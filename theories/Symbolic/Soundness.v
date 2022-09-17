@@ -2184,26 +2184,8 @@ Module Soundness
       apply refine_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      apply refine_demonic_match_tuple; auto.
-      intros w2 ω12 ι2 -> Hpc2.
-      intros ts vs Htvs.
-      apply refine_pushspops; auto.
-    - apply refine_bind; auto.
-      intros POST__s POST__c HPOST.
-      apply refine_eval_exp; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
       apply refine_demonic_match_union; auto.
       intros UK.
-      intros w2 ω12 ι2 -> Hpc2.
-      intros ts vs Htvs.
-      apply refine_pushspops; auto.
-    - apply refine_bind; auto.
-      intros POST__s POST__c HPOST.
-      apply refine_eval_exp; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      apply refine_demonic_match_record; auto.
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs Htvs.
       apply refine_pushspops; auto.
@@ -2216,16 +2198,6 @@ Module Soundness
       intros v1 v2 ->.
       intros w2 ω12 ι2 -> Hpc2.
       auto.
-    - apply refine_bind; auto.
-      intros POST__s POST__c HPOST.
-      apply refine_eval_exp; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t12 v12 Htv12.
-      apply refine_demonic_match_bvec_split; auto.
-      intros w2 ω12 ι2 -> Hpc2.
-      intros t1 v1 ->.
-      intros t2 v2 ->.
-      apply refine_pushspops; auto.
     - apply refine_bind; auto.
       apply refine_angelic; auto.
       intros w1 ω01 ι1 -> Hpc1 t v Htv. hnf in Htv; subst.

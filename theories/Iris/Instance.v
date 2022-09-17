@@ -303,18 +303,6 @@ Section Soundness.
     by iApply "tripalt".
   Qed.
 
-  Lemma iris_rule_stm_match_tuple {Γ} (δ : CStore Γ)
-        {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty.tuple σs))
-        (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (Γ ▻▻ Δ) τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-    ⊢ ((semTriple (env.cat δ (tuple_pattern_match_val p (eval e δ))) P rhs (fun v δ' => Q v (env.drop Δ δ'))) -∗
-       semTriple δ P (stm_match_tuple e p rhs) Q)%I.
-  Proof.
-    iIntros "triptup P".
-    iApply semWP_match_tuple.
-    by iApply "triptup".
-  Qed.
-
   Lemma iris_rule_stm_match_union {Γ} (δ : CStore Γ)
         {U : unioni} (e : Exp Γ (ty.union U)) {τ : Ty}
         (alt__Δ : forall (K : unionk U), PCtx)
@@ -334,18 +322,6 @@ Section Soundness.
     now rewrite <- Heqs, unionv_fold_unfold.
   Qed.
 
-  Lemma iris_rule_stm_match_record {Γ} (δ : CStore Γ)
-        {R : recordi} {Δ : PCtx} (e : Exp Γ (ty.record R))
-        (p : RecordPat (recordf_ty R) Δ) {τ : Ty} (rhs : Stm (Γ ▻▻ Δ) τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ ((semTriple (env.cat δ (record_pattern_match_val p (eval e δ))) P rhs (fun v δ' => Q v (env.drop Δ δ'))) -∗
-        semTriple δ P (stm_match_record R e p rhs) Q)%I.
-  Proof.
-    iIntros "triprec P".
-    iApply semWP_match_record.
-    by iApply "triprec".
-  Qed.
-
   Lemma iris_rule_stm_match_bvec {Γ} (δ : CStore Γ)
         {n : nat} (e : Exp Γ (ty.bvec n)) {τ : Ty}
         (rhs : forall (v : bv n), Stm Γ τ)
@@ -355,22 +331,6 @@ Section Soundness.
   Proof.
     iIntros "triprhs P".
     iApply semWP_match_bvec.
-    by iApply "triprhs".
-  Qed.
-
-  Lemma iris_rule_stm_match_bvec_split {Γ} (δ : CStore Γ)
-        {m n : nat} (e : Exp Γ (ty.bvec (m + n))) {τ : Ty}
-        (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷ty.bvec m ▻ xr∷ty.bvec n) τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-    ⊢ ((∀ vl vr,
-           ⌜ eval e δ = bv.app vl vr ⌝ →
-           semTriple (env.snoc (env.snoc δ (xl∷ty.bvec m) vl) (xr∷ty.bvec n) vr)
-             P rhs (fun v δ' => Q v (env.tail (env.tail δ')))) -∗
-          semTriple δ P (stm_match_bvec_split m n e xl xr rhs) Q)%I.
-  Proof.
-    iIntros "triprhs P".
-    iApply semWP_match_bvec_split.
-    destruct bv.appView.
     by iApply "triprhs".
   Qed.
 
@@ -836,7 +796,7 @@ Module IrisInstanceWithContracts
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -854,11 +814,8 @@ Module IrisInstanceWithContracts
     - by iApply iris_rule_stm_match_list.
     - by iApply iris_rule_stm_match_sum.
     - by iApply iris_rule_stm_match_enum.
-    - by iApply iris_rule_stm_match_tuple.
     - by iApply iris_rule_stm_match_union.
-    - by iApply iris_rule_stm_match_record.
     - by iApply iris_rule_stm_match_bvec.
-    - by iApply iris_rule_stm_match_bvec_split.
     - by iApply iris_rule_stm_read_register.
     - by iApply iris_rule_stm_write_register.
     - by iApply iris_rule_stm_assign.

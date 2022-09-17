@@ -1600,25 +1600,13 @@ Module Type SymbolicExecOn
             | stm_match_enum E e alts =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_enum t (fun EK _ _ => exec_aux (alts EK))
-            | stm_match_tuple e pat rhs =>
-                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_tuple PVartoLVar pat t
-                  (fun _ _ ts => pushspops ts (exec_aux rhs))
             | stm_match_union U e alt__pat alt__rhs =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_union PVartoLVar alt__pat t
                   (fun UK _ _ ts => pushspops ts (exec_aux (alt__rhs UK)))
-            | stm_match_record R e pat rhs =>
-                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_record PVartoLVar pat t
-                  (fun _ _ ts => pushspops ts (exec_aux rhs))
             | stm_match_bvec n e rhs =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_bvec t (fun bs _ _ => exec_aux (rhs bs))
-            | stm_match_bvec_split m n e xl xr rhs =>
-                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_bvec_split (PVartoLVar xl) (PVartoLVar xr) t
-                  (fun _ _ t1 t2 => pushspops [env].[xl∷_ ↦ t1].[xr∷_ ↦ t2] (exec_aux rhs))
             | stm_read_register reg =>
                 ⟨ ω01 ⟩ t <- angelic None _ ;;
                 ⟨ ω12 ⟩ _ <- T (consume (asn.chunk (chunk_ptsreg reg t))) ;;

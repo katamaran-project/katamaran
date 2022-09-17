@@ -227,17 +227,11 @@ Module Type Soundness
           apply IHs2; auto.
         - rewrite !wp_demonic_match_enum.
           apply H; auto.
-        - rewrite !wp_demonic_match_tuple.
-          apply IHs; auto.
         - rewrite !wp_demonic_match_union.
           destruct (unionv_unfold U (eval e δ)).
           apply H; auto.
-        - rewrite !wp_demonic_match_record.
-          apply IHs; auto.
         - rewrite !wp_demonic_match_bvec.
           apply H; auto.
-        - rewrite !wp_demonic_match_bvec_split.
-          destruct bv.appView. apply IHs; auto.
         - intros [v Hwp]; exists v; revert Hwp.
           apply consume_chunk_monotonic. auto.
         - intros [v Hwp]; exists v; revert Hwp.
@@ -639,29 +633,15 @@ Module Type Soundness
         rewrite wp_demonic_match_enum in HYP.
         now apply rule_stm_match_enum, H.
 
-      - (* stm_match_tuple *)
-        rewrite wp_demonic_match_tuple in HYP.
-        now apply rule_stm_match_tuple, IHs.
-
       - (* stm_match_union *)
         rewrite wp_demonic_match_union in HYP.
         apply rule_stm_match_union; cbn; intros * Heval;
           rewrite Heval, unionv_unfold_fold in HYP.
         now apply H.
 
-      - (* stm_match_record *)
-        rewrite wp_demonic_match_record in HYP.
-        now apply rule_stm_match_record, IHs.
-
       - (* stm_match_bvec *)
         rewrite wp_demonic_match_bvec in HYP.
         now apply rule_stm_match_bvec, H.
-
-      - (* stm_match_bvec_split *)
-        rewrite wp_demonic_match_bvec_split in HYP.
-        apply rule_stm_match_bvec_split. cbn; intros * Heval;
-          rewrite Heval, bv.appView_app in HYP.
-        now apply IHs.
 
       - (* stm_read_register *)
         destruct HYP as [v HYP].

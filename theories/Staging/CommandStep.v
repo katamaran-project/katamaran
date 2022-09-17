@@ -240,27 +240,15 @@ Module CInterpreter (Import B : Base)
       | inl v => pushpop v (exec s1)
       | inr v => pushpop v (exec s2)
       end
-    | stm_match_tuple e p rhs =>
-      v <- eval_exp e ;;
-      pushspops (tuple_pattern_match_val p v) (exec rhs)
     | stm_match_union U e alt__pat alt__rhs =>
       v <- eval_exp e ;;
       match unionv_unfold U v with
       | existT K v =>
         pushspops (pattern_match_val (alt__pat K) v) (exec (alt__rhs K))
       end
-    | stm_match_record R e p rhs =>
-      v <- eval_exp e ;;
-      pushspops (record_pattern_match_val p v) (exec rhs)
     | stm_match_bvec n e rhs =>
       v <- eval_exp e ;;
       exec (rhs v)
-    | stm_match_bvec_split m n e xl xr rhs =>
-      v <- eval_exp e ;;
-      let (vl,vr) := bv.appView m n v in
-      pushspops
-        [kv (xl∷ty.bvec m; vl); (xr∷ty.bvec n; vr)]
-        (exec rhs)
     | stm_bind s k =>
       v <- exec s ;;
       exec (k v)

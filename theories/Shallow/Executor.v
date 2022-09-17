@@ -1175,29 +1175,14 @@ Module Type ShallowExecOn
                 v
                 (fun v => pushpop v (exec_aux s1))
                 (fun v => pushpop v (exec_aux s2))
-            | stm_match_tuple e p rhs =>
-              v <- eval_exp e ;;
-              demonic_match_tuple p v
-                (fun δΔ => pushspops δΔ (exec_aux rhs))
             | stm_match_union U e alt__pat alt__rhs =>
               v <- eval_exp e ;;
               demonic_match_union alt__pat v (fun UK vs => pushspops vs (exec_aux (alt__rhs UK)))
-            | stm_match_record R e p rhs =>
-              v <- eval_exp e ;;
-              demonic_match_record p v (fun vs => pushspops vs (exec_aux rhs))
             | stm_match_bvec n e rhs =>
               v <- eval_exp e ;;
               demonic_match_bvec
                 v
                 (fun u => exec_aux (rhs u))
-            | stm_match_bvec_split m n e xl xr rhs =>
-              v <- eval_exp e ;;
-              demonic_match_bvec_split
-                v
-                (fun vl vr =>
-                   pushspops
-                     [kv (xl∷ty.bvec m; vl); (xr∷ty.bvec n; vr)]
-                     (exec_aux rhs))
             | stm_bind s k =>
               v <- exec_aux s ;;
               exec_aux (k v)

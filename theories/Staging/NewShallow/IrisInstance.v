@@ -776,27 +776,6 @@ Module IrisInstanceWithContracts
     iModIntro. by iFrame.
   Qed.
 
-  Lemma rule_match_tuple {Γ τ σs Δ} (e : Exp Γ (ty.tuple σs)) (p : TuplePat σs Δ)
-    (s : Stm (Γ ▻▻ Δ) τ) :
-    ⊢ semWP' (stm_match_tuple e p s) ≼ semWP (stm_match_tuple e p s).
-  Proof.
-    iIntros (POST δ) "WPs". unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ ns ks1 ks nt) "state_inv".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 σ' efs) "%".
-    dependent elimination H.
-    fold_semWP.
-    dependent elimination s0.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame; iSplitL; auto.
-    unfold semWP'; cbn.
-    by iApply rule_block.
-  Qed.
-
   Lemma rule_match_union {Γ τ U} (e : Exp Γ (ty.union U))
     (alt__ctx : unionk U → PCtx)
     (alt__pat : ∀ K : unionk U, Pattern (alt__ctx K) (unionk_ty U K))
@@ -822,28 +801,6 @@ Module IrisInstanceWithContracts
     by iApply rule_block.
   Qed.
 
-  Lemma rule_match_record {Γ τ R Δ} (e : Exp Γ (ty.record R))
-    (p : RecordPat (recordf_ty R) Δ) (s : Stm (Γ ▻▻ Δ) τ) :
-    ⊢ semWP' (stm_match_record R e p s) ≼
-      semWP (stm_match_record R e p s).
-  Proof.
-    iIntros (POST δ) "WPs". unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ ns ks1 ks nt) "state_inv".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 σ' efs) "%".
-    dependent elimination H.
-    fold_semWP.
-    dependent elimination s0.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame; iSplitL; auto.
-    unfold semWP'; cbn.
-    by iApply rule_block.
-  Qed.
-
   Lemma rule_match_bvec {Γ τ n} (e : Exp Γ (ty.bvec n)) (rhs : bv n → Stm Γ τ) :
     ⊢ semWP' (stm_match_bvec n e rhs) ≼ semWP (stm_match_bvec n e rhs).
   Proof.
@@ -859,29 +816,6 @@ Module IrisInstanceWithContracts
     iModIntro. iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro. by iFrame.
-  Qed.
-
-  Lemma rule_match_bvec_split {Γ τ m n xl xr} (e : Exp Γ (ty.bvec (m + n)))
-    (s : Stm (Γ ▻ xl∷ty.bvec m ▻ xr∷ty.bvec n) τ) :
-    ⊢ semWP' (stm_match_bvec_split m n e xl xr s) ≼
-      semWP (stm_match_bvec_split m n e xl xr s).
-  Proof.
-    iIntros (POST δ) "WPs". unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ ns ks1 ks nt) "state_inv".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 σ' efs) "%".
-    dependent elimination H.
-    fold_semWP.
-    dependent elimination s0.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame; iSplitL; auto.
-    unfold semWP'; cbn.
-    destruct bv.appView.
-    by iApply (rule_block [env].[_∷ty.bvec m0 ↦ xs].[_∷ty.bvec n1 ↦ ys]).
   Qed.
 
   Lemma rule_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
@@ -988,11 +922,8 @@ Module IrisInstanceWithContracts
     - apply rule_match_list.
     - apply rule_match_sum.
     - apply rule_match_enum.
-    - apply rule_match_tuple.
     - apply rule_match_union.
-    - apply rule_match_record.
     - apply rule_match_bvec.
-    - apply rule_match_bvec_split.
     - apply rule_read_register.
     - apply rule_write_register.
     - apply rule_bind.

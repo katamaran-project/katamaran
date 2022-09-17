@@ -145,10 +145,6 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       {E : enumi} (e : Exp Γ (ty.enum E))
       (alts : forall (K : enumt E), Stm Γ τ) :
       ⟨ γ , μ , δ , stm_match_enum E e alts ⟩ ---> ⟨ γ , μ , δ , alts (eval e δ) ⟩
-  | step_stm_match_tuple
-      {Δ σs} (e : Exp Γ (ty.tuple σs)) (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ) :
-      ⟨ γ , μ , δ , stm_match_tuple e p rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_block (tuple_pattern_match_val p (eval e δ)) rhs ⟩
 
   | step_stm_match_union
       {U : unioni} (e : Exp Γ (ty.union U))
@@ -159,27 +155,12 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , let (K , v) := unionv_unfold U (eval e δ) in
                 stm_block (pattern_match_val (alt__pat K) v) (alt__rhs K)
       ⟩
-  | step_stm_match_record
-      {R : recordi} {Δ : PCtx} (e : Exp Γ (ty.record R))
-      (p : RecordPat (recordf_ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ) :
-      ⟨ γ , μ , δ , stm_match_record R e p rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_block (record_pattern_match_val p (eval e δ)) rhs ⟩
 
   | step_stm_match_bvec
       {n : nat} (e : Exp Γ (ty.bvec n)) (rhs : bv n -> Stm Γ τ) :
       ⟨ γ , μ , δ , stm_match_bvec n e rhs ⟩ --->
       ⟨ γ , μ , δ , rhs (eval e δ) ⟩
 
-  | step_stm_match_bvec_split
-      {m n} (e : Exp Γ (ty.bvec (m + n))) (xl xr : PVar)
-      (rhs : Stm (Γ ▻ xl ∷ ty.bvec m ▻ xr ∷ ty.bvec n) τ) :
-      ⟨ γ , μ , δ , stm_match_bvec_split m n e xl xr rhs ⟩ --->
-      ⟨ γ , μ , δ ,
-        let v       := eval e δ in
-        let (vl,vr) := bv.appView m n v in
-        let δΔ      := [kv (xl∷ty.bvec m; vl); (xr∷ty.bvec n; vr)] in
-        stm_block δΔ rhs
-      ⟩
 
   | step_stm_read_register
       (r : 𝑹𝑬𝑮 τ) :
@@ -253,11 +234,8 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         | @stm_match_sum        => idtac
         | @stm_match_list       => idtac
         | @stm_match_enum       => idtac
-        | @stm_match_tuple      => idtac
         | @stm_match_union      => idtac
-        | @stm_match_record     => idtac
         | @stm_match_bvec       => idtac
-        | @stm_match_bvec_split => idtac
         | @stm_read_register    => idtac
         | @stm_write_register   => idtac
         | @stm_debugk           => idtac

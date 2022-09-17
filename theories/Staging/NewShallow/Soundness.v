@@ -152,22 +152,12 @@ Module Type Soundness
       - (* stm_match_enum *)
         now apply rule_stm_match_enum, H.
 
-      - (* stm_match_tuple *)
-        now apply rule_stm_match_tuple, IHs.
-
       - (* stm_match_union *)
         apply rule_stm_match_union; cbn; intros * ->.
         now rewrite unionv_unfold_fold.
 
-      - (* stm_match_record *)
-        now apply rule_stm_match_record, IHs.
-
       - (* stm_match_bvec *)
         now apply rule_stm_match_bvec, H.
-
-      - (* stm_match_bvec_split *)
-        apply rule_stm_match_bvec_split; cbn; intros * ->.
-        now rewrite bv.appView_app.
 
       - (* stm_read_register *)
         apply rule_exist. intros v.

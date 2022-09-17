@@ -75,22 +75,13 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   | stm_match_enum
       {E : enumi} (e : Exp Γ (ty.enum E))
       (alts : forall (K : enumt E), Stm Γ τ)
-  | stm_match_tuple
-      {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty.tuple σs))
-      (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
   | stm_match_union
       {U : unioni} (e : Exp Γ (ty.union U))
       (alt__ctx : forall (K : unionk U), PCtx)
       (alt__pat : forall (K : unionk U), Pattern (alt__ctx K) (unionk_ty U K))
       (alt__rhs : forall (K : unionk U), Stm (Γ ▻▻ alt__ctx K) τ)
-  | stm_match_record
-      {R : recordi} {Δ : PCtx} (e : Exp Γ (ty.record R))
-      (p : RecordPat (recordf_ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
   | stm_match_bvec
       {n} (e : Exp Γ (ty.bvec n)) (rhs : bv n -> Stm Γ τ)
-  | stm_match_bvec_split
-      {m n} (e : Exp Γ (ty.bvec (m + n))) (xl xr : PVar)
-      (rhs : Stm (Γ ▻ xl ∷ ty.bvec m ▻ xr ∷ ty.bvec n) τ)
   | stm_read_register (reg : 𝑹𝑬𝑮 τ)
   | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
   | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
@@ -115,11 +106,8 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_match_list {Γ τ _} _ _ _ _ _.
   Arguments stm_match_sum {Γ τ _ _} _ _ _ _ _.
   Arguments stm_match_enum {Γ τ} E e%exp alts%exp.
-  Arguments stm_match_tuple {Γ τ σs Δ} e%exp p%pat rhs%exp.
   Arguments stm_match_union {Γ τ} U e {alt__ctx} alt__pat alt__rhs.
-  Arguments stm_match_record {Γ%ctx τ} R {Δ%ctx} e%exp p%pat rhs%exp.
   Arguments stm_match_bvec {Γ τ} n%nat_scope e%exp rhs%exp.
-  Arguments stm_match_bvec_split {Γ τ} (m n)%nat_scope e%exp xl xr rhs%exp.
   Arguments stm_read_register {Γ τ} reg.
   Arguments stm_write_register {Γ τ} reg e%exp.
   Bind Scope exp_scope with Stm.
@@ -144,13 +132,25 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
 
   Definition stm_match_prod {Γ τ σ1 σ2} (s : Stm Γ (ty.prod σ1 σ2))
     (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) : Stm Γ τ :=
-    stm_match_pattern (Δ := ctx.nil ▻ xl∷σ1 ▻ xr∷σ2) s (pat_pair xl xr) rhs.
+    stm_match_pattern s (pat_pair xl xr) rhs.
+  Definition stm_match_tuple {Γ τ σs Δ} (s : Stm Γ (ty.tuple σs))
+    (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ) : Stm Γ τ :=
+    stm_match_pattern s (pat_tuple p) rhs.
+  Definition stm_match_record {Γ τ R Δ} (s : Stm Γ (ty.record R))
+    (p : RecordPat (recordf_ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ) : Stm Γ τ :=
+    stm_match_pattern s (pat_record p) rhs.
+  Definition stm_match_bvec_split {Γ τ m n} (s : Stm Γ (ty.bvec (m + n))) (xl xr : PVar)
+    (rhs : Stm (Γ ▻ xl ∷ ty.bvec m ▻ xr ∷ ty.bvec n) τ) : Stm Γ τ :=
+    stm_match_pattern s (pat_bvec_split xl xr) rhs.
 
   Arguments MkAlt {_ _ _ _} _ _.
   Arguments stm_match_union_alt {_ _} _ _ _.
   Arguments stm_assert {Γ} e1%exp e2%exp.
   Arguments stm_lemma {Γ Δ} l es%env.
   Arguments stm_match_prod {Γ τ _ _} _ _ _ _.
+  Arguments stm_match_tuple {Γ τ σs Δ} s%exp p%pat rhs%exp.
+  Arguments stm_match_record {Γ%ctx τ} R {Δ%ctx} s%exp p%pat rhs%exp.
+  Arguments stm_match_bvec_split {Γ τ} (m n)%nat_scope s%exp xl xr rhs%exp.
 
   Definition UnionAlt (U : unioni) (Γ : PCtx) (τ : Ty) (K : unionk U) : Set :=
     Alternative Γ (unionk_ty U K) τ.

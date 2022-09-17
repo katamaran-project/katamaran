@@ -156,12 +156,6 @@ Module ProgramLogic.
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ alts (eval e δ) ; δ ⦃ Q ⦄ ->
         ⦃ P ⦄ stm_match_enum E e alts ; δ ⦃ Q ⦄
-    | rule_stm_match_tuple
-        {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty.tuple σs))
-        (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ rhs ; env.cat δ (tuple_pattern_match_val p (eval e δ)) ⦃ fun v δ' => Q v (env.drop Δ δ') ⦄ ->
-        ⦃ P ⦄ stm_match_tuple e p rhs ; δ ⦃ Q ⦄
     | rule_stm_match_union
         {U : unioni} (e : Exp Γ (ty.union U))
         (alt__Δ : forall (K : unionk U), PCtx)
@@ -174,28 +168,12 @@ Module ProgramLogic.
              alt__r K ; env.cat δ (pattern_match_val (alt__p K) v)
            ⦃ fun v δ' => Q v (env.drop (alt__Δ K) δ') ⦄) ->
         ⦃ P ⦄ stm_match_union U e alt__p alt__r ; δ ⦃ Q ⦄
-    | rule_stm_match_record
-        {R : recordi} {Δ : PCtx} (e : Exp Γ (ty.record R))
-        (p : RecordPat (recordf_ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ rhs ; env.cat δ (record_pattern_match_val p (eval e δ)) ⦃ fun v δ' => Q v (env.drop Δ δ') ⦄ ->
-        ⦃ P ⦄ stm_match_record R e p rhs ; δ ⦃ Q ⦄
     | rule_stm_match_bvec
         {n : nat} (e : Exp Γ (ty.bvec n))
         (rhs : bv n -> Stm Γ τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ rhs (eval e δ) ; δ ⦃ Q ⦄ ->
         ⦃ P ⦄ stm_match_bvec n e rhs ; δ ⦃ Q ⦄
-    | rule_stm_match_bvec_split
-        {m n : nat} (e : Exp Γ (ty.bvec (m + n))) {xl xr : PVar}
-        (rhs : Stm (Γ ▻ xl ∷ ty.bvec m ▻ xr ∷ ty.bvec n) τ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        (forall (vl : Val (ty.bvec m)) (vr : Val (ty.bvec n)),
-           eval e δ = bv.app vl vr ->
-           ⦃ P ⦄
-             rhs ; env.snoc (env.snoc δ (xl∷ty.bvec m) vl) (xr∷ty.bvec n) vr
-           ⦃ fun v δ' => Q v (env.tail (env.tail δ')) ⦄) ->
-        ⦃ P ⦄ stm_match_bvec_split m n e xl xr rhs ; δ ⦃ Q ⦄
     | rule_stm_read_register
         (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
         ⦃ lptsreg r v ⦄
