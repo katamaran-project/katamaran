@@ -173,8 +173,8 @@ Module Type NewShallowExecOn
         fix rec Δ {struct Δ} :=
           match Δ with
           | []%ctx  => pure []
-          | Δ ▻ x∷σ => v  <- angelic σ;;
-                       vs <- rec Δ;;
+          | Δ ▻ x∷σ => vs <- rec Δ;;
+                       v  <- angelic σ;;
                        pure (vs ► (x∷σ ↦ v))
           end.
       #[global] Arguments angelic_ctx {N} Δ.
@@ -187,8 +187,8 @@ Module Type NewShallowExecOn
         fix rec Δ {struct Δ} :=
           match Δ with
           | []      => pure env.nil
-          | Δ ▻ x∷σ => v  <- demonic σ;;
-                       vs <- rec Δ;;
+          | Δ ▻ x∷σ => vs <- rec Δ;;
+                       v  <- demonic σ;;
                        pure (vs ► (x∷σ ↦ v))
           end%ctx.
       #[global] Arguments demonic_ctx {N} Δ.

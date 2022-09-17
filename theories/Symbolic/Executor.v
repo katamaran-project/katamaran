@@ -364,15 +364,17 @@ Module Type SymbolicExecOn
 
     Local Hint Extern 2 (Persistent (WTerm ?σ)) =>
       refine (@persistent_subst (STerm σ) (@SubstTerm σ)) : typeclass_instances.
+    Local Hint Extern 2 (Persistent (fun w : World => NamedEnv (Term (wctx w)) ?Γ)) =>
+      refine (@persistent_subst (fun Σ : LCtx => NamedEnv (Term Σ) Γ) _) : typeclass_instances.
 
     Definition angelic_ctx {N : Set} (n : N -> LVar) :
       ⊢ ∀ Δ : NCtx N Ty, SPureSpecM (fun w => NamedEnv (Term w) Δ) :=
       fix rec {w} Δ {struct Δ} :=
         match Δ with
-         | []%ctx => pure []
-         | Γ ▻ x∷σ => ⟨ _  ⟩ tσ <- angelic (Some (n x)) σ;;
-                      ⟨ ω2 ⟩ tΔ <- rec Γ;;
-                      pure (tΔ ► (x∷σ ↦ tσ⟨ω2⟩))
+         | []%ctx => pure []%env
+         | Γ ▻ x∷σ => ⟨ ω1 ⟩ tΔ <- rec Γ;;
+                      ⟨ ω2 ⟩ tσ <- angelic (Some (n x)) σ;;
+                      pure (tΔ⟨ω2⟩ ► (x∷σ ↦ tσ))
          end.
     Global Arguments angelic_ctx {N} n [w] Δ : rename.
 
@@ -386,14 +388,12 @@ Module Type SymbolicExecOn
 
     Definition demonic_ctx {N : Set} (n : N -> LVar) :
       ⊢ ∀ Δ : NCtx N Ty, SPureSpecM (fun w => NamedEnv (Term w) Δ) :=
-      fix demonic_ctx {w} Δ {struct Δ} :=
+      fix rec {w} Δ {struct Δ} :=
         match Δ with
-        | []      => fun k => T k env.nil
-        | Δ ▻ x∷σ =>
-          fun k =>
-            demonic (Some (n x)) σ (fun w1 ω01 t =>
-              demonic_ctx Δ (fun w2 ω12 EΔ =>
-                k w2 (acc_trans ω01 ω12) (EΔ ► (x∷σ ↦ persist__term t ω12))))
+        | []%ctx  => pure []%env
+        | Δ ▻ x∷σ => ⟨ ω1 ⟩ tΔ <- rec Δ;;
+                     ⟨ ω2 ⟩ tσ <- demonic (Some (n x)) σ;;
+                     pure (tΔ⟨ω2⟩ ► (x∷σ ↦ tσ))
         end%ctx.
     Global Arguments demonic_ctx {_} n [w] Δ : rename.
 

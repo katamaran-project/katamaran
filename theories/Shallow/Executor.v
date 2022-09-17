@@ -106,8 +106,8 @@ Module Type ShallowExecOn
       fix rec Δ {struct Δ} :=
         match Δ with
         | []%ctx  => pure []
-        | Δ ▻ x∷σ => v  <- angelic σ;;
-                     vs <- rec Δ;;
+        | Δ ▻ x∷σ => vs <- rec Δ;;
+                     v  <- angelic σ;;
                      pure (vs ► (x∷σ ↦ v))
         end.
     Arguments angelic_ctx {N} Δ.
@@ -120,8 +120,8 @@ Module Type ShallowExecOn
       fix rec Δ {struct Δ} :=
         match Δ with
         | []      => pure env.nil
-        | Δ ▻ x∷σ => v  <- demonic σ;;
-                     vs <- rec Δ;;
+        | Δ ▻ x∷σ => vs <- rec Δ;;
+                     v  <- demonic σ;;
                      pure (vs ► (x∷σ ↦ v))
         end%ctx.
     Arguments demonic_ctx {N} Δ.
@@ -225,10 +225,10 @@ Module Type ShallowExecOn
         + now exists env.nil.
         + intros [vs ?]. now destruct (env.nilView vs).
       - destruct b as [x σ]. cbv [angelic bind pure]. split.
-        + intros [v Hwp%IHΔ]. destruct Hwp as [vs HPOST].
+        + intros (vs & v & Hwp)%IHΔ.
           now exists (env.snoc vs (x∷σ) v).
         + intros [vs Hwp]. destruct (env.snocView vs) as [vs v].
-          exists v. apply IHΔ. now exists vs.
+          apply IHΔ. now exists vs, v.
     Qed.
 
     Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
@@ -242,9 +242,8 @@ Module Type ShallowExecOn
       - destruct b as [x σ]. cbv [demonic bind pure]. split.
         + intros Hwp vs.
           destruct (env.snocView vs) as [vs v].
-          now eapply (IHΔ (fun vs => POST (env.snoc vs _ v))).
-        + intros HPost v.
-          now eapply (IHΔ (fun vs => POST (env.snoc vs (x∷σ) v))).
+          now apply (IHΔ (fun vs => forall v, POST (env.snoc vs _ v))).
+        + intros HPost. apply IHΔ. intros. apply HPost.
     Qed.
 
     Lemma wp_angelic_list {A} (xs : list A) (POST : A -> Prop) :

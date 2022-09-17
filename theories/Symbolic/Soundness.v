@@ -251,14 +251,13 @@ Module Soundness
       - destruct b as [x σ].
         intros w0 ι0 Hpc0.
         apply refine_bind; [|intros w1 ω01 ι1 -> Hpc1].
-        apply refine_angelic; auto.
-        intros t v ->.
-        apply refine_bind; [|intros w2 ω12 ι2 -> Hpc2].
-        apply IHΔ; auto.
-        intros ts vs ->.
-        apply refine_pure; auto.
-        rewrite <- inst_persist.
-        reflexivity.
+        + apply IHΔ; auto.
+        + intros ts vs ->.
+          apply refine_bind; [|intros w2 ω12 ι2 -> Hpc2].
+          apply refine_angelic; auto.
+          intros t v ->.
+          apply refine_pure; auto.
+          now rewrite <- inst_persist.
     Qed.
 
     Lemma refine_demonic (x : option LVar) (σ : Ty) :
@@ -315,23 +314,19 @@ Module Soundness
       forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         ℛ ι0 (@SPureSpecM.demonic_ctx N n w0 Δ) (@CPureSpecM.demonic_ctx N Δ).
     Proof.
-      induction Δ.
+      induction Δ; cbn [SPureSpecM.demonic_ctx CPureSpecM.demonic_ctx].
       - intros w0 ι0 Hpc0.
-        intros POST__s POST__c HPOST.
-        unfold SPureSpecM.demonic_ctx, CPureSpecM.demonic_ctx, T.
-        apply HPOST; wsimpl; try reflexivity; auto.
+        now apply refine_pure.
       - destruct b as [x σ].
-        intros w0 ι0 Hpc0 POST__s POST__c HPOST; cbn.
-        apply refine_demonic; auto.
-        intros w1 ω01 ι1 -> Hpc1.
-        intros t v tv.
-        apply IHΔ; auto.
-        intros w2 ω12 ι2 -> Hpc2.
-        intros ts vs tvs.
-        apply HPOST; cbn; wsimpl; auto.
-        rewrite tv, tvs. hnf.
-        rewrite <- inst_persist.
-        reflexivity.
+        intros w0 ι0 Hpc0.
+        apply refine_bind; [|intros w1 ω01 ι1 -> Hpc1].
+        + apply IHΔ; auto.
+        + intros ts vs ->.
+          apply refine_bind; [|intros w2 ω12 ι2 -> Hpc2].
+          apply refine_demonic; auto.
+          intros t v ->.
+          apply refine_pure; auto.
+          now rewrite <- inst_persist.
     Qed.
 
     Lemma refine_assume_formulas {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0)
