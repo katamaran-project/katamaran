@@ -897,6 +897,9 @@ Module Type NewShallowExecOn
               exec k
             | stm_fail _ s =>
               block
+            | stm_match_pattern s pat rhs =>
+              v <- exec s ;;
+              pushspops (pattern_match_val pat v) (exec rhs)
             | stm_match_enum E e alts =>
               v <- eval_exp e ;;
               match_enum

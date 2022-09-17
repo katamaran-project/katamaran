@@ -211,6 +211,10 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   | step_debugk
       (k : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_debugk k ⟩ ---> ⟨ γ , μ , δ , k ⟩
+  | step_match_pattern
+      {Δ σ} (s : Stm Γ σ) (pat : Pattern Δ σ) (rhs : Stm (Γ ▻▻ Δ) τ) :
+      ⟨ γ , μ , δ , stm_match_pattern s pat rhs ⟩ --->
+      ⟨ γ , μ , δ , stm_bind s (fun v => stm_block (pattern_match_val pat v) rhs) ⟩
 
   where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
 
@@ -252,6 +256,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         | @stm_assertk          => idtac
         | @stm_fail             => idtac
         | @stm_if               => idtac
+        | @stm_match_pattern    => idtac
         | @stm_match_sum        => idtac
         | @stm_match_list       => idtac
         | @stm_match_prod       => idtac

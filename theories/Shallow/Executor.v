@@ -1135,6 +1135,10 @@ Module Type ShallowExecOn
               exec_aux k
             | stm_fail _ s =>
               block
+            | stm_match_pattern s pat rhs =>
+              v  <- exec_aux s ;;
+              vs <- demonic_match_pattern pat v;;
+              pushspops vs (exec_aux rhs)
             | stm_match_enum E e alts =>
               v <- eval_exp e ;;
               demonic_match_enum

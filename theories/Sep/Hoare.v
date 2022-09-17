@@ -262,6 +262,16 @@ Module ProgramLogic.
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ k ; δ ⦃ Q ⦄ ->
         ⦃ P ⦄ stm_debugk k ; δ ⦃ Q ⦄
+    | rule_stm_match_pattern
+        {Δ σ} (s : Stm Γ σ) (pat : Pattern Δ σ) (rhs : Stm (Γ ▻▻ Δ) τ)
+        (P : L) (Q : Val σ -> CStore Γ -> L) (R : Val τ -> CStore Γ -> L) :
+        ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
+        (forall v1 δ',
+           ⦃ Q v1 δ' ⦄
+             rhs ; δ' ►► pattern_match_val pat v1
+           ⦃ fun v2 δ' => R v2 (env.drop Δ δ') ⦄) ->
+        ⦃ P ⦄ stm_match_pattern s pat rhs ; δ ⦃ R ⦄
+
     where "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P s Q).
 
     Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P s Q).

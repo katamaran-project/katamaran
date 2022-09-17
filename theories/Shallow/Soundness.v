@@ -96,18 +96,18 @@ Module Type Soundness
           intuition.
         - now apply consume_chunk_monotonic.
         - now apply consume_chunk_monotonic.
-        - rewrite ?wp_angelic_match_bool.
+        - rewrite !wp_angelic_match_bool.
           destruct (inst b ι); cbn; eauto.
-        - rewrite ?wp_angelic_match_enum; eauto.
-        - rewrite ?wp_angelic_match_sum.
+        - rewrite !wp_angelic_match_enum; eauto.
+        - rewrite !wp_angelic_match_sum.
           destruct (inst s ι); cbn; eauto.
-        - rewrite ?wp_angelic_match_list.
+        - rewrite !wp_angelic_match_list.
           destruct (inst s ι); cbn; eauto.
-        - rewrite ?wp_angelic_match_prod.
+        - rewrite !wp_angelic_match_prod.
           destruct (inst s ι); cbn; eauto.
-        - rewrite ?wp_angelic_match_tuple; eauto.
-        - rewrite ?wp_angelic_match_record; eauto.
-        - rewrite ?wp_angelic_match_union.
+        - rewrite !wp_angelic_match_tuple; eauto.
+        - rewrite !wp_angelic_match_record; eauto.
+        - rewrite !wp_angelic_match_union.
           destruct (unionv_unfold U (inst s ι)); eauto.
         - unfold bind.
           apply IHasn1; eauto.
@@ -127,18 +127,18 @@ Module Type Soundness
           intuition.
         - unfold produce_chunk; eauto.
         - unfold produce_chunk; eauto.
-        - rewrite ?wp_demonic_match_bool.
+        - rewrite !wp_demonic_match_bool.
           destruct (inst b ι); cbn; eauto.
-        - rewrite ?wp_demonic_match_enum; eauto.
-        - rewrite ?wp_demonic_match_sum.
+        - rewrite !wp_demonic_match_enum; eauto.
+        - rewrite !wp_demonic_match_sum.
           destruct (inst s ι); cbn; eauto.
-        - rewrite ?wp_demonic_match_list.
+        - rewrite !wp_demonic_match_list.
           destruct (inst s ι); cbn; eauto.
-        - rewrite ?wp_demonic_match_prod.
+        - rewrite !wp_demonic_match_prod.
           destruct (inst s ι); cbn; eauto.
-        - rewrite ?wp_demonic_match_tuple; eauto.
-        - rewrite ?wp_demonic_match_record; eauto.
-        - rewrite ?wp_demonic_match_union.
+        - rewrite !wp_demonic_match_tuple; eauto.
+        - rewrite !wp_demonic_match_record; eauto.
+        - rewrite !wp_demonic_match_union.
           destruct (unionv_unfold U (inst s ι)); eauto.
         - unfold bind.
           apply IHasn1; eauto.
@@ -206,7 +206,7 @@ Module Type Soundness
         - apply call_contract_monotonic; auto.
         - apply call_lemma_monotonic; intros ? ? ?.
           apply IHs. auto.
-        - rewrite ?wp_demonic_match_bool.
+        - rewrite !wp_demonic_match_bool.
           destruct (eval e δ).
           apply IHs1; auto.
           apply IHs2; auto.
@@ -214,29 +214,32 @@ Module Type Soundness
         - intros HYP Heq. specialize (HYP Heq). revert HYP.
           apply IHs; auto.
         - auto.
-        - rewrite ?wp_demonic_match_list.
+        - apply IHs1. intros ? ? ?.
+          rewrite !wp_demonic_match_pattern.
+          apply IHs2; auto.
+        - rewrite !wp_demonic_match_list.
           destruct (eval e δ).
           apply IHs1; auto.
           apply IHs2; auto.
-        - rewrite ?wp_demonic_match_sum.
+        - rewrite !wp_demonic_match_sum.
           destruct (eval e δ); cbn.
           apply IHs1; auto.
           apply IHs2; auto.
-        - rewrite ?wp_demonic_match_prod.
+        - rewrite !wp_demonic_match_prod.
           destruct (eval e δ); cbn.
           apply IHs; auto.
-        - rewrite ?wp_demonic_match_enum.
+        - rewrite !wp_demonic_match_enum.
           apply H; auto.
-        - rewrite ?wp_demonic_match_tuple.
+        - rewrite !wp_demonic_match_tuple.
           apply IHs; auto.
-        - rewrite ?wp_demonic_match_union.
+        - rewrite !wp_demonic_match_union.
           destruct (unionv_unfold U (eval e δ)).
           apply H; auto.
-        - rewrite ?wp_demonic_match_record.
+        - rewrite !wp_demonic_match_record.
           apply IHs; auto.
-        - rewrite ?wp_demonic_match_bvec.
+        - rewrite !wp_demonic_match_bvec.
           apply H; auto.
-        - rewrite ?wp_demonic_match_bvec_split.
+        - rewrite !wp_demonic_match_bvec_split.
           destruct bv.appView. apply IHs; auto.
         - intros [v Hwp]; exists v; revert Hwp.
           apply consume_chunk_monotonic. auto.
@@ -606,6 +609,24 @@ Module Type Soundness
         eapply rule_consequence_left.
         apply rule_stm_fail.
         apply ltrue_right.
+
+      - (* stm_match_oattern *)
+        eapply rule_consequence_left.
+        eapply rule_stm_match_pattern; intros; apply rule_wp.
+        apply lex_right with (interpret_scheap h1).
+        apply land_right.
+        reflexivity.
+        apply lprop_right.
+        apply IHs1; clear IHs1.
+        revert HYP. apply exec_aux_monotonic; auto.
+        intros v2 δ2 h2 HYP; cbn.
+
+        apply lex_right with (interpret_scheap h2).
+        apply land_right.
+        reflexivity.
+        apply lprop_right.
+        rewrite wp_demonic_match_pattern in HYP.
+        now apply IHs2.
 
       - (* stm_match_list *)
         rewrite wp_demonic_match_list in HYP.

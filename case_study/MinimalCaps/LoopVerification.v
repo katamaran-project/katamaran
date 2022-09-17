@@ -159,8 +159,7 @@ Section Loop.
     iApply (semWP_seq (call step) (call loop)).
     iApply semWP_call_inline.
     iPoseProof (valid_semTriple_step with "IH Hpre") as "trip_step".
-    iRevert "trip_step".
-    iApply semWP_strong_mono.
+    iApply (semWP_mono with "trip_step").
     iIntros (_ _) "Hpost".
     iApply (semWP_call_inline_later loop).
     iDestruct "Hpost" as "(Hgprs & [[%c [Hpc' #Hsafe']] | [%c [Hpc' Hexpr]]])".

@@ -139,6 +139,10 @@ Module Type Soundness
         apply rule_stm_fail.
         apply ltrue_right.
 
+      - (* stm_match_pattern *)
+        eapply rule_stm_match_pattern. apply IHs1. cbn.
+        intros v1 δ1'. now apply IHs2.
+
       - (* stm_match_list *)
         apply rule_stm_match_list; cbn; intros * ->; auto.
 

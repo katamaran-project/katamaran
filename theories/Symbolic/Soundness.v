@@ -2155,6 +2155,14 @@ Module Soundness
       now apply IHs.
     - apply refine_block.
     - apply refine_bind; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros t v Htv.
+      apply refine_bind; auto.
+      apply refine_demonic_match_pattern; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs Htvs.
+      apply refine_pushspops; auto.
+    - apply refine_bind; auto.
       intros POST__s POST__c HPOST.
       apply refine_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.

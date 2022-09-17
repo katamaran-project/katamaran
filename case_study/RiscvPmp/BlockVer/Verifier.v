@@ -750,8 +750,8 @@ Module BlockVerificationDerived2Sem.
       iApply semWP_seq.
       iApply semWP_call_inline.
       iPoseProof (Hverif2 with "[Hh Hnpc Hpc Hinstr]") as "Hverif2".
-      iFrame. iRevert "Hverif2".
-      iApply semWP_strong_mono. cbn.
+      iFrame.
+      iApply (semWP_mono with "Hverif2"). cbn.
       iIntros (_ _) "([%an (Hnpc & Hpc & Hk2)] & Hinstr)".
       iSpecialize ("Hk2" with "[Hpc Hnpc Hinstrs]").
       iFrame. now iExists an.

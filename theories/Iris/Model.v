@@ -409,17 +409,10 @@ Module Type IrisResources
 
     Context `{sG : sailGS Σ}.
 
-    Lemma semWP_mono [Γ τ] (s : Stm Γ τ) (P Q : Val τ → CStore Γ → iProp Σ) :
-      (forall v δ, P v δ -∗ Q v δ) -> (forall δ, semWP s P δ -∗ semWP s Q δ).
+    Lemma semWP_mono [Γ τ] (s : Stm Γ τ) (P Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ) :
+      ⊢ (semWP s P δ -∗ (∀ v δ, P v δ -∗ Q v δ) -∗ semWP s Q δ).
     Proof.
-      unfold semWP. intros PQ δ.
-      apply wp_mono. now intros [].
-    Qed.
-
-    Lemma semWP_strong_mono [Γ τ] (s : Stm Γ τ) (P Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ) :
-      ⊢ (∀ v δ, P v δ -∗ Q v δ) -∗ (semWP s P δ -∗ semWP s Q δ).
-    Proof.
-      unfold semWP. iIntros "PQ WP".
+      unfold semWP. iIntros "WP PQ".
       iApply (wp_strong_mono with "WP"); auto.
       iIntros ([v δΓ]) "X"; cbn.
       iModIntro. by iApply "PQ".
@@ -1010,6 +1003,32 @@ Module Type IrisResources
         iModIntro.
         iFrame.
         by iApply "IH".
+    Qed.
+
+    Lemma semWP_match_pattern {Γ τ Δ σ} (s : Stm Γ σ) (pat : Pattern Δ σ) (rhs : Stm (Γ ▻▻ Δ) τ) :
+      ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
+          semWP s (fun vσ δ1 => semWP rhs (fun vτ δ2 => Q vτ (env.drop Δ δ2))
+                                  (δ1 ►► pattern_match_val pat vσ)) δ -∗
+          semWP (stm_match_pattern s pat rhs) Q δ.
+    Proof.
+      iIntros (Q δ) "WPs". unfold semWP at 3. rewrite wp_unfold. cbn.
+      iIntros (? ns ks1 ks nt) "state_inv".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; [trivial|].
+      iIntros (e2 σ' efs) "%".
+      dependent elimination H.
+      fold_semWP.
+      dependent elimination s0.
+      iModIntro. iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iModIntro.
+      iFrame; iSplitL; auto.
+      iApply semWP_bind.
+      iApply (semWP_mono with "WPs"); cbn.
+      clear - sG.
+      iIntros (v δ) "WPrhs".
+      by iApply semWP_block.
     Qed.
 
   End WeakestPre.

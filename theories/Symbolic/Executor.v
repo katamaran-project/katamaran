@@ -1581,6 +1581,11 @@ Module Type SymbolicExecOn
             | stm_fail _ _ =>
                 (* Same as stm_assert: partial correctness of failure. *)
                 block (w:=w0)
+            | stm_match_pattern s pat rhs =>
+              ⟨ ω1 ⟩ v  <- exec_aux s ;;
+              ⟨ ω2 ⟩ vs <- demonic_match_pattern PVartoLVar pat v;;
+              pushspops vs (exec_aux rhs)
+
             | stm_match_list e alt_nil xh xt alt_cons =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_list (PVartoLVar xh) (PVartoLVar xt) t

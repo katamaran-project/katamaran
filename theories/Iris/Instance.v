@@ -192,9 +192,9 @@ Section Soundness.
                      semTriple δ P (let: x := s in k) R).
   Proof.
     iIntros "trips tripk P".
+    iApply semWP_let.
     iSpecialize ("trips" with "P").
-    iApply semWP_let. iRevert "trips".
-    by iApply semWP_strong_mono.
+    by iApply (semWP_mono with "trips").
   Qed.
 
   Lemma iris_rule_stm_block {Γ} (δ : CStore Γ)
@@ -230,9 +230,10 @@ Section Soundness.
                  semTriple δ P (s1 ;; s2) R)%I.
   Proof.
     iIntros "trips1 trips2 P".
-    iPoseProof ("trips1" with "P") as "wps1".
-    iApply semWP_seq. iRevert "wps1".
-    iApply semWP_strong_mono. by iFrame.
+    iSpecialize ("trips1" with "P").
+    iApply semWP_seq.
+    iApply (semWP_mono with "trips1").
+    by iFrame.
   Qed.
 
   Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
@@ -436,9 +437,9 @@ Section Soundness.
            semTriple δ P (stm_bind s k) R)%I.
   Proof.
     iIntros "trips tripk P".
-    iPoseProof ("trips" with "P") as "wpv".
-    iApply semWP_bind. iRevert "wpv".
-    by iApply semWP_strong_mono.
+    iSpecialize ("trips" with "P").
+    iApply semWP_bind.
+    by iApply (semWP_mono with "trips").
   Qed.
 
   Lemma iris_rule_stm_call_inline_later
@@ -758,11 +759,9 @@ Module IrisInstanceWithContracts
     iSpecialize ("cenv" $! _ _ f).
     rewrite ceq. clear ceq.
     destruct c as [Σe δΔ req res ens]; cbn in *.
-    unfold semTriple.
     iPoseProof (ctrip with "P") as (ι Heq) "[req consr]". clear ctrip.
     iPoseProof ("cenv" $! ι with "req") as "wpf0". rewrite Heq.
-    iRevert "wpf0".
-    iApply semWP_strong_mono.
+    iApply (semWP_mono with "wpf0").
     by iIntros (v _).
   Qed.
 
@@ -789,8 +788,9 @@ Module IrisInstanceWithContracts
     destruct CEnvEx as [Σe δΔ req res ens]; cbn in *.
     iPoseProof (ctrip with "P") as "[%ι [%Heq [req consr]]]". clear ctrip.
     iPoseProof (forSem ι Heq with "req") as "WPf". clear forSem.
-    iRevert "WPf". iApply semWP_strong_mono.
-    iIntros (v δΓ') "[ens ->]". by iApply "consr".
+    iApply (semWP_mono with "WPf").
+    iIntros (v δΓ') "[ens ->]".
+    by iApply "consr".
   Qed.
 
   Lemma iris_rule_stm_lemmak
@@ -826,6 +826,21 @@ Module IrisInstanceWithContracts
     by iApply lemSem.
   Qed.
 
+  Lemma iris_rule_stm_match_pattern {Γ τ Δ σ} (δΓ : CStore Γ) (s : Stm Γ σ)
+    (pat : Pattern Δ σ) (rhs : Stm (Γ ▻▻ Δ) τ) (P : iProp Σ)
+    (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
+    ⊢ semTriple δΓ P s Q -∗
+      (∀ (x : Val σ) (x0 : Env (λ xt : PVar∷Ty, Val (type xt)) Γ),
+         semTriple (x0 ►► pattern_match_val pat x) (Q x x0) rhs
+           (λ (v2 : Val τ) (δ' : CStore (Γ ▻▻ Δ)), R v2 (env.drop Δ δ'))) -∗
+      semTriple δΓ P (stm_match_pattern s pat rhs) R.
+  Proof.
+    iIntros "WPs WPrhs P".
+    iSpecialize ("WPs" with "P").
+    iApply semWP_match_pattern.
+    by iApply (semWP_mono with "WPs").
+  Qed.
+
   Lemma sound_stm
     {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
     forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ),
@@ -836,7 +851,7 @@ Module IrisInstanceWithContracts
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -870,6 +885,7 @@ Module IrisInstanceWithContracts
     - by iApply iris_rule_stm_lemmak.
     - by iApply iris_rule_stm_bind.
     - by iApply iris_rule_stm_debugk.
+    - by iApply iris_rule_stm_match_pattern.
   Qed.
 
   Lemma sound :

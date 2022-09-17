@@ -213,6 +213,9 @@ Module CInterpreter (Import B : Base)
       if v then exec k else error
     | stm_fail _ s =>
       error
+    | stm_match_pattern s pat rhs =>
+      v <- exec s ;;
+      pushspops (pattern_match_val pat v) (exec rhs)
     | stm_match_enum E e alts =>
       v <- eval_exp e ;;
       exec (alts v)
