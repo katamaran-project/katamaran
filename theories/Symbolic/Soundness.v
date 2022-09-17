@@ -1209,15 +1209,11 @@ Module Soundness
       unfold SHeapSpecM.angelic_match_pattern, CHeapSpecM.angelic_match_pattern.
       apply refine_bind; try (apply refine_angelic_ctx; assumption); try assumption.
       intros w1 r01 ι1 -> Hpc1.
-      intros ts vs ->.
-      change (fun Σ => @Env (N ∷ Ty) (fun τ => Term Σ (type τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
+      intros ts vs Htvs.
+      hnf in Htvs. subst vs.
       apply refine_bind.
       - apply refine_assert_formula; try assumption. cbn - [Val].
-        rewrite inst_pattern_match_env_reverse.
-        rewrite <- inst_persist.
-        split; intros <-.
-        + now rewrite pattern_match_val_inverse_left.
-        + now rewrite pattern_match_val_inverse_right.
+        now rewrite inst_pattern_match_env_reverse, <- inst_persist.
       - intros w2 r12 ι2 -> Hpc2 _ _ _.
         apply refine_pure; try assumption.
         now rewrite <- inst_persist.
@@ -1263,15 +1259,11 @@ Module Soundness
       unfold SHeapSpecM.demonic_match_pattern, CHeapSpecM.demonic_match_pattern.
       apply refine_bind; try (apply refine_demonic_ctx; assumption); try assumption.
       intros w1 r01 ι1 -> Hpc1.
-      intros ts vs ->.
-      change (fun Σ => @Env (N ∷ Ty) (fun τ => Term Σ (type τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
+      intros ts vs Htvs.
+      hnf in Htvs. subst vs.
       apply refine_bind.
       - apply refine_assume_formula; try assumption. cbn - [Val].
-        rewrite inst_pattern_match_env_reverse.
-        rewrite <- inst_persist.
-        split; intros <-.
-        + now rewrite pattern_match_val_inverse_left.
-        + now rewrite pattern_match_val_inverse_right.
+        now rewrite inst_pattern_match_env_reverse, <- inst_persist.
       - intros w2 r12 ι2 -> Hpc2 _ _ _.
         apply refine_pure; try assumption.
         now rewrite <- inst_persist.

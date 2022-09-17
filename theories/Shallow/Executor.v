@@ -764,7 +764,7 @@ Module Type ShallowExecOn
       Definition angelic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty}
         (p : Pattern Δ σ) {Γ} (v : Val σ) : CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
         vs <- angelic_ctx Δ ;;
-        assert_formula (pattern_match_val p v = vs) ;;
+        _  <- assert_formula (pattern_match_env_val_reverse p vs = v) ;;
         pure vs.
 
       Lemma wp_angelic_match_pattern {N : Set} {σ Γ} {Δ : NCtx N Ty} (p : Pattern Δ σ)
@@ -777,15 +777,17 @@ Module Type ShallowExecOn
              lift_purem CPureSpecM.assert_formula].
         rewrite CPureSpecM.wp_angelic_ctx.
         split.
-        - now intros (vs & <- & H).
+        - intros (vs & <- & H).
+          now rewrite pattern_match_val_inverse_right.
         - intros ?. exists (pattern_match_val p v).
-          split; auto.
+          split; [|easy].
+          now rewrite pattern_match_val_inverse_left.
       Qed.
 
       Definition demonic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty}
         (p : Pattern Δ σ) {Γ} (v : Val σ) : CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
         vs <- demonic_ctx Δ ;;
-        assume_formula (pattern_match_val p v = vs) ;;
+        _  <- assume_formula (pattern_match_env_val_reverse p vs = v) ;;
         pure vs.
 
       Lemma wp_demonic_match_pattern {N : Set} {σ Γ} {Δ : NCtx N Ty} (p : Pattern Δ σ)
@@ -797,7 +799,11 @@ Module Type ShallowExecOn
         cbv [demonic_match_pattern bind pure demonic_ctx bind_right assume_formula
              lift_purem CPureSpecM.assume_formula].
         rewrite CPureSpecM.wp_demonic_ctx.
-        intuition; subst; auto.
+        split.
+        - intros HYP. apply HYP.
+          now rewrite pattern_match_val_inverse_left.
+        - intros HYP vs <-.
+          now rewrite pattern_match_val_inverse_right in HYP.
       Qed.
 
       Definition angelic_match_union {N : Set} {A Γ1 Γ2 U}
