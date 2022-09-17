@@ -150,16 +150,6 @@ Module ProgramLogic.
         (forall (v : Val σl), eval e δ = inl v -> ⦃ P ⦄ alt_inl ; env.snoc δ (xl∷σl) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
         (forall (v : Val σr), eval e δ = inr v -> ⦃ P ⦄ alt_inr ; env.snoc δ (xr∷σr) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
         ⦃ P ⦄ stm_match_sum e xl alt_inl xr alt_inr ; δ ⦃ Q ⦄
-    | rule_stm_match_prod
-        {xl xr : PVar} {σl σr : Ty} {e : Exp Γ (ty.prod σl σr)}
-        {rhs : Stm (Γ ▻ xl∷σl ▻ xr∷σr) τ}
-        {P : L} {Q : Val τ -> CStore Γ -> L} :
-        (forall (vl : Val σl) (vr : Val σr),
-           eval e δ = (vl,vr) ->
-           ⦃ P ⦄
-             rhs ; env.snoc (env.snoc δ (xl∷σl) vl) (xr∷σr) vr
-           ⦃ fun v δ' => Q v (env.tail (env.tail δ')) ⦄) ->
-        ⦃ P ⦄ stm_match_prod e xl xr rhs ; δ ⦃ Q ⦄
     | rule_stm_match_enum
         {E : enumi} (e : Exp Γ (ty.enum E))
         (alts : forall (K : enumt E), Stm Γ τ)

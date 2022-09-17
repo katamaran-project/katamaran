@@ -1597,10 +1597,6 @@ Module Type SymbolicExecOn
                 demonic_match_sum (PVartoLVar xinl) (PVartoLVar xinr) t
                   (fun _ _ tl => pushpop tl (exec_aux alt_inl))
                   (fun _ _ tr => pushpop tr (exec_aux alt_inr))
-            | stm_match_prod e xl xr rhs =>
-                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_prod (PVartoLVar xl) (PVartoLVar xr) t
-                  (fun _ _ t1 t2 => pushspops [env].[xl∷_ ↦ t1].[xr∷_ ↦ t2] (exec_aux rhs))
             | stm_match_enum E e alts =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_enum t (fun EK _ _ => exec_aux (alts EK))

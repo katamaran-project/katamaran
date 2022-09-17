@@ -240,14 +240,6 @@ Module CInterpreter (Import B : Base)
       | inl v => pushpop v (exec s1)
       | inr v => pushpop v (exec s2)
       end
-    | stm_match_prod e xl xr s =>
-      v <- eval_exp e ;;
-      match v with
-      | (vl,vr) =>
-        pushspops
-          [nenv vl; vr]
-          (exec s)
-      end
     | stm_match_tuple e p rhs =>
       v <- eval_exp e ;;
       pushspops (tuple_pattern_match_val p v) (exec rhs)

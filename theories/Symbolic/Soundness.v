@@ -2176,16 +2176,6 @@ Module Soundness
       apply refine_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      apply refine_demonic_match_prod; auto.
-      intros w2 ω12 ι2 -> Hpc2.
-      intros t1 v1 ->.
-      intros t2 v2 ->.
-      apply refine_pushspops; auto.
-    - apply refine_bind; auto.
-      intros POST__s POST__c HPOST.
-      apply refine_eval_exp; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
       apply refine_demonic_match_enum; auto.
       intros EK1 EK2 ->.
       intros w2 ω12 ι2 -> Hpc2; auto.

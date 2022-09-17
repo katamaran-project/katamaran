@@ -763,28 +763,6 @@ Module Type IrisResources
       - by iApply (semWP_block [env].[xinr0∷σinr0 ↦ v]).
     Qed.
 
-    Lemma semWP_match_prod {Γ τ σ1 σ2 xl xr} (e : Exp Γ (ty.prod σ1 σ2)) (s : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
-          (let (v1, v2) := eval e δ in
-           semWP s (fun v δ1 => Q v (env.tail (env.tail δ1))) δ.[xl∷σ1 ↦ v1].[xr∷σ2 ↦ v2]) -∗
-          semWP (stm_match_prod e xl xr s) Q δ.
-    Proof.
-      iIntros (Q δ) "WPs". unfold semWP at 2. rewrite wp_unfold. cbn.
-      iIntros (σ _ ks1 ks nt) "Hregs".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro. iSplitR; [trivial|].
-      iIntros (e2 σ' efs) "%".
-      dependent elimination H.
-      fold_semWP.
-      dependent elimination s0.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro. iFrame.
-      iSplitL; [|trivial].
-      destruct eval.
-      by iApply (semWP_block [env].[_∷_ ↦ _].[_∷_ ↦ _]).
-    Qed.
-
     Lemma semWP_match_enum {Γ τ E} (e : Exp Γ (ty.enum E)) (alts : enumt E → Stm Γ τ) :
       ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
           semWP (alts (eval e δ)) Q δ -∗ semWP (stm_match_enum E e alts) Q δ.

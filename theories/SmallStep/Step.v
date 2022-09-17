@@ -141,13 +141,6 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
                 | inr v => stm_block (env.snoc env.nil (xinr∷σinr) v) alt_inr
                 end
       ⟩
-  | step_stm_match_prod
-      {σ1 σ2 : Ty} (e : Exp Γ (ty.prod σ1 σ2)) (xl xr : PVar)
-      (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) :
-      ⟨ γ , μ , δ , stm_match_prod e xl xr rhs ⟩ --->
-      ⟨ γ , μ , δ , let (vl , vr) := eval e δ in
-                stm_block (env.snoc (env.snoc env.nil (xl∷σ1) vl) (xr∷σ2) vr) rhs
-      ⟩
   | step_stm_match_enum
       {E : enumi} (e : Exp Γ (ty.enum E))
       (alts : forall (K : enumt E), Stm Γ τ) :
@@ -259,7 +252,6 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         | @stm_match_pattern    => idtac
         | @stm_match_sum        => idtac
         | @stm_match_list       => idtac
-        | @stm_match_prod       => idtac
         | @stm_match_enum       => idtac
         | @stm_match_tuple      => idtac
         | @stm_match_union      => idtac

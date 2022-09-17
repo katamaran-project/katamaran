@@ -291,21 +291,6 @@ Section Soundness.
     - by iApply "tripinr".
   Qed.
 
-  Lemma iris_rule_stm_match_prod {Γ} (δ : CStore Γ)
-        {σ1 σ2 τ : Ty} (e : Exp Γ (ty.prod σ1 σ2))
-        (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ ((∀ (vl : Val σ1) (vr : Val σ2), ⌜ eval e δ = (vl,vr) ⌝ →
-            semTriple (env.snoc (env.snoc δ (xl∷σ1) vl) (xr∷σ2) vr)
-              P rhs (fun v δ' => Q v (env.tail (env.tail δ')))) -∗
-          semTriple δ P (stm_match_prod e xl xr rhs) Q)%I.
-  Proof.
-    iIntros "trippair P".
-    iApply semWP_match_prod.
-    destruct eval.
-    by iApply "trippair".
-  Qed.
-
   Lemma iris_rule_stm_match_enum {Γ} (δ : CStore Γ)
         {E : enumi} (e : Exp Γ (ty.enum E)) {τ : Ty}
         (alts : forall (K : enumt E), Stm Γ τ)
@@ -851,7 +836,7 @@ Module IrisInstanceWithContracts
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -868,7 +853,6 @@ Module IrisInstanceWithContracts
     - by iApply iris_rule_stm_fail.
     - by iApply iris_rule_stm_match_list.
     - by iApply iris_rule_stm_match_sum.
-    - by iApply iris_rule_stm_match_prod.
     - by iApply iris_rule_stm_match_enum.
     - by iApply iris_rule_stm_match_tuple.
     - by iApply iris_rule_stm_match_union.

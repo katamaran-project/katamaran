@@ -225,9 +225,6 @@ Module Type Soundness
           destruct (eval e δ); cbn.
           apply IHs1; auto.
           apply IHs2; auto.
-        - rewrite !wp_demonic_match_prod.
-          destruct (eval e δ); cbn.
-          apply IHs; auto.
         - rewrite !wp_demonic_match_enum.
           apply H; auto.
         - rewrite !wp_demonic_match_tuple.
@@ -637,12 +634,6 @@ Module Type Soundness
         rewrite wp_demonic_match_sum in HYP.
         apply rule_stm_match_sum; cbn; intros * Heval;
           rewrite Heval in HYP; auto.
-
-      - (* stm_match_prod *)
-        rewrite wp_demonic_match_prod in HYP.
-        apply rule_stm_match_prod; cbn; intros * Heval;
-          rewrite Heval in HYP; cbn in HYP.
-        now apply IHs.
 
       - (* stm_match_enum *)
         rewrite wp_demonic_match_enum in HYP.

@@ -149,9 +149,6 @@ Module Type Soundness
       - (* stm_match_sum *)
         apply rule_stm_match_sum; cbn; intros * ->; auto.
 
-      - (* stm_match_prod *)
-        apply rule_stm_match_prod; cbn; intros * ->; auto.
-
       - (* stm_match_enum *)
         now apply rule_stm_match_enum, H.
 

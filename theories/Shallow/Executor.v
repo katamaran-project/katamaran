@@ -1175,14 +1175,6 @@ Module Type ShallowExecOn
                 v
                 (fun v => pushpop v (exec_aux s1))
                 (fun v => pushpop v (exec_aux s2))
-            | stm_match_prod e xl xr s =>
-              v <- eval_exp e ;;
-              demonic_match_prod
-                v
-                (fun vl vr =>
-                   pushspops
-                     (env.snoc (env.snoc env.nil (xl∷_) vl) (xr∷_) vr)
-                     (exec_aux s))
             | stm_match_tuple e p rhs =>
               v <- eval_exp e ;;
               demonic_match_tuple p v

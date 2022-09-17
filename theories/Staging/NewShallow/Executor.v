@@ -931,11 +931,6 @@ Module Type NewShallowExecOn
                 v
                 (fun v => pushpop v (exec s1))
                 (fun v => pushpop v (exec s2))
-            | stm_match_prod e xl xr rhs =>
-              v <- eval_exp e ;;
-              match_prod v
-                (fun vl vr =>
-                   pushspops [kv (xl∷_; vl); (xr∷_; vr)] (exec rhs))
             | stm_match_tuple e p rhs =>
               v <- eval_exp e ;;
               match_tuple p v

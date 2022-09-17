@@ -760,26 +760,6 @@ Module IrisInstanceWithContracts
     - by iApply (rule_block [env].[xinr0∷σinr0 ↦ v]).
   Qed.
 
-  Lemma rule_match_prod {Γ τ σ1 σ2 xl xr} (e : Exp Γ (ty.prod σ1 σ2)) (s : Stm (Γ▻xl∷σ1▻xr∷σ2) τ) :
-    ⊢ semWP' (stm_match_prod e xl xr s) ≼ semWP (stm_match_prod e xl xr s).
-  Proof.
-    iIntros (POST δ) "WPs". unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ _ ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e2 σ' efs) "%".
-    dependent elimination H.
-    fold_semWP.
-    dependent elimination s0.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro. iFrame.
-    iSplitL; [|trivial].
-    unfold semWP'; cbn.
-    destruct eval as [v1 v2].
-    by iApply (rule_block [env].[_∷_ ↦ _].[_∷_ ↦ _]).
-  Qed.
-
   Lemma rule_match_enum {Γ τ E} (e : Exp Γ (ty.enum E)) (alts : enumt E → Stm Γ τ) :
     ⊢ semWP' (stm_match_enum E e alts) ≼ semWP (stm_match_enum E e alts).
   Proof.
@@ -1007,7 +987,6 @@ Module IrisInstanceWithContracts
     - apply rule_match_pattern.
     - apply rule_match_list.
     - apply rule_match_sum.
-    - apply rule_match_prod.
     - apply rule_match_enum.
     - apply rule_match_tuple.
     - apply rule_match_union.

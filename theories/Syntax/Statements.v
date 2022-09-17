@@ -72,9 +72,6 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
       {σinl σinr : Ty} (e : Exp Γ (ty.sum σinl σinr))
       (xinl : PVar) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
       (xinr : PVar) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
-  | stm_match_prod
-      {σ1 σ2 : Ty} (e : Exp Γ (ty.prod σ1 σ2))
-      (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
   | stm_match_enum
       {E : enumi} (e : Exp Γ (ty.enum E))
       (alts : forall (K : enumt E), Stm Γ τ)
@@ -117,7 +114,6 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_match_pattern {Γ τ Δ σ} s pat rhs.
   Arguments stm_match_list {Γ τ _} _ _ _ _ _.
   Arguments stm_match_sum {Γ τ _ _} _ _ _ _ _.
-  Arguments stm_match_prod {Γ τ _ _} _ _ _ _.
   Arguments stm_match_enum {Γ τ} E e%exp alts%exp.
   Arguments stm_match_tuple {Γ τ σs Δ} e%exp p%pat rhs%exp.
   Arguments stm_match_union {Γ τ} U e {alt__ctx} alt__pat alt__rhs.
@@ -146,11 +142,15 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Definition stm_lemma {Γ Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ ty.unit :=
     stm_lemmak l es (stm_val ty.unit tt).
 
+  Definition stm_match_prod {Γ τ σ1 σ2} (s : Stm Γ (ty.prod σ1 σ2))
+    (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) : Stm Γ τ :=
+    stm_match_pattern (Δ := ctx.nil ▻ xl∷σ1 ▻ xr∷σ2) s (pat_pair xl xr) rhs.
+
   Arguments MkAlt {_ _ _ _} _ _.
   Arguments stm_match_union_alt {_ _} _ _ _.
   Arguments stm_assert {Γ} e1%exp e2%exp.
   Arguments stm_lemma {Γ Δ} l es%env.
-
+  Arguments stm_match_prod {Γ τ _ _} _ _ _ _.
 
   Definition UnionAlt (U : unioni) (Γ : PCtx) (τ : Ty) (K : unionk U) : Set :=
     Alternative Γ (unionk_ty U K) τ.
