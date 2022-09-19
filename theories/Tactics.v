@@ -82,19 +82,6 @@ Ltac solve_eqb_spec := solve_eqb_spec' idtac.
 Tactic Notation "solve_eqb_spec" "with" tactic(tac) :=
   solve_eqb_spec' tac.
 
-Ltac finite_from_eqdec :=
-  match goal with
-  | |- base.NoDup ?xs =>
-      now apply (@decidable.bool_decide_unpack _ (list.NoDup_dec xs))
-  | |- forall x : ?T, base.elem_of x _ =>
-      lazymatch T with
-      | sigT _ => intros [? []]
-      | _      => intros []
-      end;
-      apply (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _));
-      auto
-  end.
-
 Ltac destruct_propositional H :=
   lazymatch type of H with
   | _ /\ _ =>

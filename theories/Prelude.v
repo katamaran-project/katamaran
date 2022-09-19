@@ -149,6 +149,19 @@ Section Equality.
 
 End Equality.
 
+Ltac finite_from_eqdec :=
+  match goal with
+  | |- base.NoDup ?xs =>
+      now apply (@decidable.bool_decide_unpack _ (list.NoDup_dec xs))
+  | |- forall x : ?T, base.elem_of x _ =>
+      lazymatch T with
+      | sigT _ => intros [? []]
+      | _      => intros []
+      end;
+      apply (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _));
+      auto
+  end.
+
 Section Finite.
 
   Import stdpp.finite.
@@ -159,6 +172,15 @@ Section Finite.
     apply NoDup_ListNoDup.
     apply NoDup_nodup.
   Qed.
+
+  #[local] Obligation Tactic := finite_from_eqdec.
+
+  (* To avoid some coherence issues, we define our own Finite instance for bool
+     that uses the EqDEc instance from the Equations library instead of the
+     EqDecision instance from stdpp. *)
+  #[export,program] Instance Finite_bool :
+    @Finite bool EqDecision_from_EqDec :=
+    {| enum := [true;false] |}.
 
 End Finite.
 
