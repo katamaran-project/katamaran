@@ -344,7 +344,7 @@ Module Type SymbolicExecOn
     Definition angelic (x : option LVar) σ :
       ⊢ SPureSpecM (STerm σ) :=
       fun w k =>
-        let y := fresh w x in
+        let y := fresh_lvar w x in
         angelicv
           (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
     Global Arguments angelic x σ {w} k.
@@ -381,7 +381,7 @@ Module Type SymbolicExecOn
     Definition demonic (x : option LVar) σ :
       ⊢ SPureSpecM (STerm σ) :=
       fun w k =>
-        let y := fresh w x in
+        let y := fresh_lvar w x in
         demonicv
           (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
     Global Arguments demonic x σ {w} k.

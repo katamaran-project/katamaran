@@ -275,7 +275,7 @@ Module Soundness
         (* HPOST : ℛ ι0 POST__s POST__c *)
         (* ============================ *)
         (* ℛ ι0 (SPureSpecM.demonic x σ POST__s) (CPureSpecM.demonic σ POST__c) *)
-      intros Hwp v. cbn in Hwp. specialize (Hwp v). remember (fresh w0 x) as ℓ.
+      intros Hwp v. cbn in Hwp. specialize (Hwp v). remember (fresh_lvar w0 x) as ℓ.
         (* x : option LVar *)
         (* σ : Ty *)
         (* w0 : World *)
@@ -286,7 +286,7 @@ Module Soundness
         (* HPOST : ℛ ι0 POST__s POST__c *)
         (* v : Val σ *)
         (* ℓ : LVar *)
-        (* Heqℓ : ℓ = fresh w0 x *)
+        (* Heqℓ : ℓ = fresh_lvar w0 x *)
         (* Hwp : wsafe (POST__s (wsnoc w0 (ℓ∷σ)) acc_snoc_right (term_var ℓ)) ι0.[ℓ∷σ ↦ v] *)
         (* ============================ *)
         (* POST__c v *)
@@ -304,7 +304,7 @@ Module Soundness
         (* HPOST : ℛ ι0 POST__s POST__c *)
         (* v : Val σ *)
         (* ℓ : LVar *)
-        (* Heqℓ : ℓ = fresh w0 x *)
+        (* Heqℓ : ℓ = fresh_lvar w0 x *)
         (* ============================ *)
         (* ℛ ι0.[ℓ∷σ ↦ v] (term_var ℓ) v *)
       reflexivity.

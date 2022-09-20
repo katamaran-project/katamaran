@@ -54,9 +54,13 @@ Class VarKit : Type :=
     (* Conversion of program variables to logic variables. *)
     PVartoLVar : PVar -> LVar;
 
+    (* Generation of program variable names that is fresh for a given context
+       and that tries to reuse an optional old name. *)
+    fresh_pvar : forall T, NCtx PVar T -> option PVar -> PVar;
+
     (* Generation of logic variable names that is fresh for a given context
        and that tries to reuse an optional old name. *)
-    fresh : forall T, NCtx LVar T -> option LVar -> LVar;
+    fresh_lvar : forall T, NCtx LVar T -> option LVar -> LVar;
   }.
 #[export] Existing Instance PVar_eq_dec.
 #[export] Existing Instance LVar_eq_dec.
@@ -67,5 +71,6 @@ Definition DefaultVarKit : VarKit :=
      LVar := string;
      LVar_eq_dec := string_dec;
      PVartoLVar x := x;
-     fresh := ctx.fresh;
+     fresh_pvar := ctx.fresh;
+     fresh_lvar := ctx.fresh;
   |}.
