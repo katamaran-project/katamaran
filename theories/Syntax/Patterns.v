@@ -244,7 +244,7 @@ Module Type PatternsOn (Import TY : Types).
     | pat_shape_bvec_split m n (x y : N)                    : PatternShape (ty.bvec (m+n))
     | pat_shape_bvec_exhaustive m                           : PatternShape (ty.bvec m)
     | pat_shape_tuple σs Δ (p : TuplePat σs Δ)              : PatternShape (ty.tuple σs)
-    | pat_shape_union U (x : N)                             : PatternShape (ty.union U)
+    | pat_shape_union U (x : unionk U -> N)                 : PatternShape (ty.union U)
     | pat_shape_record R Δ (p : RecordPat (recordf_ty R) Δ) : PatternShape (ty.record R).
 
     (* This describes the different cases/alternatives for a single pattern
@@ -287,7 +287,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_shape_enum _             => fun _ => [ctx]
       | pat_shape_bvec_split m n x y => fun _ => [x∷ty.bvec m; y∷ty.bvec n]
       | pat_shape_bvec_exhaustive m  => fun _ => [ctx]
-      | pat_shape_union U x          => fun K => [x∷unionk_ty U K]
+      | pat_shape_union U x          => fun K => [x K∷unionk_ty U K]
       | pat_shape_tuple _ Δ _        => fun _ => Δ
       | pat_shape_record _ Δ _       => fun _ => Δ
       end%ctx.
@@ -329,7 +329,7 @@ Module Type PatternsOn (Import TY : Types).
        | pat_shape_tuple σs Δ p =>
            fun v => (tt; tuple_pattern_match_val p v)
        | pat_shape_union U x =>
-           fun v => let (K, u) := unionv_unfold U v in (K; [env].[x∷unionk_ty U K ↦ u])
+           fun v => let (K, u) := unionv_unfold U v in (K; [env].[x K∷unionk_ty U K ↦ u])
        | pat_shape_record R Δ p =>
            fun v => (tt; record_pattern_match_val p v)
        end.
