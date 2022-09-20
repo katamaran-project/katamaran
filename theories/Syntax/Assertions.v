@@ -126,8 +126,7 @@ Module Import asn.
       | debug => debug
       end.
 
-  (* This instance is only used for linting contracts, so we only used it as an
-     instance locally. *)
+  (* TODO: This instance is currently unused and incomplete. Do not use. *)
   Import option.notations.
   #[local] Instance OccursCheckAssertion :
     OccursCheck Assertion :=
@@ -163,6 +162,57 @@ Module Import asn.
       | exist ς τ A => option_map (@exist _ ς τ) (occurs _ _ (ctx.in_succ bIn) A)
       | debug => Some debug
       end.
+
+  Open Scope lazy_bool_scope.
+
+  Fixpoint occurs_checkb_assertion {Σ b} (bIn : b ∈ Σ) (asn : Assertion Σ) : bool :=
+    match asn with
+    | formula fml => option.isNone (occurs_check bIn fml)
+    | chunk c     => option.isNone (option.map (@chunk _) (occurs_check bIn c))
+    | chunk_angelic c => option.isNone (option.map (@chunk_angelic _) (occurs_check bIn c))
+    | match_bool b a1 a2  =>
+        option.isNone (occurs_check bIn b) |||
+        occurs_checkb_assertion bIn a1 |||
+        occurs_checkb_assertion bIn a2
+    | match_enum E k alts =>
+        option.isNone (occurs_check bIn k) |||
+        List.forallb
+          (fun K => occurs_checkb_assertion bIn (alts K))
+          (finite.enum (enumt E))
+    | match_sum σ τ s xl alt_inl xr alt_inr =>
+        option.isNone (occurs_check bIn s) |||
+        occurs_checkb_assertion (ctx.in_succ bIn) alt_inl |||
+        occurs_checkb_assertion (ctx.in_succ bIn) alt_inr
+    | @match_list _ σ s alt_nil xh xt alt_cons =>
+        option.isNone (occurs_check bIn s) |||
+        occurs_checkb_assertion bIn alt_nil |||
+        occurs_checkb_assertion (ctx.in_succ (ctx.in_succ bIn)) alt_cons
+    | @match_prod _ σ1 σ2 s xl xr rhs =>
+        option.isNone (occurs_check bIn s) |||
+        occurs_checkb_assertion (ctx.in_succ (ctx.in_succ bIn)) rhs
+    | @match_tuple _ σs Δ s p rhs =>
+        option.isNone (occurs_check bIn s) |||
+        occurs_checkb_assertion (ctx.in_cat_left Δ bIn) rhs
+    | @match_record _ R Δ s p rhs =>
+        option.isNone (occurs_check bIn s) |||
+        occurs_checkb_assertion (ctx.in_cat_left Δ bIn) rhs
+    | match_union U s alt__ctx alt__pat alt__rhs =>
+        option.isNone (occurs_check bIn s) |||
+        List.forallb
+          (fun K => occurs_checkb_assertion
+                      (ctx.in_cat_left (alt__ctx K) bIn)
+                      (alt__rhs K))
+          (finite.enum (unionk U))
+    | sep A1 A2 =>
+        occurs_checkb_assertion bIn A1 |||
+        occurs_checkb_assertion bIn A2
+    | or A1 A2  =>
+        occurs_checkb_assertion bIn A1 |||
+        occurs_checkb_assertion bIn A2
+    | exist ς τ A =>
+        occurs_checkb_assertion (ctx.in_succ bIn) A
+    | debug => false
+    end.
 
   Fixpoint is_pure {Σ} (a : Assertion Σ) : bool :=
     match a with
@@ -364,10 +414,8 @@ Section Contracts.
       |} =>
       ctx.forallb Σ
         (fun b bIn =>
-           match occurs_check bIn (δ , pre) with
-           | Some _ => false
-           | None   => true
-           end)
+           option.isNone (occurs_check bIn δ) |||
+           occurs_checkb_assertion bIn pre)
     end.
 
   Definition lint_lemma {Δ} (l : Lemma Δ) : bool :=
@@ -378,10 +426,8 @@ Section Contracts.
       |} =>
       ctx.forallb Σ
         (fun b bIn =>
-           match occurs_check bIn (δ , pre) with
-           | Some _ => false
-           | None   => true
-           end)
+           option.isNone (occurs_check bIn δ) |||
+           occurs_checkb_assertion bIn pre)
     end.
 
   Definition Linted {Δ σ} (c : SepContract Δ σ) : Prop :=
