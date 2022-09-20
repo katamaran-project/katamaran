@@ -437,30 +437,46 @@ Module Soundness
         now rewrite inst_subst, <- inst_persist.
     Qed.
 
+    Lemma refine_angelic_list' {AT A} `{Inst AT A}
+      {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) :
+      ℛ ι0 (@SPureSpecM.angelic_list' AT w0) (@CPureSpecM.angelic_list' A).
+    Proof.
+      intros dt d -> ts vs ->. revert dt.
+      induction ts; cbn; intros d POST__s POST__c HPOST.
+      - now apply refine_pure.
+      - apply refine_symprop_angelic_binary; auto.
+        + now apply refine_pure.
+        + now apply IHts.
+    Qed.
+
     Lemma refine_angelic_list {M} `{Subst M, OccursCheck M} {AT A} `{Inst AT A}
       {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) (msg : M w0) :
       ℛ ι0 (SPureSpecM.angelic_list (A := AT) msg) (CPureSpecM.angelic_list (A := A)).
     Proof.
-      intros xs ? ->.
-      induction xs; cbn - [inst];
-        intros POST__s POST__c HPOST.
-      - intros [].
-      - cbn.
-        apply refine_symprop_angelic_binary; auto.
-        apply HPOST; wsimpl; auto.
+      intros xs ? ->. destruct xs; cbn.
+      - now apply refine_error.
+      - now apply refine_angelic_list'.
+    Qed.
+
+    Lemma refine_demonic_list' {AT A} `{Inst AT A}
+      {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) :
+      ℛ ι0 (@SPureSpecM.demonic_list' AT w0) (@CPureSpecM.demonic_list' A).
+    Proof.
+      intros dt d -> ts vs ->. revert dt.
+      induction ts; cbn; intros d POST__s POST__c HPOST.
+      - now apply refine_pure.
+      - apply refine_symprop_demonic_binary; auto.
+        + now apply refine_pure.
+        + now apply IHts.
     Qed.
 
     Lemma refine_demonic_list {AT A} `{Inst AT A}
       {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) :
       ℛ ι0 (@SPureSpecM.demonic_list AT w0) (@CPureSpecM.demonic_list A).
     Proof.
-      intros xs ? ->.
-      induction xs; cbn - [inst];
-        intros POST__s POST__c HPOST.
+      intros xs ? ->. destruct xs; cbn.
       - constructor.
-      - cbn.
-        apply refine_symprop_demonic_binary; auto.
-        apply HPOST; wsimpl; auto.
+      - now apply refine_demonic_list'.
     Qed.
 
     Lemma refine_angelic_finite {F} `{finite.Finite F}

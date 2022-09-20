@@ -493,22 +493,38 @@ Module Type SymbolicExecOn
       fun w m1 m2 POST =>
         demonic_binary (m1 POST) (m2 POST).
 
-    Definition angelic_list {M} {subM : Subst M} {occM : OccursCheck M} {A} :
-      ⊢ M -> List A -> SPureSpecM A :=
-      fun w msg =>
-        fix rec xs :=
+    Definition angelic_list' {A : LCtx -> Type} :
+      ⊢ A -> List A -> SPureSpecM A :=
+      fun w =>
+        fix rec d xs :=
         match xs with
-        | nil        => error msg
-        | cons x xs  => angelic_binary (pure x) (rec xs)
+        | nil        => pure d
+        | cons x xs  => angelic_binary (pure d) (rec x xs)
         end.
 
-    Definition demonic_list {A} :
-      ⊢ List A -> SPureSpecM A :=
+    Definition angelic_list {M} {subM : Subst M} {occM : OccursCheck M} {A : LCtx -> Type} :
+      ⊢ M -> List A -> SPureSpecM A :=
+      fun w msg xs =>
+        match xs with
+        | nil        => error msg
+        | cons x xs  => angelic_list' x xs
+        end.
+
+    Definition demonic_list' {A : LCtx -> Type} :
+      ⊢ A -> List A -> SPureSpecM A :=
       fun w =>
-        fix rec xs :=
+        fix rec d xs :=
+        match xs with
+        | nil        => pure d
+        | cons x xs  => demonic_binary (pure d) (rec x xs)
+        end.
+
+    Definition demonic_list {A : LCtx -> Type} :
+      ⊢ List A -> SPureSpecM A :=
+      fun w xs =>
         match xs with
         | nil        => block
-        | cons x xs  => demonic_binary (pure x) (rec xs)
+        | cons x xs  => demonic_list' x xs
         end.
 
     Definition angelic_finite F `{finite.Finite F} :

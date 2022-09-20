@@ -169,21 +169,33 @@ Module Type ShallowExecOn
       fun m1 m2 POST =>
         m1 POST /\ m2 POST.
 
-    Definition angelic_list {A} :
-      list A -> CPureSpecM A :=
-      fix rec xs :=
+    Definition angelic_list' {A} :
+      A -> list A -> CPureSpecM A :=
+      fix rec d xs :=
         match xs with
-        | nil        => fun POST => False
-        | cons x xs  => angelic_binary (pure x) (rec xs)
+        | nil        => pure d
+        | cons x xs  => angelic_binary (pure d) (rec x xs)
         end.
 
-    Definition demonic_list {A} :
-      list A -> CPureSpecM A :=
-      fix rec xs :=
+    Definition angelic_list {A} (xs : list A) : CPureSpecM A :=
+      match xs with
+      | nil => fun POST => False
+      | cons x xs => angelic_list' x xs
+      end.
+
+    Definition demonic_list' {A} :
+      A -> list A -> CPureSpecM A :=
+      fix rec d xs :=
         match xs with
-        | nil        => fun POST => True
-        | cons x xs  => demonic_binary (pure x) (rec xs)
+        | nil        => pure d
+        | cons x xs  => demonic_binary (pure d) (rec x xs)
         end.
+
+    Definition demonic_list {A} (xs : list A) : CPureSpecM A :=
+      match xs with
+      | nil => fun POST => True
+      | cons x xs => demonic_list' x xs
+      end.
 
     Definition angelic_finite F `{finite.Finite F} :
       CPureSpecM F :=
@@ -246,27 +258,39 @@ Module Type ShallowExecOn
         + intros HPost. apply IHΔ. intros. apply HPost.
     Qed.
 
-    Lemma wp_angelic_list {A} (xs : list A) (POST : A -> Prop) :
-      angelic_list xs POST <->
-      exists x : A, List.In x xs /\ POST x.
+    Lemma wp_angelic_list' {A} (xs : list A) (POST : A -> Prop) :
+      forall d,
+        angelic_list' d xs POST <->
+          exists x : A, List.In x (cons d xs) /\ POST x.
     Proof.
-      induction xs; cbn.
-      - firstorder.
+      induction xs; cbn; intros d.
+      - firstorder. now subst.
       - cbv [angelic_binary pure].
         rewrite IHxs; clear IHxs.
         firstorder. left. now subst.
     Qed.
 
-    Lemma wp_demonic_list {A} (xs : list A) (POST : A -> Prop) :
-      demonic_list xs POST <->
-      forall x : A, List.In x xs -> POST x.
+    Lemma wp_angelic_list {A} (xs : list A) (POST : A -> Prop) :
+      angelic_list xs POST <->
+      exists x : A, List.In x xs /\ POST x.
+    Proof. destruct xs; cbn; [firstorder|apply wp_angelic_list']. Qed.
+
+    Lemma wp_demonic_list' {A} (xs : list A) (POST : A -> Prop) :
+      forall d,
+        demonic_list' d xs POST <->
+        forall x : A, List.In x (cons d xs) -> POST x.
     Proof.
-      induction xs; cbn.
-      - firstorder.
+      induction xs; cbn; intros d.
+      - firstorder. now subst.
       - cbv [demonic_binary pure].
         rewrite IHxs; clear IHxs.
         firstorder. now subst.
     Qed.
+
+    Lemma wp_demonic_list {A} (xs : list A) (POST : A -> Prop) :
+      demonic_list xs POST <->
+      forall x : A, List.In x xs -> POST x.
+    Proof. destruct xs; cbn; [firstorder|apply wp_demonic_list']. Qed.
 
     Lemma wp_assert_eq_env {Δ : Ctx Ty} (δ δ' : Env Val Δ) :
       forall POST,
