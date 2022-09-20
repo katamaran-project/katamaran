@@ -786,6 +786,29 @@ Module IrisInstanceWithContracts
     by iApply (semWP_mono with "WPs").
   Qed.
 
+  Lemma iris_rule_stm_newpattern_match {Γ τ σ} (δΓ : CStore Γ)
+    (s : Stm Γ σ) (pat : PatternShape σ)
+    (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
+    (P : iProp Σ) (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
+    ⊢ semTriple δΓ P s Q -∗
+      (∀ pc δpc δΓ1,
+         semTriple (δΓ1 ►► δpc) (Q (newpattern_match_val_reverse pat pc δpc) δΓ1) (rhs pc)
+           (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))) -∗
+      semTriple δΓ P (stm_newpattern_match s pat rhs) R.
+  Proof.
+    iIntros "WPs WPrhs P".
+    iSpecialize ("WPs" with "P").
+    iApply semWP_newpattern_match.
+    iApply (semWP_mono with "WPs").
+    iIntros (vσ δΓ') "Q".
+    destruct newpattern_match_val as [pc δpc] eqn:Heq.
+    iApply "WPrhs".
+    change (newpattern_match_val_reverse pat pc δpc) with
+      (newpattern_match_val_reverse' pat (existT pc δpc)).
+    rewrite <- Heq.
+    now rewrite newpattern_match_val_inverse_left.
+  Qed.
+
   Lemma sound_stm
     {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
     forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ),
@@ -796,7 +819,7 @@ Module IrisInstanceWithContracts
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -826,6 +849,7 @@ Module IrisInstanceWithContracts
     - by iApply iris_rule_stm_lemmak.
     - by iApply iris_rule_stm_bind.
     - by iApply iris_rule_stm_debugk.
+    - by iApply iris_rule_stm_newpattern_match.
     - by iApply iris_rule_stm_match_pattern.
   Qed.
 

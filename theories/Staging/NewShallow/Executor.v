@@ -418,6 +418,12 @@ Module Type NewShallowExecOn
           end.
       #[global] Arguments match_bvec_split {_ _ _} v k _ /.
 
+      Definition newpattern_match {N : Set} {A σ} (v : Val σ) (pat : @PatternShape N σ)
+        (k : forall (pc : PatternCase pat), NamedEnv Val (PatternCaseCtx pc) -> CPureSpecM A) :
+        CPureSpecM A :=
+        fun POST => let (pc,δpc) := newpattern_match_val pat v in k pc δpc POST.
+      #[global] Arguments newpattern_match {N A σ} v pat  _ /.
+
     End PatternMatching.
 
     Section ProduceConsume.
@@ -782,13 +788,18 @@ Module Type NewShallowExecOn
         k v.
       #[global] Arguments match_bvec {_ _ _ _} v k _ /.
 
-      Definition match_bvec_split {A m n} {Γ1 Γ2} (v : Val (ty.bvec (m + n)))
+      Definition match_bvec_split {A m n Γ1 Γ2} (v : Val (ty.bvec (m + n)))
         (k : bv m -> bv n -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
         fun POST δ =>
           match bv.appView m n v with
           | bv.isapp xs ys => k xs ys POST δ
           end.
       #[global] Arguments match_bvec_split {_ _ _ _ _} v k _ /.
+
+      Definition newpattern_match {N : Set} {A σ Γ1 Γ2} (v : Val σ) (pat : @PatternShape N σ) (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A) :
+        CHeapSpecM Γ1 Γ2 A :=
+        fun POST δ1 => let (x,p) := newpattern_match_val pat v in k x p POST δ1.
+      #[global] Arguments newpattern_match {N A σ Γ1 Γ2} v pat k _ /.
 
     End PatternMatching.
 
@@ -897,6 +908,10 @@ Module Type NewShallowExecOn
               exec k
             | stm_fail _ s =>
               block
+            | stm_newpattern_match s pat rhs =>
+              v <- exec s ;;
+              newpattern_match v pat
+                (fun pc δpc => pushspops δpc (exec (rhs pc)))
             | stm_match_pattern s pat rhs =>
               v <- exec s ;;
               pushspops (pattern_match_val pat v) (exec rhs)

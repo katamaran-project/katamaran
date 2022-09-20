@@ -139,6 +139,11 @@ Module Type Soundness
         apply rule_stm_fail.
         apply ltrue_right.
 
+      - (* stm_match_newpattern *)
+        eapply rule_stm_newpattern_match. apply IHs. cbn.
+        intros pc δpc δ1'. rewrite newpattern_match_val_inverse_right.
+        now apply H.
+
       - (* stm_match_pattern *)
         eapply rule_stm_match_pattern. apply IHs1. cbn.
         intros v1 δ1'. now apply IHs2.

@@ -62,6 +62,8 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   | stm_seq           {σ : Ty} (s : Stm Γ σ) (k : Stm Γ τ)
   | stm_assertk       (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
   | stm_fail          (s : Val ty.string)
+  | stm_newpattern_match {σ : Ty} (s : Stm Γ σ) (pat : PatternShape σ)
+      (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ)
   | stm_match_pattern
       {Δ : PCtx} {σ : Ty} (s : Stm Γ σ) (pat : Pattern Δ σ)
       (rhs : Stm (Γ ▻▻ Δ) τ)
@@ -102,6 +104,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_seq {Γ τ σ} s%exp k%exp.
   Arguments stm_assertk {Γ τ} e1%exp e2%exp k%exp.
   Arguments stm_fail {Γ} τ s%string.
+  Arguments stm_newpattern_match {Γ τ σ} s pat rhs.
   Arguments stm_match_pattern {Γ τ Δ σ} s pat rhs.
   Arguments stm_match_list {Γ τ _} _ _ _ _ _.
   Arguments stm_match_sum {Γ τ _ _} _ _ _ _ _.

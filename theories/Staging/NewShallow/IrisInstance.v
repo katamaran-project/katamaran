@@ -899,6 +899,34 @@ Module IrisInstanceWithContracts
     iIntros (v0 δ0); auto.
   Qed.
 
+  Lemma rule_newpattern_match {Γ τ σ} (s : Stm Γ σ) (pat : PatternShape σ)
+    (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
+    ⊢ semWP' (stm_newpattern_match s pat rhs) ≼ semWP (stm_newpattern_match s pat rhs).
+  Proof.
+    iIntros (POST δ) "WPs". unfold semWP. rewrite wp_unfold. cbn.
+    iIntros (? ns ks1 ks nt) "state_inv".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; [trivial|].
+    iIntros (e2 σ' efs) "%".
+    dependent elimination H.
+    fold_semWP.
+    dependent elimination s0.
+    iModIntro. iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame; iSplitL; auto.
+    unfold semWP'; cbn.
+    iApply rule_bind; unfold semWP'; cbn.
+    iApply (semWP_mono with "WPs"); cbn.
+    clear - sG.
+    iIntros (v δ) "WPrhs".
+    destruct newpattern_match_val.
+    iApply rule_block; unfold semWP'; cbn.
+    iApply (semWP_mono with "WPrhs").
+    iIntros (v0 δ0); auto.
+  Qed.
+
   Lemma sound_stm_open (extSem : ForeignSem) (lemSem : LemmaSem) :
     forall {Γ τ} (s : Stm Γ τ),
       ⊢ semWP' s ≼ semWP s.
@@ -918,6 +946,7 @@ Module IrisInstanceWithContracts
     - apply rule_seq.
     - apply rule_assertk.
     - apply rule_fail.
+    - apply rule_newpattern_match.
     - apply rule_match_pattern.
     - apply rule_match_list.
     - apply rule_match_sum.

@@ -1065,6 +1065,17 @@ Module Type SymbolicExecOn
         ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_tuple n p <$> persist__term t <*> four k.
 
+      Definition demonic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
+        ⊢ STerm σ ->
+        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
+        SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ pc <- demonic_finite (PatternCase pat) ;;
+          ⟨ ω2 ⟩ ts <- demonic_ctx n (PatternCaseCtx pc) ;;
+          let ω12 := ω1 ∘ ω2 in
+          ⟨ ω3 ⟩ _  <- assume_formula (formula_eq (newpattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
+          k pc _ (ω12 ∘ ω3) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) _) (wctx w)) ts ω3).
+
       Definition angelic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
         ⊢ STerm σ -> SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
         fun w0 t =>
@@ -1634,6 +1645,12 @@ Module Type SymbolicExecOn
                 ⟨ ω23 ⟩ tnew <- eval_exp e (w:=_) ;;
                 ⟨ ω34 ⟩ _ <- T (produce (asn.chunk (chunk_ptsreg reg tnew))) ;;
                 pure (persist__term tnew ω34)
+            | stm_newpattern_match s pat rhs =>
+                ⟨ ω1 ⟩ v  <- exec_aux s ;;
+                demonic_newpattern_match
+                  PVartoLVar pat v
+                  (fun pc w2 ω2 vs =>
+                     pushspops vs (exec_aux (rhs pc)))
             | stm_bind _ _ =>
                 error
                   (fun δ h =>

@@ -214,6 +214,9 @@ Module Type Soundness
         - intros HYP Heq. specialize (HYP Heq). revert HYP.
           apply IHs; auto.
         - auto.
+        - apply IHs. intros ? ? ?.
+          rewrite !wp_demonic_newpattern_match.
+          apply H; auto.
         - apply IHs1. intros ? ? ?.
           rewrite !wp_demonic_match_pattern.
           apply IHs2; auto.
@@ -601,7 +604,37 @@ Module Type Soundness
         apply rule_stm_fail.
         apply ltrue_right.
 
-      - (* stm_match_oattern *)
+      - (* stm_match_newpattern *)
+        apply
+          (rule_consequence_left
+             (WP s
+                (fun (vσ : Val σ) (δ2 : CStore Γ) =>
+                   let 'existT pc δpc := newpattern_match_val pat vσ in
+                   WP (rhs pc)
+                     (fun vτ δ3  => POST vτ (env.drop (PatternCaseCtx pc) δ3))
+                     (δ2 ►► δpc))
+                δ1)).
+        + eapply rule_stm_newpattern_match.
+          apply rule_wp. intros.
+          eapply rule_consequence_left.
+          apply rule_wp.
+          now rewrite newpattern_match_val_inverse_right.
+        + apply lex_right with (interpret_scheap h1).
+          apply land_right.
+          reflexivity.
+          apply lprop_right.
+          apply IHs; clear IHs.
+          revert HYP. apply exec_aux_monotonic; auto.
+          intros v2 δ2 h2 HYP; cbn.
+          rewrite wp_demonic_newpattern_match in HYP.
+          destruct newpattern_match_val. cbn in HYP.
+          apply lex_right with (interpret_scheap h2).
+          apply land_right.
+          reflexivity.
+          apply lprop_right.
+          now apply H.
+
+      - (* stm_match_pattern *)
         eapply rule_consequence_left.
         eapply rule_stm_match_pattern; intros; apply rule_wp.
         apply lex_right with (interpret_scheap h1).

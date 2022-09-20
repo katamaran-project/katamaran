@@ -937,6 +937,38 @@ Module Type IrisResources
       by iApply semWP_block.
     Qed.
 
+    Lemma semWP_newpattern_match {Γ τ σ} (s : Stm Γ σ) (pat : PatternShape σ)
+      (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
+      ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
+      semWP s
+        (fun vσ δ1 =>
+           let (pc,δpc) := newpattern_match_val pat vσ in
+           semWP (rhs pc)
+             (fun vτ δ2 => Q vτ (env.drop (PatternCaseCtx pc) δ2))
+             (δ1 ►► δpc)) δ -∗
+      semWP (stm_newpattern_match s pat rhs) Q δ.
+    Proof.
+      iIntros (Q δ) "WPs". unfold semWP at 3. rewrite wp_unfold. cbn.
+      iIntros (? ns ks1 ks nt) "state_inv".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; [trivial|].
+      iIntros (e2 σ' efs) "%".
+      dependent elimination H.
+      fold_semWP.
+      dependent elimination s0.
+      iModIntro. iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iModIntro.
+      iFrame; iSplitL; auto.
+      iApply semWP_bind.
+      iApply (semWP_mono with "WPs"); cbn.
+      clear - sG.
+      iIntros (v δ) "WPrhs".
+      destruct newpattern_match_val.
+      by iApply semWP_block.
+    Qed.
+
   End WeakestPre.
 
 End IrisResources.

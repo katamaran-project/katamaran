@@ -230,6 +230,17 @@ Module ProgramLogic.
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ k ; δ ⦃ Q ⦄ ->
         ⦃ P ⦄ stm_debugk k ; δ ⦃ Q ⦄
+
+    | rule_stm_newpattern_match
+        {σ} (s : Stm Γ σ) (pat : PatternShape σ)
+        (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ)
+        (P : L) (Q : Val σ -> CStore Γ -> L) (R : Val τ -> CStore Γ -> L) :
+        ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
+        (forall pc δpc δ',
+           ⦃ Q (newpattern_match_val_reverse pat pc δpc) δ' ⦄ rhs pc ; δ' ►► δpc
+           ⦃ fun v2 δ' => R v2 (env.drop (PatternCaseCtx pc) δ') ⦄) ->
+        ⦃ P ⦄ stm_newpattern_match s pat rhs ; δ ⦃ R ⦄
+
     | rule_stm_match_pattern
         {Δ σ} (s : Stm Γ σ) (pat : Pattern Δ σ) (rhs : Stm (Γ ▻▻ Δ) τ)
         (P : L) (Q : Val σ -> CStore Γ -> L) (R : Val τ -> CStore Γ -> L) :

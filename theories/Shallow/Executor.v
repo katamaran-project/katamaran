@@ -338,6 +338,24 @@ Module Type ShallowExecOn
         intuition.
     Qed.
 
+    Definition angelic_newpattern_match {N : Set} {A σ} (pat : @PatternShape N σ)
+      (v : Val σ)
+      (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CPureSpecM A) :
+      CPureSpecM A :=
+      pc <- angelic_finite (PatternCase pat);;
+      vs <- angelic_ctx (PatternCaseCtx pc) ;;
+      _  <- assert_formula (newpattern_match_val_reverse pat pc vs = v);;
+      k pc vs.
+
+    Definition demonic_newpattern_match {N : Set} {A σ} (pat : @PatternShape N σ)
+      (v : Val σ)
+      (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CPureSpecM A) :
+      CPureSpecM A :=
+      pc <- demonic_finite (PatternCase pat);;
+      vs <- demonic_ctx (PatternCaseCtx pc) ;;
+      _  <- assume_formula (newpattern_match_val_reverse pat pc vs = v);;
+      k pc vs.
+
     Fixpoint assert_eq_chunk (c1 c2 : SCChunk) : CPureSpecM unit :=
       match c1 , c2 with
       | scchunk_user p1 vs1 , scchunk_user p2 vs2 =>
@@ -946,6 +964,71 @@ Module Type ShallowExecOn
         split; [auto|]. now intros ? * [-> ->]%bv.app_inj.
       Qed.
 
+      Definition angelic_newpattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @PatternShape N σ)
+        (v : Val σ)
+        (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A) :
+        CHeapSpecM Γ1 Γ2 A :=
+        pc <- angelic_finite (PatternCase pat);;
+        vs <- angelic_ctx (PatternCaseCtx pc) ;;
+        _  <- assert_formula (newpattern_match_val_reverse pat pc vs = v);;
+        k pc vs.
+
+      Definition demonic_newpattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @PatternShape N σ)
+        (v : Val σ)
+        (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A) :
+        CHeapSpecM Γ1 Γ2 A :=
+        pc <- demonic_finite (PatternCase pat);;
+        vs <- demonic_ctx (PatternCaseCtx pc) ;;
+        _  <- assume_formula (newpattern_match_val_reverse pat pc vs = v);;
+        k pc vs.
+
+      Lemma wp_angelic_newpattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @PatternShape N σ)
+        (v : Val σ)
+        (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A)
+        (POST : A -> CStore Γ2 -> SCHeap -> Prop) (δ : CStore Γ1) (h : SCHeap) :
+        angelic_newpattern_match pat v k POST δ h <->
+          let c := newpattern_match_val pat v in
+          k (projT1 c) (projT2 c) POST δ h.
+      Proof.
+        cbv [angelic_newpattern_match bind angelic_finite lift_purem angelic_ctx
+               CPureSpecM.angelic_finite assert_formula CPureSpecM.assert_formula].
+        rewrite CPureSpecM.wp_angelic_list.
+        setoid_rewrite CPureSpecM.wp_angelic_ctx.
+        split.
+        - intros (pc & Hin & δpc & <- & Hwp).
+          now rewrite newpattern_match_val_inverse_right.
+        - intros Hwp.
+          exists (newpattern_match_val pat v).1.
+          split.
+          rewrite <- base.elem_of_list_In.
+          apply finite.elem_of_enum.
+          exists (newpattern_match_val pat v).2.
+          split.
+          apply newpattern_match_val_inverse_left.
+          apply Hwp.
+      Qed.
+
+      Lemma wp_demonic_newpattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @PatternShape N σ)
+        (v : Val σ)
+        (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A)
+        (POST : A -> CStore Γ2 -> SCHeap -> Prop) (δ : CStore Γ1) (h : SCHeap) :
+        demonic_newpattern_match pat v k POST δ h <->
+          let c := newpattern_match_val pat v in
+          k (projT1 c) (projT2 c) POST δ h.
+      Proof.
+        cbv [demonic_newpattern_match bind demonic_finite lift_purem demonic_ctx
+               CPureSpecM.demonic_finite assume_formula CPureSpecM.assume_formula].
+        rewrite CPureSpecM.wp_demonic_list.
+        setoid_rewrite CPureSpecM.wp_demonic_ctx.
+        split.
+        - intros Hwp. apply Hwp.
+          rewrite <- base.elem_of_list_In.
+          apply finite.elem_of_enum.
+          apply newpattern_match_val_inverse_left.
+        - intros Hwp pc Hin δpc <-. revert Hwp.
+          now rewrite newpattern_match_val_inverse_right.
+      Qed.
+
     End PatternMatching.
 
     Section State.
@@ -1164,6 +1247,10 @@ Module Type ShallowExecOn
               exec_aux k
             | stm_fail _ s =>
               block
+            | stm_newpattern_match s pat rhs =>
+              v  <- exec_aux s ;;
+              demonic_newpattern_match pat v
+                (fun pc δpc => pushspops δpc (exec_aux (rhs pc)))
             | stm_match_pattern s pat rhs =>
               v  <- exec_aux s ;;
               vs <- demonic_match_pattern pat v;;

@@ -185,6 +185,15 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   | step_debugk
       (k : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_debugk k ⟩ ---> ⟨ γ , μ , δ , k ⟩
+
+  | step_newpattern_match
+      {σ} (s : Stm Γ σ) (pat : PatternShape σ)
+      (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
+      ⟨ γ , μ , δ , stm_newpattern_match s pat rhs ⟩ --->
+      ⟨ γ , μ , δ , stm_bind s (fun v => let (pc,δpc) := newpattern_match_val pat v
+                                         in stm_block δpc (rhs pc))
+      ⟩
+
   | step_match_pattern
       {Δ σ} (s : Stm Γ σ) (pat : Pattern Δ σ) (rhs : Stm (Γ ▻▻ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_pattern s pat rhs ⟩ --->
@@ -230,6 +239,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         | @stm_assertk          => idtac
         | @stm_fail             => idtac
         | @stm_if               => idtac
+        | @stm_newpattern_match => idtac
         | @stm_match_pattern    => idtac
         | @stm_match_sum        => idtac
         | @stm_match_list       => idtac
