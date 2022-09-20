@@ -1393,6 +1393,10 @@ Module Type SymbolicExecOn
           | asn.formula fml => box_assume_formula fml
           | asn.chunk c => produce_chunk <$> persist c
           | asn.chunk_angelic c => produce_chunk <$> persist c
+          | asn.newpattern_match s pat rhs =>
+            box_demonic_newpattern_match id pat s
+              (fun pc w1 r01 δpc =>
+                 produce (wcat w0 (PatternCaseCtx pc)) (rhs pc) w1 (acc_cat_left r01 δpc))
           | asn.match_bool b a1 a2 =>
             demonic_match_bool
               <$> persist__term b
@@ -1457,6 +1461,10 @@ Module Type SymbolicExecOn
           | asn.formula fml => box_assert_formula fml
           | asn.chunk c => consume_chunk <$> persist c
           | asn.chunk_angelic c => consume_chunk_angelic <$> persist c
+          | asn.newpattern_match s pat rhs =>
+            box_angelic_newpattern_match id pat s
+              (fun pc w1 r01 δpc =>
+                 consume (wcat w0 (PatternCaseCtx pc)) (rhs pc) w1 (acc_cat_left r01 δpc))
           | asn.match_bool b a1 a2 =>
             angelic_match_bool
               <$> persist__term b

@@ -1603,6 +1603,24 @@ Module Soundness
       now apply refine_produce_chunk.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
+      apply refine_demonic_newpattern_match; eauto.
+      intros pc.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs ->.
+      apply H; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
+      { rewrite <- ?inst_subst.
+        unfold NamedEnv.
+        fold (@inst_sub (PatternCaseCtx pc)).
+        fold (Sub (PatternCaseCtx pc)).
+        rewrite <- inst_sub_cat.
+        rewrite <- inst_subst.
+        rewrite <- subst_sub_comp.
+        rewrite sub_comp_cat_left.
+        now rewrite ?inst_subst.
+      }
+      now rewrite inst_sub_cat, inst_subst.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_persist.
       apply refine_demonic_match_bool; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
@@ -1958,6 +1976,24 @@ Module Soundness
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
       now apply refine_consume_chunk_angelic.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_persist.
+      apply refine_angelic_newpattern_match; eauto.
+      intros pc.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs ->.
+      apply H; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
+      { rewrite <- ?inst_subst.
+        unfold NamedEnv.
+        fold (@inst_sub (PatternCaseCtx pc)).
+        fold (Sub (PatternCaseCtx pc)).
+        rewrite <- inst_sub_cat.
+        rewrite <- inst_subst.
+        rewrite <- subst_sub_comp.
+        rewrite sub_comp_cat_left.
+        now rewrite ?inst_subst.
+      }
+      now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
       apply refine_angelic_match_bool; eauto.

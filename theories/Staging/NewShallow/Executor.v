@@ -433,6 +433,11 @@ Module Type NewShallowExecOn
         | asn.formula fml => assume_formula (inst fml ι)
         | asn.chunk c     => produce_chunk (inst c ι)
         | asn.chunk_angelic c => produce_chunk (inst c ι)
+        | asn.newpattern_match s pat rhs =>
+            newpattern_match
+              (inst (T := fun Σ => Term Σ _) s ι)
+              pat
+              (fun pc δpc => produce (ι ►► δpc) (rhs pc))
         | asn.match_bool b a1 a2  => match_bool (inst b ι) (produce ι a1) (produce ι a2)
         | asn.match_enum E k alts =>
           match_enum
@@ -479,6 +484,11 @@ Module Type NewShallowExecOn
         | asn.formula fml => assert_formula (inst fml ι)
         | asn.chunk c     => consume_chunk (inst c ι)
         | asn.chunk_angelic c     => consume_chunk (inst c ι)
+        | asn.newpattern_match s pat rhs =>
+            newpattern_match
+              (inst (T := fun Σ => Term Σ _) s ι)
+              pat
+              (fun pc δpc => consume (ι ►► δpc) (rhs pc))
         | asn.match_bool b a1 a2  => match_bool (inst b ι) (consume ι a1) (consume ι a2)
         | asn.match_enum E k alts =>
           match_enum
@@ -527,6 +537,7 @@ Module Type NewShallowExecOn
         - apply wp_assume_formula.
         - unfold produce_chunk; now rewrite interpret_scchunk_inst.
         - unfold produce_chunk; now rewrite interpret_scchunk_inst.
+        - destruct newpattern_match_val; auto.
         - destruct (inst b ι); cbn; auto.
         - apply H.
         - destruct (inst s ι); cbn; auto.
@@ -549,6 +560,7 @@ Module Type NewShallowExecOn
         - apply wp_assert_formula.
         - unfold consume_chunk; now rewrite interpret_scchunk_inst.
         - unfold consume_chunk; now rewrite interpret_scchunk_inst.
+        - destruct newpattern_match_val; auto.
         - destruct (inst b ι); cbn; auto.
         - apply H.
         - destruct (inst s ι); cbn; auto.

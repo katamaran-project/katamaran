@@ -56,9 +56,12 @@ Module Import asn.
   | formula (fml : Formula Σ)
   | chunk (c : Chunk Σ)
   | chunk_angelic (c : Chunk Σ)
+  | newpattern_match {σ} (s : Term Σ σ) (pat : PatternShape σ)
+      (rhs : forall (pc : PatternCase pat), Assertion (Σ ▻▻ PatternCaseCtx pc))
   | match_bool (b : Term Σ ty.bool) (A1 A2 : Assertion Σ)
   | match_enum (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ)
-  | match_sum (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : LVar) (alt_inl : Assertion (Σ ▻ xl∷σ)) (xr : LVar) (alt_inr : Assertion (Σ ▻ xr∷τ))
+  | match_sum (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : LVar)
+      (alt_inl : Assertion (Σ ▻ xl∷σ)) (xr : LVar) (alt_inr : Assertion (Σ ▻ xr∷τ))
   | match_list
       {σ : Ty} (s : Term Σ (ty.list σ)) (alt_nil : Assertion Σ) (xh xt : LVar)
       (alt_cons : Assertion (Σ ▻ xh∷σ ▻ xt∷ty.list σ))
@@ -105,6 +108,8 @@ Module Import asn.
       | formula fml => formula (subst fml ζ)
       | chunk c => chunk (subst c ζ)
       | chunk_angelic c => chunk_angelic (subst c ζ)
+      | newpattern_match s pat rhs =>
+        newpattern_match (subst s ζ) pat (fun pc => sub_assertion (rhs pc) (sub_up ζ _))
       | match_bool b A1 A2 => match_bool (subst b ζ) (sub_assertion A1 ζ) (sub_assertion A2 ζ)
       | match_enum E k alts =>
         match_enum E (subst k ζ) (fun z => sub_assertion (alts z) ζ)
@@ -135,6 +140,9 @@ Module Import asn.
       | formula fml => option.map (@formula _) (occurs_check bIn fml)
       | chunk c     => option.map (@chunk _) (occurs_check bIn c)
       | chunk_angelic c => option.map (@chunk_angelic _) (occurs_check bIn c)
+      | newpattern_match s pat rhs =>
+          s' <- occurs_check bIn s;;
+          None (* TODO *)
       | match_bool b a1 a2  =>
           b'  <- occurs_check bIn b;;
           a1' <- occurs _ _ bIn a1 ;;
@@ -163,62 +171,13 @@ Module Import asn.
       | debug => Some debug
       end.
 
-  Open Scope lazy_bool_scope.
-
-  Fixpoint occurs_checkb_assertion {Σ b} (bIn : b ∈ Σ) (asn : Assertion Σ) : bool :=
-    match asn with
-    | formula fml => option.isNone (occurs_check bIn fml)
-    | chunk c     => option.isNone (option.map (@chunk _) (occurs_check bIn c))
-    | chunk_angelic c => option.isNone (option.map (@chunk_angelic _) (occurs_check bIn c))
-    | match_bool b a1 a2  =>
-        option.isNone (occurs_check bIn b) |||
-        occurs_checkb_assertion bIn a1 |||
-        occurs_checkb_assertion bIn a2
-    | match_enum E k alts =>
-        option.isNone (occurs_check bIn k) |||
-        List.forallb
-          (fun K => occurs_checkb_assertion bIn (alts K))
-          (finite.enum (enumt E))
-    | match_sum σ τ s xl alt_inl xr alt_inr =>
-        option.isNone (occurs_check bIn s) |||
-        occurs_checkb_assertion (ctx.in_succ bIn) alt_inl |||
-        occurs_checkb_assertion (ctx.in_succ bIn) alt_inr
-    | @match_list _ σ s alt_nil xh xt alt_cons =>
-        option.isNone (occurs_check bIn s) |||
-        occurs_checkb_assertion bIn alt_nil |||
-        occurs_checkb_assertion (ctx.in_succ (ctx.in_succ bIn)) alt_cons
-    | @match_prod _ σ1 σ2 s xl xr rhs =>
-        option.isNone (occurs_check bIn s) |||
-        occurs_checkb_assertion (ctx.in_succ (ctx.in_succ bIn)) rhs
-    | @match_tuple _ σs Δ s p rhs =>
-        option.isNone (occurs_check bIn s) |||
-        occurs_checkb_assertion (ctx.in_cat_left Δ bIn) rhs
-    | @match_record _ R Δ s p rhs =>
-        option.isNone (occurs_check bIn s) |||
-        occurs_checkb_assertion (ctx.in_cat_left Δ bIn) rhs
-    | match_union U s alt__ctx alt__pat alt__rhs =>
-        option.isNone (occurs_check bIn s) |||
-        List.forallb
-          (fun K => occurs_checkb_assertion
-                      (ctx.in_cat_left (alt__ctx K) bIn)
-                      (alt__rhs K))
-          (finite.enum (unionk U))
-    | sep A1 A2 =>
-        occurs_checkb_assertion bIn A1 |||
-        occurs_checkb_assertion bIn A2
-    | or A1 A2  =>
-        occurs_checkb_assertion bIn A1 |||
-        occurs_checkb_assertion bIn A2
-    | exist ς τ A =>
-        occurs_checkb_assertion (ctx.in_succ bIn) A
-    | debug => false
-    end.
-
   Fixpoint is_pure {Σ} (a : Assertion Σ) : bool :=
     match a with
     | formula fml => true
     | chunk c => false
     | chunk_angelic c => false
+    | newpattern_match s pat rhs =>
+        List.forallb (fun pc => is_pure (rhs pc)) (finite.enum (PatternCase pat))
     | match_bool b A1 A2 => is_pure A1 && is_pure A2
     | match_enum E k alts => List.forallb (fun K => is_pure (alts K)) (finite.enum _)
     | match_sum σ τ s xl alt_inl xr alt_inr => is_pure alt_inl && is_pure alt_inr
@@ -226,7 +185,8 @@ Module Import asn.
     | match_prod s xl xr rhs => is_pure rhs
     | match_tuple s p rhs => is_pure rhs
     | match_record R s p rhs => is_pure rhs
-    | match_union U s alt__ctx alt__pat alt__rhs => List.forallb (fun K => is_pure (alt__rhs K)) (finite.enum _)
+    | match_union U s alt__ctx alt__pat alt__rhs =>
+        List.forallb (fun K => is_pure (alt__rhs K)) (finite.enum _)
     | sep A1 A2 => is_pure A1 && is_pure A2
     | or A1 A2  => is_pure A1 && is_pure A2
     | exist ς τ A => is_pure A
@@ -241,6 +201,10 @@ Module Import asn.
       | formula F => inst F ι
       | chunk c => False
       | chunk_angelic c => False
+      | newpattern_match s pat rhs =>
+        let v := inst (T := fun Σ => Term Σ _) s ι in
+        let (pc,δpc) := newpattern_match_val pat v in
+        interpret_pure (rhs pc) (ι ►► δpc)
       | match_bool b A1 A2 =>
         if inst (A := Val ty.bool) b ι
         then interpret_pure A1 ι
@@ -286,6 +250,10 @@ Module Import asn.
       | formula F => !!(inst F ι) ∧ lemp
       | chunk c => interpret_chunk c ι
       | chunk_angelic c => interpret_chunk c ι
+      | newpattern_match s pat rhs =>
+        let v := inst (T := fun Σ => Term Σ _) s ι in
+        let (pc,δpc) := newpattern_match_val pat v in
+        interpret (rhs pc) (ι ►► δpc)
       | match_bool b a1 a2 =>
         if inst (A := Val ty.bool) b ι
         then interpret a1 ι
@@ -332,6 +300,9 @@ Module Import asn.
     Proof.
       induction a; cbn in *; intros ι; try discriminate a_pure.
       - now rewrite lemp_true, land_true.
+      - destruct newpattern_match_val.
+        apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
+        apply base.elem_of_list_In. apply finite.elem_of_enum.
       - apply andb_true_iff in a_pure. destruct a_pure.
         destruct (inst b ι); auto.
       - apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
@@ -406,6 +377,69 @@ Section Contracts.
 
   #[global] Arguments MkLemma : clear implicits.
 
+  Open Scope lazy_bool_scope.
+
+  (* This function is used as part of the linter, which checks that all
+     logic variables of the contract are in fact used in the pattern or
+     the precondition. It essentially performs an occurs check, albeit with
+     a boolean result.
+   *)
+  Fixpoint lint_assertion {Σ b} (bIn : b ∈ Σ) (asn : Assertion Σ) : bool :=
+    match asn with
+    | formula fml => option.isNone (occurs_check bIn fml)
+    | chunk c     => option.isNone (option.map (@chunk _) (occurs_check bIn c))
+    | chunk_angelic c => option.isNone (option.map (@chunk_angelic _) (occurs_check bIn c))
+    | newpattern_match s pat rhs =>
+        option.isNone (occurs_check bIn s) |||
+        List.existsb
+          (fun pc => lint_assertion
+                       (ctx.in_cat_left (PatternCaseCtx pc) bIn)
+                       (rhs pc))
+          (finite.enum (PatternCase pat))
+    | match_bool b a1 a2  =>
+        option.isNone (occurs_check bIn b) |||
+        lint_assertion bIn a1 |||
+        lint_assertion bIn a2
+    | match_enum E k alts =>
+        option.isNone (occurs_check bIn k) |||
+        List.existsb
+          (fun K => lint_assertion bIn (alts K))
+          (finite.enum (enumt E))
+    | match_sum σ τ s xl alt_inl xr alt_inr =>
+        option.isNone (occurs_check bIn s) |||
+        lint_assertion (ctx.in_succ bIn) alt_inl |||
+        lint_assertion (ctx.in_succ bIn) alt_inr
+    | @match_list _ σ s alt_nil xh xt alt_cons =>
+        option.isNone (occurs_check bIn s) |||
+        lint_assertion bIn alt_nil |||
+        lint_assertion (ctx.in_succ (ctx.in_succ bIn)) alt_cons
+    | @match_prod _ σ1 σ2 s xl xr rhs =>
+        option.isNone (occurs_check bIn s) |||
+        lint_assertion (ctx.in_succ (ctx.in_succ bIn)) rhs
+    | @match_tuple _ σs Δ s p rhs =>
+        option.isNone (occurs_check bIn s) |||
+        lint_assertion (ctx.in_cat_left Δ bIn) rhs
+    | @match_record _ R Δ s p rhs =>
+        option.isNone (occurs_check bIn s) |||
+        lint_assertion (ctx.in_cat_left Δ bIn) rhs
+    | match_union U s alt__ctx alt__pat alt__rhs =>
+        option.isNone (occurs_check bIn s) |||
+        List.existsb
+          (fun K => lint_assertion
+                      (ctx.in_cat_left (alt__ctx K) bIn)
+                      (alt__rhs K))
+          (finite.enum (unionk U))
+    | sep A1 A2 =>
+        lint_assertion bIn A1 |||
+        lint_assertion bIn A2
+    | or A1 A2  =>
+        lint_assertion bIn A1 |||
+        lint_assertion bIn A2
+    | exist ς τ A =>
+        lint_assertion (ctx.in_succ bIn) A
+    | debug => false
+    end.
+
   Definition lint_contract {Δ σ} (c : SepContract Δ σ) : bool :=
     match c with
     | {| sep_contract_logic_variables := Σ;
@@ -415,7 +449,7 @@ Section Contracts.
       ctx.forallb Σ
         (fun b bIn =>
            option.isNone (occurs_check bIn δ) |||
-           occurs_checkb_assertion bIn pre)
+           lint_assertion bIn pre)
     end.
 
   Definition lint_lemma {Δ} (l : Lemma Δ) : bool :=
@@ -427,7 +461,7 @@ Section Contracts.
       ctx.forallb Σ
         (fun b bIn =>
            option.isNone (occurs_check bIn δ) |||
-           occurs_checkb_assertion bIn pre)
+           lint_assertion bIn pre)
     end.
 
   Definition Linted {Δ σ} (c : SepContract Δ σ) : Prop :=

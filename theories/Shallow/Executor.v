@@ -1077,6 +1077,10 @@ Module Type ShallowExecOn
         | asn.formula fml => assume_formula (inst fml ι)
         | asn.chunk c     => produce_chunk (inst c ι)
         | asn.chunk_angelic c => produce_chunk (inst c ι)
+        | asn.newpattern_match s pat rhs =>
+          demonic_newpattern_match
+            pat (inst (T := fun Σ => Term Σ _) s ι)
+            (fun pc δpc => produce (ι ►► δpc) (rhs pc))
         | asn.match_bool b a1 a2  => demonic_match_bool (inst b ι) (produce ι a1) (produce ι a2)
         | asn.match_enum E k alts =>
           demonic_match_enum
@@ -1123,6 +1127,10 @@ Module Type ShallowExecOn
         | asn.formula fml => assert_formula (inst fml ι)
         | asn.chunk c     => consume_chunk (inst c ι)
         | asn.chunk_angelic c     => consume_chunk (inst c ι)
+        | asn.newpattern_match s pat rhs =>
+          angelic_newpattern_match
+            pat (inst (T := fun Σ => Term Σ _) s ι)
+            (fun pc δpc => consume (ι ►► δpc) (rhs pc))
         | asn.match_bool b a1 a2  => angelic_match_bool (inst b ι) (consume ι a1) (consume ι a2)
         | asn.match_enum E k alts =>
           angelic_match_enum
