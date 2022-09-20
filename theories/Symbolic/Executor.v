@@ -1065,6 +1065,32 @@ Module Type SymbolicExecOn
         ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_tuple n p <$> persist__term t <*> four k.
 
+      Definition angelic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
+        ⊢ STerm σ ->
+        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
+        SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ pc <- angelic_finite (PatternCase pat)
+                         (fun δ h =>
+                            MkAMessage
+                              {| msg_function := "SHeapSpecM.angelic_newpattern_match";
+                                 msg_message := "pattern match assertion";
+                                 msg_program_context := Γ1;
+                                 msg_localstore := δ;
+                                 msg_heap := h;
+                                 msg_pathcondition := wco w0
+                              |});;
+          ⟨ ω2 ⟩ ts <- angelic_ctx n (PatternCaseCtx pc) ;;
+          let ω12 := ω1 ∘ ω2 in
+          ⟨ ω3 ⟩ _  <- assert_formula (formula_eq (newpattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
+          k pc _ (ω12 ∘ ω3) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) _) (wctx w)) ts ω3).
+
+      Definition box_angelic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
+        ⊢ STerm σ ->
+        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
+        □(SHeapSpecM Γ1 Γ2 AT) :=
+        fun w0 t k w1 ω01 => angelic_newpattern_match n pat t⟨ω01⟩ (fun pc => four (k pc) ω01).
+
       Definition demonic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
         ⊢ STerm σ ->
         (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
@@ -1075,6 +1101,12 @@ Module Type SymbolicExecOn
           let ω12 := ω1 ∘ ω2 in
           ⟨ ω3 ⟩ _  <- assume_formula (formula_eq (newpattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
           k pc _ (ω12 ∘ ω3) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) _) (wctx w)) ts ω3).
+
+      Definition box_demonic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
+        ⊢ STerm σ ->
+        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
+        □(SHeapSpecM Γ1 Γ2 AT) :=
+        fun w0 t k w1 ω01 => demonic_newpattern_match n pat t⟨ω01⟩ (fun pc => four (k pc) ω01).
 
       Definition angelic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
         ⊢ STerm σ -> SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=

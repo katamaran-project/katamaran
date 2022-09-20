@@ -1265,6 +1265,38 @@ Module Soundness
           now rewrite ?sub_acc_trans, ?inst_subst.
     Qed.
 
+    Lemma refine_angelic_newpattern_match {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
+      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @PatternShape N σ)
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
+      ℛ ι (@SHeapSpecM.angelic_newpattern_match N n AT Γ1 Γ2 σ pat w)
+        (@CHeapSpecM.angelic_newpattern_match N Γ1 Γ2 A σ pat).
+    Proof.
+      intros t v ->.
+      intros k k__c Hk.
+      unfold SHeapSpecM.angelic_newpattern_match, CHeapSpecM.angelic_newpattern_match.
+      apply refine_bind.
+      { now apply refine_angelic_finite. }
+      intros w1 r01 ι1 -> Hpc1.
+      intros pc ? ->.
+      apply refine_bind.
+      { now apply refine_angelic_ctx. }
+      intros w2 r12 ι2 -> Hpc2.
+      intros ts vs Htvs.
+      apply refine_bind.
+      { apply refine_assert_formula; try assumption. cbn.
+        rewrite (inst_persist (AT := fun Σ => Term Σ _)).
+        rewrite !sub_acc_trans, inst_subst.
+        rewrite inst_newpattern_match_term_reverse.
+        hnf in Htvs. subst. reflexivity.
+      }
+      intros w3 r23 ι3 -> Hpc3.
+      intros _ _ _.
+      apply Hk; auto.
+      now rewrite ?sub_acc_trans, ?inst_subst.
+      hnf in Htvs. subst.
+      now rewrite <- inst_persist.
+    Qed.
+
     Lemma refine_demonic_newpattern_match {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
       {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @PatternShape N σ)
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
