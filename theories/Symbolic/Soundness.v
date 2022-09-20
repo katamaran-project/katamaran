@@ -2265,44 +2265,6 @@ Module Soundness
       intros ts vs Htvs.
       apply refine_pushspops; auto.
     - apply refine_bind; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      apply refine_bind; auto.
-      apply refine_demonic_match_pattern; auto.
-      intros w2 ω12 ι2 -> Hpc2.
-      intros ts vs Htvs.
-      apply refine_pushspops; auto.
-    - apply refine_bind; auto.
-      intros POST__s POST__c HPOST.
-      apply refine_eval_exp; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      apply refine_demonic_match_list; auto.
-      intros w2 ω12 ι2 -> Hpc2.
-      intros thead vhead ->.
-      intros ttail vtail ->.
-      apply refine_pushspops; auto.
-    - apply refine_bind; auto.
-      intros POST__s POST__c HPOST.
-      apply refine_eval_exp; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      apply refine_demonic_match_sum; auto.
-      + intros w2 ω12 ι2 -> Hpc2.
-        intros tl vl ->.
-        apply refine_pushpop; auto.
-      + intros w2 ω12 ι2 -> Hpc2.
-        intros tr vr ->.
-        apply refine_pushpop; auto.
-    - apply refine_bind; auto.
-      intros POST__s POST__c HPOST.
-      apply refine_eval_exp; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      apply refine_demonic_match_enum; auto.
-      intros EK1 EK2 ->.
-      intros w2 ω12 ι2 -> Hpc2; auto.
-    - apply refine_bind; auto.
       intros POST__s POST__c HPOST.
       apply refine_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
@@ -2312,15 +2274,6 @@ Module Soundness
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs Htvs.
       apply refine_pushspops; auto.
-    - apply refine_bind; auto.
-      intros POST__s POST__c HPOST.
-      apply refine_eval_exp; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      apply refine_demonic_match_bvec; auto.
-      intros v1 v2 ->.
-      intros w2 ω12 ι2 -> Hpc2.
-      auto.
     - apply refine_bind; auto.
       apply refine_angelic; auto.
       intros w1 ω01 ι1 -> Hpc1 t v Htv. hnf in Htv; subst.

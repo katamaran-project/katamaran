@@ -257,52 +257,6 @@ Section Soundness.
     by iApply semWP_fail.
   Qed.
 
-  Lemma iris_rule_stm_match_list {Γ} (δ : CStore Γ)
-        {σ τ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
-        (xh xt : PVar) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ (⌜ eval e δ = nil ⌝ → semTriple δ P alt_nil (fun v' δ' => Q v' δ')) -∗
-          (∀ (v : Val σ) (vs : Val (ty.list σ)),
-              ⌜ eval e δ = cons v vs ⌝ →
-              semTriple δ.[xh∷σ ↦ v].[xt∷ty.list σ ↦ vs] P alt_cons
-                (fun v' δ' => Q v' (env.tail (env.tail δ')))) -∗
-          semTriple δ P (stm_match_list e alt_nil xh xt alt_cons) Q.
-  Proof.
-    iIntros "tripnil tripcons P".
-    iApply semWP_match_list.
-    destruct eval as [|l ls].
-    - by iApply "tripnil".
-    - by iApply "tripcons".
-  Qed.
-
-  Lemma iris_rule_stm_match_sum {Γ} (δ : CStore Γ)
-        (σinl σinr τ : Ty) (e : Exp Γ (ty.sum σinl σinr))
-        (xinl : PVar) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
-        (xinr : PVar) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ ((∀ (v : Val σinl), ⌜ eval e δ = inl v ⌝ → semTriple (env.snoc δ (xinl∷σinl) v) P alt_inl (fun v' δ' => Q v' (env.tail δ'))) -∗
-           (∀ (v : Val σinr), ⌜ eval e δ = inr v ⌝ → semTriple (env.snoc δ (xinr∷σinr) v) P alt_inr (fun v' δ' => Q v' (env.tail δ'))) -∗
-        semTriple δ P (stm_match_sum e xinl alt_inl xinr alt_inr) Q)%I.
-  Proof.
-    iIntros "tripinl tripinr P".
-    iApply semWP_match_sum.
-    destruct eval.
-    - by iApply "tripinl".
-    - by iApply "tripinr".
-  Qed.
-
-  Lemma iris_rule_stm_match_enum {Γ} (δ : CStore Γ)
-        {E : enumi} (e : Exp Γ (ty.enum E)) {τ : Ty}
-        (alts : forall (K : enumt E), Stm Γ τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ (semTriple δ P (alts (eval e δ)) Q -∗
-          semTriple δ P (stm_match_enum E e alts) Q)%I.
-  Proof.
-    iIntros "tripalt P".
-    iApply semWP_match_enum.
-    by iApply "tripalt".
-  Qed.
-
   Lemma iris_rule_stm_match_union {Γ} (δ : CStore Γ)
         {U : unioni} (e : Exp Γ (ty.union U)) {τ : Ty}
         (alt__Δ : forall (K : unionk U), PCtx)
@@ -320,18 +274,6 @@ Section Soundness.
     destruct unionv_unfold eqn:?.
     iApply "tripunion"; [|easy].
     now rewrite <- Heqs, unionv_fold_unfold.
-  Qed.
-
-  Lemma iris_rule_stm_match_bvec {Γ} (δ : CStore Γ)
-        {n : nat} (e : Exp Γ (ty.bvec n)) {τ : Ty}
-        (rhs : forall (v : bv n), Stm Γ τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ (semTriple δ P (rhs (eval e δ)) Q -∗
-          semTriple δ P (stm_match_bvec n e rhs) Q)%I.
-  Proof.
-    iIntros "triprhs P".
-    iApply semWP_match_bvec.
-    by iApply "triprhs".
   Qed.
 
   Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
@@ -771,21 +713,6 @@ Module IrisInstanceWithContracts
     by iApply lemSem.
   Qed.
 
-  Lemma iris_rule_stm_match_pattern {Γ τ Δ σ} (δΓ : CStore Γ) (s : Stm Γ σ)
-    (pat : Pattern Δ σ) (rhs : Stm (Γ ▻▻ Δ) τ) (P : iProp Σ)
-    (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
-    ⊢ semTriple δΓ P s Q -∗
-      (∀ (x : Val σ) (x0 : Env (λ xt : PVar∷Ty, Val (type xt)) Γ),
-         semTriple (x0 ►► pattern_match_val pat x) (Q x x0) rhs
-           (λ (v2 : Val τ) (δ' : CStore (Γ ▻▻ Δ)), R v2 (env.drop Δ δ'))) -∗
-      semTriple δΓ P (stm_match_pattern s pat rhs) R.
-  Proof.
-    iIntros "WPs WPrhs P".
-    iSpecialize ("WPs" with "P").
-    iApply semWP_match_pattern.
-    by iApply (semWP_mono with "WPs").
-  Qed.
-
   Lemma iris_rule_stm_newpattern_match {Γ τ σ} (δΓ : CStore Γ)
     (s : Stm Γ σ) (pat : PatternShape σ)
     (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
@@ -819,7 +746,7 @@ Module IrisInstanceWithContracts
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -834,11 +761,7 @@ Module IrisInstanceWithContracts
     - by iApply iris_rule_stm_seq.
     - by iApply iris_rule_stm_assertk.
     - by iApply iris_rule_stm_fail.
-    - by iApply iris_rule_stm_match_list.
-    - by iApply iris_rule_stm_match_sum.
-    - by iApply iris_rule_stm_match_enum.
     - by iApply iris_rule_stm_match_union.
-    - by iApply iris_rule_stm_match_bvec.
     - by iApply iris_rule_stm_read_register.
     - by iApply iris_rule_stm_write_register.
     - by iApply iris_rule_stm_assign.
@@ -850,7 +773,6 @@ Module IrisInstanceWithContracts
     - by iApply iris_rule_stm_bind.
     - by iApply iris_rule_stm_debugk.
     - by iApply iris_rule_stm_newpattern_match.
-    - by iApply iris_rule_stm_match_pattern.
   Qed.
 
   Lemma sound :

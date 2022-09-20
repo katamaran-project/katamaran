@@ -217,42 +217,18 @@ Module CInterpreter (Import B : Base)
       v <- exec s ;;
       let (pc,δpc) := newpattern_match_val pat v in
       pushspops δpc (exec (rhs pc))
-    | stm_match_pattern s pat rhs =>
-      v <- exec s ;;
-      pushspops (pattern_match_val pat v) (exec rhs)
-    | stm_match_enum E e alts =>
-      v <- eval_exp e ;;
-      exec (alts v)
-    | stm_read_register reg =>
-      mreadreg reg
-    | stm_write_register reg e =>
-      v <- eval_exp e ;;
-      mwritereg reg v ;;
-      pure v
-    | @stm_match_list _ _ σ e s1 xh xt s2 =>
-      v <- eval_exp e ;;
-      match v with
-      | nil      => exec s1
-      | cons h t =>
-        pushspops
-          [kv (xh∷σ; h); (xt∷ty.list σ; t)]
-          (exec s2)
-      end
-    | stm_match_sum e xinl s1 xinr s2 =>
-      v <- eval_exp e ;;
-      match v with
-      | inl v => pushpop v (exec s1)
-      | inr v => pushpop v (exec s2)
-      end
     | stm_match_union U e alt__pat alt__rhs =>
       v <- eval_exp e ;;
       match unionv_unfold U v with
       | existT K v =>
         pushspops (pattern_match_val (alt__pat K) v) (exec (alt__rhs K))
       end
-    | stm_match_bvec n e rhs =>
+    | stm_read_register reg =>
+      mreadreg reg
+    | stm_write_register reg e =>
       v <- eval_exp e ;;
-      exec (rhs v)
+      mwritereg reg v ;;
+      pure v
     | stm_bind s k =>
       v <- exec s ;;
       exec (k v)

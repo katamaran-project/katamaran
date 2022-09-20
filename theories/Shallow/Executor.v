@@ -1259,15 +1259,6 @@ Module Type ShallowExecOn
               v  <- exec_aux s ;;
               demonic_newpattern_match pat v
                 (fun pc δpc => pushspops δpc (exec_aux (rhs pc)))
-            | stm_match_pattern s pat rhs =>
-              v  <- exec_aux s ;;
-              vs <- demonic_match_pattern pat v;;
-              pushspops vs (exec_aux rhs)
-            | stm_match_enum E e alts =>
-              v <- eval_exp e ;;
-              demonic_match_enum
-                v
-                (fun EK => exec_aux (alts EK))
             | stm_read_register reg =>
               v <- angelic τ ;;
               let c := scchunk_ptsreg reg v in
@@ -1280,28 +1271,9 @@ Module Type ShallowExecOn
               v__new <- eval_exp e ;;
               _    <- produce_chunk (scchunk_ptsreg reg v__new) ;;
               pure v__new
-            | @stm_match_list _ _ σ e s1 xh xt s2 =>
-              v <- eval_exp e ;;
-              demonic_match_list v
-                (exec_aux s1)
-                (fun h t =>
-                   pushspops
-                     (env.snoc (env.snoc env.nil (xh∷σ) h) (xt∷ty.list σ) t)
-                     (exec_aux s2))
-            | stm_match_sum e xinl s1 xinr s2 =>
-              v <- eval_exp e ;;
-              demonic_match_sum
-                v
-                (fun v => pushpop v (exec_aux s1))
-                (fun v => pushpop v (exec_aux s2))
             | stm_match_union U e alt__pat alt__rhs =>
               v <- eval_exp e ;;
               demonic_match_union alt__pat v (fun UK vs => pushspops vs (exec_aux (alt__rhs UK)))
-            | stm_match_bvec n e rhs =>
-              v <- eval_exp e ;;
-              demonic_match_bvec
-                v
-                (fun u => exec_aux (rhs u))
             | stm_bind s k =>
               v <- exec_aux s ;;
               exec_aux (k v)

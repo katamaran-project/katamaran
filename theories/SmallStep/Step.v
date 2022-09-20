@@ -122,30 +122,6 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , stm_assertk e1 e2 k ⟩ --->
       ⟨ γ , μ , δ , if eval e1 δ then k else stm_fail τ (eval e2 δ) ⟩
 
-  | step_stm_match_list
-      {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
-      (xh xt : PVar) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ) :
-      ⟨ γ , μ , δ , stm_match_list e alt_nil xh xt alt_cons ⟩ --->
-      ⟨ γ , μ , δ , match eval e δ with
-                | nil => alt_nil
-                | cons vh vt => stm_block (env.snoc (env.snoc env.nil (xh∷σ) vh) (xt∷ty.list σ) vt) alt_cons
-                end
-      ⟩
-  | step_stm_match_sum
-      {σinl σinr : Ty} (e : Exp Γ (ty.sum σinl σinr))
-      (xinl : PVar) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
-      (xinr : PVar) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ) :
-      ⟨ γ , μ , δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
-      ⟨ γ , μ , δ , match eval e δ with
-                | inl v => stm_block (env.snoc env.nil (xinl∷σinl) v) alt_inl
-                | inr v => stm_block (env.snoc env.nil (xinr∷σinr) v) alt_inr
-                end
-      ⟩
-  | step_stm_match_enum
-      {E : enumi} (e : Exp Γ (ty.enum E))
-      (alts : forall (K : enumt E), Stm Γ τ) :
-      ⟨ γ , μ , δ , stm_match_enum E e alts ⟩ ---> ⟨ γ , μ , δ , alts (eval e δ) ⟩
-
   | step_stm_match_union
       {U : unioni} (e : Exp Γ (ty.union U))
       (alt__ctx : forall (K : unionk U), PCtx)
@@ -155,12 +131,6 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , let (K , v) := unionv_unfold U (eval e δ) in
                 stm_block (pattern_match_val (alt__pat K) v) (alt__rhs K)
       ⟩
-
-  | step_stm_match_bvec
-      {n : nat} (e : Exp Γ (ty.bvec n)) (rhs : bv n -> Stm Γ τ) :
-      ⟨ γ , μ , δ , stm_match_bvec n e rhs ⟩ --->
-      ⟨ γ , μ , δ , rhs (eval e δ) ⟩
-
 
   | step_stm_read_register
       (r : 𝑹𝑬𝑮 τ) :
@@ -193,11 +163,6 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , stm_bind s (fun v => let (pc,δpc) := newpattern_match_val pat v
                                          in stm_block δpc (rhs pc))
       ⟩
-
-  | step_match_pattern
-      {Δ σ} (s : Stm Γ σ) (pat : Pattern Δ σ) (rhs : Stm (Γ ▻▻ Δ) τ) :
-      ⟨ γ , μ , δ , stm_match_pattern s pat rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_bind s (fun v => stm_block (pattern_match_val pat v) rhs) ⟩
 
   where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
 
@@ -240,12 +205,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         | @stm_fail             => idtac
         | @stm_if               => idtac
         | @stm_newpattern_match => idtac
-        | @stm_match_pattern    => idtac
-        | @stm_match_sum        => idtac
-        | @stm_match_list       => idtac
-        | @stm_match_enum       => idtac
         | @stm_match_union      => idtac
-        | @stm_match_bvec       => idtac
         | @stm_read_register    => idtac
         | @stm_write_register   => idtac
         | @stm_debugk           => idtac

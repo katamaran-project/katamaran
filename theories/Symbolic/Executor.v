@@ -1648,32 +1648,10 @@ Module Type SymbolicExecOn
             | stm_fail _ _ =>
                 (* Same as stm_assert: partial correctness of failure. *)
                 block (w:=w0)
-            | stm_match_pattern s pat rhs =>
-              ⟨ ω1 ⟩ v  <- exec_aux s ;;
-              ⟨ ω2 ⟩ vs <- demonic_match_pattern PVartoLVar pat v;;
-              pushspops vs (exec_aux rhs)
-
-            | stm_match_list e alt_nil xh xt alt_cons =>
-                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_list (PVartoLVar xh) (PVartoLVar xt) t
-                  (fun _ _ => exec_aux alt_nil)
-                  (fun _ _ thead ttail =>
-                     pushspops [env].[xh∷_ ↦ thead].[xt∷_↦ ttail] (exec_aux alt_cons ))
-            | stm_match_sum e xinl alt_inl xinr alt_inr =>
-                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_sum (PVartoLVar xinl) (PVartoLVar xinr) t
-                  (fun _ _ tl => pushpop tl (exec_aux alt_inl))
-                  (fun _ _ tr => pushpop tr (exec_aux alt_inr))
-            | stm_match_enum E e alts =>
-                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_enum t (fun EK _ _ => exec_aux (alts EK))
             | stm_match_union U e alt__pat alt__rhs =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_union PVartoLVar alt__pat t
                   (fun UK _ _ ts => pushspops ts (exec_aux (alt__rhs UK)))
-            | stm_match_bvec n e rhs =>
-                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_bvec t (fun bs _ _ => exec_aux (rhs bs))
             | stm_read_register reg =>
                 ⟨ ω01 ⟩ t <- angelic None _ ;;
                 ⟨ ω12 ⟩ _ <- T (consume (asn.chunk (chunk_ptsreg reg t))) ;;

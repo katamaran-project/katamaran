@@ -714,72 +714,6 @@ Module Type IrisResources
       - by iApply semWP_fail.
     Qed.
 
-    Lemma semWP_match_list {Γ τ σ} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
-      (xh xt : PVar) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
-          match eval e δ with
-          | nil       => semWP alt_nil Q δ
-          | cons x xs => semWP alt_cons (fun v δ' => Q v (env.tail (env.tail δ'))) δ.[xh∷σ ↦ x].[xt∷ty.list σ ↦ xs]
-          end -∗ semWP (stm_match_list e alt_nil xh xt alt_cons) Q δ.
-    Proof.
-      iIntros (Q δ) "WPs". unfold semWP at 3. rewrite wp_unfold. cbn.
-      iIntros (σ1 ns ks1 ks nt) "Hregs".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro. iSplitR; [trivial|].
-      iIntros (e3 σ2 efs) "%".
-      dependent elimination H.
-      fold_semWP.
-      dependent elimination s.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro; iFrame.
-      iSplitL; [|trivial].
-      destruct eval as [|l ls]; [easy|].
-      by iApply (semWP_block [env].[xh0∷_ ↦ l].[xt0∷ty.list _ ↦ ls]).
-    Qed.
-
-    Lemma semWP_match_sum {Γ τ σinl σinr} (e : Exp Γ (ty.sum σinl σinr)) (xinl xinr : PVar)
-      (alt_inl : Stm (Γ ▻ xinl∷σinl) τ) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
-          match eval e δ with
-          | inl v1 => semWP alt_inl (fun v δ1 => Q v (env.tail δ1)) δ.[xinl∷σinl ↦ v1]
-          | inr v2 => semWP alt_inr (fun v δ1 => Q v (env.tail δ1)) δ.[xinr∷σinr ↦ v2]
-          end -∗ semWP (stm_match_sum e xinl alt_inl xinr alt_inr) Q δ.
-    Proof.
-      iIntros (Q δ) "WPs". unfold semWP at 3. rewrite wp_unfold. cbn.
-      iIntros (σ1 _ ks1 ks nt) "Hregs".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro. iSplitR; [trivial|].
-      iIntros (e2 σ2 efs) "%".
-      dependent elimination H.
-      fold_semWP.
-      dependent elimination s.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro. iFrame.
-      iSplitL; [|trivial].
-      destruct eval.
-      - by iApply (semWP_block [env].[xinl0∷σinl0 ↦ v]).
-      - by iApply (semWP_block [env].[xinr0∷σinr0 ↦ v]).
-    Qed.
-
-    Lemma semWP_match_enum {Γ τ E} (e : Exp Γ (ty.enum E)) (alts : enumt E → Stm Γ τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
-          semWP (alts (eval e δ)) Q δ -∗ semWP (stm_match_enum E e alts) Q δ.
-    Proof.
-      iIntros (Q δ) "WPa". unfold semWP at 2. rewrite wp_unfold. cbn.
-      iIntros (σ _ ks1 ks nt) "Hregs".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro. iSplitR; [trivial|].
-      iIntros (e2 σ' efs) "%".
-      dependent elimination H.
-      fold_semWP.
-      dependent elimination s.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro. by iFrame.
-    Qed.
-
     Lemma semWP_match_union {Γ τ U} (e : Exp Γ (ty.union U)) (alt__ctx : unionk U → PCtx)
       (alt__pat : ∀ K, Pattern (alt__ctx K) (unionk_ty U K))
       (alt__rhs : ∀ K, Stm (Γ ▻▻ alt__ctx K) τ) :
@@ -804,24 +738,6 @@ Module Type IrisResources
       iFrame; iSplitL; auto.
       destruct unionv_unfold.
       by iApply semWP_block.
-    Qed.
-
-    Lemma semWP_match_bvec {Γ τ n} (e : Exp Γ (ty.bvec n)) (rhs : bv n → Stm Γ τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
-          semWP (rhs (eval e δ)) Q δ -∗ semWP (stm_match_bvec n e rhs) Q δ.
-    Proof.
-      iIntros (Q δ) "WPs". unfold semWP at 2. rewrite wp_unfold. cbn.
-      iIntros (σ ns ks1 ks nt) "state_inv".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iSplitR; [trivial|].
-      iIntros (e2 σ' efs) "%".
-      dependent elimination H.
-      fold_semWP.
-      dependent elimination s.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro. by iFrame.
     Qed.
 
     Lemma semWP_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
@@ -909,32 +825,6 @@ Module Type IrisResources
         iModIntro.
         iFrame.
         by iApply "IH".
-    Qed.
-
-    Lemma semWP_match_pattern {Γ τ Δ σ} (s : Stm Γ σ) (pat : Pattern Δ σ) (rhs : Stm (Γ ▻▻ Δ) τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
-          semWP s (fun vσ δ1 => semWP rhs (fun vτ δ2 => Q vτ (env.drop Δ δ2))
-                                  (δ1 ►► pattern_match_val pat vσ)) δ -∗
-          semWP (stm_match_pattern s pat rhs) Q δ.
-    Proof.
-      iIntros (Q δ) "WPs". unfold semWP at 3. rewrite wp_unfold. cbn.
-      iIntros (? ns ks1 ks nt) "state_inv".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iSplitR; [trivial|].
-      iIntros (e2 σ' efs) "%".
-      dependent elimination H.
-      fold_semWP.
-      dependent elimination s0.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iFrame; iSplitL; auto.
-      iApply semWP_bind.
-      iApply (semWP_mono with "WPs"); cbn.
-      clear - sG.
-      iIntros (v δ) "WPrhs".
-      by iApply semWP_block.
     Qed.
 
     Lemma semWP_newpattern_match {Γ τ σ} (s : Stm Γ σ) (pat : PatternShape σ)

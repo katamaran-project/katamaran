@@ -221,23 +221,8 @@ Module Type Soundness
         - apply IHs. intros ? ? ?.
           rewrite !wp_demonic_newpattern_match.
           apply H; auto.
-        - apply IHs1. intros ? ? ?.
-          rewrite !wp_demonic_match_pattern.
-          apply IHs2; auto.
-        - rewrite !wp_demonic_match_list.
-          destruct (eval e δ).
-          apply IHs1; auto.
-          apply IHs2; auto.
-        - rewrite !wp_demonic_match_sum.
-          destruct (eval e δ); cbn.
-          apply IHs1; auto.
-          apply IHs2; auto.
-        - rewrite !wp_demonic_match_enum.
-          apply H; auto.
         - rewrite !wp_demonic_match_union.
           destruct (unionv_unfold U (eval e δ)).
-          apply H; auto.
-        - rewrite !wp_demonic_match_bvec.
           apply H; auto.
         - intros [v Hwp]; exists v; revert Hwp.
           apply consume_chunk_monotonic. auto.
@@ -642,47 +627,11 @@ Module Type Soundness
           apply lprop_right.
           now apply H.
 
-      - (* stm_match_pattern *)
-        eapply rule_consequence_left.
-        eapply rule_stm_match_pattern; intros; apply rule_wp.
-        apply lex_right with (interpret_scheap h1).
-        apply land_right.
-        reflexivity.
-        apply lprop_right.
-        apply IHs1; clear IHs1.
-        revert HYP. apply exec_aux_monotonic; auto.
-        intros v2 δ2 h2 HYP; cbn.
-
-        apply lex_right with (interpret_scheap h2).
-        apply land_right.
-        reflexivity.
-        apply lprop_right.
-        rewrite wp_demonic_match_pattern in HYP.
-        now apply IHs2.
-
-      - (* stm_match_list *)
-        rewrite wp_demonic_match_list in HYP.
-        apply rule_stm_match_list; cbn; intros * Heval;
-          rewrite Heval in HYP; auto.
-
-      - (* stm_match_sum *)
-        rewrite wp_demonic_match_sum in HYP.
-        apply rule_stm_match_sum; cbn; intros * Heval;
-          rewrite Heval in HYP; auto.
-
-      - (* stm_match_enum *)
-        rewrite wp_demonic_match_enum in HYP.
-        now apply rule_stm_match_enum, H.
-
       - (* stm_match_union *)
         rewrite wp_demonic_match_union in HYP.
         apply rule_stm_match_union; cbn; intros * Heval;
           rewrite Heval, unionv_unfold_fold in HYP.
         now apply H.
-
-      - (* stm_match_bvec *)
-        rewrite wp_demonic_match_bvec in HYP.
-        now apply rule_stm_match_bvec, H.
 
       - (* stm_read_register *)
         destruct HYP as [v HYP].

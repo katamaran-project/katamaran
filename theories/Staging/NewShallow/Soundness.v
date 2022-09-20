@@ -144,25 +144,9 @@ Module Type Soundness
         intros pc δpc δ1'. rewrite newpattern_match_val_inverse_right.
         now apply H.
 
-      - (* stm_match_pattern *)
-        eapply rule_stm_match_pattern. apply IHs1. cbn.
-        intros v1 δ1'. now apply IHs2.
-
-      - (* stm_match_list *)
-        apply rule_stm_match_list; cbn; intros * ->; auto.
-
-      - (* stm_match_sum *)
-        apply rule_stm_match_sum; cbn; intros * ->; auto.
-
-      - (* stm_match_enum *)
-        now apply rule_stm_match_enum, H.
-
       - (* stm_match_union *)
         apply rule_stm_match_union; cbn; intros * ->.
         now rewrite unionv_unfold_fold.
-
-      - (* stm_match_bvec *)
-        now apply rule_stm_match_bvec, H.
 
       - (* stm_read_register *)
         apply rule_exist. intros v.

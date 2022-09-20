@@ -131,31 +131,6 @@ Module ProgramLogic.
     | rule_stm_fail
         (s : Val ty.string) (Q : Val τ -> CStore Γ -> L) :
         ⦃ ⊤ ⦄ stm_fail τ s ; δ ⦃ Q ⦄
-    | rule_stm_match_list
-        {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
-        (xh xt : PVar) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        (eval e δ = nil -> ⦃ P ⦄ alt_nil ; δ ⦃ Q ⦄) ->
-        (forall (v : Val σ) (vs : Val (ty.list σ)),
-           eval e δ = cons v vs ->
-           ⦃ P ⦄
-             alt_cons ; env.snoc (env.snoc δ (xh∷σ) v) (xt∷ty.list σ) vs
-           ⦃ fun v' δ' => Q v' (env.tail (env.tail δ')) ⦄) ->
-        ⦃ P ⦄ stm_match_list e alt_nil xh xt alt_cons ; δ ⦃ Q ⦄
-    | rule_stm_match_sum
-        {xl xr : PVar} {σl σr : Ty} {e : Exp Γ (ty.sum σl σr)}
-        {alt_inl : Stm (Γ ▻ xl∷σl) τ}
-        {alt_inr : Stm (Γ ▻ xr∷σr) τ}
-        {P : L} {Q : Val τ -> CStore Γ -> L} :
-        (forall (v : Val σl), eval e δ = inl v -> ⦃ P ⦄ alt_inl ; env.snoc δ (xl∷σl) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
-        (forall (v : Val σr), eval e δ = inr v -> ⦃ P ⦄ alt_inr ; env.snoc δ (xr∷σr) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
-        ⦃ P ⦄ stm_match_sum e xl alt_inl xr alt_inr ; δ ⦃ Q ⦄
-    | rule_stm_match_enum
-        {E : enumi} (e : Exp Γ (ty.enum E))
-        (alts : forall (K : enumt E), Stm Γ τ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ alts (eval e δ) ; δ ⦃ Q ⦄ ->
-        ⦃ P ⦄ stm_match_enum E e alts ; δ ⦃ Q ⦄
     | rule_stm_match_union
         {U : unioni} (e : Exp Γ (ty.union U))
         (alt__Δ : forall (K : unionk U), PCtx)
@@ -168,12 +143,6 @@ Module ProgramLogic.
              alt__r K ; env.cat δ (pattern_match_val (alt__p K) v)
            ⦃ fun v δ' => Q v (env.drop (alt__Δ K) δ') ⦄) ->
         ⦃ P ⦄ stm_match_union U e alt__p alt__r ; δ ⦃ Q ⦄
-    | rule_stm_match_bvec
-        {n : nat} (e : Exp Γ (ty.bvec n))
-        (rhs : bv n -> Stm Γ τ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ rhs (eval e δ) ; δ ⦃ Q ⦄ ->
-        ⦃ P ⦄ stm_match_bvec n e rhs ; δ ⦃ Q ⦄
     | rule_stm_read_register
         (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
         ⦃ lptsreg r v ⦄
@@ -240,16 +209,6 @@ Module ProgramLogic.
            ⦃ Q (newpattern_match_val_reverse pat pc δpc) δ' ⦄ rhs pc ; δ' ►► δpc
            ⦃ fun v2 δ' => R v2 (env.drop (PatternCaseCtx pc) δ') ⦄) ->
         ⦃ P ⦄ stm_newpattern_match s pat rhs ; δ ⦃ R ⦄
-
-    | rule_stm_match_pattern
-        {Δ σ} (s : Stm Γ σ) (pat : Pattern Δ σ) (rhs : Stm (Γ ▻▻ Δ) τ)
-        (P : L) (Q : Val σ -> CStore Γ -> L) (R : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
-        (forall v1 δ',
-           ⦃ Q v1 δ' ⦄
-             rhs ; δ' ►► pattern_match_val pat v1
-           ⦃ fun v2 δ' => R v2 (env.drop Δ δ') ⦄) ->
-        ⦃ P ⦄ stm_match_pattern s pat rhs ; δ ⦃ R ⦄
 
     where "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P s Q).
 
