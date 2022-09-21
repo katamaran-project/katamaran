@@ -47,6 +47,8 @@ From Katamaran Require Import
      Symbolic.OccursCheck
      Symbolic.PartialEvaluation.
 
+Import SigTNotations.
+
 Module Type BaseMixin (Import TY : Types).
   Include
     ExpressionsOn TY <+
@@ -145,10 +147,10 @@ Module Type BaseMixin (Import TY : Types).
       - cbn. now destruct env.snocView, env.snocView.
     Qed.
 
-    Definition newpattern_match_term_reverse {Σ σ} (pat : @PatternShape N σ) :
+    Fixpoint newpattern_match_term_reverse {Σ σ} (pat : @PatternShape N σ) :
       forall (pc : PatternCase pat), NamedEnv (Term Σ) (PatternCaseCtx pc) -> Term Σ σ :=
       match pat with
-      | pat_shape_var σ x =>
+      | pat_shape_var x =>
           fun _ ts => env.head ts
       | pat_shape_bool =>
           fun b _ => term_val ty.bool b
@@ -161,7 +163,7 @@ Module Type BaseMixin (Import TY : Types).
                          let (E,h)  := env.snocView Eh in
                          term_binop bop.cons h t
             end
-      | pat_shape_prod σ τ x y =>
+      | pat_shape_prod x y =>
           fun _ Exy =>
             let (Ex,vτ) := env.snocView Exy in
             let (E,vσ)  := env.snocView Ex in
@@ -183,12 +185,12 @@ Module Type BaseMixin (Import TY : Types).
             term_binop bop.bvapp vl vr
       | pat_shape_bvec_exhaustive m =>
           fun v _ => term_val (ty.bvec m) v
-      | pat_shape_tuple σs Δ p =>
+      | pat_shape_tuple p =>
           fun _ ts => term_tuple (tuple_pattern_match_env_reverse p ts)
-      | pat_shape_union U x =>
-          fun K ts => term_union U K (env.head ts)
       | pat_shape_record R Δ p =>
           fun _ ts => term_record R (record_pattern_match_env_reverse p ts)
+      | pat_shape_union U x =>
+          fun '(K;pc) ts => term_union U K (newpattern_match_term_reverse (x K) pc ts)
       end.
 
     Lemma inst_newpattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : @PatternShape N σ) :
@@ -196,7 +198,7 @@ Module Type BaseMixin (Import TY : Types).
         inst (newpattern_match_term_reverse pat pc ts) ι =
         newpattern_match_val_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι).
     Proof.
-      destruct pat; cbn.
+      induction pat; cbn.
       - intros _ ts. now env.destroy ts.
       - reflexivity.
       - intros [] ts.
@@ -215,9 +217,9 @@ Module Type BaseMixin (Import TY : Types).
         intros e. induction e; cbn.
         + reflexivity.
         + f_equal. apply IHe.
-      - intros K ts. now env.destroy ts.
       - intros _ ts. f_equal.
         apply inst_record_pattern_match_reverse.
+      - intros [] ts. cbn. f_equal. f_equal. apply H.
     Qed.
 
   End PatternMatching.

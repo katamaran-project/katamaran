@@ -117,10 +117,10 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   (*   stm_newpattern_match s pat_shape_bool (fun b => if b then s1 else s2). *)
   Definition stm_match_prod {Γ τ σ1 σ2} (s : Stm Γ (ty.prod σ1 σ2))
     (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) : Stm Γ τ :=
-    stm_newpattern_match s (pat_shape_prod σ1 σ2 xl xr) (fun _ => rhs).
+    stm_newpattern_match s (pat_shape_prod xl xr) (fun _ => rhs).
   Definition stm_match_tuple {Γ τ σs Δ} (s : Stm Γ (ty.tuple σs))
     (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ) : Stm Γ τ :=
-    stm_newpattern_match s (pat_shape_tuple σs Δ p) (fun _ => rhs).
+    stm_newpattern_match s (pat_shape_tuple p) (fun _ => rhs).
   Definition stm_match_record {Γ τ R Δ} (s : Stm Γ (ty.record R))
     (p : RecordPat (recordf_ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ) : Stm Γ τ :=
     stm_newpattern_match s (pat_shape_record R Δ p) (fun _ => rhs).

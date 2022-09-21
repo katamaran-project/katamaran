@@ -235,116 +235,155 @@ Module Type PatternsOn (Import TY : Types).
        [pat_shape_sum] contains the names [x] and [y] for the [inl] and [inr]
        cases. *)
     Inductive PatternShape : Ty -> Set :=
-    | pat_shape_var σ (x : N)                               : PatternShape σ
+    | pat_shape_var (x : N) {σ}                             : PatternShape σ
     | pat_shape_bool                                        : PatternShape ty.bool
     | pat_shape_list σ (x y : N)                            : PatternShape (ty.list σ)
-    | pat_shape_prod σ τ (x y : N)                          : PatternShape (ty.prod σ τ)
+    | pat_shape_prod (x y : N) {σ τ}                        : PatternShape (ty.prod σ τ)
     | pat_shape_sum σ τ (x y : N)                           : PatternShape (ty.sum σ τ)
     | pat_shape_unit                                        : PatternShape ty.unit
     | pat_shape_enum E                                      : PatternShape (ty.enum E)
     | pat_shape_bvec_split m n (x y : N)                    : PatternShape (ty.bvec (m+n))
     | pat_shape_bvec_exhaustive m                           : PatternShape (ty.bvec m)
-    | pat_shape_tuple σs Δ (p : TuplePat σs Δ)              : PatternShape (ty.tuple σs)
-    | pat_shape_union U (x : unionk U -> N)                 : PatternShape (ty.union U)
-    | pat_shape_record R Δ (p : RecordPat (recordf_ty R) Δ) : PatternShape (ty.record R).
+    | pat_shape_tuple {σs Δ} (p : TuplePat σs Δ)             : PatternShape (ty.tuple σs)
+    | pat_shape_record R Δ (p : RecordPat (recordf_ty R) Δ) : PatternShape (ty.record R)
+    | pat_shape_union U
+        (p : forall K, PatternShape (unionk_ty U K))        : PatternShape (ty.union U).
 
     (* This describes the different cases/alternatives for a single pattern
        match of a particular shape. It can be seen as a representation of the
        arity of a match. *)
-    Definition PatternCase {σ} (pat : PatternShape σ) : Set :=
+    Fixpoint PatternCase {σ} (pat : PatternShape σ) : Set :=
       match pat with
-      | pat_shape_var σ x            => unit
+      | pat_shape_var x              => unit
       | pat_shape_bool               => bool
       | pat_shape_list σ x y         => bool
-      | pat_shape_prod σ τ x y       => unit
+      | pat_shape_prod x y           => unit
       | pat_shape_sum σ τ x y        => bool
       | pat_shape_unit               => unit
       | pat_shape_enum E             => enumt E
       | pat_shape_bvec_split m n x y => unit
       | pat_shape_bvec_exhaustive m  => bv m
-      | pat_shape_tuple σs Δ p       => unit
-      | pat_shape_union U x          => unionk U
+      | pat_shape_tuple p            => unit
       | pat_shape_record R Δ p       => unit
+      | pat_shape_union U p          => { K : unionk U & PatternCase (p K) }
       end.
 
-    #[export] Instance EqDec_PatternCase {σ} (pat : PatternShape σ) :
-      Classes.EqDec (PatternCase pat) :=
-      ltac:(destruct pat; cbn [PatternCase];
-            auto with typeclass_instances).
+    #[export] Instance EqDec_PatternCase :
+      forall {σ} (pat : PatternShape σ),
+        Classes.EqDec (PatternCase pat) :=
+      fix eqd {σ} pat :=
+        match pat return Classes.EqDec (PatternCase pat) with
+        | pat_shape_var _              => EqDecInstances.unit_EqDec
+        | pat_shape_bool               => EqDecInstances.bool_EqDec
+        | pat_shape_list _ _ _         => EqDecInstances.bool_EqDec
+        | pat_shape_prod _ _           => EqDecInstances.unit_EqDec
+        | pat_shape_sum _ _ _ _        => EqDecInstances.bool_EqDec
+        | pat_shape_unit               => EqDecInstances.unit_EqDec
+        | pat_shape_enum E             => enumt_eqdec E
+        | pat_shape_bvec_split _ _ _ _ => EqDecInstances.unit_EqDec
+        | pat_shape_bvec_exhaustive m  => bv.eqdec_bv
+        | pat_shape_tuple _            => EqDecInstances.unit_EqDec
+        | pat_shape_record _ _ _       => EqDecInstances.unit_EqDec
+        | pat_shape_union U p          => EqDecInstances.sigma_eqdec
+                                            (unionk_eqdec U)
+                                            (fun K => eqd (p K))
+        end.
 
-    #[export] Instance Finite_PatternCase {σ} (pat : PatternShape σ) :
-      finite.Finite (PatternCase pat) :=
-      ltac:(destruct pat; cbn [PatternCase EqDec_PatternCase];
-            auto with typeclass_instances).
+    #[export] Instance Finite_PatternCase :
+      forall {σ} (pat : PatternShape σ),
+        finite.Finite (PatternCase pat) :=
+      fix fin {σ} pat :=
+        match pat with
+        | pat_shape_var _              => finite.unit_finite
+        | pat_shape_bool               => Finite_bool
+        | pat_shape_list _ _ _         => Finite_bool
+        | pat_shape_prod _ _           => finite.unit_finite
+        | pat_shape_sum _ _ _ _        => Finite_bool
+        | pat_shape_unit               => finite.unit_finite
+        | pat_shape_enum E             => enumt_finite E
+        | pat_shape_bvec_split _ _ _ _ => finite.unit_finite
+        | pat_shape_bvec_exhaustive m  => bv.finite_bv
+        | pat_shape_tuple _            => finite.unit_finite
+        | pat_shape_record _ _ _       => finite.unit_finite
+        | pat_shape_union U p          =>
+            @Finite_sigT (unionk U) _ _
+              (fun K => PatternCase (p K))
+              (fun K => EqDec_PatternCase (p K))
+              (fun K => fin (p K))
+        end.
 
     (* For each [PatternShape] and each [PatternCase] for that shape, calculate
        the context that represents the variables bound in that case. *)
-    Definition PatternCaseCtx {σ} {p : PatternShape σ} : PatternCase p -> NCtx N Ty :=
+    Fixpoint PatternCaseCtx {σ} {p : PatternShape σ} : PatternCase p -> NCtx N Ty :=
       match p with
-      | pat_shape_var σ x            => fun _ => [x∷σ]
+      | @pat_shape_var x σ           => fun _ => [x∷σ]
       | pat_shape_bool               => fun _ => [ctx]
       | pat_shape_list σ x y         => fun b => if b then [ctx] else [x∷σ; y∷ty.list σ]
-      | pat_shape_prod σ τ x y       => fun _ => [x∷σ; y∷τ]
+      | @pat_shape_prod x y σ τ      => fun _ => [x∷σ; y∷τ]
       | pat_shape_sum σ τ x y        => fun b => if b then [x∷σ] else [y∷τ]
       | pat_shape_unit               => fun _ => [ctx]
       | pat_shape_enum _             => fun _ => [ctx]
       | pat_shape_bvec_split m n x y => fun _ => [x∷ty.bvec m; y∷ty.bvec n]
       | pat_shape_bvec_exhaustive m  => fun _ => [ctx]
-      | pat_shape_union U x          => fun K => [x K∷unionk_ty U K]
-      | pat_shape_tuple _ Δ _        => fun _ => Δ
+      | @pat_shape_tuple _ Δ _       => fun _ => Δ
       | pat_shape_record _ Δ _       => fun _ => Δ
+      | pat_shape_union U p          => fun '(K; pc) =>
+                                          @PatternCaseCtx (unionk_ty U K) (p K) pc
       end%ctx.
 
     (* Pattern match on a value. The result is a [PatternCase] that represents
        the alternative corresponding to the value, together with an environment
        that maps the variables of the pattern to values. *)
-    Definition newpattern_match_val {σ} (pat : PatternShape σ) :
+    Fixpoint newpattern_match_val {σ} (pat : PatternShape σ) :
       Val σ -> { c : PatternCase pat & NamedEnv Val (PatternCaseCtx c) } :=
       match pat with
-       | pat_shape_var σ x =>
-           fun v => (tt; [env].[x∷σ ↦ v])
-       | pat_shape_bool       =>
-           fun b => (b; [env])
-       | pat_shape_list σ x y =>
-           fun v : Val (ty.list σ) =>
-           match v with
-           | nil       => (true; [env])
-           | cons v vs => (false; [env].[x∷σ ↦ v].[y∷ty.list σ ↦ vs])
-           end
-       | pat_shape_prod σ τ x y =>
-           fun '(a, b) => (tt; [env].[x∷σ ↦ a].[y∷τ ↦ b])
-       | pat_shape_sum σ τ x y =>
-           fun v =>
-             match v with
-             | inl a => (true; [env].[x∷σ ↦ a])
-             | inr b => (false; [env].[y∷τ ↦ b])
-             end
-       | pat_shape_unit =>
-           fun _ => (tt; [env])
-       | pat_shape_enum E =>
-           fun v : enumt E => (v; [env])
-       | pat_shape_bvec_split m n x y =>
-           fun v =>
-             match bv.appView m n v with
-             | bv.isapp xs ys =>
-                 (tt; [env].[x∷ty.bvec m ↦ xs].[y∷ty.bvec n ↦ ys])
-             end
-       | pat_shape_bvec_exhaustive m =>
-           fun v => (v; [env])
-       | pat_shape_tuple σs Δ p =>
-           fun v => (tt; tuple_pattern_match_val p v)
-       | pat_shape_union U x =>
-           fun v => let (K, u) := unionv_unfold U v in (K; [env].[x K∷unionk_ty U K ↦ u])
-       | pat_shape_record R Δ p =>
-           fun v => (tt; record_pattern_match_val p v)
-       end.
+      | pat_shape_var x =>
+          fun v => (tt; [env].[x∷_ ↦ v])
+      | pat_shape_bool       =>
+          fun b => (b; [env])
+      | pat_shape_list σ x y =>
+          fun v : Val (ty.list σ) =>
+            match v with
+            | nil       => (true; [env])
+            | cons v vs => (false; [env].[x∷σ ↦ v].[y∷ty.list σ ↦ vs])
+            end
+      | pat_shape_prod x y =>
+          fun '(a, b) => (tt; [env].[x∷_ ↦ a].[y∷_ ↦ b])
+      | pat_shape_sum σ τ x y =>
+          fun v =>
+            match v with
+            | inl a => (true; [env].[x∷σ ↦ a])
+            | inr b => (false; [env].[y∷τ ↦ b])
+            end
+      | pat_shape_unit =>
+          fun _ => (tt; [env])
+      | pat_shape_enum E =>
+          fun v : enumt E => (v; [env])
+      | pat_shape_bvec_split m n x y =>
+          fun v =>
+            match bv.appView m n v with
+            | bv.isapp xs ys =>
+                (tt; [env].[x∷ty.bvec m ↦ xs].[y∷ty.bvec n ↦ ys])
+            end
+      | pat_shape_bvec_exhaustive m =>
+          fun v => (v; [env])
+      | pat_shape_tuple p =>
+          fun v => (tt; tuple_pattern_match_val p v)
+      | pat_shape_record R Δ p =>
+          fun v => (tt; record_pattern_match_val p v)
+      | pat_shape_union U p =>
+          fun v =>
+            let (K, u)    := unionv_unfold U v in
+            let (pc, δpc) := newpattern_match_val (p K) u in
+            ((K; pc); δpc)
+      end.
 
     (* Reverse a pattern match. Given a [PatternCase] and an environment with
        values for all variables in the pattern, reconstruct a value. *)
-    Definition newpattern_match_val_reverse {σ} (pat : PatternShape σ) :
+    Fixpoint newpattern_match_val_reverse {σ} (pat : PatternShape σ) :
       forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> Val σ :=
       match pat with
-      | pat_shape_var σ x    => fun _ vs => env.head vs
+      | pat_shape_var x      => fun _ vs => env.head vs
       | pat_shape_bool       => fun b _ => b
       | pat_shape_list σ x y =>
           fun b =>
@@ -355,7 +394,7 @@ Module Type PatternsOn (Import TY : Types).
                          let (E,h)  := env.snocView Eh in
                          cons h t
             end
-      | pat_shape_prod σ τ x y =>
+      | pat_shape_prod x y =>
           fun _ Exy =>
             let (Ex,vy) := env.snocView Exy in
             let (E,vx)  := env.snocView Ex in
@@ -377,12 +416,13 @@ Module Type PatternsOn (Import TY : Types).
             bv.app vx vy
       | pat_shape_bvec_exhaustive m =>
           fun v _ => v
-      | pat_shape_tuple σs Δ p =>
+      | pat_shape_tuple p =>
           fun _ vs => envrec.of_env (tuple_pattern_match_env_reverse p vs)
-      | pat_shape_union U x =>
-          fun K vs => unionv_fold U (K; env.head vs)
       | pat_shape_record R Δ p =>
           fun _ vs => recordv_fold R (record_pattern_match_env_reverse p vs)
+      | pat_shape_union U p =>
+          fun '(K; pc) δpc =>
+            unionv_fold U (K; newpattern_match_val_reverse (p K) pc δpc)
       end.
 
     Definition newpattern_match_val_reverse' {σ} (pat : PatternShape σ) :
@@ -393,7 +433,7 @@ Module Type PatternsOn (Import TY : Types).
       forall (c : { pc : PatternCase pat & NamedEnv Val (PatternCaseCtx pc)}),
         newpattern_match_val pat (newpattern_match_val_reverse' pat c) = c.
     Proof.
-      destruct pat; cbn; intros [pc vs]; try progress cbn.
+      induction pat; cbn; intros [pc vs]; try progress cbn.
       - destruct pc; now env.destroy vs.
       - env.destroy vs. reflexivity.
       - destruct pc; now env.destroy vs.
@@ -408,12 +448,15 @@ Module Type PatternsOn (Import TY : Types).
         unfold tuple_pattern_match_val.
         rewrite envrec.to_of_env.
         now rewrite tuple_pattern_match_env_inverse_right.
-      - rewrite unionv_unfold_fold.
-        now env.destroy vs.
       - destruct pc.
         unfold record_pattern_match_val.
         rewrite recordv_unfold_fold.
         now rewrite record_pattern_match_env_inverse_right.
+      - destruct pc as [K pc].
+        rewrite unionv_unfold_fold.
+        change (newpattern_match_val_reverse _ ?pc ?vs) with
+          (newpattern_match_val_reverse' _ (pc;vs)).
+        now rewrite H.
     Qed.
 
     Lemma newpattern_match_val_inverse_right {σ} (pat : PatternShape σ)
@@ -425,7 +468,7 @@ Module Type PatternsOn (Import TY : Types).
       forall v : Val σ,
         newpattern_match_val_reverse' pat (newpattern_match_val pat v) = v.
     Proof.
-      destruct pat; cbn; intros v; try progress cbn.
+      induction pat; cbn; intros v; try progress cbn.
       - reflexivity.
       - reflexivity.
       - destruct v; reflexivity.
@@ -438,11 +481,16 @@ Module Type PatternsOn (Import TY : Types).
       - unfold tuple_pattern_match_val.
         rewrite tuple_pattern_match_env_inverse_left.
         now rewrite envrec.of_to_env.
-      - destruct unionv_unfold as [K v'] eqn:?. cbn.
-        now rewrite <- Heqs, unionv_fold_unfold.
       - unfold record_pattern_match_val.
         rewrite record_pattern_match_env_inverse_left.
         now rewrite recordv_fold_unfold.
+      - destruct unionv_unfold as [K v'] eqn:Heq.
+        apply (f_equal (unionv_fold U)) in Heq.
+        rewrite unionv_fold_unfold in Heq. subst.
+        destruct newpattern_match_val eqn:Heq; cbn.
+        change (newpattern_match_val_reverse _ ?pc ?vs) with
+          (newpattern_match_val_reverse' _ (pc;vs)).
+        now rewrite <- Heq, H.
     Qed.
 
   End Patterns.
