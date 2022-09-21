@@ -1265,10 +1265,10 @@ Module Soundness
           now rewrite ?sub_acc_trans, ?inst_subst.
     Qed.
 
-    Lemma refine_angelic_newpattern_match {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
+    Lemma refine_angelic_newpattern_match' {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
       {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @PatternShape N σ)
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.angelic_newpattern_match N n AT Γ1 Γ2 σ pat w)
+      ℛ ι (@SHeapSpecM.angelic_newpattern_match' N n AT Γ1 Γ2 σ pat w)
         (@CHeapSpecM.angelic_newpattern_match N Γ1 Γ2 A σ pat).
     Proof.
       intros t v ->.
@@ -1297,10 +1297,10 @@ Module Soundness
       now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_demonic_newpattern_match {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
+    Lemma refine_demonic_newpattern_match' {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
       {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @PatternShape N σ)
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.demonic_newpattern_match N n AT Γ1 Γ2 σ pat w)
+      ℛ ι (@SHeapSpecM.demonic_newpattern_match' N n AT Γ1 Γ2 σ pat w)
         (@CHeapSpecM.demonic_newpattern_match N Γ1 Γ2 A σ pat).
     Proof.
       intros t v ->.
@@ -1327,6 +1327,220 @@ Module Soundness
       now rewrite ?sub_acc_trans, ?inst_subst.
       hnf in Htvs. subst.
       now rewrite <- inst_persist.
+    Qed.
+
+    Lemma refine_angelic_newpattern_match {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
+      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @PatternShape N σ) :
+      forall {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι),
+        ℛ ι (@SHeapSpecM.angelic_newpattern_match N n AT Γ1 Γ2 σ pat w)
+          (@CHeapSpecM.angelic_newpattern_match N Γ1 Γ2 A σ pat).
+    Proof.
+      induction pat; cbn; intros w ι Hpc.
+      - intros t v ->.
+        intros k k__c Hk.
+        intros POST__s POST__c HPOST.
+        intros δs0 δc0 -> hs0 hc0 ->. hnf.
+        rewrite CHeapSpecM.wp_angelic_newpattern_match.
+        apply Hk; cbn; rewrite ?inst_sub_id; auto.
+        reflexivity.
+      - intros t v Htv.
+        intros k k__c Hk.
+        intros POST__s POST__c HPOST.
+        intros δs0 δc0 Hδ hs0 hc0 Hh.
+        intros Hwp.
+        cut (CHeapSpecM.angelic_match_bool v (k__c true [env]) (k__c false [env]) POST__c δc0 hc0).
+        + rewrite CHeapSpecM.wp_angelic_newpattern_match.
+          rewrite CHeapSpecM.wp_angelic_match_bool.
+          now destruct v; cbn.
+        + revert Hwp. apply refine_angelic_match_bool; auto.
+          hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
+          hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
+      - apply (refine_angelic_newpattern_match' n (pat_shape_list σ x y)); auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_pair_spec t) as [[tl tr] Heq|]; subst.
+        + rewrite Heq. intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + apply refine_angelic_newpattern_match'; auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_sum_spec t) as [[tl|tr] Heq|]; subst.
+        + rewrite Heq. intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + rewrite Heq. intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + apply refine_angelic_newpattern_match'; auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        intros POST__s POST__c HPOST.
+        intros δs0 δc0 -> hs0 hc0 ->. hnf.
+        rewrite CHeapSpecM.wp_angelic_newpattern_match.
+        apply Hk; cbn; rewrite ?inst_sub_id; auto.
+        reflexivity.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_val_spec t); subst.
+        + intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + apply refine_angelic_newpattern_match'; auto.
+      - apply (refine_angelic_newpattern_match' n (pat_shape_bvec_split _ _ x y)); auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_val_spec t); subst.
+        + intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + apply refine_angelic_newpattern_match'; auto.
+      - apply (refine_angelic_newpattern_match' n (pat_shape_tuple p)); auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_record_spec t) as [ts Heq|]; subst.
+        + rewrite Heq.
+          intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          hnf. unfold record_pattern_match_val.
+          rewrite recordv_unfold_fold. symmetry.
+          apply inst_record_pattern_match.
+        + apply refine_angelic_newpattern_match'; auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_union_spec t) as [[K scr'] Heq|]; subst.
+        + intros POST__s POST__c HPOST.
+          intros δs0 δc0 Hδ0 hs0 hc0 Hh0.
+          intros Hwp.
+          specialize (H0 K w ι Hpc scr' (inst scr' ι) eq_refl
+                        (fun pc => k (existT K pc))
+                        (fun pc => k__c (existT K pc))).
+          eapply H0 in Hwp; eauto.
+          revert Hwp.
+          rewrite ?CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          rewrite Heq. rewrite unionv_unfold_fold.
+          now destruct newpattern_match_val; cbn.
+          intros pc. apply (Hk (existT K pc)).
+        + apply refine_angelic_newpattern_match'; auto.
+    Qed.
+
+    Lemma refine_demonic_newpattern_match {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
+      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @PatternShape N σ) :
+      forall {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι),
+        ℛ ι (@SHeapSpecM.demonic_newpattern_match N n AT Γ1 Γ2 σ pat w)
+          (@CHeapSpecM.demonic_newpattern_match N Γ1 Γ2 A σ pat).
+    Proof.
+      induction pat; cbn; intros w ι Hpc.
+      - intros t v ->.
+        intros k k__c Hk.
+        intros POST__s POST__c HPOST.
+        intros δs0 δc0 -> hs0 hc0 ->. hnf.
+        rewrite CHeapSpecM.wp_demonic_newpattern_match.
+        apply Hk; cbn; rewrite ?inst_sub_id; auto.
+        reflexivity.
+      - intros t v Htv.
+        intros k k__c Hk.
+        intros POST__s POST__c HPOST.
+        intros δs0 δc0 Hδ hs0 hc0 Hh.
+        intros Hwp.
+        cut (CHeapSpecM.demonic_match_bool v (k__c true [env]) (k__c false [env]) POST__c δc0 hc0).
+        + rewrite CHeapSpecM.wp_demonic_newpattern_match.
+          rewrite CHeapSpecM.wp_demonic_match_bool.
+          now destruct v; cbn.
+        + revert Hwp. apply refine_demonic_match_bool; auto.
+          hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
+          hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
+      - apply (refine_demonic_newpattern_match' n (pat_shape_list σ x y)); auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_pair_spec t) as [[tl tr] Heq|]; subst.
+        + rewrite Heq. intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + apply refine_demonic_newpattern_match'; auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_sum_spec t) as [[tl|tr] Heq|]; subst.
+        + rewrite Heq. intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + rewrite Heq. intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + apply refine_demonic_newpattern_match'; auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        intros POST__s POST__c HPOST.
+        intros δs0 δc0 -> hs0 hc0 ->. hnf.
+        rewrite CHeapSpecM.wp_demonic_newpattern_match.
+        apply Hk; cbn; rewrite ?inst_sub_id; auto.
+        reflexivity.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_val_spec t); subst.
+        + intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + apply refine_demonic_newpattern_match'; auto.
+      - apply (refine_demonic_newpattern_match' n (pat_shape_bvec_split _ _ x y)); auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_val_spec t); subst.
+        + intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + apply refine_demonic_newpattern_match'; auto.
+      - apply (refine_demonic_newpattern_match' n (pat_shape_tuple p)); auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_record_spec t) as [ts Heq|]; subst.
+        + rewrite Heq.
+          intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          hnf. unfold record_pattern_match_val.
+          rewrite recordv_unfold_fold. symmetry.
+          apply inst_record_pattern_match.
+        + apply refine_demonic_newpattern_match'; auto.
+      - intros t v ->.
+        intros k k__c Hk.
+        destruct (term_get_union_spec t) as [[K scr'] Heq|]; subst.
+        + intros POST__s POST__c HPOST.
+          intros δs0 δc0 Hδ0 hs0 hc0 Hh0.
+          intros Hwp.
+          specialize (H0 K w ι Hpc scr' (inst scr' ι) eq_refl
+                        (fun pc => k (existT K pc))
+                        (fun pc => k__c (existT K pc))).
+          eapply H0 in Hwp; eauto.
+          revert Hwp.
+          rewrite ?CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          rewrite Heq. rewrite unionv_unfold_fold.
+          now destruct newpattern_match_val; cbn.
+          intros pc. apply (Hk (existT K pc)).
+        + apply refine_demonic_newpattern_match'; auto.
     Qed.
 
     Lemma refine_demonic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty}

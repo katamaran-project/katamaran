@@ -1065,9 +1065,9 @@ Module Type SymbolicExecOn
         ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_tuple n p <$> persist__term t <*> four k.
 
-      Definition angelic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
+      Definition angelic_newpattern_match' {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
         ⊢ STerm σ ->
-        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
+        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
         SHeapSpecM Γ1 Γ2 AT :=
         fun w0 t k =>
           ⟨ ω1 ⟩ pc <- angelic_finite (PatternCase pat)
@@ -1085,13 +1085,70 @@ Module Type SymbolicExecOn
           ⟨ ω3 ⟩ _  <- assert_formula (formula_eq (newpattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
           k pc _ (ω12 ∘ ω3) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) _) (wctx w)) ts ω3).
 
+      Definition angelic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2} :
+        forall {σ} (pat : @PatternShape N σ),
+        ⊢ STerm σ ->
+        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
+        SHeapSpecM Γ1 Γ2 AT :=
+        fix angelic (σ : Ty) (pat : PatternShape σ) {struct pat} :
+          ⊢ WTerm σ ->
+          (∀ pc : PatternCase pat,
+              □((fun w : World => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
+          SHeapSpecM Γ1 Γ2 AT :=
+          match pat with
+          | pat_shape_var x => fun w0 scr k => k tt w0 acc_refl [env].[x∷_ ↦ scr]
+          | pat_shape_bool => fun w0 scr k =>
+                                angelic_match_bool
+                                  scr
+                                  (fun w1 r01 => k true w1 r01 [env])
+                                  (fun w1 r01 => k false w1 r01 [env])
+          | pat_shape_prod x y => fun w0 scr k =>
+                                    match term_get_pair scr with
+                                    | Some (tl, tr) => k tt w0 acc_refl [env].[x∷_ ↦ tl].[y∷_ ↦ tr]
+                                    | None => angelic_newpattern_match' n (pat_shape_prod x y) scr k
+                                    end
+          | pat_shape_sum _ _ _ _ => fun w0 scr k =>
+                                       match term_get_sum scr with
+                                       | Some (inl tl) => k true w0 acc_refl [env].[_∷_ ↦ tl]
+                                       | Some (inr tr) => k false w0 acc_refl [env].[_∷_ ↦ tr]
+                                       | None => angelic_newpattern_match' n (pat_shape_sum _ _ _ _) scr k
+                                       end
+          | pat_shape_unit => fun w0 scr k => k tt w0 acc_refl [env]
+          | pat_shape_enum E => fun w0 scr k => match term_get_val scr with
+                                                | Some v => k v w0 acc_refl [env]
+                                                | None => angelic_newpattern_match' n _ scr k
+                                                end
+          | pat_shape_bvec_exhaustive m => fun w0 scr k => match term_get_val scr with
+                                                           | Some v => k v w0 acc_refl [env]
+                                                           | None => angelic_newpattern_match' n _ scr k
+                                                           end
+          | pat_shape_tuple p => fun w0 scr k =>
+                                   match term_get_tuple scr with
+                                   | Some a => k tt w0 acc_refl (tuple_pattern_match_env p a)
+                                   | None => angelic_newpattern_match' n (pat_shape_tuple p) scr k
+                                   end
+          | pat_shape_record R Δ p => fun w0 scr k =>
+                                        match term_get_record scr with
+                                        | Some a => k tt w0 acc_refl (record_pattern_match_env p a)
+                                        | None => angelic_newpattern_match' n (pat_shape_record R Δ p) scr k
+                                        end
+          | pat_shape_union U p => fun w0 scr k =>
+                                     match term_get_union scr with
+                                     | Some (existT K scr') =>
+                                         angelic (unionk_ty U K) (p K) w0 scr'
+                                           (fun pc => k (existT K pc))
+                                     | None => angelic_newpattern_match' n (pat_shape_union U p) scr k
+                                     end
+          | _ => angelic_newpattern_match' n _
+          end.
+
       Definition box_angelic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
         ⊢ STerm σ ->
         (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
         □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k w1 ω01 => angelic_newpattern_match n pat t⟨ω01⟩ (fun pc => four (k pc) ω01).
 
-      Definition demonic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
+      Definition demonic_newpattern_match' {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
         ⊢ STerm σ ->
         (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
         SHeapSpecM Γ1 Γ2 AT :=
@@ -1101,6 +1158,63 @@ Module Type SymbolicExecOn
           let ω12 := ω1 ∘ ω2 in
           ⟨ ω3 ⟩ _  <- assume_formula (formula_eq (newpattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
           k pc _ (ω12 ∘ ω3) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) _) (wctx w)) ts ω3).
+
+      Definition demonic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2} :
+        forall {σ} (pat : @PatternShape N σ),
+        ⊢ STerm σ ->
+        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
+        SHeapSpecM Γ1 Γ2 AT :=
+        fix demonic (σ : Ty) (pat : PatternShape σ) {struct pat} :
+          ⊢ WTerm σ ->
+          (∀ pc : PatternCase pat,
+              □((fun w : World => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
+          SHeapSpecM Γ1 Γ2 AT :=
+          match pat with
+          | pat_shape_var x => fun w0 scr k => k tt w0 acc_refl [env].[x∷_ ↦ scr]
+          | pat_shape_bool => fun w0 scr k =>
+                                demonic_match_bool
+                                  scr
+                                  (fun w1 r01 => k true w1 r01 [env])
+                                  (fun w1 r01 => k false w1 r01 [env])
+          | pat_shape_prod x y => fun w0 scr k =>
+                                    match term_get_pair scr with
+                                    | Some (tl, tr) => k tt w0 acc_refl [env].[x∷_ ↦ tl].[y∷_ ↦ tr]
+                                    | None => demonic_newpattern_match' n (pat_shape_prod x y) scr k
+                                    end
+          | pat_shape_sum _ _ _ _ => fun w0 scr k =>
+                                       match term_get_sum scr with
+                                       | Some (inl tl) => k true w0 acc_refl [env].[_∷_ ↦ tl]
+                                       | Some (inr tr) => k false w0 acc_refl [env].[_∷_ ↦ tr]
+                                       | None => demonic_newpattern_match' n (pat_shape_sum _ _ _ _) scr k
+                                       end
+          | pat_shape_unit => fun w0 scr k => k tt w0 acc_refl [env]
+          | pat_shape_enum E => fun w0 scr k => match term_get_val scr with
+                                                | Some v => k v w0 acc_refl [env]
+                                                | None => demonic_newpattern_match' n _ scr k
+                                                end
+          | pat_shape_bvec_exhaustive m => fun w0 scr k => match term_get_val scr with
+                                                           | Some v => k v w0 acc_refl [env]
+                                                           | None => demonic_newpattern_match' n _ scr k
+                                                           end
+          | pat_shape_tuple p => fun w0 scr k =>
+                                   match term_get_tuple scr with
+                                   | Some a => k tt w0 acc_refl (tuple_pattern_match_env p a)
+                                   | None => demonic_newpattern_match' n (pat_shape_tuple p) scr k
+                                   end
+          | pat_shape_record R Δ p => fun w0 scr k =>
+                                        match term_get_record scr with
+                                        | Some a => k tt w0 acc_refl (record_pattern_match_env p a)
+                                        | None => demonic_newpattern_match' n (pat_shape_record R Δ p) scr k
+                                        end
+          | pat_shape_union U p => fun w0 scr k =>
+                                     match term_get_union scr with
+                                     | Some (existT K scr') =>
+                                         demonic (unionk_ty U K) (p K) w0 scr'
+                                           (fun pc => k (existT K pc))
+                                     | None => demonic_newpattern_match' n (pat_shape_union U p) scr k
+                                     end
+          | _ => demonic_newpattern_match' n _
+          end.
 
       Definition box_demonic_newpattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @PatternShape N σ) :
         ⊢ STerm σ ->
