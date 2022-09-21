@@ -166,6 +166,57 @@ Section Finite.
 
   Import stdpp.finite.
 
+  #[local] Set Equations With UIP.
+  #[export,program] Instance Finite_sigT (A : Type) {eqA : EqDec A} {finA : Finite A}
+    (B : A -> Type) {eqB : forall x, EqDec (B x)} {finB : forall x, Finite (B x)} :
+    Finite {x : A & B x} :=
+    {| enum := foldr (fun a xs => map (existT a) (enum (B a)) ++ xs) [] (enum A) |}.
+  Next Obligation.
+  Proof.
+    intros A eqA finA B eqB finB.
+    generalize (NoDup_enum A).
+    generalize (enum A) as xs.
+    induction xs; cbn.
+    - intros _. constructor.
+    - intros [HaIn NDxs]%NoDup_cons.
+      apply NoDup_app. split; [|split].
+      + apply NoDup_fmap. intros x y Heq.
+        now dependent elimination Heq.
+        apply NoDup_enum.
+      + intros [a' b'] (b & Heq & HbIn)%elem_of_list_fmap.
+        dependent elimination Heq.
+        intros HxIn. apply HaIn.
+        { clear - HxIn.
+          induction xs; cbn in *.
+          - inversion HxIn.
+          - apply elem_of_app in HxIn.
+            destruct HxIn as [HxIn|HxIn].
+            + apply elem_of_list_fmap in HxIn.
+              destruct HxIn as (b & Heq & HbIn).
+              dependent elimination Heq.
+              constructor.
+            + constructor.
+              now apply IHxs.
+        }
+      + now apply IHxs.
+  Qed.
+  Next Obligation.
+  Proof.
+    intros A eqA finA B eqB finB.
+    intros [a b].
+    generalize (elem_of_enum a).
+    generalize (enum A) as xs. clear - finB.
+    induction xs; cbn.
+    - intros []%not_elem_of_nil.
+    - intros [Ha|Ha]%elem_of_cons.
+      + clear - Ha.
+        apply elem_of_app. left. subst.
+        apply elem_of_list_fmap_1.
+        apply elem_of_enum.
+      + apply elem_of_app. right.
+        now apply IHxs.
+  Qed.
+
   Lemma nodup_fixed `{EqDec A} (l : list A) : nodup eq_dec l = l -> NoDup l.
   Proof.
     intros <-.
