@@ -158,6 +158,57 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_match_enum {Γ τ} E s%exp alts%exp.
   Arguments stm_match_bvec {Γ τ} n%nat_scope s%exp rhs%exp.
 
+  Fixpoint PatternCaseCurried Γ τ {σ} (pat : PatternShape σ) : Set :=
+    match pat with
+    | @pat_shape_var _ x σ => Stm (Γ ▻ x∷σ) τ
+    | pat_shape_bool => bool -> Stm Γ τ
+    | pat_shape_list σ0 x y => (Stm Γ τ * Stm (Γ ▻ x∷σ0 ▻ y∷ty.list σ0) τ)%type
+    | @pat_shape_prod _ x y σl σr => Stm (Γ ▻ x∷σl ▻ y∷σr) τ
+    | pat_shape_sum σ0 τ0 x y => (Stm (Γ ▻ x∷σ0) τ * Stm (Γ ▻ y∷τ0) τ)%type
+    | pat_shape_unit => Stm Γ τ
+    | pat_shape_enum E => enumt E -> Stm Γ τ
+    | pat_shape_bvec_split m n x y => Stm (Γ ▻ x∷ty.bvec m ▻ y∷ty.bvec n) τ
+    | pat_shape_bvec_exhaustive m => bv m -> Stm Γ τ
+    | @pat_shape_tuple _ _ Δ _ => Stm (Γ ▻▻ Δ) τ
+    | pat_shape_record _ Δ _ => Stm (Γ ▻▻ Δ) τ
+    | pat_shape_union U p => forall K : unionk U, PatternCaseCurried Γ τ (p K)
+    end.
+
+  Fixpoint of_pattern_case_curried {Γ τ σ} (pat : PatternShape σ) {struct pat} :
+    PatternCaseCurried Γ τ pat -> forall pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ :=
+    match pat with
+    | pat_shape_var x => fun rhs _ => rhs
+    | pat_shape_bool => fun rhs => rhs
+    | pat_shape_list σ0 x y => fun '(a,b) pc =>
+                                 match pc with true => a | false => b end
+    | pat_shape_prod x y => fun rhs _ => rhs
+    | pat_shape_sum _ _ x y => fun '(a,b) pc =>
+                                 match pc with | true => a | false => b end
+    | pat_shape_unit => fun rhs _ => rhs
+    | pat_shape_enum E => fun rhs => rhs
+    | pat_shape_bvec_split m n x y => fun rhs _ => rhs
+    | pat_shape_bvec_exhaustive m => fun rhs => rhs
+    | @pat_shape_tuple _ _ Δ _ => fun rhs _ => rhs
+    | pat_shape_record _ Δ _ => fun rhs _ => rhs
+    | pat_shape_union U p0 => fun rhs '(existT K pc) =>
+                                of_pattern_case_curried (p0 K) (rhs K) pc
+    end.
+
+  Record NewAlternative (Γ : PCtx) (σ τ : Ty) : Set :=
+    MkNewAlt
+      { newalt_pat : @PatternShape PVar σ;
+        newalt_rhs : PatternCaseCurried Γ τ newalt_pat;
+      }.
+
+  Definition stm_match_union_newalt {Γ τ} U (s : Stm Γ (ty.union U))
+    (alts : forall (K : unionk U), NewAlternative Γ (unionk_ty U K) τ) : Stm Γ τ :=
+    stm_newpattern_match s
+      (pat_shape_union U (fun K => newalt_pat (alts K)))
+      (fun '(existT K pc) =>
+         of_pattern_case_curried
+           (newalt_pat (alts K))
+           (newalt_rhs (alts K)) pc).
+
   Definition UnionAlt (U : unioni) (Γ : PCtx) (τ : Ty) (K : unionk U) : Set :=
     Alternative Γ (unionk_ty U K) τ.
   Arguments UnionAlt : clear implicits.
