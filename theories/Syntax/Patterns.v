@@ -235,6 +235,7 @@ Module Type PatternsOn (Import TY : Types).
        [pat_shape_sum] contains the names [x] and [y] for the [inl] and [inr]
        cases. *)
     Inductive PatternShape : Ty -> Set :=
+    | pat_shape_var σ (x : N)                               : PatternShape σ
     | pat_shape_bool                                        : PatternShape ty.bool
     | pat_shape_list σ (x y : N)                            : PatternShape (ty.list σ)
     | pat_shape_prod σ τ (x y : N)                          : PatternShape (ty.prod σ τ)
@@ -252,6 +253,7 @@ Module Type PatternsOn (Import TY : Types).
        arity of a match. *)
     Definition PatternCase {σ} (pat : PatternShape σ) : Set :=
       match pat with
+      | pat_shape_var σ x            => unit
       | pat_shape_bool               => bool
       | pat_shape_list σ x y         => bool
       | pat_shape_prod σ τ x y       => unit
@@ -279,6 +281,7 @@ Module Type PatternsOn (Import TY : Types).
        the context that represents the variables bound in that case. *)
     Definition PatternCaseCtx {σ} {p : PatternShape σ} : PatternCase p -> NCtx N Ty :=
       match p with
+      | pat_shape_var σ x            => fun _ => [x∷σ]
       | pat_shape_bool               => fun _ => [ctx]
       | pat_shape_list σ x y         => fun b => if b then [ctx] else [x∷σ; y∷ty.list σ]
       | pat_shape_prod σ τ x y       => fun _ => [x∷σ; y∷τ]
@@ -298,6 +301,8 @@ Module Type PatternsOn (Import TY : Types).
     Definition newpattern_match_val {σ} (pat : PatternShape σ) :
       Val σ -> { c : PatternCase pat & NamedEnv Val (PatternCaseCtx c) } :=
       match pat with
+       | pat_shape_var σ x =>
+           fun v => (tt; [env].[x∷σ ↦ v])
        | pat_shape_bool       =>
            fun b => (b; [env])
        | pat_shape_list σ x y =>
@@ -339,6 +344,7 @@ Module Type PatternsOn (Import TY : Types).
     Definition newpattern_match_val_reverse {σ} (pat : PatternShape σ) :
       forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> Val σ :=
       match pat with
+      | pat_shape_var σ x    => fun _ vs => env.head vs
       | pat_shape_bool       => fun b _ => b
       | pat_shape_list σ x y =>
           fun b =>
@@ -388,6 +394,7 @@ Module Type PatternsOn (Import TY : Types).
         newpattern_match_val pat (newpattern_match_val_reverse' pat c) = c.
     Proof.
       destruct pat; cbn; intros [pc vs]; try progress cbn.
+      - destruct pc; now env.destroy vs.
       - env.destroy vs. reflexivity.
       - destruct pc; now env.destroy vs.
       - destruct pc; now env.destroy vs.
@@ -419,6 +426,7 @@ Module Type PatternsOn (Import TY : Types).
         newpattern_match_val_reverse' pat (newpattern_match_val pat v) = v.
     Proof.
       destruct pat; cbn; intros v; try progress cbn.
+      - reflexivity.
       - reflexivity.
       - destruct v; reflexivity.
       - destruct v; reflexivity.

@@ -148,6 +148,8 @@ Module Type BaseMixin (Import TY : Types).
     Definition newpattern_match_term_reverse {Σ σ} (pat : @PatternShape N σ) :
       forall (pc : PatternCase pat), NamedEnv (Term Σ) (PatternCaseCtx pc) -> Term Σ σ :=
       match pat with
+      | pat_shape_var σ x =>
+          fun _ ts => env.head ts
       | pat_shape_bool =>
           fun b _ => term_val ty.bool b
       | pat_shape_list σ x y =>
@@ -195,6 +197,7 @@ Module Type BaseMixin (Import TY : Types).
         newpattern_match_val_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι).
     Proof.
       destruct pat; cbn.
+      - intros _ ts. now env.destroy ts.
       - reflexivity.
       - intros [] ts.
         + reflexivity.
