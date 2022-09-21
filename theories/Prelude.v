@@ -271,9 +271,6 @@ Section Countable.
 
 End Countable.
 
-Definition IsTrue (b : bool) : SProp :=
-  if b then sUnit else sEmpty.
-
 Module option.
 
   Definition isSome {A} (m : option A) : bool :=
@@ -281,8 +278,8 @@ Module option.
   Definition isNone {A} (m : option A) : bool :=
     match m with Some _ => false | None => true end.
 
-  Definition IsSome {A} (m : option A) : SProp :=
-    IsTrue (isSome m).
+  Definition IsSome {A} (m : option A) : Prop :=
+    Is_true (isSome m).
 
   Definition fromSome {A} (m : option A) : IsSome m -> A :=
     match m with Some a => fun _ => a | None => fun p => match p with end end.

@@ -172,8 +172,11 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
      exhaustiveness of pattern-matching. We currently don't rule out redundancy.
      The find function will always return the first alternative matching a given
      union constructor. *)
-  Definition UnionAltsWf {U Γ τ} (alts : UnionAlts U Γ τ) : SProp :=
-    IsTrue (List.forallb (fun K => option.isSome (findUnionAlt K alts)) (finite.enum (unionk U))).
+  Definition UnionAltsWf {U Γ τ} (alts : UnionAlts U Γ τ) : Prop :=
+    Bool.Is_true
+      (List.forallb
+         (fun K => option.isSome (findUnionAlt K alts))
+         (finite.enum (unionk U))).
 
   Lemma union_alts_wf' {U Γ τ} (alts : UnionAlts U Γ τ) (alts_wf : UnionAltsWf alts) :
     forall (K : unionk U), findUnionAlt K alts <> None.
@@ -394,7 +397,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
     (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : exp_scope.
 
   Notation "'match:' e 'in' 'union' U 'with' | x | y | .. | z 'end'" :=
-    (stm_match_union_alt_list U e (cons x%alt (cons y%alt .. (cons z%alt nil) ..)) StrictProp.stt)
+    (stm_match_union_alt_list U e (cons x%alt (cons y%alt .. (cons z%alt nil) ..)) Logic.I)
     (format "'[hv' 'match:'  e  'in'  'union'  U  'with'  '/' | x  '/' | y  '/' | ..  '/' | z  '/' 'end' ']'") : exp_scope.
 
   Notation "'>' K pat => rhs" := (existT K (MkAlt pat rhs))
