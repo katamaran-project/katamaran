@@ -58,7 +58,6 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   | stm_call_frame    (Δ : PCtx) (δ : CStore Δ) (s : Stm Δ τ)
   | stm_foreign       {Δ : PCtx} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
   | stm_lemmak        {Δ : PCtx} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
-  | stm_if            (e : Exp Γ ty.bool) (s1 s2 : Stm Γ τ)
   | stm_seq           {σ : Ty} (s : Stm Γ σ) (k : Stm Γ τ)
   | stm_assertk       (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
   | stm_fail          (s : Val ty.string)
@@ -85,7 +84,6 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_call_frame {Γ τ Δ} δ s%exp.
   Arguments stm_foreign {Γ τ Δ} f & _%env.
   Arguments stm_lemmak {Γ τ Δ} l & _%env k.
-  Arguments stm_if {Γ τ} e%exp s1%exp s2%exp.
   Arguments stm_seq {Γ τ σ} s%exp k%exp.
   Arguments stm_assertk {Γ τ} e1%exp e2%exp k%exp.
   Arguments stm_fail {Γ} τ s%string.
@@ -113,8 +111,8 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Definition stm_lemma {Γ Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ ty.unit :=
     stm_lemmak l es (stm_val ty.unit tt).
 
-  (* Definition stm_if {Γ τ} (s : Stm Γ ty.bool) (s1 s2 : Stm Γ τ) : Stm Γ τ := *)
-  (*   stm_newpattern_match s pat_shape_bool (fun b => if b then s1 else s2). *)
+  Definition stm_if {Γ τ} (s : Stm Γ ty.bool) (s1 s2 : Stm Γ τ) : Stm Γ τ :=
+    stm_newpattern_match s pat_shape_bool (fun b => if b then s1 else s2).
   Definition stm_match_prod {Γ τ σ1 σ2} (s : Stm Γ (ty.prod σ1 σ2))
     (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) : Stm Γ τ :=
     stm_newpattern_match s (pat_shape_prod xl xr) (fun _ => rhs).
@@ -149,6 +147,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_match_union_alt {_ _} _ _ _.
   Arguments stm_assert {Γ} e1%exp e2%exp.
   Arguments stm_lemma {Γ Δ} l es%env.
+  Arguments stm_if {Γ τ} s%exp s1%exp s2%exp.
   Arguments stm_match_prod {Γ τ _ _} _ _ _ _.
   Arguments stm_match_tuple {Γ τ σs Δ} s%exp p%pat rhs%exp.
   Arguments stm_match_record {Γ%ctx τ} R {Δ%ctx} s%exp p%pat rhs%exp.

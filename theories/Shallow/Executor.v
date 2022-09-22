@@ -1245,9 +1245,6 @@ Module Type ShallowExecOn
               v <- exec_aux s ;;
               _ <- put_local δ ;;
               pure v
-            | stm_if e s1 s2 =>
-              v <- eval_exp e ;;
-              demonic_match_bool v (exec_aux s1) (exec_aux s2)
             | stm_seq e k => _ <- exec_aux e ;; exec_aux k
             | stm_assertk e1 _ k =>
               v <- eval_exp e1 ;;

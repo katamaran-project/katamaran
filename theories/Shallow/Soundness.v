@@ -210,10 +210,6 @@ Module Type Soundness
         - apply call_contract_monotonic; auto.
         - apply call_lemma_monotonic; intros ? ? ?.
           apply IHs. auto.
-        - rewrite !wp_demonic_match_bool.
-          destruct (eval e δ).
-          apply IHs1; auto.
-          apply IHs2; auto.
         - apply IHs1. intros ? ? ?. apply IHs2. auto.
         - intros HYP Heq. specialize (HYP Heq). revert HYP.
           apply IHs; auto.
@@ -571,10 +567,6 @@ Module Type Soundness
         reflexivity.
         apply lprop_right.
         now apply IHs.
-
-      - (* stm_if *)
-        rewrite wp_demonic_match_bool in HYP.
-        apply rule_stm_if; intro Heval; rewrite Heval in HYP; auto.
 
       - (* stm_seq *)
         apply rule_stm_seq with (WP s2 POST).

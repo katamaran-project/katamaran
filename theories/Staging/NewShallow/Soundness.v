@@ -123,9 +123,6 @@ Module Type Soundness
         apply call_lemma_sound.
         apply IHs.
 
-      - (* stm_if *)
-        apply rule_stm_if; intros ->; auto.
-
       - (* stm_seq *)
         eapply rule_stm_seq. apply IHs1. intros δ2. apply IHs2.
 

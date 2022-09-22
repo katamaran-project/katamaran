@@ -288,9 +288,9 @@ Section Debug.
          (forall (sml : Z * Z * Z) (sm : Z * Z) (l : Z), (sm, l) = sml ->
           forall s m : Z, (s, m) = sm -> s <= m * l -> 0 <= l ->
           forall (sm' : Z * Z) (l' : Z), (sm', l') = sml -> forall s' m' : Z, (s',m') = sm' ->
-          ((m' <? y) = true -> exists (sm'' : Z * Z) (l'' : Z), (sm'', l'') = (s' + y, y, l' + 1) /\
+          (true = (m' <? y) -> exists (sm'' : Z * Z) (l'' : Z), (sm'', l'') = (s' + y, y, l' + 1) /\
              (exists s'' m'' : Z, (s'', m'') = sm'' /\ s'' <= m'' * l'' /\ 0 <= l'' /\ True)) /\
-          ((m' <? y) = false -> exists (sm'' : Z * Z) (l'' : Z), (sm'', l'') = (s' + y, m', l' + 1) /\
+          (false = (m' <? y) -> exists (sm'' : Z * Z) (l'' : Z), (sm'', l'') = (s' + y, m', l' + 1) /\
              (exists s'' m'' : Z, (s'', m'') = sm'' /\ s'' <= m'' * l'' /\ 0 <= l'' /\ True)))))%list.
     idtac "Shallow verification condition:".
     match goal with |- ?x => idtac x end.

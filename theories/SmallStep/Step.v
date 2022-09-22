@@ -114,9 +114,6 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_assign x s ⟩ ---> ⟨ γ' , μ' , δ' , stm_assign x s' ⟩
 
-  | step_stm_if
-      (e : Exp Γ ty.bool) (s1 s2 : Stm Γ τ) :
-      ⟨ γ , μ , δ , stm_if e s1 s2 ⟩ ---> ⟨ γ , μ , δ , if eval e δ then s1 else s2 ⟩
   | step_stm_assertk
       (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_assertk e1 e2 k ⟩ --->
@@ -203,7 +200,6 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         | @stm_lemmak           => idtac
         | @stm_assertk          => idtac
         | @stm_fail             => idtac
-        | @stm_if               => idtac
         | @stm_newpattern_match => idtac
         | @stm_match_union      => idtac
         | @stm_read_register    => idtac

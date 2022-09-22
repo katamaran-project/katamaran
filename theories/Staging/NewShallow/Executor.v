@@ -910,9 +910,6 @@ Module Type NewShallowExecOn
               v <- exec s ;;
               _ <- put_local δ ;;
               pure v
-            | stm_if e s1 s2 =>
-              v <- eval_exp e ;;
-              match_bool v (exec s1) (exec s2)
             | stm_seq e k => _ <- exec e ;; exec k
             | stm_assertk e1 _ k =>
               v <- eval_exp e1 ;;

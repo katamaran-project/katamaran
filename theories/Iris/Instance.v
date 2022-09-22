@@ -208,20 +208,6 @@ Section Soundness.
     by iApply semWP_block.
   Qed.
 
-  Lemma iris_rule_stm_if {Γ} (δ : CStore Γ)
-    (τ : Ty) (e : Exp Γ ty.bool) (s1 s2 : Stm Γ τ)
-    (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-    ⊢ (⌜ eval e δ = true ⌝ → semTriple δ P s1 Q) -∗
-      (⌜ eval e δ = false ⌝ → semTriple δ P s2 Q) -∗
-      semTriple δ P (stm_if e s1 s2) Q.
-  Proof.
-    iIntros "trips1 trips2 P".
-    iApply semWP_if.
-    destruct eval.
-    - by iApply "trips1".
-    - by iApply "trips2".
-  Qed.
-
   Lemma iris_rule_stm_seq {Γ} (δ : CStore Γ)
         (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
         (P : iProp Σ) (Q : CStore Γ -> iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
@@ -746,7 +732,7 @@ Module IrisInstanceWithContracts
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -757,7 +743,6 @@ Module IrisInstanceWithContracts
       by iApply H.
     - by iApply iris_rule_stm_let.
     - by iApply iris_rule_stm_block.
-    - by iApply iris_rule_stm_if.
     - by iApply iris_rule_stm_seq.
     - by iApply iris_rule_stm_assertk.
     - by iApply iris_rule_stm_fail.

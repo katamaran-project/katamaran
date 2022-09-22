@@ -204,9 +204,6 @@ Module CInterpreter (Import B : Base)
       v <- exec s ;;
       put_local δ ;;
       pure v
-    | stm_if e s1 s2 =>
-      v <- eval_exp e ;;
-      if v then exec s1 else exec s2
     | stm_seq s k => exec s ;; exec k
     | stm_assertk e1 _ k =>
       v <- eval_exp e1 ;;

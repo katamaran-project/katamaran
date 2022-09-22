@@ -111,12 +111,6 @@ Module ProgramLogic.
         (P : L) (R : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ k ; δ ►► δΔ ⦃ fun v δ'' => R v (env.drop Δ δ'') ⦄ ->
         ⦃ P ⦄ stm_block δΔ k ; δ ⦃ R ⦄
-    | rule_stm_if
-        {e : Exp Γ ty.bool} {s1 s2 : Stm Γ τ}
-        {P : L} {Q : Val τ -> CStore Γ -> L} :
-        (eval e δ = true -> ⦃ P ⦄ s1 ; δ ⦃ Q ⦄) ->
-        (eval e δ = false -> ⦃ P ⦄ s2 ; δ ⦃ Q ⦄) ->
-        ⦃ P ⦄ stm_if e s1 s2 ; δ ⦃ Q ⦄
     | rule_stm_seq
         (σ : Ty) (s1 : Stm Γ σ) (s2 : Stm Γ τ)
         (P : L) (Q : CStore Γ -> L) (R : Val τ -> CStore Γ -> L) :

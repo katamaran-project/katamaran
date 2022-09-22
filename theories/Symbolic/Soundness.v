@@ -2453,12 +2453,6 @@ Module Soundness
       apply refine_bind.
       apply refine_call_lemma; auto.
       intros w2 ω12 ι2 -> Hpc2 _ _ _; auto.
-    - apply refine_bind.
-      intros POST__s POST__c HPOST.
-      apply refine_eval_exp; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      apply refine_demonic_match_bool; auto.
     - apply refine_bind; auto.
       intros ? ? ? -> ? _ _ _; auto.
     - apply refine_bind; auto.

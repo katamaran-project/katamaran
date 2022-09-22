@@ -1745,11 +1745,6 @@ Module Type SymbolicExecOn
                 ⟨ ω01 ⟩ args <- eval_exps es (w:=w0) ;;
                 ⟨ ω12 ⟩ _  <- call_lemma (LEnv l) args;;
                 exec_aux k
-            | stm_if e s1 s2 =>
-                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_bool t
-                  (fun _ _ => exec_aux s1)
-                  (fun _ _ => exec_aux s2)
             | stm_seq s1 s2 =>
                 ⟨ ω01 ⟩ _ <- exec_aux s1 ;;
                 exec_aux s2
