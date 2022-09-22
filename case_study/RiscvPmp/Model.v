@@ -88,20 +88,17 @@ Module RiscvPmpModel2.
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
       RiscvPmpSignature RiscvPmpSpecification RiscvPmpIrisBase RiscvPmpIrisInstance.
 
-  Lemma read_ram_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
-    forall paddr w t entries p,
-  evals es δ = env.snoc env.nil ("paddr"∷ty_exc_code) paddr
-  → ⊢ semTriple δ
-        ((⌜Sub_perm Read t⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
-         interp_pmp_entries entries ∗
-         (⌜Pmp_access paddr entries p t⌝ ∧ emp) ∗ interp_ptsto paddr w)
-        (stm_foreign read_ram es)
-        (λ (v : Z) (δ' : CStore Γ),
-           ((⌜v = w⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
-            interp_ptsto paddr w ∗
-            interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
+  Lemma read_ram_sound `{sg : sailGS Σ, invGS} :
+    ValidContractForeign sep_contract_read_ram read_ram.
   Proof.
-    iIntros (paddr w t entries p Heq) "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
+    intros Γ es δ ι Heq.
+    destruct (env.snocView ι) as [ι t].
+    destruct (env.snocView ι) as [ι p].
+    destruct (env.snocView ι) as [ι entries].
+    destruct (env.snocView ι) as [ι w].
+    destruct (env.snocView ι) as [ι paddr].
+    destruct (env.nilView ι). cbn in Heq |- *.
+    iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
     unfold semWP. rewrite wp_unfold.
     cbn.
     iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
@@ -135,21 +132,17 @@ Module RiscvPmpModel2.
     iFrame.
   Qed.
 
-
-  Lemma write_ram_sound `{sg : sailGS Σ} `{HGS: invGS} {Γ es δ} :
-    forall paddr data t entries p,
-      evals es δ =
-        env.snoc (env.snoc env.nil ("paddr"∷ty_exc_code) paddr) ("data"∷ty_exc_code) data
-      → ⊢ semTriple δ
-          ((⌜Sub_perm Write t⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
-                                      interp_pmp_entries entries ∗
-                                      (⌜Pmp_access paddr entries p t⌝ ∧ emp) ∗
-                                      (∃ v : Z, interp_ptsto paddr v)) (stm_foreign write_ram es)
-          (λ (_ : Z) (δ' : CStore Γ),
-            (reg_pointsTo cur_privilege p ∗ interp_ptsto paddr data ∗
-                          interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
+  Lemma write_ram_sound `{sg : sailGS Σ, HGS: invGS} :
+    ValidContractForeign sep_contract_write_ram write_ram.
   Proof.
-    iIntros (paddr data t entries p Heq) "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
+    intros Γ es δ ι Heq.
+    destruct (env.snocView ι) as [ι t].
+    destruct (env.snocView ι) as [ι p].
+    destruct (env.snocView ι) as [ι entries].
+    destruct (env.snocView ι) as [ι data].
+    destruct (env.snocView ι) as [ι paddr].
+    destruct (env.nilView ι). cbn in Heq |- *.
+    iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
     unfold semWP. rewrite wp_unfold.
     cbn.
     iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
@@ -189,13 +182,13 @@ Module RiscvPmpModel2.
       iSplitL; now iFrame.
   Qed.
 
-  Lemma decode_sound `{sg : sailGS Σ} `{HGS: invGS} {Γ es δ} :
-    forall bv,
-      evals es δ = env.snoc env.nil ("bv"∷ty_exc_code) bv
-      → ⊢ semTriple δ (⌜true = true⌝ ∧ emp) (stm_foreign decode es)
-          (λ (_ : AST) (δ' : CStore Γ), (⌜true = true⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Lemma decode_sound `{sg : sailGS Σ, HGS: invGS} :
+    ValidContractForeign sep_contract_decode decode.
   Proof.
-    iIntros (bv Heq) "%_".
+    intros Γ es δ ι Heq.
+    destruct (env.snocView ι) as [ι bv].
+    destruct (env.nilView ι). cbn in Heq |- *.
+    iIntros "_".
     iApply wp_unfold.
     cbn.
     iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
@@ -229,9 +222,7 @@ Module RiscvPmpModel2.
 
   Lemma foreignSem `{sailGS Σ} : ForeignSem.
   Proof.
-    intros Γ τ Δ f es δ.
-    destruct f; cbn;
-      intros ι; destruct_syminstance ι; cbn in *;
+    intros Δ τ f; destruct f;
       eauto using read_ram_sound, write_ram_sound, decode_sound.
   Qed.
 

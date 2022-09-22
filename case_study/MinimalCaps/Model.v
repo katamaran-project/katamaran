@@ -638,15 +638,13 @@ Module MinCapsIrisInstanceWithContracts.
 
   End Lemmas.
 
-  Lemma dI_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
-    forall code : Val ty.int,
-    evals es δ = env.snoc env.nil (MkB _ ty.int) code
-    → ⊢ semTriple δ (⌜is_true true⌝ ∧ emp) (stm_foreign dI es)
-          (λ (v : Val ty.instr) (δ' : CStore Γ),
-             (⌜is_true true⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Lemma dI_sound `{sg : sailGS Σ} `{inv : invGS} :
+    ValidContractForeign sep_contract_dI dI.
   Proof.
-    intros code Heq.
-    iApply iris_rule_noop; try done.
+    intros Γ es δ ι Heq.
+    destruct (env.snocView ι) as [ι code].
+    destruct (env.nilView ι).
+    iApply iris_rule_noop; cbn; try done.
     intros s' γ γ' μ μ' δ' step.
     dependent elimination step.
     rewrite Heq in f1.
@@ -657,17 +655,15 @@ Module MinCapsIrisInstanceWithContracts.
 
   Import iris.base_logic.lib.gen_heap.
 
-  Lemma rM_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
-    forall a (p : Val ty.perm) (b e : Val ty.addr),
-      evals es δ = env.snoc env.nil (MkB _ ty.addr) a ->
-      ⊢ semTriple δ
-        (interp (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |})
-                ∗ (⌜Subperm R p⌝ ∧ emp) ∗ ⌜(b <=? a)%Z && (a <=? e)%Z = true⌝ ∧ emp)
-        (stm_foreign rM es)%env
-        (λ (v : Z + Capability) (δ' : CStore Γ),
-          (interp v) ∗ ⌜δ' = δ⌝).
+  Lemma rM_sound `{sg : sailGS Σ} `{invGS} :
+    ValidContractForeign sep_contract_rM rM.
   Proof.
-    intros a p b e Heq.
+    intros Γ es δ ι Heq.
+    destruct (env.snocView ι) as [ι e].
+    destruct (env.snocView ι) as [ι b].
+    destruct (env.snocView ι) as [ι p].
+    destruct (env.snocView ι) as [ι a].
+    destruct (env.nilView ι). cbn.
     iIntros "[#Hsafe [[%Hsubp _] [%Hbounds _]]]".
     apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
     unfold semWP. rewrite wp_unfold. cbn.
@@ -771,25 +767,16 @@ Module MinCapsIrisInstanceWithContracts.
       iAssumption.
   Qed.
 
-  Lemma wM_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
-    forall a w (p : Val ty.perm) (b e : Val ty.addr),
-      evals es δ = env.snoc (env.snoc env.nil (MkB _ ty.addr) a)
-                            (MkB _ ty.memval) w
-      → ⊢ semTriple δ
-          (interp w
-                  ∗ interp
-                  (inr {|
-                       cap_permission := p;
-                       cap_begin := b;
-                       cap_end := e;
-                       cap_cursor := a |})
-                  ∗ (⌜ Subperm RW p ⌝ ∧ emp)
-                  ∗ ⌜is_true ((b <=? a)%Z && (a <=? e)%Z)⌝ ∧ emp)
-          (stm_foreign wM es)
-          (λ (v3 : ()) (δ' : CStore Γ),
-            (⌜v3 = tt⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Lemma wM_sound `{sg : sailGS Σ} `{invGS} :
+    ValidContractForeign sep_contract_wM wM.
   Proof.
-    intros a w p b e Heq.
+    intros Γ es δ ι Heq.
+    destruct (env.snocView ι) as [ι e].
+    destruct (env.snocView ι) as [ι b].
+    destruct (env.snocView ι) as [ι p].
+    destruct (env.snocView ι) as [ι w].
+    destruct (env.snocView ι) as [ι a].
+    destruct (env.nilView ι). cbn.
     iIntros "[#Hwsafe [#Hsafe [[%Hsubp _] [%Hbounds _]]]]".
     apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
     unfold semWP. rewrite wp_unfold. cbn.
@@ -853,9 +840,7 @@ Module MinCapsIrisInstanceWithContracts.
 
   Lemma foreignSem `{sg : sailGS Σ} : ForeignSem.
   Proof.
-    intros Γ τ Δ f es δ.
-    destruct f; cbn - [interp];
-      intros ι; destruct_syminstance ι;
+    intros Δ τ f; destruct f;
       eauto using dI_sound, rM_sound, wM_sound.
   Qed.
 

@@ -425,19 +425,19 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import iris.proofmode.string_ident.
   Import iris.proofmode.tactics.
 
-  Lemma read_ram_sound `{sailGS Σ} {Γ} (es : NamedEnv (Exp Γ) ["paddr"∷ty_exc_code]) (δ : CStore Γ) :
-    ∀ (b : bool) paddr w,
-      evals es δ = [env].["paddr"∷ty_exc_code ↦ paddr]
-      → ⊢ semTriple δ
-          (if b then interp_ptsto_readonly paddr w else interp_ptsto paddr w)
-          (stm_foreign read_ram es)
-          (λ (v : Z) (δ' : NamedEnv Val Γ), ((if b then interp_ptsto_readonly paddr w else interp_ptsto paddr w) ∗ ⌜v = w⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Lemma read_ram_sound `{sailGS Σ} :
+    ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram read_ram.
   Proof.
-    iIntros (b paddr w Heq) "ptsto_addr_w".
+    intros Γ es δ ι Heq.
+    destruct (env.snocView ι) as [ι w].
+    destruct (env.snocView ι) as [ι paddr].
+    destruct (env.snocView ι) as [ι b].
+    destruct (env.nilView ι). cbn in Heq |- *.
+    iIntros "ptsto_addr_w".
     unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
-    destruct b.
+    destruct b; cbn.
     - iDestruct "ptsto_addr_w" as "#ptsto_addr_w".
       unfold interp_ptsto_readonly.
       iInv "ptsto_addr_w" as "Hptsto" "Hclose_ptsto".
@@ -497,16 +497,14 @@ Module RiscvPmpIrisInstanceWithContracts.
       iAssumption.
   Qed.
 
-  Lemma write_ram_sound `{sailGS Σ} {Γ}
-    (es : NamedEnv (Exp Γ) ["paddr"∷ty_exc_code; "data"∷ty_exc_code]) (δ : CStore Γ) :
-    ∀ paddr data : Z,
-      evals es δ = [env].["paddr"∷ty_exc_code ↦ paddr].["data"∷ty_exc_code ↦ data]
-      → ⊢ semTriple δ (∃ v : Z, interp_ptsto paddr v)
-            (stm_foreign write_ram es)
-            (λ (v : Z) (δ' : NamedEnv Val Γ),
-              (interp_ptsto paddr data ∗ ⌜v = 1%Z⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Lemma write_ram_sound `{sailGS Σ} :
+    ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_write_ram write_ram.
   Proof.
-    iIntros (paddr data Heq) "[% ptsto_addr]".
+    intros Γ es δ ι Heq.
+    destruct (env.snocView ι) as [ι data].
+    destruct (env.snocView ι) as [ι paddr].
+    destruct (env.nilView ι). cbn in Heq |- *.
+    iIntros "[% ptsto_addr]".
     unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
@@ -543,14 +541,14 @@ Module RiscvPmpIrisInstanceWithContracts.
     iSplitL; trivial.
   Qed.
 
-  Lemma decode_sound `{sailGS Σ} {Γ}
-    (es : NamedEnv (Exp Γ) ["bv"∷ty_exc_code]) (δ : CStore Γ) :
-    ∀ code instr,
-      evals es δ = [env].["bv"∷ty_exc_code ↦ code]
-      → ⊢ semTriple δ ⌜pure_decode code = inr instr⌝ (stm_foreign RiscvPmpProgram.decode es)
-            (λ (v : AST) (δ' : NamedEnv Val Γ), (⌜v = instr⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Lemma decode_sound `{sailGS Σ} :
+    ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
   Proof.
-    iIntros (code instr Heq) "%Hdecode".
+    intros Γ es δ ι Heq.
+    destruct (env.snocView ι) as [ι instr].
+    destruct (env.snocView ι) as [ι code].
+    destruct (env.nilView ι). cbn.
+    iIntros "%Hdecode".
     unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
@@ -577,11 +575,10 @@ Module RiscvPmpIrisInstanceWithContracts.
 
   Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
   Proof.
-    intros Γ τ Δ f es δ.
-    destruct f; cbn.
-    - intros *; apply read_ram_sound.
-    - intros *; apply write_ram_sound.
-    - intros *; apply decode_sound.
+    intros Δ τ f. destruct f.
+    - apply read_ram_sound.
+    - apply write_ram_sound.
+    - apply decode_sound.
   Qed.
 
   Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.

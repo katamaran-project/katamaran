@@ -412,6 +412,16 @@ Section Soundness.
                   (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v))
     end%I.
 
+  Definition ValidContractForeign {Δ τ} (contract : SepContract Δ τ) (f : 𝑭𝑿 Δ τ) : Prop :=
+    forall Γ (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
+      match contract with
+      | MkSepContract _ _ Σ' θΔ req result ens =>
+        forall (ι : Valuation Σ'),
+        evals es δ = inst θΔ ι ->
+        ⊢ semTriple δ (asn.interpret req ι) (stm_foreign f es)
+          (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
+      end.
+
 End Soundness.
 
 Section Adequacy.
@@ -603,15 +613,8 @@ Module IrisInstanceWithContracts
       end)%I.
 
   Definition ForeignSem :=
-    ∀ (Γ : PCtx) (τ : Ty)
-      (Δ : PCtx) f (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
-      match CEnvEx f with
-      | MkSepContract _ _ Σ' θΔ req result ens =>
-        forall (ι : Valuation Σ'),
-        evals es δ = inst θΔ ι ->
-        ⊢ semTriple δ (asn.interpret req ι) (stm_foreign f es)
-          (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
-      end.
+    ∀ (Δ : PCtx) (τ : Ty) (f : 𝑭𝑿 Δ τ),
+      ValidContractForeign (CEnvEx f) f.
 
   Definition LemmaSem : Prop :=
     forall (Δ : PCtx) (l : 𝑳 Δ),
@@ -657,7 +660,7 @@ Module IrisInstanceWithContracts
     ⊢ semTriple δ P (stm_foreign f es) Q.
   Proof.
     iIntros (forSem ctrip) "P".
-    specialize (forSem Γ τ Δ f es δ).
+    specialize (forSem Δ τ f Γ es δ).
     destruct CEnvEx as [Σe δΔ req res ens]; cbn in *.
     iPoseProof (ctrip with "P") as "[%ι [%Heq [req consr]]]". clear ctrip.
     iPoseProof (forSem ι Heq with "req") as "WPf". clear forSem.

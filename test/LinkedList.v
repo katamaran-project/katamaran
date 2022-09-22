@@ -959,13 +959,14 @@ Module ExampleModel.
         | _ => idtac
         end.
 
-      Lemma mkcons_sound `{sailGS Σ} {Γ δ} :
-        forall (x : Exp Γ ptr) (xs : Exp Γ llist),
-          ⊢ semTriple δ (⌜true = true⌝ ∧ emp) (foreign mkcons x xs)
-            (λ (v : Val ptr) (δ' : CStore Γ),
-              ptstocons_interp (mG := sailGS_memGS) v (eval x δ) (eval xs δ) ∗ ⌜δ' = δ⌝).
+      Lemma mkcons_sound `{sailGS Σ} :
+        ValidContractForeign sep_contract_mkcons mkcons.
       Proof.
-        iIntros (x xs) "_".
+        intros Γ es δ ι Heq.
+        destruct (env.snocView ι) as [ι xs].
+        destruct (env.snocView ι) as [ι x].
+        destruct (env.nilView ι). cbn.
+        iIntros "_".
         unfold semWP. rewrite wp_unfold. cbn.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
         unfold mem_inv.
@@ -973,14 +974,15 @@ Module ExampleModel.
         iModIntro.
         iSplitR; first by intuition.
         iIntros (e2 σ'' efs) "%".
-        dependent elimination H0.
+        dependent elimination H0. cbn.
+        fold_semWP.
         dependent elimination s.
-        cbn in f1.
+        rewrite Heq in f1. cbn in f1.
         destruct_conjs; subst.
         do 3 iModIntro.
         cbn.
         iMod "Hclose2" as "_".
-        iMod (gen_heap_alloc μ1 (infinite_fresh (A := Z) (elements (dom (gset Z) μ1))) (eval x δ1, eval xs δ1) with "Hmem") as "[Hmem [Hres _]]".
+        iMod (gen_heap_alloc μ1 (infinite_fresh (A := Z) (elements (dom (gset Z) μ1))) (x, xs) with "Hmem") as "[Hmem [Hres _]]".
         { rewrite <-not_elem_of_dom, <-elem_of_elements.
           now eapply infinite_is_fresh.
         }
@@ -991,25 +993,25 @@ Module ExampleModel.
         now iFrame.
       Qed.
 
-      Lemma fst_sound `{sailGS Σ} {Γ δ} :
-        forall (ep : Exp Γ ptr) (vx : Val ty.int) (vxs : Val llist),
-          let vp := eval ep δ in
-          ⊢ semTriple δ
-            (ptstocons_interp (mG := sailGS_memGS) vp vx vxs)
-            (foreign fst ep)
-            (λ (v : Z) (δ' : CStore Γ),
-              ((⌜v = vx⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜ δ' = δ⌝).
+      Lemma fst_sound `{sailGS Σ} :
+        ValidContractForeign sep_contract_fst fst.
       Proof.
-        iIntros (ep vx vxs vp) "Hres".
+        intros Γ es δ ι Heq.
+        destruct (env.snocView ι) as [ι vxs].
+        destruct (env.snocView ι) as [ι vx].
+        destruct (env.snocView ι) as [ι vp].
+        destruct (env.nilView ι). cbn.
+        iIntros "Hres".
         unfold semWP. rewrite wp_unfold.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro.
         iSplitR; first done.
         iIntros (e2 σ'' efs) "%".
-        dependent elimination H0.
+        dependent elimination H0. cbn.
+        fold_semWP.
         dependent elimination s.
-        cbn in f1.
+        rewrite Heq in f1. cbn in f1.
         unfold mem_inv.
         do 3 iModIntro.
         iMod "Hclose2" as "_".
@@ -1018,30 +1020,29 @@ Module ExampleModel.
         destruct_conjs; subst.
         iModIntro.
         iFrame.
-        iSplitL; last done.
         iApply wp_value.
         now iFrame.
       Qed.
 
-      Lemma snd_sound `{sailGS Σ} {Γ δ} :
-        forall (ep : Exp Γ ptr) (vx : Val ptr) (vxs : Val llist),
-          let vp := eval ep δ in
-          ⊢ semTriple δ
-            (ptstocons_interp (mG := sailGS_memGS) vp vx vxs)
-            (foreign snd ep)
-            (λ (v : Z + ()) (δ' : CStore Γ),
-              ((⌜v = vxs⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜ δ' = δ⌝).
+      Lemma snd_sound `{sailGS Σ} :
+        ValidContractForeign sep_contract_snd snd.
       Proof.
-        iIntros (ep vx vxs vp) "Hres".
+        intros Γ es δ ι Heq.
+        destruct (env.snocView ι) as [ι vxs].
+        destruct (env.snocView ι) as [ι vx].
+        destruct (env.snocView ι) as [ι vp].
+        destruct (env.nilView ι). cbn.
+        iIntros "Hres".
         unfold semWP. rewrite wp_unfold.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro.
         iSplitR; first done.
         iIntros (e2 σ'' efs) "%".
-        dependent elimination H0.
+        dependent elimination H0. cbn.
+        fold_semWP.
         dependent elimination s.
-        cbn in f1.
+        rewrite Heq in f1. cbn in f1.
         unfold mem_inv.
         do 3 iModIntro.
         iMod "Hclose2" as "_".
@@ -1050,21 +1051,19 @@ Module ExampleModel.
         destruct_conjs; subst.
         iModIntro.
         iFrame.
-        iSplitL; last done.
         iApply wp_value.
         now iFrame.
       Qed.
 
-      Lemma setsnd_sound `{sailGS Σ} {Γ δ} :
-        forall (ep : Exp Γ ptr) (exs : Exp Γ llist) (vx : Val ptr),
-          let vp := eval ep δ in let vxs := eval exs δ in
-          ⊢ semTriple δ
-          (∃ v : Z + (), ptstocons_interp (mG := sailGS_memGS) vp vx v)
-          (foreign setsnd ep exs)
-          (λ (v : ()) (δ' : CStore Γ),
-             ((⌜v = tt⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜δ' = δ⌝).
+      Lemma setsnd_sound `{sailGS Σ} :
+        ValidContractForeign sep_contract_setsnd setsnd.
       Proof.
-        iIntros (ep exs vx vp vxs) "Hres".
+        intros Γ es δ ι Heq.
+        destruct (env.snocView ι) as [ι vxs].
+        destruct (env.snocView ι) as [ι vx].
+        destruct (env.snocView ι) as [ι vp].
+        destruct (env.nilView ι). cbn.
+        iIntros "Hres".
         iDestruct "Hres" as (vxs__old) "Hres".
         unfold semWP. rewrite wp_unfold.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
@@ -1073,8 +1072,9 @@ Module ExampleModel.
         iSplitR; first by intuition.
         iIntros (e2 σ'' efs) "%".
         dependent elimination H0. cbn.
+        fold_semWP.
         dependent elimination s.
-        cbn in f1.
+        rewrite Heq in f1. cbn in f1.
         unfold mem_inv.
         do 3 iModIntro.
         iMod "Hclose2" as "_".
@@ -1090,8 +1090,7 @@ Module ExampleModel.
 
       Lemma foreignSem `{sailGS Σ} : ForeignSem.
       Proof.
-        intros Γ τ Δ f es δ; destruct f; env.destroy es;
-          intros ι; env.destroy ι; cbn; intros Heq; env.destroy Heq; subst;
+        intros τ Δ f; destruct f;
           eauto using mkcons_sound, fst_sound, snd_sound, setsnd_sound.
       Qed.
 

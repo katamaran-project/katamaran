@@ -389,7 +389,7 @@ Module Import ExampleModel.
 
     (* Verification of the absent foreign functions. *)
     Lemma foreignSem `{sailGS Σ} : ForeignSem.
-    Proof. intros Γ τ Δ f es δ; destruct f. Qed.
+    Proof. intros Δ τ f; destruct f. Qed.
 
     (* Verification of the absent ghost lemmas. *)
     Lemma lemSem `{sailGS Σ} : LemmaSem.
