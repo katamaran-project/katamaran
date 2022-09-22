@@ -130,10 +130,12 @@ Module Type NewShallowExecOn
       Definition pure {A : Type} :
         A -> CPureSpecM A :=
         fun a POST => POST a.
+      #[global] Arguments pure {A} a _ /.
 
       Definition map {A B} :
         (A -> B) -> CPureSpecM A -> CPureSpecM B :=
         fun f m POST => m (Basics.compose POST f).
+      #[global] Arguments map {A B} f m _ /.
 
       Definition bind {A B} :
         CPureSpecM A -> (A -> CPureSpecM B) -> CPureSpecM B :=
@@ -167,6 +169,7 @@ Module Type NewShallowExecOn
 
       Definition angelic (σ : Ty) : CPureSpecM (Val σ) :=
         fun POST => ∃ v : Val σ, POST v.
+      #[global] Arguments angelic σ _ /.
 
       Definition angelic_ctx {N : Set} :
         forall Δ : NCtx N Ty, CPureSpecM (NamedEnv Val Δ) :=
@@ -181,6 +184,7 @@ Module Type NewShallowExecOn
 
       Definition demonic σ : CPureSpecM (Val σ) :=
         fun POST => ∀ v : Val σ, POST v.
+      #[global] Arguments demonic σ _ /.
 
       Definition demonic_ctx {N : Set} :
         forall Δ : NCtx N Ty, CPureSpecM (NamedEnv Val Δ) :=
@@ -230,19 +234,11 @@ Module Type NewShallowExecOn
 
       Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> L) :
         angelic_ctx Δ POST ⊣⊢ ∃ vs : NamedEnv Val Δ, POST vs.
-      Proof.
-        induction Δ; cbn; cbv [bind angelic pure].
-        - solve_wp.
-        - setoid_rewrite IHΔ. clear IHΔ. solve_wp.
-      Qed.
+      Proof. induction Δ; cbn; [|rewrite IHΔ]; solve_wp. Qed.
 
       Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> L) :
         demonic_ctx Δ POST ⊣⊢ ∀ vs : NamedEnv Val Δ, POST vs.
-      Proof.
-        induction Δ; cbn; cbv [demonic bind pure].
-        - solve_wp.
-        - setoid_rewrite IHΔ. clear IHΔ. solve_wp.
-      Qed.
+      Proof. induction Δ; cbn; [|rewrite IHΔ]; solve_wp. Qed.
 
       Lemma wp_angelic_list {A} (xs : list A) (POST : A -> L) :
         angelic_list xs POST ⊣⊢ ∃ x : A, !! List.In x xs ∧ POST x.
@@ -353,62 +349,6 @@ Module Type NewShallowExecOn
       Definition match_bool {A} (v : Val ty.bool) (kt kf : CPureSpecM A) : CPureSpecM A :=
         fun POST => if v then kt POST else kf POST.
       #[global] Arguments match_bool {A} v kt kf _ /.
-
-      Definition match_enum {A E} (v : Val (ty.enum E))
-        (cont : enumt E -> CPureSpecM A) : CPureSpecM A :=
-        cont v.
-      #[global] Arguments match_enum {A E} v cont _ /.
-
-      Definition match_sum {A σ τ} (v : Val (ty.sum σ τ))
-        (kinl : Val σ -> CPureSpecM A) (kinr : Val τ -> CPureSpecM A) :
-        CPureSpecM A :=
-        fun POST =>
-          match v with
-          | inl v1 => kinl v1 POST
-          | inr v2 => kinr v2 POST
-          end.
-      #[global] Arguments match_sum {A σ τ} v kinl kinr _ /.
-
-      Definition match_prod {A σ τ} (v : Val (ty.prod σ τ)) (k : Val σ -> Val τ -> CPureSpecM A) : CPureSpecM A :=
-        fun POST =>
-          match v with
-          | pair v1 v2 => k v1 v2 POST
-          end.
-      #[global] Arguments match_prod {A σ τ} v k _ /.
-
-      Definition match_list {A σ} (v : Val (ty.list σ)) (knil : CPureSpecM A)
-        (kcons : Val σ -> Val (ty.list σ) -> CPureSpecM A) :
-        CPureSpecM A :=
-        fun POST =>
-          match v with
-          | nil       => knil POST
-          | cons x xs => kcons x xs POST
-          end.
-      #[global] Arguments match_list {A σ} v knil kcons _ /.
-
-      Definition match_record {N : Set} {A R} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ)
-        (v : Val (ty.record R)) (k : NamedEnv Val Δ -> CPureSpecM A) :
-        CPureSpecM A := k (record_pattern_match_val p v).
-      #[global] Arguments match_record {_ _ _ _} p v k _ /.
-
-      Definition match_tuple {N : Set} {A σs} {Δ : NCtx N Ty}
-        (p : TuplePat σs Δ) (v : Val (ty.tuple σs))
-        (k : NamedEnv Val Δ -> CPureSpecM A) :
-        CPureSpecM A := k (tuple_pattern_match_val p v).
-      #[global] Arguments match_tuple {_ _ _ _} p v k _ /.
-
-      Definition match_bvec {A n} (v : Val (ty.bvec n))
-        (k : bv n -> CPureSpecM A) : CPureSpecM A :=
-        k v.
-      #[global] Arguments match_bvec {_ _} v k _ /.
-
-      Definition match_bvec_split {A m n} (v : Val (ty.bvec (m + n)))
-        (k : bv m -> bv n -> CPureSpecM A) : CPureSpecM A :=
-        fun POST =>
-          match bv.appView m n v with
-          | bv.isapp xs ys => k xs ys POST
-          end.
-      #[global] Arguments match_bvec_split {_ _ _} v k _ /.
 
       Definition pattern_match {N : Set} {A σ} (v : Val σ) (pat : @Pattern N σ)
         (k : forall (pc : PatternCase pat), NamedEnv Val (PatternCaseCtx pc) -> CPureSpecM A) :
@@ -656,64 +596,6 @@ Module Type NewShallowExecOn
       Definition match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
         fun POST δ => if v then kt POST δ else kf POST δ.
       #[global] Arguments match_bool {_ _ _} v kt kf _ /.
-
-      Definition match_enum {A E} {Γ1 Γ2} (v : Val (ty.enum E))
-        (cont : enumt E -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        cont v.
-      #[global] Arguments match_enum {_ _ _ _} v cont _ /.
-
-      Definition match_sum {A Γ1 Γ2} {σ τ} (v : Val (ty.sum σ τ))
-        (kinl : Val σ -> CHeapSpecM Γ1 Γ2 A) (kinr : Val τ -> CHeapSpecM Γ1 Γ2 A) :
-        CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ =>
-          match v with
-          | inl v1 => kinl v1 POST δ
-          | inr v2 => kinr v2 POST δ
-          end.
-      #[global] Arguments match_sum {_ _ _ _ _} v kinl kinr _ /.
-
-      Definition match_prod {A Γ1 Γ2} {σ τ} (v : Val (ty.prod σ τ))
-        (k : Val σ -> Val τ -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ =>
-          match v with
-          | pair v1 v2 => k v1 v2 POST δ
-          end.
-      #[global] Arguments match_prod {_ _ _ _ _} v k _ /.
-
-      Definition match_list {A Γ1 Γ2} {σ} (v : Val (ty.list σ))
-        (knil : CHeapSpecM Γ1 Γ2 A)
-        (kcons : Val σ -> Val (ty.list σ) -> CHeapSpecM Γ1 Γ2 A) :
-        CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ =>
-          match v with
-          | nil => knil POST δ
-          | cons x xs => kcons x xs POST δ
-          end.
-      #[global] Arguments match_list {_ _ _ _} v knil kcons _ /.
-
-      Definition match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ)
-        (v : Val (ty.record R)) (k : NamedEnv Val Δ -> CHeapSpecM Γ1 Γ2 A) :
-        CHeapSpecM Γ1 Γ2 A := k (record_pattern_match_val p v).
-      #[global] Arguments match_record {_ _ _ _ _ _} p v k _ /.
-
-      Definition match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty}
-        (p : TuplePat σs Δ) (v : Val (ty.tuple σs))
-        (k : NamedEnv Val Δ -> CHeapSpecM Γ1 Γ2 A) :
-        CHeapSpecM Γ1 Γ2 A := k (tuple_pattern_match_val p v).
-      #[global] Arguments match_tuple {_ _ _ _ _ _} p v k _ /.
-
-      Definition match_bvec {A n} {Γ1 Γ2} (v : Val (ty.bvec n))
-        (k : bv n -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        k v.
-      #[global] Arguments match_bvec {_ _ _ _} v k _ /.
-
-      Definition match_bvec_split {A m n Γ1 Γ2} (v : Val (ty.bvec (m + n)))
-        (k : bv m -> bv n -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ =>
-          match bv.appView m n v with
-          | bv.isapp xs ys => k xs ys POST δ
-          end.
-      #[global] Arguments match_bvec_split {_ _ _ _ _} v k _ /.
 
       Definition pattern_match {N : Set} {A σ Γ1 Γ2} (v : Val σ) (pat : @Pattern N σ)
         (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A) :
