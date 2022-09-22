@@ -58,7 +58,6 @@ Module Import asn.
   | chunk_angelic (c : Chunk Σ)
   | newpattern_match {σ} (s : Term Σ σ) (pat : PatternShape σ)
       (rhs : forall (pc : PatternCase pat), Assertion (Σ ▻▻ PatternCaseCtx pc))
-  | match_bool (b : Term Σ ty.bool) (A1 A2 : Assertion Σ)
   | match_enum (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ)
   | match_sum (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : LVar)
       (alt_inl : Assertion (Σ ▻ xl∷σ)) (xr : LVar) (alt_inr : Assertion (Σ ▻ xr∷τ))
@@ -94,6 +93,9 @@ Module Import asn.
   #[global] Arguments exist [_] _ _ _.
   #[global] Arguments debug {_}.
 
+  Definition match_bool {Σ} (b : Term Σ ty.bool) (A1 A2 : Assertion Σ) : Assertion Σ :=
+    newpattern_match b pat_shape_bool (fun v => if v then A1 else A2).
+
   Fixpoint exs {Σ} Δ : Assertion (Σ ▻▻ Δ) -> Assertion Σ :=
     match Δ return Assertion (Σ ▻▻ Δ) -> Assertion Σ with
     | ctx.nil => fun A => A
@@ -110,7 +112,6 @@ Module Import asn.
       | chunk_angelic c => chunk_angelic (subst c ζ)
       | newpattern_match s pat rhs =>
         newpattern_match (subst s ζ) pat (fun pc => sub_assertion (rhs pc) (sub_up ζ _))
-      | match_bool b A1 A2 => match_bool (subst b ζ) (sub_assertion A1 ζ) (sub_assertion A2 ζ)
       | match_enum E k alts =>
         match_enum E (subst k ζ) (fun z => sub_assertion (alts z) ζ)
       | match_sum σ τ t xl al xr ar =>
@@ -143,11 +144,6 @@ Module Import asn.
       | newpattern_match s pat rhs =>
           s' <- occurs_check bIn s;;
           None (* TODO *)
-      | match_bool b a1 a2  =>
-          b'  <- occurs_check bIn b;;
-          a1' <- occurs _ _ bIn a1 ;;
-          a2' <- occurs _ _ bIn a2 ;;
-          Some (match_bool b' a1' a2')
       | match_enum E k alts => None (* TODO *)
       | match_sum σ τ s xl alt_inl xr alt_inr =>
           s'   <- occurs_check bIn s ;;
@@ -178,7 +174,6 @@ Module Import asn.
     | chunk_angelic c => false
     | newpattern_match s pat rhs =>
         List.forallb (fun pc => is_pure (rhs pc)) (finite.enum (PatternCase pat))
-    | match_bool b A1 A2 => is_pure A1 && is_pure A2
     | match_enum E k alts => List.forallb (fun K => is_pure (alts K)) (finite.enum _)
     | match_sum σ τ s xl alt_inl xr alt_inr => is_pure alt_inl && is_pure alt_inr
     | match_list s alt_nil xh xt alt_cons => is_pure alt_nil && is_pure alt_cons
@@ -205,10 +200,6 @@ Module Import asn.
         let v := inst (T := fun Σ => Term Σ _) s ι in
         let (pc,δpc) := newpattern_match_val pat v in
         interpret_pure (rhs pc) (ι ►► δpc)
-      | match_bool b A1 A2 =>
-        if inst (A := Val ty.bool) b ι
-        then interpret_pure A1 ι
-        else interpret_pure A2 ι
       | match_enum E k alts => interpret_pure (alts (inst (T := fun Σ => Term Σ _) k ι)) ι
       | match_sum σ τ s xl alt_inl xr alt_inr =>
         match inst (T := fun Σ => Term Σ _) s ι with
@@ -254,10 +245,6 @@ Module Import asn.
         let v := inst (T := fun Σ => Term Σ _) s ι in
         let (pc,δpc) := newpattern_match_val pat v in
         interpret (rhs pc) (ι ►► δpc)
-      | match_bool b a1 a2 =>
-        if inst (A := Val ty.bool) b ι
-        then interpret a1 ι
-        else interpret a2 ι
       | match_enum E k alts => interpret (alts (inst (T := fun Σ => Term Σ _) k ι)) ι
       | match_sum σ τ s xl alt_inl xr alt_inr =>
         match inst (T := fun Σ => Term Σ _) s ι with
@@ -303,8 +290,6 @@ Module Import asn.
       - destruct newpattern_match_val.
         apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
         apply base.elem_of_list_In. apply finite.elem_of_enum.
-      - apply andb_true_iff in a_pure. destruct a_pure.
-        destruct (inst b ι); auto.
       - apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
         apply base.elem_of_list_In. apply finite.elem_of_enum.
       - apply andb_true_iff in a_pure. destruct a_pure.
@@ -396,10 +381,6 @@ Section Contracts.
                        (ctx.in_cat_left (PatternCaseCtx pc) bIn)
                        (rhs pc))
           (finite.enum (PatternCase pat))
-    | match_bool b a1 a2  =>
-        option.isNone (occurs_check bIn b) |||
-        lint_assertion bIn a1 |||
-        lint_assertion bIn a2
     | match_enum E k alts =>
         option.isNone (occurs_check bIn k) |||
         List.existsb

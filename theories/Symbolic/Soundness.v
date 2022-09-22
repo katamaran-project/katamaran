@@ -1835,9 +1835,6 @@ Module Soundness
       now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
-      apply refine_demonic_match_bool; eauto.
-    - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_persist.
       apply refine_demonic_match_enum; auto.
       intros EK1 EK2 HEK. hnf in HEK. subst EK2.
       eauto.
@@ -2208,9 +2205,6 @@ Module Soundness
         now rewrite ?inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.
-    - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_persist.
-      apply refine_angelic_match_bool; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
       apply refine_angelic_match_enum; auto.

@@ -1511,11 +1511,6 @@ Module Type SymbolicExecOn
             box_demonic_newpattern_match id pat s
               (fun pc w1 r01 δpc =>
                  produce (wcat w0 (PatternCaseCtx pc)) (rhs pc) w1 (acc_cat_left r01 δpc))
-          | asn.match_bool b a1 a2 =>
-            demonic_match_bool
-              <$> persist__term b
-              <*> four (produce w0 a1)
-              <*> four (produce w0 a2)
           | asn.match_enum E k alts =>
             fun w1 ω01 =>
               demonic_match_enum k⟨ω01⟩
@@ -1579,11 +1574,6 @@ Module Type SymbolicExecOn
             box_angelic_newpattern_match id pat s
               (fun pc w1 r01 δpc =>
                  consume (wcat w0 (PatternCaseCtx pc)) (rhs pc) w1 (acc_cat_left r01 δpc))
-          | asn.match_bool b a1 a2 =>
-            angelic_match_bool
-              <$> persist__term b
-              <*> four (consume w0 a1)
-              <*> four (consume w0 a2)
           | asn.match_enum E k alts =>
             fun w1 ω01 =>
               angelic_match_enum k⟨ω01⟩

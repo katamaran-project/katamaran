@@ -1081,7 +1081,6 @@ Module Type ShallowExecOn
           demonic_newpattern_match
             pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun pc δpc => produce (ι ►► δpc) (rhs pc))
-        | asn.match_bool b a1 a2  => demonic_match_bool (inst b ι) (produce ι a1) (produce ι a2)
         | asn.match_enum E k alts =>
           demonic_match_enum
             (inst (T := fun Σ => Term Σ _) k ι)
@@ -1131,7 +1130,6 @@ Module Type ShallowExecOn
           angelic_newpattern_match
             pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun pc δpc => consume (ι ►► δpc) (rhs pc))
-        | asn.match_bool b a1 a2  => angelic_match_bool (inst b ι) (consume ι a1) (consume ι a2)
         | asn.match_enum E k alts =>
           angelic_match_enum
             (inst (T := fun Σ => Term Σ _) k ι)

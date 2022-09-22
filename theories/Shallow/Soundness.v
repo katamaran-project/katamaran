@@ -98,8 +98,6 @@ Module Type Soundness
         - now apply consume_chunk_monotonic.
         - rewrite !wp_angelic_newpattern_match.
           destruct newpattern_match_val. now apply H.
-        - rewrite !wp_angelic_match_bool.
-          destruct (inst b ι); cbn; eauto.
         - rewrite !wp_angelic_match_enum; eauto.
         - rewrite !wp_angelic_match_sum.
           destruct (inst s ι); cbn; eauto.
@@ -131,8 +129,6 @@ Module Type Soundness
         - unfold produce_chunk; eauto.
         - rewrite !wp_demonic_newpattern_match.
           destruct newpattern_match_val. now apply H.
-        - rewrite !wp_demonic_match_bool.
-          destruct (inst b ι); cbn; eauto.
         - rewrite !wp_demonic_match_enum; eauto.
         - rewrite !wp_demonic_match_sum.
           destruct (inst s ι); cbn; eauto.
@@ -348,8 +344,6 @@ Module Type Soundness
         now rewrite interpret_scchunk_inst in Hc.
       - rewrite wp_angelic_newpattern_match.
         destruct newpattern_match_val; auto.
-      - rewrite wp_angelic_match_bool.
-        destruct (inst b ι); auto.
       - rewrite wp_angelic_match_enum; auto.
       - rewrite wp_angelic_match_sum.
         destruct (inst s ι); auto.
@@ -396,8 +390,6 @@ Module Type Soundness
         now rewrite interpret_scchunk_inst.
       - rewrite wp_demonic_newpattern_match.
         destruct newpattern_match_val; auto.
-      - rewrite wp_demonic_match_bool.
-        destruct (inst b ι); auto.
       - rewrite wp_demonic_match_enum; auto.
       - rewrite wp_demonic_match_sum.
         destruct (inst s ι); auto.

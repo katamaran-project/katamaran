@@ -438,7 +438,6 @@ Module Type NewShallowExecOn
               (inst (T := fun Σ => Term Σ _) s ι)
               pat
               (fun pc δpc => produce (ι ►► δpc) (rhs pc))
-        | asn.match_bool b a1 a2  => match_bool (inst b ι) (produce ι a1) (produce ι a2)
         | asn.match_enum E k alts =>
           match_enum
             (inst (T := fun Σ => Term Σ _) k ι)
@@ -489,7 +488,6 @@ Module Type NewShallowExecOn
               (inst (T := fun Σ => Term Σ _) s ι)
               pat
               (fun pc δpc => consume (ι ►► δpc) (rhs pc))
-        | asn.match_bool b a1 a2  => match_bool (inst b ι) (consume ι a1) (consume ι a2)
         | asn.match_enum E k alts =>
           match_enum
             (inst (T := fun Σ => Term Σ _) k ι)
@@ -538,7 +536,6 @@ Module Type NewShallowExecOn
         - unfold produce_chunk; now rewrite interpret_scchunk_inst.
         - unfold produce_chunk; now rewrite interpret_scchunk_inst.
         - destruct newpattern_match_val; auto.
-        - destruct (inst b ι); cbn; auto.
         - apply H.
         - destruct (inst s ι); cbn; auto.
         - destruct (inst s ι); cbn; auto.
@@ -561,7 +558,6 @@ Module Type NewShallowExecOn
         - unfold consume_chunk; now rewrite interpret_scchunk_inst.
         - unfold consume_chunk; now rewrite interpret_scchunk_inst.
         - destruct newpattern_match_val; auto.
-        - destruct (inst b ι); cbn; auto.
         - apply H.
         - destruct (inst s ι); cbn; auto.
         - destruct (inst s ι); cbn; auto.
