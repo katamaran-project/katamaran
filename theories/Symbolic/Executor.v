@@ -571,67 +571,6 @@ Module Type SymbolicExecOn
         | None   => demonic_match_bool' t'
         end.
 
-    Definition angelic_match_sum' {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
-      ⊢ AMessage -> STerm (ty.sum σ τ) ->
-        □(STerm σ -> SPureSpecM A) -> □(STerm τ -> SPureSpecM A) -> SPureSpecM A :=
-      fun _ msg t kinl kinr =>
-        angelic_binary
-          (⟨ω1⟩ tl <- angelic (Some x) σ;;
-           ⟨ω2⟩ _  <- assert_formula msg⟨ω1⟩ (formula_eq (term_inl tl) t⟨ω1⟩) ;;
-                     T kinl⟨ω1∘ω2⟩ tl⟨ω2⟩)
-          (⟨ω1⟩ tr <- angelic (Some y) τ;;
-           ⟨ω2⟩ _  <- assert_formula msg⟨ω1⟩ (formula_eq (term_inr tr) t⟨ω1⟩);;
-                     T kinr⟨ω1∘ω2⟩ tr⟨ω2⟩).
-
-    Definition angelic_match_sum {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
-      ⊢ AMessage -> STerm (ty.sum σ τ) -> □(STerm σ -> SPureSpecM A) -> □(STerm τ -> SPureSpecM A) -> SPureSpecM A :=
-      fun w0 msg t kinl kinr =>
-        match term_get_sum t with
-        | Some (inl tσ) => T kinl tσ
-        | Some (inr tτ) => T kinr tτ
-        | None => angelic_match_sum' x y msg t kinl kinr
-        end.
-
-    Definition demonic_match_sum' {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
-      ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SPureSpecM A) -> □(STerm τ -> SPureSpecM A) -> SPureSpecM A :=
-      fun w0 t kinl kinr =>
-       demonic_binary
-         (⟨ω1⟩ t1 <- demonic (Some x) σ;;
-          ⟨ω2⟩ _  <- assume_formula (formula_eq (term_inl t1) t⟨ω1⟩);;
-                    T kinl⟨ω1∘ω2⟩ t1⟨ω2⟩)
-         (⟨ω1⟩ t1 <- demonic (Some y) τ;;
-          ⟨ω2⟩ _  <- assume_formula (formula_eq (term_inr t1) t⟨ω1⟩);;
-                    T kinr⟨ω1∘ω2⟩ t1⟨ω2⟩).
-
-    Definition demonic_match_sum {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
-      ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SPureSpecM A) -> □(STerm τ -> SPureSpecM A) -> SPureSpecM A :=
-      fun w0 t kinl kinr =>
-        match term_get_sum t with
-        | Some (inl tσ) => T kinl tσ
-        | Some (inr tτ) => T kinr tτ
-        | None => demonic_match_sum' x y t kinl kinr
-        end.
-
-    Definition angelic_match_prod {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
-      ⊢ AMessage -> STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SPureSpecM A) -> SPureSpecM A :=
-      fun _ msg t k =>
-        ⟨ω1⟩ t1 <- angelic (Some x) σ;;
-        ⟨ω2⟩ t2 <- angelic (Some y) τ;;
-                  let ω12 := ω1 ∘ ω2 in
-                  let fml := formula_eq (term_binop bop.pair t1⟨ω2⟩ t2) t⟨ω12⟩ in
-        ⟨ω3⟩ _  <- assert_formula msg⟨ω12⟩ fml;;
-                  T k⟨ω12∘ω3⟩ t1⟨ω2∘ω3⟩ t2⟨ω3⟩.
-
-    Definition demonic_match_prod {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
-      ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SPureSpecM A) -> SPureSpecM A :=
-      fun _ t k =>
-        ⟨ω1⟩ t1 <- demonic (Some x) σ;;
-        ⟨ω2⟩ t2 <- demonic (Some y) τ;;
-                  let ω12 := ω1 ∘ ω2 in
-                  let fml := formula_eq (term_binop bop.pair t1⟨ω2⟩ t2) t⟨ω12⟩ in
-       ⟨ω3⟩ _   <- assume_formula fml;;
-                  T k⟨ω12∘ω3⟩ t1⟨ω2∘ω3⟩ t2⟨ω3⟩.
-
     #[export] Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
     Proof.
       intros P Q PQ.
@@ -869,11 +808,6 @@ Module Type SymbolicExecOn
           | None => angelic_match_bool' t kt kf
           end.
 
-      Definition box_angelic_match_bool {AT} {Γ1 Γ2} :
-        ⊢ STerm ty.bool -> □(SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t kt kf =>
-          angelic_match_bool <$> persist__term t <*> four kt <*> four kf.
-
       Definition demonic_match_bool' {AT} {Γ1 Γ2} :
         ⊢ STerm ty.bool -> □(SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
         fun w0 t kt kf =>
@@ -889,181 +823,6 @@ Module Type SymbolicExecOn
           | Some false => T kf
           | None => demonic_match_bool' t kt kf
           end.
-
-      Definition box_demonic_match_bool {AT} {Γ1 Γ2} :
-        ⊢ STerm ty.bool -> □(SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t kt kf =>
-          demonic_match_bool <$> persist__term t <*> four kt <*> four kf.
-
-      Definition angelic_match_enum {AT E} {Γ1 Γ2} :
-        ⊢ STerm (ty.enum E) -> (⌜enumt E⌝ -> □(SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t cont =>
-          ⟨ ω01 ⟩ EK <- angelic_finite (enumt E)
-                          (fun δ h =>
-                             MkAMessage
-                               {| msg_function := "SHeapSpecM.angelic_match_enum";
-                                  msg_message := "pattern match assertion";
-                                  msg_program_context := Γ1;
-                                  msg_localstore := δ;
-                                  msg_heap := h;
-                                  msg_pathcondition := wco w0
-                               |}) ;;
-          ⟨ ω12 ⟩ _ <- assert_formula (formula_eq (persist__term t ω01) (term_enum E EK)) ;;
-          cont EK _ (ω01 ∘ ω12).
-
-      Definition demonic_match_enum {A E} {Γ1 Γ2} :
-        ⊢ STerm (ty.enum E) -> (⌜enumt E⌝ -> □(SHeapSpecM Γ1 Γ2 A)) -> SHeapSpecM Γ1 Γ2 A :=
-        fun w0 t cont =>
-          ⟨ ω01 ⟩ EK <- demonic_finite (enumt E) ;;
-          ⟨ ω12 ⟩ _ <- assume_formula (formula_eq (persist__term t ω01) (term_enum E EK)) ;;
-          cont EK _ (ω01 ∘ ω12).
-
-      Definition box_demonic_match_enum {AT E} {Γ1 Γ2} :
-        ⊢ STerm (ty.enum E) -> (⌜enumt E⌝ -> □(SHeapSpecM Γ1 Γ2 AT)) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t k =>
-          demonic_match_enum
-            <$> persist__term t
-            <*> (fun (w1 : World) (ω01 : w0 ⊒ w1) (EK : enumt E) => four (k EK) ω01).
-
-      Definition angelic_match_sum {AT Γ1 Γ2} (x y : LVar) {σ τ} :
-        ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SHeapSpecM Γ1 Γ2 AT) -> □(STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-      fun w0 t kinl kinr =>
-        angelic_binary
-          (⟨ω1⟩ tl <- angelic (Some x) σ;;
-           ⟨ω2⟩ _  <- assert_formula (formula_eq (term_inl tl) t⟨ω1⟩) ;;
-                     T kinl⟨ω1∘ω2⟩ tl⟨ω2⟩)
-          (⟨ω1⟩ tr <- angelic (Some y) τ;;
-           ⟨ω2⟩ _  <- assert_formula (formula_eq (term_inr tr) t⟨ω1⟩);;
-                     T kinr⟨ω1∘ω2⟩ tr⟨ω2⟩).
-
-      Definition demonic_match_sum {AT Γ1 Γ2} (x y : LVar) {σ τ} :
-        ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SHeapSpecM Γ1 Γ2 AT) -> □(STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t kinl kinr =>
-          demonic_binary
-            (⟨ω1⟩ t1 <- demonic (Some x) σ;;
-             ⟨ω2⟩ _  <- assume_formula (formula_eq (term_inl t1) t⟨ω1⟩);;
-                       T kinl⟨ω1∘ω2⟩ t1⟨ω2⟩)
-            (⟨ω1⟩ t1 <- demonic (Some y) τ;;
-             ⟨ω2⟩ _  <- assume_formula (formula_eq (term_inr t1) t⟨ω1⟩);;
-                       T kinr⟨ω1∘ω2⟩ t1⟨ω2⟩).
-
-      Definition angelic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
-        ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t knil kcons =>
-          angelic_binary
-            (⟨ω1⟩ _     <- assert_formula (formula_eq (term_val (ty.list σ) nil) t) ;;
-             knil _ ω1)
-            (⟨ω1⟩ thead <- angelic (Some x) σ ;;
-             ⟨ω2⟩ ttail <- angelic (Some y) (ty.list σ);;
-             let ω12 := ω1 ∘ ω2 in
-             ⟨ω3⟩ _     <- assert_formula (formula_eq (term_binop bop.cons thead⟨ω2⟩ ttail) t⟨ω12⟩);;
-             kcons _ (ω12 ∘ ω3) thead⟨ω2 ∘ ω3⟩ ttail⟨ω3⟩).
-
-      Definition box_angelic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
-        ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t knil kcons => angelic_match_list x y <$> persist__term t <*> four knil <*> four kcons.
-
-      Definition demonic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
-        ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t knil kcons =>
-          demonic_binary
-            (⟨ω1⟩ _     <- assume_formula (formula_eq (term_val (ty.list σ) nil) t) ;;
-             knil _ ω1)
-            (⟨ω1⟩ thead <- demonic (Some x) σ ;;
-             ⟨ω2⟩ ttail <- demonic (Some y) (ty.list σ);;
-             let ω12 := ω1 ∘ ω2 in
-             ⟨ω3⟩ _     <- assume_formula (formula_eq (term_binop bop.cons thead⟨ω2⟩ ttail) t⟨ω12⟩);;
-             kcons _ (ω12 ∘ ω3) thead⟨ω2 ∘ ω3⟩ ttail⟨ω3⟩).
-
-      Definition box_demonic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
-        ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t knil kcons => demonic_match_list x y <$> persist__term t <*> four knil <*> four kcons.
-
-      Definition angelic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
-        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ tσ <- angelic (Some x) σ ;;
-          ⟨ ω2 ⟩ tτ <- angelic (Some y) τ ;;
-          let ω12 := ω1 ∘ ω2 in
-          ⟨ ω3 ⟩ _  <- assert_formula (formula_eq (term_binop bop.pair tσ⟨ω2⟩ tτ) t⟨ω12⟩) ;;
-          k _ (ω12 ∘ ω3) tσ⟨ω2 ∘ ω3⟩ tτ⟨ω3⟩.
-
-      Definition box_angelic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
-        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t k => angelic_match_prod x y <$> persist__term t <*> four k.
-
-      Definition demonic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
-        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ tσ <- demonic (Some x) σ ;;
-          ⟨ ω2 ⟩ tτ <- demonic (Some y) τ ;;
-          let ω12 := ω1 ∘ ω2 in
-          ⟨ ω3 ⟩ _  <- assume_formula (formula_eq (term_binop bop.pair tσ⟨ω2⟩ tτ) t⟨ω12⟩) ;;
-          k _ (ω12 ∘ ω3) tσ⟨ω2 ∘ ω3⟩ tτ⟨ω3⟩.
-
-      Definition box_demonic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
-        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t k => demonic_match_prod x y <$> persist__term t <*> four k.
-
-      Definition angelic_match_record' {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
-        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ ts <- angelic_ctx n Δ ;;
-          ⟨ ω2 ⟩ _  <- assert_formula (formula_eq (term_record R (record_pattern_match_env_reverse p ts)) t⟨ω1⟩) ;;
-          k _ (ω1 ∘ ω2) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω2).
-
-      Definition angelic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
-        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          match term_get_record t with
-          | Some a => T k (record_pattern_match_env p a)
-          | None => angelic_match_record' n p t k
-          end.
-
-      Definition box_angelic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
-        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t k => angelic_match_record n p <$> persist__term t <*> four k.
-
-      Definition demonic_match_record' {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
-        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ ts <- demonic_ctx n Δ ;;
-          ⟨ ω2 ⟩ _  <- assume_formula (formula_eq (term_record R (record_pattern_match_env_reverse p ts)) t⟨ω1⟩) ;;
-          k _ (ω1 ∘ ω2) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω2).
-
-      Definition demonic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
-        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          match term_get_record t with
-          | Some a => T k (record_pattern_match_env p a)
-          | None => demonic_match_record' n p t k
-          end.
-
-      Definition box_demonic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
-        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t k => demonic_match_record n p <$> persist__term t <*> four k.
-
-      Definition angelic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ ts <- angelic_ctx n Δ ;;
-          ⟨ ω2 ⟩ _  <- assert_formula (formula_eq (term_tuple (tuple_pattern_match_env_reverse p ts)) t⟨ω1⟩) ;;
-          k _ (ω1 ∘ ω2) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω2).
-
-      Definition box_angelic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t k => angelic_match_tuple n p <$> persist__term t <*> four k.
-
-      Definition demonic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ ts <- demonic_ctx n Δ ;;
-          ⟨ ω2 ⟩ _  <- assume_formula (formula_eq (term_tuple (tuple_pattern_match_env_reverse p ts)) t⟨ω1⟩) ;;
-          k _ (ω1 ∘ ω2) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω2).
-
-      Definition box_demonic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t k => demonic_match_tuple n p <$> persist__term t <*> four k.
 
       Definition angelic_pattern_match' {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @Pattern N σ) :
         ⊢ STerm σ ->
@@ -1142,12 +901,6 @@ Module Type SymbolicExecOn
           | _ => angelic_pattern_match' n _
           end.
 
-      Definition box_angelic_pattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @Pattern N σ) :
-        ⊢ STerm σ ->
-        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
-        □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t k w1 ω01 => angelic_pattern_match n pat t⟨ω01⟩ (fun pc => four (k pc) ω01).
-
       Definition demonic_pattern_match' {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @Pattern N σ) :
         ⊢ STerm σ ->
         (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
@@ -1215,12 +968,6 @@ Module Type SymbolicExecOn
                                end
           | _ => demonic_pattern_match' n _
           end.
-
-      Definition box_demonic_pattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @Pattern N σ) :
-        ⊢ STerm σ ->
-        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
-        □(SHeapSpecM Γ1 Γ2 AT) :=
-        fun w0 t k w1 ω01 => demonic_pattern_match n pat t⟨ω01⟩ (fun pc => four (k pc) ω01).
 
       Definition angelic_match_bvec' {AT n} {Γ1 Γ2} :
         ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
@@ -1453,9 +1200,11 @@ Module Type SymbolicExecOn
           | asn.chunk c => produce_chunk <$> persist c
           | asn.chunk_angelic c => produce_chunk <$> persist c
           | asn.pattern_match s pat rhs =>
-            box_demonic_pattern_match id pat s
-              (fun pc w1 r01 δpc =>
-                 produce (wcat w0 (PatternCaseCtx pc)) (rhs pc) w1 (acc_cat_left r01 δpc))
+             fun w1 r01 =>
+               demonic_pattern_match id pat s⟨r01⟩
+                 (fun pc w2 r12 ζ =>
+                    produce (wcat w0 (PatternCaseCtx pc))
+                      (rhs pc) w2 (acc_cat_left (r01 ∘ r12) ζ))
            | asn.sep a1 a2 =>
              fun w1 ω01 =>
                ⟨ ω12 ⟩ _ <- produce w0 a1 w1 ω01 ;;
@@ -1485,9 +1234,11 @@ Module Type SymbolicExecOn
           | asn.chunk c => consume_chunk <$> persist c
           | asn.chunk_angelic c => consume_chunk_angelic <$> persist c
           | asn.pattern_match s pat rhs =>
-            box_angelic_pattern_match id pat s
-              (fun pc w1 r01 δpc =>
-                 consume (wcat w0 (PatternCaseCtx pc)) (rhs pc) w1 (acc_cat_left r01 δpc))
+             fun w1 r01 =>
+               angelic_pattern_match id pat s⟨r01⟩
+                 (fun pc w2 r12 ζ =>
+                    consume (wcat w0 (PatternCaseCtx pc))
+                      (rhs pc) w2 (acc_cat_left (r01 ∘ r12) ζ))
           | asn.sep a1 a2 =>
             fun w1 ω01 =>
               ⟨ ω12 ⟩ _ <- consume w0 a1 w1 ω01 ;;
