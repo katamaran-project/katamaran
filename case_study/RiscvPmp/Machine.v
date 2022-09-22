@@ -434,10 +434,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
           use lemma return_pmp_ptsto [paddr] ;;
           MemValue tmp)
     else match: t in union access_type with
-         |> KRead pat_unit      => MemException E_Load_Access_Fault
-         |> KWrite pat_unit     => MemException E_SAMO_Access_Fault
-         |> KReadWrite pat_unit => MemException E_SAMO_Access_Fault
-         |> KExecute pat_unit   => MemException E_Fetch_Access_Fault
+         |> KRead pat_unit      => stm_exp (MemException E_Load_Access_Fault)
+         |> KWrite pat_unit     => stm_exp (MemException E_SAMO_Access_Fault)
+         |> KReadWrite pat_unit => stm_exp (MemException E_SAMO_Access_Fault)
+         |> KExecute pat_unit   => stm_exp (MemException E_Fetch_Access_Fault)
          end.
 
   Definition fun_checked_mem_write : Stm [paddr ∷ ty_xlenbits; data ∷ ty.int] ty_memory_op_result :=
@@ -515,10 +515,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       then None
       else
         match: acc in union access_type with
-        |> KRead pat_unit      => Some E_Load_Access_Fault
-        |> KWrite pat_unit     => Some E_SAMO_Access_Fault
-        |> KReadWrite pat_unit => Some E_SAMO_Access_Fault
-        |> KExecute pat_unit   => Some E_Fetch_Access_Fault
+        |> KRead pat_unit      => stm_exp (Some E_Load_Access_Fault)
+        |> KWrite pat_unit     => stm_exp (Some E_SAMO_Access_Fault)
+        |> KReadWrite pat_unit => stm_exp (Some E_SAMO_Access_Fault)
+        |> KExecute pat_unit   => stm_exp (Some E_Fetch_Access_Fault)
         end.
 
   Definition fun_pmpCheckPerms : Stm [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool :=
@@ -612,8 +612,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp1 := stm_read_register pc in
     let: tmp2 := call mem_read Execute tmp1 in
     match: tmp2 in union memory_op_result with
-    |> KMemValue (pat_var "result") => F_Base result
-    |> KMemException (pat_var "e")  => F_Error e tmp1
+    |> KMemValue (pat_var "result") => stm_exp (F_Base result)
+    |> KMemException (pat_var "e")  => stm_exp (F_Error e tmp1)
     end.
 
   (* TODO: Define contract for step, with addition of pc ↦ ... *)

@@ -125,18 +125,6 @@ Module ProgramLogic.
     | rule_stm_fail
         (s : Val ty.string) (Q : Val τ -> CStore Γ -> L) :
         ⦃ ⊤ ⦄ stm_fail τ s ; δ ⦃ Q ⦄
-    | rule_stm_match_union
-        {U : unioni} (e : Exp Γ (ty.union U))
-        (alt__Δ : forall (K : unionk U), PCtx)
-        (alt__p : forall (K : unionk U), Pattern (alt__Δ K) (unionk_ty U K))
-        (alt__r : forall (K : unionk U), Stm (Γ ▻▻ alt__Δ K) τ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        (forall (K : unionk U) (v : Val (unionk_ty U K)),
-           eval e δ = unionv_fold U (existT K v) ->
-           ⦃ P ⦄
-             alt__r K ; env.cat δ (pattern_match_val (alt__p K) v)
-           ⦃ fun v δ' => Q v (env.drop (alt__Δ K) δ') ⦄) ->
-        ⦃ P ⦄ stm_match_union U e alt__p alt__r ; δ ⦃ Q ⦄
     | rule_stm_read_register
         (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
         ⦃ lptsreg r v ⦄
@@ -194,15 +182,15 @@ Module ProgramLogic.
         ⦃ P ⦄ k ; δ ⦃ Q ⦄ ->
         ⦃ P ⦄ stm_debugk k ; δ ⦃ Q ⦄
 
-    | rule_stm_newpattern_match
-        {σ} (s : Stm Γ σ) (pat : PatternShape σ)
+    | rule_stm_pattern_match
+        {σ} (s : Stm Γ σ) (pat : Pattern σ)
         (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ)
         (P : L) (Q : Val σ -> CStore Γ -> L) (R : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
         (forall pc δpc δ',
-           ⦃ Q (newpattern_match_val_reverse pat pc δpc) δ' ⦄ rhs pc ; δ' ►► δpc
+           ⦃ Q (pattern_match_val_reverse pat pc δpc) δ' ⦄ rhs pc ; δ' ►► δpc
            ⦃ fun v2 δ' => R v2 (env.drop (PatternCaseCtx pc) δ') ⦄) ->
-        ⦃ P ⦄ stm_newpattern_match s pat rhs ; δ ⦃ R ⦄
+        ⦃ P ⦄ stm_pattern_match s pat rhs ; δ ⦃ R ⦄
 
     where "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P s Q).
 

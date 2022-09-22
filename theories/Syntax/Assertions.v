@@ -56,7 +56,7 @@ Module Import asn.
   | formula (fml : Formula Σ)
   | chunk (c : Chunk Σ)
   | chunk_angelic (c : Chunk Σ)
-  | newpattern_match {σ} (s : Term Σ σ) (pat : PatternShape σ)
+  | pattern_match {σ} (s : Term Σ σ) (pat : Pattern σ)
       (rhs : forall (pc : PatternCase pat), Assertion (Σ ▻▻ PatternCaseCtx pc))
   | sep  (A1 A2 : Assertion Σ)
   | or   (A1 A2 : Assertion Σ)
@@ -64,27 +64,27 @@ Module Import asn.
   | debug.
 
   Definition match_bool {Σ} (b : Term Σ ty.bool) (A1 A2 : Assertion Σ) : Assertion Σ :=
-    newpattern_match b pat_shape_bool (fun v => if v then A1 else A2).
+    pattern_match b pat_bool (fun v => if v then A1 else A2).
   Definition match_enum {Σ} (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ) : Assertion Σ :=
-    newpattern_match k (pat_shape_enum E) alts.
+    pattern_match k (pat_enum E) alts.
   Definition match_sum {Σ} (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : LVar)
     (al : Assertion (Σ ▻ xl∷σ)) (xr : LVar) (ar : Assertion (Σ ▻ xr∷τ)) :
     Assertion Σ :=
-    newpattern_match s (pat_shape_sum _ _ xl xr)
+    pattern_match s (pat_sum _ _ xl xr)
       (fun b => match b with true => al | false => ar end).
   Definition match_list {Σ σ} (s : Term Σ (ty.list σ)) (anil : Assertion Σ)
     (xh xt : LVar) (acons : Assertion (Σ ▻ xh∷σ ▻ xt∷ty.list σ)) : Assertion Σ :=
-    newpattern_match s (pat_shape_list σ xh xt)
+    pattern_match s (pat_list σ xh xt)
       (fun b => match b with true => anil | false => acons end).
   Definition match_prod {Σ σ1 σ2} (s : Term Σ (ty.prod σ1 σ2)) (xl xr : LVar)
     (rhs : Assertion (Σ ▻ xl∷σ1 ▻ xr∷σ2)) : Assertion Σ :=
-    newpattern_match s (pat_shape_prod xl xr) (fun _ => rhs).
+    pattern_match s (pat_pair xl xr) (fun _ => rhs).
   Definition match_tuple {Σ σs Δ} (s : Term Σ (ty.tuple σs))
     (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ :=
-    newpattern_match s (pat_shape_tuple p) (fun _ => rhs).
+    pattern_match s (pat_tuple p) (fun _ => rhs).
   Definition match_record {Σ R Δ} (s : Term Σ (ty.record R))
     (p : RecordPat (recordf_ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ :=
-    newpattern_match s (pat_shape_record R Δ p) (fun _ => rhs).
+    pattern_match s (pat_record R Δ p) (fun _ => rhs).
 
   #[global] Arguments match_enum [_] E _ _.
   #[global] Arguments match_sum [_] σ τ _ _ _.
@@ -95,15 +95,14 @@ Module Import asn.
   #[global] Arguments exist [_] _ _ _.
   #[global] Arguments debug {_}.
 
-  Definition match_union_newalt {Σ} U (t : Term Σ (ty.union U))
-    (alts : forall (K : unionk U), NewAlternative Assertion Σ (unionk_ty U K)) : Assertion Σ :=
-    newpattern_match t
-      (pat_shape_union U (fun K => newalt_pat (alts K)))
+  Definition match_union_alt {Σ} U (t : Term Σ (ty.union U))
+    (alts : forall (K : unionk U), Alternative Assertion Σ (unionk_ty U K)) : Assertion Σ :=
+    pattern_match t (pat_union U (fun K => alt_pat (alts K)))
       (fun '(existT K pc) =>
          of_pattern_case_curried
-           (newalt_pat (alts K))
-           (newalt_rhs (alts K)) pc).
-  #[global] Arguments asn.match_union_newalt {Σ} _ _ _.
+           (alt_pat (alts K))
+           (alt_rhs (alts K)) pc).
+  #[global] Arguments asn.match_union_alt {Σ} _ _ _.
 
   Fixpoint exs {Σ} Δ : Assertion (Σ ▻▻ Δ) -> Assertion Σ :=
     match Δ return Assertion (Σ ▻▻ Δ) -> Assertion Σ with
@@ -119,8 +118,8 @@ Module Import asn.
       | formula fml => formula (subst fml ζ)
       | chunk c => chunk (subst c ζ)
       | chunk_angelic c => chunk_angelic (subst c ζ)
-      | newpattern_match s pat rhs =>
-        newpattern_match (subst s ζ) pat (fun pc => sub_assertion (rhs pc) (sub_up ζ _))
+      | pattern_match s pat rhs =>
+        pattern_match (subst s ζ) pat (fun pc => sub_assertion (rhs pc) (sub_up ζ _))
       | sep A1 A2 => sep (sub_assertion A1 ζ) (sub_assertion A2 ζ)
       | or A1 A2  => sep (sub_assertion A1 ζ) (sub_assertion A2 ζ)
       | exist ς τ A => exist ς τ (sub_assertion A (sub_up1 ζ))
@@ -136,7 +135,7 @@ Module Import asn.
       | formula fml => option.map (@formula _) (occurs_check bIn fml)
       | chunk c     => option.map (@chunk _) (occurs_check bIn c)
       | chunk_angelic c => option.map (@chunk_angelic _) (occurs_check bIn c)
-      | newpattern_match s pat rhs =>
+      | pattern_match s pat rhs =>
           s' <- occurs_check bIn s;;
           None (* TODO *)
       | sep A1 A2 =>
@@ -156,7 +155,7 @@ Module Import asn.
     | formula fml => true
     | chunk c => false
     | chunk_angelic c => false
-    | newpattern_match s pat rhs =>
+    | pattern_match s pat rhs =>
         List.forallb (fun pc => is_pure (rhs pc)) (finite.enum (PatternCase pat))
     | sep A1 A2 => is_pure A1 && is_pure A2
     | or A1 A2  => is_pure A1 && is_pure A2
@@ -172,9 +171,9 @@ Module Import asn.
       | formula F => inst F ι
       | chunk c => False
       | chunk_angelic c => False
-      | newpattern_match s pat rhs =>
+      | pattern_match s pat rhs =>
         let v := inst (T := fun Σ => Term Σ _) s ι in
-        let (pc,δpc) := newpattern_match_val pat v in
+        let (pc,δpc) := pattern_match_val pat v in
         interpret_pure (rhs pc) (ι ►► δpc)
       | sep A1 A2 => interpret_pure A1 ι /\ interpret_pure A2 ι
       | or A1 A2  => interpret_pure A1 ι \/ interpret_pure A2 ι
@@ -189,9 +188,9 @@ Module Import asn.
       | formula F => !!(inst F ι) ∧ lemp
       | chunk c => interpret_chunk c ι
       | chunk_angelic c => interpret_chunk c ι
-      | newpattern_match s pat rhs =>
+      | pattern_match s pat rhs =>
         let v := inst (T := fun Σ => Term Σ _) s ι in
-        let (pc,δpc) := newpattern_match_val pat v in
+        let (pc,δpc) := pattern_match_val pat v in
         interpret (rhs pc) (ι ►► δpc)
       | sep A1 A2 => interpret A1 ι ∗ interpret A2 ι
       | or A1 A2  => interpret A1 ι ∨ interpret A2 ι
@@ -207,7 +206,7 @@ Module Import asn.
     Proof.
       induction a; cbn in *; intros ι; try discriminate a_pure.
       - now rewrite lemp_true, land_true.
-      - destruct newpattern_match_val.
+      - destruct pattern_match_val.
         apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
         apply base.elem_of_list_In. apply finite.elem_of_enum.
       - apply andb_true_iff in a_pure. destruct a_pure.
@@ -282,7 +281,7 @@ Section Contracts.
     | formula fml => option.isNone (occurs_check bIn fml)
     | chunk c     => option.isNone (option.map (@chunk _) (occurs_check bIn c))
     | chunk_angelic c => option.isNone (option.map (@chunk_angelic _) (occurs_check bIn c))
-    | newpattern_match s pat rhs =>
+    | pattern_match s pat rhs =>
         option.isNone (occurs_check bIn s) |||
         List.existsb
           (fun pc => lint_assertion

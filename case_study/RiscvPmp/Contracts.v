@@ -197,10 +197,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
        sep_contract_result          := "result_process_load";
        sep_contract_postcondition   :=
          asn_gprs ∗
-         asn.match_union_newalt memory_op_result (term_var value)
+         asn.match_union_alt memory_op_result (term_var value)
           (fun K =>
              match K with
-             | KMemValue     => MkNewAlt (pat_shape_var v)
+             | KMemValue     => MkAlt (pat_var v)
                                   (term_var "result_process_load" = term_val ty_retired RETIRE_SUCCESS
                                    ∗ pc            ↦ term_var "i"
                                    ∗ nextpc        ↦ term_var "npc"
@@ -209,7 +209,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                                    ∗ mstatus       ↦ term_record rmstatus [ term_var "mpp" ]
                                    ∗ mtvec         ↦ term_var tvec
                                    ∗ mepc          ↦ term_var "mepc")
-             | KMemException => MkNewAlt (pat_shape_var e)
+             | KMemException => MkAlt (pat_var e)
                                   (term_var "result_process_load" = term_val ty_retired RETIRE_FAIL
                                    ∗             pc            ↦ term_var "i"
                                    ∗             nextpc        ↦ term_var tvec
@@ -395,16 +395,16 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
          ∗             mepc          ↦ (term_var "mepc");
        sep_contract_result          := "result_exception_handler";
        sep_contract_postcondition   :=
-        asn.match_union_newalt ctl_result (term_var ctl)
+        asn.match_union_alt ctl_result (term_var ctl)
           (fun K => match K with
-                    | KCTL_TRAP => MkNewAlt (pat_shape_var e)
+                    | KCTL_TRAP => MkAlt (pat_var e)
                                      (term_var "result_exception_handler" = term_var tvec
                                       ∗             cur_privilege ↦ term_val ty_privilege Machine
                                       ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
                                       ∗             mstatus       ↦ term_record rmstatus [ term_var p ]
                                       ∗             mepc          ↦ term_var "pc"
                                       ∗             mtvec         ↦ term_var tvec)
-                    | KCTL_MRET => MkNewAlt pat_shape_unit
+                    | KCTL_MRET => MkAlt pat_unit
                                      (term_var "result_exception_handler" = term_var "mepc"
                                       ∗             cur_privilege ↦ term_var "mpp"
                                       ∗ ∃ "mcause", mcause        ↦ term_var "mcause"

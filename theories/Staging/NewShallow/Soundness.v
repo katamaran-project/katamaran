@@ -136,14 +136,10 @@ Module Type Soundness
         apply rule_stm_fail.
         apply ltrue_right.
 
-      - (* stm_match_newpattern *)
-        eapply rule_stm_newpattern_match. apply IHs. cbn.
-        intros pc δpc δ1'. rewrite newpattern_match_val_inverse_right.
+      - (* stm_pattern_match *)
+        eapply rule_stm_pattern_match. apply IHs. cbn.
+        intros pc δpc δ1'. rewrite pattern_match_val_inverse_right.
         now apply H.
-
-      - (* stm_match_union *)
-        apply rule_stm_match_union; cbn; intros * ->.
-        now rewrite unionv_unfold_fold.
 
       - (* stm_read_register *)
         apply rule_exist. intros v.

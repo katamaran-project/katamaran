@@ -119,16 +119,6 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , stm_assertk e1 e2 k ⟩ --->
       ⟨ γ , μ , δ , if eval e1 δ then k else stm_fail τ (eval e2 δ) ⟩
 
-  | step_stm_match_union
-      {U : unioni} (e : Exp Γ (ty.union U))
-      (alt__ctx : forall (K : unionk U), PCtx)
-      (alt__pat : forall (K : unionk U), Pattern (alt__ctx K) (unionk_ty U K))
-      (alt__rhs : forall (K : unionk U), Stm (Γ ▻▻ alt__ctx K) τ) :
-      ⟨ γ , μ , δ , stm_match_union U e alt__pat alt__rhs ⟩ --->
-      ⟨ γ , μ , δ , let (K , v) := unionv_unfold U (eval e δ) in
-                stm_block (pattern_match_val (alt__pat K) v) (alt__rhs K)
-      ⟩
-
   | step_stm_read_register
       (r : 𝑹𝑬𝑮 τ) :
       ⟨ γ, μ , δ, stm_read_register r ⟩ ---> ⟨ γ, μ , δ, stm_val τ (read_register γ r) ⟩
@@ -154,10 +144,10 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , stm_debugk k ⟩ ---> ⟨ γ , μ , δ , k ⟩
 
   | step_newpattern_match
-      {σ} (s : Stm Γ σ) (pat : PatternShape σ)
+      {σ} (s : Stm Γ σ) (pat : Pattern σ)
       (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
-      ⟨ γ , μ , δ , stm_newpattern_match s pat rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_bind s (fun v => let (pc,δpc) := newpattern_match_val pat v
+      ⟨ γ , μ , δ , stm_pattern_match s pat rhs ⟩ --->
+      ⟨ γ , μ , δ , stm_bind s (fun v => let (pc,δpc) := pattern_match_val pat v
                                          in stm_block δpc (rhs pc))
       ⟩
 
@@ -200,8 +190,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         | @stm_lemmak           => idtac
         | @stm_assertk          => idtac
         | @stm_fail             => idtac
-        | @stm_newpattern_match => idtac
-        | @stm_match_union      => idtac
+        | @stm_pattern_match    => idtac
         | @stm_read_register    => idtac
         | @stm_write_register   => idtac
         | @stm_debugk           => idtac

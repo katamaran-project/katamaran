@@ -338,22 +338,22 @@ Module Type ShallowExecOn
         intuition.
     Qed.
 
-    Definition angelic_newpattern_match {N : Set} {A σ} (pat : @PatternShape N σ)
+    Definition angelic_pattern_match {N : Set} {A σ} (pat : @Pattern N σ)
       (v : Val σ)
       (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CPureSpecM A) :
       CPureSpecM A :=
       pc <- angelic_finite (PatternCase pat);;
       vs <- angelic_ctx (PatternCaseCtx pc) ;;
-      _  <- assert_formula (newpattern_match_val_reverse pat pc vs = v);;
+      _  <- assert_formula (pattern_match_val_reverse pat pc vs = v);;
       k pc vs.
 
-    Definition demonic_newpattern_match {N : Set} {A σ} (pat : @PatternShape N σ)
+    Definition demonic_pattern_match {N : Set} {A σ} (pat : @Pattern N σ)
       (v : Val σ)
       (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CPureSpecM A) :
       CPureSpecM A :=
       pc <- demonic_finite (PatternCase pat);;
       vs <- demonic_ctx (PatternCaseCtx pc) ;;
-      _  <- assume_formula (newpattern_match_val_reverse pat pc vs = v);;
+      _  <- assume_formula (pattern_match_val_reverse pat pc vs = v);;
       k pc vs.
 
     Fixpoint assert_eq_chunk (c1 c2 : SCChunk) : CPureSpecM unit :=
@@ -803,121 +803,6 @@ Module Type ShallowExecOn
         rewrite CPureSpecM.wp_demonic_ctx; intuition; subst; auto.
       Qed.
 
-      Definition angelic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty}
-        (p : Pattern Δ σ) {Γ} (v : Val σ) : CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
-        vs <- angelic_ctx Δ ;;
-        _  <- assert_formula (pattern_match_env_val_reverse p vs = v) ;;
-        pure vs.
-
-      Lemma wp_angelic_match_pattern {N : Set} {σ Γ} {Δ : NCtx N Ty} (p : Pattern Δ σ)
-        (v : Val σ)
-        POST δ h :
-        angelic_match_pattern (Γ := Γ) p v POST δ h <->
-        POST (pattern_match_val p v) δ h.
-      Proof.
-        cbv [angelic_match_pattern bind pure angelic_ctx assert_formula
-             lift_purem CPureSpecM.assert_formula].
-        rewrite CPureSpecM.wp_angelic_ctx.
-        split.
-        - intros (vs & <- & H).
-          now rewrite pattern_match_val_inverse_right.
-        - intros ?. exists (pattern_match_val p v).
-          split; [|easy].
-          now rewrite pattern_match_val_inverse_left.
-      Qed.
-
-      Definition demonic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty}
-        (p : Pattern Δ σ) {Γ} (v : Val σ) : CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
-        vs <- demonic_ctx Δ ;;
-        _  <- assume_formula (pattern_match_env_val_reverse p vs = v) ;;
-        pure vs.
-
-      Lemma wp_demonic_match_pattern {N : Set} {σ Γ} {Δ : NCtx N Ty} (p : Pattern Δ σ)
-        (v : Val σ)
-        POST δ h :
-        demonic_match_pattern (Γ := Γ) p v POST δ h <->
-        POST (pattern_match_val p v) δ h.
-      Proof.
-        cbv [demonic_match_pattern bind pure demonic_ctx bind_right assume_formula
-             lift_purem CPureSpecM.assume_formula].
-        rewrite CPureSpecM.wp_demonic_ctx.
-        split.
-        - intros HYP. apply HYP.
-          now rewrite pattern_match_val_inverse_left.
-        - intros HYP vs <-.
-          now rewrite pattern_match_val_inverse_right in HYP.
-      Qed.
-
-      Definition angelic_match_union {N : Set} {A Γ1 Γ2 U}
-        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
-        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A :=
-        fun v POST =>
-          UK     <- angelic_finite (unionk U);;
-          v__field <- angelic (unionk_ty U UK);;
-          assert_formula (unionv_fold U (existT UK v__field) = v);;
-          x      <- angelic_match_pattern (p UK) v__field;;
-          POST UK x.
-
-      Lemma wp_angelic_match_union {N : Set} {A Γ1 Γ2 U}
-        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K))
-        (v : Val (ty.union U)) (k : forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A)
-        POST δ h :
-        angelic_match_union p v k POST δ h <->
-        let (UK , vf) := unionv_unfold U v in
-        k UK (pattern_match_val (p UK) vf) POST δ h.
-      Proof.
-        cbv [angelic_match_union bind bind_right angelic_finite assert_formula angelic
-             lift_purem CPureSpecM.angelic_finite CPureSpecM.assert_formula].
-        rewrite CPureSpecM.wp_angelic_list.
-        split.
-        - intros (UK & HIn & vf & Heq & Hwp).
-          rewrite wp_angelic_match_pattern in Hwp.
-          subst v. now rewrite unionv_unfold_fold.
-        - destruct (unionv_unfold U v) as [UK vf] eqn:Heq.
-          intros Hwp.
-          exists UK. split.
-          rewrite <- base.elem_of_list_In.
-          apply finite.elem_of_enum.
-          exists vf. rewrite <- Heq.
-          rewrite wp_angelic_match_pattern.
-          rewrite unionv_fold_unfold. split; auto.
-      Qed.
-
-      Definition demonic_match_union {N : Set} {A Γ1 Γ2 U}
-        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
-        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A :=
-        fun v POST =>
-          UK     <- demonic_finite (unionk U);;
-          v__field <- demonic (unionk_ty U UK);;
-          assume_formula (unionv_fold U (existT UK v__field) = v);;
-          x      <- demonic_match_pattern (p UK) v__field;;
-          POST UK x.
-
-      Lemma wp_demonic_match_union {N : Set} {A Γ1 Γ2 U}
-        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K))
-        (v : Val (ty.union U)) (k : forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A)
-        POST δ h :
-        demonic_match_union p v k POST δ h <->
-        let (UK , vf) := unionv_unfold U v in
-        k UK (pattern_match_val (p UK) vf) POST δ h.
-      Proof.
-        cbv [demonic_match_union bind bind_right demonic_finite assume_formula demonic
-             lift_purem CPureSpecM.demonic_finite CPureSpecM.assume_formula].
-        rewrite CPureSpecM.wp_demonic_list.
-        split.
-        - destruct (unionv_unfold U v) as [UK vf] eqn:Heq.
-          intros HYP. specialize (HYP UK).
-          inster HYP by
-              rewrite <- base.elem_of_list_In; apply finite.elem_of_enum.
-          specialize (HYP vf).
-          rewrite wp_demonic_match_pattern in HYP.
-          apply HYP.
-          now rewrite <- Heq, unionv_fold_unfold.
-        - intros HYP UK HIn vf <-.
-          rewrite unionv_unfold_fold in HYP.
-          now rewrite wp_demonic_match_pattern.
-      Qed.
-
       Definition demonic_match_bvec {A n} {Γ1 Γ2} :
         Val (ty.bvec n) -> (bv n -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A :=
         fun v k =>
@@ -964,59 +849,59 @@ Module Type ShallowExecOn
         split; [auto|]. now intros ? * [-> ->]%bv.app_inj.
       Qed.
 
-      Definition angelic_newpattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @PatternShape N σ)
+      Definition angelic_pattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @Pattern N σ)
         (v : Val σ)
         (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A) :
         CHeapSpecM Γ1 Γ2 A :=
         pc <- angelic_finite (PatternCase pat);;
         vs <- angelic_ctx (PatternCaseCtx pc) ;;
-        _  <- assert_formula (newpattern_match_val_reverse pat pc vs = v);;
+        _  <- assert_formula (pattern_match_val_reverse pat pc vs = v);;
         k pc vs.
 
-      Definition demonic_newpattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @PatternShape N σ)
+      Definition demonic_pattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @Pattern N σ)
         (v : Val σ)
         (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A) :
         CHeapSpecM Γ1 Γ2 A :=
         pc <- demonic_finite (PatternCase pat);;
         vs <- demonic_ctx (PatternCaseCtx pc) ;;
-        _  <- assume_formula (newpattern_match_val_reverse pat pc vs = v);;
+        _  <- assume_formula (pattern_match_val_reverse pat pc vs = v);;
         k pc vs.
 
-      Lemma wp_angelic_newpattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @PatternShape N σ)
+      Lemma wp_angelic_pattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @Pattern N σ)
         (v : Val σ)
         (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A)
         (POST : A -> CStore Γ2 -> SCHeap -> Prop) (δ : CStore Γ1) (h : SCHeap) :
-        angelic_newpattern_match pat v k POST δ h <->
-          let c := newpattern_match_val pat v in
+        angelic_pattern_match pat v k POST δ h <->
+          let c := pattern_match_val pat v in
           k (projT1 c) (projT2 c) POST δ h.
       Proof.
-        cbv [angelic_newpattern_match bind angelic_finite lift_purem angelic_ctx
+        cbv [angelic_pattern_match bind angelic_finite lift_purem angelic_ctx
                CPureSpecM.angelic_finite assert_formula CPureSpecM.assert_formula].
         rewrite CPureSpecM.wp_angelic_list.
         setoid_rewrite CPureSpecM.wp_angelic_ctx.
         split.
         - intros (pc & Hin & δpc & <- & Hwp).
-          now rewrite newpattern_match_val_inverse_right.
+          now rewrite pattern_match_val_inverse_right.
         - intros Hwp.
-          exists (newpattern_match_val pat v).1.
+          exists (pattern_match_val pat v).1.
           split.
           rewrite <- base.elem_of_list_In.
           apply finite.elem_of_enum.
-          exists (newpattern_match_val pat v).2.
+          exists (pattern_match_val pat v).2.
           split.
-          apply newpattern_match_val_inverse_left.
+          apply pattern_match_val_inverse_left.
           apply Hwp.
       Qed.
 
-      Lemma wp_demonic_newpattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @PatternShape N σ)
+      Lemma wp_demonic_pattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @Pattern N σ)
         (v : Val σ)
         (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A)
         (POST : A -> CStore Γ2 -> SCHeap -> Prop) (δ : CStore Γ1) (h : SCHeap) :
-        demonic_newpattern_match pat v k POST δ h <->
-          let c := newpattern_match_val pat v in
+        demonic_pattern_match pat v k POST δ h <->
+          let c := pattern_match_val pat v in
           k (projT1 c) (projT2 c) POST δ h.
       Proof.
-        cbv [demonic_newpattern_match bind demonic_finite lift_purem demonic_ctx
+        cbv [demonic_pattern_match bind demonic_finite lift_purem demonic_ctx
                CPureSpecM.demonic_finite assume_formula CPureSpecM.assume_formula].
         rewrite CPureSpecM.wp_demonic_list.
         setoid_rewrite CPureSpecM.wp_demonic_ctx.
@@ -1024,9 +909,9 @@ Module Type ShallowExecOn
         - intros Hwp. apply Hwp.
           rewrite <- base.elem_of_list_In.
           apply finite.elem_of_enum.
-          apply newpattern_match_val_inverse_left.
+          apply pattern_match_val_inverse_left.
         - intros Hwp pc Hin δpc <-. revert Hwp.
-          now rewrite newpattern_match_val_inverse_right.
+          now rewrite pattern_match_val_inverse_right.
       Qed.
 
     End PatternMatching.
@@ -1077,8 +962,8 @@ Module Type ShallowExecOn
         | asn.formula fml => assume_formula (inst fml ι)
         | asn.chunk c     => produce_chunk (inst c ι)
         | asn.chunk_angelic c => produce_chunk (inst c ι)
-        | asn.newpattern_match s pat rhs =>
-          demonic_newpattern_match
+        | asn.pattern_match s pat rhs =>
+          demonic_pattern_match
             pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun pc δpc => produce (ι ►► δpc) (rhs pc))
         | asn.sep a1 a2   => _ <- produce ι a1 ;; produce ι a2
@@ -1096,8 +981,8 @@ Module Type ShallowExecOn
         | asn.formula fml => assert_formula (inst fml ι)
         | asn.chunk c     => consume_chunk (inst c ι)
         | asn.chunk_angelic c     => consume_chunk (inst c ι)
-        | asn.newpattern_match s pat rhs =>
-          angelic_newpattern_match
+        | asn.pattern_match s pat rhs =>
+          angelic_pattern_match
             pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun pc δpc => consume (ι ►► δpc) (rhs pc))
         | asn.sep a1 a2   => _ <- consume ι a1;; consume ι a2
@@ -1190,9 +1075,9 @@ Module Type ShallowExecOn
               exec_aux k
             | stm_fail _ s =>
               block
-            | stm_newpattern_match s pat rhs =>
+            | stm_pattern_match s pat rhs =>
               v  <- exec_aux s ;;
-              demonic_newpattern_match pat v
+              demonic_pattern_match pat v
                 (fun pc δpc => pushspops δpc (exec_aux (rhs pc)))
             | stm_read_register reg =>
               v <- angelic τ ;;
@@ -1206,9 +1091,6 @@ Module Type ShallowExecOn
               v__new <- eval_exp e ;;
               _    <- produce_chunk (scchunk_ptsreg reg v__new) ;;
               pure v__new
-            | stm_match_union U e alt__pat alt__rhs =>
-              v <- eval_exp e ;;
-              demonic_match_union alt__pat v (fun UK vs => pushspops vs (exec_aux (alt__rhs UK)))
             | stm_bind s k =>
               v <- exec_aux s ;;
               exec_aux (k v)

@@ -694,32 +694,6 @@ Module Type IrisResources
       - by iApply semWP_fail.
     Qed.
 
-    Lemma semWP_match_union {Γ τ U} (e : Exp Γ (ty.union U)) (alt__ctx : unionk U → PCtx)
-      (alt__pat : ∀ K, Pattern (alt__ctx K) (unionk_ty U K))
-      (alt__rhs : ∀ K, Stm (Γ ▻▻ alt__ctx K) τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
-          (let (K, vf) := unionv_unfold U (eval e δ) in
-           semWP (alt__rhs K) (fun v δ1 => Q v (env.drop (alt__ctx K) δ1))
-             (δ ►► pattern_match_val (alt__pat K) vf)) -∗
-           semWP (stm_match_union U e alt__pat alt__rhs) Q δ.
-    Proof.
-      iIntros (Q δ) "WPs". unfold semWP at 2. rewrite wp_unfold. cbn.
-      iIntros (σ ns ks1 ks nt) "state_inv".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iSplitR; [trivial|].
-      iIntros (e2 σ' efs) "%".
-      dependent elimination H.
-      fold_semWP.
-      dependent elimination s.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iFrame; iSplitL; auto.
-      destruct unionv_unfold.
-      by iApply semWP_block.
-    Qed.
-
     Lemma semWP_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
       ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
           (∃ v : Val τ, reg_pointsTo reg v ∗ (reg_pointsTo reg v -∗ Q v δ)) -∗
@@ -807,16 +781,16 @@ Module Type IrisResources
         by iApply "IH".
     Qed.
 
-    Lemma semWP_newpattern_match {Γ τ σ} (s : Stm Γ σ) (pat : PatternShape σ)
+    Lemma semWP_pattern_match {Γ τ σ} (s : Stm Γ σ) (pat : Pattern σ)
       (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
       ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),
       semWP s
         (fun vσ δ1 =>
-           let (pc,δpc) := newpattern_match_val pat vσ in
+           let (pc,δpc) := pattern_match_val pat vσ in
            semWP (rhs pc)
              (fun vτ δ2 => Q vτ (env.drop (PatternCaseCtx pc) δ2))
              (δ1 ►► δpc)) δ -∗
-      semWP (stm_newpattern_match s pat rhs) Q δ.
+      semWP (stm_pattern_match s pat rhs) Q δ.
     Proof.
       iIntros (Q δ) "WPs". unfold semWP at 3. rewrite wp_unfold. cbn.
       iIntros (? ns ks1 ks nt) "state_inv".
@@ -835,7 +809,7 @@ Module Type IrisResources
       iApply (semWP_mono with "WPs"); cbn.
       clear - sG.
       iIntros (v δ) "WPrhs".
-      destruct newpattern_match_val.
+      destruct pattern_match_val.
       by iApply semWP_block.
     Qed.
 

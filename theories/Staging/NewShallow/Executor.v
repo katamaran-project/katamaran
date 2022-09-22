@@ -397,14 +397,6 @@ Module Type NewShallowExecOn
         CPureSpecM A := k (tuple_pattern_match_val p v).
       #[global] Arguments match_tuple {_ _ _ _} p v k _ /.
 
-      Definition match_union {N : Set} {A U} {Δ : unionk U -> NCtx N Ty}
-        (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) (v : Val (ty.union U))
-        (k : forall K, NamedEnv Val (Δ K) -> CPureSpecM A) : CPureSpecM A :=
-        fun POST =>
-          let (UK , vf) := unionv_unfold U v in
-          k UK (pattern_match_val (p UK) vf) POST.
-      #[global] Arguments match_union {_ _ _ _} p v k _ /.
-
       Definition match_bvec {A n} (v : Val (ty.bvec n))
         (k : bv n -> CPureSpecM A) : CPureSpecM A :=
         k v.
@@ -418,11 +410,11 @@ Module Type NewShallowExecOn
           end.
       #[global] Arguments match_bvec_split {_ _ _} v k _ /.
 
-      Definition newpattern_match {N : Set} {A σ} (v : Val σ) (pat : @PatternShape N σ)
+      Definition pattern_match {N : Set} {A σ} (v : Val σ) (pat : @Pattern N σ)
         (k : forall (pc : PatternCase pat), NamedEnv Val (PatternCaseCtx pc) -> CPureSpecM A) :
         CPureSpecM A :=
-        fun POST => let (pc,δpc) := newpattern_match_val pat v in k pc δpc POST.
-      #[global] Arguments newpattern_match {N A σ} v pat  _ /.
+        fun POST => let (pc,δpc) := pattern_match_val pat v in k pc δpc POST.
+      #[global] Arguments pattern_match {N A σ} v pat  _ /.
 
     End PatternMatching.
 
@@ -433,8 +425,8 @@ Module Type NewShallowExecOn
         | asn.formula fml => assume_formula (inst fml ι)
         | asn.chunk c     => produce_chunk (inst c ι)
         | asn.chunk_angelic c => produce_chunk (inst c ι)
-        | asn.newpattern_match s pat rhs =>
-            newpattern_match
+        | asn.pattern_match s pat rhs =>
+            pattern_match
               (inst (T := fun Σ => Term Σ _) s ι)
               pat
               (fun pc δpc => produce (ι ►► δpc) (rhs pc))
@@ -453,8 +445,8 @@ Module Type NewShallowExecOn
         | asn.formula fml => assert_formula (inst fml ι)
         | asn.chunk c     => consume_chunk (inst c ι)
         | asn.chunk_angelic c     => consume_chunk (inst c ι)
-        | asn.newpattern_match s pat rhs =>
-            newpattern_match
+        | asn.pattern_match s pat rhs =>
+            pattern_match
               (inst (T := fun Σ => Term Σ _) s ι)
               pat
               (fun pc δpc => consume (ι ►► δpc) (rhs pc))
@@ -475,7 +467,7 @@ Module Type NewShallowExecOn
         - apply wp_assume_formula.
         - unfold produce_chunk; now rewrite interpret_scchunk_inst.
         - unfold produce_chunk; now rewrite interpret_scchunk_inst.
-        - destruct newpattern_match_val; auto.
+        - destruct pattern_match_val; auto.
         - now rewrite IHasn1, IHasn2, lwand_curry.
         - unfold demonic_binary. now rewrite IHasn1, IHasn2, lwand_disj_distr.
         - unfold demonic. rewrite lwand_exists_comm.
@@ -490,7 +482,7 @@ Module Type NewShallowExecOn
         - apply wp_assert_formula.
         - unfold consume_chunk; now rewrite interpret_scchunk_inst.
         - unfold consume_chunk; now rewrite interpret_scchunk_inst.
-        - destruct newpattern_match_val; auto.
+        - destruct pattern_match_val; auto.
         - now rewrite IHasn1, IHasn2, <- lsep_assoc.
         - rewrite lsep_disj_distr. now apply proper_lor_equiv.
         - rewrite lsep_exists_comm. now apply proper_lex_equiv.
@@ -607,11 +599,11 @@ Module Type NewShallowExecOn
       Definition pure {Γ A} (a : A) : CHeapSpecM Γ Γ A :=
         fun POST => POST a.
       #[global] Arguments pure {_ _} a _ /.
-      Definition bind {Γ1 Γ2 Γ3 A B} (ma : CHeapSpecM Γ1 Γ2 A) (f : A -> CHeapSpecM Γ2 Γ3 B) : CHeapSpecM Γ1 Γ3 B :=
-        fun POST => ma (fun a => f a POST).
+      Definition bind {Γ1 Γ2 Γ3 A B} (ma : CHeapSpecM Γ1 Γ2 A) (f : A -> CHeapSpecM Γ2 Γ3 B) :
+        CHeapSpecM Γ1 Γ3 B := fun POST => ma (fun a => f a POST).
       #[global] Arguments bind {_ _ _ _ _} ma f _ /.
-      Definition bind_right {Γ1 Γ2 Γ3 A B} (ma : CHeapSpecM Γ1 Γ2 A) (mb : CHeapSpecM Γ2 Γ3 B) : CHeapSpecM Γ1 Γ3 B :=
-        bind ma (fun _ => mb).
+      Definition bind_right {Γ1 Γ2 Γ3 A B} (ma : CHeapSpecM Γ1 Γ2 A) (mb : CHeapSpecM Γ2 Γ3 B) :
+        CHeapSpecM Γ1 Γ3 B := bind ma (fun _ => mb).
       #[global] Arguments bind_right {_ _ _ _ _} ma mb _ /.
       Definition map {Γ1 Γ2 A B} (f : A -> B) (ma : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 B :=
         fun POST => ma (fun a => POST (f a)).
@@ -680,7 +672,8 @@ Module Type NewShallowExecOn
           end.
       #[global] Arguments match_sum {_ _ _ _ _} v kinl kinr _ /.
 
-      Definition match_prod {A Γ1 Γ2} {σ τ} (v : Val (ty.prod σ τ)) (k : Val σ -> Val τ -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
+      Definition match_prod {A Γ1 Γ2} {σ τ} (v : Val (ty.prod σ τ))
+        (k : Val σ -> Val τ -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
         fun POST δ =>
           match v with
           | pair v1 v2 => k v1 v2 POST δ
@@ -709,14 +702,6 @@ Module Type NewShallowExecOn
         CHeapSpecM Γ1 Γ2 A := k (tuple_pattern_match_val p v).
       #[global] Arguments match_tuple {_ _ _ _ _ _} p v k _ /.
 
-      Definition match_union {N : Set} {A Γ1 Γ2 U} {Δ : unionk U -> NCtx N Ty}
-        (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) (v : Val (ty.union U))
-        (k : forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ =>
-          let (UK , vf) := unionv_unfold U v in
-          k UK (pattern_match_val (p UK) vf) POST δ.
-      #[global] Arguments match_union {_ _ _ _ _ _} p v k _ /.
-
       Definition match_bvec {A n} {Γ1 Γ2} (v : Val (ty.bvec n))
         (k : bv n -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
         k v.
@@ -730,10 +715,11 @@ Module Type NewShallowExecOn
           end.
       #[global] Arguments match_bvec_split {_ _ _ _ _} v k _ /.
 
-      Definition newpattern_match {N : Set} {A σ Γ1 Γ2} (v : Val σ) (pat : @PatternShape N σ) (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A) :
+      Definition pattern_match {N : Set} {A σ Γ1 Γ2} (v : Val σ) (pat : @Pattern N σ)
+        (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A) :
         CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ1 => let (x,p) := newpattern_match_val pat v in k x p POST δ1.
-      #[global] Arguments newpattern_match {N A σ Γ1 Γ2} v pat k _ /.
+        fun POST δ1 => let (x,p) := pattern_match_val pat v in k x p POST δ1.
+      #[global] Arguments pattern_match {N A σ Γ1 Γ2} v pat k _ /.
 
     End PatternMatching.
 
@@ -839,9 +825,9 @@ Module Type NewShallowExecOn
               exec k
             | stm_fail _ s =>
               block
-            | stm_newpattern_match s pat rhs =>
+            | stm_pattern_match s pat rhs =>
               v <- exec s ;;
-              newpattern_match v pat
+              pattern_match v pat
                 (fun pc δpc => pushspops δpc (exec (rhs pc)))
             | stm_read_register reg =>
               v <- angelic τ ;;
@@ -855,9 +841,6 @@ Module Type NewShallowExecOn
               v__new <- eval_exp e ;;
               _    <- lift_purem (CPureSpecM.produce_chunk (scchunk_ptsreg reg v__new)) ;;
               pure v__new
-            | stm_match_union U e alt__pat alt__rhs =>
-              v <- eval_exp e ;;
-              match_union alt__pat v (fun UK vs => pushspops vs (exec (alt__rhs UK)))
             | stm_bind s k =>
               v <- exec s ;;
               exec (k v)

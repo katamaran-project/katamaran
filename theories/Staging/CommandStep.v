@@ -210,16 +210,10 @@ Module CInterpreter (Import B : Base)
       if v then exec k else error
     | stm_fail _ s =>
       error
-    | stm_newpattern_match s pat rhs =>
+    | stm_pattern_match s pat rhs =>
       v <- exec s ;;
-      let (pc,δpc) := newpattern_match_val pat v in
+      let (pc,δpc) := pattern_match_val pat v in
       pushspops δpc (exec (rhs pc))
-    | stm_match_union U e alt__pat alt__rhs =>
-      v <- eval_exp e ;;
-      match unionv_unfold U v with
-      | existT K v =>
-        pushspops (pattern_match_val (alt__pat K) v) (exec (alt__rhs K))
-      end
     | stm_read_register reg =>
       mreadreg reg
     | stm_write_register reg e =>

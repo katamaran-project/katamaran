@@ -1215,65 +1215,15 @@ Module Soundness
         now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_angelic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty}
-          {p : Pattern Δ σ} {Γ}
+    Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
+      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @Pattern N σ)
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.angelic_match_pattern N n σ Δ p Γ w) (@CHeapSpecM.angelic_match_pattern N σ Δ p Γ).
+      ℛ ι (@SHeapSpecM.angelic_pattern_match' N n AT Γ1 Γ2 σ pat w)
+        (@CHeapSpecM.angelic_pattern_match N Γ1 Γ2 A σ pat).
     Proof.
       intros t v ->.
       intros k k__c Hk.
-      unfold SHeapSpecM.angelic_match_pattern, CHeapSpecM.angelic_match_pattern.
-      apply refine_bind; try (apply refine_angelic_ctx; assumption); try assumption.
-      intros w1 r01 ι1 -> Hpc1.
-      intros ts vs Htvs.
-      hnf in Htvs. subst vs.
-      apply refine_bind.
-      - apply refine_assert_formula; try assumption. cbn - [Val].
-        now rewrite inst_pattern_match_env_reverse, <- inst_persist.
-      - intros w2 r12 ι2 -> Hpc2 _ _ _.
-        apply refine_pure; try assumption.
-        now rewrite <- inst_persist.
-    Qed.
-
-    Lemma refine_angelic_match_union {N : Set} (n : N -> LVar) {AT A} `{Refine AT A} {Γ1 Γ2 : PCtx} {U : unioni}
-      {Δ : unionk U -> NCtx N Ty} {p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)}
-      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.angelic_match_union N n AT Γ1 Γ2 U Δ p w) (@CHeapSpecM.angelic_match_union N A Γ1 Γ2 U Δ p).
-    Proof.
-      intros t v ->.
-      intros k k__c Hk.
-      unfold SHeapSpecM.angelic_match_union, CHeapSpecM.angelic_match_union.
-      apply refine_bind; try (apply refine_angelic_finite; assumption).
-      intros w1 r01 ι1 -> Hpc1.
-      intros v1 vc1 ->.
-      apply refine_bind; try (apply refine_angelic; assumption).
-      intros w2 r12 ι2 -> Hpc2.
-      intros v2 vc2 ->.
-      apply refine_bind.
-      - apply refine_assert_formula; try assumption. cbn - [Val].
-        change (inst v1 _) with v1.
-        change (inst_term ?t ?ι) with (inst t ι).
-        rewrite (inst_persist (AT := STerm _) (A := Val _)).
-        now rewrite sub_acc_trans, inst_subst.
-      - intros w3 r23 ι3 -> Hpc3 _ _ _.
-        apply refine_bind.
-        + apply refine_angelic_match_pattern; try assumption.
-          now rewrite <- inst_persist.
-        + change (inst v1 _) with v1.
-          specialize (Hk v1).
-          eapply (refine_four Hk).
-          now rewrite ?sub_acc_trans, ?inst_subst.
-    Qed.
-
-    Lemma refine_angelic_newpattern_match' {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
-      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @PatternShape N σ)
-      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.angelic_newpattern_match' N n AT Γ1 Γ2 σ pat w)
-        (@CHeapSpecM.angelic_newpattern_match N Γ1 Γ2 A σ pat).
-    Proof.
-      intros t v ->.
-      intros k k__c Hk.
-      unfold SHeapSpecM.angelic_newpattern_match, CHeapSpecM.angelic_newpattern_match.
+      unfold SHeapSpecM.angelic_pattern_match, CHeapSpecM.angelic_pattern_match.
       apply refine_bind.
       { now apply refine_angelic_finite. }
       intros w1 r01 ι1 -> Hpc1.
@@ -1286,7 +1236,7 @@ Module Soundness
       { apply refine_assert_formula; try assumption. cbn.
         rewrite (inst_persist (AT := fun Σ => Term Σ _)).
         rewrite !sub_acc_trans, inst_subst.
-        rewrite inst_newpattern_match_term_reverse.
+        rewrite inst_pattern_match_term_reverse.
         hnf in Htvs. subst. reflexivity.
       }
       intros w3 r23 ι3 -> Hpc3.
@@ -1297,15 +1247,15 @@ Module Soundness
       now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_demonic_newpattern_match' {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
-      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @PatternShape N σ)
+    Lemma refine_demonic_pattern_match' {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
+      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @Pattern N σ)
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.demonic_newpattern_match' N n AT Γ1 Γ2 σ pat w)
-        (@CHeapSpecM.demonic_newpattern_match N Γ1 Γ2 A σ pat).
+      ℛ ι (@SHeapSpecM.demonic_pattern_match' N n AT Γ1 Γ2 σ pat w)
+        (@CHeapSpecM.demonic_pattern_match N Γ1 Γ2 A σ pat).
     Proof.
       intros t v ->.
       intros k k__c Hk.
-      unfold SHeapSpecM.demonic_newpattern_match, CHeapSpecM.demonic_newpattern_match.
+      unfold SHeapSpecM.demonic_pattern_match, CHeapSpecM.demonic_pattern_match.
       apply refine_bind.
       { now apply refine_demonic_finite. }
       intros w1 r01 ι1 -> Hpc1.
@@ -1318,7 +1268,7 @@ Module Soundness
       { apply refine_assume_formula; try assumption. cbn.
         rewrite (inst_persist (AT := fun Σ => Term Σ _)).
         rewrite !sub_acc_trans, inst_subst.
-        rewrite inst_newpattern_match_term_reverse.
+        rewrite inst_pattern_match_term_reverse.
         hnf in Htvs. subst. reflexivity.
       }
       intros w3 r23 ι3 -> Hpc3.
@@ -1329,18 +1279,18 @@ Module Soundness
       now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_angelic_newpattern_match {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
-      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @PatternShape N σ) :
+    Lemma refine_angelic_pattern_match {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
+      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @Pattern N σ) :
       forall {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι),
-        ℛ ι (@SHeapSpecM.angelic_newpattern_match N n AT Γ1 Γ2 σ pat w)
-          (@CHeapSpecM.angelic_newpattern_match N Γ1 Γ2 A σ pat).
+        ℛ ι (@SHeapSpecM.angelic_pattern_match N n AT Γ1 Γ2 σ pat w)
+          (@CHeapSpecM.angelic_pattern_match N Γ1 Γ2 A σ pat).
     Proof.
       induction pat; cbn; intros w ι Hpc.
       - intros t v ->.
         intros k k__c Hk.
         intros POST__s POST__c HPOST.
         intros δs0 δc0 -> hs0 hc0 ->. hnf.
-        rewrite CHeapSpecM.wp_angelic_newpattern_match.
+        rewrite CHeapSpecM.wp_angelic_pattern_match.
         apply Hk; cbn; rewrite ?inst_sub_id; auto.
         reflexivity.
       - intros t v Htv.
@@ -1349,41 +1299,41 @@ Module Soundness
         intros δs0 δc0 Hδ hs0 hc0 Hh.
         intros Hwp.
         cut (CHeapSpecM.angelic_match_bool v (k__c true [env]) (k__c false [env]) POST__c δc0 hc0).
-        + rewrite CHeapSpecM.wp_angelic_newpattern_match.
+        + rewrite CHeapSpecM.wp_angelic_pattern_match.
           rewrite CHeapSpecM.wp_angelic_match_bool.
           now destruct v; cbn.
         + revert Hwp. apply refine_angelic_match_bool; auto.
           hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
           hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
-      - apply (refine_angelic_newpattern_match' n (pat_shape_list σ x y)); auto.
+      - apply (refine_angelic_pattern_match' n (pat_list σ x y)); auto.
       - intros t v ->.
         intros k k__c Hk.
         destruct (term_get_pair_spec t) as [[tl tr] Heq|]; subst.
         + rewrite Heq. intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_angelic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           reflexivity.
-        + apply refine_angelic_newpattern_match'; auto.
+        + apply refine_angelic_pattern_match'; auto.
       - intros t v ->.
         intros k k__c Hk.
         destruct (term_get_sum_spec t) as [[tl|tr] Heq|]; subst.
         + rewrite Heq. intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_angelic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           reflexivity.
         + rewrite Heq. intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_angelic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           reflexivity.
-        + apply refine_angelic_newpattern_match'; auto.
+        + apply refine_angelic_pattern_match'; auto.
       - intros t v ->.
         intros k k__c Hk.
         intros POST__s POST__c HPOST.
         intros δs0 δc0 -> hs0 hc0 ->. hnf.
-        rewrite CHeapSpecM.wp_angelic_newpattern_match.
+        rewrite CHeapSpecM.wp_angelic_pattern_match.
         apply Hk; cbn; rewrite ?inst_sub_id; auto.
         reflexivity.
       - intros t v ->.
@@ -1391,33 +1341,33 @@ Module Soundness
         destruct (term_get_val_spec t); subst.
         + intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_angelic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           reflexivity.
-        + apply refine_angelic_newpattern_match'; auto.
-      - apply (refine_angelic_newpattern_match' n (pat_shape_bvec_split _ _ x y)); auto.
+        + apply refine_angelic_pattern_match'; auto.
+      - apply (refine_angelic_pattern_match' n (pat_bvec_split _ _ x y)); auto.
       - intros t v ->.
         intros k k__c Hk.
         destruct (term_get_val_spec t); subst.
         + intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_angelic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           reflexivity.
-        + apply refine_angelic_newpattern_match'; auto.
-      - apply (refine_angelic_newpattern_match' n (pat_shape_tuple p)); auto.
+        + apply refine_angelic_pattern_match'; auto.
+      - apply (refine_angelic_pattern_match' n (pat_tuple p)); auto.
       - intros t v ->.
         intros k k__c Hk.
         destruct (term_get_record_spec t) as [ts Heq|]; subst.
         + rewrite Heq.
           intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_angelic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           hnf. unfold record_pattern_match_val.
           rewrite recordv_unfold_fold. symmetry.
           apply inst_record_pattern_match.
-        + apply refine_angelic_newpattern_match'; auto.
+        + apply refine_angelic_pattern_match'; auto.
       - intros t v ->.
         intros k k__c Hk.
         destruct (term_get_union_spec t) as [[K scr'] Heq|]; subst.
@@ -1429,25 +1379,25 @@ Module Soundness
                         (fun pc => k__c (existT K pc))).
           eapply H0 in Hwp; eauto.
           revert Hwp.
-          rewrite ?CHeapSpecM.wp_angelic_newpattern_match. cbn.
+          rewrite ?CHeapSpecM.wp_angelic_pattern_match. cbn.
           rewrite Heq. rewrite unionv_unfold_fold.
-          now destruct newpattern_match_val; cbn.
+          now destruct pattern_match_val; cbn.
           intros pc. apply (Hk (existT K pc)).
-        + apply refine_angelic_newpattern_match'; auto.
+        + apply refine_angelic_pattern_match'; auto.
     Qed.
 
-    Lemma refine_demonic_newpattern_match {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
-      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @PatternShape N σ) :
+    Lemma refine_demonic_pattern_match {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
+      {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @Pattern N σ) :
       forall {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι),
-        ℛ ι (@SHeapSpecM.demonic_newpattern_match N n AT Γ1 Γ2 σ pat w)
-          (@CHeapSpecM.demonic_newpattern_match N Γ1 Γ2 A σ pat).
+        ℛ ι (@SHeapSpecM.demonic_pattern_match N n AT Γ1 Γ2 σ pat w)
+          (@CHeapSpecM.demonic_pattern_match N Γ1 Γ2 A σ pat).
     Proof.
       induction pat; cbn; intros w ι Hpc.
       - intros t v ->.
         intros k k__c Hk.
         intros POST__s POST__c HPOST.
         intros δs0 δc0 -> hs0 hc0 ->. hnf.
-        rewrite CHeapSpecM.wp_demonic_newpattern_match.
+        rewrite CHeapSpecM.wp_demonic_pattern_match.
         apply Hk; cbn; rewrite ?inst_sub_id; auto.
         reflexivity.
       - intros t v Htv.
@@ -1456,41 +1406,41 @@ Module Soundness
         intros δs0 δc0 Hδ hs0 hc0 Hh.
         intros Hwp.
         cut (CHeapSpecM.demonic_match_bool v (k__c true [env]) (k__c false [env]) POST__c δc0 hc0).
-        + rewrite CHeapSpecM.wp_demonic_newpattern_match.
+        + rewrite CHeapSpecM.wp_demonic_pattern_match.
           rewrite CHeapSpecM.wp_demonic_match_bool.
           now destruct v; cbn.
         + revert Hwp. apply refine_demonic_match_bool; auto.
           hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
           hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
-      - apply (refine_demonic_newpattern_match' n (pat_shape_list σ x y)); auto.
+      - apply (refine_demonic_pattern_match' n (pat_list σ x y)); auto.
       - intros t v ->.
         intros k k__c Hk.
         destruct (term_get_pair_spec t) as [[tl tr] Heq|]; subst.
         + rewrite Heq. intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_demonic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           reflexivity.
-        + apply refine_demonic_newpattern_match'; auto.
+        + apply refine_demonic_pattern_match'; auto.
       - intros t v ->.
         intros k k__c Hk.
         destruct (term_get_sum_spec t) as [[tl|tr] Heq|]; subst.
         + rewrite Heq. intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_demonic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           reflexivity.
         + rewrite Heq. intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_demonic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           reflexivity.
-        + apply refine_demonic_newpattern_match'; auto.
+        + apply refine_demonic_pattern_match'; auto.
       - intros t v ->.
         intros k k__c Hk.
         intros POST__s POST__c HPOST.
         intros δs0 δc0 -> hs0 hc0 ->. hnf.
-        rewrite CHeapSpecM.wp_demonic_newpattern_match.
+        rewrite CHeapSpecM.wp_demonic_pattern_match.
         apply Hk; cbn; rewrite ?inst_sub_id; auto.
         reflexivity.
       - intros t v ->.
@@ -1498,33 +1448,33 @@ Module Soundness
         destruct (term_get_val_spec t); subst.
         + intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_demonic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           reflexivity.
-        + apply refine_demonic_newpattern_match'; auto.
-      - apply (refine_demonic_newpattern_match' n (pat_shape_bvec_split _ _ x y)); auto.
+        + apply refine_demonic_pattern_match'; auto.
+      - apply (refine_demonic_pattern_match' n (pat_bvec_split _ _ x y)); auto.
       - intros t v ->.
         intros k k__c Hk.
         destruct (term_get_val_spec t); subst.
         + intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_demonic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           reflexivity.
-        + apply refine_demonic_newpattern_match'; auto.
-      - apply (refine_demonic_newpattern_match' n (pat_shape_tuple p)); auto.
+        + apply refine_demonic_pattern_match'; auto.
+      - apply (refine_demonic_pattern_match' n (pat_tuple p)); auto.
       - intros t v ->.
         intros k k__c Hk.
         destruct (term_get_record_spec t) as [ts Heq|]; subst.
         + rewrite Heq.
           intros POST__s POST__c HPOST.
           intros δs0 δc0 -> hs0 hc0 ->. hnf.
-          rewrite CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          rewrite CHeapSpecM.wp_demonic_pattern_match. cbn.
           apply Hk; cbn; rewrite ?inst_sub_id; auto.
           hnf. unfold record_pattern_match_val.
           rewrite recordv_unfold_fold. symmetry.
           apply inst_record_pattern_match.
-        + apply refine_demonic_newpattern_match'; auto.
+        + apply refine_demonic_pattern_match'; auto.
       - intros t v ->.
         intros k k__c Hk.
         destruct (term_get_union_spec t) as [[K scr'] Heq|]; subst.
@@ -1536,61 +1486,11 @@ Module Soundness
                         (fun pc => k__c (existT K pc))).
           eapply H0 in Hwp; eauto.
           revert Hwp.
-          rewrite ?CHeapSpecM.wp_demonic_newpattern_match. cbn.
+          rewrite ?CHeapSpecM.wp_demonic_pattern_match. cbn.
           rewrite Heq. rewrite unionv_unfold_fold.
-          now destruct newpattern_match_val; cbn.
+          now destruct pattern_match_val; cbn.
           intros pc. apply (Hk (existT K pc)).
-        + apply refine_demonic_newpattern_match'; auto.
-    Qed.
-
-    Lemma refine_demonic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty}
-          {p : Pattern Δ σ} {Γ}
-      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.demonic_match_pattern N n σ Δ p Γ w) (@CHeapSpecM.demonic_match_pattern N σ Δ p Γ).
-    Proof.
-      intros t v ->.
-      intros k k__c Hk.
-      unfold SHeapSpecM.demonic_match_pattern, CHeapSpecM.demonic_match_pattern.
-      apply refine_bind; try (apply refine_demonic_ctx; assumption); try assumption.
-      intros w1 r01 ι1 -> Hpc1.
-      intros ts vs Htvs.
-      hnf in Htvs. subst vs.
-      apply refine_bind.
-      - apply refine_assume_formula; try assumption. cbn - [Val].
-        now rewrite inst_pattern_match_env_reverse, <- inst_persist.
-      - intros w2 r12 ι2 -> Hpc2 _ _ _.
-        apply refine_pure; try assumption.
-        now rewrite <- inst_persist.
-    Qed.
-
-    Lemma refine_demonic_match_union {N : Set} (n : N -> LVar) {AT A} `{Refine AT A} {Γ1 Γ2 : PCtx} {U : unioni}
-      {Δ : unionk U -> NCtx N Ty} {p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)}
-      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.demonic_match_union N n AT Γ1 Γ2 U Δ p w) (@CHeapSpecM.demonic_match_union N A Γ1 Γ2 U Δ p).
-    Proof.
-      intros t v ->.
-      intros k k__c Hk.
-      unfold SHeapSpecM.demonic_match_union, CHeapSpecM.demonic_match_union.
-      apply refine_bind; try (apply refine_demonic_finite; assumption).
-      intros w1 r01 ι1 -> Hpc1.
-      intros v1 vc1 ->.
-      apply refine_bind; try (apply refine_demonic; assumption).
-      intros w2 r12 ι2 -> Hpc2.
-      intros v2 vc2 ->.
-      apply refine_bind.
-      - apply refine_assume_formula; try assumption. cbn - [Val].
-        change (inst v1 _) with v1.
-        change (inst_term ?t ?ι) with (inst t ι).
-        rewrite (inst_persist (AT := STerm _) (A := Val _)).
-        now rewrite sub_acc_trans, inst_subst.
-      - intros w3 r23 ι3 -> Hpc3 _ _ _.
-        apply refine_bind.
-        + apply refine_demonic_match_pattern; try assumption.
-          now rewrite <- inst_persist.
-        + change (inst v1 _) with v1.
-          specialize (Hk v1).
-          eapply (refine_four Hk).
-          now rewrite ?sub_acc_trans, ?inst_subst.
+        + apply refine_demonic_pattern_match'; auto.
     Qed.
 
     Lemma refine_demonic_match_bvec' {AT A} `{Refine AT A} {n : nat} {Γ1 Γ2 : PCtx}
@@ -1817,7 +1717,7 @@ Module Soundness
       now apply refine_produce_chunk.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
-      apply refine_demonic_newpattern_match; eauto.
+      apply refine_demonic_pattern_match; eauto.
       intros pc.
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs ->.
@@ -2109,7 +2009,7 @@ Module Soundness
       now apply refine_consume_chunk_angelic.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
-      apply refine_angelic_newpattern_match; eauto.
+      apply refine_angelic_pattern_match; eauto.
       intros pc.
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs ->.
@@ -2302,18 +2202,8 @@ Module Soundness
     - apply refine_bind; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      apply refine_demonic_newpattern_match; auto.
+      apply refine_demonic_pattern_match; auto.
       intros pc w2 r12 ι2 -> Hpc2.
-      intros ts vs Htvs.
-      apply refine_pushspops; auto.
-    - apply refine_bind; auto.
-      intros POST__s POST__c HPOST.
-      apply refine_eval_exp; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      apply refine_demonic_match_union; auto.
-      intros UK.
-      intros w2 ω12 ι2 -> Hpc2.
       intros ts vs Htvs.
       apply refine_pushspops; auto.
     - apply refine_bind; auto.

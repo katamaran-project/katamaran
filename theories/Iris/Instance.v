@@ -243,25 +243,6 @@ Section Soundness.
     by iApply semWP_fail.
   Qed.
 
-  Lemma iris_rule_stm_match_union {Γ} (δ : CStore Γ)
-        {U : unioni} (e : Exp Γ (ty.union U)) {τ : Ty}
-        (alt__Δ : forall (K : unionk U), PCtx)
-        (alt__p : forall (K : unionk U), Pattern (alt__Δ K) (unionk_ty U K))
-        (alt__r : forall (K : unionk U), Stm (Γ ▻▻ alt__Δ K) τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ ((∀ (K : unionk U) (v : Val (unionk_ty U K)),
-               ⌜eval e δ = unionv_fold U (existT K v)⌝ →
-               semTriple (env.cat δ (pattern_match_val (alt__p K) v)) P (alt__r K) (fun v δ' => Q v (env.drop (alt__Δ K) δ'))) -∗
-               semTriple δ P (stm_match_union U e alt__p alt__r) Q
-          )%I.
-  Proof.
-    iIntros "tripunion P".
-    iApply semWP_match_union.
-    destruct unionv_unfold eqn:?.
-    iApply "tripunion"; [|easy].
-    now rewrite <- Heqs, unionv_fold_unfold.
-  Qed.
-
   Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
         ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v))%I.
@@ -702,27 +683,27 @@ Module IrisInstanceWithContracts
     by iApply lemSem.
   Qed.
 
-  Lemma iris_rule_stm_newpattern_match {Γ τ σ} (δΓ : CStore Γ)
-    (s : Stm Γ σ) (pat : PatternShape σ)
+  Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
+    (s : Stm Γ σ) (pat : Pattern σ)
     (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
     (P : iProp Σ) (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
     ⊢ semTriple δΓ P s Q -∗
       (∀ pc δpc δΓ1,
-         semTriple (δΓ1 ►► δpc) (Q (newpattern_match_val_reverse pat pc δpc) δΓ1) (rhs pc)
+         semTriple (δΓ1 ►► δpc) (Q (pattern_match_val_reverse pat pc δpc) δΓ1) (rhs pc)
            (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))) -∗
-      semTriple δΓ P (stm_newpattern_match s pat rhs) R.
+      semTriple δΓ P (stm_pattern_match s pat rhs) R.
   Proof.
     iIntros "WPs WPrhs P".
     iSpecialize ("WPs" with "P").
-    iApply semWP_newpattern_match.
+    iApply semWP_pattern_match.
     iApply (semWP_mono with "WPs").
     iIntros (vσ δΓ') "Q".
-    destruct newpattern_match_val as [pc δpc] eqn:Heq.
+    destruct pattern_match_val as [pc δpc] eqn:Heq.
     iApply "WPrhs".
-    change (newpattern_match_val_reverse pat pc δpc) with
-      (newpattern_match_val_reverse' pat (existT pc δpc)).
+    change (pattern_match_val_reverse pat pc δpc) with
+      (pattern_match_val_reverse' pat (existT pc δpc)).
     rewrite <- Heq.
-    now rewrite newpattern_match_val_inverse_left.
+    now rewrite pattern_match_val_inverse_left.
   Qed.
 
   Lemma sound_stm
@@ -735,7 +716,7 @@ Module IrisInstanceWithContracts
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -749,7 +730,6 @@ Module IrisInstanceWithContracts
     - by iApply iris_rule_stm_seq.
     - by iApply iris_rule_stm_assertk.
     - by iApply iris_rule_stm_fail.
-    - by iApply iris_rule_stm_match_union.
     - by iApply iris_rule_stm_read_register.
     - by iApply iris_rule_stm_write_register.
     - by iApply iris_rule_stm_assign.
@@ -760,7 +740,7 @@ Module IrisInstanceWithContracts
     - by iApply iris_rule_stm_lemmak.
     - by iApply iris_rule_stm_bind.
     - by iApply iris_rule_stm_debugk.
-    - by iApply iris_rule_stm_newpattern_match.
+    - by iApply iris_rule_stm_pattern_match.
   Qed.
 
   Lemma sound :

@@ -698,31 +698,6 @@ Module IrisInstanceWithContracts
     - by iApply semWP_fail.
   Qed.
 
-  Lemma rule_match_union {Γ τ U} (e : Exp Γ (ty.union U))
-    (alt__ctx : unionk U → PCtx)
-    (alt__pat : ∀ K : unionk U, Pattern (alt__ctx K) (unionk_ty U K))
-    (alt__rhs : ∀ K : unionk U, Stm (Γ ▻▻ alt__ctx K) τ) :
-    ⊢ semWP' (stm_match_union U e alt__pat alt__rhs) ≼
-      semWP (stm_match_union U e alt__pat alt__rhs).
-  Proof.
-    iIntros (POST δ) "WPs". unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ ns ks1 ks nt) "state_inv".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 σ' efs) "%".
-    dependent elimination H.
-    fold_semWP.
-    dependent elimination s.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame; iSplitL; auto.
-    unfold semWP'; cbn.
-    destruct unionv_unfold.
-    by iApply rule_block.
-  Qed.
-
   Lemma rule_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
     ⊢ semWP' (Γ := Γ) (stm_read_register reg) ≼ semWP (stm_read_register reg).
   Proof.
@@ -778,9 +753,9 @@ Module IrisInstanceWithContracts
     iModIntro; by iFrame.
   Qed.
 
-  Lemma rule_newpattern_match {Γ τ σ} (s : Stm Γ σ) (pat : PatternShape σ)
+  Lemma rule_pattern_match {Γ τ σ} (s : Stm Γ σ) (pat : Pattern σ)
     (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
-    ⊢ semWP' (stm_newpattern_match s pat rhs) ≼ semWP (stm_newpattern_match s pat rhs).
+    ⊢ semWP' (stm_pattern_match s pat rhs) ≼ semWP (stm_pattern_match s pat rhs).
   Proof.
     iIntros (POST δ) "WPs". unfold semWP. rewrite wp_unfold. cbn.
     iIntros (? ns ks1 ks nt) "state_inv".
@@ -800,7 +775,7 @@ Module IrisInstanceWithContracts
     iApply (semWP_mono with "WPs"); cbn.
     clear - sG.
     iIntros (v δ) "WPrhs".
-    destruct newpattern_match_val.
+    destruct pattern_match_val.
     iApply rule_block; unfold semWP'; cbn.
     iApply (semWP_mono with "WPrhs").
     iIntros (v0 δ0); auto.
@@ -824,8 +799,7 @@ Module IrisInstanceWithContracts
     - apply rule_seq.
     - apply rule_assertk.
     - apply rule_fail.
-    - apply rule_newpattern_match.
-    - apply rule_match_union.
+    - apply rule_pattern_match.
     - apply rule_read_register.
     - apply rule_write_register.
     - apply rule_bind.

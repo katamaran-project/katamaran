@@ -64,23 +64,6 @@ Module Type BaseMixin (Import TY : Types).
   Section PatternMatching.
     Context {N : Set}.
 
-    Definition pattern_match_env_reverse {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
-      NamedEnv (Term Σ) Δ -> Term Σ σ :=
-      match p with
-      | pat_var x          => fun Ex => match env.snocView Ex with env.isSnoc _ t => t end
-      | pat_unit           => fun _ => term_val ty.unit tt
-      | pat_pair x y       => fun Exy =>
-                                let (Ex,ty) := env.snocView Exy in
-                                let (E,tx)  := env.snocView Ex in
-                                term_binop bop.pair tx ty
-      | pat_tuple p        => fun EΔ => term_tuple (tuple_pattern_match_env_reverse p EΔ)
-      | pat_record p       => fun EΔ => term_record _ (record_pattern_match_env_reverse p EΔ)
-      | pat_bvec_split x y => fun Exy =>
-                                let (Ex,ty) := env.snocView Exy in
-                                let (E,tx)  := env.snocView Ex in
-                                term_binop bop.bvapp tx ty
-      end.
-
     Lemma inst_tuple_pattern_match {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty}
       (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : Env (Term Σ) σs) :
       inst (tuple_pattern_match_env p ts) ι =
@@ -129,32 +112,14 @@ Module Type BaseMixin (Import TY : Types).
         f_equal. apply IHp.
     Qed.
 
-    Lemma inst_pattern_match_env_reverse {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty}
-          (ι : Valuation Σ) (p : Pattern Δ σ) (ts : NamedEnv (Term Σ) Δ) :
-      inst (Inst := inst_term) (pattern_match_env_reverse p ts) ι =
-      pattern_match_env_val_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
-    Proof.
-      induction p.
-      - now destruct (env.snocView ts).
-      - reflexivity.
-      - destruct (env.snocView ts).
-        now destruct (env.snocView E); cbn.
-      - cbn - [Val].
-        now rewrite inst_term_tuple, inst_tuple_pattern_match_reverse.
-      - cbn.
-        f_equal.
-        apply inst_record_pattern_match_reverse.
-      - cbn. now destruct env.snocView, env.snocView.
-    Qed.
-
-    Fixpoint newpattern_match_term_reverse {Σ σ} (pat : @PatternShape N σ) :
+    Fixpoint pattern_match_term_reverse {Σ σ} (pat : @Pattern N σ) :
       forall (pc : PatternCase pat), NamedEnv (Term Σ) (PatternCaseCtx pc) -> Term Σ σ :=
       match pat with
-      | pat_shape_var x =>
+      | pat_var x =>
           fun _ ts => env.head ts
-      | pat_shape_bool =>
+      | pat_bool =>
           fun b _ => term_val ty.bool b
-      | pat_shape_list σ x y =>
+      | pat_list σ x y =>
           fun b =>
             match b with
             | true => fun _ => term_val (ty.list σ) nil
@@ -163,40 +128,40 @@ Module Type BaseMixin (Import TY : Types).
                          let (E,h)  := env.snocView Eh in
                          term_binop bop.cons h t
             end
-      | pat_shape_prod x y =>
+      | pat_pair x y =>
           fun _ Exy =>
             let (Ex,vτ) := env.snocView Exy in
             let (E,vσ)  := env.snocView Ex in
             term_binop bop.pair vσ vτ
-      | pat_shape_sum σ0 τ x y =>
+      | pat_sum σ0 τ x y =>
           fun b =>
             match b with
             | true => fun ts => term_inl (env.head ts)
             | false => fun ts => term_inr (env.head ts)
             end
-      | pat_shape_unit =>
+      | pat_unit =>
           fun pc _ => term_val ty.unit pc
-      | pat_shape_enum E =>
+      | pat_enum E =>
           fun v _ => term_val (ty.enum E) v
-      | pat_shape_bvec_split m n x y =>
+      | pat_bvec_split m n x y =>
           fun _ Exy =>
             let (Ex,vr) := env.snocView Exy in
             let (E,vl)  := env.snocView Ex in
             term_binop bop.bvapp vl vr
-      | pat_shape_bvec_exhaustive m =>
+      | pat_bvec_exhaustive m =>
           fun v _ => term_val (ty.bvec m) v
-      | pat_shape_tuple p =>
+      | pat_tuple p =>
           fun _ ts => term_tuple (tuple_pattern_match_env_reverse p ts)
-      | pat_shape_record R Δ p =>
+      | pat_record R Δ p =>
           fun _ ts => term_record R (record_pattern_match_env_reverse p ts)
-      | pat_shape_union U x =>
-          fun '(K;pc) ts => term_union U K (newpattern_match_term_reverse (x K) pc ts)
+      | pat_union U x =>
+          fun '(K;pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts)
       end.
 
-    Lemma inst_newpattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : @PatternShape N σ) :
+    Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : @Pattern N σ) :
       forall (pc : PatternCase pat) (ts : NamedEnv (Term Σ) (PatternCaseCtx pc)),
-        inst (newpattern_match_term_reverse pat pc ts) ι =
-        newpattern_match_val_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι).
+        inst (pattern_match_term_reverse pat pc ts) ι =
+        pattern_match_val_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι).
     Proof.
       induction pat; cbn.
       - intros _ ts. now env.destroy ts.

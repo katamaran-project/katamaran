@@ -720,55 +720,55 @@ Section FunDefKit.
         (fun K =>
            match K with
            | kjalr_cap      => MkAlt (pat_pair "cd" "cs")
-                                     (call exec_jalr_cap (exp_var "cd") (exp_var "cs"))
+                                     (call exec_jalr_cap (exp_var "cd") (exp_var "cs"))%exp
            | kcjalr         => MkAlt (pat_tuple ("cd" , "cs" , "imm"))
-                                     (call exec_cjalr (exp_var "cd") (exp_var "cs") (exp_var "imm"))
+                                     (call exec_cjalr (exp_var "cd") (exp_var "cs") (exp_var "imm"))%exp
            | kcjal          => MkAlt (pat_pair "cd" "imm")
-                                     (call exec_cjal (exp_var "cd") (exp_var "imm"))
+                                     (call exec_cjal (exp_var "cd") (exp_var "imm"))%exp
            | kbne           => MkAlt (pat_tuple ("rs1" , "rs2" , "imm"))
-                                     (call exec_bne (exp_var "rs1") (exp_var "rs2") (exp_var "imm"))
+                                     (call exec_bne (exp_var "rs1") (exp_var "rs2") (exp_var "imm"))%exp
            | kcmove         => MkAlt (pat_pair "cd" "cs")
-                                     (call exec_cmove (exp_var "cd") (exp_var "cs"))
+                                     (call exec_cmove (exp_var "cd") (exp_var "cs"))%exp
            | kld            => MkAlt (pat_tuple ("cd" , "cs" , "imm"))
-                                     (call exec_ld (exp_var "cd") (exp_var "cs") (exp_var "imm"))
+                                     (call exec_ld (exp_var "cd") (exp_var "cs") (exp_var "imm"))%exp
            | ksd            => MkAlt (pat_tuple ("rs1" , "rs2" , "imm"))
-                                     (call exec_sd (exp_var "rs1") (exp_var "rs2") (exp_var "imm"))
+                                     (call exec_sd (exp_var "rs1") (exp_var "rs2") (exp_var "imm"))%exp
            | kcincoffset    => MkAlt (pat_tuple ("cd" , "cs" , "rs"))
-                                     (call exec_cincoffset (exp_var "cd") (exp_var "cs") (exp_var "rs"))
+                                     (call exec_cincoffset (exp_var "cd") (exp_var "cs") (exp_var "rs"))%exp
            | kcandperm      => MkAlt (pat_tuple ("cd" , "cs" , "rs"))
-                                     (call exec_candperm (exp_var "cd") (exp_var "cs") (exp_var "rs"))
+                                     (call exec_candperm (exp_var "cd") (exp_var "cs") (exp_var "rs"))%exp
            | kcsetbounds    => MkAlt (pat_tuple ("cd" , "cs" , "rs"))
-                                     (call exec_csetbounds (exp_var "cd") (exp_var "cs") (exp_var "rs"))
+                                     (call exec_csetbounds (exp_var "cd") (exp_var "cs") (exp_var "rs"))%exp
            | kcsetboundsimm => MkAlt (pat_tuple ("cd" , "cs" , "imm"))
-                                     (call exec_csetboundsimm (exp_var "cd") (exp_var "cs") (exp_var "imm"))
+                                     (call exec_csetboundsimm (exp_var "cd") (exp_var "cs") (exp_var "imm"))%exp
            | kaddi          => MkAlt (pat_tuple ("rd" , "rs" , "imm"))
-                                     (call exec_addi (exp_var "rd") (exp_var "rs") (exp_var "imm"))
+                                     (call exec_addi (exp_var "rd") (exp_var "rs") (exp_var "imm"))%exp
            | kadd           => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
-                                     (call exec_add (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))
+                                     (call exec_add (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))%exp
            | ksub           => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
-                                     (call exec_sub (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))
+                                     (call exec_sub (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))%exp
            | kslt           => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
-                                     (call exec_slt (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))
+                                     (call exec_slt (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))%exp
            | kslti          => MkAlt (pat_tuple ("rd" , "rs" , "imm"))
-                                     (call exec_slti (exp_var "rd") (exp_var "rs") (exp_var "imm"))
+                                     (call exec_slti (exp_var "rd") (exp_var "rs") (exp_var "imm"))%exp
            | ksltu          => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
-                                     (call exec_sltu (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))
+                                     (call exec_sltu (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))%exp
            | ksltiu         => MkAlt (pat_tuple ("rd" , "rs" , "imm"))
-                                     (call exec_sltiu (exp_var "rd") (exp_var "rs") (exp_var "imm"))
+                                     (call exec_sltiu (exp_var "rd") (exp_var "rs") (exp_var "imm"))%exp
            | kcgettag       => MkAlt (pat_pair "rd" "cs")
-                                     (call exec_cgettag (exp_var "rd") (exp_var "cs"))
+                                     (call exec_cgettag (exp_var "rd") (exp_var "cs"))%exp
            | kcgetperm      => MkAlt (pat_pair "rd" "cs")
-                                     (call exec_cgetperm (exp_var "rd") (exp_var "cs"))
+                                     (call exec_cgetperm (exp_var "rd") (exp_var "cs"))%exp
            | kcgetbase      => MkAlt (pat_pair "rd" "cs")
-                                     (call exec_cgetbase (exp_var "rd") (exp_var "cs"))
+                                     (call exec_cgetbase (exp_var "rd") (exp_var "cs"))%exp
            | kcgetlen       => MkAlt (pat_pair "rd" "cs")
-                                     (call exec_cgetlen (exp_var "rd") (exp_var "cs"))
+                                     (call exec_cgetlen (exp_var "rd") (exp_var "cs"))%exp
            | kcgetaddr      => MkAlt (pat_pair "rd" "cs")
-                                     (call exec_cgetaddr (exp_var "rd") (exp_var "cs"))
+                                     (call exec_cgetaddr (exp_var "rd") (exp_var "cs"))%exp
            | kfail          => MkAlt pat_unit
-                                     (call exec_fail)
+                                     (call exec_fail)%exp
            | kret           => MkAlt pat_unit
-                                     (call exec_ret)
+                                     (call exec_ret)%exp
            end).
 
     Definition fun_read_mem : Stm ["c" ∷ ty.cap] ty.memval :=

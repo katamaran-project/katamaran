@@ -96,8 +96,8 @@ Module Type Soundness
           intuition.
         - now apply consume_chunk_monotonic.
         - now apply consume_chunk_monotonic.
-        - rewrite !wp_angelic_newpattern_match.
-          destruct newpattern_match_val. now apply H.
+        - rewrite !wp_angelic_pattern_match.
+          destruct pattern_match_val. now apply H.
         - unfold bind.
           apply IHasn1; eauto.
         - intros [|].
@@ -116,8 +116,8 @@ Module Type Soundness
           intuition.
         - unfold produce_chunk; eauto.
         - unfold produce_chunk; eauto.
-        - rewrite !wp_demonic_newpattern_match.
-          destruct newpattern_match_val. now apply H.
+        - rewrite !wp_demonic_pattern_match.
+          destruct pattern_match_val. now apply H.
         - unfold bind.
           apply IHasn1; eauto.
         - intros [Hasn1 Hasn2].
@@ -189,10 +189,7 @@ Module Type Soundness
           apply IHs; auto.
         - auto.
         - apply IHs. intros ? ? ?.
-          rewrite !wp_demonic_newpattern_match.
-          apply H; auto.
-        - rewrite !wp_demonic_match_union.
-          destruct (unionv_unfold U (eval e δ)).
+          rewrite !wp_demonic_pattern_match.
           apply H; auto.
         - intros [v Hwp]; exists v; revert Hwp.
           apply consume_chunk_monotonic. auto.
@@ -320,8 +317,8 @@ Module Type Soundness
         now rewrite interpret_scchunk_inst in Hc.
       - intros Hc%consume_chunk_sound.
         now rewrite interpret_scchunk_inst in Hc.
-      - rewrite wp_angelic_newpattern_match.
-        destruct newpattern_match_val; auto.
+      - rewrite wp_angelic_pattern_match.
+        destruct pattern_match_val; auto.
       - unfold bind. intros Hwp. rewrite <- lsep_assoc.
         apply (IHasn1 ι (fun δ => asn.interpret asn2 ι ∗ POST δ) δ1 h1); clear IHasn1.
         revert Hwp. apply consume_monotonic. intros _ h2.
@@ -355,8 +352,8 @@ Module Type Soundness
       - rewrite lsep_comm.
         unfold produce_chunk, liftP; cbn.
         now rewrite interpret_scchunk_inst.
-      - rewrite wp_demonic_newpattern_match.
-        destruct newpattern_match_val; auto.
+      - rewrite wp_demonic_pattern_match.
+        destruct pattern_match_val; auto.
       - unfold bind. intros Hwp.
         rewrite lsep_assoc.
         apply lwand_sep_adjoint.
@@ -542,16 +539,16 @@ Module Type Soundness
           (rule_consequence_left
              (WP s
                 (fun (vσ : Val σ) (δ2 : CStore Γ) =>
-                   let 'existT pc δpc := newpattern_match_val pat vσ in
+                   let 'existT pc δpc := pattern_match_val pat vσ in
                    WP (rhs pc)
                      (fun vτ δ3  => POST vτ (env.drop (PatternCaseCtx pc) δ3))
                      (δ2 ►► δpc))
                 δ1)).
-        + eapply rule_stm_newpattern_match.
+        + eapply rule_stm_pattern_match.
           apply rule_wp. intros.
           eapply rule_consequence_left.
           apply rule_wp.
-          now rewrite newpattern_match_val_inverse_right.
+          now rewrite pattern_match_val_inverse_right.
         + apply lex_right with (interpret_scheap h1).
           apply land_right.
           reflexivity.
@@ -559,19 +556,13 @@ Module Type Soundness
           apply IHs; clear IHs.
           revert HYP. apply exec_aux_monotonic; auto.
           intros v2 δ2 h2 HYP; cbn.
-          rewrite wp_demonic_newpattern_match in HYP.
-          destruct newpattern_match_val. cbn in HYP.
+          rewrite wp_demonic_pattern_match in HYP.
+          destruct pattern_match_val. cbn in HYP.
           apply lex_right with (interpret_scheap h2).
           apply land_right.
           reflexivity.
           apply lprop_right.
           now apply H.
-
-      - (* stm_match_union *)
-        rewrite wp_demonic_match_union in HYP.
-        apply rule_stm_match_union; cbn; intros * Heval;
-          rewrite Heval, unionv_unfold_fold in HYP.
-        now apply H.
 
       - (* stm_read_register *)
         destruct HYP as [v HYP].
