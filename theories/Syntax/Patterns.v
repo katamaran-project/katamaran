@@ -493,6 +493,57 @@ Module Type PatternsOn (Import TY : Types).
         now rewrite <- Heq, H.
     Qed.
 
+    Section NewAlternative.
+      Context {R : NCtx N Ty -> Set} {Γ : NCtx N Ty}.
+
+      Fixpoint PatternCaseCurried {σ} (pat : PatternShape σ) : Set :=
+        match pat with
+        | @pat_shape_var x σ => R (Γ ▻ x∷σ)
+        | pat_shape_bool => bool -> R Γ
+        | pat_shape_list σ0 x y => (R Γ * R (Γ ▻ x∷σ0 ▻ y∷ty.list σ0))%type
+        | @pat_shape_prod x y σl σr => R (Γ ▻ x∷σl ▻ y∷σr)
+        | pat_shape_sum σ0 τ0 x y => (R (Γ ▻ x∷σ0) * R (Γ ▻ y∷τ0))%type
+        | pat_shape_unit => R Γ
+        | pat_shape_enum E => enumt E -> R Γ
+        | pat_shape_bvec_split m n x y => R (Γ ▻ x∷ty.bvec m ▻ y∷ty.bvec n)
+        | pat_shape_bvec_exhaustive m => bv m -> R Γ
+        | @pat_shape_tuple _ Δ _ => R (Γ ▻▻ Δ)
+        | pat_shape_record _ Δ _ => R (Γ ▻▻ Δ)
+        | pat_shape_union U p => forall K : unionk U, PatternCaseCurried (p K)
+        end.
+
+      Fixpoint of_pattern_case_curried {σ} (pat : PatternShape σ) {struct pat} :
+        PatternCaseCurried pat -> forall pc : PatternCase pat, R (Γ ▻▻ PatternCaseCtx pc) :=
+        match pat with
+        | pat_shape_var x => fun rhs _ => rhs
+        | pat_shape_bool => fun rhs => rhs
+        | pat_shape_list σ0 x y => fun '(a,b) pc =>
+                                     match pc with true => a | false => b end
+        | pat_shape_prod x y => fun rhs _ => rhs
+        | pat_shape_sum _ _ x y => fun '(a,b) pc =>
+                                     match pc with | true => a | false => b end
+        | pat_shape_unit => fun rhs _ => rhs
+        | pat_shape_enum E => fun rhs => rhs
+        | pat_shape_bvec_split m n x y => fun rhs _ => rhs
+        | pat_shape_bvec_exhaustive m => fun rhs => rhs
+        | @pat_shape_tuple _ Δ _ => fun rhs _ => rhs
+        | pat_shape_record _ Δ _ => fun rhs _ => rhs
+        | pat_shape_union U p0 => fun rhs '(existT K pc) =>
+                                    of_pattern_case_curried (p0 K) (rhs K) pc
+        end.
+
+      Record NewAlternative (σ : Ty) : Set :=
+        MkNewAlt
+          { newalt_pat : PatternShape σ;
+            newalt_rhs : PatternCaseCurried newalt_pat;
+          }.
+
+    End NewAlternative.
+    #[global] Arguments NewAlternative : clear implicits.
+    #[global] Arguments MkNewAlt {R Γ σ} _ & _.
+    #[global] Arguments newalt_pat {R Γ σ} _.
+    #[global] Arguments newalt_rhs {R Γ σ} _.
+
   End Patterns.
 
   Bind Scope pat_scope with TuplePat.
