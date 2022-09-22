@@ -476,19 +476,29 @@ Import BlockVerificationDerived2.
     - exact sat__femtohandler.
     Unshelve.
     exact (env.snoc env.nil (_::ty_exc_code) epc).
-    - iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hnpc & Hhandler)".
+    - cbv [asn.interpret femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
+           Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
+           Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst inst_formula
+           inst_term env.lookup ctx.snocView ctx.in_at ctx.in_valid inst_env
+           env.map].
+      iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hnpc & Hhandler)".
       cbn.
       iFrame.
       now iFrame.
-    - iIntros (an) "(Hpc & Hnpc & Hhandler & (Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo & %eq & _)))".
+    - cbv [asn.interpret femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
+           Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
+           Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst inst_formula
+           inst_term env.lookup ctx.snocView ctx.in_at ctx.in_valid inst_env
+           env.map femto_handler_post femtokernel_handler_post].
+      iIntros (an) "(Hpc & Hnpc & Hhandler & (Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo & %eq & _)))".
       cbn.
       iApply "Hk".
-      unfold femto_handler_post.
       cbn in eq; destruct eq.
       now iFrame.
   Qed.
 
   Transparent femtokernel_handler_pre.
+  Opaque interp_pmp_entries.
 
   Lemma femtokernel_hander_safe `{sailGS Σ} {mepcv}:
     ⊢ mstatus ↦ {| MPP := User |} ∗
@@ -520,7 +530,7 @@ Import BlockVerificationDerived2.
     - iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmpentries & Hfortytwo & Hpc & Hnextpc & Hinstrs)".
       iApply LoopVerification.valid_semTriple_loop.
       iSplitL "Hmem Hnextpc Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7 Hpmpentries Hpc".
-      + unfold LoopVerification.Execution.
+      + unfold LoopVerification.Step_pre. cbn.
         iFrame.
         unfold interp_gprs; cbn -[interp_pmp_entries].
         rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
@@ -678,6 +688,7 @@ Import BlockVerificationDerived2.
 
   (* see above *)
   Transparent femtokernel_init_pre.
+  Transparent interp_pmp_entries.
 
   Lemma femtokernel_init_safe `{sailGS Σ} :
     ⊢ (∃ v, mstatus ↦ v) ∗
