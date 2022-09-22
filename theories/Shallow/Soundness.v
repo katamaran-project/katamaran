@@ -98,17 +98,6 @@ Module Type Soundness
         - now apply consume_chunk_monotonic.
         - rewrite !wp_angelic_newpattern_match.
           destruct newpattern_match_val. now apply H.
-        - rewrite !wp_angelic_match_enum; eauto.
-        - rewrite !wp_angelic_match_sum.
-          destruct (inst s ι); cbn; eauto.
-        - rewrite !wp_angelic_match_list.
-          destruct (inst s ι); cbn; eauto.
-        - rewrite !wp_angelic_match_prod.
-          destruct (inst s ι); cbn; eauto.
-        - rewrite !wp_angelic_match_tuple; eauto.
-        - rewrite !wp_angelic_match_record; eauto.
-        - rewrite !wp_angelic_match_union.
-          destruct (unionv_unfold U (inst s ι)); eauto.
         - unfold bind.
           apply IHasn1; eauto.
         - intros [|].
@@ -129,17 +118,6 @@ Module Type Soundness
         - unfold produce_chunk; eauto.
         - rewrite !wp_demonic_newpattern_match.
           destruct newpattern_match_val. now apply H.
-        - rewrite !wp_demonic_match_enum; eauto.
-        - rewrite !wp_demonic_match_sum.
-          destruct (inst s ι); cbn; eauto.
-        - rewrite !wp_demonic_match_list.
-          destruct (inst s ι); cbn; eauto.
-        - rewrite !wp_demonic_match_prod.
-          destruct (inst s ι); cbn; eauto.
-        - rewrite !wp_demonic_match_tuple; eauto.
-        - rewrite !wp_demonic_match_record; eauto.
-        - rewrite !wp_demonic_match_union.
-          destruct (unionv_unfold U (inst s ι)); eauto.
         - unfold bind.
           apply IHasn1; eauto.
         - intros [Hasn1 Hasn2].
@@ -344,17 +322,6 @@ Module Type Soundness
         now rewrite interpret_scchunk_inst in Hc.
       - rewrite wp_angelic_newpattern_match.
         destruct newpattern_match_val; auto.
-      - rewrite wp_angelic_match_enum; auto.
-      - rewrite wp_angelic_match_sum.
-        destruct (inst s ι); auto.
-      - rewrite wp_angelic_match_list.
-        destruct (inst s ι); auto.
-      - rewrite wp_angelic_match_prod.
-        destruct (inst s ι); auto.
-      - rewrite wp_angelic_match_tuple; auto.
-      - rewrite wp_angelic_match_record; auto.
-      - rewrite wp_angelic_match_union.
-        destruct (unionv_unfold U (inst s ι)); auto.
       - unfold bind. intros Hwp. rewrite <- lsep_assoc.
         apply (IHasn1 ι (fun δ => asn.interpret asn2 ι ∗ POST δ) δ1 h1); clear IHasn1.
         revert Hwp. apply consume_monotonic. intros _ h2.
@@ -390,17 +357,6 @@ Module Type Soundness
         now rewrite interpret_scchunk_inst.
       - rewrite wp_demonic_newpattern_match.
         destruct newpattern_match_val; auto.
-      - rewrite wp_demonic_match_enum; auto.
-      - rewrite wp_demonic_match_sum.
-        destruct (inst s ι); auto.
-      - rewrite wp_demonic_match_list.
-        destruct (inst s ι); auto.
-      - rewrite wp_demonic_match_prod.
-        destruct (inst s ι); auto.
-      - rewrite wp_demonic_match_tuple; auto.
-      - rewrite wp_demonic_match_record; auto.
-      - rewrite wp_demonic_match_union.
-        destruct (unionv_unfold U (inst s ι)); auto.
       - unfold bind. intros Hwp.
         rewrite lsep_assoc.
         apply lwand_sep_adjoint.

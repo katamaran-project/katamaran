@@ -197,35 +197,28 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
        sep_contract_result          := "result_process_load";
        sep_contract_postcondition   :=
          asn_gprs ∗
-         asn.match_union memory_op_result (term_var value)
-          (fun K => match K with
-                    | KMemValue     => [v :: ty_xlenbits]
-                    | KMemException => [e :: ty_exception_type]
-                    end)
-          (fun K => match K with
-                    | KMemValue     => pat_var v
-                    | KMemException => pat_var e
-                    end)
-          (fun K => match K with
-                    | KMemValue     =>
-                        term_var "result_process_load" = term_val ty_retired RETIRE_SUCCESS
-                        ∗ pc            ↦ term_var "i"
-                        ∗ nextpc        ↦ term_var "npc"
-                        ∗ cur_privilege ↦ term_var p
-                        ∗ mcause        ↦ term_var "mcause"
-                        ∗ mstatus       ↦ term_record rmstatus [ term_var "mpp" ]
-                        ∗ mtvec         ↦ term_var tvec
-                        ∗ mepc          ↦ term_var "mepc"
-                    | KMemException =>
-                        term_var "result_process_load" = term_val ty_retired RETIRE_FAIL
-                        ∗             pc            ↦ term_var "i"
-                        ∗             nextpc        ↦ term_var tvec
-                        ∗             cur_privilege ↦ term_val ty_privilege Machine
-                        ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-                        ∗             mstatus       ↦ term_record rmstatus [ term_var p ]
-                        ∗             mepc          ↦ term_var "i"
-                        ∗             mtvec         ↦ term_var tvec
-                    end);
+         asn.match_union_newalt memory_op_result (term_var value)
+          (fun K =>
+             match K with
+             | KMemValue     => MkNewAlt (pat_shape_var v)
+                                  (term_var "result_process_load" = term_val ty_retired RETIRE_SUCCESS
+                                   ∗ pc            ↦ term_var "i"
+                                   ∗ nextpc        ↦ term_var "npc"
+                                   ∗ cur_privilege ↦ term_var p
+                                   ∗ mcause        ↦ term_var "mcause"
+                                   ∗ mstatus       ↦ term_record rmstatus [ term_var "mpp" ]
+                                   ∗ mtvec         ↦ term_var tvec
+                                   ∗ mepc          ↦ term_var "mepc")
+             | KMemException => MkNewAlt (pat_shape_var e)
+                                  (term_var "result_process_load" = term_val ty_retired RETIRE_FAIL
+                                   ∗             pc            ↦ term_var "i"
+                                   ∗             nextpc        ↦ term_var tvec
+                                   ∗             cur_privilege ↦ term_val ty_privilege Machine
+                                   ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
+                                   ∗             mstatus       ↦ term_record rmstatus [ term_var p ]
+                                   ∗             mepc          ↦ term_var "i"
+                                   ∗             mtvec         ↦ term_var tvec)
+             end);
     |}.
 
   Definition sep_contract_readCSR : SepContractFun readCSR :=
@@ -401,31 +394,24 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
          ∗             mtvec         ↦ (term_var tvec)
          ∗             mepc          ↦ (term_var "mepc");
        sep_contract_result          := "result_exception_handler";
-       sep_contract_postcondition   := asn.match_union ctl_result (term_var ctl)
-        (fun K => match K with
-                | KCTL_TRAP => ctx.snoc ε (e ∷ ty_exception_type)
-                | KCTL_MRET => ε
-                end)
-        (fun K => match K with
-                | KCTL_TRAP => pat_var e
-                | KCTL_MRET => pat_unit
-                end)
-        (fun K => match K with
-                | KCTL_TRAP =>
-                    term_var "result_exception_handler" = term_var tvec
-                    ∗             cur_privilege ↦ term_val ty_privilege Machine
-                    ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-                    ∗             mstatus       ↦ term_record rmstatus [ term_var p ]
-                    ∗             mepc          ↦ term_var "pc"
-                    ∗             mtvec         ↦ term_var tvec
-                | KCTL_MRET =>
-                    term_var "result_exception_handler" = term_var "mepc"
-                    ∗             cur_privilege ↦ term_var "mpp"
-                    ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-                    ∗             mstatus       ↦ term_record rmstatus [ term_val ty_privilege User ]
-                    ∗             mtvec         ↦ term_var tvec
-                    ∗             mepc          ↦ term_var "mepc"
-                end);
+       sep_contract_postcondition   :=
+        asn.match_union_newalt ctl_result (term_var ctl)
+          (fun K => match K with
+                    | KCTL_TRAP => MkNewAlt (pat_shape_var e)
+                                     (term_var "result_exception_handler" = term_var tvec
+                                      ∗             cur_privilege ↦ term_val ty_privilege Machine
+                                      ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
+                                      ∗             mstatus       ↦ term_record rmstatus [ term_var p ]
+                                      ∗             mepc          ↦ term_var "pc"
+                                      ∗             mtvec         ↦ term_var tvec)
+                    | KCTL_MRET => MkNewAlt pat_shape_unit
+                                     (term_var "result_exception_handler" = term_var "mepc"
+                                      ∗             cur_privilege ↦ term_var "mpp"
+                                      ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
+                                      ∗             mstatus       ↦ term_record rmstatus [ term_val ty_privilege User ]
+                                      ∗             mtvec         ↦ term_var tvec
+                                      ∗             mepc          ↦ term_var "mepc")
+                    end);
     |}.
 
   Definition sep_contract_handle_illegal : SepContractFun handle_illegal :=

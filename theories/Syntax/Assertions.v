@@ -58,43 +58,52 @@ Module Import asn.
   | chunk_angelic (c : Chunk Σ)
   | newpattern_match {σ} (s : Term Σ σ) (pat : PatternShape σ)
       (rhs : forall (pc : PatternCase pat), Assertion (Σ ▻▻ PatternCaseCtx pc))
-  | match_enum (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ)
-  | match_sum (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : LVar)
-      (alt_inl : Assertion (Σ ▻ xl∷σ)) (xr : LVar) (alt_inr : Assertion (Σ ▻ xr∷τ))
-  | match_list
-      {σ : Ty} (s : Term Σ (ty.list σ)) (alt_nil : Assertion Σ) (xh xt : LVar)
-      (alt_cons : Assertion (Σ ▻ xh∷σ ▻ xt∷ty.list σ))
-  | match_prod
-      {σ1 σ2 : Ty} (s : Term Σ (ty.prod σ1 σ2))
-      (xl xr : LVar) (rhs : Assertion (Σ ▻ xl∷σ1 ▻ xr∷σ2))
-  | match_tuple
-      {σs : Ctx Ty} {Δ : LCtx} (s : Term Σ (ty.tuple σs))
-      (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ))
-  | match_record
-      {R : recordi} {Δ : LCtx} (s : Term Σ (ty.record R))
-      (p : RecordPat (recordf_ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ))
-  | match_union
-      {U : unioni} (s : Term Σ (ty.union U))
-      (alt__ctx : forall (K : unionk U), LCtx)
-      (alt__pat : forall (K : unionk U), Pattern (alt__ctx K) (unionk_ty U K))
-      (alt__rhs : forall (K : unionk U), Assertion (Σ ▻▻ alt__ctx K))
   | sep  (A1 A2 : Assertion Σ)
   | or   (A1 A2 : Assertion Σ)
   | exist (ς : LVar) (τ : Ty) (a : Assertion (Σ ▻ ς∷τ))
   | debug.
 
+  Definition match_bool {Σ} (b : Term Σ ty.bool) (A1 A2 : Assertion Σ) : Assertion Σ :=
+    newpattern_match b pat_shape_bool (fun v => if v then A1 else A2).
+  Definition match_enum {Σ} (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ) : Assertion Σ :=
+    newpattern_match k (pat_shape_enum E) alts.
+  Definition match_sum {Σ} (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : LVar)
+    (al : Assertion (Σ ▻ xl∷σ)) (xr : LVar) (ar : Assertion (Σ ▻ xr∷τ)) :
+    Assertion Σ :=
+    newpattern_match s (pat_shape_sum _ _ xl xr)
+      (fun b => match b with true => al | false => ar end).
+  Definition match_list {Σ σ} (s : Term Σ (ty.list σ)) (anil : Assertion Σ)
+    (xh xt : LVar) (acons : Assertion (Σ ▻ xh∷σ ▻ xt∷ty.list σ)) : Assertion Σ :=
+    newpattern_match s (pat_shape_list σ xh xt)
+      (fun b => match b with true => anil | false => acons end).
+  Definition match_prod {Σ σ1 σ2} (s : Term Σ (ty.prod σ1 σ2)) (xl xr : LVar)
+    (rhs : Assertion (Σ ▻ xl∷σ1 ▻ xr∷σ2)) : Assertion Σ :=
+    newpattern_match s (pat_shape_prod xl xr) (fun _ => rhs).
+  Definition match_tuple {Σ σs Δ} (s : Term Σ (ty.tuple σs))
+    (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ :=
+    newpattern_match s (pat_shape_tuple p) (fun _ => rhs).
+  Definition match_record {Σ R Δ} (s : Term Σ (ty.record R))
+    (p : RecordPat (recordf_ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ :=
+    newpattern_match s (pat_shape_record R Δ p) (fun _ => rhs).
+
   #[global] Arguments match_enum [_] E _ _.
   #[global] Arguments match_sum [_] σ τ _ _ _.
-  #[global] Arguments match_list [_] {σ} s alt_nil xh xt alt_cons.
+  #[global] Arguments match_list [_] {σ} s anil xh xt acons.
   #[global] Arguments match_prod [_] {σ1 σ2} s xl xr rhs.
   #[global] Arguments match_tuple [_] {σs Δ} s p rhs.
   #[global] Arguments match_record [_] R {Δ} s p rhs.
-  #[global] Arguments match_union [_] U s alt__ctx alt__pat alt__rhs.
   #[global] Arguments exist [_] _ _ _.
   #[global] Arguments debug {_}.
 
-  Definition match_bool {Σ} (b : Term Σ ty.bool) (A1 A2 : Assertion Σ) : Assertion Σ :=
-    newpattern_match b pat_shape_bool (fun v => if v then A1 else A2).
+  Definition match_union_newalt {Σ} U (t : Term Σ (ty.union U))
+    (alts : forall (K : unionk U), NewAlternative Assertion Σ (unionk_ty U K)) : Assertion Σ :=
+    newpattern_match t
+      (pat_shape_union U (fun K => newalt_pat (alts K)))
+      (fun '(existT K pc) =>
+         of_pattern_case_curried
+           (newalt_pat (alts K))
+           (newalt_rhs (alts K)) pc).
+  #[global] Arguments asn.match_union_newalt {Σ} _ _ _.
 
   Fixpoint exs {Σ} Δ : Assertion (Σ ▻▻ Δ) -> Assertion Σ :=
     match Δ return Assertion (Σ ▻▻ Δ) -> Assertion Σ with
@@ -112,20 +121,6 @@ Module Import asn.
       | chunk_angelic c => chunk_angelic (subst c ζ)
       | newpattern_match s pat rhs =>
         newpattern_match (subst s ζ) pat (fun pc => sub_assertion (rhs pc) (sub_up ζ _))
-      | match_enum E k alts =>
-        match_enum E (subst k ζ) (fun z => sub_assertion (alts z) ζ)
-      | match_sum σ τ t xl al xr ar =>
-        match_sum σ τ (subst t ζ) xl (sub_assertion al (sub_up1 ζ)) xr (sub_assertion ar (sub_up1 ζ))
-      | match_list s anil xh xt acons =>
-        match_list (subst s ζ) (sub_assertion anil ζ) xh xt (sub_assertion acons (sub_up1 (sub_up1 ζ)))
-      | match_prod s xl xr A =>
-        match_prod (subst s ζ) xl xr (sub_assertion A (sub_up1 (sub_up1 ζ)))
-      | match_tuple s p A =>
-        match_tuple (subst s ζ) p (sub_assertion A (sub_up ζ _))
-      | match_record R s p A =>
-        match_record R (subst s ζ) p (sub_assertion A (sub_up ζ _))
-      | match_union U s ctx pat rhs =>
-        match_union U (subst s ζ) ctx pat (fun K => sub_assertion (rhs K) (sub_up ζ _))
       | sep A1 A2 => sep (sub_assertion A1 ζ) (sub_assertion A2 ζ)
       | or A1 A2  => sep (sub_assertion A1 ζ) (sub_assertion A2 ζ)
       | exist ς τ A => exist ς τ (sub_assertion A (sub_up1 ζ))
@@ -144,17 +139,6 @@ Module Import asn.
       | newpattern_match s pat rhs =>
           s' <- occurs_check bIn s;;
           None (* TODO *)
-      | match_enum E k alts => None (* TODO *)
-      | match_sum σ τ s xl alt_inl xr alt_inr =>
-          s'   <- occurs_check bIn s ;;
-          inl' <- occurs (Σ ▻ xl∷σ) b (ctx.in_succ bIn) alt_inl ;;
-          inr' <- occurs (Σ ▻ xr∷τ) b (ctx.in_succ bIn) alt_inr ;;
-          Some (match_sum σ τ s' xl inl' xr inr')
-      | @match_list _ σ s alt_nil xh xt alt_cons => None (* TODO *)
-      | @match_prod _ σ1 σ2 s xl xr rhs => None (* TODO *)
-      | @match_tuple _ σs Δ s p rhs => None (* TODO *)
-      | @match_record _ R4 Δ s p rhs => None (* TODO *)
-      | match_union U s alt__ctx alt__pat alt__rhs => None (* TODO *)
       | sep A1 A2 =>
           A1' <- occurs _ _ bIn A1 ;;
           A2' <- occurs _ _ bIn A2 ;;
@@ -174,14 +158,6 @@ Module Import asn.
     | chunk_angelic c => false
     | newpattern_match s pat rhs =>
         List.forallb (fun pc => is_pure (rhs pc)) (finite.enum (PatternCase pat))
-    | match_enum E k alts => List.forallb (fun K => is_pure (alts K)) (finite.enum _)
-    | match_sum σ τ s xl alt_inl xr alt_inr => is_pure alt_inl && is_pure alt_inr
-    | match_list s alt_nil xh xt alt_cons => is_pure alt_nil && is_pure alt_cons
-    | match_prod s xl xr rhs => is_pure rhs
-    | match_tuple s p rhs => is_pure rhs
-    | match_record R s p rhs => is_pure rhs
-    | match_union U s alt__ctx alt__pat alt__rhs =>
-        List.forallb (fun K => is_pure (alt__rhs K)) (finite.enum _)
     | sep A1 A2 => is_pure A1 && is_pure A2
     | or A1 A2  => is_pure A1 && is_pure A2
     | exist ς τ A => is_pure A
@@ -200,34 +176,6 @@ Module Import asn.
         let v := inst (T := fun Σ => Term Σ _) s ι in
         let (pc,δpc) := newpattern_match_val pat v in
         interpret_pure (rhs pc) (ι ►► δpc)
-      | match_enum E k alts => interpret_pure (alts (inst (T := fun Σ => Term Σ _) k ι)) ι
-      | match_sum σ τ s xl alt_inl xr alt_inr =>
-        match inst (T := fun Σ => Term Σ _) s ι with
-        | inl v => interpret_pure alt_inl (ι ► (xl∷σ ↦ v))
-        | inr v => interpret_pure alt_inr (ι ► (xr∷τ ↦ v))
-        end
-      | match_list s alt_nil xh xt alt_cons =>
-        match inst (T := fun Σ => Term Σ _) s ι with
-        | nil        => interpret_pure alt_nil ι
-        | cons vh vt => interpret_pure alt_cons (ι ► (xh∷_ ↦ vh) ► (xt∷ty.list _ ↦ vt))
-        end
-      | match_prod s xl xr rhs =>
-        match inst (T := fun Σ => Term Σ _) s ι with
-        | (vl,vr)    => interpret_pure rhs (ι ► (xl∷_ ↦ vl) ► (xr∷_ ↦ vr))
-        end
-      | match_tuple s p rhs =>
-        let t := inst (T := fun Σ => Term Σ _) s ι in
-        let ι' := tuple_pattern_match_val p t in
-        interpret_pure rhs (ι ►► ι')
-      | match_record R s p rhs =>
-        let t := inst (T := fun Σ => Term Σ _) s ι in
-        let ι' := record_pattern_match_val p t in
-        interpret_pure rhs (ι ►► ι')
-      | match_union U s alt__ctx alt__pat alt__rhs =>
-        let t := inst (T := fun Σ => Term Σ _) s ι in
-        let (K , v) := unionv_unfold U t in
-        let ι' := pattern_match_val (alt__pat K) v in
-        interpret_pure (alt__rhs K) (ι ►► ι')
       | sep A1 A2 => interpret_pure A1 ι /\ interpret_pure A2 ι
       | or A1 A2  => interpret_pure A1 ι \/ interpret_pure A2 ι
       | exist ς τ A => exists (v : Val τ), interpret_pure A (ι ► (ς∷τ ↦ v))
@@ -245,34 +193,6 @@ Module Import asn.
         let v := inst (T := fun Σ => Term Σ _) s ι in
         let (pc,δpc) := newpattern_match_val pat v in
         interpret (rhs pc) (ι ►► δpc)
-      | match_enum E k alts => interpret (alts (inst (T := fun Σ => Term Σ _) k ι)) ι
-      | match_sum σ τ s xl alt_inl xr alt_inr =>
-        match inst (T := fun Σ => Term Σ _) s ι with
-        | inl v => interpret alt_inl (ι ► (xl∷σ ↦ v))
-        | inr v => interpret alt_inr (ι ► (xr∷τ ↦ v))
-        end
-      | match_list s alt_nil xh xt alt_cons =>
-        match inst (T := fun Σ => Term Σ _) s ι with
-        | nil        => interpret alt_nil ι
-        | cons vh vt => interpret alt_cons (ι ► (xh∷_ ↦ vh) ► (xt∷ty.list _ ↦ vt))
-        end
-      | match_prod s xl xr rhs =>
-        match inst (T := fun Σ => Term Σ _) s ι with
-        | (vl,vr)    => interpret rhs (ι ► (xl∷_ ↦ vl) ► (xr∷_ ↦ vr))
-        end
-      | match_tuple s p rhs =>
-        let t := inst (T := fun Σ => Term Σ _) s ι in
-        let ι' := tuple_pattern_match_val p t in
-        interpret rhs (ι ►► ι')
-      | match_record R s p rhs =>
-        let t := inst (T := fun Σ => Term Σ _) s ι in
-        let ι' := record_pattern_match_val p t in
-        interpret rhs (ι ►► ι')
-      | match_union U s alt__ctx alt__pat alt__rhs =>
-        let t := inst (T := fun Σ => Term Σ _) s ι in
-        let (K , v) := unionv_unfold U t in
-        let ι' := pattern_match_val (alt__pat K) v in
-        interpret (alt__rhs K) (ι ►► ι')
       | sep A1 A2 => interpret A1 ι ∗ interpret A2 ι
       | or A1 A2  => interpret A1 ι ∨ interpret A2 ι
       | exist ς τ A => ∃ (v : Val τ), interpret A (ι ► (ς∷τ ↦ v))
@@ -288,18 +208,6 @@ Module Import asn.
       induction a; cbn in *; intros ι; try discriminate a_pure.
       - now rewrite lemp_true, land_true.
       - destruct newpattern_match_val.
-        apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
-        apply base.elem_of_list_In. apply finite.elem_of_enum.
-      - apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
-        apply base.elem_of_list_In. apply finite.elem_of_enum.
-      - apply andb_true_iff in a_pure. destruct a_pure.
-        destruct (inst s ι); auto.
-      - apply andb_true_iff in a_pure. destruct a_pure.
-        destruct (inst s ι); auto.
-      - destruct (inst s ι); auto.
-      - apply IHa; auto.
-      - apply IHa; auto.
-      - destruct (unionv_unfold U (inst s ι)).
         apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
         apply base.elem_of_list_In. apply finite.elem_of_enum.
       - apply andb_true_iff in a_pure. destruct a_pure.
@@ -381,35 +289,6 @@ Section Contracts.
                        (ctx.in_cat_left (PatternCaseCtx pc) bIn)
                        (rhs pc))
           (finite.enum (PatternCase pat))
-    | match_enum E k alts =>
-        option.isNone (occurs_check bIn k) |||
-        List.existsb
-          (fun K => lint_assertion bIn (alts K))
-          (finite.enum (enumt E))
-    | match_sum σ τ s xl alt_inl xr alt_inr =>
-        option.isNone (occurs_check bIn s) |||
-        lint_assertion (ctx.in_succ bIn) alt_inl |||
-        lint_assertion (ctx.in_succ bIn) alt_inr
-    | @match_list _ σ s alt_nil xh xt alt_cons =>
-        option.isNone (occurs_check bIn s) |||
-        lint_assertion bIn alt_nil |||
-        lint_assertion (ctx.in_succ (ctx.in_succ bIn)) alt_cons
-    | @match_prod _ σ1 σ2 s xl xr rhs =>
-        option.isNone (occurs_check bIn s) |||
-        lint_assertion (ctx.in_succ (ctx.in_succ bIn)) rhs
-    | @match_tuple _ σs Δ s p rhs =>
-        option.isNone (occurs_check bIn s) |||
-        lint_assertion (ctx.in_cat_left Δ bIn) rhs
-    | @match_record _ R Δ s p rhs =>
-        option.isNone (occurs_check bIn s) |||
-        lint_assertion (ctx.in_cat_left Δ bIn) rhs
-    | match_union U s alt__ctx alt__pat alt__rhs =>
-        option.isNone (occurs_check bIn s) |||
-        List.existsb
-          (fun K => lint_assertion
-                      (ctx.in_cat_left (alt__ctx K) bIn)
-                      (alt__rhs K))
-          (finite.enum (unionk U))
     | sep A1 A2 =>
         lint_assertion bIn A1 |||
         lint_assertion bIn A2

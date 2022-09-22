@@ -252,11 +252,11 @@ Module Import ExampleProgram <: Program ExampleBase.
     Local Notation "'z'"   := (@exp_var _ "z" _ _) : exp_scope.
 
     Definition fun_msum : Stm ["x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either) :=
-      stm_match_union_alt either x
+      stm_match_union_newalt either x
        (fun K =>
           match K with
-          | Left  => MkAlt (pat_var "z") (`Left z)
-          | Right => MkAlt (pat_var "z") y
+          | Left  => MkNewAlt (pat_shape_var "z") (`Left z)
+          | Right => MkNewAlt (pat_shape_var "z") (y)%exp
           end).
 
     Definition fun_fpthree' (e f : nat) : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec (1 + e + f)) :=

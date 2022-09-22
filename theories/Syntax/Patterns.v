@@ -494,9 +494,9 @@ Module Type PatternsOn (Import TY : Types).
     Qed.
 
     Section NewAlternative.
-      Context {R : NCtx N Ty -> Set} {Γ : NCtx N Ty}.
+      Context {R : NCtx N Ty -> Type} {Γ : NCtx N Ty}.
 
-      Fixpoint PatternCaseCurried {σ} (pat : PatternShape σ) : Set :=
+      Fixpoint PatternCaseCurried {σ} (pat : PatternShape σ) : Type :=
         match pat with
         | @pat_shape_var x σ => R (Γ ▻ x∷σ)
         | pat_shape_bool => bool -> R Γ
@@ -532,7 +532,7 @@ Module Type PatternsOn (Import TY : Types).
                                     of_pattern_case_curried (p0 K) (rhs K) pc
         end.
 
-      Record NewAlternative (σ : Ty) : Set :=
+      Record NewAlternative (σ : Ty) : Type :=
         MkNewAlt
           { newalt_pat : PatternShape σ;
             newalt_rhs : PatternCaseCurried newalt_pat;

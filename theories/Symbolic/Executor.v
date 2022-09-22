@@ -1511,37 +1511,6 @@ Module Type SymbolicExecOn
             box_demonic_newpattern_match id pat s
               (fun pc w1 r01 δpc =>
                  produce (wcat w0 (PatternCaseCtx pc)) (rhs pc) w1 (acc_cat_left r01 δpc))
-          | asn.match_enum E k alts =>
-            fun w1 ω01 =>
-              demonic_match_enum k⟨ω01⟩
-                (fun EK => four (produce w0 (alts EK)) ω01)
-          | asn.match_sum σ τ s xl alt_inl xr alt_inr =>
-            demonic_match_sum xl xr
-              <$> persist__term s
-              <*> four (fun w1 ω01 t1 => produce (wsnoc w0 (xl∷σ)) alt_inl w1 (acc_snoc_left ω01 (xl∷σ) t1))
-              <*> four (fun w1 ω01 t1 => produce (wsnoc w0 (xr∷τ)) alt_inr w1 (acc_snoc_left ω01 (xr∷τ) t1))
-           | asn.match_list s alt_nil xh xt alt_cons =>
-             box_demonic_match_list xh xt s (produce w0 alt_nil)
-               (fun w1 ω01 thead ttail =>
-                  produce (wsnoc (wsnoc w0 (xh∷_)) (xt∷ty.list _)) alt_cons w1
-                    (acc_snoc_left (acc_snoc_left ω01 (xh∷_) thead) (xt∷ty.list _) ttail))
-           | asn.match_prod s xl xr rhs =>
-             box_demonic_match_prod xl xr s
-               (fun w1 ω01 t1 t2 =>
-                  produce (wsnoc (wsnoc w0 (xl∷_)) (xr∷_)) rhs w1
-                    (acc_snoc_left (acc_snoc_left ω01 (xl∷_) t1) (xr∷_) t2))
-           | asn.match_tuple s p rhs =>
-             box_demonic_match_tuple id p s
-               (fun w1 ω01 ts =>
-                  produce (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
-           | asn.match_record R s p rhs =>
-             box_demonic_match_record id p s
-               (fun w1 ω01 ts =>
-                  produce (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
-           | asn.match_union U s alt__ctx alt__pat alt__rhs =>
-             box_demonic_match_union id alt__pat s
-               (fun UK w1 ω01 ts =>
-                  produce (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1 (acc_cat_left ω01 ts))
            | asn.sep a1 a2 =>
              fun w1 ω01 =>
                ⟨ ω12 ⟩ _ <- produce w0 a1 w1 ω01 ;;
@@ -1574,37 +1543,6 @@ Module Type SymbolicExecOn
             box_angelic_newpattern_match id pat s
               (fun pc w1 r01 δpc =>
                  consume (wcat w0 (PatternCaseCtx pc)) (rhs pc) w1 (acc_cat_left r01 δpc))
-          | asn.match_enum E k alts =>
-            fun w1 ω01 =>
-              angelic_match_enum k⟨ω01⟩
-                (fun EK => four (consume w0 (alts EK)) ω01)
-          | asn.match_sum σ τ s xl alt_inl xr alt_inr =>
-            angelic_match_sum xl xr
-              <$> persist__term s
-              <*> four (fun w1 ω01 t1 => consume (wsnoc w0 (xl∷σ)) alt_inl w1 (acc_snoc_left ω01 (xl∷σ) t1))
-              <*> four (fun w1 ω01 t1 => consume (wsnoc w0 (xr∷τ)) alt_inr w1 (acc_snoc_left ω01 (xr∷τ) t1))
-          | asn.match_list s alt_nil xh xt alt_cons =>
-            box_angelic_match_list xh xt s (consume w0 alt_nil)
-              (fun w1 ω01 thead ttail =>
-                 consume (wsnoc (wsnoc w0 (xh∷_)) (xt∷ty.list _)) alt_cons w1
-                   (acc_snoc_left (acc_snoc_left ω01 (xh∷_) thead) (xt∷ty.list _) ttail))
-          | asn.match_prod s xl xr rhs =>
-            box_angelic_match_prod xl xr s
-              (fun w1 ω01 t1 t2 =>
-                 consume (wsnoc (wsnoc w0 (xl∷_)) (xr∷_)) rhs w1
-                   (acc_snoc_left (acc_snoc_left ω01 (xl∷_) t1) (xr∷_) t2))
-          | asn.match_tuple s p rhs =>
-            box_angelic_match_tuple id p s
-              (fun w1 ω01 ts =>
-                 consume (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
-          | asn.match_record R s p rhs =>
-            box_angelic_match_record id p s
-              (fun w1 ω01 ts =>
-                 consume (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
-          | asn.match_union U s alt__ctx alt__pat alt__rhs =>
-            box_angelic_match_union id alt__pat s
-              (fun UK w1 ω01 ts =>
-                 consume (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1 (acc_cat_left ω01 ts))
           | asn.sep a1 a2 =>
             fun w1 ω01 =>
               ⟨ ω12 ⟩ _ <- consume w0 a1 w1 ω01 ;;

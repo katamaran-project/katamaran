@@ -165,6 +165,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
          of_pattern_case_curried
            (newalt_pat (alts K))
            (newalt_rhs (alts K)) pc).
+  Arguments stm_match_union_newalt {_ _} _ _ _.
 
   Definition UnionAlt (U : unioni) (Γ : PCtx) (τ : Ty) (K : unionk U) : Set :=
     Alternative Γ (unionk_ty U K) τ.
