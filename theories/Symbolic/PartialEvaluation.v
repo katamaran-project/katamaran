@@ -130,6 +130,7 @@ Module Type PartialEvaluationOn
     | term_not t                 := peval_not (peval t);
     | term_inl t                 := peval_inl (peval t);
     | term_inr t                 := peval_inr (peval t);
+    | @term_tuple _ σs ts        := @term_tuple _ σs (env.map (fun b => @peval b) ts);
     | term_union U K t           := peval_union (peval t);
     | @term_record _ R ts        := term_record R (env.map (fun b => peval (σ := type b)) ts).
 
@@ -175,6 +176,7 @@ Module Type PartialEvaluationOn
       - now rewrite peval_not_sound, IHt.
       - now rewrite peval_inl_sound, IHt.
       - now rewrite peval_inr_sound, IHt.
+      - f_equal. induction IH; cbn; f_equal; auto.
       - now rewrite peval_union_sound, IHt.
       - f_equal. induction IH; cbn; f_equal; auto.
     Qed.

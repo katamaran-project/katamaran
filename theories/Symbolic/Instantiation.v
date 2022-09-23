@@ -103,6 +103,8 @@ Module Type InstantiationOn
     | term_not e           => negb (inst_term e ι)
     | term_inl e           => @inl (Val _) (Val _) (inst_term e ι)
     | term_inr e           => @inr (Val _) (Val _) (inst_term e ι)
+    | @term_tuple _ σs ts  =>
+        envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι)
     | @term_union _ U K e     => unionv_fold U (existT K (inst_term e ι))
     | @term_record _ R ts     =>
         let InstTerm xt := @inst_term (@type recordf Ty xt) in
@@ -182,6 +184,7 @@ Module Type InstantiationOn
     induction t; cbn; try (repeat f_equal; auto; fail).
     - unfold inst, inst_sub, inst_env.
       now rewrite env.lookup_map.
+    - f_equal. induction IH; cbn; now f_equal.
     - f_equal. induction IH; cbn; now f_equal.
   Qed.
 
@@ -316,16 +319,6 @@ Module Type InstantiationOn
   Lemma inst_lookup {Σ0 Σ1} (ι : Valuation Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : x∷τ ∈ Σ0) :
     inst (env.lookup ζ xIn) ι = env.lookup (inst (A := Valuation Σ0) ζ ι) xIn.
   Proof. unfold inst, inst_sub, inst_env. now rewrite env.lookup_map. Qed.
-
-  Lemma inst_term_tuple {Σ σs} {ι : Valuation Σ} (es : Env (Term Σ) σs) :
-    @eq (EnvRec Val σs) (inst (Inst := inst_term) (term_tuple es) ι)
-        (envrec.of_env (inst es ι)).
-  Proof.
-    induction σs; cbn.
-    - destruct (env.nilView es); now cbn.
-    - destruct (env.snocView es); cbn.
-      f_equal. now eapply IHσs.
-  Qed.
 
   #[export] Instance inst_unit : Inst Unit unit :=
     fun _ x ι => x.

@@ -176,12 +176,7 @@ Module Type BaseMixin (Import TY : Types).
       - intros _ ts. now env.destroy ts.
       - reflexivity.
       - intros _ ts.
-        rewrite <- inst_tuple_pattern_match_reverse.
-        generalize (tuple_pattern_match_env_reverse p ts).
-        clear.
-        intros e. induction e; cbn.
-        + reflexivity.
-        + f_equal. apply IHe.
+        now rewrite <- inst_tuple_pattern_match_reverse.
       - intros _ ts. f_equal.
         apply inst_record_pattern_match_reverse.
       - intros [] ts. cbn. f_equal. f_equal. apply H.

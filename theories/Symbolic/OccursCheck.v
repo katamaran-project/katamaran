@@ -84,6 +84,8 @@ Module Type OccursCheckOn
       | term_not t => term_not <$> occurs_check_term xIn t
       | term_inl t => term_inl <$> occurs_check_term xIn t
       | term_inr t => term_inr <$> occurs_check_term xIn t
+      | @term_tuple _ σs ts =>
+        @term_tuple _ σs <$> occurs_check (OccursCheck := occurs_check_env (OCT := @occurs_check_term)) xIn ts
       | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0
       | term_record R ts =>
         let OCTerm xt := @occurs_check_term (@type recordf Ty xt) in
@@ -185,10 +187,14 @@ Module Type OccursCheckOn
       now rewrite ctx.occurs_check_shift_var.
     - generalize (occurs_check_env_shift_point IH).
       apply wp_monotonic. intros ? <-. reflexivity.
+    - generalize (occurs_check_env_shift_point IH).
+      apply wp_monotonic. intros ? <-. reflexivity.
     - pose proof (ctx.occurs_check_var_spec xIn ςInΣ) as H.
       destruct (ctx.occurs_check_var xIn ςInΣ); constructor; cbn.
       destruct H as [H1 H2]. subst. unfold sub_shift.
       now rewrite env.lookup_tabulate.
+    - generalize (occurs_check_env_sound_point IH).
+      apply wlp_monotonic. now intros ts' ->.
     - generalize (occurs_check_env_sound_point IH).
       apply wlp_monotonic. now intros ts' ->.
   Qed.

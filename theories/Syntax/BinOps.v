@@ -66,7 +66,6 @@ Module bop.
     | pair {σ1 σ2 : Ty} : BinOp σ1 σ2 (prod σ1 σ2)
     | cons {σ : Ty}     : BinOp σ (list σ) (list σ)
     | append {σ : Ty}   : BinOp (list σ) (list σ) (list σ)
-    | tuple_snoc {σs σ} : BinOp (tuple σs) σ (tuple (σs ▻ σ))
     | bvadd {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvsub {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvmul {n}         : BinOp (bvec n) (bvec n) (bvec n)
@@ -90,8 +89,6 @@ Module bop.
       ((σ, list σ, list σ), cons).
     Definition binoptel_append (σ : Ty) : BinOpTel :=
       ((list σ, list σ, list σ), append).
-    Definition binoptel_tuple_snoc (σs : Ctx Ty) (σ : Ty) : BinOpTel :=
-      ((tuple σs, σ, tuple (σs ▻ σ)), tuple_snoc).
     Definition binoptel_eq (σ : Ty) : BinOpTel :=
       ((σ, σ, bool), eq).
     Definition binoptel_bvadd n : BinOpTel :=
@@ -127,8 +124,6 @@ Module bop.
         f_equal_dec binoptel_cons noConfusion_inv (eq_dec σ τ)
       | @append _ σ , @append _ τ   =>
         f_equal_dec binoptel_append noConfusion_inv (eq_dec σ τ)
-      | @tuple_snoc _ σs σ , @tuple_snoc _ τs τ =>
-        f_equal2_dec binoptel_tuple_snoc noConfusion_inv (eq_dec σs τs) (eq_dec σ τ)
       | @bvadd _ m , @bvadd _ n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvadd))
@@ -202,7 +197,6 @@ Module bop.
       | pair       => Datatypes.pair
       | cons       => List.cons
       | append     => app
-      | tuple_snoc => Datatypes.pair
       | bvadd      => fun v1 v2 => bv.add v1 v2
       | bvsub      => fun v1 v2 => bv.sub v1 v2
       | bvmul      => fun v1 v2 => bv.mul v1 v2

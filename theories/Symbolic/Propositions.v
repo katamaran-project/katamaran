@@ -1431,363 +1431,6 @@ Module Type SymPropOn
 
   End PostProcess.
 
-  Module ErasureOld.
-
-    Import SymProp.
-
-    Inductive ETerm : Set :=
-    | eterm_var     (ℓ : LVar) (n : nat)
-    | eterm_val     (σ : Ty) (v : Val σ)
-    | eterm_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (t1 : ETerm) (t2 : ETerm)
-    | eterm_neg     (t : ETerm)
-    | eterm_not     (t : ETerm)
-    | eterm_inl     (t : ETerm)
-    | eterm_inr     (t : ETerm)
-    | eterm_union   {U : unioni} (K : unionk U) (t : ETerm)
-    | eterm_record  (R : recordi) (ts : NamedEnv (fun _ => ETerm) (recordf_ty R)).
-
-    Inductive EFormula : Type :=
-    | eformula_user (p : 𝑷) (ts : Env (fun _ => ETerm) (𝑷_Ty p))
-    | eformula_bool (t : ETerm)
-    | eformula_prop {Σ' : LCtx} (ζ : Env (fun _ => ETerm) Σ') (P : abstract_named Val Σ' Prop)
-    | eformula_ge (t1 t2 : ETerm)
-    | eformula_gt (t1 t2 : ETerm)
-    | eformula_le (t1 t2 : ETerm)
-    | eformula_lt (t1 t2 : ETerm)
-    | eformula_eq (σ : Ty) (t1 t2 : ETerm)
-    | eformula_neq (σ : Ty) (t1 t2 : ETerm).
-
-    Inductive ESymProp : Type :=
-    | eangelic_binary (o1 o2 : ESymProp)
-    | edemonic_binary (o1 o2 : ESymProp)
-    | eerror
-    | eblock
-    | eassertk (fml : EFormula) (k : ESymProp)
-    | eassumek (fml : EFormula) (k : ESymProp)
-    | eangelicv (b : LVar∷Ty) (k : ESymProp)
-    | edemonicv (b : LVar∷Ty) (k : ESymProp)
-    | eassert_vareq
-        (x : LVar)
-        (σ : Ty)
-        (n : nat)
-        (t : ETerm)
-        (k : ESymProp)
-    | eassume_vareq
-        (x : LVar)
-        (σ : Ty)
-        (n : nat)
-        (t : ETerm)
-        (k : ESymProp).
-
-    Definition erase_term {Σ} : forall {σ} (t : Term Σ σ), ETerm :=
-      fix erase {σ} t :=
-        match t with
-        | @term_var _ ℓ _ ℓIn => eterm_var ℓ (ctx.in_at ℓIn)
-        | term_val σ v => eterm_val σ v
-        | term_binop op t1 t2 => eterm_binop op (erase t1) (erase t2)
-        | term_neg t => eterm_neg (erase t)
-        | term_not t => eterm_not (erase t)
-        | term_inl t => eterm_inl (erase t)
-        | term_inr t => eterm_inr (erase t)
-        | term_union U K t => eterm_union K (erase t)
-        | term_record R ts => eterm_record R (env.map (fun _ => erase) ts)
-        end.
-
-    Definition erase_formula {Σ} : Formula Σ -> EFormula :=
-      fix erase f :=
-        match f with
-        | formula_user p ts => @eformula_user p (env.map (@erase_term Σ) ts)
-        | formula_bool t => eformula_bool (erase_term t)
-        | formula_prop ζ P =>  eformula_prop (env.map (fun _ => erase_term) ζ) P
-        | formula_ge t1 t2 => eformula_ge (erase_term t1) (erase_term t2)
-        | formula_gt t1 t2 => eformula_gt (erase_term t1) (erase_term t2)
-        | formula_le t1 t2 => eformula_le (erase_term t1) (erase_term t2)
-        | formula_lt t1 t2 => eformula_lt (erase_term t1) (erase_term t2)
-        | @formula_eq _ σ t1 t2 => eformula_eq σ (erase_term t1) (erase_term t2)
-        | @formula_neq _ σ t1 t2 => eformula_neq σ (erase_term t1) (erase_term t2)
-        end.
-
-    Fixpoint erase_symprop {Σ} (p : SymProp Σ) : ESymProp :=
-      match p with
-      | angelic_binary o1 o2 => eangelic_binary (erase_symprop o1) (erase_symprop o2)
-      | demonic_binary o1 o2 => edemonic_binary (erase_symprop o1) (erase_symprop o2)
-      | error _ => eerror
-      | block => eblock
-      | assertk fml _ k => eassertk (erase_formula fml) (erase_symprop k)
-      | assumek fml k => eassumek (erase_formula fml) (erase_symprop k)
-      | angelicv b k => eangelicv b (erase_symprop k)
-      | demonicv b k => edemonicv b (erase_symprop k)
-      | @assert_vareq _ x σ xIn t msg k => eassert_vareq x σ (ctx.in_at xIn) (erase_term t) (erase_symprop k)
-      | @assume_vareq _ x σ xIn t k => eassume_vareq x σ (ctx.in_at xIn) (erase_term t) (erase_symprop k)
-      | debug b k => erase_symprop k
-      end.
-
-    Fixpoint erase_valuation {Σ} (ι : Valuation Σ) : list { σ : Ty & Val σ} :=
-      match ι with
-      | env.nil        => nil
-      | env.snoc ι b v => cons (existT (type b) v) (erase_valuation ι)
-      end.
-
-    Import option.notations.
-
-    Definition inst_namedenv' (ι : list { σ : Ty & Val σ}) (inst_eterm : ETerm -> forall τ, option (Val τ)) {N} :
-      forall {Δ : NCtx N Ty}, NamedEnv (fun _ => ETerm) Δ -> option (NamedEnv Val Δ) :=
-       fix inst_env {Δ} E :=
-         match E with
-         | [] => Some []
-         | @env.snoc _ _ Γ E (ℓ∷σ) t =>
-             v  <- inst_eterm t σ;;
-             vs <- inst_env E;;
-             Some (vs ► (ℓ∷σ ↦ v))
-         end.
-
-    Definition inst_eterm (ι : list { σ : Ty & Val σ}) : ETerm -> forall τ, option (Val τ) :=
-      fix inst_eterm t τ :=
-        match t with
-        | eterm_var _ n =>
-            '(existT σ v) <- nth_error ι n;;
-            match Classes.eq_dec σ τ with
-            | left e => Some (eq_rect σ Val v τ e)
-            | right _ => None
-            end
-        | eterm_val σ v =>
-            match Classes.eq_dec σ τ with
-            | left e => Some (eq_rect σ Val v τ e)
-            | right _ => None
-            end
-        | @eterm_binop σ1 σ2 σ3 op t1 t2 =>
-            match Classes.eq_dec σ3 τ with
-            | left e =>
-                v1 <- inst_eterm t1 σ1;;
-                v2 <- inst_eterm t2 σ2;;
-                Some (eq_rect σ3 Val (bop.eval op v1 v2) τ e)
-            | right _ => None
-            end
-        | eterm_neg t0 =>
-            match Classes.eq_dec ty.int τ with
-            | left e => v <- inst_eterm t0 ty.int;;
-                        Some (eq_rect ty.int Val (BinInt.Z.opp v) τ e)
-            | right _ => None
-            end
-        | eterm_not t0 =>
-            match Classes.eq_dec ty.bool τ with
-            | left e => v <- inst_eterm t0 ty.bool;;
-                        Some (eq_rect ty.bool Val (negb v) τ e)
-            | right _ => None
-            end
-        | eterm_inl t0 =>
-            match τ with
-            | ty.sum τ1 τ2 => v <- inst_eterm t0 τ1 ;; Some (inl v)
-            | _ => None
-            end
-        | eterm_inr t0 =>
-            match τ with
-            | ty.sum τ1 τ2 => v <- inst_eterm t0 τ2 ;; Some (inr v)
-            | _ => None
-            end
-        | @eterm_union U K t0 =>
-            match τ with
-            | ty.union U' =>
-                match Classes.eq_dec U U' with
-                | left e =>
-                    v <- inst_eterm t0 (unionk_ty U K);;
-                    Some (eq_rect U uniont (unionv_fold U (existT K v)) U' e)
-                | right _ => None
-                end
-            | _ => None
-            end
-        | @eterm_record R ts =>
-            match τ with
-            | ty.record R' =>
-                match Classes.eq_dec R R' with
-                | left e =>
-                    v <- inst_namedenv' ι inst_eterm ts;;
-                    Some (eq_rect R recordt (recordv_fold R v) R' e)
-                | right _ => None
-                end
-            | _ => None
-            end
-        end.
-
-    Definition inst_namedenv (ι : list { σ : Ty & Val σ}) {N} {Δ : NCtx N Ty} :
-      Env (fun _ => ETerm) Δ -> option (NamedEnv Val Δ) :=
-      inst_namedenv' ι (inst_eterm ι).
-
-    Definition inst_env (ι : list { σ : Ty & Val σ}) :
-      forall {Δ : Ctx Ty}, Env (fun _ => ETerm) Δ -> option (Env Val Δ) :=
-      fix inst_env {Δ} E :=
-        match E with
-        | [] => Some []
-        | @env.snoc _ _ Γ E σ t =>
-            v  <- inst_eterm ι t σ;;
-            vs <- inst_env E;;
-            Some (vs ► (σ ↦ v))
-        end.
-
-    Definition inst_eformula (ι : list { σ : Ty & Val σ}) (f : EFormula) : Prop :=
-      match f with
-      | @eformula_user p ts => option_rect (fun _ => Prop) (env.uncurry (𝑷_inst p)) False (inst_env ι ts)
-      | eformula_bool t => option_rect (fun _ => Prop) (fun b => b = true) False (inst_eterm ι t ty.bool)
-      | @eformula_prop Σ' ζ P => option_rect (fun _ => Prop) (uncurry_named P) False (inst_namedenv ι ζ)
-      | eformula_ge t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.ge v1 v2) False
-                               (v1 <- inst_eterm ι t1 ty.int;; v2 <- inst_eterm ι t2 ty.int;; Some (v1, v2))
-      | eformula_gt t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.gt v1 v2) False
-                               (v1 <- inst_eterm ι t1 ty.int;; v2 <- inst_eterm ι t2 ty.int;; Some (v1, v2))
-      | eformula_le t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.le v1 v2) False
-                               (v1 <- inst_eterm ι t1 ty.int;; v2 <- inst_eterm ι t2 ty.int;; Some (v1, v2))
-      | eformula_lt t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.lt v1 v2) False
-                               (v1 <- inst_eterm ι t1 ty.int;; v2 <- inst_eterm ι t2 ty.int;; Some (v1, v2))
-      | eformula_eq σ t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => v1 = v2) False
-                                 (v1 <- inst_eterm ι t1 σ;; v2 <- inst_eterm ι t2 σ;; Some (v1, v2))
-      | eformula_neq σ t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => v1 <> v2) False
-                                  (v1 <- inst_eterm ι t1 σ;; v2 <- inst_eterm ι t2 σ;; Some (v1, v2))
-      end.
-
-    Fixpoint list_remove {A} (xs : list A) (n : nat) : list A :=
-      match xs with
-      | nil       => nil
-      | cons x xs => match n with
-                     | O   => xs
-                     | S n => cons x (list_remove xs n)
-                     end
-      end.
-
-    Fixpoint inst_symprop (ι : list { σ : Ty & Val σ}) (f : ESymProp) : Prop :=
-      match f with
-      | eangelic_binary p1 p2 => inst_symprop ι p1 \/ inst_symprop ι p2
-      | edemonic_binary p1 p2 => inst_symprop ι p1 /\ inst_symprop ι p2
-      | eerror => False
-      | eblock => True
-      | eassertk fml k => inst_eformula ι fml /\ inst_symprop ι k
-      | eassumek fml k => inst_eformula ι fml -> inst_symprop ι k
-      | eangelicv b k => exists v : Val (type b), inst_symprop (cons (existT (type b) v) ι) k
-      | edemonicv b k => forall v : Val (type b), inst_symprop (cons (existT (type b) v) ι) k
-      | eassert_vareq x σ n t k =>
-          let ι' := list_remove ι n in
-          inst_eterm ι (eterm_var x n) σ = inst_eterm ι' t σ /\
-          inst_symprop ι' k
-      | eassume_vareq x σ n t k =>
-          let ι' := list_remove ι n in
-          inst_eterm ι (eterm_var x n) σ = inst_eterm ι' t σ ->
-          inst_symprop ι' k
-      end.
-
-    Lemma erase_valuation_remove {Σ b} (bIn : b ∈ Σ) (ι : Valuation Σ) :
-      list_remove (erase_valuation ι) (ctx.in_at bIn) =
-      erase_valuation (env.remove b ι bIn).
-    Proof.
-      induction ι.
-      - destruct (ctx.nilView bIn).
-      - destruct (ctx.snocView bIn); cbn.
-        + reflexivity.
-        + f_equal. apply (IHι i).
-    Qed.
-
-    Lemma nth_error_erase {Σ b} (ι : Valuation Σ) (bIn : b ∈ Σ) :
-      nth_error (erase_valuation ι) (ctx.in_at bIn) =
-      Some (existT (type b) (env.lookup ι bIn)).
-    Proof.
-      induction ι; cbn.
-      - destruct (ctx.nilView bIn).
-      - destruct (ctx.snocView bIn) as [|b bIn]; cbn.
-        + reflexivity.
-        + now rewrite IHι.
-    Qed.
-
-    Lemma inst_eterm_erase {Σ σ} (t : Term Σ σ) (ι : Valuation Σ) :
-      inst_eterm (erase_valuation ι) (erase_term t) σ = Some (inst t ι).
-    Proof.
-      induction t; cbn [inst_eterm erase_term].
-      - rewrite nth_error_erase; cbn.
-        now rewrite EqDec.eq_dec_refl.
-      - now rewrite EqDec.eq_dec_refl.
-      - now rewrite EqDec.eq_dec_refl, IHt1, IHt2.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite EqDec.eq_dec_refl, IHt.
-      - rewrite EqDec.eq_dec_refl. cbn.
-        assert (inst_namedenv'
-                  (erase_valuation ι)
-                  (inst_eterm (erase_valuation ι))
-                  (env.map (fun b : recordf∷Ty => erase_term) es) =
-                  Some (inst
-                    (* (T := fun Σ => @NamedEnv 𝑹𝑭 Ty (Term Σ) (𝑹𝑭_Ty R)) *)
-                    (* (A := @NamedEnv 𝑹𝑭 Ty Val (𝑹𝑭_Ty R)) *)
-                    es ι)) as ->; auto.
-        induction IH as [|Δ E [x σ] t _ IHE IHt]; cbn in *.
-        + reflexivity.
-        + now rewrite IHt, IHE.
-    Qed.
-
-    Lemma inst_env_erase {Σ Δ} (ts : Env (Term Σ) Δ) (ι : Valuation Σ) :
-      inst_env (erase_valuation ι) (env.map (@erase_term Σ) ts) = Some (inst ts ι).
-    Proof.
-      induction ts; cbn.
-      - reflexivity.
-      - now rewrite inst_eterm_erase, IHts.
-    Qed.
-
-    Lemma inst_namedenv_erase {Σ N} {Δ : NCtx N Ty} (ts : NamedEnv (Term Σ) Δ) (ι : Valuation Σ) :
-      inst_namedenv (erase_valuation ι) (env.map (fun _ => erase_term) ts) = Some (inst ts ι).
-    Proof.
-      unfold inst_namedenv.
-      induction ts as [|Δ ts IHts [x σ]]; cbn.
-      - reflexivity.
-      - now rewrite inst_eterm_erase, IHts.
-    Qed.
-
-    Lemma inst_eformula_erase {Σ} (fml : Formula Σ) (ι : Valuation Σ) :
-      inst_eformula (erase_valuation ι) (erase_formula fml) <-> inst fml ι.
-    Proof.
-      destruct fml; cbn;
-        now rewrite ?inst_eterm_erase, ?inst_env_erase, ?inst_namedenv_erase.
-    Qed.
-
-    Lemma erase_safe {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
-      inst_symprop (erase_valuation ι) (erase_symprop p) <->
-      safe p ι.
-    Proof.
-      induction p; cbn [inst_symprop erase_symprop safe].
-      - apply Morphisms_Prop.or_iff_morphism. auto. auto.
-      - apply Morphisms_Prop.and_iff_morphism. auto. auto.
-      - reflexivity.
-      - reflexivity.
-      - apply Morphisms_Prop.and_iff_morphism.
-        + apply inst_eformula_erase.
-        + auto.
-      - apply Morphisms_Prop.iff_iff_iff_impl_morphism.
-        + apply inst_eformula_erase.
-        + auto.
-      - apply base.exist_proper. intros v. apply (IHp (env.snoc ι b v)).
-      - apply base.forall_proper. intros v. apply (IHp (env.snoc ι b v)).
-      - apply Morphisms_Prop.and_iff_morphism; cbn.
-        + rewrite nth_error_erase; cbn.
-          rewrite EqDec.eq_dec_refl.
-          rewrite erase_valuation_remove. cbn.
-          rewrite inst_eterm_erase.
-          intuition.
-        + generalize (IHp (env.remove _ ι xIn)).
-          now rewrite erase_valuation_remove.
-      - apply Morphisms_Prop.iff_iff_iff_impl_morphism; cbn.
-        + rewrite nth_error_erase; cbn.
-          rewrite EqDec.eq_dec_refl.
-          rewrite erase_valuation_remove. cbn.
-          rewrite inst_eterm_erase.
-          intuition.
-        + generalize (IHp (env.remove _ ι xIn)).
-          now rewrite erase_valuation_remove.
-      - apply IHp.
-    Qed.
-
-    Lemma erase_safe' {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
-      inst_symprop (erase_valuation ι) (erase_symprop p) ->
-      safe p ι.
-    Proof. apply erase_safe. Qed.
-
-  End ErasureOld.
-
   Module Erasure.
 
     Import SymProp.
@@ -1800,6 +1443,7 @@ Module Type SymPropOn
     | eterm_not     (t : ETerm ty.bool) : ETerm ty.bool
     | eterm_inl     {σ1 σ2 : Ty} (t : ETerm σ1) : ETerm (ty.sum σ1 σ2)
     | eterm_inr     {σ1 σ2 : Ty} (t : ETerm σ2) : ETerm (ty.sum σ1 σ2)
+    | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs)
     | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U)
     | eterm_record  (R : recordi) (ts : NamedEnv ETerm (recordf_ty R)) : ETerm (ty.record R).
 
@@ -1847,6 +1491,7 @@ Module Type SymPropOn
         | term_not t => eterm_not (erase t)
         | term_inl t => eterm_inl (erase t)
         | term_inr t => eterm_inr (erase t)
+        | term_tuple ts => eterm_tuple (env.map (fun _ => erase) ts)
         | term_union U K t => eterm_union K (erase t)
         | term_record R ts => eterm_record R (env.map (fun _ => erase) ts)
         end.
@@ -1888,6 +1533,17 @@ Module Type SymPropOn
 
     Import option.notations.
 
+    Definition inst_env' (ι : list { σ : Ty & Val σ}) (inst_eterm : forall τ, ETerm τ -> option (Val τ)) :
+      forall {Δ : Ctx Ty}, Env ETerm Δ -> option (Env Val Δ) :=
+       fix inst_env {Δ} E :=
+         match E with
+         | [] => Some []
+         | @env.snoc _ _ Γ E σ t =>
+             v  <- inst_eterm σ t;;
+             vs <- inst_env E;;
+             Some (vs ► (σ ↦ v))
+         end.
+
     Definition inst_namedenv' (ι : list { σ : Ty & Val σ}) (inst_eterm : forall τ, ETerm τ -> option (Val τ)) {N} :
       forall {Δ : NCtx N Ty}, NamedEnv ETerm Δ -> option (NamedEnv Val Δ) :=
        fix inst_env {Δ} E :=
@@ -1921,6 +1577,8 @@ Module Type SymPropOn
             inl <$> inst_eterm t0
         | eterm_inr t0 =>
             inr <$> inst_eterm t0
+        | @eterm_tuple σs ts =>
+            envrec.of_env (σs := σs) <$> inst_env' ι inst_eterm ts
         | @eterm_union U K t0 =>
             v <- inst_eterm t0 ;;
             Some (unionv_fold U (existT K v))
@@ -2025,15 +1683,12 @@ Module Type SymPropOn
       - now rewrite IHt.
       - now rewrite IHt.
       - now rewrite IHt.
+      - cbn. apply option.map_eq_some.
+        induction IH as [|Δ E σ t _ IHE IHt]; cbn in *.
+        + reflexivity.
+        + now rewrite IHt, IHE.
       - now rewrite IHt.
-      - assert (inst_namedenv'
-                  (erase_valuation ι)
-                  (inst_eterm (erase_valuation ι))
-                  (env.map (fun b : recordf∷Ty => erase_term) es) =
-                  Some (inst
-                    (* (T := fun Σ => @NamedEnv 𝑹𝑭 Ty (Term Σ) (𝑹𝑭_Ty R)) *)
-                    (* (A := @NamedEnv 𝑹𝑭 Ty Val (𝑹𝑭_Ty R)) *)
-                    es ι)) as ->; auto.
+      - cbn. apply option.map_eq_some.
         induction IH as [|Δ E [x σ] t _ IHE IHt]; cbn in *.
         + reflexivity.
         + now rewrite IHt, IHE.

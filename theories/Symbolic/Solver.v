@@ -174,7 +174,6 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     | bop.pair       | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_val _ v1)) (cons (formula_eq t2 (term_val _ v2)) k));
     | bop.cons       | t1 | t2 | nil        | k := None;
     | bop.cons       | t1 | t2 | cons v1 v2 | k := Some (cons (formula_eq t1 (term_val _ v1)) (cons (formula_eq t2 (term_val (ty.list _) v2)) k));
-    | bop.tuple_snoc | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_val (ty.tuple _) v1)) (cons (formula_eq t2 (term_val _ v2)) k));
     | op             | t1 | t2 | v          | k :=
       Some (cons (formula_eq (term_binop op t1 t2) (term_val _ v)) k).
 
@@ -193,8 +192,6 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - destruct v; constructor; intros ι; cbn.
         + discriminate.
         + rewrite ?inst_pathcondition_cons. cbn. intuition.
-      - destruct v; constructor; intros ι; cbn.
-        rewrite ?inst_pathcondition_cons. cbn. intuition.
     Qed.
 
     Definition simplify_formula_eq_union {Σ U} {K1 K2 : unionk U}
@@ -283,15 +280,18 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     | term_inl _             | term_val _ (inr _)       | k => None;
     | term_inl t1            | term_val _ (inl v2)      | k => simplify_formula_eq t1 (term_val _ v2) k;
     | term_inr t1            | term_val _ (inr v2)      | k => simplify_formula_eq t1 (term_val _ v2) k;
+    | term_tuple ts          | term_val _ vs            | k => Some (app (formula_eqs_ctx ts (lift (envrec.to_env _ vs))) k);
+    | term_record _ ts       | term_val _ v             | k => Some (app (formula_eqs_nctx ts (lift (recordv_unfold _ v))) k);
     | term_inr _             | term_inl _               | k => None;
     | term_inl _             | term_inr _               | k => None;
     | term_inl t1            | term_inl t2              | k => simplify_formula_eq t1 t2 k;
     | term_inr t1            | term_inr t2              | k => simplify_formula_eq t1 t2 k;
-    | term_record ?(R) ts1   | term_record R ts2        | k => Some (app (formula_eqs_nctx ts1 ts2) k);
+    | term_tuple ts1         | term_tuple ts2           | k => Some (app (formula_eqs_ctx ts1 ts2) k);
+    | term_record _ ts1      | term_record _ ts2        | k => Some (app (formula_eqs_nctx ts1 ts2) k);
     | term_binop op1 t11 t12 | term_binop op2 t21 t22   | k => simplify_formula_eq_binop op1 t11 t12 op2 t21 t22 k;
     | term_binop op1 t11 t12 | term_val _ v             | k => simplify_formula_eq_binop_val op1 t11 t12 v k;
     | term_union U K t       | term_val ?(ty.union U) v | k => simplify_formula_eq_union_val t v k;
-    | term_union ?(U) K1 t1  | term_union U K2 t2       | k => simplify_formula_eq_union t1 t2 k;
+    | term_union _ K1 t1     | term_union _ K2 t2       | k => simplify_formula_eq_union t1 t2 k;
     | t1                     | t2                       | k => simplify_formula_eqb t1 t2 k.
 
     Definition simplify_formula {Σ} (fml : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
@@ -394,6 +394,20 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
           * now f_equal.
           * apply noConfusion_inv in Heq. apply Heq.
         + intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
+      - cbn. constructor. intros ι.
+        rewrite inst_pathcondition_app, inst_formula_eqs_ctx.
+        apply and_iff_compat_r.
+        rewrite inst_lift.
+        split; intros Heq.
+        + now rewrite Heq, envrec.of_to_env.
+        + subst. now rewrite envrec.to_of_env.
+      - cbn. constructor. intros ι.
+        rewrite inst_pathcondition_app, inst_formula_eqs_ctx.
+        apply and_iff_compat_r.
+        split; intros Heq.
+        + f_equal. apply Heq.
+        + apply (@f_equal _ _ (envrec.to_env _)) in Heq.
+          rewrite !envrec.to_of_env in Heq. apply Heq.
       - cbn. apply simplify_formula_eq_union_val_spec.
       - cbn. clear. rename e3 into t2, K1 into K2, s into t1, K0 into K1, U0 into U.
         generalize (simplify_formula_eq_union_spec t1 t2 k). apply option.spec_monotonic.
@@ -401,6 +415,13 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
           now rewrite unionv_fold_inj.
         + apply base.forall_proper. intros ι.
           now rewrite unionv_fold_inj.
+      - cbn. constructor. intros ι.
+        rewrite inst_pathcondition_app, inst_formula_eqs_nctx.
+        apply and_iff_compat_r.
+        rewrite inst_lift.
+        split; intros Heq.
+        + now rewrite Heq, recordv_fold_unfold.
+        + subst. now rewrite recordv_unfold_fold.
       - cbn. constructor. intros ι.
         rewrite inst_pathcondition_app, inst_formula_eqs_nctx.
         apply and_iff_compat_r.

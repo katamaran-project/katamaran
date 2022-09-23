@@ -74,7 +74,7 @@ Module SWAP.
 	SymProp.demonic_close (BlockVerification.VC pre1 block1 post1).
 
   Lemma sat_vc1 : VerificationConditionWithErasure (Erasure.erase_symprop vc1).
-  Proof. compute. constructor. cbv - [Z.sub Z.add]. lia. Qed.
+  Proof. vm_compute. constructor. cbv - [Z.sub Z.add]. lia. Qed.
 
   Example vc2 : 𝕊 ε :=
 	let vc1 := BlockVerificationDerived.VC pre1 block1 post1 in
@@ -84,7 +84,7 @@ Module SWAP.
 	vc4.
 
   Lemma sat_vc2 : VerificationConditionWithErasure (Erasure.erase_symprop vc2).
-  Proof. compute. constructor. cbv - [Z.sub Z.add]. lia. Qed.
+  Proof. vm_compute. constructor. cbv - [Z.sub Z.add]. lia. Qed.
 
   Section ContractAddr.
 
@@ -103,7 +103,7 @@ Module SWAP.
 	  (BlockVerificationDerived2.VC__addr pre1' block1 post1').
 
   Lemma sat_vc3' : BlockVerificationDerived2.safeE vc1.
-  Proof. compute. constructor. cbv - [Z.sub Z.add]. lia. Qed.
+  Proof. vm_compute. constructor. cbv - [Z.sub Z.add]. lia. Qed.
 
 End SWAP.
 
