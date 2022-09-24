@@ -225,8 +225,8 @@ Module Type TermsOn (Import TY : Types).
       subst xs ζ = List.map (fun x => subst x ζ) xs.
     Proof. induction xs; cbn; f_equal; auto. Qed.
 
-    #[export] Instance SubstConst {A} `{finite.Finite A} : Subst (Const A) :=
-      fun _ x _ _ => x.
+    #[export] Instance SubstConst {A} : Subst (Const A) | 10 :=
+       fun _ x _ _ => x.
     #[export] Instance SubstEnv {B : Set} {A : Ctx _ -> B -> Set} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
       Subst (fun Σ => Env (A Σ) Δ) :=
       fun Σ1 xs Σ2 ζ => env.map (fun b a => subst (T := fun Σ => A Σ b) a ζ) xs.
@@ -313,7 +313,7 @@ Module Type TermsOn (Import TY : Types).
       }
     Qed.
 
-    #[export] Instance SubstLawsConst {A} `{finite.Finite A} : SubstLaws (Const A).
+    #[export] Instance SubstLawsConst {A} : SubstLaws (Const A).
     Proof. constructor; reflexivity. Qed.
 
     #[export] Instance SubstLawsEnv {B : Set} {A : Ctx _ -> B -> Set}

@@ -73,10 +73,8 @@ Module Type InstantiationOn
   #[export] Instance lift_list {T : LCtx -> Type} {A : Type} `{Lift T A} :
     Lift (List T) (list A) := fun Σ => List.map lift.
 
-  #[export] Instance inst_const {A} `{finite.Finite A} :
-    Inst (Const A) A := fun Σ x ι => x.
-  #[export] Instance lift_const {A} `{finite.Finite A} :
-    Lift (Const A) A := fun Σ x => x.
+  #[export] Instance inst_const {A} : Inst (Const A) A | 10 := fun Σ x ι => x.
+  #[export] Instance lift_const {A} : Lift (Const A) A | 10 := fun Σ x => x.
 
   #[export] Instance inst_env {T : Set} {S : LCtx -> T -> Set} {A : T -> Set}
     {InstSA : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)} {Γ : Ctx T} :
