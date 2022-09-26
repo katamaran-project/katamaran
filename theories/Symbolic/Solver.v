@@ -192,6 +192,12 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     | bop.gt         | t1 | t2 | v          | k := Some (if v
                                                          then simplify_formula_bool_binop bop.gt t1 t2 k
                                                          else simplify_formula_bool_binop_neg bop.gt t1 t2 k);
+    | bop.and        | t1 | t2 | v          | k := Some (if v
+                                                         then simplify_formula_bool_binop bop.and t1 t2 k
+                                                         else simplify_formula_bool_binop_neg bop.and t1 t2 k);
+    | bop.or         | t1 | t2 | v          | k := Some (if v
+                                                         then simplify_formula_bool_binop bop.or t1 t2 k
+                                                         else simplify_formula_bool_binop_neg bop.or t1 t2 k);
     | op             | t1 | t2 | v          | k :=
       Some (cons (formula_eq (term_binop op t1 t2) (term_val _ v)) k).
 
@@ -210,6 +216,12 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         | |- context[Val_eqb ?σ ?v1 ?v2] =>
             destruct (Val_eqb_spec σ v1 v2); intuition
         end.
+      - destruct v.
+        now rewrite simplify_formula_bool_binop_spec.
+        now rewrite simplify_formula_bool_binop_neg_spec.
+      - destruct v.
+        now rewrite simplify_formula_bool_binop_spec.
+        now rewrite simplify_formula_bool_binop_neg_spec.
       - destruct v.
         now rewrite simplify_formula_bool_binop_spec.
         now rewrite simplify_formula_bool_binop_neg_spec.
