@@ -346,10 +346,6 @@ Module Type NewShallowExecOn
 
     Section PatternMatching.
 
-      Definition match_bool {A} (v : Val ty.bool) (kt kf : CPureSpecM A) : CPureSpecM A :=
-        fun POST => if v then kt POST else kf POST.
-      #[global] Arguments match_bool {A} v kt kf _ /.
-
       Definition pattern_match {N : Set} {A σ} (v : Val σ) (pat : @Pattern N σ)
         (k : forall (pc : PatternCase pat), NamedEnv Val (PatternCaseCtx pc) -> CPureSpecM A) :
         CPureSpecM A :=
@@ -592,10 +588,6 @@ Module Type NewShallowExecOn
     (* Local Open Scope mut_scope. *)
 
     Section PatternMatching.
-
-      Definition match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ => if v then kt POST δ else kf POST δ.
-      #[global] Arguments match_bool {_ _ _} v kt kf _ /.
 
       Definition pattern_match {N : Set} {A σ Γ1 Γ2} (v : Val σ) (pat : @Pattern N σ)
         (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A) :

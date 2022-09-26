@@ -535,42 +535,6 @@ Module Type SymbolicExecOn
       ⊢ SPureSpecM ⌜F⌝ :=
       fun w => demonic_list (finite.enum F).
 
-    Definition angelic_match_bool' :
-      ⊢ AMessage -> STerm ty.bool -> SPureSpecM ⌜bool⌝ :=
-      fun _ msg t =>
-        angelic_binary
-          (⟨_⟩ _ <- assert_formula msg (formula_bool t) ;;
-                    pure true)
-          (⟨_⟩ _ <- assert_formula msg (formula_bool (term_not t)) ;;
-                    pure false).
-
-    Definition angelic_match_bool :
-      ⊢ AMessage -> STerm ty.bool -> SPureSpecM ⌜bool⌝ :=
-      fun w msg t =>
-        let t' := peval t in
-        match term_get_val t' with
-        | Some l => pure  l
-        | None   => angelic_match_bool' msg t'
-        end.
-
-    Definition demonic_match_bool' :
-      ⊢ STerm ty.bool -> SPureSpecM ⌜bool⌝ :=
-      fun _ t =>
-        demonic_binary
-          (⟨_⟩ _ <- assume_formula (formula_bool t) ;;
-                    pure true)
-          (⟨_⟩ _ <- assume_formula (formula_bool (term_not t)) ;;
-                    pure false).
-
-    Definition demonic_match_bool :
-      ⊢ STerm ty.bool -> SPureSpecM ⌜bool⌝ :=
-      fun w t =>
-        let t' := peval t in
-        match term_get_val t' with
-        | Some l => pure  l
-        | None   => demonic_match_bool' t'
-        end.
-
     #[export] Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
     Proof.
       intros P Q PQ.
@@ -792,38 +756,6 @@ Module Type SymbolicExecOn
 
     Section PatternMatching.
 
-      Definition angelic_match_bool' {AT} {Γ1 Γ2} :
-        ⊢ STerm ty.bool -> □(SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t kt kf =>
-          angelic_binary
-            (⟨ ω ⟩ _ <- assert_formula (formula_bool t) ;; kt _ ω)
-            (⟨ ω ⟩ _ <- assert_formula (formula_bool (term_not t)) ;; kf _ ω).
-
-      Definition angelic_match_bool {AT} {Γ1 Γ2} :
-        ⊢ STerm ty.bool -> □(SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t kt kf =>
-          match term_get_val t with
-          | Some true => T kt
-          | Some false => T kf
-          | None => angelic_match_bool' t kt kf
-          end.
-
-      Definition demonic_match_bool' {AT} {Γ1 Γ2} :
-        ⊢ STerm ty.bool -> □(SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t kt kf =>
-          demonic_binary
-            (⟨ ω ⟩ _ <- assume_formula (formula_bool t) ;; kt _ ω)
-            (⟨ ω ⟩ _ <- assume_formula (formula_bool (term_not t)) ;; kf _ ω).
-
-      Definition demonic_match_bool {AT} {Γ1 Γ2} :
-        ⊢ STerm ty.bool -> □(SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t kt kf =>
-          match term_get_val t with
-          | Some true => T kt
-          | Some false => T kf
-          | None => demonic_match_bool' t kt kf
-          end.
-
       Definition angelic_pattern_match' {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @Pattern N σ) :
         ⊢ STerm σ ->
         (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
@@ -857,10 +789,10 @@ Module Type SymbolicExecOn
           match pat with
           | pat_var x => fun w0 scr k => k tt w0 acc_refl [env].[x∷_ ↦ scr]
           | pat_bool => fun w0 scr k =>
-                          angelic_match_bool
-                            scr
-                            (fun w1 r01 => k true w1 r01 [env])
-                            (fun w1 r01 => k false w1 r01 [env])
+                          match term_get_val scr with
+                          | Some v => k v w0 acc_refl [env]
+                          | None => angelic_pattern_match' n _ scr k
+                          end
           | pat_pair x y => fun w0 scr k =>
                               match term_get_pair scr with
                               | Some (tl, tr) => k tt w0 acc_refl [env].[x∷_ ↦ tl].[y∷_ ↦ tr]
@@ -925,10 +857,10 @@ Module Type SymbolicExecOn
           match pat with
           | pat_var x => fun w0 scr k => k tt w0 acc_refl [env].[x∷_ ↦ scr]
           | pat_bool => fun w0 scr k =>
-                          demonic_match_bool
-                            scr
-                            (fun w1 r01 => k true w1 r01 [env])
-                            (fun w1 r01 => k false w1 r01 [env])
+                          match term_get_val scr with
+                          | Some v => k v w0 acc_refl [env]
+                          | None => demonic_pattern_match' n _ scr k
+                          end
           | pat_pair x y => fun w0 scr k =>
                               match term_get_pair scr with
                               | Some (tl, tr) => k tt w0 acc_refl [env].[x∷_ ↦ tl].[y∷_ ↦ tr]

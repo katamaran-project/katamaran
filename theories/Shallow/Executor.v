@@ -207,28 +207,6 @@ Module Type ShallowExecOn
       demonic_list (finite.enum F).
     #[global] Arguments demonic_finite F {_ _}.
 
-    Definition angelic_match_bool :
-      Val ty.bool -> CPureSpecM bool :=
-      fun v =>
-        angelic_binary
-          (bind
-             (assert_formula (v = true))
-             (fun _ => pure true))
-          (bind
-             (assert_formula (v = false))
-             (fun _ => pure false)).
-
-    Definition demonic_match_bool :
-      Val ty.bool -> CPureSpecM bool :=
-      fun v =>
-        demonic_binary
-          (bind
-             (assume_formula (v = true))
-             (fun _ => pure true))
-          (bind
-             (assume_formula (v = false))
-             (fun _ => pure false)).
-
     Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
       angelic_ctx Δ POST <-> exists vs : NamedEnv Val Δ, POST vs.
     Proof.
@@ -502,32 +480,6 @@ Module Type ShallowExecOn
     End AssumeAssert.
 
     Section PatternMatching.
-
-      Definition angelic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        (assert_formula (v = true);; kt) ⊕ (assert_formula (v = false);; kf).
-
-      Lemma wp_angelic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CHeapSpecM Γ1 Γ2 A) :
-        forall POST δ h,
-          angelic_match_bool v kt kf POST δ h <->
-          if v then kt POST δ h else kf POST δ h.
-      Proof.
-        cbv [angelic_match_bool angelic_binary bind_right bind assert_formula
-             lift_purem CPureSpecM.assert_formula is_true negb].
-        destruct v; intuition; discriminate.
-      Qed.
-
-      Definition demonic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        (assume_formula (v = true);; kt) ⊗ (assume_formula (v = false);; kf).
-
-      Lemma wp_demonic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CHeapSpecM Γ1 Γ2 A) :
-        forall POST δ h,
-          demonic_match_bool v kt kf POST δ h <->
-          if v then kt POST δ h else kf POST δ h.
-      Proof.
-        cbv [demonic_match_bool demonic_binary bind_right bind assume_formula
-             lift_purem CPureSpecM.assume_formula is_true negb].
-        destruct v; intuition; discriminate.
-      Qed.
 
       Definition angelic_pattern_match {N : Set} {Γ1 Γ2 A σ} (pat : @Pattern N σ)
         (v : Val σ)

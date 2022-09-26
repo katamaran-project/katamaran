@@ -759,80 +759,6 @@ Module Soundness
 
   Section PatternMatching.
 
-    Lemma refine_angelic_match_bool' {AT A} `{Refine AT A} {Γ1 Γ2}
-      {w : World} (ι : Valuation w) (Hpc: instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.angelic_match_bool' AT Γ1 Γ2 w) (CHeapSpecM.angelic_match_bool (A := A)).
-    Proof.
-      unfold SHeapSpecM.angelic_match_bool', CHeapSpecM.angelic_match_bool.
-      intros t v ->.
-      intros kt__s kt__c Hkt.
-      intros kf__s kf__c Hkf.
-      apply refine_angelic_binary; eauto.
-      - apply refine_bind; eauto.
-        apply refine_assert_formula; eauto.
-        intros ? ? ? -> ? _ _ _. auto.
-      - apply refine_bind; eauto.
-        apply refine_assert_formula; eauto.
-        cbn. unfold is_true. now rewrite negb_true_iff.
-        intros ? ? ? -> ? _ _ _. auto.
-    Qed.
-
-    Lemma refine_angelic_match_bool {AT A} `{Refine AT A} {Γ1 Γ2}
-      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.angelic_match_bool AT Γ1 Γ2 w) (CHeapSpecM.angelic_match_bool (A := A)).
-    Proof.
-      unfold SHeapSpecM.angelic_match_bool.
-      intros t v ->.
-      destruct (term_get_val_spec t).
-      - rewrite H0.
-        intros kt__s kt__c Hkt.
-        intros kf__s kf__c Hkf.
-        intros POST__s POST__c HPOST.
-        intros δs δc Hδ hs hc Hh.
-        hnf. rewrite CHeapSpecM.wp_angelic_match_bool.
-        destruct a.
-        + apply Hkt; wsimpl; eauto.
-        + apply Hkf; wsimpl; eauto.
-      - now apply refine_angelic_match_bool'.
-    Qed.
-
-    Lemma refine_demonic_match_bool' {AT A} `{Refine AT A} {Γ1 Γ2}
-      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.demonic_match_bool' AT Γ1 Γ2 w) (CHeapSpecM.demonic_match_bool (A := A)).
-    Proof.
-      unfold SHeapSpecM.demonic_match_bool, CHeapSpecM.demonic_match_bool.
-      intros t v ->.
-      intros kt__s kt__c Hkt.
-      intros kf__s kf__c Hkf.
-      apply refine_demonic_binary; eauto.
-      - apply refine_bind; eauto.
-        apply refine_assume_formula; eauto.
-        intros ? ? ? -> ? _ _ _. auto.
-      - apply refine_bind; eauto.
-        apply refine_assume_formula; eauto.
-        cbn. unfold is_true. now rewrite negb_true_iff.
-        intros ? ? ? -> ? _ _ _. auto.
-    Qed.
-
-    Lemma refine_demonic_match_bool {AT A} `{Refine AT A} {Γ1 Γ2} {w : World}
-      (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ ι (@SHeapSpecM.demonic_match_bool AT Γ1 Γ2 w) (CHeapSpecM.demonic_match_bool (A := A)).
-    Proof.
-      unfold SHeapSpecM.demonic_match_bool.
-      intros t v ->.
-      destruct (term_get_val_spec t).
-      - rewrite H0.
-        intros kt__s kt__c Hkt.
-        intros kf__s kf__c Hkf.
-        intros POST__s POST__c HPOST.
-        intros δs δc Hδ hs hc Hh.
-        hnf. rewrite CHeapSpecM.wp_demonic_match_bool.
-        destruct a.
-        + apply Hkt; wsimpl; eauto.
-        + apply Hkf; wsimpl; eauto.
-      - now apply refine_demonic_match_bool'.
-    Qed.
-
     Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar) {A AT} `{Refine AT A}
       {Γ1 Γ2 : PCtx} {σ : Ty} (pat : @Pattern N σ)
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
@@ -911,18 +837,15 @@ Module Soundness
         rewrite CHeapSpecM.wp_angelic_pattern_match.
         apply Hk; cbn; rewrite ?inst_sub_id; auto.
         reflexivity.
-      - intros t v Htv.
+      - intros t v ->.
         intros k k__c Hk.
-        intros POST__s POST__c HPOST.
-        intros δs0 δc0 Hδ hs0 hc0 Hh.
-        intros Hwp.
-        cut (CHeapSpecM.angelic_match_bool v (k__c true [env]) (k__c false [env]) POST__c δc0 hc0).
-        + rewrite CHeapSpecM.wp_angelic_pattern_match.
-          rewrite CHeapSpecM.wp_angelic_match_bool.
-          now destruct v; cbn.
-        + revert Hwp. apply refine_angelic_match_bool; auto.
-          hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
-          hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
+        destruct (term_get_val_spec t); subst.
+        + intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_angelic_pattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + apply refine_angelic_pattern_match'; auto.
       - apply (refine_angelic_pattern_match' n (pat_list σ x y)); auto.
       - intros t v ->.
         intros k k__c Hk.
@@ -1018,18 +941,15 @@ Module Soundness
         rewrite CHeapSpecM.wp_demonic_pattern_match.
         apply Hk; cbn; rewrite ?inst_sub_id; auto.
         reflexivity.
-      - intros t v Htv.
+      - intros t v ->.
         intros k k__c Hk.
-        intros POST__s POST__c HPOST.
-        intros δs0 δc0 Hδ hs0 hc0 Hh.
-        intros Hwp.
-        cut (CHeapSpecM.demonic_match_bool v (k__c true [env]) (k__c false [env]) POST__c δc0 hc0).
-        + rewrite CHeapSpecM.wp_demonic_pattern_match.
-          rewrite CHeapSpecM.wp_demonic_match_bool.
-          now destruct v; cbn.
-        + revert Hwp. apply refine_demonic_match_bool; auto.
-          hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
-          hnf. intros * -> Hpc1. apply Hk; auto. reflexivity.
+        destruct (term_get_val_spec t); subst.
+        + intros POST__s POST__c HPOST.
+          intros δs0 δc0 -> hs0 hc0 ->. hnf.
+          rewrite CHeapSpecM.wp_demonic_pattern_match. cbn.
+          apply Hk; cbn; rewrite ?inst_sub_id; auto.
+          reflexivity.
+        + apply refine_demonic_pattern_match'; auto.
       - apply (refine_demonic_pattern_match' n (pat_list σ x y)); auto.
       - intros t v ->.
         intros k k__c Hk.
