@@ -95,6 +95,9 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       now destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)).
     Qed.
 
+    #[local] Opaque simplify_formula_bool_binop.
+    #[local] Opaque simplify_formula_bool_binop_neg.
+
     Equations(noeqns) simplify_formula_bool {Σ} (t : Term Σ ty.bool) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_var ς                 | k := Some (cons (formula_bool (term_var ς)) k);
     | term_val _ b               | k := if b then Some k else None;
@@ -174,6 +177,21 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     | bop.pair       | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_val _ v1)) (cons (formula_eq t2 (term_val _ v2)) k));
     | bop.cons       | t1 | t2 | nil        | k := None;
     | bop.cons       | t1 | t2 | cons v1 v2 | k := Some (cons (formula_eq t1 (term_val _ v1)) (cons (formula_eq t2 (term_val (ty.list _) v2)) k));
+    | bop.eq         | t1 | t2 | v          | k := Some (if v
+                                                         then cons (formula_eq t1 t2) k
+                                                         else cons (formula_neq t1 t2) k);
+    | bop.le         | t1 | t2 | v          | k := Some (if v
+                                                         then simplify_formula_bool_binop bop.le t1 t2 k
+                                                         else simplify_formula_bool_binop_neg bop.le t1 t2 k);
+    | bop.lt         | t1 | t2 | v          | k := Some (if v
+                                                         then simplify_formula_bool_binop bop.lt t1 t2 k
+                                                         else simplify_formula_bool_binop_neg bop.lt t1 t2 k);
+    | bop.ge         | t1 | t2 | v          | k := Some (if v
+                                                         then simplify_formula_bool_binop bop.ge t1 t2 k
+                                                         else simplify_formula_bool_binop_neg bop.ge t1 t2 k);
+    | bop.gt         | t1 | t2 | v          | k := Some (if v
+                                                         then simplify_formula_bool_binop bop.gt t1 t2 k
+                                                         else simplify_formula_bool_binop_neg bop.gt t1 t2 k);
     | op             | t1 | t2 | v          | k :=
       Some (cons (formula_eq (term_binop op t1 t2) (term_val _ v)) k).
 
@@ -187,6 +205,23 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     Proof.
       destruct op; cbn; try (constructor; intros ι); cbn;
         rewrite ?inst_pathcondition_cons; cbn; try reflexivity.
+      - destruct v; cbn; apply and_iff_compat_r'; intros _;
+        match goal with
+        | |- context[Val_eqb ?σ ?v1 ?v2] =>
+            destruct (Val_eqb_spec σ v1 v2); intuition
+        end.
+      - destruct v.
+        now rewrite simplify_formula_bool_binop_spec.
+        now rewrite simplify_formula_bool_binop_neg_spec.
+      - destruct v.
+        now rewrite simplify_formula_bool_binop_spec.
+        now rewrite simplify_formula_bool_binop_neg_spec.
+      - destruct v.
+        now rewrite simplify_formula_bool_binop_spec.
+        now rewrite simplify_formula_bool_binop_neg_spec.
+      - destruct v.
+        now rewrite simplify_formula_bool_binop_spec.
+        now rewrite simplify_formula_bool_binop_neg_spec.
       - destruct v. constructor. intros ι. cbn.
         rewrite ?inst_pathcondition_cons. cbn. intuition.
       - destruct v; constructor; intros ι; cbn.
@@ -276,6 +311,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
 
     Equations(noeqns) simplify_formula_eq {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_val ?(σ) l1       | term_val σ l2            | k => if Val_eqb σ l1 l2 then Some k else None;
+    | term_val _ v           | term_binop op2 t21 t22   | k => simplify_formula_eq_binop_val op2 t21 t22 v k;
     | term_inr _             | term_val _ (inl _)       | k => None;
     | term_inl _             | term_val _ (inr _)       | k => None;
     | term_inl t1            | term_val _ (inl v2)      | k => simplify_formula_eq t1 (term_val _ v2) k;
@@ -361,6 +397,11 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         dependent elimination t; try (cbn; constructor; intros;
           rewrite ?inst_pathcondition_cons; auto; fail).
       - cbn. destruct (Val_eqb_spec σ1 v v0); constructor; intuition.
+      - cbn. generalize (simplify_formula_eq_binop_val_spec op e1 e2 v k).
+        apply option.spec_monotonic.
+        + intros fs Hwp ι. rewrite (Hwp ι). apply and_iff_compat_r'.
+          intros _. clear. split; intros; now symmetry.
+        + intros Hwp ι Heq. apply (Hwp ι). now symmetry.
       - cbn. apply simplify_formula_eq_binop_val_spec.
       - cbn. apply simplify_formula_eq_binop_spec.
       - cbn. destruct v.
