@@ -427,13 +427,7 @@ Import BlockVerificationDerived2.
       (∃ v, mcause ↦ v) ∗
       (mepc ↦ epc) ∗
       cur_privilege ↦ Machine ∗
-      (∃ v, x1 ↦ v) ∗
-      (∃ v, x2 ↦ v) ∗
-      (∃ v, x3 ↦ v) ∗
-      (∃ v, x4 ↦ v) ∗
-      (∃ v, x5 ↦ v) ∗
-      (∃ v, x6 ↦ v) ∗
-      (∃ v, x7 ↦ v) ∗
+      interp_gprs ∗
       interp_pmp_entries femto_pmpentries ∗
       femto_inv_fortytwo ∗
       pc ↦ 72 ∗
@@ -446,13 +440,7 @@ Import BlockVerificationDerived2.
         (∃ v, mcause ↦ v) ∗
         (mepc ↦ epc) ∗
         cur_privilege ↦ User ∗
-        (∃ v, x1 ↦ v) ∗
-        (∃ v, x2 ↦ v) ∗
-        (∃ v, x3 ↦ v) ∗
-        (∃ v, x4 ↦ v) ∗
-        (∃ v, x5 ↦ v) ∗
-        (∃ v, x6 ↦ v) ∗
-        (∃ v, x7 ↦ v) ∗
+        interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
         femto_inv_fortytwo ∗
         pc ↦ epc ∗
@@ -481,10 +469,8 @@ Import BlockVerificationDerived2.
            Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst inst_formula
            inst_term env.lookup ctx.snocView ctx.in_at ctx.in_valid inst_env
            env.map].
-      iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hnpc & Hhandler)".
-      cbn.
-      iFrame.
-      now iFrame.
+      iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hnpc & Hhandler)".
+      rewrite Model.RiscvPmpModel2.gprs_equiv. cbn. now iFrame.
     - cbv [asn.interpret femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
            Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
            Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst inst_formula
@@ -494,7 +480,7 @@ Import BlockVerificationDerived2.
       cbn.
       iApply "Hk".
       cbn in eq; destruct eq.
-      now iFrame.
+      rewrite Model.RiscvPmpModel2.gprs_equiv. now iFrame.
   Qed.
 
   Transparent femtokernel_handler_pre.
@@ -517,24 +503,17 @@ Import BlockVerificationDerived2.
         -∗
         WP_loop.
   Proof.
-    unfold interp_gprs; cbn -[interp_pmp_entries].
-    rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
-    iIntros "".
-    iLöb as "Hind".
+    cbn - [interp_pmp_entries]. iLöb as "Hind".
     iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmpentries & Hfortytwo & Hpc & Hmem & Hnextpc & Hinstrs)".
+
 
     iApply (femto_handler_verified $! mepcv with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmpentries Hfortytwo Hpc Hinstrs Hnextpc] [Hmem]").
     - unfold femto_handler_pre; iFrame.
-      iDestruct "Hgprs" as "(? & ? & ? & ? & ? & ? & ? & ? & _)".
-      now iFrame.
-    - iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmpentries & Hfortytwo & Hpc & Hnextpc & Hinstrs)".
+    - iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmpentries & Hfortytwo & Hpc & Hnextpc & Hinstrs)".
       iApply LoopVerification.valid_semTriple_loop.
-      iSplitL "Hmem Hnextpc Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7 Hpmpentries Hpc".
+      iSplitL "Hmem Hnextpc Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmpentries Hpc".
       + unfold LoopVerification.Step_pre. cbn.
         iFrame.
-        unfold interp_gprs; cbn -[interp_pmp_entries].
-        rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
-        now iFrame.
       + iSplitL "".
         { iModIntro.
           unfold LoopVerification.CSRMod.
@@ -547,8 +526,6 @@ Import BlockVerificationDerived2.
           unfold LoopVerification.Trap.
           iIntros "(Hmem & Hgprs & Hpmpentries & Hmcause & Hcurpriv & Hnextpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
           iApply "Hind".
-          unfold interp_gprs; cbn -[interp_pmp_entries].
-          rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
           iFrame.
           now iExists _.
         }
@@ -579,8 +556,7 @@ Import BlockVerificationDerived2.
   Proof.
     iIntros "([%mpp Hmst] & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
     iExists mpp, mepc.
-    unfold LoopVerification.loop_pre, LoopVerification.Step_pre, LoopVerification.Execution, interp_gprs.
-    rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
+    unfold LoopVerification.loop_pre, LoopVerification.Step_pre, LoopVerification.Execution.
     iFrame.
 
     iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptsto 84 42) with "Hfortytwo") as "#Hinv".
@@ -620,13 +596,7 @@ Import BlockVerificationDerived2.
       (∃ v, mcause ↦ v) ∗
       (∃ v, mepc ↦ v) ∗
       cur_privilege ↦ Machine ∗
-      (∃ v, x1 ↦ v) ∗
-      (∃ v, x2 ↦ v) ∗
-      (∃ v, x3 ↦ v) ∗
-      (∃ v, x4 ↦ v) ∗
-      (∃ v, x5 ↦ v) ∗
-      (∃ v, x6 ↦ v) ∗
-      (∃ v, x7 ↦ v) ∗
+      interp_gprs ∗
       pmp0cfg ↦ femtokernel_default_pmpcfg ∗
       pmp1cfg ↦ femtokernel_default_pmpcfg ∗
       (∃ v, pmpaddr0 ↦ v) ∗
@@ -642,13 +612,7 @@ Import BlockVerificationDerived2.
         (∃ v, mcause ↦ v) ∗
         (∃ v, mepc ↦ v) ∗
         cur_privilege ↦ User ∗
-        (∃ v, x1 ↦ v) ∗
-        (∃ v, x2 ↦ v) ∗
-        (∃ v, x3 ↦ v) ∗
-        (∃ v, x4 ↦ v) ∗
-        (∃ v, x5 ↦ v) ∗
-        (∃ v, x6 ↦ v) ∗
-        (∃ v, x7 ↦ v) ∗
+        interp_gprs ∗
         pmp0cfg ↦ femto_pmpcfg_ent0 ∗
         pmp1cfg ↦ femto_pmpcfg_ent1 ∗
         (pmpaddr0 ↦ 88) ∗
@@ -673,16 +637,19 @@ Import BlockVerificationDerived2.
     - exact sat__femtoinit.
     Unshelve.
     exact env.nil.
-    - unfold femto_init_pre.
-      unfold asn.interpret; cbn -[ptsto_instrs].
-      iDestruct "Hpre" as "[Hpre1 Hpre2]".
+    - unfold femto_init_pre. cbn -[ptsto_instrs].
+      iDestruct "Hpre" as "((H11 & H12 & H13 & H14 & H15 & H16 & H17) & H2 & H3 & H4)".
+      rewrite Model.RiscvPmpModel2.gprs_equiv.
       now iFrame.
     - iIntros (an) "Hpost".
       iApply "Hk".
       unfold femto_init_post.
       cbn -[ptsto_instrs].
       iDestruct "Hpost" as "(Hpc & Hnpc & Hhandler & ([%eq _] & Hrest))".
-      subst.
+      iDestruct "Hrest" as "(H1 & H2 & H3 & H4 & H5 & Hrest)".
+      subst. iFrame.
+      rewrite Model.RiscvPmpModel2.gprs_equiv. cbn -[ptsto_instrs].
+      iDestruct "Hrest" as "(H1 & H2 & H3 & H4 & H5 & H6 & H7 & H8)".
       iFrame.
   Qed.
 
@@ -711,21 +678,12 @@ Import BlockVerificationDerived2.
       WP_loop.
   Proof.
     iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpc & Hfortytwo & Hadv & Hnextpc & Hinit & Hhandler)".
-    unfold interp_gprs.
-    rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
-    iDestruct "Hgprs" as "(_ & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & _)".
-    iApply (femto_init_verified with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7 Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1 Hpc Hinit Hfortytwo Hnextpc]").
+    iApply (femto_init_verified with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1 Hpc Hinit Hfortytwo Hnextpc]").
     - unfold femto_init_pre.
       iFrame.
-    - iIntros "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hfortytwo) & Hpc & Hnextpc & Hinit)".
+    - iIntros "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hfortytwo) & Hpc & Hnextpc & Hinit)".
       iAssert (interp_pmp_entries femto_pmpentries) with "[Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1]" as "Hpmpents".
       { unfold interp_pmp_entries; cbn; iFrame. }
-      iAssert interp_gprs with "[Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7]" as "Hgprs".
-      { unfold interp_gprs.
-        rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
-        iFrame.
-        now iExists 0.
-      }
       iApply fupd_wp.
       iMod (femtokernel_manualStep2 with "[Hmstatus Hmtvec Hmcause Hgprs Hcurpriv Hpmpents Hfortytwo Hpc Hnextpc Hhandler Hadv Hmepc ]") as "[%mpp [%mepcv Hlooppre]]".
       { iFrame.

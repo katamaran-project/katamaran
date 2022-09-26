@@ -229,23 +229,30 @@ Module RiscvPmpModel2.
   Section Lemmas.
     Context `{sg : sailGS Σ}.
 
+    Lemma gprs_equiv :
+      interp_gprs ⊣⊢
+      asn.interpret asn_regs_ptsto env.nil.
+    Proof.
+      unfold interp_gprs, reg_file.
+      rewrite big_sepS_list_to_set; [|apply finite.NoDup_enum].
+      cbn. iSplit.
+      - iIntros "[_ [Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 [Hx7 _]]]]]]]]". iFrame.
+      - iIntros "[Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 Hx7]]]]]]". iFrame.
+        by iExists 0.
+    Qed.
+
     Lemma open_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      unfold interp_gprs, reg_file.
-      rewrite big_sepS_list_to_set; [|apply finite.NoDup_enum]; cbn.
-      iIntros "[_ [Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 [Hx7 _]]]]]]]]". iFrame.
+      rewrite gprs_equiv. cbn. iIntros. iFrame.
     Qed.
 
     Lemma close_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_close_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      unfold interp_gprs, reg_file.
-      iIntros "[Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 Hx7]]]]]]".
-      iApply big_sepS_list_to_set; [apply finite.NoDup_enum|].
-      cbn; iFrame. eauto using 0%Z.
+      rewrite gprs_equiv. cbn. iIntros. iFrame.
     Qed.
 
     Lemma open_pmp_entries_sound :
