@@ -563,7 +563,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
     |}.
 
   Definition sep_contract_step {τ Δ} : SepContract Δ τ :=
-    let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "i" :: ty_xlenbits] in
+    let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "i" :: ty_xlenbits] in
     {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
        sep_contract_localstore      := create_localstore Δ Σ;
        sep_contract_precondition    :=
@@ -572,7 +572,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                      pc            ↦ term_var "i" ∗
          ∃ "npc",    nextpc        ↦ term_var "npc" ∗
          ∃ "mcause", mcause        ↦ term_var "mcause" ∗
-                     mepc          ↦ term_var "mepc" ∗
+         ∃ "mepc",   mepc          ↦ term_var "mepc" ∗
                      mstatus       ↦ term_record rmstatus [ term_var "mpp" ] ∗
                      asn_pmp_entries (term_var "entries") ∗
                      asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
@@ -589,7 +589,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                         pc            ↦ term_var v) ∗
                         mtvec         ↦ term_var "h" ∗
                         mstatus       ↦ term_record rmstatus [ term_var "mpp" ] ∗
-                        mepc          ↦ term_var "mepc"
+            ∃ v,        mepc          ↦ term_var v
           ∨
             (* Modified CSRs, requires Machine mode *)
                            asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
@@ -623,11 +623,11 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             term_var "m"  =  term_val ty_privilege Machine ∗
             ∃ "mcause", mcause ↦ term_var "mcause" ∗
             cur_privilege ↦ term_var "mpp" ∗
-            nextpc        ↦ term_var "mepc" ∗
-            pc            ↦ term_var "mepc" ∗
+            ∃ "mepc", (mepc          ↦ term_var "mepc" ∗
+                       nextpc        ↦ term_var "mepc" ∗
+                       pc            ↦ term_var "mepc") ∗
             mtvec         ↦ term_var "h" ∗
-            mstatus       ↦ term_record rmstatus [ term_val ty_privilege User ] ∗
-            mepc          ↦ term_var "mepc")
+            mstatus       ↦ term_record rmstatus [ term_val ty_privilege User ])
     |}.
 
   Definition sep_contract_step' : SepContractFun step :=
