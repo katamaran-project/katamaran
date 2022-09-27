@@ -106,49 +106,6 @@ Section Loop.
     iExists c; iFrame.
   Qed.
 
-  Lemma simplify_semTriple_pre_add : forall Γ (e : CStore Γ) τ δ P Q (s : Stm Γ τ),
-      (@semTriple _ _ Γ τ δ P s Q) ⊢ (@semTriple _ _ Γ τ δ (P ∧ ⌜e = e⌝) s Q).
-  Proof.
-    intros; iIntros "H".
-    iApply iris_rule_consequence.
-    - iIntros "[HP _]"; iExact "HP".
-    - auto.
-    - iExact "H".
-  Qed.
-
-  Lemma simplify_semTriple_pre : forall Γ (e : CStore Γ) τ δ P Q (s : Stm Γ τ),
-      (@semTriple _ _ Γ τ δ P s Q) ⊣⊢ (@semTriple _ _ Γ τ δ (P ∧ ⌜e = e⌝) s Q).
-  Proof.
-    iIntros.
-    iSplit; iIntros "H"; first iApply (simplify_semTriple_pre_add with "H").
-    iApply (@iris_rule_consequence _ _ _ _ _  _ (P ∧ ⌜e = e⌝) _ _ _ _ _).
-    iExact "H".
-    Unshelve.
-    all: auto.
-  Qed.
-
-  Lemma simplify_semTriple_post_add : forall (e : CStore ctx.nil) τ δ P (Q : Val τ → CStore ctx.nil → iProp Σ) (s : Stm ctx.nil τ),
-      (@semTriple _ _ ctx.nil τ δ P s Q) ⊢ (@semTriple _ _ ctx.nil τ δ P s (fun v (δ : CStore ctx.nil) => Q v δ ∧ ⌜[env] = δ⌝)).
-  Proof.
-    intros; iIntros "H".
-    iApply iris_rule_consequence.
-    iIntros "H"; iExact "H".
-    iIntros (v δ') "H".
-    iSplit; first iExact "H".
-    now destruct (env.nilView δ').
-    iApply "H".
-  Qed.
-
-  Lemma simplify_semTriple_post_remove : forall (e : CStore ctx.nil) τ δ P (Q : Val τ → CStore ctx.nil → iProp Σ) (s : Stm ctx.nil τ),
-       (@semTriple _ _ ctx.nil τ δ P s (fun v (δ : CStore ctx.nil) => Q v δ ∧ ⌜[env] = δ⌝)) ⊢ (@semTriple _ _ ctx.nil τ δ P s Q).
-  Proof.
-    intros; iIntros "H".
-    iApply iris_rule_consequence.
-    3: iApply "H".
-    done.
-    now iIntros (v δ') "[H _]".
-  Qed.
-
   Definition semTriple_loop : iProp Σ :=
     IH -∗ semTriple [env] Step_pre (FunDef loop) (fun _ _ => True%I).
 
