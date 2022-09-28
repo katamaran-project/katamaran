@@ -100,7 +100,6 @@ Section Loop.
   Proof.
     iIntros "IH (Hregs & [%c (Hpc & Hsafe & Hcorrect)])".
     iApply (valid_step_contract $! [env]).
-    unfold Step_pre.
     cbn - [interp_gprs interp].
     iFrame.
     iExists c; iFrame.
@@ -132,4 +131,6 @@ Section Loop.
       iApply "Hexpr".
       iFrame.
   Qed.
+
+  Print Assumptions valid_semContract_loop.
 End Loop.

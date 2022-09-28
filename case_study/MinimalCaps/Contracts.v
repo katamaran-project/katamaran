@@ -1387,17 +1387,18 @@ Module MinCapsValidContracts.
     - cbn in H; inversion H.
   Qed.
 
-  Goal True. idtac "Timing before: minimalcaps". Abort.
-  Lemma valid_contracts : forall {Δ τ} (f : Fun Δ τ),
-      ValidContract f.
-  Proof.
-  (* destruct f; reflexivity.
-Qed. *)
-  Admitted.
-  Goal True. idtac "Timing after: minimalcaps". Abort.
+
+(*   Goal True. idtac "Timing before: minimalcaps". Abort. *)
+(*   Lemma valid_contracts : forall {Δ τ} (f : Fun Δ τ), *)
+(*       ValidContract f. *)
+(*   Proof. *)
+(*   (* destruct f; reflexivity. *)
+(* Qed. *) *)
+(*   Admitted. *)
+(*   Goal True. idtac "Timing after: minimalcaps". Abort. *)
 
   Goal True. idtac "Assumptions for minimalcaps contracts:". Abort.
-  Print Assumptions valid_contracts.
+  Print Assumptions ValidContracts.
 End MinCapsValidContracts.
 
 Section Statistics.
