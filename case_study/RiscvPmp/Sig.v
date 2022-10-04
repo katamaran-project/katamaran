@@ -50,6 +50,7 @@ Inductive PurePredicate : Set :=
 | pmp_access
 | pmp_check_perms
 | pmp_check_rwx
+| pmp_cfg_unlocked
 | sub_perm
 | access_pmp_perm
 | within_cfg
@@ -62,6 +63,7 @@ Inductive Predicate : Set :=
 | pmp_entries
 | pmp_addr_access
 | pmp_addr_access_without
+| pmp_all_entries_unlocked
 | gprs
 | ptsto
 | ptsto_readonly
@@ -87,15 +89,16 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition 𝑷 := PurePredicate.
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
       match p with
-      | pmp_access      => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
-      | pmp_check_perms => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
-      | pmp_check_rwx   => [ty_pmpcfg_ent; ty_access_type]
-      | sub_perm        => [ty_access_type; ty_access_type]
-      | access_pmp_perm => [ty_access_type; ty_pmpcfgperm]
-      | within_cfg      => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
-      | not_within_cfg  => [ty_xlenbits; ty.list ty_pmpentry]
-      | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
-      | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
+      | pmp_access       => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
+      | pmp_check_perms  => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
+      | pmp_check_rwx    => [ty_pmpcfg_ent; ty_access_type]
+      | pmp_cfg_unlocked => [ty_pmpcfg_ent]
+      | sub_perm         => [ty_access_type; ty_access_type]
+      | access_pmp_perm  => [ty_access_type; ty_pmpcfgperm]
+      | within_cfg       => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
+      | not_within_cfg   => [ty_xlenbits; ty.list ty_pmpentry]
+      | prev_addr        => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
+      | in_entries       => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
       end.
 
     Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
@@ -317,17 +320,22 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition Not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) : Prop :=
       decide_not_within_cfg paddr entries = true.
+
+    Definition Pmp_cfg_unlocked (cfg : Val ty_pmpcfg_ent) : Prop :=
+      L cfg = false.
+
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
-      | pmp_access      => Pmp_access
-      | pmp_check_perms => Pmp_check_perms
-      | pmp_check_rwx   => Pmp_check_rwx
-      | sub_perm        => Sub_perm
-      | access_pmp_perm => Access_pmp_perm
-      | within_cfg      => Within_cfg
-      | not_within_cfg  => Not_within_cfg
-      | prev_addr       => Prev_addr
-      | in_entries      => In_entries
+      | pmp_access       => Pmp_access
+      | pmp_check_perms  => Pmp_check_perms
+      | pmp_check_rwx    => Pmp_check_rwx
+      | pmp_cfg_unlocked => Pmp_cfg_unlocked
+      | sub_perm         => Sub_perm
+      | access_pmp_perm  => Access_pmp_perm
+      | within_cfg       => Within_cfg
+      | not_within_cfg   => Not_within_cfg
+      | prev_addr        => Prev_addr
+      | in_entries       => In_entries
       end.
 
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -335,29 +343,31 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition 𝑯 := Predicate.
     Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
       match p with
-      | pmp_entries             => [ty.list ty_pmpentry]
-      | pmp_addr_access         => [ty.list ty_pmpentry; ty_privilege]
-      | pmp_addr_access_without => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege]
-      | gprs                    => ctx.nil
-      | ptsto                   => [ty_xlenbits; ty_xlenbits]
-      | ptsto_readonly          => [ty_xlenbits; ty_xlenbits]
-      | encodes_instr           => [ty.int; ty_ast]
-      | ptstomem                => [ty_xlenbits; ty.int; ty.list ty_word]
-      | ptstoinstr              => [ty_xlenbits; ty_ast]
+      | pmp_entries              => [ty.list ty_pmpentry]
+      | pmp_addr_access          => [ty.list ty_pmpentry; ty_privilege]
+      | pmp_addr_access_without  => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege]
+      | pmp_all_entries_unlocked => [ty.list ty_pmpentry]
+      | gprs                     => ctx.nil
+      | ptsto                    => [ty_xlenbits; ty_xlenbits]
+      | ptsto_readonly           => [ty_xlenbits; ty_xlenbits]
+      | encodes_instr            => [ty.int; ty_ast]
+      | ptstomem                 => [ty_xlenbits; ty.int; ty.list ty_word]
+      | ptstoinstr               => [ty_xlenbits; ty_ast]
       end.
 
     Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
       is_duplicable p :=
         match p with
-        | pmp_entries             => false
-        | pmp_addr_access         => false
-        | pmp_addr_access_without => false
-        | gprs                    => false
-        | ptsto                   => false
-        | ptsto_readonly          => true
-        | encodes_instr           => true
-        | ptstomem                => false
-        | ptstoinstr              => false
+        | pmp_entries              => false
+        | pmp_addr_access          => false
+        | pmp_addr_access_without  => false
+        | pmp_all_entries_unlocked => true
+        | gprs                     => false
+        | ptsto                    => false
+        | ptsto_readonly           => true
+        | encodes_instr            => true
+        | ptstomem                 => false
+        | ptstoinstr               => false
         end
       }.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -367,15 +377,16 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     (* TODO: look up precise predicates again, check if below makes sense *)
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
-      | ptsto                   => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
-      | ptsto_readonly          => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
-      | pmp_entries             => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
-      | pmp_addr_access         => Some (MkPrecise ε [ty.list ty_pmpentry; ty_privilege] eq_refl)
-      | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
-      | ptstomem                => Some (MkPrecise [ty_xlenbits; ty.int] [ty.list ty_word] eq_refl)
-      | ptstoinstr              => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
-      | encodes_instr           => Some (MkPrecise [ty.int] [ty_ast] eq_refl)
-      | _                       => None
+      | ptsto                    => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
+      | ptsto_readonly           => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
+      | pmp_entries              => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
+      | pmp_addr_access          => Some (MkPrecise ε [ty.list ty_pmpentry; ty_privilege] eq_refl)
+      | pmp_addr_access_without  => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
+      | pmp_all_entries_unlocked => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
+      | ptstomem                 => Some (MkPrecise [ty_xlenbits; ty.int] [ty.list ty_word] eq_refl)
+      | ptstoinstr               => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
+      | encodes_instr            => Some (MkPrecise [ty.int] [ty_ast] eq_refl)
+      | _                        => None
       end.
 
   End PredicateKit.
@@ -441,6 +452,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Notation asn_bool t := (asn.formula (formula_bool t)).
     Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
     Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+    Notation asn_pmp_all_entries_unlocked l := (asn.chunk (chunk_user pmp_all_entries_unlocked [l])).
+    Notation asn_pmp_cfg_unlocked e := (asn.formula (formula_user pmp_cfg_unlocked [e])).
     (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
     (* Notation asn_pmp_entries_angelic l := (asn.chunk_angelic (chunk_user pmp_entries [l])). *)
     Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
@@ -460,6 +473,11 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 End RiscvPmpSignature.
 
 Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
+  Definition simplify_pmp_cfg_unlocked {Σ} (cfg : Term Σ ty_pmpcfg_ent) : option (List Formula Σ) :=
+    match term_get_val cfg with
+    | Some cfg => if L cfg then None else Some nil
+    | _        => Some (cons (formula_user pmp_cfg_unlocked [cfg]) nil)
+    end.
 
   Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (List Formula Σ) :=
     match term_get_val a1 , term_get_val a2 with
@@ -543,6 +561,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   | pmp_access             | [ paddr; entries; priv; perm ] => simplify_pmp_access paddr entries priv perm
   | pmp_check_perms        | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
   | pmp_check_rwx          | [ cfg; acc ]                   => simplify_pmp_check_rwx cfg acc
+  | Pmp_cfg_unlocked       | [ cfg ]                        => simplify_pmp_cfg_unlocked cfg
   | sub_perm               | [ a1; a2 ]                     => simplify_sub_perm a1 a2
   | access_pmp_perm        | [ a; p ]                       => simplify_access_pmp_perm a p
   | within_cfg             | [ paddr; cfg; prevaddr; addr]  => simplify_within_cfg paddr cfg prevaddr addr
@@ -671,6 +690,17 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     unfold Prev_addr. destruct decide_prev_addr; lsolve.
   Qed.
 
+  Lemma simplify_pmp_cfg_unlocked_spec {Σ} (cfg : Term Σ ty_pmpcfg_ent) :
+    option.spec
+      (fun r => forall ι, Pmp_cfg_unlocked (inst cfg ι) <-> instpc r ι)
+      (forall ι, ~ Pmp_cfg_unlocked (inst cfg ι))
+      (simplify_pmp_cfg_unlocked cfg).
+  Proof.
+    unfold simplify_pmp_cfg_unlocked; lsolve.
+    unfold Pmp_cfg_unlocked; destruct a; lsolve.
+    destruct L; simpl; lsolve.
+  Qed.
+
   Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.
   Proof.
     intros Σ p ts.
@@ -678,6 +708,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     - simple apply simplify_pmp_access_spec.
     - simple apply simplify_pmp_check_perms_spec.
     - simple apply simplify_pmp_check_rwx_spec.
+    - simple apply simplify_pmp_cfg_unlocked_spec.
     - simple apply simplify_sub_perm_spec.
     - simple apply simplify_access_pmp_perm_spec.
     - simple apply simplify_within_cfg_spec.
