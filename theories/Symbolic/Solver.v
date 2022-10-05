@@ -330,6 +330,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     | term_inr t1            | term_val _ (inr v2)      | k => simplify_formula_eq t1 (term_val _ v2) k;
     | term_tuple ts          | term_val _ vs            | k => Some (app (formula_eqs_ctx ts (lift (envrec.to_env _ vs))) k);
     | term_record _ ts       | term_val _ v             | k => Some (app (formula_eqs_nctx ts (lift (recordv_unfold _ v))) k);
+    | term_val _ v           | term_record _ ts         | k => Some (app (formula_eqs_nctx ts (lift (recordv_unfold _ v))) k);
     | term_inr _             | term_inl _               | k => None;
     | term_inl _             | term_inr _               | k => None;
     | term_inl t1            | term_inl t2              | k => simplify_formula_eq t1 t2 k;
@@ -414,6 +415,13 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         + intros fs Hwp ι. rewrite (Hwp ι). apply and_iff_compat_r'.
           intros _. clear. split; intros; now symmetry.
         + intros Hwp ι Heq. apply (Hwp ι). now symmetry.
+      - cbn. constructor. intros ι.
+        rewrite inst_pathcondition_app, inst_formula_eqs_nctx.
+        apply and_iff_compat_r.
+        rewrite inst_lift.
+        split; intros Heq.
+        + now rewrite Heq, recordv_fold_unfold.
+        + subst. now rewrite recordv_unfold_fold.
       - cbn. apply simplify_formula_eq_binop_val_spec.
       - cbn. apply simplify_formula_eq_binop_spec.
       - cbn. destruct v.
