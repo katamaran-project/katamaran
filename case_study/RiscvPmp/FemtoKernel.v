@@ -250,7 +250,7 @@ Import BlockVerificationDerived2.
     (*   simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post). *)
 
     Definition vc__femtoinit : 𝕊 Σ__femtoinit :=
-      simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post).
+      postprocess (postprocess (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post)).
       (* let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in *)
       (* let vc2 := Postprocessing.prune vc1 in *)
       (* let vc3 := Postprocessing.solve_evars vc2 in *)
@@ -324,7 +324,7 @@ Import BlockVerificationDerived2.
     (*   Eval vm_compute in *)
     (*     simplify (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post). *)
     Definition vc__femtohandler : 𝕊 [] :=
-      simplify (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post).
+      postprocess (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post).
 
       (* let vc1 := VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post in *)
       (* let vc2 := Postprocessing.prune vc1 in *)

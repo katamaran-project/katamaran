@@ -341,19 +341,6 @@ Module BlockVerificationDerived2.
          (fun _ _ _ _ h => SymProp.block)
          []%env []%list).
 
-  Definition simplify {Σ} : 𝕊 Σ -> 𝕊 Σ :=
-    fun P => let P2 := Postprocessing.prune P in
-          let P3 := Postprocessing.solve_evars P2 in
-          let P4 := Postprocessing.solve_uvars P3 in
-          P4.
-
-  Lemma simplify_sound {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) : SymProp.safe (simplify p) ι -> SymProp.safe p ι.
-  Proof.
-    unfold simplify.
-    intros Hs.
-    now apply (Postprocessing.prune_sound p), Postprocessing.solve_evars_sound, Postprocessing.solve_uvars_sound.
-  Qed.
-
   Definition safeE {Σ} : 𝕊 Σ -> Prop :=
     fun P => VerificationConditionWithErasure (Erasure.erase_symprop P).
 
@@ -817,7 +804,7 @@ Module BlockVerificationDerived2Sem.
   Qed.
 
   Lemma sound_VC__addr `{sailGS Σ} {Γ} {pre post instrs} :
-    safeE (simplify (BlockVerificationDerived2.VC__addr (Σ := Γ) pre instrs post)) ->
+    safeE (postprocess (BlockVerificationDerived2.VC__addr (Σ := Γ) pre instrs post)) ->
     forall ι,
     ⊢ semTripleBlock (fun a => asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a]))
       instrs
@@ -828,7 +815,7 @@ Module BlockVerificationDerived2Sem.
     eapply (refine_exec_triple_addr (Σ := {| wctx := Γ ; wco := [] |}) I (ta := λ w1 _ _ _ _, SymProp.block)).
     all: cycle 3.
     - rewrite SymProp.wsafe_safe SymProp.safe_debug_safe.
-      eapply (safeE_safe env.nil), simplify_sound in Hverif.
+      eapply (safeE_safe env.nil), postprocess_sound in Hverif.
       rewrite SymProp.safe_demonic_close in Hverif.
       now eapply Hverif.
     - unfold refine, RefineBox, RefineImpl, refine, RefineProp.
