@@ -903,8 +903,10 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     Qed.
 
     Definition generic (user : Solver) : Solver :=
-      let s := solver_compose solver_generic_round solver_generic_round in
-      solver_compose s (solver_compose user s).
+      let g   := solver_generic_round in
+      let gg  := solver_compose g g in
+      let ggu := solver_compose gg user in
+      solver_compose ggu (solver_compose ggu gg).
 
     Lemma generic_spec {user} (H : SolverSpec user) :
       SolverSpec (generic user).
