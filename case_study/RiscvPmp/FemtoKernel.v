@@ -161,21 +161,19 @@ Import BlockVerificationDerived2.
       ; UTYPE femto_address_max ra RISCV_LUI
       ; CSR MPMPADDR1 ra zero CSRRW
       ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI
-    (* SANDER TODO: adding the following instruction causes longer vm_compute *)
-      (* ; CSR MPMP0CFG ra zero CSRRW *)
+      ; CSR MPMP0CFG ra zero CSRRW
+      ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI
+      ; CSR MPMP1CFG ra zero CSRRW
+      ; UTYPE 0 ra RISCV_AUIPC
+      ; ITYPE 52 ra ra RISCV_ADDI
+      ; CSR MEpc ra zero CSRRW
+      ; UTYPE 0 ra RISCV_AUIPC
+      ; ITYPE 24 ra ra RISCV_ADDI
+      ; CSR MTvec ra zero CSRRW
+      ; UTYPE femto_mstatus ra RISCV_LUI
+      ; CSR MStatus ra zero CSRRW
+      ; MRET
       ].
-    (*   ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI *)
-    (*   ; CSR MPMP1CFG ra zero CSRRW *)
-    (*   ; UTYPE 0 ra RISCV_AUIPC *)
-    (*   ; ITYPE 52 ra ra RISCV_ADDI *)
-    (*   ; CSR MEpc ra zero CSRRW *)
-    (*   ; UTYPE 0 ra RISCV_AUIPC *)
-    (*   ; ITYPE 24 ra ra RISCV_ADDI *)
-    (*   ; CSR MTvec ra zero CSRRW *)
-    (*   ; UTYPE femto_mstatus ra RISCV_LUI *)
-    (*   ; CSR MStatus ra zero CSRRW *)
-    (*   ; MRET *)
-    (*   ]. *)
 
     Example femtokernel_handler : list AST :=
       [ UTYPE 0 ra RISCV_AUIPC
