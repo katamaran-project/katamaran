@@ -188,7 +188,6 @@ Import BlockVerificationDerived2.
     Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
     Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user ptsto_readonly [a; t])) (at level 70).
     Local Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
-    Local Notation asn_pmp_cfg_unlocked e := (asn.formula (formula_user pmp_cfg_unlocked [e])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Local Notation asn_pmp_all_entries_unlocked l := (asn.chunk (chunk_user pmp_all_entries_unlocked [l])).

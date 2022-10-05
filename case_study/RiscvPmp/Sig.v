@@ -50,7 +50,6 @@ Inductive PurePredicate : Set :=
 | pmp_access
 | pmp_check_perms
 | pmp_check_rwx
-| pmp_cfg_unlocked
 | sub_perm
 | access_pmp_perm
 | within_cfg
@@ -92,7 +91,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_access       => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
       | pmp_check_perms  => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
       | pmp_check_rwx    => [ty_pmpcfg_ent; ty_access_type]
-      | pmp_cfg_unlocked => [ty_pmpcfg_ent]
       | sub_perm         => [ty_access_type; ty_access_type]
       | access_pmp_perm  => [ty_access_type; ty_pmpcfgperm]
       | within_cfg       => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
@@ -329,7 +327,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_access       => Pmp_access
       | pmp_check_perms  => Pmp_check_perms
       | pmp_check_rwx    => Pmp_check_rwx
-      | pmp_cfg_unlocked => Pmp_cfg_unlocked
       | sub_perm         => Sub_perm
       | access_pmp_perm  => Access_pmp_perm
       | within_cfg       => Within_cfg
@@ -445,6 +442,13 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
   End ContractDefKit.
 
+  Import asn.notations.
+  Definition asn_pmp_cfg_unlocked {Σ} (t : Term Σ ty_pmpcfg_ent) : Assertion Σ :=
+    match: t in rpmpcfg_ent with
+      ["L";"A";"x";"W";"R"] =>
+        term_var "L" = term_val ty.bool false
+    end.
+
   Module notations.
     Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
     Notation "p '⊑' q" := (asn.formula (formula_user sub_perm [p;q])) (at level 70).
@@ -453,7 +457,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
     Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
     Notation asn_pmp_all_entries_unlocked l := (asn.chunk (chunk_user pmp_all_entries_unlocked [l])).
-    Notation asn_pmp_cfg_unlocked e := (asn.formula (formula_user pmp_cfg_unlocked [e])).
     (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
     (* Notation asn_pmp_entries_angelic l := (asn.chunk_angelic (chunk_user pmp_entries [l])). *)
     Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
@@ -473,12 +476,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 End RiscvPmpSignature.
 
 Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
-  Definition simplify_pmp_cfg_unlocked {Σ} (cfg : Term Σ ty_pmpcfg_ent) : option (List Formula Σ) :=
-    match term_get_val cfg with
-    | Some cfg => if L cfg then None else Some nil
-    | _        => Some (cons (formula_user pmp_cfg_unlocked [cfg]) nil)
-    end.
-
   Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (List Formula Σ) :=
     match term_get_val a1 , term_get_val a2 with
     | Some a1 , Some a2 => if decide_sub_perm a1 a2 then Some nil else None
@@ -561,7 +558,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   | pmp_access             | [ paddr; entries; priv; perm ] => simplify_pmp_access paddr entries priv perm
   | pmp_check_perms        | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
   | pmp_check_rwx          | [ cfg; acc ]                   => simplify_pmp_check_rwx cfg acc
-  | Pmp_cfg_unlocked       | [ cfg ]                        => simplify_pmp_cfg_unlocked cfg
   | sub_perm               | [ a1; a2 ]                     => simplify_sub_perm a1 a2
   | access_pmp_perm        | [ a; p ]                       => simplify_access_pmp_perm a p
   | within_cfg             | [ paddr; cfg; prevaddr; addr]  => simplify_within_cfg paddr cfg prevaddr addr
@@ -690,17 +686,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     unfold Prev_addr. destruct decide_prev_addr; lsolve.
   Qed.
 
-  Lemma simplify_pmp_cfg_unlocked_spec {Σ} (cfg : Term Σ ty_pmpcfg_ent) :
-    option.spec
-      (fun r => forall ι, Pmp_cfg_unlocked (inst cfg ι) <-> instpc r ι)
-      (forall ι, ~ Pmp_cfg_unlocked (inst cfg ι))
-      (simplify_pmp_cfg_unlocked cfg).
-  Proof.
-    unfold simplify_pmp_cfg_unlocked; lsolve.
-    unfold Pmp_cfg_unlocked; destruct a; lsolve.
-    destruct L; simpl; lsolve.
-  Qed.
-
   Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.
   Proof.
     intros Σ p ts.
@@ -708,7 +693,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     - simple apply simplify_pmp_access_spec.
     - simple apply simplify_pmp_check_perms_spec.
     - simple apply simplify_pmp_check_rwx_spec.
-    - simple apply simplify_pmp_cfg_unlocked_spec.
     - simple apply simplify_sub_perm_spec.
     - simple apply simplify_access_pmp_perm_spec.
     - simple apply simplify_within_cfg_spec.

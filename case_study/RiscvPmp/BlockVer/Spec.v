@@ -90,7 +90,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
   Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-  Notation asn_pmp_cfg_unlocked e := (asn.formula (formula_user pmp_cfg_unlocked [e])).
   Notation asn_pmp_all_entries_unlocked l := (asn.chunk (chunk_user pmp_all_entries_unlocked [l])).
   Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
   Notation asn_pmp_access addr es m p := (asn.formula (formula_user pmp_access [addr;es;m;p])).
@@ -171,7 +170,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-  Local Notation asn_pmp_cfg_unlocked e := (asn.formula (formula_user pmp_cfg_unlocked [e])).
   Local Notation asn_pmp_all_entries_unlocked l := (asn.chunk (chunk_user pmp_all_entries_unlocked [l])).
   Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
   Local Notation asn_pmp_access addr es m p := (asn.formula (formula_user pmp_access [addr;es;m;p])).
@@ -489,12 +487,7 @@ Module RiscvPmpSpecVerif.
          (SHeapSpecM.vcgen default_config fuel c body)).
 
   Lemma valid_pmpLocked : ValidContractDebug pmpLocked.
-  Proof.
-    symbolic_simpl;
-      intros;
-      unfold Pmp_cfg_unlocked in H;
-      simpl in H; now subst.
-  Qed.
+  Proof. now symbolic_simpl. Qed.
 
   Lemma valid_checked_mem_read : ValidContractDebug checked_mem_read.
   Proof.
