@@ -132,6 +132,27 @@ Import BlockVerificationDerived2.
 
     Definition femto_mstatus := pure_mstatus_to_bits (MkMstatus User ).
 
+    (* Example femtokernel_init : list AST := *)
+    (*   [ *)
+    (*     UTYPE 0 ra RISCV_AUIPC *)
+    (*   ; ITYPE 88 ra ra RISCV_ADDI *)
+    (*   ; CSR MPMPADDR0 ra zero CSRRW *)
+    (*   ; UTYPE femto_address_max ra RISCV_LUI *)
+    (*   ; CSR MPMPADDR1 ra zero CSRRW *)
+    (*   ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI *)
+    (*   ; CSR MPMP0CFG ra zero CSRRW *)
+    (*   ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI *)
+    (*   ; CSR MPMP1CFG ra zero CSRRW *)
+    (*   ; UTYPE 0 ra RISCV_AUIPC *)
+    (*   ; ITYPE 52 ra ra RISCV_ADDI *)
+    (*   ; CSR MEpc ra zero CSRRW *)
+    (*   ; UTYPE 0 ra RISCV_AUIPC *)
+    (*   ; ITYPE 24 ra ra RISCV_ADDI *)
+    (*   ; CSR MTvec ra zero CSRRW *)
+    (*   ; UTYPE femto_mstatus ra RISCV_LUI *)
+    (*   ; CSR MStatus ra zero CSRRW *)
+    (*   ; MRET *)
+    (*   ]. *)
     Example femtokernel_init : list AST :=
       [
         UTYPE 0 ra RISCV_AUIPC
@@ -140,19 +161,21 @@ Import BlockVerificationDerived2.
       ; UTYPE femto_address_max ra RISCV_LUI
       ; CSR MPMPADDR1 ra zero CSRRW
       ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI
-      ; CSR MPMP0CFG ra zero CSRRW
-      ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI
-      ; CSR MPMP1CFG ra zero CSRRW
-      ; UTYPE 0 ra RISCV_AUIPC
-      ; ITYPE 52 ra ra RISCV_ADDI
-      ; CSR MEpc ra zero CSRRW
-      ; UTYPE 0 ra RISCV_AUIPC
-      ; ITYPE 24 ra ra RISCV_ADDI
-      ; CSR MTvec ra zero CSRRW
-      ; UTYPE femto_mstatus ra RISCV_LUI
-      ; CSR MStatus ra zero CSRRW
-      ; MRET
+    (* SANDER TODO: adding the following instruction causes longer vm_compute *)
+      (* ; CSR MPMP0CFG ra zero CSRRW *)
       ].
+    (*   ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI *)
+    (*   ; CSR MPMP1CFG ra zero CSRRW *)
+    (*   ; UTYPE 0 ra RISCV_AUIPC *)
+    (*   ; ITYPE 52 ra ra RISCV_ADDI *)
+    (*   ; CSR MEpc ra zero CSRRW *)
+    (*   ; UTYPE 0 ra RISCV_AUIPC *)
+    (*   ; ITYPE 24 ra ra RISCV_ADDI *)
+    (*   ; CSR MTvec ra zero CSRRW *)
+    (*   ; UTYPE femto_mstatus ra RISCV_LUI *)
+    (*   ; CSR MStatus ra zero CSRRW *)
+    (*   ; MRET *)
+    (*   ]. *)
 
     Example femtokernel_handler : list AST :=
       [ UTYPE 0 ra RISCV_AUIPC
@@ -165,6 +188,10 @@ Import BlockVerificationDerived2.
     Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
     Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user ptsto_readonly [a; t])) (at level 70).
     Local Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
+    Local Notation asn_pmp_cfg_unlocked e := (asn.formula (formula_user pmp_cfg_unlocked [e])).
+    Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+    Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
+    Local Notation asn_pmp_all_entries_unlocked l := (asn.chunk (chunk_user pmp_all_entries_unlocked [l])).
 
     Let Σ__femtoinit : LCtx := [].
     Let W__femtoinit : World := MkWorld Σ__femtoinit [].
@@ -187,10 +214,13 @@ Import BlockVerificationDerived2.
       (∃ "v", x5 ↦ term_var "v") ∗
       (∃ "v", x6 ↦ term_var "v") ∗
       (∃ "v", x7 ↦ term_var "v") ∗
-      (pmp0cfg ↦ term_val ty_pmpcfg_ent femtokernel_default_pmpcfg)  ∗
-      (pmp1cfg ↦ term_val ty_pmpcfg_ent femtokernel_default_pmpcfg)  ∗
-      (∃ "v", pmpaddr0 ↦ term_var "v") ∗
-      (∃ "v", pmpaddr1 ↦ term_var "v") ∗
+      (asn_pmp_cfg_unlocked (term_val ty_pmpcfg_ent femto_pmpcfg_ent0)) ∗
+      (asn_pmp_cfg_unlocked (term_val ty_pmpcfg_ent femto_pmpcfg_ent1)) ∗
+      (∃ "a0", ∃ "a1",
+          (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a0");
+                                      (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a1")]) ∗
+          asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a0");
+                                                   (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a1")]))) ∗
       (term_var "a" + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42)%exp.
 
     Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := nil |} :=
@@ -208,10 +238,10 @@ Import BlockVerificationDerived2.
           (∃ "v", x5 ↦ term_var "v") ∗
           (∃ "v", x6 ↦ term_var "v") ∗
           (∃ "v", x7 ↦ term_var "v") ∗
-          (pmp0cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
-          (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
-          (pmpaddr0 ↦ term_var "a" + term_val ty_xlenbits 88) ∗
-          (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
+          (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 88);
+                                       (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
+          (asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 88);
+                                       (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
           (term_var "a" + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42)
       )%exp.
 
@@ -228,14 +258,12 @@ Import BlockVerificationDerived2.
       (* let vc4 := Postprocessing.solve_uvars vc3 in *)
       (* let vc5 := Postprocessing.prune vc4 in *)
       (* vc5. *)
-    (* Import SymProp.notations. *)
+    Import SymProp.notations.
     (* Set Printing Depth 200. *)
-    (* Print vc__femtoinit. *)
+    Eval vm_compute in vc__femtoinit.
 
     Lemma sat__femtoinit : safeE vc__femtoinit.
-    Proof.
-      constructor. vm_compute. intros. auto.
-    Qed.
+    Proof. constructor. compute. intros. auto. Qed.
 
     (* Even admitting this goes OOM :-) *)
     (* Lemma sat__femtoinit2 : SymProp.safe vc__femtoinit env.nil. *)

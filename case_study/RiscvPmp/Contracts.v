@@ -1091,6 +1091,23 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                                      (term_var "cfg1" ,ₜ term_var "addr1")]);
     |}.
 
+  Definition lemma_machine_unlocked_update_pmp_entries : SepLemma close_pmp_entries :=
+    {| lemma_logic_variables := ["cfg0" :: ty_pmpcfg_ent; "addr0" :: _;
+                                 "cfg1" :: ty_pmpcfg_ent; "addr1" :: _];
+       lemma_patterns        := env.nil;
+       lemma_precondition    :=
+         pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
+         pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+         asn_pmp_cfg_unlocked (term_var "cfg0") ∗
+         asn_pmp_cfg_unlocked (term_var "cfg1") ∗
+         cur_privilege ↦ term_val ty_privilege Machine;
+       lemma_postcondition   :=
+         let entries := term_list [(term_var "cfg0" ,ₜ term_var "addr0");
+                                   (term_var "cfg1" ,ₜ term_var "addr1")] in
+         cur_privilege ↦ term_val ty_privilege Machine ∗
+         asn_pmp_entries entries ∗ asn_pmp_all_entries_unlocked entries;
+    |}.
+
   Definition lemma_extract_pmp_ptsto : SepLemma extract_pmp_ptsto :=
     {| lemma_logic_variables := [paddr :: ty_xlenbits; acc :: ty_access_type; "entries" :: ty.list ty_pmpentry; p :: ty_privilege];
        lemma_patterns        := [term_var paddr];
