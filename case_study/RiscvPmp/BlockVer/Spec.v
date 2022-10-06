@@ -232,22 +232,16 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     |}.
 
   Definition sep_contract_checked_mem_read : SepContractFun checked_mem_read :=
-    {| sep_contract_logic_variables := ["t" :: ty_access_type; "paddr" :: ty_xlenbits; "p" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
-       sep_contract_localstore      := [term_var "t"; term_var "paddr"];
-       sep_contract_precondition    :=
-           term_var "t" = term_union access_type KRead (term_val ty.unit tt)
-           ∗ term_val ty_xlenbits minAddr <= term_var "paddr"
-           ∗ term_var "paddr" <= term_val ty_xlenbits maxAddr
-           ∗ asn_cur_privilege (term_var "p")
-           ∗ asn_pmp_entries (term_var "entries")
-           ∗ asn_pmp_addr_access (term_var "entries") (term_var "p")
-           ∗ asn_pmp_access (term_var "paddr") (term_var "entries") (term_var "p") (term_var "t");
-       sep_contract_result          := "result_checked_mem_read";
-       sep_contract_postcondition   :=
-         asn_cur_privilege (term_var "p")
-         ∗ asn_pmp_entries (term_var "entries")
-         ∗ asn_pmp_addr_access (term_var "entries") (term_var "p")
-         ∗ asn.exist "v" _ (term_var "result_checked_mem_read" = term_union memory_op_result KMemValue (term_var "v"))
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
+      sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
+      sep_contract_precondition    :=
+        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w") ∗
+          term_val ty_xlenbits minAddr <= term_var "paddr" ∗
+          term_var "paddr" <= term_val ty_xlenbits maxAddr;
+      sep_contract_result          := "result_mem_read";
+      sep_contract_postcondition   :=
+        term_var "result_mem_read" = term_union memory_op_result KMemValue (term_var "w") ∗
+                                       asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w");
     |}.
 
   Definition sep_contract_pmpCheckPerms : SepContractFun pmpCheckPerms :=
@@ -286,47 +280,42 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     |}.
 
   Definition sep_contract_pmp_mem_read : SepContractFun pmp_mem_read :=
-    {| sep_contract_logic_variables := ["t" :: ty_access_type; "p" :: ty_privilege; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry];
-       sep_contract_localstore      := [term_var "t"; term_var "p"; term_var "paddr"];
-       sep_contract_precondition    :=
-           term_var "t" = term_union access_type KRead (term_val ty.unit tt)
-         ∗ term_val ty_xlenbits minAddr <= term_var "paddr"
-         ∗ term_var "paddr" <= term_val ty_xlenbits maxAddr
-         ∗ asn_cur_privilege (term_var "p")
-         ∗ term_var "p" = term_val ty_privilege Machine
-         ∗ asn_pmp_entries (term_var "entries")
-         ∗ asn_pmp_all_entries_unlocked (term_var "entries")
-         ∗ asn_pmp_addr_access (term_var "entries") (term_var "p");
-       sep_contract_result          := "result_pmp_mem_read";
-       sep_contract_postcondition   :=
-         asn_cur_privilege (term_var "p")
-         ∗ asn.exist "v" _ (term_var "result_pmp_mem_read" = term_union memory_op_result KMemValue (term_var "v"))
-         ∗ asn_pmp_entries (term_var "entries")
-         ∗ asn_pmp_addr_access (term_var "entries") (term_var "p");
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "w" :: ty_xlenbits; "m" :: ty_privilege];
+      sep_contract_localstore      := [term_var "typ"; term_var "m"; term_var "paddr"];
+      sep_contract_precondition    :=
+        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w") ∗
+          term_var "m" = term_val ty_privilege Machine ∗
+          term_val ty_xlenbits minAddr <= term_var "paddr" ∗
+          term_var "paddr" <= term_val ty_xlenbits maxAddr ∗
+          asn_cur_privilege (term_val ty_privilege Machine) ∗
+          asn_pmp_entries (term_var "entries") ∗
+          asn_pmp_all_entries_unlocked (term_var "entries");
+      sep_contract_result          := "result_mem_read";
+      sep_contract_postcondition   :=
+        term_var "result_mem_read" = term_union memory_op_result KMemValue (term_var "w") ∗
+                                       asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w") ∗
+          asn_cur_privilege (term_val ty_privilege Machine) ∗
+          asn_pmp_entries (term_var "entries") ∗
+          asn_pmp_all_entries_unlocked (term_var "entries");
     |}.
 
   Definition sep_contract_mem_read : SepContractFun mem_read :=
-    (* {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "w" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "m" :: ty_privilege]; *)
-    {| sep_contract_logic_variables := ["typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "m" :: ty_privilege];
-       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
-       sep_contract_precondition    :=
-          term_var "typ" = term_union access_type KRead (term_val ty.unit tt) ∗
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "w" :: ty_xlenbits];
+      sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
+      sep_contract_precondition    :=
+        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w") ∗
           term_val ty_xlenbits minAddr <= term_var "paddr" ∗
           term_var "paddr" <= term_val ty_xlenbits maxAddr ∗
-          asn_cur_privilege (term_var "m") ∗
-          term_var "m" = term_val ty_privilege Machine ∗
+          asn_cur_privilege (term_val ty_privilege Machine) ∗
           asn_pmp_entries (term_var "entries") ∗
-          asn_pmp_all_entries_unlocked (term_var "entries") ∗
-          asn_pmp_addr_access (term_var "entries") (term_var "m");
-          (* asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w"); *)
-       sep_contract_result          := "result_mem_read";
-       sep_contract_postcondition   :=
-         asn_pmp_entries (term_var "entries") ∗
-         asn_cur_privilege (term_var "m") ∗
-         asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
-         asn.exist "w" ty_xlenbits
-         (term_var "result_mem_read" = term_union memory_op_result KMemValue (term_var "w"));
-                                     (* asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w"); *)
+          asn_pmp_all_entries_unlocked (term_var "entries");
+      sep_contract_result          := "result_mem_read";
+      sep_contract_postcondition   :=
+        term_var "result_mem_read" = term_union memory_op_result KMemValue (term_var "w") ∗
+                                       asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w") ∗
+          asn_cur_privilege (term_val ty_privilege Machine) ∗
+          asn_pmp_entries (term_var "entries") ∗
+          asn_pmp_all_entries_unlocked (term_var "entries");
     |}.
 
   Definition sep_contract_tick_pc : SepContractFun tick_pc :=
@@ -422,17 +411,44 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        lemma_precondition    := ⊤;
        lemma_postcondition   := ⊤;
     |}.
+  Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
+    {| lemma_logic_variables := ctx.nil;
+       lemma_patterns        := env.nil;
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
+    |}.
 
-  Definition LEnv : LemmaEnv :=
-    fun Δ l =>
-      match l with
-      | open_gprs                          => lemma_open_gprs
-      | close_gprs                         => lemma_close_gprs
-      | open_pmp_entries                   => lemma_machine_unlocked_open_pmp_entries
-      | close_pmp_entries                  => lemma_machine_unlocked_close_pmp_entries
-      | update_pmp_entries                 => lemma_machine_unlocked_update_pmp_entries
-      | extract_pmp_ptsto                  => lemma_extract_pmp_ptsto
-      | return_pmp_ptsto                   => lemma_return_pmp_ptsto
+  Definition lemma_close_pmp_entries : SepLemma close_pmp_entries :=
+    {| lemma_logic_variables := ctx.nil;
+       lemma_patterns        := env.nil;
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
+    |}.
+
+  Definition lemma_extract_pmp_ptsto : SepLemma extract_pmp_ptsto :=
+    {| lemma_logic_variables := ["paddr" :: ty_xlenbits];
+       lemma_patterns        := [term_var "paddr"];
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
+    |}.
+
+  Definition lemma_return_pmp_ptsto : SepLemma return_pmp_ptsto :=
+    {| lemma_logic_variables := ["paddr" :: ty_xlenbits];
+       lemma_patterns        := [term_var "paddr"];
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
+    |}.
+
+   Definition LEnv : LemmaEnv :=
+     fun Δ l =>
+       match l with
+       | open_gprs      => lemma_open_gprs
+       | close_gprs     => lemma_close_gprs
+       | open_pmp_entries                   => lemma_machine_unlocked_open_pmp_entries
+       | close_pmp_entries                  => lemma_machine_unlocked_close_pmp_entries
+       | update_pmp_entries                 => lemma_machine_unlocked_update_pmp_entries
+       | extract_pmp_ptsto => lemma_extract_pmp_ptsto
+       | return_pmp_ptsto => lemma_return_pmp_ptsto
       end.
 End RiscvPmpBlockVerifSpec.
 
@@ -455,9 +471,22 @@ Module RiscvPmpSpecVerif.
     | None => False
     end.
 
+  Definition ValidContractWithFuelDebug {Δ τ} (fuel : nat) (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => ValidContractWithFuel fuel c (FunDef f)
+    | None => False
+    end.
+
+
   Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => ValidContractReflect c (FunDef f)
+    | None => False
+    end.
+
+  Definition ValidContractWithFuel {Δ τ} (fuel : nat) (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => ValidContractReflectWithFuel fuel c (FunDef f)
     | None => False
     end.
 
@@ -484,21 +513,14 @@ Module RiscvPmpSpecVerif.
 
   Import RiscvPmpBlockVerifExecutor.
 
-  Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    VerificationCondition
-      (postprocess
-         (SHeapSpecM.vcgen default_config fuel c body)).
-
-  Lemma valid_pmpLocked : ValidContractDebug pmpLocked.
-  Proof. now symbolic_simpl. Qed.
+  Lemma valid_pmpLocked : ValidContract pmpLocked.
+  Proof. now compute. Qed.
 
   Lemma valid_checked_mem_read : ValidContractDebug checked_mem_read.
   Proof.
+    (* strange: replacing ValidContractDebug with ValidContract makes the proof fail. *)
     symbolic_simpl.
-    intros.
-    split; intros.
-    now exists Read.
-    split; intuition.
+    now intuition.
   Qed.
 
   Lemma valid_pmp_mem_read : ValidContract pmp_mem_read.
@@ -573,17 +595,16 @@ Module RiscvPmpSpecVerif.
       unfold decide_access_pmp_perm; destruct acc; auto.
   Qed.
 
-  (* This holds, it's just incredibly slow =) *)
-  Lemma valid_pmpCheck : ValidContractWithFuel 10 sep_contract_pmpCheck fun_pmpCheck.
+  Lemma valid_pmpCheck : ValidContractWithFuelDebug 10 pmpCheck.
   Proof.
-  (*   compute. *)
-  (*   constructor. *)
-  (*   cbn. *)
-  (*   intros; subst. *)
-  (*   repeat try split; subst; *)
-  (*   apply (machine_unlocked_pmp_access _ _ _ _ (conj H H0)). *)
-  (* Qed. *)
-  Admitted.
+    vm_compute.
+    constructor.
+    cbn.
+    intros; subst.
+    repeat try split; subst;
+    apply (machine_unlocked_pmp_access);
+      unfold Pmp_cfg_unlocked; now cbn.
+  Qed.
 
   Lemma valid_mem_read : ValidContract mem_read.
   Proof. reflexivity. Qed.
@@ -612,6 +633,17 @@ Module RiscvPmpSpecVerif.
     apply Hvc.
   Qed.
 
+  Lemma valid_contract_with_fuel_debug : forall {Δ τ} (fuel : nat) (f : Fun Δ τ) (c : SepContract Δ τ),
+      RiscvPmpBlockVerifSpec.CEnv f = Some c ->
+      ValidContractWithFuelDebug fuel f ->
+      Symbolic.ValidContractWithFuel fuel c (FunDef f).
+  Proof.
+    intros ? ? fuel f c Hcenv Hvc.
+    unfold ValidContractWithFuelDebug in Hvc.
+    rewrite Hcenv in Hvc.
+    apply Hvc.
+  Qed.
+
   Lemma valid_contract_debug : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
       ValidContractDebug f ->
@@ -625,10 +657,10 @@ Module RiscvPmpSpecVerif.
 
   Lemma ValidContracts : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
-      Symbolic.ValidContract c (FunDef f).
+      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
   Proof.
     intros.
-    destruct f; try discriminate H.
+    destruct f; try discriminate H; eexists.
     - apply (valid_contract _ H valid_execute_rX).
     - apply (valid_contract _ H valid_execute_wX).
     - apply (valid_contract _ H valid_execute_tick_pc).
@@ -636,13 +668,12 @@ Module RiscvPmpSpecVerif.
     - apply (valid_contract _ H valid_mem_read).
     - apply (valid_contract_debug _ H valid_checked_mem_read).
     - apply (valid_contract _ H valid_pmp_mem_read).
-    - apply (valid_contract_debug _ H valid_pmpLocked).
-    - (* apply (valid_contract_debug _ H valid_pmpCheck). *) admit.
+    - apply (valid_contract _ H valid_pmpLocked).
+    - apply (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
     - apply (valid_contract _ H valid_pmpCheckPerms).
     - apply (valid_contract_debug _ H valid_pmpMatchAddr).
     - apply (valid_contract _ H valid_execute_fetch).
-  (* Qed. *)
-  Admitted.
+  Qed.
 End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
@@ -930,8 +961,6 @@ Module RiscvPmpIrisInstanceWithContracts.
     - apply machine_unlocked_open_pmp_entries_sound.
     - apply machine_unlocked_close_pmp_entries_sound.
     - apply machine_unlocked_update_pmp_entries_sound.
-    - apply extract_pmp_ptsto_sound.
-    - apply return_pmp_ptsto_sound.
   Qed.
 
   Import RiscvPmpBlockVerifSpec.
@@ -941,8 +970,9 @@ Module RiscvPmpIrisInstanceWithContracts.
   Proof.
     apply (sound foreignSemBlockVerif lemSemBlockVerif).
     intros Γ τ f c Heq.
-    apply shallow_vcgen_soundness, symbolic_vcgen_soundness.
-    apply RiscvPmpSpecVerif.ValidContracts; assumption.
+    destruct (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc].
+    eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness.
+    eexact Hvc.
   Qed.
 
 End RiscvPmpIrisInstanceWithContracts.

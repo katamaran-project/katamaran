@@ -1777,6 +1777,15 @@ Module Soundness
     apply refine_vcgen. now rewrite wsafe_safe, safe_debug_safe.
   Qed.
 
+  Lemma symbolic_vcgen_fuel_soundness {Γ τ} (fuel : nat) (c : SepContract Γ τ) (body : Stm Γ τ) :
+    Symbolic.ValidContractWithFuel fuel c body ->
+    Shallow.ValidContractWithFuel fuel c body.
+  Proof.
+    unfold Symbolic.ValidContractWithFuel. intros [Hwp%postprocess_sound].
+    apply refine_vcgen. now rewrite wsafe_safe, safe_debug_safe.
+  Qed.
+
+
   (* Print Assumptions symbolic_vcgen_soundness. *)
 
 End Soundness.

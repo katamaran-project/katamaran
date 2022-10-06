@@ -1252,6 +1252,13 @@ Module RiscvPmpValidContracts.
     | None => False
     end.
 
+  Definition ValidContractWithFuel {Δ τ} (fuel : nat) (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => Symbolic.ValidContractReflectWithFuel fuel c (FunDef f)
+    | None => False
+    end.
+
+
   Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContract c (FunDef f)

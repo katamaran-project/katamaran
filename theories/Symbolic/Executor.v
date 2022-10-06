@@ -1401,11 +1401,14 @@ Module Type SymbolicExecOn
   Module Symbolic.
     Import SHeapSpecM.
 
-    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition
         (postprocess
-           (* Use inline_fuel = 1 by default. *)
-           (vcgen default_config 1 c body)).
+           (vcgen default_config fuel c body)).
+
+    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      (* Use inline_fuel = 1 by default. *)
+      ValidContractWithFuel 1 c body.
 
     Definition ok {Σ} (p : 𝕊 Σ) : bool :=
       match prune p with
@@ -1421,15 +1424,25 @@ Module Type SymbolicExecOn
       destruct q; try discriminate; cbn; auto.
     Qed.
 
+    Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      is_true (ok (postprocess (vcgen default_config fuel c body))).
+
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (ok (postprocess (vcgen default_config 1 c body))).
+      ValidContractReflectWithFuel 1 c body.
+
+    Lemma validcontract_reflect_fuel_sound {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
+      ValidContractReflectWithFuel fuel c body ->
+      ValidContractWithFuel fuel c body.
+    Proof.
+      unfold ValidContractReflectWithFuel, ValidContractWithFuel. intros Hok.
+      apply (ok_sound _ env.nil) in Hok. now constructor.
+    Qed.
 
     Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflect c body ->
       ValidContract c body.
     Proof.
-      unfold ValidContractReflect, ValidContract. intros Hok.
-      apply (ok_sound _ env.nil) in Hok. now constructor.
+      eapply validcontract_reflect_fuel_sound.
     Qed.
 
     Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=

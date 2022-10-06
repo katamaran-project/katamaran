@@ -769,9 +769,12 @@ Module Type ShallowExecOn
 
   Module Shallow.
 
+    Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      CHeapSpecM.vcgen fuel c body.
+
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)
-      CHeapSpecM.vcgen 1 c body.
+      ValidContractWithFuel 1 c body.
 
     Module Statistics.
 
