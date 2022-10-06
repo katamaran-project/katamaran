@@ -321,6 +321,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
           (* asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w"); *)
        sep_contract_result          := "result_mem_read";
        sep_contract_postcondition   :=
+         asn_pmp_entries (term_var "entries") ∗
+         asn_cur_privilege (term_var "m") ∗
+         asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
          asn.exist "w" ty_xlenbits
          (term_var "result_mem_read" = term_union memory_op_result KMemValue (term_var "w"));
                                      (* asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w"); *)

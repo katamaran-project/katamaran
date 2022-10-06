@@ -132,27 +132,6 @@ Import BlockVerificationDerived2.
 
     Definition femto_mstatus := pure_mstatus_to_bits (MkMstatus User ).
 
-    (* Example femtokernel_init : list AST := *)
-    (*   [ *)
-    (*     UTYPE 0 ra RISCV_AUIPC *)
-    (*   ; ITYPE 88 ra ra RISCV_ADDI *)
-    (*   ; CSR MPMPADDR0 ra zero CSRRW *)
-    (*   ; UTYPE femto_address_max ra RISCV_LUI *)
-    (*   ; CSR MPMPADDR1 ra zero CSRRW *)
-    (*   ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI *)
-    (*   ; CSR MPMP0CFG ra zero CSRRW *)
-    (*   ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI *)
-    (*   ; CSR MPMP1CFG ra zero CSRRW *)
-    (*   ; UTYPE 0 ra RISCV_AUIPC *)
-    (*   ; ITYPE 52 ra ra RISCV_ADDI *)
-    (*   ; CSR MEpc ra zero CSRRW *)
-    (*   ; UTYPE 0 ra RISCV_AUIPC *)
-    (*   ; ITYPE 24 ra ra RISCV_ADDI *)
-    (*   ; CSR MTvec ra zero CSRRW *)
-    (*   ; UTYPE femto_mstatus ra RISCV_LUI *)
-    (*   ; CSR MStatus ra zero CSRRW *)
-    (*   ; MRET *)
-    (*   ]. *)
     Example femtokernel_init : list AST :=
       [
         UTYPE 0 ra RISCV_AUIPC
@@ -186,6 +165,7 @@ Import BlockVerificationDerived2.
     Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
     Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user ptsto_readonly [a; t])) (at level 70).
     Local Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
+    Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Local Notation asn_pmp_all_entries_unlocked l := (asn.chunk (chunk_user pmp_all_entries_unlocked [l])).
@@ -255,9 +235,9 @@ Import BlockVerificationDerived2.
       (* let vc4 := Postprocessing.solve_uvars vc3 in *)
       (* let vc5 := Postprocessing.prune vc4 in *)
       (* vc5. *)
-    Import SymProp.notations.
+    (* Import SymProp.notations. *)
     (* Set Printing Depth 200. *)
-    Eval vm_compute in vc__femtoinit.
+    (* Eval vm_compute in vc__femtoinit. *)
 
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof. constructor. compute. intros. auto. Qed.
@@ -288,10 +268,12 @@ Import BlockVerificationDerived2.
       (∃ "v", x5 ↦ term_var "v") ∗
       (∃ "v", x6 ↦ term_var "v") ∗
       (∃ "v", x7 ↦ term_var "v") ∗
-      (pmp0cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
-      (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
-      (pmpaddr0 ↦ term_var "a" + term_val ty_xlenbits 16) ∗
-      (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
+      (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 16);
+                                   (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
+      (asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 16);
+                                                (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
+      (asn_pmp_addr_access (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 16);
+                                   (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)]) (term_val ty_privilege Machine)) ∗
       (term_var "a" + (term_val ty_xlenbits 12) ↦ᵣ term_val ty_xlenbits 42)%exp.
 
     Example femtokernel_handler_post : Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := nil |} :=
@@ -311,10 +293,12 @@ Import BlockVerificationDerived2.
           (∃ "v", x5 ↦ term_var "v") ∗
           (∃ "v", x6 ↦ term_var "v") ∗
           (∃ "v", x7 ↦ term_var "v") ∗
-          (pmp0cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
-          (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
-          (pmpaddr0 ↦ term_var "a" + term_val ty_xlenbits 16) ∗
-          (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
+          (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 16);
+                                       (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
+          (asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 16);
+                                                    (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
+          (asn_pmp_addr_access (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 16);
+                                       (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)]) (term_val ty_privilege Machine)) ∗
           (term_var "a" + (term_val ty_xlenbits 12) ↦ᵣ term_val ty_xlenbits 42)
       )%exp.
 
@@ -330,9 +314,9 @@ Import BlockVerificationDerived2.
       (* let vc4 := Postprocessing.solve_uvars vc3 in *)
       (* let vc5 := Postprocessing.prune vc4 in *)
       (* vc5. *)
-    (* Import SymProp.notations. *)
-    (* Set Printing Depth 200. *)
-    (* Compute vc__femtohandler. *)
+    Import SymProp.notations.
+    Set Printing Depth 200.
+    Compute vc__femtohandler.
     (* Print vc__femtohandler. *)
 
     Lemma sat__femtohandler : safeE vc__femtohandler.
@@ -456,6 +440,8 @@ Import BlockVerificationDerived2.
       cur_privilege ↦ Machine ∗
       interp_gprs ∗
       interp_pmp_entries femto_pmpentries ∗
+      interp_pmp_all_entries_unlocked femto_pmpentries ∗
+      interp_pmp_addr_access liveAddrs femto_pmpentries Machine ∗
       femto_inv_fortytwo ∗
       pc ↦ 72 ∗
       (∃ v, nextpc ↦ v) ∗
@@ -468,6 +454,8 @@ Import BlockVerificationDerived2.
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
+        interp_pmp_all_entries_unlocked femto_pmpentries ∗
+        interp_pmp_addr_access liveAddrs femto_pmpentries Machine ∗
         femto_inv_fortytwo ∗
         (∃ epc, mepc ↦ epc ∗
                 pc ↦ epc) ∗
@@ -490,23 +478,26 @@ Import BlockVerificationDerived2.
     - exact sat__femtohandler.
     Unshelve.
     exact [env].
-    - cbv [asn.interpret femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
+    - cbv [femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
            Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
            Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst inst_formula
            inst_term env.lookup ctx.snocView ctx.in_at ctx.in_valid inst_env
            env.map].
+      cbn.
       iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hnpc & Hhandler)".
       rewrite Model.RiscvPmpModel2.gprs_equiv. cbn. now iFrame.
-    - cbv [asn.interpret femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
+    - cbv [femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
            Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
            Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst inst_formula
            inst_term env.lookup ctx.snocView ctx.in_at ctx.in_valid inst_env
            env.map femto_handler_post femtokernel_handler_post].
-      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo))".
+      cbn.
+      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1) & [%Hcfg0L %Hcfg1L] & HaccM & Hfortytwo)".
       cbn.
       iApply "Hk".
       cbn in eq; destruct eq.
       rewrite Model.RiscvPmpModel2.gprs_equiv. iFrame.
+      iSplitR; first done.
       iExists an; iFrame.
   Qed.
 
@@ -521,6 +512,8 @@ Import BlockVerificationDerived2.
         cur_privilege ↦ Machine ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
+        interp_pmp_all_entries_unlocked femto_pmpentries ∗
+        interp_pmp_addr_access liveAddrs femto_pmpentries Machine ∗
         femto_inv_fortytwo ∗
         (pc ↦ 72) ∗
         interp_pmp_addr_access liveAddrs femto_pmpentries User ∗
@@ -531,16 +524,18 @@ Import BlockVerificationDerived2.
         WP_loop.
   Proof.
     cbn - [interp_pmp_entries]. iLöb as "Hind".
-    iIntros "(Hmstatus & Hmtvec & Hmcause & [%mepcv Hmepc] & Hcurpriv & Hgprs & Hpmpentries & Hfortytwo & Hpc & Hmem & Hnextpc & Hinstrs)".
-    iApply (femto_handler_verified with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmpentries Hfortytwo Hpc Hinstrs Hnextpc] [Hmem]").
-    - unfold femto_handler_pre; iFrame.
-      now iExists mepcv.
-    - iIntros "(Hmstatus & Hmtvec & Hmcause & Hcurpriv & Hgprs & Hpmpentries & Hfortytwo & [%mepcv' (Hmepc & Hpc)] & Hnextpc & Hinstrs)".
+    iIntros "(Hmstatus & Hmtvec & Hmcause & [%mepcv Hmepc] & Hcurpriv & Hgprs & Hpmpentries & [%Hcfg0L %Hcfg1L] & HaccM & #Hmem & Hpc & HaccU & Hnextpc & Hinstrs)".
+    iApply (femto_handler_verified with "[-HaccU] [HaccU]").
+    - unfold femto_handler_pre, interp_pmp_all_entries_unlocked, femto_pmpentries; iFrame.
+      iSplitL "Hmepc"; first now iExists mepcv.
+      iSplitR; first done.
+      iExact "Hmem".
+    - iIntros "(Hmstatus & Hmtvec & Hmcause & Hcurpriv & Hgprs & Hpmpentries & HpmpentriesL & HaccM & #Hmem' & [%epc (Hmepc & Hpc)] & Hnpc & Hhandler)".
       iApply LoopVerification.valid_semTriple_loop.
-      iSplitL "Hmem Hnextpc Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmpentries Hpc".
+      iSplitL "Hmem Hmstatus Hmtvec Hmcause Hmepc Hpc Hcurpriv Hgprs Hpmpentries Hnpc HaccU".
       + unfold LoopVerification.Step_pre. cbn.
         iFrame.
-        now iExists mepcv'.
+        now iExists epc.
       + iSplitL "".
         { iModIntro.
           unfold LoopVerification.CSRMod.
@@ -551,10 +546,10 @@ Import BlockVerificationDerived2.
         iSplitR "".
         { iModIntro.
           unfold LoopVerification.Trap.
-          iIntros "(Hmem & Hgprs & Hpmpentries & Hmcause & Hcurpriv & Hnextpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
+          iIntros "(HaccU & Hgprs & Hpmpentries & Hmcause & Hcurpriv & Hnextpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
           iApply "Hind".
           iFrame.
-          now iExists _.
+          iSplitR; first iExact "Hmem"; now iExists _.
         }
 
         { iModIntro.
@@ -572,6 +567,8 @@ Import BlockVerificationDerived2.
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
+        interp_pmp_all_entries_unlocked femto_pmpentries ∗
+        interp_pmp_addr_access liveAddrs femto_pmpentries Machine ∗
          (interp_ptsto 84 42) ∗
         (pc ↦ 88) ∗
         (∃ v, nextpc ↦ v) ∗
@@ -581,7 +578,7 @@ Import BlockVerificationDerived2.
         ={⊤}=∗
         ∃ mpp, LoopVerification.loop_pre User 72 88 mpp femto_pmpentries.
   Proof.
-    iIntros "([%mpp Hmst] & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
+    iIntros "([%mpp Hmst] & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & HpmpcfgL & HaccM & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
     iExists mpp.
     unfold LoopVerification.loop_pre, LoopVerification.Step_pre, LoopVerification.Execution.
     iFrame.
