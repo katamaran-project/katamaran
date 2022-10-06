@@ -255,6 +255,20 @@ Module RiscvPmpModel2.
       rewrite gprs_equiv. cbn. iIntros. iFrame.
     Qed.
 
+    Lemma open_ptsto_instr_sound :
+      ValidLemma RiscvPmpSpecification.lemma_open_ptsto_instr.
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      now iIntros.
+    Qed.
+
+    Lemma close_ptsto_instr_sound :
+      ValidLemma RiscvPmpSpecification.lemma_close_ptsto_instr.
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      now iIntros.
+    Qed.
+
     Lemma open_pmp_entries_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_pmp_entries.
     Proof.
@@ -442,7 +456,7 @@ Module RiscvPmpModel2.
   Lemma lemSem `{sailGS Σ} : LemmaSem.
   Proof.
     intros Δ [];
-      eauto using open_gprs_sound, close_gprs_sound, open_pmp_entries_sound,
+      eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound,
       close_pmp_entries_sound, update_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound,
       machine_unlocked_open_pmp_entries_sound, machine_unlocked_close_pmp_entries_sound.
   Qed.

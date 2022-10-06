@@ -211,16 +211,23 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     |}.
 
   Definition sep_contract_fetch_instr : SepContractFun fetch :=
-    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast];
+    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [];
        sep_contract_precondition    := asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
-                                                 term_var "a" ↦ᵢ term_var "i";
+                                                 term_var "a" ↦ᵢ term_var "i" ∗
+                                                 term_val ty_xlenbits minAddr <= term_var "a" ∗
+                                                 term_var "a" <= term_val ty_xlenbits maxAddr ∗
+                                                 asn_cur_privilege (term_val ty_privilege Machine) ∗
+                                                 asn_pmp_entries (term_var "entries") ∗
+                                                 asn_pmp_all_entries_unlocked (term_var "entries");
        sep_contract_result          := "result_fetch";
        sep_contract_postcondition   :=
          asn.chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ term_var "i" ∗
          asn.exist "w" _
            (term_var "result_fetch" = term_union fetch_result KF_Base (term_var "w") ∗
-            asn.chunk (chunk_user encodes_instr [term_var "w"; term_var "i"]));
+                                        asn.chunk (chunk_user encodes_instr [term_var "w"; term_var "i"])) ∗
+           asn_cur_privilege (term_val ty_privilege Machine) ∗
+           asn_pmp_entries (term_var "entries");
     |}.
 
   Definition sep_contract_pmpLocked : SepContractFun pmpLocked :=
@@ -411,6 +418,23 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        lemma_precondition    := ⊤;
        lemma_postcondition   := ⊤;
     |}.
+
+  Definition lemma_open_ptsto_instr : SepLemma open_ptsto_instr :=
+    {| lemma_logic_variables := ["paddr" :: ty.int; "i" :: ty_ast];
+       lemma_patterns        := [term_var "paddr"];
+       lemma_precondition    := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "i"]);
+      lemma_postcondition   := ∃ "w", (asn.chunk (chunk_user ptsto [term_var "paddr"; term_var "w"]) ∗
+                                      asn.chunk (chunk_user encodes_instr [term_var "w"; term_var "i"]))
+    |}.
+
+  Definition lemma_close_ptsto_instr : SepLemma close_ptsto_instr :=
+    {| lemma_logic_variables := ["paddr" :: ty.int; "w" :: ty.int; "i" :: ty_ast];
+       lemma_patterns        := [term_var "paddr"; term_var "w"];
+       lemma_precondition    := asn.chunk (chunk_user ptsto [term_var "paddr"; term_var "w"]) ∗
+                                  asn.chunk (chunk_user encodes_instr [term_var "w"; term_var "i"]);
+       lemma_postcondition   := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "i"]);
+    |}.
+
   Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
     {| lemma_logic_variables := ctx.nil;
        lemma_patterns        := env.nil;
@@ -444,6 +468,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        match l with
        | open_gprs      => lemma_open_gprs
        | close_gprs     => lemma_close_gprs
+       | open_ptsto_instr      => lemma_open_ptsto_instr
+       | close_ptsto_instr     => lemma_close_ptsto_instr
        | open_pmp_entries                   => lemma_machine_unlocked_open_pmp_entries
        | close_pmp_entries                  => lemma_machine_unlocked_close_pmp_entries
        | update_pmp_entries                 => lemma_machine_unlocked_update_pmp_entries
@@ -496,8 +522,14 @@ Module RiscvPmpSpecVerif.
   Lemma valid_execute_wX : ValidContract wX.
   Proof. reflexivity. Qed.
 
+  (* Import SymProp.notations.
+  Set Printing Depth 200.
+  Eval vm_compute in (postprocess (RiscvPmpBlockVerifExecutor.SHeapSpecM.vcgen RiscvPmpBlockVerifExecutor.default_config 1 *)
+  (*            sep_contract_fetch_instr (FunDef fetch))). *)
   Lemma valid_execute_fetch : ValidContract fetch.
-  Proof. Admitted.
+  Proof.
+    reflexivity.
+  Qed.
 
   (* Lemma valid_execute_fetch_instr : SMut.ValidContract sep_contract_fetch_instr (FunDef fetch). *)
   (* Proof. compute. Admitted. *)
@@ -595,6 +627,7 @@ Module RiscvPmpSpecVerif.
       unfold decide_access_pmp_perm; destruct acc; auto.
   Qed.
 
+  (* Holds but takes long to type-check *)
   Lemma valid_pmpCheck : ValidContractWithFuelDebug 10 pmpCheck.
   Proof.
     vm_compute.
@@ -864,6 +897,24 @@ Module RiscvPmpIrisInstanceWithContracts.
       | _ => idtac
       end.
 
+  Lemma open_ptsto_instr_sound `{sailGS Σ} :
+    ValidLemma RiscvPmpBlockVerifSpec.lemma_open_ptsto_instr.
+  Proof.
+    intros ι; destruct_syminstance ι; cbn.
+    iIntros "[%w (Hptsto & Henc )]".
+    iExists w.
+    now iFrame.
+  Qed.
+
+  Lemma close_ptsto_instr_sound `{sailGS Σ} :
+    ValidLemma RiscvPmpBlockVerifSpec.lemma_close_ptsto_instr.
+  Proof.
+    intros ι; destruct_syminstance ι; cbn.
+    iIntros "(Hptsto & Henc )".
+    iExists w.
+    now iFrame.
+  Qed.
+
   Lemma machine_unlocked_open_pmp_entries_sound `{sailGS Σ} :
     ValidLemma RiscvPmpSpecification.lemma_machine_unlocked_open_pmp_entries.
   Proof.
@@ -961,6 +1012,8 @@ Module RiscvPmpIrisInstanceWithContracts.
     - apply machine_unlocked_open_pmp_entries_sound.
     - apply machine_unlocked_close_pmp_entries_sound.
     - apply machine_unlocked_update_pmp_entries_sound.
+    - apply open_ptsto_instr_sound.
+    - apply close_ptsto_instr_sound.
   Qed.
 
   Import RiscvPmpBlockVerifSpec.

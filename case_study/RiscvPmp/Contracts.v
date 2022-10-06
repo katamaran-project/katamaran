@@ -1018,6 +1018,20 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
        lemma_postcondition   := asn_gprs;
     |}.
 
+  Definition lemma_open_ptsto_instr : SepLemma open_ptsto_instr :=
+    {| lemma_logic_variables := [paddr :: ty.int];
+       lemma_patterns        := [term_var paddr];
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
+    |}.
+
+  Definition lemma_close_ptsto_instr : SepLemma close_ptsto_instr :=
+    {| lemma_logic_variables := [paddr :: ty.int; w :: ty.int];
+       lemma_patterns        := [term_var paddr; term_var w];
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
+    |}.
+
   Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
     {| lemma_logic_variables := ["entries" :: ty.list ty_pmpentry];
        lemma_patterns        := env.nil;
@@ -1224,6 +1238,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
       | close_gprs            => lemma_close_gprs
       | open_pmp_entries      => lemma_open_pmp_entries
       | close_pmp_entries     => lemma_close_pmp_entries
+      | open_ptsto_instr      => lemma_open_ptsto_instr
+      | close_ptsto_instr     => lemma_close_ptsto_instr
       | update_pmp_entries    => lemma_update_pmp_entries
       | extract_pmp_ptsto     => lemma_extract_pmp_ptsto
       | return_pmp_ptsto      => lemma_return_pmp_ptsto

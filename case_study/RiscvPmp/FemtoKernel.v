@@ -236,7 +236,7 @@ Import BlockVerificationDerived2.
       (* let vc5 := Postprocessing.prune vc4 in *)
       (* vc5. *)
     (* Import SymProp.notations. *)
-    (* Set Printing Depth 200. *)
+    (* (* Set Printing Depth 200. *) *)
     (* Eval vm_compute in vc__femtoinit. *)
 
     Lemma sat__femtoinit : safeE vc__femtoinit.
