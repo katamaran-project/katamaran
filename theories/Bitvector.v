@@ -157,17 +157,6 @@ Module bv.
 
   End Conversion.
 
-  Section Constants.
-
-    Definition zero n : bv n := mk 0 I.
-    Definition one n : bv n :=
-      match n with
-      | 0   => mk 0 I
-      | S _ => mk 1 I
-      end.
-
-  End Constants.
-
   Section Equality.
 
     Definition eqb {n : nat} (x y : bv n) : bool :=
@@ -447,6 +436,22 @@ Module bv.
     Qed.
   End ListLike.
 
+  Section Constants.
+
+    Definition zero n : bv n := mk 0 I.
+    Definition one n : bv n :=
+      match n with
+      | 0   => mk 0 I
+      | S _ => mk 1 I
+      end.
+    Fixpoint ones (n : nat) : bv n :=
+      match n with
+      | O   => nil
+      | S m => cons true (ones m)
+      end.
+
+  End Constants.
+
   Section Access.
 
     Import BinPos.
@@ -468,7 +473,7 @@ Module bv.
 
     (* Sign extension. A bit awkward for little-endian vectors.  *)
     Definition sext {m} (v : bv m) n : bv (m + n) :=
-      app v (if msb v then one n else zero n).
+      app v (if msb v then ones n else zero n).
     (* Zero extension. Equally as awkward. *)
     Definition zext {m} (v : bv m) n : bv (m + n) :=
       app v (zero n).
@@ -746,15 +751,15 @@ Module bv.
     Goal msb [bv[2] 2] = true.  reflexivity. Qed.
     Goal msb [bv[2] 3] = true.  reflexivity. Qed.
 
-    Goal sext [bv[2] 0] 1 = [bv[3] 0]. reflexivity. Qed.
-    Goal sext [bv[2] 1] 1 = [bv[3] 1]. reflexivity. Qed.
-    Goal sext [bv[2] 2] 1 = [bv[3] 6]. reflexivity. Qed.
-    Goal sext [bv[2] 3] 1 = [bv[3] 7]. reflexivity. Qed.
+    Goal sext [bv[2] 0] 2 = [bv[4] 0].  reflexivity. Qed.
+    Goal sext [bv[2] 1] 2 = [bv[4] 1].  reflexivity. Qed.
+    Goal sext [bv[2] 2] 2 = [bv[4] 14]. reflexivity. Qed.
+    Goal sext [bv[2] 3] 2 = [bv[4] 15]. reflexivity. Qed.
 
-    Goal zext [bv[2] 0] 1 = [bv[3] 0]. reflexivity. Qed.
-    Goal zext [bv[2] 1] 1 = [bv[3] 1]. reflexivity. Qed.
-    Goal zext [bv[2] 2] 1 = [bv[3] 2]. reflexivity. Qed.
-    Goal zext [bv[2] 3] 1 = [bv[3] 3]. reflexivity. Qed.
+    Goal zext [bv[2] 0] 2 = [bv[4] 0]. reflexivity. Qed.
+    Goal zext [bv[2] 1] 2 = [bv[4] 1]. reflexivity. Qed.
+    Goal zext [bv[2] 2] 2 = [bv[4] 2]. reflexivity. Qed.
+    Goal zext [bv[2] 3] 2 = [bv[4] 3]. reflexivity. Qed.
   End Tests.
 
 End bv.
