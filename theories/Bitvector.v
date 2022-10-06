@@ -258,7 +258,7 @@ Module bv.
           else mk (N.double bs) (wf_double n bs wf)
       end.
 
-    Inductive NilView : bv 0 -> Set :=
+    Variant NilView : bv 0 -> Set :=
     | nvnil : NilView nil.
     Definition nilView (xs : bv 0) : NilView xs :=
       match xs with
@@ -269,7 +269,7 @@ Module bv.
           end wf
       end.
 
-    Inductive ConsView {n} : bv (S n) -> Set :=
+    Variant ConsView {n} : bv (S n) -> Set :=
     | cvcons (b : bool) (xs : bv n) : @ConsView n (cons b xs).
     Definition consView {n} (xs : bv (S n)) : ConsView xs :=
       match xs with
@@ -285,7 +285,7 @@ Module bv.
           end wf
       end.
 
-    Inductive View : forall n, bv n -> Set :=
+    Variant View : forall n, bv n -> Set :=
     | isnil  : @View 0 nil
     | iscons (b : bool) {n} (xs : bv n) : @View (S n) (cons b xs).
     Definition view {n} : forall xs : bv n, View xs :=
@@ -339,7 +339,7 @@ Module bv.
       app (cons b xs) ys = cons b (app xs ys).
     Proof. destruct xs as [[] ?], b; reflexivity. Defined.
 
-    Inductive AppView m n : bv (m + n) -> Set :=
+    Variant AppView m n : bv (m + n) -> Set :=
     | isapp (xs : bv m) (ys : bv n) : AppView _ _ (app xs ys).
 
     Import EqNotations.
@@ -478,6 +478,27 @@ Module bv.
     Definition zext {m} (v : bv m) n : bv (m + n) :=
       app v (zero n).
 
+    Variant LeView (m : nat) : nat -> Set :=
+    | is_le k : LeView m (m + k).
+
+    Fixpoint leview (m : nat) : forall n, Is_true (Nat.leb m n) -> LeView m n :=
+      match m with
+      | O    => fun n _ => is_le O n
+      | S m' => fun n =>
+        match n with
+        | O    => fun p => match p with end
+        | S n' => fun p => match leview m' n' p with
+                           | is_le _ k => is_le (S m') k
+                           end
+        end
+      end.
+
+    (* Less awkward to use, but some type-level trickery. *)
+    Definition sext' {m} (v : bv m) {n} (p : Is_true (Nat.leb m n)) : bv n :=
+      match leview m n p with is_le _ k => sext v k end.
+    Definition zext' {m} (v : bv m) {n} (p : Is_true (Nat.leb m n)) : bv n :=
+      match leview m n p with is_le _ k => zext v k end.
+
   End Extend.
 
   Section Finite.
@@ -591,12 +612,12 @@ Module bv.
     (* A raw representation of bit string intended for the definition of the
        number notation. *)
     Inductive raw : Set := rI (_:raw) | rO (_:raw) | rN.
-    Inductive null : Set := bN.
+    Variant null : Set := bN.
     Derive NoConfusion EqDec for null.
 
     Section Digit.
       Context {A : Set} {eqA : EqDec A}.
-      Inductive digit : Set :=
+      Variant digit : Set :=
       | bO (_:A) | bI (_:A).
       Derive NoConfusion EqDec for digit.
     End Digit.
