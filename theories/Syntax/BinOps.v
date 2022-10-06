@@ -74,6 +74,10 @@ Module bop.
     | bvxor {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvapp {m n}       : BinOp (bvec m) (bvec n) (bvec (m + n))
     | bvcons {m}        : BinOp (bool) (bvec m) (bvec (S m))
+    | bvuge {n}         : BinOp (bvec n) (bvec n) bool
+    | bvugt {n}         : BinOp (bvec n) (bvec n) bool
+    | bvule {n}         : BinOp (bvec n) (bvec n) bool
+    | bvult {n}         : BinOp (bvec n) (bvec n) bool
     .
     Set Transparent Obligations.
     Derive Signature NoConfusion for BinOp.
@@ -156,6 +160,22 @@ Module bop.
         f_equal_dec
           (fun n => ((bool, bvec n, bvec (S n)), bvcons))
           noConfusion_inv (eq_dec m n)
+      | @bvuge _ m , @bvuge _ n =>
+        f_equal_dec
+          (fun n => ((bvec n, bvec n, bool), bvuge))
+          noConfusion_inv (eq_dec m n)
+      | @bvugt _ m , @bvugt _ n =>
+        f_equal_dec
+          (fun n => ((bvec n, bvec n, bool), bvugt))
+          noConfusion_inv (eq_dec m n)
+      | @bvule _ m , @bvule _ n =>
+        f_equal_dec
+          (fun n => ((bvec n, bvec n, bool), bvule))
+          noConfusion_inv (eq_dec m n)
+      | @bvult _ m , @bvult _ n =>
+        f_equal_dec
+          (fun n => ((bvec n, bvec n, bool), bvult))
+          noConfusion_inv (eq_dec m n)
       | _           , _            => right noConfusion_inv
       end.
 
@@ -205,6 +225,10 @@ Module bop.
       | bvxor      => fun v1 v2 => bv.lxor v1 v2
       | bvapp      => fun v1 v2 => bv.app v1 v2
       | bvcons     => fun b bs => bv.cons b bs
+      | bvuge      => fun v1 v2 => bv.geb v1 v2
+      | bvugt      => fun v1 v2 => bv.gtb v1 v2
+      | bvule      => fun v1 v2 => bv.leb v1 v2
+      | bvult      => fun v1 v2 => bv.ltb v1 v2
       end.
 
   End WithTypeDef.

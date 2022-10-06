@@ -41,8 +41,15 @@ Delimit Scope bv_scope with bv.
 Declare Scope bv_bitstring_scope.
 Delimit Scope bv_bitstring_scope with bits.
 
-(* Yet another library for sized bitvectors. Ultimately, it would be great to
-   consolidate this with for example: https://github.com/jasmin-lang/coqword or
+(* Yet another library for sized bitvectors. Under the good it is reusing the
+   binary natural numbers N from the Coq standard library to leverage the proof
+   automation already defined for it (very soon I guess). This means that
+   bitvectors are stored as strings of bits in little-endian! Bitvector sizes
+   are statically checked through a type-level natural number. We also define
+   a good amount of dependently-typed goodies for vector-like operations.
+
+   Ultimately, it would be great to consolidate this with for example:
+   https://github.com/jasmin-lang/coqword or
    https://github.com/mit-plv/coqutil/tree/master/src/coqutil/Word
 
    Other resources include:
@@ -225,6 +232,15 @@ Module bv.
 
     Definition mul {n} (x y : bv n) : bv n :=
       of_N (N.mul (bin x) (bin y)).
+
+    Definition geb {n} (x y : bv n) : bool :=
+      N.leb (bin y) (bin x).
+    Definition gtb {n} (x y : bv n) : bool :=
+      N.ltb (bin y) (bin x).
+    Definition leb {n} (x y : bv n) : bool :=
+      N.leb (bin y) (bin x).
+    Definition ltb {n} (x y : bv n) : bool :=
+      N.ltb (bin y) (bin x).
 
   End Arithmetic.
 
@@ -430,6 +446,34 @@ Module bv.
         now rewrite rew_opp_l.
     Qed.
   End ListLike.
+
+  Section Access.
+
+    Import BinPos.
+
+    Definition lsb {n} (v : bv n) : bool :=
+      match v with
+      | mk N0          _ => false
+      | mk (N.pos _~0) _ => false
+      | mk (N.pos _~1) _ => true
+      | mk (N.pos 1)   _ => true
+      end.
+
+    Definition msb {n} (v : bv n) : bool :=
+      fold_left (fun _ l m => m) false v.
+
+  End Access.
+
+  Section Extend.
+
+    (* Sign extension. A bit awkward for little-endian vectors.  *)
+    Definition sext {m} (v : bv m) n : bv (m + n) :=
+      app v (if msb v then one n else zero n).
+    (* Zero extension. Equally as awkward. *)
+    Definition zext {m} (v : bv m) n : bv (m + n) :=
+      app v (zero n).
+
+  End Extend.
 
   Section Finite.
 
@@ -646,7 +690,7 @@ Module bv.
   Arguments to_bitstring [n] & _%bv.
   Arguments of_bitstring [n] & _%bits.
 
-  Module notations.
+  Module Import notations.
     Open Scope bv_scope.
     Open Scope bv_bitstring_scope.
 
@@ -690,6 +734,28 @@ Module bv.
     Notation "[ 'bv' [ n ] x ]" := (@mk n x%xN I) (only parsing) : bv_scope.
 
   End notations.
+
+  Section Tests.
+    Goal lsb [bv[2] 0] = false. reflexivity. Qed.
+    Goal lsb [bv[2] 1] = true.  reflexivity. Qed.
+    Goal lsb [bv[2] 2] = false. reflexivity. Qed.
+    Goal lsb [bv[2] 3] = true.  reflexivity. Qed.
+
+    Goal msb [bv[2] 0] = false. reflexivity. Qed.
+    Goal msb [bv[2] 1] = false. reflexivity. Qed.
+    Goal msb [bv[2] 2] = true.  reflexivity. Qed.
+    Goal msb [bv[2] 3] = true.  reflexivity. Qed.
+
+    Goal sext [bv[2] 0] 1 = [bv[3] 0]. reflexivity. Qed.
+    Goal sext [bv[2] 1] 1 = [bv[3] 1]. reflexivity. Qed.
+    Goal sext [bv[2] 2] 1 = [bv[3] 6]. reflexivity. Qed.
+    Goal sext [bv[2] 3] 1 = [bv[3] 7]. reflexivity. Qed.
+
+    Goal zext [bv[2] 0] 1 = [bv[3] 0]. reflexivity. Qed.
+    Goal zext [bv[2] 1] 1 = [bv[3] 1]. reflexivity. Qed.
+    Goal zext [bv[2] 2] 1 = [bv[3] 2]. reflexivity. Qed.
+    Goal zext [bv[2] 3] 1 = [bv[3] 3]. reflexivity. Qed.
+  End Tests.
 
 End bv.
 Export bv (bv).

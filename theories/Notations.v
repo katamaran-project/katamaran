@@ -82,3 +82,13 @@ Reserved Notation "P ∗ Q" (at level 80, right associativity).
 Reserved Notation "P -∗ Q"
   (at level 99, Q at level 200, right associativity,
    format "'[' P  '/' -∗  Q ']'").
+
+Reserved Notation "x +ᵇ y" (at level 50, left associativity).
+Reserved Notation "x -ᵇ y" (at level 50, left associativity).
+Reserved Notation "x *ᵇ y" (at level 40, left associativity).
+
+(* Unsigned bitvector operations *)
+Reserved Notation "x >=ᵘ y" (at level 70, no associativity).
+Reserved Notation "x >ᵘ y" (at level 70, no associativity).
+Reserved Notation "x <=ᵘ y" (at level 70, no associativity).
+Reserved Notation "x <ᵘ y" (at level 70, no associativity).
