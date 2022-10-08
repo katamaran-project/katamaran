@@ -1065,7 +1065,7 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
                apply andb_prop in H; destruct H as [H1 H2];
                apply Bool.andb_true_iff; split; intuition).
       + constructor. cbn. intuition.
-      + cbn in es; env.destroy es.
+      + cbn in ts0; env.destroy ts0.
         unfold CorrectPC, simplify_correctPC.
         dependent elimination v2.
         * constructor; cbn; intuition.

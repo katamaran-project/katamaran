@@ -97,14 +97,16 @@ Module Type InstantiationOn
     match t in Term _ σ return Val σ with
     | @term_var _ _ _ bIn  => env.lookup ι bIn
     | term_val _ v         => v
-    | term_binop op e1 e2  => bop.eval op (inst_term e1 ι) (inst_term e2 ι)
-    | term_neg e           => Z.opp (inst_term e ι)
-    | term_not e           => negb (inst_term e ι)
-    | term_inl e           => @inl (Val _) (Val _) (inst_term e ι)
-    | term_inr e           => @inr (Val _) (Val _) (inst_term e ι)
+    | term_binop op t1 t2  => bop.eval op (inst_term t1 ι) (inst_term t2 ι)
+    | term_neg t           => Z.opp (inst_term t ι)
+    | term_not t           => negb (inst_term t ι)
+    | term_inl t           => @inl (Val _) (Val _) (inst_term t ι)
+    | term_inr t           => @inr (Val _) (Val _) (inst_term t ι)
+    | term_sext t          => bv.sext (inst_term t ι)
+    | term_zext t          => bv.zext (inst_term t ι)
     | @term_tuple _ σs ts  =>
         envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι)
-    | @term_union _ U K e     => unionv_fold U (existT K (inst_term e ι))
+    | @term_union _ U K t     => unionv_fold U (existT K (inst_term t ι))
     | @term_record _ R ts     =>
         let InstTerm xt := @inst_term (@type recordf Ty xt) in
         recordv_fold R (inst (Inst := inst_env (InstSA := InstTerm)) ts ι)

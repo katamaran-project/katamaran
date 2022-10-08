@@ -28,6 +28,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Arith.PeanoNat
      Bool.Bool.
 From Equations Require Import
      Equations.
@@ -61,18 +62,22 @@ Module Type TermsOn (Import TY : Types).
   | term_not     (e : Term Σ ty.bool) : Term Σ ty.bool
   | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty.sum σ1 σ2)
   | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty.sum σ1 σ2)
+  | term_sext    {m n} (t : Term Σ (ty.bvec m)) {p : IsTrue (m <=? n)} : Term Σ (ty.bvec n)
+  | term_zext    {m n} (t : Term Σ (ty.bvec m)) {p : IsTrue (m <=? n)} : Term Σ (ty.bvec n)
   | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs)
-  | term_union   {U : unioni} (K : unionk U) (e : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
-  | term_record  (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
+  | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
+  | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
   #[global] Arguments term_var {_} _ {_ _}.
   #[global] Arguments term_val {_} _ _.
   #[global] Arguments term_neg {_} _.
   #[global] Arguments term_not {_} _.
   #[global] Arguments term_inl {_ _ _} _.
   #[global] Arguments term_inr {_ _ _} _.
+  #[global] Arguments term_sext {_ _ _} t {p}.
+  #[global] Arguments term_zext {_ _ _} t {p}.
   #[global] Arguments term_tuple {_ _} ts.
-  #[global] Arguments term_union {_} _ _.
-  #[global] Arguments term_record {_} _ _.
+  #[global] Arguments term_union {_} U K t.
+  #[global] Arguments term_record {_} R ts.
   Bind Scope exp_scope with Term.
   Derive NoConfusion Signature for Term.
 
@@ -123,28 +128,34 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (P_not        : forall e : Term Σ ty.bool, P ty.bool e -> P ty.bool (term_not e)).
     Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty.sum σ1 σ2) (term_inl t)).
     Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty.sum σ1 σ2) (term_inr t)).
+    Hypothesis (P_sext       : forall {m n} {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec m)), P (ty.bvec m) t -> P (ty.bvec n) (term_sext t)).
+    Hypothesis (P_zext       : forall {m n} {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec m)), P (ty.bvec m) t -> P (ty.bvec n) (term_zext t)).
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs) (IH : PE es), P (ty.tuple σs) (term_tuple es)).
     Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)).
     Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)).
 
     Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) {struct t} : P σ t :=
       match t with
-      | @term_var _ ς σ ςInΣ           => ltac:(eapply P_var; eauto)
-      | @term_val _ σ x                => ltac:(eapply P_val; eauto)
-      | term_binop op e1 e2            => ltac:(eapply P_binop; eauto)
-      | @term_neg _ e                  => ltac:(eapply P_neg; eauto)
-      | @term_not _ e                  => ltac:(eapply P_not; eauto)
-      | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
-      | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
-      | @term_tuple _ σs es            => ltac:(eapply P_tuple, env.all_intro; eauto)
-      | @term_union _ U K e            => ltac:(eapply P_union; eauto)
-      | @term_record _ R es            => ltac:(eapply P_record, env.all_intro; eauto)
+      | term_var ς          => ltac:(eapply P_var; eauto)
+      | term_val σ v        => ltac:(eapply P_val; eauto)
+      | term_binop op t1 t2 => ltac:(eapply P_binop; eauto)
+      | term_neg t          => ltac:(eapply P_neg; eauto)
+      | term_not t          => ltac:(eapply P_not; eauto)
+      | term_inl t          => ltac:(eapply P_inl; eauto)
+      | term_inr t          => ltac:(eapply P_inr; eauto)
+      | term_sext t         => ltac:(eapply P_sext; eauto)
+      | term_zext t         => ltac:(eapply P_zext; eauto)
+      | term_tuple ts       => ltac:(eapply P_tuple, env.all_intro; eauto)
+      | term_union U K t    => ltac:(eapply P_union; eauto)
+      | term_record R ts    => ltac:(eapply P_record, env.all_intro; eauto)
       end.
 
   End Term_rect.
 
   Definition Term_rec Σ (P : forall σ, Term Σ σ -> Set) := @Term_rect _ P.
   Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := @Term_rect _ P.
+
+  Open Scope lazy_bool_scope.
 
   Equations(noeqns) Term_eqb {Σ} [σ : Ty] (t1 t2 : Term Σ σ) : bool :=
     Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
@@ -153,13 +164,23 @@ Module Type TermsOn (Import TY : Types).
     Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
       with bop.eqdep_dec op1 op2 => {
       Term_eqb (term_binop op1 x1 y1) (term_binop ?(op1) x2 y2) (left bop.opeq_refl) :=
-        Term_eqb x1 x2 && Term_eqb y1 y2;
+        Term_eqb x1 x2 &&& Term_eqb y1 y2;
       Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (right _) := false
     };
     Term_eqb (term_neg x) (term_neg y) := Term_eqb x y;
     Term_eqb (term_not x) (term_not y) := Term_eqb x y;
     Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
     Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
+    Term_eqb (@term_sext _ m ?(k) x p) (@term_sext _ n k y q) with eq_dec m n => {
+      Term_eqb (@term_sext _ m ?(k) x p) (@term_sext _ ?(m) k y q) (left eq_refl) :=
+          Term_eqb x y;
+      Term_eqb _ _ (right _) := false
+    };
+    Term_eqb (@term_zext _ m ?(k) x p) (@term_zext _ n k y q) with eq_dec m n => {
+      Term_eqb (@term_zext _ m ?(k) x p) (@term_zext _ ?(m) k y q) (left eq_refl) :=
+          Term_eqb x y;
+      Term_eqb _ _ (right _) := false
+    };
     Term_eqb (@term_tuple ?(σs) xs) (@term_tuple σs ys) :=
        @env.eqb_hom _ (Term Σ) (@Term_eqb _ ) _ xs ys;
     Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
@@ -185,10 +206,12 @@ Module Type TermsOn (Import TY : Types).
               destruct (bop.eqdep_dec x y) as [e|];
               [dependent elimination e|]
           | H: ~ bop.OpEq ?o ?o |- False => apply H; constructor
+          | p : IsTrue (?m <=? ?n), q : IsTrue (?m <=? ?n) |- _ =>
+            destruct (proofirr_istrue p q)
           end.
     - apply (@ssrbool.iffP (es = ts)); solve_eqb_spec.
       apply env.eqb_hom_spec_point, IH.
-    - apply (@ssrbool.iffP (es = es0)); solve_eqb_spec.
+    - apply (@ssrbool.iffP (es = ts0)); solve_eqb_spec.
       apply env.eqb_hom_spec_point, IH.
   Qed.
 
@@ -220,6 +243,8 @@ Module Type TermsOn (Import TY : Types).
       | term_not t0               => term_not (sub_term t0 ζ)
       | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0 ζ)
       | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0 ζ)
+      | term_sext t               => term_sext (sub_term t ζ)
+      | term_zext t               => term_zext (sub_term t ζ)
       | term_tuple ts             => term_tuple (env.map (fun _ t => sub_term t ζ) ts)
       | term_union U K t          => term_union U K (sub_term t ζ)
       | term_record R ts          => term_record R (env.map (fun _ t => sub_term t ζ) ts)

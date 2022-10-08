@@ -347,6 +347,8 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
                                  | inl _ => None
                                  | inr v => simplify_eq_val t v k
                                  end
+      | term_sext t         => fun v k => Some (formula_relop bop.eq (term_sext t) (term_val _ v) :: k)
+      | term_zext t         => fun v k => Some (formula_relop bop.eq (term_zext t) (term_val _ v) :: k)
       | term_tuple ts       => env.Env_rect
                                  (fun σs _ => Val (ty.tuple σs) -> List Formula Σ -> option (List Formula Σ))
                                  (fun _ => Some)
@@ -388,6 +390,8 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - destruct v; arw.
         + intros ι; now arw.
         + rewrite IHt; arw. intros ι; now arw.
+      - reflexivity.
+      - reflexivity.
       - revert k. induction IH; cbn; intros k; arw.
         + destruct v. intros ι; now arw.
         + destruct v as [vs v]. specialize (q v k).
@@ -433,6 +437,8 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - dependent elimination t; cbn; arw; try easy.
         + intros ι; now arw.
         + rewrite IHs; arw. intros ι; now arw.
+      - dependent elimination t; cbn; arw; try easy.
+      - dependent elimination t; cbn; arw; try easy.
       - dependent elimination t; cbn; arw; try easy.
         intros ι; now arw.
       - dependent elimination t; cbn; arw; try easy.

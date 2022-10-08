@@ -273,6 +273,24 @@ Section Finite.
 
 End Finite.
 
+Definition proofirr_is_true {b : bool} :
+  forall (p q : Is_true b), p = q :=
+  match b with
+  | true  => fun p q => match p, q with
+                        | I , I => eq_refl
+                        end
+  | false => fun p => False_rect _ p
+  end.
+
+(* We define our own variant of a boolean 'is true' predicate to turn it into
+   a typeclass and fill it in automatically during typechecking. *)
+Class IsTrue (b : bool) : Prop := MkI { toI : Is_true b }.
+#[global] Arguments MkI {b} _.
+Definition proofirr_istrue {b : bool} (p q : IsTrue b) : p = q :=
+  match p , q with MkI p , MkI q => f_equal MkI (proofirr_is_true p q) end.
+#[export] Hint Extern 10 (IsTrue ?b) =>
+  refine (@MkI true I) : typeclass_instances.
+
 Definition IsSome {A : Type} (m : option A) : Type :=
   match m with
   | Some _ => unit

@@ -433,32 +433,30 @@ Module bv.
   Section Extend.
 
     (* Sign extension. A bit awkward for little-endian vectors.  *)
-    Definition sext {m} (v : bv m) n : bv (m + n) :=
+    Definition sext' {m} (v : bv m) n : bv (m + n) :=
       app v (if msb v then ones n else zero n).
     (* Zero extension. Equally as awkward. *)
-    Definition zext {m} (v : bv m) n : bv (m + n) :=
+    Definition zext' {m} (v : bv m) n : bv (m + n) :=
       app v (zero n).
 
     Variant LeView (m : nat) : nat -> Set :=
     | is_le k : LeView m (m + k).
 
-    Fixpoint leview (m : nat) : forall n, Is_true (Nat.leb m n) -> LeView m n :=
-      match m with
-      | O    => fun n _ => is_le O n
-      | S m' => fun n =>
-        match n with
-        | O    => fun p => match p with end
-        | S n' => fun p => match leview m' n' p with
-                           | is_le _ k => is_le (S m') k
-                           end
-        end
+    Fixpoint leview (m n : nat) : Is_true (m <=? n) -> LeView m n :=
+      match m , n with
+      | O    , n    => fun _ => is_le O n
+      | S m' , O    => fun p => match p with end
+      | S m' , S n' => fun p => match leview m' n' p with
+                                | is_le _ k => is_le (S m') k
+                                end
       end.
 
     (* Less awkward to use, but some type-level trickery. *)
-    Definition sext' {m} (v : bv m) {n} (p : Is_true (Nat.leb m n)) : bv n :=
-      match leview m n p with is_le _ k => sext v k end.
-    Definition zext' {m} (v : bv m) {n} (p : Is_true (Nat.leb m n)) : bv n :=
-      match leview m n p with is_le _ k => zext v k end.
+    Definition sext {m} (v : bv m) {n} {p : IsTrue (m <=? n)} : bv n :=
+      match leview m n toI with is_le _ k => sext' v k end.
+
+    Definition zext {m} (v : bv m) {n} {p : IsTrue (m <=? n)} : bv n :=
+      match leview m n toI with is_le _ k => zext' v k end.
 
   End Extend.
 
@@ -818,15 +816,26 @@ Module bv.
     Goal msb [bv[2] 2] = true.  reflexivity. Qed.
     Goal msb [bv[2] 3] = true.  reflexivity. Qed.
 
-    Goal sext [bv[2] 0] 2 = [bv[4] 0].  reflexivity. Qed.
-    Goal sext [bv[2] 1] 2 = [bv[4] 1].  reflexivity. Qed.
-    Goal sext [bv[2] 2] 2 = [bv[4] 14]. reflexivity. Qed.
-    Goal sext [bv[2] 3] 2 = [bv[4] 15]. reflexivity. Qed.
+    Goal sext' [bv[2] 0] 2 = [bv[4] 0].  reflexivity. Qed.
+    Goal sext' [bv[2] 1] 2 = [bv[4] 1].  reflexivity. Qed.
+    Goal sext' [bv[2] 2] 2 = [bv[4] 14]. reflexivity. Qed.
+    Goal sext' [bv[2] 3] 2 = [bv[4] 15]. reflexivity. Qed.
 
-    Goal zext [bv[2] 0] 2 = [bv[4] 0]. reflexivity. Qed.
-    Goal zext [bv[2] 1] 2 = [bv[4] 1]. reflexivity. Qed.
-    Goal zext [bv[2] 2] 2 = [bv[4] 2]. reflexivity. Qed.
-    Goal zext [bv[2] 3] 2 = [bv[4] 3]. reflexivity. Qed.
+    Goal zext' [bv[2] 0] 2 = [bv[4] 0]. reflexivity. Qed.
+    Goal zext' [bv[2] 1] 2 = [bv[4] 1]. reflexivity. Qed.
+    Goal zext' [bv[2] 2] 2 = [bv[4] 2]. reflexivity. Qed.
+    Goal zext' [bv[2] 3] 2 = [bv[4] 3]. reflexivity. Qed.
+
+    Goal sext [bv[2] 0] = [bv[4] 0].  reflexivity. Qed.
+    Goal sext [bv[2] 1] = [bv[4] 1].  reflexivity. Qed.
+    Goal sext [bv[2] 2] = [bv[4] 14]. reflexivity. Qed.
+    Goal sext [bv[2] 3] = [bv[4] 15]. reflexivity. Qed.
+
+    Goal zext [bv[2] 0] = [bv[4] 0]. reflexivity. Qed.
+    Goal zext [bv[2] 1] = [bv[4] 1]. reflexivity. Qed.
+    Goal zext [bv[2] 2] = [bv[4] 2]. reflexivity. Qed.
+    Goal zext [bv[2] 3] = [bv[4] 3]. reflexivity. Qed.
+
     Goal signed [bv[0] 0] = 0%Z.    reflexivity. Qed.
     Goal signed [bv[1] 0] = 0%Z.    reflexivity. Qed.
     Goal signed [bv[1] 1] = (-1)%Z. reflexivity. Qed.

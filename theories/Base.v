@@ -190,18 +190,20 @@ Module Type BaseMixin (Import TY : Types).
     forall {σ} (e : Exp Γ σ), Term Σ σ :=
     fix seval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
       match e with
-      | exp_var ς                => δ.[??ς]
-      | exp_val σ v              => term_val σ v
-      | exp_binop op e1 e2       => term_binop op (seval_exp e1) (seval_exp e2)
-      | exp_neg e                => term_neg (seval_exp e)
-      | exp_not e                => term_not (seval_exp e)
-      | exp_inl e                => term_inl (seval_exp e)
-      | exp_inr e                => term_inr (seval_exp e)
-      | exp_list es              => term_list (List.map seval_exp es)
-      | exp_bvec es              => term_bvec (Vector.map seval_exp es)
-      | exp_tuple es             => term_tuple (env.map (@seval_exp) es)
-      | exp_union E K e          => term_union E K (seval_exp e)
-      | exp_record R es          => term_record R (env.map (fun _ => seval_exp) es)
+      | exp_var ς          => δ.[??ς]
+      | exp_val σ v        => term_val σ v
+      | exp_binop op e1 e2 => term_binop op (seval_exp e1) (seval_exp e2)
+      | exp_neg e          => term_neg (seval_exp e)
+      | exp_not e          => term_not (seval_exp e)
+      | exp_inl e          => term_inl (seval_exp e)
+      | exp_inr e          => term_inr (seval_exp e)
+      | exp_sext e         => term_sext (seval_exp e)
+      | exp_zext e         => term_zext (seval_exp e)
+      | exp_list es        => term_list (List.map seval_exp es)
+      | exp_bvec es        => term_bvec (Vector.map seval_exp es)
+      | exp_tuple es       => term_tuple (env.map (@seval_exp) es)
+      | exp_union E K e    => term_union E K (seval_exp e)
+      | exp_record R es    => term_record R (env.map (fun _ => seval_exp) es)
       end%exp.
 
   Lemma eval_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
