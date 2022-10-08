@@ -35,7 +35,7 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 From Katamaran Require Import
-     Prelude.
+     Notations Prelude.
 Local Set Implicit Arguments.
 
 Declare Scope bv_scope.
@@ -483,43 +483,17 @@ Module bv.
     Definition mul {n} (x y : bv n) : bv n :=
       of_N (N.mul (bin x) (bin y)).
 
-    (* Note that x and y are swapped because NArith.BinNat
-       doesn't implement geb/gtb. *)
-    (* Definition ugeb {n} (x y : bv n) : bool := *)
-    (*   N.leb (bin y) (bin x). *)
-    (* Definition ugtb {n} (x y : bv n) : bool := *)
-    (*   N.ltb (bin y) (bin x). *)
-    Definition uleb {n} (x y : bv n) : bool :=
-      N.leb (bin x) (bin y).
-    Definition ultb {n} (x y : bv n) : bool :=
-      N.ltb (bin x) (bin y).
 
-    (* Definition sgeb {n} (x y : bv n) : bool := *)
-    (*   Z.geb (signed x) (signed y). *)
-    (* Definition sgtb {n} (x y : bv n) : bool := *)
-    (*   Z.gtb (signed x) (signed y). *)
-    Definition sleb {n} (x y : bv n) : bool :=
-      Z.leb (signed x) (signed y).
-    Definition sltb {n} (x y : bv n) : bool :=
-      Z.ltb (signed x) (signed y).
-
-    (* Definition uge {n} (x y : bv n) : Prop := *)
-    (*   N.le (bin y) (bin x). *)
-    (* Definition ugt {n} (x y : bv n) : Prop := *)
-    (*   N.lt (bin y) (bin x). *)
-    Definition ule {n} (x y : bv n) : Prop :=
-      N.le (bin x) (bin y).
-    Definition ult {n} (x y : bv n) : Prop :=
-      N.lt (bin x) (bin y).
-
-    (* Definition sge {n} (x y : bv n) : Prop := *)
-    (*   Z.ge (signed x) (signed y). *)
-    (* Definition sgt {n} (x y : bv n) : Prop := *)
-    (*   Z.gt (signed x) (signed y). *)
-    Definition sle {n} (x y : bv n) : Prop :=
-      Z.le (signed x) (signed y).
-    Definition slt {n} (x y : bv n) : Prop :=
-      Z.lt (signed x) (signed y).
+    (* For the relational operators we default to the < and <= version and
+       only allow the others for parsing. *)
+    Definition uleb {n} (x y : bv n) : bool := N.leb (bin x) (bin y).
+    Definition ultb {n} (x y : bv n) : bool := N.ltb (bin x) (bin y).
+    Definition sleb {n} (x y : bv n) : bool := Z.leb (signed x) (signed y).
+    Definition sltb {n} (x y : bv n) : bool := Z.ltb (signed x) (signed y).
+    Definition ule {n} (x y : bv n) : Prop := N.le (bin x) (bin y).
+    Definition ult {n} (x y : bv n) : Prop := N.lt (bin x) (bin y).
+    Definition sle {n} (x y : bv n) : Prop := Z.le (signed x) (signed y).
+    Definition slt {n} (x y : bv n) : Prop := Z.lt (signed x) (signed y).
 
     Definition sle_spec {n} {v1 v2 : bv n} : reflect (sle v1 v2) (sleb v1 v2) :=
       Z.leb_spec0 (signed v1) (signed v2).
@@ -529,6 +503,25 @@ Module bv.
       N.leb_spec0 (bin v1) (bin v2).
     Definition ult_spec {n} {v1 v2 : bv n} : reflect (ult v1 v2) (ultb v1 v2) :=
       N.ltb_spec0 (bin v1) (bin v2).
+
+    Definition ugeb {n} (x y : bv n) : bool := uleb y x.
+    Definition ugtb {n} (x y : bv n) : bool := ultb y x.
+    Definition sgeb {n} (x y : bv n) : bool := sleb y x.
+    Definition sgtb {n} (x y : bv n) : bool := sltb y x.
+    Definition uge {n} (x y : bv n) : Prop := ule y x.
+    Definition ugt {n} (x y : bv n) : Prop := ult y x.
+    Definition sge {n} (x y : bv n) : Prop := ule y x.
+    Definition sgt {n} (x y : bv n) : Prop := ult y x.
+
+    (* Unfold these automaticall when fully applied. *)
+    #[global] Arguments ugeb {n} x y /.
+    #[global] Arguments ugtb {n} x y /.
+    #[global] Arguments sgeb {n} x y /.
+    #[global] Arguments sgtb {n} x y /.
+    #[global] Arguments uge {n} x y /.
+    #[global] Arguments ugt {n} x y /.
+    #[global] Arguments sge {n} x y /.
+    #[global] Arguments sgt {n} x y /.
 
   End Arithmetic.
 
@@ -802,6 +795,30 @@ Module bv.
 
     Notation "[ 'bv' x ]" := (mk x%xN I) (format "[ 'bv'  x ]") : bv_scope.
     Notation "[ 'bv' [ n ] x ]" := (@mk n x%xN I) (only parsing) : bv_scope.
+
+    Infix "+" := (@add _) : bv_scope.
+    Infix "-" := (@sub _) : bv_scope.
+    Infix "*" := (@mul _) : bv_scope.
+
+    (* Signed bitvector operations *)
+    Infix ">=ˢ"  := (@sge _)  : bv_scope.
+    Infix ">ˢ"   := (@sgt _)  : bv_scope.
+    Infix "<=ˢ"  := (@sle _)  : bv_scope.
+    Infix "<ˢ"   := (@slt _)  : bv_scope.
+    Infix ">=ˢ?" := (@sgeb _) : bv_scope.
+    Infix ">ˢ?"  := (@sgtb _) : bv_scope.
+    Infix "<=ˢ?" := (@sleb _) : bv_scope.
+    Infix "<ˢ?"  := (@sltb _) : bv_scope.
+
+    (* Unsigned bitvector operations *)
+    Infix ">=ᵘ"  := (@uge _)  : bv_scope.
+    Infix ">ᵘ"   := (@ugt _)  : bv_scope.
+    Infix "<=ᵘ"  := (@ule _)  : bv_scope.
+    Infix "<ᵘ"   := (@ult _)  : bv_scope.
+    Infix ">=ᵘ?" := (@ugeb _) : bv_scope.
+    Infix ">ᵘ?"  := (@ugtb _) : bv_scope.
+    Infix "<=ᵘ?" := (@uleb _) : bv_scope.
+    Infix "<ᵘ?"  := (@ultb _) : bv_scope.
 
   End notations.
 
