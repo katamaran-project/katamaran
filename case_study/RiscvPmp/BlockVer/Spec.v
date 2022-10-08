@@ -627,12 +627,10 @@ Module RiscvPmpSpecVerif.
       unfold decide_access_pmp_perm; destruct acc; auto.
   Qed.
 
-  (* Holds but takes long to type-check *)
-  Lemma valid_pmpCheck : ValidContractWithFuelDebug 10 pmpCheck.
+  Lemma valid_pmpCheck : ValidContractWithFuelDebug 3 pmpCheck.
   Proof.
-    vm_compute.
-    constructor.
-    cbn.
+    hnf. apply verification_condition_with_erasure_sound. vm_compute.
+    constructor. cbn.
     intros; subst.
     repeat try split; subst;
     apply (machine_unlocked_pmp_access);

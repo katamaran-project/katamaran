@@ -1451,13 +1451,15 @@ Module Type SymbolicExecOn
     Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasure c body).
 
+    Lemma verification_condition_with_erasure_sound (p : 𝕊 ctx.nil) :
+      VerificationConditionWithErasure (Erasure.erase_symprop p) ->
+      VerificationCondition p.
+    Proof. intros [H]. constructor. now rewrite <- Erasure.erase_safe. Qed.
+
     Lemma validcontract_with_erasure_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractWithErasure c body ->
       ValidContract c body.
-    Proof.
-      unfold ValidContractWithErasure, VcGenErasure, ValidContract. intros [H].
-      constructor. now rewrite <- Erasure.erase_safe.
-    Qed.
+    Proof. apply verification_condition_with_erasure_sound. Qed.
 
     Module Statistics.
 
