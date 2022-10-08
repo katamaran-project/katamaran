@@ -720,7 +720,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
          if: term_var "result_within_phys_mem"
          then term_val ty_xlenbits minAddr <= term_var paddr
               ∗ term_var paddr <= term_val ty_xlenbits maxAddr
-         else  ⊤;
+         else (term_var paddr < term_val ty_xlenbits minAddr
+               ∨ term_val ty_xlenbits maxAddr < term_var paddr);
     |}.
 
   Definition sep_contract_checked_mem_read : SepContractFun checked_mem_read :=
@@ -1017,6 +1018,20 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
        lemma_postcondition   := asn_gprs;
     |}.
 
+  Definition lemma_open_ptsto_instr : SepLemma open_ptsto_instr :=
+    {| lemma_logic_variables := [paddr :: ty.int];
+       lemma_patterns        := [term_var paddr];
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
+    |}.
+
+  Definition lemma_close_ptsto_instr : SepLemma close_ptsto_instr :=
+    {| lemma_logic_variables := [paddr :: ty.int; w :: ty.int];
+       lemma_patterns        := [term_var paddr; term_var w];
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
+    |}.
+
   Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
     {| lemma_logic_variables := ["entries" :: ty.list ty_pmpentry];
        lemma_patterns        := env.nil;
@@ -1044,6 +1059,39 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                                      (term_var "cfg1" ,ₜ term_var "addr1")]);
     |}.
 
+  Definition lemma_machine_unlocked_open_pmp_entries : SepLemma open_pmp_entries :=
+    {| lemma_logic_variables := ["entries" :: ty.list ty_pmpentry];
+       lemma_patterns        := env.nil;
+       lemma_precondition    := asn_pmp_entries (term_var "entries")
+                              ∗ asn_pmp_all_entries_unlocked (term_var "entries");
+       lemma_postcondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
+          (pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
+           pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+           asn_pmp_cfg_unlocked (term_var "cfg0") ∗
+           asn_pmp_cfg_unlocked (term_var "cfg1") ∗
+           asn_expand_pmpcfg_ent (term_var "cfg0") ∗
+           asn_expand_pmpcfg_ent (term_var "cfg1") ∗
+           term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
+                                           (term_var "cfg1" ,ₜ term_var "addr1")]);
+    |}.
+
+  Definition lemma_machine_unlocked_close_pmp_entries : SepLemma close_pmp_entries :=
+    {| lemma_logic_variables := ["cfg0" :: ty_pmpcfg_ent; "addr0" :: _;
+                                 "cfg1" :: ty_pmpcfg_ent; "addr1" :: _];
+       lemma_patterns        := env.nil;
+       lemma_precondition    :=
+         pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
+         pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+         asn_pmp_cfg_unlocked (term_var "cfg0") ∗
+         asn_pmp_cfg_unlocked (term_var "cfg1") ∗
+         asn_expand_pmpcfg_ent (term_var "cfg0") ∗
+         asn_expand_pmpcfg_ent (term_var "cfg1");
+       lemma_postcondition   :=
+         let entries := term_list [(term_var "cfg0" ,ₜ term_var "addr0");
+                                   (term_var "cfg1" ,ₜ term_var "addr1")] in
+         asn_pmp_entries entries ∗ asn_pmp_all_entries_unlocked entries;
+    |}.
+
   Definition lemma_update_pmp_entries : SepLemma update_pmp_entries :=
     {| lemma_logic_variables := ["cfg0" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "cfg1" :: ty_pmpcfg_ent; "addr1" :: ty_xlenbits];
        lemma_patterns        := env.nil;
@@ -1055,6 +1103,23 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
          cur_privilege ↦ term_val ty_privilege Machine ∗
          asn_pmp_entries (term_list [(term_var "cfg0" ,ₜ term_var "addr0");
                                      (term_var "cfg1" ,ₜ term_var "addr1")]);
+    |}.
+
+  Definition lemma_machine_unlocked_update_pmp_entries : SepLemma close_pmp_entries :=
+    {| lemma_logic_variables := ["cfg0" :: ty_pmpcfg_ent; "addr0" :: _;
+                                 "cfg1" :: ty_pmpcfg_ent; "addr1" :: _];
+       lemma_patterns        := env.nil;
+       lemma_precondition    :=
+         pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
+         pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+         asn_pmp_cfg_unlocked (term_var "cfg0") ∗
+         asn_pmp_cfg_unlocked (term_var "cfg1") ∗
+         cur_privilege ↦ term_val ty_privilege Machine;
+       lemma_postcondition   :=
+         let entries := term_list [(term_var "cfg0" ,ₜ term_var "addr0");
+                                   (term_var "cfg1" ,ₜ term_var "addr1")] in
+         cur_privilege ↦ term_val ty_privilege Machine ∗
+         asn_pmp_entries entries ∗ asn_pmp_all_entries_unlocked entries;
     |}.
 
   Definition lemma_extract_pmp_ptsto : SepLemma extract_pmp_ptsto :=
@@ -1173,6 +1238,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
       | close_gprs            => lemma_close_gprs
       | open_pmp_entries      => lemma_open_pmp_entries
       | close_pmp_entries     => lemma_close_pmp_entries
+      | open_ptsto_instr      => lemma_open_ptsto_instr
+      | close_ptsto_instr     => lemma_close_ptsto_instr
       | update_pmp_entries    => lemma_update_pmp_entries
       | extract_pmp_ptsto     => lemma_extract_pmp_ptsto
       | return_pmp_ptsto      => lemma_return_pmp_ptsto
@@ -1200,6 +1267,13 @@ Module RiscvPmpValidContracts.
     | Some c => Symbolic.ValidContractReflect c (FunDef f)
     | None => False
     end.
+
+  Definition ValidContractWithFuel {Δ τ} (fuel : nat) (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => Symbolic.ValidContractReflectWithFuel fuel c (FunDef f)
+    | None => False
+    end.
+
 
   Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
@@ -1375,8 +1449,19 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_abs : ValidContract abs.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_within_phys_mem : ValidContract within_phys_mem.
-  Proof. reflexivity. Qed.
+  Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
+  Proof.
+    compute.
+    constructor.
+    cbn.
+    intros.
+    rewrite Bool.negb_andb in H.
+    apply Bool.orb_prop in H.
+    destruct H;
+      apply Bool.negb_true_iff in H.
+    apply Z.leb_gt in H; auto.
+    apply Z.leb_gt in H; auto.
+  Qed.
 
   Lemma valid_contract_execute_RTYPE : ValidContract execute_RTYPE.
   Proof. reflexivity. Qed. 
@@ -1534,7 +1619,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_set_next_pc).
     - apply (valid_contract _ H valid_contract_tick_pc).
     - apply (valid_contract _ H valid_contract_abs).
-    - apply (valid_contract _ H valid_contract_within_phys_mem).
+    - apply (valid_contract_debug _ H valid_contract_within_phys_mem).
     - apply (valid_contract _ H valid_contract_mem_read).
     - apply (valid_contract_debug _ H valid_contract_checked_mem_read).
     - apply (valid_contract_debug _ H valid_contract_checked_mem_write).

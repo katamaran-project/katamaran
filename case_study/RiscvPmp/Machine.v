@@ -202,6 +202,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | update_pmp_entries    : Lem ctx.nil
   | extract_pmp_ptsto     : Lem [paddr :: ty_xlenbits]
   | return_pmp_ptsto      : Lem [paddr :: ty_xlenbits]
+  | open_ptsto_instr      : Lem [paddr :: ty_xlenbits]
+  | close_ptsto_instr     : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits]
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -610,9 +612,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_fetch : Stm ctx.nil ty_fetch_result :=
     let: tmp1 := stm_read_register pc in
+    use lemma open_ptsto_instr [tmp1];;
     let: tmp2 := call mem_read Execute tmp1 in
     match: tmp2 in union memory_op_result with
-    |> KMemValue (pat_var "result") => stm_exp (F_Base result)
+    |> KMemValue (pat_var "result") =>
+      use lemma close_ptsto_instr [tmp1; exp_var "result"];;
+      stm_exp (F_Base result)
     |> KMemException (pat_var "e")  => stm_exp (F_Error e tmp1)
     end.
 

@@ -349,18 +349,19 @@ Module Type SymbolicExecOn
           (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
     Global Arguments angelic x σ {w} k.
 
-    Local Notation "⟨ ω ⟩ x <- ma ;; mb" :=
-      (bind ma (fun _ ω x => mb))
-        (at level 80, x at next level,
-          ma at next level, mb at level 200,
-          right associativity).
-
-    Local Notation "⟨ w , ω ⟩ x <- ma ;; mb" :=
-      (bind ma (fun w ω x => mb))
-        (at level 80, x at next level,
-          ma at next level, mb at level 200,
-          right associativity, only printing).
-    Notation "x ⟨ ω ⟩" := (persist x ω) (at level 9, format "x ⟨ ω ⟩").
+    Module Import notations.
+      Notation "⟨ ω ⟩ x <- ma ;; mb" :=
+        (bind ma (fun _ ω x => mb))
+          (at level 80, x at next level,
+            ma at next level, mb at level 200,
+            right associativity).
+      (* Notation "⟨ w , ω ⟩ x <- ma ;; mb" := *)
+      (*   (bind ma (fun w ω x => mb)) *)
+      (*     (at level 80, x at next level, *)
+      (*       ma at next level, mb at level 200, *)
+      (*       right associativity, only printing). *)
+      Notation "x ⟨ ω ⟩" := (persist x ω) (at level 9, format "x ⟨ ω ⟩").
+    End notations.
 
     Local Hint Extern 2 (Persistent (WTerm ?σ)) =>
       refine (@persistent_subst (STerm σ) (@SubstTerm σ)) : typeclass_instances.
@@ -1400,11 +1401,14 @@ Module Type SymbolicExecOn
   Module Symbolic.
     Import SHeapSpecM.
 
-    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition
         (postprocess
-           (* Use inline_fuel = 1 by default. *)
-           (vcgen default_config 1 c body)).
+           (vcgen default_config fuel c body)).
+
+    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      (* Use inline_fuel = 1 by default. *)
+      ValidContractWithFuel 1 c body.
 
     Definition ok {Σ} (p : 𝕊 Σ) : bool :=
       match prune p with
@@ -1420,15 +1424,25 @@ Module Type SymbolicExecOn
       destruct q; try discriminate; cbn; auto.
     Qed.
 
+    Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      is_true (ok (postprocess (vcgen default_config fuel c body))).
+
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (ok (postprocess (vcgen default_config 1 c body))).
+      ValidContractReflectWithFuel 1 c body.
+
+    Lemma validcontract_reflect_fuel_sound {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
+      ValidContractReflectWithFuel fuel c body ->
+      ValidContractWithFuel fuel c body.
+    Proof.
+      unfold ValidContractReflectWithFuel, ValidContractWithFuel. intros Hok.
+      apply (ok_sound _ env.nil) in Hok. now constructor.
+    Qed.
 
     Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflect c body ->
       ValidContract c body.
     Proof.
-      unfold ValidContractReflect, ValidContract. intros Hok.
-      apply (ok_sound _ env.nil) in Hok. now constructor.
+      eapply validcontract_reflect_fuel_sound.
     Qed.
 
     Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
@@ -1437,13 +1451,15 @@ Module Type SymbolicExecOn
     Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasure c body).
 
+    Lemma verification_condition_with_erasure_sound (p : 𝕊 ctx.nil) :
+      VerificationConditionWithErasure (Erasure.erase_symprop p) ->
+      VerificationCondition p.
+    Proof. intros [H]. constructor. now rewrite <- Erasure.erase_safe. Qed.
+
     Lemma validcontract_with_erasure_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractWithErasure c body ->
       ValidContract c body.
-    Proof.
-      unfold ValidContractWithErasure, VcGenErasure, ValidContract. intros [H].
-      constructor. now rewrite <- Erasure.erase_safe.
-    Qed.
+    Proof. apply verification_condition_with_erasure_sound. Qed.
 
     Module Statistics.
 
@@ -1483,6 +1499,70 @@ Module Type SymbolicExecOn
     End Statistics.
 
   End Symbolic.
+
+  Module Replay.
+
+    Import SPureSpecM.
+    Import SPureSpecM.notations.
+
+    Definition replay_aux : forall {Σ} (s : 𝕊 Σ) {w : World},
+        MkWorld Σ [] ⊒ w -> SPureSpecM Unit w :=
+      fix replay {Σ} s {w} {struct s} :=
+        match s with
+        | SymProp.angelic_binary o1 o2 =>
+            fun r => angelic_binary (replay o1 r) (replay o2 r)
+        | SymProp.demonic_binary o1 o2 =>
+            fun r => demonic_binary (replay o1 r) (replay o2 r)
+        | SymProp.block =>
+            fun r P => SymProp.block
+        | SymProp.error msg =>
+            fun r P => SymProp.block (* FIXME *)
+        | assertk fml msg k =>
+            fun r01 =>
+              ⟨ r12 ⟩ _ <- assert_formula msg⟨r01⟩ fml⟨r01⟩ ;;
+              replay k (r01 ∘ r12)
+        | assumek fml k =>
+            fun r01 =>
+              ⟨ r12 ⟩ _ <- assume_formula fml⟨r01⟩ ;;
+              replay k (r01 ∘ r12)
+        | angelicv b k =>
+            fun r01 P =>
+              angelicv b
+                (replay k
+                   (@acc_sub (MkWorld (Σ▻b) []) (wsnoc w b)
+                      (sub_up1 (sub_acc r01))
+                      entails_nil)
+                   (four P acc_snoc_right))
+        | demonicv b k =>
+            fun r01 P =>
+              demonicv b
+                (replay k
+                   (@acc_sub (MkWorld (Σ▻b) []) (wsnoc w b)
+                      (sub_up1 (sub_acc r01))
+                      entails_nil)
+                   (four P acc_snoc_right))
+        | @assert_vareq _ x σ xIn t msg k =>
+            fun r01 =>
+              let ζ    := subst (sub_shift xIn) (sub_acc r01) in
+              let msg1 := subst msg ζ in
+              let x1   := subst (T := fun Σ => Term Σ _) (term_var x) (sub_acc r01) in
+              let t1   := subst (T := fun Σ => Term Σ _) t ζ in
+              ⟨ r12 ⟩ _ <- assert_formula msg1 (formula_eq x1 t1) ;;
+              replay k (@acc_sub (MkWorld (Σ-x∷σ) []) _ ζ entails_nil ∘ r12)
+        | @assume_vareq _ x σ xIn t k =>
+            fun r01 =>
+              let ζ    := subst (sub_shift xIn) (sub_acc r01) in
+              let x1   := subst (T := fun Σ => Term Σ _) (term_var x) (sub_acc r01) in
+              let t1   := subst (T := fun Σ => Term Σ _) t ζ in
+              ⟨ r12 ⟩ _ <- assume_formula (formula_eq x1 t1) ;;
+              replay k (@acc_sub (MkWorld (Σ-x∷σ) []) _ ζ entails_nil ∘ r12)
+        | debug b k => fun r01 P => debug (subst b (sub_acc r01)) (replay k r01 P)
+        end.
+
+    Definition replay {Σ} (s : 𝕊 Σ) : 𝕊 Σ :=
+      replay_aux s acc_refl (fun _ _ _ => SymProp.block).
+
+  End Replay.
 
 End SymbolicExecOn.
 

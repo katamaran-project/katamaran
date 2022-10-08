@@ -99,8 +99,8 @@ Module SWAP.
   End ContractAddr.
 
   Example vc3 : 𝕊 ε :=
-	BlockVerificationDerived2.simplify
-	  (BlockVerificationDerived2.VC__addr pre1' block1 post1').
+    RiscvPmpSignature.postprocess
+          (BlockVerificationDerived2.VC__addr pre1' block1 post1').
 
   Lemma sat_vc3' : BlockVerificationDerived2.safeE vc1.
   Proof. vm_compute. constructor. cbv - [Z.sub Z.add]. lia. Qed.

@@ -239,6 +239,12 @@ Module Import asn.
     Notation "x > y" := (formula (formula_gt x y)) : asn_scope.
     Notation "x >= y" := (formula (formula_ge x y)) : asn_scope.
 
+    Notation "'match:' e 'in' R 'with' [ x ; y ; .. ; z ] => rhs 'end'" :=
+      (match_record R e%exp
+        (recordpat_snoc .. (recordpat_snoc (recordpat_snoc recordpat_nil _ x) _ y) .. _ z)
+        rhs%asn)
+      (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : asn_scope.
+
   End notations.
 
 End asn.

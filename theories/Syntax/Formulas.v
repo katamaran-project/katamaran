@@ -229,6 +229,9 @@ Module Type FormulasOn
         instpc pc ι -> (inst f ι : Prop).
     Infix "⊢f" := (@entails_formula _).
 
+    Lemma entails_nil {Σ} {pc : PathCondition Σ} : pc ⊢ nil.
+    Proof. constructor. Qed.
+
     Lemma entails_cons {Σ} (pc1 pc2 : PathCondition Σ) (f : Formula Σ) :
       (pc1 ⊢ pc2) /\ (pc1 ⊢f f) <-> (pc1 ⊢ (f :: pc2)%list).
     Proof. unfold entails, entails_formula. cbn. intuition. Qed.

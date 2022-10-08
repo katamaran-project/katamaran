@@ -662,6 +662,11 @@ Module Type Soundness
       ProgramLogic.ValidContract c body.
     Proof. apply vcgen_sound. Qed.
 
+    Lemma shallow_vcgen_fuel_soundness {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
+      Shallow.ValidContractWithFuel fuel c body ->
+      ProgramLogic.ValidContract c body.
+    Proof. apply vcgen_sound. Qed.
+
     (* Print Assumptions shallow_vcgen_soundnes. *)
 
   End Soundness.

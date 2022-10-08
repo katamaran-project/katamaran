@@ -93,6 +93,16 @@ Module RiscvPmpIrisInstance <:
     Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       (ptstoSth addr -∗ interp_pmp_addr_access addrs entries m)%I.
 
+    Definition unlocked (cfg : Pmpcfg_ent) : Prop :=
+      L cfg = false.
+
+    Definition interp_pmp_all_entries_unlocked (entries : list PmpEntryCfg) : iProp Σ :=
+      match entries with
+      | (cfg0, _) :: (cfg1, _) :: [] =>
+          ⌜unlocked cfg0 ∧ unlocked cfg1⌝
+      | _ => False
+      end%I.
+
     Definition interp_ptsto_instr (addr : Z) (instr : AST) : iProp Σ :=
       (∃ v, interp_ptsto addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
 
@@ -104,15 +114,26 @@ Module RiscvPmpIrisInstance <:
 
     Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
-    | pmp_entries             | [ v ]                => interp_pmp_entries v
-    | pmp_addr_access         | [ entries; m ]       => interp_pmp_addr_access liveAddrs entries m
-    | pmp_addr_access_without | [ addr; entries; m ] => interp_pmp_addr_access_without addr liveAddrs entries m
-    | gprs                    | _                    => interp_gprs
-    | ptsto                   | [ addr; w ]          => interp_ptsto addr w
-    | ptsto_readonly          | [ addr; w ]          => interp_ptsto_readonly addr w
-    | encodes_instr           | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
+    | pmp_entries              | [ v ]                => interp_pmp_entries v
+    | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs entries m
+    | pmp_addr_access_without  | [ addr; entries; m ] => interp_pmp_addr_access_without addr liveAddrs entries m
+    | pmp_all_entries_unlocked | [ entries ]          => interp_pmp_all_entries_unlocked entries
+    | gprs                     | _                    => interp_gprs
+    | ptsto                    | [ addr; w ]          => interp_ptsto addr w
+    | ptsto_readonly           | [ addr; w ]          => interp_ptsto_readonly addr w
+    | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem                | _                    => True%I
     | ptstoinstr              | [ addr; instr ]      => interp_ptsto_instr addr instr.
+
+    Ltac destruct_pmp_entries :=
+      repeat match goal with
+      | x : Val ty_pmpentry |- _ =>
+          destruct x; auto
+      | x : Val (ty.list ty_pmpentry) |- _ =>
+          destruct x; auto
+      | x : list (Val ty_pmpentry) |- _ =>
+          destruct x; auto
+      end.
 
     Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
@@ -120,7 +141,7 @@ Module RiscvPmpIrisInstance <:
         (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
     Proof.
       destruct p; intros ts Heq; try discriminate Heq;
-        clear Heq; cbn in *; env.destroy ts; auto.
+        clear Heq; cbn in *; env.destroy ts; destruct_pmp_entries; auto.
     Qed.
 
   End RiscvPmpIrisPredicates.
