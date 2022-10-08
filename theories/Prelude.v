@@ -177,6 +177,14 @@ Section Equality.
     - now apply f_equal.
   Qed.
 
+  Lemma some_inj [A] (x y : A) :
+    @Some A x = @Some A y <-> x = y.
+  Proof.
+    split; intros e.
+    - now apply noConfusion_inv in e.
+    - now apply f_equal.
+  Qed.
+
 End Equality.
 
 Ltac finite_from_eqdec :=
@@ -614,7 +622,7 @@ Definition empty_stats : Stats :=
 Create HintDb katamaran.
 #[global] Hint Rewrite
   andb_true_iff andb_false_iff negb_true_iff negb_false_iff orb_true_iff
-  orb_false_iff cons_inj inl_inj inr_inj pair_equal_spec
+  orb_false_iff cons_inj inl_inj inr_inj some_inj pair_equal_spec
   : katamaran.
 #[global] Hint Rewrite
   @option.spec_ap    @option.wlp_ap   @option.wp_ap

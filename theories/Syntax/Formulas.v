@@ -124,9 +124,11 @@ Module Type FormulasOn
       inst (formula_relop_neg op t1 t2) ι <->
       bop.eval_relop_val op (inst t1 ι) (inst t2 ι) = false.
   Proof.
-    destruct op; cbn; intros t1 t2; unfold bv.sltb, bv.sleb, bv.uleb, bv.ultb;
-      rewrite ?N.ltb_antisym, ?negb_true_iff, ?negb_false_iff; auto;
-      try Lia.lia.
+    destruct op; cbn; intros t1 t2;
+      unfold bv.sle, bv.sleb, bv.slt, bv.sltb;
+      unfold bv.ule, bv.uleb, bv.ult, bv.ultb;
+      rewrite ?N.ltb_antisym, ?negb_true_iff, ?negb_false_iff, ?N.leb_gt, ?N.leb_le;
+      auto; try Lia.lia.
     - destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)); intuition.
     - destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)); intuition.
   Qed.

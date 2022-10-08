@@ -149,6 +149,9 @@ Module bv.
       | Npos p => mk (trunc n p) (wf_trunc n p)
       end.
 
+    Definition of_nat {n} (k : nat) : bv n :=
+      of_N (N.of_nat k).
+
   End Conversion.
 
   Section Equality.
@@ -164,7 +167,7 @@ Module bv.
       - now intros p%(f_equal (@bin _)).
     Qed.
 
-    Instance eqdec_bv {n : nat} : EqDec (bv n) :=
+    #[export] Instance eqdec_bv {n : nat} : EqDec (bv n) :=
       fun x y =>
         match N.eq_dec (bin x) (bin y) with
         | left a  => left (bin_inj x y a)
@@ -172,7 +175,6 @@ Module bv.
         end.
 
   End Equality.
-  Local Existing Instance eqdec_bv.
 
   Section NoConfusion.
 
@@ -485,23 +487,50 @@ Module bv.
 
     (* Note that x and y are swapped because NArith.BinNat
        doesn't implement geb/gtb. *)
-    Definition ugeb {n} (x y : bv n) : bool :=
-      N.leb (bin y) (bin x).
-    Definition ugtb {n} (x y : bv n) : bool :=
-      N.ltb (bin y) (bin x).
+    (* Definition ugeb {n} (x y : bv n) : bool := *)
+    (*   N.leb (bin y) (bin x). *)
+    (* Definition ugtb {n} (x y : bv n) : bool := *)
+    (*   N.ltb (bin y) (bin x). *)
     Definition uleb {n} (x y : bv n) : bool :=
       N.leb (bin x) (bin y).
     Definition ultb {n} (x y : bv n) : bool :=
       N.ltb (bin x) (bin y).
 
-    Definition sgeb {n} (x y : bv n) : bool :=
-      Z.geb (signed x) (signed y).
-    Definition sgtb {n} (x y : bv n) : bool :=
-      Z.gtb (signed x) (signed y).
+    (* Definition sgeb {n} (x y : bv n) : bool := *)
+    (*   Z.geb (signed x) (signed y). *)
+    (* Definition sgtb {n} (x y : bv n) : bool := *)
+    (*   Z.gtb (signed x) (signed y). *)
     Definition sleb {n} (x y : bv n) : bool :=
       Z.leb (signed x) (signed y).
     Definition sltb {n} (x y : bv n) : bool :=
       Z.ltb (signed x) (signed y).
+
+    (* Definition uge {n} (x y : bv n) : Prop := *)
+    (*   N.le (bin y) (bin x). *)
+    (* Definition ugt {n} (x y : bv n) : Prop := *)
+    (*   N.lt (bin y) (bin x). *)
+    Definition ule {n} (x y : bv n) : Prop :=
+      N.le (bin x) (bin y).
+    Definition ult {n} (x y : bv n) : Prop :=
+      N.lt (bin x) (bin y).
+
+    (* Definition sge {n} (x y : bv n) : Prop := *)
+    (*   Z.ge (signed x) (signed y). *)
+    (* Definition sgt {n} (x y : bv n) : Prop := *)
+    (*   Z.gt (signed x) (signed y). *)
+    Definition sle {n} (x y : bv n) : Prop :=
+      Z.le (signed x) (signed y).
+    Definition slt {n} (x y : bv n) : Prop :=
+      Z.lt (signed x) (signed y).
+
+    Definition sle_spec {n} {v1 v2 : bv n} : reflect (sle v1 v2) (sleb v1 v2) :=
+      Z.leb_spec0 (signed v1) (signed v2).
+    Definition slt_spec {n} {v1 v2 : bv n} : reflect (slt v1 v2) (sltb v1 v2) :=
+      Z.ltb_spec0 (signed v1) (signed v2).
+    Definition ule_spec {n} {v1 v2 : bv n} : reflect (ule v1 v2) (uleb v1 v2) :=
+      N.leb_spec0 (bin v1) (bin v2).
+    Definition ult_spec {n} {v1 v2 : bv n} : reflect (ult v1 v2) (ultb v1 v2) :=
+      N.ltb_spec0 (bin v1) (bin v2).
 
   End Arithmetic.
 

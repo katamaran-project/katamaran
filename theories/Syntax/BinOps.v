@@ -233,10 +233,10 @@ Module bop.
       | neq   => fun v1 v2 => v1 <> v2
       | le    => fun v1 v2 => (v1 <= v2)%Z
       | lt    => fun v1 v2 => (v1 < v2)%Z
-      | bvsle => fun v1 v2 => bv.sleb v1 v2 = true
-      | bvslt => fun v1 v2 => bv.sltb v1 v2 = true
-      | bvule => fun v1 v2 => bv.uleb v1 v2 = true
-      | bvult => fun v1 v2 => bv.ultb v1 v2 = true
+      | bvsle => fun v1 v2 => bv.sle v1 v2
+      | bvslt => fun v1 v2 => bv.slt v1 v2
+      | bvule => fun v1 v2 => bv.ule v1 v2
+      | bvult => fun v1 v2 => bv.ult v1 v2
       end.
 
     Lemma eval_relop_val_spec {σ} (op : RelOp σ) (v1 v2 : Val σ) :
@@ -247,10 +247,10 @@ Module bop.
       - destruct (Val_eqb_spec σ v1 v2)...
       - apply Z.leb_spec0.
       - apply Z.ltb_spec0.
-      - apply ssrbool.idP.
-      - apply ssrbool.idP.
-      - apply ssrbool.idP.
-      - apply ssrbool.idP.
+      - apply bv.sle_spec.
+      - apply bv.slt_spec.
+      - apply bv.ule_spec.
+      - apply bv.ult_spec.
     Qed.
 
     Lemma eval_relop_equiv {σ} (op : RelOp σ) (v1 v2 : Val σ) :
