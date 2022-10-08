@@ -1456,7 +1456,11 @@ Module Type SymPropOn
     | eformula_user (p : 𝑷) (ts : Env ETerm (𝑷_Ty p))
     | eformula_bool (t : ETerm ty.bool)
     | eformula_prop {Σ' : LCtx} (ζ : Env (fun x => ETerm (type x)) Σ') (P : abstract_named Val Σ' Prop)
-    | eformula_relop {σ} (op : RelOp σ) (t1 t2 : ETerm σ).
+    | eformula_relop {σ} (op : RelOp σ) (t1 t2 : ETerm σ)
+    | eformula_true
+    | eformula_false
+    | eformula_and (F1 F2 : EFormula)
+    | eformula_or (F1 F2 : EFormula).
     Arguments eformula_user : clear implicits.
 
     Inductive ESymProp : Type :=
@@ -1501,10 +1505,15 @@ Module Type SymPropOn
     Definition erase_formula {Σ} : Formula Σ -> EFormula :=
       fix erase f :=
         match f with
-        | formula_user p ts => @eformula_user p (env.map (@erase_term Σ) ts)
-        | formula_bool t => eformula_bool (erase_term t)
-        | formula_prop ζ P =>  eformula_prop (env.map (fun _ => erase_term) ζ) P
+        | formula_user p ts      => eformula_user p (env.map (@erase_term Σ) ts)
+        | formula_bool t         => eformula_bool (erase_term t)
+        | formula_prop ζ P       => eformula_prop (env.map (fun _ => erase_term) ζ) P
         | formula_relop op t1 t2 => eformula_relop op (erase_term t1) (erase_term t2)
+        | formula_true           => eformula_true
+        | formula_false          => eformula_false
+        | formula_and F1 F2      => eformula_and (erase F1) (erase F2)
+        | formula_or F1 F2       => eformula_or (erase F1) (erase F2)
+
         end.
 
     Fixpoint erase_symprop {Σ} (p : SymProp Σ) : ESymProp :=
@@ -1602,17 +1611,28 @@ Module Type SymPropOn
             Some (vs ► (σ ↦ v))
         end.
 
-    Definition inst_eformula (ι : list { σ : Ty & Val σ}) (f : EFormula) : Prop :=
+    Fixpoint inst_eformula (ι : list { σ : Ty & Val σ}) (f : EFormula) : option Prop :=
       match f with
-      | @eformula_user p ts =>
-          option_rect (fun _ => Prop) (env.uncurry (𝑷_inst p)) False (inst_env ι ts)
-      | eformula_bool t => option_rect (fun _ => Prop) (fun b => b = true) False (inst_eterm ι t)
-      | @eformula_prop Σ' ζ P =>
-          option_rect (fun _ => Prop) (uncurry_named P) False (inst_namedenv ι ζ)
-      | eformula_relop op t1 t2 =>
-          option_rect (fun _ => Prop) (fun '(v1,v2) => bop.eval_relop_prop op v1 v2) False
-            (v1 <- inst_eterm ι t1;; v2 <- inst_eterm ι t2;; Some (v1, v2))
+      | @eformula_user p ts     => vs <- inst_env ι ts ;; Some (env.uncurry (𝑷_inst p) vs)
+      | eformula_bool t         => b  <- inst_eterm ι t ;;
+                                   Some (b = true)
+      | @eformula_prop Σ' ζ P   => vs <- inst_namedenv ι ζ ;;
+                                   Some (uncurry_named P vs)
+      | eformula_relop op t1 t2 => v1 <- inst_eterm ι t1 ;;
+                                   v2 <- inst_eterm ι t2 ;;
+                                   Some (bop.eval_relop_prop op v1 v2)
+      | eformula_true           => Some True
+      | eformula_false          => Some False
+      | eformula_and F1 F2      => p1 <- inst_eformula ι F1;;
+                                   p2 <- inst_eformula ι F2;;
+                                   Some (p1 /\ p2)
+      | eformula_or F1 F2       => p1 <- inst_eformula ι F1;;
+                                   p2 <- inst_eformula ι F2;;
+                                   Some (p1 \/ p2)
       end.
+
+    Definition inst_eformula' (ι : list { σ : Ty & Val σ}) (f : EFormula) : Prop :=
+      option_rect (fun _ => Prop) (fun p => p) False (inst_eformula ι f).
 
     Fixpoint list_remove {A} (xs : list A) (n : nat) : list A :=
       match xs with
@@ -1635,8 +1655,8 @@ Module Type SymPropOn
       | edemonic_binary p1 p2 => inst_symprop ι p1 /\ inst_symprop ι p2
       | eerror => False
       | eblock => True
-      | eassertk fml k => inst_eformula ι fml /\ inst_symprop ι k
-      | eassumek fml k => inst_eformula ι fml -> inst_symprop ι k
+      | eassertk fml k => inst_eformula' ι fml /\ inst_symprop ι k
+      | eassumek fml k => inst_eformula' ι fml -> inst_symprop ι k
       | eangelicv b k => exists v : Val (type b), inst_symprop (cons (existT (type b) v) ι) k
       | edemonicv b k => forall v : Val (type b), inst_symprop (cons (existT (type b) v) ι) k
       | eassert_vareq x n t k =>
@@ -1714,26 +1734,29 @@ Module Type SymPropOn
     Qed.
 
     Lemma inst_eformula_erase {Σ} (fml : Formula Σ) (ι : Valuation Σ) :
-      inst_eformula (erase_valuation ι) (erase_formula fml) <-> inst fml ι.
+      inst_eformula (erase_valuation ι) (erase_formula fml) = Some (inst fml ι).
     Proof.
-      destruct fml; cbn;
-        now rewrite ?inst_eterm_erase, ?inst_env_erase, ?inst_namedenv_erase.
+      induction fml;
+        repeat
+          (try progress cbn;
+           try rewrite ?inst_eterm_erase, ?inst_env_erase, ?inst_namedenv_erase;
+           try match goal with H: ?x = Some _ |- context[?x] => rewrite H end); auto.
     Qed.
 
     Lemma erase_safe {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
       inst_symprop (erase_valuation ι) (erase_symprop p) <->
       safe p ι.
     Proof.
-      induction p; cbn [inst_symprop erase_symprop safe].
+      induction p; cbn [inst_symprop erase_symprop safe]; unfold inst_eformula'.
       - apply Morphisms_Prop.or_iff_morphism. auto. auto.
       - apply Morphisms_Prop.and_iff_morphism. auto. auto.
       - reflexivity.
       - reflexivity.
       - apply Morphisms_Prop.and_iff_morphism.
-        + apply inst_eformula_erase.
+        + now rewrite inst_eformula_erase.
         + auto.
       - apply Morphisms_Prop.iff_iff_iff_impl_morphism.
-        + apply inst_eformula_erase.
+        + now rewrite inst_eformula_erase.
         + auto.
       - apply base.exist_proper. intros v. apply (IHp (env.snoc ι b v)).
       - apply base.forall_proper. intros v. apply (IHp (env.snoc ι b v)).

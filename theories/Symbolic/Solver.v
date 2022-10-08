@@ -481,12 +481,17 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       now rewrite simplify_eq_spec.
     Qed.
 
-    Definition simplify_formula {Σ} (fml : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
+    Fixpoint simplify_formula {Σ} (fml : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
       match fml with
       | formula_user p ts      => Some (formula_user p (pevals ts) :: k)
       | formula_bool t         => simplify_bool (peval t) k
       | formula_prop ζ P       => Some (fml :: k)
       | formula_relop op t1 t2 => simplify_relop op (peval t1) (peval t2) k
+      | formula_true           => Some k
+      | formula_false          => None
+      | formula_and F1 F2      => k' <- simplify_formula F1 k ;;
+                                  simplify_formula F2 k'
+      | formula_or F1 F2       => Some (fml :: k)
       end.
 
     Fixpoint simplify_formulas {Σ} (fmls : List Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
@@ -496,15 +501,22 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         option.bind (simplify_formulas fmls k) (simplify_formula fml)
       end.
 
-    Lemma simplify_formula_spec {Σ} (fml : Formula Σ) (k : List Formula Σ) :
-      simplify_formula fml k ≋ Some (fml :: k).
+    Lemma simplify_formula_spec {Σ} (fml : Formula Σ) :
+      forall k, simplify_formula fml k ≋ Some (fml :: k).
     Proof.
-      destruct fml; cbn - [peval]; arw.
+      induction fml; cbn - [peval]; intros k; arw.
       - intros ι; cbn. now rewrite pevals_sound.
       - intros ι; cbn. now rewrite peval_sound.
       - reflexivity.
       - rewrite simplify_relop_spec; arw.
         intros ι; cbn. now rewrite ?peval_sound.
+      - intros ι; cbn. easy.
+      - intros ι; now arw.
+      - intros ι; arw. specialize (IHfml1 k ι).
+        destruct (simplify_formula fml1 k) as [k'|]; arw.
+        + rewrite (IHfml2 k' ι); arw; intuition.
+        + intuition.
+      - reflexivity.
     Qed.
 
     Lemma simplify_formulas_spec {Σ} (fmls k : List Formula Σ) :

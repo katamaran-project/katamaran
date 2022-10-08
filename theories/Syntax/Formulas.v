@@ -59,9 +59,15 @@ Module Type FormulasOn
   | formula_user (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | formula_bool (t : Term Σ ty.bool)
   | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Val Σ' Prop)
-  | formula_relop {σ} (rop : bop.RelOp σ) (t1 t2 : Term Σ σ).
-  Arguments formula_user {_} p ts.
-  Arguments formula_bool {_} t.
+  | formula_relop {σ} (rop : bop.RelOp σ) (t1 t2 : Term Σ σ)
+  | formula_true
+  | formula_false
+  | formula_and (F1 F2 : Formula Σ)
+  | formula_or (F1 F2 : Formula Σ).
+  #[global] Arguments formula_user {_} p ts.
+  #[global] Arguments formula_bool {_} t.
+  #[global] Arguments formula_true {_}.
+  #[global] Arguments formula_false {_}.
 
   Definition formula_relop_neg {Σ σ} (op : RelOp σ) :
     forall (t1 t2 : Term Σ σ), Formula Σ :=
@@ -89,34 +95,46 @@ Module Type FormulasOn
       formula_relop bop.eq t t' :: formula_eqs_nctx δ δ'.
 
   #[export] Instance sub_formula : Subst Formula :=
-    fun Σ1 fml Σ2 ζ =>
+    fix sub_formula {Σ} fml {Σ2} ζ {struct fml} :=
       match fml with
       | formula_user p ts      => formula_user p (subst ts ζ)
       | formula_bool t         => formula_bool (subst t ζ)
       | formula_prop ζ' P      => formula_prop (subst ζ' ζ) P
       | formula_relop op t1 t2 => formula_relop op (subst t1 ζ) (subst t2 ζ)
+      | formula_true           => formula_true
+      | formula_false          => formula_false
+      | formula_and F1 F2      => formula_and (sub_formula F1 ζ) (sub_formula F2 ζ)
+      | formula_or F1 F2       => formula_or (sub_formula F1 ζ) (sub_formula F2 ζ)
       end.
 
   #[export] Instance substlaws_formula : SubstLaws Formula.
   Proof.
-    constructor.
-    { intros ? []; cbn; f_equal; apply subst_sub_id. }
-    { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
+      constructor.
+      { intros ? F.
+        induction F; cbn; f_equal; auto; apply subst_sub_id.
+      }
+      { intros ? ? ? ? ? F.
+        induction F; cbn; f_equal; auto; apply subst_sub_comp.
+      }
   Qed.
 
   #[export] Instance inst_formula : Inst Formula Prop :=
-    fun {Σ} (fml : Formula Σ) (ι : Valuation Σ) =>
+    fix inst_formula {Σ} (fml : Formula Σ) (ι : Valuation Σ) :=
       match fml with
-      | formula_user p ts => env.uncurry (𝑷_inst p) (inst ts ι)
-      | formula_bool t    => inst (A := Val ty.bool) t ι = true
-      | formula_prop ζ P  => uncurry_named P (inst ζ ι)
+      | formula_user p ts      => env.uncurry (𝑷_inst p) (inst ts ι)
+      | formula_bool t         => inst (A := Val ty.bool) t ι = true
+      | formula_prop ζ P       => uncurry_named P (inst ζ ι)
       | formula_relop op t1 t2 => bop.eval_relop_prop op (inst t1 ι) (inst t2 ι)
+      | formula_true           => True
+      | formula_false          => False
+      | formula_and F1 F2      => inst_formula F1 ι /\ inst_formula F2 ι
+      | formula_or F1 F2       => inst_formula F1 ι \/ inst_formula F2 ι
       end.
 
   #[export] Instance inst_subst_formula : InstSubst Formula Prop.
   Proof.
     intros ? ? ? ? f.
-    induction f; cbn; repeat f_equal; apply inst_subst.
+    induction f; cbn; repeat f_equal; try easy; now apply inst_subst.
   Qed.
 
   Lemma inst_formula_relop_neg {Σ σ} (ι : Valuation Σ) (op : RelOp σ) :
@@ -135,14 +153,22 @@ Module Type FormulasOn
 
   Import option.notations.
   #[export] Instance OccursCheckFormula : OccursCheck Formula :=
-    fun Σ x xIn fml =>
+    fix oc {Σ x} xIn fml {struct fml} :=
       match fml with
-      | formula_user p ts => option.map (formula_user p) (occurs_check xIn ts)
-      | formula_bool t    => option.map formula_bool (occurs_check xIn t)
-      | formula_prop ζ P  => option.map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
+      | formula_user p ts      => option.map (formula_user p) (occurs_check xIn ts)
+      | formula_bool t         => option.map formula_bool (occurs_check xIn t)
+      | formula_prop ζ P       => option.map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
       | formula_relop op t1 t2 => t1' <- occurs_check xIn t1 ;;
                                   t2' <- occurs_check xIn t2 ;;
                                   Some (formula_relop op t1' t2')
+      | formula_true           => Some formula_true
+      | formula_false          => Some formula_false
+      | formula_and F1 F2      => F1' <- oc xIn F1 ;;
+                                  F2' <- oc xIn F2 ;;
+                                  Some (formula_and F1' F2')
+      | formula_or F1 F2       => F1' <- oc xIn F1 ;;
+                                  F2' <- oc xIn F2 ;;
+                                  Some (formula_or F1' F2')
       end.
 
   #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.
