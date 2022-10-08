@@ -1623,6 +1623,12 @@ Module Type SymPropOn
                      end
       end.
 
+    Definition inst_eq {σ} (o1 o2 : option (Val σ)) : Prop :=
+      match o1 , o2 with
+      | Some v1 , Some v2 => v1 = v2
+      | _       , _       => False
+      end.
+
     Fixpoint inst_symprop (ι : list { σ : Ty & Val σ}) (f : ESymProp) : Prop :=
       match f with
       | eangelic_binary p1 p2 => inst_symprop ι p1 \/ inst_symprop ι p2
@@ -1635,11 +1641,11 @@ Module Type SymPropOn
       | edemonicv b k => forall v : Val (type b), inst_symprop (cons (existT (type b) v) ι) k
       | eassert_vareq x n t k =>
           let ι' := list_remove ι n in
-          inst_eterm ι (eterm_var x _ n) = inst_eterm ι' t /\
+          inst_eq (inst_eterm ι (eterm_var x _ n)) (inst_eterm ι' t) /\
           inst_symprop ι' k
       | eassume_vareq x n t k =>
           let ι' := list_remove ι n in
-          inst_eterm ι (eterm_var x _ n) = inst_eterm ι' t ->
+          inst_eq (inst_eterm ι (eterm_var x _ n)) (inst_eterm ι' t) ->
           inst_symprop ι' k
       end.
 
