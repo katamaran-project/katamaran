@@ -317,7 +317,7 @@ Section Debug.
     idtac "Second debug node:".
     match goal with
     | |- context[SymProp.assumek
-                   (formula_ge _ _)
+                   (formula_relop bop.le _ _)
                    (SymProp.debug (MkAMessage ?x) _)] =>
         idtac x
     end.

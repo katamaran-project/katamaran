@@ -313,7 +313,7 @@ Module MEMCOPY.
 	ra0 ↦ term_var "dst" ∗
 	ra1 ↦ term_var "src" ∗
 	ra2 ↦ term_var "size" ∗
-	asn.formula (formula_neq (term_var "size") (term_val ty.int 0)) ∗
+	asn.formula (formula_relop bop.neq (term_var "size") (term_val ty.int 0)) ∗
 	term_var "src" ↦[ term_var "size" ] term_var "srcval" ∗
 	(∃ "dstval", term_var "dst" ↦[ term_var "size" ] term_var "dstval").
 

@@ -107,6 +107,12 @@ Section Equality.
   Definition EqbSpecPoint {A} (eqb : A -> A -> bool) (x : A) : Type :=
     forall y, reflect (x = y) (eqb x y).
 
+  Definition f_equal2' {A : Type} {B : A -> Type} {C : Type} (f : forall a, B a -> C)
+    {a1 a2 : A} {b1 : B a1} {b2 : B a2} :
+    sigmaI B a1 b1 = sigmaI B a2 b2 -> f a1 b1 = f a2 b2 :=
+    DepElim.eq_simplification_sigma1_dep a1 a2 b1 b2
+      (fun e => match e with eq_refl => fun b eb => f_equal (f a1) eb end b2).
+
   Definition f_equal_dec {A B : Type} (f : A -> B) {x y : A} (inj : f x = f y -> x = y)
              (hyp : dec_eq x y) : dec_eq (f x) (f y) :=
     match hyp with
@@ -146,6 +152,30 @@ Section Equality.
 
   #[export] Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
     stdpp.base.EqDecision A | 10 := eqdec.
+
+  Lemma cons_inj [A] (x y : A) (xs ys : list A) :
+    x :: xs = y :: ys <-> x = y /\ xs = ys.
+  Proof.
+    split.
+    - intros e. now depelim e.
+    - intros [e1 e2]. now apply f_equal2.
+  Qed.
+
+  Lemma inl_inj [A B] (x y : A) :
+    @inl A B x = @inl A B y <-> x = y.
+  Proof.
+    split; intros e.
+    - now apply noConfusion_inv in e.
+    - now apply f_equal.
+  Qed.
+
+  Lemma inr_inj [A B] (x y : B) :
+    @inr A B x = @inr A B y <-> x = y.
+  Proof.
+    split; intros e.
+    - now apply noConfusion_inv in e.
+    - now apply f_equal.
+  Qed.
 
 End Equality.
 
@@ -391,6 +421,19 @@ Module option.
     - destruct o; auto.
   Qed.
 
+  Lemma spec_some {A S N} (a : A) : spec S N (Some a) <-> S a.
+  Proof. now rewrite spec_match. Qed.
+  Lemma spec_none {A S N} : @spec A S N None <-> N.
+  Proof. now rewrite spec_match. Qed.
+  Lemma wp_some {A P} (a : A) : wp P (Some a) <-> P a.
+  Proof. now rewrite wp_match. Qed.
+  Lemma wp_none {A P} : @wp A P None <-> False.
+  Proof. now rewrite wp_match. Qed.
+  Lemma wlp_some {A P} (a : A) : wlp P (Some a) <-> P a.
+  Proof. now rewrite wlp_match. Qed.
+  Lemma wlp_none {A P} : @wlp A P None <-> True.
+  Proof. now rewrite wlp_match. Qed.
+
   Section Bind.
 
     Context {A B} {S : B -> Prop} {N : Prop} (f : A -> option B) (o : option A).
@@ -567,3 +610,16 @@ Definition plus_stats (x y : Stats) : Stats :=
   |}.
 Definition empty_stats : Stats :=
   {| branches := 0; pruned   := 0|}.
+
+Create HintDb katamaran.
+#[global] Hint Rewrite
+  andb_true_iff andb_false_iff negb_true_iff negb_false_iff orb_true_iff
+  orb_false_iff cons_inj inl_inj inr_inj pair_equal_spec
+  : katamaran.
+#[global] Hint Rewrite
+  @option.spec_ap    @option.wlp_ap   @option.wp_ap
+  @option.spec_bind  @option.wlp_bind @option.wp_bind
+  @option.spec_map   @option.wlp_map  @option.wp_map
+  @option.spec_none  @option.wlp_none @option.wp_none
+  @option.spec_some  @option.wlp_some @option.wp_some
+  : katamaran.

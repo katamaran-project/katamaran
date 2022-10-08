@@ -95,7 +95,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Notation asn_pmp_access addr es m p := (asn.formula (formula_user pmp_access [addr;es;m;p])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
-    term_binop bop.eq e1 e2.
+    term_binop (bop.relop bop.eq) e1 e2.
 
   Local Notation "e1 '=?' e2" := (term_eqb e1 e2).
 
@@ -559,15 +559,7 @@ Module RiscvPmpSpecVerif.
   Proof. reflexivity. Qed.
 
   Lemma valid_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
-  Proof.
-    symbolic_simpl.
-    intros.
-    apply Z.ge_le in H1.
-    apply Zle_imp_le_bool in H1; rewrite H1 in H2.
-    apply Z.gt_lt in H0.
-    apply Z.ltb_lt in H0; rewrite H0 in H2.
-    simpl in *; discriminate.
-  Qed.
+  Proof. symbolic_simpl. intros. Lia.lia. Qed.
 
   Lemma valid_pmpCheckPerms : ValidContract pmpCheckPerms.
   Proof. reflexivity. Qed.
@@ -577,17 +569,12 @@ Module RiscvPmpSpecVerif.
   Lemma pmp_match_addr_never_partial : forall (a : Xlenbits) (rng : PmpAddrRange),
       pmp_match_addr a rng = PMP_Match \/ pmp_match_addr a rng = PMP_NoMatch.
   Proof.
-    intros a [[lo hi]|].
-    - simpl; destruct (hi <? lo)%Z eqn:H; subst; clear H; first now right.
-      destruct (a <? lo)%Z eqn:?; subst; simpl; first now right.
-      destruct (hi <=? a)%Z eqn:?; subst; simpl; first now right.
-      left.
-      rewrite Z.ltb_antisym in Heqb.
-      rewrite Z.leb_antisym in Heqb0.
-      apply Bool.negb_false_iff in Heqb.
-      apply Bool.negb_false_iff in Heqb0.
-      now rewrite Heqb; rewrite Heqb0.
-    - right; reflexivity.
+    intros a [[lo hi]|]; cbn;
+      repeat
+        match goal with
+        | |- context[Z.leb ?x ?y] => destruct (Z.leb_spec x y); cbn
+        | |- context[Z.ltb ?x ?y] => destruct (Z.ltb_spec x y); cbn
+        end; auto; Lia.lia.
   Qed.
 
   Lemma unlocked_bool : forall (cfg : Pmpcfg_ent),
@@ -641,16 +628,7 @@ Module RiscvPmpSpecVerif.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
-  Proof.
-    symbolic_simpl.
-    intros.
-    rewrite Bool.negb_andb in H.
-    apply Bool.orb_prop in H.
-    destruct H;
-      apply Bool.negb_true_iff in H.
-    apply Z.leb_gt in H; auto.
-    apply Z.leb_gt in H; auto.
-  Qed.
+  Proof. symbolic_simpl. intros. Lia.lia. Qed.
 
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       RiscvPmpBlockVerifSpec.CEnv f = Some c ->

@@ -290,7 +290,7 @@ Module Type SymPropOn
         | demonicv b k => forall v, safe_debug k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
-          Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
+          Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ))) ι /\
           (let ι' := env.remove (x∷σ) ι xIn in
           safe_debug k ι')
         | @assume_vareq _ x σ xIn t k =>
@@ -317,7 +317,7 @@ Module Type SymPropOn
         | demonicv b k => forall v, @wsafe (wsnoc w b) k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
-          Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
+          Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ))) ι /\
           (let ι' := env.remove (x∷σ) ι xIn in
           @wsafe (wsubst w x t) k ι')
         | @assume_vareq _ x σ xIn t k =>
@@ -592,7 +592,7 @@ Module Type SymPropOn
 
     Module notations.
       Notation "x" := (@term_var _ x%string _ (@ctx.MkIn _ (x%string :: _) _ _ _)) (at level 1, only printing).
-      Notation "s = t" := (@formula_eq _ _ s t) (only printing).
+      Notation "s = t" := (formula_relop bop.eq s t) (only printing).
       Notation "' t" := (@formula_bool _ t) (at level 10, only printing, format "' t").
       Notation "F ∧ P" := (@SymProp.assertk _ F _ P) (only printing).
       Notation "F → P" := (@SymProp.assumek _ F P) (only printing).
@@ -606,9 +606,10 @@ Module Type SymPropOn
       Notation "x ↦ t → k" := (@SymProp.assume_vareq _ x _ _ t k) (at level 99, right associativity, only printing).
       Notation "P ∧ Q" := (@SymProp.demonic_binary _ P Q) (at level 80, right associativity, only printing).
       Notation "P ∨ Q" := (@SymProp.angelic_binary _ P Q) (at level 85, right associativity, only printing).
-      Notation "x < y" := (formula_lt x y) (only printing).
-      Notation "x <= y" := (formula_le x y) (only printing).
-      Notation "x >= y" := (formula_ge x y) (only printing).
+      Notation "x >= y" := (formula_relop bop.le y x) (only printing).
+      Notation "x > y" := (formula_relop bop.lt y x) (only printing).
+      Notation "x <= y" := (formula_relop bop.le x y) (only printing).
+      Notation "x < y" := (formula_relop bop.lt x y) (only printing).
       Notation "t" := (term_val _ t) (at level 1, only printing).
     End notations.
 
@@ -1451,12 +1452,7 @@ Module Type SymPropOn
     | eformula_user (p : 𝑷) (ts : Env ETerm (𝑷_Ty p))
     | eformula_bool (t : ETerm ty.bool)
     | eformula_prop {Σ' : LCtx} (ζ : Env (fun x => ETerm (type x)) Σ') (P : abstract_named Val Σ' Prop)
-    | eformula_ge (t1 t2 : ETerm ty.int)
-    | eformula_gt (t1 t2 : ETerm ty.int)
-    | eformula_le (t1 t2 : ETerm ty.int)
-    | eformula_lt (t1 t2 : ETerm ty.int)
-    | eformula_eq (σ : Ty) (t1 t2 : ETerm σ)
-    | eformula_neq (σ : Ty) (t1 t2 : ETerm σ).
+    | eformula_relop {σ} (op : RelOp σ) (t1 t2 : ETerm σ).
     Arguments eformula_user : clear implicits.
 
     Inductive ESymProp : Type :=
@@ -1502,12 +1498,7 @@ Module Type SymPropOn
         | formula_user p ts => @eformula_user p (env.map (@erase_term Σ) ts)
         | formula_bool t => eformula_bool (erase_term t)
         | formula_prop ζ P =>  eformula_prop (env.map (fun _ => erase_term) ζ) P
-        | formula_ge t1 t2 => eformula_ge (erase_term t1) (erase_term t2)
-        | formula_gt t1 t2 => eformula_gt (erase_term t1) (erase_term t2)
-        | formula_le t1 t2 => eformula_le (erase_term t1) (erase_term t2)
-        | formula_lt t1 t2 => eformula_lt (erase_term t1) (erase_term t2)
-        | @formula_eq _ σ t1 t2 => eformula_eq (erase_term t1) (erase_term t2)
-        | @formula_neq _ σ t1 t2 => eformula_neq (erase_term t1) (erase_term t2)
+        | formula_relop op t1 t2 => eformula_relop op (erase_term t1) (erase_term t2)
         end.
 
     Fixpoint erase_symprop {Σ} (p : SymProp Σ) : ESymProp :=
@@ -1603,21 +1594,14 @@ Module Type SymPropOn
 
     Definition inst_eformula (ι : list { σ : Ty & Val σ}) (f : EFormula) : Prop :=
       match f with
-      | @eformula_user p ts => option_rect (fun _ => Prop) (env.uncurry (𝑷_inst p)) False (inst_env ι ts)
+      | @eformula_user p ts =>
+          option_rect (fun _ => Prop) (env.uncurry (𝑷_inst p)) False (inst_env ι ts)
       | eformula_bool t => option_rect (fun _ => Prop) (fun b => b = true) False (inst_eterm ι t)
-      | @eformula_prop Σ' ζ P => option_rect (fun _ => Prop) (uncurry_named P) False (inst_namedenv ι ζ)
-      | eformula_ge t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.ge v1 v2) False
-                               (v1 <- inst_eterm ι t1;; v2 <- inst_eterm ι t2;; Some (v1, v2))
-      | eformula_gt t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.gt v1 v2) False
-                               (v1 <- inst_eterm ι t1;; v2 <- inst_eterm ι t2;; Some (v1, v2))
-      | eformula_le t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.le v1 v2) False
-                               (v1 <- inst_eterm ι t1;; v2 <- inst_eterm ι t2;; Some (v1, v2))
-      | eformula_lt t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.lt v1 v2) False
-                               (v1 <- inst_eterm ι t1;; v2 <- inst_eterm ι t2;; Some (v1, v2))
-      | eformula_eq t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => v1 = v2) False
-                                 (v1 <- inst_eterm ι t1;; v2 <- inst_eterm ι t2;; Some (v1, v2))
-      | eformula_neq t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => v1 <> v2) False
-                                  (v1 <- inst_eterm ι t1;; v2 <- inst_eterm ι t2;; Some (v1, v2))
+      | @eformula_prop Σ' ζ P =>
+          option_rect (fun _ => Prop) (uncurry_named P) False (inst_namedenv ι ζ)
+      | eformula_relop op t1 t2 =>
+          option_rect (fun _ => Prop) (fun '(v1,v2) => bop.eval_relop_prop op v1 v2) False
+            (v1 <- inst_eterm ι t1;; v2 <- inst_eterm ι t2;; Some (v1, v2))
       end.
 
     Fixpoint list_remove {A} (xs : list A) (n : nat) : list A :=

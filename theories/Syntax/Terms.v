@@ -92,6 +92,19 @@ Module Type TermsOn (Import TY : Types).
     | Vector.cons e es => term_binop bop.bvcons e (term_bvec es)
     end.
 
+  Definition term_relop_neg [Σ σ] (op : RelOp σ) :
+    forall (t1 t2 : Term Σ σ), Term Σ ty.bool :=
+    match op with
+    | bop.eq     => term_binop (bop.relop bop.neq)
+    | bop.neq    => term_binop (bop.relop bop.eq)
+    | bop.le     => Basics.flip (term_binop (bop.relop bop.lt))
+    | bop.lt     => Basics.flip (term_binop (bop.relop bop.le))
+    | bop.bvsle  => Basics.flip (term_binop (bop.relop bop.bvslt))
+    | bop.bvslt  => Basics.flip (term_binop (bop.relop bop.bvsle))
+    | bop.bvule  => Basics.flip (term_binop (bop.relop bop.bvult))
+    | bop.bvult  => Basics.flip (term_binop (bop.relop bop.bvule))
+    end.
+
   Section Term_rect.
 
     Variable (Σ : LCtx).

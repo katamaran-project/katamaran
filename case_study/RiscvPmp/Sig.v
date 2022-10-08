@@ -395,10 +395,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Import asn.notations.
 
-    Definition term_eqb {Σ} (e1 e2 : Term Σ ty.int) : Term Σ ty.bool :=
-      term_binop bop.eq e1 e2.
-
-    Local Notation "e1 '=?' e2" := (term_eqb e1 e2).
+    Local Notation "e1 '=?' e2" := (term_binop (bop.relop bop.eq) e1 e2).
 
     Definition z_term {Σ} : Z -> Term Σ ty.int := term_val ty.int.
 

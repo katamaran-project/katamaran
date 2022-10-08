@@ -29,6 +29,7 @@
 
 From Coq Require Import
      Bool.Bool
+     NArith.BinNat
      Strings.String
      ZArith.BinInt.
 
@@ -188,6 +189,16 @@ Module Type InstantiationOn
 
   #[export] Instance inst_lift_term {σ} : InstLift (fun Σ => Term Σ σ) (Val σ).
   Proof. red. reflexivity. Qed.
+
+  Lemma inst_term_relop_neg [Σ σ] (op : RelOp σ) (t1 t2 : Term Σ σ) :
+    forall (ι : Valuation Σ),
+      inst (T := fun Σ => Term Σ ty.bool) (term_relop_neg op t1 t2) ι =
+        negb (bop.eval_relop_val op (inst t1 ι) (inst t2 ι)).
+  Proof.
+    destruct op; cbn; intros; unfold bv.sltb, bv.sleb, bv.ultb, bv.uleb;
+      rewrite ?negb_involutive, <- ?Z.leb_antisym, <- ?Z.ltb_antisym,
+      <- ?N.leb_antisym, <- ?N.ltb_antisym; try easy.
+  Qed.
 
   #[export] Instance inst_subst_sub {Σ} : InstSubst (Sub Σ) (Valuation Σ).
   Proof. apply inst_subst_env. Qed.

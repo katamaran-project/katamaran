@@ -710,7 +710,7 @@ Section FunDefKit.
     Definition fun_exec_bne : Stm ["rs1" :: ty.src; "rs2" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: "a" :: ty.int := call read_reg_num (exp_var "rs1") in
       let: "b" :: ty.int := call read_reg_num (exp_var "rs2") in
-      stm_if (exp_binop bop.eq (exp_var "a") (exp_var "b"))
+      stm_if (exp_var "a" = exp_var "b")
              (call update_pc ;; stm_val ty.bool true)
              (call add_pc (exp_var "imm") ;; stm_val ty.bool true).
 

@@ -450,7 +450,7 @@ Module Type SymbolicExecOn
       assert_eq_env msg env.nil          env.nil            := pure tt;
       assert_eq_env msg (env.snoc δ _ t) (env.snoc δ' _ t') :=
         ⟨ ω ⟩ _ <- assert_eq_env msg δ δ' ;;
-        assert_formula msg⟨ω⟩ (formula_eq t⟨ω⟩ t'⟨ω⟩).
+        assert_formula msg⟨ω⟩ (formula_relop bop.eq t⟨ω⟩ t'⟨ω⟩).
 
     Equations(noeqns) assert_eq_nenv {N} {Δ : NCtx N Ty} :
       let E := fun w : World => NamedEnv (Term w) Δ in
@@ -458,7 +458,7 @@ Module Type SymbolicExecOn
       assert_eq_nenv msg env.nil          env.nil            := pure tt;
       assert_eq_nenv msg (env.snoc δ _ t) (env.snoc δ' _ t') :=
         ⟨ ω ⟩ _ <- assert_eq_nenv msg δ δ' ;;
-        assert_formula msg⟨ω⟩ (formula_eq t⟨ω⟩ t'⟨ω⟩).
+        assert_formula msg⟨ω⟩ (formula_relop bop.eq t⟨ω⟩ t'⟨ω⟩).
 
     Definition assert_eq_chunk : ⊢ AMessage -> Chunk -> Chunk -> □(SPureSpecM Unit) :=
       fix assert_eq w0 msg c1 c2 w1 ω01 {struct c1} :=
@@ -473,7 +473,7 @@ Module Type SymbolicExecOn
         | chunk_ptsreg r1 v1 as c1 , chunk_ptsreg r2 v2 as c2 =>
             match eq_dec_het r1 r2 with
             | left e => assert_formula msg⟨ω01⟩
-                          (formula_eq (eq_rect _ (Term w1) v1⟨ω01⟩ _ (f_equal projT1 e)) v2⟨ω01⟩)
+                          (formula_relop bop.eq (eq_rect _ (Term w1) v1⟨ω01⟩ _ (f_equal projT1 e)) v2⟨ω01⟩)
             | right _ => error msg⟨ω01⟩
             end
         | chunk_conj c11 c12 , chunk_conj c21 c22 =>
@@ -774,7 +774,7 @@ Module Type SymbolicExecOn
                               |});;
           ⟨ ω2 ⟩ ts <- angelic_ctx n (PatternCaseCtx pc) ;;
           let ω12 := ω1 ∘ ω2 in
-          ⟨ ω3 ⟩ _  <- assert_formula (formula_eq (pattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
+          ⟨ ω3 ⟩ _  <- assert_formula (formula_relop bop.eq (pattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
           k pc _ (ω12 ∘ ω3) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) _) (wctx w)) ts ω3).
 
       Definition angelic_pattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2} :
@@ -842,7 +842,7 @@ Module Type SymbolicExecOn
           ⟨ ω1 ⟩ pc <- demonic_finite (PatternCase pat) ;;
           ⟨ ω2 ⟩ ts <- demonic_ctx n (PatternCaseCtx pc) ;;
           let ω12 := ω1 ∘ ω2 in
-          ⟨ ω3 ⟩ _  <- assume_formula (formula_eq (pattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
+          ⟨ ω3 ⟩ _  <- assume_formula (formula_relop bop.eq (pattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
           k pc _ (ω12 ∘ ω3) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) _) (wctx w)) ts ω3).
 
       Definition demonic_pattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2} :
@@ -915,7 +915,7 @@ Module Type SymbolicExecOn
                               msg_pathcondition := wco w0
                            |})) ;;
           let t1 := persist__term t ω1 in
-          ⟨ ω2 ⟩ _ <- assert_formula (formula_eq t1 (term_val (ty.bvec n) b)) ;;
+          ⟨ ω2 ⟩ _ <- assert_formula (formula_relop bop.eq t1 (term_val (ty.bvec n) b)) ;;
           four (k b) ω1 ω2.
 
       Definition angelic_match_bvec {AT n} {Γ1 Γ2} :
@@ -932,7 +932,7 @@ Module Type SymbolicExecOn
           ⟨ ω1 ⟩ b <- demonic_finite (bv n) ;;
           let s1 := term_val (ty.bvec n) b in
           let t1 := persist__term t ω1 in
-          ⟨ ω2 ⟩ _ <- assume_formula (formula_eq s1 t1) ;;
+          ⟨ ω2 ⟩ _ <- assume_formula (formula_relop bop.eq s1 t1) ;;
           four (k b) ω1 ω2.
 
       Definition demonic_match_bvec {AT n} {Γ1 Γ2} :
@@ -951,7 +951,7 @@ Module Type SymbolicExecOn
           let ω12 := ω1 ∘ ω2 in
           let t   := persist__term t ω12 in
           let t1  := persist__term t1 ω2 in
-          ⟨ ω3 ⟩ _  <- assume_formula (formula_eq (term_binop (@bop.bvapp _ m n) t1 t2) t) ;;
+          ⟨ ω3 ⟩ _  <- assume_formula (formula_relop bop.eq (term_binop (@bop.bvapp _ m n) t1 t2) t) ;;
           let t1 := persist__term t1 ω3 in
           let t2 := persist__term t2 ω3 in
           k _ (ω12 ∘ ω3) t1 t2.
@@ -1047,7 +1047,8 @@ Module Type SymbolicExecOn
         Equations(noeqns) match_chunk_ptsreg_precise (c : Chunk Σ) : option (Formula Σ) :=
         match_chunk_ptsreg_precise (chunk_ptsreg r' t')
         with eq_dec_het r r' => {
-          match_chunk_ptsreg_precise (chunk_ptsreg ?(r) t') (left eq_refl) := Some (formula_eq t t');
+          match_chunk_ptsreg_precise (chunk_ptsreg ?(r) t') (left eq_refl) :=
+                Some (formula_relop bop.eq t t');
           match_chunk_ptsreg_precise (chunk_ptsreg r' t') (right _) := None
         };
         match_chunk_ptsreg_precise _ := None.
@@ -1547,14 +1548,14 @@ Module Type SymbolicExecOn
               let msg1 := subst msg ζ in
               let x1   := subst (T := fun Σ => Term Σ _) (term_var x) (sub_acc r01) in
               let t1   := subst (T := fun Σ => Term Σ _) t ζ in
-              ⟨ r12 ⟩ _ <- assert_formula msg1 (formula_eq x1 t1) ;;
+              ⟨ r12 ⟩ _ <- assert_formula msg1 (formula_relop bop.eq x1 t1) ;;
               replay k (@acc_sub (MkWorld (Σ-x∷σ) []) _ ζ entails_nil ∘ r12)
         | @assume_vareq _ x σ xIn t k =>
             fun r01 =>
               let ζ    := subst (sub_shift xIn) (sub_acc r01) in
               let x1   := subst (T := fun Σ => Term Σ _) (term_var x) (sub_acc r01) in
               let t1   := subst (T := fun Σ => Term Σ _) t ζ in
-              ⟨ r12 ⟩ _ <- assume_formula (formula_eq x1 t1) ;;
+              ⟨ r12 ⟩ _ <- assume_formula (formula_relop bop.eq x1 t1) ;;
               replay k (@acc_sub (MkWorld (Σ-x∷σ) []) _ ζ entails_nil ∘ r12)
         | debug b k => fun r01 P => debug (subst b (sub_acc r01)) (replay k r01 P)
         end.

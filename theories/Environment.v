@@ -784,6 +784,22 @@ Section WithBinding.
       | _ ▻ b => fun '(E1,d1) '(E2,d2) => eqd d1 d2 &&& eqb E1 E2
       end.
 
+    Lemma of_env_inj (σs : Ctx B) (e1 e2 : Env D σs) :
+      of_env e1 = of_env e2 <-> e1 = e2.
+    Proof.
+      split; intro HYP; [|now f_equal].
+      apply (f_equal (@to_env _)) in HYP.
+      now rewrite !to_of_env in HYP.
+    Qed.
+
+    Lemma to_env_inj (σs : Ctx B) (e1 e2 : EnvRec D σs) :
+      to_env _ e1 = to_env _ e2 <-> e1 = e2.
+    Proof.
+      split; intro HYP; [|now f_equal].
+      apply (f_equal (@of_env _)) in HYP.
+      now rewrite !of_to_env in HYP.
+    Qed.
+
   End WithD.
 
 End WithBinding.

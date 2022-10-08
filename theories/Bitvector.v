@@ -27,9 +27,11 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Arith.PeanoNat
      Bool.Bool
-     PeanoNat
-     NArith.BinNat.
+     NArith.BinNat
+     PArith.BinPos
+     ZArith.BinInt.
 From Equations Require Import
      Equations.
 From Katamaran Require Import
@@ -147,14 +149,6 @@ Module bv.
       | Npos p => mk (trunc n p) (wf_trunc n p)
       end.
 
-    (* Definition unsigned {n} (x : t n) : Z := *)
-    (*   Z.of_N (bin x). *)
-    (* Definition signed {n} (x : t n) : Z := *)
-    (*   unsigned x - Zpower.two_power_nat (Nat.pred n). *)
-
-    (* Definition of_Z {n} (x : Z) : t n := *)
-    (*   of_N (Z.to_N (Z.modulo x (Zpower.two_power_nat n))). *)
-
   End Conversion.
 
   Section Equality.
@@ -210,41 +204,6 @@ Module bv.
 
   End NoConfusion.
   Local Existing Instance NoConfusionPackage_bv.
-
-  Section Arithmetic.
-
-    Definition add {n} (x y : bv n) : bv n :=
-      of_N (N.add (bin x) (bin y)).
-
-    Definition sub {n} (x y : bv n) : bv n :=
-      of_N (N.sub (N.shiftl_nat 1 n + bin x) (bin y)).
-
-    Definition mul {n} (x y : bv n) : bv n :=
-      of_N (N.mul (bin x) (bin y)).
-
-    Definition geb {n} (x y : bv n) : bool :=
-      N.leb (bin y) (bin x).
-    Definition gtb {n} (x y : bv n) : bool :=
-      N.ltb (bin y) (bin x).
-    Definition leb {n} (x y : bv n) : bool :=
-      N.leb (bin y) (bin x).
-    Definition ltb {n} (x y : bv n) : bool :=
-      N.ltb (bin y) (bin x).
-
-  End Arithmetic.
-
-  Section Logical.
-
-    Definition land {n} (x y : bv n) : bv n :=
-      of_N (N.land (bin x) (bin y)).
-
-    Definition lor {n} (x y : bv n) : bv n :=
-      of_N (N.lor (bin x) (bin y)).
-
-    Definition lxor {n} (x y : bv n) : bv n :=
-      of_N (N.lxor (bin x) (bin y)).
-
-  End Logical.
 
   Section ListLike.
 
@@ -500,6 +459,64 @@ Module bv.
       match leview m n p with is_le _ k => zext v k end.
 
   End Extend.
+
+  Section Integers.
+
+    Definition unsigned {n} (x : bv n) : Z :=
+      Z.of_N (bin x).
+    Definition signed {n} (x : bv n) : Z :=
+      let u := unsigned x in
+      if msb x then u - Zpower.two_power_nat n else u.
+    Definition of_Z {n} (x : Z) : bv n :=
+      of_N (Z.to_N (Z.modulo x (Zpower.two_power_nat n))).
+
+  End Integers.
+
+  Section Arithmetic.
+
+    Definition add {n} (x y : bv n) : bv n :=
+      of_N (N.add (bin x) (bin y)).
+
+    Definition sub {n} (x y : bv n) : bv n :=
+      of_N (N.sub (N.shiftl_nat 1 n + bin x) (bin y)).
+
+    Definition mul {n} (x y : bv n) : bv n :=
+      of_N (N.mul (bin x) (bin y)).
+
+    (* Note that x and y are swapped because NArith.BinNat
+       doesn't implement geb/gtb. *)
+    Definition ugeb {n} (x y : bv n) : bool :=
+      N.leb (bin y) (bin x).
+    Definition ugtb {n} (x y : bv n) : bool :=
+      N.ltb (bin y) (bin x).
+    Definition uleb {n} (x y : bv n) : bool :=
+      N.leb (bin x) (bin y).
+    Definition ultb {n} (x y : bv n) : bool :=
+      N.ltb (bin x) (bin y).
+
+    Definition sgeb {n} (x y : bv n) : bool :=
+      Z.geb (signed x) (signed y).
+    Definition sgtb {n} (x y : bv n) : bool :=
+      Z.gtb (signed x) (signed y).
+    Definition sleb {n} (x y : bv n) : bool :=
+      Z.leb (signed x) (signed y).
+    Definition sltb {n} (x y : bv n) : bool :=
+      Z.ltb (signed x) (signed y).
+
+  End Arithmetic.
+
+  Section Logical.
+
+    Definition land {n} (x y : bv n) : bv n :=
+      of_N (N.land (bin x) (bin y)).
+
+    Definition lor {n} (x y : bv n) : bv n :=
+      of_N (N.lor (bin x) (bin y)).
+
+    Definition lxor {n} (x y : bv n) : bv n :=
+      of_N (N.lxor (bin x) (bin y)).
+
+  End Logical.
 
   Section Finite.
 
@@ -781,6 +798,29 @@ Module bv.
     Goal zext [bv[2] 1] 2 = [bv[4] 1]. reflexivity. Qed.
     Goal zext [bv[2] 2] 2 = [bv[4] 2]. reflexivity. Qed.
     Goal zext [bv[2] 3] 2 = [bv[4] 3]. reflexivity. Qed.
+    Goal signed [bv[0] 0] = 0%Z.    reflexivity. Qed.
+    Goal signed [bv[1] 0] = 0%Z.    reflexivity. Qed.
+    Goal signed [bv[1] 1] = (-1)%Z. reflexivity. Qed.
+    Goal signed [bv[3] 0] = 0%Z.    reflexivity. Qed.
+    Goal signed [bv[3] 1] = 1%Z.    reflexivity. Qed.
+    Goal signed [bv[3] 2] = 2%Z.    reflexivity. Qed.
+    Goal signed [bv[3] 3] = 3%Z.    reflexivity. Qed.
+    Goal signed [bv[3] 4] = (-4)%Z. reflexivity. Qed.
+    Goal signed [bv[3] 5] = (-3)%Z. reflexivity. Qed.
+    Goal signed [bv[3] 6] = (-2)%Z. reflexivity. Qed.
+    Goal signed [bv[3] 7] = (-1)%Z. reflexivity. Qed.
+
+    Goal of_Z 0%Z    = [bv[0] 0]. reflexivity. Qed.
+    Goal of_Z 0%Z    = [bv[1] 0]. reflexivity. Qed.
+    Goal of_Z (-1)%Z = [bv[1] 1]. reflexivity. Qed.
+    Goal of_Z 0%Z    = [bv[3] 0]. reflexivity. Qed.
+    Goal of_Z 1%Z    = [bv[3] 1]. reflexivity. Qed.
+    Goal of_Z 2%Z    = [bv[3] 2]. reflexivity. Qed.
+    Goal of_Z 3%Z    = [bv[3] 3]. reflexivity. Qed.
+    Goal of_Z (-4)%Z = [bv[3] 4]. reflexivity. Qed.
+    Goal of_Z (-3)%Z = [bv[3] 5]. reflexivity. Qed.
+    Goal of_Z (-2)%Z = [bv[3] 6]. reflexivity. Qed.
+    Goal of_Z (-1)%Z = [bv[3] 7]. reflexivity. Qed.
   End Tests.
 
 End bv.

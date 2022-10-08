@@ -202,7 +202,7 @@ Import BlockVerificationDerived2.
 
     Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := nil |} :=
       (
-        asn.formula (formula_eq (term_var "an") (term_var "a" + term_val ty_xlenbits 88)) ∗
+        asn.formula (formula_relop bop.eq (term_var "an") (term_var "a" + term_val ty_xlenbits 88)) ∗
           (∃ "v", mstatus ↦ term_var "v") ∗
           (mtvec ↦ (term_var "a" + term_val ty_xlenbits 72)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
@@ -283,7 +283,7 @@ Import BlockVerificationDerived2.
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "epc", (mepc ↦ term_var "epc" ∗
                      asn.formula
-                         (formula_eq (term_var "an")
+                         (formula_relop bop.eq (term_var "an")
                                      (term_var "epc")))) ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           (∃ "v", x1 ↦ term_var "v") ∗

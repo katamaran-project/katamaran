@@ -42,7 +42,6 @@ Import ctx.notations.
 
 Local Set Implicit Arguments.
 Local Set Transparent Obligations.
-Local Unset Elimination Schemes.
 
 Module bop.
 
@@ -51,16 +50,21 @@ Module bop.
   Section WithTypeDecl.
     Context {TDC : TypeDeclKit}.
 
-    Inductive BinOp : Ty -> Ty -> Ty -> Set :=
+    Variant RelOp : Ty -> Set :=
+    | eq {σ}            : RelOp σ
+    | neq {σ}           : RelOp σ
+    | le                : RelOp int
+    | lt                : RelOp int
+    | bvsle {n}         : RelOp (bvec n)
+    | bvslt {n}         : RelOp (bvec n)
+    | bvule {n}         : RelOp (bvec n)
+    | bvult {n}         : RelOp (bvec n).
+
+    Variant BinOp : Ty -> Ty -> Ty -> Set :=
     | plus              : BinOp int int int
     | times             : BinOp int int int
     | minus             : BinOp int int int
     | land              : BinOp int int int
-    | eq {σ}            : BinOp σ σ bool
-    | le                : BinOp int int bool
-    | lt                : BinOp int int bool
-    | ge                : BinOp int int bool
-    | gt                : BinOp int int bool
     | and               : BinOp bool bool bool
     | or                : BinOp bool bool bool
     | pair {σ1 σ2 : Ty} : BinOp σ1 σ2 (prod σ1 σ2)
@@ -74,16 +78,17 @@ Module bop.
     | bvxor {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvapp {m n}       : BinOp (bvec m) (bvec n) (bvec (m + n))
     | bvcons {m}        : BinOp (bool) (bvec m) (bvec (S m))
-    | bvuge {n}         : BinOp (bvec n) (bvec n) bool
-    | bvugt {n}         : BinOp (bvec n) (bvec n) bool
-    | bvule {n}         : BinOp (bvec n) (bvec n) bool
-    | bvult {n}         : BinOp (bvec n) (bvec n) bool
+    | relop {σ} (r : RelOp σ) : BinOp σ σ bool
     .
     Set Transparent Obligations.
-    Derive Signature NoConfusion for BinOp.
+    Derive Signature NoConfusion for BinOp RelOp.
+    Derive NoConfusionHom for RelOp.
+    Derive EqDec for RelOp.
 
     Import Sigma_Notations.
 
+    Definition RelOpTel : Set :=
+      Σ σ : Ty, RelOp σ.
     Definition BinOpTel : Set :=
       Σ i : (Σ σ1 σ2 : Ty, Ty), BinOp i.1 (i.2).1 (i.2).2.
 
@@ -93,10 +98,9 @@ Module bop.
       ((σ, list σ, list σ), cons).
     Definition binoptel_append (σ : Ty) : BinOpTel :=
       ((list σ, list σ, list σ), append).
-    Definition binoptel_eq (σ : Ty) : BinOpTel :=
-      ((σ, σ, bool), eq).
-    Definition binoptel_bvadd n : BinOpTel :=
-      ((bvec n, bvec n, bvec n), bvadd).
+
+    Definition is_eq {σ} (op : RelOp σ) : Datatypes.bool :=
+      match op with eq => true | _ => false end.
 
   End WithTypeDecl.
 
@@ -106,77 +110,84 @@ Module bop.
     Context {TDF : TypeDefKit TDN}.
     Import Sigma_Notations.
 
+    Definition binoptel_reloptel_eq_dec {σ τ} (op1 : RelOp σ) (op2 : RelOp τ) :
+      @dec_eq RelOpTel (σ, op1) (τ, op2) ->
+      @dec_eq BinOpTel ((σ, σ, bool), relop op1) ((τ, τ, bool), relop op2) :=
+      fun Heq =>
+       match Heq with
+       | left e  => left (f_equal2' (fun σ op => ((σ, σ, bool), relop op)) e)
+       | right n =>
+         right (fun e : ((σ, σ, bool), relop op1) = ((τ, τ, bool), relop op2) =>
+                  n (noConfusion_inv e))
+       end.
+
+    Definition reloptel_eq_dec {σ τ : Ty} (op1 : RelOp σ) (op2 : RelOp τ) :
+      dec_eq (A := RelOpTel) (σ,op1) (τ,op2).
+    Proof.
+      pose (@noConfusion_inv RelOpTel (NoConfusionPackage_RelOp)) as ninv.
+      destruct op1, op2;
+        try refine (left eq_refl);
+        try refine (right (ninv _ _)).
+      refine (f_equal_dec (fun ρ => (ρ, eq)) (ninv _ _) (eq_dec σ σ0)).
+      refine (f_equal_dec (fun ρ => (ρ, neq)) (ninv _ _) (eq_dec σ σ0)).
+      refine (f_equal_dec (fun n => (bvec n, bvsle)) (ninv _ _) (eq_dec n n0)).
+      refine (f_equal_dec (fun n => (bvec n, bvslt)) (ninv _ _) (eq_dec n n0)).
+      refine (f_equal_dec (fun n => (bvec n, bvule)) (ninv _ _) (eq_dec n n0)).
+      refine (f_equal_dec (fun n => (bvec n, bvult)) (ninv _ _) (eq_dec n n0)).
+    Defined.
+
     Definition binoptel_eq_dec {σ1 σ2 σ3 τ1 τ2 τ3 : Ty}
       (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
       dec_eq (A := BinOpTel) ((σ1,σ2,σ3),op1) ((τ1,τ2,τ3),op2) :=
+      let ninv := @noConfusion_inv BinOpTel (NoConfusionPackage_BinOp) in
       match op1 , op2 with
       | plus  , plus   => left eq_refl
       | times , times  => left eq_refl
       | minus , minus  => left eq_refl
       | land  , land   => left eq_refl
-      | @eq _ σ , @eq _ τ  =>
-        f_equal_dec binoptel_eq noConfusion_inv (eq_dec σ τ)
-      | le    , le     => left eq_refl
-      | lt    , lt     => left eq_refl
-      | ge    , ge     => left eq_refl
-      | gt    , gt     => left eq_refl
       | and   , and    => left eq_refl
       | or    , or     => left eq_refl
       | @pair _ σ1 σ2 , @pair _ τ1 τ2   =>
-        f_equal2_dec binoptel_pair noConfusion_inv (eq_dec σ1 τ1) (eq_dec σ2 τ2)
+        f_equal2_dec binoptel_pair (ninv _ _) (eq_dec σ1 τ1) (eq_dec σ2 τ2)
       | @cons _ σ  , @cons _ τ   =>
-        f_equal_dec binoptel_cons noConfusion_inv (eq_dec σ τ)
+        f_equal_dec binoptel_cons (ninv _ _) (eq_dec σ τ)
       | @append _ σ , @append _ τ   =>
-        f_equal_dec binoptel_append noConfusion_inv (eq_dec σ τ)
+        f_equal_dec binoptel_append (ninv _ _) (eq_dec σ τ)
       | @bvadd _ m , @bvadd _ n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvadd))
-          noConfusion_inv (eq_dec m n)
+          (ninv _ _) (eq_dec m n)
       | @bvsub _ m , @bvsub _ n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvsub))
-          noConfusion_inv (eq_dec m n)
+          (ninv _ _) (eq_dec m n)
       | @bvmul _ m , @bvmul _ n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvmul))
-          noConfusion_inv (eq_dec m n)
+          (ninv _ _) (eq_dec m n)
       | @bvand _ m , @bvand _ n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvand))
-          noConfusion_inv (eq_dec m n)
+          (ninv _ _) (eq_dec m n)
       | @bvor _ m , @bvor _ n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvor))
-          noConfusion_inv (eq_dec m n)
+          (ninv _ _) (eq_dec m n)
       | @bvxor _ m , @bvxor _ n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvxor))
-          noConfusion_inv (eq_dec m n)
+          (ninv _ _) (eq_dec m n)
       | @bvapp _ m1 m2 , @bvapp _ n1 n2 =>
         f_equal2_dec
           (fun m n => ((bvec m, bvec n, bvec (m+n)), bvapp))
-          noConfusion_inv (eq_dec m1 n1) (eq_dec m2 n2)
+          (ninv _ _) (eq_dec m1 n1) (eq_dec m2 n2)
       | @bvcons _ m , @bvcons _ n =>
         f_equal_dec
           (fun n => ((bool, bvec n, bvec (S n)), bvcons))
-          noConfusion_inv (eq_dec m n)
-      | @bvuge _ m , @bvuge _ n =>
-        f_equal_dec
-          (fun n => ((bvec n, bvec n, bool), bvuge))
-          noConfusion_inv (eq_dec m n)
-      | @bvugt _ m , @bvugt _ n =>
-        f_equal_dec
-          (fun n => ((bvec n, bvec n, bool), bvugt))
-          noConfusion_inv (eq_dec m n)
-      | @bvule _ m , @bvule _ n =>
-        f_equal_dec
-          (fun n => ((bvec n, bvec n, bool), bvule))
-          noConfusion_inv (eq_dec m n)
-      | @bvult _ m , @bvult _ n =>
-        f_equal_dec
-          (fun n => ((bvec n, bvec n, bool), bvult))
-          noConfusion_inv (eq_dec m n)
-      | _           , _            => right noConfusion_inv
+          (ninv _ _) (eq_dec m n)
+      | @relop _ σ op1 , @relop _ τ op2 =>
+        binoptel_reloptel_eq_dec (eq_dec (σ,op1) (τ,op2))
+      | _           , _            => right (ninv _ _)
       end.
 
     Inductive OpEq {σ1 σ2 σ3} (op1 : BinOp σ1 σ2 σ3) : forall {τ1 τ2 τ3}, BinOp τ1 τ2 τ3 -> Prop :=
@@ -201,17 +212,57 @@ Module bop.
       - right. congruence.
     Defined.
 
+    Definition eval_relop_val {σ} (op : RelOp σ) : Val σ -> Val σ -> Datatypes.bool :=
+      match op with
+      | eq    => Val_eqb _
+      | neq   => fun v1 v2 => negb (Val_eqb _ v1 v2)
+      | le    => Z.leb
+      | lt    => Z.ltb
+      | bvsle => fun v1 v2 => bv.sleb v1 v2
+      | bvslt => fun v1 v2 => bv.sltb v1 v2
+      | bvule => fun v1 v2 => bv.uleb v1 v2
+      | bvult => fun v1 v2 => bv.ultb v1 v2
+      end.
+
+    Definition eval_relop_prop
+      (* Force TypeDefKit into the context, so that the eval_relop_equiv lemma
+         below doesn't leave unsolved existentials when used in rewriting. *)
+      {TDF : TypeDefKit TDN} {σ} (op : RelOp σ) : Val σ -> Val σ -> Prop :=
+      match op with
+      | eq    => fun v1 v2 => v1 = v2
+      | neq   => fun v1 v2 => v1 <> v2
+      | le    => fun v1 v2 => (v1 <= v2)%Z
+      | lt    => fun v1 v2 => (v1 < v2)%Z
+      | bvsle => fun v1 v2 => bv.sleb v1 v2 = true
+      | bvslt => fun v1 v2 => bv.sltb v1 v2 = true
+      | bvule => fun v1 v2 => bv.uleb v1 v2 = true
+      | bvult => fun v1 v2 => bv.ultb v1 v2 = true
+      end.
+
+    Lemma eval_relop_val_spec {σ} (op : RelOp σ) (v1 v2 : Val σ) :
+      reflect (eval_relop_prop op v1 v2) (eval_relop_val op v1 v2).
+    Proof with constructor; auto.
+      destruct op; cbn.
+      - destruct (Val_eqb_spec σ v1 v2)...
+      - destruct (Val_eqb_spec σ v1 v2)...
+      - apply Z.leb_spec0.
+      - apply Z.ltb_spec0.
+      - apply ssrbool.idP.
+      - apply ssrbool.idP.
+      - apply ssrbool.idP.
+      - apply ssrbool.idP.
+    Qed.
+
+    Lemma eval_relop_equiv {σ} (op : RelOp σ) (v1 v2 : Val σ) :
+      eval_relop_prop op v1 v2 <-> eval_relop_val op v1 v2 = true.
+    Proof. apply ssrbool.rwP, eval_relop_val_spec. Qed.
+
     Definition eval {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Val σ1 -> Val σ2 -> Val σ3 :=
       match op in BinOp σ1 σ2 σ3 return Val σ1 -> Val σ2 -> Val σ3 with
       | plus       => Z.add
       | times      => Z.mul
       | minus      => Z.sub
       | land       => Z.land
-      | eq         => Val_eqb _
-      | le         => Z.leb
-      | lt         => Z.ltb
-      | ge         => Z.geb
-      | gt         => Z.gtb
       | and        => andb
       | or         => fun v1 v2 => orb v1 v2
       | pair       => Datatypes.pair
@@ -225,10 +276,7 @@ Module bop.
       | bvxor      => fun v1 v2 => bv.lxor v1 v2
       | bvapp      => fun v1 v2 => bv.app v1 v2
       | bvcons     => fun b bs => bv.cons b bs
-      | bvuge      => fun v1 v2 => bv.geb v1 v2
-      | bvugt      => fun v1 v2 => bv.gtb v1 v2
-      | bvule      => fun v1 v2 => bv.leb v1 v2
-      | bvult      => fun v1 v2 => bv.ltb v1 v2
+      | relop op   => eval_relop_val op
       end.
 
   End WithTypeDef.
@@ -236,4 +284,4 @@ Module bop.
 
 End bop.
 #[export] Existing Instance bop.eq_dec_binop.
-Export bop ( BinOp ).
+Export bop ( BinOp, RelOp ).

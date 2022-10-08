@@ -200,7 +200,7 @@ End PredicateKit.
     Export asn.notations.
     Open Scope env_scope.
 
-    Notation "x '≠' y" := (asn.formula (formula_neq x y)) (at level 70) : asn_scope.
+    Notation "x '≠' y" := (asn.formula (formula_relop bop.neq x y)) (at level 70) : asn_scope.
     Notation "p '<=ₚ' p'" := (asn.formula (formula_user subperm (env.nil ► (ty.perm ↦ p) ► (ty.perm ↦ p')))) (at level 70).
 
     Notation "r '↦r' t" := (asn.chunk (chunk_user ptsreg (env.nil ► (ty.enum regname ↦ r) ► (ty.word ↦ t)))) (at level 70).
@@ -226,8 +226,8 @@ End PredicateKit.
          asn).
     Notation asn_within_bounds a b e :=
       (asn.formula (formula_bool (term_binop bop.and
-                                             (term_binop bop.le b a)
-                                             (term_binop bop.le a e)))).
+                                             (term_binop (bop.relop bop.le) b a)
+                                             (term_binop (bop.relop bop.le) a e)))).
   End MinCapsContractNotations.
 
 Section ContractDefKit.
@@ -490,7 +490,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        sep_contract_result          := "result_upper_bound";
        sep_contract_postcondition   :=
          term_var "result_upper_bound" =
-           term_binop bop.le (term_var "a") (term_var "e");
+           term_binop (bop.relop bop.le) (term_var "a") (term_var "e");
     |}.
 
   Definition sep_contract_within_bounds : SepContract ["c" :: ty.cap] ty.bool :=
@@ -502,8 +502,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
          asn_match_cap (term_var "c") "perm" "b" "e" "a"
                        (term_var "result_within_bounds" =
                           term_binop bop.and
-                            (term_binop bop.le (term_var "b") (term_var "a"))
-                            (term_binop bop.le (term_var "a") (term_var "e")));
+                            (term_binop (bop.relop bop.le) (term_var "b") (term_var "a"))
+                            (term_binop (bop.relop bop.le) (term_var "a") (term_var "e")));
     |}.
 
   Definition sep_contract_exec_jalr_cap : SepContractFun exec_jalr_cap :=
@@ -640,8 +640,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        sep_contract_postcondition   :=
          term_var "result_is_within_range" =
            term_binop bop.and
-             (term_binop bop.le (term_var "b") (term_var "b'"))
-             (term_binop bop.le (term_var "e'") (term_var "e"))
+             (term_binop (bop.relop bop.le) (term_var "b") (term_var "b'"))
+             (term_binop (bop.relop bop.le) (term_var "e'") (term_var "e"))
     |}.
   
   Definition sep_contract_exec_cgettag : SepContractFun exec_cgettag :=
@@ -855,8 +855,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
          asn.formula
          (formula_bool
             (term_binop bop.and
-                        (term_binop bop.le (term_var "b") (term_var "b'"))
-                        (term_binop bop.le (term_var "e'") (term_var "e"))));
+                        (term_binop (bop.relop bop.le) (term_var "b") (term_var "b'"))
+                        (term_binop (bop.relop bop.le) (term_var "e'") (term_var "e"))));
        lemma_postcondition   :=
          asn_csafe c ∗
          asn_csafe c';
@@ -992,8 +992,8 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
                      let e := c'.[??"cap_end"] in
                      let a := c'.[??"cap_cursor"] in
                      Some (cons (formula_bool (term_binop bop.and
-                                                          (term_binop bop.le b a)
-                                                          (term_binop bop.lt a e))) nil)
+                                                          (term_binop (bop.relop bop.le) b a)
+                                                          (term_binop (bop.relop bop.lt) a e))) nil)
                  | None   => Some (cons (formula_user correctPC [c]) nil)
                  end
     | _       => Some (cons (formula_user correctPC [c]) nil)

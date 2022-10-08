@@ -385,17 +385,12 @@ Module RiscvPmpModel2.
     Lemma pmp_match_addr_never_partial : ∀ (a : Xlenbits) (rng : PmpAddrRange),
         pmp_match_addr a rng = PMP_Match ∨ pmp_match_addr a rng = PMP_NoMatch.
     Proof.
-      intros a [[lo hi]|].
-      - simpl; destruct (hi <? lo)%Z eqn:H; subst; clear H; first now right.
-        destruct (a <? lo)%Z eqn:?; subst; simpl; first now right.
-        destruct (hi <=? a)%Z eqn:?; subst; simpl; first now right.
-        left.
-        rewrite Z.ltb_antisym in Heqb.
-        rewrite Z.leb_antisym in Heqb0.
-        apply negb_false_iff in Heqb.
-        apply negb_false_iff in Heqb0.
-        now rewrite Heqb; rewrite Heqb0.
-      - right; reflexivity.
+    intros a [[lo hi]|]; cbn;
+      repeat
+        match goal with
+        | |- context[Z.leb ?x ?y] => destruct (Z.leb_spec x y); cbn
+        | |- context[Z.ltb ?x ?y] => destruct (Z.ltb_spec x y); cbn
+        end; auto; Lia.lia.
     Qed.
 
     Lemma machine_unlocked_pmp_get_perms : ∀ (cfg : Pmpcfg_ent),

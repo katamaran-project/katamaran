@@ -440,7 +440,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := term_inl (term_var "p") ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn.formula (formula_eq (term_var "result") (term_val ty.unit tt)) ∗
+           term_var "result" = term_val ty.unit tt ∗
            asn.exist "zs" (ty.list ty.int)
              (term_inl (term_var "p") ↦l term_var "zs" ∗
               asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
@@ -502,7 +502,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := term_var "p" ↦p ( term_var "x" , term_var "xs" );
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn.formula (formula_eq (term_var "result") (term_var "x")) ∗
+           term_var "result" = term_var "x" ∗
            term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
 
@@ -512,7 +512,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := term_var "p" ↦p ( term_var "x" , term_var "xs" );
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn.formula (formula_eq (term_var "result") (term_var "xs")) ∗
+           term_var "result" = term_var "xs" ∗
            term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
 
@@ -522,7 +522,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := asn.exist "ys" llist (term_var "p" ↦p ( term_var "x" , term_var "ys"));
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-         asn.formula (formula_eq (term_var "result") (term_val ty.unit tt)) ∗
+         term_var "result" = term_val ty.unit tt ∗
          term_var "p" ↦p ( term_var "x" , term_var "xs");
       |}.
 
@@ -559,8 +559,8 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          lemma_patterns        := [term_var "p"];
          lemma_precondition    := term_inr (term_var "p") ↦l term_var "xs";
          lemma_postcondition   :=
-           asn.formula (formula_eq (term_var "p") (term_val ty.unit tt)) ∗
-           asn.formula (formula_eq (term_var "xs") (term_val (ty.list ty.int) nil))
+           term_var "p"  = term_val ty.unit tt ∗
+           term_var "xs" = term_val (ty.list ty.int) nil
       |}.
 
 
@@ -645,7 +645,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
   Equations simplify_preverseappend {Σ} (xs ys zs: Term Σ (ty.list ty.int)) : option (List Formula Σ) :=
   (* | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty.int) 1%Z) n := *)
   (*   Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list; *)
-  | term_val ?(ty.list ty.int) nil | ys | zs := Some [formula_eq ys zs]%list;
+  | term_val ?(ty.list ty.int) nil | ys | zs := Some [formula_relop bop.eq ys zs]%list;
   | xs | term_val ?(ty.list ty.int) nil | zs := Some [formula_user preverse (env.nil ► (_ ↦ xs) ► (_ ↦ zs))]%list;
   | term_binop bop.cons x xs | ys | zs := Some [formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_  ↦ term_binop bop.cons x ys) ► (_  ↦ zs))]%list;
   | xs | ys | zs          :=

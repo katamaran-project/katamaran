@@ -336,7 +336,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition exp_testbit {Γ} (eb : Exp Γ ty_xlenbits) (i : Z) : Exp Γ ty.bool :=
     let em := exp_int (Z.shiftl 1 i) in
-    exp_binop bop.eq (exp_binop bop.land eb em) em.
+    exp_binop bop.land eb em = em.
 
   Definition stm_pmpcfg_ent_from_bits {Γ} (b : Stm Γ ty_xlenbits) : Stm Γ ty_pmpcfg_ent :=
     let: "b" := b in

@@ -28,6 +28,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Classes.Morphisms
      Classes.RelationClasses
      Program.Basics
@@ -55,42 +56,45 @@ Module Type FormulasOn
   Local Obligation Tactic := idtac.
 
   Inductive Formula (Σ : LCtx) : Type :=
-  | formula_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
+  | formula_user (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | formula_bool (t : Term Σ ty.bool)
   | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Val Σ' Prop)
-  | formula_ge (t1 t2 : Term Σ ty.int)
-  | formula_gt (t1 t2 : Term Σ ty.int)
-  | formula_le (t1 t2 : Term Σ ty.int)
-  | formula_lt (t1 t2 : Term Σ ty.int)
-  | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
-  | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
+  | formula_relop {σ} (rop : bop.RelOp σ) (t1 t2 : Term Σ σ).
   Arguments formula_user {_} p ts.
   Arguments formula_bool {_} t.
+
+  Definition formula_relop_neg {Σ σ} (op : RelOp σ) :
+    forall (t1 t2 : Term Σ σ), Formula Σ :=
+    match op with
+    | bop.eq     => formula_relop bop.neq
+    | bop.neq    => formula_relop bop.eq
+    | bop.le     => Basics.flip (formula_relop bop.lt)
+    | bop.lt     => Basics.flip (formula_relop bop.le)
+    | bop.bvsle  => Basics.flip (formula_relop bop.bvslt)
+    | bop.bvslt  => Basics.flip (formula_relop bop.bvsle)
+    | bop.bvule  => Basics.flip (formula_relop bop.bvult)
+    | bop.bvult  => Basics.flip (formula_relop bop.bvule)
+    end.
 
   Equations(noeqns) formula_eqs_ctx {Δ : Ctx Ty} {Σ : LCtx}
     (δ δ' : Env (Term Σ) Δ) : list (Formula Σ) :=
     formula_eqs_ctx env.nil          env.nil            := nil;
     formula_eqs_ctx (env.snoc δ _ t) (env.snoc δ' _ t') :=
-      formula_eq t t' :: formula_eqs_ctx δ δ'.
+      formula_relop bop.eq t t' :: formula_eqs_ctx δ δ'.
 
   Equations(noeqns) formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ : LCtx}
     (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
     formula_eqs_nctx env.nil          env.nil            := nil;
     formula_eqs_nctx (env.snoc δ _ t) (env.snoc δ' _ t') :=
-      formula_eq t t' :: formula_eqs_nctx δ δ'.
+      formula_relop bop.eq t t' :: formula_eqs_nctx δ δ'.
 
   #[export] Instance sub_formula : Subst Formula :=
     fun Σ1 fml Σ2 ζ =>
       match fml with
-      | formula_user p ts => formula_user p (subst ts ζ)
-      | formula_bool t    => formula_bool (subst t ζ)
-      | formula_prop ζ' P => formula_prop (subst ζ' ζ) P
-      | formula_ge t1 t2  => formula_ge (subst t1 ζ) (subst t2 ζ)
-      | formula_gt t1 t2  => formula_gt (subst t1 ζ) (subst t2 ζ)
-      | formula_le t1 t2  => formula_le (subst t1 ζ) (subst t2 ζ)
-      | formula_lt t1 t2  => formula_lt (subst t1 ζ) (subst t2 ζ)
-      | formula_eq t1 t2  => formula_eq (subst t1 ζ) (subst t2 ζ)
-      | formula_neq t1 t2 => formula_neq (subst t1 ζ) (subst t2 ζ)
+      | formula_user p ts      => formula_user p (subst ts ζ)
+      | formula_bool t         => formula_bool (subst t ζ)
+      | formula_prop ζ' P      => formula_prop (subst ζ' ζ) P
+      | formula_relop op t1 t2 => formula_relop op (subst t1 ζ) (subst t2 ζ)
       end.
 
   #[export] Instance substlaws_formula : SubstLaws Formula.
@@ -106,18 +110,25 @@ Module Type FormulasOn
       | formula_user p ts => env.uncurry (𝑷_inst p) (inst ts ι)
       | formula_bool t    => inst (A := Val ty.bool) t ι = true
       | formula_prop ζ P  => uncurry_named P (inst ζ ι)
-      | formula_ge t1 t2  => inst (A := Val ty.int) t1 ι >= inst (A := Val ty.int) t2 ι
-      | formula_gt t1 t2  => inst (A := Val ty.int) t1 ι >  inst (A := Val ty.int) t2 ι
-      | formula_le t1 t2  => inst (A := Val ty.int) t1 ι <= inst (A := Val ty.int) t2 ι
-      | formula_lt t1 t2  => inst (A := Val ty.int) t1 ι <  inst (A := Val ty.int) t2 ι
-      | formula_eq t1 t2  => inst t1 ι =  inst t2 ι
-      | formula_neq t1 t2 => inst t1 ι <> inst t2 ι
-      end%Z.
+      | formula_relop op t1 t2 => bop.eval_relop_prop op (inst t1 ι) (inst t2 ι)
+      end.
 
   #[export] Instance inst_subst_formula : InstSubst Formula Prop.
   Proof.
     intros ? ? ? ? f.
     induction f; cbn; repeat f_equal; apply inst_subst.
+  Qed.
+
+  Lemma inst_formula_relop_neg {Σ σ} (ι : Valuation Σ) (op : RelOp σ) :
+    forall (t1 t2 : Term Σ σ),
+      inst (formula_relop_neg op t1 t2) ι <->
+      bop.eval_relop_val op (inst t1 ι) (inst t2 ι) = false.
+  Proof.
+    destruct op; cbn; intros t1 t2; unfold bv.sltb, bv.sleb, bv.uleb, bv.ultb;
+      rewrite ?N.ltb_antisym, ?negb_true_iff, ?negb_false_iff; auto;
+      try Lia.lia.
+    - destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)); intuition.
+    - destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)); intuition.
   Qed.
 
   Import option.notations.
@@ -127,12 +138,9 @@ Module Type FormulasOn
       | formula_user p ts => option.map (formula_user p) (occurs_check xIn ts)
       | formula_bool t    => option.map formula_bool (occurs_check xIn t)
       | formula_prop ζ P  => option.map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
-      | formula_ge t1 t2  => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_ge t1' t2')
-      | formula_gt t1 t2  => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_gt t1' t2')
-      | formula_le t1 t2  => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_le t1' t2')
-      | formula_lt t1 t2  => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_lt t1' t2')
-      | formula_eq t1 t2  => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_eq t1' t2')
-      | formula_neq t1 t2 => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_neq t1' t2')
+      | formula_relop op t1 t2 => t1' <- occurs_check xIn t1 ;;
+                                  t2' <- occurs_check xIn t2 ;;
+                                  Some (formula_relop op t1' t2')
       end.
 
   #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.
@@ -157,6 +165,10 @@ Module Type FormulasOn
       intros Σ Σ' ζ ι pc.
       induction pc; cbn; f_equal; auto using inst_subst.
     Qed.
+
+    Lemma inst_pathcondition_nil {Σ} (ι : Valuation Σ) :
+      inst (@nil (Formula Σ)) ι <-> True.
+    Proof. reflexivity. Qed.
 
     Lemma inst_pathcondition_cons {Σ} (ι : Valuation Σ) (f : Formula Σ) (pc : PathCondition Σ) :
       inst (cons f pc) ι <-> inst f ι /\ inst pc ι.

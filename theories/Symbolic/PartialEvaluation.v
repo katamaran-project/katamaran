@@ -105,8 +105,9 @@ Module Type PartialEvaluationOn
     | t            := term_neg t.
 
     Equations(noeqns) peval_not (t : Term Σ ty.bool) : Term Σ ty.bool :=
-    | term_val _ v := term_val ty.bool (negb v);
-    | t            := term_not t.
+    | term_val _ v                    := term_val ty.bool (negb v);
+    | term_binop (bop.relop op) t1 t2 := term_relop_neg op t1 t2;
+    | t                               := term_not t.
 
     Equations(noeqns) peval_inl {σ1 σ2} (t : Term Σ σ1) : Term Σ (ty.sum σ1 σ2) :=
     | term_val _ v := term_val (ty.sum _ _) (@inl (Val _) (Val _) v);
@@ -123,16 +124,16 @@ Module Type PartialEvaluationOn
       end.
 
     Equations(noeqns) peval [σ] (t : Term Σ σ) : Term Σ σ :=
-    | term_var ς                 := term_var ς;
-    | term_val _ v               := term_val _ v;
-    | term_binop op t1 t2        := peval_binop op (peval t1) (peval t2);
-    | term_neg t                 := peval_neg (peval t);
-    | term_not t                 := peval_not (peval t);
-    | term_inl t                 := peval_inl (peval t);
-    | term_inr t                 := peval_inr (peval t);
-    | @term_tuple _ σs ts        := @term_tuple _ σs (env.map (fun b => @peval b) ts);
-    | term_union U K t           := peval_union (peval t);
-    | @term_record _ R ts        := term_record R (env.map (fun b => peval (σ := type b)) ts).
+    | term_var ς          => term_var ς
+    | term_val _ v        => term_val _ v
+    | term_binop op t1 t2 => peval_binop op (peval t1) (peval t2)
+    | term_neg t          => peval_neg (peval t)
+    | term_not t          => peval_not (peval t)
+    | term_inl t          => peval_inl (peval t)
+    | term_inr t          => peval_inr (peval t)
+    | @term_tuple _ σs ts => @term_tuple _ σs (env.map (fun b => @peval b) ts)
+    | term_union U K t    => peval_union (peval t)
+    | @term_record _ R ts => term_record R (env.map (fun b => peval (σ := type b)) ts).
 
     Lemma peval_neg_sound (t : Term Σ ty.int) :
       forall (ι : Valuation Σ),
@@ -142,7 +143,11 @@ Module Type PartialEvaluationOn
     Lemma peval_not_sound (t : Term Σ ty.bool) :
       forall (ι : Valuation Σ),
         inst (peval_not t) ι = inst (term_not t) ι.
-    Proof. dependent elimination t; cbn; auto. Qed.
+    Proof.
+      dependent elimination t; auto.
+      dependent elimination op; auto.
+      cbn. intros ι. now rewrite inst_term_relop_neg.
+    Qed.
 
     Lemma peval_inl_sound {σ1 σ2} (t : Term Σ σ1) :
       forall (ι : Valuation Σ),

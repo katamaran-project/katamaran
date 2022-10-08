@@ -73,8 +73,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
     Import RiscvPmpSignature.notations.
 
     Import asn.notations.
-    Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
-    Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
+    Local Notation "a <ₜ b" := (term_binop (bop.relop bop.lt) a b) (at level 60).
+    Local Notation "a <=ₜ b" := (term_binop (bop.relop bop.le) a b) (at level 60).
     Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
     Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
@@ -1451,20 +1451,12 @@ Module RiscvPmpValidContracts.
 
   Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
   Proof.
-    compute.
-    constructor.
-    cbn.
-    intros.
-    rewrite Bool.negb_andb in H.
-    apply Bool.orb_prop in H.
-    destruct H;
-      apply Bool.negb_true_iff in H.
-    apply Z.leb_gt in H; auto.
-    apply Z.leb_gt in H; auto.
+    apply Symbolic.validcontract_with_erasure_sound.
+    vm_compute. constructor. cbn. intros. Lia.lia.
   Qed.
 
   Lemma valid_contract_execute_RTYPE : ValidContract execute_RTYPE.
-  Proof. reflexivity. Qed. 
+  Proof. reflexivity. Qed.
 
   Lemma valid_contract_execute_ITYPE : ValidContract execute_ITYPE.
   Proof. reflexivity. Qed.

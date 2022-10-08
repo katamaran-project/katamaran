@@ -216,7 +216,7 @@ Module BlockVerificationDerived.
   Definition exec_instruction (i : AST) : ⊢ M Unit :=
     fun _ =>
       _ ∣ msg <- @exec_instruction' i _ ;;
-      assert (formula_eq msg (term_val ty_retired RETIRE_SUCCESS)).
+      assert (formula_relop bop.eq msg (term_val ty_retired RETIRE_SUCCESS)).
 
   (* Ideally, a block should be a list of non-branching
      instruction plus one final branching instruction *)
@@ -301,7 +301,7 @@ Module BlockVerificationDerived2.
     fun _ =>
       ω1 ∣ a <- @demonic _ _ ;;
       ω2 ∣ na <- exec_instruction_any i a ;;
-      assert (formula_eq na (term_binop bop.plus (persist__term a ω2) (term_val ty_exc_code 4))).
+      assert (formula_relop bop.eq na (term_binop bop.plus (persist__term a ω2) (term_val ty_exc_code 4))).
 
 
   Fixpoint exec_block_addr (b : list AST) : ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
@@ -309,7 +309,7 @@ Module BlockVerificationDerived2.
       match b with
       | nil       => pure apc
       | cons i b' =>
-        ω1 ∣ _ <- assert (formula_eq ainstr apc) ;;
+        ω1 ∣ _ <- assert (formula_relop bop.eq ainstr apc) ;;
         ω2 ∣ apc' <- exec_instruction_any i (persist__term apc ω1) ;;
         @exec_block_addr b' _ (term_binop bop.plus (persist__term ainstr (ω1 ∘ ω2)) (term_val ty_xlenbits 4)) apc'
       end.

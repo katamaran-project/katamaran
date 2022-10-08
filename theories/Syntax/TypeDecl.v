@@ -286,17 +286,33 @@ Module ty.
     Lemma unionv_fold_inj {U} (v1 v2 : {K : unionk U & Val (unionk_ty U K)}) :
       unionv_fold U v1 = unionv_fold U v2 <-> v1 = v2.
     Proof.
-      split; try congruence. intros H.
+      split; intro H; [|now f_equal].
       apply (f_equal (unionv_unfold U)) in H.
-      now rewrite ?unionv_unfold_fold in H.
+      now rewrite !unionv_unfold_fold in H.
     Qed.
 
     Lemma unionv_unfold_inj {U} (v1 v2 : Val (union U)) :
       unionv_unfold U v1 = unionv_unfold U v2 <-> v1 = v2.
     Proof.
-      split; try congruence. intros H.
+      split; intro H; [|now f_equal].
       apply (f_equal (unionv_fold U)) in H.
-      now rewrite ?unionv_fold_unfold in H.
+      now rewrite !unionv_fold_unfold in H.
+    Qed.
+
+    Lemma recordv_fold_inj {R} (v1 v2 : NamedEnv Val (recordf_ty R)) :
+      recordv_fold R v1 = recordv_fold R v2 <-> v1 = v2.
+    Proof.
+      split; intro H; [|now f_equal].
+      apply (f_equal (recordv_unfold R)) in H.
+      now rewrite !recordv_unfold_fold in H.
+    Qed.
+
+    Lemma recordv_unfold_inj {R} (v1 v2 : Val (ty.record R)) :
+      recordv_unfold R v1 = recordv_unfold R v2 <-> v1 = v2.
+    Proof.
+      split; intro H; [|now f_equal].
+      apply (f_equal (recordv_fold R)) in H.
+      now rewrite ?recordv_fold_unfold in H.
     Qed.
 
     Lemma K (σ : Ty) (p : σ = σ) : p = eq_refl.
@@ -333,7 +349,8 @@ Export ty
 
     unionv_fold_unfold, unionv_unfold_fold,
     unionv_fold_inj, unionv_unfold_inj,
-    recordv_fold_unfold, recordv_unfold_fold
+    recordv_fold_unfold, recordv_unfold_fold,
+    recordv_fold_inj, recordv_unfold_inj
   ).
 (* Reexport all instances from the ty submodule. Coq >= 8.15 can do this with
      Export (hints) ty.

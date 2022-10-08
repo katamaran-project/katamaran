@@ -233,11 +233,20 @@ Module Import asn.
       (at level 200, format
        "'[hv' 'if:'  c  '/' '[' 'then'  A1  ']' '/' '[' 'else'  A2 ']' ']'"
       ) : asn_scope.
-    Notation "x = y" := (formula (formula_eq x y)) : asn_scope.
-    Notation "x < y" := (formula (formula_lt x y)) : asn_scope.
-    Notation "x <= y" := (formula (formula_le x y)) : asn_scope.
-    Notation "x > y" := (formula (formula_gt x y)) : asn_scope.
-    Notation "x >= y" := (formula (formula_ge x y)) : asn_scope.
+    Notation "x = y" := (formula (formula_relop bop.eq x y)) : asn_scope.
+    Notation "x >= y" := (formula (formula_relop bop.le y x)) : asn_scope.
+    Notation "x > y" := (formula (formula_relop bop.lt y x)) : asn_scope.
+    Notation "x <= y" := (formula (formula_relop bop.le x y)) : asn_scope.
+    Notation "x < y" := (formula (formula_relop bop.lt x y)) : asn_scope.
+    Notation "x = y" := (formula (formula_relop bop.eq x y)) : asn_scope.
+    Notation "x >=ˢ y" := (formula (formula_relop bop.bvsle y x)) : asn_scope.
+    Notation "x >ˢ y" := (formula (formula_relop bop.bvslt y x)) : asn_scope.
+    Notation "x <=ˢ y" := (formula (formula_relop bop.bvsle x y)) : asn_scope.
+    Notation "x <ˢ y" := (formula (formula_relop bop.bvslt x y)) : asn_scope.
+    Notation "x >=ᵘ y" := (formula (formula_relop bop.bvule y x)) : asn_scope.
+    Notation "x >ᵘ y" := (formula (formula_relop bop.bvult y x)) : asn_scope.
+    Notation "x <=ᵘ y" := (formula (formula_relop bop.bvule x y)) : asn_scope.
+    Notation "x <ᵘ y" := (formula (formula_relop bop.bvult x y)) : asn_scope.
 
     Notation "'match:' e 'in' R 'with' [ x ; y ; .. ; z ] => rhs 'end'" :=
       (match_record R e%exp

@@ -169,19 +169,27 @@ Module Type ExpressionsOn (Import TY : Types).
   Notation "e1 + e2" := (exp_binop bop.plus e1 e2) : exp_scope.
   Notation "e1 * e2" := (exp_binop bop.times e1 e2) : exp_scope.
   Notation "e1 - e2" := (exp_binop bop.minus e1 e2) : exp_scope.
-  Notation "e1 < e2" := (exp_binop bop.lt e1 e2) : exp_scope.
-  Notation "e1 > e2" := (exp_binop bop.gt e1 e2) : exp_scope.
-  Notation "e1 <= e2" := (exp_binop bop.le e1 e2) : exp_scope.
-  Notation "e1 >= e2" := (exp_binop bop.ge e1 e2) : exp_scope.
-
   Notation "e1 +ᵇ e2" := (exp_binop bop.bvadd e1 e2) : exp_scope.
   Notation "e1 -ᵇ e2" := (exp_binop bop.bvadd e1 e2) : exp_scope.
   Notation "e1 *ᵇ e2" := (exp_binop bop.bvmul e1 e2) : exp_scope.
-  Notation "e1 <ᵘ e2" := (exp_binop bop.bvult e1 e2) : exp_scope.
-  Notation "e1 >ᵘ e2" := (exp_binop bop.bvugt e1 e2) : exp_scope.
-  Notation "e1 <=ᵘ e2" := (exp_binop bop.bvule e1 e2) : exp_scope.
-  Notation "e1 >=ᵘ e2" := (exp_binop bop.bvuge e1 e2) : exp_scope.
-  Notation "e1 = e2" := (exp_binop bop.eq e1 e2) : exp_scope.
+
+  Notation "e1 >= e2" := (exp_binop (bop.relop bop.le) e2 e1) : exp_scope.
+  Notation "e1 > e2" := (exp_binop (bop.relop bop.lt) e2 e1) : exp_scope.
+  Notation "e1 <= e2" := (exp_binop (bop.relop bop.le) e1 e2) : exp_scope.
+  Notation "e1 < e2" := (exp_binop (bop.relop bop.lt) e1 e2) : exp_scope.
+
+  Notation "e1 >=ˢ e2" := (exp_binop (bop.relop bop.bvule) e2 e1) : exp_scope.
+  Notation "e1 >ˢ e2" := (exp_binop (bop.relop bop.bvult) e2 e1) : exp_scope.
+  Notation "e1 <ˢ e2" := (exp_binop (bop.relop bop.bvult) e1 e2) : exp_scope.
+  Notation "e1 <=ˢ e2" := (exp_binop (bop.relop bop.bvule) e1 e2) : exp_scope.
+
+  Notation "e1 >=ᵘ e2" := (exp_binop (bop.relop bop.bvule) e2 e1) : exp_scope.
+  Notation "e1 >ᵘ e2" := (exp_binop (bop.relop bop.bvult) e2 e1) : exp_scope.
+  Notation "e1 <=ᵘ e2" := (exp_binop (bop.relop bop.bvule) e1 e2) : exp_scope.
+  Notation "e1 <ᵘ e2" := (exp_binop (bop.relop bop.bvult) e1 e2) : exp_scope.
+
+  Notation "e1 = e2" := (exp_binop (bop.relop bop.eq) e1 e2) : exp_scope.
+  Notation "e1 != e2" := (exp_binop (bop.relop bop.neq) e1 e2) : exp_scope.
   Notation "- e" := (exp_neg e) : exp_scope.
 
 End ExpressionsOn.
