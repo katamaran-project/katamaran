@@ -142,18 +142,25 @@ Section Loop.
   Lemma wrongPC_crashes_step {c Q} : decide_correct_pc c = false ->
                               ⊢ semTriple [env] (pc ↦ c) (FunDef step) Q.
   Proof.
-    (* iIntros (wrongPC) "Hpc". *)
-    (* unfold FunDef, fun_step. *)
-    (* iApply semWP_let. *)
-    (* iApply semWP_read_register. *)
-    (* iExists c; iFrame. *)
-    (* iIntros "Hpc". *)
-    (* iApply semWP_let. *)
-    (* iApply semWP_call_inline. *)
-    (* cbn. *)
-    (* iApply is_correct_pc_false. *)
-    (* iSplitL "Hk". *)
-  Admitted.
+    iIntros (wrongPC) "Hpc".
+    unfold FunDef, fun_step.
+    iApply semWP_let.
+    iApply semWP_read_register.
+    iExists c; iFrame.
+    iIntros "Hpc".
+    iApply semWP_let.
+    iApply semWP_call_inline.
+    cbn.
+    iApply (semWP_mono fun_is_correct_pc (fun x y => ⌜ x = false ⌝ )%I with "[Hpc]").
+    { now iApply is_correct_pc_false. }
+    iIntros (v ι) "%eq".
+    unfold stm_if.
+    cbn.
+    subst.
+    iApply (semWP_pattern_match _ pat_bool (λ b : bool, if b then (call exec;; stm_val ty.unit ())%exp else _)).
+    iApply semWP_exp.
+    now rewrite semWP_fail.
+  Qed.
 
   Lemma wrongPC_crashes {c Q} : decide_correct_pc c = false ->
                               ⊢ semTriple [env] (pc ↦ c) (FunDef loop) Q.
