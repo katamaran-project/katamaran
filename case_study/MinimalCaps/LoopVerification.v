@@ -132,5 +132,59 @@ Section Loop.
       iFrame.
   Qed.
 
-  Print Assumptions valid_semContract_loop.
+  Import ctx.notations.
+  Import env.notations.
+  Lemma is_correct_pc_false {c cpc} : decide_correct_pc c = cpc ->
+    ⊢ semTriple [env].[ "c" ∷ ty.cap ↦ c ] (pc ↦ c) (FunDef is_correct_pc) (fun x y => ⌜ x = cpc ⌝ ).
+  Proof.
+  Admitted.
+
+  Lemma wrongPC_crashes_step {c Q} : decide_correct_pc c = false ->
+                              ⊢ semTriple [env] (pc ↦ c) (FunDef step) Q.
+  Proof.
+    (* iIntros (wrongPC) "Hpc". *)
+    (* unfold FunDef, fun_step. *)
+    (* iApply semWP_let. *)
+    (* iApply semWP_read_register. *)
+    (* iExists c; iFrame. *)
+    (* iIntros "Hpc". *)
+    (* iApply semWP_let. *)
+    (* iApply semWP_call_inline. *)
+    (* cbn. *)
+    (* iApply is_correct_pc_false. *)
+    (* iSplitL "Hk". *)
+  Admitted.
+
+  Lemma wrongPC_crashes {c Q} : decide_correct_pc c = false ->
+                              ⊢ semTriple [env] (pc ↦ c) (FunDef loop) Q.
+  Proof.
+    iIntros (wrongPc) "Hpc".
+    unfold FunDef, fun_loop.
+    iApply semWP_seq.
+    iApply semWP_call_inline.
+    now iApply (wrongPC_crashes_step wrongPc).
+  Qed.
+
+  (* and now without the IH. *)
+  Lemma valid_semContract_loop2 : ⊢ semTriple [env] Step_pre (FunDef loop) (fun _ _ => True%I).
+  Proof.
+    iIntros.
+    iLöb as "IH".
+    iApply valid_semContract_loop.
+    do 2 iModIntro.
+    iIntros (p b e a) "Hgprs Hpc #Hpcvalid".
+    remember (decide_correct_pc {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) as dcpc.
+    destruct dcpc.
+    - iApply "IH".
+      iFrame.
+      iExists _.
+      iFrame.
+      iSplitL; try iAssumption.
+      iPureIntro.
+      now unfold CorrectPC.
+    - unfold interp_loop.
+      iApply (wrongPC_crashes (Q := fun _ _ => True)%I); try iFrame.
+      now symmetry.
+  Qed.
+  Print Assumptions valid_semContract_loop2.
 End Loop.
