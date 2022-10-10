@@ -345,8 +345,7 @@ Module RiscvPmpModel2.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       rewrite ?Z.leb_le.
-      iIntros "[Hentries [Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]]".
-      iSplitL "Hentries"; try done.
+      iIntros "[Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]".
       unfold interp_pmp_addr_access_without,
         interp_pmp_addr_access,
         interp_ptsto,
@@ -369,8 +368,7 @@ Module RiscvPmpModel2.
       ValidLemma RiscvPmpSpecification.lemma_return_pmp_ptsto.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      iIntros "[Hentries [Hwithout Hptsto]]".
-      iSplitL "Hentries"; first iFrame.
+      iIntros "[Hwithout Hptsto]".
       unfold interp_pmp_addr_access_without.
       iApply ("Hwithout" with "Hptsto").
     Qed.

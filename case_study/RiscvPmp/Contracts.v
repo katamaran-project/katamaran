@@ -1193,14 +1193,12 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           {| lemma_logic_variables := [paddr :: ty_xlenbits; acc :: ty_access_type; "entries" :: ty.list ty_pmpentry; p :: ty_privilege];
             lemma_patterns        := [term_var paddr];
             lemma_precondition    :=
-            asn_pmp_entries (term_var "entries")
-                            ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
+              asn_pmp_addr_access (term_var "entries") (term_var p)
                             ∗ asn_bool (term_val ty_xlenbits minAddr <=ₜ term_var paddr)
                             ∗ asn_bool (term_var paddr <=ₜ term_val ty_xlenbits maxAddr)
                             ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc);
             lemma_postcondition   :=
-            asn_pmp_entries (term_var "entries")
-                            ∗ asn_pmp_addr_access_without (term_var paddr) (term_var "entries") (term_var p)
+              asn_pmp_addr_access_without (term_var paddr) (term_var "entries") (term_var p)
                             ∗ ∃ "w", term_var paddr ↦ₘ term_var w;
           |}.
 
@@ -1208,12 +1206,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           {| lemma_logic_variables := [paddr :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; p :: ty_privilege];
             lemma_patterns        := [term_var paddr];
             lemma_precondition    :=
-            asn_pmp_entries (term_var "entries")
-                            ∗ asn_pmp_addr_access_without (term_var paddr) (term_var "entries") (term_var p)
+              asn_pmp_addr_access_without (term_var paddr) (term_var "entries") (term_var p)
                             ∗ ∃ "w", term_var paddr ↦ₘ term_var w;
             lemma_postcondition   :=
-            asn_pmp_entries (term_var "entries")
-                            ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
+              asn_pmp_addr_access (term_var "entries") (term_var p)
           |}.
 
         Definition LEnv : LemmaEnv :=
