@@ -83,11 +83,11 @@ Import BlockVerificationDerived2.
 (*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := TOR; X := true; W := true; R := true }) ra RISCV_LUI; *) (* 28 *)
 (*         CSR pmp1cfg ra r0 CSRRW; *) (* 32 *)
 (*         UTYPE #HERE ra RISCV_AUIPC *) (* 36 *)
-(*         ADDI RA, RA, (ADV - #PREVHERE) *) (* 40 *)
-(*         CSR epc ra r0 CSRRW; *) (* 44 *)
+(*         ADDI RA, RA, (IH - #PREVHERE) *) (* 40 *)
+(*         CSR Tvec ra r0 CSRRW; *) (* 44 *)
 (*         UTYPE #HERE ra RISCV_AUIPC *) (* 48 *)
-(*         ADDI RA, RA, (IH - #PREVHERE) *) (* 52 *)
-(*         CSR Tvec ra r0 CSRRW; *) (* 56 *)
+(*         ADDI RA, RA, (ADV - #PREVHERE) *) (* 52 *)
+(*         CSR epc ra r0 CSRRW; *) (* 56 *)
 (*         UTYPE (pure_mstatus_to_bits { MPP := User }) ra RISCV_LUI; *) (* 60 *)
 (*         CSR Mstatus ra r0 CSRRW; *) (* 64 *)
 (*         MRET *) (* 68 *)
@@ -144,11 +144,11 @@ Import BlockVerificationDerived2.
       ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI
       ; CSR MPMP1CFG ra zero CSRRW
       ; UTYPE 0 ra RISCV_AUIPC
-      ; ITYPE 52 ra ra RISCV_ADDI
-      ; CSR MEpc ra zero CSRRW
-      ; UTYPE 0 ra RISCV_AUIPC
-      ; ITYPE 24 ra ra RISCV_ADDI
+      ; ITYPE 36 ra ra RISCV_ADDI
       ; CSR MTvec ra zero CSRRW
+      ; UTYPE 0 ra RISCV_AUIPC
+      ; ITYPE 40 ra ra RISCV_ADDI
+      ; CSR MEpc ra zero CSRRW
       ; UTYPE femto_mstatus ra RISCV_LUI
       ; CSR MStatus ra zero CSRRW
       ; MRET
