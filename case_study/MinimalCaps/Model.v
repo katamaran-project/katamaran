@@ -510,7 +510,7 @@ Module MinCapsIrisInstanceWithContracts.
   Include IrisInstanceWithContracts MinCapsBase MinCapsProgram MinCapsSemantics
     MinCapsSignature MinCapsSpecification MinCapsIrisBase MinCapsIrisInstance.
 
-  Section Lemmas.
+  Section LemProofs.
     Context {Σ} `{sg : sailGS Σ}.
 
     Lemma safe_to_execute_sound :
@@ -636,41 +636,165 @@ Module MinCapsIrisInstanceWithContracts.
       lia.
     Qed.
 
-  End Lemmas.
+    Lemma lemSem : LemmaSem.
+    Proof.
+      intros Δ []; eauto using
+                         open_ptsreg_sound, close_ptsreg_sound,
+        open_gprs_sound, close_gprs_sound, int_safe_sound, correctPC_subperm_R_sound,
+        subperm_not_E_sound, safe_move_cursor_sound, safe_sub_perm_sound,
+        safe_within_range_sound, safe_to_execute_sound, rewrite_add_r_0_sound.
+    Qed.
 
-  Lemma dI_sound `{sg : sailGS Σ} `{inv : invGS} :
-    ValidContractForeign sep_contract_dI dI.
-  Proof.
-    intros Γ es δ ι Heq.
-    destruct (env.snocView ι) as [ι code].
-    destruct (env.nilView ι).
-    iApply iris_rule_noop; cbn; try done.
-    intros s' γ γ' μ μ' δ' step.
-    dependent elimination step.
-    rewrite Heq in f1.
-    cbn in f1. destruct f1 as [res' e].
-    dependent elimination e.
-    repeat split; destruct res; eauto.
-  Qed.
+  End LemProofs.
 
-  Import iris.base_logic.lib.gen_heap.
+  Section ForeignProofs.
+    Lemma dI_sound `{sg : sailGS Σ} `{inv : invGS} :
+      ValidContractForeign sep_contract_dI dI.
+    Proof.
+      intros Γ es δ ι Heq.
+      destruct (env.snocView ι) as [ι code].
+      destruct (env.nilView ι).
+      iApply iris_rule_noop; cbn; try done.
+      intros s' γ γ' μ μ' δ' step.
+      dependent elimination step.
+      rewrite Heq in f1.
+      cbn in f1. destruct f1 as [res' e].
+      dependent elimination e.
+      repeat split; destruct res; eauto.
+    Qed.
 
-  Lemma rM_sound `{sg : sailGS Σ} `{invGS} :
-    ValidContractForeign sep_contract_rM rM.
-  Proof.
-    intros Γ es δ ι Heq.
-    destruct (env.snocView ι) as [ι e].
-    destruct (env.snocView ι) as [ι b].
-    destruct (env.snocView ι) as [ι p].
-    destruct (env.snocView ι) as [ι a].
-    destruct (env.nilView ι). cbn.
-    iIntros "[#Hsafe [[%Hsubp _] [%Hbounds _]]]".
-    apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
-    unfold semWP. rewrite wp_unfold. cbn.
-    destruct p; try discriminate.
-    (* TODO: clean this up! *)
-    - iAssert (inv (mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ interp w))%I as "Hown".
-      { rewrite fixpoint_interp1_eq; simpl.
+    Import iris.base_logic.lib.gen_heap.
+
+    Lemma rM_sound `{sg : sailGS Σ} `{invGS} :
+      ValidContractForeign sep_contract_rM rM.
+    Proof.
+      intros Γ es δ ι Heq.
+      destruct (env.snocView ι) as [ι e].
+      destruct (env.snocView ι) as [ι b].
+      destruct (env.snocView ι) as [ι p].
+      destruct (env.snocView ι) as [ι a].
+      destruct (env.nilView ι). cbn.
+      iIntros "[#Hsafe [[%Hsubp _] [%Hbounds _]]]".
+      apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
+      unfold semWP. rewrite wp_unfold. cbn.
+      destruct p; try discriminate.
+      (* TODO: clean this up! *)
+      - iAssert (inv (mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ interp w))%I as "Hown".
+        { rewrite fixpoint_interp1_eq; simpl.
+          iDestruct "Hsafe" as "[Hsafe | %]"; try lia.
+          iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
+          { iPureIntro; lia. }
+          iAssert (
+              ⌜b ∈ liveAddrs ∧ e ∈ liveAddrs⌝
+                                 ∗ ([∗ list] a0 ∈ region_addrs b e,
+                                     inv (mc_invNs.@a0) (∃ w, mapsto a0 (DfracOwn 1) w
+                                                                     ∗ fixpoint interp1 w))
+            )%I with "[Htmp Hsafe]" as "Hsafe'".
+          { iApply ("Hsafe" with "Htmp"). }
+          iApply (specialize_range $! (conj Hb He) with "Hsafe'"). }
+        iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+        iDestruct "Hmem" as (memmap) "[Hmem' %]".
+        iInv "Hown" as "Hinv" "Hclose".
+        iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+        iModIntro.
+        iSplitR; first by intuition.
+        iIntros (e2 σ'' efs) "%".
+        dependent elimination H1.
+        dependent elimination s.
+        rewrite Heq in f1.
+        cbn in f1.
+        dependent elimination f1.
+        do 3 iModIntro.
+        iDestruct "Hinv" as (v) "Hav".
+        iDestruct "Hav" as "[Hav #Hrec]".
+        iAssert (⌜ memmap !! a = Some v ⌝)%I with "[Hav Hmem']" as "%".
+        { iApply (gen_heap.gen_heap_valid with "Hmem' Hav"). }
+        iMod "Hclose2" as "_".
+        iAssert (▷ (∃ v0 : Z + Capability, gen_heap.mapsto a (dfrac.DfracOwn 1) v0 ∗ fixpoint interp1 v0))%I with "[Hav Hrec]" as "Hinv".
+        { iModIntro. iExists v. iSplitL "Hav"; iAssumption. }
+        iMod ("Hclose" with "Hinv") as "_".
+        iModIntro.
+        cbn.
+        iSplitL "Hmem' Hregs".
+        iSplitL "Hregs"; first iFrame.
+        iExists memmap.
+        iSplitL "Hmem'"; first iFrame.
+        iPureIntro; assumption.
+        iSplitL; trivial.
+        iApply wp_value; cbn.
+        iSplitL; trivial.
+        unfold fun_rM.
+        apply map_Forall_lookup_1 with (i := a) (x := v) in H0; auto.
+        simpl in H0. subst.
+        iAssumption.
+      - iAssert (inv (mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ fixpoint (interp1) w))%I as "Hown".
+        { rewrite fixpoint_interp1_eq; simpl.
+          iDestruct "Hsafe" as "[Hsafe | %]"; try lia.
+          iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
+          { iPureIntro; lia. }
+          iAssert (
+              ⌜b ∈ liveAddrs ∧ e ∈ liveAddrs⌝
+                                 ∗ ([∗ list] a0 ∈ region_addrs b e,
+                                     inv (mc_invNs.@a0) (∃ w, mapsto a0 (DfracOwn 1) w
+                                                                     ∗ fixpoint interp1 w))
+            )%I with "[Htmp Hsafe]" as "Hsafe'".
+          { iApply ("Hsafe" with "Htmp"). }
+          iApply (specialize_range $! (conj Hb He) with "Hsafe'"). }
+        iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+        iDestruct "Hmem" as (memmap) "[Hmem' %]".
+        iInv "Hown" as "Hinv" "Hclose".
+        iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+        iModIntro.
+        iSplitR; first by intuition.
+        iIntros (e2 σ'' efs) "%".
+        dependent elimination H1.
+        dependent elimination s.
+        rewrite Heq in f1.
+        cbn in f1.
+        dependent elimination f1.
+        do 3 iModIntro.
+        iDestruct "Hinv" as (v) "Hav".
+        iDestruct "Hav" as "[Hav #Hrec]".
+        iAssert (⌜ memmap !! a = Some v ⌝)%I with "[Hav Hmem']" as "%".
+        { iApply (gen_heap.gen_heap_valid with "Hmem' Hav"). }
+        iMod "Hclose2" as "_".
+        iAssert (▷ (∃ v0 : Z + Capability, gen_heap.mapsto a (dfrac.DfracOwn 1) v0 ∗ fixpoint interp1 v0))%I with "[Hav Hrec]" as "Hinv".
+        { iModIntro. iExists v. iSplitL "Hav"; iAssumption. }
+        iMod ("Hclose" with "Hinv") as "_".
+        iModIntro.
+        cbn.
+        iSplitL "Hmem' Hregs".
+        iSplitL "Hregs"; first iFrame.
+        iExists memmap.
+        iSplitL "Hmem'"; first iFrame.
+        iPureIntro; assumption.
+        iSplitL; trivial.
+        iApply wp_value; cbn.
+        iSplitL; trivial.
+        unfold fun_rM.
+        apply map_Forall_lookup_1 with (i := a) (x := v) in H0; auto.
+        simpl in H0. subst.
+        iAssumption.
+    Qed.
+
+    Lemma wM_sound `{sg : sailGS Σ} `{invGS} :
+      ValidContractForeign sep_contract_wM wM.
+    Proof.
+      intros Γ es δ ι Heq.
+      destruct (env.snocView ι) as [ι e].
+      destruct (env.snocView ι) as [ι b].
+      destruct (env.snocView ι) as [ι p].
+      destruct (env.snocView ι) as [ι w].
+      destruct (env.snocView ι) as [ι a].
+      destruct (env.nilView ι). cbn.
+      iIntros "[#Hwsafe [#Hsafe [[%Hsubp _] [%Hbounds _]]]]".
+      apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
+      unfold semWP. rewrite wp_unfold. cbn.
+      destruct p; try discriminate. clear Hsubp.
+      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+      iDestruct "Hmem" as (memmap) "[Hmem' %]".
+      iAssert (inv (mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ fixpoint (interp1) w))%I as "Hown".
+      { do 2 rewrite fixpoint_interp1_eq; simpl.
         iDestruct "Hsafe" as "[Hsafe | %]"; try lia.
         iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
         { iPureIntro; lia. }
@@ -682,8 +806,6 @@ Module MinCapsIrisInstanceWithContracts.
           )%I with "[Htmp Hsafe]" as "Hsafe'".
         { iApply ("Hsafe" with "Htmp"). }
         iApply (specialize_range $! (conj Hb He) with "Hsafe'"). }
-      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-      iDestruct "Hmem" as (memmap) "[Hmem' %]".
       iInv "Hown" as "Hinv" "Hclose".
       iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
       iModIntro.
@@ -696,162 +818,43 @@ Module MinCapsIrisInstanceWithContracts.
       dependent elimination f1.
       do 3 iModIntro.
       iDestruct "Hinv" as (v) "Hav".
-      iDestruct "Hav" as "[Hav #Hrec]".
-      iAssert (⌜ memmap !! a = Some v ⌝)%I with "[Hav Hmem']" as "%".
-      { iApply (gen_heap.gen_heap_valid with "Hmem' Hav"). }
+      iDestruct "Hav" as "[Hav Hrec]".
+      iMod (gen_heap.gen_heap_update _ _ _ w with "Hmem' Hav") as "[Hmem' Hav]".
       iMod "Hclose2" as "_".
       iAssert (▷ (∃ v0 : Z + Capability, gen_heap.mapsto a (dfrac.DfracOwn 1) v0 ∗ fixpoint interp1 v0))%I with "[Hav Hrec]" as "Hinv".
-      { iModIntro. iExists v. iSplitL "Hav"; iAssumption. }
+      { iModIntro. iExists w. iSplitL "Hav"; iAssumption. }
       iMod ("Hclose" with "Hinv") as "_".
       iModIntro.
+      iSplitL; trivial.
       cbn.
-      iSplitL "Hmem' Hregs".
-      iSplitL "Hregs"; first iFrame.
-      iExists memmap.
-      iSplitL "Hmem'"; first iFrame.
-      iPureIntro; assumption.
-      iSplitL; trivial.
-      iApply wp_value; cbn.
-      iSplitL; trivial.
-      unfold fun_rM.
-      apply map_Forall_lookup_1 with (i := a) (x := v) in H0; auto.
-      simpl in H0. subst.
-      iAssumption.
-    - iAssert (inv (mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ fixpoint (interp1) w))%I as "Hown".
-      { rewrite fixpoint_interp1_eq; simpl.
-        iDestruct "Hsafe" as "[Hsafe | %]"; try lia.
-        iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
-        { iPureIntro; lia. }
-        iAssert (
-            ⌜b ∈ liveAddrs ∧ e ∈ liveAddrs⌝
-                               ∗ ([∗ list] a0 ∈ region_addrs b e,
-                                   inv (mc_invNs.@a0) (∃ w, mapsto a0 (DfracOwn 1) w
-                                                                   ∗ fixpoint interp1 w))
-          )%I with "[Htmp Hsafe]" as "Hsafe'".
-        { iApply ("Hsafe" with "Htmp"). }
-        iApply (specialize_range $! (conj Hb He) with "Hsafe'"). }
-      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-      iDestruct "Hmem" as (memmap) "[Hmem' %]".
-      iInv "Hown" as "Hinv" "Hclose".
-      iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
-      iModIntro.
-      iSplitR; first by intuition.
-      iIntros (e2 σ'' efs) "%".
-      dependent elimination H1.
-      dependent elimination s.
-      rewrite Heq in f1.
-      cbn in f1.
-      dependent elimination f1.
-      do 3 iModIntro.
-      iDestruct "Hinv" as (v) "Hav".
-      iDestruct "Hav" as "[Hav #Hrec]".
-      iAssert (⌜ memmap !! a = Some v ⌝)%I with "[Hav Hmem']" as "%".
-      { iApply (gen_heap.gen_heap_valid with "Hmem' Hav"). }
-      iMod "Hclose2" as "_".
-      iAssert (▷ (∃ v0 : Z + Capability, gen_heap.mapsto a (dfrac.DfracOwn 1) v0 ∗ fixpoint interp1 v0))%I with "[Hav Hrec]" as "Hinv".
-      { iModIntro. iExists v. iSplitL "Hav"; iAssumption. }
-      iMod ("Hclose" with "Hinv") as "_".
-      iModIntro.
-      cbn.
-      iSplitL "Hmem' Hregs".
-      iSplitL "Hregs"; first iFrame.
-      iExists memmap.
-      iSplitL "Hmem'"; first iFrame.
-      iPureIntro; assumption.
-      iSplitL; trivial.
-      iApply wp_value; cbn.
-      iSplitL; trivial.
-      unfold fun_rM.
-      apply map_Forall_lookup_1 with (i := a) (x := v) in H0; auto.
-      simpl in H0. subst.
-      iAssumption.
-  Qed.
+      iSplitL "Hregs"; first by iFrame.
+      - iExists (<[a:=w]> memmap).
+        iSplitL; first by iFrame.
+        iPureIntro.
+        apply map_Forall_lookup.
+        intros i x Hl.
+        unfold fun_wM.
+        cbn in *.
+        destruct (Z.eqb a i) eqn:Heqb.
+        + rewrite -> Z.eqb_eq in Heqb.
+          subst.
+          apply (lookup_insert_rev memmap i); assumption.
+        + rewrite -> map_Forall_lookup in H0.
+          rewrite -> Z.eqb_neq in Heqb.
+          rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in Hl.
+          apply H0; assumption.
+      - iSplitL; trivial.
+        iApply wp_value; cbn; trivial;
+          repeat (iSplitL; trivial).
+    Qed.
 
-  Lemma wM_sound `{sg : sailGS Σ} `{invGS} :
-    ValidContractForeign sep_contract_wM wM.
-  Proof.
-    intros Γ es δ ι Heq.
-    destruct (env.snocView ι) as [ι e].
-    destruct (env.snocView ι) as [ι b].
-    destruct (env.snocView ι) as [ι p].
-    destruct (env.snocView ι) as [ι w].
-    destruct (env.snocView ι) as [ι a].
-    destruct (env.nilView ι). cbn.
-    iIntros "[#Hwsafe [#Hsafe [[%Hsubp _] [%Hbounds _]]]]".
-    apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
-    unfold semWP. rewrite wp_unfold. cbn.
-    destruct p; try discriminate. clear Hsubp.
-    iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-    iDestruct "Hmem" as (memmap) "[Hmem' %]".
-    iAssert (inv (mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ fixpoint (interp1) w))%I as "Hown".
-    { do 2 rewrite fixpoint_interp1_eq; simpl.
-      iDestruct "Hsafe" as "[Hsafe | %]"; try lia.
-      iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
-      { iPureIntro; lia. }
-      iAssert (
-          ⌜b ∈ liveAddrs ∧ e ∈ liveAddrs⌝
-                             ∗ ([∗ list] a0 ∈ region_addrs b e,
-                                 inv (mc_invNs.@a0) (∃ w, mapsto a0 (DfracOwn 1) w
-                                                                 ∗ fixpoint interp1 w))
-        )%I with "[Htmp Hsafe]" as "Hsafe'".
-      { iApply ("Hsafe" with "Htmp"). }
-      iApply (specialize_range $! (conj Hb He) with "Hsafe'"). }
-    iInv "Hown" as "Hinv" "Hclose".
-    iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    dependent elimination H1.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    do 3 iModIntro.
-    iDestruct "Hinv" as (v) "Hav".
-    iDestruct "Hav" as "[Hav Hrec]".
-    iMod (gen_heap.gen_heap_update _ _ _ w with "Hmem' Hav") as "[Hmem' Hav]".
-    iMod "Hclose2" as "_".
-    iAssert (▷ (∃ v0 : Z + Capability, gen_heap.mapsto a (dfrac.DfracOwn 1) v0 ∗ fixpoint interp1 v0))%I with "[Hav Hrec]" as "Hinv".
-    { iModIntro. iExists w. iSplitL "Hav"; iAssumption. }
-    iMod ("Hclose" with "Hinv") as "_".
-    iModIntro.
-    iSplitL; trivial.
-    cbn.
-    iSplitL "Hregs"; first by iFrame.
-    - iExists (<[a:=w]> memmap).
-      iSplitL; first by iFrame.
-      iPureIntro.
-      apply map_Forall_lookup.
-      intros i x Hl.
-      unfold fun_wM.
-      cbn in *.
-      destruct (Z.eqb a i) eqn:Heqb.
-      + rewrite -> Z.eqb_eq in Heqb.
-        subst.
-        apply (lookup_insert_rev memmap i); assumption.
-      + rewrite -> map_Forall_lookup in H0.
-        rewrite -> Z.eqb_neq in Heqb.
-        rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in Hl.
-        apply H0; assumption.
-    - iSplitL; trivial.
-      iApply wp_value; cbn; trivial;
-        repeat (iSplitL; trivial).
-  Qed.
+    Lemma foreignSem `{sg : sailGS Σ} : ForeignSem.
+    Proof.
+      intros Δ τ f; destruct f;
+        eauto using dI_sound, rM_sound, wM_sound.
+    Qed.
 
-  Lemma foreignSem `{sg : sailGS Σ} : ForeignSem.
-  Proof.
-    intros Δ τ f; destruct f;
-      eauto using dI_sound, rM_sound, wM_sound.
-  Qed.
-
-  Lemma lemSem `{sg : sailGS Σ} : LemmaSem.
-  Proof.
-    intros Δ []; eauto using
-                       open_ptsreg_sound, close_ptsreg_sound,
-      open_gprs_sound, close_gprs_sound, int_safe_sound, correctPC_subperm_R_sound,
-      subperm_not_E_sound, safe_move_cursor_sound, safe_sub_perm_sound,
-      safe_within_range_sound, safe_to_execute_sound, rewrite_add_r_0_sound.
-  Qed.
+  End ForeignProofs.
 
   (* Import the soundness proofs for the shallow and symbolic executors. *)
   Include Symbolic.Soundness.Soundness MinCapsBase MinCapsProgram MinCapsSignature

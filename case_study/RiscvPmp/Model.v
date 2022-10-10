@@ -88,145 +88,147 @@ Module RiscvPmpModel2.
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
       RiscvPmpSignature RiscvPmpSpecification RiscvPmpIrisBase RiscvPmpIrisInstance.
 
-  Lemma read_ram_sound `{sg : sailGS Σ, invGS} :
-    ValidContractForeign sep_contract_read_ram read_ram.
-  Proof.
-    intros Γ es δ ι Heq.
-    destruct (env.snocView ι) as [ι t].
-    destruct (env.snocView ι) as [ι p].
-    destruct (env.snocView ι) as [ι entries].
-    destruct (env.snocView ι) as [ι w].
-    destruct (env.snocView ι) as [ι paddr].
-    destruct (env.nilView ι). cbn in Heq |- *.
-    iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
-    unfold semWP. rewrite wp_unfold.
-    cbn.
-    iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first auto.
-    iIntros.
-    iModIntro.
-    iModIntro.
-    iModIntro.
-    dependent elimination H0.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    cbn.
-    iMod "Hclose" as "_".
-    iModIntro.
-    cbn.
-    iAssert (⌜ memmap !! paddr = Some w ⌝)%I with "[H Hmem]" as "%".
-    { iApply (gen_heap.gen_heap_valid with "Hmem H"). }
-    iSplitL "Hregs Hmem".
-    iSplitL "Hregs"; first iFrame.
-    iExists memmap; iFrame.
-    iPureIntro; assumption.
-    iSplitL; [|auto].
-    iApply wp_value; cbn.
-    iSplitL; [|auto].
-    iSplitR.
-    apply map_Forall_lookup_1 with (i := paddr) (x := w) in Hmap; auto.
-    iFrame.
-  Qed.
+  Section ForeignProofs.
+    Lemma read_ram_sound `{sg : sailGS Σ, invGS} :
+      ValidContractForeign sep_contract_read_ram read_ram.
+    Proof.
+      intros Γ es δ ι Heq.
+      destruct (env.snocView ι) as [ι t].
+      destruct (env.snocView ι) as [ι p].
+      destruct (env.snocView ι) as [ι entries].
+      destruct (env.snocView ι) as [ι w].
+      destruct (env.snocView ι) as [ι paddr].
+      destruct (env.nilView ι). cbn in Heq |- *.
+      iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
+      unfold semWP. rewrite wp_unfold.
+      cbn.
+      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; first auto.
+      iIntros.
+      iModIntro.
+      iModIntro.
+      iModIntro.
+      dependent elimination H0.
+      dependent elimination s.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      cbn.
+      iMod "Hclose" as "_".
+      iModIntro.
+      cbn.
+      iAssert (⌜ memmap !! paddr = Some w ⌝)%I with "[H Hmem]" as "%".
+      { iApply (gen_heap.gen_heap_valid with "Hmem H"). }
+      iSplitL "Hregs Hmem".
+      iSplitL "Hregs"; first iFrame.
+      iExists memmap; iFrame.
+      iPureIntro; assumption.
+      iSplitL; [|auto].
+      iApply wp_value; cbn.
+      iSplitL; [|auto].
+      iSplitR.
+      apply map_Forall_lookup_1 with (i := paddr) (x := w) in Hmap; auto.
+      iFrame.
+    Qed.
 
-  Lemma write_ram_sound `{sg : sailGS Σ, HGS: invGS} :
-    ValidContractForeign sep_contract_write_ram write_ram.
-  Proof.
-    intros Γ es δ ι Heq.
-    destruct (env.snocView ι) as [ι t].
-    destruct (env.snocView ι) as [ι p].
-    destruct (env.snocView ι) as [ι entries].
-    destruct (env.snocView ι) as [ι data].
-    destruct (env.snocView ι) as [ι paddr].
-    destruct (env.nilView ι). cbn in Heq |- *.
-    iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
-    unfold semWP. rewrite wp_unfold.
-    cbn.
-    iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first auto.
-    iIntros.
-    iModIntro.
-    iModIntro.
-    iModIntro.
-    dependent elimination H.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    cbn.
-    iDestruct "H" as "(%w & H)".
-    iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem H") as "[Hmem H]".
-    iMod "Hclose" as "_".
-    iModIntro.
-    cbn.
-    iSplitL "Hregs Hmem".
-    - iSplitL "Hregs"; first iFrame.
-      iExists (<[paddr:=data]> memmap); iFrame.
-      unfold fun_write_ram; iPureIntro.
-      apply map_Forall_lookup.
-      intros i x H.
-      destruct (Z.eqb paddr i) eqn:Heqb.
-      + rewrite -> Z.eqb_eq in Heqb.
-        subst.
-        apply (lookup_insert_rev memmap i); assumption.
-      + rewrite -> map_Forall_lookup in Hmap.
-        rewrite -> Z.eqb_neq in Heqb.
-        rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in H.
-        apply Hmap; assumption.
-    - iSplitL; trivial; iApply wp_value; cbn.
-      iSplitL; now iFrame.
-  Qed.
+    Lemma write_ram_sound `{sg : sailGS Σ, HGS: invGS} :
+      ValidContractForeign sep_contract_write_ram write_ram.
+    Proof.
+      intros Γ es δ ι Heq.
+      destruct (env.snocView ι) as [ι t].
+      destruct (env.snocView ι) as [ι p].
+      destruct (env.snocView ι) as [ι entries].
+      destruct (env.snocView ι) as [ι data].
+      destruct (env.snocView ι) as [ι paddr].
+      destruct (env.nilView ι). cbn in Heq |- *.
+      iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
+      unfold semWP. rewrite wp_unfold.
+      cbn.
+      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; first auto.
+      iIntros.
+      iModIntro.
+      iModIntro.
+      iModIntro.
+      dependent elimination H.
+      dependent elimination s.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      cbn.
+      iDestruct "H" as "(%w & H)".
+      iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem H") as "[Hmem H]".
+      iMod "Hclose" as "_".
+      iModIntro.
+      cbn.
+      iSplitL "Hregs Hmem".
+      - iSplitL "Hregs"; first iFrame.
+        iExists (<[paddr:=data]> memmap); iFrame.
+        unfold fun_write_ram; iPureIntro.
+        apply map_Forall_lookup.
+        intros i x H.
+        destruct (Z.eqb paddr i) eqn:Heqb.
+        + rewrite -> Z.eqb_eq in Heqb.
+          subst.
+          apply (lookup_insert_rev memmap i); assumption.
+        + rewrite -> map_Forall_lookup in Hmap.
+          rewrite -> Z.eqb_neq in Heqb.
+          rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in H.
+          apply Hmap; assumption.
+      - iSplitL; trivial; iApply wp_value; cbn.
+        iSplitL; now iFrame.
+    Qed.
 
-  Lemma decode_sound `{sg : sailGS Σ, HGS: invGS} :
-    ValidContractForeign sep_contract_decode decode.
-  Proof.
-    intros Γ es δ ι Heq.
-    destruct (env.snocView ι) as [ι bv].
-    destruct (env.nilView ι). cbn in Heq |- *.
-    iIntros "_".
-    iApply wp_unfold.
-    cbn.
-    iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first auto.
-    iIntros.
-    iModIntro.
-    iModIntro.
-    iModIntro.
-    dependent elimination H.
-    fold_semWP.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    cbn.
-    iMod "Hclose" as "_".
-    iModIntro.
-    cbn.
-    iSplitL "Hregs Hmem".
-    iSplitL "Hregs"; first iFrame.
-    iExists memmap; iFrame.
-    iPureIntro; assumption.
-    iSplitL; trivial.
-    destruct (pure_decode bv) eqn:Ed.
-    by rewrite semWP_fail.
-    iApply wp_value.
-    iSplitL; first iPureIntro; auto.
-  Qed.
+    Lemma decode_sound `{sg : sailGS Σ, HGS: invGS} :
+      ValidContractForeign sep_contract_decode decode.
+    Proof.
+      intros Γ es δ ι Heq.
+      destruct (env.snocView ι) as [ι bv].
+      destruct (env.nilView ι). cbn in Heq |- *.
+      iIntros "_".
+      iApply wp_unfold.
+      cbn.
+      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; first auto.
+      iIntros.
+      iModIntro.
+      iModIntro.
+      iModIntro.
+      dependent elimination H.
+      fold_semWP.
+      dependent elimination s.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      cbn.
+      iMod "Hclose" as "_".
+      iModIntro.
+      cbn.
+      iSplitL "Hregs Hmem".
+      iSplitL "Hregs"; first iFrame.
+      iExists memmap; iFrame.
+      iPureIntro; assumption.
+      iSplitL; trivial.
+      destruct (pure_decode bv) eqn:Ed.
+      by rewrite semWP_fail.
+      iApply wp_value.
+      iSplitL; first iPureIntro; auto.
+    Qed.
 
-  Lemma foreignSem `{sailGS Σ} : ForeignSem.
-  Proof.
-    intros Δ τ f; destruct f;
-      eauto using read_ram_sound, write_ram_sound, decode_sound.
-  Qed.
+    Lemma foreignSem `{sailGS Σ} : ForeignSem.
+    Proof.
+      intros Δ τ f; destruct f;
+        eauto using read_ram_sound, write_ram_sound, decode_sound.
+    Qed.
+  End ForeignProofs.
 
-  Section Lemmas.
+  Section LemProofs.
     Context `{sg : sailGS Σ}.
 
     Lemma gprs_equiv :
@@ -446,14 +448,14 @@ Module RiscvPmpModel2.
       iFrame.
       now iPureIntro.
     Qed.
-  End Lemmas.
 
-  Lemma lemSem `{sailGS Σ} : LemmaSem.
-  Proof.
-    intros Δ [];
-      eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound,
-      close_pmp_entries_sound, update_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound,
-      machine_unlocked_open_pmp_entries_sound, machine_unlocked_close_pmp_entries_sound.
-  Qed.
+    Lemma lemSem : LemmaSem.
+    Proof.
+      intros Δ [];
+        eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound,
+        close_pmp_entries_sound, update_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound,
+        machine_unlocked_open_pmp_entries_sound, machine_unlocked_close_pmp_entries_sound.
+    Qed.
+  End LemProofs.
 
 End RiscvPmpModel2.
