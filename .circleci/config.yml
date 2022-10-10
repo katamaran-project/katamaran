@@ -5,7 +5,7 @@ defaults: &defaults
     - checkout
     - run:
         name: Build project
-        command: eval $(opam env) && opam list && make Makefile.coq && echo "NPROC: $(nproc)" && make -j$(nproc) -f Makefile.coq pretty-timed
+        command: eval $(opam env) && opam list && make Makefile.coq && echo "NPROC:" $(nproc) && make -j$(nproc) -f Makefile.coq pretty-timed
         no_output_timeout: 1200
   resource_class: large
 
