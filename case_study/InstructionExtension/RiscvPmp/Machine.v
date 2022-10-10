@@ -879,6 +879,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
        match: op in rop with
        | RISCV_ADD => rs1_val + rs2_val
        | RISCV_SUB => rs1_val - rs2_val
+       | RISCV_ADD' => rs1_val + rs2_val
        end in
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.

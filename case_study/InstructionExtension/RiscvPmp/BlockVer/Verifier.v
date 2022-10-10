@@ -128,6 +128,7 @@ Module BlockVerification.
       let bop := match op with
                  | RISCV_ADD => bop.plus
                  | RISCV_SUB => bop.minus
+                 | RISCV_ADD' => bop.plus
                  end in
       wX rd (peval_binop bop v12 v22).
 

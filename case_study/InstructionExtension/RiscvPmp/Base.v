@@ -111,6 +111,7 @@ Inductive PmpAddrMatch : Set :=
 Inductive ROP : Set :=
 | RISCV_ADD
 | RISCV_SUB
+| RISCV_ADD'
 .
 
 Inductive IOP : Set :=
@@ -382,7 +383,7 @@ Section Finite.
 
   #[export,program] Instance ROP_finite :
     Finite ROP :=
-    {| enum := [RISCV_ADD;RISCV_SUB] |}.
+    {| enum := [RISCV_ADD;RISCV_SUB;RISCV_ADD'] |}.
 
   #[export,program] Instance IOP_finite :
     Finite IOP :=

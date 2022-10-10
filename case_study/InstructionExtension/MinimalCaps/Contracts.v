@@ -543,6 +543,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       Definition sep_contract_exec_add : SepContractFun exec_add :=
         mach_inv_contract.
 
+      Definition sep_contract_exec_add' : SepContractFun exec_add' :=
+        mach_inv_contract.
+
       Definition sep_contract_exec_sub : SepContractFun exec_sub :=
         mach_inv_contract.
 
@@ -712,6 +715,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           | exec_csetboundsimm     => Some sep_contract_exec_csetboundsimm
           | exec_addi              => Some sep_contract_exec_addi
           | exec_add               => Some sep_contract_exec_add
+          | exec_add'              => Some sep_contract_exec_add'
           | exec_sub               => Some sep_contract_exec_sub
           | exec_slt               => Some sep_contract_exec_slt
           | exec_slti              => Some sep_contract_exec_slti
@@ -1265,6 +1269,9 @@ Module MinCapsValidContracts.
   Lemma valid_contract_exec_add : ValidContract exec_add.
   Proof. reflexivity. Qed.
 
+  Lemma valid_contract_exec_add' : ValidContract exec_add'.
+  Proof. reflexivity. Qed.
+
   Lemma valid_contract_exec_sub : ValidContract exec_sub.
   Proof. reflexivity. Qed.
 
@@ -1367,6 +1374,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_exec_sd).
     - apply (valid_contract _ H valid_contract_exec_addi).
     - apply (valid_contract _ H valid_contract_exec_add).
+    - apply (valid_contract _ H valid_contract_exec_add').
     - apply (valid_contract _ H valid_contract_exec_sub).
     - apply (valid_contract _ H valid_contract_exec_slt).
     - apply (valid_contract _ H valid_contract_exec_slti).
@@ -1443,6 +1451,7 @@ Section Statistics.
       existT _ (existT _ exec_cgettag);
       existT _ (existT _ exec_addi);
       existT _ (existT _ exec_add);
+      existT _ (existT _ exec_add');
       existT _ (existT _ exec_sub);
       existT _ (existT _ exec_slt);
       existT _ (existT _ exec_slti);

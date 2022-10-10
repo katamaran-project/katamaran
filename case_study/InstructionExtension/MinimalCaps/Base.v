@@ -55,6 +55,7 @@ Inductive Instruction : Set :=
 | sd            (rs1 : Src) (rs2 : Src) (imm : Imm)
 | addi          (rd  : Dst) (rs  : Src) (imm : Imm)
 | add           (rd  : Dst) (rs1 : Src) (rs2 : Src)
+| add'          (rd  : Dst) (rs1 : Src) (rs2 : Src)
 | sub           (rd  : Dst) (rs1 : Src) (rs2 : Src)
 | slt           (rd  : Dst) (rs1 : Src) (rs2 : Src)
 | slti          (rd  : Dst) (rs  : Src) (imm : Imm)
@@ -83,6 +84,7 @@ Inductive InstructionConstructor : Set :=
 | ksd
 | kaddi
 | kadd
+| kadd'
 | ksub
 | kslt
 | kslti
@@ -167,7 +169,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjalr_cap;kcjalr;kcjal;kbne;kcmove;kld;ksd;kcincoffset;kcandperm;kcsetbounds;kcsetboundsimm;kcgettag;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
+    {| enum := [kjalr_cap;kcjalr;kcjal;kbne;kcmove;kld;ksd;kcincoffset;kcandperm;kcsetbounds;kcsetboundsimm;kcgettag;kaddi;kadd;kadd';ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
 
 End Finite.
 
@@ -233,6 +235,7 @@ Module Export MinCapsBase <: Base.
       | ksd            => ty.tuple [ty.src; ty.src; ty.int]
       | kaddi          => ty.tuple [ty.dst; ty.src; ty.int]
       | kadd           => ty.tuple [ty.dst; ty.src; ty.src]
+      | kadd'          => ty.tuple [ty.dst; ty.src; ty.src]
       | ksub           => ty.tuple [ty.dst; ty.src; ty.src]
       | kslt           => ty.tuple [ty.dst; ty.src; ty.src]
       | kslti          => ty.tuple [ty.dst; ty.src; ty.int]
@@ -278,6 +281,7 @@ Module Export MinCapsBase <: Base.
       | existT ksd            (tt , rs1 , rs2, imm)  => sd            rs1 rs2 imm
       | existT kaddi          (tt , rd , rs , imm)   => addi          rd  rs  imm
       | existT kadd           (tt , rd , rs1 , rs2)  => add           rd  rs1 rs2
+      | existT kadd'          (tt , rd , rs1 , rs2)  => add'          rd  rs1 rs2
       | existT ksub           (tt , rd , rs1 , rs2)  => sub           rd  rs1 rs2
       | existT kslt           (tt , rd , rs1 , rs2)  => slt           rd  rs1 rs2
       | existT kslti          (tt , rd , rs , imm)   => slti          rd  rs  imm
@@ -310,6 +314,7 @@ Module Export MinCapsBase <: Base.
       | sd            rs1 rs2 imm => existT ksd            (tt , rs1 , rs2 , imm)
       | addi          rd  rs  imm => existT kaddi          (tt , rd , rs , imm)
       | add           rd  rs1 rs2 => existT kadd           (tt , rd , rs1 , rs2)
+      | add'          rd  rs1 rs2 => existT kadd'          (tt , rd , rs1 , rs2)
       | sub           rd  rs1 rs2 => existT ksub           (tt , rd , rs1 , rs2)
       | slt           rd  rs1 rs2 => existT kslt           (tt , rd , rs1 , rs2)
       | slti          rd  rs  imm => existT kslti          (tt , rd , rs , imm)

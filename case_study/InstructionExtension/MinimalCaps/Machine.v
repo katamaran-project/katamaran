@@ -85,6 +85,7 @@ Section FunDeclKit.
   | exec_sd            : Fun ["rs1" :: ty.src; "rs2" :: ty.src; "imm" :: ty.int] ty.bool
   | exec_addi          : Fun ["rd"  :: ty.dst; "rs"  :: ty.src; "imm" :: ty.int] ty.bool
   | exec_add           : Fun ["rd"  :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool
+  | exec_add'          : Fun ["rd"  :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool
   | exec_sub           : Fun ["rd"  :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool
   | exec_slt           : Fun ["rd"  :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool
   | exec_slti          : Fun ["rd"  :: ty.dst; "rs"  :: ty.src; "imm" :: ty.int] ty.bool
@@ -408,6 +409,15 @@ Section FunDefKit.
       stm_val ty.bool true.
 
     Definition fun_exec_add : Stm ["rd" :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool :=
+      let: "v1" :: int := call read_reg_num (exp_var "rs1") in
+      let: "v2" :: int := call read_reg_num (exp_var "rs2") in
+      let: "res" :: int := stm_exp (exp_var "v1" + exp_var "v2") in
+      use lemma int_safe [exp_var "res"] ;;
+      call write_reg (exp_var "rd") (exp_inl (exp_var "res")) ;;
+      call update_pc ;;
+      stm_val ty.bool true.
+
+    Definition fun_exec_add' : Stm ["rd" :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "rs1") in
       let: "v2" :: int := call read_reg_num (exp_var "rs2") in
       let: "res" :: int := stm_exp (exp_var "v1" + exp_var "v2") in
@@ -745,6 +755,8 @@ Section FunDefKit.
                                      (call exec_addi (exp_var "rd") (exp_var "rs") (exp_var "imm"))%exp
            | kadd           => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
                                      (call exec_add (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))%exp
+           | kadd'          => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
+                                     (call exec_add' (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))%exp
            | ksub           => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
                                      (call exec_sub (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))%exp
            | kslt           => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
@@ -849,6 +861,7 @@ Section FunDefKit.
     | exec_csetboundsimm => fun_exec_csetboundsimm
     | exec_addi          => fun_exec_addi
     | exec_add           => fun_exec_add
+    | exec_add'          => fun_exec_add'
     | exec_sub           => fun_exec_sub
     | exec_slt           => fun_exec_slt
     | exec_slti          => fun_exec_slti
