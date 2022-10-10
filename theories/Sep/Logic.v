@@ -100,19 +100,6 @@ Module sep.
   #[global] Arguments lex_right {_} [_] _.
   #[global] Arguments lall_left {_} [_] _.
 
-  Section Derived.
-
-    Context {L : SepLogic}.
-
-    Definition Forall (B : Set) (D : B -> Set) :=
-      fix Forall {Δ : Ctx B} : (Env D Δ -> L) -> L :=
-        match Δ with
-        | ctx.nil      => fun P => P env.nil
-        | ctx.snoc Δ b => fun P => Forall (fun E => lall (fun v => P (env.snoc E b v)))
-        end.
-
-  End Derived.
-
   Module Import notations.
     Open Scope logic_scope.
     Notation "P ⊢ Q" := (lentails P%L Q%L) : type_scope.
@@ -234,6 +221,33 @@ Module sep.
     Proof. intros P Q [pq qp] R S [rs sr]. split; now apply proper_lwand_entails. Qed.
 
   End instances.
+
+  Section Derived.
+
+    Context {L : SepLogic} (B : Set) (D : B -> Set).
+
+    Fixpoint Forall {Δ : Ctx B} : (Env D Δ -> L) -> L :=
+      match Δ with
+      | ctx.nil      => fun P => P env.nil
+      | ctx.snoc Δ b => fun P => Forall (fun E => lall (fun v => P (env.snoc E b v)))
+      end.
+
+    Lemma Forall_forall (Δ : Ctx B) (P : Env D Δ -> L) :
+      (Forall P) ⊣⊢ (∀ E : Env D Δ, P E).
+    Proof.
+      induction Δ; cbn.
+      - split.
+        + apply lall_right. intros E. env.destroy E. reflexivity.
+        + apply (lall_left env.nil). reflexivity.
+      - rewrite IHΔ. clear IHΔ.
+        split; apply lall_right.
+        + intros E. destruct (env.snocView E) as [E v].
+          now apply (lall_left E), (lall_left v).
+        + intros E. apply lall_right. intros v.
+          now apply (lall_left (env.snoc E _ v)).
+    Qed.
+
+  End Derived.
 
   Section Facts.
 

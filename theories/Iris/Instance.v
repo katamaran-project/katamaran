@@ -403,6 +403,17 @@ Section Soundness.
           (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
       end.
 
+  Lemma Forall_forall {B D} (Δ : Ctx B) (P : Env D Δ → iProp Σ) :
+    sep.Forall P ⊣⊢ (∀ E : Env D Δ, P E).
+  Proof. apply bi.equiv_entails, sep.Forall_forall. Qed.
+
+  Definition valid_contract_curry {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) :
+    ValidContractSem body contract ⊣⊢ ValidContractSemCurried body contract.
+  Proof.
+    destruct contract as [lvars δ req res ens]; cbn.
+    now rewrite Forall_forall.
+  Qed.
+
 End Soundness.
 
 Section Adequacy.
