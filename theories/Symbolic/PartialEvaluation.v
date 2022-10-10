@@ -49,6 +49,7 @@ Import env.notations.
 Local Set Implicit Arguments.
 Local Set Transparent Obligations.
 Local Unset Elimination Schemes.
+Local Set Equations Transparent.
 
 Module Type PartialEvaluationOn
   (Import TY : Types)
@@ -69,13 +70,21 @@ Module Type PartialEvaluationOn
     | term_binop bop.cons t11 t12 | t2 := term_binop bop.cons t11 (term_binop bop.append t12 t2);
     | t1                            | t2 := term_binop bop.append t1 t2.
 
+    Equations(noeqns) peval_or (t1 t2 : Term Σ ty.bool) : Term Σ ty.bool :=
+    | term_val _ true  , t2               => term_val ty.bool true
+    | term_val _ false , t2               => t2
+    | t1               , term_val _ true  => term_val ty.bool true
+    | t1               , term_val _ false => t1
+    | t1               , t2               => term_binop bop.or t1 t2.
+
     Equations(noeqns) peval_binop' {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
     | op | term_val _ v1 | term_val _ v2 := term_val σ (bop.eval op v1 v2);
     | op | t1            | t2            := term_binop op t1 t2.
 
     Equations(noeqns) peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
-    | bop.append | t1 | t2 := peval_append t1 t2;
-    | op           | t1 | t2 := peval_binop' op t1 t2.
+    | bop.append , t1 , t2 => peval_append t1 t2
+    | bop.or     , t1 , t2 => peval_or t1 t2
+    | op         , t1 , t2 => peval_binop' op t1 t2.
 
     Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
       forall (ι : Valuation Σ),
@@ -89,6 +98,21 @@ Module Type PartialEvaluationOn
       - dependent elimination op; cbn; auto.
     Qed.
 
+    Lemma peval_or_sound (t1 t2 : Term Σ ty.bool) :
+      forall (ι : Valuation Σ),
+        inst  (peval_or t1 t2) ι =
+          bop.eval bop.or (inst t1 ι) (inst t2 ι).
+    Proof.
+      intros ι. depelim t1.
+      - depelim t2; cbn; try easy.
+        destruct v; cbn; intuition.
+      - destruct v; easy.
+      - depelim t2; cbn; try easy.
+        destruct v; cbn; intuition.
+      - depelim t2; cbn; try easy.
+        destruct v; cbn; intuition.
+    Qed.
+
     Lemma peval_binop'_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
       forall (ι : Valuation Σ),
         inst (peval_binop' op t1 t2) ι = bop.eval op (inst t1 ι) (inst t2 ι).
@@ -100,17 +124,19 @@ Module Type PartialEvaluationOn
     Proof.
       intros ι.
       destruct op; cbn [peval_binop];
-        auto using peval_binop'_sound, peval_append_sound.
+        auto using peval_binop'_sound, peval_append_sound, peval_or_sound.
     Qed.
 
     Equations(noeqns) peval_neg (t : Term Σ ty.int) : Term Σ ty.int :=
     | term_val _ v := term_val ty.int (Z.opp v);
     | t            := term_neg t.
 
-    Equations(noeqns) peval_not (t : Term Σ ty.bool) : Term Σ ty.bool :=
-    | term_val _ v                    := term_val ty.bool (negb v);
-    | term_binop (bop.relop op) t1 t2 := term_relop_neg op t1 t2;
-    | t                               := term_not t.
+    Equations peval_not (t : Term Σ ty.bool) : Term Σ ty.bool :=
+    | term_val _ v                    => term_val ty.bool (negb v)
+    | term_binop bop.and t1 t2        => term_binop bop.or (peval_not t1) (peval_not t2)
+    | term_binop bop.or t1 t2         => term_binop bop.and (peval_not t1) (peval_not t2)
+    | term_binop (bop.relop op) t1 t2 => term_relop_neg op t1 t2
+    | t                               => term_not t.
 
     Equations(noeqns) peval_inl {σ1 σ2} (t : Term Σ σ1) : Term Σ (ty.sum σ1 σ2) :=
     | term_val _ v := term_val (ty.sum _ _) (@inl (Val _) (Val _) v);
@@ -163,9 +189,10 @@ Module Type PartialEvaluationOn
       forall (ι : Valuation Σ),
         inst (peval_not t) ι = inst (term_not t) ι.
     Proof.
-      dependent elimination t; auto.
-      dependent elimination op; auto.
-      cbn. intros ι. now rewrite inst_term_relop_neg.
+      intros ι. funelim (peval_not t); cbn; try easy.
+      - rewrite negb_andb. intuition.
+      - rewrite negb_orb. intuition.
+      - now rewrite inst_term_relop_neg.
     Qed.
 
     Lemma peval_inl_sound {σ1 σ2} (t : Term Σ σ1) :
