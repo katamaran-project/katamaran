@@ -21,6 +21,25 @@ case_study/RiscvPmp/BlockVer/Examples.v
 case_study/RiscvPmp/BlockVer/Spec.v
 case_study/RiscvPmp/BlockVer/Verifier.v
 case_study/RiscvPmp/FemtoKernel.v
+-Q case_study/InstructionExtension/MinimalCaps Katamaran.ExtendedMinimalCaps
+case_study/InstructionExtension/MinimalCaps/Base.v
+case_study/InstructionExtension/MinimalCaps/Contracts.v
+case_study/InstructionExtension/MinimalCaps/Machine.v
+case_study/InstructionExtension/MinimalCaps/Model.v
+case_study/InstructionExtension/MinimalCaps/LoopVerification.v
+-Q case_study/InstructionExtension/RiscvPmp Katamaran.ExtendedRiscvPmp
+case_study/InstructionExtension/RiscvPmp/Base.v
+case_study/InstructionExtension/RiscvPmp/Contracts.v
+case_study/InstructionExtension/RiscvPmp/Machine.v
+case_study/InstructionExtension/RiscvPmp/IrisModel.v
+case_study/InstructionExtension/RiscvPmp/IrisInstance.v
+case_study/InstructionExtension/RiscvPmp/Model.v
+case_study/InstructionExtension/RiscvPmp/Sig.v
+case_study/InstructionExtension/RiscvPmp/LoopVerification.v
+case_study/InstructionExtension/RiscvPmp/BlockVer/Examples.v
+case_study/InstructionExtension/RiscvPmp/BlockVer/Spec.v
+case_study/InstructionExtension/RiscvPmp/BlockVer/Verifier.v
+case_study/InstructionExtension/RiscvPmp/FemtoKernel.v
 -R theories Katamaran
 test/Example.v
 test/LinkedList.v
