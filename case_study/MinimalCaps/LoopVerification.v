@@ -73,9 +73,6 @@ Section Loop.
   Context `{sg : sailGS Σ}.
   Import env.notations.
 
-  Definition step_sem_contract :=
-    Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
-
   Local Notation "r '↦' val" := (reg_pointsTo r val) (at level 70).
 
   Definition Step_pre : iProp Σ :=
@@ -134,10 +131,50 @@ Section Loop.
 
   Import ctx.notations.
   Import env.notations.
-  Lemma is_correct_pc_false {c cpc} : decide_correct_pc c = cpc ->
-    ⊢ semTriple [env].[ "c" ∷ ty.cap ↦ c ] (pc ↦ c) (FunDef is_correct_pc) (fun x y => ⌜ x = cpc ⌝ ).
+  Import wptactics.
+
+  Lemma semWP_is_perm {Γ} (e1 e2 : Exp Γ ty.perm) Q δ :
+    ⊢ ((⌜eval e1 δ = eval e2 δ⌝ -∗ Q true δ) ∧
+      (⌜is_perm (eval e1 δ) (eval e2 δ) = false⌝ -∗ Q false δ)) -∗
+      semWP (call MinCapsProgram.is_perm e1 e2) Q δ.
   Proof.
-  Admitted.
+    iIntros "HYP".
+    iApply (semWP_call_inline MinCapsProgram.is_perm).
+    iPoseProof (contracts_sound $! _ _ MinCapsProgram.is_perm) as "-#His_perm".
+    rewrite valid_contract_curry.
+    unfold ValidContractSemCurried, sep_contract_is_perm; cbn.
+    iPoseProof ("His_perm" $! (eval e1 δ) (eval e2 δ) with "[%]") as "His_perm"; [by auto|].
+    iApply (semWP_mono with "His_perm").
+    iIntros ([] _) "[%H1 _]"; cbn in *; iApply "HYP".
+    - auto.
+    - unfold Not_is_perm in H1.
+      now rewrite ?negb_true_iff in H1.
+  Qed.
+
+  Lemma is_correct_pc_false {c cpc} : decide_correct_pc c = cpc ->
+    ⊢ semWP (FunDef is_correct_pc) (fun x y => ⌜ x = cpc ⌝ ) [env].[ "c" ∷ ty.cap ↦ c ].
+  Proof.
+    destruct c as [p b e a]. cbn.
+    intros Heq. iIntros.
+    kEval. kStep. kStep. cbn. kStep.
+    iApply semWP_is_perm; cbn. iSplit.
+    - iIntros "%H1". subst p. cbn in *. kStep.
+      iApply semWP_is_perm; cbn. iSplit.
+      iIntros "%H1". discriminate.
+      iIntros "_". kStep. kStep. cbn.
+      kStep; rewrite semWP_val; auto.
+    - iIntros "%H1". kStep.
+      iApply semWP_is_perm; cbn. iSplit.
+      iIntros "%H2". subst p. cbn in *. kStep.
+      cbn. kStep. cbn.
+      kStep; rewrite semWP_val; auto.
+      iIntros "%H2". kStep. kStep. cbn.
+      rewrite andb_false_r.
+      rewrite semWP_val.
+      iPureIntro. subst.
+      rewrite H1 H2.
+      now rewrite ?andb_false_r.
+  Qed.
 
   Lemma wrongPC_crashes_step {c Q} : decide_correct_pc c = false ->
                               ⊢ semTriple [env] (pc ↦ c) (FunDef step) Q.
@@ -151,14 +188,10 @@ Section Loop.
     iApply semWP_let.
     iApply semWP_call_inline.
     cbn.
-    iApply (semWP_mono fun_is_correct_pc (fun x y => ⌜ x = false ⌝ )%I with "[Hpc]").
-    { now iApply is_correct_pc_false. }
-    iIntros (v ι) "%eq".
+    iApply (semWP_mono $! (is_correct_pc_false wrongPC)).
+    iIntros (? _ Heq). subst.
     unfold stm_if.
-    cbn.
-    subst.
-    iApply (semWP_pattern_match _ pat_bool (λ b : bool, if b then (call exec;; stm_val ty.unit ())%exp else _)).
-    iApply semWP_exp.
+    kStep. kStep. kEval.
     now rewrite semWP_fail.
   Qed.
 

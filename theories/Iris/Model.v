@@ -815,6 +815,29 @@ Module Type IrisResources
 
   End WeakestPre.
 
+  Module wptactics.
+    Ltac kEval :=
+      match goal with
+      | |- environments.envs_entails ?ctx (semWP ?s ?post ?store) =>
+          let s' := eval compute - [Val] in s in
+          let store' := eval compute - [Val] in store in
+          change_no_check (environments.envs_entails ctx (semWP s' post store'))
+      end.
+
+    Ltac kStep :=
+      match goal with
+      | |- environments.envs_entails ?ctx (semWP ?stm ?post ?store) =>
+          match stm with
+          | stm_val ?τ ?v => iApply semWP_val
+          | stm_exp ?e => iApply (semWP_exp e)
+          | stm_let ?x ?τ ?s1 ?s2 => iApply (semWP_let s1 s2)
+          | stm_pattern_match ?scrut ?pat ?rhs =>
+              iApply (semWP_pattern_match scrut pat rhs)
+          | match ?x with _ => _ end => destruct x eqn:?
+          end
+      end.
+  End wptactics.
+
 End IrisResources.
 
 Module Type IrisBase (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
