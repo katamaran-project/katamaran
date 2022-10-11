@@ -310,14 +310,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           sep_contract_postcondition   := asn_gprs ∗ (asn_pc_safe pc ∨ asn_pc_expr pc);
         |}.
 
-      Definition mach_inv_jump_contract {Δ τ} : SepContract Δ τ :=
-        {| sep_contract_logic_variables := sep_contract_logvars Δ [];
-          sep_contract_localstore      := create_localstore Δ [];
-          sep_contract_precondition    := asn_gprs ∗ asn_pc_correct pc ∗ asn_IH;
-          sep_contract_result          := "result_mach_inv";
-          sep_contract_postcondition   := (asn_gprs ∗ asn_pc_safe pc) ∨ asn_WP_loop;
-        |}.
-
       Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
         SepContract Δ τ.
 
