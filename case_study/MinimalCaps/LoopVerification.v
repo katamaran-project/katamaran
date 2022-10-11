@@ -226,5 +226,8 @@ Section Loop.
       iApply (wrongPC_crashes (Q := fun _ _ => True)%I); try iFrame.
       now symmetry.
   Qed.
-  Print Assumptions valid_semContract_loop2.
+
 End Loop.
+
+Goal True. idtac "Assumptions of MinimalCaps universal contract:". Abort.
+Print Assumptions valid_semContract_loop2.

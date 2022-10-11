@@ -657,10 +657,12 @@ Module MinCapsIrisInstanceWithContracts.
       iApply iris_rule_noop; cbn; try done.
       intros s' γ γ' μ μ' δ' step.
       dependent elimination step.
-      rewrite Heq in f1.
-      cbn in f1. destruct f1 as [res' e].
-      dependent elimination e.
-      repeat split; destruct res; eauto.
+      rewrite Heq in f1. cbn in f1.
+      dependent elimination f1.
+      repeat split; auto.
+      destruct pure_decode.
+      right. eexists; auto.
+      left. eexists; reflexivity.
     Qed.
 
     Import iris.base_logic.lib.gen_heap.

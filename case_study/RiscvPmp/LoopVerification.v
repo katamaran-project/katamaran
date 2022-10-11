@@ -223,10 +223,6 @@ Section Loop.
      Trap m h entries ∨
      Recover m h mpp entries)%I.
 
-  Definition semTriple_step' : iProp Σ :=
-    (∀ (m cp : Privilege) (h i npc : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z),
-        semTriple env.nil (Step_pre m h i mpp entries) (FunDef step) (fun _ _ => step_post' m cp h i entries es mpp mepc_v))%I.
-
   Definition semTriple_step : iProp Σ :=
     (∀ m i h mepc_v mpp entries,
         semTriple env.nil (Step_pre m h i mpp entries)
@@ -250,8 +246,6 @@ Section Loop.
     apply symbolic_vcgen_soundness.
     apply ValidContracts; assumption.
   Qed.
-
-  Axiom step_iprop' : ⊢ semTriple_step.
 
   Lemma valid_init_model_contract : ⊢ ValidContractSem fun_init_model sep_contract_init_model.
   Proof.
@@ -347,3 +341,6 @@ Section Loop.
     - iApply ("HRec" with "HRes").
   Qed.
 End Loop.
+
+Goal True. idtac "Assumptions of Risc-V PMP universal contract:". Abort.
+Print Assumptions valid_semTriple_loop.

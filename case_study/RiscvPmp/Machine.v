@@ -1033,13 +1033,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
-  Proof.
-    destruct f; cbn.
-    - repeat depelim args; repeat eexists; constructor.
-    - repeat depelim args; repeat eexists; constructor.
-    - repeat depelim args.
-      exists γ, μ. eexists. reflexivity.
-  Qed.
+  Proof. destruct f; env.destroy args; repeat econstructor. Qed.
   End ForeignKit.
 
   Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=

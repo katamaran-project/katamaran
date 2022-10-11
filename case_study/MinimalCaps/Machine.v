@@ -880,6 +880,10 @@ Section ForeignKit.
   Definition fun_wM (μ : Memory) (addr : Val ty.int) (val : Val ty.memval) : Memory :=
     fun addr' => if Z.eqb addr addr' then val else μ addr'.
 
+  (* We postulate a pure decode function and assume that that's what the decode primitive implements. *)
+  (* Similarly for *_{from,to}_bits functions, ideally we would move to actual bitvectors for values... *)
+  Axiom pure_decode : Z -> string + Instruction.
+
   #[derive(equations=no)]
   Equations ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
     ForeignCall rM [addr] res γ γ' μ μ' :=
@@ -887,18 +891,11 @@ Section ForeignKit.
     ForeignCall wM [addr; val] res γ γ' μ μ' =>
       (γ' , μ' , res) = (γ , fun_wM μ addr val , inr tt);
     ForeignCall dI [code] res γ γ' μ μ' :=
-      (* Non-deterministically return any possible result *)
-      exists res' : Val (ty.sum ty.string ty.instr),
-        (γ' , μ' , res) = (γ , μ , res').
+      (γ' , μ' , res) = (γ , μ , pure_decode code).
 
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
-  Proof.
-    destruct f; env.destroy args.
-    - repeat eexists; constructor.
-    - repeat eexists; constructor.
-    - exists γ, μ, (inr ret), (inr ret). reflexivity.
-  Qed.
+  Proof. destruct f; env.destroy args; repeat econstructor. Qed.
 End ForeignKit.
 
 Include ProgramMixin MinCapsBase.
