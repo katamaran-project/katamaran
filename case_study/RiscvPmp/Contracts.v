@@ -27,9 +27,10 @@
 (******************************************************************************)
 
 From Coq Require Import
-     ZArith.ZArith
      Lists.List
-     Strings.String.
+     Strings.String
+     ZArith.ZArith
+     micromega.Lia.
 From Katamaran Require Import
      Notations
      Shallow.Executor
@@ -225,7 +226,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
 
         Definition sep_contract_readCSR : SepContractFun readCSR :=
           {| sep_contract_logic_variables := [csr :: ty_csridx; "mpp" :: ty_privilege;
-                                              "mtvec" :: ty_xlenbits; "mcause" :: ty_exc_code;
+                                              "mtvec" :: ty_xlenbits; "mcause" :: ty_mcause;
                                               "mepc" :: ty_xlenbits; "cfg0" :: ty_pmpcfg_ent; "cfg1" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "addr1" :: ty_xlenbits];
              sep_contract_localstore      := [term_var csr];
              sep_contract_precondition    :=
@@ -1029,7 +1030,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           |}.
 
         Definition sep_contract_write_ram : SepContractFunX write_ram :=
-          {| sep_contract_logic_variables := [paddr :: ty.int; data :: ty_word; "entries" :: ty.list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
+          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_word; "entries" :: ty.list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
              sep_contract_localstore      := [term_var paddr; term_var data];
              sep_contract_precondition    :=
                term_union access_type KWrite (term_val ty.unit tt) ⊑ term_var t
@@ -1045,7 +1046,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           |}.
 
         Definition sep_contract_decode    : SepContractFunX decode :=
-          {| sep_contract_logic_variables := [bv :: ty.int];
+          {| sep_contract_logic_variables := [bv :: ty_xlenbits];
              sep_contract_localstore      := [term_var bv];
              sep_contract_precondition    := ⊤;
              sep_contract_result          := "result_decode";
@@ -1084,14 +1085,14 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           |}.
 
         Definition lemma_open_ptsto_instr : SepLemma open_ptsto_instr :=
-          {| lemma_logic_variables := [paddr :: ty.int];
+          {| lemma_logic_variables := [paddr :: ty_xlenbits];
              lemma_patterns        := [term_var paddr];
              lemma_precondition    := ⊤;
              lemma_postcondition   := ⊤;
           |}.
 
         Definition lemma_close_ptsto_instr : SepLemma close_ptsto_instr :=
-          {| lemma_logic_variables := [paddr :: ty.int; w :: ty.int];
+          {| lemma_logic_variables := [paddr :: ty_xlenbits; w :: ty_word];
              lemma_patterns        := [term_var paddr; term_var w];
              lemma_precondition    := ⊤;
              lemma_postcondition   := ⊤;
@@ -1308,23 +1309,23 @@ Module RiscvPmpValidContracts.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_checked_mem_read : ValidContractDebug checked_mem_read.
-  Proof.
+  Proof with trivial.
     apply Symbolic.validcontract_with_erasure_sound.
     compute.
     constructor.
     cbn.
     intros acc paddr p entries Hsub Hacc **.
-    firstorder.
+    exists acc. split... exists acc. split... split...
   Qed.
 
   Lemma valid_contract_checked_mem_write : ValidContractDebug checked_mem_write.
-  Proof.
+  Proof with trivial.
     apply Symbolic.validcontract_with_erasure_sound.
     compute.
     constructor.
     cbn.
-    intros addr _ p entries acc.
-    repeat split; firstorder.
+    intros addr _ p entries acc **.
+    exists acc. split... exists acc. split... split...
   Qed.
 
   Lemma valid_contract_pmp_mem_read : ValidContract pmp_mem_read.
@@ -1336,9 +1337,9 @@ Module RiscvPmpValidContracts.
     compute.
     constructor.
     cbn.
-    firstorder.
-    - exists Write; firstorder.
-    - exists ReadWrite; firstorder.
+    intros. split; intros.
+    - now exists Write.
+    - now exists ReadWrite.
   Qed.
 
   Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.

@@ -451,35 +451,36 @@ Module Export RiscvPmpBase <: Base.
   (* Override notations of bindigns to put the variable x into string_scope. *)
   Notation "x ∷ t" := (MkB x%string t) : ctx_scope.
 
-  Notation ty_xlenbits         := (ty.int).
-  Notation ty_word             := (ty.int).
-  Notation ty_regno            := (ty.bvec 3).
-  Notation ty_privilege        := (ty.enum privilege).
-  Notation ty_csridx           := (ty.enum csridx).
-  Notation ty_pmpcfgidx        := (ty.enum pmpcfgidx).
-  Notation ty_pmpcfgperm       := (ty.enum pmpcfgperm).
-  Notation ty_pmpaddridx       := (ty.enum pmpaddridx).
-  Notation ty_pmpaddrmatchtype := (ty.enum pmpaddrmatchtype).
-  Notation ty_pmpmatch         := (ty.enum pmpmatch).
-  Notation ty_pmpaddrmatch     := (ty.enum pmpaddrmatch).
-  Notation ty_pmp_addr_range   := (ty.option (ty.prod ty_xlenbits ty_xlenbits)).
-  Notation ty_rop              := (ty.enum rop).
-  Notation ty_iop              := (ty.enum iop).
-  Notation ty_uop              := (ty.enum uop).
-  Notation ty_bop              := (ty.enum bop).
-  Notation ty_csrop            := (ty.enum csrop).
-  Notation ty_retired          := (ty.enum retired).
-  Notation ty_mcause           := (ty_xlenbits).
-  Notation ty_exc_code         := (ty.int).
-  Notation ty_ast              := (ty.union ast).
-  Notation ty_access_type      := (ty.union access_type).
-  Notation ty_exception_type   := (ty.union exception_type).
-  Notation ty_memory_op_result := (ty.union memory_op_result).
-  Notation ty_fetch_result     := (ty.union fetch_result).
-  Notation ty_ctl_result       := (ty.union ctl_result).
-  Notation ty_pmpcfg_ent       := (ty.record rpmpcfg_ent).
-  Notation ty_mstatus          := (ty.record rmstatus).
-  Notation ty_pmpentry         := (ty.prod ty_pmpcfg_ent ty_xlenbits).
+  Definition ty_xlenbits         := (ty.int).
+  Definition ty_word             := (ty.int).
+  Definition ty_regno            := (ty.bvec 3).
+  Definition ty_privilege        := (ty.enum privilege).
+  Definition ty_priv_level       := (ty.int).
+  Definition ty_csridx           := (ty.enum csridx).
+  Definition ty_pmpcfgidx        := (ty.enum pmpcfgidx).
+  Definition ty_pmpcfgperm       := (ty.enum pmpcfgperm).
+  Definition ty_pmpaddridx       := (ty.enum pmpaddridx).
+  Definition ty_pmpaddrmatchtype := (ty.enum pmpaddrmatchtype).
+  Definition ty_pmpmatch         := (ty.enum pmpmatch).
+  Definition ty_pmpaddrmatch     := (ty.enum pmpaddrmatch).
+  Definition ty_pmp_addr_range   := (ty.option (ty.prod ty_xlenbits ty_xlenbits)).
+  Definition ty_rop              := (ty.enum rop).
+  Definition ty_iop              := (ty.enum iop).
+  Definition ty_uop              := (ty.enum uop).
+  Definition ty_bop              := (ty.enum bop).
+  Definition ty_csrop            := (ty.enum csrop).
+  Definition ty_retired          := (ty.enum retired).
+  Definition ty_mcause           := (ty_xlenbits).
+  Definition ty_exc_code         := (ty.int).
+  Definition ty_ast              := (ty.union ast).
+  Definition ty_access_type      := (ty.union access_type).
+  Definition ty_exception_type   := (ty.union exception_type).
+  Definition ty_memory_op_result := (ty.union memory_op_result).
+  Definition ty_fetch_result     := (ty.union fetch_result).
+  Definition ty_ctl_result       := (ty.union ctl_result).
+  Definition ty_pmpcfg_ent       := (ty.record rpmpcfg_ent).
+  Definition ty_mstatus          := (ty.record rmstatus).
+  Definition ty_pmpentry         := (ty.prod ty_pmpcfg_ent ty_xlenbits).
 
   Definition enum_denote (e : Enums) : Set :=
     match e with
@@ -738,7 +739,7 @@ Module Export RiscvPmpBase <: Base.
     | nextpc        : Reg ty_xlenbits
     | mstatus       : Reg ty_mstatus
     | mtvec         : Reg ty_xlenbits
-    | mcause        : Reg ty_exc_code
+    | mcause        : Reg ty_mcause
     | mepc          : Reg ty_xlenbits
     | cur_privilege : Reg ty_privilege
     | x1            : Reg ty_xlenbits
@@ -769,13 +770,37 @@ Module Export RiscvPmpBase <: Base.
 
     Section TransparentObligations.
       Local Set Transparent Obligations.
-      Derive Signature NoConfusion NoConfusionHom EqDec for Reg.
+      Derive Signature NoConfusion (* NoConfusionHom *) for Reg.
     End TransparentObligations.
 
     Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
 
-    Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg) :=
-      sigma_eqdec _ _.
+    (* With definitions like ty_xlenbits the equations library cannot
+       derive this instance automatically. *)
+    #[export,refine] Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg) :=
+      fun '(existT σ x) '(existT τ y) =>
+        match x , y with
+        | pc            , pc            => left eq_refl
+        | nextpc        , nextpc        => left eq_refl
+        | mstatus       , mstatus       => left eq_refl
+        | mtvec         , mtvec         => left eq_refl
+        | mcause        , mcause        => left eq_refl
+        | mepc          , mepc          => left eq_refl
+        | cur_privilege , cur_privilege => left eq_refl
+        | x1            , x1            => left eq_refl
+        | x2            , x2            => left eq_refl
+        | x3            , x3            => left eq_refl
+        | x4            , x4            => left eq_refl
+        | x5            , x5            => left eq_refl
+        | x6            , x6            => left eq_refl
+        | x7            , x7            => left eq_refl
+        | pmp0cfg       , pmp0cfg       => left eq_refl
+        | pmp1cfg       , pmp1cfg       => left eq_refl
+        | pmpaddr0      , pmpaddr0      => left eq_refl
+        | pmpaddr1      , pmpaddr1      => left eq_refl
+        | _             , _             => right _
+        end.
+    Proof. all: abstract (intros H; depelim H). Defined.
 
     Local Obligation Tactic :=
       finite_from_eqdec.

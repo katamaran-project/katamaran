@@ -611,7 +611,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       intros ?; intuition; constructor.
   Qed.
 
-  Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_exc_code)
+  Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_xlenbits)
     (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege)
     (acc : Term Σ ty_access_type) :
     option.spec
@@ -634,6 +634,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   Proof.
     unfold simplify_pmp_check_rwx.
     destruct (term_get_record_spec cfg); [|lsolve].
+    fold ty_pmpcfg_ent in H.
     cbn in a; env.destroy a. cbn in H.
     unfold Pmp_check_rwx. lsolve.
     destruct a; lsolve.
@@ -653,6 +654,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   Proof.
     unfold simplify_pmp_check_perms.
     destruct (term_get_record_spec cfg); [|lsolve].
+    fold ty_pmpcfg_ent in H.
     cbn in a; env.destroy a. cbn in H.
     unfold Pmp_check_perms. lsolve.
     destruct a; lsolve.
@@ -661,8 +663,8 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     intros ι; rewrite (H ι); cbn; intuition.
   Qed.
 
-  Lemma simplify_within_cfg_spec {Σ} (paddr : Term Σ ty_exc_code)
-    (cfg : Term Σ ty_pmpcfg_ent) (prevaddr addr : Term Σ ty_exc_code) :
+  Lemma simplify_within_cfg_spec {Σ} (paddr : Term Σ ty_xlenbits)
+    (cfg : Term Σ ty_pmpcfg_ent) (prevaddr addr : Term Σ ty_xlenbits) :
     option.spec
       (fun r => forall ι, Within_cfg (inst paddr ι) (inst cfg ι) (inst prevaddr ι) (inst addr ι) <-> instpc r ι)
       (forall ι, ~ Within_cfg (inst paddr ι) (inst cfg ι) (inst prevaddr ι) (inst addr ι))
@@ -673,7 +675,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   Qed.
 
   Lemma simplify_prev_addr_spec {Σ} (cfg : Term Σ ty_pmpcfgidx)
-    (entries : Term Σ (ty.list ty_pmpentry)) (prev : Term Σ ty_exc_code) :
+    (entries : Term Σ (ty.list ty_pmpentry)) (prev : Term Σ ty_xlenbits) :
     option.spec
       (fun r => forall ι, Prev_addr (inst cfg ι) (inst entries ι) (inst prev ι) <-> instpc r ι)
       (forall ι, ~ Prev_addr (inst cfg ι) (inst entries ι) (inst prev ι))
