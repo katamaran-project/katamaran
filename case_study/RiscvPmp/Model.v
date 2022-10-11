@@ -297,16 +297,8 @@ Module RiscvPmpModel2.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       unfold interp_pmp_entries.
-      iIntros "[Hcfg0 [Haddr0 [Hcfg1 [Haddr1 _]]]]".
+      iIntros "[Hcfg0 [Haddr0 [Hcfg1 Haddr1]]]".
       iAccu.
-    Qed.
-
-    Lemma update_pmp_entries_sound :
-      ValidLemma RiscvPmpSpecification.lemma_update_pmp_entries.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      iIntros "[Hcfg0 [Haddr0 [Hcfg1 [Haddr1 Hpriv]]]]".
-      iFrame.
     Qed.
 
     Lemma in_liveAddrs : forall (addr : Addr),
@@ -451,7 +443,7 @@ Module RiscvPmpModel2.
     Proof.
       intros Δ [];
         eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound,
-        close_pmp_entries_sound, update_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound,
+        close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound,
         machine_unlocked_open_pmp_entries_sound, machine_unlocked_close_pmp_entries_sound.
     Qed.
   End LemProofs.

@@ -199,7 +199,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | close_gprs            : Lem ctx.nil
   | open_pmp_entries      : Lem ctx.nil
   | close_pmp_entries     : Lem ctx.nil
-  | update_pmp_entries    : Lem ctx.nil
   | extract_pmp_ptsto     : Lem [paddr :: ty_xlenbits]
   | return_pmp_ptsto      : Lem [paddr :: ty_xlenbits]
   | open_ptsto_instr      : Lem [paddr :: ty_xlenbits]
@@ -636,7 +635,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     stm_write_register cur_privilege (exp_val ty_privilege Machine) ;;
     use lemma open_pmp_entries ;;
     call init_pmp ;;
-    use lemma update_pmp_entries.
+    use lemma close_pmp_entries.
 
   Definition fun_init_pmp : Stm ctx.nil ty.unit :=
     let: tmp := stm_read_register pmp0cfg in
@@ -1001,7 +1000,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       (use lemma open_pmp_entries ;;
        let: csr_val := call readCSR csr in
        call writeCSR csr rs1_val ;;
-       use lemma update_pmp_entries ;;
+       use lemma close_pmp_entries ;;
        call wX rd csr_val ;;
        stm_val ty_retired RETIRE_SUCCESS)
     else (call handle_illegal ;;

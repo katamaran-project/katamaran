@@ -472,7 +472,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        | close_ptsto_instr     => lemma_close_ptsto_instr
        | open_pmp_entries                   => lemma_machine_unlocked_open_pmp_entries
        | close_pmp_entries                  => lemma_machine_unlocked_close_pmp_entries
-       | update_pmp_entries                 => lemma_machine_unlocked_update_pmp_entries
        | extract_pmp_ptsto => lemma_extract_pmp_ptsto
        | return_pmp_ptsto => lemma_return_pmp_ptsto
       end.
@@ -921,15 +920,6 @@ Module RiscvPmpIrisInstanceWithContracts.
     now iPureIntro.
   Qed.
 
-  Lemma machine_unlocked_update_pmp_entries_sound `{sailGS Σ} :
-    ValidLemma RiscvPmpSpecification.lemma_machine_unlocked_update_pmp_entries.
-  Proof.
-    intros ι; destruct_syminstance ι; cbn.
-    iIntros "(? & ? & ? & ? & %Hunlocked0 & %Hunlocked1 & ?)".
-    iFrame.
-    now iPureIntro.
-  Qed.
-
   Lemma in_liveAddrs_split : forall (addr : Addr),
       (minAddr <= addr)%Z ->
       (addr <= maxAddr)%Z ->
@@ -985,7 +975,6 @@ Module RiscvPmpIrisInstanceWithContracts.
     intros Δ []; intros ι; destruct_syminstance ι; try now iIntros "_".
     - apply machine_unlocked_open_pmp_entries_sound.
     - apply machine_unlocked_close_pmp_entries_sound.
-    - apply machine_unlocked_update_pmp_entries_sound.
     - apply open_ptsto_instr_sound.
     - apply close_ptsto_instr_sound.
   Qed.
