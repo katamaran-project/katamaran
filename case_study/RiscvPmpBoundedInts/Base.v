@@ -776,6 +776,8 @@ Module Export RiscvPmpBase <: Base.
 
     Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
 
+    (* With definitions like ty_xlenbits the equations library cannot
+       derive this instance automatically. *)
     #[export,refine] Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg) :=
       fun '(existT σ x) '(existT τ y) =>
         match x , y with

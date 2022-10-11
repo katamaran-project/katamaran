@@ -1118,9 +1118,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              lemma_patterns        := env.nil;
              lemma_precondition    :=
                pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
-               pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
-               asn_expand_pmpcfg_ent (term_var "cfg0") ∗
-               asn_expand_pmpcfg_ent (term_var "cfg1");
+               pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1";
              lemma_postcondition   :=
                asn_pmp_entries (term_list [(term_var "cfg0" ,ₜ term_var "addr0");
                                            (term_var "cfg1" ,ₜ term_var "addr1")]);
@@ -1157,19 +1155,6 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                let entries := term_list [(term_var "cfg0" ,ₜ term_var "addr0");
                                          (term_var "cfg1" ,ₜ term_var "addr1")] in
                asn_pmp_entries entries ∗ asn_pmp_all_entries_unlocked entries;
-          |}.
-
-        Definition lemma_update_pmp_entries : SepLemma update_pmp_entries :=
-          {| lemma_logic_variables := ["cfg0" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "cfg1" :: ty_pmpcfg_ent; "addr1" :: ty_xlenbits];
-             lemma_patterns        := env.nil;
-             lemma_precondition    :=
-               pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
-               pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
-               cur_privilege ↦ term_val ty_privilege Machine;
-             lemma_postcondition   :=
-               cur_privilege ↦ term_val ty_privilege Machine ∗
-               asn_pmp_entries (term_list [(term_var "cfg0" ,ₜ term_var "addr0");
-                                           (term_var "cfg1" ,ₜ term_var "addr1")]);
           |}.
 
         Definition lemma_machine_unlocked_update_pmp_entries : SepLemma close_pmp_entries :=
@@ -1221,7 +1206,6 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | close_pmp_entries     => lemma_close_pmp_entries
             | open_ptsto_instr      => lemma_open_ptsto_instr
             | close_ptsto_instr     => lemma_close_ptsto_instr
-            | update_pmp_entries    => lemma_update_pmp_entries
             | extract_pmp_ptsto     => lemma_extract_pmp_ptsto
             | return_pmp_ptsto      => lemma_return_pmp_ptsto
             end.
