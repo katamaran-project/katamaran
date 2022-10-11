@@ -1,7 +1,0 @@
-(coq.theory
- (name Katamaran.MinimalCaps)
- (package coq-katamaran)
- (modules Base Machine Contracts Model)
- (theories Katamaran))
-
-(include_subdirs qualified)

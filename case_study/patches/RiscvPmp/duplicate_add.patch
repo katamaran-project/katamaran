@@ -1,0 +1,45 @@
+diff --git a/case_study/RiscvPmp/Base.v b/case_study/RiscvPmp/Base.v
+index 45fc015..bb34287 100644
+--- a/case_study/RiscvPmp/Base.v
++++ b/case_study/RiscvPmp/Base.v
+@@ -111,6 +111,7 @@ Inductive PmpAddrMatch : Set :=
+ Inductive ROP : Set :=
+ | RISCV_ADD
+ | RISCV_SUB
++| RISCV_ADD'
+ .
+ 
+ Inductive IOP : Set :=
+@@ -382,7 +383,7 @@ Section Finite.
+ 
+   #[export,program] Instance ROP_finite :
+     Finite ROP :=
+-    {| enum := [RISCV_ADD;RISCV_SUB] |}.
++    {| enum := [RISCV_ADD;RISCV_SUB;RISCV_ADD'] |}.
+ 
+   #[export,program] Instance IOP_finite :
+     Finite IOP :=
+diff --git a/case_study/RiscvPmp/BlockVer/Verifier.v b/case_study/RiscvPmp/BlockVer/Verifier.v
+index ba30ae9..1a962ce 100644
+--- a/case_study/RiscvPmp/BlockVer/Verifier.v
++++ b/case_study/RiscvPmp/BlockVer/Verifier.v
+@@ -128,6 +128,7 @@ Module BlockVerification.
+       let bop := match op with
+                  | RISCV_ADD => bop.plus
+                  | RISCV_SUB => bop.minus
++                 | RISCV_ADD' => bop.plus
+                  end in
+       wX rd (peval_binop bop v12 v22).
+ 
+diff --git a/case_study/RiscvPmp/Machine.v b/case_study/RiscvPmp/Machine.v
+index fb33831..65128d0 100644
+--- a/case_study/RiscvPmp/Machine.v
++++ b/case_study/RiscvPmp/Machine.v
+@@ -879,6 +879,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
+        match: op in rop with
+        | RISCV_ADD => rs1_val + rs2_val
+        | RISCV_SUB => rs1_val - rs2_val
++       | RISCV_ADD' => rs1_val + rs2_val
+        end in
+      call wX rd result ;;
+      stm_val ty_retired RETIRE_SUCCESS.
