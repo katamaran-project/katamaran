@@ -30,14 +30,10 @@ From Coq Require Export
      Numbers.BinNums.
 From Coq Require Import
      Bool.Bool
-     Logic.StrictProp
      Lists.List
      NArith.NArith
      Strings.String
      ZArith.BinInt.
-
-From Coq Require
-     ssr.ssrbool.
 
 From Equations Require Import
      Equations.
@@ -46,61 +42,9 @@ From Equations Require Import
    library functions and constructors. Import the module here, so that the
    changes are consistently applied over our code base. *)
 From stdpp Require
-     base countable finite list option vector.
+     base countable finite list.
 
 Local Set Implicit Arguments.
-
-Scheme Equality for list.
-Scheme Equality for prod.
-Scheme Equality for sum.
-Scheme Equality for option.
-
-Section WithA.
-  Context {A : Type}.
-
-  Definition all_list (P : A -> Prop) : list A -> Prop :=
-    fix all_list (xs : list A) : Prop :=
-      match xs with
-      | nil       => True
-      | cons x xs => P x /\ all_list xs
-      end.
-
-  Section WithEq.
-    Variable eqbA : A -> A -> bool.
-    Let eqbA_spec := fun x => forall y, reflect (x = y) (eqbA x y).
-
-    Lemma list_beq_spec (hyp : forall x : A, eqbA_spec x) :
-      forall xs ys : list A, reflect (xs = ys) (list_beq eqbA xs ys).
-    Proof.
-      induction xs as [|x xs]; intros [|y ys]; cbn; try (constructor; congruence).
-      destruct (hyp x y).
-      - apply (ssrbool.iffP (IHxs ys)); congruence.
-      - constructor; congruence.
-    Qed.
-
-    Lemma option_beq_spec (hyp : forall x : A, eqbA_spec x) :
-      forall xs ys : option A, reflect (xs = ys) (option_beq eqbA xs ys).
-    Proof.
-      intros [x|] [y|]; cbn in *; try constructor; try congruence.
-      apply (ssrbool.iffP (hyp x y)); congruence.
-    Qed.
-
-  End WithEq.
-
-End WithA.
-
-Lemma all_list_map {A B} {P : B -> Prop} {xs : list A} (f : A -> B) :
-  all_list P (map f xs) <-> all_list (fun a => P (f a)) xs.
-Proof.
-  induction xs; cbn; intuition.
-Qed.
-
-Lemma all_list_impl {A} {P1 P2 : A -> Prop} {xs : list A} :
-  (forall x, P1 x -> P2 x) ->
-  all_list P1 xs -> all_list P2 xs.
-Proof.
-  induction xs; cbn; intuition.
-Qed.
 
 Section Equality.
 
@@ -139,11 +83,8 @@ Section Equality.
   #[export] Instance Z_eqdec : EqDec Z := Z.eq_dec.
   #[export] Instance string_eqdec : EqDec string := string_dec.
   Derive NoConfusion EqDec for Empty_set.
-  Derive Signature NoConfusion NoConfusionHom for Vector.t.
 
   #[export] Instance option_eqdec `{EqDec A} : EqDec (option A).
-  Proof. eqdec_proof. Defined.
-  #[export] Instance vector_eqdec `{EqDec A} {n} : EqDec (Vector.t A n).
   Proof. eqdec_proof. Defined.
 
   Definition eq_dec_het {I} {A : I -> Type} `{eqdec : EqDec (sigT A)}
@@ -157,7 +98,7 @@ Section Equality.
     x :: xs = y :: ys <-> x = y /\ xs = ys.
   Proof.
     split.
-    - intros e. now depelim e.
+    - intros e. refine match e with eq_refl => conj eq_refl eq_refl end.
     - intros [e1 e2]. now apply f_equal2.
   Qed.
 
@@ -317,12 +258,11 @@ Section Countable.
          mret (existT a b)
     |}.
   Proof.
-    intros [a b].
-    rewrite prod_decode_encode_fst; cbn.
-    rewrite decode_encode; cbn.
-    rewrite prod_decode_encode_snd; cbn.
-    rewrite decode_encode; cbn.
-    reflexivity.
+    abstract
+      (intros [a b];
+       rewrite prod_decode_encode_fst; cbn;
+       rewrite decode_encode, prod_decode_encode_snd;
+       cbn; now rewrite decode_encode).
   Defined.
 
 End Countable.

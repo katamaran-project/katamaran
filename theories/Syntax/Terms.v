@@ -29,7 +29,8 @@
 
 From Coq Require Import
      Arith.PeanoNat
-     Bool.Bool.
+     Bool.Bool
+     ssr.ssrbool.
 From Equations Require Import
      Equations.
 From Katamaran Require Import
@@ -160,7 +161,8 @@ Module Type TermsOn (Import TY : Types).
   Equations(noeqns) Term_eqb {Σ} [σ : Ty] (t1 t2 : Term Σ σ) : bool :=
     Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
       ctx.In_eqb ς1inΣ ς2inΣ;
-    Term_eqb (term_val _ v1) (term_val _ v2) := Val_eqb _ v1 v2;
+    Term_eqb (term_val _ v1) (term_val _ v2) :=
+      if eq_dec v1 v2 then true else false;
     Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
       with bop.eqdep_dec op1 op2 => {
       Term_eqb (term_binop op1 x1 y1) (term_binop ?(op1) x2 y2) (left bop.opeq_refl) :=
@@ -200,7 +202,7 @@ Module Type TermsOn (Import TY : Types).
     induction t1 using Term_rect; cbn [Term_eqb]; dependent elimination t2;
       solve_eqb_spec with
       try match goal with
-          | |- context[Val_eqb _ ?l1 ?l2] => destruct (Val_eqb_spec _ l1 l2)
+          | |- context[eq_dec ?l1 ?l2] => destruct (eq_dec l1 l2)
           | |- context[bop.eqdep_dec ?x ?y] =>
               let e := fresh in
               destruct (bop.eqdep_dec x y) as [e|];

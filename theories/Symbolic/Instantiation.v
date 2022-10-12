@@ -199,7 +199,7 @@ Module Type InstantiationOn
   Proof.
     destruct op; cbn; intros; unfold bv.sltb, bv.sleb, bv.ultb, bv.uleb;
       rewrite ?negb_involutive, <- ?Z.leb_antisym, <- ?Z.ltb_antisym,
-      <- ?N.leb_antisym, <- ?N.ltb_antisym; try easy.
+      <- ?N.leb_antisym, <- ?N.ltb_antisym; try easy; try now destruct eq_dec.
   Qed.
 
   #[export] Instance inst_subst_sub {Σ} : InstSubst (Sub Σ) (Valuation Σ).

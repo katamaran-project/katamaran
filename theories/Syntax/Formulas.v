@@ -146,9 +146,7 @@ Module Type FormulasOn
       unfold bv.sle, bv.sleb, bv.slt, bv.sltb;
       unfold bv.ule, bv.uleb, bv.ult, bv.ultb;
       rewrite ?N.ltb_antisym, ?negb_true_iff, ?negb_false_iff, ?N.leb_gt, ?N.leb_le;
-      auto; try Lia.lia.
-    - destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)); intuition.
-    - destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)); intuition.
+      auto; try Lia.lia; try (now destruct eq_dec; intuition).
   Qed.
 
   Import option.notations.

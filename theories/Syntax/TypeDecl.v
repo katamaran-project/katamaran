@@ -249,39 +249,29 @@ Module ty.
         | _          , _          => right noConfusion_inv
         end.
 
-    Fixpoint Val_eqb (σ : Ty) : forall (v1 v2 : Val σ), Datatypes.bool :=
-      match σ return Val σ -> Val σ -> Datatypes.bool with
-      | int      => Z.eqb
-      | bool     => Bool.eqb
-      | string   => String.eqb
-      | list σ   => list_beq (Val_eqb σ)
-      | prod σ τ => prod_beq (Val_eqb σ) (Val_eqb τ)
-      | sum σ τ  => sum_beq (Val_eqb σ) (Val_eqb τ)
-      | unit     => fun _ _ => true
-      | enum E   => fun v1 v2 => if eq_dec v1 v2 then true else false
-      | bvec n   => @bv.eqb n
-      | tuple σs => envrec.eqb Val_eqb
-      | union U  => fun v1 v2 => if eq_dec v1 v2 then true else false
-      | record R => fun v1 v2 => if eq_dec v1 v2 then true else false
-      end.
-
-    Lemma Val_eqb_spec (σ : Ty) (x y : Val σ) : reflect (x = y) (Val_eqb σ x y).
-    Proof with solve_eqb_spec.
-      induction σ; cbn.
-      - apply Z.eqb_spec.
-      - apply Bool.eqb_spec.
-      - apply String.eqb_spec.
-      - apply list_beq_spec; auto.
-      - destruct x as [x1 x2], y as [y1 y2]...
-      - destruct x as [x1|x2], y as [y1|y2]...
-      - destruct x, y...
-      - destruct (eq_dec x y)...
-      - apply bv.eqb_spec.
-      - induction IH...
-        destruct x as [? x], y as [? y]; destruct (p x y)...
-      - destruct (eq_dec x y)...
-      - destruct (eq_dec x y)...
-    Qed.
+    #[export] Instance Val_eq_dec : forall σ, EqDec (Val σ) :=
+      fix eqd σ :=
+        match σ with
+        | int      => eq_dec (A := Z)
+        | bool     => eq_dec (A := Datatypes.bool)
+        | string   => eq_dec (A := String.string)
+        | list σ   => eq_dec (A := Datatypes.list (Val σ))
+        | prod σ τ => eq_dec (A := Datatypes.prod (Val σ) (Val τ))
+        | sum σ τ  => eq_dec (A := Datatypes.sum (Val σ) (Val τ))
+        | unit     => eq_dec (A := Datatypes.unit)
+        | enum E   => eq_dec (A := enumt E)
+        | bvec n   => eq_dec (A := bv n)
+        | tuple σs => ctx.Ctx_rect
+                        (fun τs => EqDec (EnvRec Val τs))
+                        (eq_dec (A := Datatypes.unit))
+                        (fun τs IHτs τ =>
+                           @eq_dec
+                             (Datatypes.prod (EnvRec Val τs) (Val τ))
+                             (prod_eqdec IHτs (eqd τ)))
+                        σs
+        | union U  => eq_dec (A := uniont U)
+        | record R => eq_dec (A := recordt R)
+        end.
 
     Lemma unionv_fold_inj {U} (v1 v2 : {K : unionk U & Val (unionk_ty U K)}) :
       unionv_fold U v1 = unionv_fold U v2 <-> v1 = v2.
@@ -337,7 +327,7 @@ Export ty
   ( TypeDeclKit, enumt, uniont, recordt,
 
     TypeDenoteKit,
-    Ty, Val, Val_eqb, Val_eqb_spec,
+    Ty, Val,
 
     TypeDefKit, enum_eqdec, enumt_eqdec, enumt_finite,
     enumi,
@@ -356,6 +346,7 @@ Export ty
      Export (hints) ty.
    but we currently still support Coq 8.14. *)
 #[export] Existing Instance ty.Ty_eq_dec.
+#[export] Existing Instance ty.Val_eq_dec.
 #[export] Existing Instance ty.enum_eqdec.
 #[export] Existing Instance ty.union_eqdec.
 #[export] Existing Instance ty.record_eqdec.

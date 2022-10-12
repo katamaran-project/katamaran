@@ -216,36 +216,6 @@ Section WithBinding.
 
     End HomEquality.
 
-    Section HetEquality.
-
-      Variable eqb : forall b1 b2, D b1 -> D b2 -> bool.
-
-      Fixpoint eqb_het {Γ1 Γ2} (δ1 : Env Γ1) (δ2 : Env Γ2) {struct δ1} : bool :=
-        match δ1 , δ2 with
-        | nil         , nil         => true
-        | snoc δ1 db1 , snoc δ2 db2 => eqb db1 db2 &&& eqb_het δ1 δ2
-        | _           , _           => false
-        end.
-
-      Variable eqb_spec : forall b1 b2 (x : D b1) (y : D b2),
-          reflect ({| pr2 := x |} = {| pr2 := y |}) (eqb x y).
-
-      Lemma eqb_het_spec {Γ1 Γ2} (δ1 : Env Γ1) (δ2 : Env Γ2) :
-        reflect ({| pr2 := δ1 |} = {| pr2 := δ2 |}) (eqb_het δ1 δ2).
-      Proof.
-        revert Γ2 δ2; induction δ1; intros ? []; cbn.
-        - constructor. reflexivity.
-        - constructor. intro e; dependent elimination e.
-        - constructor. intro e; dependent elimination e.
-        - destruct (eqb_spec db db0).
-          + apply (ssrbool.iffP (IHδ1 _ E)); intros Heq; dependent elimination Heq.
-            * dependent elimination e; reflexivity.
-            * reflexivity.
-          + constructor; intros e; dependent elimination e; congruence.
-      Qed.
-
-    End HetEquality.
-
     Fixpoint tabulate {Γ} : (forall b, b ∈ Γ -> D b) -> Env Γ :=
       match Γ with
       | []    => fun _ => nil

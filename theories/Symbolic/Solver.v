@@ -331,7 +331,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     Fixpoint simplify_eq_val {Σ} [σ] (t : Term Σ σ) : forall (v : Val σ) (k : List Formula Σ), option (List Formula Σ) :=
       match t with
       | term_var x          => fun v k => Some (formula_relop bop.eq (term_var x) (term_val _ v) :: k)
-      | term_val σ v        => fun v' k => if Val_eqb σ v v' then Some k else None
+      | term_val σ v        => fun v' k => if eq_dec v v' then Some k else None
       | term_binop op t1 t2 => simplify_eq_binop_val op t1 t2
       | term_neg t          => fun v k => Some (formula_relop bop.eq (term_neg t) (term_val ty.int v) :: k)
       | term_not t          => fun v k => if v
@@ -378,7 +378,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     Proof.
       induction t; cbn; intros k; arw.
       - reflexivity.
-      - destruct (Val_eqb_spec σ v0 v); arw.
+      - destruct eq_dec; arw.
         + subst. intros ι; now arw.
         + intros ι; now arw.
       - reflexivity.

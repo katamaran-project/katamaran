@@ -384,7 +384,7 @@ Import BlockVerificationDerived2.
     eapply finite.exists_dec.
     intros p2.
     unfold Pmp_access.
-    destruct (decide_pmp_access x ents p1 p2); [left|right]; intuition.
+    destruct (decide_pmp_access x ents p1 p2); [left|right]; easy.
   Defined.
 
   Lemma liveAddr_filter_advAddr : filter

@@ -1521,7 +1521,7 @@ Module RiscvPmpValidContracts.
              | H: Some OFF = Some TOR |- _ =>
                  inversion H
              end; cbn; auto.
-    all: apply pmp_check_perms_gives_access; first assumption.
+    all: apply pmp_check_perms_gives_access; assumption.
   Qed.
 
   (* TODO: this is just to make sure that all contracts defined so far are valid

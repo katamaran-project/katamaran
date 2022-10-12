@@ -214,8 +214,8 @@ Module bop.
 
     Definition eval_relop_val {σ} (op : RelOp σ) : Val σ -> Val σ -> Datatypes.bool :=
       match op with
-      | eq    => Val_eqb _
-      | neq   => fun v1 v2 => negb (Val_eqb _ v1 v2)
+      | eq    => fun v1 v2 => if eq_dec v1 v2 then true else false
+      | neq   => fun v1 v2 => if eq_dec v1 v2 then false else true
       | le    => Z.leb
       | lt    => Z.ltb
       | bvsle => fun v1 v2 => bv.sleb v1 v2
@@ -243,8 +243,8 @@ Module bop.
       reflect (eval_relop_prop op v1 v2) (eval_relop_val op v1 v2).
     Proof with constructor; auto.
       destruct op; cbn.
-      - destruct (Val_eqb_spec σ v1 v2)...
-      - destruct (Val_eqb_spec σ v1 v2)...
+      - destruct eq_dec...
+      - destruct eq_dec...
       - apply Z.leb_spec0.
       - apply Z.ltb_spec0.
       - apply bv.sle_spec.
@@ -255,7 +255,7 @@ Module bop.
 
     Lemma eval_relop_equiv {σ} (op : RelOp σ) (v1 v2 : Val σ) :
       eval_relop_prop op v1 v2 <-> eval_relop_val op v1 v2 = true.
-    Proof. apply ssrbool.rwP, eval_relop_val_spec. Qed.
+    Proof. now destruct (eval_relop_val_spec op v1 v2). Qed.
 
     Definition eval {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Val σ1 -> Val σ2 -> Val σ3 :=
       match op in BinOp σ1 σ2 σ3 return Val σ1 -> Val σ2 -> Val σ3 with

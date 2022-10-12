@@ -197,19 +197,7 @@ Module Type IrisPrelims
     #[export] Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
     #[export] Instance countable_SomeReg : countable.Countable SomeReg := finite.finite_countable.
 
-    #[export] Instance eqDec_SomeVal : EqDec SomeVal.
-    Proof.
-      intros [τ1 v1] [τ2 v2].
-      destruct (eq_dec τ1 τ2).
-      - subst.
-        destruct (Val_eqb_spec _ v1 v2).
-        + left. congruence.
-        + right. intros H.
-          Local Set Equations With UIP.
-          by dependent elimination H.
-      - right. intros H.
-        by dependent elimination H.
-    Qed.
+    #[export] Instance eqDec_SomeVal : EqDec SomeVal := sigma_eqdec _ _.
 
     Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeVal))).
     (* Definition regUR' : cmra := *)
