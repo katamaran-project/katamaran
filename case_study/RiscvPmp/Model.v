@@ -307,12 +307,8 @@ Module RiscvPmpModel2.
         addr ∈ liveAddrs.
     Proof.
       intros addr Hmin Hmax.
-      unfold liveAddrs.
       apply elem_of_seqZ.
-      split; auto.
-      rewrite Z.add_assoc.
-      rewrite Zplus_minus.
-      apply Zle_lt_succ; auto.
+      lia.
     Qed.
 
     Lemma in_liveAddrs_split : forall (addr : Addr),
@@ -324,12 +320,11 @@ Module RiscvPmpModel2.
       unfold liveAddrs.
       exists (seqZ minAddr (addr - minAddr)).
       exists (seqZ (addr + 1) (maxAddr - addr)).
-      transitivity (seqZ minAddr (addr - minAddr) ++ seqZ (addr) (maxAddr - addr + 1)).
-      refine (eq_trans _ (eq_trans (seqZ_app minAddr (addr - minAddr) (maxAddr - addr + 1) _ _) _));
-        do 2 (f_equal; try lia).
-      f_equal; cbn.
-      refine (eq_trans (seqZ_cons _ _ _) _); try lia.
-      do 2 f_equal; lia.
+      change [addr] with (seqZ addr 1).
+      rewrite <-seqZ_app; try lia.
+      replace addr with (minAddr + (addr - minAddr))%Z at 2 by lia.
+      rewrite <-seqZ_app; try lia.
+      now f_equal; lia.
     Qed.
 
     Lemma extract_pmp_ptsto_sound :
