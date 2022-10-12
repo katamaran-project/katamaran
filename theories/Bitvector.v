@@ -323,29 +323,30 @@ Module bv.
       fold_left (fun k (z : bv k) b => cons b z) nil x.
 
     Lemma cons_inj [n] (x y : bool) (xs ys : bv n) :
-      cons x xs = cons y ys -> x = y /\ xs = ys.
+      cons x xs = cons y ys <-> x = y /\ xs = ys.
     Proof.
-      destruct xs as [xs wfxs], ys as [ys wfys], x, y; intros Heq.
-      - split; auto.
-        apply noConfusion_inv in Heq.
-        apply N.succ_double_inj in Heq. destruct Heq.
-        apply f_equal, proof_irrelevance_is_true.
-      - exfalso. apply noConfusion_inv in Heq.
-        destruct xs, ys; discriminate Heq.
-      - exfalso. apply noConfusion_inv in Heq.
-        destruct xs, ys; discriminate Heq.
-      - split; auto.
-        apply noConfusion_inv, N.double_inj in Heq. destruct Heq.
-        apply f_equal, proof_irrelevance_is_true.
+      split.
+      - destruct xs as [xs wfxs], ys as [ys wfys], x, y; intros Heq.
+        + split; auto. apply noConfusion_inv_bv, N.succ_double_inj in Heq.
+          destruct Heq. apply f_equal, proof_irrelevance_is_true.
+        + exfalso. apply noConfusion_inv_bv in Heq.
+          destruct xs, ys; discriminate Heq.
+        + exfalso. apply noConfusion_inv_bv in Heq.
+          destruct xs, ys; discriminate Heq.
+        + split; auto. apply noConfusion_inv_bv, N.double_inj in Heq.
+          destruct Heq. apply f_equal, proof_irrelevance_is_true.
+      - intros [e1 e2]; now f_equal.
     Qed.
 
     Lemma app_inj [m n] (x1 y1 : bv m) (x2 y2 : bv n) :
-      app x1 x2 = app y1 y2 -> x1 = y1 /\ x2 = y2.
+      app x1 x2 = app y1 y2 <-> x1 = y1 /\ x2 = y2.
     Proof.
-      induction x1 using bv_rect.
-      - destruct (nilView y1). rewrite ?app_nil. intuition.
-      - destruct (consView y1) as [c y1]. rewrite ?app_cons.
-        intros [H1 H2]%cons_inj. specialize (IHx1 y1 H2). intuition.
+      split.
+      - induction x1 using bv_rect.
+        + destruct (nilView y1). rewrite ?app_nil. intuition.
+        + destruct (consView y1) as [c y1]. rewrite ?app_cons.
+          intros [H1 H2]%cons_inj. specialize (IHx1 y1 H2). intuition.
+      - intros [e1 e2]; now f_equal.
     Qed.
 
     Lemma consView_cons {m} b (x : bv m)  :
@@ -611,7 +612,7 @@ Module bv.
       enumV cons nil n.
 
     Lemma nodup_enum (n : nat) : base.NoDup (enum n).
-    Proof. apply (nodup_enumV cons (@cons_inj)). Qed.
+    Proof. apply (nodup_enumV cons); intros *; apply cons_inj. Qed.
 
     Lemma elem_of_enum (m : nat) (x : bv m) : base.elem_of x (enum m).
     Proof.
