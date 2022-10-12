@@ -26,6 +26,7 @@ case_study/RiscvPmpBoundedInts/Base.v
 case_study/RiscvPmpBoundedInts/Contracts.v
 case_study/RiscvPmpBoundedInts/Machine.v
 case_study/RiscvPmpBoundedInts/Sig.v
+case_study/Assumptions.v
 -R theories Katamaran
 theories/Base.v
 theories/Bitvector.v

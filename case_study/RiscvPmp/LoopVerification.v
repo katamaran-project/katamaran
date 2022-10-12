@@ -341,6 +341,3 @@ Section Loop.
     - iApply ("HRec" with "HRes").
   Qed.
 End Loop.
-
-Goal True. idtac "Assumptions of Risc-V PMP universal contract:". Abort.
-Print Assumptions valid_semTriple_loop.

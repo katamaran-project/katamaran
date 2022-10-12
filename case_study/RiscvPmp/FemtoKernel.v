@@ -723,6 +723,3 @@ Import BlockVerificationDerived2.
       }
       now iApply (LoopVerification.valid_semTriple_loop $! User 72 88 mpp femto_pmpentries).
   Qed.
-
-  Goal True. idtac "Assumptions of FemtoKernel verification:". Abort.
-  Print Assumptions femtokernel_init_safe.
