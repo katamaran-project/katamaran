@@ -84,15 +84,6 @@ Module bv.
   Arguments mk {n} _ &.
   Set Transparent Obligations.
 
-  Definition proofirr {b : bool} :
-    forall (p q : Is_true b), p = q :=
-    match b with
-    | true  => fun p q => match p, q with
-                          | I , I => eq_refl
-                          end
-    | false => fun p => False_rect _ p
-    end.
-
   Definition bin_inj {n} (x y : bv n) : bin x = bin y -> x = y :=
     match x , y with
     | mk x p , mk y q =>
@@ -100,7 +91,7 @@ Module bv.
           match e in _ = y return forall q, mk x p = mk y q with
           | eq_refl =>
               fun q =>
-                match proofirr p q with
+                match proof_irrelevance_is_true p q with
                 | eq_refl => eq_refl
                 end
           end q
@@ -163,7 +154,7 @@ Module bv.
     Proof.
       intros [x wfx] [y wfy]. unfold eqb. cbn.
       destruct (N.eqb_spec x y); constructor.
-      - destruct e. destruct (proofirr wfx wfy). reflexivity.
+      - destruct e. apply f_equal, proof_irrelevance_is_true.
       - now intros p%(f_equal (@bin _)).
     Qed.
 
@@ -198,7 +189,7 @@ Module bv.
     Next Obligation.
       intros n x y. destruct x as [x p], y as [y q].
       intros e. change_no_check (x = y) in e.
-      destruct e. cbn. now destruct proofirr.
+      destruct e. cbn. now destruct proof_irrelevance_is_true.
     Qed.
     Next Obligation.
       intros n x y e. apply uip.
@@ -338,14 +329,14 @@ Module bv.
       - split; auto.
         apply noConfusion_inv in Heq.
         apply N.succ_double_inj in Heq. destruct Heq.
-        destruct (proofirr wfxs wfys). reflexivity.
+        apply f_equal, proof_irrelevance_is_true.
       - exfalso. apply noConfusion_inv in Heq.
         destruct xs, ys; discriminate Heq.
       - exfalso. apply noConfusion_inv in Heq.
         destruct xs, ys; discriminate Heq.
       - split; auto.
         apply noConfusion_inv, N.double_inj in Heq. destruct Heq.
-        destruct (proofirr wfxs wfys). reflexivity.
+        apply f_equal, proof_irrelevance_is_true.
     Qed.
 
     Lemma app_inj [m n] (x1 y1 : bv m) (x2 y2 : bv n) :
@@ -440,23 +431,24 @@ Module bv.
       app v (zero n).
 
     Variant LeView (m : nat) : nat -> Set :=
-    | is_le k : LeView m (m + k).
+      is_le k : LeView m (m + k).
 
-    Fixpoint leview (m n : nat) : Is_true (m <=? n) -> LeView m n :=
+    Fixpoint leview (m n : nat) : IsTrue (m <=? n) -> LeView m n :=
       match m , n with
       | O    , n    => fun _ => is_le O n
-      | S m' , O    => fun p => match p with end
+      | S m' , O    => fun p => match IsTrue.from p with end
       | S m' , S n' => fun p => match leview m' n' p with
                                 | is_le _ k => is_le (S m') k
                                 end
       end.
+    #[global] Arguments is_le [m] k.
+    #[global] Arguments leview _ _ {p}.
 
     (* Less awkward to use, but some type-level trickery. *)
     Definition sext {m} (v : bv m) {n} {p : IsTrue (m <=? n)} : bv n :=
-      match leview m n toI with is_le _ k => sext' v k end.
-
+      match leview m n with is_le k => sext' v k end.
     Definition zext {m} (v : bv m) {n} {p : IsTrue (m <=? n)} : bv n :=
-      match leview m n toI with is_le _ k => zext' v k end.
+      match leview m n with is_le k => zext' v k end.
 
   End Extend.
 

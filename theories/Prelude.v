@@ -214,7 +214,7 @@ Section Finite.
 
 End Finite.
 
-Definition proofirr_is_true {b : bool} :
+Definition proof_irrelevance_is_true {b : bool} :
   forall (p q : Is_true b), p = q :=
   match b with
   | true  => fun p q => match p, q with
@@ -225,12 +225,20 @@ Definition proofirr_is_true {b : bool} :
 
 (* We define our own variant of a boolean 'is true' predicate to turn it into
    a typeclass and fill it in automatically during typechecking. *)
-Class IsTrue (b : bool) : Prop := MkI { toI : Is_true b }.
-#[global] Arguments MkI {b} _.
-Definition proofirr_istrue {b : bool} (p q : IsTrue b) : p = q :=
-  match p , q with MkI p , MkI q => f_equal MkI (proofirr_is_true p q) end.
-#[export] Hint Extern 10 (IsTrue ?b) =>
-  refine (@MkI true I) : typeclass_instances.
+Module IsTrue.
+  Class IsTrue (b : bool) : Prop := mk { from : Is_true b }.
+  Definition proof_irrelevance {b} (p q : IsTrue b) : p = q :=
+    match p , q with
+      mk _ p , mk _ q => f_equal (mk b) (proof_irrelevance_is_true p q)
+    end.
+
+  #[global] Arguments mk [b] _, {b _}.
+  #[global] Arguments from [b] _.
+  #[export] Hint Extern 10 (IsTrue ?b) =>
+    refine (@mk true I) : typeclass_instances.
+End IsTrue.
+Export (hints) IsTrue.
+Export IsTrue (IsTrue).
 
 Definition IsSome {A : Type} (m : option A) : Type :=
   match m with

@@ -209,7 +209,7 @@ Module Type TermsOn (Import TY : Types).
               [dependent elimination e|]
           | H: ~ bop.OpEq ?o ?o |- False => apply H; constructor
           | p : IsTrue (?m <=? ?n), q : IsTrue (?m <=? ?n) |- _ =>
-            destruct (proofirr_istrue p q)
+            destruct (IsTrue.proof_irrelevance p q)
           end.
     - apply (@ssrbool.iffP (es = ts)); solve_eqb_spec.
       apply env.eqb_hom_spec_point, IH.
