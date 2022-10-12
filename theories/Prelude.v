@@ -232,6 +232,18 @@ Module IsTrue.
       mk _ p , mk _ q => f_equal (mk b) (proof_irrelevance_is_true p q)
     end.
 
+  (* Normalize proof terms, i.e. replace a potentially big proof term by the
+     unique small one. See e.g.:
+     http://poleiro.info/posts/2018-01-26-equality-in-coq.html *)
+  Definition normalize {b} : IsTrue b -> IsTrue b :=
+    match b with
+    | true  => fun _ => mk true I
+    | false => fun p => p
+    end.
+
+  Lemma normalize_identity {b} (p : IsTrue b) : normalize p = p.
+  Proof. apply proof_irrelevance. Qed.
+
   #[global] Arguments mk [b] _, {b _}.
   #[global] Arguments from [b] _.
   #[export] Hint Extern 10 (IsTrue ?b) =>
