@@ -136,25 +136,25 @@ Module Type ShallowExecOn
        symbolic executor can in fact only assert equalities between symbolic
        terms. We mirror the structure of the symbolic execution and also
        traverse (the statically known parts) of other data structures. *)
-    Equations(noeqns) assert_eq_env {Δ : Ctx Ty}
+    Equations(noeqns) assert_eq_env [Δ : Ctx Ty]
       (δ δ' : Env Val Δ) : CPureSpecM unit :=
       assert_eq_env env.nil          env.nil            := pure tt;
       assert_eq_env (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assert_eq_env δ δ') (fun _ => assert_formula (t = t')).
 
-    Equations(noeqns) assert_eq_nenv {N : Set} {Δ : NCtx N Ty}
+    Equations(noeqns) assert_eq_nenv {N : Set} [Δ : NCtx N Ty]
       (δ δ' : NamedEnv Val Δ) : CPureSpecM unit :=
       assert_eq_nenv env.nil          env.nil            := pure tt;
       assert_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assert_eq_nenv δ δ') (fun _ => assert_formula (t = t')).
 
-    Equations(noeqns) assume_eq_env {Δ : Ctx Ty}
+    Equations(noeqns) assume_eq_env [Δ : Ctx Ty]
       (δ δ' : Env Val Δ) : CPureSpecM unit :=
       assume_eq_env env.nil          env.nil            := pure tt;
       assume_eq_env (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assume_eq_env δ δ') (fun _ => assume_formula (t = t')).
 
-    Equations(noeqns) assume_eq_nenv {N : Set} {Δ : NCtx N Ty}
+    Equations(noeqns) assume_eq_nenv {N : Set} [Δ : NCtx N Ty]
       (δ δ' : NamedEnv Val Δ) : CPureSpecM unit :=
       assume_eq_nenv env.nil          env.nil            := pure tt;
       assume_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
@@ -418,9 +418,9 @@ Module Type ShallowExecOn
         fun POST δ h => m1 POST δ h \/ m2 POST δ h.
 
       Definition demonic {Γ} (σ : Ty) : CHeapSpecM Γ Γ (Val σ) :=
-        fun POST δ h => forall v : Val σ, POST v δ h.
+        lift_purem (CPureSpecM.demonic σ).
       Definition angelic {Γ} (σ : Ty) : CHeapSpecM Γ Γ (Val σ) :=
-        fun POST δ h => exists v : Val σ, POST v δ h.
+        lift_purem (CPureSpecM.angelic σ).
 
       Definition angelic_ctx {N : Set} {Γ} :
         forall Δ : NCtx N Ty, CHeapSpecM Γ Γ (NamedEnv Val Δ) :=

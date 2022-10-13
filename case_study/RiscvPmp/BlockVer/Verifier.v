@@ -88,7 +88,7 @@ Module BlockVerification.
 
   Definition pure {A} : ⊢ A -> M A := SHeapSpecM.pure.
   Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SHeapSpecM.bind.
-  Definition angelic {σ} : ⊢ M (STerm σ) := @SHeapSpecM.angelic [] None σ.
+  Definition angelic : ⊢ ∀ σ : Ty, M (STerm σ) := @SHeapSpecM.angelic [] None.
   Definition assert : ⊢ Formula -> M Unit := SHeapSpecM.assert_formula.
   Definition assume : ⊢ Formula -> M Unit := SHeapSpecM.assume_formula.
 
@@ -106,7 +106,7 @@ Module BlockVerification.
 
   Definition rX (r : Reg ty_xlenbits) : ⊢ M (STerm ty_xlenbits) :=
     fun _ =>
-      ω01 ∣ v1 <- @angelic ty_xlenbits _ ;;
+      ω01 ∣ v1 <- @angelic _ ty_xlenbits ;;
       ω12 ∣ _  <- consume_chunk (r ↦ v1) ;;
       let v2 := persist__term v1 ω12 in
       ω23 ∣ _ <- produce_chunk (r ↦ v2) ;;
@@ -115,7 +115,7 @@ Module BlockVerification.
 
   Definition wX (r : Reg ty_xlenbits) : ⊢ STerm ty_xlenbits -> M Unit :=
     fun _ u0 =>
-      ω01 ∣ v1 <- @angelic ty_xlenbits _ ;;
+      ω01 ∣ v1 <- @angelic _ ty_xlenbits ;;
       ω12 ∣ _  <- consume_chunk (r ↦ v1) ;;
       let u2 := persist__term u0 (acc_trans ω01 ω12) in
       produce_chunk (r ↦ u2).
@@ -188,8 +188,8 @@ Module BlockVerificationDerived.
 
   Definition pure {A} : ⊢ A -> M A := SHeapSpecM.pure.
   Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SHeapSpecM.bind.
-  Definition angelic {σ} : ⊢ M (STerm σ) := @SHeapSpecM.angelic [] None σ.
-  Definition demonic {σ} : ⊢ M (STerm σ) := @SHeapSpecM.demonic [] None σ.
+  Definition angelic : ⊢ ∀ σ : Ty, M (STerm σ) := @SHeapSpecM.angelic [] None.
+  Definition demonic : ⊢ ∀ σ : Ty, M (STerm σ) := @SHeapSpecM.demonic [] None.
   Definition assert : ⊢ Formula -> M Unit := SHeapSpecM.assert_formula.
   Definition assume : ⊢ Formula -> M Unit := SHeapSpecM.assume_formula.
 
@@ -265,8 +265,8 @@ Module BlockVerificationDerived2.
 
   Definition pure {A} : ⊢ A -> M A := SHeapSpecM.pure.
   Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SHeapSpecM.bind.
-  Definition angelic {σ} : ⊢ M (STerm σ) := @SHeapSpecM.angelic [] None σ.
-  Definition demonic {σ} : ⊢ M (STerm σ) := @SHeapSpecM.demonic [] None σ.
+  Definition angelic : ⊢ ∀ σ : Ty, M (STerm σ) := @SHeapSpecM.angelic [] None.
+  Definition demonic : ⊢ ∀ σ : Ty, M (STerm σ) := @SHeapSpecM.demonic [] None.
   Definition assert : ⊢ Formula -> M Unit := SHeapSpecM.assert_formula.
   Definition assume : ⊢ Formula -> M Unit := SHeapSpecM.assume_formula.
 
@@ -348,7 +348,7 @@ Module BlockVerificationDerived2.
   Proof.
     unfold safeE.
     destruct 1 as [H].
-    now eapply Erasure.erase_safe'.
+    now apply Erasure.erase_safe'.
   Qed.
 
 End BlockVerificationDerived2.
@@ -440,10 +440,12 @@ Module BlockVerificationDerived2Sound.
       _ <- consume_chunk (scchunk_ptsreg pc na) ;; (* TODO: a + 4! *)
       pure na.
 
-  Lemma refine_exec_instruction_any  (i : AST) :
-    forall {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0),
-      refine ι0 (@BlockVerificationDerived2.exec_instruction_any i w0)
-        (exec_instruction_any__c i).
+  Import refinement.notations.
+
+  Lemma refine_exec_instruction_any (i : AST) :
+    ℛ⟦RVal ty_xlenbits -> RHeapSpecM [ctx] [ctx] (RVal ty_xlenbits)⟧
+      (BlockVerificationDerived2.exec_instruction_any i)
+      (exec_instruction_any__c i).
   Proof.
     unfold BlockVerificationDerived2.exec_instruction_any, exec_instruction_any__c.
     intros w0 ι0 Hpc0 a a0 ->.
@@ -467,8 +469,7 @@ Module BlockVerificationDerived2Sound.
     intros w5 ω5 ι5 -> Hpc5 res ? ->.
     apply refine_bind.
     apply refine_consume_chunk; auto.
-    { rewrite H.
-      unfold refine, RefineInst. cbn. repeat f_equal.
+    { cbn. repeat f_equal.
       rewrite (inst_persist (H := inst_term) _ _ a).
       now rewrite ?sub_acc_trans, ?inst_subst.
     }
@@ -482,12 +483,12 @@ Module BlockVerificationDerived2Sound.
     intros w8 ω8 ι8 -> Hpc8 [] [] _.
     apply refine_bind.
     apply refine_consume_chunk; auto.
-    { unfold refine, RefineInst. cbn. repeat f_equal.
+    { cbn. repeat f_equal.
       now rewrite (inst_persist (H := inst_term) _ _ na).
     }
     intros w9 ω9 ι9 -> Hpc9 [] [] _.
     apply refine_pure; auto.
-    unfold refine, RefineTermVal, RefineInst.
+    cbn.
     rewrite (inst_persist (H := inst_term) _ _ na).
     now rewrite ?sub_acc_trans, ?inst_subst.
   Qed.
@@ -502,27 +503,24 @@ Module BlockVerificationDerived2Sound.
         @exec_block_addr__c b' (ainstr + 4) apc'
       end.
 
-  Lemma refine_exec_block_addr  (b : list AST) :
-    forall {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0),
-      refine ι0 (@BlockVerificationDerived2.exec_block_addr b w0)
-        (exec_block_addr__c b).
+  Lemma refine_exec_block_addr (b : list AST) :
+    ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpecM [ctx] [ctx] (RVal ty_xlenbits)⟧
+      (@BlockVerificationDerived2.exec_block_addr b)
+      (exec_block_addr__c b).
   Proof.
     induction b.
     - intros w0 ι0 Hpc0 a ? ->.
       now apply refine_pure.
     - intros w0 ι0 Hpc0 ainstr ? -> apc ? ->.
-      cbn.
       apply refine_bind.
-      apply refine_assert_formula; auto.
-      intros w1 ω1 ι1 -> Hpc1 [] [] _.
+      apply refine_assert_formula; easy.
+      intros w1 ω1 ι1 -> Hpc1 _ _ _.
       apply refine_bind.
       apply refine_exec_instruction_any; auto.
-      unfold refine, RefineTermVal, RefineInst.
-      now rewrite (inst_persist (H := inst_term)).
+      eapply refine_inst_persist; eauto; easy.
       intros w2 ω2 ι2 -> Hpc2 napc ? ->.
       apply IHb; auto.
-      {unfold refine, RefineTermVal, RefineInst.
-        cbn. f_equal.
+      { cbn. f_equal.
         change (inst_term ?t ?ι) with (inst t ι).
         rewrite (inst_persist (H := inst_term) (acc_trans ω1 ω2) _ ainstr).
         now rewrite ?sub_acc_trans, ?inst_subst.
@@ -550,28 +548,27 @@ Module BlockVerificationDerived2Sound.
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
     forall {ι0 : Valuation Σ} (Hpc0 : instpc (wco Σ) ι0),
-      refine ι0 (@BlockVerificationDerived2.exec_triple_addr Σ req b ens)
+      ℛ⟦RHeapSpecM [ctx] [ctx] RUnit⟧@{ι0}
+        (@BlockVerificationDerived2.exec_triple_addr Σ req b ens)
         (exec_triple_addr__c ι0 req b ens).
   Proof.
     intros ι0 Hpc0.
     unfold BlockVerificationDerived2.exec_triple_addr, exec_triple_addr__c.
-    eapply refine_bind.
-    { eapply refine_demonic; auto. }
+    apply refine_bind.
+    { apply refine_demonic; auto. }
     intros w1 ω1 ι1 -> Hpc1 a ? ->.
-    eapply refine_bind.
-    { eapply refine_produce; auto.
+    apply refine_bind.
+    { apply refine_produce; auto.
       cbn.
       now rewrite inst_subst, inst_sub_wk1.
     }
     intros w2 ω2 ι2 -> Hpc2 [] [] _.
-    eapply refine_bind.
-    {eapply refine_exec_block_addr; auto;
-        unfold refine, RefineTermVal, RefineInst in *;
-        change (persist__term a ω2) with (persist a ω2);
-        now rewrite inst_persist.
+    apply refine_bind.
+    { apply refine_exec_block_addr; auto;
+        eapply refine_inst_persist; eauto.
     }
     intros w3 ω3 ι3 -> Hpc3 na ? ->.
-    eapply refine_consume; auto.
+    apply refine_consume; auto.
     cbn -[sub_wk1].
     now rewrite ?inst_subst, ?inst_sub_wk1.
     cbn [acc_snoc_left sub_acc].
@@ -689,17 +686,17 @@ Module BlockVerificationDerived2Sem.
     induction instrs; cbn.
     - intros ainstr apc δ P Q PQ h.
       cbv [pure CHeapSpecM.pure].
-      eapply PQ.
+      apply PQ.
     - intros ainstr apc.
       cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpecM.assert_formula].
       intros δ P Q PQ h [<- Hverif].
       split; [reflexivity|].
       revert Hverif.
-      eapply mono_exec_instruction_any__c.
+      apply mono_exec_instruction_any__c.
       intros res h2.
-      eapply IHinstrs.
+      apply IHinstrs.
       intros res2 h3.
-      now eapply PQ.
+      now apply PQ.
   Qed.
 
   Lemma sound_exec_block_addr `{sailGS Σ} {instrs ainstr apc} (h : SCHeap) (POST : Val ty_xlenbits -> CStore [ctx] -> iProp Σ) :
@@ -725,7 +722,7 @@ Module BlockVerificationDerived2Sem.
                      WP_loop) apc)%I as Hverif2.
       { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (apc + 4) instrs -∗ (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ WP_loop) -∗ WP_loop)%I).
         revert Hverif.
-        eapply mono_exec_instruction_any__c.
+        apply mono_exec_instruction_any__c.
         intros an h2.
         unfold liftP; cbn.
         iIntros (Hverif) "Hh2 (Hpc & Hnpc & Hinstrs) Hk".
@@ -783,7 +780,7 @@ Module BlockVerificationDerived2Sem.
                         asn.interpret post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ an]
                          -∗ WP_loop) -∗
                WP_loop)%I) as Hverifblock.
-      { eapply (sound_exec_block_addr h
+      { apply (sound_exec_block_addr h
                   (fun an δ => asn.interpret post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ an])%I).
         refine (mono_exec_block_addr _ _ _ _ _ Hexec).
         intros res h2 Hcons. cbn.
@@ -811,15 +808,14 @@ Module BlockVerificationDerived2Sem.
       (fun a na => asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
   Proof.
     intros Hverif ι.
-    eapply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := [] |}) (pre := pre) (post := post) (instrs := instrs)).
+    apply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := [] |}) (pre := pre) (post := post) (instrs := instrs)).
     eapply (refine_exec_triple_addr (Σ := {| wctx := Γ ; wco := [] |}) I (ta := λ w1 _ _ _ _, SymProp.block)).
     all: cycle 3.
     - rewrite SymProp.wsafe_safe SymProp.safe_debug_safe.
-      eapply (safeE_safe env.nil), postprocess_sound in Hverif.
+      apply (safeE_safe env.nil), postprocess_sound in Hverif.
       rewrite SymProp.safe_demonic_close in Hverif.
-      now eapply Hverif.
-    - unfold refine, RefineBox, RefineImpl, refine, RefineProp.
-      now intros.
+      now apply Hverif.
+    - cbn. now intros.
     - reflexivity.
     - reflexivity.
   Qed.

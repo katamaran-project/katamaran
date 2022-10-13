@@ -124,7 +124,7 @@ Module Type Soundness
           split.
           + apply IHasn1 with (P := P); assumption.
           + apply IHasn2 with (P := P); assumption.
-        - unfold bind, demonic. eauto.
+        - unfold bind, demonic, lift_purem, CPureSpecM.demonic. eauto.
         - unfold pure; eauto.
       Qed.
 

@@ -413,6 +413,7 @@ Module Type WorldsOn
 
   End Persistence.
 
+  Notation WProd A B := (fun w : World => A w * B w)%type.
   Notation WList A := (fun w : World => list (A w)).
   Notation WTerm σ := (fun w : World => Term (wctx w) σ).
   Notation STerm σ := (fun Σ => Term Σ σ).

@@ -318,6 +318,26 @@ Module Type SymbolicExecOn
 
   End VerificationConditions.
 
+  Definition symprop_assume_formulas :
+    ⊢ List Formula -> □SymProp -> SymProp :=
+    fun w0 fmls0 POST =>
+      match solver fmls0 with
+      | Some (existT w1 (ν , fmls1)) =>
+          (* Assume variable equalities and the residual constraints *)
+          assume_triangular ν
+            (assume_formulas_without_solver fmls1
+               (* Run POST in the world with the variable and residual
+                  formulas included. This is a critical piece of code since
+                  this is the place where we really meaningfully change the
+                  world. We changed the type of assume_formulas_without_solver
+                  just to not forget adding the formulas to the path constraints.
+                *)
+               (four POST (acc_triangular ν) (acc_formulas_right w1 fmls1)))
+      | None =>
+          (* The formulas are inconsistent with the path constraints. *)
+          SymProp.block
+      end.
+
   Definition SPureSpecM (A : TYPE) : TYPE :=
     □(A -> 𝕊) -> 𝕊.
 
@@ -334,6 +354,7 @@ Module Type SymbolicExecOn
     Definition bind {A B} :
       ⊢ SPureSpecM A -> □(A -> SPureSpecM B) -> SPureSpecM B :=
       fun w0 m f POST => m (fun w1 ω01 a1 => f w1 ω01 a1 (four POST ω01)).
+    #[global] Arguments bind {A B} [w] m f _ /.
 
     Definition error {M A} {subM : Subst M} {occM : OccursCheck M} :
       ⊢ M -> SPureSpecM A := fun w msg POST => SymProp.error (EMsgHere msg).
@@ -341,13 +362,13 @@ Module Type SymbolicExecOn
       fun w POST => SymProp.block.
     Global Arguments block {A w}.
 
-    Definition angelic (x : option LVar) σ :
-      ⊢ SPureSpecM (STerm σ) :=
-      fun w k =>
+    Definition angelic (x : option LVar) :
+      ⊢ ∀ σ, SPureSpecM (STerm σ) :=
+      fun w σ k =>
         let y := fresh_lvar w x in
         angelicv
           (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
-    Global Arguments angelic x σ {w} k.
+    Global Arguments angelic x [w] σ k : rename.
 
     Module Import notations.
       Notation "⟨ ω ⟩ x <- ma ;; mb" :=
@@ -379,13 +400,13 @@ Module Type SymbolicExecOn
          end.
     Global Arguments angelic_ctx {N} n [w] Δ : rename.
 
-    Definition demonic (x : option LVar) σ :
-      ⊢ SPureSpecM (STerm σ) :=
-      fun w k =>
+    Definition demonic (x : option LVar) :
+      ⊢ ∀ σ, SPureSpecM (STerm σ) :=
+      fun w σ k =>
         let y := fresh_lvar w x in
         demonicv
           (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
-    Global Arguments demonic x σ {w} k.
+    Global Arguments demonic x [w] σ k : rename.
 
     Definition demonic_ctx {N : Set} (n : N -> LVar) :
       ⊢ ∀ Δ : NCtx N Ty, SPureSpecM (fun w => NamedEnv (Term w) Δ) :=
@@ -401,22 +422,7 @@ Module Type SymbolicExecOn
     Definition assume_formulas :
       ⊢ List Formula -> SPureSpecM Unit :=
       fun w0 fmls0 POST =>
-        match solver fmls0 with
-        | Some (existT w1 (ν , fmls1)) =>
-          (* Assume variable equalities and the residual constraints *)
-          assume_triangular ν
-            (assume_formulas_without_solver fmls1
-               (* Run POST in the world with the variable and residual
-                  formulas included. This is a critical piece of code since
-                  this is the place where we really meaningfully change the
-                  world. We changed the type of assume_formulas_without_solver
-                  just to not forget adding the formulas to the path constraints.
-               *)
-               (four POST (acc_triangular ν) (acc_formulas_right w1 fmls1) tt))
-        | None =>
-          (* The formulas are inconsistent with the path constraints. *)
-          SymProp.block
-        end.
+        symprop_assume_formulas fmls0 (POST <*> (fun w r => tt)).
 
     Definition assume_formula :
       ⊢ Formula -> SPureSpecM Unit :=
@@ -444,21 +450,21 @@ Module Type SymbolicExecOn
       fun w0 msg fml0 =>
         assert_formulas msg (cons fml0 nil).
 
-    Equations(noeqns) assert_eq_env {Δ : Ctx Ty} :
-      let E := fun w : World => Env (Term w) Δ in
-      ⊢ AMessage -> E -> E -> SPureSpecM Unit :=
+    Equations(noeqns) assert_eq_env :
+      let E Δ := fun w : World => Env (Term w) Δ in
+      ⊢ ∀ Δ : Ctx Ty, AMessage -> E Δ -> E Δ -> SPureSpecM Unit :=
       assert_eq_env msg env.nil          env.nil            := pure tt;
       assert_eq_env msg (env.snoc δ _ t) (env.snoc δ' _ t') :=
         ⟨ ω ⟩ _ <- assert_eq_env msg δ δ' ;;
-        assert_formula msg⟨ω⟩ (formula_relop bop.eq t⟨ω⟩ t'⟨ω⟩).
+        assert_formula msg⟨ω⟩ (formula_relop bop.eq t t')⟨ω⟩.
 
-    Equations(noeqns) assert_eq_nenv {N} {Δ : NCtx N Ty} :
-      let E := fun w : World => NamedEnv (Term w) Δ in
-      ⊢ AMessage -> E -> E -> SPureSpecM Unit :=
+    Equations(noeqns) assert_eq_nenv {N} :
+      let E Δ := fun w : World => NamedEnv (Term w) Δ in
+      ⊢ ∀ Δ : NCtx N Ty, AMessage -> E Δ -> E Δ -> SPureSpecM Unit :=
       assert_eq_nenv msg env.nil          env.nil            := pure tt;
       assert_eq_nenv msg (env.snoc δ _ t) (env.snoc δ' _ t') :=
         ⟨ ω ⟩ _ <- assert_eq_nenv msg δ δ' ;;
-        assert_formula msg⟨ω⟩ (formula_relop bop.eq t⟨ω⟩ t'⟨ω⟩).
+        assert_formula msg⟨ω⟩ (formula_relop bop.eq t t')⟨ω⟩.
 
     Definition assert_eq_chunk : ⊢ AMessage -> Chunk -> Chunk -> □(SPureSpecM Unit) :=
       fix assert_eq w0 msg c1 c2 w1 ω01 {struct c1} :=
@@ -494,25 +500,26 @@ Module Type SymbolicExecOn
       fun w m1 m2 POST =>
         demonic_binary (m1 POST) (m2 POST).
 
-    Definition angelic_list' {A : LCtx -> Type} :
-      ⊢ A -> List A -> SPureSpecM A :=
+    Definition angelic_list' {A} :
+      ⊢ A -> WList A -> SPureSpecM A :=
       fun w =>
         fix rec d xs :=
         match xs with
         | nil        => pure d
         | cons x xs  => angelic_binary (pure d) (rec x xs)
         end.
+    #[global] Arguments angelic_list' {A} [w].
 
-    Definition angelic_list {M} {subM : Subst M} {occM : OccursCheck M} {A : LCtx -> Type} :
-      ⊢ M -> List A -> SPureSpecM A :=
+    Definition angelic_list {M} {subM : Subst M} {occM : OccursCheck M} {A} :
+      ⊢ M -> WList A -> SPureSpecM A :=
       fun w msg xs =>
         match xs with
         | nil        => error msg
         | cons x xs  => angelic_list' x xs
         end.
 
-    Definition demonic_list' {A : LCtx -> Type} :
-      ⊢ A -> List A -> SPureSpecM A :=
+    Definition demonic_list' {A} :
+      ⊢ A -> WList A -> SPureSpecM A :=
       fun w =>
         fix rec d xs :=
         match xs with
@@ -520,8 +527,8 @@ Module Type SymbolicExecOn
         | cons x xs  => demonic_binary (pure d) (rec x xs)
         end.
 
-    Definition demonic_list {A : LCtx -> Type} :
-      ⊢ List A -> SPureSpecM A :=
+    Definition demonic_list {A} :
+      ⊢ WList A -> SPureSpecM A :=
       fun w xs =>
         match xs with
         | nil        => block
@@ -531,10 +538,12 @@ Module Type SymbolicExecOn
     Definition angelic_finite F `{finite.Finite F} :
       ⊢ AMessage -> SPureSpecM ⌜F⌝ :=
       fun w msg => angelic_list msg (finite.enum F).
+    #[global] Arguments angelic_finite F {_ _} [w].
 
     Definition demonic_finite F `{finite.Finite F} :
       ⊢ SPureSpecM ⌜F⌝ :=
       fun w => demonic_list (finite.enum F).
+    #[global] Arguments demonic_finite F {_ _} [w].
 
     #[export] Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
     Proof.
@@ -605,28 +614,28 @@ Module Type SymbolicExecOn
           demonic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
 
       Definition angelic_list {M} {subM : Subst M} {occM : OccursCheck M} {A Γ} :
-        ⊢ (SStore Γ -> SHeap -> M) -> List A -> SHeapSpecM Γ Γ A :=
+        ⊢ (SStore Γ -> SHeap -> M) -> WList A -> SHeapSpecM Γ Γ A :=
         fun w msg xs POST δ h => lift_purem (SPureSpecM.angelic_list (msg δ h) xs) POST δ h.
 
       Definition angelic_finite F `{finite.Finite F} {Γ} :
         ⊢ (SStore Γ -> SHeap -> AMessage) -> SHeapSpecM Γ Γ ⌜F⌝ :=
-        fun w msg POST δ h => lift_purem (SPureSpecM.angelic_finite (msg δ h)) POST δ h.
+        fun w msg POST δ h => lift_purem (SPureSpecM.angelic_finite F (msg δ h)) POST δ h.
       #[global] Arguments angelic_finite F {_ _ Γ w}.
 
       Definition demonic_finite F `{finite.Finite F} {Γ} :
         ⊢ SHeapSpecM Γ Γ ⌜F⌝ :=
-        fun w => lift_purem (SPureSpecM.demonic_finite (w:=w)).
+        fun w => lift_purem (SPureSpecM.demonic_finite F (w:=w)).
       #[global] Arguments demonic_finite F {_ _ Γ w}.
 
-      Definition angelic {Γ} (x : option LVar) σ :
-        ⊢ SHeapSpecM Γ Γ (STerm σ) :=
-        fun w => lift_purem (SPureSpecM.angelic x σ (w:=w)).
-      Global Arguments angelic {Γ} x σ {w}.
+      Definition angelic {Γ} (x : option LVar) :
+        ⊢ ∀ σ, SHeapSpecM Γ Γ (STerm σ) :=
+        fun w σ => lift_purem (SPureSpecM.angelic x σ).
+      Global Arguments angelic {Γ} x [w] σ : rename.
 
-      Definition demonic {Γ} (x : option LVar) σ :
-        ⊢ SHeapSpecM Γ Γ (STerm σ) :=
-        fun w => lift_purem (SPureSpecM.demonic x σ (w:=w)).
-      Global Arguments demonic {Γ} x σ {w}.
+      Definition demonic {Γ} (x : option LVar) :
+        ⊢ ∀ σ, SHeapSpecM Γ Γ (STerm σ) :=
+        fun w σ => lift_purem (SPureSpecM.demonic x σ).
+      Global Arguments demonic {Γ} x [w] σ : rename.
 
       Definition debug {AT DT} `{Subst DT, SubstLaws DT, OccursCheck DT} {Γ1 Γ2} :
         ⊢ (SStore Γ1 -> SHeap -> DT) -> (SHeapSpecM Γ1 Γ2 AT) -> (SHeapSpecM Γ1 Γ2 AT) :=
@@ -634,12 +643,12 @@ Module Type SymbolicExecOn
 
       Definition angelic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
-        fun w0 Δ => lift_purem (SPureSpecM.angelic_ctx n Δ).
+        fun w Δ => lift_purem (SPureSpecM.angelic_ctx n Δ).
       Global Arguments angelic_ctx {N} n {Γ} [w] Δ : rename.
 
       Definition demonic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
-        fun w0 Δ => lift_purem (SPureSpecM.demonic_ctx n Δ).
+        fun w Δ => lift_purem (SPureSpecM.demonic_ctx n Δ).
       Global Arguments demonic_ctx {N} n {Γ} [w] Δ : rename.
 
     End Basic.
@@ -990,7 +999,7 @@ Module Type SymbolicExecOn
 
       Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} : ⊢ STerm σ -> SHeapSpecM Γ Γ Unit :=
         fun w0 t POST δ => T POST tt (δ ⟪ x ↦ t ⟫).
-      Global Arguments assign {Γ} x {σ xIn w} v.
+      Global Arguments assign {Γ} x {σ xIn} [w] v.
 
     End State.
 
