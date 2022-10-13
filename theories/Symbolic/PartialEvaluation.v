@@ -207,7 +207,7 @@ Module Type PartialEvaluationOn
 
     Lemma peval_sext_sound {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) :
       forall (ι : Valuation Σ),
-        inst (peval_sext t) ι = inst (term_sext t) ι.
+        inst (peval_sext (p := p) t) ι = inst (term_sext t) ι.
     Proof.
       intros ι. unfold peval_sext.
       destruct (term_get_val_spec t); cbn; subst; easy.
@@ -215,7 +215,7 @@ Module Type PartialEvaluationOn
 
     Lemma peval_zext_sound {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) :
       forall (ι : Valuation Σ),
-        inst (peval_zext t) ι = inst (term_zext t) ι.
+        inst (peval_zext (p := p) t) ι = inst (term_zext t) ι.
     Proof.
       intros ι. unfold peval_zext.
       destruct (term_get_val_spec t); cbn; subst; easy.

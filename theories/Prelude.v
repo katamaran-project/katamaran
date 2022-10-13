@@ -246,6 +246,14 @@ Module IsTrue.
 
   #[global] Arguments mk [b] _, {b _}.
   #[global] Arguments from [b] _.
+  (* Set the Hint Mode for IsTrue, so that it will only use the Hint Extern
+     below if whatever b is unified with does not contain any existential
+     variables anymore. This is mostly used in statically checking bitvector
+     sizes. Essentially we want to delay checking the constraints until it is
+     fully known, in particular when type information flows from a later program
+     position to an earlier one, e.g. for sign extension from the type
+     information from a variable reference flows to the variable declaration. *)
+  #[export] Hint Mode IsTrue + : typeclass_instances.
   #[export] Hint Extern 10 (IsTrue ?b) =>
     refine (@mk true I) : typeclass_instances.
 End IsTrue.
