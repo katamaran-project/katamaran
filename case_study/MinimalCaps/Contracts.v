@@ -760,9 +760,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           lemma_patterns        := (env.snoc env.nil (_∷_) c);
           lemma_precondition    := asn_csafe c ∗ term_var "p" = term_val ty.perm E;
           lemma_postcondition   :=
-          asn.exist "p'" ty.perm
-                    (let c : Term _ _ := term_record capability [term_var "p'"; term_var "b"; term_var "e"; term_var "a"] in
-                     term_var "p'" = term_val ty.perm R ∗ asn_expr c);
+            (let p : Term _ (type (_ :: _)) := term_val ty.perm R in
+               let c : Term _ _ := term_record capability [p; term_var "b"; term_var "e"; term_var "a"] in
+                      asn_expr c);
         |}.
 
       Definition lemma_open_ptsreg : SepLemma open_ptsreg :=

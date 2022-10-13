@@ -518,7 +518,7 @@ Module MinCapsIrisInstanceWithContracts.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
       iIntros "(#H & [-> _])".
-      iExists R; iFrame.
+      iFrame.
       rewrite ?fixpoint_interp1_eq.
       iSimpl in "H"; auto.
     Qed.
