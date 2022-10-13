@@ -128,7 +128,6 @@ Section FunDeclKit.
   | correctPC_subperm_R        : Lem ["c" :: ty.cap]
   | subperm_not_E              : Lem ["p" :: ty.perm; "p'" :: ty.perm]
   | safe_to_execute            : Lem ["c" :: ty.cap]
-  | rewrite_add_r_0            : Lem ["a" :: ty.int; "b" :: ty.int]
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -444,7 +443,6 @@ Section FunDefKit.
         if: exp_var "tmp2"
         then stm_val ty.bool false
         else
-          use lemma rewrite_add_r_0 [exp_var "a"; exp_var "imm"] ;;
           stm_val ty.bool true
       else stm_val ty.bool true.
 

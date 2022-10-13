@@ -806,14 +806,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
                     asn_csafe c';
         |}.
 
-      Definition lemma_rewrite_add_r_0 : SepLemma rewrite_add_r_0 :=
-        {| lemma_logic_variables := ["a" :: ty.int; "b" :: ty.int];
-          lemma_patterns        := [term_var "a"; term_var "b"];
-          lemma_precondition    := term_var "b" = term_val ty.int 0%Z;
-          lemma_postcondition   :=
-          term_var "a" = term_binop bop.plus (term_var "a") (term_var "b");
-        |}.
-
       (*
     @pre c = mkcap(p,b,e,a) ✱ c' = mkcap(p',b,e,a) ✱ csafe(c) ✱ p' ≤ p
     @post csafe(c) ✱ csafe(c')
@@ -899,7 +891,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           | correctPC_subperm_R => lemma_correctPC_subperm_R
           | subperm_not_E       => lemma_subperm_not_E
           | safe_to_execute     => lemma_safe_to_execute
-          | rewrite_add_r_0     => lemma_rewrite_add_r_0
           end.
 
     End LemDef.
@@ -1212,8 +1203,10 @@ Module MinCapsValidContracts.
   Lemma valid_contract_is_not_zero : ValidContract is_not_zero.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_can_incr_cursor : ValidContract can_incr_cursor.
-  Proof. reflexivity. Qed.
+  Lemma valid_contract_can_incr_cursor : ValidContractDebug can_incr_cursor.
+  Proof. symbolic_simpl.
+         intros; lia.
+  Qed.
 
   Lemma valid_contract_exec_jalr_cap : ValidContract exec_jalr_cap.
   Proof. reflexivity. Qed.
@@ -1350,7 +1343,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_is_within_range).
     - apply (valid_contract _ H valid_contract_abs).
     - apply (valid_contract _ H valid_contract_is_not_zero).
-    - apply (valid_contract _ H valid_contract_can_incr_cursor).
+    - apply (valid_contract_debug _ H valid_contract_can_incr_cursor).
     - apply (valid_contract _ H valid_contract_exec_jalr_cap).
     - apply (valid_contract _ H valid_contract_exec_cjalr).
     - apply (valid_contract _ H valid_contract_exec_cjal).
