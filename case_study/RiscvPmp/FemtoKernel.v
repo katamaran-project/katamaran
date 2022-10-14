@@ -242,15 +242,6 @@ Import BlockVerificationDerived2.
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof. now vm_compute. Qed.
 
-    (* Even admitting this goes OOM :-) *)
-    (* Lemma sat__femtoinit2 : SymProp.safe vc__femtoinit env.nil. *)
-    (* Admitted. *)
-    (* (* Proof. *) *)
-    (* (*   destruct sat__femtoinit as [se]. *) *)
-    (* (*   exact (proj1 (Erasure.erase_safe vc__femtoinit env.nil) se). *) *)
-    (* (* Qed. *) *)
-
-
     Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].
     Let W__femtohandler : World := MkWorld Σ__femtohandler [].
 
@@ -424,7 +415,6 @@ Import BlockVerificationDerived2.
     now rewrite <- liveAddr_filter_advAddr.
   Qed.
 
-  (* DOMI: for simplicity, we're currently treating the femtokernel invariant on the private state not as a shared invariant but as a piece of private state to be framed off during every invocation of the adversary.  This is fine since for now we're assuming no concurrency... *)
   Definition ptsto_readonly `{sailGS Σ} addr v : iProp Σ :=
         inv.inv femto_inv_ns (interp_ptsto addr v).
   Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := ptsto_readonly 84 42.
@@ -718,8 +708,7 @@ Import BlockVerificationDerived2.
         destruct mst as [mpp].
         iSplitL.
         now iExists mpp.
-        iPureIntro.
-        now split.
+        now iPureIntro.
       }
-      now iApply (LoopVerification.valid_semTriple_loop $! User 72 88 mpp femto_pmpentries).
+      now iApply LoopVerification.valid_semTriple_loop.
   Qed.
