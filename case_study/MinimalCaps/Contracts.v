@@ -459,7 +459,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           sep_contract_postcondition   := 
           if: term_var "result_read_allowed"
           then term_val ty.perm R <=ₚ term_var "p"
-          else term_var "result_read_allowed" = term_val ty.bool false;
+          else ⊤
         |}.
 
       Definition sep_contract_write_allowed : SepContract ["p" :: ty.perm ] ty.bool :=
@@ -470,7 +470,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           sep_contract_postcondition   :=
           if: term_var "result_write_allowed"
           then term_val ty.perm RW <=ₚ term_var "p"
-          else term_var "result_write_allowed" = term_val ty.bool false;
+          else ⊤
         |}.
 
       Definition sep_contract_upper_bound : SepContract ["a" :: ty.addr; "e" :: ty.addr ] ty.bool :=
@@ -618,7 +618,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           sep_contract_postcondition   :=
           if: term_var "result_is_sub_perm"
           then term_var "p" <=ₚ term_var "p'"
-          else term_var "result_is_sub_perm" = term_val ty.bool false;
+          else ⊤
         |}.
 
       Definition sep_contract_is_within_range : SepContractFun is_within_range :=
