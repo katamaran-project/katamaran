@@ -63,8 +63,8 @@ Module Type TermsOn (Import TY : Types).
   | term_not     (e : Term Σ ty.bool) : Term Σ ty.bool
   | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty.sum σ1 σ2)
   | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty.sum σ1 σ2)
-  | term_sext    {m n} (t : Term Σ (ty.bvec m)) {p : IsTrue (m <=? n)} : Term Σ (ty.bvec n)
-  | term_zext    {m n} (t : Term Σ (ty.bvec m)) {p : IsTrue (m <=? n)} : Term Σ (ty.bvec n)
+  | term_sext    {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n)
+  | term_zext    {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n)
   | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs)
   | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
   | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
@@ -74,8 +74,8 @@ Module Type TermsOn (Import TY : Types).
   #[global] Arguments term_not {_} _.
   #[global] Arguments term_inl {_ _ _} _.
   #[global] Arguments term_inr {_ _ _} _.
-  #[global] Arguments term_sext {_ _ _} t {p}.
-  #[global] Arguments term_zext {_ _ _} t {p}.
+  #[global] Arguments term_sext {_ _ _ p} t.
+  #[global] Arguments term_zext {_ _ _ p} t.
   #[global] Arguments term_tuple {_ _} ts.
   #[global] Arguments term_union {_} U K t.
   #[global] Arguments term_record {_} R ts.
@@ -173,13 +173,13 @@ Module Type TermsOn (Import TY : Types).
     Term_eqb (term_not x) (term_not y) := Term_eqb x y;
     Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
     Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
-    Term_eqb (@term_sext _ m ?(k) x p) (@term_sext _ n k y q) with eq_dec m n => {
-      Term_eqb (@term_sext _ m ?(k) x p) (@term_sext _ ?(m) k y q) (left eq_refl) :=
+    Term_eqb (@term_sext _ m ?(k) p x) (@term_sext _ n k q y) with eq_dec m n => {
+      Term_eqb (@term_sext _ m ?(k) p x) (@term_sext _ ?(m) k q y) (left eq_refl) :=
           Term_eqb x y;
       Term_eqb _ _ (right _) := false
     };
-    Term_eqb (@term_zext _ m ?(k) x p) (@term_zext _ n k y q) with eq_dec m n => {
-      Term_eqb (@term_zext _ m ?(k) x p) (@term_zext _ ?(m) k y q) (left eq_refl) :=
+    Term_eqb (@term_zext _ m ?(k) p x) (@term_zext _ n k q y) with eq_dec m n => {
+      Term_eqb (@term_zext _ m ?(k) p x) (@term_zext _ ?(m) k q y) (left eq_refl) :=
           Term_eqb x y;
       Term_eqb _ _ (right _) := false
     };

@@ -28,8 +28,12 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Arith.PeanoNat
      Bool.Bool
+     Classes.Morphisms
+     Classes.RelationClasses
      NArith.BinNat
+     Relations.Relation_Definitions
      Strings.String
      ZArith.BinInt.
 
@@ -93,20 +97,22 @@ Module Type InstantiationOn
   Proof. reflexivity. Qed.
 
   #[export] Instance inst_term : forall {σ}, Inst (fun Σ => Term Σ σ) (Val σ) :=
-    fix inst_term {σ : Ty} {Σ : LCtx} (t : Term Σ σ) (ι : Valuation Σ) {struct t} : Val σ :=
+    fix inst_term {σ : Ty} [Σ : LCtx] (t : Term Σ σ) (ι : Valuation Σ) {struct t} : Val σ :=
     match t in Term _ σ return Val σ with
     | @term_var _ _ _ bIn  => env.lookup ι bIn
     | term_val _ v         => v
-    | term_binop op t1 t2  => bop.eval op (inst_term t1 ι) (inst_term t2 ι)
+    | term_binop op t1 t2  => bop.eval op
+                                (inst (Inst := @inst_term _) t1 ι)
+                                (inst (Inst := @inst_term _) t2 ι)
     | term_neg t           => Z.opp (inst_term t ι)
     | term_not t           => negb (inst_term t ι)
-    | term_inl t           => @inl (Val _) (Val _) (inst_term t ι)
-    | term_inr t           => @inr (Val _) (Val _) (inst_term t ι)
-    | term_sext t          => bv.sext (inst_term t ι)
-    | term_zext t          => bv.zext (inst_term t ι)
+    | term_inl t           => @inl (Val _) (Val _) (inst (Inst := inst_term) t ι)
+    | term_inr t           => @inr (Val _) (Val _) (inst (Inst := inst_term) t ι)
+    | term_sext t          => bv.sext (inst (Inst := inst_term) t ι)
+    | term_zext t          => bv.zext (inst (Inst := inst_term) t ι)
     | @term_tuple _ σs ts  =>
         envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι)
-    | @term_union _ U K t     => unionv_fold U (existT K (inst_term t ι))
+    | @term_union _ U K t     => unionv_fold U (existT K (inst (Inst := inst_term) t ι))
     | @term_record _ R ts     =>
         let InstTerm xt := @inst_term (@type recordf Ty xt) in
         recordv_fold R (inst (Inst := inst_env (InstSA := InstTerm)) ts ι)
@@ -374,6 +380,101 @@ Module Type InstantiationOn
   Proof. apply inst_subst_env. Qed.
   #[export] Instance inst_lift_store {Γ} : InstLift (SStore Γ) (CStore Γ).
   Proof. apply inst_lift_env. Qed.
+
+  Section SemanticEquivalence.
+
+    Record SEquiv T V {instTV : Inst T V} (Σ : LCtx) (s t : T Σ) : Prop :=
+      toSEquiv { fromSEquiv : forall (ι : Valuation Σ), inst s ι = inst t ι }.
+    #[global] Arguments SEquiv T V {_} Σ.
+
+    #[export] Instance seequiv_equivalence {T V} {instTV : Inst T V} {Σ} :
+      Equivalence (SEquiv T V Σ).
+    Proof.
+      constructor.
+      - unfold Reflexive. easy.
+      - intros x y []. easy.
+      - intros x y z [] []. constructor.
+        intros ι. now transitivity (inst y ι).
+    Qed.
+
+    Definition SETerm (Σ : LCtx) (σ : Ty) : relation (Term Σ σ) :=
+      SEquiv (fun Σ => Term Σ σ) (Val σ) Σ.
+    Definition SEEnv (Σ : LCtx) (σs : Ctx Ty) : relation (Env (Term Σ) σs) :=
+      SEquiv (fun Σ => Env (Term Σ) σs) (Env Val σs) Σ.
+    Definition SENamedEnv {N} (Σ : LCtx) (Δ : NCtx N Ty) : relation (NamedEnv (Term Σ) Δ) :=
+      SEquiv (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv Val Δ) Σ.
+    #[global] Arguments SETerm : clear implicits.
+    #[global] Arguments SEEnv : clear implicits.
+    #[global] Arguments SENamedEnv {N} _ _.
+
+    #[export] Instance seterm_equivalence {Σ σ} : Equivalence (SETerm Σ σ) :=
+      seequiv_equivalence.
+    #[export] Instance seenv_equivalence {Σ σs} : Equivalence (SEEnv Σ σs) :=
+      seequiv_equivalence.
+    #[export] Instance senamedenv_equivalence {N Σ Δ} : Equivalence (@SENamedEnv N Σ Δ) :=
+      seequiv_equivalence.
+
+    Lemma proper_term_binop {Σ σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) :
+      Proper (SETerm Σ σ1 ==> SETerm Σ σ2 ==> SETerm Σ σ3) (term_binop op).
+    Proof. intros s1 t1 [e1] s2 t2 [e2]. constructor. intros ι. cbn. f_equal; auto. Qed.
+
+    Lemma proper_term_neg {Σ} :
+      Proper (SETerm Σ ty.int ==> SETerm Σ ty.int) term_neg.
+    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
+
+    Lemma proper_term_not {Σ} :
+      Proper (SETerm Σ ty.bool ==> SETerm Σ ty.bool) term_not.
+    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
+
+    Lemma proper_term_inl {Σ σ1 σ2} :
+      Proper (SETerm Σ σ1 ==> SETerm Σ (ty.sum σ1 σ2)) term_inl.
+    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
+
+    Lemma proper_term_inr {Σ σ1 σ2} :
+      Proper (SETerm Σ σ2 ==> SETerm Σ (ty.sum σ1 σ2)) term_inr.
+    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
+
+    Lemma proper_term_sext {Σ m n} {p : IsTrue (m <=? n)} :
+      Proper (SETerm Σ (ty.bvec m) ==> SETerm Σ (ty.bvec n)) term_sext.
+    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
+
+    Lemma proper_term_zext {Σ m n} {p : IsTrue (m <=? n)} :
+      Proper (SETerm Σ (ty.bvec m) ==> SETerm Σ (ty.bvec n)) term_zext.
+    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
+
+    Lemma proper_term_tuple {Σ σs} :
+      Proper (SEEnv Σ σs ==> SETerm Σ (ty.tuple σs)) term_tuple.
+    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
+
+    Lemma proper_term_union {Σ U} {K : unionk U} :
+      Proper (SETerm Σ (unionk_ty U K) ==> SETerm Σ (ty.union U)) (term_union U K).
+    Proof. intros s t [e]. constructor. intros ι. cbn. do 2 f_equal. auto. Qed.
+
+    Lemma proper_term_record {Σ R} :
+      Proper (SENamedEnv Σ (recordf_ty R) ==> SETerm Σ (ty.record R)) (term_record R).
+    Proof.
+      intros xs ys [xys]. constructor. intros ι. cbn. f_equal. auto. Qed.
+
+    Lemma proper_env_snoc {Σ σs} :
+      Proper (SEEnv Σ σs ==> forall_relation (fun σ => SETerm Σ σ ==> SEEnv Σ (σs ▻ σ))) env.snoc.
+    Proof.
+      intros xs ys [xys] σ x y [xy].
+      constructor. intros ι. cbn.
+      f_equal. apply xys. apply xy.
+    Qed.
+
+    Lemma proper_namedenv_snoc {N Σ} {Δ : NCtx N Ty} :
+      Proper (SENamedEnv Σ Δ ==> forall_relation (fun b => SETerm Σ (type b) ==> SENamedEnv Σ (Δ ▻ b))) env.snoc.
+    Proof.
+      intros xs ys [xys] σ x y [xy].
+      constructor. intros ι. cbn.
+      f_equal. apply xys. apply xy.
+    Qed.
+
+  End SemanticEquivalence.
+  Infix "≈ᵀ" := (@SETerm _ _).
+  Infix "≈ᴱ" := (@SEEnv _ _).
+  Infix "≈ᴺ" := (@SENamedEnv _ _ _).
 
   Section Utils.
 

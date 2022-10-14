@@ -233,8 +233,7 @@ Module Type ChunksOn
       inst (peval_chunk c) ι = inst c ι.
   Proof.
     induction c; cbn; intros ι; f_equal; auto using peval_sound.
-    unfold inst, inst_env. rewrite env.map_map.
-    apply env.map_ext. auto using peval_sound.
+    apply pevals_sound. apply peval_sound.
   Qed.
 
   Section Interpretation.

@@ -108,3 +108,8 @@ Reserved Infix ">=ᵘ?" (at level 70, no associativity).
 Reserved Infix ">ᵘ?"  (at level 70, no associativity).
 Reserved Infix "<=ᵘ?" (at level 70, no associativity).
 Reserved Infix "<ᵘ?"  (at level 70, no associativity).
+
+(* Semantic equivalence *)
+Reserved Infix "≈ᴱ" (at level 70).
+Reserved Infix "≈ᴺ" (at level 70).
+Reserved Infix "≈ᵀ" (at level 70).

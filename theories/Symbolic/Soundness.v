@@ -1167,7 +1167,7 @@ Module Soundness
 
     Lemma refine_peval {w : World} {ι : Valuation w} {σ} t v :
       ℛ⟦RVal σ⟧@{ι} t v -> ℛ⟦RVal σ⟧@{ι} (peval t) v.
-    Proof. cbn. now rewrite peval_sound. Qed.
+    Proof. intros ->. symmetry. apply peval_sound. Qed.
 
     Lemma refine_eval_exp {Γ σ} (e : Exp Γ σ) :
       ℛ⟦RHeapSpecM Γ Γ (RVal σ)⟧ (SHeapSpecM.eval_exp e) (CHeapSpecM.eval_exp e).
@@ -1195,7 +1195,8 @@ Module Soundness
       apply refine_T; eauto.
       apply env.lookup_extensional; cbn; intros [x σ] xIn.
       unfold evals, inst, inst_store, inst_env. rewrite ?env.lookup_map.
-      rewrite peval_sound, <- eval_exp_inst. f_equal. exact Hδ0.
+      symmetry. etransitivity. apply peval_sound.
+      rewrite <- eval_exp_inst. f_equal. symmetry. exact Hδ0.
     Qed.
 
     Lemma refine_env_update {Γ x σ} (xIn : x∷σ ∈ Γ) (w : World) (ι : Valuation w)

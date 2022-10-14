@@ -102,16 +102,28 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         now transitivity (option.wp (fun xs => instpc xs ι) y).
     Qed.
 
-    #[local] Instance proper_cons [Σ] :
+    Lemma proper_cons [Σ] :
       Proper (@RFormula Σ ==> RFormulas ==> RFormulas) cons.
     Proof.
       intros ? ? H1 ? ? H2 ι. rewrite ?inst_pathcondition_cons.
       specialize (H1 ι). specialize (H2 ι). intuition.
     Qed.
 
-    #[local] Instance proper_some [Σ] :
+    Lemma proper_some [Σ] :
       Proper (@RFormulas Σ ==> @ROFormulas Σ) Some.
     Proof. intros xs ys Hxys ι. now rewrite ?option.wp_some. Qed.
+
+    Lemma proper_formula_user [Σ p] :
+      Proper (SEEnv Σ (𝑷_Ty p) ==> @RFormula Σ) (formula_user p).
+    Proof. intros xs ys [xys] ι; cbn; now rewrite xys. Qed.
+
+    Lemma proper_formula_bool [Σ] :
+      Proper (SETerm Σ ty.bool ==> @RFormula Σ) formula_bool.
+    Proof. intros s t [e] ι; cbn; now rewrite e. Qed.
+
+    Lemma proper_formula_relop [Σ σ] (rop : RelOp σ) :
+      Proper (SETerm Σ σ ==> SETerm Σ σ ==> RFormula) (formula_relop rop).
+    Proof. intros s1 t1 [e1] s2 t2 [e2] ι; cbn; now rewrite e1, e2. Qed.
 
     Local Ltac arw :=
       repeat
@@ -129,7 +141,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
 
     Lemma formula_bool_relop [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
       formula_bool (term_binop (bop.relop op) s t) ~ formula_relop op s t.
-    Proof. intros ι; now arw. Qed.
+    Proof. intros ι; cbn; symmetry; apply bop.eval_relop_equiv. Qed.
     #[local] Hint Rewrite formula_bool_relop : katamaran.
 
     (* Simplifies boolean terms to equivalent formulas. These come for instance
@@ -175,7 +187,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         destruct simplify_bool as [kt|]; arw.
         + rewrite (Hs kt ι); arw. now rewrite Ht.
         + clear Hs. intuition.
-      - intros; reflexivity.
+      - reflexivity.
       - intros Σ σ op s t k. now arw.
       - easy.
       - easy.
@@ -505,11 +517,12 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       forall k, simplify_formula fml k ≋ Some (fml :: k).
     Proof.
       induction fml; cbn - [peval]; intros k; arw.
-      - intros ι; cbn. now rewrite pevals_sound.
-      - intros ι; cbn. now rewrite peval_sound.
+      - apply proper_formula_user. apply pevals_sound.
+      - apply proper_formula_bool. apply peval_sound.
       - reflexivity.
-      - rewrite simplify_relop_spec; arw.
-        intros ι; cbn. now rewrite ?peval_sound.
+      - rewrite simplify_relop_spec.
+        apply proper_some, proper_cons; [|reflexivity].
+        apply proper_formula_relop; apply peval_sound.
       - intros ι; cbn. easy.
       - intros ι; now arw.
       - intros ι; arw. specialize (IHfml1 k ι).
