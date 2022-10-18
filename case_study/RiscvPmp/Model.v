@@ -360,14 +360,6 @@ Module RiscvPmpModel2.
       iApply ("Hwithout" with "Hptsto").
     Qed.
 
-    Lemma unlocked_bool : ∀ (cfg : Pmpcfg_ent),
-        unlocked cfg ->
-        match cfg with
-        | {| L := L |} =>
-            L = false
-        end.
-    Proof. intros []; unfold unlocked; auto. Qed.
-
     (* TODO: we will never have a partial match because we are using integers instead of bitvectors, eventually this lemma will make no sense *)
     Lemma pmp_match_addr_never_partial : ∀ (a : Xlenbits) (rng : PmpAddrRange),
         pmp_match_addr a rng = PMP_Match ∨ pmp_match_addr a rng = PMP_NoMatch.
@@ -381,27 +373,28 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma machine_unlocked_pmp_get_perms : ∀ (cfg : Pmpcfg_ent),
-        unlocked cfg ->
+        Pmp_cfg_unlocked cfg ->
         pmp_get_perms cfg Machine = PmpRWX.
     Proof.
-      intros [] H.
+      intros cfg H.
       unfold pmp_get_perms.
-      now rewrite (unlocked_bool H).
+      now apply Pmp_cfg_unlocked_bool in H as ->.
     Qed.
 
     Lemma machine_unlocked_check_pmp_access : ∀ (cfg0 cfg1 : Pmpcfg_ent) (a0 a1 addr : Xlenbits),
-        unlocked cfg0 ∧ unlocked cfg1 ->
+        Pmp_cfg_unlocked cfg0 ∧ Pmp_cfg_unlocked cfg1 ->
         check_pmp_access addr [(cfg0, a0); (cfg1, a1)] Machine = (true, None) ∨ check_pmp_access addr [(cfg0, a0); (cfg1, a1)] Machine = (true, Some PmpRWX).
     Proof.
-     intros cfg0 cfg1 a0 a1 addr [Hcfg0 Hcfg1].
-     unfold check_pmp_access, pmp_check.
-     unfold pmp_match_entry.
-     destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg1 a1 a0)) as [-> | ->];
-       destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg0 a0 0%Z)) as [-> | ->];
-       destruct cfg0, cfg1;
-       try rewrite (unlocked_bool Hcfg0);
-       try rewrite (unlocked_bool Hcfg1);
-       cbn; auto.
+    intros cfg0 cfg1 a0 a1 addr [Hcfg0 Hcfg1].
+    unfold check_pmp_access, pmp_check.
+    unfold pmp_match_entry.
+    apply Pmp_cfg_unlocked_bool in Hcfg0.
+    apply Pmp_cfg_unlocked_bool in Hcfg1.
+    destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg1 a1 a0)) as [-> | ->];
+      destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg0 a0 0%Z)) as [-> | ->];
+      unfold pmp_get_perms;
+      rewrite ?Hcfg0; rewrite ?Hcfg1;
+      auto.
     Qed.
 
     Lemma machine_unlocked_open_pmp_entries_sound :
@@ -414,9 +407,10 @@ Module RiscvPmpModel2.
       destruct entries; try done.
       destruct v as [cfg1 addr1].
       destruct entries; try done.
-      unfold interp_pmp_all_entries_unlocked.
-      iDestruct "Hunlocked" as "[Hcfg0 Hcfg1]".
+      iDestruct "Hunlocked" as "[[%Hcfg0 %Hcfg1] _]".
       unfold interp_pmp_entries.
+      apply Pmp_cfg_unlocked_bool in Hcfg0.
+      apply Pmp_cfg_unlocked_bool in Hcfg1.
       iDestruct "Hentries" as "(? & ? & ? & ?)".
       iExists cfg0.
       iExists addr0.
@@ -429,7 +423,9 @@ Module RiscvPmpModel2.
       ValidLemma RiscvPmpSpecification.lemma_machine_unlocked_close_pmp_entries.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      iIntros "(? & ? & ? & ? & %Hunlocked0 & %Hunlocked1 & _ & _)".
+      iIntros "(? & ? & ? & ? & [%Hunlocked0 _] & [%Hunlocked1 _] & _ & _)".
+      apply Pmp_cfg_unlocked_bool in Hunlocked0.
+      apply Pmp_cfg_unlocked_bool in Hunlocked1.
       iFrame.
       now iPureIntro.
     Qed.

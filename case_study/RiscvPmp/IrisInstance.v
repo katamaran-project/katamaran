@@ -93,16 +93,6 @@ Module RiscvPmpIrisInstance <:
     Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       (ptstoSth addr -∗ interp_pmp_addr_access addrs entries m)%I.
 
-    Definition unlocked (cfg : Pmpcfg_ent) : Prop :=
-      L cfg = false.
-
-    Definition interp_pmp_all_entries_unlocked (entries : list PmpEntryCfg) : iProp Σ :=
-      match entries with
-      | (cfg0, _) :: (cfg1, _) :: [] =>
-          ⌜unlocked cfg0 ∧ unlocked cfg1⌝
-      | _ => False
-      end%I.
-
     Definition interp_ptsto_instr (addr : Z) (instr : AST) : iProp Σ :=
       (∃ v, interp_ptsto addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
 
@@ -117,7 +107,6 @@ Module RiscvPmpIrisInstance <:
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs entries m
     | pmp_addr_access_without  | [ addr; entries; m ] => interp_pmp_addr_access_without addr liveAddrs entries m
-    | pmp_all_entries_unlocked | [ entries ]          => interp_pmp_all_entries_unlocked entries
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_readonly           | [ addr; w ]          => interp_ptsto_readonly addr w

@@ -168,7 +168,7 @@ Import BlockVerificationDerived2.
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
-    Local Notation asn_pmp_all_entries_unlocked l := (asn.chunk (chunk_user pmp_all_entries_unlocked [l])).
+    Local Notation asn_pmp_all_entries_unlocked l := (asn.formula (formula_user pmp_all_entries_unlocked [l])).
 
     Let Σ__femtoinit : LCtx := [].
     Let W__femtoinit : World := MkWorld Σ__femtoinit [].
@@ -430,7 +430,7 @@ Import BlockVerificationDerived2.
       cur_privilege ↦ Machine ∗
       interp_gprs ∗
       interp_pmp_entries femto_pmpentries ∗
-      interp_pmp_all_entries_unlocked femto_pmpentries ∗
+      ⌜Pmp_all_entries_unlocked femto_pmpentries⌝ ∗
       interp_pmp_addr_access liveAddrs femto_pmpentries User ∗
       femto_inv_fortytwo ∗
       pc ↦ 72 ∗
@@ -444,7 +444,7 @@ Import BlockVerificationDerived2.
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
-        interp_pmp_all_entries_unlocked femto_pmpentries ∗
+        ⌜Pmp_all_entries_unlocked femto_pmpentries⌝ ∗
         interp_pmp_addr_access liveAddrs femto_pmpentries User ∗
         femto_inv_fortytwo ∗
         (∃ epc, mepc ↦ epc ∗
@@ -502,7 +502,7 @@ Import BlockVerificationDerived2.
         cur_privilege ↦ Machine ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
-        interp_pmp_all_entries_unlocked femto_pmpentries ∗
+        ⌜Pmp_all_entries_unlocked femto_pmpentries⌝ ∗
         femto_inv_fortytwo ∗
         (pc ↦ 72) ∗
         interp_pmp_addr_access liveAddrs femto_pmpentries User ∗
@@ -515,7 +515,7 @@ Import BlockVerificationDerived2.
     cbn - [interp_pmp_entries]. iLöb as "Hind".
     iIntros "(Hmstatus & Hmtvec & Hmcause & [%mepcv Hmepc] & Hcurpriv & Hgprs & Hpmpentries & [%Hcfg0L %Hcfg1L] & #Hmem & Hpc & HaccU & Hnextpc & Hinstrs)".
     iApply (femto_handler_verified with "[-] []").
-    - unfold femto_handler_pre, interp_pmp_all_entries_unlocked, femto_pmpentries; iFrame.
+    - unfold femto_handler_pre, femto_pmpentries; iFrame.
       iSplitL "Hmepc"; first now iExists mepcv.
       iSplitR; first done.
       iExact "Hmem".
@@ -556,7 +556,7 @@ Import BlockVerificationDerived2.
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
-        interp_pmp_all_entries_unlocked femto_pmpentries ∗
+        ⌜Pmp_all_entries_unlocked femto_pmpentries⌝ ∗
          (interp_ptsto 84 42) ∗
         (pc ↦ 88) ∗
         (∃ v, nextpc ↦ v) ∗

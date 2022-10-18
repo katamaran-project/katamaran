@@ -90,7 +90,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
   Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-  Notation asn_pmp_all_entries_unlocked l := (asn.chunk (chunk_user pmp_all_entries_unlocked [l])).
+  Notation asn_pmp_all_entries_unlocked l := (asn.formula (formula_user pmp_all_entries_unlocked [l])).
   Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
   Notation asn_pmp_access addr es m p := (asn.formula (formula_user pmp_access [addr;es;m;p])).
 
@@ -170,7 +170,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-  Local Notation asn_pmp_all_entries_unlocked l := (asn.chunk (chunk_user pmp_all_entries_unlocked [l])).
+  Local Notation asn_pmp_all_entries_unlocked l := (asn.formula (formula_user pmp_all_entries_unlocked [l])).
   Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
   Local Notation asn_pmp_access addr es m p := (asn.formula (formula_user pmp_access [addr;es;m;p])).
   Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
@@ -576,14 +576,6 @@ Module RiscvPmpSpecVerif.
         end; auto; Lia.lia.
   Qed.
 
-  Lemma unlocked_bool : forall (cfg : Pmpcfg_ent),
-      Pmp_cfg_unlocked cfg ->
-      match cfg with
-      | {| L := L |} =>
-          L = false
-      end.
-  Proof. intros []; unfold Pmp_cfg_unlocked; auto. Qed.
-
   Lemma machine_unlocked_check_pmp_access : forall (cfg0 cfg1 : Pmpcfg_ent) (a0 a1 addr : Xlenbits),
       Pmp_cfg_unlocked cfg0 /\ Pmp_cfg_unlocked cfg1 ->
       check_pmp_access addr [(cfg0, a0); (cfg1, a1)]%list Machine = (true, None) \/ check_pmp_access addr [(cfg0, a0); (cfg1, a1)]%list Machine = (true, Some PmpRWX).
@@ -591,12 +583,13 @@ Module RiscvPmpSpecVerif.
     intros cfg0 cfg1 a0 a1 addr [Hcfg0 Hcfg1].
     unfold check_pmp_access, pmp_check.
     unfold pmp_match_entry.
+    apply Pmp_cfg_unlocked_bool in Hcfg0.
+    apply Pmp_cfg_unlocked_bool in Hcfg1.
     destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg1 a1 a0)) as [-> | ->];
       destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg0 a0 0%Z)) as [-> | ->];
-      destruct cfg0, cfg1;
-      try rewrite (unlocked_bool Hcfg0);
-      try rewrite (unlocked_bool Hcfg1);
-      cbn; auto.
+      unfold pmp_get_perms;
+      rewrite ?Hcfg0, ?Hcfg1;
+      auto.
   Qed.
 
   Lemma machine_unlocked_pmp_access : forall (addr : Val ty_xlenbits) (cfg0 cfg1 : Val ty_pmpcfg_ent) (a0 a1 : Val ty_xlenbits) (acc : Val ty_access_type),
@@ -900,9 +893,10 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct entries; try done.
     destruct v as [cfg1 addr1].
     destruct entries; try done.
-    unfold interp_pmp_all_entries_unlocked.
-    iDestruct "Hunlocked" as "[Hcfg0 Hcfg1]".
+    iDestruct "Hunlocked" as "[[%Hcfg0 %Hcfg1] _]".
     unfold interp_pmp_entries.
+    apply Pmp_cfg_unlocked_bool in Hcfg0.
+    apply Pmp_cfg_unlocked_bool in Hcfg1.
     iDestruct "Hentries" as "(? & ? & ? & ?)".
     iExists cfg0.
     iExists addr0.
@@ -915,7 +909,9 @@ Module RiscvPmpIrisInstanceWithContracts.
     ValidLemma RiscvPmpSpecification.lemma_machine_unlocked_close_pmp_entries.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
-    iIntros "(? & ? & ? & ? & %Hunlocked0 & %Hunlocked1 & _ & _)".
+    iIntros "(? & ? & ? & ? & [%Hunlocked0 _] & [%Hunlocked1 _] & _ & _)".
+    apply Pmp_cfg_unlocked_bool in Hunlocked0.
+    apply Pmp_cfg_unlocked_bool in Hunlocked1.
     iFrame.
     now iPureIntro.
   Qed.
