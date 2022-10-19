@@ -369,7 +369,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | gprs                     => ctx.nil
       | ptsto                    => [ty_xlenbits; ty_xlenbits]
       | ptsto_readonly           => [ty_xlenbits; ty_xlenbits]
-      | encodes_instr            => [ty.int; ty_ast]
+      | encodes_instr            => [ty_word; ty_ast]
       | ptstomem                 => [ty_xlenbits; ty.int; ty.list ty_word]
       | ptstoinstr               => [ty_xlenbits; ty_ast]
       end.
@@ -402,7 +402,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_addr_access_without  => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
       | ptstomem                 => Some (MkPrecise [ty_xlenbits; ty.int] [ty.list ty_word] eq_refl)
       | ptstoinstr               => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
-      | encodes_instr            => Some (MkPrecise [ty.int] [ty_ast] eq_refl)
+      | encodes_instr            => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
       | _                        => None
       end.
 
@@ -738,7 +738,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       destruct cfg1 as [[] ? ? ? ?];
       simpl;
       lsolve;
-      firstorder.
+      intuition.
   Qed.
 
   Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.

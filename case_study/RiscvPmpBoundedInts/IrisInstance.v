@@ -31,10 +31,10 @@ From Katamaran Require Import
      Iris.Instance
      Iris.Model
      Syntax.Predicates
-     RiscvPmp.Base
-     RiscvPmp.Machine
-     RiscvPmp.IrisModel
-     RiscvPmp.Sig.
+     RiscvPmpBoundedInts.Base
+     RiscvPmpBoundedInts.Machine
+     RiscvPmpBoundedInts.IrisModel
+     RiscvPmpBoundedInts.Sig.
 
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
 From iris.proofmode Require Import tactics.
