@@ -809,8 +809,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_privLevel_to_bits : Stm [p ∷ ty_privilege] ty_priv_level :=
     match: p in privilege with
-    | Machine => stm_val ty.int 3%Z
-    | User => stm_val ty.int 0%Z
+    | Machine => stm_val ty_priv_level 3%Z
+    | User => stm_val ty_priv_level 0%Z
     end.
 
   Definition fun_readCSR : Stm [csr ∷ ty_csridx] ty_xlenbits :=

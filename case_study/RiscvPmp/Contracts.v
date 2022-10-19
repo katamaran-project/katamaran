@@ -340,9 +340,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                asn.match_enum privilege (term_var p)
                  (fun K => match K with
                            | Machine => term_var "result_privLevel_to_bits" =
-                                          term_val ty_xlenbits 3%Z
+                                          term_val ty_priv_level 3%Z
                            | User    => term_var "result_privLevel_to_bits" =
-                                          term_val ty_xlenbits 0%Z
+                                          term_val ty_priv_level 0%Z
                            end);
           |}.
 
