@@ -97,54 +97,6 @@ Module bv.
           end q
     end.
 
-  Section Conversion.
-
-    Fixpoint trunc (n : nat) (p : positive) : N :=
-      match n with
-      | 0   => N0
-      | S n => match p with
-                | xI p => N.succ_double (trunc n p)
-                | xO p => N.double (trunc n p)
-                | xH   => 1%N
-                end
-      end.
-
-    Definition wf_double (n : nat) (x : N) :
-      Is_true (is_wf n x) -> Is_true (is_wf (S n) (N.double x)) :=
-      match x with
-      | N0     => fun wf => wf
-      | Npos p => fun wf => wf
-      end.
-
-    Definition wf_succ_double (n : nat) (x : N) :
-      Is_true (is_wf n x) -> Is_true (is_wf (S n) (N.succ_double x)) :=
-       match x with
-       | N0     => fun wf => wf
-       | Npos p => fun wf => wf
-       end.
-
-    Fixpoint wf_trunc n : forall p, Is_true (is_wf n (trunc n p)) :=
-      match n with
-      | O   => fun _ => I
-      | S n => fun p =>
-                  match p with
-                  | xI p => wf_succ_double n (trunc n p) (wf_trunc n p)
-                  | xO p => wf_double n (trunc n p) (wf_trunc n p)
-                  | xH   => I
-                  end
-      end.
-
-    Definition of_N {n} (bs : N) : bv n :=
-      match bs with
-      | N0     => mk N0 I
-      | Npos p => mk (trunc n p) (wf_trunc n p)
-      end.
-
-    Definition of_nat {n} (k : nat) : bv n :=
-      of_N (N.of_nat k).
-
-  End Conversion.
-
   Section Equality.
 
     Definition eqb {n : nat} (x y : bv n) : bool :=
@@ -197,6 +149,73 @@ Module bv.
 
   End NoConfusion.
   Local Existing Instance NoConfusionPackage_bv.
+
+  Section Conversion.
+
+    Fixpoint trunc (n : nat) (p : positive) : N :=
+      match n with
+      | 0   => N0
+      | S n => match p with
+                | xI p => N.succ_double (trunc n p)
+                | xO p => N.double (trunc n p)
+                | xH   => 1%N
+                end
+      end.
+
+    Definition wf_double (n : nat) (x : N) :
+      Is_true (is_wf n x) -> Is_true (is_wf (S n) (N.double x)) :=
+      match x with
+      | N0     => fun wf => wf
+      | Npos p => fun wf => wf
+      end.
+
+    Definition wf_succ_double (n : nat) (x : N) :
+      Is_true (is_wf n x) -> Is_true (is_wf (S n) (N.succ_double x)) :=
+       match x with
+       | N0     => fun wf => wf
+       | Npos p => fun wf => wf
+       end.
+
+    Fixpoint wf_trunc n : forall p, Is_true (is_wf n (trunc n p)) :=
+      match n with
+      | O   => fun _ => I
+      | S n => fun p =>
+                  match p with
+                  | xI p => wf_succ_double n (trunc n p) (wf_trunc n p)
+                  | xO p => wf_double n (trunc n p) (wf_trunc n p)
+                  | xH   => I
+                  end
+      end.
+
+    Definition of_N {n} (bs : N) : bv n :=
+      match bs with
+      | N0     => mk N0 I
+      | Npos p => mk (trunc n p) (wf_trunc n p)
+      end.
+
+    Definition of_nat {n} (k : nat) : bv n :=
+      of_N (N.of_nat k).
+
+    Fixpoint trunc_wf (n : nat) (p : positive) {struct n} :
+      Is_true (at_most n p) -> trunc n p = N.pos p :=
+      match n , p with
+      | O   , _    => fun w => match w with end
+      | S n , xI p => fun w => f_equal N.succ_double (trunc_wf n p w)
+      | S n , xO p => fun w => f_equal N.double (trunc_wf n p w)
+      | S n , xH   => fun _ => eq_refl
+      end.
+
+    Definition of_N_wf [n] (bs : N) :
+      forall w, of_N bs = mk bs w :=
+       match bs with
+       | N0     => fun w => f_equal (mk 0) (proof_irrelevance_True I w)
+       | Npos p => fun w => bin_inj (mk _ _) (mk _ _) (trunc_wf n p w)
+       end.
+
+    Definition of_N_bin {n} (x : bv n) : of_N (bin x) = x :=
+      match x with mk bs w => of_N_wf bs w end.
+
+  End Conversion.
 
   Section ListLike.
 
@@ -531,7 +550,7 @@ Module bv.
 
   End Logical.
 
-  Section Finite.
+  Module finite.
 
     Fixpoint enumV {V : forall k : nat, Type} (c : forall k, bool -> V k -> V (S k))
       (n : V O) (m : nat) {struct m} : list (V m) :=
@@ -621,13 +640,24 @@ Module bv.
       - now apply elem_of_enumV.
     Qed.
 
-    Instance finite_bv {n} : finite.Finite (bv n) :=
+    #[export] Instance finite_bv {n} : finite.Finite (bv n) :=
       {| stdpp.finite.enum         := enum n;
          stdpp.finite.NoDup_enum   := nodup_enum n;
          stdpp.finite.elem_of_enum := @elem_of_enum n;
       |}.
 
-  End Finite.
+  End finite.
+
+  Module countable.
+    Import countable.
+    #[export] Instance countable_bv {n} : Countable (bv n) :=
+      {| encode x        := encode (bin x);
+         decode p        := option.map of_N (decode p);
+         decode_encode x := eq_trans
+                              (f_equal (option.map of_N) (decode_encode (bin x)))
+                              (f_equal Some (of_N_bin x));
+      |}.
+  End countable.
 
   (* Big-endian bit strings (radix 2 strings). This type is defined by recursion
      over the number of bits and is less efficient than the subtype
@@ -872,13 +902,11 @@ Module bv.
   End Tests.
 
 End bv.
+Export (hints) bv.
+Export (hints) bv.countable.
 Export bv (bv).
 
 Bind Scope bv_scope with bv.
 Bind Scope bv_bitstring_scope with bv.bitstring.
 Bind Scope bv_bitstring_scope with bv.bitstring.null.
 Bind Scope bv_bitstring_scope with bv.bitstring.digit.
-
-#[export] Existing Instance bv.NoConfusionPackage_bv.
-#[export] Existing Instance bv.eqdec_bv.
-#[export] Existing Instance bv.finite_bv.

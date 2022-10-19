@@ -233,7 +233,7 @@ Module RiscvPmpModel2.
       asn.interpret asn_regs_ptsto env.nil.
     Proof.
       unfold interp_gprs, reg_file.
-      rewrite big_sepS_list_to_set; [|apply finite.NoDup_enum].
+      rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
       cbn. iSplit.
       - iIntros "[_ [Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 [Hx7 _]]]]]]]]". iFrame.
       - iIntros "[Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 Hx7]]]]]]". iFrame.

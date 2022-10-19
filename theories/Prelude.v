@@ -214,12 +214,13 @@ Section Finite.
 
 End Finite.
 
+Definition proof_irrelevance_True (p q : True) : p = q :=
+  match p, q with I , I => eq_refl end.
+
 Definition proof_irrelevance_is_true {b : bool} :
   forall (p q : Is_true b), p = q :=
   match b with
-  | true  => fun p q => match p, q with
-                        | I , I => eq_refl
-                        end
+  | true  => proof_irrelevance_True
   | false => fun p => False_rect _ p
   end.
 

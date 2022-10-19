@@ -58,6 +58,7 @@ From stdpp Require
 Import ctx.notations.
 Import env.notations.
 Import ListNotations.
+Import (hints) bv.finite.
 
 Set Implicit Arguments.
 

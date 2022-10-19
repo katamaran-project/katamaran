@@ -230,7 +230,7 @@ Module Type PatternsOn (Import TY : Types).
         | pat_unit               => finite.unit_finite
         | pat_enum E             => enumt_finite E
         | pat_bvec_split _ _ _ _ => finite.unit_finite
-        | pat_bvec_exhaustive m  => bv.finite_bv
+        | pat_bvec_exhaustive m  => bv.finite.finite_bv
         | pat_tuple _            => finite.unit_finite
         | pat_record _ _ _       => finite.unit_finite
         | pat_union U p          =>
