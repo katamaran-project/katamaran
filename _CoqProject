@@ -24,6 +24,7 @@ case_study/RiscvPmp/FemtoKernel.v
 -Q case_study/RiscvPmpBoundedInts Katamaran.RiscvPmpBoundedInts
 case_study/RiscvPmpBoundedInts/Base.v
 case_study/RiscvPmpBoundedInts/Contracts.v
+case_study/RiscvPmpBoundedInts/IrisModel.v
 case_study/RiscvPmpBoundedInts/Machine.v
 case_study/RiscvPmpBoundedInts/Sig.v
 case_study/Assumptions.v

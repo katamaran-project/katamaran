@@ -27,9 +27,10 @@
 (******************************************************************************)
 
 From Katamaran Require Import
+     Bitvector
      Environment
      Iris.Model
-     RiscvPmp.Machine.
+     RiscvPmpBoundedInts.Machine.
 From iris Require Import
      base_logic.lib.gen_heap
      proofmode.tactics.
@@ -61,7 +62,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Definition memGS : gFunctors -> Set := mcMemGS.
     Definition memΣ : gFunctors := gen_heapΣ Addr MemVal.
 
-    Definition liveAddrs := seqZ minAddr (maxAddr - minAddr + 1).
+    Definition liveAddrs := List.map (fun x => bv.add minAddr (bv.of_nat x)) (seq 0 lenAddr).
     Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
 
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
