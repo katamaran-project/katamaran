@@ -1161,8 +1161,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              lemma_patterns        := [term_var paddr];
              lemma_precondition    :=
                 asn_pmp_addr_access (term_var "entries") (term_var p)
-                ∗ asn_bool (term_val ty_xlenbits minAddr <=ₜ term_var paddr)
-                ∗ asn_bool (term_var paddr <=ₜ term_val ty_xlenbits maxAddr)
+                ∗ term_val ty_xlenbits minAddr <= term_var paddr
+                ∗ term_var paddr <= term_val ty_xlenbits maxAddr
                 ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc);
              lemma_postcondition   :=
                 asn_pmp_addr_access_without (term_var paddr) (term_var "entries") (term_var p)

@@ -39,11 +39,11 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Specification
-     RiscvPmp.Machine
-     RiscvPmp.Contracts
-     RiscvPmp.IrisModel
-     RiscvPmp.IrisInstance
-     RiscvPmp.Sig.
+     RiscvPmpBoundedInts.Machine
+     RiscvPmpBoundedInts.Contracts
+     RiscvPmpBoundedInts.IrisModel
+     RiscvPmpBoundedInts.IrisInstance
+     RiscvPmpBoundedInts.Sig.
 From Equations Require Import
      Equations.
 
@@ -56,6 +56,7 @@ From iris.proofmode Require Import string_ident tactics.
 
 Set Implicit Arguments.
 Import ListNotations.
+Import bv.notations.
 
 Import RiscvPmpProgram.
 Import RiscvPmpSignature.
@@ -120,13 +121,11 @@ Module RiscvPmpModel2.
       unfold fun_write_ram.
       apply map_Forall_lookup.
       intros i x H0.
-      destruct (Z.eqb paddr i) eqn:Heqb.
-      + rewrite -> Z.eqb_eq in Heqb.
-        subst.
+      destruct (bv.eqb_spec paddr i) as [e|n].
+      + subst.
         apply (lookup_insert_rev memmap i); assumption.
       + rewrite -> map_Forall_lookup in Hmap.
-        rewrite -> Z.eqb_neq in Heqb.
-        rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in H0.
+        rewrite -> (lookup_insert_ne _ _ _ _ n) in H0.
         apply Hmap; assumption.
     Qed.
 
@@ -237,7 +236,7 @@ Module RiscvPmpModel2.
       cbn. iSplit.
       - iIntros "[_ [Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 [Hx7 _]]]]]]]]". iFrame.
       - iIntros "[Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 Hx7]]]]]]". iFrame.
-        by iExists 0.
+        by iExists (bv.zero _).
     Qed.
 
     Lemma open_gprs_sound :
@@ -270,7 +269,7 @@ Module RiscvPmpModel2.
 
     Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
         ⊢ interp_pmp_entries entries -∗
-          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Z) (cfg1 : Pmpcfg_ent) (addr1 : Z),
+          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr),
             ⌜entries = [(cfg0, addr0); (cfg1, addr1)]⌝ ∗
             reg_pointsTo pmp0cfg cfg0 ∗ reg_pointsTo pmpaddr0 addr0 ∗
             reg_pointsTo pmp1cfg cfg1 ∗ reg_pointsTo pmpaddr1 addr1.
@@ -297,41 +296,40 @@ Module RiscvPmpModel2.
     Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed.
 
     Lemma in_liveAddrs : forall (addr : Addr),
-        (minAddr <= addr)%Z ->
-        (addr <= maxAddr)%Z ->
+        (minAddr <=ᵘ addr) ->
+        (addr <=ᵘ maxAddr) ->
         addr ∈ liveAddrs.
     Proof.
       intros addr Hmin Hmax.
-      apply elem_of_seqZ.
-      lia.
-    Qed.
+      (* apply elem_of_seqZ. *)
+      (* lia. *)
+    Admitted.
 
     Lemma in_liveAddrs_split : forall (addr : Addr),
-        (minAddr <= addr)%Z ->
-        (addr <= maxAddr)%Z ->
+        (minAddr <=ᵘ addr) ->
+        (addr <=ᵘ maxAddr) ->
         exists l1 l2, liveAddrs = l1 ++ ([addr] ++ l2).
     Proof.
       intros addr Hmin Hmax.
       unfold liveAddrs.
-      exists (seqZ minAddr (addr - minAddr)).
-      exists (seqZ (addr + 1) (maxAddr - addr)).
-      change [addr] with (seqZ addr 1).
-      rewrite <-seqZ_app; try lia.
-      replace addr with (minAddr + (addr - minAddr))%Z at 2 by lia.
-      rewrite <-seqZ_app; try lia.
-      now f_equal; lia.
-    Qed.
+      (* exists (seqZ minAddr (addr - minAddr)). *)
+      (* exists (seqZ (addr + 1) (maxAddr - addr)). *)
+      (* change [addr] with (seqZ addr 1). *)
+      (* rewrite <-seqZ_app; try lia. *)
+      (* replace addr with (minAddr + (addr - minAddr))%Z at 2 by lia. *)
+      (* rewrite <-seqZ_app; try lia. *)
+      (* now f_equal; lia. *)
+    Admitted.
 
     Lemma extract_pmp_ptsto_sound :
       ValidLemma RiscvPmpSpecification.lemma_extract_pmp_ptsto.
     Proof.
-      intros ι; destruct_syminstance ι; cbn.
+      intros ι; destruct_syminstance ι; cbn - [liveAddrs].
       iIntros "[Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]".
       unfold interp_pmp_addr_access_without,
         interp_pmp_addr_access,
         interp_ptsto,
         MemVal, Word.
-
       destruct (in_liveAddrs_split Hlemin Hlemax) as (l1 & l2 & eq).
       rewrite eq.
       rewrite big_opL_app big_opL_cons.
@@ -361,9 +359,9 @@ Module RiscvPmpModel2.
     intros a [[lo hi]|]; cbn;
       repeat
         match goal with
-        | |- context[Z.leb ?x ?y] => destruct (Z.leb_spec x y); cbn
-        | |- context[Z.ltb ?x ?y] => destruct (Z.ltb_spec x y); cbn
-        end; auto; Lia.lia.
+        | |- context[bv.uleb ?x ?y] => destruct (bv.ule_spec x y); cbn
+        | |- context[bv.ultb ?x ?y] => destruct (bv.ult_spec x y); cbn
+        end; auto; cbv [bv.ule bv.ult] in *; Lia.lia.
     Qed.
 
     Lemma machine_unlocked_pmp_get_perms : ∀ (cfg : Pmpcfg_ent),
@@ -384,7 +382,7 @@ Module RiscvPmpModel2.
     apply Pmp_cfg_unlocked_bool in Hcfg0.
     apply Pmp_cfg_unlocked_bool in Hcfg1.
     destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg1 a1 a0)) as [-> | ->];
-      destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg0 a0 0%Z)) as [-> | ->];
+      destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg0 a0 [bv 0])) as [-> | ->];
       unfold pmp_get_perms;
       rewrite ?Hcfg0; rewrite ?Hcfg1;
       auto.

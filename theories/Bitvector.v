@@ -507,13 +507,13 @@ Module bv.
     Definition sle {n} (x y : bv n) : Prop := Z.le (signed x) (signed y).
     Definition slt {n} (x y : bv n) : Prop := Z.lt (signed x) (signed y).
 
-    Definition sle_spec {n} {v1 v2 : bv n} : reflect (sle v1 v2) (sleb v1 v2) :=
+    Definition sle_spec {n} (v1 v2 : bv n) : reflect (sle v1 v2) (sleb v1 v2) :=
       Z.leb_spec0 (signed v1) (signed v2).
-    Definition slt_spec {n} {v1 v2 : bv n} : reflect (slt v1 v2) (sltb v1 v2) :=
+    Definition slt_spec {n} (v1 v2 : bv n) : reflect (slt v1 v2) (sltb v1 v2) :=
       Z.ltb_spec0 (signed v1) (signed v2).
-    Definition ule_spec {n} {v1 v2 : bv n} : reflect (ule v1 v2) (uleb v1 v2) :=
+    Definition ule_spec {n} (v1 v2 : bv n) : reflect (ule v1 v2) (uleb v1 v2) :=
       N.leb_spec0 (bin v1) (bin v2).
-    Definition ult_spec {n} {v1 v2 : bv n} : reflect (ult v1 v2) (ultb v1 v2) :=
+    Definition ult_spec {n} (v1 v2 : bv n) : reflect (ult v1 v2) (ultb v1 v2) :=
       N.ltb_spec0 (bin v1) (bin v2).
 
     Definition ugeb {n} (x y : bv n) : bool := uleb y x.
