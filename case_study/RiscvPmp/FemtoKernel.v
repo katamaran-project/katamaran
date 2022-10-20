@@ -198,7 +198,7 @@ Import BlockVerificationDerived2.
                                       (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a1")]) ∗
           asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a0");
                                                    (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a1")]))) ∗
-      (term_var "a" + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42)%exp.
+      (term_var "a" + (term_val ty_xlenbits 84) ↦ᵣ term_val ty_xlenbits 42)%exp.
 
     Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := nil |} :=
       (
@@ -219,7 +219,7 @@ Import BlockVerificationDerived2.
                                        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
           (asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 88);
                                        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
-          (term_var "a" + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42)
+          (term_var "a" + (term_val ty_xlenbits 84) ↦ᵣ term_val ty_xlenbits 42)
       )%exp.
 
     (* (* note that this computation takes longer than directly proving sat__femtoinit below *) *)
@@ -557,7 +557,7 @@ Import BlockVerificationDerived2.
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
         ⌜Pmp_all_entries_unlocked femto_pmpentries⌝ ∗
-         (interp_ptsto 84 42) ∗
+         (interp_ptsto_readonly 84 42) ∗
         (pc ↦ 88) ∗
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
@@ -571,8 +571,8 @@ Import BlockVerificationDerived2.
     unfold LoopVerification.loop_pre, LoopVerification.Step_pre, LoopVerification.Execution.
     iFrame.
 
-    iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptsto 84 42) with "Hfortytwo") as "#Hinv".
-    change (inv.inv femto_inv_ns (interp_ptsto 84 42)) with femto_inv_fortytwo.
+    (* iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptsto 84 42) with "Hfortytwo") as "#Hinv". *)
+    (* change (inv.inv femto_inv_ns (interp_ptsto 84 42)) with femto_inv_fortytwo. *)
     iModIntro.
 
     iSplitL "Hmcause Hmepc Hmemadv".
@@ -594,8 +594,6 @@ Import BlockVerificationDerived2.
     iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
     iApply femtokernel_hander_safe.
     iFrame.
-    iSplitL "".
-    now iFrame.
     now iExists _.
 
     iModIntro.
@@ -615,7 +613,7 @@ Import BlockVerificationDerived2.
       pmp1cfg ↦ femtokernel_default_pmpcfg ∗
       (∃ v, pmpaddr0 ↦ v) ∗
       (∃ v, pmpaddr1 ↦ v) ∗
-      interp_ptsto 84 42) ∗
+      interp_ptsto_readonly 84 42) ∗
       pc ↦ 0 ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs 0 femtokernel_init.
@@ -631,7 +629,7 @@ Import BlockVerificationDerived2.
         pmp1cfg ↦ femto_pmpcfg_ent1 ∗
         (pmpaddr0 ↦ 88) ∗
         (pmpaddr1 ↦ femto_address_max) ∗
-        interp_ptsto 84 42) ∗
+        interp_ptsto_readonly 84 42) ∗
         pc ↦ 88 ∗
         (∃ v, nextpc ↦ v) ∗
         ptsto_instrs 0 femtokernel_init.
@@ -686,7 +684,7 @@ Import BlockVerificationDerived2.
       reg_pointsTo pmp1cfg femtokernel_default_pmpcfg ∗
       (∃ v, reg_pointsTo pmpaddr1 v) ∗
       (pc ↦ 0) ∗
-      interp_ptsto 84 42 ∗
+      interp_ptsto_readonly 84 42 ∗
       ptstoSthL advAddrs ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs 0 femtokernel_init ∗
