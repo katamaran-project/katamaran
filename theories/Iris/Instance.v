@@ -108,6 +108,7 @@ Section Soundness.
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
     PRE -∗ semWP s POST δ.
   (* always modality needed? perhaps not because sail not higher-order? *)
+  Global Arguments semTriple {Γ} {τ} δ PRE%I s%exp POST%I.
 
   Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
     match lem with
@@ -146,7 +147,7 @@ Section Soundness.
 
   Lemma iris_rule_pull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ)
         (P : iProp Σ) (Q : Prop) (R : Val σ -> CStore Γ -> iProp Σ) :
-        (⊢ (⌜ Q ⌝ → semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R)%I.
+        (⊢ (⌜ Q ⌝ → semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R).
   Proof.
     iIntros "QP [P %]".
     by iApply "QP".
@@ -155,7 +156,7 @@ Section Soundness.
   Lemma iris_rule_exist {σ Γ} (δ : CStore Γ)
         (s : Stm Γ σ) {A : Type} {P : A -> iProp Σ}
         {Q :  Val σ -> CStore Γ -> iProp Σ} :
-        ⊢ ((∀ x, semTriple δ (P x) s Q) -∗ semTriple δ (∃ x, P x) s Q)%I.
+        ⊢ ((∀ x, semTriple δ (P x) s Q) -∗ semTriple δ (∃ x, P x) s Q).
   Proof.
     iIntros "trips Px".
     iDestruct "Px" as (x) "Px".
@@ -165,7 +166,7 @@ Section Soundness.
   Lemma iris_rule_stm_val {Γ} (δ : CStore Γ)
         {τ : Ty} {v : Val τ}
         {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
-        ⊢ ((P -∗ Q v δ)%I -∗ semTriple δ P (stm_val τ v) Q)%I.
+        ⊢ ((P -∗ Q v δ)%I -∗ semTriple δ P (stm_val τ v) Q).
   Proof.
     iIntros "PQ P".
     iApply semWP_val.
@@ -175,7 +176,7 @@ Section Soundness.
   Lemma iris_rule_stm_exp {Γ} (δ : CStore Γ)
         {τ : Ty} {e : Exp Γ τ}
         {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
-        ⊢ ((P -∗ Q (eval e δ) δ) -∗ semTriple δ P (stm_exp e) Q)%I.
+        ⊢ ((P -∗ Q (eval e δ) δ) -∗ semTriple δ P (stm_exp e) Q).
   Proof.
     iIntros "PQ P".
     iApply semWP_exp.
@@ -202,7 +203,7 @@ Section Soundness.
         (τ : Ty) (k : Stm (Γ ▻▻ Δ) τ)
         (P : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env.drop Δ δ'')) -∗
-                   semTriple δ P (stm_block δΔ k) R)%I.
+                   semTriple δ P (stm_block δΔ k) R).
   Proof.
     iIntros "tripk P". iPoseProof ("tripk" with "P") as "wpk".
     by iApply semWP_block.
@@ -213,7 +214,7 @@ Section Soundness.
         (P : iProp Σ) (Q : CStore Γ -> iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
     ⊢ (semTriple δ P s1 (fun _ => Q) -∗
                  (∀ δ', semTriple δ' (Q δ') s2 R) -∗
-                 semTriple δ P (s1 ;; s2) R)%I.
+                 semTriple δ P (s1 ;; s2) R).
   Proof.
     iIntros "trips1 trips2 P".
     iSpecialize ("trips1" with "P").
@@ -237,7 +238,7 @@ Section Soundness.
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
         (τ : Ty) (s : Val ty.string) :
         forall (Q : Val τ -> CStore Γ -> iProp Σ),
-          ⊢ semTriple δ True%I (stm_fail τ s) Q.
+          ⊢ semTriple δ True (stm_fail τ s) Q.
   Proof.
     iIntros (Q) "_".
     by iApply semWP_fail.
@@ -245,7 +246,7 @@ Section Soundness.
 
   Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
-        ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v))%I.
+        ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v)).
   Proof.
     iIntros "Hreg".
     iApply semWP_read_register.
@@ -260,7 +261,7 @@ Section Soundness.
                               (Q : Val σ -> CStore Γ -> iProp Σ)
                               (v : Val σ) :
         ⊢ semTriple δ (lptsreg r v) (stm_write_register r w)
-                  (fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v')%I.
+                  (fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v').
   Proof.
     iIntros "Hreg".
     iApply semWP_write_register.
@@ -274,7 +275,7 @@ Section Soundness.
         (x : PVar) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
         (P : iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s (fun v δ' => R v (@env.update _ _ _ δ' (x∷_) _ v)) -∗
-           semTriple δ P (stm_assign x s) R)%I.
+           semTriple δ P (stm_assign x s) R).
   Proof.
     iIntros "trips P".
     iPoseProof ("trips" with "P") as "wpv".
@@ -288,7 +289,7 @@ Section Soundness.
         ⊢ (semTriple δ P s Q -∗
            (∀ (v__σ : Val σ) (δ' : CStore Γ),
                semTriple δ' (Q v__σ δ') (k v__σ) R) -∗
-           semTriple δ P (stm_bind s k) R)%I.
+           semTriple δ P (stm_bind s k) R).
   Proof.
     iIntros "trips tripk P".
     iSpecialize ("trips" with "P").
@@ -324,7 +325,7 @@ Section Soundness.
     {Γ τ} (δ : CStore Γ) (k : Stm Γ τ)
     (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
     ⊢ (semTriple δ P k Q -∗
-       semTriple δ P (stm_debugk k) Q)%I.
+       semTriple δ P (stm_debugk k) Q).
   Proof.
     iIntros "tripk P".
     unfold semWP. rewrite wp_unfold. cbn.
@@ -383,7 +384,7 @@ Section Soundness.
       sep.Forall (fun (ι : Valuation ctxΣ) =>
         semTriple (inst θΔ ι) (asn.interpret pre ι) body
                   (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
-    end%I.
+    end.
 
   Definition ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
     match contract with
@@ -391,7 +392,7 @@ Section Soundness.
       ∀ (ι : Valuation ctxΣ),
         semTriple (inst θΔ ι) (asn.interpret pre ι) body
                   (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v))
-    end%I.
+    end.
 
   Definition ValidContractForeign {Δ τ} (contract : SepContract Δ τ) (f : 𝑭𝑿 Δ τ) : Prop :=
     forall Γ (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
@@ -637,7 +638,7 @@ Module IrisInstanceWithContracts
         (Δ : PCtx) (δΔ : CStore Δ) (τ : Ty) (s : Stm Δ τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δΔ P s (fun v _ => Q v δ) -∗
-           semTriple δ P (stm_call_frame δΔ s) Q)%I.
+           semTriple δ P (stm_call_frame δΔ s) Q).
   Proof.
     iIntros "trips P".
     iSpecialize ("trips" with "P").

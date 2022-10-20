@@ -368,6 +368,7 @@ Module BlockVerificationDerivedSem.
 
   Definition semTripleOneInstr `{sailGS Σ} (PRE : iProp Σ) (a : AST) (POST : iProp Σ) : iProp Σ :=
     semTriple [a : Val (type ("ast" :: ty_ast))]%env PRE (FunDef execute) (fun ret _ => ⌜ret = RETIRE_SUCCESS⌝ ∗ POST)%I.
+  Global Arguments semTripleOneInstr {Σ} {_} PRE%I a POST%I.
 
   Module ValidContractsBlockVerif.
     Import RiscvPmpBlockVerifExecutor.
@@ -376,7 +377,7 @@ Module BlockVerificationDerivedSem.
 
     (* Lemma sound_exec_instruction {ast} `{sailGS Σ} : *)
     (*   SymProp.safe (exec_instruction (w := wnil) ast (fun _ _ res _ h => SymProp.block) env.nil []%list) env.nil -> *)
-    (*   ⊢ semTripleOneInstr emp%I ast emp%I. *)
+    (*   ⊢ semTripleOneInstr emp ast emp. *)
     (* Proof. *)
     (*   unfold exec_instruction, exec_instruction', assert. *)
     (*   iIntros (safe_exec) "". *)
@@ -626,7 +627,7 @@ Module BlockVerificationDerived2Sem.
   Lemma sound_exec_instruction_any `{sailGS Σ} {instr} (h : SCHeap) (POST : Val ty_xlenbits -> CStore [ctx] -> iProp Σ) :
     forall a,
     exec_instruction_any__c instr a (fun res => liftP (POST res)) [] h ->
-    ⊢ semTripleOneInstrStep (interpret_scheap h)%I instr (fun an => POST an [])%I a.
+    ⊢ semTripleOneInstrStep (interpret_scheap h) instr (fun an => POST an []) a.
   Proof.
     intros a.
     intros Hverif.
@@ -715,11 +716,11 @@ Module BlockVerificationDerived2Sem.
       unfold CHeapSpecM.lift_purem, CPureSpecM.assert_formula.
       intros [-> Hverif].
       unfold WP_loop at 2, FunDef, fun_loop.
-      assert (⊢ semTripleOneInstrStep (interpret_scheap h)%I instr
+      assert (⊢ semTripleOneInstrStep (interpret_scheap h) instr
                 (fun an =>
                    lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (apc + 4) instrs -∗
                    (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ WP_loop) -∗
-                     WP_loop) apc)%I as Hverif2.
+                     WP_loop) apc) as Hverif2.
       { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (apc + 4) instrs -∗ (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ WP_loop) -∗ WP_loop)%I).
         revert Hverif.
         apply mono_exec_instruction_any__c.
@@ -751,6 +752,7 @@ Module BlockVerificationDerived2Sem.
     (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs) -∗
       (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ WP_loop) -∗
       WP_loop)%I.
+  Global Arguments semTripleBlock {Σ} {_} PRE%I instrs POST%I.
 
   Lemma sound_exec_triple_addr__c `{sailGS Σ} {W : World} {pre post instrs} {ι : Valuation W} :
       (exec_triple_addr__c ι pre instrs post (λ _ _ _ , True) [env] []%list) ->

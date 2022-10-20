@@ -103,7 +103,7 @@ Section Loop.
   Qed.
 
   Definition semTriple_loop : iProp Σ :=
-    IH -∗ semTriple [env] Step_pre (FunDef loop) (fun _ _ => True%I).
+    IH -∗ semTriple [env] Step_pre (FunDef loop) (fun _ _ => True)%I.
 
   Lemma valid_semContract_loop : ⊢ semTriple_loop.
   Proof.
@@ -206,7 +206,7 @@ Section Loop.
   Qed.
 
   (* and now without the IH. *)
-  Lemma valid_semContract_loop2 : ⊢ semTriple [env] Step_pre (FunDef loop) (fun _ _ => True%I).
+  Lemma valid_semContract_loop2 : ⊢ semTriple [env] Step_pre (FunDef loop) (fun _ _ => True).
   Proof.
     iIntros.
     iLöb as "IH".
