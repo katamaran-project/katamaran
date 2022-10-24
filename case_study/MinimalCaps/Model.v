@@ -689,6 +689,43 @@ Module MinCapsIrisInstanceWithContracts.
           ▷ (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ interp w).
     Proof. iIntros (a w) "? ?"; iModIntro; iExists _; iAccu. Qed.
 
+    Lemma mem_inv_not_modified : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal),
+        ⊢ ⌜map_Forall (λ (a : Addr) (v : MemVal), (γ, μ).2 a = v) memmap⌝ -∗
+        gen_heap.gen_heap_interp memmap -∗
+        mem_inv sailGS_memGS μ.
+    Proof. iIntros (γ μ memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
+
+    Lemma map_Forall_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal)
+                                (paddr : Addr) (data : MemVal),
+        map_Forall (λ (a : Addr) (v : MemVal), (γ, μ).2 a = v) memmap ->
+        map_Forall (λ (a : Addr) (v : MemVal), fun_wM μ paddr data a = v)
+                   (<[paddr:=data]> memmap).
+    Proof.
+      intros γ μ memmap paddr data Hmap.
+      unfold fun_wM.
+      apply map_Forall_lookup.
+      intros i x H0.
+      destruct (Z.eqb paddr i) eqn:Heqb.
+      + rewrite -> Z.eqb_eq in Heqb.
+        subst.
+        apply (lookup_insert_rev memmap i); assumption.
+      + rewrite -> map_Forall_lookup in Hmap.
+        rewrite -> Z.eqb_neq in Heqb.
+        rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in H0.
+        apply Hmap; assumption.
+    Qed.
+
+    Lemma mem_inv_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal)
+                             (paddr : Addr) (data : MemVal),
+        ⊢ ⌜map_Forall (λ (a : Addr) (v : MemVal), (γ, μ).2 a = v) memmap⌝ -∗
+          gen_heap.gen_heap_interp (<[paddr := data]> memmap) -∗
+          mem_inv sailGS_memGS (fun_wM μ paddr data).
+    Proof.
+      iIntros (γ μ memmap paddr data) "%Hmap Hmem".
+      iExists (<[paddr := data]> memmap); iFrame.
+      iPureIntro; apply (map_Forall_update _ _ _ _ Hmap).
+    Qed.
+
     Lemma rM_sound :
       ValidContractForeign sep_contract_rM rM.
     Proof.
@@ -709,8 +746,7 @@ Module MinCapsIrisInstanceWithContracts.
       repeat iModIntro.
       iDestruct "Hinv" as (v) "Hav".
       iDestruct "Hav" as "[Hav #Hrec]".
-      iAssert (⌜ memmap !! a = Some v ⌝)%I with "[Hav Hmem']" as "%".
-      { iApply (gen_heap.gen_heap_valid with "Hmem' Hav"). }
+      iPoseProof (gen_heap.gen_heap_valid with "Hmem' Hav") as "%".
       iMod "Hclose2" as "_".
       iPoseProof (later_exists_ptsto with "Hav Hrec") as "Hinv".
       iMod ("Hclose" with "Hinv") as "_".
@@ -718,10 +754,8 @@ Module MinCapsIrisInstanceWithContracts.
       cbn.
       iSplitL "Hmem' Hregs".
       iSplitL "Hregs"; first iFrame.
-      iExists memmap.
-      iSplitL "Hmem'"; first iFrame.
-      iPureIntro; assumption.
-      iSplitL; trivial.
+      iApply (mem_inv_not_modified $! H0 with "Hmem'").
+      iSplitR; last trivial.
       iApply wp_value; cbn.
       iSplitL; trivial.
       unfold fun_rM.
@@ -759,24 +793,10 @@ Module MinCapsIrisInstanceWithContracts.
       iSplitL; trivial.
       cbn.
       iSplitL "Hregs"; first by iFrame.
-      - iExists (<[a:=w]> memmap).
-        iSplitL; first by iFrame.
-        iPureIntro.
-        apply map_Forall_lookup.
-        intros i x Hl.
-        unfold fun_wM.
-        cbn in *.
-        destruct (Z.eqb a i) eqn:Heqb.
-        + rewrite -> Z.eqb_eq in Heqb.
-          subst.
-          apply (lookup_insert_rev memmap i); assumption.
-        + rewrite -> map_Forall_lookup in H0.
-          rewrite -> Z.eqb_neq in Heqb.
-          rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in Hl.
-          apply H0; assumption.
-      - iSplitL; trivial.
-        iApply wp_value; cbn; trivial;
-          repeat (iSplitL; trivial).
+      iApply (mem_inv_update $! H0 with "Hmem'").
+      iSplitL; trivial.
+      iApply wp_value; cbn; trivial;
+        repeat (iSplitL; trivial).
     Qed.
 
     Lemma foreignSem : ForeignSem.
