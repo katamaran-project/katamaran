@@ -31,7 +31,11 @@ From Coq Require Import
      Bool.Bool
      NArith.BinNat
      PArith.BinPos
-     ZArith.BinInt.
+     ZArith.BinInt
+     micromega.Lia
+     micromega.Zify
+     micromega.ZifyClasses.
+
 From Equations Require Import
      Equations.
 From Katamaran Require Import
@@ -536,6 +540,67 @@ Module bv.
     #[global] Arguments sgt {n} x y /.
 
   End Arithmetic.
+
+  Section Zify.
+
+    Lemma is_wf_pow (n : nat) (bs : N) :
+      Is_true (is_wf n bs) <-> (Z.of_N bs < 2 ^ Z.of_nat n)%Z.
+    Proof.
+      destruct bs; cbn; [lia|]. revert p. induction n; cbn; [lia|].
+      rewrite Znat.Nat2Z.inj_succ, Z.pow_succ_r; [|lia].
+      destruct p; cbn; try rewrite IHn; lia.
+    Qed.
+
+    #[local,program] Instance Inj_bv_Z n : InjTyp (bv n) Z :=
+      {| inj    := unsigned;
+         (* pred z := 0 <= z < Zpower.two_power_nat n; *)
+         pred z := 0 <= z < 2^Z.of_nat n;
+      |}%Z.
+    Next Obligation.
+      intros ? [bs H]; unfold unsigned; cbn; apply is_wf_pow in H; lia.
+    Qed.
+
+    #[local,program] Instance Op_add n : BinOp (@add n) :=
+      {| TBOp x y := (x + y) mod 2^Z.of_nat n; |}%Z.
+    Next Obligation.
+      intros n x y. cbn.
+    Admitted.
+
+    #[local,program] Instance Op_eq n : BinRel (@eq (bv n)) :=
+      {| TR := @eq Z; |}.
+    Next Obligation.
+      intros n x y; cbn.
+    Admitted.
+
+    Section Test1.
+      Let inj32 := @Inj_bv_Z 32. Add Zify InjTyp inj32.
+      Let eq32 := @Op_eq 32. Add Zify BinRel eq32.
+
+      Show Zify InjTyp.
+      Set Printing Implicit.
+      Show Zify BinRel.
+
+      Goal forall (x : bv 32), @eq (bv 32) x x.
+      Proof. intros. Fail zify. Abort.
+    End Test1.
+
+    Section Test2.
+      Let bv32 : Set := bv 32.
+      Let add32 : bv32 -> bv32 -> bv32 := @add 32.
+      Opaque bv32 add32.
+
+      Let inj32 : InjTyp bv32 Z := @Inj_bv_Z 32. Add Zify InjTyp inj32.
+      Let eq32 : BinRel (@eq bv32) := @Op_eq 32. Add Zify BinRel eq32.
+
+      Show Zify InjTyp.
+      Set Printing Implicit.
+      Show Zify BinRel.
+
+      Goal forall (x : bv32), @eq (bv32) x x.
+      Proof. intros. Fail zify. Abort.
+    End Test2.
+
+  End Zify.
 
   Section Logical.
 
