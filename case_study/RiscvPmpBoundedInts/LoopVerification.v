@@ -41,12 +41,12 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Specification
-     RiscvPmp.Machine
-     RiscvPmp.Sig
-     RiscvPmp.IrisModel
-     RiscvPmp.IrisInstance
-     RiscvPmp.Model
-     RiscvPmp.Contracts.
+     RiscvPmpBoundedInts.Machine
+     RiscvPmpBoundedInts.Sig
+     RiscvPmpBoundedInts.IrisModel
+     RiscvPmpBoundedInts.IrisInstance
+     RiscvPmpBoundedInts.Model
+     RiscvPmpBoundedInts.Contracts.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.
@@ -312,14 +312,14 @@ Section Loop.
     constructor.
   Qed.
 
-  Definition loop_pre (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Z)) : iProp Σ :=
+  Definition loop_pre (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Addr)) : iProp Σ :=
     (Step_pre m h i mpp entries ∗
               ▷ (CSRMod m entries -∗ WP_loop) ∗
               ▷ (Trap m h entries -∗ WP_loop) ∗
               ▷ (Recover m h mpp entries -∗ WP_loop))%I.
 
   Definition semTriple_loop : iProp Σ :=
-    (∀ (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Z)),
+    (∀ (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Addr)),
         semTriple env.nil (loop_pre m h i mpp entries)
                   (FunDef loop)
                   (fun _ _ => True))%I.

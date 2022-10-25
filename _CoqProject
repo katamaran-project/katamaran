@@ -26,6 +26,7 @@ case_study/RiscvPmpBoundedInts/Base.v
 case_study/RiscvPmpBoundedInts/Contracts.v
 case_study/RiscvPmpBoundedInts/IrisInstance.v
 case_study/RiscvPmpBoundedInts/IrisModel.v
+case_study/RiscvPmpBoundedInts/LoopVerification.v
 case_study/RiscvPmpBoundedInts/Machine.v
 case_study/RiscvPmpBoundedInts/Model.v
 case_study/RiscvPmpBoundedInts/Sig.v
