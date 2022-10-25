@@ -63,6 +63,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Definition memΣ : gFunctors := gen_heapΣ Addr MemVal.
 
     Definition liveAddrs := List.map (fun x => bv.add minAddr (bv.of_nat x)) (seq 0 lenAddr).
+    #[global] Arguments liveAddrs : simpl never.
     Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
 
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=

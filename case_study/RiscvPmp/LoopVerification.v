@@ -99,7 +99,7 @@ Section Loop.
                         mtvec         ↦ h                ∗
                         pc            ↦ i                ∗
      (∃ npc : Xlenbits, nextpc        ↦ npc)             ∗
-     (∃ mc : Z,         mcause        ↦ mc)              ∗
+     (∃ mc : Xlenbits,  mcause        ↦ mc)              ∗
      (∃ v : Xlenbits,   mepc          ↦ v)               ∗
                         mstatus       ↦ {| MPP := mpp |} ∗
                         interp_pmp_entries entries       ∗
@@ -158,38 +158,38 @@ Section Loop.
 
   (* Executing normally *)
   (* TODO: this should be the same as Start of iteration (P), drop one of them *)
-  Definition Execution' (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
+  Definition Execution' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
     (            interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
                                         interp_gprs ∗
                                         interp_pmp_entries es ∗
-                                        (∃ mc : Z,  mcause        ↦ mc) ∗
+                                        (∃ mc,         mcause        ↦ mc) ∗
                                         cur_privilege ↦ cp ∗
-                                        (∃ npc : Z, nextpc        ↦ npc) ∗
-                                        (∃ cpc : Z, pc            ↦ cpc) ∗
+                                        (∃ npc : Addr, nextpc        ↦ npc) ∗
+                                        (∃ cpc : Addr, pc            ↦ cpc) ∗
                                         mtvec         ↦ h ∗
                                         mstatus       ↦ {| MPP := mpp |} ∗
                                         mepc          ↦ mepc_v)%I.
 
   (* Modified CSRs, requires Machine mode *)
-  Definition CSRMod' (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
+  Definition CSRMod' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
     (                               interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
                                                            interp_gprs ∗
-                                                           (∃ es : list (Pmpcfg_ent * Z), interp_pmp_entries es) ∗
+                                                           (∃ es : list (Pmpcfg_ent * Addr), interp_pmp_entries es) ∗
                                                            ⌜m = Machine⌝ ∗
-                                                                         (∃ mc : Z,                     mcause        ↦ mc) ∗
+                                                                         (∃ mc : Addr,                  mcause        ↦ mc) ∗
                                                                          cur_privilege ↦ Machine ∗
-                                                                         (∃ npc : Z,                    nextpc        ↦ npc ∗
+                                                                         (∃ npc : Addr,                 nextpc        ↦ npc ∗
                                                                                                                       pc            ↦ npc) ∗
-                                                                         (∃ h : Z,                      mtvec         ↦ h) ∗
+                                                                         (∃ h : Addr,                   mtvec         ↦ h) ∗
                                                                          (∃ mpp : Privilege,            mstatus       ↦ {| MPP := mpp |}) ∗
-                                                                         (∃ epc : Z,                    mepc          ↦ epc))%I.
+                                                                         (∃ epc : Addr,                 mepc          ↦ epc))%I.
 
   (* Trap occured -> Go into M-mode *)
-  Definition Trap' (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
+  Definition Trap' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
     (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
                             interp_gprs ∗
                             interp_pmp_entries es ∗
-                            (∃ mc : Z, mcause        ↦ mc) ∗
+                            (∃ mc, mcause        ↦ mc) ∗
                             cur_privilege ↦ Machine ∗
                             nextpc        ↦ h ∗
                             pc            ↦ h ∗
@@ -198,12 +198,12 @@ Section Loop.
                             mepc          ↦ i)%I.
 
   (* MRET = Recover *)
-  Definition Recover' (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
+  Definition Recover' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
     (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
                             interp_gprs ∗
                             interp_pmp_entries es ∗
                             ⌜m = Machine⌝ ∗
-                                          (∃ mc : Z, mcause        ↦ mc) ∗
+                                          (∃ mc, mcause        ↦ mc) ∗
                                           cur_privilege ↦ mpp ∗
                                           nextpc        ↦ mepc_v ∗
                                           pc            ↦ mepc_v ∗
@@ -211,7 +211,7 @@ Section Loop.
                                           mstatus       ↦ {| MPP := User |} ∗
                                           mepc          ↦ mepc_v)%I.
 
-  Definition step_post' (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) : iProp Σ :=
+  Definition step_post' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) : iProp Σ :=
     (Execution' m cp h i entries es mpp mepc_v ∨
      CSRMod'    m cp h i entries es mpp mepc_v ∨
      Trap'      m cp h i entries es mpp mepc_v ∨

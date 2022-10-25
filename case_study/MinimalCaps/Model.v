@@ -705,12 +705,10 @@ Module MinCapsIrisInstanceWithContracts.
       unfold fun_wM.
       apply map_Forall_lookup.
       intros i x H0.
-      destruct (Z.eqb paddr i) eqn:Heqb.
-      + rewrite -> Z.eqb_eq in Heqb.
-        subst.
+      destruct (Z.eqb_spec paddr i) as [Heqb|Heqb].
+      + subst.
         apply (lookup_insert_rev memmap i); assumption.
       + rewrite -> map_Forall_lookup in Hmap.
-        rewrite -> Z.eqb_neq in Heqb.
         rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in H0.
         apply Hmap; assumption.
     Qed.
