@@ -371,8 +371,8 @@ Module Type WorldsOn
         (at level 99, x binder, y binder, right associativity)
       : modal_scope.
     Notation "w1 ⊒ w2" := (Acc w1 w2) (at level 80).
-    Notation "f <$> a" := (fmap_box f a) (at level 40, left associativity).
-    Notation "f <*> a" := (K f a) (at level 40, left associativity).
+    Notation "f <$> a" := (fmap_box f a).
+    Notation "f <*> a" := (K f a).
     Notation "ω1 ∘ ω2" := (acc_trans ω1 ω2) (at level 40, left associativity).
   End ModalNotations.
   Open Scope modal.

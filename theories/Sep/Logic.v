@@ -128,6 +128,8 @@ Module sep.
   Module Import instances.
 
     #[export] Existing Instance lentails_preorder.
+    #[export] Instance lentails_rewrite_relation {L} :
+      RewriteRelation (@lentails L) := {}.
 
     #[export] Instance lequiv_equivalence {L} : Equivalence (@lequiv L).
     Proof.

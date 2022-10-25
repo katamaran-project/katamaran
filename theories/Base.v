@@ -58,7 +58,7 @@ Module Type BaseMixin (Import TY : Types).
 
   Notation PCtx := (NCtx PVar Ty).
   Notation LCtx := (NCtx LVar Ty).
-  Notation Valuation Σ := (@Env (Binding LVar Ty) (fun xt : Binding LVar Ty => Val (@type LVar Ty xt)) Σ).
+  Notation Valuation Σ := (Env (fun xt : Binding LVar Ty => Val (type xt)) Σ).
   Notation CStore := (@NamedEnv PVar Ty Val).
 
   Section PatternMatching.

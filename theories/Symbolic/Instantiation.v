@@ -59,7 +59,7 @@ Module Type InstantiationOn
   (Import TM : TermsOn TY).
 
   Local Notation LCtx := (NCtx LVar Ty).
-  Local Notation Valuation Σ := (@Env (Binding LVar Ty) (fun xt : Binding LVar Ty => Val (@type LVar Ty xt)) Σ).
+  Local Notation Valuation Σ := (Env (fun xt : Binding LVar Ty => Val (type xt)) Σ).
   Local Notation CStore := (@NamedEnv PVar Ty Val).
 
   (* This type class connects a symbolic representation of a type with its
