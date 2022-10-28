@@ -404,7 +404,7 @@ Section Soundness.
           (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
       end.
 
-  Lemma Forall_forall {B D} (Δ : Ctx B) (P : Env D Δ → iProp Σ) :
+  Lemma Forall_forall {B : Set} {D : B -> Set} (Δ : Ctx B) (P : Env D Δ → iProp Σ) :
     sep.Forall P ⊣⊢ (∀ E : Env D Δ, P E).
   Proof. apply bi.equiv_entails, sep.Forall_forall. Qed.
 

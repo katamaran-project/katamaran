@@ -69,7 +69,8 @@ Module ctx.
 
   (* Type of contexts. This is a list of bindings of type B. This type and
      subsequent types use the common notation of snoc lists. *)
-  Inductive Ctx (B : Set) : Set :=
+  #[universes(template)]
+  Inductive Ctx (B : Type) : Type :=
   | nil
   | snoc (Γ : Ctx B) (b : B).
 
@@ -82,7 +83,7 @@ Module ctx.
   Arguments snoc {_} _%ctx _%ctx.
 
   Section WithBinding.
-    Context {B : Set}.
+    Context {B : Type}.
 
     Instance eq_dec_ctx (eqB : EqDec B) : EqDec (Ctx B) :=
       fix eq_dec_ctx (Γ Δ : Ctx B) {struct Γ} : dec_eq Γ Δ :=
@@ -231,12 +232,12 @@ Module ctx.
       In b (snoc Γ b') :=
       @MkIn _ (snoc Γ b') (S (in_at bIn)) (in_valid bIn).
 
-    Inductive NilView {b : B} (i : In b nil) : Set :=.
+    Inductive NilView {b : B} (i : In b nil) : Type :=.
 
     Definition nilView {b : B} (i : In b nil) : NilView i :=
       match in_valid i with end.
 
-    Inductive SnocView (Γ : Ctx B) {b' : B} : forall b, In b (snoc Γ b') -> Set :=
+    Inductive SnocView (Γ : Ctx B) {b' : B} : forall b, In b (snoc Γ b') -> Type :=
     | snocViewZero                  : SnocView in_zero
     | snocViewSucc {b} (i : In b Γ) : SnocView (in_succ i).
     Global Arguments snocViewZero {_ _}.
@@ -249,7 +250,7 @@ Module ctx.
       | S n => fun p => snocViewSucc (MkIn n p)
       end (in_valid i).
 
-    Inductive InView {b : B} : forall Γ, In b Γ -> Set :=
+    Inductive InView {b : B} : forall Γ, In b Γ -> Type :=
     | inctxViewZero {Γ}                 : @InView b (snoc Γ b) in_zero
     | inctxViewSucc {Γ b'} (i : In b Γ) : @InView b (snoc Γ b') (in_succ i).
 
@@ -280,7 +281,7 @@ Module ctx.
           end
       end.
 
-    Inductive CatView {Γ Δ} {b : B} : In b (cat Γ Δ) -> Set :=
+    Inductive CatView {Γ Δ} {b : B} : In b (cat Γ Δ) -> Type :=
     | isCatLeft  (bIn : In b Γ) : CatView (in_cat_left Δ bIn)
     | isCatRight (bIn : In b Δ) : CatView (in_cat_right bIn).
 
@@ -409,7 +410,7 @@ Module ctx.
     Definition occurs_check_var {Σ} {x y : B} (xIn : In x Σ) (yIn : In y Σ) : (x = y) + (In y (remove Σ xIn)) :=
       occurs_check_index (in_at xIn) (in_at yIn) (in_valid xIn) (in_valid yIn).
 
-    Inductive OccursCheckView {Σ} {x : B} (xIn : In x Σ) : forall y, In y Σ -> Set :=
+    Inductive OccursCheckView {Σ} {x : B} (xIn : In x Σ) : forall y, In y Σ -> Type :=
     | Same : OccursCheckView xIn xIn
     | Diff {y} (yIn : In y (remove Σ xIn)) : OccursCheckView xIn (shift_var xIn yIn).
 
@@ -580,7 +581,7 @@ Module ctx.
   Arguments forallb [B] Γ p.
 
   Section WithAB.
-    Context {A B : Set} (f : A -> B).
+    Context {A B : Type} (f : A -> B).
 
     Fixpoint map (Γ : Ctx A) : Ctx B :=
       match Γ with
