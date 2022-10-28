@@ -67,6 +67,7 @@ theories/Syntax/Expressions.v
 theories/Syntax/Formulas.v
 theories/Syntax/FunDecl.v
 theories/Syntax/FunDef.v
+theories/Syntax/Messages.v
 theories/Syntax/Patterns.v
 theories/Syntax/Predicates.v
 theories/Syntax/Registers.v

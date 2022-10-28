@@ -100,32 +100,6 @@ Module Type SymPropOn
 
     Inductive Error (Σ : LCtx) (msg : Message Σ) : Prop :=.
 
-    Inductive AMessage (Σ : LCtx) : Type :=
-    | MkAMessage {BT} {subB : Subst BT} {sublawsB : SubstLaws BT} {occB: OccursCheck BT} : BT Σ -> AMessage Σ
-    .
-    #[global] Arguments MkAMessage {Σ BT _ _ _} _.
-
-    #[export] Instance SubstAMessage : Subst AMessage :=
-      fun Σ1 msg Σ2 ζ12 =>
-        match msg with
-        | @MkAMessage _ BT subB sublB occB msg => MkAMessage (subst msg ζ12)
-        end.
-
-    #[export] Instance SubstLawsAMessage : SubstLaws AMessage.
-    Proof.
-      constructor.
-      - intros ? []; cbn; now rewrite ?subst_sub_id.
-      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
-    Qed.
-
-    #[export] Instance OccursCheckAMessage : OccursCheck AMessage :=
-      fun Σ x xIn msg =>
-        match msg with
-        | MkAMessage msg =>
-            msg' <- occurs_check xIn msg;;
-            Some (MkAMessage msg')
-        end.
-
   End Messages.
 
   Inductive Obligation {Σ} (msg : AMessage Σ) (fml : Formula Σ) (ι : Valuation Σ) : Prop :=
@@ -136,27 +110,10 @@ Module Type SymPropOn
 
   Module SymProp.
 
-    Inductive EMessage (Σ : LCtx) : Type :=
-    | EMsgHere {M} {subM : Subst M} {occM: OccursCheck M} (msg : M Σ)
-    | EMsgThere {b} (msg : EMessage (Σ ▻ b)).
-    Global Arguments EMsgHere {_ _ _ _} msg.
-
-    Fixpoint emsg_close {Σ ΣΔ} {struct ΣΔ} : EMessage (Σ ▻▻ ΣΔ) -> EMessage Σ :=
-      match ΣΔ with
-      | []      => fun msg => msg
-      | ΣΔ  ▻ b => fun msg => emsg_close (EMsgThere msg)
-      end%ctx.
-
-    Fixpoint shift_emsg {Σ b} (bIn : b ∈ Σ) (emsg : EMessage (Σ - b)) : EMessage Σ :=
-      match emsg with
-      | EMsgHere msg   => EMsgHere (subst msg (sub_shift bIn))
-      | EMsgThere emsg => EMsgThere (shift_emsg (ctx.in_succ bIn) emsg)
-      end.
-
     Inductive SymProp (Σ : LCtx) : Type :=
     | angelic_binary (o1 o2 : SymProp Σ)
     | demonic_binary (o1 o2 : SymProp Σ)
-    | error (msg : EMessage Σ)
+    | error (msg : AMessage Σ)
     | block
     | assertk (fml : Formula Σ) (msg : AMessage Σ) (k : SymProp Σ)
     | assumek (fml : Formula Σ) (k : SymProp Σ)
@@ -717,7 +674,7 @@ Module Type SymPropOn
 
     Definition angelicv_prune {Σ} b (p : 𝕊 (Σ ▻ b)) : 𝕊 Σ :=
       match p with
-      | error msg => error (EMsgThere msg)
+      | error msg => error (amsg.there msg)
       | _         => angelicv b p
       end.
 
@@ -738,7 +695,7 @@ Module Type SymPropOn
     Definition assert_vareq_prune {Σ} {x σ} {xIn : x∷σ ∈ Σ}
       (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
       match k with
-      | error emsg => error (shift_emsg xIn emsg)
+      | error emsg => error (subst msg (sub_shift xIn))
       | _          => assert_vareq x t msg k
       end.
     Global Arguments assert_vareq_prune {Σ} x {σ xIn} t msg k.
@@ -1008,8 +965,8 @@ Module Type SymPropOn
       Definition plug {Σ1 Σ2} (e : ECtx Σ1 Σ2) : 𝕊 Σ2 -> 𝕊 Σ1 :=
         match e with ectx Σe mfs => fun p => angelic_close0 Σe (assert_msgs_formulas mfs p) end.
 
-      Definition plug_msg {Σ1 Σ2} (ec : ECtx Σ1 Σ2) : EMessage Σ2 -> EMessage Σ1 :=
-        match ec with ectx _ _ => emsg_close end.
+      Definition plug_msg {Σ1 Σ2} (ec : ECtx Σ1 Σ2) : AMessage Σ2 -> AMessage Σ1 :=
+        match ec with ectx _ _ => amsg.close end.
 
       Fixpoint push {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (p : 𝕊 Σ2) {struct p} : 𝕊 Σ1 :=
         match p with
@@ -1113,7 +1070,7 @@ Module Type SymPropOn
           now rewrite inst_sub_shift.
       Qed.
 
-      Lemma error_plug_msg {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (msg : EMessage Σ2) :
+      Lemma error_plug_msg {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (msg : AMessage Σ2) :
         error (plug_msg ec msg) <=> plug ec (error msg).
       Proof.
         destruct ec; intros ι; cbn.
@@ -1210,18 +1167,12 @@ Module Type SymPropOn
       Definition plug {Σ1 Σ2} (e : UCtx Σ1 Σ2) : 𝕊 Σ2 -> 𝕊 Σ1 :=
         match e with uctx Σu mfs => fun p => demonic_close0 Σu (assume_formulas mfs p) end.
 
-      Fixpoint close_message {Σ ΣΔ} : EMessage (Σ ▻▻ ΣΔ) -> EMessage Σ :=
-         match ΣΔ as c return (EMessage (Σ ▻▻ c) -> EMessage Σ) with
-         | ctx.nil      => fun msg => msg
-         | ctx.snoc Γ b => fun msg => close_message (EMsgThere msg)
-         end.
-
-      Definition plug_error {Σ1 Σ2} (ec : UCtx Σ1 Σ2) : EMessage Σ2 -> 𝕊 Σ1 :=
+      Definition plug_error {Σ1 Σ2} (ec : UCtx Σ1 Σ2) : AMessage Σ2 -> 𝕊 Σ1 :=
        match ec with
        | uctx Σu mfs as ec =>
            fun msg =>
              match mfs with
-             | List.nil      => error (close_message msg)
+             | List.nil      => error (amsg.close msg)
              | List.cons _ _ => plug ec (error msg)
              end
        end.
@@ -1401,7 +1352,7 @@ Module Type SymPropOn
           | inr uc => SymProp.demonic_binary (p Σ0 eph) (q Σ0 eph)
           end.
 
-      Definition error {Σ} (msg : EMessage Σ) : EProp Σ :=
+      Definition error {Σ} (msg : AMessage Σ) : EProp Σ :=
         fun Σ0 eph =>
           match eph with
           | inl ec => error (SolveEvars.plug_msg ec msg)

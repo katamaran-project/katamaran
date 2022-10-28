@@ -205,6 +205,13 @@ Module Type SymbolicExecOn
           MkDebugConsumeChunk (subst pc ζ01) (subst δ ζ01) (subst h ζ01) (subst c ζ01)
         end.
 
+    #[export] Instance SubstLawsDebugConsumeChunk : SubstLaws DebugConsumeChunk.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
     #[export] Instance OccursCheckDebugConsumeChunk : OccursCheck DebugConsumeChunk :=
       fun Σ x xIn d =>
         match d with
@@ -357,8 +364,8 @@ Module Type SymbolicExecOn
       fun w0 m f POST => m (fun w1 ω01 a1 => f w1 ω01 a1 (four POST ω01)).
     #[global] Arguments bind {A B} [w] m f _ /.
 
-    Definition error {M A} {subM : Subst M} {occM : OccursCheck M} :
-      ⊢ M -> SPureSpecM A := fun w msg POST => SymProp.error (EMsgHere msg).
+    Definition error {A} :
+      ⊢ AMessage -> SPureSpecM A := fun w msg POST => SymProp.error msg.
     Definition block {A} : ⊢ SPureSpecM A :=
       fun w POST => SymProp.block.
     Global Arguments block {A w}.
@@ -443,7 +450,7 @@ Module Type SymbolicExecOn
                  (four POST (acc_triangular ν) (acc_formulas_right w1 fmls1) tt))
         | None =>
           (* The formulas are inconsistent with the path constraints. *)
-          SymProp.error (EMsgHere msg)
+          SymProp.error msg
         end.
 
     Definition assert_formula :
@@ -511,8 +518,8 @@ Module Type SymbolicExecOn
         end.
     #[global] Arguments angelic_list' {A} [w].
 
-    Definition angelic_list {M} {subM : Subst M} {occM : OccursCheck M} {A} :
-      ⊢ M -> WList A -> SPureSpecM A :=
+    Definition angelic_list {A} :
+      ⊢ AMessage -> WList A -> SPureSpecM A :=
       fun w msg xs =>
         match xs with
         | nil        => error msg
@@ -598,9 +605,9 @@ Module Type SymbolicExecOn
         ⊢ SHeapSpecM Γ1 Γ2 A -> □(SHeapSpecM Γ2 Γ3 B) -> SHeapSpecM Γ1 Γ3 B :=
         fun _ m k POST => m (fun _ ω1 _ => k _ ω1 (four POST ω1)).
 
-      Definition error {Γ1 Γ2 M A} {subM : Subst M} {occM : OccursCheck M} :
-        ⊢ (SStore Γ1 -> SHeap -> M) -> SHeapSpecM Γ1 Γ2 A :=
-        fun w msg _ δ h => SymProp.error (EMsgHere (msg δ h)).
+      Definition error {Γ1 Γ2 A} :
+        ⊢ (SStore Γ1 -> SHeap -> AMessage) -> SHeapSpecM Γ1 Γ2 A :=
+        fun w msg _ δ h => SymProp.error (msg δ h).
 
       Definition block {Γ1 Γ2 A} :
         ⊢ SHeapSpecM Γ1 Γ2 A := fun _ POST δ h => block.
@@ -614,8 +621,8 @@ Module Type SymbolicExecOn
         fun w m1 m2 POST δ1 h1 =>
           demonic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
 
-      Definition angelic_list {M} {subM : Subst M} {occM : OccursCheck M} {A Γ} :
-        ⊢ (SStore Γ -> SHeap -> M) -> WList A -> SHeapSpecM Γ Γ A :=
+      Definition angelic_list {A Γ} :
+        ⊢ (SStore Γ -> SHeap -> AMessage) -> WList A -> SHeapSpecM Γ Γ A :=
         fun w msg xs POST δ h => lift_purem (SPureSpecM.angelic_list (msg δ h) xs) POST δ h.
 
       Definition angelic_finite F `{finite.Finite F} {Γ} :
@@ -638,9 +645,9 @@ Module Type SymbolicExecOn
         fun w σ => lift_purem (SPureSpecM.demonic x σ).
       Global Arguments demonic {Γ} x [w] σ : rename.
 
-      Definition debug {AT DT} `{Subst DT, SubstLaws DT, OccursCheck DT} {Γ1 Γ2} :
-        ⊢ (SStore Γ1 -> SHeap -> DT) -> (SHeapSpecM Γ1 Γ2 AT) -> (SHeapSpecM Γ1 Γ2 AT) :=
-        fun _ d m POST δ h => SymProp.debug (MkAMessage (d δ h)) (m POST δ h).
+      Definition debug {AT} {Γ1 Γ2} :
+        ⊢ (SStore Γ1 -> SHeap -> AMessage) -> (SHeapSpecM Γ1 Γ2 AT) -> (SHeapSpecM Γ1 Γ2 AT) :=
+        fun _ d m POST δ h => SymProp.debug (d δ h) (m POST δ h).
 
       Definition angelic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
@@ -695,7 +702,7 @@ Module Type SymbolicExecOn
         fun w0 fml POST δ0 h0 =>
           lift_purem
             (SPureSpecM.assert_formula
-               (MkAMessage (MkDebugAssertFormula (wco w0) δ0 h0 fml)) fml)
+               (amsg.mk (MkDebugAssertFormula (wco w0) δ0 h0 fml)) fml)
             POST δ0 h0.
 
       Definition box_assert_formula {Γ} :
@@ -707,7 +714,7 @@ Module Type SymbolicExecOn
         fun w0 fmls POST δ0 h0 =>
           lift_purem
             (SPureSpecM.assert_formulas
-               (MkAMessage
+               (amsg.mk
                   {| msg_function := "smut_assert_formula";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
@@ -722,7 +729,7 @@ Module Type SymbolicExecOn
         fun w0 E1 E2 POST δ0 h0 =>
           lift_purem
             (SPureSpecM.assert_eq_env
-               (MkAMessage
+               (amsg.mk
                   {| msg_function := "smut/assert_eq_env";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
@@ -738,7 +745,7 @@ Module Type SymbolicExecOn
         fun w0 E1 E2 POST δ0 h0 =>
           lift_purem
             (SPureSpecM.assert_eq_nenv
-               (MkAMessage
+               (amsg.mk
                   {| msg_function := "smut/assert_eq_env";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
@@ -753,7 +760,7 @@ Module Type SymbolicExecOn
         fun w0 c1 c2 POST δ0 h0 =>
           lift_purem
             (T (SPureSpecM.assert_eq_chunk
-                  (MkAMessage
+                  (amsg.mk
                      {| msg_function := "SHeapSpecM.assert_eq_chunk";
                         msg_message := "Proof obligation";
                         msg_program_context := Γ;
@@ -774,7 +781,7 @@ Module Type SymbolicExecOn
         fun w0 t k =>
           ⟨ ω1 ⟩ pc <- angelic_finite (PatternCase pat)
                          (fun δ h =>
-                            MkAMessage
+                            amsg.mk
                               {| msg_function := "SHeapSpecM.angelic_pattern_match";
                                  msg_message := "pattern match assertion";
                                  msg_program_context := Γ1;
@@ -917,7 +924,7 @@ Module Type SymbolicExecOn
         fun w0 t k =>
           ⟨ ω1 ⟩ b <- angelic_finite (bv n)
                         (fun (δ : SStore Γ1 w0) (h : SHeap w0) =>
-                           (MkAMessage {| msg_function := "SHeapSpecM.angelic_match_bvec";
+                           (amsg.mk {| msg_function := "SHeapSpecM.angelic_match_bvec";
                               msg_message := "pattern match assertion";
                               msg_program_context := Γ1;
                               msg_localstore := δ;
@@ -1101,6 +1108,7 @@ Module Type SymbolicExecOn
             | None =>
               error
                 (fun δ1 h1 =>
+                   amsg.mk
                    {| debug_consume_chunk_program_context := Γ;
                       debug_consume_chunk_pathcondition := wco _;
                       debug_consume_chunk_localstore := δ1;
@@ -1124,6 +1132,7 @@ Module Type SymbolicExecOn
                   angelic_list
                     (A := Pair Chunk SHeap)
                     (fun δ1 h1 =>
+                       amsg.mk
                        {| debug_consume_chunk_program_context := Γ;
                           debug_consume_chunk_pathcondition := wco _;
                           debug_consume_chunk_localstore := δ1;
@@ -1162,6 +1171,7 @@ Module Type SymbolicExecOn
             fun w1 _ =>
               debug
                 (fun δ1 h1 =>
+                   amsg.mk
                    {| debug_asn_program_context := Γ;
                       debug_asn_pathcondition := wco w1;
                       debug_asn_localstore := δ1;
@@ -1196,6 +1206,7 @@ Module Type SymbolicExecOn
             fun w1 ω01 =>
               debug
                 (fun δ1 h1 =>
+                 amsg.mk
                  {| debug_asn_program_context := Γ;
                     debug_asn_pathcondition := wco w1;
                     debug_asn_localstore := δ1;
@@ -1249,7 +1260,8 @@ Module Type SymbolicExecOn
           if config_debug_function cfg f
           then
             debug
-              (fun δ h => {| debug_call_function_parameters := Δ;
+              (fun δ h => amsg.mk
+                          {| debug_call_function_parameters := Δ;
                              debug_call_function_result_type := τ;
                              debug_call_function_name := f;
                              debug_call_function_contract := c;
@@ -1345,6 +1357,7 @@ Module Type SymbolicExecOn
             | stm_bind _ _ =>
                 error
                   (fun δ h =>
+                     amsg.mk
                      {| msg_function := "SHeapSpecM.exec";
                         msg_message := "stm_bind not supported";
                         msg_program_context := _;
@@ -1355,6 +1368,7 @@ Module Type SymbolicExecOn
             | stm_debugk k =>
                 debug
                   (fun (δ0 : SStore Γ w0) (h0 : SHeap w0) =>
+                     amsg.mk
                      {| debug_stm_program_context := Γ;
                         debug_stm_statement_type := τ;
                         debug_stm_statement := k;
@@ -1373,6 +1387,7 @@ Module Type SymbolicExecOn
         | O   => fun _ _ _ _ =>
                    error
                      (fun δ h =>
+                        amsg.mk
                         {| msg_function := "SHeapSpecM.exec";
                            msg_message := "out of fuel for inlining";
                            msg_program_context := _;

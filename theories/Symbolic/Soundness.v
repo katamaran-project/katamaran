@@ -321,8 +321,8 @@ Module Soundness
         SPureSpecM.bind CPureSpecM.bind.
     Proof. intros ? ? _. apply refine_bind. Qed.
 
-    Lemma refine_error `{Subst M, OccursCheck M, RA : Rel AT A} :
-      ℛ⟦RMsg M (RPureSpecM RA)⟧ SPureSpecM.error CPureSpecM.error.
+    Lemma refine_error `{RA : Rel AT A} :
+      ℛ⟦RMsg AMessage (RPureSpecM RA)⟧ SPureSpecM.error CPureSpecM.error.
     Proof. intros w ι Hpc m POST__s POST__c HPOST. inversion 1. Qed.
 
     Lemma refine_angelic (x : option LVar) :
@@ -534,8 +534,8 @@ Module Soundness
         now apply refine_pure.
     Qed.
 
-    Lemma refine_angelic_list `{Subst M, OccursCheck M, R : Rel AT A} :
-      ℛ⟦RMsg M (RList R -> RPureSpecM R)⟧
+    Lemma refine_angelic_list `{R : Rel AT A} :
+      ℛ⟦RMsg AMessage (RList R -> RPureSpecM R)⟧
         SPureSpecM.angelic_list CPureSpecM.angelic_list.
     Proof.
       intros w ι Hpc msg ts vs [].
@@ -676,11 +676,11 @@ Module Soundness
       apply PureSpecM.refine_demonic_ctx; auto.
     Qed.
 
-    Lemma refine_debug {AT A D} `{R : Rel AT A, Subst D, SubstLaws D, OccursCheck D}
+    Lemma refine_debug {AT A} `{R : Rel AT A}
       {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0)
           (Hpc : instpc (wco w0) ι0) f ms mc :
       ℛ⟦RHeapSpecM Γ1 Γ2 R⟧@{ι0} ms mc ->
-      ℛ⟦RHeapSpecM Γ1 Γ2 R⟧@{ι0} (@SHeapSpecM.debug AT D _ _ _ _ Γ1 Γ2 w0 f ms) mc.
+      ℛ⟦RHeapSpecM Γ1 Γ2 R⟧@{ι0} (@SHeapSpecM.debug AT Γ1 Γ2 w0 f ms) mc.
     Proof.
       intros Hap POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0.
       intros [HP]. revert HP. apply Hap; auto.
