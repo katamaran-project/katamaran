@@ -526,15 +526,17 @@ Section Adequacy.
         now intros [σ2 r2].
   Qed.
 
+  Definition own_regstore `{sailGS Σ} (γ : RegStore) : iProp Σ :=
+    [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮),
+      match x with | existT _ r => reg_pointsTo r (read_register γ r) end.
+
   Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : Val σ -> Prop} :
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
     (forall `{sailGS Σ'},
         ⊢ semTriple (Σ := Σ') δ
-          (mem_res sailGS_memGS μ ∗
-           [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮),
-              match x with | existT _ r => reg_pointsTo r (read_register γ r) end
-          )%I s (fun v δ' => bi_pure (Q v)))%I ->
+          (mem_res sailGS_memGS μ ∗ own_regstore γ) s
+          (fun v δ' => bi_pure (Q v))) ->
     ResultOrFail s' Q.
   Proof.
     intros steps fins trips.
