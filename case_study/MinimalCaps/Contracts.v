@@ -961,14 +961,14 @@ End ContractDefKit.
 End MinCapsSpecification.
 
 Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
-  Definition simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (List Formula Σ) :=
+  Definition simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
     match term_get_val p, term_get_val q with
-    | Some O , _       => Some nil
-    | Some p', Some q' => if decide_subperm p' q' then Some nil else None
-    | _      , _       => Some (cons (formula_user subperm [p;q]) nil)
-    end.
+    | Some O , _       => Some []
+    | Some p', Some q' => if decide_subperm p' q' then Some [] else None
+    | _      , _       => Some [formula_user subperm [p;q]]
+    end%ctx.
 
-  Definition simplify_correctPC {Σ} (c : Term Σ ty.cap) : option (List Formula Σ) :=
+  Definition simplify_correctPC {Σ} (c : Term Σ ty.cap) : option (PathCondition Σ) :=
     match term_get_record c with
     | Some c' => match term_get_val c'.[??"cap_permission"] with
                  | Some O => None
@@ -977,18 +977,18 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
                      let b := c'.[??"cap_begin"] in
                      let e := c'.[??"cap_end"] in
                      let a := c'.[??"cap_cursor"] in
-                     Some (cons (formula_bool (term_binop bop.and
-                                                          (term_binop (bop.relop bop.le) b a)
-                                                          (term_binop (bop.relop bop.lt) a e))) nil)
-                 | None   => Some (cons (formula_user correctPC [c]) nil)
+                     Some [formula_bool (term_binop bop.and
+                                           (term_binop (bop.relop bop.le) b a)
+                                           (term_binop (bop.relop bop.lt) a e))]
+                 | None   => Some [formula_user correctPC [c]]
                  end
-    | _       => Some (cons (formula_user correctPC [c]) nil)
-    end.
+    | _       => Some [formula_user correctPC [c]]
+    end%ctx.
 
-  Definition simplify_not_is_perm {Σ} (p q : Term Σ ty.perm) : option (List Formula Σ) :=
+  Definition simplify_not_is_perm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
     match term_get_val p, term_get_val q with
-    | Some p', Some q' => if negb (is_perm p' q') then Some nil else None
-    | _      , _       => Some (cons (formula_user not_is_perm [p;q]) nil)
+    | Some p', Some q' => if negb (is_perm p' q') then Some [] else None
+    | _      , _       => Some [formula_user not_is_perm [p;q]]
     end.
 
   Definition solve_user : SolverUserOnly :=

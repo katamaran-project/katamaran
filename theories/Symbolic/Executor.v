@@ -255,7 +255,7 @@ Module Type SymbolicExecOn
     Record WInstance (w : World) : Set :=
       MkWInstance
         { ιassign :> Valuation w;
-          ιvalid  : instpc (wco w) ιassign;
+          ιvalid  : instprop (wco w) ιassign;
         }.
 
     Program Definition winstance_formula {w} (ι : WInstance w) (fml : Formula w) (p : inst (A := Prop) fml ι) :
@@ -264,7 +264,7 @@ Module Type SymbolicExecOn
     Next Obligation.
     Proof.
       intros. cbn.
-      apply inst_pathcondition_cons. split; auto.
+      apply inst_pathcondition_snoc. split; auto.
       apply ιvalid.
     Qed.
 
@@ -326,23 +326,23 @@ Module Type SymbolicExecOn
 
   End VerificationConditions.
 
-  Definition symprop_assume_formulas :
-    ⊢ List Formula -> □SymProp -> SymProp :=
-    fun w0 fmls0 POST =>
-      match solver fmls0 with
-      | Some (existT w1 (ν , fmls1)) =>
+  Definition symprop_assume_pathcondition :
+    ⊢ PathCondition -> □SymProp -> SymProp :=
+    fun w0 C0 POST =>
+      match solver _ C0 with
+      | Some (existT w1 (ν , C1)) =>
           (* Assume variable equalities and the residual constraints *)
           assume_triangular ν
-            (assume_formulas_without_solver fmls1
-               (* Run POST in the world with the variable and residual
-                  formulas included. This is a critical piece of code since
-                  this is the place where we really meaningfully change the
-                  world. We changed the type of assume_formulas_without_solver
-                  just to not forget adding the formulas to the path constraints.
-                *)
-               (four POST (acc_triangular ν) (acc_formulas_right w1 fmls1)))
+            (assume_pathcondition_without_solver C1
+               (* Run POST in the world with the variable and residual formulas
+                  included. This is a critical piece of code since this is the
+                  place where we really meaningfully change the world. We
+                  changed the type of assume_pathcondition_without_solver just
+                  to not forget adding the new path constraints. *)
+               (four POST (acc_triangular ν) (acc_pathcondition_right w1 C1)))
       | None =>
-          (* The formulas are inconsistent with the path constraints. *)
+          (* The new path constraints are inconsistent with the old path
+             constraints. *)
           SymProp.block
       end.
 
@@ -427,36 +427,36 @@ Module Type SymbolicExecOn
         end%ctx.
     Global Arguments demonic_ctx {_} n [w] Δ : rename.
 
-    Definition assume_formulas :
-      ⊢ List Formula -> SPureSpecM Unit :=
-      fun w0 fmls0 POST =>
-        symprop_assume_formulas fmls0 (POST <*> (fun w r => tt)).
+    Definition assume_pathcondition :
+      ⊢ PathCondition -> SPureSpecM Unit :=
+      fun w C POST =>
+        symprop_assume_pathcondition C (POST <*> (fun w r => tt)).
 
     Definition assume_formula :
       ⊢ Formula -> SPureSpecM Unit :=
-      fun w0 fml0 =>
-        assume_formulas (cons fml0 nil).
+      fun w F => assume_pathcondition ([ctx] ▻ F).
 
-    Definition assert_formulas :
-      ⊢ AMessage -> List Formula -> SPureSpecM Unit :=
-      fun w0 msg fmls0 POST =>
-        match solver fmls0 with
-        | Some (existT w1 (ν , fmls1)) =>
+    Definition assert_pathcondition :
+      ⊢ AMessage -> PathCondition -> SPureSpecM Unit :=
+      fun w0 msg C0 POST =>
+        match solver _ C0 with
+        | Some (existT w1 (ν , C1)) =>
           (* Assert variable equalities and the residual constraints *)
           assert_triangular msg ν
             (fun msg' =>
-               assert_formulas_without_solver msg' fmls1
-                 (* Critical code. Like for assume_formulas. *)
-                 (four POST (acc_triangular ν) (acc_formulas_right w1 fmls1) tt))
+               assert_pathcondition_without_solver msg' C1
+                 (* Critical code. Like for assume_pathcondition. *)
+                 (four POST (acc_triangular ν) (acc_pathcondition_right w1 C1) tt))
         | None =>
-          (* The formulas are inconsistent with the path constraints. *)
+          (* The new path constraints are inconsistent with the old path
+             constraints. *)
           SymProp.error msg
         end.
 
     Definition assert_formula :
       ⊢ AMessage -> Formula -> SPureSpecM Unit :=
       fun w0 msg fml0 =>
-        assert_formulas msg (cons fml0 nil).
+        assert_pathcondition msg (ctx.nil ▻ fml0 ).
 
     Equations(noeqns) assert_eq_env :
       let E Δ := fun w : World => Env (Term w) Δ in
@@ -709,11 +709,11 @@ Module Type SymbolicExecOn
         ⊢ Formula -> □(SHeapSpecM Γ Γ Unit) :=
         fun w0 fml => assert_formula <$> persist fml.
 
-      Definition assert_formulas {Γ} :
-        ⊢ List Formula -> SHeapSpecM Γ Γ Unit :=
+      Definition assert_pathcondition {Γ} :
+        ⊢ PathCondition -> SHeapSpecM Γ Γ Unit :=
         fun w0 fmls POST δ0 h0 =>
           lift_purem
-            (SPureSpecM.assert_formulas
+            (SPureSpecM.assert_pathcondition
                (amsg.mk
                   {| msg_function := "smut_assert_formula";
                      msg_message := "Proof obligation";
@@ -1031,7 +1031,7 @@ Module Type SymbolicExecOn
 
         Context {Σ} (p : 𝑯) {ΔI ΔO : Ctx Ty} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO).
 
-        Equations(noeqns) match_chunk_user_precise (c : Chunk Σ) : option (List Formula Σ) :=
+        Equations(noeqns) match_chunk_user_precise (c : Chunk Σ) : option (PathCondition Σ) :=
         match_chunk_user_precise (chunk_user p' ts')
         with eq_dec p p' => {
           match_chunk_user_precise (chunk_user ?(p) ts') (left eq_refl) :=
@@ -1045,7 +1045,7 @@ Module Type SymbolicExecOn
         };
         match_chunk_user_precise _ := None.
 
-        Fixpoint find_chunk_user_precise (h : SHeap Σ) : option (SHeap Σ * List Formula Σ) :=
+        Fixpoint find_chunk_user_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) :=
           match h with
           | nil => None
           | cons c h' =>
@@ -1070,19 +1070,19 @@ Module Type SymbolicExecOn
         };
         match_chunk_ptsreg_precise _ := None.
 
-        Fixpoint find_chunk_ptsreg_precise (h : SHeap Σ) : option (SHeap Σ * List Formula Σ) :=
+        Fixpoint find_chunk_ptsreg_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) :=
           match h with
           | nil => None
           | cons c h' =>
               match match_chunk_ptsreg_precise c with
-              | Some fml => Some (h', cons fml nil)
+              | Some fml => Some (h', ctx.nil ▻ fml)
               | None => option_map (base.prod_map (cons c) id) (find_chunk_ptsreg_precise h')
               end
           end.
 
       End ConsumePrecisePtsreg.
 
-      Definition try_consume_chunk_precise {Σ} (h : SHeap Σ) (c : Chunk Σ) : option (SHeap Σ * List Formula Σ) :=
+      Definition try_consume_chunk_precise {Σ} (h : SHeap Σ) (c : Chunk Σ) : option (SHeap Σ * PathCondition Σ) :=
         match c with
         | chunk_user p ts =>
             match 𝑯_precise p with
@@ -1104,7 +1104,7 @@ Module Type SymbolicExecOn
           | Some h' => put_heap h'
           | None =>
             match try_consume_chunk_precise h (peval_chunk c⟨ω1⟩) with
-            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_formulas Fs⟨ω2⟩
+            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_pathcondition Fs⟨ω2⟩
             | None =>
               error
                 (fun δ1 h1 =>
@@ -1126,7 +1126,7 @@ Module Type SymbolicExecOn
           | Some h' => put_heap h'
           | None =>
             match try_consume_chunk_precise h (peval_chunk c⟨ω1⟩) with
-            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_formulas Fs⟨ω2⟩
+            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_pathcondition Fs⟨ω2⟩
             | None =>
                 ⟨ ω2 ⟩ '(c',h') <-
                   angelic_list
@@ -1229,11 +1229,11 @@ Module Type SymbolicExecOn
             ⟨ ω1 ⟩ evars <- angelic_ctx id Σe ;;
             ⟨ ω2 ⟩ _     <- assert_eq_nenv (subst δe evars) args⟨ω1⟩ ;;
 
-            ⟨ ω3 ⟩ _     <- (let we := @MkWorld Σe nil in
+            ⟨ ω3 ⟩ _     <- (let we := @MkWorld Σe ctx.nil in
                             consume (w := we)
                               req (@acc_sub we _ evars (fun _ _ => I) ∘ ω2)) ;;
             ⟨ ω4 ⟩ res   <- demonic (Some result) τ;;
-            ⟨ ω5 ⟩ _     <- (let we := @MkWorld (Σe ▻ result∷τ) nil in
+            ⟨ ω5 ⟩ _     <- (let we := @MkWorld (Σe ▻ result∷τ) ctx.nil in
                             let evars' := persist (A := Sub _) evars (ω2 ∘ ω3 ∘ ω4) in
                             let ζ      := sub_snoc evars' (result∷τ) res in
                             produce (w := we) ens (@acc_sub we _ ζ (fun _ _ => I))) ;;
@@ -1247,7 +1247,7 @@ Module Type SymbolicExecOn
           fun w0 args =>
             ⟨ ω1 ⟩ evars <- angelic_ctx id Σe ;;
             ⟨ ω2 ⟩ _     <- assert_eq_nenv (subst δe evars) args⟨ω1⟩ ;;
-            let we := @MkWorld Σe nil in
+            let we := @MkWorld Σe ctx.nil in
             ⟨ ω3 ⟩ _     <- consume (w := we) req (@acc_sub we _ evars (fun _ _ => I) ∘ ω2) ;;
                            (let evars' := persist (A := Sub _) evars (ω2 ∘ ω3) in
                             produce (w := we) ens (@acc_sub we _ evars' (fun _ _ => I)))
@@ -1404,13 +1404,13 @@ Module Type SymbolicExecOn
       Variable inline_fuel : nat.
 
       Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
-        SHeapSpecM Δ Δ Unit {| wctx := sep_contract_logic_variables c; wco := [] |} :=
+        SHeapSpecM Δ Δ Unit {| wctx := sep_contract_logic_variables c; wco := ctx.nil |} :=
         match c with
         | MkSepContract _ _ _ _ req result ens =>
           ⟨ ω01 ⟩ _   <- produce (w:=@MkWorld _ _) req acc_refl ;;
           ⟨ ω12 ⟩ res <- exec inline_fuel s ;;
           consume
-            (w:=wsnoc (@MkWorld _ []) (result∷τ)%ctx)
+            (w:=wsnoc (@MkWorld _ ctx.nil) (result∷τ)%ctx)
             ens
             (acc_snoc_left (acc_trans ω01 ω12) (result∷τ)%ctx res)
         end.
@@ -1532,7 +1532,7 @@ Module Type SymbolicExecOn
     Import SPureSpecM.notations.
 
     Definition replay_aux : forall {Σ} (s : 𝕊 Σ) {w : World},
-        MkWorld Σ [] ⊒ w -> SPureSpecM Unit w :=
+        MkWorld Σ ctx.nil ⊒ w -> SPureSpecM Unit w :=
       fix replay {Σ} s {w} {struct s} :=
         match s with
         | SymProp.angelic_binary o1 o2 =>
@@ -1555,7 +1555,7 @@ Module Type SymbolicExecOn
             fun r01 P =>
               angelicv b
                 (replay k
-                   (@acc_sub (MkWorld (Σ▻b) []) (wsnoc w b)
+                   (@acc_sub (MkWorld (Σ▻b) ctx.nil) (wsnoc w b)
                       (sub_up1 (sub_acc r01))
                       entails_nil)
                    (four P acc_snoc_right))
@@ -1563,7 +1563,7 @@ Module Type SymbolicExecOn
             fun r01 P =>
               demonicv b
                 (replay k
-                   (@acc_sub (MkWorld (Σ▻b) []) (wsnoc w b)
+                   (@acc_sub (MkWorld (Σ▻b) ctx.nil) (wsnoc w b)
                       (sub_up1 (sub_acc r01))
                       entails_nil)
                    (four P acc_snoc_right))
@@ -1574,14 +1574,14 @@ Module Type SymbolicExecOn
               let x1   := subst (T := fun Σ => Term Σ _) (term_var x) (sub_acc r01) in
               let t1   := subst (T := fun Σ => Term Σ _) t ζ in
               ⟨ r12 ⟩ _ <- assert_formula msg1 (formula_relop bop.eq x1 t1) ;;
-              replay k (@acc_sub (MkWorld (Σ-x∷σ) []) _ ζ entails_nil ∘ r12)
+              replay k (@acc_sub (MkWorld (Σ-x∷σ) ctx.nil) _ ζ entails_nil ∘ r12)
         | @assume_vareq _ x σ xIn t k =>
             fun r01 =>
               let ζ    := subst (sub_shift xIn) (sub_acc r01) in
               let x1   := subst (T := fun Σ => Term Σ _) (term_var x) (sub_acc r01) in
               let t1   := subst (T := fun Σ => Term Σ _) t ζ in
               ⟨ r12 ⟩ _ <- assume_formula (formula_relop bop.eq x1 t1) ;;
-              replay k (@acc_sub (MkWorld (Σ-x∷σ) []) _ ζ entails_nil ∘ r12)
+              replay k (@acc_sub (MkWorld (Σ-x∷σ) ctx.nil) _ ζ entails_nil ∘ r12)
         | debug b k => fun r01 P => debug (subst b (sub_acc r01)) (replay k r01 P)
         end.
 

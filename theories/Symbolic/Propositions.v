@@ -167,32 +167,31 @@ Module Type SymPropOn
         | Σ ▻ b => fun k => close Σ (@demonicv Σ b k)
         end%ctx.
 
-    Fixpoint assume_formulas_without_solver' {Σ}
-      (fmls : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
-      match fmls with
-      | nil           => p
-      | cons fml fmls => assume_formulas_without_solver' fmls (assumek fml p)
+    Fixpoint assume_pathcondition_without_solver' {Σ}
+      (C : PathCondition Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      match C with
+      | [ctx] => p
+      | C ▻ F => assume_pathcondition_without_solver' C (assumek F p)
       end.
 
-    Fixpoint assert_formulas_without_solver' {Σ}
-      (msg : AMessage Σ) (fmls : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
-      match fmls with
-      | nil => p
-      | cons fml fmls =>
-        assert_formulas_without_solver' msg fmls (assertk fml msg p)
+    Fixpoint assert_pathcondition_without_solver' {Σ}
+      (msg : AMessage Σ) (C : PathCondition Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      match C with
+      | [ctx] => p
+      | C ▻ F => assert_pathcondition_without_solver' msg C (assertk F msg p)
       end.
 
     (* These versions just add the world indexing. They simply enforces *)
-(*        that p should have been computed in the world with fmls added. *)
-    Definition assume_formulas_without_solver {w : World}
-      (fmls : List Formula w) (p : 𝕊 (wformulas w fmls)) : 𝕊 w :=
-      assume_formulas_without_solver' fmls p.
-    Global Arguments assume_formulas_without_solver {_} fmls p.
+    (* that p should have been computed in the world with [C] added. *)
+    Definition assume_pathcondition_without_solver {w : World}
+      (C : PathCondition w) (p : 𝕊 (wpathcondition w C)) : 𝕊 w :=
+      assume_pathcondition_without_solver' C p.
+    Global Arguments assume_pathcondition_without_solver {_} C p.
 
-    Definition assert_formulas_without_solver {w : World} (msg : AMessage w)
-      (fmls : List Formula w) (p : 𝕊 (wformulas w fmls)) : 𝕊 w :=
-      assert_formulas_without_solver' msg fmls p.
-    Global Arguments assert_formulas_without_solver {_} msg fmls p.
+    Definition assert_pathcondition_without_solver {w : World} (msg : AMessage w)
+      (C : PathCondition w) (p : 𝕊 (wpathcondition w C)) : 𝕊 w :=
+      assert_pathcondition_without_solver' msg C p.
+    Global Arguments assert_pathcondition_without_solver {_} msg C p.
 
     Fixpoint assume_triangular {w1 w2} (ξ : Tri w1 w2) : 𝕊 w2 -> 𝕊 w1 :=
       match ξ with
@@ -314,29 +313,29 @@ Module Type SymPropOn
       now rewrite inst_subst, inst_sub_shift.
     Qed.
 
-    Lemma safe_assume_formulas_without_solver {w0 : World}
-      (fmls : List Formula w0) (p : 𝕊 w0) (ι0 : Valuation w0) :
-      wsafe (assume_formulas_without_solver fmls p) ι0 <->
-      (instpc fmls ι0 -> @wsafe (wformulas w0 fmls) p ι0).
+    Lemma safe_assume_pathcondition_without_solver {w0 : World}
+      (C : PathCondition w0) (p : 𝕊 w0) (ι0 : Valuation w0) :
+      wsafe (assume_pathcondition_without_solver C p) ι0 <->
+      (instprop C ι0 -> @wsafe (wpathcondition w0 C) p ι0).
     Proof.
-      unfold assume_formulas_without_solver. revert p.
-      induction fmls; cbn in *; intros p.
+      unfold assume_pathcondition_without_solver. revert p.
+      induction C; cbn in *; intros p.
       - destruct w0; cbn; split; auto.
-      - rewrite IHfmls. cbn. intuition.
+      - rewrite IHC. cbn. intuition.
     Qed.
 
-    Lemma safe_assert_formulas_without_solver {w0 : World}
-      (msg : AMessage w0) (fmls : List Formula w0) (p : 𝕊 w0)
+    Lemma safe_assert_pathcondition_without_solver {w0 : World}
+      (msg : AMessage w0) (C : PathCondition w0) (p : 𝕊 w0)
       (ι0 : Valuation w0) :
-      wsafe (assert_formulas_without_solver msg fmls p) ι0 <->
-      (instpc fmls ι0 /\ @wsafe (wformulas w0 fmls) p ι0).
+      wsafe (assert_pathcondition_without_solver msg C p) ι0 <->
+      (instprop C ι0 /\ @wsafe (wpathcondition w0 C) p ι0).
     Proof.
-      unfold assert_formulas_without_solver. revert p.
-      induction fmls; cbn in *; intros p.
+      unfold assert_pathcondition_without_solver. revert p.
+      induction C; cbn in *; intros p.
       - destruct w0; cbn; split.
         + intros HYP. split; auto.
         + intros []; auto.
-      - rewrite IHfmls; cbn.
+      - rewrite IHC; cbn.
         split; intros []; auto.
         + destruct H0. destruct H0. auto.
         + destruct H. split; auto. split; auto.
@@ -919,30 +918,30 @@ Module Type SymPropOn
 
     Module SolveEvars.
 
-      Fixpoint assert_msgs_formulas {Σ} (mfs : List (WithMessage Formula) Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      Fixpoint assert_msgs_formulas {Σ} (mfs : Ctx (WithMessage Formula Σ)) (p : 𝕊 Σ) : 𝕊 Σ :=
         match mfs with
-        | nil => p
-        | cons (wmsg.mk msg fml) mfs =>
+        | ctx.nil => p
+        | ctx.snoc mfs (wmsg.mk msg fml) =>
           assert_msgs_formulas mfs (assertk fml msg p)
         end.
 
-      Lemma safe_assert_msgs_formulas {Σ} {mfs : List (WithMessage Formula) Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
-        (safe (assert_msgs_formulas mfs p) ι <-> instpc (map wmsg.from mfs) ι /\ safe p ι).
+      Lemma safe_assert_msgs_formulas {Σ} {mfs : Ctx (WithMessage Formula Σ)} {p : 𝕊 Σ} {ι : Valuation Σ} :
+        (safe (assert_msgs_formulas mfs p) ι <-> instprop (ctx.map wmsg.from mfs) ι /\ safe p ι).
       Proof.
         revert p.
         induction mfs; intros p; cbn.
         - intuition.
-        - destruct a. rewrite IHmfs. now cbn.
+        - destruct b. rewrite IHmfs. now cbn.
       Qed.
 
       Inductive ECtx (Σ : LCtx) : LCtx -> Type :=
-      | ectx Σe (mfs : List (WithMessage Formula) (Σ ▻▻ Σe)) : ECtx Σ (Σ ▻▻ Σe).
+      | ectx Σe (mfs : Ctx (WithMessage Formula (Σ ▻▻ Σe))) : ECtx Σ (Σ ▻▻ Σe).
       Arguments ectx {Σ} Σe mfs.
 
-      Definition ectx_refl {Σ : LCtx} : ECtx Σ Σ := @ectx Σ ctx.nil nil.
+      Definition ectx_refl {Σ : LCtx} : ECtx Σ Σ := @ectx Σ ctx.nil ctx.nil.
 
       Definition ectx_formula {Σ1 Σ2} (e: ECtx Σ1 Σ2) : AMessage Σ2 -> Formula Σ2 -> ECtx Σ1 Σ2 :=
-        match e with ectx Σe mfs => fun msg fml => ectx Σe (cons (wmsg.mk msg fml) mfs) end.
+        match e with ectx Σe mfs => fun msg fml => ectx Σe (mfs ▻ wmsg.mk msg fml) end.
       Definition ectx_snoc {Σ1 Σ2} (e: ECtx Σ1 Σ2) b : ECtx Σ1 (Σ2 ▻ b) :=
         match e with ectx Σe mfs => ectx (Σe ▻ b) (subst mfs sub_wk1) end.
       Definition ectx_subst {Σ1 Σ2} (e : ECtx Σ1 Σ2) :
@@ -987,7 +986,7 @@ Module Type SymPropOn
         | debug b p              => plug ec (debug b (push ectx_refl p))
         end.
 
-      #[export] Instance proper_assert_msgs_formulas {Σ} (mfs : List (WithMessage Formula) Σ) :
+      #[export] Instance proper_assert_msgs_formulas {Σ} (mfs : Ctx (WithMessage Formula Σ)) :
         Proper (sequiv Σ ==> sequiv Σ) (assert_msgs_formulas mfs).
       Proof. intros p q pq ι. rewrite ?safe_assert_msgs_formulas. intuition. Qed.
 
@@ -998,7 +997,7 @@ Module Type SymPropOn
         now apply proper_angelic_close0, proper_assert_msgs_formulas.
       Qed.
 
-      Lemma assert_msgs_formulas_angelic_binary {Σ} (mfs : List (WithMessage Formula) Σ) (p1  p2 : 𝕊 Σ) :
+      Lemma assert_msgs_formulas_angelic_binary {Σ} (mfs : Ctx (WithMessage Formula Σ)) (p1 p2 : 𝕊 Σ) :
         assert_msgs_formulas mfs (angelic_binary p1 p2) <=>
         angelic_binary (assert_msgs_formulas mfs p1) (assert_msgs_formulas mfs p2).
       Proof.
@@ -1008,17 +1007,17 @@ Module Type SymPropOn
       Qed.
 
       Lemma map_snd_subst {Σ Σ' : LCtx} {ζ : Sub Σ Σ'}
-            {mfs : List (WithMessage Formula) Σ} :
-            map wmsg.from (subst mfs ζ) = subst (map wmsg.from mfs) ζ.
+            {mfs : Ctx (WithMessage Formula Σ)} :
+            ctx.map wmsg.from (subst mfs ζ) = subst (ctx.map wmsg.from mfs) ζ.
       Proof.
         induction mfs.
         - easy.
         - cbn.
           rewrite IHmfs.
-          now destruct a.
+          now destruct b.
       Qed.
 
-      Lemma assert_msgs_formulas_angelicv {b Σ} (mfs : List (WithMessage Formula) Σ) (p : 𝕊 (Σ ▻ b)) :
+      Lemma assert_msgs_formulas_angelicv {b Σ} (mfs : Ctx (WithMessage Formula Σ)) (p : 𝕊 (Σ ▻ b)) :
         assert_msgs_formulas mfs (angelicv b p) <=>
         angelicv b (assert_msgs_formulas (subst mfs sub_wk1) p).
       Proof.
@@ -1121,32 +1120,31 @@ Module Type SymPropOn
 
     Module SolveUvars.
 
-      Fixpoint assume_formulas {Σ} (fs : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
-        match fs with
-        | nil => p
-        | cons fml mfs =>
-          assume_formulas mfs (assumek fml p)
+      Fixpoint assume_pathcondition {Σ} (C : PathCondition Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+        match C with
+        | [ctx] => p
+        | C ▻ F => assume_pathcondition C (assumek F p)
         end.
 
-      Lemma safe_assume_formulas {Σ} {fs : List Formula Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
-        safe (assume_formulas fs p) ι <-> (instpc fs ι -> safe p ι).
+      Lemma safe_assume_pathcondition {Σ} {C : PathCondition Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
+        safe (assume_pathcondition C p) ι <-> (instprop C ι -> safe p ι).
       Proof.
         revert p.
-        induction fs; intros p; cbn.
+        induction C; intros p; cbn.
         - intuition.
-        - rewrite IHfs. cbn. intuition.
+        - rewrite IHC. cbn. intuition.
       Qed.
 
       Inductive UCtx (Σ : LCtx) : LCtx -> Type :=
-      | uctx Σu (mfs : List Formula (Σ ▻▻ Σu)) : UCtx Σ (Σ ▻▻ Σu).
+      | uctx Σu (mfs : PathCondition (Σ ▻▻ Σu)) : UCtx Σ (Σ ▻▻ Σu).
       Arguments uctx {Σ} Σu mfs.
 
-      Definition uctx_refl {Σ : LCtx} : UCtx Σ Σ := @uctx Σ ctx.nil nil.
+      Definition uctx_refl {Σ : LCtx} : UCtx Σ Σ := @uctx Σ ctx.nil ctx.nil.
 
       Definition uctx_formula {Σ1 Σ2} (e : UCtx Σ1 Σ2) : Formula Σ2 -> UCtx Σ1 Σ2 :=
-        match e with uctx Σu mfs => fun fml => uctx Σu (cons fml mfs) end.
+        match e with uctx Σu C => fun F => uctx Σu (C ▻ F) end.
       Definition uctx_snoc {Σ1 Σ2} (e: UCtx Σ1 Σ2) b : UCtx Σ1 (Σ2 ▻ b) :=
-        match e with uctx Σu mfs => uctx (Σu ▻ b) (subst mfs sub_wk1) end.
+        match e with uctx Σu C => uctx (Σu ▻ b) (subst C sub_wk1) end.
       Definition uctx_subst {Σ1 Σ2} (e : UCtx Σ1 Σ2) :
         forall x σ (xIn : x∷σ ∈ Σ2) (t : Term (Σ2 - x∷σ) σ),
           option (UCtx Σ1 (Σ2 - x∷σ)) :=
@@ -1165,15 +1163,15 @@ Module Type SymPropOn
         end.
 
       Definition plug {Σ1 Σ2} (e : UCtx Σ1 Σ2) : 𝕊 Σ2 -> 𝕊 Σ1 :=
-        match e with uctx Σu mfs => fun p => demonic_close0 Σu (assume_formulas mfs p) end.
+        match e with uctx Σu C => fun p => demonic_close0 Σu (assume_pathcondition C p) end.
 
       Definition plug_error {Σ1 Σ2} (ec : UCtx Σ1 Σ2) : AMessage Σ2 -> 𝕊 Σ1 :=
        match ec with
-       | uctx Σu mfs as ec =>
+       | uctx Σu C as ec =>
            fun msg =>
-             match mfs with
-             | List.nil      => error (amsg.close msg)
-             | List.cons _ _ => plug ec (error msg)
+             match C with
+             | [ctx] => error (amsg.close msg)
+             | _ ▻ _ => plug ec (error msg)
              end
        end.
 
@@ -1197,34 +1195,34 @@ Module Type SymPropOn
         | debug b p              => plug ec (debug b (push uctx_refl p))
         end.
 
-      #[export] Instance proper_assume_formulas {Σ} (mfs : List Formula Σ) :
-        Proper (sequiv Σ ==> sequiv Σ) (assume_formulas mfs).
-      Proof. intros p q pq ι. rewrite ?safe_assume_formulas. intuition. Qed.
+      #[export] Instance proper_assume_pathcondition {Σ} (mfs : PathCondition Σ) :
+        Proper (sequiv Σ ==> sequiv Σ) (assume_pathcondition mfs).
+      Proof. intros p q pq ι. rewrite ?safe_assume_pathcondition. intuition. Qed.
 
-      #[export] Instance proper_assume_formulas_impl {Σ} (mfs : List Formula Σ) :
-        Proper (simpl Σ ==> simpl Σ) (assume_formulas mfs).
-      Proof. intros p q pq ι. rewrite ?safe_assume_formulas. intuition. Qed.
+      #[export] Instance proper_assume_pathcondition_impl {Σ} (mfs : PathCondition Σ) :
+        Proper (simpl Σ ==> simpl Σ) (assume_pathcondition mfs).
+      Proof. intros p q pq ι. rewrite ?safe_assume_pathcondition. intuition. Qed.
 
       #[export] Instance proper_plug {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
         Proper (sequiv Σ2 ==> sequiv Σ1) (plug ec).
       Proof.
         intros p q pq. destruct ec; cbn.
-        now apply proper_demonic_close0, proper_assume_formulas.
+        now apply proper_demonic_close0, proper_assume_pathcondition.
       Qed.
 
       #[export] Instance proper_plug_impl {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
         Proper (simpl Σ2 ==> simpl Σ1) (plug ec).
       Proof.
         intros p q pq. destruct ec; cbn.
-        now apply proper_demonic_close0_impl, proper_assume_formulas_impl.
+        now apply proper_demonic_close0_impl, proper_assume_pathcondition_impl.
       Qed.
 
-      Lemma assume_formulas_demonic_binary {Σ} (fmls : List Formula Σ) (p1 p2 : 𝕊 Σ) :
-        assume_formulas fmls (demonic_binary p1 p2) <=>
-        demonic_binary (assume_formulas fmls p1) (assume_formulas fmls p2).
+      Lemma assume_pathcondition_demonic_binary {Σ} (fmls : PathCondition Σ) (p1 p2 : 𝕊 Σ) :
+        assume_pathcondition fmls (demonic_binary p1 p2) <=>
+        demonic_binary (assume_pathcondition fmls p1) (assume_pathcondition fmls p2).
       Proof.
         intros ι; cbn.
-        rewrite ?safe_assume_formulas.
+        rewrite ?safe_assume_pathcondition.
         cbn. intuition.
       Qed.
 
@@ -1232,15 +1230,15 @@ Module Type SymPropOn
         (Q -> forall (x : A), P x) <-> (forall (x : A), Q -> P x).
       Proof. firstorder. Qed.
 
-      Lemma assume_formulas_demonicv {b Σ} (fmls : List Formula Σ) (p : 𝕊 (Σ ▻ b)) :
-        assume_formulas fmls (demonicv b p) <=>
-        demonicv b (assume_formulas (subst fmls sub_wk1) p).
+      Lemma assume_pathcondition_demonicv {b Σ} (fmls : PathCondition Σ) (p : 𝕊 (Σ ▻ b)) :
+        assume_pathcondition fmls (demonicv b p) <=>
+        demonicv b (assume_pathcondition (subst fmls sub_wk1) p).
       Proof.
         intros ι; cbn.
-        rewrite safe_assume_formulas. cbn.
+        rewrite safe_assume_pathcondition. cbn.
         rewrite forall_impl.
         apply base.forall_proper. intros v.
-        rewrite safe_assume_formulas.
+        rewrite safe_assume_pathcondition.
         rewrite inst_subst.
         rewrite inst_sub_wk1.
         reflexivity.
@@ -1260,9 +1258,9 @@ Module Type SymPropOn
         rewrite ?safe_demonic_close0.
         split; intros HYP ιu.
         - specialize (HYP (env.remove (x∷σ) ιu bIn)).
-          rewrite safe_assume_formulas. intros Hpc Heq.
+          rewrite safe_assume_pathcondition. intros Hpc Heq.
           rewrite <- inst_sub_shift in Heq.
-          rewrite safe_assume_formulas in HYP.
+          rewrite safe_assume_pathcondition in HYP.
           rewrite inst_subst in HYP.
           rewrite inst_eq_rect in HYP.
           unfold eq_rect_r in HYP. rewrite safe_eq_rect, eq_sym_involutive in HYP.
@@ -1270,9 +1268,9 @@ Module Type SymPropOn
           rewrite <- inst_sub_shift.
           rewrite inst_sub_single_shift; auto.
         - specialize (HYP (env.insert bIn ιu (inst (eq_rect ((Σ1 ▻▻ Σu) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σu - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιu)))).
-          rewrite safe_assume_formulas, inst_subst, inst_eq_rect. intros Hpc.
+          rewrite safe_assume_pathcondition, inst_subst, inst_eq_rect. intros Hpc.
           unfold eq_rect_r. rewrite safe_eq_rect, eq_sym_involutive.
-          rewrite safe_assume_formulas in HYP. cbn in HYP.
+          rewrite safe_assume_pathcondition in HYP. cbn in HYP.
           rewrite env_insert_app, env.remove_insert, env.insert_lookup in HYP.
           rewrite inst_eq_rect in HYP.
           rewrite inst_sub_single2 in Hpc.
@@ -1290,19 +1288,19 @@ Module Type SymPropOn
           (* destruct ec. cbn [plug]. *)
           (* rewrite <- demonic_close0_demonic_binary. *)
           (* apply proper_demonic_close0. *)
-          (* now rewrite <- assume_formulas_demonic_binary. *)
+          (* now rewrite <- assume_pathcondition_demonic_binary. *)
         - now destruct ec as [? []].
         - intros ι _. destruct ec; cbn.
           rewrite safe_demonic_close0; intros ιu.
-          rewrite safe_assume_formulas; cbn; auto.
+          rewrite safe_assume_pathcondition; cbn; auto.
         - apply proper_plug_impl, proper_assertk_impl, IHp.
         - rewrite IHp. clear IHp.
           destruct ec; cbn. reflexivity.
         - apply proper_plug_impl, proper_angelicv_impl, IHp.
         - rewrite IHp. clear IHp. destruct ec; cbn.
           apply proper_demonic_close0_impl. intros ι. cbn.
-          rewrite safe_assume_formulas. intros H Mmfs v.
-          specialize (H v). rewrite safe_assume_formulas in H.
+          rewrite safe_assume_pathcondition. intros H Mmfs v.
+          specialize (H v). rewrite safe_assume_pathcondition in H.
           apply H. now rewrite inst_subst, inst_sub_wk1.
         - apply proper_plug_impl, proper_assert_vareq_impl, IHp.
         - destruct (uctx_subst_spec ec xIn t).

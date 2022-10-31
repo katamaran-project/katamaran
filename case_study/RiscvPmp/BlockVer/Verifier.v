@@ -168,7 +168,7 @@ Module BlockVerification.
   Definition VC {Σ : LCtx} (req : Assertion Σ) (b : list AST) (ens : Assertion Σ) : 𝕊 Σ :=
     Post.prune (Post.solve_uvars (Post.prune (Post.solve_evars (Post.prune
       (@exec_triple
-        {| wctx := Σ; wco := nil |}
+        {| wctx := Σ; wco := []%ctx |}
         req b ens
         (* Could include leakcheck here *)
         (fun _ _ _ _ h => SymProp.block)
@@ -245,7 +245,7 @@ Module BlockVerificationDerived.
   Definition VC {Σ : LCtx} (req : Assertion Σ) (b : list AST) (ens : Assertion Σ) : 𝕊 ε :=
     SymProp.demonic_close
       (@exec_triple
-         {| wctx := Σ; wco := nil |}
+         {| wctx := Σ; wco := []%ctx |}
          req b ens
          (* Could include leakcheck here *)
          (fun _ _ _ _ h => SymProp.block)
@@ -331,11 +331,11 @@ Module BlockVerificationDerived2.
 
   (* This is a VC for triples, for doubles we probably need to talk
      about the continuation of a block. *)
-  Definition VC__addr {Σ : LCtx} (req : Assertion {| wctx := Σ ▻ ("a":: ty_xlenbits); wco := nil |}) (b : list AST)
-    (ens : Assertion {| wctx := Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits); wco := nil |}) : 𝕊 ε :=
+  Definition VC__addr {Σ : LCtx} (req : Assertion {| wctx := Σ ▻ ("a":: ty_xlenbits); wco := []%ctx |}) (b : list AST)
+    (ens : Assertion {| wctx := Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits); wco := []%ctx |}) : 𝕊 ε :=
     SymProp.demonic_close
       (@exec_triple_addr
-         {| wctx := Σ; wco := nil |}
+         {| wctx := Σ; wco := []%ctx |}
          req b ens
          (* Could include leakcheck here *)
          (fun _ _ _ _ h => SymProp.block)
@@ -548,7 +548,7 @@ Module BlockVerificationDerived2Sound.
   Lemma refine_exec_triple_addr {Σ : World}
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-    forall {ι0 : Valuation Σ} (Hpc0 : instpc (wco Σ) ι0),
+    forall {ι0 : Valuation Σ} (Hpc0 : instprop (wco Σ) ι0),
       ℛ⟦RHeapSpecM [ctx] [ctx] RUnit⟧@{ι0}
         (@BlockVerificationDerived2.exec_triple_addr Σ req b ens)
         (exec_triple_addr__c ι0 req b ens).
@@ -810,8 +810,8 @@ Module BlockVerificationDerived2Sem.
       (fun a na => asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
   Proof.
     intros Hverif ι.
-    apply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := [] |}) (pre := pre) (post := post) (instrs := instrs)).
-    eapply (refine_exec_triple_addr (Σ := {| wctx := Γ ; wco := [] |}) I (ta := λ w1 _ _ _ _, SymProp.block)).
+    apply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := []%ctx |}) (pre := pre) (post := post) (instrs := instrs)).
+    eapply (refine_exec_triple_addr (Σ := {| wctx := Γ ; wco := []%ctx |}) I (ta := λ w1 _ _ _ _, SymProp.block)).
     all: cycle 3.
     - rewrite SymProp.wsafe_safe SymProp.safe_debug_safe.
       apply (safeE_safe env.nil), postprocess_sound in Hverif.

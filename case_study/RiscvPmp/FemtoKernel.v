@@ -171,13 +171,13 @@ Import BlockVerificationDerived2.
     Local Notation asn_pmp_all_entries_unlocked l := (asn.formula (formula_user pmp_all_entries_unlocked [l])).
 
     Let Σ__femtoinit : LCtx := [].
-    Let W__femtoinit : World := MkWorld Σ__femtoinit [].
+    Let W__femtoinit : World := MkWorld Σ__femtoinit []%ctx.
 
     Example femtokernel_default_pmpcfg : Pmpcfg_ent :=
       {| L := false; A := OFF; X := false; W := false; R := false |}.
 
     (* DOMI: TODO: replace the pointsto chunk for 84 ↦ 42 with a corresponding invariant *)
-    Example femtokernel_init_pre : Assertion {| wctx := [] ▻ ("a"::ty_xlenbits) ; wco := nil |} :=
+    Example femtokernel_init_pre : Assertion {| wctx := [] ▻ ("a"::ty_xlenbits) ; wco := []%ctx |} :=
         (term_var "a" = term_val ty_word 0) ∗
       (∃ "v", mstatus ↦ term_var "v") ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
@@ -200,7 +200,7 @@ Import BlockVerificationDerived2.
                                                    (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a1")]))) ∗
       (term_var "a" + (term_val ty_xlenbits 84) ↦ᵣ term_val ty_xlenbits 42)%exp.
 
-    Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := nil |} :=
+    Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
       (
         asn.formula (formula_relop bop.eq (term_var "an") (term_var "a" + term_val ty_xlenbits 88)) ∗
           (∃ "v", mstatus ↦ term_var "v") ∗
@@ -243,9 +243,9 @@ Import BlockVerificationDerived2.
     Proof. now vm_compute. Qed.
 
     Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].
-    Let W__femtohandler : World := MkWorld Σ__femtohandler [].
+    Let W__femtohandler : World := MkWorld Σ__femtohandler []%ctx.
 
-    Example femtokernel_handler_pre : Assertion {| wctx := ["a" :: ty_xlenbits]; wco := nil |} :=
+    Example femtokernel_handler_pre : Assertion {| wctx := ["a" :: ty_xlenbits]; wco := []%ctx |} :=
         (term_var "a" = term_val ty_word 72) ∗
       (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
       (mtvec ↦ term_val ty_word 72) ∗
@@ -267,7 +267,7 @@ Import BlockVerificationDerived2.
                                    (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)]) (term_val ty_privilege User)) ∗
       (term_var "a" + (term_val ty_xlenbits 12) ↦ᵣ term_val ty_xlenbits 42)%exp.
 
-    Example femtokernel_handler_post : Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := nil |} :=
+    Example femtokernel_handler_post : Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := []%ctx |} :=
       (
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word 72) ∗

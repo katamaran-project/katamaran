@@ -98,7 +98,7 @@ Module Soundness
 
   Definition RValid {AT A} (R : Rel AT A) (t : Valid AT) (v : A) : Prop :=
     forall (w : World) (ι : Valuation w),
-      instpc (wco w) ι -> RSat R ι (t w) v.
+      instprop (wco w) ι -> RSat R ι (t w) v.
   #[local] Notation "ℛ⟦ R ⟧@{ ι }" := (RSat R%R ι) (format "ℛ⟦ R ⟧@{ ι }") .
   #[local] Notation "ℛ⟦ R ⟧" := (RValid R%R) (format "ℛ⟦ R ⟧").
 
@@ -116,7 +116,7 @@ Module Soundness
     MkRel (fun w0 ι0 a0 a =>
       forall (w1 : World) (ω01 : w0 ⊒ w1) (ι1 : Valuation w1),
         ι0 = inst (sub_acc ω01) ι1 ->
-        instpc (wco w1) ι1 ->
+        instprop (wco w1) ι1 ->
         ℛ⟦RA⟧@{ι1} (a0 w1 ω01) a).
 
   #[export] Instance RImpl {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
@@ -144,8 +144,8 @@ Module Soundness
   #[export] Instance RUnit : Rel Unit unit := RInst Unit unit.
   #[export] Instance RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
 
-  #[export] Instance RFormulas : Rel (List Formula) Prop :=
-    MkRel (fun w ι fs p => instpc fs ι <-> p).
+  #[export] Instance RPathCondition : Rel PathCondition Prop :=
+    MkRel (fun w ι fs p => instprop fs ι <-> p).
   #[export] Instance RFormula : Rel Formula Prop :=
     MkRel (fun w ι f p => inst f ι <-> p).
 
@@ -198,7 +198,7 @@ Module Soundness
   Qed.
 
   Lemma refine_T {AT A} (R : Rel AT A) :
-    forall (w : World) t v (ι : Valuation w), instpc (wco w) ι ->
+    forall (w : World) t v (ι : Valuation w), instprop (wco w) ι ->
       ℛ⟦□R⟧@{ι} t v -> ℛ⟦R⟧@{ι} (T t) v.
   Proof.
     intros * Hpc ra. apply ra; auto.
@@ -244,14 +244,14 @@ Module Soundness
        try change (sub_acc (@acc_refl ?w)) with (sub_id (wctx w));
        try change (wctx (wformula ?w ?fml)) with (wctx w);
        try change (sub_acc (@acc_formula_right ?w ?fml)) with (sub_id (wctx w));
-       try change (sub_acc (@acc_formulas_right ?w ?fmls)) with (sub_id (wctx w));
+       try change (sub_acc (@acc_pathcondition_right ?w ?fmls)) with (sub_id (wctx w));
        try change (wco (wformula ?w ?fml)) with (cons fml (wco w));
        try change (wco (@wsubst ?w _ _ ?xIn ?t)) with (subst (wco w) (sub_single xIn t));
        try change (wctx (@wsubst ?w _ _ ?xIn ?t)) with (ctx.remove xIn);
        try change (sub_acc (@acc_subst_right ?w _ _ ?xIn ?t)) with (sub_single xIn t);
        rewrite <- ?sub_comp_wk1_tail, ?inst_subst, ?subst_sub_id,
          ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc,
-         ?inst_lift, ?inst_sub_single_shift, ?inst_pathcondition_cons,
+         ?inst_lift, ?inst_sub_single_shift, ?inst_pathcondition_snoc,
          ?sub_acc_trans, ?sub_acc_triangular, ?inst_triangular_right_inverse).
 
   Section SymProp.
@@ -387,24 +387,24 @@ Module Soundness
         eapply refine_inst_persist; eauto.
     Qed.
 
-    Lemma refine_assume_formulas :
-      ℛ⟦RFormulas -> RPureSpecM RUnit⟧
-        SPureSpecM.assume_formulas CPureSpecM.assume_formula.
+    Lemma refine_assume_pathcondition :
+      ℛ⟦RPathCondition -> RPureSpecM RUnit⟧
+        SPureSpecM.assume_pathcondition CPureSpecM.assume_formula.
     Proof.
-      unfold SPureSpecM.assume_formulas, symprop_assume_formulas.
+      unfold SPureSpecM.assume_pathcondition, symprop_assume_pathcondition.
       intros w0 ι0 Hpc0 fmls0 p Heq POST__s POST__c HPOST.
       intros Hwp Hfmls0. apply Heq in Hfmls0.
-      destruct (solver_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      destruct (solver_spec _ fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0).
         destruct Hsolver as [Hν Hsolver]. inster Hν by auto.
         specialize (Hsolver (inst (sub_triangular_inv ζ) ι0)).
         rewrite inst_triangular_right_inverse in Hsolver; auto.
         inster Hsolver by now try apply entails_triangular_inv.
         destruct Hsolver as [Hsolver _]. inster Hsolver by auto.
-        rewrite safe_assume_triangular, safe_assume_formulas_without_solver in Hwp.
+        rewrite safe_assume_triangular, safe_assume_pathcondition_without_solver in Hwp.
         specialize (Hwp Hν Hsolver). revert Hwp.
         unfold four. apply HPOST; cbn; wsimpl; auto.
-        rewrite inst_pathcondition_app. split; auto.
+        rewrite inst_pathcondition_cat. split; auto.
         now apply entails_triangular_inv.
       - intuition.
     Qed.
@@ -414,19 +414,19 @@ Module Soundness
         SPureSpecM.assume_formula CPureSpecM.assume_formula.
     Proof.
       unfold SPureSpecM.assume_formula, CPureSpecM.assume_formula.
-      solve. apply refine_assume_formulas; cbn; intuition.
+      solve. apply refine_assume_pathcondition; cbn; intuition.
     Qed.
 
-    Lemma refine_assert_formulas :
-      ℛ⟦RMsg AMessage (RFormulas -> RPureSpecM RUnit)⟧
-        SPureSpecM.assert_formulas CPureSpecM.assert_formula.
+    Lemma refine_assert_pathcondition :
+      ℛ⟦RMsg AMessage (RPathCondition -> RPureSpecM RUnit)⟧
+        SPureSpecM.assert_pathcondition CPureSpecM.assert_formula.
     Proof.
-      unfold SPureSpecM.assert_formulas, CPureSpecM.assert_formula.
+      unfold SPureSpecM.assert_pathcondition, CPureSpecM.assert_formula.
       intros w0 ι0 Hpc0 msg fmls0 p Heq POST__s POST__c HPOST Hwp.
-      destruct (solver_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      destruct (solver_spec _ fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
         rewrite safe_assert_triangular in Hwp. destruct Hwp as [Hν Hwp].
-        rewrite safe_assert_formulas_without_solver in Hwp.
+        rewrite safe_assert_pathcondition_without_solver in Hwp.
         destruct Hwp as [Hfmls Hwp].
         split.
         + apply Hsolver in Hfmls; rewrite ?inst_triangular_right_inverse; auto.
@@ -434,7 +434,7 @@ Module Soundness
           now apply entails_triangular_inv.
         + revert Hwp. unfold four.
           apply HPOST; cbn; wsimpl; eauto.
-          rewrite inst_pathcondition_app. split; auto.
+          rewrite inst_pathcondition_cat. split; auto.
           now apply entails_triangular_inv.
       - intuition.
     Qed.
@@ -444,7 +444,7 @@ Module Soundness
         SPureSpecM.assert_formula CPureSpecM.assert_formula.
     Proof.
       unfold SPureSpecM.assert_formula, CPureSpecM.assert_formula.
-      solve. apply refine_assert_formulas; cbn; intuition.
+      solve. apply refine_assert_pathcondition; cbn; intuition.
     Qed.
 
     Lemma refine_angelic_binary `{R : Rel AT A} :
@@ -678,7 +678,7 @@ Module Soundness
 
     Lemma refine_debug {AT A} `{R : Rel AT A}
       {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0)
-          (Hpc : instpc (wco w0) ι0) f ms mc :
+          (Hpc : instprop (wco w0) ι0) f ms mc :
       ℛ⟦RHeapSpecM Γ1 Γ2 R⟧@{ι0} ms mc ->
       ℛ⟦RHeapSpecM Γ1 Γ2 R⟧@{ι0} (@SHeapSpecM.debug AT Γ1 Γ2 w0 f ms) mc.
     Proof.
@@ -787,13 +787,13 @@ Module Soundness
       eapply refine_formula_persist; eauto.
     Qed.
 
-    Lemma refine_assert_formulas {Γ} :
-      ℛ⟦RFormulas -> RHeapSpecM Γ Γ RUnit⟧
-        SHeapSpecM.assert_formulas CHeapSpecM.assert_formula.
+    Lemma refine_assert_pathcondition {Γ} :
+      ℛ⟦RPathCondition -> RHeapSpecM Γ Γ RUnit⟧
+        SHeapSpecM.assert_pathcondition CHeapSpecM.assert_formula.
     Proof.
       intros w ι Hpc Ps ps Hps POST__s POST__c HPOST δs δc Hδ hs hc Hh.
       apply refine_lift_purem; auto.
-      now apply PureSpecM.refine_assert_formulas.
+      now apply PureSpecM.refine_assert_pathcondition.
     Qed.
 
     Lemma refine_assert_eq_nenv {N Γ} (Δ : NCtx N Ty) :
@@ -1226,7 +1226,7 @@ Module Soundness
   End State.
 
   Lemma refine_produce_chunk {Γ} {w0 : World} (ι0 : Valuation w0)
-    (Hpc0 : instpc (wco w0) ι0) :
+    (Hpc0 : instprop (wco w0) ι0) :
     ℛ⟦_⟧@{ι0} (@SHeapSpecM.produce_chunk Γ w0) (CHeapSpecM.produce_chunk).
   Proof.
     intros cs cc ->.
@@ -1244,7 +1244,7 @@ Module Soundness
     let w0 := @MkWorld Σ0 pc0 in
     forall
       (ι0 : Valuation w0)
-      (Hpc0 : instpc (wco w0) ι0),
+      (Hpc0 : instprop (wco w0) ι0),
       ℛ⟦□(RHeapSpecM Γ Γ RUnit)⟧@{ι0} (@SHeapSpecM.produce Γ w0 asn) (CHeapSpecM.produce ι0 asn).
   Proof.
     induction asn; intros w0 * Hpc; cbn - [RSat wctx Val].
@@ -1340,7 +1340,7 @@ Module Soundness
   Lemma find_chunk_user_precise_spec {Σ p ΔI ΔO} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO) (h : SHeap Σ) :
     option.wlp
       (fun '(h', eqs) =>
-         forall ι : Valuation Σ, instpc eqs ι ->
+         forall ι : Valuation Σ, instprop eqs ι ->
            List.In
              (inst (chunk_user p (eq_rect_r (fun c : Ctx Ty => Env (Term Σ) c) (tsI ►► tsO) prec)) ι, inst h' ι)
              (heap_extractions (inst h ι)))
@@ -1372,7 +1372,7 @@ Module Soundness
   Lemma find_chunk_ptsreg_precise_spec {Σ σ} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ) (h : SHeap Σ) :
     option.wlp
       (fun '(h', eqs) =>
-         forall ι : Valuation Σ, instpc eqs ι ->
+         forall ι : Valuation Σ, instprop eqs ι ->
            List.In
              (inst (chunk_ptsreg r t) ι, inst h' ι)
              (heap_extractions (inst h ι)))
@@ -1380,7 +1380,7 @@ Module Soundness
   Proof.
     induction h; cbn [SHeapSpecM.find_chunk_ptsreg_precise]; [now constructor|].
     destruct SHeapSpecM.match_chunk_ptsreg_precise eqn:?.
-    - constructor. intros ι. rewrite inst_pathcondition_cons. intros [Hf Hpc].
+    - constructor. intros ι. rewrite inst_pathcondition_snoc. intros [Hpc Hf].
       clear IHh. destruct a; cbn in Heqo; try discriminate Heqo.
       destruct (eq_dec_het r r0); try discriminate Heqo.
       dependent elimination e. cbn in Heqo. dependent elimination Heqo.
@@ -1429,7 +1429,7 @@ Module Soundness
     { intros POST__s POST__c HPOST.
       intros δs δc Hδ hs' hc' Hh'.
       cbv [SHeapSpecM.put_heap SHeapSpecM.bind_right SHeapSpecM.bind  T]. cbn. intros Hwp.
-      eapply (refine_assert_formulas Hpc1 (ta := eqs)) in Hwp; eauto.
+      eapply (refine_assert_pathcondition Hpc1 (ta := eqs)) in Hwp; eauto.
       2: cbn; reflexivity.
       2: cbn; reflexivity.
       destruct Hwp as [Heqs HPOST1].
@@ -1494,7 +1494,7 @@ Module Soundness
     { intros POST__s POST__c HPOST.
       intros δs δc -> hs' hc' ->.
       cbv [SHeapSpecM.put_heap SHeapSpecM.bind_right T]. cbn. intros Hwp.
-      eapply (refine_assert_formulas Hpc1) in Hwp; eauto.
+      eapply (refine_assert_pathcondition Hpc1) in Hwp; eauto.
       2: cbn; reflexivity.
       2: cbn; reflexivity.
       2: cbn; reflexivity.
@@ -1547,7 +1547,7 @@ Module Soundness
     let w0 := @MkWorld Σ0 pc0 in
     forall
       (ι0 : Valuation w0)
-      (Hpc0 : instpc (wco w0) ι0),
+      (Hpc0 : instprop (wco w0) ι0),
       ℛ⟦□(RHeapSpecM Γ Γ RUnit)⟧@{ι0}
         (@SHeapSpecM.consume Γ w0 asn) (CHeapSpecM.consume ι0 asn).
   Proof.
@@ -1811,7 +1811,7 @@ Module Soundness
   Qed.
 
   Lemma refine_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) :
-    let w0 := {| wctx := sep_contract_logic_variables c; wco := nil |} in
+    let w0 := {| wctx := sep_contract_logic_variables c; wco := ctx.nil |} in
     forall (ι0 : Valuation w0),
       ℛ⟦RHeapSpecM Γ Γ RUnit⟧@{ι0}
         (SHeapSpecM.exec_contract cfg n c s) (CHeapSpecM.exec_contract n c s ι0).
@@ -1847,7 +1847,7 @@ Module Soundness
   Proof.
     unfold SHeapSpecM.vcgen, CHeapSpecM.vcgen.
     apply (refine_demonic_close
-             (w := {| wctx := sep_contract_logic_variables c; wco := nil |})).
+             (w := {| wctx := sep_contract_logic_variables c; wco := ctx.nil |})).
     intros ι.
     apply refine_exec_contract; auto.
     now intros w1 ω01 ι1 -> Hpc1.

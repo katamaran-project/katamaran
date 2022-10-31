@@ -88,10 +88,10 @@ Module SWAP.
 
   Section ContractAddr.
 
-	Example pre1' : Assertion  {| wctx := Σ1 ▻ ("a"::ty_xlenbits) ; wco := nil |} :=
+	Example pre1' : Assertion  {| wctx := Σ1 ▻ ("a"::ty_xlenbits) ; wco := []%ctx |} :=
 	  (x1 ↦ term_var "x") ∗ x2 ↦ term_var "y".
 
-	Example post1' : Assertion	{| wctx := Σ1 ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := nil |} :=
+	Example post1' : Assertion	{| wctx := Σ1 ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
 		x1 ↦ term_var "y" ∗
 		x2 ↦ term_var "x" ∗
 		term_var "an" = term_binop bop.plus (term_var "a") (term_val _ (Z.of_nat 12 : Val ty.int)).
