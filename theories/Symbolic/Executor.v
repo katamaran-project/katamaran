@@ -389,7 +389,7 @@ Module Type SymbolicExecOn
       (*     (at level 80, x at next level, *)
       (*       ma at next level, mb at level 200, *)
       (*       right associativity, only printing). *)
-      Notation "x ⟨ ω ⟩" := (persist x ω) (at level 9, format "x ⟨ ω ⟩").
+      Notation "x ⟨ ω ⟩" := (persist x ω).
     End notations.
 
     Local Hint Extern 2 (Persistent (WTerm ?σ)) =>
@@ -681,7 +681,7 @@ Module Type SymbolicExecOn
           (at level 80, x pattern,
            ma at next level, mb at level 200,
            right associativity) : mut_scope.
-      Notation "x ⟨ ω ⟩" := (persist x ω) (at level 9, format "x ⟨ ω ⟩").
+      Notation "x ⟨ ω ⟩" := (persist x ω).
 
     End notations.
     Local Open Scope mut_scope.

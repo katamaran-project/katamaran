@@ -382,10 +382,8 @@ Module Type TermsOn (Import TY : Types).
 
   Module SubNotations.
 
-    Notation "a ⟨ ζ ⟩" := (subst a ζ)
-      (at level 8, left associativity,
-        format "a ⟨ ζ ⟩").
-    Notation "ζ1 ∘ ζ2" := (@subst (Sub _) _ _ ζ1 _ ζ2) (at level 60, right associativity).
+    Notation "a ⟨ ζ ⟩" := (subst a ζ).
+    Notation "ζ1 ∘ ζ2" := (@subst (Sub _) _ _ ζ1 _ ζ2).
 
   End SubNotations.
 

@@ -68,6 +68,10 @@ Reserved Notation "s1 ;; s2" (at level 100, s2 at level 200, right associativity
 
 Reserved Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" (at level 75, no associativity).
 
+(* Subst / persist / inst notations. *)
+Reserved Notation "a ⟨ ζ ⟩" (at level 7, left associativity, format "a ⟨ ζ ⟩").
+Reserved Infix "∘" (at level 40, left associativity).
+
 (* Functor notations. Compatible with stdpp. *)
 Reserved Infix "<$>" (at level 61, left associativity).
 Reserved Infix "<*>" (at level 61, left associativity).
