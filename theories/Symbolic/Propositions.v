@@ -919,15 +919,15 @@ Module Type SymPropOn
 
     Module SolveEvars.
 
-      Fixpoint assert_msgs_formulas {Σ} (mfs : List (Pair AMessage Formula) Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      Fixpoint assert_msgs_formulas {Σ} (mfs : List (WithMessage Formula) Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
         match mfs with
         | nil => p
-        | cons (msg,fml) mfs =>
+        | cons (wmsg.mk msg fml) mfs =>
           assert_msgs_formulas mfs (assertk fml msg p)
         end.
 
-      Lemma safe_assert_msgs_formulas {Σ} {mfs : List (Pair AMessage Formula) Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
-        (safe (assert_msgs_formulas mfs p) ι <-> instpc (map snd mfs) ι /\ safe p ι).
+      Lemma safe_assert_msgs_formulas {Σ} {mfs : List (WithMessage Formula) Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
+        (safe (assert_msgs_formulas mfs p) ι <-> instpc (map wmsg.from mfs) ι /\ safe p ι).
       Proof.
         revert p.
         induction mfs; intros p; cbn.
@@ -936,13 +936,13 @@ Module Type SymPropOn
       Qed.
 
       Inductive ECtx (Σ : LCtx) : LCtx -> Type :=
-      | ectx Σe (mfs : List (Pair AMessage Formula) (Σ ▻▻ Σe)) : ECtx Σ (Σ ▻▻ Σe).
+      | ectx Σe (mfs : List (WithMessage Formula) (Σ ▻▻ Σe)) : ECtx Σ (Σ ▻▻ Σe).
       Arguments ectx {Σ} Σe mfs.
 
       Definition ectx_refl {Σ : LCtx} : ECtx Σ Σ := @ectx Σ ctx.nil nil.
 
       Definition ectx_formula {Σ1 Σ2} (e: ECtx Σ1 Σ2) : AMessage Σ2 -> Formula Σ2 -> ECtx Σ1 Σ2 :=
-        match e with ectx Σe mfs => fun msg fml => ectx Σe (cons (msg,fml) mfs) end.
+        match e with ectx Σe mfs => fun msg fml => ectx Σe (cons (wmsg.mk msg fml) mfs) end.
       Definition ectx_snoc {Σ1 Σ2} (e: ECtx Σ1 Σ2) b : ECtx Σ1 (Σ2 ▻ b) :=
         match e with ectx Σe mfs => ectx (Σe ▻ b) (subst mfs sub_wk1) end.
       Definition ectx_subst {Σ1 Σ2} (e : ECtx Σ1 Σ2) :
@@ -987,7 +987,7 @@ Module Type SymPropOn
         | debug b p              => plug ec (debug b (push ectx_refl p))
         end.
 
-      #[export] Instance proper_assert_msgs_formulas {Σ} (mfs : List (Pair AMessage Formula) Σ) :
+      #[export] Instance proper_assert_msgs_formulas {Σ} (mfs : List (WithMessage Formula) Σ) :
         Proper (sequiv Σ ==> sequiv Σ) (assert_msgs_formulas mfs).
       Proof. intros p q pq ι. rewrite ?safe_assert_msgs_formulas. intuition. Qed.
 
@@ -998,7 +998,7 @@ Module Type SymPropOn
         now apply proper_angelic_close0, proper_assert_msgs_formulas.
       Qed.
 
-      Lemma assert_msgs_formulas_angelic_binary {Σ} (mfs : List (Pair AMessage Formula) Σ) (p1  p2 : 𝕊 Σ) :
+      Lemma assert_msgs_formulas_angelic_binary {Σ} (mfs : List (WithMessage Formula) Σ) (p1  p2 : 𝕊 Σ) :
         assert_msgs_formulas mfs (angelic_binary p1 p2) <=>
         angelic_binary (assert_msgs_formulas mfs p1) (assert_msgs_formulas mfs p2).
       Proof.
@@ -1008,8 +1008,8 @@ Module Type SymPropOn
       Qed.
 
       Lemma map_snd_subst {Σ Σ' : LCtx} {ζ : Sub Σ Σ'}
-            {mfs : List (Pair AMessage Formula) Σ} :
-            map snd (subst mfs ζ) = subst (map snd mfs) ζ.
+            {mfs : List (WithMessage Formula) Σ} :
+            map wmsg.from (subst mfs ζ) = subst (map wmsg.from mfs) ζ.
       Proof.
         induction mfs.
         - easy.
@@ -1018,7 +1018,7 @@ Module Type SymPropOn
           now destruct a.
       Qed.
 
-      Lemma assert_msgs_formulas_angelicv {b Σ} (mfs : List (Pair AMessage Formula) Σ) (p : 𝕊 (Σ ▻ b)) :
+      Lemma assert_msgs_formulas_angelicv {b Σ} (mfs : List (WithMessage Formula) Σ) (p : 𝕊 (Σ ▻ b)) :
         assert_msgs_formulas mfs (angelicv b p) <=>
         angelicv b (assert_msgs_formulas (subst mfs sub_wk1) p).
       Proof.
