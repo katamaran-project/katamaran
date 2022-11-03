@@ -749,9 +749,12 @@ Module Type InstantiationOn
 
     Equations(noeqns) term_get_record {R Σ} (t : Term Σ (ty.record R)) :
       option (NamedEnv (Term Σ) (recordf_ty R)) :=
-      term_get_record (term_val _ v)        := Some (lift (recordv_unfold R v));
-      term_get_record (@term_record _ R ts) := Some ts;
-      term_get_record _ := None.
+    | term_val _ v     => (* We inlined lift here, so that user solvers that use
+                             this operation are spared with a inst_lift rewrite
+                             when pattern matching on symbolic records. *)
+                          Some (env.map (fun _ v => term_val _ v) (recordv_unfold R v))
+    | term_record R ts => Some ts
+    | _                => None.
 
     Lemma term_get_record_spec {Σ R} (s : Term Σ (ty.record R)) :
       option.wlp
@@ -761,8 +764,9 @@ Module Type InstantiationOn
              recordv_fold R (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (recordf_ty R)) (A := NamedEnv Val (recordf_ty R)) ts ι))
         (term_get_record s).
     Proof.
-      dependent elimination s; try constructor; auto.
-      intros ι. now rewrite inst_lift, recordv_fold_unfold.
+      dependent elimination s; try constructor; auto. intros ι. cbn.
+      change (v = recordv_fold R (inst (lift (recordv_unfold R v)) ι)).
+      now rewrite inst_lift, recordv_fold_unfold.
     Qed.
 
     Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty.tuple σs)) :

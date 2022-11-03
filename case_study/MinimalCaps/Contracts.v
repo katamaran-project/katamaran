@@ -1012,61 +1012,36 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
   Lemma subperm_O : forall p, Subperm O p.
   Proof. destruct p; reflexivity. Qed.
 
-  Local Ltac lsolve_match x :=
-    match x with
-    | @term_get_val ?Σ ?σ ?v =>
-        destruct (@term_get_val_spec Σ σ v); subst;
-        try progress cbn
-    | match ?x with _ => _ end =>
-        lsolve_match x
-    end.
+  Import Entailment.
 
   Local Ltac lsolve :=
     repeat
       lazymatch goal with
-      | |- option.spec _ _ (match ?x with _ => _ end) =>
-          lsolve_match x
-      | |- option.spec _ _ (Some _) =>
-          constructor; cbn; try intuition fail
-      | |- option.spec _ _ None =>
-          constructor; cbn; try intuition fail
-      end; auto.
+      | |- Some _             ⊣⊢ Some _             => apply @proper_some
+      | |- ctx.snoc ctx.nil _ ⊣⊢ ctx.snoc ctx.nil _ => apply proper_snoc; [easy|]
+      | |- None               ⊣⊢ Some _             => apply @unsatisfiable_none_some
+      | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
+      | op : BinOp _ _ ty.perm |- _                 => dependent elimination op
+      end; try easy; auto.
 
   Lemma solve_user_spec : SolverUserOnlySpec solve_user.
   Proof.
     intros Σ p ts.
     destruct p; cbv in ts; env.destroy ts; cbn.
-    - dependent elimination v0.
-      + constructor. cbn. intuition.
-      + dependent elimination v.
-        * destruct v0; constructor; cbn; auto; intuition. apply subperm_O.
-        * destruct v, v0; constructor; cbn; auto; unfold Subperm; intuition.
-        * dependent elimination op.
-      + dependent elimination op.
-    - dependent elimination v.
-      + constructor. cbn. intuition.
-      + destruct v.
-        unfold CorrectPC.
-        cbn.
-        destruct cap_permission; constructor; cbn; auto; intuition;
-          try (apply andb_prop in H; destruct H as [H _];
-               apply andb_prop in H; destruct H as [H1 H2];
-               apply Bool.andb_true_iff; split; intuition).
-      + constructor. cbn. intuition.
+    - dependent elimination v0; lsolve.
+      dependent elimination v; lsolve.
+      * destruct v0; cbn; lsolve.
+      * destruct v, v0; cbn; lsolve.
+    - dependent elimination v; lsolve.
+      + destruct v as [[] b e a]; cbn; lsolve;
+          intros ι; cbn; unfold CorrectPC; cbn; lia.
       + cbn in ts0; env.destroy ts0.
-        unfold CorrectPC, simplify_correctPC.
-        dependent elimination v2.
-        * constructor; cbn; intuition.
-        * destruct v2; constructor; cbn; auto; intuition;
-            apply andb_prop in H as [H _]; auto.
-        * dependent elimination op.
-    - dependent elimination v0.
-      + constructor. cbn. intuition.
-      + dependent elimination v.
-        * constructor. cbn. intuition.
-        * destruct v, v0; constructor; cbn; auto; unfold Not_is_perm; intuition.
-        * dependent elimination op.
-      + dependent elimination op.
+        dependent elimination v2; cbn; lsolve.
+        destruct v2; lsolve;
+          intros ι; cbn; unfold CorrectPC; cbn; try lia.
+    - dependent elimination v0; lsolve.
+      dependent elimination v; lsolve.
+      destruct v, v0; cbn; lsolve.
   Qed.
 
   Definition solver : Solver :=
