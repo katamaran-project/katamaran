@@ -475,13 +475,53 @@ Module Type InstantiationOn
   #[export] Hint Extern 0 (term_binop ?op _ _ ≡ term_binop ?op _ _) =>
       simple apply (proper_term_binop op) : katamaran.
 
-  Class InstProp (T : LCtx -> Type) : Type :=
-    instprop : forall {Σ}, T Σ -> Valuation Σ -> Prop.
-  Class InstPropSubst (T : LCtx -> Type) `{InstProp T, Subst T} : Prop :=
-    instprop_subst : forall {Σ Σ'} (ζ : Sub Σ Σ') (ι : Valuation Σ') (t : T Σ),
-        instprop (subst t ζ) ι <-> instprop t (inst ζ ι).
-  #[global] Arguments instprop {T _ Σ} !_ ι.
-  #[global] Arguments InstPropSubst T {_ _}.
+  Section InstProp.
+
+    Class InstProp (T : LCtx -> Type) : Type :=
+      instprop : forall {Σ}, T Σ -> Valuation Σ -> Prop.
+    Class InstPropSubst (T : LCtx -> Type) `{InstProp T, Subst T} : Prop :=
+      instprop_subst : forall {Σ Σ'} (ζ : Sub Σ Σ') (ι : Valuation Σ') (t : T Σ),
+          instprop (subst t ζ) ι <-> instprop t (inst ζ ι).
+    #[global] Arguments instprop {T _ Σ} !_ ι.
+    #[global] Arguments InstPropSubst T {_ _}.
+
+    #[export] Instance instprop_option `{InstProp A} : InstProp (Option A) :=
+      fun Σ o =>
+        match o with
+        | Some C => fun ι => instprop C ι
+        | None   => fun _ => False
+        end.
+
+    #[export] Instance instprop_pair `{InstProp A, InstProp B} : InstProp (Pair A B) :=
+      fun Σ '(a,b) ι => instprop a ι /\ instprop b ι.
+
+    #[export] Instance instpropsubst_pair `{InstPropSubst A, InstPropSubst B} : InstPropSubst (Pair A B).
+    Proof. hnf. intros ? ? ζ ι [a b]. apply and_iff_morphism; apply instprop_subst. Qed.
+
+    #[export] Instance instprop_ctx `{InstProp A} : InstProp (fun Σ => Ctx (A Σ)) :=
+      fix instprop_ctx {Σ} (xs : Ctx (A Σ)) (ι : Valuation Σ) : Prop :=
+        match xs with
+        | ctx.nil       => True
+        | ctx.snoc xs x => instprop_ctx xs ι /\ instprop x ι
+        end.
+
+    #[export] Instance instpropsubst_ctx `{InstPropSubst A} : InstPropSubst (fun Σ => Ctx (A Σ)).
+    Proof. intros ? ? ζ ι x. now induction x; cbn; [|apply and_iff_morphism]. Qed.
+
+    Lemma instprop_nil `{InstProp A} {Σ} (ι : Valuation Σ) :
+      instprop (@ctx.nil (A Σ)) ι <-> True.
+    Proof. reflexivity. Qed.
+
+    Lemma instprop_snoc `{InstProp A} {Σ} (ι : Valuation Σ) (xs : Ctx (A Σ)) (x : A Σ) :
+      instprop (xs ▻ x) ι <-> instprop xs ι /\ instprop x ι.
+    Proof. reflexivity. Qed.
+
+    Lemma instprop_cat `{InstProp A} {Σ} (x y : Ctx (A Σ)) (ι : Valuation Σ) :
+      instprop (x ▻▻ y) ι <->
+        instprop x ι /\ instprop y ι.
+    Proof. induction y; cbn; rewrite ?IHy; intuition. Qed.
+
+  End InstProp.
 
   Module Entailment.
 
@@ -570,52 +610,6 @@ Module Type InstantiationOn
     Infix "⊣⊢" := bientails.
     Notation "(⊣⊢@{ A } )" := (bientails (A:=A)) (only parsing).
 
-    Lemma proper_subst_entails `{InstPropSubst A, InstPropSubst B}
-      {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (x : A Σ1) (y : B Σ1) :
-      (x ⊢ y) -> (subst x ζ12 ⊢ subst y ζ12).
-    Proof. intros E ι. rewrite ?instprop_subst; eauto. Qed.
-
-  End Entailment.
-
-  Section InstProp.
-    Import Entailment.
-
-    #[export] Instance instprop_option `{InstProp A} : InstProp (Option A) :=
-      fun Σ o =>
-        match o with
-        | Some C => fun ι => instprop C ι
-        | None   => fun _ => False
-        end.
-
-    #[export] Instance instprop_pair `{InstProp A, InstProp B} : InstProp (Pair A B) :=
-      fun Σ '(a,b) ι => instprop a ι /\ instprop b ι.
-
-    #[export] Instance instpropsubst_pair `{InstPropSubst A, InstPropSubst B} : InstPropSubst (Pair A B).
-    Proof. hnf. intros ? ? ζ ι [a b]. apply and_iff_morphism; apply instprop_subst. Qed.
-
-    #[export] Instance instprop_ctx `{InstProp A} : InstProp (fun Σ => Ctx (A Σ)) :=
-      fix instprop_ctx {Σ} (xs : Ctx (A Σ)) (ι : Valuation Σ) : Prop :=
-        match xs with
-        | ctx.nil       => True
-        | ctx.snoc xs x => instprop_ctx xs ι /\ instprop x ι
-        end.
-
-    #[export] Instance instpropsubst_ctx `{InstPropSubst A} : InstPropSubst (fun Σ => Ctx (A Σ)).
-    Proof. intros ? ? ζ ι x. now induction x; cbn; [|apply and_iff_morphism]. Qed.
-
-    Lemma instprop_nil `{InstProp A} {Σ} (ι : Valuation Σ) :
-      instprop (@ctx.nil (A Σ)) ι <-> True.
-    Proof. reflexivity. Qed.
-
-    Lemma instprop_snoc `{InstProp A} {Σ} (ι : Valuation Σ) (xs : Ctx (A Σ)) (x : A Σ) :
-      instprop (xs ▻ x) ι <-> instprop xs ι /\ instprop x ι.
-    Proof. reflexivity. Qed.
-
-    Lemma instprop_cat `{InstProp A} {Σ} (x y : Ctx (A Σ)) (ι : Valuation Σ) :
-      instprop (x ▻▻ y) ι <->
-        instprop x ι /\ instprop y ι.
-    Proof. induction y; cbn; rewrite ?IHy; intuition. Qed.
-
     Lemma entails_nil `{InstProp A, InstProp B} {Σ} {x : A Σ} : x ⊢ @ctx.nil (B Σ).
     Proof. constructor. Qed.
 
@@ -623,7 +617,55 @@ Module Type InstantiationOn
       (x ⊢ ys) /\ (x ⊢ y) <-> (x ⊢ ys ▻ y).
     Proof. unfold entails; cbn. intuition. Qed.
 
-  End InstProp.
+    Lemma proper_subst_entails `{InstPropSubst A, InstPropSubst B}
+      {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (x : A Σ1) (y : B Σ1) :
+      (x ⊢ y) -> (subst x ζ12 ⊢ subst y ζ12).
+    Proof. intros E ι. rewrite ?instprop_subst; eauto. Qed.
+
+    #[export] Instance proper_snoc `{InstProp A} [Σ] :
+      Proper ((⊣⊢) ==> (⊣⊢) ==> (⊣⊢)) (@ctx.snoc (A Σ)).
+    Proof. intros C1 C2 HC F1 F2 HF ι. now apply and_iff_morphism. Qed.
+
+    #[local] Instance proper_snoc_entails `{InstProp A} [Σ] :
+      Proper ((⊢) ==> (⊢) ==> (⊢)) (@ctx.snoc (A Σ)).
+    Proof.
+      intros C1 C2 HC F1 F2 HF ι; cbn.
+      apply and_impl_morphism; red; [apply HC|apply HF].
+    Qed.
+
+    #[local] Instance proper_some `{InstProp A} [Σ] :
+      Proper ((⊣⊢) ==> (⊣⊢)) (@Some (A Σ)).
+    Proof. intros xs ys Hxys. apply Hxys. Qed.
+
+    Lemma snoc_cancel `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
+      Valid x -> xs ⊣⊢ xs ▻ x.
+    Proof. intros vx ι; specialize (vx ι). cbn in *. intuition. Qed.
+
+    Lemma unsatisfiable_snoc_l `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
+      Unsatisfiable xs -> Unsatisfiable (xs ▻ x).
+    Proof. unfold Unsatisfiable; intuition. Qed.
+
+    Lemma unsatisfiable_snoc_r `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
+      Unsatisfiable x -> Unsatisfiable (xs ▻ x).
+    Proof. unfold Unsatisfiable; intuition. Qed.
+
+    Lemma unsatisfiable_none_some `{InstProp A} [Σ] (x : A Σ) :
+      Unsatisfiable x -> None ⊣⊢ Some x.
+    Proof. unfold Unsatisfiable; intros ? ι; cbn; intuition. Qed.
+
+    Lemma unsatisfiable_some_none `{InstProp A} [Σ] (x : A Σ) :
+      Unsatisfiable x -> Some x ⊣⊢ None.
+    Proof. unfold Unsatisfiable; intros ? ι; cbn; intuition. Qed.
+
+    Lemma nil_l_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
+      Valid xs -> [ctx] ⊣⊢ xs.
+    Proof. unfold Valid; intros ? ι; cbn; intuition. Qed.
+
+    Lemma nil_r_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
+      Valid xs -> xs ⊣⊢ [ctx].
+    Proof. unfold Valid; intros ? ι; cbn; intuition. Qed.
+
+  End Entailment.
 
   Section Utils.
 

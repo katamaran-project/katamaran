@@ -138,6 +138,62 @@ Module Type FormulasOn
       auto; try Lia.lia; try (now destruct eq_dec; intuition).
   Qed.
 
+  Section Reasoning.
+    Import Entailment.
+
+    #[export] Instance proper_formula_user [Σ p] :
+      Proper (base.equiv ==> (⊣⊢)) (@formula_user Σ p).
+    Proof. intros xs ys xys ι; cbn; now rewrite xys. Qed.
+
+    #[export] Instance proper_formula_bool [Σ] :
+      Proper (base.equiv ==> (⊣⊢)) (@formula_bool Σ).
+    Proof. intros s t e ι; cbn; now rewrite e. Qed.
+
+    #[export] Instance proper_formula_relop [Σ σ] (rop : RelOp σ) :
+      Proper (base.equiv ==> base.equiv ==> (⊣⊢)) (@formula_relop Σ σ rop).
+    Proof. intros s1 t1 e1 s2 t2 e2 ι; cbn; now rewrite e1, e2. Qed.
+
+    Lemma formula_bool_and [Σ] (t1 t2 : Term Σ ty.bool):
+      formula_bool (term_binop bop.and t1 t2) ⊣⊢ formula_and (formula_bool t1) (formula_bool t2).
+    Proof. intro ι. cbn. rewrite andb_true_iff. intuition. Qed.
+    #[local] Hint Rewrite formula_bool_and : katamaran.
+
+    Lemma formula_bool_relop [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
+      formula_bool (term_binop (bop.relop op) s t) ⊣⊢ formula_relop op s t.
+    Proof. intro; cbn; symmetry; apply bop.eval_relop_equiv. Qed.
+
+    Lemma formula_bool_relop_neg [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
+      formula_bool (term_relop_neg op s t) ⊣⊢ formula_relop_neg op s t.
+    Proof.
+      intro; cbn.
+      rewrite inst_term_relop_neg, negb_true_iff.
+      now rewrite instprop_formula_relop_neg.
+    Qed.
+
+    Lemma formula_relop_val [Σ σ] (op : RelOp σ) (v1 v2 : Val σ) :
+      formula_relop (Σ:=Σ) op (term_val σ v1) (term_val σ v2) ⊣⊢
+      if bop.eval_relop_val op v1 v2 then formula_true else formula_false.
+    Proof.
+      intro. cbn. rewrite bop.eval_relop_equiv.
+      now destruct bop.eval_relop_val.
+    Qed.
+
+    Lemma formula_and_l [Σ] (F1 F2 : Formula Σ) : formula_and F1 F2 ⊢ F1.
+    Proof. intros ι H. apply H. Qed.
+
+    Lemma formula_and_r [Σ] (F1 F2 : Formula Σ) : formula_and F1 F2 ⊢ F2.
+    Proof. intros ι H. apply H. Qed.
+
+    Lemma unsatisfiable_formula_bool [Σ] (t : Term Σ ty.bool) :
+      base.equiv t (term_val ty.bool false) -> Unsatisfiable (formula_bool t).
+    Proof. intros e ι. specialize (e ι). cbn in *. intuition. Qed.
+
+    Lemma unsatisfiable_formula_false [Σ] :
+      Unsatisfiable (@formula_false Σ).
+    Proof. unfold Unsatisfiable; intuition. Qed.
+
+  End Reasoning.
+
   Import option.notations.
   #[export] Instance OccursCheckFormula : OccursCheck Formula :=
     fix oc {Σ x} xIn fml {struct fml} :=
@@ -162,8 +218,17 @@ Module Type FormulasOn
   Proof. occurs_check_derive. Qed.
 
   Section PathCondition.
+    Import Entailment.
 
     Definition PathCondition (Σ : LCtx) : Type := Ctx (Formula Σ).
+
+    Lemma formula_cons_true [Σ] (k : PathCondition Σ) :
+      k ▻ formula_true ⊣⊢ k.
+    Proof. symmetry. now apply snoc_cancel. Qed.
+
+    Lemma formula_snoc_and [Σ] (k : PathCondition Σ) (F1 F2 : Formula Σ) :
+      k ▻ formula_and F1 F2 ⊣⊢ k ▻ F1 ▻ F2.
+    Proof. intro ι. cbn. intuition. Qed.
 
     Equations(noeqns) formula_eqs_ctx {Δ : Ctx Ty} {Σ : LCtx}
       (δ δ' : Env (Term Σ) Δ) : PathCondition Σ :=
