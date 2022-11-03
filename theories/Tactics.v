@@ -40,6 +40,21 @@ Ltac head t :=
   | _ => t
   end.
 
+Ltac constructor_congruence :=
+  repeat
+    match goal with
+    | H: ?x = ?y |- _ =>
+        let hx := head x in
+        let hy := head y in
+        is_constructor hx; is_constructor hy;
+        dependent elimination H
+    | |- ?x = ?y =>
+        let hx := head x in
+        let hy := head y in
+        is_constructor hx; is_constructor hy;
+        f_equal
+    end.
+
 Ltac solve_eqb_spec' tac :=
   repeat
     (intros; try progress cbn in *;

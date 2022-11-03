@@ -55,255 +55,372 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
 
   Module Solver.
 
-    Open Scope list_scope.
-    Import List.ListNotations.
     Import option.notations.
+    Import Entailment.
 
-    Definition RFormula {Σ} : relation (Formula Σ) :=
-      fun x y => forall ι : Valuation Σ, inst x ι <-> inst y ι.
-    Definition RFormulas {Σ} : relation (PathCondition Σ) :=
-      fun xs ys => forall ι : Valuation Σ, instprop xs ι <-> instprop ys ι.
-    Definition ROFormulas {Σ} : relation (option (PathCondition Σ)) :=
-      fun oxs oys =>
-        forall ι : Valuation Σ,
-          option.wp (fun xs => instprop xs ι) oxs <->
-          option.wp (fun ys => instprop ys ι) oys.
-    #[local] Notation "x ~ y" := (RFormula x y) (at level 90).
-    #[local] Notation "x ≈ y" := (RFormulas x y) (at level 90).
-    #[local] Notation "x ≋ y" := (ROFormulas x y) (at level 90).
-
-    #[local] Hint Rewrite @inst_formula_relop_neg @inst_pathcondition_nil @inst_pathcondition_snoc @inst_pathcondition_cat : katamaran.
-    #[local] Hint Rewrite @inst_formula_eqs_ctx @inst_formula_eqs_nctx @envrec.of_env_inj
-      @recordv_fold_inj @unionv_fold_inj : katamaran.
+    #[local] Hint Rewrite @instprop_formula_relop_neg : katamaran.
+    #[local] Hint Rewrite @instprop_nil @instprop_snoc @instprop_cat : katamaran.
+    #[local] Hint Rewrite @recordv_fold_inj @unionv_fold_inj : katamaran.
     #[local] Hint Rewrite @bop.eval_relop_equiv : katamaran.
-    #[local] Hint Rewrite <- and_assoc : katamaran.
 
-    #[local] Instance rformula_equiv {Σ} : Equivalence (@RFormula Σ).
+    (* TODO: generalize and move *)
+    #[local] Instance proper_snoc [Σ] : Proper ((⊣⊢) ==> (⊣⊢) ==> (⊣⊢)) (@ctx.snoc (Formula Σ)).
+    Proof. intros C1 C2 HC F1 F2 HF ι. now apply and_iff_morphism. Qed.
+
+    #[local] Instance proper_snoc_entails [Σ] :
+      Proper ((⊢) ==> (⊢) ==> (⊢)) (@ctx.snoc (Formula Σ)).
     Proof.
-      constructor.
-      - unfold Reflexive. easy.
-      - unfold Symmetric. easy.
-      - intros x y z xy yz ι. now transitivity (inst y ι).
+      intros C1 C2 HC F1 F2 HF ι; cbn.
+      apply and_impl_morphism; red; [apply HC|apply HF].
     Qed.
 
-    #[local] Instance rformulas_equiv {Σ} : Equivalence (@RFormulas Σ).
-    Proof.
-      constructor.
-      - unfold Reflexive. easy.
-      - unfold Symmetric. easy.
-      - intros x y z xy yz ι. now transitivity (instprop y ι).
-    Qed.
+    #[local] Instance proper_some [Σ : LCtx] :
+      Proper ((⊣⊢) ==> (⊣⊢)) (@Some (Ctx (Formula Σ))).
+    Proof. intros xs ys Hxys. apply Hxys. Qed.
 
-    #[local] Instance roformulas_equiv {Σ} : Equivalence (@ROFormulas Σ).
-    Proof.
-      constructor.
-      - unfold Reflexive. easy.
-      - unfold Symmetric. easy.
-      - intros x y z xy yz ι.
-        now transitivity (option.wp (fun xs => instprop xs ι) y).
-    Qed.
+    #[local] Instance proper_formula_user [Σ p] :
+      Proper (base.equiv ==> (⊣⊢)) (@formula_user Σ p).
+    Proof. intros xs ys xys ι; cbn; now rewrite xys. Qed.
 
-    #[local] Instance proper_snoc [Σ] :
-      Proper (RFormulas ==> @RFormula Σ ==> RFormulas) ctx.snoc.
-    Proof. intros ? ? ? ? ? ? ?. cbn. now apply and_iff_morphism. Qed.
-
-    Lemma proper_some [Σ] :
-      Proper (@RFormulas Σ ==> @ROFormulas Σ) Some.
-    Proof. intros xs ys Hxys ι. now rewrite ?option.wp_some. Qed.
-
-    Lemma proper_formula_user [Σ p] :
-      Proper (SEEnv Σ (𝑷_Ty p) ==> @RFormula Σ) (formula_user p).
-    Proof. intros xs ys [xys] ι; cbn; now rewrite xys. Qed.
-
-    Lemma proper_formula_bool [Σ] :
-      Proper (SETerm Σ ty.bool ==> @RFormula Σ) formula_bool.
-    Proof. intros s t [e] ι; cbn; now rewrite e. Qed.
+    #[local] Instance proper_formula_bool [Σ] :
+      Proper (base.equiv ==> (⊣⊢)) (@formula_bool Σ).
+    Proof. intros s t e ι; cbn; now rewrite e. Qed.
 
     Lemma proper_formula_relop [Σ σ] (rop : RelOp σ) :
-      Proper (SETerm Σ σ ==> SETerm Σ σ ==> RFormula) (formula_relop rop).
-    Proof. intros s1 t1 [e1] s2 t2 [e2] ι; cbn; now rewrite e1, e2. Qed.
+      Proper (base.equiv ==> base.equiv ==> (⊣⊢)) (@formula_relop Σ σ rop).
+    Proof. intros s1 t1 e1 s2 t2 e2 ι; cbn; now rewrite e1, e2. Qed.
+
+    Lemma formula_bool_and [Σ] (t1 t2 : Term Σ ty.bool):
+      formula_bool (term_binop bop.and t1 t2) ⊣⊢ formula_and (formula_bool t1) (formula_bool t2).
+    Proof. intro ι. cbn. rewrite andb_true_iff. intuition. Qed.
+    #[local] Hint Rewrite formula_bool_and : katamaran.
+
+    Lemma formula_snoc_cancel [Σ] (F : Formula Σ) k :
+      Valid F -> k ⊣⊢ k ▻ F.
+    Proof. intros H ι; specialize (H ι). cbn in *. intuition. Qed.
+
+    Lemma formula_snoc_and [Σ] (k : PathCondition Σ) (F1 F2 : Formula Σ) :
+      k ▻ formula_and F1 F2 ⊣⊢ k ▻ F1 ▻ F2.
+    Proof. intro ι. cbn. intuition. Qed.
+
+    Lemma formula_cons_true [Σ] (k : PathCondition Σ) :
+      k ▻ formula_true ⊣⊢ k.
+    Proof. symmetry. now apply formula_snoc_cancel. Qed.
+
+    Lemma formula_bool_relop [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
+      formula_bool (term_binop (bop.relop op) s t) ⊣⊢ formula_relop op s t.
+    Proof. intro; cbn; symmetry; apply bop.eval_relop_equiv. Qed.
+    #[local] Hint Rewrite formula_bool_relop : katamaran.
+
+    Lemma formula_bool_relop_neg [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
+      formula_bool (term_relop_neg op s t) ⊣⊢ formula_relop_neg op s t.
+    Proof.
+      intro; cbn.
+      rewrite inst_term_relop_neg, negb_true_iff.
+      now rewrite instprop_formula_relop_neg.
+    Qed.
+    #[local] Hint Rewrite formula_bool_relop_neg : katamaran.
+
+    Lemma formula_relop_val [Σ σ] (op : RelOp σ) (v1 v2 : Val σ) :
+      formula_relop (Σ:=Σ) op (term_val σ v1) (term_val σ v2) ⊣⊢
+      if bop.eval_relop_val op v1 v2 then formula_true else formula_false.
+    Proof.
+      intro. cbn. rewrite bop.eval_relop_equiv.
+      now destruct bop.eval_relop_val.
+    Qed.
+
+    Lemma formula_and_l [Σ] (F1 F2 : Formula Σ) :
+      formula_and F1 F2 ⊢ F1.
+    Proof. intros ι H. apply H. Qed.
+
+    Lemma formula_and_r [Σ] (F1 F2 : Formula Σ) :
+      formula_and F1 F2 ⊢ F2.
+    Proof. intros ι H. apply H. Qed.
+
+    Lemma unsatisfiable_snoc_l [Σ] (C : PathCondition Σ) (F : Formula Σ) :
+      Unsatisfiable C -> Unsatisfiable (ctx.snoc C F).
+    Proof. unfold Unsatisfiable; intuition. Qed.
+
+    Lemma unsatisfiable_snoc_r [Σ] (C : PathCondition Σ) (F : Formula Σ) :
+      Unsatisfiable F -> Unsatisfiable (ctx.snoc C F).
+    Proof. unfold Unsatisfiable; intuition. Qed.
+
+    Lemma unsatisfiable_formula_bool [Σ] (t : Term Σ ty.bool) :
+      base.equiv t (term_val ty.bool false) -> Unsatisfiable (formula_bool t).
+    Proof. intros e ι. specialize (e ι). cbn in *. intuition. Qed.
+
+    Lemma unsatisfiable_formula_false [Σ] :
+      Unsatisfiable (@formula_false Σ).
+    Proof. unfold Unsatisfiable; intuition. Qed.
+
+    Module Import DList.
+      Record DList (Σ : LCtx) : Type :=
+        MkDList
+        { raw : PathCondition Σ -> Option PathCondition Σ;
+          wf : forall k ι, instprop (raw k) ι <-> instprop (raw ctx.nil) ι /\ instprop k ι;
+        }.
+
+      #[export] Instance instprop_dlist : InstProp DList :=
+        fun Σ x ι => instprop (raw x [ctx]) ι.
+
+      Section Alternative.
+        Let equiv {Σ} : relation (DList Σ) :=
+          fun x y =>
+            forall k1 k2 : PathCondition Σ,
+              k1 ⊣⊢ k2 -> raw x k1 ⊣⊢ raw y k2.
+
+        Goal forall {Σ} (x y : DList Σ),
+            equiv x y <-> (x ⊣⊢ y).
+        Proof.
+          intros Σ x y.
+          change (equiv x y <-> (raw x [ctx] ⊣⊢ raw y [ctx])).
+          destruct x as [x mx], y as [y my]; unfold equiv; cbn.
+          split; intros HYP.
+          - now apply HYP.
+          - intros k1 k2 Hk ι. specialize (Hk ι). specialize (HYP ι).
+            rewrite mx, my. intuition.
+        Qed.
+      End Alternative.
+
+      Definition singleton {Σ} (F : Formula Σ) : DList Σ.
+        refine (MkDList (fun k => Some (k ▻ F)) _).
+        abstract (cbn; intuition).
+      Defined.
+      Definition error {Σ} : DList Σ.
+      Proof.
+        refine (MkDList (fun k => None) _).
+        abstract (cbn; intuition).
+      Defined.
+      Definition empty {Σ} : DList Σ.
+        refine (MkDList Some _).
+        abstract (cbn; intuition).
+      Defined.
+      Definition cat {Σ} (xs ys : DList Σ) : DList Σ.
+        refine (MkDList (fun k => option.bind (raw xs k) (raw ys)) _).
+        abstract
+          (destruct xs as [rx wx], ys as [ry wy]; cbn; intros k ι;
+           specialize (wx k ι); destruct (rx k) as [k1|], (rx ctx.nil) as [k2|];
+           cbn in *; try rewrite (wy k1); try rewrite (wy k2); intuition).
+      Defined.
+      #[local] Arguments cat {Σ} !_ !_ /.
+
+      Lemma instprop_dlist_singleton [Σ] (F : Formula Σ) (ι : Valuation Σ) :
+        instprop (singleton F) ι <-> instprop F ι.
+      Proof. now cbn. Qed.
+
+      Lemma instprop_dlist_cat [Σ] (x y : DList Σ) (ι : Valuation Σ) :
+        instprop (cat x y) ι <-> instprop x ι /\ instprop y ι.
+      Proof.
+        destruct x as [x wx], y as [y wy]; cbn.
+        destruct (x [ctx]); cbn; [|easy].
+        rewrite wy. intuition.
+      Qed.
+
+      #[export] Hint Rewrite instprop_dlist_cat instprop_dlist_singleton : katamaran.
+      #[global] Arguments singleton : simpl never.
+      #[global] Arguments cat : simpl never.
+
+      Definition run [Σ] (xs : DList Σ) : Option PathCondition Σ :=
+        raw xs ctx.nil.
+
+    End DList.
+
+    #[local] Instance proper_singleton [Σ] : Proper ((⊣⊢) ==> (⊣⊢)) (@DList.singleton Σ).
+    Proof. intros F1 F2 HF ι. apply and_iff_morphism; auto. Qed.
+
+    #[local] Instance proper_cat [Σ] : Proper ((⊣⊢) ==> (⊣⊢) ==> (⊣⊢)) (@DList.cat Σ).
+    Proof. repeat intro. rewrite !instprop_dlist_cat. now apply and_iff_morphism. Qed.
+
+    Lemma empty_l_valid [Σ] (xs : DList Σ) : Valid xs -> empty ⊣⊢ xs.
+    Proof. easy. Qed.
+
+    Lemma empty_r_valid [Σ] (xs : DList Σ) : Valid xs -> xs ⊣⊢ empty.
+    Proof. easy. Qed.
+
+    Lemma valid_singleton [Σ] (F : Formula Σ) : Valid F -> Valid (singleton F).
+    Proof. easy. Qed.
+
+    Lemma valid_formula_bool [Σ] (t : Term Σ ty.bool) :
+      base.equiv t (term_val ty.bool true) -> Valid (formula_bool t).
+    Proof. easy. Qed.
+
+    Lemma error_l_unsatisfiable [Σ] (xs : DList Σ) : Unsatisfiable xs -> error ⊣⊢ xs.
+    Proof. intros uxs ι. specialize (uxs ι). easy. Qed.
+
+    Lemma error_r_unsatisfiable [Σ] (xs : DList Σ) : Unsatisfiable xs -> xs ⊣⊢ error.
+    Proof. intros uxs ι. specialize (uxs ι). easy. Qed.
+
+    Lemma unsatisfiable_singleton [Σ] (F : Formula Σ) :
+      Unsatisfiable F -> Unsatisfiable (singleton F).
+    Proof. apply unsatisfiable_snoc_r. Qed.
+
+    Lemma singleton_formula_and [Σ] (F1 F2 : Formula Σ) :
+      singleton (formula_and F1 F2) ⊣⊢ cat (singleton F1) (singleton F2).
+    Proof. intro. now rewrite instprop_dlist_cat, !instprop_dlist_singleton. Qed.
+    #[local] Hint Rewrite singleton_formula_and : katamaran.
 
     Local Ltac arw :=
       repeat
-        (try progress cbn
-           [bop.eval bop.eval_relop_val bop.eval_relop_prop
-            Val inst inst_formula inst_term] in *;
-         autorewrite with katamaran in *;
+        (try progress cbn - [cat] in *;
          repeat
            match goal with
-           | |- Some ?x ≋ Some ?y =>
-               apply proper_some
-           | |- ?k ▻ _ ≈ ?k ▻ _ => apply proper_snoc; [easy|]
-           | |- (?A /\ ?B <-> ?A /\ ?C) =>
-               apply (@and_iff_compat_l' A B C); intro
-           (* | |- (?B /\ ?A <-> ?C /\ ?A) => *)
-           (*     apply (@and_iff_compat_r' A B C); intro *)
-           end).
+           | |- base.equiv ?x ?x => reflexivity
+           | |- ?x ⊣⊢ ?x => reflexivity
+           | |- singleton _ ⊣⊢ singleton _ => apply proper_singleton
+           | |- formula_bool _ ⊣⊢ formula_bool _ => apply proper_formula_bool
+           | |- formula_user ?p _ ⊣⊢ formula_user ?p _ => apply proper_formula_user
+           | |- empty ⊣⊢ _ => apply empty_l_valid
+           | |- Valid (singleton _) => apply valid_singleton
+           | |- Valid (formula_bool _) => apply valid_formula_bool
+           | |- error ⊣⊢ _ => apply error_l_unsatisfiable
+           | |- Unsatisfiable (singleton _) => apply unsatisfiable_singleton
+           | |- Unsatisfiable (formula_bool _) => apply unsatisfiable_formula_bool
+           | |- context[env.snoc _ _ _ = env.snoc _ _ _] =>
+               unfold NamedEnv; rewrite env.inversion_eq_snoc
+           end; try easy;
+         autorewrite with katamaran in *).
 
-    Lemma formula_bool_relop [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
-      formula_bool (term_binop (bop.relop op) s t) ~ formula_relop op s t.
-    Proof. intros ι; cbn; symmetry; apply bop.eval_relop_equiv. Qed.
-    #[local] Hint Rewrite formula_bool_relop : katamaran.
 
     (* Simplifies boolean terms to equivalent formulas. These come for instance
        from (formula_bool t) or equations of the form
        (formula_relop bop.eq t = true). *)
-    Equations simplify_bool [Σ] (t : Term Σ ty.bool) (k : PathCondition Σ)  :
-      option (PathCondition Σ)  :=
-    | term_var ς                    | k => Some (k ▻ formula_bool (term_var ς))
-    | term_val _ b                  | k => if b then Some k else None
-    | term_binop bop.and s t        | k => k' <- simplify_bool s k ;; simplify_bool t k'
-    | term_binop (bop.relop op) s t | k => (* We do not recurse into the terms of a relop
-                                              to avoid defining too many mutually recursive
-                                              functions. We content ourselves with the fact
-                                              that the boolean term has been turned into
-                                              a Prop. *)
-                                           Some (k ▻ formula_relop op s t)
-    | term_binop bop.or s t         | k => Some (k ▻ formula_bool (term_binop bop.or s t))
-    | term_not t                    | k => simplify_bool_neg t k
+    Equations simplify_bool [Σ] (t : Term Σ ty.bool) : DList Σ :=
+    | term_var ς                    => singleton (formula_bool (term_var ς))
+    | term_val _ b                  => if b then empty else error
+    | term_binop bop.and s t        => cat (simplify_bool s) (simplify_bool t)
+    | term_binop (bop.relop op) s t => (* We do not recurse into the terms of a relop
+                                          to avoid defining too many mutually recursive
+                                          functions. We content ourselves with the fact
+                                          that the boolean term has been turned into
+                                          a Prop. *)
+                                       singleton (formula_relop op s t)
+    | term_binop bop.or s t         => singleton (formula_bool (term_binop bop.or s t))
+    | term_not t                    => simplify_bool_neg t
     (* Simplifies formulas of the the shape (formula_bool (term_not t)) or
        (formula_relop bop.eq t = false) *)
-    with simplify_bool_neg [Σ] (t : Term Σ ty.bool) (k : PathCondition Σ) : option (PathCondition Σ) :=
-    | term_var ς                    | k => Some (k ▻ formula_bool (term_not (term_var ς)))
-    | term_val _ b                  | k => if b then None else Some k
-    | term_binop bop.and s t        | k => Some (k ▻ formula_bool (term_binop bop.or (term_not s) (term_not t)))
-    | term_binop bop.or s t         | k => k' <- simplify_bool_neg s k ;; simplify_bool_neg t k'
-    | term_binop (bop.relop op) s t | k => Some (k ▻ formula_relop_neg op s t)
-    | term_not t                    | k => simplify_bool t k.
+    with simplify_bool_neg [Σ] (t : Term Σ ty.bool) : DList Σ :=
+    | term_var ς                    => singleton (formula_bool (term_not (term_var ς)))
+    | term_val _ b                  => if b then error else empty
+    | term_binop bop.and s t        => singleton (formula_bool (term_binop bop.or (term_not s) (term_not t)))
+    | term_binop bop.or s t         => cat (simplify_bool_neg s) (simplify_bool_neg t)
+    | term_binop (bop.relop op) s t => singleton (formula_relop_neg op s t)
+    | term_not t                    => simplify_bool t.
+
+    #[global] Instance: Params (@Unsatisfiable) 3 := {}.
 
     Lemma simplify_bool_spec_combined :
-      (forall Σ (t : Term Σ ty.bool) (k : PathCondition Σ),
-          simplify_bool t k ≋ Some (k ▻ formula_bool t)) *
-      (forall Σ (t : Term Σ ty.bool) (k : PathCondition Σ),
-          simplify_bool_neg t k ≋ Some (k ▻ formula_bool (term_not t))).
+      (forall Σ (t : Term Σ ty.bool),
+          simplify_bool t ⊣⊢ singleton (formula_bool t)) *
+      (forall Σ (t : Term Σ ty.bool),
+          simplify_bool_neg t ⊣⊢ singleton (formula_bool (term_not t))).
     Proof.
-      (* This uses the fucntional elimination principle
+      (* This uses the functional elimination principle
          generated by the equations library. *)
       apply (simplify_bool_elim
-               (fun Σ t k r => r ≋ Some (k ▻ formula_bool t))
-               (fun Σ t k r => r ≋ Some (k ▻ formula_bool (term_not t)))).
+               (fun Σ t r => r ⊣⊢ singleton (formula_bool t))
+               (fun Σ t r => r ⊣⊢ singleton (formula_bool (term_not t)))).
       - intros; reflexivity.
-      - intros ? [] *; arw; intros ι; arw; cbn; intuition.
-      - intros ? s t k Ht Hs ι. specialize (Ht ι). arw.
-        destruct simplify_bool as [kt|]; arw.
-        + rewrite (Hs kt ι); arw. now rewrite Ht.
-        + clear Hs. intuition.
+      - intros ? [] *; arw.
+      - intros ? s t Ht Hs. arw.
+        now apply proper_cat.
       - reflexivity.
-      - intros Σ σ op s t k. now arw.
-      - easy.
-      - easy.
-      - intros ? [] * ι; arw; intuition.
-      - intros * ι; arw; easy.
-      - intros ? s t k Ht Hs ι; specialize (Ht ι). arw.
-        destruct simplify_bool_neg as [kt|]; arw.
-        + specialize (Hs kt ι). arw. now rewrite Hs, Ht.
-        + clear Hs. intuition.
-      - intros Σ σ op s t k. arw. intros ι; now arw.
-      - intros * HYP ι. specialize (HYP ι); now arw.
+      - intros Σ σ op s t. arw.
+      - auto.
+      - reflexivity.
+      - intros ? [] *; arw.
+      - intros Σ s t. arw.
+      - intros ? s t Hs Ht. arw.
+        now apply proper_cat.
+      - intros Σ σ op s t. arw.
+      - intros Σ t H. rewrite H. arw.
     Qed.
 
-    Lemma simplify_bool_spec [Σ] (t : Term Σ ty.bool) (k : PathCondition Σ) :
-      simplify_bool t k ≋ Some (k ▻ formula_bool t).
+    Lemma simplify_bool_spec [Σ] (t : Term Σ ty.bool) :
+      simplify_bool t ⊣⊢ singleton (formula_bool t).
     Proof. apply simplify_bool_spec_combined. Qed.
 
-    Lemma simplify_bool_neg_spec [Σ] (t : Term Σ ty.bool) (k : PathCondition Σ) :
-      simplify_bool_neg t k ≋ Some (k ▻ formula_bool (term_not t)).
+    Lemma simplify_bool_neg_spec [Σ] (t : Term Σ ty.bool) :
+      simplify_bool_neg t ⊣⊢ singleton (formula_bool (term_not t)).
     Proof. apply simplify_bool_spec_combined. Qed.
     #[local] Opaque simplify_bool simplify_bool_neg.
     #[local] Hint Rewrite simplify_bool_spec simplify_bool_neg_spec : katamaran.
 
     (* Simplifies equations of the form (term_binop op t1 t2 = v). *)
     Equations(noeqns) simplify_eq_binop_val [Σ σ σ1 σ2]
-      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ)
-      (k : PathCondition Σ) : option (PathCondition Σ) :=
-    | bop.pair       | t1 | t2 | (v1 , v2)  | k =>
-      Some (k ▻ formula_relop bop.eq t1 (term_val _ v1)
-              ▻ formula_relop bop.eq t2 (term_val _ v2))
-    | bop.cons       | t1 | t2 | nil        | k => None
-    | bop.cons       | t1 | t2 | cons v1 v2 | k =>
-      Some (k ▻ formula_relop bop.eq t1 (term_val _ v1)
-              ▻ formula_relop bop.eq t2 (term_val (ty.list _) v2))
-    | bop.and        | t1 | t2 | v          | k =>
-      if v
-      then simplify_bool (term_binop bop.and t1 t2) k
-      else simplify_bool_neg (term_binop bop.and t1 t2) k
-    | bop.or         | t1 | t2 | v          | k =>
-      if v
-      then simplify_bool (term_binop bop.or t1 t2) k
-      else simplify_bool_neg (term_binop bop.or t1 t2) k
-    | bop.relop op   | t1 | t2 | v          | k =>
-      if v
-      then Some (k ▻ formula_relop op t1 t2)
-      else Some (k ▻ formula_relop_neg op t1 t2)
-    | op             | t1 | t2 | v          | k =>
-      Some (k ▻ formula_relop bop.eq (term_binop op t1 t2) (term_val _ v)).
+      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ) : DList Σ :=
+    | bop.pair       | t1 | t2 | (v1 , v2)  => cat
+                                                (singleton (formula_relop bop.eq t1 (term_val _ v1)))
+                                                (singleton (formula_relop bop.eq t2 (term_val _ v2)))
+    | bop.cons       | t1 | t2 | nil        => error
+    | bop.cons       | t1 | t2 | cons v1 v2 => cat
+                                                 (singleton (formula_relop bop.eq t1 (term_val _ v1)))
+                                                 (singleton (formula_relop bop.eq t2 (term_val (ty.list _) v2)))
+    | bop.and        | t1 | t2 | v          => if v
+                                               then simplify_bool (term_binop bop.and t1 t2)
+                                               else simplify_bool_neg (term_binop bop.and t1 t2)
+    | bop.or         | t1 | t2 | v          => if v
+                                               then simplify_bool (term_binop bop.or t1 t2)
+                                               else simplify_bool_neg (term_binop bop.or t1 t2)
+    | bop.relop op   | t1 | t2 | v          => if v
+                                               then singleton (formula_relop op t1 t2)
+                                               else singleton (formula_relop_neg op t1 t2)
+    | op             | t1 | t2 | v          => singleton (formula_relop bop.eq (term_binop op t1 t2) (term_val _ v)).
 
     Lemma simplify_eq_binop_val_spec [Σ σ σ1 σ2]
-      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ) (k : PathCondition Σ) :
-      simplify_eq_binop_val op t1 t2 v k ≋
-      Some (k ▻ formula_relop bop.eq (term_binop op t1 t2) (term_val σ v)).
-    Proof.
-      destruct op; cbn; try reflexivity;
-        destruct v; arw; try easy; intros ι; now arw.
-    Qed.
+      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ) :
+      simplify_eq_binop_val op t1 t2 v ⊣⊢
+      singleton (formula_relop bop.eq (term_binop op t1 t2) (term_val σ v)).
+    Proof. destruct op; arw; destruct v; arw; intro ι; arw. Qed.
     #[local] Opaque simplify_eq_binop_val.
     #[local] Hint Rewrite simplify_eq_binop_val_spec : katamaran.
 
-    Definition simplify_eqb {Σ σ} (t1 t2 : Term Σ σ) (k : PathCondition Σ) :
-      option (PathCondition Σ) :=
-      if Term_eqb t1 t2
-      then Some k
-      else Some (k ▻ formula_relop bop.eq t1 t2).
+    Definition simplify_eqb {Σ σ} (t1 t2 : Term Σ σ) : DList Σ :=
+      if Term_eqb t1 t2 then empty else singleton (formula_relop bop.eq t1 t2).
 
-    Lemma simplify_eqb_spec [Σ σ] (t1 t2 : Term Σ σ) (k : PathCondition Σ) :
-      simplify_eqb t1 t2 k ≋ Some (k ▻ formula_relop bop.eq t1 t2).
-    Proof.
-      unfold simplify_eqb.
-      destruct (Term_eqb_spec t1 t2); arw.
-      - subst; intros ι; now arw.
-      - reflexivity.
-    Qed.
+    Lemma simplify_eqb_spec [Σ σ] (t1 t2 : Term Σ σ) :
+      simplify_eqb t1 t2 ⊣⊢ singleton (formula_relop bop.eq t1 t2).
+    Proof. unfold simplify_eqb. destruct (Term_eqb_spec t1 t2); now subst. Qed.
     #[local] Hint Rewrite simplify_eqb_spec : katamaran.
     #[local] Opaque simplify_eqb.
 
     Equations(noeqns) simplify_eq_binop {Σ σ σ11 σ12 σ21 σ22}
       (op1 : BinOp σ11 σ12 σ) (t11 : Term Σ σ11) (t12 : Term Σ σ12)
       (op2 : BinOp σ21 σ22 σ) (t21 : Term Σ σ21) (t22 : Term Σ σ22)
-      (k : PathCondition Σ) : option (PathCondition Σ) :=
-    | bop.pair | t11 | t12 | bop.pair | t21 | t22 | k =>
-      Some (k ▻ formula_relop bop.eq t11 t21 ▻ formula_relop bop.eq t12 t22)
-    | bop.cons | t11 | t12 | bop.cons | t21 | t22 | k =>
-      Some (k ▻ formula_relop bop.eq t11 t21 ▻ formula_relop bop.eq t12 t22)
-    | op1      | t11 | t12 | op2      | t21 | t22 | k =>
-      simplify_eqb (term_binop op1 t11 t12) (term_binop op2 t21 t22) k.
+      : DList Σ :=
+    | bop.pair | t11 | t12 | bop.pair | t21 | t22 =>
+      cat
+        (singleton (formula_relop bop.eq t11 t21))
+        (singleton (formula_relop bop.eq t12 t22))
+    | bop.cons | t11 | t12 | bop.cons | t21 | t22 =>
+      cat
+        (singleton (formula_relop bop.eq t11 t21))
+        (singleton (formula_relop bop.eq t12 t22))
+    | op1      | t11 | t12 | op2      | t21 | t22 =>
+      simplify_eqb (term_binop op1 t11 t12) (term_binop op2 t21 t22).
 
     Lemma simplify_eq_binop_spec [Σ σ σ11 σ12 σ21 σ22]
       (op1 : BinOp σ11 σ12 σ) (t11 : Term Σ σ11) (t12 : Term Σ σ12)
-      (op2 : BinOp σ21 σ22 σ) (t21 : Term Σ σ21) (t22 : Term Σ σ22)
-      (k : PathCondition Σ) :
-      simplify_eq_binop op1 t11 t12 op2 t21 t22 k ≋
-      Some (k ▻ formula_relop bop.eq (term_binop op1 t11 t12) (term_binop op2 t21 t22)).
-    Proof.
-      destruct op1; cbn; arw; try easy; dependent elimination op2;
-        cbn; arw; intros ι; now arw.
-    Qed.
+      (op2 : BinOp σ21 σ22 σ) (t21 : Term Σ σ21) (t22 : Term Σ σ22) :
+      simplify_eq_binop op1 t11 t12 op2 t21 t22 ⊣⊢
+      singleton (formula_relop bop.eq (term_binop op1 t11 t12) (term_binop op2 t21 t22)).
+    Proof. destruct op1; arw; dependent elimination op2; arw; intro ι; arw. Qed.
     #[local] Hint Rewrite simplify_eq_binop_spec : katamaran.
     #[local] Opaque simplify_eq_binop.
 
     Definition simplify_eq_union [Σ U] [K1 K2 : unionk U]
-      (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (unionk_ty U K2)) (k : PathCondition Σ) :
-      option (PathCondition Σ) :=
+      (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (unionk_ty U K2)) :
+      DList Σ :=
       match eq_dec K1 K2 with
       | left e  => let t2' := eq_rec_r (fun K => Term Σ (unionk_ty U K)) t2 e in
-                   Some (k ▻ formula_relop bop.eq t1 t2')
-      | right _ => None
+                   singleton (formula_relop bop.eq t1 t2')
+      | right _ => error
       end.
 
     Set Equations With UIP.
     Lemma simplify_eq_union_spec [Σ U] [K1 K2 : unionk U]
-      (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (unionk_ty U K2)) (k : PathCondition Σ) :
-      simplify_eq_union t1 t2 k ≋
-      Some (k ▻ formula_relop bop.eq (term_union U K1 t1) (term_union U K2 t2)).
+      (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (unionk_ty U K2)) :
+      simplify_eq_union t1 t2 ⊣⊢
+      singleton (formula_relop bop.eq (term_union U K1 t1) (term_union U K2 t2)).
     Proof.
       unfold simplify_eq_union. destruct eq_dec; arw.
       - intros ι; arw. split; intros HYP.
@@ -314,20 +431,19 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     #[local] Opaque simplify_eq_union.
 
     Definition simplify_eq_union_val [Σ U] [K1 : unionk U]
-      (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) (k : PathCondition Σ) :
-      option (PathCondition Σ) :=
+      (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) : DList Σ :=
        let (K2, v2) := unionv_unfold U v2 in
        match eq_dec K1 K2 with
        | left e  => let v2' := eq_rec_r (fun K1 => Val (unionk_ty U K1)) v2 e in
                     let t2  := term_val (unionk_ty U K1) v2' in
-                    Some (k ▻ formula_relop bop.eq t1 t2)
-       | right _ => None
+                    singleton (formula_relop bop.eq t1 t2)
+       | right _ => error
        end.
 
     Lemma simplify_eq_union_val_spec [Σ U] [K1 : unionk U]
-      (t1 : Term Σ (unionk_ty U K1)) (v : Val (ty.union U)) (k : PathCondition Σ) :
-      simplify_eq_union_val t1 v k ≋
-      Some (k ▻ formula_relop bop.eq (term_union U K1 t1) (term_val (ty.union U) v)).
+      (t1 : Term Σ (unionk_ty U K1)) (v : Val (ty.union U)) :
+      simplify_eq_union_val t1 v ⊣⊢
+      singleton (formula_relop bop.eq (term_union U K1 t1) (term_val (ty.union U) v)).
     Proof.
       unfold simplify_eq_union_val.
       destruct unionv_unfold as [K2 v2] eqn:?.
@@ -341,207 +457,201 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     Qed.
     #[local] Opaque simplify_eq_union_val.
 
-    Fixpoint simplify_eq_val {Σ} [σ] (t : Term Σ σ) : forall (v : Val σ) (k : PathCondition Σ), option (PathCondition Σ) :=
+    Fixpoint simplify_eq_val {Σ} [σ] (t : Term Σ σ) : forall (v : Val σ), DList Σ :=
       match t with
-      | term_var x          => fun v k => Some (k ▻ formula_relop bop.eq (term_var x) (term_val _ v))
-      | term_val σ v        => fun v' k => if eq_dec v v' then Some k else None
+      | term_var x          => fun v => singleton (formula_relop bop.eq (term_var x) (term_val _ v))
+      | term_val σ v        => fun v' => if eq_dec v v' then empty else error
       | term_binop op t1 t2 => simplify_eq_binop_val op t1 t2
-      | term_neg t          => fun v k => Some (k ▻ formula_relop bop.eq (term_neg t) (term_val ty.int v))
-      | term_not t          => fun v k => if v
-                                          then simplify_bool_neg t k
-                                          else simplify_bool t k
-      | term_inl t          => fun v k =>
+      | term_neg t          => fun v => singleton (formula_relop bop.eq (term_neg t) (term_val ty.int v))
+      | term_not t          => fun v => if v then simplify_bool_neg t else simplify_bool t
+      | term_inl t          => fun v =>
                                  match v with
-                                 | inl v => simplify_eq_val t v k
-                                 | inr _ => None
+                                 | inl v => simplify_eq_val t v
+                                 | inr _ => error
                                  end
-      | term_inr t          => fun v k =>
+      | term_inr t          => fun v =>
                                  match v with
-                                 | inl _ => None
-                                 | inr v => simplify_eq_val t v k
+                                 | inl _ => error
+                                 | inr v => simplify_eq_val t v
                                  end
-      | term_sext t         => fun v k => Some (k ▻ formula_relop bop.eq (term_sext t) (term_val _ v))
-      | term_zext t         => fun v k => Some (k ▻ formula_relop bop.eq (term_zext t) (term_val _ v))
+      | term_sext t         => fun v => singleton (formula_relop bop.eq (term_sext t) (term_val _ v))
+      | term_zext t         => fun v => singleton (formula_relop bop.eq (term_zext t) (term_val _ v))
       | term_tuple ts       => env.Env_rect
-                                 (fun σs _ => Val (ty.tuple σs) -> PathCondition Σ -> option (PathCondition Σ))
-                                 (fun _ => Some)
-                                 (fun τs _ IHts τ t (vτsτ : Val (ty.tuple (τs ▻ τ))) k =>
+                                 (fun σs _ => Val (ty.tuple σs) -> DList Σ)
+                                 (fun _ => empty)
+                                 (fun τs _ IHts τ t (vτsτ : Val (ty.tuple (τs ▻ τ))) =>
                                     let (vτs, vτ) := vτsτ in
-                                    k' <- simplify_eq_val t vτ k;; IHts vτs k')
+                                    cat (simplify_eq_val t vτ) (IHts vτs))
                                  ts
       | term_union U K t    => simplify_eq_union_val t
-      | term_record R ts    => fun v k => Some (k ▻▻ formula_eqs_nctx ts (lift (recordv_unfold _ v)))
-                                 (* env.All_rect *)
-                                 (*   (fun Δ _ _ => NamedEnv Val Δ -> PathCondition Σ -> OFormulas Σ) *)
-                                 (*   (fun _ => Some) *)
-                                 (*   (fun Δ _ b _ _ *)
-                                 (*        (IHΔ : NamedEnv Val Δ -> PathCondition Σ -> OFormulas Σ) *)
-                                 (*        (IHb : Val (type b) -> PathCondition Σ -> OFormulas Σ) *)
-                                 (*        (vΔb : NamedEnv Val (Δ ▻ b)) *)
-                                 (*        (k : PathCondition Σ) => *)
-                                 (*      let (vΔ , vb) := env.snocView vΔb in *)
-                                 (*      k' <- IHb vb k;; IHΔ vΔ k') *)
-                                 (*   (env.all_intro (fun b t => simplify_eq_val t) ts) *)
-                                 (*   (recordv_unfold R v) *)
+      | term_record R ts    => fun vR =>
+                                 env.Env_rect
+                                   (fun Δ _ => NamedEnv Val Δ -> DList Σ)
+                                   (fun _ => empty)
+                                   (fun Δ _ IHts b t vs =>
+                                      let (vsΔ,vb) := env.snocView vs in
+                                      cat (IHts vsΔ) (simplify_eq_val t vb))
+                                   ts
+                                   (recordv_unfold R vR)
       end.
 
     Lemma simplify_eq_val_spec [Σ σ] (t : Term Σ σ) (v : Val σ) :
-      forall (k : PathCondition Σ),
-        simplify_eq_val t v k ≋ Some (k ▻ formula_relop bop.eq t (term_val σ v)).
+      simplify_eq_val t v ⊣⊢ singleton (formula_relop bop.eq t (term_val σ v)).
     Proof.
-      induction t; cbn; intros k; arw.
+      induction t; cbn.
       - reflexivity.
       - destruct eq_dec; arw.
-        + subst. intros ι; now arw.
-        + intros ι; now arw.
+      - apply simplify_eq_binop_val_spec.
+      - reflexivity.
+      - destruct v; arw. intros ι. arw.
+      - destruct v; arw. rewrite IHt; arw. intros ι. arw.
+      - destruct v; arw. rewrite IHt; arw. intros ι. arw.
       - reflexivity.
       - reflexivity.
-      - destruct v; arw; try easy. intros ι; now arw.
-      - destruct v; arw.
-        + rewrite IHt; arw. intros ι; now arw.
-        + intros ι; now arw.
-      - destruct v; arw.
-        + intros ι; now arw.
-        + rewrite IHt; arw. intros ι; now arw.
-      - reflexivity.
-      - reflexivity.
-      - revert k. induction IH; cbn; intros k; arw.
-        + destruct v. intros ι; now arw.
-        + destruct v as [vs v]. specialize (q v k).
-          destruct (simplify_eq_val d v k) as [k'|]; cbn.
-          * rewrite (IHIH vs k'); arw. intros ι. specialize (q ι); arw.
-            cbn. rewrite q. now arw.
-          * clear IHIH. intros ι. specialize (q ι).
-            arw. cbn in *. intuition.
+      - induction IH; cbn.
+        + now destruct v.
+        + destruct v as [vs v]. rewrite q, IHIH. clear.
+          intros ι; arw.
       - apply simplify_eq_union_val_spec.
-      - intros ι; arw. rewrite inst_lift. split.
-        intros ->. now rewrite recordv_fold_unfold.
-        intros <-. now rewrite recordv_unfold_fold.
+      - rewrite <- (recordv_fold_unfold R v) at 2.
+        generalize (recordv_unfold R v). clear v.
+        intros n ι. arw.
+        induction IH; env.destroy n; arw.
+        rewrite IHIH, (q v ι). arw.
     Qed.
     #[local] Opaque simplify_eq_val.
     #[local] Hint Rewrite simplify_eq_val_spec : katamaran.
 
-    Equations(noeqns) simplify_eq {Σ σ} (t1 t2 : Term Σ σ)
-      (k : PathCondition Σ) : option (PathCondition Σ) :=
-    | term_val _ v           | t                        | k => simplify_eq_val t v k
-    | t                      | term_val _ v             | k => simplify_eq_val t v k
-    | term_inr _             | term_inl _               | k => None
-    | term_inl _             | term_inr _               | k => None
-    | term_inl t1            | term_inl t2              | k => simplify_eq t1 t2 k
-    | term_inr t1            | term_inr t2              | k => simplify_eq t1 t2 k
-    | term_tuple ts1         | term_tuple ts2           | k => Some (k ▻▻ formula_eqs_ctx ts1 ts2)
-    | term_record _ ts1      | term_record _ ts2        | k => Some (k ▻▻ formula_eqs_nctx ts1 ts2)
-    | term_binop op1 t11 t12 | term_binop op2 t21 t22   | k => simplify_eq_binop op1 t11 t12 op2 t21 t22 k
-    | term_union _ K1 t1     | term_union _ K2 t2       | k => simplify_eq_union t1 t2 k
-    | t1                     | t2                       | k => simplify_eqb t1 t2 k.
+    Section Bla.
+      Variable simplify_eq : forall {Σ σ} (t1 t2 : Term Σ σ), DList Σ.
 
-    Lemma simplify_eq_spec [Σ σ] (s t : Term Σ σ) (k : PathCondition Σ) :
-      simplify_eq s t k ≋ Some (k ▻ formula_relop bop.eq s t).
+      Equations(noeqns) formula_eqs_ctx {Σ Δ}
+        (δ δ' : Env (Term Σ) Δ) : DList Σ :=
+      | env.nil,        env.nil          => empty
+      | env.snoc δ _ t, env.snoc δ' _ t' =>
+        cat (formula_eqs_ctx δ δ') (simplify_eq t t').
+
+      Equations(noeqns) formula_eqs_nctx {N Σ} {Δ : NCtx N Ty}
+        (δ δ' : NamedEnv (Term Σ) Δ) : DList Σ :=
+      | env.nil,        env.nil          => empty
+      | env.snoc δ _ t, env.snoc δ' _ t' =>
+        cat (formula_eqs_nctx δ δ') (simplify_eq t t').
+
+    End Bla.
+
+    Equations(noeqns) simplify_eq {Σ σ} (t1 t2 : Term Σ σ) : DList Σ :=
+    | term_val _ v           | t                      => simplify_eq_val t v
+    | t                      | term_val _ v           => simplify_eq_val t v
+    | term_inr _             | term_inl _             => error
+    | term_inl _             | term_inr _             => error
+    | term_inl t1            | term_inl t2            => simplify_eq t1 t2
+    | term_inr t1            | term_inr t2            => simplify_eq t1 t2
+    | term_tuple ts1         | term_tuple ts2         => formula_eqs_ctx (@simplify_eq) ts1 ts2
+    | term_record _ ts1      | term_record _ ts2      => formula_eqs_nctx (@simplify_eq) ts1 ts2
+    | term_binop op1 t11 t12 | term_binop op2 t21 t22 => simplify_eq_binop op1 t11 t12 op2 t21 t22
+    | term_union _ K1 t1     | term_union _ K2 t2     => simplify_eq_union t1 t2
+    | t1                     | t2                     => simplify_eqb t1 t2.
+
+    Lemma simplify_eq_spec [Σ σ] (s t : Term Σ σ) :
+      simplify_eq s t ⊣⊢ singleton (formula_relop bop.eq s t).
     Proof.
       induction s.
-      - dependent elimination t; cbn; now arw.
-      - cbn. rewrite simplify_eq_val_spec. now arw.
-      - dependent elimination t; cbn; now arw.
-      - dependent elimination t; cbn; now arw.
-      - dependent elimination t; cbn; now arw.
-      - dependent elimination t; cbn; arw; try easy.
-        + rewrite IHs; arw. intros ι; now arw.
-        + intros ι; now arw.
-      - dependent elimination t; cbn; arw; try easy.
-        + intros ι; now arw.
-        + rewrite IHs; arw. intros ι; now arw.
-      - dependent elimination t; cbn; arw; try easy.
-      - dependent elimination t; cbn; arw; try easy.
-      - dependent elimination t; cbn; arw; try easy.
-        intros ι; now arw.
-      - dependent elimination t; cbn; arw; try easy.
+      - dependent elimination t; arw.
+      - arw.
+      - dependent elimination t; arw.
+      - dependent elimination t; arw.
+      - dependent elimination t; arw.
+      - dependent elimination t; arw.
+        rewrite IHs. arw. intros ι. arw.
+      - dependent elimination t; arw.
+        rewrite IHs. arw. intros ι. arw.
+      - dependent elimination t; arw.
+      - dependent elimination t; arw.
+      - dependent elimination t; arw. intros ι. arw.
+        induction IH; env.destroy ts; arw.
+        rewrite IHIH, (q v ι). arw.
+      - dependent elimination t; arw.
         apply simplify_eq_union_spec.
-      - dependent elimination t; cbn; arw; try easy.
-        intros ι; now arw.
+      - dependent elimination t; arw. intros ι. arw.
+        induction IH; env.destroy ts0; arw.
+        rewrite IHIH, (q v ι). arw.
     Qed.
 
     Definition simplify_relopb {Σ σ} (op : RelOp σ)
-      (t1 t2 : STerm σ Σ) (k : PathCondition Σ) : option (PathCondition Σ) :=
+      (t1 t2 : STerm σ Σ) : DList Σ :=
       match term_get_val t1 , term_get_val t2 with
-      | Some v1 , Some v2 => if bop.eval_relop_val op v1 v2 then Some k else None
-      | _       , _       => Some (k ▻ formula_relop op t1 t2)
+      | Some v1 , Some v2 => if bop.eval_relop_val op v1 v2 then empty else error
+      | _       , _       => singleton (formula_relop op t1 t2)
       end.
 
     Definition simplify_relop {Σ σ} (op : RelOp σ) :
-      forall (t1 t2 : STerm σ Σ), PathCondition Σ -> option (PathCondition Σ) :=
+      forall (t1 t2 : STerm σ Σ), DList Σ :=
       match op with
-      | bop.eq => fun t1 t2 k => simplify_eq t1 t2 k
+      | bop.eq => fun t1 t2 => simplify_eq t1 t2
       | _      => simplify_relopb op
       end.
 
     Definition simplify_relopb_spec {Σ σ} (op : RelOp σ)
-      (t1 t2 : STerm σ Σ) (k : PathCondition Σ) :
-      simplify_relopb op t1 t2 k ≋ Some (k ▻ formula_relop op t1 t2).
+      (t1 t2 : STerm σ Σ) :
+      simplify_relopb op t1 t2 ⊣⊢ singleton (formula_relop op t1 t2).
     Proof.
       unfold simplify_relopb.
       destruct (term_get_val_spec t1) as [v1|]; try easy. subst.
       destruct (term_get_val_spec t2) as [v2|]; try easy. subst.
-      - intros ι; arw. destruct bop.eval_relop_val; now arw.
+      rewrite formula_relop_val. destruct bop.eval_relop_val; [easy|].
+      now apply error_l_unsatisfiable, unsatisfiable_singleton.
     Qed.
     #[local] Opaque simplify_relopb.
 
-    Definition simplify_relop_spec {Σ σ} (op : RelOp σ)
-      (t1 t2 : STerm σ Σ) (k : PathCondition Σ) :
-      simplify_relop op t1 t2 k ≋ Some (k ▻ formula_relop op t1 t2).
+    Definition simplify_relop_spec {Σ σ} (op : RelOp σ) (t1 t2 : STerm σ Σ) :
+      simplify_relop op t1 t2 ⊣⊢ singleton (formula_relop op t1 t2).
     Proof.
       unfold simplify_relop.
       destruct op; cbn; rewrite ?simplify_relopb_spec; try easy.
-      now rewrite simplify_eq_spec.
+      apply simplify_eq_spec.
     Qed.
 
-    Fixpoint simplify_formula {Σ} (fml : Formula Σ) (k : PathCondition Σ) : option (PathCondition Σ) :=
+    Fixpoint simplify_formula {Σ} (fml : Formula Σ) : DList Σ :=
       match fml with
-      | formula_user p ts      => Some (k ▻ formula_user p (pevals ts))
-      | formula_bool t         => simplify_bool (peval t) k
-      | formula_prop ζ P       => Some (k ▻ fml)
-      | formula_relop op t1 t2 => simplify_relop op (peval t1) (peval t2) k
-      | formula_true           => Some k
-      | formula_false          => None
-      | formula_and F1 F2      => k' <- simplify_formula F1 k ;;
-                                  simplify_formula F2 k'
-      | formula_or F1 F2       => Some (k ▻ fml)
+      | formula_user p ts      => singleton (formula_user p (pevals ts))
+      | formula_bool t         => simplify_bool (peval t)
+      | formula_prop ζ P       => singleton fml
+      | formula_relop op t1 t2 => simplify_relop op (peval t1) (peval t2)
+      | formula_true           => empty
+      | formula_false          => error
+      | formula_and F1 F2      => cat (simplify_formula F1) (simplify_formula F2)
+      | formula_or F1 F2       => singleton fml
       end.
 
-    Fixpoint simplify_pathcondition {Σ} (C : PathCondition Σ) (k : PathCondition Σ) : option (PathCondition Σ) :=
+    Fixpoint simplify_pathcondition {Σ} (C : PathCondition Σ) : DList Σ :=
       match C with
-      | [ctx] => Some k
-      | C ▻ F =>
-        option.bind (simplify_pathcondition C k) (simplify_formula F)
+      | [ctx] => empty
+      | C ▻ F => cat (simplify_pathcondition C) (simplify_formula F)
       end.
 
     Lemma simplify_formula_spec {Σ} (F : Formula Σ) :
-      forall k, simplify_formula F k ≋ Some (k ▻ F).
+      simplify_formula F ⊣⊢ singleton F.
     Proof.
-      induction F; cbn - [peval]; intros k; arw.
-      - apply proper_formula_user. apply pevals_sound.
-      - apply proper_formula_bool. apply peval_sound.
+      induction F; cbn.
+      - arw. apply pevals_sound.
+      - arw. apply peval_sound.
       - reflexivity.
-      - rewrite simplify_relop_spec.
-        apply proper_some, proper_snoc; [reflexivity|].
+      - rewrite simplify_relop_spec. arw.
         apply proper_formula_relop; apply peval_sound.
-      - intros ι; cbn. easy.
-      - intros ι; now arw.
-      - intros ι; arw. specialize (IHF1 k ι).
-        destruct (simplify_formula F1 k) as [k'|]; arw.
-        + rewrite (IHF2 k' ι); arw; intuition.
-        + intuition.
-      - reflexivity.
+      - arw.
+      - arw.
+      - arw. now apply proper_cat.
+      - arw.
     Qed.
 
-    Lemma simplify_pathcondition_spec {Σ} (C k : PathCondition Σ) :
-      simplify_pathcondition C k ≋ Some (k ▻▻ C).
+    Lemma simplify_pathcondition_spec {Σ} (C : PathCondition Σ) (ι : Valuation Σ) :
+      instprop (run (simplify_pathcondition C)) ι <-> instprop C ι.
     Proof.
-      revert k; induction C as [|C IHC F]; cbn; intros k.
+      change (instprop (simplify_pathcondition C) ι <-> instprop C ι).
+      induction C as [|C IHC F]; cbn.
       - reflexivity.
-      - intros ι. specialize (IHC k ι). arw.
-        destruct simplify_pathcondition as [k'|]; arw.
-        + rewrite (simplify_formula_spec F k' ι); arw. now rewrite IHC.
-        + intuition.
+      - rewrite instprop_dlist_cat. apply and_iff_morphism; [easy|].
+        now rewrite (simplify_formula_spec F ι), instprop_dlist_singleton.
     Qed.
 
     Definition occurs_check_lt {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
@@ -615,7 +725,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     Qed.
 
     Lemma try_unify_formula_spec {w : World} (fml : Formula w) :
-      option.wlp (fun '(existT w' ν) => forall ι, (inst fml ι : Prop) <-> inst_triangular ν ι) (try_unify_formula fml).
+      option.wlp (fun '(existT w' ν) => forall ι, instprop fml ι <-> inst_triangular ν ι) (try_unify_formula fml).
     Proof.
       unfold try_unify_formula; destruct fml; cbn; try (constructor; auto; fail).
       - apply try_unify_bool_spec.
@@ -637,12 +747,12 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       match unify_formula fml with
       | existT w1 (ν01 , fmls) =>
         (forall ι0 : Valuation w0,
-            inst (A := Prop) fml ι0 ->
+            instprop fml ι0 ->
             inst_triangular ν01 ι0 /\
             instprop fmls (inst (sub_triangular_inv ν01) ι0)) /\
         (forall ι1 : Valuation w1,
             instprop fmls ι1 ->
-            inst (A := Prop) fml (inst (sub_triangular ν01) ι1))
+            instprop fml (inst (sub_triangular ν01) ι1))
       end.
     Proof.
       unfold unify_formula.
@@ -650,8 +760,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - destruct a as [w1 ν01]. split.
         + intros ι0 Hfml. specialize (H ι0). intuition. constructor.
         + intros ι1 []. apply H. apply inst_triangular_valid.
-      - split; intros ?; rewrite inst_pathcondition_snoc;
-          cbn; rewrite inst_sub_id; intuition.
+      - cbn. split; intros ?; rewrite inst_sub_id; intuition.
     Qed.
 
     Fixpoint unify_pathcondition {w0 : World} (C : PathCondition w0) :
@@ -689,24 +798,18 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         + intros ι0. intros [HCι0 HFι0].
           specialize (IHC01 ι0 HCι0). destruct IHC01 as [Hν01 HCι1].
           specialize (IHF12 (inst (sub_triangular_inv ν01) ι0)).
-          rewrite inst_persist, sub_acc_triangular in IHF12.
+          rewrite instprop_persist, sub_acc_triangular in IHF12.
           rewrite inst_triangular_right_inverse in IHF12; auto.
           specialize (IHF12 HFι0). destruct IHF12 as [Hν12 Hfmls2].
-          repeat fold PathCondition.
-          change (fun w : World => Ctx (Formula w))
-            with (fun w : World => PathCondition w).
-          rewrite inst_pathcondition_cat.
-          rewrite inst_persist, inst_tri_comp, sub_acc_triangular.
+          unfold PathCondition. rewrite instprop_cat.
+          rewrite instprop_persist, inst_tri_comp, sub_acc_triangular.
           split; auto. rewrite sub_triangular_inv_comp, inst_subst. split; auto.
           revert HCι1. remember (inst (sub_triangular_inv ν01) ι0) as ι1.
           rewrite inst_triangular_right_inverse; auto.
-        + intros ι2.
-          repeat fold PathCondition.
-          change (fun w : World => Ctx (Formula w))
-            with (fun w : World => PathCondition w).
-          rewrite !inst_pathcondition_cat, inst_persist, sub_acc_triangular.
+        + intros ι2. unfold PathCondition.
+          rewrite !instprop_cat, instprop_persist, sub_acc_triangular.
           intros [HCι1 HFι2].
-          specialize (IHF21 ι2 HFι2). rewrite inst_persist, sub_acc_triangular in IHF21.
+          specialize (IHF21 ι2 HFι2). rewrite instprop_persist, sub_acc_triangular in IHF21.
           specialize (IHC10 (inst (sub_triangular ν12) ι2) HCι1).
           rewrite sub_triangular_comp, inst_subst.
           split; auto.
@@ -780,37 +883,35 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
 
     Definition solver_generic_round : Solver :=
       fun w0 C0 =>
-        match simplify_pathcondition C0 ctx.nil with
+        match DList.run (simplify_pathcondition C0) with
         | Some C1 => Some (unify_pathcondition (assumption_pathcondition (wco w0) C1 ctx.nil))
         | None => None
         end.
 
     Lemma solver_generic_round_spec : SolverSpec solver_generic_round.
     Proof.
-      unfold solver_generic_round. intros w0 fmls0.
-      pose proof (simplify_pathcondition_spec fmls0 ctx.nil) as Hequiv.
-      destruct simplify_pathcondition as [fmls0'|]; constructor; cbn.
-      - pose proof (unify_pathcondition_spec (assumption_pathcondition (wco w0) fmls0' ctx.nil)) as Hunify.
-        destruct (unify_pathcondition (assumption_pathcondition (wco w0) fmls0' ctx.nil)) as (w1 & ν01 & fmls1).
-        intros ι0 Hpc0. specialize (Hequiv ι0). autorewrite with katamaran in Hequiv.
-        pose proof (assumption_pathcondition_spec (wco w0) fmls0' ctx.nil ι0 Hpc0) as Hassumption.
+      unfold solver_generic_round. intros w0 C0.
+      pose proof (simplify_pathcondition_spec C0) as Hequiv.
+      destruct run as [C0'|]; constructor; cbn.
+      - pose proof (unify_pathcondition_spec (assumption_pathcondition (wco w0) C0' ctx.nil)) as Hunify.
+        destruct (unify_pathcondition (assumption_pathcondition (wco w0) C0' ctx.nil)) as (w1 & ν01 & C1).
+        intros ι0 Hpc0. specialize (Hequiv ι0). cbn in Hequiv.
+        pose proof (assumption_pathcondition_spec (wco w0) C0' ctx.nil ι0 Hpc0) as Hassumption.
         destruct Hassumption as [Hassumption01 Hassumption10].
         destruct Hunify as [Hunify01 Hunify10]. specialize (Hunify01 ι0).
         split.
-        + intros Hfmls0. apply Hunify01. apply Hassumption01.
-          split. constructor. apply Hequiv. split; auto.
+        + intros HC0. apply Hunify01. apply Hassumption01.
+          split. constructor. apply Hequiv. auto.
         + intros ι1 Heqι. specialize (Hunify10 ι1).
           split.
-          * intros Hfmls0. destruct Hequiv as [_ Hequiv].
-            inster Hequiv by split; auto; constructor.
+          * intros HC0. destruct Hequiv as [_ Hequiv].
+            inster Hequiv by auto.
             inster Hassumption01 by split; auto; constructor.
-            inster Hunify01 by auto. destruct Hunify01 as [Hν01 Hfmls1].
-            revert Hfmls1. subst. now rewrite inst_triangular_left_inverse.
-          * intros Hfmls1. inster Hunify10 by subst; auto.
+            inster Hunify01 by auto. destruct Hunify01 as [Hν01 HC1].
+            revert HC1. subst. now rewrite inst_triangular_left_inverse.
+          * intros HC1. inster Hunify10 by subst; auto.
             apply Hequiv. apply Hassumption10. subst; auto.
-      - intros ι. specialize (Hequiv ι).
-        autorewrite with katamaran in Hequiv.
-        intuition.
+      - intros ι. specialize (Hequiv ι). cbn in Hequiv. intuition.
     Qed.
 
     Definition solver_compose (s1 s2 : Solver) : Solver :=
@@ -845,7 +946,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         + intros ι2 Hpc2 Hι0. rewrite sub_triangular_comp, inst_subst in Hι0.
           remember (inst (sub_triangular ν12) ι2) as ι1.
           assert (instprop (wco w1) ι1) as Hpc1 by
-              (revert Hpc2; subst; rewrite <- sub_acc_triangular, <- inst_persist; apply ent_acc).
+              (revert Hpc2; subst; rewrite <- sub_acc_triangular, <- instprop_persist; apply ent_acc).
           rewrite H10; eauto. apply H2; auto.
       - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
         destruct H1 as [H01 H10]. inster H01 by auto.

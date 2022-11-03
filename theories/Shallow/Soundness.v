@@ -273,9 +273,9 @@ Module Type Soundness
     Lemma assert_formula_sound {Γ Σ} {ι : Valuation Σ} {fml : Formula Σ}
       (POST : CStore Γ -> L) :
       forall δ h,
-        assert_formula (inst fml ι)
+        assert_formula (instprop fml ι)
           (fun _ => liftP POST) δ h ->
-      interpret_scheap h ⊢ (!! inst fml ι ∧ lemp) ∗ POST δ.
+      interpret_scheap h ⊢ (!! instprop fml ι ∧ lemp) ∗ POST δ.
     Proof.
       intros ? ? [Hfml HP].
       rewrite <- lsep_emp at 1.
@@ -289,9 +289,9 @@ Module Type Soundness
     Lemma assume_formula_sound {Γ Σ} {ι : Valuation Σ} {fml : Formula Σ}
       (POST : CStore Γ -> L) :
       forall δ h,
-        assume_formula (inst fml ι)
+        assume_formula (instprop fml ι)
           (fun _ => liftP POST) δ h ->
-      interpret_scheap h ∗ (!! inst fml ι ∧ lemp) ⊢ POST δ.
+      interpret_scheap h ∗ (!! instprop fml ι ∧ lemp) ⊢ POST δ.
     Proof.
       intros ? ? HYP.
       rewrite lsep_comm.

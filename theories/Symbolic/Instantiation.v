@@ -31,8 +31,10 @@ From Coq Require Import
      Arith.PeanoNat
      Bool.Bool
      Classes.Morphisms
+     Classes.Morphisms_Prop
      Classes.RelationClasses
      NArith.BinNat
+     Program.Basics
      Relations.Relation_Definitions
      Strings.String
      ZArith.BinInt.
@@ -49,6 +51,8 @@ From Katamaran Require Import
      Syntax.Variables
      Tactics.
 
+Import base (Equiv, equiv).
+Import (notations) base.
 Import ctx.notations.
 Import env.notations.
 
@@ -383,98 +387,243 @@ Module Type InstantiationOn
 
   Section SemanticEquivalence.
 
-    Record SEquiv T V {instTV : Inst T V} (Σ : LCtx) (s t : T Σ) : Prop :=
-      toSEquiv { fromSEquiv : forall (ι : Valuation Σ), inst s ι = inst t ι }.
+    Definition SEquiv T V {instTV : Inst T V} (Σ : LCtx) : relation (T Σ) :=
+      fun s t => forall (ι : Valuation Σ), inst s ι = inst t ι.
+    #[global] Typeclasses Opaque SEquiv.
     #[global] Arguments SEquiv T V {_} Σ.
 
-    #[export] Instance seequiv_equivalence {T V} {instTV : Inst T V} {Σ} :
+    Definition seequiv_equivalence {T V} {instTV : Inst T V} {Σ} :
       Equivalence (SEquiv T V Σ).
     Proof.
-      constructor.
-      - unfold Reflexive. easy.
-      - intros x y []. easy.
-      - intros x y z [] []. constructor.
-        intros ι. now transitivity (inst y ι).
+      constructor. easy. easy. intros x y z ? ? ι.
+      now transitivity (inst y ι).
     Qed.
 
-    Definition SETerm (Σ : LCtx) (σ : Ty) : relation (Term Σ σ) :=
+    #[export] Instance term_equiv {Σ σ} : base.Equiv (Term Σ σ) :=
       SEquiv (fun Σ => Term Σ σ) (Val σ) Σ.
-    Definition SEEnv (Σ : LCtx) (σs : Ctx Ty) : relation (Env (Term Σ) σs) :=
+    #[export] Instance term_equivalence {Σ σ} : Equivalence (≡@{Term Σ σ}) :=
+      seequiv_equivalence.
+    #[export] Typeclasses Opaque term_equiv.
+
+    #[export] Instance env_equiv {Σ σs} : base.Equiv (Env (Term Σ) σs) :=
       SEquiv (fun Σ => Env (Term Σ) σs) (Env Val σs) Σ.
-    Definition SENamedEnv {N} (Σ : LCtx) (Δ : NCtx N Ty) : relation (NamedEnv (Term Σ) Δ) :=
+    #[export] Instance seenv_equivalence {Σ σs} : Equivalence (≡@{Env (Term Σ) σs}) :=
+      seequiv_equivalence.
+
+    #[export] Instance nenv_equiv {N Σ} {Δ : NCtx N Ty} :
+      base.Equiv (NamedEnv (Term Σ) Δ) :=
       SEquiv (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv Val Δ) Σ.
-    #[global] Arguments SETerm : clear implicits.
-    #[global] Arguments SEEnv : clear implicits.
-    #[global] Arguments SENamedEnv {N} _ _.
-
-    #[export] Instance seterm_equivalence {Σ σ} : Equivalence (SETerm Σ σ) :=
-      seequiv_equivalence.
-    #[export] Instance seenv_equivalence {Σ σs} : Equivalence (SEEnv Σ σs) :=
-      seequiv_equivalence.
-    #[export] Instance senamedenv_equivalence {N Σ Δ} : Equivalence (@SENamedEnv N Σ Δ) :=
+    #[export] Instance senamedenv_equivalence {N Σ} {Δ : NCtx N Ty} :
+      Equivalence (≡@{NamedEnv (Term Σ) Δ}) :=
       seequiv_equivalence.
 
-    Lemma proper_term_binop {Σ σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) :
-      Proper (SETerm Σ σ1 ==> SETerm Σ σ2 ==> SETerm Σ σ3) (term_binop op).
-    Proof. intros s1 t1 [e1] s2 t2 [e2]. constructor. intros ι. cbn. f_equal; auto. Qed.
+    #[local] Obligation Tactic :=
+      repeat intro; cbn; f_equal; constructor_congruence; solve [ eauto ].
 
-    Lemma proper_term_neg {Σ} :
-      Proper (SETerm Σ ty.int ==> SETerm Σ ty.int) term_neg.
-    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
+    #[export,program] Instance proper_term_binop {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) [Σ] :
+      Proper ((≡) ==> (≡) ==> (≡)) (term_binop (Σ:=Σ) op).
+    #[export,program] Instance proper_term_neg {Σ} : Proper ((≡) ==> (≡)) (term_neg (Σ:=Σ)).
+    #[export,program] Instance proper_term_not {Σ} : Proper ((≡) ==> (≡)) (term_not (Σ:=Σ)).
+    #[export,program] Instance proper_term_inl {Σ σ1 σ2} : Proper ((≡) ==> (≡)) (@term_inl Σ σ1 σ2).
+    #[export,program] Instance proper_term_inr {Σ σ1 σ2} : Proper ((≡) ==> (≡)) (@term_inr Σ σ1 σ2).
+    #[export,program] Instance proper_term_sext {Σ m n p} : Proper ((≡) ==> (≡)) (@term_sext Σ m n p).
+    #[export,program] Instance proper_term_zext {Σ m n p} : Proper ((≡) ==> (≡)) (@term_zext Σ m n p).
+    #[export,program] Instance proper_term_tuple {Σ σs} : Proper ((≡) ==> (≡)) (@term_tuple Σ σs).
+    #[export,program] Instance proper_term_union {Σ U K} : Proper ((≡) ==> (≡)) (@term_union Σ U K).
+    #[export,program] Instance proper_term_record {Σ R} : Proper ((≡) ==> (≡)) (@term_record Σ R).
+    #[export,program] Instance proper_env_snoc {Σ σs} :
+      Proper ((≡) ==> forall_relation (fun σ => (≡) ==> (≡)))
+        (@env.snoc _ (Term Σ) σs).
+    #[export,program] Instance proper_namedenv_snoc {N Σ} {Δ : NCtx N Ty} :
+      Proper ((≡) ==> forall_relation (fun b : N∷Ty => (≡) ==> (≡)))
+        (@env.snoc _ (fun b => Term Σ (type b)) Δ).
 
-    Lemma proper_term_not {Σ} :
-      Proper (SETerm Σ ty.bool ==> SETerm Σ ty.bool) term_not.
-    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
-
-    Lemma proper_term_inl {Σ σ1 σ2} :
-      Proper (SETerm Σ σ1 ==> SETerm Σ (ty.sum σ1 σ2)) term_inl.
-    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
-
-    Lemma proper_term_inr {Σ σ1 σ2} :
-      Proper (SETerm Σ σ2 ==> SETerm Σ (ty.sum σ1 σ2)) term_inr.
-    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
-
-    Lemma proper_term_sext {Σ m n} {p : IsTrue (m <=? n)} :
-      Proper (SETerm Σ (ty.bvec m) ==> SETerm Σ (ty.bvec n)) term_sext.
-    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
-
-    Lemma proper_term_zext {Σ m n} {p : IsTrue (m <=? n)} :
-      Proper (SETerm Σ (ty.bvec m) ==> SETerm Σ (ty.bvec n)) term_zext.
-    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
-
-    Lemma proper_term_tuple {Σ σs} :
-      Proper (SEEnv Σ σs ==> SETerm Σ (ty.tuple σs)) term_tuple.
-    Proof. intros s t [e]. constructor. intros ι. cbn. f_equal. auto. Qed.
-
-    Lemma proper_term_union {Σ U} {K : unionk U} :
-      Proper (SETerm Σ (unionk_ty U K) ==> SETerm Σ (ty.union U)) (term_union U K).
-    Proof. intros s t [e]. constructor. intros ι. cbn. do 2 f_equal. auto. Qed.
-
-    Lemma proper_term_record {Σ R} :
-      Proper (SENamedEnv Σ (recordf_ty R) ==> SETerm Σ (ty.record R)) (term_record R).
-    Proof.
-      intros xs ys [xys]. constructor. intros ι. cbn. f_equal. auto. Qed.
-
-    Lemma proper_env_snoc {Σ σs} :
-      Proper (SEEnv Σ σs ==> forall_relation (fun σ => SETerm Σ σ ==> SEEnv Σ (σs ▻ σ))) env.snoc.
-    Proof.
-      intros xs ys [xys] σ x y [xy].
-      constructor. intros ι. cbn.
-      f_equal. apply xys. apply xy.
-    Qed.
-
-    Lemma proper_namedenv_snoc {N Σ} {Δ : NCtx N Ty} :
-      Proper (SENamedEnv Σ Δ ==> forall_relation (fun b => SETerm Σ (type b) ==> SENamedEnv Σ (Δ ▻ b))) env.snoc.
-    Proof.
-      intros xs ys [xys] σ x y [xy].
-      constructor. intros ι. cbn.
-      f_equal. apply xys. apply xy.
-    Qed.
+    Lemma term_orb_false_l [Σ] (b : Term Σ ty.bool) :
+      term_binop bop.or (term_val ty.bool false) b ≡ b.
+    Proof. intro ι; reflexivity. Qed.
+    Lemma term_orb_false_r [Σ] (b : Term Σ ty.bool) :
+      term_binop bop.or b (term_val ty.bool false) ≡ b.
+    Proof. intro ι; apply orb_false_r. Qed.
+    Lemma term_orb_true_l [Σ] (b : Term Σ ty.bool) :
+      term_binop bop.or (term_val ty.bool true) b ≡ term_val ty.bool true.
+    Proof. intro ι; reflexivity. Qed.
+    Lemma term_orb_true_r [Σ] (b : Term Σ ty.bool) :
+      term_binop bop.or b (term_val ty.bool true) ≡ term_val ty.bool true.
+    Proof. intro ι; apply orb_true_r. Qed.
+    Lemma term_negb_andb [Σ] (b1 b2 : Term Σ ty.bool) :
+      term_not (term_binop bop.and b1 b2) ≡
+      term_binop bop.or (term_not b1) (term_not b2).
+    Proof. intro ι; apply negb_andb. Qed.
+    Lemma term_negb_orb [Σ] (b1 b2 : Term Σ ty.bool) :
+      term_not (term_binop bop.or b1 b2) ≡
+      term_binop bop.and (term_not b1) (term_not b2).
+    Proof. intro ι; apply negb_orb. Qed.
+    Lemma term_negb_involutive [Σ] (t : Term Σ ty.bool) :
+      term_not (term_not t) ≡ t.
+    Proof. intro ι; apply negb_involutive. Qed.
+    Lemma term_negb_val [Σ b] :
+      term_not (Σ:=Σ) (term_val ty.bool b) ≡ term_val ty.bool (negb b).
+    Proof. easy. Qed.
+    Lemma term_negb_relop [σ] (op : RelOp σ) [Σ] (t1 t2 : Term Σ σ) :
+      term_not (term_binop (bop.relop op) t1 t2) ≡ term_relop_neg op t1 t2.
+    Proof. intro ι. symmetry. apply inst_term_relop_neg. Qed.
 
   End SemanticEquivalence.
-  Infix "≈ᵀ" := (@SETerm _ _).
-  Infix "≈ᴱ" := (@SEEnv _ _).
-  Infix "≈ᴺ" := (@SENamedEnv _ _ _).
+  #[export] Hint Rewrite term_orb_false_l term_orb_false_r term_orb_true_l term_orb_true_r : katamaran.
+  #[export] Hint Rewrite term_negb_andb term_negb_orb term_negb_relop : katamaran.
+  #[export] Hint Rewrite term_negb_involutive term_negb_val : katamaran.
+  #[export] Hint Extern 0 (term_binop ?op _ _ ≡ term_binop ?op _ _) =>
+      simple apply (proper_term_binop op) : katamaran.
+
+  Class InstProp (T : LCtx -> Type) : Type :=
+    instprop : forall {Σ}, T Σ -> Valuation Σ -> Prop.
+  Class InstPropSubst (T : LCtx -> Type) `{InstProp T, Subst T} : Prop :=
+    instprop_subst : forall {Σ Σ'} (ζ : Sub Σ Σ') (ι : Valuation Σ') (t : T Σ),
+        instprop (subst t ζ) ι <-> instprop t (inst ζ ι).
+  #[global] Arguments instprop {T _ Σ} !_ ι.
+  #[global] Arguments InstPropSubst T {_ _}.
+
+  Module Entailment.
+
+    (* A preorder on path conditions. This encodes that either pc1 belongs to a
+       longer symbolic execution path (or that it's the same path, but with
+       potentially some constraints substituted away). *)
+    Definition entails {A B} {IA : InstProp A} {IB : InstProp B}
+      {Σ} (x : A Σ) (y : B Σ) : Prop :=
+      forall (ι : Valuation Σ), instprop x ι -> instprop y ι.
+    Definition bientails {A} {IA : InstProp A} {Σ} : relation (A Σ) :=
+      fun x y => forall ι, instprop x ι <-> instprop y ι.
+
+    Section WithA.
+      Context `{IA : InstProp A} {Σ : LCtx}.
+      Notation "(⊢)" := (@entails A A _ _ Σ).
+      Notation "(⊣⊢)" := (@bientails A _ Σ).
+
+      Definition entails_refl : Reflexive (⊢).
+      Proof. now unfold Reflexive, entails. Qed.
+
+      Definition entails_trans : Transitive (⊢).
+      Proof. unfold Transitive, entails; eauto. Qed.
+
+      #[export] Instance preorder_entails : PreOrder (⊢).
+      Proof. split; auto using entails_refl, entails_trans. Qed.
+
+      #[export] Instance equivalence_bientails : Equivalence (⊣⊢).
+      Proof.
+        unfold bientails. constructor; try easy.
+        intros x y z xy yz ι. now transitivity (instprop y ι).
+      Qed.
+
+      #[export] Instance subrelation_bientails_entails :
+        subrelation (⊣⊢) (⊢).
+      Proof. intros x y xy ι. apply xy. Qed.
+
+      #[export] Instance subrelation_bientails_flip_entails :
+        subrelation (⊣⊢) (flip (⊢)).
+      Proof. intros x y xy ι. apply xy. Qed.
+
+      Definition Unsatisfiable (x : A Σ) : Prop :=
+        forall ι : Valuation Σ, ~ instprop x ι.
+
+      #[export] Instance proper_unsatisfiable_entails :
+        Proper ((⊢) --> impl) Unsatisfiable.
+      Proof. intros xs ys xys uxs ι H. apply (uxs ι), xys, H. Qed.
+
+      #[export] Instance proper_unsatisfiable_bientails :
+        Proper ((⊣⊢) ==> iff) Unsatisfiable.
+      Proof.
+        intros x y xy.
+        split; apply proper_unsatisfiable_entails;
+          intros ι; apply xy.
+      Qed.
+
+      Definition Valid (x : A Σ) : Prop :=
+        forall ι : Valuation Σ, instprop x ι.
+
+      #[export] Instance proper_valid_entails :
+        Proper ((⊢) ==> impl) Valid.
+      Proof. intros xs ys xys uxs ι. apply xys, (uxs ι). Qed.
+
+      #[export] Instance proper_valid_bientails :
+        Proper ((⊣⊢) ==> iff) Valid.
+      Proof.
+        intros x y xy.
+        split; apply proper_valid_entails;
+          intros ι; apply xy.
+      Qed.
+
+    End WithA.
+
+    #[global] Instance: Params (@entails) 5 := {}.
+    #[global] Instance: Params (@bientails) 3 := {}.
+    #[global] Instance: Params (@Unsatisfiable) 3 := {}.
+    #[global] Instance: Params (@Valid) 3 := {}.
+
+    #[global] Typeclasses Opaque entails.
+    #[global] Typeclasses Opaque bientails.
+
+    Notation "(⊢)" := entails.
+    Infix "⊢" := entails.
+    Notation "(⊢@{ A } )" := (entails (A:=A) (B:=A)) (only parsing).
+
+    Notation "(⊣⊢)" := bientails.
+    Infix "⊣⊢" := bientails.
+    Notation "(⊣⊢@{ A } )" := (bientails (A:=A)) (only parsing).
+
+    Lemma proper_subst_entails `{InstPropSubst A, InstPropSubst B}
+      {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (x : A Σ1) (y : B Σ1) :
+      (x ⊢ y) -> (subst x ζ12 ⊢ subst y ζ12).
+    Proof. intros E ι. rewrite ?instprop_subst; eauto. Qed.
+
+  End Entailment.
+
+  Section InstProp.
+    Import Entailment.
+
+    #[export] Instance instprop_option `{InstProp A} : InstProp (Option A) :=
+      fun Σ o =>
+        match o with
+        | Some C => fun ι => instprop C ι
+        | None   => fun _ => False
+        end.
+
+    #[export] Instance instprop_pair `{InstProp A, InstProp B} : InstProp (Pair A B) :=
+      fun Σ '(a,b) ι => instprop a ι /\ instprop b ι.
+
+    #[export] Instance instpropsubst_pair `{InstPropSubst A, InstPropSubst B} : InstPropSubst (Pair A B).
+    Proof. hnf. intros ? ? ζ ι [a b]. apply and_iff_morphism; apply instprop_subst. Qed.
+
+    #[export] Instance instprop_ctx `{InstProp A} : InstProp (fun Σ => Ctx (A Σ)) :=
+      fix instprop_ctx {Σ} (xs : Ctx (A Σ)) (ι : Valuation Σ) : Prop :=
+        match xs with
+        | ctx.nil       => True
+        | ctx.snoc xs x => instprop_ctx xs ι /\ instprop x ι
+        end.
+
+    #[export] Instance instpropsubst_ctx `{InstPropSubst A} : InstPropSubst (fun Σ => Ctx (A Σ)).
+    Proof. intros ? ? ζ ι x. now induction x; cbn; [|apply and_iff_morphism]. Qed.
+
+    Lemma instprop_nil `{InstProp A} {Σ} (ι : Valuation Σ) :
+      instprop (@ctx.nil (A Σ)) ι <-> True.
+    Proof. reflexivity. Qed.
+
+    Lemma instprop_snoc `{InstProp A} {Σ} (ι : Valuation Σ) (xs : Ctx (A Σ)) (x : A Σ) :
+      instprop (xs ▻ x) ι <-> instprop xs ι /\ instprop x ι.
+    Proof. reflexivity. Qed.
+
+    Lemma instprop_cat `{InstProp A} {Σ} (x y : Ctx (A Σ)) (ι : Valuation Σ) :
+      instprop (x ▻▻ y) ι <->
+        instprop x ι /\ instprop y ι.
+    Proof. induction y; cbn; rewrite ?IHy; intuition. Qed.
+
+    Lemma entails_nil `{InstProp A, InstProp B} {Σ} {x : A Σ} : x ⊢ @ctx.nil (B Σ).
+    Proof. constructor. Qed.
+
+    Lemma entails_cons `{InstProp A, InstProp B} {Σ} (x : A Σ) (ys : Ctx (B Σ)) (y : B Σ) :
+      (x ⊢ ys) /\ (x ⊢ y) <-> (x ⊢ ys ▻ y).
+    Proof. unfold entails; cbn. intuition. Qed.
+
+  End InstProp.
 
   Section Utils.
 

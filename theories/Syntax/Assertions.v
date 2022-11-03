@@ -168,7 +168,7 @@ Module Import asn.
 
     Fixpoint interpret_pure {Σ} (a : Assertion Σ) (ι : Valuation Σ) : Prop :=
       match a with
-      | formula F => inst F ι
+      | formula F => instprop F ι
       | chunk c => False
       | chunk_angelic c => False
       | pattern_match s pat rhs =>
@@ -185,7 +185,7 @@ Module Import asn.
 
     Fixpoint interpret {Σ} (A : Assertion Σ) (ι : Valuation Σ) : HProp :=
       match A with
-      | formula F => !!(inst F ι) ∧ lemp
+      | formula F => !!(instprop F ι) ∧ lemp
       | chunk c => interpret_chunk c ι
       | chunk_angelic c => interpret_chunk c ι
       | pattern_match s pat rhs =>

@@ -961,6 +961,8 @@ End ContractDefKit.
 End MinCapsSpecification.
 
 Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
+  #[local] Arguments Some {_} _%ctx.
+
   Definition simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
     match term_get_val p, term_get_val q with
     | Some O , _       => Some []
@@ -1100,7 +1102,7 @@ Module MinCapsValidContracts.
          | |- VerificationCondition _ =>
              constructor;
              cbv [SymProp.safe env.remove env.lookup bop.eval is_true
-                               inst inst_term inst_formula env.Env_rect];
+                               inst inst_term instprop_formula env.Env_rect];
              cbn
          | |- Obligation _ _ _ => constructor; cbn
          | |- Debug _ _ => constructor

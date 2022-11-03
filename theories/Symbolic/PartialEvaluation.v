@@ -30,6 +30,7 @@
 From Coq Require Import
      Arith.PeanoNat
      Bool.Bool
+     Classes.Morphisms
      Classes.RelationClasses
      NArith.BinNat
      ZArith.BinInt.
@@ -44,6 +45,7 @@ From Katamaran Require Import
      Syntax.TypeDecl
      Syntax.Variables.
 
+Import (notations) base.
 Import ctx.notations.
 Import env.notations.
 
@@ -58,10 +60,16 @@ Module Type PartialEvaluationOn
   (Import IN : InstantiationOn TY TM).
 
   Local Notation LCtx := (NCtx LVar Ty).
-  Local Notation Valuation Σ := (@Env (Binding LVar Ty) (fun xt : Binding LVar Ty => Val (@type LVar Ty xt)) Σ).
+  Local Notation Valuation Σ := (Env (fun xt : Binding LVar Ty => Val (type xt)) Σ).
 
   Section WithLCtx.
     Context {Σ : LCtx}.
+
+    #[local] Ltac lsolve :=
+      try progress cbn;
+      try (progress autorewrite with katamaran);
+      try easy;
+      auto with core katamaran.
 
     Equations(noeqns) peval_append {σ} (t1 t2 : Term Σ (ty.list σ)) : Term Σ (ty.list σ) :=
     | term_val _ v1                 | term_val _ v2 := term_val (ty.list σ) (app v1 v2);
@@ -88,7 +96,7 @@ Module Type PartialEvaluationOn
     | op         , t1 , t2 => peval_binop' op t1 t2.
 
     Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
-      peval_append t1 t2 ≈ᵀ term_binop bop.append t1 t2.
+      peval_append t1 t2 ≡ term_binop bop.append t1 t2.
     Proof.
       depelim t1.
       - reflexivity.
@@ -100,20 +108,17 @@ Module Type PartialEvaluationOn
     Qed.
 
     Lemma peval_or_sound (t1 t2 : Term Σ ty.bool) :
-      peval_or t1 t2 ≈ᵀ term_binop bop.or t1 t2.
-    Proof.
+      peval_or t1 t2 ≡ term_binop bop.or t1 t2.
+    Proof with lsolve.
       depelim t1.
-      - depelim t2; cbn; try easy.
-        destruct v; constructor; cbn; intuition.
-      - destruct v; easy.
-      - depelim t2; cbn; try easy.
-        destruct v; constructor; cbn; intuition.
-      - depelim t2; cbn; try easy.
-        destruct v; constructor; cbn; intuition.
+      - depelim t2... destruct v...
+      - now destruct v.
+      - depelim t2... destruct v...
+      - depelim t2... destruct v...
     Qed.
 
     Lemma peval_binop'_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
-      peval_binop' op t1 t2 ≈ᵀ term_binop op t1 t2.
+      peval_binop' op t1 t2 ≡ term_binop op t1 t2.
     Proof.
       unfold peval_binop'.
       now repeat
@@ -123,7 +128,7 @@ Module Type PartialEvaluationOn
     Qed.
 
     Lemma peval_binop_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
-      peval_binop op t1 t2 ≈ᵀ term_binop op t1 t2.
+      peval_binop op t1 t2 ≡ term_binop op t1 t2.
     Proof.
       destruct op; cbn [peval_binop];
         auto using peval_binop'_sound, peval_append_sound, peval_or_sound.
@@ -177,46 +182,41 @@ Module Type PartialEvaluationOn
       | term_inr t          => peval_inr (peval t)
       | term_sext t         => peval_sext (peval t)
       | term_zext t         => peval_zext (peval t)
-      | @term_tuple _ σs ts => @term_tuple _ σs (env.map (fun b => @peval b) ts)
+      | term_tuple ts       => term_tuple (env.map (fun b => @peval b) ts)
       | term_union U K t    => peval_union (peval t)
-      | @term_record _ R ts => term_record R (env.map (fun b => peval (σ := type b)) ts)
+      | term_record R ts    => term_record R (env.map (fun b => peval (σ := type b)) ts)
       end.
 
     Lemma peval_neg_sound (t : Term Σ ty.int) :
-      peval_neg t ≈ᵀ term_neg t.
+      peval_neg t ≡ term_neg t.
     Proof. now dependent elimination t. Qed.
 
     Lemma peval_not_sound (t : Term Σ ty.bool) :
-      peval_not t ≈ᵀ term_not t.
-    Proof.
-      funelim (peval_not t); try easy.
-      - constructor. intro. cbn. rewrite negb_andb. intuition.
-      - constructor. intro. cbn. rewrite negb_orb. intuition.
-      - constructor. intro. cbn. now rewrite inst_term_relop_neg.
-    Qed.
+      peval_not t ≡ term_not t.
+    Proof. funelim (peval_not t); lsolve; now apply proper_term_binop. Qed.
 
     Lemma peval_inl_sound {σ1 σ2} (t : Term Σ σ1) :
-      peval_inl (σ2 := σ2) t ≈ᵀ term_inl t.
+      peval_inl (σ2 := σ2) t ≡ term_inl t.
     Proof. now destruct t. Qed.
 
     Lemma peval_inr_sound {σ1 σ2} (t : Term Σ σ2) :
-      peval_inr (σ1 := σ1) t ≈ᵀ term_inr t.
+      peval_inr (σ1 := σ1) t ≡ term_inr t.
     Proof. now destruct t. Qed.
 
     Lemma peval_sext_sound {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) :
-      peval_sext (p := p) t ≈ᵀ term_sext t.
+      peval_sext (p := p) t ≡ term_sext t.
     Proof. unfold peval_sext. destruct (term_get_val_spec t); now subst. Qed.
 
     Lemma peval_zext_sound {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) :
-      peval_zext (p := p) t ≈ᵀ term_zext t.
+      peval_zext (p := p) t ≡ term_zext t.
     Proof. unfold peval_zext. destruct (term_get_val_spec t); now subst. Qed.
 
     Lemma peval_union_sound {U K} (t : Term Σ (unionk_ty U K)) :
-      peval_union t ≈ᵀ term_union U K t.
+      peval_union t ≡ term_union U K t.
     Proof. unfold peval_union. destruct (term_get_val_spec t); now subst. Qed.
 
     Lemma peval_sound [σ] (t : Term Σ σ) :
-      peval t ≈ᵀ t.
+      peval t ≡ t.
     Proof.
       induction t; cbn.
       - reflexivity.
@@ -241,7 +241,7 @@ Module Type PartialEvaluationOn
       env.map peval.
 
     Lemma pevals_sound [Δ] (ts : Env (Term Σ) Δ) :
-      pevals ts ≈ᴱ ts.
+      pevals ts ≡ ts.
     Proof.
       induction ts; [reflexivity|]; cbn.
       apply proper_env_snoc; auto using peval_sound.

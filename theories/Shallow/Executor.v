@@ -591,7 +591,7 @@ Module Type ShallowExecOn
 
       Fixpoint produce {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CHeapSpecM Γ Γ unit :=
         match asn with
-        | asn.formula fml => assume_formula (inst fml ι)
+        | asn.formula fml => assume_formula (instprop fml ι)
         | asn.chunk c     => produce_chunk (inst c ι)
         | asn.chunk_angelic c => produce_chunk (inst c ι)
         | asn.pattern_match s pat rhs =>
@@ -610,7 +610,7 @@ Module Type ShallowExecOn
 
       Fixpoint consume {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CHeapSpecM Γ Γ unit :=
         match asn with
-        | asn.formula fml => assert_formula (inst fml ι)
+        | asn.formula fml => assert_formula (instprop fml ι)
         | asn.chunk c     => consume_chunk (inst c ι)
         | asn.chunk_angelic c     => consume_chunk (inst c ι)
         | asn.pattern_match s pat rhs =>

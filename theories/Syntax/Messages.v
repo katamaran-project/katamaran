@@ -26,34 +26,17 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
-     Bool.Bool
-     Classes.Morphisms
-     Classes.RelationClasses
-     Program.Basics
-     Program.Tactics
-     ZArith.
-
 From Katamaran Require Import
      Context
-     Environment
-     Notations
      Prelude
      Symbolic.Instantiation
      Symbolic.OccursCheck
-     Syntax.BinOps
      Syntax.Terms
      Syntax.TypeDecl
-     Syntax.Variables
-     Tactics.
-
-From Equations Require Import
-     Equations.
+     Syntax.Variables.
 
 Import ctx.notations.
-Import env.notations.
-
-Local Set Implicit Arguments.
+Import option.notations.
 
 Module Type MessagesOn
   (Import TY : Types)
@@ -61,7 +44,7 @@ Module Type MessagesOn
   (Import IN : InstantiationOn TY TM)
   (Import OC : OccursCheckOn TY TM).
 
-  Local Notation LCtx := (NCtx LVar Ty).
+  #[local] Notation LCtx := (NCtx LVar Ty).
 
   Module amsg.
     Inductive AMessage (Σ : LCtx) : Type :=
@@ -93,7 +76,6 @@ Module Type MessagesOn
           rewrite ?sub_up1_comp; auto using subst_sub_comp.
     Qed.
 
-    Import option.notations.
     #[export] Instance occurscheck_amessage : OccursCheck AMessage :=
       fix oc {Σ x} xIn m {struct m} :=
         match m with
@@ -101,38 +83,14 @@ Module Type MessagesOn
         | there msg => there <$> oc (ctx.in_succ xIn) msg
         end.
 
+    #[export] Instance instprop_amessage : InstProp AMessage :=
+      fun _ _ _ => True.
+
+    #[export] Instance instpropsubst_amessage : InstPropSubst AMessage.
+    Proof. easy. Qed.
+
   End amsg.
   Export amsg (AMessage).
   Export (hints) amsg.
-
-  Module wmsg.
-
-    Record WithMessage (A : LCtx -> Type) (Σ : LCtx) : Type :=
-      mk { msg : AMessage Σ; from : A Σ; }.
-    #[global] Arguments mk {A Σ} _ _.
-    #[global] Arguments wmsg.from {A Σ} _.
-
-    (* Use the same prioity that an instance of pairs would have. *)
-    #[export] Instance subst_wmessage `{Subst A} : Subst (WithMessage A) | 2 :=
-      fun _ '(mk m x) _ ζ => mk (subst m ζ) (subst x ζ).
-
-    (* Use the same prioity that an instance of pairs would have. *)
-    #[export] Instance substlaws_wmessage `{SubstLaws A} : SubstLaws (WithMessage A) | 2.
-    Proof.
-      constructor.
-      - intros ? []; cbn; f_equal; apply subst_sub_id.
-      - intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp.
-    Qed.
-
-    #[export] Instance inst_wmessage `{Inst A Prop} : Inst (WithMessage A) Prop :=
-      fun Σ '(mk _ x) ι => inst x ι.
-
-    #[export] Instance instsubst_wmessage `{InstSubst A Prop} :
-      InstSubst (WithMessage A) Prop :=
-      fun _ _ ζ ι '(mk _ x) => inst_subst ζ ι x.
-
-  End wmsg.
-  Export wmsg (WithMessage).
-  Export (hints) wmsg.
 
 End MessagesOn.

@@ -470,7 +470,7 @@ Import BlockVerificationDerived2.
     exact [env].
     - cbv [femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
            Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
-           Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst inst_formula
+           Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst instprop_formula
            inst_term env.lookup ctx.snocView ctx.in_at ctx.in_valid inst_env
            env.map].
       cbn.
@@ -478,7 +478,7 @@ Import BlockVerificationDerived2.
       rewrite Model.RiscvPmpModel2.gprs_equiv. cbn. now iFrame.
     - cbv [femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
            Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
-           Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst inst_formula
+           Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst instprop_formula
            inst_term env.lookup ctx.snocView ctx.in_at ctx.in_valid inst_env
            env.map femto_handler_post femtokernel_handler_post].
       cbn.

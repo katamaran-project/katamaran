@@ -258,15 +258,11 @@ Module Type SymbolicExecOn
           ιvalid  : instprop (wco w) ιassign;
         }.
 
-    Program Definition winstance_formula {w} (ι : WInstance w) (fml : Formula w) (p : inst (A := Prop) fml ι) :
+    Program Definition winstance_formula {w} (ι : WInstance w) (fml : Formula w) (p : instprop fml ι) :
       WInstance (wformula w fml) :=
       {| ιassign := ι; |}.
     Next Obligation.
-    Proof.
-      intros. cbn.
-      apply inst_pathcondition_snoc. split; auto.
-      apply ιvalid.
-    Qed.
+    Proof. intros. cbn. split; auto. apply ιvalid. Qed.
 
     Program Definition winstance_snoc {w} (ι : WInstance w) {b : LVar ∷ Ty} (v : Val (type b)) :
       WInstance (wsnoc w b) :=
@@ -274,7 +270,7 @@ Module Type SymbolicExecOn
     Next Obligation.
     Proof.
       intros. unfold wsnoc. cbn [wctx wco].
-      rewrite inst_subst, inst_sub_wk1.
+      rewrite instprop_subst, inst_sub_wk1.
       apply ιvalid.
     Qed.
 
@@ -283,7 +279,7 @@ Module Type SymbolicExecOn
       WInstance (wsubst w x t) :=
       @MkWInstance (wsubst w x t) (env.remove _ (ιassign ι) xIn) _.
     Next Obligation.
-      intros * p. cbn. rewrite inst_subst, <- inst_sub_shift in *.
+      intros * p. cbn. rewrite instprop_subst, <- inst_sub_shift in *.
       rewrite inst_sub_single_shift; auto using ιvalid.
     Qed.
 
@@ -295,7 +291,7 @@ Module Type SymbolicExecOn
     Next Obligation.
     Proof.
       intros. specialize (ent ι1).
-      rewrite <- inst_subst.
+      rewrite <- instprop_subst.
       apply ent.
       apply ιvalid.
     Qed.

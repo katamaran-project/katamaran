@@ -30,6 +30,7 @@
 From Coq Require Import
      Bool.Bool
      Classes.Morphisms
+     Classes.Morphisms_Prop
      Classes.RelationClasses
      Program.Basics
      Program.Tactics
@@ -106,7 +107,7 @@ Module Type FormulasOn
       }
   Qed.
 
-  #[export] Instance inst_formula : Inst Formula Prop :=
+  #[export] Instance instprop_formula : InstProp Formula :=
     fix inst_formula {Σ} (fml : Formula Σ) (ι : Valuation Σ) :=
       match fml with
       | formula_user p ts      => env.uncurry (𝑷_inst p) (inst ts ι)
@@ -119,15 +120,15 @@ Module Type FormulasOn
       | formula_or F1 F2       => inst_formula F1 ι \/ inst_formula F2 ι
       end.
 
-  #[export] Instance inst_subst_formula : InstSubst Formula Prop.
+  #[export] Instance instprop_subst_formula : InstPropSubst Formula.
   Proof.
-    intros ? ? ? ? f.
-    induction f; cbn; repeat f_equal; try easy; now apply inst_subst.
+    intros ? ? ? ? f. induction f; cbn; rewrite ?inst_subst; auto.
+    now apply and_iff_morphism. now apply or_iff_morphism.
   Qed.
 
-  Lemma inst_formula_relop_neg {Σ σ} (ι : Valuation Σ) (op : RelOp σ) :
+  Lemma instprop_formula_relop_neg {Σ σ} (ι : Valuation Σ) (op : RelOp σ) :
     forall (t1 t2 : Term Σ σ),
-      inst (formula_relop_neg op t1 t2) ι <->
+      instprop (formula_relop_neg op t1 t2) ι <->
       bop.eval_relop_val op (inst t1 ι) (inst t2 ι) = false.
   Proof.
     destruct op; cbn; intros t1 t2;
@@ -160,217 +161,37 @@ Module Type FormulasOn
   #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.
   Proof. occurs_check_derive. Qed.
 
-  (* The path condition expresses a set of constraints on the logic variables
-     that encode the path taken during execution. *)
-  Section PathConditions.
-
-    #[export] Instance subst_ctx `{Subst A} : Subst (fun Σ => Ctx (A Σ)) :=
-      fix subst_ctx {Σ} xs {Σ'} ζ {struct xs} :=
-        match xs with
-        | ctx.nil       => ctx.nil
-        | ctx.snoc xs x => ctx.snoc (subst_ctx xs ζ) (subst x ζ)
-        end.
-
-    #[export] Instance substlaws_ctx `{SubstLaws A} : SubstLaws (fun Σ => Ctx (A Σ)).
-    Proof.
-      constructor.
-      - intros ? xs. induction xs; cbn; f_equal; auto; apply subst_sub_id.
-      - intros ? ? ? ? ? xs; induction xs; cbn; f_equal; auto; apply subst_sub_comp.
-    Qed.
-
-    #[export] Instance occurscheck_ctx `{OccursCheck A} : OccursCheck (fun Σ => Ctx (A Σ)) :=
-      fix oc {Σ x} xIn ys {struct ys} :=
-        match ys with
-        | ctx.nil       => Some (ctx.nil)
-        | ctx.snoc ys y => ys' <- oc xIn ys ;;
-                           y'  <- occurs_check xIn y;;
-                           Some (ctx.snoc ys' y')
-        end.
-
-    #[export] Instance occurschecklaws_ctx `{OccursCheckLaws A} : OccursCheckLaws (fun Σ => Ctx (A Σ)).
-    Proof. occurs_check_derive. Qed.
-
-    #[export] Instance instprop_ctx `{Inst A Prop} : Inst (fun Σ => Ctx (A Σ)) Prop :=
-      fix instctx {Σ} (xs : Ctx (A Σ)) (ι : Valuation Σ) : Prop :=
-        match xs with
-        | ctx.nil       => True
-        | ctx.snoc xs x => instctx xs ι /\ inst x ι
-        end.
-
-    #[export] Instance instpropsubst_ctx `{InstSubst A Prop} : InstSubst (fun Σ => Ctx (A Σ)) Prop.
-    Proof. intros ? ? ζ ι xs. induction xs; cbn; f_equal; auto using inst_subst. Qed.
-
-    Lemma inst_nil `{Inst A Prop} {Σ} (ι : Valuation Σ) :
-      inst (@ctx.nil (A Σ)) ι <-> True.
-    Proof. reflexivity. Qed.
-
-    Lemma inst_snoc `{Inst A Prop} {Σ} (ι : Valuation Σ) (xs : Ctx (A Σ)) (x : A Σ) :
-      inst (xs ▻ x) ι <-> inst xs ι /\ inst x ι.
-    Proof. reflexivity. Qed.
-
-    Lemma inst_cat `{Inst A Prop} {Σ} (x y : Ctx (A Σ)) (ι : Valuation Σ) :
-      inst (x ▻▻ y) ι <->
-      inst x ι /\ inst y ι.
-    Proof. induction y; cbn; rewrite ?IHy; intuition. Qed.
+  Section PathCondition.
 
     Definition PathCondition (Σ : LCtx) : Type := Ctx (Formula Σ).
 
-    Lemma inst_pathcondition_nil {Σ} (ι : Valuation Σ) :
-      inst (T := PathCondition) ctx.nil ι <-> True.
-    Proof. reflexivity. Qed.
-
-    Lemma inst_pathcondition_snoc {Σ} (ι : Valuation Σ) (C : PathCondition Σ) (F : Formula Σ) :
-      inst (C ▻ F) ι <-> inst C ι /\ inst F ι.
-    Proof. reflexivity. Qed.
-
-    Lemma inst_pathcondition_cat {Σ} (C1 C2 : PathCondition Σ) (ι : Valuation Σ) :
-      inst (C1 ▻▻ C2) ι <->
-      inst C1 ι /\ inst C2 ι.
-    Proof. induction C2; cbn; rewrite ?IHC2; intuition. Qed.
-
-    (* Lemma inst_pathcondition_rev_append {Σ} (ι : Valuation Σ) (pc1 pc2 : PathCondition Σ) : *)
-    (*   inst (List.rev_append pc1 pc2) ι <-> inst pc1 ι /\ inst pc2 ι. *)
-    (* Proof. *)
-    (*   revert pc2. *)
-    (*   induction pc1; cbn; intros pc2. *)
-    (*   - intuition. *)
-    (*   - rewrite IHpc1. clear IHpc1. cbn. intuition. *)
-    (* Qed. *)
-
     Equations(noeqns) formula_eqs_ctx {Δ : Ctx Ty} {Σ : LCtx}
       (δ δ' : Env (Term Σ) Δ) : PathCondition Σ :=
-      formula_eqs_ctx env.nil          env.nil            := ctx.nil;
-      formula_eqs_ctx (env.snoc δ _ t) (env.snoc δ' _ t') :=
-        ctx.snoc (formula_eqs_ctx δ δ') (formula_relop bop.eq t t').
+    | env.nil,        env.nil          => ctx.nil
+    | env.snoc δ _ t, env.snoc δ' _ t' =>
+      ctx.snoc (formula_eqs_ctx δ δ') (formula_relop bop.eq t t').
 
     Equations(noeqns) formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ : LCtx}
       (δ δ' : NamedEnv (Term Σ) Δ) : PathCondition Σ :=
-      formula_eqs_nctx env.nil          env.nil            := ctx.nil;
-      formula_eqs_nctx (env.snoc δ _ t) (env.snoc δ' _ t') :=
-        ctx.snoc (formula_eqs_nctx δ δ') (formula_relop bop.eq t t').
+    | env.nil,        env.nil          => ctx.nil
+    | env.snoc δ _ t, env.snoc δ' _ t' =>
+      ctx.snoc (formula_eqs_nctx δ δ') (formula_relop bop.eq t t').
 
-    Lemma inst_formula_eqs_ctx {Δ Σ} (xs ys : Env (Term Σ) Δ) ι :
-      inst (formula_eqs_ctx xs ys) ι <-> inst xs ι = inst ys ι.
+    Lemma instprop_formula_eqs_ctx {Δ Σ} (xs ys : Env (Term Σ) Δ) ι :
+      instprop (formula_eqs_ctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs; env.destroy ys; cbn; [easy|].
       now rewrite IHxs, env.inversion_eq_snoc.
     Qed.
 
-    Lemma inst_formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ} (xs ys : NamedEnv (Term Σ) Δ) ι :
-      inst (formula_eqs_nctx xs ys) ι <-> inst xs ι = inst ys ι.
+    Lemma instprop_formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ} (xs ys : NamedEnv (Term Σ) Δ) ι :
+      instprop (formula_eqs_nctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs; env.destroy ys; cbn; [easy|].
       now rewrite IHxs, env.inversion_eq_snoc.
     Qed.
 
-  End PathConditions.
-
-  (* Avoid some Prop <-> Type confusion. *)
-  Notation instprop x ι := (@inst _ Prop _ _ x ι).
-
-  Module Entailment.
-
-    (* A preorder on path conditions. This encodes that either pc1 belongs to a
-       longer symbolic execution path (or that it's the same path, but with
-       potentially some constraints substituted away). *)
-    Definition entails {Σ} (C1 C0 : PathCondition Σ) : Prop :=
-      forall (ι : Valuation Σ), instprop C1 ι -> instprop C0 ι.
-    Infix "⊢" := (@entails _).
-
-    Definition entails_formula {Σ} (C : PathCondition Σ) (F : Formula Σ) : Prop :=
-      forall (ι : Valuation Σ), instprop C ι -> instprop F ι.
-    Infix "⊢f" := (@entails_formula _).
-
-    Lemma entails_nil {Σ} {pc : PathCondition Σ} : pc ⊢ ctx.nil.
-    Proof. constructor. Qed.
-
-    Lemma entails_cons {Σ} (C1 C2 : PathCondition Σ) (F : Formula Σ) :
-      (C1 ⊢ C2) /\ (C1 ⊢f F) <-> (C1 ⊢ C2 ▻ F).
-    Proof. unfold entails, entails_formula. cbn. intuition. Qed.
-
-    Definition entails_refl {Σ} : Reflexive (@entails Σ).
-    Proof. now unfold Reflexive, entails. Qed.
-
-    Definition entails_trans {Σ} : Transitive (@entails Σ).
-    Proof. unfold Transitive, entails; eauto. Qed.
-
-    #[export] Instance preorder_entails {Σ} : PreOrder (@entails Σ).
-    Proof. split; auto using entails_refl, entails_trans. Qed.
-
-    Lemma proper_subst_entails {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (C1 C2 : PathCondition Σ1) :
-      (C1 ⊢ C2) -> (subst C1 ζ12 ⊢ subst C2 ζ12).
-    Proof. intros E ι. rewrite ?inst_subst; eauto. Qed.
-
-    (* Definition entails_eq {AT A} `{Inst AT A} {Σ} (C : PathCondition Σ) (a0 a1 : AT Σ) : Prop := *)
-    (*   forall (ι : Valuation Σ), instprop C ι -> inst a0 ι = inst a1 ι. *)
-    (* Notation "C ⊢ a0 == a1" := *)
-    (*   (entails_eq C a0 a1) *)
-    (*   (at level 99, a1 at level 200, no associativity). *)
-
-    (* (* (* Not sure this instance is a good idea... *) *)
-    (* (*    This seems to cause rewrite to take very long... *) *) *)
-    (* (* #[export] Instance proper_entails_pc_iff {Σ} (C : PathCondition Σ) : *) *)
-    (* (*   Proper (entails_eq C ==> iff) (entails C). *) *)
-    (* (* Proof. *) *)
-    (* (*   intros C1 C2 E12. *) *)
-    (* (*   split; intros HYP ι ιC; *) *)
-    (* (*     specialize (E12 ι ιC); *) *)
-    (* (*     specialize (HYP ι ιC); *) *)
-    (* (*     congruence. *) *)
-    (* (* Qed. *) *)
-
-    (* (* #[export] Instance proper_entails_formula_iff *) *)
-    (* (*        {Σ} (C : PathCondition Σ): *) *)
-    (* (*      Proper (entails_eq C ==> iff) (entails_formula C). *) *)
-    (* (* Proof. *) *)
-    (* (*   intros C1 C2 E12. *) *)
-    (* (*   split; intros HYP ι ιC; *) *)
-    (* (*     specialize (E12 ι ιC); *) *)
-    (* (*     specialize (HYP ι ιC); *) *)
-    (* (*     congruence. *) *)
-    (* (* Qed. *) *)
-
-    (* #[export] Instance proper_entails_eq_impl {AT A} {Σ} {Γ} : *)
-    (*   Proper (entails --> eq ==> eq ==> impl) (@entails_eq AT A Γ Σ). *)
-    (* Proof. *)
-    (*   intros C1 C2 E21 a1 _ [] a2 _ [] eq1 ι ιC2; eauto. *)
-    (* Qed. *)
-
-    (* #[export] Instance proper_entails_eq_flip_impl {AT A} `{Inst AT A} {Σ} : *)
-    (*   Proper ((@entails Σ) ==> eq ==> eq ==> flip impl) entails_eq. *)
-    (* Proof. *)
-    (*   intros C1 C2 E21 a1 _ [] a2 _ [] eq1 ι ιC2; eauto. *)
-    (* Qed. *)
-
-    (* #[export] Instance equiv_entails_eq `{instA : Inst AT A} {Σ} {C : PathCondition Σ} : *)
-    (*   Equivalence (entails_eq C). *)
-    (* Proof. *)
-    (*   split. *)
-    (*   - intuition. *)
-    (*   - intros x y xy ι ιC. *)
-    (*     now symmetry; apply xy. *)
-    (*   - intros x y z xy yz ι ipc. *)
-    (*     now transitivity (inst y ι); [apply xy|apply yz]. *)
-    (* Qed. *)
-
-    (* (* #[export] Instance proper_entails_eq_flip_impl_pc {AT A} `{Inst AT A} {Σ} {pc : PathCondition Σ}: *) *)
-    (* (*   Proper (entails_eq pc ==> entails_eq pc ==> iff) (entails_eq pc). *) *)
-    (* (* Proof. *) *)
-    (* (*   split; intros Heq. *) *)
-    (* (*   - transitivity x; [|transitivity x0]; easy. *) *)
-    (* (*   - transitivity y; [|transitivity y0]; easy. *) *)
-    (* (* Qed. *) *)
-
-    (* (* #[export] Instance proper_entails_eq_sub_comp *) *)
-    (* (*        {Σ1 Σ2 Σ3} {ζ : Sub Σ1 Σ2} (pc : PathCondition Σ3): *) *)
-    (* (*   Proper (entails_eq pc ==> entails_eq pc) (subst ζ). *) *)
-    (* (* Proof. *) *)
-    (* (*   intros ζ1 ζ2 ζ12. *) *)
-    (* (*   unfold entails_eq in *. *) *)
-    (* (*   intros ι Hpc. specialize (ζ12 ι Hpc). *) *)
-    (* (*   now rewrite ?inst_subst, ζ12. *) *)
-    (* (* Qed. *) *)
-
-  End Entailment.
+  End PathCondition.
+  Bind Scope ctx_scope with PathCondition.
 
 End FormulasOn.

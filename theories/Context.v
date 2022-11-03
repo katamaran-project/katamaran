@@ -28,6 +28,7 @@
 
 From Coq Require Import
      Bool.Bool
+     Classes.Morphisms
      NArith.BinNat
      Numbers.DecimalString
      Strings.Ascii
@@ -65,7 +66,7 @@ Module Binding.
 End Binding.
 Export Binding.
 
-Module ctx.
+Module Import ctx.
 
   (* Type of contexts. This is a list of bindings of type B. This type and
      subsequent types use the common notation of snoc lists. *)
@@ -718,3 +719,8 @@ Export ctx (Ctx).
 Notation NCtx N T := (Ctx (Binding N T)).
 Bind Scope ctx_scope with Ctx.
 Bind Scope ctx_scope with NCtx.
+
+#[global] Instance: Params (@snoc) 1 := {}.
+#[global] Instance: Params (@lookup) 1 := {}.
+#[global] Instance: Params (@cat) 1 := {}.
+#[global] Instance: Params (@map) 2 := {}.

@@ -54,7 +54,7 @@ Module Type WorldsOn
         { wctx :> LCtx;
           wco  : PathCondition wctx;
         }.
-    Global Arguments MkWorld _ _%list_scope : clear implicits.
+    #[global] Arguments MkWorld : clear implicits.
 
     (* The empty world without logic variables and constraints. *)
     Definition wnil : World := @MkWorld ctx.nil ctx.nil.
@@ -180,7 +180,7 @@ Module Type WorldsOn
       - cbn. rewrite inst_sub_id. auto.
       - rewrite <- inst_sub_shift, inst_subst. intros [Heqx Heq'] Hpc0.
         apply IHν; cbn; auto.
-        rewrite inst_subst, inst_sub_single_shift; auto.
+        rewrite instprop_subst, inst_sub_single_shift; auto.
     Qed.
 
     Lemma inst_triangular_valid {w0 w1} (ζ01 : Tri w0 w1) (ι1 : Valuation w1) :
@@ -293,12 +293,7 @@ Module Type WorldsOn
       w ⊒ wpathcondition w C :=
       @acc_sub w (wpathcondition w C) (sub_id (wctx w)) _.
     Next Obligation.
-    Proof.
-      intros w C ι. cbn.
-      rewrite subst_sub_id.
-      rewrite inst_pathcondition_cat.
-      now intros [].
-    Qed.
+    Proof. intros w C ι H%instprop_cat. now rewrite subst_sub_id. Qed.
 
     Definition acc_subst_right {w : World} x {σ} {xIn : x∷σ ∈ w} (t : Term (w - x∷σ) σ) :
       w ⊒ wsubst w x t :=
@@ -402,13 +397,18 @@ Module Type WorldsOn
       persist a (acc_trans ω1 ω2) = persist (persist a ω1) ω2.
     Proof. now rewrite ?persist_subst, sub_acc_trans, subst_sub_comp. Qed.
 
-    Lemma inst_persist {AT A} `{InstSubst AT A} `{@SubstLaws AT _} {w1 w2} (ω : w1 ⊒ w2) :
+    Lemma inst_persist `{InstSubst AT A, !SubstLaws AT} {w1 w2} (ω : w1 ⊒ w2) :
       forall (ι : Valuation w2) (t : AT w1),
         inst (persist t ω) ι = inst t (inst (sub_acc ω) ι).
     Proof. intros. now rewrite persist_subst, inst_subst. Qed.
 
+    Lemma instprop_persist `{InstPropSubst AT, !SubstLaws AT} {w1 w2} (ω : w1 ⊒ w2) :
+      forall (ι : Valuation w2) (t : AT w1),
+        instprop (persist t ω) ι <-> instprop t (inst (sub_acc ω) ι).
+    Proof. intros. now rewrite persist_subst, instprop_subst. Qed.
+
     Lemma ent_acc {w1 w2} (ω : w1 ⊒ w2) :
-      wco w2 ⊢ persist (wco w1) ω.
+      wco w2 ⊢ persist (A := PathCondition) (wco w1) ω.
     Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
 
   End Persistence.
@@ -425,11 +425,11 @@ Module Type WorldsOn
 
   (* TODO: Move *)
   Definition Solver : Type :=
-    forall {w0 : World} (C0 : PathCondition w0),
+    forall (w0 : World) (C0 : PathCondition w0),
       option { w1 & Tri w0 w1 * PathCondition w1 }%type.
 
   Definition SolverSpec (s : Solver) : Prop :=
-    forall {w0 : World} (C0 : PathCondition w0),
+    forall (w0 : World) (C0 : PathCondition w0),
       option.spec
         (fun '(existT w1 (ζ, C1)) =>
            forall ι0,
@@ -459,8 +459,8 @@ Module Type WorldsOn
       option.spec
         (fun r : PathCondition Σ =>
            forall ι : Valuation Σ,
-             inst (formula_user p ts) ι <-> instprop r ι)
-        (forall ι : Valuation Σ, ~ inst (formula_user p ts) ι)
+             instprop (formula_user p ts) ι <-> instprop r ι)
+        (forall ι : Valuation Σ, ~ instprop (formula_user p ts) ι)
         (s Σ p ts).
 
   Section SimplifyAll.
@@ -527,14 +527,14 @@ Module Type WorldsOn
         (fun r : PathCondition Σ =>
            forall ι : Valuation Σ,
              instprop (k ▻ F) ι <-> instprop r ι)
-        (forall ι : Valuation Σ, ~ inst F ι)
+        (forall ι : Valuation Σ, ~ instprop F ι)
         (solveruseronly_simplify_formula F k).
     Proof.
       destruct F; try (constructor; reflexivity).
       cbn [solveruseronly_simplify_formula]. apply option.spec_map.
       generalize (user_spec ts).
       apply option.spec_monotonic.
-      - intros ? H ?. rewrite inst_pathcondition_cat.
+      - intros ? H ?. unfold PathCondition. rewrite instprop_cat.
         apply and_iff_compat_l'. intros ?. apply H.
       - auto.
     Qed.
@@ -546,8 +546,8 @@ Module Type WorldsOn
       generalize (simplify_all_spec solveruseronly_simplify_formula solveruseronly_simplify_formula_spec C ctx.nil).
       apply option.spec_monotonic.
       - intros r H ι Hpc. split; [constructor|].
-        specialize (H ι). rewrite inst_pathcondition_cat in H.
-        cbn in H. rewrite leftid_true_and in H.
+        specialize (H ι). unfold PathCondition in H.
+        rewrite instprop_cat in H. cbn in H. rewrite leftid_true_and in H.
         intros ι' Hpc'. cbn. rewrite inst_sub_id. intros. now subst.
       - intros Hnf ι Hpc. apply Hnf.
     Qed.

@@ -147,7 +147,7 @@ Module Soundness
   #[export] Instance RPathCondition : Rel PathCondition Prop :=
     MkRel (fun w ι fs p => instprop fs ι <-> p).
   #[export] Instance RFormula : Rel Formula Prop :=
-    MkRel (fun w ι f p => inst f ι <-> p).
+    MkRel (fun w ι f p => instprop f ι <-> p).
 
   #[export] Instance RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A :=
     MkRel (fun w ι t v => forall m, RSat RA ι (t m) v).
@@ -226,7 +226,7 @@ Module Soundness
       ι1 = inst (sub_acc r12) ι2 ->
       ℛ⟦RFormula⟧@{ι1} f p ->
       ℛ⟦RFormula⟧@{ι2} (persist f r12) p.
-  Proof. cbn. intros * ->. now rewrite inst_persist. Qed.
+  Proof. cbn. intros * ->. now rewrite instprop_persist. Qed.
 
   Lemma refine_env_snoc {N : Set} (Δ : NCtx N Ty) :
     ℛ⟦RNEnv Δ -> ∀ b, RVal (type b) -> RNEnv (Δ ▻ b)⟧
@@ -251,7 +251,7 @@ Module Soundness
        try change (sub_acc (@acc_subst_right ?w _ _ ?xIn ?t)) with (sub_single xIn t);
        rewrite <- ?sub_comp_wk1_tail, ?inst_subst, ?subst_sub_id,
          ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc,
-         ?inst_lift, ?inst_sub_single_shift, ?inst_pathcondition_snoc,
+         ?inst_lift, ?inst_sub_single_shift, ?instprop_snoc,
          ?sub_acc_trans, ?sub_acc_triangular, ?inst_triangular_right_inverse).
 
   Section SymProp.
@@ -332,7 +332,7 @@ Module Soundness
       intros [v Hwp]. exists v. revert Hwp.
       apply HPOST; cbn; eauto.
       now rewrite inst_sub_wk1.
-      now rewrite inst_subst, inst_sub_wk1.
+      now rewrite instprop_subst, inst_sub_wk1.
     Qed.
 
     Lemma refine_angelic_ctx {N : Set} {n : N -> LVar} :
@@ -363,7 +363,7 @@ Module Soundness
       remember (fresh_lvar w0 x) as ℓ.
       revert Hwp. apply HPOST;
         [ (* Boilerplate #1 *) cbn; now rewrite inst_sub_wk1
-        | (* Boilerplate #2 *) cbn; now rewrite inst_subst, inst_sub_wk1
+        | (* Boilerplate #2 *) cbn; now rewrite instprop_subst, inst_sub_wk1
         | ].
       reflexivity.
     Qed.
@@ -404,7 +404,7 @@ Module Soundness
         rewrite safe_assume_triangular, safe_assume_pathcondition_without_solver in Hwp.
         specialize (Hwp Hν Hsolver). revert Hwp.
         unfold four. apply HPOST; cbn; wsimpl; auto.
-        rewrite inst_pathcondition_cat. split; auto.
+        unfold PathCondition. rewrite instprop_cat. split; auto.
         now apply entails_triangular_inv.
       - intuition.
     Qed.
@@ -434,7 +434,7 @@ Module Soundness
           now apply entails_triangular_inv.
         + revert Hwp. unfold four.
           apply HPOST; cbn; wsimpl; eauto.
-          rewrite inst_pathcondition_cat. split; auto.
+          unfold PathCondition. rewrite instprop_cat. split; auto.
           now apply entails_triangular_inv.
       - intuition.
     Qed.
@@ -1270,10 +1270,10 @@ Module Soundness
         fold (@inst_sub (PatternCaseCtx pc)).
         fold (Sub (PatternCaseCtx pc)).
         rewrite <- inst_sub_cat.
-        rewrite <- inst_subst.
+        rewrite <- instprop_subst.
         rewrite <- subst_sub_comp.
         rewrite sub_comp_cat_left.
-        now rewrite ?inst_subst.
+        now rewrite instprop_subst, inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
@@ -1292,7 +1292,7 @@ Module Soundness
       apply refine_demonic; auto.
       intros w2 ω02 ι2 -> Hpc2. intros t v ->.
       apply IHasn; cbn - [inst sub_wk1];
-        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?inst_subst, ?inst_sub_wk1; eauto.
+        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?instprop_subst, ?inst_subst, ?inst_sub_wk1; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       apply refine_debug; auto.
       apply refine_pure; auto.
@@ -1355,7 +1355,7 @@ Module Soundness
       destruct (env.catView ts') as [tsI' tsO'].
       destruct (env.eqb_hom_spec Term_eqb (@Term_eqb_spec Σ) tsI tsI'); try discriminate.
       apply noConfusion_inv in Heqo. cbn in Heqo. subst.
-      apply inst_formula_eqs_ctx in Heqs.
+      apply instprop_formula_eqs_ctx in Heqs.
       rewrite (@inst_eq_rect_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
       rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat.
       change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.
@@ -1380,8 +1380,8 @@ Module Soundness
   Proof.
     induction h; cbn [SHeapSpecM.find_chunk_ptsreg_precise]; [now constructor|].
     destruct SHeapSpecM.match_chunk_ptsreg_precise eqn:?.
-    - constructor. intros ι. rewrite inst_pathcondition_snoc. intros [Hpc Hf].
-      clear IHh. destruct a; cbn in Heqo; try discriminate Heqo.
+    - constructor. intros ι [Hpc Hf]. clear IHh.
+      destruct a; cbn in Heqo; try discriminate Heqo.
       destruct (eq_dec_het r r0); try discriminate Heqo.
       dependent elimination e. cbn in Heqo. dependent elimination Heqo.
       change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
@@ -1572,10 +1572,10 @@ Module Soundness
         fold (@inst_sub (PatternCaseCtx pc)).
         fold (Sub (PatternCaseCtx pc)).
         rewrite <- inst_sub_cat.
-        rewrite <- inst_subst.
+        rewrite <- instprop_subst.
         rewrite <- subst_sub_comp.
         rewrite sub_comp_cat_left.
-        now rewrite ?inst_subst.
+        now rewrite instprop_subst, inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
@@ -1594,7 +1594,7 @@ Module Soundness
       apply refine_angelic; auto.
       intros w2 ω02 ι2 -> Hpc2. intros t v ->.
       apply IHasn; cbn - [inst sub_wk1];
-        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?inst_subst, ?inst_sub_wk1; eauto.
+        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?instprop_subst, ?inst_subst, ?inst_sub_wk1; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       apply refine_debug; auto.
       apply refine_pure; auto.
@@ -1827,7 +1827,6 @@ Module Soundness
     intros w2 ω12 ι2 -> Hpc2.
     intros res__s res__c Hres.
     apply refine_consume; cbn - [inst]; wsimpl; auto.
-    constructor.
     f_equal; auto.
   Qed.
 

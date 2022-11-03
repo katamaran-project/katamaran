@@ -494,6 +494,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 End RiscvPmpSignature.
 
 Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
+  #[local] Arguments Some {_} _%ctx.
+
   Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (PathCondition Σ) :=
     match term_get_val a1 , term_get_val a2 with
     | Some a1 , Some a2 => if decide_sub_perm a1 a2 then Some ctx.nil else None

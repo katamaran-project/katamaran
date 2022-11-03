@@ -561,7 +561,7 @@ Module BlockVerificationDerived2Sound.
     apply refine_bind.
     { apply refine_produce; auto.
       cbn.
-      now rewrite inst_subst, inst_sub_wk1.
+      now rewrite instprop_subst, inst_sub_wk1.
     }
     intros w2 ω2 ι2 -> Hpc2 [] [] _.
     apply refine_bind.
@@ -571,7 +571,7 @@ Module BlockVerificationDerived2Sound.
     intros w3 ω3 ι3 -> Hpc3 na ? ->.
     apply refine_consume; auto.
     cbn -[sub_wk1].
-    now rewrite ?inst_subst, ?inst_sub_wk1.
+    now rewrite ?instprop_subst, ?inst_sub_wk1.
     cbn [acc_snoc_left sub_acc].
     refine (eq_trans _ (eq_sym (inst_sub_snoc ι3 (sub_snoc (sub_acc (ω1 ∘ ω2 ∘ ω3)) ("a"∷ty_exc_code) (persist__term a (ω2 ∘ ω3))) ("an"::ty_exc_code) na))).
     f_equal.
