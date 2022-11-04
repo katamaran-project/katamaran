@@ -130,6 +130,11 @@ Module Type SymPropOn
         x σ (xIn : x∷σ ∈ Σ)
         (t : Term (Σ - x∷σ) σ)
         (k : SymProp (Σ - x∷σ))
+    | pattern_match {σ} (s : Term Σ σ) (pat : Pattern σ)
+        (rhs : forall (pc : PatternCase pat), SymProp (Σ ▻▻ PatternCaseCtx pc))
+    | pattern_match_var
+        x σ (xIn : x∷σ ∈ Σ) (pat : Pattern σ)
+        (rhs : forall (pc : PatternCase pat), SymProp (Σ - x∷σ ▻▻ PatternCaseCtx pc))
     | debug
         (b : AMessage Σ) (k : SymProp Σ).
     Notation 𝕊 := SymProp.
@@ -142,6 +147,7 @@ Module Type SymPropOn
     Global Arguments demonicv {_} _ _.
     Global Arguments assert_vareq {_} x {_ _} t msg k.
     Global Arguments assume_vareq {_} x {_ _} t k.
+    Global Arguments pattern_match_var {_} x {σ xIn} _ _.
 
     Definition angelic_close0 {Σ0 : LCtx} :
       forall Σ, 𝕊 (Σ0 ▻▻ Σ) -> 𝕊 Σ0 :=
@@ -230,6 +236,13 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           safe k ι'
+        | pattern_match s pat rhs =>
+          let (c,ι__pat) := pattern_match_val pat (inst s ι) in
+          safe (rhs c) (ι ►► ι__pat)
+        | pattern_match_var x pat rhs =>
+          let (c,ι__pat) := pattern_match_val pat ι.[?? x] in
+          let ι' := env.remove (x∷_) ι _ in
+          safe (rhs c) (ι' ►► ι__pat)
         | debug d k => safe k ι
         end%type.
     Global Arguments safe {Σ} p ι.
@@ -255,6 +268,13 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           safe_debug k ι'
+        | pattern_match s pat rhs =>
+          let (c,ι__pat) := pattern_match_val pat (inst s ι) in
+          safe_debug (rhs c) (ι ►► ι__pat)
+        | pattern_match_var x pat rhs =>
+          let (c,ι__pat) := pattern_match_val pat ι.[?? x] in
+          let ι' := env.remove (x∷_) ι _ in
+          safe_debug (rhs c) (ι' ►► ι__pat)
         | debug d k => Debug d (safe_debug k ι)
         end%type.
     Global Arguments safe_debug {Σ} p ι.
@@ -282,6 +302,16 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           @wsafe (wsubst w x t) k ι'
+        | pattern_match s pat rhs =>
+          let (c,ι__pat) := pattern_match_val pat (inst s ι) in
+          (* FIXME: This doesn't add the control flow constraint to the world *)
+          @wsafe (wcat w (PatternCaseCtx c)) (rhs c) (ι ►► ι__pat)
+        | pattern_match_var x pat rhs =>
+          let v        := ι.[?? x] in
+          let ι'       := env.remove (x∷_) ι _ in
+          let (c,ι__pat) := pattern_match_val pat v in
+          (* FIXME: This doesn't add the control flow constraint to the world *)
+          @wsafe (wcat (wsubst w x (lift v)) (PatternCaseCtx c)) (rhs c) (ι' ►► ι__pat)
         | debug d k => Debug d (wsafe k ι)
         end%type.
     Global Arguments wsafe {w} p ι.
@@ -300,7 +330,9 @@ Module Type SymPropOn
       destruct w as [Σ pc]; cbn in *; revert pc.
       induction p; cbn; intros pc; rewrite ?debug_equiv; auto;
         try (intuition; fail).
-      apply base.exist_proper; eauto.
+      - apply base.exist_proper; eauto.
+      - destruct pattern_match_val; eauto.
+      - destruct pattern_match_val; eauto.
     Qed.
 
     Lemma safe_debug_safe {Σ : LCtx} (p : 𝕊 Σ) (ι : Valuation Σ) :
@@ -308,9 +340,11 @@ Module Type SymPropOn
     Proof.
       induction p; cbn; rewrite ?debug_equiv, ?obligation_equiv; auto;
         try (intuition; fail).
-      apply base.exist_proper; eauto.
-      apply Morphisms_Prop.and_iff_morphism; cbn; eauto.
-      now rewrite inst_subst, inst_sub_shift.
+      - apply base.exist_proper; eauto.
+      - apply Morphisms_Prop.and_iff_morphism; cbn; eauto.
+        now rewrite inst_subst, inst_sub_shift.
+      - destruct pattern_match_val; eauto.
+      - destruct pattern_match_val; eauto.
     Qed.
 
     Lemma safe_assume_pathcondition_without_solver {w0 : World}
@@ -520,6 +554,34 @@ Module Type SymPropOn
     #[export] Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.forall_proper. Qed.
 
+    #[export] Instance proper_pattern_match {Σ σ} (s : Term Σ σ) (pat : Pattern σ) :
+      Proper
+        (forall_relation (fun pc => sequiv (Σ ▻▻ PatternCaseCtx pc)) ==> sequiv Σ)
+        (pattern_match s pat).
+    Proof. intros p q pq ι. cbn. destruct pattern_match_val. apply pq. Qed.
+
+    #[export] Instance proper_pattern_match_impl {Σ σ} (s : Term Σ σ) (pat : Pattern σ) :
+      Proper
+        (forall_relation (fun pc => simpl (Σ ▻▻ PatternCaseCtx pc)) ==> simpl Σ)
+        (pattern_match s pat).
+    Proof. intros p q pq ι. cbn. destruct pattern_match_val. apply pq. Qed.
+
+    #[export] Instance proper_pattern_match_var {Σ x σ} (xIn : x∷σ ∈ Σ)
+      (pat : Pattern σ) :
+      Proper
+        (forall_relation
+           (fun pc => sequiv (Σ - x∷σ ▻▻ PatternCaseCtx pc)) ==> sequiv Σ)
+        (pattern_match_var x pat).
+    Proof. intros p q pq ι. cbn. destruct pattern_match_val. apply pq. Qed.
+
+    #[export] Instance proper_pattern_match_var_impl {Σ x σ} (xIn : x∷σ ∈ Σ)
+      (pat : Pattern σ) :
+      Proper
+        (forall_relation
+           (fun pc => simpl (Σ - x∷σ ▻▻ PatternCaseCtx pc)) ==> simpl Σ)
+        (pattern_match_var x pat).
+    Proof. intros p q pq ι. cbn. destruct pattern_match_val. apply pq. Qed.
+
     #[export] Instance proper_debug {Σ} {bt : AMessage Σ} :
       Proper (sequiv Σ ==> sequiv Σ) (debug bt).
     Proof. unfold sequiv. intros p q pq ι. cbn. now rewrite ?debug_equiv. Qed.
@@ -585,6 +647,14 @@ Module Type SymPropOn
         | SymProp.demonicv b k => 1 + size k
         | @SymProp.assert_vareq _ x σ xIn t msg k => 1 + size k
         | @SymProp.assume_vareq _ x σ xIn t k => 1 + size k
+        | pattern_match _ pat rhs =>
+            List.fold_right
+              (fun pc => N.add (size (rhs pc))) 1%N
+              (finite.enum (PatternCase pat))
+        | pattern_match_var _ pat rhs =>
+            List.fold_right
+              (fun pc => N.add (size (rhs pc))) 1%N
+              (finite.enum (PatternCase pat))
         | SymProp.debug b k => 1 + size k
         end.
 
@@ -627,6 +697,14 @@ Module Type SymPropOn
         | SymProp.assume_vareq _ _ s   => count_nodes s c
         | SymProp.angelic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
         | SymProp.demonic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
+        | SymProp.pattern_match _ pat rhs  =>
+            List.fold_right
+              (fun pc => count_nodes (rhs pc)) c
+              (finite.enum (PatternCase pat))
+        | SymProp.pattern_match_var _ pat rhs =>
+            List.fold_right
+              (fun pc => count_nodes (rhs pc)) c
+              (finite.enum (PatternCase pat))
         end.
 
     End Statistics.
@@ -719,6 +797,10 @@ Module Type SymPropOn
         assert_vareq_prune x t msg (prune k)
       | assume_vareq x t k =>
         assume_vareq_prune x t (prune k)
+      | pattern_match s pat rhs =>
+        pattern_match s pat (fun pc => prune (rhs pc))
+      | pattern_match_var x pat rhs =>
+        pattern_match_var x pat (fun pc => prune (rhs pc))
       | debug d k =>
         debug d (prune k)
       end.
@@ -740,6 +822,8 @@ Module Type SymPropOn
           rewrite ?obligation_equiv; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
     Qed.
 
     Lemma prune_demonic_binary_sound {Σ} (p1 p2 : 𝕊 Σ) (ι : Valuation Σ) :
@@ -757,6 +841,8 @@ Module Type SymPropOn
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
     Qed.
@@ -811,6 +897,8 @@ Module Type SymPropOn
         now rewrite IHp.
       - rewrite prune_assume_vareq_sound; cbn.
         now rewrite IHp.
+      - destruct pattern_match_val; cbn; auto.
+      - destruct pattern_match_val; cbn; auto.
       - now rewrite ?debug_equiv.
     Qed.
 
@@ -983,6 +1071,10 @@ Module Type SymPropOn
             | None    => plug ec (assert_vareq x t msg (push ectx_refl p))
             end
         | assume_vareq x t p     => plug ec (assume_vareq x t (push ectx_refl p))
+        | pattern_match s pat rhs =>
+            plug ec (pattern_match s pat (fun pc => push ectx_refl (rhs pc)))
+        | pattern_match_var x pat rhs =>
+            plug ec (pattern_match_var x pat (fun pc => push ectx_refl (rhs pc)))
         | debug b p              => plug ec (debug b (push ectx_refl p))
         end.
 
@@ -1094,6 +1186,10 @@ Module Type SymPropOn
           + rewrite IHp. rewrite H. reflexivity.
           + apply proper_plug, proper_assert_vareq, IHp.
         - apply proper_plug, proper_assume_vareq, IHp.
+        - apply proper_plug, proper_pattern_match.
+          intros pc. rewrite H. reflexivity.
+        - apply proper_plug, proper_pattern_match_var.
+          intros pc. rewrite H. reflexivity.
         - apply proper_plug, proper_debug, IHp.
       Qed.
 
@@ -1180,6 +1276,10 @@ Module Type SymPropOn
             | Some e' => push e' p
             | None    => plug ec (assume_vareq x t (push uctx_refl p))
             end
+        | pattern_match s pat rhs =>
+            plug ec (pattern_match s pat (fun pc => push uctx_refl (rhs pc)))
+        | pattern_match_var x pat rhs =>
+            plug ec (pattern_match_var x pat (fun pc => push uctx_refl (rhs pc)))
         | debug b p              => plug ec (debug b (push uctx_refl p))
         end.
 
@@ -1294,6 +1394,10 @@ Module Type SymPropOn
         - destruct (uctx_subst_spec ec xIn t).
           + rewrite IHp. intros ι. apply H.
           + apply proper_plug_impl, proper_assume_vareq_impl, IHp.
+        - apply proper_plug_impl, proper_pattern_match_impl.
+          intros pc. rewrite H. reflexivity.
+        - apply proper_plug_impl, proper_pattern_match_var_impl.
+          intros pc. rewrite H. reflexivity.
         - apply proper_plug_impl, proper_debug_impl, IHp.
       Qed.
 
@@ -1420,7 +1524,11 @@ Module Type SymPropOn
         (σ : Ty)
         (n : nat)
         (t : ETerm σ)
-        (k : ESymProp).
+        (k : ESymProp)
+    | epattern_match {σ} (s : ETerm σ) (pat : @Pattern LVar σ)
+        (rhs : PatternCase pat -> ESymProp)
+    | epattern_match_var (x : LVar) σ (n : nat) (pat : @Pattern LVar σ)
+        (rhs : PatternCase pat -> ESymProp).
 
     Definition erase_term {Σ} : forall {σ} (t : Term Σ σ), ETerm σ :=
       fix erase {σ} t :=
@@ -1450,7 +1558,6 @@ Module Type SymPropOn
         | formula_false          => eformula_false
         | formula_and F1 F2      => eformula_and (erase F1) (erase F2)
         | formula_or F1 F2       => eformula_or (erase F1) (erase F2)
-
         end.
 
     Fixpoint erase_symprop {Σ} (p : SymProp Σ) : ESymProp :=
@@ -1465,6 +1572,12 @@ Module Type SymPropOn
       | demonicv b k => edemonicv b (erase_symprop k)
       | @assert_vareq _ x σ xIn t msg k => eassert_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop k)
       | @assume_vareq _ x σ xIn t k => eassume_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop k)
+      | pattern_match s pat rhs =>
+          epattern_match (erase_term s) pat
+            (fun pc => erase_symprop (rhs pc))
+      | @pattern_match_var _ x σ xIn pat rhs =>
+          epattern_match_var x (ctx.in_at xIn) pat
+            (fun pc => erase_symprop (rhs pc))
       | debug b k => erase_symprop k
       end.
 
@@ -1604,6 +1717,19 @@ Module Type SymPropOn
           let ι' := list_remove ι n in
           inst_eq (inst_eterm ι (eterm_var x _ n)) (inst_eterm ι' t) ->
           inst_symprop ι' k
+      | epattern_match s pat rhs =>
+          match inst_eterm ι s with
+          | Some v => let (c,ι__pat) := pattern_match_val pat v in
+                      inst_symprop (app (erase_valuation ι__pat) ι) (rhs c)
+          | None   => False
+          end
+      | epattern_match_var x n pat rhs =>
+          match inst_eterm ι (eterm_var x _ n) with
+          | Some v => let ι'       := list_remove ι n in
+                      let (c,ι__pat) := pattern_match_val pat v in
+                      inst_symprop (app (erase_valuation ι__pat) ι') (rhs c)
+          | None   => False
+          end
       end.
 
     Lemma erase_valuation_remove {Σ b} (bIn : b ∈ Σ) (ι : Valuation Σ) :
@@ -1616,6 +1742,11 @@ Module Type SymPropOn
         + reflexivity.
         + f_equal. apply (IHι i).
     Qed.
+
+    Lemma erase_valuation_cat {Σ1 Σ2} (ι1 : Valuation Σ1) (ι2 : Valuation Σ2) :
+      app (erase_valuation ι2) (erase_valuation ι1) =
+      erase_valuation (ι1 ►► ι2).
+    Proof. induction ι2; cbn; now f_equal. Qed.
 
     Lemma nth_error_erase {Σ b} (ι : Valuation Σ) (bIn : b ∈ Σ) :
       nth_error (erase_valuation ι) (ctx.in_at bIn) =
@@ -1697,22 +1828,17 @@ Module Type SymPropOn
         + auto.
       - apply base.exist_proper. intros v. apply (IHp (env.snoc ι b v)).
       - apply base.forall_proper. intros v. apply (IHp (env.snoc ι b v)).
-      - apply Morphisms_Prop.and_iff_morphism; cbn.
-        + rewrite nth_error_erase; cbn.
-          rewrite EqDec.eq_dec_refl.
-          rewrite erase_valuation_remove. cbn.
-          rewrite inst_eterm_erase.
-          intuition.
-        + generalize (IHp (env.remove _ ι xIn)).
-          now rewrite erase_valuation_remove.
-      - apply Morphisms_Prop.iff_iff_iff_impl_morphism; cbn.
-        + rewrite nth_error_erase; cbn.
-          rewrite EqDec.eq_dec_refl.
-          rewrite erase_valuation_remove. cbn.
-          rewrite inst_eterm_erase.
-          intuition.
-        + generalize (IHp (env.remove _ ι xIn)).
-          now rewrite erase_valuation_remove.
+      - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)).
+        rewrite erase_valuation_remove, !inst_eterm_erase.
+        now apply Morphisms_Prop.and_iff_morphism.
+      - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)).
+        rewrite erase_valuation_remove, !inst_eterm_erase.
+        now apply Morphisms_Prop.iff_iff_iff_impl_morphism.
+      - rewrite inst_eterm_erase. destruct pattern_match_val as [pc ι__pat].
+        now rewrite erase_valuation_cat.
+      - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)).
+        rewrite inst_eterm_erase. cbn. destruct pattern_match_val as [pc ι__pat].
+        now rewrite erase_valuation_remove, erase_valuation_cat.
       - apply IHp.
     Qed.
 
