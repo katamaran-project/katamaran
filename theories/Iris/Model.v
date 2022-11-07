@@ -42,6 +42,8 @@ From Katamaran Require Import
      Sep.Logic
      Semantics.
 
+Require Import Coq.Program.Equality.
+
 Import ctx.notations.
 Import env.notations.
 Set Implicit Arguments.
@@ -799,6 +801,38 @@ Module Type IrisResources
       iIntros (v δ) "WPrhs".
       destruct pattern_match_val.
       by iApply semWP_block.
+    Qed.
+
+    Lemma semWP_foreign {Γ Δ τ} {f : 𝑭𝑿 Δ τ} {es : NamedEnv (Exp Γ) Δ} {Q δ} :
+      ⊢ (∀ γ μ,
+            (regs_inv γ ∗ mem_inv sailGS_memGS μ)
+            ={⊤,∅}=∗
+        (∀ res γ' μ' ,
+          ⌜ ForeignCall f (evals es δ) res γ γ' μ μ' ⌝
+           ={∅}▷=∗
+           |={∅,⊤}=> (regs_inv γ' ∗ mem_inv sailGS_memGS μ') ∗
+                      semWP (match res with inr v => stm_val _ v
+                                       | inl s => stm_fail _ s
+                             end) Q δ)) -∗
+        semWP (stm_foreign f es) Q δ.
+    Proof.
+      iIntros "H".
+      unfold semWP. rewrite wp_unfold. cbn.
+      iIntros ([γ μ] ns ks1 ks nt) "[Hregs Hmem]".
+      iMod ("H" $! γ μ with "[$]") as "H"; iFrame.
+      iModIntro.
+      iSplitR; first done.
+      iIntros (e2 [γ' μ'] efs) "%primstep".
+      dependent induction primstep.
+      dependent induction H.
+      iMod ("H" $! res γ' μ' H) as "H"; iFrame.
+      do 2 iModIntro.
+      iMod "H" as "H".
+      iModIntro.
+      iMod "H" as "[[Hregs' Hmem'] Hwp]".
+      iModIntro.
+      cbn.
+      iFrame.
     Qed.
 
   End WeakestPre.

@@ -654,15 +654,21 @@ Module MinCapsIrisInstanceWithContracts.
     Lemma dI_sound :
       ValidContractForeign sep_contract_dI dI.
     Proof.
-      intros Γ es δ ι Heq.
+      iIntros (Γ es δ ι Heq) "_".
       destruct_syminstances.
-      iApply iris_rule_noop; cbn; try done.
-      intros s' γ γ' μ μ' δ' step.
-      eliminate_prim_step Heq.
-      repeat split; auto.
-      destruct pure_decode.
-      right. eexists; auto.
-      left. eexists; reflexivity.
+      iApply (semWP_foreign (f := dI)).
+      iIntros (γ μ) "[Hregs Hmem]".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iIntros (res γ' μ') "%fcall".
+      rewrite Heq in fcall.
+      dependent elimination fcall.
+      repeat iModIntro.
+      iMod "Hclose" as "_".
+      iFrame. cbn.
+      destruct (pure_decode code).
+      - now rewrite semWP_fail.
+      - now rewrite semWP_val.
     Qed.
 
     Import iris.base_logic.lib.gen_heap.
@@ -689,19 +695,19 @@ Module MinCapsIrisInstanceWithContracts.
           ▷ (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ interp w).
     Proof. iIntros (a w) "? ?"; iModIntro; iExists _; iAccu. Qed.
 
-    Lemma mem_inv_not_modified : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal),
-        ⊢ ⌜map_Forall (λ (a : Addr) (v : MemVal), (γ, μ).2 a = v) memmap⌝ -∗
+    Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
+        ⊢ ⌜map_Forall (λ (a : Addr) (v : MemVal), μ a = v) memmap⌝ -∗
         gen_heap.gen_heap_interp memmap -∗
         mem_inv sailGS_memGS μ.
-    Proof. iIntros (γ μ memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
+    Proof. iIntros (μ memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
 
-    Lemma map_Forall_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal)
+    Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
                                 (paddr : Addr) (data : MemVal),
-        map_Forall (λ (a : Addr) (v : MemVal), (γ, μ).2 a = v) memmap ->
+        map_Forall (λ (a : Addr) (v : MemVal), μ a = v) memmap ->
         map_Forall (λ (a : Addr) (v : MemVal), fun_wM μ paddr data a = v)
                    (<[paddr:=data]> memmap).
     Proof.
-      intros γ μ memmap paddr data Hmap.
+      intros μ memmap paddr data Hmap.
       unfold fun_wM.
       apply map_Forall_lookup.
       intros i x H0.
@@ -713,15 +719,15 @@ Module MinCapsIrisInstanceWithContracts.
         apply Hmap; assumption.
     Qed.
 
-    Lemma mem_inv_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal)
+    Lemma mem_inv_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
                              (paddr : Addr) (data : MemVal),
-        ⊢ ⌜map_Forall (λ (a : Addr) (v : MemVal), (γ, μ).2 a = v) memmap⌝ -∗
+        ⊢ ⌜map_Forall (λ (a : Addr) (v : MemVal), μ a = v) memmap⌝ -∗
           gen_heap.gen_heap_interp (<[paddr := data]> memmap) -∗
           mem_inv sailGS_memGS (fun_wM μ paddr data).
     Proof.
-      iIntros (γ μ memmap paddr data) "%Hmap Hmem".
+      iIntros (μ memmap paddr data) "%Hmap Hmem".
       iExists (<[paddr := data]> memmap); iFrame.
-      iPureIntro; apply (map_Forall_update _ _ _ _ Hmap).
+      iPureIntro; apply (map_Forall_update _ _ _ Hmap).
     Qed.
 
     Lemma rM_sound :
@@ -731,16 +737,16 @@ Module MinCapsIrisInstanceWithContracts.
       rename address into a.
       iIntros "(#Hsafe & [%Hsubp _] & [%Hbounds _])".
       apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
-      unfold semWP. rewrite wp_unfold. cbn.
+      iApply (semWP_foreign (f := rM)).
+      iIntros (γ μ) "[Hregs Hmem]".
       iPoseProof (extract_ptsto b e a p $! Hb He (or_introl Hsubp) with "Hsafe") as "Hown".
-      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
       iDestruct "Hmem" as (memmap) "[Hmem' %]".
       iInv "Hown" as "Hinv" "Hclose".
       iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
       iModIntro.
-      iSplitR; first by intuition.
-      iIntros (e2 σ'' efs) "%".
-      eliminate_prim_step Heq.
+      iIntros (res γ' μ') "%fcall".
+      rewrite Heq in fcall; cbn in fcall.
+      dependent elimination fcall.
       repeat iModIntro.
       iDestruct "Hinv" as (v) "Hav".
       iDestruct "Hav" as "[Hav #Hrec]".
@@ -749,37 +755,32 @@ Module MinCapsIrisInstanceWithContracts.
       iPoseProof (later_exists_ptsto with "Hav Hrec") as "Hinv".
       iMod ("Hclose" with "Hinv") as "_".
       iModIntro.
-      cbn.
-      iSplitL "Hmem' Hregs".
-      iSplitL "Hregs"; first iFrame.
+      iFrame.
+      iSplitL "Hmem'".
       iApply (mem_inv_not_modified $! H0 with "Hmem'").
-      iSplitR; last trivial.
       iApply wp_value; cbn.
       iSplitL; trivial.
-      unfold fun_rM.
       apply map_Forall_lookup_1 with (i := a) (x := v) in H0; auto.
-      simpl in H0. subst.
-      iAssumption.
+      now subst.
     Qed.
 
-    Lemma wM_sound :
-      ValidContractForeign sep_contract_wM wM.
+    Lemma wM_sound : ValidContractForeign sep_contract_wM wM.
     Proof.
       intros Γ es δ ι Heq; destruct_syminstances; cbn in *.
       rename address into a.
       rename new_value into w.
       iIntros "[#Hwsafe [#Hsafe [[%Hsubp _] [%Hbounds _]]]]".
       apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
-      unfold semWP. rewrite wp_unfold. cbn.
+      iApply (semWP_foreign (f := wM)).
       iPoseProof (extract_ptsto b e a p $! Hb He (or_intror Hsubp) with "Hsafe") as "Hown".
-      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+      iIntros (γ μ) "[Hregs Hmem]".
       iDestruct "Hmem" as (memmap) "[Hmem' %]".
       iInv "Hown" as "Hinv" "Hclose".
       iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
       iModIntro.
-      iSplitR; first by intuition.
-      iIntros (e2 σ'' efs) "%".
-      eliminate_prim_step Heq.
+      iIntros (res γ' μ') "%fcall".
+      rewrite Heq in fcall.
+      dependent elimination fcall.
       repeat iModIntro.
       iDestruct "Hinv" as (v) "Hav".
       iDestruct "Hav" as "[Hav #Hrec]".
@@ -789,12 +790,9 @@ Module MinCapsIrisInstanceWithContracts.
       iMod ("Hclose" with "Hinv") as "_".
       iModIntro.
       iSplitL; trivial.
-      cbn.
-      iSplitL "Hregs"; first by iFrame.
+      iFrame.
       iApply (mem_inv_update $! H0 with "Hmem'").
-      iSplitL; trivial.
-      iApply wp_value; cbn; trivial;
-        repeat (iSplitL; trivial).
+      now iApply wp_value.
     Qed.
 
     Lemma foreignSem : ForeignSem.
