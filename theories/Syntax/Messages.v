@@ -53,6 +53,8 @@ Module Type MessagesOn
     #[global] Arguments mk {_ _ _ _ _} msg.
     #[global] Arguments there {_ _} msg.
 
+    Definition empty {Σ} : AMessage Σ := mk (M := Unit) tt.
+
     Fixpoint close {Σ ΣΔ} {struct ΣΔ} : AMessage (Σ ▻▻ ΣΔ) -> AMessage Σ :=
       match ΣΔ with
       | []      => fun msg => msg

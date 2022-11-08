@@ -1536,9 +1536,9 @@ Module Type SymbolicExecOn
         | SymProp.demonic_binary o1 o2 =>
             fun r => demonic_binary (replay o1 r) (replay o2 r)
         | SymProp.block =>
-            fun r P => SymProp.block
+            fun r => block
         | SymProp.error msg =>
-            fun r P => SymProp.block (* FIXME *)
+            fun r => error msg⟨r⟩
         | assertk fml msg k =>
             fun r01 =>
               ⟨ r12 ⟩ _ <- assert_formula msg⟨r01⟩ fml⟨r01⟩ ;;

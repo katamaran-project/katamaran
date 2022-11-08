@@ -36,6 +36,9 @@ From Coq Require Import
      Relations.Relation_Definitions
      Strings.String.
 
+From Equations Require Import
+     Equations.
+
 From Katamaran Require Import
      Base
      Notations
@@ -198,6 +201,84 @@ Module Type SymPropOn
         | []    => fun k => k
         | Σ ▻ b => fun k => close Σ (@demonicv Σ b k)
         end%ctx.
+
+    Definition angelic_list' {A Σ} (d : 𝕊 Σ) (P : A Σ -> 𝕊 Σ) :
+      List A Σ -> 𝕊 Σ :=
+      fix alist xs :=
+        match xs with
+        | nil       => d
+        | cons x xs => angelic_binary (P x) (alist xs)
+        end.
+
+    Definition angelic_list {A Σ} (msg : AMessage Σ) (P : A Σ -> 𝕊 Σ) :
+      List A Σ -> 𝕊 Σ :=
+      fun xs =>
+        match xs with
+        | nil       => error msg
+        | cons x xs => angelic_list' (P x) P xs
+        end.
+
+    Definition demonic_list' {A Σ} (d : 𝕊 Σ) (P : A Σ -> 𝕊 Σ) :
+      List A Σ -> 𝕊 Σ :=
+      fix dlist xs :=
+        match xs with
+        | nil       => d
+        | cons x xs => demonic_binary (P x) (dlist xs)
+        end.
+
+    Definition demonic_list {A Σ} (P : A Σ -> 𝕊 Σ) :
+      List A Σ -> 𝕊 Σ :=
+      fun xs =>
+        match xs with
+        | nil       => block
+        | cons x xs => demonic_list' (P x) P xs
+        end.
+
+    Definition angelic_finite F `{finite.Finite F} {Σ} (msg : AMessage Σ)
+      (P : F -> 𝕊 Σ) : 𝕊 Σ := angelic_list msg P (finite.enum F).
+    #[global] Arguments angelic_finite F {_ _} [Σ] msg P.
+    Definition demonic_finite F `{finite.Finite F} {Σ}
+      (P : F -> 𝕊 Σ) : 𝕊 Σ := demonic_list P (finite.enum F).
+    #[global] Arguments demonic_finite F {_ _} [Σ] P.
+
+    Definition angelic_pattern_match {σ} (pat : @Pattern LVar σ) {Σ} (s : Term Σ σ)
+      (k : forall pc : PatternCase pat, 𝕊 (Σ ▻▻ PatternCaseCtx pc)) : 𝕊 Σ :=
+      angelic_finite (PatternCase pat) amsg.empty
+        (fun pc => angelic_close0 (PatternCaseCtx pc)
+           (assertk
+              (formula_relop bop.eq
+                 (pattern_match_term_reverse pat pc (sub_cat_right _))
+                 (subst s (sub_cat_left (PatternCaseCtx pc))))
+              amsg.empty (k pc))).
+
+    Definition angelic_pattern_match_var {σ} (pat : @Pattern LVar σ) {Σ} x {xIn : x∷σ ∈ Σ}
+      (k : forall pc : PatternCase pat, 𝕊 (Σ - x∷σ ▻▻ PatternCaseCtx pc)) : 𝕊 Σ :=
+      angelic_finite (PatternCase pat) amsg.empty
+        (fun pc => angelic_close0 (PatternCaseCtx pc)
+           (let e := eq_sym (ctx.remove_in_cat_left xIn) in
+            assert_vareq x
+              (eq_rect _ (STerm σ) (pattern_match_term_reverse pat pc (sub_cat_right (PatternCaseCtx pc))) _ e)
+              amsg.empty
+              (eq_rect _ 𝕊 (k pc) _ e))).
+
+    Definition demonic_pattern_match {σ} (pat : @Pattern LVar σ) {Σ} (s : Term Σ σ)
+      (k : forall pc : PatternCase pat, 𝕊 (Σ ▻▻ PatternCaseCtx pc)) : 𝕊 Σ :=
+      demonic_finite (PatternCase pat)
+        (fun pc => demonic_close0 (PatternCaseCtx pc)
+           (assumek
+              (formula_relop bop.eq
+                 (pattern_match_term_reverse pat pc (sub_cat_right _))
+                 (subst s (sub_cat_left (PatternCaseCtx pc))))
+              (k pc))).
+
+    Definition demonic_pattern_match_var {σ} (pat : @Pattern LVar σ) {Σ} x {xIn : x∷σ ∈ Σ}
+      (k : forall pc : PatternCase pat, 𝕊 (Σ - x∷σ ▻▻ PatternCaseCtx pc)) : 𝕊 Σ :=
+      demonic_finite (PatternCase pat)
+        (fun pc => demonic_close0 (PatternCaseCtx pc)
+           (let e := eq_sym (ctx.remove_in_cat_left xIn) in
+            assume_vareq x
+              (eq_rect _ (STerm σ) (pattern_match_term_reverse pat pc (sub_cat_right (PatternCaseCtx pc))) _ e)
+              (eq_rect _ 𝕊 (k pc) _ e))).
 
     Fixpoint assume_pathcondition_without_solver' {Σ}
       (C : PathCondition Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
@@ -482,6 +563,56 @@ Module Type SymPropOn
         + intros sp ι v. apply (sp (env.snoc ι b v)).
     Qed.
 
+    Lemma safe_angelic_list' {A Σ} (d : 𝕊 Σ) (P : A Σ -> 𝕊 Σ) (xs : List A Σ) :
+      forall ι : Valuation Σ,
+        safe (angelic_list' d P xs) ι <->
+          safe d ι \/ exists x : A Σ, List.In x xs /\ safe (P x) ι.
+    Proof.
+      intros ι. induction xs; cbn.
+      - split. now left. now intros [|(x & [] & ?)].
+      - rewrite IHxs. clear IHxs. intuition.
+        + right. exists a. auto.
+        + destruct H as (x & HIn & Hsafe).
+          right. exists x. auto.
+        + destruct H0 as (x & [Heq|HIn] & Hsafe).
+          * left. now subst.
+          * right. right. exists x. auto.
+    Qed.
+
+    Lemma safe_angelic_list {A Σ} (msg : AMessage Σ) (P : A Σ -> 𝕊 Σ) (xs : List A Σ) :
+      forall ι : Valuation Σ,
+        safe (angelic_list msg P xs) ι <->
+          exists x : A Σ, List.In x xs /\ safe (P x) ι.
+    Proof.
+      intros ι. destruct xs; cbn.
+      - split; [easy|]. now intros [].
+      - rewrite safe_angelic_list'. split.
+        + intros [|(x&?&?)]. exists a; auto. exists x; auto.
+        + intros (x & [Heq|HIn] & Hsafe).
+          * left. now subst.
+          * right. exists x; auto.
+    Qed.
+
+    Lemma safe_demonic_list' {A Σ} (d : 𝕊 Σ) (P : A Σ -> 𝕊 Σ) (xs : List A Σ) :
+      forall ι : Valuation Σ,
+        safe (demonic_list' d P xs) ι <->
+          safe d ι /\ forall x : A Σ, List.In x xs -> safe (P x) ι.
+    Proof.
+      intros ι. induction xs; cbn.
+      - intuition.
+      - rewrite IHxs. clear IHxs. intuition.
+    Qed.
+
+    Lemma safe_demonic_list {A Σ} (P : A Σ -> 𝕊 Σ) (xs : List A Σ) :
+      forall ι : Valuation Σ,
+        safe (demonic_list P xs) ι <->
+          forall x : A Σ, List.In x xs -> safe (P x) ι.
+    Proof.
+      intros ι. destruct xs; cbn.
+      - intuition.
+      - rewrite safe_demonic_list'. intuition.
+    Qed.
+
     Definition sequiv Σ : relation (𝕊 Σ) :=
       fun p q => forall ι, safe p ι <-> safe q ι.
     Arguments sequiv : clear implicits.
@@ -513,8 +644,13 @@ Module Type SymPropOn
     #[export] Instance simpl_preorder {Σ} : PreOrder (simpl Σ).
     Proof. split; auto using simpl_refl, simpl_trans. Qed.
 
-    #[export] Instance simpl_rewriterelation {Σ} : RewriteRelation (sequiv Σ).
-    Defined.
+    #[export] Instance subrelation_sequiv_simpl {Σ} :
+      subrelation (sequiv Σ) (simpl Σ).
+    Proof. intros x y xy ι. apply xy. Qed.
+
+    #[export] Instance subrelation_sequiv_flip_simpl {Σ} :
+      subrelation (sequiv Σ) (Basics.flip (simpl Σ)).
+    Proof. intros x y xy ι. apply xy. Qed.
 
     #[export] Instance proper_angelic_close0 {Σ Σe} : Proper (sequiv (Σ ▻▻ Σe) ==> sequiv Σ) (angelic_close0 Σe).
     Proof. intros p q pq ι. rewrite ?safe_angelic_close0. now apply base.exist_proper. Qed.
@@ -640,6 +776,114 @@ Module Type SymPropOn
       split.
       - intros sp; split; intros ιu; apply (sp ιu).
       - intros [sp1 sp2] ιu; split; auto.
+    Qed.
+
+    Lemma angelic_pattern_match_correct [Σ σ] (s : Term Σ σ) (pat : Pattern σ)
+      (rhs : forall pc : PatternCase pat, 𝕊 (Σ ▻▻ PatternCaseCtx pc)) :
+      angelic_pattern_match pat s rhs <=> pattern_match s pat rhs.
+    Proof.
+      unfold angelic_pattern_match, angelic_finite. intros ι. cbn.
+      rewrite safe_angelic_list.
+      setoid_rewrite safe_angelic_close0. cbn.
+      setoid_rewrite inst_pattern_match_term_reverse.
+      change_no_check (@inst_env _ _ _ _) with (@inst_sub).
+      setoid_rewrite inst_subst.
+      setoid_rewrite inst_sub_cat_right.
+      setoid_rewrite inst_sub_cat_left.
+      split.
+      - intros (pc & HIn & ιpat & Hmatch & Hsafe).
+        now rewrite <- Hmatch, pattern_match_val_inverse_right.
+      - pose proof (pattern_match_val_inverse_left pat (inst s ι)) as Hmatch.
+        destruct pattern_match_val as [pc ιpat]. intros Hsafe.
+        exists pc. split. apply base.elem_of_list_In, finite.elem_of_enum.
+        exists ιpat. split. exact Hmatch. exact Hsafe.
+    Qed.
+
+    Lemma angelic_pattern_match_var_correct [Σ x σ] (xIn : x∷σ ∈ Σ) (pat : Pattern σ)
+      (rhs : forall pc : PatternCase pat, 𝕊 (Σ - x∷σ ▻▻ PatternCaseCtx pc)) :
+      angelic_pattern_match_var pat rhs <=> pattern_match_var x pat rhs.
+    Proof.
+      unfold angelic_pattern_match_var, angelic_finite. intros ι. cbn.
+      rewrite safe_angelic_list.
+      setoid_rewrite safe_angelic_close0. cbn.
+      setoid_rewrite env.lookup_cat_left.
+      setoid_rewrite safe_eq_rect.
+      setoid_rewrite inst_eq_rect.
+      setoid_rewrite inst_pattern_match_term_reverse.
+      setoid_rewrite eq_sym_involutive.
+      split.
+      - intros (pc & HIn & ιpat & Hmatch & Hsafe). revert Hsafe.
+        rewrite Hmatch. clear Hmatch.
+        rewrite pattern_match_val_inverse_right.
+        rewrite env.cat_remove_left.
+        rewrite env.remove_cat_left. rewrite eq_rect_sym2.
+        change_no_check (@inst_env _ _ _ _) with (@inst_sub).
+        rewrite env.remove_cat_left.
+        rewrite eq_rect_sym2.
+        match goal with
+          |- safe ?P ?ι1 -> safe ?P ?ι2 => enough (ι1 = ι2) as <-; auto
+        end.
+        f_equal. symmetry. apply inst_sub_cat_right.
+      - pose proof (pattern_match_val_inverse_left pat ι.[? x∷σ]) as Hmatch.
+        destruct pattern_match_val as [pc ιpat]. intros Hsafe.
+        exists pc. split. apply base.elem_of_list_In, finite.elem_of_enum.
+        exists ιpat.
+        rewrite env.remove_cat_left.
+        rewrite eq_rect_sym2.
+        split; auto. clear Hsafe.
+        symmetry. etransitivity; [|exact Hmatch].
+        unfold pattern_match_val_reverse'. cbn.
+        f_equal. apply inst_sub_cat_right.
+    Qed.
+
+    Lemma demonic_pattern_match_correct [Σ σ] (s : Term Σ σ) (pat : Pattern σ)
+      (rhs : forall pc : PatternCase pat, 𝕊 (Σ ▻▻ PatternCaseCtx pc)) :
+      demonic_pattern_match pat s rhs <=> pattern_match s pat rhs.
+    Proof.
+      unfold demonic_pattern_match, demonic_finite. intros ι. cbn.
+      rewrite safe_demonic_list.
+      setoid_rewrite safe_demonic_close0. cbn.
+      setoid_rewrite inst_pattern_match_term_reverse.
+      change_no_check (@inst_env _ _ _ _) with (@inst_sub).
+      setoid_rewrite inst_subst.
+      setoid_rewrite inst_sub_cat_right.
+      setoid_rewrite inst_sub_cat_left.
+      split.
+      - pose proof (pattern_match_val_inverse_left pat (inst s ι)) as Hmatch.
+        destruct pattern_match_val as [pc ιpat]. intros HYP. apply HYP; auto.
+        apply base.elem_of_list_In, finite.elem_of_enum.
+      - intros Heq pc HIn ιpat Hmatch. rewrite <- Hmatch in Heq.
+        now rewrite pattern_match_val_inverse_right in Heq.
+    Qed.
+
+    Lemma demonic_pattern_match_var_correct [Σ x σ] (xIn : x∷σ ∈ Σ) (pat : Pattern σ)
+      (rhs : forall pc : PatternCase pat, 𝕊 (Σ - x∷σ ▻▻ PatternCaseCtx pc)) :
+      demonic_pattern_match_var pat rhs <=> pattern_match_var x pat rhs.
+    Proof.
+      unfold demonic_pattern_match_var, demonic_finite. intros ι. cbn.
+      rewrite safe_demonic_list.
+      setoid_rewrite safe_demonic_close0. cbn.
+      setoid_rewrite env.lookup_cat_left.
+      setoid_rewrite safe_eq_rect.
+      setoid_rewrite inst_eq_rect.
+      setoid_rewrite inst_pattern_match_term_reverse.
+      setoid_rewrite eq_sym_involutive.
+      change_no_check (@inst_env _ _ _ _) with (@inst_sub).
+      split.
+      - pose proof (pattern_match_val_inverse_left pat ι.[? x∷σ]) as Hmatch.
+        destruct pattern_match_val as [pc ιpat]. rewrite env.cat_remove_left.
+        intros HYP. apply HYP. apply base.elem_of_list_In, finite.elem_of_enum.
+        rewrite <- Hmatch. unfold pattern_match_val_reverse'. cbn.
+        f_equal. rewrite env.remove_cat_left. rewrite eq_rect_sym2.
+        symmetry. apply inst_sub_cat_right.
+      - intros HYP pc HIn ιpat Hmatch. revert HYP.
+        rewrite Hmatch.
+        rewrite pattern_match_val_inverse_right.
+        rewrite env.remove_cat_left. rewrite eq_rect_sym2.
+        match goal with
+          |- safe ?P ?ι1 -> safe ?P ?ι2 => enough (ι1 = ι2) as ->; auto
+        end.
+        f_equal. apply inst_sub_cat_right.
     Qed.
 
     Module notations.
@@ -1002,9 +1246,9 @@ Module Type SymPropOn
             end
         | assume_vareq x t p     => plug ec (assume_vareq x t (push ectx_refl p))
         | pattern_match s pat rhs =>
-            plug ec (pattern_match s pat (fun pc => push ectx_refl (rhs pc)))
+            plug ec (angelic_pattern_match pat s (fun pc => push ectx_refl (rhs pc)))
         | pattern_match_var x pat rhs =>
-            plug ec (pattern_match_var x pat (fun pc => push ectx_refl (rhs pc)))
+            plug ec (angelic_pattern_match_var pat (fun pc => push ectx_refl (rhs pc)))
         | debug b p              => plug ec (debug b (push ectx_refl p))
         end.
 
@@ -1116,10 +1360,10 @@ Module Type SymPropOn
           + rewrite IHp. rewrite H. reflexivity.
           + apply proper_plug, proper_assert_vareq, IHp.
         - apply proper_plug, proper_assume_vareq, IHp.
-        - apply proper_plug, proper_pattern_match.
-          intros pc. rewrite H. reflexivity.
-        - apply proper_plug, proper_pattern_match_var.
-          intros pc. rewrite H. reflexivity.
+        - apply proper_plug. rewrite angelic_pattern_match_correct.
+          apply proper_pattern_match. intros pc. now rewrite H.
+        - apply proper_plug.  rewrite angelic_pattern_match_var_correct.
+          apply proper_pattern_match_var. intros pc. now rewrite H.
         - apply proper_plug, proper_debug, IHp.
       Qed.
 
@@ -1207,9 +1451,9 @@ Module Type SymPropOn
             | None    => plug ec (assume_vareq x t (push uctx_refl p))
             end
         | pattern_match s pat rhs =>
-            plug ec (pattern_match s pat (fun pc => push uctx_refl (rhs pc)))
+            plug ec (demonic_pattern_match pat s (fun pc => push uctx_refl (rhs pc)))
         | pattern_match_var x pat rhs =>
-            plug ec (pattern_match_var x pat (fun pc => push uctx_refl (rhs pc)))
+            plug ec (demonic_pattern_match_var pat (fun pc => push uctx_refl (rhs pc)))
         | debug b p              => plug ec (debug b (push uctx_refl p))
         end.
 
@@ -1324,10 +1568,10 @@ Module Type SymPropOn
         - destruct (uctx_subst_spec ec xIn t).
           + rewrite IHp. intros ι. apply H.
           + apply proper_plug_impl, proper_assume_vareq_impl, IHp.
-        - apply proper_plug_impl, proper_pattern_match_impl.
-          intros pc. rewrite H. reflexivity.
-        - apply proper_plug_impl, proper_pattern_match_var_impl.
-          intros pc. rewrite H. reflexivity.
+        - apply proper_plug_impl. rewrite demonic_pattern_match_correct.
+          apply proper_pattern_match_impl. intros pc. now rewrite H.
+        - apply proper_plug_impl. rewrite demonic_pattern_match_var_correct.
+          apply proper_pattern_match_var_impl. intros pc. now rewrite H.
         - apply proper_plug_impl, proper_debug_impl, IHp.
       Qed.
 
