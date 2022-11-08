@@ -108,6 +108,32 @@ Module Type SymPropOn
   Inductive Debug {B : LCtx -> Type} {Σ : LCtx} (b : B Σ) (P : Prop) : Prop :=
   | debug (p : P).
 
+  Section Util.
+
+    Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
+      (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
+    Proof. firstorder. Qed.
+
+    Lemma inst_eq_rect `{Inst AT A} {Σ Σ'} (t : AT Σ) (eq : Σ = Σ') (ι : Valuation Σ'):
+      inst (eq_rect Σ AT t Σ' eq) ι = inst t (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
+    Proof.
+      now subst.
+    Qed.
+
+    Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
+      eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
+    Proof.
+      now subst.
+    Qed.
+
+    Lemma eq_rect_sym2 {A : Type} {P : A -> Type} {a a' : A} (eq : a' = a) (v : P a) :
+      eq_rect a' P (eq_rect a P v a' (eq_sym eq)) a eq = v.
+    Proof.
+      now subst.
+    Qed.
+
+  End Util.
+
   Module SymProp.
 
     Inductive SymProp (Σ : LCtx) : Type :=
@@ -315,6 +341,12 @@ Module Type SymPropOn
         | debug d k => Debug d (wsafe k ι)
         end%type.
     Global Arguments wsafe {w} p ι.
+
+    Lemma safe_eq_rect {Σ Σ'} (eq : Σ = Σ') (p : 𝕊 Σ) (ι : Valuation Σ') :
+      safe (eq_rect Σ 𝕊 p Σ' eq) ι <-> safe p (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
+    Proof.
+      now destruct eq.
+    Qed.
 
     Lemma obligation_equiv {Σ : LCtx} (msg : AMessage Σ) (fml : Formula Σ) (ι : Valuation Σ) :
       Obligation msg fml ι <-> instprop fml ι.
@@ -902,108 +934,6 @@ Module Type SymPropOn
       - now rewrite ?debug_equiv.
     Qed.
 
-    Section Util.
-
-      Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
-        (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
-      Proof. firstorder. Qed.
-
-      Lemma safe_eq_rect {Σ Σ'} (eq : Σ = Σ') (p : 𝕊 Σ) (ι : Valuation Σ') :
-        safe (eq_rect Σ 𝕊 p Σ' eq) ι = safe p (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
-      Proof.
-        now destruct eq.
-      Qed.
-
-      Lemma inst_eq_rect `{Inst AT A} {Σ Σ'} (t : AT Σ) (eq : Σ = Σ') (ι : Valuation Σ'):
-        inst (eq_rect Σ AT t Σ' eq) ι = inst t (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
-      Proof.
-        now subst.
-      Qed.
-
-      Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
-        eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
-      Proof.
-        now subst.
-      Qed.
-
-      Lemma eq_rect_sym2 {A : Type} {P : A -> Type} {a a' : A} (eq : a' = a) (v : P a) :
-        eq_rect a' P (eq_rect a P v a' (eq_sym eq)) a eq = v.
-      Proof.
-        now subst.
-      Qed.
-
-      Lemma match_snocView_eq_rect {Σ1 Σ2 b} {R : Type} (eq : Σ1 = Σ2) (E : Valuation (Σ1 ▻ b))
-        (f : Valuation Σ2 -> Val (type b) -> R) :
-        match env.snocView (eq_rect Σ1 (fun Σ => Valuation (Σ ▻ b)) E Σ2 eq) with
-        | env.isSnoc E v => f E v
-        end =
-        match env.snocView E with
-        | env.isSnoc E v => f (eq_rect Σ1 (fun Σ => Valuation Σ) E Σ2 eq) v
-        end.
-      Proof.
-        now destruct eq.
-      Qed.
-
-      Lemma snoc_eq_rect {Σ1 Σ2 b v} (eq : Σ1 = Σ2) (E : Valuation Σ1) :
-        eq_rect Σ1 (fun Σ => Valuation Σ) E Σ2 eq ► (b ↦ v) =
-        eq_rect Σ1 (fun Σ => Valuation (Σ ▻ b)) (E ► (b ↦ v)) Σ2 eq.
-      Proof.
-        now destruct eq.
-      Qed.
-
-      Lemma env_insert_app {x : LVar} {σ : Ty} {Σ0 Σe : LCtx}
-            (bIn : x∷σ ∈ Σe) (v : Val σ)
-            {ι : Valuation Σ0} {ιe : Valuation (Σe - x∷σ)} :
-            (ι ►► env.insert bIn ιe v) =
-            env.insert (ctx.in_cat_right bIn) (eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ => Valuation Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn))) v.
-      Proof.
-        revert bIn ιe.
-        induction Σe; intros bIn ιe;
-          try destruct (ctx.nilView bIn).
-        cbn [env.insert ctx.remove_in_cat_right].
-        (* can't destruct Contxt.snocView bIn?*)
-        destruct bIn as ([|n] & eq).
-        - cbn in eq.
-          now subst.
-        - cbn in ιe.
-          destruct (env.snocView ιe) as (ιe & v').
-          change (ctx.remove_in_cat_right {| ctx.in_at := S n; ctx.in_valid := eq |})
-                 with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx.snoc (@ctx.remove_in_cat_right _ Σ0 Σe _ {| ctx.in_at := n; ctx.in_valid := eq |})))).
-          rewrite eq_trans_refl_l.
-          cbn.
-          rewrite (eq_sym_map_distr (fun f : LVar ∷ Ty -> LCtx => f b)).
-          rewrite eq_sym_map_distr.
-          rewrite f_equal_compose.
-          rewrite (map_subst_map (P := fun x => Valuation (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
-          rewrite match_snocView_eq_rect.
-          now rewrite IHΣe.
-      Qed.
-
-      Lemma env_remove_app {x : LVar} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x∷σ ∈ Σe)
-        (ι : Valuation Σ0) (ιe : Valuation Σe) :
-        env.remove (x∷σ) (ι ►► ιe) (ctx.in_cat_right bIn) =
-        eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ : LCtx => Valuation Σ) (ι ►► env.remove (x∷σ) ιe bIn)
-                 ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn)).
-      Proof.
-        revert bIn ιe.
-        induction Σe; intros bIn ιe; try destruct (ctx.nilView bIn).
-        destruct (ctx.snocView bIn).
-        - now destruct (env.snocView ιe).
-        - destruct (env.snocView ιe) as (ιe & v).
-          change (ctx.remove_in_cat_right (ctx.in_succ i))
-                 with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx.snoc (@ctx.remove_in_cat_right _ Σ0 Σe _ i)))).
-          rewrite eq_trans_refl_l.
-          cbn.
-          rewrite (eq_sym_map_distr (fun f : LVar ∷ Ty -> LCtx => f b)).
-          rewrite eq_sym_map_distr.
-          rewrite f_equal_compose.
-          rewrite (map_subst_map (P := fun x => Valuation (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
-          rewrite IHΣe.
-          now rewrite snoc_eq_rect.
-      Qed.
-
-    End Util.
-
     Module SolveEvars.
 
       Fixpoint assert_msgs_formulas {Σ} (mfs : Ctx (Pair AMessage Formula Σ)) (p : 𝕊 Σ) : 𝕊 Σ :=
@@ -1129,21 +1059,21 @@ Module Type SymPropOn
           unfold eq_rect_r in Hp. rewrite safe_eq_rect, eq_sym_involutive in Hp.
           exists (env.insert bIn ιe (inst (eq_rect ((Σ1 ▻▻ Σe) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιe))).
           rewrite safe_assert_msgs_formulas. cbn.
-          rewrite env_insert_app, env.remove_insert, env.insert_lookup.
+          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert.
           rewrite ?inst_eq_rect.
           split; auto.
           rewrite instprop_subst, inst_eq_rect in Hpc.
           now rewrite inst_sub_single2 in Hpc.
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
           cbn in Hp. cbn in Hp. destruct Hp as [Ht Hp].
-          rewrite env_remove_app in Hp.
+          rewrite env.remove_cat_right in Hp.
           exists (env.remove (x∷σ) ιe bIn).
           rewrite safe_assert_msgs_formulas.
           rewrite instprop_subst.
           unfold eq_rect_r. rewrite safe_eq_rect.
           rewrite eq_sym_involutive. split; auto.
           rewrite inst_eq_rect.
-          rewrite <- env_remove_app.
+          rewrite <- env.remove_cat_right.
           rewrite <- inst_sub_shift.
           rewrite inst_sub_single_shift; auto.
           now rewrite inst_sub_shift.
@@ -1352,14 +1282,14 @@ Module Type SymPropOn
           rewrite instprop_subst in HYP.
           rewrite inst_eq_rect in HYP.
           unfold eq_rect_r in HYP. rewrite safe_eq_rect, eq_sym_involutive in HYP.
-          rewrite <- env_remove_app in HYP. apply HYP.
+          rewrite <- env.remove_cat_right in HYP. apply HYP.
           rewrite <- inst_sub_shift.
           rewrite inst_sub_single_shift; auto.
         - specialize (HYP (env.insert bIn ιu (inst (eq_rect ((Σ1 ▻▻ Σu) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σu - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιu)))).
           rewrite safe_assume_pathcondition, instprop_subst, inst_eq_rect. intros Hpc.
           unfold eq_rect_r. rewrite safe_eq_rect, eq_sym_involutive.
           rewrite safe_assume_pathcondition in HYP. cbn in HYP.
-          rewrite env_insert_app, env.remove_insert, env.insert_lookup in HYP.
+          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert in HYP.
           rewrite inst_eq_rect in HYP.
           rewrite inst_sub_single2 in Hpc.
           now apply HYP.

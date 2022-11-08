@@ -298,14 +298,12 @@ Section WithBinding.
 
     Fixpoint remove {Γ b} (E : Env Γ) : forall (bIn : b ∈ Γ), Env (Γ - b) :=
       match E with
-      | nil => fun bIn => match ctx.nilView bIn with end
-      | @snoc Γ0 E0 b0 db =>
-        fun '(ctx.MkIn n e) =>
-          match n return forall e, Env (ctx.remove (@ctx.MkIn B b (Γ0 ▻ b0) n e))
-          with
-          | O   => fun _ => E0
-          | S n => fun e => snoc (remove E0 (@ctx.MkIn B b Γ0 n e)) db
-          end e
+      | nil        => fun bIn => match ctx.nilView bIn with end
+      | snoc E0 db => fun bIn =>
+        match ctx.snocView bIn in ctx.SnocView bIn return Env (ctx.remove bIn) with
+        | ctx.snocViewZero            => E0
+        | @ctx.snocViewSucc _ _ _ b1 i => snoc (remove E0 i) db
+        end
       end.
     Global Arguments remove {_} b%ctx E.
 
@@ -328,11 +326,15 @@ Section WithBinding.
       remove b (insert bIn E v) bIn = E.
     Proof. induction Γ; destroy bIn; destroy E; cbn; now f_equal. Qed.
 
-    Lemma insert_lookup {b Γ} (bIn : b ∈ Γ) (v : D b) (E : Env (Γ - b)) :
+    Lemma insert_remove {b} {Γ} (bIn : b ∈ Γ) (E : Env Γ) :
+      insert bIn (remove b E bIn) (lookup E bIn) = E.
+    Proof. induction E; destroy bIn; cbn; now f_equal. Qed.
+
+    Lemma lookup_insert {b Γ} (bIn : b ∈ Γ) (v : D b) (E : Env (Γ - b)) :
       lookup (insert bIn E v) bIn = v.
     Proof. induction Γ; destroy bIn; destroy E; cbn; auto. Qed.
 
-    Lemma insert_lookup_shift {b Γ} {bIn : b ∈ Γ}
+    Lemma lookup_insert_shift {b Γ} {bIn : b ∈ Γ}
           {E : Env (Γ - b)} {v : D b}
           (b' : B) (i : b' ∈ Γ - b) :
       lookup (insert bIn E v) (ctx.shift_var bIn i) = lookup E i.
@@ -438,8 +440,8 @@ Section WithBinding.
     Proof.
       unfold insert'. eapply lookup_extensional. intros b' bIn.
       rewrite lookup_tabulate. destruct ctx.occurs_check_view.
-      - now rewrite insert_lookup.
-      - now rewrite insert_lookup_shift.
+      - now rewrite lookup_insert.
+      - now rewrite lookup_insert_shift.
     Qed.
 
     Lemma lookup_cat_left {Γ1 Γ2 x} (xIn : x ∈ Γ1) (E1 : Env Γ1) (E2 : Env Γ2) :
@@ -449,6 +451,58 @@ Section WithBinding.
     Lemma lookup_cat_right {Γ1 Γ2 x} (xIn : x ∈ Γ2) (E1 : Env Γ1) (E2 : Env Γ2) :
       lookup (cat E1 E2) (ctx.in_cat_right xIn) = lookup E2 xIn.
     Proof. induction E2; destroy xIn; cbn; auto. Qed.
+
+    Lemma snoc_eq_rect {Γ1 Γ2 b v} (e : Γ1 = Γ2) (E : Env Γ1) :
+      snoc (eq_rect Γ1 Env E Γ2 e) v =
+      eq_rect Γ1 (fun Γ => Env (Γ ▻ b)) (snoc E v) Γ2 e.
+    Proof. now destruct e. Qed.
+
+    Lemma remove_cat_right {Γ1 Γ2 x} (xIn : x ∈ Γ2) (E1 : Env Γ1) (E2 : Env Γ2) :
+      remove x (cat E1 E2) (ctx.in_cat_right xIn) =
+      eq_rect _ _  (cat E1 (remove x E2 xIn)) _ (eq_sym (ctx.remove_in_cat_right xIn)).
+    Proof.
+      induction xIn using ctx.In_ind; destruct (snocView E2); cbn; [easy|].
+      ctx.tactics.fold_in. rewrite IHxIn, snoc_eq_rect.
+      now rewrite ctx.eq_sym_map_snoc_distr, ctx.map_snoc_subst_map.
+    Qed.
+
+    Lemma remove_cat_left {Γ1 Γ2 x} (xIn : x ∈ Γ1) (E1 : Env Γ1) (E2 : Env Γ2) :
+      remove x (cat E1 E2) (ctx.in_cat_left Γ2 xIn) =
+      eq_rect _ _ (cat (remove x E1 xIn) E2) _ (eq_sym (ctx.remove_in_cat_left xIn)).
+    Proof.
+      induction E2; cbn; [easy|].
+      ctx.tactics.fold_in. rewrite IHE2, snoc_eq_rect.
+      now rewrite ctx.eq_sym_map_snoc_distr, ctx.map_snoc_subst_map.
+    Qed.
+
+    Lemma cat_remove_left {Γ1 Γ2 x} (xIn : x ∈ Γ1) (E1 : Env Γ1) (E2 : Env Γ2) :
+      cat (remove x E1 xIn) E2 =
+      eq_rect _ _ (remove x (cat E1 E2) _) _ (ctx.remove_in_cat_left xIn).
+    Proof.
+      induction E2; cbn; [easy|]. ctx.tactics.fold_in.
+      now rewrite IHE2, snoc_eq_rect, ctx.map_snoc_subst_map.
+    Qed.
+
+    Lemma insert_cat_right {Γ1 Γ2 b} (bIn : b ∈ Γ2) (d : D b) (E1 : Env Γ1) (E2 : Env (Γ2 - b)) :
+      cat E1 (insert bIn E2 d) =
+      insert (ctx.in_cat_right bIn)
+        (eq_rect _ _ (cat E1 E2) _ (eq_sym (ctx.remove_in_cat_right bIn))) d.
+    Proof.
+      induction bIn using ctx.In_ind; cbn in *; [easy|]. ctx.tactics.fold_in.
+      rewrite ctx.eq_sym_map_snoc_distr, ctx.map_snoc_subst_map.
+      destruct (snocView E2) as [E2]. cbn. rewrite <- snoc_eq_rect. cbn.
+      now rewrite IHbIn.
+    Qed.
+
+    Lemma insert_cat_left {Γ1 Γ2 b} (bIn : b ∈ Γ1) (d : D b) (E1 : Env (Γ1 - b)) (E2 : Env Γ2) :
+      cat (insert bIn E1 d) E2 =
+      insert (ctx.in_cat_left Γ2 bIn)
+        (eq_rect _ _ (cat E1 E2) _ (eq_sym (ctx.remove_in_cat_left bIn))) d.
+    Proof.
+      induction E2; cbn; [easy|]. ctx.tactics.fold_in.
+      rewrite ctx.eq_sym_map_snoc_distr, ctx.map_snoc_subst_map.
+      rewrite <- snoc_eq_rect. cbn. now rewrite IHE2.
+    Qed.
 
     Fixpoint abstract (Δ : Ctx B) (r : Type) {struct Δ} : Type :=
       match Δ with

@@ -277,7 +277,7 @@ Module Import ctx.
       | snoc _ _ =>
         fun bIn =>
           match snocView bIn with
-          | snocViewZero => in_zero
+          | snocViewZero => @in_zero _ (cat _ _)
           | snocViewSucc bIn => in_succ (in_cat_right bIn)
           end
       end.
@@ -567,19 +567,49 @@ Module Import ctx.
         + cbn in *. f_equal. apply IHΓ.
     Defined.
 
-    Lemma remove_in_cat_right {Γ Δ : Ctx B} {b : B} (bIn : In b Δ) :
-      @remove (@cat Γ Δ) b (@in_cat_right b Γ Δ bIn) =
-      @cat Γ (@remove Δ b bIn).
-    Proof.
-      induction bIn using In_rect; cbn.
-      - reflexivity.
-      - f_equal. auto.
-    Defined.
+    Definition f_equal_snoc (b : B) Γ Δ (e : Γ = Δ) : snoc Γ b = snoc Δ b :=
+      f_equal (fun Γ => snoc Γ b) e.
+
+    Definition eq_sym_map_snoc_distr (b : B) (x y : Ctx B) (e : x = y) :
+      eq_sym (f_equal_snoc b e) = f_equal_snoc b (eq_sym e) :=
+      eq_sym_map_distr (fun Γ => snoc Γ b) e.
+
+    Definition map_snoc_subst_map (b : B) (Q : Ctx B -> Type)
+      (x y : Ctx B) (e : x = y) (z : Q (snoc x b)) :
+      eq_rect (snoc x b) Q z (snoc y b) (f_equal_snoc b e) =
+      eq_rect x (fun x => Q (snoc x b)) z y e :=
+      map_subst_map (fun Γ => snoc Γ b) (fun _ x => x) e z.
+
+    Fixpoint remove_in_cat_right (Γ Δ : Ctx B) {struct Δ} :
+      forall b (bIn : In b Δ),
+        remove (cat Γ Δ) (in_cat_right bIn) =
+          cat Γ (remove Δ bIn) :=
+      match Δ with
+      | nil        => fun b bIn => match nilView bIn with end
+      | snoc Δ' b' =>
+        fun b bIn =>
+          match snocView bIn in SnocView i
+          return remove _ (in_cat_right i) = cat Γ (remove _ i)
+          with
+          | snocViewZero   => eq_refl
+          | snocViewSucc i => f_equal_snoc b' (remove_in_cat_right _ i)
+          end
+      end.
+
+    Fixpoint remove_in_cat_left (Γ Δ : Ctx B) {b} (bIn : In b Γ) {struct Δ} :
+      remove (cat Γ Δ) (in_cat_left Δ bIn) =
+        cat (remove Γ bIn) Δ :=
+      match Δ with
+      | nil        => eq_refl
+      | snoc Δ' b' => f_equal_snoc b' (remove_in_cat_left _ bIn)
+      end.
 
   End WithBinding.
-  Arguments In_rect [B b] _ _ _ [_].
-  Arguments In_ind [B b] _ _ _ [_].
+  Arguments In_rect [B b] _ _ _ [_] : simpl never.
+  Arguments In_ind [B b] _ _ _ [_] : simpl never.
   Arguments forallb [B] Γ p.
+  Arguments remove_in_cat_right [B Γ Δ b] bIn.
+  Arguments remove_in_cat_left [B Γ Δ b] bIn.
 
   Section WithAB.
     Context {A B : Type} (f : A -> B).
@@ -667,6 +697,12 @@ Module Import ctx.
         exact xInΓ : typeclass_instances.
 
   End resolution.
+
+  Module tactics.
+    Ltac fold_in :=
+      repeat change_no_check
+        {| ctx.in_at := ctx.in_at ?x; ctx.in_valid := ctx.in_valid ?x |} with x.
+  End tactics.
 
   Section FreshName.
 
