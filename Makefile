@@ -15,7 +15,7 @@ endif
 SRCS := $(shell egrep "^.*\.v$$" _CoqProject)
 AUXS := $(join $(dir $(SRCS)), $(addprefix ., $(notdir $(SRCS:.v=.aux))))
 
-.PHONY: coq clean summaxlen install uninstall pretty-timed
+.PHONY: coq clean summaxlen install uninstall pretty-timed make-pretty-timed-before make-pretty-timed-after print-pretty-timed-diff
 
 coq: Makefile.coq
 	$(E) "MAKE Makefile.coq"
@@ -38,7 +38,7 @@ clean: Makefile.coq
 	$(Q)rm -f $(AUXS)
 	$(Q)rm -f Makefile.coq *.bak *.d *.glob *~ result*
 
-install uninstall pretty-timed: Makefile.coq
+install uninstall pretty-timed make-pretty-timed-before make-pretty-timed-after print-pretty-timed-diff: Makefile.coq
 	$(Q)$(MAKE) -f Makefile.coq $@
 
 summaxlen: Makefile.coq
