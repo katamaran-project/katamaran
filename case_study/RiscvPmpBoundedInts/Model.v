@@ -106,15 +106,15 @@ Module RiscvPmpModel2.
       end.
 
     Lemma mem_inv_not_modified : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal),
-        ⊢ ⌜map_Forall (λ (a : Addr) (v : Word), (γ, μ).2 a = v) memmap⌝ -∗
+        ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), (γ, μ).2 a = v) memmap⌝ -∗
         gen_heap.gen_heap_interp memmap -∗
         mem_inv sailGS_memGS μ.
     Proof. iIntros (γ μ memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
 
     Lemma map_Forall_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal)
-                                (paddr : Addr) (data : MemVal),
-        map_Forall (λ (a : Addr) (v : Word), (γ, μ).2 a = v) memmap ->
-        map_Forall (λ (a : Addr) (v : Word), fun_write_ram μ paddr data a = v)
+                                (paddr : Addr) (data : Byte),
+        map_Forall (λ (a : Addr) (v : Byte), (γ, μ).2 a = v) memmap ->
+        map_Forall (λ (a : Addr) (v : Byte), fun_write_ram μ 1 paddr data a = v)
                    (<[paddr:=data]> memmap).
     Proof.
       intros γ μ memmap paddr data Hmap.

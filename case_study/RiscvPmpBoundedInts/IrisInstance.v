@@ -75,9 +75,20 @@ Module RiscvPmpIrisInstance <:
       | _ => False
       end.
 
+    Definition addr_inc (x : bv 32) (n : nat) : bv 32 :=
+      bv.add x (bv.of_nat n).
+
+    Definition get_byte {n} (offset : Z) (bits : bv n) : Byte :=
+      bv.of_Z (Z.shiftr (bv.unsigned bits) (offset * 8)).
+
+    (* TODO: change back to words instead of bytes... might be an easier first version
+             and most likely still conventient in the future *)
   Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptsto_readonly").
     Definition interp_ptsto (addr : Addr) (w : Word) : iProp Σ :=
-      mapsto addr (DfracOwn 1) w.
+      mapsto addr              (DfracOwn 1) (get_byte 0 w) ∗
+      mapsto (addr_inc addr 1) (DfracOwn 1) (get_byte 1 w) ∗
+      mapsto (addr_inc addr 2) (DfracOwn 1) (get_byte 2 w) ∗
+      mapsto (addr_inc addr 3) (DfracOwn 1) (get_byte 3 w).
     Definition interp_ptsto_readonly (addr : Addr) (w : Word) : iProp Σ :=
       inv femto_inv_ns (interp_ptsto addr w).
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.

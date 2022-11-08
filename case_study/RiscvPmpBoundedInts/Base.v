@@ -28,6 +28,7 @@
 
 From Coq Require Import
      Strings.String
+     Bool
      ZArith.ZArith.
 From Equations Require Import
      Equations.
@@ -43,9 +44,36 @@ Local Set Implicit Arguments.
 (* Taken from Coq >= 8.15 SigTNotations *)
 Local Notation "( x ; y )" := (existT x y) (only parsing).
 
-Definition Xlenbits : Set := bv 32.
-Definition Addr : Set := bv 32.
-Definition Word : Set := bv 32.
+Definition byte     := 8.
+Definition word     := 4 * byte.
+Definition xlenbytes := 4.
+Definition xlenbits := xlenbytes * byte.
+
+Definition Xlenbits : Set := bv xlenbits.
+Definition Addr : Set     := bv xlenbits.
+Definition Word : Set     := bv word.
+Definition Byte : Set     := bv byte.
+
+Lemma IsTrue_leb_mono_l : forall (bytes : nat),
+    IsTrue (bytes <=? xlenbytes)%nat ->
+    IsTrue (byte * bytes <=? byte * xlenbytes)%nat.
+Proof.
+  intros.
+  apply IsTrue.from in H.
+  constructor.
+  apply Is_true_eq_left.
+  apply Is_true_eq_true in H.
+  apply leb_correct.
+  apply leb_complete in H.
+  apply (Nat.mul_le_mono_l _ _ _ H).
+Qed.
+
+#[export]  Hint Extern 10 =>
+  match goal with
+  | H: IsTrue (?bytes <=? xlenbytes)%nat
+    |- IsTrue (byte * ?bytes <=? byte * xlenbytes)%nat =>
+      apply (IsTrue_leb_mono_l bytes)
+  end : typeclass_instances.
 
 (* Parameter minAddr : Addr. *)
 (* Parameter maxAddr : Addr. *)
@@ -192,11 +220,6 @@ Inductive ExceptionType : Set :=
 | E_Illegal_Instr
 .
 
-Inductive MemoryOpResult : Set :=
-| MemValue (v : Word)
-| MemException (e : ExceptionType)
-.
-
 Inductive FetchResult : Set :=
 | F_Base (v : Word)
 | F_Error (e : ExceptionType) (v : Xlenbits)
@@ -207,6 +230,11 @@ Inductive FetchResult : Set :=
 Inductive CtlResult : Set :=
 | CTL_TRAP (e : ExceptionType)
 | CTL_MRET
+.
+
+Inductive MemoryOpResult (bytes : nat): Set :=
+| MemValue (bs : bv (8 * bytes))
+| MemException (e : ExceptionType)
 .
 
 Inductive ASTConstructor : Set :=
@@ -258,7 +286,7 @@ Inductive Unions : Set :=
 | ast
 | access_type
 | exception_type
-| memory_op_result
+| memory_op_result (bytes : nat)
 | fetch_result
 | ctl_result
 (* | pmp_entries *)
@@ -308,12 +336,12 @@ Section TransparentObligations.
   Derive NoConfusion for AccessTypeConstructor.
   Derive NoConfusion for ExceptionType.
   Derive NoConfusion for ExceptionTypeConstructor.
-  Derive NoConfusion for MemoryOpResult.
-  Derive NoConfusion for MemoryOpResultConstructor.
   Derive NoConfusion for FetchResult.
   Derive NoConfusion for FetchResultConstructor.
   Derive NoConfusion for CtlResult.
   Derive NoConfusion for CtlResultConstructor.
+  Derive NoConfusion for MemoryOpResult.
+  Derive NoConfusion for MemoryOpResultConstructor.
   Derive NoConfusion for Records.
   Derive NoConfusion for Pmpcfg_ent.
   Derive NoConfusion for Mstatus.
@@ -341,12 +369,12 @@ Derive EqDec for AccessType.
 Derive EqDec for AccessTypeConstructor.
 Derive EqDec for ExceptionType.
 Derive EqDec for ExceptionTypeConstructor.
-Derive EqDec for MemoryOpResult.
-Derive EqDec for MemoryOpResultConstructor.
 Derive EqDec for FetchResult.
 Derive EqDec for FetchResultConstructor.
 Derive EqDec for CtlResult.
 Derive EqDec for CtlResultConstructor.
+Derive EqDec for MemoryOpResult.
+Derive EqDec for MemoryOpResultConstructor.
 Derive EqDec for Records.
 Derive EqDec for Pmpcfg_ent.
 Derive EqDec for Mstatus.
@@ -355,7 +383,7 @@ Section Finite.
   Import stdpp.finite.
 
   Local Obligation Tactic :=
-    finite_from_eqdec.
+    try finite_from_eqdec.
 
   #[export,program] Instance Privilege_finite : Finite Privilege :=
     {| enum := [User;Machine] |}.
@@ -422,10 +450,6 @@ Section Finite.
     {| enum := [KE_Fetch_Access_Fault;KE_Load_Access_Fault;KE_SAMO_Access_Fault;
                 KE_U_EnvCall;KE_M_EnvCall;KE_Illegal_Instr] |}.
 
-  #[export,program] Instance MemoryOpResultConstructor_finite :
-    Finite MemoryOpResultConstructor :=
-    {| enum := [KMemValue;KMemException] |}.
-
   #[export,program] Instance FetchResultConstructor_finite :
     Finite FetchResultConstructor :=
     {| enum := [KF_Base;KF_Error] |}.
@@ -434,6 +458,9 @@ Section Finite.
     Finite CtlResultConstructor :=
     {| enum := [KCTL_TRAP;KCTL_MRET] |}.
 
+  #[export,program] Instance MemoryOpResultConstructor_finite :
+    Finite MemoryOpResultConstructor :=
+    {| enum := [KMemValue;KMemException] |}.
 End Finite.
 
 Module Export RiscvPmpBase <: Base.
@@ -452,36 +479,38 @@ Module Export RiscvPmpBase <: Base.
   (* Override notations of bindigns to put the variable x into string_scope. *)
   Notation "x ∷ t" := (MkB x%string t) : ctx_scope.
 
-  Definition ty_xlenbits         := (ty.bvec 32).
-  Definition ty_word             := (ty.bvec 32).
-  Definition ty_regno            := (ty.bvec 3).
-  Definition ty_privilege        := (ty.enum privilege).
-  Definition ty_priv_level       := (ty.bvec 2).
-  Definition ty_csridx           := (ty.enum csridx).
-  Definition ty_pmpcfgidx        := (ty.enum pmpcfgidx).
-  Definition ty_pmpcfgperm       := (ty.enum pmpcfgperm).
-  Definition ty_pmpaddridx       := (ty.enum pmpaddridx).
-  Definition ty_pmpaddrmatchtype := (ty.enum pmpaddrmatchtype).
-  Definition ty_pmpmatch         := (ty.enum pmpmatch).
-  Definition ty_pmpaddrmatch     := (ty.enum pmpaddrmatch).
-  Definition ty_pmp_addr_range   := (ty.option (ty.prod ty_xlenbits ty_xlenbits)).
-  Definition ty_rop              := (ty.enum rop).
-  Definition ty_iop              := (ty.enum iop).
-  Definition ty_uop              := (ty.enum uop).
-  Definition ty_bop              := (ty.enum bop).
-  Definition ty_csrop            := (ty.enum csrop).
-  Definition ty_retired          := (ty.enum retired).
-  Definition ty_mcause           := (ty_xlenbits).
-  Definition ty_exc_code         := (ty.bvec 8).
-  Definition ty_ast              := (ty.union ast).
-  Definition ty_access_type      := (ty.union access_type).
-  Definition ty_exception_type   := (ty.union exception_type).
-  Definition ty_memory_op_result := (ty.union memory_op_result).
-  Definition ty_fetch_result     := (ty.union fetch_result).
-  Definition ty_ctl_result       := (ty.union ctl_result).
-  Definition ty_pmpcfg_ent       := (ty.record rpmpcfg_ent).
-  Definition ty_mstatus          := (ty.record rmstatus).
-  Definition ty_pmpentry         := (ty.prod ty_pmpcfg_ent ty_xlenbits).
+  Definition ty_xlenbits                       := (ty.bvec xlenbits).
+  Definition ty_word                           := (ty.bvec word).
+  Definition ty_byte                           := (ty.bvec byte).
+  Definition ty_bytes (bytes : nat)            := (ty.bvec (byte * bytes)).
+  Definition ty_regno                          := (ty.bvec 3).
+  Definition ty_privilege                      := (ty.enum privilege).
+  Definition ty_priv_level                     := (ty.bvec 2).
+  Definition ty_csridx                         := (ty.enum csridx).
+  Definition ty_pmpcfgidx                      := (ty.enum pmpcfgidx).
+  Definition ty_pmpcfgperm                     := (ty.enum pmpcfgperm).
+  Definition ty_pmpaddridx                     := (ty.enum pmpaddridx).
+  Definition ty_pmpaddrmatchtype               := (ty.enum pmpaddrmatchtype).
+  Definition ty_pmpmatch                       := (ty.enum pmpmatch).
+  Definition ty_pmpaddrmatch                   := (ty.enum pmpaddrmatch).
+  Definition ty_pmp_addr_range                 := (ty.option (ty.prod ty_xlenbits ty_xlenbits)).
+  Definition ty_rop                            := (ty.enum rop).
+  Definition ty_iop                            := (ty.enum iop).
+  Definition ty_uop                            := (ty.enum uop).
+  Definition ty_bop                            := (ty.enum bop).
+  Definition ty_csrop                          := (ty.enum csrop).
+  Definition ty_retired                        := (ty.enum retired).
+  Definition ty_mcause                         := (ty_xlenbits).
+  Definition ty_exc_code                       := (ty.bvec 8).
+  Definition ty_ast                            := (ty.union ast).
+  Definition ty_access_type                    := (ty.union access_type).
+  Definition ty_exception_type                 := (ty.union exception_type).
+  Definition ty_memory_op_result (bytes : nat) := (ty.union (memory_op_result bytes)).
+  Definition ty_fetch_result                   := (ty.union fetch_result).
+  Definition ty_ctl_result                     := (ty.union ctl_result).
+  Definition ty_pmpcfg_ent                     := (ty.record rpmpcfg_ent).
+  Definition ty_mstatus                        := (ty.record rmstatus).
+  Definition ty_pmpentry                       := (ty.prod ty_pmpcfg_ent ty_xlenbits).
 
   Definition enum_denote (e : Enums) : Set :=
     match e with
@@ -503,12 +532,12 @@ Module Export RiscvPmpBase <: Base.
 
   Definition union_denote (U : Unions) : Set :=
     match U with
-    | ast              => AST
-    | access_type      => AccessType
-    | exception_type   => ExceptionType
-    | memory_op_result => MemoryOpResult
-    | fetch_result     => FetchResult
-    | ctl_result       => CtlResult
+    | ast                    => AST
+    | access_type            => AccessType
+    | exception_type         => ExceptionType
+    | memory_op_result bytes => MemoryOpResult bytes
+    | fetch_result           => FetchResult
+    | ctl_result             => CtlResult
     (* | pmp_entries      => Coq type in the model for pmp_entries  *)
     end.
 
@@ -526,12 +555,12 @@ Module Export RiscvPmpBase <: Base.
 
   Definition union_constructor (U : Unions) : Set :=
     match U with
-    | ast              => ASTConstructor
-    | access_type      => AccessTypeConstructor
-    | exception_type   => ExceptionTypeConstructor
-    | memory_op_result => MemoryOpResultConstructor
-    | fetch_result     => FetchResultConstructor
-    | ctl_result       => CtlResultConstructor
+    | ast                    => ASTConstructor
+    | access_type            => AccessTypeConstructor
+    | exception_type         => ExceptionTypeConstructor
+    | memory_op_result bytes => MemoryOpResultConstructor
+    | fetch_result           => FetchResultConstructor
+    | ctl_result             => CtlResultConstructor
     (* | pmp_entries   => PmpEntriesConstructor *)
     end.
 
@@ -553,11 +582,11 @@ Module Export RiscvPmpBase <: Base.
                             end
     | access_type      => fun _ => ty.unit
     | exception_type   => fun _ => ty.unit
-    | memory_op_result => fun K =>
-                            match K with
-                            | KMemValue     => ty_word
-                            | KMemException => ty_exception_type
-                            end
+    | memory_op_result bytes => fun K =>
+                                  match K with
+                                  | KMemValue     => ty.bvec (8 * bytes)
+                                  | KMemException => ty_exception_type
+                                  end
     | fetch_result     => fun K =>
                             match K with
                             | KF_Base  => ty_word
@@ -580,8 +609,6 @@ Module Export RiscvPmpBase <: Base.
     ltac:(destruct U; cbn; auto with typeclass_instances).
   #[export] Instance finite_union_constructor U : finite.Finite (union_constructor U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  #[export] Instance eqdec_record_denote R : EqDec (record_denote R) :=
-    ltac:(destruct R; auto with typeclass_instances).
 
   Definition union_unfold (U : unioni) : uniont U -> { K & Val (union_constructor_type U K) } :=
     match U with
@@ -615,10 +642,10 @@ Module Export RiscvPmpBase <: Base.
                             | E_M_EnvCall          => existT KE_M_EnvCall tt
                             | E_Illegal_Instr      => existT KE_Illegal_Instr tt
                             end
-    | memory_op_result => fun Kv =>
+    | memory_op_result bytes => fun Kv =>
                             match Kv with
-                            | MemValue v     => existT KMemValue v
-                            | MemException e => existT KMemException e
+                            | MemValue _ v     => existT KMemValue v
+                            | MemException _ e => existT KMemException e
                             end
     | fetch_result     => fun Kv =>
                             match Kv with
@@ -664,10 +691,10 @@ Module Export RiscvPmpBase <: Base.
                               | existT KE_M_EnvCall tt          => E_M_EnvCall
                               | existT KE_Illegal_Instr tt      => E_Illegal_Instr
                               end
-      | memory_op_result => fun Kv =>
+      | memory_op_result bytes => fun Kv =>
                               match Kv with
-                              | existT KMemValue v     => MemValue v
-                              | existT KMemException e => MemException e
+                              | existT KMemValue v     => MemValue bytes v
+                              | existT KMemException e => MemException bytes e
                               end
       | fetch_result     => fun Kv =>
                               match Kv with
@@ -716,13 +743,13 @@ Module Export RiscvPmpBase <: Base.
        recordv_unfold   := record_unfold;
     |}.
   Proof.
-    - abstract (now intros [] []).
+    - abstract (now intros []; apply _).
+    - abstract (intros [] []; now cbn).
     - abstract (intros [] [[] x]; cbn in x;
-                repeat
-                  match goal with
-                  | x: unit     |- _ => destruct x
-                  | x: prod _ _ |- _ => destruct x
-                  end; auto).
+        repeat match goal with
+               | x: unit |- _ => destruct x
+               | x: prod _ _ |- _ => destruct x
+               end; auto).
     - abstract (now intros [] []).
     - abstract (intros []; now apply env.Forall_forall).
   Defined.

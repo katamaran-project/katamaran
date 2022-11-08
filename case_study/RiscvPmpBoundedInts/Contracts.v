@@ -73,9 +73,6 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
 
   Section Contracts.
     Section ContractDefKit.
-      Import RiscvNotations.
-      Import RiscvPmpSignature.notations.
-
       Import asn.notations.
       Local Notation "a <ᵘₜ b" := (term_binop (bop.relop bop.bvult) a b) (at level 60).
       Local Notation "a <=ᵘₜ b" := (term_binop (bop.relop bop.bvule) a b) (at level 60).
@@ -84,6 +81,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
       Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
       Section ContractDef.
+        Import RiscvNotations.
+        Import RiscvPmpSignature.notations.
+
         (** Machine Invariant **)
         (* TODO: - this should work for the execute{,_/x/} functions, but step and loop will update
                    the pc, so this should be reflected in their contract (2nd pc(i) -> pc(i + 4)?)
@@ -186,8 +186,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition sep_contract_execute : SepContractFun execute :=
           instr_exec_contract.
 
-        Definition sep_contract_process_load : SepContractFun process_load :=
-          {| sep_contract_logic_variables := [rd :: ty_regno; vaddr :: ty_xlenbits; value :: ty_memory_op_result; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mcause" :: ty_mcause];
+        Definition sep_contract_process_load (bytes : nat) {pr : IsTrue (bytes <=? xlenbytes)%nat} : SepContractFun (@process_load bytes pr) :=
+          {| sep_contract_logic_variables := [rd :: ty_regno; vaddr :: ty_xlenbits; value :: ty_memory_op_result bytes; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mcause" :: ty_mcause];
              sep_contract_localstore      := [term_var rd; term_var vaddr; term_var value];
              sep_contract_precondition    :=
                asn_gprs
@@ -201,7 +201,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              sep_contract_result          := "result_process_load";
              sep_contract_postcondition   :=
                asn_gprs ∗
-               asn.match_union_alt memory_op_result (term_var value)
+               asn.match_union_alt (memory_op_result bytes) (term_var value)
                 (fun K =>
                    match K with
                    | KMemValue     => MkAlt (pat_var v)
@@ -700,7 +700,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                      ∨ term_val ty_xlenbits maxAddr <ᵘ term_var paddr);
           |}.
 
-        Definition sep_contract_checked_mem_read : SepContractFun checked_mem_read :=
+        Definition sep_contract_checked_mem_read (bytes : nat) : SepContractFun (checked_mem_read bytes) :=
           {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty.list ty_pmpentry];
              sep_contract_localstore      := [term_var t; term_var paddr];
              sep_contract_precondition    :=
@@ -716,8 +716,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
           |}.
 
-        Definition sep_contract_checked_mem_write : SepContractFun checked_mem_write :=
-          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; p :: ty_privilege; "entries" :: ty.list ty_pmpentry; acc :: ty_access_type];
+        Definition sep_contract_checked_mem_write (bytes : nat) : SepContractFun (checked_mem_write bytes) :=
+          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_bytes bytes; p :: ty_privilege; "entries" :: ty.list ty_pmpentry; acc :: ty_access_type];
              sep_contract_localstore      := [term_var paddr; term_var data];
              sep_contract_precondition    :=
                 asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc)
@@ -732,7 +732,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
           |}.
 
-        Definition sep_contract_pmp_mem_read : SepContractFun pmp_mem_read :=
+        Definition sep_contract_pmp_mem_read (bytes : nat) : SepContractFun (pmp_mem_read bytes) :=
           {| sep_contract_logic_variables := [t :: ty_access_type; p :: ty_privilege; paddr :: ty_xlenbits; "entries" :: ty.list ty_pmpentry];
              sep_contract_localstore      := [term_var t; term_var p; term_var paddr];
              sep_contract_precondition    :=
@@ -747,8 +747,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
           |}.
 
-        Definition sep_contract_pmp_mem_write : SepContractFun pmp_mem_write :=
-          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; typ :: ty_access_type; priv :: ty_privilege; "entries" :: ty.list ty_pmpentry];
+        Definition sep_contract_pmp_mem_write (bytes : nat) : SepContractFun (pmp_mem_write bytes) :=
+          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_bytes bytes; typ :: ty_access_type; priv :: ty_privilege; "entries" :: ty.list ty_pmpentry];
              sep_contract_localstore      := [term_var paddr; term_var data; term_var typ; term_var priv];
              sep_contract_precondition    := (* NOTE: only ever called with typ = Write *)
                (term_var typ = term_union access_type KWrite (term_val ty.unit tt)
@@ -763,8 +763,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                ∗ asn_pmp_addr_access (term_var "entries") (term_var priv);
           |}.
 
-        Definition sep_contract_mem_write_value : SepContractFun mem_write_value :=
-          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; value :: ty_xlenbits; p :: ty_privilege; "entries" :: ty.list ty_pmpentry];
+        Definition sep_contract_mem_write_value (bytes : nat) : SepContractFun (mem_write_value bytes) :=
+          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; value :: ty_bytes bytes; p :: ty_privilege; "entries" :: ty.list ty_pmpentry];
              sep_contract_localstore      := [term_var paddr; term_var value];
              sep_contract_precondition    :=
                cur_privilege ↦ term_var p
@@ -777,7 +777,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
           |}.
 
-        Definition sep_contract_mem_read : SepContractFun mem_read :=
+        Definition sep_contract_mem_read (bytes : nat) : SepContractFun (mem_read bytes) :=
           {| sep_contract_logic_variables := [typ :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty.list ty_pmpentry];
              sep_contract_localstore      := [term_var typ; term_var paddr];
              sep_contract_precondition    :=
@@ -942,65 +942,65 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition CEnv : SepContractEnv :=
           fun Δ τ fn =>
             match fn with
-            | execute_RTYPE         => Some sep_contract_execute_RTYPE
-            | execute_ITYPE         => Some sep_contract_execute_ITYPE
-            | execute_UTYPE         => Some sep_contract_execute_UTYPE
-            | execute_BTYPE         => Some sep_contract_execute_BTYPE
-            | execute_RISCV_JAL     => Some sep_contract_execute_RISCV_JAL
-            | execute_RISCV_JALR    => Some sep_contract_execute_RISCV_JALR
-            | execute_ECALL         => Some sep_contract_execute_ECALL
-            | execute_MRET          => Some sep_contract_execute_MRET
-            | execute_CSR           => Some sep_contract_execute_CSR
-            | execute_STORE         => Some sep_contract_execute_STORE
-            | execute_LOAD          => Some sep_contract_execute_LOAD
-            | process_load          => Some sep_contract_process_load
-            | get_arch_pc           => Some sep_contract_get_arch_pc
-            | get_next_pc           => Some sep_contract_get_next_pc
-            | set_next_pc           => Some sep_contract_set_next_pc
-            | tick_pc               => Some sep_contract_tick_pc
-            | exception_handler     => Some sep_contract_exception_handler
-            | handle_mem_exception  => Some sep_contract_handle_mem_exception
-            | handle_illegal        => Some sep_contract_handle_illegal
-            | trap_handler          => Some sep_contract_trap_handler
-            | prepare_trap_vector   => Some sep_contract_prepare_trap_vector
-            | tvec_addr             => Some sep_contract_tvec_addr
-            | exceptionType_to_bits => Some sep_contract_exceptionType_to_bits
-            | exception_delegatee   => Some sep_contract_exception_delegatee
-            | rX                    => Some sep_contract_rX
-            | wX                    => Some sep_contract_wX
-            (* | abs                   => Some sep_contract_abs *)
-            | within_phys_mem       => Some sep_contract_within_phys_mem
-            | readCSR               => Some sep_contract_readCSR
-            | writeCSR              => Some sep_contract_writeCSR
-            | check_CSR             => Some sep_contract_check_CSR
-            | is_CSR_defined        => Some sep_contract_is_CSR_defined
-            | check_CSR_access      => Some sep_contract_check_CSR_access
-            | privLevel_to_bits     => Some sep_contract_privLevel_to_bits
-            | csrAccess             => Some sep_contract_csrAccess
-            | csrPriv               => Some sep_contract_csrPriv
-            | checked_mem_read      => Some sep_contract_checked_mem_read
-            | checked_mem_write     => Some sep_contract_checked_mem_write
-            | pmp_mem_read          => Some sep_contract_pmp_mem_read
-            | pmp_mem_write         => Some sep_contract_pmp_mem_write
-            | pmpCheck              => Some sep_contract_pmpCheck
-            | pmpCheckPerms         => Some sep_contract_pmpCheckPerms
-            | pmpCheckRWX           => Some sep_contract_pmpCheckRWX
-            | pmpAddrRange          => Some sep_contract_pmpAddrRange
-            | pmpMatchAddr          => Some sep_contract_pmpMatchAddr
-            | pmpMatchEntry         => Some sep_contract_pmpMatchEntry
-            | pmpLocked             => Some sep_contract_pmpLocked
-            | pmpWriteCfgReg        => Some sep_contract_pmpWriteCfgReg
-            | pmpWriteCfg           => Some sep_contract_pmpWriteCfg
-            | pmpWriteAddr          => Some sep_contract_pmpWriteAddr
-            | mem_write_value       => Some sep_contract_mem_write_value
-            | mem_read              => Some sep_contract_mem_read
-            | init_model            => Some sep_contract_init_model
-            | init_sys              => Some sep_contract_init_sys
-            | init_pmp              => Some sep_contract_init_pmp
-            | fetch                 => Some sep_contract_fetch
-            | execute               => Some sep_contract_execute
-            | step                  => Some sep_contract_step
-            | _                     => None
+            | execute_RTYPE           => Some sep_contract_execute_RTYPE
+            | execute_ITYPE           => Some sep_contract_execute_ITYPE
+            | execute_UTYPE           => Some sep_contract_execute_UTYPE
+            | execute_BTYPE           => Some sep_contract_execute_BTYPE
+            | execute_RISCV_JAL       => Some sep_contract_execute_RISCV_JAL
+            | execute_RISCV_JALR      => Some sep_contract_execute_RISCV_JALR
+            | execute_ECALL           => Some sep_contract_execute_ECALL
+            | execute_MRET            => Some sep_contract_execute_MRET
+            | execute_CSR             => Some sep_contract_execute_CSR
+            | execute_STORE           => Some sep_contract_execute_STORE
+            | execute_LOAD            => Some sep_contract_execute_LOAD
+            | @process_load _ pr      => Some (@sep_contract_process_load _ pr)
+            | get_arch_pc             => Some sep_contract_get_arch_pc
+            | get_next_pc             => Some sep_contract_get_next_pc
+            | set_next_pc             => Some sep_contract_set_next_pc
+            | tick_pc                 => Some sep_contract_tick_pc
+            | exception_handler       => Some sep_contract_exception_handler
+            | handle_mem_exception    => Some sep_contract_handle_mem_exception
+            | handle_illegal          => Some sep_contract_handle_illegal
+            | trap_handler            => Some sep_contract_trap_handler
+            | prepare_trap_vector     => Some sep_contract_prepare_trap_vector
+            | tvec_addr               => Some sep_contract_tvec_addr
+            | exceptionType_to_bits   => Some sep_contract_exceptionType_to_bits
+            | exception_delegatee     => Some sep_contract_exception_delegatee
+            | rX                      => Some sep_contract_rX
+            | wX                      => Some sep_contract_wX
+            (* | abs                     => Some sep_contract_abs *)
+            | within_phys_mem         => Some sep_contract_within_phys_mem
+            | readCSR                 => Some sep_contract_readCSR
+            | writeCSR                => Some sep_contract_writeCSR
+            | check_CSR               => Some sep_contract_check_CSR
+            | is_CSR_defined          => Some sep_contract_is_CSR_defined
+            | check_CSR_access        => Some sep_contract_check_CSR_access
+            | privLevel_to_bits       => Some sep_contract_privLevel_to_bits
+            | csrAccess               => Some sep_contract_csrAccess
+            | csrPriv                 => Some sep_contract_csrPriv
+            | checked_mem_read width  => Some (sep_contract_checked_mem_read width)
+            | checked_mem_write width => Some (sep_contract_checked_mem_write width)
+            | pmp_mem_read width      => Some (sep_contract_pmp_mem_read width)
+            | pmp_mem_write width     => Some (sep_contract_pmp_mem_write width)
+            | pmpCheck                => Some sep_contract_pmpCheck
+            | pmpCheckPerms           => Some sep_contract_pmpCheckPerms
+            | pmpCheckRWX             => Some sep_contract_pmpCheckRWX
+            | pmpAddrRange            => Some sep_contract_pmpAddrRange
+            | pmpMatchAddr            => Some sep_contract_pmpMatchAddr
+            | pmpMatchEntry           => Some sep_contract_pmpMatchEntry
+            | pmpLocked               => Some sep_contract_pmpLocked
+            | pmpWriteCfgReg          => Some sep_contract_pmpWriteCfgReg
+            | pmpWriteCfg             => Some sep_contract_pmpWriteCfg
+            | pmpWriteAddr            => Some sep_contract_pmpWriteAddr
+            | mem_write_value width   => Some (sep_contract_mem_write_value width)
+            | mem_read width          => Some (sep_contract_mem_read width)
+            | init_model              => Some sep_contract_init_model
+            | init_sys                => Some sep_contract_init_sys
+            | init_pmp                => Some sep_contract_init_pmp
+            | fetch                   => Some sep_contract_fetch
+            | execute                 => Some sep_contract_execute
+            | step                    => Some sep_contract_step
+            | _                       => None
             end.
 
         Lemma linted_cenv :
@@ -1014,8 +1014,25 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
       End ContractDef.
 
       Section ForeignDef.
-        Definition sep_contract_read_ram : SepContractFunX read_ram :=
-          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; w :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
+        Import RiscvPmpSignature.notations.
+
+        Definition get_byte {Σ} {width : nat} (offset : nat) (bits : Term Σ (ty_bytes width)) : Term Σ ty_byte :=
+          bv.of_Z (Z.shiftr (bv.unsigned bits) (Z.of_nat (offset * byte))).
+
+        Definition addr_inc (x : Katamaran.Bitvector.bv.bv 32) (n : nat) : Katamaran.Bitvector.bv.bv 32 :=
+          bv.add x (bv.of_nat n).
+
+        Definition ptsto_bytes (a : Val ty_xlenbits) (bytes : nat) (val : Val (ty_bytes bytes)) :=
+          let fix recur a (bs : nat) i :=
+            match bs with
+            | O       => ⊤
+            | S bs =>
+                a ↦ₘ (get_byte i val) ∗ (recur (addr_inc a 1) bs (i + 1))
+            end
+              in recur a bytes 0.
+
+        Definition sep_contract_read_ram (bytes : nat) : SepContractFunX (read_ram bytes) :=
+          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; w :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
              sep_contract_localstore      := [term_var paddr];
              sep_contract_precondition    :=
                term_union access_type KRead (term_val ty.unit tt) ⊑ term_var t
@@ -1031,8 +1048,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           |}.
 
         Definition sep_contract_write_ram : SepContractFunX write_ram :=
-          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_word; "entries" :: ty.list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
-             sep_contract_localstore      := [term_var paddr; term_var data];
+          {| sep_contract_logic_variables := ["data_size" :: ty.int; paddr :: ty_xlenbits; data :: ty_word; "entries" :: ty.list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
+             sep_contract_localstore      := [term_var "data_size"; term_var paddr; term_var data];
              sep_contract_precondition    :=
                term_union access_type KWrite (term_val ty.unit tt) ⊑ term_var t
                ∗ cur_privilege ↦ term_var p
