@@ -603,11 +603,11 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           sep_contract_result          := "result_can_incr_cursor";
           sep_contract_postcondition   :=
           if: term_var "result_can_incr_cursor"
-          then 
+          then
             term_var "p" ≠ₚ term_val ty.perm E
             ∨
-              (term_var "p" = term_val ty.perm E ∗ term_var "imm" = term_val ty.int 0%Z ∗ term_var "a" = term_binop bop.plus (term_var "a") (term_var "imm"))
-          else term_var "p" = term_val ty.perm E ∗ term_var "imm" ≠ term_val ty.int 0%Z
+              (term_var "imm" = term_val ty.int 0%Z ∗ term_var "a" = term_binop bop.plus (term_var "a") (term_var "imm"))
+          else ⊤
         |}.
 
       Definition sep_contract_is_sub_perm : SepContractFun is_sub_perm :=
