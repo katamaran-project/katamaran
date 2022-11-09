@@ -555,6 +555,24 @@ Module Type SymbolicExecOn
       split; intros []; constructor; intuition.
     Qed.
 
+    Definition pattern_match {AT} :
+      forall {σ} (pat : @Pattern LVar σ),
+        ⊢ STerm σ ->
+        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SPureSpecM AT)) ->
+        SPureSpecM AT :=
+      fun σ pat w0 scr k POST =>
+        SymProp.pattern_match scr pat
+          (fun pc : PatternCase pat =>
+             let w1  : World      := wcat w0 (PatternCaseCtx pc) in
+             let r1  : w0 ⊒ w1    := acc_cat_right w0 (PatternCaseCtx pc) in
+             let F1  : Formula w1 := formula_relop bop.eq scr⟨r1⟩ (pattern_match_term_reverse pat pc (sub_cat_right _)) in
+             let w2  : World      := wformula w1 F1 in
+             let r2  : w1 ⊒ w2    := acc_formula_right F1 in
+             let r12 : w0 ⊒ w2    := r1 ∘ r2 in
+             k pc w2 r12
+               (sub_cat_right (PatternCaseCtx pc))
+               (four POST r12)).
+
   End SPureSpecM.
 
   Section Configuration.
@@ -1578,7 +1596,7 @@ Module Type SymbolicExecOn
               let t1   := subst (T := fun Σ => Term Σ _) t ζ in
               ⟨ r12 ⟩ _ <- assume_formula (formula_relop bop.eq x1 t1) ;;
               replay k (@acc_sub (MkWorld (Σ-x∷σ) ctx.nil) _ ζ entails_nil ∘ r12)
-        | pattern_match s pat rhs => fun r P => SymProp.block (* FIXME *)
+        | SymProp.pattern_match s pat rhs => fun r P => SymProp.block (* FIXME *)
         | pattern_match_var x pat rhs => fun r P => SymProp.block (* FIXME *)
         | debug b k => fun r01 P => debug (subst b (sub_acc r01)) (replay k r01 P)
         end.

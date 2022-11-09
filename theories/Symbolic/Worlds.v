@@ -258,6 +258,10 @@ Module Type WorldsOn
     Definition acc_snoc_right {w} {b : LVar ∷ Ty} : w ⊒ wsnoc w b :=
       @acc_sub w (wsnoc w b) sub_wk1 (entails_refl (subst (wco w) sub_wk1)).
 
+    Definition acc_cat_right w (Δ : LCtx) : w ⊒ wcat w Δ :=
+      @acc_sub w (wcat w Δ) (@sub_cat_left w Δ)
+        (entails_refl (subst (wco w) (sub_cat_left Δ))).
+
     Program Definition acc_snoc_left {w1 w2} (ω12 : w1 ⊒ w2) (b : LVar ∷ Ty) (t : Term w2 (type b)) :
       wsnoc w1 b ⊒ w2 := acc_sub (sub_snoc (sub_acc ω12) b t) _.
     Next Obligation.
