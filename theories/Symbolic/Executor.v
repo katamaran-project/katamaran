@@ -555,22 +555,24 @@ Module Type SymbolicExecOn
       split; intros []; constructor; intuition.
     Qed.
 
-    Definition pattern_match {AT} :
-      forall {σ} (pat : @Pattern LVar σ),
+    Definition pattern_match {N : Set} (n : N -> LVar) {AT} :
+      forall {σ} (pat : @Pattern N σ),
         ⊢ STerm σ ->
         (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SPureSpecM AT)) ->
         SPureSpecM AT :=
       fun σ pat w0 scr k POST =>
-        SymProp.pattern_match scr pat
-          (fun pc : PatternCase pat =>
+        SymProp.pattern_match scr (freshen_pattern n w0 pat)
+          (fun pc : PatternCase _ =>
              let w1  : World      := wcat w0 (PatternCaseCtx pc) in
              let r1  : w0 ⊒ w1    := acc_cat_right w0 (PatternCaseCtx pc) in
-             let F1  : Formula w1 := formula_relop bop.eq scr⟨r1⟩ (pattern_match_term_reverse pat pc (sub_cat_right _)) in
+             let ts  : NamedEnv (Term (w0 ▻▻ PatternCaseCtx pc)) (PatternCaseCtx pc)
+                                  := sub_cat_right (PatternCaseCtx pc) in
+             let F1  : Formula w1 := formula_relop bop.eq scr⟨r1⟩ (pattern_match_term_reverse _ pc ts) in
              let w2  : World      := wformula w1 F1 in
              let r2  : w1 ⊒ w2    := acc_formula_right F1 in
              let r12 : w0 ⊒ w2    := r1 ∘ r2 in
-             k pc w2 r12
-               (sub_cat_right (PatternCaseCtx pc))
+             k (unfreshen_patterncase n w0 pat pc) w2 r12
+               (unfreshen_patterncaseenv n pat pc ts)
                (four POST r12)).
 
   End SPureSpecM.

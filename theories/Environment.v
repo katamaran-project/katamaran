@@ -692,10 +692,16 @@ Module notations.
   Notation "[ x ; y ; .. ; z ]" :=
     (snoc .. (snoc (snoc nil _ x) _ y) .. _ z)
     (format "[ '[' x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope.
+  Notation "[ 'env' x ]" :=
+    (snoc nil _ x)
+    (only parsing) : env_scope.
   Notation "[ 'env' x ; y ; .. ; z ]" :=
     (snoc .. (snoc (snoc nil _ x) _ y) .. _ z)
     (only parsing) : env_scope.
     (* (format "[ 'env'  '[' x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope. *)
+  Notation "[ 'nenv' x ]" :=
+    (snoc nil (_∷_) x)
+    (only parsing) : env_scope.
   Notation "[ 'nenv' x ; y ; .. ; z ]" :=
     (snoc .. (snoc (snoc nil (_∷_) x) (_∷_) y) .. (_∷_) z)
     (only parsing) : env_scope.
