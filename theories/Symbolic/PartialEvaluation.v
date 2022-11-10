@@ -33,7 +33,8 @@ From Coq Require Import
      Classes.Morphisms
      Classes.RelationClasses
      NArith.BinNat
-     ZArith.BinInt.
+     ZArith.BinInt
+     micromega.Lia.
 From Equations Require Import
      Equations.
 From Katamaran Require Import
@@ -86,6 +87,13 @@ Module Type PartialEvaluationOn
     | t1               , term_val _ false => t1
     | t1               , t2               => term_binop bop.or t1 t2.
 
+    Equations peval_plus (t1 t2 : Term Σ ty.int) : Term Σ ty.int :=
+    | term_val _ v1  , term_val _ v2    => term_val ty.int (v1 + v2)%Z
+    | term_val _ 0%Z , t2               => t2
+    | t1             , term_val _ 0%Z   => t1
+    | t1             , term_val _ v2    => term_binop bop.plus (term_val ty.int v2) t1
+    | t1             , t2               => term_binop bop.plus t1 t2.
+
     Equations(noeqns) peval_binop' {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
     | op | term_val _ v1 | term_val _ v2 := term_val σ (bop.eval op v1 v2);
     | op | t1            | t2            := term_binop op t1 t2.
@@ -93,6 +101,7 @@ Module Type PartialEvaluationOn
     Equations(noeqns) peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
     | bop.append , t1 , t2 => peval_append t1 t2
     | bop.or     , t1 , t2 => peval_or t1 t2
+    | bop.plus   , t1 , t2 => peval_plus t1 t2
     | op         , t1 , t2 => peval_binop' op t1 t2.
 
     Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
@@ -117,6 +126,10 @@ Module Type PartialEvaluationOn
       - depelim t2... destruct v...
     Qed.
 
+    Lemma peval_plus_sound (t1 t2 : Term Σ ty.int) :
+      peval_plus t1 t2 ≡ term_binop bop.plus t1 t2.
+    Proof. funelim (peval_plus t1 t2); lsolve; intros ι; cbn; lia. Qed.
+
     Lemma peval_binop'_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
       peval_binop' op t1 t2 ≡ term_binop op t1 t2.
     Proof.
@@ -131,7 +144,8 @@ Module Type PartialEvaluationOn
       peval_binop op t1 t2 ≡ term_binop op t1 t2.
     Proof.
       destruct op; cbn [peval_binop];
-        auto using peval_binop'_sound, peval_append_sound, peval_or_sound.
+        auto using peval_binop'_sound, peval_append_sound, peval_or_sound,
+        peval_plus_sound.
     Qed.
 
     Equations(noeqns) peval_neg (t : Term Σ ty.int) : Term Σ ty.int :=

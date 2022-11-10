@@ -1180,10 +1180,8 @@ Module MinCapsValidContracts.
   Lemma valid_contract_is_not_zero : ValidContract is_not_zero.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_can_incr_cursor : ValidContractDebug can_incr_cursor.
-  Proof. symbolic_simpl.
-         intros; lia.
-  Qed.
+  Lemma valid_contract_can_incr_cursor : ValidContract can_incr_cursor.
+  Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_jalr_cap : ValidContract exec_jalr_cap.
   Proof. reflexivity. Qed.
@@ -1320,7 +1318,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_is_within_range).
     - apply (valid_contract _ H valid_contract_abs).
     - apply (valid_contract _ H valid_contract_is_not_zero).
-    - apply (valid_contract_debug _ H valid_contract_can_incr_cursor).
+    - apply (valid_contract _ H valid_contract_can_incr_cursor).
     - apply (valid_contract _ H valid_contract_exec_jalr_cap).
     - apply (valid_contract _ H valid_contract_exec_cjalr).
     - apply (valid_contract _ H valid_contract_exec_cjal).
