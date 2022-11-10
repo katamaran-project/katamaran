@@ -823,9 +823,9 @@ Module Type IrisResources
       iModIntro.
       iSplitR; first done.
       iIntros (e2 [γ' μ'] efs) "%primstep".
-      dependent induction primstep.
-      dependent induction H.
-      iMod ("H" $! res γ' μ' H) as "H"; iFrame.
+      dependent elimination primstep.
+      dependent elimination s.
+      iMod ("H" $! res γ'1 μ'1 f2) as "H"; iFrame.
       do 2 iModIntro.
       iMod "H" as "H".
       iModIntro.
