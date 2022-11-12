@@ -137,9 +137,8 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
       fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := MemVal).
 
-    Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-      fun {Σ} hG μ =>
-        (∃ memmap, gen_heap_interp (hG := mc_ghG (mcMemGS := hG)) memmap ∗
+    Definition mem_inv `{mG : mcMemGS Σ} (μ : Memory) : iProp Σ :=
+        (∃ memmap, gen_heap_interp (hG := mc_ghG (mcMemGS := mG)) memmap ∗
           ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
@@ -160,15 +159,12 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
       by destruct el as (a' & <- & _).
     Qed.
 
-    Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-      fun {Σ} hG μ =>
-        ([∗ map] l↦v ∈ initMemMap μ, mapsto (hG := mc_ghG (mcMemGS := hG)) l (DfracOwn 1) v) %I.
+    Definition mem_res `{mG : mcMemGS Σ} (μ : Memory) : iProp Σ :=
+        ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v) %I.
 
-    Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-                                                ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+    Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
+                                                ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
     Proof.
-      iIntros (Σ μ gHP).
-
       iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
       pose (memmap := initMemMap μ).
       iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
@@ -698,7 +694,7 @@ Module MinCapsIrisInstanceWithContracts.
     Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : MemVal), μ a = v) memmap⌝ -∗
         gen_heap.gen_heap_interp memmap -∗
-        mem_inv sailGS_memGS μ.
+        mem_inv μ.
     Proof. iIntros (μ memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
 
     Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
@@ -723,7 +719,7 @@ Module MinCapsIrisInstanceWithContracts.
                              (paddr : Addr) (data : MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : MemVal), μ a = v) memmap⌝ -∗
           gen_heap.gen_heap_interp (<[paddr := data]> memmap) -∗
-          mem_inv sailGS_memGS (fun_wM μ paddr data).
+          mem_inv (fun_wM μ paddr data).
     Proof.
       iIntros (μ memmap paddr data) "%Hmap Hmem".
       iExists (<[paddr := data]> memmap); iFrame.

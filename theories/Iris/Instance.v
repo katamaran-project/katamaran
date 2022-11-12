@@ -548,7 +548,7 @@ Section Adequacy.
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
     (forall `{sailGS Σ'},
         ⊢ semTriple (Σ := Σ') δ
-          (mem_res sailGS_memGS μ ∗ own_regstore γ) s
+          (mem_res μ ∗ own_regstore γ) s
           (fun v δ' => bi_pure (Q v))) ->
     ResultOrFail s' Q.
   Proof.
@@ -571,10 +571,10 @@ Section Adequacy.
       iIntros (Hinv κs) "".
       iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
-      pose proof (memΣ_GpreS (Σ := sailΣ) _) as mPG.
-      iMod (mem_inv_init μ mPG) as (memG) "[Hmem Rmem]".
+      pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
+      iMod (mem_inv_init (mGS := mGS)) as (memG) "[Hmem Rmem]".
       iModIntro.
-      iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv memG (σ.2))%I.
+      iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
       iExists _.
       iSplitR "Hs2 Rmem".
       * iFrame.
@@ -594,10 +594,9 @@ Section Adequacy.
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : forall `{sailGS Σ}, Val σ -> CStore Γ -> iProp Σ} (φ : Prop):
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     (forall `{sailGS Σ'},
-        ⊢ semTriple (Σ := Σ') δ (mem_res sailGS_memGS μ ∗ own_regstore γ) s Q
-          ∗ (mem_inv sailGS_memGS μ' ={⊤,∅}=∗ ⌜φ⌝)
-    )%I ->
-    φ.
+        mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP s Q δ
+          ∗ (mem_inv μ' ={⊤,∅}=∗ ⌜φ⌝)
+    )%I -> φ.
   Proof.
     (* intros steps trips. *)
     intros [n steps]%steps_to_nsteps trips.
@@ -607,34 +606,27 @@ Section Adequacy.
     assert (regsmapv := RegStore_to_map_valid γ).
     iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
-    pose proof (memΣ_GpreS (Σ := sailΣ) _) as mPG.
-    iMod (mem_inv_init μ mPG) as (memG) "[Hmem Rmem]".
+    pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
+    iMod (mem_inv_init (mGS := mGS)) as (memG) "[Hmem Rmem]".
     pose (regsG := {| reg_inG := @reg_pre_inG sailΣ (@subG_sailGpreS sailΣ (subG_refl sailΣ)); reg_gv_name := spec_name |}).
     pose (sailG := SailGS Hinv regsG memG).
+    iMod (trips sailΣ sailG with "[Rmem Hs2]") as "[trips Hφ]".
+    { iFrame.
+      unfold own_regstore.
+      iApply (own_RegStore_to_map_reg_pointsTos (H := regsG) (γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
+      eapply finite.NoDup_enum.
+    }
     iModIntro.
     iExists MaybeStuck.
-    iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv memG (σ.2))%I.
+    iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
     iExists [ fun v => Q _ sailG (valconf_val v) (valconf_store v) ]%list.
     iExists _.
-    assert (∀ σ0 : state (microsail_lang Γ σ), nat → list (language.observation (microsail_lang Γ σ)) → nat → (regs_inv σ0.1 ∗ mem_inv memG σ0.2 ⊢ |={∅}=> regs_inv σ0.1 ∗ mem_inv memG σ0.2)%I) as state_interp_mono.
-    { iIntros (σ1 _ _ _) "[Hregs Hmem]".
-      now iFrame.
-    }
     iExists _.
-    iDestruct (trips sailΣ sailG) as "[trips Hφ]".
-    iSplitR "Hs2 Rmem".
+    iSplitR "trips Hφ".
     * iFrame.
       iExists (RegStore_to_map γ).
       now iFrame.
-    * iSplitL.
-      cbn.
-      iSplitL; last done.
-      iApply ("trips" with "[Rmem Hs2]").
-      { iFrame.
-        unfold own_regstore.
-        iApply (own_RegStore_to_map_reg_pointsTos (H := regsG) (γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
-        eapply finite.NoDup_enum.
-      }
+    * cbn. iFrame.
       iIntros (es' t2') "_ _ _ [Hregsinv Hmeminv] _ _".
       now iApply "Hφ".
   Qed.

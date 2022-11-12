@@ -91,11 +91,9 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
       by destruct el as (a' & <- & _).
     Qed.
 
-    Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+    Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
       ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
     Proof.
-      iIntros (Σ μ gHP).
-
       iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
 
       pose (memmap := initMemMap μ).
