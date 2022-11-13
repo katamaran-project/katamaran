@@ -735,7 +735,7 @@ Import BlockVerificationDerived2.
 
   Lemma intro_ptsto_instrs `{sailGS Σ} {μ : Memory} {a : Z} {instrs : list AST} :
     mem_has_instrs μ a instrs ->
-    ([∗ map] k ↦ y ∈ list_to_map (map (λ a : Z, (a, μ a)) (seqZ a (4 * length instrs))), interp_ptsto k y)
+    ([∗ list] a' ∈ seqZ a (4 * length instrs), interp_ptsto a' (μ a'))
       ⊢ ptsto_instrs a instrs.
   Proof.
     iIntros (Hmeminstrs) "Hmem".
@@ -744,40 +744,28 @@ Import BlockVerificationDerived2.
     - do 4 (rewrite seqZ_cons; last (by cbn)).
       cbn in *.
       destruct Hmeminstrs as [(v & <- & Hv) Hmeminstrs].
-      rewrite ?big_sepM_insert.
-      + iDestruct "Hmem" as "(Hmema & _ & _ & _ & Hmem)".
-        iSplitL "Hmema".
-        * unfold interp_ptsto_instr.
-          iExists (μ a).
-          now iFrame.
-        * replace (a + 4)%Z with (4 + a)%Z by lia.
-          iApply "IH".
-          { now iPureIntro. }
-          replace (Z.pred (Z.pred (Z.pred (Z.pred (4 * S (length instrs)))))) with (4 * length instrs)%Z by lia.
-          replace (Z.succ (Z.succ (Z.succ (Z.succ a)))) with (4 + a)%Z by lia.
-          iExact "Hmem".
-      + admit.
-      + admit.
-      + admit.
-      + admit.
-  Admitted.
+      iDestruct "Hmem" as "(Hmema & _ & _ & _ & Hmem)".
+      iSplitL "Hmema".
+      + unfold interp_ptsto_instr.
+        iExists (μ a).
+        now iFrame.
+      + replace (a + 4)%Z with (4 + a)%Z by lia.
+        iApply "IH".
+        { now iPureIntro. }
+        replace (Z.pred (Z.pred (Z.pred (Z.pred (4 * S (length instrs)))))) with (4 * length instrs)%Z by lia.
+        replace (Z.succ (Z.succ (Z.succ (Z.succ a)))) with (4 + a)%Z by lia.
+        iExact "Hmem".
+  Qed.
 
   Lemma intro_ptstoSthL `{sailGS Σ} (μ : Memory) (addrs : list Z)  :
-    NoDup addrs ->
-    ([∗ map] k↦y ∈ (list_to_map (map (λ a : Z, (a, μ a)) addrs)), gen_heap.mapsto k (dfrac.DfracOwn 1) y) ⊢ ptstoSthL addrs.
+    ([∗ list] a' ∈ addrs, interp_ptsto a' (μ a')) ⊢ ptstoSthL addrs.
   Proof.
-    intros nd.
-    induction nd as [|a l anl ndl]; cbn.
+    induction addrs as [|a l]; cbn.
     - now iIntros "_".
-    - iIntros "Hmem".
-      rewrite big_sepM_insert.
-      iDestruct "Hmem" as "[Hmema Hmem]".
+    - iIntros "[Hmema Hmem]".
       iSplitL "Hmema".
       + now iExists (μ a).
-      + now iApply IHndl.
-      + apply not_elem_of_list_to_map_1.
-        change (fmap fst ?l) with (map fst l).
-        now rewrite map_map map_id.
+      + now iApply IHl.
   Qed.
 
   Lemma femtokernel_splitMemory `{sailGS Σ} {μ : Memory} :
@@ -794,27 +782,17 @@ Import BlockVerificationDerived2.
     unfold mem_res, initMemMap.
     rewrite liveAddrs_split.
     rewrite ?map_app ?list_to_map_app ?big_sepM_union.
-    - iDestruct "Hmem" as "(Hinit & Hhandler & Hfortytwo & _ & Hadv)".
-      iSplitL "Hinit".
-      now iApply (intro_ptsto_instrs (μ := μ)).
-      iSplitL "Hhandler".
-      now iApply (intro_ptsto_instrs (μ := μ)).
-      iSplitL "Hfortytwo".
-      rewrite big_sepM_singleton.
-      cbn.
-      unfold interp_ptsto_readonly.
-      change (gen_heap.mapsto 84 (dfrac.DfracOwn 1) (μ 84)) with (interp_ptsto 84 (μ 84)).
-      rewrite Hft.
+    iDestruct "Hmem" as "(Hinit & Hhandler & [ Hfortytwo _ ] & _ & Hadv)".
+    iSplitL "Hinit".
+    now iApply (intro_ptsto_instrs (μ := μ)).
+    iSplitL "Hhandler".
+    now iApply (intro_ptsto_instrs (μ := μ)).
+    iSplitL "Hfortytwo".
+    - rewrite Hft.
       iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptsto 84 42) with "Hfortytwo") as "Hinv".
       now iModIntro.
-
-      cbn.
-      iModIntro.
-      iApply (intro_ptstoSthL μ).
-      { apply NoDup_seqZ. }
-      done.
-      all: admit.
-  Admitted.
+    - now iApply (intro_ptstoSthL μ).
+  Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
     ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜μ a = v⌝.
