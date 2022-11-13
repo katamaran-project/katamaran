@@ -752,7 +752,7 @@ Import BlockVerificationDerived2.
           now iFrame.
         * replace (a + 4)%Z with (4 + a)%Z by lia.
           iApply "IH".
-          {now iPureIntro.}
+          { now iPureIntro. }
           replace (Z.pred (Z.pred (Z.pred (Z.pred (4 * S (length instrs)))))) with (4 * length instrs)%Z by lia.
           replace (Z.succ (Z.succ (Z.succ (Z.succ a)))) with (4 + a)%Z by lia.
           iExact "Hmem".
@@ -811,7 +811,7 @@ Import BlockVerificationDerived2.
       cbn.
       iModIntro.
       iApply (intro_ptstoSthL μ).
-      {apply NoDup_seqZ.}
+      { apply NoDup_seqZ. }
       done.
       all: admit.
   Admitted.
@@ -859,12 +859,12 @@ Import BlockVerificationDerived2.
       iSplitL "Hmepc". { now iExists _. }
       iSplitL "Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7".
       {rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
-       iSplitL "Hx1". {now iExists _.}
-       iSplitL "Hx2". {now iExists _.}
-       iSplitL "Hx3". {now iExists _.}
-       iSplitL "Hx4". {now iExists _.}
-       iSplitL "Hx5". {now iExists _.}
-       iSplitL "Hx6". {now iExists _.}
+       iSplitL "Hx1". { now iExists _. }
+       iSplitL "Hx2". { now iExists _. }
+       iSplitL "Hx3". { now iExists _. }
+       iSplitL "Hx4". { now iExists _. }
+       iSplitL "Hx5". { now iExists _. }
+       iSplitL "Hx6". { now iExists _. }
        now iExists _.
       }
       iSplitL "Hpmpaddr0". { now iExists _. }
@@ -878,4 +878,8 @@ Import BlockVerificationDerived2.
       iApply fupd_mask_intro; first set_solver.
       now iIntros "_".
   Qed.
-  Print Assumptions femtokernel_endToEnd.
+
+  Goal True.
+    idtac "Assumptions of femtokernel end-to-end theorem:".
+    Print Assumptions femtokernel_endToEnd.
+  Abort.
