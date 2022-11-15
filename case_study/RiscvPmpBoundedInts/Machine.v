@@ -1050,23 +1050,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     apply IsTrue.proof_irrelevance.
   Qed.
 
-  Lemma nat_le_plus_one : forall (x y : nat),
-      IsTrue (x <=? (y + 1) * x)%nat.
-  Proof.
-    intros.
-    constructor.
-    rewrite Nat.mul_add_distr_r, Nat.mul_1_l.
-    apply Is_true_eq_left.
-    apply leb_correct.
-    lia.
-  Qed.
-
-  Lemma normalize_nat_le_plus_one : forall (x y : nat),
-      IsTrue.normalize (nat_le_plus_one x y) = nat_le_plus_one x y.
-  Proof.
-    intros.
-    apply IsTrue.proof_irrelevance.
-  Qed.
+  Instance IsTrue_byte_le (x : nat) : IsTrue (byte <=? byte * S x)%nat.
+  Proof. apply IsTrue_byte_widening. Qed.
 
   Definition read_mem (μ : Memory) (data_size : nat) (addr : Addr) (offset : nat) {p : IsTrue (byte <=? data_size)%nat} : bv data_size :=
       let bits := @bv.zext _ (μ addr) _ p in
@@ -1076,20 +1061,14 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     fun offset =>
       let a := bv.add addr (@bv.of_nat 32 offset) in
       read_mem μ bitlen a offset.
-
-  (* TODO: IsTrue should be discharged automatically:
-     - define lemma as is
-     - define lemma with normalized values (see normalize in Prelude.v)
-     -? add hint? *)
-  #[program] Definition fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) : Val (ty_bytes data_size) :=
+  Definition fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) : Val (ty_bytes data_size) :=
     match data_size with
     | 0 => bv.of_nat 0
     | S width =>
-        let bitlen := byte * S width in (* TODO: use bitlen everywhere again *)
-        let bytes := map (@read_shifted_bits μ (byte * S width) addr _) (seq 0 data_size) in
-        foldl bv.add (@bv.zero (byte * S width)) bytes
+        let bitlen := byte * S width in 
+        let bytes := map (@read_shifted_bits μ bitlen addr _) (seq 0 data_size) in
+        foldl bv.add (@bv.zero bitlen) bytes
     end.
-  Next Obligation. now (intros; rewrite Nat.mul_comm). Qed.
 
   Definition get_byte {n} (offset : nat) (bits : bv n) : Byte :=
     bv.of_Z (Z.shiftr (bv.unsigned bits) (Z.of_nat (offset * byte))).

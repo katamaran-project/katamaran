@@ -29,6 +29,7 @@
 From Coq Require Import
      Strings.String
      Bool
+     Lia
      ZArith.ZArith.
 From Equations Require Import
      Equations.
@@ -49,31 +50,21 @@ Definition word     := 4 * byte.
 Definition xlenbytes := 4.
 Definition xlenbits := xlenbytes * byte.
 
-Definition Xlenbits : Set := bv xlenbits.
-Definition Addr : Set     := bv xlenbits.
-Definition Word : Set     := bv word.
-Definition Byte : Set     := bv byte.
-
-Lemma IsTrue_leb_mono_l : forall (bytes : nat),
-    IsTrue (bytes <=? xlenbytes)%nat ->
-    IsTrue (byte * bytes <=? byte * xlenbytes)%nat.
+#[export] Instance IsTrue_bytes_xlenbytes (x : nat) (H : IsTrue (x <=? xlenbytes)): IsTrue (byte * x <=? byte * xlenbytes).
 Proof.
-  intros.
-  apply IsTrue.from in H.
   constructor.
   apply Is_true_eq_left.
+  apply IsTrue.from in H.
   apply Is_true_eq_true in H.
   apply leb_correct.
   apply leb_complete in H.
   apply (Nat.mul_le_mono_l _ _ _ H).
 Qed.
 
-#[export]  Hint Extern 10 =>
-  match goal with
-  | H: IsTrue (?bytes <=? xlenbytes)%nat
-    |- IsTrue (byte * ?bytes <=? byte * xlenbytes)%nat =>
-      apply (IsTrue_leb_mono_l bytes)
-  end : typeclass_instances.
+Definition Xlenbits : Set := bv xlenbits.
+Definition Addr : Set     := bv xlenbits.
+Definition Word : Set     := bv word.
+Definition Byte : Set     := bv byte.
 
 (* Parameter minAddr : Addr. *)
 (* Parameter maxAddr : Addr. *)
