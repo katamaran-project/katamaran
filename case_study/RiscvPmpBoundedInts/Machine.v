@@ -1033,6 +1033,23 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   (* Memory *)
   Definition Memory := Addr -> Byte.
 
+  Lemma IsTrue_byte_widening : forall (x : nat),
+      IsTrue (byte <=? byte * S x)%nat.
+  Proof.
+    intros.
+    constructor.
+    apply Is_true_eq_left.
+    apply leb_correct.
+    lia.
+  Qed.
+
+  Lemma normalize_IsTrue_byte_widening : forall (x : nat),
+      IsTrue.normalize (IsTrue_byte_widening x) = IsTrue_byte_widening x.
+  Proof.
+    intros.
+    apply IsTrue.proof_irrelevance.
+  Qed.
+
   Lemma nat_le_plus_one : forall (x y : nat),
       IsTrue (x <=? (y + 1) * x)%nat.
   Proof.
@@ -1042,6 +1059,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     apply Is_true_eq_left.
     apply leb_correct.
     lia.
+  Qed.
+
+  Lemma normalize_nat_le_plus_one : forall (x y : nat),
+      IsTrue.normalize (nat_le_plus_one x y) = nat_le_plus_one x y.
+  Proof.
+    intros.
+    apply IsTrue.proof_irrelevance.
   Qed.
 
   Definition read_mem (μ : Memory) (data_size : nat) (addr : Addr) (offset : nat) {p : IsTrue (byte <=? data_size)%nat} : bv data_size :=
@@ -1061,9 +1085,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     match data_size with
     | 0 => bv.of_nat 0
     | S width =>
-        let bitlen := byte * S width in
-        let bytes := map (@read_shifted_bits μ bitlen addr _) (seq 0 data_size) in
-        foldl bv.add (@bv.zero bitlen) bytes
+        let bitlen := byte * S width in (* TODO: use bitlen everywhere again *)
+        let bytes := map (@read_shifted_bits μ (byte * S width) addr _) (seq 0 data_size) in
+        foldl bv.add (@bv.zero (byte * S width)) bytes
     end.
   Next Obligation. now (intros; rewrite Nat.mul_comm). Qed.
 
