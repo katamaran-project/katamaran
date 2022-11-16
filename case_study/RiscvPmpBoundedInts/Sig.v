@@ -68,7 +68,7 @@ Inductive Predicate : Set :=
 | ptsto
 | ptsto_readonly
 | encodes_instr
-| ptstomem
+| ptstomem (bytes : nat)
 | ptstoinstr
 .
 
@@ -344,7 +344,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | _                              =>
           False
       end%list.
-
+    
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
       | pmp_access               => Pmp_access
@@ -371,7 +371,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptsto                    => [ty_xlenbits; ty_byte]
       | ptsto_readonly           => [ty_xlenbits; ty_byte]
       | encodes_instr            => [ty_word; ty_ast]
-      | ptstomem                 => [ty_xlenbits; ty.int; ty.list ty_word]
+      | ptstomem width           => [ty_xlenbits; ty.bvec (byte * width)]
       | ptstoinstr               => [ty_xlenbits; ty_ast]
       end.
 
@@ -385,7 +385,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | ptsto                    => false
         | ptsto_readonly           => true
         | encodes_instr            => true
-        | ptstomem                 => false
+        | ptstomem _               => false
         | ptstoinstr               => false
         end
       }.
@@ -401,7 +401,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_entries              => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
       | pmp_addr_access          => Some (MkPrecise ε [ty.list ty_pmpentry; ty_privilege] eq_refl)
       | pmp_addr_access_without  => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
-      | ptstomem                 => Some (MkPrecise [ty_xlenbits; ty.int] [ty.list ty_word] eq_refl)
+      | ptstomem width           => Some (MkPrecise [ty_xlenbits] [ty.bvec (byte * width)] eq_refl)
       | ptstoinstr               => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
       | encodes_instr            => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
       | _                        => None
@@ -468,6 +468,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     end.
 
   Module notations.
+    (* TODO: better notation needed *)
+    Notation "a '↦mem' b bs" := (asn.chunk (chunk_user (ptstomem b) [a; bs])) (at level 70).
     Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
     Notation "p '⊑' q" := (asn.formula (formula_user sub_perm [p;q])) (at level 70).
 

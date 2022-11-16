@@ -125,11 +125,41 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Section FunDeclKit.
   Import RiscvNotations.
 
+  Definition width_constraint (width : nat) : bool :=
+    (0 <? width)%nat && (width <=? xlenbytes)%nat.
+
+  #[export] Instance IsTrue_byte_multiplier (x y : nat) (H: IsTrue (x <=? y)%nat) :
+    IsTrue (byte * x <=? byte * y)%nat.
+  Proof.
+    constructor.
+    apply Is_true_eq_left.
+    apply IsTrue.from in H.
+    apply Is_true_eq_true in H.
+    apply leb_correct.
+    apply leb_complete in H.
+    apply (Nat.mul_le_mono_l _ _ _ H).
+  Qed.
+
+  #[export] Instance IsTrue_width_constraint_byte_multiplier (bytes : nat) (H: IsTrue (width_constraint bytes)) :
+    IsTrue (byte * bytes <=? byte * xlenbytes)%nat.
+  Proof.
+    constructor.
+    apply Is_true_eq_left.
+    apply IsTrue.from in H.
+    unfold width_constraint in H.
+    apply Is_true_eq_true in H.
+    apply leb_correct.
+    apply andb_prop in H.
+    destruct H as [_ H].
+    apply leb_complete in H.
+    apply (Nat.mul_le_mono_l _ _ _ H).
+  Qed.
+
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
   | rX                    : Fun [rs ∷ ty_regno] ty_xlenbits
   | wX                    : Fun [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit
-  | extend_value (bytes : nat) {p : IsTrue (bytes <=? xlenbytes)%nat} : Fun [value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes)
+  | extend_value (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes)
   | get_arch_pc           : Fun ctx.nil ty_xlenbits
   | get_next_pc           : Fun ctx.nil ty_xlenbits
   | set_next_pc           : Fun [addr ∷ ty_xlenbits] ty.unit
@@ -151,7 +181,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
   | pmpAddrRange          : Fun [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range
   | pmpMatchAddr          : Fun [addr ∷ ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch
-  | process_load (bytes : nat) {p : IsTrue (bytes <=? xlenbytes)%nat} : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result bytes] ty_retired
+  | process_load (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result bytes] ty_retired
   | mem_write_value (bytes : nat)       : Fun [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1)
   | main                  : Fun ctx.nil ty.unit
   | init_model            : Fun ctx.nil ty.unit
@@ -403,7 +433,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end ;;
     use lemma close_gprs.
 
-  Definition fun_extend_value (bytes : nat) {pr : IsTrue (bytes <=? xlenbytes)%nat} : Stm [value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes) :=
+  Definition fun_extend_value (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes) :=
     match: value in union (memory_op_result bytes) with
     |> KMemValue (pat_var "result") =>
       stm_exp (exp_union (memory_op_result xlenbytes) KMemValue (@exp_zext _ (byte * bytes) (byte * xlenbytes) result _))
@@ -599,7 +629,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | inr v => exp_val ty_pmpaddrmatch PMP_NoMatch
     end.
 
-  Definition fun_process_load (bytes : nat) {pr : IsTrue (bytes <=? xlenbytes)%nat} : Stm [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ (ty_memory_op_result bytes)] ty_retired :=
+  Definition fun_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ (ty_memory_op_result bytes)] ty_retired :=
     let: tmp := stm_call (@extend_value _ pr) [value] in
     match: tmp in union (memory_op_result xlenbytes) with
     |> KMemValue (pat_var "result") =>

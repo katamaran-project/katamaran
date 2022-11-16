@@ -186,7 +186,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition sep_contract_execute : SepContractFun execute :=
           instr_exec_contract.
 
-        Definition sep_contract_process_load (bytes : nat) {pr : IsTrue (bytes <=? xlenbytes)%nat} : SepContractFun (@process_load bytes pr) :=
+        Definition sep_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : SepContractFun (process_load bytes) :=
           {| sep_contract_logic_variables := [rd :: ty_regno; vaddr :: ty_xlenbits; value :: ty_memory_op_result bytes; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mcause" :: ty_mcause];
              sep_contract_localstore      := [term_var rd; term_var vaddr; term_var value];
              sep_contract_precondition    :=
@@ -953,7 +953,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | execute_CSR             => Some sep_contract_execute_CSR
             | execute_STORE           => Some sep_contract_execute_STORE
             | execute_LOAD            => Some sep_contract_execute_LOAD
-            | @process_load _ pr      => Some (@sep_contract_process_load _ pr)
+            | process_load bytes      => Some (sep_contract_process_load bytes)
             | get_arch_pc             => Some sep_contract_get_arch_pc
             | get_next_pc             => Some sep_contract_get_next_pc
             | set_next_pc             => Some sep_contract_set_next_pc
@@ -1016,56 +1016,41 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
       Section ForeignDef.
         Import RiscvPmpSignature.notations.
 
-        Definition get_byte {Σ} {width : nat} (offset : nat) (bits : Term Σ (ty_bytes width)) : Term Σ ty_byte :=
-          bv.of_Z (Z.shiftr (bv.unsigned bits) (Z.of_nat (offset * byte))).
-
-        Definition addr_inc (x : Katamaran.Bitvector.bv.bv 32) (n : nat) : Katamaran.Bitvector.bv.bv 32 :=
-          bv.add x (bv.of_nat n).
-
-        Definition ptsto_bytes (a : Val ty_xlenbits) (bytes : nat) (val : Val (ty_bytes bytes)) :=
-          let fix recur a (bs : nat) i :=
-            match bs with
-            | O       => ⊤
-            | S bs =>
-                a ↦ₘ (get_byte i val) ∗ (recur (addr_inc a 1) bs (i + 1))
-            end
-              in recur a bytes 0.
-
         Definition sep_contract_read_ram (bytes : nat) : SepContractFunX (read_ram bytes) :=
-          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; w :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
-             sep_contract_localstore      := [term_var paddr];
+          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry; "p" :: ty_privilege; "t" :: ty_access_type];
+             sep_contract_localstore      := [term_var "paddr"];
              sep_contract_precondition    :=
-               term_union access_type KRead (term_val ty.unit tt) ⊑ term_var t
-               ∗ cur_privilege ↦ term_var p
+               term_union access_type KRead (term_val ty.unit tt) ⊑ term_var "t"
+               ∗ cur_privilege ↦ term_var "p"
                ∗ asn_pmp_entries (term_var "entries")
-               ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t) (* TODO: move predicates that do unification earlier in the precond *)
-               ∗ term_var paddr ↦ₘ term_var w;
+               ∗ asn_pmp_access (term_var "paddr") (term_var "entries") (term_var "p") (term_var "t") (* TODO: move predicates that do unification earlier in the precond *)
+               ∗ asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
              sep_contract_result          := "result_read_ram";
-             sep_contract_postcondition   := term_var "result_read_ram" = term_var w
-              ∗ cur_privilege ↦ term_var p
-              ∗ term_var paddr ↦ₘ term_var w
+             sep_contract_postcondition   := term_var "result_read_ram" = term_var "w"
+              ∗ cur_privilege ↦ term_var "p"
+              ∗ asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"])
               ∗ asn_pmp_entries (term_var "entries");
           |}.
 
-        Definition sep_contract_write_ram : SepContractFunX write_ram :=
-          {| sep_contract_logic_variables := ["data_size" :: ty.int; paddr :: ty_xlenbits; data :: ty_word; "entries" :: ty.list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
-             sep_contract_localstore      := [term_var "data_size"; term_var paddr; term_var data];
+        Definition sep_contract_write_ram (bytes : nat) : SepContractFunX (write_ram bytes) :=
+          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry; "p" :: ty_privilege; "t" :: ty_access_type];
+             sep_contract_localstore      := [term_var "paddr"; term_var "data"];
              sep_contract_precondition    :=
-               term_union access_type KWrite (term_val ty.unit tt) ⊑ term_var t
-               ∗ cur_privilege ↦ term_var p
+               term_union access_type KWrite (term_val ty.unit tt) ⊑ term_var "t"
+               ∗ cur_privilege ↦ term_var "p"
                ∗ asn_pmp_entries (term_var "entries")
-               ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t)
-               ∗ ∃ w, term_var paddr ↦ₘ term_var w;
+               ∗ asn_pmp_access (term_var "paddr") (term_var "entries") (term_var "p") (term_var "t")
+              ∗ ∃ "w", asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
              sep_contract_result          := "result_write_ram";
              sep_contract_postcondition   :=
-               cur_privilege ↦ term_var p
-               ∗ term_var paddr ↦ₘ term_var data
+               cur_privilege ↦ term_var "p"
+               ∗ asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "data"])
                ∗ asn_pmp_entries (term_var "entries");
           |}.
 
         Definition sep_contract_decode    : SepContractFunX decode :=
           {| sep_contract_logic_variables := ["bv" :: ty_xlenbits];
-             sep_contract_localstore      := [term_var bv];
+             sep_contract_localstore      := [term_var "bv"];
              sep_contract_precondition    := ⊤;
              sep_contract_result          := "result_decode";
              sep_contract_postcondition   := ⊤;
@@ -1074,9 +1059,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition CEnvEx : SepContractEnvEx :=
           fun Δ τ fn =>
             match fn with
-            | read_ram             => sep_contract_read_ram
-            | write_ram            => sep_contract_write_ram
-            | decode               => sep_contract_decode
+            | read_ram bytes  => sep_contract_read_ram bytes
+            | write_ram bytes => sep_contract_write_ram bytes
+            | decode          => sep_contract_decode
             end.
 
         Lemma linted_cenvex :
@@ -1088,6 +1073,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
       End ForeignDef.
 
       Section LemDef.
+        Import RiscvPmpSignature.notations.
+        Import RiscvNotations.
+
         Definition lemma_open_gprs : SepLemma open_gprs :=
           {| lemma_logic_variables := ctx.nil;
              lemma_patterns        := env.nil;
@@ -1243,6 +1231,12 @@ Module RiscvPmpValidContracts.
     | None => False
     end.
 
+  Ltac symbolic_simpl :=
+    apply Symbolic.validcontract_with_erasure_sound;
+    compute;
+    constructor;
+    cbn.
+
   Section Debug.
     Coercion stm_exp : Exp >-> Stm.
     Local Notation "'use' 'lemma' lem args" := (stm_lemma lem args%env) (at level 10, lem at next level) : exp_scope.
@@ -1251,7 +1245,6 @@ Module RiscvPmpValidContracts.
     (* Import RiscvNotations.
      Import RiscvμSailNotations. *)
     Import SymProp.notations.
-
   End Debug.
 
   Lemma valid_contract_step : ValidContract step.
@@ -1284,16 +1277,16 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_handle_mem_exception : ValidContract handle_mem_exception.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_mem_write_value : ValidContract mem_write_value.
+  Lemma valid_contract_mem_write_value (bytes : nat) : ValidContract (mem_write_value bytes).
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_mem_read : ValidContract mem_read.
+  Lemma valid_contract_mem_read (bytes : nat) : ValidContract (mem_read bytes).
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_process_load : ValidContract process_load.
+  Lemma valid_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : ValidContractWithFuel 2 (process_load bytes).
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_checked_mem_read : ValidContractDebug checked_mem_read.
+  Lemma valid_contract_checked_mem_read (bytes : nat) : ValidContractDebug (checked_mem_read bytes).
   Proof with trivial.
     apply Symbolic.validcontract_with_erasure_sound.
     compute.
