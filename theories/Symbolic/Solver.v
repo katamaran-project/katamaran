@@ -825,50 +825,6 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - intros ι. specialize (Hequiv ι). cbn in Hequiv. intuition.
     Qed.
 
-    Definition solver_compose (s1 s2 : Solver) : Solver :=
-      fun w0 fmls0 =>
-        option.bind
-          (s1 _ fmls0)
-          (fun '(existT w1 (ν01 , fmls1)) =>
-             option.map
-               (fun '(existT w2 (ν12 , fmls2)) =>
-                  existT w2 (tri_comp ν01 ν12 , fmls2))
-               (s2 _ fmls1)).
-
-    Lemma solver_compose_spec {s1 s2} (spec1 : SolverSpec s1) (spec2 : SolverSpec s2) : SolverSpec (solver_compose s1 s2).
-    Proof.
-      unfold SolverSpec, solver_compose. intros w0 fmls0.
-      apply option.spec_bind.
-      generalize (spec1 _ fmls0); clear spec1.
-      apply option.spec_monotonic; auto.
-      intros (w1 & ν01 & fmls1) H1.
-      apply option.spec_map.
-      generalize (spec2 _ fmls1); clear spec2.
-      apply option.spec_monotonic; auto.
-      - intros (w2 & ν12 & fmls2) H2. intros ι0 Hpc0.
-        specialize (H1 ι0 Hpc0). destruct H1 as [H01 H10].
-        rewrite inst_tri_comp. split.
-        + intros Hfmls0. split; auto.
-          remember (inst (sub_triangular_inv ν01) ι0) as ι1.
-          assert (instprop (wco w1) ι1) as Hpc1 by
-              (subst; apply entails_triangular_inv; auto).
-          apply H2; auto. apply H10; auto.
-          subst; rewrite inst_triangular_right_inverse; auto.
-        + intros ι2 Hpc2 Hι0. rewrite sub_triangular_comp, inst_subst in Hι0.
-          remember (inst (sub_triangular ν12) ι2) as ι1.
-          assert (instprop (wco w1) ι1) as Hpc1 by
-              (revert Hpc2; subst; rewrite <- sub_acc_triangular, <- instprop_persist; apply ent_acc).
-          rewrite H10; eauto. apply H2; auto.
-      - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
-        destruct H1 as [H01 H10]. inster H01 by auto.
-        pose (inst (sub_triangular_inv ν01) ι0) as ι1.
-        assert (instprop (wco w1) ι1) as Hpc1 by
-            (subst; apply entails_triangular_inv; auto).
-        apply (Hfmls1 ι1 Hpc1). revert Hfmls0.
-        apply H10; auto. subst ι1.
-        now rewrite inst_triangular_right_inverse.
-    Qed.
-
     Definition generic (user : Solver) : Solver :=
       let g   := solver_generic_round in
       let gg  := solver_compose g g in
