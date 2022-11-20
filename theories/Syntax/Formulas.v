@@ -34,6 +34,7 @@ From Coq Require Import
      Classes.RelationClasses
      Program.Basics
      Program.Tactics
+     Relations.Relation_Definitions
      ZArith.
 
 From Katamaran Require Import
@@ -258,5 +259,113 @@ Module Type FormulasOn
 
   End PathCondition.
   Bind Scope ctx_scope with PathCondition.
+
+  Module Import DList.
+    Import Entailment.
+    Record DList (Σ : LCtx) : Type :=
+      MkDList
+      { raw : PathCondition Σ -> Option PathCondition Σ;
+        wf : forall k ι, instprop (raw k) ι <-> instprop (raw ctx.nil) ι /\ instprop k ι;
+      }.
+
+    #[export] Instance instprop_dlist : InstProp DList :=
+      fun Σ x ι => instprop (raw x [ctx]) ι.
+
+    Section Alternative.
+      Let equiv {Σ} : relation (DList Σ) :=
+        fun x y =>
+          forall k1 k2 : PathCondition Σ,
+            k1 ⊣⊢ k2 -> raw x k1 ⊣⊢ raw y k2.
+
+      Goal forall {Σ} (x y : DList Σ),
+        equiv x y <-> (x ⊣⊢ y).
+      Proof.
+        intros Σ x y.
+        change (equiv x y <-> (raw x [ctx] ⊣⊢ raw y [ctx])).
+        destruct x as [x mx], y as [y my]; unfold equiv; cbn.
+        split; intros HYP.
+        - now apply HYP.
+        - intros k1 k2 Hk ι. specialize (Hk ι). specialize (HYP ι).
+          rewrite mx, my. intuition.
+      Qed.
+    End Alternative.
+
+    Definition singleton {Σ} (F : Formula Σ) : DList Σ.
+      refine (MkDList (fun k => Some (k ▻ F)) _).
+      abstract (cbn; intuition).
+    Defined.
+    Definition error {Σ} : DList Σ.
+    Proof.
+      refine (MkDList (fun k => None) _).
+      abstract (cbn; intuition).
+    Defined.
+    Definition empty {Σ} : DList Σ.
+      refine (MkDList Some _).
+      abstract (cbn; intuition).
+    Defined.
+    Definition cat {Σ} (xs ys : DList Σ) : DList Σ.
+      refine (MkDList (fun k => option.bind (raw xs k) (raw ys)) _).
+      abstract
+        (destruct xs as [rx wx], ys as [ry wy]; cbn; intros k ι;
+         specialize (wx k ι); destruct (rx k) as [k1|], (rx ctx.nil) as [k2|];
+         cbn in *; try rewrite (wy k1); try rewrite (wy k2); intuition).
+    Defined.
+    #[local] Arguments cat {Σ} !_ !_ /.
+
+    Lemma instprop_dlist_singleton [Σ] (F : Formula Σ) (ι : Valuation Σ) :
+      instprop (singleton F) ι <-> instprop F ι.
+    Proof. now cbn. Qed.
+
+    Lemma instprop_dlist_cat [Σ] (x y : DList Σ) (ι : Valuation Σ) :
+      instprop (cat x y) ι <-> instprop x ι /\ instprop y ι.
+    Proof.
+      destruct x as [x wx], y as [y wy]; cbn.
+      destruct (x [ctx]); cbn; [|easy].
+      rewrite wy. intuition.
+    Qed.
+
+    #[global] Arguments singleton : simpl never.
+    #[global] Arguments cat : simpl never.
+
+    Definition run [Σ] (xs : DList Σ) : Option PathCondition Σ :=
+      raw xs ctx.nil.
+
+    Lemma run_singleton {Σ} (F : Formula Σ) :
+      run (singleton F) ⊣⊢ Some [F]%ctx.
+    Proof. easy. Qed.
+
+    #[export] Instance proper_singleton [Σ] : Proper ((⊣⊢) ==> (⊣⊢)) (@DList.singleton Σ).
+    Proof. intros F1 F2 HF ι. apply and_iff_morphism; auto. Qed.
+
+    #[export] Instance proper_cat [Σ] : Proper ((⊣⊢) ==> (⊣⊢) ==> (⊣⊢)) (@DList.cat Σ).
+    Proof. repeat intro. rewrite !instprop_dlist_cat. now apply and_iff_morphism. Qed.
+
+    Lemma empty_l_valid [Σ] (xs : DList Σ) : Valid xs -> empty ⊣⊢ xs.
+    Proof. easy. Qed.
+
+    Lemma empty_r_valid [Σ] (xs : DList Σ) : Valid xs -> xs ⊣⊢ empty.
+    Proof. easy. Qed.
+
+    Lemma valid_singleton [Σ] (F : Formula Σ) : Valid F -> Valid (singleton F).
+    Proof. easy. Qed.
+
+    Lemma error_l_unsatisfiable [Σ] (xs : DList Σ) : Unsatisfiable xs -> error ⊣⊢ xs.
+    Proof. intros uxs ι. specialize (uxs ι). easy. Qed.
+
+    Lemma error_r_unsatisfiable [Σ] (xs : DList Σ) : Unsatisfiable xs -> xs ⊣⊢ error.
+    Proof. intros uxs ι. specialize (uxs ι). easy. Qed.
+
+    Lemma unsatisfiable_singleton [Σ] (F : Formula Σ) :
+      Unsatisfiable F -> Unsatisfiable (singleton F).
+    Proof. apply unsatisfiable_snoc_r. Qed.
+
+    Lemma singleton_formula_and [Σ] (F1 F2 : Formula Σ) :
+      singleton (formula_and F1 F2) ⊣⊢ cat (singleton F1) (singleton F2).
+    Proof. intro. now rewrite instprop_dlist_cat, !instprop_dlist_singleton. Qed.
+
+    #[export] Instance proper_run [Σ] : Proper ((⊣⊢) ==> (⊣⊢)) (@run Σ).
+    Proof. easy. Qed.
+
+  End DList.
 
 End FormulasOn.
