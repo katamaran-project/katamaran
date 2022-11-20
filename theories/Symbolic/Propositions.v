@@ -1702,7 +1702,9 @@ Module Type SymPropOn
     | epattern_match {σ} (s : ETerm σ) (pat : @Pattern LVar σ)
         (rhs : PatternCase pat -> ESymProp)
     | epattern_match_var (x : LVar) σ (n : nat) (pat : @Pattern LVar σ)
-        (rhs : PatternCase pat -> ESymProp).
+        (rhs : PatternCase pat -> ESymProp)
+    | edebug {Σ}
+        (b : AMessage Σ) (k : ESymProp).
 
     Definition erase_term {Σ} : forall {σ} (t : Term Σ σ), ETerm σ :=
       fix erase {σ} t :=
@@ -1752,7 +1754,7 @@ Module Type SymPropOn
       | @pattern_match_var _ x σ xIn pat rhs =>
           epattern_match_var x (ctx.in_at xIn) pat
             (fun pc => erase_symprop (rhs pc))
-      | debug b k => erase_symprop k
+      | debug b k => edebug b (erase_symprop k)
       end.
 
     Fixpoint erase_valuation {Σ} (ι : Valuation Σ) : list { σ : Ty & Val σ} :=
@@ -1904,6 +1906,7 @@ Module Type SymPropOn
                       inst_symprop (app (erase_valuation ι__pat) ι') (rhs c)
           | None   => False
           end
+      | edebug _ k => inst_symprop ι k
       end.
 
     Lemma erase_valuation_remove {Σ b} (bIn : b ∈ Σ) (ι : Valuation Σ) :
