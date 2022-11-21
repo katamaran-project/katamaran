@@ -192,8 +192,6 @@ Import BlockVerificationDerived2.
       (∃ "v", x5 ↦ term_var "v") ∗
       (∃ "v", x6 ↦ term_var "v") ∗
       (∃ "v", x7 ↦ term_var "v") ∗
-      (asn_pmp_cfg_unlocked (term_val ty_pmpcfg_ent femto_pmpcfg_ent0)) ∗
-      (asn_pmp_cfg_unlocked (term_val ty_pmpcfg_ent femto_pmpcfg_ent1)) ∗
       (∃ "a0", ∃ "a1",
           (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a0");
                                       (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a1")]) ∗

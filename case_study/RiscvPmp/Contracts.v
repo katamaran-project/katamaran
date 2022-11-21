@@ -1131,10 +1131,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              lemma_postcondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
                 (pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
                  pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
-                 asn_pmp_cfg_unlocked (term_var "cfg0") ∗
-                 asn_pmp_cfg_unlocked (term_var "cfg1") ∗
                  asn_expand_pmpcfg_ent (term_var "cfg0") ∗
                  asn_expand_pmpcfg_ent (term_var "cfg1") ∗
+                 asn_pmp_cfg_unlocked (term_var "cfg0") ∗
+                 asn_pmp_cfg_unlocked (term_var "cfg1") ∗
                  term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
                                                  (term_var "cfg1" ,ₜ term_var "addr1")]);
           |}.
@@ -1146,10 +1146,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              lemma_precondition    :=
                pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
                pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
-               asn_pmp_cfg_unlocked (term_var "cfg0") ∗
-               asn_pmp_cfg_unlocked (term_var "cfg1") ∗
                asn_expand_pmpcfg_ent (term_var "cfg0") ∗
-               asn_expand_pmpcfg_ent (term_var "cfg1");
+               asn_expand_pmpcfg_ent (term_var "cfg1") ∗
+               asn_pmp_cfg_unlocked (term_var "cfg0") ∗
+               asn_pmp_cfg_unlocked (term_var "cfg1");
              lemma_postcondition   :=
                let entries := term_list [(term_var "cfg0" ,ₜ term_var "addr0");
                                          (term_var "cfg1" ,ₜ term_var "addr1")] in

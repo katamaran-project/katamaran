@@ -611,9 +611,10 @@ Module RiscvPmpSpecVerif.
     hnf. apply verification_condition_with_erasure_sound. vm_compute.
     constructor. cbn.
     intros; subst.
-    repeat try split; subst;
-    apply (machine_unlocked_pmp_access);
-      unfold Pmp_cfg_unlocked; now cbn.
+    repeat try split; subst; unfold Pmp_entry_unlocked, Pmp_cfg_unlocked in *;
+    rewrite ?is_pmp_cfg_unlocked_bool in *; cbn in *; subst; try reflexivity;
+    apply machine_unlocked_pmp_access;
+      now cbn.
   Qed.
 
   Lemma valid_mem_read : ValidContract mem_read.
@@ -893,7 +894,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct entries; try done.
     destruct v as [cfg1 addr1].
     destruct entries; try done.
-    iDestruct "Hunlocked" as "[[%Hcfg0 %Hcfg1] _]".
+    iDestruct "Hunlocked" as "[[%Hcfg0 [%Hcfg1 _]] _]".
     unfold interp_pmp_entries.
     apply Pmp_cfg_unlocked_bool in Hcfg0.
     apply Pmp_cfg_unlocked_bool in Hcfg1.
@@ -902,18 +903,16 @@ Module RiscvPmpIrisInstanceWithContracts.
     iExists addr0.
     iExists cfg1.
     iExists addr1.
-    now iFrame.
+    iFrame.
+    now rewrite ?Pmp_cfg_unlocked_bool.
   Qed.
 
   Lemma machine_unlocked_close_pmp_entries_sound `{sailGS Σ} :
     ValidLemma RiscvPmpSpecification.lemma_machine_unlocked_close_pmp_entries.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
-    iIntros "(? & ? & ? & ? & [%Hunlocked0 _] & [%Hunlocked1 _] & _ & _)".
-    apply Pmp_cfg_unlocked_bool in Hunlocked0.
-    apply Pmp_cfg_unlocked_bool in Hunlocked1.
-    iFrame.
-    now iPureIntro.
+    iIntros "(? & ? & ? & ? & _ & _ & [%Hunlocked0 _] & [%Hunlocked1 _])".
+    now iFrame.
   Qed.
 
   Lemma in_liveAddrs_split : forall (addr : Addr),

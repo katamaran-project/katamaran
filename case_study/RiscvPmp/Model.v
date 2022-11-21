@@ -394,9 +394,7 @@ Module RiscvPmpModel2.
       intros ι; destruct_syminstance ι; cbn.
       iIntros "(Hentries & Hunlocked)".
       iPoseProof (pmp_entries_ptsto with "Hentries") as "(% & % & % & % & -> & ? & ? & ? & ?)".
-      iDestruct "Hunlocked" as "[[%Hcfg0 %Hcfg1] _]".
-      apply Pmp_cfg_unlocked_bool in Hcfg0.
-      apply Pmp_cfg_unlocked_bool in Hcfg1.
+      iDestruct "Hunlocked" as "[[%Hcfg0 [%Hcfg1 _]] _]".
       repeat iExists _.
       now iFrame.
     Qed.
@@ -405,9 +403,7 @@ Module RiscvPmpModel2.
       ValidLemma RiscvPmpSpecification.lemma_machine_unlocked_close_pmp_entries.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      iIntros "(? & ? & ? & ? & [%Hunlocked0 _] & [%Hunlocked1 _] & _ & _)".
-      apply Pmp_cfg_unlocked_bool in Hunlocked0.
-      apply Pmp_cfg_unlocked_bool in Hunlocked1.
+      iIntros "(? & ? & ? & ? & _ & _ & [%Hunlocked0 _] & [%Hunlocked1 _])".
       now iFrame.
     Qed.
 

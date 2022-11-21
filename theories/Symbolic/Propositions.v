@@ -2024,7 +2024,7 @@ Module Type SymPropOn
       safe p ι.
     Proof. apply erase_safe. Qed.
 
-    Arguments eterm_var _ {_ _}.
+    #[global] Arguments eterm_var _ {_ _}.
 
   End Erasure.
 
