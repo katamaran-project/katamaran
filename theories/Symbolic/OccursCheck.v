@@ -227,6 +227,18 @@ Module Type OccursCheckOn
   #[export] Instance occurs_check_laws_unit : OccursCheckLaws Unit.
   Proof. derive. Qed.
 
+  #[export] Instance occurscheck_ctx `{OccursCheck A} : OccursCheck (fun Σ => Ctx (A Σ)) :=
+    fix oc {Σ x} xIn ys {struct ys} :=
+      match ys with
+      | ctx.nil       => Some (ctx.nil)
+      | ctx.snoc ys y => ys' <- oc xIn ys ;;
+                         y'  <- occurs_check xIn y;;
+                         Some (ctx.snoc ys' y')
+      end.
+
+  #[export] Instance occurschecklaws_ctx `{OccursCheckLaws A} : OccursCheckLaws (fun Σ => Ctx (A Σ)).
+  Proof. derive. Qed.
+
   Module Experimental.
 
     (* A generic view for the occurs check instead of the option monad

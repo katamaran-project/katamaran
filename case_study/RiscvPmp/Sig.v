@@ -56,6 +56,8 @@ Inductive PurePredicate : Set :=
 | not_within_cfg
 | prev_addr
 | in_entries
+| pmp_cfg_unlocked
+| pmp_entry_unlocked
 | pmp_all_entries_unlocked
 .
 
@@ -97,6 +99,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg           => [ty_xlenbits; ty.list ty_pmpentry]
       | prev_addr                => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
       | in_entries               => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
+      | pmp_cfg_unlocked         => [ty_pmpcfg_ent]
+      | pmp_entry_unlocked       => [ty_pmpentry]
       | pmp_all_entries_unlocked => [ty.list ty_pmpentry]
       end.
 
@@ -336,13 +340,20 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         L cfg = false.
     Proof. unfold Pmp_cfg_unlocked; apply is_pmp_cfg_unlocked_bool. Qed.
 
-    Definition Pmp_all_entries_unlocked (entries : Val (ty.list ty_pmpentry)) : Prop :=
+    Definition Pmp_entry_unlocked (ent : Val ty_pmpentry) : Prop :=
+      Pmp_cfg_unlocked (fst ent).
+    Global Arguments Pmp_entry_unlocked !ent.
+
+    Fixpoint Pmp_all_entries_unlocked (entries : Val (ty.list ty_pmpentry)) : Prop :=
       match entries with
-      | (cfg0 , _) :: (cfg1 , _) :: [] =>
-          Pmp_cfg_unlocked cfg0 /\ Pmp_cfg_unlocked cfg1
-      | _                              =>
-          False
+      | ent :: ents => Pmp_entry_unlocked ent /\ Pmp_all_entries_unlocked ents
+      | nil        => True
       end%list.
+
+    Lemma Pmp_all_entries_unlocked_app (xs ys : Val (ty.list ty_pmpentry)) :
+      Pmp_all_entries_unlocked (app xs ys) <->
+      Pmp_all_entries_unlocked xs /\ Pmp_all_entries_unlocked ys.
+    Proof. induction xs; cbn; intuition. Qed.
 
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
@@ -355,6 +366,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg           => Not_within_cfg
       | prev_addr                => Prev_addr
       | in_entries               => In_entries
+      | pmp_cfg_unlocked         => Pmp_cfg_unlocked
+      | pmp_entry_unlocked       => Pmp_entry_unlocked
       | pmp_all_entries_unlocked => Pmp_all_entries_unlocked
       end.
 
@@ -474,6 +487,9 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
     Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
     Notation asn_pmp_all_entries_unlocked l := (asn.formula (formula_user pmp_all_entries_unlocked [l])).
+    Notation asn_pmp_cfg_unlocked cfg := (asn.formula (formula_user pmp_cfg_unlocked [cfg])).
+    Notation asn_pmp_entry_unlocked ent := (asn.formula (formula_user pmp_entry_unlocked [ent])).
+
     (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
     (* Notation asn_pmp_entries_angelic l := (asn.chunk_angelic (chunk_user pmp_entries [l])). *)
     Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
@@ -489,256 +505,266 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Notation asn_expand_pmpcfg_ent cfg := (asn.match_record rpmpcfg_ent cfg
       (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
       (asn.formula (formula_bool (term_val ty.bool true)))).
+    Notation asn_expand_pmpentry entry := (asn.match_prod (σ1 := ty_pmpcfg_ent) (σ2 := ty_xlenbits) entry "cfg" "addr" (asn_expand_pmpcfg_ent (term_var "cfg"))).
+
+    Definition asn_expand_pmpentries {Σ} (entries : Term Σ _) : Assertion Σ :=
+      (asn.match_list (σ := ty_pmpentry) entries ⊥ "entry0" "entries1"
+         (asn_expand_pmpentry (term_var "entry0") ∗
+            asn.match_list (σ := ty_pmpentry) (term_var "entries1") ⊥ "entry1" "entries2"
+            (asn_expand_pmpentry (term_var "entry1") ∗
+               asn.match_list (σ := ty_pmpentry) (term_var "entries2") ⊤ "entry1" "entries2" ⊥
+      ))).
   End notations.
 End RiscvPmpSignature.
 
 Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
-  Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (List Formula Σ) :=
-    match term_get_val a1 , term_get_val a2 with
-    | Some a1 , Some a2 => if decide_sub_perm a1 a2 then Some nil else None
-    | _       , _       => Some (cons (formula_user sub_perm [a1;a2]) nil)
-    end.
+  #[local] Arguments Some {_} _%ctx.
 
-  Definition simplify_access_pmp_perm {Σ} (a : Term Σ ty_access_type) (p : Term Σ ty_pmpcfgperm) : option (List Formula Σ) :=
+  Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (PathCondition Σ) :=
+    match term_get_val a1 , term_get_val a2 with
+    | Some a1 , Some a2 => if decide_sub_perm a1 a2 then Some ctx.nil else None
+    | _       , _       => Some [formula_user sub_perm [a1;a2]]
+    end%ctx.
+
+  Definition simplify_access_pmp_perm {Σ} (a : Term Σ ty_access_type) (p : Term Σ ty_pmpcfgperm) : option (PathCondition Σ) :=
     match term_get_val a , term_get_val p with
-    | Some a , Some p => if decide_access_pmp_perm a p then Some nil else None
-    | _      , _      => Some (cons (formula_user access_pmp_perm [a;p]) nil)
-    end.
+    | Some a , Some p => if decide_access_pmp_perm a p then Some ctx.nil else None
+    | _      , _      => Some [formula_user access_pmp_perm [a;p]]
+    end%ctx.
 
   (* TODO: simplify_access_pmp_perm *)
 
-  Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
+  Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
     match term_get_val paddr , term_get_val es , term_get_val p with
     | Some paddr , Some entries , Some p =>
       match check_pmp_access paddr entries p with
       | (true, Some typ) => simplify_access_pmp_perm acc (term_val ty_pmpcfgperm typ)
-      | (true, None)     => Some nil
+      | (true, None)     => Some []
       | (false, _)       => None
       end
-    | _ , _ , _ =>
-      Some (cons (formula_user pmp_access [paddr; es; p; acc]) nil)
-    end.
+    | _ , _ , _ => Some [formula_user pmp_access [paddr; es; p; acc]]
+    end%ctx.
 
   (* TODO: User predicates can be simplified smarter *)
-  Definition simplify_pmp_check_rwx {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
+  Definition simplify_pmp_check_rwx {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
     match term_get_record cfg, term_get_val acc with
     | Some cfg' , Some acc' =>
         match acc' with
         | Read      => match term_get_val cfg'.[??"R"] with
-                       | Some true  => Some nil
+                       | Some true  => Some []
                        | Some false => None
-                       | None       => Some (cons (formula_user pmp_check_rwx [cfg;acc]) nil)
+                       | None       => Some [formula_user pmp_check_rwx [cfg; acc]]
                        end
         | Write     => match term_get_val cfg'.[??"W"] with
-                       | Some true  => Some nil
+                       | Some true  => Some []
                        | Some false => None
-                       | None       => Some (cons (formula_user pmp_check_rwx [cfg;acc]) nil)
+                       | None       => Some [formula_user pmp_check_rwx [cfg;acc]]
                        end
         | ReadWrite => match term_get_val cfg'.[??"R"], term_get_val cfg'.[??"W"] with
-                       | Some b1 , Some b2 => if andb b1 b2 then Some nil else None
-                       | _       , _       => Some (cons (formula_user pmp_check_rwx [cfg;acc]) nil)
+                       | Some b1 , Some b2 => if andb b1 b2 then Some ctx.nil else None
+                       | _       , _       => Some [formula_user pmp_check_rwx [cfg;acc]]
                        end
         | Execute   => match term_get_val cfg'.[??"X"] with
-                       | Some true  => Some nil
+                       | Some true  => Some []
                        | Some false => None
-                       | None       => Some (cons (formula_user pmp_check_rwx [cfg;acc]) nil)
+                       | None       => Some [formula_user pmp_check_rwx [cfg;acc]]
                        end
         end
-    | _        , _        => Some (cons (formula_user pmp_check_rwx [cfg;acc]) nil)
-    end.
+    | _        , _        => Some [formula_user pmp_check_rwx [cfg;acc]]
+    end%ctx.
 
-  Definition simplify_pmp_check_perms {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) (p : Term Σ ty_privilege) : option (List Formula Σ) :=
+  Definition simplify_pmp_check_perms {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) (p : Term Σ ty_privilege) : option (PathCondition Σ) :=
     match term_get_record cfg, term_get_val p with
     | Some cfg' , Some Machine => match term_get_val cfg'.[??"L"] with
-                                  | Some true  => Some (cons (formula_user pmp_check_rwx [cfg;acc]) nil)
-                                  | Some false => Some nil
-                                  | None       => Some (cons (formula_user pmp_check_perms [cfg;acc;p]) nil)
+                                  | Some true  => Some [formula_user pmp_check_rwx [cfg;acc]]
+                                  | Some false => Some []
+                                  | None       => Some [formula_user pmp_check_perms [cfg;acc;p]]
                                   end
-    | Some cfg' , Some User    => Some (cons (formula_user pmp_check_rwx [cfg;acc]) nil)
-    | _         , _            => Some (cons (formula_user pmp_check_perms [cfg;acc;p]) nil)
-    end.
+    | Some cfg' , Some User    => Some [formula_user pmp_check_rwx [cfg;acc]]
+    | _         , _            => Some [formula_user pmp_check_perms [cfg;acc;p]]
+    end%ctx.
 
-  Definition simplify_within_cfg {Σ} (paddr : Term Σ ty_xlenbits) (cfg : Term Σ ty_pmpcfg_ent) (prev_addr addr : Term Σ ty_xlenbits) : option (List Formula Σ) :=
+  Definition simplify_within_cfg {Σ} (paddr : Term Σ ty_xlenbits) (cfg : Term Σ ty_pmpcfg_ent) (prev_addr addr : Term Σ ty_xlenbits) : option (PathCondition Σ) :=
     match term_get_val paddr, term_get_val cfg, term_get_val prev_addr, term_get_val addr with
-    | Some paddr, Some cfg, Some a , Some a' => if decide_within_cfg paddr cfg a a' then Some nil else None
+    | Some paddr, Some cfg, Some a , Some a' => if decide_within_cfg paddr cfg a a' then Some [] else None
     | _         , _       , _      , _       =>
-        Some (cons (formula_user within_cfg [paddr; cfg; prev_addr; addr]) nil)
-    end.
+        Some [formula_user within_cfg [paddr; cfg; prev_addr; addr]]
+    end%ctx.
 
-  Definition simplify_prev_addr {Σ} (cfg : Term Σ ty_pmpcfgidx) (entries : Term Σ (ty.list ty_pmpentry)) (prev : Term Σ ty_xlenbits) : option (List Formula Σ) :=
+  Definition simplify_prev_addr {Σ} (cfg : Term Σ ty_pmpcfgidx) (entries : Term Σ (ty.list ty_pmpentry)) (prev : Term Σ ty_xlenbits) : option (PathCondition Σ) :=
     match term_get_val cfg, term_get_val entries, term_get_val prev with
-    | Some cfg, Some entries, Some prev => if decide_prev_addr cfg entries prev then Some nil else None
-    | _       , _           , _         => Some (cons (formula_user prev_addr [cfg; entries; prev]) nil)
+    | Some cfg, Some entries, Some prev => if decide_prev_addr cfg entries prev then Some [] else None
+    | _       , _           , _         => Some [formula_user prev_addr [cfg; entries; prev]]
+    end%ctx.
+
+  Import DList.
+
+  Definition simplify_pmp_cfg_unlocked {Σ} (cfg : Term Σ (ty_pmpcfg_ent)) : DList Σ :=
+    let fml := formula_user pmp_cfg_unlocked [cfg] in
+    match term_get_record cfg with
+    | Some cfg          => singleton (formula_bool (term_not (cfg.[??"L"])))
+    | _                 => singleton fml
+    end.
+  Definition simplify_pmp_entry_unlocked {Σ} (entry : Term Σ (ty_pmpentry)) : DList Σ :=
+    let fml := formula_user pmp_entry_unlocked [entry] in
+    match term_get_pair entry with
+    | Some (cfg , _)         => simplify_pmp_cfg_unlocked cfg
+    | _                      => singleton fml
     end.
 
-  Definition simplify_pmp_all_entries_unlocked {Σ} (entries : Term Σ (ty.list ty_pmpentry)) : option (List Formula Σ) :=
-    let fml := formula_user pmp_all_entries_unlocked [entries] in
-    match term_get_val entries with
-    | Some entries =>
-        match entries with
-        | (cfg0 , _) :: (cfg1 , _) :: [] =>
-            if (is_pmp_cfg_unlocked cfg0 && is_pmp_cfg_unlocked cfg1)%bool
-            then Some nil
-            else None
-        | _                              =>
-            None
-        end%list
-    | _            =>
-        Some (cons (formula_user pmp_all_entries_unlocked [entries]) nil)
+  Fixpoint simplify_pmp_all_entries_unlocked_val {Σ}
+    (xs : Val (ty.list ty_pmpentry)) : DList Σ :=
+    match xs with
+    | nil       => empty
+    | cons x xs => cat
+                     (simplify_pmp_entry_unlocked (term_val ty_pmpentry x))
+                     (simplify_pmp_all_entries_unlocked_val xs)
     end.
 
-  Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ) :=
+  Equations simplify_pmp_all_entries_unlocked {Σ} (entries : Term Σ (ty.list ty_pmpentry)) : DList Σ :=
+  | term_var x                    => singleton (formula_user pmp_all_entries_unlocked [term_var x])
+  | term_val _ v                  => simplify_pmp_all_entries_unlocked_val v
+  | term_binop bop.cons e es      => cat
+                                       (simplify_pmp_entry_unlocked e)
+                                       (simplify_pmp_all_entries_unlocked es)
+  | term_binop bop.append es1 es2 => cat
+                                       (simplify_pmp_all_entries_unlocked es1)
+                                       (simplify_pmp_all_entries_unlocked es2).
+
+  Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> Option PathCondition Σ :=
   | pmp_access               | [ paddr; entries; priv; perm ] => simplify_pmp_access paddr entries priv perm
   | pmp_check_perms          | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
   | pmp_check_rwx            | [ cfg; acc ]                   => simplify_pmp_check_rwx cfg acc
   | sub_perm                 | [ a1; a2 ]                     => simplify_sub_perm a1 a2
   | access_pmp_perm          | [ a; p ]                       => simplify_access_pmp_perm a p
   | within_cfg               | [ paddr; cfg; prevaddr; addr]  => simplify_within_cfg paddr cfg prevaddr addr
-  | not_within_cfg           | [ paddr; entries ]             => Some (cons (formula_user not_within_cfg [paddr; entries]) nil)
+  | not_within_cfg           | [ paddr; entries ]             => Some [formula_user not_within_cfg [paddr; entries]]%ctx
   | prev_addr                | [ cfg; entries; prev ]         => simplify_prev_addr cfg entries prev
-  | in_entries               | [ cfg; entries; prev ]         => Some (cons (formula_user in_entries [cfg; entries; prev]) nil)
-  | pmp_all_entries_unlocked | [ entries ]                    => simplify_pmp_all_entries_unlocked entries.
+  | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx
+  | pmp_cfg_unlocked         | [ cfg ]                        => run (simplify_pmp_cfg_unlocked cfg)
+  | pmp_entry_unlocked       | [ entry ]                      => run (simplify_pmp_entry_unlocked entry)
+  | pmp_all_entries_unlocked | [ entries ]                    => run (simplify_pmp_all_entries_unlocked entries).
 
-  Local Ltac lsolve_match x :=
-    match x with
-    | @term_get_val ?Σ ?σ ?v =>
-        destruct (@term_get_val_spec Σ σ v); subst;
-        try progress cbn - [simplify_sub_perm]
-    | check_pmp_access _ _ _ =>
-        unfold Pmp_access, decide_pmp_access;
-        let o := fresh "o" in
-        destruct check_pmp_access as [[] o]; [destruct o|]
-    | match ?x with _ => _ end =>
-        lsolve_match x
-    end.
+  Import Entailment.
 
   Local Ltac lsolve :=
     repeat
       lazymatch goal with
-      | |- option.spec _ _ (match ?x with _ => _ end) =>
-          lsolve_match x
-      | |- option.spec _ _ (Some _) =>
-          constructor; cbn; try intuition fail
-      | |- option.spec _ _ None =>
-          constructor; cbn; try intuition fail
-      end; auto.
+      | |- Some _             ⊣⊢ Some _             => apply @proper_some
+      | |- ctx.snoc ctx.nil _ ⊣⊢ ctx.snoc ctx.nil _ => apply proper_snoc; [easy|]
+      | |- None               ⊣⊢ Some _             => apply @unsatisfiable_none_some
+      | |- [ctx]              ⊣⊢ _                  => apply nil_l_valid
+      | |- singleton _        ⊣⊢ singleton _        => apply proper_singleton
+      | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
+      | |- match @term_get_val ?Σ ?σ ?v with _ => _ end ⊣⊢ _ =>
+          destruct (@term_get_val_spec Σ σ v); subst; try progress cbn
+      end; try easy; auto.
 
   Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :
-    option.spec
-      (fun r => forall ι, Sub_perm (inst a1 ι) (inst a2 ι) <-> instpc r ι)
-      (forall ι, ~ Sub_perm (inst a1 ι) (inst a2 ι))
-      (simplify_sub_perm a1 a2).
+    simplify_sub_perm a1 a2 ⊣⊢ Some [formula_user sub_perm [a1; a2]].
   Proof.
     unfold simplify_sub_perm. lsolve.
-    destruct decide_sub_perm eqn:?; constructor;
-      intros ?; intuition; constructor.
+    intros ι; cbn. unfold Sub_perm.
+    now destruct decide_sub_perm.
   Qed.
 
   Lemma simplify_access_pmp_perm_spec {Σ} (acc : Term Σ ty_access_type) (p : Term Σ ty_pmpcfgperm) :
-  option.spec
-    (fun r : PathCondition Σ =>
-     forall ι : Env (fun xt : string∷Ty => Val (type xt)) Σ,
-     Access_pmp_perm (inst acc ι) (inst p ι) <-> instpc r ι)
-    (forall ι : Env (fun xt : string∷Ty => Val (type xt)) Σ,
-    ~ Access_pmp_perm (inst acc ι) (inst p ι))
-    (simplify_access_pmp_perm acc p).
+    simplify_access_pmp_perm acc p ⊣⊢ Some [formula_user access_pmp_perm [acc; p]].
   Proof.
     unfold simplify_access_pmp_perm. lsolve.
-    destruct decide_access_pmp_perm eqn:?; constructor;
-      intros ?; intuition; constructor.
+    intros ι; cbn. unfold Access_pmp_perm.
+    now destruct decide_access_pmp_perm.
   Qed.
 
   Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_xlenbits)
     (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege)
     (acc : Term Σ ty_access_type) :
-    option.spec
-      (fun r => forall ι,
-           Pmp_access (inst paddr ι) (inst es ι) (inst p ι) (inst acc ι) <->
-             instpc r ι)
-      (forall ι, ~ Pmp_access (inst paddr ι) (inst es ι) (inst p ι) (inst acc ι))
-      (simplify_pmp_access paddr es p acc).
+    simplify_pmp_access paddr es p acc ⊣⊢ Some [formula_user pmp_access [paddr; es; p; acc]].
   Proof.
     unfold simplify_pmp_access. lsolve.
-    apply (simplify_access_pmp_perm_spec acc (term_val _ _)).
+    - intros ι; cbn. unfold Pmp_access, decide_pmp_access.
+      destruct check_pmp_access as [[] o]; [|easy].
+      destruct o; [|easy].
+      apply simplify_access_pmp_perm_spec.
   Qed.
 
+  #[local] Arguments Pmp_check_rwx !cfg !acc /.
   Lemma simplify_pmp_check_rwx_spec {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) :
-    option.spec
-      (fun r =>
-       forall ι, Pmp_check_rwx (inst cfg ι) (inst acc ι) <-> instpc r ι)
-      (forall ι, ~ Pmp_check_rwx (inst cfg ι) (inst acc ι))
-      (simplify_pmp_check_rwx cfg acc).
+    simplify_pmp_check_rwx cfg acc ⊣⊢ Some [formula_user pmp_check_rwx [cfg; acc]].
   Proof.
     unfold simplify_pmp_check_rwx.
     destruct (term_get_record_spec cfg); [|lsolve].
-    fold ty_pmpcfg_ent in H.
-    cbn in a; env.destroy a. cbn in H.
-    unfold Pmp_check_rwx. lsolve.
+    cbn in a; env.destroy a; cbn in *; lsolve.
     destruct a; lsolve.
-    - destruct a; constructor; intros ι; rewrite (H ι); cbn; intuition.
-    - destruct a; constructor; intros ι; rewrite (H ι); cbn; intuition.
-    - destruct (a && a0)%bool eqn:Heq; constructor;
-        intros ι; rewrite (H ι); cbn; intuition.
-    - destruct a; constructor; intros ι; rewrite (H ι); cbn; intuition.
+    - destruct a; lsolve; intro; cbn; now rewrite H.
+    - destruct a; lsolve; intro; cbn; now rewrite H.
+    - destruct (a && a0)%bool eqn:Heq; lsolve; intro; cbn; rewrite H; cbn; intuition.
+    - destruct a; lsolve; intro; cbn; now rewrite H.
   Qed.
 
   Lemma simplify_pmp_check_perms_spec {Σ} (cfg : Term Σ ty_pmpcfg_ent)
     (acc : Term Σ ty_access_type) (p : Term Σ ty_privilege) :
-    option.spec
-      (fun r => forall ι, Pmp_check_perms (inst cfg ι) (inst acc ι) (inst p ι) <-> instpc r ι)
-      (forall ι, ~ Pmp_check_perms (inst cfg ι) (inst acc ι) (inst p ι))
-      (simplify_pmp_check_perms cfg acc p).
+    simplify_pmp_check_perms cfg acc p ⊣⊢ Some [formula_user pmp_check_perms [cfg; acc; p]].
   Proof.
     unfold simplify_pmp_check_perms.
     destruct (term_get_record_spec cfg); [|lsolve].
-    fold ty_pmpcfg_ent in H.
-    cbn in a; env.destroy a. cbn in H.
-    unfold Pmp_check_perms. lsolve.
+    cbn in a; env.destroy a; cbn in *; lsolve.
     destruct a; lsolve.
-    destruct a; lsolve.
-    intros ι; rewrite (H ι); cbn; intuition.
-    intros ι; rewrite (H ι); cbn; intuition.
+    destruct a; lsolve; intros ι; cbn; now rewrite H.
   Qed.
 
   Lemma simplify_within_cfg_spec {Σ} (paddr : Term Σ ty_xlenbits)
     (cfg : Term Σ ty_pmpcfg_ent) (prevaddr addr : Term Σ ty_xlenbits) :
-    option.spec
-      (fun r => forall ι, Within_cfg (inst paddr ι) (inst cfg ι) (inst prevaddr ι) (inst addr ι) <-> instpc r ι)
-      (forall ι, ~ Within_cfg (inst paddr ι) (inst cfg ι) (inst prevaddr ι) (inst addr ι))
-      (simplify_within_cfg paddr cfg prevaddr addr).
+    simplify_within_cfg paddr cfg prevaddr addr ⊣⊢ Some [formula_user within_cfg [paddr; cfg; prevaddr; addr]].
   Proof.
     unfold simplify_within_cfg. lsolve.
-    unfold Within_cfg. destruct decide_within_cfg; lsolve.
+    intros ι; cbn. unfold Within_cfg.
+    now destruct decide_within_cfg.
   Qed.
 
   Lemma simplify_prev_addr_spec {Σ} (cfg : Term Σ ty_pmpcfgidx)
     (entries : Term Σ (ty.list ty_pmpentry)) (prev : Term Σ ty_xlenbits) :
-    option.spec
-      (fun r => forall ι, Prev_addr (inst cfg ι) (inst entries ι) (inst prev ι) <-> instpc r ι)
-      (forall ι, ~ Prev_addr (inst cfg ι) (inst entries ι) (inst prev ι))
-      (simplify_prev_addr cfg entries prev).
+    simplify_prev_addr cfg entries prev ⊣⊢ Some [formula_user prev_addr [cfg; entries; prev]].
   Proof.
     unfold simplify_prev_addr. lsolve.
-    unfold Prev_addr. destruct decide_prev_addr; lsolve.
+    intros ι; cbn. unfold Prev_addr.
+    now destruct decide_prev_addr.
+  Qed.
+
+  Lemma simplify_pmp_cfg_unlocked_spec {Σ} (cfg : Term Σ ty_pmpcfg_ent) :
+    simplify_pmp_cfg_unlocked cfg ⊣⊢ singleton (formula_user pmp_cfg_unlocked [cfg]).
+  Proof.
+    unfold simplify_pmp_cfg_unlocked.
+    destruct (term_get_record_spec cfg); [|easy].
+    cbn in a; env.destroy a; cbn in *; lsolve.
+    intros ι. cbn. rewrite H. now destruct (inst v3 ι).
+  Qed.
+
+  Lemma simplify_pmp_entry_unlocked_spec {Σ} (entry : Term Σ ty_pmpentry) :
+    simplify_pmp_entry_unlocked entry ⊣⊢
+    singleton (formula_user pmp_entry_unlocked [entry]).
+  Proof.
+    unfold simplify_pmp_entry_unlocked.
+    destruct (term_get_pair_spec entry); [|easy].
+    destruct a; cbn; lsolve.
+    rewrite simplify_pmp_cfg_unlocked_spec; lsolve.
+    intros ι; cbn; now rewrite H.
   Qed.
 
   Lemma simplify_pmp_all_entries_unlocked_spec {Σ} (entries : Term Σ (ty.list ty_pmpentry)) :
-    option.spec
-      (fun r => forall ι, Pmp_all_entries_unlocked (inst entries ι) <-> instpc r ι)
-      (forall ι, ~ Pmp_all_entries_unlocked (inst entries ι))
-      (simplify_pmp_all_entries_unlocked entries).
+    simplify_pmp_all_entries_unlocked entries ⊣⊢
+    singleton (formula_user pmp_all_entries_unlocked [entries]).
   Proof.
-    unfold simplify_pmp_all_entries_unlocked. lsolve.
-    unfold Pmp_all_entries_unlocked.
-    destruct a as [|[cfg0 addr0]]; lsolve.
-    destruct a as [|[cfg1 addr1]]; lsolve.
-    destruct a; lsolve.
-    unfold Pmp_cfg_unlocked, is_pmp_cfg_unlocked.
-    destruct cfg0 as [[] ? ? ? ?];
-      destruct cfg1 as [[] ? ? ? ?];
-      simpl;
-      lsolve;
-      intuition.
+    funelim (simplify_pmp_all_entries_unlocked entries);
+      simp simplify_pmp_all_entries_unlocked; lsolve.
+    - induction v; cbn; [easy|].
+      rewrite simplify_pmp_entry_unlocked_spec, IHv. intros ι.
+      now rewrite instprop_dlist_cat, !instprop_dlist_singleton.
+    - rewrite simplify_pmp_entry_unlocked_spec, H. intros ι.
+      now rewrite instprop_dlist_cat, !instprop_dlist_singleton.
+    - rewrite H, H0. intros ι.
+      rewrite instprop_dlist_cat, !instprop_dlist_singleton. cbn.
+      now rewrite Pmp_all_entries_unlocked_app.
   Qed.
 
   Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.
@@ -751,10 +777,12 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     - simple apply simplify_sub_perm_spec.
     - simple apply simplify_access_pmp_perm_spec.
     - simple apply simplify_within_cfg_spec.
-    - lsolve.
+    - reflexivity.
     - simple apply simplify_prev_addr_spec.
-    - lsolve.
-    - simple apply simplify_pmp_all_entries_unlocked_spec.
+    - reflexivity.
+    - now rewrite simplify_pmp_cfg_unlocked_spec, run_singleton.
+    - now rewrite simplify_pmp_entry_unlocked_spec, run_singleton.
+    - now rewrite simplify_pmp_all_entries_unlocked_spec, run_singleton.
   Qed.
 
   Definition solver : Solver :=

@@ -205,6 +205,13 @@ Module Type SymbolicExecOn
           MkDebugConsumeChunk (subst pc ζ01) (subst δ ζ01) (subst h ζ01) (subst c ζ01)
         end.
 
+    #[export] Instance SubstLawsDebugConsumeChunk : SubstLaws DebugConsumeChunk.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
     #[export] Instance OccursCheckDebugConsumeChunk : OccursCheck DebugConsumeChunk :=
       fun Σ x xIn d =>
         match d with
@@ -248,18 +255,14 @@ Module Type SymbolicExecOn
     Record WInstance (w : World) : Set :=
       MkWInstance
         { ιassign :> Valuation w;
-          ιvalid  : instpc (wco w) ιassign;
+          ιvalid  : instprop (wco w) ιassign;
         }.
 
-    Program Definition winstance_formula {w} (ι : WInstance w) (fml : Formula w) (p : inst (A := Prop) fml ι) :
+    Program Definition winstance_formula {w} (ι : WInstance w) (fml : Formula w) (p : instprop fml ι) :
       WInstance (wformula w fml) :=
       {| ιassign := ι; |}.
     Next Obligation.
-    Proof.
-      intros. cbn.
-      apply inst_pathcondition_cons. split; auto.
-      apply ιvalid.
-    Qed.
+    Proof. intros. cbn. split; auto. apply ιvalid. Qed.
 
     Program Definition winstance_snoc {w} (ι : WInstance w) {b : LVar ∷ Ty} (v : Val (type b)) :
       WInstance (wsnoc w b) :=
@@ -267,7 +270,7 @@ Module Type SymbolicExecOn
     Next Obligation.
     Proof.
       intros. unfold wsnoc. cbn [wctx wco].
-      rewrite inst_subst, inst_sub_wk1.
+      rewrite instprop_subst, inst_sub_wk1.
       apply ιvalid.
     Qed.
 
@@ -276,7 +279,7 @@ Module Type SymbolicExecOn
       WInstance (wsubst w x t) :=
       @MkWInstance (wsubst w x t) (env.remove _ (ιassign ι) xIn) _.
     Next Obligation.
-      intros * p. cbn. rewrite inst_subst, <- inst_sub_shift in *.
+      intros * p. cbn. rewrite instprop_subst, <- inst_sub_shift in *.
       rewrite inst_sub_single_shift; auto using ιvalid.
     Qed.
 
@@ -288,7 +291,7 @@ Module Type SymbolicExecOn
     Next Obligation.
     Proof.
       intros. specialize (ent ι1).
-      rewrite <- inst_subst.
+      rewrite <- instprop_subst.
       apply ent.
       apply ιvalid.
     Qed.
@@ -319,23 +322,23 @@ Module Type SymbolicExecOn
 
   End VerificationConditions.
 
-  Definition symprop_assume_formulas :
-    ⊢ List Formula -> □SymProp -> SymProp :=
-    fun w0 fmls0 POST =>
-      match solver fmls0 with
-      | Some (existT w1 (ν , fmls1)) =>
+  Definition symprop_assume_pathcondition :
+    ⊢ PathCondition -> □SymProp -> SymProp :=
+    fun w0 C0 POST =>
+      match solver _ C0 with
+      | Some (existT w1 (ν , C1)) =>
           (* Assume variable equalities and the residual constraints *)
           assume_triangular ν
-            (assume_formulas_without_solver fmls1
-               (* Run POST in the world with the variable and residual
-                  formulas included. This is a critical piece of code since
-                  this is the place where we really meaningfully change the
-                  world. We changed the type of assume_formulas_without_solver
-                  just to not forget adding the formulas to the path constraints.
-                *)
-               (four POST (acc_triangular ν) (acc_formulas_right w1 fmls1)))
+            (assume_pathcondition_without_solver C1
+               (* Run POST in the world with the variable and residual formulas
+                  included. This is a critical piece of code since this is the
+                  place where we really meaningfully change the world. We
+                  changed the type of assume_pathcondition_without_solver just
+                  to not forget adding the new path constraints. *)
+               (four POST (acc_triangular ν) (acc_pathcondition_right w1 C1)))
       | None =>
-          (* The formulas are inconsistent with the path constraints. *)
+          (* The new path constraints are inconsistent with the old path
+             constraints. *)
           SymProp.block
       end.
 
@@ -357,8 +360,8 @@ Module Type SymbolicExecOn
       fun w0 m f POST => m (fun w1 ω01 a1 => f w1 ω01 a1 (four POST ω01)).
     #[global] Arguments bind {A B} [w] m f _ /.
 
-    Definition error {M A} {subM : Subst M} {occM : OccursCheck M} :
-      ⊢ M -> SPureSpecM A := fun w msg POST => SymProp.error (EMsgHere msg).
+    Definition error {A} :
+      ⊢ AMessage -> SPureSpecM A := fun w msg POST => SymProp.error msg.
     Definition block {A} : ⊢ SPureSpecM A :=
       fun w POST => SymProp.block.
     Global Arguments block {A w}.
@@ -382,7 +385,7 @@ Module Type SymbolicExecOn
       (*     (at level 80, x at next level, *)
       (*       ma at next level, mb at level 200, *)
       (*       right associativity, only printing). *)
-      Notation "x ⟨ ω ⟩" := (persist x ω) (at level 9, format "x ⟨ ω ⟩").
+      Notation "x ⟨ ω ⟩" := (persist x ω).
     End notations.
 
     Local Hint Extern 2 (Persistent (WTerm ?σ)) =>
@@ -420,36 +423,36 @@ Module Type SymbolicExecOn
         end%ctx.
     Global Arguments demonic_ctx {_} n [w] Δ : rename.
 
-    Definition assume_formulas :
-      ⊢ List Formula -> SPureSpecM Unit :=
-      fun w0 fmls0 POST =>
-        symprop_assume_formulas fmls0 (POST <*> (fun w r => tt)).
+    Definition assume_pathcondition :
+      ⊢ PathCondition -> SPureSpecM Unit :=
+      fun w C POST =>
+        symprop_assume_pathcondition C (POST <*> (fun w r => tt)).
 
     Definition assume_formula :
       ⊢ Formula -> SPureSpecM Unit :=
-      fun w0 fml0 =>
-        assume_formulas (cons fml0 nil).
+      fun w F => assume_pathcondition ([ctx] ▻ F).
 
-    Definition assert_formulas :
-      ⊢ AMessage -> List Formula -> SPureSpecM Unit :=
-      fun w0 msg fmls0 POST =>
-        match solver fmls0 with
-        | Some (existT w1 (ν , fmls1)) =>
+    Definition assert_pathcondition :
+      ⊢ AMessage -> PathCondition -> SPureSpecM Unit :=
+      fun w0 msg C0 POST =>
+        match solver _ C0 with
+        | Some (existT w1 (ν , C1)) =>
           (* Assert variable equalities and the residual constraints *)
           assert_triangular msg ν
             (fun msg' =>
-               assert_formulas_without_solver msg' fmls1
-                 (* Critical code. Like for assume_formulas. *)
-                 (four POST (acc_triangular ν) (acc_formulas_right w1 fmls1) tt))
+               assert_pathcondition_without_solver msg' C1
+                 (* Critical code. Like for assume_pathcondition. *)
+                 (four POST (acc_triangular ν) (acc_pathcondition_right w1 C1) tt))
         | None =>
-          (* The formulas are inconsistent with the path constraints. *)
-          SymProp.error (EMsgHere msg)
+          (* The new path constraints are inconsistent with the old path
+             constraints. *)
+          SymProp.error msg
         end.
 
     Definition assert_formula :
       ⊢ AMessage -> Formula -> SPureSpecM Unit :=
       fun w0 msg fml0 =>
-        assert_formulas msg (cons fml0 nil).
+        assert_pathcondition msg (ctx.nil ▻ fml0 ).
 
     Equations(noeqns) assert_eq_env :
       let E Δ := fun w : World => Env (Term w) Δ in
@@ -511,8 +514,8 @@ Module Type SymbolicExecOn
         end.
     #[global] Arguments angelic_list' {A} [w].
 
-    Definition angelic_list {M} {subM : Subst M} {occM : OccursCheck M} {A} :
-      ⊢ M -> WList A -> SPureSpecM A :=
+    Definition angelic_list {A} :
+      ⊢ AMessage -> WList A -> SPureSpecM A :=
       fun w msg xs =>
         match xs with
         | nil        => error msg
@@ -551,6 +554,26 @@ Module Type SymbolicExecOn
       intros P Q PQ.
       split; intros []; constructor; intuition.
     Qed.
+
+    Definition pattern_match {N : Set} (n : N -> LVar) {AT} :
+      forall {σ} (pat : @Pattern N σ),
+        ⊢ STerm σ ->
+        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SPureSpecM AT)) ->
+        SPureSpecM AT :=
+      fun σ pat w0 scr k POST =>
+        SymProp.pattern_match scr (freshen_pattern n w0 pat)
+          (fun pc : PatternCase _ =>
+             let w1  : World      := wcat w0 (PatternCaseCtx pc) in
+             let r1  : w0 ⊒ w1    := acc_cat_right w0 (PatternCaseCtx pc) in
+             let ts  : NamedEnv (Term (w0 ▻▻ PatternCaseCtx pc)) (PatternCaseCtx pc)
+                                  := sub_cat_right (PatternCaseCtx pc) in
+             let F1  : Formula w1 := formula_relop bop.eq scr⟨r1⟩ (pattern_match_term_reverse _ pc ts) in
+             let w2  : World      := wformula w1 F1 in
+             let r2  : w1 ⊒ w2    := acc_formula_right F1 in
+             let r12 : w0 ⊒ w2    := r1 ∘ r2 in
+             k (unfreshen_patterncase n w0 pat pc) w2 r12
+               (unfreshen_patterncaseenv n pat pc ts)
+               (four POST r12)).
 
   End SPureSpecM.
 
@@ -598,9 +621,9 @@ Module Type SymbolicExecOn
         ⊢ SHeapSpecM Γ1 Γ2 A -> □(SHeapSpecM Γ2 Γ3 B) -> SHeapSpecM Γ1 Γ3 B :=
         fun _ m k POST => m (fun _ ω1 _ => k _ ω1 (four POST ω1)).
 
-      Definition error {Γ1 Γ2 M A} {subM : Subst M} {occM : OccursCheck M} :
-        ⊢ (SStore Γ1 -> SHeap -> M) -> SHeapSpecM Γ1 Γ2 A :=
-        fun w msg _ δ h => SymProp.error (EMsgHere (msg δ h)).
+      Definition error {Γ1 Γ2 A} :
+        ⊢ (SStore Γ1 -> SHeap -> AMessage) -> SHeapSpecM Γ1 Γ2 A :=
+        fun w msg _ δ h => SymProp.error (msg δ h).
 
       Definition block {Γ1 Γ2 A} :
         ⊢ SHeapSpecM Γ1 Γ2 A := fun _ POST δ h => block.
@@ -614,8 +637,8 @@ Module Type SymbolicExecOn
         fun w m1 m2 POST δ1 h1 =>
           demonic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
 
-      Definition angelic_list {M} {subM : Subst M} {occM : OccursCheck M} {A Γ} :
-        ⊢ (SStore Γ -> SHeap -> M) -> WList A -> SHeapSpecM Γ Γ A :=
+      Definition angelic_list {A Γ} :
+        ⊢ (SStore Γ -> SHeap -> AMessage) -> WList A -> SHeapSpecM Γ Γ A :=
         fun w msg xs POST δ h => lift_purem (SPureSpecM.angelic_list (msg δ h) xs) POST δ h.
 
       Definition angelic_finite F `{finite.Finite F} {Γ} :
@@ -638,9 +661,9 @@ Module Type SymbolicExecOn
         fun w σ => lift_purem (SPureSpecM.demonic x σ).
       Global Arguments demonic {Γ} x [w] σ : rename.
 
-      Definition debug {AT DT} `{Subst DT, SubstLaws DT, OccursCheck DT} {Γ1 Γ2} :
-        ⊢ (SStore Γ1 -> SHeap -> DT) -> (SHeapSpecM Γ1 Γ2 AT) -> (SHeapSpecM Γ1 Γ2 AT) :=
-        fun _ d m POST δ h => SymProp.debug (MkAMessage (d δ h)) (m POST δ h).
+      Definition debug {AT} {Γ1 Γ2} :
+        ⊢ (SStore Γ1 -> SHeap -> AMessage) -> (SHeapSpecM Γ1 Γ2 AT) -> (SHeapSpecM Γ1 Γ2 AT) :=
+        fun _ d m POST δ h => SymProp.debug (d δ h) (m POST δ h).
 
       Definition angelic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
@@ -674,7 +697,7 @@ Module Type SymbolicExecOn
           (at level 80, x pattern,
            ma at next level, mb at level 200,
            right associativity) : mut_scope.
-      Notation "x ⟨ ω ⟩" := (persist x ω) (at level 9, format "x ⟨ ω ⟩").
+      Notation "x ⟨ ω ⟩" := (persist x ω).
 
     End notations.
     Local Open Scope mut_scope.
@@ -695,19 +718,19 @@ Module Type SymbolicExecOn
         fun w0 fml POST δ0 h0 =>
           lift_purem
             (SPureSpecM.assert_formula
-               (MkAMessage (MkDebugAssertFormula (wco w0) δ0 h0 fml)) fml)
+               (amsg.mk (MkDebugAssertFormula (wco w0) δ0 h0 fml)) fml)
             POST δ0 h0.
 
       Definition box_assert_formula {Γ} :
         ⊢ Formula -> □(SHeapSpecM Γ Γ Unit) :=
         fun w0 fml => assert_formula <$> persist fml.
 
-      Definition assert_formulas {Γ} :
-        ⊢ List Formula -> SHeapSpecM Γ Γ Unit :=
+      Definition assert_pathcondition {Γ} :
+        ⊢ PathCondition -> SHeapSpecM Γ Γ Unit :=
         fun w0 fmls POST δ0 h0 =>
           lift_purem
-            (SPureSpecM.assert_formulas
-               (MkAMessage
+            (SPureSpecM.assert_pathcondition
+               (amsg.mk
                   {| msg_function := "smut_assert_formula";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
@@ -722,7 +745,7 @@ Module Type SymbolicExecOn
         fun w0 E1 E2 POST δ0 h0 =>
           lift_purem
             (SPureSpecM.assert_eq_env
-               (MkAMessage
+               (amsg.mk
                   {| msg_function := "smut/assert_eq_env";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
@@ -738,7 +761,7 @@ Module Type SymbolicExecOn
         fun w0 E1 E2 POST δ0 h0 =>
           lift_purem
             (SPureSpecM.assert_eq_nenv
-               (MkAMessage
+               (amsg.mk
                   {| msg_function := "smut/assert_eq_env";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
@@ -753,7 +776,7 @@ Module Type SymbolicExecOn
         fun w0 c1 c2 POST δ0 h0 =>
           lift_purem
             (T (SPureSpecM.assert_eq_chunk
-                  (MkAMessage
+                  (amsg.mk
                      {| msg_function := "SHeapSpecM.assert_eq_chunk";
                         msg_message := "Proof obligation";
                         msg_program_context := Γ;
@@ -774,7 +797,7 @@ Module Type SymbolicExecOn
         fun w0 t k =>
           ⟨ ω1 ⟩ pc <- angelic_finite (PatternCase pat)
                          (fun δ h =>
-                            MkAMessage
+                            amsg.mk
                               {| msg_function := "SHeapSpecM.angelic_pattern_match";
                                  msg_message := "pattern match assertion";
                                  msg_program_context := Γ1;
@@ -917,7 +940,7 @@ Module Type SymbolicExecOn
         fun w0 t k =>
           ⟨ ω1 ⟩ b <- angelic_finite (bv n)
                         (fun (δ : SStore Γ1 w0) (h : SHeap w0) =>
-                           (MkAMessage {| msg_function := "SHeapSpecM.angelic_match_bvec";
+                           (amsg.mk {| msg_function := "SHeapSpecM.angelic_match_bvec";
                               msg_message := "pattern match assertion";
                               msg_program_context := Γ1;
                               msg_localstore := δ;
@@ -1024,7 +1047,7 @@ Module Type SymbolicExecOn
 
         Context {Σ} (p : 𝑯) {ΔI ΔO : Ctx Ty} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO).
 
-        Equations(noeqns) match_chunk_user_precise (c : Chunk Σ) : option (List Formula Σ) :=
+        Equations(noeqns) match_chunk_user_precise (c : Chunk Σ) : option (PathCondition Σ) :=
         match_chunk_user_precise (chunk_user p' ts')
         with eq_dec p p' => {
           match_chunk_user_precise (chunk_user ?(p) ts') (left eq_refl) :=
@@ -1038,7 +1061,7 @@ Module Type SymbolicExecOn
         };
         match_chunk_user_precise _ := None.
 
-        Fixpoint find_chunk_user_precise (h : SHeap Σ) : option (SHeap Σ * List Formula Σ) :=
+        Fixpoint find_chunk_user_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) :=
           match h with
           | nil => None
           | cons c h' =>
@@ -1063,19 +1086,19 @@ Module Type SymbolicExecOn
         };
         match_chunk_ptsreg_precise _ := None.
 
-        Fixpoint find_chunk_ptsreg_precise (h : SHeap Σ) : option (SHeap Σ * List Formula Σ) :=
+        Fixpoint find_chunk_ptsreg_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) :=
           match h with
           | nil => None
           | cons c h' =>
               match match_chunk_ptsreg_precise c with
-              | Some fml => Some (h', cons fml nil)
+              | Some fml => Some (h', ctx.nil ▻ fml)
               | None => option_map (base.prod_map (cons c) id) (find_chunk_ptsreg_precise h')
               end
           end.
 
       End ConsumePrecisePtsreg.
 
-      Definition try_consume_chunk_precise {Σ} (h : SHeap Σ) (c : Chunk Σ) : option (SHeap Σ * List Formula Σ) :=
+      Definition try_consume_chunk_precise {Σ} (h : SHeap Σ) (c : Chunk Σ) : option (SHeap Σ * PathCondition Σ) :=
         match c with
         | chunk_user p ts =>
             match 𝑯_precise p with
@@ -1097,10 +1120,11 @@ Module Type SymbolicExecOn
           | Some h' => put_heap h'
           | None =>
             match try_consume_chunk_precise h (peval_chunk c⟨ω1⟩) with
-            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_formulas Fs⟨ω2⟩
+            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_pathcondition Fs⟨ω2⟩
             | None =>
               error
                 (fun δ1 h1 =>
+                   amsg.mk
                    {| debug_consume_chunk_program_context := Γ;
                       debug_consume_chunk_pathcondition := wco _;
                       debug_consume_chunk_localstore := δ1;
@@ -1118,12 +1142,13 @@ Module Type SymbolicExecOn
           | Some h' => put_heap h'
           | None =>
             match try_consume_chunk_precise h (peval_chunk c⟨ω1⟩) with
-            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_formulas Fs⟨ω2⟩
+            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_pathcondition Fs⟨ω2⟩
             | None =>
                 ⟨ ω2 ⟩ '(c',h') <-
                   angelic_list
                     (A := Pair Chunk SHeap)
                     (fun δ1 h1 =>
+                       amsg.mk
                        {| debug_consume_chunk_program_context := Γ;
                           debug_consume_chunk_pathcondition := wco _;
                           debug_consume_chunk_localstore := δ1;
@@ -1162,6 +1187,7 @@ Module Type SymbolicExecOn
             fun w1 _ =>
               debug
                 (fun δ1 h1 =>
+                   amsg.mk
                    {| debug_asn_program_context := Γ;
                       debug_asn_pathcondition := wco w1;
                       debug_asn_localstore := δ1;
@@ -1196,6 +1222,7 @@ Module Type SymbolicExecOn
             fun w1 ω01 =>
               debug
                 (fun δ1 h1 =>
+                 amsg.mk
                  {| debug_asn_program_context := Γ;
                     debug_asn_pathcondition := wco w1;
                     debug_asn_localstore := δ1;
@@ -1218,11 +1245,11 @@ Module Type SymbolicExecOn
             ⟨ ω1 ⟩ evars <- angelic_ctx id Σe ;;
             ⟨ ω2 ⟩ _     <- assert_eq_nenv (subst δe evars) args⟨ω1⟩ ;;
 
-            ⟨ ω3 ⟩ _     <- (let we := @MkWorld Σe nil in
+            ⟨ ω3 ⟩ _     <- (let we := @MkWorld Σe ctx.nil in
                             consume (w := we)
                               req (@acc_sub we _ evars (fun _ _ => I) ∘ ω2)) ;;
             ⟨ ω4 ⟩ res   <- demonic (Some result) τ;;
-            ⟨ ω5 ⟩ _     <- (let we := @MkWorld (Σe ▻ result∷τ) nil in
+            ⟨ ω5 ⟩ _     <- (let we := @MkWorld (Σe ▻ result∷τ) ctx.nil in
                             let evars' := persist (A := Sub _) evars (ω2 ∘ ω3 ∘ ω4) in
                             let ζ      := sub_snoc evars' (result∷τ) res in
                             produce (w := we) ens (@acc_sub we _ ζ (fun _ _ => I))) ;;
@@ -1236,7 +1263,7 @@ Module Type SymbolicExecOn
           fun w0 args =>
             ⟨ ω1 ⟩ evars <- angelic_ctx id Σe ;;
             ⟨ ω2 ⟩ _     <- assert_eq_nenv (subst δe evars) args⟨ω1⟩ ;;
-            let we := @MkWorld Σe nil in
+            let we := @MkWorld Σe ctx.nil in
             ⟨ ω3 ⟩ _     <- consume (w := we) req (@acc_sub we _ evars (fun _ _ => I) ∘ ω2) ;;
                            (let evars' := persist (A := Sub _) evars (ω2 ∘ ω3) in
                             produce (w := we) ens (@acc_sub we _ evars' (fun _ _ => I)))
@@ -1249,7 +1276,8 @@ Module Type SymbolicExecOn
           if config_debug_function cfg f
           then
             debug
-              (fun δ h => {| debug_call_function_parameters := Δ;
+              (fun δ h => amsg.mk
+                          {| debug_call_function_parameters := Δ;
                              debug_call_function_result_type := τ;
                              debug_call_function_name := f;
                              debug_call_function_contract := c;
@@ -1345,6 +1373,7 @@ Module Type SymbolicExecOn
             | stm_bind _ _ =>
                 error
                   (fun δ h =>
+                     amsg.mk
                      {| msg_function := "SHeapSpecM.exec";
                         msg_message := "stm_bind not supported";
                         msg_program_context := _;
@@ -1355,6 +1384,7 @@ Module Type SymbolicExecOn
             | stm_debugk k =>
                 debug
                   (fun (δ0 : SStore Γ w0) (h0 : SHeap w0) =>
+                     amsg.mk
                      {| debug_stm_program_context := Γ;
                         debug_stm_statement_type := τ;
                         debug_stm_statement := k;
@@ -1373,6 +1403,7 @@ Module Type SymbolicExecOn
         | O   => fun _ _ _ _ =>
                    error
                      (fun δ h =>
+                        amsg.mk
                         {| msg_function := "SHeapSpecM.exec";
                            msg_message := "out of fuel for inlining";
                            msg_program_context := _;
@@ -1389,13 +1420,13 @@ Module Type SymbolicExecOn
       Variable inline_fuel : nat.
 
       Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
-        SHeapSpecM Δ Δ Unit {| wctx := sep_contract_logic_variables c; wco := [] |} :=
+        SHeapSpecM Δ Δ Unit {| wctx := sep_contract_logic_variables c; wco := ctx.nil |} :=
         match c with
         | MkSepContract _ _ _ _ req result ens =>
           ⟨ ω01 ⟩ _   <- produce (w:=@MkWorld _ _) req acc_refl ;;
           ⟨ ω12 ⟩ res <- exec inline_fuel s ;;
           consume
-            (w:=wsnoc (@MkWorld _ []) (result∷τ)%ctx)
+            (w:=wsnoc (@MkWorld _ ctx.nil) (result∷τ)%ctx)
             ens
             (acc_snoc_left (acc_trans ω01 ω12) (result∷τ)%ctx res)
         end.
@@ -1517,7 +1548,7 @@ Module Type SymbolicExecOn
     Import SPureSpecM.notations.
 
     Definition replay_aux : forall {Σ} (s : 𝕊 Σ) {w : World},
-        MkWorld Σ [] ⊒ w -> SPureSpecM Unit w :=
+        MkWorld Σ ctx.nil ⊒ w -> SPureSpecM Unit w :=
       fix replay {Σ} s {w} {struct s} :=
         match s with
         | SymProp.angelic_binary o1 o2 =>
@@ -1525,9 +1556,9 @@ Module Type SymbolicExecOn
         | SymProp.demonic_binary o1 o2 =>
             fun r => demonic_binary (replay o1 r) (replay o2 r)
         | SymProp.block =>
-            fun r P => SymProp.block
+            fun r => block
         | SymProp.error msg =>
-            fun r P => SymProp.block (* FIXME *)
+            fun r => error msg⟨r⟩
         | assertk fml msg k =>
             fun r01 =>
               ⟨ r12 ⟩ _ <- assert_formula msg⟨r01⟩ fml⟨r01⟩ ;;
@@ -1540,7 +1571,7 @@ Module Type SymbolicExecOn
             fun r01 P =>
               angelicv b
                 (replay k
-                   (@acc_sub (MkWorld (Σ▻b) []) (wsnoc w b)
+                   (@acc_sub (MkWorld (Σ▻b) ctx.nil) (wsnoc w b)
                       (sub_up1 (sub_acc r01))
                       entails_nil)
                    (four P acc_snoc_right))
@@ -1548,7 +1579,7 @@ Module Type SymbolicExecOn
             fun r01 P =>
               demonicv b
                 (replay k
-                   (@acc_sub (MkWorld (Σ▻b) []) (wsnoc w b)
+                   (@acc_sub (MkWorld (Σ▻b) ctx.nil) (wsnoc w b)
                       (sub_up1 (sub_acc r01))
                       entails_nil)
                    (four P acc_snoc_right))
@@ -1559,14 +1590,16 @@ Module Type SymbolicExecOn
               let x1   := subst (T := fun Σ => Term Σ _) (term_var x) (sub_acc r01) in
               let t1   := subst (T := fun Σ => Term Σ _) t ζ in
               ⟨ r12 ⟩ _ <- assert_formula msg1 (formula_relop bop.eq x1 t1) ;;
-              replay k (@acc_sub (MkWorld (Σ-x∷σ) []) _ ζ entails_nil ∘ r12)
+              replay k (@acc_sub (MkWorld (Σ-x∷σ) ctx.nil) _ ζ entails_nil ∘ r12)
         | @assume_vareq _ x σ xIn t k =>
             fun r01 =>
               let ζ    := subst (sub_shift xIn) (sub_acc r01) in
               let x1   := subst (T := fun Σ => Term Σ _) (term_var x) (sub_acc r01) in
               let t1   := subst (T := fun Σ => Term Σ _) t ζ in
               ⟨ r12 ⟩ _ <- assume_formula (formula_relop bop.eq x1 t1) ;;
-              replay k (@acc_sub (MkWorld (Σ-x∷σ) []) _ ζ entails_nil ∘ r12)
+              replay k (@acc_sub (MkWorld (Σ-x∷σ) ctx.nil) _ ζ entails_nil ∘ r12)
+        | SymProp.pattern_match s pat rhs => fun r P => SymProp.block (* FIXME *)
+        | pattern_match_var x pat rhs => fun r P => SymProp.block (* FIXME *)
         | debug b k => fun r01 P => debug (subst b (sub_acc r01)) (replay k r01 P)
         end.
 

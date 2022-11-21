@@ -68,6 +68,14 @@ Reserved Notation "s1 ;; s2" (at level 100, s2 at level 200, right associativity
 
 Reserved Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" (at level 75, no associativity).
 
+(* Subst / persist / inst notations. *)
+Reserved Notation "a ⟨ ζ ⟩" (at level 7, left associativity, format "a ⟨ ζ ⟩").
+Reserved Infix "∘" (at level 40, left associativity).
+
+(* Functor notations. Compatible with stdpp. *)
+Reserved Infix "<$>" (at level 61, left associativity).
+Reserved Infix "<*>" (at level 61, left associativity).
+
 (* Logic notations. These were chosen to be compatible with Coq.Unicode.Utf8, stdpp and iris. *)
 Reserved Notation "P ⊢ Q" (at level 99, Q at level 200, right associativity).
 Reserved Notation "P '⊢@{' L } Q" (at level 99, Q at level 200, right associativity).

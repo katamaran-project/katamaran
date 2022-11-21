@@ -75,7 +75,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
 
     Definition mem_res : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v) %I.
+        ([∗ list] a' ∈ liveAddrs, mapsto a' (DfracOwn 1) (μ a'))%I.
 
     Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
     Proof.
@@ -91,11 +91,27 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
       by destruct el as (a' & <- & _).
     Qed.
 
-    Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+    Lemma big_sepM_list_to_map {Σ} {A B : Type} `{EqDecision A, Countable A} {l : list A} {f : A -> B} (F : A -> B -> iProp Σ) :
+      NoDup l ->
+      ([∗ map] l↦v ∈ (list_to_map (map (λ a : A, (a, f a)) l)), F l v)
+        ⊢
+        [∗ list] v ∈ l, F v (f v).
+    Proof.
+      intros ndl.
+      induction ndl.
+      - now iIntros "_".
+      - cbn.
+        rewrite big_sepM_insert.
+        + iIntros "[$ Hrest]".
+          now iApply IHndl.
+        + apply not_elem_of_list_to_map_1.
+          change (fmap fst ?l) with (map fst l).
+          now rewrite map_map map_id.
+    Qed.
+
+    Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
       ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
     Proof.
-      iIntros (Σ μ gHP).
-
       iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
 
       pose (memmap := initMemMap μ).
@@ -105,11 +121,15 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
       rewrite (right_id empty union memmap).
 
       iExists (McMemGS gH).
-      iFrame.
+      iSplitL "inv".
       iExists memmap.
       iFrame.
       iPureIntro.
       apply initMemMap_works.
+      unfold mem_res, initMemMap in *.
+      iApply (big_sepM_list_to_map (f := μ) (fun a v => mapsto a (DfracOwn 1) v)).
+      - now eapply NoDup_seqZ.
+      - iFrame.
     Qed.
   End RiscvPmpIrisParams.
 

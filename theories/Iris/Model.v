@@ -42,6 +42,8 @@ From Katamaran Require Import
      Sep.Logic
      Semantics.
 
+Require Import Coq.Program.Equality.
+
 Import ctx.notations.
 Import env.notations.
 Set Implicit Arguments.
@@ -309,16 +311,16 @@ Module Type IrisParameters
   Parameter Inline memGS : gFunctors -> Set.
   Parameter memΣ : gFunctors.
   Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
-  Parameter mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ.
-  Parameter mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ.
+  Parameter mem_inv : forall `{mG : memGS Σ}, Memory -> iProp Σ.
+  Parameter mem_res : forall `{mG : memGS Σ}, Memory -> iProp Σ.
 
     (* Definition mem_inv `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
     (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
     (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
     (*   )%I. *)
 
-  Parameter mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-                                         ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+  Parameter mem_inv_init : forall `{mGS : memGpreS Σ} (μ : Memory),
+                                         ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
 End IrisParameters.
 
 Module Type IrisResources
@@ -360,7 +362,7 @@ Module Type IrisResources
 
   #[export] Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
     iris_invGS := sailGS_invGS;
-    state_interp σ ns κs nt := (regs_inv σ.1 ∗ mem_inv sailGS_memGS σ.2)%I;
+    state_interp σ ns κs nt := (regs_inv σ.1 ∗ mem_inv σ.2)%I;
     fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
     num_laters_per_step _ := 0;
     state_interp_mono _ _ _ _ := fupd_intro _ _;
@@ -799,6 +801,38 @@ Module Type IrisResources
       iIntros (v δ) "WPrhs".
       destruct pattern_match_val.
       by iApply semWP_block.
+    Qed.
+
+    Lemma semWP_foreign {Γ Δ τ} {f : 𝑭𝑿 Δ τ} {es : NamedEnv (Exp Γ) Δ} {Q δ} :
+      ⊢ (∀ γ μ,
+            (regs_inv γ ∗ mem_inv μ)
+            ={⊤,∅}=∗
+        (∀ res γ' μ' ,
+          ⌜ ForeignCall f (evals es δ) res γ γ' μ μ' ⌝
+           ={∅}▷=∗
+           |={∅,⊤}=> (regs_inv γ' ∗ mem_inv μ') ∗
+                      semWP (match res with inr v => stm_val _ v
+                                       | inl s => stm_fail _ s
+                             end) Q δ)) -∗
+        semWP (stm_foreign f es) Q δ.
+    Proof.
+      iIntros "H".
+      unfold semWP. rewrite wp_unfold. cbn.
+      iIntros ([γ μ] ns ks1 ks nt) "[Hregs Hmem]".
+      iMod ("H" $! γ μ with "[$]") as "H"; iFrame.
+      iModIntro.
+      iSplitR; first done.
+      iIntros (e2 [γ' μ'] efs) "%primstep".
+      dependent elimination primstep.
+      dependent elimination s.
+      iMod ("H" $! res γ'1 μ'1 f2) as "H"; iFrame.
+      do 2 iModIntro.
+      iMod "H" as "H".
+      iModIntro.
+      iMod "H" as "[[Hregs' Hmem'] Hwp]".
+      iModIntro.
+      cbn.
+      iFrame.
     Qed.
 
   End WeakestPre.

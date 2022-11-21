@@ -36,6 +36,9 @@ From Coq Require Import
      Relations.Relation_Definitions
      Strings.String.
 
+From Equations Require Import
+     Equations.
+
 From Katamaran Require Import
      Base
      Notations
@@ -100,63 +103,46 @@ Module Type SymPropOn
 
     Inductive Error (Σ : LCtx) (msg : Message Σ) : Prop :=.
 
-    Inductive AMessage (Σ : LCtx) : Type :=
-    | MkAMessage {BT} {subB : Subst BT} {sublawsB : SubstLaws BT} {occB: OccursCheck BT} : BT Σ -> AMessage Σ
-    .
-    #[global] Arguments MkAMessage {Σ BT _ _ _} _.
-
-    #[export] Instance SubstAMessage : Subst AMessage :=
-      fun Σ1 msg Σ2 ζ12 =>
-        match msg with
-        | @MkAMessage _ BT subB sublB occB msg => MkAMessage (subst msg ζ12)
-        end.
-
-    #[export] Instance SubstLawsAMessage : SubstLaws AMessage.
-    Proof.
-      constructor.
-      - intros ? []; cbn; now rewrite ?subst_sub_id.
-      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
-    Qed.
-
-    #[export] Instance OccursCheckAMessage : OccursCheck AMessage :=
-      fun Σ x xIn msg =>
-        match msg with
-        | MkAMessage msg =>
-            msg' <- occurs_check xIn msg;;
-            Some (MkAMessage msg')
-        end.
-
   End Messages.
 
   Inductive Obligation {Σ} (msg : AMessage Σ) (fml : Formula Σ) (ι : Valuation Σ) : Prop :=
-  | obligation (p : inst fml ι : Prop).
+  | obligation (p : instprop fml ι : Prop).
 
   Inductive Debug {B : LCtx -> Type} {Σ : LCtx} (b : B Σ) (P : Prop) : Prop :=
   | debug (p : P).
 
+  Section Util.
+
+    Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
+      (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
+    Proof. firstorder. Qed.
+
+    Lemma inst_eq_rect `{Inst AT A} {Σ Σ'} (t : AT Σ) (eq : Σ = Σ') (ι : Valuation Σ'):
+      inst (eq_rect Σ AT t Σ' eq) ι = inst t (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
+    Proof.
+      now subst.
+    Qed.
+
+    Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
+      eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
+    Proof.
+      now subst.
+    Qed.
+
+    Lemma eq_rect_sym2 {A : Type} {P : A -> Type} {a a' : A} (eq : a' = a) (v : P a) :
+      eq_rect a' P (eq_rect a P v a' (eq_sym eq)) a eq = v.
+    Proof.
+      now subst.
+    Qed.
+
+  End Util.
+
   Module SymProp.
-
-    Inductive EMessage (Σ : LCtx) : Type :=
-    | EMsgHere {M} {subM : Subst M} {occM: OccursCheck M} (msg : M Σ)
-    | EMsgThere {b} (msg : EMessage (Σ ▻ b)).
-    Global Arguments EMsgHere {_ _ _ _} msg.
-
-    Fixpoint emsg_close {Σ ΣΔ} {struct ΣΔ} : EMessage (Σ ▻▻ ΣΔ) -> EMessage Σ :=
-      match ΣΔ with
-      | []      => fun msg => msg
-      | ΣΔ  ▻ b => fun msg => emsg_close (EMsgThere msg)
-      end%ctx.
-
-    Fixpoint shift_emsg {Σ b} (bIn : b ∈ Σ) (emsg : EMessage (Σ - b)) : EMessage Σ :=
-      match emsg with
-      | EMsgHere msg   => EMsgHere (subst msg (sub_shift bIn))
-      | EMsgThere emsg => EMsgThere (shift_emsg (ctx.in_succ bIn) emsg)
-      end.
 
     Inductive SymProp (Σ : LCtx) : Type :=
     | angelic_binary (o1 o2 : SymProp Σ)
     | demonic_binary (o1 o2 : SymProp Σ)
-    | error (msg : EMessage Σ)
+    | error (msg : AMessage Σ)
     | block
     | assertk (fml : Formula Σ) (msg : AMessage Σ) (k : SymProp Σ)
     | assumek (fml : Formula Σ) (k : SymProp Σ)
@@ -173,6 +159,11 @@ Module Type SymPropOn
         x σ (xIn : x∷σ ∈ Σ)
         (t : Term (Σ - x∷σ) σ)
         (k : SymProp (Σ - x∷σ))
+    | pattern_match {σ} (s : Term Σ σ) (pat : Pattern σ)
+        (rhs : forall (pc : PatternCase pat), SymProp (Σ ▻▻ PatternCaseCtx pc))
+    | pattern_match_var
+        x σ (xIn : x∷σ ∈ Σ) (pat : Pattern σ)
+        (rhs : forall (pc : PatternCase pat), SymProp (Σ - x∷σ ▻▻ PatternCaseCtx pc))
     | debug
         (b : AMessage Σ) (k : SymProp Σ).
     Notation 𝕊 := SymProp.
@@ -185,6 +176,7 @@ Module Type SymPropOn
     Global Arguments demonicv {_} _ _.
     Global Arguments assert_vareq {_} x {_ _} t msg k.
     Global Arguments assume_vareq {_} x {_ _} t k.
+    Global Arguments pattern_match_var {_} x {σ xIn} _ _.
 
     Definition angelic_close0 {Σ0 : LCtx} :
       forall Σ, 𝕊 (Σ0 ▻▻ Σ) -> 𝕊 Σ0 :=
@@ -210,32 +202,109 @@ Module Type SymPropOn
         | Σ ▻ b => fun k => close Σ (@demonicv Σ b k)
         end%ctx.
 
-    Fixpoint assume_formulas_without_solver' {Σ}
-      (fmls : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
-      match fmls with
-      | nil           => p
-      | cons fml fmls => assume_formulas_without_solver' fmls (assumek fml p)
+    Definition angelic_list' {A Σ} (d : 𝕊 Σ) (P : A Σ -> 𝕊 Σ) :
+      List A Σ -> 𝕊 Σ :=
+      fix alist xs :=
+        match xs with
+        | nil       => d
+        | cons x xs => angelic_binary (P x) (alist xs)
+        end.
+
+    Definition angelic_list {A Σ} (msg : AMessage Σ) (P : A Σ -> 𝕊 Σ) :
+      List A Σ -> 𝕊 Σ :=
+      fun xs =>
+        match xs with
+        | nil       => error msg
+        | cons x xs => angelic_list' (P x) P xs
+        end.
+
+    Definition demonic_list' {A Σ} (d : 𝕊 Σ) (P : A Σ -> 𝕊 Σ) :
+      List A Σ -> 𝕊 Σ :=
+      fix dlist xs :=
+        match xs with
+        | nil       => d
+        | cons x xs => demonic_binary (P x) (dlist xs)
+        end.
+
+    Definition demonic_list {A Σ} (P : A Σ -> 𝕊 Σ) :
+      List A Σ -> 𝕊 Σ :=
+      fun xs =>
+        match xs with
+        | nil       => block
+        | cons x xs => demonic_list' (P x) P xs
+        end.
+
+    Definition angelic_finite F `{finite.Finite F} {Σ} (msg : AMessage Σ)
+      (P : F -> 𝕊 Σ) : 𝕊 Σ := angelic_list msg P (finite.enum F).
+    #[global] Arguments angelic_finite F {_ _} [Σ] msg P.
+    Definition demonic_finite F `{finite.Finite F} {Σ}
+      (P : F -> 𝕊 Σ) : 𝕊 Σ := demonic_list P (finite.enum F).
+    #[global] Arguments demonic_finite F {_ _} [Σ] P.
+
+    Definition angelic_pattern_match {σ} (pat : @Pattern LVar σ) {Σ} (s : Term Σ σ)
+      (k : forall pc : PatternCase pat, 𝕊 (Σ ▻▻ PatternCaseCtx pc)) : 𝕊 Σ :=
+      angelic_finite (PatternCase pat) amsg.empty
+        (fun pc => angelic_close0 (PatternCaseCtx pc)
+           (assertk
+              (formula_relop bop.eq
+                 (pattern_match_term_reverse pat pc (sub_cat_right _))
+                 (subst s (sub_cat_left (PatternCaseCtx pc))))
+              amsg.empty (k pc))).
+
+    Definition angelic_pattern_match_var {σ} (pat : @Pattern LVar σ) {Σ} x {xIn : x∷σ ∈ Σ}
+      (k : forall pc : PatternCase pat, 𝕊 (Σ - x∷σ ▻▻ PatternCaseCtx pc)) : 𝕊 Σ :=
+      angelic_finite (PatternCase pat) amsg.empty
+        (fun pc => angelic_close0 (PatternCaseCtx pc)
+           (let e := eq_sym (ctx.remove_in_cat_left xIn) in
+            assert_vareq x
+              (eq_rect _ (STerm σ) (pattern_match_term_reverse pat pc (sub_cat_right (PatternCaseCtx pc))) _ e)
+              amsg.empty
+              (eq_rect _ 𝕊 (k pc) _ e))).
+
+    Definition demonic_pattern_match {σ} (pat : @Pattern LVar σ) {Σ} (s : Term Σ σ)
+      (k : forall pc : PatternCase pat, 𝕊 (Σ ▻▻ PatternCaseCtx pc)) : 𝕊 Σ :=
+      demonic_finite (PatternCase pat)
+        (fun pc => demonic_close0 (PatternCaseCtx pc)
+           (assumek
+              (formula_relop bop.eq
+                 (pattern_match_term_reverse pat pc (sub_cat_right _))
+                 (subst s (sub_cat_left (PatternCaseCtx pc))))
+              (k pc))).
+
+    Definition demonic_pattern_match_var {σ} (pat : @Pattern LVar σ) {Σ} x {xIn : x∷σ ∈ Σ}
+      (k : forall pc : PatternCase pat, 𝕊 (Σ - x∷σ ▻▻ PatternCaseCtx pc)) : 𝕊 Σ :=
+      demonic_finite (PatternCase pat)
+        (fun pc => demonic_close0 (PatternCaseCtx pc)
+           (let e := eq_sym (ctx.remove_in_cat_left xIn) in
+            assume_vareq x
+              (eq_rect _ (STerm σ) (pattern_match_term_reverse pat pc (sub_cat_right (PatternCaseCtx pc))) _ e)
+              (eq_rect _ 𝕊 (k pc) _ e))).
+
+    Fixpoint assume_pathcondition_without_solver' {Σ}
+      (C : PathCondition Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      match C with
+      | [ctx] => p
+      | C ▻ F => assume_pathcondition_without_solver' C (assumek F p)
       end.
 
-    Fixpoint assert_formulas_without_solver' {Σ}
-      (msg : AMessage Σ) (fmls : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
-      match fmls with
-      | nil => p
-      | cons fml fmls =>
-        assert_formulas_without_solver' msg fmls (assertk fml msg p)
+    Fixpoint assert_pathcondition_without_solver' {Σ}
+      (msg : AMessage Σ) (C : PathCondition Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      match C with
+      | [ctx] => p
+      | C ▻ F => assert_pathcondition_without_solver' msg C (assertk F msg p)
       end.
 
     (* These versions just add the world indexing. They simply enforces *)
-(*        that p should have been computed in the world with fmls added. *)
-    Definition assume_formulas_without_solver {w : World}
-      (fmls : List Formula w) (p : 𝕊 (wformulas w fmls)) : 𝕊 w :=
-      assume_formulas_without_solver' fmls p.
-    Global Arguments assume_formulas_without_solver {_} fmls p.
+    (* that p should have been computed in the world with [C] added. *)
+    Definition assume_pathcondition_without_solver {w : World}
+      (C : PathCondition w) (p : 𝕊 (wpathcondition w C)) : 𝕊 w :=
+      assume_pathcondition_without_solver' C p.
+    Global Arguments assume_pathcondition_without_solver {_} C p.
 
-    Definition assert_formulas_without_solver {w : World} (msg : AMessage w)
-      (fmls : List Formula w) (p : 𝕊 (wformulas w fmls)) : 𝕊 w :=
-      assert_formulas_without_solver' msg fmls p.
-    Global Arguments assert_formulas_without_solver {_} msg fmls p.
+    Definition assert_pathcondition_without_solver {w : World} (msg : AMessage w)
+      (C : PathCondition w) (p : 𝕊 (wpathcondition w C)) : 𝕊 w :=
+      assert_pathcondition_without_solver' msg C p.
+    Global Arguments assert_pathcondition_without_solver {_} msg C p.
 
     Fixpoint assume_triangular {w1 w2} (ξ : Tri w1 w2) : 𝕊 w2 -> 𝕊 w1 :=
       match ξ with
@@ -262,8 +331,8 @@ Module Type SymPropOn
         | error msg => False
         | block => True
         | assertk fml msg o =>
-          inst fml ι /\ safe o ι
-        | assumek fml o => (inst fml ι : Prop) -> safe o ι
+          instprop fml ι /\ safe o ι
+        | assumek fml o => instprop fml ι -> safe o ι
         | angelicv b k => exists v, safe k (env.snoc ι b v)
         | demonicv b k => forall v, safe k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
@@ -274,6 +343,13 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           safe k ι'
+        | pattern_match s pat rhs =>
+          let (c,ι__pat) := pattern_match_val pat (inst s ι) in
+          safe (rhs c) (ι ►► ι__pat)
+        | pattern_match_var x pat rhs =>
+          let (c,ι__pat) := pattern_match_val pat ι.[?? x] in
+          let ι' := env.remove (x∷_) ι _ in
+          safe (rhs c) (ι' ►► ι__pat)
         | debug d k => safe k ι
         end%type.
     Global Arguments safe {Σ} p ι.
@@ -287,7 +363,7 @@ Module Type SymPropOn
         | block => True
         | assertk fml msg o =>
           Obligation msg fml ι /\ safe_debug o ι
-        | assumek fml o => (inst fml ι : Prop) -> safe_debug o ι
+        | assumek fml o => instprop fml ι -> safe_debug o ι
         | angelicv b k => exists v, safe_debug k (env.snoc ι b v)
         | demonicv b k => forall v, safe_debug k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
@@ -299,6 +375,13 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           safe_debug k ι'
+        | pattern_match s pat rhs =>
+          let (c,ι__pat) := pattern_match_val pat (inst s ι) in
+          safe_debug (rhs c) (ι ►► ι__pat)
+        | pattern_match_var x pat rhs =>
+          let (c,ι__pat) := pattern_match_val pat ι.[?? x] in
+          let ι' := env.remove (x∷_) ι _ in
+          safe_debug (rhs c) (ι' ►► ι__pat)
         | debug d k => Debug d (safe_debug k ι)
         end%type.
     Global Arguments safe_debug {Σ} p ι.
@@ -314,7 +397,7 @@ Module Type SymPropOn
         | block => True
         | assertk fml msg o =>
           Obligation msg fml ι /\ @wsafe (wformula w fml) o ι
-        | assumek fml o => (inst fml ι : Prop) -> @wsafe (wformula w fml) o ι
+        | assumek fml o => instprop fml ι -> @wsafe (wformula w fml) o ι
         | angelicv b k => exists v, @wsafe (wsnoc w b) k (env.snoc ι b v)
         | demonicv b k => forall v, @wsafe (wsnoc w b) k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
@@ -326,12 +409,28 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           @wsafe (wsubst w x t) k ι'
+        | pattern_match s pat rhs =>
+          let (c,ι__pat) := pattern_match_val pat (inst s ι) in
+          (* FIXME: This doesn't add the control flow constraint to the world *)
+          @wsafe (wcat w (PatternCaseCtx c)) (rhs c) (ι ►► ι__pat)
+        | pattern_match_var x pat rhs =>
+          let v        := ι.[?? x] in
+          let ι'       := env.remove (x∷_) ι _ in
+          let (c,ι__pat) := pattern_match_val pat v in
+          (* FIXME: This doesn't add the control flow constraint to the world *)
+          @wsafe (wcat (wsubst w x (lift v)) (PatternCaseCtx c)) (rhs c) (ι' ►► ι__pat)
         | debug d k => Debug d (wsafe k ι)
         end%type.
     Global Arguments wsafe {w} p ι.
 
+    Lemma safe_eq_rect {Σ Σ'} (eq : Σ = Σ') (p : 𝕊 Σ) (ι : Valuation Σ') :
+      safe (eq_rect Σ 𝕊 p Σ' eq) ι <-> safe p (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
+    Proof.
+      now destruct eq.
+    Qed.
+
     Lemma obligation_equiv {Σ : LCtx} (msg : AMessage Σ) (fml : Formula Σ) (ι : Valuation Σ) :
-      Obligation msg fml ι <-> inst fml ι.
+      Obligation msg fml ι <-> instprop fml ι.
     Proof. split. now intros []. now constructor. Qed.
 
     Lemma debug_equiv {B : LCtx -> Type} {Σ} {b : B Σ} {P : Prop} :
@@ -344,7 +443,9 @@ Module Type SymPropOn
       destruct w as [Σ pc]; cbn in *; revert pc.
       induction p; cbn; intros pc; rewrite ?debug_equiv; auto;
         try (intuition; fail).
-      apply base.exist_proper; eauto.
+      - apply base.exist_proper; eauto.
+      - destruct pattern_match_val; eauto.
+      - destruct pattern_match_val; eauto.
     Qed.
 
     Lemma safe_debug_safe {Σ : LCtx} (p : 𝕊 Σ) (ι : Valuation Σ) :
@@ -352,34 +453,36 @@ Module Type SymPropOn
     Proof.
       induction p; cbn; rewrite ?debug_equiv, ?obligation_equiv; auto;
         try (intuition; fail).
-      apply base.exist_proper; eauto.
-      apply Morphisms_Prop.and_iff_morphism; cbn; eauto.
-      now rewrite inst_subst, inst_sub_shift.
+      - apply base.exist_proper; eauto.
+      - apply Morphisms_Prop.and_iff_morphism; cbn; eauto.
+        now rewrite inst_subst, inst_sub_shift.
+      - destruct pattern_match_val; eauto.
+      - destruct pattern_match_val; eauto.
     Qed.
 
-    Lemma safe_assume_formulas_without_solver {w0 : World}
-      (fmls : List Formula w0) (p : 𝕊 w0) (ι0 : Valuation w0) :
-      wsafe (assume_formulas_without_solver fmls p) ι0 <->
-      (instpc fmls ι0 -> @wsafe (wformulas w0 fmls) p ι0).
+    Lemma safe_assume_pathcondition_without_solver {w0 : World}
+      (C : PathCondition w0) (p : 𝕊 w0) (ι0 : Valuation w0) :
+      wsafe (assume_pathcondition_without_solver C p) ι0 <->
+      (instprop C ι0 -> @wsafe (wpathcondition w0 C) p ι0).
     Proof.
-      unfold assume_formulas_without_solver. revert p.
-      induction fmls; cbn in *; intros p.
+      unfold assume_pathcondition_without_solver. revert p.
+      induction C; cbn in *; intros p.
       - destruct w0; cbn; split; auto.
-      - rewrite IHfmls. cbn. intuition.
+      - rewrite IHC. cbn. intuition.
     Qed.
 
-    Lemma safe_assert_formulas_without_solver {w0 : World}
-      (msg : AMessage w0) (fmls : List Formula w0) (p : 𝕊 w0)
+    Lemma safe_assert_pathcondition_without_solver {w0 : World}
+      (msg : AMessage w0) (C : PathCondition w0) (p : 𝕊 w0)
       (ι0 : Valuation w0) :
-      wsafe (assert_formulas_without_solver msg fmls p) ι0 <->
-      (instpc fmls ι0 /\ @wsafe (wformulas w0 fmls) p ι0).
+      wsafe (assert_pathcondition_without_solver msg C p) ι0 <->
+      (instprop C ι0 /\ @wsafe (wpathcondition w0 C) p ι0).
     Proof.
-      unfold assert_formulas_without_solver. revert p.
-      induction fmls; cbn in *; intros p.
+      unfold assert_pathcondition_without_solver. revert p.
+      induction C; cbn in *; intros p.
       - destruct w0; cbn; split.
         + intros HYP. split; auto.
         + intros []; auto.
-      - rewrite IHfmls; cbn.
+      - rewrite IHC; cbn.
         split; intros []; auto.
         + destruct H0. destruct H0. auto.
         + destruct H. split; auto. split; auto.
@@ -460,6 +563,56 @@ Module Type SymPropOn
         + intros sp ι v. apply (sp (env.snoc ι b v)).
     Qed.
 
+    Lemma safe_angelic_list' {A Σ} (d : 𝕊 Σ) (P : A Σ -> 𝕊 Σ) (xs : List A Σ) :
+      forall ι : Valuation Σ,
+        safe (angelic_list' d P xs) ι <->
+          safe d ι \/ exists x : A Σ, List.In x xs /\ safe (P x) ι.
+    Proof.
+      intros ι. induction xs; cbn.
+      - split. now left. now intros [|(x & [] & ?)].
+      - rewrite IHxs. clear IHxs. intuition.
+        + right. exists a. auto.
+        + destruct H as (x & HIn & Hsafe).
+          right. exists x. auto.
+        + destruct H0 as (x & [Heq|HIn] & Hsafe).
+          * left. now subst.
+          * right. right. exists x. auto.
+    Qed.
+
+    Lemma safe_angelic_list {A Σ} (msg : AMessage Σ) (P : A Σ -> 𝕊 Σ) (xs : List A Σ) :
+      forall ι : Valuation Σ,
+        safe (angelic_list msg P xs) ι <->
+          exists x : A Σ, List.In x xs /\ safe (P x) ι.
+    Proof.
+      intros ι. destruct xs; cbn.
+      - split; [easy|]. now intros [].
+      - rewrite safe_angelic_list'. split.
+        + intros [|(x&?&?)]. exists a; auto. exists x; auto.
+        + intros (x & [Heq|HIn] & Hsafe).
+          * left. now subst.
+          * right. exists x; auto.
+    Qed.
+
+    Lemma safe_demonic_list' {A Σ} (d : 𝕊 Σ) (P : A Σ -> 𝕊 Σ) (xs : List A Σ) :
+      forall ι : Valuation Σ,
+        safe (demonic_list' d P xs) ι <->
+          safe d ι /\ forall x : A Σ, List.In x xs -> safe (P x) ι.
+    Proof.
+      intros ι. induction xs; cbn.
+      - intuition.
+      - rewrite IHxs. clear IHxs. intuition.
+    Qed.
+
+    Lemma safe_demonic_list {A Σ} (P : A Σ -> 𝕊 Σ) (xs : List A Σ) :
+      forall ι : Valuation Σ,
+        safe (demonic_list P xs) ι <->
+          forall x : A Σ, List.In x xs -> safe (P x) ι.
+    Proof.
+      intros ι. destruct xs; cbn.
+      - intuition.
+      - rewrite safe_demonic_list'. intuition.
+    Qed.
+
     Definition sequiv Σ : relation (𝕊 Σ) :=
       fun p q => forall ι, safe p ι <-> safe q ι.
     Arguments sequiv : clear implicits.
@@ -491,8 +644,13 @@ Module Type SymPropOn
     #[export] Instance simpl_preorder {Σ} : PreOrder (simpl Σ).
     Proof. split; auto using simpl_refl, simpl_trans. Qed.
 
-    #[export] Instance simpl_rewriterelation {Σ} : RewriteRelation (sequiv Σ).
-    Defined.
+    #[export] Instance subrelation_sequiv_simpl {Σ} :
+      subrelation (sequiv Σ) (simpl Σ).
+    Proof. intros x y xy ι. apply xy. Qed.
+
+    #[export] Instance subrelation_sequiv_flip_simpl {Σ} :
+      subrelation (sequiv Σ) (Basics.flip (simpl Σ)).
+    Proof. intros x y xy ι. apply xy. Qed.
 
     #[export] Instance proper_angelic_close0 {Σ Σe} : Proper (sequiv (Σ ▻▻ Σe) ==> sequiv Σ) (angelic_close0 Σe).
     Proof. intros p q pq ι. rewrite ?safe_angelic_close0. now apply base.exist_proper. Qed.
@@ -564,6 +722,34 @@ Module Type SymPropOn
     #[export] Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.forall_proper. Qed.
 
+    #[export] Instance proper_pattern_match {Σ σ} (s : Term Σ σ) (pat : Pattern σ) :
+      Proper
+        (forall_relation (fun pc => sequiv (Σ ▻▻ PatternCaseCtx pc)) ==> sequiv Σ)
+        (pattern_match s pat).
+    Proof. intros p q pq ι. cbn. destruct pattern_match_val. apply pq. Qed.
+
+    #[export] Instance proper_pattern_match_impl {Σ σ} (s : Term Σ σ) (pat : Pattern σ) :
+      Proper
+        (forall_relation (fun pc => simpl (Σ ▻▻ PatternCaseCtx pc)) ==> simpl Σ)
+        (pattern_match s pat).
+    Proof. intros p q pq ι. cbn. destruct pattern_match_val. apply pq. Qed.
+
+    #[export] Instance proper_pattern_match_var {Σ x σ} (xIn : x∷σ ∈ Σ)
+      (pat : Pattern σ) :
+      Proper
+        (forall_relation
+           (fun pc => sequiv (Σ - x∷σ ▻▻ PatternCaseCtx pc)) ==> sequiv Σ)
+        (pattern_match_var x pat).
+    Proof. intros p q pq ι. cbn. destruct pattern_match_val. apply pq. Qed.
+
+    #[export] Instance proper_pattern_match_var_impl {Σ x σ} (xIn : x∷σ ∈ Σ)
+      (pat : Pattern σ) :
+      Proper
+        (forall_relation
+           (fun pc => simpl (Σ - x∷σ ▻▻ PatternCaseCtx pc)) ==> simpl Σ)
+        (pattern_match_var x pat).
+    Proof. intros p q pq ι. cbn. destruct pattern_match_val. apply pq. Qed.
+
     #[export] Instance proper_debug {Σ} {bt : AMessage Σ} :
       Proper (sequiv Σ ==> sequiv Σ) (debug bt).
     Proof. unfold sequiv. intros p q pq ι. cbn. now rewrite ?debug_equiv. Qed.
@@ -590,6 +776,114 @@ Module Type SymPropOn
       split.
       - intros sp; split; intros ιu; apply (sp ιu).
       - intros [sp1 sp2] ιu; split; auto.
+    Qed.
+
+    Lemma angelic_pattern_match_correct [Σ σ] (s : Term Σ σ) (pat : Pattern σ)
+      (rhs : forall pc : PatternCase pat, 𝕊 (Σ ▻▻ PatternCaseCtx pc)) :
+      angelic_pattern_match pat s rhs <=> pattern_match s pat rhs.
+    Proof.
+      unfold angelic_pattern_match, angelic_finite. intros ι. cbn.
+      rewrite safe_angelic_list.
+      setoid_rewrite safe_angelic_close0. cbn.
+      setoid_rewrite inst_pattern_match_term_reverse.
+      change_no_check (@inst_env _ _ _ _) with (@inst_sub).
+      setoid_rewrite inst_subst.
+      setoid_rewrite inst_sub_cat_right.
+      setoid_rewrite inst_sub_cat_left.
+      split.
+      - intros (pc & HIn & ιpat & Hmatch & Hsafe).
+        now rewrite <- Hmatch, pattern_match_val_inverse_right.
+      - pose proof (pattern_match_val_inverse_left pat (inst s ι)) as Hmatch.
+        destruct pattern_match_val as [pc ιpat]. intros Hsafe.
+        exists pc. split. apply base.elem_of_list_In, finite.elem_of_enum.
+        exists ιpat. split. exact Hmatch. exact Hsafe.
+    Qed.
+
+    Lemma angelic_pattern_match_var_correct [Σ x σ] (xIn : x∷σ ∈ Σ) (pat : Pattern σ)
+      (rhs : forall pc : PatternCase pat, 𝕊 (Σ - x∷σ ▻▻ PatternCaseCtx pc)) :
+      angelic_pattern_match_var pat rhs <=> pattern_match_var x pat rhs.
+    Proof.
+      unfold angelic_pattern_match_var, angelic_finite. intros ι. cbn.
+      rewrite safe_angelic_list.
+      setoid_rewrite safe_angelic_close0. cbn.
+      setoid_rewrite env.lookup_cat_left.
+      setoid_rewrite safe_eq_rect.
+      setoid_rewrite inst_eq_rect.
+      setoid_rewrite inst_pattern_match_term_reverse.
+      setoid_rewrite eq_sym_involutive.
+      split.
+      - intros (pc & HIn & ιpat & Hmatch & Hsafe). revert Hsafe.
+        rewrite Hmatch. clear Hmatch.
+        rewrite pattern_match_val_inverse_right.
+        rewrite env.cat_remove_left.
+        rewrite env.remove_cat_left. rewrite eq_rect_sym2.
+        change_no_check (@inst_env _ _ _ _) with (@inst_sub).
+        rewrite env.remove_cat_left.
+        rewrite eq_rect_sym2.
+        match goal with
+          |- safe ?P ?ι1 -> safe ?P ?ι2 => enough (ι1 = ι2) as <-; auto
+        end.
+        f_equal. symmetry. apply inst_sub_cat_right.
+      - pose proof (pattern_match_val_inverse_left pat ι.[? x∷σ]) as Hmatch.
+        destruct pattern_match_val as [pc ιpat]. intros Hsafe.
+        exists pc. split. apply base.elem_of_list_In, finite.elem_of_enum.
+        exists ιpat.
+        rewrite env.remove_cat_left.
+        rewrite eq_rect_sym2.
+        split; auto. clear Hsafe.
+        symmetry. etransitivity; [|exact Hmatch].
+        unfold pattern_match_val_reverse'. cbn.
+        f_equal. apply inst_sub_cat_right.
+    Qed.
+
+    Lemma demonic_pattern_match_correct [Σ σ] (s : Term Σ σ) (pat : Pattern σ)
+      (rhs : forall pc : PatternCase pat, 𝕊 (Σ ▻▻ PatternCaseCtx pc)) :
+      demonic_pattern_match pat s rhs <=> pattern_match s pat rhs.
+    Proof.
+      unfold demonic_pattern_match, demonic_finite. intros ι. cbn.
+      rewrite safe_demonic_list.
+      setoid_rewrite safe_demonic_close0. cbn.
+      setoid_rewrite inst_pattern_match_term_reverse.
+      change_no_check (@inst_env _ _ _ _) with (@inst_sub).
+      setoid_rewrite inst_subst.
+      setoid_rewrite inst_sub_cat_right.
+      setoid_rewrite inst_sub_cat_left.
+      split.
+      - pose proof (pattern_match_val_inverse_left pat (inst s ι)) as Hmatch.
+        destruct pattern_match_val as [pc ιpat]. intros HYP. apply HYP; auto.
+        apply base.elem_of_list_In, finite.elem_of_enum.
+      - intros Heq pc HIn ιpat Hmatch. rewrite <- Hmatch in Heq.
+        now rewrite pattern_match_val_inverse_right in Heq.
+    Qed.
+
+    Lemma demonic_pattern_match_var_correct [Σ x σ] (xIn : x∷σ ∈ Σ) (pat : Pattern σ)
+      (rhs : forall pc : PatternCase pat, 𝕊 (Σ - x∷σ ▻▻ PatternCaseCtx pc)) :
+      demonic_pattern_match_var pat rhs <=> pattern_match_var x pat rhs.
+    Proof.
+      unfold demonic_pattern_match_var, demonic_finite. intros ι. cbn.
+      rewrite safe_demonic_list.
+      setoid_rewrite safe_demonic_close0. cbn.
+      setoid_rewrite env.lookup_cat_left.
+      setoid_rewrite safe_eq_rect.
+      setoid_rewrite inst_eq_rect.
+      setoid_rewrite inst_pattern_match_term_reverse.
+      setoid_rewrite eq_sym_involutive.
+      change_no_check (@inst_env _ _ _ _) with (@inst_sub).
+      split.
+      - pose proof (pattern_match_val_inverse_left pat ι.[? x∷σ]) as Hmatch.
+        destruct pattern_match_val as [pc ιpat]. rewrite env.cat_remove_left.
+        intros HYP. apply HYP. apply base.elem_of_list_In, finite.elem_of_enum.
+        rewrite <- Hmatch. unfold pattern_match_val_reverse'. cbn.
+        f_equal. rewrite env.remove_cat_left. rewrite eq_rect_sym2.
+        symmetry. apply inst_sub_cat_right.
+      - intros HYP pc HIn ιpat Hmatch. revert HYP.
+        rewrite Hmatch.
+        rewrite pattern_match_val_inverse_right.
+        rewrite env.remove_cat_left. rewrite eq_rect_sym2.
+        match goal with
+          |- safe ?P ?ι1 -> safe ?P ?ι2 => enough (ι1 = ι2) as ->; auto
+        end.
+        f_equal. apply inst_sub_cat_right.
     Qed.
 
     Module notations.
@@ -629,6 +923,14 @@ Module Type SymPropOn
         | SymProp.demonicv b k => 1 + size k
         | @SymProp.assert_vareq _ x σ xIn t msg k => 1 + size k
         | @SymProp.assume_vareq _ x σ xIn t k => 1 + size k
+        | pattern_match _ pat rhs =>
+            List.fold_right
+              (fun pc => N.add (size (rhs pc))) 1%N
+              (finite.enum (PatternCase pat))
+        | pattern_match_var _ pat rhs =>
+            List.fold_right
+              (fun pc => N.add (size (rhs pc))) 1%N
+              (finite.enum (PatternCase pat))
         | SymProp.debug b k => 1 + size k
         end.
 
@@ -671,6 +973,14 @@ Module Type SymPropOn
         | SymProp.assume_vareq _ _ s   => count_nodes s c
         | SymProp.angelic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
         | SymProp.demonic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
+        | SymProp.pattern_match _ pat rhs  =>
+            List.fold_right
+              (fun pc => count_nodes (rhs pc)) c
+              (finite.enum (PatternCase pat))
+        | SymProp.pattern_match_var _ pat rhs =>
+            List.fold_right
+              (fun pc => count_nodes (rhs pc)) c
+              (finite.enum (PatternCase pat))
         end.
 
     End Statistics.
@@ -717,7 +1027,7 @@ Module Type SymPropOn
 
     Definition angelicv_prune {Σ} b (p : 𝕊 (Σ ▻ b)) : 𝕊 Σ :=
       match p with
-      | error msg => error (EMsgThere msg)
+      | error msg => error (amsg.there msg)
       | _         => angelicv b p
       end.
 
@@ -738,7 +1048,7 @@ Module Type SymPropOn
     Definition assert_vareq_prune {Σ} {x σ} {xIn : x∷σ ∈ Σ}
       (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
       match k with
-      | error emsg => error (shift_emsg xIn emsg)
+      | error emsg => error (subst msg (sub_shift xIn))
       | _          => assert_vareq x t msg k
       end.
     Global Arguments assert_vareq_prune {Σ} x {σ xIn} t msg k.
@@ -763,6 +1073,10 @@ Module Type SymPropOn
         assert_vareq_prune x t msg (prune k)
       | assume_vareq x t k =>
         assume_vareq_prune x t (prune k)
+      | pattern_match s pat rhs =>
+        pattern_match s pat (fun pc => prune (rhs pc))
+      | pattern_match_var x pat rhs =>
+        pattern_match_var x pat (fun pc => prune (rhs pc))
       | debug d k =>
         debug d (prune k)
       end.
@@ -784,6 +1098,8 @@ Module Type SymPropOn
           rewrite ?obligation_equiv; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
     Qed.
 
     Lemma prune_demonic_binary_sound {Σ} (p1 p2 : 𝕊 Σ) (ι : Valuation Σ) :
@@ -801,6 +1117,8 @@ Module Type SymPropOn
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
     Qed.
@@ -855,137 +1173,37 @@ Module Type SymPropOn
         now rewrite IHp.
       - rewrite prune_assume_vareq_sound; cbn.
         now rewrite IHp.
+      - destruct pattern_match_val; cbn; auto.
+      - destruct pattern_match_val; cbn; auto.
       - now rewrite ?debug_equiv.
     Qed.
 
-    Section Util.
-
-      Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
-        (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
-      Proof. firstorder. Qed.
-
-      Lemma safe_eq_rect {Σ Σ'} (eq : Σ = Σ') (p : 𝕊 Σ) (ι : Valuation Σ') :
-        safe (eq_rect Σ 𝕊 p Σ' eq) ι = safe p (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
-      Proof.
-        now destruct eq.
-      Qed.
-
-      Lemma inst_eq_rect `{Inst AT A} {Σ Σ'} (t : AT Σ) (eq : Σ = Σ') (ι : Valuation Σ'):
-        inst (eq_rect Σ AT t Σ' eq) ι = inst t (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
-      Proof.
-        now subst.
-      Qed.
-
-      Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
-        eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
-      Proof.
-        now subst.
-      Qed.
-
-      Lemma eq_rect_sym2 {A : Type} {P : A -> Type} {a a' : A} (eq : a' = a) (v : P a) :
-        eq_rect a' P (eq_rect a P v a' (eq_sym eq)) a eq = v.
-      Proof.
-        now subst.
-      Qed.
-
-      Lemma match_snocView_eq_rect {Σ1 Σ2 b} {R : Type} (eq : Σ1 = Σ2) (E : Valuation (Σ1 ▻ b))
-        (f : Valuation Σ2 -> Val (type b) -> R) :
-        match env.snocView (eq_rect Σ1 (fun Σ => Valuation (Σ ▻ b)) E Σ2 eq) with
-        | env.isSnoc E v => f E v
-        end =
-        match env.snocView E with
-        | env.isSnoc E v => f (eq_rect Σ1 (fun Σ => Valuation Σ) E Σ2 eq) v
-        end.
-      Proof.
-        now destruct eq.
-      Qed.
-
-      Lemma snoc_eq_rect {Σ1 Σ2 b v} (eq : Σ1 = Σ2) (E : Valuation Σ1) :
-        eq_rect Σ1 (fun Σ => Valuation Σ) E Σ2 eq ► (b ↦ v) =
-        eq_rect Σ1 (fun Σ => Valuation (Σ ▻ b)) (E ► (b ↦ v)) Σ2 eq.
-      Proof.
-        now destruct eq.
-      Qed.
-
-      Lemma env_insert_app {x : LVar} {σ : Ty} {Σ0 Σe : LCtx}
-            (bIn : x∷σ ∈ Σe) (v : Val σ)
-            {ι : Valuation Σ0} {ιe : Valuation (Σe - x∷σ)} :
-            (ι ►► env.insert bIn ιe v) =
-            env.insert (ctx.in_cat_right bIn) (eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ => Valuation Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn))) v.
-      Proof.
-        revert bIn ιe.
-        induction Σe; intros bIn ιe;
-          try destruct (ctx.nilView bIn).
-        cbn [env.insert ctx.remove_in_cat_right].
-        (* can't destruct Contxt.snocView bIn?*)
-        destruct bIn as ([|n] & eq).
-        - cbn in eq.
-          now subst.
-        - cbn in ιe.
-          destruct (env.snocView ιe) as (ιe & v').
-          change (ctx.remove_in_cat_right {| ctx.in_at := S n; ctx.in_valid := eq |})
-                 with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx.snoc (@ctx.remove_in_cat_right _ Σ0 Σe _ {| ctx.in_at := n; ctx.in_valid := eq |})))).
-          rewrite eq_trans_refl_l.
-          cbn.
-          rewrite (eq_sym_map_distr (fun f : LVar ∷ Ty -> LCtx => f b)).
-          rewrite eq_sym_map_distr.
-          rewrite f_equal_compose.
-          rewrite (map_subst_map (P := fun x => Valuation (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
-          rewrite match_snocView_eq_rect.
-          now rewrite IHΣe.
-      Qed.
-
-      Lemma env_remove_app {x : LVar} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x∷σ ∈ Σe)
-        (ι : Valuation Σ0) (ιe : Valuation Σe) :
-        env.remove (x∷σ) (ι ►► ιe) (ctx.in_cat_right bIn) =
-        eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ : LCtx => Valuation Σ) (ι ►► env.remove (x∷σ) ιe bIn)
-                 ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn)).
-      Proof.
-        revert bIn ιe.
-        induction Σe; intros bIn ιe; try destruct (ctx.nilView bIn).
-        destruct (ctx.snocView bIn).
-        - now destruct (env.snocView ιe).
-        - destruct (env.snocView ιe) as (ιe & v).
-          change (ctx.remove_in_cat_right (ctx.in_succ i))
-                 with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx.snoc (@ctx.remove_in_cat_right _ Σ0 Σe _ i)))).
-          rewrite eq_trans_refl_l.
-          cbn.
-          rewrite (eq_sym_map_distr (fun f : LVar ∷ Ty -> LCtx => f b)).
-          rewrite eq_sym_map_distr.
-          rewrite f_equal_compose.
-          rewrite (map_subst_map (P := fun x => Valuation (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
-          rewrite IHΣe.
-          now rewrite snoc_eq_rect.
-      Qed.
-
-    End Util.
-
     Module SolveEvars.
 
-      Fixpoint assert_msgs_formulas {Σ} (mfs : List (Pair AMessage Formula) Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      Fixpoint assert_msgs_formulas {Σ} (mfs : Ctx (Pair AMessage Formula Σ)) (p : 𝕊 Σ) : 𝕊 Σ :=
         match mfs with
-        | nil => p
-        | cons (msg,fml) mfs =>
+        | ctx.nil => p
+        | ctx.snoc mfs (msg,fml) =>
           assert_msgs_formulas mfs (assertk fml msg p)
         end.
 
-      Lemma safe_assert_msgs_formulas {Σ} {mfs : List (Pair AMessage Formula) Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
-        (safe (assert_msgs_formulas mfs p) ι <-> instpc (map snd mfs) ι /\ safe p ι).
+      Lemma safe_assert_msgs_formulas {Σ} {mfs : Ctx (Pair AMessage Formula Σ)} {p : 𝕊 Σ} {ι : Valuation Σ} :
+        (safe (assert_msgs_formulas mfs p) ι <-> instprop mfs ι /\ safe p ι).
       Proof.
         revert p.
         induction mfs; intros p; cbn.
         - intuition.
-        - destruct a. rewrite IHmfs. now cbn.
+        - destruct b. rewrite IHmfs. now cbn.
       Qed.
 
       Inductive ECtx (Σ : LCtx) : LCtx -> Type :=
-      | ectx Σe (mfs : List (Pair AMessage Formula) (Σ ▻▻ Σe)) : ECtx Σ (Σ ▻▻ Σe).
+      | ectx Σe (mfs : Ctx (Pair AMessage Formula (Σ ▻▻ Σe))) : ECtx Σ (Σ ▻▻ Σe).
       Arguments ectx {Σ} Σe mfs.
 
-      Definition ectx_refl {Σ : LCtx} : ECtx Σ Σ := @ectx Σ ctx.nil nil.
+      Definition ectx_refl {Σ : LCtx} : ECtx Σ Σ := @ectx Σ ctx.nil ctx.nil.
 
       Definition ectx_formula {Σ1 Σ2} (e: ECtx Σ1 Σ2) : AMessage Σ2 -> Formula Σ2 -> ECtx Σ1 Σ2 :=
-        match e with ectx Σe mfs => fun msg fml => ectx Σe (cons (msg,fml) mfs) end.
+        match e with ectx Σe mfs => fun msg fml => ectx Σe (mfs ▻ (msg,fml)) end.
       Definition ectx_snoc {Σ1 Σ2} (e: ECtx Σ1 Σ2) b : ECtx Σ1 (Σ2 ▻ b) :=
         match e with ectx Σe mfs => ectx (Σe ▻ b) (subst mfs sub_wk1) end.
       Definition ectx_subst {Σ1 Σ2} (e : ECtx Σ1 Σ2) :
@@ -1008,8 +1226,8 @@ Module Type SymPropOn
       Definition plug {Σ1 Σ2} (e : ECtx Σ1 Σ2) : 𝕊 Σ2 -> 𝕊 Σ1 :=
         match e with ectx Σe mfs => fun p => angelic_close0 Σe (assert_msgs_formulas mfs p) end.
 
-      Definition plug_msg {Σ1 Σ2} (ec : ECtx Σ1 Σ2) : EMessage Σ2 -> EMessage Σ1 :=
-        match ec with ectx _ _ => emsg_close end.
+      Definition plug_msg {Σ1 Σ2} (ec : ECtx Σ1 Σ2) : AMessage Σ2 -> AMessage Σ1 :=
+        match ec with ectx _ _ => amsg.close end.
 
       Fixpoint push {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (p : 𝕊 Σ2) {struct p} : 𝕊 Σ1 :=
         match p with
@@ -1027,10 +1245,14 @@ Module Type SymPropOn
             | None    => plug ec (assert_vareq x t msg (push ectx_refl p))
             end
         | assume_vareq x t p     => plug ec (assume_vareq x t (push ectx_refl p))
+        | pattern_match s pat rhs =>
+            plug ec (angelic_pattern_match pat s (fun pc => push ectx_refl (rhs pc)))
+        | pattern_match_var x pat rhs =>
+            plug ec (angelic_pattern_match_var pat (fun pc => push ectx_refl (rhs pc)))
         | debug b p              => plug ec (debug b (push ectx_refl p))
         end.
 
-      #[export] Instance proper_assert_msgs_formulas {Σ} (mfs : List (Pair AMessage Formula) Σ) :
+      #[export] Instance proper_assert_msgs_formulas {Σ} (mfs : Ctx (Pair AMessage Formula Σ)) :
         Proper (sequiv Σ ==> sequiv Σ) (assert_msgs_formulas mfs).
       Proof. intros p q pq ι. rewrite ?safe_assert_msgs_formulas. intuition. Qed.
 
@@ -1041,7 +1263,7 @@ Module Type SymPropOn
         now apply proper_angelic_close0, proper_assert_msgs_formulas.
       Qed.
 
-      Lemma assert_msgs_formulas_angelic_binary {Σ} (mfs : List (Pair AMessage Formula) Σ) (p1  p2 : 𝕊 Σ) :
+      Lemma assert_msgs_formulas_angelic_binary {Σ} (mfs : Ctx (Pair AMessage Formula Σ)) (p1 p2 : 𝕊 Σ) :
         assert_msgs_formulas mfs (angelic_binary p1 p2) <=>
         angelic_binary (assert_msgs_formulas mfs p1) (assert_msgs_formulas mfs p2).
       Proof.
@@ -1050,18 +1272,7 @@ Module Type SymPropOn
         cbn. intuition.
       Qed.
 
-      Lemma map_snd_subst {Σ Σ' : LCtx} {ζ : Sub Σ Σ'}
-            {mfs : List (Pair AMessage Formula) Σ} :
-            map snd (subst mfs ζ) = subst (map snd mfs) ζ.
-      Proof.
-        induction mfs.
-        - easy.
-        - cbn.
-          rewrite IHmfs.
-          now destruct a.
-      Qed.
-
-      Lemma assert_msgs_formulas_angelicv {b Σ} (mfs : List (Pair AMessage Formula) Σ) (p : 𝕊 (Σ ▻ b)) :
+      Lemma assert_msgs_formulas_angelicv {b Σ} (mfs : Ctx (Pair AMessage Formula Σ)) (p : 𝕊 (Σ ▻ b)) :
         assert_msgs_formulas mfs (angelicv b p) <=>
         angelicv b (assert_msgs_formulas (subst mfs sub_wk1) p).
       Proof.
@@ -1070,8 +1281,7 @@ Module Type SymPropOn
         rewrite and_comm, <- exists_and.
         apply base.exist_proper. intros v.
         rewrite safe_assert_msgs_formulas.
-        rewrite map_snd_subst.
-        rewrite inst_subst.
+        rewrite instprop_subst.
         rewrite inst_sub_wk1.
         apply and_comm.
       Qed.
@@ -1093,27 +1303,27 @@ Module Type SymPropOn
           unfold eq_rect_r in Hp. rewrite safe_eq_rect, eq_sym_involutive in Hp.
           exists (env.insert bIn ιe (inst (eq_rect ((Σ1 ▻▻ Σe) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιe))).
           rewrite safe_assert_msgs_formulas. cbn.
-          rewrite env_insert_app, env.remove_insert, env.insert_lookup.
+          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert.
           rewrite ?inst_eq_rect.
           split; auto.
-          rewrite map_snd_subst, inst_subst, inst_eq_rect in Hpc.
+          rewrite instprop_subst, inst_eq_rect in Hpc.
           now rewrite inst_sub_single2 in Hpc.
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
           cbn in Hp. cbn in Hp. destruct Hp as [Ht Hp].
-          rewrite env_remove_app in Hp.
+          rewrite env.remove_cat_right in Hp.
           exists (env.remove (x∷σ) ιe bIn).
           rewrite safe_assert_msgs_formulas.
-          rewrite map_snd_subst, inst_subst.
+          rewrite instprop_subst.
           unfold eq_rect_r. rewrite safe_eq_rect.
           rewrite eq_sym_involutive. split; auto.
           rewrite inst_eq_rect.
-          rewrite <- env_remove_app.
+          rewrite <- env.remove_cat_right.
           rewrite <- inst_sub_shift.
           rewrite inst_sub_single_shift; auto.
           now rewrite inst_sub_shift.
       Qed.
 
-      Lemma error_plug_msg {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (msg : EMessage Σ2) :
+      Lemma error_plug_msg {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (msg : AMessage Σ2) :
         error (plug_msg ec msg) <=> plug ec (error msg).
       Proof.
         destruct ec; intros ι; cbn.
@@ -1150,6 +1360,10 @@ Module Type SymPropOn
           + rewrite IHp. rewrite H. reflexivity.
           + apply proper_plug, proper_assert_vareq, IHp.
         - apply proper_plug, proper_assume_vareq, IHp.
+        - apply proper_plug. rewrite angelic_pattern_match_correct.
+          apply proper_pattern_match. intros pc. now rewrite H.
+        - apply proper_plug.  rewrite angelic_pattern_match_var_correct.
+          apply proper_pattern_match_var. intros pc. now rewrite H.
         - apply proper_plug, proper_debug, IHp.
       Qed.
 
@@ -1164,32 +1378,31 @@ Module Type SymPropOn
 
     Module SolveUvars.
 
-      Fixpoint assume_formulas {Σ} (fs : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
-        match fs with
-        | nil => p
-        | cons fml mfs =>
-          assume_formulas mfs (assumek fml p)
+      Fixpoint assume_pathcondition {Σ} (C : PathCondition Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+        match C with
+        | [ctx] => p
+        | C ▻ F => assume_pathcondition C (assumek F p)
         end.
 
-      Lemma safe_assume_formulas {Σ} {fs : List Formula Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
-        safe (assume_formulas fs p) ι <-> (instpc fs ι -> safe p ι).
+      Lemma safe_assume_pathcondition {Σ} {C : PathCondition Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
+        safe (assume_pathcondition C p) ι <-> (instprop C ι -> safe p ι).
       Proof.
         revert p.
-        induction fs; intros p; cbn.
+        induction C; intros p; cbn.
         - intuition.
-        - rewrite IHfs. cbn. intuition.
+        - rewrite IHC. cbn. intuition.
       Qed.
 
       Inductive UCtx (Σ : LCtx) : LCtx -> Type :=
-      | uctx Σu (mfs : List Formula (Σ ▻▻ Σu)) : UCtx Σ (Σ ▻▻ Σu).
+      | uctx Σu (mfs : PathCondition (Σ ▻▻ Σu)) : UCtx Σ (Σ ▻▻ Σu).
       Arguments uctx {Σ} Σu mfs.
 
-      Definition uctx_refl {Σ : LCtx} : UCtx Σ Σ := @uctx Σ ctx.nil nil.
+      Definition uctx_refl {Σ : LCtx} : UCtx Σ Σ := @uctx Σ ctx.nil ctx.nil.
 
       Definition uctx_formula {Σ1 Σ2} (e : UCtx Σ1 Σ2) : Formula Σ2 -> UCtx Σ1 Σ2 :=
-        match e with uctx Σu mfs => fun fml => uctx Σu (cons fml mfs) end.
+        match e with uctx Σu C => fun F => uctx Σu (C ▻ F) end.
       Definition uctx_snoc {Σ1 Σ2} (e: UCtx Σ1 Σ2) b : UCtx Σ1 (Σ2 ▻ b) :=
-        match e with uctx Σu mfs => uctx (Σu ▻ b) (subst mfs sub_wk1) end.
+        match e with uctx Σu C => uctx (Σu ▻ b) (subst C sub_wk1) end.
       Definition uctx_subst {Σ1 Σ2} (e : UCtx Σ1 Σ2) :
         forall x σ (xIn : x∷σ ∈ Σ2) (t : Term (Σ2 - x∷σ) σ),
           option (UCtx Σ1 (Σ2 - x∷σ)) :=
@@ -1208,21 +1421,15 @@ Module Type SymPropOn
         end.
 
       Definition plug {Σ1 Σ2} (e : UCtx Σ1 Σ2) : 𝕊 Σ2 -> 𝕊 Σ1 :=
-        match e with uctx Σu mfs => fun p => demonic_close0 Σu (assume_formulas mfs p) end.
+        match e with uctx Σu C => fun p => demonic_close0 Σu (assume_pathcondition C p) end.
 
-      Fixpoint close_message {Σ ΣΔ} : EMessage (Σ ▻▻ ΣΔ) -> EMessage Σ :=
-         match ΣΔ as c return (EMessage (Σ ▻▻ c) -> EMessage Σ) with
-         | ctx.nil      => fun msg => msg
-         | ctx.snoc Γ b => fun msg => close_message (EMsgThere msg)
-         end.
-
-      Definition plug_error {Σ1 Σ2} (ec : UCtx Σ1 Σ2) : EMessage Σ2 -> 𝕊 Σ1 :=
+      Definition plug_error {Σ1 Σ2} (ec : UCtx Σ1 Σ2) : AMessage Σ2 -> 𝕊 Σ1 :=
        match ec with
-       | uctx Σu mfs as ec =>
+       | uctx Σu C as ec =>
            fun msg =>
-             match mfs with
-             | List.nil      => error (close_message msg)
-             | List.cons _ _ => plug ec (error msg)
+             match C with
+             | [ctx] => error (amsg.close msg)
+             | _ ▻ _ => plug ec (error msg)
              end
        end.
 
@@ -1243,37 +1450,41 @@ Module Type SymPropOn
             | Some e' => push e' p
             | None    => plug ec (assume_vareq x t (push uctx_refl p))
             end
+        | pattern_match s pat rhs =>
+            plug ec (demonic_pattern_match pat s (fun pc => push uctx_refl (rhs pc)))
+        | pattern_match_var x pat rhs =>
+            plug ec (demonic_pattern_match_var pat (fun pc => push uctx_refl (rhs pc)))
         | debug b p              => plug ec (debug b (push uctx_refl p))
         end.
 
-      #[export] Instance proper_assume_formulas {Σ} (mfs : List Formula Σ) :
-        Proper (sequiv Σ ==> sequiv Σ) (assume_formulas mfs).
-      Proof. intros p q pq ι. rewrite ?safe_assume_formulas. intuition. Qed.
+      #[export] Instance proper_assume_pathcondition {Σ} (mfs : PathCondition Σ) :
+        Proper (sequiv Σ ==> sequiv Σ) (assume_pathcondition mfs).
+      Proof. intros p q pq ι. rewrite ?safe_assume_pathcondition. intuition. Qed.
 
-      #[export] Instance proper_assume_formulas_impl {Σ} (mfs : List Formula Σ) :
-        Proper (simpl Σ ==> simpl Σ) (assume_formulas mfs).
-      Proof. intros p q pq ι. rewrite ?safe_assume_formulas. intuition. Qed.
+      #[export] Instance proper_assume_pathcondition_impl {Σ} (mfs : PathCondition Σ) :
+        Proper (simpl Σ ==> simpl Σ) (assume_pathcondition mfs).
+      Proof. intros p q pq ι. rewrite ?safe_assume_pathcondition. intuition. Qed.
 
       #[export] Instance proper_plug {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
         Proper (sequiv Σ2 ==> sequiv Σ1) (plug ec).
       Proof.
         intros p q pq. destruct ec; cbn.
-        now apply proper_demonic_close0, proper_assume_formulas.
+        now apply proper_demonic_close0, proper_assume_pathcondition.
       Qed.
 
       #[export] Instance proper_plug_impl {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
         Proper (simpl Σ2 ==> simpl Σ1) (plug ec).
       Proof.
         intros p q pq. destruct ec; cbn.
-        now apply proper_demonic_close0_impl, proper_assume_formulas_impl.
+        now apply proper_demonic_close0_impl, proper_assume_pathcondition_impl.
       Qed.
 
-      Lemma assume_formulas_demonic_binary {Σ} (fmls : List Formula Σ) (p1 p2 : 𝕊 Σ) :
-        assume_formulas fmls (demonic_binary p1 p2) <=>
-        demonic_binary (assume_formulas fmls p1) (assume_formulas fmls p2).
+      Lemma assume_pathcondition_demonic_binary {Σ} (fmls : PathCondition Σ) (p1 p2 : 𝕊 Σ) :
+        assume_pathcondition fmls (demonic_binary p1 p2) <=>
+        demonic_binary (assume_pathcondition fmls p1) (assume_pathcondition fmls p2).
       Proof.
         intros ι; cbn.
-        rewrite ?safe_assume_formulas.
+        rewrite ?safe_assume_pathcondition.
         cbn. intuition.
       Qed.
 
@@ -1281,16 +1492,16 @@ Module Type SymPropOn
         (Q -> forall (x : A), P x) <-> (forall (x : A), Q -> P x).
       Proof. firstorder. Qed.
 
-      Lemma assume_formulas_demonicv {b Σ} (fmls : List Formula Σ) (p : 𝕊 (Σ ▻ b)) :
-        assume_formulas fmls (demonicv b p) <=>
-        demonicv b (assume_formulas (subst fmls sub_wk1) p).
+      Lemma assume_pathcondition_demonicv {b Σ} (fmls : PathCondition Σ) (p : 𝕊 (Σ ▻ b)) :
+        assume_pathcondition fmls (demonicv b p) <=>
+        demonicv b (assume_pathcondition (subst fmls sub_wk1) p).
       Proof.
         intros ι; cbn.
-        rewrite safe_assume_formulas. cbn.
+        rewrite safe_assume_pathcondition. cbn.
         rewrite forall_impl.
         apply base.forall_proper. intros v.
-        rewrite safe_assume_formulas.
-        rewrite inst_subst.
+        rewrite safe_assume_pathcondition.
+        rewrite instprop_subst.
         rewrite inst_sub_wk1.
         reflexivity.
       Qed.
@@ -1309,20 +1520,20 @@ Module Type SymPropOn
         rewrite ?safe_demonic_close0.
         split; intros HYP ιu.
         - specialize (HYP (env.remove (x∷σ) ιu bIn)).
-          rewrite safe_assume_formulas. intros Hpc Heq.
+          rewrite safe_assume_pathcondition. intros Hpc Heq.
           rewrite <- inst_sub_shift in Heq.
-          rewrite safe_assume_formulas in HYP.
-          rewrite inst_subst in HYP.
+          rewrite safe_assume_pathcondition in HYP.
+          rewrite instprop_subst in HYP.
           rewrite inst_eq_rect in HYP.
           unfold eq_rect_r in HYP. rewrite safe_eq_rect, eq_sym_involutive in HYP.
-          rewrite <- env_remove_app in HYP. apply HYP.
+          rewrite <- env.remove_cat_right in HYP. apply HYP.
           rewrite <- inst_sub_shift.
           rewrite inst_sub_single_shift; auto.
         - specialize (HYP (env.insert bIn ιu (inst (eq_rect ((Σ1 ▻▻ Σu) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σu - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιu)))).
-          rewrite safe_assume_formulas, inst_subst, inst_eq_rect. intros Hpc.
+          rewrite safe_assume_pathcondition, instprop_subst, inst_eq_rect. intros Hpc.
           unfold eq_rect_r. rewrite safe_eq_rect, eq_sym_involutive.
-          rewrite safe_assume_formulas in HYP. cbn in HYP.
-          rewrite env_insert_app, env.remove_insert, env.insert_lookup in HYP.
+          rewrite safe_assume_pathcondition in HYP. cbn in HYP.
+          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert in HYP.
           rewrite inst_eq_rect in HYP.
           rewrite inst_sub_single2 in Hpc.
           now apply HYP.
@@ -1339,24 +1550,28 @@ Module Type SymPropOn
           (* destruct ec. cbn [plug]. *)
           (* rewrite <- demonic_close0_demonic_binary. *)
           (* apply proper_demonic_close0. *)
-          (* now rewrite <- assume_formulas_demonic_binary. *)
+          (* now rewrite <- assume_pathcondition_demonic_binary. *)
         - now destruct ec as [? []].
         - intros ι _. destruct ec; cbn.
           rewrite safe_demonic_close0; intros ιu.
-          rewrite safe_assume_formulas; cbn; auto.
+          rewrite safe_assume_pathcondition; cbn; auto.
         - apply proper_plug_impl, proper_assertk_impl, IHp.
         - rewrite IHp. clear IHp.
           destruct ec; cbn. reflexivity.
         - apply proper_plug_impl, proper_angelicv_impl, IHp.
         - rewrite IHp. clear IHp. destruct ec; cbn.
           apply proper_demonic_close0_impl. intros ι. cbn.
-          rewrite safe_assume_formulas. intros H Mmfs v.
-          specialize (H v). rewrite safe_assume_formulas in H.
-          apply H. now rewrite inst_subst, inst_sub_wk1.
+          rewrite safe_assume_pathcondition. intros H Mmfs v.
+          specialize (H v). rewrite safe_assume_pathcondition in H.
+          apply H. now rewrite instprop_subst, inst_sub_wk1.
         - apply proper_plug_impl, proper_assert_vareq_impl, IHp.
         - destruct (uctx_subst_spec ec xIn t).
           + rewrite IHp. intros ι. apply H.
           + apply proper_plug_impl, proper_assume_vareq_impl, IHp.
+        - apply proper_plug_impl. rewrite demonic_pattern_match_correct.
+          apply proper_pattern_match_impl. intros pc. now rewrite H.
+        - apply proper_plug_impl. rewrite demonic_pattern_match_var_correct.
+          apply proper_pattern_match_var_impl. intros pc. now rewrite H.
         - apply proper_plug_impl, proper_debug_impl, IHp.
       Qed.
 
@@ -1401,7 +1616,7 @@ Module Type SymPropOn
           | inr uc => SymProp.demonic_binary (p Σ0 eph) (q Σ0 eph)
           end.
 
-      Definition error {Σ} (msg : EMessage Σ) : EProp Σ :=
+      Definition error {Σ} (msg : AMessage Σ) : EProp Σ :=
         fun Σ0 eph =>
           match eph with
           | inl ec => error (SolveEvars.plug_msg ec msg)
@@ -1483,7 +1698,13 @@ Module Type SymPropOn
         (σ : Ty)
         (n : nat)
         (t : ETerm σ)
-        (k : ESymProp).
+        (k : ESymProp)
+    | epattern_match {σ} (s : ETerm σ) (pat : @Pattern LVar σ)
+        (rhs : PatternCase pat -> ESymProp)
+    | epattern_match_var (x : LVar) σ (n : nat) (pat : @Pattern LVar σ)
+        (rhs : PatternCase pat -> ESymProp)
+    | edebug {Σ}
+        (b : AMessage Σ) (k : ESymProp).
 
     Definition erase_term {Σ} : forall {σ} (t : Term Σ σ), ETerm σ :=
       fix erase {σ} t :=
@@ -1513,7 +1734,6 @@ Module Type SymPropOn
         | formula_false          => eformula_false
         | formula_and F1 F2      => eformula_and (erase F1) (erase F2)
         | formula_or F1 F2       => eformula_or (erase F1) (erase F2)
-
         end.
 
     Fixpoint erase_symprop {Σ} (p : SymProp Σ) : ESymProp :=
@@ -1528,7 +1748,13 @@ Module Type SymPropOn
       | demonicv b k => edemonicv b (erase_symprop k)
       | @assert_vareq _ x σ xIn t msg k => eassert_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop k)
       | @assume_vareq _ x σ xIn t k => eassume_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop k)
-      | debug b k => erase_symprop k
+      | pattern_match s pat rhs =>
+          epattern_match (erase_term s) pat
+            (fun pc => erase_symprop (rhs pc))
+      | @pattern_match_var _ x σ xIn pat rhs =>
+          epattern_match_var x (ctx.in_at xIn) pat
+            (fun pc => erase_symprop (rhs pc))
+      | debug b k => edebug b (erase_symprop k)
       end.
 
     Fixpoint erase_valuation {Σ} (ι : Valuation Σ) : list { σ : Ty & Val σ} :=
@@ -1667,6 +1893,20 @@ Module Type SymPropOn
           let ι' := list_remove ι n in
           inst_eq (inst_eterm ι (eterm_var x _ n)) (inst_eterm ι' t) ->
           inst_symprop ι' k
+      | epattern_match s pat rhs =>
+          match inst_eterm ι s with
+          | Some v => let (c,ι__pat) := pattern_match_val pat v in
+                      inst_symprop (app (erase_valuation ι__pat) ι) (rhs c)
+          | None   => False
+          end
+      | epattern_match_var x n pat rhs =>
+          match inst_eterm ι (eterm_var x _ n) with
+          | Some v => let ι'       := list_remove ι n in
+                      let (c,ι__pat) := pattern_match_val pat v in
+                      inst_symprop (app (erase_valuation ι__pat) ι') (rhs c)
+          | None   => False
+          end
+      | edebug _ k => inst_symprop ι k
       end.
 
     Lemma erase_valuation_remove {Σ b} (bIn : b ∈ Σ) (ι : Valuation Σ) :
@@ -1679,6 +1919,11 @@ Module Type SymPropOn
         + reflexivity.
         + f_equal. apply (IHι i).
     Qed.
+
+    Lemma erase_valuation_cat {Σ1 Σ2} (ι1 : Valuation Σ1) (ι2 : Valuation Σ2) :
+      app (erase_valuation ι2) (erase_valuation ι1) =
+      erase_valuation (ι1 ►► ι2).
+    Proof. induction ι2; cbn; now f_equal. Qed.
 
     Lemma nth_error_erase {Σ b} (ι : Valuation Σ) (bIn : b ∈ Σ) :
       nth_error (erase_valuation ι) (ctx.in_at bIn) =
@@ -1734,7 +1979,7 @@ Module Type SymPropOn
     Qed.
 
     Lemma inst_eformula_erase {Σ} (fml : Formula Σ) (ι : Valuation Σ) :
-      inst_eformula (erase_valuation ι) (erase_formula fml) = Some (inst fml ι).
+      inst_eformula (erase_valuation ι) (erase_formula fml) = Some (instprop fml ι).
     Proof.
       induction fml;
         repeat
@@ -1760,22 +2005,17 @@ Module Type SymPropOn
         + auto.
       - apply base.exist_proper. intros v. apply (IHp (env.snoc ι b v)).
       - apply base.forall_proper. intros v. apply (IHp (env.snoc ι b v)).
-      - apply Morphisms_Prop.and_iff_morphism; cbn.
-        + rewrite nth_error_erase; cbn.
-          rewrite EqDec.eq_dec_refl.
-          rewrite erase_valuation_remove. cbn.
-          rewrite inst_eterm_erase.
-          intuition.
-        + generalize (IHp (env.remove _ ι xIn)).
-          now rewrite erase_valuation_remove.
-      - apply Morphisms_Prop.iff_iff_iff_impl_morphism; cbn.
-        + rewrite nth_error_erase; cbn.
-          rewrite EqDec.eq_dec_refl.
-          rewrite erase_valuation_remove. cbn.
-          rewrite inst_eterm_erase.
-          intuition.
-        + generalize (IHp (env.remove _ ι xIn)).
-          now rewrite erase_valuation_remove.
+      - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)).
+        rewrite erase_valuation_remove, !inst_eterm_erase.
+        now apply Morphisms_Prop.and_iff_morphism.
+      - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)).
+        rewrite erase_valuation_remove, !inst_eterm_erase.
+        now apply Morphisms_Prop.iff_iff_iff_impl_morphism.
+      - rewrite inst_eterm_erase. destruct pattern_match_val as [pc ι__pat].
+        now rewrite erase_valuation_cat.
+      - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)).
+        rewrite inst_eterm_erase. cbn. destruct pattern_match_val as [pc ι__pat].
+        now rewrite erase_valuation_remove, erase_valuation_cat.
       - apply IHp.
     Qed.
 
@@ -1784,7 +2024,7 @@ Module Type SymPropOn
       safe p ι.
     Proof. apply erase_safe. Qed.
 
-    Arguments eterm_var _ {_ _}.
+    #[global] Arguments eterm_var _ {_ _}.
 
   End Erasure.
 

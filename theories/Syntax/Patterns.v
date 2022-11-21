@@ -30,7 +30,8 @@ From Katamaran Require Import
      Prelude
      Context
      Environment
-     Syntax.TypeDecl.
+     Syntax.TypeDecl
+     Syntax.Variables.
 
 Import ctx.notations.
 Import env.notations.
@@ -353,6 +354,7 @@ Module Type PatternsOn (Import TY : Types).
             unionv_fold U (K; pattern_match_val_reverse (p K) pc δpc)
       end.
 
+    (* A curried version of the above. *)
     Definition pattern_match_val_reverse' {σ} (pat : Pattern σ) :
       { c : PatternCase pat & NamedEnv Val (PatternCaseCtx c) } -> Val σ :=
         fun c => pattern_match_val_reverse pat (projT1 c) (projT2 c).
@@ -421,6 +423,31 @@ Module Type PatternsOn (Import TY : Types).
         now rewrite <- Heq, H.
     Qed.
 
+    (* The intendend use case of the above definitions is in the declaration of
+       inductive types for AST that represent pattern matches. This will
+       generally be of the form
+
+         | my_sort_pattern_match {σ} (scrutinee : ... σ) (p : Pattern σ)
+             (k : forall pc : PatternCase p, MySort (Γ ▻▻ PatternCaseCtx pc) ) :
+             MySort Γ
+
+       That is, we have a scrutinee represented using some sort, a pattern of
+       the same type as the scrutinee and then for every case (there is only a
+       finite amount of cases for each pattern), we have a right hand side. This
+       scheme makes sure that Coq can derive good elimination schemes. However,
+       the PatternCase type is unwieldy for writing down syntax terms. One of
+       the problems is that for patterns of arity one a superfluous unit
+       argument is introduced. More aggravating is the fact that for patterns of
+       (multi-level) matches on unions the constructors are bundled together in
+       a telescopic form in PatternCase. To write down such a match, the user
+       would have to pattern match on the constructor of a sigma type,
+       generalize over the second component again (i.e. revert), and then
+       pattern on the first component, i.e. the union constructor. To avoid this
+       burden on the user we define alternative versions that uncurry the
+       telescope and also remove superfluous arguments.
+     *)
+
+
     Section NewAlternative.
       Context {R : NCtx N Ty -> Type} {Γ : NCtx N Ty}.
 
@@ -440,6 +467,8 @@ Module Type PatternsOn (Import TY : Types).
         | pat_union U p => forall K : unionk U, PatternCaseCurried (p K)
         end.
 
+      (* Uncurry the representation of different cases to the curried functional
+         form. *)
       Fixpoint of_pattern_case_curried {σ} (pat : Pattern σ) {struct pat} :
         PatternCaseCurried pat -> forall pc : PatternCase pat, R (Γ ▻▻ PatternCaseCtx pc) :=
         match pat with
@@ -449,7 +478,7 @@ Module Type PatternsOn (Import TY : Types).
                                      match pc with true => a | false => b end
         | pat_pair x y => fun rhs _ => rhs
         | pat_sum _ _ x y => fun '(a,b) pc =>
-                                     match pc with | true => a | false => b end
+                                     match pc with true => a | false => b end
         | pat_unit => fun rhs _ => rhs
         | pat_enum E => fun rhs => rhs
         | pat_bvec_split m n x y => fun rhs _ => rhs
@@ -473,6 +502,209 @@ Module Type PatternsOn (Import TY : Types).
     #[global] Arguments alt_rhs {R Γ σ} _.
 
   End Patterns.
+
+  Section Freshen.
+    Notation LCtx := (NCtx LVar Ty).
+    Context {N : Set} (n : N -> LVar).
+
+    (* Freshen the name of the variables in a given named context [Δ]. The type
+       of variables is also changed to logic variables, which covers all the
+       cases where we currently do freshening. The first parameter [Σ] are all
+       the logic variables that we consider to be in scope. Freshened variables
+       from [Δ] are also added to [Σ] to pick a disjoint set of fresh
+       variables. *)
+    Fixpoint freshen_ctx (Σ : LCtx) (Δ : NCtx N Ty) : LCtx :=
+      match Δ with
+      | [ctx]   => [ctx]
+      | Γ ▻ x∷σ => let Γ' := freshen_ctx Σ Γ in
+                   (* TOneverDO: Always doing the concatenation of Σ and Γ'
+                      is not very efficient. This has quadratic runtime in the
+                      length of the context, i.e. the number of variables in
+                      a pattern. *)
+                   let x' := fresh_lvar (Σ ▻▻ Γ') (Some (n x)) in Γ' ▻ x'∷σ
+      end.
+
+    (* Translate an environment for an freshened context, i.e. unfreshened keys
+       of a map from varaibles to stuff of type [D], back to an environment
+       for unfreshened keys. *)
+    Definition unfreshen_namedenv {D : Ty -> Set} :
+      forall {Σ : LCtx} {Δ : NCtx N Ty},
+        NamedEnv D (freshen_ctx Σ Δ) -> NamedEnv D Δ :=
+      fix un Σ Δ :=
+        match Δ with
+        | [ctx] => fun _   => [env]
+        | Γ ▻ b => fun EΓb : let Γ' := freshen_ctx Σ Γ in
+                             NamedEnv D (Γ' ▻ fresh_lvar (Σ ▻▻ Γ') _∷_) =>
+                     let (EΓ,tb) := env.snocView EΓb in
+                     env.snoc (un Σ _ EΓ) b tb
+        end.
+
+    (* Traverse a tuple pattern to freshen all variables inside it. The
+       context index [Δ] is freshened according to witness the change. *)
+    Fixpoint freshen_tuplepat (Σ : LCtx) {σs Δ} (p : @TuplePat N σs Δ) :
+      TuplePat σs (freshen_ctx Σ Δ) :=
+      match p with
+      | tuplepat_nil        => tuplepat_nil
+      | tuplepat_snoc pat x =>
+          tuplepat_snoc
+            (freshen_tuplepat Σ pat)
+            (fresh_lvar (Σ ▻▻ freshen_ctx Σ _) (Some (n x)))
+      end.
+
+    (* Traverse a record pattern to freshen all variables inside it. The
+       context index [Δ] is freshened according to witness the change. *)
+    Fixpoint freshen_recordpat (Σ : LCtx) {rfs Δ} (p : @RecordPat N rfs Δ) :
+      RecordPat rfs (freshen_ctx Σ Δ) :=
+      match p with
+      | recordpat_nil           => recordpat_nil
+      | recordpat_snoc pat rf x =>
+          recordpat_snoc
+            (freshen_recordpat Σ pat) rf
+            (fresh_lvar (Σ ▻▻ freshen_ctx Σ _) (Some (n x)))
+      end.
+
+    (* Freshen a pattern and transform it to a pattern using logic variables
+       instead of [N]. Patterns, unlike record or tuple patterns, are not
+       indexed by their context of bound variables, since that is dependent
+       on the case. However, the pattern contains the variables names for all
+       cases, which are freshened. *)
+    Fixpoint freshen_pattern (Σ : LCtx) {σ} (p : @Pattern N σ) : @Pattern LVar σ :=
+      match p in (Pattern t) return (Pattern t) with
+      | pat_var x              => pat_var (fresh_lvar Σ (Some (n x)))
+      | pat_bool               => pat_bool
+      | pat_list σ x y         => let x' := fresh_lvar Σ (Some (n x)) in
+                                  let y' := fresh_lvar (Σ▻x'∷σ) (Some (n y)) in
+                                  pat_list σ x' y'
+      | @pat_pair _ x y σ τ    => let x' := fresh_lvar Σ (Some (n x)) in
+                                  let y' := fresh_lvar (Σ▻x'∷σ) (Some (n y)) in
+                                  pat_pair x' y'
+      | pat_sum σ τ x y        => pat_sum σ τ
+                                    (fresh_lvar Σ (Some (n x)))
+                                    (fresh_lvar Σ (Some (n y)))
+      | pat_unit               => pat_unit
+      | pat_enum E             => pat_enum E
+      | pat_bvec_split m _ x y =>
+          let x' := fresh_lvar Σ (Some (n x)) in
+          let y' := fresh_lvar (Σ▻x'∷ty.bvec m) (Some (n y)) in
+          pat_bvec_split m _ x' y'
+      | pat_bvec_exhaustive m  => pat_bvec_exhaustive m
+      | pat_tuple p            => pat_tuple (freshen_tuplepat Σ p)
+      | pat_record R Δ p       => pat_record R
+                                    (freshen_ctx Σ Δ)
+                                    (freshen_recordpat Σ p)
+      | pat_union U p          => pat_union U (fun K => freshen_pattern Σ (p K))
+      end.
+
+    (* The user will usually have written a function for all cases of a pattern
+       [pat]:
+
+         (forall pc : PatternCase pat, ... )
+
+       However, for the freshened pattern we need to provide a function of type
+
+         (forall pc : PatternCase (freshen_pattern Σ pat), ...)
+
+       To use the user function, the following definition translates cases for a
+       freshened pattern back to cases on an unfreshened pattern. *)
+    Fixpoint unfreshen_patterncase (Σ : LCtx) {σ} (p : @Pattern N σ) :
+      PatternCase (freshen_pattern Σ p) -> PatternCase p :=
+      match p with
+      | pat_var _              => fun pc => pc
+      | pat_bool               => fun pc => pc
+      | pat_list _ _ _         => fun pc => pc
+      | pat_pair _ _           => fun pc => pc
+      | pat_sum _ _ _ _        => fun pc => pc
+      | pat_unit               => fun pc => pc
+      | pat_enum E             => fun pc => pc
+      | pat_bvec_split _ _ _ _ => fun pc => pc
+      | pat_bvec_exhaustive m  => fun pc => pc
+      | pat_tuple _            => fun pc => pc
+      | pat_record _ _ _       => fun pc => pc
+      | pat_union U p          => fun '(existT K pc) =>
+                                    @existT _
+                                      (fun K => PatternCase (p K)) K
+                                      (unfreshen_patterncase Σ (p K) pc)
+      end.
+
+    (* The context of bound variables of a variable is the same as calculating
+       the variables of the unfreshened pattern case and "refreshen" the
+       result. *)
+    Fixpoint freshen_patterncasectx (Σ : LCtx) {σ} (p : @Pattern N σ) :
+      forall pc : PatternCase (freshen_pattern Σ p),
+        PatternCaseCtx pc =
+        freshen_ctx Σ (PatternCaseCtx (unfreshen_patterncase Σ p pc)) :=
+      match p with
+      | pat_var _              => fun _ => eq_refl
+      | pat_bool               => fun _ => eq_refl
+      | pat_list _ _ _         => fun pc => match pc with
+                                            | true => eq_refl
+                                            | false => eq_refl
+                                            end
+      | pat_pair _ _           => fun _ => eq_refl
+      | pat_sum _ _ _ _        => fun pc => match pc with
+                                            | true => eq_refl
+                                            | false => eq_refl
+                                            end
+      | pat_unit               => fun _ => eq_refl
+      | pat_enum _             => fun _ => eq_refl
+      | pat_bvec_split _ _ _ _ => fun _ => eq_refl
+      | pat_bvec_exhaustive m  => fun _ => eq_refl
+      | pat_tuple _            => fun _ => eq_refl
+      | pat_record _ _ _       => fun _ => eq_refl
+      | pat_union _ p          => fun '(K; pc) =>
+                                    freshen_patterncasectx Σ (p K) pc
+      end.
+
+    (* Transports an environment for a freshened pattern case back. Use the
+       equivalent function below which avoids the rewrite. *)
+    Definition unfreshen_patterncaseenv' {D : Ty -> Set} {Σ σ} (p : @Pattern N σ) :
+      forall (pc : PatternCase (freshen_pattern Σ p)),
+        NamedEnv D (PatternCaseCtx pc) ->
+        NamedEnv D (PatternCaseCtx (unfreshen_patterncase Σ p pc)) :=
+      fun pc E =>
+        unfreshen_namedenv
+          (eq_rect _ (NamedEnv D) E _ (freshen_patterncasectx Σ p pc)).
+
+    Fixpoint unfreshen_patterncaseenv {D : Ty -> Set} {Σ σ} (p : @Pattern N σ) :
+      forall (pc : PatternCase (freshen_pattern Σ p)),
+        NamedEnv D (PatternCaseCtx pc) ->
+        NamedEnv D (PatternCaseCtx (unfreshen_patterncase Σ p pc)) :=
+         match p with
+         | pat_var _ => fun ps ts => let (_,t) := env.snocView ts in
+                                     [nenv t]
+         | pat_bool => fun _ _   => [env]
+         | pat_list σ x y =>
+             fun pc => match pc with
+                       | true  => fun _  => [env]
+                       | false => fun ts => let (ts1,t) := env.snocView ts in
+                                            let (_,h)   := env.snocView ts1 in
+                                            [nenv h; t]
+                       end
+         | pat_pair x y =>
+             fun _ ts =>
+               let (ts1,v) := env.snocView ts in
+               let (_,v0) := env.snocView ts1 in
+               [nenv v0; v]
+         | pat_sum σ τ x y =>
+             fun pc =>
+               match pc with
+               | true  => fun ts => let (_,v) := env.snocView ts in [nenv v]
+               | false => fun ts => let (_,v) := env.snocView ts in [nenv v]
+               end
+         | pat_unit   => fun _ _ => [env]
+         | pat_enum E => fun _ _ => [env]
+         | pat_bvec_split m n x y =>
+             fun _ ts =>
+               let (ts1,vy) := env.snocView ts in
+               let (_,vx)   := env.snocView ts1 in
+               [env].[x∷ty.bvec m ↦ vx].[y∷ty.bvec n ↦ vy]
+         | pat_bvec_exhaustive _ => fun _ _ => [env]
+         | pat_tuple _ => fun _ => unfreshen_namedenv
+         | pat_record _ Δ _ => fun _ => unfreshen_namedenv
+         | pat_union U p => fun '(K;pc) => unfreshen_patterncaseenv (p K) pc
+         end.
+
+  End Freshen.
 
   Bind Scope pat_scope with TuplePat.
   Bind Scope pat_scope with RecordPat.

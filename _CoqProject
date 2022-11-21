@@ -26,6 +26,7 @@ case_study/RiscvPmpBoundedInts/Base.v
 case_study/RiscvPmpBoundedInts/Contracts.v
 case_study/RiscvPmpBoundedInts/IrisInstance.v
 case_study/RiscvPmpBoundedInts/IrisModel.v
+case_study/RiscvPmpBoundedInts/LoopVerification.v
 case_study/RiscvPmpBoundedInts/Machine.v
 case_study/RiscvPmpBoundedInts/Model.v
 case_study/RiscvPmpBoundedInts/Sig.v
@@ -66,6 +67,7 @@ theories/Syntax/Expressions.v
 theories/Syntax/Formulas.v
 theories/Syntax/FunDecl.v
 theories/Syntax/FunDef.v
+theories/Syntax/Messages.v
 theories/Syntax/Patterns.v
 theories/Syntax/Predicates.v
 theories/Syntax/Registers.v

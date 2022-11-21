@@ -378,14 +378,26 @@ Module Type TermsOn (Import TY : Types).
       }
     Qed.
 
+    #[export] Instance subst_ctx `{Subst A} : Subst (fun Σ => Ctx (A Σ)) :=
+      fix subst_ctx {Σ} xs {Σ'} ζ {struct xs} :=
+        match xs with
+        | ctx.nil       => ctx.nil
+        | ctx.snoc xs x => ctx.snoc (subst_ctx xs ζ) (subst x ζ)
+        end.
+
+    #[export] Instance substlaws_ctx `{SubstLaws A} : SubstLaws (fun Σ => Ctx (A Σ)).
+    Proof.
+      constructor.
+      - intros ? xs. induction xs; cbn; f_equal; auto; apply subst_sub_id.
+      - intros ? ? ? ? ? xs; induction xs; cbn; f_equal; auto; apply subst_sub_comp.
+    Qed.
+
   End SymbolicSubstitutions.
 
   Module SubNotations.
 
-    Notation "a ⟨ ζ ⟩" := (subst a ζ)
-      (at level 8, left associativity,
-        format "a ⟨ ζ ⟩").
-    Notation "ζ1 ∘ ζ2" := (@subst (Sub _) _ _ ζ1 _ ζ2) (at level 60, right associativity).
+    Notation "a ⟨ ζ ⟩" := (subst a ζ).
+    Notation "ζ1 ∘ ζ2" := (@subst (Sub _) _ _ ζ1 _ ζ2).
 
   End SubNotations.
 

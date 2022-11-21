@@ -28,6 +28,7 @@
 
 From Coq Require Import
      Bool.Bool
+     Classes.Morphisms
      NArith.BinNat
      Numbers.DecimalString
      Strings.Ascii
@@ -65,11 +66,12 @@ Module Binding.
 End Binding.
 Export Binding.
 
-Module ctx.
+Module Import ctx.
 
   (* Type of contexts. This is a list of bindings of type B. This type and
      subsequent types use the common notation of snoc lists. *)
-  Inductive Ctx (B : Set) : Set :=
+  #[universes(template)]
+  Inductive Ctx (B : Type) : Type :=
   | nil
   | snoc (Γ : Ctx B) (b : B).
 
@@ -82,7 +84,7 @@ Module ctx.
   Arguments snoc {_} _%ctx _%ctx.
 
   Section WithBinding.
-    Context {B : Set}.
+    Context {B : Type}.
 
     Instance eq_dec_ctx (eqB : EqDec B) : EqDec (Ctx B) :=
       fix eq_dec_ctx (Γ Δ : Ctx B) {struct Γ} : dec_eq Γ Δ :=
@@ -231,12 +233,12 @@ Module ctx.
       In b (snoc Γ b') :=
       @MkIn _ (snoc Γ b') (S (in_at bIn)) (in_valid bIn).
 
-    Inductive NilView {b : B} (i : In b nil) : Set :=.
+    Inductive NilView {b : B} (i : In b nil) : Type :=.
 
     Definition nilView {b : B} (i : In b nil) : NilView i :=
       match in_valid i with end.
 
-    Inductive SnocView (Γ : Ctx B) {b' : B} : forall b, In b (snoc Γ b') -> Set :=
+    Inductive SnocView (Γ : Ctx B) {b' : B} : forall b, In b (snoc Γ b') -> Type :=
     | snocViewZero                  : SnocView in_zero
     | snocViewSucc {b} (i : In b Γ) : SnocView (in_succ i).
     Global Arguments snocViewZero {_ _}.
@@ -249,7 +251,7 @@ Module ctx.
       | S n => fun p => snocViewSucc (MkIn n p)
       end (in_valid i).
 
-    Inductive InView {b : B} : forall Γ, In b Γ -> Set :=
+    Inductive InView {b : B} : forall Γ, In b Γ -> Type :=
     | inctxViewZero {Γ}                 : @InView b (snoc Γ b) in_zero
     | inctxViewSucc {Γ b'} (i : In b Γ) : @InView b (snoc Γ b') (in_succ i).
 
@@ -275,12 +277,12 @@ Module ctx.
       | snoc _ _ =>
         fun bIn =>
           match snocView bIn with
-          | snocViewZero => in_zero
+          | snocViewZero => @in_zero _ (cat _ _)
           | snocViewSucc bIn => in_succ (in_cat_right bIn)
           end
       end.
 
-    Inductive CatView {Γ Δ} {b : B} : In b (cat Γ Δ) -> Set :=
+    Inductive CatView {Γ Δ} {b : B} : In b (cat Γ Δ) -> Type :=
     | isCatLeft  (bIn : In b Γ) : CatView (in_cat_left Δ bIn)
     | isCatRight (bIn : In b Δ) : CatView (in_cat_right bIn).
 
@@ -409,7 +411,7 @@ Module ctx.
     Definition occurs_check_var {Σ} {x y : B} (xIn : In x Σ) (yIn : In y Σ) : (x = y) + (In y (remove Σ xIn)) :=
       occurs_check_index (in_at xIn) (in_at yIn) (in_valid xIn) (in_valid yIn).
 
-    Inductive OccursCheckView {Σ} {x : B} (xIn : In x Σ) : forall y, In y Σ -> Set :=
+    Inductive OccursCheckView {Σ} {x : B} (xIn : In x Σ) : forall y, In y Σ -> Type :=
     | Same : OccursCheckView xIn xIn
     | Diff {y} (yIn : In y (remove Σ xIn)) : OccursCheckView xIn (shift_var xIn yIn).
 
@@ -565,22 +567,52 @@ Module ctx.
         + cbn in *. f_equal. apply IHΓ.
     Defined.
 
-    Lemma remove_in_cat_right {Γ Δ : Ctx B} {b : B} (bIn : In b Δ) :
-      @remove (@cat Γ Δ) b (@in_cat_right b Γ Δ bIn) =
-      @cat Γ (@remove Δ b bIn).
-    Proof.
-      induction bIn using In_rect; cbn.
-      - reflexivity.
-      - f_equal. auto.
-    Defined.
+    Definition f_equal_snoc (b : B) Γ Δ (e : Γ = Δ) : snoc Γ b = snoc Δ b :=
+      f_equal (fun Γ => snoc Γ b) e.
+
+    Definition eq_sym_map_snoc_distr (b : B) (x y : Ctx B) (e : x = y) :
+      eq_sym (f_equal_snoc b e) = f_equal_snoc b (eq_sym e) :=
+      eq_sym_map_distr (fun Γ => snoc Γ b) e.
+
+    Definition map_snoc_subst_map (b : B) (Q : Ctx B -> Type)
+      (x y : Ctx B) (e : x = y) (z : Q (snoc x b)) :
+      eq_rect (snoc x b) Q z (snoc y b) (f_equal_snoc b e) =
+      eq_rect x (fun x => Q (snoc x b)) z y e :=
+      map_subst_map (fun Γ => snoc Γ b) (fun _ x => x) e z.
+
+    Fixpoint remove_in_cat_right (Γ Δ : Ctx B) {struct Δ} :
+      forall b (bIn : In b Δ),
+        remove (cat Γ Δ) (in_cat_right bIn) =
+          cat Γ (remove Δ bIn) :=
+      match Δ with
+      | nil        => fun b bIn => match nilView bIn with end
+      | snoc Δ' b' =>
+        fun b bIn =>
+          match snocView bIn in SnocView i
+          return remove _ (in_cat_right i) = cat Γ (remove _ i)
+          with
+          | snocViewZero   => eq_refl
+          | snocViewSucc i => f_equal_snoc b' (remove_in_cat_right _ i)
+          end
+      end.
+
+    Fixpoint remove_in_cat_left (Γ Δ : Ctx B) {b} (bIn : In b Γ) {struct Δ} :
+      remove (cat Γ Δ) (in_cat_left Δ bIn) =
+        cat (remove Γ bIn) Δ :=
+      match Δ with
+      | nil        => eq_refl
+      | snoc Δ' b' => f_equal_snoc b' (remove_in_cat_left _ bIn)
+      end.
 
   End WithBinding.
-  Arguments In_rect [B b] _ _ _ [_].
-  Arguments In_ind [B b] _ _ _ [_].
+  Arguments In_rect [B b] _ _ _ [_] : simpl never.
+  Arguments In_ind [B b] _ _ _ [_] : simpl never.
   Arguments forallb [B] Γ p.
+  Arguments remove_in_cat_right [B Γ Δ b] bIn.
+  Arguments remove_in_cat_left [B Γ Δ b] bIn.
 
   Section WithAB.
-    Context {A B : Set} (f : A -> B).
+    Context {A B : Type} (f : A -> B).
 
     Fixpoint map (Γ : Ctx A) : Ctx B :=
       match Γ with
@@ -666,6 +698,12 @@ Module ctx.
 
   End resolution.
 
+  Module tactics.
+    Ltac fold_in :=
+      repeat change_no_check
+        {| ctx.in_at := ctx.in_at ?x; ctx.in_valid := ctx.in_valid ?x |} with x.
+  End tactics.
+
   Section FreshName.
 
     Open Scope string_scope.
@@ -717,3 +755,8 @@ Export ctx (Ctx).
 Notation NCtx N T := (Ctx (Binding N T)).
 Bind Scope ctx_scope with Ctx.
 Bind Scope ctx_scope with NCtx.
+
+#[global] Instance: Params (@snoc) 1 := {}.
+#[global] Instance: Params (@lookup) 1 := {}.
+#[global] Instance: Params (@cat) 1 := {}.
+#[global] Instance: Params (@map) 2 := {}.

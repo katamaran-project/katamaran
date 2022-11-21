@@ -603,11 +603,11 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           sep_contract_result          := "result_can_incr_cursor";
           sep_contract_postcondition   :=
           if: term_var "result_can_incr_cursor"
-          then 
+          then
             term_var "p" ≠ₚ term_val ty.perm E
             ∨
-              (term_var "p" = term_val ty.perm E ∗ term_var "imm" = term_val ty.int 0%Z ∗ term_var "a" = term_binop bop.plus (term_var "a") (term_var "imm"))
-          else term_var "p" = term_val ty.perm E ∗ term_var "imm" ≠ term_val ty.int 0%Z
+              (term_var "imm" = term_val ty.int 0%Z ∗ term_var "a" = term_binop bop.plus (term_var "a") (term_var "imm"))
+          else ⊤
         |}.
 
       Definition sep_contract_is_sub_perm : SepContractFun is_sub_perm :=
@@ -961,14 +961,16 @@ End ContractDefKit.
 End MinCapsSpecification.
 
 Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
-  Definition simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (List Formula Σ) :=
-    match term_get_val p, term_get_val q with
-    | Some O , _       => Some nil
-    | Some p', Some q' => if decide_subperm p' q' then Some nil else None
-    | _      , _       => Some (cons (formula_user subperm [p;q]) nil)
-    end.
+  #[local] Arguments Some {_} _%ctx.
 
-  Definition simplify_correctPC {Σ} (c : Term Σ ty.cap) : option (List Formula Σ) :=
+  Definition simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
+    match term_get_val p, term_get_val q with
+    | Some O , _       => Some []
+    | Some p', Some q' => if decide_subperm p' q' then Some [] else None
+    | _      , _       => Some [formula_user subperm [p;q]]
+    end%ctx.
+
+  Definition simplify_correctPC {Σ} (c : Term Σ ty.cap) : option (PathCondition Σ) :=
     match term_get_record c with
     | Some c' => match term_get_val c'.[??"cap_permission"] with
                  | Some O => None
@@ -977,18 +979,18 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
                      let b := c'.[??"cap_begin"] in
                      let e := c'.[??"cap_end"] in
                      let a := c'.[??"cap_cursor"] in
-                     Some (cons (formula_bool (term_binop bop.and
-                                                          (term_binop (bop.relop bop.le) b a)
-                                                          (term_binop (bop.relop bop.lt) a e))) nil)
-                 | None   => Some (cons (formula_user correctPC [c]) nil)
+                     Some [formula_bool (term_binop bop.and
+                                           (term_binop (bop.relop bop.le) b a)
+                                           (term_binop (bop.relop bop.lt) a e))]
+                 | None   => Some [formula_user correctPC [c]]
                  end
-    | _       => Some (cons (formula_user correctPC [c]) nil)
-    end.
+    | _       => Some [formula_user correctPC [c]]
+    end%ctx.
 
-  Definition simplify_not_is_perm {Σ} (p q : Term Σ ty.perm) : option (List Formula Σ) :=
+  Definition simplify_not_is_perm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
     match term_get_val p, term_get_val q with
-    | Some p', Some q' => if negb (is_perm p' q') then Some nil else None
-    | _      , _       => Some (cons (formula_user not_is_perm [p;q]) nil)
+    | Some p', Some q' => if negb (is_perm p' q') then Some [] else None
+    | _      , _       => Some [formula_user not_is_perm [p;q]]
     end.
 
   Definition solve_user : SolverUserOnly :=
@@ -1010,61 +1012,36 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
   Lemma subperm_O : forall p, Subperm O p.
   Proof. destruct p; reflexivity. Qed.
 
-  Local Ltac lsolve_match x :=
-    match x with
-    | @term_get_val ?Σ ?σ ?v =>
-        destruct (@term_get_val_spec Σ σ v); subst;
-        try progress cbn
-    | match ?x with _ => _ end =>
-        lsolve_match x
-    end.
+  Import Entailment.
 
   Local Ltac lsolve :=
     repeat
       lazymatch goal with
-      | |- option.spec _ _ (match ?x with _ => _ end) =>
-          lsolve_match x
-      | |- option.spec _ _ (Some _) =>
-          constructor; cbn; try intuition fail
-      | |- option.spec _ _ None =>
-          constructor; cbn; try intuition fail
-      end; auto.
+      | |- Some _             ⊣⊢ Some _             => apply @proper_some
+      | |- ctx.snoc ctx.nil _ ⊣⊢ ctx.snoc ctx.nil _ => apply proper_snoc; [easy|]
+      | |- None               ⊣⊢ Some _             => apply @unsatisfiable_none_some
+      | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
+      | op : BinOp _ _ ty.perm |- _                 => dependent elimination op
+      end; try easy; auto.
 
   Lemma solve_user_spec : SolverUserOnlySpec solve_user.
   Proof.
     intros Σ p ts.
     destruct p; cbv in ts; env.destroy ts; cbn.
-    - dependent elimination v0.
-      + constructor. cbn. intuition.
-      + dependent elimination v.
-        * destruct v0; constructor; cbn; auto; intuition. apply subperm_O.
-        * destruct v, v0; constructor; cbn; auto; unfold Subperm; intuition.
-        * dependent elimination op.
-      + dependent elimination op.
-    - dependent elimination v.
-      + constructor. cbn. intuition.
-      + destruct v.
-        unfold CorrectPC.
-        cbn.
-        destruct cap_permission; constructor; cbn; auto; intuition;
-          try (apply andb_prop in H; destruct H as [H _];
-               apply andb_prop in H; destruct H as [H1 H2];
-               apply Bool.andb_true_iff; split; intuition).
-      + constructor. cbn. intuition.
+    - dependent elimination v0; lsolve.
+      dependent elimination v; lsolve.
+      * destruct v0; cbn; lsolve.
+      * destruct v, v0; cbn; lsolve.
+    - dependent elimination v; lsolve.
+      + destruct v as [[] b e a]; cbn; lsolve;
+          intros ι; cbn; unfold CorrectPC; cbn; lia.
       + cbn in ts0; env.destroy ts0.
-        unfold CorrectPC, simplify_correctPC.
-        dependent elimination v2.
-        * constructor; cbn; intuition.
-        * destruct v2; constructor; cbn; auto; intuition;
-            apply andb_prop in H as [H _]; auto.
-        * dependent elimination op.
-    - dependent elimination v0.
-      + constructor. cbn. intuition.
-      + dependent elimination v.
-        * constructor. cbn. intuition.
-        * destruct v, v0; constructor; cbn; auto; unfold Not_is_perm; intuition.
-        * dependent elimination op.
-      + dependent elimination op.
+        dependent elimination v2; cbn; lsolve.
+        destruct v2; lsolve;
+          intros ι; cbn; unfold CorrectPC; cbn; try lia.
+    - dependent elimination v0; lsolve.
+      dependent elimination v; lsolve.
+      destruct v, v0; cbn; lsolve.
   Qed.
 
   Definition solver : Solver :=
@@ -1100,7 +1077,7 @@ Module MinCapsValidContracts.
          | |- VerificationCondition _ =>
              constructor;
              cbv [SymProp.safe env.remove env.lookup bop.eval is_true
-                               inst inst_term inst_formula env.Env_rect];
+                               inst inst_term instprop_formula env.Env_rect];
              cbn
          | |- Obligation _ _ _ => constructor; cbn
          | |- Debug _ _ => constructor
@@ -1203,10 +1180,8 @@ Module MinCapsValidContracts.
   Lemma valid_contract_is_not_zero : ValidContract is_not_zero.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_can_incr_cursor : ValidContractDebug can_incr_cursor.
-  Proof. symbolic_simpl.
-         intros; lia.
-  Qed.
+  Lemma valid_contract_can_incr_cursor : ValidContract can_incr_cursor.
+  Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_jalr_cap : ValidContract exec_jalr_cap.
   Proof. reflexivity. Qed.
@@ -1343,7 +1318,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_is_within_range).
     - apply (valid_contract _ H valid_contract_abs).
     - apply (valid_contract _ H valid_contract_is_not_zero).
-    - apply (valid_contract_debug _ H valid_contract_can_incr_cursor).
+    - apply (valid_contract _ H valid_contract_can_incr_cursor).
     - apply (valid_contract _ H valid_contract_exec_jalr_cap).
     - apply (valid_contract _ H valid_contract_exec_cjalr).
     - apply (valid_contract _ H valid_contract_exec_cjal).

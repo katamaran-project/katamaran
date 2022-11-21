@@ -64,6 +64,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Definition memΣ : gFunctors := gen_heapΣ Addr MemVal.
 
     Definition liveAddrs := List.map (fun x => bv.add minAddr (bv.of_nat x)) (seq 0 lenAddr).
+    #[global] Arguments liveAddrs : simpl never.
     Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
 
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
@@ -75,9 +76,8 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
            ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
-    Definition mem_res : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
-      fun {Σ} hG μ =>
-        ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v) %I.
+    Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
+      fun μ => ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v)%I.
 
     Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
     Proof.
@@ -93,11 +93,9 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
       by destruct el as (a' & <- & _).
     Qed.
 
-    Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-      ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+    Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
+      ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res μ)%I.
     Proof.
-      iIntros (Σ μ gHP).
-
       iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
 
       pose (memmap := initMemMap μ).

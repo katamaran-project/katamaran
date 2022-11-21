@@ -41,6 +41,7 @@ From Katamaran Require Export
      Tactics.
 From Katamaran Require Import
      Syntax.Expressions
+     Syntax.Messages
      Syntax.Patterns
      Syntax.Terms
      Symbolic.Instantiation
@@ -54,11 +55,11 @@ Module Type BaseMixin (Import TY : Types).
     ExpressionsOn TY <+
     TermsOn TY <+ PatternsOn TY <+
     OccursCheckOn TY <+ InstantiationOn TY <+
-    PartialEvaluationOn TY.
+    MessagesOn TY <+ PartialEvaluationOn TY.
 
   Notation PCtx := (NCtx PVar Ty).
   Notation LCtx := (NCtx LVar Ty).
-  Notation Valuation Σ := (@Env (Binding LVar Ty) (fun xt : Binding LVar Ty => Val (@type LVar Ty xt)) Σ).
+  Notation Valuation Σ := (Env (fun xt : Binding LVar Ty => Val (type xt)) Σ).
   Notation CStore := (@NamedEnv PVar Ty Val).
 
   Section PatternMatching.

@@ -34,7 +34,8 @@ From Coq Require Import
      NArith.NArith
      Strings.String
      ZArith.BinInt.
-
+From Katamaran Require Export
+     Notations.
 From Equations Require Import
      Equations.
 
@@ -328,10 +329,8 @@ Module option.
     Notation "x <- ma ;; mb" :=
       (bind ma (fun x => mb))
         (at level 80, ma at next level, mb at level 200, right associativity).
-    Notation "f <$> a" := (map f a) (at level 40, left associativity).
-    Notation "f <*> a" :=
-      (match f with Some g => map g a | None => None end)
-        (at level 40, left associativity).
+    Notation "f <$> a" := (map f a).
+    Notation "f <*> a" := (match f with Some g => map g a | None => None end).
 
   End notations.
 

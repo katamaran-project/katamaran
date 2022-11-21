@@ -54,10 +54,10 @@ Module Type WorldsOn
         { wctx :> LCtx;
           wco  : PathCondition wctx;
         }.
-    Global Arguments MkWorld _ _%list_scope : clear implicits.
+    #[global] Arguments MkWorld : clear implicits.
 
     (* The empty world without logic variables and constraints. *)
-    Definition wnil : World := @MkWorld ctx.nil nil.
+    Definition wnil : World := @MkWorld ctx.nil ctx.nil.
 
     (* This adds one new logic variable binding [b] to the world, i.e. after
        "allocating" it in a quantifier in the proposition. *)
@@ -69,10 +69,10 @@ Module Type WorldsOn
 
     (* Adds a new assume or asserted formula [f] to the world [w]. *)
     Definition wformula (w : World) (f : Formula w) : World :=
-      @MkWorld (wctx w) (cons f (wco w)).
-    (* Add all the formulas [fmls] to the world [w]. *)
-    Definition wformulas (w : World) (fmls : List Formula w) : World :=
-      @MkWorld (wctx w) (app fmls (wco w)).
+      @MkWorld (wctx w) (ctx.snoc (wco w) f).
+    (* Add all the formulas [C] to the world [w]. *)
+    Definition wpathcondition (w : World) (C : PathCondition w) : World :=
+      @MkWorld (wctx w) (ctx.cat (wco w) C).
 
     (* Change the world after a unifying variable [x] with term [t]. *)
     Definition wsubst (w : World) x {σ} {xIn : x∷σ ∈ w} (t : Term (w - x∷σ) σ) : World :=
@@ -173,14 +173,14 @@ Module Type WorldsOn
     (* Forward entailment *)
     Lemma entails_triangular_inv {w0 w1} (ν : Tri w0 w1) (ι0 : Valuation w0) :
       inst_triangular ν ι0 ->
-      instpc (wco w0) ι0 ->
-      instpc (wco w1) (inst (sub_triangular_inv ν) ι0).
+      instprop (wco w0) ι0 ->
+      instprop (wco w1) (inst (sub_triangular_inv ν) ι0).
     Proof.
       induction ν; cbn.
       - cbn. rewrite inst_sub_id. auto.
       - rewrite <- inst_sub_shift, inst_subst. intros [Heqx Heq'] Hpc0.
         apply IHν; cbn; auto.
-        rewrite inst_subst, inst_sub_single_shift; auto.
+        rewrite instprop_subst, inst_sub_single_shift; auto.
     Qed.
 
     Lemma inst_triangular_valid {w0 w1} (ζ01 : Tri w0 w1) (ι1 : Valuation w1) :
@@ -258,6 +258,10 @@ Module Type WorldsOn
     Definition acc_snoc_right {w} {b : LVar ∷ Ty} : w ⊒ wsnoc w b :=
       @acc_sub w (wsnoc w b) sub_wk1 (entails_refl (subst (wco w) sub_wk1)).
 
+    Definition acc_cat_right w (Δ : LCtx) : w ⊒ wcat w Δ :=
+      @acc_sub w (wcat w Δ) (@sub_cat_left w Δ)
+        (entails_refl (subst (wco w) (sub_cat_left Δ))).
+
     Program Definition acc_snoc_left {w1 w2} (ω12 : w1 ⊒ w2) (b : LVar ∷ Ty) (t : Term w2 (type b)) :
       wsnoc w1 b ⊒ w2 := acc_sub (sub_snoc (sub_acc ω12) b t) _.
     Next Obligation.
@@ -289,16 +293,11 @@ Module Type WorldsOn
       now intros [].
     Qed.
 
-    Program Definition acc_formulas_right (w : World) (fmls : List Formula w) :
-      w ⊒ wformulas w fmls :=
-      @acc_sub w (wformulas w fmls) (sub_id (wctx w)) _.
+    Program Definition acc_pathcondition_right (w : World) (C : PathCondition w) :
+      w ⊒ wpathcondition w C :=
+      @acc_sub w (wpathcondition w C) (sub_id (wctx w)) _.
     Next Obligation.
-    Proof.
-      intros w fmls ι. cbn.
-      rewrite subst_sub_id.
-      rewrite inst_pathcondition_app.
-      now intros [].
-    Qed.
+    Proof. intros w C ι H%instprop_cat. now rewrite subst_sub_id. Qed.
 
     Definition acc_subst_right {w : World} x {σ} {xIn : x∷σ ∈ w} (t : Term (w - x∷σ) σ) :
       w ⊒ wsubst w x t :=
@@ -371,8 +370,8 @@ Module Type WorldsOn
         (at level 99, x binder, y binder, right associativity)
       : modal_scope.
     Notation "w1 ⊒ w2" := (Acc w1 w2) (at level 80).
-    Notation "f <$> a" := (fmap_box f a) (at level 40, left associativity).
-    Notation "f <*> a" := (K f a) (at level 40, left associativity).
+    Notation "f <$> a" := (fmap_box f a).
+    Notation "f <*> a" := (K f a).
     Notation "ω1 ∘ ω2" := (acc_trans ω1 ω2) (at level 40, left associativity).
   End ModalNotations.
   Open Scope modal.
@@ -402,13 +401,18 @@ Module Type WorldsOn
       persist a (acc_trans ω1 ω2) = persist (persist a ω1) ω2.
     Proof. now rewrite ?persist_subst, sub_acc_trans, subst_sub_comp. Qed.
 
-    Lemma inst_persist {AT A} `{InstSubst AT A} `{@SubstLaws AT _} {w1 w2} (ω : w1 ⊒ w2) :
+    Lemma inst_persist `{InstSubst AT A, !SubstLaws AT} {w1 w2} (ω : w1 ⊒ w2) :
       forall (ι : Valuation w2) (t : AT w1),
         inst (persist t ω) ι = inst t (inst (sub_acc ω) ι).
     Proof. intros. now rewrite persist_subst, inst_subst. Qed.
 
+    Lemma instprop_persist `{InstPropSubst AT, !SubstLaws AT} {w1 w2} (ω : w1 ⊒ w2) :
+      forall (ι : Valuation w2) (t : AT w1),
+        instprop (persist t ω) ι <-> instprop t (inst (sub_acc ω) ι).
+    Proof. intros. now rewrite persist_subst, instprop_subst. Qed.
+
     Lemma ent_acc {w1 w2} (ω : w1 ⊒ w2) :
-      wco w2 ⊢ persist (wco w1) ω.
+      wco w2 ⊢ persist (A := PathCondition) (wco w1) ω.
     Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
 
   End Persistence.
@@ -423,135 +427,177 @@ Module Type WorldsOn
   Notation persist__term t :=
     (@persist (WTerm _) (@persistent_subst (STerm _) (@SubstTerm _)) _ t).
 
-  (* TODO: Move *)
-  Definition Solver : Type :=
-    forall w0 (fmls0 : WList Formula w0),
-      option { w1 & Tri w0 w1 * List Formula w1 }%type.
+  Section SolverInterface.
+    Import Entailment.
 
-  Definition SolverSpec (s : Solver) : Prop :=
-    forall w0 (fmls0 : WList Formula w0),
-      option.spec
-        (fun '(existT w1 (ζ, fmls1)) =>
-           forall ι0,
-             instpc (wco w0) ι0 ->
-             (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
-               (forall ι1,
-                   instpc (wco w1) ι1 ->
-                   ι0 = inst (sub_triangular ζ) ι1 ->
-                   instpc fmls0 ι0 <-> inst fmls1 ι1))
-        (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
-        (s w0 fmls0).
+    Definition Solver : Type :=
+      forall (w0 : World) (C0 : PathCondition w0),
+        option { w1 & Tri w0 w1 * PathCondition w1 }%type.
 
-  Definition solver_null : Solver :=
-    fun w fmls => Some (existT w (tri_id , fmls)).
+    Definition SolverSpec (s : Solver) : Prop :=
+      forall (w0 : World) (C0 : PathCondition w0),
+        option.spec
+          (fun '(existT w1 (ζ, C1)) =>
+             forall ι0,
+               instprop (wco w0) ι0 ->
+               (instprop C0 ι0 -> inst_triangular ζ ι0) /\
+                 (forall ι1,
+                     instprop (wco w1) ι1 ->
+                     ι0 = inst (sub_triangular ζ) ι1 ->
+                     instprop C0 ι0 <-> instprop C1 ι1))
+          (forall ι, instprop (wco w0) ι -> ~ instprop C0 ι)
+          (s w0 C0).
 
-  Lemma solver_null_spec : SolverSpec solver_null.
-  Proof.
-    intros w fmls. constructor. cbn. intros ι Hpc. split. auto.
-    intros ι' Hpc' ->. now rewrite inst_sub_id.
-  Qed.
+    Definition solver_null : Solver :=
+      fun w C => Some (existT w (tri_id , C)).
 
-  Definition SolverUserOnly : Type :=
-    forall Σ (p : 𝑷), Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ).
+    Lemma solver_null_spec : SolverSpec solver_null.
+    Proof.
+      intros w C. constructor. cbn. intros ι Hpc. split. auto.
+      intros ι' Hpc' ->. now rewrite inst_sub_id.
+    Qed.
 
-  Definition SolverUserOnlySpec (s : SolverUserOnly) : Prop :=
-    forall Σ (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)),
-      option.spec
-        (fun r : List Formula Σ =>
-           forall ι : Valuation Σ,
-             inst (formula_user p ts) ι <-> instpc r ι)
-        (forall ι : Valuation Σ, ~ inst (formula_user p ts) ι)
-        (s Σ p ts).
+    Definition SolverUserOnly : Type :=
+      forall Σ (p : 𝑷), Env (Term Σ) (𝑷_Ty p) -> Option PathCondition Σ.
 
-  Section SimplifyAll.
-    Import option.notations.
-    Context {Σ} (g : Formula Σ -> List Formula Σ -> option (List Formula Σ)).
+    Definition SolverUserOnlySpec (s : SolverUserOnly) : Prop :=
+      forall Σ (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)),
+        s Σ p ts ⊣⊢ Some [formula_user p ts]%ctx.
 
-    Definition simplify_all {Σ} (g : Formula Σ -> List Formula Σ -> option (List Formula Σ)) :=
-      fix simplify_all (fmls k : List Formula Σ) {struct fmls} : option (List Formula Σ) :=
-        match fmls with
-        | nil => Some k
-        | cons fml0 fmls =>
-          k' <- simplify_all fmls k ;;
-          g fml0 k'
+    Section SimplifyAll.
+      Import option.notations.
+      Context {Σ} (g : Formula Σ -> PathCondition Σ -> option (PathCondition Σ)).
+
+      Definition simplify_all {Σ} (g : Formula Σ -> PathCondition Σ -> option (PathCondition Σ)) :=
+        fix simplify_all (C k : PathCondition Σ) {struct C} : option (PathCondition Σ) :=
+          match C with
+          | ctx.nil => Some k
+          | ctx.snoc C F  =>
+              k' <- simplify_all C k ;;
+              g F k'
+          end.
+
+      Context (g_spec : forall F k,
+                  option.spec
+                    (fun r : PathCondition Σ =>
+                       forall ι : Valuation Σ,
+                         instprop (k ▻ F) ι <-> instprop r ι)
+                    (forall ι : Valuation Σ, ~ instprop F ι)
+                    (g F k)).
+
+      Lemma simplify_all_spec (C k : PathCondition Σ) :
+        option.spec
+          (fun r : PathCondition Σ =>
+             forall ι : Valuation Σ,
+               instprop (k ▻▻ C) ι <-> instprop r ι)
+          (forall ι : Valuation Σ, ~ instprop C ι)
+          (simplify_all g C k).
+      Proof.
+        induction C as [|C IHC F]; cbn; [constructor; reflexivity|].
+        apply option.spec_bind. revert IHC.
+        apply option.spec_monotonic.
+        - intros tmp Htmp. specialize (g_spec F tmp). revert g_spec.
+          apply option.spec_monotonic.
+          + intros res Hres ι. rewrite (Htmp ι). apply (Hres ι).
+          + intros HnF ι [HCι HFι]. now apply (HnF ι).
+        - intros HnC ι [HCι HFι]. now apply (HnC ι).
+      Qed.
+
+    End SimplifyAll.
+
+    Section WithUserOnlySolver.
+
+      Context (user : SolverUserOnly).
+
+      Definition solveruseronly_simplify_formula {Σ} (F : Formula Σ) (k : PathCondition Σ) : option (PathCondition Σ) :=
+        match F with
+        | formula_user p ts => option.map (fun r => k ▻▻ r) (user ts)
+        | F                 => Some (k ▻ F)
         end.
 
-    Context (g_spec : forall f k,
-                option.spec
-                  (fun r : List Formula Σ =>
-                     forall ι : Valuation Σ,
-                       instpc (cons f k)%list ι <-> instpc r ι)
-                  (forall ι : Valuation Σ, ~ inst f ι)
-                  (g f k)).
+      Definition solveruseronly_to_solver : Solver :=
+        fun w C =>
+          option_map
+            (fun l => existT w (tri_id, l))
+            (simplify_all solveruseronly_simplify_formula C ctx.nil).
 
-    Lemma simplify_all_spec (fmls k : List Formula Σ) :
-      option.spec
-        (fun r : List Formula Σ =>
-           forall ι : Valuation Σ,
-             instpc (fmls ++ k)%list ι <-> instpc r ι)
-        (forall ι : Valuation Σ, ~ instpc fmls ι)
-        (simplify_all g fmls k).
-    Proof.
-      induction fmls; cbn; [constructor; reflexivity|].
-      apply option.spec_bind. revert IHfmls.
-      apply option.spec_monotonic.
-      - intros tmp Htmp. specialize (g_spec a tmp). revert g_spec.
+      Context (user_spec : SolverUserOnlySpec user).
+
+      Lemma solveruseronly_simplify_formula_spec {Σ} (F : Formula Σ) (k : PathCondition Σ) :
+        option.spec
+          (fun r : PathCondition Σ =>
+             forall ι : Valuation Σ,
+               instprop (k ▻ F) ι <-> instprop r ι)
+          (forall ι : Valuation Σ, ~ instprop F ι)
+          (solveruseronly_simplify_formula F k).
+      Proof.
+        destruct F; try (constructor; reflexivity). apply option.spec_map.
+        specialize (user_spec ts).
+        destruct user; constructor; intros ι; specialize (@user_spec ι); cbn in *.
+        - unfold PathCondition. rewrite instprop_cat. intuition.
+        - intuition.
+      Qed.
+
+      Lemma solveruseronly_to_solver_spec : SolverSpec solveruseronly_to_solver.
+      Proof.
+        intros w0 C. unfold solveruseronly_to_solver.
+        apply option.spec_map.
+        generalize (simplify_all_spec solveruseronly_simplify_formula solveruseronly_simplify_formula_spec C ctx.nil).
         apply option.spec_monotonic.
-        + intros res Hres ι. rewrite (Htmp ι). apply (Hres ι).
-        + intros Hna ι [Ha ?]. now apply (Hna ι).
-      - intros Hnfmls ι [Ha Hfmls]. now apply (Hnfmls ι).
-    Qed.
+        - intros r H ι Hpc. split; [constructor|].
+          specialize (H ι). unfold PathCondition in H.
+          rewrite instprop_cat in H. cbn in H. rewrite leftid_true_and in H.
+          intros ι' Hpc'. cbn. rewrite inst_sub_id. intros. now subst.
+        - intros Hnf ι Hpc. apply Hnf.
+      Qed.
 
-  End SimplifyAll.
+    End WithUserOnlySolver.
 
-  Section WithUserOnlySolver.
+  End SolverInterface.
 
-    Context (user : SolverUserOnly).
+  Section SolverCompose.
+    Definition solver_compose (s1 s2 : Solver) : Solver :=
+      fun w0 fmls0 =>
+        option.bind
+          (s1 _ fmls0)
+          (fun '(existT w1 (ν01 , fmls1)) =>
+             option.map
+               (fun '(existT w2 (ν12 , fmls2)) =>
+                  existT w2 (tri_comp ν01 ν12 , fmls2))
+               (s2 _ fmls1)).
 
-    Definition solveruseronly_simplify_formula {Σ} (f : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
-      match f with
-      | formula_user p ts => option.map (fun r => app r k) (user ts)
-      | f                 => Some (cons f k)
-      end.
-
-    Definition solveruseronly_to_solver : Solver :=
-      fun w fmls =>
-        option_map
-          (fun l => existT w (tri_id, l))
-          (simplify_all solveruseronly_simplify_formula fmls nil).
-
-    Context (user_spec : SolverUserOnlySpec user).
-
-    Lemma solveruseronly_simplify_formula_spec {Σ} (f : Formula Σ) (k : List Formula Σ) :
-      option.spec
-        (fun r : List Formula Σ =>
-           forall ι : Valuation Σ,
-             instpc (cons f k)%list ι <-> instpc r ι)
-        (forall ι : Valuation Σ, ~ inst f ι)
-        (solveruseronly_simplify_formula f k).
+    Lemma solver_compose_spec {s1 s2} (spec1 : SolverSpec s1) (spec2 : SolverSpec s2) : SolverSpec (solver_compose s1 s2).
     Proof.
-      destruct f; try (constructor; reflexivity).
-      cbn [solveruseronly_simplify_formula]. apply option.spec_map.
-      generalize (user_spec ts).
-      apply option.spec_monotonic.
-      - intros ? H ?. rewrite inst_pathcondition_app.
-        apply and_iff_compat_r'. intros ?. apply H.
-      - auto.
-    Qed.
-
-    Lemma solveruseronly_to_solver_spec : SolverSpec solveruseronly_to_solver.
-    Proof.
-      intros w0 fmls. unfold solveruseronly_to_solver.
+      unfold SolverSpec, solver_compose. intros w0 fmls0.
+      apply option.spec_bind.
+      generalize (spec1 _ fmls0); clear spec1.
+      apply option.spec_monotonic; auto.
+      intros (w1 & ν01 & fmls1) H1.
       apply option.spec_map.
-      generalize (simplify_all_spec solveruseronly_simplify_formula solveruseronly_simplify_formula_spec fmls nil).
-      apply option.spec_monotonic.
-      - intros r H ι Hpc. split; [constructor|].
-        specialize (H ι). rewrite inst_pathcondition_app in H.
-        cbn in H. rewrite rightid_and_true in H.
-        intros ι' Hpc'. cbn. rewrite inst_sub_id. intros. now subst.
-      - intros Hnf ι Hpc. apply Hnf.
+      generalize (spec2 _ fmls1); clear spec2.
+      apply option.spec_monotonic; auto.
+      - intros (w2 & ν12 & fmls2) H2. intros ι0 Hpc0.
+        specialize (H1 ι0 Hpc0). destruct H1 as [H01 H10].
+        rewrite inst_tri_comp. split.
+        + intros Hfmls0. split; auto.
+          remember (inst (sub_triangular_inv ν01) ι0) as ι1.
+          assert (instprop (wco w1) ι1) as Hpc1 by
+              (subst; apply entails_triangular_inv; auto).
+          apply H2; auto. apply H10; auto.
+          subst; rewrite inst_triangular_right_inverse; auto.
+        + intros ι2 Hpc2 Hι0. rewrite sub_triangular_comp, inst_subst in Hι0.
+          remember (inst (sub_triangular ν12) ι2) as ι1.
+          assert (instprop (wco w1) ι1) as Hpc1 by
+              (revert Hpc2; subst; rewrite <- sub_acc_triangular, <- instprop_persist; apply ent_acc).
+          rewrite H10; eauto. apply H2; auto.
+      - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
+        destruct H1 as [H01 H10]. inster H01 by auto.
+        pose (inst (sub_triangular_inv ν01) ι0) as ι1.
+        assert (instprop (wco w1) ι1) as Hpc1 by
+            (subst; apply entails_triangular_inv; auto).
+        apply (Hfmls1 ι1 Hpc1). revert Hfmls0.
+        apply H10; auto. subst ι1.
+        now rewrite inst_triangular_right_inverse.
     Qed.
-
-  End WithUserOnlySolver.
-
+  End SolverCompose.
 End WorldsOn.
