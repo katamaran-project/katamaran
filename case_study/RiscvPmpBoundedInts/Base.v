@@ -50,6 +50,7 @@ Definition word      := 4 * byte.
 Definition xlenbytes := 4.
 Definition xlenbits  := xlenbytes * byte.
 
+(* TODO: Use Spec for both, then use lia *)
 #[export] Instance IsTrue_bytes_xlenbytes (x : nat) (H : IsTrue (x <=? xlenbytes)): IsTrue (byte * x <=? byte * xlenbytes).
 Proof.
   constructor.
