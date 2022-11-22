@@ -84,13 +84,10 @@ Module RiscvPmpIrisInstance <:
     (* TODO: change back to words instead of bytes... might be an easier first version
              and most likely still conventient in the future *)
   Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptsto_readonly").
-    Definition interp_ptsto (addr : Addr) (w : Word) : iProp Σ :=
-      mapsto addr              (DfracOwn 1) (get_byte 0 w) ∗
-      mapsto (addr_inc addr 1) (DfracOwn 1) (get_byte 1 w) ∗
-      mapsto (addr_inc addr 2) (DfracOwn 1) (get_byte 2 w) ∗
-      mapsto (addr_inc addr 3) (DfracOwn 1) (get_byte 3 w).
-    Definition interp_ptsto_readonly (addr : Addr) (w : Word) : iProp Σ :=
-      inv femto_inv_ns (interp_ptsto addr w).
+    Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
+      mapsto addr (DfracOwn 1) b.
+    Definition interp_ptsto_readonly (addr : Addr) (b : Byte) : iProp Σ :=
+      inv femto_inv_ns (interp_ptsto addr b).
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
     Definition ptstoSthL : list Addr -> iProp Σ :=
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
@@ -104,8 +101,13 @@ Module RiscvPmpIrisInstance <:
     Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       (ptstoSth addr -∗ interp_pmp_addr_access addrs entries m)%I.
 
+    Definition interp_ptstomem {width : nat} (addr : Addr) (bytes : bv (byte * width)) : iProp Σ :=
+      [∗ list] offset ∈ (seq 0 width),
+        interp_ptsto (bv.of_Z (bv.unsigned addr + Z.of_nat offset)) (get_byte offset bytes).
+
+    (* TODO: introduce constant for nr of word bytes (replace 4) *)
     Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
-      (∃ v, interp_ptsto addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
+      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
 
   End WithSailGS.
 
@@ -122,7 +124,7 @@ Module RiscvPmpIrisInstance <:
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_readonly           | [ addr; w ]          => interp_ptsto_readonly addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
-    | ptstomem                | _                    => True%I
+    | ptstomem _               | [ addr; bs]       => interp_ptstomem addr bs
     | ptstoinstr              | [ addr; instr ]      => interp_ptsto_instr addr instr.
 
     Ltac destruct_pmp_entries :=
