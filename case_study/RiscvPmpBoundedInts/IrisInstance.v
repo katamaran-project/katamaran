@@ -101,7 +101,7 @@ Module RiscvPmpIrisInstance <:
     Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       (ptstoSth addr -∗ interp_pmp_addr_access addrs entries m)%I.
 
-    Definition interp_ptstomem {width : nat} (addr : Addr) (bytes : bv (byte * width)) : iProp Σ :=
+    Definition interp_ptstomem {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
       [∗ list] offset ∈ (seq 0 width),
         interp_ptsto (bv.of_Z (bv.unsigned addr + Z.of_nat offset)) (get_byte offset bytes).
 

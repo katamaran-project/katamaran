@@ -121,30 +121,32 @@ Module RiscvPmpModel2.
       unfold fun_write_ram.
       apply map_Forall_lookup.
       intros i x H0.
-      destruct (bv.eqb_spec paddr i) as [e|n].
-      + subst.
-        apply (lookup_insert_rev memmap i); assumption.
-      + rewrite -> map_Forall_lookup in Hmap.
-        rewrite -> (lookup_insert_ne _ _ _ _ n) in H0.
+      destruct bv.appView as [byte bytes]. cbn in bytes.
+      unfold write_byte.
+      destruct eq_dec.
+      - subst paddr.
+        apply (lookup_insert_rev memmap i).
+        admit.
+      - rewrite -> map_Forall_lookup in Hmap.
+        rewrite (lookup_insert_ne _ _ _ _ n) in H0.
         apply Hmap; assumption.
-    Qed.
+    Admitted.
 
-    Lemma mem_inv_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal)
-                             (paddr : Addr) (data : MemVal),
-        ⊢ ⌜map_Forall (λ (a : Addr) (v : Word), (γ, μ).2 a = v) memmap⌝ -∗
-          gen_heap.gen_heap_interp (<[paddr := data]> memmap) -∗
-          mem_inv sailGS_memGS (fun_write_ram μ paddr data).
-    Proof.
-      iIntros (γ μ memmap paddr data) "%Hmap Hmem".
-      iExists (<[paddr := data]> memmap); iFrame.
-      iPureIntro; apply (map_Forall_update _ _ _ _ Hmap).
-    Qed.
+    (* Lemma mem_inv_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal) *)
+    (*                          (paddr : Addr) (data : MemVal), *)
+    (*     ⊢ ⌜map_Forall (λ (a : Addr) (v : Word), (γ, μ).2 a = v) memmap⌝ -∗ *)
+    (*       gen_heap.gen_heap_interp (<[paddr := data]> memmap) -∗ *)
+    (*       mem_inv sailGS_memGS (fun_write_ram μ paddr data). *)
+    (* Proof. *)
+    (*   iIntros (γ μ memmap paddr data) "%Hmap Hmem". *)
+    (*   iExists (<[paddr := data]> memmap); iFrame. *)
+    (*   iPureIntro; apply (map_Forall_update _ _ _ _ Hmap). *)
+    (* Qed. *)
 
-    Lemma read_ram_sound :
-      ValidContractForeign sep_contract_read_ram read_ram.
+    Lemma read_ram_sound (bytes : nat) :
+      ValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
     Proof.
-      intros Γ es δ ι Heq.
-      destruct_syminstance ι.
+      intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
       iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
       unfold semWP. rewrite wp_unfold.
       cbn in *.
@@ -157,20 +159,19 @@ Module RiscvPmpModel2.
       eliminate_prim_step Heq.
       iMod "Hclose" as "_".
       iModIntro.
-      iPoseProof (gen_heap.gen_heap_valid with "Hmem H") as "%".
-      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "?".
-      iFrame.
-      iApply wp_value; cbn.
-      iSplitL; [|auto].
-      iSplitR; auto.
-      apply map_Forall_lookup_1 with (i := paddr) (x := w) in Hmap; auto.
-    Qed.
+      (* iPoseProof (gen_heap.gen_heap_valid with "Hmem H") as "%". *)
+      (* iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "?". *)
+      (* iFrame. *)
+      (* iApply wp_value; cbn. *)
+      (* iSplitL; [|auto]. *)
+      (* iSplitR; auto. *)
+      (* apply map_Forall_lookup_1 with (i := paddr) (x := w) in Hmap; auto. *)
+    Admitted.
 
-    Lemma write_ram_sound :
-      ValidContractForeign sep_contract_write_ram write_ram.
+    Lemma write_ram_sound (bytes : nat) :
+      ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
     Proof.
-      intros Γ es δ ι Heq.
-      destruct_syminstance ι.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
       iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
       unfold semWP. rewrite wp_unfold.
       cbn.
@@ -182,13 +183,13 @@ Module RiscvPmpModel2.
       repeat iModIntro.
       eliminate_prim_step Heq.
       iDestruct "H" as "(%w & H)".
-      iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem H") as "[Hmem H]".
-      iMod "Hclose" as "_".
-      iModIntro.
-      iPoseProof (mem_inv_update $! Hmap with "Hmem") as "?".
-      iFrame.
-      iApply wp_value; now iFrame.
-    Qed.
+      (* iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem H") as "[Hmem H]". *)
+      (* iMod "Hclose" as "_". *)
+      (* iModIntro. *)
+      (* iPoseProof (mem_inv_update $! Hmap with "Hmem") as "?". *)
+      (* iFrame. *)
+      (* iApply wp_value; now iFrame. *)
+    Admitted.
 
     Lemma decode_sound :
       ValidContractForeign sep_contract_decode decode.
@@ -359,8 +360,8 @@ Module RiscvPmpModel2.
     intros a [[lo hi]|]; cbn;
       repeat
         match goal with
-        | |- context[bv.uleb ?x ?y] => destruct (bv.ule_spec x y); cbn
-        | |- context[bv.ultb ?x ?y] => destruct (bv.ult_spec x y); cbn
+        | |- context[@bv.uleb ?n ?x ?y] => destruct (@bv.ule_spec n x y); cbn
+        | |- context[@bv.ultb ?n ?x ?y] => destruct (@bv.ult_spec n x y); cbn
         end; auto; cbv [bv.ule bv.ult] in *; Lia.lia.
     Qed.
 
@@ -397,7 +398,7 @@ Module RiscvPmpModel2.
       iDestruct "Hunlocked" as "[[%Hcfg0 %Hcfg1] _]".
       apply Pmp_cfg_unlocked_bool in Hcfg0.
       apply Pmp_cfg_unlocked_bool in Hcfg1.
-      repeat iExists _.
+      iExists cfg0. iExists addr0. iExists cfg1. iExists addr1.
       now iFrame.
     Qed.
 

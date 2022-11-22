@@ -50,17 +50,13 @@ Definition word      := 4 * byte.
 Definition xlenbytes := 4.
 Definition xlenbits  := xlenbytes * byte.
 
-(* TODO: Use Spec for both, then use lia *)
-#[export] Instance IsTrue_bytes_xlenbytes (x : nat) (H : IsTrue (x <=? xlenbytes)): IsTrue (byte * x <=? byte * xlenbytes).
+#[export] Instance IsTrue_bytes_xlenbytes (x y: nat) (H : IsTrue (x <=? y)): IsTrue (x * byte <=? y * byte).
 Proof.
-  constructor.
-  apply Is_true_eq_left.
-  apply IsTrue.from in H.
-  apply Is_true_eq_true in H.
-  apply leb_correct.
-  apply leb_complete in H.
-  apply (Nat.mul_le_mono_l _ _ _ H).
-Qed.
+  destruct H as [H]. revert y H.
+  induction x; cbn.
+  - constructor. constructor.
+  - now intros [|y]; cbn; auto.
+Defined.
 
 Definition Xlenbits : Set := bv xlenbits.
 Definition Addr : Set     := bv xlenbits.
@@ -225,7 +221,7 @@ Inductive CtlResult : Set :=
 .
 
 Inductive MemoryOpResult (bytes : nat): Set :=
-| MemValue (bs : bv (8 * bytes))
+| MemValue (bs : bv (bytes * 8))
 | MemException (e : ExceptionType)
 .
 
@@ -474,7 +470,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_xlenbits                       := (ty.bvec xlenbits).
   Definition ty_word                           := (ty.bvec word).
   Definition ty_byte                           := (ty.bvec byte).
-  Definition ty_bytes (bytes : nat)            := (ty.bvec (byte * bytes)).
+  Definition ty_bytes (bytes : nat)            := (ty.bvec (bytes * byte)).
   Definition ty_regno                          := (ty.bvec 3).
   Definition ty_privilege                      := (ty.enum privilege).
   Definition ty_priv_level                     := (ty.bvec 2).
@@ -576,7 +572,7 @@ Module Export RiscvPmpBase <: Base.
     | exception_type   => fun _ => ty.unit
     | memory_op_result bytes => fun K =>
                                   match K with
-                                  | KMemValue     => ty.bvec (8 * bytes)
+                                  | KMemValue     => ty.bvec (bytes * 8)
                                   | KMemException => ty_exception_type
                                   end
     | fetch_result     => fun K =>

@@ -128,32 +128,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition width_constraint (width : nat) : bool :=
     (0 <? width)%nat && (width <=? xlenbytes)%nat.
 
-  #[export] Instance IsTrue_byte_multiplier (x y : nat) (H: IsTrue (x <=? y)%nat) :
-    IsTrue (byte * x <=? byte * y)%nat.
-  Proof.
-    constructor.
-    apply Is_true_eq_left.
-    apply IsTrue.from in H.
-    apply Is_true_eq_true in H.
-    apply leb_correct.
-    apply leb_complete in H.
-    apply (Nat.mul_le_mono_l _ _ _ H).
-  Qed.
-
-  #[export] Instance IsTrue_width_constraint_byte_multiplier (bytes : nat) (H: IsTrue (width_constraint bytes)) :
-    IsTrue (byte * bytes <=? byte * xlenbytes)%nat.
-  Proof.
-    constructor.
-    apply Is_true_eq_left.
-    apply IsTrue.from in H.
-    unfold width_constraint in H.
-    apply Is_true_eq_true in H.
-    apply leb_correct.
-    apply andb_prop in H.
-    destruct H as [_ H].
-    apply leb_complete in H.
-    apply (Nat.mul_le_mono_l _ _ _ H).
-  Qed.
+  #[export] Instance IsTrue_width_constraint_byte_multiplier (bytes : nat)
+    (H: IsTrue (width_constraint bytes)) :
+    IsTrue (bytes * byte <=? xlenbytes * byte)%nat :=
+    IsTrue_bytes_xlenbytes bytes xlenbytes (IsTrue.andb_r H).
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
@@ -436,7 +414,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_extend_value (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes) :=
     match: value in union (memory_op_result bytes) with
     |> KMemValue (pat_var "result") =>
-      stm_exp (exp_union (memory_op_result xlenbytes) KMemValue (@exp_zext _ (byte * bytes) (byte * xlenbytes) result _))
+      stm_exp (exp_union (memory_op_result xlenbytes) KMemValue (@exp_zext _ (bytes * byte) (xlenbytes * byte) result _))
     |> KMemException (pat_var "e")  =>
       stm_exp (exp_union (memory_op_result xlenbytes) KMemException (exp_var "e"))
     end.
@@ -1059,73 +1037,45 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Include DefaultRegStoreKit RiscvPmpBase.
 
   Section ForeignKit.
+  Import bv.notations.
 
   (* Memory *)
   Definition Memory := Addr -> Byte.
 
-  Lemma IsTrue_byte_widening : forall (x : nat),
-      IsTrue (byte <=? byte * S x)%nat.
-  Proof.
-    intros.
-    constructor.
-    apply Is_true_eq_left.
-    apply leb_correct.
-    lia.
-  Qed.
-
-  Lemma normalize_IsTrue_byte_widening : forall (x : nat),
-      IsTrue.normalize (IsTrue_byte_widening x) = IsTrue_byte_widening x.
-  Proof.
-    intros.
-    apply IsTrue.proof_irrelevance.
-  Qed.
-
-  Instance IsTrue_byte_le (x : nat) : IsTrue (byte <=? byte * S x)%nat.
-  Proof. apply IsTrue_byte_widening. Qed.
-
-  Definition read_mem (μ : Memory) (data_size : nat) (addr : Addr) (offset : nat) {p : IsTrue (byte <=? data_size)%nat} : bv data_size :=
-      let bits := @bv.zext _ (μ addr) _ p in
-      bv.of_Z (Z.shiftl (bv.unsigned bits) (Z.of_nat (offset * byte)%nat)).
-
-  Definition read_shifted_bits (μ : Memory) (bitlen : nat) (addr : Addr) {p : IsTrue (byte <=? bitlen)%nat} : nat -> bv bitlen :=
-    fun offset =>
-      let a := bv.add addr (@bv.of_nat 32 offset) in
-      read_mem μ bitlen a offset.
-  Definition fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) : Val (ty_bytes data_size) :=
+  Fixpoint fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
+    Val (ty_bytes data_size) :=
     match data_size with
-    | 0 => bv.of_nat 0
-    | S width =>
-        let bitlen := byte * S width in 
-        let bytes := map (@read_shifted_bits μ bitlen addr _) (seq 0 data_size) in
-        foldl bv.add (@bv.zero bitlen) bytes
+    | O   => bv.zero _
+    | S n => bv.app (μ addr) (fun_read_ram μ n (bv.one _ + addr))
     end.
 
-  Definition get_byte {n} (offset : nat) (bits : bv n) : Byte :=
-    bv.of_Z (Z.shiftr (bv.unsigned bits) (Z.of_nat (offset * byte))).
-
-  Example ex_get_byte₁ : bv.unsigned (get_byte 0 (@bv.of_Z 32 16715760)) = 240%Z.
+  (* Small test to show that read_ram reads bitvectors in little
+     endian order. *)
+  Goal
+    let μ : Memory := fun a =>
+      if eq_dec a [bv 0x0] then [bv 0xEF] else
+      if eq_dec a [bv 0x1] then [bv 0xBE] else
+      if eq_dec a [bv 0x2] then [bv 0xAD] else
+      if eq_dec a [bv 0x3] then [bv 0xDE] else
+      [bv 0]
+    in fun_read_ram μ 4 [bv 0] = [bv 0xDEADBEEF].
   Proof. reflexivity. Qed.
 
-  Example ex_get_byte₂ : bv.unsigned (get_byte 1 (@bv.of_Z 32 16715760)) = 15%Z.
-  Proof. reflexivity. Qed.
+  Definition write_byte (μ : Memory) (addr : Val ty_xlenbits) (data : Byte) : Memory :=
+    fun a => if eq_dec addr a then data else μ a.
 
-  Example ex_get_byte₃ : bv.unsigned (get_byte 2 (@bv.of_Z 32 16715760)) = 255%Z.
-  Proof. reflexivity. Qed.
-
-  Example ex_get_byte₄ : bv.unsigned (get_byte 3 (@bv.of_Z 32 16715760)) = 0%Z.
-  Proof. reflexivity. Qed.
-
-  Definition write_mem {n} (data : bv n) (addr : Val ty_xlenbits) : Memory -> nat -> Memory :=
-    fun μ offset =>
-      let byte := get_byte offset data in
-      let a    := bv.add addr (@bv.zext 32 (bv.of_nat offset) _ _) in
-      fun addr' => if bv.eqb a addr' then byte else μ addr'.
-
-  Definition fun_write_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) (data : Val (ty_bytes data_size)) : Memory :=
-    (* foldl (write_mem data addr) μ (seqZ 0 data_size). *)
-    foldl (write_mem data addr) μ (seq 0 data_size).
-
-  Import bv.notations.
+  Fixpoint fun_write_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
+    Val (ty_bytes data_size) -> Memory :=
+    match data_size as n return (Val (ty_bytes n) → Memory) with
+    | O   => fun _data => μ
+    | S n => fun data : Val (ty_bytes (S n)) =>
+               let (byte,bytes) := bv.appView 8 (n * 8) data in
+               fun_write_ram
+                 (write_byte μ addr byte)
+                 (bv.one xlenbits + addr)
+                 bytes
+    end.
+  #[global] Arguments fun_write_ram : clear implicits.
 
   #[derive(equations=no)]
   Equations ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=

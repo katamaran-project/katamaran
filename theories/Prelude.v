@@ -258,6 +258,23 @@ Module IsTrue.
   #[export] Hint Mode IsTrue + : typeclass_instances.
   #[export] Hint Extern 10 (IsTrue ?b) =>
     refine (@mk true I) : typeclass_instances.
+
+  (* The following two definition should never be added as instances themselves
+     because they will easily lead to exponential blowup in proof search. Only
+     use them locally in the definition of other instances. *)
+  Definition andb_l {a b} : IsTrue (a && b) -> IsTrue a :=
+    match a with
+    | true  => fun _ => @IsTrue.mk true I
+    | false => fun H => H
+    end.
+
+  Definition andb_r {a b} : IsTrue (a && b) -> IsTrue b :=
+    match b , a with
+    | true  , _     => fun _ => @IsTrue.mk true I
+    | false , true  => fun H => H
+    | false , false => fun H => H
+    end.
+
 End IsTrue.
 Export (hints) IsTrue.
 Export IsTrue (IsTrue).
