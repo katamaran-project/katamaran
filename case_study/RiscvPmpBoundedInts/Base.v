@@ -52,10 +52,10 @@ Definition xlenbits  := xlenbytes * byte.
 
 #[export] Instance IsTrue_bytes_xlenbytes (x y: nat) (H : IsTrue (x <=? y)): IsTrue (x * byte <=? y * byte).
 Proof.
-  destruct H as [H]. revert y H.
+  revert y H.
   induction x; cbn.
   - constructor. constructor.
-  - now intros [|y]; cbn; auto.
+  - intros [|y]; cbn; auto.
 Defined.
 
 Definition Xlenbits : Set := bv xlenbits.

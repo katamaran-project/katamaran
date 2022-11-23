@@ -126,11 +126,12 @@ Module RiscvPmpModel2.
       destruct eq_dec.
       - subst paddr.
         apply (lookup_insert_rev memmap i).
-        admit.
+        destruct (bv.nilView bytes).
+        now rewrite bv.app_nil_r in H0.
       - rewrite -> map_Forall_lookup in Hmap.
         rewrite (lookup_insert_ne _ _ _ _ n) in H0.
         apply Hmap; assumption.
-    Admitted.
+    Qed.
 
     (* Lemma mem_inv_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal) *)
     (*                          (paddr : Addr) (data : MemVal), *)

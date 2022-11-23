@@ -406,6 +406,26 @@ Module bv.
         rewrite IHx. cbn.
         now rewrite rew_opp_l.
     Qed.
+
+    Lemma cons_eq_rect (m n : nat) (e : m = n) (b : bool) (v : bv m) :
+      cons b (eq_rect m bv v n e) =
+      eq_rect (S m) bv (cons b v) (S n) (f_equal S e).
+    Proof. now destruct e. Qed.
+
+    (* This is a transparent copy of a lemma with the same name from the
+       stdlib. *)
+    Fixpoint plus_n_O (n : nat) : n + O = n :=
+      match n with
+      | O   => eq_refl
+      | S n => f_equal S (plus_n_O n)
+      end.
+
+    Lemma app_nil_r {n} (v : bv n) :
+      app v nil = eq_rect n bv v (n + O) (eq_sym (plus_n_O n)).
+    Proof.
+      induction v using bv_rect; cbn; [easy|].
+      now rewrite app_cons, IHv, cons_eq_rect, eq_sym_map_distr.
+    Qed.
   End ListLike.
 
   Section Constants.
@@ -722,14 +742,14 @@ Module bv.
     | S n => bitstring.bO (bitstring_zeroes n)
     end.
 
-  Fixpoint fold_left_nat {A : forall n : nat, Type}
+  Fixpoint fold_left_nat [A : forall n : nat, Type]
     (s : forall n, A n -> A (S n)) (z : A O) (m : nat) {struct m} : A m :=
     match m as n return (A n) with
     | O   => z
     | S n => fold_left_nat (fun k => s (S k)) (s 0 z) n
     end.
 
-  Fixpoint fold_left_positive {A : forall n : nat, Type}
+  Fixpoint fold_left_positive [A : forall n : nat, Type]
     (cI : forall n, A n -> A (S n))
     (cO : forall n, A n -> A (S n))
     (n : A O) {m : nat} (p : positive) {struct m} : A m :=
