@@ -49,7 +49,8 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
   (* Defines the memory ghost state. *)
   Section RiscvPmpIrisParams.
 
-    Definition MemVal : Set := Word.
+    Definition Byte : Set := bv 8.
+    Definition MemVal : Set := Byte.
 
     Class mcMemGS Σ :=
       McMemGS {
