@@ -12,3 +12,6 @@ Print Assumptions RiscvPmp.LoopVerification.valid_semTriple_loop.
 
 Goal True. idtac "Assumptions of FemtoKernel verification:". Abort.
 Print Assumptions RiscvPmp.FemtoKernel.femtokernel_init_safe.
+
+Goal True. idtac "Assumptions of femtokernel end-to-end theorem:". Abort.
+Print Assumptions RiscvPmp.FemtoKernel.femtokernel_endToEnd.

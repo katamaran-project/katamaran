@@ -185,14 +185,13 @@ Import BlockVerificationDerived2.
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "v", mepc ↦ term_var "v") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
-      (* notations.asn_gprs ∗ *)
-      (∃ "v", x1 ↦ term_var "v") ∗
+      ((∃ "v", x1 ↦ term_var "v") ∗
       (∃ "v", x2 ↦ term_var "v") ∗
       (∃ "v", x3 ↦ term_var "v") ∗
       (∃ "v", x4 ↦ term_var "v") ∗
       (∃ "v", x5 ↦ term_var "v") ∗
       (∃ "v", x6 ↦ term_var "v") ∗
-      (∃ "v", x7 ↦ term_var "v") ∗
+      (∃ "v", x7 ↦ term_var "v")) ∗
       (∃ "a0", ∃ "a1",
           (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a0");
                                       (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a1")]) ∗
@@ -208,13 +207,13 @@ Import BlockVerificationDerived2.
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
-          (∃ "v", x1 ↦ term_var "v") ∗
+          ((∃ "v", x1 ↦ term_var "v") ∗
           (∃ "v", x2 ↦ term_var "v") ∗
           (∃ "v", x3 ↦ term_var "v") ∗
           (∃ "v", x4 ↦ term_var "v") ∗
           (∃ "v", x5 ↦ term_var "v") ∗
           (∃ "v", x6 ↦ term_var "v") ∗
-          (∃ "v", x7 ↦ term_var "v") ∗
+          (∃ "v", x7 ↦ term_var "v")) ∗
           (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 88);
                                        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
           (asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 88);
@@ -252,13 +251,13 @@ Import BlockVerificationDerived2.
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
-      (∃ "v", x1 ↦ term_var "v") ∗
+      ((∃ "v", x1 ↦ term_var "v") ∗
       (∃ "v", x2 ↦ term_var "v") ∗
       (∃ "v", x3 ↦ term_var "v") ∗
       (∃ "v", x4 ↦ term_var "v") ∗
       (∃ "v", x5 ↦ term_var "v") ∗
       (∃ "v", x6 ↦ term_var "v") ∗
-      (∃ "v", x7 ↦ term_var "v") ∗
+      (∃ "v", x7 ↦ term_var "v")) ∗
       (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 16);
                                    (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
       (asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 16);
@@ -277,13 +276,13 @@ Import BlockVerificationDerived2.
                          (formula_relop bop.eq (term_var "an")
                                      (term_var "epc")))) ∗
           cur_privilege ↦ term_val ty_privilege User ∗
-          (∃ "v", x1 ↦ term_var "v") ∗
+          ((∃ "v", x1 ↦ term_var "v") ∗
           (∃ "v", x2 ↦ term_var "v") ∗
           (∃ "v", x3 ↦ term_var "v") ∗
           (∃ "v", x4 ↦ term_var "v") ∗
           (∃ "v", x5 ↦ term_var "v") ∗
           (∃ "v", x6 ↦ term_var "v") ∗
-          (∃ "v", x7 ↦ term_var "v") ∗
+          (∃ "v", x7 ↦ term_var "v")) ∗
           (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 16);
                                        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits femto_address_max)])) ∗
           (asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits 16);
@@ -311,9 +310,7 @@ Import BlockVerificationDerived2.
     (* Print vc__femtohandler. *)
 
     Lemma sat__femtohandler : safeE vc__femtohandler.
-    Proof.
-      constructor. now vm_compute.
-    Qed.
+    Proof. now vm_compute. Qed.
 
   End FemtoKernel.
 
@@ -482,12 +479,12 @@ Import BlockVerificationDerived2.
            inst_term env.lookup ctx.snocView ctx.in_at ctx.in_valid inst_env
            env.map femto_handler_post femtokernel_handler_post].
       cbn.
-      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp & [%Hcfg0L %Hcfg1L] & HaccM & Hfortytwo)".
+      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hregs & Hpmp & [%Hcfg0L %Hcfg1L] & HaccM & Hfortytwo)".
       cbn.
       iApply "Hk".
       cbn in eq; destruct eq.
       rewrite Model.RiscvPmpModel2.gprs_equiv.
-      iFrame "Hmstatus Hmtvec Hmcause Hcurpriv Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7 Hpmp HaccM Hnpc Hhandler Hfortytwo".
+      iFrame "Hmstatus Hmtvec Hmcause Hcurpriv Hregs Hpmp HaccM Hnpc Hhandler Hfortytwo".
       iSplitR; first done.
       iExists an; iFrame.
   Qed.
@@ -652,8 +649,7 @@ Import BlockVerificationDerived2.
     - unfold femto_init_pre. cbn -[ptsto_instrs].
       iDestruct "Hpre" as "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmp1cfg & [%pmpaddr0 Hpmpaddr0] & [%pmpaddr1 Hpmpaddr1] & Hfortytwo) & Hpc & Hnpc & Hinit)".
       rewrite Model.RiscvPmpModel2.gprs_equiv.
-      iDestruct "Hgprs" as "(Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7)".
-      iFrame "Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7 Hpmp0cfg Hpmp1cfg Hfortytwo Hpc Hnpc Hinit".
+      iFrame "Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmp0cfg Hpmp1cfg Hfortytwo Hpc Hnpc Hinit".
       repeat (iSplitR; first done).
       iExists pmpaddr0.
       iExists pmpaddr1.
@@ -666,7 +662,7 @@ Import BlockVerificationDerived2.
       iDestruct "Hrest" as "(H1 & H2 & H3 & H4 & H5 & Hrest)".
       subst. iFrame.
       rewrite Model.RiscvPmpModel2.gprs_equiv. cbn -[ptsto_instrs].
-      iDestruct "Hrest" as "(H1 & H2 & H3 & H4 & H5 & H6 & H7 & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & %Hunlocked & Hfortytwo)".
+      iDestruct "Hrest" as "(Hgprs & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & %Hunlocked & Hfortytwo)".
       now iFrame.
   Qed.
 
@@ -855,8 +851,3 @@ Import BlockVerificationDerived2.
       iApply fupd_mask_intro; first set_solver.
       now iIntros "_".
   Qed.
-
-  Goal True.
-    idtac "Assumptions of femtokernel end-to-end theorem:".
-    Print Assumptions femtokernel_endToEnd.
-  Abort.
