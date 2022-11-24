@@ -243,7 +243,7 @@ Module sep.
         + apply (lall_left env.nil). reflexivity.
       - rewrite IHΔ. clear IHΔ.
         split; apply lall_right.
-        + intros E. destruct (env.snocView E) as [E v].
+        + intros E. destruct (env.view E) as [E v].
           now apply (lall_left E), (lall_left v).
         + intros E. apply lall_right. intros v.
           now apply (lall_left (env.snoc E _ v)).

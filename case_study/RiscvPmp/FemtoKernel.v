@@ -824,7 +824,7 @@ Import BlockVerificationDerived2.
       try assumption.
     iModIntro.
     iSplitR "".
-    - destruct (env.nilView δ).
+    - destruct (env.view δ).
       iApply femtokernel_init_safe.
       iFrame "Hpc Hcurpriv Hpmp0cfg Hpmp1cfg Hinit Hfortytwo Hadv Hhandler".
       iSplitL "Hmstatus". { now iExists _. }

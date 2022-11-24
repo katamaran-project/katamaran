@@ -67,10 +67,8 @@ Module Type PatternsOn (Import TY : Types).
         match p with
         | tuplepat_nil => fun _ => []
         | tuplepat_snoc p x =>
-          fun EΔ =>
-            match env.snocView EΔ with
-            | env.isSnoc E v => pattern_match p E ► (_ ↦ v)
-            end
+            fun EΔ => let (E,v) := env.view EΔ in
+                      pattern_match p E ► (_ ↦ v)
         end.
 
     Definition tuple_pattern_match_env_reverse {T : Ty -> Set} :
@@ -80,10 +78,8 @@ Module Type PatternsOn (Import TY : Types).
         match p with
         | tuplepat_nil => fun _ => []
         | tuplepat_snoc p x =>
-          fun EΔ =>
-            match env.snocView EΔ with
-            | env.isSnoc E v => pattern_match p E ► (_ ↦ v)
-            end
+          fun EΔ => let (E,v) := env.view EΔ in
+                    pattern_match p E ► (_ ↦ v)
         end.
 
     Definition tuple_pattern_match_val {σs : Ctx Ty} {Δ : NCtx N Ty}
@@ -115,42 +111,22 @@ Module Type PatternsOn (Import TY : Types).
     Lemma record_pattern_match_env_inverse_right {V : Ty -> Set} {rfs : NCtx recordf Ty} {Δ : NCtx N Ty}
           (p : RecordPat rfs Δ) (vs : NamedEnv V Δ) :
       record_pattern_match_env p (record_pattern_match_env_reverse p vs) = vs.
-    Proof.
-      induction p.
-      - now destruct (env.nilView vs).
-      - destruct (env.snocView vs) as [vs v].
-        cbn. f_equal. now apply IHp.
-    Qed.
+    Proof. induction p; env.destroy vs; cbn; now f_equal. Qed.
 
     Lemma record_pattern_match_env_inverse_left {V : Ty -> Set} {rfs : NCtx recordf Ty} {Δ : NCtx N Ty}
           (p : RecordPat rfs Δ) (vs : NamedEnv V rfs) :
       record_pattern_match_env_reverse p (record_pattern_match_env p vs) = vs.
-    Proof.
-      induction p.
-      - now destruct (env.nilView vs).
-      - destruct (env.snocView vs) as [vs v].
-        cbn. f_equal. now apply IHp.
-    Qed.
+    Proof. induction p; env.destroy vs; cbn; now f_equal. Qed.
 
     Lemma tuple_pattern_match_env_inverse_right {T : Ty -> Set}
       {σs : Ctx Ty} {Δ : NCtx N Ty} (p : TuplePat σs Δ) (ts : NamedEnv T Δ) :
       tuple_pattern_match_env p (tuple_pattern_match_env_reverse p ts) = ts.
-    Proof.
-      induction p; cbn.
-      - now destruct (env.nilView ts).
-      - destruct (env.snocView ts); cbn.
-        now rewrite (IHp E).
-    Qed.
+    Proof. induction p; env.destroy ts; cbn; now f_equal. Qed.
 
     Lemma tuple_pattern_match_env_inverse_left {T : Ty -> Set}
           {σs : Ctx Ty} {Δ : NCtx N Ty} (p : TuplePat σs Δ) (ts : Env T σs) :
       tuple_pattern_match_env_reverse p (tuple_pattern_match_env p ts) = ts.
-    Proof.
-      induction p.
-      - now destruct (env.nilView ts).
-      - destruct (env.snocView ts); cbn.
-        now rewrite (IHp E).
-    Qed.
+    Proof. induction p; env.destroy ts; cbn; now f_equal. Qed.
 
     Definition record_pattern_match_val {R} {Δ : NCtx N Ty}
       (p : RecordPat (recordf_ty R) Δ) : Val (ty.record R) -> NamedEnv Val Δ :=
@@ -319,14 +295,14 @@ Module Type PatternsOn (Import TY : Types).
             match b with
             | true  => fun _ => nil
             | false => fun Eht =>
-                         let (Eh,t) := env.snocView Eht in
-                         let (E,h)  := env.snocView Eh in
+                         let (Eh,t) := env.view Eht in
+                         let (E,h)  := env.view Eh in
                          cons h t
             end
       | pat_pair x y =>
           fun _ Exy =>
-            let (Ex,vy) := env.snocView Exy in
-            let (E,vx)  := env.snocView Ex in
+            let (Ex,vy) := env.view Exy in
+            let (E,vx)  := env.view Ex in
             (vx,vy)
       | pat_sum σ τ x y =>
           fun b =>
@@ -340,8 +316,8 @@ Module Type PatternsOn (Import TY : Types).
           fun v _ => v
       | pat_bvec_split m n x y =>
           fun _ Exy =>
-            let (Ex,vy) := env.snocView Exy in
-            let (E,vx)  := env.snocView Ex in
+            let (Ex,vy) := env.view Exy in
+            let (E,vx)  := env.view Ex in
             bv.app vx vy
       | pat_bvec_exhaustive m =>
           fun v _ => v
@@ -535,7 +511,7 @@ Module Type PatternsOn (Import TY : Types).
         | [ctx] => fun _   => [env]
         | Γ ▻ b => fun EΓb : let Γ' := freshen_ctx Σ Γ in
                              NamedEnv D (Γ' ▻ fresh_lvar (Σ ▻▻ Γ') _∷_) =>
-                     let (EΓ,tb) := env.snocView EΓb in
+                     let (EΓ,tb) := env.view EΓb in
                      env.snoc (un Σ _ EΓ) b tb
         end.
 
@@ -670,33 +646,32 @@ Module Type PatternsOn (Import TY : Types).
         NamedEnv D (PatternCaseCtx pc) ->
         NamedEnv D (PatternCaseCtx (unfreshen_patterncase Σ p pc)) :=
          match p with
-         | pat_var _ => fun ps ts => let (_,t) := env.snocView ts in
-                                     [nenv t]
+         | pat_var _ => fun ps ts => let (_,t) := env.view ts in [nenv t]
          | pat_bool => fun _ _   => [env]
          | pat_list σ x y =>
              fun pc => match pc with
                        | true  => fun _  => [env]
-                       | false => fun ts => let (ts1,t) := env.snocView ts in
-                                            let (_,h)   := env.snocView ts1 in
+                       | false => fun ts => let (ts1,t) := env.view ts in
+                                            let (_,h)   := env.view ts1 in
                                             [nenv h; t]
                        end
          | pat_pair x y =>
              fun _ ts =>
-               let (ts1,v) := env.snocView ts in
-               let (_,v0) := env.snocView ts1 in
+               let (ts1,v) := env.view ts in
+               let (_,v0) := env.view ts1 in
                [nenv v0; v]
          | pat_sum σ τ x y =>
              fun pc =>
                match pc with
-               | true  => fun ts => let (_,v) := env.snocView ts in [nenv v]
-               | false => fun ts => let (_,v) := env.snocView ts in [nenv v]
+               | true  => fun ts => let (_,v) := env.view ts in [nenv v]
+               | false => fun ts => let (_,v) := env.view ts in [nenv v]
                end
          | pat_unit   => fun _ _ => [env]
          | pat_enum E => fun _ _ => [env]
          | pat_bvec_split m n x y =>
              fun _ ts =>
-               let (ts1,vy) := env.snocView ts in
-               let (_,vx)   := env.snocView ts1 in
+               let (ts1,vy) := env.view ts in
+               let (_,vx)   := env.view ts1 in
                [env].[x∷ty.bvec m ↦ vx].[y∷ty.bvec n ↦ vy]
          | pat_bvec_exhaustive _ => fun _ _ => [env]
          | pat_tuple _ => fun _ => unfreshen_namedenv

@@ -53,35 +53,20 @@ Section WithBinding.
     | nil                                     : Env []
     | snoc {Γ} (E : Env Γ) {b : B} (db : D b) : Env (Γ ▻ b).
 
-    Inductive NilView : Env [] -> Set :=
-    | isNil : NilView nil.
+    Variant NilView : Env [] -> Set :=
+      isNil : NilView nil.
 
-    Equations(noeqns) nilView (E : Env []) : NilView E :=
-    | nil := isNil.
+    Variant SnocView {Γ b} : Env (Γ ▻ b) -> Set :=
+      isSnoc (E : Env Γ) (v : D b) : SnocView (snoc E v).
 
-    Inductive SnocView {Γ b} : Env (Γ ▻ b) -> Set :=
-    | isSnoc (E : Env Γ) (v : D b) : SnocView (snoc E v).
-
-    Equations(noeqns) snocView {Γ b} (E : Env (Γ ▻ b)) : SnocView E :=
-    | snoc E v := isSnoc E v.
-
-    Inductive DeepSnocView {Γ b} (V : Env  Γ -> Set) : Env (Γ ▻ b) -> Set :=
-    | dsnoc {E : Env Γ} (vE : V E) (v : D b) : DeepSnocView V (snoc E v).
-
-    Fixpoint View (Γ : Ctx B) : Env Γ -> Set :=
+    Definition view (Γ : Ctx B) (E : Env Γ) :
       match Γ with
-      | ctx.nil      => NilView
-      | ctx.snoc Γ b => DeepSnocView (@View Γ)
-      end.
-
-    Fixpoint view {Γ} : forall E : Env Γ, View E :=
-      match Γ with
-      | ctx.nil      => nilView
-      | ctx.snoc Γ b =>
-          fun E =>
-            match snocView E with
-            | isSnoc E v => dsnoc (@View Γ) (@view Γ E) v
-            end
+      | [ctx] => NilView
+      | Γ ▻ b => SnocView
+      end E :=
+      match E with
+      | nil      => isNil
+      | snoc E v => isSnoc E v
       end.
 
     Fixpoint cat {Γ Δ} (EΓ : Env Γ) (EΔ : Env Δ) : Env (Γ ▻▻ Δ) :=
@@ -90,25 +75,27 @@ Section WithBinding.
       | snoc E db => snoc (cat EΓ E) db
       end.
 
-    Inductive CatView {Γ Δ} : Env (Γ ▻▻ Δ) -> Set :=
-    | isCat (EΓ : Env Γ) (EΔ : Env Δ) : CatView (cat EΓ EΔ).
+    Variant CatView {Γ Δ} : Env (Γ ▻▻ Δ) -> Set :=
+      isCat (EΓ : Env Γ) (EΔ : Env Δ) : CatView (cat EΓ EΔ).
 
     Fixpoint catView {Γ Δ} : forall E : Env (Γ ▻▻ Δ), CatView E :=
-      match Δ with
-      | []    => fun E => isCat E nil
-      | Δ ▻ b => fun E => match snocView E with
-                            isSnoc E v =>
-                              match catView E with
-                                isCat EΓ EΔ => isCat EΓ (snoc EΔ v)
-                              end
-                          end
+      match Δ as c return (forall E : Env (Γ ▻▻ c), CatView E) with
+      | [ctx] => fun EΓ : Env Γ => isCat EΓ nil
+      | Δ ▻ b => fun EΓΔb : Env (Γ ▻▻ Δ ▻ b) =>
+                   let '(isSnoc EΓΔ v) := view EΓΔb in
+                   let '(isCat EΓ EΔ)  := catView EΓΔ in
+                   isCat EΓ (snoc EΔ v)
       end.
+
+    Lemma catView_cat {Γ Δ} (EΓ : Env Γ) (EΔ : Env Δ) :
+      catView (cat EΓ EΔ) = isCat EΓ EΔ.
+    Proof. induction EΔ; cbn; now rewrite ?IHEΔ. Qed.
 
     Ltac destroy x :=
       try (progress cbn in x);
       lazymatch type of x with
-      | Env []       => destruct (nilView x)
-      | Env (_ ▻ _)  => destruct (snocView x) as [x]; destroy x
+      | Env []       => destruct (view x)
+      | Env (_ ▻ _)  => destruct (view x) as [x]; destroy x
       | Env (_ ▻▻ _) => let E1 := fresh in
                         let E2 := fresh in
                         destruct (catView x) as [E1 E2];
@@ -258,17 +245,6 @@ Section WithBinding.
       | Δ ▻ b , E => snoc (take Δ (tail E)) (head E)
       end.
 
-    Definition unsnoc {Γ b} (E : Env (Γ ▻ b)) : Env Γ * D b:=
-      match E in Env Γb
-      return match Γb with
-             | []    => unit
-             | Γ ▻ b => Env Γ * D b
-             end
-      with
-      | nil       => tt
-      | snoc E db => (E , db)
-      end.
-
     Fixpoint drop {Γ} Δ (E : Env (Γ ▻▻ Δ)) : Env Γ :=
       match Δ , E with
       | []    , E => E
@@ -290,7 +266,7 @@ Section WithBinding.
       forall (E : Env (Γ - b)) (v : D b), Env Γ :=
       ctx.In_case (fun b Γ bIn => Env (Γ - b) -> D b -> Env Γ)
         (fun b Γ E v => snoc E v)
-        (fun b' Γ b bIn E v => let (E,v') := snocView E in
+        (fun b' Γ b bIn E v => let (E,v') := view E in
                                snoc (insert bIn E v) v')
         bIn.
 
@@ -413,7 +389,7 @@ Section WithBinding.
       remove x (cat E1 E2) (ctx.in_cat_right xIn) =
       eq_rect _ _  (cat E1 (remove x E2 xIn)) _ (eq_sym (ctx.remove_in_cat_right xIn)).
     Proof.
-      induction xIn using ctx.In_ind; destruct (snocView E2); cbn; [easy|].
+      induction xIn using ctx.In_ind; destruct (view E2); cbn; [easy|].
       ctx.tactics.fold_in. rewrite IHxIn, snoc_eq_rect.
       now rewrite ctx.eq_sym_map_snoc_distr, ctx.map_snoc_subst_map.
     Qed.
@@ -442,7 +418,7 @@ Section WithBinding.
     Proof.
       induction bIn using ctx.In_ind; cbn in *; [easy|]. ctx.tactics.fold_in.
       rewrite ctx.eq_sym_map_snoc_distr, ctx.map_snoc_subst_map.
-      destruct (snocView E2) as [E2]. cbn. rewrite <- snoc_eq_rect. cbn.
+      destruct (view E2) as [E2]. cbn. rewrite <- snoc_eq_rect. cbn.
       now rewrite IHbIn.
     Qed.
 
@@ -702,8 +678,8 @@ Local Ltac destroy_env_eq H :=
 Ltac destroy x :=
   try (progress hnf in x);
   lazymatch type of x with
-  | Env _ []       => destruct (nilView x)
-  | Env _ (_ ▻ _)  => destruct (snocView x) as [x]; destroy x
+  | Env _ []       => destruct (view x)
+  | Env _ (_ ▻ _)  => destruct (view x) as [x]; destroy x
   | Env _ (_ ▻▻ _) => let E1 := fresh in
                       let E2 := fresh in
                       destruct (catView x) as [E1 E2];

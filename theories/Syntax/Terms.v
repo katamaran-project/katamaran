@@ -454,7 +454,7 @@ Module Type TermsOn (Import TY : Types).
     Proof.
       apply env.lookup_extensional. intros [x σ] *.
       rewrite lookup_sub_comp, lookup_sub_wk1.
-      now destruct (env.snocView ζ) as [ζ t].
+      now destruct (env.view ζ) as [ζ t].
     Qed.
 
     Lemma sub_comp_shift {Σ0 Σ1 b} (bIn : b ∈ Σ0) (ζ : Sub Σ0 Σ1) :

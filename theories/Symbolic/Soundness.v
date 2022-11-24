@@ -1091,7 +1091,7 @@ Module Soundness
       intros POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0.
       apply Hm; eauto.
       - intros w1 r01 ι1 Hι1 Hpc1 a1 a Ha δs1 δc1 -> hs1 hc1 Hh1.
-        apply HPOST; auto. now destruct (env.snocView δs1).
+        apply HPOST; auto. now destruct (env.view δs1).
       - now apply refine_env_snoc.
     Qed.
 

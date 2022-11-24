@@ -102,8 +102,8 @@ Module Type NewShallowExecOn
          lazymatch goal with
          (* These first rules do not change the provability if the goal, i.e.
             these steps are always complete. *)
-         | x : NamedEnv Val [ctx] |- _ => destruct (env.nilView x)
-         | x: NamedEnv Val (_ ▻ _) |- _ => destruct (env.snocView x)
+         | x : NamedEnv Val [ctx] |- _ => destruct (env.view x)
+         | x: NamedEnv Val (_ ▻ _) |- _ => destruct (env.view x)
          | |- _ ⊣⊢ _ => split
          | |- context[_ ∧ !! _] => rewrite lprop_float
          | |- !! ?P ∧ ?Q ⊢ ?R => apply (land_prop_left (P := P) (Q := Q) (R := R)); intros ?

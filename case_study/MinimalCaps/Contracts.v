@@ -997,15 +997,15 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
     fun Σ p =>
       match p with
       | subperm     => fun ts =>
-                         let (ts,q) := env.snocView ts in
-                         let (ts,p) := env.snocView ts in
+                         let (ts,q) := env.view ts in
+                         let (ts,p) := env.view ts in
                          simplify_subperm p q
       | correctPC   => fun ts =>
-                         let (ts,c) := env.snocView ts in
+                         let (ts,c) := env.view ts in
                          simplify_correctPC c
       | not_is_perm => fun ts =>
-                         let (ts,q) := env.snocView ts in
-                         let (ts,p) := env.snocView ts in
+                         let (ts,q) := env.view ts in
+                         let (ts,p) := env.view ts in
                          simplify_not_is_perm p q
       end.
 

@@ -608,11 +608,11 @@ Module BlockVerificationDerived2Sem.
   Lemma mono_exec_instruction_any__c {i a} : Monotonic' (exec_instruction_any__c i a).
     cbv [Monotonic' exec_instruction_any__c bind CHeapSpecM.bind produce_chunk CHeapSpecM.produce_chunk demonic CHeapSpecM.demonic angelic CHeapSpecM.angelic pure CHeapSpecM.pure].
     intros δ P Q PQ h eP v.
-    destruct (env.nilView δ).
+    destruct (env.view δ).
     specialize (eP v); revert eP.
     apply exec_monotonic.
     clear -PQ. intros _ δ h.
-    destruct (env.nilView δ).
+    destruct (env.view δ).
     apply consume_chunk_monotonic.
     clear -PQ. intros _ h.
     intros [v H]; exists v; revert H.
@@ -664,7 +664,7 @@ Module BlockVerificationDerived2Sem.
     apply foreignSemBlockVerif.
     apply lemSemBlockVerif.
     { iIntros ([[] store]) "[Hinstr [%an (Hnextpc & Hpc & HPOST)]]".
-      destruct (env.nilView store).
+      destruct (env.view store).
       iFrame.
       iExists an.
       iFrame.

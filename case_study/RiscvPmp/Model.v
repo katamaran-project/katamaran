@@ -66,9 +66,9 @@ Ltac destruct_syminstance ι :=
     | Env _ (ctx.snoc _ (MkB ?s _)) =>
         let id := string_to_ident s in
         let fr := fresh id in
-        destruct (env.snocView ι) as [ι fr];
+        destruct (env.view ι) as [ι fr];
         destruct_syminstance ι
-    | Env _ ctx.nil => destruct (env.nilView ι)
+    | Env _ ctx.nil => destruct (env.view ι)
     | _ => idtac
     end.
 

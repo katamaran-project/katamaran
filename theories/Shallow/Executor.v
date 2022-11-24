@@ -213,11 +213,11 @@ Module Type ShallowExecOn
       induction Δ; cbn.
       - split.
         + now exists env.nil.
-        + intros [vs ?]. now destruct (env.nilView vs).
+        + intros [vs ?]. now destruct (env.view vs).
       - destruct b as [x σ]. cbv [angelic bind pure]. split.
         + intros (vs & v & Hwp)%IHΔ.
           now exists (env.snoc vs (x∷σ) v).
-        + intros [vs Hwp]. destruct (env.snocView vs) as [vs v].
+        + intros [vs Hwp]. destruct (env.view vs) as [vs v].
           apply IHΔ. now exists vs, v.
     Qed.
 
@@ -227,11 +227,11 @@ Module Type ShallowExecOn
       induction Δ; cbn.
       - split.
         + intros ? vs.
-          now destruct (env.nilView vs).
+          now destruct (env.view vs).
         + now intuition.
       - destruct b as [x σ]. cbv [demonic bind pure]. split.
         + intros Hwp vs.
-          destruct (env.snocView vs) as [vs v].
+          destruct (env.view vs) as [vs v].
           now apply (IHΔ (fun vs => forall v, POST (env.snoc vs _ v))).
         + intros HPost. apply IHΔ. intros. apply HPost.
     Qed.
@@ -275,8 +275,8 @@ Module Type ShallowExecOn
         assert_eq_env δ δ' POST <-> δ = δ' /\ POST tt.
     Proof.
       induction δ; intros POST.
-      - destruct (env.nilView δ'). intuition.
-      - destruct (env.snocView δ'); cbn.
+      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ'); cbn.
         unfold bind, assert_formula.
         now rewrite IHδ, env.inversion_eq_snoc.
     Qed.
@@ -286,8 +286,8 @@ Module Type ShallowExecOn
         assert_eq_nenv δ δ' POST <-> δ = δ' /\ POST tt.
     Proof.
       induction δ; intros POST.
-      - destruct (env.nilView δ'). intuition.
-      - destruct (env.snocView δ') as [δ']; cbn in *.
+      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ') as [δ']; cbn in *.
         unfold bind, assert_formula.
         now rewrite IHδ, (@env.inversion_eq_snoc _ _ _ b δ δ').
     Qed.
@@ -297,8 +297,8 @@ Module Type ShallowExecOn
         assume_eq_env δ δ' POST <-> (δ = δ' -> POST tt).
     Proof.
       induction δ; intros POST.
-      - destruct (env.nilView δ'). intuition.
-      - destruct (env.snocView δ'); cbn.
+      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ'); cbn.
         unfold bind, assume_formula.
         rewrite IHδ, env.inversion_eq_snoc.
         intuition.
@@ -309,8 +309,8 @@ Module Type ShallowExecOn
         assume_eq_nenv δ δ' POST <-> (δ = δ' -> POST tt).
     Proof.
       induction δ; intros POST.
-      - destruct (env.nilView δ'). intuition.
-      - destruct (env.snocView δ') as [δ']; cbn in *.
+      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ') as [δ']; cbn in *.
         unfold bind, assume_formula.
         rewrite IHδ, (@env.inversion_eq_snoc _ _ _ b δ δ').
         intuition.

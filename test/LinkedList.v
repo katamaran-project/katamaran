@@ -661,15 +661,15 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
     fun Σ p =>
       match p with
       | plength => fun ts =>
-                     let (ts,n)  := env.snocView ts in
-                     let (ts,xs) := env.snocView ts in
+                     let (ts,n)  := env.view ts in
+                     let (ts,xs) := env.view ts in
                      simplify_plength xs n
       | preverse => fun ts => Some [formula_user preverse ts]
       | preverseappend =>
           fun ts =>
-            let (ts,zs) := env.snocView ts in
-            let (ts,ys) := env.snocView ts in
-            let (ts,xs) := env.snocView ts in
+            let (ts,zs) := env.view ts in
+            let (ts,ys) := env.view ts in
+            let (ts,xs) := env.view ts in
             simplify_preverseappend xs ys zs
       end.
 
@@ -936,9 +936,9 @@ Module ExampleModel.
           | Env _ (ctx.snoc _ (MkB ?s _)) =>
               let id := string_to_ident s in
               let fr := fresh id in
-              destruct (env.snocView ι) as [ι fr];
+              destruct (env.view ι) as [ι fr];
               destruct_syminstance ι
-        | Env _ ctx.nil => destruct (env.nilView ι)
+        | Env _ ctx.nil => destruct (env.view ι)
         | _ => idtac
         end.
 
@@ -946,9 +946,9 @@ Module ExampleModel.
         ValidContractForeign sep_contract_mkcons mkcons.
       Proof.
         intros Γ es δ ι Heq.
-        destruct (env.snocView ι) as [ι xs].
-        destruct (env.snocView ι) as [ι x].
-        destruct (env.nilView ι). cbn.
+        destruct (env.view ι) as [ι xs].
+        destruct (env.view ι) as [ι x].
+        destruct (env.view ι). cbn.
         iIntros "_".
         unfold semWP. rewrite wp_unfold. cbn.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
@@ -980,10 +980,10 @@ Module ExampleModel.
         ValidContractForeign sep_contract_fst fst.
       Proof.
         intros Γ es δ ι Heq.
-        destruct (env.snocView ι) as [ι vxs].
-        destruct (env.snocView ι) as [ι vx].
-        destruct (env.snocView ι) as [ι vp].
-        destruct (env.nilView ι). cbn.
+        destruct (env.view ι) as [ι vxs].
+        destruct (env.view ι) as [ι vx].
+        destruct (env.view ι) as [ι vp].
+        destruct (env.view ι). cbn.
         iIntros "Hres".
         unfold semWP. rewrite wp_unfold.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
@@ -1011,10 +1011,10 @@ Module ExampleModel.
         ValidContractForeign sep_contract_snd snd.
       Proof.
         intros Γ es δ ι Heq.
-        destruct (env.snocView ι) as [ι vxs].
-        destruct (env.snocView ι) as [ι vx].
-        destruct (env.snocView ι) as [ι vp].
-        destruct (env.nilView ι). cbn.
+        destruct (env.view ι) as [ι vxs].
+        destruct (env.view ι) as [ι vx].
+        destruct (env.view ι) as [ι vp].
+        destruct (env.view ι). cbn.
         iIntros "Hres".
         unfold semWP. rewrite wp_unfold.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
@@ -1042,10 +1042,10 @@ Module ExampleModel.
         ValidContractForeign sep_contract_setsnd setsnd.
       Proof.
         intros Γ es δ ι Heq.
-        destruct (env.snocView ι) as [ι vxs].
-        destruct (env.snocView ι) as [ι vx].
-        destruct (env.snocView ι) as [ι vp].
-        destruct (env.nilView ι). cbn.
+        destruct (env.view ι) as [ι vxs].
+        destruct (env.view ι) as [ι vx].
+        destruct (env.view ι) as [ι vp].
+        destruct (env.view ι). cbn.
         iIntros "Hres".
         iDestruct "Hres" as (vxs__old) "Hres".
         unfold semWP. rewrite wp_unfold.

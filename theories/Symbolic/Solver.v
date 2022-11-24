@@ -302,7 +302,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
                                    (fun Δ _ => NamedEnv Val Δ -> DList Σ)
                                    (fun _ => empty)
                                    (fun Δ _ IHts b t vs =>
-                                      let (vsΔ,vb) := env.snocView vs in
+                                      let (vsΔ,vb) := env.view vs in
                                       cat (IHts vsΔ) (simplify_eq_val t vb))
                                    ts
                                    (recordv_unfold R vR)

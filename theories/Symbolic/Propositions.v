@@ -526,14 +526,14 @@ Module Type SymPropOn
         + intros s.
           now exists env.nil.
         + intros [ι sp].
-          destruct (env.nilView ι).
+          destruct (env.view ι).
           now cbn in *.
       - rewrite (IHΣ (angelicv b p)).
         split.
         + intros (ι & v & sp).
           now exists (env.snoc ι b v).
         + intros (ι & sp).
-          destruct (env.snocView ι) as (ι & v).
+          destruct (env.view ι) as (ι & v).
           now exists ι, v.
     Qed.
 
@@ -542,11 +542,11 @@ Module Type SymPropOn
     Proof.
       induction Σ; cbn.
       - split.
-        + intros s ι. now destruct (env.nilView ι).
+        + intros s ι. now destruct (env.view ι).
         + intros s; apply (s env.nil).
       - rewrite (IHΣ (demonicv b p)); cbn.
         split.
-        + intros sp ι. destruct (env.snocView ι) as (ι & v). cbn. auto.
+        + intros sp ι. destruct (env.view ι) as (ι & v). cbn. auto.
         + intros sp ι v. apply (sp (env.snoc ι b v)).
     Qed.
 
@@ -555,11 +555,11 @@ Module Type SymPropOn
     Proof.
       induction Σ; cbn [demonic_close] in *.
       - split.
-        + intros s ι. now destruct (env.nilView ι).
+        + intros s ι. now destruct (env.view ι).
         + intros s. apply (s env.nil).
       - rewrite (IHΣ (demonicv b p)); cbn.
         split.
-        + intros sp ι. destruct (env.snocView ι) as (ι & v). auto.
+        + intros sp ι. destruct (env.view ι) as (ι & v). auto.
         + intros sp ι v. apply (sp (env.snoc ι b v)).
     Qed.
 

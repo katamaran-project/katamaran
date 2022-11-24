@@ -73,7 +73,7 @@ Module Type BaseMixin (Import TY : Types).
       unfold inst at 1; cbn.
       induction p; cbn.
       - reflexivity.
-      - destruct (env.snocView ts); cbn.
+      - destruct (env.view ts); cbn.
         f_equal. apply IHp.
     Qed.
 
@@ -85,7 +85,7 @@ Module Type BaseMixin (Import TY : Types).
       unfold inst at 1; cbn.
       induction p; cbn.
       - reflexivity.
-      - destruct (env.snocView ts); cbn.
+      - destruct (env.view ts); cbn.
         f_equal. apply IHp.
     Qed.
 
@@ -97,7 +97,7 @@ Module Type BaseMixin (Import TY : Types).
       unfold inst at 1; cbn.
       induction p; cbn.
       - reflexivity.
-      - destruct (env.snocView ts); cbn.
+      - destruct (env.view ts); cbn.
         f_equal. apply IHp.
     Qed.
 
@@ -109,7 +109,7 @@ Module Type BaseMixin (Import TY : Types).
       unfold inst at 1; cbn.
       induction p; cbn.
       - reflexivity.
-      - destruct (env.snocView ts); cbn.
+      - destruct (env.view ts); cbn.
         f_equal. apply IHp.
     Qed.
 
@@ -125,14 +125,14 @@ Module Type BaseMixin (Import TY : Types).
             match b with
             | true => fun _ => term_val (ty.list σ) nil
             | false => fun Eht =>
-                         let (Eh,t) := env.snocView Eht in
-                         let (E,h)  := env.snocView Eh in
+                         let (Eh,t) := env.view Eht in
+                         let (E,h)  := env.view Eh in
                          term_binop bop.cons h t
             end
       | pat_pair x y =>
           fun _ Exy =>
-            let (Ex,vτ) := env.snocView Exy in
-            let (E,vσ)  := env.snocView Ex in
+            let (Ex,vτ) := env.view Exy in
+            let (E,vσ)  := env.view Ex in
             term_binop bop.pair vσ vτ
       | pat_sum σ0 τ x y =>
           fun b =>
@@ -146,8 +146,8 @@ Module Type BaseMixin (Import TY : Types).
           fun v _ => term_val (ty.enum E) v
       | pat_bvec_split m n x y =>
           fun _ Exy =>
-            let (Ex,vr) := env.snocView Exy in
-            let (E,vl)  := env.snocView Ex in
+            let (Ex,vr) := env.view Exy in
+            let (E,vl)  := env.view Ex in
             term_binop bop.bvapp vl vr
       | pat_bvec_exhaustive m =>
           fun v _ => term_val (ty.bvec m) v

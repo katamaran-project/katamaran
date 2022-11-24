@@ -702,10 +702,10 @@ Module RiscvPmpIrisInstanceWithContracts.
     ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram read_ram.
   Proof.
     intros Γ es δ ι Heq.
-    destruct (env.snocView ι) as [ι w].
-    destruct (env.snocView ι) as [ι paddr].
-    destruct (env.snocView ι) as [ι b].
-    destruct (env.nilView ι). cbn in Heq |- *.
+    destruct (env.view ι) as [ι w].
+    destruct (env.view ι) as [ι paddr].
+    destruct (env.view ι) as [ι b].
+    destruct (env.view ι). cbn in Heq |- *.
     iIntros "ptsto_addr_w".
     unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
@@ -774,9 +774,9 @@ Module RiscvPmpIrisInstanceWithContracts.
     ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_write_ram write_ram.
   Proof.
     intros Γ es δ ι Heq.
-    destruct (env.snocView ι) as [ι data].
-    destruct (env.snocView ι) as [ι paddr].
-    destruct (env.nilView ι). cbn in Heq |- *.
+    destruct (env.view ι) as [ι data].
+    destruct (env.view ι) as [ι paddr].
+    destruct (env.view ι). cbn in Heq |- *.
     iIntros "[% ptsto_addr]".
     unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
@@ -818,9 +818,9 @@ Module RiscvPmpIrisInstanceWithContracts.
     ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
   Proof.
     intros Γ es δ ι Heq.
-    destruct (env.snocView ι) as [ι instr].
-    destruct (env.snocView ι) as [ι code].
-    destruct (env.nilView ι). cbn.
+    destruct (env.view ι) as [ι instr].
+    destruct (env.view ι) as [ι code].
+    destruct (env.view ι). cbn.
     iIntros "%Hdecode".
     unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
@@ -860,9 +860,9 @@ Module RiscvPmpIrisInstanceWithContracts.
       | Env _ (ctx.snoc _ (MkB ?s _)) =>
           let id := string_to_ident s in
           let fr := fresh id in
-          destruct (env.snocView ι) as [ι fr];
+          destruct (env.view ι) as [ι fr];
           destruct_syminstance ι
-      | Env _ ctx.nil => destruct (env.nilView ι)
+      | Env _ ctx.nil => destruct (env.view ι)
       | _ => idtac
       end.
 
