@@ -113,8 +113,8 @@ Section WithBinding.
                         let E2 := fresh in
                         destruct (catView x) as [E1 E2];
                         destroy E1; destroy E2
-      | _ ∈ []       => destruct (ctx.nilView x)
-      | _ ∈ _ ▻ _    => destruct (ctx.snocView x)
+      | _ ∈ []       => destruct (ctx.view x)
+      | _ ∈ _ ▻ _    => destruct (ctx.view x)
       | _            => idtac
       end.
 
@@ -153,11 +153,11 @@ Section WithBinding.
 
     Fixpoint lookup {Γ} (E : Env Γ) : forall {b}, b ∈ Γ -> D b :=
       match E with
-      | nil      => fun _ bIn => match ctx.nilView bIn with end
+      | nil      => fun _ bIn => match ctx.view bIn with end
       | snoc E v => fun _ bIn =>
-        match ctx.snocView bIn with
-        | ctx.snocViewZero   => v
-        | ctx.snocViewSucc i => lookup E i
+        match ctx.view bIn with
+        | ctx.isZero   => v
+        | ctx.isSucc i => lookup E i
         end
       end.
 
@@ -179,11 +179,7 @@ Section WithBinding.
 
     Lemma all_elim {Q : forall [b], D b -> Type} {Γ} {E : Env Γ} (HE : All Q E) :
       forall b (bIn : b ∈ Γ), Q (lookup E bIn).
-    Proof.
-      induction HE; intros x xIn.
-      - destruct (ctx.nilView xIn).
-      - destruct (ctx.snocView xIn); cbn; auto.
-    Defined.
+    Proof. induction HE; intros x xIn; destruct (ctx.view xIn); cbn; auto. Defined.
 
     Section HomEquality.
 
@@ -226,11 +222,11 @@ Section WithBinding.
     Fixpoint update {Γ} (E : Env Γ) {struct E} :
       forall {b} (bIn : b ∈ Γ) (new : D b), Env Γ :=
       match E with
-      | nil        => fun _ bIn => match ctx.nilView bIn with end
+      | nil        => fun _ bIn => match ctx.view bIn with end
       | snoc E old => fun _ bIn =>
-        match ctx.snocView bIn with
-        | ctx.snocViewZero     => snoc E
-        | ctx.snocViewSucc bIn => fun new => snoc (update E bIn new) old
+        match ctx.view bIn with
+        | ctx.isZero     => snoc E
+        | ctx.isSucc bIn => fun new => snoc (update E bIn new) old
         end
       end.
 
@@ -279,48 +275,24 @@ Section WithBinding.
       | Δ ▻ _ , E => drop Δ (tail E)
       end.
 
-    Fixpoint split {Γ} Δ (E : Env (Γ ▻▻ Δ)) : Env Γ * Env Δ :=
-      match Δ , E with
-      | []    , E => (E , nil)
-      | Δ ▻ b , E =>
-        match E in Env ΓΔb
-        return match ΓΔb with
-               | []     => unit
-               | ΓΔ ▻ b => (Env ΓΔ -> Env Γ * Env Δ) ->
-                           Env Γ * Env (Δ ▻ b)
-               end
-        with
-        | nil => tt
-        | snoc EΓΔ db =>
-          fun split => let (EΓ, EΔ) := split EΓΔ in (EΓ, snoc EΔ db)
-        end (split Δ)
-      end.
-
     Fixpoint remove {Γ b} (E : Env Γ) : forall (bIn : b ∈ Γ), Env (Γ - b) :=
       match E with
-      | nil        => fun bIn => match ctx.nilView bIn with end
-      | snoc E0 db => fun bIn =>
-        match ctx.snocView bIn in ctx.SnocView bIn return Env (ctx.remove bIn) with
-        | ctx.snocViewZero            => E0
-        | @ctx.snocViewSucc _ _ _ b1 i => snoc (remove E0 i) db
+      | nil      => fun bIn => match ctx.view bIn with end
+      | snoc E v => fun bIn =>
+        match ctx.view bIn in ctx.SnocView bIn return Env (ctx.remove bIn) with
+        | ctx.isZero     => E
+        | ctx.isSucc bIn => snoc (remove E bIn) v
         end
       end.
     Global Arguments remove {_} b%ctx E.
 
-    Fixpoint insert {Γ : Ctx B} {b} {struct Γ} :
-      forall (bIn : b ∈ Γ) (E : Env (Γ - b)) (v : D b), Env Γ :=
-      match Γ with
-      | []     => fun bIn => match ctx.nilView bIn with end
-      | Γ ▻ b' => fun bIn =>
-        match ctx.snocView bIn with
-        | ctx.snocViewZero   => fun E v => snoc E v
-        | ctx.snocViewSucc i =>
-            fun E v =>
-              match snocView E with
-              | isSnoc E v' => snoc (insert i E v) v'
-              end
-        end
-      end.
+    Fixpoint insert b {Γ : Ctx B} (bIn : b ∈ Γ) {struct Γ} :
+      forall (E : Env (Γ - b)) (v : D b), Env Γ :=
+      ctx.In_case (fun b Γ bIn => Env (Γ - b) -> D b -> Env Γ)
+        (fun b Γ E v => snoc E v)
+        (fun b' Γ b bIn E v => let (E,v') := snocView E in
+                               snoc (insert bIn E v) v')
+        bIn.
 
     Lemma remove_insert {b} {Γ} (bIn : b ∈ Γ) (v : D b) (E : Env (Γ - b)) :
       remove b (insert bIn E v) bIn = E.
@@ -363,26 +335,6 @@ Section WithBinding.
       induction E; intros ? [n e]; try destruct e;
         destruct n; cbn in *; subst; auto.
     Qed.
-
-    Lemma split_takedrop {Γ} Δ (E : Env (Γ ▻▻ Δ)) :
-      split Δ E = (drop Δ E , take Δ E).
-    Proof.
-      induction Δ; [easy|].
-      destroy E; cbn. now rewrite IHΔ.
-    Qed.
-
-    Lemma split_cat {Γ Δ} (EΓ : Env Γ) (EΔ : Env Δ) :
-      split Δ (cat EΓ EΔ) = (EΓ , EΔ).
-    Proof. induction EΔ; [easy|]; cbn; now rewrite IHEΔ. Qed.
-
-    Lemma cat_split' {Γ Δ} (EΓΔ : Env (Γ ▻▻ Δ)) :
-      let (EΓ,EΔ) := split _ EΓΔ in
-      EΓΔ = cat EΓ EΔ.
-    Proof. destroy EΓΔ. now rewrite split_cat. Qed.
-
-    Lemma cat_split {Γ Δ} (EΓΔ : Env (Γ ▻▻ Δ)) :
-      EΓΔ = cat (fst (split _ EΓΔ)) (snd (split _ EΓΔ)).
-    Proof. destroy EΓΔ. now rewrite split_cat. Qed.
 
     Lemma drop_cat {Γ Δ} (δΔ : Env Δ) (δΓ : Env Γ) :
       drop Δ (cat δΓ δΔ) = δΓ.
@@ -756,8 +708,8 @@ Ltac destroy x :=
                       let E2 := fresh in
                       destruct (catView x) as [E1 E2];
                       destroy E1; destroy E2
-  | _ ∈ []         => destruct (ctx.nilView x)
-  | _ ∈ _ ▻ _      => destruct (ctx.snocView x)
+  | _ ∈ []         => destruct (ctx.view x)
+  | _ ∈ _ ▻ _      => destruct (ctx.view x)
   | @eq ?A ?y ?z   => let A := eval hnf in A in
                         change_no_check (@eq A y z) in x;
                         destroy_env_eq x

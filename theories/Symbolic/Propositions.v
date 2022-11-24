@@ -1912,13 +1912,7 @@ Module Type SymPropOn
     Lemma erase_valuation_remove {Σ b} (bIn : b ∈ Σ) (ι : Valuation Σ) :
       list_remove (erase_valuation ι) (ctx.in_at bIn) =
       erase_valuation (env.remove b ι bIn).
-    Proof.
-      induction ι.
-      - destruct (ctx.nilView bIn).
-      - destruct (ctx.snocView bIn); cbn.
-        + reflexivity.
-        + f_equal. apply (IHι i).
-    Qed.
+    Proof. induction ι; destruct (ctx.view bIn); cbn; now f_equal. Qed.
 
     Lemma erase_valuation_cat {Σ1 Σ2} (ι1 : Valuation Σ1) (ι2 : Valuation Σ2) :
       app (erase_valuation ι2) (erase_valuation ι1) =
@@ -1928,13 +1922,7 @@ Module Type SymPropOn
     Lemma nth_error_erase {Σ b} (ι : Valuation Σ) (bIn : b ∈ Σ) :
       nth_error (erase_valuation ι) (ctx.in_at bIn) =
       Some (existT (type b) (env.lookup ι bIn)).
-    Proof.
-      induction ι; cbn.
-      - destruct (ctx.nilView bIn).
-      - destruct (ctx.snocView bIn) as [|b bIn]; cbn.
-        + reflexivity.
-        + now rewrite IHι.
-    Qed.
+    Proof. induction ι; destruct (ctx.view bIn); cbn; now f_equal. Qed.
 
     Lemma inst_eterm_erase {Σ σ} (t : Term Σ σ) (ι : Valuation Σ) :
       inst_eterm (erase_valuation ι) (erase_term t) = Some (inst t ι).

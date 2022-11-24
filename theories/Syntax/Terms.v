@@ -306,15 +306,17 @@ Module Type TermsOn (Import TY : Types).
     Definition sub_up {Σ1 Σ2} (ζ : Sub Σ1 Σ2) Δ : Sub (Σ1 ▻▻ Δ) (Σ2 ▻▻ Δ) :=
       subst ζ (sub_cat_left Δ) ►► sub_cat_right Δ.
 
-    Definition sub_single {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) : Sub Σ (Σ - x∷σ) :=
-      @env.tabulate
-        _ (fun b => Term _ (type b)) _
-        (fun '(y∷τ) =>
-           fun yIn =>
-             match ctx.occurs_check_var xIn yIn with
-             | inl e => eq_rect σ (Term (Σ - x∷σ)) t τ (f_equal type e)
-             | inr i => term_var y
-             end).
+    Definition sub_single {Σ x} (xIn : x ∈ Σ) (t : Term (Σ - x) (type x)) : Sub Σ (Σ - x) :=
+       @env.tabulate _
+         (fun b => Term (Σ - x) (@type _ _ b)) Σ
+         (fun y (yIn : y ∈ Σ) =>
+            match ctx.occurs_check_view xIn yIn
+            in @ctx.OccursCheckView _ _ _ _ y i
+            return Term (Σ - x) (@type _ _ y)
+            with
+            | ctx.Same _     => t
+            | ctx.Diff _ yIn => @term_var _ _ _ yIn
+            end).
 
     Class SubstLaws (T : LCtx -> Type) `{Subst T} : Type :=
       { subst_sub_id Σ (t : T Σ) :
@@ -424,11 +426,11 @@ Module Type TermsOn (Import TY : Types).
 
     Lemma lookup_sub_single_eq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       env.lookup (sub_single xIn t) xIn = t.
-    Proof. unfold sub_single. now rewrite env.lookup_tabulate, ctx.occurs_check_var_refl. Qed.
+    Proof. unfold sub_single. now rewrite env.lookup_tabulate, ctx.occurs_check_view_refl. Qed.
 
     Lemma lookup_sub_single_neq {Σ x σ y τ} (xIn : x ∷ σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (yIn : y∷τ ∈ Σ - x∷σ) :
       env.lookup (sub_single xIn t) (ctx.shift_var xIn yIn) = term_var y.
-    Proof. unfold sub_single. now rewrite env.lookup_tabulate, ctx.occurs_check_shift_var. Qed.
+    Proof. unfold sub_single. now rewrite env.lookup_tabulate, ctx.occurs_check_view_shift. Qed.
 
     Lemma sub_comp_id_left {Σ0 Σ1} (ζ : Sub Σ0 Σ1) :
       subst (sub_id Σ0) ζ = ζ.
@@ -503,7 +505,7 @@ Module Type TermsOn (Import TY : Types).
       unfold sub_up1.
       rewrite sub_comp_id_left.
       apply env.lookup_extensional. intros y yIn.
-      destruct (ctx.snocView yIn) as [|[y τ] yIn].
+      destruct (ctx.view yIn) as [|[y τ] yIn].
       - reflexivity.
       - rewrite lookup_sub_id. cbn.
         now rewrite lookup_sub_wk1.

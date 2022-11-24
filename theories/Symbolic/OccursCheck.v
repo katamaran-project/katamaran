@@ -71,9 +71,9 @@ Module Type OccursCheckOn
   #[export] Instance occurs_check_term : forall σ, OccursCheck (fun Σ => Term Σ σ) :=
     fix occurs_check_term {τ Σ x} xIn (t : Term Σ τ) {struct t} : option (Term (Σ - x) τ) :=
       match t with
-      | @term_var _ y _ yIn => match ctx.occurs_check_var xIn yIn with
-                              | inl _    => None
-                              | inr yIn' => Some (term_var y)
+      | @term_var _ y _ yIn => match ctx.occurs_check_view xIn yIn with
+                              | ctx.Same _      => None
+                              | ctx.Diff _ yIn' => Some (@term_var _ _ _ yIn')
                               end
       | term_val σ v => Some (term_val σ v)
       | term_binop op t1 t2 =>
@@ -186,15 +186,28 @@ Module Type OccursCheckOn
   Proof.
     derive.
     - unfold sub_shift. rewrite env.lookup_tabulate. cbn.
-      now rewrite ctx.occurs_check_shift_var.
+      now rewrite ctx.occurs_check_view_shift.
     - generalize (occurs_check_env_shift_point IH).
       apply wp_monotonic. intros ? <-. reflexivity.
     - generalize (occurs_check_env_shift_point IH).
       apply wp_monotonic. intros ? <-. reflexivity.
-    - pose proof (ctx.occurs_check_var_spec xIn ςInΣ) as H.
-      destruct (ctx.occurs_check_var xIn ςInΣ); constructor; cbn.
-      destruct H as [H1 H2]. subst. unfold sub_shift.
-      now rewrite env.lookup_tabulate.
+    - change_no_check
+        (@wlp (Term (Σ - x) (@type _ _ (ς∷σ)))
+           (fun t' : Term (Σ - x) (@type _ _ (ς∷σ)) =>
+              @term_var Σ (@name _ _ (ς∷σ)) (@type _ _ (ς∷σ)) ςInΣ =
+                @subst (fun Σ => Term Σ (@type _ _ (ς∷σ)))
+                  (@SubstTerm (@type _ _ (ς∷σ)))
+                  (Σ - x) t' Σ (sub_shift xIn))
+           match @ctx.occurs_check_view _ Σ x xIn (ς∷σ) ςInΣ
+           in ctx.OccursCheckView _ i
+           return option (Term (Σ - x) _)
+           with
+           | ctx.Same _      => None
+           | ctx.Diff _ yIn' => Some (@term_var _ _ _ yIn')
+           end).
+      revert ςInΣ. generalize (ς∷σ). intros y yIn.
+      destruct ctx.occurs_check_view; constructor; cbn.
+      unfold sub_shift. now rewrite env.lookup_tabulate.
     - generalize (occurs_check_env_sound_point IH).
       apply wlp_monotonic. now intros ts' ->.
     - generalize (occurs_check_env_sound_point IH).

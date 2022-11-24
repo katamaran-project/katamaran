@@ -302,18 +302,15 @@ Module Type InstantiationOn
     inst (sub_single xIn t) (inst (sub_shift xIn) ι) = ι.
   Proof.
     rewrite inst_sub_shift, env.remove_remove'. intros HYP.
-    apply env.lookup_extensional. intros [y τ] yIn.
+    apply env.lookup_extensional. intros y yIn.
     unfold inst, inst_sub, inst_env, sub_single; cbn.
     rewrite env.lookup_map, env.lookup_tabulate.
-    pose proof (ctx.occurs_check_var_spec xIn yIn).
-    destruct (ctx.occurs_check_var xIn yIn).
-    * dependent elimination e. subst yIn. exact HYP.
-    * destruct H; subst yIn. cbn. unfold env.remove'.
-      now rewrite env.lookup_tabulate.
+    destruct (ctx.occurs_check_view); [easy|cbn].
+    unfold env.remove'. now rewrite env.lookup_tabulate.
   Qed.
 
-  Lemma sub_single_zero {Σ : LCtx} {x : LVar} {σ : Ty} (t : Term Σ σ) :
-    (sub_single ctx.in_zero t) = env.snoc (sub_id Σ) (x∷σ) t.
+  Lemma sub_single_zero {Σ : LCtx} {x : LVar∷Ty} (t : Term Σ (type x)) :
+    (sub_single ctx.in_zero t) = env.snoc (sub_id Σ) x t.
   Proof.
     eapply env.lookup_extensional.
     intros [x' σ'] ([|n] & eq).
@@ -330,11 +327,10 @@ Module Type InstantiationOn
   Proof.
     rewrite env.insert_insert'.
     apply env.lookup_extensional. intros y yIn.
-    unfold env.insert', sub_single, inst, inst_sub, inst_env; cbn.
+    unfold env.insert', sub_single; cbn.
+    unfold inst at 1, inst_sub, inst_env.
     rewrite env.lookup_map, ?env.lookup_tabulate.
-    destruct (ctx.occurs_check_view xIn yIn).
-    - now rewrite ctx.occurs_check_var_refl.
-    - now rewrite ctx.occurs_check_shift_var.
+    now destruct (ctx.occurs_check_view xIn yIn).
   Qed.
 
   Lemma inst_lookup {Σ0 Σ1} (ι : Valuation Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : x∷τ ∈ Σ0) :

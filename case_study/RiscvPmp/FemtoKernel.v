@@ -468,7 +468,7 @@ Import BlockVerificationDerived2.
     - cbv [femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
            Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
            Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst instprop_formula
-           inst_term env.lookup ctx.snocView ctx.in_at ctx.in_valid inst_env
+           inst_term env.lookup ctx.view ctx.in_at ctx.in_valid inst_env
            env.map].
       cbn.
       iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp & Hfortytwo & Hpc & Hnpc & Hhandler)".
@@ -476,7 +476,7 @@ Import BlockVerificationDerived2.
     - cbv [femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
            Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
            Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst instprop_formula
-           inst_term env.lookup ctx.snocView ctx.in_at ctx.in_valid inst_env
+           inst_term env.lookup ctx.view ctx.in_at ctx.in_valid inst_env
            env.map femto_handler_post femtokernel_handler_post].
       cbn.
       iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hregs & Hpmp & [%Hcfg0L %Hcfg1L] & HaccM & Hfortytwo)".
