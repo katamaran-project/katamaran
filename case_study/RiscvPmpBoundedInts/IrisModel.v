@@ -64,7 +64,11 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Definition memΣ : gFunctors := gen_heapΣ Addr MemVal.
 
     Definition liveAddrs := List.map (fun x => bv.add minAddr (bv.of_nat x)) (seq 0 lenAddr).
+    Lemma NoDup_liveAddrs : NoDup liveAddrs.
+      now eapply Prelude.nodup_fixed.
+    Qed.
     #[global] Arguments liveAddrs : simpl never.
+
     Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
 
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
@@ -77,7 +81,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
         )%I.
 
     Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
-      fun μ => ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v)%I.
+      fun μ => ([∗ list] a' ∈ liveAddrs, mapsto a' (DfracOwn 1) (μ a'))%I.
 
     Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
     Proof.
@@ -93,6 +97,24 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
       by destruct el as (a' & <- & _).
     Qed.
 
+    Lemma big_sepM_list_to_map {Σ} {A B : Type} `{Countable A} {l : list A} {f : A -> B} (F : A -> B -> iProp Σ) :
+      NoDup l ->
+      ([∗ map] l↦v ∈ (list_to_map (map (λ a : A, (a, f a)) l)), F l v)
+        ⊢
+        [∗ list] v ∈ l, F v (f v).
+    Proof.
+      intros ndl.
+      induction ndl.
+      - now iIntros "_".
+      - cbn.
+        rewrite big_sepM_insert.
+        + iIntros "[$ Hrest]".
+          now iApply IHndl.
+        + apply not_elem_of_list_to_map_1.
+          change (fmap fst ?l) with (map fst l).
+          now rewrite map_map map_id.
+    Qed.
+
     Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
       ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res μ)%I.
     Proof.
@@ -105,11 +127,14 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
       rewrite (right_id empty union memmap).
 
       iExists (McMemGS gH).
-      iFrame.
-      iExists memmap.
-      iFrame.
-      iPureIntro.
-      apply initMemMap_works.
+      iSplitL "inv".
+      - iExists memmap.
+        iFrame.
+        iPureIntro.
+        apply initMemMap_works.
+      - unfold mem_res, initMemMap in *.
+        iApply (big_sepM_list_to_map (f := μ) (fun a v => mapsto a (DfracOwn 1) v) with "[$]").
+        eapply NoDup_liveAddrs.
     Qed.
   End RiscvPmpIrisParams.
 
