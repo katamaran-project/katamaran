@@ -126,7 +126,7 @@ Module RiscvPmpModel2.
       destruct eq_dec.
       - subst paddr.
         apply (lookup_insert_rev memmap i).
-        destruct (bv.nilView bytes).
+        destruct (bv.view bytes).
         now rewrite bv.app_nil_r in H0.
       - rewrite -> map_Forall_lookup in Hmap.
         rewrite (lookup_insert_ne _ _ _ _ n) in H0.

@@ -229,81 +229,58 @@ Module bv.
           else mk (N.double bs) (wf_double n bs wf)
       end.
 
-    Variant NilView : bv 0 -> Set :=
-    | nvnil : NilView nil.
-    Definition nilView (xs : bv 0) : NilView xs :=
-      match xs with
-      | mk bs wf =>
-          match bs return forall wf : Is_true (is_wf 0 bs), NilView (mk bs wf) with
-          | N0      => fun q => match q with I => nvnil end
-          | N.pos p => fun q => False_rect _ q
-          end wf
-      end.
-
-    Variant ConsView {n} : bv (S n) -> Set :=
-    | cvcons (b : bool) (xs : bv n) : @ConsView n (cons b xs).
-    Definition consView {n} (xs : bv (S n)) : ConsView xs :=
-      match xs with
-      | mk bs wf =>
-          match bs return forall wf : Is_true (is_wf (S n) bs), ConsView (mk bs wf) with
-          | N0      => fun wf => cvcons false (@mk n 0 wf)
-          | N.pos p =>
-              match p with
-              | xI p => fun wf => cvcons true  (mk (N.pos p) wf)
-              | xO p => fun wf => cvcons false (mk (N.pos p) wf)
-              | xH   => fun wf => cvcons true  (mk 0 wf)
-              end
-          end wf
-      end.
-
-    Variant View : forall n, bv n -> Set :=
-    | isnil  : @View 0 nil
-    | iscons (b : bool) {n} (xs : bv n) : @View (S n) (cons b xs).
-    Definition view {n} : forall xs : bv n, View xs :=
-      match n return forall xs : bv n, View xs with
-      | 0   => fun xs => match nilView xs with nvnil => isnil end
-      | S n => fun xs => match consView xs with cvcons b xs => iscons b xs end
-      end.
-
-    Definition bv_rect (P : forall n : nat, bv n -> Type)
-      (PO : P O nil)
-      (PS : forall n (b : bool) (x : bv n), P n x -> P (S n) (cons b x)) :
+    Definition bv_case (P : forall n : nat, bv n -> Type) (PO : P O nil)
+      (PS : forall n (b : bool) (x : bv n), P (S n) (cons b x)) :
       forall [n] (xs : bv n), P n xs :=
-      fix t_rect (n : nat) : forall xs : bv n, P n xs :=
-        match n with
-        | 0   => fun xs => match nilView xs with
-                           | nvnil => PO
-                           end
-        | S n => fun xs => match consView xs with
-                           | cvcons b xs => PS n b xs (t_rect n xs)
-                           end
+      fun n xs =>
+        match xs with
+        | mk bs wf =>
+            match n , bs return forall wf, P n (mk bs wf) with
+            | O   , N0      => fun wf =>
+                                 match wf as t return (P 0 (mk 0 t)) with
+                                 | I => PO
+                                 end
+            | O   , N.pos p => fun wf => False_rect _ wf
+            | S m , N0      => fun wf => PS m false (mk 0 wf)
+            | S m , N.pos p => match p with
+                               | xI p => fun wf => PS m true (mk (N.pos p) wf)
+                               | xO p => fun wf => PS m false (mk (N.pos p) wf)
+                               | xH    => fun wf => PS m true (mk 0 wf)
+                               end
+            end wf
         end.
 
-    Definition fold_right (A : forall n : nat, Type)
-      (c : forall n, bool -> A n -> A (S n)) (n : A O) :
-      forall {m} (xs : bv m), A m :=
-      bv_rect (fun m _ => A m) n (fun m b _ p => c m b p).
+    Definition bv_rect (P : forall n : nat, bv n -> Type) (PO : P O nil)
+      (PS : forall n (b : bool) (x : bv n), P n x -> P (S n) (cons b x)) :
+      forall [n] (xs : bv n), P n xs :=
+      fix rect [n] (xs : bv n) {struct n} : P n xs :=
+        bv_case P PO (fun n b x => PS n b x (rect x)) xs.
+
+    Fixpoint fold_right (A : forall n : nat, Type)
+      (c : forall n, bool -> A n -> A (S n)) (n : A O) [m] (xs : bv m) : A m :=
+      bv_case (fun k _ => A k) n
+        (fun k b x => c k b (fold_right A c n x)) xs.
 
     Fixpoint fold_left {A : forall n : nat, Type}
-      (c : forall n, A n -> bool -> A (S n)) (n : A O)
-      [m] {struct m} : forall (xs : bv m), A m :=
-      match m with
-      | O    => fun xs =>
-                  match nilView xs with
-                  | nvnil => n
-                  end
-      | S m => fun xs  =>
-                 match consView xs with
-                 | cvcons b xs => fold_left (fun m => c (S m)) (c 0 n b) xs
-                 end
-      end.
+      (c : forall n, A n -> bool -> A (S n)) (n : A O) [m] (xs : bv m) : A m :=
+      bv_case (fun m _ => A m) n
+        (fun k b xs => fold_left (fun m => c (S m)) (c 0 n b) xs) xs.
+
+    Variant NilView : bv 0 -> Set :=
+      nvnil : NilView nil.
+    Variant ConsView {n} : bv (S n) -> Set :=
+      cvcons (b : bool) (xs : bv n) : @ConsView n (cons b xs).
+    #[global] Arguments cvcons [n] b xs.
+
+    Definition view : forall {n} (xs : bv n),
+      match n with O => NilView | S n => ConsView end xs :=
+      bv_case _ nvnil cvcons.
 
     Definition app {m n} (xs : bv m) (ys : bv n) : bv (m + n) :=
       fold_right (fun m => bv (m + n)) (fun m => @cons (m + n)) ys xs.
-    Global Arguments app : simpl never.
+    #[global] Arguments app : simpl never.
 
-    Lemma app_nil {m} (xs : bv m) :
-      app nil xs = xs.
+    Lemma app_nil {m} (xs : bv m) : app nil xs = xs.
     Proof. reflexivity. Defined.
 
     Definition app_cons b {m n} (xs : bv m) (ys : bv n) :
@@ -311,7 +288,7 @@ Module bv.
     Proof. destruct xs as [[] ?], b; reflexivity. Defined.
 
     Variant AppView m n : bv (m + n) -> Set :=
-    | isapp (xs : bv m) (ys : bv n) : AppView _ _ (app xs ys).
+      isapp (xs : bv m) (ys : bv n) : AppView _ _ (app xs ys).
 
     Import EqNotations.
 
@@ -331,7 +308,7 @@ Module bv.
       match m with
       | O   => isapp nil
       | S m => fun xs =>
-                 match consView xs with
+                 match view xs with
                  | cvcons b xs => avcons b (appView m n xs)
                  end
       end.
@@ -362,45 +339,41 @@ Module bv.
     Proof.
       split.
       - induction x1 using bv_rect.
-        + destruct (nilView y1). rewrite ?app_nil. intuition.
-        + destruct (consView y1) as [c y1]. rewrite ?app_cons.
+        + destruct (view y1). rewrite ?app_nil. intuition.
+        + destruct (view y1) as [c y1]. rewrite ?app_cons.
           intros [H1 H2]%cons_inj. specialize (IHx1 y1 H2). intuition.
       - intros [e1 e2]; now f_equal.
     Qed.
 
-    Lemma consView_cons {m} b (x : bv m)  :
-      consView (cons b x) = cvcons b x.
+    Lemma view_cons {m} b (x : bv m)  :
+      view (cons b x) = cvcons b x.
+    Proof. now destruct x as [[|x0] p], b. Qed.
+
+    Lemma view_app {m n} (x : bv (S m)) (y : bv n) :
+      view (app x y) = cvapp (view x) y.
     Proof.
-      destruct x as [[|x0] p]; now destruct b.
+      destruct (view x).
+      rewrite <- (f_equal_dep _ view (eq_sym (app_cons b xs y))).
+      cbn. now rewrite view_cons.
     Qed.
 
-    Lemma consView_app {m n} (x : bv (S m)) (y : bv n) :
-      consView (app x y) = cvapp (consView x) y.
-    Proof.
-      destruct (consView x).
-      rewrite <-(f_equal_dep _ consView (eq_sym (app_cons b xs y))).
-      now rewrite consView_cons.
-    Qed.
-
-    Lemma match_rew {m : nat} {x y : bv (S m)} {D : forall (x : bv (S m)), Set}(eq : y = x) {f : forall (b : bool) (x : bv m), D (cons b x)} (v : ConsView x) :
-      match rew <- eq in v in ConsView b0 return D b0 with
+    Lemma match_rew {m : nat} {x y : bv (S m)} {D : forall (x : bv (S m)), Set}
+      (e : y = x) {f : forall b x, D (cons b x)} (v : ConsView x) :
+      match rew <- e in v in ConsView b0 return D b0 with
       | cvcons b0 xs0 => f b0 xs0
       end =
-        rew <- eq in match v in ConsView b0 return D b0 with
+        rew <- e in match v in ConsView b0 return D b0 with
         | cvcons b0 xs0 => f b0 xs0
         end.
-    Proof.
-       now subst.
-    Qed.
+    Proof. now subst. Qed.
 
     Lemma appView_app [m n] (x : bv m) (y : bv n) :
       appView m n (app x y) = isapp x y.
     Proof.
-      induction x using bv_rect.
+      induction x using bv_rect; cbn - [plus].
       - reflexivity.
-      - cbn.
-        rewrite consView_app.
-        rewrite consView_cons.
+      - rewrite view_app.
+        rewrite view_cons.
         cbn.
         rewrite match_rew.
         rewrite IHx. cbn.
