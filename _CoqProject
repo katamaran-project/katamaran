@@ -32,6 +32,9 @@ case_study/RiscvPmpBoundedInts/Model.v
 case_study/RiscvPmpBoundedInts/Sig.v
 case_study/Assumptions.v
 -R theories Katamaran
+test/Example.v
+test/LinkedList.v
+test/SumMaxLen.v
 theories/Base.v
 theories/Bitvector.v
 theories/Context.v
@@ -76,3 +79,8 @@ theories/Syntax/Terms.v
 theories/Syntax/TypeDecl.v
 theories/Syntax/Variables.v
 theories/Tactics.v
+
+theories/Staging/CommandStep.v
+theories/Staging/NewShallow/Executor.v
+theories/Staging/NewShallow/IrisInstance.v
+theories/Staging/NewShallow/Soundness.v
