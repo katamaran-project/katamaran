@@ -523,149 +523,6 @@ Module Type InstantiationOn
 
   End InstProp.
 
-  Module Entailment.
-
-    (* A preorder on path conditions. This encodes that either pc1 belongs to a
-       longer symbolic execution path (or that it's the same path, but with
-       potentially some constraints substituted away). *)
-    Definition entails {A B} {IA : InstProp A} {IB : InstProp B}
-      {Σ} (x : A Σ) (y : B Σ) : Prop :=
-      forall (ι : Valuation Σ), instprop x ι -> instprop y ι.
-    Definition bientails {A} {IA : InstProp A} {Σ} : relation (A Σ) :=
-      fun x y => forall ι, instprop x ι <-> instprop y ι.
-
-    Section WithA.
-      Context `{IA : InstProp A} {Σ : LCtx}.
-      Notation "(⊢)" := (@entails A A _ _ Σ).
-      Notation "(⊣⊢)" := (@bientails A _ Σ).
-
-      Definition entails_refl : Reflexive (⊢).
-      Proof. now unfold Reflexive, entails. Qed.
-
-      Definition entails_trans : Transitive (⊢).
-      Proof. unfold Transitive, entails; eauto. Qed.
-
-      #[export] Instance preorder_entails : PreOrder (⊢).
-      Proof. split; auto using entails_refl, entails_trans. Qed.
-
-      #[export] Instance equivalence_bientails : Equivalence (⊣⊢).
-      Proof.
-        unfold bientails. constructor; try easy.
-        intros x y z xy yz ι. now transitivity (instprop y ι).
-      Qed.
-
-      #[export] Instance subrelation_bientails_entails :
-        subrelation (⊣⊢) (⊢).
-      Proof. intros x y xy ι. apply xy. Qed.
-
-      #[export] Instance subrelation_bientails_flip_entails :
-        subrelation (⊣⊢) (flip (⊢)).
-      Proof. intros x y xy ι. apply xy. Qed.
-
-      Definition Unsatisfiable (x : A Σ) : Prop :=
-        forall ι : Valuation Σ, ~ instprop x ι.
-
-      #[export] Instance proper_unsatisfiable_entails :
-        Proper ((⊢) --> impl) Unsatisfiable.
-      Proof. intros xs ys xys uxs ι H. apply (uxs ι), xys, H. Qed.
-
-      #[export] Instance proper_unsatisfiable_bientails :
-        Proper ((⊣⊢) ==> iff) Unsatisfiable.
-      Proof.
-        intros x y xy.
-        split; apply proper_unsatisfiable_entails;
-          intros ι; apply xy.
-      Qed.
-
-      Definition Valid (x : A Σ) : Prop :=
-        forall ι : Valuation Σ, instprop x ι.
-
-      #[export] Instance proper_valid_entails :
-        Proper ((⊢) ==> impl) Valid.
-      Proof. intros xs ys xys uxs ι. apply xys, (uxs ι). Qed.
-
-      #[export] Instance proper_valid_bientails :
-        Proper ((⊣⊢) ==> iff) Valid.
-      Proof.
-        intros x y xy.
-        split; apply proper_valid_entails;
-          intros ι; apply xy.
-      Qed.
-
-    End WithA.
-
-    #[global] Instance: Params (@entails) 5 := {}.
-    #[global] Instance: Params (@bientails) 3 := {}.
-    #[global] Instance: Params (@Unsatisfiable) 3 := {}.
-    #[global] Instance: Params (@Valid) 3 := {}.
-
-    #[global] Typeclasses Opaque entails.
-    #[global] Typeclasses Opaque bientails.
-
-    Notation "(⊢)" := entails.
-    Infix "⊢" := entails.
-    Notation "(⊢@{ A } )" := (entails (A:=A) (B:=A)) (only parsing).
-
-    Notation "(⊣⊢)" := bientails.
-    Infix "⊣⊢" := bientails.
-    Notation "(⊣⊢@{ A } )" := (bientails (A:=A)) (only parsing).
-
-    Lemma entails_nil `{InstProp A, InstProp B} {Σ} {x : A Σ} : x ⊢ @ctx.nil (B Σ).
-    Proof. constructor. Qed.
-
-    Lemma entails_cons `{InstProp A, InstProp B} {Σ} (x : A Σ) (ys : Ctx (B Σ)) (y : B Σ) :
-      (x ⊢ ys) /\ (x ⊢ y) <-> (x ⊢ ys ▻ y).
-    Proof. unfold entails; cbn. intuition. Qed.
-
-    Lemma proper_subst_entails `{InstPropSubst A, InstPropSubst B}
-      {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (x : A Σ1) (y : B Σ1) :
-      (x ⊢ y) -> (subst x ζ12 ⊢ subst y ζ12).
-    Proof. intros E ι. rewrite ?instprop_subst; eauto. Qed.
-
-    #[export] Instance proper_snoc `{InstProp A} [Σ] :
-      Proper ((⊣⊢) ==> (⊣⊢) ==> (⊣⊢)) (@ctx.snoc (A Σ)).
-    Proof. intros C1 C2 HC F1 F2 HF ι. now apply and_iff_morphism. Qed.
-
-    #[local] Instance proper_snoc_entails `{InstProp A} [Σ] :
-      Proper ((⊢) ==> (⊢) ==> (⊢)) (@ctx.snoc (A Σ)).
-    Proof.
-      intros C1 C2 HC F1 F2 HF ι; cbn.
-      apply and_impl_morphism; red; [apply HC|apply HF].
-    Qed.
-
-    #[local] Instance proper_some `{InstProp A} [Σ] :
-      Proper ((⊣⊢) ==> (⊣⊢)) (@Some (A Σ)).
-    Proof. intros xs ys Hxys. apply Hxys. Qed.
-
-    Lemma snoc_cancel `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
-      Valid x -> xs ⊣⊢ xs ▻ x.
-    Proof. intros vx ι; specialize (vx ι). cbn in *. intuition. Qed.
-
-    Lemma unsatisfiable_snoc_l `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
-      Unsatisfiable xs -> Unsatisfiable (xs ▻ x).
-    Proof. unfold Unsatisfiable; intuition. Qed.
-
-    Lemma unsatisfiable_snoc_r `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
-      Unsatisfiable x -> Unsatisfiable (xs ▻ x).
-    Proof. unfold Unsatisfiable; intuition. Qed.
-
-    Lemma unsatisfiable_none_some `{InstProp A} [Σ] (x : A Σ) :
-      Unsatisfiable x -> None ⊣⊢ Some x.
-    Proof. unfold Unsatisfiable; intros ? ι; cbn; intuition. Qed.
-
-    Lemma unsatisfiable_some_none `{InstProp A} [Σ] (x : A Σ) :
-      Unsatisfiable x -> Some x ⊣⊢ None.
-    Proof. unfold Unsatisfiable; intros ? ι; cbn; intuition. Qed.
-
-    Lemma nil_l_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
-      Valid xs -> [ctx] ⊣⊢ xs.
-    Proof. unfold Valid; intros ? ι; cbn; intuition. Qed.
-
-    Lemma nil_r_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
-      Valid xs -> xs ⊣⊢ [ctx].
-    Proof. unfold Valid; intros ? ι; cbn; intuition. Qed.
-
-  End Entailment.
 
   Section Utils.
 
@@ -810,5 +667,165 @@ Module Type InstantiationOn
     Qed.
 
   End Utils.
+
+  Module Entailment.
+
+    (* A preorder on path conditions. This encodes that either pc1 belongs to a
+       longer symbolic execution path (or that it's the same path, but with
+       potentially some constraints substituted away). *)
+    Definition entails {A B} {IA : InstProp A} {IB : InstProp B}
+      {Σ} (x : A Σ) (y : B Σ) : Prop :=
+      forall (ι : Valuation Σ), instprop x ι -> instprop y ι.
+    Definition bientails {A} {IA : InstProp A} {Σ} : relation (A Σ) :=
+      fun x y => forall ι, instprop x ι <-> instprop y ι.
+
+    Section WithA.
+      Context `{IA : InstProp A} {Σ : LCtx}.
+      Notation "(⊢)" := (@entails A A _ _ Σ).
+      Notation "(⊣⊢)" := (@bientails A _ Σ).
+
+      Definition entails_refl : Reflexive (⊢).
+      Proof. now unfold Reflexive, entails. Qed.
+
+      Definition entails_trans : Transitive (⊢).
+      Proof. unfold Transitive, entails; eauto. Qed.
+
+      #[export] Instance preorder_entails : PreOrder (⊢).
+      Proof. split; auto using entails_refl, entails_trans. Qed.
+
+      #[export] Instance equivalence_bientails : Equivalence (⊣⊢).
+      Proof.
+        unfold bientails. constructor; try easy.
+        intros x y z xy yz ι. now transitivity (instprop y ι).
+      Qed.
+
+      #[export] Instance subrelation_bientails_entails :
+        subrelation (⊣⊢) (⊢).
+      Proof. intros x y xy ι. apply xy. Qed.
+
+      #[export] Instance subrelation_bientails_flip_entails :
+        subrelation (⊣⊢) (flip (⊢)).
+      Proof. intros x y xy ι. apply xy. Qed.
+
+      Definition Unsatisfiable (x : A Σ) : Prop :=
+        forall ι : Valuation Σ, ~ instprop x ι.
+
+      #[export] Instance proper_unsatisfiable_entails :
+        Proper ((⊢) --> impl) Unsatisfiable.
+      Proof. intros xs ys xys uxs ι H. apply (uxs ι), xys, H. Qed.
+
+      #[export] Instance proper_unsatisfiable_bientails :
+        Proper ((⊣⊢) ==> iff) Unsatisfiable.
+      Proof.
+        intros x y xy.
+        split; apply proper_unsatisfiable_entails;
+          intros ι; apply xy.
+      Qed.
+
+      Definition Valid (x : A Σ) : Prop :=
+        forall ι : Valuation Σ, instprop x ι.
+
+      #[export] Instance proper_valid_entails :
+        Proper ((⊢) ==> impl) Valid.
+      Proof. intros xs ys xys uxs ι. apply xys, (uxs ι). Qed.
+
+      #[export] Instance proper_valid_bientails :
+        Proper ((⊣⊢) ==> iff) Valid.
+      Proof.
+        intros x y xy.
+        split; apply proper_valid_entails;
+          intros ι; apply xy.
+      Qed.
+
+    End WithA.
+
+    #[global] Instance: Params (@entails) 5 := {}.
+    #[global] Instance: Params (@bientails) 3 := {}.
+    #[global] Instance: Params (@Unsatisfiable) 3 := {}.
+    #[global] Instance: Params (@Valid) 3 := {}.
+
+    #[global] Typeclasses Opaque entails.
+    #[global] Typeclasses Opaque bientails.
+
+    Notation "(⊢)" := entails.
+    Infix "⊢" := entails.
+    Notation "(⊢@{ A } )" := (entails (A:=A) (B:=A)) (only parsing).
+
+    Notation "(⊣⊢)" := bientails.
+    Infix "⊣⊢" := bientails.
+    Notation "(⊣⊢@{ A } )" := (bientails (A:=A)) (only parsing).
+
+    Lemma entails_nil `{InstProp A, InstProp B} {Σ} {x : A Σ} : x ⊢ @ctx.nil (B Σ).
+    Proof. constructor. Qed.
+
+    Lemma entails_cons `{InstProp A, InstProp B} {Σ} (x : A Σ) (ys : Ctx (B Σ)) (y : B Σ) :
+      (x ⊢ ys) /\ (x ⊢ y) <-> (x ⊢ ys ▻ y).
+    Proof. unfold entails; cbn. intuition. Qed.
+
+    Lemma proper_subst_entails `{InstPropSubst A, InstPropSubst B}
+      {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (x : A Σ1) (y : B Σ1) :
+      (x ⊢ y) -> (subst x ζ12 ⊢ subst y ζ12).
+    Proof. intros E ι. rewrite ?instprop_subst; eauto. Qed.
+
+    #[export] Instance proper_snoc `{InstProp A} [Σ] :
+      Proper ((⊣⊢) ==> (⊣⊢) ==> (⊣⊢)) (@ctx.snoc (A Σ)).
+    Proof. intros C1 C2 HC F1 F2 HF ι. now apply and_iff_morphism. Qed.
+
+    #[local] Instance proper_snoc_entails `{InstProp A} [Σ] :
+      Proper ((⊢) ==> (⊢) ==> (⊢)) (@ctx.snoc (A Σ)).
+    Proof.
+      intros C1 C2 HC F1 F2 HF ι; cbn.
+      apply and_impl_morphism; red; [apply HC|apply HF].
+    Qed.
+
+    #[local] Instance proper_some `[InstProp A] [Σ] :
+      Proper ((⊣⊢) ==> (⊣⊢)) (@Some (A Σ)).
+    Proof. intros xs ys Hxys. apply Hxys. Qed.
+
+    Lemma snoc_cancel `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
+      Valid x -> xs ⊣⊢ xs ▻ x.
+    Proof. intros vx ι; specialize (vx ι). cbn in *. intuition. Qed.
+
+    Lemma unsatisfiable_snoc_l `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
+      Unsatisfiable xs -> Unsatisfiable (xs ▻ x).
+    Proof. unfold Unsatisfiable; intuition. Qed.
+
+    Lemma unsatisfiable_snoc_r `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
+      Unsatisfiable x -> Unsatisfiable (xs ▻ x).
+    Proof. unfold Unsatisfiable; intuition. Qed.
+
+    Lemma unsatisfiable_none_some `{InstProp A} [Σ] (x : A Σ) :
+      Unsatisfiable x -> None ⊣⊢ Some x.
+    Proof. unfold Unsatisfiable; intros ? ι; cbn; intuition. Qed.
+
+    Lemma unsatisfiable_some_none `{InstProp A} [Σ] (x : A Σ) :
+      Unsatisfiable x -> Some x ⊣⊢ None.
+    Proof. unfold Unsatisfiable; intros ? ι; cbn; intuition. Qed.
+
+    Lemma nil_l_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
+      Valid xs -> [ctx] ⊣⊢ xs.
+    Proof. unfold Valid; intros ? ι; cbn; intuition. Qed.
+
+    Lemma nil_r_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
+      Valid xs -> xs ⊣⊢ [ctx].
+    Proof. unfold Valid; intros ? ι; cbn; intuition. Qed.
+
+    Module tactics.
+
+      Ltac mixin :=
+          lazymatch goal with
+          | |- ?x                 ⊣⊢ ?x                 => reflexivity
+          | |- Some _             ⊣⊢ Some _             => apply @proper_some
+          | |- ctx.snoc ctx.nil _ ⊣⊢ ctx.snoc ctx.nil _ => apply proper_snoc; [easy|]
+          | |- None               ⊣⊢ Some _             => apply @unsatisfiable_none_some
+          | |- [ctx]              ⊣⊢ _                  => apply nil_l_valid
+          | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
+          | |- match @term_get_val ?Σ ?σ ?v with _ => _ end ⊣⊢ _ =>
+              destruct (@term_get_val_spec Σ σ v); subst; try progress cbn
+          end.
+
+    End tactics.
+
+  End Entailment.
 
 End InstantiationOn.

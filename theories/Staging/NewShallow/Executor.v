@@ -358,7 +358,7 @@ Module Type NewShallowExecOn
 
       Fixpoint produce {Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CPureSpecM unit :=
         match asn with
-        | asn.formula fml => assume_formula (inst fml ι)
+        | asn.formula fml => assume_formula (instprop fml ι)
         | asn.chunk c     => produce_chunk (inst c ι)
         | asn.chunk_angelic c => produce_chunk (inst c ι)
         | asn.pattern_match s pat rhs =>
@@ -378,7 +378,7 @@ Module Type NewShallowExecOn
 
       Fixpoint consume {Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CPureSpecM unit :=
         match asn with
-        | asn.formula fml => assert_formula (inst fml ι)
+        | asn.formula fml => assert_formula (instprop fml ι)
         | asn.chunk c     => consume_chunk (inst c ι)
         | asn.chunk_angelic c     => consume_chunk (inst c ι)
         | asn.pattern_match s pat rhs =>

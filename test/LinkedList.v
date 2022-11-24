@@ -607,65 +607,49 @@ End ExampleSpecification.
    by showing that all runs of the simplifier produce unsolved residual formulas
    (that are hopefully simpler) that are equivalent to the input. *)
 Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
-
-  Local Unset Implicit Arguments.
-  Set Equations Transparent.
-  Import ListNotations.
+  #[local] Arguments Some {_} _%ctx.
+  #[local] Unset Implicit Arguments.
+  #[local] Set Equations Transparent.
 
   (* Simplification of the [plength] predicate with arguments [xs] and [n]. *)
-  Equations simplify_plength {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) : option (List Formula Σ) :=
-  | term_binop bop.cons x xs | term_binop bop.plus (term_val ?(ty.int) 1%Z) n :=
-    Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list;
-  | term_val ?(ty.list ty.int) nil | term_val ?(ty.int) 0%Z := Some nil;
-  | xs          | n          :=
-    Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list.
+  Equations simplify_plength {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) : Option PathCondition Σ :=
+  | term_binop bop.cons x xs       | term_binop bop.plus (term_val ?(ty.int) 1%Z) n => Some [formula_user plength [xs;n]]
+  | term_val ?(ty.list ty.int) nil | term_val ?(ty.int) 0%Z                         => Some []
+  | xs                             | n                                              => Some [formula_user plength [xs;n]].
+
+  (* Simplification of the [preverseappend] predicate with arguments [xs], [ys],
+     and [zs]. *)
+  Equations simplify_preverseappend {Σ} (xs ys zs: Term Σ (ty.list ty.int)) : Option PathCondition Σ :=
+  (* | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty.int) 1%Z) n := *)
+  (*   Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list; *)
+  | term_val ?(ty.list ty.int) nil | ys | zs => Some [formula_relop bop.eq ys zs]
+  | xs | term_val ?(ty.list ty.int) nil | zs => Some [formula_user preverse [xs;zs]]
+  | term_binop bop.cons x xs | ys       | zs => Some [formula_user preverseappend [xs; term_binop bop.cons x ys; zs]]
+  | xs | ys | zs                             => Some [formula_user preverseappend [xs;ys;zs]].
+
+  Import Entailment.
+
+  Local Ltac lsolve := repeat Entailment.tactics.mixin; try easy; auto.
 
   (* Prove that the simplifier of [plength] is sound and complete. *)
   Goal True. idtac "Timing before: llist/simplify_plength_spec". Abort.
   Lemma simplify_plength_spec {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) :
-    let f := formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n)) in
-    option.spec
-      (fun r : List Formula Σ =>
-         forall ι : Valuation Σ,
-           inst f ι <-> instpc r ι)
-      (forall ι : Valuation Σ, ~ inst f ι)
-      (simplify_plength xs n).
+    simplify_plength xs n ⊣⊢ Some [formula_user plength [xs;n]].
   Proof.
     pattern (simplify_plength xs n).
-    apply_funelim (simplify_plength xs n);
-      try (constructor; intros; cbn; now rewrite rightid_and_true);
-      intros; constructor; intros ι; cbn.
-    - split; auto.
-    - now rewrite rightid_and_true, Nat2Z.inj_succ, Z.add_1_l, Z.succ_inj_wd.
+    apply_funelim (simplify_plength xs n); intros *; lsolve;
+      intro ι; cbn; lia.
   Qed.
   Goal True. idtac "Timing after: llist/simplify_plength_spec". Abort.
-
-  (* Simplification of the [preverseappend] predicate with arguments [xs], [ys],
-     and [zs]. *)
-  Equations simplify_preverseappend {Σ} (xs ys zs: Term Σ (ty.list ty.int)) : option (List Formula Σ) :=
-  (* | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty.int) 1%Z) n := *)
-  (*   Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list; *)
-  | term_val ?(ty.list ty.int) nil | ys | zs := Some [formula_relop bop.eq ys zs]%list;
-  | xs | term_val ?(ty.list ty.int) nil | zs := Some [formula_user preverse (env.nil ► (_ ↦ xs) ► (_ ↦ zs))]%list;
-  | term_binop bop.cons x xs | ys | zs := Some [formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_  ↦ term_binop bop.cons x ys) ► (_  ↦ zs))]%list;
-  | xs | ys | zs          :=
-    Some [formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_  ↦ ys) ► (_  ↦ zs))]%list.
 
   (* Prove that the simplifier of [preverseappend] is sound and complete. *)
   Goal True. idtac "Timing before: llist/simplify_preverseappend_spec". Abort.
   Lemma simplify_preverseappend_spec {Σ} (xs ys zs : Term Σ (ty.list ty.int)) :
-    let f := formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_ ↦ ys) ► (_ ↦ zs)) in
-    option.spec
-      (fun r : List Formula Σ =>
-         forall ι : Valuation Σ,
-           inst f ι <-> instpc r ι)
-      (forall ι : Valuation Σ, ~ inst f ι)
-      (simplify_preverseappend xs ys zs).
+    simplify_preverseappend xs ys zs ⊣⊢ Some [formula_user preverseappend [xs;ys;zs]].
   Proof.
     pattern (simplify_preverseappend xs ys zs).
-    apply_funelim (simplify_preverseappend xs ys zs);
-      try (constructor; intros; cbn; now rewrite rightid_and_true);
-      intros; constructor; intros ι; cbn; rewrite ?rightid_and_true.
+    apply_funelim (simplify_preverseappend xs ys zs); intros *; lsolve;
+      intro ι; cbn.
     - now rewrite rev_alt.
     - now rewrite rev_append_rev.
     - now rewrite rev_alt.
@@ -680,7 +664,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
                      let (ts,n)  := env.snocView ts in
                      let (ts,xs) := env.snocView ts in
                      simplify_plength xs n
-      | preverse => fun ts => Some (cons (formula_user preverse ts) nil)
+      | preverse => fun ts => Some [formula_user preverse ts]
       | preverseappend =>
           fun ts =>
             let (ts,zs) := env.snocView ts in
@@ -695,8 +679,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
     intros Σ p ts.
     destruct p; cbv in ts; env.destroy ts.
     - apply simplify_plength_spec.
-    - constructor; intros ?; cbn.
-      now rewrite rightid_and_true.
+    - reflexivity.
     - apply simplify_preverseappend_spec.
   Qed.
 
@@ -719,9 +702,10 @@ Module Import ExampleExecutor :=
 
 Section DebugExample.
   Import SymProp.notations.
-  Notation "x '∷' σ . P" := (@SymProp.EMsgThere _ (x ∷ σ) P) (at level 200, right associativity, only printing, format "x '∷' σ .  '/' P").
+  Notation "x '∷' σ . P" := (@amsg.there _ (x ∷ σ) P)
+    (at level 200, right associativity, only printing, format "x '∷' σ .  '/' P").
   Notation "'error' x" := (SymProp.error x) (at level 200, only printing, format "'error'  x").
-  Notation "P" := (SymProp.EMsgHere P) (only printing).
+  Notation "P" := (amsg.mk P) (only printing).
   Import ListNotations.
 
   Lemma debug_appendloop_broken : Symbolic.ValidContract sep_contract_appendloop fun_appendloop_broken.
@@ -846,10 +830,9 @@ Module ExampleModel.
       Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
         fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
 
-      Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-                                                  ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+      Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
+        ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
       Proof.
-        iIntros (Σ μ gHP).
         iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
 
         iMod (gen_heap_alloc_big empty μ (map_disjoint_empty_r μ) with "inv") as "(inv & res & _)".

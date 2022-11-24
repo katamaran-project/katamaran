@@ -318,7 +318,7 @@ Section Debug.
     match goal with
     | |- context[SymProp.assumek
                    (formula_relop bop.le _ _)
-                   (SymProp.debug (MkAMessage ?x) _)] =>
+                   (SymProp.debug (amsg.mk ?x) _)] =>
         idtac x
     end.
   Abort.
@@ -353,11 +353,9 @@ Module Import ExampleModel.
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ := fun _ _ => I.
     Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
     Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
-    Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-                                                ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
-    Proof.
-      now iIntros (Σ μ mG) "".
-    Qed.
+    Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
+      ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+    Proof. now iIntros "". Qed.
 
     (* Combine the memory and register ghost states. *)
     Include IrisResources DefaultBase ExampleProgram ExampleSemantics.
