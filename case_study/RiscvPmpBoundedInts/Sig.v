@@ -63,7 +63,7 @@ Inductive PurePredicate : Set :=
 Inductive Predicate : Set :=
 | pmp_entries
 | pmp_addr_access
-| pmp_addr_access_without
+| pmp_addr_access_without (bytes : nat)
 | gprs
 | ptsto
 | ptsto_readonly
@@ -89,7 +89,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition 𝑷 := PurePredicate.
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
       match p with
-      | pmp_access               => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
+      | pmp_access               => [ty_xlenbits; ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
       | pmp_check_perms          => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
       | pmp_check_rwx            => [ty_pmpcfg_ent; ty_access_type]
       | sub_perm                 => [ty_access_type; ty_access_type]
@@ -160,46 +160,46 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | TOR => Some (lo , hi)
       end.
 
-    Definition pmp_match_addr (a : Val ty_xlenbits) (rng : PmpAddrRange) : Val ty_pmpaddrmatch :=
+    Definition pmp_match_addr (a : Val ty_xlenbits) (width : Val ty_xlenbits) (rng : PmpAddrRange) : Val ty_pmpaddrmatch :=
       match rng with
       | Some (lo, hi) =>
           if hi <ᵘ? lo
           then PMP_NoMatch
-          else if ((a <ᵘ? lo) || (hi <=ᵘ? a))%bool
+          else if ((a + width <=ᵘ? lo)%bv || (hi <=ᵘ? a))%bool
                then PMP_NoMatch
-               else if ((lo <=ᵘ? a) && (a <ᵘ? hi))%bool
+               else if ((lo <=ᵘ? a) && (a + width <=ᵘ? hi)%bv)%bool
                     then PMP_Match
                     else PMP_PartialMatch
       | None          => PMP_NoMatch
       end.
 
-    Definition pmp_match_entry (a : Val ty_xlenbits) (m : Val ty_privilege) (cfg : Val ty_pmpcfg_ent) (lo hi : Val ty_xlenbits) : Val ty_pmpmatch :=
+    Definition pmp_match_entry (a : Val ty_xlenbits) (width : Val ty_xlenbits) (m : Val ty_privilege) (cfg : Val ty_pmpcfg_ent) (lo hi : Val ty_xlenbits) : Val ty_pmpmatch :=
       let rng := pmp_addr_range cfg hi lo in
-      match pmp_match_addr a rng with
+      match pmp_match_addr a width rng with
       | PMP_NoMatch      => PMP_Continue
       | PMP_PartialMatch => PMP_Fail
       | PMP_Match        => PMP_Success
       end.
 
-    Fixpoint pmp_check (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
+    Fixpoint pmp_check (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
       match entries with
       | [] => match m with
               | Machine => (true, None)
               | User    => (false, None)
               end
       | (cfg , addr) :: entries =>
-          match pmp_match_entry a m cfg prev addr with
+          match pmp_match_entry a width m cfg prev addr with
           | PMP_Success  => (true, Some (pmp_get_perms cfg m))
           | PMP_Fail     => (false, None)
-          | PMP_Continue => pmp_check a entries addr m
+          | PMP_Continue => pmp_check a width entries addr m
           end
       end%list.
 
     (* check_access is based on the pmpCheck algorithm, main difference
            is that we can define it less cumbersome because entries will contain
            the PMP entries in highest-priority order. *)
-    Definition check_pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
-      pmp_check a entries [bv 0] m.
+    Definition check_pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
+      pmp_check a width entries [bv 0] m.
 
     Equations(noeqns) access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
     | Read      | Read      := true;
@@ -244,15 +244,15 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition Access_pmp_perm (a : Val ty_access_type) (p : Val ty_pmpcfgperm) : Prop :=
       decide_access_pmp_perm a p = true.
 
-    Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : bool :=
-      match check_pmp_access a entries m with
+    Definition decide_pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : bool :=
+      match check_pmp_access a width entries m with
       | (true, Some p) => decide_access_pmp_perm acc p
       | (true, None)     => true
       | (false, _)       => false
       end.
 
-    Definition Pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
-      decide_pmp_access a entries m acc = true.
+    Definition Pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
+      decide_pmp_access a width entries m acc = true.
 
     Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
       decide_pmp_check_perms cfg acc p = true.
@@ -364,29 +364,29 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition 𝑯 := Predicate.
     Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
       match p with
-      | pmp_entries              => [ty.list ty_pmpentry]
-      | pmp_addr_access          => [ty.list ty_pmpentry; ty_privilege]
-      | pmp_addr_access_without  => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege]
-      | gprs                     => ctx.nil
-      | ptsto                    => [ty_xlenbits; ty_byte]
-      | ptsto_readonly           => [ty_xlenbits; ty_byte]
-      | encodes_instr            => [ty_word; ty_ast]
-      | ptstomem width           => [ty_xlenbits; ty.bvec (width * byte)]
-      | ptstoinstr               => [ty_xlenbits; ty_ast]
+      | pmp_entries                   => [ty.list ty_pmpentry]
+      | pmp_addr_access               => [ty.list ty_pmpentry; ty_privilege]
+      | pmp_addr_access_without bytes => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege]
+      | gprs                          => ctx.nil
+      | ptsto                         => [ty_xlenbits; ty_byte]
+      | ptsto_readonly                => [ty_xlenbits; ty_byte]
+      | encodes_instr                 => [ty_word; ty_ast]
+      | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
+      | ptstoinstr                    => [ty_xlenbits; ty_ast]
       end.
 
     Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
       is_duplicable p :=
         match p with
-        | pmp_entries              => false
-        | pmp_addr_access          => false
-        | pmp_addr_access_without  => false
-        | gprs                     => false
-        | ptsto                    => false
-        | ptsto_readonly           => true
-        | encodes_instr            => true
-        | ptstomem _               => false
-        | ptstoinstr               => false
+        | pmp_entries                => false
+        | pmp_addr_access            => false
+        | pmp_addr_access_without  _ => false
+        | gprs                       => false
+        | ptsto                      => false
+        | ptsto_readonly             => true
+        | encodes_instr              => true
+        | ptstomem _                 => false
+        | ptstoinstr                 => false
         end
       }.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -396,15 +396,15 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     (* TODO: look up precise predicates again, check if below makes sense *)
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
-      | ptsto                    => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
-      | ptsto_readonly           => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
-      | pmp_entries              => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
-      | pmp_addr_access          => Some (MkPrecise ε [ty.list ty_pmpentry; ty_privilege] eq_refl)
-      | pmp_addr_access_without  => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
-      | ptstomem width           => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
-      | ptstoinstr               => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
-      | encodes_instr            => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
-      | _                        => None
+      | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
+      | ptsto_readonly            => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
+      | pmp_entries               => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
+      | pmp_addr_access           => Some (MkPrecise ε [ty.list ty_pmpentry; ty_privilege] eq_refl)
+      | pmp_addr_access_without _ => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
+      | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
+      | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
+      | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
+      | _                         => None
       end.
 
   End PredicateKit.
@@ -480,13 +480,13 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
     (* Notation asn_pmp_entries_angelic l := (asn.chunk_angelic (chunk_user pmp_entries [l])). *)
     Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-    Notation asn_pmp_addr_access_without a l m := (asn.chunk (chunk_user pmp_addr_access_without [a;l; m])).
+    Notation asn_pmp_addr_access_without a width l m := (asn.chunk (chunk_user (pmp_addr_access_without width) [a; l; m])).
     Notation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).
     Notation asn_within_cfg a cfg prev_addr addr := (asn.formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
     Notation asn_not_within_cfg a es := (asn.formula (formula_user not_within_cfg [a; es])).
     Notation asn_prev_addr cfg es prev := (asn.formula (formula_user prev_addr [cfg; es; prev])).
     Notation asn_in_entries idx e es := (asn.formula (formula_user in_entries [idx; e; es])).
-    Notation asn_pmp_access addr es m p := (asn.formula (formula_user pmp_access [addr;es;m;p])).
+    Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
     Notation asn_pmp_check_perms cfg acc p := (asn.formula (formula_user pmp_check_perms [cfg;acc;p])).
     Notation asn_pmp_check_rwx cfg acc := (asn.formula (formula_user pmp_check_rwx [cfg;acc])).
     Notation asn_expand_pmpcfg_ent cfg := (asn.match_record rpmpcfg_ent cfg
@@ -512,15 +512,15 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
 
   (* TODO: simplify_access_pmp_perm *)
 
-  Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
-    match term_get_val paddr , term_get_val es , term_get_val p with
-    | Some paddr , Some entries , Some p =>
-      match check_pmp_access paddr entries p with
+  Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
+    match term_get_val paddr , term_get_val width , term_get_val es , term_get_val p with
+    | Some paddr , Some width , Some entries , Some p =>
+      match check_pmp_access paddr width entries p with
       | (true, Some typ) => simplify_access_pmp_perm acc (term_val ty_pmpcfgperm typ)
       | (true, None)     => Some []
       | (false, _)       => None
       end
-    | _ , _ , _ => Some [formula_user pmp_access [paddr; es; p; acc]]
+    | _, _ , _ , _ => Some [formula_user pmp_access [paddr; width; es; p; acc]]
     end%ctx.
 
   (* TODO: User predicates can be simplified smarter *)
@@ -592,7 +592,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     end%ctx.
 
   Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (PathCondition Σ) :=
-  | pmp_access               | [ paddr; entries; priv; perm ] => simplify_pmp_access paddr entries priv perm
+  | pmp_access               | [ paddr; width; entries; priv; perm ] => simplify_pmp_access paddr width entries priv perm
   | pmp_check_perms          | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
   | pmp_check_rwx            | [ cfg; acc ]                   => simplify_pmp_check_rwx cfg acc
   | sub_perm                 | [ a1; a2 ]                     => simplify_sub_perm a1 a2
@@ -634,9 +634,9 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   Qed.
 
   Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_xlenbits)
-    (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege)
-    (acc : Term Σ ty_access_type) :
-    simplify_pmp_access paddr es p acc ⊣⊢ Some [formula_user pmp_access [paddr; es; p; acc]].
+    (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry))
+    (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) :
+    simplify_pmp_access paddr width es p acc ⊣⊢ Some [formula_user pmp_access [paddr; width; es; p; acc]].
   Proof.
     unfold simplify_pmp_access. lsolve.
     - intros ι; cbn. unfold Pmp_access, decide_pmp_access.

@@ -28,6 +28,7 @@
 
 From Katamaran Require Import
      Base
+     Bitvector
      Iris.Instance
      Iris.Model
      Syntax.Predicates
@@ -42,6 +43,7 @@ From stdpp Require namespaces.
 Module ns := stdpp.namespaces.
 
 Set Implicit Arguments.
+Import bv.notations.
 
 Module RiscvPmpIrisInstance <:
   IrisInstance RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
@@ -94,16 +96,16 @@ Module RiscvPmpIrisInstance <:
     Lemma ptstoSthL_app {l1 l2} : (ptstoSthL (l1 ++ l2) ⊣⊢ ptstoSthL l1 ∗ ptstoSthL l2)%I.
     Proof. eapply big_sepL_app. Qed.
 
+    Definition interp_ptstomem {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
+      [∗ list] offset ∈ seq 0 width,
+        interp_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
+
     Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       [∗ list] a ∈ addrs,
-        (⌜∃ p, Pmp_access a entries m p⌝ -∗ ptstoSth a)%I.
+        (⌜∃ p, Pmp_access (bv.of_nat 1) a entries m p⌝ -∗ ptstoSth a)%I.
 
-    Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-      (ptstoSth addr -∗ interp_pmp_addr_access addrs entries m)%I.
-
-    Definition interp_ptstomem {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
-      [∗ list] offset ∈ (seq 0 width),
-        interp_ptsto (bv.of_Z (bv.unsigned addr + Z.of_nat offset)) (get_byte offset bytes).
+    Definition interp_pmp_addr_access_without (addr : Addr) (width : nat) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+      ((∃ w, @interp_ptstomem width addr w)  -∗ interp_pmp_addr_access addrs entries m)%I.
 
     (* TODO: introduce constant for nr of word bytes (replace 4) *)
     Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
@@ -119,7 +121,7 @@ Module RiscvPmpIrisInstance <:
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs entries m
-    | pmp_addr_access_without  | [ addr; entries; m ] => interp_pmp_addr_access_without addr liveAddrs entries m
+    | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without addr bytes liveAddrs entries m
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_readonly           | [ addr; w ]          => interp_ptsto_readonly addr w

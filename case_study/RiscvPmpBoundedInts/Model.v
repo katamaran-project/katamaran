@@ -307,10 +307,10 @@ Module RiscvPmpModel2.
       (* lia. *)
     Admitted.
 
-    Lemma in_liveAddrs_split : forall (addr : Addr),
+    Lemma in_liveAddrs_split : forall (addr : Addr) (bytes : nat),
         (minAddr <=ᵘ addr) ->
-        (addr <=ᵘ maxAddr) ->
-        exists l1 l2, liveAddrs = l1 ++ ([addr] ++ l2).
+        (addr + (bv.of_nat bytes) <=ᵘ maxAddr) ->
+        exists l1 l2, liveAddrs = l1 ++ ((map (fun offset => addr + (bv.of_nat offset)) (seq 0 bytes))  ++ l2).
     Proof.
       intros addr Hmin Hmax.
       unfold liveAddrs.
@@ -323,8 +323,8 @@ Module RiscvPmpModel2.
       (* now f_equal; lia. *)
     Admitted.
 
-    Lemma extract_pmp_ptsto_sound :
-      ValidLemma RiscvPmpSpecification.lemma_extract_pmp_ptsto.
+    Lemma extract_pmp_ptsto_sound (bytes : nat) :
+      ValidLemma (RiscvPmpSpecification.lemma_extract_pmp_ptsto bytes).
     Proof.
       intros ι; destruct_syminstance ι; cbn - [liveAddrs].
       iIntros "[Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]".
@@ -332,21 +332,22 @@ Module RiscvPmpModel2.
         interp_pmp_addr_access,
         interp_ptsto,
         MemVal, Word.
-      destruct (in_liveAddrs_split Hlemin Hlemax) as (l1 & l2 & eq).
-      rewrite eq.
-      rewrite big_opL_app big_opL_cons.
-      iDestruct "Hmem" as "[Hmem1 [Hpaddr Hmem2]]".
-      iSplitR "Hpaddr".
+      destruct (@in_liveAddrs_split paddr bytes Hlemin Hlemax) as (l1 & l2 & eq).
+      rewrite eq. (* TODO: we need to get ptsto chuncks for the range [paddr,paddr+bytes] *)
+      rewrite ?big_opL_app.
+      iDestruct "Hmem" as "(Hmem1 & Haddrs & Hmem2)".
+      iSplitR "Haddrs".
       - iIntros "Hpaddr".
         iFrame.
+        (* unfold interp_ptstomem.
         now iIntros "_".
       - iApply "Hpaddr".
         iPureIntro.
-        now exists acc.
-    Qed.
+        now exists acc. *)
+    Admitted.
 
-    Lemma return_pmp_ptsto_sound :
-      ValidLemma RiscvPmpSpecification.lemma_return_pmp_ptsto.
+    Lemma return_pmp_ptsto_sound (bytes : nat) :
+      ValidLemma (RiscvPmpSpecification.lemma_return_pmp_ptsto bytes).
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       iIntros "[Hwithout Hptsto]".
@@ -355,40 +356,40 @@ Module RiscvPmpModel2.
     Qed.
 
     (* TODO: we will never have a partial match because we are using integers instead of bitvectors, eventually this lemma will make no sense *)
-    Lemma pmp_match_addr_never_partial : ∀ (a : Xlenbits) (rng : PmpAddrRange),
-        pmp_match_addr a rng = PMP_Match ∨ pmp_match_addr a rng = PMP_NoMatch.
-    Proof.
-    intros a [[lo hi]|]; cbn;
-      repeat
-        match goal with
-        | |- context[@bv.uleb ?n ?x ?y] => destruct (@bv.ule_spec n x y); cbn
-        | |- context[@bv.ultb ?n ?x ?y] => destruct (@bv.ult_spec n x y); cbn
-        end; auto; cbv [bv.ule bv.ult] in *; Lia.lia.
-    Qed.
+    (* Lemma pmp_match_addr_never_partial : ∀ (a : Xlenbits) (rng : PmpAddrRange), *)
+    (*     pmp_match_addr a rng = PMP_Match ∨ pmp_match_addr a rng = PMP_NoMatch. *)
+    (* Proof. *)
+    (* intros a [[lo hi]|]; cbn; *)
+    (*   repeat *)
+    (*     match goal with *)
+    (*     | |- context[@bv.uleb ?n ?x ?y] => destruct (@bv.ule_spec n x y); cbn *)
+    (*     | |- context[@bv.ultb ?n ?x ?y] => destruct (@bv.ult_spec n x y); cbn *)
+    (*     end; auto; cbv [bv.ule bv.ult] in *; Lia.lia. *)
+    (* Qed. *)
 
-    Lemma machine_unlocked_pmp_get_perms : ∀ (cfg : Pmpcfg_ent),
-        Pmp_cfg_unlocked cfg ->
-        pmp_get_perms cfg Machine = PmpRWX.
-    Proof.
-      intros cfg H.
-      unfold pmp_get_perms.
-      now apply Pmp_cfg_unlocked_bool in H as ->.
-    Qed.
+    (* Lemma machine_unlocked_pmp_get_perms : ∀ (cfg : Pmpcfg_ent), *)
+    (*     Pmp_cfg_unlocked cfg -> *)
+    (*     pmp_get_perms cfg Machine = PmpRWX. *)
+    (* Proof. *)
+    (*   intros cfg H. *)
+    (*   unfold pmp_get_perms. *)
+    (*   now apply Pmp_cfg_unlocked_bool in H as ->. *)
+    (* Qed. *)
 
-    Lemma machine_unlocked_check_pmp_access : ∀ (cfg0 cfg1 : Pmpcfg_ent) (a0 a1 addr : Xlenbits),
-        Pmp_cfg_unlocked cfg0 ∧ Pmp_cfg_unlocked cfg1 ->
-        check_pmp_access addr [(cfg0, a0); (cfg1, a1)] Machine = (true, None) ∨ check_pmp_access addr [(cfg0, a0); (cfg1, a1)] Machine = (true, Some PmpRWX).
-    Proof.
-    intros cfg0 cfg1 a0 a1 addr [Hcfg0 Hcfg1].
-    unfold check_pmp_access, pmp_check, pmp_match_entry.
-    apply Pmp_cfg_unlocked_bool in Hcfg0.
-    apply Pmp_cfg_unlocked_bool in Hcfg1.
-    destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg1 a1 a0)) as [-> | ->];
-      destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg0 a0 [bv 0])) as [-> | ->];
-      unfold pmp_get_perms;
-      rewrite ?Hcfg0; rewrite ?Hcfg1;
-      auto.
-    Qed.
+    (* Lemma machine_unlocked_check_pmp_access : ∀ (cfg0 cfg1 : Pmpcfg_ent) (a0 a1 addr : Xlenbits), *)
+    (*     Pmp_cfg_unlocked cfg0 ∧ Pmp_cfg_unlocked cfg1 -> *)
+    (*     check_pmp_access addr [(cfg0, a0); (cfg1, a1)] Machine = (true, None) ∨ check_pmp_access addr [(cfg0, a0); (cfg1, a1)] Machine = (true, Some PmpRWX). *)
+    (* Proof. *)
+    (* intros cfg0 cfg1 a0 a1 addr [Hcfg0 Hcfg1]. *)
+    (* unfold check_pmp_access, pmp_check, pmp_match_entry. *)
+    (* apply Pmp_cfg_unlocked_bool in Hcfg0. *)
+    (* apply Pmp_cfg_unlocked_bool in Hcfg1. *)
+    (* destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg1 a1 a0)) as [-> | ->]; *)
+    (*   destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg0 a0 [bv 0])) as [-> | ->]; *)
+    (*   unfold pmp_get_perms; *)
+    (*   rewrite ?Hcfg0; rewrite ?Hcfg1; *)
+    (*   auto. *)
+    (* Qed. *)
 
     Lemma machine_unlocked_open_pmp_entries_sound :
       ValidLemma RiscvPmpSpecification.lemma_machine_unlocked_open_pmp_entries.

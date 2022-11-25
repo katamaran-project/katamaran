@@ -71,6 +71,7 @@ Module RiscvNotations.
   Notation "'cfg'"          := "cfg" : string_scope.
   Notation "'rng'"          := "rng" : string_scope.
   Notation "'bv'"           := "bv" : string_scope.
+  Notation "'width'"        := "width" : string_scope.
   Notation "'e'"            := "e" : string_scope.
   Notation "'ctl'"          := "ctl" : string_scope.
   Notation "'c'"            := "c" : string_scope.
@@ -123,8 +124,6 @@ Axiom pure_decode : bv 32 -> string + AST.
 Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Section FunDeclKit.
-  Import RiscvNotations.
-
   Definition width_constraint (width : nat) : bool :=
     (0 <? width)%nat && (width <=? xlenbytes)%nat.
 
@@ -132,6 +131,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     (H: IsTrue (width_constraint bytes)) :
     IsTrue (bytes * byte <=? xlenbytes * byte)%nat :=
     IsTrue_bytes_xlenbytes bytes xlenbytes (IsTrue.andb_r H).
+
+  Import RiscvNotations.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
@@ -153,12 +154,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | pmpWriteCfgReg        : Fun [idx :: ty_pmpcfgidx; value :: ty_xlenbits] ty.unit
   | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits] ty_pmpcfg_ent
   | pmpWriteAddr          : Fun [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
-  | pmpCheck              : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
+  | pmpCheck              : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
   | pmpCheckPerms         : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool
   | pmpCheckRWX           : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool
-  | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
+  | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
   | pmpAddrRange          : Fun [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range
-  | pmpMatchAddr          : Fun [addr ∷ ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch
+  | pmpMatchAddr          : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch
   | process_load (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result bytes] ty_retired
   | mem_write_value (bytes : nat)       : Fun [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1)
   | main                  : Fun ctx.nil ty.unit
@@ -205,14 +206,14 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   .
 
   Inductive Lem : PCtx -> Set :=
-  | open_gprs             : Lem ctx.nil
-  | close_gprs            : Lem ctx.nil
-  | open_pmp_entries      : Lem ctx.nil
-  | close_pmp_entries     : Lem ctx.nil
-  | extract_pmp_ptsto     : Lem [paddr :: ty_xlenbits]
-  | return_pmp_ptsto      : Lem [paddr :: ty_xlenbits]
-  | open_ptsto_instr      : Lem [paddr :: ty_xlenbits]
-  | close_ptsto_instr     : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits]
+  | open_gprs                       : Lem ctx.nil
+  | close_gprs                      : Lem ctx.nil
+  | open_pmp_entries                : Lem ctx.nil
+  | close_pmp_entries               : Lem ctx.nil
+  | extract_pmp_ptsto (bytes : nat) : Lem [paddr :: ty_xlenbits]
+  | return_pmp_ptsto  (bytes : nat) : Lem [paddr :: ty_xlenbits]
+  | open_ptsto_instr                : Lem [paddr :: ty_xlenbits]
+  | close_ptsto_instr               : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits]
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -285,6 +286,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'csrpr'"        := (@exp_var _ "csrpr" _ _) : exp_scope.
     Notation "'idx'"          := (@exp_var _ "idx" _ _) : exp_scope.
     Notation "'locked'"       := (@exp_var _ "locked" _ _) : exp_scope.
+    Notation "'width'"        := (@exp_var _ "width" _ _) : exp_scope.
 
     Notation "'Read'" := (exp_union access_type KRead (exp_val ty.unit tt)) : exp_scope.
     Notation "'Write'" := (exp_union access_type KWrite (exp_val ty.unit tt)) : exp_scope.
@@ -449,9 +451,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_checked_mem_read (bytes : nat) : Stm [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := call within_phys_mem paddr in
     if: tmp
-    then (use lemma extract_pmp_ptsto [paddr] ;;
+    then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
           let: tmp := stm_foreign (read_ram bytes) [paddr] in
-          use lemma return_pmp_ptsto [paddr] ;;
+          use lemma (return_pmp_ptsto bytes) [paddr] ;;
           stm_exp (exp_union (memory_op_result bytes) KMemValue tmp))
     else match: t in union access_type with
          |> KRead pat_unit      =>
@@ -467,22 +469,22 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_checked_mem_write (bytes : nat) : Stm [paddr ∷ ty_xlenbits; data :: ty_bytes bytes] (ty_memory_op_result 1) :=
     let: tmp := call within_phys_mem paddr in
     if: tmp
-    then (use lemma extract_pmp_ptsto [paddr] ;;
+    then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
           stm_foreign (write_ram bytes) [paddr; data] ;;
-          use lemma return_pmp_ptsto [paddr] ;;
+          use lemma (return_pmp_ptsto bytes) [paddr] ;;
           stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1]))) (* NOTE: normally the return value of write_ram should be wrapped in MemValue but this constructor is currently restricted to bytes and write_ram *ALWAYS* returns true, so we just return a byte representation of 1 *)
     else
       stm_exp (exp_union (memory_op_result 1) KMemException E_SAMO_Access_Fault).
 
   Definition fun_pmp_mem_read (bytes : nat) : Stm [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
-    let: tmp := call pmpCheck paddr t p in
+    let: tmp := call pmpCheck paddr (exp_val ty_xlenbits (Bitvector.bv.of_nat bytes)) t p in
     match: tmp with
     | inl e => stm_exp (exp_union (memory_op_result bytes) KMemException e)
     | inr v => stm_call (checked_mem_read bytes) [t; paddr]
     end.
 
   Definition fun_pmp_mem_write (bytes : nat) : Stm [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1) :=
-    let: tmp := call pmpCheck paddr typ priv in
+    let: tmp := call pmpCheck paddr (exp_val ty_xlenbits (Bitvector.bv.of_nat bytes)) typ priv in
     match: tmp with
     | inl e => stm_exp (exp_union (memory_op_result 1) KMemException e)
     | inr v => stm_call (checked_mem_write bytes) [paddr; data]
@@ -510,13 +512,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_pmpWriteAddr : Stm [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits :=
     if: locked then addr else value.
 
-  Definition fun_pmpCheck : Stm [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
+  Definition fun_pmpCheck : Stm [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
     use lemma open_pmp_entries ;;
     let: check%string :=
       let: tmp1 := stm_read_register pmp0cfg in
       let: tmp2 := stm_read_register pmpaddr0 in
       let: tmp3 := exp_val ty_xlenbits [bv 0] in
-      let: tmp := call pmpMatchEntry addr acc priv tmp1 tmp2 tmp3 in
+      let: tmp := call pmpMatchEntry addr width acc priv tmp1 tmp2 tmp3 in
       match: tmp in pmpmatch with
       | PMP_Success  => stm_val ty.bool true
       | PMP_Fail     => stm_val ty.bool false
@@ -524,7 +526,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       let: tmp1 := stm_read_register pmp1cfg in
       let: tmp2 := stm_read_register pmpaddr1 in
       let: tmp3 := stm_read_register pmpaddr0 in
-      let: tmp := call pmpMatchEntry addr acc priv tmp1 tmp2 tmp3 in
+      let: tmp := call pmpMatchEntry addr width acc priv tmp1 tmp2 tmp3 in
       match: tmp in pmpmatch with
       | PMP_Success  => stm_val ty.bool true
       | PMP_Fail     => stm_val ty.bool false
@@ -568,9 +570,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         end
     end.
 
-  Definition fun_pmpMatchEntry : Stm [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch :=
+  Definition fun_pmpMatchEntry : Stm [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch :=
     let: rng := call pmpAddrRange ent pmpaddr prev_pmpaddr in
-    let: tmp := call pmpMatchAddr addr rng in
+    let: tmp := call pmpMatchAddr addr width rng in
     match: tmp in pmpaddrmatch with
     | PMP_NoMatch      => exp_val ty_pmpmatch PMP_Continue
     | PMP_PartialMatch => exp_val ty_pmpmatch PMP_Fail
@@ -590,7 +592,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         end
     end.
 
-  Definition fun_pmpMatchAddr : Stm [addr ∷ ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch :=
+  Definition fun_pmpMatchAddr : Stm [addr ∷ ty_xlenbits; width :: ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch :=
     match: rng with
     | inl v =>
       match: v in (ty_xlenbits , ty_xlenbits) with
@@ -598,9 +600,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         if: hi <ᵘ lo
         then exp_val ty_pmpaddrmatch PMP_NoMatch
         else
-          if: (addr <ᵘ lo) || (hi <=ᵘ addr) (* NOTE: this only makes sense when using a "width" (see Sail impl), having this without the width means the PartialMatch case will never occur *)
+          if: (exp_binop bop.bvadd addr width <=ᵘ lo) || (hi <=ᵘ addr) (* NOTE: this only makes sense when using a "width" (see Sail impl), having this without the width means the PartialMatch case will never occur *)
           then exp_val ty_pmpaddrmatch PMP_NoMatch
-          else if: (lo <=ᵘ addr) && (addr <ᵘ hi) (* NOTE: small difference with actual model due to lack of width, but more correct with respect to the manual (y matches TOR if pmpaddrᵢ₋₁ <= y < pmpaddrᵢ) *)
+          else if: (lo <=ᵘ addr) && (exp_binop bop.bvadd addr width <=ᵘ hi) (* NOTE: small difference with actual model due to lack of width, but more correct with respect to the manual (y matches TOR if pmpaddrᵢ₋₁ <= y < pmpaddrᵢ) *)
                then exp_val ty_pmpaddrmatch PMP_Match
                else exp_val ty_pmpaddrmatch PMP_PartialMatch
       end
