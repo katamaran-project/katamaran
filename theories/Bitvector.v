@@ -31,7 +31,9 @@ From Coq Require Import
      Bool.Bool
      NArith.BinNat
      PArith.BinPos
-     ZArith.BinInt.
+     ZArith.BinInt
+     RelationClasses
+     Morphisms.
 From Equations Require Import
      Equations.
 From Katamaran Require Import
@@ -187,11 +189,19 @@ Module bv.
                   end
       end.
 
-    Definition of_N {n} (bs : N) : bv n :=
-      match bs with
-      | N0     => mk N0 I
-      | Npos p => mk (trunc n p) (wf_trunc n p)
+    Definition truncn (n : nat) (x : N) : N :=
+      match x with
+      | N0 => N0
+      | Npos p => trunc n p
       end.
+    Definition wf_truncn n x : Is_true (is_wf n (truncn n x)) :=
+      match x with
+      | N0     => I
+      | Npos p => wf_trunc n p
+      end.
+
+    Definition of_N {n} (bs : N) : bv n :=
+      mk (truncn n bs) (wf_truncn n bs).
 
     Definition of_nat {n} (k : nat) : bv n :=
       of_N (N.of_nat k).
@@ -205,12 +215,52 @@ Module bv.
       | S n , xH   => fun _ => eq_refl
       end.
 
+    Definition truncn_succ_double (n : nat) (x : N) : truncn (S n) (N.succ_double x) = N.succ_double (truncn n x) :=
+      match x with
+      | 0%N => eq_refl
+      | N.pos p => eq_refl
+      end.
+    Definition truncn_double (n : nat) (x : N) : truncn (S n) (N.double x) = N.double (truncn n x) :=
+      match x with
+      | 0%N => eq_refl
+      | N.pos p => eq_refl
+      end.
+    Fixpoint truncn_trunc (n : nat) (p : positive) {struct n} :
+      truncn n (trunc n p) = trunc n p.
+    Proof.
+      destruct n, p; cbn; intuition.
+      - now rewrite truncn_succ_double, truncn_trunc.
+      - now rewrite truncn_double, truncn_trunc.
+    Defined.
+
+    Definition truncn_idemp (n : nat) (x : N) :
+      truncn n (truncn n x) = truncn n x :=
+      match x with
+      | 0%N => eq_refl
+      | N.pos p => truncn_trunc n p
+      end.
+
+    Lemma truncn_wf (n : nat) (x : N) :
+      Is_true (is_wf n x) -> truncn n x = x.
+    Proof.
+      destruct x; cbn; auto using trunc_wf.
+    Qed.
+
+    Definition f_equal_dep_alt {A R} (B : A -> Type) (f : forall a, B a -> R) {x y} {px : B x} (eq1 : x = y) :
+       forall {py : B y}, (eq_rect x B px y eq1) = py -> f x px = f y py :=
+      (match eq1 in (_ = z) return forall (py : B z), ((eq_rect x B px z eq1) = py -> f x px = f z py) with eq_refl => fun py eq2 => match eq2 with eq_refl => eq_refl end end).
+
+    Definition mk_proof_irr [n] (bs1 bs2 : N) (eq1 : bs1 = bs2) :
+      forall w1 w2, @mk n bs1 w1 = @mk n bs2 w2.
+    Proof.
+      intros w1 w2.
+      refine (f_equal_dep_alt _ mk eq1 _).
+      now apply proof_irrel.Is_true_pi.
+    Qed.
+
     Definition of_N_wf [n] (bs : N) :
-      forall w, of_N bs = mk bs w :=
-       match bs with
-       | N0     => fun w => f_equal (mk 0) (proof_irrelevance_True I w)
-       | Npos p => fun w => bin_inj (mk _ _) (mk _ _) (trunc_wf n p w)
-       end.
+      forall w, of_N bs = @mk n bs w.
+    Proof. intros w; now apply mk_proof_irr, truncn_wf. Qed.
 
     Definition of_N_bin {n} (x : bv n) : of_N (bin x) = x :=
       match x with mk bs w => of_N_wf bs w end.
@@ -477,17 +527,85 @@ Module bv.
 
   End Integers.
 
+  Section EqMod2N.
+    Definition eq2np (n : nat) := fun x y => trunc n x = trunc n y.
+    Arguments eq2np n x y : simpl never.
+    Lemma eq2np_refl {n} : Reflexive (eq2np n).
+    Proof. now intros x. Qed.
+    Lemma eq2np_sym {n} : Symmetric (eq2np n).
+    Proof. now intros x y. Qed.
+    Lemma eq2np_trans {n} : Transitive (eq2np n).
+    Proof. now intuition. Qed.
+    #[export] Instance eq2np_setoid {n} : Equivalence (eq2np n).
+    Proof.
+      constructor; auto using eq2np_refl, eq2np_sym, eq2np_trans.
+    Qed.
+    #[export] Instance eq2np_rewriterelation {n} : RewriteRelation (eq2np n). Defined.
+
+    Definition eq2n (n : nat) := fun x y => truncn n x = truncn n y.
+    Arguments eq2n n x y : simpl never.
+    Lemma eq2n_refl {n} : Reflexive (eq2n n).
+    Proof. now intros [|px]. Qed.
+    Lemma eq2n_sym {n} : Symmetric (eq2n n).
+    Proof. now intros [|px] [|py]. Qed.
+    Lemma eq2n_trans {n} : Transitive (eq2n n).
+    Proof. intros [|px] [|py] [|pz]; intuition. Qed.
+    #[export] Instance eq2n_setoid {n} : Equivalence (eq2n n).
+    Proof.
+      constructor; auto using eq2n_refl, eq2n_sym, eq2n_trans.
+    Qed.
+
+    #[export] Instance eq2n_rewriterelation {n} : RewriteRelation (eq2n n). Defined.
+
+    #[export] Instance trunc_Proper {n} : Proper (eq2np n ==> eq2n n) (trunc n).
+    Proof. now intros x y ->. Qed.
+
+    #[export] Instance of_N_Proper {n} : Proper (eq2n n ==> eq) (@of_N n).
+    Proof.
+      intros [|px] [|py]; cbn in *; intuition;
+      now eapply (mk_proof_irr H).
+    Qed.
+  End EqMod2N.
   Section Arithmetic.
 
     Definition add {n} (x y : bv n) : bv n :=
       of_N (N.add (bin x) (bin y)).
 
+    #[export] Instance add_Proper {n} : Proper (eq ==> eq ==> eq) (@add n).
+    Proof. intuition. Qed.
+
     Definition sub {n} (x y : bv n) : bv n :=
       of_N (N.sub (N.shiftl_nat 1 n + bin x) (bin y)).
+    Instance sub_Proper {n} : Proper (eq ==> eq ==> eq) (@sub n).
+    Proof. intuition. Qed.
 
     Definition mul {n} (x y : bv n) : bv n :=
       of_N (N.mul (bin x) (bin y)).
 
+    Instance mul_Proper {n} : Proper (eq ==> eq ==> eq) (@mul n).
+    Proof. intuition. Qed.
+
+    Lemma trunc_eq2n {n p} : eq2n n (trunc n p) (N.pos p).
+    Proof.
+      unfold eq2n.
+      now rewrite truncn_trunc.
+    Qed.
+
+    Lemma bin_of_N_eq2n {n x} : eq2n n (@bin n (@of_N n x)) x.
+    Proof.
+      destruct x; cbn;
+        now auto using trunc_eq2n.
+    Qed.
+
+    #[export] Instance Nadd_Proper {n} : Proper (eq2n n ==> eq2n n ==> eq2n n) N.add.
+    Proof.
+      intros x x' eqx y y' eqy.
+    Admitted.
+    Lemma of_N_respects_add {n} {x y : N} : add  (@of_N n x) (of_N y) = of_N (x + y).
+    Proof.
+      unfold add.
+      now rewrite ?bin_of_N_eq2n.
+    Qed.
 
     (* For the relational operators we default to the < and <= version and
        only allow the others for parsing. *)
