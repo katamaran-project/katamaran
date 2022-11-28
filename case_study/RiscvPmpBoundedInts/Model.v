@@ -97,7 +97,7 @@ Module RiscvPmpModel2.
       let f := fresh "f" in
       match goal with
       | H: prim_step _ _ _ _ _ _ |- _ =>
-          dependent elimination H as [mk_prim_step s];
+          dependent elimination H as [mk_prim_step _ s];
           dependent elimination s as [RiscvPmpSemantics.st_foreign _ _ f];
           rewrite Heq in f;
           cbn in f;

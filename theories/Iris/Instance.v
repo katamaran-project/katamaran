@@ -52,7 +52,6 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Signature
-     SmallStep.Inversion
      SmallStep.Step
      Specification.
 
