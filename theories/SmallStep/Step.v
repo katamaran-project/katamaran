@@ -154,6 +154,139 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" :=
     (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
 
+  (* Implement small inversions for the operational semantics. This considers
+     only the cases where the starting statement is constructed with exactly one
+     level of constructors and all the other indices of the relation are
+     variables. For details see the relevant literature:
+
+     - Jean-François Monin (2022), "Small inversions for smaller inversions."
+       TYPES'22.
+       https://types22.inria.fr/files/2022/06/TYPES_2022_paper_25.pdf
+       https://types22.inria.fr/files/2022/06/TYPES_2022_slides_25.pdf
+     - Dominique Larchey-Wendling & Jean-François Monin (2022), "The Braga
+       Method: Extracting Certified Algorithms from Complex Recursive Schemes
+       in Coq." In "PROOF AND COMPUTATION II: From Proof Theory and Univalent
+       Mathematics to Program Extraction and Verification" (pp. 305-386).
+       https://doi.org/10.1142/9789811236488_0008
+     - Jean-François Monin & Xiaomu Shi (2013), "Handcrafted Inversions Made
+       Operational on Operational Semantics." ITP'13
+       https://doi.org/10.1007/978-3-642-39634-2_25
+   *)
+  Section SmallInversions.
+    Section WithParamaters.
+      Context {Γ : PCtx} {τ : Ty} {γ : RegStore} {μ : Memory} {δ : CStore Γ}.
+
+      Variant StVal {v : Val τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_val τ v ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=.
+      Variant StExp {e : Exp Γ τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_exp e ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_exp : StExp (st_exp γ μ δ e).
+      Variant StLet {x σ} {s : Stm Γ σ} {k : Stm (Γ ▻ x∷σ) τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_let x σ s k ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_let : StLet (st_let γ μ δ s k).
+      Variant StBlock {Δ} {δΔ : CStore Δ} :
+        forall {s : Stm (Γ ▻▻ Δ) τ} [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_block δΔ s ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        | stc_block_value' v : StBlock (st_block_value γ μ δ δΔ v)
+        | stc_block_fail' s : StBlock (st_block_fail γ μ δ δΔ s)
+        | stc_block_step' k γ' μ' δ' δΔ' k'
+            (H : ⟨ γ , μ , δ ►► δΔ , k ⟩ ---> ⟨ γ', μ' , δ' ►► δΔ' , k' ⟩) :
+          StBlock (st_block_step _ _ _ _ H).
+      Variant StSeq {σ} {s : Stm Γ σ} {k : Stm Γ τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_seq s k ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_seq : StSeq (st_seq γ μ δ s k).
+      Variant StCall {Δ} {f : 𝑭 Δ τ} {es : NamedEnv (Exp Γ) Δ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_call f es ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_call : StCall (st_call γ μ δ f es).
+      Variant StCallFrame {Δ} {δΔ : CStore Δ} :
+        forall {s : Stm Δ τ} [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_call_frame δΔ s ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        | stc_call_frame_value v : StCallFrame (st_call_frame_value γ μ δ v)
+        | stc_call_frame_fail s : StCallFrame (st_call_frame_fail γ μ δ s)
+        | stc_call_frame_step s γ' μ' δΔ' s'
+            (H : ⟨ γ , μ , δΔ , s ⟩ ---> ⟨ γ' , μ' , δΔ' , s' ⟩) :
+          StCallFrame (st_call_frame_step _ H).
+      Variant StForeign {Δ} {f : 𝑭𝑿 Δ τ} {es : NamedEnv (Exp Γ) Δ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_foreign f es ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_foreign res γ' μ' (H : ForeignCall f (evals es δ) res γ γ' μ μ') :
+          StForeign (st_foreign δ es H).
+      Variant StLemmak {Δ} {l : 𝑳 Δ} {es : NamedEnv (Exp Γ) Δ} {k : Stm Γ τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_lemmak l es k ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_lemmak : StLemmak (st_lemmak γ μ δ es k).
+      Variant StAssign {x} {xInΓ : x∷τ ∈ Γ}:
+        forall {s} [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_assign x s ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        | stc_assign_value v : StAssign (st_assign_value γ μ δ v)
+        | stc_assign_fail s : StAssign (st_assign_fail γ μ δ s)
+        | stc_assign_step {s : Stm Γ τ} γ' μ' δ' s'
+            (H : ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩) :
+          StAssign (st_assign_step H).
+      Variant StAssertk {e1 e2} {k : Stm Γ τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_assertk e1 e2 k ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_assertk : StAssertk (st_assertk γ μ δ e1 e2 k).
+      Variant StReadRegister {r : 𝑹𝑬𝑮 τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_read_register r ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_read_register : StReadRegister (st_read_register γ μ δ r).
+      Variant StWriteRegister {r : 𝑹𝑬𝑮 τ} {e : Exp Γ τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_write_register r e ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_write_register : StWriteRegister (st_write_register γ μ δ r e).
+      Variant StBind {σ} {k : Val σ -> Stm Γ τ} :
+        forall {s} [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_bind s k ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        | stc_bind_value v : StBind (st_bind_value γ μ δ σ v k)
+        | stc_bind_fail s : StBind (st_bind_fail γ μ δ σ s k)
+        | stc_bind_step s γ' μ' δ' s'
+            (H : ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ', μ' , δ' , s' ⟩) :
+          StBind (st_bind_step k H).
+      Variant StDebugk {k : Stm Γ τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_debugk k ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_debugk : StDebugk (st_debugk γ μ δ k).
+      Variant StPatternMatch {σ} {s : Stm Γ σ} {pat : Pattern σ}
+        {rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_pattern_match s pat rhs ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_match : StPatternMatch (st_pattern_match γ μ δ s pat rhs).
+    End WithParamaters.
+
+    Definition smallinvdispatch {Γ τ γ μ δ} (s1 : Stm Γ τ) :
+      forall γ2 μ2 δ2 s2, ⟨ γ, μ, δ, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+       match s1 with
+       | stm_val _ _             => StVal
+       | stm_exp _               => StExp
+       | stm_let _ _ _ _         => StLet
+       | stm_block _ s           => StBlock
+       | stm_assign _ s          => StAssign
+       | stm_call _ _            => StCall
+       | stm_call_frame _ s      => StCallFrame
+       | stm_foreign _ _         => StForeign
+       | stm_lemmak _ _ _        => StLemmak
+       | stm_seq _ _             => StSeq
+       | stm_assertk _ _ _       => StAssertk
+       | stm_fail _ _            => fun _ _ _ _ _ => False
+       | stm_pattern_match _ _ _ => StPatternMatch
+       | stm_read_register _     => StReadRegister
+       | stm_write_register _ _  => StWriteRegister
+       | stm_bind s k            => StBind
+       | stm_debugk _            => StDebugk
+       end.
+
+    Definition smallinvstep {Γ τ γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ τ}
+      (st : ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩) : smallinvdispatch st.
+    Proof. destruct st; now constructor. Qed.
+
+  End SmallInversions.
+
   Inductive Steps {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> CStore Γ -> Stm Γ σ -> Prop :=
   | step_refl : Steps γ1 μ1 δ1 s1 γ1 μ1 δ1 s1
   | step_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : CStore Γ} {s2 s3 : Stm Γ σ} :
