@@ -98,7 +98,7 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
     let f := fresh "f" in
     match goal with
     | H: MinCapsSemantics.Step _ _ _ _ _ _ _ _ |- _ =>
-        dependent elimination H as [MinCapsSemantics.step_stm_foreign _ _ f];
+        dependent elimination H as [MinCapsSemantics.st_foreign _ _ f];
         rewrite Heq in f;
         cbn in f;
         dependent elimination f;
@@ -106,7 +106,7 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
     | H: prim_step _ _ _ _ _ _ |- _ =>
           let s := fresh "s" in
           dependent elimination H as [mk_prim_step s];
-          dependent elimination s as [MinCapsSemantics.step_stm_foreign _ _ f];
+          dependent elimination s as [MinCapsSemantics.st_foreign _ _ f];
           rewrite Heq in f;
           cbn in f;
           dependent elimination f;

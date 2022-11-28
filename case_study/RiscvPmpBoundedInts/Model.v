@@ -98,7 +98,7 @@ Module RiscvPmpModel2.
       match goal with
       | H: prim_step _ _ _ _ _ _ |- _ =>
           dependent elimination H as [mk_prim_step s];
-          dependent elimination s as [RiscvPmpSemantics.step_stm_foreign _ _ f];
+          dependent elimination s as [RiscvPmpSemantics.st_foreign _ _ f];
           rewrite Heq in f;
           cbn in f;
           dependent elimination f;

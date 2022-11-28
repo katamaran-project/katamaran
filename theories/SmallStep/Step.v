@@ -48,48 +48,48 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   Inductive Step {Γ : PCtx} {τ : Ty} (γ : RegStore) (μ : Memory) (δ : CStore Γ) :
     forall (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s1 s2 : Stm Γ τ), Prop :=
 
-  | step_stm_exp
+  | st_exp
       (e : Exp Γ τ) :
       ⟨ γ , μ , δ , (stm_exp e) ⟩ ---> ⟨ γ , μ , δ , stm_val τ (eval e δ) ⟩
 
-  | step_stm_let
+  | st_let
       (x : PVar) (σ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ) :
       ⟨ γ , μ , δ , stm_let x σ s k ⟩ --->
       ⟨ γ, μ , δ , stm_bind s (fun v => stm_block (env.snoc env.nil (x∷σ) v) k) ⟩
 
-  | step_stm_block_value
+  | st_block_value
       (Δ : PCtx) (δΔ : CStore Δ) (v : Val τ) :
       ⟨ γ , μ , δ , stm_block δΔ (stm_val τ v) ⟩ ---> ⟨ γ , μ , δ , stm_val τ v ⟩
-  | step_stm_block_fail
+  | st_block_fail
       (Δ : PCtx) (δΔ : CStore Δ) (s : string) :
       ⟨ γ , μ , δ , stm_block δΔ (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
-  | step_stm_block_step
+  | st_block_step
       (Δ : PCtx) (δΔ δΔ' : CStore Δ) (k k' : Stm (Γ ▻▻ Δ) τ)
       (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) :
       ⟨ γ , μ , δ ►► δΔ , k ⟩ ---> ⟨ γ', μ' , δ' ►► δΔ' , k' ⟩ ->
       ⟨ γ , μ , δ , stm_block δΔ k ⟩ ---> ⟨ γ' , μ' , δ' , stm_block δΔ' k' ⟩
 
-  | step_stm_seq
+  | st_seq
       (σ : Ty) (s : Stm Γ σ) (k : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_seq s k ⟩ ---> ⟨ γ , μ , δ , stm_bind s (fun _ => k) ⟩
 
-  | step_stm_call
-      {Δ} {f : 𝑭 Δ τ} (es : NamedEnv (Exp Γ) Δ) :
+  | st_call
+      {Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ) :
       ⟨ γ , μ , δ , stm_call f es ⟩ --->
       ⟨ γ , μ , δ , stm_call_frame (evals es δ) (FunDef f) ⟩
-  | step_stm_call_frame_step
+  | st_call_frame_value
+      (Δ : PCtx) {δΔ : CStore Δ} (v : Val τ) :
+      ⟨ γ , μ , δ , stm_call_frame δΔ (stm_val τ v) ⟩ ---> ⟨ γ , μ , δ , stm_val τ v ⟩
+  | st_call_frame_fail
+      (Δ : PCtx) {δΔ : CStore Δ} (s : string) :
+      ⟨ γ , μ , δ , stm_call_frame δΔ (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
+  | st_call_frame_step
       (Δ : PCtx) {δΔ δΔ' : CStore Δ} (s s' : Stm Δ τ)
       (γ' : RegStore) (μ' : Memory) :
       ⟨ γ , μ , δΔ , s ⟩ ---> ⟨ γ' , μ' , δΔ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_call_frame δΔ s ⟩ ---> ⟨ γ' , μ' , δ , stm_call_frame δΔ' s' ⟩
-  | step_stm_call_frame_value
-      (Δ : PCtx) {δΔ : CStore Δ} (v : Val τ) :
-      ⟨ γ , μ , δ , stm_call_frame δΔ (stm_val τ v) ⟩ ---> ⟨ γ , μ , δ , stm_val τ v ⟩
-  | step_stm_call_frame_fail
-      (Δ : PCtx) {δΔ : CStore Δ} (s : string) :
-      ⟨ γ , μ , δ , stm_call_frame δΔ (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
-  | step_stm_foreign
-      {Δ} {f : 𝑭𝑿 Δ τ} (es : NamedEnv (Exp Γ) Δ) (res : string + Val τ)
+  | st_foreign
+      {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ) (res : string + Val τ)
       (γ' : RegStore) (μ' : Memory) :
       ForeignCall f (evals es δ) res γ γ' μ μ' ->
       ⟨ γ  , μ  , δ , stm_foreign f es ⟩ --->
@@ -97,53 +97,53 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
                       | inl msg => stm_fail τ msg
                       | inr v__σ  => stm_val τ v__σ
                       end ⟩
-  | step_stm_lemmak
+  | st_lemmak
       {Δ} {l : 𝑳 Δ} (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_lemmak l es k ⟩ --->
       ⟨ γ , μ , δ , k ⟩
 
-  | step_stm_assign_value
+  | st_assign_value
       (x : PVar) {xInΓ : x∷τ ∈ Γ} (v : Val τ) :
       ⟨ γ , μ , δ , stm_assign x (stm_val τ v) ⟩ ---> ⟨ γ , μ , δ ⟪ x ↦ v ⟫ , stm_val τ v ⟩
-  | step_stm_assign_fail
+  | st_assign_fail
       (x : PVar) {xInΓ : x∷τ ∈ Γ} (s : string) :
       ⟨ γ , μ , δ , stm_assign x (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
-  | step_stm_assign_step
+  | st_assign_step
       (x : PVar) {xInΓ : x∷τ ∈ Γ} (s s' : Stm Γ τ)
       (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) :
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_assign x s ⟩ ---> ⟨ γ' , μ' , δ' , stm_assign x s' ⟩
 
-  | step_stm_assertk
+  | st_assertk
       (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_assertk e1 e2 k ⟩ --->
       ⟨ γ , μ , δ , if eval e1 δ then k else stm_fail τ (eval e2 δ) ⟩
 
-  | step_stm_read_register
+  | st_read_register
       (r : 𝑹𝑬𝑮 τ) :
       ⟨ γ, μ , δ, stm_read_register r ⟩ ---> ⟨ γ, μ , δ, stm_val τ (read_register γ r) ⟩
-  | step_stm_write_register
+  | st_write_register
       (r : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) :
       let v := eval e δ in
       ⟨ γ , μ , δ, stm_write_register r e ⟩ ---> ⟨ write_register γ r v , μ , δ , stm_val τ v ⟩
 
-  | step_stm_bind_step
+  | st_bind_value
+      (σ : Ty) (v : Val σ) (k : Val σ -> Stm Γ τ) :
+      ⟨ γ , μ , δ , stm_bind (stm_val σ v) k ⟩ ---> ⟨ γ , μ , δ , k v ⟩
+  | st_bind_fail
+      (σ : Ty) (s : string) (k : Val σ -> Stm Γ τ) :
+      ⟨ γ , μ , δ , stm_bind (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
+  | st_bind_step
       (σ : Ty) (s s' : Stm Γ σ) (k : Val σ -> Stm Γ τ)
       (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) :
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ', μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_bind s k ⟩ ---> ⟨ γ', μ' , δ' , stm_bind s' k ⟩
-  | step_stm_bind_value
-      (σ : Ty) (v : Val σ) (k : Val σ -> Stm Γ τ) :
-      ⟨ γ , μ , δ , stm_bind (stm_val σ v) k ⟩ ---> ⟨ γ , μ , δ , k v ⟩
-  | step_stm_bind_fail
-      (σ : Ty) (s : string) (k : Val σ -> Stm Γ τ) :
-      ⟨ γ , μ , δ , stm_bind (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
 
-  | step_debugk
+  | st_debugk
       (k : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_debugk k ⟩ ---> ⟨ γ , μ , δ , k ⟩
 
-  | step_newpattern_match
+  | st_pattern_match
       {σ} (s : Stm Γ σ) (pat : Pattern σ)
       (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
       ⟨ γ , μ , δ , stm_pattern_match s pat rhs ⟩ --->
@@ -151,7 +151,8 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
                                          in stm_block δpc (rhs pc))
       ⟩
 
-  where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
+  where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" :=
+    (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
 
   Inductive Steps {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> CStore Γ -> Stm Γ σ -> Prop :=
   | step_refl : Steps γ1 μ1 δ1 s1 γ1 μ1 δ1 s1

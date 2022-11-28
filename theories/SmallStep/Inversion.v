@@ -72,12 +72,12 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       ).
     Proof.
       dependent elimination step.
+      - intuition. right. eexists. intuition.
+      - intuition. left. eexists. intuition.
       - match goal with
           H: ⟨_,_,?δ1,_⟩ ---> ⟨_,_,?δ2,_⟩ |- _ =>
             dependent elimination H; cbn in *; try contradiction
         end.
-      - intuition. right. eexists. intuition.
-      - intuition. left. eexists. intuition.
     Qed.
 
     Lemma step_inversion_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
@@ -106,12 +106,12 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       ).
     Proof.
       dependent elimination step.
+      - intuition. right. eexists. intuition.
+      - intuition. left. eexists. intuition.
       - match goal with
           H: ⟨_,_,?δ1,_⟩ ---> ⟨_,_,?δ2,_⟩ |- _ =>
             dependent elimination H; cbn in *; try contradiction
         end.
-      - intuition. right. eexists. intuition.
-      - intuition. left. eexists. intuition.
     Qed.
 
   End StepInversionFinal.
@@ -210,14 +210,14 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       | [ |- True ] => constructor
       | [ |- ⟨ _, _, _, stm_val _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ ] => constructor 1
       | [ |- ⟨ _, _, _, stm_fail _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ ] => constructor 1
-      | [ |- ⟨ _, _, _, stm_block _ (stm_val _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_block_value
-      | [ |- ⟨ _, _, _, stm_block _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_block_fail
-      | [ |- ⟨ _, _, _, stm_call_frame _ (stm_val _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call_frame_value
-      | [ |- ⟨ _, _, _, stm_call_frame _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call_frame_fail
-      | [ |- ⟨ _, _, _, stm_assign _ (stm_val _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_value
-      | [ |- ⟨ _, _, _, stm_assign _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_fail
-      | [ |- ⟨ _, _, _, stm_bind (stm_val _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_bind_value
-      | [ |- ⟨ _, _, _, stm_bind (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_bind_fail
+      | [ |- ⟨ _, _, _, stm_block _ (stm_val _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply st_block_value
+      | [ |- ⟨ _, _, _, stm_block _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply st_block_fail
+      | [ |- ⟨ _, _, _, stm_call_frame _ (stm_val _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply st_call_frame_value
+      | [ |- ⟨ _, _, _, stm_call_frame _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply st_call_frame_fail
+      | [ |- ⟨ _, _, _, stm_assign _ (stm_val _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply st_assign_value
+      | [ |- ⟨ _, _, _, stm_assign _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply st_assign_fail
+      | [ |- ⟨ _, _, _, stm_bind (stm_val _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply st_bind_value
+      | [ |- ⟨ _, _, _, stm_bind (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply st_bind_fail
       | _ => progress cbn
       end; try eassumption.
 

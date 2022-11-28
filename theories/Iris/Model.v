@@ -514,22 +514,6 @@ Module Type IrisResources
       dependent elimination H.
       fold_semWP.
       dependent elimination s0.
-      - iMod "Hclose" as "_".
-        unfold semWP at 3.
-        rewrite wp_unfold.
-        rewrite {1}/wp_pre.
-        rewrite (val_stuck (MkConf s5 _) (γ1 , μ1) [] _ _ [] (mk_prim_step s6)).
-        iMod ("WPs" $! (γ1 , μ1) ns nil ks nt with "Hregs") as "[% WPs]". cbn.
-        iMod ("WPs" $! _ _ _ (mk_prim_step s6)) as "WPs".
-        fold_semWP.
-        iModIntro. iModIntro.
-        iMod "WPs".
-        iModIntro.
-        iMod "WPs" as "[Hregs [WPs' _]]".
-        iModIntro.
-        iFrame.
-        iSplitL; last trivial.
-        by iApply "IH".
       - iModIntro. iModIntro. iModIntro.
         iMod "Hclose" as "_".
         iModIntro.
@@ -542,6 +526,22 @@ Module Type IrisResources
         iModIntro.
         iSplitL; [|trivial].
         by iApply semWP_fail.
+      - iMod "Hclose" as "_".
+        unfold semWP at 3.
+        rewrite wp_unfold.
+        rewrite {1}/wp_pre.
+        rewrite (val_stuck (MkConf _ _) (γ1 , μ1) [] _ _ [] (mk_prim_step s7)).
+        iMod ("WPs" $! (γ1 , μ1) ns nil ks nt with "Hregs") as "[% WPs]". cbn.
+        iMod ("WPs" $! _ _ _ (mk_prim_step s7)) as "WPs".
+        fold_semWP.
+        iModIntro. iModIntro.
+        iMod "WPs".
+        iModIntro.
+        iMod "WPs" as "[Hregs [WPs' _]]".
+        iModIntro.
+        iFrame.
+        iSplitL; last trivial.
+        by iApply "IH".
     Qed.
 
     Lemma semWP_call_inline_later {Γ τ Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ) :
@@ -589,22 +589,6 @@ Module Type IrisResources
       dependent elimination H.
       fold_semWP.
       dependent elimination s0.
-      + unfold semWP at 4. rewrite wp_unfold.
-        unfold wp_pre.
-        rewrite (val_stuck (MkConf s11 δ1) (γ1 , μ1) [] _ _ [] (mk_prim_step s12)).
-        iSpecialize ("WPs" $! (γ1 , μ1) ns nil nil nt with "Hregs"). cbn.
-        iMod "Hclose".
-        iMod "WPs" as "[_ WPs]".
-        iSpecialize ("WPs" $! _ _ nil (mk_prim_step s12)).
-        iMod "WPs" as "WPs".
-        iModIntro. iModIntro.
-        iMod "WPs".
-        iModIntro.
-        iMod "WPs" as "[Hregs [wps _]]".
-        fold_semWP.
-        iModIntro.
-        iFrame.
-        by iApply "IH".
       + iModIntro. iModIntro. iModIntro.
         iMod "Hclose" as "_".
         rewrite semWP_val.
@@ -615,6 +599,22 @@ Module Type IrisResources
         iMod "Hclose" as "_".
         iFrame; iSplitL; auto.
         by iApply semWP_fail.
+      + unfold semWP at 4. rewrite wp_unfold.
+        unfold wp_pre.
+        rewrite (val_stuck (MkConf _ _) (γ1 , μ1) [] _ _ [] (mk_prim_step s13)).
+        iSpecialize ("WPs" $! (γ1 , μ1) ns nil nil nt with "Hregs"). cbn.
+        iMod "Hclose".
+        iMod "WPs" as "[_ WPs]".
+        iSpecialize ("WPs" $! _ _ nil (mk_prim_step s13)).
+        iMod "WPs" as "WPs".
+        iModIntro. iModIntro.
+        iMod "WPs".
+        iModIntro.
+        iMod "WPs" as "[Hregs [wps _]]".
+        fold_semWP.
+        iModIntro.
+        iFrame.
+        by iApply "IH".
     Qed.
 
     Lemma semWP_let {Γ τ x σ} (s1 : Stm Γ σ) (s2 : Stm (Γ ▻ x∷σ) τ) :
