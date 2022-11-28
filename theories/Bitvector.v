@@ -720,6 +720,27 @@ Module bv.
       now rewrite ?bin_of_N_eq2n.
     Qed.
 
+    #[export] Instance bin_Proper {n} : Proper (eq ==> eq2n n) (@bin n).
+    Proof.
+      now intros x y <-.
+    Qed.
+
+    Lemma add_comm {n} {x y}: @add n x y = @add n y x.
+    Proof.
+      rewrite <-?(of_N_bin x), <-(of_N_bin y).
+      rewrite ?of_N_respects_add.
+      f_equal.
+      Lia.lia.
+    Qed.
+
+    Lemma add_assoc {n} {x y z}: @add n x (add y z) = @add n (add x y) z.
+    Proof.
+      rewrite <-?(of_N_bin x), <-(of_N_bin y), <-(of_N_bin z).
+      rewrite ?of_N_respects_add.
+      f_equal.
+      Lia.lia.
+    Qed.
+
     (* For the relational operators we default to the < and <= version and
        only allow the others for parsing. *)
     Definition uleb {n} (x y : bv n) : bool := N.leb (bin x) (bin y).
