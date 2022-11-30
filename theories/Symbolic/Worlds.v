@@ -79,6 +79,16 @@ Module Type WorldsOn
       {| wctx := wctx w - x∷σ; wco := subst (wco w) (sub_single xIn t) |}.
     Global Arguments wsubst w x {σ xIn} t.
 
+    Definition wmatch (w : World) {σ} (s : Term w σ) (p : @Pattern LVar σ)
+      (pc : PatternCase p) : World :=
+      let Δ   : LCtx           := PatternCaseCtx pc in
+      let w1  : World          := wcat w Δ in
+      let ts  : Sub Δ (w ▻▻ Δ) := sub_cat_right Δ in
+      let F1  : Formula w1     := formula_relop bop.eq
+                                    (subst s (sub_cat_left Δ))
+                                    (pattern_match_term_reverse _ pc ts) in
+      wformula (wcat w Δ) F1.
+
     (* Define a shorthand [TYPE] for the category of world indexed types. *)
     Definition TYPE : Type := World -> Type.
     Bind Scope modal_scope with TYPE.
@@ -305,6 +315,11 @@ Module Type WorldsOn
       let w' := {| wctx := w - x∷σ; wco := subst (wco w) ζ |}  in
       @acc_sub w w' ζ (entails_refl (wco w')).
     Arguments acc_subst_right {w} x {σ xIn} t.
+
+    Definition acc_match_right {w : World} {σ} {s : Term w σ}
+      {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatch w s p pc :=
+      @acc_sub w (wmatch w s p pc) (sub_cat_left (PatternCaseCtx pc))
+        (fun ι HCι => proj1 HCι).
 
     Fixpoint acc_triangular {w1 w2} (ν : Tri w1 w2) : w1 ⊒ w2 :=
       match ν with
