@@ -851,3 +851,7 @@ Import BlockVerificationDerived2.
       iApply fupd_mask_intro; first set_solver.
       now iIntros "_".
   Qed.
+
+(* Local Variables: *)
+(* proof-omit-proofs-option: t *)
+(* End: *)

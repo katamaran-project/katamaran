@@ -758,3 +758,7 @@ Module MakeSolver
     Solver.generic_spec SOLV.solver_spec.
 
 End MakeSolver.
+
+(* Local Variables: *)
+(* proof-omit-proofs-option: t *)
+(* End: *)
