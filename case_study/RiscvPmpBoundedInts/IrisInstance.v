@@ -80,6 +80,7 @@ Module RiscvPmpIrisInstance <:
     Definition addr_inc (x : bv 32) (n : nat) : bv 32 :=
       bv.add x (bv.of_nat n).
 
+    (* TODO: remove get_byte! rewrite similar as for the foreign functions *)
     Definition get_byte {n} (offset : Z) (bits : bv n) : Byte :=
       bv.of_Z (Z.shiftr (bv.unsigned bits) (offset * 8)).
 
@@ -102,7 +103,7 @@ Module RiscvPmpIrisInstance <:
 
     Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       [∗ list] a ∈ addrs,
-        (⌜∃ p, Pmp_access (bv.of_nat 1) a entries m p⌝ -∗ ptstoSth a)%I.
+        (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ ptstoSth a)%I.
 
     Definition interp_pmp_addr_access_without (addr : Addr) (width : nat) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       ((∃ w, @interp_ptstomem width addr w)  -∗ interp_pmp_addr_access addrs entries m)%I.
