@@ -282,15 +282,13 @@ Module Type IrisPrelims
       specialize (regsmapv (existT _ r)).
       rewrite eq1 in regsmapv.
       destruct y as [y|]; inversion regsmapv.
-      iMod (own_update_2 with "Hregs Hreg") as "[Hregs Hreg]".
+      iMod (own_update_2 with "Hregs Hreg") as "[Hregs $]".
       {
         eapply auth_update.
         apply (singleton_local_update regsmap (existT _ r) (Excl y) (Excl (existT _ v1)) (Excl (existT _ v2)) (Excl (existT _ v2)) eq1).
         by eapply exclusive_local_update.
       }
-      iModIntro.
-      iFrame.
-      iApply (regs_inv_update H); iFrame.
+      now iApply (regs_inv_update H).
     Qed.
 
   End Registers.
@@ -421,14 +419,14 @@ Module Type IrisResources
         iSpecialize ("HYP" $! (MkConf s' δ') (γ',μ') nil
                        (mk_prim_step (MkConf _ _) step)).
         iMod "HYP". do 2 iModIntro. iMod "HYP". iModIntro.
-        iMod "HYP" as "[state_inv [HYP _]]". iModIntro. by iFrame.
+        now iMod "HYP" as "[$ [$ _]]".
       - iIntros (σ _ κ _ _) "state_inv".
         iSpecialize ("HYP" $! (fst σ) (snd σ) with "state_inv").
         iMod "HYP". iModIntro. iSplitR; [easy|].
         iIntros (c' σ' efs [γ γ' μ μ' δ' s']).
         iSpecialize ("HYP" $! s' δ' γ' μ' H).
         iMod "HYP". do 2 iModIntro. iMod "HYP". iModIntro.
-        iMod "HYP" as "(state_inv & HYP)". iModIntro. by iFrame.
+        iMod "HYP" as "($ & $)". now cbn.
     Qed.
 
     Lemma semWP_mono [Γ τ] (s : Stm Γ τ) (P Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ) :
@@ -437,7 +435,7 @@ Module Type IrisResources
       unfold semWP. iIntros "WP PQ".
       iApply (wp_strong_mono with "WP"); auto.
       iIntros ([v δΓ]) "X"; cbn.
-      iModIntro. by iApply "PQ".
+      by iApply "PQ".
     Qed.
 
     Lemma semWP_val {Γ τ} (v : Val τ) (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ) :
@@ -482,8 +480,8 @@ Module Type IrisResources
         iMod "Hclose". iMod "WPk".
         iSpecialize ("WPk" $! _ _ _ _ H).
         iMod "WPk". iModIntro. iModIntro. iModIntro.
-        iMod "WPk". iMod "WPk" as "[state_inv wps]".
-        iModIntro. iFrame "state_inv". by iApply "IH".
+        iMod "WPk". iMod "WPk" as "[$ wps]".
+        by iApply "IH".
     Qed.
 
     Lemma semWP_call_frame {Γ τ Δ} (δΔ : CStore Δ) (s : Stm Δ τ) :
@@ -503,8 +501,8 @@ Module Type IrisResources
         iMod "Hclose". iMod "WPs".
         iSpecialize ("WPs" $! _ _ _ _ H).
         iMod "WPs". iModIntro. iModIntro. iModIntro.
-        iMod "WPs". iMod "WPs" as "[state_inv wps]".
-        iModIntro. iFrame "state_inv". by iApply "IH".
+        iMod "WPs". iMod "WPs" as "[$ wps]".
+        now iApply "IH".
     Qed.
 
     Lemma semWP_call_inline_later {Γ τ Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ) :
@@ -542,8 +540,8 @@ Module Type IrisResources
         iMod "Hclose". iMod "WPs".
         iSpecialize ("WPs" $! _ _ _ _ H).
         iMod "WPs". iModIntro. iModIntro. iModIntro.
-        iMod "WPs". iMod "WPs" as "[state_inv wps]".
-        iModIntro. iFrame "state_inv". by iApply "IH".
+        iMod "WPs". iMod "WPs" as "[$ wps]".
+        by iApply "IH".
     Qed.
 
     Lemma semWP_let {Γ τ x σ} (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ) :
@@ -630,8 +628,8 @@ Module Type IrisResources
         iMod "Hclose". iMod "WPs".
         iSpecialize ("WPs" $! _ _ _ _ H).
         iMod "WPs". iModIntro. iModIntro. iModIntro.
-        iMod "WPs". iMod "WPs" as "[state_inv wps]".
-        iModIntro. iFrame "state_inv". by iApply "IH".
+        iMod "WPs". iMod "WPs" as "[$ wps]".
+        by iApply "IH".
     Qed.
 
     Lemma semWP_pattern_match {Γ τ σ} (s : Stm Γ σ) (pat : Pattern σ)
