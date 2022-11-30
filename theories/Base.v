@@ -183,6 +183,22 @@ Module Type BaseMixin (Import TY : Types).
       - intros [] ts. cbn. f_equal. f_equal. apply H.
     Qed.
 
+    Lemma inst_unfreshen_namedenv (n : N -> LVar) {Σ Σ' Δ}
+      (ζ : Sub (freshen_ctx n Σ Δ) Σ') (ι : Valuation Σ') :
+      inst (unfreshen_namedenv n ζ) ι = unfreshen_namedenv n (inst ζ ι).
+    Proof. induction Δ; cbn in ζ; env.destroy ζ; cbn; f_equal; apply IHΔ. Qed.
+
+    Lemma inst_unfreshen_patterncaseenv (n : N -> LVar) {Σ Σ' σ} (pat : @Pattern N σ)
+      (pc : PatternCase (freshen_pattern n Σ pat))
+      (ζ : Sub (PatternCaseCtx pc) Σ')
+      (ι : Valuation Σ') :
+      inst (unfreshen_patterncaseenv n pat pc ζ) ι =
+      unfreshen_patterncaseenv n pat pc (inst ζ ι).
+    Proof.
+      induction pat; cbn in pc; try destruct pc; cbn in ζ, ι; env.destroy ζ;
+        env.destroy ι; cbn; auto using inst_unfreshen_namedenv.
+    Qed.
+
   End PatternMatching.
 
   Import env.notations.
