@@ -303,10 +303,13 @@ Module RiscvPmpModel2.
         addr ∈ liveAddrs.
     Proof.
       intros addr Hmin Hmax.
+      Print liveAddrs.
+      Print seqZ.
       (* apply elem_of_seqZ. *)
       (* lia. *)
     Admitted.
 
+    (* TODO: might be beneficial to introduce "seqBV" *)
     Lemma in_liveAddrs_split : forall (addr : Addr) (bytes : nat),
         (minAddr <=ᵘ addr) ->
         (addr + (bv.of_nat bytes) <=ᵘ maxAddr) ->
@@ -384,11 +387,11 @@ Module RiscvPmpModel2.
       iDestruct "Hmem" as "(Hmem1 & Haddrs & Hmem2)".
       iSplitR "Haddrs".
       - iIntros "Hpaddr".
-        iFrame.
+        iFrame "Hmem1 Hmem2".
         unfold interp_ptstomem, ptstoSth.
         rewrite big_op_addrs_sum.
         iApply big_sepL_pure_impl.
-        iIntros "H".
+        iIntros "%H".
         iInduction (seq 0 bytes) as [|a] "IH"; first done.
         rewrite ?big_opL_cons.
         iDestruct "Hpaddr" as "[% [Hptsto Hpaddr]]".
