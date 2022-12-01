@@ -325,56 +325,26 @@ Section Soundness.
     (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
     ⊢ (semTriple δ P k Q -∗
        semTriple δ P (stm_debugk k) Q).
-  Proof.
-    iIntros "tripk P".
-    unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e3 σ2 efs) "%".
-    dependent elimination H.
-    dependent elimination s.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro; iFrame.
-    iSplitL; [|trivial].
-    iApply "tripk".
-    by iFrame.
-  Qed.
+  Proof. iIntros "tripk P". iApply semWP_debugk. now iApply "tripk". Qed.
 
   Lemma iris_rule_noop {Γ σ} {δ : CStore Γ}
         {P} {Q : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
-    language.to_val (MkConf s δ) = None ->
+    stm_to_val s = None ->
     (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
                             (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
                             ((exists v, s' = stm_val _ v) \/ (exists msg, s' = stm_fail _ msg))) ->
     (∀ v, P ={⊤}=∗ Q v δ) -∗
                  semTriple δ P s Q.
   Proof.
-    iIntros (Hnv Hnoop) "HPQ HP".
-    unfold semWP. rewrite wp_unfold.
-    unfold wp_pre.
-    rewrite Hnv. cbn.
-    iIntros (σ' ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first done.
-    iIntros (e2 σ'' efs) "%".
-    dependent elimination H.
-    destruct (Hnoop _ _ _ _ _ _ s0) as (-> & -> & -> & [[v ->]|[msg ->]]).
-    - do 3 iModIntro.
-      iMod "Hclose" as "_".
-      iMod ("HPQ" with "HP") as "HQ".
-      iModIntro.
-      iFrame.
-      iSplitL; trivial.
-      now iApply wp_value.
-    - do 3 iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iFrame.
-      iSplitL; trivial.
-      now iApply semWP_fail.
+    iIntros (Hnv Hnoop) "HPQ HP". rewrite semWP_unfold. rewrite Hnv.
+    iIntros (γ1 μ1) "state_inv".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (s2 δ2 γ2 μ2) "%".
+    destruct (Hnoop _ _ _ _ _ _ H) as (-> & -> & -> & [[v ->]|[msg ->]]).
+    - do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
+      iFrame. iApply semWP_val. now iApply "HPQ".
+    - do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
+      iFrame. now iApply semWP_fail.
   Qed.
 
   Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
@@ -726,29 +696,12 @@ Module IrisInstanceWithContracts
     ⊢ semTriple δ Q k R -∗
       semTriple δ P (stm_lemmak l es k) R.
   Proof.
-    iIntros (lemSem ltrip).
-    specialize (lemSem _ l).
-    revert ltrip lemSem.
-    generalize (LEnv l) as contractL.
-    intros contractL ltrip lemSem.
-    iIntros "tripk P".
-    unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e3 σ2 efs) "%".
-    dependent elimination H.
-    fold_semWP.
-    dependent elimination s.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro; iFrame.
-    iSplitL; [|trivial].
-    iApply "tripk".
+    iIntros (lemSem ltrip) "tripk P". iApply semWP_lemmak. iApply "tripk".
+    specialize (lemSem _ l). remember (LEnv l) as contractL.
+    clear - lemSem ltrip.
     dependent elimination ltrip; cbn in lemSem.
-    iPoseProof (l with "P") as (ι Heq) "[req consr]". clear l.
-    iApply "consr".
-    by iApply lemSem.
+    iPoseProof (l with "P") as (ι Heq) "[req consr]".
+    iApply "consr". by iApply lemSem.
   Qed.
 
   Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)

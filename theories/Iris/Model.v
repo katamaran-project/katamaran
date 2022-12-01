@@ -670,6 +670,26 @@ Module Type IrisResources
       iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn. by iApply "H".
     Qed.
 
+    Lemma semWP_debugk {Γ τ} (s : Stm Γ τ) :
+      ⊢ ∀ Q δ, semWP s Q δ -∗ semWP (stm_debugk s) Q δ.
+    Proof.
+      iIntros (Q δ) "WPs". rewrite (semWP_unfold (stm_debugk s)). cbn.
+      iIntros (γ1 μ1) "state_inv".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+      iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
+      do 3 iModIntro. iMod "Hclose" as "_". iModIntro. now iFrame "state_inv".
+    Qed.
+
+    Lemma semWP_lemmak {Γ τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (s : Stm Γ τ) :
+      ⊢ ∀ Q δ, semWP s Q δ -∗ semWP (stm_lemmak l es s) Q δ.
+    Proof.
+      iIntros (Q δ) "WPs". rewrite (semWP_unfold (stm_lemmak l es s)). cbn.
+      iIntros (γ1 μ1) "state_inv".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+      iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
+      do 3 iModIntro. iMod "Hclose" as "_". iModIntro. now iFrame "state_inv".
+    Qed.
+
   End WeakestPre.
 
   Module wptactics.
