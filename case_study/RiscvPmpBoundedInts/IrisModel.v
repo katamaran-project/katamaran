@@ -39,106 +39,6 @@ Set Implicit Arguments.
 
 Import RiscvPmpProgram.
 
-Module Bitvector_seq.
-  Import bv.
-  Import bv.notations.
-
-  Lemma truncn_refl : forall {n : nat} (x y : N),
-      truncn n x = truncn n y <-> x = y.
-  Proof.
-    intros; split; intros H.
-    - admit.
-    - subst; reflexivity.
-  Admitted.
-
-  Lemma of_N_refl : forall {n : nat} (x y : N),
-      @of_N n x = of_N y <-> x = y.
-  Proof.
-   intros; split; intros H.
-   - inversion H.
-     apply (proj1 (truncn_refl x y) H1).
-   - subst; reflexivity.
-  Qed.
-
-  Lemma add_cancel_l : forall {l : nat} (n m p : bv l),
-      p + n = p + m <-> n = m.
-  Proof.
-    intros l n m p; split; intros H.
-    - inversion H.
-      rewrite (@truncn_refl l) in H1.
-      rewrite N.add_cancel_l in H1.
-      unfold bin in H1.
-      destruct n, m; subst.
-      About Prelude.proof_irrelevance_is_true.
-      destruct (@Prelude.proof_irrelevance_is_true (is_wf l bin1)).
-    - subst; reflexivity.
-  Admitted.
-
-  Lemma add_cancel_r : forall {l : nat} (n m p : bv l),
-      n + p = m + p <-> n = m.
-  Proof.
-    intros.
-    rewrite (@add_comm _ n _) (@add_comm _ m _).
-    apply add_cancel_l.
-  Qed.
-
-  Lemma of_nat_refl : forall {n : nat} (x y : nat),
-      @of_nat n x = of_nat y <-> x = y.
-  Proof.
-    intros; split; intros H.
-    - admit.
-    - subst; reflexivity.
-  Admitted.
-
-  Definition seq_bv {n : nat} (start : bv n) (len : bv n) : list (bv n) :=
-    (fun i : nat => bv.of_nat i + start) <$> seq 0 (Z.to_nat (bv.unsigned len)).
-
-  Lemma NoDup_seq_bv n start len : NoDup (@seq_bv n start len).
-  Proof.
-    apply NoDup_fmap_2, NoDup_seq.
-    intros x y H.
-    apply add_cancel_r in H.
-    now apply of_nat_refl in H.
-  Qed.
-
-  About elem_of_seqZ.
-  About lookup_seqZ.
-  About lookup_seqZ_ge.
-
-  Definition bv_le_gt_dec {n} (x y : bv n) : {x <=ᵘ y} + {x >ᵘ y}.
-  Admitted.
-
-  Lemma seq_bv_nil {l i} (m n : bv l) : n = mk 0 i -> seq_bv m n = [].
-  Proof. intros; now subst. Qed.
-
-  Lemma seq_bv_cons {l} (m n : bv l) :
-    0 <ᵘ n -> seq_bv m n = m :: seq_bv (
-
-  Lemma lookup_seq_bv_ge {l} (m n : bv l) (i : nat) :
-    (n <=ᵘ of_nat i) → seq_bv m n !! i = None.
-  Proof.
-    revert m i.
-    destruct n as [[]]; intros.
-    - by rewrite seq_bv_nil.
-    -
-      
-
-
-
-  Lemma lookup_seq_bv {l} (m n : bv l) (i : nat) (m': bv l) :
-    seq_bv m n !! i = Some m' <-> m' = (m + of_nat i) ∧ of_nat i <ᵘ n.
-  Proof.
-    destruct (bv_le_gt_dec n (of_nat i)).
-    -
-
-  Lemma uelem_of_seq_bv {l} (m n k : bv l) :
-      k ∈ seq_bv m n <-> (m <=ᵘ k ∧ k <ᵘ m + n).
-  Proof.
-    rewrite elem_of_list_lookup.
-
-
-End Bitvector_seq.
-
 (* Instantiate the Iris framework solely using the operational semantics. At
    this point we do not commit to a set of contracts nor to a set of
    user-defined predicates. *)
@@ -148,8 +48,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
 
   (* Defines the memory ghost state. *)
   Section RiscvPmpIrisParams.
-    Import Bitvector_seq.
-
+    Import bv.
     Definition Byte : Set := bv 8.
     Definition MemVal : Set := Byte.
 
@@ -164,7 +63,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Definition memGS : gFunctors -> Set := mcMemGS.
     Definition memΣ : gFunctors := gen_heapΣ Addr MemVal.
 
-    Definition liveAddrs := seq_bv minAddr maxAddr.
+    Definition liveAddrs := bv_seq minAddr lenAddr.
 
     Lemma NoDup_liveAddrs : NoDup liveAddrs.
       now eapply NoDup_seq_bv.

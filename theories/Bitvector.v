@@ -852,6 +852,30 @@ Module bv.
 
   End Arithmetic.
 
+  Section Sequencing.
+    From stdpp Require Import
+      list_numbers.
+
+    Definition bv_modulus (n : nat) : Z := 2 ^ (Z.of_nat n).
+
+    Definition bv_seq {n : nat} (start : bv n) (len : Z) : list (bv n) :=
+      (fun i : Z => add start (bv.of_Z i)) <$> (seqZ 0 len).
+
+    Lemma NoDup_seq_bv n start len :
+      (0 <= len <= bv_modulus n)%Z ->
+      NoDup (@bv_seq n start len).
+    Proof.
+      intros H. apply NoDup_alt. intros i j b'. unfold bv_seq. rewrite !list_lookup_fmap.
+      intros [?[[??]%lookup_seqZ ?]]%fmap_Some ; simplify_eq.
+      intros.
+      apply fmap_Some in H0.
+      destruct H0 as (x & Hseq & Heq).
+      apply lookup_seqZ in Hseq as (Hx & Hj).
+      rewrite Hx in Heq.
+      admit.
+    Admitted.
+  End Sequencing.
+
   Section Logical.
 
     Definition land {n} (x y : bv n) : bv n :=

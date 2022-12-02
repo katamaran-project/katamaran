@@ -17,5 +17,11 @@ workflows:
   version: 2
   build:
     jobs:
-      - "coq-8-15"
-      - "coq-8-16"
+      - "coq-8-15":
+          filters:
+            branches:
+              ignore: bounded-ints
+      - "coq-8-16":
+          filters:
+            branches:
+              ignore: bounded-ints
