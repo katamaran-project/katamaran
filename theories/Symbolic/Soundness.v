@@ -169,6 +169,19 @@ Module Soundness
     MkRel (fun w ι '(ta,tb) '(va,vb) =>
              ℛ⟦RA⟧@{ι} ta va /\ ℛ⟦RB⟧@{ι} tb vb).
 
+  #[export] Instance RMatchResult {N σ} (p : @Pattern N σ) :
+    Rel (SMatchResult p) (MatchResult p) :=
+    MkRel
+      (fun w ι '(existT pc1 ts) '(existT pc2 vs) =>
+         exists e : pc1 = pc2,
+           ℛ⟦RNEnv (PatternCaseCtx pc2)⟧@{ι}
+             (eq_rect pc1 (fun pc => NamedEnv (Term w) (PatternCaseCtx pc))
+                ts pc2 e)
+             vs).
+
+  #[export] Instance RIn b : Rel (ctx.In b) (Val (type b)) :=
+    MkRel (fun w ι bIn v => env.lookup ι bIn = v).
+
   Module refinement.
     Module notations.
       Open Scope rel_scope.
@@ -578,6 +591,88 @@ Module Soundness
       intros w ι Hpc. apply refine_demonic_list; auto.
       induction (finite.enum F); now constructor.
     Qed.
+
+    Lemma refine_pattern_match_regular {N : Set} (n : N -> LVar) {σ} (p : @Pattern N σ) :
+      ℛ⟦RVal σ -> RPureSpecM (RMatchResult p)⟧
+        (SPureSpecM.pattern_match_regular n p)
+        (CPureSpecM.pattern_match p).
+    Proof.
+      cbv beta delta [RPureSpecM SPureSpecM.pattern_match_regular
+                        CPureSpecM.pattern_match CPureSpecM.pure] iota.
+      intros w ι Hpc t v -> POST__s POST__c HPOST. hnf. cbn beta delta [wsafe] iota.
+      rewrite <- (pattern_match_val_freshen n p (Σ := w)).
+      pose proof (pattern_match_val_inverse_left (freshen_pattern n w p) (inst t ι)).
+      destruct pattern_match_val as [pc vs]. cbn - [acc_trans].
+      unfold pattern_match_val_reverse' in H. cbn in H.
+      intros Hsafe. refine (HPOST _ _ _ _ _ _ _ _ Hsafe); clear Hsafe;
+        cbn - [sub_cat_left sub_cat_right sub_id];
+        rewrite ?inst_subst, ?instprop_subst, ?inst_sub_id, ?inst_sub_cat_left; try easy.
+      - rewrite inst_pattern_match_term_reverse. split; auto. rewrite <- H.
+        f_equal. symmetry. apply inst_sub_cat_right.
+      - exists eq_refl; cbn. rewrite inst_unfreshen_patterncaseenv.
+        f_equal. symmetry. apply inst_sub_cat_right.
+    Qed.
+
+    Lemma refine_pattern_match_var {N : Set} (n : N -> LVar) {σ} (p : @Pattern N σ) :
+      ℛ⟦∀ x, RIn (x∷σ) -> RPureSpecM (RMatchResult p)⟧
+        (SPureSpecM.pattern_match_var n p)
+        (fun x => CPureSpecM.pattern_match p).
+    Proof.
+    Admitted.
+
+    Lemma refine_pattern_match_basic {N : Set} (n : N -> LVar) {σ} (p : @Pattern N σ) :
+      ℛ⟦RVal σ -> RPureSpecM (RMatchResult p)⟧
+        (SPureSpecM.pattern_match_basic n p)
+        (CPureSpecM.pattern_match p).
+    Proof.
+      intros w ι HCι t v Htv. destruct t; cbn.
+      now apply refine_pattern_match_var.
+      all: now apply refine_pattern_match_regular.
+    Qed.
+
+    Lemma refine_pattern_match {N : Set} (n : N -> LVar) {σ} (p : @Pattern N σ) :
+      ℛ⟦RVal σ -> RPureSpecM (RMatchResult p)⟧
+        (SPureSpecM.pattern_match n p)
+        (CPureSpecM.pattern_match p).
+    Proof.
+      induction p; intros w ι HCι t v ->; cbn [SPureSpecM.pattern_match].
+      - apply refine_pure; auto. exists eq_refl; cbn; auto.
+      - destruct (term_get_val_spec t) as [? ->|]; cbn.
+        + apply refine_pure; auto. exists eq_refl; cbn; auto.
+        + now apply refine_pattern_match_basic with (p := pat_bool).
+      - now apply refine_pattern_match_basic.
+      - destruct (term_get_pair_spec t) as [[t1 t2] ->|]; cbn.
+        + apply refine_pure; auto. exists eq_refl; cbn; auto.
+        + now apply refine_pattern_match_basic with (p := pat_pair _ _).
+      - destruct (term_get_sum_spec t) as [[] ->|]; cbn.
+        + apply refine_pure; auto. exists eq_refl; cbn; auto.
+        + apply refine_pure; auto. exists eq_refl; cbn; auto.
+        + now apply refine_pattern_match_basic with (p := pat_sum _ _ _ _).
+      - apply refine_pure; auto. exists eq_refl; cbn; auto.
+      - destruct (term_get_val_spec t) as [? ->|]; cbn.
+        + apply refine_pure; auto. exists eq_refl; cbn; auto.
+        + now apply refine_pattern_match_basic with (p := pat_enum E).
+      - now apply refine_pattern_match_basic.
+      - destruct (term_get_val_spec t) as [? ->|]; cbn.
+        + apply refine_pure; auto. exists eq_refl; cbn; auto.
+        + now apply refine_pattern_match_basic with (p := pat_bvec_exhaustive m).
+      - destruct (term_get_tuple_spec t) as [ts ->|].
+        + apply refine_pure; auto. exists eq_refl; cbn; auto.
+          unfold tuple_pattern_match_val.
+          now rewrite envrec.to_of_env, inst_tuple_pattern_match.
+        + now apply refine_pattern_match_basic.
+      - destruct (term_get_record_spec t) as [ts ->|].
+        + apply refine_pure; auto. exists eq_refl; cbn; auto.
+          unfold record_pattern_match_val.
+          rewrite recordv_unfold_fold. symmetry.
+          apply inst_record_pattern_match.
+        + now apply refine_pattern_match_basic.
+      - destruct (term_get_union_spec t) as [[K tf] Heq|].
+        + specialize (H K w ι HCι tf (inst tf ι) eq_refl).
+          change (base.equiv t (term_union U K tf)) in Heq.
+          admit.
+        + now apply refine_pattern_match_basic.
+    Admitted.
 
   End PureSpecM.
 

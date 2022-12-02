@@ -236,12 +236,15 @@ Module Type PatternsOn (Import TY : Types).
                                     @PatternCaseCtx (unionk_ty U K) (p K) pc
       end%ctx.
 
+    Definition MatchResult {σ} (pat : Pattern σ) : Type :=
+      { c : PatternCase pat & NamedEnv Val (PatternCaseCtx c) }.
+    #[global] Arguments MatchResult {σ} !pat /.
+
     (* Pattern match on a value. The result is a [PatternCase] that represents
        the alternative corresponding to the value, together with an environment
        that maps the variables of the pattern to values. *)
-    Fixpoint pattern_match_val {σ} (pat : Pattern σ) :
-      Val σ -> { c : PatternCase pat & NamedEnv Val (PatternCaseCtx c) } :=
-      match pat with
+    Fixpoint pattern_match_val {σ} (p : Pattern σ) : Val σ -> MatchResult p :=
+      match p with
       | pat_var x =>
           fun v => (tt; [env].[x∷_ ↦ v])
       | pat_bool       =>
@@ -285,9 +288,9 @@ Module Type PatternsOn (Import TY : Types).
 
     (* Reverse a pattern match. Given a [PatternCase] and an environment with
        values for all variables in the pattern, reconstruct a value. *)
-    Fixpoint pattern_match_val_reverse {σ} (pat : Pattern σ) :
-      forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> Val σ :=
-      match pat with
+    Fixpoint pattern_match_val_reverse {σ} (p : Pattern σ) :
+      forall (c : PatternCase p), NamedEnv Val (PatternCaseCtx c) -> Val σ :=
+      match p with
       | pat_var x      => fun _ vs => env.head vs
       | pat_bool       => fun b _ => b
       | pat_list σ x y =>
@@ -331,15 +334,15 @@ Module Type PatternsOn (Import TY : Types).
       end.
 
     (* A curried version of the above. *)
-    Definition pattern_match_val_reverse' {σ} (pat : Pattern σ) :
-      { c : PatternCase pat & NamedEnv Val (PatternCaseCtx c) } -> Val σ :=
-        fun c => pattern_match_val_reverse pat (projT1 c) (projT2 c).
+    Definition pattern_match_val_reverse' {σ} (p : Pattern σ) :
+      MatchResult p -> Val σ :=
+      fun c => pattern_match_val_reverse p (projT1 c) (projT2 c).
 
-    Lemma pattern_match_val_inverse_right' {σ} (pat : Pattern σ) :
-      forall (c : { pc : PatternCase pat & NamedEnv Val (PatternCaseCtx pc)}),
-        pattern_match_val pat (pattern_match_val_reverse' pat c) = c.
+    Lemma pattern_match_val_inverse_right' {σ} (p : Pattern σ) :
+      forall (r : MatchResult p),
+        pattern_match_val p (pattern_match_val_reverse' p r) = r.
     Proof.
-      induction pat; cbn; intros [pc vs]; try progress cbn.
+      induction p; cbn; intros [pc vs]; try progress cbn.
       - destruct pc; now env.destroy vs.
       - env.destroy vs. reflexivity.
       - destruct pc; now env.destroy vs.
@@ -515,6 +518,18 @@ Module Type PatternsOn (Import TY : Types).
                      env.snoc (un Σ _ EΓ) b tb
         end.
 
+    Definition freshen_namedenv {D : Ty -> Set} :
+      forall {Σ : LCtx} {Δ : NCtx N Ty},
+        NamedEnv D Δ -> NamedEnv D (freshen_ctx Σ Δ) :=
+      fix fr {Σ Δ} (E : NamedEnv D Δ) {struct E} :=
+        match E in Env _ Δ return NamedEnv D (freshen_ctx Σ Δ) with
+        | [env]       => [env]
+        | E ► (b ↦ d) =>
+            let E' := fr E in
+            let x' := fresh_lvar _ _ in
+            E'.[x'∷type b ↦ d]
+        end.
+
     (* Traverse a tuple pattern to freshen all variables inside it. The
        context index [Δ] is freshened according to witness the change. *)
     Fixpoint freshen_tuplepat (Σ : LCtx) {σs Δ} (p : @TuplePat N σs Δ) :
@@ -581,7 +596,7 @@ Module Type PatternsOn (Import TY : Types).
          (forall pc : PatternCase (freshen_pattern Σ pat), ...)
 
        To use the user function, the following definition translates cases for a
-       freshened pattern back to cases on an unfreshened pattern. *)
+       freshened pattern back and forth to cases on an unfreshened pattern. *)
     Fixpoint unfreshen_patterncase (Σ : LCtx) {σ} (p : @Pattern N σ) :
       PatternCase (freshen_pattern Σ p) -> PatternCase p :=
       match p with
@@ -600,6 +615,26 @@ Module Type PatternsOn (Import TY : Types).
                                     @existT _
                                       (fun K => PatternCase (p K)) K
                                       (unfreshen_patterncase Σ (p K) pc)
+      end.
+
+    Fixpoint freshen_patterncase (Σ : LCtx) {σ} (p : @Pattern N σ) :
+      PatternCase p -> PatternCase (freshen_pattern Σ p) :=
+      match p with
+      | pat_var _              => fun pc => pc
+      | pat_bool               => fun pc => pc
+      | pat_list _ _ _         => fun pc => pc
+      | pat_pair _ _           => fun pc => pc
+      | pat_sum _ _ _ _        => fun pc => pc
+      | pat_unit               => fun pc => pc
+      | pat_enum E             => fun pc => pc
+      | pat_bvec_split _ _ _ _ => fun pc => pc
+      | pat_bvec_exhaustive m  => fun pc => pc
+      | pat_tuple _            => fun pc => pc
+      | pat_record _ _ _       => fun pc => pc
+      | pat_union U p          =>
+             fun Kpc : {K : unionk U & PatternCase (p K)} =>
+               let (K,pc) := Kpc in
+               (K; freshen_patterncase Σ (p K) pc)
       end.
 
     (* The context of bound variables of a variable is the same as calculating
@@ -641,43 +676,111 @@ Module Type PatternsOn (Import TY : Types).
         unfreshen_namedenv
           (eq_rect _ (NamedEnv D) E _ (freshen_patterncasectx Σ p pc)).
 
+    Fixpoint freshen_patterncaseenv {D : Ty -> Set} {Σ σ} (p : @Pattern N σ) :
+      forall (pc : PatternCase p),
+        NamedEnv D (PatternCaseCtx pc) ->
+        NamedEnv D (PatternCaseCtx (freshen_patterncase Σ p pc)) :=
+      match p with
+      | pat_var _ => fun ps ts => let (_,t) := env.view ts in [nenv t]
+      | pat_bool => fun _ _   => [env]
+      | pat_list σ x y =>
+          fun pc => match pc with
+                    | true  => fun _  => [env]
+                    | false => fun ts => let (ts1,t) := env.view ts in
+                                         let (_,h)   := env.view ts1 in
+                                         [nenv h; t]
+                    end
+      | pat_pair x y =>
+          fun _ ts =>
+            let (ts1,v) := env.view ts in
+            let (_,v0) := env.view ts1 in
+            [nenv v0; v]
+      | pat_sum σ τ x y =>
+          fun pc =>
+            match pc with
+            | true  => fun ts => let (_,v) := env.view ts in [nenv v]
+            | false => fun ts => let (_,v) := env.view ts in [nenv v]
+            end
+      | pat_unit   => fun _ _ => [env]
+      | pat_enum E => fun _ _ => [env]
+      | pat_bvec_split m n x y =>
+          fun _ ts =>
+            let (ts1,vy) := env.view ts in
+            let (_,vx)   := env.view ts1 in
+            [env].[_∷ty.bvec m ↦ vx].[_∷ty.bvec n ↦ vy]
+      | pat_bvec_exhaustive _ => fun _ _ => [env]
+      | pat_tuple _ => fun _ => freshen_namedenv
+      | pat_record _ Δ _ => fun _ => freshen_namedenv
+      | pat_union U p => fun '(K;pc) => freshen_patterncaseenv (p K) pc
+      end.
+
     Fixpoint unfreshen_patterncaseenv {D : Ty -> Set} {Σ σ} (p : @Pattern N σ) :
       forall (pc : PatternCase (freshen_pattern Σ p)),
         NamedEnv D (PatternCaseCtx pc) ->
         NamedEnv D (PatternCaseCtx (unfreshen_patterncase Σ p pc)) :=
-         match p with
-         | pat_var _ => fun ps ts => let (_,t) := env.view ts in [nenv t]
-         | pat_bool => fun _ _   => [env]
-         | pat_list σ x y =>
-             fun pc => match pc with
-                       | true  => fun _  => [env]
-                       | false => fun ts => let (ts1,t) := env.view ts in
-                                            let (_,h)   := env.view ts1 in
-                                            [nenv h; t]
-                       end
-         | pat_pair x y =>
-             fun _ ts =>
-               let (ts1,v) := env.view ts in
-               let (_,v0) := env.view ts1 in
-               [nenv v0; v]
-         | pat_sum σ τ x y =>
-             fun pc =>
-               match pc with
-               | true  => fun ts => let (_,v) := env.view ts in [nenv v]
-               | false => fun ts => let (_,v) := env.view ts in [nenv v]
-               end
-         | pat_unit   => fun _ _ => [env]
-         | pat_enum E => fun _ _ => [env]
-         | pat_bvec_split m n x y =>
-             fun _ ts =>
-               let (ts1,vy) := env.view ts in
-               let (_,vx)   := env.view ts1 in
-               [env].[x∷ty.bvec m ↦ vx].[y∷ty.bvec n ↦ vy]
-         | pat_bvec_exhaustive _ => fun _ _ => [env]
-         | pat_tuple _ => fun _ => unfreshen_namedenv
-         | pat_record _ Δ _ => fun _ => unfreshen_namedenv
-         | pat_union U p => fun '(K;pc) => unfreshen_patterncaseenv (p K) pc
-         end.
+      match p with
+      | pat_var _ => fun ps ts => let (_,t) := env.view ts in [nenv t]
+      | pat_bool => fun _ _   => [env]
+      | pat_list σ x y =>
+          fun pc => match pc with
+                    | true  => fun _  => [env]
+                    | false => fun ts => let (ts1,t) := env.view ts in
+                                         let (_,h)   := env.view ts1 in
+                                         [nenv h; t]
+                    end
+      | pat_pair x y =>
+          fun _ ts =>
+            let (ts1,v) := env.view ts in
+            let (_,v0) := env.view ts1 in
+            [nenv v0; v]
+      | pat_sum σ τ x y =>
+          fun pc =>
+            match pc with
+            | true  => fun ts => let (_,v) := env.view ts in [nenv v]
+            | false => fun ts => let (_,v) := env.view ts in [nenv v]
+            end
+      | pat_unit   => fun _ _ => [env]
+      | pat_enum E => fun _ _ => [env]
+      | pat_bvec_split m n x y =>
+          fun _ ts =>
+            let (ts1,vy) := env.view ts in
+            let (_,vx)   := env.view ts1 in
+            [env].[x∷ty.bvec m ↦ vx].[y∷ty.bvec n ↦ vy]
+      | pat_bvec_exhaustive _ => fun _ _ => [env]
+      | pat_tuple _ => fun _ => unfreshen_namedenv
+      | pat_record _ Δ _ => fun _ => unfreshen_namedenv
+      | pat_union U p => fun '(K;pc) => unfreshen_patterncaseenv (p K) pc
+      end.
+
+    Definition freshen_matchresult {Σ σ} (p : @Pattern N σ) (r : MatchResult p) :
+      MatchResult (freshen_pattern Σ p) :=
+      let (pc, vs) := r in
+      (freshen_patterncase Σ p pc; freshen_patterncaseenv p pc vs).
+
+    Definition unfreshen_matchresult {Σ σ} (p : @Pattern N σ)
+      (r : MatchResult (freshen_pattern Σ p)) : MatchResult p :=
+      let (pc, vs) := r in
+      (unfreshen_patterncase Σ p pc; unfreshen_patterncaseenv p pc vs).
+
+    Lemma pattern_match_val_freshen {Σ : LCtx} {σ} (p : @Pattern N σ) (v : Val σ) :
+      unfreshen_matchresult p (pattern_match_val (freshen_pattern Σ p) v) =
+      pattern_match_val p v.
+    Proof.
+      induction p; cbn;
+        repeat
+          match goal with
+          | |- _ = match ?v with _ => _ end =>
+              is_var v; destruct v; try progress cbn
+          end; f_equal; auto.
+      - now destruct bv.appView.
+      - unfold tuple_pattern_match_val.
+        induction p; cbn; f_equal; auto.
+      - unfold record_pattern_match_val.
+        generalize (recordv_unfold R v); intros ts.
+        induction p; cbn; f_equal; auto.
+      - destruct unionv_unfold as [K u]. clear v.
+        rewrite <- H. now destruct pattern_match_val.
+    Qed.
 
   End Freshen.
 

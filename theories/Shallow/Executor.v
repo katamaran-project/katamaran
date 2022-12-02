@@ -334,6 +334,10 @@ Module Type ShallowExecOn
       _  <- assume_formula (pattern_match_val_reverse pat pc vs = v);;
       k pc vs.
 
+    Definition pattern_match {N σ} (pat : @Pattern N σ) (v : Val σ) :
+      CPureSpecM (MatchResult pat) := pure (pattern_match_val pat v).
+    #[global] Arguments pattern_match {N σ} pat v.
+
     Fixpoint assert_eq_chunk (c1 c2 : SCChunk) : CPureSpecM unit :=
       match c1 , c2 with
       | scchunk_user p1 vs1 , scchunk_user p2 vs2 =>
@@ -598,6 +602,9 @@ Module Type ShallowExecOn
           demonic_pattern_match
             pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun pc δpc => produce (ι ►► δpc) (rhs pc))
+            (* let v := inst (T := fun Σ => Term Σ _) s ι in *)
+            (* '(existT pc vs) <- lift_purem (CPureSpecM.pattern_match pat v) ;; *)
+            (* produce (ι ►► vs) (rhs pc) *)
         | asn.sep a1 a2   => _ <- produce ι a1 ;; produce ι a2
         | asn.or a1 a2 =>
           demonic_binary (produce ι a1)
@@ -617,6 +624,9 @@ Module Type ShallowExecOn
           angelic_pattern_match
             pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun pc δpc => consume (ι ►► δpc) (rhs pc))
+            (* let v := inst (T := fun Σ => Term Σ _) s ι in *)
+            (* '(existT pc vs) <- lift_purem (CPureSpecM.pattern_match pat v) ;; *)
+            (* consume (ι ►► vs) (rhs pc) *)
         | asn.sep a1 a2   => _ <- consume ι a1;; consume ι a2
         | asn.or a1 a2 =>
           angelic_binary (consume ι a1)
@@ -711,6 +721,9 @@ Module Type ShallowExecOn
               v  <- exec_aux s ;;
               demonic_pattern_match pat v
                 (fun pc δpc => pushspops δpc (exec_aux (rhs pc)))
+              (* v <- exec_aux s ;; *)
+              (* '(existT pc δpc) <- lift_purem (CPureSpecM.pattern_match pat v) ;; *)
+              (* pushspops δpc (exec_aux (rhs pc)) *)
             | stm_read_register reg =>
               v <- angelic τ ;;
               let c := scchunk_ptsreg reg v in

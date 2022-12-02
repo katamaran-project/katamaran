@@ -342,6 +342,9 @@ Module Type SymbolicExecOn
           SymProp.block
       end.
 
+  Definition SMatchResult {N σ} (pat : @Pattern N σ) (w : World) : Type :=
+    { pc : PatternCase pat & NamedEnv (Term w) (PatternCaseCtx pc) }.
+
   Definition SPureSpecM (A : TYPE) : TYPE :=
     □(A -> 𝕊) -> 𝕊.
 
@@ -550,30 +553,118 @@ Module Type SymbolicExecOn
     #[global] Arguments demonic_finite F {_ _} [w].
 
     #[export] Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
-    Proof.
-      intros P Q PQ.
-      split; intros []; constructor; intuition.
-    Qed.
+    Proof. intros P Q PQ. split; intros []; constructor; intuition. Qed.
 
-    Definition pattern_match {N : Set} (n : N -> LVar) {AT} :
-      forall {σ} (pat : @Pattern N σ),
-        ⊢ STerm σ ->
-        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SPureSpecM AT)) ->
-        SPureSpecM AT :=
-      fun σ pat w0 scr k POST =>
+    Definition pattern_match_regular {N : Set} (n : N -> LVar) {σ} (pat : @Pattern N σ) :
+      ⊢ STerm σ -> SPureSpecM (SMatchResult pat) :=
+      fun w0 scr POST =>
         SymProp.pattern_match scr (freshen_pattern n w0 pat)
           (fun pc : PatternCase _ =>
-             let w1  : World      := wcat w0 (PatternCaseCtx pc) in
-             let r1  : w0 ⊒ w1    := acc_cat_right w0 (PatternCaseCtx pc) in
-             let ts  : NamedEnv (Term (w0 ▻▻ PatternCaseCtx pc)) (PatternCaseCtx pc)
-                                  := sub_cat_right (PatternCaseCtx pc) in
-             let F1  : Formula w1 := formula_relop bop.eq scr⟨r1⟩ (pattern_match_term_reverse _ pc ts) in
-             let w2  : World      := wformula w1 F1 in
-             let r2  : w1 ⊒ w2    := acc_formula_right F1 in
+             let w1 : World   := wmatch w0 scr _ pc in
+             let r1 : w0 ⊒ w1 := acc_match_right pc in
+             POST w1 r1
+               (existT
+                  (unfreshen_patterncase n w0 pat pc)
+                  (unfreshen_patterncaseenv n pat pc (sub_cat_right _)))).
+    #[global] Arguments pattern_match_regular {N} n {σ} pat [w] t.
+
+    Definition pattern_match_var {N : Set} (n : N -> LVar) {σ} (pat : @Pattern N σ) :
+      ⊢ ∀ x, ctx.In (x∷σ) -> SPureSpecM (SMatchResult pat) :=
+      fun w0 x xIn POST =>
+        let pat' := freshen_pattern n w0 pat in
+        SymProp.pattern_match_var x pat'
+          (fun pc : PatternCase _ =>
+             let Δ   : LCtx       := PatternCaseCtx pc in
+             let w1  : World      := wcat w0 Δ in
+             let r1  : w0 ⊒ w1    := acc_cat_right w0 Δ in
+             let ts  : NamedEnv (Term (ctx.remove (ctx.in_cat_left Δ xIn))) Δ
+                                  := eq_rect _ (fun Σ => NamedEnv (Term Σ) Δ)
+                                       (sub_cat_right Δ) _
+                                       (eq_sym (ctx.remove_in_cat_left xIn)) in
+             let t   : Term (ctx.remove (ctx.in_cat_left Δ xIn)) σ
+                                  := pattern_match_term_reverse pat' pc ts in
+             let w2  : World      := wsubst w1 x t in
+             let r2  : w1 ⊒ w2    := @acc_subst_right w1 x σ _ t in
              let r12 : w0 ⊒ w2    := r1 ∘ r2 in
-             k (unfreshen_patterncase n w0 pat pc) w2 r12
-               (unfreshen_patterncaseenv n pat pc ts)
-               (four POST r12)).
+             POST w2 r12
+               (existT
+                  (unfreshen_patterncase n w0 pat pc)
+                  (unfreshen_patterncaseenv n pat pc ts))).
+    #[global] Arguments pattern_match_var {N} n {σ} pat [w x] xIn : rename.
+
+    Definition pattern_match_basic {N : Set} (n : N -> LVar) {σ} (pat : @Pattern N σ) :
+      ⊢ STerm σ -> SPureSpecM (SMatchResult pat) :=
+      fun w0 scr =>
+        match scr with
+        | @term_var _ x σ xIn => fun pat => pattern_match_var n pat xIn
+        | t => fun pat => pattern_match_regular n pat t
+        end pat.
+    #[global] Arguments pattern_match_basic {N} n {σ} pat [w] t.
+
+    Fixpoint pattern_match {N : Set} (n : N -> LVar) {σ} (pat : @Pattern N σ) :
+      ⊢ WTerm σ -> SPureSpecM (SMatchResult pat) :=
+      fun w0 : World =>
+        match pat as p in (Pattern t) return (forall _ : Term (wctx w0) t, SPureSpecM (@SMatchResult N t p) w0) with
+        | pat_var x       => fun scr => pure (existT tt [env].[x∷_ ↦ scr])
+        | pat_bool        =>
+            fun scr => match term_get_val scr with
+                       | Some a => pure (existT a [env])
+                       | None => pattern_match_basic n pat_bool scr
+                       end
+        | pat_list σ x y  =>
+            fun scr => pattern_match_basic n (pat_list σ x y) scr
+        | pat_pair x y    =>
+            fun scr =>
+              match term_get_pair scr with
+              | Some (a, b) => pure (existT tt [env].[x∷_ ↦ a].[y∷_ ↦ b])
+              | None        => pattern_match_basic n (pat_pair x y) scr
+              end
+        | pat_sum σ τ x y =>
+            fun scr => match term_get_sum scr with
+                       | Some (inl a) => pure (existT true [env].[x∷σ ↦ a])
+                       | Some (inr b) => pure (existT false [env].[y∷τ ↦ b])
+                       | None => pattern_match_basic n (pat_sum σ τ x y) scr
+                       end
+        | pat_unit        => fun _ => pure (existT tt [env])
+        | pat_enum E      =>
+            fun scr => match term_get_val scr with
+                       | Some a => pure (existT a [env])
+                       | None => pattern_match_basic n (pat_enum E) scr
+                       end
+        | pat_bvec_split m k x y =>
+            fun scr => pattern_match_basic n (pat_bvec_split m k x y) scr
+        | pat_bvec_exhaustive m =>
+            fun scr =>
+              match term_get_val scr with
+              | Some a => pure (existT a [env])
+              | None => pattern_match_basic n (pat_bvec_exhaustive m) scr
+              end
+        | @pat_tuple _ σs Δ p =>
+            fun scr =>
+              match term_get_tuple scr with
+              | Some a => pure (existT tt (tuple_pattern_match_env p a))
+              | None => pattern_match_basic n (pat_tuple p) scr
+              end
+        | pat_record R Δ p =>
+            fun scr =>
+              match term_get_record scr with
+              | Some a => pure (existT tt (record_pattern_match_env p a))
+              | None => pattern_match_basic n (pat_record R Δ p) scr
+              end
+        | pat_union U p =>
+            fun scr =>
+              match term_get_union scr with
+              | Some (existT K t) =>
+                  @map (SMatchResult (p K)) (SMatchResult (pat_union U p)) _
+                    (fun w1 _ '(existT pc ts) =>
+                       @existT (PatternCase (pat_union U p))
+                         (fun pc => NamedEnv (Term w1) (PatternCaseCtx pc))
+                         (existT (P := fun K => PatternCase (p K)) K pc) ts)
+                    (pattern_match n t)
+              | None => pattern_match_basic n (pat_union U p) scr
+              end
+        end.
+    #[global] Arguments pattern_match {N} n {σ} pat [w].
 
   End SPureSpecM.
 
@@ -989,6 +1080,11 @@ Module Type SymbolicExecOn
           let t2 := persist__term t2 ω3 in
           k _ (ω12 ∘ ω3) t1 t2.
 
+      Definition pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
+        ⊢ WTerm σ -> SHeapSpecM Γ Γ (SMatchResult pat) :=
+        fun w t => lift_purem (SPureSpecM.pattern_match n pat t).
+      #[global] Arguments pattern_match {N} n {Γ σ} pat [w].
+
     End PatternMatching.
 
     Section State.
@@ -1174,6 +1270,9 @@ Module Type SymbolicExecOn
                  (fun pc w2 r12 ζ =>
                     produce (wcat w0 (PatternCaseCtx pc))
                       (rhs pc) w2 (acc_cat_left (r01 ∘ r12) ζ))
+               (* ⟨ r12 ⟩ '(existT pc ζ) <- pattern_match id pat s⟨r01⟩ ;; *)
+               (* produce (wcat w0 (PatternCaseCtx pc)) *)
+               (*   (rhs pc) _ (acc_cat_left (r01 ∘ r12) ζ) *)
            | asn.sep a1 a2 =>
              fun w1 ω01 =>
                ⟨ ω12 ⟩ _ <- produce w0 a1 w1 ω01 ;;
@@ -1209,6 +1308,9 @@ Module Type SymbolicExecOn
                  (fun pc w2 r12 ζ =>
                     consume (wcat w0 (PatternCaseCtx pc))
                       (rhs pc) w2 (acc_cat_left (r01 ∘ r12) ζ))
+               (* ⟨ r12 ⟩ '(existT pc ζ) <- wip_pattern_match id pat s⟨r01⟩ ;; *)
+               (* consume (wcat w0 (PatternCaseCtx pc)) *)
+               (*   (rhs pc) _ (acc_cat_left (r01 ∘ r12) ζ) *)
           | asn.sep a1 a2 =>
             fun w1 ω01 =>
               ⟨ ω12 ⟩ _ <- consume w0 a1 w1 ω01 ;;
@@ -1370,6 +1472,9 @@ Module Type SymbolicExecOn
                   PVartoLVar pat v
                   (fun pc w2 ω2 vs =>
                      pushspops vs (exec_aux (rhs pc)))
+                (* ⟨ r1 ⟩ v  <- exec_aux s ;; *)
+                (* ⟨ r2 ⟩ '(existT pc vs) <- wip_pattern_match PVartoLVar pat v ;; *)
+                (* pushspops vs (exec_aux (rhs pc)) *)
             | stm_bind _ _ =>
                 error
                   (fun δ h =>
@@ -1599,7 +1704,7 @@ Module Type SymbolicExecOn
               ⟨ r12 ⟩ _ <- assume_formula (formula_relop bop.eq x1 t1) ;;
               replay k (@acc_sub (MkWorld (Σ-x∷σ) ctx.nil) _ ζ entails_nil ∘ r12)
         | SymProp.pattern_match s pat rhs => fun r P => SymProp.block (* FIXME *)
-        | pattern_match_var x pat rhs => fun r P => SymProp.block (* FIXME *)
+        | SymProp.pattern_match_var x pat rhs => fun r P => SymProp.block (* FIXME *)
         | debug b k => fun r01 P => debug (subst b (sub_acc r01)) (replay k r01 P)
         end.
 
