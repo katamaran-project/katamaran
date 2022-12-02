@@ -757,23 +757,22 @@ Module bv.
       now apply truncn_idemp.
     Qed.
 
-    Lemma add_comm {n} {x y}: @add n x y = @add n y x.
-    Proof.
-      apply bin_inj_eq2n. cbn.
-      f_equiv.
-      Lia.lia.
-    Qed.
-
     Lemma eq2R `{Reflexive A R} {x y} : x = y -> R x y.
     Proof. now induction 1. Qed.
 
+    Local Ltac solve_eq2n := (apply bin_inj_eq2n; cbn; rewrite ?truncn_eq2n; apply eq2R; try Lia.lia).
+
+    Lemma add_comm {n} {x y}: @add n x y = @add n y x.
+    Proof. solve_eq2n. Qed.
+
     Lemma add_assoc {n} {x y z}: @add n x (add y z) = @add n (add x y) z.
-    Proof.
-      apply bin_inj_eq2n; cbn.
-      rewrite ?truncn_eq2n.
-      apply eq2R.
-      Lia.lia.
-    Qed.
+    Proof. solve_eq2n. Qed.
+
+    Lemma add_zero_l {n} {x} : @add n x (of_N 0) = x.
+    Proof. solve_eq2n. Qed.
+
+    Lemma add_zero_r {n} {x} : @add n (of_N 0) x = x.
+    Proof. solve_eq2n. Qed.
 
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
     Proof.
@@ -791,20 +790,10 @@ Module bv.
     Qed.
 
     Lemma mul_comm {n} {x y}: @mul n x y = @mul n y x.
-    Proof.
-      apply bin_inj_eq2n; cbn.
-      rewrite ?truncn_eq2n.
-      apply eq2R.
-      Lia.lia.
-    Qed.
+    Proof. solve_eq2n. Qed.
 
     Lemma mul_assoc {n} {x y z}: @mul n x (mul y z) = @mul n (mul x y) z.
-    Proof.
-      apply bin_inj_eq2n; cbn.
-      rewrite ?truncn_eq2n.
-      apply eq2R.
-      Lia.lia.
-    Qed.
+    Proof. solve_eq2n. Qed.
 
     Lemma mul_one_r {n} {x}: @mul n x (of_N 1) = x.
     Proof.
