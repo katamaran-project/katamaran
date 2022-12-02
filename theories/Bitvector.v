@@ -532,14 +532,15 @@ Module bv.
     Definition signed {n} (x : bv n) : Z :=
       let u := unsigned x in
       if msb x then u - Zpower.two_power_nat n else u.
+    Definition truncz (n : nat) := fun y => Z.modulo y (Zpower.two_power_nat n).
     Definition of_Z {n} (x : Z) : bv n :=
-      of_N (Z.to_N (Z.modulo x (Zpower.two_power_nat n))).
+      of_N (Z.to_N (truncz n x)).
 
   End Integers.
 
   Section EqMod2N.
     Definition eq2np (n : nat) := fun x y => trunc n x = trunc n y.
-    Arguments eq2np n x y : simpl never.
+    #[global] Arguments eq2np n x y : simpl never.
     Lemma eq2np_refl {n} : Reflexive (eq2np n).
     Proof. now intros x. Qed.
     Lemma eq2np_sym {n} : Symmetric (eq2np n).
@@ -553,7 +554,7 @@ Module bv.
     #[export] Instance eq2np_rewriterelation {n} : RewriteRelation (eq2np n). Defined.
 
     Definition eq2n (n : nat) := fun x y => truncn n x = truncn n y.
-    Arguments eq2n n x y : simpl never.
+    #[global] Arguments eq2n n x y : simpl never.
     Lemma eq2n_refl {n} : Reflexive (eq2n n).
     Proof. now intros [|px]. Qed.
     Lemma eq2n_sym {n} : Symmetric (eq2n n).
@@ -570,10 +571,33 @@ Module bv.
 
     #[export] Instance eq2n_rewriterelation {n} : RewriteRelation (eq2n n). Defined.
 
+    Definition eq2nz (n : nat) := fun x y => truncz n x = truncz n y.
+    #[global] Arguments eq2nz n x y : simpl never.
+    Lemma eq2nz_refl {n} : Reflexive (eq2nz n).
+    Proof. now intros [|px]. Qed.
+    Lemma eq2nz_sym {n} : Symmetric (eq2nz n).
+    Proof. now intros [|px] [|py]. Qed.
+    Lemma eq2nz_trans {n} : Transitive (eq2nz n).
+    Proof. intros [|px] [|py] [|pz]; intuition. Qed.
+    #[export] Instance eq2nz_setoid {n} : Equivalence (eq2nz n).
+    Proof.
+      constructor; auto using eq2nz_refl, eq2nz_sym, eq2nz_trans.
+    Qed.
+
+    Lemma truncz_zero {x} : truncz 0 x = 0%Z.
+    Proof. unfold truncz. now rewrite Zdiv.Zmod_1_r. Qed.
+    Lemma eq2nz_zero {x y} : eq2nz 0 x y.
+    Proof. unfold eq2nz. now rewrite ?truncz_zero. Qed.
+
+    #[export] Instance eq2nz_rewriterelation {n} : RewriteRelation (eq2nz n). Defined.
+
     #[export] Instance trunc_Proper {n} : Proper (eq2np n ==> eq2n n) (trunc n).
     Proof. now intros x y ->. Qed.
 
     #[export] Instance truncn_Proper {n : nat} : Proper (eq2n n ==> eq) (truncn n).
+    Proof. now intros x y H. Qed.
+
+    #[export] Instance truncz_Proper {n : nat} : Proper (eq2nz n ==> eq) (truncz n).
     Proof. now intros x y H. Qed.
 
     #[export] Instance of_N_Proper {n} : Proper (eq2n n ==> eq) (@of_N n).
@@ -581,6 +605,9 @@ Module bv.
       intros [|px] [|py]; cbn in *; intuition;
       now eapply (mk_proof_irr H).
     Qed.
+
+    #[export] Instance of_Z_Proper {n} : Proper (eq2nz n ==> eq) (@of_Z n).
+    Proof. unfold of_Z. now intros x y <-. Qed.
 
     #[export] Instance double_proper {n} : Proper (eq2n n ==> eq2n (S n)) N.double.
     Proof.
@@ -689,10 +716,9 @@ Module bv.
 
     Lemma truncn_add : forall {n x y}, eq2n n (x + y) (truncn n x + truncn n y).
     Proof.
-      intros n x y.
-      unfold eq2n.
+      intros n x y. unfold eq2n.
       rewrite ?truncn_spec.
-      rewrite <-N.add_mod; auto using exp2_nzero.
+      now apply N.add_mod, exp2_nzero.
     Qed.
 
     #[export] Instance Nadd_Proper {n} : Proper (eq2n n ==> eq2n n ==> eq2n n) N.add.
@@ -711,6 +737,16 @@ Module bv.
     Qed.
 
     #[export] Instance bin_Proper {n} : Proper (eq ==> eq2n n) (@bin n).
+    Proof.
+      now intros x y <-.
+    Qed.
+
+    #[export] Instance unsigned_Proper {n} : Proper (eq ==> eq2nz n) (@unsigned n).
+    Proof.
+      now intros x y <-.
+    Qed.
+
+    #[export] Instance signed_Proper {n} : Proper (eq ==> eq2nz n) (@unsigned n).
     Proof.
       now intros x y <-.
     Qed.
@@ -764,6 +800,22 @@ Module bv.
     Lemma mul_assoc {n} {x y z}: @mul n x (mul y z) = @mul n (mul x y) z.
     Proof.
       rewrite <-?(of_N_bin x), <-(of_N_bin y), <-(of_N_bin z).
+      rewrite ?of_N_respects_mul.
+      f_equal.
+      Lia.lia.
+    Qed.
+
+    Lemma mul_one_r {n} {x}: @mul n x (of_N 1) = x.
+    Proof.
+      rewrite <-?(of_N_bin x).
+      rewrite ?of_N_respects_mul.
+      f_equal.
+      Lia.lia.
+    Qed.
+
+    Lemma mul_one_l {n} {x}: @mul n (of_N 1) x = x.
+    Proof.
+      rewrite <-?(of_N_bin x).
       rewrite ?of_N_respects_mul.
       f_equal.
       Lia.lia.
