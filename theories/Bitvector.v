@@ -730,15 +730,15 @@ Module bv.
       now rewrite <-(@truncn_add n x' y').
     Qed.
 
-    Lemma of_N_respects_add {n} {x y : N} : add  (@of_N n x) (of_N y) = of_N (x + y).
-    Proof.
-      unfold add.
-      now rewrite ?bin_of_N_eq2n.
-    Qed.
-
     #[export] Instance bin_Proper {n} : Proper (eq ==> eq2n n) (@bin n).
     Proof.
       now intros x y <-.
+    Qed.
+
+    Lemma bin_inj_eq2n {n x y} : eq2n n (@bin n x) (bin y) -> x = y.
+    Proof.
+      intros Hbxy.
+      now rewrite <-(of_N_bin x), <-(of_N_bin y), Hbxy.
     Qed.
 
     #[export] Instance unsigned_Proper {n} : Proper (eq ==> eq2nz n) (@unsigned n).
@@ -751,26 +751,33 @@ Module bv.
       now intros x y <-.
     Qed.
 
+    Lemma truncn_eq2n {n x} : eq2n n (truncn n x) x.
+    Proof.
+      unfold eq2n.
+      now apply truncn_idemp.
+    Qed.
+
     Lemma add_comm {n} {x y}: @add n x y = @add n y x.
     Proof.
-      rewrite <-?(of_N_bin x), <-(of_N_bin y).
-      rewrite ?of_N_respects_add.
-      f_equal.
+      apply bin_inj_eq2n. cbn.
+      f_equiv.
       Lia.lia.
     Qed.
 
+    Lemma eq2R `{Reflexive A R} {x y} : x = y -> R x y.
+    Proof. now induction 1. Qed.
+
     Lemma add_assoc {n} {x y z}: @add n x (add y z) = @add n (add x y) z.
     Proof.
-      rewrite <-?(of_N_bin x), <-(of_N_bin y), <-(of_N_bin z).
-      rewrite ?of_N_respects_add.
-      f_equal.
+      apply bin_inj_eq2n; cbn.
+      rewrite ?truncn_eq2n.
+      apply eq2R.
       Lia.lia.
     Qed.
 
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
     Proof.
-      intros n x y.
-      unfold eq2n.
+      intros n x y. unfold eq2n.
       rewrite ?truncn_spec.
       rewrite <-N.mul_mod; auto using exp2_nzero.
     Qed.
@@ -779,45 +786,39 @@ Module bv.
     Proof.
       intros x x' eqx y y' eqy.
       unfold eq2n.
-      rewrite (@truncn_mul n x y), eqx, eqy.
-      now rewrite <-(@truncn_mul n x' y').
-    Qed.
-
-    Lemma of_N_respects_mul {n} {x y : N} : mul (@of_N n x) (of_N y) = of_N (x * y).
-    Proof.
-      unfold mul.
-      now rewrite ?bin_of_N_eq2n.
+      rewrite truncn_mul, eqx, eqy.
+      now rewrite <-truncn_mul.
     Qed.
 
     Lemma mul_comm {n} {x y}: @mul n x y = @mul n y x.
     Proof.
-      rewrite <-?(of_N_bin x), <-(of_N_bin y).
-      rewrite ?of_N_respects_mul.
-      f_equal.
+      apply bin_inj_eq2n; cbn.
+      rewrite ?truncn_eq2n.
+      apply eq2R.
       Lia.lia.
     Qed.
 
     Lemma mul_assoc {n} {x y z}: @mul n x (mul y z) = @mul n (mul x y) z.
     Proof.
-      rewrite <-?(of_N_bin x), <-(of_N_bin y), <-(of_N_bin z).
-      rewrite ?of_N_respects_mul.
-      f_equal.
+      apply bin_inj_eq2n; cbn.
+      rewrite ?truncn_eq2n.
+      apply eq2R.
       Lia.lia.
     Qed.
 
     Lemma mul_one_r {n} {x}: @mul n x (of_N 1) = x.
     Proof.
-      rewrite <-?(of_N_bin x).
-      rewrite ?of_N_respects_mul.
-      f_equal.
+      apply bin_inj_eq2n; cbn.
+      rewrite truncn_eq2n, (@truncn_eq2n n 1).
+      apply eq2R.
       Lia.lia.
     Qed.
 
     Lemma mul_one_l {n} {x}: @mul n (of_N 1) x = x.
     Proof.
-      rewrite <-?(of_N_bin x).
-      rewrite ?of_N_respects_mul.
-      f_equal.
+      apply bin_inj_eq2n; cbn.
+      rewrite truncn_eq2n, (@truncn_eq2n n 1).
+      apply eq2R.
       Lia.lia.
     Qed.
 
