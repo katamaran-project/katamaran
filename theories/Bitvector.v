@@ -574,11 +574,11 @@ Module bv.
     Definition eq2nz (n : nat) := fun x y => truncz n x = truncz n y.
     #[global] Arguments eq2nz n x y : simpl never.
     Lemma eq2nz_refl {n} : Reflexive (eq2nz n).
-    Proof. now intros [|px]. Qed.
+    Proof. now intros. Qed.
     Lemma eq2nz_sym {n} : Symmetric (eq2nz n).
-    Proof. now intros [|px] [|py]. Qed.
+    Proof. now intros. Qed.
     Lemma eq2nz_trans {n} : Transitive (eq2nz n).
-    Proof. intros [|px] [|py] [|pz]; intuition. Qed.
+    Proof. intros; intuition. Qed.
     #[export] Instance eq2nz_setoid {n} : Equivalence (eq2nz n).
     Proof.
       constructor; auto using eq2nz_refl, eq2nz_sym, eq2nz_trans.
