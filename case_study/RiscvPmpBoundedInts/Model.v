@@ -297,15 +297,40 @@ Module RiscvPmpModel2.
       ValidLemma RiscvPmpSpecification.lemma_close_pmp_entries.
     Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed.
 
+    Lemma in_seqBv n v min len :
+      (bv.bin min + N.of_nat len < bv.exp2 n)%N ->
+      (min <=ᵘ v) -> (v <ᵘ bv.add min (bv.of_nat len)) ->
+        v ∈ @seqBv n min len.
+    Proof.
+      unfold bv.ule, bv.ult, seqBv.
+      intros Hbits mla alm.
+      apply (elem_of_list_fmap_1_alt bv.of_Z _ (bv.unsigned v)).
+      - apply elem_of_seqZ.
+        unfold bv.unsigned.
+        enough ((bv.bin (min + bv.of_nat len)) = (N.add (bv.bin min) (N.of_nat len))) by Lia.lia.
+        apply (@bv.eq2n_to_eq_lt n); try assumption.
+        + apply bv.is_wf_spec.
+          now destruct (min + bv.of_nat len).
+        + cbn.
+          rewrite bv.truncn_eq2n.
+          apply bv.eq2R.
+          f_equal.
+          rewrite bv.truncn_spec.
+          rewrite N.mod_small; Lia.lia.
+      - now rewrite bv.of_Z_unsigned.
+    Qed.
+
+
     Lemma in_liveAddrs : forall (addr : Addr),
         (minAddr <=ᵘ addr) ->
-        (addr <=ᵘ maxAddr) ->
+        (addr <ᵘ maxAddr) ->
         addr ∈ liveAddrs.
     Proof.
-      intros addr Hmin Hmax.
-      (* apply elem_of_seqZ. *)
-      (* lia. *)
-    Admitted.
+      unfold liveAddrs, maxAddr.
+      intros.
+      apply in_seqBv;
+        eauto using enough_addr_bits.
+    Qed.
 
     Lemma in_liveAddrs_split : forall (addr : Addr) (bytes : nat),
         (minAddr <=ᵘ addr) ->

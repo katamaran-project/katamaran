@@ -275,6 +275,99 @@ Module bv.
     Definition of_N_bin {n} (x : bv n) : of_N (bin x) = x :=
       match x with mk bs w => of_N_wf bs w end.
 
+    Definition maybe_succ_double (b : bool) (n : N) : N :=
+      if b then N.succ_double n else N.double n.
+
+    Lemma maybe_succ_double_spec b x : maybe_succ_double b x = (N.b2n b + x * 2)%N.
+    Proof.
+      destruct b; cbn -[N.mul];
+      rewrite ?N.succ_double_spec, ?N.double_spec;
+      Lia.lia.
+    Qed.
+
+    Lemma div2_mod2 : forall x, x = maybe_succ_double (N.odd x) (N.div2 x).
+    Proof.
+      eapply N.binary_ind; cbn; try Lia.lia.
+      - intros n _. now destruct n.
+      - intros n _. now destruct n.
+    Qed.
+
+    Lemma maybe_succ_double_truncn {n b x} : truncn (S n) (maybe_succ_double b x) = maybe_succ_double b (truncn n x).
+    Proof.
+      destruct b;
+      now rewrite ?truncn_double, ?truncn_succ_double.
+    Qed.
+
+    Lemma maybe_succ_double_mod_double b x y :
+      y <> 0%N ->
+      (maybe_succ_double b x mod (N.double y))%N = maybe_succ_double b (x mod y)%N.
+    Proof.
+      intros ynz.
+      rewrite ?maybe_succ_double_spec, ?N.double_spec.
+      apply eq_sym.
+      apply (N.mod_unique _ _ (x / y)).
+      - assert (N.b2n b < 2)%N by (destruct b; now cbn).
+        assert (x mod y < y)%N by (now apply N.mod_lt).
+        now Lia.lia.
+      - rewrite (N.div_mod' x y) at 1.
+        now Lia.lia.
+    Qed.
+
+    Lemma exp2_nzero n : exp2 n <> 0%N.
+    Proof.
+      induction n; cbn.
+      - auto.
+      - change 0%N with (N.double 0).
+        now intros ?%N.double_inj.
+    Qed.
+
+    Lemma exp2_spec {n} : exp2 n = N.pow 2 (N.of_nat n).
+    Proof.
+      induction n; cbn -[N.pow N.of_nat]; try easy.
+      rewrite Nnat.Nat2N.inj_succ.
+      rewrite N.pow_succ_r'.
+      rewrite N.double_spec.
+      Lia.lia.
+    Qed.
+
+    Lemma truncn_spec {n x} : truncn n x = (x mod (exp2 n))%N.
+    Proof.
+      revert x.
+      induction n.
+      - intros. cbn. rewrite N.mod_1_r.
+        now destruct x.
+      - intros x; cbn.
+        rewrite (div2_mod2 x).
+        rewrite maybe_succ_double_mod_double.
+        rewrite maybe_succ_double_truncn.
+        now rewrite (IHn (N.div2 x)).
+        now apply exp2_nzero.
+    Qed.
+
+    Lemma at_most_spec {n x} : Is_true (at_most n x) <-> (N.pos x < exp2 n)%N.
+    Proof.
+      revert x.
+      induction n; cbn.
+      - intuition.
+      - destruct x.
+        + rewrite IHn.
+          Lia.lia.
+        + rewrite IHn.
+          Lia.lia.
+        + intuition.
+          generalize (exp2_nzero n).
+          destruct (exp2 n); Lia.lia.
+    Qed.
+
+    Lemma is_wf_spec {n x} : Is_true (is_wf n x) <-> (x < exp2 n)%N.
+    Proof.
+      destruct x; cbn.
+      - intuition.
+        generalize (exp2_nzero n).
+        now destruct (exp2 n).
+      - eapply at_most_spec.
+    Qed.
+
   End Conversion.
 
   Section ListLike.
@@ -536,6 +629,24 @@ Module bv.
     Definition of_Z {n} (x : Z) : bv n :=
       of_N (Z.to_N (truncz n x)).
 
+    Definition truncz_idemp (n : nat) (x : Z) :
+      truncz n (truncz n x) = truncz n x.
+    Proof.
+      unfold truncz.
+      now rewrite Z.mod_mod.
+    Qed.
+
+    Lemma to_N_truncz {n x} : Z.to_N (truncz n (Z.of_N x)) = truncn n x.
+    Proof.
+      unfold truncz.
+      rewrite truncn_spec, exp2_spec, Zpower.two_power_nat_equiv.
+      rewrite Znat.Z2N.inj_mod; try Lia.lia.
+      rewrite Znat.N2Z.id.
+      rewrite Znat.Z2N.inj_pow; try Lia.lia.
+      repeat f_equal.
+      now Lia.lia.
+    Qed.
+
   End Integers.
 
   Section EqMod2N.
@@ -594,6 +705,24 @@ Module bv.
     #[export] Instance trunc_Proper {n} : Proper (eq2np n ==> eq2n n) (trunc n).
     Proof. now intros x y ->. Qed.
 
+    Lemma trunc_eq2n {n p} : eq2n n (trunc n p) (N.pos p).
+    Proof.
+      unfold eq2n.
+      now rewrite truncn_trunc.
+    Qed.
+
+    Lemma truncn_eq2n {n x} : eq2n n (truncn n x) x.
+    Proof.
+      unfold eq2n.
+      now apply truncn_idemp.
+    Qed.
+
+    Lemma truncz_eq2nz {n x} : eq2nz n (truncz n x) x.
+    Proof.
+      unfold eq2nz.
+      now apply truncz_idemp.
+    Qed.
+
     #[export] Instance truncn_Proper {n : nat} : Proper (eq2n n ==> eq) (truncn n).
     Proof. now intros x y H. Qed.
 
@@ -609,6 +738,13 @@ Module bv.
     #[export] Instance of_Z_Proper {n} : Proper (eq2nz n ==> eq) (@of_Z n).
     Proof. unfold of_Z. now intros x y <-. Qed.
 
+    Lemma of_Z_unsigned n v : @of_Z n (unsigned v) = v.
+    Proof.
+      unfold unsigned, of_Z.
+      rewrite to_N_truncz, truncn_eq2n.
+      now rewrite bv.of_N_bin.
+    Qed.
+
     #[export] Instance double_proper {n} : Proper (eq2n n ==> eq2n (S n)) N.double.
     Proof.
       intros x x' Hx.
@@ -622,6 +758,19 @@ Module bv.
       unfold eq2n.
       now rewrite ?truncn_succ_double, Hx.
     Qed.
+
+    Lemma eq2n_to_eq_lt n {x y} : (x < exp2 n)%N -> (y < exp2 n)%N -> eq2n n x y -> x = y.
+    Proof.
+      unfold eq2n.
+      rewrite ?truncn_spec.
+      intros xle yle xmeqy.
+      rewrite (N.div_mod x (exp2 n)); try apply exp2_nzero.
+      rewrite (N.div_mod y (exp2 n)); try apply exp2_nzero.
+      rewrite xmeqy.
+      do 2 f_equal.
+      now rewrite ?N.div_small.
+    Qed.
+
   End EqMod2N.
   Section Arithmetic.
 
@@ -642,76 +791,10 @@ Module bv.
     Instance mul_Proper {n} : Proper (eq ==> eq ==> eq) (@mul n).
     Proof. intuition. Qed.
 
-    Lemma trunc_eq2n {n p} : eq2n n (trunc n p) (N.pos p).
-    Proof.
-      unfold eq2n.
-      now rewrite truncn_trunc.
-    Qed.
-
     Lemma bin_of_N_eq2n {n x} : eq2n n (@bin n (@of_N n x)) x.
     Proof.
       destruct x; cbn;
         now auto using trunc_eq2n.
-    Qed.
-
-    Definition maybe_succ_double (b : bool) (n : N) : N :=
-      if b then N.succ_double n else N.double n.
-
-    Lemma maybe_succ_double_spec b x : maybe_succ_double b x = (N.b2n b + x * 2)%N.
-    Proof.
-      destruct b; cbn -[N.mul];
-      rewrite ?N.succ_double_spec, ?N.double_spec;
-      Lia.lia.
-    Qed.
-
-    Lemma div2_mod2 : forall x, x = maybe_succ_double (N.odd x) (N.div2 x).
-    Proof.
-      eapply N.binary_ind; cbn; try Lia.lia.
-      - intros n _. now destruct n.
-      - intros n _. now destruct n.
-    Qed.
-
-    Lemma maybe_succ_double_truncn {n b x} : truncn (S n) (maybe_succ_double b x) = maybe_succ_double b (truncn n x).
-    Proof.
-      destruct b;
-      now rewrite ?truncn_double, ?truncn_succ_double.
-    Qed.
-
-    Lemma maybe_succ_double_mod_double b x y :
-      y <> 0%N ->
-      (maybe_succ_double b x mod (N.double y))%N = maybe_succ_double b (x mod y)%N.
-    Proof.
-      intros ynz.
-      rewrite ?maybe_succ_double_spec, ?N.double_spec.
-      apply eq_sym.
-      apply (N.mod_unique _ _ (x / y)).
-      - assert (N.b2n b < 2)%N by (destruct b; now cbn).
-        assert (x mod y < y)%N by (now apply N.mod_lt).
-        now Lia.lia.
-      - rewrite (N.div_mod' x y) at 1.
-        now Lia.lia.
-    Qed.
-
-    Lemma exp2_nzero n : exp2 n <> 0%N.
-    Proof.
-      induction n; cbn.
-      - auto.
-      - change 0%N with (N.double 0).
-        now intros ?%N.double_inj.
-    Qed.
-
-    Lemma truncn_spec {n x} : truncn n x = (x mod (exp2 n))%N.
-    Proof.
-      revert x.
-      induction n.
-      - intros. cbn. rewrite N.mod_1_r.
-        now destruct x.
-      - intros x; cbn.
-        rewrite (div2_mod2 x).
-        rewrite maybe_succ_double_mod_double.
-        rewrite maybe_succ_double_truncn.
-        now rewrite (IHn (N.div2 x)).
-        now apply exp2_nzero.
     Qed.
 
     Lemma truncn_add : forall {n x y}, eq2n n (x + y) (truncn n x + truncn n y).
@@ -749,12 +832,6 @@ Module bv.
     #[export] Instance signed_Proper {n} : Proper (eq ==> eq2nz n) (@unsigned n).
     Proof.
       now intros x y <-.
-    Qed.
-
-    Lemma truncn_eq2n {n x} : eq2n n (truncn n x) x.
-    Proof.
-      unfold eq2n.
-      now apply truncn_idemp.
     Qed.
 
     Lemma eq2R `{Reflexive A R} {x y} : x = y -> R x y.
