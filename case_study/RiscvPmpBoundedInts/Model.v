@@ -297,30 +297,6 @@ Module RiscvPmpModel2.
       ValidLemma RiscvPmpSpecification.lemma_close_pmp_entries.
     Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed.
 
-    Lemma in_seqBv n v min len :
-      (bv.bin min + N.of_nat len < bv.exp2 n)%N ->
-      (min <=ᵘ v) -> (v <ᵘ bv.add min (bv.of_nat len)) ->
-        v ∈ @seqBv n min len.
-    Proof.
-      unfold bv.ule, bv.ult, seqBv.
-      intros Hbits mla alm.
-      apply (elem_of_list_fmap_1_alt bv.of_Z _ (bv.unsigned v)).
-      - apply elem_of_seqZ.
-        unfold bv.unsigned.
-        enough ((bv.bin (min + bv.of_nat len)) = (N.add (bv.bin min) (N.of_nat len))) by Lia.lia.
-        apply (@bv.eq2n_to_eq_lt n); try assumption.
-        + apply bv.is_wf_spec.
-          now destruct (min + bv.of_nat len).
-        + cbn.
-          rewrite bv.truncn_eq2n.
-          apply bv.eq2R.
-          f_equal.
-          rewrite bv.truncn_spec.
-          rewrite N.mod_small; Lia.lia.
-      - now rewrite bv.of_Z_unsigned.
-    Qed.
-
-
     Lemma in_liveAddrs : forall (addr : Addr),
         (minAddr <=ᵘ addr) ->
         (addr <ᵘ maxAddr) ->
@@ -328,24 +304,41 @@ Module RiscvPmpModel2.
     Proof.
       unfold liveAddrs, maxAddr.
       intros.
-      apply in_seqBv;
+      apply bv.in_seqBv;
         eauto using enough_addr_bits.
     Qed.
 
+    Opaque minAddr.
+    Opaque lenAddr.
+    Opaque xlenbits.
+
     Lemma in_liveAddrs_split : forall (addr : Addr) (bytes : nat),
         (minAddr <=ᵘ addr) ->
-        (addr + (bv.of_nat bytes) <=ᵘ maxAddr) ->
-        exists l1 l2, liveAddrs = l1 ++ ((map (fun offset => addr + (bv.of_nat offset)) (seq 0 bytes))  ++ l2).
+        (addr + (bv.of_nat bytes) <ᵘ maxAddr) ->
+        exists l1 l2, liveAddrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
     Proof.
-      intros addr Hmin Hmax.
+      unfold maxAddr.
+      intros addr bytes Hmin Hmax.
       unfold liveAddrs.
-      (* exists (seqZ minAddr (addr - minAddr)). *)
-      (* exists (seqZ (addr + 1) (maxAddr - addr)). *)
-      (* change [addr] with (seqZ addr 1). *)
-      (* rewrite <-seqZ_app; try lia. *)
-      (* replace addr with (minAddr + (addr - minAddr))%Z at 2 by lia. *)
-      (* rewrite <-seqZ_app; try lia. *)
-      (* now f_equal; lia. *)
+      exists (bv.seqBv minAddr (N.to_nat (bv.bin addr - bv.bin minAddr))%N).
+      exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (N.to_nat (bv.bin minAddr + N.of_nat lenAddr - bv.bin addr - N.of_nat bytes))).
+      rewrite <-(bv.seqBv_app addr).
+      replace addr with (minAddr + bv.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr))) at 2.
+      rewrite <-bv.seqBv_app; try lia.
+      f_equal.
+      rewrite <-(bv.of_N_bin minAddr); cbn.
+      rewrite (bv.truncn_wf xlenbits (bv.bin minAddr)).
+      replace (bv.truncn xlenbits (bv.bin minAddr + bv.truncn xlenbits (N.of_nat lenAddr))) with (bv.bin minAddr + N.of_nat lenAddr)%N.
+      unfold bv.ule in Hmin.
+      (* pff reasoning in N is way too hard: move to Z earlier? *)
+      admit.
+      admit.
+      by destruct minAddr.
+      rewrite N2Nat.id.
+      admit.
+      admit.
+      rewrite N2Nat.id.
+      admit.
     Admitted.
 
     Lemma extract_pmp_ptsto_sound (bytes : nat) :
@@ -364,11 +357,10 @@ Module RiscvPmpModel2.
       iSplitR "Haddrs".
       - iIntros "Hpaddr".
         iFrame.
+        admit.
         (* unfold interp_ptstomem.
-        now iIntros "_".
-      - iApply "Hpaddr".
-        iPureIntro.
-        now exists acc. *)
+        now iIntros "_". *)
+      - admit.
     Admitted.
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :

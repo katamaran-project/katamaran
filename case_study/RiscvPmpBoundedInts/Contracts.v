@@ -1171,7 +1171,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              lemma_precondition    :=
                 asn_pmp_addr_access (term_var "entries") (term_var p)
                 ∗ term_val ty_xlenbits minAddr <=ᵘ term_var paddr
-                ∗ term_binop bop.bvadd (term_var paddr) bv_bytes <=ᵘ term_val ty_xlenbits maxAddr
+                ∗ term_binop bop.bvadd (term_var paddr) bv_bytes <ᵘ term_val ty_xlenbits maxAddr
                 ∗ asn_pmp_access (term_var paddr) bv_bytes (term_var "entries") (term_var p) (term_var acc);
              lemma_postcondition   :=
                 asn_pmp_addr_access_without (term_var paddr) bytes (term_var "entries") (term_var p)
