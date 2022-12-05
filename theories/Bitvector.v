@@ -629,6 +629,12 @@ Module bv.
     Definition of_Z {n} (x : Z) : bv n :=
       of_N (Z.to_N (truncz n x)).
 
+    Lemma unsigned_inj {n} (x y : bv n) : unsigned x = unsigned y -> x = y.
+    Proof.
+      intros.
+      now apply bin_inj, numbers.Z_of_N_inj.
+    Qed.
+
     Definition truncz_idemp (n : nat) (x : Z) :
       truncz n (truncz n x) = truncz n x.
     Proof.
@@ -1263,6 +1269,32 @@ Module bv.
     Infix "<ᵘ?"  := (@ultb _) : bv_scope.
 
   End notations.
+
+  Section DropTruncs.
+    Lemma truncn_small {n x} : (x < exp2 n)%N -> truncn n x = x.
+    Proof.
+      intros.
+      now apply truncn_wf, is_wf_spec.
+    Qed.
+
+    Lemma bin_add_small {n x y} : (@bin n x + bin y < exp2 n)%N ->
+                            bin (x + y) = (bin x + bin y)%N.
+    Proof.
+      destruct x, y.
+      now apply truncn_small.
+    Qed.
+
+    Lemma bin_of_N_small {n x} : (x < exp2 n)%N -> @bin n (of_N x) = x.
+    Proof.
+      now apply truncn_small.
+    Qed.
+
+    Lemma bin_of_nat_small {n x} : (N.of_nat x < exp2 n)%N ->
+                                   @bin n (of_nat x) = N.of_nat x.
+    Proof.
+      now apply bin_of_N_small.
+    Qed.
+  End DropTruncs.
 
   Section Sequences.
     Import List.
