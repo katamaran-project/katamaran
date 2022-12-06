@@ -335,7 +335,7 @@ Section FunDefKit.
                                        exp_var "cursor" + exp_var "imm"
                                      ] in
        let: p :: bool := call write_allowed (exp_var "perm") in
-       stm_assert p (exp_string "Err: [store] no read permission") ;;
+       stm_assert p (exp_string "Err: [store] no write permission") ;;
        let: w :: ty.word := call read_reg (exp_var "rs2") in
        let: "tmp" := exp_val ty.perm RW in
        use lemma subperm_not_E [exp_var "tmp"; exp_var "perm"] ;;
