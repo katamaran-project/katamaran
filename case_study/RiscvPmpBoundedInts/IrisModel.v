@@ -63,11 +63,11 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Definition memGS : gFunctors -> Set := mcMemGS.
     Definition memΣ : gFunctors := gen_heapΣ Addr MemVal.
 
-    Definition liveAddrs := bv_seq minAddr lenAddr.
-
+    Definition seqBv {n} (min : bv n) (len : nat) := List.map (@bv.of_Z n) (seqZ (bv.unsigned min) (Z.of_nat len)).
+    Definition liveAddrs := seqBv minAddr lenAddr.
     Lemma NoDup_liveAddrs : NoDup liveAddrs.
-      now eapply NoDup_seq_bv.
-    Qed.
+    Proof. now eapply Prelude.nodup_fixed. Qed.
+    
     #[global] Arguments liveAddrs : simpl never.
 
     Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).

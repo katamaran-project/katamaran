@@ -68,6 +68,8 @@ Definition Byte : Set     := bv byte.
 Definition minAddr : Addr := bv.of_N 0.
 Definition lenAddr : nat  := 100.
 Definition maxAddr : Addr := bv.add minAddr (bv.of_nat lenAddr).
+Lemma enough_addr_bits : (bv.bin minAddr + N.of_nat lenAddr < bv.exp2 xlenbits)%N.
+Proof. now compute. Qed.
 
 Inductive Privilege : Set :=
 | User

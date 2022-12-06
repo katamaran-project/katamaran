@@ -11,7 +11,7 @@ defaults: &defaults
 
 jobs:
   coq-8-15: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.15.2_iris-3.6.0_equations-1.3"}]}
-  coq-8-16: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.16.0_iris-3.6.0_equations-1.3"}]}
+  coq-8-16: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.16.1_iris-3.6.0_equations-1.3"}]}
 
 workflows:
   version: 2
