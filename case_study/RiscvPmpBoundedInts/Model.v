@@ -388,17 +388,17 @@ Module RiscvPmpModel2.
         interp_pmp_addr_access,
         interp_ptsto,
         MemVal, Word.
-      destruct (@in_liveAddrs_split paddr bytes Hlemin Hlemax) as (l1 & l2 & eq).
-      rewrite eq. (* TODO: we need to get ptsto chuncks for the range [paddr,paddr+bytes] *)
-      rewrite ?big_opL_app.
-      iDestruct "Hmem" as "(Hmem1 & Haddrs & Hmem2)".
-      iSplitR "Haddrs".
-      - iIntros "Hpaddr".
-        iFrame.
-        admit.
-        (* unfold interp_ptstomem.
-        now iIntros "_". *)
-      - admit.
+      (* destruct (@in_liveAddrs_split paddr bytes Hlemin Hlemax) as (l1 & l2 & eq). *)
+      (* rewrite eq. (* TODO: we need to get ptsto chuncks for the range [paddr,paddr+bytes] *) *)
+      (* rewrite ?big_opL_app. *)
+      (* iDestruct "Hmem" as "(Hmem1 & Haddrs & Hmem2)". *)
+      (* iSplitR "Haddrs". *)
+      (* - iIntros "Hpaddr". *)
+      (*   iFrame. *)
+      (*   admit. *)
+      (*   (* unfold interp_ptstomem. *)
+      (*   now iIntros "_". *) *)
+      (* - admit. *)
     Admitted.
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :
