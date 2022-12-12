@@ -418,9 +418,7 @@ Section Adequacy.
     eapply map_Forall_lookup_2.
     intros [σ r] x eq.
     unfold RegStore_to_map in eq.
-    remember (list_to_map _ !! _) as o in eq.
-    destruct o; inversion eq; subst.
-    assert (eq' := eq_sym Heqo).
+    destruct (list_to_map _ !! _) eqn:eq' in eq; inversion eq; subst.
     rewrite <-elem_of_list_to_map in eq'.
     - eapply elem_of_list_fmap_2 in eq'.
       destruct eq' as ([σ' r'] & eq2 & eq3).
