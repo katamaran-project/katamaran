@@ -101,22 +101,14 @@ Module RiscvPmpIrisInstance <:
       [∗ list] offset ∈ seq 0 width,
         interp_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
 
-    Fixpoint interp_ptstomem {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ.
-    Proof.
-      destruct width.
-      - exact True%I.
-      - destruct (bv.appView byte (width * byte) bytes) as [byte bytes].
-        exact (interp_ptsto addr byte ∗ interp_ptstomem width (bv.one xlenbits + addr) bytes)%I.
-        Show Proof.
-    Defined.
-
-    (* Fixpoint interp_ptstomem {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
+    Fixpoint interp_ptstomem {width : nat} (addr : Addr) : bv (width * byte) -> iProp Σ :=
       match width with
-      | O   => True
+      | O   => fun _ => True
       | S w =>
-          let (byte, bytes) := bv.appView byte (w * byte) bytes in
-          interp_ptsto addr byte ∗ interp_ptstomem (bv.one xlenbits + addr) bytes
-      end. *)
+          fun bytes =>
+            let (byte, bytes) := bv.appView byte (w * byte) bytes in
+            interp_ptsto addr byte ∗ interp_ptstomem (bv.one xlenbits + addr) bytes
+      end%I.
 
     Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       [∗ list] a ∈ addrs,
