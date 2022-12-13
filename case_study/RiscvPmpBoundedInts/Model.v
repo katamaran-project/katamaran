@@ -440,22 +440,23 @@ Module RiscvPmpModel2.
         (interp_ptsto a b ∗ interp_ptstomem (bv.one xlenbits + a) bs).
     Proof. intros; cbn [interp_ptstomem]; now rewrite bv.appView_app. Qed.
 
-    Lemma tmp (paddr : Addr) (bytes : nat) :
-      forall (w : bv (bytes * byte)),
-      interp_ptstomem paddr w -∗
-        [∗ list] offset ∈ seq 0 bytes,
-            interp_ptsto (paddr + bv.of_nat offset) (get_byte (Z.of_nat offset) w).
+    Lemma tmp (bytes : nat) :
+      ⊢ ∀ (base : nat) (paddr : Addr),
+      (∃ (w : bv (bytes * byte)), interp_ptstomem (bv.of_nat base + paddr) w) -∗
+        [∗ list] offset ∈ seq base bytes,
+            ∃ w, interp_ptsto (bv.of_nat offset + paddr) w.
     Proof.
-      generalize dependent paddr.
       iInduction bytes as [|bytes] "IHbytes"; eauto.
-      iIntros (paddr w) "H".
-      rewrite seq_S.
-      rewrite big_sepL_app.
-      destruct (bv.appView (bytes * byte) byte w) as [b bs].
+      iIntros (paddr base) "[%w H]". cbn [seq].
+      rewrite big_sepL_cons.
+      destruct (bv.appView byte (bytes * byte) w) as [b bs].
       rewrite ptstomem_bv_app.
       iDestruct "H" as "[Hb Hbs]".
-      iSplitL "Hbs".
-      iApply ("IHbytes" $! (bv.one xlenbits + paddr) bs with "Hbs").
+      iSplitL "Hb".
+      - by iExists b.
+      - iApply "IHbytes".
+        iExists bs. now rewrite bv.of_nat_S bv.add_assoc.
+    Qed.
 
     Lemma extract_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_extract_pmp_ptsto bytes).
