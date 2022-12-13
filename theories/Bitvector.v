@@ -888,6 +888,11 @@ Module bv.
       Lia.lia.
     Qed.
 
+    Lemma of_nat_S {n} (k : nat) :
+      of_nat (S k) = add (one n) (of_nat k).
+    Proof.
+    Admitted.
+
     (* For the relational operators we default to the < and <= version and
        only allow the others for parsing. *)
     Definition uleb {n} (x y : bv n) : bool := N.leb (bin x) (bin y).
