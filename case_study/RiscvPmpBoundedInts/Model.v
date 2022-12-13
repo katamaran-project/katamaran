@@ -433,6 +433,30 @@ Module RiscvPmpModel2.
       by iPoseProof (big_andL_elem_of _ _ _ Hi with "H") as "H".
     Qed.
 
+    Lemma ptstomem_bv_app :
+      forall {n} (a : Addr) (b : bv byte) (bs : bv (n * byte)),
+        @interp_ptstomem _ _ (S n)%nat a (bv.app b bs)
+        ⊣⊢
+        (interp_ptsto a b ∗ interp_ptstomem (bv.one xlenbits + a) bs).
+    Proof. intros; cbn [interp_ptstomem]; now rewrite bv.appView_app. Qed.
+
+    Lemma tmp (paddr : Addr) (bytes : nat) :
+      forall (w : bv (bytes * byte)),
+      interp_ptstomem paddr w -∗
+        [∗ list] offset ∈ seq 0 bytes,
+            interp_ptsto (paddr + bv.of_nat offset) (get_byte (Z.of_nat offset) w).
+    Proof.
+      generalize dependent paddr.
+      iInduction bytes as [|bytes] "IHbytes"; eauto.
+      iIntros (paddr w) "H".
+      rewrite seq_S.
+      rewrite big_sepL_app.
+      destruct (bv.appView (bytes * byte) byte w) as [b bs].
+      rewrite ptstomem_bv_app.
+      iDestruct "H" as "[Hb Hbs]".
+      iSplitL "Hbs".
+      iApply ("IHbytes" $! (bv.one xlenbits + paddr) bs with "Hbs").
+
     Lemma extract_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_extract_pmp_ptsto bytes).
     Proof.
@@ -449,15 +473,18 @@ Module RiscvPmpModel2.
       iSplitR "Haddrs".
       - iIntros "Hpaddr".
         iFrame "Hmem1 Hmem2".
+
+        unfold ptstoSth.
+        rewrite big_op_addrs_sum.
+        iApply big_sepL_pure_impl.
+        iIntros "_".
+
+
+
         unfold interp_ptstomem, ptstoSth.
         rewrite big_op_addrs_sum.
         iApply big_sepL_pure_impl.
         iIntros "%H".
-
-
-
-
-
         iInduction (seq 0 bytes) as [|a] "IH"; first done.
         rewrite ?big_opL_cons.
         iDestruct "Hpaddr" as "[% [Hptsto Hpaddr]]".
