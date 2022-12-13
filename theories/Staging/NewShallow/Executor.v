@@ -105,6 +105,8 @@ Module Type NewShallowExecOn
          | x : NamedEnv Val [ctx] |- _ => destruct (env.view x)
          | x: NamedEnv Val (_ ▻ _) |- _ => destruct (env.view x)
          | |- _ ⊣⊢ _ => split
+         | |- ⊥ ⊢ _ => apply lfalse_left
+         | |- _ ⊢ ⊤ => apply ltrue_right
          | |- context[_ ∧ !! _] => rewrite lprop_float
          | |- !! ?P ∧ ?Q ⊢ ?R => apply (land_prop_left (P := P) (Q := Q) (R := R)); intros ?
          (* | |- !! ?P ⊢ _ => apply lprop_left; intros ? *)
@@ -206,21 +208,33 @@ Module Type NewShallowExecOn
         fun m1 m2 POST =>
           m1 POST ∧ m2 POST.
 
-      Definition angelic_list {A} :
-        list A -> CPureSpecM A :=
-        fix rec xs :=
+      Definition angelic_list' {A} :
+        A -> list A -> CPureSpecM A :=
+        fix rec d xs :=
           match xs with
-          | nil        => error
-          | cons x xs  => angelic_binary (pure x) (rec xs)
+          | nil        => pure d
+          | cons x xs  => angelic_binary (pure d) (rec x xs)
           end.
 
-      Definition demonic_list {A} :
-        list A -> CPureSpecM A :=
-        fix rec xs :=
+      Definition angelic_list {A} (xs : list A) : CPureSpecM A :=
+        match xs with
+        | nil       => error
+        | cons x xs => angelic_list' x xs
+        end.
+
+      Definition demonic_list' {A} :
+        A -> list A -> CPureSpecM A :=
+        fix rec d xs :=
           match xs with
-          | nil        => block
-          | cons x xs  => demonic_binary (pure x) (rec xs)
+          | nil        => pure d
+          | cons x xs  => demonic_binary (pure d) (rec x xs)
           end.
+
+      Definition demonic_list {A} (xs : list A) : CPureSpecM A :=
+        match xs with
+        | nil       => block
+        | cons x xs => demonic_list' x xs
+        end.
 
       Definition angelic_finite F `{finite.Finite F} :
         CPureSpecM F :=
@@ -240,29 +254,59 @@ Module Type NewShallowExecOn
         demonic_ctx Δ POST ⊣⊢ ∀ vs : NamedEnv Val Δ, POST vs.
       Proof. induction Δ; cbn; [|rewrite IHΔ]; solve_wp. Qed.
 
+      Lemma wp_angelic_list' {A} (xs : list A) (POST : A -> L) :
+        forall d, angelic_list' d xs POST ⊣⊢
+                    ∃ x : A, !! (d = x \/ In x xs) ∧ POST x.
+      Proof.
+        induction xs; cbn; intros d.
+        - split.
+          + apply (lex_right d), land_right; [apply lprop_right;left|]; easy.
+          + apply lex_left; intros x. apply land_prop_left.
+            intros [H|H]; now destruct H.
+        - cbv [angelic_binary pure]. rewrite IHxs. clear IHxs. split.
+          + apply lor_left.
+            * apply (lex_right d), land_right; [apply lprop_right;left|]; easy.
+            * apply proper_lex_entails. intros x.
+              apply proper_land_entails; [|easy].
+              apply proper_lprop_entails.
+              unfold Basics.impl; cbn. intuition.
+          + apply lex_left; intros x. apply land_prop_left.
+            intros [H|H]; [apply lor_right1|apply lor_right2].
+            * now subst.
+            * apply (lex_right x), land_right; [apply lprop_right|]; easy.
+      Qed.
+
       Lemma wp_angelic_list {A} (xs : list A) (POST : A -> L) :
         angelic_list xs POST ⊣⊢ ∃ x : A, !! List.In x xs ∧ POST x.
       Proof.
-        induction xs; cbn; cbv [angelic_binary pure].
-        - setoid_rewrite lfalse_and. now rewrite lex_false.
-        - rewrite IHxs. clear IHxs. repeat solve_wp.
-          apply lor_right2. repeat solve_wp.
+        destruct xs; cbn.
+        - unfold error, FALSE. split; solve_wp.
+        - apply wp_angelic_list'.
+      Qed.
+
+      Lemma wp_demonic_list' {A} (xs : list A) (POST : A -> L) :
+        forall d, demonic_list' d xs POST ⊣⊢
+                    ∀ x : A, !! (d = x \/ In x xs) → POST x.
+      Proof.
+        induction xs; cbn; intros d.
+        - split.
+          + solve_wp.
+          + apply (lall_left d), lentails_apply, lprop_right; now left.
+        - cbv [demonic_binary pure]. rewrite IHxs. clear IHxs. split.
+          + solve_wp; apply land_left2, (lall_left v), lentails_apply, lprop_right;
+              [left|right]; assumption.
+          + apply land_right.
+            * apply (lall_left d), lentails_apply, lprop_right; auto.
+            * apply lall_right; intro x; apply lprop_intro_impl; intro HIn.
+              apply (lall_left x), lentails_apply, lprop_right; auto.
       Qed.
 
       Lemma wp_demonic_list {A} (xs : list A) (POST : A -> L) :
         demonic_list xs POST ⊣⊢ ∀ x : A, !! List.In x xs → POST x.
       Proof.
-        induction xs; cbn; cbv [demonic_binary pure].
-        - setoid_rewrite limpl_false. now rewrite lall_true.
-        - rewrite IHxs. clear IHxs. split.
-          + repeat solve_wp.
-            apply land_left2. apply (lall_left v).
-              now apply lentails_apply, lprop_right.
-          + apply land_right.
-            * apply (lall_left a), lentails_apply, lprop_right. now left.
-            * apply proper_lall_entails; intros x.
-              apply proper_limpl_entails; [|easy].
-              apply proper_lprop_entails. now right.
+        destruct xs; cbn.
+        - unfold block, TRUE. split; solve_wp.
+        - apply wp_demonic_list'.
       Qed.
 
     End Nondeterminism.
@@ -286,13 +330,13 @@ Module Type NewShallowExecOn
          symbolic executor can in fact only assert equalities between symbolic
          terms. We mirror the structure of the symbolic execution and also
          traverse (the statically known parts) of other data structures. *)
-      Equations(noeqns) assert_eq_env {Δ : Ctx Ty}
+      Equations(noeqns) assert_eq_env [Δ : Ctx Ty]
         (δ δ' : Env Val Δ) : CPureSpecM unit :=
         assert_eq_env env.nil          env.nil            := pure tt;
         assert_eq_env (env.snoc δ _ t) (env.snoc δ' _ t') :=
           bind (assert_eq_env δ δ') (fun _ => assert_formula (t = t')).
 
-      Equations(noeqns) assert_eq_nenv {N : Set} {Δ : NCtx N Ty}
+      Equations(noeqns) assert_eq_nenv {N : Set} [Δ : NCtx N Ty]
         (δ δ' : NamedEnv Val Δ) : CPureSpecM unit :=
         assert_eq_nenv env.nil          env.nil            := pure tt;
         assert_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
