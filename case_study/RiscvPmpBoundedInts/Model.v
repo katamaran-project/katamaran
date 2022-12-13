@@ -393,7 +393,45 @@ Module RiscvPmpModel2.
          *)
     Admitted.
 
+    (* TODO: cannot just inline this definition? *)
+    Definition Pmp_access' (a : Val ty_xlenbits) (width : nat) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : iProp Σ :=
+      ([∧ list] offset ∈ seq 0 width,
+        ⌜Pmp_access (a + (bv.of_nat offset))%bv (bv.of_nat 1) entries m acc⌝).
 
+    Lemma pmp_access_split : ∀ a w es m acc,
+        0 < w ->
+        ⌜Pmp_access a (bv.of_nat w) es m acc⌝
+          ⊣⊢
+          Pmp_access' a w es m acc.
+    Proof.
+      unfold Pmp_access'.
+      unfold Pmp_access.
+      intros.
+      iSplit.
+      - iIntros "%".
+        rewrite big_andL_pure.
+        iPureIntro.
+        intros.
+        apply lookup_seq in H1.
+        destruct H1 as [Hx Hkw].
+        simpl in Hx.
+        subst.
+        (* TODO: if we have access to, for example, a word, then we have access to the individual bytes of the word too *)
+    Admitted.
+
+    Lemma Pmp_access_width : ∀ a w es m acc i,
+        0 < w ->
+        i < w ->
+        @bi_entails (iProp Σ) ⌜Pmp_access a (bv.of_nat w) es m acc⌝
+          ⌜Pmp_access (a + bv.of_nat i)%bv (bv.of_nat 1) es m acc⌝%I.
+    Proof.
+      iIntros (a w es m acc i H0w Hiw) "H".
+      iPoseProof (pmp_access_split a es m acc H0w with "H") as "H".
+      unfold Pmp_access'.
+      assert (Hi: 0 <= i < 0 + w) by lia.
+      apply elem_of_seq in Hi.
+      by iPoseProof (big_andL_elem_of _ _ _ Hi with "H") as "H".
+    Qed.
 
     Lemma extract_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_extract_pmp_ptsto bytes).
@@ -415,6 +453,11 @@ Module RiscvPmpModel2.
         rewrite big_op_addrs_sum.
         iApply big_sepL_pure_impl.
         iIntros "%H".
+
+
+
+
+
         iInduction (seq 0 bytes) as [|a] "IH"; first done.
         rewrite ?big_opL_cons.
         iDestruct "Hpaddr" as "[% [Hptsto Hpaddr]]".
@@ -424,54 +467,11 @@ Module RiscvPmpModel2.
         admit.
         (* now iIntros "_". *)
       - unfold interp_ptstomem.
+        rewrite big_op_addrs_sum.
         (* iApply "Hpaddr".
         iPureIntro.
         now exists acc. *)
     Admitted.
-
-    Check big_opL.
-
-    (* TODO: cannot just inline this definition? *)
-    Definition Pmp_access' (a : Val ty_xlenbits) (width : nat) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : iProp Σ :=
-      ([∗ list] offset ∈ seq 0 width,
-        ⌜Pmp_access (a + (bv.of_nat offset))%bv (bv.of_nat 1) entries m acc⌝)%I.
-
-    Lemma pmp_access_split : ∀ a w es m acc,
-        0 < w ->
-        ⌜Pmp_access a (bv.of_nat w) es m acc⌝
-          ⊣⊢
-          Pmp_access' a w es m acc.
-    Proof.
-      unfold Pmp_access'.
-      unfold Pmp_access.
-      intros.
-      iSplit.
-      - iIntros "%".
-        rewrite big_sepL_pure.
-        iPureIntro.
-        intros.
-        apply lookup_seq in H1.
-        destruct H1 as [Hx Hkw].
-        simpl in Hx.
-        subst.
-        cbv in H2.
-        inversion H1.
-        + admit.
-        + inversion H3.
-          assert ((bv.of_nat x + (bv.of_nat 0))%bv = bv.of_nat x).
-    Admitted.
-
-    Lemma Pmp_access_width : ∀ a w es m acc i,
-        Pmp_access a (bv.of_nat w) es m acc ->
-        i <= w ->
-        Pmp_access (a + bv.of_nat i) (bv.of_nat 1) es m acc.
-    Proof.
-      intros a w es m acc i H Hiw.
-      revert H.
-      unfold Pmp_access, decide_pmp_access, check_pmp_access.
-      unfold pmp_check, pmp_match_entry, pmp_match_addr.
-      destruct (pmp_check (a + bv.of_nat i) (bv.of_nat 1) es [bv 0x0] m).
-      
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_return_pmp_ptsto bytes).

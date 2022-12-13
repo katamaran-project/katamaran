@@ -371,13 +371,9 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       (b <= a)%Z ∧ (a <= e)%Z ->
       a ∈ liveAddrs.
     Proof.
-      intros [Hb He] [Hba Hae].
-      apply elem_of_seqZ in Hb.
-      apply elem_of_seqZ in He.
-      destruct Hb as [H0b Hbm].
-      destruct He as [H0e Hem].
-      rewrite elem_of_seqZ.
-      split; lia.
+      intros [[H0b Hbm]%elem_of_seqZ [H0e Hem]%elem_of_seqZ] [Hba Hae];
+        rewrite elem_of_seqZ;
+        split; lia.
     Qed.
 
     Lemma region_addrs_submseteq  (b' e' b e : Addr) :

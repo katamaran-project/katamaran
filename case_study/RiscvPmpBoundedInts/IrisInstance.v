@@ -97,9 +97,18 @@ Module RiscvPmpIrisInstance <:
     Lemma ptstoSthL_app {l1 l2} : (ptstoSthL (l1 ++ l2) ⊣⊢ ptstoSthL l1 ∗ ptstoSthL l2)%I.
     Proof. eapply big_sepL_app. Qed.
 
-    Definition interp_ptstomem {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
+    Definition interp_ptstomem' {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
       [∗ list] offset ∈ seq 0 width,
         interp_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
+
+    Fixpoint interp_ptstomem {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
+      match width with
+      | O   => True
+      | S w =>
+          let bytes : bv (byte + w * byte) := bytes in
+          let (byte, bytes) := bv.appView byte (w * byte) bytes in
+          interp_ptsto addr byte ∗ interp_ptstomem (bv.one xlenbits + addr) bytes
+      end.
 
     Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       [∗ list] a ∈ addrs,
