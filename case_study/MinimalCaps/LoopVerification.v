@@ -121,12 +121,9 @@ Section Loop.
       by iApply ("IH" $! p b e a with "Hgprs Hpc'").
     - destruct c as [p b e a].
       cbn - [interp_gprs interp].
-      iDestruct "Hexpr" as "[%Hp Hexpr]".
+      iDestruct "Hexpr" as "[%Hp #Hexpr]".
       subst.
-      iModIntro.
-      iDestruct "Hexpr" as "#Hexpr".
-      iApply "Hexpr".
-      iFrame.
+      now iApply ("Hexpr" with "[$]").
   Qed.
 
   Import ctx.notations.
@@ -213,18 +210,12 @@ Section Loop.
     iApply valid_semContract_loop.
     do 2 iModIntro.
     iIntros (p b e a) "Hgprs Hpc #Hpcvalid".
-    remember (decide_correct_pc {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) as dcpc.
-    destruct dcpc.
-    - iApply "IH".
-      iFrame.
+    destruct (decide_correct_pc {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) eqn:Heqdpc.
+    - iApply ("IH" with "[$Hgprs Hpc]").
       iExists _.
-      iFrame.
-      iSplitL; try iAssumption.
-      iPureIntro.
-      now unfold CorrectPC.
+      now iFrame "Hpc Hpcvalid %".
     - unfold interp_loop.
-      iApply (wrongPC_crashes (Q := fun _ _ => True)%I); try iFrame.
-      now symmetry.
+      now iApply (wrongPC_crashes (Q := fun _ _ => True)%I with "[$]").
   Qed.
 
 End Loop.

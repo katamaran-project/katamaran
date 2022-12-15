@@ -629,6 +629,12 @@ Module bv.
     Definition of_Z {n} (x : Z) : bv n :=
       of_N (Z.to_N (truncz n x)).
 
+    Lemma unsigned_inj {n} (x y : bv n) : unsigned x = unsigned y -> x = y.
+    Proof.
+      intros.
+      now apply bin_inj, numbers.Z_of_N_inj.
+    Qed.
+
     Definition truncz_idemp (n : nat) (x : Z) :
       truncz n (truncz n x) = truncz n x.
     Proof.
@@ -745,6 +751,19 @@ Module bv.
       now rewrite bv.of_N_bin.
     Qed.
 
+    #[export] Instance Z_of_N_Proper {n} : Proper (eq2n n ==> eq2nz n) Z.of_N.
+    Proof.
+      unfold eq2nz, eq2n.
+      intros x y Hxy.
+      unfold truncz.
+      rewrite Zpower.two_power_nat_equiv.
+      rewrite ?truncn_spec, ?exp2_spec in Hxy.
+      rewrite <- Znat.nat_N_Z.
+      change 2%Z with (Z.of_N 2%N).
+      rewrite <- Znat.N2Z.inj_pow.
+      rewrite <-?Znat.N2Z.inj_mod.
+      now rewrite Hxy.
+    Qed.
     #[export] Instance double_proper {n} : Proper (eq2n n ==> eq2n (S n)) N.double.
     Proof.
       intros x x' Hx.
@@ -771,6 +790,20 @@ Module bv.
       now rewrite ?N.div_small.
     Qed.
 
+    Lemma eq2nz_to_eq_lt n {x y} :
+      (0 <= x < 2 ^ Z.of_nat n)%Z ->
+      (0 <= y < 2 ^ Z.of_nat n)%Z ->
+      eq2nz n x y -> eq x y.
+    Proof.
+      unfold eq2nz, truncz.
+      rewrite Zpower.two_power_nat_equiv.
+      intros xle yle xmeqy.
+      rewrite (Z.div_mod x (2 ^ Z.of_nat n)); try Lia.lia.
+      rewrite (Z.div_mod y (2 ^ Z.of_nat n)); try Lia.lia.
+      rewrite xmeqy.
+      do 2 f_equal.
+      now rewrite ?Z.div_small.
+    Qed.
   End EqMod2N.
   Section Arithmetic.
 
@@ -1279,6 +1312,83 @@ Module bv.
     Infix "<ᵘ?"  := (@ultb _) : bv_scope.
 
   End notations.
+
+  Section DropTruncs.
+    Lemma truncn_small {n x} : (x < exp2 n)%N -> truncn n x = x.
+    Proof.
+      intros.
+      now apply truncn_wf, is_wf_spec.
+    Qed.
+
+    Lemma bin_add_small {n x y} : (@bin n x + bin y < exp2 n)%N ->
+                            bin (x + y) = (bin x + bin y)%N.
+    Proof.
+      destruct x, y.
+      now apply truncn_small.
+    Qed.
+
+    Lemma bin_of_N_small {n x} : (x < exp2 n)%N -> @bin n (of_N x) = x.
+    Proof.
+      now apply truncn_small.
+    Qed.
+
+    Lemma bin_of_nat_small {n x} : (N.of_nat x < exp2 n)%N ->
+                                   @bin n (of_nat x) = N.of_nat x.
+    Proof.
+      now apply bin_of_N_small.
+    Qed.
+  End DropTruncs.
+
+  Section Sequences.
+    Import List.
+
+    Definition seqBv {n} (min : bv n) (len : nat) := List.map (@bv.of_Z n) (list_numbers.seqZ (bv.unsigned min) (Z.of_nat len)).
+
+    Lemma seqBv_app {n} m n1 n2 :
+      (bin m + N.of_nat n1 + N.of_nat n2 < exp2 n)%N ->
+      @seqBv n m (n1 + n2) = seqBv m n1 ++ seqBv (bv.add m (bv.of_nat n1)) n2.
+    Proof.
+      unfold seqBv.
+      intros ineq.
+      rewrite Znat.Nat2Z.inj_add.
+      rewrite list_numbers.seqZ_app; try Lia.lia.
+      rewrite map_app.
+      repeat f_equal.
+      unfold unsigned, add; cbn.
+      rewrite <-Znat.nat_N_Z, <-Znat.N2Z.inj_add.
+      f_equal.
+      apply (@bv.eq2n_to_eq_lt n).
+      - Lia.lia.
+      - rewrite truncn_spec.
+        apply N.mod_lt, exp2_nzero.
+      - now rewrite ?bv.truncn_eq2n.
+    Qed.
+
+    Lemma in_seqBv n v min len :
+      (bv.bin min + N.of_nat len < bv.exp2 n)%N ->
+      (min <=ᵘ v) -> (v <ᵘ bv.add min (bv.of_nat len)) ->
+        base.elem_of v (@seqBv n min len).
+    Proof.
+      unfold bv.ule, bv.ult, seqBv.
+      intros Hbits mla alm.
+      apply (list.elem_of_list_fmap_1_alt bv.of_Z _ (bv.unsigned v)).
+      - apply list_numbers.elem_of_seqZ.
+        unfold unsigned.
+        enough ((bv.bin (min + bv.of_nat len)) = (N.add (bv.bin min) (N.of_nat len))) by Lia.lia.
+        apply (@bv.eq2n_to_eq_lt n); try assumption.
+        + apply bv.is_wf_spec.
+          now destruct (min + bv.of_nat len).
+        + cbn.
+          rewrite truncn_eq2n.
+          apply bv.eq2R.
+          f_equal.
+          rewrite bv.truncn_spec.
+          rewrite N.mod_small; Lia.lia.
+      - now rewrite bv.of_Z_unsigned.
+    Qed.
+
+
+  End Sequences.
 
   Section Tests.
     Goal lsb [bv[2] 0] = false. reflexivity. Qed.

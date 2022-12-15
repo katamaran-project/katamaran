@@ -80,7 +80,8 @@ Module Type IrisPredicates
   (Import IB   : IrisBase B PROG SEM).
   Parameter luser_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
   Parameter lduplicate_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
-      is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG ts) (luser_inst (sRG := sRG) mG ts ∗ luser_inst (sRG := sRG) mG ts).
+      is_duplicable p = true ->
+      luser_inst mG ts ⊢ luser_inst mG ts ∗ luser_inst mG ts.
 
 End IrisPredicates.
 
@@ -100,7 +101,7 @@ Section Soundness.
   #[export] Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
     {| lptsreg σ r v        := reg_pointsTo r v;
        luser p ts           := luser_inst sailGS_memGS ts;
-       lduplicate p ts Hdup := lduplicate_inst (sRG := sailGS_sailRegGS) sailGS_memGS ts Hdup
+       lduplicate p ts Hdup := lduplicate_inst sailGS_memGS ts Hdup
     |}.
 
   Definition semTriple {Γ τ} (δ : CStore Γ)
@@ -131,7 +132,7 @@ Section Soundness.
     + intros [v δ']; cbn.
       apply QQ.
     + iApply "trips".
-      iApply PP; iFrame.
+      now iApply PP.
   Qed.
 
   Lemma iris_rule_frame {Γ σ} {δ : CStore Γ}
@@ -139,8 +140,7 @@ Section Soundness.
         (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
   Proof.
     iIntros "trips [HR HP]".
-    iApply (wp_frame_l _ _ (MkConf s δ) (fun v => match v with MkValConf _ v δ' => Q v δ' end) R).
-    iFrame.
+    iApply (wp_frame_l _ _ (MkConf s δ) (fun v => match v with MkValConf _ v δ' => Q v δ' end) R with "[$HR HP trips]").
     by iApply "trips".
   Qed.
 
@@ -157,8 +157,7 @@ Section Soundness.
         {Q :  Val σ -> CStore Γ -> iProp Σ} :
         ⊢ ((∀ x, semTriple δ (P x) s Q) -∗ semTriple δ (∃ x, P x) s Q).
   Proof.
-    iIntros "trips Px".
-    iDestruct "Px" as (x) "Px".
+    iIntros "trips [%x Px]".
     by iApply "trips".
   Qed.
 
@@ -218,7 +217,7 @@ Section Soundness.
     iIntros "trips1 trips2 P".
     iSpecialize ("trips1" with "P").
     iApply semWP_seq.
-    iApply (semWP_mono with "trips1").
+    iApply (semWP_mono with "[$]").
     by iFrame.
   Qed.
 
@@ -251,7 +250,6 @@ Section Soundness.
     iApply semWP_read_register.
     iExists v.
     iFrame.
-    iIntros "Hreg".
     repeat iSplit; auto.
   Qed.
 
@@ -266,7 +264,6 @@ Section Soundness.
     iApply semWP_write_register.
     iExists v.
     iFrame.
-    iIntros "Hreg".
     repeat iSplit; auto.
   Qed.
 
@@ -277,7 +274,7 @@ Section Soundness.
            semTriple δ P (stm_assign x s) R).
   Proof.
     iIntros "trips P".
-    iPoseProof ("trips" with "P") as "wpv".
+    iSpecialize ("trips" with "P").
     by iApply semWP_assign.
   Qed.
 
@@ -305,7 +302,6 @@ Section Soundness.
   Proof.
     iIntros "tripbody P".
     iApply semWP_call_inline_later.
-    iModIntro.
     by iApply "tripbody".
   Qed.
 
@@ -336,14 +332,15 @@ Section Soundness.
     (∀ v, P ={⊤}=∗ Q v δ) -∗
                  semTriple δ P s Q.
   Proof.
-    iIntros (Hnv Hnoop) "HPQ HP". rewrite semWP_unfold. rewrite Hnv.
+    iIntros (Hnv Hnoop) "HPQ HP".
+    rewrite semWP_unfold. rewrite Hnv.
     iIntros (γ1 μ1) "state_inv".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
     iIntros (s2 δ2 γ2 μ2) "%".
     destruct (Hnoop _ _ _ _ _ _ H) as (-> & -> & -> & [[v ->]|[msg ->]]).
-    - do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
+    - do 3 iModIntro. iMod "Hclose" as "_".
       iFrame. iApply semWP_val. now iApply "HPQ".
-    - do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
+    - do 3 iModIntro. iMod "Hclose" as "_".
       iFrame. now iApply semWP_fail.
   Qed.
 
@@ -421,9 +418,7 @@ Section Adequacy.
     eapply map_Forall_lookup_2.
     intros [σ r] x eq.
     unfold RegStore_to_map in eq.
-    remember (list_to_map _ !! _) as o in eq.
-    destruct o; inversion eq; subst.
-    assert (eq' := eq_sym Heqo).
+    destruct (list_to_map _ !! _) eqn:eq' in eq; inversion eq; subst.
     rewrite <-elem_of_list_to_map in eq'.
     - eapply elem_of_list_fmap_2 in eq'.
       destruct eq' as ([σ' r'] & eq2 & eq3).
@@ -495,10 +490,8 @@ Section Adequacy.
       rewrite auth_frag_op.
       iPoseProof (own_op with "Hregs") as "[Hreg Hregs]".
       iFrame.
-      iApply "IH".
-      + iPureIntro.
-        refine (NoDup_cons_1_2 (existT x r) l nodups).
-      + iFrame.
+      iApply ("IH" with "[%] [$]").
+      + refine (NoDup_cons_1_2 (existT x r) l nodups).
       + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _].
         refine (not_elem_of_list_to_map_1 _ (existT x r) _).
         rewrite <-list_fmap_compose.
@@ -515,10 +508,7 @@ Section Adequacy.
   Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : Val σ -> Prop} :
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
-    (forall `{sailGS Σ'},
-        ⊢ semTriple (Σ := Σ') δ
-          (mem_res μ ∗ own_regstore γ) s
-          (fun v δ' => bi_pure (Q v))) ->
+    (forall `{sailGS Σ'}, ⊢ semTriple δ (mem_res μ ∗ own_regstore γ) s (fun v _ => ⌜ Q v ⌝)) ->
     ResultOrFail s' Q.
   Proof.
     intros steps fins trips.
@@ -549,10 +539,9 @@ Section Adequacy.
       * iFrame.
         iExists (RegStore_to_map γ).
         now iFrame.
-      * iApply wp_mono.
+      * iApply (wp_mono).
         2: {
-          iApply (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[Rmem Hs2]").
-          iFrame.
+          iApply (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]").
           iApply (own_RegStore_to_map_reg_pointsTos (H := SailRegGS reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
           eapply finite.NoDup_enum.
         }
@@ -579,9 +568,8 @@ Section Adequacy.
     iMod (mem_inv_init (mGS := mGS)) as (memG) "[Hmem Rmem]".
     pose (regsG := {| reg_inG := @reg_pre_inG sailΣ (@subG_sailGpreS sailΣ (subG_refl sailΣ)); reg_gv_name := spec_name |}).
     pose (sailG := SailGS Hinv regsG memG).
-    iMod (trips sailΣ sailG with "[Rmem Hs2]") as "[trips Hφ]".
-    { iFrame.
-      unfold own_regstore.
+    iMod (trips sailΣ sailG with "[$Rmem Hs2]") as "[trips Hφ]".
+    {unfold own_regstore.
       iApply (own_RegStore_to_map_reg_pointsTos (H := regsG) (γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
       eapply finite.NoDup_enum.
     }

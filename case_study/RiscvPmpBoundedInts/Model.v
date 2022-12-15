@@ -297,30 +297,6 @@ Module RiscvPmpModel2.
       ValidLemma RiscvPmpSpecification.lemma_close_pmp_entries.
     Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed.
 
-    Lemma in_seqBv n v min len :
-      (bv.bin min + N.of_nat len < bv.exp2 n)%N ->
-      (min <=ᵘ v) -> (v <ᵘ bv.add min (bv.of_nat len)) ->
-        v ∈ @seqBv n min len.
-    Proof.
-      unfold bv.ule, bv.ult, seqBv.
-      intros Hbits mla alm.
-      apply (elem_of_list_fmap_1_alt bv.of_Z _ (bv.unsigned v)).
-      - apply elem_of_seqZ.
-        unfold bv.unsigned.
-        enough ((bv.bin (min + bv.of_nat len)) = (N.add (bv.bin min) (N.of_nat len))) by Lia.lia.
-        apply (@bv.eq2n_to_eq_lt n); try assumption.
-        + apply bv.is_wf_spec.
-          now destruct (min + bv.of_nat len).
-        + cbn.
-          rewrite bv.truncn_eq2n.
-          apply bv.eq2R.
-          f_equal.
-          rewrite bv.truncn_spec.
-          rewrite N.mod_small; Lia.lia.
-      - now rewrite bv.of_Z_unsigned.
-    Qed.
-
-
     Lemma in_liveAddrs : forall (addr : Addr),
         (minAddr <=ᵘ addr) ->
         (addr <ᵘ maxAddr) ->
@@ -328,12 +304,83 @@ Module RiscvPmpModel2.
     Proof.
       unfold liveAddrs, maxAddr.
       intros.
-      apply in_seqBv;
+      apply bv.in_seqBv;
         eauto using enough_addr_bits.
     Qed.
 
-    (* TODO: might be beneficial to introduce "seqBV" *)
+    Opaque minAddr.
+    Opaque lenAddr.
+    Opaque xlenbits.
+
     Lemma in_liveAddrs_split : forall (addr : Addr) (bytes : nat),
+        (N.of_nat bytes < bv.exp2 xlenbits)%N ->
+        (N.of_nat lenAddr < bv.exp2 xlenbits)%N ->
+        (bv.bin maxAddr < bv.exp2 xlenbits)%N ->
+        (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
+        (bv.bin addr - bv.bin minAddr < bv.exp2 xlenbits)%N ->
+        (minAddr <=ᵘ addr) ->
+        (addr + (bv.of_nat bytes) <=ᵘ maxAddr) ->
+        exists l1 l2, liveAddrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
+    Proof.
+    Admitted.
+    (* more efficient proof? *)
+    (*   unfold maxAddr. *)
+    (*   intros addr bytes bytesfit lenAddrFits maxAddrFits addrbytesFits addrDiffFits Hmin Hmax. *)
+    (*   unfold liveAddrs. *)
+    (*   exists (bv.seqBv minAddr (N.to_nat (bv.bin addr - bv.bin minAddr))%N). *)
+    (*   exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes)))). *)
+    (*   rewrite <-(bv.seqBv_app addr). *)
+    (*   replace addr with (minAddr + bv.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr))) at 2. *)
+    (*   rewrite <-bv.seqBv_app; try lia. *)
+    (*   f_equal. *)
+    (*   unfold bv.ule, bv.ult in *. *)
+    (*   apply N_of_nat_inj. *)
+    (*   apply Z_of_N_inj. *)
+    (*   rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small; *)
+    (*     try assumption. *)
+    (*   rewrite (N2Z.inj_add (bv.bin addr)). *)
+    (*   now Lia.lia. *)
+    (*   now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax. *)
+
+    (*   enough (bv.bin minAddr + N.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr)) + *)
+    (*             N.of_nat (bytes + N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes))) = bv.bin minAddr + N.of_nat lenAddr)%N as -> by assumption. *)
+    (*   apply Z_of_N_inj. *)
+    (*   rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small; *)
+    (*     try assumption. *)
+    (*   rewrite (N2Z.inj_add (bv.bin addr)). *)
+    (*   now Lia.lia. *)
+
+    (*   unfold bv.ule in Hmax. *)
+    (*   rewrite ?bv.bin_add_small ?bv.bin_of_nat_small in Hmax; try assumption. *)
+
+    (*   unfold bv.ule in Hmin. *)
+    (*   unfold bv.of_nat. *)
+    (*   rewrite N2Nat.id. *)
+    (*   apply bv.unsigned_inj. *)
+    (*   unfold bv.unsigned. *)
+    (*   rewrite bv.bin_add_small. *)
+    (*   rewrite N2Z.inj_add. *)
+    (*   rewrite bv.bin_of_N_small; try assumption. *)
+    (*   now Lia.lia. *)
+
+    (*   replace (bv.bin minAddr + _)%N with (bv.bin addr). *)
+    (*   Lia.lia. *)
+    (*   apply Z_of_N_inj. *)
+    (*   rewrite N2Z.inj_add. *)
+    (*   rewrite bv.bin_of_N_small; try assumption. *)
+    (*   now Lia.lia. *)
+
+    (*   rewrite N2Nat.id. *)
+    (*   rewrite ?bv.bin_add_small; try assumption. *)
+    (*   rewrite ?bv.bin_of_nat_small; try assumption. *)
+    (*   rewrite bv.bin_add_small bv.bin_of_nat_small in maxAddrFits; try assumption. *)
+    (*   now Lia.lia. *)
+
+    (*   now rewrite bv.bin_of_nat_small. *)
+    (* Qed. *)
+
+    (* TODO: might be beneficial to introduce "seqBV" *)
+    Lemma in_liveAddrs_split_old : forall (addr : Addr) (bytes : nat),
         (minAddr <=ᵘ addr) ->
         (addr + (bv.of_nat bytes) <=ᵘ maxAddr) ->
         exists l1 l2, liveAddrs = l1 ++ ((map (fun offset => addr + (bv.of_nat offset)) (seq 0 bytes))  ++ l2).
@@ -485,7 +532,7 @@ Module RiscvPmpModel2.
         interp_pmp_addr_access,
         interp_ptsto,
         MemVal, Word.
-      destruct (@in_liveAddrs_split paddr bytes Hlemin Hlemax) as (l1 & l2 & eq).
+      destruct (@in_liveAddrs_split_old paddr bytes Hlemin Hlemax) as (l1 & l2 & eq).
       rewrite eq. 
       rewrite ?big_opL_app.
       iDestruct "Hmem" as "(Hmem1 & Haddrs & Hmem2)".
