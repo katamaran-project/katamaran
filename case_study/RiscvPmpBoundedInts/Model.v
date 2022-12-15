@@ -440,22 +440,40 @@ Module RiscvPmpModel2.
         (interp_ptsto a b ∗ interp_ptstomem (bv.one xlenbits + a) bs).
     Proof. intros; cbn [interp_ptstomem]; now rewrite bv.appView_app. Qed.
 
-    Lemma tmp (bytes : nat) :
+    Lemma interp_ptstomem_big_sepS (bytes : nat) :
       ⊢ ∀ (base : nat) (paddr : Addr),
-      (∃ (w : bv (bytes * byte)), interp_ptstomem (bv.of_nat base + paddr) w) -∗
+      (∃ (w : bv (bytes * byte)), interp_ptstomem (bv.of_nat base + paddr) w) ∗-∗
         [∗ list] offset ∈ seq base bytes,
-            ∃ w, interp_ptsto (bv.of_nat offset + paddr) w.
+            ∃ w, interp_ptsto (paddr + bv.of_nat offset) w.
     Proof.
-      iInduction bytes as [|bytes] "IHbytes"; eauto.
-      iIntros (paddr base) "[%w H]". cbn [seq].
-      rewrite big_sepL_cons.
-      destruct (bv.appView byte (bytes * byte) w) as [b bs].
-      rewrite ptstomem_bv_app.
-      iDestruct "H" as "[Hb Hbs]".
-      iSplitL "Hb".
-      - by iExists b.
-      - iApply "IHbytes".
-        iExists bs. now rewrite bv.of_nat_S bv.add_assoc.
+      iInduction bytes as [|bytes] "IHbytes";
+        iIntros (base paddr); iSplit.
+      - auto.
+      - iIntros "H". now iExists (bv.zero (0 * byte)).
+      - iIntros "[%w H]". cbn [seq].
+        rewrite big_sepL_cons.
+        rewrite (@bv.add_comm _ paddr (bv.of_nat base)).
+        destruct (bv.appView byte (bytes * byte) w) as [b bs].
+        rewrite ptstomem_bv_app.
+        iDestruct "H" as "[Hb Hbs]".
+        iSplitL "Hb".
+        + by iExists b.
+        + iApply "IHbytes".
+          iExists bs.
+          now rewrite bv.of_nat_S bv.add_assoc.
+      - iIntros "H".
+        rewrite big_sepL_cons.
+        rewrite (@bv.add_comm _ paddr (bv.of_nat base)).
+        iDestruct "H" as "([%b Hb] & Hbs)".
+        iAssert (∃ (w : bv (bytes * byte)), interp_ptstomem (bv.of_nat (S base) + paddr) w)%I with "[Hbs]" as "H".
+        iApply ("IHbytes" $! (S base) paddr).
+        iApply "Hbs".
+        iDestruct "H" as "[%w H]".
+        iExists (bv.app b w).
+        rewrite ptstomem_bv_app.
+        iSplitL "Hb"; first iExact "Hb".
+        rewrite bv.add_assoc.
+        now rewrite <- bv.of_nat_S.
     Qed.
 
     Lemma extract_pmp_ptsto_sound (bytes : nat) :
@@ -479,27 +497,17 @@ Module RiscvPmpModel2.
         rewrite big_op_addrs_sum.
         iApply big_sepL_pure_impl.
         iIntros "_".
-
-
-
-        unfold interp_ptstomem, ptstoSth.
-        rewrite big_op_addrs_sum.
-        iApply big_sepL_pure_impl.
-        iIntros "%H".
-        iInduction (seq 0 bytes) as [|a] "IH"; first done.
-        rewrite ?big_opL_cons.
-        iDestruct "Hpaddr" as "[% [Hptsto Hpaddr]]".
-        iSplitL "Hptsto".
-        + iIntros; now iExists (get_byte a w).
-        + iApply "IH"; auto.
-        admit.
-        (* now iIntros "_". *)
-      - unfold interp_ptstomem.
-        rewrite big_op_addrs_sum.
-        (* iApply "Hpaddr".
+        rewrite (bv.add_of_nat_0_l paddr).
+        iPoseProof (interp_ptstomem_big_sepS bytes $! 0%nat paddr with "Hpaddr") as "H".
+        now rewrite <- bv.add_of_nat_0_l.
+      - rewrite big_op_addrs_sum big_sepL_pure_impl.
+        rewrite (bv.add_of_nat_0_l paddr).
+        iApply (interp_ptstomem_big_sepS bytes $! 0%nat paddr).
+        rewrite <- bv.add_of_nat_0_l.
+        iApply "Haddrs".
         iPureIntro.
-        now exists acc. *)
-    Admitted.
+        now exists acc.
+    Qed.
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_return_pmp_ptsto bytes).

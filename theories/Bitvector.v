@@ -893,6 +893,20 @@ Module bv.
     Proof.
     Admitted.
 
+    Lemma add_of_nat_0_l :
+      forall {n} (v : bv n), v = add (of_nat 0) v.
+    Proof.
+      intros.
+      unfold of_nat.
+      simpl.
+      symmetry.
+      apply add_zero_r.
+    Qed.
+
+    Lemma add_of_nat_0_r :
+      forall {n} (v : bv n), v = add v (bv.of_nat 0).
+    Proof. intros; rewrite add_comm; apply add_of_nat_0_l. Qed.
+
     (* For the relational operators we default to the < and <= version and
        only allow the others for parsing. *)
     Definition uleb {n} (x y : bv n) : bool := N.leb (bin x) (bin y).
