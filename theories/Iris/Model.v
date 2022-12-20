@@ -370,11 +370,7 @@ Module Type IrisResources
   Definition semWP {Σ} `{sG : sailGS Σ} [Γ τ] (s : Stm Γ τ)
     (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ) : iProp Σ :=
     WP {| conf_stm := s; conf_store := δ |} ?{{ v, Q (valconf_val v) (valconf_store v) }}.
-
-  Definition semTriple {Σ} `{sG : sailGS Σ} {Γ τ} (δ : CStore Γ) (PRE : iProp Σ) (s : Stm Γ τ)
-    (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
-    PRE -∗ semWP s POST δ.
-  (* always modality needed? perhaps not because sail not higher-order? *)
+  Global Arguments semWP {Σ} {sG} [Γ] [τ] s%exp Q%I δ.
 
   Ltac fold_semWP :=
     first
