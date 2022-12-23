@@ -396,15 +396,31 @@ Module RiscvPmpModel2.
       (* now f_equal; lia. *)
     Admitted.
 
-    Lemma big_sepL_pure_impl : forall paddr bytes entries p,
-      (([∗ list] offset ∈ seq 0 bytes,
-        ⌜∃ p0, Pmp_access (paddr + bv.of_nat offset)%bv 
-                                               (bv.of_nat 1) entries p p0⌝ -∗
-            ∃ w : Byte, interp_ptsto (paddr + bv.of_nat offset) w)
-                                     ⊣⊢
-    (⌜∃ p0, Pmp_access paddr (bv.of_nat bytes) entries p p0⌝ -∗ [∗ list] offset ∈ seq 0 bytes,
-      ∃ w : Byte, interp_ptsto (paddr + bv.of_nat offset) w))%I.
-    Admitted.
+    Lemma big_sepL_pure_impl (bytes : nat) :
+        ⊢ ∀ (base : nat) (paddr : Addr)
+            (entries : list PmpEntryCfg) (p : Privilege),
+            (([∗ list] offset ∈ seq base bytes,
+               ⌜∃ p0, Pmp_access (paddr + bv.of_nat offset)%bv 
+                        (bv.of_nat 1) entries p p0⌝ -∗
+                        ∃ w : Byte, interp_ptsto (paddr + bv.of_nat offset) w)
+              ∗-∗ 
+              (⌜∃ p0, Pmp_access paddr (bv.of_nat bytes) entries p p0⌝ -∗
+                        [∗ list] offset ∈ seq base bytes,
+                          ∃ w : Byte, interp_ptsto (paddr + bv.of_nat offset) w))%I.
+    Proof.
+      iInduction bytes as [|bytes] "IHbytes"; iIntros (base paddr pmp p).
+      now iSimpl.
+      iSplit; iIntros "H".
+      - iIntros "Haccess".
+        rewrite big_sepL_cons.
+        iDestruct "H" as "[Hb Hbs]".
+        iSimpl.
+        iSplitL "Hb".
+        iApply "Hb".
+        admit. (* TODO: proof using Haccess, will need helper lemma, need for next steps too *)
+        iRevert "Haccess".
+        iApply ("IHbytes" $! (S base) paddr pmp p with "[Hbs]").
+
 
     Lemma big_op_addrs_sum (paddr : Addr) : forall bytes (ϕ : Addr -> iProp Σ),
       (([∗ list] x ∈ map (λ offset : nat, paddr + bv.of_nat offset) (seq 0 bytes), ϕ x)
@@ -555,6 +571,8 @@ Module RiscvPmpModel2.
         iPureIntro.
         now exists acc.
     Qed.
+
+    Print Assumptions extract_pmp_ptsto_sound.
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_return_pmp_ptsto bytes).
