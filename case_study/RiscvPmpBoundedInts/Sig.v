@@ -183,17 +183,41 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Fixpoint pmp_check (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
       match entries with
-      | [] => match m with
-              | Machine => (true, None)
-              | User    => (false, None)
-              end
-      | (cfg , addr) :: entries =>
-          match pmp_match_entry a width m cfg prev addr with
-          | PMP_Success  => (true, Some (pmp_get_perms cfg m))
+      | (cfg0 , addr0) :: (cfg1 , addr1) :: [] =>
+          match pmp_match_entry a width m cfg0 prev addr0 with
+          | PMP_Success  => (true, Some (pmp_get_perms cfg0 m))
           | PMP_Fail     => (false, None)
-          | PMP_Continue => pmp_check a width entries addr m
+          | PMP_Continue => 
+              match pmp_match_entry a width m cfg1 addr0 addr1 with
+              | PMP_Success  => (true, Some (pmp_get_perms cfg1 m))
+              | PMP_Fail     => (false, None)
+              | PMP_Continue => match m with
+                                | Machine => (true, None)
+                                | User    => (false, None)
+                                end
+              end
           end
+      | _ => match m with
+             | Machine => (true, None)
+             | User    => (false, None)
+             end
       end%list.
+
+    Section Old_pmp_check.
+      Fixpoint pmp_check' (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
+        match entries with
+        | [] => match m with
+                | Machine => (true, None)
+                | User    => (false, None)
+                end
+        | (cfg , addr) :: entries =>
+            match pmp_match_entry a width m cfg prev addr with
+            | PMP_Success  => (true, Some (pmp_get_perms cfg m))
+            | PMP_Fail     => (false, None)
+            | PMP_Continue => pmp_check a width entries addr m
+            end
+        end%list.
+    End Old_pmp_check.
 
     (* check_access is based on the pmpCheck algorithm, main difference
            is that we can define it less cumbersome because entries will contain

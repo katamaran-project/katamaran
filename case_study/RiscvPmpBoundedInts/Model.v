@@ -396,6 +396,180 @@ Module RiscvPmpModel2.
       (* now f_equal; lia. *)
     Admitted.
 
+    (* TODO: better name! *)
+    Lemma bv_uleb_leb : forall {n} (base a b max : bv n),
+        (bv.bin base + bv.bin a < bv.exp2 n)%N ->
+        base + a <=ᵘ max ->
+        b <=ᵘ a ->
+        base + b <=ᵘ max.
+    Proof.
+      intros n base a b max Hn H Hba.
+      unfold bv.ule.
+      unfold bv.ule in H.
+      rewrite (bv.bin_add_small _).
+      rewrite (bv.bin_add_small _) in H.
+      eapply N.le_trans.
+      2: exact H.
+      apply N.add_le_mono_l.
+      now unfold bv.ule in Hba.
+      auto.
+      unfold bv.ule in Hba.
+      apply N.lt_eq_cases in Hba.
+      destruct Hba as [Hba|Hba].
+      - eapply N.lt_trans.
+        2: exact Hn.
+        now apply N.add_lt_mono_l.
+      - apply bv.bin_inj in Hba.
+        now subst.
+    Qed.
+
+    (* TODO: better name! *)
+    Lemma bv_uleb_false : forall {n} (base a b max : bv n),
+        (bv.bin base + bv.bin a < bv.exp2 n)%N ->
+        base + a <=ᵘ? max = false ->
+        b <=ᵘ a ->
+        base + b <=ᵘ? max = false.
+    Admitted.
+
+    Lemma bv_uleb_ule : forall {n} (x y : bv n),
+        x <=ᵘ y <-> x <=ᵘ? y = true.
+    Admitted.
+
+    (* TODO: move all these w <=ᵘ bytes stuff as an early assumption to get rid of all the "exact H..." tactics *)
+    Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
+      forall paddr rng,
+      pmp_match_addr paddr bytes rng = PMP_Match ->
+      w <=ᵘ bytes ->
+      pmp_match_addr paddr w rng = PMP_Match.
+    Proof.
+      intros paddr [[lo hi]|];
+        assert (Hass: (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N) by admit.
+      unfold pmp_match_addr.
+      destruct (hi <ᵘ? lo); auto.
+      destruct (paddr + bytes <=ᵘ? lo) eqn:?.
+      rewrite orb_true_l.
+      now intros.
+      rewrite orb_false_l.
+      destruct (hi <=ᵘ? paddr).
+      now intros.
+      intros H Hw.
+      apply (@bv_uleb_false _ _ _ w _ Hass) in Heqb.
+      2: exact Hw.
+      rewrite Heqb.
+      simpl.
+      destruct (lo <=ᵘ? paddr).
+      destruct (paddr + bytes <=ᵘ? hi) eqn:?.
+      apply bv_uleb_ule in Heqb0.
+      apply (@bv_uleb_leb _ _ _ w _ Hass) in Heqb0.
+      2: exact Hw.
+      apply bv_uleb_ule in Heqb0.
+      rewrite Heqb0.
+      now simpl.
+      now rewrite andb_false_r in H.
+      now rewrite andb_false_l in H.
+      auto.
+    Admitted.
+
+    Lemma pmp_match_addr_reduced_width_no_match (bytes w : Xlenbits) :
+      forall paddr rng,
+      w <=ᵘ bytes ->
+      pmp_match_addr paddr bytes rng = PMP_NoMatch ->
+      pmp_match_addr paddr w rng = PMP_NoMatch.
+    Proof.
+      intros paddr [[lo hi]|] Hle;
+        assert (Hass: (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N) by admit.
+      unfold pmp_match_addr.
+      destruct (hi <ᵘ? lo); auto.
+      destruct (paddr + bytes <=ᵘ? lo) eqn:?.
+      rewrite orb_true_l.
+      intros _.
+      apply bv_uleb_ule in Heqb.
+      apply (@bv_uleb_leb _ _ _ w _ Hass) in Heqb.
+      2: exact Hle.
+      apply bv_uleb_ule in Heqb.
+      rewrite Heqb.
+      now rewrite orb_true_l.
+      rewrite orb_false_l.
+      destruct (hi <=ᵘ? paddr).
+      now rewrite orb_true_r.
+      destruct (lo <=ᵘ? paddr).
+      destruct (paddr + bytes <=ᵘ? hi) eqn:?.
+      apply bv_uleb_ule in Heqb0.
+      apply (@bv_uleb_leb _ _ _ w _ Hass) in Heqb0.
+      2: exact Hle.
+      apply bv_uleb_ule in Heqb0.
+      rewrite Heqb0.
+      now simpl.
+      intros; now rewrite andb_false_r in H.
+      intros; now rewrite andb_false_l in H.
+      auto.
+    Admitted.
+
+    Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
+      forall paddr cfg p hi lo,
+      w <=ᵘ bytes ->
+      pmp_match_entry paddr bytes p cfg hi lo = PMP_Success ->
+      pmp_match_entry paddr w p cfg hi lo = PMP_Success.
+    Proof.
+      unfold pmp_match_entry.
+      intros.
+      destruct (pmp_match_addr paddr bytes _) eqn:E; try discriminate.
+      apply (@pmp_match_addr_reduced_width _ w _ _) in E.
+      2: exact H.
+      now rewrite E.
+    Qed.
+
+    Lemma pmp_match_entry_reduced_width_continue (bytes w : Xlenbits) :
+      forall paddr cfg p hi lo,
+      w <=ᵘ bytes ->
+      pmp_match_entry paddr bytes p cfg hi lo = PMP_Continue ->
+      pmp_match_entry paddr w p cfg hi lo = PMP_Continue.
+    Proof.
+      unfold pmp_match_entry.
+      intros.
+      destruct (pmp_match_addr paddr bytes _) eqn:E; try discriminate.
+      apply (pmp_match_addr_reduced_width_no_match _ _ H) in E.
+      now rewrite E.
+    Qed.
+
+    Lemma check_pmp_access_reduced_width (bytes w : Xlenbits) :
+      forall paddr pmp p acc,
+        w <=ᵘ bytes ->
+        check_pmp_access paddr bytes pmp p = (true, acc) ->
+        check_pmp_access paddr w pmp p = (true, acc).
+    Proof.
+      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc Hle H;
+        try now cbn in *.
+      unfold check_pmp_access, pmp_check in *.
+      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E0.
+      - apply (pmp_match_entry_reduced_width _ _ _ _ _ Hle) in E0.
+        now rewrite E0.
+      - apply (pmp_match_entry_reduced_width_continue _ _ _ _ _ Hle) in E0.
+        rewrite E0.
+        destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E1.
+        + apply (pmp_match_entry_reduced_width _ _ _ _ _ Hle) in E1.
+          now rewrite E1.
+        + apply (pmp_match_entry_reduced_width_continue _ _ _ _ _ Hle) in E1.
+          now rewrite E1.
+        + discriminate.
+      - discriminate.
+    Qed.
+
+    Lemma pmp_access_reduced_width (bytes w : Xlenbits) :
+      forall paddr pmp p acc,
+      Pmp_access paddr bytes pmp p acc ->
+      w <=ᵘ bytes ->
+      Pmp_access paddr w pmp p acc.
+    Proof.
+      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc H Hw;
+        unfold Pmp_access, decide_pmp_access in *;
+        try (destruct p; now cbn).
+      destruct (check_pmp_access paddr _ _) eqn:E.
+      destruct b; try discriminate.
+      apply (check_pmp_access_reduced_width _ _ _ Hw) in E.
+      now rewrite E.
+    Qed.
+
     Lemma big_sepL_pure_impl (bytes : nat) :
         ⊢ ∀ (base : nat) (paddr : Addr)
             (entries : list PmpEntryCfg) (p : Privilege),
@@ -404,23 +578,30 @@ Module RiscvPmpModel2.
                         (bv.of_nat 1) entries p p0⌝ -∗
                         ∃ w : Byte, interp_ptsto (paddr + bv.of_nat offset) w)
               ∗-∗ 
-              (⌜∃ p0, Pmp_access paddr (bv.of_nat bytes) entries p p0⌝ -∗
+              (⌜∃ p0, Pmp_access (paddr + bv.of_nat base)%bv (bv.of_nat bytes) entries p p0⌝ -∗
                         [∗ list] offset ∈ seq base bytes,
                           ∃ w : Byte, interp_ptsto (paddr + bv.of_nat offset) w))%I.
     Proof.
       iInduction bytes as [|bytes] "IHbytes"; iIntros (base paddr pmp p).
       now iSimpl.
       iSplit; iIntros "H".
-      - iIntros "Haccess".
+      - iIntros "%Haccess".
         rewrite big_sepL_cons.
         iDestruct "H" as "[Hb Hbs]".
         iSimpl.
         iSplitL "Hb".
         iApply "Hb".
-        admit. (* TODO: proof using Haccess, will need helper lemma, need for next steps too *)
-        iRevert "Haccess".
-        iApply ("IHbytes" $! (S base) paddr pmp p with "[Hbs]").
-
+        iPureIntro.
+        destruct Haccess as [acc Haccess].
+        exists acc.
+        apply (pmp_access_reduced_width Haccess).
+        admit. (* TODO: this is provable! *)
+        fold seq.
+        iSpecialize ("IHbytes" $! (S base) paddr pmp p with "Hbs").
+        iApply "IHbytes".
+        iPureIntro.
+        admit. (* TODO: provable, if we have access to pₓ₊₁ then we also have access to (p+1)ₓ (format: addr\_bytes), or more visually p:|----| -> p+1:|---| *)
+    Admitted.
 
     Lemma big_op_addrs_sum (paddr : Addr) : forall bytes (ϕ : Addr -> iProp Σ),
       (([∗ list] x ∈ map (λ offset : nat, paddr + bv.of_nat offset) (seq 0 bytes), ϕ x)
@@ -455,46 +636,6 @@ Module RiscvPmpModel2.
            ∃ b₀ : bv m, ∃ bs : bv n, P (bv.app b₀ bs) -> ∃ w : bv (m + n), P w
          *)
     Admitted.
-
-    (* TODO: cannot just inline this definition? *)
-    Definition Pmp_access' (a : Val ty_xlenbits) (width : nat) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : iProp Σ :=
-      ([∧ list] offset ∈ seq 0 width,
-        ⌜Pmp_access (a + (bv.of_nat offset))%bv (bv.of_nat 1) entries m acc⌝).
-
-    Lemma pmp_access_split : ∀ a w es m acc,
-        0 < w ->
-        ⌜Pmp_access a (bv.of_nat w) es m acc⌝
-          ⊣⊢
-          Pmp_access' a w es m acc.
-    Proof.
-      unfold Pmp_access'.
-      unfold Pmp_access.
-      intros.
-      iSplit.
-      - iIntros "%".
-        rewrite big_andL_pure.
-        iPureIntro.
-        intros.
-        apply lookup_seq in H1.
-        destruct H1 as [Hx Hkw].
-        simpl in Hx.
-        subst.
-        (* TODO: if we have access to, for example, a word, then we have access to the individual bytes of the word too *)
-    Admitted.
-
-    Lemma Pmp_access_width : ∀ a w es m acc i,
-        0 < w ->
-        i < w ->
-        @bi_entails (iProp Σ) ⌜Pmp_access a (bv.of_nat w) es m acc⌝
-          ⌜Pmp_access (a + bv.of_nat i)%bv (bv.of_nat 1) es m acc⌝%I.
-    Proof.
-      iIntros (a w es m acc i H0w Hiw) "H".
-      iPoseProof (pmp_access_split a es m acc H0w with "H") as "H".
-      unfold Pmp_access'.
-      assert (Hi: 0 <= i < 0 + w) by lia.
-      apply elem_of_seq in Hi.
-      by iPoseProof (big_andL_elem_of _ _ _ Hi with "H") as "H".
-    Qed.
 
     Lemma ptstomem_bv_app :
       forall {n} (a : Addr) (b : bv byte) (bs : bv (n * byte)),
@@ -555,7 +696,6 @@ Module RiscvPmpModel2.
       iSplitR "Haddrs".
       - iIntros "Hpaddr".
         iFrame "Hmem1 Hmem2".
-
         unfold ptstoSth.
         rewrite big_op_addrs_sum.
         iApply big_sepL_pure_impl.
@@ -563,12 +703,15 @@ Module RiscvPmpModel2.
         rewrite (bv.add_of_nat_0_l paddr).
         iPoseProof (interp_ptstomem_big_sepS bytes $! 0%nat paddr with "Hpaddr") as "H".
         now rewrite <- bv.add_of_nat_0_l.
-      - rewrite big_op_addrs_sum big_sepL_pure_impl.
+      - unfold ptstoSth.
+        rewrite big_op_addrs_sum.
+        iPoseProof (big_sepL_pure_impl with "Haddrs") as "Haddrs".
         rewrite (bv.add_of_nat_0_l paddr).
         iApply (interp_ptstomem_big_sepS bytes $! 0%nat paddr).
         rewrite <- bv.add_of_nat_0_l.
         iApply "Haddrs".
         iPureIntro.
+        rewrite <- bv.add_of_nat_0_r.
         now exists acc.
     Qed.
 
