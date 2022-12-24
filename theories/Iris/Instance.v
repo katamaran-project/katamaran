@@ -128,11 +128,11 @@ Section Soundness.
         semTriple δ P' s Q' -∗ semTriple δ P s Q.
   Proof.
     iIntros (PP QQ) "trips P".
-    iApply (wp_mono _ _ _ (fun v => match v with MkValConf _ v δ' => Q' v δ' end)).
-    + intros [v δ']; cbn.
-      apply QQ.
+    iApply (semWP_mono with "[trips P]").
     + iApply "trips".
       now iApply PP.
+    + iIntros (v δ') "Qp".
+      now iApply QQ.
   Qed.
 
   Lemma iris_rule_frame {Γ σ} {δ : CStore Γ}
