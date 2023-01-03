@@ -396,95 +396,217 @@ Module RiscvPmpModel2.
       (* now f_equal; lia. *)
     Admitted.
 
+    Lemma N_of_nat_lt_S : forall w n,
+        (N.of_nat (S n) < bv.exp2 w)%N ->
+        (N.of_nat n < bv.exp2 w)%N.
+    Proof. lia. Qed.
+
+    Lemma bv_ule_nat_one_S : forall {w} (n : nat),
+        (N.of_nat 1 < bv.exp2 w)%N ->
+        (N.of_nat (S n) < bv.exp2 w)%N ->
+        @bv.of_nat w 1 <=ᵘ bv.of_nat (S n).
+    Proof. intros; unfold bv.ule; rewrite ?bv.bin_of_nat_small; lia. Qed.
+
+    Lemma bv_ult_nat_S_zero : forall {w} (n : nat),
+        (N.of_nat (S n) < bv.exp2 w)%N ->
+        bv.zero w <ᵘ bv.of_nat (S n).
+    Proof. intros; unfold bv.ult; rewrite bv.bin_of_nat_small; auto; now simpl. Qed.
+
+    Lemma bv_ule_trans : forall {n} (x y z : bv n),
+        x <=ᵘ y ->
+        y <=ᵘ z ->
+        x <=ᵘ z.
+    Proof. intros n x y z; unfold bv.ule; apply N.le_trans. Qed.
+
+    Lemma bv_add_ule_mono : forall {x} (n m p : bv x),
+        (bv.bin p + bv.bin n < bv.exp2 x)%N ->
+        (bv.bin p + bv.bin m < bv.exp2 x)%N ->
+        n <=ᵘ m <-> p + n <=ᵘ p + m.
+    Proof.
+      intros; unfold bv.ule; rewrite ?bv.bin_add_small; auto; now apply N.add_le_mono_l.
+    Qed.
+
+    Lemma bv_ult_ule_incl : forall {n} (x y : bv n),
+        x <ᵘ y -> x <=ᵘ y.
+    Proof. intros; unfold bv.ule, bv.ult; apply N.lt_le_incl; auto. Qed.
+
+    Lemma bv_ule_cases : forall {n} (x y : bv n),
+        x <=ᵘ y <-> x <ᵘ y ∨ x = y.
+    Proof.
+      intros n x y.
+      unfold bv.ule, bv.ult.
+      split; intros H.
+      - apply N.lt_eq_cases in H as [H|H]; auto.
+        right.
+        now apply bv.bin_inj in H.
+      - apply N.lt_eq_cases.
+        destruct H as [H|H]; auto.
+        rewrite H; auto.
+    Qed.
+
     (* TODO: better name! *)
-    Lemma bv_uleb_leb : forall {n} (base a b max : bv n),
+    Lemma bv_ule_base : forall {n} (base a b max : bv n),
         (bv.bin base + bv.bin a < bv.exp2 n)%N ->
         base + a <=ᵘ max ->
         b <=ᵘ a ->
         base + b <=ᵘ max.
     Proof.
       intros n base a b max Hn H Hba.
-      unfold bv.ule.
-      unfold bv.ule in H.
-      rewrite (bv.bin_add_small _).
-      rewrite (bv.bin_add_small _) in H.
-      eapply N.le_trans.
-      2: exact H.
-      apply N.add_le_mono_l.
-      now unfold bv.ule in Hba.
-      auto.
-      unfold bv.ule in Hba.
-      apply N.lt_eq_cases in Hba.
-      destruct Hba as [Hba|Hba].
-      - eapply N.lt_trans.
-        2: exact Hn.
-        now apply N.add_lt_mono_l.
-      - apply bv.bin_inj in Hba.
-        now subst.
+      apply bv_ule_trans with (y := base + a);
+        first apply bv_add_ule_mono;
+        auto.
+      apply bv_ule_cases in Hba as [Hba|Hba].
+      apply N.lt_trans with (m := (bv.bin base + bv.bin a)%N); auto.
+      apply N.add_lt_mono_l.
+      now unfold bv.ult in Hba.
+      rewrite Hba; auto.
     Qed.
 
-    (* TODO: better name! *)
-    Lemma bv_uleb_false : forall {n} (base a b max : bv n),
-        (bv.bin base + bv.bin a < bv.exp2 n)%N ->
-        base + a <=ᵘ? max = false ->
-        b <=ᵘ a ->
-        base + b <=ᵘ? max = false.
-    Admitted.
+    Lemma bv_ule_refl : forall {n} (x : bv n),
+        x <=ᵘ x.
+    Proof. intros; unfold bv.ule; auto. Qed.
+
+    Lemma bv_uleb_ugt : forall {n} (x y : bv n),
+        x <=ᵘ? y = false <-> y <ᵘ x.
+    Proof. intros; unfold bv.uleb, bv.ule; now apply N.leb_gt. Qed.
 
     Lemma bv_uleb_ule : forall {n} (x y : bv n),
-        x <=ᵘ y <-> x <=ᵘ? y = true.
+        x <=ᵘ? y = true <-> x <=ᵘ y.
+    Proof. intros; unfold bv.uleb; now apply N.leb_le. Qed.
+
+    Lemma bv_ultb_uge : forall {n} (x y : bv n),
+        x <ᵘ? y = false <-> y <=ᵘ x.
+    Proof. intros; unfold bv.ultb; now apply N.ltb_ge. Qed.
+
+    Lemma bv_ultb_ult : forall {n} (x y : bv n),
+        x <ᵘ? y = true <-> x <ᵘ y.
+    Proof. intros; unfold bv.ultb; now apply N.ltb_lt. Qed.
+
+    Lemma bv_ultb_uleb : forall {n} (x y : bv n),
+        x <ᵘ? y = true -> x <=ᵘ? y = true.
+    Proof.
+      intros.
+      rewrite bv_ultb_ult in H.
+      apply bv_uleb_ule.
+      apply bv_ule_cases.
+      now left.
+    Qed.
+
+    Lemma bv_add_nonzero_neq : forall {n} (x y : bv n),
+        bv.zero n <ᵘ y ->
+        x + y ≠ x.
     Admitted.
 
     (* TODO: move all these w <=ᵘ bytes stuff as an early assumption to get rid of all the "exact H..." tactics *)
+    (* TODO: heavy cleanup needed! *)
     Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
       forall paddr rng,
-      pmp_match_addr paddr bytes rng = PMP_Match ->
-      w <=ᵘ bytes ->
-      pmp_match_addr paddr w rng = PMP_Match.
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        bv.zero xlenbits <ᵘ w ->
+        w <=ᵘ bytes ->
+        pmp_match_addr paddr bytes rng = PMP_Match ->
+        pmp_match_addr paddr w rng = PMP_Match.
     Proof.
-      intros paddr [[lo hi]|];
-        assert (Hass: (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N) by admit.
+      intros paddr rng Hass H0w Hw Hpmp.
+      assert (Hrep_paddr_w: (bv.bin paddr + bv.bin w < bv.exp2 xlenbits)%N).
+      apply bv_ule_cases in Hw as [Hw|Hw].
+      apply N.lt_trans with (m := (bv.bin paddr + bv.bin bytes)%N); auto.
+      now apply N.add_lt_mono_l.
+      subst; auto.
+      apply bv_ule_cases in Hw as [Hw|Hw].
+      2: subst; auto.
+      destruct rng as [[lo hi]|].
+      revert Hpmp.
       unfold pmp_match_addr.
-      destruct (hi <ᵘ? lo); auto.
+      destruct (hi <ᵘ? lo) eqn:?; auto.
       destruct (paddr + bytes <=ᵘ? lo) eqn:?.
       rewrite orb_true_l.
       now intros.
       rewrite orb_false_l.
-      destruct (hi <=ᵘ? paddr).
+      destruct (hi <=ᵘ? paddr) eqn:?.
       now intros.
-      intros H Hw.
-      apply (@bv_uleb_false _ _ _ w _ Hass) in Heqb.
-      2: exact Hw.
-      rewrite Heqb.
-      simpl.
-      destruct (lo <=ᵘ? paddr).
+      intros H.
       destruct (paddr + bytes <=ᵘ? hi) eqn:?.
-      apply bv_uleb_ule in Heqb0.
-      apply (@bv_uleb_leb _ _ _ w _ Hass) in Heqb0.
-      2: exact Hw.
-      apply bv_uleb_ule in Heqb0.
-      rewrite Heqb0.
-      now simpl.
-      now rewrite andb_false_r in H.
-      now rewrite andb_false_l in H.
-      auto.
-    Admitted.
+      destruct (lo <ᵘ? paddr) eqn:?.
+      (* TODO: can probably undo some rewrites or just do them in * *)
+      rewrite bv_uleb_ugt in Heqb0.
+      rewrite bv_uleb_ugt in Heqb1.
+      rewrite bv_uleb_ule in Heqb2.
+      rewrite bv_ultb_ult in Heqb3.
+      rewrite bv_ultb_uge in Heqb.
+      assert (Hlt: lo <ᵘ paddr + w).
+      unfold bv.ult in *.
+      eapply N.lt_trans.
+      apply Heqb3.
+      rewrite ?bv.bin_add_small; auto.
+      now apply N.lt_add_pos_r.
+      rewrite <- bv_uleb_ugt in Hlt.
+      rewrite Hlt.
+      simpl.
+      rewrite <- bv_ultb_ult in Heqb3.
+      apply bv_ultb_uleb in Heqb3.
+      rewrite Heqb3.
+      assert (Hlthi: paddr + w <=ᵘ? hi = true).
+      rewrite bv_uleb_ule.
+      apply bv_ule_trans with (y := paddr + bytes); auto.
+      apply bv_add_ule_mono; auto.
+      apply bv_ult_ule_incl; auto.
+      now rewrite Hlthi.
+      rewrite bv_uleb_ule in Heqb2.
+      rewrite bv_uleb_ugt in Heqb0.
+      rewrite bv_uleb_ugt in Heqb1.
+      rewrite bv_ultb_uge in Heqb.
+      rewrite bv_ultb_uge in Heqb3.
+      apply bv_ule_cases in Heqb3 as [Hplo|Hplo].
+      destruct (lo <=ᵘ? paddr) eqn:?.
+      rewrite bv_uleb_ule in Heqb3.
+      apply bv_ule_cases in Heqb3 as [Hlop|Hlop].
+      unfold bv.ule, bv.ult in *.
+      exfalso.
+      now apply (N.lt_asymm _ _ Hplo).
+      subst.
+      unfold bv.ult in Hplo.
+      apply N.lt_irrefl in Hplo.
+      contradiction.
+      rewrite andb_false_l in H.
+      discriminate H.
+      subst.
+      destruct (lo + w <=ᵘ? lo) eqn:?.
+      rewrite bv_uleb_ule in Heqb3.
+      apply bv_ule_cases in Heqb3 as [Hlo|Hlo].
+      exfalso.
+      apply (N.lt_asymm _ _ Hlo).
+      rewrite bv.bin_add_small; auto.
+      apply N.lt_add_pos_r; auto.
+      now apply bv_add_nonzero_neq in Hlo.
+      apply bv_ule_trans with (x := lo + w) in Heqb2.
+      simpl.
+      assert (lo <=ᵘ lo) by (apply bv_ule_refl).
+      rewrite <- bv_uleb_ule in H0.
+      rewrite <- bv_uleb_ule in Heqb2.
+      now rewrite H0 Heqb2.
+      apply bv_add_ule_mono; auto.
+      apply bv_ult_ule_incl; auto.
+      rewrite andb_false_r in H; discriminate H.
+      simpl in Hpmp.
+      discriminate Hpmp.
+    Qed.
 
     Lemma pmp_match_addr_reduced_width_no_match (bytes w : Xlenbits) :
       forall paddr rng,
+      (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
       w <=ᵘ bytes ->
       pmp_match_addr paddr bytes rng = PMP_NoMatch ->
       pmp_match_addr paddr w rng = PMP_NoMatch.
     Proof.
-      intros paddr [[lo hi]|] Hle;
-        assert (Hass: (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N) by admit.
+      intros paddr [[lo hi]|] Hass Hle.
       unfold pmp_match_addr.
       destruct (hi <ᵘ? lo); auto.
       destruct (paddr + bytes <=ᵘ? lo) eqn:?.
       rewrite orb_true_l.
       intros _.
       apply bv_uleb_ule in Heqb.
-      apply (@bv_uleb_leb _ _ _ w _ Hass) in Heqb.
+      apply (@bv_ule_base _ _ _ w _ Hass) in Heqb.
       2: exact Hle.
       apply bv_uleb_ule in Heqb.
       rewrite Heqb.
@@ -495,7 +617,7 @@ Module RiscvPmpModel2.
       destruct (lo <=ᵘ? paddr).
       destruct (paddr + bytes <=ᵘ? hi) eqn:?.
       apply bv_uleb_ule in Heqb0.
-      apply (@bv_uleb_leb _ _ _ w _ Hass) in Heqb0.
+      apply (@bv_ule_base _ _ _ w _ Hass) in Heqb0.
       2: exact Hle.
       apply bv_uleb_ule in Heqb0.
       rewrite Heqb0.
@@ -503,53 +625,57 @@ Module RiscvPmpModel2.
       intros; now rewrite andb_false_r in H.
       intros; now rewrite andb_false_l in H.
       auto.
-    Admitted.
+    Qed.
 
     Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
       forall paddr cfg p hi lo,
-      w <=ᵘ bytes ->
-      pmp_match_entry paddr bytes p cfg hi lo = PMP_Success ->
-      pmp_match_entry paddr w p cfg hi lo = PMP_Success.
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        bv.zero xlenbits <ᵘ w ->
+        w <=ᵘ bytes ->
+        pmp_match_entry paddr bytes p cfg hi lo = PMP_Success ->
+        pmp_match_entry paddr w p cfg hi lo = PMP_Success.
     Proof.
       unfold pmp_match_entry.
       intros.
       destruct (pmp_match_addr paddr bytes _) eqn:E; try discriminate.
-      apply (@pmp_match_addr_reduced_width _ w _ _) in E.
-      2: exact H.
+      apply pmp_match_addr_reduced_width with (w := w) in E; auto.
       now rewrite E.
     Qed.
 
     Lemma pmp_match_entry_reduced_width_continue (bytes w : Xlenbits) :
       forall paddr cfg p hi lo,
-      w <=ᵘ bytes ->
-      pmp_match_entry paddr bytes p cfg hi lo = PMP_Continue ->
-      pmp_match_entry paddr w p cfg hi lo = PMP_Continue.
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        w <=ᵘ bytes ->
+        pmp_match_entry paddr bytes p cfg hi lo = PMP_Continue ->
+        pmp_match_entry paddr w p cfg hi lo = PMP_Continue.
     Proof.
       unfold pmp_match_entry.
       intros.
       destruct (pmp_match_addr paddr bytes _) eqn:E; try discriminate.
-      apply (pmp_match_addr_reduced_width_no_match _ _ H) in E.
+      apply pmp_match_addr_reduced_width_no_match with (w := w) in E; auto.
       now rewrite E.
     Qed.
 
     Lemma check_pmp_access_reduced_width (bytes w : Xlenbits) :
       forall paddr pmp p acc,
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        bv.zero xlenbits <ᵘ w ->
         w <=ᵘ bytes ->
         check_pmp_access paddr bytes pmp p = (true, acc) ->
         check_pmp_access paddr w pmp p = (true, acc).
     Proof.
-      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc Hle H;
+      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc Hrep H0w Hle H;
         try now cbn in *.
       unfold check_pmp_access, pmp_check in *.
       destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E0.
-      - apply (pmp_match_entry_reduced_width _ _ _ _ _ Hle) in E0.
+      - apply pmp_match_entry_reduced_width with (w := w) in E0; auto.
         now rewrite E0.
-      - apply (pmp_match_entry_reduced_width_continue _ _ _ _ _ Hle) in E0.
+      - apply pmp_match_entry_reduced_width_continue with (w := w) in E0; auto.
         rewrite E0.
         destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E1.
-        + apply (pmp_match_entry_reduced_width _ _ _ _ _ Hle) in E1.
+        + apply pmp_match_entry_reduced_width with (w := w) in E1; auto.
           now rewrite E1.
-        + apply (pmp_match_entry_reduced_width_continue _ _ _ _ _ Hle) in E1.
+        + apply pmp_match_entry_reduced_width_continue with (w := w) in E1; auto.
           now rewrite E1.
         + discriminate.
       - discriminate.
@@ -557,22 +683,27 @@ Module RiscvPmpModel2.
 
     Lemma pmp_access_reduced_width (bytes w : Xlenbits) :
       forall paddr pmp p acc,
-      Pmp_access paddr bytes pmp p acc ->
-      w <=ᵘ bytes ->
-      Pmp_access paddr w pmp p acc.
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        bv.zero xlenbits <ᵘ w ->
+        w <=ᵘ bytes ->
+        Pmp_access paddr bytes pmp p acc ->
+        Pmp_access paddr w pmp p acc.
     Proof.
-      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc H Hw;
+      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc Hrep H0w Hw H;
         unfold Pmp_access, decide_pmp_access in *;
         try (destruct p; now cbn).
       destruct (check_pmp_access paddr _ _) eqn:E.
       destruct b; try discriminate.
-      apply (check_pmp_access_reduced_width _ _ _ Hw) in E.
+      apply check_pmp_access_reduced_width with (w := w) in E; auto.
       now rewrite E.
     Qed.
 
     Lemma big_sepL_pure_impl (bytes : nat) :
         ⊢ ∀ (base : nat) (paddr : Addr)
             (entries : list PmpEntryCfg) (p : Privilege),
+            (⌜bv.bin paddr + N.of_nat base + N.of_nat bytes < bv.exp2 xlenbits⌝)%N -∗
+            (⌜N.of_nat bytes < bv.exp2 xlenbits⌝)%N -∗
+            (⌜N.of_nat base < bv.exp2 xlenbits⌝)%N -∗
             (([∗ list] offset ∈ seq base bytes,
                ⌜∃ p0, Pmp_access (paddr + bv.of_nat offset)%bv 
                         (bv.of_nat 1) entries p p0⌝ -∗
@@ -582,7 +713,7 @@ Module RiscvPmpModel2.
                         [∗ list] offset ∈ seq base bytes,
                           ∃ w : Byte, interp_ptsto (paddr + bv.of_nat offset) w))%I.
     Proof.
-      iInduction bytes as [|bytes] "IHbytes"; iIntros (base paddr pmp p).
+      iInduction bytes as [|bytes] "IHbytes"; iIntros (base paddr pmp p) "%Hrep %Hbytes %Hbase".
       now iSimpl.
       iSplit; iIntros "H".
       - iIntros "%Haccess".
@@ -594,13 +725,24 @@ Module RiscvPmpModel2.
         iPureIntro.
         destruct Haccess as [acc Haccess].
         exists acc.
-        apply (pmp_access_reduced_width Haccess).
-        admit. (* TODO: this is provable! *)
+        assert (Htmp: (N.of_nat 1 < bv.exp2 xlenbits)%N) by lia.
+        rewrite <- (@bv.bin_of_nat_small _ _ Hbase) in Hrep.
+        rewrite <- (@bv.bin_of_nat_small _ _ Hbytes) in Hrep.
+        rewrite <- bv.bin_add_small in Hrep.
+        apply (pmp_access_reduced_width Hrep (bv_ult_nat_S_zero Htmp) (bv_ule_nat_one_S Htmp Hbytes) Haccess).
+        eapply N.lt_trans.
+        2: exact Hrep.
+        apply N.lt_add_pos_r.
+        apply bv_ult_nat_S_zero; auto.
         fold seq.
-        iSpecialize ("IHbytes" $! (S base) paddr pmp p with "Hbs").
+        iSpecialize ("IHbytes" $! (S base) paddr pmp p _ (N_of_nat_lt_S _ Hbytes) _ with "Hbs").
+        Unshelve. (* TODO: the unshelved ones are provable with some arithmetic etc *)
+        2: admit.
+        2: admit.
         iApply "IHbytes".
         iPureIntro.
         admit. (* TODO: provable, if we have access to pₓ₊₁ then we also have access to (p+1)ₓ (format: addr\_bytes), or more visually p:|----| -> p+1:|---| *)
+      - admit.
     Admitted.
 
     Lemma big_op_addrs_sum (paddr : Addr) : forall bytes (ϕ : Addr -> iProp Σ),
@@ -699,13 +841,17 @@ Module RiscvPmpModel2.
         unfold ptstoSth.
         rewrite big_op_addrs_sum.
         iApply big_sepL_pure_impl.
+        admit. (* TODO: if x <= maxAddr, then x < exp2 xlenbits (maxAddr should never exceed arch size) *)
+        admit. (* TODO: same as above *)
+        iPureIntro; now simpl.
         iIntros "_".
         rewrite (bv.add_of_nat_0_l paddr).
         iPoseProof (interp_ptstomem_big_sepS bytes $! 0%nat paddr with "Hpaddr") as "H".
         now rewrite <- bv.add_of_nat_0_l.
       - unfold ptstoSth.
         rewrite big_op_addrs_sum.
-        iPoseProof (big_sepL_pure_impl with "Haddrs") as "Haddrs".
+        iPoseProof (big_sepL_pure_impl $! _ _ _ _ _ _ _ with "Haddrs") as "Haddrs".
+        Unshelve. (* TODO: just derive these beforehand and pass them as args to big_sepL_pure_impl *)
         rewrite (bv.add_of_nat_0_l paddr).
         iApply (interp_ptstomem_big_sepS bytes $! 0%nat paddr).
         rewrite <- bv.add_of_nat_0_l.
@@ -713,7 +859,7 @@ Module RiscvPmpModel2.
         iPureIntro.
         rewrite <- bv.add_of_nat_0_r.
         now exists acc.
-    Qed.
+    Admitted.
 
     Print Assumptions extract_pmp_ptsto_sound.
 
