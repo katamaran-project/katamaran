@@ -238,7 +238,7 @@ Module RiscvPmpModel2.
       cbn. iSplit.
       - iIntros "[_ [Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 [Hx7 _]]]]]]]]". iFrame.
       - iIntros "[Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 Hx7]]]]]]". iFrame.
-        by iExists (bv.zero _).
+        by iExists bv.zero.
     Qed.
 
     Lemma open_gprs_sound :
@@ -410,7 +410,7 @@ Module RiscvPmpModel2.
 
     Lemma bv_ult_nat_S_zero : forall {w} (n : nat),
         (N.of_nat (S n) < bv.exp2 w)%N ->
-        bv.zero w <ᵘ bv.of_nat (S n).
+        @bv.zero w <ᵘ bv.of_nat (S n).
     Proof. intros; unfold bv.ult; rewrite bv.bin_of_nat_small; auto; now simpl. Qed.
 
     Lemma bv_ule_trans : forall {n} (x y z : bv n),
@@ -430,7 +430,7 @@ Module RiscvPmpModel2.
         (bv.bin p + bv.bin m < bv.exp2 x)%N ->
         n <=ᵘ m <-> p + n <=ᵘ p + m.
     Proof.
-      intros; unfold bv.ule; rewrite ?bv.bin_add_small; auto; now apply N.add_le_mono_l.
+      intros; unfold bv.ule; rewrite ?bv.bin_add_small; lia.
     Qed.
 
     Lemma bv_ule_add_r : forall {x} (n m p : bv x),
@@ -481,31 +481,20 @@ Module RiscvPmpModel2.
     Proof.
       intros n x y.
       unfold bv.ule, bv.ult.
-      split; intros H.
-      - apply N.lt_eq_cases in H as [H|H]; auto.
-        right.
-        now apply bv.bin_inj in H.
-      - apply N.lt_eq_cases.
-        destruct H as [H|H]; auto.
-        rewrite H; auto.
+      now rewrite N.lt_eq_cases bv.bin_inj_equiv.
     Qed.
 
     (* TODO: better name! *)
     Lemma bv_ule_base : forall {n} (base a b max : bv n),
         (bv.bin base + bv.bin a < bv.exp2 n)%N ->
-        base + a <=ᵘ max ->
         b <=ᵘ a ->
+        base + a <=ᵘ max ->
         base + b <=ᵘ max.
     Proof.
-      intros n base a b max Hn H Hba.
-      apply bv_ule_trans with (y := base + a);
-        first apply bv_add_ule_mono;
-        auto.
-      apply bv_ule_cases in Hba as [Hba|Hba].
-      apply N.lt_trans with (m := (bv.bin base + bv.bin a)%N); auto.
-      apply N.add_lt_mono_l.
-      now unfold bv.ult in Hba.
-      rewrite Hba; auto.
+      intros n base a b max Hn Hba.
+      apply bv_ule_trans with (y := base + a).
+      unfold bv.ule in *.
+      rewrite ?bv.bin_add_small; lia.
     Qed.
 
     Lemma bv_ule_refl : forall {n} (x : bv n),
@@ -531,24 +520,32 @@ Module RiscvPmpModel2.
     Lemma bv_ultb_uleb : forall {n} (x y : bv n),
         x <ᵘ? y = true -> x <=ᵘ? y = true.
     Proof.
-      intros.
-      rewrite bv_ultb_ult in H.
-      apply bv_uleb_ule.
-      apply bv_ule_cases.
-      now left.
+      intros n x y.
+      rewrite bv_ultb_ult bv_uleb_ule.
+      unfold bv.ule, bv.ult.
+      lia.
     Qed.
 
+    Lemma bv_ult_antirefl : forall {n} (x : bv n), not (x <ᵘ x).
+    Proof. unfold bv.ult. lia. Qed.
+
     Lemma bv_add_nonzero_neq : forall {n} (x y : bv n),
-        bv.zero n <ᵘ y ->
+        bv.zero <ᵘ y ->
         x + y ≠ x.
-    Admitted.
+    Proof.
+      intros n x y ynz eq.
+      replace x with (x + bv.zero) in eq  at 2 by apply bv.add_zero_r.
+      apply bv.add_cancel_l in eq.
+      subst. revert ynz.
+      now apply bv_ult_antirefl.
+    Qed.
 
     (* TODO: move all these w <=ᵘ bytes stuff as an early assumption to get rid of all the "exact H..." tactics *)
     (* TODO: heavy cleanup needed! *)
     Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
       forall paddr rng,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero xlenbits <ᵘ w ->
+        bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
         pmp_match_addr paddr bytes rng = PMP_Match ->
         pmp_match_addr paddr w rng = PMP_Match.
@@ -676,7 +673,7 @@ Module RiscvPmpModel2.
     Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
       forall paddr cfg p hi lo,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero xlenbits <ᵘ w ->
+        bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
         pmp_match_entry paddr bytes p cfg hi lo = PMP_Success ->
         pmp_match_entry paddr w p cfg hi lo = PMP_Success.
@@ -705,7 +702,7 @@ Module RiscvPmpModel2.
     Lemma check_pmp_access_reduced_width (bytes w : Xlenbits) :
       forall paddr pmp p acc,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero xlenbits <ᵘ w ->
+        bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
         check_pmp_access paddr bytes pmp p = (true, acc) ->
         check_pmp_access paddr w pmp p = (true, acc).
@@ -730,7 +727,7 @@ Module RiscvPmpModel2.
     Lemma pmp_access_reduced_width (bytes w : Xlenbits) :
       forall paddr pmp p acc,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero xlenbits <ᵘ w ->
+        bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
         Pmp_access paddr bytes pmp p acc ->
         Pmp_access paddr w pmp p acc.
@@ -936,11 +933,9 @@ Module RiscvPmpModel2.
         apply N.lt_add_pos_r.
         apply bv_ult_nat_S_zero; auto.
         fold seq.
-        iSpecialize ("IHbytes" $! (S base) paddr pmp p _ (N_of_nat_lt_S _ Hbytes) _ with "Hbs").
+        iApply ("IHbytes" $! (S base) paddr pmp p _ _ _ with "Hbs").
         Unshelve. (* TODO: the unshelved ones are provable with some arithmetic etc *)
-        2: admit.
-        2: admit.
-        iApply "IHbytes".
+        2-4: Lia.lia.
         iPureIntro.
 
         destruct Haccess as [acc Haccess].
@@ -1005,7 +1000,7 @@ Module RiscvPmpModel2.
       iInduction bytes as [|bytes] "IHbytes";
         iIntros (base paddr); iSplit.
       - auto.
-      - iIntros "H". now iExists (bv.zero (0 * byte)).
+      - iIntros "H". now iExists bv.zero.
       - iIntros "[%w H]". cbn [seq].
         rewrite big_sepL_cons.
         rewrite (@bv.add_comm _ paddr (bv.of_nat base)).

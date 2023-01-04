@@ -99,6 +99,13 @@ Module bv.
           end q
     end.
 
+  Lemma bin_inj_equiv {n} (x y : bv n) : bin x = bin y <-> x = y.
+  Proof.
+    split.
+    - apply bin_inj.
+    - now intros ->.
+  Qed.
+
   Section Equality.
 
     Definition eqb {n : nat} (x y : bv n) : bool :=
@@ -556,11 +563,11 @@ Module bv.
 
   Section Constants.
 
-    Definition zero n : bv n := mk 0 I.
+    Definition zero {n} : bv n := mk 0 I.
     Definition one n : bv n :=
       match n with
       | 0   => mk 0 I
-      | S _ => mk 1 I
+      | S u => mk 1 I
       end.
     Fixpoint ones (n : nat) : bv n :=
       match n with
@@ -576,7 +583,7 @@ Module bv.
 
     Definition lsb {n} (v : bv n) : bool :=
       match v with
-      | mk N0          _ => false
+      | mk N0          u => false
       | mk (N.pos _~0) _ => false
       | mk (N.pos _~1) _ => true
       | mk (N.pos 1)   _ => true
@@ -591,10 +598,10 @@ Module bv.
 
     (* Sign extension. A bit awkward for little-endian vectors.  *)
     Definition sext' {m} (v : bv m) n : bv (m + n) :=
-      app v (if msb v then ones n else zero n).
+      app v (if msb v then ones n else zero).
     (* Zero extension. Equally as awkward. *)
     Definition zext' {m} (v : bv m) n : bv (m + n) :=
-      app v (zero n).
+      app v zero.
 
     Variant LeView (m : nat) : nat -> Set :=
       is_le k : LeView m (m + k).
@@ -771,6 +778,13 @@ Module bv.
       now rewrite ?truncn_double, Hx.
     Qed.
 
+    Lemma eq2n_exp2 {n} : eq2n n (exp2 n) 0.
+    Proof.
+      induction n; cbn.
+      - apply eq2n_zero.
+      - now rewrite IHn.
+    Qed.
+
     #[export] Instance succ_double_proper {n} : Proper (eq2n n ==> eq2n (S n)) N.succ_double.
     Proof.
       intros x x' Hx.
@@ -813,8 +827,11 @@ Module bv.
     #[export] Instance add_Proper {n} : Proper (eq ==> eq ==> eq) (@add n).
     Proof. intuition. Qed.
 
-    Definition sub {n} (x y : bv n) : bv n :=
-      of_N (N.sub (N.shiftl_nat 1 n + bin x) (bin y)).
+    Definition negate {n} (x : bv n) : bv n := of_N (exp2 n - bin x).
+    Instance negate_Proper {n} : Proper (eq ==> eq) (@negate n).
+    Proof. intuition. Qed.
+
+    Definition sub {n} (x y : bv n) : bv n := add x (negate y).
     Instance sub_Proper {n} : Proper (eq ==> eq ==> eq) (@sub n).
     Proof. intuition. Qed.
 
@@ -878,11 +895,41 @@ Module bv.
     Lemma add_assoc {n} {x y z}: @add n x (add y z) = @add n (add x y) z.
     Proof. solve_eq2n. Qed.
 
-    Lemma add_zero_l {n} {x} : @add n x (of_N 0) = x.
+    Lemma add_zero_r {n} {x} : @add n x zero = x.
     Proof. solve_eq2n. Qed.
 
-    Lemma add_zero_r {n} {x} : @add n (of_N 0) x = x.
+    Lemma add_zero_l {n} {x} : @add n zero x = x.
     Proof. solve_eq2n. Qed.
+
+    Lemma add_negate {n} {y} : @add n (negate y) y = zero.
+    Proof.
+      apply bin_inj_eq2n; cbn.
+      rewrite ?truncn_eq2n.
+      rewrite N.sub_add.
+      - now apply eq2n_exp2.
+      - enough (bin y < exp2 n)%N by Lia.lia.
+        apply is_wf_spec.
+        now destruct y.
+    Qed.
+
+    Lemma add_negate2 {n} {y} : @add n y (negate y) = zero.
+    Proof.
+      now rewrite add_comm, add_negate.
+    Qed.
+
+    Lemma add_cancel_l {n} {x y z} : @add n x y = add x z -> y = z.
+    Proof.
+      intros eq.
+      apply (f_equal (add (negate x))) in eq.
+      now rewrite ?add_assoc, ?add_negate, ?add_zero_l in eq.
+    Qed.
+
+    Lemma add_cancel_r {n} {x y z} : @add n x z = add y z -> x = y.
+    Proof.
+      intros eq.
+      apply (f_equal (fun y => add y (negate z))) in eq.
+      now rewrite <-?add_assoc, ?add_negate2, ?add_zero_r in eq.
+    Qed.
 
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
     Proof.
@@ -933,7 +980,7 @@ Module bv.
       unfold of_nat.
       simpl.
       symmetry.
-      apply add_zero_r.
+      apply add_zero_l.
     Qed.
 
     Lemma add_of_nat_0_r :
