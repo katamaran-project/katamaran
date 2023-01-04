@@ -238,7 +238,7 @@ Module RiscvPmpModel2.
       cbn. iSplit.
       - iIntros "[_ [Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 [Hx7 _]]]]]]]]". iFrame.
       - iIntros "[Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 Hx7]]]]]]". iFrame.
-        by iExists (bv.zero _).
+        by iExists bv.zero.
     Qed.
 
     Lemma open_gprs_sound :
@@ -409,7 +409,7 @@ Module RiscvPmpModel2.
 
     Lemma bv_ult_nat_S_zero : forall {w} (n : nat),
         (N.of_nat (S n) < bv.exp2 w)%N ->
-        bv.zero w <ᵘ bv.of_nat (S n).
+        @bv.zero w <ᵘ bv.of_nat (S n).
     Proof. intros; unfold bv.ult; rewrite bv.bin_of_nat_small; auto; now simpl. Qed.
 
     Lemma bv_ule_trans : forall {n} (x y z : bv n),
@@ -423,7 +423,7 @@ Module RiscvPmpModel2.
         (bv.bin p + bv.bin m < bv.exp2 x)%N ->
         n <=ᵘ m <-> p + n <=ᵘ p + m.
     Proof.
-      intros; unfold bv.ule; rewrite ?bv.bin_add_small; auto; now apply N.add_le_mono_l.
+      intros; unfold bv.ule; rewrite ?bv.bin_add_small; lia.
     Qed.
 
     Lemma bv_ult_ule_incl : forall {n} (x y : bv n),
@@ -435,31 +435,20 @@ Module RiscvPmpModel2.
     Proof.
       intros n x y.
       unfold bv.ule, bv.ult.
-      split; intros H.
-      - apply N.lt_eq_cases in H as [H|H]; auto.
-        right.
-        now apply bv.bin_inj in H.
-      - apply N.lt_eq_cases.
-        destruct H as [H|H]; auto.
-        rewrite H; auto.
+      now rewrite N.lt_eq_cases bv.bin_inj_equiv.
     Qed.
 
     (* TODO: better name! *)
     Lemma bv_ule_base : forall {n} (base a b max : bv n),
         (bv.bin base + bv.bin a < bv.exp2 n)%N ->
-        base + a <=ᵘ max ->
         b <=ᵘ a ->
+        base + a <=ᵘ max ->
         base + b <=ᵘ max.
     Proof.
-      intros n base a b max Hn H Hba.
-      apply bv_ule_trans with (y := base + a);
-        first apply bv_add_ule_mono;
-        auto.
-      apply bv_ule_cases in Hba as [Hba|Hba].
-      apply N.lt_trans with (m := (bv.bin base + bv.bin a)%N); auto.
-      apply N.add_lt_mono_l.
-      now unfold bv.ult in Hba.
-      rewrite Hba; auto.
+      intros n base a b max Hn Hba.
+      apply bv_ule_trans with (y := base + a).
+      unfold bv.ule in *.
+      rewrite ?bv.bin_add_small; lia.
     Qed.
 
     Lemma bv_ule_refl : forall {n} (x : bv n),
@@ -485,17 +474,25 @@ Module RiscvPmpModel2.
     Lemma bv_ultb_uleb : forall {n} (x y : bv n),
         x <ᵘ? y = true -> x <=ᵘ? y = true.
     Proof.
-      intros.
-      rewrite bv_ultb_ult in H.
-      apply bv_uleb_ule.
-      apply bv_ule_cases.
-      now left.
+      intros n x y.
+      rewrite bv_ultb_ult bv_uleb_ule.
+      unfold bv.ule, bv.ult.
+      lia.
     Qed.
 
+    Lemma bv_ult_antirefl : forall {n} (x : bv n), not (x <ᵘ x).
+    Proof. unfold bv.ult. lia. Qed.
+
     Lemma bv_add_nonzero_neq : forall {n} (x y : bv n),
-        bv.zero n <ᵘ y ->
+        bv.zero <ᵘ y ->
         x + y ≠ x.
-    Admitted.
+    Proof.
+      intros n x y ynz eq.
+      replace x with (x + bv.zero) in eq  at 2 by apply bv.add_zero_r.
+      apply bv.add_cancel_l in eq.
+      subst. revert ynz.
+      now apply bv_ult_antirefl.
+    Qed.
 
     (* TODO: move all these w <=ᵘ bytes stuff as an early assumption to get rid of all the "exact H..." tactics *)
     (* TODO: heavy cleanup needed! *)
