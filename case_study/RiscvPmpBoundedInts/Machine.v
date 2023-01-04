@@ -600,9 +600,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         if: hi <ᵘ lo
         then exp_val ty_pmpaddrmatch PMP_NoMatch
         else
-          if: (exp_binop bop.bvadd addr width <=ᵘ lo) || (hi <=ᵘ addr) (* NOTE: this only makes sense when using a "width" (see Sail impl), having this without the width means the PartialMatch case will never occur *)
+          if: (exp_binop bop.bvadd addr width <=ᵘ lo) || (hi <=ᵘ addr)
           then exp_val ty_pmpaddrmatch PMP_NoMatch
-          else if: (lo <=ᵘ addr) && (exp_binop bop.bvadd addr width <=ᵘ hi) (* NOTE: small difference with actual model due to lack of width, but more correct with respect to the manual (y matches TOR if pmpaddrᵢ₋₁ <= y < pmpaddrᵢ) *)
+          else if: (lo <=ᵘ addr) && (exp_binop bop.bvadd addr width <=ᵘ hi)
                then exp_val ty_pmpaddrmatch PMP_Match
                else exp_val ty_pmpaddrmatch PMP_PartialMatch
       end
