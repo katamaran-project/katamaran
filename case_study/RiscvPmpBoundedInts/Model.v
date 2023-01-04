@@ -322,62 +322,54 @@ Module RiscvPmpModel2.
         (addr + (bv.of_nat bytes) <=ᵘ maxAddr) ->
         exists l1 l2, liveAddrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
     Proof.
-    Admitted.
     (* TODO: more efficient proof? *)
-    (*   unfold maxAddr. *)
-    (*   intros addr bytes bytesfit lenAddrFits maxAddrFits addrbytesFits addrDiffFits Hmin Hmax. *)
-    (*   unfold liveAddrs. *)
-    (*   exists (bv.seqBv minAddr (N.to_nat (bv.bin addr - bv.bin minAddr))%N). *)
-    (*   exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes)))). *)
-    (*   rewrite <-(bv.seqBv_app addr). *)
-    (*   replace addr with (minAddr + bv.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr))) at 2. *)
-    (*   rewrite <-bv.seqBv_app; try lia. *)
-    (*   f_equal. *)
-    (*   unfold bv.ule, bv.ult in *. *)
-    (*   apply N_of_nat_inj. *)
-    (*   apply Z_of_N_inj. *)
-    (*   rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small; *)
-    (*     try assumption. *)
-    (*   rewrite (N2Z.inj_add (bv.bin addr)). *)
-    (*   now Lia.lia. *)
-    (*   now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax. *)
+      unfold maxAddr.
+      intros addr bytes bytesfit lenAddrFits maxAddrFits addrbytesFits addrDiffFits Hmin Hmax.
+      unfold bv.ule, bv.ule in *.
+      unfold liveAddrs.
+      exists (bv.seqBv minAddr (N.to_nat (bv.bin addr - bv.bin minAddr))%N).
+      exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes)))).
+      rewrite <-(bv.seqBv_app addr).
+      replace addr with (minAddr + bv.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr))) at 2.
+      rewrite <-bv.seqBv_app; try lia.
+      f_equal.
+      - unfold bv.ule, bv.ult in *.
+        apply N_of_nat_inj.
+        apply Z_of_N_inj.
+        rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
+        try assumption.
+        + rewrite (N2Z.inj_add (bv.bin addr)).
+          now Lia.lia.
+        + now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax.
+      - enough (bv.bin minAddr + N.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr)) +
+                N.of_nat (bytes + N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes))) = bv.bin minAddr + N.of_nat lenAddr)%N as -> by assumption.
+        apply Z_of_N_inj.
+        rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
+        try assumption.
+        + rewrite (N2Z.inj_add (bv.bin addr)).
+          now Lia.lia.
+        + rewrite ?bv.bin_add_small ?bv.bin_of_nat_small in Hmax; try assumption.
+      - unfold bv.of_nat.
+        rewrite N2Nat.id.
+        apply bv.unsigned_inj.
+        unfold bv.unsigned.
+        rewrite bv.bin_add_small.
+        + rewrite N2Z.inj_add.
+          rewrite bv.bin_of_N_small; try assumption.
+          now Lia.lia.
+        + replace (bv.bin minAddr + _)%N with (bv.bin addr); try Lia.lia.
+          apply Z_of_N_inj.
+          rewrite N2Z.inj_add.
+          rewrite bv.bin_of_N_small; try assumption.
+          now Lia.lia.
 
-    (*   enough (bv.bin minAddr + N.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr)) + *)
-    (*             N.of_nat (bytes + N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes))) = bv.bin minAddr + N.of_nat lenAddr)%N as -> by assumption. *)
-    (*   apply Z_of_N_inj. *)
-    (*   rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small; *)
-    (*     try assumption. *)
-    (*   rewrite (N2Z.inj_add (bv.bin addr)). *)
-    (*   now Lia.lia. *)
-
-    (*   unfold bv.ule in Hmax. *)
-    (*   rewrite ?bv.bin_add_small ?bv.bin_of_nat_small in Hmax; try assumption. *)
-
-    (*   unfold bv.ule in Hmin. *)
-    (*   unfold bv.of_nat. *)
-    (*   rewrite N2Nat.id. *)
-    (*   apply bv.unsigned_inj. *)
-    (*   unfold bv.unsigned. *)
-    (*   rewrite bv.bin_add_small. *)
-    (*   rewrite N2Z.inj_add. *)
-    (*   rewrite bv.bin_of_N_small; try assumption. *)
-    (*   now Lia.lia. *)
-
-    (*   replace (bv.bin minAddr + _)%N with (bv.bin addr). *)
-    (*   Lia.lia. *)
-    (*   apply Z_of_N_inj. *)
-    (*   rewrite N2Z.inj_add. *)
-    (*   rewrite bv.bin_of_N_small; try assumption. *)
-    (*   now Lia.lia. *)
-
-    (*   rewrite N2Nat.id. *)
-    (*   rewrite ?bv.bin_add_small; try assumption. *)
-    (*   rewrite ?bv.bin_of_nat_small; try assumption. *)
-    (*   rewrite bv.bin_add_small bv.bin_of_nat_small in maxAddrFits; try assumption. *)
-    (*   now Lia.lia. *)
-
-    (*   now rewrite bv.bin_of_nat_small. *)
-    (* Qed. *)
+      - rewrite N2Nat.id.
+        rewrite ?bv.bin_add_small; try assumption.
+        rewrite ?bv.bin_of_nat_small; try assumption.
+        + rewrite bv.bin_add_small bv.bin_of_nat_small in maxAddrFits; try assumption.
+          now Lia.lia.
+        + now rewrite bv.bin_of_nat_small.
+    Qed.
 
     (* TODO: first use Dominique's impl/lemma above, then in cleanup/refactor phase shift to a seqBV as in stddp/unstable! *)
     (* TODO: might be beneficial to introduce "seqBV" *)
