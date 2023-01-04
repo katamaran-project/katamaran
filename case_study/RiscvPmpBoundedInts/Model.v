@@ -732,11 +732,9 @@ Module RiscvPmpModel2.
         apply N.lt_add_pos_r.
         apply bv_ult_nat_S_zero; auto.
         fold seq.
-        iSpecialize ("IHbytes" $! (S base) paddr pmp p _ (N_of_nat_lt_S _ Hbytes) _ with "Hbs").
+        iApply ("IHbytes" $! (S base) paddr pmp p _ _ _ with "Hbs").
         Unshelve. (* TODO: the unshelved ones are provable with some arithmetic etc *)
-        2: admit.
-        2: admit.
-        iApply "IHbytes".
+        2-4: Lia.lia.
         iPureIntro.
         admit. (* TODO: provable, if we have access to pₓ₊₁ then we also have access to (p+1)ₓ (format: addr\_bytes), or more visually p:|----| -> p+1:|---| *)
       - admit.
