@@ -792,7 +792,7 @@ Module RiscvPmpModel2.
       iInduction bytes as [|bytes] "IHbytes";
         iIntros (base paddr); iSplit.
       - auto.
-      - iIntros "H". now iExists (bv.zero (0 * byte)).
+      - iIntros "H". now iExists bv.zero.
       - iIntros "[%w H]". cbn [seq].
         rewrite big_sepL_cons.
         rewrite (@bv.add_comm _ paddr (bv.of_nat base)).
