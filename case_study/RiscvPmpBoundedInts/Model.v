@@ -499,7 +499,7 @@ Module RiscvPmpModel2.
     Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
       forall paddr rng,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero xlenbits <ᵘ w ->
+        bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
         pmp_match_addr paddr bytes rng = PMP_Match ->
         pmp_match_addr paddr w rng = PMP_Match.
@@ -627,7 +627,7 @@ Module RiscvPmpModel2.
     Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
       forall paddr cfg p hi lo,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero xlenbits <ᵘ w ->
+        bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
         pmp_match_entry paddr bytes p cfg hi lo = PMP_Success ->
         pmp_match_entry paddr w p cfg hi lo = PMP_Success.
@@ -656,7 +656,7 @@ Module RiscvPmpModel2.
     Lemma check_pmp_access_reduced_width (bytes w : Xlenbits) :
       forall paddr pmp p acc,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero xlenbits <ᵘ w ->
+        bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
         check_pmp_access paddr bytes pmp p = (true, acc) ->
         check_pmp_access paddr w pmp p = (true, acc).
@@ -681,7 +681,7 @@ Module RiscvPmpModel2.
     Lemma pmp_access_reduced_width (bytes w : Xlenbits) :
       forall paddr pmp p acc,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero xlenbits <ᵘ w ->
+        bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
         Pmp_access paddr bytes pmp p acc ->
         Pmp_access paddr w pmp p acc.
