@@ -458,7 +458,7 @@ Module RiscvPmpModel2.
 
     Lemma bv_add_ule_S_ult : forall {x} (n m p : bv x),
         (bv.bin n + bv.bin p < bv.exp2 x)%N ->
-        bv.zero x <ᵘ p ->
+        bv.zero <ᵘ p ->
         n + p <=ᵘ m -> n <ᵘ m.
     Proof.
       intros.
@@ -742,7 +742,7 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma pmp_match_addr_match_conditions_1 : forall paddr w lo hi,
-        bv.zero xlenbits <ᵘ w ->
+        bv.zero <ᵘ w ->
         pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match ->
         lo <=ᵘ hi ∧ lo <=ᵘ paddr ∧ paddr + w <=ᵘ hi.
     Proof.
@@ -765,7 +765,7 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma pmp_match_addr_match_conditions_2 : forall paddr w lo hi,
-        bv.zero xlenbits <ᵘ w ->
+        bv.zero <ᵘ w ->
         (bv.bin paddr + bv.bin w < bv.exp2 xlenbits)%N ->
         lo <=ᵘ hi ->
         lo <=ᵘ paddr ->
@@ -853,8 +853,8 @@ Module RiscvPmpModel2.
         apply pmp_match_addr_addr_S_width_pred in E;
         auto;
         try now rewrite E.
-      all: try discriminate H.
-    Admitted.
+      discriminate H.
+    Qed.
 
     Lemma pmp_match_entry_addr_S_width_pred_continue (bytes : nat) : forall paddr p cfg lo hi,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
@@ -870,8 +870,8 @@ Module RiscvPmpModel2.
         apply pmp_match_addr_addr_S_width_pred in E;
         auto;
         try now rewrite E.
-      all: try discriminate H.
-    Admitted.
+      discriminate H.
+    Qed.
 
     Lemma pmp_access_addr_S_width_pred (bytes : nat) : forall paddr pmp p acc,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
@@ -943,9 +943,16 @@ Module RiscvPmpModel2.
         rewrite bv.of_nat_S.
         rewrite (@bv.add_comm _ (bv.one xlenbits) _).
         rewrite bv.add_assoc.
-        apply pmp_access_addr_S_width_pred.
-        admit.
-        apply Haccess.
+        apply pmp_access_addr_S_width_pred; auto.
+        admit (* TODO: add assumption *).
+        rewrite <- (@bv.bin_of_nat_small _ _ Hbase) in Hrep.
+        rewrite <- bv.bin_add_small in Hrep.
+        apply Hrep.
+        eapply N.lt_trans.
+        2: exact Hrep.
+        apply N.lt_add_pos_r; auto.
+        rewrite <- (@bv.bin_of_nat_small _ _ Hbytes); auto.
+        apply bv_ult_nat_S_zero; auto.
      - admit.
     Admitted.
 
