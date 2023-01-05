@@ -322,62 +322,54 @@ Module RiscvPmpModel2.
         (addr + (bv.of_nat bytes) <=ᵘ maxAddr) ->
         exists l1 l2, liveAddrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
     Proof.
-    Admitted.
     (* TODO: more efficient proof? *)
-    (*   unfold maxAddr. *)
-    (*   intros addr bytes bytesfit lenAddrFits maxAddrFits addrbytesFits addrDiffFits Hmin Hmax. *)
-    (*   unfold liveAddrs. *)
-    (*   exists (bv.seqBv minAddr (N.to_nat (bv.bin addr - bv.bin minAddr))%N). *)
-    (*   exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes)))). *)
-    (*   rewrite <-(bv.seqBv_app addr). *)
-    (*   replace addr with (minAddr + bv.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr))) at 2. *)
-    (*   rewrite <-bv.seqBv_app; try lia. *)
-    (*   f_equal. *)
-    (*   unfold bv.ule, bv.ult in *. *)
-    (*   apply N_of_nat_inj. *)
-    (*   apply Z_of_N_inj. *)
-    (*   rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small; *)
-    (*     try assumption. *)
-    (*   rewrite (N2Z.inj_add (bv.bin addr)). *)
-    (*   now Lia.lia. *)
-    (*   now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax. *)
+      unfold maxAddr.
+      intros addr bytes bytesfit lenAddrFits maxAddrFits addrbytesFits addrDiffFits Hmin Hmax.
+      unfold bv.ule, bv.ule in *.
+      unfold liveAddrs.
+      exists (bv.seqBv minAddr (N.to_nat (bv.bin addr - bv.bin minAddr))%N).
+      exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes)))).
+      rewrite <-(bv.seqBv_app addr).
+      replace addr with (minAddr + bv.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr))) at 2.
+      rewrite <-bv.seqBv_app; try lia.
+      f_equal.
+      - unfold bv.ule, bv.ult in *.
+        apply N_of_nat_inj.
+        apply Z_of_N_inj.
+        rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
+        try assumption.
+        + rewrite (N2Z.inj_add (bv.bin addr)).
+          now Lia.lia.
+        + now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax.
+      - enough (bv.bin minAddr + N.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr)) +
+                N.of_nat (bytes + N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes))) = bv.bin minAddr + N.of_nat lenAddr)%N as -> by assumption.
+        apply Z_of_N_inj.
+        rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
+        try assumption.
+        + rewrite (N2Z.inj_add (bv.bin addr)).
+          now Lia.lia.
+        + rewrite ?bv.bin_add_small ?bv.bin_of_nat_small in Hmax; try assumption.
+      - unfold bv.of_nat.
+        rewrite N2Nat.id.
+        apply bv.unsigned_inj.
+        unfold bv.unsigned.
+        rewrite bv.bin_add_small.
+        + rewrite N2Z.inj_add.
+          rewrite bv.bin_of_N_small; try assumption.
+          now Lia.lia.
+        + replace (bv.bin minAddr + _)%N with (bv.bin addr); try Lia.lia.
+          apply Z_of_N_inj.
+          rewrite N2Z.inj_add.
+          rewrite bv.bin_of_N_small; try assumption.
+          now Lia.lia.
 
-    (*   enough (bv.bin minAddr + N.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr)) + *)
-    (*             N.of_nat (bytes + N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes))) = bv.bin minAddr + N.of_nat lenAddr)%N as -> by assumption. *)
-    (*   apply Z_of_N_inj. *)
-    (*   rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small; *)
-    (*     try assumption. *)
-    (*   rewrite (N2Z.inj_add (bv.bin addr)). *)
-    (*   now Lia.lia. *)
-
-    (*   unfold bv.ule in Hmax. *)
-    (*   rewrite ?bv.bin_add_small ?bv.bin_of_nat_small in Hmax; try assumption. *)
-
-    (*   unfold bv.ule in Hmin. *)
-    (*   unfold bv.of_nat. *)
-    (*   rewrite N2Nat.id. *)
-    (*   apply bv.unsigned_inj. *)
-    (*   unfold bv.unsigned. *)
-    (*   rewrite bv.bin_add_small. *)
-    (*   rewrite N2Z.inj_add. *)
-    (*   rewrite bv.bin_of_N_small; try assumption. *)
-    (*   now Lia.lia. *)
-
-    (*   replace (bv.bin minAddr + _)%N with (bv.bin addr). *)
-    (*   Lia.lia. *)
-    (*   apply Z_of_N_inj. *)
-    (*   rewrite N2Z.inj_add. *)
-    (*   rewrite bv.bin_of_N_small; try assumption. *)
-    (*   now Lia.lia. *)
-
-    (*   rewrite N2Nat.id. *)
-    (*   rewrite ?bv.bin_add_small; try assumption. *)
-    (*   rewrite ?bv.bin_of_nat_small; try assumption. *)
-    (*   rewrite bv.bin_add_small bv.bin_of_nat_small in maxAddrFits; try assumption. *)
-    (*   now Lia.lia. *)
-
-    (*   now rewrite bv.bin_of_nat_small. *)
-    (* Qed. *)
+      - rewrite N2Nat.id.
+        rewrite ?bv.bin_add_small; try assumption.
+        rewrite ?bv.bin_of_nat_small; try assumption.
+        + rewrite bv.bin_add_small bv.bin_of_nat_small in maxAddrFits; try assumption.
+          now Lia.lia.
+        + now rewrite bv.bin_of_nat_small.
+    Qed.
 
     (* TODO: first use Dominique's impl/lemma above, then in cleanup/refactor phase shift to a seqBV as in stddp/unstable! *)
     (* TODO: might be beneficial to introduce "seqBV" *)
@@ -540,6 +532,14 @@ Module RiscvPmpModel2.
       now apply bv_ult_antirefl.
     Qed.
 
+    Lemma bv_ule_antisymm {n} {x y : bv n} : x <=ᵘ y -> y <=ᵘ x -> x = y.
+    Proof.
+      unfold bv.ule.
+      intros ineq1 ineq2.
+      apply bv.bin_inj.
+      now Lia.lia.
+    Qed.
+
     (* TODO: move all these w <=ᵘ bytes stuff as an early assumption to get rid of all the "exact H..." tactics *)
     (* TODO: heavy cleanup needed! *)
     Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
@@ -550,89 +550,56 @@ Module RiscvPmpModel2.
         pmp_match_addr paddr bytes rng = PMP_Match ->
         pmp_match_addr paddr w rng = PMP_Match.
     Proof.
+      unfold bv.ule, bv.ult.
       intros paddr rng Hass H0w Hw Hpmp.
-      assert (Hrep_paddr_w: (bv.bin paddr + bv.bin w < bv.exp2 xlenbits)%N).
-      apply bv_ule_cases in Hw as [Hw|Hw].
-      apply N.lt_trans with (m := (bv.bin paddr + bv.bin bytes)%N); auto.
-      now apply N.add_lt_mono_l.
-      subst; auto.
-      apply bv_ule_cases in Hw as [Hw|Hw].
-      2: subst; auto.
-      destruct rng as [[lo hi]|].
+      assert (Hrep_paddr_w: (bv.bin paddr + bv.bin w < bv.exp2 xlenbits)%N) by lia.
+      apply bv_ule_cases in Hw as [Hw|Hw]; last by subst.
+      destruct rng as [[lo hi]|]; last by simpl.
       revert Hpmp.
       unfold pmp_match_addr.
       destruct (hi <ᵘ? lo) eqn:?; auto.
-      destruct (paddr + bytes <=ᵘ? lo) eqn:?.
-      rewrite orb_true_l.
-      now intros.
+      destruct (paddr + bytes <=ᵘ? lo) eqn:?; first by cbn.
       rewrite orb_false_l.
-      destruct (hi <=ᵘ? paddr) eqn:?.
-      now intros.
+      destruct (hi <=ᵘ? paddr) eqn:?; first by intros.
+      destruct (paddr + bytes <=ᵘ? hi) eqn:?;
+        last by (rewrite andb_false_r; inversion 1).
       intros H.
-      destruct (paddr + bytes <=ᵘ? hi) eqn:?.
       destruct (lo <ᵘ? paddr) eqn:?.
-      (* TODO: can probably undo some rewrites or just do them in * *)
-      rewrite bv_uleb_ugt in Heqb0.
-      rewrite bv_uleb_ugt in Heqb1.
-      rewrite bv_uleb_ule in Heqb2.
-      rewrite bv_ultb_ult in Heqb3.
-      rewrite bv_ultb_uge in Heqb.
-      assert (Hlt: lo <ᵘ paddr + w).
-      unfold bv.ult in *.
-      eapply N.lt_trans.
-      apply Heqb3.
-      rewrite ?bv.bin_add_small; auto.
-      now apply N.lt_add_pos_r.
-      rewrite <- bv_uleb_ugt in Hlt.
-      rewrite Hlt.
-      simpl.
-      rewrite <- bv_ultb_ult in Heqb3.
-      apply bv_ultb_uleb in Heqb3.
-      rewrite Heqb3.
-      assert (Hlthi: paddr + w <=ᵘ? hi = true).
-      rewrite bv_uleb_ule.
-      apply bv_ule_trans with (y := paddr + bytes); auto.
-      apply bv_add_ule_mono; auto.
-      apply bv_ult_ule_incl; auto.
-      now rewrite Hlthi.
-      rewrite bv_uleb_ule in Heqb2.
-      rewrite bv_uleb_ugt in Heqb0.
-      rewrite bv_uleb_ugt in Heqb1.
-      rewrite bv_ultb_uge in Heqb.
-      rewrite bv_ultb_uge in Heqb3.
-      apply bv_ule_cases in Heqb3 as [Hplo|Hplo].
-      destruct (lo <=ᵘ? paddr) eqn:?.
-      rewrite bv_uleb_ule in Heqb3.
-      apply bv_ule_cases in Heqb3 as [Hlop|Hlop].
-      unfold bv.ule, bv.ult in *.
-      exfalso.
-      now apply (N.lt_asymm _ _ Hplo).
-      subst.
-      unfold bv.ult in Hplo.
-      apply N.lt_irrefl in Hplo.
-      contradiction.
-      rewrite andb_false_l in H.
-      discriminate H.
-      subst.
-      destruct (lo + w <=ᵘ? lo) eqn:?.
-      rewrite bv_uleb_ule in Heqb3.
-      apply bv_ule_cases in Heqb3 as [Hlo|Hlo].
-      exfalso.
-      apply (N.lt_asymm _ _ Hlo).
-      rewrite bv.bin_add_small; auto.
-      apply N.lt_add_pos_r; auto.
-      now apply bv_add_nonzero_neq in Hlo.
-      apply bv_ule_trans with (x := lo + w) in Heqb2.
-      simpl.
-      assert (lo <=ᵘ lo) by (apply bv_ule_refl).
-      rewrite <- bv_uleb_ule in H0.
-      rewrite <- bv_uleb_ule in Heqb2.
-      now rewrite H0 Heqb2.
-      apply bv_add_ule_mono; auto.
-      apply bv_ult_ule_incl; auto.
-      rewrite andb_false_r in H; discriminate H.
-      simpl in Hpmp.
-      discriminate Hpmp.
+      - rewrite ?bv_uleb_ugt ?bv_uleb_ule ?bv_ultb_ult ?bv_ultb_uge in Heqb0 Heqb1 Heqb3 Heqb.
+        assert (Hlt: lo <ᵘ paddr + w).
+        { unfold bv.ult in *.
+          rewrite ?bv.bin_add_small; auto.
+          Lia.lia.
+        }
+        rewrite <- bv_uleb_ugt in Hlt.
+        rewrite Hlt.
+        simpl.
+        rewrite <- bv_ultb_ult in Heqb3.
+        apply bv_ultb_uleb in Heqb3.
+        rewrite Heqb3.
+        enough (paddr + w <=ᵘ? hi = true) by now rewrite H0.
+        rewrite bv_uleb_ule.
+        apply bv_ule_trans with (y := paddr + bytes); auto.
+        apply bv_add_ule_mono; auto.
+        apply bv_ult_ule_incl; auto.
+        now rewrite bv_uleb_ule in Heqb2.
+      - rewrite ?bv_uleb_ugt ?bv_uleb_ule ?bv_ultb_ult ?bv_ultb_uge in Heqb0 Heqb1 Heqb2 Heqb3 Heqb.
+        rewrite andb_true_r in H.
+        destruct (lo <=ᵘ? paddr) eqn:Heqlp; inversion H.
+        rewrite bv_uleb_ule in Heqlp.
+        replace paddr with lo in * by now apply bv_ule_antisymm.
+        clear Heqb3 Heqb H Heqlp.
+        assert (lo <ᵘ lo + w).
+        { unfold bv.ugt, bv.ult.
+          rewrite bv.bin_add_small; lia.
+        }
+        rewrite <-bv_uleb_ugt in H.
+        rewrite H.
+        enough ((lo + w <=ᵘ? hi) = true) by now rewrite H0.
+        rewrite bv_uleb_ule.
+        unfold bv.ule, bv.ult in *.
+        rewrite bv.bin_add_small in Heqb2; try lia.
+        rewrite bv.bin_add_small; lia.
     Qed.
 
     Lemma pmp_match_addr_reduced_width_no_match (bytes w : Xlenbits) :
@@ -642,15 +609,13 @@ Module RiscvPmpModel2.
       pmp_match_addr paddr bytes rng = PMP_NoMatch ->
       pmp_match_addr paddr w rng = PMP_NoMatch.
     Proof.
-      intros paddr [[lo hi]|] Hass Hle.
+      intros paddr [[lo hi]|] Hass Hle; last by simpl.
       unfold pmp_match_addr.
       destruct (hi <ᵘ? lo); auto.
       destruct (paddr + bytes <=ᵘ? lo) eqn:?.
       rewrite orb_true_l.
-      intros _.
       apply bv_uleb_ule in Heqb.
-      apply (@bv_ule_base _ _ _ w _ Hass) in Heqb.
-      2: exact Hle.
+      apply (@bv_ule_base _ _ _ w _ Hass Hle) in Heqb.
       apply bv_uleb_ule in Heqb.
       rewrite Heqb.
       now rewrite orb_true_l.
@@ -660,14 +625,11 @@ Module RiscvPmpModel2.
       destruct (lo <=ᵘ? paddr).
       destruct (paddr + bytes <=ᵘ? hi) eqn:?.
       apply bv_uleb_ule in Heqb0.
-      apply (@bv_ule_base _ _ _ w _ Hass) in Heqb0.
-      2: exact Hle.
+      apply (@bv_ule_base _ _ _ w _ Hass Hle) in Heqb0.
       apply bv_uleb_ule in Heqb0.
-      rewrite Heqb0.
-      now simpl.
-      intros; now rewrite andb_false_r in H.
-      intros; now rewrite andb_false_l in H.
-      auto.
+      now rewrite Heqb0.
+      now rewrite andb_false_r.
+      now rewrite andb_false_l.
     Qed.
 
     Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
