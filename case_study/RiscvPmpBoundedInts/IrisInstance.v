@@ -86,11 +86,9 @@ Module RiscvPmpIrisInstance <:
 
     (* TODO: change back to words instead of bytes... might be an easier first version
              and most likely still conventient in the future *)
-  Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptsto_readonly").
+  Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptstomem_readonly").
     Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
       mapsto addr (DfracOwn 1) b.
-    Definition interp_ptsto_readonly (addr : Addr) (b : Byte) : iProp Σ :=
-      inv femto_inv_ns (interp_ptsto addr b).
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
     Definition ptstoSthL : list Addr -> iProp Σ :=
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
@@ -110,6 +108,8 @@ Module RiscvPmpIrisInstance <:
             interp_ptsto addr byte ∗ interp_ptstomem (bv.one xlenbits + addr) bytes
       end%I.
 
+    Definition interp_ptstomem_readonly {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
+      inv femto_inv_ns (interp_ptstomem addr b).
     Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       [∗ list] a ∈ addrs,
         (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ ptstoSth a)%I.
@@ -134,10 +134,10 @@ Module RiscvPmpIrisInstance <:
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without addr bytes liveAddrs entries m
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
-    | ptsto_readonly           | [ addr; w ]          => interp_ptsto_readonly addr w
+    | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
-    | ptstomem _               | [ addr; bs]       => interp_ptstomem addr bs
-    | ptstoinstr              | [ addr; instr ]      => interp_ptsto_instr addr instr.
+    | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
+    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
 
     Ltac destruct_pmp_entries :=
       repeat match goal with
