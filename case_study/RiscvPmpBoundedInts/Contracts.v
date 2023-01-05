@@ -540,6 +540,15 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                ∗ pc     ↦ term_var "npc";
           |}.
 
+        Definition sep_contract_to_bits (l : nat) : SepContractFun (to_bits l) :=
+          {| sep_contract_logic_variables := [value :: ty.int];
+             sep_contract_localstore      := [term_var value];
+             sep_contract_precondition    := ⊤;
+             sep_contract_result          := "result_to_bits";
+             sep_contract_postcondition   :=
+               term_var "result_to_bits" = term_get_slice_int (term_var value);
+          |}.
+
         Definition sep_contract_rX : SepContractFun rX :=
           {| sep_contract_logic_variables := [rs :: ty_regno];
              sep_contract_localstore      := [term_var rs];
@@ -794,7 +803,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           |}.
 
         Definition sep_contract_pmpCheck : SepContractFun pmpCheck :=
-          {| sep_contract_logic_variables := [addr :: ty_xlenbits; width :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; "entries" :: ty.list ty_pmpentry];
+          {| sep_contract_logic_variables := [addr :: ty_xlenbits; width :: ty.int; acc :: ty_access_type; priv :: ty_privilege; "entries" :: ty.list ty_pmpentry];
              sep_contract_localstore      := [term_var addr; term_var width; term_var acc; term_var priv];
              sep_contract_precondition    :=
                asn_pmp_entries (term_var "entries");
@@ -803,7 +812,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                asn_match_option
                  _ (term_var "result_pmpCheck") e
                  (asn_pmp_entries (term_var "entries"))
-                 (asn_pmp_entries (term_var "entries") ∗ asn_pmp_access (term_var addr) (term_var width) (term_var "entries") (term_var priv) (term_var acc));
+                 (asn_pmp_entries (term_var "entries") ∗ asn_pmp_access (term_var addr) (term_get_slice_int (term_var width)) (term_var "entries") (term_var priv) (term_var acc));
           |}.
 
         Definition sep_contract_pmpCheckPerms : SepContractFun pmpCheckPerms :=
@@ -959,6 +968,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | get_next_pc             => Some sep_contract_get_next_pc
             | set_next_pc             => Some sep_contract_set_next_pc
             | tick_pc                 => Some sep_contract_tick_pc
+            | to_bits l               => Some (sep_contract_to_bits l)
             | exception_handler       => Some sep_contract_exception_handler
             | handle_mem_exception    => Some sep_contract_handle_mem_exception
             | handle_illegal          => Some sep_contract_handle_illegal
@@ -1401,6 +1411,9 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_tick_pc : ValidContract tick_pc.
   Proof. reflexivity. Qed.
 
+  Lemma valid_contract_to_bits (l : nat) : ValidContract (to_bits l).
+  Proof. reflexivity. Qed.
+
   Lemma valid_contract_rX : ValidContract rX.
   Proof. reflexivity. Qed.
 
@@ -1474,6 +1487,7 @@ Module RiscvPmpValidContracts.
   Lemma N_ltb_0 (n : N) : N.ltb n N0 = false.
   Proof. apply N.ltb_ge, N.le_0_l. Qed.
 
+  (* TODO: reprove this contract! notable change: we convert the width to a bitvector in the body of pmpCheck *)
   (* TODO: the pmpCheck contract requires some manual proof effort in the case
          that no pmp entry matches (i.e. we end up in the final check of
          the unrolled loop, more specifically the match on the privilege level,
@@ -1585,6 +1599,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_get_next_pc).
     - apply (valid_contract _ H valid_contract_set_next_pc).
     - apply (valid_contract _ H valid_contract_tick_pc).
+    - apply (valid_contract _ H (valid_contract_to_bits l)).
     (* - apply (valid_contract _ H valid_contract_abs). *)
     - apply (valid_contract_debug _ H valid_contract_within_phys_mem).
     - apply (valid_contract _ H (valid_contract_mem_read bytes)).

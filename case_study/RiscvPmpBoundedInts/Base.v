@@ -45,6 +45,7 @@ Local Set Implicit Arguments.
 (* Taken from Coq >= 8.15 SigTNotations *)
 Local Notation "( x ; y )" := (existT x y) (only parsing).
 
+Definition xlen      := 32.
 Definition byte      := 8.
 Definition word      := 4 * byte.
 Definition xlenbytes := 4.

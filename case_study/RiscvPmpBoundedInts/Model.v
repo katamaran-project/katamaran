@@ -1063,9 +1063,10 @@ Module RiscvPmpModel2.
         unfold ptstoSth.
         rewrite big_op_addrs_sum.
         iApply big_sepL_pure_impl.
+        1-3: iPureIntro.
         admit. (* TODO: if x <= maxAddr, then x < exp2 xlenbits (maxAddr should never exceed arch size) *)
         admit. (* TODO: same as above *)
-        iPureIntro; now simpl.
+        now simpl.
         iIntros "_".
         rewrite (bv.add_of_nat_0_l paddr).
         iPoseProof (interp_ptstomem_big_sepS bytes $! 0%nat paddr with "Hpaddr") as "H".

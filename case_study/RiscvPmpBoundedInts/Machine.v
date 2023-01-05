@@ -143,6 +143,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | get_next_pc           : Fun ctx.nil ty_xlenbits
   | set_next_pc           : Fun [addr ∷ ty_xlenbits] ty.unit
   | tick_pc               : Fun ctx.nil ty.unit
+  | to_bits (l : nat)     : Fun [value :: ty.int] (ty.bvec l)
   (* | abs                   : Fun [v ∷ ty.int] ty.int *)
   | within_phys_mem       : Fun [paddr ∷ ty_xlenbits] ty.bool
   | mem_read (bytes : nat)             : Fun [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
@@ -154,7 +155,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | pmpWriteCfgReg        : Fun [idx :: ty_pmpcfgidx; value :: ty_xlenbits] ty.unit
   | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits] ty_pmpcfg_ent
   | pmpWriteAddr          : Fun [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
-  | pmpCheck              : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
+  | pmpCheck              : Fun [addr ∷ ty_xlenbits; width :: ty.int; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
   | pmpCheckPerms         : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool
   | pmpCheckRWX           : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool
   | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
@@ -436,11 +437,15 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     stm_write_register pc tmp ;;
     stm_val ty.unit tt.
 
+  Definition fun_to_bits (l : nat) : Stm [value :: ty.int] (ty.bvec l) :=
+    exp_get_slice_int value.
+
   Definition fun_abs : Stm [v ∷ ty.int] ty.int :=
     if: v < exp_int 0
     then v * exp_int (-1)
     else v.
 
+  (* TODO: add width *)
   Definition fun_within_phys_mem : Stm [paddr :: ty_xlenbits] ty.bool :=
     (exp_val ty_xlenbits minAddr <=ᵘ paddr) && (paddr <=ᵘ exp_val ty_xlenbits maxAddr).
 
@@ -477,14 +482,14 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       stm_exp (exp_union (memory_op_result 1) KMemException E_SAMO_Access_Fault).
 
   Definition fun_pmp_mem_read (bytes : nat) : Stm [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
-    let: tmp := call pmpCheck paddr (exp_val ty_xlenbits (Bitvector.bv.of_nat bytes)) t p in
+    let: tmp := call pmpCheck paddr (exp_val ty.int (Z.of_nat bytes)) t p in
     match: tmp with
     | inl e => stm_exp (exp_union (memory_op_result bytes) KMemException e)
     | inr v => stm_call (checked_mem_read bytes) [t; paddr]
     end.
 
   Definition fun_pmp_mem_write (bytes : nat) : Stm [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1) :=
-    let: tmp := call pmpCheck paddr (exp_val ty_xlenbits (Bitvector.bv.of_nat bytes)) typ priv in
+    let: tmp := call pmpCheck paddr (exp_val ty.int (Z.of_nat bytes)) typ priv in
     match: tmp with
     | inl e => stm_exp (exp_union (memory_op_result 1) KMemException e)
     | inr v => stm_call (checked_mem_write bytes) [paddr; data]
@@ -512,8 +517,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_pmpWriteAddr : Stm [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits :=
     if: locked then addr else value.
 
-  Definition fun_pmpCheck : Stm [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
+  Definition fun_pmpCheck : Stm [addr ∷ ty_xlenbits; width :: ty.int; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
     use lemma open_pmp_entries ;;
+    let: "width" :: ty_xlenbits := stm_call (to_bits xlen) [width] in  
     let: check%string :=
       let: tmp1 := stm_read_register pmp0cfg in
       let: tmp2 := stm_read_register pmpaddr0 in
@@ -1102,6 +1108,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | get_next_pc             => fun_get_next_pc
     | set_next_pc             => fun_set_next_pc
     | tick_pc                 => fun_tick_pc
+    | (to_bits l)             => @fun_to_bits l
     (* | abs                     => fun_abs *)
     | within_phys_mem         => fun_within_phys_mem
     | mem_read width          => fun_mem_read width
