@@ -314,7 +314,7 @@ Module RiscvPmpModel2.
       unfold liveAddrs, maxAddr.
       intros.
       apply bv.in_seqBv;
-        eauto using enough_addr_bits.
+        eauto using maxAddr_rep.
     Qed.
 
     Opaque minAddr.
@@ -1032,7 +1032,7 @@ Module RiscvPmpModel2.
         interp_pmp_addr_access,
         interp_ptsto,
         MemVal, Word.
-      destruct (@in_liveAddrs_split paddr bytes _ _ Hlemin Hlemax) as (l1 & l2 & eq).
+      destruct (@in_liveAddrs_split_old paddr bytes Hlemin Hlemax) as (l1 & l2 & eq).
       rewrite eq. 
       rewrite ?big_opL_app.
       iDestruct "Hmem" as "(Hmem1 & Haddrs & Hmem2)".
