@@ -160,6 +160,15 @@ Module RiscvPmpModel2.
       eliminate_prim_step Heq.
       iMod "Hclose" as "_".
       iModIntro.
+      iInduction bytes as [|bytes] "IHbytes".
+      - iSplitL "Hregs Hmem".
+        now iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "$".
+        iFrame.
+        iApply wp_value.
+        simpl; iSplit; auto.
+        iPureIntro.
+        now destruct (bv.view w).
+      - admit.
       (* iPoseProof (gen_heap.gen_heap_valid with "Hmem H") as "%". *)
       (* iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "?". *)
       (* iFrame. *)
@@ -929,18 +938,20 @@ Module RiscvPmpModel2.
         apply N.lt_add_pos_r.
         apply bv_ult_nat_S_zero; auto.
         fold seq.
-        iApply ("IHbytes" $! (S base) paddr pmp p _ _ _ with "Hbs").
-        Unshelve.
-        2-4: Lia.lia.
-        iPureIntro.
-
+        destruct bytes. (* we need to know a bit more about bytes to finish this case *)
+        now iSimpl.
+        iSimpl in "Hbs".
         destruct Haccess as [acc Haccess].
-        exists acc.
-        rewrite bv.of_nat_S.
-        rewrite (@bv.add_comm _ (bv.one xlenbits) _).
-        rewrite bv.add_assoc.
-        apply pmp_access_addr_S_width_pred; auto.
-        admit (* TODO: add assumption *).
+        apply pmp_access_addr_S_width_pred in Haccess.
+        rewrite <- bv.add_assoc in Haccess.
+        rewrite (@bv.add_comm _ (bv.of_nat base) (bv.one xlenbits)) in Haccess.
+        rewrite <- bv.of_nat_S in Haccess.
+        iApply ("IHbytes" $! (S base) paddr pmp p _ _ _ with "Hbs").
+        now iExists acc.
+        rewrite bv.bin_of_nat_small; first lia.
+        eapply N.lt_trans.
+        2: exact Hbytes.
+        lia.
         rewrite <- (@bv.bin_of_nat_small _ _ Hbase) in Hrep.
         rewrite <- bv.bin_add_small in Hrep.
         apply Hrep.
@@ -949,6 +960,9 @@ Module RiscvPmpModel2.
         apply N.lt_add_pos_r; auto.
         rewrite <- (@bv.bin_of_nat_small _ _ Hbytes); auto.
         apply bv_ult_nat_S_zero; auto.
+        lia.
+        Unshelve.
+        all: lia.
      - admit.
     Admitted.
 
