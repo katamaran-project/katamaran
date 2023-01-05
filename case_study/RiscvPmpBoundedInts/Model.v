@@ -373,11 +373,9 @@ Module RiscvPmpModel2.
           now Lia.lia.
 
       - rewrite N2Nat.id.
-        rewrite ?bv.bin_add_small; try assumption.
-        rewrite ?bv.bin_of_nat_small; try assumption.
-        + rewrite bv.bin_add_small bv.bin_of_nat_small in maxAddrFits; try assumption.
-          now Lia.lia.
-        + now rewrite bv.bin_of_nat_small.
+        rewrite ?bv.bin_add_small ?bv.bin_of_nat_small; try assumption.
+        rewrite bv.bin_add_small bv.bin_of_nat_small in maxAddrFits; try assumption.
+        now Lia.lia.
     Qed.
 
     (* TODO: first use Dominique's impl/lemma above, then in cleanup/refactor phase shift to a seqBV as in stddp/unstable! *)
