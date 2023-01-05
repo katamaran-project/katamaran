@@ -323,8 +323,6 @@ Module RiscvPmpModel2.
 
     Lemma in_liveAddrs_split : forall (addr : Addr) (bytes : nat),
         (N.of_nat bytes < bv.exp2 xlenbits)%N ->
-        (N.of_nat lenAddr < bv.exp2 xlenbits)%N ->
-        (bv.bin maxAddr < bv.exp2 xlenbits)%N ->
         (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
         (bv.bin addr - bv.bin minAddr < bv.exp2 xlenbits)%N ->
         (minAddr <=ᵘ addr) ->
@@ -333,7 +331,7 @@ Module RiscvPmpModel2.
     Proof.
     (* TODO: more efficient proof? *)
       unfold maxAddr.
-      intros addr bytes bytesfit lenAddrFits maxAddrFits addrbytesFits addrDiffFits Hmin Hmax.
+      intros addr bytes bytesfit addrbytesFits addrDiffFits Hmin Hmax.
       unfold bv.ule, bv.ule in *.
       unfold liveAddrs.
       exists (bv.seqBv minAddr (N.to_nat (bv.bin addr - bv.bin minAddr))%N).
@@ -346,18 +344,18 @@ Module RiscvPmpModel2.
         apply N_of_nat_inj.
         apply Z_of_N_inj.
         rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
-        try assumption.
+        auto using lenAddr_rep.
         + rewrite (N2Z.inj_add (bv.bin addr)).
           now Lia.lia.
         + now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax.
       - enough (bv.bin minAddr + N.of_nat (N.to_nat (bv.bin addr - bv.bin minAddr)) +
-                N.of_nat (bytes + N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes))) = bv.bin minAddr + N.of_nat lenAddr)%N as -> by assumption.
+                N.of_nat (bytes + N.to_nat (bv.bin (minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes))) = bv.bin minAddr + N.of_nat lenAddr)%N as -> by apply maxAddr_rep.
         apply Z_of_N_inj.
         rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
-        try assumption.
+        auto using lenAddr_rep.
         + rewrite (N2Z.inj_add (bv.bin addr)).
           now Lia.lia.
-        + rewrite ?bv.bin_add_small ?bv.bin_of_nat_small in Hmax; try assumption.
+        + rewrite ?bv.bin_add_small ?bv.bin_of_nat_small in Hmax; auto using lenAddr_rep.
       - unfold bv.of_nat.
         rewrite N2Nat.id.
         apply bv.unsigned_inj.
@@ -371,10 +369,9 @@ Module RiscvPmpModel2.
           rewrite N2Z.inj_add.
           rewrite bv.bin_of_N_small; try assumption.
           now Lia.lia.
-
       - rewrite N2Nat.id.
-        rewrite ?bv.bin_add_small ?bv.bin_of_nat_small; try assumption.
-        rewrite bv.bin_add_small bv.bin_of_nat_small in maxAddrFits; try assumption.
+        rewrite ?bv.bin_add_small ?bv.bin_of_nat_small; auto using lenAddr_rep.
+        assert (maxAddrFits := maxAddr_rep).
         now Lia.lia.
     Qed.
 
@@ -1035,7 +1032,7 @@ Module RiscvPmpModel2.
         interp_pmp_addr_access,
         interp_ptsto,
         MemVal, Word.
-      destruct (@in_liveAddrs_split_old paddr bytes Hlemin Hlemax) as (l1 & l2 & eq).
+      destruct (@in_liveAddrs_split paddr bytes _ _ Hlemin Hlemax) as (l1 & l2 & eq).
       rewrite eq. 
       rewrite ?big_opL_app.
       iDestruct "Hmem" as "(Hmem1 & Haddrs & Hmem2)".
