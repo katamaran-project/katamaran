@@ -801,6 +801,18 @@ Module RiscvPmpModel2.
       auto.
     Qed.
 
+    Lemma bv_lt_S_add_one : forall {n} x,
+        (N.of_nat (S x) < bv.exp2 n)%N ->
+        (bv.bin (bv.one n) + (@bv.bin n (bv.of_nat x)) < bv.exp2 n)%N.
+    Proof.
+      destruct n.
+      simpl; lia.
+      assert (bv.bin (bv.one (S n)) = 1%N) by auto.
+      rewrite H.
+      intros.
+      rewrite bv.bin_of_nat_small; lia.
+    Qed.
+
     Lemma pmp_match_addr_addr_S_width_pred (bytes : nat) : forall paddr rng res,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
@@ -809,8 +821,25 @@ Module RiscvPmpModel2.
         pmp_match_addr paddr (bv.of_nat (S bytes)) rng = res ->
         pmp_match_addr (paddr + bv.one xlenbits) (bv.of_nat bytes) rng = res.
     Proof.
-      intros paddr [[lo hi]|] res Hb Hrep Hrepb [Hres|Hres]; subst; auto;
-        intros H.
+      intros paddr rng res Hb Hrep Hrepb.
+      assert (HrepS: (bv.bin paddr + bv.bin (bv.one xlenbits) < bv.exp2 xlenbits)%N).
+      { eapply N.lt_trans.
+        2: exact Hrep.
+        apply N.add_lt_mono_l.
+        rewrite <- (@bv.bin_of_nat_small _ _ Hrepb).
+        rewrite (bv.add_of_nat_0_r (bv.one xlenbits)).
+        rewrite <- bv.of_nat_S.
+        rewrite ?bv.bin_of_nat_small; auto.
+        rewrite ?Nat2N.inj_succ.
+        rewrite <- N.succ_lt_mono.
+        rewrite <- (@bv.bin_of_nat_small xlenbits bytes); auto.
+        eapply N.lt_trans.
+        2: exact Hrepb.
+        lia.
+        lia.
+      }
+      destruct rng as [[lo hi]|]; subst; auto.
+      intros [Hres|Hres]; subst; auto; intros H.
       - unfold pmp_match_addr in *.
         destruct (hi <ᵘ? lo) eqn:?; auto.
         destruct (hi <=ᵘ? paddr) eqn:Ehipaddr.
@@ -819,7 +848,6 @@ Module RiscvPmpModel2.
           apply bv_uleb_ule in Ehipaddr.
           rewrite Ehipaddr.
           now rewrite orb_true_r.
-          admit.
         + destruct (paddr + bv.of_nat (S bytes) <=ᵘ? lo) eqn:Epblo;
             rewrite bv.of_nat_S in Epblo;
             rewrite bv.add_assoc in Epblo;
@@ -831,13 +859,19 @@ Module RiscvPmpModel2.
               destruct (paddr + bv.of_nat (S bytes) <=ᵘ? hi); now auto.
       - apply pmp_match_addr_match_conditions_1 in H as (Hlohi & Hlop & Hpwhi).
         apply pmp_match_addr_match_conditions_2; auto.
-        admit.
+
+        rewrite (bv.bin_add_small HrepS).
+        rewrite <- N.add_assoc.
+        rewrite <- bv.bin_add_small.
+        rewrite <- bv.of_nat_S.
+        rewrite <- (bv.bin_of_nat_small Hrepb) in Hrep.
+        apply Hrep.
+        apply bv_lt_S_add_one; auto.
         apply bv_ule_add_r; auto.
-        admit.
         rewrite bv.of_nat_S in Hpwhi.
         now rewrite bv.add_assoc in Hpwhi.
         apply bv_ult_nat_S_zero; auto.
-    Admitted.
+    Qed.
 
     Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr p cfg lo hi,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
@@ -934,7 +968,7 @@ Module RiscvPmpModel2.
         apply bv_ult_nat_S_zero; auto.
         fold seq.
         iApply ("IHbytes" $! (S base) paddr pmp p _ _ _ with "Hbs").
-        Unshelve. (* TODO: the unshelved ones are provable with some arithmetic etc *)
+        Unshelve.
         2-4: Lia.lia.
         iPureIntro.
 
