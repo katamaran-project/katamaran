@@ -681,18 +681,16 @@ Module RiscvPmpModel2.
       intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc Hrep H0w Hle H;
         try now cbn in *.
       unfold check_pmp_access, pmp_check in *.
-      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E0.
+      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E0; last done.
       - apply pmp_match_entry_reduced_width with (w := w) in E0; auto.
         now rewrite E0.
       - apply pmp_match_entry_reduced_width_continue with (w := w) in E0; auto.
         rewrite E0.
-        destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E1.
+        destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E1; last done.
         + apply pmp_match_entry_reduced_width with (w := w) in E1; auto.
           now rewrite E1.
         + apply pmp_match_entry_reduced_width_continue with (w := w) in E1; auto.
           now rewrite E1.
-        + discriminate.
-      - discriminate.
     Qed.
 
     Lemma pmp_access_reduced_width (bytes w : Xlenbits) :
@@ -720,19 +718,16 @@ Module RiscvPmpModel2.
       unfold pmp_match_addr.
       intros paddr w lo hi Hw H.
       destruct (hi <ᵘ? lo) eqn:Ehilo; try discriminate H.
-      destruct (paddr + w <=ᵘ? lo) eqn:Epwlo.
-      now rewrite orb_true_l in H.
-      destruct (hi <=ᵘ? paddr) eqn:Ehip.
-      now rewrite orb_true_r in H.
+      destruct (paddr + w <=ᵘ? lo) eqn:Epwlo; first done.
+      destruct (hi <=ᵘ? paddr) eqn:Ehip; first done.
       simpl in H.
-      destruct (lo <=ᵘ? paddr) eqn:Elop; [|now rewrite andb_false_l in H].
-      destruct (paddr + w <=ᵘ? hi) eqn:Epwhi; [|now simpl].
+      destruct (lo <=ᵘ? paddr) eqn:Elop; last done.
+      destruct (paddr + w <=ᵘ? hi) eqn:Epwhi; last done.
       rewrite bv_ultb_antisym in Ehilo.
       apply negb_false_iff in Ehilo.
       apply bv_uleb_ule in Ehilo.
       apply bv_uleb_ule in Elop.
-      apply bv_uleb_ule in Epwhi.
-      auto.
+      now apply bv_uleb_ule in Epwhi.
     Qed.
 
     Lemma pmp_match_addr_match_conditions_2 : forall paddr w lo hi,
@@ -745,31 +740,20 @@ Module RiscvPmpModel2.
     Proof.
       intros paddr w lo hi Hw Hrep Hlohi Hlop Hpwhi.
       unfold pmp_match_addr.
-      remember Hlohi as Hlohi2.
-      clear HeqHlohi2.
-      apply bv_uleb_ule in Hlohi.
-      apply negb_false_iff in Hlohi.
-      rewrite <- bv_ultb_antisym in Hlohi.
-      rewrite Hlohi.
-      assert (lo <ᵘ paddr + w).
-      unfold bv.ule, bv.ult in *.
-      rewrite bv.bin_add_small; auto.
-      lia.
-      apply bv_uleb_ugt in H.
-      rewrite H.
-      simpl.
-      apply bv_uleb_ugt in H.
-      assert (paddr <ᵘ hi).
-      unfold bv.ule, bv.ult in *.
-      rewrite bv.bin_add_small in Hpwhi; auto.
-      lia.
-      apply bv_uleb_ugt in H0.
-      rewrite H0.
-      apply bv_uleb_ule in Hlop.
-      apply bv_uleb_ule in Hpwhi.
-      rewrite Hlop.
-      rewrite Hpwhi.
-      auto.
+      replace (hi <ᵘ? lo) with false
+        by (symmetry; now rewrite bv_ultb_antisym negb_false_iff bv_uleb_ule).
+      replace (paddr + w <=ᵘ? lo) with false.
+      replace (hi <=ᵘ? paddr) with false.
+      replace (lo <=ᵘ? paddr) with true by (symmetry; now rewrite bv_uleb_ule).
+      now replace (paddr + w <=ᵘ? hi) with true by (symmetry; now rewrite bv_uleb_ule).
+      - symmetry.
+        rewrite bv_uleb_ugt.
+        unfold bv.ule, bv.ult in *.
+        rewrite bv.bin_add_small in Hpwhi; lia.
+      - symmetry.
+        rewrite bv_uleb_ugt.
+        unfold bv.ule, bv.ult in *.
+        rewrite bv.bin_add_small; lia.
     Qed.
 
     Lemma bv_lt_S_add_one : forall {n} x,
