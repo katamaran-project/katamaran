@@ -114,6 +114,7 @@ Module Type InstantiationOn
     | term_inr t           => @inr (Val _) (Val _) (inst (Inst := inst_term) t ι)
     | term_sext t          => bv.sext (inst (Inst := inst_term) t ι)
     | term_zext t          => bv.zext (inst (Inst := inst_term) t ι)
+    | term_get_slice_int t => bv.of_Z (inst (Inst := inst_term) t ι)
     | @term_tuple _ σs ts  =>
         envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι)
     | @term_union _ U K t     => unionv_fold U (existT K (inst (Inst := inst_term) t ι))
@@ -424,6 +425,7 @@ Module Type InstantiationOn
     #[export,program] Instance proper_term_inr {Σ σ1 σ2} : Proper ((≡) ==> (≡)) (@term_inr Σ σ1 σ2).
     #[export,program] Instance proper_term_sext {Σ m n p} : Proper ((≡) ==> (≡)) (@term_sext Σ m n p).
     #[export,program] Instance proper_term_zext {Σ m n p} : Proper ((≡) ==> (≡)) (@term_zext Σ m n p).
+    #[export,program] Instance proper_term_get_slice_int {Σ n} : Proper ((≡) ==> (≡)) (@term_get_slice_int Σ n).
     #[export,program] Instance proper_term_tuple {Σ σs} : Proper ((≡) ==> (≡)) (@term_tuple Σ σs).
     #[export,program] Instance proper_term_union {Σ U K} : Proper ((≡) ==> (≡)) (@term_union Σ U K).
     #[export,program] Instance proper_term_record {Σ R} : Proper ((≡) ==> (≡)) (@term_record Σ R).

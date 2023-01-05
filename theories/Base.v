@@ -216,6 +216,7 @@ Module Type BaseMixin (Import TY : Types).
       | exp_inr e          => term_inr (seval_exp e)
       | exp_sext e         => term_sext (seval_exp e)
       | exp_zext e         => term_zext (seval_exp e)
+      | exp_get_slice_int e => term_get_slice_int (seval_exp e)
       | exp_list es        => term_list (List.map seval_exp es)
       | exp_bvec es        => term_bvec (Vector.map seval_exp es)
       | exp_tuple es       => term_tuple (env.map (@seval_exp) es)

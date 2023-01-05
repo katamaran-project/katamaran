@@ -86,6 +86,7 @@ Module Type OccursCheckOn
       | term_inr t => term_inr <$> occurs_check_term xIn t
       | term_sext t => (fun t' => term_sext t') <$> occurs_check_term xIn t
       | term_zext t => (fun t' => term_zext t') <$> occurs_check_term xIn t
+      | term_get_slice_int t => (fun t' => term_get_slice_int t') <$> occurs_check_term xIn t
       | @term_tuple _ σs ts =>
         @term_tuple _ σs <$> occurs_check (OccursCheck := occurs_check_env (OCT := @occurs_check_term)) xIn ts
       | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0
