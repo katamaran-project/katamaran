@@ -971,7 +971,13 @@ Module bv.
     Lemma of_nat_S {n} (k : nat) :
       of_nat (S k) = add (one n) (of_nat k).
     Proof.
-    Admitted.
+      apply bin_inj.
+      cbn -[truncn].
+      replace (bin (one n)) with (truncn n 1) by now destruct n.
+      rewrite <-truncn_add.
+      f_equal.
+      Lia.lia.
+    Qed.
 
     Lemma add_of_nat_0_l :
       forall {n} (v : bv n), v = add (of_nat 0) v.
