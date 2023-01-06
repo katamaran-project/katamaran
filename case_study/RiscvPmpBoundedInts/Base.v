@@ -45,12 +45,15 @@ Local Set Implicit Arguments.
 (* Taken from Coq >= 8.15 SigTNotations *)
 Local Notation "( x ; y )" := (existT x y) (only parsing).
 
-Definition xlen      := 32.
-Definition byte           := 8.
-Definition bytes_per_word := 4.
-Definition word           := bytes_per_word * byte.
-Definition xlenbytes      := 4.
-Definition xlenbits       := xlenbytes * byte.
+Definition xlen            := 32.
+Definition byte            := 8.
+Definition bytes_per_word  := 4.
+Definition bytes_per_instr := 4.
+Definition word            := bytes_per_word * byte.
+Definition xlenbytes       := 4.
+Definition xlenbits        := xlenbytes * byte.
+
+Definition bv_instrsize {n} : bv n := bv.of_nat bytes_per_instr.
 
 #[export] Instance IsTrue_bytes_xlenbytes (x y: nat) (H : IsTrue (x <=? y)): IsTrue (x * byte <=? y * byte).
 Proof.

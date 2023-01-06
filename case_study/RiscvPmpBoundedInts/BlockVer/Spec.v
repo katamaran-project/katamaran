@@ -81,8 +81,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Section ContractDefKit.
 
   Import asn.notations.
-  (* Notation "a [ bytes ]'↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes) [a; t])) (at level 70). *)
-  (* Notation "a [ bytes ]'↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes) [a; t])) (at level 70). *)
   Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
@@ -162,6 +160,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   (* TODO: This notation is already defined with a different meaning in
      asn.notations. Resolve this.
    *)
+  (* Notation "a '*↦ₘ[' n ']' xs" := (asn.chunk (chunk_user (@ptstomem n) [a; xs])) (at level 79). *)
+  Local Notation "a '↦ₘ[' bytes ']' t" := (asn.chunk (chunk_user (@ptstomem bytes) [a; t])) (at level 70).
+  Local Notation "a '↦ᵣ[' bytes ']' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes) [a; t])) (at level 70).
   Local Notation "r '↦' val" := (asn_reg_ptsto r val) : asn_scope.
   Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
   Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
@@ -244,13 +245,15 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "w" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
-        asn.match_bool (term_var "inv") (asn.chunk (chunk_user (ptstomem_readonly bytes) [term_var "paddr"; term_var "w"])) (asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"])) ∗
+        asn.match_bool (term_var "inv")
+          (term_var "paddr" ↦ᵣ[ bytes ] term_var "w")
+          (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
           (term_val ty_xlenbits minAddr <=ᵘ term_var "paddr")%asn ∗
           (term_var "paddr" <=ᵘ term_val ty_xlenbits maxAddr)%asn;
       sep_contract_result          := "result_mem_read";
       sep_contract_postcondition   :=
         term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
-                                       asn.match_bool (term_var "inv") (asn.chunk (chunk_user (ptstomem_readonly bytes) [term_var "paddr"; term_var "w"])) (asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]));
+                                       asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w");
     |}.
 
   Definition sep_contract_pmpCheckPerms : SepContractFun pmpCheckPerms :=
@@ -275,7 +278,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     |}.
 
   Definition sep_contract_pmpCheck : SepContractFun pmpCheck :=
-    {| sep_contract_logic_variables := ["addr" :: ty_xlenbits; "width" :: ty_xlenbits; "acc" :: ty_access_type; "priv" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
+    {| sep_contract_logic_variables := ["addr" :: ty_xlenbits; "width" :: ty.int; "acc" :: ty_access_type; "priv" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [term_var "addr"; term_var "width"; term_var "acc"; term_var "priv"];
        sep_contract_precondition    :=
          asn_pmp_entries (term_var "entries")
@@ -285,7 +288,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_postcondition   :=
          term_var "result_pmpCheck" = term_inr (term_val ty.unit tt)
          ∗ asn_pmp_entries (term_var "entries")
-         ∗ asn.formula (formula_user pmp_access [(term_var "addr"); (term_var "width"); (term_var "entries"); (term_var "priv"); (term_var "acc")])
+         ∗ asn.formula (formula_user pmp_access [(term_var "addr"); (term_get_slice_int (term_var "width")); (term_var "entries"); (term_var "priv"); (term_var "acc")])
          (* not sure why this notation doesn't type check *)
          (* ∗ asn_pmp_access (term_var "addr") (term_var "width") (term_var "entries") (term_var "priv") (term_var "acc"); *)
     |}.
@@ -294,7 +297,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "w" :: ty_bytes bytes; "m" :: ty_privilege];
       sep_contract_localstore      := [term_var "typ"; term_var "m"; term_var "paddr"];
       sep_contract_precondition    :=
-        asn.match_bool (term_var "inv") (asn.chunk (chunk_user (ptstomem_readonly bytes) [term_var "paddr"; term_var "w"])) (asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"])) ∗
+        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
           term_var "m" = term_val ty_privilege Machine ∗
           (term_val ty_xlenbits minAddr <=ᵘ term_var "paddr")%asn ∗
           (term_var "paddr" <=ᵘ term_val ty_xlenbits maxAddr)%asn ∗
@@ -304,7 +307,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
       sep_contract_result          := "result_mem_read";
       sep_contract_postcondition   :=
         term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
-                                       asn.match_bool (term_var "inv") (asn.chunk (chunk_user (ptstomem_readonly bytes) [term_var "paddr"; term_var "w"])) (asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"])) ∗
+                                       asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
           asn_cur_privilege (term_val ty_privilege Machine) ∗
           asn_pmp_entries (term_var "entries") ∗
           asn_pmp_all_entries_unlocked (term_var "entries");
@@ -314,7 +317,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "w" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
-        asn.match_bool (term_var "inv") (asn.chunk (chunk_user (ptstomem_readonly bytes) [term_var "paddr"; term_var "w"])) (asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"])) ∗
+        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
           (term_val ty_xlenbits minAddr <=ᵘ term_var "paddr")%asn ∗
           (term_var "paddr" <=ᵘ term_val ty_xlenbits maxAddr)%asn ∗
           asn_cur_privilege (term_val ty_privilege Machine) ∗
@@ -323,7 +326,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
       sep_contract_result          := "result_mem_read";
       sep_contract_postcondition   :=
         term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
-                                       asn.match_bool (term_var "inv") (asn.chunk (chunk_user (ptstomem_readonly bytes) [term_var "paddr"; term_var "w"])) (asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"])) ∗
+                                       asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
           asn_cur_privilege (term_val ty_privilege Machine) ∗
           asn_pmp_entries (term_var "entries") ∗
           asn_pmp_all_entries_unlocked (term_var "entries");
@@ -369,11 +372,10 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Definition sep_contract_read_ram {bytes} : SepContractFunX (read_ram bytes) :=
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "w" :: ty_bytes bytes];
        sep_contract_localstore      := [term_var "paddr"];
-       sep_contract_precondition    := asn.match_bool (term_var "inv") (asn.chunk (chunk_user (ptstomem_readonly bytes) [term_var "paddr"; term_var "w"])) (asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]));
+       sep_contract_precondition    := asn.match_bool (term_var "inv")  (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w");
        sep_contract_result          := "result_read_ram";
        sep_contract_postcondition   := asn.match_bool (term_var "inv")
-                                         (asn.chunk (chunk_user (ptstomem_readonly bytes) [term_var "paddr"; term_var "w"]))
-                                         (asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"])) ∗
+                                         (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
                                             term_var "result_read_ram" = term_var "w";
     |}.
 
@@ -382,7 +384,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_localstore      := [term_var "paddr"; term_var "data"];
        sep_contract_precondition    := ∃ "w", (asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]));
        sep_contract_result          := "result_write_ram";
-       sep_contract_postcondition   := (asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "data"])) ∗
+       sep_contract_postcondition   :=  term_var "paddr" ↦ₘ[ bytes ] term_var "data" ∗
                                        term_var "result_write_ram" = term_val ty.bool true;
     |}.
 
