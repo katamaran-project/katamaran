@@ -758,6 +758,12 @@ Module bv.
       now rewrite bv.of_N_bin.
     Qed.
 
+    Lemma of_Z_nat {n} i : @of_Z n (Z.of_nat i) = of_nat i.
+    Proof.
+      unfold of_nat, of_Z.
+      now rewrite <-Znat.nat_N_Z, to_N_truncz, truncn_eq2n.
+    Qed.
+
     #[export] Instance Z_of_N_Proper {n} : Proper (eq2n n ==> eq2nz n) Z.of_N.
     Proof.
       unfold eq2nz, eq2n.
@@ -1038,24 +1044,18 @@ Module bv.
     From stdpp Require Import
       list_numbers.
 
+    (* not sure why we don't use exp2 here? *)
     Definition bv_modulus (n : nat) : Z := 2 ^ (Z.of_nat n).
+
+    Lemma exp2_bv_modulus {n} : bv_modulus n = Z.of_N (exp2 n).
+    Proof.
+      rewrite exp2_spec.
+      unfold bv_modulus.
+      now lia.
+    Qed.
 
     Definition bv_seq {n : nat} (start : bv n) (len : Z) : list (bv n) :=
       (fun i : Z => add start (bv.of_Z i)) <$> (seqZ 0 len).
-
-    Lemma NoDup_seq_bv n start len :
-      (0 <= len <= bv_modulus n)%Z ->
-      NoDup (@bv_seq n start len).
-    Proof.
-      intros H. apply NoDup_alt. intros i j b'. unfold bv_seq. rewrite !list_lookup_fmap.
-      intros [?[[??]%lookup_seqZ ?]]%fmap_Some ; simplify_eq.
-      intros.
-      apply fmap_Some in H0.
-      destruct H0 as (x & Hseq & Heq).
-      apply lookup_seqZ in Hseq as (Hx & Hj).
-      rewrite Hx in Heq.
-      admit.
-    Admitted.
   End Sequencing.
 
   Section Logical.
@@ -1390,11 +1390,33 @@ Module bv.
     Proof.
       now apply bin_of_N_small.
     Qed.
+
   End DropTruncs.
+
+  Section NoDupBvSeq.
+    Lemma NoDup_seq_bv n start len :
+      (0 <= len <= bv_modulus n)%Z ->
+      base.NoDup (@bv_seq n start len).
+    Proof.
+      rewrite exp2_bv_modulus.
+      intros H. apply list.NoDup_alt. intros i j b'. unfold bv_seq. rewrite !list.list_lookup_fmap.
+      intros [x [[-> ?]%list_numbers.lookup_seqZ ->]]%option.fmap_Some.
+      intros.
+      apply option.fmap_Some in H1.
+      destruct H1 as (x & Hseq & Heq).
+      apply list_numbers.lookup_seqZ in Hseq as (-> & Hj).
+      apply add_cancel_l in Heq.
+      change (0 + ?x)%Z with x in Heq.
+      rewrite ?of_Z_nat in Heq.
+      apply (f_equal (@bin _)) in Heq.
+      rewrite ?bin_of_nat_small in Heq; Lia.lia.
+    Qed.
+  End NoDupBvSeq.
 
   Section Sequences.
     Import List.
 
+    (* why do we have both bv_seq and seqBv? *)
     Definition seqBv {n} (min : bv n) (len : nat) := List.map (@bv.of_Z n) (list_numbers.seqZ (bv.unsigned min) (Z.of_nat len)).
 
     Lemma seqBv_app {n} m n1 n2 :
