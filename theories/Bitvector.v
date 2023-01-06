@@ -223,6 +223,13 @@ Module bv.
     Definition of_nat {n} (k : nat) : bv n :=
       of_N (N.of_nat k).
 
+    Definition of_bool (b : bool) : bv 1 := if b then mk 1 I else mk 0 I.
+    Definition to_bool (b : bv 1) : bool := N.eqb 1 (bin b).
+    Lemma to_bool_of_bool {b} : to_bool (of_bool b) = b.
+    Proof. now destruct b. Qed.
+    Lemma of_bool_to_bool {b} : of_bool (to_bool b) = b.
+    Proof. destruct b as [[|[?|?|]] []]; now cbn. Qed.
+
     Fixpoint trunc_wf (n : nat) (p : positive) {struct n} :
       Is_true (at_most n p) -> trunc n p = N.pos p :=
       match n , p with
