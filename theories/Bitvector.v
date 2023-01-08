@@ -582,6 +582,10 @@ Module bv.
       | S m => cons true (ones m)
       end.
 
+    Lemma bin_one {n} : n > 0 -> bin (one n) = 1%N.
+    Proof.
+      destruct n; cbn; now Lia.lia.
+    Qed.
   End Constants.
 
   Section Access.
@@ -784,6 +788,7 @@ Module bv.
       rewrite <-?Znat.N2Z.inj_mod.
       now rewrite Hxy.
     Qed.
+
     #[export] Instance double_proper {n} : Proper (eq2n n ==> eq2n (S n)) N.double.
     Proof.
       intros x x' Hx.
@@ -981,8 +986,10 @@ Module bv.
       Lia.lia.
     Qed.
 
+    (* Definition succ {n} : bv n -> bv n := add (one n). *)
+
     Lemma of_nat_S {n} (k : nat) :
-      of_nat (S k) = add (one n) (of_nat k).
+      @of_nat n (S k) = add (one _) (of_nat k).
     Proof.
       apply bin_inj.
       cbn -[truncn].
@@ -1398,6 +1405,11 @@ Module bv.
       now apply bin_of_N_small.
     Qed.
 
+    Lemma unsigned_succ_small n m :
+      (N.succ (bin m) < exp2 n)%N ->
+      Z.succ (unsigned m) = @unsigned n (one _ + m).
+    Proof.
+    Admitted.
   End DropTruncs.
 
   Section NoDupBvSeq.
@@ -1425,6 +1437,22 @@ Module bv.
 
     (* why do we have both bv_seq and seqBv? *)
     Definition seqBv {n} (min : bv n) (len : nat) := List.map (@bv.of_Z n) (list_numbers.seqZ (bv.unsigned min) (Z.of_nat len)).
+
+    Lemma seqBv_succ {n} m n1 :
+      n > 0 ->
+      (N.succ (bin m) < bv.exp2 n)%N ->
+      (@seqBv n m (S n1)) = cons m (seqBv (one _ + m) n1).
+    Proof.
+      intros nnz ineq.
+      unfold seqBv.
+      rewrite list_numbers.seqZ_cons; try Lia.lia.
+      cbn.
+      rewrite of_Z_unsigned.
+      rewrite Znat.Nat2Z.inj_succ.
+      rewrite <-Zpred_succ.
+      now rewrite unsigned_succ_small.
+    Qed.
+
 
     Lemma seqBv_app {n} m n1 n2 :
       (bin m + N.of_nat n1 + N.of_nat n2 < exp2 n)%N ->

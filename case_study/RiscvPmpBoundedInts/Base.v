@@ -55,6 +55,10 @@ Definition xlenbits        := xlenbytes * byte.
 
 Definition bv_instrsize {n} : bv n := bv.of_nat bytes_per_instr.
 
+(* xlenbits is made opaque further on and it really must be non-zero. *)
+Lemma xlenbits_not_zero : xlenbits > 0.
+Proof. cbn. lia. Qed.
+
 #[export] Instance IsTrue_bytes_xlenbytes (x y: nat) (H : IsTrue (x <=? y)): IsTrue (x * byte <=? y * byte).
 Proof.
   revert y H.

@@ -544,6 +544,9 @@ Module RiscvPmpModel2.
       now Lia.lia.
     Qed.
 
+    Lemma bv_bin_one : bv.bin (bv.one xlenbits) = 1%N.
+    Proof. apply bv.bin_one, xlenbits_not_zero. Qed.
+
     (* TODO: move all these w <=ᵘ bytes stuff as an early assumption to get rid of all the "exact H..." tactics *)
     (* TODO: heavy cleanup needed! *)
     Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
@@ -772,21 +775,11 @@ Module RiscvPmpModel2.
         pmp_match_addr (paddr + bv.one xlenbits) (bv.of_nat bytes) rng = res.
     Proof.
       intros paddr rng res Hb Hrep Hrepb.
-      assert (HrepS: (bv.bin paddr + bv.bin (bv.one xlenbits) < bv.exp2 xlenbits)%N).
-      { eapply N.lt_trans.
-        2: exact Hrep.
+      assert (HrepS: (bv.bin paddr + 1 < bv.exp2 xlenbits)%N).
+      { enough (bv.bin paddr + 1 < bv.bin paddr + N.of_nat (S bytes))%N by lia.
         apply N.add_lt_mono_l.
-        rewrite <- (@bv.bin_of_nat_small _ _ Hrepb).
-        rewrite (bv.add_of_nat_0_r (bv.one xlenbits)).
-        rewrite <- bv.of_nat_S.
-        rewrite ?bv.bin_of_nat_small; auto.
         rewrite ?Nat2N.inj_succ.
-        rewrite <- N.succ_lt_mono.
-        rewrite <- (@bv.bin_of_nat_small xlenbits bytes); auto.
-        eapply N.lt_trans.
-        2: exact Hrepb.
-        lia.
-        lia.
+        rewrite bv.bin_of_nat_small in Hb; lia.
       }
       destruct rng as [[lo hi]|]; subst; auto.
       intros [Hres|Hres]; subst; auto; intros H.
@@ -810,14 +803,10 @@ Module RiscvPmpModel2.
       - apply pmp_match_addr_match_conditions_1 in H as (Hlohi & Hlop & Hpwhi).
         apply pmp_match_addr_match_conditions_2; auto.
 
-        rewrite (bv.bin_add_small HrepS).
-        rewrite <- N.add_assoc.
-        rewrite <- bv.bin_add_small.
-        rewrite <- bv.of_nat_S.
-        rewrite <- (bv.bin_of_nat_small Hrepb) in Hrep.
-        apply Hrep.
-        apply bv_lt_S_add_one; auto.
-        apply bv_ule_add_r; auto.
+        rewrite bv.bin_add_small bv_bin_one; last by lia.
+        rewrite Nat2N.inj_succ in Hrep.
+        rewrite bv.bin_of_nat_small; lia.
+        eauto using bv_ule_add_r, bv_bin_one.
         rewrite bv.of_nat_S in Hpwhi.
         now rewrite bv.add_assoc in Hpwhi.
         apply bv_ult_nat_S_zero; auto.
@@ -924,12 +913,10 @@ Module RiscvPmpModel2.
         apply pmp_access_addr_S_width_pred in Haccess.
         rewrite <- bv.add_assoc in Haccess.
         rewrite (@bv.add_comm _ (bv.of_nat base) (bv.one xlenbits)) in Haccess.
-        rewrite <- bv.of_nat_S in Haccess.
         iApply ("IHbytes" $! (S base) paddr pmp p _ _ _ with "Hbs").
+        rewrite <-bv.of_nat_S in Haccess.
         now iExists acc.
         rewrite bv.bin_of_nat_small; first lia.
-        eapply N.lt_trans.
-        2: exact Hbytes.
         lia.
         rewrite <- (@bv.bin_of_nat_small _ _ Hbase) in Hrep.
         rewrite <- bv.bin_add_small in Hrep.
