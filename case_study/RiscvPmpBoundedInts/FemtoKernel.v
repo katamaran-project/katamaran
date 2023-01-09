@@ -481,16 +481,15 @@ Import BlockVerificationDerived2.
            inst_term env.lookup ctx.view ctx.in_at ctx.in_valid inst_env
            env.map femto_handler_post femtokernel_handler_post].
       cbn.
-  Admitted.
-  (*     iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hregs & Hpmp & [%Hcfg0L %Hcfg1L] & HaccM & Hfortytwo)". *)
-  (*     cbn. *)
-  (*     iApply "Hk". *)
-  (*     cbn in eq; destruct eq. *)
-  (*     rewrite Model.RiscvPmpModel2.gprs_equiv. *)
-  (*     iFrame "Hmstatus Hmtvec Hmcause Hcurpriv Hregs Hpmp HaccM Hnpc Hhandler Hfortytwo". *)
-  (*     iSplitR; first done. *)
-  (*     iExists an; iFrame. *)
-  (* Qed. *)
+      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hregs & Hpmp & [%Hcfg0L %Hcfg1L] & HaccM & Hfortytwo & _ & _)".
+      cbn.
+      iApply "Hk".
+      cbn in eq; destruct eq.
+      rewrite Model.RiscvPmpModel2.gprs_equiv.
+      iFrame "Hmstatus Hmtvec Hmcause Hcurpriv Hregs Hpmp HaccM Hnpc Hhandler Hfortytwo".
+      iSplitR; first done.
+      iExists an; iFrame.
+  Qed.
 
   Transparent femtokernel_handler_pre.
   Opaque interp_pmp_entries.
@@ -646,7 +645,6 @@ Import BlockVerificationDerived2.
 
   Lemma femto_init_verified : forall `{sailGS Σ}, ⊢ femto_init_contract.
   Proof.
-  (* Admitted. *)
     iIntros (Σ sG) "Hpre Hk".
     iApply (sound_VC__addr sat__femtoinit [env] $! bv.zero with "[Hpre] [Hk]").
     - unfold femto_init_pre. cbn -[ptsto_instrs].
@@ -738,11 +736,12 @@ Import BlockVerificationDerived2.
     ([∗ list] a' ∈ bv.seqBv a (4 * length instrs), interp_ptsto a' (μ a'))
       ⊢ ptsto_instrs a instrs.
   Proof.
+    assert (word > 0) by now compute; Lia.lia.
     iIntros (Hmeminstrs) "Hmem".
     iInduction instrs as [|instr instrs] "IH" forall (a Hmeminstrs).
     - done.
     - replace (4 * length (instr :: instrs)) with (4 + 4 * length instrs) by (cbn; lia).
-      rewrite ?bv.seqBv_succ.
+      rewrite ?bv.seqBv_succ; try assumption.
       destruct Hmeminstrs as [(v1 & v2 & v3 & v4 & Heq & Hv) Hmeminstrs].
       iDestruct "Hmem" as "(Hmema & Hmema1 & Hmema2 & Hmema3 & Hmem)".
       iSplitL "Hmema Hmema1 Hmema2 Hmema3".
@@ -750,21 +749,33 @@ Import BlockVerificationDerived2.
         iExists (bv.app v1 (bv.app v2 (bv.app v3 v4))).
         iSplitL; last done.
         unfold interp_ptstomem.
-        replace v4 with (bv.app v4 bv.nil).
+        replace v4 with (bv.app v4 bv.nil) by now rewrite bv.app_nil_r.
         rewrite ?bv.appView_app.
         inversion Heq.
-        replace (bv.of_Z (Z.of_nat 0 + bv.unsigned a)) with a.
-        replace (@bv.of_Z word (Z.of_nat 1 + bv.unsigned a)) with (bv.add (bv.one _) a).
+        replace (bv.of_Z (Z.of_nat 0 + bv.unsigned a)) with a by now rewrite bv.of_Z_unsigned.
+        replace (@bv.of_Z word (Z.of_nat 1 + bv.unsigned a)) with (bv.add (bv.one _) a) by now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
         replace (@bv.of_Z word (Z.of_nat 2 + bv.unsigned a)) with (bv.add (bv.one word) (bv.add (bv.one word) a)).
         replace (@bv.of_Z word (Z.of_nat 3 + bv.unsigned a)) with (bv.add (bv.one word) (bv.add (bv.one word) (bv.add (bv.one word) a))).
         now iFrame.
-        all: admit.
-      + replace (bv.add a bv_instrsize)%Z with (bv.add (bv.of_N 4) a)%Z.
+        rewrite ?bv.add_assoc.
+        change (bv.add _ (bv.one word)) with (@bv.of_Z xlenbits 3).
+        now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+        rewrite ?bv.add_assoc.
+        now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+      + rewrite (@bv.add_comm _ a bv_instrsize).
         iApply "IH".
         { now iPureIntro. }
         replace (bv.add (bv.one word) (bv.add (bv.one word) (bv.add (bv.one word) (bv.add (bv.one word) a)))) with (bv.add (bv.of_N 4) a)%Z.
         iExact "Hmem".
-        all: admit.
+        now rewrite ?bv.add_assoc.
+      + rewrite ?bv.add_assoc.
+        admit.
+      + rewrite ?bv.add_assoc.
+        admit.
+      + rewrite ?bv.add_assoc.
+        admit.
+      + rewrite ?bv.add_assoc.
+        admit.
   Admitted.
 
   Lemma intro_ptstoSthL `{sailGS Σ} (μ : Memory) (addrs : list Xlenbits)  :

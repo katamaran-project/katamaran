@@ -660,6 +660,12 @@ Module bv.
       now rewrite Z.mod_mod.
     Qed.
 
+    Lemma truncz_add {n x y} : truncz n (x + y) = truncz n (truncz n x + truncz n y).
+    Proof.
+      unfold truncz.
+      now apply Z.add_mod.
+    Qed.
+
     Lemma to_N_truncz {n x} : Z.to_N (truncz n (Z.of_N x)) = truncn n x.
     Proof.
       unfold truncz.
@@ -948,6 +954,30 @@ Module bv.
       apply (f_equal (fun y => add y (negate z))) in eq.
       now rewrite <-?add_assoc, ?add_negate2, ?add_zero_r in eq.
     Qed.
+
+    Lemma truncz_ge_0 {n x} : (0 <= truncz n x)%Z.
+    Proof.
+      unfold truncz.
+      apply Z.mod_pos_bound.
+      rewrite Zpower.two_power_nat_equiv.
+      Lia.lia.
+    Qed.
+
+    Lemma of_Z_add {n} x y : @add n (of_Z x) (of_Z y) = of_Z (x + y).
+    Proof.
+      apply bin_inj.
+      cbn.
+      rewrite truncz_add.
+      replace (truncz n x + truncz n y)%Z with (Z.of_N (Z.to_N (truncz n x + truncz n y))).
+      - rewrite to_N_truncz.
+        rewrite <-truncn_add.
+        rewrite truncn_eq2n.
+        now rewrite Znat.Z2N.inj_add; try apply truncz_ge_0.
+      - apply Znat.Z2N.id.
+        change 0%Z with (0 + 0)%Z.
+        auto using Z.add_le_mono, truncz_ge_0.
+    Qed.
+
 
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
     Proof.
