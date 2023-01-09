@@ -284,8 +284,13 @@ Import BlockVerificationDerived2.
           (∃ "v", x5 ↦ term_var "v") ∗
           (∃ "v", x6 ↦ term_var "v") ∗
           (∃ "v", x7 ↦ term_var "v")) ∗
+          (* it appears that Katamaran does not see the value of the entries here...
+           * perhaps because of what goes on in the lemma_machine_unlocked_open_pmp_entries and lemma_machine_unlocked_close_pmp_entries?
+           *)
           (* (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16)); *)
           (*                              (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))])) ∗ *)
+          (∃ "ent0", ∃ "ent1", asn_pmp_entries (term_list [(term_var "ent0" ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16));
+                                                           (term_var "ent1" ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))])) ∗
           (asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16));
                                                     (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))])) ∗
           (* (asn_pmp_addr_access (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16)); *)
