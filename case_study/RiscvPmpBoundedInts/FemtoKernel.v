@@ -312,6 +312,7 @@ Import BlockVerificationDerived2.
 
     Lemma sat__femtohandler : safeE vc__femtohandler.
     Proof.
+      (* vm_compute. *)
     Admitted.
     (* now vm_compute. Qed. *)
 
@@ -611,8 +612,8 @@ Import BlockVerificationDerived2.
       interp_gprs ∗
       pmp0cfg ↦ femtokernel_default_pmpcfg ∗
       pmp1cfg ↦ femtokernel_default_pmpcfg ∗
-      (∃ v, pmpaddr0 ↦ v) ∗
-      (∃ v, pmpaddr1 ↦ v) ∗
+      pmpaddr0 ↦ bv.zero ∗
+      pmpaddr1 ↦ bv.zero ∗
       interp_ptstomem_readonly (width := xlenbytes) (bv.of_N 84) (bv.of_N 42)) ∗
       pc ↦ bv.zero ∗
       (∃ v, nextpc ↦ v) ∗
@@ -649,12 +650,11 @@ Import BlockVerificationDerived2.
     iIntros (Σ sG) "Hpre Hk".
     iApply (sound_VC__addr sat__femtoinit [env] $! bv.zero with "[Hpre] [Hk]").
     - unfold femto_init_pre. cbn -[ptsto_instrs].
-      iDestruct "Hpre" as "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmp1cfg & [%pmpaddr0 Hpmpaddr0] & [%pmpaddr1 Hpmpaddr1] & Hfortytwo) & Hpc & Hnpc & Hinit)".
+      iDestruct "Hpre" as "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo) & Hpc & Hnpc & Hinit)".
       rewrite Model.RiscvPmpModel2.gprs_equiv.
       iFrame "Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmp0cfg Hpmp1cfg Hfortytwo Hpc Hnpc Hinit".
       repeat (iSplitR; first done).
-      iExists pmpaddr0.
-      iExists pmpaddr1.
+      cbn.
       now iFrame.
     - iIntros (an) "Hpost".
       iApply "Hk".
@@ -679,9 +679,9 @@ Import BlockVerificationDerived2.
       cur_privilege ↦ Machine ∗
       interp_gprs ∗
       reg_pointsTo pmp0cfg femtokernel_default_pmpcfg ∗
-      (∃ v, reg_pointsTo pmpaddr0 v) ∗
+      reg_pointsTo pmpaddr0 bv.zero ∗
       reg_pointsTo pmp1cfg femtokernel_default_pmpcfg ∗
-      (∃ v, reg_pointsTo pmpaddr1 v) ∗
+      reg_pointsTo pmpaddr1 bv.zero ∗
       (pc ↦ bv.zero) ∗
       interp_ptstomem_readonly (width := xlenbytes) (bv.of_N 84) (bv.of_N 42) ∗
       ptstoSthL advAddrs ∗
@@ -820,27 +820,28 @@ Import BlockVerificationDerived2.
     mem_has_instrs μ (bv.of_N 72) femtokernel_handler ->
     μ (bv.of_N 84) = (bv.of_N 42) ->
     read_register γ cur_privilege = Machine ->
+    read_register γ pmpaddr0 = bv.zero ->
+    read_register γ pmpaddr1 = bv.zero ->
     read_register γ pmp0cfg = femtokernel_default_pmpcfg ->
     read_register γ pmp1cfg = femtokernel_default_pmpcfg ->
     read_register γ pc = (bv.of_N 0) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     μ' (bv.of_N 84) = (bv.of_N 42).
   Proof.
-    intros μinit μhandler μft γcurpriv γpmp0cfg γpmp1cfg γpc steps.
+    intros μinit μhandler μft γcurpriv γpmpaddr0 γpmpaddr1 γpmp0cfg γpmp1cfg γpc steps.
     refine (adequacy_gen (Q := fun _ _ _ _ => True%I) (μ' (bv.of_N 84) = (bv.of_N 42)) steps _).
     iIntros (Σ' H).
     unfold own_regstore.
     cbn.
     iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & _)".
-    rewrite γcurpriv γpmp0cfg γpmp1cfg γpc.
-    (* TODO: need to allocate an invariant here! *)
+    rewrite γcurpriv γpmpaddr0 γpmpaddr1 γpmp0cfg γpmp1cfg γpc.
     iMod (femtokernel_splitMemory with "Hmem") as "(Hinit & Hhandler & #Hfortytwo & Hadv)";
       try assumption.
     iModIntro.
     iSplitR "".
     - destruct (env.view δ).
       iApply femtokernel_init_safe.
-      iFrame "Hpc Hcurpriv Hpmp0cfg Hpmp1cfg Hinit Hadv Hhandler".
+      iFrame "Hpc Hcurpriv Hpmp0cfg Hpmp1cfg Hpmpaddr0 Hpmpaddr1 Hinit Hadv Hhandler".
       iSplitL "Hmstatus". { now iExists _. }
       iSplitL "Hmtvec". { now iExists _. }
       iSplitL "Hmcause". { now iExists _. }
@@ -855,8 +856,6 @@ Import BlockVerificationDerived2.
        iSplitL "Hx6". { now iExists _. }
        now iExists _.
       }
-      iSplitL "Hpmpaddr0". { now iExists _. }
-      iSplitL "Hpmpaddr1". { now iExists _. }
       iSplitL "". { admit. }
       now iExists _.
     - iIntros "Hmem".
