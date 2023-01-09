@@ -745,15 +745,15 @@ Module Export RiscvPmpBase <: Base.
        recordv_unfold   := record_unfold;
     |}.
   Proof.
-    - abstract (now intros []; apply _).
-    - abstract (intros [] []; now cbn).
-    - abstract (intros [] [[] x]; cbn in x;
+    - transparent_abstract (now intros []; apply _).
+    - transparent_abstract (intros [] []; now cbn).
+    - transparent_abstract (intros [] [[] x]; cbn in x;
         repeat match goal with
                | x: unit |- _ => destruct x
                | x: prod _ _ |- _ => destruct x
                end; auto).
-    - abstract (now intros [] []).
-    - abstract (intros []; now apply env.Forall_forall).
+    - transparent_abstract (now intros [] []).
+    - transparent_abstract (intros []; now apply env.Forall_forall).
   Defined.
 
   Canonical typedeclkit.
@@ -830,7 +830,7 @@ Module Export RiscvPmpBase <: Base.
         | pmpaddr1      , pmpaddr1      => left eq_refl
         | _             , _             => right _
         end.
-    Proof. all: abstract (intros H; depelim H). Defined.
+    Proof. all: transparent_abstract (intros H; depelim H). Defined.
 
     Local Obligation Tactic :=
       finite_from_eqdec.
