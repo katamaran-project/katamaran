@@ -324,7 +324,6 @@ Import BlockVerificationDerived2.
   Import RiscvPmpBlockVerifSpec.
   Import weakestpre.
   Import tactics.
-  Import BlockVerificationDerived.
   Import RiscvPmpIrisInstanceWithContracts.
 
   Import ctx.resolution.
