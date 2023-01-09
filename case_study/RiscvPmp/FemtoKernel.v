@@ -193,10 +193,8 @@ Import BlockVerificationDerived2.
       (∃ "v", x6 ↦ term_var "v") ∗
       (∃ "v", x7 ↦ term_var "v")) ∗
       (∃ "a0", ∃ "a1",
-          (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a0");
-                                      (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a1")]) ∗
-          asn_pmp_all_entries_unlocked (term_list [(term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a0");
-                                                   (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a1")]))) ∗
+          asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a0");
+                                      (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_var "a1")])) ∗
       (term_var "a" + (term_val ty_xlenbits 84) ↦ᵣ term_val ty_xlenbits 42)%exp.
 
     Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
