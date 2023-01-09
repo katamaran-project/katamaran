@@ -1670,6 +1670,7 @@ Module Type SymPropOn
     | eterm_sext    {m n} (e : ETerm (ty.bvec m)) {p : IsTrue (m <=? n)} : ETerm (ty.bvec n)
     | eterm_zext    {m n} (e : ETerm (ty.bvec m)) {p : IsTrue (m <=? n)} : ETerm (ty.bvec n)
     | eterm_get_slice_int {n} (e : ETerm ty.int) : ETerm (ty.bvec n)
+    | eterm_unsigned {n} (e : ETerm (ty.bvec n)) : ETerm ty.int
     | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs)
     | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U)
     | eterm_record  (R : recordi) (ts : NamedEnv ETerm (recordf_ty R)) : ETerm (ty.record R).
@@ -1726,6 +1727,7 @@ Module Type SymPropOn
         | term_sext t => eterm_sext (erase t)
         | term_zext t => eterm_zext (erase t)
         | term_get_slice_int t => eterm_get_slice_int (erase t)
+        | term_unsigned t => eterm_unsigned (erase t)
         | term_tuple ts => eterm_tuple (env.map (fun _ => erase) ts)
         | term_union U K t => eterm_union K (erase t)
         | term_record R ts => eterm_record R (env.map (fun _ => erase) ts)
@@ -1827,6 +1829,8 @@ Module Type SymPropOn
             (fun v => bv.zext v) <$> inst_eterm t0
         | @eterm_get_slice_int _ t0 =>
             (fun v => bv.of_Z v) <$> inst_eterm t0
+        | @eterm_unsigned _ t0 =>
+            (fun v => bv.unsigned v) <$> inst_eterm t0
         | @eterm_tuple σs ts =>
             envrec.of_env (σs := σs) <$> inst_env' ι inst_eterm ts
         | @eterm_union U K t0 =>
@@ -1946,6 +1950,7 @@ Module Type SymPropOn
         now rewrite EqDec.eq_dec_refl.
       - reflexivity.
       - now rewrite IHt1, IHt2.
+      - now rewrite IHt.
       - now rewrite IHt.
       - now rewrite IHt.
       - now rewrite IHt.

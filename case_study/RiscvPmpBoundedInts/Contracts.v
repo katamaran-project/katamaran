@@ -697,16 +697,17 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           |}.
 
         Definition sep_contract_within_phys_mem : SepContractFun within_phys_mem :=
-          {| sep_contract_logic_variables := [paddr :: ty_xlenbits];
-             sep_contract_localstore      := [term_var paddr];
+          {| sep_contract_logic_variables := [paddr :: ty_xlenbits; width :: ty.int];
+             sep_contract_localstore      := [term_var paddr; term_var width];
              sep_contract_precondition    := ⊤;
              sep_contract_result          := "result_within_phys_mem";
              sep_contract_postcondition   :=
+              let paddr_int : Term _ ty.int := term_unsigned (term_var paddr) in
                if: term_var "result_within_phys_mem"
-               then term_val ty_xlenbits minAddr <=ᵘ term_var paddr
-                    ∗ term_var paddr <=ᵘ term_val ty_xlenbits maxAddr
-               else (term_var paddr <ᵘ term_val ty_xlenbits minAddr
-                     ∨ term_val ty_xlenbits maxAddr <ᵘ term_var paddr);
+               then term_val ty.int (Z.of_nat minAddr) <= paddr_int
+                    ∗ (term_binop bop.plus paddr_int (term_var width)) <= term_val ty.int (Z.of_nat maxAddr)
+               else (paddr_int < term_val ty.int (Z.of_nat minAddr)
+                     ∨ term_val ty.int (Z.of_nat maxAddr) < (term_binop bop.plus paddr_int (term_var width)));
           |}.
 
         Definition sep_contract_checked_mem_read (bytes : nat) : SepContractFun (checked_mem_read bytes) :=
@@ -1179,9 +1180,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           {| lemma_logic_variables := Σ;
              lemma_patterns        := [term_var paddr];
              lemma_precondition    :=
+              let paddr_int : Term _ ty.int := term_unsigned (term_var paddr) in
                 asn_pmp_addr_access (term_var "entries") (term_var p)
-                ∗ term_val ty_xlenbits minAddr <=ᵘ term_var paddr
-                ∗ term_binop bop.bvadd (term_var paddr) bv_bytes <=ᵘ term_val ty_xlenbits maxAddr
+                ∗ term_val ty.int (Z.of_nat minAddr) <= paddr_int
+                ∗ (term_binop bop.plus paddr_int (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr)
                 ∗ asn_pmp_access (term_var paddr) bv_bytes (term_var "entries") (term_var p) (term_var acc);
              lemma_postcondition   :=
                 asn_pmp_addr_access_without (term_var paddr) bytes (term_var "entries") (term_var p)
@@ -1427,12 +1429,7 @@ Module RiscvPmpValidContracts.
   Proof.
     apply Symbolic.validcontract_with_erasure_sound.
     vm_compute. constructor. cbn. intros.
-    unfold bv.ule, bv.ult, bv.uleb, bv.ultb; cbn.
-    repeat
-      match goal with
-      | |- context[N.leb ?x ?y] => destruct (N.leb_spec x y); cbn
-      | |- context[N.ltb ?x ?y] => destruct (N.ltb_spec x y); cbn
-      end; lia.
+    lia.
   Qed.
 
   Lemma valid_contract_execute_RTYPE : ValidContract execute_RTYPE.

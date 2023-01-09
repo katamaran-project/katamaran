@@ -60,6 +60,7 @@ Module RiscvNotations.
   Notation "'t'"            := "t" : string_scope.
   Notation "'addr'"         := "addr" : string_scope.
   Notation "'paddr'"        := "paddr" : string_scope.
+  Notation "'addr_int'"     := "addr_int" : string_scope.
   Notation "'vaddr'"        := "vaddr" : string_scope.
   Notation "'typ'"          := "typ" : string_scope.
   Notation "'acc'"          := "acc" : string_scope.
@@ -145,7 +146,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | tick_pc               : Fun ctx.nil ty.unit
   | to_bits (l : nat)     : Fun [value :: ty.int] (ty.bvec l)
   (* | abs                   : Fun [v ∷ ty.int] ty.int *)
-  | within_phys_mem       : Fun [paddr ∷ ty_xlenbits] ty.bool
+  | within_phys_mem       : Fun [paddr ∷ ty_xlenbits; width :: ty.int] ty.bool
   | mem_read (bytes : nat)             : Fun [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
   | checked_mem_read (bytes : nat)     : Fun [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
   | checked_mem_write (bytes : nat)    : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes] (ty_memory_op_result 1)
@@ -249,6 +250,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'e'"            := (@exp_var _ "e" _ _) : exp_scope.
     Notation "'addr'"         := (@exp_var _ "addr" _ _) : exp_scope.
     Notation "'paddr'"        := (@exp_var _ "paddr" _ _) : exp_scope.
+    Notation "'addr_int'"     := (@exp_var _ "addr_int" _ _) : exp_scope.
     Notation "'vaddr'"        := (@exp_var _ "vaddr" _ _) : exp_scope.
     Notation "'taken'"        := (@exp_var _ "taken" _ _) : exp_scope.
     Notation "'typ'"          := (@exp_var _ "typ" _ _) : exp_scope.
@@ -445,16 +447,16 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     then v * exp_int (-1)
     else v.
 
-  (* TODO: add width *)
-  Definition fun_within_phys_mem : Stm [paddr :: ty_xlenbits] ty.bool :=
-    (exp_val ty_xlenbits minAddr <=ᵘ paddr) && (paddr <=ᵘ exp_val ty_xlenbits maxAddr).
+  Definition fun_within_phys_mem : Stm [paddr :: ty_xlenbits; width :: ty.int] ty.bool :=
+    let: addr_int := exp_unsigned paddr in
+    ((exp_int (Z.of_nat minAddr) <= addr_int)%exp && (addr_int + width <= exp_int (Z.of_nat maxAddr)))%exp.
 
   Definition fun_mem_read (bytes : nat) : Stm [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := stm_read_register cur_privilege in
     stm_call (pmp_mem_read bytes) [typ; tmp; paddr].
 
   Definition fun_checked_mem_read (bytes : nat) : Stm [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
-    let: tmp := call within_phys_mem paddr in
+    let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
     if: tmp
     then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
           let: tmp := stm_foreign (read_ram bytes) [paddr] in
@@ -472,7 +474,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
          end.
 
   Definition fun_checked_mem_write (bytes : nat) : Stm [paddr ∷ ty_xlenbits; data :: ty_bytes bytes] (ty_memory_op_result 1) :=
-    let: tmp := call within_phys_mem paddr in
+    let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
     if: tmp
     then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
           stm_foreign (write_ram bytes) [paddr; data] ;;

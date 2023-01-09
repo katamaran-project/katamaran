@@ -55,10 +55,6 @@ Definition xlenbits        := xlenbytes * byte.
 
 Definition bv_instrsize {n} : bv n := bv.of_nat bytes_per_instr.
 
-(* xlenbits is made opaque further on and it really must be non-zero. *)
-Lemma xlenbits_not_zero : xlenbits > 0.
-Proof. cbn. lia. Qed.
-
 #[export] Instance IsTrue_bytes_xlenbytes (x y: nat) (H : IsTrue (x <=? y)): IsTrue (x * byte <=? y * byte).
 Proof.
   revert y H.
@@ -74,13 +70,18 @@ Definition Byte : Set     := bv byte.
 
 (* Parameter minAddr : Addr. *)
 (* Parameter maxAddr : Addr. *)
-Definition minAddr : Addr := bv.of_N 0.
-Definition lenAddr : nat  := 100.
-Definition maxAddr : Addr := bv.add minAddr (bv.of_nat lenAddr).
-Lemma maxAddr_rep : (bv.bin minAddr + N.of_nat lenAddr < bv.exp2 xlenbits)%N.
+Definition minAddr : nat := 0.
+Definition lenAddr : nat := 100.
+Definition maxAddr : nat := minAddr + lenAddr.
+Lemma minAddr_rep : (N.of_nat minAddr < bv.exp2 xlenbits)%N.
+Proof. now compute. Qed.
+Lemma maxAddr_rep : (N.of_nat maxAddr < bv.exp2 xlenbits)%N.
 Proof. now compute. Qed.
 Lemma lenAddr_rep : (N.of_nat lenAddr < bv.exp2 xlenbits)%N.
 Proof. now compute. Qed.
+(* xlenbits is made opaque further on and it really must be non-zero. *)
+Lemma xlenbits_pos : (xlenbits > 0).
+Proof. cbv. lia. Qed.
 
 Inductive Privilege : Set :=
 | User

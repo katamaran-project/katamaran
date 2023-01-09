@@ -368,7 +368,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | _                              =>
           False
       end%list.
-    
+
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
       | pmp_access               => Pmp_access
