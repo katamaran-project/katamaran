@@ -1283,7 +1283,7 @@ Module RiscvPmpModel2.
       intros ι; destruct_syminstance ι; cbn.
       iIntros "(Hentries & Hunlocked)".
       iPoseProof (pmp_entries_ptsto with "Hentries") as "(% & % & % & % & -> & ? & ? & ? & ?)".
-      iDestruct "Hunlocked" as "[[%Hcfg0 %Hcfg1] _]".
+      iDestruct "Hunlocked" as "[(%Hcfg0 & %Hcfg1 & _) _]".
       apply Pmp_cfg_unlocked_bool in Hcfg0.
       apply Pmp_cfg_unlocked_bool in Hcfg1.
       iExists cfg0. iExists addr0. iExists cfg1. iExists addr1.

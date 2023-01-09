@@ -156,7 +156,8 @@ Import BlockVerificationDerived2.
       ].
 
     Example femtokernel_handler : list AST :=
-      [ UTYPE bv.zero ra RISCV_AUIPC
+      [
+        UTYPE bv.zero ra RISCV_AUIPC
       ; LOAD (bv.of_N 12) ra ra
       ; MRET
       ].
