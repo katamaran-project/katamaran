@@ -156,7 +156,7 @@ Module RiscvPmpModel2.
       - change (S bytes * byte)%nat with (byte + bytes * byte)%nat in w.
         unfold interp_ptstomem at 2.
         destruct (bv.appView byte (bytes * byte) w) as (w0 & w).
-        change ((fix interp_ptstomem (width : nat) (addr : Addr) {struct width} : bv (width * byte) → iProp Σ := _) bytes (bv.one _ + paddr) w) with (interp_ptstomem (bv.one xlenbits + paddr) w).
+        fold ((interp_ptstomem (bv.one xlenbits + paddr) w)).
         iDestruct "Haddr" as "(Haddr0 & Haddr)".
         iPoseProof (gen_heap.gen_heap_valid with "Hmem Haddr0") as "%".
         iPoseProof ("IHbytes" $! w (bv.one xlenbits + paddr) Hmap with "[$Haddr $Hmem]") as "%eq".
