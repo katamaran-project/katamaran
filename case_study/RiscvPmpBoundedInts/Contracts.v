@@ -1226,8 +1226,12 @@ End RiscvPmpSpecification.
 Module RiscvPmpExecutor :=
   MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolver.
 
+Module RiscvPmpShallowExecutor :=
+  MakeShallowExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
+
 Module RiscvPmpValidContracts.
   Import RiscvPmpExecutor.
+  Import RiscvPmpShallowExecutor.
 
   Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
@@ -1304,9 +1308,34 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : ValidContractWithFuel 2 (process_load bytes).
   Proof. reflexivity. Qed.
 
+  Lemma valid_contract_checked_mem_read_shallow (bytes : nat) : Shallow.ValidContract (sep_contract_checked_mem_read bytes) (fun_checked_mem_read bytes).
+  Proof.
+    econstructor.
+    cbv [CPureSpecM.pure
+           CPureSpecM.bind
+           CHeapSpecM.bind
+           CHeapSpecM.bind_right
+           CHeapSpecM.consume
+           CHeapSpecM.lift_purem
+           CHeapSpecM.assert_eq_nenv
+           CPureSpecM.angelic].
+    exists (Z.of_nat bytes).
+    cbv [inst inst_store inst_env inst_chunk].
+    cbv [evals eval].
+  Admitted.
+
+  Lemma valid_contract_checked_mem_read_1 : ValidContractDebug (checked_mem_read 1%nat).
+  Proof with trivial.
+    apply Symbolic.validcontract_with_erasure_sound.
+    compute.
+    constructor.
+    cbn.
+    intros acc paddr p entries Hsub Hacc **.
+    exists acc. split... exists acc. split... split...
+  Qed.
   Lemma valid_contract_checked_mem_read (bytes : nat) : ValidContractDebug (checked_mem_read bytes).
   Proof with trivial.
-    (* (* apply Symbolic.validcontract_with_erasure_sound. *) *)
+    (* apply Symbolic.validcontract_with_erasure_sound. *)
     (* compute. *)
     (* constructor. *)
     (* cbn. *)
@@ -1329,13 +1358,13 @@ Module RiscvPmpValidContracts.
 
   Lemma valid_contract_pmp_mem_write (bytes : nat) : ValidContractDebug (pmp_mem_write bytes).
   Proof.
-  (*   apply Symbolic.validcontract_with_erasure_sound. *)
-  (*   compute. *)
-  (*   constructor. *)
-  (*   cbn. *)
-  (*   intros. split; intros. *)
-  (*   - now exists Write. *)
-  (*   - now exists ReadWrite. *)
+    (* apply Symbolic.validcontract_with_erasure_sound. *)
+    (* compute. *)
+    (* constructor. *)
+    (* cbn. *)
+    (* intros. split; intros. *)
+    (* - now exists Write. *)
+    (* - now exists ReadWrite. *)
   Admitted.
 
   Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
@@ -1498,19 +1527,19 @@ Module RiscvPmpValidContracts.
    *)
   Lemma valid_contract_pmpCheck : ValidContractDebug pmpCheck.
   Proof.
-  (*   apply Symbolic.validcontract_with_erasure_sound. *)
-  (*   vm_compute. constructor. *)
-  (*   cbv - [N.lt N.ltb N.le N.leb andb orb *)
-  (*               Pmp_access *)
-  (*               Pmp_check_perms *)
-  (*               Pmp_check_rwx *)
-  (*               Sub_perm *)
-  (*               Within_cfg *)
-  (*               Not_within_cfg *)
-  (*               Prev_addr *)
-  (*               In_entries *)
-  (*     ]. *)
-  (*   intros [addr wf_addr] acc priv [addr0 wf_addr0] [addr1 wf_addr1] R0 W0 X0 A0 L0 R1 W1 X1 A1 L1. *)
+    (* apply Symbolic.validcontract_with_erasure_sound. *)
+    (* vm_compute. constructor. *)
+    (* cbv - [N.lt N.ltb N.le N.leb andb orb *)
+    (*             Pmp_access *)
+    (*             Pmp_check_perms *)
+    (*             Pmp_check_rwx *)
+    (*             Sub_perm *)
+    (*             Within_cfg *)
+    (*             Not_within_cfg *)
+    (*             Prev_addr *)
+    (*             In_entries *)
+    (*   ]. *)
+    (* intros [addr wf_addr] acc priv [addr0 wf_addr0] [addr1 wf_addr1] R0 W0 X0 A0 L0 R1 W1 X1 A1 L1. *)
   (*   repeat *)
   (*     (intros; *)
   (*      match goal with *)
@@ -1563,29 +1592,43 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
       ValidContract f ->
-      Symbolic.ValidContract c (FunDef f).
+      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
   Proof.
     intros ? ? f c Hcenv Hvc.
     unfold ValidContract in Hvc.
     rewrite Hcenv in Hvc.
+    exists 1%nat.
     apply Symbolic.validcontract_reflect_sound.
     apply Hvc.
+  Qed.
+
+  Lemma valid_contract_with_fuel : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ) (fuel : nat),
+      CEnv f = Some c ->
+      ValidContractWithFuel fuel f ->
+      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
+  Proof.
+    intros ? ? f c fuel Hcenv Hvc.
+    unfold ValidContractWithFuel in Hvc.
+    rewrite Hcenv in Hvc.
+    exists fuel.
+    now apply Symbolic.validcontract_reflect_fuel_sound.
   Qed.
 
   Lemma valid_contract_debug : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
       ValidContractDebug f ->
-      Symbolic.ValidContract c (FunDef f).
+      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
   Proof.
     intros ? ? f c Hcenv Hvc.
     unfold ValidContractDebug in Hvc.
     rewrite Hcenv in Hvc.
+    exists 1%nat.
     apply Hvc.
   Qed.
 
   Lemma ValidContracts : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
-      Symbolic.ValidContract c (FunDef f).
+      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
   Proof.
     intros.
     destruct f.
@@ -1614,8 +1657,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_pmpMatchEntry).
     - apply (valid_contract _ H valid_contract_pmpAddrRange).
     - apply (valid_contract _ H valid_contract_pmpMatchAddr).
-    - (* apply (valid_contract _ H (@valid_contract_process_load bytes p)). *)
-      admit.
+    - apply (valid_contract_with_fuel _ _ H (@valid_contract_process_load bytes p)).
     - apply (valid_contract _ H (valid_contract_mem_write_value bytes)).
     - cbn in H; inversion H.
     - apply (valid_contract _ H valid_contract_init_model).

@@ -80,9 +80,17 @@ Module RiscvPmpIrisInstance <:
     Definition addr_inc (x : bv 32) (n : nat) : bv 32 :=
       bv.add x (bv.of_nat n).
 
-    (* TODO: remove get_byte! rewrite similar as for the foreign functions *)
-    Definition get_byte {n} (offset : Z) (bits : bv n) : Byte :=
-      bv.of_Z (Z.shiftr (bv.unsigned bits) (offset * 8)).
+    Fixpoint get_byte {width : nat} (offset : nat) : bv (width * byte) -> Byte :=
+      match width with
+      | O   => fun _ => bv.zero
+      | S w =>
+          fun bytes =>
+            let (byte, bytes) := bv.appView byte (w * byte) bytes in
+            match offset with
+            | O        => byte
+            | S offset => get_byte offset bytes
+            end
+      end.
 
     (* TODO: change back to words instead of bytes... might be an easier first version
              and most likely still conventient in the future *)
