@@ -611,6 +611,8 @@ Module Export RiscvPmpBase <: Base.
     ltac:(destruct U; cbn; auto with typeclass_instances).
   #[export] Instance finite_union_constructor U : finite.Finite (union_constructor U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
+  #[export] Instance eqdec_record_denote R : EqDec (record_denote R) :=
+    ltac:(destruct R; auto with typeclass_instances).
 
   Definition union_unfold (U : unioni) : uniont U -> { K & Val (union_constructor_type U K) } :=
     match U with
@@ -745,15 +747,14 @@ Module Export RiscvPmpBase <: Base.
        recordv_unfold   := record_unfold;
     |}.
   Proof.
-    - transparent_abstract (now intros []; apply _).
-    - transparent_abstract (intros [] []; now cbn).
-    - transparent_abstract (intros [] [[] x]; cbn in x;
+    - abstract (intros [] []; now cbn).
+    - abstract (intros [] [[] x]; cbn in x;
         repeat match goal with
                | x: unit |- _ => destruct x
                | x: prod _ _ |- _ => destruct x
                end; auto).
-    - transparent_abstract (now intros [] []).
-    - transparent_abstract (intros []; now apply env.Forall_forall).
+    - abstract (now intros [] []).
+    - abstract (intros []; now apply env.Forall_forall).
   Defined.
 
   Canonical typedeclkit.
