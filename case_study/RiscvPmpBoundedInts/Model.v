@@ -144,6 +144,27 @@ Module RiscvPmpModel2.
     (*   iPureIntro; apply (map_Forall_update _ _ _ _ Hmap). *)
     (* Qed. *)
 
+    Lemma fun_read_ram_works {bytes memmap μ paddr} {w : bv (bytes * byte)} :
+      map_Forall (λ (a : Addr) (v : Base.Byte), μ a = v) memmap ->
+           interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ⊢
+              ⌜ fun_read_ram μ bytes paddr = w ⌝.
+    Proof.
+      revert paddr.
+      iInduction bytes as [|bytes] "IHbytes";
+      iIntros (paddr Hmap) "[Haddr Hmem]".
+      - now destruct (bv.view w).
+      - change (S bytes * byte)%nat with (byte + bytes * byte)%nat in w.
+        unfold interp_ptstomem at 2.
+        destruct (bv.appView byte (bytes * byte) w) as (w0 & w).
+        change ((fix interp_ptstomem (width : nat) (addr : Addr) {struct width} : bv (width * byte) → iProp Σ := _) bytes (bv.one _ + paddr) w) with (interp_ptstomem (bv.one xlenbits + paddr) w).
+        iDestruct "Haddr" as "(Haddr0 & Haddr)".
+        iPoseProof (gen_heap.gen_heap_valid with "Hmem Haddr0") as "%".
+        iPoseProof ("IHbytes" $! w (bv.one xlenbits + paddr) Hmap with "[$Haddr $Hmem]") as "%eq".
+        iPureIntro.
+        simpl.
+        f_equal; auto.
+    Qed.
+
     Lemma read_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
     Proof.
@@ -160,23 +181,11 @@ Module RiscvPmpModel2.
       eliminate_prim_step Heq.
       iMod "Hclose" as "_".
       iModIntro.
-      iInduction bytes as [|bytes] "IHbytes".
-      - iSplitL "Hregs Hmem".
-        now iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "$".
-        iFrame.
-        iApply wp_value.
-        simpl; iSplit; auto.
-        iPureIntro.
-        now destruct (bv.view w).
-      - admit.
-      (* iPoseProof (gen_heap.gen_heap_valid with "Hmem H") as "%". *)
-      (* iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "?". *)
-      (* iFrame. *)
-      (* iApply wp_value; cbn. *)
-      (* iSplitL; [|auto]. *)
-      (* iSplitR; auto. *)
-      (* apply map_Forall_lookup_1 with (i := paddr) (x := w) in Hmap; auto. *)
-    Admitted.
+      iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
+      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "Hmem".
+      iFrame.
+      now iApply wp_value.
+    Qed.
 
     Lemma write_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
