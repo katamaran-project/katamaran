@@ -1436,13 +1436,14 @@ Module bv.
     Qed.
 
     Lemma unsigned_succ_small n m :
-      n > 0 ->
       (N.succ (bin m) < exp2 n)%N ->
       Z.succ (unsigned m) = @unsigned n (one _ + m).
     Proof.
-      intros Hnz Hineq.
-      unfold unsigned.
-      rewrite bin_add_small; rewrite ?bin_one; Lia.lia.
+      intro H. unfold unsigned.
+      rewrite bin_add_small.
+      - rewrite Znat.N2Z.inj_add.
+        destruct n; cbn in *; Lia.lia.
+      - induction m using bv_case; cbn in *; Lia.lia.
     Qed.
   End DropTruncs.
 
