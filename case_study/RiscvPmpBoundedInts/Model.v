@@ -507,88 +507,6 @@ Module RiscvPmpModel2.
         (N.of_nat n < bv.exp2 w)%N.
     Proof. lia. Qed.
 
-    Lemma bv_ule_nat_one_S : forall {w} (n : nat),
-        (N.of_nat 1 < bv.exp2 w)%N ->
-        (N.of_nat (S n) < bv.exp2 w)%N ->
-        @bv.of_nat w 1 <=ᵘ bv.of_nat (S n).
-    Proof. intros; unfold bv.ule; rewrite ?bv.bin_of_nat_small; lia. Qed.
-
-    Lemma bv_ult_nat_S_zero : forall {w} (n : nat),
-        (N.of_nat (S n) < bv.exp2 w)%N ->
-        @bv.zero w <ᵘ bv.of_nat (S n).
-    Proof. intros; unfold bv.ult; rewrite bv.bin_of_nat_small; auto; now simpl. Qed.
-
-    Lemma bv_ule_trans : forall {n} (x y z : bv n),
-        x <=ᵘ y ->
-        y <=ᵘ z ->
-        x <=ᵘ z.
-    Proof. intros n x y z; unfold bv.ule; apply N.le_trans. Qed.
-
-    Lemma bv_ult_trans : forall {n} (x y z : bv n),
-        x <ᵘ y ->
-        y <ᵘ z ->
-        x <ᵘ z.
-    Proof. intros n x y z; unfold bv.ult; apply N.lt_trans. Qed.
-
-    Lemma bv_add_ule_mono : forall {x} (n m p : bv x),
-        (bv.bin p + bv.bin n < bv.exp2 x)%N ->
-        (bv.bin p + bv.bin m < bv.exp2 x)%N ->
-        n <=ᵘ m <-> p + n <=ᵘ p + m.
-    Proof.
-      intros; unfold bv.ule; rewrite ?bv.bin_add_small; lia.
-    Qed.
-
-    Lemma bv_ule_add_r : forall {x} (n m p : bv x),
-        (bv.bin m + bv.bin p < bv.exp2 x)%N ->
-        n <=ᵘ m -> n <=ᵘ m + p.
-    Proof.
-      intros.
-      unfold bv.ule in *.
-      rewrite bv.bin_add_small; auto.
-      rewrite <- (N.add_0_r (bv.bin n)).
-      apply N.add_le_mono; auto.
-      apply N.le_0_l.
-    Qed.
-
-    Lemma bv_add_ule_r : forall {x} (n m p : bv x),
-        (bv.bin n + bv.bin p < bv.exp2 x)%N ->
-        n + p <=ᵘ m -> n <=ᵘ m.
-    Proof.
-      intros.
-      unfold bv.ule in *.
-      rewrite bv.bin_add_small in H0; auto.
-      rewrite <- N.add_0_r in H0.
-      apply (N.le_le_add_le _ _ _ _ (N.le_0_l (bv.bin p)) H0).
-    Qed.
-
-    Lemma bv_add_ule_S_ult : forall {x} (n m p : bv x),
-        (bv.bin n + bv.bin p < bv.exp2 x)%N ->
-        bv.zero <ᵘ p ->
-        n + p <=ᵘ m -> n <ᵘ m.
-    Proof.
-      intros.
-      unfold bv.ule, bv.ult in *.
-      rewrite bv.bin_add_small in H1; auto.
-      apply (N.lt_le_add_lt _ _ _ _ H0).
-      now rewrite N.add_0_r.
-    Qed.
-
-    Lemma bv_ultb_antisym : forall {n} (x y : bv n),
-        y <ᵘ? x = negb (x <=ᵘ? y).
-    Proof. intros; unfold bv.uleb, bv.ultb; apply N.ltb_antisym. Qed.
-
-    Lemma bv_ult_ule_incl : forall {n} (x y : bv n),
-        x <ᵘ y -> x <=ᵘ y.
-    Proof. intros; unfold bv.ule, bv.ult; apply N.lt_le_incl; auto. Qed.
-
-    Lemma bv_ule_cases : forall {n} (x y : bv n),
-        x <=ᵘ y <-> x <ᵘ y ∨ x = y.
-    Proof.
-      intros n x y.
-      unfold bv.ule, bv.ult.
-      now rewrite N.lt_eq_cases bv.bin_inj_equiv.
-    Qed.
-
     (* TODO: better name! *)
     Lemma bv_ule_base : forall {n} (base a b max : bv n),
         (bv.bin base + bv.bin a < bv.exp2 n)%N ->
@@ -597,60 +515,9 @@ Module RiscvPmpModel2.
         base + b <=ᵘ max.
     Proof.
       intros n base a b max Hn Hba.
-      apply bv_ule_trans with (y := base + a).
+      apply bv.ule_trans with (y := base + a).
       unfold bv.ule in *.
       rewrite ?bv.bin_add_small; lia.
-    Qed.
-
-    Lemma bv_ule_refl : forall {n} (x : bv n),
-        x <=ᵘ x.
-    Proof. intros; unfold bv.ule; auto. Qed.
-
-    Lemma bv_uleb_ugt : forall {n} (x y : bv n),
-        x <=ᵘ? y = false <-> y <ᵘ x.
-    Proof. intros; unfold bv.uleb, bv.ule; now apply N.leb_gt. Qed.
-
-    Lemma bv_uleb_ule : forall {n} (x y : bv n),
-        x <=ᵘ? y = true <-> x <=ᵘ y.
-    Proof. intros; unfold bv.uleb; now apply N.leb_le. Qed.
-
-    Lemma bv_ultb_uge : forall {n} (x y : bv n),
-        x <ᵘ? y = false <-> y <=ᵘ x.
-    Proof. intros; unfold bv.ultb; now apply N.ltb_ge. Qed.
-
-    Lemma bv_ultb_ult : forall {n} (x y : bv n),
-        x <ᵘ? y = true <-> x <ᵘ y.
-    Proof. intros; unfold bv.ultb; now apply N.ltb_lt. Qed.
-
-    Lemma bv_ultb_uleb : forall {n} (x y : bv n),
-        x <ᵘ? y = true -> x <=ᵘ? y = true.
-    Proof.
-      intros n x y.
-      rewrite bv_ultb_ult bv_uleb_ule.
-      unfold bv.ule, bv.ult.
-      lia.
-    Qed.
-
-    Lemma bv_ult_antirefl : forall {n} (x : bv n), not (x <ᵘ x).
-    Proof. unfold bv.ult. lia. Qed.
-
-    Lemma bv_add_nonzero_neq : forall {n} (x y : bv n),
-        bv.zero <ᵘ y ->
-        x + y ≠ x.
-    Proof.
-      intros n x y ynz eq.
-      replace x with (x + bv.zero) in eq  at 2 by apply bv.add_zero_r.
-      apply bv.add_cancel_l in eq.
-      subst. revert ynz.
-      now apply bv_ult_antirefl.
-    Qed.
-
-    Lemma bv_ule_antisymm {n} {x y : bv n} : x <=ᵘ y -> y <=ᵘ x -> x = y.
-    Proof.
-      unfold bv.ule.
-      intros ineq1 ineq2.
-      apply bv.bin_inj.
-      now Lia.lia.
     Qed.
 
     (* TODO: move all these w <=ᵘ bytes stuff as an early assumption to get rid of all the "exact H..." tactics *)
@@ -666,7 +533,7 @@ Module RiscvPmpModel2.
       unfold bv.ule, bv.ult.
       intros paddr rng Hass H0w Hw Hpmp.
       assert (Hrep_paddr_w: (bv.bin paddr + bv.bin w < bv.exp2 xlenbits)%N) by lia.
-      apply bv_ule_cases in Hw as [Hw|Hw]; last by subst.
+      apply bv.ule_cases in Hw as [Hw|Hw]; last by subst.
       destruct rng as [[lo hi]|]; last by simpl.
       revert Hpmp.
       unfold pmp_match_addr.
@@ -678,38 +545,38 @@ Module RiscvPmpModel2.
         last by (rewrite andb_false_r; inversion 1).
       intros H.
       destruct (lo <ᵘ? paddr) eqn:?.
-      - rewrite ?bv_uleb_ugt ?bv_uleb_ule ?bv_ultb_ult ?bv_ultb_uge in Heqb0 Heqb1 Heqb3 Heqb.
+      - rewrite ?bv.uleb_ugt ?bv.uleb_ule ?bv.ultb_ult ?bv.ultb_uge in Heqb0 Heqb1 Heqb3 Heqb.
         assert (Hlt: lo <ᵘ paddr + w).
         { unfold bv.ult in *.
           rewrite ?bv.bin_add_small; auto.
           Lia.lia.
         }
-        rewrite <- bv_uleb_ugt in Hlt.
+        rewrite <- bv.uleb_ugt in Hlt.
         rewrite Hlt.
         simpl.
-        rewrite <- bv_ultb_ult in Heqb3.
-        apply bv_ultb_uleb in Heqb3.
+        rewrite <- bv.ultb_ult in Heqb3.
+        apply bv.ultb_uleb in Heqb3.
         rewrite Heqb3.
         enough (paddr + w <=ᵘ? hi = true) by now rewrite H0.
-        rewrite bv_uleb_ule.
-        apply bv_ule_trans with (y := paddr + bytes); auto.
-        apply bv_add_ule_mono; auto.
-        apply bv_ult_ule_incl; auto.
-        now rewrite bv_uleb_ule in Heqb2.
-      - rewrite ?bv_uleb_ugt ?bv_uleb_ule ?bv_ultb_ult ?bv_ultb_uge in Heqb0 Heqb1 Heqb2 Heqb3 Heqb.
+        rewrite bv.uleb_ule.
+        apply bv.ule_trans with (y := paddr + bytes); auto.
+        apply bv.add_ule_mono; auto.
+        apply bv.ult_ule_incl; auto.
+        now rewrite bv.uleb_ule in Heqb2.
+      - rewrite ?bv.uleb_ugt ?bv.uleb_ule ?bv.ultb_ult ?bv.ultb_uge in Heqb0 Heqb1 Heqb2 Heqb3 Heqb.
         rewrite andb_true_r in H.
         destruct (lo <=ᵘ? paddr) eqn:Heqlp; inversion H.
-        rewrite bv_uleb_ule in Heqlp.
-        replace paddr with lo in * by now apply bv_ule_antisymm.
+        rewrite bv.uleb_ule in Heqlp.
+        replace paddr with lo in * by now apply bv.ule_antisymm.
         clear Heqb3 Heqb H Heqlp.
         assert (lo <ᵘ lo + w).
         { unfold bv.ugt, bv.ult.
           rewrite bv.bin_add_small; lia.
         }
-        rewrite <-bv_uleb_ugt in H.
+        rewrite <-bv.uleb_ugt in H.
         rewrite H.
         enough ((lo + w <=ᵘ? hi) = true) by now rewrite H0.
-        rewrite bv_uleb_ule.
+        rewrite bv.uleb_ule.
         unfold bv.ule, bv.ult in *.
         rewrite bv.bin_add_small in Heqb2; try lia.
         rewrite bv.bin_add_small; lia.
@@ -727,9 +594,9 @@ Module RiscvPmpModel2.
       destruct (hi <ᵘ? lo); auto.
       destruct (paddr + bytes <=ᵘ? lo) eqn:?.
       rewrite orb_true_l.
-      apply bv_uleb_ule in Heqb.
+      apply bv.uleb_ule in Heqb.
       apply (@bv_ule_base _ _ _ w _ Hass Hle) in Heqb.
-      apply bv_uleb_ule in Heqb.
+      apply bv.uleb_ule in Heqb.
       rewrite Heqb.
       now rewrite orb_true_l.
       rewrite orb_false_l.
@@ -737,9 +604,9 @@ Module RiscvPmpModel2.
       now rewrite orb_true_r.
       destruct (lo <=ᵘ? paddr).
       destruct (paddr + bytes <=ᵘ? hi) eqn:?.
-      apply bv_uleb_ule in Heqb0.
+      apply bv.uleb_ule in Heqb0.
       apply (@bv_ule_base _ _ _ w _ Hass Hle) in Heqb0.
-      apply bv_uleb_ule in Heqb0.
+      apply bv.uleb_ule in Heqb0.
       now rewrite Heqb0.
       now rewrite andb_false_r.
       now rewrite andb_false_l.
@@ -814,10 +681,11 @@ Module RiscvPmpModel2.
       now rewrite E.
     Qed.
 
+    (* TODO: move some pmp predicate specific lemmas into sig.v? *)
     Lemma pmp_match_addr_match_conditions_1 : forall paddr w lo hi,
         bv.zero <ᵘ w ->
         pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match ->
-        lo <=ᵘ hi ∧ lo <=ᵘ paddr ∧ paddr + w <=ᵘ hi.
+        lo <=ᵘ hi ∧ lo <ᵘ paddr + w ∧ lo <=ᵘ paddr ∧ paddr <ᵘ hi ∧ paddr + w <=ᵘ hi.
     Proof.
       unfold pmp_match_addr.
       intros paddr w lo hi Hw H.
@@ -827,49 +695,13 @@ Module RiscvPmpModel2.
       simpl in H.
       destruct (lo <=ᵘ? paddr) eqn:Elop; last done.
       destruct (paddr + w <=ᵘ? hi) eqn:Epwhi; last done.
-      rewrite bv_ultb_antisym in Ehilo.
+      rewrite bv.ultb_antisym in Ehilo.
       apply negb_false_iff in Ehilo.
-      apply bv_uleb_ule in Ehilo.
-      apply bv_uleb_ule in Elop.
-      now apply bv_uleb_ule in Epwhi.
-    Qed.
-
-    Lemma pmp_match_addr_match_conditions_2 : forall paddr w lo hi,
-        bv.zero <ᵘ w ->
-        (bv.bin paddr + bv.bin w < bv.exp2 xlenbits)%N ->
-        lo <=ᵘ hi ->
-        lo <=ᵘ paddr ->
-        paddr + w <=ᵘ hi ->
-        pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match.
-    Proof.
-      intros paddr w lo hi Hw Hrep Hlohi Hlop Hpwhi.
-      unfold pmp_match_addr.
-      replace (hi <ᵘ? lo) with false
-        by (symmetry; now rewrite bv_ultb_antisym negb_false_iff bv_uleb_ule).
-      replace (paddr + w <=ᵘ? lo) with false.
-      replace (hi <=ᵘ? paddr) with false.
-      replace (lo <=ᵘ? paddr) with true by (symmetry; now rewrite bv_uleb_ule).
-      now replace (paddr + w <=ᵘ? hi) with true by (symmetry; now rewrite bv_uleb_ule).
-      - symmetry.
-        rewrite bv_uleb_ugt.
-        unfold bv.ule, bv.ult in *.
-        rewrite bv.bin_add_small in Hpwhi; lia.
-      - symmetry.
-        rewrite bv_uleb_ugt.
-        unfold bv.ule, bv.ult in *.
-        rewrite bv.bin_add_small; lia.
-    Qed.
-
-    Lemma bv_lt_S_add_one : forall {n} x,
-        (N.of_nat (S x) < bv.exp2 n)%N ->
-        (bv.bin (bv.one n) + (@bv.bin n (bv.of_nat x)) < bv.exp2 n)%N.
-    Proof.
-      destruct n.
-      simpl; lia.
-      assert (bv.bin (bv.one (S n)) = 1%N) by auto.
-      rewrite H.
-      intros.
-      rewrite bv.bin_of_nat_small; lia.
+      apply bv.uleb_ule in Ehilo.
+      apply bv.uleb_ule in Elop.
+      apply bv.uleb_ugt in Ehip.
+      apply bv.uleb_ugt in Epwlo.
+      now apply bv.uleb_ule in Epwhi.
     Qed.
 
     Lemma pmp_match_addr_addr_S_width_pred (bytes : nat) : forall paddr rng res,
@@ -892,9 +724,9 @@ Module RiscvPmpModel2.
       - unfold pmp_match_addr in *.
         destruct (hi <ᵘ? lo) eqn:?; auto.
         destruct (hi <=ᵘ? paddr) eqn:Ehipaddr.
-        + apply bv_uleb_ule in Ehipaddr.
-          apply bv_ule_add_r with (p := bv.one xlenbits) in Ehipaddr; auto.
-          apply bv_uleb_ule in Ehipaddr.
+        + apply bv.uleb_ule in Ehipaddr.
+          apply bv.ule_add_r with (p := bv.one xlenbits) in Ehipaddr; auto.
+          apply bv.uleb_ule in Ehipaddr.
           rewrite Ehipaddr.
           now rewrite orb_true_r.
         + destruct (paddr + bv.of_nat (S bytes) <=ᵘ? lo) eqn:Epblo;
@@ -906,16 +738,20 @@ Module RiscvPmpModel2.
           * simpl in *.
             destruct (lo <=ᵘ? paddr);
               destruct (paddr + bv.of_nat (S bytes) <=ᵘ? hi); now auto.
-      - apply pmp_match_addr_match_conditions_1 in H as (Hlohi & Hlop & Hpwhi).
+      - apply pmp_match_addr_match_conditions_1 in H as (Hlohi & Hlopw & Hlop & Hphi & Hpwhi).
         apply pmp_match_addr_match_conditions_2; auto.
 
+        now rewrite bv.of_nat_S bv.add_assoc in Hlopw.
+        eauto using bv.ule_add_r, bv_bin_one.
+        rewrite bv.of_nat_S in Hpwhi.
+        rewrite bv.add_assoc in Hpwhi.
+        apply bv.add_ule_S_ult in Hpwhi; auto.
         rewrite bv.bin_add_small bv_bin_one; last by lia.
         rewrite Nat2N.inj_succ in Hrep.
         rewrite bv.bin_of_nat_small; lia.
-        eauto using bv_ule_add_r, bv_bin_one.
         rewrite bv.of_nat_S in Hpwhi.
         now rewrite bv.add_assoc in Hpwhi.
-        apply bv_ult_nat_S_zero; auto.
+        apply bv.ult_nat_S_zero; auto.
     Qed.
 
     Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr p cfg lo hi,
@@ -1006,7 +842,7 @@ Module RiscvPmpModel2.
         exists acc.
         assert (Htmp: (N.of_nat 1 < bv.exp2 xlenbits)%N) by lia.
         rewrite <- (@bv.bin_of_nat_small _ _ Hbytes) in Hrep.
-        apply (pmp_access_reduced_width Hrep (bv_ult_nat_S_zero Htmp) (bv_ule_nat_one_S Htmp Hbytes) Haccess).
+        apply (pmp_access_reduced_width Hrep (bv.ult_nat_S_zero Htmp) (bv.ule_nat_one_S Htmp Hbytes) Haccess).
         destruct bytes. (* we need to know a bit more about bytes to finish this case *)
         now iSimpl.
         iSimpl in "Hbs".
