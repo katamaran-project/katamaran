@@ -241,7 +241,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_postcondition   := term_var "result_pmpLocked" = term_val ty.bool false;
     |}.
 
-  Definition sep_contract_checked_mem_read {bytes} : SepContractFun (@checked_mem_read bytes) :=
+  Definition sep_contract_checked_mem_read {bytes} {H: restrict_bytes bytes} : SepContractFun (@checked_mem_read bytes H) :=
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "w" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
@@ -277,9 +277,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
          ∨ term_var "result_pmpMatchAddr" = term_val ty_pmpaddrmatch PMP_Match;
     |}.
 
-  Definition sep_contract_pmpCheck : SepContractFun pmpCheck :=
-    {| sep_contract_logic_variables := ["addr" :: ty_xlenbits; "width" :: ty.int; "acc" :: ty_access_type; "priv" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
-       sep_contract_localstore      := [term_var "addr"; term_var "width"; term_var "acc"; term_var "priv"];
+  Definition sep_contract_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : SepContractFun (@pmpCheck bytes H) :=
+    {| sep_contract_logic_variables := ["addr" :: ty_xlenbits; "acc" :: ty_access_type; "priv" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
+       sep_contract_localstore      := [term_var "addr"; term_var "acc"; term_var "priv"];
        sep_contract_precondition    :=
          asn_pmp_entries (term_var "entries")
          ∗ term_var "priv" = term_val ty_privilege Machine
@@ -288,12 +288,12 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_postcondition   :=
          term_var "result_pmpCheck" = term_inr (term_val ty.unit tt)
          ∗ asn_pmp_entries (term_var "entries")
-         ∗ asn.formula (formula_user pmp_access [(term_var "addr"); (term_get_slice_int (term_var "width")); (term_var "entries"); (term_var "priv"); (term_var "acc")])
+         ∗ asn.formula (formula_user pmp_access [(term_var "addr"); (term_get_slice_int (term_val ty.int (Z.of_nat bytes))); (term_var "entries"); (term_var "priv"); (term_var "acc")])
          (* not sure why this notation doesn't type check *)
          (* ∗ asn_pmp_access (term_var "addr") (term_var "width") (term_var "entries") (term_var "priv") (term_var "acc"); *)
     |}.
 
-  Definition sep_contract_pmp_mem_read {bytes} : SepContractFun (pmp_mem_read bytes) :=
+  Definition sep_contract_pmp_mem_read {bytes} {H : restrict_bytes bytes} : SepContractFun (@pmp_mem_read bytes H) :=
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "w" :: ty_bytes bytes; "m" :: ty_privilege];
       sep_contract_localstore      := [term_var "typ"; term_var "m"; term_var "paddr"];
       sep_contract_precondition    :=
@@ -313,7 +313,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
           asn_pmp_all_entries_unlocked (term_var "entries");
     |}.
 
-  Definition sep_contract_mem_read {bytes} : SepContractFun (mem_read bytes) :=
+  Definition sep_contract_mem_read {bytes} {H : restrict_bytes bytes} : SepContractFun (@mem_read bytes H) :=
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "w" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
@@ -346,19 +346,19 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
-      | rX                     => Some sep_contract_rX
-      | wX                     => Some sep_contract_wX
-      | fetch                  => Some sep_contract_fetch_instr
-      | mem_read bytes         => Some sep_contract_mem_read
-      | tick_pc                => Some sep_contract_tick_pc
-      | pmpCheck               => Some sep_contract_pmpCheck
-      | pmpCheckPerms          => Some sep_contract_pmpCheckPerms
-      | within_phys_mem        => Some sep_contract_within_phys_mem
-      | pmpLocked              => Some sep_contract_pmpLocked
-      | pmpMatchAddr           => Some sep_contract_pmpMatchAddr
-      | pmp_mem_read bytes     => Some sep_contract_pmp_mem_read
-      | checked_mem_read bytes => Some sep_contract_checked_mem_read
-      | _                      => None
+      | rX                        => Some sep_contract_rX
+      | wX                        => Some sep_contract_wX
+      | fetch                     => Some sep_contract_fetch_instr
+      | @mem_read bytes H         => Some (@sep_contract_mem_read bytes H)
+      | tick_pc                   => Some sep_contract_tick_pc
+      | @pmpCheck bytes H         => Some (@sep_contract_pmpCheck bytes H)
+      | pmpCheckPerms             => Some sep_contract_pmpCheckPerms
+      | within_phys_mem           => Some sep_contract_within_phys_mem
+      | pmpLocked                 => Some sep_contract_pmpLocked
+      | pmpMatchAddr              => Some sep_contract_pmpMatchAddr
+      | @pmp_mem_read bytes H     => Some (@sep_contract_pmp_mem_read bytes H)
+      | @checked_mem_read bytes H => Some (@sep_contract_checked_mem_read bytes H)
+      | _                         => None
       end.
 
   Lemma linted_cenv :
@@ -553,7 +553,7 @@ Module RiscvPmpSpecVerif.
   Lemma valid_pmpLocked : ValidContract pmpLocked.
   Proof. now compute. Qed.
 
-  Lemma valid_checked_mem_read {bytes} : ValidContractDebug (checked_mem_read bytes).
+  Lemma valid_checked_mem_read {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
   Proof.
     (* strange: replacing ValidContractDebug with ValidContract makes the proof fail. *)
   Admitted.
@@ -561,7 +561,7 @@ Module RiscvPmpSpecVerif.
   (*   intuition. *)
   (* Qed. *)
 
-  Lemma valid_pmp_mem_read {bytes} : ValidContract (pmp_mem_read bytes).
+  Lemma valid_pmp_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@pmp_mem_read bytes H).
   Admitted.
   (* Proof. reflexivity. Qed. *)
 
@@ -620,8 +620,10 @@ Module RiscvPmpSpecVerif.
   (*     unfold decide_access_pmp_perm; destruct acc; auto. *)
   (* Qed. *)
 
-  Lemma valid_pmpCheck : ValidContractWithFuelDebug 3 pmpCheck.
+  Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 3 (@pmpCheck bytes H).
   Proof.
+    destruct H as [H|[H|H]];
+      rewrite ?H.
     hnf. apply verification_condition_with_erasure_sound. vm_compute.
     constructor. cbn.
     intros; subst.
@@ -632,7 +634,7 @@ Module RiscvPmpSpecVerif.
   (*     now cbn. *)
   (* Qed. *)
 
-  Lemma valid_mem_read {bytes} : ValidContract (mem_read bytes).
+  Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof.
   Admitted.
  (* reflexivity. Qed. *)

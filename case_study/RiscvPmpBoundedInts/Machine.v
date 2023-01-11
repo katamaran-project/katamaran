@@ -133,6 +133,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     IsTrue (bytes * byte <=? xlenbytes * byte)%nat :=
     IsTrue_bytes_xlenbytes bytes xlenbytes (IsTrue.andb_r H).
 
+  Definition restrict_bytes (bytes : nat) : Prop := 
+    bytes = 1%nat \/ bytes = 2%nat \/ bytes = 4%nat.
+
+  Lemma restrict_bytes_four : restrict_bytes 4%nat.
+  Proof. unfold restrict_bytes; auto. Qed.
+
   Import RiscvNotations.
 
   (** Functions **)
@@ -147,23 +153,23 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | to_bits (l : nat)     : Fun [value :: ty.int] (ty.bvec l)
   (* | abs                   : Fun [v ∷ ty.int] ty.int *)
   | within_phys_mem       : Fun [paddr ∷ ty_xlenbits; width :: ty.int] ty.bool
-  | mem_read (bytes : nat)             : Fun [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
-  | checked_mem_read (bytes : nat)     : Fun [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
-  | checked_mem_write (bytes : nat)    : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes] (ty_memory_op_result 1)
-  | pmp_mem_read (bytes : nat)         : Fun [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
-  | pmp_mem_write (bytes : nat)         : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1)
+  | mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
+  | checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
+  | checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes] (ty_memory_op_result 1)
+  | pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
+  | pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1)
   | pmpLocked             : Fun [cfg ∷ ty_pmpcfg_ent] ty.bool
   | pmpWriteCfgReg        : Fun [idx :: ty_pmpcfgidx; value :: ty_xlenbits] ty.unit
   | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits] ty_pmpcfg_ent
   | pmpWriteAddr          : Fun [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
-  | pmpCheck              : Fun [addr ∷ ty_xlenbits; width :: ty.int; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
+  | pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
   | pmpCheckPerms         : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool
   | pmpCheckRWX           : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool
   | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
   | pmpAddrRange          : Fun [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range
   | pmpMatchAddr          : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch
   | process_load (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result bytes] ty_retired
-  | mem_write_value (bytes : nat)       : Fun [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1)
+  | mem_write_value (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1)
   | main                  : Fun ctx.nil ty.unit
   | init_model            : Fun ctx.nil ty.unit
   | loop                  : Fun ctx.nil ty.unit
@@ -451,11 +457,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: addr_int := exp_unsigned paddr in
     ((exp_int (Z.of_nat minAddr) <= addr_int)%exp && (addr_int + width <= exp_int (Z.of_nat maxAddr)))%exp.
 
-  Definition fun_mem_read (bytes : nat) : Stm [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
+  Definition fun_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := stm_read_register cur_privilege in
-    stm_call (pmp_mem_read bytes) [typ; tmp; paddr].
+    stm_call (@pmp_mem_read bytes H) [typ; tmp; paddr].
 
-  Definition fun_checked_mem_read (bytes : nat) : Stm [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
+  Definition fun_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
     if: tmp
     then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
@@ -473,7 +479,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
             stm_exp (exp_union (memory_op_result bytes) KMemException E_Fetch_Access_Fault)
          end.
 
-  Definition fun_checked_mem_write (bytes : nat) : Stm [paddr ∷ ty_xlenbits; data :: ty_bytes bytes] (ty_memory_op_result 1) :=
+  Definition fun_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; data :: ty_bytes bytes] (ty_memory_op_result 1) :=
     let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
     if: tmp
     then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
@@ -483,18 +489,18 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     else
       stm_exp (exp_union (memory_op_result 1) KMemException E_SAMO_Access_Fault).
 
-  Definition fun_pmp_mem_read (bytes : nat) : Stm [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
-    let: tmp := call pmpCheck paddr (exp_val ty.int (Z.of_nat bytes)) t p in
+  Definition fun_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
+    let: tmp := stm_call (@pmpCheck bytes H) [paddr; t; p] in
     match: tmp with
     | inl e => stm_exp (exp_union (memory_op_result bytes) KMemException e)
-    | inr v => stm_call (checked_mem_read bytes) [t; paddr]
+    | inr v => stm_call (@checked_mem_read bytes H) [t; paddr]
     end.
 
-  Definition fun_pmp_mem_write (bytes : nat) : Stm [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1) :=
-    let: tmp := call pmpCheck paddr (exp_val ty.int (Z.of_nat bytes)) typ priv in
+  Definition fun_pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1) :=
+    let: tmp := stm_call (@pmpCheck bytes H) [paddr; typ; priv] in
     match: tmp with
     | inl e => stm_exp (exp_union (memory_op_result 1) KMemException e)
-    | inr v => stm_call (checked_mem_write bytes) [paddr; data]
+    | inr v => stm_call (@checked_mem_write bytes H) [paddr; data]
     end.
 
   Definition fun_pmpLocked : Stm [cfg ∷ ty_pmpcfg_ent] ty.bool :=
@@ -519,9 +525,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_pmpWriteAddr : Stm [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits :=
     if: locked then addr else value.
 
-  Definition fun_pmpCheck : Stm [addr ∷ ty_xlenbits; width :: ty.int; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
+  Definition fun_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Stm [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
     use lemma open_pmp_entries ;;
-    let: "width" :: ty_xlenbits := stm_call (to_bits xlen) [width] in  
+    let: "width" :: ty_xlenbits := stm_call (to_bits xlen) [exp_val ty.int (Z.of_nat bytes)] in  
     let: check%string :=
       let: tmp1 := stm_read_register pmp0cfg in
       let: tmp2 := stm_read_register pmpaddr0 in
@@ -627,10 +633,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                                        stm_val ty_retired RETIRE_FAIL
     end.
 
-  Definition fun_mem_write_value (bytes : nat) : Stm [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1) :=
+  Definition fun_mem_write_value (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1) :=
     let: tmp1 := Write in
     let: tmp2 := stm_read_register cur_privilege in
-    stm_call (pmp_mem_write bytes) [paddr; value; tmp1; tmp2].
+    stm_call (@pmp_mem_write bytes H) [paddr; value; tmp1; tmp2].
 
   Definition fun_main : Stm ctx.nil ty.unit :=
     call init_model ;;
@@ -650,7 +656,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp1 := Execute in 
     let: tmp := stm_read_register pc in
     use lemma open_ptsto_instr [tmp];;
-    let: tmp2 := stm_call (mem_read 4) [tmp1; tmp] in
+    let: tmp2 := stm_call (@mem_read 4%nat restrict_bytes_four) [tmp1; tmp] in
     match: tmp2 in union (memory_op_result 4) with
     |> KMemValue (pat_var "result") =>
       use lemma close_ptsto_instr [tmp; exp_var "result"];;
@@ -985,7 +991,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp := call rX rs1 in
     let: paddr := tmp +ᵇ offset in
     let: tmp1 := Read in
-    let: tmp := stm_call (mem_read 4) [tmp1; paddr] in
+    let: tmp := stm_call (@mem_read 4 restrict_bytes_four) [tmp1; paddr] in
     stm_call (@process_load 4 _) [rd; paddr; tmp] ;;
     stm_val ty_retired RETIRE_SUCCESS.
 
@@ -994,7 +1000,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp := call rX rs1 in
     let: paddr ∷ ty_xlenbits := tmp +ᵇ offset in
     let: rs2_val := call rX rs2 in
-    let: res := stm_call (mem_write_value 4) [paddr; rs2_val] in
+    let: res := stm_call (@mem_write_value 4 restrict_bytes_four) [paddr; rs2_val] in
     match: res in union (memory_op_result 1) with
     |> KMemValue (pat_var "v") => if: v = exp_val ty_byte [bv 1]
                                   then stm_val ty_retired RETIRE_SUCCESS
@@ -1113,17 +1119,17 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | (to_bits l)             => @fun_to_bits l
     (* | abs                     => fun_abs *)
     | within_phys_mem         => fun_within_phys_mem
-    | mem_read width          => fun_mem_read width
-    | mem_write_value width   => fun_mem_write_value width
-    | checked_mem_read width  => fun_checked_mem_read width
-    | checked_mem_write width => fun_checked_mem_write width
-    | pmp_mem_read width      => fun_pmp_mem_read width
-    | pmp_mem_write width     => fun_pmp_mem_write width
+    | @mem_read width H       => @fun_mem_read width H
+    | @mem_write_value width H => @fun_mem_write_value width H
+    | @checked_mem_read width H => @fun_checked_mem_read width H
+    | @checked_mem_write width H => @fun_checked_mem_write width H
+    | @pmp_mem_read width H   => @fun_pmp_mem_read width H
+    | @pmp_mem_write width H  => @fun_pmp_mem_write width H
     | pmpLocked               => fun_pmpLocked
     | pmpWriteCfgReg          => fun_pmpWriteCfgReg
     | pmpWriteCfg             => fun_pmpWriteCfg
     | pmpWriteAddr            => fun_pmpWriteAddr
-    | pmpCheck                => fun_pmpCheck
+    | @pmpCheck bytes H       => @fun_pmpCheck bytes H
     | pmpCheckPerms           => fun_pmpCheckPerms
     | pmpCheckRWX             => fun_pmpCheckRWX
     | pmpMatchEntry           => fun_pmpMatchEntry
