@@ -709,9 +709,12 @@ Import BlockVerificationDerived2.
       now iApply LoopVerification.valid_semTriple_loop.
   Qed.
 
+  Definition mem_has_word (μ : Memory) (a : Val ty_word) (w : Val ty_word) : Prop :=
+    exists v0 v1 v2 v3, map μ (bv.seqBv a 4) = [v0; v1; v2; v3]%list /\ bv.app v0 (bv.app v1 (bv.app v2 (bv.app v3 bv.nil))) = w.
+
   (* byte order correct? *)
   Definition mem_has_instr (μ : Memory) (a : Val ty_word) (instr : AST) : Prop :=
-    exists v0 v1 v2 v3, map μ (bv.seqBv a 4) = [v0; v1; v2; v3]%list /\ pure_decode (bv.app v0 (bv.app v1 (bv.app v2 v3))) = inr instr.
+    exists w, mem_has_word μ a w /\ pure_decode w = inr instr.
 
   Fixpoint mem_has_instrs (μ : Memory) (a : Val ty_word) (instrs : list AST) : Prop :=
     match instrs with
@@ -731,6 +734,53 @@ Import BlockVerificationDerived2.
     by compute.
   Qed.
 
+  Lemma intro_ptstomem_word `{sailGS Σ} v0 v1 v2 v3 (a : Val ty_word) :
+    interp_ptsto (bv.of_Z (0 + bv.unsigned a)) v0 ∗
+    interp_ptsto (bv.of_Z (1 + bv.unsigned a)) v1 ∗
+    interp_ptsto (bv.of_Z (2 + bv.unsigned a)) v2 ∗
+    interp_ptsto (bv.of_Z (3 + bv.unsigned a)) v3 ⊢
+      interp_ptstomem (width := 4) a (bv.app v0 (bv.app v1 (bv.app v2 (bv.app v3 bv.nil)))).
+  Proof.
+    iIntros "(Hmema & Hmema1 & Hmema2 & Hmema3)".
+    unfold interp_ptstomem.
+    rewrite ?bv.appView_app.
+    replace (@bv.of_Z xlenbits (0 + bv.unsigned a)%Z) with a by now rewrite bv.of_Z_unsigned.
+    replace (@bv.of_Z xlenbits (1 + bv.unsigned a)%Z) with (bv.add (bv.one _) a) by now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+    replace (@bv.of_Z xlenbits (2 + bv.unsigned a)%Z) with (bv.add (bv.one word) (bv.add (bv.one word) a)).
+    replace (@bv.of_Z xlenbits (3 + bv.unsigned a)%Z) with (bv.add (bv.one word) (bv.add (bv.one word) (bv.add (bv.one word) a))).
+    now iFrame.
+    rewrite ?bv.add_assoc.
+    change (bv.add _ (bv.one word)) with (@bv.of_Z xlenbits 3).
+    now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+    rewrite ?bv.add_assoc.
+    now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+  Qed.
+
+  Lemma intro_ptstomem_word2 `{sailGS Σ} {μ : Memory} {a : Val ty_word} {v : Val ty_word} :
+    mem_has_word μ a v ->
+    ([∗ list] a' ∈ bv.seqBv a 4, interp_ptsto a' (μ a')) ⊢ interp_ptstomem a v.
+  Proof.
+    iIntros (Hmhw) "Hmem".
+    destruct Hmhw as (v0 & v1 & v2 & v3 & Heqμ & Heqv).
+    unfold bv.seqBv, seqZ, Z.to_nat, Z.of_nat, Pos.to_nat.
+    cbn -[bv.add interp_ptstomem word].
+    iDestruct "Hmem" as "(Hmema & Hmema1 & Hmema2 & Hmema3 & _)".
+    inversion Heqμ; subst.
+    now iApply (intro_ptstomem_word with "[$Hmema $Hmema1 $Hmema2 $Hmema3]").
+  Qed.
+
+  Lemma intro_ptsto_instr `{sailGS Σ} {μ : Memory} {a : Val ty_word} {instr : AST} :
+    (4 + bv.bin a < bv.exp2 xlenbits)%N ->
+    mem_has_instr μ a instr ->
+    ([∗ list] a' ∈ bv.seqBv a 4, interp_ptsto a' (μ a'))
+      ⊢ interp_ptsto_instr a instr.
+  Proof.
+    iIntros (Hrep (v & Hmhw & Heq)) "Hmem".
+    iExists v.
+    iSplitL; last done.
+    now iApply (intro_ptstomem_word2 Hmhw).
+  Qed.
+
   Lemma intro_ptsto_instrs `{sailGS Σ} {μ : Memory} {a : Val ty_word} {instrs : list AST} :
     (4 * N.of_nat (length instrs) + bv.bin a < bv.exp2 xlenbits)%N ->
     mem_has_instrs μ a instrs ->
@@ -744,36 +794,20 @@ Import BlockVerificationDerived2.
     - rewrite Nat2N.inj_succ in Hrep.
       fold (length instrs) in Hrep.
       replace (4 * length (instr :: instrs)) with (4 + 4 * length instrs) by (cbn; lia).
-      rewrite ?bv.seqBv_succ; try (rewrite ?bv.add_assoc ?bv.bin_add_small; cbn -[N.mul] in *; Lia.lia).
-      destruct Hmeminstrs as [(v1 & v2 & v3 & v4 & Heq & Hv) Hmeminstrs].
-      iDestruct "Hmem" as "(Hmema & Hmema1 & Hmema2 & Hmema3 & Hmem)".
-      iSplitL "Hmema Hmema1 Hmema2 Hmema3".
-      + unfold interp_ptsto_instr.
-        iExists (bv.app v1 (bv.app v2 (bv.app v3 v4))).
-        iSplitL; last done.
-        unfold interp_ptstomem.
-        replace v4 with (bv.app v4 bv.nil) by now rewrite bv.app_nil_r.
-        rewrite ?bv.appView_app.
-        inversion Heq.
-        replace (bv.of_Z (Z.of_nat 0 + bv.unsigned a)) with a by now rewrite bv.of_Z_unsigned.
-        replace (@bv.of_Z word (Z.of_nat 1 + bv.unsigned a)) with (bv.add (bv.one _) a) by now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
-        replace (@bv.of_Z word (Z.of_nat 2 + bv.unsigned a)) with (bv.add (bv.one word) (bv.add (bv.one word) a)).
-        replace (@bv.of_Z word (Z.of_nat 3 + bv.unsigned a)) with (bv.add (bv.one word) (bv.add (bv.one word) (bv.add (bv.one word) a))).
-        now iFrame.
-        rewrite ?bv.add_assoc.
-        change (bv.add _ (bv.one word)) with (@bv.of_Z xlenbits 3).
-        now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
-        rewrite ?bv.add_assoc.
-        now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+      rewrite bv.seqBv_app; try (cbn -[N.of_nat N.mul] in *; Lia.lia).
+      rewrite big_opL_app.
+      destruct Hmeminstrs as [Hinstr Hmeminstrs].
+      iDestruct "Hmem" as "[Hmema Hmema4]".
+      iSplitL "Hmema".
+      + iApply (intro_ptsto_instr with "Hmema"); auto; Lia.lia.
       + rewrite (@bv.add_comm _ a bv_instrsize).
         iApply "IH".
-        { iPureIntro.
+        * iPureIntro.
           rewrite bv.bin_add_small;
           cbn -[N.mul] in *;
           now Lia.lia.
-        }
-        { now iPureIntro. }
-        now rewrite ?bv.add_assoc.
+        * now iPureIntro.
+        * now rewrite ?bv.add_assoc.
   Qed.
 
   Lemma intro_ptstoSthL `{sailGS Σ} (μ : Memory) (addrs : list Xlenbits)  :
@@ -790,7 +824,7 @@ Import BlockVerificationDerived2.
   Lemma femtokernel_splitMemory `{sailGS Σ} {μ : Memory} :
     mem_has_instrs μ (bv.of_N 0) femtokernel_init ->
     mem_has_instrs μ (bv.of_N 72) femtokernel_handler ->
-    μ (bv.of_N 84) = (bv.of_N 42) ->
+    mem_has_word μ (bv.of_N 84) (bv.of_N 42) ->
     @mem_res _ sailGS_memGS μ ⊢ |={⊤}=>
       ptsto_instrs (bv.of_N 0) femtokernel_init ∗
       ptsto_instrs (bv.of_N 72) femtokernel_handler ∗
@@ -807,12 +841,12 @@ Import BlockVerificationDerived2.
     iSplitL "Hhandler".
     now iApply (intro_ptsto_instrs (μ := μ)).
     iSplitL "Hfortytwo".
-    - (* rewrite Hft. *)
-      admit.
-      (* iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptstomem (width := word) (bv.of_N 84) (bv.of_N 42)) with "Hfortytwo") as "Hinv". *)
-      (* now iModIntro. *)
+    - iAssert (interp_ptstomem (bv.of_N 84) (bv.of_N 42)) with "[Hfortytwo]" as "Hfortytwo".
+      {now iApply (intro_ptstomem_word2 Hft with "Hfortytwo").}
+      iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptstomem (bv.of_N 84) (bv.of_N 42)) with "Hfortytwo") as "Hinv".
+      now iModIntro.
     - now iApply (intro_ptstoSthL μ).
-  Admitted.
+  Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
     ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜μ a = v⌝.
@@ -876,6 +910,7 @@ Import BlockVerificationDerived2.
       now iIntros "_".
   Qed.
 
+  Print Assumptions femtokernel_endToEnd.
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
 (* End: *)
