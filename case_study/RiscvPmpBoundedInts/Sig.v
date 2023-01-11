@@ -37,6 +37,7 @@ From Katamaran Require Import
      RiscvPmpBoundedInts.Base.
 From Equations Require Import
      Equations.
+From iris.proofmode Require Import string_ident tactics.
 
 Set Implicit Arguments.
 Import ctx.resolution.
@@ -176,6 +177,47 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
                     else PMP_PartialMatch
       | None          => PMP_NoMatch
       end.
+
+    Lemma pmp_match_addr_match_conditions_1 : forall (paddr w lo hi : Val ty_xlenbits),
+        bv.zero <ᵘ w ->
+        pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match ->
+        lo <=ᵘ hi /\ lo <ᵘ (paddr + w)%bv /\ lo <=ᵘ paddr /\ paddr <ᵘ hi /\ (paddr + w)%bv <=ᵘ hi.
+    Proof.
+      unfold pmp_match_addr.
+      intros paddr w lo hi Hw H.
+      destruct (hi <ᵘ? lo) eqn:Ehilo; try discriminate H.
+      destruct ((paddr + w)%bv <=ᵘ? lo) eqn:Epwlo; first done.
+      destruct (hi <=ᵘ? paddr) eqn:Ehip; first done.
+      simpl in H.
+      destruct (lo <=ᵘ? paddr) eqn:Elop; last done.
+      destruct ((paddr + w)%bv <=ᵘ? hi) eqn:Epwhi; last done.
+      rewrite bv.ultb_antisym in Ehilo.
+      apply negb_false_iff in Ehilo.
+      apply bv.uleb_ule in Ehilo.
+      apply bv.uleb_ule in Elop.
+      apply bv.uleb_ugt in Ehip.
+      apply bv.uleb_ugt in Epwlo.
+      now apply bv.uleb_ule in Epwhi.
+    Qed.
+
+    Lemma pmp_match_addr_match_conditions_2 : forall paddr w lo hi,
+        bv.zero <ᵘ w ->
+        lo <=ᵘ hi ->
+        lo <ᵘ (paddr + w)%bv ->
+        lo <=ᵘ paddr ->
+        paddr <ᵘ hi ->
+        (paddr + w)%bv <=ᵘ hi ->
+        pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match.
+    Proof.
+      intros paddr w lo hi Hw Hlohi Hlopw Hlop Hphi Hpwhi.
+      unfold pmp_match_addr.
+      replace (hi <ᵘ? lo) with false
+        by (symmetry; now rewrite bv.ultb_antisym negb_false_iff bv.uleb_ule).
+      replace ((paddr + w)%bv <=ᵘ? lo) with false by (symmetry; now rewrite bv.uleb_ugt).
+      replace (hi <=ᵘ? paddr) with false by (symmetry; now rewrite bv.uleb_ugt).
+      replace (lo <=ᵘ? paddr) with true by (symmetry; now rewrite bv.uleb_ule).
+      now replace ((paddr + w)%bv <=ᵘ? hi) with true by (symmetry; now rewrite bv.uleb_ule).
+    Qed.
 
     Definition pmp_match_entry (a : Val ty_xlenbits) (width : Val ty_xlenbits) (m : Val ty_privilege) (cfg : Val ty_pmpcfg_ent) (lo hi : Val ty_xlenbits) : Val ty_pmpmatch :=
       let rng := pmp_addr_range cfg hi lo in
@@ -484,7 +526,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition asn_regs_ptsto {Σ} : Assertion Σ :=
       asn_and_regs
-        (fun r => ∃ "w", r ↦ term_var "w").
+        (fun r => asn.exist "w" _ (r ↦ term_var "w")).
 
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
@@ -713,6 +755,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     - destruct a; lsolve; intro; cbn; now rewrite H.
     - destruct a; lsolve; intro; cbn; now rewrite H.
     - destruct (a && a0)%bool eqn:Heq; lsolve; intro; cbn; rewrite H; cbn; intuition.
+      now rewrite Heq in H0.
     - destruct a; lsolve; intro; cbn; now rewrite H.
   Qed.
 
@@ -772,12 +815,12 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     funelim (simplify_pmp_all_entries_unlocked entries);
       simp simplify_pmp_all_entries_unlocked; lsolve.
     - induction v; cbn; [easy|].
-      rewrite simplify_pmp_entry_unlocked_spec, IHv. intros ι.
-      now rewrite instprop_dlist_cat, !instprop_dlist_singleton.
-    - rewrite simplify_pmp_entry_unlocked_spec, H. intros ι.
-      now rewrite instprop_dlist_cat, !instprop_dlist_singleton.
-    - rewrite H, H0. intros ι.
-      rewrite instprop_dlist_cat, !instprop_dlist_singleton. cbn.
+      rewrite simplify_pmp_entry_unlocked_spec IHv. intros ι.
+      now rewrite instprop_dlist_cat !instprop_dlist_singleton.
+    - rewrite simplify_pmp_entry_unlocked_spec H. intros ι.
+      now rewrite instprop_dlist_cat !instprop_dlist_singleton.
+    - rewrite H H0. intros ι.
+      rewrite instprop_dlist_cat !instprop_dlist_singleton. cbn.
       now rewrite Pmp_all_entries_unlocked_app.
   Qed.
 
@@ -794,9 +837,9 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     - reflexivity.
     - simple apply simplify_prev_addr_spec.
     - reflexivity.
-    - now rewrite simplify_pmp_cfg_unlocked_spec, run_singleton.
-    - now rewrite simplify_pmp_entry_unlocked_spec, run_singleton.
-    - now rewrite simplify_pmp_all_entries_unlocked_spec, run_singleton.
+    - now rewrite simplify_pmp_cfg_unlocked_spec run_singleton.
+    - now rewrite simplify_pmp_entry_unlocked_spec run_singleton.
+    - now rewrite simplify_pmp_all_entries_unlocked_spec run_singleton.
   Qed.
 
   Definition solver : Solver :=
