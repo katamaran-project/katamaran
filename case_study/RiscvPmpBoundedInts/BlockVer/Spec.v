@@ -917,28 +917,27 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct entries; try done.
     destruct v as [cfg1 addr1].
     destruct entries; try done.
-  (*   iDestruct "Hunlocked" as "[[%Hcfg0 [%Hcfg1 _]] _]". *)
-  (*   unfold interp_pmp_entries. *)
-  (*   apply Pmp_cfg_unlocked_bool in Hcfg0. *)
-  (*   apply Pmp_cfg_unlocked_bool in Hcfg1. *)
-  (*   iDestruct "Hentries" as "(? & ? & ? & ?)". *)
-  (*   iExists cfg0. *)
-  (*   iExists addr0. *)
-  (*   iExists cfg1. *)
-  (*   iExists addr1. *)
-  (*   iFrame. *)
-  (*   now rewrite ?Pmp_cfg_unlocked_bool. *)
-  (* Qed. *)
-  Admitted.
+    iDestruct "Hunlocked" as "[[%Hcfg0 [%Hcfg1 _]] _]".
+    unfold interp_pmp_entries.
+    apply Pmp_cfg_unlocked_bool in Hcfg0.
+    apply Pmp_cfg_unlocked_bool in Hcfg1.
+    iDestruct "Hentries" as "(? & ? & ? & ?)".
+    iExists cfg0.
+    iExists addr0.
+    iExists cfg1.
+    iExists addr1.
+    iFrame.
+    now rewrite ?Pmp_cfg_unlocked_bool.
+  Qed.
 
   Lemma machine_unlocked_close_pmp_entries_sound `{sailGS Σ} :
     ValidLemma RiscvPmpSpecification.lemma_machine_unlocked_close_pmp_entries.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
-    iIntros "(? & ? & ? & ? & _ & _ & [%Hunlocked0 _] & [%Hunlocked1 _])".
-  (*   now iFrame. *)
-  (* Qed. *)
-  Admitted.
+    iIntros "(? & ? & ? & ? & [%Hunlocked0 _] & [%Hunlocked1 _] & _ & _)".
+    iFrame.
+    iPureIntro; intuition; now apply Pmp_cfg_unlocked_bool.
+  Qed.
 
   (* Lemma in_liveAddrs_split : forall (addr : Addr), *)
   (*     (minAddr <= addr)%Z -> *)
