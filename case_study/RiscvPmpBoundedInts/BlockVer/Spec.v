@@ -785,8 +785,8 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct (env.view ι). cbn in Heq |- *.
     iIntros "[% ptsto_addr]".
     unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-    iDestruct "Hmem" as (memmap) "[Hmem' %]".
+    iIntros ([γ μ] ns ks1 ks nt) "[Hregs Hmem]".
+    iDestruct "Hmem" as (memmap) "[Hmem' %Hmap]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
     iSplitR; first easy.
@@ -797,29 +797,13 @@ Module RiscvPmpIrisInstanceWithContracts.
     rewrite Heq in f1. cbn in f1.
     dependent elimination f1. cbn.
     do 3 iModIntro.
-    unfold interp_ptsto.
-  (*   iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem' ptsto_addr") as "[Hmem' ptsto_addr]". *)
-  (*   iMod "Hclose" as "_". *)
-  (*   iModIntro. *)
-  (*   iSplitL "Hmem' Hregs". *)
-  (*   iSplitL "Hregs"; first iFrame. *)
-  (*   iExists (<[paddr:=data]> memmap). *)
-  (*   iSplitL "Hmem'"; first iFrame. *)
-  (*   iPureIntro. *)
-  (*   { apply map_Forall_lookup. *)
-  (*     intros i x Hl. *)
-  (*     unfold fun_write_ram. *)
-  (*     destruct (Z.eqb_spec paddr i). *)
-  (*     + subst. apply (lookup_insert_rev memmap i); assumption. *)
-  (*     + rewrite -> map_Forall_lookup in H0. *)
-  (*       rewrite -> lookup_insert_ne in Hl; auto. *)
-  (*   } *)
-  (*   iSplitL; last easy. *)
-  (*   iApply wp_value. *)
-  (*   iSplitL; trivial. *)
-  (*   iSplitL; trivial. *)
-  (* Qed. *)
-  Admitted.
+    iMod (@Model.RiscvPmpModel2.fun_write_ram_works _ _ μ1 bytes paddr data memmap v Hmap
+                 with "[$ptsto_addr $Hmem' $Hclose]") as "[Hmem Haddr]".
+    iMod "Haddr" as "Haddr".
+    iModIntro.
+    iFrame.
+    now iApply wp_value.
+  Qed.
 
   Lemma decode_sound `{sailGS Σ} :
     ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
