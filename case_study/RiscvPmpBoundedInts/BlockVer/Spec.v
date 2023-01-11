@@ -623,16 +623,13 @@ Module RiscvPmpSpecVerif.
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 3 (@pmpCheck bytes H).
   Proof.
     destruct H as [H|[H|H]];
-      rewrite ?H.
-    hnf. apply verification_condition_with_erasure_sound. vm_compute.
-    constructor. cbn.
-    intros; subst.
-  Admitted.
-  (*   repeat try split; subst; unfold Pmp_entry_unlocked, Pmp_cfg_unlocked in *; *)
-  (*   rewrite ?is_pmp_cfg_unlocked_bool in *; cbn in *; subst; try reflexivity; *)
-  (*   apply machine_unlocked_pmp_access; *)
-  (*     now cbn. *)
-  (* Qed. *)
+      rewrite ?H;
+    hnf; apply verification_condition_with_erasure_sound; vm_compute;
+    constructor; cbn;
+    repeat try split; subst; unfold Pmp_entry_unlocked, Pmp_cfg_unlocked in *;
+    rewrite ?is_pmp_cfg_unlocked_bool in *; cbn in *; subst; try reflexivity;
+    now apply machine_unlocked_pmp_access.
+  Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof.
