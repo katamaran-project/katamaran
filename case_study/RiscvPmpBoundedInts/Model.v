@@ -108,29 +108,25 @@ Module RiscvPmpModel2.
     Lemma bv_bin_one : bv.bin (bv.one xlenbits) = 1%N.
     Proof. apply bv.bin_one, xlenbits_pos. Qed.
 
-    Lemma mem_inv_not_modified : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal),
-        ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), (γ, μ).2 a = v) memmap⌝ -∗
+    Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
+        ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), μ a = v) memmap⌝ -∗
         gen_heap.gen_heap_interp memmap -∗
         mem_inv sailGS_memGS μ.
-    Proof. iIntros (γ μ memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
+    Proof. iIntros (μ memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
 
-    Lemma map_Forall_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal)
+    Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
                                 (paddr : Addr) (data : Byte),
-        map_Forall (λ (a : Addr) (v : Byte), (γ, μ).2 a = v) memmap ->
-        map_Forall (λ (a : Addr) (v : Byte), fun_write_ram μ 1 paddr data a = v)
-                   (<[paddr:=data]> memmap).
+        map_Forall (λ (a : Addr) (v : Byte), μ a = v) memmap ->
+        map_Forall (λ (a : Addr) (v : Byte), write_byte μ paddr data a = v) (<[paddr:=data]> memmap).
     Proof.
-      intros γ μ memmap paddr data Hmap.
-      unfold fun_write_ram.
+      intros μ memmap paddr data Hmap.
       apply map_Forall_lookup.
       intros i x H0.
-      destruct bv.appView as [byte bytes]. cbn in bytes.
       unfold write_byte.
       destruct eq_dec.
       - subst paddr.
         apply (lookup_insert_rev memmap i).
-        destruct (bv.view bytes).
-        now rewrite bv.app_nil_r in H0.
+        assumption.
       - rewrite -> map_Forall_lookup in Hmap.
         rewrite (lookup_insert_ne _ _ _ _ n) in H0.
         apply Hmap; assumption.
@@ -246,6 +242,31 @@ Module RiscvPmpModel2.
       now iApply wp_value.
     Qed.
 
+    Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
+      map_Forall (λ (a : Addr) (v : Base.Byte), μ a = v) memmap ->
+      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗ (|={∅,⊤}=> emp) ={∅,⊤}=∗
+      mem_inv sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ (|={⊤}=> interp_ptstomem paddr data).
+    Proof.
+      iRevert (data w paddr μ memmap).
+      iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
+        iIntros (data w paddr μ memmap Hmap) "[Haddr [Hmem Hclose]]".
+      - iMod "Hclose" as "_". iModIntro.
+        iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "Hmem".
+        by iFrame.
+     -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
+        destruct (bv.appView byte (bytes * byte) data) as [bd data].
+        destruct (bv.appView byte (bytes * byte) w) as [bw w].
+        iDestruct "Haddr" as "[H Haddr]".
+        iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem H]".
+        iFrame "H".
+        iApply ("IHbytes" $! data w
+                       (bv.add (bv.one xlenbits) paddr) (write_byte μ paddr bd)
+                    (insert paddr bd memmap)).
+        + iPureIntro.
+          by apply map_Forall_update.
+        + by iFrame.
+    Qed.
+
     Lemma write_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
     Proof.
@@ -259,15 +280,14 @@ Module RiscvPmpModel2.
       iSplitR; first auto.
       iIntros.
       repeat iModIntro.
-      eliminate_prim_step Heq.
-      About gen_heap.gen_heap_update.
-      (* iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem H") as "[Hmem H]". *)
-      (* iMod "Hclose" as "_". *)
-      (* iModIntro. *)
-      (* iPoseProof (mem_inv_update $! Hmap with "Hmem") as "?". *)
-      (* iFrame. *)
-      (* iApply wp_value; now iFrame. *)
-    Admitted.
+      eliminate_prim_step Heq. clear es1 Heq.
+      iDestruct "H" as "(%w & H)".
+      fold_semWP. rewrite semWP_val.
+      iFrame "Hcp Hes Hregs".
+      iPoseProof (@fun_write_ram_works μ1 bytes paddr data memmap w Hmap
+                   with "[$H $Hmem $Hclose]") as "H".
+      iMod "H" as "[$ H]". by iSplitL.
+    Qed.
 
     Lemma decode_sound :
       ValidContractForeign sep_contract_decode decode.
