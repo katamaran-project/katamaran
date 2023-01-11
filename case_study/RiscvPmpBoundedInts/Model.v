@@ -90,7 +90,7 @@ Module RiscvPmpModel2.
       RiscvPmpSignature RiscvPmpSpecification RiscvPmpIrisBase RiscvPmpIrisInstance.
 
   Section ForeignProofs.
-    Context `{sg : sailGS Σ, invGS}.
+    Context `{sg : sailGS Σ}.
 
     Ltac eliminate_prim_step Heq :=
       let s := fresh "s" in
