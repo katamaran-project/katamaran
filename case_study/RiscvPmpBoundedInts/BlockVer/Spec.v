@@ -637,9 +637,7 @@ Module RiscvPmpSpecVerif.
   Qed.
 
   Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
-  Proof. symbolic_simpl. intros.
-  Admitted.
-  (* Lia.lia. Qed. *)
+  Proof. symbolic_simpl. intros. Lia.lia. Qed.
 
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       RiscvPmpBlockVerifSpec.CEnv f = Some c ->
