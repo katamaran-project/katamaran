@@ -849,7 +849,7 @@ Import BlockVerificationDerived2.
     iSplitR "".
     - destruct (env.view δ).
       iApply femtokernel_init_safe.
-      iFrame "Hpc Hcurpriv Hpmp0cfg Hpmp1cfg Hinit Hadv Hhandler".
+      iFrame "Hfortytwo Hpc Hcurpriv Hpmp0cfg Hpmp1cfg Hinit Hadv Hhandler".
       iSplitL "Hmstatus". { now iExists _. }
       iSplitL "Hmtvec". { now iExists _. }
       iSplitL "Hmcause". { now iExists _. }
@@ -866,16 +866,15 @@ Import BlockVerificationDerived2.
       }
       iSplitL "Hpmpaddr0". { now iExists _. }
       iSplitL "Hpmpaddr1". { now iExists _. }
-      iSplitL "". { iFrame. admit. }
       now iExists _.
     - iIntros "Hmem".
       unfold interp_ptstomem_readonly.
       iInv "Hfortytwo" as ">Hptsto" "_".
-      admit.
-      (* iDestruct (interp_ptsto_valid with "Hmem Hptsto") as "res". *)
-      (* iApply fupd_mask_intro; first set_solver. *)
-      (* now iIntros "_". *)
-  Admitted.
+      iDestruct "Hptsto" as "(Hptsto0 & Hptsto1 & Hptsto2 & Hptsto3)".
+      iDestruct (interp_ptsto_valid with "Hmem Hptsto0") as "%res".
+      iApply fupd_mask_intro; first set_solver.
+      now iIntros "_".
+  Qed.
 
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
