@@ -862,7 +862,7 @@ Import BlockVerificationDerived2.
         {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} :
     mem_has_instrs μ (bv.of_N 0) femtokernel_init ->
     mem_has_instrs μ (bv.of_N 72) femtokernel_handler ->
-    μ (bv.of_N 84) = (bv.of_N 42) ->
+    mem_has_word μ (bv.of_N 84) (bv.of_N 42) ->
     read_register γ cur_privilege = Machine ->
     read_register γ pmp0cfg = femtokernel_default_pmpcfg ->
     read_register γ pmp1cfg = femtokernel_default_pmpcfg ->
