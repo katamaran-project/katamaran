@@ -594,18 +594,17 @@ Module RiscvPmpSpecVerif.
       Pmp_cfg_unlocked cfg0 /\ Pmp_cfg_unlocked cfg1 ->
       check_pmp_access addr width [(cfg0, a0); (cfg1, a1)]%list Machine = (true, None) \/ check_pmp_access addr width [(cfg0, a0); (cfg1, a1)]%list Machine = (true, Some PmpRWX).
   Proof.
-    intros cfg0 cfg1 a0 a1 addr [Hcfg0 Hcfg1].
+    intros width cfg0 cfg1 a0 a1 addr [Hcfg0 Hcfg1].
     unfold check_pmp_access, pmp_check.
     unfold pmp_match_entry.
-  Admitted.
-  (*   apply Pmp_cfg_unlocked_bool in Hcfg0. *)
-  (*   apply Pmp_cfg_unlocked_bool in Hcfg1. *)
-  (*   destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg1 a1 a0)) as [-> | ->]; *)
-  (*     destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg0 a0 0%Z)) as [-> | ->]; *)
-  (*     unfold pmp_get_perms; *)
-  (*     rewrite ?Hcfg0, ?Hcfg1; *)
-  (*     auto. *)
-  (* Qed. *)
+    apply Pmp_cfg_unlocked_bool in Hcfg0.
+    apply Pmp_cfg_unlocked_bool in Hcfg1.
+    destruct (pmp_match_addr_never_partial addr width (pmp_addr_range cfg1 a1 a0)) as [-> | ->];
+      destruct (pmp_match_addr_never_partial addr width (pmp_addr_range cfg0 a0 (bv.mk 0 I))) as [-> | ->];
+      unfold pmp_get_perms;
+      rewrite ?Hcfg0, ?Hcfg1;
+      auto.
+  Qed.
 
   Lemma machine_unlocked_pmp_access : forall width (addr : Val ty_xlenbits) (cfg0 cfg1 : Val ty_pmpcfg_ent) (a0 a1 : Val ty_xlenbits) (acc : Val ty_access_type),
       Pmp_cfg_unlocked cfg0 /\ Pmp_cfg_unlocked cfg1 ->
@@ -613,14 +612,13 @@ Module RiscvPmpSpecVerif.
   Proof.
     intros.
     unfold Pmp_access, decide_pmp_access.
-  Admitted.
-  (*   destruct (machine_unlocked_check_pmp_access a0 a1 addr H) as [|]. *)
-  (*   - destruct (check_pmp_access addr _ Machine). *)
-  (*     now inversion H0. *)
-  (*   - destruct (check_pmp_access addr _ Machine). *)
-  (*     inversion H0. *)
-  (*     unfold decide_access_pmp_perm; destruct acc; auto. *)
-  (* Qed. *)
+    destruct (machine_unlocked_check_pmp_access width a0 a1 addr H) as [|].
+    - destruct (check_pmp_access addr _ _ Machine).
+      now inversion H0.
+    - destruct (check_pmp_access addr _ _ Machine).
+      inversion H0.
+      unfold decide_access_pmp_perm; destruct acc; auto.
+  Qed.
 
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 3 (@pmpCheck bytes H).
   Proof.
