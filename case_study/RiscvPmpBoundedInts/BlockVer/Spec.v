@@ -940,41 +940,6 @@ Module RiscvPmpIrisInstanceWithContracts.
   (*   do 2 f_equal; lia. *)
   (* Qed. *)
 
-  Lemma extract_pmp_ptsto_sound `{sailGS Σ} {bytes} {Hr : restrict_bytes bytes} :
-    ValidLemma (RiscvPmpSpecification.lemma_extract_pmp_ptsto bytes).
-  Proof.
-    destruct Hr as [->|[->| ->]].
-    intros ι; destruct_syminstance ι; cbn.
-    rewrite ?Z.leb_le.
-    iIntros "[Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]".
-    unfold interp_pmp_addr_access_without,
-      interp_pmp_addr_access,
-      interp_ptsto,
-      MemVal, Word.
-
-  (*   destruct (in_liveAddrs_split Hlemin Hlemax) as (l1 & l2 & eq). *)
-  (*   rewrite eq. *)
-  (*   rewrite big_opL_app big_opL_cons. *)
-  (*   iDestruct "Hmem" as "[Hmem1 [Hpaddr Hmem2]]". *)
-  (*   iSplitR "Hpaddr". *)
-  (*   - iIntros "Hpaddr". *)
-  (*     iFrame. *)
-  (*     now iIntros "_". *)
-  (*   - iApply "Hpaddr". *)
-  (*     iPureIntro. *)
-  (*     now exists acc. *)
-  (* Qed. *)
-  Admitted.
-
-  Lemma return_pmp_ptsto_sound `{sailGS Σ} {bytes} :
-    ValidLemma (RiscvPmpSpecification.lemma_return_pmp_ptsto bytes).
-  Proof.
-    intros ι; destruct_syminstance ι; cbn.
-    iIntros "[Hwithout Hptsto]".
-    unfold interp_pmp_addr_access_without.
-    iApply ("Hwithout" with "Hptsto").
-  Qed.
-
   Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.
   Proof.
     intros Δ []; intros ι; destruct_syminstance ι; try now iIntros "_".
