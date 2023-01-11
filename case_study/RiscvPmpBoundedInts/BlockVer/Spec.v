@@ -562,8 +562,9 @@ Module RiscvPmpSpecVerif.
   (* Qed. *)
 
   Lemma valid_pmp_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@pmp_mem_read bytes H).
-  Admitted.
-  (* Proof. reflexivity. Qed. *)
+  Proof.
+    destruct H as [->|[->| ->]]; reflexivity.
+  Qed.
 
   Lemma valid_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
   Proof. symbolic_simpl. intros.
@@ -636,8 +637,8 @@ Module RiscvPmpSpecVerif.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof.
-  Admitted.
- (* reflexivity. Qed. *)
+    destruct H as [->|[->| ->]]; reflexivity.
+  Qed.
 
   Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
   Proof. symbolic_simpl. intros.
@@ -956,9 +957,10 @@ Module RiscvPmpIrisInstanceWithContracts.
   (*   do 2 f_equal; lia. *)
   (* Qed. *)
 
-  Lemma extract_pmp_ptsto_sound `{sailGS Σ} {bytes} :
+  Lemma extract_pmp_ptsto_sound `{sailGS Σ} {bytes} {Hr : restrict_bytes bytes} :
     ValidLemma (RiscvPmpSpecification.lemma_extract_pmp_ptsto bytes).
   Proof.
+    destruct Hr as [->|[->| ->]].
     intros ι; destruct_syminstance ι; cbn.
     rewrite ?Z.leb_le.
     iIntros "[Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]".
