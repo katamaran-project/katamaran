@@ -193,10 +193,6 @@ Module RiscvPmpModel2.
         rewrite <- N.add_1_l; lia.
     Qed.
 
-    Lemma get_byte_O_bv_app : forall {width : nat} (b : Byte) (bs : bv (width * byte)),
-        @get_byte (S width) 0 (bv.app b bs) = b.
-    Proof. intros; unfold get_byte; now rewrite bv.appView_app. Qed.
-
     (* Lemma mem_inv_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal) *)
     (*                          (paddr : Addr) (data : MemVal), *)
     (*     ⊢ ⌜map_Forall (λ (a : Addr) (v : Word), (γ, μ).2 a = v) memmap⌝ -∗ *)
@@ -208,55 +204,25 @@ Module RiscvPmpModel2.
     (*   iPureIntro; apply (map_Forall_update _ _ _ _ Hmap). *)
     (* Qed. *)
 
-    Lemma get_byte_S_app : forall {width : nat} (offset : nat) (b : Byte) (bs : bv (width * byte)),
-        @get_byte (S width) (S offset) (bv.app b bs) = get_byte offset bs.
-    Proof. intros; unfold get_byte; now rewrite bv.appView_app. Qed.
-
-    Lemma get_byte_sub_app : forall {width : nat} (offset base : nat) (b : Byte) (bs : bv (width * byte)),
-        1 <= offset ->
-        base <= offset - 1 ->
-        (@get_byte (S width) (offset - base) (bv.app b bs) = get_byte (offset - S base) bs).
+    Lemma fun_read_ram_works {bytes memmap μ paddr} {w : bv (bytes * byte)} :
+      map_Forall (λ (a : Addr) (v : Base.Byte), μ a = v) memmap ->
+           interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ⊢
+              ⌜ fun_read_ram μ bytes paddr = w ⌝.
     Proof.
-      destruct offset; intros; first lia.
-      rewrite Nat.sub_succ_l.
-      rewrite get_byte_S_app.
-      now simpl.
-      lia.
+      revert paddr.
+      iInduction bytes as [|bytes] "IHbytes";
+      iIntros (paddr Hmap) "[Haddr Hmem]".
+      - now destruct (bv.view w).
+      - change (S bytes * byte)%nat with (byte + bytes * byte)%nat in w.
+        destruct (bv.appView byte (bytes * byte) w) as (w0 & w).
+        rewrite ptstomem_bv_app.
+        iDestruct "Haddr" as "(Haddr0 & Haddr)".
+        iPoseProof (gen_heap.gen_heap_valid with "Hmem Haddr0") as "%".
+        iPoseProof ("IHbytes" $! w (bv.one xlenbits + paddr) Hmap with "[$Haddr $Hmem]") as "%eq".
+        iPureIntro.
+        simpl.
+        f_equal; auto.
     Qed.
-
-    Lemma gen_heap_validS : forall {width : nat} (σ : gmap Addr MemVal) (a : Addr) (base : nat) (v : bv (width * byte)),
-      gen_heap.gen_heap_interp σ -∗
-      interp_ptstomem (a + bv.of_nat base) v -∗
-      [∗ list] offset ∈ seq base width, ⌜σ !! (a + bv.of_nat offset)%bv = Some (get_byte (offset - base) v)⌝.
-    Proof.
-      intros width; iInduction width as [|width] "IHwidth";
-        iIntros (σ a base v) "Hgen Hmem".
-      now simpl.
-      destruct (bv.appView byte (width * byte) v) as [b bs].
-      rewrite big_sepL_cons; fold seq.
-      rewrite ptstomem_bv_app.
-      iDestruct "Hmem" as "[Hb Hbs]".
-      rewrite Nat.sub_diag.
-      rewrite get_byte_O_bv_app.
-      iPoseProof (gen_heap.gen_heap_valid with "Hgen Hb") as "%".
-      iSplitR; first auto.
-      iPoseProof ("IHwidth" $! σ a (S base) bs) as "H".
-      iApply (big_sepL_impl with "[Hgen Hbs]").
-      iApply ("H" with "Hgen [Hbs]").
-      rewrite bv.add_assoc.
-      rewrite (@bv.add_comm _ (bv.one xlenbits) _).
-      rewrite bv.of_nat_S.
-      now rewrite bv.add_assoc.
-      iModIntro.
-      iIntros (idx offset) "%Hseq %Hget".
-      iPureIntro.
-      rewrite (@get_byte_sub_app _ _ base b bs _ _).
-      apply Hget.
-      apply Nat.le_trans with (m := S base).
-      lia.
-      admit. (* TODO: provable by Hseq (offset must be between S base and S base + width! *)
-      admit. (* TODO: provable by Hseq (offset must be between S base and S base + width! *)
-    Admitted.
 
     Lemma read_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
@@ -274,32 +240,11 @@ Module RiscvPmpModel2.
       eliminate_prim_step Heq.
       iMod "Hclose" as "_".
       iModIntro.
-      rewrite (bv.add_of_nat_0_r paddr).
-      iPoseProof (gen_heap_validS memmap paddr 0 w with "Hmem H") as "%Hlookup".
-      rewrite <- bv.add_of_nat_0_r.
-      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "?".
+      iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
+      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "Hmem".
       iFrame.
-      iApply wp_value; cbn.
-      iSplitL; [|auto].
-      iSplitR; auto.
-      iPureIntro.
-      (* TODO:
-         Write conversion lemma:
-         fun_read_ram μ bytes paddr = w <->
-         [∗ list] offset ∈ seq 0 bytes,
-            ⌜μ (paddr + bv.of_nat offset) = get_byte x w⌝
-        ???
-       *)
-      generalize dependent paddr.
-      induction bytes.
-      - now destruct (bv.view w).
-      - intros.
-        destruct (bv.appView byte (bytes * byte) w) as [b bs].
-        simpl.
-        assert (fun_read_ram μ'1 bytes (bv.one xlenbits + paddr) = bs).
-        apply IHbytes.
-      (* apply map_Forall_lookup_1 with (i := paddr) (x := w) in Hmap; auto. *)
-    Admitted.
+      now iApply wp_value.
+    Qed.
 
     Lemma write_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
@@ -315,16 +260,7 @@ Module RiscvPmpModel2.
       iIntros.
       repeat iModIntro.
       eliminate_prim_step Heq.
-      iPoseProof (interp_ptstomem_big_sepS bytes $! paddr _ with "H") as "H".
-      iInduction bytes as [|bytes] "IHbytes".
-      - simpl; iFrame.
-        iMod "Hclose" as "_".
-        iModIntro.
-        iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "$".
-        now iApply wp_value.
-      -
       About gen_heap.gen_heap_update.
-      (* iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem H") as "[Hmem H]". *)
       (* iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem H") as "[Hmem H]". *)
       (* iMod "Hclose" as "_". *)
       (* iModIntro. *)
@@ -1110,32 +1046,6 @@ Module RiscvPmpModel2.
         apply xlenbits_pos; lia.
         lia.
     Qed.
-
-    (* TODO: not used, remove? *)
-    Lemma big_sepL_exists_bytes : forall paddr bytes,
-       ((∃ w : bv (bytes * byte),
-         [∗ list] offset ∈ seq 0 bytes, interp_ptsto (paddr + bv.of_nat offset)
-                                          (get_byte offset w))
-       ⊣⊢
-       ([∗ list] offset ∈ seq 0 bytes,
-               ∃ w : Byte, interp_ptsto (paddr + bv.of_nat offset) w))%I.
-    Proof.
-      iIntros;
-        iSplit;
-        iIntros "H";
-        iInduction (seq 0 bytes) as [|b] "IH"; try (simpl; done).
-      - iDestruct "H" as "(%w & Hptsto & H)".
-        iSplitL "Hptsto".
-        now iExists (get_byte b w).
-        iApply "IH".
-        now iExists w.
-      - now iExists _.
-      - simpl.
-        iDestruct "H" as "([%w Hptsto] & H)".
-        (* TODO: add lemma in the form of:
-           ∃ b₀ : bv m, ∃ bs : bv n, P (bv.app b₀ bs) -> ∃ w : bv (m + n), P w
-         *)
-    Admitted.
 
     Lemma extract_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_extract_pmp_ptsto bytes).

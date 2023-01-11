@@ -250,9 +250,10 @@ Section Loop.
     exact lemSem.
     unfold ProgramLogic.ValidContractCEnv.
     intros.
-    apply shallow_vcgen_soundness.
-    apply symbolic_vcgen_soundness.
-    apply ValidContracts; assumption.
+    pose (ValidContracts f H) as Hc.
+    destruct Hc as [fuel Hc].
+    apply shallow_vcgen_fuel_soundness with (fuel := fuel).
+    now apply symbolic_vcgen_fuel_soundness.
   Qed.
 
   Lemma valid_init_model_contract : ⊢ ValidContractSem fun_init_model sep_contract_init_model.
@@ -262,9 +263,10 @@ Section Loop.
     exact lemSem.
     unfold ProgramLogic.ValidContractCEnv.
     intros.
-    apply shallow_vcgen_soundness.
-    apply symbolic_vcgen_soundness.
-    apply ValidContracts; assumption.
+    pose (ValidContracts f H) as Hc.
+    destruct Hc as [fuel Hc].
+    apply shallow_vcgen_fuel_soundness with (fuel := fuel).
+    now apply symbolic_vcgen_fuel_soundness.
   Qed.
 
   Import env.notations.
