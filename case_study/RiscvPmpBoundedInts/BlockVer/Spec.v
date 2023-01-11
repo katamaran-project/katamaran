@@ -47,6 +47,7 @@ From Katamaran Require Import
      RiscvPmpBoundedInts.Machine
      RiscvPmpBoundedInts.Sig
      RiscvPmpBoundedInts.Contracts.
+From Katamaran Require RiscvPmpBoundedInts.Model.
 
 Import RiscvPmpProgram.
 Import ListNotations.
@@ -731,67 +732,56 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros "ptsto_addr_w".
     unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-    iDestruct "Hmem" as (memmap) "[Hmem' %]".
+    iDestruct "Hmem" as (memmap) "[Hmem' %Hmap]".
     destruct b; cbn.
     - iDestruct "ptsto_addr_w" as "#ptsto_addr_w".
-  (*     unfold interp_ptsto_readonly. *)
-  (*     iInv "ptsto_addr_w" as "Hptsto" "Hclose_ptsto". *)
-  (*     iMod (fupd_mask_subseteq empty) as "Hclose_rest"; first set_solver. *)
-  (*     iModIntro. *)
-  (*     iSplitR; first done. *)
-  (*     iIntros (e2 σ'' efs Hstep). *)
-  (*     dependent elimination Hstep. *)
-  (*     fold_semWP. *)
-  (*     dependent elimination s. *)
-  (*     rewrite Heq in f1. cbv in f1. *)
-  (*     dependent elimination f1. cbn. *)
-  (*     do 3 iModIntro. *)
-  (*     unfold interp_ptsto. *)
-  (*     iAssert (⌜ memmap !! paddr = Some w ⌝)%I with "[Hptsto Hmem']" as "%". *)
-  (*     { iApply (gen_heap.gen_heap_valid with "Hmem' Hptsto"). } *)
-  (*     iMod "Hclose_rest" as "_". *)
-  (*     iMod ("Hclose_ptsto" with "Hptsto") as "_". *)
-  (*     iModIntro. *)
-  (*     iSplitL "Hmem' Hregs". *)
-  (*     iSplitL "Hregs"; first iFrame. *)
-  (*     iExists memmap. *)
-  (*     iSplitL "Hmem'"; first iFrame. *)
-  (*     iPureIntro; assumption. *)
-  (*     iSplitL; last easy. *)
-  (*     apply map_Forall_lookup_1 with (i := paddr) (x := w) in H0; auto. *)
-  (*     cbn in H0. subst. *)
-  (*     iApply wp_value. *)
-  (*     iSplitL; last easy. *)
-  (*     now iSplitL. *)
-  (*   - iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. *)
-  (*     iModIntro. *)
-  (*     iSplitR; first easy. *)
-  (*     iIntros (e2 σ'' efs Hstep). *)
-  (*     dependent elimination Hstep. *)
-  (*     fold_semWP. *)
-  (*     dependent elimination s. *)
-  (*     rewrite Heq in f1. cbv in f1. *)
-  (*     dependent elimination f1. cbn. *)
-  (*     do 3 iModIntro. *)
-  (*     unfold interp_ptsto. *)
-  (*     iAssert (⌜ memmap !! paddr = Some w ⌝)%I with "[ptsto_addr_w Hmem']" as "%". *)
-  (*     { iApply (gen_heap.gen_heap_valid with "Hmem' ptsto_addr_w"). } *)
-  (*     iMod "Hclose" as "_". *)
-  (*     iModIntro. *)
-  (*     iSplitL "Hmem' Hregs". *)
-  (*     iSplitL "Hregs"; first iFrame. *)
-  (*     iExists memmap. *)
-  (*     iSplitL "Hmem'"; first iFrame. *)
-  (*     iPureIntro; assumption. *)
-  (*     iSplitL; last easy. *)
-  (*     apply map_Forall_lookup_1 with (i := paddr) (x := w) in H0; auto. *)
-  (*     cbn in H0. subst. *)
-  (*     iApply wp_value. *)
-  (*     iSplitL; last easy. *)
-  (*     iSplitL; last easy. *)
-  (*     iAssumption. *)
-  (* Qed. *)
-  Admitted.
+      unfold interp_ptstomem_readonly.
+      iInv "ptsto_addr_w" as "Hptsto" "Hclose_ptsto".
+      iMod (fupd_mask_subseteq empty) as "Hclose_rest"; first set_solver.
+      iModIntro.
+      iSplitR; first done.
+      iIntros (e2 σ'' efs Hstep).
+      dependent elimination Hstep.
+      fold_semWP.
+      dependent elimination s.
+      rewrite Heq in f1.
+      dependent elimination f1. cbn.
+      do 3 iModIntro.
+      iPoseProof (Model.RiscvPmpModel2.fun_read_ram_works Hmap with "[$Hptsto $Hmem']") as "%eq_fun_read_ram".
+      iMod "Hclose_rest" as "_".
+      iMod ("Hclose_ptsto" with "Hptsto") as "_".
+      iModIntro.
+      iFrame "Hregs".
+      iSplitL "Hmem'".
+      iExists memmap.
+      now iFrame.
+      iSplitL; last easy.
+      iApply wp_value.
+      iSplitL; last easy.
+      now iSplitL.
+    - iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; first easy.
+      iIntros (e2 σ'' efs Hstep).
+      dependent elimination Hstep.
+      fold_semWP.
+      dependent elimination s.
+      rewrite Heq in f1.
+      dependent elimination f1. cbn.
+      do 3 iModIntro.
+      iPoseProof (Model.RiscvPmpModel2.fun_read_ram_works Hmap with "[$ptsto_addr_w $Hmem']") as "%eq_fun_read_ram".
+      iMod "Hclose" as "_".
+      iModIntro.
+      iSplitL "Hmem' Hregs".
+      iSplitL "Hregs"; first iFrame.
+      iExists memmap.
+      iSplitL "Hmem'"; first iFrame.
+      iPureIntro; assumption.
+      iSplitL; last easy.
+      iApply wp_value.
+      iSplitL; last easy.
+      now iSplitL.
+  Qed.
 
   Lemma write_ram_sound `{sailGS Σ} {bytes} :
     ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_write_ram (write_ram bytes).
