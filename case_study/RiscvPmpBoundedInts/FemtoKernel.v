@@ -732,16 +732,19 @@ Import BlockVerificationDerived2.
   Qed.
 
   Lemma intro_ptsto_instrs `{sailGS Σ} {μ : Memory} {a : Val ty_word} {instrs : list AST} :
+    (4 * N.of_nat (length instrs) + bv.bin a < bv.exp2 xlenbits)%N ->
     mem_has_instrs μ a instrs ->
     ([∗ list] a' ∈ bv.seqBv a (4 * length instrs), interp_ptsto a' (μ a'))
       ⊢ ptsto_instrs a instrs.
   Proof.
     assert (word > 0) by now compute; Lia.lia.
-    iIntros (Hmeminstrs) "Hmem".
-    iInduction instrs as [|instr instrs] "IH" forall (a Hmeminstrs).
+    iIntros (Hrep Hmeminstrs) "Hmem".
+    iInduction instrs as [|instr instrs] "IH" forall (a Hrep Hmeminstrs).
     - done.
-    - replace (4 * length (instr :: instrs)) with (4 + 4 * length instrs) by (cbn; lia).
-      rewrite ?bv.seqBv_succ; try assumption.
+    - rewrite Nat2N.inj_succ in Hrep.
+      fold (length instrs) in Hrep.
+      replace (4 * length (instr :: instrs)) with (4 + 4 * length instrs) by (cbn; lia).
+      rewrite ?bv.seqBv_succ; try (rewrite ?bv.add_assoc ?bv.bin_add_small; cbn -[N.mul] in *; Lia.lia).
       destruct Hmeminstrs as [(v1 & v2 & v3 & v4 & Heq & Hv) Hmeminstrs].
       iDestruct "Hmem" as "(Hmema & Hmema1 & Hmema2 & Hmema3 & Hmem)".
       iSplitL "Hmema Hmema1 Hmema2 Hmema3".
@@ -764,19 +767,14 @@ Import BlockVerificationDerived2.
         now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
       + rewrite (@bv.add_comm _ a bv_instrsize).
         iApply "IH".
+        { iPureIntro.
+          rewrite bv.bin_add_small;
+          cbn -[N.mul] in *;
+          now Lia.lia.
+        }
         { now iPureIntro. }
-        replace (bv.add (bv.one word) (bv.add (bv.one word) (bv.add (bv.one word) (bv.add (bv.one word) a)))) with (bv.add (bv.of_N 4) a)%Z.
-        iExact "Hmem".
         now rewrite ?bv.add_assoc.
-      + rewrite ?bv.add_assoc.
-        admit.
-      + rewrite ?bv.add_assoc.
-        admit.
-      + rewrite ?bv.add_assoc.
-        admit.
-      + rewrite ?bv.add_assoc.
-        admit.
-  Admitted.
+  Qed.
 
   Lemma intro_ptstoSthL `{sailGS Σ} (μ : Memory) (addrs : list Xlenbits)  :
     ([∗ list] a' ∈ addrs, interp_ptsto a' (μ a')) ⊢ ptstoSthL addrs.
