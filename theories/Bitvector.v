@@ -1530,6 +1530,151 @@ Module bv.
 
   End Sequences.
 
+  Section Comparison.
+    Lemma ule_nat_one_S : forall {w} (n : nat),
+        (N.of_nat 1 < exp2 w)%N ->
+        (N.of_nat (S n) < exp2 w)%N ->
+        (@of_nat w 1) <=ᵘ (of_nat (S n)).
+    Proof. intros; unfold ule. rewrite ?bin_of_nat_small; Lia.lia. Qed.
+
+    Lemma ult_nat_S_zero : forall {w} (n : nat),
+        (N.of_nat (S n) < exp2 w)%N ->
+        @zero w <ᵘ of_nat (S n).
+    Proof. intros; unfold ult; rewrite bin_of_nat_small; auto; now simpl. Qed.
+
+    Lemma ule_trans : forall {n} (x y z : bv n),
+        x <=ᵘ y ->
+        y <=ᵘ z ->
+        x <=ᵘ z.
+    Proof. intros n x y z; unfold bv.ule; apply N.le_trans. Qed.
+
+    Lemma ult_trans : forall {n} (x y z : bv n),
+        x <ᵘ y ->
+        y <ᵘ z ->
+        x <ᵘ z.
+    Proof. intros n x y z; unfold bv.ult; apply N.lt_trans. Qed.
+
+    Lemma add_ule_mono : forall {x} (n m p : bv x),
+        (bv.bin p + bv.bin n < bv.exp2 x)%N ->
+        (bv.bin p + bv.bin m < bv.exp2 x)%N ->
+        n <=ᵘ m <-> p + n <=ᵘ p + m.
+    Proof. intros; unfold bv.ule; rewrite ?bv.bin_add_small; Lia.lia. Qed.
+
+    Lemma ule_add_r : forall {x} (n m p : bv x),
+        (bv.bin m + bv.bin p < bv.exp2 x)%N ->
+        n <=ᵘ m -> n <=ᵘ m + p.
+    Proof.
+      intros.
+      unfold bv.ule in *.
+      rewrite bv.bin_add_small; auto.
+      rewrite <- (N.add_0_r (bv.bin n)).
+      apply N.add_le_mono; auto.
+      apply N.le_0_l.
+    Qed.
+
+    Lemma add_ule_r : forall {x} (n m p : bv x),
+        (bv.bin n + bv.bin p < bv.exp2 x)%N ->
+        n + p <=ᵘ m -> n <=ᵘ m.
+    Proof.
+      intros.
+      unfold bv.ule in *.
+      rewrite bv.bin_add_small in H0; auto.
+      rewrite <- N.add_0_r in H0.
+      apply (N.le_le_add_le _ _ _ _ (N.le_0_l (bv.bin p)) H0).
+    Qed.
+
+    Lemma add_ule_S_ult : forall {x} (n m p : bv x),
+        (bv.bin n + bv.bin p < bv.exp2 x)%N ->
+        bv.zero <ᵘ p ->
+        n + p <=ᵘ m -> n <ᵘ m.
+    Proof.
+      intros.
+      unfold bv.ule, bv.ult in *.
+      rewrite bv.bin_add_small in H1; auto.
+      apply (N.lt_le_add_lt _ _ _ _ H0).
+      now rewrite N.add_0_r.
+    Qed.
+
+    Lemma ultb_antisym : forall {n} (x y : bv n),
+        y <ᵘ? x = negb (x <=ᵘ? y).
+    Proof. intros; unfold bv.uleb, bv.ultb; apply N.ltb_antisym. Qed.
+
+    Lemma ult_ule_incl : forall {n} (x y : bv n),
+        x <ᵘ y -> x <=ᵘ y.
+    Proof. intros; unfold bv.ule, bv.ult; apply N.lt_le_incl; auto. Qed.
+
+    Lemma ule_cases : forall {n} (x y : bv n),
+        x <=ᵘ y <-> x <ᵘ y \/ x = y.
+    Proof.
+      intros n x y.
+      unfold bv.ule, bv.ult.
+      rewrite N.lt_eq_cases; now rewrite bv.bin_inj_equiv.
+    Qed.
+
+    Lemma ule_refl : forall {n} (x : bv n),
+        x <=ᵘ x.
+    Proof. intros; unfold bv.ule; auto. Qed.
+
+    Lemma uleb_ugt : forall {n} (x y : bv n),
+        x <=ᵘ? y = false <-> y <ᵘ x.
+    Proof. intros; unfold bv.uleb, bv.ule; now apply N.leb_gt. Qed.
+
+    Lemma uleb_ule : forall {n} (x y : bv n),
+        x <=ᵘ? y = true <-> x <=ᵘ y.
+    Proof. intros; unfold bv.uleb; now apply N.leb_le. Qed.
+
+    Lemma ultb_uge : forall {n} (x y : bv n),
+        x <ᵘ? y = false <-> y <=ᵘ x.
+    Proof. intros; unfold bv.ultb; now apply N.ltb_ge. Qed.
+
+    Lemma ultb_ult : forall {n} (x y : bv n),
+        x <ᵘ? y = true <-> x <ᵘ y.
+    Proof. intros; unfold bv.ultb; now apply N.ltb_lt. Qed.
+
+    Lemma ultb_uleb : forall {n} (x y : bv n),
+        x <ᵘ? y = true -> x <=ᵘ? y = true.
+    Proof.
+      intros n x y.
+      rewrite ultb_ult, uleb_ule.
+      unfold bv.ule, bv.ult.
+      Lia.lia.
+    Qed.
+
+    Lemma ult_antirefl : forall {n} (x : bv n), not (x <ᵘ x).
+    Proof. unfold ult. Lia.lia. Qed.
+
+    Lemma add_nonzero_neq : forall {n} (x y : bv n),
+        bv.zero <ᵘ y ->
+        x + y <> x.
+    Proof.
+      intros n x y ynz eq.
+      replace x with (x + bv.zero) in eq  at 2 by apply bv.add_zero_r.
+      apply bv.add_cancel_l in eq.
+      subst. revert ynz.
+      now apply ult_antirefl.
+    Qed.
+
+    Lemma ule_antisymm {n} {x y : bv n} : x <=ᵘ y -> y <=ᵘ x -> x = y.
+    Proof.
+      unfold bv.ule.
+      intros ineq1 ineq2.
+      apply bv.bin_inj.
+      now Lia.lia.
+    Qed.
+
+    Lemma lt_S_add_one : forall {n} x,
+        (N.of_nat (S x) < bv.exp2 n)%N ->
+        (bv.bin (bv.one n) + (@bv.bin n (bv.of_nat x)) < bv.exp2 n)%N.
+    Proof.
+      destruct n.
+      simpl; Lia.lia.
+      assert (bv.bin (bv.one (S n)) = 1%N) by auto.
+      rewrite H.
+      intros.
+      rewrite bv.bin_of_nat_small; Lia.lia.
+    Qed.
+  End Comparison.
+
   Section Tests.
     Goal lsb [bv[2] 0] = false. reflexivity. Qed.
     Goal lsb [bv[2] 1] = true.  reflexivity. Qed.
