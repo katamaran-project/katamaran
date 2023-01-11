@@ -798,9 +798,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     dependent elimination f1. cbn.
     do 3 iModIntro.
     iMod (@Model.RiscvPmpModel2.fun_write_ram_works _ _ μ1 bytes paddr data memmap v Hmap
-                 with "[$ptsto_addr $Hmem' $Hclose]") as "[Hmem Haddr]".
-    iMod "Haddr" as "Haddr".
-    iModIntro.
+                 with "[$ptsto_addr $Hmem' $Hclose]") as "[Hmem >Haddr]".
     iFrame.
     now iApply wp_value.
   Qed.
