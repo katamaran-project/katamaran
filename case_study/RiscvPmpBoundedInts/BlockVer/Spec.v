@@ -218,7 +218,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_precondition    := asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
                                                  term_var "a" ↦ᵢ term_var "i" ∗
                                                  (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "a"))%asn ∗
-                                                 (term_unsigned (term_var "a") <= term_val ty.int (Z.of_nat maxAddr))%asn ∗
+                                                 (term_binop bop.plus (term_unsigned (term_var "a")) (term_val ty.int (Z.of_nat bytes_per_instr))) <= term_val ty.int (Z.of_nat maxAddr) ∗
                                                  asn_cur_privilege (term_val ty_privilege Machine) ∗
                                                  asn_pmp_entries (term_var "entries") ∗
                                                  asn_pmp_access (term_var "a") (term_val ty_word bv_instrsize) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Execute);
@@ -240,7 +240,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
           (term_var "paddr" ↦ᵣ[ bytes ] term_var "w")
           (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
           (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-          (term_unsigned (term_var "paddr") <= term_val ty.int (Z.of_nat maxAddr))%asn;
+          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr);
       sep_contract_result          := "result_mem_read";
       sep_contract_postcondition   :=
         term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
@@ -288,7 +288,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
         asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
           term_var "m" = term_val ty_privilege Machine ∗
           (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-          (term_unsigned (term_var "paddr") <= term_val ty.int (Z.of_nat maxAddr))%asn ∗
+          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr) ∗
           asn_cur_privilege (term_var "m") ∗
           asn_pmp_entries (term_var "entries") ∗
           asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "m") (term_var "typ");
@@ -306,7 +306,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
           (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-          (term_unsigned (term_var "paddr") <= term_val ty.int (Z.of_nat maxAddr))%asn ∗
+          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr) ∗
           asn_cur_privilege (term_val ty_privilege Machine) ∗
           asn_pmp_entries (term_var "entries") ∗
           asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_var "typ");
@@ -327,6 +327,18 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_postcondition   := asn.chunk (chunk_ptsreg pc (term_var "an")) ∗
                                                  asn.chunk (chunk_ptsreg nextpc (term_var "an")) ∗
                                                  term_var "result_tick_pc" = term_val ty.unit tt;
+    |}.
+
+  Definition sep_contract_within_phys_mem : SepContractFun within_phys_mem :=
+    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "width" :: ty.int];
+       sep_contract_localstore      := [term_var "paddr"; term_var "width"];
+       sep_contract_precondition    :=
+        let paddr_int : Term _ ty.int := term_unsigned (term_var "paddr") in
+        (term_val ty.int (Z.of_nat minAddr) <= paddr_int) ∗
+          (term_binop bop.plus paddr_int (term_var "width")) <= term_val ty.int (Z.of_nat maxAddr);
+       sep_contract_result          := "result_within_phys_mem";
+       sep_contract_postcondition   :=
+         term_var "result_within_phys_mem" = term_val ty.bool true;
     |}.
 
   Definition CEnv : SepContractEnv :=
@@ -520,13 +532,11 @@ Module RiscvPmpSpecVerif.
 
   Import RiscvPmpBlockVerifExecutor.
 
-  Lemma valid_checked_mem_read {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
+  Lemma valid_checked_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@checked_mem_read bytes H).
   Proof.
-    (* strange: replacing ValidContractDebug with ValidContract makes the proof fail. *)
-  Admitted.
-  (*   symbolic_simpl. *)
-  (*   intuition. *)
-  (* Qed. *)
+    destruct H as [->|[->| ->]];
+    now vm_compute.
+  Qed.
 
   Lemma valid_pmp_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@pmp_mem_read bytes H).
   Proof.
@@ -606,7 +616,7 @@ Module RiscvPmpSpecVerif.
     - apply (valid_contract _ H valid_execute_tick_pc).
     - apply (valid_contract_debug _ H valid_contract_within_phys_mem).
     - apply (valid_contract _ H valid_mem_read).
-    - apply (valid_contract_debug _ H valid_checked_mem_read).
+    - apply (valid_contract _ H valid_checked_mem_read).
     - apply (valid_contract _ H valid_pmp_mem_read).
     - apply (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
     - apply (valid_contract _ H valid_pmpCheckPerms).

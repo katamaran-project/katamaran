@@ -893,7 +893,7 @@ Import BlockVerificationDerived2.
       now iIntros "_".
   Qed.
 
-  Print Assumptions femtokernel_endToEnd.
+  (* Print Assumptions femtokernel_endToEnd. *)
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
 (* End: *)
