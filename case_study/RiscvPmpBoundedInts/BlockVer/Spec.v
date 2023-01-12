@@ -591,7 +591,6 @@ Module RiscvPmpSpecVerif.
     - apply (valid_contract _ H valid_checked_mem_read).
     - apply (valid_contract _ H valid_pmp_mem_read).
     - apply (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
-    - apply (valid_contract_with_fuel_debug _ _ H valid_pmpCheckPerms).
     - apply (valid_contract _ H valid_pmpMatchAddr).
     - apply (valid_contract _ H valid_execute_fetch).
   Qed.
