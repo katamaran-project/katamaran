@@ -252,7 +252,16 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     {| sep_contract_logic_variables := ["entry" :: ty_pmpcfg_ent; "acc" :: ty_access_type; "priv" :: ty_privilege];
        sep_contract_localstore      := [term_var "entry"; term_var "acc"; term_var "priv"];
        sep_contract_precondition    :=
-         term_var "priv" = term_val ty_privilege Machine;
+         term_var "priv" = term_val ty_privilege Machine ∗
+                             (asn.match_record
+                                rpmpcfg_ent (term_var "entry")
+                                (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+                                                                                                   "L" "L")
+                                                                                   "A" "A")
+                                                                   "X" "X")
+                                                   "W" "W")
+                                   "R" "R")
+                                (term_var "L" = term_val ty.bool false));
        sep_contract_result          := "result_pmpCheckPerms";
        sep_contract_postcondition   :=
          term_var "result_pmpCheckPerms" = term_val ty.bool true;
@@ -546,22 +555,19 @@ Module RiscvPmpSpecVerif.
   Lemma valid_pmpMatchAddr : ValidContract pmpMatchAddr.
   Proof. now vm_compute. Qed.
 
-  Lemma valid_pmpCheckPerms : ValidContract pmpCheckPerms.
-  Proof.
-  Admitted.
- (* reflexivity. Qed. *)
+  Lemma valid_pmpCheckPerms : ValidContractWithFuelDebug 2 pmpCheckPerms.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 3 (@pmpCheck bytes H).
   Proof.
-  Admitted.
     (* destruct H as [H|[H|H]]; *)
     (*   rewrite ?H; *)
     (* hnf; apply verification_condition_with_erasure_sound; vm_compute; *)
     (* constructor; cbn; *)
     (* repeat try split; subst; unfold Pmp_entry_unlocked, Pmp_cfg_unlocked in *; *)
-    (* rewrite ?is_pmp_cfg_unlocked_bool in *; cbn in *; subst; try reflexivity; *)
-    (* now apply machine_unlocked_pmp_access. *)
+    (* rewrite ?is_pmp_cfg_unlocked_bool in *; cbn in *; subst; try reflexivity. *)
   (* Qed. *)
+  Admitted.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof.
@@ -619,7 +625,7 @@ Module RiscvPmpSpecVerif.
     - apply (valid_contract _ H valid_checked_mem_read).
     - apply (valid_contract _ H valid_pmp_mem_read).
     - apply (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
-    - apply (valid_contract _ H valid_pmpCheckPerms).
+    - apply (valid_contract_with_fuel_debug _ _ H valid_pmpCheckPerms).
     - apply (valid_contract _ H valid_pmpMatchAddr).
     - apply (valid_contract _ H valid_execute_fetch).
   Qed.
