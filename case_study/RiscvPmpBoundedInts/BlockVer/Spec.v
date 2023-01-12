@@ -247,36 +247,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
                                        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w");
     |}.
 
-  (* TODO: update *)
-  Definition sep_contract_pmpCheckPerms : SepContractFun pmpCheckPerms :=
-    {| sep_contract_logic_variables := ["entry" :: ty_pmpcfg_ent; "acc" :: ty_access_type; "priv" :: ty_privilege];
-       sep_contract_localstore      := [term_var "entry"; term_var "acc"; term_var "priv"];
-       sep_contract_precondition    :=
-         term_var "priv" = term_val ty_privilege Machine ∗
-                             (asn.match_record
-                                rpmpcfg_ent (term_var "entry")
-                                (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-                                                                                                   "L" "L")
-                                                                                   "A" "A")
-                                                                   "X" "X")
-                                                   "W" "W")
-                                   "R" "R")
-                                (term_var "L" = term_val ty.bool false));
-       sep_contract_result          := "result_pmpCheckPerms";
-       sep_contract_postcondition   :=
-         term_var "result_pmpCheckPerms" = term_val ty.bool true;
-    |}.
-
-  (* Definition sep_contract_pmpMatchAddr : SepContractFun pmpMatchAddr := *)
-  (*   {| sep_contract_logic_variables := ["addr" :: ty_xlenbits; "width" :: ty_xlenbits; "rng" :: ty_pmp_addr_range]; *)
-  (*      sep_contract_localstore      := [term_var "addr"; term_var "width"; term_var "rng"]; *)
-  (*      sep_contract_precondition    := ⊤; *)
-  (*      sep_contract_result          := "result_pmpMatchAddr"; *)
-  (*      sep_contract_postcondition   := *)
-  (*        term_var "result_pmpMatchAddr" = term_val ty_pmpaddrmatch PMP_NoMatch *)
-  (*        ∨ term_var "result_pmpMatchAddr" = term_val ty_pmpaddrmatch PMP_Match; *)
-  (*   |}. *)
-
   Definition sep_contract_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : SepContractFun (@pmpCheck bytes H) :=
     {| sep_contract_logic_variables := ["addr" :: ty_xlenbits; "acc" :: ty_access_type; "priv" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [term_var "addr"; term_var "acc"; term_var "priv"];
@@ -359,9 +329,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
       | @mem_read bytes H         => Some (@sep_contract_mem_read bytes H)
       | tick_pc                   => Some sep_contract_tick_pc
       | @pmpCheck bytes H         => Some (@sep_contract_pmpCheck bytes H)
-      | pmpCheckPerms             => Some sep_contract_pmpCheckPerms
       | within_phys_mem           => Some sep_contract_within_phys_mem
-      (* | pmpLocked                 => Some sep_contract_pmpLocked *)
       | pmpMatchAddr              => Some sep_contract_pmpMatchAddr
       | @pmp_mem_read bytes H     => Some (@sep_contract_pmp_mem_read bytes H)
       | @checked_mem_read bytes H => Some (@sep_contract_checked_mem_read bytes H)
@@ -555,16 +523,14 @@ Module RiscvPmpSpecVerif.
   Lemma valid_pmpMatchAddr : ValidContract pmpMatchAddr.
   Proof. now vm_compute. Qed.
 
-  Lemma valid_pmpCheckPerms : ValidContractWithFuelDebug 2 pmpCheckPerms.
-  Proof. now vm_compute. Qed.
-
-  Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 3 (@pmpCheck bytes H).
+  Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
-    (* destruct H as [H|[H|H]]; *)
-    (*   rewrite ?H; *)
-    (* hnf; apply verification_condition_with_erasure_sound; vm_compute; *)
-    (* constructor; cbn; *)
-    (* repeat try split; subst; unfold Pmp_entry_unlocked, Pmp_cfg_unlocked in *; *)
+    (* update: Pmp_access not defined in a way that makes it easy to destruct here... *)
+    destruct H as [-> |[-> | ->]].
+    (* Set Printing Depth 200. *)
+    hnf; apply verification_condition_with_erasure_sound; vm_compute.
+    constructor; cbn.
+    repeat try split; subst; unfold Pmp_access, check_pmp_access, decide_pmp_access, check_pmp_access, pmp_check, pmp_match_entry, pmp_match_addr, pmp_addr_range in *.
     (* rewrite ?is_pmp_cfg_unlocked_bool in *; cbn in *; subst; try reflexivity. *)
   (* Qed. *)
   Admitted.
