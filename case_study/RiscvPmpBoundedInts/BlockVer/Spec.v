@@ -176,7 +176,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
   Local Notation asn_pmp_all_entries_unlocked l := (asn.formula (formula_user pmp_all_entries_unlocked [l])).
   Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-  Local Notation asn_pmp_access addr es m p := (asn.formula (formula_user pmp_access [addr;es;m;p])).
+  Local Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
   Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
   (* TODO: clean up above notations to get rid of the following one *)
   Local Notation asn_cur_privilege val := (asn.chunk (chunk_ptsreg cur_privilege val)).
@@ -289,9 +289,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_postcondition   :=
          term_var "result_pmpCheck" = term_inr (term_val ty.unit tt)
          ∗ asn_pmp_entries (term_var "entries")
-         ∗ asn.formula (formula_user pmp_access [(term_var "addr"); (term_get_slice_int (term_val ty.int (Z.of_nat bytes))); (term_var "entries"); (term_var "priv"); (term_var "acc")])
-         (* not sure why this notation doesn't type check *)
-         (* ∗ asn_pmp_access (term_var "addr") (term_var "width") (term_var "entries") (term_var "priv") (term_var "acc"); *)
+         ∗ asn_pmp_access (term_var "addr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "priv") (term_var "acc");
     |}.
 
   Definition sep_contract_pmp_mem_read {bytes} {H : restrict_bytes bytes} : SepContractFun (@pmp_mem_read bytes H) :=
