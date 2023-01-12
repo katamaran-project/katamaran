@@ -523,6 +523,42 @@ Module RiscvPmpSpecVerif.
   Lemma valid_pmpMatchAddr : ValidContract pmpMatchAddr.
   Proof. now vm_compute. Qed.
 
+  Import Katamaran.Bitvector.
+  Import bv.notations.
+
+  Ltac bv_comp :=
+      repeat match goal with
+      | H: (?a <ᵘ? ?b) = true |- _ =>
+          rewrite bv.ultb_ult in H
+      | H: (?a <ᵘ? ?b) = false |- _ =>
+          rewrite bv.ultb_uge in H
+      | H: (?a <=ᵘ? ?b) = true |- _ =>
+          rewrite bv.uleb_ule in H
+      | H: (?a <=ᵘ? ?b) = false |- _ =>
+          rewrite bv.uleb_ugt in H
+      end.
+
+  Lemma Pmp_access_inversion : forall addr bytes cfg0 addr0 cfg1 addr1 acc,
+      Pmp_access addr bytes [(cfg0 , addr0); (cfg1, addr1)]%list Machine acc ->
+         (A cfg0 = OFF /\ A cfg1 = OFF)
+      \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr1 <ᵘ addr0)
+      \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr0 <=ᵘ addr1 /\ addr + bytes <=ᵘ addr0)
+      \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr1 <=ᵘ addr)
+      \/ (A cfg0 = OFF /\ addr <ᵘ addr0).
+  Proof.
+    intros addr bytes [? [] ? ? ?] addr0 [? [] ? ? ?] addr1 acc;
+      unfold Pmp_access, decide_pmp_access, check_pmp_access, pmp_check, pmp_match_entry,
+             pmp_match_addr, pmp_addr_range;
+      simpl;
+      intros H.
+    - left; auto.
+    - destruct (addr1 <ᵘ? addr0) eqn:?; bv_comp; auto.
+      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
+      right; right; left; auto.
+      destruct (addr1 <=ᵘ? addr) eqn:?; bv_comp.
+      right; right; right; left; auto.
+  Admitted.
+
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
     (* update: Pmp_access not defined in a way that makes it easy to destruct here... *)
