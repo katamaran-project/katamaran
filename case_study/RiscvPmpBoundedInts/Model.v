@@ -1007,35 +1007,11 @@ Module RiscvPmpModel2.
     (*   auto. *)
     (* Qed. *)
 
-    Lemma machine_unlocked_open_pmp_entries_sound :
-      ValidLemma RiscvPmpSpecification.lemma_machine_unlocked_open_pmp_entries.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      iIntros "(Hentries & Hunlocked)".
-      iPoseProof (pmp_entries_ptsto with "Hentries") as "(% & % & % & % & -> & ? & ? & ? & ?)".
-      iDestruct "Hunlocked" as "[(%Hcfg0 & %Hcfg1 & _) _]".
-      apply Pmp_cfg_unlocked_bool in Hcfg0.
-      apply Pmp_cfg_unlocked_bool in Hcfg1.
-      iExists cfg0. iExists addr0. iExists cfg1. iExists addr1.
-      now iFrame.
-    Qed.
-
-    Lemma machine_unlocked_close_pmp_entries_sound :
-      ValidLemma RiscvPmpSpecification.lemma_machine_unlocked_close_pmp_entries.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      iIntros "(? & ? & ? & ? & [%Hunlocked0 _] & [%Hunlocked1 _] & _ & _)".
-      apply Pmp_cfg_unlocked_bool in Hunlocked0.
-      apply Pmp_cfg_unlocked_bool in Hunlocked1.
-      now iFrame.
-    Qed.
-
     Lemma lemSem : LemmaSem.
     Proof.
       intros Δ [];
         eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound,
-        close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound,
-        machine_unlocked_open_pmp_entries_sound, machine_unlocked_close_pmp_entries_sound.
+        close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound.
     Qed.
   End LemProofs.
 

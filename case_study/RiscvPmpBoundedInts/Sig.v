@@ -58,9 +58,6 @@ Inductive PurePredicate : Set :=
 | not_within_cfg
 | prev_addr
 | in_entries
-| pmp_cfg_unlocked
-| pmp_entry_unlocked
-| pmp_all_entries_unlocked
 .
 
 Inductive Predicate : Set :=
@@ -101,9 +98,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg           => [ty_xlenbits; ty.list ty_pmpentry]
       | prev_addr                => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
       | in_entries               => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
-      | pmp_cfg_unlocked         => [ty_pmpcfg_ent]
-      | pmp_entry_unlocked       => [ty_pmpentry]
-      | pmp_all_entries_unlocked => [ty.list ty_pmpentry]
       end.
 
     Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
@@ -411,17 +405,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       Pmp_cfg_unlocked (fst ent).
     Global Arguments Pmp_entry_unlocked !ent.
 
-    Fixpoint Pmp_all_entries_unlocked (entries : Val (ty.list ty_pmpentry)) : Prop :=
-      match entries with
-      | ent :: ents => Pmp_entry_unlocked ent /\ Pmp_all_entries_unlocked ents
-      | nil        => True
-      end%list.
-
-    Lemma Pmp_all_entries_unlocked_app (xs ys : Val (ty.list ty_pmpentry)) :
-      Pmp_all_entries_unlocked (app xs ys) <->
-      Pmp_all_entries_unlocked xs /\ Pmp_all_entries_unlocked ys.
-    Proof. induction xs; cbn; intuition. Qed.
-
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
       | pmp_access               => Pmp_access
@@ -433,9 +416,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg           => Not_within_cfg
       | prev_addr                => Prev_addr
       | in_entries               => In_entries
-      | pmp_cfg_unlocked         => Pmp_cfg_unlocked
-      | pmp_entry_unlocked       => Pmp_entry_unlocked
-      | pmp_all_entries_unlocked => Pmp_all_entries_unlocked
       end.
 
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -540,11 +520,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
   End ContractDefKit.
 
   Import asn.notations.
-  Definition asn_pmp_cfg_unlocked {Σ} (t : Term Σ ty_pmpcfg_ent) : Assertion Σ :=
-    match: t in rpmpcfg_ent with
-      ["L";"A";"x";"W";"R"] =>
-        term_var "L" = term_val ty.bool false
-    end.
 
   Module notations.
     (* TODO: better notation needed *)
@@ -555,7 +530,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Notation asn_bool t := (asn.formula (formula_bool t)).
     Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
     Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-    Notation asn_pmp_all_entries_unlocked l := (asn.formula (formula_user pmp_all_entries_unlocked [l])).
+
     (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
     (* Notation asn_pmp_entries_angelic l := (asn.chunk_angelic (chunk_user pmp_entries [l])). *)
     Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
@@ -656,38 +631,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
 
   Import DList.
 
-  Definition simplify_pmp_cfg_unlocked {Σ} (cfg : Term Σ (ty_pmpcfg_ent)) : DList Σ :=
-    let fml := formula_user pmp_cfg_unlocked [cfg] in
-    match term_get_record cfg with
-    | Some cfg          => singleton (formula_bool (term_not (cfg.[??"L"])))
-    | _                 => singleton fml
-    end.
-  Definition simplify_pmp_entry_unlocked {Σ} (entry : Term Σ (ty_pmpentry)) : DList Σ :=
-    let fml := formula_user pmp_entry_unlocked [entry] in
-    match term_get_pair entry with
-    | Some (cfg , _)         => simplify_pmp_cfg_unlocked cfg
-    | _                      => singleton fml
-    end.
-
-  Fixpoint simplify_pmp_all_entries_unlocked_val {Σ}
-    (xs : Val (ty.list ty_pmpentry)) : DList Σ :=
-    match xs with
-    | nil       => empty
-    | cons x xs => cat
-                     (simplify_pmp_entry_unlocked (term_val ty_pmpentry x))
-                     (simplify_pmp_all_entries_unlocked_val xs)
-    end.
-
-  Equations simplify_pmp_all_entries_unlocked {Σ} (entries : Term Σ (ty.list ty_pmpentry)) : DList Σ :=
-  | term_var x                    => singleton (formula_user pmp_all_entries_unlocked [term_var x])
-  | term_val _ v                  => simplify_pmp_all_entries_unlocked_val v
-  | term_binop bop.cons e es      => cat
-                                       (simplify_pmp_entry_unlocked e)
-                                       (simplify_pmp_all_entries_unlocked es)
-  | term_binop bop.append es1 es2 => cat
-                                       (simplify_pmp_all_entries_unlocked es1)
-                                       (simplify_pmp_all_entries_unlocked es2).
-
   Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (PathCondition Σ) :=
   | pmp_access               | [ paddr; width; entries; priv; perm ] => simplify_pmp_access paddr width entries priv perm
   | pmp_check_perms          | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
@@ -697,10 +640,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   | within_cfg               | [ paddr; cfg; prevaddr; addr]  => simplify_within_cfg paddr cfg prevaddr addr
   | not_within_cfg           | [ paddr; entries ]             => Some [formula_user not_within_cfg [paddr; entries]]%ctx
   | prev_addr                | [ cfg; entries; prev ]         => simplify_prev_addr cfg entries prev
-  | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx
-  | pmp_cfg_unlocked         | [ cfg ]                        => run (simplify_pmp_cfg_unlocked cfg)
-  | pmp_entry_unlocked       | [ entry ]                      => run (simplify_pmp_entry_unlocked entry)
-  | pmp_all_entries_unlocked | [ entries ]                    => run (simplify_pmp_all_entries_unlocked entries).
+  | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx.
 
   Import Entailment.
 
@@ -788,42 +728,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     now destruct decide_prev_addr.
   Qed.
 
-  Lemma simplify_pmp_cfg_unlocked_spec {Σ} (cfg : Term Σ ty_pmpcfg_ent) :
-    simplify_pmp_cfg_unlocked cfg ⊣⊢ singleton (formula_user pmp_cfg_unlocked [cfg]).
-  Proof.
-    unfold simplify_pmp_cfg_unlocked.
-    destruct (term_get_record_spec cfg); [|easy].
-    cbn in a; env.destroy a; cbn in *; lsolve.
-    intros ι. unfold singleton. cbn. rewrite H. now destruct (inst v3 ι).
-  Qed.
-
-  Lemma simplify_pmp_entry_unlocked_spec {Σ} (entry : Term Σ ty_pmpentry) :
-    simplify_pmp_entry_unlocked entry ⊣⊢
-    singleton (formula_user pmp_entry_unlocked [entry]).
-  Proof.
-    unfold simplify_pmp_entry_unlocked.
-    destruct (term_get_pair_spec entry); [|easy].
-    destruct a; cbn; lsolve.
-    rewrite simplify_pmp_cfg_unlocked_spec; lsolve.
-    intros ι; unfold singleton; cbn; now rewrite H.
-  Qed.
-
-  Lemma simplify_pmp_all_entries_unlocked_spec {Σ} (entries : Term Σ (ty.list ty_pmpentry)) :
-    simplify_pmp_all_entries_unlocked entries ⊣⊢
-    singleton (formula_user pmp_all_entries_unlocked [entries]).
-  Proof.
-    funelim (simplify_pmp_all_entries_unlocked entries);
-      simp simplify_pmp_all_entries_unlocked; lsolve.
-    - induction v; cbn; [easy|].
-      rewrite simplify_pmp_entry_unlocked_spec IHv. intros ι.
-      now rewrite instprop_dlist_cat !instprop_dlist_singleton.
-    - rewrite simplify_pmp_entry_unlocked_spec H. intros ι.
-      now rewrite instprop_dlist_cat !instprop_dlist_singleton.
-    - rewrite H H0. intros ι.
-      rewrite instprop_dlist_cat !instprop_dlist_singleton. cbn.
-      now rewrite Pmp_all_entries_unlocked_app.
-  Qed.
-
   Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.
   Proof.
     intros Σ p ts.
@@ -837,9 +741,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     - reflexivity.
     - simple apply simplify_prev_addr_spec.
     - reflexivity.
-    - now rewrite simplify_pmp_cfg_unlocked_spec run_singleton.
-    - now rewrite simplify_pmp_entry_unlocked_spec run_singleton.
-    - now rewrite simplify_pmp_all_entries_unlocked_spec run_singleton.
   Qed.
 
   Definition solver : Solver :=
