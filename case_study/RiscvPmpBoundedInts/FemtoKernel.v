@@ -842,7 +842,7 @@ Import BlockVerificationDerived2.
     now iApply (intro_ptsto_instrs (μ := μ)).
     iSplitL "Hfortytwo".
     - iAssert (interp_ptstomem (bv.of_N 84) (bv.of_N 42)) with "[Hfortytwo]" as "Hfortytwo".
-      {now iApply (intro_ptstomem_word2 Hft with "Hfortytwo").}
+      { now iApply (intro_ptstomem_word2 Hft with "Hfortytwo"). }
       iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptstomem (bv.of_N 84) (bv.of_N 42)) with "Hfortytwo") as "Hinv".
       now iModIntro.
     - now iApply (intro_ptstoSthL μ).
