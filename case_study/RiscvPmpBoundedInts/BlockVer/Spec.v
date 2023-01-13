@@ -82,6 +82,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Section ContractDefKit.
 
   Import asn.notations.
+  Notation asn_bool t := (asn.formula (formula_bool t)).
+  Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
@@ -89,7 +91,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
   Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
-  Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
   Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
   Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
@@ -178,6 +179,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
   (* TODO: clean up above notations to get rid of the following one *)
   Local Notation asn_cur_privilege val := (asn.chunk (chunk_ptsreg cur_privilege val)).
+  Local Notation asn_bool t := (asn.formula (formula_bool t)).
   Import bv.notations.
 
 
@@ -520,8 +522,13 @@ Module RiscvPmpSpecVerif.
     destruct H as [->|[->| ->]]; now vm_compute.
   Qed.
 
-  Lemma valid_pmpMatchAddr : ValidContract pmpMatchAddr.
-  Proof. now vm_compute. Qed.
+  Lemma valid_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
+  Proof.
+    symbolic_simpl.
+    intros.
+    apply Bool.orb_true_iff in H2 as [?%bv.ultb_ult|?%bv.ultb_ult];
+      [left; auto| right; auto].
+  Qed.
 
   Import Katamaran.Bitvector.
   Import bv.notations.
@@ -538,13 +545,32 @@ Module RiscvPmpSpecVerif.
           rewrite bv.uleb_ugt in H
       end.
 
+  Opaque pmp_get_perms.
+
   Lemma Pmp_access_inversion : forall addr bytes cfg0 addr0 cfg1 addr1 acc,
       Pmp_access addr bytes [(cfg0 , addr0); (cfg1, addr1)]%list Machine acc ->
          (A cfg0 = OFF /\ A cfg1 = OFF)
       \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr1 <ᵘ addr0)
       \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr0 <=ᵘ addr1 /\ addr + bytes <=ᵘ addr0)
       \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr1 <=ᵘ addr)
-      \/ (A cfg0 = OFF /\ addr <ᵘ addr0).
+      \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr <ᵘ addr1 /\ addr0 <=ᵘ addr /\ addr + bytes <=ᵘ addr1 /\ Access_pmp_perm acc (pmp_get_perms cfg1 Machine))
+      \/ (A cfg0 = TOR /\ A cfg1 = OFF /\ addr0 <ᵘ [bv 0x0])
+      \/ (A cfg0 = TOR /\ A cfg1 = OFF /\ [bv 0x0] <=ᵘ addr0 /\ addr + bytes <=ᵘ [bv 0x0])
+      \/ (A cfg0 = TOR /\ A cfg1 = OFF /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr0 <=ᵘ addr)
+      \/ (A cfg0 = TOR /\ A cfg1 = OFF /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr <ᵘ addr0 /\ [bv 0x0] <=ᵘ addr /\ addr + bytes <=ᵘ addr0 /\ Access_pmp_perm acc (pmp_get_perms cfg0 Machine))
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ addr0 <ᵘ [bv 0x0] /\ addr1 <ᵘ addr0)
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ addr0 <ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr + bytes <=ᵘ addr0)
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ addr0 <ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr1 <=ᵘ addr)
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ addr0 <ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr <ᵘ addr1 /\ addr0 <=ᵘ addr /\addr + bytes <=ᵘ addr1 /\ Access_pmp_perm acc (pmp_get_perms cfg1 Machine))
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ addr + bytes <=ᵘ [bv 0x0] /\ addr1 <ᵘ addr0)
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ addr + bytes <=ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr + bytes <=ᵘ addr0)
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ addr + bytes <=ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr1 <=ᵘ addr)
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ addr + bytes <=ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr <ᵘ addr1 /\ addr0 <=ᵘ addr /\ addr + bytes <=ᵘ addr1 /\ Access_pmp_perm acc (pmp_get_perms cfg1 Machine))
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr0 <=ᵘ addr /\ addr0 <=ᵘ addr1 /\ addr + bytes <=ᵘ addr0)
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr0 <=ᵘ addr /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr1 <=ᵘ addr)
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr0 <=ᵘ addr /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr <ᵘ addr1 /\ addr + bytes <=ᵘ addr1 /\ Access_pmp_perm acc (pmp_get_perms cfg1 Machine))
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr <ᵘ addr0 /\ [bv 0x0] <=ᵘ addr /\ addr + bytes <=ᵘ addr0 /\ Access_pmp_perm acc (pmp_get_perms cfg0 Machine))
+      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr0 <=ᵘ addr /\ addr1 <ᵘ addr0).
   Proof.
     intros addr bytes [? [] ? ? ?] addr0 [? [] ? ? ?] addr1 acc;
       unfold Pmp_access, decide_pmp_access, check_pmp_access, pmp_check, pmp_match_entry,
@@ -553,23 +579,120 @@ Module RiscvPmpSpecVerif.
       intros H.
     - left; auto.
     - destruct (addr1 <ᵘ? addr0) eqn:?; bv_comp; auto.
-      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
+      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp; simpl in H.
       right; right; left; auto.
       destruct (addr1 <=ᵘ? addr) eqn:?; bv_comp.
       right; right; right; left; auto.
-  Admitted.
+      destruct (addr0 <=ᵘ? addr) eqn:?; bv_comp.
+      destruct (addr + bytes <=ᵘ? addr1) eqn:?; bv_comp.
+      simpl in H.
+      right; right; right; right; left; repeat (split; auto).
+      rewrite Bool.andb_false_r in H; inversion H.
+      rewrite Bool.andb_false_l in H; inversion H.
+    - destruct (addr0 <ᵘ? [bv 0x0]) eqn:?; bv_comp.
+      right; right; right; right; right; left; repeat (split; auto).
+      destruct (addr + bytes <=ᵘ? [bv 0x0]) eqn:?; bv_comp.
+      simpl in H.
+      right; right; right; right; right; right; left; repeat (split; auto).
+      destruct (addr0 <=ᵘ? addr) eqn:?; bv_comp.
+      simpl in H.
+      right; right; right; right; right; right; right; left; repeat (split; auto).
+      simpl in H.
+      destruct ([bv 0x0] <=ᵘ? addr) eqn:?; bv_comp.
+      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
+      simpl in H.
+      right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      rewrite Bool.andb_false_r in H; inversion H.
+      rewrite Bool.andb_false_l in H; inversion H.
+    - destruct (addr0 <ᵘ? [bv 0x0]) eqn:?; bv_comp.
+      destruct (addr1 <ᵘ? addr0) eqn:?; bv_comp.
+      right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
+      simpl in H.
+      right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      destruct (addr1 <=ᵘ? addr) eqn:?; bv_comp.
+      simpl in H.
+      right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      simpl in H.
+      destruct (addr0 <=ᵘ? addr) eqn:?; bv_comp.
+      destruct (addr + bytes <=ᵘ? addr1) eqn:?; bv_comp.
+      simpl in H.
+      right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      rewrite Bool.andb_false_r in H; inversion H.
+      rewrite Bool.andb_false_l in H; inversion H.
+      destruct (addr + bytes <=ᵘ? [bv 0x0]) eqn:?; bv_comp.
+      simpl in H.
+      destruct (addr1 <ᵘ? addr0) eqn:?; bv_comp.
+      do 4 right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
+      simpl in H.
+      do 4 right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      destruct (addr1 <=ᵘ? addr) eqn:?; bv_comp.
+      simpl in H.
+      do 4 right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      simpl in H.
+      destruct (addr0 <=ᵘ? addr) eqn:?; bv_comp.
+      destruct (addr + bytes <=ᵘ? addr1) eqn:?; bv_comp.
+      simpl in H.
+      do 4 right; right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      rewrite Bool.andb_false_r in H; inversion H.
+      rewrite Bool.andb_false_l in H; inversion H.
+      destruct (addr0 <=ᵘ? addr) eqn:?; bv_comp.
+      simpl in H.
+      destruct (addr1 <ᵘ? addr0) eqn:?; bv_comp.
+      do 5 right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; repeat (split; auto).
+      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
+      simpl in H.
+      do 4 right; right; right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      destruct (addr1 <=ᵘ? addr) eqn:?; bv_comp.
+      simpl in H.
+      do 4 right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      simpl in H.
+      destruct (addr + bytes <=ᵘ? addr1) eqn:?; bv_comp.
+      do 4 right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      inversion H.
+      simpl in H.
+      destruct ([bv 0x0] <=ᵘ? addr) eqn:?; bv_comp.
+      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
+      simpl in H.
+      do 4 right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
+      rewrite Bool.andb_false_r in H; inversion H.
+      rewrite Bool.andb_false_l in H; inversion H.
+  Qed.
+
+  Transparent pmp_get_perms.
 
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
     (* update: Pmp_access not defined in a way that makes it easy to destruct here... *)
-    destruct H as [-> |[-> | ->]].
+    destruct H as [-> |[-> | ->]];
     (* Set Printing Depth 200. *)
-    hnf; apply verification_condition_with_erasure_sound; vm_compute.
-    constructor; cbn.
-    repeat try split; subst; unfold Pmp_access, check_pmp_access, decide_pmp_access, check_pmp_access, pmp_check, pmp_match_entry, pmp_match_addr, pmp_addr_range in *.
-    (* rewrite ?is_pmp_cfg_unlocked_bool in *; cbn in *; subst; try reflexivity. *)
-  (* Qed. *)
-  Admitted.
+    hnf; apply verification_condition_with_erasure_sound; vm_compute;
+    constructor; cbn;
+    intros paddr acc addr0 addr1 L0 A0 X0 W0 R0 L1 A1 X1 W1 R1;
+    repeat try split; intros; subst; intros;
+      repeat
+        match goal with
+        | H: Pmp_access ?a ?b ?es Machine ?acc |- _ =>
+            apply Pmp_access_inversion in H;
+            simpl in H
+        | H: (?b1 || ?b2)%bool = true |- _ =>
+            apply Bool.orb_true_iff in H
+        | H: ?P /\ ?Q |- _ =>
+            destruct H
+        | H: ?P \/ ?Q |- _ =>
+            destruct H as [H|H]
+        | H: negb ?b = true |- _ =>
+            apply Bool.negb_true_iff in H;
+            subst
+        | H1: ?a <=ᵘ ?b, H2: ?b <ᵘ ?a |- False =>
+            unfold bv.ult, bv.ule in *; apply N.le_ngt in H1; apply (H1 H2)
+        end;
+      bv_comp;
+      unfold Access_pmp_perm, decide_access_pmp_perm in *;
+      try discriminate.
+    all: try destruct X1; try destruct W1; try destruct R1; try destruct X0; try destruct W0; try destruct R0; try discriminate.
+  Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof.
@@ -627,7 +750,7 @@ Module RiscvPmpSpecVerif.
     - apply (valid_contract _ H valid_checked_mem_read).
     - apply (valid_contract _ H valid_pmp_mem_read).
     - apply (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
-    - apply (valid_contract _ H valid_pmpMatchAddr).
+    - apply (valid_contract_debug _ H valid_pmpMatchAddr).
     - apply (valid_contract _ H valid_execute_fetch).
   Qed.
 End RiscvPmpSpecVerif.

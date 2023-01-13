@@ -874,9 +874,11 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                       (fun K => match K with
                                 | PMP_NoMatch =>
                                     asn_bool (term_var hi <ᵘₜ term_var lo) ∨ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var lo ||ₜ term_var hi <=ᵘₜ term_var addr) ∨ term_var rng = term_inr (term_val ty.unit tt)
-                                | PMP_PartialMatch => asn_bool
-                                                        (term_not
-                                                           (term_var lo <=ᵘₜ term_var addr &&ₜ (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var hi)))
+                                | PMP_PartialMatch =>
+                                    term_var lo <=ᵘ term_var hi ∗
+                                    term_var lo <ᵘ term_binop bop.bvadd (term_var addr) (term_var width) ∗
+                                    term_var addr <ᵘ term_var hi ∗
+                                    (term_var addr <ᵘ term_var lo ∨ term_var hi <ᵘ (term_binop bop.bvadd (term_var addr) (term_var width)))
                                 | PMP_Match =>
                                       (term_var lo) <=ᵘ (term_var hi)
                                     ∗ (term_var lo) <ᵘ  (term_binop bop.bvadd (term_var addr) (term_var width))
@@ -1354,8 +1356,13 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_pmpAddrRange : ValidContract pmpAddrRange.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_pmpMatchAddr : ValidContract pmpMatchAddr.
-  Proof. reflexivity. Qed.
+  Lemma valid_contract_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
+  Proof.
+    symbolic_simpl.
+    intros.
+    apply Bool.orb_true_iff in H2 as [?%bv.ultb_ult|?%bv.ultb_ult];
+      [left; auto| right; auto].
+  Qed.
 
   Lemma valid_contract_pmpMatchEntry : ValidContract pmpMatchEntry.
   Proof. reflexivity. Qed.
@@ -1654,7 +1661,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_pmpCheckRWX).
     - apply (valid_contract _ H valid_contract_pmpMatchEntry).
     - apply (valid_contract _ H valid_contract_pmpAddrRange).
-    - apply (valid_contract _ H valid_contract_pmpMatchAddr).
+    - apply (valid_contract_debug _ H valid_contract_pmpMatchAddr).
     - apply (valid_contract_with_fuel _ _ H (@valid_contract_process_load bytes p)).
     - apply (valid_contract _ H (@valid_contract_mem_write_value bytes H0)).
     - cbn in H; inversion H.
