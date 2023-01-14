@@ -125,11 +125,10 @@ Module RiscvPmpModel2.
       unfold write_byte.
       destruct eq_dec.
       - subst paddr.
-        apply (lookup_insert_rev memmap i).
-        assumption.
+        now apply (lookup_insert_rev memmap i).
       - rewrite -> map_Forall_lookup in Hmap.
         rewrite (lookup_insert_ne _ _ _ _ n) in H0.
-        apply Hmap; assumption.
+        now apply Hmap.
     Qed.
 
     Lemma ptstomem_bv_app :
@@ -156,7 +155,7 @@ Module RiscvPmpModel2.
         iIntros (paddr) "%Hrep"; iSplit.
       - auto.
       - iIntros "H". now iExists bv.zero.
-      - iIntros "[%w H]". 
+      - iIntros "[%w H]".
         rewrite bv.seqBv_succ.
         rewrite big_sepL_cons.
         destruct (bv.appView byte (bytes * byte) w) as [b bs].
@@ -164,28 +163,22 @@ Module RiscvPmpModel2.
         iDestruct "H" as "[Hb Hbs]".
         iSplitL "Hb".
         + by iExists b.
-        + iApply "IHbytes".
-          iPureIntro.
+        + iApply ("IHbytes" with "[%]").
           rewrite bv.bin_add_small;
             rewrite bv_bin_one; lia.
-          iExists bs.
-          iFrame.
+          now iExists bs.
         + apply xlenbits_pos.
         + rewrite <- N.add_1_l; lia.
       - iIntros "H".
-        rewrite bv.seqBv_succ.
+        rewrite bv.seqBv_succ; try apply xlenbits_pos.
         rewrite big_sepL_cons.
         iDestruct "H" as "([%b Hb] & Hbs)".
-        iAssert (∃ (w : bv (bytes * byte)), interp_ptstomem (bv.one xlenbits + paddr) w)%I with "[Hbs]" as "H".
-        iPoseProof ("IHbytes" $! (bv.one xlenbits + paddr)) as "H".
-        iApply "H".
-        iPureIntro.
+        iAssert (∃ (w : bv (bytes * byte)), interp_ptstomem (bv.one xlenbits + paddr) w)%I with "[Hbs]" as "[%w H]".
+        iApply ("IHbytes" $! (bv.one xlenbits + paddr) with "[%]").
         rewrite bv.bin_add_small bv_bin_one; lia.
         iApply "Hbs".
-        iDestruct "H" as "[%w H]".
         iExists (bv.app b w).
         rewrite ptstomem_bv_app; iFrame.
-        apply xlenbits_pos.
         rewrite <- N.add_1_l; lia.
     Qed.
 
@@ -250,21 +243,17 @@ Module RiscvPmpModel2.
       iRevert (data w paddr μ memmap).
       iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
         iIntros (data w paddr μ memmap Hmap) "[Haddr [Hmem Hclose]]".
-      - iMod "Hclose" as "_". iModIntro.
-        iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "Hmem".
-        by iFrame.
+      - iMod "Hclose" as "_". iModIntro. iSplitL; last done.
+        now iApply (mem_inv_not_modified $! Hmap with "Hmem").
      -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
         destruct (bv.appView byte (bytes * byte) w) as [bw w].
         iDestruct "Haddr" as "[H Haddr]".
-        iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem H]".
-        iFrame "H".
+        iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
         iApply ("IHbytes" $! data w
                        (bv.add (bv.one xlenbits) paddr) (write_byte μ paddr bd)
-                    (insert paddr bd memmap)).
-        + iPureIntro.
-          by apply map_Forall_update.
-        + by iFrame.
+                    (insert paddr bd memmap) with "[%] [$Haddr $Hclose $Hmem]").
+        by apply map_Forall_update.
     Qed.
 
     Lemma write_ram_sound (bytes : nat) :
@@ -284,9 +273,9 @@ Module RiscvPmpModel2.
       iDestruct "H" as "(%w & H)".
       fold_semWP. rewrite semWP_val.
       iFrame "Hcp Hes Hregs".
-      iPoseProof (@fun_write_ram_works μ1 bytes paddr data memmap w Hmap
-                   with "[$H $Hmem $Hclose]") as "H".
-      iMod "H" as "[$ H]". by iSplitL.
+      iMod (@fun_write_ram_works μ1 bytes paddr data memmap w Hmap
+                   with "[$H $Hmem $Hclose]") as "[$ H]".
+      by iSplitL.
     Qed.
 
     Lemma decode_sound :
@@ -926,61 +915,23 @@ Module RiscvPmpModel2.
       iSplitR "Haddrs".
       - iIntros "Hpaddr".
         iFrame "Hmem1 Hmem2".
-        iApply (big_sepL_pure_impl _ _ Hpmp with "[Hpaddr]").
+        iApply (big_sepL_pure_impl Hpmp with "[Hpaddr]"); try lia.
         iIntros "%".
         now iApply (interp_ptstomem_big_sepS bytes $! paddr H).
       - unfold ptstoSth.
         iApply (interp_ptstomem_big_sepS bytes $! paddr H).
-        iApply (big_sepL_pure_impl _ _ Hpmp with "Haddrs [%]").
+        iApply (big_sepL_pure_impl Hpmp with "Haddrs [%]"); try lia.
         now exists acc.
-        Unshelve.
-        all: try lia.
     Qed.
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_return_pmp_ptsto bytes).
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      iIntros "[Hwithout Hptsto]".
       unfold interp_pmp_addr_access_without.
+      iIntros "[Hwithout Hptsto]".
       iApply ("Hwithout" with "Hptsto").
     Qed.
-
-    (* TODO: we will never have a partial match because we are using integers instead of bitvectors, eventually this lemma will make no sense *)
-    (* Lemma pmp_match_addr_never_partial : ∀ (a : Xlenbits) (rng : PmpAddrRange), *)
-    (*     pmp_match_addr a rng = PMP_Match ∨ pmp_match_addr a rng = PMP_NoMatch. *)
-    (* Proof. *)
-    (* intros a [[lo hi]|]; cbn; *)
-    (*   repeat *)
-    (*     match goal with *)
-    (*     | |- context[@bv.uleb ?n ?x ?y] => destruct (@bv.ule_spec n x y); cbn *)
-    (*     | |- context[@bv.ultb ?n ?x ?y] => destruct (@bv.ult_spec n x y); cbn *)
-    (*     end; auto; cbv [bv.ule bv.ult] in *; Lia.lia. *)
-    (* Qed. *)
-
-    (* Lemma machine_unlocked_pmp_get_perms : ∀ (cfg : Pmpcfg_ent), *)
-    (*     Pmp_cfg_unlocked cfg -> *)
-    (*     pmp_get_perms cfg Machine = PmpRWX. *)
-    (* Proof. *)
-    (*   intros cfg H. *)
-    (*   unfold pmp_get_perms. *)
-    (*   now apply Pmp_cfg_unlocked_bool in H as ->. *)
-    (* Qed. *)
-
-    (* Lemma machine_unlocked_check_pmp_access : ∀ (cfg0 cfg1 : Pmpcfg_ent) (a0 a1 addr : Xlenbits), *)
-    (*     Pmp_cfg_unlocked cfg0 ∧ Pmp_cfg_unlocked cfg1 -> *)
-    (*     check_pmp_access addr [(cfg0, a0); (cfg1, a1)] Machine = (true, None) ∨ check_pmp_access addr [(cfg0, a0); (cfg1, a1)] Machine = (true, Some PmpRWX). *)
-    (* Proof. *)
-    (* intros cfg0 cfg1 a0 a1 addr [Hcfg0 Hcfg1]. *)
-    (* unfold check_pmp_access, pmp_check, pmp_match_entry. *)
-    (* apply Pmp_cfg_unlocked_bool in Hcfg0. *)
-    (* apply Pmp_cfg_unlocked_bool in Hcfg1. *)
-    (* destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg1 a1 a0)) as [-> | ->]; *)
-    (*   destruct (pmp_match_addr_never_partial addr (pmp_addr_range cfg0 a0 [bv 0])) as [-> | ->]; *)
-    (*   unfold pmp_get_perms; *)
-    (*   rewrite ?Hcfg0; rewrite ?Hcfg1; *)
-    (*   auto. *)
-    (* Qed. *)
 
     Lemma lemSem : LemmaSem.
     Proof.
