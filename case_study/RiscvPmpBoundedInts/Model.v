@@ -832,75 +832,54 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma big_sepL_pure_impl (bytes : nat) :
-        ⊢ ∀ (paddr : Addr)
-            (entries : list PmpEntryCfg) (p : Privilege),
-            (⌜bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits⌝)%N -∗
-            (⌜N.of_nat bytes < bv.exp2 xlenbits⌝)%N -∗
-            (⌜∃ p0, Pmp_access paddr (bv.of_nat bytes) entries p p0⌝) -∗
-            (([∗ list] offset ∈ bv.seqBv paddr bytes,
-               ⌜∃ p0, Pmp_access offset%bv 
+        ∀ (paddr : Addr)
+            (entries : list PmpEntryCfg) (p : Privilege) p0,
+            (Pmp_access paddr (bv.of_nat bytes) entries p p0) ->
+            (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
+            (N.of_nat bytes < bv.exp2 xlenbits)%N ->
+            ⊢ (([∗ list] offset ∈ bv.seqBv paddr bytes,
+               ⌜∃ p0, Pmp_access offset%bv
                         (bv.of_nat 1) entries p p0⌝ -∗
                         ∃ w : Byte, interp_ptsto offset w)
-              ∗-∗ 
+              ∗-∗
               (⌜∃ p0, Pmp_access paddr (bv.of_nat bytes) entries p p0⌝ -∗
                         [∗ list] offset ∈ bv.seqBv paddr bytes,
                           ∃ w : Byte, interp_ptsto offset w))%I.
     Proof.
-      iInduction bytes as [|bytes] "IHbytes"; iIntros (paddr pmp p) "%Hrep %Hbytes %Hpmp".
+      pose proof xlenbits_pos.
+      iInduction bytes as [|bytes] "IHbytes"; iIntros (paddr pmp p p0 Hpmp Hrep Hbytes) "".
       now iSimpl.
       iSplit; iIntros "H".
-      - iIntros "%Haccess".
+      - iIntros "[%acc %Haccess]".
         simpl.
-        rewrite bv.seqBv_succ.
+        rewrite bv.seqBv_succ; try lia.
         rewrite big_sepL_cons.
         iDestruct "H" as "[Hb Hbs]".
-        iSimpl.
         iSplitL "Hb".
-        iApply "Hb".
-        iPureIntro.
-        destruct Haccess as [acc Haccess].
+        iApply ("Hb" with "[%]").
         exists acc.
         assert (Htmp: (N.of_nat 1 < bv.exp2 xlenbits)%N) by lia.
         rewrite <- (@bv.bin_of_nat_small _ _ Hbytes) in Hrep.
-        apply (pmp_access_reduced_width Hrep (bv.ult_nat_S_zero Htmp) (bv.ule_nat_one_S Htmp Hbytes) Haccess).
-        destruct bytes. (* we need to know a bit more about bytes to finish this case *)
-        now iSimpl.
+        refine (pmp_access_reduced_width Hrep (bv.ult_nat_S_zero Htmp) (bv.ule_nat_one_S Htmp Hbytes) Haccess).
+        destruct bytes; first by simpl. (* we need to know a bit more about bytes to finish this case *)
         iSimpl in "Hbs".
-        destruct Haccess as [acc Haccess].
-        apply pmp_access_addr_S_width_pred in Haccess.
-        iApply ("IHbytes" $! (bv.one xlenbits + paddr) pmp p _ _ _ with "Hbs").
-        iExists acc.
-        iPureIntro.
-        now rewrite (@bv.add_comm _ (bv.one xlenbits) paddr).
+        apply pmp_access_addr_S_width_pred in Haccess; try lia.
+        rewrite bv.add_comm in Haccess.
+        iApply ("IHbytes" $! (bv.one xlenbits + paddr) pmp p acc Haccess with "[%] [%] Hbs"); try lia.
+        rewrite bv.bin_add_small ?bv_bin_one; lia.
+        now iExists acc.
         rewrite bv.bin_of_nat_small; lia.
-        auto.
-        auto.
-        Unshelve.
-        all: try lia.
-        apply xlenbits_pos.
-        eapply N.le_lt_trans.
-        2: exact Hrep.
-        rewrite bv.bin_add_small.
-        rewrite bv_bin_one; lia.
-        rewrite bv_bin_one; lia.
-        exists acc.
-        now rewrite (@bv.add_comm _ (bv.one xlenbits) paddr).
-      - iSpecialize ("H" $! Hpmp).
-        rewrite bv.seqBv_succ.
+      - iSpecialize ("H" $! (ex_intro _ _ Hpmp)).
+        rewrite bv.seqBv_succ; try lia.
         iDestruct "H" as "[Hw H]"; fold seq.
         simpl.
         iSplitL "Hw"; auto.
         destruct bytes; first now simpl.
-        iApply "IHbytes"; auto.
-        1-3: iPureIntro; try lia.
+        apply pmp_access_addr_S_width_pred in Hpmp; auto.
+        rewrite bv.add_comm in Hpmp.
+        iApply ("IHbytes" $! (bv.one xlenbits + paddr) pmp p p0 Hpmp with "[%] [%]"); auto; try lia.
         rewrite bv.bin_add_small bv_bin_one; lia.
-        destruct Hpmp as [acc Hpmp].
-        exists acc.
-        rewrite bv.add_comm.
-        apply pmp_access_addr_S_width_pred; auto.
         rewrite bv.bin_of_nat_small; try lia.
-        apply xlenbits_pos; lia.
-        lia.
     Qed.
 
     Lemma extract_pmp_ptsto_sound (bytes : nat) :
@@ -941,25 +920,21 @@ Module RiscvPmpModel2.
       lia.
       apply minAddr_le_ule; auto.
       apply maxAddr_le_ule; auto.
-      rewrite eq. 
+      rewrite eq.
       rewrite ?big_opL_app.
       iDestruct "Hmem" as "(Hmem1 & Haddrs & Hmem2)".
       iSplitR "Haddrs".
       - iIntros "Hpaddr".
         iFrame "Hmem1 Hmem2".
-        unfold ptstoSth.
-        iPoseProof (big_sepL_pure_impl bytes $! _ _ _ _ _ _ with "[Hpaddr]") as "Haddrs".
+        iApply (big_sepL_pure_impl _ _ Hpmp with "[Hpaddr]").
         iIntros "%".
         now iApply (interp_ptstomem_big_sepS bytes $! paddr H).
-        iFrame.
       - unfold ptstoSth.
         iApply (interp_ptstomem_big_sepS bytes $! paddr H).
-        iApply (big_sepL_pure_impl bytes $! _ _ _ _ _ _ with "Haddrs").
-        iPureIntro.
+        iApply (big_sepL_pure_impl _ _ Hpmp with "Haddrs [%]").
         now exists acc.
         Unshelve.
         all: try lia.
-        all: now exists acc.
     Qed.
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :
