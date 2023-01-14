@@ -502,37 +502,31 @@ Import BlockVerificationDerived2.
   Proof.
     cbn - [interp_pmp_entries]. iLöb as "Hind".
     iIntros "(Hmstatus & Hmtvec & Hmcause & [%mepcv Hmepc] & Hcurpriv & Hgprs & Hpmpentries & #Hmem & Hpc & HaccU & Hnextpc & Hinstrs)".
-    iApply (femto_handler_verified with "[-] []").
-    - unfold femto_handler_pre, femto_pmpentries; iFrame.
-      iSplitL "Hmepc"; first now iExists mepcv.
-      iExact "Hmem".
-    - iIntros "(Hmstatus & Hmtvec & Hmcause & Hcurpriv & Hgprs & Hpmpentries & HaccU & #Hmem' & [%epc (Hmepc & Hpc)] & Hnpc & Hhandler)".
-      iApply LoopVerification.valid_semTriple_loop.
-      iSplitL "Hmem Hmstatus Hmtvec Hmcause Hmepc Hpc Hcurpriv Hgprs Hpmpentries Hnpc HaccU".
-      + unfold LoopVerification.Step_pre. cbn.
-        iFrame "Hcurpriv Hmtvec Hpc Hnpc Hmcause Hmstatus Hpmpentries HaccU Hgprs".
-        now iExists epc.
-      + iSplitL "".
-        { iModIntro.
-          unfold LoopVerification.CSRMod.
-          iIntros "(_ & _ & _ & %eq & _)".
-          inversion eq.
-        }
+    iApply (femto_handler_verified with "[$Hmstatus $Hmtvec $Hmcause Hmepc $Hcurpriv $Hgprs $Hpmpentries $Hpc $HaccU $Hnextpc $Hinstrs $Hmem] []");
+      first by now iExists mepcv.
+    iIntros "(Hmstatus & Hmtvec & Hmcause & Hcurpriv & Hgprs & Hpmpentries & HaccU & #Hmem' & [%epc (Hmepc & Hpc)] & Hnpc & Hhandler)".
+    iApply (LoopVerification.valid_semTriple_loop with "[Hmem $Hmstatus $Hmtvec $Hmcause Hmepc $Hpc $Hcurpriv $Hgprs $Hpmpentries $Hnpc $HaccU Hhandler]").
+    iSplitL "Hmepc"; first by now iExists epc.
+    iSplitL "".
+    { iModIntro.
+      unfold LoopVerification.CSRMod.
+      iIntros "(_ & _ & _ & %eq & _)".
+      inversion eq.
+    }
 
-        iSplitR "".
-        { iModIntro.
-          unfold LoopVerification.Trap.
-          iIntros "(HaccU & Hgprs & Hpmpentries & Hmcause & Hcurpriv & Hnextpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
-          iApply "Hind".
-          iFrame.
-          iSplitR; first iExact "Hmem"; now iExists _.
-        }
+    iSplitR "".
+    { iModIntro.
+      unfold LoopVerification.Trap.
+      iIntros "(HaccU & Hgprs & Hpmpentries & Hmcause & Hcurpriv & Hnextpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
+      iApply ("Hind" with "[$Hmstatus $Hmtvec $Hmcause $Hmepc $Hcurpriv $Hpmpentries $Hpc $HaccU Hnextpc Hmem $Hgprs $Hhandler $Hmem]").
+      now iExists _.
+    }
 
-        { iModIntro.
-          unfold LoopVerification.Recover.
-          iIntros "(_ & _ & _ & %eq & _)".
-          inversion eq.
-        }
+    { iModIntro.
+      unfold LoopVerification.Recover.
+      iIntros "(_ & _ & _ & %eq & _)".
+      inversion eq.
+    }
   Qed.
 
   Lemma femtokernel_manualStep2 `{sailGS Σ} :
@@ -578,8 +572,7 @@ Import BlockVerificationDerived2.
     unfold LoopVerification.Trap.
     iModIntro.
     iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
-    iApply femtokernel_hander_safe.
-    iFrame.
+    iApply (femtokernel_hander_safe with "[$Hmem $Hgprs $Hpmpents $Hmcause $Hcurpriv Hnpc $Hpc $Hmtvec $Hmstatus $Hmepc $Hfortytwo $Hhandler]").
     now iExists _.
 
     iModIntro.
@@ -636,19 +629,11 @@ Import BlockVerificationDerived2.
     - unfold femto_init_pre. cbn -[ptsto_instrs].
       iDestruct "Hpre" as "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo) & Hpc & Hnpc & Hinit)".
       rewrite Model.RiscvPmpModel2.gprs_equiv.
-      iFrame "Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmp0cfg Hpmp1cfg Hfortytwo Hpc Hnpc Hinit".
-      repeat (iSplitR; first done).
-      cbn.
-      now iFrame.
-    - iIntros (an) "Hpost".
-      iApply "Hk".
-      unfold femto_init_post.
-      cbn -[ptsto_instrs].
-      iDestruct "Hpost" as "(Hpc & Hnpc & Hhandler & ([%eq _] & Hrest))".
-      iDestruct "Hrest" as "(H1 & H2 & H3 & H4 & H5 & Hrest)".
-      subst. iFrame.
-      rewrite Model.RiscvPmpModel2.gprs_equiv. cbn -[ptsto_instrs].
-      iDestruct "Hrest" as "(Hgprs & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo)".
+      now iFrame "Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmp0cfg Hpmp1cfg Hfortytwo Hpc Hnpc Hinit Hpmpaddr0 Hpmpaddr1".
+    - iIntros (an) "(Hpc & Hnpc & Hhandler & [%eq _] & (Hmstatus & Hmtvec & Hmcause & Hmepc & Hcp & (Hgprs & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo)))".
+      iApply ("Hk" with "[Hpc $Hnpc $Hhandler $Hmstatus $Hmtvec $Hmcause $Hmepc $Hcp Hgprs $Hpmp0cfg $Hpmpaddr0 $Hpmp1cfg $Hpmpaddr1 $Hfortytwo]").
+      cbn in eq. subst.
+      rewrite Model.RiscvPmpModel2.gprs_equiv.
       now iFrame.
   Qed.
 
@@ -676,20 +661,17 @@ Import BlockVerificationDerived2.
       WP_loop.
   Proof.
     iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpc & Hfortytwo & Hadv & Hnextpc & Hinit & Hhandler)".
-    iApply (femto_init_verified with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1 Hpc Hinit Hfortytwo Hnextpc]").
-    - unfold femto_init_pre.
-      iFrame.
-    - iIntros "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hfortytwo) & Hpc & Hnextpc & Hinit)".
-      iAssert (interp_pmp_entries femto_pmpentries) with "[Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1]" as "Hpmpents".
-      { unfold interp_pmp_entries; cbn; iFrame. }
-      iApply fupd_wp.
-      iMod (femtokernel_manualStep2 with "[Hmstatus Hmtvec Hmcause Hgprs Hcurpriv Hpmpents Hfortytwo Hpc Hnextpc Hhandler Hadv Hmepc ]") as "[%mpp Hlooppre]".
-      { iFrame.
-        iDestruct "Hmstatus" as "[%mst Hmstatus]".
-        destruct mst as [mpp].
-        now iExists mpp.
-      }
-      now iApply LoopVerification.valid_semTriple_loop.
+    iApply (femto_init_verified with "[$Hmstatus $Hmtvec $Hmcause $Hmepc $Hcurpriv $Hgprs $Hpmp0cfg $Hpmpaddr0 $Hpmp1cfg $Hpmpaddr1 $Hpc $Hinit $Hfortytwo $Hnextpc]").
+    iIntros "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hfortytwo) & Hpc & Hnextpc & Hinit)".
+    iAssert (interp_pmp_entries femto_pmpentries) with "[Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1]" as "Hpmpents".
+    { unfold interp_pmp_entries; cbn; iFrame. }
+    iApply fupd_wp.
+    iMod (femtokernel_manualStep2 with "[Hmstatus $Hmtvec $Hmcause $Hgprs $Hcurpriv $Hpmpents $Hfortytwo $Hpc $Hnextpc $Hhandler $Hadv $Hmepc ]") as "[%mpp Hlooppre]".
+    {iDestruct "Hmstatus" as "[%mst Hmstatus]".
+      destruct mst as [mpp].
+      now iExists mpp.
+    }
+    now iApply LoopVerification.valid_semTriple_loop.
   Qed.
 
   Definition mem_has_word (μ : Memory) (a : Val ty_word) (w : Val ty_word) : Prop :=
@@ -784,12 +766,10 @@ Import BlockVerificationDerived2.
       iSplitL "Hmema".
       + iApply (intro_ptsto_instr with "Hmema"); auto; Lia.lia.
       + rewrite (@bv.add_comm _ a bv_instrsize).
-        iApply "IH".
-        * iPureIntro.
-          rewrite bv.bin_add_small;
+        iApply ("IH" with "[%] [% //] [-]").
+        * rewrite bv.bin_add_small;
           cbn -[N.mul] in *;
           now Lia.lia.
-        * now iPureIntro.
         * now rewrite ?bv.add_assoc.
   Qed.
 
