@@ -23,10 +23,12 @@ coq: Makefile.coq
 
 patch:
 	$(Q) patch -p1 -N -r - < case_study/patches/RiscvPmp/duplicate_add.patch || true
+	$(Q) patch -p1 -N -r - < case_study/patches/RiscvPmpBoundedInts/duplicate_add.patch || true
 	$(Q) patch -p1 -N -r - < case_study/patches/MinimalCaps/duplicate_add.patch || true
 
 unpatch:
 	$(Q) patch -p1 -NR -r - < case_study/patches/RiscvPmp/duplicate_add.patch || true
+	$(Q) patch -p1 -NR -r - < case_study/patches/RiscvPmpBoundedInts/duplicate_add.patch || true
 	$(Q) patch -p1 -NR -r - < case_study/patches/MinimalCaps/duplicate_add.patch || true
 
 Makefile.coq: _CoqProject Makefile $(SRCS)

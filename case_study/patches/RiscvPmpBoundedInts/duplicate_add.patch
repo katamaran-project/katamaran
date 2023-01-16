@@ -1,0 +1,33 @@
+diff --git a/case_study/RiscvPmpBoundedInts/Base.v b/case_study/RiscvPmpBoundedInts/Base.v
+index b197664..c34a642 100644
+--- a/case_study/RiscvPmpBoundedInts/Base.v
++++ b/case_study/RiscvPmpBoundedInts/Base.v
+@@ -142,6 +142,7 @@ Inductive PmpAddrMatch : Set :=
+ Inductive ROP : Set :=
+ | RISCV_ADD
+ | RISCV_SUB
++| RISCV_ADD'
+ .
+ 
+ Inductive IOP : Set :=
+@@ -413,7 +414,7 @@ Section Finite.
+ 
+   #[export,program] Instance ROP_finite :
+     Finite ROP :=
+-    {| enum := [RISCV_ADD;RISCV_SUB] |}.
++    {| enum := [RISCV_ADD;RISCV_SUB;RISCV_ADD'] |}.
+ 
+   #[export,program] Instance IOP_finite :
+     Finite IOP :=
+diff --git a/case_study/RiscvPmpBoundedInts/Machine.v b/case_study/RiscvPmpBoundedInts/Machine.v
+index a6db7ea..56c64b6 100644
+--- a/case_study/RiscvPmpBoundedInts/Machine.v
++++ b/case_study/RiscvPmpBoundedInts/Machine.v
+@@ -923,6 +923,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
+        match: op in rop with
+        | RISCV_ADD => rs1_val +ᵇ rs2_val
+        | RISCV_SUB => rs1_val -ᵇ rs2_val
++       | RISCV_ADD' => rs1_val +ᵇ rs2_val
+        end in
+      call wX rd result ;;
+      stm_val ty_retired RETIRE_SUCCESS.
