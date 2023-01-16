@@ -182,17 +182,6 @@ Module RiscvPmpModel2.
         rewrite <- N.add_1_l; lia.
     Qed.
 
-    (* Lemma mem_inv_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal) *)
-    (*                          (paddr : Addr) (data : MemVal), *)
-    (*     ⊢ ⌜map_Forall (λ (a : Addr) (v : Word), (γ, μ).2 a = v) memmap⌝ -∗ *)
-    (*       gen_heap.gen_heap_interp (<[paddr := data]> memmap) -∗ *)
-    (*       mem_inv sailGS_memGS (fun_write_ram μ paddr data). *)
-    (* Proof. *)
-    (*   iIntros (γ μ memmap paddr data) "%Hmap Hmem". *)
-    (*   iExists (<[paddr := data]> memmap); iFrame. *)
-    (*   iPureIntro; apply (map_Forall_update _ _ _ _ Hmap). *)
-    (* Qed. *)
-
     Lemma fun_read_ram_works {bytes memmap μ paddr} {w : bv (bytes * byte)} :
       map_Forall (λ (a : Addr) (v : Base.Byte), μ a = v) memmap ->
            interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ⊢
@@ -529,8 +518,6 @@ Module RiscvPmpModel2.
       rewrite ?bv.bin_add_small; lia.
     Qed.
 
-    (* TODO: move all these w <=ᵘ bytes stuff as an early assumption to get rid of all the "exact H..." tactics *)
-    (* TODO: heavy cleanup needed! *)
     Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
       forall paddr rng,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
@@ -544,51 +531,18 @@ Module RiscvPmpModel2.
       assert (Hrep_paddr_w: (bv.bin paddr + bv.bin w < bv.exp2 xlenbits)%N) by lia.
       apply bv.ule_cases in Hw as [Hw|Hw]; last by subst.
       destruct rng as [[lo hi]|]; last by simpl.
-      revert Hpmp.
-      unfold pmp_match_addr.
-      destruct (hi <ᵘ? lo) eqn:?; auto.
-      destruct (paddr + bytes <=ᵘ? lo) eqn:?; first by cbn.
-      rewrite orb_false_l.
-      destruct (hi <=ᵘ? paddr) eqn:?; first by intros.
-      destruct (paddr + bytes <=ᵘ? hi) eqn:?;
-        last by (rewrite andb_false_r; inversion 1).
-      intros H.
-      destruct (lo <ᵘ? paddr) eqn:?.
-      - rewrite ?bv.uleb_ugt ?bv.uleb_ule ?bv.ultb_ult ?bv.ultb_uge in Heqb0 Heqb1 Heqb3 Heqb.
-        assert (Hlt: lo <ᵘ paddr + w).
-        { unfold bv.ult in *.
-          rewrite ?bv.bin_add_small; auto.
-          Lia.lia.
-        }
-        rewrite <- bv.uleb_ugt in Hlt.
-        rewrite Hlt.
-        simpl.
-        rewrite <- bv.ultb_ult in Heqb3.
-        apply bv.ultb_uleb in Heqb3.
-        rewrite Heqb3.
-        enough (paddr + w <=ᵘ? hi = true) by now rewrite H0.
-        rewrite bv.uleb_ule.
-        apply bv.ule_trans with (y := paddr + bytes); auto.
-        apply bv.add_ule_mono; auto.
-        apply bv.ult_ule_incl; auto.
-        now rewrite bv.uleb_ule in Heqb2.
-      - rewrite ?bv.uleb_ugt ?bv.uleb_ule ?bv.ultb_ult ?bv.ultb_uge in Heqb0 Heqb1 Heqb2 Heqb3 Heqb.
-        rewrite andb_true_r in H.
-        destruct (lo <=ᵘ? paddr) eqn:Heqlp; inversion H.
-        rewrite bv.uleb_ule in Heqlp.
-        replace paddr with lo in * by now apply bv.ule_antisymm.
-        clear Heqb3 Heqb H Heqlp.
-        assert (lo <ᵘ lo + w).
-        { unfold bv.ugt, bv.ult.
-          rewrite bv.bin_add_small; lia.
-        }
-        rewrite <-bv.uleb_ugt in H.
-        rewrite H.
-        enough ((lo + w <=ᵘ? hi) = true) by now rewrite H0.
-        rewrite bv.uleb_ule.
-        unfold bv.ule, bv.ult in *.
-        rewrite bv.bin_add_small in Heqb2; try lia.
-        rewrite bv.bin_add_small; lia.
+      unfold bv.ule, bv.ult in *.
+      assert (Hb: bv.zero <ᵘ bytes).
+      apply bv.ult_trans with (y := w); auto.
+      apply pmp_match_addr_match_conditions_1 in Hpmp as (Hlohi & Hlopw & Hlop & Hphi & Hpwhi); auto.
+      apply pmp_match_addr_match_conditions_2; auto.
+      unfold bv.ult, bv.ule in *.
+      rewrite ?bv.bin_add_small; auto.
+      lia.
+      apply bv.ule_trans with (y := paddr + bytes); auto.
+      unfold bv.ult, bv.ule in *.
+      rewrite ?bv.bin_add_small; auto.
+      lia.
     Qed.
 
     Lemma pmp_match_addr_reduced_width_no_match (bytes w : Xlenbits) :
@@ -599,26 +553,17 @@ Module RiscvPmpModel2.
       pmp_match_addr paddr w rng = PMP_NoMatch.
     Proof.
       intros paddr [[lo hi]|] Hass Hle; last by simpl.
-      unfold pmp_match_addr.
-      destruct (hi <ᵘ? lo); auto.
-      destruct (paddr + bytes <=ᵘ? lo) eqn:?.
-      rewrite orb_true_l.
-      apply bv.uleb_ule in Heqb.
-      apply (@bv_ule_base _ _ _ w _ Hass Hle) in Heqb.
-      apply bv.uleb_ule in Heqb.
-      rewrite Heqb.
-      now rewrite orb_true_l.
-      rewrite orb_false_l.
-      destruct (hi <=ᵘ? paddr).
-      now rewrite orb_true_r.
-      destruct (lo <=ᵘ? paddr).
-      destruct (paddr + bytes <=ᵘ? hi) eqn:?.
-      apply bv.uleb_ule in Heqb0.
-      apply (@bv_ule_base _ _ _ w _ Hass Hle) in Heqb0.
-      apply bv.uleb_ule in Heqb0.
-      now rewrite Heqb0.
-      now rewrite andb_false_r.
-      now rewrite andb_false_l.
+      intros H; apply pmp_match_addr_nomatch_1 in H as [H|Hcond];
+        try discriminate.
+      apply pmp_match_addr_nomatch_2.
+      right; intros.
+      inversion H.
+      subst.
+      destruct (Hcond _ _ H) as [?|[Hs|?]]; auto.
+      right; left; auto.
+      unfold bv.ule in *.
+      rewrite ?bv.bin_add_small; try lia.
+      rewrite ?bv.bin_add_small in Hs; try lia.
     Qed.
 
     Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
@@ -688,29 +633,6 @@ Module RiscvPmpModel2.
       destruct b; try discriminate.
       apply check_pmp_access_reduced_width with (w := w) in E; auto.
       now rewrite E.
-    Qed.
-
-    (* TODO: move some pmp predicate specific lemmas into sig.v? *)
-    Lemma pmp_match_addr_match_conditions_1 : forall paddr w lo hi,
-        bv.zero <ᵘ w ->
-        pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match ->
-        lo <=ᵘ hi ∧ lo <ᵘ paddr + w ∧ lo <=ᵘ paddr ∧ paddr <ᵘ hi ∧ paddr + w <=ᵘ hi.
-    Proof.
-      unfold pmp_match_addr.
-      intros paddr w lo hi Hw H.
-      destruct (hi <ᵘ? lo) eqn:Ehilo; try discriminate H.
-      destruct (paddr + w <=ᵘ? lo) eqn:Epwlo; first done.
-      destruct (hi <=ᵘ? paddr) eqn:Ehip; first done.
-      simpl in H.
-      destruct (lo <=ᵘ? paddr) eqn:Elop; last done.
-      destruct (paddr + w <=ᵘ? hi) eqn:Epwhi; last done.
-      rewrite bv.ultb_antisym in Ehilo.
-      apply negb_false_iff in Ehilo.
-      apply bv.uleb_ule in Ehilo.
-      apply bv.uleb_ule in Elop.
-      apply bv.uleb_ugt in Ehip.
-      apply bv.uleb_ugt in Epwlo.
-      now apply bv.uleb_ule in Epwhi.
     Qed.
 
     Lemma pmp_match_addr_addr_S_width_pred (bytes : nat) : forall paddr rng res,

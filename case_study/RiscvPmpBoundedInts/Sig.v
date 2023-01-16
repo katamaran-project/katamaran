@@ -172,6 +172,19 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | None          => PMP_NoMatch
       end.
 
+  Ltac bv_comp :=
+      repeat match goal with
+      | H: (?a <ᵘ? ?b) = true |- _ =>
+          rewrite bv.ultb_ult in H
+      | H: (?a <ᵘ? ?b) = false |- _ =>
+          rewrite bv.ultb_uge in H
+      | H: (?a <=ᵘ? ?b) = true |- _ =>
+          rewrite bv.uleb_ule in H
+      | H: (?a <=ᵘ? ?b) = false |- _ =>
+          rewrite bv.uleb_ugt in H
+      end.
+
+
     Lemma pmp_match_addr_match_conditions_1 : forall (paddr w lo hi : Val ty_xlenbits),
         bv.zero <ᵘ w ->
         pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match ->
@@ -187,11 +200,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       destruct ((paddr + w)%bv <=ᵘ? hi) eqn:Epwhi; last done.
       rewrite bv.ultb_antisym in Ehilo.
       apply negb_false_iff in Ehilo.
-      apply bv.uleb_ule in Ehilo.
-      apply bv.uleb_ule in Elop.
-      apply bv.uleb_ugt in Ehip.
-      apply bv.uleb_ugt in Epwlo.
-      now apply bv.uleb_ule in Epwhi.
+      now bv_comp.
     Qed.
 
     Lemma pmp_match_addr_match_conditions_2 : forall paddr w lo hi,
@@ -211,6 +220,79 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       replace (hi <=ᵘ? paddr) with false by (symmetry; now rewrite bv.uleb_ugt).
       replace (lo <=ᵘ? paddr) with true by (symmetry; now rewrite bv.uleb_ule).
       now replace ((paddr + w)%bv <=ᵘ? hi) with true by (symmetry; now rewrite bv.uleb_ule).
+    Qed.
+
+    Lemma pmp_match_addr_nomatch_conditions : forall paddr w lo hi,
+        hi <ᵘ lo ->
+        pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
+    Proof.
+      intros.
+      unfold pmp_match_addr.
+      rewrite <- bv.ultb_ult in H.
+      now rewrite H.
+    Qed.
+
+    Lemma pmp_match_addr_nomatch_conditions_1 : forall paddr w lo hi,
+        (paddr + w)%bv <=ᵘ lo ->
+        pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
+    Proof.
+      intros.
+      unfold pmp_match_addr.
+      destruct (hi <ᵘ? lo) eqn:Ehilo; auto.
+      apply bv.uleb_ule in H.
+      now rewrite H.
+    Qed.
+
+    Lemma pmp_match_addr_nomatch_conditions_2 : forall paddr w lo hi,
+        hi <=ᵘ paddr ->
+        pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
+    Proof.
+      intros.
+      unfold pmp_match_addr.
+      destruct (hi <ᵘ? lo) eqn:Ehilo; auto.
+      apply bv.uleb_ule in H.
+      rewrite H.
+      now rewrite Bool.orb_true_r.
+    Qed.
+
+    Lemma pmp_match_addr_none: forall paddr w,
+        pmp_match_addr paddr w None = PMP_NoMatch.
+    Proof. auto. Qed.
+
+    Lemma pmp_match_addr_nomatch_1 : forall paddr w rng,
+        pmp_match_addr paddr w rng = PMP_NoMatch ->
+        rng = None \/
+        (∀ lo hi, rng = Some (lo , hi) ->
+         (hi <ᵘ lo \/ (paddr + w)%bv <=ᵘ lo \/ hi <=ᵘ paddr)).
+    Proof.
+      intros paddr w [[lo hi]|]; auto.
+      intros H.
+      right; intros l h Heq; inversion Heq; subst.
+      unfold pmp_match_addr in H.
+      destruct (h <ᵘ? l) eqn:?; auto.
+      left; now bv_comp.
+      destruct ((paddr + w)%bv <=ᵘ? l) eqn:?.
+      right; left; now bv_comp.
+      destruct (h <=ᵘ? paddr) eqn:?.
+      right; right; now bv_comp.
+      simpl in H.
+      destruct (l <=ᵘ? paddr) eqn:?; destruct ((paddr + w)%bv <=ᵘ? h) eqn:?; inversion H.
+    Qed.
+
+    Lemma pmp_match_addr_nomatch_2 : forall paddr w rng,
+        (rng = None \/
+           (∀ lo hi, rng = Some (lo , hi) ->
+            (hi <ᵘ lo \/ (paddr + w)%bv <=ᵘ lo \/ hi <=ᵘ paddr))) ->
+        pmp_match_addr paddr w rng = PMP_NoMatch.
+    Proof.
+      intros paddr w [[lo hi]|]; auto.
+      intros [H|H].
+      inversion H.
+      assert (Heq: Some (lo , hi) = Some (lo , hi)) by auto.
+      destruct (H lo hi Heq) as [Hs|[Hs|Hs]]; revert Hs.
+      apply pmp_match_addr_nomatch_conditions.
+      apply pmp_match_addr_nomatch_conditions_1.
+      apply pmp_match_addr_nomatch_conditions_2.
     Qed.
 
     Definition pmp_match_entry (a : Val ty_xlenbits) (width : Val ty_xlenbits) (m : Val ty_privilege) (cfg : Val ty_pmpcfg_ent) (lo hi : Val ty_xlenbits) : Val ty_pmpmatch :=

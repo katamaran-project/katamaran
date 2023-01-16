@@ -1491,51 +1491,6 @@ Module RiscvPmpValidContracts.
 
   Open Scope N_scope.
 
-  Lemma Nle_lt_ltb : forall x y z,
-      x <= y -> y < z -> z <? x = false.
-  Proof. intros. rewrite N.ltb_ge. lia. Qed.
-
-  Lemma N_ltb_0 (n : N) : N.ltb n N0 = false.
-  Proof. apply N.ltb_ge, N.le_0_l. Qed.
-
-  (* TODO: move pmp_match_addr lemmas into Sig.v *)
-  Lemma pmp_match_addr_nomatch_conditions : forall paddr w lo hi,
-      hi <ᵘ lo ->
-      pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
-  Proof.
-    intros.
-    unfold pmp_match_addr.
-    rewrite <- bv.ultb_ult in H.
-    now rewrite H.
-  Qed.
-
-  Lemma pmp_match_addr_nomatch_conditions_1 : forall paddr w lo hi,
-      (paddr + w)%bv <=ᵘ lo ->
-      pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
-  Proof.
-    intros.
-    unfold pmp_match_addr.
-    destruct (hi <ᵘ? lo) eqn:Ehilo; auto.
-    apply bv.uleb_ule in H.
-    now rewrite H.
-  Qed.
-
-  Lemma pmp_match_addr_nomatch_conditions_2 : forall paddr w lo hi,
-      hi <=ᵘ paddr ->
-      pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
-  Proof.
-    intros.
-    unfold pmp_match_addr.
-    destruct (hi <ᵘ? lo) eqn:Ehilo; auto.
-    apply bv.uleb_ule in H.
-    rewrite H.
-    now rewrite Bool.orb_true_r.
-  Qed.
-
-  Lemma pmp_match_addr_none: forall paddr w,
-      pmp_match_addr paddr w None = PMP_NoMatch.
-  Proof. auto. Qed.
-
   (* TODO: reprove this contract! notable change: we convert the width to a bitvector in the body of pmpCheck *)
   (* TODO: the pmpCheck contract requires some manual proof effort in the case
          that no pmp entry matches (i.e. we end up in the final check of
