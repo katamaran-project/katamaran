@@ -77,6 +77,7 @@ Module Type ExpressionsOn (Import TY : Types).
   | exp_zext    {m n} (e : Exp Γ (ty.bvec m)) {p : IsTrue (m <=? n)} : Exp Γ (ty.bvec n)
   | exp_get_slice_int {n} (e : Exp Γ ty.int) : Exp Γ (ty.bvec n)
   | exp_unsigned {n} (e : Exp Γ (ty.bvec n)) : Exp Γ ty.int
+  | exp_truncate {n} (m : nat) (e : Exp Γ (ty.bvec n)) {p : IsTrue (m <=? n)} : Exp Γ (ty.bvec m)
   | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty.list σ)
   (* Experimental features *)
   | exp_bvec    {n} (es : Vector.t (Exp Γ ty.bool) n) : Exp Γ (ty.bvec n)
@@ -116,6 +117,7 @@ Module Type ExpressionsOn (Import TY : Types).
     Hypothesis (P_zext    : forall {m n} (p : IsTrue (Nat.leb m n)) (e : Exp Γ (ty.bvec m)), P (ty.bvec m) e -> P (ty.bvec n) (exp_zext e)).
     Hypothesis (P_get_slice_int : forall {n} (e : Exp Γ ty.int), P ty.int e -> P (ty.bvec n) (exp_get_slice_int e)).
     Hypothesis (P_unsigned : forall {n} (e : Exp Γ (ty.bvec n)), P (ty.bvec n) e -> P ty.int (exp_unsigned e)).
+    Hypothesis (P_truncate : forall {n} (m : nat) (p : IsTrue (Nat.leb m n)) (e : Exp Γ (ty.bvec n)), P (ty.bvec n) e -> P (ty.bvec m) (exp_truncate m e)).
     Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty.list σ) (exp_list es)).
     Hypothesis (P_bvec    : forall (n : nat) (es : Vector.t (Exp Γ ty.bool) n), PV es -> P (ty.bvec n) (exp_bvec es)).
     Hypothesis (P_tuple   : forall (σs : Ctx Ty) (es : Env (Exp Γ) σs), PE es -> P (ty.tuple σs) (exp_tuple es)).
@@ -135,6 +137,7 @@ Module Type ExpressionsOn (Import TY : Types).
       | exp_zext e                => ltac:(apply P_zext; auto)
       | exp_get_slice_int e       => ltac:(apply P_get_slice_int; auto)
       | exp_unsigned e            => ltac:(apply P_unsigned; auto)
+      | exp_truncate m e          => ltac:(apply P_truncate; auto)
       | exp_list es               => ltac:(apply P_list; induction es; cbn; auto using unit)
       | exp_bvec es               => ltac:(apply P_bvec; induction es; cbn; auto using unit)
       | exp_tuple es              => ltac:(apply P_tuple; induction es; cbn; auto using unit)
@@ -160,6 +163,7 @@ Module Type ExpressionsOn (Import TY : Types).
     | exp_zext e          => bv.zext (eval e δ)
     | exp_get_slice_int e => bv.of_Z (eval e δ)
     | exp_unsigned e      => bv.unsigned (eval e δ)
+    | exp_truncate m e    => bv.truncate m (eval e δ)
     | exp_list es         => List.map (fun e => eval e δ) es
     | exp_bvec es         => Vector.t_rect
                                _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => bv m)

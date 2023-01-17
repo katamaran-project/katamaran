@@ -67,6 +67,7 @@ Module Type TermsOn (Import TY : Types).
   | term_zext    {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n)
   | term_get_slice_int {n} (t : Term Σ ty.int) : Term Σ (ty.bvec n)
   | term_unsigned {n} (t : Term Σ (ty.bvec n)) : Term Σ ty.int
+  | term_truncate {n} (m : nat) {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec m)
   | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs)
   | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
   | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
@@ -80,6 +81,7 @@ Module Type TermsOn (Import TY : Types).
   #[global] Arguments term_zext {_ _ _ p} t.
   #[global] Arguments term_get_slice_int {_ _} t.
   #[global] Arguments term_unsigned {_ _} t.
+  #[global] Arguments term_truncate {_ _} m {p} t.
   #[global] Arguments term_tuple {_ _} ts.
   #[global] Arguments term_union {_} U K t.
   #[global] Arguments term_record {_} R ts.
@@ -137,6 +139,7 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (P_zext       : forall {m n} {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec m)), P (ty.bvec m) t -> P (ty.bvec n) (term_zext t)).
     Hypothesis (P_get_slice_int : forall {n} (t : Term Σ ty.int), P ty.int t -> P (ty.bvec n) (term_get_slice_int t)).
     Hypothesis (P_unsigned : forall {n} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P ty.int (term_unsigned t)).
+    Hypothesis (P_truncate   : forall {n} (m : nat) {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec m) (term_truncate m t)).
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs) (IH : PE es), P (ty.tuple σs) (term_tuple es)).
     Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)).
     Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)).
@@ -154,6 +157,7 @@ Module Type TermsOn (Import TY : Types).
       | term_zext t         => ltac:(eapply P_zext; eauto)
       | term_get_slice_int t => ltac:(eapply P_get_slice_int; eauto)
       | term_unsigned t     => ltac:(eapply P_unsigned; eauto)
+      | term_truncate m t   => ltac:(eapply P_truncate; eauto)
       | term_tuple ts       => ltac:(eapply P_tuple, env.all_intro; eauto)
       | term_union U K t    => ltac:(eapply P_union; eauto)
       | term_record R ts    => ltac:(eapply P_record, env.all_intro; eauto)
@@ -194,6 +198,11 @@ Module Type TermsOn (Import TY : Types).
     Term_eqb (term_get_slice_int x) (term_get_slice_int y) := Term_eqb x y;
     Term_eqb (@term_unsigned _ m x)   (@term_unsigned _ n y) with eq_dec m n => {
         Term_eqb (@term_unsigned _ m x) (@term_unsigned _ ?(m) y) (left eq_refl) :=
+          Term_eqb x y;
+        Term_eqb _ _ (right _) := false
+      };
+    Term_eqb (@term_truncate _ a m p x) (@term_truncate _ b m q y) with eq_dec a b => {
+        Term_eqb (@term_truncate _ a m p x) (@term_truncate _ ?(a) m q y) (left eq_refl) :=
           Term_eqb x y;
         Term_eqb _ _ (right _) := false
       };
@@ -263,6 +272,7 @@ Module Type TermsOn (Import TY : Types).
       | term_zext t               => term_zext (sub_term t ζ)
       | term_get_slice_int t      => term_get_slice_int (sub_term t ζ)
       | term_unsigned t           => term_unsigned (sub_term t ζ)
+      | term_truncate m t         => term_truncate m (sub_term t ζ)
       | term_tuple ts             => term_tuple (env.map (fun _ t => sub_term t ζ) ts)
       | term_union U K t          => term_union U K (sub_term t ζ)
       | term_record R ts          => term_record R (env.map (fun _ t => sub_term t ζ) ts)

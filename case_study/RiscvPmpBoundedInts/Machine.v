@@ -136,6 +136,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition restrict_bytes (bytes : nat) : Prop := 
     bytes = 1%nat \/ bytes = 2%nat \/ bytes = 4%nat.
 
+  Lemma restrict_bytes_one : restrict_bytes 1%nat.
+  Proof. unfold restrict_bytes; auto. Qed.
+  Lemma restrict_bytes_two : restrict_bytes 2%nat.
+  Proof. unfold restrict_bytes; auto. Qed.
   Lemma restrict_bytes_four : restrict_bytes 4%nat.
   Proof. unfold restrict_bytes; auto. Qed.
 
@@ -200,8 +204,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_BTYPE         : Fun [imm ∷ ty.bvec 13; rs2 ∷ ty_regno; rs1 ∷ ty_regno; op ∷ ty_bop] ty_retired
   | execute_RISCV_JAL     : Fun [imm ∷ ty.bvec 21; rd ∷ ty_regno] ty_retired
   | execute_RISCV_JALR    : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired
-  | execute_LOAD          : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired
-  | execute_STORE         : Fun [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno] ty_retired
+  | execute_LOAD          : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; width :: ty_word_width] ty_retired
+  | execute_STORE         : Fun [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired
   | execute_ECALL         : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
   | execute_CSR           : Fun [csr ∷ ty_csridx; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_csrop] ty_retired
@@ -909,8 +913,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KBTYPE (pat_tuple (imm , rs2, rs1 , op)) => call execute_BTYPE imm rs2 rs1 op
     |> KRISCV_JAL (pat_tuple (imm , rd))        => call execute_RISCV_JAL imm rd
     |> KRISCV_JALR (pat_tuple (imm , rs1 , rd)) => call execute_RISCV_JALR imm rs1 rd
-    |> KLOAD (pat_tuple (imm , rs1, rd))        => call execute_LOAD imm rs1 rd
-    |> KSTORE (pat_tuple (imm , rs2 , rs1))     => call execute_STORE imm rs2 rs1
+    |> KLOAD (pat_tuple (imm , rs1, rd , w))    => call execute_LOAD imm rs1 rd w
+    |> KSTORE (pat_tuple (imm , rs2 , rs1 , w)) => call execute_STORE imm rs2 rs1 w
     |> KECALL pat_unit                          => call execute_ECALL
     |> KMRET pat_unit                           => call execute_MRET
     |> KCSR (pat_tuple (csr , rs1 , rd , op))   => call execute_CSR csr rs1 rd op
@@ -986,21 +990,38 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     else
       stm_val ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_LOAD : Stm [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired :=
+  Definition fun_execute_LOAD : Stm [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; width :: ty_word_width] ty_retired :=
     let: offset ∷ ty_xlenbits := exp_sext imm in
     let: tmp := call rX rs1 in
     let: paddr := tmp +ᵇ offset in
     let: tmp1 := Read in
-    let: tmp := stm_call (@mem_read 4 restrict_bytes_four) [tmp1; paddr] in
-    stm_call (@process_load 4 _) [rd; paddr; tmp] ;;
-    stm_val ty_retired RETIRE_SUCCESS.
+    match: width in wordwidth with
+    | BYTE =>
+        let: tmp := stm_call (@mem_read 1 restrict_bytes_one) [tmp1; paddr] in
+        stm_call (@process_load 1 _) [rd; paddr; tmp]
+    | HALF =>
+        let: tmp := stm_call (@mem_read 2 restrict_bytes_two) [tmp1; paddr] in
+        stm_call (@process_load 2 _) [rd; paddr; tmp]
+    | WORD =>
+        let: tmp := stm_call (@mem_read 4 restrict_bytes_four) [tmp1; paddr] in
+        stm_call (@process_load 4 _) [rd; paddr; tmp]
+    end.
 
-  Definition fun_execute_STORE : Stm [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno] ty_retired :=
+   #[program] Definition fun_execute_STORE : Stm [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired :=
     let: offset ∷ ty_xlenbits := exp_sext imm in
     let: tmp := call rX rs1 in
     let: paddr ∷ ty_xlenbits := tmp +ᵇ offset in
-    let: rs2_val := call rX rs2 in
-    let: res := stm_call (@mem_write_value 4 restrict_bytes_four) [paddr; rs2_val] in
+    let: rs2_val :: ty.bvec xlenbits := call rX rs2 in
+    let: res := match: width in wordwidth with
+    | BYTE =>
+        let: tmp := exp_truncate 8 rs2_val in
+        stm_call (@mem_write_value 1 restrict_bytes_one) [paddr; tmp]
+    | HALF =>
+        let: tmp := exp_truncate 16 rs2_val in
+        stm_call (@mem_write_value 2 restrict_bytes_two) [paddr; tmp]
+    | WORD =>
+        stm_call (@mem_write_value 4 restrict_bytes_four) [paddr; rs2_val]
+    end in
     match: res in union (memory_op_result 1) with
     |> KMemValue (pat_var "v") => if: v = exp_val ty_byte [bv 1]
                                   then stm_val ty_retired RETIRE_SUCCESS
