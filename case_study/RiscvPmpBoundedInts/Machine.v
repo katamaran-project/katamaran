@@ -1007,7 +1007,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         stm_call (@process_load 4 _) [rd; paddr; tmp]
     end.
 
-   #[program] Definition fun_execute_STORE : Stm [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired :=
+   Definition fun_execute_STORE : Stm [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired :=
     let: offset ∷ ty_xlenbits := exp_sext imm in
     let: tmp := call rX rs1 in
     let: paddr ∷ ty_xlenbits := tmp +ᵇ offset in
