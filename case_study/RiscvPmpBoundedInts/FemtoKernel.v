@@ -308,6 +308,20 @@ Import BlockVerificationDerived2.
       now vm_compute.
     Qed.
 
+    Definition femtoinit_stats :=
+      SymProp.Statistics.count_to_stats
+        (SymProp.Statistics.count_nodes
+           (VC__addr femtokernel_init_pre femtokernel_init (asn.sep femtokernel_init_post asn.debug))
+           SymProp.Statistics.empty).
+    Eval vm_compute in femtoinit_stats.
+
+    Definition femtohandler_stats :=
+      SymProp.Statistics.count_to_stats
+        (SymProp.Statistics.count_nodes
+           (VC__addr femtokernel_handler_pre femtokernel_handler (asn.sep femtokernel_handler_post asn.debug))
+           SymProp.Statistics.empty).
+    Eval vm_compute in femtohandler_stats.
+
   End FemtoKernel.
 
   Import Contracts.
