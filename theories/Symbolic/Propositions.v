@@ -989,6 +989,12 @@ Module Type SymPropOn
               (finite.enum (PatternCase pat))
         end.
 
+      Definition count_to_stats (c : Count) : Stats :=
+        match c with
+        | {| block := b; error := e; debug := d |} =>
+          {| branches := b + e; pruned := b + e - d |}
+        end.
+
     End Statistics.
 
   End SymProp.

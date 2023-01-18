@@ -1627,12 +1627,6 @@ Module Type SymbolicExecOn
                 |}
         end.
 
-      Definition count_to_stats (c : Count) : Stats :=
-        match c with
-        | {| block := b; error := e; debug := d |} =>
-          {| branches := b + e; pruned := b + e - d |}
-        end.
-
       Definition calc {Δ τ} (f : 𝑭 Δ τ) : option (Stats) :=
         match CEnv f with
         | Some contract =>
