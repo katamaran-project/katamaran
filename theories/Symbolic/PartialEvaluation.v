@@ -203,6 +203,21 @@ Module Type PartialEvaluationOn
       | None   => term_union U K t
       end.
 
+    Import option.notations.
+    Fixpoint peval_record' {rfs : NCtx recordf Ty} (ts : NamedEnv (Term Σ) rfs) {struct ts} : option (NamedEnv Val rfs) :=
+      match ts with
+      | env.nil         => Some [env]
+      | env.snoc ts _ t => vs <- peval_record' ts ;;
+                           v  <- term_get_val t ;;
+                           Some (env.snoc vs _ v)
+      end.
+
+    Definition peval_record R (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R) :=
+      match peval_record' ts with
+      | Some a => term_val (ty.record R) (recordv_fold R a)
+      | None => term_record R ts
+      end.
+
     Fixpoint peval [σ] (t : Term Σ σ) : Term Σ σ :=
       match t with
       | term_var ς          => term_var ς
@@ -219,7 +234,7 @@ Module Type PartialEvaluationOn
       | term_truncate m t   => peval_truncate m (peval t)
       | term_tuple ts       => term_tuple (env.map (fun b => @peval b) ts)
       | term_union U K t    => peval_union (peval t)
-      | term_record R ts    => term_record R (env.map (fun b => peval (σ := type b)) ts)
+      | term_record R ts    => peval_record R (env.map (fun b => peval (σ := type b)) ts)
       end.
 
     Lemma peval_neg_sound (t : Term Σ ty.int) :
@@ -262,6 +277,25 @@ Module Type PartialEvaluationOn
       peval_union t ≡ term_union U K t.
     Proof. unfold peval_union. destruct (term_get_val_spec t); now subst. Qed.
 
+    Lemma peval_record'_sound {rfs : NCtx recordf Ty} (ts : NamedEnv (Term Σ) rfs) :
+      option.wlp (fun vs => forall ι, inst ts ι = vs) (peval_record' ts).
+    Proof.
+      induction ts; cbn.
+      - now constructor.
+      - rewrite option.wlp_bind. revert IHts.
+        apply option.wlp_monotonic. intros vs IHvs.
+        rewrite option.wlp_bind. generalize (term_get_val_spec db).
+        apply option.wlp_monotonic. intros v IHv. constructor.
+        intros ι. specialize (IHvs ι). subst. reflexivity.
+    Qed.
+
+    Lemma peval_record_sound {R} ts :
+      peval_record R ts ≡ term_record R ts.
+    Proof.
+      unfold peval_record. destruct (peval_record'_sound ts); [|reflexivity].
+      intros ι; cbn. now f_equal.
+    Qed.
+
     Lemma peval_sound [σ] (t : Term Σ σ) :
       peval t ≡ t.
     Proof.
@@ -282,8 +316,9 @@ Module Type PartialEvaluationOn
         induction IH; [reflexivity|]; cbn.
         now apply proper_env_snoc.
       - etransitivity; [apply peval_union_sound|now apply proper_term_union].
-      - apply proper_term_record.
-        induction IH; [reflexivity|]; cbn.
+      - rewrite peval_record_sound.
+        apply proper_term_record.
+        induction IH; cbn; [reflexivity|].
         now apply proper_namedenv_snoc.
     Qed.
 
