@@ -1089,8 +1089,7 @@ Module bv.
   End Arithmetic.
 
   Section Sequencing.
-    From stdpp Require Import
-      list_numbers.
+    Import stdpp.list_numbers.
 
     (* not sure why we don't use exp2 here? *)
     Definition bv_modulus (n : nat) : Z := 2 ^ (Z.of_nat n).
