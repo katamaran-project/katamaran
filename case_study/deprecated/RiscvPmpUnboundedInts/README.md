@@ -8,6 +8,8 @@ Remarks/Comments/Info:
 - WFI (wait for interrupt) instruction not implemented, focus in this model is on exceptions, not interrupts
 - store & load instructions are simplified (i.e. no size, always word, no sign/zero extension, no aq or rl
 - keep AccessType simple (i.e. no type parameter for extensions, this is ignored in the PMP related code anyway), but still represent it as a *union* (note that we could opt to represent this as an enum, but this way is more faithful to the (simplified) Sail model)
+- MemoryOpResult is simplified and MemValue can only be a Word (no type param in definition of MemoryOpResult, this complicates EqDec...)
+- Store instructions involve a function mem_write that returns a MemoryOpResult with a boolean value to indicate failure, to keep things simple (point above), I model this as a ty_word where 0 = false and 1 = true
 - the model does not support S-mode, so any checks/pattern matches that depend on M-mode and S-mode privileges are simplified to only consider the M-mode case
 - some auxiliary functions that convert bits to enums are dropped, the model uses the enum immediately (example: pmpAddrRange calls a function pmpAddrMatchType_of_bits that converts a bitvector into the corresponding enum value of PmpAddrMatchType)
 - note that the main loop (function "loop") just calls the step function, this is a lot simpler than the one in the actual sail model, which is complicated with tracing, interrupts, ...
@@ -40,8 +42,12 @@ Ignoring instructions that rely on bitvector operations (like shift operations),
 ## Source
 
 This machine is based on a minimal model of the official RISC-V Sail model.
+The corresponding model can be found at [https://gitlab.soft.vub.ac.be/shuygheb/sail-minimal-riscv](sail-minimal-riscv).
 
 The machine that this case study represents is based on the official RISC-V code, more specifically, (parts of) the following files:
 - [https://github.com/rems-project/sail-riscv/blob/master/model/riscv_insts_base.sail](Base Instructions)
 - [https://github.com/rems-project/sail-riscv/blob/master/model/riscv_pmp_regs.sail](PMP Configuration)
 - [https://github.com/rems-project/sail-riscv/blob/master/model/riscv_pmp_control.sail](PMP)
+
+## Machine Invariant
+TODO

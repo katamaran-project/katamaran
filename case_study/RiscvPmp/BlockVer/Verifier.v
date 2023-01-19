@@ -75,184 +75,6 @@ Module ns := stdpp.namespaces.
 
 (*   Definition pmp_entry_cfg := ty_prod ty_pmpcfg_ent ty_xlenbits. *)
 
-Module BlockVerification.
-  Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpBlockVerifExecutor.
-
-  Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
-
-  Import ModalNotations.
-  Import bv.notations.
-
-  Definition M : TYPE -> TYPE := SHeapSpecM [] [].
-
-  Definition pure {A} : ⊢ A -> M A := SHeapSpecM.pure.
-  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SHeapSpecM.bind.
-  Definition angelic : ⊢ ∀ σ : Ty, M (STerm σ) := @SHeapSpecM.angelic [] None.
-  Definition assert : ⊢ Formula -> M Unit := SHeapSpecM.assert_formula.
-  Definition assume : ⊢ Formula -> M Unit := SHeapSpecM.assume_formula.
-
-  Definition produce_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.produce_chunk.
-  Definition consume_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.consume_chunk.
-
-  Definition produce : ⊢ Assertion -> □(M Unit) := SHeapSpecM.produce.
-  Definition consume : ⊢ Assertion -> □(M Unit) := SHeapSpecM.consume.
-
-  Notation "ω ∣ x <- ma ;; mb" :=
-    (bind ma (fun _ ω x => mb))
-      (at level 80, x at next level,
-        ma at next level, mb at level 200,
-        right associativity).
-
-  Definition rX (r : Reg ty_xlenbits) : ⊢ M (STerm ty_xlenbits) :=
-    fun _ =>
-      ω01 ∣ v1 <- @angelic _ ty_xlenbits ;;
-      ω12 ∣ _  <- consume_chunk (r ↦ v1) ;;
-      let v2 := persist__term v1 ω12 in
-      ω23 ∣ _ <- produce_chunk (r ↦ v2) ;;
-      let v3 := persist__term v2 ω23 in
-      pure v3.
-
-  Definition wX (r : Reg ty_xlenbits) : ⊢ STerm ty_xlenbits -> M Unit :=
-    fun _ u0 =>
-      ω01 ∣ v1 <- @angelic _ ty_xlenbits ;;
-      ω12 ∣ _  <- consume_chunk (r ↦ v1) ;;
-      let u2 := persist__term u0 (acc_trans ω01 ω12) in
-      produce_chunk (r ↦ u2).
-
-  Definition exec_rtype (rs2 rs1 rd : Reg ty_xlenbits) (op : ROP) : ⊢ M Unit :=
-    fun _ =>
-      ω01 ∣ v11 <- @rX rs1 _ ;;
-      ω12 ∣ v22 <- @rX rs2 _ ;;
-      let v12 := persist__term v11 ω12 in
-      let bop := match op with
-                 | RISCV_ADD => bop.plus
-                 | RISCV_SUB => bop.minus
-                 end in
-      wX rd (peval_binop bop v12 v22).
-
-  Definition exec_instruction (i : AST) : ⊢ M Unit :=
-    match i with
-    | RTYPE rs2 rs1 rd op =>
-        match reg_convert rs2, reg_convert rs1, reg_convert rd with
-        | Some rs2, Some rs1, Some rd => exec_rtype rs2 rs1 rd op
-        | _, _, _ => fun _ => pure tt
-        end
-    | _                   => fun _ => pure tt
-    end.
-
-  (* Ideally, a block should be a list of non-branching
-     instruction plus one final branching instruction *)
-  Fixpoint exec_block (b : list AST) : ⊢ M Unit :=
-    fun _ =>
-      match b with
-      | nil       => pure tt
-      | cons i b' =>
-        _ ∣ _ <- @exec_instruction i _ ;;
-        @exec_block b' _
-      end.
-
-  Definition exec_double {Σ : World}
-    (req : Assertion Σ) (b : list AST) : M Unit Σ :=
-    ω1 ∣ _ <- T (produce req) ;;
-    @exec_block b _.
-
-  Definition exec_triple {Σ : World}
-    (req : Assertion Σ) (b : list AST) (ens : Assertion Σ) : M Unit Σ :=
-    ω ∣ _ <- exec_double req b ;;
-    consume ens ω.
-
-  Module Post := Postprocessing.
-  (* This is a VC for triples, for doubles we probably need to talk
-     about the continuation of a block. *)
-  Definition VC {Σ : LCtx} (req : Assertion Σ) (b : list AST) (ens : Assertion Σ) : 𝕊 Σ :=
-    Post.prune (Post.solve_uvars (Post.prune (Post.solve_evars (Post.prune
-      (@exec_triple
-        {| wctx := Σ; wco := []%ctx |}
-        req b ens
-        (* Could include leakcheck here *)
-        (fun _ _ _ _ h => SymProp.block)
-        []%env []%list))))).
-
-End BlockVerification.
-
-Module BlockVerificationDerived.
-
-  Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpBlockVerifExecutor.
-  Import Symbolic.
-
-  Import ModalNotations.
-
-  Definition M : TYPE -> TYPE := SHeapSpecM [] [].
-
-  Definition pure {A} : ⊢ A -> M A := SHeapSpecM.pure.
-  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SHeapSpecM.bind.
-  Definition angelic : ⊢ ∀ σ : Ty, M (STerm σ) := @SHeapSpecM.angelic [] None.
-  Definition demonic : ⊢ ∀ σ : Ty, M (STerm σ) := @SHeapSpecM.demonic [] None.
-  Definition assert : ⊢ Formula -> M Unit := SHeapSpecM.assert_formula.
-  Definition assume : ⊢ Formula -> M Unit := SHeapSpecM.assume_formula.
-
-  Definition produce_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.produce_chunk.
-  Definition consume_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.consume_chunk.
-
-  Definition produce : ⊢ Assertion -> □(M Unit) := SHeapSpecM.produce.
-  Definition consume : ⊢ Assertion -> □(M Unit) := SHeapSpecM.consume.
-
-  Notation "ω ∣ x <- ma ;; mb" :=
-    (bind ma (fun _ ω x => mb))
-      (at level 80, x at next level,
-        ma at next level, mb at level 200,
-        right associativity).
-
-  Definition exec_instruction' (i : AST) : ⊢ M (STerm ty_retired) :=
-    let inline_fuel := 3%nat in
-    fun w0 POST _ =>
-      SHeapSpecM.exec
-        default_config inline_fuel (FunDef execute)
-        (fun w1 ω01 res _ => POST w1 ω01 res []%env)
-        [term_val (type ("ast" :: ty_ast)) i]%env.
-
-  Definition exec_instruction (i : AST) : ⊢ M Unit :=
-    fun _ =>
-      _ ∣ msg <- @exec_instruction' i _ ;;
-      assert (formula_relop bop.eq msg (term_val ty_retired RETIRE_SUCCESS)).
-
-  (* Ideally, a block should be a list of non-branching
-     instruction plus one final branching instruction *)
-  Fixpoint exec_block (b : list AST) : ⊢ M Unit :=
-    fun _ =>
-      match b with
-      | nil       => pure tt
-      | cons i b' =>
-        _ ∣ _ <- @exec_instruction i _ ;;
-        @exec_block b' _
-      end.
-
-
-  Definition exec_double {Σ : World}
-    (req : Assertion Σ) (b : list AST) : M Unit Σ :=
-    ω1 ∣ _ <- T (produce req) ;;
-    @exec_block b _.
-
-  Definition exec_triple {Σ : World}
-    (req : Assertion Σ) (b : list AST) (ens : Assertion Σ) : M Unit Σ :=
-    ω ∣ _ <- exec_double req b ;;
-    consume ens ω.
-
-  (* This is a VC for triples, for doubles we probably need to talk
-     about the continuation of a block. *)
-  Definition VC {Σ : LCtx} (req : Assertion Σ) (b : list AST) (ens : Assertion Σ) : 𝕊 ε :=
-    SymProp.demonic_close
-      (@exec_triple
-         {| wctx := Σ; wco := []%ctx |}
-         req b ens
-         (* Could include leakcheck here *)
-         (fun _ _ _ _ h => SymProp.block)
-         []%env []%list).
-
-End BlockVerificationDerived.
-
 Module BlockVerificationDerived2.
 
   Import RiscvPmpBlockVerifSpec.
@@ -301,7 +123,7 @@ Module BlockVerificationDerived2.
     fun _ =>
       ω1 ∣ a <- @demonic _ _ ;;
       ω2 ∣ na <- exec_instruction_any i a ;;
-      assert (formula_relop bop.eq na (term_binop bop.plus (persist__term a ω2) (term_val ty_exc_code 4))).
+      assert (formula_relop bop.eq na (term_binop bop.bvadd (persist__term a ω2) (term_val ty_word bv_instrsize))).
 
 
   Fixpoint exec_block_addr (b : list AST) : ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
@@ -311,7 +133,7 @@ Module BlockVerificationDerived2.
       | cons i b' =>
         ω1 ∣ _ <- assert (formula_relop bop.eq ainstr apc) ;;
         ω2 ∣ apc' <- exec_instruction_any i (persist__term apc ω1) ;;
-        @exec_block_addr b' _ (term_binop bop.plus (persist__term ainstr (ω1 ∘ ω2)) (term_val ty_xlenbits 4)) apc'
+        @exec_block_addr b' _ (term_binop bop.bvadd (persist__term ainstr (ω1 ∘ ω2)) (term_val ty_word bv_instrsize)) apc'
       end.
 
   Definition exec_double_addr {Σ : World}
@@ -352,56 +174,6 @@ Module BlockVerificationDerived2.
   Qed.
 
 End BlockVerificationDerived2.
-
-Module BlockVerificationDerivedSem.
-  Import RiscvPmpIrisBase.
-  Import RiscvPmpIrisInstance.
-  Import RiscvPmpBlockVerifSpec.
-  Import weakestpre.
-  Import tactics.
-  Import BlockVerificationDerived.
-  Import RiscvPmpIrisInstanceWithContracts.
-
-  Import ctx.resolution.
-  Import ctx.notations.
-  Import env.notations.
-
-  Definition semTripleOneInstr `{sailGS Σ} (PRE : iProp Σ) (a : AST) (POST : iProp Σ) : iProp Σ :=
-    semTriple [a : Val (type ("ast" :: ty_ast))]%env PRE (FunDef execute) (fun ret _ => ⌜ret = RETIRE_SUCCESS⌝ ∗ POST)%I.
-  Global Arguments semTripleOneInstr {Σ} {_} PRE%I a POST%I.
-
-  Module ValidContractsBlockVerif.
-    Import RiscvPmpBlockVerifExecutor.
-    Import Symbolic.
-
-
-    (* Lemma sound_exec_instruction {ast} `{sailGS Σ} : *)
-    (*   SymProp.safe (exec_instruction (w := wnil) ast (fun _ _ res _ h => SymProp.block) env.nil []%list) env.nil -> *)
-    (*   ⊢ semTripleOneInstr emp ast emp. *)
-    (* Proof. *)
-    (*   unfold exec_instruction, exec_instruction', assert. *)
-    (*   iIntros (safe_exec) "". *)
-    (*   rewrite <-SymProp.safe_debug_safe in safe_exec. *)
-    (*   rewrite <-SymProp.wsafe_safe in safe_exec. *)
-    (*   iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif). *)
-    (* Admitted. *)
-    (*   - refine (exec_sound 3 _ _ _ []%list _). *)
-    (*     enough (CMut.bind (CMut.exec 3 (FunDef execute)) (fun v => CMut.assert_formula (v = RETIRE_SUCCESS)) (fun _ _ _ => True) [ast] []%list). *)
-    (*     + unfold CMut.bind, CMut.assert_formula, CMut.dijkstra, CDijk.assert_formula in H0. *)
-    (*       refine (exec_monotonic _ _ _ _ _ _ _ H0). *)
-    (*       intros ret δ h [-> _]; cbn. *)
-    (*       iIntros "_". iPureIntro. now split. *)
-    (*     + refine (approx_exec _ _ _ _ _ safe_exec); cbn; try trivial; try reflexivity. *)
-    (*       intros w ω ι _ Hpc tr ? -> δ δ' Hδ h h' Hh. *)
-    (*       refine (approx_assert_formula _ _ _ (a := fun _ _ _ => True) _ _ _); *)
-    (*         try assumption; try reflexivity. *)
-    (*       constructor. *)
-    (*   - do 2 iModIntro. *)
-    (*     iApply contractsSound. *)
-    (* Qed. *)
-  End ValidContractsBlockVerif.
-
-End BlockVerificationDerivedSem.
 
 Module BlockVerificationDerived2Sound.
   Import RiscvPmpBlockVerifSpec.
@@ -501,7 +273,7 @@ Module BlockVerificationDerived2Sound.
       | cons i b' =>
         _ <- assert (ainstr = apc) ;;
         apc' <- exec_instruction_any__c i apc ;;
-        @exec_block_addr__c b' (ainstr + 4) apc'
+        @exec_block_addr__c b' (bv.add ainstr bv_instrsize) apc'
       end.
 
   Lemma refine_exec_block_addr (b : list AST) :
@@ -573,7 +345,7 @@ Module BlockVerificationDerived2Sound.
     cbn -[sub_wk1].
     now rewrite ?instprop_subst, ?inst_sub_wk1.
     cbn [acc_snoc_left sub_acc].
-    refine (eq_trans _ (eq_sym (inst_sub_snoc ι3 (sub_snoc (sub_acc (ω1 ∘ ω2 ∘ ω3)) ("a"∷ty_exc_code) (persist__term a (ω2 ∘ ω3))) ("an"::ty_exc_code) na))).
+    refine (eq_trans _ (eq_sym (inst_sub_snoc ι3 (sub_snoc (sub_acc (ω1 ∘ ω2 ∘ ω3)) ("a"∷ty_word) (persist__term a (ω2 ∘ ω3))) ("an"::ty_word) na))).
     f_equal.
     rewrite inst_sub_snoc.
     rewrite <-?inst_subst.
@@ -600,7 +372,7 @@ Module BlockVerificationDerived2Sem.
   Import RiscvPmpBlockVerifShalExecutor.
   Import BlockVerificationDerived2Sound.
 
-  Definition semTripleOneInstrStep `{sailGS Σ} (PRE : iProp Σ) (instr : AST) (POST : Z -> iProp Σ) (a : Z) : iProp Σ :=
+  Definition semTripleOneInstrStep `{sailGS Σ} (PRE : iProp Σ) (instr : AST) (POST : Val ty_word -> iProp Σ) (a : Val ty_word) : iProp Σ :=
     semTriple [] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
       (FunDef RiscvPmpProgram.step)
       (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a instr)%I.
@@ -674,9 +446,9 @@ Module BlockVerificationDerived2Sem.
   Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
   Local Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 79).
 
-  Fixpoint ptsto_instrs `{sailGS Σ} (a : Z) (instrs : list AST) : iProp Σ :=
+  Fixpoint ptsto_instrs `{sailGS Σ} (a : Val ty_word) (instrs : list AST) : iProp Σ :=
     match instrs with
-    | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (a + 4) insts)%I
+    | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
     | nil => True%I
     end.
   (* Arguments ptsto_instrs {Σ H} a%Z_scope instrs%list_scope : simpl never. *)
@@ -718,16 +490,16 @@ Module BlockVerificationDerived2Sem.
       unfold WP_loop at 2, FunDef, fun_loop.
       assert (⊢ semTripleOneInstrStep (interpret_scheap h) instr
                 (fun an =>
-                   lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (apc + 4) instrs -∗
-                   (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ WP_loop) -∗
+                   lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (bv.add apc bv_instrsize) instrs -∗
+                   (∀ an2 : Val ty_word, pc ↦ an2 ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (bv.add apc bv_instrsize) instrs ∗ POST an2 [env] -∗ WP_loop) -∗
                      WP_loop) apc) as Hverif2.
-      { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (apc + 4) instrs -∗ (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ WP_loop) -∗ WP_loop)%I).
+      { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (bv.add apc bv_instrsize) instrs -∗ (∀ an2 : Val ty_word, pc ↦ an2 ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs (bv.add apc bv_instrsize) instrs ∗ POST an2 [env] -∗ WP_loop) -∗ WP_loop)%I).
         revert Hverif.
         apply mono_exec_instruction_any__c.
         intros an h2.
         unfold liftP; cbn.
         iIntros (Hverif) "Hh2 (Hpc & Hnpc & Hinstrs) Hk".
-        iApply (IHinstrs (apc + 4)%Z an _ _ Hverif with "[$]").
+        iApply (IHinstrs (bv.add apc bv_instrsize)%Z an _ _ Hverif with "[$]").
         iIntros (an2) "(Hpc & Hinstrs & HPOST)".
         iApply "Hk"; now iFrame.
       }
@@ -747,7 +519,7 @@ Module BlockVerificationDerived2Sem.
       iFrame.
   Qed.
 
-  Definition semTripleBlock `{sailGS Σ} (PRE : Z -> iProp Σ) (instrs : list AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
+  Definition semTripleBlock `{sailGS Σ} (PRE : Val ty_word -> iProp Σ) (instrs : list AST) (POST : Val ty_word -> Val ty_word -> iProp Σ) : iProp Σ :=
     (∀ a,
     (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs) -∗
       (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ WP_loop) -∗
@@ -756,18 +528,18 @@ Module BlockVerificationDerived2Sem.
 
   Lemma sound_exec_triple_addr__c `{sailGS Σ} {W : World} {pre post instrs} {ι : Valuation W} :
       (exec_triple_addr__c ι pre instrs post (λ _ _ _ , True) [env] []%list) ->
-    ⊢ semTripleBlock (λ a : Z, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])) instrs
-      (λ a na : Z, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
+    ⊢ semTripleBlock (λ a : Val ty_word, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])) instrs
+      (λ a na : Val ty_word, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
   Proof.
     intros Hexec.
     iIntros (a) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
     specialize (Hexec a).
     unfold bind, CHeapSpecM.bind, produce in Hexec.
-    assert (interpret_scheap []%list ∗ asn.interpret pre ι.[("a"::ty_exc_code) ↦ a] ⊢
+    assert (interpret_scheap []%list ∗ asn.interpret pre ι.[("a"::ty_word) ↦ a] ⊢
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
       WP_loop)%I as Hverif.
-    { refine (@produce_sound _ _ _ _ (ι.[("a"::ty_exc_code) ↦ a]) pre (fun _ =>
+    { refine (@produce_sound _ _ _ _ (ι.[("a"::ty_word) ↦ a]) pre (fun _ =>
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
       WP_loop)%I [env] []%list _).
@@ -779,14 +551,14 @@ Module BlockVerificationDerived2Sem.
       assert (
           ⊢ ((interpret_scheap h ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
                (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗
-                        asn.interpret post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ an]
+                        asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ an]
                          -∗ WP_loop) -∗
                WP_loop)%I) as Hverifblock.
       { apply (sound_exec_block_addr h
-                  (fun an δ => asn.interpret post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ an])%I).
+                  (fun an δ => asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ an])%I).
         refine (mono_exec_block_addr _ _ _ _ _ Hexec).
         intros res h2 Hcons. cbn.
-        rewrite <-(bi.sep_True (asn.interpret post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ res] : iProp Σ)).
+        rewrite <-(bi.sep_True (asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ res] : iProp Σ)).
         eapply (consume_sound (fun _ => True%I : iProp Σ)).
         revert Hcons.
         refine (consume_monotonic _ _ _ _ _).

@@ -41,12 +41,12 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Specification
-     RiscvPmpBoundedInts.Machine
-     RiscvPmpBoundedInts.Sig
-     RiscvPmpBoundedInts.IrisModel
-     RiscvPmpBoundedInts.IrisInstance
-     RiscvPmpBoundedInts.Model
-     RiscvPmpBoundedInts.Contracts.
+     RiscvPmp.Machine
+     RiscvPmp.Sig
+     RiscvPmp.IrisModel
+     RiscvPmp.IrisInstance
+     RiscvPmp.Model
+     RiscvPmp.Contracts.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.
@@ -250,10 +250,9 @@ Section Loop.
     exact lemSem.
     unfold ProgramLogic.ValidContractCEnv.
     intros.
-    pose (ValidContracts f H) as Hc.
-    destruct Hc as [fuel Hc].
-    apply shallow_vcgen_fuel_soundness with (fuel := fuel).
-    now apply symbolic_vcgen_fuel_soundness.
+    apply shallow_vcgen_soundness.
+    apply symbolic_vcgen_soundness.
+    apply ValidContracts; assumption.
   Qed.
 
   Lemma valid_init_model_contract : ⊢ ValidContractSem fun_init_model sep_contract_init_model.
@@ -263,10 +262,9 @@ Section Loop.
     exact lemSem.
     unfold ProgramLogic.ValidContractCEnv.
     intros.
-    pose (ValidContracts f H) as Hc.
-    destruct Hc as [fuel Hc].
-    apply shallow_vcgen_fuel_soundness with (fuel := fuel).
-    now apply symbolic_vcgen_fuel_soundness.
+    apply shallow_vcgen_soundness.
+    apply symbolic_vcgen_soundness.
+    apply ValidContracts; assumption.
   Qed.
 
   Import env.notations.
@@ -314,14 +312,14 @@ Section Loop.
     constructor.
   Qed.
 
-  Definition loop_pre (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Addr)) : iProp Σ :=
+  Definition loop_pre (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Z)) : iProp Σ :=
     (Step_pre m h i mpp entries ∗
               ▷ (CSRMod m entries -∗ WP_loop) ∗
               ▷ (Trap m h entries -∗ WP_loop) ∗
               ▷ (Recover m h mpp entries -∗ WP_loop))%I.
 
   Definition semTriple_loop : iProp Σ :=
-    (∀ (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Addr)),
+    (∀ (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Z)),
         semTriple env.nil (loop_pre m h i mpp entries)
                   (FunDef loop)
                   (fun _ _ => True))%I.

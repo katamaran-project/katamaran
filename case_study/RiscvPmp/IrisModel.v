@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Katamaran Require Import
+     Bitvector
      Environment
      Iris.Model
      RiscvPmp.Machine.
@@ -47,8 +48,9 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
 
   (* Defines the memory ghost state. *)
   Section RiscvPmpIrisParams.
-
-    Definition MemVal : Set := Word.
+    Import bv.
+    Definition Byte : Set := bv 8.
+    Definition MemVal : Set := Byte.
 
     Class mcMemGS Σ :=
       McMemGS {
@@ -61,10 +63,12 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Definition memGS : gFunctors -> Set := mcMemGS.
     Definition memΣ : gFunctors := gen_heapΣ Addr MemVal.
 
-    Definition liveAddrs := seqZ minAddr (maxAddr - minAddr + 1).
+    Definition liveAddrs := bv.seqBv (@bv.of_nat xlenbits minAddr) lenAddr.
     Lemma NoDup_liveAddrs : NoDup liveAddrs.
-      eapply NoDup_seqZ.
-    Qed.
+    Proof. now eapply Prelude.nodup_fixed. Qed.
+    
+    #[global] Arguments liveAddrs : simpl never.
+
     Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
 
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
@@ -76,9 +80,8 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
            ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
-    Definition mem_res : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
-      fun {Σ} hG μ =>
-        ([∗ list] a' ∈ liveAddrs, mapsto a' (DfracOwn 1) (μ a'))%I.
+    Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
+      fun μ => ([∗ list] a' ∈ liveAddrs, mapsto a' (DfracOwn 1) (μ a'))%I.
 
     Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
     Proof.
@@ -113,7 +116,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Qed.
 
     Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
-      ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+      ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res μ)%I.
     Proof.
       iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
 
@@ -131,7 +134,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
         apply initMemMap_works.
       - unfold mem_res, initMemMap in *.
         iApply (big_sepM_list_to_map (f := μ) (fun a v => mapsto a (DfracOwn 1) v) with "[$]").
-        now eapply NoDup_liveAddrs.
+        eapply NoDup_liveAddrs.
     Qed.
   End RiscvPmpIrisParams.
 
