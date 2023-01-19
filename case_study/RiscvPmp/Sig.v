@@ -303,7 +303,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | PMP_Match        => PMP_Success
       end.
 
-    Fixpoint pmp_check (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
+    Definition pmp_check (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
       match entries with
       | (cfg0 , addr0) :: (cfg1 , addr1) :: [] =>
           match pmp_match_entry a width m cfg0 prev addr0 with
@@ -326,7 +326,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       end%list.
 
     Section Old_pmp_check.
-      Fixpoint pmp_check' (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
+      Definition pmp_check' (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
         match entries with
         | [] => match m with
                 | Machine => (true, None)
