@@ -3,6 +3,7 @@ Require
   Katamaran.MinimalCaps.LoopVerification
   Katamaran.RiscvPmp.FemtoKernel
   Katamaran.RiscvPmp.LoopVerification.
+Import Coq.Numbers.BinNums Coq.Strings.String Bitvector.
 
 Goal True. idtac "Assumptions of MinimalCaps universal contract:". Abort.
 Print Assumptions MinimalCaps.LoopVerification.valid_semContract_loop2.
