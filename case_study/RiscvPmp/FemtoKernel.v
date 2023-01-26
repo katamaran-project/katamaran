@@ -189,8 +189,8 @@ Import BlockVerificationDerived2.
       (∃ "v", x5 ↦ term_var "v") ∗
       (∃ "v", x6 ↦ term_var "v") ∗
       (∃ "v", x7 ↦ term_var "v")) ∗
-      (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_val ty_xlenbits bv.zero);
-                                      (term_val ty_pmpcfg_ent femtokernel_default_pmpcfg ,ₜ term_val ty_xlenbits bv.zero)])) ∗
+      (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                      (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])) ∗
       (term_var "a" + (term_val ty_xlenbits (bv.of_N 84)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
 
     Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
@@ -599,8 +599,8 @@ Import BlockVerificationDerived2.
       (∃ v, mepc ↦ v) ∗
       cur_privilege ↦ Machine ∗
       interp_gprs ∗
-      pmp0cfg ↦ femtokernel_default_pmpcfg ∗
-      pmp1cfg ↦ femtokernel_default_pmpcfg ∗
+      pmp0cfg ↦ default_pmpcfg_ent ∗
+      pmp1cfg ↦ default_pmpcfg_ent ∗
       (pmpaddr0 ↦ bv.zero) ∗
       (pmpaddr1 ↦ bv.zero) ∗
       interp_ptstomem_readonly (width := xlenbytes) (bv.of_N 84) (bv.of_N 42)) ∗
@@ -658,9 +658,9 @@ Import BlockVerificationDerived2.
       (∃ v, mepc ↦ v) ∗
       cur_privilege ↦ Machine ∗
       interp_gprs ∗
-      reg_pointsTo pmp0cfg femtokernel_default_pmpcfg ∗
+      reg_pointsTo pmp0cfg default_pmpcfg_ent ∗
       (reg_pointsTo pmpaddr0 bv.zero) ∗
-      reg_pointsTo pmp1cfg femtokernel_default_pmpcfg ∗
+      reg_pointsTo pmp1cfg default_pmpcfg_ent ∗
       (reg_pointsTo pmpaddr1 bv.zero) ∗
       (pc ↦ bv.zero) ∗
       interp_ptstomem_readonly (width := xlenbytes) (bv.of_N 84) (bv.of_N 42) ∗
@@ -838,9 +838,9 @@ Import BlockVerificationDerived2.
     mem_has_instrs μ (bv.of_N 72) femtokernel_handler ->
     mem_has_word μ (bv.of_N 84) (bv.of_N 42) ->
     read_register γ cur_privilege = Machine ->
-    read_register γ pmp0cfg = femtokernel_default_pmpcfg ->
+    read_register γ pmp0cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr0 = bv.zero ->
-    read_register γ pmp1cfg = femtokernel_default_pmpcfg ->
+    read_register γ pmp1cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr1 = bv.zero ->
     read_register γ pc = (bv.of_N 0) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
