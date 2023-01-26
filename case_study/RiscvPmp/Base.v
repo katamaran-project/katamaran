@@ -528,6 +528,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_pmpcfg_ent                     := (ty.record rpmpcfg_ent).
   Definition ty_mstatus                        := (ty.record rmstatus).
   Definition ty_pmpentry                       := (ty.prod ty_pmpcfg_ent ty_xlenbits).
+  Definition ty_pmpentries                     := (ty.list (ty.prod ty_pmpcfg_ent ty_xlenbits)).
 
   Definition enum_denote (e : Enums) : Set :=
     match e with

@@ -174,9 +174,6 @@ Import BlockVerificationDerived2.
     Let Σ__femtoinit : LCtx := [].
     Let W__femtoinit : World := MkWorld Σ__femtoinit []%ctx.
 
-    Example femtokernel_default_pmpcfg : Pmpcfg_ent :=
-      {| L := false; A := OFF; X := false; W := false; R := false |}.
-
     (* DOMI: TODO: replace the pointsto chunk for 84 ↦ 42 with a corresponding invariant *)
     Example femtokernel_init_pre : Assertion {| wctx := [] ▻ ("a"::ty_xlenbits) ; wco := []%ctx |} :=
         (term_var "a" = term_val ty_word bv.zero) ∗

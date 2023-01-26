@@ -192,7 +192,7 @@ Module Type ExpressionsOn (Import TY : Types).
   Notation "e1 * e2" := (exp_binop bop.times e1 e2) : exp_scope.
   Notation "e1 - e2" := (exp_binop bop.minus e1 e2) : exp_scope.
   Notation "e1 +ᵇ e2" := (exp_binop bop.bvadd e1 e2) : exp_scope.
-  Notation "e1 -ᵇ e2" := (exp_binop bop.bvadd e1 e2) : exp_scope.
+  Notation "e1 -ᵇ e2" := (exp_binop bop.bvsub e1 e2) : exp_scope.
   Notation "e1 *ᵇ e2" := (exp_binop bop.bvmul e1 e2) : exp_scope.
 
   Notation "e1 >= e2" := (exp_binop (bop.relop bop.le) e2 e1) : exp_scope.

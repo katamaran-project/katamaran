@@ -103,6 +103,14 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
     Definition PmpAddrRange := option (Xlenbits * Xlenbits).
 
+    Example default_pmpcfg_ent : Pmpcfg_ent :=
+      {| L := false; A := OFF; X := false; W := false; R := false |}.
+
+    Example default_pmpentries : list (Pmpcfg_ent * Xlenbits) :=
+      [(default_pmpcfg_ent, bv.zero);
+       (default_pmpcfg_ent, bv.zero)
+      ].
+
     Definition pmp_check_RWX (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) : bool :=
       match cfg with
       | {| L := _; A := _; X := X; W := W; R := R |} =>
