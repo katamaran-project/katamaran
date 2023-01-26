@@ -683,6 +683,11 @@ Module bv.
 
   End Integers.
 
+  Section Extract.
+    Definition extract {n} (start length : nat) (x : bv n) : bv length :=
+      @of_Z length (Z.shiftr (unsigned x) (Z.of_nat start)).
+  End Extract.
+
   Section EqMod2N.
     Definition eq2np (n : nat) := fun x y => trunc n x = trunc n y.
     #[global] Arguments eq2np n x y : simpl never.
@@ -1737,6 +1742,9 @@ Module bv.
     Goal of_Z (-3)%Z = [bv[3] 5]. reflexivity. Qed.
     Goal of_Z (-2)%Z = [bv[3] 6]. reflexivity. Qed.
     Goal of_Z (-1)%Z = [bv[3] 7]. reflexivity. Qed.
+
+    Goal extract 0 8 [bv[16] 256] = [bv[8] 0]. reflexivity. Qed.
+    Goal extract 8 8 [bv[16] 256] = [bv[8] 1]. reflexivity. Qed.
   End Tests.
 
 End bv.

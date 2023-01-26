@@ -89,6 +89,7 @@ Module Type OccursCheckOn
       | term_get_slice_int t => (fun t' => term_get_slice_int t') <$> occurs_check_term xIn t
       | term_unsigned t => (fun t' => term_unsigned t') <$> occurs_check_term xIn t
       | term_truncate m t => (fun t' => term_truncate m t') <$> occurs_check_term xIn t
+      | term_extract s l t => (fun t' => term_extract s l t') <$> occurs_check_term xIn t
       | @term_tuple _ σs ts =>
         @term_tuple _ σs <$> occurs_check (OccursCheck := occurs_check_env (OCT := @occurs_check_term)) xIn ts
       | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0
