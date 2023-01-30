@@ -688,6 +688,11 @@ Module bv.
       @of_Z length (Z.shiftr (unsigned x) (Z.of_nat start)).
   End Extract.
 
+  Section Shift.
+    Definition shiftr {m n} (x : bv m) (y : bv n) : bv m :=
+      of_Z (Z.shiftr (unsigned x) (unsigned y)).
+  End Shift.
+
   Section EqMod2N.
     Definition eq2np (n : nat) := fun x y => trunc n x = trunc n y.
     #[global] Arguments eq2np n x y : simpl never.
@@ -1745,6 +1750,8 @@ Module bv.
 
     Goal extract 0 8 [bv[16] 256] = [bv[8] 0]. reflexivity. Qed.
     Goal extract 8 8 [bv[16] 256] = [bv[8] 1]. reflexivity. Qed.
+
+    Goal shiftr [bv[8] 16] [bv[5] 4] = [bv[8] 1]. reflexivity. Qed.
   End Tests.
 
 End bv.
