@@ -156,6 +156,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition sep_contract_execute_ITYPE : SepContractFun execute_ITYPE :=
           instr_exec_contract.
 
+        Definition sep_contract_execute_SHIFTIOP : SepContractFun execute_SHIFTIOP :=
+          instr_exec_contract.
+
         Definition sep_contract_execute_UTYPE : SepContractFun execute_UTYPE :=
           instr_exec_contract.
 
@@ -967,6 +970,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             match fn with
             | execute_RTYPE           => Some sep_contract_execute_RTYPE
             | execute_ITYPE           => Some sep_contract_execute_ITYPE
+            | execute_SHIFTIOP        => Some sep_contract_execute_SHIFTIOP
             | execute_UTYPE           => Some sep_contract_execute_UTYPE
             | execute_BTYPE           => Some sep_contract_execute_BTYPE
             | execute_RISCV_JAL       => Some sep_contract_execute_RISCV_JAL
@@ -1453,6 +1457,9 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_ITYPE : ValidContract execute_ITYPE.
   Proof. reflexivity. Qed.
 
+  Lemma valid_contract_execute_SHIFTIOP : ValidContract execute_SHIFTIOP.
+  Proof. reflexivity. Qed.
+
   Lemma valid_contract_execute_UTYPE : ValidContract execute_UTYPE.
   Proof. reflexivity. Qed.
 
@@ -1646,6 +1653,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_execute).
     - apply (valid_contract _ H valid_contract_execute_RTYPE).
     - apply (valid_contract _ H valid_contract_execute_ITYPE).
+    - apply (valid_contract _ H valid_contract_execute_SHIFTIOP).
     - apply (valid_contract _ H valid_contract_execute_UTYPE).
     - apply (valid_contract _ H valid_contract_execute_BTYPE).
     - apply (valid_contract _ H valid_contract_execute_RISCV_JAL).

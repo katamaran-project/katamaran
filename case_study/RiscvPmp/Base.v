@@ -147,6 +147,10 @@ Inductive IOP : Set :=
 | RISCV_ADDI
 .
 
+Inductive SOP : Set :=
+| RISCV_SRLI
+.
+
 Inductive UOP : Set :=
 | RISCV_LUI
 | RISCV_AUIPC
@@ -188,6 +192,7 @@ Inductive Enums : Set :=
 | pmpaddrmatch
 | rop
 | iop
+| sop
 | uop
 | bop
 | csrop
@@ -201,6 +206,7 @@ Bind Scope bv_scope with RegIdx.
 Inductive AST : Set :=
 | RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
 | ITYPE (imm : bv 12) (rs1 rd : RegIdx) (op : IOP)
+| SHIFTIOP (shamt : bv 6) (rs1 rd : RegIdx) (op : SOP)
 | UTYPE (imm : bv 20) (rd : RegIdx) (op : UOP)
 | BTYPE (imm : bv 13) (rs2 rs1 : RegIdx) (op : BOP)
 | RISCV_JAL (imm : bv 21) (rd : RegIdx)
@@ -249,6 +255,7 @@ Inductive MemoryOpResult (bytes : nat): Set :=
 Inductive ASTConstructor : Set :=
 | KRTYPE
 | KITYPE
+| KSHIFTIOP
 | KUTYPE
 | KBTYPE
 | KRISCV_JAL
@@ -334,6 +341,7 @@ Section TransparentObligations.
   Derive NoConfusion for PmpAddrMatch.
   Derive NoConfusion for ROP.
   Derive NoConfusion for IOP.
+  Derive NoConfusion for SOP.
   Derive NoConfusion for UOP.
   Derive NoConfusion for BOP.
   Derive NoConfusion for CSROP.
@@ -368,6 +376,7 @@ Derive EqDec for PmpMatch.
 Derive EqDec for PmpAddrMatch.
 Derive EqDec for ROP.
 Derive EqDec for IOP.
+Derive EqDec for SOP.
 Derive EqDec for UOP.
 Derive EqDec for BOP.
 Derive EqDec for CSROP.
@@ -428,6 +437,10 @@ Section Finite.
     Finite IOP :=
     {| enum := [RISCV_ADDI] |}.
 
+  #[export,program] Instance SOP_finite :
+    Finite SOP :=
+    {| enum := [RISCV_SRLI] |}.
+
   #[export,program] Instance UOP_finite :
     Finite UOP :=
     {| enum := [RISCV_LUI;RISCV_AUIPC] |}.
@@ -450,7 +463,7 @@ Section Finite.
 
   #[export,program] Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KMRET;KCSR] |}.
+    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KMRET;KCSR] |}.
 
   #[export,program] Instance AccessType_finite :
     Finite AccessType :=
@@ -511,6 +524,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_pmp_addr_range                 := (ty.option (ty.prod ty_xlenbits ty_xlenbits)).
   Definition ty_rop                            := (ty.enum rop).
   Definition ty_iop                            := (ty.enum iop).
+  Definition ty_sop                            := (ty.enum sop).
   Definition ty_uop                            := (ty.enum uop).
   Definition ty_bop                            := (ty.enum bop).
   Definition ty_csrop                          := (ty.enum csrop).
@@ -541,6 +555,7 @@ Module Export RiscvPmpBase <: Base.
     | pmpaddrmatch     => PmpAddrMatch
     | rop              => ROP
     | iop              => IOP
+    | sop              => SOP
     | uop              => UOP
     | bop              => BOP
     | csrop            => CSROP
@@ -588,6 +603,7 @@ Module Export RiscvPmpBase <: Base.
                             match K with
                             | KRTYPE      => ty.tuple [ty_regno; ty_regno; ty_regno; ty_rop]
                             | KITYPE      => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty_iop]
+                            | KSHIFTIOP   => ty.tuple [ty.bvec 6;  ty_regno; ty_regno; ty_sop]
                             | KUTYPE      => ty.tuple [ty.bvec 20; ty_regno; ty_uop]
                             | KBTYPE      => ty.tuple [ty.bvec 13; ty_regno; ty_regno; ty_bop]
                             | KRISCV_JAL  => ty.tuple [ty.bvec 21; ty_regno]
@@ -634,17 +650,18 @@ Module Export RiscvPmpBase <: Base.
     match U with
     | ast              => fun Kv =>
                             match Kv with
-                            | RTYPE rs2 rs1 rd op   => existT KRTYPE (tt , rs2 , rs1 , rd , op)
-                            | ITYPE imm rs1 rd op   => existT KITYPE (tt , imm , rs1 , rd , op)
-                            | UTYPE imm rd op       => existT KUTYPE (tt , imm , rd , op)
-                            | BTYPE imm rs2 rs1 op  => existT KBTYPE (tt , imm , rs2 , rs1 , op)
-                            | RISCV_JAL imm rd      => existT KRISCV_JAL (tt , imm , rd)
-                            | RISCV_JALR imm rs1 rd => existT KRISCV_JALR (tt , imm , rs1 , rd)
-                            | LOAD imm rs1 rd w      => existT KLOAD (tt , imm , rs1 , rd , w)
-                            | STORE imm rs2 rs1 w   => existT KSTORE (tt , imm , rs2 , rs1 , w)
-                            | ECALL                 => existT KECALL tt
-                            | MRET                  => existT KMRET tt
-                            | CSR csr rs1 rd op     => existT KCSR (tt , csr , rs1 , rd , op)
+                            | RTYPE rs2 rs1 rd op      => existT KRTYPE (tt , rs2 , rs1 , rd , op)
+                            | ITYPE imm rs1 rd op      => existT KITYPE (tt , imm , rs1 , rd , op)
+                            | SHIFTIOP shamt rs1 rd op => existT KSHIFTIOP (tt , shamt , rs1 , rd , op)
+                            | UTYPE imm rd op          => existT KUTYPE (tt , imm , rd , op)
+                            | BTYPE imm rs2 rs1 op     => existT KBTYPE (tt , imm , rs2 , rs1 , op)
+                            | RISCV_JAL imm rd         => existT KRISCV_JAL (tt , imm , rd)
+                            | RISCV_JALR imm rs1 rd    => existT KRISCV_JALR (tt , imm , rs1 , rd)
+                            | LOAD imm rs1 rd w        => existT KLOAD (tt , imm , rs1 , rd , w)
+                            | STORE imm rs2 rs1 w      => existT KSTORE (tt , imm , rs2 , rs1 , w)
+                            | ECALL                    => existT KECALL tt
+                            | MRET                     => existT KMRET tt
+                            | CSR csr rs1 rd op        => existT KCSR (tt , csr , rs1 , rd , op)
                             end
     | access_type      => fun Kv =>
                             match Kv with
@@ -683,17 +700,18 @@ Module Export RiscvPmpBase <: Base.
       match U with
       | ast              => fun Kv =>
                               match Kv with
-                              | existT KRTYPE (tt , rs2 , rs1 , rd , op)  => RTYPE rs2 rs1 rd op
-                              | existT KITYPE (tt , imm , rs1 , rd , op)  => ITYPE imm rs1 rd op
-                              | existT KUTYPE (tt , imm , rd , op)        => UTYPE imm rd op
-                              | existT KBTYPE (tt , imm , rs2 , rs1 , op) => BTYPE imm rs2 rs1 op
-                              | existT KRISCV_JAL (tt , imm , rd)         => RISCV_JAL imm rd
-                              | existT KRISCV_JALR (tt , imm , rs1 , rd)  => RISCV_JALR imm rs1 rd
-                              | existT KLOAD (tt , imm , rs1 , rd , w)    => LOAD imm rs1 rd w
-                              | existT KSTORE (tt , imm , rs2 , rs1 , w)  => STORE imm rs2 rs1 w
-                              | existT KECALL tt                          => ECALL
-                              | existT KMRET tt                           => MRET
-                              | existT KCSR (tt , csr , rs1 , rd , op)    => CSR csr rs1 rd op
+                              | existT KRTYPE (tt , rs2 , rs1 , rd , op)      => RTYPE rs2 rs1 rd op
+                              | existT KITYPE (tt , imm , rs1 , rd , op)      => ITYPE imm rs1 rd op
+                              | existT KSHIFTIOP (tt , shamt , rs1 , rd , op) => SHIFTIOP shamt rs1 rd op
+                              | existT KUTYPE (tt , imm , rd , op)            => UTYPE imm rd op
+                              | existT KBTYPE (tt , imm , rs2 , rs1 , op)     => BTYPE imm rs2 rs1 op
+                              | existT KRISCV_JAL (tt , imm , rd)             => RISCV_JAL imm rd
+                              | existT KRISCV_JALR (tt , imm , rs1 , rd)      => RISCV_JALR imm rs1 rd
+                              | existT KLOAD (tt , imm , rs1 , rd , w)        => LOAD imm rs1 rd w
+                              | existT KSTORE (tt , imm , rs2 , rs1 , w)      => STORE imm rs2 rs1 w
+                              | existT KECALL tt                              => ECALL
+                              | existT KMRET tt                               => MRET
+                              | existT KCSR (tt , csr , rs1 , rd , op)        => CSR csr rs1 rd op
                               end
       | access_type      => fun Kv =>
                               match Kv with

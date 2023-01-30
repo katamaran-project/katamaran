@@ -57,6 +57,7 @@ Module RiscvNotations.
   Notation "'op'"           := "op" : string_scope.
   Notation "'v'"            := "v" : string_scope.
   Notation "'imm'"          := "imm" : string_scope.
+  Notation "'shamt'"        := "shamt" : string_scope.
   Notation "'t'"            := "t" : string_scope.
   Notation "'addr'"         := "addr" : string_scope.
   Notation "'paddr'"        := "paddr" : string_scope.
@@ -200,6 +201,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute               : Fun ["ast" ∷ ty_ast] ty_retired
   | execute_RTYPE         : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired
   | execute_ITYPE         : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_iop] ty_retired
+  | execute_SHIFTIOP      : Fun [shamt ∷ ty.bvec 6; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_sop] ty_retired
   | execute_UTYPE         : Fun [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired
   | execute_BTYPE         : Fun [imm ∷ ty.bvec 13; rs2 ∷ ty_regno; rs1 ∷ ty_regno; op ∷ ty_bop] ty_retired
   | execute_RISCV_JAL     : Fun [imm ∷ ty.bvec 21; rd ∷ ty_regno] ty_retired
@@ -248,6 +250,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'res'"          := (@exp_var _ "res" _ _) : exp_scope.
     Notation "'v'"            := (@exp_var _ "v" _ _) : exp_scope.
     Notation "'imm'"          := (@exp_var _ "imm" _ _) : exp_scope.
+    Notation "'shamt'"        := (@exp_var _ "shamt" _ _) : exp_scope.
     Notation "'immext'"       := (@exp_var _ "immext" _ _) : exp_scope.
     Notation "'off'"          := (@exp_var _ "off" _ _) : exp_scope.
     Notation "'offset'"       := (@exp_var _ "offset" _ _) : exp_scope.
@@ -903,17 +906,18 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
            function clauses of execute (a scattered definition) *)
   Definition fun_execute : Stm ["ast" ∷ ty_ast] ty_retired :=
     match: exp_var "ast" in union ast with
-    |> KRTYPE (pat_tuple (rs2 , rs1 , rd , op)) => call execute_RTYPE rs2 rs1 rd op
-    |> KITYPE (pat_tuple (imm , rs1 , rd , op)) => call execute_ITYPE imm rs1 rd op
-    |> KUTYPE (pat_tuple (imm , rd , op))       => call execute_UTYPE imm rd op
-    |> KBTYPE (pat_tuple (imm , rs2, rs1 , op)) => call execute_BTYPE imm rs2 rs1 op
-    |> KRISCV_JAL (pat_tuple (imm , rd))        => call execute_RISCV_JAL imm rd
-    |> KRISCV_JALR (pat_tuple (imm , rs1 , rd)) => call execute_RISCV_JALR imm rs1 rd
-    |> KLOAD (pat_tuple (imm , rs1, rd , w))    => call execute_LOAD imm rs1 rd w
-    |> KSTORE (pat_tuple (imm , rs2 , rs1 , w)) => call execute_STORE imm rs2 rs1 w
-    |> KECALL pat_unit                          => call execute_ECALL
-    |> KMRET pat_unit                           => call execute_MRET
-    |> KCSR (pat_tuple (csr , rs1 , rd , op))   => call execute_CSR csr rs1 rd op
+    |> KRTYPE (pat_tuple (rs2 , rs1 , rd , op))      => call execute_RTYPE rs2 rs1 rd op
+    |> KITYPE (pat_tuple (imm , rs1 , rd , op))      => call execute_ITYPE imm rs1 rd op
+    |> KSHIFTIOP (pat_tuple (shamt , rs1 , rd , op)) => call execute_SHIFTIOP shamt rs1 rd op
+    |> KUTYPE (pat_tuple (imm , rd , op))            => call execute_UTYPE imm rd op
+    |> KBTYPE (pat_tuple (imm , rs2, rs1 , op))      => call execute_BTYPE imm rs2 rs1 op
+    |> KRISCV_JAL (pat_tuple (imm , rd))             => call execute_RISCV_JAL imm rd
+    |> KRISCV_JALR (pat_tuple (imm , rs1 , rd))      => call execute_RISCV_JALR imm rs1 rd
+    |> KLOAD (pat_tuple (imm , rs1, rd , w))         => call execute_LOAD imm rs1 rd w
+    |> KSTORE (pat_tuple (imm , rs2 , rs1 , w))      => call execute_STORE imm rs2 rs1 w
+    |> KECALL pat_unit                               => call execute_ECALL
+    |> KMRET pat_unit                                => call execute_MRET
+    |> KCSR (pat_tuple (csr , rs1 , rd , op))        => call execute_CSR csr rs1 rd op
     end.
 
   Definition fun_execute_RTYPE : Stm [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired :=
@@ -937,9 +941,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
 
-  (* TODO: offset needs to be shifted (will need to update femtokernel too!) *)
+  Definition fun_execute_SHIFTIOP : Stm [shamt :: ty.bvec 6; rs1 :: ty_regno; rd :: ty_regno; op :: ty_sop] ty_retired :=
+    let: rs1_val := call rX rs1 in
+    let: result :=
+      match: op in sop with
+      | RISCV_SLRI => let: tmp := exp_extract 0 5 shamt in
+                      exp_binop bop.shiftr rs1_val tmp
+      end in
+    call wX rd result ;;
+    stm_val ty_retired RETIRE_SUCCESS.
+
+  Import Vector.VectorNotations.
   Definition fun_execute_UTYPE : Stm [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired :=
-    let: off ∷ ty_xlenbits := exp_sext imm in
+    let: off ∷ ty_xlenbits := exp_sext (exp_binop bop.bvapp (exp_bvec [exp_val ty.bool false; exp_val ty.bool false; exp_val ty.bool false]) imm) in
     let: ret :=
        match: op in uop with
        | RISCV_LUI   => off
@@ -1180,6 +1194,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | execute                 => fun_execute
     | execute_RTYPE           => fun_execute_RTYPE
     | execute_ITYPE           => fun_execute_ITYPE
+    | execute_SHIFTIOP        => fun_execute_SHIFTIOP
     | execute_UTYPE           => fun_execute_UTYPE
     | execute_BTYPE           => fun_execute_BTYPE
     | execute_RISCV_JAL       => fun_execute_RISCV_JAL
