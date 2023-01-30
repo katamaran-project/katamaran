@@ -299,6 +299,9 @@ Import BlockVerificationDerived2.
       (* let vc4 := Postprocessing.solve_uvars vc3 in *)
       (* let vc5 := Postprocessing.prune vc4 in *)
       (* vc5. *)
+    Import SymProp.notations.
+    Set Printing Depth 200.
+    Eval vm_compute in vc__femtohandler.
 
     Lemma sat__femtohandler : safeE vc__femtohandler.
     Proof.
