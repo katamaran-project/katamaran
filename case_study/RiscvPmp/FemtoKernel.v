@@ -129,7 +129,7 @@ Import BlockVerificationDerived2.
     Definition femto_pmpcfg_ent0_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
     Definition femto_pmpcfg_ent1_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
-    Definition femto_pmp0cfg_bits : Val (ty.bvec 20) := bv.zext (bv.app femto_pmpcfg_ent1_bits femto_pmpcfg_ent0_bits).
+    Definition femto_pmp0cfg_bits : Val (ty.bvec 20) := bv.zext (bv.app femto_pmpcfg_ent0_bits femto_pmpcfg_ent1_bits).
                                                                
     Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N 88); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
 
@@ -183,7 +183,7 @@ Import BlockVerificationDerived2.
 
     (* DOMI: TODO: replace the pointsto chunk for 84 ↦ 42 with a corresponding invariant *)
     Example femtokernel_init_pre : Assertion {| wctx := [] ▻ ("a"::ty_xlenbits) ; wco := []%ctx |} :=
-        (term_var "a" = term_val ty_word bv.zero) ∗
+      (term_var "a" = term_val ty_word bv.zero) ∗
       (∃ "v", mstatus ↦ term_var "v") ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
       (∃ "v", mcause ↦ term_var "v") ∗
@@ -234,15 +234,12 @@ Import BlockVerificationDerived2.
       (* let vc5 := Postprocessing.prune vc4 in *)
       (* vc5. *)
     (* Import SymProp.notations. *)
-    (* (* Set Printing Depth 200. *) *)
+    (* Set Printing Depth 200. *)
     (* Eval vm_compute in vc__femtoinit. *)
 
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
-      vm_compute.
-      constructor.
-      simpl.
-      intros.
+      now vm_compute.
     Qed.
 
     Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].
