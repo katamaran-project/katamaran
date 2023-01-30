@@ -868,7 +868,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | MPMP0CFG  =>
         let: tmp1 := stm_pmpcfg_ent_to_bits (stm_read_register pmp0cfg) in
         let: tmp2 := stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg) in
-        exp_zext (exp_binop bop.bvapp tmp2 tmp1)
+        exp_zext (exp_binop bop.bvapp tmp1 tmp2)
     | MPMPADDR0 => stm_read_register pmpaddr0
     | MPMPADDR1 => stm_read_register pmpaddr1
     end.
