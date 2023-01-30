@@ -112,7 +112,7 @@ Import BlockVerificationDerived2.
                 | TOR => bv.one _
                 end.
 
-    Definition pure_pmpcfg_ent_to_bits : Pmpcfg_ent -> Val (ty.bvec 20) :=
+    Definition pure_pmpcfg_ent_to_bits : Pmpcfg_ent -> Val (ty.bvec byte) :=
       fun ent =>
         match ent with
         | MkPmpcfg_ent L A X W R =>
@@ -126,13 +126,16 @@ Import BlockVerificationDerived2.
 
     Definition femto_address_max : N := 2^19 - 1.
     Definition femto_pmpcfg_ent0 : Pmpcfg_ent := MkPmpcfg_ent false OFF false false false.
-    Definition femto_pmpcfg_ent0_bits : Val (ty.bvec 20) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
+    Definition femto_pmpcfg_ent0_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
-    Definition femto_pmpcfg_ent1_bits : Val (ty.bvec 20) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
+    Definition femto_pmpcfg_ent1_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
+    Definition femto_pmp0cfg_bits : Val (ty.bvec 20) := bv.zext (bv.app femto_pmpcfg_ent1_bits femto_pmpcfg_ent0_bits).
+                                                               
     Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N 88); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
 
     Definition femto_mstatus := pure_mstatus_to_bits (MkMstatus User).
 
+    (* TODO: depends on incorrect definiton of LUI *)
     Example femtokernel_init : list AST :=
       [
         UTYPE bv.zero ra RISCV_AUIPC
@@ -140,10 +143,10 @@ Import BlockVerificationDerived2.
       ; CSR MPMPADDR0 ra zero CSRRW
       ; UTYPE (bv.of_N femto_address_max) ra RISCV_LUI
       ; CSR MPMPADDR1 ra zero CSRRW
-      ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI
+      ; UTYPE femto_pmp0cfg_bits ra RISCV_LUI
       ; CSR MPMP0CFG ra zero CSRRW
-      ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI
-      ; CSR MPMP1CFG ra zero CSRRW
+      ; UTYPE femto_pmp0cfg_bits ra RISCV_LUI (* TODO: remove this line and the next (duplicate to have to bother changing pcs for now *)
+      ; CSR MPMP0CFG ra zero CSRRW
       ; UTYPE bv.zero ra RISCV_AUIPC
       ; ITYPE (bv.of_N 36) ra ra RISCV_ADDI
       ; CSR MTvec ra zero CSRRW
@@ -161,6 +164,10 @@ Import BlockVerificationDerived2.
       ; LOAD (bv.of_N 12) ra ra WORD
       ; MRET
       ].
+    Definition addPc (l : list AST) : list (nat * AST) :=
+      map (fun '(i , a) => (i * 4 , a)%nat)
+          (combine (seq 0 (List.length l)) l).
+    Compute addPc (femtokernel_init ++ femtokernel_handler).
 
     Import asn.notations.
     (* Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79). *)
@@ -232,7 +239,10 @@ Import BlockVerificationDerived2.
 
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
-      now vm_compute.
+      vm_compute.
+      constructor.
+      simpl.
+      intros.
     Qed.
 
     Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].

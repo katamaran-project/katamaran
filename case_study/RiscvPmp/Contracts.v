@@ -929,7 +929,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           |}.
 
         Definition sep_contract_pmpWriteCfg : SepContractFun pmpWriteCfg :=
-          {| sep_contract_logic_variables := [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits];
+          {| sep_contract_logic_variables := [cfg :: ty_pmpcfg_ent; value :: ty_byte];
              sep_contract_localstore      := [term_var cfg; term_var value];
              sep_contract_precondition    := asn_expand_pmpcfg_ent (term_var cfg);
              sep_contract_result          := "result_pmpWriteCfg";
@@ -937,12 +937,13 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                ∃ "cfg", term_var "result_pmpWriteCfg" = term_var "cfg";
           |}.
 
-        Definition sep_contract_pmpWriteCfgReg : SepContractFun pmpWriteCfgReg :=
-          {| sep_contract_logic_variables := [idx :: ty_pmpcfgidx; value :: ty_xlenbits];
-             sep_contract_localstore      := [term_var idx; term_var value];
+
+        Definition sep_contract_pmpWriteCfgReg (n : nat) {H: (n < 1)%nat} : SepContractFun (@pmpWriteCfgReg n H) :=
+          {| sep_contract_logic_variables := [value :: ty_xlenbits];
+             sep_contract_localstore      := [term_var value];
              sep_contract_precondition    :=
-               ∃ "cfg0", (pmp0cfg ↦ term_var "cfg0" ∗ asn_expand_pmpcfg_ent (term_var "cfg0"))
-               ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"));
+                  ∃ "cfg0", (pmp0cfg ↦ term_var "cfg0" ∗ asn_expand_pmpcfg_ent (term_var "cfg0"))
+                  ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"));
              sep_contract_result          := "result_pmpWriteCfgReg";
              sep_contract_postcondition   :=
                term_var "result_pmpWriteCfgReg" = term_val ty.unit tt
@@ -1012,7 +1013,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | pmpMatchAddr            => Some sep_contract_pmpMatchAddr
             | pmpMatchEntry           => Some sep_contract_pmpMatchEntry
             | pmpLocked               => Some sep_contract_pmpLocked
-            | pmpWriteCfgReg          => Some sep_contract_pmpWriteCfgReg
+            | @pmpWriteCfgReg n H     => Some (@sep_contract_pmpWriteCfgReg n H)
             | pmpWriteCfg             => Some sep_contract_pmpWriteCfg
             | pmpWriteAddr            => Some sep_contract_pmpWriteAddr
             | @mem_write_value bytes H => Some (@sep_contract_mem_write_value bytes H)
@@ -1250,8 +1251,8 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_step : ValidContract step.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_pmpWriteCfgReg : ValidContract pmpWriteCfgReg.
-  Proof. reflexivity. Qed.
+  Lemma valid_contract_pmpWriteCfgReg (n : nat) {H : (n < 1)%nat} : ValidContract (@pmpWriteCfgReg n H).
+  Proof. destruct n; reflexivity. Qed.
 
   Lemma valid_contract_pmpWriteCfg : ValidContract pmpWriteCfg.
   Proof. reflexivity. Qed.

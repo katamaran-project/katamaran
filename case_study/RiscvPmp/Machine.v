@@ -163,8 +163,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
   | pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1)
   | pmpLocked             : Fun [cfg ∷ ty_pmpcfg_ent] ty.bool
-  | pmpWriteCfgReg        : Fun [idx :: ty_pmpcfgidx; value :: ty_xlenbits] ty.unit
-  | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits] ty_pmpcfg_ent
+  | pmpWriteCfgReg(n : nat) {H : n < 1} : Fun [value :: ty_xlenbits] ty.unit
+  | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent
   | pmpWriteAddr          : Fun [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
   | pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
   | pmpCheckPerms         : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool
@@ -357,11 +357,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                  in exp_var "mppb"
     end.
 
-  Definition exp_testbit {Γ} (eb : Exp Γ ty_xlenbits) (i : N) : Exp Γ ty.bool :=
-    let em := exp_val ty_xlenbits (Bitvector.bv.of_N (N.shiftl 1 i)) in
+  Definition exp_testbit {Γ} (eb : Exp Γ ty_byte) (i : N) : Exp Γ ty.bool :=
+    let em := exp_val ty_byte (Bitvector.bv.of_N (N.shiftl 1 i)) in
     exp_binop bop.bvand eb em = em.
 
-  Definition stm_pmpcfg_ent_from_bits {Γ} (b : Stm Γ ty_xlenbits) : Stm Γ ty_pmpcfg_ent :=
+  Definition stm_pmpcfg_ent_from_bits {Γ} (b : Stm Γ ty_byte) : Stm Γ ty_pmpcfg_ent :=
     let: "b" := b in
     let: "L" := exp_testbit (exp_var "b") 7 in
     let: "A" := if: exp_testbit (exp_var "b") 4
@@ -510,19 +510,21 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_pmpLocked : Stm [cfg ∷ ty_pmpcfg_ent] ty.bool :=
     match: cfg in rpmpcfg_ent with [L; A; X; W; R] => L end.
 
-  Definition fun_pmpWriteCfgReg : Stm [idx :: ty_pmpcfgidx; value :: ty_xlenbits] ty.unit :=
-    match: idx in pmpcfgidx with
-    | PMP0CFG => let: tmp1 := stm_read_register pmp0cfg in
-                 let: tmp2 := call pmpWriteCfg tmp1 value in
-                 stm_write_register pmp0cfg tmp2 ;;
-                 stm_val ty.unit tt
-    | PMP1CFG => let: tmp1 := stm_read_register pmp1cfg in
-                 let: tmp2 := call pmpWriteCfg tmp1 value in
-                 stm_write_register pmp1cfg tmp2 ;;
-                 stm_val ty.unit tt
-    end.
+  Definition fun_pmpWriteCfgReg (n : nat) {H : n < 1} : Stm [value :: ty_xlenbits] ty.unit :=
+    if: exp_int (Z.of_nat n) = exp_int 0%Z
+    then
+      let: tmp  := stm_read_register pmp0cfg in
+      let: tmp1 := exp_extract 0 8 value in
+      let: tmp2 := call pmpWriteCfg tmp tmp1 in
+      stm_write_register pmp0cfg tmp2 ;;
+      let: tmp  := stm_read_register pmp1cfg in
+      let: tmp1 := exp_extract 8 8 value in
+      let: tmp2 := call pmpWriteCfg tmp tmp1 in
+      stm_write_register pmp1cfg tmp2 ;;
+      stm_val ty.unit tt
+    else fail "writing to non-existent cfg".
 
-  Definition fun_pmpWriteCfg : Stm [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits] ty_pmpcfg_ent :=
+  Definition fun_pmpWriteCfg : Stm [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent :=
     let: locked := call pmpLocked cfg in
     if: locked then cfg else stm_pmpcfg_ent_from_bits value.
 
@@ -830,10 +832,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                   | Machine => stm_val ty.bool true
                   | _ => stm_val ty.bool false
                   end
-    | MPMP1CFG => match: p in privilege with
-                  | Machine => stm_val ty.bool true
-                  | _ => stm_val ty.bool false
-                  end
     | MPMPADDR0 => match: p in privilege with
                    | Machine => stm_val ty.bool true
                    | _ => stm_val ty.bool false
@@ -870,8 +868,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | MTvec     => stm_read_register mtvec
     | MCause    => stm_read_register mcause
     | MEpc      => stm_read_register mepc
-    | MPMP0CFG  => stm_pmpcfg_ent_to_bits (stm_read_register pmp0cfg)
-    | MPMP1CFG  => stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg)
+    | MPMP0CFG  =>
+        (* TODO: read both cfgs! *)
+        stm_pmpcfg_ent_to_bits (stm_read_register pmp0cfg)
     | MPMPADDR0 => stm_read_register pmpaddr0
     | MPMPADDR1 => stm_read_register pmpaddr1
     end.
@@ -887,8 +886,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                 stm_val ty.unit tt
     | MEpc => stm_write_register mepc value ;;
               stm_val ty.unit tt
-    | MPMP0CFG => call pmpWriteCfgReg (exp_val ty_pmpcfgidx PMP0CFG) value
-    | MPMP1CFG => call pmpWriteCfgReg (exp_val ty_pmpcfgidx PMP1CFG) value
+    | MPMP0CFG => stm_call (@pmpWriteCfgReg 0%nat Nat.lt_0_1) [value]
     | MPMPADDR0 => let: tmp1 := stm_read_register pmp0cfg in
                    let: tmp1 := call pmpLocked tmp1 in
                    let: tmp2 := stm_read_register pmpaddr0 in
@@ -941,6 +939,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
 
+  (* TODO: offset needs to be shifted (will need to update femtokernel too!) *)
   Definition fun_execute_UTYPE : Stm [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired :=
     let: off ∷ ty_xlenbits := exp_sext imm in
     let: ret :=
@@ -1147,7 +1146,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | @pmp_mem_read width H   => @fun_pmp_mem_read width H
     | @pmp_mem_write width H  => @fun_pmp_mem_write width H
     | pmpLocked               => fun_pmpLocked
-    | pmpWriteCfgReg          => fun_pmpWriteCfgReg
+    | @pmpWriteCfgReg n p     => @fun_pmpWriteCfgReg n p
     | pmpWriteCfg             => fun_pmpWriteCfg
     | pmpWriteAddr            => fun_pmpWriteAddr
     | @pmpCheck bytes H       => @fun_pmpCheck bytes H

@@ -95,7 +95,6 @@ Inductive CSRIdx : Set :=
 | MCause
 | MEpc
 | MPMP0CFG
-| MPMP1CFG
 | MPMPADDR0
 | MPMPADDR1
 .
@@ -401,7 +400,7 @@ Section Finite.
     {| enum := [User;Machine] |}.
 
   #[export,program] Instance CSRIdx_finite : Finite CSRIdx :=
-    {| enum := [MStatus;MTvec;MCause;MEpc;MPMP0CFG;MPMP1CFG;MPMPADDR0;MPMPADDR1] |}.
+    {| enum := [MStatus;MTvec;MCause;MEpc;MPMP0CFG;MPMPADDR0;MPMPADDR1] |}.
 
   #[export,program] Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
     {| enum := [PMP0CFG;PMP1CFG] |}.
