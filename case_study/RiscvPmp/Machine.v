@@ -378,20 +378,20 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Notation "x '|bv|' y" := (exp_binop bop.bvor x y)
       (at level 60) : exp_scope.
-  Definition stm_pmpcfg_ent_to_bits {Γ} (cfgent : Stm Γ ty_pmpcfg_ent) : Stm Γ ty_xlenbits :=
+  Definition stm_pmpcfg_ent_to_bits {Γ} (cfgent : Stm Γ ty_pmpcfg_ent) : Stm Γ ty_byte :=
     let: "cfgent" := cfgent in
     match: exp_var "cfgent" in rpmpcfg_ent with
       ["L";"A";"X";"W";"R"] =>
       let: "L'" := if: exp_var "L"
-                   then exp_val ty_xlenbits [bv (N.shiftl 1 7)]
-                   else exp_val ty_xlenbits [bv 0] in
+                   then exp_val ty_byte [bv (N.shiftl 1 7)]
+                   else exp_val ty_byte [bv 0] in
       let: "A'" := match: A in pmpaddrmatchtype with
-                   | OFF => exp_val ty_xlenbits [bv (N.shiftl 0 3)]
-                   | TOR => exp_val ty_xlenbits [bv (N.shiftl 1 3)]
+                   | OFF => exp_val ty_byte [bv (N.shiftl 0 3)]
+                   | TOR => exp_val ty_byte [bv (N.shiftl 1 3)]
                    end in
-      let: "X'" := if: exp_var "X" then exp_val ty_xlenbits [bv (N.shiftl 1 2)] else exp_val ty_xlenbits [bv 0] in
-      let: "W'" := if: exp_var "W" then exp_val ty_xlenbits [bv (N.shiftl 1 1)] else exp_val ty_xlenbits [bv 0] in
-      let: "R'" := if: exp_var "R" then exp_val ty_xlenbits [bv (N.shiftl 1 0)] else exp_val ty_xlenbits [bv 0] in
+      let: "X'" := if: exp_var "X" then exp_val ty_byte [bv (N.shiftl 1 2)] else exp_val ty_byte [bv 0] in
+      let: "W'" := if: exp_var "W" then exp_val ty_byte [bv (N.shiftl 1 1)] else exp_val ty_byte [bv 0] in
+      let: "R'" := if: exp_var "R" then exp_val ty_byte [bv (N.shiftl 1 0)] else exp_val ty_byte [bv 0] in
       exp_var "L'" |bv| exp_var "A'" |bv| exp_var "X'" |bv| exp_var "W'" |bv| exp_var "R'"
     end.
 
@@ -653,8 +653,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_init_model : Stm ctx.nil ty.unit :=
     call init_sys.
 
-  (* TODO: specify contract for loop in the Iris Model *)
-  (* TODO: (Katamaran-based solution, but stuck on ▹)introduce missing Iris stuff as abstract predicates (▹, wp loop ⊤) *)
   Definition fun_loop : Stm ctx.nil ty.unit :=
     call step ;; call loop.
 
@@ -670,7 +668,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KMemException (pat_var "e")  => stm_exp (F_Error e tmp)
     end.
 
-  (* TODO: Define contract for step, with addition of pc ↦ ... *)
   Definition fun_step : Stm ctx.nil ty.unit :=
     let: f := call fetch in
     match: f in union fetch_result with
@@ -869,8 +866,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | MCause    => stm_read_register mcause
     | MEpc      => stm_read_register mepc
     | MPMP0CFG  =>
-        (* TODO: read both cfgs! *)
-        stm_pmpcfg_ent_to_bits (stm_read_register pmp0cfg)
+        let: tmp1 := stm_pmpcfg_ent_to_bits (stm_read_register pmp0cfg) in
+        let: tmp2 := stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg) in
+        exp_zext (exp_binop bop.bvapp tmp2 tmp1)
     | MPMPADDR0 => stm_read_register pmpaddr0
     | MPMPADDR1 => stm_read_register pmpaddr1
     end.
