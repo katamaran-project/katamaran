@@ -121,7 +121,7 @@ Import BlockVerificationDerived2.
             let x : bv 1 := bv.of_bool X in
             let w : bv 1 := bv.of_bool W in
             let r : bv 1 := bv.of_bool R in
-            bv.app r (bv.app w (bv.app x (bv.app a (bv.app l bv.zero))))
+            bv.app r (bv.app w (bv.app x (bv.app a l)))
         end%Z.
 
     Definition femto_address_max : N := 2^19 - 1.
@@ -146,7 +146,7 @@ Import BlockVerificationDerived2.
       ; SHIFTIOP (bv.of_N 3) ra ra RISCV_SRLI
       ; CSR MPMP0CFG ra zero CSRRW
       ; UTYPE bv.zero ra RISCV_AUIPC
-      ; ITYPE (bv.of_N 36) ra ra RISCV_ADDI
+      ; ITYPE (bv.of_N 32) ra ra RISCV_ADDI
       ; CSR MTvec ra zero CSRRW
       ; ITYPE (bv.of_N 16) ra ra RISCV_ADDI
       ; CSR MEpc ra zero CSRRW
@@ -224,12 +224,12 @@ Import BlockVerificationDerived2.
 
     Definition vc__femtoinit : 𝕊 Σ__femtoinit :=
       postprocess (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post).
-      (* let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in *)
-      (* let vc2 := Postprocessing.prune vc1 in *)
-      (* let vc3 := Postprocessing.solve_evars vc2 in *)
-      (* let vc4 := Postprocessing.solve_uvars vc3 in *)
-      (* let vc5 := Postprocessing.prune vc4 in *)
-      (* vc5. *)
+    (*   let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in *)
+    (*   let vc2 := Postprocessing.prune vc1 in *)
+    (*   let vc3 := Postprocessing.solve_evars vc1 in *)
+    (*   let vc4 := Postprocessing.solve_uvars vc3 in *)
+    (*   let vc5 := Postprocessing.prune vc4 in *)
+    (*   vc5. *)
     (* Import SymProp.notations. *)
     (* Set Printing Depth 200. *)
     (* Eval vm_compute in vc__femtoinit. *)
