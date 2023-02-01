@@ -953,7 +953,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Import Vector.VectorNotations.
   Definition fun_execute_UTYPE : Stm [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired :=
-    let: off ∷ ty_xlenbits := exp_sext (exp_binop bop.bvapp (exp_bvec [exp_val ty.bool false; exp_val ty.bool false; exp_val ty.bool false]) imm) in
+    let: off ∷ ty_xlenbits := exp_sext (exp_binop bop.bvapp (exp_val (ty.bvec 12) Bitvector.bv.zero) imm) in
     let: ret :=
        match: op in uop with
        | RISCV_LUI   => off

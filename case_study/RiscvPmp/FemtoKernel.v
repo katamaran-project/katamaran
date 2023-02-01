@@ -129,7 +129,9 @@ Import BlockVerificationDerived2.
     Definition femto_pmpcfg_ent0_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
     Definition femto_pmpcfg_ent1_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
-    Definition femto_pmp0cfg_bits : Val (ty.bvec 20) := bv.zext (bv.app femto_pmpcfg_ent0_bits femto_pmpcfg_ent1_bits).
+    Definition femto_pmp0cfg_bits : Val (ty.bvec 32) := bv.zext (bv.app femto_pmpcfg_ent0_bits femto_pmpcfg_ent1_bits).
+    Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := bv.extract 0 12 femto_pmp0cfg_bits.
+    Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := bv.extract 12 20 femto_pmp0cfg_bits.
                                                                
     Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N 80); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
 
@@ -142,8 +144,8 @@ Import BlockVerificationDerived2.
       ; CSR MPMPADDR0 ra zero CSRRW
       ; UTYPE (bv.of_N femto_address_max) ra RISCV_LUI
       ; CSR MPMPADDR1 ra zero CSRRW
-      ; UTYPE femto_pmp0cfg_bits ra RISCV_LUI
-      ; SHIFTIOP (bv.of_N 3) ra ra RISCV_SRLI
+      ; UTYPE femto_pmp0cfg_bits_2 ra RISCV_LUI
+      ; ITYPE femto_pmp0cfg_bits_1 ra ra RISCV_ADDI
       ; CSR MPMP0CFG ra zero CSRRW
       ; UTYPE bv.zero ra RISCV_AUIPC
       ; ITYPE (bv.of_N 32) ra ra RISCV_ADDI
@@ -236,8 +238,8 @@ Import BlockVerificationDerived2.
 
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
-      (* now vm_compute. *)
-    Admitted.
+      now vm_compute.
+    Qed.
 
     Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].
     Let W__femtohandler : World := MkWorld Σ__femtohandler []%ctx.
