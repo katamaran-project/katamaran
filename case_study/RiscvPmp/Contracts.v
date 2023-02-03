@@ -819,6 +819,20 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                  (asn_pmp_entries (term_var "entries") ∗ asn_pmp_access (term_var addr) (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var priv) (term_var acc));
           |}.
 
+        Definition sep_contract_pmpCheckExp (bytes : nat) {H : restrict_bytes bytes} : SepContractFun (@pmpCheckExp bytes H) :=
+          {| sep_contract_logic_variables := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; "entries" :: ty.list ty_pmpentry];
+             sep_contract_localstore      := [term_var addr; term_var acc; term_var priv];
+             sep_contract_precondition    :=
+               asn_pmp_entries (term_var "entries");
+             sep_contract_result          := "result_pmpCheck";
+             sep_contract_postcondition   :=
+               asn_match_option
+                 _ (term_var "result_pmpCheck") e
+                 (asn_pmp_entries (term_var "entries"))
+                 (asn_pmp_entries (term_var "entries") ∗ asn_pmp_access_exp (term_var addr) (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var priv) (term_var acc));
+          |}.
+
+
         Definition sep_contract_pmpCheckPerms : SepContractFun pmpCheckPerms :=
           let Σ : LCtx := [acc :: ty_access_type; priv :: ty_privilege; L :: ty.bool; A :: ty_pmpaddrmatchtype; X :: ty.bool; W :: ty.bool; R :: ty.bool] in
           let entry : Term Σ _ := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
@@ -1011,6 +1025,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | @pmp_mem_read bytes H   => Some (@sep_contract_pmp_mem_read bytes H)
             | @pmp_mem_write bytes H  => Some (@sep_contract_pmp_mem_write bytes H)
             | @pmpCheck bytes H       => Some (@sep_contract_pmpCheck bytes H)
+            | @pmpCheckExp bytes H    => Some (@sep_contract_pmpCheckExp bytes H)
             | pmpCheckPerms           => Some sep_contract_pmpCheckPerms
             | pmpCheckRWX             => Some sep_contract_pmpCheckRWX
             | pmpAddrRange            => Some sep_contract_pmpAddrRange
@@ -1251,6 +1266,14 @@ Module RiscvPmpValidContracts.
     Import SymProp.notations.
 
   End Debug.
+
+  Lemma valid_contract_pmpCheckExp (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheckExp bytes H).
+  Proof.
+    destruct H as [H|[H|H]]; rewrite ?H;
+    apply Symbolic.validcontract_with_erasure_sound;
+    vm_compute; constructor;
+    cbn.
+  Admitted.
 
   Lemma valid_contract_step : ValidContract step.
   Proof. reflexivity. Qed.
@@ -1620,6 +1643,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_pmpWriteCfg).
     - apply (valid_contract _ H valid_contract_pmpWriteAddr).
     - apply (valid_contract_debug _ H valid_contract_pmpCheck).
+    - apply (valid_contract_debug _ H valid_contract_pmpCheckExp).
     - apply (valid_contract _ H valid_contract_pmpCheckPerms).
     - apply (valid_contract _ H valid_contract_pmpCheckRWX).
     - apply (valid_contract _ H valid_contract_pmpMatchEntry).

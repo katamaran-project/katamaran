@@ -682,7 +682,6 @@ Module RiscvPmpModel2.
         rewrite bv.bin_of_nat_small; lia.
         rewrite bv.of_nat_S in Hpwhi.
         now rewrite bv.add_assoc in Hpwhi.
-        apply bv.ult_nat_S_zero; auto.
     Qed.
 
     Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr p cfg lo hi,

@@ -168,6 +168,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent
   | pmpWriteAddr          : Fun [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
   | pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
+  | pmpCheckExp (bytes : nat) {H : restrict_bytes bytes} : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
   | pmpCheckPerms         : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool
   | pmpCheckRWX           : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool
   | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
@@ -571,6 +572,34 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         |> KExecute pat_unit   => stm_exp (Some E_Fetch_Access_Fault)
         end.
 
+  Definition fun_pmpCheckExp (bytes : nat) {H : restrict_bytes bytes} : Stm [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
+    use lemma open_pmp_entries ;;
+    let: "width" :: ty_xlenbits := stm_call (to_bits xlen) [exp_val ty.int (Z.of_nat bytes)] in  
+    let: check%string :=
+      let: tmp1 := stm_read_register pmp0cfg in
+      let: tmp2 := stm_read_register pmpaddr0 in
+      let: tmp3 := exp_val ty_xlenbits [bv 0] in
+      let: tmp := call pmpMatchEntry addr width acc priv tmp1 tmp2 tmp3 in
+      match: tmp in pmpmatch with
+      | PMP_Success  => stm_val ty.bool true
+      | PMP_Fail     => stm_val ty.bool false
+      | PMP_Continue =>
+          match: priv in privilege with
+          | Machine => stm_val ty.bool true
+          | User    => stm_val ty.bool false
+          end
+      end in
+    use lemma close_pmp_entries ;;
+    if: check
+    then None
+    else
+      match: acc in union access_type with
+      |> KRead pat_unit      => stm_exp (Some E_Load_Access_Fault)
+      |> KWrite pat_unit     => stm_exp (Some E_SAMO_Access_Fault)
+      |> KReadWrite pat_unit => stm_exp (Some E_SAMO_Access_Fault)
+      |> KExecute pat_unit   => stm_exp (Some E_Fetch_Access_Fault)
+      end.
+
   Definition fun_pmpCheckPerms : Stm [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool :=
     match: priv in privilege with
     | Machine =>
@@ -951,7 +980,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call wX rd result ;;
     stm_val ty_retired RETIRE_SUCCESS.
 
-  Import Vector.VectorNotations.
   Definition fun_execute_UTYPE : Stm [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired :=
     let: off ∷ ty_xlenbits := exp_sext (exp_binop bop.bvapp (exp_val (ty.bvec 12) Bitvector.bv.zero) imm) in
     let: ret :=
@@ -1162,6 +1190,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | pmpWriteCfg             => fun_pmpWriteCfg
     | pmpWriteAddr            => fun_pmpWriteAddr
     | @pmpCheck bytes H       => @fun_pmpCheck bytes H
+    | @pmpCheckExp bytes H    => @fun_pmpCheckExp bytes H
     | pmpCheckPerms           => fun_pmpCheckPerms
     | pmpCheckRWX             => fun_pmpCheckRWX
     | pmpMatchEntry           => fun_pmpMatchEntry
