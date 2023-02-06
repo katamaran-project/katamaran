@@ -584,21 +584,30 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       | PMP_Success  => stm_val ty.bool true
       | PMP_Fail     => stm_val ty.bool false
       | PMP_Continue =>
+      let: tmp1 := stm_read_register pmp1cfg in
+      let: tmp2 := stm_read_register pmpaddr1 in
+      let: tmp3 := stm_read_register pmpaddr0 in
+      let: tmp := call pmpMatchEntry addr width acc priv tmp1 tmp2 tmp3 in
+      match: tmp in pmpmatch with
+      | PMP_Success  => stm_val ty.bool true
+      | PMP_Fail     => stm_val ty.bool false
+      | PMP_Continue =>
           match: priv in privilege with
           | Machine => stm_val ty.bool true
           | User    => stm_val ty.bool false
           end
+      end
       end in
-    use lemma close_pmp_entries ;;
-    if: check
-    then None
-    else
-      match: acc in union access_type with
-      |> KRead pat_unit      => stm_exp (Some E_Load_Access_Fault)
-      |> KWrite pat_unit     => stm_exp (Some E_SAMO_Access_Fault)
-      |> KReadWrite pat_unit => stm_exp (Some E_SAMO_Access_Fault)
-      |> KExecute pat_unit   => stm_exp (Some E_Fetch_Access_Fault)
-      end.
+      use lemma close_pmp_entries ;;
+      if: check
+      then None
+      else
+        match: acc in union access_type with
+        |> KRead pat_unit      => stm_exp (Some E_Load_Access_Fault)
+        |> KWrite pat_unit     => stm_exp (Some E_SAMO_Access_Fault)
+        |> KReadWrite pat_unit => stm_exp (Some E_SAMO_Access_Fault)
+        |> KExecute pat_unit   => stm_exp (Some E_Fetch_Access_Fault)
+        end.
 
   Definition fun_pmpCheckPerms : Stm [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool :=
     match: priv in privilege with

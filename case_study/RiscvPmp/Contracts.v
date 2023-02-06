@@ -1267,13 +1267,31 @@ Module RiscvPmpValidContracts.
 
   End Debug.
 
+  Ltac bv_comp :=
+      repeat match goal with
+      | H: (?a <ᵘ? ?b) = true |- _ =>
+          rewrite bv.ultb_ult in H
+      | H: (?a <ᵘ? ?b) = false |- _ =>
+          rewrite bv.ultb_uge in H
+      | H: (?a <=ᵘ? ?b) = true |- _ =>
+          rewrite bv.uleb_ule in H
+      | H: (?a <=ᵘ? ?b) = false |- _ =>
+          rewrite bv.uleb_ugt in H
+      | H: (?P || ?q = true)%bool |- _ =>
+          apply Bool.orb_true_iff in H as [?|?]
+      end.
+
   Lemma valid_contract_pmpCheckExp (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheckExp bytes H).
   Proof.
     destruct H as [H|[H|H]]; rewrite ?H;
     apply Symbolic.validcontract_with_erasure_sound;
     vm_compute; constructor;
-    cbn.
-  Admitted.
+      cbn;
+      repeat (intros; split; bv_comp);
+      try (left; split; [|left]; solve [auto]); (* ∀ cfg . NoMatch cfg *)
+      try (right; repeat split; solve [auto]); (* Match cfg0 *)
+      try (left; split; [|right]; repeat split; solve [auto]). (* NoMatch cfg0 ∧ Match cfg1 *)
+  Qed.
 
   Lemma valid_contract_step : ValidContract step.
   Proof. reflexivity. Qed.

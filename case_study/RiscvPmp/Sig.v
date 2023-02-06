@@ -339,9 +339,14 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           | PMP_Success  => (true, Some (pmp_get_perms cfg0 m))
           | PMP_Fail     => (false, None)
           | PMP_Continue => 
-              match m with
-              | Machine => (true, None)
-              | User    => (false, None)
+              match pmp_match_entry a width m cfg1 addr0 addr1 with
+              | PMP_Success  => (true, Some (pmp_get_perms cfg1 m))
+              | PMP_Fail     => (false, None)
+              | PMP_Continue => 
+                  match m with
+                  | Machine => (true, None)
+                  | User    => (false, None)
+                  end
               end
           end
       | _ => (false, None)
@@ -696,50 +701,77 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     | _, _ , _ , _ => Some [formula_user pmp_access [paddr; width; es; p; acc]]
     end%ctx.
 
+  (* TODO: move up *)
+  Local Notation "P ∨ Q" := (formula_or P Q). 
+  Local Notation "P ∧ Q" := (formula_and P Q). 
+
+  Fixpoint matches_nothing {Σ} (a width : Term Σ ty_xlenbits) (bounds : list (Term Σ ty_xlenbits)) (xs : list (Term Σ ty_pmpaddrmatchtype)) : Formula Σ :=
+  match bounds, xs with
+  | [],  _                      => formula_true
+  | [_], _                      => formula_true
+  | _, []                       => formula_true
+  | lo :: hi :: bounds, A :: xs =>
+      (formula_relop bop.eq (term_val ty_pmpaddrmatchtype OFF) A
+      ∨ formula_relop bop.bvult hi lo
+      ∨ formula_relop bop.bvule (term_binop bop.bvadd a width) lo
+      ∨ formula_relop bop.bvule hi a)
+      ∧ matches_nothing a width (hi :: bounds) xs
+  end%list.
+
+  Definition is_off {Σ} (A : Term Σ ty_pmpaddrmatchtype) : Formula Σ :=
+    formula_relop bop.eq A (term_val ty_pmpaddrmatchtype OFF).
+
+  Definition is_on {Σ} (A : Term Σ ty_pmpaddrmatchtype) : Formula Σ :=
+    formula_relop bop.neq A (term_val ty_pmpaddrmatchtype OFF).
+
+  Definition is_machine_mode {Σ} (p : Term Σ ty_privilege) : Formula Σ :=
+    formula_relop bop.eq (term_val ty_privilege Machine) p.
+
+  Fixpoint simplify_pmpcheck {Σ} (a width : Term Σ ty_xlenbits) (bounds : list (Term Σ ty_xlenbits)) (cfgs : list (NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent))) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : Formula Σ :=
+  match bounds, cfgs with
+  | _, []                       => is_machine_mode p
+  | [],  _                      => formula_true
+  | [_], _                      => formula_true
+  | lo :: hi :: bounds, cfg :: cfgs =>
+      ((* PMP_NoMatch *)
+        (is_off cfg.[??"A"]
+         ∨ formula_relop bop.bvult hi lo
+         ∨ formula_relop bop.bvule (term_binop bop.bvadd a width) lo
+         ∨ formula_relop bop.bvule hi a)
+         ∧ simplify_pmpcheck a width (hi :: bounds) cfgs p acc)
+      ∨
+      ((* PMP_Match *)
+        is_on cfg.[??"A"]
+      ∧ formula_relop bop.bvule lo hi
+      ∧ formula_relop bop.bvult lo (term_binop bop.bvadd a width)
+      ∧ formula_relop bop.bvult a hi
+      ∧ formula_relop bop.bvule lo a
+      ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) hi
+      ∧ formula_user pmp_check_perms [term_record rpmpcfg_ent [cfg.[??"L"];cfg.[??"A"];cfg.[??"X"];cfg.[??"W"];cfg.[??"R"]]; acc; p])
+  end%list.
+
   Definition simplify_pmp_access_exp {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
-    let fml_full := Some [formula_user pmp_access_exp [paddr; width; es; p; acc]] in
+    let pmp_access_fml := formula_user pmp_access_exp [paddr; width; es; p; acc] in
     match term_get_list es with
     | Some (inl (pmp0 , es)) => match term_get_list es, term_get_pair pmp0 with
                           | Some (inl (pmp1, es)), Some (cfg0, addr0) =>
                               match term_get_list es, term_get_pair pmp1 with
                               | Some (inr tt), Some (cfg1, addr1) =>
                                   match term_get_record cfg0 with
-                                  | Some [env L; A; X; W; R ] =>
-                                      Some [] (* TODO: fmls that make pmp_access True! *)
-                                  | _ => fml_full
+                                 | Some cfg0' =>
+                                     match term_get_record cfg1 with
+                                     | Some cfg1' =>
+                                     Some [simplify_pmpcheck paddr width [term_val ty_xlenbits bv.zero; addr0; addr1]%list [cfg0'; cfg1']%list p acc]
+                                     | _ => Some [pmp_access_fml]
+                                     end
+                                  | _ => Some [pmp_access_fml]
                                   end
-                              | _, _ => fml_full
+                              | _, _ => Some [pmp_access_fml]
                               end
-                          | _, _ => fml_full
+                          | _, _ => Some [pmp_access_fml]
                           end
-    | _ => fml_full
-    end%ctx.
-    (* match term_get_val paddr , term_get_val width , term_get_val es , term_get_val p with *)
-    (* | Some paddr , Some width , Some entries , Some p => *)
-    (*   match check_pmp_access_exp paddr width entries p with *)
-    (*   | (true, Some typ) => simplify_access_pmp_perm acc (term_val ty_pmpcfgperm typ) *)
-    (*   | (true, None)     => Some [] *)
-    (*   | (false, _)       => None *)
-    (*   end *)
-    (* | _ , _ , Some [(cfg0 , addr0); _]%list , Some Machine => *)
-    (*     Some [ *)
-    (*         formula_or (formula_relop bop.bvult (term_val ty_xlenbits addr0) (term_val ty_xlenbits bv.zero)) *)
-    (*           (formula_or (formula_relop bop.bvule (term_binop bop.bvadd paddr width) (term_val ty_xlenbits bv.zero)) *)
-    (*              (formula_or (formula_relop bop.bvule (term_val ty_xlenbits addr0) paddr) *)
-    (*                 (formula_relop bop.eq (term_val ty_pmpaddrmatchtype (A cfg0)) (term_val ty_pmpaddrmatchtype OFF)))) *)
-    (*       ] *)
-    (* | _ , _ , Some [(cfg0 , addr0); _]%list , Some p => *)
-    (*     Some [ *)
-    (*           formula_relop bop.neq (term_val ty_pmpaddrmatchtype (A cfg0)) (term_val ty_pmpaddrmatchtype OFF) *)
-    (*         ; formula_relop bop.bvule (term_val ty_xlenbits bv.zero) (term_val ty_xlenbits addr0) *)
-    (*         ; formula_relop bop.bvult (term_val ty_xlenbits bv.zero) (term_binop bop.bvadd paddr width) *)
-    (*         ; formula_relop bop.bvult paddr (term_val ty_xlenbits addr0) *)
-    (*         ; formula_relop bop.bvule (term_val ty_xlenbits bv.zero) paddr *)
-    (*         ; formula_relop bop.bvule (term_binop bop.bvadd paddr width) (term_val ty_xlenbits addr0) *)
-    (*         ; formula_user access_pmp_perm [acc; term_val ty_pmpcfgperm (pmp_get_perms cfg0 p)] *)
-    (*       ] *)
-    (* | _, _ , _ , _ => Some [formula_user pmp_access_exp [paddr; width; es; p; acc]] *)
-    (* end%ctx. *)
+    | _ => Some [pmp_access_fml]
+    end.
 
   (* TODO: User predicates can be simplified smarter *)
   Definition simplify_pmp_check_rwx {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
@@ -854,6 +886,17 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) :
     simplify_pmp_access_exp paddr width es p acc ⊣⊢ Some [formula_user pmp_access_exp [paddr; width; es; p; acc]].
   Proof.
+    unfold simplify_pmp_access_exp; lsolve.
+    intros ι; cbn.
+    destruct (term_get_list es) as [[[pmp0 es0]|]|]; lsolve.
+    destruct (term_get_list es0) as [[[pmp1 es1]|]|]; lsolve.
+    destruct (term_get_list es1) as [[[? es2]|]|]; lsolve.
+    all: destruct (term_get_pair pmp0) as [[cfg0 addr0]|]; lsolve.
+    destruct u.
+    destruct (term_get_pair pmp1) as [[cfg1 addr1]|]; lsolve.
+    destruct (term_get_record cfg0) as [cfg0'|]; lsolve.
+    destruct (term_get_record cfg1) as [cfg1'|]; lsolve.
+    unfold Pmp_access_exp, decide_pmp_access_exp.
   Admitted.
 
   #[local] Arguments Pmp_check_rwx !cfg !acc /.
