@@ -851,6 +851,12 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
       | |- match @term_get_val ?Σ ?σ ?v with _ => _ end ⊣⊢ _ =>
           destruct (@term_get_val_spec Σ σ v); subst; try progress cbn
+      | |- match @term_get_list ?Σ ?σ ?v with _ =>_ end ⊣⊢ _ =>
+          destruct (@term_get_list_spec Σ σ v); subst; try progress cbn
+      | |- match @term_get_pair ?Σ ?σ₁ ?σ₂ ?v with _ =>_ end ⊣⊢ _ =>
+          destruct (@term_get_pair_spec Σ σ₁ σ₂ v); subst; try progress cbn
+      | |- match @term_get_record ?r ?Σ ?v with _ =>_ end ⊣⊢ _ =>
+          destruct (@term_get_record_spec Σ r v); subst; try progress cbn
       end; try easy; auto.
 
   Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :
@@ -886,17 +892,28 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) :
     simplify_pmp_access_exp paddr width es p acc ⊣⊢ Some [formula_user pmp_access_exp [paddr; width; es; p; acc]].
   Proof.
-    unfold simplify_pmp_access_exp; lsolve.
-    intros ι; cbn.
-    destruct (term_get_list es) as [[[pmp0 es0]|]|]; lsolve.
-    destruct (term_get_list es0) as [[[pmp1 es1]|]|]; lsolve.
-    destruct (term_get_list es1) as [[[? es2]|]|]; lsolve.
-    all: destruct (term_get_pair pmp0) as [[cfg0 addr0]|]; lsolve.
-    destruct u.
-    destruct (term_get_pair pmp1) as [[cfg1 addr1]|]; lsolve.
-    destruct (term_get_record cfg0) as [cfg0'|]; lsolve.
-    destruct (term_get_record cfg1) as [cfg1'|]; lsolve.
-    unfold Pmp_access_exp, decide_pmp_access_exp.
+    unfold simplify_pmp_access_exp.
+    lsolve.
+    destruct a as [[pmp0 es0]|[]]; [|easy].
+    lsolve.
+    destruct a as [[pmp1 es1]|[]]; [|easy].
+    lsolve.
+    destruct a as [cfg0 addr0].
+    lsolve.
+    destruct a as [[pmp2 es2]|[]]; [easy|].
+    lsolve.
+    destruct a as [cfg1 addr1].
+    lsolve.
+    intros ι; cbn;
+      unfold Pmp_access_exp, decide_pmp_access_exp, check_pmp_access_exp,
+            pmp_check_exp, pmp_match_entry, pmp_match_addr.
+    split; intros Hpmp.
+    - repeat match goal with
+             | H: ?P ∧ ?q |- _ =>
+                 destruct H
+             | H: ?P ∨ ?q |- _ =>
+                 destruct H
+             end.
   Admitted.
 
   #[local] Arguments Pmp_check_rwx !cfg !acc /.
