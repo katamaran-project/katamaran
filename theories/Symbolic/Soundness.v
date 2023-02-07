@@ -1954,6 +1954,7 @@ Module Soundness
     Shallow.ValidContract c body.
   Proof.
     unfold Symbolic.ValidContract. intros [Hwp%postprocess_sound].
+    rewrite Replay.replay_sound in Hwp. apply postprocess_sound in Hwp.
     apply refine_vcgen. now rewrite wsafe_safe, safe_debug_safe.
   Qed.
 
@@ -1962,6 +1963,7 @@ Module Soundness
     Shallow.ValidContractWithFuel fuel c body.
   Proof.
     unfold Symbolic.ValidContractWithFuel. intros [Hwp%postprocess_sound].
+    rewrite Replay.replay_sound in Hwp. apply postprocess_sound in Hwp.
     apply refine_vcgen. now rewrite wsafe_safe, safe_debug_safe.
   Qed.
 

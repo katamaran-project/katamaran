@@ -1545,102 +1545,6 @@ Module Type SymbolicExecOn
 
   End SHeapSpecM.
 
-  Module Symbolic.
-    Import SHeapSpecM.
-
-    Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationCondition
-        (postprocess
-           (vcgen default_config fuel c body)).
-
-    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      (* Use inline_fuel = 1 by default. *)
-      ValidContractWithFuel 1 c body.
-
-    Definition ok {Σ} (p : 𝕊 Σ) : bool :=
-      match prune p with
-      | SymProp.block => true
-      | _           => false
-      end.
-
-    Lemma ok_sound {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
-      is_true (ok p) -> safe p ι.
-    Proof.
-      rewrite <- prune_sound. unfold ok.
-      generalize (prune p) as q. clear. intros q.
-      destruct q; try discriminate; cbn; auto.
-    Qed.
-
-    Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (ok (postprocess (vcgen default_config fuel c body))).
-
-    Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      ValidContractReflectWithFuel 1 c body.
-
-    Lemma validcontract_reflect_fuel_sound {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
-      ValidContractReflectWithFuel fuel c body ->
-      ValidContractWithFuel fuel c body.
-    Proof.
-      unfold ValidContractReflectWithFuel, ValidContractWithFuel. intros Hok.
-      apply (ok_sound _ env.nil) in Hok. now constructor.
-    Qed.
-
-    Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-      ValidContractReflect c body ->
-      ValidContract c body.
-    Proof.
-      eapply validcontract_reflect_fuel_sound.
-    Qed.
-
-    Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
-      Erasure.erase_symprop (postprocess (vcgen default_config 1 c body)).
-
-    Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationConditionWithErasure (VcGenErasure c body).
-
-    Lemma verification_condition_with_erasure_sound (p : 𝕊 ctx.nil) :
-      VerificationConditionWithErasure (Erasure.erase_symprop p) ->
-      VerificationCondition p.
-    Proof. intros [H]. constructor. now rewrite <- Erasure.erase_safe. Qed.
-
-    Lemma validcontract_with_erasure_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-      ValidContractWithErasure c body ->
-      ValidContract c body.
-    Proof. apply verification_condition_with_erasure_sound. Qed.
-
-    Module Statistics.
-
-      Import SymProp.Statistics.
-
-      Definition extend_postcond_with_debug {Δ τ} (c : SepContract Δ τ) : SepContract Δ τ :=
-        match c with
-        | {| sep_contract_logic_variables := lvars;
-             sep_contract_localstore      := store;
-             sep_contract_precondition    := pre;
-             sep_contract_result          := res;
-             sep_contract_postcondition   := post;
-          |} => {| sep_contract_logic_variables := lvars;
-                   sep_contract_localstore      := store;
-                   sep_contract_precondition    := pre;
-                   sep_contract_result          := res;
-                   sep_contract_postcondition   := asn.sep post asn.debug;
-                |}
-        end.
-
-      Definition calc {Δ τ} (f : 𝑭 Δ τ) : option (Stats) :=
-        match CEnv f with
-        | Some contract =>
-            let contract' := extend_postcond_with_debug contract in
-            let body      := FunDef f in
-            let vc        := vcgen default_config 1 contract' body in
-            Some (count_to_stats (count_nodes vc empty))
-        | None   => None
-        end.
-
-    End Statistics.
-
-  End Symbolic.
-
   Module Replay.
 
     Import SPureSpecM.
@@ -1705,7 +1609,107 @@ Module Type SymbolicExecOn
     Definition replay {Σ} (s : 𝕊 Σ) : 𝕊 Σ :=
       replay_aux s acc_refl (fun _ _ _ => SymProp.block).
 
+    Lemma replay_sound {Σ} (s : 𝕊 Σ) :
+      sequiv Σ (replay s) s.
+    Proof. Admitted.
+
   End Replay.
+
+  Module Symbolic.
+    Import SHeapSpecM.
+
+    Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      VerificationCondition
+        (postprocess (Replay.replay (postprocess (vcgen default_config fuel c body)))).
+
+    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      (* Use inline_fuel = 1 by default. *)
+      ValidContractWithFuel 1 c body.
+
+    Definition ok {Σ} (p : 𝕊 Σ) : bool :=
+      match prune p with
+      | SymProp.block => true
+      | _           => false
+      end.
+
+    Lemma ok_sound {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
+      is_true (ok p) -> safe p ι.
+    Proof.
+      rewrite <- prune_sound. unfold ok.
+      generalize (prune p) as q. clear. intros q.
+      destruct q; try discriminate; cbn; auto.
+    Qed.
+
+    Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      is_true (ok (postprocess (Replay.replay (postprocess (vcgen default_config fuel c body))))).
+
+    Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      ValidContractReflectWithFuel 1 c body.
+
+    Lemma validcontract_reflect_fuel_sound {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
+      ValidContractReflectWithFuel fuel c body ->
+      ValidContractWithFuel fuel c body.
+    Proof.
+      unfold ValidContractReflectWithFuel, ValidContractWithFuel. intros Hok.
+      apply (ok_sound _ env.nil) in Hok. now constructor.
+    Qed.
+
+    Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+      ValidContractReflect c body ->
+      ValidContract c body.
+    Proof.
+      unfold ValidContract, ValidContractReflect.
+      now apply validcontract_reflect_fuel_sound.
+    Qed.
+
+    Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
+      Erasure.erase_symprop (postprocess (Replay.replay (postprocess (vcgen default_config 1 c body)))).
+
+    Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      VerificationConditionWithErasure (VcGenErasure c body).
+
+    Lemma verification_condition_with_erasure_sound (p : 𝕊 ctx.nil) :
+      VerificationConditionWithErasure (Erasure.erase_symprop p) ->
+      VerificationCondition p.
+    Proof. intros [H]. constructor. now rewrite <- Erasure.erase_safe. Qed.
+
+    Lemma validcontract_with_erasure_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+      ValidContractWithErasure c body ->
+      ValidContract c body.
+    Proof. apply verification_condition_with_erasure_sound. Qed.
+
+    Module Statistics.
+
+      Import SymProp.Statistics.
+
+      Definition extend_postcond_with_debug {Δ τ} (c : SepContract Δ τ) : SepContract Δ τ :=
+        match c with
+        | {| sep_contract_logic_variables := lvars;
+             sep_contract_localstore      := store;
+             sep_contract_precondition    := pre;
+             sep_contract_result          := res;
+             sep_contract_postcondition   := post;
+          |} => {| sep_contract_logic_variables := lvars;
+                   sep_contract_localstore      := store;
+                   sep_contract_precondition    := pre;
+                   sep_contract_result          := res;
+                   sep_contract_postcondition   := asn.sep post asn.debug;
+                |}
+        end.
+
+      Definition calc {Δ τ} (f : 𝑭 Δ τ) : option (Stats) :=
+        match CEnv f with
+        | Some contract =>
+            let contract' := extend_postcond_with_debug contract in
+            let body      := FunDef f in
+            let vc        := vcgen default_config 1 contract' body in
+            Some (count_to_stats (count_nodes vc empty))
+        | None   => None
+        end.
+
+    End Statistics.
+
+  End Symbolic.
 
 End SymbolicExecOn.
 
