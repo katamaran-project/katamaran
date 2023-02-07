@@ -50,7 +50,6 @@ Open Scope Z_scope.
 
 Inductive PurePredicate : Set :=
 | pmp_access
-| pmp_access_exp
 | pmp_check_perms
 | pmp_check_rwx
 | sub_perm
@@ -114,16 +113,15 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition 𝑷 := PurePredicate.
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
       match p with
-      | pmp_access               => [ty_xlenbits; ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
-      | pmp_access_exp           => [ty_xlenbits; ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
-      | pmp_check_perms          => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
-      | pmp_check_rwx            => [ty_pmpcfg_ent; ty_access_type]
-      | sub_perm                 => [ty_access_type; ty_access_type]
-      | access_pmp_perm          => [ty_access_type; ty_pmpcfgperm]
-      | within_cfg               => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
-      | not_within_cfg           => [ty_xlenbits; ty.list ty_pmpentry]
-      | prev_addr                => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
-      | in_entries               => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
+      | pmp_access      => [ty_xlenbits; ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
+      | pmp_check_perms => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
+      | pmp_check_rwx   => [ty_pmpcfg_ent; ty_access_type]
+      | sub_perm        => [ty_access_type; ty_access_type]
+      | access_pmp_perm => [ty_access_type; ty_pmpcfgperm]
+      | within_cfg      => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
+      | not_within_cfg  => [ty_xlenbits; ty.list ty_pmpentry]
+      | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
+      | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
       end.
 
     Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
@@ -322,29 +320,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | PMP_Match        => PMP_Success
       end.
 
-    Definition pmp_check (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
-      match entries with
-      | (cfg0 , addr0) :: (cfg1 , addr1) :: [] =>
-          match pmp_match_entry a width m cfg0 prev addr0 with
-          | PMP_Success  => (true, Some (pmp_get_perms cfg0 m))
-          | PMP_Fail     => (false, None)
-          | PMP_Continue => 
-              match pmp_match_entry a width m cfg1 addr0 addr1 with
-              | PMP_Success  => (true, Some (pmp_get_perms cfg1 m))
-              | PMP_Fail     => (false, None)
-              | PMP_Continue => match m with
-                                | Machine => (true, None)
-                                | User    => (false, None)
-                                end
-              end
-          end
-      | _ => match m with
-             | Machine => (true, None)
-             | User    => (false, None)
-             end
-      end%list.
-
-    Definition pmp_check_exp (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
+    Definition pmp_check(a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
       match entries with
       | (cfg0 , addr0) :: (cfg1 , addr1) :: [] =>
           match pmp_match_entry a width m cfg0 prev addr0 with
@@ -380,14 +356,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         end%list.
     End Old_pmp_check.
 
-    (* check_access is based on the pmpCheck algorithm, main difference
-           is that we can define it less cumbersome because entries will contain
-           the PMP entries in highest-priority order. *)
     Definition check_pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
       pmp_check a width entries [bv 0] m.
-
-    Definition check_pmp_access_exp (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
-      pmp_check_exp a width entries [bv 0] m.
 
     Equations(noeqns) access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
     | Read      | Read      := true;
@@ -439,18 +409,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | (false, _)       => false
       end.
 
-    Definition decide_pmp_access_exp (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : bool :=
-      match check_pmp_access_exp a width entries m with
-      | (true, Some p) => decide_access_pmp_perm acc p
-      | (true, None)     => true
-      | (false, _)       => false
-      end.
-
     Definition Pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
       decide_pmp_access a width entries m acc = true.
-
-    Definition Pmp_access_exp (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
-      decide_pmp_access_exp a width entries m acc = true.
 
     Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
       decide_pmp_check_perms cfg acc p = true.
@@ -545,16 +505,15 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
-      | pmp_access               => Pmp_access
-      | pmp_access_exp           => Pmp_access_exp
-      | pmp_check_perms          => Pmp_check_perms
-      | pmp_check_rwx            => Pmp_check_rwx
-      | sub_perm                 => Sub_perm
-      | access_pmp_perm          => Access_pmp_perm
-      | within_cfg               => Within_cfg
-      | not_within_cfg           => Not_within_cfg
-      | prev_addr                => Prev_addr
-      | in_entries               => In_entries
+      | pmp_access      => Pmp_access
+      | pmp_check_perms => Pmp_check_perms
+      | pmp_check_rwx   => Pmp_check_rwx
+      | sub_perm        => Sub_perm
+      | access_pmp_perm => Access_pmp_perm
+      | within_cfg      => Within_cfg
+      | not_within_cfg  => Not_within_cfg
+      | prev_addr       => Prev_addr
+      | in_entries      => In_entries
       end.
 
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -680,7 +639,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Notation asn_prev_addr cfg es prev := (asn.formula (formula_user prev_addr [cfg; es; prev])).
     Notation asn_in_entries idx e es := (asn.formula (formula_user in_entries [idx; e; es])).
     Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
-    Notation asn_pmp_access_exp addr width es m p := (asn.formula (formula_user pmp_access_exp [addr;width;es;m;p])).
     Notation asn_pmp_check_perms cfg acc p := (asn.formula (formula_user pmp_check_perms [cfg;acc;p])).
     Notation asn_pmp_check_rwx cfg acc := (asn.formula (formula_user pmp_check_rwx [cfg;acc])).
     Notation asn_expand_pmpcfg_ent cfg := (asn.match_record rpmpcfg_ent cfg
@@ -704,35 +662,9 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     | _      , _      => Some [formula_user access_pmp_perm [a;p]]
     end%ctx.
 
-  (* TODO: simplify_access_pmp_perm *)
-
-  Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
-    match term_get_val paddr , term_get_val width , term_get_val es , term_get_val p with
-    | Some paddr , Some width , Some entries , Some p =>
-      match check_pmp_access paddr width entries p with
-      | (true, Some typ) => simplify_access_pmp_perm acc (term_val ty_pmpcfgperm typ)
-      | (true, None)     => Some []
-      | (false, _)       => None
-      end
-    | _, _ , _ , _ => Some [formula_user pmp_access [paddr; width; es; p; acc]]
-    end%ctx.
-
   (* TODO: move up *)
   Local Notation "P ∨ Q" := (formula_or P Q). 
   Local Notation "P ∧ Q" := (formula_and P Q). 
-
-  Fixpoint matches_nothing {Σ} (a width : Term Σ ty_xlenbits) (bounds : list (Term Σ ty_xlenbits)) (xs : list (Term Σ ty_pmpaddrmatchtype)) : Formula Σ :=
-  match bounds, xs with
-  | [],  _                      => formula_true
-  | [_], _                      => formula_true
-  | _, []                       => formula_true
-  | lo :: hi :: bounds, A :: xs =>
-      (formula_relop bop.eq (term_val ty_pmpaddrmatchtype OFF) A
-      ∨ formula_relop bop.bvult hi lo
-      ∨ formula_relop bop.bvule (term_binop bop.bvadd a width) lo
-      ∨ formula_relop bop.bvule hi a)
-      ∧ matches_nothing a width (hi :: bounds) xs
-  end%list.
 
   Definition is_off {Σ} (A : Term Σ ty_pmpaddrmatchtype) : Formula Σ :=
     formula_relop bop.eq A (term_val ty_pmpaddrmatchtype OFF).
@@ -767,8 +699,8 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       ∧ formula_user pmp_check_perms [term_record rpmpcfg_ent [cfg.[??"L"];cfg.[??"A"];cfg.[??"X"];cfg.[??"W"];cfg.[??"R"]]; acc; p])
   end%list.
 
-  Definition simplify_pmp_access_exp {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
-    let pmp_access_fml := formula_user pmp_access_exp [paddr; width; es; p; acc] in
+  Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
+    let pmp_access_fml := formula_user pmp_access [paddr; width; es; p; acc] in
     match term_get_list es with
     | Some (inl (pmp0 , es)) => match term_get_list es, term_get_pair pmp0 with
                           | Some (inl (pmp1, es)), Some (cfg0, addr0) =>
@@ -846,7 +778,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
 
   Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (PathCondition Σ) :=
   | pmp_access               | [ paddr; width; entries; priv; perm ] => simplify_pmp_access paddr width entries priv perm
-  | pmp_access_exp           | [ paddr; width; entries; priv; perm ] => simplify_pmp_access_exp paddr width entries priv perm
   | pmp_check_perms          | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
   | pmp_check_rwx            | [ cfg; acc ]                   => simplify_pmp_check_rwx cfg acc
   | sub_perm                 | [ a1; a2 ]                     => simplify_sub_perm a1 a2
@@ -896,18 +827,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     now destruct decide_access_pmp_perm.
   Qed.
 
-  Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_xlenbits)
-    (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry))
-    (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) :
-    simplify_pmp_access paddr width es p acc ⊣⊢ Some [formula_user pmp_access [paddr; width; es; p; acc]].
-  Proof.
-    unfold simplify_pmp_access. lsolve.
-    - intros ι; cbn. unfold Pmp_access, decide_pmp_access.
-      destruct check_pmp_access as [[] o]; [|easy].
-      destruct o; [|easy].
-      apply simplify_access_pmp_perm_spec.
-  Qed.
-
   Lemma addr_match_type_neq_off_cases :
     ∀ a, a ≠ OFF -> a = TOR.
   Proof. by destruct a. Qed.
@@ -920,15 +839,15 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
           specialize (H ι)
       end.
 
-  Lemma simplify_pmp_access_exp_spec {Σ} (paddr : Term Σ ty_xlenbits)
+  Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_xlenbits)
     (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry))
     (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) :
-    simplify_pmp_access_exp paddr width es p acc ⊣⊢ Some [formula_user pmp_access_exp [paddr; width; es; p; acc]].
+    simplify_pmp_access paddr width es p acc ⊣⊢ Some [formula_user pmp_access [paddr; width; es; p; acc]].
   Proof.
-    unfold simplify_pmp_access_exp. lsolve.
+    unfold simplify_pmp_access. lsolve.
     intros ι; cbn;
-      unfold Pmp_access_exp, decide_pmp_access_exp, check_pmp_access_exp,
-      pmp_check_exp, pmp_match_entry, pmp_match_addr, pmp_addr_range;
+      unfold Pmp_access, decide_pmp_access, check_pmp_access,
+      pmp_check, pmp_match_entry, pmp_match_addr, pmp_addr_range;
       process_inst ι.
     split; intros Hpmp.
     - repeat match goal with
@@ -996,8 +915,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
               left; clear H
           end;
         repeat split;
-        auto 10.
-      all: solve [left; auto 10].
+        auto 11.
   Qed.
 
   #[local] Arguments Pmp_check_rwx !cfg !acc /.
@@ -1049,7 +967,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     intros Σ p ts.
     destruct p; cbv in ts; env.destroy ts; cbn.
     - simple apply simplify_pmp_access_spec.
-    - simple apply simplify_pmp_access_exp_spec.
     - simple apply simplify_pmp_check_perms_spec.
     - simple apply simplify_pmp_check_rwx_spec.
     - simple apply simplify_sub_perm_spec.

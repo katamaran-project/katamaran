@@ -819,19 +819,6 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                  (asn_pmp_entries (term_var "entries") ∗ asn_pmp_access (term_var addr) (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var priv) (term_var acc));
           |}.
 
-        Definition sep_contract_pmpCheckExp (bytes : nat) {H : restrict_bytes bytes} : SepContractFun (@pmpCheckExp bytes H) :=
-          {| sep_contract_logic_variables := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; "entries" :: ty.list ty_pmpentry];
-             sep_contract_localstore      := [term_var addr; term_var acc; term_var priv];
-             sep_contract_precondition    :=
-               asn_pmp_entries (term_var "entries");
-             sep_contract_result          := "result_pmpCheck";
-             sep_contract_postcondition   :=
-               asn_match_option
-                 _ (term_var "result_pmpCheck") e
-                 (asn_pmp_entries (term_var "entries"))
-                 (asn_pmp_entries (term_var "entries") ∗ asn_pmp_access_exp (term_var addr) (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var priv) (term_var acc));
-          |}.
-
 
         Definition sep_contract_pmpCheckPerms : SepContractFun pmpCheckPerms :=
           let Σ : LCtx := [acc :: ty_access_type; priv :: ty_privilege; L :: ty.bool; A :: ty_pmpaddrmatchtype; X :: ty.bool; W :: ty.bool; R :: ty.bool] in
@@ -1030,7 +1017,6 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | @pmp_mem_read bytes H   => Some (@sep_contract_pmp_mem_read bytes H)
             | @pmp_mem_write bytes H  => Some (@sep_contract_pmp_mem_write bytes H)
             | @pmpCheck bytes H       => Some (@sep_contract_pmpCheck bytes H)
-            | @pmpCheckExp bytes H    => Some (@sep_contract_pmpCheckExp bytes H)
             | pmpCheckPerms           => Some sep_contract_pmpCheckPerms
             | pmpCheckRWX             => Some sep_contract_pmpCheckRWX
             | pmpAddrRange            => Some sep_contract_pmpAddrRange
@@ -1286,7 +1272,7 @@ Module RiscvPmpValidContracts.
           apply Bool.orb_true_iff in H as [?|?]
       end.
 
-  Lemma valid_contract_pmpCheckExp (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheckExp bytes H).
+  Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheck bytes H).
   Proof.
     destruct H as [H|[H|H]]; rewrite ?H;
       apply Symbolic.validcontract_with_erasure_sound;
@@ -1542,64 +1528,6 @@ Module RiscvPmpValidContracts.
 
   Open Scope N_scope.
 
-  (* TODO: reprove this contract! notable change: we convert the width to a bitvector in the body of pmpCheck *)
-  (* TODO: the pmpCheck contract requires some manual proof effort in the case
-         that no pmp entry matches (i.e. we end up in the final check of
-         the unrolled loop, more specifically the match on the privilege level,
-         and the Machine case (= the check is true)
-   Ideas:
-   - A lemma capturing the different conditions that can arise that lead to those
-     cases (have the conditions as precond, and asn_pmp_access ... as postcond,
-     we can then proof it sound in the model (which should be equivalent to what        
-     is currently happening in the proof below, but we should be able to define
-     the contract is one that can be proven by reflexivity))
-   *)
-  Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheck bytes H).
-  Proof.
-    destruct H as [H|[H|H]]; rewrite ?H;
-    apply Symbolic.validcontract_with_erasure_sound;
-    vm_compute; constructor;
-    cbn;
-    intros addr acc priv addr0 addr1 R0 [] X0 A0 L0 R1 [] X1 A1 L1;
-      repeat
-        (intros;
-         match goal with
-         | |- _ /\ _ => split; intros; subst; auto
-         | H: OFF = TOR |- _ => inversion H
-         | H: (?x || ?y)%bool = true |- _ =>
-             apply Bool.orb_prop in H as [|]
-         | H: ?a <ᵘ [bv 0x0] |- _ =>
-             now apply N.nlt_0_r in H
-         | H: Pmp_check_perms ?cfg ?acc ?priv |- _ =>
-             apply pmp_check_perms_gives_access in H
-         | H: ?x <=ᵘ? ?y = true |- _ =>
-             apply bv.uleb_ule in H
-         end);
-      unfold Pmp_access, decide_pmp_access, check_pmp_access, pmp_check, pmp_match_entry;
-      cbv [pmp_addr_range A];
-      rewrite ?pmp_match_addr_none;
-      auto.
-
-    all: try now rewrite pmp_match_addr_match_conditions_2.
-    all: try now rewrite pmp_match_addr_nomatch_conditions.
-    all: try now rewrite pmp_match_addr_nomatch_conditions_1.
-    all: try now rewrite pmp_match_addr_nomatch_conditions_2.
-    all: try (rewrite pmp_match_addr_nomatch_conditions_1; auto;
-              now rewrite pmp_match_addr_match_conditions_2).
-    all: try (rewrite pmp_match_addr_nomatch_conditions_2; auto;
-              now rewrite pmp_match_addr_match_conditions_2).
-    all: try (rewrite pmp_match_addr_nomatch_conditions_1; auto;
-              now rewrite pmp_match_addr_nomatch_conditions).
-    all: try (rewrite pmp_match_addr_nomatch_conditions_2; auto;
-              now rewrite pmp_match_addr_nomatch_conditions).
-    all: try now rewrite ?pmp_match_addr_nomatch_conditions_1.
-    all: try (rewrite pmp_match_addr_nomatch_conditions_2; auto;
-              now rewrite ?pmp_match_addr_nomatch_conditions_1).
-    all: try (rewrite pmp_match_addr_nomatch_conditions_1; auto;
-              now rewrite ?pmp_match_addr_nomatch_conditions_2).
-    all: now rewrite ?pmp_match_addr_nomatch_conditions_2.
-  Qed.
-
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
       ValidContract f ->
@@ -1663,7 +1591,6 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_pmpWriteCfg).
     - apply (valid_contract _ H valid_contract_pmpWriteAddr).
     - apply (valid_contract_debug _ H valid_contract_pmpCheck).
-    - apply (valid_contract_debug _ H valid_contract_pmpCheckExp).
     - apply (valid_contract _ H valid_contract_pmpCheckPerms).
     - apply (valid_contract _ H valid_contract_pmpCheckRWX).
     - apply (valid_contract _ H valid_contract_pmpMatchEntry).
