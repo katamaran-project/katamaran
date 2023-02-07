@@ -522,16 +522,7 @@ Module RiscvPmpSpecVerif.
     destruct H as [->|[->| ->]]; now vm_compute.
   Qed.
 
-  Lemma valid_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
-  Proof.
-    symbolic_simpl.
-    intros.
-    apply Bool.orb_true_iff in H2 as [?%bv.ultb_ult|?%bv.ultb_ult];
-      [left; auto| right; auto].
-  Qed.
-
-  Import Katamaran.Bitvector.
-  Import bv.notations.
+  Import Bitvector.bv.notations.
 
   Ltac bv_comp :=
       repeat match goal with
@@ -543,7 +534,16 @@ Module RiscvPmpSpecVerif.
           rewrite bv.uleb_ule in H
       | H: (?a <=ᵘ? ?b) = false |- _ =>
           rewrite bv.uleb_ugt in H
+      | H: (?P || ?q = true)%bool |- _ =>
+          apply Bool.orb_true_iff in H as [?|?]
       end.
+
+  Lemma valid_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
+  Proof.
+    symbolic_simpl.
+    intros; split; intros; bv_comp; auto.
+    destruct (v + v0 <=ᵘ? v1)%bv eqn:?; bv_comp; auto.
+  Qed.
 
   Opaque pmp_get_perms.
 

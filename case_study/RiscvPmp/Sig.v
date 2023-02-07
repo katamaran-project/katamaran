@@ -73,6 +73,30 @@ Inductive Predicate : Set :=
 | ptstoinstr
 .
 
+Ltac bv_comp :=
+  repeat match goal with
+    | H: (?a <ᵘ? ?b) = true |- _ =>
+        rewrite bv.ultb_ult in H
+    | H: (?a <ᵘ? ?b) = false |- _ =>
+        rewrite bv.ultb_uge in H
+    | H: (?a <=ᵘ? ?b) = true |- _ =>
+        rewrite bv.uleb_ule in H
+    | H: (?a <=ᵘ? ?b) = false |- _ =>
+        rewrite bv.uleb_ugt in H
+    end.
+
+Ltac bv_comp_bool :=
+  repeat match goal with
+    | H: ?a <ᵘ ?b |- _ =>
+        rewrite ? (proj2 (bv.ultb_ult _ _) H)
+                ? (proj2 (bv.uleb_ugt _ _) H);
+        clear H
+    | H: ?a <=ᵘ ?b |- _ =>
+        rewrite ? (proj2 (bv.uleb_ule _ _) H)
+                ? (proj2 (bv.ultb_uge _ _) H);
+        clear H
+    end.
+
 Section TransparentObligations.
   Local Set Transparent Obligations.
 
@@ -180,18 +204,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
                     then PMP_Match
                     else PMP_PartialMatch
       | None          => PMP_NoMatch
-      end.
-
-  Ltac bv_comp :=
-      repeat match goal with
-      | H: (?a <ᵘ? ?b) = true |- _ =>
-          rewrite bv.ultb_ult in H
-      | H: (?a <ᵘ? ?b) = false |- _ =>
-          rewrite bv.ultb_uge in H
-      | H: (?a <=ᵘ? ?b) = true |- _ =>
-          rewrite bv.uleb_ule in H
-      | H: (?a <=ᵘ? ?b) = false |- _ =>
-          rewrite bv.uleb_ugt in H
       end.
 
     Lemma pmp_match_addr_match_conditions_1 : forall (paddr w lo hi : Val ty_xlenbits),
@@ -527,6 +539,10 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       Pmp_cfg_unlocked (fst ent).
     Global Arguments Pmp_entry_unlocked !ent.
 
+    Lemma Pmp_check_perms_Access_pmp_perm : forall cfg acc p,
+        Pmp_check_perms cfg acc p <-> Access_pmp_perm acc (pmp_get_perms cfg p).
+    Proof. by intros [[] ? [] [] []] [] []. Qed.
+
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
       | pmp_access               => Pmp_access
@@ -735,9 +751,10 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   | lo :: hi :: bounds, cfg :: cfgs =>
       ((* PMP_NoMatch *)
         (is_off cfg.[??"A"]
-         ∨ formula_relop bop.bvult hi lo
-         ∨ formula_relop bop.bvule (term_binop bop.bvadd a width) lo
-         ∨ formula_relop bop.bvule hi a)
+         ∨ (is_on cfg.[??"A"] ∧
+              (formula_relop bop.bvult hi lo
+              ∨ (formula_relop bop.bvule lo hi ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) lo)
+              ∨ (formula_relop bop.bvule lo hi ∧ formula_relop bop.bvult lo (term_binop bop.bvadd a width) ∧ formula_relop bop.bvule hi a))))
          ∧ simplify_pmpcheck a width (hi :: bounds) cfgs p acc)
       ∨
       ((* PMP_Match *)
@@ -852,11 +869,15 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       | |- match @term_get_val ?Σ ?σ ?v with _ => _ end ⊣⊢ _ =>
           destruct (@term_get_val_spec Σ σ v); subst; try progress cbn
       | |- match @term_get_list ?Σ ?σ ?v with _ =>_ end ⊣⊢ _ =>
-          destruct (@term_get_list_spec Σ σ v); subst; try progress cbn
+          destruct (@term_get_list_spec Σ σ v) as [[] ?|]; subst; try progress cbn
       | |- match @term_get_pair ?Σ ?σ₁ ?σ₂ ?v with _ =>_ end ⊣⊢ _ =>
           destruct (@term_get_pair_spec Σ σ₁ σ₂ v); subst; try progress cbn
       | |- match @term_get_record ?r ?Σ ?v with _ =>_ end ⊣⊢ _ =>
           destruct (@term_get_record_spec Σ r v); subst; try progress cbn
+      | H: ?fst * ?snd |- _ =>
+          destruct H; subst; try progress cbn
+      | u: () |- _ =>
+          destruct u; try progress cbn
       end; try easy; auto.
 
   Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :
@@ -887,34 +908,97 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       apply simplify_access_pmp_perm_spec.
   Qed.
 
+  Lemma addr_match_type_neq_off_cases :
+    ∀ a, a ≠ OFF -> a = TOR.
+  Proof. by destruct a. Qed.
+
+  Local Ltac process_inst ι :=
+    repeat match goal with
+      | a: NamedEnv ?t (recordf_ty ?r) |- _ =>
+          simpl in a; env.destroy a
+      | H: ∀ ι : Valuation ?Σ, ?P |- _ =>
+          specialize (H ι)
+      end.
+
   Lemma simplify_pmp_access_exp_spec {Σ} (paddr : Term Σ ty_xlenbits)
     (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry))
     (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) :
     simplify_pmp_access_exp paddr width es p acc ⊣⊢ Some [formula_user pmp_access_exp [paddr; width; es; p; acc]].
   Proof.
-    unfold simplify_pmp_access_exp.
-    lsolve.
-    destruct a as [[pmp0 es0]|[]]; [|easy].
-    lsolve.
-    destruct a as [[pmp1 es1]|[]]; [|easy].
-    lsolve.
-    destruct a as [cfg0 addr0].
-    lsolve.
-    destruct a as [[pmp2 es2]|[]]; [easy|].
-    lsolve.
-    destruct a as [cfg1 addr1].
-    lsolve.
+    unfold simplify_pmp_access_exp. lsolve.
     intros ι; cbn;
       unfold Pmp_access_exp, decide_pmp_access_exp, check_pmp_access_exp,
-            pmp_check_exp, pmp_match_entry, pmp_match_addr.
+      pmp_check_exp, pmp_match_entry, pmp_match_addr, pmp_addr_range;
+      process_inst ι.
     split; intros Hpmp.
     - repeat match goal with
+             | H: inst ?ι ?v = ?x |- _ =>
+                 cbn in H; rewrite H
+             | H: ?x = inst ?ι ?v |- _ =>
+                 symmetry in H
              | H: ?P ∧ ?q |- _ =>
                  destruct H
              | H: ?P ∨ ?q |- _ =>
                  destruct H
-             end.
-  Admitted.
+             | H: ?x ≠ OFF |- _ =>
+                 apply addr_match_type_neq_off_cases in H; rewrite H
+             end;
+        subst;
+        try progress cbn;
+        bv_comp_bool;
+        simpl;
+        try apply Pmp_check_perms_Access_pmp_perm;
+        auto.
+    - repeat match goal with
+             | H: inst ?ι ?v = ?x |- _ =>
+                 cbn in H; rewrite H in Hpmp; simpl in Hpmp
+             | H: ?x = inst ?ι ?v |- _ =>
+                 symmetry in H
+             | H: ?P ∧ ?q |- _ =>
+                 destruct H
+             | H: ?P ∨ ?q |- _ =>
+                 destruct H
+             | H: ?x ≠ OFF |- _ =>
+                 apply addr_match_type_neq_off_cases in H; rewrite H
+             end;
+        subst;
+        try progress cbn.
+      repeat match goal with
+             | H: context[match inst ?v ?ι with | _ => _ end] |- _ =>
+                 let E := fresh "E" in
+                 destruct (inst v ι) eqn:E; rewrite ?E in H
+             | H: context[if ?a <ᵘ? ?b then _ else _] |- _ =>
+                 let E := fresh "E" in
+                 destruct (a <ᵘ? b) eqn:E; rewrite ?E in H
+             | H: context[if ?a <=ᵘ? ?b then _ else _] |- _ =>
+                 let E := fresh "E" in
+                 destruct (a <=ᵘ? b) eqn:E; rewrite ?E in H
+             | H: context[if false && _ then _ else _] |- _ =>
+                 rewrite andb_false_l in H
+             | H: context[if true && _ then _ else _] |- _ =>
+                 rewrite andb_true_l in H
+             | H: context[if ?a && ?b then _ else _] |- _ =>
+                 let E := fresh "E" in
+                 destruct (a) eqn:E; rewrite ?E in H
+             | H: context[if true || _ then _ else _] |- _ =>
+                 rewrite orb_true_l in H
+             | H: context[if false || _ then _ else _] |- _ =>
+                 rewrite orb_false_l in H
+             | H: context[if ?a || ?b then _ else _] |- _ =>
+                 let E := fresh "E" in
+                 destruct (a) eqn:E; rewrite ?E in H
+             end;
+        try discriminate;
+        bv_comp;
+        rewrite ?Pmp_check_perms_Access_pmp_perm;
+        try match goal with
+          | H: inst v7 ?ι = OFF |- _ =>
+              left; clear H
+          end;
+        repeat split;
+        auto 10.
+      all: solve [left; auto 10].
+  Qed.
 
   #[local] Arguments Pmp_check_rwx !cfg !acc /.
   Lemma simplify_pmp_check_rwx_spec {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) :

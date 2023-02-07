@@ -890,7 +890,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                     (asn.match_enum pmpaddrmatch (term_var "result_pmpMatchAddr")
                       (fun K => match K with
                                 | PMP_NoMatch =>
-                                    asn_bool (term_var hi <ᵘₜ term_var lo) ∨ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var lo ||ₜ term_var hi <=ᵘₜ term_var addr) ∨ term_var rng = term_inr (term_val ty.unit tt)
+                                    asn_bool (term_var hi <ᵘₜ term_var lo)
+                                    ∨ (asn_bool (term_var lo <=ᵘₜ term_var hi) ∗ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var lo))
+                                    ∨ (asn_bool (term_var lo <=ᵘₜ term_var hi) ∗ asn_bool (term_var lo <ᵘₜ term_binop bop.bvadd (term_var addr) (term_var width)) ∗ asn_bool (term_var hi <=ᵘₜ term_var addr))
                                 | PMP_PartialMatch =>
                                     term_var lo <=ᵘ term_var hi ∗
                                     term_var lo <ᵘ term_binop bop.bvadd (term_var addr) (term_var width) ∗
@@ -918,8 +920,11 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                asn.match_enum pmpmatch (term_var "result_pmpMatchEntry")
                  (fun K => match K with
                            | PMP_Continue =>
-                               asn_bool (term_var pmpaddr <ᵘₜ term_var prev_pmpaddr) ∨ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var prev_pmpaddr ||ₜ term_var pmpaddr <=ᵘₜ term_var addr)
-                               ∨ term_var A = term_val ty_pmpaddrmatchtype OFF
+                                    term_var A = term_val ty_pmpaddrmatchtype OFF
+                                    ∨ (asn.formula (formula_relop bop.neq (term_var A) (term_val ty_pmpaddrmatchtype OFF)) ∗
+                                         (asn_bool (term_var pmpaddr <ᵘₜ term_var prev_pmpaddr)
+                                          ∨ (asn_bool (term_var prev_pmpaddr <=ᵘₜ term_var pmpaddr) ∗ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var prev_pmpaddr))
+                                          ∨ (asn_bool (term_var prev_pmpaddr <=ᵘₜ term_var pmpaddr) ∗ asn_bool (term_var prev_pmpaddr <ᵘₜ term_binop bop.bvadd (term_var addr) (term_var width)) ∗ asn_bool (term_var pmpaddr <=ᵘₜ term_var addr))))
                            | PMP_Fail     =>
                                asn_bool (term_not
                                            (term_var prev_pmpaddr <=ᵘₜ term_var addr &&ₜ term_var addr <ᵘₜ term_var pmpaddr))
@@ -1284,13 +1289,11 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_pmpCheckExp (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheckExp bytes H).
   Proof.
     destruct H as [H|[H|H]]; rewrite ?H;
-    apply Symbolic.validcontract_with_erasure_sound;
-    vm_compute; constructor;
+      apply Symbolic.validcontract_with_erasure_sound;
+      vm_compute; constructor;
       cbn;
       repeat (intros; split; bv_comp);
-      try (left; split; [|left]; solve [auto]); (* ∀ cfg . NoMatch cfg *)
-      try (right; repeat split; solve [auto]); (* Match cfg0 *)
-      try (left; split; [|right]; repeat split; solve [auto]). (* NoMatch cfg0 ∧ Match cfg1 *)
+      auto 11.
   Qed.
 
   Lemma valid_contract_step : ValidContract step.
@@ -1405,9 +1408,8 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
   Proof.
     symbolic_simpl.
-    intros.
-    apply Bool.orb_true_iff in H2 as [?%bv.ultb_ult|?%bv.ultb_ult];
-      [left; auto| right; auto].
+    intros; split; intros; bv_comp; auto.
+    destruct (v + v0 <=ᵘ? v1)%bv eqn:?; bv_comp; auto.
   Qed.
 
   Lemma valid_contract_pmpMatchEntry : ValidContract pmpMatchEntry.
