@@ -545,137 +545,13 @@ Module RiscvPmpSpecVerif.
     destruct (v + v0 <=ᵘ? v1)%bv eqn:?; bv_comp; auto.
   Qed.
 
-  Opaque pmp_get_perms.
-
-  Lemma Pmp_access_inversion : forall addr bytes cfg0 addr0 cfg1 addr1 acc,
-      Pmp_access addr bytes [(cfg0 , addr0); (cfg1, addr1)]%list Machine acc ->
-         (A cfg0 = OFF /\ A cfg1 = OFF)
-      \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr1 <ᵘ addr0)
-      \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr0 <=ᵘ addr1 /\ addr + bytes <=ᵘ addr0)
-      \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr1 <=ᵘ addr)
-      \/ (A cfg0 = OFF /\ A cfg1 = TOR /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr <ᵘ addr1 /\ addr0 <=ᵘ addr /\ addr + bytes <=ᵘ addr1 /\ Access_pmp_perm acc (pmp_get_perms cfg1 Machine))
-      \/ (A cfg0 = TOR /\ A cfg1 = OFF /\ addr0 <ᵘ [bv 0x0])
-      \/ (A cfg0 = TOR /\ A cfg1 = OFF /\ [bv 0x0] <=ᵘ addr0 /\ addr + bytes <=ᵘ [bv 0x0])
-      \/ (A cfg0 = TOR /\ A cfg1 = OFF /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr0 <=ᵘ addr)
-      \/ (A cfg0 = TOR /\ A cfg1 = OFF /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr <ᵘ addr0 /\ [bv 0x0] <=ᵘ addr /\ addr + bytes <=ᵘ addr0 /\ Access_pmp_perm acc (pmp_get_perms cfg0 Machine))
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ addr0 <ᵘ [bv 0x0] /\ addr1 <ᵘ addr0)
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ addr0 <ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr + bytes <=ᵘ addr0)
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ addr0 <ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr1 <=ᵘ addr)
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ addr0 <ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr <ᵘ addr1 /\ addr0 <=ᵘ addr /\addr + bytes <=ᵘ addr1 /\ Access_pmp_perm acc (pmp_get_perms cfg1 Machine))
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ addr + bytes <=ᵘ [bv 0x0] /\ addr1 <ᵘ addr0)
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ addr + bytes <=ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr + bytes <=ᵘ addr0)
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ addr + bytes <=ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr1 <=ᵘ addr)
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ addr + bytes <=ᵘ [bv 0x0] /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr <ᵘ addr1 /\ addr0 <=ᵘ addr /\ addr + bytes <=ᵘ addr1 /\ Access_pmp_perm acc (pmp_get_perms cfg1 Machine))
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr0 <=ᵘ addr /\ addr0 <=ᵘ addr1 /\ addr + bytes <=ᵘ addr0)
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr0 <=ᵘ addr /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr1 <=ᵘ addr)
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr0 <=ᵘ addr /\ addr0 <=ᵘ addr1 /\ addr0 <ᵘ addr + bytes /\ addr <ᵘ addr1 /\ addr + bytes <=ᵘ addr1 /\ Access_pmp_perm acc (pmp_get_perms cfg1 Machine))
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr <ᵘ addr0 /\ [bv 0x0] <=ᵘ addr /\ addr + bytes <=ᵘ addr0 /\ Access_pmp_perm acc (pmp_get_perms cfg0 Machine))
-      \/ (A cfg0 = TOR /\ A cfg1 = TOR /\ [bv 0x0] <=ᵘ addr0 /\ [bv 0x0] <ᵘ addr + bytes /\ addr0 <=ᵘ addr /\ addr1 <ᵘ addr0).
-  Proof.
-    intros addr bytes [? [] ? ? ?] addr0 [? [] ? ? ?] addr1 acc;
-      unfold Pmp_access, decide_pmp_access, check_pmp_access, pmp_check, pmp_match_entry,
-             pmp_match_addr, pmp_addr_range;
-      simpl;
-      intros H.
-    - left; auto.
-    - destruct (addr1 <ᵘ? addr0) eqn:?; bv_comp; auto.
-      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp; simpl in H.
-      right; right; left; auto.
-      destruct (addr1 <=ᵘ? addr) eqn:?; bv_comp.
-      right; right; right; left; auto.
-      destruct (addr0 <=ᵘ? addr) eqn:?; bv_comp.
-      destruct (addr + bytes <=ᵘ? addr1) eqn:?; bv_comp.
-      simpl in H.
-      right; right; right; right; left; repeat (split; auto).
-      rewrite Bool.andb_false_r in H; inversion H.
-      rewrite Bool.andb_false_l in H; inversion H.
-    - destruct (addr0 <ᵘ? [bv 0x0]) eqn:?; bv_comp.
-      right; right; right; right; right; left; repeat (split; auto).
-      destruct (addr + bytes <=ᵘ? [bv 0x0]) eqn:?; bv_comp.
-      simpl in H.
-      right; right; right; right; right; right; left; repeat (split; auto).
-      destruct (addr0 <=ᵘ? addr) eqn:?; bv_comp.
-      simpl in H.
-      right; right; right; right; right; right; right; left; repeat (split; auto).
-      simpl in H.
-      destruct ([bv 0x0] <=ᵘ? addr) eqn:?; bv_comp.
-      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
-      simpl in H.
-      right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      rewrite Bool.andb_false_r in H; inversion H.
-      rewrite Bool.andb_false_l in H; inversion H.
-    - destruct (addr0 <ᵘ? [bv 0x0]) eqn:?; bv_comp.
-      destruct (addr1 <ᵘ? addr0) eqn:?; bv_comp.
-      right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
-      simpl in H.
-      right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      destruct (addr1 <=ᵘ? addr) eqn:?; bv_comp.
-      simpl in H.
-      right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      simpl in H.
-      destruct (addr0 <=ᵘ? addr) eqn:?; bv_comp.
-      destruct (addr + bytes <=ᵘ? addr1) eqn:?; bv_comp.
-      simpl in H.
-      right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      rewrite Bool.andb_false_r in H; inversion H.
-      rewrite Bool.andb_false_l in H; inversion H.
-      destruct (addr + bytes <=ᵘ? [bv 0x0]) eqn:?; bv_comp.
-      simpl in H.
-      destruct (addr1 <ᵘ? addr0) eqn:?; bv_comp.
-      do 4 right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
-      simpl in H.
-      do 4 right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      destruct (addr1 <=ᵘ? addr) eqn:?; bv_comp.
-      simpl in H.
-      do 4 right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      simpl in H.
-      destruct (addr0 <=ᵘ? addr) eqn:?; bv_comp.
-      destruct (addr + bytes <=ᵘ? addr1) eqn:?; bv_comp.
-      simpl in H.
-      do 4 right; right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      rewrite Bool.andb_false_r in H; inversion H.
-      rewrite Bool.andb_false_l in H; inversion H.
-      destruct (addr0 <=ᵘ? addr) eqn:?; bv_comp.
-      simpl in H.
-      destruct (addr1 <ᵘ? addr0) eqn:?; bv_comp.
-      do 5 right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; repeat (split; auto).
-      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
-      simpl in H.
-      do 4 right; right; right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      destruct (addr1 <=ᵘ? addr) eqn:?; bv_comp.
-      simpl in H.
-      do 4 right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      simpl in H.
-      destruct (addr + bytes <=ᵘ? addr1) eqn:?; bv_comp.
-      do 4 right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      inversion H.
-      simpl in H.
-      destruct ([bv 0x0] <=ᵘ? addr) eqn:?; bv_comp.
-      destruct (addr + bytes <=ᵘ? addr0) eqn:?; bv_comp.
-      simpl in H.
-      do 4 right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; right; left; repeat (split; auto).
-      rewrite Bool.andb_false_r in H; inversion H.
-      rewrite Bool.andb_false_l in H; inversion H.
-  Qed.
-
-  Transparent pmp_get_perms.
-
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
-    (* update: Pmp_access not defined in a way that makes it easy to destruct here... *)
     destruct H as [-> |[-> | ->]];
-    (* Set Printing Depth 200. *)
-    hnf; apply verification_condition_with_erasure_sound; vm_compute;
-    constructor; cbn;
-    intros paddr acc addr0 addr1 L0 A0 X0 W0 R0 L1 A1 X1 W1 R1;
-    repeat try split; intros; subst; intros;
-      repeat
-        match goal with
-        | H: Pmp_access ?a ?b ?es Machine ?acc |- _ =>
-            apply Pmp_access_inversion in H;
-            simpl in H
+      hnf; apply verification_condition_with_erasure_sound; vm_compute;
+      constructor; cbn;
+      repeat (intros; split; intros);
+      repeat match goal with
         | H: (?b1 || ?b2)%bool = true |- _ =>
             apply Bool.orb_true_iff in H
         | H: ?P /\ ?Q |- _ =>
@@ -688,10 +564,11 @@ Module RiscvPmpSpecVerif.
         | H1: ?a <=ᵘ ?b, H2: ?b <ᵘ ?a |- False =>
             unfold bv.ult, bv.ule in *; apply N.le_ngt in H1; apply (H1 H2)
         end;
-      bv_comp;
-      unfold Access_pmp_perm, decide_access_pmp_perm in *;
-      try discriminate.
-    all: try destruct X1; try destruct W1; try destruct R1; try destruct X0; try destruct W0; try destruct R0; try discriminate.
+      subst;
+      unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *;
+      simpl in *;
+      try discriminate;
+      try Lia.lia.
   Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
