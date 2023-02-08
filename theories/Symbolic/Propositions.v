@@ -663,6 +663,12 @@ Module Type SymPropOn
       subrelation (sequiv Σ) (Basics.flip (simpl Σ)).
     Proof. intros x y xy ι. apply xy. Qed.
 
+    #[export] Instance proper_safe {Σ} : Proper (sequiv Σ ==> eq ==> Basics.impl) safe.
+    Proof.
+      unfold Proper, sequiv, respectful, Basics.impl.
+      intros p q pq ι ? <-. apply pq.
+    Qed.
+
     #[export] Instance proper_angelic_close0 {Σ Σe} : Proper (sequiv (Σ ▻▻ Σe) ==> sequiv Σ) (angelic_close0 Σe).
     Proof. intros p q pq ι. rewrite ?safe_angelic_close0. now apply base.exist_proper. Qed.
 
