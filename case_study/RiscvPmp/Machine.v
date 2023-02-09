@@ -952,6 +952,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     stm_val ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_UTYPE : Stm [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired :=
+    (* NOTE: the sign extension only makes sense to support GPRs wider than 32 bits (i.e., 64-bit risc-v needs the sign extension) *)
     let: off ∷ ty_xlenbits := exp_sext (exp_binop bop.bvapp (exp_val (ty.bvec 12) Bitvector.bv.zero) imm) in
     let: ret :=
        match: op in uop with
