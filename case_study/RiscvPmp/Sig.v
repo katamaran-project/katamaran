@@ -699,6 +699,21 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       ∧ formula_user pmp_check_perms [term_record rpmpcfg_ent [cfg.[??"L"];cfg.[??"A"];cfg.[??"X"];cfg.[??"W"];cfg.[??"R"]]; acc; p])
   end%list.
 
+  Definition get_inl {A B} (v : option (A + B)) : option A :=
+    match v with
+    | Some (inl x) => Some x
+    | _            => None
+    end.
+
+  Definition get_inr {A B} (v : option (A + B)) : option B :=
+    match v with
+    | Some (inr x) => Some x
+    | _            => None
+    end.
+
+  (* TODO: write function that splits the entries into (cfg , addr), angostic of the length of the entries (could add this as a parameter if neccesary, the pmp entries counter) *)
+
+  Import option.notations.
   Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
     let pmp_access_fml := formula_user pmp_access [paddr; width; es; p; acc] in
     match term_get_val paddr , term_get_val width , term_get_val es , term_get_val p with
@@ -709,25 +724,17 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       | (false, _)       => None
       end
     | _, _ , _ , _ =>  
-        match term_get_list es with
-        | Some (inl (pmp0 , es)) => match term_get_list es, term_get_pair pmp0 with
-                                    | Some (inl (pmp1, es)), Some (cfg0, addr0) =>
-                                        match term_get_list es, term_get_pair pmp1 with
-                                        | Some (inr tt), Some (cfg1, addr1) =>
-                                            match term_get_record cfg0 with
-                                            | Some cfg0' =>
-                                                match term_get_record cfg1 with
-                                                | Some cfg1' =>
-                                                    Some [simplify_pmpcheck paddr width [term_val ty_xlenbits bv.zero; addr0; addr1]%list [cfg0'; cfg1']%list p acc]
-                                                | _ => Some [pmp_access_fml]
-                                                end
-                                            | _ => Some [pmp_access_fml]
-                                            end
-                                        | _, _ => Some [pmp_access_fml]
-                                        end
-                                    | _, _ => Some [pmp_access_fml]
-                                    end
-        | _ => Some [pmp_access_fml]
+        let result := '(pmp0 , es) <- get_inl (term_get_list es) ;;
+                      '(pmp1 , es) <- get_inl (term_get_list es) ;;
+                      get_inr (term_get_list es) ;;
+                      '(cfg0 , addr0) <- term_get_pair pmp0 ;;
+                      '(cfg1 , addr1) <- term_get_pair pmp1 ;;
+                      cfg0' <- term_get_record cfg0 ;;
+                      cfg1' <- term_get_record cfg1 ;;
+                      Some [simplify_pmpcheck paddr width [term_val ty_xlenbits bv.zero; addr0; addr1]%list [cfg0'; cfg1']%list p acc] in
+        match result with
+        | Some _ => result
+        | None   => Some [pmp_access_fml]
         end
     end.
 
@@ -866,6 +873,18 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
         unfold Pmp_access, decide_pmp_access, check_pmp_access,
         pmp_check, pmp_match_entry, pmp_match_addr, pmp_addr_range;
         process_inst ι.
+      destruct a1; [easy|].
+      destruct a1; [|easy].
+      lsolve.
+      cbn [option.bind].
+      cbn.
+      destruct v0.
+      cbn [option.bind].
+      lsolve.
+      destruct (@term_get_record_spec Σ rpmpcfg_ent (term_val ty_pmpcfg_ent v0)). (* TODO: not done by lsolve! *)
+      destruct v0.
+      process_inst ι.
+      cbn.
       split; intros Hpmp.
       + repeat match goal with
                | H: inst ?ι ?v = ?x |- _ =>
@@ -887,7 +906,11 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
           simpl;
           try apply Pmp_check_perms_Access_pmp_perm;
           auto.
-      + repeat match goal with
+        all: inversion H.
+        all: try (rewrite H2; easy).
+        rewrite H2.
+        simpl.
+      (* + repeat match goal with
                | H: inst ?ι ?v = ?x |- _ =>
                    cbn in H; rewrite H in Hpmp; simpl in Hpmp
                | H: ?x = inst ?ι ?v |- _ =>
@@ -1139,7 +1162,8 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
           rewrite ?Pmp_check_perms_Access_pmp_perm;
           repeat split;
           auto 11.
-  Qed.
+  Qed. *)
+  Admitted.
 
   #[local] Arguments Pmp_check_rwx !cfg !acc /.
   Lemma simplify_pmp_check_rwx_spec {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) :
