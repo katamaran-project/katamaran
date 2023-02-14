@@ -865,26 +865,15 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       destruct check_pmp_access as [[] o]; [|easy].
       destruct o; [|easy].
       apply simplify_access_pmp_perm_spec.
-    - env.destroy a1.
-      destruct a1; [easy|].
-      lsolve.
-      destruct v as [[] ?]; lsolve.
+    - env.destroy a1; destruct a1; [easy|].
+      env.destroy a1; destruct a1; [easy|].
+      env.destroy a1; destruct a1; [|easy].
+      cbn; destruct v as [[] ?]; destruct v0 as [[] ?]; lsolve.
+      cbn.
       intros ι; cbn;
         unfold Pmp_access, decide_pmp_access, check_pmp_access,
         pmp_check, pmp_match_entry, pmp_match_addr, pmp_addr_range;
         process_inst ι.
-      destruct a1; [easy|].
-      destruct a1; [|easy].
-      lsolve.
-      cbn [option.bind].
-      cbn.
-      destruct v0.
-      cbn [option.bind].
-      lsolve.
-      destruct (@term_get_record_spec Σ rpmpcfg_ent (term_val ty_pmpcfg_ent v0)). (* TODO: not done by lsolve! *)
-      destruct v0.
-      process_inst ι.
-      cbn.
       split; intros Hpmp.
       + repeat match goal with
                | H: inst ?ι ?v = ?x |- _ =>
@@ -899,17 +888,14 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
                    rewrite !H; clear H
                | H: ?x ≠ OFF |- _ =>
                    apply addr_match_type_neq_off_cases in H; rewrite H
+               | H: Pmp_check_perms _ _ _ |- _ =>
+                   apply Pmp_check_perms_Access_pmp_perm in H; unfold Access_pmp_perm in H
                end;
           subst;
           try progress cbn;
           bv_comp_bool;
           simpl;
-          try apply Pmp_check_perms_Access_pmp_perm;
           auto.
-        all: inversion H.
-        all: try (rewrite H2; easy).
-        rewrite H2.
-        simpl.
       (* + repeat match goal with
                | H: inst ?ι ?v = ?x |- _ =>
                    cbn in H; rewrite H in Hpmp; simpl in Hpmp
