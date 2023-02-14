@@ -896,21 +896,8 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
           bv_comp_bool;
           simpl;
           auto.
-      (* + repeat match goal with
-               | H: inst ?ι ?v = ?x |- _ =>
-                   cbn in H; rewrite H in Hpmp; simpl in Hpmp
-               | H: ?x = inst ?ι ?v |- _ =>
-                   symmetry in H
-               | H: ?P ∧ ?q |- _ =>
-                   destruct H
-               | H: ?P ∨ ?q |- _ =>
-                   destruct H
-               | H: ?x ≠ OFF |- _ =>
-                   apply addr_match_type_neq_off_cases in H; rewrite H
-               end;
-          subst;
-          try progress cbn.
-        destruct A;
+      + destruct Hpmp as [_ Hpmp]; simpl in Hpmp.
+        destruct A, A0;
           repeat match goal with
             | H: context[match inst ?v ?ι with | _ => _ end] |- _ =>
                 let E := fresh "E" in
@@ -941,7 +928,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
           rewrite ?Pmp_check_perms_Access_pmp_perm;
           repeat split;
           auto 11.
-    - intros ι; cbn;
+    - (* intros ι; cbn;
         unfold Pmp_access, decide_pmp_access, check_pmp_access,
         pmp_check, pmp_match_entry, pmp_match_addr, pmp_addr_range;
         process_inst ι.
