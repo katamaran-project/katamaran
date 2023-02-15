@@ -320,7 +320,13 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | PMP_Match        => PMP_Success
       end.
 
-    Definition pmp_check(a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
+    (* TODO: revert back to a better implementation. (see OldPmpCheck)
+             However, add a parameter to recurse over as in the split_entries definition.
+             Having the split_entries and pmp_check definitions defined similarly should
+             help in verifying the soundness of the simplifier.
+             Before the old version made a proof difficult in the Model,
+             fix that proof first before continuing here *)
+    Definition pmp_check (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
       match entries with
       | (cfg0 , addr0) :: (cfg1 , addr1) :: [] =>
           match pmp_match_entry a width m cfg0 prev addr0 with
@@ -337,7 +343,11 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
                   end
               end
           end
-      | _ => (false, None)
+      | _ => 
+          match m with
+          | Machine => (true, None)
+          | User    => (false, None)
+          end
       end%list.
 
     Section Old_pmp_check.
@@ -711,9 +721,19 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     | _            => None
     end.
 
-  (* TODO: write function that splits the entries into (cfg , addr), angostic of the length of the entries (could add this as a parameter if neccesary, the pmp entries counter) *)
-
   Import option.notations.
+  (* NOTE: can't just recurse over es, Coq can't determine it will ever terminate (not sure how to fix this, don't think we can do something as "measure (length es)"), that's why the parameter n is added for the nr of pmp entries of the machine *)
+  Fixpoint split_entries {Σ} (n : nat) (es : Term Σ (ty.list ty_pmpentry)) : option (list (NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent)) * list (Term Σ ty_xlenbits)) :=
+    match n, term_get_list es with
+    | O   , Some (inr tt)         => Some ([] , [])
+    | S n , Some (inl (pmp , es)) =>
+        '(cfg , addr) <- term_get_pair pmp ;;
+        cfg' <- term_get_record cfg ;;
+        '(cfgs , addrs) <- split_entries n es ;;
+        Some (cfg' :: cfgs , addr :: addrs)
+    | _   , _                     => None
+    end%list.
+
   Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
     let pmp_access_fml := formula_user pmp_access [paddr; width; es; p; acc] in
     match term_get_val paddr , term_get_val width , term_get_val es , term_get_val p with
@@ -724,16 +744,18 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       | (false, _)       => None
       end
     | _, _ , _ , _ =>  
-        let result := '(pmp0 , es) <- get_inl (term_get_list es) ;;
+        let result := (* '(pmp0 , es) <- get_inl (term_get_list es) ;;
                       '(pmp1 , es) <- get_inl (term_get_list es) ;;
                       get_inr (term_get_list es) ;;
                       '(cfg0 , addr0) <- term_get_pair pmp0 ;;
                       '(cfg1 , addr1) <- term_get_pair pmp1 ;;
                       cfg0' <- term_get_record cfg0 ;;
-                      cfg1' <- term_get_record cfg1 ;;
-                      Some [simplify_pmpcheck paddr width [term_val ty_xlenbits bv.zero; addr0; addr1]%list [cfg0'; cfg1']%list p acc] in
+                      cfg1' <- term_get_record cfg1 ;; *)
+                      '(cfgs , addrs) <- split_entries NumPmpEntries es ;;
+                      let addrs := cons (term_val ty_xlenbits bv.zero) addrs in
+                      Some [simplify_pmpcheck paddr width addrs cfgs p acc] in
         match result with
-        | Some _ => result
+        | Some v => Some v
         | None   => Some [pmp_access_fml]
         end
     end.
@@ -855,6 +877,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
           specialize (H ι)
       end.
 
+  Opaque NumPmpEntries.
   Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_xlenbits)
     (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry))
     (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) :
@@ -865,70 +888,70 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       destruct check_pmp_access as [[] o]; [|easy].
       destruct o; [|easy].
       apply simplify_access_pmp_perm_spec.
-    - env.destroy a1; destruct a1; [easy|].
-      env.destroy a1; destruct a1; [easy|].
-      env.destroy a1; destruct a1; [|easy].
-      cbn; destruct v as [[] ?]; destruct v0 as [[] ?]; lsolve.
-      cbn.
-      intros ι; cbn;
-        unfold Pmp_access, decide_pmp_access, check_pmp_access,
-        pmp_check, pmp_match_entry, pmp_match_addr, pmp_addr_range;
-        process_inst ι.
-      split; intros Hpmp.
-      + repeat match goal with
-               | H: inst ?ι ?v = ?x |- _ =>
-                   cbn in H; rewrite H
-               | H: ?x = inst ?ι ?v |- _ =>
-                   symmetry in H
-               | H: ?P ∧ ?q |- _ =>
-                   destruct H
-               | H: ?P ∨ ?q |- _ =>
-                   destruct H
-               | H: ?x = OFF |- _ =>
-                   rewrite !H; clear H
-               | H: ?x ≠ OFF |- _ =>
-                   apply addr_match_type_neq_off_cases in H; rewrite H
-               | H: Pmp_check_perms _ _ _ |- _ =>
-                   apply Pmp_check_perms_Access_pmp_perm in H; unfold Access_pmp_perm in H
-               end;
-          subst;
-          try progress cbn;
-          bv_comp_bool;
-          simpl;
-          auto.
-      + destruct Hpmp as [_ Hpmp]; simpl in Hpmp.
-        destruct A, A0;
-          repeat match goal with
-            | H: context[match inst ?v ?ι with | _ => _ end] |- _ =>
-                let E := fresh "E" in
-                destruct (inst v ι) eqn:E; rewrite ?E in H
-            | H: context[if ?a <ᵘ? ?b then _ else _] |- _ =>
-                let E := fresh "E" in
-                destruct (a <ᵘ? b) eqn:E; rewrite ?E in H
-            | H: context[if ?a <=ᵘ? ?b then _ else _] |- _ =>
-                let E := fresh "E" in
-                destruct (a <=ᵘ? b) eqn:E; rewrite ?E in H
-            | H: context[if false && _ then _ else _] |- _ =>
-                rewrite andb_false_l in H
-            | H: context[if true && _ then _ else _] |- _ =>
-                rewrite andb_true_l in H
-            | H: context[if ?a && ?b then _ else _] |- _ =>
-                let E := fresh "E" in
-                destruct (a) eqn:E; rewrite ?E in H
-            | H: context[if true || _ then _ else _] |- _ =>
-                rewrite orb_true_l in H
-            | H: context[if false || _ then _ else _] |- _ =>
-                rewrite orb_false_l in H
-            | H: context[if ?a || ?b then _ else _] |- _ =>
-                let E := fresh "E" in
-                destruct (a) eqn:E; rewrite ?E in H
-            end;
-          try discriminate;
-          bv_comp;
-          rewrite ?Pmp_check_perms_Access_pmp_perm;
-          repeat split;
-          auto 11.
-    - (* intros ι; cbn;
+    (* - *) (* env.destroy a1; induction a1; lsolve. *)
+      (* env.destroy a1; destruct a1; [easy|]. *)
+      (* env.destroy a1; destruct a1; [|easy]. *)
+      (* cbn; destruct v as [[] ?]; destruct v0 as [[] ?]; lsolve. *)
+      (* cbn. *)
+      (* intros ι; cbn; *)
+      (*   unfold Pmp_access, decide_pmp_access, check_pmp_access, *)
+      (*   pmp_check, pmp_match_entry, pmp_match_addr, pmp_addr_range; *)
+      (*   process_inst ι. *)
+      (* split; intros Hpmp. *)
+      (* + repeat match goal with *)
+      (*          | H: inst ?ι ?v = ?x |- _ => *)
+      (*              cbn in H; rewrite H *)
+      (*          | H: ?x = inst ?ι ?v |- _ => *)
+      (*              symmetry in H *)
+      (*          | H: ?P ∧ ?q |- _ => *)
+      (*              destruct H *)
+      (*          | H: ?P ∨ ?q |- _ => *)
+      (*              destruct H *)
+      (*          | H: ?x = OFF |- _ => *)
+      (*              rewrite !H; clear H *)
+      (*          | H: ?x ≠ OFF |- _ => *)
+      (*              apply addr_match_type_neq_off_cases in H; rewrite H *)
+      (*          | H: Pmp_check_perms _ _ _ |- _ => *)
+      (*              apply Pmp_check_perms_Access_pmp_perm in H; unfold Access_pmp_perm in H *)
+      (*          end; *)
+      (*     subst; *)
+      (*     try progress cbn; *)
+      (*     bv_comp_bool; *)
+      (*     simpl; *)
+      (*     auto. *)
+      (* + destruct Hpmp as [_ Hpmp]; simpl in Hpmp. *)
+      (*   destruct A, A0; *)
+      (*     repeat match goal with *)
+      (*       | H: context[match inst ?v ?ι with | _ => _ end] |- _ => *)
+      (*           let E := fresh "E" in *)
+      (*           destruct (inst v ι) eqn:E; rewrite ?E in H *)
+      (*       | H: context[if ?a <ᵘ? ?b then _ else _] |- _ => *)
+      (*           let E := fresh "E" in *)
+      (*           destruct (a <ᵘ? b) eqn:E; rewrite ?E in H *)
+      (*       | H: context[if ?a <=ᵘ? ?b then _ else _] |- _ => *)
+      (*           let E := fresh "E" in *)
+      (*           destruct (a <=ᵘ? b) eqn:E; rewrite ?E in H *)
+      (*       | H: context[if false && _ then _ else _] |- _ => *)
+      (*           rewrite andb_false_l in H *)
+      (*       | H: context[if true && _ then _ else _] |- _ => *)
+      (*           rewrite andb_true_l in H *)
+      (*       | H: context[if ?a && ?b then _ else _] |- _ => *)
+      (*           let E := fresh "E" in *)
+      (*           destruct (a) eqn:E; rewrite ?E in H *)
+      (*       | H: context[if true || _ then _ else _] |- _ => *)
+      (*           rewrite orb_true_l in H *)
+      (*       | H: context[if false || _ then _ else _] |- _ => *)
+      (*           rewrite orb_false_l in H *)
+      (*       | H: context[if ?a || ?b then _ else _] |- _ => *)
+      (*           let E := fresh "E" in *)
+      (*           destruct (a) eqn:E; rewrite ?E in H *)
+      (*       end; *)
+      (*     try discriminate; *)
+      (*     bv_comp; *)
+      (*     rewrite ?Pmp_check_perms_Access_pmp_perm; *)
+      (*     repeat split; *)
+      (*     auto 11. *)
+    (* - intros ι; cbn;
         unfold Pmp_access, decide_pmp_access, check_pmp_access,
         pmp_check, pmp_match_entry, pmp_match_addr, pmp_addr_range;
         process_inst ι.

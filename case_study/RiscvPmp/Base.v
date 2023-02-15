@@ -99,6 +99,7 @@ Inductive CSRIdx : Set :=
 | MPMPADDR1
 .
 
+Definition NumPmpEntries := 2.
 (* NOTE: PMP CSRs limited to 1 for now *)
 Inductive PmpCfgIdx : Set :=
 | PMP0CFG
