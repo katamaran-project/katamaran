@@ -44,6 +44,7 @@ Import ctx.resolution.
 Import ctx.notations.
 Import env.notations.
 Import bv.notations.
+Import option.notations.
 Import ListNotations.
 Open Scope string_scope.
 Open Scope Z_scope.
@@ -320,38 +321,212 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | PMP_Match        => PMP_Success
       end.
 
-    (* TODO: revert back to a better implementation. (see OldPmpCheck)
-             However, add a parameter to recurse over as in the split_entries definition.
-             Having the split_entries and pmp_check definitions defined similarly should
-             help in verifying the soundness of the simplifier.
-             Before the old version made a proof difficult in the Model,
-             fix that proof first before continuing here *)
-    Definition pmp_check (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
-      match entries with
-      | (cfg0 , addr0) :: (cfg1 , addr1) :: [] =>
-          match pmp_match_entry a width m cfg0 prev addr0 with
-          | PMP_Success  => (true, Some (pmp_get_perms cfg0 m))
-          | PMP_Fail     => (false, None)
-          | PMP_Continue => 
-              match pmp_match_entry a width m cfg1 addr0 addr1 with
-              | PMP_Success  => (true, Some (pmp_get_perms cfg1 m))
-              | PMP_Fail     => (false, None)
-              | PMP_Continue => 
-                  match m with
-                  | Machine => (true, None)
-                  | User    => (false, None)
-                  end
-              end
-          end
-      | _ => 
-          match m with
-          | Machine => (true, None)
-          | User    => (false, None)
-          end
+    Section UnrolledPmpCheck.
+      Definition unrolled_pmp_check (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
+        match entries with
+        | (cfg0 , addr0) :: (cfg1 , addr1) :: [] =>
+            match pmp_match_entry a width m cfg0 prev addr0 with
+            | PMP_Success  => (true, Some (pmp_get_perms cfg0 m))
+            | PMP_Fail     => (false, None)
+            | PMP_Continue => 
+                match pmp_match_entry a width m cfg1 addr0 addr1 with
+                | PMP_Success  => (true, Some (pmp_get_perms cfg1 m))
+                | PMP_Fail     => (false, None)
+                | PMP_Continue => 
+                    match m with
+                    | Machine => (true, None)
+                    | User    => (false, None)
+                    end
+                end
+            end
+        | _ => 
+            match m with
+            | Machine => (true, None)
+            | User    => (false, None)
+            end
+        end%list.
+    End UnrolledPmpCheck.
+
+    Fixpoint split_entries_aux (n : nat) (es : Val (ty.list ty_pmpentry)) : option (list (Val ty_pmpcfg_ent) * list (Val ty_xlenbits)) :=
+      match n, es with
+      | O   , []                 => Some ([] , [])
+      | S n , (cfg , addr) :: es =>
+          '(cfgs , addrs) <- split_entries_aux n es ;;
+          Some (cfg :: cfgs , addr :: addrs)
+      | _   , _                  => None
       end%list.
 
+    Definition split_entries (n : nat) (es : Val (ty.list ty_pmpentry)) : option (list (Val ty_pmpcfg_ent) * list (Val ty_xlenbits)) :=
+      '(cfgs , addrs) <- split_entries_aux n es ;;
+      Some (cfgs , bv.zero :: addrs)%list.
+
+    Equations(noeqns) decide_access_pmp_perm (a : Val ty_access_type) (p : Val ty_pmpcfgperm) : bool :=
+    | Read      | PmpR   := true;
+    | Read      | PmpRW  := true;
+    | Read      | PmpRX  := true;
+    | Write     | PmpW   := true;
+    | Write     | PmpRW  := true;
+    | Write     | PmpWX  := true;
+    | ReadWrite | PmpRW  := true;
+    | Execute   | PmpX   := true;
+    | Execute   | PmpRX  := true;
+    | Execute   | PmpWX  := true;
+    | _         | PmpRWX := true;
+    | _         | _      := false.
+
+    Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
+      decide_pmp_check_perms cfg acc p = true.
+
+    Section PresplitPmpCheck.
+      Fixpoint presplit_pmp_check (a width : Val ty_xlenbits) (bounds : list (Val ty_xlenbits)) (cfgs : list (Val ty_pmpcfg_ent)) (p : Val ty_privilege) (acc : Val ty_access_type) : bool :=
+        match bounds, cfgs with
+        | _, []  => match p with
+                    | Machine => true
+                    | User    => false
+                    end
+        | [], _  => false
+        | [_], _ => false
+        | lo :: hi :: bounds, cfg :: cfgs =>
+            match pmp_match_entry a width p cfg lo hi with
+            | PMP_Success  => decide_access_pmp_perm acc (pmp_get_perms cfg p)
+            | PMP_Fail     => false
+            | PMP_Continue => presplit_pmp_check a width (hi :: bounds) cfgs p acc
+            end
+        end%list.
+
+      Fixpoint presplit_pmp_check_vc (a width : Val ty_xlenbits) (bounds : list (Val ty_xlenbits)) (cfgs : list (Val ty_pmpcfg_ent)) (p : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
+        match bounds, cfgs with
+        | _, []  => p = Machine
+        | [], _  => True
+        | [_], _ => True
+        | lo :: hi :: bounds, cfg :: cfgs =>
+            ((* PMP_NoMatch *)
+              (A cfg = OFF
+               ∨ (A cfg ≠ OFF ∧
+                    (hi <ᵘ lo
+                     ∨ (lo <=ᵘ hi ∧ (a + width)%bv <=ᵘ lo)
+                     ∨ (lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ hi <=ᵘ a))))
+              ∧ presplit_pmp_check_vc a width (hi :: bounds) cfgs p acc)
+            ∨
+              ((* PMP_Match *)
+                A cfg ≠ OFF
+                ∧ lo <=ᵘ hi
+                ∧ lo <ᵘ (a + width)%bv
+                ∧ a <ᵘ hi
+                ∧ lo <=ᵘ a
+                ∧ (a + width)%bv <=ᵘ hi
+                ∧ Pmp_check_perms cfg acc p)
+        end%list.
+    End PresplitPmpCheck.
+
+    Section GeneralizedPmpCheck.
+      (* TODO: - remove other definitions eventually
+               - introduce the nat parameter again to control recursion (necessary for the user solver one, can't recurse over a term list?)
+               - ideally we would reuse the vcgen here and add a pass over it to translate the generated VC into a formula *)
+      Fixpoint pmp_check_aux (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : bool :=
+        match entries with
+        | (cfg , hi) :: entries =>
+            match pmp_match_entry a width p cfg lo hi with
+            | PMP_Success  => decide_access_pmp_perm acc (pmp_get_perms cfg p)
+            | PMP_Fail     => false
+            | PMP_Continue => pmp_check_aux a width hi entries p acc
+            end
+        | [] =>
+            match p with
+            | Machine => true
+            | _       => false
+            end
+        end%list.
+
+      Definition pmp_check (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : bool :=
+        pmp_check_aux a width lo entries p acc.
+
+      Fixpoint pmp_check_vc_aux (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
+        match entries with
+        | (cfg , hi) :: entries =>
+            ((* PMP_NoMatch *)
+              (A cfg = OFF
+               ∨ (A cfg ≠ OFF ∧
+                    (hi <ᵘ lo
+                     ∨ (lo <=ᵘ hi ∧ (a + width)%bv <=ᵘ lo)
+                     ∨ (lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ hi <=ᵘ a))))
+              ∧ pmp_check_vc_aux a width hi entries p acc)
+            ∨
+              ((* PMP_Match *)
+                A cfg ≠ OFF
+                ∧ lo <=ᵘ hi
+                ∧ lo <ᵘ (a + width)%bv
+                ∧ a <ᵘ hi
+                ∧ lo <=ᵘ a
+                ∧ (a + width)%bv <=ᵘ hi
+                ∧ Pmp_check_perms cfg acc p)
+        | [] => p = Machine
+        end%list.
+
+      Definition pmp_check_vc (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
+        pmp_check_vc_aux a width lo entries p acc.
+
+      Lemma pmp_check_inversion_1 (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
+        pmp_check a width lo entries p acc = true ->
+        pmp_check_vc a width lo entries p acc.
+      Proof.
+        generalize dependent lo.
+        induction entries.
+        - cbn; intros; destruct p; auto; discriminate.
+        - simpl.
+          destruct a0 as [cfg0 addr0].
+          unfold pmp_match_entry.
+          intros lo.
+          unfold pmp_addr_range.
+          destruct (pmp_match_addr a width _) eqn:?;
+            destruct (A _) eqn:?;
+            intros H;
+            try discriminate.
+          + apply pmp_match_addr_nomatch_1 in Heqv.
+            destruct Heqv; try discriminate; auto.
+          + apply pmp_match_addr_nomatch_1 in Heqv.
+            destruct Heqv; try discriminate; auto.
+            specialize (H0 lo addr0 eq_refl).
+            destruct H0 as [|[|]].
+            left; split; auto.
+            left; split; auto.
+            right; split; auto.
+            admit. (* TODO: seems like pmp_match_addr_nomatch_1 loses information *)
+            admit.
+          + right.
+            apply pmp_match_addr_match_conditions_1 in Heqv as (? & ? & ? & ? & ?).
+            repeat split; auto.
+            admit. (* TODO: remember already writing a lemma that converts Pmp_check_perms... Not accesible here, so need to move it up! *)
+      Admitted.
+    End GeneralizedPmpCheck.
+
+    Definition decide_pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : bool :=
+      let result :=
+        '(cfgs , addrs) <- split_entries NumPmpEntries entries ;;
+        Some (pmp_check a width addrs cfgs m acc)
+      in match result with
+         | Some b => b
+         | None   => false
+         end.
+
+    Definition Pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
+      decide_pmp_access a width entries m acc = true.
+
+    Lemma pmp_check_inversion_1 (a width : Val ty_xlenbits) (bounds : list (Val ty_xlenbits)) (cfgs : list (Val ty_pmpcfg_ent)) (p : Val ty_privilege) (acc : Val ty_access_type) :
+      pmp_check a width bounds cfgs p acc = true ->
+      pmp_check_vc a width bounds cfgs p acc.
+    Proof.
+      generalize dependent bounds.
+      induction cfgs.
+      - destruct bounds; auto.
+        simpl; destruct p; auto; discriminate.
+        simpl; destruct bounds; destruct p; auto; discriminate.
+      - induction bounds.
+        + simpl; intros; discriminate.
+        +
+
     Section Old_pmp_check.
-      Definition pmp_check' (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
+      Fixpoint pmp_check' (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
         match entries with
         | [] => match m with
                 | Machine => (true, None)
@@ -361,13 +536,10 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
             match pmp_match_entry a width m cfg prev addr with
             | PMP_Success  => (true, Some (pmp_get_perms cfg m))
             | PMP_Fail     => (false, None)
-            | PMP_Continue => pmp_check a width entries addr m
+            | PMP_Continue => pmp_check' a width entries addr m
             end
         end%list.
     End Old_pmp_check.
-
-    Definition check_pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
-      pmp_check a width entries [bv 0] m.
 
     Equations(noeqns) access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
     | Read      | Read      := true;
@@ -395,35 +567,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition Sub_perm (a1 a2 : Val ty_access_type) : Prop :=
       decide_sub_perm a1 a2 = true.
 
-    Equations(noeqns) decide_access_pmp_perm (a : Val ty_access_type) (p : Val ty_pmpcfgperm) : bool :=
-    | Read      | PmpR   := true;
-    | Read      | PmpRW  := true;
-    | Read      | PmpRX  := true;
-    | Write     | PmpW   := true;
-    | Write     | PmpRW  := true;
-    | Write     | PmpWX  := true;
-    | ReadWrite | PmpRW  := true;
-    | Execute   | PmpX   := true;
-    | Execute   | PmpRX  := true;
-    | Execute   | PmpWX  := true;
-    | _         | PmpRWX := true;
-    | _         | _      := false.
-
     Definition Access_pmp_perm (a : Val ty_access_type) (p : Val ty_pmpcfgperm) : Prop :=
       decide_access_pmp_perm a p = true.
-
-    Definition decide_pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : bool :=
-      match check_pmp_access a width entries m with
-      | (true, Some p) => decide_access_pmp_perm acc p
-      | (true, None)     => true
-      | (false, _)       => false
-      end.
-
-    Definition Pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
-      decide_pmp_access a width entries m acc = true.
-
-    Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
-      decide_pmp_check_perms cfg acc p = true.
 
     Definition Pmp_check_rwx (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) : Prop :=
       pmp_check_RWX cfg acc = true.
@@ -721,38 +866,31 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     | _            => None
     end.
 
-  Import option.notations.
   (* NOTE: can't just recurse over es, Coq can't determine it will ever terminate (not sure how to fix this, don't think we can do something as "measure (length es)"), that's why the parameter n is added for the nr of pmp entries of the machine *)
-  Fixpoint split_entries {Σ} (n : nat) (es : Term Σ (ty.list ty_pmpentry)) : option (list (NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent)) * list (Term Σ ty_xlenbits)) :=
+  Fixpoint split_entries_aux {Σ} (n : nat) (es : Term Σ (ty.list ty_pmpentry)) : option (list (NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent)) * list (Term Σ ty_xlenbits)) :=
     match n, term_get_list es with
     | O   , Some (inr tt)         => Some ([] , [])
     | S n , Some (inl (pmp , es)) =>
         '(cfg , addr) <- term_get_pair pmp ;;
         cfg' <- term_get_record cfg ;;
-        '(cfgs , addrs) <- split_entries n es ;;
+        '(cfgs , addrs) <- split_entries_aux n es ;;
         Some (cfg' :: cfgs , addr :: addrs)
     | _   , _                     => None
     end%list.
 
+  Definition split_entries {Σ} (n : nat) (es : Term Σ (ty.list ty_pmpentry)) : option (list (NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent)) * list (Term Σ ty_xlenbits)) :=
+    '(cfgs , addrs) <- split_entries_aux n es ;;
+    Some (cfgs , cons (term_val ty_xlenbits bv.zero) addrs).
+
   Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
     let pmp_access_fml := formula_user pmp_access [paddr; width; es; p; acc] in
-    match term_get_val paddr , term_get_val width , term_get_val es , term_get_val p with
-    | Some paddr , Some width , Some entries , Some p =>
-      match check_pmp_access paddr width entries p with
-      | (true, Some typ) => simplify_access_pmp_perm acc (term_val ty_pmpcfgperm typ)
-      | (true, None)     => Some []
-      | (false, _)       => None
-      end
-    | _, _ , _ , _ =>  
-        let result := (* '(pmp0 , es) <- get_inl (term_get_list es) ;;
-                      '(pmp1 , es) <- get_inl (term_get_list es) ;;
-                      get_inr (term_get_list es) ;;
-                      '(cfg0 , addr0) <- term_get_pair pmp0 ;;
-                      '(cfg1 , addr1) <- term_get_pair pmp1 ;;
-                      cfg0' <- term_get_record cfg0 ;;
-                      cfg1' <- term_get_record cfg1 ;; *)
-                      '(cfgs , addrs) <- split_entries NumPmpEntries es ;;
-                      let addrs := cons (term_val ty_xlenbits bv.zero) addrs in
+    match term_get_val paddr , term_get_val width , term_get_val es , term_get_val p , term_get_val acc with
+    | Some paddr , Some width , Some entries , Some p , Some acc =>
+        if decide_pmp_access paddr width entries p acc
+        then Some []
+        else None
+    | _, _ , _ , _, _ =>  
+        let result := '(cfgs , addrs) <- split_entries NumPmpEntries es ;;
                       Some [simplify_pmpcheck paddr width addrs cfgs p acc] in
         match result with
         | Some v => Some v
@@ -885,9 +1023,10 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   Proof.
     unfold simplify_pmp_access. lsolve.
     - intros ι; cbn. unfold Pmp_access, decide_pmp_access.
-      destruct check_pmp_access as [[] o]; [|easy].
-      destruct o; [|easy].
-      apply simplify_access_pmp_perm_spec.
+      induction (RiscvPmpSignature.split_entries NumPmpEntries a1).
+      + destruct a4; simpl.
+        admit. (* TODO: provable *)
+      + lsolve.
     (* - *) (* env.destroy a1; induction a1; lsolve. *)
       (* env.destroy a1; destruct a1; [easy|]. *)
       (* env.destroy a1; destruct a1; [|easy]. *)

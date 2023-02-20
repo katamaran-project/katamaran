@@ -596,43 +596,44 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma check_pmp_access_reduced_width (bytes w : Xlenbits) :
-      forall paddr pmp p acc,
+      forall paddr pmp p acc cfgs addrs,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
         bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
-        check_pmp_access paddr bytes pmp p = (true, acc) ->
-        check_pmp_access paddr w pmp p = (true, acc).
+        split_entries NumPmpEntries pmp = Some (cfgs , addrs) ->
+        pmp_check paddr bytes addrs cfgs p acc = true ->
+        pmp_check paddr w addrs cfgs p acc = true.
     Proof.
-      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc Hrep H0w Hle H;
+      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc cfgs addrs Hrep H0w Hle Hsplit H;
         try now cbn in *.
-      unfold check_pmp_access, pmp_check in *.
+      inversion Hsplit.
+      subst.
+      unfold pmp_check in *.
       destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E0; last done.
       - apply pmp_match_entry_reduced_width with (w := w) in E0; auto.
         now rewrite E0.
       - apply pmp_match_entry_reduced_width_continue with (w := w) in E0; auto.
         rewrite E0.
-        destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E1; last done.
-        + apply pmp_match_entry_reduced_width with (w := w) in E1; auto.
-          now rewrite E1.
-        + apply pmp_match_entry_reduced_width_continue with (w := w) in E1; auto.
-          now rewrite E1.
     Qed.
 
     Lemma pmp_access_reduced_width (bytes w : Xlenbits) :
-      forall paddr pmp p acc,
+      forall paddr pmp p acc cfgs addrs,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
         bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
+        split_entries NumPmpEntries pmp = Some (cfgs , addrs) ->
         Pmp_access paddr bytes pmp p acc ->
         Pmp_access paddr w pmp p acc.
     Proof.
-      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc Hrep H0w Hw H;
+      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc cfgs addrs Hrep H0w Hw Hsplit H;
         unfold Pmp_access, decide_pmp_access in *;
         try (destruct p; now cbn).
-      destruct (check_pmp_access paddr _ _) eqn:E.
-      destruct b; try discriminate.
-      apply check_pmp_access_reduced_width with (w := w) in E; auto.
-      now rewrite E.
+      inversion Hsplit; subst.
+      simpl in *.
+      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E0; last done.
+      - apply pmp_match_entry_reduced_width with (w := w) in E0; auto.
+        now rewrite E0.
+      - apply pmp_match_entry_reduced_width_continue with (w := w) in E0; auto.
     Qed.
 
     Lemma pmp_match_addr_addr_S_width_pred (bytes : nat) : forall paddr rng res,
@@ -718,27 +719,24 @@ Module RiscvPmpModel2.
       discriminate H.
     Qed.
 
-    Lemma pmp_access_addr_S_width_pred (bytes : nat) : forall paddr pmp p acc,
+    Lemma pmp_access_addr_S_width_pred (bytes : nat) : forall paddr pmp p acc cfgs addrs,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
+        split_entries NumPmpEntries pmp = Some (cfgs , addrs) ->
         Pmp_access paddr (bv.of_nat (S bytes)) pmp p acc ->
         Pmp_access (paddr + bv.one xlenbits) (bv.of_nat bytes) pmp p acc.
     Proof.
-      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc Hb Hrep Hrepb;
+      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc cfgs addrs Hb Hrep Hrepb Hsplit;
         unfold Pmp_access, decide_pmp_access;
         try (destruct p; now cbn).
-      unfold check_pmp_access, pmp_check.
+      inversion Hsplit; subst.
+      Locate pmp_check.
+      Print pmp_check.
+      simpl in *.
       destruct (pmp_match_entry paddr _ _ cfg0 _ _) eqn:Ecfg0; auto.
       apply pmp_match_entry_addr_S_width_pred_success in Ecfg0; auto.
       now rewrite Ecfg0.
-      apply pmp_match_entry_addr_S_width_pred_continue in Ecfg0; auto.
-      rewrite Ecfg0.
-      destruct (pmp_match_entry paddr _ _ cfg1 _ _) eqn:Ecfg1; auto.
-      apply pmp_match_entry_addr_S_width_pred_success in Ecfg1; auto.
-      now rewrite Ecfg1.
-      apply pmp_match_entry_addr_S_width_pred_continue in Ecfg1; auto.
-      now rewrite Ecfg1.
     Qed.
 
     Lemma big_sepL_pure_impl (bytes : nat) :
