@@ -559,11 +559,12 @@ Module RiscvPmpModel2.
       right; intros.
       inversion H.
       subst.
-      destruct (Hcond _ _ H) as [?|[Hs|?]]; auto.
+      destruct (Hcond _ _ H) as [?|[(? & ?)|?]]; auto.
       right; left; auto.
       unfold bv.ule in *.
       rewrite ?bv.bin_add_small; try lia.
-      rewrite ?bv.bin_add_small in Hs; try lia.
+      rewrite ?bv.bin_add_small in H1; try lia.
+      repeat right; destruct H0 as (? & ? & ?); auto.
     Qed.
 
     Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
@@ -596,24 +597,23 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma check_pmp_access_reduced_width (bytes w : Xlenbits) :
-      forall paddr pmp p acc cfgs addrs,
+      forall paddr entries p acc,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
         bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
-        split_entries NumPmpEntries pmp = Some (cfgs , addrs) ->
-        pmp_check paddr bytes addrs cfgs p acc = true ->
-        pmp_check paddr w addrs cfgs p acc = true.
+        pmp_check paddr bytes entries p acc = true ->
+        pmp_check paddr w entries p acc = true.
     Proof.
-      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc cfgs addrs Hrep H0w Hle Hsplit H;
-        try now cbn in *.
-      inversion Hsplit.
-      subst.
-      unfold pmp_check in *.
-      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E0; last done.
-      - apply pmp_match_entry_reduced_width with (w := w) in E0; auto.
-        now rewrite E0.
-      - apply pmp_match_entry_reduced_width_continue with (w := w) in E0; auto.
-        rewrite E0.
+      intros paddr entries p acc Hrep H0w Hle H.
+      (* TODO: investigate how this can properly be proven with induction... *)
+      induction entries as [|[cfg0 addr0]];
+        first now simpl in *.
+      cbn in *.
+      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E; last done.
+      - apply pmp_match_entry_reduced_width with (w := w) in E; auto.
+        now rewrite E.
+      - apply pmp_match_entry_reduced_width_continue with (w := w) in E; auto.
+        rewrite E.
     Qed.
 
     Lemma pmp_access_reduced_width (bytes w : Xlenbits) :
