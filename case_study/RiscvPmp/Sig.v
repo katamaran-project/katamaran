@@ -377,23 +377,24 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       (* TODO: - remove other definitions eventually
                - introduce the nat parameter again to control recursion (necessary for the user solver one, can't recurse over a term list?)
                - ideally we would reuse the vcgen here and add a pass over it to translate the generated VC into a formula *)
-      Fixpoint pmp_check_rec (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : bool :=
-        match entries with
-        | (cfg , hi) :: entries =>
+      Fixpoint pmp_check_rec (n : nat) (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : bool :=
+        match n, entries with
+        | S n, (cfg , hi) :: entries =>
             match pmp_match_entry a width p cfg lo hi with
             | PMP_Success  => decide_access_pmp_perm acc (pmp_get_perms cfg p)
             | PMP_Fail     => false
-            | PMP_Continue => pmp_check_rec a width hi entries p acc
+            | PMP_Continue => pmp_check_rec n a width hi entries p acc
             end
-        | [] =>
+        | O, [] =>
             match p with
             | Machine => true
             | _       => false
             end
+        | _, _ => false
         end%list.
 
       Definition pmp_check_aux (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : bool :=
-        pmp_check_rec a width lo entries p acc.
+        pmp_check_rec NumPmpEntries a width lo entries p acc.
 
       Definition pmp_check (a width : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : bool :=
         pmp_check_aux a width bv.zero entries p acc.
@@ -430,32 +431,33 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         pmp_check_aux a width lo entries p acc = true ->
         pmp_check_vc_aux a width lo entries p acc.
       Proof.
-        generalize dependent lo.
-        induction entries.
-        - cbn; intros; destruct p; auto; discriminate.
-        - simpl.
-          destruct a0 as [cfg0 addr0].
-          unfold pmp_match_entry.
-          intros lo.
-          unfold pmp_addr_range.
-          destruct (pmp_match_addr a width _) eqn:?;
-            destruct (A _) eqn:?;
-            intros H;
-            try discriminate.
-          + apply pmp_match_addr_nomatch_1 in Heqv.
-            destruct Heqv; try discriminate; auto.
-          + apply pmp_match_addr_nomatch_1 in Heqv.
-            destruct Heqv; try discriminate; auto.
-            specialize (H0 lo addr0 eq_refl).
-            destruct H0 as [|[|]].
-            left; split; auto.
-            left; split; auto.
-            left; split; auto.
-          + right.
-            apply pmp_match_addr_match_conditions_1 in Heqv as (? & ? & ? & ? & ?).
-            repeat split; auto.
-            now apply Pmp_check_perms_Access_pmp_perm.
-      Qed.
+      (*   generalize dependent lo. *)
+      (*   induction entries. *)
+      (*   - cbn; intros; destruct p; auto; discriminate. *)
+      (*   - simpl. *)
+      (*     destruct a0 as [cfg0 addr0]. *)
+      (*     unfold pmp_match_entry. *)
+      (*     intros lo. *)
+      (*     unfold pmp_addr_range. *)
+      (*     destruct (pmp_match_addr a width _) eqn:?; *)
+      (*       destruct (A _) eqn:?; *)
+      (*       intros H; *)
+      (*       try discriminate. *)
+      (*     + apply pmp_match_addr_nomatch_1 in Heqv. *)
+      (*       destruct Heqv; try discriminate; auto. *)
+      (*     + apply pmp_match_addr_nomatch_1 in Heqv. *)
+      (*       destruct Heqv; try discriminate; auto. *)
+      (*       specialize (H0 lo addr0 eq_refl). *)
+      (*       destruct H0 as [|[|]]. *)
+      (*       left; split; auto. *)
+      (*       left; split; auto. *)
+      (*       left; split; auto. *)
+      (*     + right. *)
+      (*       apply pmp_match_addr_match_conditions_1 in Heqv as (? & ? & ? & ? & ?). *)
+      (*       repeat split; auto. *)
+      (*       now apply Pmp_check_perms_Access_pmp_perm. *)
+      (* Qed. *)
+      Admitted.
 
       Lemma addr_match_type_neq_off_cases :
         ∀ a, a ≠ OFF -> a = TOR.
@@ -465,25 +467,26 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         pmp_check_vc_aux a width lo entries p acc ->
         pmp_check_aux a width lo entries p acc = true.
       Proof.
-        generalize dependent lo.
-        induction entries.
-        - simpl; intros; subst; auto.
-        - intros lo; simpl.
-          destruct a0 as [cfg0 addr0].
-          intros [];
-            unfold pmp_match_entry, pmp_addr_range.
-          + destruct H as (H & ->%IHentries).
-            destruct H as [->|]; auto.
-            destruct H as [->%addr_match_type_neq_off_cases [|[|]]];
-              unfold pmp_match_addr; bv_comp_bool; auto.
-            destruct H; bv_comp_bool.
-            now rewrite Bool.orb_true_l.
-            destruct H as (? & ? & ?); bv_comp_bool.
-            now rewrite Bool.orb_true_r.
-          + destruct H as (->%addr_match_type_neq_off_cases & ? & ? & ? & ? & ? & ?).
-            apply Pmp_check_perms_Access_pmp_perm in H4.
-            unfold pmp_match_addr; now bv_comp_bool.
-      Qed.
+      (*   generalize dependent lo. *)
+      (*   induction entries. *)
+      (*   - simpl; intros; subst; auto. *)
+      (*   - intros lo; simpl. *)
+      (*     destruct a0 as [cfg0 addr0]. *)
+      (*     intros []; *)
+      (*       unfold pmp_match_entry, pmp_addr_range. *)
+      (*     + destruct H as (H & ->%IHentries). *)
+      (*       destruct H as [->|]; auto. *)
+      (*       destruct H as [->%addr_match_type_neq_off_cases [|[|]]]; *)
+      (*         unfold pmp_match_addr; bv_comp_bool; auto. *)
+      (*       destruct H; bv_comp_bool. *)
+      (*       now rewrite Bool.orb_true_l. *)
+      (*       destruct H as (? & ? & ?); bv_comp_bool. *)
+      (*       now rewrite Bool.orb_true_r. *)
+      (*     + destruct H as (->%addr_match_type_neq_off_cases & ? & ? & ? & ? & ? & ?). *)
+      (*       apply Pmp_check_perms_Access_pmp_perm in H4. *)
+      (*       unfold pmp_match_addr; now bv_comp_bool. *)
+      (* Qed. *)
+      Admitted.
 
       Lemma pmp_check_aux_inversion (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
         pmp_check_aux a width lo entries p acc = true <->
@@ -778,6 +781,142 @@ End RiscvPmpSignature.
 
 Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   #[local] Arguments Some {_} _%ctx.
+  Local Notation "P ∨ Q" := (formula_or P Q). 
+  Local Notation "P ∧ Q" := (formula_and P Q). 
+
+  Definition is_off {Σ} (A : Term Σ ty_pmpaddrmatchtype) : Formula Σ :=
+    formula_relop bop.eq A (term_val ty_pmpaddrmatchtype OFF).
+
+  Definition is_on {Σ} (A : Term Σ ty_pmpaddrmatchtype) : Formula Σ :=
+    formula_relop bop.neq A (term_val ty_pmpaddrmatchtype OFF).
+
+  Definition is_machine_mode {Σ} (p : Term Σ ty_privilege) : Formula Σ :=
+    formula_relop bop.eq (term_val ty_privilege Machine) p.
+
+
+  Fixpoint simplify_pmpcheck {Σ} (n : nat) (a width lo : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (Formula Σ) :=
+    match n, term_get_list es with
+    | S n, Some (inl (pmp , es)) =>
+        '(cfg , addr) <- term_get_pair pmp ;;
+        cfg <- term_get_record cfg ;;
+        fml <- simplify_pmpcheck n a width addr es p acc ;;
+        Some (((* PMP_NoMatch *)
+              (is_off cfg.[??"A"]
+               ∨ (is_on cfg.[??"A"] ∧
+                    (formula_relop bop.bvult addr lo
+                     ∨ (formula_relop bop.bvule lo addr ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) lo)
+                     ∨ (formula_relop bop.bvule lo addr ∧ formula_relop bop.bvult lo (term_binop bop.bvadd a width) ∧ formula_relop bop.bvule addr a))))
+              ∧ fml)
+              ∨
+                ((* PMP_Match *)
+                  is_on cfg.[??"A"]
+                  ∧ formula_relop bop.bvule lo addr
+                  ∧ formula_relop bop.bvult lo (term_binop bop.bvadd a width)
+                  ∧ formula_relop bop.bvult a addr
+                  ∧ formula_relop bop.bvule lo a
+                  ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) addr
+                  ∧ formula_user pmp_check_perms [term_record rpmpcfg_ent [cfg.[??"L"];cfg.[??"A"];cfg.[??"X"];cfg.[??"W"];cfg.[??"R"]]; acc; p]))
+    | O, Some (inr tt) => Some (is_machine_mode p)
+    | _, _             => None
+    end%list.
+
+  Definition pmp_check_fml_aux {Σ} (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Formula Σ :=
+    let a       := term_val ty_xlenbits a in
+    let width   := term_val ty_xlenbits width in
+    let lo      := term_val ty_xlenbits lo in
+    let entries := term_val (ty.list ty_pmpentry) entries in
+    let p       := term_val ty_privilege p in
+    let acc     := term_val ty_access_type acc in
+    let fml     := simplify_pmpcheck NumPmpEntries a width lo entries p acc in
+    match fml with
+    | Some fml => fml
+    | None     => formula_user pmp_access [a; width; entries; p; acc]
+    end.
+
+  Definition pmp_check_fml_prop_aux (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
+    instprop (pmp_check_fml_aux a width lo entries p acc) [env].
+
+  (* TODO: this is ugly, is something like this not already provided by the eqdec or confusion packages? *)
+  Lemma cfg_record : ∀ cfg,
+      {| L := L cfg; A := A cfg; X := X cfg; W := W cfg; R := R cfg |} = cfg.
+  Proof. intros []; reflexivity. Qed.
+
+  (* TODO: - introduce a "non-aux" lemma, that we can then use in the soundness for the user spec of pmp_access simplification
+           - Have both directions *)
+  Lemma pmp_check_inversion_fml_aux (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
+    pmp_check_aux a width lo entries p acc = true ->
+    pmp_check_fml_prop_aux a width lo entries p acc.
+  Proof.
+    unfold pmp_check_aux, pmp_check_fml_prop_aux, pmp_check_fml_aux.
+    generalize dependent lo.
+    generalize dependent NumPmpEntries.
+    induction entries as [|[cfg0 addr0] entries IHentries], n;
+      cbn; intros; auto; try discriminate;
+      try (solve [destruct p; auto; discriminate]).
+
+    unfold pmp_match_entry, pmp_addr_range in H.
+    destruct (A _) eqn:?;
+      cbn - [pmp_match_addr] in H.
+    - destruct (@simplify_pmpcheck [ctx] n (term_val ty_xlenbits a) (term_val ty_xlenbits width)
+                  (term_val ty_xlenbits addr0) (term_val (ty.list ty_pmpentry) entries)
+                  (term_val ty_privilege p) (term_val ty_access_type acc)) eqn:?.
+      + rewrite Heqo; cbn.
+        specialize (IHentries n addr0 H).
+        rewrite Heqo in IHentries.
+        left; split; auto.
+      + rewrite Heqo; cbn.
+        specialize (IHentries n addr0 H).
+        rewrite Heqo in IHentries.
+        cbn in IHentries.
+        unfold Pmp_access.
+        unfold pmp_check, pmp_check_aux, pmp_check_rec.
+        simpl.
+        unfold pmp_match_entry, pmp_addr_range.
+        rewrite Heqp0; simpl.
+        (* TODO: introduce a pure predicate "Gen_Pmp_Access", where we keep the
+                 initial lower bound (bv.zero) general (maybe also the nat for the recursion...)
+                 The Pmp_Access predicate can
+                 then just be defined as Gen_Pmp_Access ... [bv.zero] ...
+                 The issue is that we currently don't get a general enough IH... *)
+        admit.
+    - destruct (pmp_match_addr a width _) eqn:Heqv;
+        try discriminate;
+        remember Heqv as dup;
+        clear Heqdup.
+      + apply pmp_match_addr_nomatch_1 in Heqv as [|Heqv];
+          try discriminate; auto.
+        specialize (Heqv lo addr0 eq_refl) as [|[|]];
+          destruct (@simplify_pmpcheck [ctx] n (term_val ty_xlenbits a) (term_val ty_xlenbits width)
+                      (term_val ty_xlenbits addr0) (term_val (ty.list ty_pmpentry) entries)
+                      (term_val ty_privilege p) (term_val ty_access_type acc)) eqn:?;
+            rewrite Heqo;
+          specialize (IHentries n addr0 H);
+          rewrite Heqo in IHentries; auto;
+          try (cbn; left; split; auto).
+        (* TODO: these admits can be solved similar to the above one! *)
+        admit.
+        admit.
+        admit.
+      + apply pmp_match_addr_match_conditions_1 in Heqv as (? & ? & ? & ? & ?).
+        destruct (@simplify_pmpcheck [ctx] n (term_val ty_xlenbits a) (term_val ty_xlenbits width)
+                    (term_val ty_xlenbits addr0) (term_val (ty.list ty_pmpentry) entries)
+                    (term_val ty_privilege p) (term_val ty_access_type acc)) eqn:?.
+        * rewrite Heqo;
+          specialize (IHentries n addr0).
+          rewrite Heqo in IHentries; auto.
+          cbn.
+          right; repeat split; auto.
+          rewrite <- Heqp0.
+          rewrite cfg_record.
+          now apply Pmp_check_perms_Access_pmp_perm.
+        * simpl.
+          rewrite Heqo.
+          cbn.
+          unfold Pmp_access, pmp_check, pmp_check_aux, pmp_check_rec,
+            pmp_match_entry, pmp_addr_range.
+          simpl; rewrite Heqp0.
+          admit. (* TODO: same as above ones... *)
+  Admitted.
 
   Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (PathCondition Σ) :=
     match term_get_val a1 , term_get_val a2 with
@@ -790,19 +929,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     | Some a , Some p => if decide_access_pmp_perm a p then Some ctx.nil else None
     | _      , _      => Some [formula_user access_pmp_perm [a;p]]
     end%ctx.
-
-  (* TODO: move up *)
-  Local Notation "P ∨ Q" := (formula_or P Q). 
-  Local Notation "P ∧ Q" := (formula_and P Q). 
-
-  Definition is_off {Σ} (A : Term Σ ty_pmpaddrmatchtype) : Formula Σ :=
-    formula_relop bop.eq A (term_val ty_pmpaddrmatchtype OFF).
-
-  Definition is_on {Σ} (A : Term Σ ty_pmpaddrmatchtype) : Formula Σ :=
-    formula_relop bop.neq A (term_val ty_pmpaddrmatchtype OFF).
-
-  Definition is_machine_mode {Σ} (p : Term Σ ty_privilege) : Formula Σ :=
-    formula_relop bop.eq (term_val ty_privilege Machine) p.
 
   (* TODO: remove, same for the get_* procs and split_entries* procs *)
   Fixpoint simplify_pmpcheck' {Σ} (a width : Term Σ ty_xlenbits) (bounds : list (Term Σ ty_xlenbits)) (cfgs : list (NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent))) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : Formula Σ :=
@@ -828,32 +954,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) hi
       ∧ formula_user pmp_check_perms [term_record rpmpcfg_ent [cfg.[??"L"];cfg.[??"A"];cfg.[??"X"];cfg.[??"W"];cfg.[??"R"]]; acc; p])
   end%list.
-
-  Fixpoint simplify_pmpcheck {Σ} (n : nat) (a width lo : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (Formula Σ) :=
-    match n, term_get_list es with
-    | S n, Some (inl (pmp , es)) =>
-        '(cfg , addr) <- term_get_pair pmp ;;
-        cfg <- term_get_record cfg ;;
-        fml <- simplify_pmpcheck n a width addr es p acc ;;
-        Some (((* PMP_NoMatch *)
-              (is_off cfg.[??"A"]
-               ∨ (is_on cfg.[??"A"] ∧
-                    (formula_relop bop.bvult addr lo
-                     ∨ (formula_relop bop.bvule lo addr ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) lo)
-                     ∨ (formula_relop bop.bvule lo addr ∧ formula_relop bop.bvult lo (term_binop bop.bvadd a width) ∧ formula_relop bop.bvule addr a))))
-              ∧ fml)
-        ∨
-          ((* PMP_Match *)
-            is_on cfg.[??"A"]
-            ∧ formula_relop bop.bvule lo addr
-            ∧ formula_relop bop.bvult lo (term_binop bop.bvadd a width)
-            ∧ formula_relop bop.bvult a addr
-            ∧ formula_relop bop.bvule lo a
-            ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) addr
-            ∧ formula_user pmp_check_perms [term_record rpmpcfg_ent [cfg.[??"L"];cfg.[??"A"];cfg.[??"X"];cfg.[??"W"];cfg.[??"R"]]; acc; p]))
-    | O, Some (inr tt) => Some (is_machine_mode p)
-    | _, _             => None
-    end%list.
 
   Definition get_inl {A B} (v : option (A + B)) : option A :=
     match v with
