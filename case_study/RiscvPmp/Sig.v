@@ -50,6 +50,7 @@ Open Scope string_scope.
 Open Scope Z_scope.
 
 Inductive PurePredicate : Set :=
+| gen_pmp_access
 | pmp_access
 | pmp_check_perms
 | pmp_check_rwx
@@ -114,6 +115,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition 𝑷 := PurePredicate.
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
       match p with
+      | gen_pmp_access  => [ty.int; ty_xlenbits; ty_xlenbits; ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
       | pmp_access      => [ty_xlenbits; ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
       | pmp_check_perms => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
       | pmp_check_rwx   => [ty_pmpcfg_ent; ty_access_type]
@@ -393,11 +395,11 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | _, _ => false
         end%list.
 
-      Definition pmp_check_aux (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : bool :=
-        pmp_check_rec NumPmpEntries a width lo entries p acc.
+      Definition pmp_check_aux (n : nat) (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : bool :=
+        pmp_check_rec n a width lo entries p acc.
 
       Definition pmp_check (a width : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : bool :=
-        pmp_check_aux a width bv.zero entries p acc.
+        pmp_check_aux NumPmpEntries a width bv.zero entries p acc.
 
       Fixpoint pmp_check_vc_rec (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
         match entries with
@@ -428,7 +430,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         pmp_check_vc_aux a width bv.zero entries p acc.
 
       Lemma pmp_check_aux_inversion_1 (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
-        pmp_check_aux a width lo entries p acc = true ->
+        pmp_check_aux NumPmpEntries a width lo entries p acc = true ->
         pmp_check_vc_aux a width lo entries p acc.
       Proof.
       (*   generalize dependent lo. *)
@@ -465,7 +467,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
       Lemma pmp_check_aux_inversion_2 (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
         pmp_check_vc_aux a width lo entries p acc ->
-        pmp_check_aux a width lo entries p acc = true.
+        pmp_check_aux NumPmpEntries a width lo entries p acc = true.
       Proof.
       (*   generalize dependent lo. *)
       (*   induction entries. *)
@@ -489,7 +491,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       Admitted.
 
       Lemma pmp_check_aux_inversion (a width : Val ty_xlenbits) (lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
-        pmp_check_aux a width lo entries p acc = true <->
+        pmp_check_aux NumPmpEntries a width lo entries p acc = true <->
         pmp_check_vc_aux a width lo entries p acc.
       Proof.
         split.
@@ -506,8 +508,11 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       Qed.
     End GeneralizedPmpCheck.
 
+    Definition Gen_Pmp_access (n : Val ty.int) (a width lo : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
+      pmp_check_aux (Z.to_nat n) a width lo entries m acc = true.
+
     Definition Pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
-      pmp_check a width entries m acc = true.
+      Gen_Pmp_access (Z.of_nat NumPmpEntries) a width bv.zero entries m acc.
 
     Section Old_pmp_check.
       Fixpoint pmp_check' (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
@@ -637,6 +642,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
+      | gen_pmp_access  => Gen_Pmp_access
       | pmp_access      => Pmp_access
       | pmp_check_perms => Pmp_check_perms
       | pmp_check_rwx   => Pmp_check_rwx
@@ -793,7 +799,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   Definition is_machine_mode {Σ} (p : Term Σ ty_privilege) : Formula Σ :=
     formula_relop bop.eq (term_val ty_privilege Machine) p.
 
-
   Fixpoint simplify_pmpcheck {Σ} (n : nat) (a width lo : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (Formula Σ) :=
     match n, term_get_list es with
     | S n, Some (inl (pmp , es)) =>
@@ -820,21 +825,22 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     | _, _             => None
     end%list.
 
-  Definition pmp_check_fml_aux {Σ} (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Formula Σ :=
+  Definition pmp_check_fml_aux {Σ} (n : nat) (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Formula Σ :=
+    let term_n  := term_val ty.int (Z.of_nat n) in
     let a       := term_val ty_xlenbits a in
     let width   := term_val ty_xlenbits width in
     let lo      := term_val ty_xlenbits lo in
     let entries := term_val (ty.list ty_pmpentry) entries in
     let p       := term_val ty_privilege p in
     let acc     := term_val ty_access_type acc in
-    let fml     := simplify_pmpcheck NumPmpEntries a width lo entries p acc in
+    let fml     := simplify_pmpcheck n a width lo entries p acc in
     match fml with
     | Some fml => fml
-    | None     => formula_user pmp_access [a; width; entries; p; acc]
+    | None     => formula_user gen_pmp_access [term_n; a; width; lo; entries; p; acc]
     end.
 
-  Definition pmp_check_fml_prop_aux (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
-    instprop (pmp_check_fml_aux a width lo entries p acc) [env].
+  Definition pmp_check_fml_prop_aux (n : nat) (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
+    instprop (pmp_check_fml_aux n a width lo entries p acc) [env].
 
   (* TODO: this is ugly, is something like this not already provided by the eqdec or confusion packages? *)
   Lemma cfg_record : ∀ cfg,
@@ -843,79 +849,61 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
 
   (* TODO: - introduce a "non-aux" lemma, that we can then use in the soundness for the user spec of pmp_access simplification
            - Have both directions *)
-  Lemma pmp_check_inversion_fml_aux (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
-    pmp_check_aux a width lo entries p acc = true ->
-    pmp_check_fml_prop_aux a width lo entries p acc.
+  Lemma pmp_check_inversion_fml_aux (n : nat) (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
+    pmp_check_aux n a width lo entries p acc = true ->
+    pmp_check_fml_prop_aux n a width lo entries p acc.
   Proof.
     unfold pmp_check_aux, pmp_check_fml_prop_aux, pmp_check_fml_aux.
     generalize dependent lo.
-    generalize dependent NumPmpEntries.
-    induction entries as [|[cfg0 addr0] entries IHentries], n;
-      cbn; intros; auto; try discriminate;
-      try (solve [destruct p; auto; discriminate]).
+    generalize dependent entries.
 
-    unfold pmp_match_entry, pmp_addr_range in H.
-    destruct (A _) eqn:?;
-      cbn - [pmp_match_addr] in H.
-    - destruct (@simplify_pmpcheck [ctx] n (term_val ty_xlenbits a) (term_val ty_xlenbits width)
+    induction n.
+    - cbn; destruct entries; cbn.
+      intros; destruct p; auto; discriminate.
+      intros; discriminate.
+    - cbn; destruct entries as [|[cfg0 addr0] entries];
+        intros; try discriminate; cbn.
+      destruct (@simplify_pmpcheck [ctx] n (term_val ty_xlenbits a) (term_val ty_xlenbits width)
                   (term_val ty_xlenbits addr0) (term_val (ty.list ty_pmpentry) entries)
-                  (term_val ty_privilege p) (term_val ty_access_type acc)) eqn:?.
-      + rewrite Heqo; cbn.
-        specialize (IHentries n addr0 H).
-        rewrite Heqo in IHentries.
-        left; split; auto.
-      + rewrite Heqo; cbn.
-        specialize (IHentries n addr0 H).
-        rewrite Heqo in IHentries.
-        cbn in IHentries.
-        unfold Pmp_access.
-        unfold pmp_check, pmp_check_aux, pmp_check_rec.
-        simpl.
-        unfold pmp_match_entry, pmp_addr_range.
-        rewrite Heqp0; simpl.
-        (* TODO: introduce a pure predicate "Gen_Pmp_Access", where we keep the
-                 initial lower bound (bv.zero) general (maybe also the nat for the recursion...)
-                 The Pmp_Access predicate can
-                 then just be defined as Gen_Pmp_Access ... [bv.zero] ...
-                 The issue is that we currently don't get a general enough IH... *)
-        admit.
-    - destruct (pmp_match_addr a width _) eqn:Heqv;
-        try discriminate;
-        remember Heqv as dup;
-        clear Heqdup.
-      + apply pmp_match_addr_nomatch_1 in Heqv as [|Heqv];
+                  (term_val ty_privilege p) (term_val ty_access_type acc)) eqn:Epmp.
+      rewrite Epmp; cbn.
+      specialize (IHn entries addr0).
+      rewrite Epmp in IHn.
+      unfold pmp_match_entry, pmp_addr_range in H.
+      destruct (A _) eqn:EA.
+      simpl in H.
+      left; auto.
+      destruct (pmp_match_addr a width _) eqn:Heq;
+        try discriminate.
+      + apply pmp_match_addr_nomatch_1 in Heq as [|Heq];
           try discriminate; auto.
-        specialize (Heqv lo addr0 eq_refl) as [|[|]];
-          destruct (@simplify_pmpcheck [ctx] n (term_val ty_xlenbits a) (term_val ty_xlenbits width)
-                      (term_val ty_xlenbits addr0) (term_val (ty.list ty_pmpentry) entries)
-                      (term_val ty_privilege p) (term_val ty_access_type acc)) eqn:?;
-            rewrite Heqo;
-          specialize (IHentries n addr0 H);
-          rewrite Heqo in IHentries; auto;
-          try (cbn; left; split; auto).
-        (* TODO: these admits can be solved similar to the above one! *)
-        admit.
-        admit.
-        admit.
-      + apply pmp_match_addr_match_conditions_1 in Heqv as (? & ? & ? & ? & ?).
-        destruct (@simplify_pmpcheck [ctx] n (term_val ty_xlenbits a) (term_val ty_xlenbits width)
-                    (term_val ty_xlenbits addr0) (term_val (ty.list ty_pmpentry) entries)
-                    (term_val ty_privilege p) (term_val ty_access_type acc)) eqn:?.
-        * rewrite Heqo;
-          specialize (IHentries n addr0).
-          rewrite Heqo in IHentries; auto.
+        specialize (Heq lo addr0 eq_refl) as [|[|]];
+          left; split; auto.
+      + apply pmp_match_addr_match_conditions_1 in Heq as (? & ? & ? & ? & ?).
+        right; repeat split; auto.
+        rewrite <- EA, cfg_record.
+        now apply Pmp_check_perms_Access_pmp_perm.
+      + rewrite Epmp; cbn.
+        specialize (IHn entries addr0).
+        rewrite Epmp in IHn.
+        unfold pmp_match_entry, pmp_addr_range in H.
+        destruct (A _) eqn:EA.
+        * simpl in H.
+          specialize (IHn H).
+          cbn in IHn.
+          unfold Gen_Pmp_access, pmp_check_aux, pmp_check_rec.
           cbn.
-          right; repeat split; auto.
-          rewrite <- Heqp0.
-          rewrite cfg_record.
-          now apply Pmp_check_perms_Access_pmp_perm.
-        * simpl.
-          rewrite Heqo.
-          cbn.
-          unfold Pmp_access, pmp_check, pmp_check_aux, pmp_check_rec,
-            pmp_match_entry, pmp_addr_range.
-          simpl; rewrite Heqp0.
-          admit. (* TODO: same as above ones... *)
+          admit.
+          (* TODO: add lemma : Gen_Pmp_access (S n) _ _ l ((cfg, a) :: es) _ _ ->
+                             ( Gen_Pmp_access 1     _ _ l [(cfg, a)]       _ _
+                             ∨ Gen_Pmp_access n     _ _ a es               _ _) *)
+        * (* TODO: proof outline:
+                   - invoke above lemma
+                   - destruct the pmp_match_addr for (cfg0, addr0)
+                     + if success  => we can proof left branch
+                     + if continue => we can proof right branch (using the induction hypothesis!
+                     + if fail     => we will have "false = true" :) *)
+          admit.
   Admitted.
 
   Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (PathCondition Σ) :=
@@ -983,6 +971,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     '(cfgs , addrs) <- split_entries_aux n es ;;
     Some (cfgs , cons (term_val ty_xlenbits bv.zero) addrs).
 
+  (* TODO: define this as simplify_gen_pmp_access and change the dispatch to the right simplifier so that "pmp_access" is simplified by simplify_gen_pmp_access (with some specialized values) *)
   Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
     let pmp_access_fml := formula_user pmp_access [paddr; width; es; p; acc] in
     match term_get_val paddr , term_get_val width , term_get_val es , term_get_val p , term_get_val acc with
@@ -1117,6 +1106,8 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
           specialize (H ι)
       end.
 
+  (* TODO: this should be a proof for simplify_gen_pmp_access, which can then
+           be used for pmp_access as well *)
   Opaque NumPmpEntries.
   Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_xlenbits)
     (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry))
