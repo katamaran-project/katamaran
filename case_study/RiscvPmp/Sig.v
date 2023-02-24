@@ -891,12 +891,12 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
         * simpl in H.
           specialize (IHn H).
           cbn in IHn.
-          unfold Gen_Pmp_access, pmp_check_aux, pmp_check_rec.
+          unfold Gen_Pmp_access, pmp_check_aux, pmp_check_rec in *.
           cbn.
-          admit.
-          (* TODO: add lemma : Gen_Pmp_access (S n) _ _ l ((cfg, a) :: es) _ _ ->
-                             ( Gen_Pmp_access 1     _ _ l [(cfg, a)]       _ _
-                             ∨ Gen_Pmp_access n     _ _ a es               _ _) *)
+          rewrite Nat2Z.id.
+          rewrite Nat2Z.id in IHn.
+          unfold pmp_match_entry, pmp_addr_range.
+          now rewrite EA.
         * (* TODO: proof outline:
                    - invoke above lemma
                    - destruct the pmp_match_addr for (cfg0, addr0)
