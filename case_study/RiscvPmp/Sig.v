@@ -825,19 +825,23 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     | _, _             => None
     end%list.
 
+  Definition pmp_check_fml_term_aux {Σ} (n : nat) (a width lo : Term Σ ty_xlenbits) (entries : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : Formula Σ :=
+    let fml     := simplify_pmpcheck n a width lo entries p acc in
+    match fml with
+    | Some fml => fml
+    | None     =>
+        let term_n  := term_val ty.int (Z.of_nat n) in
+        formula_user gen_pmp_access [term_n; a; width; lo; entries; p; acc]
+    end.
+
   Definition pmp_check_fml_aux {Σ} (n : nat) (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Formula Σ :=
-    let term_n  := term_val ty.int (Z.of_nat n) in
     let a       := term_val ty_xlenbits a in
     let width   := term_val ty_xlenbits width in
     let lo      := term_val ty_xlenbits lo in
     let entries := term_val (ty.list ty_pmpentry) entries in
     let p       := term_val ty_privilege p in
     let acc     := term_val ty_access_type acc in
-    let fml     := simplify_pmpcheck n a width lo entries p acc in
-    match fml with
-    | Some fml => fml
-    | None     => formula_user gen_pmp_access [term_n; a; width; lo; entries; p; acc]
-    end.
+    pmp_check_fml_term_aux n a width lo entries p acc.
 
   Definition pmp_check_fml_prop_aux (n : nat) (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
     instprop (pmp_check_fml_aux n a width lo entries p acc) [env].
@@ -853,7 +857,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     pmp_check_aux n a width lo entries p acc = true ->
     pmp_check_fml_prop_aux n a width lo entries p acc.
   Proof.
-    unfold pmp_check_aux, pmp_check_fml_prop_aux, pmp_check_fml_aux.
+    unfold pmp_check_aux, pmp_check_fml_prop_aux, pmp_check_fml_aux, pmp_check_fml_term_aux.
     generalize dependent lo.
     generalize dependent entries.
 
@@ -897,14 +901,222 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
           rewrite Nat2Z.id in IHn.
           unfold pmp_match_entry, pmp_addr_range.
           now rewrite EA.
-        * (* TODO: proof outline:
-                   - invoke above lemma
-                   - destruct the pmp_match_addr for (cfg0, addr0)
-                     + if success  => we can proof left branch
-                     + if continue => we can proof right branch (using the induction hypothesis!
-                     + if fail     => we will have "false = true" :) *)
-          admit.
-  Admitted.
+        * unfold Gen_Pmp_access, pmp_check_aux, pmp_check_rec, pmp_match_entry, pmp_addr_range.
+          rewrite Nat2Z.id.
+          rewrite EA.
+          destruct (pmp_match_addr a width _) eqn:E;
+            auto; try discriminate.
+  Qed.
+
+  Lemma pmp_check_fml_term_aux_gen_pmp_access : forall {Σ} (n : nat) a width lo es p acc (ι : Valuation Σ),
+  instprop (pmp_check_fml_term_aux n a width lo es p acc) ι
+  ↔ instprop (formula_user gen_pmp_access [term_val ty.int (Z.of_nat n); a; width; lo; es; p; acc]) ι.
+  Proof.
+    induction n.
+    - cbn.
+      intros.
+      unfold Gen_Pmp_access, pmp_check_fml_term_aux.
+      simpl.
+      split; intros H.
+      + destruct (@term_get_list_spec Σ ty_pmpentry es) as [[] ?|].
+        * cbn in H.
+          unfold Gen_Pmp_access in H.
+          now simpl in H.
+        * destruct u.
+          cbn in H.
+          rewrite (H0 ι).
+          now rewrite <- H.
+        * cbn in H.
+          unfold Gen_Pmp_access in H.
+          now simpl in H.
+      + destruct (@term_get_list_spec Σ ty_pmpentry es) as [[] ?|].
+        * destruct p0 as [cfg0 addr0].
+          rewrite (H0 ι) in H.
+          discriminate.
+        * destruct u.
+          cbn.
+          rewrite (H0 ι) in H.
+          destruct (inst p ι); auto; discriminate.
+        * cbn.
+          unfold Gen_Pmp_access.
+          now simpl.
+    - intros; cbn.
+      unfold Gen_Pmp_access, pmp_check_fml_term_aux, (* simplify_pmpcheck, *) pmp_check_aux (*, pmp_check_rec *).
+      rewrite Nat2Z.id.
+      cbn.
+      split; intros.
+      + destruct (@term_get_list_spec Σ ty_pmpentry es) as [[] ?|].
+        destruct p0 as [e es'].
+        destruct (term_get_pair_spec e) as [[cfg0 addr0]|].
+        rewrite (H0 ι) (H1 ι).
+        cbn in H.
+        destruct (term_get_record_spec cfg0).
+        cbn in a0.
+        env.destroy a0.
+        simpl in H.
+        cbn in IHn.
+        unfold Gen_Pmp_access in IHn.
+        rewrite Nat2Z.id in IHn.
+        destruct (simplify_pmpcheck n a width addr0 es' p acc) eqn:?;
+          cbn in H.
+        rewrite (H2 ι).
+        destruct H.
+        * destruct H as ([|[?%addr_match_type_neq_off_cases [|[(? & ?)|(? & ? & ?)]]]] & ?);
+            unfold pmp_match_entry, pmp_addr_range;
+            cbn.
+          rewrite H.
+          simpl.
+          cbn in IHn.
+          unfold Gen_Pmp_access, pmp_check_aux in IHn.
+          apply IHn.
+          unfold pmp_check_fml_term_aux.
+          now rewrite Heqo.
+          rewrite H.
+          unfold pmp_match_addr; bv_comp_bool.
+          apply IHn.
+          unfold pmp_check_fml_term_aux.
+          now rewrite Heqo.
+          rewrite H.
+          unfold pmp_match_addr; bv_comp_bool.
+          simpl.
+          apply IHn.
+          unfold pmp_check_fml_term_aux.
+          now rewrite Heqo.
+          rewrite H.
+          unfold pmp_match_addr; bv_comp_bool.
+          simpl.
+          apply IHn.
+          unfold pmp_check_fml_term_aux.
+          now rewrite Heqo.
+        * cbn.
+          destruct H as (? & ? & ? & ? & ? & ? & ?).
+          apply addr_match_type_neq_off_cases in H.
+          rewrite H.
+          unfold pmp_match_entry, pmp_addr_range.
+          simpl; bv_comp_bool; simpl.
+          now apply Pmp_check_perms_Access_pmp_perm.
+        * unfold Gen_Pmp_access, pmp_check_aux in H.
+          now rewrite Nat2Z.id (H0 ι) (H1 ι) in H.
+        * cbn in H.
+          unfold Gen_Pmp_access, pmp_check_aux in H.
+          now rewrite Nat2Z.id (H0 ι) (H1 ι) in H.
+        * cbn in H.
+          unfold Gen_Pmp_access, pmp_check_aux in H.
+          now rewrite Nat2Z.id in H.
+        * cbn in H.
+          unfold Gen_Pmp_access, pmp_check_aux in H.
+          now rewrite Nat2Z.id in H.
+        * cbn in H.
+          unfold Gen_Pmp_access, pmp_check_aux in H.
+          now rewrite Nat2Z.id in H.
+      + cbn.
+        destruct (@term_get_list_spec Σ ty_pmpentry es) as [[] ?|].
+        destruct p0 as [pmp es'].
+        rewrite (H0 ι) in H.
+        destruct (term_get_pair_spec pmp) as [[cfg0 addr0]|].
+        rewrite (H1 ι) in H.
+        simpl.
+        destruct (term_get_record_spec cfg0).
+        cbn in a0.
+        env.destroy a0.
+        rewrite (H2 ι) in H.
+        simpl.
+        destruct (simplify_pmpcheck n a width addr0 es' p acc) eqn:?;
+          cbn.
+        cbn in H.
+        unfold pmp_match_entry, pmp_addr_range in H.
+        cbn in H.
+        destruct (inst v2 ι).
+        simpl in H.
+        left; split; auto.
+        unfold pmp_check_fml_term_aux in IHn.
+        specialize (IHn a width addr0 es' p acc ι).
+        rewrite Heqo in IHn.
+        apply IHn.
+        cbn.
+        unfold Gen_Pmp_access, pmp_check_aux.
+        now rewrite Nat2Z.id.
+        destruct (pmp_match_addr _ _ _) eqn:Epmp;
+          try discriminate.
+        * apply pmp_match_addr_nomatch_1 in Epmp.
+          destruct Epmp as [|]; try discriminate.
+          destruct (H3 (inst lo ι) (inst addr0 ι) eq_refl) as [|[|]].
+          left; split; auto.
+          unfold pmp_check_fml_term_aux in IHn.
+          specialize (IHn a width addr0 es' p acc ι).
+          rewrite Heqo in IHn.
+          apply IHn.
+          cbn.
+          unfold Gen_Pmp_access, pmp_check_aux.
+          now rewrite Nat2Z.id.
+          destruct H4 as (? & ?).
+          left; split; auto.
+          unfold pmp_check_fml_term_aux in IHn.
+          specialize (IHn a width addr0 es' p acc ι).
+          rewrite Heqo in IHn.
+          apply IHn.
+          cbn.
+          unfold Gen_Pmp_access, pmp_check_aux.
+          now rewrite Nat2Z.id.
+          destruct H4 as (? & ? & ?).
+          left; split; auto.
+          unfold pmp_check_fml_term_aux in IHn.
+          specialize (IHn a width addr0 es' p acc ι).
+          rewrite Heqo in IHn.
+          apply IHn.
+          cbn.
+          unfold Gen_Pmp_access, pmp_check_aux.
+          now rewrite Nat2Z.id.
+        * apply pmp_match_addr_match_conditions_1 in Epmp.
+          destruct Epmp as (? & ? & ? & ? & ?).
+          apply Pmp_check_perms_Access_pmp_perm in H.
+          right; repeat split; auto.
+        * rewrite (H0 ι) (H1 ι) (H2 ι).
+          cbn.
+          unfold Gen_Pmp_access.
+          now rewrite Nat2Z.id.
+        * cbn.
+          rewrite (H0 ι) (H1 ι); cbn.
+          unfold Gen_Pmp_access.
+          now rewrite Nat2Z.id.
+        * cbn.
+          rewrite (H0 ι); cbn.
+          unfold Gen_Pmp_access.
+          now rewrite Nat2Z.id.
+        * cbn.
+          rewrite (H0 ι) in H; cbn in H; discriminate.
+        * cbn.
+          unfold Gen_Pmp_access.
+          now rewrite Nat2Z.id.
+  Qed.
+
+  Lemma Z_pmp_check_fml_term_aux_gen_pmp_access : forall {Σ} (n : Z) a width lo es p acc (ι : Valuation Σ),
+  instprop (pmp_check_fml_term_aux (Z.to_nat n) a width lo es p acc) ι
+  ↔ instprop (formula_user gen_pmp_access [term_val ty.int n; a; width; lo; es; p; acc]) ι.
+  Proof.
+    intros; cbn; destruct n.
+    - rewrite Z2Nat.inj_0.
+      apply pmp_check_fml_term_aux_gen_pmp_access.
+    - split; intros H.
+      apply pmp_check_fml_term_aux_gen_pmp_access in H.
+      cbn in H.
+      now rewrite positive_nat_Z in H.
+      apply pmp_check_fml_term_aux_gen_pmp_access.
+      now rewrite positive_nat_Z.
+    - split; intros H.
+      apply pmp_check_fml_term_aux_gen_pmp_access in H.
+      cbn in H.
+      unfold Gen_Pmp_access in *.
+      rewrite Z2Nat.inj_neg in H.
+      rewrite Z2Nat.inj_neg.
+      apply H.
+      apply pmp_check_fml_term_aux_gen_pmp_access.
+      cbn.
+      unfold Gen_Pmp_access in *.
+      rewrite Z2Nat.inj_neg in H.
+      rewrite Z2Nat.inj_neg.
+      apply H.
+  Qed.
 
   Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (PathCondition Σ) :=
     match term_get_val a1 , term_get_val a2 with
@@ -971,27 +1183,21 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     '(cfgs , addrs) <- split_entries_aux n es ;;
     Some (cfgs , cons (term_val ty_xlenbits bv.zero) addrs).
 
-  (* TODO: define this as simplify_gen_pmp_access and change the dispatch to the right simplifier so that "pmp_access" is simplified by simplify_gen_pmp_access (with some specialized values) *)
-  Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
-    let pmp_access_fml := formula_user pmp_access [paddr; width; es; p; acc] in
-    match term_get_val paddr , term_get_val width , term_get_val es , term_get_val p , term_get_val acc with
-    | Some paddr , Some width , Some entries , Some p , Some acc =>
-        if pmp_check paddr width entries p acc
+  Definition simplify_gen_pmp_access {Σ} (n : Term Σ ty.int) (paddr width lo : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
+    let pmp_access_fml := formula_user gen_pmp_access [n; paddr; width; lo; es; p; acc] in
+    match term_get_val n , term_get_val paddr , term_get_val width , term_get_val lo , term_get_val es , term_get_val p , term_get_val acc with
+    | Some n , Some paddr , Some width , Some lo , Some entries , Some p , Some acc =>
+        if pmp_check_aux (Z.to_nat n) paddr width lo entries p acc
         then Some []
         else None
-    | _, _ , _ , _, _ =>
-        let fml := simplify_pmpcheck NumPmpEntries paddr width (term_val ty_xlenbits bv.zero) es p acc in
-        match fml with
-        | Some fml => Some [fml]
-        | None     => Some [pmp_access_fml]
-        end
-        (* let result := '(cfgs , addrs) <- split_entries NumPmpEntries es ;;
-                      Some [simplify_pmpcheck paddr width addrs cfgs p acc] in
-        match result with
-        | Some v => Some v
-        | None   => Some [pmp_access_fml]
-        end *)
+    | Some n, _, _, _ , _ , _, _ =>
+        Some [pmp_check_fml_term_aux (Z.to_nat n) paddr width lo es p acc]
+    | _, _, _, _ , _ , _, _ => Some [pmp_access_fml]
     end.
+
+  Definition simplify_pmp_access {Σ} (paddr width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
+    simplify_gen_pmp_access (term_val ty.int NumPmpEntries) paddr width
+      (term_val ty_xlenbits bv.zero) es p acc.
 
   (* TODO: User predicates can be simplified smarter *)
   Definition simplify_pmp_check_rwx {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
@@ -1048,6 +1254,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   Import DList.
 
   Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (PathCondition Σ) :=
+  | gen_pmp_access               | [ n; paddr; width; lo; entries; priv; perm ] => simplify_gen_pmp_access n paddr width lo entries priv perm
   | pmp_access               | [ paddr; width; entries; priv; perm ] => simplify_pmp_access paddr width entries priv perm
   | pmp_check_perms          | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
   | pmp_check_rwx            | [ cfg; acc ]                   => simplify_pmp_check_rwx cfg acc
@@ -1069,17 +1276,17 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       | |- [ctx]              ⊣⊢ _                  => apply nil_l_valid
       | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
       | |- match @term_get_val ?Σ ?σ ?v with _ => _ end ⊣⊢ _ =>
-          destruct (@term_get_val_spec Σ σ v); subst; try progress cbn
+          destruct (@term_get_val_spec Σ σ v); subst; try progress cbn - [pmp_check_fml_term_aux]
       | |- match @term_get_list ?Σ ?σ ?v with _ =>_ end ⊣⊢ _ =>
-          destruct (@term_get_list_spec Σ σ v) as [[] ?|]; subst; try progress cbn
+          destruct (@term_get_list_spec Σ σ v) as [[] ?|]; subst; try progress cbn - [pmp_check_fml_term_aux]
       | |- match @term_get_pair ?Σ ?σ₁ ?σ₂ ?v with _ =>_ end ⊣⊢ _ =>
-          destruct (@term_get_pair_spec Σ σ₁ σ₂ v); subst; try progress cbn
+          destruct (@term_get_pair_spec Σ σ₁ σ₂ v); subst; try progress cbn - [pmp_check_fml_term_aux]
       | |- match @term_get_record ?r ?Σ ?v with _ =>_ end ⊣⊢ _ =>
-          destruct (@term_get_record_spec Σ r v); subst; try progress cbn
+          destruct (@term_get_record_spec Σ r v); subst; try progress cbn - [pmp_check_fml_term_aux]
       | H: ?fst * ?snd |- _ =>
-          destruct H; subst; try progress cbn
+          destruct H; subst; try progress cbn - [pmp_check_fml_term_aux]
       | u: () |- _ =>
-          destruct u; try progress cbn
+          destruct u; try progress cbn - [pmp_check_fml_term_aux]
       end; try easy; auto.
 
   Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :
@@ -1106,23 +1313,23 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
           specialize (H ι)
       end.
 
-  (* TODO: this should be a proof for simplify_gen_pmp_access, which can then
-           be used for pmp_access as well *)
-  Opaque NumPmpEntries.
-  Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_xlenbits)
-    (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry))
-    (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) :
-    simplify_pmp_access paddr width es p acc ⊣⊢ Some [formula_user pmp_access [paddr; width; es; p; acc]].
+  Lemma simplify_gen_pmp_access_spec {Σ} (n : Term Σ ty.int) (paddr width lo : Term Σ ty_xlenbits)
+    (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege)
+    (acc : Term Σ ty_access_type) :
+    simplify_gen_pmp_access n paddr width lo es p acc ⊣⊢ Some [formula_user gen_pmp_access [n; paddr; width; lo; es; p; acc]].
   Proof.
-    unfold simplify_pmp_access. lsolve.
-    - intros ι; cbn; unfold Pmp_access.
-      destruct (pmp_check _ _ _ _ _) eqn:?; lsolve.
-    - destruct (simplify_pmpcheck _ _ _ _ _ _ _) eqn:?; lsolve.
-      (* TODO: move simplify_pmpcheck up, and define the vcgen functions in terms of
-               simplify_pmpcheck (by using instprop we will get a Prop back
-               The already defined (but probably needing proof updates)
-               inversion lemmas will make this case trivial to solve *)
-  Admitted.
+    unfold simplify_gen_pmp_access.
+    lsolve; intros ι;
+      try apply Z_pmp_check_fml_term_aux_gen_pmp_access.
+    cbn; unfold Gen_Pmp_access.
+    destruct (pmp_check_aux _ _ _ _ _ _ _) eqn:?; lsolve.
+  Qed.
+
+  Lemma simplify_pmp_access_spec {Σ} (paddr width : Term Σ ty_xlenbits)
+    (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege)
+    (acc : Term Σ ty_access_type) :
+    simplify_pmp_access paddr width es p acc ⊣⊢ Some [formula_user pmp_access [paddr; width; es; p; acc]].
+  Proof. apply simplify_gen_pmp_access_spec. Qed.
 
   #[local] Arguments Pmp_check_rwx !cfg !acc /.
   Lemma simplify_pmp_check_rwx_spec {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) :
@@ -1171,7 +1378,8 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.
   Proof.
     intros Σ p ts.
-    destruct p; cbv in ts; env.destroy ts; cbn.
+    destruct p; cbv in ts; env.destroy ts; cbn - [simplify_pmp_access].
+    - simple apply simplify_gen_pmp_access_spec.
     - simple apply simplify_pmp_access_spec.
     - simple apply simplify_pmp_check_perms_spec.
     - simple apply simplify_pmp_check_rwx_spec.

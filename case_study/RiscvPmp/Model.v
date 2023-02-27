@@ -596,7 +596,32 @@ Module RiscvPmpModel2.
       now rewrite E.
     Qed.
 
-    Lemma check_pmp_access_reduced_width (bytes w : Xlenbits) :
+    Lemma pmp_check_aux_access_reduced_width (bytes w : Xlenbits) :
+      forall n paddr lo entries p acc,
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        bv.zero <ᵘ w ->
+        w <=ᵘ bytes ->
+        pmp_check_aux n paddr bytes lo entries p acc = true ->
+        pmp_check_aux n paddr w lo entries p acc = true.
+    Proof.
+      intros n paddr lo entries p acc Hrep H0w Hle H.
+      generalize dependent lo.
+      generalize dependent entries.
+      induction n;
+        intros;
+        first now simpl in *.
+      cbn in *.
+      destruct entries as [|[cfg0 addr0] entries]; auto.
+      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E; last done.
+      - apply pmp_match_entry_reduced_width with (w := w) in E; auto.
+        now rewrite E.
+      - apply pmp_match_entry_reduced_width_continue with (w := w) in E; auto.
+        rewrite E.
+        unfold pmp_check_aux in IHn.
+        now apply IHn.
+    Qed.
+
+    Lemma pmp_check_access_reduced_width (bytes w : Xlenbits) :
       forall paddr entries p acc,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
         bv.zero <ᵘ w ->
@@ -604,36 +629,20 @@ Module RiscvPmpModel2.
         pmp_check paddr bytes entries p acc = true ->
         pmp_check paddr w entries p acc = true.
     Proof.
-      intros paddr entries p acc Hrep H0w Hle H.
-      (* TODO: investigate how this can properly be proven with induction... *)
-      induction entries as [|[cfg0 addr0]];
-        first now simpl in *.
-      cbn in *.
-      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E; last done.
-      - apply pmp_match_entry_reduced_width with (w := w) in E; auto.
-        now rewrite E.
-      - apply pmp_match_entry_reduced_width_continue with (w := w) in E; auto.
-        rewrite E.
+      unfold pmp_check; intros;
+        apply pmp_check_aux_access_reduced_width with (bytes := bytes); auto.
     Qed.
 
     Lemma pmp_access_reduced_width (bytes w : Xlenbits) :
-      forall paddr pmp p acc cfgs addrs,
+      forall paddr pmp p acc ,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
         bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
-        split_entries NumPmpEntries pmp = Some (cfgs , addrs) ->
         Pmp_access paddr bytes pmp p acc ->
         Pmp_access paddr w pmp p acc.
     Proof.
-      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc cfgs addrs Hrep H0w Hw Hsplit H;
-        unfold Pmp_access, decide_pmp_access in *;
-        try (destruct p; now cbn).
-      inversion Hsplit; subst.
-      simpl in *.
-      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E0; last done.
-      - apply pmp_match_entry_reduced_width with (w := w) in E0; auto.
-        now rewrite E0.
-      - apply pmp_match_entry_reduced_width_continue with (w := w) in E0; auto.
+      unfold Pmp_access, Gen_Pmp_access; intros;
+        apply pmp_check_aux_access_reduced_width with (bytes := bytes); auto.
     Qed.
 
     Lemma pmp_match_addr_addr_S_width_pred (bytes : nat) : forall paddr rng res,
@@ -719,21 +728,31 @@ Module RiscvPmpModel2.
       discriminate H.
     Qed.
 
-    Lemma pmp_access_addr_S_width_pred (bytes : nat) : forall paddr pmp p acc cfgs addrs,
+    Lemma pmp_check_aux_addr_S_width_pred (bytes : nat) : forall (n : nat) paddr lo pmp p acc,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        split_entries NumPmpEntries pmp = Some (cfgs , addrs) ->
-        Pmp_access paddr (bv.of_nat (S bytes)) pmp p acc ->
-        Pmp_access (paddr + bv.one xlenbits) (bv.of_nat bytes) pmp p acc.
+        pmp_check_aux n paddr (bv.of_nat (S bytes)) lo pmp p acc = true ->
+        pmp_check_aux n (paddr + bv.one xlenbits) (bv.of_nat bytes) lo pmp p acc = true.
     Proof.
-      intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc cfgs addrs Hb Hrep Hrepb Hsplit;
-        unfold Pmp_access, decide_pmp_access;
-        try (destruct p; now cbn).
-      inversion Hsplit; subst.
-      Locate pmp_check.
-      Print pmp_check.
-      simpl in *.
+      intros n paddr lo pmp p acc Hb Hrep Hrepb.
+
+    Lemma pmp_access_addr_S_width_pred (bytes : nat) : forall (n : nat) paddr lo pmp p acc,
+        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
+        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
+        (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
+        Gen_Pmp_access (Z.of_nat n) paddr (bv.of_nat (S bytes)) lo pmp p acc ->
+        Gen_Pmp_access (Z.of_nat n) (paddr + bv.one xlenbits) (bv.of_nat bytes) lo pmp p acc.
+    Proof.
+      intros n paddr lo pmp p acc Hb Hrep Hrepb.
+      generalize dependent lo.
+      generalize dependent pmp.
+      induction n;
+        intros;
+        first now simpl in *.
+      unfold Gen_Pmp_access in *.
+      rewrite Nat2Z.id.
+      rewrite Nat2Z.id in H.
       destruct (pmp_match_entry paddr _ _ cfg0 _ _) eqn:Ecfg0; auto.
       apply pmp_match_entry_addr_S_width_pred_success in Ecfg0; auto.
       now rewrite Ecfg0.
