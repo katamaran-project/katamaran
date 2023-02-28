@@ -736,6 +736,23 @@ Module RiscvPmpModel2.
         pmp_check_aux n (paddr + bv.one xlenbits) (bv.of_nat bytes) lo pmp p acc = true.
     Proof.
       intros n paddr lo pmp p acc Hb Hrep Hrepb.
+      generalize dependent lo.
+      generalize dependent pmp.
+      induction n;
+        intros;
+        first now simpl in *.
+      unfold pmp_check_aux.
+      unfold pmp_check_aux in H.
+      simpl in *.
+      destruct pmp as [|[cfg0 addr0] pmp];
+        first discriminate.
+      destruct (pmp_match_entry paddr _ _ cfg0 _ _) eqn:Ecfg0; auto.
+      apply pmp_match_entry_addr_S_width_pred_success in Ecfg0; auto.
+      now rewrite Ecfg0.
+      apply pmp_match_entry_addr_S_width_pred_continue in Ecfg0; auto.
+      rewrite Ecfg0.
+      now apply IHn.
+    Qed.
 
     Lemma pmp_access_addr_S_width_pred (bytes : nat) : forall (n : nat) paddr lo pmp p acc,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
@@ -745,17 +762,9 @@ Module RiscvPmpModel2.
         Gen_Pmp_access (Z.of_nat n) (paddr + bv.one xlenbits) (bv.of_nat bytes) lo pmp p acc.
     Proof.
       intros n paddr lo pmp p acc Hb Hrep Hrepb.
-      generalize dependent lo.
-      generalize dependent pmp.
-      induction n;
-        intros;
-        first now simpl in *.
-      unfold Gen_Pmp_access in *.
-      rewrite Nat2Z.id.
-      rewrite Nat2Z.id in H.
-      destruct (pmp_match_entry paddr _ _ cfg0 _ _) eqn:Ecfg0; auto.
-      apply pmp_match_entry_addr_S_width_pred_success in Ecfg0; auto.
-      now rewrite Ecfg0.
+      unfold Gen_Pmp_access.
+      rewrite ?Nat2Z.id.
+      now apply pmp_check_aux_addr_S_width_pred.
     Qed.
 
     Lemma big_sepL_pure_impl (bytes : nat) :
