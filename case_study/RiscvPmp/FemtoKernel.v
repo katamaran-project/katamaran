@@ -42,6 +42,7 @@ From Katamaran Require Import
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From Katamaran Require
+     RiscvPmp.PmpCheck
      RiscvPmp.Contracts
      RiscvPmp.LoopVerification
      RiscvPmp.Model.
@@ -52,6 +53,7 @@ From iris.program_logic Require weakestpre adequacy.
 From iris.proofmode Require string_ident tactics.
 From stdpp Require namespaces.
 
+Import PmpCheck.
 Import RiscvPmpProgram.
 
 Set Implicit Arguments.

@@ -39,6 +39,7 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Specification
+     RiscvPmp.PmpCheck
      RiscvPmp.Machine
      RiscvPmp.Contracts
      RiscvPmp.IrisModel
