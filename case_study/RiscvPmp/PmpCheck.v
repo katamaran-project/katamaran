@@ -32,6 +32,8 @@ From Coq Require Import
 From Katamaran Require Import
      Bitvector
      RiscvPmp.Base.
+From iris.proofmode Require Import
+     tactics.
 
 Import ListNotations.
 Import bv.notations.
@@ -52,11 +54,11 @@ Ltac bv_comp :=
 Ltac bv_comp_bool :=
   repeat match goal with
     | H: ?a <ᵘ ?b |- _ =>
-        rewrite ? (proj2 (bv.ultb_ult _ _) H),
+        rewrite ? (proj2 (bv.ultb_ult _ _) H)
                 ? (proj2 (bv.uleb_ugt _ _) H);
         clear H
     | H: ?a <=ᵘ ?b |- _ =>
-        rewrite ? (proj2 (bv.uleb_ule _ _) H),
+        rewrite ? (proj2 (bv.uleb_ule _ _) H)
                 ? (proj2 (bv.ultb_uge _ _) H);
         clear H
     end.
@@ -157,16 +159,16 @@ Definition pmp_check (a width : Xlenbits) (entries : list PmpEntryCfg) (p : Priv
   pmp_check_aux NumPmpEntries a width bv.zero entries p acc.
 
 Lemma addr_match_type_neq_off_cases :
-  forall a, a <> OFF -> a = TOR.
-Proof. now destruct a. Qed.
+  ∀ a, a ≠ OFF -> a = TOR.
+Proof. by destruct a. Qed.
 
 Lemma addr_match_type_TOR_neq_OFF :
-  forall a, a = TOR -> a <> OFF.
-Proof. now destruct a. Qed.
+  ∀ a, a = TOR -> a ≠ OFF.
+Proof. by destruct a. Qed.
 
 Lemma pmp_match_addr_match_conditions_1 : forall (paddr w lo hi : Xlenbits),
     pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match ->
-    lo <=ᵘ hi /\ lo <ᵘ (paddr + w)%bv /\ lo <=ᵘ paddr /\ paddr <ᵘ hi /\ (paddr + w)%bv <=ᵘ hi.
+    lo <=ᵘ hi ∧ lo <ᵘ (paddr + w)%bv ∧ lo <=ᵘ paddr ∧ paddr <ᵘ hi ∧ (paddr + w)%bv <=ᵘ hi.
 Proof.
   unfold pmp_match_addr.
   intros paddr w lo hi H.
@@ -217,10 +219,10 @@ Proof. auto. Qed.
 Lemma pmp_match_addr_nomatch_1 : forall paddr w rng,
     pmp_match_addr paddr w rng = PMP_NoMatch ->
     rng = None \/
-      (forall lo hi, rng = Some (lo , hi) ->
+      (∀ lo hi, rng = Some (lo , hi) ->
                 (hi <ᵘ lo
-                 \/ (lo <=ᵘ hi /\ (paddr + w)%bv <=ᵘ lo)
-                 \/ (lo <=ᵘ hi /\ lo <ᵘ (paddr + w)%bv /\ hi <=ᵘ paddr))).
+                 ∨ (lo <=ᵘ hi ∧ (paddr + w)%bv <=ᵘ lo)
+                 ∨ (lo <=ᵘ hi ∧ lo <ᵘ (paddr + w)%bv ∧ hi <=ᵘ paddr))).
 Proof.
   intros paddr w [[lo hi]|]; auto.
   intros H.
@@ -234,9 +236,9 @@ Proof.
 Qed.
 
 Lemma pmp_match_addr_nomatch_2 : forall paddr w rng,
-    (rng = None \/
+    (rng = None ∨ 
        (forall lo hi, rng = Some (lo , hi) ->
-                 (hi <ᵘ lo \/ (paddr + w)%bv <=ᵘ lo \/ hi <=ᵘ paddr))) ->
+                 (hi <ᵘ lo ∨ (paddr + w)%bv <=ᵘ lo ∨ hi <=ᵘ paddr))) ->
     pmp_match_addr paddr w rng = PMP_NoMatch.
 Proof.
   intros paddr w [[lo hi]|]; auto.
