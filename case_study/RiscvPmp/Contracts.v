@@ -1259,20 +1259,6 @@ Module RiscvPmpValidContracts.
 
   End Debug.
 
-  Ltac bv_comp :=
-      repeat match goal with
-      | H: (?a <ᵘ? ?b) = true |- _ =>
-          rewrite bv.ultb_ult in H
-      | H: (?a <ᵘ? ?b) = false |- _ =>
-          rewrite bv.ultb_uge in H
-      | H: (?a <=ᵘ? ?b) = true |- _ =>
-          rewrite bv.uleb_ule in H
-      | H: (?a <=ᵘ? ?b) = false |- _ =>
-          rewrite bv.uleb_ugt in H
-      | H: (?P || ?q = true)%bool |- _ =>
-          apply Bool.orb_true_iff in H as [?|?]
-      end.
-
   Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheck bytes H).
   Proof.
     destruct H as [H|[H|H]]; rewrite ?H;

@@ -86,18 +86,6 @@ End TransparentObligations.
 Derive EqDec for PurePredicate.
 Derive EqDec for Predicate.
 
-Ltac bv_comp_bool :=
-  repeat match goal with
-    | H: ?a <ᵘ ?b |- _ =>
-        rewrite ? (proj2 (bv.ultb_ult _ _) H)
-                ? (proj2 (bv.uleb_ugt _ _) H);
-        clear H
-    | H: ?a <=ᵘ ?b |- _ =>
-        rewrite ? (proj2 (bv.uleb_ule _ _) H)
-                ? (proj2 (bv.ultb_uge _ _) H);
-        clear H
-    end.
-
 Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
   Section PredicateKit.

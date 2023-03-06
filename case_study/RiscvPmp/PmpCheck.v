@@ -48,9 +48,10 @@ Ltac bv_comp :=
         rewrite bv.uleb_ule in H
     | H: (?a <=ᵘ? ?b) = false |- _ =>
         rewrite bv.uleb_ugt in H
+    | H: (?P || ?Q)%bool = true |- _ =>
+        apply Bool.orb_true_iff in H as [?|?]
     end.
 
-(* TODO: revert back to Iris/Stdpp rewrite tactic! (then remove tactic from Sig) *)
 Ltac bv_comp_bool :=
   repeat match goal with
     | H: ?a <ᵘ ?b |- _ =>
