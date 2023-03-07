@@ -64,204 +64,283 @@ Ltac bv_comp_bool :=
         clear H
     end.
 
-Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
-Definition PmpAddrRange := option (Xlenbits * Xlenbits).
+Section Implementation.
+  Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
+  Definition PmpAddrRange := option (Xlenbits * Xlenbits).
 
-Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange :=
-  match A cfg with
-  | OFF => None
-  | TOR => Some (lo , hi)
-  end.
+  Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange :=
+    match A cfg with
+    | OFF => None
+    | TOR => Some (lo , hi)
+    end.
 
-Definition pmp_match_addr (a : Xlenbits) (width : Xlenbits) (rng : PmpAddrRange) : PmpAddrMatch :=
-  match rng with
-  | Some (lo, hi) =>
-      if hi <ᵘ? lo
-      then PMP_NoMatch
-      else if ((a + width <=ᵘ? lo)%bv || (hi <=ᵘ? a))%bool
-           then PMP_NoMatch
-           else if ((lo <=ᵘ? a) && (a + width <=ᵘ? hi)%bv)%bool
-                then PMP_Match
-                else PMP_PartialMatch
-  | None          => PMP_NoMatch
-  end.
+  Definition pmp_match_addr (a : Xlenbits) (width : Xlenbits) (rng : PmpAddrRange) : PmpAddrMatch :=
+    match rng with
+    | Some (lo, hi) =>
+        if hi <ᵘ? lo
+        then PMP_NoMatch
+        else if ((a + width <=ᵘ? lo)%bv || (hi <=ᵘ? a))%bool
+             then PMP_NoMatch
+             else if ((lo <=ᵘ? a) && (a + width <=ᵘ? hi)%bv)%bool
+                  then PMP_Match
+                  else PMP_PartialMatch
+    | None          => PMP_NoMatch
+    end.
 
-Definition pmp_match_entry (a width : Xlenbits) (m : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits) : PmpMatch :=
-  let rng := pmp_addr_range cfg hi lo in
-  match pmp_match_addr a width rng with
-  | PMP_NoMatch      => PMP_Continue
-  | PMP_PartialMatch => PMP_Fail
-  | PMP_Match        => PMP_Success
-  end.
+  Definition pmp_match_entry (a width : Xlenbits) (m : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits) : PmpMatch :=
+    let rng := pmp_addr_range cfg hi lo in
+    match pmp_match_addr a width rng with
+    | PMP_NoMatch      => PMP_Continue
+    | PMP_PartialMatch => PMP_Fail
+    | PMP_Match        => PMP_Success
+    end.
 
-Equations(noeqns) decide_access_pmp_perm (a : AccessType) (p : PmpCfgPerm) : bool :=
-| Read      | PmpR   := true;
-| Read      | PmpRW  := true;
-| Read      | PmpRX  := true;
-| Write     | PmpW   := true;
-| Write     | PmpRW  := true;
-| Write     | PmpWX  := true;
-| ReadWrite | PmpRW  := true;
-| Execute   | PmpX   := true;
-| Execute   | PmpRX  := true;
-| Execute   | PmpWX  := true;
-| _         | PmpRWX := true;
-| _         | _      := false.
+  Equations(noeqns) decide_access_pmp_perm (a : AccessType) (p : PmpCfgPerm) : bool :=
+  | Read      | PmpR   := true;
+  | Read      | PmpRW  := true;
+  | Read      | PmpRX  := true;
+  | Write     | PmpW   := true;
+  | Write     | PmpRW  := true;
+  | Write     | PmpWX  := true;
+  | ReadWrite | PmpRW  := true;
+  | Execute   | PmpX   := true;
+  | Execute   | PmpRX  := true;
+  | Execute   | PmpWX  := true;
+  | _         | PmpRWX := true;
+  | _         | _      := false.
 
-Definition pmp_get_RWX (cfg : Pmpcfg_ent) (p : Privilege) : PmpCfgPerm :=
-  match cfg with
-  | {| L := L; A := _; X := X; W := W; R := R |} =>
-      match L, p with
-      | false, Machine => PmpRWX
-      | _,     _       =>
-          match X, W, R with
-          | false, false, true  => PmpR
-          | false, true,  false => PmpW
-          | false, true,  true  => PmpRW
-          | true,  false, false => PmpX
-          | true,  false, true  => PmpRX
-          | true,  true,  false => PmpWX
-          | true,  true,  true  => PmpRWX
-          | _,     _,     _     => PmpO
-          end
-      end
-  end.
+  Definition pmp_get_RWX (cfg : Pmpcfg_ent) (p : Privilege) : PmpCfgPerm :=
+    match cfg with
+    | {| L := L; A := _; X := X; W := W; R := R |} =>
+        match L, p with
+        | false, Machine => PmpRWX
+        | _,     _       =>
+            match X, W, R with
+            | false, false, true  => PmpR
+            | false, true,  false => PmpW
+            | false, true,  true  => PmpRW
+            | true,  false, false => PmpX
+            | true,  false, true  => PmpRX
+            | true,  true,  false => PmpWX
+            | true,  true,  true  => PmpRWX
+            | _,     _,     _     => PmpO
+            end
+        end
+    end.
 
-Definition pmp_get_perms (cfg : Pmpcfg_ent) (p : Privilege) : PmpCfgPerm :=
-  match p with
-  | Machine =>
-      if L cfg
-      then pmp_get_RWX cfg p
-      else PmpRWX
-  | User =>
-      pmp_get_RWX cfg p
-  end.
+  Definition pmp_get_perms (cfg : Pmpcfg_ent) (p : Privilege) : PmpCfgPerm :=
+    match p with
+    | Machine =>
+        if L cfg
+        then pmp_get_RWX cfg p
+        else PmpRWX
+    | User =>
+        pmp_get_RWX cfg p
+    end.
 
-Fixpoint pmp_check_rec (n : nat) (a width lo : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
-  match n, entries with
-  | S n, (cfg , hi) :: entries =>
-      match pmp_match_entry a width p cfg lo hi with
-      | PMP_Success  => decide_access_pmp_perm acc (pmp_get_perms cfg p)
-      | PMP_Fail     => false
-      | PMP_Continue => pmp_check_rec n a width hi entries p acc
-      end
-  | O, [] =>
-      match p with
-      | Machine => true
-      | _       => false
-      end
-  | _, _ => false
-  end%list.
+  Fixpoint pmp_check_rec (n : nat) (a width lo : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
+    match n, entries with
+    | S n, (cfg , hi) :: entries =>
+        match pmp_match_entry a width p cfg lo hi with
+        | PMP_Success  => decide_access_pmp_perm acc (pmp_get_perms cfg p)
+        | PMP_Fail     => false
+        | PMP_Continue => pmp_check_rec n a width hi entries p acc
+        end
+    | O, [] =>
+        match p with
+        | Machine => true
+        | _       => false
+        end
+    | _, _ => false
+    end%list.
 
-Definition pmp_check_aux (n : nat) (a width lo : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
-  pmp_check_rec n a width lo entries p acc.
+  Definition pmp_check_aux (n : nat) (a width lo : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
+    pmp_check_rec n a width lo entries p acc.
 
-Definition pmp_check (a width : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
-  pmp_check_aux NumPmpEntries a width bv.zero entries p acc.
+  Definition pmp_check (a width : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
+    pmp_check_aux NumPmpEntries a width bv.zero entries p acc.
+End Implementation.
 
-Lemma addr_match_type_neq_off_cases :
-  ∀ a, a ≠ OFF -> a = TOR.
-Proof. by destruct a. Qed.
+Section AddrMatchType.
+  Lemma addr_match_type_neq_off_cases :
+    ∀ a, a ≠ OFF -> a = TOR.
+  Proof. by destruct a. Qed.
 
-Lemma addr_match_type_TOR_neq_OFF :
-  ∀ a, a = TOR -> a ≠ OFF.
-Proof. by destruct a. Qed.
+  Lemma addr_match_type_TOR_neq_OFF :
+    ∀ a, a = TOR -> a ≠ OFF.
+  Proof. by destruct a. Qed.
+End AddrMatchType.
 
-Lemma pmp_match_addr_match_conditions_1 : forall (paddr w lo hi : Xlenbits),
-    pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match ->
-    lo <=ᵘ hi ∧ lo <ᵘ (paddr + w)%bv ∧ lo <=ᵘ paddr ∧ paddr <ᵘ hi ∧ (paddr + w)%bv <=ᵘ hi.
-Proof.
-  unfold pmp_match_addr.
-  intros paddr w lo hi H.
-  destruct (hi <ᵘ? lo) eqn:Ehilo; try discriminate H.
-  destruct ((paddr + w)%bv <=ᵘ? lo) eqn:Epwlo; first easy.
-  destruct (hi <=ᵘ? paddr) eqn:Ehip; first easy.
-  simpl in H.
-  destruct (lo <=ᵘ? paddr) eqn:Elop; last easy.
-  destruct ((paddr + w)%bv <=ᵘ? hi) eqn:Epwhi; last easy.
-  rewrite bv.ultb_antisym in Ehilo.
-  apply Bool.negb_false_iff in Ehilo.
-  now bv_comp.
-Qed.
+Section PmpAddrRange.
+  Lemma pmp_addr_range_None : ∀ cfg hi lo,
+      pmp_addr_range cfg hi lo = None ->
+      A cfg = OFF.
+  Proof.
+    intros.
+    unfold pmp_addr_range in H.
+    destruct (A cfg); auto; discriminate.
+  Qed.
 
-Lemma pmp_match_addr_match_conditions_2 : forall paddr w lo hi,
-    lo <=ᵘ hi ->
-    lo <ᵘ (paddr + w)%bv ->
-    lo <=ᵘ paddr ->
-    paddr <ᵘ hi ->
-    (paddr + w)%bv <=ᵘ hi ->
-    pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match.
-Proof. intros; unfold pmp_match_addr; now bv_comp_bool. Qed.
+  Lemma pmp_addr_range_Some : ∀ cfg hi lo p,
+      pmp_addr_range cfg hi lo = Some p ->
+      A cfg = TOR /\ p = (lo , hi).
+  Proof.
+    intros.
+    unfold pmp_addr_range in H.
+    destruct (A cfg); auto; now inversion H.
+  Qed.
+End PmpAddrRange.
 
-Lemma pmp_match_addr_nomatch_conditions : forall paddr w lo hi,
-    hi <ᵘ lo ->
-    pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
-Proof. intros; unfold pmp_match_addr; now bv_comp_bool. Qed.
+Section PmpMatchAddr.
+  Lemma pmp_match_addr_match_conditions_1 : forall (paddr w lo hi : Xlenbits),
+      pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match ->
+      lo <=ᵘ hi ∧ lo <ᵘ (paddr + w)%bv ∧ lo <=ᵘ paddr
+      ∧ paddr <ᵘ hi ∧ (paddr + w)%bv <=ᵘ hi.
+  Proof.
+    unfold pmp_match_addr.
+    intros paddr w lo hi H.
+    destruct (hi <ᵘ? lo) eqn:Ehilo; try discriminate H.
+    destruct ((paddr + w)%bv <=ᵘ? lo) eqn:Epwlo; first easy.
+    destruct (hi <=ᵘ? paddr) eqn:Ehip; first easy.
+    simpl in H.
+    destruct (lo <=ᵘ? paddr) eqn:Elop; last easy.
+    destruct ((paddr + w)%bv <=ᵘ? hi) eqn:Epwhi; last easy.
+    rewrite bv.ultb_antisym in Ehilo.
+    apply Bool.negb_false_iff in Ehilo.
+    now bv_comp.
+  Qed.
 
-Lemma pmp_match_addr_nomatch_conditions_1 : forall paddr w lo hi,
-    (paddr + w)%bv <=ᵘ lo ->
-    pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
-Proof. intros; unfold pmp_match_addr; destruct (hi <ᵘ? lo); now bv_comp_bool. Qed.
+  Lemma pmp_match_addr_match_conditions_2 : forall paddr w lo hi,
+      lo <=ᵘ hi ∧ lo <ᵘ (paddr + w)%bv ∧ lo <=ᵘ paddr
+      ∧ paddr <ᵘ hi ∧ (paddr + w)%bv <=ᵘ hi ->
+      pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match.
+  Proof.
+    intros ? ? ? ? (? & ? & ? & ? & ?);
+      unfold pmp_match_addr; now bv_comp_bool.
+  Qed.
 
-Lemma pmp_match_addr_nomatch_conditions_2 : forall paddr w lo hi,
-    hi <=ᵘ paddr ->
-    pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
-Proof.
-  intros.
-  unfold pmp_match_addr.
-  destruct (hi <ᵘ? lo) eqn:Ehilo; auto; bv_comp_bool.
-  now rewrite Bool.orb_true_r.
-Qed.
+  Lemma pmp_match_addr_match : forall (paddr w lo hi : Xlenbits),
+      pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match <->
+      lo <=ᵘ hi ∧ lo <ᵘ (paddr + w)%bv ∧ lo <=ᵘ paddr
+      ∧ paddr <ᵘ hi ∧ (paddr + w)%bv <=ᵘ hi.
+    Proof.
+      intros; split.
+      - apply pmp_match_addr_match_conditions_1.
+      - apply pmp_match_addr_match_conditions_2.
+    Qed.
 
-Lemma pmp_match_addr_none: forall paddr w,
-    pmp_match_addr paddr w None = PMP_NoMatch.
-Proof. auto. Qed.
+  Lemma pmp_match_addr_nomatch_conditions : forall paddr w lo hi,
+      hi <ᵘ lo ->
+      pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
+  Proof. intros; unfold pmp_match_addr; now bv_comp_bool. Qed.
 
-Lemma pmp_match_addr_nomatch_1 : forall paddr w rng,
-    pmp_match_addr paddr w rng = PMP_NoMatch ->
-    rng = None ∨
-      (∀ lo hi, rng = Some (lo , hi) ->
-                (hi <ᵘ lo
-                 ∨ (paddr + w)%bv <=ᵘ lo
-                 ∨ hi <=ᵘ paddr)).
-Proof.
-  intros paddr w [[lo hi]|]; auto.
-  intros H.
-  right; intros l h Heq; inversion Heq; subst.
-  unfold pmp_match_addr in H.
-  destruct (h <ᵘ? l) eqn:?; bv_comp; auto.
-  destruct ((paddr + w)%bv <=ᵘ? l) eqn:?; bv_comp; simpl in H; auto.
-  destruct (h <=ᵘ? paddr) eqn:?; bv_comp; auto.
-  destruct (l <=ᵘ? paddr) eqn:?; destruct ((paddr + w)%bv <=ᵘ? h) eqn:?;
-    inversion H.
-Qed.
+  Lemma pmp_match_addr_nomatch_conditions_1 : forall paddr w lo hi,
+      (paddr + w)%bv <=ᵘ lo ->
+      pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
+  Proof. intros; unfold pmp_match_addr; destruct (hi <ᵘ? lo); now bv_comp_bool. Qed.
 
-Lemma pmp_match_addr_nomatch_2 : forall paddr w rng,
-    (rng = None ∨
-      (∀ lo hi, rng = Some (lo , hi) ->
-                (hi <ᵘ lo
-                 ∨ (paddr + w)%bv <=ᵘ lo
-                 ∨ hi <=ᵘ paddr))) ->
-    pmp_match_addr paddr w rng = PMP_NoMatch.
-Proof.
-  intros paddr w [[lo hi]|]; auto.
-  intros [|H]; first discriminate.
-  specialize (H lo hi eq_refl).
-  destruct H as [|[|]].
-  now apply pmp_match_addr_nomatch_conditions.
-  now apply pmp_match_addr_nomatch_conditions_1.
-  now apply pmp_match_addr_nomatch_conditions_2.
-Qed.
+  Lemma pmp_match_addr_nomatch_conditions_2 : forall paddr w lo hi,
+      hi <=ᵘ paddr ->
+      pmp_match_addr paddr w (Some (lo , hi)) = PMP_NoMatch.
+  Proof.
+    intros.
+    unfold pmp_match_addr.
+    destruct (hi <ᵘ? lo) eqn:Ehilo; auto; bv_comp_bool.
+    now rewrite Bool.orb_true_r.
+  Qed.
 
-Lemma pmp_match_addr_nomatch : forall paddr w rng,
-    pmp_match_addr paddr w rng = PMP_NoMatch <->
-    rng = None ∨
-      (∀ lo hi, rng = Some (lo , hi) ->
-                (hi <ᵘ lo
-                 ∨ (paddr + w)%bv <=ᵘ lo
-                 ∨ hi <=ᵘ paddr)).
-Proof.
-  intros; split.
-  - apply pmp_match_addr_nomatch_1.
-  - apply pmp_match_addr_nomatch_2.
-Qed.
+  Lemma pmp_match_addr_none: forall paddr w,
+      pmp_match_addr paddr w None = PMP_NoMatch.
+  Proof. auto. Qed.
+
+  Lemma pmp_match_addr_nomatch_1 : forall paddr w rng,
+      pmp_match_addr paddr w rng = PMP_NoMatch ->
+      rng = None ∨
+        (∀ lo hi, rng = Some (lo , hi) ->
+                  (hi <ᵘ lo
+                   ∨ (paddr + w)%bv <=ᵘ lo
+                   ∨ hi <=ᵘ paddr)).
+  Proof.
+    intros paddr w [[lo hi]|]; auto.
+    intros H.
+    right; intros l h Heq; inversion Heq; subst.
+    unfold pmp_match_addr in H.
+    destruct (h <ᵘ? l) eqn:?; bv_comp; auto.
+    destruct ((paddr + w)%bv <=ᵘ? l) eqn:?; bv_comp; simpl in H; auto.
+    destruct (h <=ᵘ? paddr) eqn:?; bv_comp; auto.
+    destruct (l <=ᵘ? paddr) eqn:?; destruct ((paddr + w)%bv <=ᵘ? h) eqn:?;
+      inversion H.
+  Qed.
+
+  Lemma pmp_match_addr_nomatch_2 : forall paddr w rng,
+      (rng = None ∨
+         (∀ lo hi, rng = Some (lo , hi) ->
+                   (hi <ᵘ lo
+                    ∨ (paddr + w)%bv <=ᵘ lo
+                    ∨ hi <=ᵘ paddr))) ->
+      pmp_match_addr paddr w rng = PMP_NoMatch.
+  Proof.
+    intros paddr w [[lo hi]|]; auto.
+    intros [|H]; first discriminate.
+    specialize (H lo hi eq_refl).
+    destruct H as [|[|]].
+    now apply pmp_match_addr_nomatch_conditions.
+    now apply pmp_match_addr_nomatch_conditions_1.
+    now apply pmp_match_addr_nomatch_conditions_2.
+  Qed.
+
+  Lemma pmp_match_addr_nomatch : forall paddr w rng,
+      pmp_match_addr paddr w rng = PMP_NoMatch <->
+        rng = None ∨
+          (∀ lo hi, rng = Some (lo , hi) ->
+                    (hi <ᵘ lo
+                     ∨ (paddr + w)%bv <=ᵘ lo
+                     ∨ hi <=ᵘ paddr)).
+  Proof.
+    intros; split.
+    - apply pmp_match_addr_nomatch_1.
+    - apply pmp_match_addr_nomatch_2.
+  Qed.
+End PmpMatchAddr.
+
+Section PmpMatchEntry.
+  Lemma pmp_match_entry_PMP_Continue : ∀ a width m cfg lo hi,
+      pmp_match_entry a width m cfg lo hi = PMP_Continue ->
+      A cfg = OFF
+      ∨ (A cfg ≠ OFF ∧
+         (hi <ᵘ lo
+          ∨ (lo <=ᵘ hi ∧ (a + width)%bv <=ᵘ lo)
+          ∨ (lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ hi <=ᵘ a))).
+  Proof.
+    unfold pmp_match_entry; intros.
+    destruct (pmp_addr_range _ _ _) eqn:Hr.
+    - apply pmp_addr_range_Some in Hr as [?%addr_match_type_TOR_neq_OFF ->].
+      destruct (pmp_match_addr a width _) eqn:Hm;
+        try discriminate.
+      apply pmp_match_addr_nomatch in Hm.
+      right; split; auto.
+      destruct Hm as [|Hm]; first discriminate.
+      specialize (Hm lo hi eq_refl).
+      destruct Hm as [|[|]]; auto.
+      + destruct (hi <ᵘ? lo) eqn:?; bv_comp; auto.
+      + destruct (hi <ᵘ? lo) eqn:?;
+          destruct ((a + width)%bv <=ᵘ? lo) eqn:?;
+          bv_comp; auto.
+    - apply pmp_addr_range_None in Hr; auto.
+  Qed.
+
+  Lemma pmp_match_entry_PMP_Success : ∀ a width m cfg lo hi,
+      pmp_match_entry a width m cfg lo hi = PMP_Success ->
+      A cfg = TOR
+      ∧ lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ lo <=ᵘ a
+      ∧ a <ᵘ hi ∧ (a + width)%bv <=ᵘ hi.
+  Proof.
+    unfold pmp_match_entry; intros.
+    destruct (pmp_addr_range _ _ _) eqn:Hr;
+      last (simpl in H; discriminate).
+    apply pmp_addr_range_Some in Hr as (HA & ->).
+    destruct (pmp_match_addr _ _ _) eqn:Ha;
+      try discriminate.
+    now apply pmp_match_addr_match in Ha.
+  Qed.
+End PmpMatchEntry.

@@ -535,11 +535,11 @@ Module RiscvPmpModel2.
       unfold bv.ule, bv.ult in *.
       assert (Hb: bv.zero <ᵘ bytes).
       apply bv.ult_trans with (y := w); auto.
-      apply pmp_match_addr_match_conditions_1 in Hpmp as (Hlohi & Hlopw & Hlop & Hphi & Hpwhi); auto.
-      apply pmp_match_addr_match_conditions_2; auto.
+      apply pmp_match_addr_match in Hpmp as (Hlohi & Hlopw & Hlop & Hphi & Hpwhi); auto.
+      apply pmp_match_addr_match; auto.
+      repeat split; auto.
       unfold bv.ult, bv.ule in *.
-      rewrite ?bv.bin_add_small; auto.
-      lia.
+      rewrite ?bv.bin_add_small; lia.
       apply bv.ule_trans with (y := paddr + bytes); auto.
       unfold bv.ult, bv.ule in *.
       rewrite ?bv.bin_add_small; auto.
@@ -679,17 +679,25 @@ Module RiscvPmpModel2.
           * simpl in *.
             destruct (lo <=ᵘ? paddr);
               destruct (paddr + bv.of_nat (S bytes) <=ᵘ? hi); now auto.
-      - apply pmp_match_addr_match_conditions_1 in H as (Hlohi & Hlopw & Hlop & Hphi & Hpwhi).
-        apply pmp_match_addr_match_conditions_2; auto.
-
+      - apply pmp_match_addr_match in H as (Hlohi & Hlopw & Hlop & Hphi & Hpwhi).
+        apply pmp_match_addr_match; auto.
+        unfold bv.ule, bv.ult in *.
+        repeat split; try lia.
         now rewrite bv.of_nat_S bv.add_assoc in Hlopw.
-        eauto using bv.ule_add_r, bv_bin_one.
+        rewrite ?bv.bin_add_small ?bv_bin_one; try lia.
+        rewrite ?bv.bin_add_small ?bv_bin_one.
         rewrite bv.of_nat_S in Hpwhi.
-        rewrite bv.add_assoc in Hpwhi.
-        apply bv.add_ule_S_ult in Hpwhi; auto.
-        rewrite bv.bin_add_small bv_bin_one; last by lia.
-        rewrite Nat2N.inj_succ in Hrep.
+        rewrite ?bv.bin_add_small ?bv_bin_one in Hpwhi; try lia.
         rewrite bv.bin_of_nat_small; lia.
+        rewrite <- bv_bin_one.
+        apply N.le_lt_trans with (m := (bv.bin paddr + N.of_nat (S bytes))%N).
+        apply N.add_le_mono_l.
+        rewrite bv.bin_of_nat_small; try lia.
+        rewrite bv.bin_one; try lia.
+        apply xlenbits_pos.
+        auto.
+        rewrite bv.bin_of_nat_small; try lia.
+        lia.
         rewrite bv.of_nat_S in Hpwhi.
         now rewrite bv.add_assoc in Hpwhi.
     Qed.

@@ -491,63 +491,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       {| L := L cfg; A := A cfg; X := X cfg; W := W cfg; R := R cfg |} = cfg.
   Proof. now intros []. Qed.
 
-  Lemma pmp_addr_range_None : ∀ cfg hi lo,
-      pmp_addr_range cfg hi lo = None ->
-      A cfg = OFF.
-  Proof.
-    intros.
-    unfold pmp_addr_range in H.
-    destruct (A cfg); auto; discriminate.
-  Qed.
-
-  Lemma pmp_addr_range_Some : ∀ cfg hi lo p,
-      pmp_addr_range cfg hi lo = Some p ->
-      A cfg = TOR /\ p = (lo , hi).
-  Proof.
-    intros.
-    unfold pmp_addr_range in H.
-    destruct (A cfg); auto; now inversion H.
-  Qed.
-
-  Lemma pmp_match_entry_PMP_Continue : ∀ a width m cfg lo hi,
-      pmp_match_entry a width m cfg lo hi = PMP_Continue ->
-      A cfg = OFF
-      ∨ (A cfg ≠ OFF ∧
-         (hi <ᵘ lo
-          ∨ (lo <=ᵘ hi ∧ (a + width)%bv <=ᵘ lo)
-          ∨ (lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ hi <=ᵘ a))).
-  Proof.
-    unfold pmp_match_entry; intros.
-    destruct (pmp_addr_range _ _ _) eqn:Hr.
-    - apply pmp_addr_range_Some in Hr as [?%addr_match_type_TOR_neq_OFF ->].
-      destruct (pmp_match_addr a width _) eqn:Hm;
-        try discriminate.
-      apply pmp_match_addr_nomatch in Hm.
-      right; split; auto.
-      destruct Hm as [|Hm]; first discriminate.
-      specialize (Hm lo hi eq_refl).
-      destruct Hm as [|[|]]; auto.
-      + destruct (hi <ᵘ? lo) eqn:?; bv_comp; auto.
-      + destruct (hi <ᵘ? lo) eqn:?;
-          destruct ((a + width)%bv <=ᵘ? lo) eqn:?;
-          bv_comp; auto.
-    - apply pmp_addr_range_None in Hr; auto.
-  Qed.
-
-  Lemma pmp_match_entry_PMP_Success : ∀ a width m cfg lo hi,
-      pmp_match_entry a width m cfg lo hi = PMP_Success ->
-      A cfg = TOR
-      ∧ lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ lo <=ᵘ a ∧ a <ᵘ hi ∧ (a + width)%bv <=ᵘ hi.
-  Proof.
-    unfold pmp_match_entry; intros.
-    destruct (pmp_addr_range _ _ _) eqn:Hr;
-      last (simpl in H; discriminate).
-    apply pmp_addr_range_Some in Hr as (HA & ->).
-    destruct (pmp_match_addr _ _ _) eqn:Ha;
-      try discriminate.
-    now apply pmp_match_addr_match_conditions_1 in Ha.
-  Qed.
-
   Lemma pmp_check_inversion_fml_aux (n : nat) (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
     pmp_check_aux n a width lo entries p acc = true ->
     pmp_check_fml_prop_aux n a width lo entries p acc.
