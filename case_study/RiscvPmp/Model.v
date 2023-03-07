@@ -554,18 +554,17 @@ Module RiscvPmpModel2.
       pmp_match_addr paddr w rng = PMP_NoMatch.
     Proof.
       intros paddr [[lo hi]|] Hass Hle; last by simpl.
-      intros H; apply pmp_match_addr_nomatch_1 in H as [H|Hcond];
+      intros H; apply pmp_match_addr_nomatch in H as [H|Hcond];
         try discriminate.
-      apply pmp_match_addr_nomatch_2.
+      apply pmp_match_addr_nomatch.
       right; intros.
       inversion H.
       subst.
-      destruct (Hcond _ _ H) as [?|[(? & ?)|?]]; auto.
-      right; left; auto.
+      destruct (Hcond _ _ H) as [|[|]]; auto.
+      right; left.
+      apply bv.ule_trans with (y := paddr + bytes); auto.
       unfold bv.ule in *.
-      rewrite ?bv.bin_add_small; try lia.
-      rewrite ?bv.bin_add_small in H1; try lia.
-      repeat right; destruct H0 as (? & ? & ?); auto.
+      rewrite ?bv.bin_add_small; lia.
     Qed.
 
     Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :

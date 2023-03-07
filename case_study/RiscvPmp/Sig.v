@@ -522,10 +522,15 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     - apply pmp_addr_range_Some in Hr as [?%addr_match_type_TOR_neq_OFF ->].
       destruct (pmp_match_addr a width _) eqn:Hm;
         try discriminate.
-      apply pmp_match_addr_nomatch_1 in Hm.
+      apply pmp_match_addr_nomatch in Hm.
+      right; split; auto.
       destruct Hm as [|Hm]; first discriminate.
       specialize (Hm lo hi eq_refl).
       destruct Hm as [|[|]]; auto.
+      + destruct (hi <ᵘ? lo) eqn:?; bv_comp; auto.
+      + destruct (hi <ᵘ? lo) eqn:?;
+          destruct ((a + width)%bv <=ᵘ? lo) eqn:?;
+          bv_comp; auto.
     - apply pmp_addr_range_None in Hr; auto.
   Qed.
 

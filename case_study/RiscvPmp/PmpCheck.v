@@ -219,11 +219,11 @@ Proof. auto. Qed.
 
 Lemma pmp_match_addr_nomatch_1 : forall paddr w rng,
     pmp_match_addr paddr w rng = PMP_NoMatch ->
-    rng = None \/
+    rng = None ∨
       (∀ lo hi, rng = Some (lo , hi) ->
                 (hi <ᵘ lo
-                 ∨ (lo <=ᵘ hi ∧ (paddr + w)%bv <=ᵘ lo)
-                 ∨ (lo <=ᵘ hi ∧ lo <ᵘ (paddr + w)%bv ∧ hi <=ᵘ paddr))).
+                 ∨ (paddr + w)%bv <=ᵘ lo
+                 ∨ hi <=ᵘ paddr)).
 Proof.
   intros paddr w [[lo hi]|]; auto.
   intros H.
@@ -237,16 +237,31 @@ Proof.
 Qed.
 
 Lemma pmp_match_addr_nomatch_2 : forall paddr w rng,
-    (rng = None ∨ 
-       (forall lo hi, rng = Some (lo , hi) ->
-                 (hi <ᵘ lo ∨ (paddr + w)%bv <=ᵘ lo ∨ hi <=ᵘ paddr))) ->
+    (rng = None ∨
+      (∀ lo hi, rng = Some (lo , hi) ->
+                (hi <ᵘ lo
+                 ∨ (paddr + w)%bv <=ᵘ lo
+                 ∨ hi <=ᵘ paddr))) ->
     pmp_match_addr paddr w rng = PMP_NoMatch.
 Proof.
   intros paddr w [[lo hi]|]; auto.
-  intros [H|H].
-  inversion H.
-  destruct (H lo hi eq_refl) as [Hs|[Hs|Hs]]; revert Hs.
-  apply pmp_match_addr_nomatch_conditions.
-  apply pmp_match_addr_nomatch_conditions_1.
-  apply pmp_match_addr_nomatch_conditions_2.
+  intros [|H]; first discriminate.
+  specialize (H lo hi eq_refl).
+  destruct H as [|[|]].
+  now apply pmp_match_addr_nomatch_conditions.
+  now apply pmp_match_addr_nomatch_conditions_1.
+  now apply pmp_match_addr_nomatch_conditions_2.
+Qed.
+
+Lemma pmp_match_addr_nomatch : forall paddr w rng,
+    pmp_match_addr paddr w rng = PMP_NoMatch <->
+    rng = None ∨
+      (∀ lo hi, rng = Some (lo , hi) ->
+                (hi <ᵘ lo
+                 ∨ (paddr + w)%bv <=ᵘ lo
+                 ∨ hi <=ᵘ paddr)).
+Proof.
+  intros; split.
+  - apply pmp_match_addr_nomatch_1.
+  - apply pmp_match_addr_nomatch_2.
 Qed.
