@@ -172,6 +172,62 @@ Module Type TermsOn (Import TY : Types).
   Definition Term_rec Σ (P : forall σ, Term Σ σ -> Set) := @Term_rect _ P.
   Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := @Term_rect _ P.
 
+  (* We define some specialized view for certain types to make
+     recusion over terms easier. *)
+  Section TermView.
+
+    (* A view on list terms. *)
+    Inductive ListView {Σ σ} : Term Σ (ty.list σ) -> Type :=
+    | term_list_var {ς} {ςInΣ : (ς∷ty.list σ) ∈ Σ} :
+      ListView (term_var ς)
+    | term_list_val v :
+      ListView (term_val _ v)
+    | term_list_cons h {t} (lv : ListView t) :
+      ListView (term_binop bop.cons h t)
+    | term_list_append {t1 t2} (lv1 : ListView t1) (lv2 : ListView t2) :
+      ListView (term_binop bop.append t1 t2).
+    #[global] Arguments term_list_var {Σ σ} ς {ςInΣ}.
+    #[global] Arguments term_list_append {Σ σ} [t1 t2] lv1 lv2.
+
+    (* We map each type to a specialized view for that type. *)
+    Definition View {Σ} (σ : Ty) : Term Σ σ -> Type :=
+      match σ with
+      | ty.list τ => ListView
+      | _         => fun _ => unit
+      end.
+
+    Definition view_var {Σ ς σ} : forall ςInΣ, View (@term_var Σ ς σ ςInΣ) :=
+      match σ with
+       | ty.list σ => @term_list_var _ _ ς
+       | _         => fun _ => tt
+       end.
+
+    Definition view_val {Σ σ} : forall v, View (@term_val Σ σ v) :=
+      match σ with
+      | ty.list σ0 => term_list_val
+      | _          => fun _ => tt
+      end.
+
+    Definition view_binop {Σ σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) :
+      forall {t1 : Term Σ σ1} {t2 : Term Σ σ2},
+        View t1 -> View t2 -> View (term_binop op t1 t2) :=
+       match op with
+       | bop.cons   => fun t1 t2 _  v2 => term_list_cons t1 v2
+       | bop.append => term_list_append
+       | _ => fun _ _ _ _ => tt
+       end.
+
+    (* Construct a view for each term. *)
+    Fixpoint view {Σ σ} (t : Term Σ σ) {struct t} : View t :=
+      match t as t1 in (Term _ t0) return (View t1) with
+      | term_var ς          => view_var _
+      | term_val _ v        => view_val v
+      | term_binop op t1 t2 => view_binop op (view t1) (view t2)
+      | _                   => tt
+      end.
+
+  End TermView.
+
   Open Scope lazy_bool_scope.
 
   Equations(noeqns) Term_eqb {Σ} [σ : Ty] (t1 t2 : Term Σ σ) : bool :=
