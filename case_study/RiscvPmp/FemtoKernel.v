@@ -384,7 +384,7 @@ Import BlockVerificationDerived2.
     eapply finite.exists_dec.
     intros p2.
     unfold Pmp_access, Gen_Pmp_access.
-    destruct (pmp_check_aux (Z.to_nat NumPmpEntries) x (bv.of_nat 1) bv.zero ents p1 p2); [left|right]; easy.
+    destruct (pmp_check_aux x (bv.of_nat 1) bv.zero ents p1 p2); [left|right]; easy.
   Defined.
 
   Lemma liveAddr_filter_advAddr : filter

@@ -138,27 +138,26 @@ Section Implementation.
         pmp_get_RWX cfg p
     end.
 
-  Fixpoint pmp_check_rec (n : nat) (a width lo : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
-    match n, entries with
-    | S n, (cfg , hi) :: entries =>
+  Fixpoint pmp_check_rec (a width lo : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
+    match entries with
+    | (cfg , hi) :: entries =>
         match pmp_match_entry a width p cfg lo hi with
         | PMP_Success  => decide_access_pmp_perm acc (pmp_get_perms cfg p)
         | PMP_Fail     => false
-        | PMP_Continue => pmp_check_rec n a width hi entries p acc
+        | PMP_Continue => pmp_check_rec a width hi entries p acc
         end
-    | O, [] =>
+    | [] =>
         match p with
         | Machine => true
         | _       => false
         end
-    | _, _ => false
     end%list.
 
-  Definition pmp_check_aux (n : nat) (a width lo : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
-    pmp_check_rec n a width lo entries p acc.
+  Definition pmp_check_aux (a width lo : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
+    pmp_check_rec a width lo entries p acc.
 
   Definition pmp_check (a width : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
-    pmp_check_aux NumPmpEntries a width bv.zero entries p acc.
+    pmp_check_aux a width bv.zero entries p acc.
 End Implementation.
 
 Section AddrMatchType.
@@ -172,7 +171,7 @@ Section AddrMatchType.
 End AddrMatchType.
 
 Section PmpAddrRange.
-  Lemma pmp_addr_range_None : ∀ cfg hi lo,
+  Lemma pmp_addr_range_None_1 : ∀ cfg hi lo,
       pmp_addr_range cfg hi lo = None ->
       A cfg = OFF.
   Proof.
@@ -181,13 +180,45 @@ Section PmpAddrRange.
     destruct (A cfg); auto; discriminate.
   Qed.
 
-  Lemma pmp_addr_range_Some : ∀ cfg hi lo p,
+  Lemma pmp_addr_range_None_2 : ∀ cfg hi lo,
+      A cfg = OFF ->
+      pmp_addr_range cfg hi lo = None.
+  Proof. intros; unfold pmp_addr_range; now rewrite H. Qed.
+
+  Lemma pmp_addr_range_None : ∀ cfg hi lo,
+      pmp_addr_range cfg hi lo = None <->
+      A cfg = OFF.
+  Proof.
+    intros; split.
+    - apply pmp_addr_range_None_1.
+    - apply pmp_addr_range_None_2.
+  Qed.
+
+  Lemma pmp_addr_range_Some_1 : ∀ cfg hi lo p,
       pmp_addr_range cfg hi lo = Some p ->
       A cfg = TOR /\ p = (lo , hi).
   Proof.
     intros.
     unfold pmp_addr_range in H.
     destruct (A cfg); auto; now inversion H.
+  Qed.
+
+  Lemma pmp_addr_range_Some_2 : ∀ cfg hi lo p,
+      A cfg = TOR /\ p = (lo , hi) ->
+      pmp_addr_range cfg hi lo = Some p.
+  Proof.
+    intros ? ? ? ? [HA Hp].
+    unfold pmp_addr_range; subst.
+    now rewrite HA.
+  Qed.
+
+  Lemma pmp_addr_range_Some : ∀ cfg hi lo p,
+      pmp_addr_range cfg hi lo = Some p <->
+      A cfg = TOR /\ p = (lo , hi).
+  Proof.
+    intros; split.
+    - apply pmp_addr_range_Some_1.
+    - apply pmp_addr_range_Some_2.
   Qed.
 End PmpAddrRange.
 
@@ -329,7 +360,30 @@ Section PmpMatchEntry.
     - apply pmp_addr_range_None in Hr; auto.
   Qed.
 
-  Lemma pmp_match_entry_PMP_Success : ∀ a width m cfg lo hi,
+  Lemma pmp_match_entry_cfg_OFF_PMP_Continue : ∀ a width m cfg lo hi,
+      A cfg = OFF ->
+      pmp_match_entry a width m cfg lo hi = PMP_Continue.
+  Proof.
+    intros; unfold pmp_match_entry.
+    now rewrite (proj2 (pmp_addr_range_None _ _ _) H).
+  Qed.
+
+  Lemma pmp_match_entry_cfg_ON_PMP_Continue : ∀ a width m cfg lo hi,
+      (A cfg ≠ OFF ∧
+         (hi <ᵘ lo
+          ∨ (lo <=ᵘ hi ∧ (a + width)%bv <=ᵘ lo)
+          ∨ (lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ hi <=ᵘ a))) ->
+      pmp_match_entry a width m cfg lo hi = PMP_Continue.
+  Proof.
+    intros; unfold pmp_match_entry.
+    destruct H as [HA%addr_match_type_neq_off_cases H].
+    rewrite (proj2 (pmp_addr_range_Some cfg hi lo (lo , hi)) (conj HA eq_refl)).
+    cbn.
+    destruct H as [|[[]|[? []]]];
+      now bv_comp_bool.
+  Qed.
+
+  Lemma pmp_match_entry_PMP_Success_1 : ∀ a width m cfg lo hi,
       pmp_match_entry a width m cfg lo hi = PMP_Success ->
       A cfg = TOR
       ∧ lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ lo <=ᵘ a
@@ -342,5 +396,28 @@ Section PmpMatchEntry.
     destruct (pmp_match_addr _ _ _) eqn:Ha;
       try discriminate.
     now apply pmp_match_addr_match in Ha.
+  Qed.
+
+  Lemma pmp_match_entry_PMP_Success_2 : ∀ a width m cfg lo hi,
+      A cfg = TOR
+      ∧ lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ lo <=ᵘ a
+      ∧ a <ᵘ hi ∧ (a + width)%bv <=ᵘ hi ->
+      pmp_match_entry a width m cfg lo hi = PMP_Success.
+  Proof.
+    intros; unfold pmp_match_entry.
+    destruct H as (HA & H).
+    now rewrite (proj2 (pmp_addr_range_Some _ _ _ _) (conj HA eq_refl))
+                (proj2 (pmp_match_addr_match _ _ _ _) H).
+  Qed.
+
+  Lemma pmp_match_entry_PMP_Success : ∀ a width m cfg lo hi,
+      pmp_match_entry a width m cfg lo hi = PMP_Success <->
+      A cfg = TOR
+      ∧ lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ lo <=ᵘ a
+      ∧ a <ᵘ hi ∧ (a + width)%bv <=ᵘ hi.
+  Proof.
+    intros; split.
+    - apply pmp_match_entry_PMP_Success_1.
+    - apply pmp_match_entry_PMP_Success_2.
   Qed.
 End PmpMatchEntry.

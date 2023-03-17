@@ -175,6 +175,7 @@ Module Type TermsOn (Import TY : Types).
   (* We define some specialized view for certain types to make
      recusion over terms easier. *)
   Section TermView.
+    Local Set Elimination Schemes.
 
     (* A view on list terms. *)
     Inductive ListView {Σ σ} : Term Σ (ty.list σ) -> Type :=
