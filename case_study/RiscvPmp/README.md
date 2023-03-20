@@ -32,7 +32,7 @@ Inline function call expressions get translated into
 	tmp + off
 ```
 
-Currently ommitting alignment related checks and exceptions (bitvector support needed for this).
+Currently omitting alignment related checks and exceptions (bitvector support needed for this).
 -> OR simply check if address is divisible by 4?
 
 Ignoring instructions that rely on bitvector operations (like shift operations), this mostly affects the support for RTYPE- and ITYPE-instructions.
@@ -42,6 +42,6 @@ Ignoring instructions that rely on bitvector operations (like shift operations),
 This machine is based on a minimal model of the official RISC-V Sail model.
 
 The machine that this case study represents is based on the official RISC-V code, more specifically, (parts of) the following files:
-- [https://github.com/rems-project/sail-riscv/blob/master/model/riscv_insts_base.sail](Base Instructions)
-- [https://github.com/rems-project/sail-riscv/blob/master/model/riscv_pmp_regs.sail](PMP Configuration)
-- [https://github.com/rems-project/sail-riscv/blob/master/model/riscv_pmp_control.sail](PMP)
+- [Base Instructions](https://github.com/rems-project/sail-riscv/blob/master/model/riscv_insts_base.sail)
+- [PMP Configuration](https://github.com/rems-project/sail-riscv/blob/master/model/riscv_pmp_regs.sail)
+- [PMP](https://github.com/rems-project/sail-riscv/blob/master/model/riscv_pmp_control.sail)
