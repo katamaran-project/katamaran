@@ -674,6 +674,51 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
         discriminate.
   Qed.
 
+  Lemma pmp_check_fml_pure_aux_gen_pmp_access : forall {Σ} a width lo es p acc (ι : Valuation Σ),
+  instprop (simplify_pmpcheck_pure_list a width lo es p acc) ι
+    ↔ instprop (formula_user gen_pmp_access [a; width; lo; term_val (ty.list ty_pmpentry) es; p; acc]) ι.
+  Proof.
+    intros ? ? ? lo es.
+    revert lo.
+    induction es as [|[cfg0 addr0] es IHentries];
+      cbn; unfold Gen_Pmp_access.
+    - intros; cbn.
+      split; intros H.
+      + now rewrite <- H.
+      + destruct (inst p ι); auto; try discriminate.
+    - intros; cbn.
+      split; intros H.
+      destruct H as [([HA|(HA & ?)] & ?)|(? & ? & ? & ? & ? & ? & Hperms)].
+      + unfold pmp_match_entry, pmp_addr_range; rewrite HA.
+        simpl.
+        cbn in IHentries; unfold Gen_Pmp_access, pmp_check_aux in IHentries.
+        specialize (IHentries (term_val ty_xlenbits addr0) p acc ι).
+        now apply IHentries.
+      + apply addr_match_type_neq_off_cases in HA.
+        unfold pmp_match_entry, pmp_addr_range; rewrite HA.
+        cbn.
+        cbn in IHentries; unfold Gen_Pmp_access, pmp_check_aux in IHentries.
+        specialize (IHentries (term_val ty_xlenbits addr0) p acc ι).
+        destruct H as [|[(? & ?)|(? & ? & ?)]];
+          bv_comp_bool; simpl;
+          try now apply IHentries.
+      + apply Pmp_check_perms_Access_pmp_perm in Hperms.
+        rewrite cfg_record in Hperms.
+        unfold pmp_match_entry, pmp_addr_range.
+        apply addr_match_type_neq_off_cases in H; rewrite H.
+        cbn; bv_comp_bool; done.
+      + destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp;
+          try discriminate.
+        * apply pmp_match_entry_PMP_Success in Hpmp as (?%addr_match_type_TOR_neq_OFF & ? & ? & ? & ? & ?).
+          apply Pmp_check_perms_Access_pmp_perm in H.
+          rewrite cfg_record.
+          right; repeat split; auto.
+        * apply pmp_match_entry_PMP_Continue in Hpmp.
+          left; split; auto.
+          apply IHentries.
+          cbn; now unfold Gen_Pmp_access, pmp_check_aux.
+  Qed.
+
   Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (PathCondition Σ) :=
     match term_get_val a1 , term_get_val a2 with
     | Some a1 , Some a2 => if decide_sub_perm a1 a2 then Some ctx.nil else None
@@ -798,13 +843,11 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     unfold simplify_gen_pmp_access.
     lsolve; intros ι;
       try apply pmp_check_fml_term_aux_gen_pmp_access;
-      cbn;
-      unfold Gen_Pmp_access.
-    - destruct (pmp_check_aux _ _ _ _ _ _) eqn:?; lsolve.
-      (* TODO: lemma simplify_pure <-> pmp_check_aux needed *)
-    - admit.
-    - admit.
-  Admitted.
+      cbn.
+    - unfold Gen_Pmp_access; destruct (pmp_check_aux _ _ _ _ _ _) eqn:?; lsolve.
+    - apply pmp_check_fml_pure_aux_gen_pmp_access.
+    - apply pmp_check_fml_pure_aux_gen_pmp_access.
+  Qed.
 
   Lemma simplify_pmp_access_spec {Σ} (paddr width : Term Σ ty_xlenbits)
     (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege)
