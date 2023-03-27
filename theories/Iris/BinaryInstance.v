@@ -342,6 +342,43 @@ Section Soundness.
       now iApply "IH".
   Admitted.
 
+  Lemma semWp2_block {Γ τ Δ} (δΔ1 δΔ2 : CStore Δ) (s1 s2 : Stm (Γ ▻▻ Δ) τ) :
+    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+        semWp2 (δ1 ►► δΔ1) (δ2 ►► δΔ2) s1 s2 (fun v1 δ21 v2 δ22 => Q v1 (env.drop Δ δ21) v2 (env.drop Δ δ22)) -∗
+        semWp2 δ1 δ2 (stm_block δΔ1 s1) (stm_block δΔ2 s2) Q.
+  Proof.
+    iIntros (Q). iRevert (δΔ1 s1 δΔ2 s2).
+    iLöb as "IH". iIntros (δΔ1 s1 δΔ2 s2 δΓ1 δΓ2) "WPk".
+    rewrite (semWp2_unfold (stm_block δΔ1 s1)). cbn.
+    iIntros (γ1 γ2 μ1 μ2) "state_inv".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
+    - rewrite !semWp2_val. rewrite ?env.drop_cat.
+      do 3 iModIntro. iMod "Hclose" as "_".
+      iMod "WPk" as "(%v2 & -> & HQ)". iModIntro.
+      iExists _, _, _, _.
+      rewrite semWp2_val.
+      iSplitR; first by iPureIntro; constructor.
+      iFrame "state_inv". iModIntro.
+      iExists v2. now iSplitR.
+    - rewrite !semWp2_fail.
+      do 3 iModIntro. iMod "Hclose" as "_".
+      iModIntro.
+      (* see above: failure left should imply failure right? *)
+      admit.
+    - rewrite (semWp2_unfold k s2). rewrite (stm_val_stuck H).
+      iSpecialize ("WPk" with "state_inv").
+      iMod "Hclose" as "_". iMod "WPk".
+      iSpecialize ("WPk" $! _ _ _ _ H).
+      iMod "WPk". iModIntro. iModIntro. iModIntro.
+      iMod "WPk". iMod "WPk" as "(%s22 & %γ22 & %μ22 & %δ22 & %step2 & state_inv & WPk)". iModIntro.
+      destruct (env.catView δ22) as (δΓ22 & δΔ22).
+      iExists _, _, _, _.
+      iSplitR; first by iPureIntro; constructor.
+      iFrame.
+      by iApply "IH".
+  Admitted.
+
   Lemma semWp2_let {Γ τ x σ} (s1 s2 : Stm Γ σ) (k1 k2 : Stm (Γ ▻ x∷σ) τ)
     (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ) :
     ⊢ semWp2 δ1 δ2 s1 s2 (fun v1 δ12 v2 δ22 => semWp2 δ12.[x∷σ ↦ v1] δ22.[x∷σ ↦ v2] k1 k2 (fun v12 δ13 v22 δ23 => Q v12 (env.tail δ13) v22 (env.tail δ23)) ) -∗
@@ -360,9 +397,9 @@ Section Soundness.
     - iPureIntro; repeat constructor.
     - iFrame "Hstate".
       iApply semWp2_bind.
-      iApply semWp2_mono.
-      (* TODO: semWp2_block? *)
-  Admitted.
+      iApply (semWp2_mono with "Hs"). iIntros (v1 δ21 v2 δ22) "WPk".
+      now iApply (semWp2_block [env].[_∷_ ↦ v1]).
+  Qed.
 
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
