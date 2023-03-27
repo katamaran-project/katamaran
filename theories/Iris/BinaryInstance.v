@@ -113,14 +113,14 @@ Module Type IrisResources2
   Context `{sG : sailGS2 Σ}.
   #[export] Existing Instance sailGS2_invGS.
 
-  #[export] Program Instance sailGS2_irisGS2 {Γ τ} : irisGS2 (microsail_lang Γ τ) (microsail_lang Γ τ) Σ :=
+  #[export] Program Instance sailGS2_irisGS2 {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
     {|
       iris_invGS2 := sailGS2_invGS;
       state_interp2 σ1 σ2 κ := (regs_inv (srGS := sailGS2_sailRegGS_left) σ1.1 ∗ regs_inv (srGS := sailGS2_sailRegGS_right) σ2.1 ∗ @mem_inv2 _ (sailGS2_memGS) σ1.2 σ2.2)%I;
       num_laters_per_step2 := fun _ => 0
     |}.
   Next Obligation.
-    iIntros (Γ τ σ1 σ2 ns) "(Hreg1 & Hreg2 & Hmem)".
+    iIntros (Γ1 Γ2 τ σ1 σ2 ns) "(Hreg1 & Hreg2 & Hmem)".
     now iFrame.
   Qed.
 
@@ -185,18 +185,22 @@ Section Soundness.
 
   Existing Instance IB.sG.
 
+  Definition reg_pointsTo2 {τ} : 𝑹𝑬𝑮 τ → Val τ → Val τ → iProp Σ :=
+    fun reg v1 v2 =>
+    (@reg_pointsTo _ sailGS2_sailRegGS_left _ reg v1 ∗ @reg_pointsTo _ sailGS2_sailRegGS_right _ reg v2)%I.
+
   #[export] Program Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
-    {| lptsreg σ r v        := (@reg_pointsTo _ sailGS2_sailRegGS_left _ r v ∗ @reg_pointsTo _ sailGS2_sailRegGS_right _ r v)%I;
+    {| lptsreg σ r v        := reg_pointsTo2 r v v;
        luser p ts           := luser_inst2 sailGS2_sailRegGS_left sailGS2_sailRegGS_right sailGS2_memGS ts;
        lduplicate p ts Hdup := lduplicate_inst2 sailGS2_sailRegGS_left sailGS2_sailRegGS_right sailGS2_memGS ts Hdup
     |}.
 
-  Definition semWp2 {Γ τ} (δ1 δ2 : CStore Γ)
-             (s1 s2 : Stm Γ τ) (POST : Val τ -> CStore Γ -> Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
+  Definition semWp2 {Γ1 Γ2 τ} (δ1 : CStore Γ1) (δ2 : CStore Γ2)
+             (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) (POST : Val τ -> CStore Γ1 -> Val τ -> CStore Γ2 -> iProp Σ) : iProp Σ :=
            WP2 (MkConf s1 δ1) and (MkConf s2 δ2) @ MaybeStuck ; ⊤ {{ fun c1 c2 => POST (valconf_val c1) (valconf_store c1) (valconf_val c2) (valconf_store c2) }}%I.
 
-  Lemma semWp2_unfold [Γ τ] (s1 s2 : Stm Γ τ)
-    (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ) :
+  Lemma semWp2_unfold [Γ1 Γ2 τ] (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
+    (Q : Val τ → CStore Γ1 → Val τ → CStore Γ2 → iProp Σ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
     semWp2 δ1 δ2 s1 s2 Q ⊣⊢
       match stm_to_val s1 with
       | Some v1 => |={⊤}=> ∃ v2, ⌜ s2 = stm_val τ v2 ⌝ ∗ Q v1 δ1 v2 δ2
@@ -205,7 +209,7 @@ Section Soundness.
              regs_inv (srGS := sailGS2_sailRegGS_right) γ2 ∗
              mem_inv2 (mG := sailGS2_memGS) μ1 μ2
            ={⊤,∅}=∗
-              (∀ (s12 : Stm Γ τ) (δ12 : CStore Γ) (γ12 : RegStore) (μ12 : Memory),
+              (∀ (s12 : Stm Γ1 τ) (δ12 : CStore Γ1) (γ12 : RegStore) (μ12 : Memory),
                   ⌜⟨ γ1, μ1, δ1 , s1 ⟩ ---> ⟨ γ12, μ12, δ12, s12 ⟩⌝ ={∅}▷=∗
                      |={∅,⊤}=> ∃ s22 γ22 μ22 δ22,
                        ⌜⟨ γ2, μ2, δ2 , s2 ⟩ ---> ⟨ γ22, μ22, δ22, s22 ⟩⌝ ∗
@@ -260,7 +264,7 @@ Section Soundness.
     now iApply ("HQ" with "HQ1").
   Qed.
 
-  Lemma semWp2_val {Γ τ} (v1 : Val τ) e2 (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ) :
+  Lemma semWp2_val {Γ1 Γ2 τ} (v1 : Val τ) e2 (Q : Val τ → CStore Γ1 → Val τ → CStore Γ2 → iProp Σ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
     semWp2 δ1 δ2 (stm_val τ v1) e2 Q ⊣⊢ |={⊤}=> ∃ v2, ⌜ e2 = stm_val τ v2 ⌝ ∗ Q v1 δ1 v2 δ2.
   Proof.
     now rewrite semWp2_unfold.
@@ -272,7 +276,7 @@ Section Soundness.
          now iFrame "HΦ".
   Qed.
 
-  Lemma semWp2_fail {Γ τ s} Q (δ1 δ2 : CStore Γ) s2 :
+  Lemma semWp2_fail {Γ1 Γ2 τ s} Q (δ1 : CStore Γ1) (δ2 : CStore Γ2) s2 :
       semWp2 δ1 δ2 (stm_fail τ s) s2 Q ⊣⊢ True.
   Proof.
     apply bi.entails_anti_sym; [auto|].
@@ -342,9 +346,9 @@ Section Soundness.
       now iApply "IH".
   Admitted.
 
-  Lemma semWp2_block {Γ τ Δ} (δΔ1 δΔ2 : CStore Δ) (s1 s2 : Stm (Γ ▻▻ Δ) τ) :
-    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
-        semWp2 (δ1 ►► δΔ1) (δ2 ►► δΔ2) s1 s2 (fun v1 δ21 v2 δ22 => Q v1 (env.drop Δ δ21) v2 (env.drop Δ δ22)) -∗
+  Lemma semWp2_block {Γ1 Γ2 τ Δ1 Δ2} (δΔ1 : CStore Δ1) (δΔ2 : CStore Δ2) (s1 : Stm (Γ1 ▻▻ Δ1) τ) (s2 : Stm (Γ2 ▻▻ Δ2) τ) :
+    ⊢ ∀ (Q : Val τ → CStore Γ1 → Val τ → CStore Γ2 → iProp Σ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
+        semWp2 (δ1 ►► δΔ1) (δ2 ►► δΔ2) s1 s2 (fun v1 δ21 v2 δ22 => Q v1 (env.drop Δ1 δ21) v2 (env.drop Δ2 δ22)) -∗
         semWp2 δ1 δ2 (stm_block δΔ1 s1) (stm_block δΔ2 s2) Q.
   Proof.
     iIntros (Q). iRevert (δΔ1 s1 δΔ2 s2).
@@ -398,7 +402,7 @@ Section Soundness.
     - iFrame "Hstate".
       iApply semWp2_bind.
       iApply (semWp2_mono with "Hs"). iIntros (v1 δ21 v2 δ22) "WPk".
-      now iApply (semWp2_block [env].[_∷_ ↦ v1]).
+      now iApply (semWp2_block [env].[_∷_ ↦ v1] [env].[_∷_ ↦ v2]).
   Qed.
 
   Lemma semWp2_seq {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Stm Γ τ) :
@@ -414,6 +418,162 @@ Section Soundness.
     iSplitR; first by iPureIntro; constructor.
     by iApply semWp2_bind.
   Qed.
+
+  Lemma semWp2_assertk {Γ τ} (e11 e21 : Exp Γ ty.bool) (e12 e22 : Exp Γ ty.string) (k1 k2 : Stm Γ τ) :
+    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+        ⌜eval e11 δ1 = eval e21 δ2⌝ -∗
+        (⌜eval e11 δ1 = true⌝ → ⌜eval e21 δ2 = true⌝ → semWp2 δ1 δ2 k1 k2 Q) -∗
+                                                                              semWp2 δ1 δ2 (stm_assertk e11 e12 k1) (stm_assertk e21 e22 k2) Q.
+  Proof.
+    iIntros (Q δ1 δ2) "%Heq WPs". rewrite (semWp2_unfold (stm_assertk e11 e12 k1)). cbn.
+    iIntros (γ1 γ2 μ1 μ2) "state_inv".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
+    do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
+    iExists _, _, _, _.
+    iSplitR; first by iPureIntro; constructor.
+    iFrame "state_inv".
+    rewrite Heq.
+    destruct (eval e21 δ2).
+    - by iApply "WPs".
+    - by iApply semWp2_fail.
+  Qed.
+
+  Lemma semWp2_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
+    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+        (∃ v1 v2 : Val τ, reg_pointsTo2 reg v1 v2 ∗ (reg_pointsTo2 reg v1 v2 -∗ Q v1 δ1 v2 δ2)) -∗
+        semWp2 δ1 δ2 (stm_read_register reg) (stm_read_register reg) Q.
+  Proof.
+    iIntros (Q δ1 δ2) "(% & % & (Hreg1 & Hreg2) & HP)". rewrite semWp2_unfold. cbn.
+    iIntros (γ1 γ2 μ1 μ2) "(Hregs1 & Hregs2 & Hmem)".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro. iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
+    do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
+    iDestruct (@reg_valid with "Hregs1 Hreg1") as %->.
+    iDestruct (@reg_valid with "Hregs2 Hreg2") as %Heq2.
+    iSpecialize ("HP" with "[$Hreg1 $Hreg2]").
+    iExists _, _, _, _.
+    iSplitR; first by iPureIntro; constructor.
+    iFrame "Hregs1 Hregs2 Hmem". rewrite Heq2.
+    iApply semWp2_val.
+    iExists _; now iSplitR.
+  Qed.
+
+  Lemma semWp2_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) (e1 e2 : Exp Γ τ) :
+    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+        (∃ v1 v2 : Val τ, reg_pointsTo2 reg v1 v2 ∗ (reg_pointsTo2 reg (eval e1 δ1) (eval e2 δ2) -∗ Q (eval e1 δ1) δ1 (eval e2 δ2) δ2)) -∗
+        semWp2 δ1 δ2 (stm_write_register reg e1) (stm_write_register reg e2) Q.
+  Proof.
+    iIntros (Q δ1 δ2) "(% & % & (Hreg1 & Hreg2) & HP)". rewrite semWp2_unfold. cbn.
+    iIntros (γ1 γ2 μ1 μ2) "(Hregs1 & Hregs2 & Hmem)".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iMod (reg_update γ1 reg v1 (eval e1 δ1) with "Hregs1 Hreg1") as "[Hregs1 Hreg1]".
+    iMod (reg_update γ2 reg v2 (eval e2 δ2) with "Hregs2 Hreg2") as "[Hregs2 Hreg2]".
+    iModIntro. iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
+    do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
+    iSpecialize ("HP" with "[$Hreg1 $Hreg2]").
+    iExists _, _, _, _.
+    iSplitR; first by iPureIntro; constructor.
+    iFrame "Hregs1 Hregs2 Hmem".
+    iApply semWp2_val.
+    iModIntro. iExists _. now iSplitR.
+  Qed.
+
+  Lemma semWp2_assign {Γ τ x} (xInΓ : x∷τ ∈ Γ) (s1 s2 : Stm Γ τ) :
+    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+        semWp2 δ1 δ2 s1 s2 (λ v1 δ21 v2 δ22, Q v1 (δ21 ⟪ x ↦ v1 ⟫) v2 (δ22 ⟪ x ↦ v2 ⟫)) -∗
+        semWp2 δ1 δ2 (stm_assign x s1) (stm_assign x s2) Q.
+  Proof.
+    iIntros (Q δ1 δ2). iRevert (s1 s2 δ1 δ2). iLöb as "IH". iIntros (s1 s2 δ1 δ2) "WPs".
+    rewrite (semWp2_unfold (stm_assign x s1)). cbn.
+    iIntros (γ1 γ2 μ1 μ2) "state_inv".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
+    - rewrite !semWp2_val.
+      do 3 iModIntro. iMod "Hclose" as "_".
+      iMod "WPs" as "(%v2 & -> & HQ)". iModIntro.
+      iExists _, _, _, _.
+      rewrite semWp2_val.
+      iSplitR; first by iPureIntro; constructor.
+      iFrame "state_inv". iModIntro.
+      iExists v2. now iSplitR.
+    - rewrite !semWp2_fail.
+      admit.
+    - rewrite (semWp2_unfold s). rewrite (stm_val_stuck H).
+      iSpecialize ("WPs" with "state_inv").
+      iMod "Hclose" as "_". iMod "WPs".
+      iSpecialize ("WPs" $! _ _ _ _ H).
+      iMod "WPs". iModIntro. iModIntro. iModIntro.
+      iMod "WPs". iMod "WPs" as "(%s22 & %γ22 & %μ22 & %δ22 & %step & state_inv & wps)".
+      iModIntro.
+      iExists _, _, _, _.
+      iSplitR; first by iPureIntro; constructor.
+      iFrame.
+      by iApply "IH".
+  Admitted.
+
+  Lemma semWp2_pattern_match {Γ τ σ} (s1 s2 : Stm Γ σ) (pat : Pattern σ)
+    (rhs1 rhs2 : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
+    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+    semWp2 δ1 δ2 s1 s2
+      (fun vσ1 δ12 vσ2 δ22 =>
+         let (pc1,δpc1) := pattern_match_val pat vσ1 in
+         let (pc2,δpc2) := pattern_match_val pat vσ2 in
+         semWp2 (δ12 ►► δpc1) (δ22 ►► δpc2) (rhs1 pc1) (rhs2 pc2)
+           (fun vτ1 δ21 vτ2 δ22 => Q vτ1 (env.drop (PatternCaseCtx pc1) δ21) vτ2 (env.drop (PatternCaseCtx pc2) δ22))
+           ) -∗
+    semWp2 δ1 δ2 (stm_pattern_match s1 pat rhs1) (stm_pattern_match s2 pat rhs2) Q.
+  Proof.
+    iIntros (Q δΓ1 δΓ2) "WPs". rewrite (semWp2_unfold (stm_pattern_match s1 pat rhs1)). cbn.
+    iIntros (γ1 γ2 μ1 μ2) "state_inv".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
+    do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
+    iExists _, _, _, _.
+    iSplitR; first by iPureIntro; constructor.
+    iFrame "state_inv".
+    iApply semWp2_bind. iApply (semWp2_mono with "WPs"). iIntros (v1 δ21 v2 δ22) "WPrhs".
+    destruct pattern_match_val as [pc1 δpc1].
+    destruct pattern_match_val as [pc2 δpc2]. by iApply (semWp2_block δpc1 δpc2).
+  Qed.
+
+  (* Lemma semWP_foreign {Γ Δ τ} {f : 𝑭𝑿 Δ τ} {es : NamedEnv (Exp Γ) Δ} {Q δ} : *)
+  (*   ⊢ (∀ γ μ, *)
+  (*         (regs_inv γ ∗ mem_inv μ) *)
+  (*         ={⊤,∅}=∗ *)
+  (*     (∀ res γ' μ' , *)
+  (*       ⌜ ForeignCall f (evals es δ) res γ γ' μ μ' ⌝ *)
+  (*        ={∅}▷=∗ *)
+  (*        |={∅,⊤}=> (regs_inv γ' ∗ mem_inv μ') ∗ *)
+  (*                   semWP (match res with inr v => stm_val _ v *)
+  (*                                    | inl s => stm_fail _ s *)
+  (*                          end) Q δ)) -∗ *)
+  (*     semWP (stm_foreign f es) Q δ. *)
+  (* Proof. *)
+  (*   iIntros "H". rewrite semWP_unfold. cbn. iIntros (γ1 μ1) "state_inv". *)
+  (*   iMod ("H" $! γ1 μ1 with "[$]") as "H". iModIntro. *)
+  (*   iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn. by iApply "H". *)
+  (* Qed. *)
+
+  (* Lemma semWP_debugk {Γ τ} (s : Stm Γ τ) : *)
+  (*   ⊢ ∀ Q δ, semWP s Q δ -∗ semWP (stm_debugk s) Q δ. *)
+  (* Proof. *)
+  (*   iIntros (Q δ) "WPs". rewrite (semWP_unfold (stm_debugk s)). cbn. *)
+  (*   iIntros (γ1 μ1) "state_inv". *)
+  (*   iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro. *)
+  (*   iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn. *)
+  (*   do 3 iModIntro. iMod "Hclose" as "_". iModIntro. now iFrame "state_inv". *)
+  (* Qed. *)
+
+  (* Lemma semWP_lemmak {Γ τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (s : Stm Γ τ) : *)
+  (*   ⊢ ∀ Q δ, semWP s Q δ -∗ semWP (stm_lemmak l es s) Q δ. *)
+  (* Proof. *)
+  (*   iIntros (Q δ) "WPs". rewrite (semWP_unfold (stm_lemmak l es s)). cbn. *)
+  (*   iIntros (γ1 μ1) "state_inv". *)
+  (*   iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro. *)
+  (*   iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn. *)
+  (*   do 3 iModIntro. iMod "Hclose" as "_". iModIntro. now iFrame "state_inv". *)
+  (* Qed. *)
 
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
@@ -553,12 +713,14 @@ Section Soundness.
     ⊢ (⌜ eval e1 δ = true ⌝ → semTriple δ P k Q) -∗
       semTriple δ P (stm_assertk e1 e2 k) Q.
   Proof.
-  Admitted.
-  (*   iIntros "tripk P". *)
-  (*   iApply semWP_assertk. *)
-  (*   iIntros (->). *)
-  (*   by iApply "tripk". *)
-  (* Qed. *)
+    iIntros "tripk P".
+    iApply semWp2_assertk; first easy.
+    iIntros (-> _).
+    iApply (semWp2_mono with "[tripk P]").
+    - by iApply "tripk".
+    - iIntros (v1 δ1 v2 δ2) "(-> & -> & HQ)".
+      now repeat iSplitR.
+  Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
         (τ : Ty) (s : Val ty.string) :
