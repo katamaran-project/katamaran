@@ -401,6 +401,20 @@ Section Soundness.
       now iApply (semWp2_block [env].[_∷_ ↦ v1]).
   Qed.
 
+  Lemma semWp2_seq {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Stm Γ τ) :
+    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+        semWp2 δ1 δ2 s1 s2 (fun v1 δ21 v2 δ22 => semWp2 δ21 δ22 k1 k2 Q) -∗ semWp2 δ1 δ2 (s1;;k1) (s2;;k2) Q.
+  Proof.
+    iIntros (Q δ1 δ2) "WPs". rewrite (semWp2_unfold (stm_seq s1 k1)). cbn.
+    iIntros (γ1 γ2 μ1 μ2) "state_inv".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
+    do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
+    iExists _, _, _, _. iFrame "state_inv".
+    iSplitR; first by iPureIntro; constructor.
+    by iApply semWp2_bind.
+  Qed.
+
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
     PRE -∗
@@ -511,10 +525,12 @@ Section Soundness.
         ⊢ (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env.drop Δ δ'')) -∗
                    semTriple δ P (stm_block δΔ k) R).
   Proof.
-  (*   iIntros "tripk P". iPoseProof ("tripk" with "P") as "wpk". *)
-  (*   by iApply semWP_block. *)
-  (* Qed. *)
-  Admitted.
+    iIntros "tripk P". iPoseProof ("tripk" with "P") as "wpk".
+    iApply semWp2_block.
+    iApply (semWp2_mono with "wpk").
+    iIntros (v1 δ1 v2 δ2) "(-> & -> & HR)".
+    now repeat iSplitR.
+  Qed.
 
   Lemma iris_rule_stm_seq {Γ} (δ : CStore Γ)
         (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
@@ -523,13 +539,13 @@ Section Soundness.
                  (∀ δ', semTriple δ' (Q δ') s2 R) -∗
                  semTriple δ P (s1 ;; s2) R).
   Proof.
-  Admitted.
-  (*   iIntros "trips1 trips2 P". *)
-  (*   iSpecialize ("trips1" with "P"). *)
-  (*   iApply semWP_seq. *)
-  (*   iApply (semWP_mono with "[$]"). *)
-  (*   by iFrame. *)
-  (* Qed. *)
+    iIntros "trips1 trips2 P".
+    iSpecialize ("trips1" with "P").
+    iApply semWp2_seq.
+    iApply (semWp2_mono with "[$]").
+    iIntros (v1 δ1 v2 δ2) "(-> & -> & HQ)".
+    by iApply "trips2".
+  Qed.
 
   Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
         (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
