@@ -113,14 +113,17 @@ Module Type IrisResources2
   Context `{sG : sailGS2 Σ}.
   #[export] Existing Instance sailGS2_invGS.
 
+  Definition regs_inv2 γ1 γ2 := (regs_inv (srGS := sailGS2_sailRegGS_left) γ1 ∗ regs_inv (srGS := sailGS2_sailRegGS_right) γ2)%I.
+  Definition mem_inv2_sail μ1 μ2 := @mem_inv2 _ (sailGS2_memGS) μ1 μ2.
+
   #[export] Program Instance sailGS2_irisGS2 {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
     {|
       iris_invGS2 := sailGS2_invGS;
-      state_interp2 σ1 σ2 κ := (regs_inv (srGS := sailGS2_sailRegGS_left) σ1.1 ∗ regs_inv (srGS := sailGS2_sailRegGS_right) σ2.1 ∗ @mem_inv2 _ (sailGS2_memGS) σ1.2 σ2.2)%I;
+      state_interp2 σ1 σ2 κ := (regs_inv2 σ1.1 σ2.1 ∗ mem_inv2_sail σ1.2 σ2.2)%I;
       num_laters_per_step2 := fun _ => 0
     |}.
   Next Obligation.
-    iIntros (Γ1 Γ2 τ σ1 σ2 ns) "(Hreg1 & Hreg2 & Hmem)".
+    iIntros (Γ1 Γ2 τ σ1 σ2 ns) "((Hreg1 & Hreg2) & Hmem)".
     now iFrame.
   Qed.
 
@@ -205,17 +208,13 @@ Section Soundness.
       match stm_to_val s1 with
       | Some v1 => |={⊤}=> ∃ v2, ⌜ s2 = stm_val τ v2 ⌝ ∗ Q v1 δ1 v2 δ2
       | None   => ∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
-          (regs_inv (srGS := sailGS2_sailRegGS_left) γ1 ∗
-             regs_inv (srGS := sailGS2_sailRegGS_right) γ2 ∗
-             mem_inv2 (mG := sailGS2_memGS) μ1 μ2
+          (regs_inv2 γ1 γ2 ∗ mem_inv2_sail μ1 μ2
            ={⊤,∅}=∗
               (∀ (s12 : Stm Γ1 τ) (δ12 : CStore Γ1) (γ12 : RegStore) (μ12 : Memory),
                   ⌜⟨ γ1, μ1, δ1 , s1 ⟩ ---> ⟨ γ12, μ12, δ12, s12 ⟩⌝ ={∅}▷=∗
                      |={∅,⊤}=> ∃ s22 γ22 μ22 δ22,
                        ⌜⟨ γ2, μ2, δ2 , s2 ⟩ ---> ⟨ γ22, μ22, δ22, s22 ⟩⌝ ∗
-                      (regs_inv (srGS := sailGS2_sailRegGS_left) γ12 ∗
-                         regs_inv (srGS := sailGS2_sailRegGS_right) γ22 ∗
-                         mem_inv2 (mG := sailGS2_memGS) μ12 μ22) ∗
+                      (regs_inv2 γ12 γ22 ∗ mem_inv2_sail μ12 μ22) ∗
                                  semWp2 δ12 δ22 s12 s22 Q))
       end.
   Proof.
@@ -230,18 +229,18 @@ Section Soundness.
         iExists (MkValConf _ _ _); now iSplitR.
     }
     - iSplit.
-      + iIntros "H" (γ1 γ2 μ1 μ2) "(Hγ1 & Hγ2 & Hmem)".
-        iMod ("H" $! (γ1 , μ1)  (γ2 , μ2) 0 []%list with "[$Hγ1 $Hγ2 $Hmem]") as "(_ & H)".
+      + iIntros "H" (γ1 γ2 μ1 μ2) "(Hγ & Hmem)".
+        iMod ("H" $! (γ1 , μ1)  (γ2 , μ2) 0 []%list with "[$Hγ $Hmem]") as "(_ & H)".
         iModIntro.
         iIntros (s12 δ12 γ12 μ12 Hstep) "".
         iMod ("H" $! (MkConf s12 δ12) (γ12 , μ12) (mk_prim_step (MkConf s1 δ1) Hstep)) as "H".
         do 2 iModIntro.
         iMod "H" as "H". iModIntro.
-        iMod "H" as "(%c22 & %σ22 & %κ2 & %Hstep2 & (Hγ12 & Hγ22 & Hmem) & Hcont)". iModIntro.
+        iMod "H" as "(%c22 & %σ22 & %κ2 & %Hstep2 & (Hγ2 & Hmem) & Hcont)". iModIntro.
         inversion Hstep2; subst; cbn in *.
         iExists _, _, _, _; now iFrame.
-      + iIntros "H" ([γ1 μ1] [γ2 μ2] _ κ1) "(Hγ1 & Hγ2 & Hmem)".
-        iMod ("H" with "[$Hγ1 $Hγ2 $Hmem]") as "H".
+      + iIntros "H" ([γ1 μ1] [γ2 μ2] _ κ1) "(Hγ & Hmem)".
+        iMod ("H" with "[$Hγ $Hmem]") as "H".
         iModIntro. iSplitR; first easy.
         iIntros ([s12 δ12] [γ12 μ12] Hstep) "".
         inversion Hstep; subst.
@@ -249,7 +248,7 @@ Section Soundness.
         iMod ("H" $! s12 δ12 γ12 μ12 H2) as "H".
         do 2 iModIntro.
         iMod "H" as "H". iModIntro.
-        iMod "H" as "(%s22 & %γ22 & %μ22 & %δ22 & %Hstep2 & (Hγ12 & Hγ22 & Hmem) & Hcont)".
+        iMod "H" as "(%s22 & %γ22 & %μ22 & %δ22 & %Hstep2 & (Hγ2 & Hmem) & Hcont)".
         iModIntro.
         iExists (MkConf _ _), (_ , _), []%list; now iFrame.
   Qed.
@@ -445,7 +444,7 @@ Section Soundness.
         semWp2 δ1 δ2 (stm_read_register reg) (stm_read_register reg) Q.
   Proof.
     iIntros (Q δ1 δ2) "(% & % & (Hreg1 & Hreg2) & HP)". rewrite semWp2_unfold. cbn.
-    iIntros (γ1 γ2 μ1 μ2) "(Hregs1 & Hregs2 & Hmem)".
+    iIntros (γ1 γ2 μ1 μ2) "((Hregs1 & Hregs2) & Hmem)".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
     do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
@@ -465,7 +464,7 @@ Section Soundness.
         semWp2 δ1 δ2 (stm_write_register reg e1) (stm_write_register reg e2) Q.
   Proof.
     iIntros (Q δ1 δ2) "(% & % & (Hreg1 & Hreg2) & HP)". rewrite semWp2_unfold. cbn.
-    iIntros (γ1 γ2 μ1 μ2) "(Hregs1 & Hregs2 & Hmem)".
+    iIntros (γ1 γ2 μ1 μ2) "((Hregs1 & Hregs2) & Hmem)".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iMod (reg_update γ1 reg v1 (eval e1 δ1) with "Hregs1 Hreg1") as "[Hregs1 Hreg1]".
     iMod (reg_update γ2 reg v2 (eval e2 δ2) with "Hregs2 Hreg2") as "[Hregs2 Hreg2]".
