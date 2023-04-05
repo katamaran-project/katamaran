@@ -34,7 +34,7 @@ Mappings of logic variables to values are valuations ([`Notation Valuation`](the
 ## Programs and specifications
 The framework uses modules and module functors, i.e. modules parameterized by other modules.
 To instantiate the library, the user has to define his own modules of certain signatures.
-For some of these modules a default implementation is available, in case the use does not want to define custom functionality, e.g. custom datatypes etc.
+For some of these modules a default implementation is available, in case the user does not want to define custom functionality, e.g. custom datatypes etc.
 We describe these user-provided modules on a high level and give pointers to the codebase where the signatures of the modules can be found with more detailed documentation for each one.
 
 - The *base module* ([`Module Type Base`](theories/Base.v)) consists of the definitions of user-specified types, i.e. unions, records and enums, for the development, and the names and types of registers of the machine.

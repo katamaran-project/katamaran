@@ -38,7 +38,7 @@ Local Set Implicit Arguments.
 Module Type RegStoreKit (Import B : Base).
 
   (* We choose to make [RegStore] a parameter so the users of the module would be able to
-     instantiate it with their own data structure and [read_regsiter]/[write_register]
+     instantiate it with their own data structure and [read_register]/[write_register]
      functions *)
   Parameter RegStore : Type.
   Parameter read_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ), Val σ.
