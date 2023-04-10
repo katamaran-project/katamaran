@@ -44,15 +44,16 @@ Definition wp_pre2 `{!irisGS2 Λ1 Λ2 Σ} (s : stuckness)
     coPset -d> expr Λ1 -d> expr Λ2 -d> (val Λ1 -d> val Λ2 -d> iPropO Σ) -d> iPropO Σ := λ E e11 e21 Φ,
   match to_val e11 with
   | Some v1 => |={E}=> ∃ v2, ⌜ e21 = of_val v2 ⌝ ∗ Φ v1 v2
-  | None => ∀ σ11 σ21 ns κ1,
-      state_interp2 σ11 σ21 ns ={E,∅}=∗
+  | None =>
+      (|={E}=> ∀ σ11 σ21, ⌜stuck e11 σ11 -> stuck e21 σ21 ⌝) ∧
+      (∀ σ11 σ21 ns κ1, state_interp2 σ11 σ21 ns ={E,∅}=∗
        ⌜if s is NotStuck then reducible e11 σ11 else True⌝ ∗
-       ∀ e12 σ12, ⌜prim_step e11 σ11 κ1 e12 σ12 []⌝
+       (∀ e12 σ12, ⌜prim_step e11 σ11 κ1 e12 σ12 []⌝
          ={∅}▷=∗^(S $ num_laters_per_step2 ns) |={∅,E}=>
        ∃ e22 σ22 κ2,
          ⌜ prim_step e21 σ21 κ2 e22 σ22 [] ⌝ ∗
          state_interp2 σ12 σ22 (S ns) ∗
-         wp E e12 e22 Φ
+         wp E e12 e22 Φ))
   end%I.
 
 Local Instance wp_pre2_contractive `{!irisGS2 Λ1 Λ2 Σ} s : Contractive (wp_pre2 s).
@@ -105,7 +106,7 @@ Proof.
   (* FIXME : simplify this proof once we have a good definition and a
      proper instance for step_fupdN. *)
   induction num_laters_per_step2 as [|k IHk]; simpl; last by rewrite IHk.
-  do 7 (f_contractive || f_equiv).
+  do 10 (f_contractive || f_equiv).
   rewrite IH; [done|lia|]. intros v. eapply dist_S, HΦ.
 Qed.
 Global Instance wp2_proper s E eA eB :
@@ -122,7 +123,7 @@ Proof.
   (* FIXME : simplify this proof once we have a good definition and a
      proper instance for step_fupdN. *)
   induction num_laters_per_step2 as [|k IHk]; simpl; last by rewrite IHk.
-  by do 12 f_equiv.
+  do 13 (f_contractive || f_equiv).
 Qed.
 
 Lemma wp2_value_fupd' s E Φ vA vB : WP2 (of_val vA) and (of_val vB) @ s ; E {{ Φ }} ⊣⊢ |={E}=> Φ vA vB.
@@ -160,10 +161,15 @@ Proof.
     iMod ("HΦ" with "H") as "HΨ".
     iModIntro. iExists v2. now iSplitR.
   }
+  iSplit.
+  { iDestruct "H" as "[Hstuck _]".
+    now iApply (fupd_mask_mono E1). }
+  iDestruct "H" as "[_ H]".
   iIntros (σ11 σ21 ns κ1) "Hσ".
-  iMod (fupd_mask_subseteq E1) as "Hclose"; first done.
-  iMod ("H" with "[$]") as "[% H]".
-  iModIntro. iSplit; [by destruct s1, s2|]. iIntros (e12 σ12 Hstep).
+  iMod (fupd_mask_subseteq E1 HE) as "Hclose".
+  iMod ("H" with "Hσ") as "[%Hred H]".
+  iModIntro. iSplit; [by destruct s1, s2|].
+  iIntros (e12 σ12 Hstep).
   iMod ("H" with "[//]") as "H". iIntros "!> !>".  iMod "H". iModIntro.
   iApply (step_fupdN_wand with "[H]"); first by iApply "H".
   iIntros ">(%e22 & %σ22 & %κ2 & %Hstep2 & Hstate & H)".
@@ -171,7 +177,7 @@ Proof.
   iModIntro.
   iExists e22, σ22, κ2.
   iSplitR; first done.
-  iFrame.
+  iFrame "Hstate".
   iApply ("IH" with "[//] H HΦ").
 Qed.
 
@@ -179,8 +185,14 @@ Lemma fupd_wp2 s E eA eB Φ : (|={E}=> wp2 s E eA eB Φ) ⊢ wp2 s E eA eB Φ.
 Proof.
   rewrite wp2_unfold /wp_pre2. iIntros "H". destruct (to_val eA) as [v|] eqn:?.
   { by iMod "H". }
-  iIntros (σ11 σ21 ns κ1) "Hσ1". iMod "H". by iApply "H".
+  iSplit.
+  - now iMod "H" as "[H _]".
+  - iIntros (σ11 σ21 ns κ1) "Hstate".
+    iMod "H" as "[ _ H ]".
+    iMod ("H" $! σ11 σ21 ns κ1 with "Hstate") as "[ %Hred H ]".
+    iModIntro. now iSplitR.
 Qed.
+
 Lemma wp2_fupd s E eA eB Φ : wp2 s E eA eB (fun vA vB => |={E}=> Φ vA vB) ⊢ wp2 s E eA eB Φ.
 Proof. iIntros "H". iApply (wp2_strong_mono s s E with "H"); auto. Qed.
 
@@ -241,6 +253,10 @@ Proof. iIntros "H". iApply (wp2_strong_mono s s E with "H"); auto. Qed.
 (*     auto with lia. *)
 (* Qed. *)
 
+Lemma stuck_fill_inv `{!@LanguageCtx Λ K} e σ :
+  to_val e = None -> stuck (K e) σ → stuck e σ.
+Proof. rewrite /stuck. intros ? [? ?]. eauto using irreducible_fill_inv. Qed.
+
 Lemma wp_bind K1 K2 `{!LanguageCtx K1} `{!LanguageCtx K2} s E e1 e2 Φ :
   WP2 e1 and e2 @ s ; E {{| v1 v2 , WP2 (K1 (of_val v1)) and (K2 (of_val v2)) @ s ; E {{ Φ }} }} ⊢ WP2 (K1 e1) and (K2 e2) @ s ; E {{ Φ }}.
 Proof.
@@ -251,8 +267,16 @@ Proof.
     now iMod "H" as "[%v2 (-> & H)]".
   }
   rewrite wp2_unfold /wp_pre2 fill_not_val /=; [|done].
-  iIntros (σ11 σ21 ns κ1) "Hσ". iMod ("H" with "[$]") as "[% H]".
-  iModIntro; iSplit.
+  iSplit.
+  { iDestruct "H" as "[>H _]". iModIntro.
+    iIntros (σ11 σ21 Hstuck).
+    iDestruct ("H" $! σ11 σ21) as "%Hstuck12".
+    iPureIntro. now apply stuck_fill, Hstuck12, stuck_fill_inv.
+  }
+  iIntros (σ11 σ21 ns κ1) "Hσ".
+  iDestruct "H" as "[_ H]".
+  iMod ("H" with "Hσ") as "[%Hred H]".
+  iModIntro. iSplitR.
   { destruct s; last by trivial. iPureIntro; now apply reducible_fill. }
   iIntros (e12 σ12 Hstep).
   destruct (fill_step_inv e1 σ11 κ1 e12 σ12 []) as (e2'&->&?); auto.

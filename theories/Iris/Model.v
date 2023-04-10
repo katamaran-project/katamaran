@@ -151,6 +151,16 @@ Module Type IrisPrelims
       ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> stm_to_val s1 = None.
     Proof. now destruct 1. Qed.
 
+    Definition stm_to_fail {Γ τ} (s : Stm Γ τ) : option string :=
+      match s with
+      | stm_fail _ m => Some m
+      | _           => None
+      end.
+
+    Lemma stm_fail_stuck {Γ τ γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ τ} :
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> stm_to_fail s1 = None.
+    Proof. now destruct 1. Qed.
+
     Definition to_val {Γ} {τ} (t : Conf Γ τ) : option (ValConf Γ τ) :=
       match t with
       | MkConf s δ => option.map (fun v => MkValConf _ v δ) (stm_to_val s)
@@ -188,6 +198,27 @@ Module Type IrisPrelims
     #[export] Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf _ v δ).
       intros; eapply of_to_val; by cbn.
     Defined.
+
+    Lemma stuck_fail {Γ} {τ} (c : Conf Γ τ) state :
+      stuck c state <-> exists m, stm_to_fail (conf_stm c) = Some m.
+    Proof.
+      destruct c as [s δ].
+      destruct state as [γ μ].
+      split.
+      - intros [Hnv Hirred].
+        destruct (SEM.progress s) as [fs|red].
+        + destruct s; inversion fs; inversion Hnv.
+          now exists s.
+        + exfalso.
+          destruct (red γ μ δ) as (γ' & μ' & δ' & s' & step).
+          eapply Hirred. constructor. done.
+     - cbn. intros [m eq].
+       destruct s; inversion eq; subst.
+       split.
+       + now cbn.
+       + intros obs e' σ' efs [γ1 γ2 μ1 μ2 δ2 s2 step].
+         now inversion step.
+    Qed.
 
   End Language.
 
