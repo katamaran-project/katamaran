@@ -1001,6 +1001,7 @@ Section Soundness.
     stm_to_fail s = None ->
     (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
                             (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
+                              (forall {s2 : Stm Γ σ} {γ2 μ2} {δ2 : CStore Γ}, ⟨ γ2, μ2, δ2, s2 ⟩ ---> ⟨ γ2, μ2, δ2, s' ⟩) /\
                             ((exists v, s' = stm_val _ v) \/ (exists msg, s' = stm_fail _ msg))) ->
     (∀ v, P ={⊤}=∗ Q v δ) -∗
                  semTriple δ P s Q.
@@ -1010,15 +1011,22 @@ Section Soundness.
     iIntros (γ1 γ2 μ1 μ2) "state_inv".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
     iIntros (s12 δ12 γ12 μ12) "%".
-    destruct (Hnoop _ _ _ _ _ _ H) as (-> & -> & -> & [[v ->]|[msg ->]]).
+    destruct (Hnoop _ _ _ _ _ _ H) as (-> & -> & -> & Hsteps & [[v ->]|[msg ->]]).
     - do 3 iModIntro. iMod "Hclose" as "_".
       iFrame. iModIntro.
       iExists _, _, _, _.
-    (*   iSplitR; first eassumption. *)
-    (*   iApply semWP_val. now iApply "HPQ". *)
-    (* - do 3 iModIntro. iMod "Hclose" as "_". *)
-    (*   iFrame. now iApply semWP_fail. *)
-  Admitted.
+      iSplitR.
+      { iPureIntro. apply Hsteps. }
+      iFrame "state_inv".
+      rewrite semWp2_val.
+      iExists v.
+      repeat (iSplitR; first by iPureIntro).
+      now iApply "HPQ".
+    - do 3 iModIntro. iMod "Hclose" as "_".
+      iExists _, _, _, _.
+      iSplitR; first by iPureIntro.
+      iFrame. now iApply semWp2_fail_2.
+  Qed.
 
   Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
     match contract with
