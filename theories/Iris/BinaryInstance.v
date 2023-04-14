@@ -116,21 +116,24 @@ Module Type IrisResources2
                        sailGS2_memGS : memGS2 Σ;
                      }.
 
-  Context `{sG : sailGS2 Σ}.
   #[export] Existing Instance sailGS2_invGS.
   #[export] Existing Instance sailGS2_memGS.
 
-  Definition regs_inv2 γ1 γ2 := (regs_inv (srGS := sailGS2_sailRegGS_left) γ1 ∗ regs_inv (srGS := sailGS2_sailRegGS_right) γ2)%I.
-  Definition mem_inv2_sail μ1 μ2 := @mem_inv2 _ (sailGS2_memGS) μ1 μ2.
+  Definition regs_inv2 `{sailGS2 Σ} γ1 γ2 := (regs_inv (srGS := sailGS2_sailRegGS_left) γ1 ∗ regs_inv (srGS := sailGS2_sailRegGS_right) γ2)%I.
+  Definition mem_inv2_sail `{sailGS2 Σ} μ1 μ2 := @mem_inv2 _ (sailGS2_memGS) μ1 μ2.
 
-  #[export] Program Instance sailGS2_irisGS2 {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
+  Definition reg_pointsTo2 `{sailGS2 Σ} {τ} : 𝑹𝑬𝑮 τ → Val τ → Val τ → iProp Σ :=
+    fun reg v1 v2 =>
+    (@reg_pointsTo _ sailGS2_sailRegGS_left _ reg v1 ∗ @reg_pointsTo _ sailGS2_sailRegGS_right _ reg v2)%I.
+
+  #[export] Program Instance sailGS2_irisGS2 `{sailGS2 Σ} {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
     {|
       iris_invGS2 := sailGS2_invGS;
       state_interp2 σ1 σ2 κ := (regs_inv2 σ1.1 σ2.1 ∗ mem_inv2_sail σ1.2 σ2.2)%I;
       num_laters_per_step2 := fun _ => 0
     |}.
   Next Obligation.
-    iIntros (Γ1 Γ2 τ σ1 σ2 ns) "((Hreg1 & Hreg2) & Hmem)".
+    iIntros (Σ sG Γ1 Γ2 τ σ1 σ2 ns) "((Hreg1 & Hreg2) & Hmem)".
     now iFrame.
   Qed.
 
@@ -193,11 +196,7 @@ Section Soundness.
 
   Import SmallStepNotations.
 
-  Existing Instance IB.sG.
-
-  Definition reg_pointsTo2 {τ} : 𝑹𝑬𝑮 τ → Val τ → Val τ → iProp Σ :=
-    fun reg v1 v2 =>
-    (@reg_pointsTo _ sailGS2_sailRegGS_left _ reg v1 ∗ @reg_pointsTo _ sailGS2_sailRegGS_right _ reg v2)%I.
+  Context `{sG : sailGS2 Σ}.
 
   #[export] Program Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
     {| lptsreg σ r v        := reg_pointsTo2 r v v;
@@ -251,7 +250,7 @@ Section Soundness.
       iSplit.
       + iMod "H" as "[%m2 %eqs2f]".
         iModIntro.
-        iIntros (σ11 σ21). iPureIntro.
+        iIntros (σ11 σ21) "!%".
         rewrite !stuck_fail eqs1f eqs2f .
         now eauto.
       + iIntros ([γ1 μ1] [γ2 μ2] _ κ1) "(Hγ & Hmem)".
@@ -1067,71 +1066,34 @@ Section Soundness.
 
 End Soundness.
 
-Section Adequacy.
+End IrisSignatureRules2.
+
+Module Type IrisAdequacy
+  (Import B     : Base)
+  (Import PROG  : Program B)
+  (Import SEM   : Semantics B PROG)
+  (Import SIG   : Signature B)
+  (Import IB    : IrisBase2 B PROG SEM)
+  (Import IPred : IrisPredicates2 B PROG SEM SIG IB)
+  (Import IRules : IrisSignatureRules2 B PROG SEM SIG IB IPred).
 
   Import SmallStepNotations.
 
-(*   Definition sailΣ : gFunctors := #[ memΣ ; invΣ ; GFunctor regUR]. *)
+  Definition sailΣ2 : gFunctors := #[ memΣ2 ; invΣ ; GFunctor regUR; GFunctor regUR].
 
-(*   Instance subG_sailGpreS {Σ} : subG sailΣ Σ -> sailGpreS Σ. *)
-(*   Proof. *)
-(*     intros. *)
-(*     lazymatch goal with *)
-(*     | H:subG ?xΣ _ |- _ => try unfold xΣ in H *)
-(*     end. *)
-(*     repeat match goal with *)
-(*            | H:subG (gFunctors.app _ _) _ |- _ => apply subG_inv in H; destruct H *)
-(*            end. *)
-(*     split; eauto using memΣ_GpreS, subG_invΣ. *)
-(*     solve_inG. *)
-(*  Qed. *)
-
-(*   Definition RegStore_to_map (γ : RegStore) : gmap SomeReg (exclR (leibnizO SomeVal)) := *)
-(*     list_to_map (K := SomeReg) *)
-(*                 (fmap (fun x => match x with *)
-(*                               existT _ r => *)
-(*                                 pair (existT _ r) (Excl (existT _ (read_register γ r))) *)
-(*                             end) *)
-(*                      (finite.enum (sigT 𝑹𝑬𝑮))). *)
-
-(*   Lemma RegStore_to_map_Forall (γ : RegStore) : *)
-(*     map_Forall (K := SomeReg) *)
-(*       (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register γ reg)) = v end) *)
-(*       (RegStore_to_map γ). *)
-(*   Proof. *)
-(*     eapply map_Forall_lookup_2. *)
-(*     intros [σ r] x eq. *)
-(*     unfold RegStore_to_map in eq. *)
-(*     destruct (list_to_map _ !! _) eqn:eq' in eq; inversion eq; subst. *)
-(*     rewrite <-elem_of_list_to_map in eq'. *)
-(*     - eapply elem_of_list_fmap_2 in eq'. *)
-(*       destruct eq' as ([σ' r'] & eq2 & eq3). *)
-(*       now inversion eq2. *)
-(*     - rewrite <-list_fmap_compose. *)
-(*       rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H}, *)
-(*           let (x0, r0) := x in (existT x0 r0 , Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl). *)
-(*       + rewrite list_fmap_id. *)
-(*         eapply finite.NoDup_enum. *)
-(*       + now intros [σ' r']. *)
-(*   Qed. *)
-
-(*   Lemma RegStore_to_map_valid (γ : RegStore) : *)
-(*     valid (RegStore_to_map γ). *)
-(*   Proof. *)
-(*     intros i. *)
-(*     cut (exists v, RegStore_to_map γ !! i = Some (Excl v)). *)
-(*     - intros [v eq]. *)
-(*       now rewrite eq. *)
-(*     - destruct i as [σ r]. *)
-(*       exists (existT _ (read_register γ r)). *)
-(*       eapply elem_of_list_to_map_1'. *)
-(*       + intros y eq. *)
-(*         eapply elem_of_list_fmap_2 in eq. *)
-(*         destruct eq as ([σ2 r2] & eq1 & eq2). *)
-(*         now inversion eq1. *)
-(*       + refine (elem_of_list_fmap_1 _ _ (existT _ r) _). *)
-(*         eapply finite.elem_of_enum. *)
-(*   Qed. *)
+  Instance subG_sailGpreS {Σ} : subG sailΣ2 Σ -> sailGpreS2 Σ.
+  Proof.
+    intros.
+    lazymatch goal with
+    | H:subG ?xΣ _ |- _ => try unfold xΣ in H
+    end.
+    repeat match goal with
+           | H:subG (gFunctors.app _ _) _ |- _ => apply subG_inv in H; destruct H
+           end.
+    split; eauto using memΣ_GpreS2, subG_invΣ.
+    - clear s2. solve_inG.
+    - clear s1. solve_inG.
+ Qed.
 
 (*   Lemma steps_to_erased {σ Γ γ μ δ} (s : Stm Γ σ) {γ' μ' δ' s'}: *)
 (*     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> *)
@@ -1157,123 +1119,182 @@ Section Adequacy.
 (*       now eapply mk_prim_step. *)
 (*   Qed. *)
 
-(*   Lemma own_RegStore_to_map_reg_pointsTos `{sailRegGS Σ'} {γ : RegStore} {l : list (sigT 𝑹𝑬𝑮)} : *)
-(*     NoDup l -> *)
-(*     ⊢ own reg_gv_name (◯ list_to_map (K := SomeReg) *)
-(*                          (fmap (fun x => match x with existT _ r => *)
-(*                                                      pair (existT _ r) (Excl (existT _ (read_register γ r))) *)
-(*                                       end) l)) -∗ *)
-(*       [∗ list] x ∈ l, *)
-(*         let (x0, r) := (x : sigT 𝑹𝑬𝑮) in reg_pointsTo r (read_register γ r). *)
-(*   Proof. *)
-(*     iIntros (nodups) "Hregs". *)
-(*     iInduction l as [|[x r]] "IH". *)
-(*     - now iFrame. *)
-(*     - rewrite big_sepL_cons. cbn. *)
-(*       rewrite (insert_singleton_op (A := exclR (leibnizO SomeVal)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ r)))). *)
-(*       rewrite auth_frag_op. *)
-(*       iPoseProof (own_op with "Hregs") as "[Hreg Hregs]". *)
-(*       iFrame. *)
-(*       iApply ("IH" with "[%] [$]"). *)
-(*       + refine (NoDup_cons_1_2 (existT x r) l nodups). *)
-(*       + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _]. *)
-(*         refine (not_elem_of_list_to_map_1 _ (existT x r) _). *)
-(*         rewrite <-list_fmap_compose. *)
-(*         rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H}, *)
-(*           let (x0, r0) := x in (existT x0 r0, Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl). *)
-(*         now rewrite list_fmap_id. *)
-(*         now intros [σ2 r2]. *)
-(*   Qed. *)
+  Lemma own_RegStore_to_map_reg_pointsTos `{sailGS2 Σ} {γ1 γ2 : RegStore} {l : list (sigT 𝑹𝑬𝑮)} :
+    NoDup l ->
+    ⊢ own (A := regUR) (inG0 := @reg_inG _ sailGS2_sailRegGS_left) (@reg_gv_name _ sailGS2_sailRegGS_left) (◯ list_to_map (K := SomeReg)
+                         (fmap (fun x => match x with existT _ r =>
+                                                     pair (existT _ r) (Excl (existT _ (read_register γ1 r)))
+                                      end) l)) ∗
+      own (A := regUR) (inG0 := @reg_inG _ sailGS2_sailRegGS_right) (@reg_gv_name _ sailGS2_sailRegGS_right) (◯ list_to_map (K := SomeReg)
+                         (fmap (fun x => match x with existT _ r =>
+                                                     pair (existT _ r) (Excl (existT _ (read_register γ2 r)))
+                                      end) l))
+    -∗
+      [∗ list] x ∈ l,
+        let (x0, r) := (x : sigT 𝑹𝑬𝑮) in reg_pointsTo2 r (read_register γ1 r) (read_register γ2 r).
+  Proof.
+    iIntros (nodups) "[Hregs1 Hregs2]".
+    iInduction l as [|[x r]] "IH".
+    - now iFrame.
+    - rewrite big_sepL_cons. cbn.
+      rewrite (insert_singleton_op (A := exclR (leibnizO SomeVal)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ1 r)))).
+      rewrite (insert_singleton_op (A := exclR (leibnizO SomeVal)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ2 r)))).
+      rewrite ?auth_frag_op.
+      iPoseProof (own_op reg_gv_name with "Hregs1") as "[Hreg1 Hregs1]".
+      iDestruct (own_op reg_gv_name with "Hregs2") as "[Hreg2 Hregs2]".
+      iFrame.
+      iApply ("IH" with "[%] [$Hregs1] [$Hregs2]").
+      + refine (NoDup_cons_1_2 (existT x r) l nodups).
+      + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _].
+        refine (not_elem_of_list_to_map_1 _ (existT x r) _).
+        rewrite <-list_fmap_compose.
+        rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
+          let (x0, r0) := x in (existT x0 r0, Excl (existT x0 (read_register γ2 r0))))) id _ _ _ eq_refl).
+        now rewrite list_fmap_id.
+        now intros [σ2 r2].
+      + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _].
+        refine (not_elem_of_list_to_map_1 _ (existT x r) _).
+        rewrite <-list_fmap_compose.
+        rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
+          let (x0, r0) := x in (existT x0 r0, Excl (existT x0 (read_register γ1 r0))))) id _ _ _ eq_refl).
+        now rewrite list_fmap_id.
+        now intros [σ2 r2].
+  Qed.
 
-(*   Definition own_regstore `{sailGS Σ} (γ : RegStore) : iProp Σ := *)
-(*     [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮), *)
-(*       match x with | existT _ r => reg_pointsTo r (read_register γ r) end. *)
+  Definition own_regstore2 `{sailGS2 Σ} (γ1 γ2 : RegStore) : iProp Σ :=
+    [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮),
+      match x with | existT _ r => reg_pointsTo2 r (read_register γ1 r) (read_register γ2 r) end.
 
-(*   Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'} *)
-(*         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : Val σ -> Prop} : *)
-(*     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' -> *)
-(*     (forall `{sailGS Σ'}, ⊢ semTriple δ (mem_res μ ∗ own_regstore γ) s (fun v _ => ⌜ Q v ⌝)) -> *)
-(*     ResultOrFail s' Q. *)
-(*   Proof. *)
-(*     intros steps fins trips. *)
-(*     cut (adequate MaybeStuck (MkConf s δ) (γ,μ) *)
-(*              (λ (v : val (microsail_lang Γ σ)) (_ : state (microsail_lang Γ σ)), *)
-(*                 (λ v0 : val (microsail_lang Γ σ), match v0 with *)
-(*                                                   | MkValConf _ v' _ => Q v' *)
-(*                                                   end) v)). *)
-(*     - destruct s'; cbn in fins; destruct fins; last done. *)
-(*       intros adeq. *)
-(*       apply (adequate_result MaybeStuck (MkConf s δ) (γ , μ) (fun v _ => match v with | MkValConf _ v' δ' => Q v' end) adeq nil (γ' , μ') (MkValConf _ v δ')). *)
-(*       by apply steps_to_erased. *)
-(*     - constructor; last done. *)
-(*       intros t2 σ2 [v2 δ2] eval. *)
-(*       assert (eq := RegStore_to_map_Forall γ). *)
-(*       assert (regsmapv := RegStore_to_map_valid γ). *)
-(*       pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) MaybeStuck (MkConf s δ) (γ , μ) (fun v => match v with | MkValConf _ v' δ' => Q v' end)) as adeq. *)
-(*       refine (adequate_result _ _ _ _ (adeq _) _ _ _ eval); clear adeq. *)
-(*       iIntros (Hinv κs) "". *)
-(*       iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]"; *)
-(*         first by apply auth_both_valid. *)
-(*       pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS. *)
-(*       iMod (mem_inv_init (mGS := mGS)) as (memG) "[Hmem Rmem]". *)
-(*       iModIntro. *)
-(*       iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I. *)
-(*       iExists _. *)
-(*       iSplitR "Hs2 Rmem". *)
-(*       * iFrame. *)
-(*         iExists (RegStore_to_map γ). *)
-(*         now iFrame. *)
-(*       * iApply (wp_mono). *)
-(*         2: { *)
-(*           iApply (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]"). *)
-(*           iApply (own_RegStore_to_map_reg_pointsTos (H := SailRegGS reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2"). *)
-(*           eapply finite.NoDup_enum. *)
-(*         } *)
-(*         done. *)
-(*   Qed. *)
+  Inductive NSteps {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> CStore Γ -> Stm Γ σ -> nat -> Prop :=
+  | nstep_refl : NSteps γ1 μ1 δ1 s1 γ1 μ1 δ1 s1 0
+  | nstep_trans {n} {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : CStore Γ} {s2 s3 : Stm Γ σ} :
+      Step γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 -> NSteps γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 n -> NSteps γ1 μ1 δ1 s1 γ3 μ3 δ3 s3 (S n).
 
-(*   Lemma adequacy_gen {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'} *)
-(*         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : forall `{sailGS Σ}, Val σ -> CStore Γ -> iProp Σ} (φ : Prop): *)
-(*     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> *)
-(*     (forall `{sailGS Σ'}, *)
-(*         mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP s Q δ *)
-(*           ∗ (mem_inv μ' ={⊤,∅}=∗ ⌜φ⌝) *)
-(*     )%I -> φ. *)
-(*   Proof. *)
-(*     (* intros steps trips. *) *)
-(*     intros [n steps]%steps_to_nsteps trips. *)
-(*     refine (wp_strong_adequacy sailΣ (microsail_lang Γ σ) _ _ _ _ _ _ _ (fun _ => 0) _ steps). *)
-(*     iIntros (Hinv) "". *)
-(*     assert (eq := RegStore_to_map_Forall γ). *)
-(*     assert (regsmapv := RegStore_to_map_valid γ). *)
-(*     iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]"; *)
-(*         first by apply auth_both_valid. *)
-(*     pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS. *)
-(*     iMod (mem_inv_init (mGS := mGS)) as (memG) "[Hmem Rmem]". *)
-(*     pose (regsG := {| reg_inG := @reg_pre_inG sailΣ (@subG_sailGpreS sailΣ (subG_refl sailΣ)); reg_gv_name := spec_name |}). *)
-(*     pose (sailG := SailGS Hinv regsG memG). *)
-(*     iMod (trips sailΣ sailG with "[$Rmem Hs2]") as "[trips Hφ]". *)
-(*     {unfold own_regstore. *)
-(*       iApply (own_RegStore_to_map_reg_pointsTos (H := regsG) (γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2"). *)
-(*       eapply finite.NoDup_enum. *)
-(*     } *)
-(*     iModIntro. *)
-(*     iExists MaybeStuck. *)
-(*     iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I. *)
-(*     iExists [ fun v => Q _ sailG (valconf_val v) (valconf_store v) ]%list. *)
-(*     iExists _. *)
-(*     iExists _. *)
-(*     iSplitR "trips Hφ". *)
-(*     * iFrame. *)
-(*       iExists (RegStore_to_map γ). *)
-(*       now iFrame. *)
-(*     * cbn. iFrame. *)
-(*       iIntros (es' t2') "_ _ _ [Hregsinv Hmeminv] _ _". *)
-(*       now iApply "Hφ". *)
-(*   Qed. *)
+  Lemma steps_to_nsteps {Γ : PCtx} {σ : Ty} {γ1 γ2 : RegStore} {μ1 μ2 : Memory} {δ1 δ2 : CStore Γ} {s1 s2 : Stm Γ σ} :
+    Steps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 -> exists n, NSteps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 n.
+  Proof.
+    induction 1 as [|γ1 μ1 δ1 s1 γ2 γ3 μ2 μ3 δ2 δ3 s2 s3 eval evals [n nsteps]].
+    - exists 0. constructor.
+    - exists (S n). econstructor; eassumption.
+  Qed.
 
-End Adequacy.
-End IrisSignatureRules2.
+  Lemma nsteps_to_steps {Γ : PCtx} {σ : Ty} {γ1 γ2 : RegStore} {μ1 μ2 : Memory} {δ1 δ2 : CStore Γ} {s1 s2 : Stm Γ σ} {n} :
+    NSteps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 n -> Steps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2.
+  Proof.
+    induction 1; econstructor; eassumption.
+  Qed.
+
+  Lemma adequacy {Γ} {σ} (s11 s21 : Stm Γ σ) {γ11 γ21 γ12} {μ11 μ21 μ12}
+        {δ11 δ21 δ12 : CStore Γ} {s12 : Stm Γ σ} {Q : Val σ -> Val σ -> Prop} :
+    ⟨ γ11, μ11, δ11, s11 ⟩ --->* ⟨ γ12, μ12, δ12, s12 ⟩ -> Final s12 ->
+    (forall {Σ} `{sailGS2 Σ}, mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ semWp2 δ11 δ21 s11 s21 (fun v1 _ v2 _ => ⌜ Q v1 v2 ⌝)) ->
+    ResultOrFail s12 (fun v12 =>
+                        exists γ22 μ22 δ22 v22,
+                          ⟨ γ21, μ21, δ21, s21 ⟩ --->* ⟨ γ22, μ22, δ22, stm_val _ v22 ⟩ /\
+                            Q v12 v22).
+  Proof.
+    intros Heval1 Hfinal Hwp.
+    destruct (steps_to_nsteps Heval1) as [n Hevaln1].
+    refine (@step_fupdN_soundness sailΣ2 _ _ n _).
+    iIntros (Hinv) "".
+    iMod (own_alloc ((● RegStore_to_map γ11 ⋅ ◯ RegStore_to_map γ11 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    iMod (own_alloc ((● RegStore_to_map γ21 ⋅ ◯ RegStore_to_map γ21 ) : regUR)) as (regs2) "[Hregsown2 Hregsinv2]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
+    iMod (mem_inv_init2 (mGS := mGS) μ11 μ21) as (memG) "[Hmem Rmem]".
+    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2) memG).
+    specialize (Hwp _ sG).
+    iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
+    { iApply own_RegStore_to_map_reg_pointsTos.
+      apply finite.NoDup_enum.
+      iSplitR "Hregsinv2"; iAssumption.
+    }
+    iAssert (regs_inv2 γ11 γ21) with "[Hregsown1 Hregsown2]" as "Hregs".
+    { iSplitL "Hregsown1";
+      now iApply own_RegStore_to_regs_inv.
+    }
+    clear Hwp.
+    iStopProof.
+    revert γ21 μ21 δ21 s21.
+    induction Hevaln1.
+    - iIntros (γ21 μ21 δ21 s21) "(Hregs & Hwp2 & Hmem)".
+      rewrite semWp2_unfold.
+      unfold Final in Hfinal.
+      destruct s1; inversion Hfinal; cbn.
+      + iMod "Hwp2" as "(%v2 & -> & %HQ)".
+        iApply fupd_mask_intro; first by set_solver.
+        iIntros "_ !%".
+        do 4 eexists.
+        split. constructor. assumption.
+      + iApply fupd_mask_intro; first by set_solver.
+        now iIntros "_ !%".
+    - iIntros (γ21 μ21 δ21 s21) "(Hregs & Hwp2 & Hmem)".
+      specialize (IHHevaln1 (nsteps_to_steps Hevaln1) Hfinal).
+      rewrite semWp2_unfold.
+      rewrite (stm_val_stuck H) (stm_fail_stuck H).
+      iSpecialize ("Hwp2" with "[$Hregs $Hmem]").
+      iMod "Hwp2". iModIntro.
+      iSpecialize ("Hwp2" $! _ _ _ _ H).
+      change ((|={∅}▷=>^(S n) ?P))%I with (|={∅}▷=> (|={∅}▷=>^n P))%I.
+      iMod "Hwp2". iModIntro. iModIntro. iMod "Hwp2".
+      iMod "Hwp2" as "(%s22 & %γ22 & %μ22 & %δ22 & %Hstep2 & [Hregs Hmem] & Hwp)".
+      iMod (IHHevaln1 γ22 μ22 δ22 s22 with "[$Hregs $Hmem $Hwp]") as "IH2".
+      iModIntro.
+      iApply (step_fupdN_mono with "IH2").
+      iPureIntro.
+      apply result_or_fail_mono.
+      intros v (γ23 & μ23 & δ23 & v23 & Hsteps223 & HQ).
+      do 4 eexists.
+      eauto using step_trans.
+  Qed.
+
+  (* Lemma adequacy_gen {Γ σ} (s11 s21 : Stm Γ σ) {γ11 γ12 γ21} {μ11 μ12 μ21} *)
+  (*       {δ11 δ12 δ21 : CStore Γ} {s12 : Stm Γ σ} {Q : forall `{sailGS Σ}, Val σ -> CStore Γ -> iProp Σ} *)
+  (*       (φ : Prop) : *)
+  (*   ⟨ γ11, μ11, δ11, s11 ⟩ --->* ⟨ γ12, μ12, δ12, s12 ⟩ -> *)
+  (*   (forall `{sailGS Σ}, *)
+  (*       mem_res2 μ11 μ21 ∗ own_regstore γ11 ⊢ |={⊤}=> semWP s11 Q δ11 *)
+  (*         ∗ (mem_inv μ' ={⊤,∅}=∗ ⌜φ⌝) *)
+  (*   )%I -> φ. *)
+  (* Proof. *)
+  (*   (* intros steps trips. *) *)
+  (*   intros [n steps]%steps_to_nsteps trips. *)
+  (*   refine (wp_strong_adequacy sailΣ (microsail_lang Γ σ) _ _ _ _ _ _ _ (fun _ => 0) _ steps). *)
+  (*   iIntros (Hinv) "". *)
+  (*   assert (eq := RegStore_to_map_Forall γ). *)
+  (*   assert (regsmapv := RegStore_to_map_valid γ). *)
+  (*   iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]"; *)
+  (*       first by apply auth_both_valid. *)
+  (*   pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS. *)
+  (*   iMod (mem_inv_init (mGS := mGS)) as (memG) "[Hmem Rmem]". *)
+  (*   pose (regsG := {| reg_inG := @reg_pre_inG sailΣ (@subG_sailGpreS sailΣ (subG_refl sailΣ)); reg_gv_name := spec_name |}). *)
+  (*   pose (sailG := SailGS Hinv regsG memG). *)
+  (*   iMod (trips sailΣ sailG with "[$Rmem Hs2]") as "[trips Hφ]". *)
+  (*   {unfold own_regstore. *)
+  (*     iApply (own_RegStore_to_map_reg_pointsTos (H := regsG) (γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2"). *)
+  (*     eapply finite.NoDup_enum. *)
+  (*   } *)
+  (*   iModIntro. *)
+  (*   iExists MaybeStuck. *)
+  (*   iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I. *)
+  (*   iExists [ fun v => Q _ sailG (valconf_val v) (valconf_store v) ]%list. *)
+  (*   iExists _. *)
+  (*   iExists _. *)
+  (*   iSplitR "trips Hφ". *)
+  (*   * iFrame. *)
+  (*     iExists (RegStore_to_map γ). *)
+  (*     now iFrame. *)
+  (*   * cbn. iFrame. *)
+  (*     iIntros (es' t2') "_ _ _ [Hregsinv Hmeminv] _ _". *)
+  (*     now iApply "Hφ". *)
+  (* Qed. *)
+
+End IrisAdequacy.
 
 (* Module Type IrisInstance (B : Base) (PROG : Program B) (SEM : Semantics B PROG) (SIG : Signature B) (IB : IrisBase B PROG SEM) := *)
 (*   IrisPredicates B PROG SEM SIG IB <+ IrisSignatureRules B PROG SEM SIG IB. *)
