@@ -894,6 +894,7 @@ Module ExampleModel.
     (* At this point we have enough information to instantiate the program logic
        rules of Iris that do not refer to specific contracts. *)
     Include IrisSignatureRules DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisBase.
+    Include IrisAdequacy DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisBase.
 
   End ExampleIrisInstance.
 

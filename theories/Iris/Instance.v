@@ -382,8 +382,16 @@ Section Soundness.
   Qed.
 
 End Soundness.
+End IrisSignatureRules.
 
-Section Adequacy.
+Module Type IrisAdequacy
+  (Import B     : Base)
+  (Import PROG  : Program B)
+  (Import SEM   : Semantics B PROG)
+  (Import SIG   : Signature B)
+  (Import IB    : IrisBase B PROG SEM)
+  (Import IPred : IrisPredicates B PROG SEM SIG IB)
+  (Import IRules : IrisSignatureRules B PROG SEM SIG IB IPred).
 
   Import SmallStepNotations.
 
@@ -400,53 +408,6 @@ Section Adequacy.
            end.
     split; eauto using memΣ_GpreS, subG_invΣ.
     solve_inG.
- Qed.
-
-  Definition RegStore_to_map (γ : RegStore) : gmap SomeReg (exclR (leibnizO SomeVal)) :=
-    list_to_map (K := SomeReg)
-                (fmap (fun x => match x with
-                              existT _ r =>
-                                pair (existT _ r) (Excl (existT _ (read_register γ r)))
-                            end)
-                     (finite.enum (sigT 𝑹𝑬𝑮))).
-
-  Lemma RegStore_to_map_Forall (γ : RegStore) :
-    map_Forall (K := SomeReg)
-      (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register γ reg)) = v end)
-      (RegStore_to_map γ).
-  Proof.
-    eapply map_Forall_lookup_2.
-    intros [σ r] x eq.
-    unfold RegStore_to_map in eq.
-    destruct (list_to_map _ !! _) eqn:eq' in eq; inversion eq; subst.
-    rewrite <-elem_of_list_to_map in eq'.
-    - eapply elem_of_list_fmap_2 in eq'.
-      destruct eq' as ([σ' r'] & eq2 & eq3).
-      now inversion eq2.
-    - rewrite <-list_fmap_compose.
-      rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
-          let (x0, r0) := x in (existT x0 r0 , Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl).
-      + rewrite list_fmap_id.
-        eapply finite.NoDup_enum.
-      + now intros [σ' r'].
-  Qed.
-
-  Lemma RegStore_to_map_valid (γ : RegStore) :
-    valid (RegStore_to_map γ).
-  Proof.
-    intros i.
-    cut (exists v, RegStore_to_map γ !! i = Some (Excl v)).
-    - intros [v eq].
-      now rewrite eq.
-    - destruct i as [σ r].
-      exists (existT _ (read_register γ r)).
-      eapply elem_of_list_to_map_1'.
-      + intros y eq.
-        eapply elem_of_list_fmap_2 in eq.
-        destruct eq as ([σ2 r2] & eq1 & eq2).
-        now inversion eq1.
-      + refine (elem_of_list_fmap_1 _ _ (existT _ r) _).
-        eapply finite.elem_of_enum.
   Qed.
 
   Lemma steps_to_erased {σ Γ γ μ δ} (s : Stm Γ σ) {γ' μ' δ' s'}:
@@ -473,34 +434,6 @@ Section Adequacy.
       now eapply mk_prim_step.
   Qed.
 
-  Lemma own_RegStore_to_map_reg_pointsTos `{sailRegGS Σ'} {γ : RegStore} {l : list (sigT 𝑹𝑬𝑮)} :
-    NoDup l ->
-    ⊢ own reg_gv_name (◯ list_to_map (K := SomeReg)
-                         (fmap (fun x => match x with existT _ r =>
-                                                     pair (existT _ r) (Excl (existT _ (read_register γ r)))
-                                      end) l)) -∗
-      [∗ list] x ∈ l,
-        let (x0, r) := (x : sigT 𝑹𝑬𝑮) in reg_pointsTo r (read_register γ r).
-  Proof.
-    iIntros (nodups) "Hregs".
-    iInduction l as [|[x r]] "IH".
-    - now iFrame.
-    - rewrite big_sepL_cons. cbn.
-      rewrite (insert_singleton_op (A := exclR (leibnizO SomeVal)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ r)))).
-      rewrite auth_frag_op.
-      iPoseProof (own_op with "Hregs") as "[Hreg Hregs]".
-      iFrame.
-      iApply ("IH" with "[%] [$]").
-      + refine (NoDup_cons_1_2 (existT x r) l nodups).
-      + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _].
-        refine (not_elem_of_list_to_map_1 _ (existT x r) _).
-        rewrite <-list_fmap_compose.
-        rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
-          let (x0, r0) := x in (existT x0 r0, Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl).
-        now rewrite list_fmap_id.
-        now intros [σ2 r2].
-  Qed.
-
   Definition own_regstore `{sailGS Σ} (γ : RegStore) : iProp Σ :=
     [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮),
       match x with | existT _ r => reg_pointsTo r (read_register γ r) end.
@@ -523,7 +456,6 @@ Section Adequacy.
       by apply steps_to_erased.
     - constructor; last done.
       intros t2 σ2 [v2 δ2] eval.
-      assert (eq := RegStore_to_map_Forall γ).
       assert (regsmapv := RegStore_to_map_valid γ).
       pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) MaybeStuck (MkConf s δ) (γ , μ) (fun v => match v with | MkValConf _ v' δ' => Q v' end)) as adeq.
       refine (adequate_result _ _ _ _ (adeq _) _ _ _ eval); clear adeq.
@@ -537,15 +469,11 @@ Section Adequacy.
       iExists _.
       iSplitR "Hs2 Rmem".
       * iFrame.
-        iExists (RegStore_to_map γ).
-        now iFrame.
-      * iApply (wp_mono).
-        2: {
-          iApply (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]").
-          iApply (own_RegStore_to_map_reg_pointsTos (H := SailRegGS reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
-          eapply finite.NoDup_enum.
-        }
-        done.
+        now iApply own_RegStore_to_regs_inv.
+      * iApply (wp_mono); first easy.
+        iApply (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]").
+        iApply (own_RegStore_to_map_reg_pointsTos (srGS := SailRegGS reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
+        eapply finite.NoDup_enum.
   Qed.
 
   Lemma adequacy_gen {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
@@ -560,7 +488,6 @@ Section Adequacy.
     intros [n steps]%steps_to_nsteps trips.
     refine (wp_strong_adequacy sailΣ (microsail_lang Γ σ) _ _ _ _ _ _ _ (fun _ => 0) _ steps).
     iIntros (Hinv) "".
-    assert (eq := RegStore_to_map_Forall γ).
     assert (regsmapv := RegStore_to_map_valid γ).
     iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
@@ -570,7 +497,7 @@ Section Adequacy.
     pose (sailG := SailGS Hinv regsG memG).
     iMod (trips sailΣ sailG with "[$Rmem Hs2]") as "[trips Hφ]".
     {unfold own_regstore.
-      iApply (own_RegStore_to_map_reg_pointsTos (H := regsG) (γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
+      iApply (own_RegStore_to_map_reg_pointsTos (srGS := regsG) (γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
       eapply finite.NoDup_enum.
     }
     iModIntro.
@@ -581,18 +508,16 @@ Section Adequacy.
     iExists _.
     iSplitR "trips Hφ".
     * iFrame.
-      iExists (RegStore_to_map γ).
-      now iFrame.
+      now iApply own_RegStore_to_regs_inv.
     * cbn. iFrame.
       iIntros (es' t2') "_ _ _ [Hregsinv Hmeminv] _ _".
       now iApply "Hφ".
   Qed.
 
-End Adequacy.
-End IrisSignatureRules.
+End IrisAdequacy.
 
 Module Type IrisInstance (B : Base) (PROG : Program B) (SEM : Semantics B PROG) (SIG : Signature B) (IB : IrisBase B PROG SEM) :=
-  IrisPredicates B PROG SEM SIG IB <+ IrisSignatureRules B PROG SEM SIG IB.
+  IrisPredicates B PROG SEM SIG IB <+ IrisSignatureRules B PROG SEM SIG IB <+ IrisAdequacy B PROG SEM SIG IB.
 
 (*
  * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature.

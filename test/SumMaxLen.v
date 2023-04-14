@@ -381,6 +381,8 @@ Module Import ExampleModel.
 
     Include IrisSignatureRules DefaultBase ExampleProgram ExampleSemantics ExampleSig
       ExampleIrisBase.
+    Include IrisAdequacy DefaultBase ExampleProgram ExampleSemantics ExampleSig
+      ExampleIrisBase.
     Include ProgramLogicOn DefaultBase ExampleProgram ExampleSig ExampleSpecification.
     Include IrisInstanceWithContracts DefaultBase ExampleProgram ExampleSemantics
       ExampleSig ExampleSpecification ExampleIrisBase.

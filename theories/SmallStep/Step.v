@@ -369,6 +369,14 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
                         \/ (exists v, s = stm_val _ v /\ POST v).
   Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
 
+  Lemma result_or_fail_mono {Γ σ} {s : Stm Γ σ} {P Q : Val σ -> Prop}:
+    (forall v, P v -> Q v) ->
+    ResultOrFail s P -> ResultOrFail s Q.
+  Proof.
+    intros HPQ HsP.
+    destruct (result_or_fail_inversion _ _ HsP) as [[msg ->]|[v [-> *]]]; cbn; auto.
+  Qed.
+
   (* This predicate encodes that the statement s is a finished computation and
      that the result is not a failure. This is a computational version that is
      better suited for the goal and the inversion below is better suited for

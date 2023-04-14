@@ -227,6 +227,53 @@ Module Type IrisPrelims
     Definition SomeReg : Type := sigT 𝑹𝑬𝑮.
     Definition SomeVal : Type := sigT Val.
 
+    Definition RegStore_to_map (γ : RegStore) : gmap SomeReg (exclR (leibnizO SomeVal)) :=
+      list_to_map (K := SomeReg)
+                  (fmap (fun x => match x with
+                                existT _ r =>
+                                  pair (existT _ r) (Excl (existT _ (read_register γ r)))
+                              end)
+                       (finite.enum (sigT 𝑹𝑬𝑮))).
+
+    Lemma RegStore_to_map_Forall (γ : RegStore) :
+      map_Forall (K := SomeReg)
+        (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register γ reg)) = v end)
+        (RegStore_to_map γ).
+    Proof.
+      eapply map_Forall_lookup_2.
+      intros [σ r] x eq.
+      unfold RegStore_to_map in eq.
+      destruct (list_to_map _ !! _) eqn:eq' in eq; inversion eq; subst.
+      rewrite <-elem_of_list_to_map in eq'.
+      - eapply elem_of_list_fmap_2 in eq'.
+        destruct eq' as ([σ' r'] & eq2 & eq3).
+        now inversion eq2.
+      - rewrite <-list_fmap_compose.
+        rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
+            let (x0, r0) := x in (existT x0 r0 , Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl).
+        + rewrite list_fmap_id.
+          eapply finite.NoDup_enum.
+        + now intros [σ' r'].
+    Qed.
+
+    Lemma RegStore_to_map_valid (γ : RegStore) :
+      valid (RegStore_to_map γ).
+    Proof.
+      intros i.
+      cut (exists v, RegStore_to_map γ !! i = Some (Excl v)).
+      - intros [v eq].
+        now rewrite eq.
+      - destruct i as [σ r].
+        exists (existT _ (read_register γ r)).
+        eapply elem_of_list_to_map_1'.
+        + intros y eq.
+          eapply elem_of_list_fmap_2 in eq.
+          destruct eq as ([σ2 r2] & eq1 & eq2).
+          now inversion eq1.
+        + refine (elem_of_list_fmap_1 _ _ (existT _ r) _).
+          eapply finite.elem_of_enum.
+    Qed.
+
     #[export] Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
     #[export] Instance countable_SomeReg : countable.Countable SomeReg := finite.finite_countable.
 
@@ -320,6 +367,41 @@ Module Type IrisPrelims
         by eapply exclusive_local_update.
       }
       now iApply (regs_inv_update H).
+    Qed.
+
+    Lemma own_RegStore_to_map_reg_pointsTos {γ : RegStore} {l : list (sigT 𝑹𝑬𝑮)} :
+      NoDup l ->
+      ⊢ own reg_gv_name (◯ list_to_map (K := SomeReg)
+                           (fmap (fun x => match x with existT _ r =>
+                                                       pair (existT _ r) (Excl (existT _ (read_register γ r)))
+                                        end) l)) -∗
+        [∗ list] x ∈ l,
+          let (x0, r) := (x : sigT 𝑹𝑬𝑮) in reg_pointsTo r (read_register γ r).
+    Proof.
+      iIntros (nodups) "Hregs".
+      iInduction l as [|[x r]] "IH".
+      - now iFrame.
+      - rewrite big_sepL_cons. cbn.
+        rewrite (insert_singleton_op (A := exclR (leibnizO SomeVal)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ r)))).
+        rewrite auth_frag_op.
+        iPoseProof (own_op with "Hregs") as "[Hreg Hregs]".
+        iFrame.
+        iApply ("IH" with "[%] [$]").
+        + refine (NoDup_cons_1_2 (existT x r) l nodups).
+        + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _].
+          refine (not_elem_of_list_to_map_1 _ (existT x r) _).
+          rewrite <-list_fmap_compose.
+          rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
+            let (x0, r0) := x in (existT x0 r0, Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl).
+          now rewrite list_fmap_id.
+          now intros [σ2 r2].
+    Qed.
+
+    Lemma own_RegStore_to_regs_inv {γ} : own reg_gv_name (● RegStore_to_map γ) ⊢ regs_inv γ.
+    Proof.
+      iIntros "Hregs".
+      iExists _; iFrame; iPureIntro.
+      apply RegStore_to_map_Forall.
     Qed.
 
   End Registers.

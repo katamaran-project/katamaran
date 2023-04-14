@@ -170,5 +170,7 @@ Module RiscvPmpIrisInstance <:
 
   Include IrisSignatureRules RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
     RiscvPmpSignature RiscvPmpIrisBase.
+  Include IrisAdequacy RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpSignature RiscvPmpIrisBase.
 
 End RiscvPmpIrisInstance.
