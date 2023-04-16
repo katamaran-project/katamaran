@@ -19,6 +19,7 @@ case_study/RiscvPmp/IrisInstanceBinary.v
 case_study/RiscvPmp/IrisModel.v
 case_study/RiscvPmp/IrisModelBinary.v
 case_study/RiscvPmp/Model.v
+case_study/RiscvPmp/ModelBinary.v
 case_study/RiscvPmp/LoopVerification.v
 case_study/RiscvPmp/BlockVer/Examples.v
 case_study/RiscvPmp/BlockVer/Spec.v
