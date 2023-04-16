@@ -107,24 +107,27 @@ Module Type IrisResources2
                      }.
   #[export] Existing Instance sailGpresS_invGpreS2.
 
+  Class sailRegGS2 Σ := SailRegGS2 {
+                            sailRegGS2_sailRegGS_left : sailRegGS Σ;
+                            sailRegGS2_sailRegGS_right : sailRegGS Σ;
+                          }.
   Class sailGS2 Σ := SailGS2 { (* resources for the implementation side *)
                        sailGS2_invGS : invGS Σ; (* for fancy updates, invariants... *)
-                       sailGS2_sailRegGS_left : sailRegGS Σ;
-                       sailGS2_sailRegGS_right : sailRegGS Σ;
-
+                       sailGS2_regGS2 : sailRegGS2 Σ;
                        (* ghost variable for tracking user-defined state *)
                        sailGS2_memGS : memGS2 Σ;
                      }.
 
   #[export] Existing Instance sailGS2_invGS.
+  #[export] Existing Instance sailGS2_regGS2.
   #[export] Existing Instance sailGS2_memGS.
 
-  Definition regs_inv2 `{sailGS2 Σ} γ1 γ2 := (regs_inv (srGS := sailGS2_sailRegGS_left) γ1 ∗ regs_inv (srGS := sailGS2_sailRegGS_right) γ2)%I.
+  Definition regs_inv2 `{sailRegGS2 Σ} γ1 γ2 := (regs_inv (srGS := sailRegGS2_sailRegGS_left) γ1 ∗ regs_inv (srGS := sailRegGS2_sailRegGS_right) γ2)%I.
   Definition mem_inv2_sail `{sailGS2 Σ} μ1 μ2 := @mem_inv2 _ (sailGS2_memGS) μ1 μ2.
 
-  Definition reg_pointsTo2 `{sailGS2 Σ} {τ} : 𝑹𝑬𝑮 τ → Val τ → Val τ → iProp Σ :=
+  Definition reg_pointsTo2 `{sailRegGS2 Σ} {τ} : 𝑹𝑬𝑮 τ → Val τ → Val τ → iProp Σ :=
     fun reg v1 v2 =>
-    (@reg_pointsTo _ sailGS2_sailRegGS_left _ reg v1 ∗ @reg_pointsTo _ sailGS2_sailRegGS_right _ reg v2)%I.
+    (@reg_pointsTo _ sailRegGS2_sailRegGS_left _ reg v1 ∗ @reg_pointsTo _ sailRegGS2_sailRegGS_right _ reg v2)%I.
 
   #[export] Program Instance sailGS2_irisGS2 `{sailGS2 Σ} {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
     {|
@@ -178,10 +181,10 @@ Module Type IrisPredicates2
   (Import SEM  : Semantics B PROG)
   (Import SIG  : Signature B)
   (Import IB   : IrisBase2 B PROG SEM).
-  Parameter luser_inst2 : forall `(sRG_left : sailRegGS Σ) `(sRG_right : sailRegGS Σ) `{!invGS Σ} (mG : memGS2 Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
-  Parameter lduplicate_inst2 : forall `(sRG_left : sailRegGS Σ) `(sRG_right : sailRegGS Σ) `{invGS Σ} (mG : memGS2 Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+  Parameter luser_inst2 : forall `{sRG : sailRegGS2 Σ} `{invGS Σ} `{mG : memGS2 Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
+  Parameter lduplicate_inst2 : forall `{sRG : sailRegGS2 Σ} `{invGS Σ} {mG : memGS2 Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
       is_duplicable p = true ->
-      luser_inst2 sRG_left sRG_right mG ts ⊢ luser_inst2 sRG_left sRG_right mG ts ∗ luser_inst2 sRG_left sRG_right mG ts.
+      luser_inst2 ts ⊢ luser_inst2 ts ∗ luser_inst2 ts.
 
 End IrisPredicates2.
 
@@ -200,8 +203,8 @@ Section Soundness.
 
   #[export] Program Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
     {| lptsreg σ r v        := reg_pointsTo2 r v v;
-       luser p ts           := luser_inst2 sailGS2_sailRegGS_left sailGS2_sailRegGS_right sailGS2_memGS ts;
-       lduplicate p ts Hdup := lduplicate_inst2 sailGS2_sailRegGS_left sailGS2_sailRegGS_right sailGS2_memGS ts Hdup
+       luser p ts           := luser_inst2 ts;
+       lduplicate p ts Hdup := lduplicate_inst2 ts Hdup
     |}.
 
   Definition semWp2 {Γ1 Γ2 τ} (δ1 : CStore Γ1) (δ2 : CStore Γ2)
@@ -1121,11 +1124,11 @@ Module Type IrisAdequacy2
 
   Lemma own_RegStore_to_map_reg_pointsTos `{sailGS2 Σ} {γ1 γ2 : RegStore} {l : list (sigT 𝑹𝑬𝑮)} :
     NoDup l ->
-    ⊢ own (A := regUR) (inG0 := @reg_inG _ sailGS2_sailRegGS_left) (@reg_gv_name _ sailGS2_sailRegGS_left) (◯ list_to_map (K := SomeReg)
+    ⊢ own (A := regUR) (inG0 := @reg_inG _ sailRegGS2_sailRegGS_left) (@reg_gv_name _ sailRegGS2_sailRegGS_left) (◯ list_to_map (K := SomeReg)
                          (fmap (fun x => match x with existT _ r =>
                                                      pair (existT _ r) (Excl (existT _ (read_register γ1 r)))
                                       end) l)) ∗
-      own (A := regUR) (inG0 := @reg_inG _ sailGS2_sailRegGS_right) (@reg_gv_name _ sailGS2_sailRegGS_right) (◯ list_to_map (K := SomeReg)
+      own (A := regUR) (inG0 := @reg_inG _ sailRegGS2_sailRegGS_right) (@reg_gv_name _ sailRegGS2_sailRegGS_right) (◯ list_to_map (K := SomeReg)
                          (fmap (fun x => match x with existT _ r =>
                                                      pair (existT _ r) (Excl (existT _ (read_register γ2 r)))
                                       end) l))
@@ -1207,7 +1210,7 @@ Module Type IrisAdequacy2
       apply RegStore_to_map_valid. }
     pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
     iMod (mem_inv_init2 (mGS := mGS) μ11 μ21) as (memG) "[Hmem Rmem]".
-    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2) memG).
+    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2)) memG).
     specialize (Hwp _ sG).
     iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
     { iApply own_RegStore_to_map_reg_pointsTos.
@@ -1276,7 +1279,7 @@ Module Type IrisAdequacy2
       apply RegStore_to_map_valid. }
     pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
     iMod (mem_inv_init2 (mGS := mGS) μ11 μ21) as (memG) "[Hmem Rmem]".
-    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2) memG).
+    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2)) memG).
     specialize (Hwp _ sG).
     iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
     { iApply own_RegStore_to_map_reg_pointsTos.

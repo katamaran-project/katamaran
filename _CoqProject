@@ -15,7 +15,9 @@ case_study/RiscvPmp/PmpCheck.v
 case_study/RiscvPmp/Sig.v
 case_study/RiscvPmp/Contracts.v
 case_study/RiscvPmp/IrisInstance.v
+case_study/RiscvPmp/IrisInstanceBinary.v
 case_study/RiscvPmp/IrisModel.v
+case_study/RiscvPmp/IrisModelBinary.v
 case_study/RiscvPmp/Model.v
 case_study/RiscvPmp/LoopVerification.v
 case_study/RiscvPmp/BlockVer/Examples.v

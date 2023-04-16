@@ -29,12 +29,12 @@
 From Katamaran Require Import
      Base
      Bitvector
-     Iris.Instance
-     Iris.Model
+     Iris.BinaryInstance
+     Iris.BinaryWp
      Syntax.Predicates
      RiscvPmp.Base
      RiscvPmp.Machine
-     RiscvPmp.IrisModel
+     RiscvPmp.IrisModelBinary
      RiscvPmp.Sig.
 
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
@@ -45,20 +45,20 @@ Module ns := stdpp.namespaces.
 Set Implicit Arguments.
 Import bv.notations.
 
-Module RiscvPmpIrisInstance <:
-  IrisInstance RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpSignature RiscvPmpIrisBase.
-  Import RiscvPmpIrisBase.
+Module RiscvPmpIrisInstance2 <:
+  IrisInstance2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpSignature RiscvPmpIrisBase2.
+  Import RiscvPmpIrisBase2.
   Import RiscvPmpProgram.
 
   Section WithSailGS.
-    Context `{sailRegGS Σ} `{invGS Σ} `{mG : mcMemGS Σ}.
+    Context `{sailRegGS2 Σ, invGS Σ, mcMemGS2 Σ}.
 
     Definition reg_file : gset (bv 3) := list_to_set (bv.finite.enum 3).
 
     Definition interp_ptsreg (r : RegIdx) (v : Word) : iProp Σ :=
       match reg_convert r with
-      | Some x => reg_pointsTo x v
+      | Some x => reg_pointsTo2 x v v
       | None => True
       end.
 
@@ -70,10 +70,10 @@ Module RiscvPmpIrisInstance <:
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
       match entries with
       | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
-          reg_pointsTo pmp0cfg cfg0 ∗
-                       reg_pointsTo pmpaddr0 addr0 ∗
-                       reg_pointsTo pmp1cfg cfg1 ∗
-                       reg_pointsTo pmpaddr1 addr1
+          reg_pointsTo2 pmp0cfg cfg0 cfg0 ∗
+                       reg_pointsTo2 pmpaddr0 addr0 addr0 ∗
+                       reg_pointsTo2 pmp1cfg cfg1 cfg1 ∗
+                       reg_pointsTo2 pmpaddr1 addr1 addr1
       | _ => False
       end.
 
@@ -96,7 +96,7 @@ Module RiscvPmpIrisInstance <:
              and most likely still conventient in the future *)
   Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptstomem_readonly").
     Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
-      mapsto addr (DfracOwn 1) b.
+      mapsto addr (DfracOwn 1) (b , b).
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
     Definition ptstoSthL : list Addr -> iProp Σ :=
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
@@ -135,7 +135,7 @@ Module RiscvPmpIrisInstance <:
 
     Import env.notations.
 
-    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
+    Equations(noeqns) luser_inst2 `{sailRegGS2 Σ, invGS Σ, mcMemGS2 Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs entries m
@@ -157,10 +157,10 @@ Module RiscvPmpIrisInstance <:
           destruct x; auto
       end.
 
-    Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} :
+    Definition lduplicate_inst2 `{sailRegGS2 Σ, invGS Σ, mcMemGS2 Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
-        (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
+        (luser_inst2 p ts) ⊢ (luser_inst2 p ts ∗ luser_inst2 p ts).
     Proof.
       destruct p; intros ts Heq; try discriminate Heq;
         clear Heq; cbn in *; env.destroy ts; destruct_pmp_entries; auto.
@@ -168,9 +168,9 @@ Module RiscvPmpIrisInstance <:
 
   End RiscvPmpIrisPredicates.
 
-  Include IrisSignatureRules RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpSignature RiscvPmpIrisBase.
-  Include IrisAdequacy RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpSignature RiscvPmpIrisBase.
+  Include IrisSignatureRules2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpSignature RiscvPmpIrisBase2.
+  Include IrisAdequacy2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpSignature RiscvPmpIrisBase2.
 
-End RiscvPmpIrisInstance.
+End RiscvPmpIrisInstance2.
