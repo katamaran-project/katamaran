@@ -227,13 +227,13 @@ Module RiscvPmpModel2.
 
     Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
       map_Forall (λ (a : Addr) (v : Base.Byte), μ a = v) memmap ->
-      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗ (|={∅,⊤}=> emp) ={∅,⊤}=∗
+      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ={⊤}=∗
       mem_inv sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ (|={⊤}=> interp_ptstomem paddr data).
     Proof.
       iRevert (data w paddr μ memmap).
       iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
-        iIntros (data w paddr μ memmap Hmap) "[Haddr [Hmem Hclose]]".
-      - iMod "Hclose" as "_". iModIntro. iSplitL; last done.
+        iIntros (data w paddr μ memmap Hmap) "[Haddr Hmem]".
+      - iModIntro. iSplitL; last done.
         now iApply (mem_inv_not_modified $! Hmap with "Hmem").
      -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
@@ -242,7 +242,7 @@ Module RiscvPmpModel2.
         iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
         iApply ("IHbytes" $! data w
                        (bv.add (bv.one xlenbits) paddr) (write_byte μ paddr bd)
-                    (insert paddr bd memmap) with "[%] [$Haddr $Hclose $Hmem]").
+                    (insert paddr bd memmap) with "[%] [$Haddr $Hmem]").
         by apply map_Forall_update.
     Qed.
 
@@ -263,8 +263,9 @@ Module RiscvPmpModel2.
       iDestruct "H" as "(%w & H)".
       fold_semWP. rewrite semWP_val.
       iFrame "Hcp Hes Hregs".
+      iMod "Hclose" as "_".
       iMod (@fun_write_ram_works μ1 bytes paddr data memmap w Hmap
-                   with "[$H $Hmem $Hclose]") as "[$ H]".
+                   with "[$H $Hmem]") as "[$ H]".
       by iSplitL.
     Qed.
 
