@@ -56,9 +56,11 @@ Module RiscvPmpIrisInstance2 <:
 
     Definition reg_file : gset (bv 3) := list_to_set (bv.finite.enum 3).
 
+    Definition reg_pointsTo21 {τ} (r : Reg τ) (v : Val τ) : iProp Σ :=
+      reg_pointsTo2 r v v.
     Definition interp_ptsreg (r : RegIdx) (v : Word) : iProp Σ :=
       match reg_convert r with
-      | Some x => reg_pointsTo2 x v v
+      | Some x => reg_pointsTo21 x v
       | None => True
       end.
 
