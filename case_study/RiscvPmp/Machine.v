@@ -1211,6 +1211,15 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   (* Memory *)
   Definition Memory := Addr -> Byte.
+  (* Trace of Events *)
+  Inductive EventTy : Type :=
+  | IOWrite
+  | IORead .
+  Definition Event : Type := EventTy * Addr * Z.
+  Definition event_type (e : Event) := fst $ fst e.
+  Definition event_addr (e : Event) := snd $ fst e.
+  Definition event_z (e : Event) := snd e.
+  Definition Trace : Type := list Event.
 
   Fixpoint fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
     Val (ty_bytes data_size) :=
