@@ -138,7 +138,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     IsTrue (bytes * byte <=? xlenbytes * byte)%nat :=
     IsTrue_bytes_xlenbytes bytes xlenbytes (IsTrue.andb_r H).
 
-  Definition restrict_bytes (bytes : nat) : Prop := 
+  Definition restrict_bytes (bytes : nat) : Prop :=
     bytes = 1%nat \/ bytes = 2%nat \/ bytes = 4%nat.
 
   Lemma restrict_bytes_one : restrict_bytes 1%nat.
@@ -223,6 +223,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Inductive FunX : PCtx -> Ty -> Set :=
   | read_ram (bytes : nat) : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
   | write_ram (bytes : nat) : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
+  | mmio_read (bytes : nat) : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
+  | mmio_write (bytes : nat) : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
+  | within_mmio (bytes : nat) : FunX [paddr ∷ ty_xlenbits] ty.bool
   | decode               : FunX [bv ∷ ty_word] ty_ast
   .
 
@@ -541,6 +544,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp := stm_read_register cur_privilege in
     stm_call (@pmp_mem_read bytes H) [typ; tmp; paddr].
 
+  (* TODO: it is currently possible to read from a mix of MMIO and non-MMIO memory! We can ignore this for now, since we avoid this situation in our examples, but it is worth keeping in mind. *)
   Definition fun_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
     if: tmp
@@ -609,7 +613,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Stm [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
     use lemma open_pmp_entries ;;
-    let: "width" :: ty_xlenbits := stm_call (to_bits xlen) [exp_val ty.int (Z.of_nat bytes)] in  
+    let: "width" :: ty_xlenbits := stm_call (to_bits xlen) [exp_val ty.int (Z.of_nat bytes)] in
     let: check%string :=
       let: tmp1 := stm_read_register pmp0cfg in
       let: tmp2 := stm_read_register pmpaddr0 in
@@ -734,7 +738,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call step ;; call loop.
 
   Definition fun_fetch : Stm ctx.nil ty_fetch_result :=
-    let: tmp1 := Execute in 
+    let: tmp1 := Execute in
     let: tmp := stm_read_register pc in
     use lemma open_ptsto_instr [tmp];;
     let: tmp2 := stm_call (@mem_read 4%nat restrict_bytes_four) [tmp1; tmp] in
@@ -835,10 +839,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     stm_write_register cur_privilege del_priv ;;
     (* NOTE: the following let can be dropped by just reusing c (the value we are
              writing into mcause, but this (manual) translation is more faithful to
-             what I expect an automatic translation would produce, i.e. do an 
+             what I expect an automatic translation would produce, i.e. do an
              stm_read_register when a register is used as param to a function call,
              to get the value in the register
-     
+
              Also keep into account that the risc-v model trap handler function handles
              more cases than represented here, i.e. we only have support for M-mode and
              do not explicitly check for this here. So we could simplify
@@ -1209,39 +1213,54 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Section ForeignKit.
   Import bv.notations.
 
-  (* Memory *)
-  Definition Memory := Addr -> Byte.
+  Definition RAM : Type := Addr -> Byte.
+
   (* Trace of Events *)
-  Inductive EventTy : Type :=
+  Inductive EventTy : Set :=
   | IOWrite
   | IORead .
-  Definition Event : Type := EventTy * Addr * Z.
-  Definition event_type (e : Event) := fst $ fst e.
-  Definition event_addr (e : Event) := snd $ fst e.
-  Definition event_z (e : Event) := snd e.
-  Definition Trace : Type := list Event.
+  Record Event : Set :=
+    mkEvent {
+      event_type : EventTy;
+      event_addr : Addr;
+      event_nbbytes : nat;
+      event_contents : bv (event_nbbytes * 8);
+    }.
+  Definition Trace : Set := list Event.
+
+  (* Memory *)
+  Record Memory : Type :=
+    mkMem {
+      memory_ram : RAM;
+      memory_trace : Trace;
+      memory_state : State;
+    } .
+  Definition memory_update_ram (μ : Memory) (r : RAM) := mkMem r (memory_trace μ) (memory_state μ).
+  Definition memory_update_trace (μ : Memory) (t : Trace) := mkMem (memory_ram μ) t (memory_state μ).
+  Definition memory_append_trace (μ : Memory) (e : Event) := memory_update_trace μ (cons e (memory_trace μ)).
+  Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s.
 
   Fixpoint fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
     Val (ty_bytes data_size) :=
     match data_size with
     | O   => bv.zero
-    | S n => bv.app (μ addr) (fun_read_ram μ n (bv.one + addr))
+    | S n => bv.app ((memory_ram μ) addr) (fun_read_ram μ n (bv.one + addr))
     end.
 
   (* Small test to show that read_ram reads bitvectors in little
      endian order. *)
-  Goal
-    let μ : Memory := fun a =>
+  Goal ∀ μ : Memory,
+    let μ': Memory := memory_update_ram μ (fun a =>
       if eq_dec a [bv 0x0] then [bv 0xEF] else
       if eq_dec a [bv 0x1] then [bv 0xBE] else
       if eq_dec a [bv 0x2] then [bv 0xAD] else
       if eq_dec a [bv 0x3] then [bv 0xDE] else
-      [bv 0]
-    in fun_read_ram μ 4 [bv 0] = [bv 0xDEADBEEF].
+      [bv 0])
+    in fun_read_ram μ' 4 [bv 0] = [bv 0xDEADBEEF].
   Proof. reflexivity. Qed.
 
-  Definition write_byte (μ : Memory) (addr : Val ty_xlenbits) (data : Byte) : Memory :=
-    fun a => if eq_dec addr a then data else μ a.
+  Definition write_byte (r : RAM) (addr : Val ty_xlenbits) (data : Byte) : RAM :=
+    (fun a => if eq_dec addr a then data else r a).
 
   Fixpoint fun_write_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
     Val (ty_bytes data_size) -> Memory :=
@@ -1249,12 +1268,35 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | O   => fun _data => μ
     | S n => fun data : Val (ty_bytes (S n)) =>
                let (byte,bytes) := bv.appView 8 (n * 8) data in
-               fun_write_ram
-                 (write_byte μ addr byte)
-                 (bv.one + addr)
-                 bytes
+               let μ' := (memory_update_ram μ (write_byte (memory_ram μ) addr byte)) in
+               fun_write_ram μ' (bv.one + addr) bytes
     end.
   #[global] Arguments fun_write_ram : clear implicits.
+
+  (* Separated into a read and a write function in the sail model *)
+  Definition fun_within_mmio (addr : Val ty_xlenbits) (data_size : nat) : bool :=
+    bool_decide (withinMMIO addr data_size).
+
+  Definition fun_read_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
+    Memory * Val (ty_bytes data_size) :=
+    match data_size with
+    | O   => (μ , bv.zero)
+    | S n => let (s',readv) := state_tra_read (memory_state μ) addr data_size in
+             let mmioev := mkEvent IORead addr data_size readv in
+             let μ' := memory_append_trace (memory_update_state μ s') mmioev in
+              (μ', readv)%type
+    end.
+
+  Definition fun_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
+    Val (ty_bytes data_size) -> Memory :=
+    match data_size as n return (Val (ty_bytes n) → Memory) with
+    | O   => fun _data => μ
+    | S n => fun data : Val (ty_bytes (S n)) =>
+              let s' := state_tra_write (memory_state μ) addr (S n) data in
+              let mmioev := mkEvent IOWrite addr (S n) data in
+              let μ' := memory_append_trace (memory_update_state μ s') mmioev in
+              μ'
+    end.
 
   #[derive(equations=no)]
   Equations ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
