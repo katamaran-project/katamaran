@@ -277,7 +277,7 @@ Module RiscvPmpModel2.
       iIntros "_".
       iApply wp_unfold.
       cbn in *.
-      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
+      iIntros (? ? ? ? ?) "[Hregs Hmem]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
       iSplitR; first auto.
@@ -287,7 +287,6 @@ Module RiscvPmpModel2.
       fold_semWP.
       iMod "Hclose" as "_".
       iModIntro.
-      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "?".
       iFrame.
       iSplitL; trivial.
       destruct (pure_decode bv0) eqn:Ed.
