@@ -30,17 +30,22 @@ From Coq Require Import
      Strings.String
      Bool
      Lia
+     Lists.List
      ZArith.ZArith.
 From Equations Require Import
      Equations.
+From stdpp Require Import
+     base.
 From stdpp Require
      finite.
 From Katamaran Require Import
      Base
      Syntax.TypeDecl.
 
+Import ListNotations.
 Local Unset Equations Derive Equations.
 Local Set Implicit Arguments.
+
 
 (* Taken from Coq >= 8.15 SigTNotations *)
 Local Notation "( x ; y )" := (existT x y) (only parsing).
@@ -82,6 +87,23 @@ Proof. now compute. Qed.
 (* xlenbits is made opaque further on and it really must be non-zero. *)
 Lemma xlenbits_pos : (xlenbits > 0).
 Proof. cbv. lia. Qed.
+
+(* 1. Definition of MMIO region *)
+(* For now, we only consider the one femtokernel address to be part of the MMIO-mapped memory. *)
+Definition mmioAddr : list Addr := [bv.of_N 64].
+Definition isMMIO a := a ∈ mmioAddr.
+
+(* Definition of machinery required to do MMIO *)
+(* 2. Finite state machine to model the load instruction *)
+Class MMIOEnv : Type := {
+  State : Type;
+  (* The combination of these two should allow us to simulate a finitely non-deterministic I/O device, by quantifying over these transition functions at the top-level and adding restrictions *)
+  state_tra_load : State -> Addr -> State * Z;
+  state_tra_store : State -> (Addr * Z) -> State;
+  state_init : State; (* Useful mostly when reasoning about concrete devices *)
+}.
+Parameter mmioenv : MMIOEnv.
+#[export] Existing Instance mmioenv.
 
 Inductive Privilege : Set :=
 | User
