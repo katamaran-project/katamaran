@@ -47,79 +47,43 @@ Import RiscvPmpProgram.
    user-defined predicates. *)
 Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
   (* Pull in the definition of the LanguageMixin and register ghost state. *)
-  Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+  Include RiscvPmpIrisBase.
 
   (* Defines the memory ghost state. *)
   Section RiscvPmpIrisParams2.
     Import bv.
-    Definition Byte : Set := bv 8.
-    Definition MemVal : Set := Byte.
 
     Class mcMemGS2 Σ :=
       McMemGS2 {
-          (* ghost variable for tracking state of registers *)
-          mc_ghGS2 : gen_heapGS Addr (MemVal * MemVal) Σ
+          (* two copies of the unary ghost variables *)
+          mc_ghGS2_left : RiscvPmpIrisBase.mcMemGS Σ
+        ; mc_ghGS2_right : RiscvPmpIrisBase.mcMemGS Σ
         }.
-    #[export] Existing Instance mc_ghGS2.
 
-    Definition memGpreS2 : gFunctors -> Set := fun Σ => gen_heapGpreS Addr (MemVal * MemVal) Σ.
+    Definition memGpreS2 : gFunctors -> Set := fun Σ => prod (RiscvPmpIrisBase.memGpreS Σ) (RiscvPmpIrisBase.memGpreS Σ).
     Definition memGS2 : gFunctors -> Set := mcMemGS2.
-    Definition memΣ2 : gFunctors := gen_heapΣ Addr (MemVal * MemVal).
-
-    Definition liveAddrs := bv.seqBv (@bv.of_nat xlenbits minAddr) lenAddr.
-    Lemma NoDup_liveAddrs : NoDup liveAddrs.
-    Proof. now eapply Prelude.nodup_fixed. Qed.
-
-    #[global] Arguments liveAddrs : simpl never.
-
-    Definition initMemMap2 μ1 μ2 := (list_to_map (map (fun a => (a , (μ1 a , μ2 a))) liveAddrs) : gmap Addr (MemVal * MemVal)).
+    Definition memΣ2 : gFunctors := gFunctors.app (RiscvPmpIrisBase.memΣ) (RiscvPmpIrisBase.memΣ).
 
     Definition memΣ_GpreS2 : forall {Σ}, subG memΣ2 Σ -> memGpreS2 Σ :=
-      fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal * MemVal).
+      fun {Σ} HsG => (subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal) (fst (subG_inv _ _ _ HsG)),
+                    subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal) (snd (subG_inv _ _ _ HsG))).
 
     Definition mem_inv2 : forall {Σ}, mcMemGS2 Σ -> Memory -> Memory -> iProp Σ :=
       fun {Σ} hG μ1 μ2 =>
-        (∃ memmap, gen_heap_interp memmap ∗
-           ⌜ map_Forall (fun a v => (μ1 a , μ2 a) = v) memmap ⌝
-        )%I.
+        (RiscvPmpIrisBase.mem_inv mc_ghGS2_left μ1 ∗ RiscvPmpIrisBase.mem_inv mc_ghGS2_right μ2)%I.
 
     Definition mem_res2 `{hG : mcMemGS2 Σ} : Memory -> Memory -> iProp Σ :=
-      fun μ1 μ2 => ([∗ list] a' ∈ liveAddrs, mapsto a' (DfracOwn 1) (μ1 a' , μ2 a'))%I.
-
-    Lemma initMemMap2_works μ1 μ2 : map_Forall (λ (a : Addr) (v : MemVal * MemVal), (μ1 a , μ2 a) = v) (initMemMap2 μ1 μ2).
-    Proof.
-      unfold initMemMap2.
-      rewrite map_Forall_to_list.
-      rewrite Forall_forall.
-      intros (a , v).
-      rewrite elem_of_map_to_list.
-      intros el.
-      apply elem_of_list_to_map_2 in el.
-      apply elem_of_list_In in el.
-      apply in_map_iff in el.
-      by destruct el as (a' & <- & _).
-    Qed.
+      fun μ1 μ2 => (RiscvPmpIrisBase.mem_res (hG := mc_ghGS2_left) μ1 ∗
+                   RiscvPmpIrisBase.mem_res (hG := mc_ghGS2_right) μ2)%I.
 
     Lemma mem_inv_init2 `{gHP : memGpreS2 Σ} (μ1 μ2 : Memory) :
       ⊢ |==> ∃ mG : mcMemGS2 Σ, (mem_inv2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
     Proof.
-      iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal * MemVal) empty) as (gH) "[inv _]".
-
-      pose (memmap := initMemMap2 μ1 μ2).
-      iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
+      iMod (RiscvPmpIrisBase.mem_inv_init (gHP := fst gHP) μ1) as (mG1) "[inv1 res1]".
+      iMod (RiscvPmpIrisBase.mem_inv_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
       iModIntro.
-
-      rewrite (right_id empty union memmap).
-
-      iExists (McMemGS2 gH).
-      iSplitL "inv".
-      - iExists memmap.
-        iFrame.
-        iPureIntro.
-        apply initMemMap2_works.
-      - unfold mem_res2, initMemMap2 in *.
-        iApply (RiscvPmpIrisBase.big_sepM_list_to_map (f := fun a => (μ1 a , μ2 a)) (fun a v => mapsto a (DfracOwn 1) v) with "[$]").
-        eapply NoDup_liveAddrs.
+      iExists (McMemGS2 mG1 mG2).
+      iSplitL "inv1 inv2"; iFrame.
     Qed.
 
     (* Note: this defaultRegStore is only needed for technical reason, it is not used. *)

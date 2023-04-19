@@ -35,6 +35,7 @@ From Katamaran Require Import
      RiscvPmp.Base
      RiscvPmp.Machine
      RiscvPmp.IrisModelBinary
+     RiscvPmp.IrisInstance
      RiscvPmp.Sig.
 
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
@@ -73,9 +74,9 @@ Module RiscvPmpIrisInstance2 <:
       match entries with
       | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
           reg_pointsTo2 pmp0cfg cfg0 cfg0 ∗
-                       reg_pointsTo2 pmpaddr0 addr0 addr0 ∗
-                       reg_pointsTo2 pmp1cfg cfg1 cfg1 ∗
-                       reg_pointsTo2 pmpaddr1 addr1 addr1
+                       reg_pointsTo21 pmpaddr0 addr0 ∗
+                       reg_pointsTo21 pmp1cfg cfg1 ∗
+                       reg_pointsTo21 pmpaddr1 addr1
       | _ => False
       end.
 
@@ -98,7 +99,8 @@ Module RiscvPmpIrisInstance2 <:
              and most likely still conventient in the future *)
   Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptstomem_readonly").
     Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
-      mapsto addr (DfracOwn 1) (b , b).
+      RiscvPmpIrisInstance.interp_ptsto (mG := mc_ghGS2_left) addr b ∗
+      RiscvPmpIrisInstance.interp_ptsto (mG := mc_ghGS2_right) addr b.
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
     Definition ptstoSthL : list Addr -> iProp Σ :=
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.

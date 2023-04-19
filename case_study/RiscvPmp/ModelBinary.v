@@ -42,6 +42,7 @@ From Katamaran Require Import
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
      RiscvPmp.Contracts
+     RiscvPmp.Model
      RiscvPmp.IrisModelBinary
      RiscvPmp.IrisInstanceBinary
      RiscvPmp.Sig.
@@ -107,29 +108,6 @@ Module RiscvPmpModel2.
     Lemma bv_bin_one : bv.bin (bv.one xlenbits) = 1%N.
     Proof. apply bv.bin_one, xlenbits_pos. Qed.
 
-    Lemma mem_inv_not_modified : ∀ (μ1 μ2 : Memory) (memmap : gmap Addr (MemVal * MemVal)),
-        ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte * Byte), (μ1 a , μ2 a) = v) memmap⌝ -∗
-        gen_heap.gen_heap_interp memmap -∗
-        mem_inv2 sailGS2_memGS μ1 μ2.
-    Proof. iIntros (μ1 μ2 memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
-
-    Lemma map_Forall_update : ∀ (μ1 μ2 : Memory) (memmap : gmap Addr (MemVal * MemVal))
-                                (paddr : Addr) (data1 data2 : Byte),
-        map_Forall (λ (a : Addr) (v : Byte * Byte), (μ1 a , μ2 a) = v) memmap ->
-        map_Forall (λ (a : Addr) (v : Byte * Byte), (write_byte μ1 paddr data1 a , write_byte μ2 paddr data2 a) = v) (<[paddr:=(data1 , data2)]> memmap).
-    Proof.
-      intros μ1 μ2 memmap paddr data1 data2 Hmap.
-      apply map_Forall_lookup.
-      intros i x H0.
-      unfold write_byte.
-      destruct eq_dec.
-      - subst paddr.
-        now apply (lookup_insert_rev memmap i).
-      - rewrite -> map_Forall_lookup in Hmap.
-        rewrite (lookup_insert_ne _ _ _ _ n) in H0.
-        now apply Hmap.
-    Qed.
-
     Lemma ptstomem_bv_app :
       forall {n} (a : Addr) (b : bv byte) (bs : bv (n * byte)),
         @interp_ptstomem _ _ (S n)%nat a (bv.app b bs)
@@ -181,37 +159,62 @@ Module RiscvPmpModel2.
         rewrite <- N.add_1_l; lia.
     Qed.
 
-    Lemma fun_read_ram_works {bytes memmap μ1 μ2 paddr} {w : bv (bytes * byte)} :
-      map_Forall (λ (a : Addr) (v : Base.Byte * Base.Byte), (μ1 a , μ2 a) = v) memmap ->
-           interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ⊢
-              ⌜ fun_read_ram μ1 bytes paddr = w /\ fun_read_ram μ2 bytes paddr = w ⌝.
+    Lemma interp_ptstomem_dedup {paddr width} {w : bv (width * byte)}:
+      IrisInstance.RiscvPmpIrisInstance.interp_ptstomem (mG := mc_ghGS2_left) paddr w ∗
+        IrisInstance.RiscvPmpIrisInstance.interp_ptstomem (mG := mc_ghGS2_right) paddr w ⊣⊢
+        interp_ptstomem paddr w.
     Proof.
-      revert paddr.
-      iInduction bytes as [|bytes] "IHbytes";
-      iIntros (paddr Hmap) "[Haddr Hmem]".
-      - now destruct (bv.view w).
-      - change (S bytes * byte)%nat with (byte + bytes * byte)%nat in w.
-        destruct (bv.appView byte (bytes * byte) w) as (w0 & w).
-        rewrite ptstomem_bv_app.
-        iDestruct "Haddr" as "(Haddr0 & Haddr)".
-        iPoseProof (gen_heap.gen_heap_valid with "Hmem Haddr0") as "%".
-        iPoseProof ("IHbytes" $! w (bv.one xlenbits + paddr) Hmap with "[$Haddr $Hmem]") as "%eq".
-        destruct eq as (eq1 & eq2).
-        iPureIntro.
-        simpl.
-        pose proof (map_Forall_lookup_1 _ _ _ _ Hmap H) as eq3.
-        inversion eq3.
-        split; f_equal; auto.
+      revert paddr w. induction width; intros paddr w.
+      { now iSplit. }
+      change (S width * byte)%nat with (byte + width * byte)%nat in w.
+      unfold interp_ptstomem, IrisInstance.RiscvPmpIrisInstance.interp_ptstomem.
+      destruct (bv.appView byte (width * byte) w).
+      rewrite <-IHwidth.
+      iSplit; now iIntros "[[$ $] [$ $]]".
+    Qed.
+
+    Definition sailGS2_sailGS_left `{sailGS2 Σ} : sailGS Σ :=
+      SailGS sailGS2_invGS sailRegGS2_sailRegGS_left mc_ghGS2_left.
+
+    Definition sailGS2_sailGS_right `{sailGS2 Σ} : sailGS Σ :=
+      SailGS sailGS2_invGS sailRegGS2_sailRegGS_right mc_ghGS2_right.
+
+    Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
+        ⊢ interp_pmp_entries entries -∗
+          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr),
+            ⌜entries = [(cfg0, addr0); (cfg1, addr1)]⌝ ∗
+            reg_pointsTo21 pmp0cfg cfg0 ∗ reg_pointsTo21 pmpaddr0 addr0 ∗
+            reg_pointsTo21 pmp1cfg cfg1 ∗ reg_pointsTo21 pmpaddr1 addr1.
+    Proof.
+      iIntros (entries) "H".
+      destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|]]] eqn:?; try done.
+      repeat iExists _.
+      now iFrame.
+    Qed.
+
+    Lemma interp_pmpentries_dedup : ∀ (entries : list PmpEntryCfg),
+        interp_pmp_entries entries ⊣⊢
+          IrisInstance.RiscvPmpIrisInstance.interp_pmp_entries (H := sailRegGS2_sailRegGS_left) entries ∗
+          IrisInstance.RiscvPmpIrisInstance.interp_pmp_entries (H := sailRegGS2_sailRegGS_right) entries.
+    Proof.
+      iIntros (entries).
+      destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|]]] eqn:?; cbn;
+      try (iSplit; iIntros; now destruct H).
+      iSplit.
+      - iIntros "([$ $] & [$ $] & [$ $] & [$ $])".
+      - iIntros "(($ & $ & $ & $) & ($ & $ & $ & $))".
     Qed.
 
     Lemma read_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
     Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
-      iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
+      iIntros "((%Hperm & _) & [Hcp1 Hcp2] & Hes & (%Hpmp & _) & H)".
+      rewrite <-interp_ptstomem_dedup.
+      iDestruct "H" as "[Hmemres1 Hmemres2]".
       rewrite semWp2_unfold.
       cbn in *.
-      iIntros (? ? ? ?) "(Hregs & % & Hmem & %Hmap)".
+      iIntros (? ? ? ?) "(Hregs & (% & Hmem1 & %Hmap1) & (% & Hmem2 & %Hmap2))".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
       iIntros.
@@ -219,9 +222,10 @@ Module RiscvPmpModel2.
       eliminate_prim_step Heq.
       iMod "Hclose" as "_".
       iModIntro.
-      iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-      destruct eq_fun_read_ram as (eq_fun_read_ram1 & eq_fun_read_ram2).
-      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "Hmem".
+      iDestruct (RiscvPmpModel2.fun_read_ram_works (sg := sailGS2_sailGS_left) Hmap1 with "[$Hmemres1 $Hmem1]") as "%eq_fun_read_ram1".
+      iDestruct (RiscvPmpModel2.fun_read_ram_works (sg := sailGS2_sailGS_right) Hmap2 with "[$Hmemres2 $Hmem2]") as "%eq_fun_read_ram2".
+      iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_left) $! Hmap1 with "Hmem1") as "Hmem1".
+      iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_right) $! Hmap2 with "Hmem2") as "Hmem2".
       iExists _, _, _, _.
       iSplitR.
       { iPureIntro. constructor. rewrite Heq. now cbn.  }
@@ -229,48 +233,30 @@ Module RiscvPmpModel2.
       rewrite semWp2_val.
       iModIntro.
       iExists _.
-      iFrame.
-      now rewrite ?eq_fun_read_ram1 ?eq_fun_read_ram2.
-    Qed.
-
-    Lemma fun_write_ram_works μ1 μ2 bytes paddr data memmap {w : bv (bytes * byte)} :
-      map_Forall (λ (a : Addr) (v : Base.Byte * Base.Byte), (μ1 a , μ2 a) = v) memmap ->
-      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ={⊤}=∗
-      mem_inv2 sailGS2_memGS (fun_write_ram μ1 bytes paddr data) (fun_write_ram μ2 bytes paddr data) ∗ (|={⊤}=> interp_ptstomem paddr data).
-    Proof.
-      iRevert (data w paddr μ1 μ2 memmap).
-      iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
-        iIntros (data w paddr μ1 μ2 memmap Hmap) "[Haddr Hmem]".
-      - iModIntro. iSplitL; last done.
-        now iApply (mem_inv_not_modified $! Hmap with "Hmem").
-     -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
-        destruct (bv.appView byte (bytes * byte) data) as [bd data].
-        destruct (bv.appView byte (bytes * byte) w) as [bw w].
-        iDestruct "Haddr" as "[H Haddr]".
-        iMod (gen_heap.gen_heap_update _ _ _ (bd , bd) with "Hmem H") as "[Hmem $]".
-        iApply ("IHbytes" $! data w
-                       (bv.add (bv.one xlenbits) paddr) (write_byte μ1 paddr bd) (write_byte μ2 paddr bd)
-                    (insert paddr (bd , bd) memmap) with "[%] [$Haddr $Hmem]").
-        by apply map_Forall_update.
+      rewrite <-interp_ptstomem_dedup, ?eq_fun_read_ram1, ?eq_fun_read_ram2.
+      now iFrame.
     Qed.
 
     Lemma write_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
-      iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
+      iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & (%vold & H))".
       rewrite semWp2_unfold.
       cbn.
-      iIntros (? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
+      iIntros (? ? ? ?) "[Hregs ((% & Hmem1 & %Hmap1) & (% & Hmem2 & %Hmap2))]".
+      rewrite <-interp_ptstomem_dedup.
+      iDestruct "H" as "[Hmemres1 Hmemres2]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
       iIntros.
       repeat iModIntro.
       eliminate_prim_step Heq.
-      iDestruct "H" as "(%w & H)".
       iMod "Hclose" as "_".
-      iMod (@fun_write_ram_works μ1 μ2 bytes paddr data memmap w Hmap
-                   with "[$H $Hmem]") as "[Hmem H]".
+      iMod (RiscvPmpModel2.fun_write_ram_works (sg := sailGS2_sailGS_left) μ1 paddr data Hmap1
+                   with "[$Hmemres1 $Hmem1]") as "[Hmem1 Hmemres1]".
+      iMod (RiscvPmpModel2.fun_write_ram_works (sg := sailGS2_sailGS_right) μ2 paddr data Hmap2
+                   with "[$Hmemres2 $Hmem2]") as "[Hmem2 Hmemres2]".
       iModIntro.
       iExists _, _, _, _.
       iSplitR.
@@ -278,10 +264,12 @@ Module RiscvPmpModel2.
       cbn.
       rewrite semWp2_val.
       iFrame "Hcp Hes Hregs".
-      iSplitL "Hmem"; first done.
-      iMod "H".
+      iSplitL "Hmem1 Hmem2"; first iFrame.
+      iMod "Hmemres1".
+      iMod "Hmemres2".
       iModIntro.
       iExists _.
+      rewrite <-interp_ptstomem_dedup.
       now iFrame.
     Qed.
 
@@ -293,7 +281,7 @@ Module RiscvPmpModel2.
       iIntros "_".
       iApply semWp2_unfold.
       cbn in *.
-      iIntros (? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
+      iIntros (? ? ? ?) "[Hregs (Hmem1 & Hmem2)]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
       iIntros.
@@ -301,7 +289,6 @@ Module RiscvPmpModel2.
       eliminate_prim_step Heq.
       iMod "Hclose" as "_".
       iModIntro.
-      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "?".
       iExists _, _, _, _.
       iSplitR.
       { iPureIntro. constructor. now rewrite Heq. }
@@ -360,20 +347,6 @@ Module RiscvPmpModel2.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       now iIntros.
-    Qed.
-
-    Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
-        ⊢ interp_pmp_entries entries -∗
-          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr),
-            ⌜entries = [(cfg0, addr0); (cfg1, addr1)]⌝ ∗
-            reg_pointsTo2 pmp0cfg cfg0 cfg0 ∗ reg_pointsTo2 pmpaddr0 addr0 addr0 ∗
-            reg_pointsTo2 pmp1cfg cfg1 cfg1 ∗ reg_pointsTo2 pmpaddr1 addr1 addr1.
-    Proof.
-      iIntros (entries) "H".
-      unfold interp_pmp_entries.
-      destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|]]] eqn:?; try done.
-      repeat iExists _.
-      now iFrame.
     Qed.
 
     Lemma open_pmp_entries_sound :
