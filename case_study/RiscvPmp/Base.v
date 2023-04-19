@@ -91,15 +91,25 @@ Proof. cbv. lia. Qed.
 (* 1. Definition of MMIO region *)
 (* For now, we only consider the one femtokernel address to be part of the MMIO-mapped memory. *)
 Definition mmioAddr : list Addr := [bv.of_N 64].
-Definition isMMIO a := a ∈ mmioAddr.
+Definition isMMIO a : Prop := a ∈ mmioAddr.
+Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
+  match size with
+  | O => True
+  | S size' => a ∈ mmioAddr /\ withinMMIO (bv.add (bv.one _) a) size' end.
+#[export] Instance withinMMIODec a size: Decision (withinMMIO a size).
+Proof. generalize a. induction size.
+       - apply _.
+       - intro a'. cbn. apply decidable.and_dec; [|auto].
+         apply _.
+Qed.
 
 (* Definition of machinery required to do MMIO *)
 (* 2. Finite state machine to model the load instruction *)
 Class MMIOEnv : Type := {
   State : Type;
   (* The combination of these two should allow us to simulate a finitely non-deterministic I/O device, by quantifying over these transition functions at the top-level and adding restrictions *)
-  state_tra_load : State -> Addr -> State * Z;
-  state_tra_store : State -> (Addr * Z) -> State;
+  state_tra_read : State -> Addr -> forall (bytes : nat) , State * bv (bytes * 8);
+  state_tra_write : State -> Addr -> forall (bytes : nat) , bv (bytes * 8) -> State;
   state_init : State; (* Useful mostly when reasoning about concrete devices *)
 }.
 Parameter mmioenv : MMIOEnv.
