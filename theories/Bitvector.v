@@ -571,7 +571,7 @@ Module bv.
   Section Constants.
 
     Definition zero {n} : bv n := mk 0 I.
-    Definition one n : bv n :=
+    Definition one {n} : bv n :=
       match n with
       | 0   => mk 0 I
       | S u => mk 1 I
@@ -582,7 +582,7 @@ Module bv.
       | S m => cons true (ones m)
       end.
 
-    Lemma bin_one {n} : n > 0 -> bin (one n) = 1%N.
+    Lemma bin_one {n} : n > 0 -> bin (@one n) = 1%N.
     Proof.
       destruct n; cbn; now Lia.lia.
     Qed.
@@ -1033,11 +1033,11 @@ Module bv.
     (* Definition succ {n} : bv n -> bv n := add (one n). *)
 
     Lemma of_nat_S {n} (k : nat) :
-      @of_nat n (S k) = add (one _) (of_nat k).
+      @of_nat n (S k) = add one (of_nat k).
     Proof.
       apply bin_inj.
       cbn -[truncn].
-      replace (bin (one n)) with (truncn n 1) by now destruct n.
+      replace (bin one) with (truncn n 1) by now destruct n.
       rewrite <-truncn_add.
       f_equal.
       Lia.lia.
@@ -1450,7 +1450,7 @@ Module bv.
 
     Lemma unsigned_succ_small n m :
       (N.succ (bin m) < exp2 n)%N ->
-      Z.succ (unsigned m) = @unsigned n (one _ + m).
+      Z.succ (unsigned m) = @unsigned n (one + m).
     Proof.
       intro H. unfold unsigned.
       rewrite bin_add_small.
@@ -1489,7 +1489,7 @@ Module bv.
     Lemma seqBv_succ {n} m n1 :
       n > 0 ->
       (N.succ (bin m) < bv.exp2 n)%N ->
-      (@seqBv n m (S n1)) = cons m (seqBv (one _ + m) n1).
+      (@seqBv n m (S n1)) = cons m (seqBv (one + m) n1).
     Proof.
       intros nnz ineq.
       unfold seqBv.
@@ -1682,11 +1682,11 @@ Module bv.
 
     Lemma lt_S_add_one : forall {n} x,
         (N.of_nat (S x) < bv.exp2 n)%N ->
-        (bv.bin (bv.one n) + (@bv.bin n (bv.of_nat x)) < bv.exp2 n)%N.
+        (bv.bin (@bv.one n) + (@bv.bin n (bv.of_nat x)) < bv.exp2 n)%N.
     Proof.
       destruct n.
       simpl; Lia.lia.
-      assert (bv.bin (bv.one (S n)) = 1%N) by auto.
+      assert (bv.bin (@bv.one (S n)) = 1%N) by auto.
       rewrite H.
       intros.
       rewrite bv.bin_of_nat_small; Lia.lia.

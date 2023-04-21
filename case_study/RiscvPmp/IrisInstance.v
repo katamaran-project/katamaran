@@ -113,7 +113,7 @@ Module RiscvPmpIrisInstance <:
       | S w =>
           fun bytes =>
             let (byte, bytes) := bv.appView byte (w * byte) bytes in
-            interp_ptsto addr byte ∗ interp_ptstomem (bv.one xlenbits + addr) bytes
+            interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
       end%I.
 
     Definition interp_ptstomem_readonly {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=

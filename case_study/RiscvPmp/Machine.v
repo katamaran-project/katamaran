@@ -1094,7 +1094,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Val (ty_bytes data_size) :=
     match data_size with
     | O   => bv.zero
-    | S n => bv.app (μ addr) (fun_read_ram μ n (bv.one _ + addr))
+    | S n => bv.app (μ addr) (fun_read_ram μ n (bv.one + addr))
     end.
 
   (* Small test to show that read_ram reads bitvectors in little
@@ -1120,7 +1120,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                let (byte,bytes) := bv.appView 8 (n * 8) data in
                fun_write_ram
                  (write_byte μ addr byte)
-                 (bv.one xlenbits + addr)
+                 (bv.one + addr)
                  bytes
     end.
   #[global] Arguments fun_write_ram : clear implicits.

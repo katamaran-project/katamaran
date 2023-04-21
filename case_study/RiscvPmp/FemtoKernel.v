@@ -111,7 +111,7 @@ Import BlockVerificationDerived2.
     Definition pure_pmpAddrMatchType_to_bits : PmpAddrMatchType -> bv 4 :=
       fun mt => match mt with
                 | OFF => bv.zero
-                | TOR => bv.one _
+                | TOR => bv.one
                 end.
 
     Definition pure_pmpcfg_ent_to_bits : Pmpcfg_ent -> Val (ty.bvec byte) :=
@@ -727,12 +727,12 @@ Import BlockVerificationDerived2.
     unfold interp_ptstomem.
     rewrite ?bv.appView_app.
     replace (@bv.of_Z xlenbits (0 + bv.unsigned a)%Z) with a by now rewrite bv.of_Z_unsigned.
-    replace (@bv.of_Z xlenbits (1 + bv.unsigned a)%Z) with (bv.add (bv.one _) a) by now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
-    replace (@bv.of_Z xlenbits (2 + bv.unsigned a)%Z) with (bv.add (bv.one word) (bv.add (bv.one word) a)).
-    replace (@bv.of_Z xlenbits (3 + bv.unsigned a)%Z) with (bv.add (bv.one word) (bv.add (bv.one word) (bv.add (bv.one word) a))).
+    replace (@bv.of_Z xlenbits (1 + bv.unsigned a)%Z) with (bv.add bv.one a) by now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+    replace (@bv.of_Z xlenbits (2 + bv.unsigned a)%Z) with (bv.add bv.one (bv.add bv.one a)).
+    replace (@bv.of_Z xlenbits (3 + bv.unsigned a)%Z) with (bv.add bv.one (bv.add bv.one (bv.add bv.one a))).
     now iFrame.
     rewrite ?bv.add_assoc.
-    change (bv.add _ (bv.one word)) with (@bv.of_Z xlenbits 3).
+    change (bv.add _ bv.one) with (@bv.of_Z xlenbits 3).
     now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
     rewrite ?bv.add_assoc.
     now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
