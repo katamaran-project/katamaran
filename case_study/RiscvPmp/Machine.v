@@ -540,38 +540,53 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: addr_int := exp_unsigned paddr in
     ((exp_int (Z.of_nat minAddr) <= addr_int)%exp && (addr_int + width <= exp_int (Z.of_nat maxAddr)))%exp.
 
+  (* TODO: it is currently possible to read/write from/to a mix of MMIO and non-MMIO memory! We can ignore this for now, since we avoid this situation in our examples.
+     Concretely, trusted code reads/writes are aligned manually, and untrusted read/writes will never gain access to MMIO regions.
+     It is worth keeping in mind, as the sail model does perform this check (under certain conditions) in `mem_[read/write_value]_priv_meta`. *)
   Definition fun_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := stm_read_register cur_privilege in
     stm_call (@pmp_mem_read bytes H) [typ; tmp; paddr].
 
-  (* TODO: it is currently possible to read from a mix of MMIO and non-MMIO memory! We can ignore this for now, since we avoid this situation in our examples, but it is worth keeping in mind. *)
   Definition fun_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
-    let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
+    let: tmp := stm_foreign (within_mmio bytes) [paddr] in
     if: tmp
-    then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
-          let: tmp := stm_foreign (read_ram bytes) [paddr] in
-          use lemma (return_pmp_ptsto bytes) [paddr] ;;
-          stm_exp (exp_union (memory_op_result bytes) KMemValue tmp))
-    else match: t in union access_type with
-         |> KRead pat_unit      =>
-            stm_exp (exp_union (memory_op_result bytes) KMemException E_Load_Access_Fault)
-         |> KWrite pat_unit     =>
-            stm_exp (exp_union (memory_op_result bytes) KMemException E_SAMO_Access_Fault)
-         |> KReadWrite pat_unit =>
-            stm_exp (exp_union (memory_op_result bytes) KMemException E_SAMO_Access_Fault)
-         |> KExecute pat_unit   =>
-            stm_exp (exp_union (memory_op_result bytes) KMemException E_Fetch_Access_Fault)
-         end.
-
-  Definition fun_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; data :: ty_bytes bytes] (ty_memory_op_result 1) :=
-    let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
-    if: tmp
-    then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
-          stm_foreign (write_ram bytes) [paddr; data] ;;
-          use lemma (return_pmp_ptsto bytes) [paddr] ;;
-          stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1]))) (* NOTE: normally the return value of write_ram should be wrapped in MemValue but this constructor is currently restricted to bytes and write_ram *ALWAYS* returns true, so we just return a byte representation of 1 *)
+    then
+      let: tmp := stm_foreign (mmio_read bytes) [paddr] in
+      stm_exp (exp_union (memory_op_result bytes) KMemValue tmp)
     else
-      stm_exp (exp_union (memory_op_result 1) KMemException E_SAMO_Access_Fault).
+      let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
+      if: tmp
+      then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
+            let: tmp := stm_foreign (read_ram bytes) [paddr] in
+            use lemma (return_pmp_ptsto bytes) [paddr] ;;
+            stm_exp (exp_union (memory_op_result bytes) KMemValue tmp))
+      else match: t in union access_type with
+          |> KRead pat_unit      =>
+              stm_exp (exp_union (memory_op_result bytes) KMemException E_Load_Access_Fault)
+          |> KWrite pat_unit     =>
+              stm_exp (exp_union (memory_op_result bytes) KMemException E_SAMO_Access_Fault)
+          |> KReadWrite pat_unit =>
+              stm_exp (exp_union (memory_op_result bytes) KMemException E_SAMO_Access_Fault)
+          |> KExecute pat_unit   =>
+              stm_exp (exp_union (memory_op_result bytes) KMemException E_Fetch_Access_Fault)
+          end.
+
+  (* NOTE: normally the return values of both `write_ram` and `mmio_write` should be wrapped in MemValue but this constructor is currently restricted to bytes and write_ram *ALWAYS* returns true, so we just return a byte representation of 1 *)
+  Definition fun_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; data :: ty_bytes bytes] (ty_memory_op_result 1) :=
+    let: tmp := stm_foreign (within_mmio bytes) [paddr] in
+    if: tmp
+    then
+      let: tmp := stm_foreign (mmio_write bytes) [paddr; data] in
+      stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1]))
+    else
+      let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
+      if: tmp
+      then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
+            stm_foreign (write_ram bytes) [paddr; data] ;;
+            use lemma (return_pmp_ptsto bytes) [paddr] ;;
+            stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1])))
+      else
+        stm_exp (exp_union (memory_op_result 1) KMemException E_SAMO_Access_Fault).
 
   Definition fun_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := stm_call (@pmpCheck bytes H) [paddr; t; p] in
