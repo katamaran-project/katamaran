@@ -1244,12 +1244,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition Trace : Set := list Event.
 
   (* Memory *)
-  Record Memory : Type :=
+  Record MemoryType : Type :=
     mkMem {
       memory_ram : RAM;
       memory_trace : Trace;
       memory_state : State;
     } .
+  Definition Memory := MemoryType.
   Definition memory_update_ram (μ : Memory) (r : RAM) := mkMem r (memory_trace μ) (memory_state μ).
   Definition memory_update_trace (μ : Memory) (t : Trace) := mkMem (memory_ram μ) t (memory_state μ).
   Definition memory_append_trace (μ : Memory) (e : Event) := memory_update_trace μ (cons e (memory_trace μ)).
