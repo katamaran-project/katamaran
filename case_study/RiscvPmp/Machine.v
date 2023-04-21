@@ -1267,24 +1267,24 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     match data_size as n return (Val (ty_bytes n) → Memory) with
     | O   => fun _data => μ
     | S n => fun data : Val (ty_bytes (S n)) =>
-               let (byte,bytes) := bv.appView 8 (n * 8) data in
+               let (byte , bytes) := bv.appView 8 (n * 8) data in
                let μ' := (memory_update_ram μ (write_byte (memory_ram μ) addr byte)) in
                fun_write_ram μ' (bv.one + addr) bytes
     end.
   #[global] Arguments fun_write_ram : clear implicits.
 
   (* Separated into a read and a write function in the sail model *)
-  Definition fun_within_mmio (addr : Val ty_xlenbits) (data_size : nat) : bool :=
+  Definition fun_within_mmio (data_size : nat) (addr : Val ty_xlenbits) : bool :=
     bool_decide (withinMMIO addr data_size).
 
   Definition fun_read_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
     Memory * Val (ty_bytes data_size) :=
     match data_size with
     | O   => (μ , bv.zero)
-    | S n => let (s',readv) := state_tra_read (memory_state μ) addr data_size in
+    | S n => let (s' , readv) := state_tra_read (memory_state μ) addr data_size in
              let mmioev := mkEvent IORead addr data_size readv in
              let μ' := memory_append_trace (memory_update_state μ s') mmioev in
-              (μ', readv)%type
+              (μ' , readv)%type
     end.
 
   Definition fun_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
@@ -1304,12 +1304,21 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       (γ' , μ' , res) = (γ , μ , inr (fun_read_ram μ width addr));
     ForeignCall (write_ram width) [addr; data] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , @fun_write_ram μ width addr data , inr true);
+    ForeignCall (mmio_read width) [addr] res γ γ' μ μ' :=
+      let (μupd,readv) := fun_read_mmio μ width addr in
+      (γ' , μ' , res) = (γ , μupd , inr readv);
+    ForeignCall (mmio_write width) [addr; data] res γ γ' μ μ' :=
+      (γ' , μ' , res) = (γ , @fun_write_mmio μ width addr data , inr true);
+    ForeignCall (within_mmio width) [addr] res γ γ' μ μ' :=
+      (γ' , μ' , res) = (γ , μ , inr (fun_within_mmio width addr));
     ForeignCall decode [code] res γ γ' μ μ' :=
         (γ' , μ' , res) = (γ , μ , pure_decode code).
 
+  Local Arguments ForeignCall {_ _} f /.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
-  Proof. destruct f; env.destroy args; repeat econstructor. Qed.
+  Proof. destruct f; env.destroy args; [| | cbn; destruct fun_read_mmio|..]; repeat econstructor.
+  Qed.
   End ForeignKit.
 
   Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
