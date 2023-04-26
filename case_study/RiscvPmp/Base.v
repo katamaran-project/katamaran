@@ -121,10 +121,11 @@ Inductive PmpAddrIdx : Set :=
 | PMPADDR1
 .
 
-(* NOTE: PMP Addr Match Type limited to OFF and TOR for now *)
+(* NOTE: PMP Addr Match Type limited to OFF, TOR and NA4 for now *)
 Inductive PmpAddrMatchType : Set :=
 | OFF
 | TOR
+| NA4
 .
 
 Inductive PmpMatch : Set :=
@@ -422,7 +423,7 @@ Section Finite.
     {| enum := [PMPADDR0;PMPADDR1] |}.
 
   #[export,program] Instance PmpAddrMatchType_finite : Finite PmpAddrMatchType :=
-    {| enum := [OFF;TOR] |}.
+    {| enum := [OFF;TOR;NA4] |}.
 
   #[export,program] Instance PmpMatch_finite : Finite PmpMatch :=
     {| enum := [PMP_Success;PMP_Continue;PMP_Fail] |}.

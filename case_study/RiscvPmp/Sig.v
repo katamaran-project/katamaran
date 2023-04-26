@@ -181,6 +181,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Equations PmpAddrMatchType_eqb (a1 a2 : PmpAddrMatchType) : bool :=
     | OFF | OFF := true;
     | TOR | TOR := true;
+    | NA4 | NA4 := true;
     | _   | _   := false.
 
     Definition pmpcfg_ent_eqb (c1 c2 : Pmpcfg_ent) : bool :=
@@ -223,11 +224,13 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       match A cfg with
       | OFF => false
       | TOR => (prev_addr <=ᵘ? paddr) && (paddr <ᵘ? addr)
+      | NA4 => (addr <=ᵘ? paddr) && (paddr <ᵘ? addr + (bv.of_nat 4))%bv
       end.
 
     Definition Within_cfg (paddr : Val ty_xlenbits) (cfg : Val ty_pmpcfg_ent) (prev_addr addr : Val ty_xlenbits) : Prop :=
       decide_within_cfg paddr cfg prev_addr addr = true.
 
+    (* TODO: update for NA4? *)
     Definition decide_not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) : bool :=
       match entries with
       | (c0 , a0) :: (c1 , a1) :: [] =>
@@ -437,24 +440,36 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   Definition is_on {Σ} (A : Term Σ ty_pmpaddrmatchtype) : Formula Σ :=
     formula_relop bop.neq A (term_val ty_pmpaddrmatchtype OFF).
 
+  Definition is_TOR {Σ} (A : Term Σ ty_pmpaddrmatchtype) : Formula Σ :=
+    formula_relop bop.eq A (term_val ty_pmpaddrmatchtype TOR).
+
+  Definition is_NA4 {Σ} (A : Term Σ ty_pmpaddrmatchtype) : Formula Σ :=
+    formula_relop bop.eq A (term_val ty_pmpaddrmatchtype NA4).
+
   Definition is_machine_mode {Σ} (p : Term Σ ty_privilege) : Formula Σ :=
     formula_relop bop.eq (term_val ty_privilege Machine) p.
 
-  Definition fml_pmp_match {Σ} (a width lo hi : Term Σ ty_xlenbits) (cfg : NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : Formula Σ :=
-    is_on cfg.[??"A"]
-    ∧ formula_relop bop.bvule lo hi
+  Definition fml_pmp_match_conditions {Σ} (a width lo hi : Term Σ ty_xlenbits) : Formula Σ :=
+    formula_relop bop.bvule lo hi
     ∧ formula_relop bop.bvult lo (term_binop bop.bvadd a width)
-    ∧ formula_relop bop.bvult a hi
     ∧ formula_relop bop.bvule lo a
-    ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) hi
+    ∧ formula_relop bop.bvult a hi
+    ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) hi.
+
+  Definition fml_pmp_match {Σ} (a width prev_pmpaddr pmpaddr : Term Σ ty_xlenbits) (cfg : NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : Formula Σ :=
+    ((is_TOR cfg.[??"A"] ∧ fml_pmp_match_conditions a width prev_pmpaddr pmpaddr)
+    ∨ (is_NA4 cfg.[??"A"] ∧ fml_pmp_match_conditions a width pmpaddr (term_binop bop.bvadd pmpaddr (term_val ty_xlenbits (bv.of_nat 4)))))
     ∧ formula_user pmp_check_perms [term_record rpmpcfg_ent [cfg.[??"L"];cfg.[??"A"];cfg.[??"X"];cfg.[??"W"];cfg.[??"R"]]; acc; p].
 
-  Definition fml_pmp_nomatch {Σ} (a width lo hi : Term Σ ty_xlenbits) (cfg : NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) (cont : Formula Σ) : Formula Σ :=
+  Definition fml_pmp_nomatch_conditions {Σ} (a width lo hi : Term Σ ty_xlenbits) : Formula Σ :=
+    formula_relop bop.bvult hi lo
+     ∨ (formula_relop bop.bvule lo hi ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) lo)
+     ∨ (formula_relop bop.bvule lo hi ∧ formula_relop bop.bvult lo (term_binop bop.bvadd a width) ∧ formula_relop bop.bvule hi a).
+
+  Definition fml_pmp_nomatch {Σ} (a width prev_pmpaddr pmpaddr : Term Σ ty_xlenbits) (cfg : NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) (cont : Formula Σ) : Formula Σ :=
     (is_off cfg.[??"A"]
-     ∨ (is_on cfg.[??"A"] ∧
-          (formula_relop bop.bvult hi lo
-           ∨ (formula_relop bop.bvule lo hi ∧ formula_relop bop.bvule (term_binop bop.bvadd a width) lo)
-           ∨ (formula_relop bop.bvule lo hi ∧ formula_relop bop.bvult lo (term_binop bop.bvadd a width) ∧ formula_relop bop.bvule hi a))))
+     ∨ (is_TOR cfg.[??"A"] ∧ fml_pmp_nomatch_conditions a width prev_pmpaddr pmpaddr)
+     ∨ (is_NA4 cfg.[??"A"] ∧ fml_pmp_nomatch_conditions a width pmpaddr (term_binop bop.bvadd pmpaddr (term_val ty_xlenbits (bv.of_nat 4)))))
     ∧ cont.
 
   Definition cfg_to_env {Σ} (cfg : Pmpcfg_ent) : NamedEnv (Term Σ) (recordf_ty rpmpcfg_ent) :=
@@ -540,35 +555,70 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       {| L := L cfg; A := A cfg; X := X cfg; W := W cfg; R := R cfg |} = cfg.
   Proof. now intros []. Qed.
 
-  Lemma pmp_check_inversion_fml_aux (a width lo : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
-    pmp_check_aux a width lo entries p acc = true ->
-    pmp_check_fml_prop_aux a width lo entries p acc.
+  Lemma pmp_check_inversion_fml_aux (a width prev_pmpaddr : Val ty_xlenbits) (entries : list (Val ty_pmpentry)) (p : Val ty_privilege) (acc : Val ty_access_type) :
+    pmp_check_aux a width prev_pmpaddr entries p acc = true ->
+    pmp_check_fml_prop_aux a width prev_pmpaddr entries p acc.
   Proof.
     unfold pmp_check_aux, pmp_check_fml_prop_aux, pmp_check_fml_aux, pmp_check_fml_term_aux.
-    generalize dependent lo.
-    induction entries as [|[cfg0 addr0] entries IHentries].
+    generalize dependent prev_pmpaddr.
+    induction entries as [|[cfg0 pmpaddr] entries IHentries].
     - cbn; intros; destruct p; auto; discriminate.
     - intros.
       destruct (@simplify_pmpcheck_term_list [ctx] (term_val ty_xlenbits a) (term_val ty_xlenbits width)
-                  (term_val ty_xlenbits addr0) (term_val (ty.list ty_pmpentry) entries)
+                  (term_val ty_xlenbits pmpaddr) (term_val (ty.list ty_pmpentry) entries)
                   (term_val ty_privilege p) (term_val ty_access_type acc)) eqn:Epmp;
         cbn;
-        specialize (IHentries addr0);
+        specialize (IHentries pmpaddr);
         rewrite Epmp in IHentries;
-        cbn in H.
-      + destruct (pmp_match_entry a width p cfg0 lo addr0) eqn:Hm;
+        cbn in H;
+        last done.
+      destruct (pmp_match_entry a width p cfg0 prev_pmpaddr pmpaddr) eqn:Hm;
         try discriminate.
-        * apply pmp_match_entry_PMP_Success in Hm as (?%addr_match_type_TOR_neq_OFF & ? & ? & ? & ? & ?).
+      + destruct (A cfg0) eqn:HA.
+        * left; split.
+          now left.
+          unfold pmp_match_entry in Hm.
+          rewrite (pmp_addr_range_None_2 _ _ _ HA) in Hm.
+          now simpl in Hm.
+        * rewrite <- HA.
+          apply (pmp_addr_range_Some_TOR cfg0 pmpaddr prev_pmpaddr) in HA.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ HA) in Hm.
           apply Pmp_check_perms_Access_pmp_perm in H.
           rewrite cfg_record.
-          right; repeat split; auto.
+          right; split; auto; left; repeat split; intuition.
+        * rewrite <- HA.
+          apply (pmp_addr_range_Some_NA4 cfg0 pmpaddr prev_pmpaddr) in HA.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ HA) in Hm.
+          apply Pmp_check_perms_Access_pmp_perm in H.
+          rewrite cfg_record.
+          right; split; auto; right; repeat split; intuition.
+      + cbn in Epmp.
+        inversion Epmp.
+        subst.
+        destruct (A cfg0) eqn:HA.
         * left; split.
-          apply pmp_match_entry_PMP_Continue in Hm as [|(? & [|])]; auto.
-          cbn in Epmp.
-          inversion Epmp.
-          subst.
-          apply IHentries; auto.
-      + done.
+          now left.
+          now apply IHentries.
+        * rewrite <- HA.
+          left; split; last by apply IHentries.
+          rename HA into Hrng.
+          remember Hrng as HA.
+          clear HeqHA.
+          apply (pmp_addr_range_Some_TOR cfg0 pmpaddr prev_pmpaddr) in Hrng.
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hm as [?|Hm]; auto.
+          destruct Hm as [[?|Hcon]%addr_match_type_neq_off_cases (lo' & hi' & [Heq Hm])].
+          inversion Heq; subst; auto.
+          rewrite HA in Hcon; discriminate.
+        * rewrite <- HA.
+          left; split; last by apply IHentries.
+          rename HA into Hrng.
+          remember Hrng as HA.
+          clear HeqHA.
+          apply (pmp_addr_range_Some_NA4 cfg0 pmpaddr prev_pmpaddr) in Hrng.
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hm as [?|Hm]; auto.
+          destruct Hm as [[Hcon|?]%addr_match_type_neq_off_cases (lo' & hi' & [Heq Hm])].
+          rewrite HA in Hcon; discriminate.
+          inversion Heq; subst; auto.
   Qed.
 
   Lemma pmp_check_fml_term_aux_gen_pmp_access : forall {Σ} a width lo es p acc (ι : Valuation Σ),
@@ -594,23 +644,80 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
           rewrite H.
           cbn.
           now apply IHentries.
-          rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ H).
+          destruct H as [(HA & ?)|(HA & ?)].
+          remember (inst lo ι) as Vlo.
+          remember HA as Hrng.
+          clear HeqHrng.
+          apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
+          subst Vlo.
+          apply addr_match_type_TOR_neq_OFF in HA.
+          rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ _ Hrng (conj HA H)).
           now apply IHentries.
-          destruct H as (?%addr_match_type_neq_off_cases & ? & ? & ? & ? & ? & Hperm).
-          pose (conj H (conj H0 (conj H1 (conj H3 (conj H2 H4))))) as Hcond.
-          rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _) Hcond).
-          rewrite cfg_record in Hperm.
-          now apply Pmp_check_perms_Access_pmp_perm.
-        * destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp.
-          apply pmp_match_entry_PMP_Success in Hpmp.
-          destruct Hpmp as (?%addr_match_type_TOR_neq_OFF & ? & ? & ? & ? & ?).
-          right; repeat split; auto.
-          rewrite cfg_record.
-          now apply Pmp_check_perms_Access_pmp_perm.
-          apply pmp_match_entry_PMP_Continue in Hpmp.
-          left; split; auto;
-            last now apply IHentries.
-          discriminate.
+          remember (inst lo ι) as Vlo.
+          remember HA as Hrng.
+          clear HeqHrng.
+          apply (pmp_addr_range_Some_NA4 cfg0 addr0 Vlo) in Hrng.
+          subst Vlo.
+          apply addr_match_type_NA4_neq_OFF in HA.
+          rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ _ Hrng (conj HA H)).
+          now apply IHentries.
+          rewrite cfg_record in H.
+          rewrite Pmp_check_perms_Access_pmp_perm in H.
+          destruct H as [[(HA & H)|(HA & H)] Hperm].
+          remember HA as Hrng.
+          clear HeqHrng.
+          remember (inst lo ι) as Vlo.
+          apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
+          subst Vlo.
+          apply addr_match_type_TOR_neq_OFF in HA.
+          now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) (conj HA H)).
+          remember HA as Hrng.
+          clear HeqHrng.
+          remember (inst lo ι) as Vlo.
+          apply (pmp_addr_range_Some_NA4 cfg0 addr0 Vlo) in Hrng.
+          subst Vlo.
+          apply addr_match_type_NA4_neq_OFF in HA.
+          now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) (conj HA H)).
+        * destruct (A cfg0) eqn:HA.
+          unfold pmp_match_entry in H.
+          rewrite (proj2 (pmp_addr_range_None _ _ _) HA) in H.
+          simpl in H.
+          left; split; auto.
+          now apply IHentries.
+          rewrite <- HA.
+          rewrite cfg_record Pmp_check_perms_Access_pmp_perm;
+            unfold Access_pmp_perm.
+          remember HA as Hrng.
+          clear HeqHrng.
+          remember (inst lo ι) as Vlo.
+          apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
+          subst Vlo.
+          destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp;
+            try discriminate.
+          right; split; auto.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) in Hpmp.
+          left; auto; intuition.
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hpmp as [Hcon|[? (lo' & hi' & [Heq Hpmp])]];
+            first (rewrite HA in Hcon; discriminate).
+          left; split; last by apply IHentries.
+          inversion Heq; subst; right; left; auto.
+          rewrite <- HA.
+          rewrite cfg_record Pmp_check_perms_Access_pmp_perm;
+            unfold Access_pmp_perm.
+          remember HA as Hrng.
+          clear HeqHrng.
+          remember (inst lo ι) as Vlo.
+          apply (pmp_addr_range_Some_NA4 cfg0 addr0 Vlo) in Hrng.
+          subst Vlo.
+          destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp;
+            try discriminate.
+          right; split; auto.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) in Hpmp.
+          right; auto; intuition.
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hpmp as [Hcon|[? (lo' & hi' & [Heq Hpmp])]];
+            first (rewrite HA in Hcon; discriminate).
+          left; split; last by apply IHentries.
+          inversion Heq; subst; right; right; auto.
     - unfold pmp_check_fml_term_aux.
       cbn.
       destruct (term_get_pair_spec h) as [[cfg0 addr0]|]; auto.
@@ -636,42 +743,72 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
         unfold pmp_check_fml_term_aux.
         unfold simplify_pmpcheck_term_list.
         now rewrite Hs.
-        destruct H1 as (HA%addr_match_type_neq_off_cases & [|[[]|[? []]]]);
+        destruct H1 as [(HA & [|[[]|[? []]]])|(HA & [|[[]|[? []]]])];
           unfold pmp_match_entry, pmp_addr_range;
           rewrite HA; simpl;
           bv_comp_bool; simpl;
           apply IHv;
           unfold pmp_check_fml_term_aux, simplify_pmpcheck_term_list;
           now rewrite Hs.
-        destruct H1 as (HA%addr_match_type_neq_off_cases & ? & ? & ? & ? & ? & Hperm).
-        rewrite HA.
-        unfold pmp_match_entry, pmp_addr_range.
-        simpl.
-        bv_comp_bool.
-        simpl.
-        rewrite HA in Hperm.
-        now apply Pmp_check_perms_Access_pmp_perm.
-      + destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp.
-        apply pmp_match_entry_PMP_Success in Hpmp.
-        right.
-        destruct Hpmp as (HA%addr_match_type_TOR_neq_OFF & ? & ? & ? & ? & ?).
-        apply Pmp_check_perms_Access_pmp_perm in Hc.
-        repeat split; auto.
+        destruct H1 as ([(-> & ?)|(-> & ?)] & Hperm);
+          unfold pmp_match_entry, pmp_addr_range;
+          simpl; bv_comp_bool; simpl;
+          now apply Pmp_check_perms_Access_pmp_perm.
+      + remember (inst cfg0 ι) as Vcfg0.
+        remember (inst addr0 ι) as Vaddr0.
+        remember (inst lo ι) as Vlo.
+        destruct (pmp_addr_range Vcfg0 Vaddr0 Vlo) eqn:Hrng;
+          subst.
+        destruct p0 as [lo' hi'].
 
+        rewrite <- H0 in Hc.
+        destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp;
+          try discriminate.
+        apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) in Hpmp.
+        rewrite Pmp_check_perms_Access_pmp_perm; unfold Access_pmp_perm.
+        rewrite H0 in Hc.
+        right; split; auto.
+        destruct Hpmp as [[HA|HA]%addr_match_type_neq_off_cases Hpmp].
+        rewrite (pmp_addr_range_Some_TOR _ _ _ HA) in Hrng.
+        inversion Hrng; subst.
+        rewrite H0 in HA; simpl in HA.
+        left; auto.
+        rewrite (pmp_addr_range_Some_NA4 _ _ _ HA) in Hrng.
+        inversion Hrng; subst.
+        rewrite H0 in HA; simpl in HA.
+        right; auto.
+        apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hpmp.
+        left.
+        split.
+        destruct Hpmp as [HA|([HA|HA]%addr_match_type_neq_off_cases & (lo'' & hi'' & (Heq & Hpmp)))].
+        left; rewrite H0 in HA; simpl in HA; auto.
+        rewrite (pmp_addr_range_Some_TOR _ _ _ HA) in Hrng.
+        inversion Hrng; subst.
+        inversion Heq; subst.
+        rewrite H0 in HA; simpl in HA.
+        right; left; auto.
+        rewrite (pmp_addr_range_Some_NA4 _ _ _ HA) in Hrng.
+        inversion Hrng; subst.
+        inversion Heq; subst.
+        rewrite H0 in HA; simpl in HA.
+        right; right; auto.
         unfold pmp_check_fml_term_aux, simplify_pmpcheck_term_list in IHv.
         specialize (IHv addr0 p acc ι).
         rewrite Hs in IHv.
         destruct IHv as (? & IH).
-        apply IH in Hc.
-        left.
-        apply pmp_match_entry_PMP_Continue in Hpmp as [|[HA [|[|[]]]]];
-          auto.
-        simpl in HA.
-        destruct H2; split; auto.
-        right; auto.
-        destruct H3; split; auto.
-        right; split; auto.
-        discriminate.
+        unfold pmp_match_entry in Hc.
+        now apply IH in Hc.
+        left; split.
+        apply pmp_addr_range_None in Hrng; left.
+        now rewrite H0 in Hrng; simpl in Hrng.
+        unfold pmp_check_fml_term_aux, simplify_pmpcheck_term_list in IHv.
+        specialize (IHv addr0 p acc ι).
+        rewrite Hs in IHv.
+        destruct IHv as (? & IH).
+        unfold pmp_match_entry in Hc.
+        rewrite <- H0 in Hc.
+        rewrite Hrng in Hc.
+        now apply IH in Hc.
   Qed.
 
   Lemma pmp_check_fml_pure_aux_gen_pmp_access : forall {Σ} a width lo es p acc (ι : Valuation Σ),
@@ -688,35 +825,98 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       + destruct (inst p ι); auto; try discriminate.
     - intros; cbn.
       split; intros H.
-      destruct H as [([HA|(HA & ?)] & ?)|(? & ? & ? & ? & ? & ? & Hperms)].
+      destruct H as [([HA|[(HA & ?)|(HA & ?)]] & ?)|?].
       + unfold pmp_match_entry, pmp_addr_range; rewrite HA.
         simpl.
         cbn in IHentries; unfold Gen_Pmp_access, pmp_check_aux in IHentries.
         specialize (IHentries (term_val ty_xlenbits addr0) p acc ι).
         now apply IHentries.
-      + apply addr_match_type_neq_off_cases in HA.
-        unfold pmp_match_entry, pmp_addr_range; rewrite HA.
-        cbn.
+      + remember HA as Hrng.
+        clear HeqHrng.
+        remember (inst lo ι) as Vlo.
+        apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
+        subst.
+        apply addr_match_type_TOR_neq_OFF in HA.
+        rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ _ Hrng (conj HA H)).
         cbn in IHentries; unfold Gen_Pmp_access, pmp_check_aux in IHentries.
         specialize (IHentries (term_val ty_xlenbits addr0) p acc ι).
-        destruct H as [|[(? & ?)|(? & ? & ?)]];
-          bv_comp_bool; simpl;
-          try now apply IHentries.
-      + apply Pmp_check_perms_Access_pmp_perm in Hperms.
-        rewrite cfg_record in Hperms.
-        unfold pmp_match_entry, pmp_addr_range.
-        apply addr_match_type_neq_off_cases in H; rewrite H.
-        cbn; bv_comp_bool; done.
-      + destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp;
-          try discriminate.
-        * apply pmp_match_entry_PMP_Success in Hpmp as (?%addr_match_type_TOR_neq_OFF & ? & ? & ? & ? & ?).
-          apply Pmp_check_perms_Access_pmp_perm in H.
+        now apply IHentries.
+      + remember HA as Hrng.
+        clear HeqHrng.
+        remember (inst lo ι) as Vlo.
+        apply (pmp_addr_range_Some_NA4 cfg0 addr0 Vlo) in Hrng.
+        subst.
+        apply addr_match_type_NA4_neq_OFF in HA.
+        rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ _ Hrng (conj HA H)).
+        cbn in IHentries; unfold Gen_Pmp_access, pmp_check_aux in IHentries.
+        specialize (IHentries (term_val ty_xlenbits addr0) p acc ι).
+        now apply IHentries.
+      + destruct H as ([(HA & ?)|(HA & ?)] & Hperms);
+          apply Pmp_check_perms_Access_pmp_perm in Hperms;
+          rewrite cfg_record in Hperms.
+        remember HA as Hrng.
+        clear HeqHrng.
+        remember (inst lo ι) as Vlo.
+        apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
+        subst.
+        apply addr_match_type_TOR_neq_OFF in HA.
+        now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) (conj HA H)).
+        remember HA as Hrng.
+        clear HeqHrng.
+        remember (inst lo ι) as Vlo.
+        apply (pmp_addr_range_Some_NA4 cfg0 addr0 Vlo) in Hrng.
+        subst.
+        apply addr_match_type_NA4_neq_OFF in HA.
+        now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) (conj HA H)).
+      + destruct (A cfg0) eqn:HA.
+        * unfold pmp_match_entry in H.
+          rewrite (pmp_addr_range_None_2 _ _ _ HA) in H.
+          simpl in H.
+          cbn in IHentries; unfold Gen_Pmp_access, pmp_check_aux in IHentries.
+          specialize (IHentries (term_val ty_xlenbits addr0) p acc ι).
+          left; split.
+          left; auto.
+          now apply IHentries.
+        * remember (inst lo ι) as Vlo.
+          rewrite <- HA.
+          apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in HA.
+          subst.
           rewrite cfg_record.
-          right; repeat split; auto.
-        * apply pmp_match_entry_PMP_Continue in Hpmp.
-          left; split; auto.
-          apply IHentries.
-          cbn; now unfold Gen_Pmp_access, pmp_check_aux.
+          rewrite Pmp_check_perms_Access_pmp_perm.
+          destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp;
+            try discriminate.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ HA) in Hpmp.
+          right; split; auto.
+          left; intuition.
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ HA) in Hpmp as [Ha|Ha].
+          left; split.
+          left; auto.
+          now apply IHentries.
+          destruct Ha as (? & lo' & hi' & Heq & Ha).
+          inversion Heq; subst.
+          left; split.
+          right; left; auto.
+          now apply IHentries.
+        * remember (inst lo ι) as Vlo.
+          rewrite <- HA.
+          apply (pmp_addr_range_Some_NA4 cfg0 addr0 Vlo) in HA.
+          subst.
+          rewrite cfg_record.
+          rewrite Pmp_check_perms_Access_pmp_perm.
+          destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp;
+            try discriminate.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ HA) in Hpmp.
+          right; split; auto.
+          right; intuition.
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ HA) in Hpmp as [Ha|Ha].
+          left; split.
+          left; auto.
+          now apply IHentries.
+          destruct Ha as (? & lo' & hi' & Heq & Ha).
+          inversion Heq; subst.
+          left; split.
+          right; right; auto.
+          now apply IHentries.
   Qed.
 
   Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (PathCondition Σ) :=
