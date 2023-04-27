@@ -163,7 +163,7 @@ Import BlockVerificationDerived2.
     Example femtokernel_handler : list AST :=
       [
         UTYPE bv.zero ra RISCV_AUIPC
-      ; LOAD (bv.of_N 12) ra ra WORD
+      ; LOAD (bv.of_N 12) ra ra false WORD
       ; MRET
       ].
     Definition addPc (l : list AST) : list (nat * AST) :=

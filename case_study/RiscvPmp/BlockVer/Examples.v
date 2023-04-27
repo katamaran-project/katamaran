@@ -287,7 +287,7 @@ Module MEMCOPY.
 
   Example memcpy : list AST :=
 	[ BEQ a2 bv.zero (bv.of_N 0x1c)
-	; LOAD bv.zero a1 a3 BYTE
+	; LOAD bv.zero a1 a3 false BYTE
 	; STORE bv.zero a3 a0 BYTE
 	; ADDI a0 a0 (bv.of_N 1)
 	; ADDI a1 a1 (bv.of_N 1)
