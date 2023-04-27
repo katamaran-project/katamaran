@@ -152,6 +152,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | rX                    : Fun [rs ∷ ty_regno] ty_xlenbits
   | wX                    : Fun [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit
   | bool_to_bits          : Fun ["x" :: ty.bool] (ty.bvec 1)
+  | shift_right_arith32   : Fun [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32)
   | extend_value (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes)
   | get_arch_pc           : Fun ctx.nil ty_xlenbits
   | get_next_pc           : Fun ctx.nil ty_xlenbits
@@ -437,6 +438,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     if: exp_var "x"
     then exp_val (ty.bvec 1) Bitvector.bv.one
     else exp_val (ty.bvec 1) Bitvector.bv.zero.
+
+  Definition fun_shift_right_arith32 : Stm [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32) :=
+    let: "v64" :: ty.bvec 64 := exp_sext v in
+    let: tmp := exp_binop bop.shiftr (exp_var "v64") (exp_var "shift") in
+    exp_extract 0 32 tmp.
 
   Definition fun_extend_value (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes) :=
     match: value in union (memory_op_result bytes) with
@@ -967,8 +973,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: rs1_val := call rX rs1 in
     let: result :=
       match: op in sop with
-      | RISCV_SLRI => let: tmp := exp_extract 0 5 shamt in
+      | RISCV_SLLI => let: tmp := exp_extract 0 5 shamt in
+                      exp_binop bop.shiftl rs1_val tmp
+      | RISCV_SRLI => let: tmp := exp_extract 0 5 shamt in
                       exp_binop bop.shiftr rs1_val tmp
+      | RISCV_SRAI => let: tmp := exp_extract 0 5 shamt in
+                      call shift_right_arith32 rs1_val tmp
       end in
     call wX rd result ;;
     stm_val ty_retired RETIRE_SUCCESS.
@@ -1166,6 +1176,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | rX                      => fun_rX
     | wX                      => fun_wX
     | bool_to_bits            => fun_bool_to_bits
+    | shift_right_arith32     => fun_shift_right_arith32
     | @extend_value _ p       => @fun_extend_value _ p
     | get_arch_pc             => fun_get_arch_pc
     | get_next_pc             => fun_get_next_pc

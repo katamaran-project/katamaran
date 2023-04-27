@@ -1491,7 +1491,7 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_ITYPE : ValidContractWithFuel InlineOneLevel execute_ITYPE.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_SHIFTIOP : ValidContract execute_SHIFTIOP.
+  Lemma valid_contract_execute_SHIFTIOP : ValidContractWithFuel InlineOneLevel execute_SHIFTIOP.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_execute_UTYPE : ValidContract execute_UTYPE.
@@ -1580,6 +1580,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_wX).
     - cbn in H; inversion H.
     - cbn in H; inversion H.
+    - cbn in H; inversion H.
     - apply (valid_contract _ H valid_contract_get_arch_pc).
     - apply (valid_contract _ H valid_contract_get_next_pc).
     - apply (valid_contract _ H valid_contract_set_next_pc).
@@ -1630,7 +1631,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_execute).
     - apply (valid_contract _ H valid_contract_execute_RTYPE).
     - apply (valid_contract_with_fuel _ _ H valid_contract_execute_ITYPE).
-    - apply (valid_contract _ H valid_contract_execute_SHIFTIOP).
+    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_SHIFTIOP).
     - apply (valid_contract _ H valid_contract_execute_UTYPE).
     - apply (valid_contract _ H valid_contract_execute_BTYPE).
     - apply (valid_contract _ H valid_contract_execute_RISCV_JAL).

@@ -155,7 +155,9 @@ Inductive IOP : Set :=
 .
 
 Inductive SOP : Set :=
+| RISCV_SLLI
 | RISCV_SRLI
+| RISCV_SRAI
 .
 
 Inductive UOP : Set :=
@@ -446,7 +448,7 @@ Section Finite.
 
   #[export,program] Instance SOP_finite :
     Finite SOP :=
-    {| enum := [RISCV_SRLI] |}.
+    {| enum := [RISCV_SLLI;RISCV_SRLI;RISCV_SRAI] |}.
 
   #[export,program] Instance UOP_finite :
     Finite UOP :=
