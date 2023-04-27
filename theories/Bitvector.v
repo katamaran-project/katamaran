@@ -691,6 +691,9 @@ Module bv.
   Section Shift.
     Definition shiftr {m n} (x : bv m) (y : bv n) : bv m :=
       of_Z (Z.shiftr (unsigned x) (unsigned y)).
+
+    Definition shiftl {m n} (x : bv m) (y : bv n) : bv m :=
+      of_Z (Z.shiftl (unsigned x) (unsigned y)).
   End Shift.
 
   Section EqMod2N.
@@ -1752,6 +1755,7 @@ Module bv.
     Goal extract 8 8 [bv[16] 256] = [bv[8] 1]. reflexivity. Qed.
 
     Goal shiftr [bv[8] 16] [bv[5] 4] = [bv[8] 1]. reflexivity. Qed.
+    Goal shiftl [bv[8] 1] [bv[5] 4] = [bv[8] 16]. reflexivity. Qed.
   End Tests.
 
 End bv.
