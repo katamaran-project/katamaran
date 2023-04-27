@@ -151,6 +151,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Inductive Fun : PCtx -> Ty -> Set :=
   | rX                    : Fun [rs ∷ ty_regno] ty_xlenbits
   | wX                    : Fun [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit
+  | bool_to_bits          : Fun ["x" :: ty.bool] (ty.bvec 1)
   | extend_value (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes)
   | get_arch_pc           : Fun ctx.nil ty_xlenbits
   | get_next_pc           : Fun ctx.nil ty_xlenbits
@@ -431,6 +432,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | 111 => stm_write_register x7 v
     end ;;
     use lemma close_gprs.
+
+  Definition fun_bool_to_bits : Stm ["x" :: ty.bool] (ty.bvec 1) :=
+    if: exp_var "x"
+    then exp_val (ty.bvec 1) Bitvector.bv.one
+    else exp_val (ty.bvec 1) Bitvector.bv.zero.
 
   Definition fun_extend_value (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes) :=
     match: value in union (memory_op_result bytes) with
@@ -943,7 +949,16 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: immext ∷ ty_xlenbits := exp_sext imm in
     let: result :=
        match: op in iop with
-       | RISCV_ADDI => rs1_val +ᵇ immext
+       | RISCV_ADDI  => rs1_val +ᵇ immext
+       | RISCV_SLTI  => let: tmp := rs1_val <ˢ immext in
+                        let: tmp := call bool_to_bits tmp in
+                        exp_zext tmp
+       | RISCV_SLTIU => let: tmp := rs1_val <ᵘ immext in
+                        let: tmp := call bool_to_bits tmp in
+                        exp_zext tmp
+       | RISCV_ANDI  => exp_binop bop.bvand rs1_val immext
+       | RISCV_ORI   => exp_binop bop.bvor  rs1_val immext
+       | RISCV_XORI  => exp_binop bop.bvxor rs1_val immext
        end in
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
@@ -1150,6 +1165,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     match f with
     | rX                      => fun_rX
     | wX                      => fun_wX
+    | bool_to_bits            => fun_bool_to_bits
     | @extend_value _ p       => @fun_extend_value _ p
     | get_arch_pc             => fun_get_arch_pc
     | get_next_pc             => fun_get_next_pc

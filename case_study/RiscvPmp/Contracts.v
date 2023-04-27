@@ -1229,16 +1229,26 @@ Module RiscvPmpValidContracts.
   Import RiscvPmpExecutor.
   Import RiscvPmpShallowExecutor.
 
+  Inductive Fuel : Set :=
+  | NoInlining
+  | InlineOneLevel.
+
+  Definition fuel_to_nat (f : Fuel) : nat :=
+    match f with
+    | NoInlining     => 1
+    | InlineOneLevel => 2
+    end.
+
   Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContractReflect c (FunDef f)
-    | None => False
+    | None   => False
     end.
 
-  Definition ValidContractWithFuel {Δ τ} (fuel : nat) (f : Fun Δ τ) : Prop :=
+  Definition ValidContractWithFuel {Δ τ} (fuel : Fuel) (f : Fun Δ τ) : Prop :=
     match CEnv f with
-    | Some c => Symbolic.ValidContractReflectWithFuel fuel c (FunDef f)
-    | None => False
+    | Some c => Symbolic.ValidContractReflectWithFuel (fuel_to_nat fuel) c (FunDef f)
+    | None   => False
     end.
 
 
@@ -1313,7 +1323,7 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : ValidContractWithFuel 2 (process_load bytes).
+  Lemma valid_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : ValidContractWithFuel InlineOneLevel (process_load bytes).
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
@@ -1478,7 +1488,7 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_RTYPE : ValidContract execute_RTYPE.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_ITYPE : ValidContract execute_ITYPE.
+  Lemma valid_contract_execute_ITYPE : ValidContractWithFuel InlineOneLevel execute_ITYPE.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_execute_SHIFTIOP : ValidContract execute_SHIFTIOP.
@@ -1536,7 +1546,7 @@ Module RiscvPmpValidContracts.
     apply Hvc.
   Qed.
 
-  Lemma valid_contract_with_fuel : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ) (fuel : nat),
+  Lemma valid_contract_with_fuel : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ) (fuel : Fuel),
       CEnv f = Some c ->
       ValidContractWithFuel fuel f ->
       exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
@@ -1544,7 +1554,7 @@ Module RiscvPmpValidContracts.
     intros ? ? f c fuel Hcenv Hvc.
     unfold ValidContractWithFuel in Hvc.
     rewrite Hcenv in Hvc.
-    exists fuel.
+    exists (fuel_to_nat fuel).
     now apply Symbolic.validcontract_reflect_fuel_sound.
   Qed.
 
@@ -1568,6 +1578,7 @@ Module RiscvPmpValidContracts.
     destruct f.
     - apply (valid_contract _ H valid_contract_rX).
     - apply (valid_contract _ H valid_contract_wX).
+    - cbn in H; inversion H.
     - cbn in H; inversion H.
     - apply (valid_contract _ H valid_contract_get_arch_pc).
     - apply (valid_contract _ H valid_contract_get_next_pc).
@@ -1618,7 +1629,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_writeCSR).
     - apply (valid_contract _ H valid_contract_execute).
     - apply (valid_contract _ H valid_contract_execute_RTYPE).
-    - apply (valid_contract _ H valid_contract_execute_ITYPE).
+    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_ITYPE).
     - apply (valid_contract _ H valid_contract_execute_SHIFTIOP).
     - apply (valid_contract _ H valid_contract_execute_UTYPE).
     - apply (valid_contract _ H valid_contract_execute_BTYPE).
