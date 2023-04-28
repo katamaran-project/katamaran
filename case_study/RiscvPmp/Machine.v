@@ -75,6 +75,9 @@ Module RiscvNotations.
   Notation "'bv'"           := "bv" : string_scope.
   Notation "'width'"        := "width" : string_scope.
   Notation "'is_unsigned'"  := "is_unsigned" : string_scope.
+  Notation "'is_imm'"       := "is_imm" : string_scope.
+  Notation "'isWrite'"      := "isWrite" : string_scope.
+  Notation "'new_val'"      := "new_val" : string_scope.
   Notation "'e'"            := "e" : string_scope.
   Notation "'ctl'"          := "ctl" : string_scope.
   Notation "'c'"            := "c" : string_scope.
@@ -213,7 +216,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_STORE         : Fun [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired
   | execute_ECALL         : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
-  | execute_CSR           : Fun [csr ∷ ty_csridx; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_csrop] ty_retired
+  | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
@@ -307,6 +310,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'locked'"       := (@exp_var _ "locked" _ _) : exp_scope.
     Notation "'width'"        := (@exp_var _ "width" _ _) : exp_scope.
     Notation "'is_unsigned'"  := (@exp_var _ "is_unsigned" _ _) : exp_scope.
+    Notation "'is_imm'"       := (@exp_var _ "is_imm" _ _) : exp_scope.
+    Notation "'isWrite'"      := (@exp_var _ "isWrite" _ _) : exp_scope.
+    Notation "'new_val'"      := (@exp_var _ "new_val" _ _) : exp_scope.
 
     Notation "'Read'" := (exp_union access_type KRead (exp_val ty.unit tt)) : exp_scope.
     Notation "'Write'" := (exp_union access_type KWrite (exp_val ty.unit tt)) : exp_scope.
@@ -936,7 +942,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KSTORE (pat_tuple (imm , rs2 , rs1 , w))            => call execute_STORE imm rs2 rs1 w
     |> KECALL pat_unit                                     => call execute_ECALL
     |> KMRET pat_unit                                      => call execute_MRET
-    |> KCSR (pat_tuple (csr , rs1 , rd , op))              => call execute_CSR csr rs1 rd op
+    |> KCSR (pat_tuple (csr , rs1 , rd , is_imm , op))     => call execute_CSR csr rs1 rd is_imm op
     end.
 
   Definition fun_execute_RTYPE : Stm [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired :=
@@ -1112,15 +1118,30 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       stm_val ty_retired RETIRE_FAIL
     end.
 
-  Definition fun_execute_CSR : Stm [csr ∷ ty_csridx; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_csrop] ty_retired :=
-    let: rs1_val := call rX rs1 in
+  Definition fun_execute_CSR : Stm [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired :=
+    let: rs1_val := if: is_imm
+                    then exp_zext rs1
+                    else call rX rs1 in
+    let: isWrite := match: op in csrop with
+                    | CSRRW => exp_val ty.bool true
+                    | _     => if: is_imm
+                               then exp_unsigned rs1_val != exp_val ty.int 0%Z
+                               else exp_unsigned rs1 != exp_val ty.int 0%Z
+                    end in
     let: tmp1 := stm_read_register cur_privilege in
     let: tmp2 := call check_CSR csr tmp1 in
     if: tmp2 (* then and else branch switched, Sail model uses a not here *)
     then
       (use lemma open_pmp_entries ;;
        let: csr_val := call readCSR csr in
-       call writeCSR csr rs1_val ;;
+       (if: isWrite
+        then let: new_val := match: op in csrop with
+                             | CSRRW => rs1_val
+                             | CSRRS => exp_binop bop.bvor csr_val rs1_val
+                             | CSRRC => exp_binop bop.bvand csr_val (exp_negate rs1_val)
+                             end in
+                 call writeCSR csr rs1_val
+        else stm_val ty.unit tt) ;;
        use lemma close_pmp_entries ;;
        call wX rd csr_val ;;
        stm_val ty_retired RETIRE_SUCCESS)

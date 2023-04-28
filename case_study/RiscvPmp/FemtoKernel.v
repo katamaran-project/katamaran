@@ -144,19 +144,19 @@ Import BlockVerificationDerived2.
       [
         UTYPE bv.zero ra RISCV_AUIPC
       ; ITYPE (bv.of_N 80) ra ra RISCV_ADDI
-      ; CSR MPMPADDR0 ra zero CSRRW
+      ; CSR MPMPADDR0 ra zero false CSRRW
       ; UTYPE (bv.of_N femto_address_max) ra RISCV_LUI
-      ; CSR MPMPADDR1 ra zero CSRRW
+      ; CSR MPMPADDR1 ra zero false CSRRW
       ; UTYPE femto_pmp0cfg_bits_2 ra RISCV_LUI
       ; ITYPE femto_pmp0cfg_bits_1 ra ra RISCV_ADDI
-      ; CSR MPMP0CFG ra zero CSRRW
+      ; CSR MPMP0CFG ra zero false CSRRW
       ; UTYPE bv.zero ra RISCV_AUIPC
       ; ITYPE (bv.of_N 32) ra ra RISCV_ADDI
-      ; CSR MTvec ra zero CSRRW
+      ; CSR MTvec ra zero false CSRRW
       ; ITYPE (bv.of_N 16) ra ra RISCV_ADDI
-      ; CSR MEpc ra zero CSRRW
+      ; CSR MEpc ra zero false CSRRW
       ; UTYPE femto_mstatus ra RISCV_LUI
-      ; CSR MStatus ra zero CSRRW
+      ; CSR MStatus ra zero false CSRRW
       ; MRET
       ].
 

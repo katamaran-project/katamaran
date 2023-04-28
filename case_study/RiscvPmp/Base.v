@@ -185,6 +185,8 @@ Inductive BOP : Set :=
 (* Zicsr extension, only support for Read-Write (no set or clear) *)
 Inductive CSROP : Set :=
 | CSRRW
+| CSRRS
+| CSRRC
 .
 
 Inductive Retired : Set :=
@@ -232,8 +234,7 @@ Inductive AST : Set :=
 | STORE (imm : bv 12) (rs2 rs1 : RegIdx) (width : WordWidth)
 | ECALL
 | MRET
-(* Ziscr extension, excluding immediate variants *)
-| CSR (csr : CSRIdx) (rs1 rd : RegIdx) (csrop : CSROP)
+| CSR (csr : CSRIdx) (rs1 rd : RegIdx) (is_imm : bool) (csrop : CSROP)
 .
 
 Inductive AccessType : Set :=
@@ -468,7 +469,7 @@ Section Finite.
 
   #[export,program] Instance CSROP_finite :
     Finite CSROP :=
-    {| enum := [CSRRW] |}.
+    {| enum := [CSRRW;CSRRS;CSRRC] |}.
 
   #[export,program] Instance Retired_finite :
     Finite Retired :=
@@ -629,7 +630,7 @@ Module Export RiscvPmpBase <: Base.
                             | KSTORE      => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty_word_width]
                             | KECALL      => ty.unit
                             | KMRET       => ty.unit
-                            | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty_csrop]
+                            | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty.bool; ty_csrop]
                             end
     | access_type      => fun _ => ty.unit
     | exception_type   => fun _ => ty.unit
@@ -678,7 +679,7 @@ Module Export RiscvPmpBase <: Base.
                             | STORE imm rs2 rs1 w           => existT KSTORE (tt , imm , rs2 , rs1 , w)
                             | ECALL                         => existT KECALL tt
                             | MRET                          => existT KMRET tt
-                            | CSR csr rs1 rd op             => existT KCSR (tt , csr , rs1 , rd , op)
+                            | CSR csr rs1 rd is_imm op      => existT KCSR (tt , csr , rs1 , rd , is_imm , op)
                             end
     | access_type      => fun Kv =>
                             match Kv with
@@ -728,7 +729,7 @@ Module Export RiscvPmpBase <: Base.
                               | existT KSTORE (tt , imm , rs2 , rs1 , w)             => STORE imm rs2 rs1 w
                               | existT KECALL tt                                     => ECALL
                               | existT KMRET tt                                      => MRET
-                              | existT KCSR (tt , csr , rs1 , rd , op)               => CSR csr rs1 rd op
+                              | existT KCSR (tt , csr , rs1 , rd , is_imm , op)      => CSR csr rs1 rd is_imm op
                               end
       | access_type      => fun Kv =>
                               match Kv with
