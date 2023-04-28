@@ -84,10 +84,10 @@ Module Type OccursCheckOn
       | term_not t => term_not <$> occurs_check_term xIn t
       | term_inl t => term_inl <$> occurs_check_term xIn t
       | term_inr t => term_inr <$> occurs_check_term xIn t
-      | term_sext t => (fun t' => term_sext t') <$> occurs_check_term xIn t
-      | term_zext t => (fun t' => term_zext t') <$> occurs_check_term xIn t
-      | term_get_slice_int t => (fun t' => term_get_slice_int t') <$> occurs_check_term xIn t
-      | term_unsigned t => (fun t' => term_unsigned t') <$> occurs_check_term xIn t
+      | term_sext t => term_sext <$> occurs_check_term xIn t
+      | term_zext t => term_zext <$> occurs_check_term xIn t
+      | term_get_slice_int t => term_get_slice_int <$> occurs_check_term xIn t
+      | term_unsigned t => term_unsigned <$> occurs_check_term xIn t
       | term_truncate m t => (fun t' => term_truncate m t') <$> occurs_check_term xIn t
       | term_extract s l t => (fun t' => term_extract s l t') <$> occurs_check_term xIn t
       | term_negate t => term_negate <$> occurs_check_term xIn t

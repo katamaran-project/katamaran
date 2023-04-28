@@ -1845,10 +1845,10 @@ Module Type SymPropOn
             (fun v => bv.sext v) <$> inst_eterm t0
         | @eterm_zext _ _ t0 p =>
             (fun v => bv.zext v) <$> inst_eterm t0
-        | @eterm_get_slice_int _ t0 =>
-            (fun v => bv.of_Z v) <$> inst_eterm t0
-        | @eterm_unsigned _ t0 =>
-            (fun v => bv.unsigned v) <$> inst_eterm t0
+        | eterm_get_slice_int t0 =>
+            bv.of_Z <$> inst_eterm t0
+        | eterm_unsigned t0 =>
+            bv.unsigned <$> inst_eterm t0
         | @eterm_truncate _ m p t0 =>
             (fun v => bv.truncate m v) <$> inst_eterm t0
         | @eterm_extract _ s l t0 =>
