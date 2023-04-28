@@ -1485,7 +1485,7 @@ Module RiscvPmpValidContracts.
     lia.
   Qed.
 
-  Lemma valid_contract_execute_RTYPE : ValidContract execute_RTYPE.
+  Lemma valid_contract_execute_RTYPE : ValidContractWithFuel InlineOneLevel execute_RTYPE.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_execute_ITYPE : ValidContractWithFuel InlineOneLevel execute_ITYPE.
@@ -1629,7 +1629,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_readCSR).
     - apply (valid_contract _ H valid_contract_writeCSR).
     - apply (valid_contract _ H valid_contract_execute).
-    - apply (valid_contract _ H valid_contract_execute_RTYPE).
+    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_RTYPE).
     - apply (valid_contract_with_fuel _ _ H valid_contract_execute_ITYPE).
     - apply (valid_contract_with_fuel _ _ H valid_contract_execute_SHIFTIOP).
     - apply (valid_contract _ H valid_contract_execute_UTYPE).

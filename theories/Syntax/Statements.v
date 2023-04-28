@@ -324,6 +324,39 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' | alt7 => rhs7 '/' | alt8 => rhs8 '/' 'end' ']'"
     ) : exp_scope.
 
+  Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 | alt6 => rhs6 | alt7 => rhs7 | alt8 => rhs8 | alt9 => rhs9 'end'" :=
+    (stm_match_enum τ e (fun K => match K with
+                                  | alt1 => rhs1%exp
+                                  | alt2 => rhs2%exp
+                                  | alt3 => rhs3%exp
+                                  | alt4 => rhs4%exp
+                                  | alt5 => rhs5%exp
+                                  | alt6 => rhs6%exp
+                                  | alt7 => rhs7%exp
+                                  | alt8 => rhs8%exp
+                                  | alt9 => rhs9%exp
+                                  end))
+    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, alt9 pattern, format
+     "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' | alt7 => rhs7 '/' | alt8 => rhs8 '/' | alt9 => rhs9 '/' 'end' ']'"
+    ) : exp_scope.
+
+  Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 | alt6 => rhs6 | alt7 => rhs7 | alt8 => rhs8 | alt9 => rhs9 | alt10 => rhs10 'end'" :=
+    (stm_match_enum τ e (fun K => match K with
+                                  | alt1  => rhs1%exp
+                                  | alt2  => rhs2%exp
+                                  | alt3  => rhs3%exp
+                                  | alt4  => rhs4%exp
+                                  | alt5  => rhs5%exp
+                                  | alt6  => rhs6%exp
+                                  | alt7  => rhs7%exp
+                                  | alt8  => rhs8%exp
+                                  | alt9  => rhs9%exp
+                                  | alt10 => rhs10%exp
+                                  end))
+    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, alt9 pattern, alt10 pattern, format
+     "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' | alt7 => rhs7 '/' | alt8 => rhs8 '/' | alt9 => rhs9 '/' | alt10 => rhs10 '/' 'end' ']'"
+    ) : exp_scope.
+
   Notation "'match:' e 'with' | 'inl' p1 => rhs1 | 'inr' p2 => rhs2 'end'" :=
     (stm_match_sum e p1%string rhs1 p2%string rhs2) (at level 0, only parsing) : exp_scope.
 
