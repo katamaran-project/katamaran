@@ -69,6 +69,7 @@ Module Type TermsOn (Import TY : Types).
   | term_unsigned {n} (t : Term Σ (ty.bvec n)) : Term Σ ty.int
   | term_truncate {n} (m : nat) {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec m)
   | term_extract {n} (s l : nat) (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec l)
+  | term_negate {n} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n)
   | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs)
   | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
   | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
@@ -84,6 +85,7 @@ Module Type TermsOn (Import TY : Types).
   #[global] Arguments term_unsigned {_ _} t.
   #[global] Arguments term_truncate {_ _} m {p} t.
   #[global] Arguments term_extract {_ _} s l t.
+  #[global] Arguments term_negate {_ _} t.
   #[global] Arguments term_tuple {_ _} ts.
   #[global] Arguments term_union {_} U K t.
   #[global] Arguments term_record {_} R ts.
@@ -143,6 +145,7 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (P_unsigned : forall {n} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P ty.int (term_unsigned t)).
     Hypothesis (P_truncate   : forall {n} (m : nat) {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec m) (term_truncate m t)).
     Hypothesis (P_extract   : forall {n} (s l : nat) (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec l) (term_extract s l t)).
+    Hypothesis (P_negate     : forall {n} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec n) (term_negate t)).
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs) (IH : PE es), P (ty.tuple σs) (term_tuple es)).
     Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)).
     Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)).
@@ -162,6 +165,7 @@ Module Type TermsOn (Import TY : Types).
       | term_unsigned t     => ltac:(eapply P_unsigned; eauto)
       | term_truncate m t   => ltac:(eapply P_truncate; eauto)
       | term_extract s l t  => ltac:(eapply P_extract; eauto)
+      | term_negate t       => ltac:(eapply P_negate; eauto)
       | term_tuple ts       => ltac:(eapply P_tuple, env.all_intro; eauto)
       | term_union U K t    => ltac:(eapply P_union; eauto)
       | term_record R ts    => ltac:(eapply P_record, env.all_intro; eauto)
@@ -272,6 +276,7 @@ Module Type TermsOn (Import TY : Types).
           Term_eqb x y;
         Term_eqb _ _ _ _ := false
       };
+    Term_eqb (term_negate x) (term_negate y) := Term_eqb x y;
     Term_eqb (@term_tuple ?(σs) xs) (@term_tuple σs ys) :=
        @env.eqb_hom _ (Term Σ) (@Term_eqb _ ) _ xs ys;
     Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
@@ -340,6 +345,7 @@ Module Type TermsOn (Import TY : Types).
       | term_unsigned t           => term_unsigned (sub_term t ζ)
       | term_truncate m t         => term_truncate m (sub_term t ζ)
       | term_extract s l t        => term_extract s l (sub_term t ζ)
+      | term_negate t             => term_negate (sub_term t ζ)
       | term_tuple ts             => term_tuple (env.map (fun _ t => sub_term t ζ) ts)
       | term_union U K t          => term_union U K (sub_term t ζ)
       | term_record R ts          => term_record R (env.map (fun _ t => sub_term t ζ) ts)

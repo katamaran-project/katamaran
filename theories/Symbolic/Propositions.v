@@ -1685,6 +1685,7 @@ Module Type SymPropOn
     | eterm_unsigned {n} (e : ETerm (ty.bvec n)) : ETerm ty.int
     | eterm_truncate {n} (m : nat) {p : IsTrue (m <=? n)} (e: ETerm (ty.bvec n)) : ETerm (ty.bvec m)
     | eterm_extract {n} (s l : nat) (e : ETerm (ty.bvec n)) : ETerm (ty.bvec l)
+    | eterm_negate  {n} (e : ETerm (ty.bvec n)) : ETerm (ty.bvec n)
     | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs)
     | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U)
     | eterm_record  (R : recordi) (ts : NamedEnv ETerm (recordf_ty R)) : ETerm (ty.record R).
@@ -1744,6 +1745,7 @@ Module Type SymPropOn
         | term_unsigned t => eterm_unsigned (erase t)
         | term_truncate m t => eterm_truncate m (erase t)
         | term_extract s l t => eterm_extract s l (erase t)
+        | term_negate t => eterm_negate (erase t)
         | term_tuple ts => eterm_tuple (env.map (fun _ => erase) ts)
         | term_union U K t => eterm_union K (erase t)
         | term_record R ts => eterm_record R (env.map (fun _ => erase) ts)
@@ -1851,6 +1853,8 @@ Module Type SymPropOn
             (fun v => bv.truncate m v) <$> inst_eterm t0
         | @eterm_extract _ s l t0 =>
             (fun v => bv.extract s l v) <$> inst_eterm t0
+        | eterm_negate t0 =>
+            bv.negate <$> inst_eterm t0
         | @eterm_tuple σs ts =>
             envrec.of_env (σs := σs) <$> inst_env' ι inst_eterm ts
         | @eterm_union U K t0 =>
@@ -1970,6 +1974,7 @@ Module Type SymPropOn
         now rewrite EqDec.eq_dec_refl.
       - reflexivity.
       - now rewrite IHt1, IHt2.
+      - now rewrite IHt.
       - now rewrite IHt.
       - now rewrite IHt.
       - now rewrite IHt.

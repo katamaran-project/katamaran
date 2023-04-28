@@ -293,6 +293,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       | term_unsigned t     => fun v => singleton (formula_relop bop.eq (term_unsigned t) (term_val _ v))
       | term_truncate m t   => fun v => singleton (formula_relop bop.eq (term_truncate m t) (term_val _ v))
       | term_extract s l t  => fun v => singleton (formula_relop bop.eq (term_extract s l t) (term_val _ v))
+      | term_negate t       => fun v => singleton (formula_relop bop.eq (term_negate t) (term_val _ v))
       | term_tuple ts       => env.Env_rect
                                  (fun σs _ => Val (ty.tuple σs) -> DList Σ)
                                  (fun _ => empty)
@@ -323,6 +324,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - destruct v; arw. intros ι. arw.
       - destruct v; arw. rewrite IHt; arw. intros ι. arw.
       - destruct v; arw. rewrite IHt; arw. intros ι. arw.
+      - reflexivity.
       - reflexivity.
       - reflexivity.
       - reflexivity.
@@ -386,6 +388,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         rewrite IHs. arw. intros ι. arw.
       - dependent elimination t; arw.
         rewrite IHs. arw. intros ι. arw.
+      - dependent elimination t; arw.
       - dependent elimination t; arw.
       - dependent elimination t; arw.
       - dependent elimination t; arw.

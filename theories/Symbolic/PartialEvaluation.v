@@ -203,6 +203,12 @@ Module Type PartialEvaluationOn
       | None   => term_extract s l t
       end.
 
+    Definition peval_negate {n} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      match term_get_val t with
+      | Some v => term_val (ty.bvec n) (bv.negate v)
+      | None   => term_negate t
+      end.
+
     Definition peval_union {U K} (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) :=
       match term_get_val t with
       | Some v => term_val (ty.union U) (unionv_fold U (existT K v))
@@ -239,6 +245,7 @@ Module Type PartialEvaluationOn
       | term_unsigned t     => peval_unsigned (peval t)
       | term_truncate m t   => peval_truncate m (peval t)
       | term_extract s l t  => peval_extract s l (peval t)
+      | term_negate t       => peval_negate (peval t)
       | term_tuple ts       => term_tuple (env.map (fun b => @peval b) ts)
       | term_union U K t    => peval_union (peval t)
       | term_record R ts    => peval_record R (env.map (fun b => peval (σ := type b)) ts)
@@ -284,6 +291,10 @@ Module Type PartialEvaluationOn
       @peval_extract n s l t ≡ term_extract s l t.
     Proof. unfold peval_extract; destruct (term_get_val_spec t); now subst. Qed.
 
+    Lemma peval_negate_sound {n} (t : Term Σ (ty.bvec n)) :
+      peval_negate t ≡ term_negate t.
+    Proof. unfold peval_negate; destruct (term_get_val_spec t); now subst. Qed.
+
     Lemma peval_union_sound {U K} (t : Term Σ (unionk_ty U K)) :
       peval_union t ≡ term_union U K t.
     Proof. unfold peval_union. destruct (term_get_val_spec t); now subst. Qed.
@@ -324,6 +335,7 @@ Module Type PartialEvaluationOn
       - etransitivity; [apply peval_unsigned_sound |now apply proper_term_unsigned].
       - etransitivity; [apply peval_truncate_sound |now apply proper_term_truncate].
       - etransitivity; [apply peval_extract_sound |now apply proper_term_extract].
+      - etransitivity; [apply peval_negate_sound |now apply proper_term_negate].
       - apply proper_term_tuple.
         induction IH; [reflexivity|]; cbn.
         now apply proper_env_snoc.
