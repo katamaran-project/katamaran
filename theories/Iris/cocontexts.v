@@ -152,12 +152,45 @@ Proof.
 (* Qed. *)
 Admitted.
 
+Class LookupEnv (Γ : env PROP) (P : PROP) i :=
+  lookup_env_result : env_lookup i Γ = Some P.
+Global Arguments LookupEnv _ _%I : simpl never.
+Global Arguments lookup_env_result _ _%I.
+Global Hint Mode LookupEnv + + - : typeclass_instances.
+
+Global Instance lookup_env_here {i Γ P}: LookupEnv (Esnoc Γ i P) P i.
+Admitted.
+Global Instance lookup_env_there {i Γ P j Q}: forall `{! LookupEnv Γ P i}, LookupEnv (Esnoc Γ j Q) P i.
+Admitted.
+
 Lemma tac_frame_hyp_in Δh Δc i j Δc' p R P Q :
   envs_lookup i Δh = Some (p, P) →
   envs_lookup j Δc = Some (p, R) →
   Frame p R P Q →
   (envs_simple_replace i p (Esnoc Enil j Q) Δc) = Some Δc' ->
   envs_entails_cocontexts (envs_delete false i p Δh) Δc' →
+  envs_entails_cocontexts Δh Δc.
+Proof.
+(*   rewrite envs_entails_cocontexts_eq. intros ? Hframe HQ. *)
+(*   rewrite (envs_lookup_sound' _ false) //. by rewrite -Hframe HQ. *)
+(* Qed. *)
+Admitted.
+
+Lemma tac_frame_hyp_in_lookup Δh Δc i j p P :
+  envs_lookup i Δh = Some (p, P) →
+  LookupEnv (env_spatial Δc) P j ->
+  envs_entails_cocontexts (envs_delete false i p Δh) (envs_delete false j p Δc) →
+  envs_entails_cocontexts Δh Δc.
+Proof.
+(*   rewrite envs_entails_cocontexts_eq. intros ? Hframe HQ. *)
+(*   rewrite (envs_lookup_sound' _ false) //. by rewrite -Hframe HQ. *)
+(* Qed. *)
+Admitted.
+
+Lemma tac_frame_cohyp_in_lookup Δh Δc i j p P :
+  envs_lookup i Δc = Some (p, P) →
+  LookupEnv (env_spatial Δh) P j ->
+  envs_entails_cocontexts (envs_delete false j p Δh) (envs_delete false i p Δc) →
   envs_entails_cocontexts Δh Δc.
 Proof.
 (*   rewrite envs_entails_cocontexts_eq. intros ? Hframe HQ. *)
@@ -272,6 +305,28 @@ Ltac iFrameHypIn Hh Hc :=
     |iSolveTC ||
      let R := match goal with |- Frame _ ?R _ _ => R end in
      fail "iFrame: cannot frame" R
+    |pm_reduce; iFrameFinish].
+
+Ltac iFrameHyp2 Hh :=
+  iStartProof;
+  eapply tac_frame_hyp_in_lookup with Hh _ _ _;
+    [pm_reflexivity ||
+     let H := pretty_ident Hh in
+     fail "iFrame:" Hh "not found"
+    |iSolveTC ||
+     let P := match goal with |- LookupEnv _ ?P _ => P end in
+     fail "iFrame: cannot frame" P
+    |pm_reduce; iFrameFinish].
+
+Ltac iFrameCohyp Hh :=
+  iStartProof;
+  eapply tac_frame_cohyp_in_lookup with Hh _ _ _;
+    [pm_reflexivity ||
+     let H := pretty_ident Hh in
+     fail "iFrame:" Hh "not found"
+    |iSolveTC ||
+     let P := match goal with |- LookupEnv _ ?P _ => P end in
+     fail "iFrame: cannot frame" P
     |pm_reduce; iFrameFinish].
 
 Ltac iFresh :=
