@@ -404,3 +404,22 @@ Ltac iCodestructCohypGo Hz pat0 pat :=
   (*   iModCore Hz as x; iDestructHypGo x pat0 pat *)
   | _ => fail "iDestruct:" pat0 "is not supported due to" pat
   end.
+
+Local Ltac iCodestructCohypFindPat Hgo pat found pats :=
+  lazymatch pats with
+  | [] =>
+    lazymatch found with
+    | true => pm_prettify (* post-tactic prettification *)
+    | false => fail "iDestruct:" pat "should contain exactly one proper introduction pattern"
+    end
+  | ISimpl :: ?pats => simpl; iCodestructCohypFindPat Hgo pat found pats
+  (* | IClear ?H :: ?pats => iClear H; iDestructHypFindPat Hgo pat found pats *)
+  (* | IClearFrame ?H :: ?pats => iFrame H; iDestructHypFindPat Hgo pat found pats *)
+  | ?pat1 :: ?pats =>
+     lazymatch found with
+     | false => iCodestructCohypGo Hgo pat pat1; iCodestructCohypFindPat Hgo pat true pats
+     | true => fail "iDestruct:" pat "should contain exactly one proper introduction pattern"
+     end
+  end.
+Tactic Notation "iCodestruct" constr(H) "as" constr(pat) :=
+  let pats := intro_pat.parse pat in iCodestructCohypFindPat H pat false pats.
