@@ -588,3 +588,17 @@ Global Hint Extern 0 (envs_entails_cocontexts _ (Envs Enil Enil _)) => iEmptyCoc
 (* Global Hint Extern 2 (envs_entails _ (|={_}=> _)) => iModIntro : core. *)
 
 (* Global Hint Extern 2 (envs_entails _ (_ ∗ _)) => progress iFrame : iFrame. *)
+
+(* DOMI: Cocontexts ideas not yet there *)
+(* less hard:
+   - the cointroduction pattern [%x pat] should satisfy an existential goal by introducing an evar x and continuing with cointro pattern pat
+   - make (iNext and) iModIntro work properly?
+   - make iIntros work when there is only a single goal in the cocontext.
+   - a variant of iIntros that introduces context and cocontext variables in one go.
+   - what is actually the point of an intuitionistic cocontext?
+   - a variant of iSplit that splits off a subset of context and cocontext into a separate coq goal.
+   hard:
+   - a variant of iApply that applies an entailment or wand to satisfy one of the current goals in the cocontext.
+   - what should iLob or iInduction or iInv or iRewrite do?
+   - improve automation hints to make "now xyz" or "by xyz" more effective?
+ *)
