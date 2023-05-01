@@ -227,6 +227,36 @@ Lemma tac_pure_intro Δh (Δc : env PROP) φ c' :
 (* Qed. *)
 Admitted.
 
+Lemma tac_pure_intro_cohyp Δh Δc i p P φ :
+  envs_lookup i Δc = Some (p, P) →
+  FromPure false P φ →
+  (* (if p then TCTrue else TCOr (Affine P) (Absorbing Q)) → *)
+  (envs_entails_cocontexts Δh (envs_delete true i p Δc)) → φ → envs_entails_cocontexts Δh Δc.
+Proof.
+  (* rewrite envs_entails_eq=> ?? HPQ HQ. *)
+  (* rewrite envs_lookup_sound //; simpl. destruct p; simpl. *)
+  (* - rewrite (into_pure P) -persistently_and_intuitionistically_sep_l persistently_pure. *)
+  (*   by apply pure_elim_l. *)
+  (* - destruct HPQ. *)
+  (*   + rewrite -(affine_affinely P) (into_pure P) -persistent_and_affinely_sep_l. *)
+  (*     by apply pure_elim_l. *)
+  (*   + rewrite (into_pure P) -(persistent_absorbingly_affinely ⌜ _ ⌝) absorbingly_sep_lr. *)
+  (*     rewrite -persistent_and_affinely_sep_l. apply pure_elim_l=> ?. by rewrite HQ. *)
+Admitted.
+
+(* not sure why this is local in iris.proofmode.coq_tactics.v *)
+Local Instance affine_env_spatial Δ :
+  AffineEnv (env_spatial Δ) → Affine ([∗] env_spatial Δ).
+Proof. intros H. induction H; simpl; apply _. Qed.
+
+Lemma tac_empty_cocontext_intro Δ {c} : AffineEnv (env_spatial Δ) → envs_entails_cocontexts Δ (Envs Enil Enil c).
+Proof. intros. rewrite envs_entails_cocontexts_eq.
+       rewrite (of_envs_eq (Envs Enil _ _)); cbn.
+       rewrite intuitionistically_True_emp.
+       rewrite emp_sep.
+       rewrite (affine (of_envs Δ)).
+Admitted.
+
 End tactics.
 
 Tactic Notation "iAndCodestructCohyp" constr(H) "as" constr(H1) constr(H2) :=
@@ -371,6 +401,19 @@ Local Ltac ident_for_pat_default pat default :=
     end
   end.
 
+Tactic Notation "iPureIntroCohyp" constr(H) tactic(solver):=
+  iStartProof;
+  eapply tac_pure_intro_cohyp with H _ _ _;
+    [pm_reflexivity ||
+     let H := pretty_ident H in
+     fail "iFrame:" H "not found"
+    |iSolveTC ||
+     let P := match goal with |- FromPure _ ?P _ => P end in
+     fail "iPureIntroCohyp:" P "not pure"
+    (* |pm_reduce; iSolveTC || *)
+    (*  fail "iPureIntro: spatial context contains non-affine hypotheses" *)
+    | pm_reduce |  solver ].
+
 Tactic Notation "iPureIntro" :=
   iStartProof;
   eapply tac_pure_intro;
@@ -386,13 +429,13 @@ Tactic Notation "iPureIntro" :=
 (** [pat0] is the unparsed pattern, and is only used in error messages *)
 Ltac iCodestructCohypGo Hz pat0 pat :=
   lazymatch pat with
-  (* | IFresh => *)
-  (*    lazymatch Hz with *)
-  (*    | IAnon _ => idtac *)
-  (*    | INamed ?Hz => let Hz' := iFresh in iRename Hz into Hz' *)
-  (*    end *)
+  | IFresh =>
+     lazymatch Hz with
+     | IAnon _ => idtac
+     | INamed ?Hz => let Hz' := iFresh in iCoRename Hz into Hz'
+     end
   (* | IDrop => iClearHyp Hz *)
-  (* | IFrame => iFrameHyp Hz *)
+  | IFrame => iFrameCohyp Hz
   | IIdent Hz => idtac
   | IIdent ?y => iRename Hz into y
   (* | IList [[]] => iExFalso; iExact Hz *)
@@ -427,8 +470,8 @@ Ltac iCodestructCohypGo Hz pat0 pat :=
      iAndCodestructCohyp Hz as x1 x2;
      iCodestructCohypGo x1 pat0 pat1;
      iCodestructCohypGo x2 pat0 pat2
-  (* | IList [_ :: _ :: _] => fail "iDestruct:" pat0 "has too many conjuncts" *)
-  (* | IList [[_]] => fail "iDestruct:" pat0 "has just a single conjunct" *)
+  | IList [_ :: _ :: _] => fail "iDestruct:" pat0 "has too many conjuncts"
+  | IList [[_]] => fail "iDestruct:" pat0 "has just a single conjunct"
 
   (* disjunctive patterns like [H1|H2] *)
   (* | IList [[?pat1];[?pat2]] => *)
@@ -446,8 +489,7 @@ Ltac iCodestructCohypGo Hz pat0 pat :=
   (*    let x := fresh in *)
   (*    iPure Hz as x; *)
   (*    rename_by_string x s *)
-  (* | IRewrite Right => iPure Hz as -> *)
-  (* | IRewrite Left => iPure Hz as <- *)
+  | IRewrite _ => iPureIntroCohyp Hz reflexivity
   (* | IIntuitionistic ?pat => *)
   (*   let x := ident_for_pat_default pat Hz in *)
   (*   iIntuitionistic Hz as x; iDestructHypGo x pat0 pat *)
@@ -478,3 +520,71 @@ Local Ltac iCodestructCohypFindPat Hgo pat found pats :=
   end.
 Tactic Notation "iCodestruct" constr(H) "as" constr(pat) :=
   let pats := intro_pat.parse pat in iCodestructCohypFindPat H pat false pats.
+
+
+(* Tactic Notation "iEmpIntroCohyp" := *)
+(*   iStartProof; *)
+(*   eapply tac_emp_intro_cohyp; *)
+(*     [pm_reduce; iSolveTC || *)
+(*      fail "iEmpIntro: spatial context contains non-affine hypotheses"]. *)
+
+Tactic Notation "iEmptyCocontextIntro" :=
+  iStartProof;
+  eapply tac_empty_cocontext_intro;
+    [pm_reduce; iSolveTC ||
+     fail "iEmpIntro: spatial context contains non-affine hypotheses"].
+
+(** Automation *)
+Global Hint Extern 0 (_ ⊢ _) => iStartProof : core.
+Global Hint Extern 0 (⊢ _) => iStartProof : core.
+
+(* Make sure that [by] and [done] solve trivial things in proof mode.
+[iPureIntro] invokes [FromPure], so adding [FromPure] instances can help improve
+what [done] can do. *)
+Global Hint Extern 0 (envs_entails_cocontexts _ _) => iPureIntro; try done : core.
+(* Global Hint Extern 0 (envs_entails _ ?Q) => *)
+(*   first [is_evar Q; fail 1|iAssumption] : core. *)
+Global Hint Extern 0 (envs_entails_cocontexts _ (Envs Enil Enil _)) => iEmptyCocontextIntro : core.
+
+(* (* TODO: look for a more principled way of adding trivial hints like those *)
+(* below; see the discussion in !75 for further details. *) *)
+(* Global Hint Extern 0 (envs_entails _ (_ ≡ _)) => *)
+(*   rewrite envs_entails_eq; apply internal_eq_refl : core. *)
+(* Global Hint Extern 0 (envs_entails _ (big_opL _ _ _)) => *)
+(*   rewrite envs_entails_eq; apply (big_sepL_nil' _) : core. *)
+(* Global Hint Extern 0 (envs_entails _ (big_sepL2 _ _ _)) => *)
+(*   rewrite envs_entails_eq; apply (big_sepL2_nil' _) : core. *)
+(* Global Hint Extern 0 (envs_entails _ (big_opM _ _ _)) => *)
+(*   rewrite envs_entails_eq; apply (big_sepM_empty' _) : core. *)
+(* Global Hint Extern 0 (envs_entails _ (big_sepM2 _ _ _)) => *)
+(*   rewrite envs_entails_eq; apply (big_sepM2_empty' _) : core. *)
+(* Global Hint Extern 0 (envs_entails _ (big_opS _ _ _)) => *)
+(*   rewrite envs_entails_eq; apply (big_sepS_empty' _) : core. *)
+(* Global Hint Extern 0 (envs_entails _ (big_opMS _ _ _)) => *)
+(*   rewrite envs_entails_eq; apply (big_sepMS_empty' _) : core. *)
+
+(* (* These introduce as much as possible at once, for better performance. *) *)
+(* Global Hint Extern 0 (envs_entails _ (∀ _, _)) => iIntros : core. *)
+(* Global Hint Extern 0 (envs_entails _ (_ → _)) => iIntros : core. *)
+(* Global Hint Extern 0 (envs_entails _ (_ -∗ _)) => iIntros : core. *)
+(* (* Multi-intro doesn't work for custom binders. *) *)
+(* Global Hint Extern 0 (envs_entails _ (∀.. _, _)) => iIntros (?) : core. *)
+
+(* Global Hint Extern 1 (envs_entails _ (_ ∧ _)) => iSplit : core. *)
+(* Global Hint Extern 1 (envs_entails _ (_ ∗ _)) => iSplit : core. *)
+(* Global Hint Extern 1 (envs_entails _ (_ ∗-∗ _)) => iSplit : core. *)
+(* Global Hint Extern 1 (envs_entails _ (▷ _)) => iNext : core. *)
+(* Global Hint Extern 1 (envs_entails _ (■ _)) => iModIntro : core. *)
+(* Global Hint Extern 1 (envs_entails _ (<pers> _)) => iModIntro : core. *)
+(* Global Hint Extern 1 (envs_entails _ (<affine> _)) => iModIntro : core. *)
+(* Global Hint Extern 1 (envs_entails _ (□ _)) => iModIntro : core. *)
+(* Global Hint Extern 1 (envs_entails _ (∃ _, _)) => iExists _ : core. *)
+(* Global Hint Extern 1 (envs_entails _ (∃.. _, _)) => iExists _ : core. *)
+(* Global Hint Extern 1 (envs_entails _ (◇ _)) => iModIntro : core. *)
+(* Global Hint Extern 1 (envs_entails _ (_ ∨ _)) => iLeft : core. *)
+(* Global Hint Extern 1 (envs_entails _ (_ ∨ _)) => iRight : core. *)
+(* Global Hint Extern 1 (envs_entails _ (|==> _)) => iModIntro : core. *)
+(* Global Hint Extern 1 (envs_entails _ (<absorb> _)) => iModIntro : core. *)
+(* Global Hint Extern 2 (envs_entails _ (|={_}=> _)) => iModIntro : core. *)
+
+(* Global Hint Extern 2 (envs_entails _ (_ ∗ _)) => progress iFrame : iFrame. *)
