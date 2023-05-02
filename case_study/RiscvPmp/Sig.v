@@ -61,6 +61,7 @@ Inductive PurePredicate : Set :=
 | not_within_cfg
 | prev_addr
 | in_entries
+| within_mmio (bytes : nat)
 .
 
 Inductive Predicate : Set :=
@@ -102,6 +103,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg  => [ty_xlenbits; ty.list ty_pmpentry]
       | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
       | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
+      | within_mmio _  => [ty_xlenbits]
       end.
 
     Example default_pmpcfg_ent : Pmpcfg_ent :=
@@ -274,6 +276,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg  => Not_within_cfg
       | prev_addr       => Prev_addr
       | in_entries      => In_entries
+      | within_mmio bytes => (fun a => withinMMIO a bytes)
       end.
 
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -1001,7 +1004,8 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   | within_cfg               | [ paddr; cfg; prevaddr; addr]  => simplify_within_cfg paddr cfg prevaddr addr
   | not_within_cfg           | [ paddr; entries ]             => Some [formula_user not_within_cfg [paddr; entries]]%ctx
   | prev_addr                | [ cfg; entries; prev ]         => simplify_prev_addr cfg entries prev
-  | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx.
+  | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx
+  | within_mmio bytes        | [ a ]                          => Some [formula_user (within_mmio bytes) [a]]%ctx.
 
   Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :
     simplify_sub_perm a1 a2 ⊣⊢ Some [formula_user sub_perm [a1; a2]].
@@ -1104,6 +1108,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     - simple apply simplify_within_cfg_spec.
     - reflexivity.
     - simple apply simplify_prev_addr_spec.
+    - reflexivity.
     - reflexivity.
   Qed.
 
