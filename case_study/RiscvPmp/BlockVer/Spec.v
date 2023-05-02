@@ -323,6 +323,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
          term_var "result_within_phys_mem" = term_val ty.bool true;
     |}.
 
+  Definition sep_contract_execute_EBREAK : SepContractFun execute_EBREAK :=
+    RiscvPmpExecutor.Symbolic.Statistics.extend_postcond_with_debug sep_contract_execute_EBREAK.
+
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
@@ -336,6 +339,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
       | pmpMatchAddr              => Some sep_contract_pmpMatchAddr
       | @pmp_mem_read bytes H     => Some (@sep_contract_pmp_mem_read bytes H)
       | @checked_mem_read bytes H => Some (@sep_contract_checked_mem_read bytes H)
+      | execute_EBREAK            => Some sep_contract_execute_EBREAK
       | _                         => None
       end.
 
@@ -567,6 +571,9 @@ Module RiscvPmpSpecVerif.
   Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
   Proof. symbolic_simpl. intros. Lia.lia. Qed.
 
+  Lemma valid_contract_execute_EBREAK : ValidContractDebug execute_EBREAK.
+  Proof. now symbolic_simpl. Qed.
+
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       RiscvPmpBlockVerifSpec.CEnv f = Some c ->
       ValidContract f ->
@@ -617,6 +624,7 @@ Module RiscvPmpSpecVerif.
     - apply (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
     - apply (valid_contract_debug _ H valid_pmpMatchAddr).
     - apply (valid_contract _ H valid_execute_fetch).
+    - apply (valid_contract_debug _ H valid_contract_execute_EBREAK).
   Qed.
 End RiscvPmpSpecVerif.
 

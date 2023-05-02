@@ -233,6 +233,7 @@ Inductive AST : Set :=
 | LOAD (imm : bv 12) (rs1 rd : RegIdx) (is_unsigned : bool) (width : WordWidth)
 | STORE (imm : bv 12) (rs2 rs1 : RegIdx) (width : WordWidth)
 | ECALL
+| EBREAK
 | MRET
 | CSR (csr : CSRIdx) (rs1 rd : RegIdx) (is_imm : bool) (csrop : CSROP)
 .
@@ -281,6 +282,7 @@ Inductive ASTConstructor : Set :=
 | KLOAD
 | KSTORE
 | KECALL
+| KEBREAK
 | KMRET
 | KCSR
 .
@@ -481,7 +483,7 @@ Section Finite.
 
   #[export,program] Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KMRET;KCSR] |}.
+    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KEBREAK;KMRET;KCSR] |}.
 
   #[export,program] Instance AccessType_finite :
     Finite AccessType :=
@@ -629,6 +631,7 @@ Module Export RiscvPmpBase <: Base.
                             | KLOAD       => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty.bool; ty_word_width]
                             | KSTORE      => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty_word_width]
                             | KECALL      => ty.unit
+                            | KEBREAK     => ty.unit
                             | KMRET       => ty.unit
                             | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty.bool; ty_csrop]
                             end
@@ -678,6 +681,7 @@ Module Export RiscvPmpBase <: Base.
                             | LOAD imm rs1 rd is_unsigned w => existT KLOAD (tt , imm , rs1 , rd , is_unsigned , w)
                             | STORE imm rs2 rs1 w           => existT KSTORE (tt , imm , rs2 , rs1 , w)
                             | ECALL                         => existT KECALL tt
+                            | EBREAK                        => existT KEBREAK tt
                             | MRET                          => existT KMRET tt
                             | CSR csr rs1 rd is_imm op      => existT KCSR (tt , csr , rs1 , rd , is_imm , op)
                             end
@@ -728,6 +732,7 @@ Module Export RiscvPmpBase <: Base.
                               | existT KLOAD (tt , imm , rs1 , rd , is_unsigned , w) => LOAD imm rs1 rd is_unsigned w
                               | existT KSTORE (tt , imm , rs2 , rs1 , w)             => STORE imm rs2 rs1 w
                               | existT KECALL tt                                     => ECALL
+                              | existT KEBREAK tt                                    => EBREAK
                               | existT KMRET tt                                      => MRET
                               | existT KCSR (tt , csr , rs1 , rd , is_imm , op)      => CSR csr rs1 rd is_imm op
                               end

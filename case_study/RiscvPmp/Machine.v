@@ -215,6 +215,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_LOAD          : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; is_unsigned :: ty.bool; width :: ty_word_width] ty_retired
   | execute_STORE         : Fun [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired
   | execute_ECALL         : Fun ctx.nil ty_retired
+  | execute_EBREAK        : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
   | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
   .
@@ -941,6 +942,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KLOAD (pat_tuple (imm , rs1, rd , is_unsigned , w)) => call execute_LOAD imm rs1 rd is_unsigned w
     |> KSTORE (pat_tuple (imm , rs2 , rs1 , w))            => call execute_STORE imm rs2 rs1 w
     |> KECALL pat_unit                                     => call execute_ECALL
+    |> KEBREAK pat_unit                                    => call execute_EBREAK
     |> KMRET pat_unit                                      => call execute_MRET
     |> KCSR (pat_tuple (csr , rs1 , rd , is_imm , op))     => call execute_CSR csr rs1 rd is_imm op
     end.
@@ -1104,6 +1106,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp3 := call exception_handler tmp1 (CTL_TRAP t) tmp2 in
     call set_next_pc tmp3 ;;
     stm_val ty_retired RETIRE_FAIL.
+
+  (* NOTE: we implement a custom EBREAK instruction for BlockVerifier debugging purposes *)
+  Definition fun_execute_EBREAK : Stm ctx.nil ty_retired :=
+    stm_debugk (stm_val ty_retired RETIRE_FAIL).
 
   Definition fun_execute_MRET : Stm ctx.nil ty_retired :=
     let: tmp1 := stm_read_register cur_privilege in
@@ -1272,6 +1278,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | execute_LOAD            => fun_execute_LOAD
     | execute_STORE           => fun_execute_STORE
     | execute_ECALL           => fun_execute_ECALL
+    | execute_EBREAK          => fun_execute_EBREAK
     | execute_MRET            => fun_execute_MRET
     | execute_CSR             => fun_execute_CSR
     end.

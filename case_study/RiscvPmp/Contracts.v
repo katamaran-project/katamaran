@@ -175,6 +175,14 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition sep_contract_execute_ECALL : SepContractFun execute_ECALL :=
           instr_exec_contract.
 
+        Definition sep_contract_execute_EBREAK : SepContractFun execute_EBREAK :=
+          {| sep_contract_logic_variables := ctx.nil;
+             sep_contract_localstore      := env.nil;
+             sep_contract_precondition    := ⊤;
+             sep_contract_result          := "result_execute_EBREAK";
+             sep_contract_postcondition   := ⊤;
+          |}.
+
         Definition sep_contract_execute_MRET : SepContractFun execute_MRET :=
           instr_exec_contract.
 
@@ -989,6 +997,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | execute_RISCV_JAL       => Some sep_contract_execute_RISCV_JAL
             | execute_RISCV_JALR      => Some sep_contract_execute_RISCV_JALR
             | execute_ECALL           => Some sep_contract_execute_ECALL
+            | execute_EBREAK          => Some sep_contract_execute_EBREAK
             | execute_MRET            => Some sep_contract_execute_MRET
             | execute_CSR             => Some sep_contract_execute_CSR
             | execute_STORE           => Some sep_contract_execute_STORE
@@ -1509,6 +1518,9 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_ECALL : ValidContract execute_ECALL.
   Proof. reflexivity. Qed.
 
+  Lemma valid_contract_execute_EBREAK : ValidContractDebug execute_EBREAK.
+  Proof. now symbolic_simpl. Qed.
+
   Lemma valid_contract_execute_MRET : ValidContract execute_MRET.
   Proof. reflexivity. Qed.
 
@@ -1639,6 +1651,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_execute_LOAD).
     - apply (valid_contract _ H valid_contract_execute_STORE).
     - apply (valid_contract _ H valid_contract_execute_ECALL).
+    - apply (valid_contract_debug _ H valid_contract_execute_EBREAK).
     - apply (valid_contract _ H valid_contract_execute_MRET).
     - apply (valid_contract _ H valid_contract_execute_CSR).
   Qed.
