@@ -54,7 +54,7 @@ Module RiscvPmpIrisInstance <:
   Section WithSailGS.
     Context `{sailRegGS Σ} `{invGS Σ} `{mG : mcMemGS Σ}.
 
-    Definition reg_file : gset (bv 3) := list_to_set (bv.finite.enum 3).
+    Definition reg_file : gset (bv 5) := list_to_set (bv.finite.enum 5).
 
     Definition interp_ptsreg (r : RegIdx) (v : Word) : iProp Σ :=
       match reg_convert r with

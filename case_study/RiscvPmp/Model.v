@@ -312,9 +312,9 @@ Module RiscvPmpModel2.
       unfold interp_gprs, reg_file.
       rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
       cbn. iSplit.
-      - iIntros "[_ [Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 [Hx7 _]]]]]]]]". iFrame.
-      - iIntros "[Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 Hx7]]]]]]". iFrame.
-        by iExists bv.zero.
+      - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
+      - iIntros "H"; iSplitR; first by iExists bv.zero.
+        repeat iDestruct "H" as "($ & H)"; iFrame.
     Qed.
 
     Lemma open_gprs_sound :

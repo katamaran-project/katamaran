@@ -172,6 +172,7 @@ Import BlockVerificationDerived2.
     (* Compute addPc (femtokernel_init ++ femtokernel_handler). *)
 
     Import asn.notations.
+    Import RiscvPmp.Sig.
     (* Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79). *)
     Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
     Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
@@ -191,13 +192,7 @@ Import BlockVerificationDerived2.
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "v", mepc ↦ term_var "v") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
-      ((∃ "v", x1 ↦ term_var "v") ∗
-      (∃ "v", x2 ↦ term_var "v") ∗
-      (∃ "v", x3 ↦ term_var "v") ∗
-      (∃ "v", x4 ↦ term_var "v") ∗
-      (∃ "v", x5 ↦ term_var "v") ∗
-      (∃ "v", x6 ↦ term_var "v") ∗
-      (∃ "v", x7 ↦ term_var "v")) ∗
+      asn_regs_ptsto ∗
       (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
                                       (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])) ∗
       (term_var "a" + (term_val ty_xlenbits (bv.of_N 76)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
@@ -210,13 +205,7 @@ Import BlockVerificationDerived2.
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
-          ((∃ "v", x1 ↦ term_var "v") ∗
-          (∃ "v", x2 ↦ term_var "v") ∗
-          (∃ "v", x3 ↦ term_var "v") ∗
-          (∃ "v", x4 ↦ term_var "v") ∗
-          (∃ "v", x5 ↦ term_var "v") ∗
-          (∃ "v", x6 ↦ term_var "v") ∗
-          (∃ "v", x7 ↦ term_var "v")) ∗
+          asn_regs_ptsto ∗
           (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 80));
                                        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))])) ∗
           (term_var "a" + (term_val ty_xlenbits (bv.of_N 76)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
@@ -256,13 +245,7 @@ Import BlockVerificationDerived2.
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
-      ((∃ "v", x1 ↦ term_var "v") ∗
-      (∃ "v", x2 ↦ term_var "v") ∗
-      (∃ "v", x3 ↦ term_var "v") ∗
-      (∃ "v", x4 ↦ term_var "v") ∗
-      (∃ "v", x5 ↦ term_var "v") ∗
-      (∃ "v", x6 ↦ term_var "v") ∗
-      (∃ "v", x7 ↦ term_var "v")) ∗
+      asn_regs_ptsto ∗
       (asn_pmp_entries (term_list pmpcfg)) ∗
       (asn_pmp_addr_access (term_list pmpcfg) (term_val ty_privilege User)) ∗
       (term_var "a" + (term_val ty_xlenbits (bv.of_N 12)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
@@ -279,13 +262,7 @@ Import BlockVerificationDerived2.
                          (formula_relop bop.eq (term_var "an")
                                      (term_var "epc")))) ∗
           cur_privilege ↦ term_val ty_privilege User ∗
-          ((∃ "v", x1 ↦ term_var "v") ∗
-          (∃ "v", x2 ↦ term_var "v") ∗
-          (∃ "v", x3 ↦ term_var "v") ∗
-          (∃ "v", x4 ↦ term_var "v") ∗
-          (∃ "v", x5 ↦ term_var "v") ∗
-          (∃ "v", x6 ↦ term_var "v") ∗
-          (∃ "v", x7 ↦ term_var "v")) ∗
+          asn_regs_ptsto ∗
           (asn_pmp_entries (term_list pmpcfg)) ∗
           (asn_pmp_addr_access (term_list pmpcfg) (term_val ty_privilege User)) ∗
           (term_var "a" + (term_val ty_xlenbits (bv.of_N 12)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42)) ∗ ⊤
@@ -858,7 +835,8 @@ Import BlockVerificationDerived2.
     iIntros (Σ' H).
     unfold own_regstore.
     cbn.
-    iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & _)".
+
+    iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
     rewrite γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc.
     iMod (femtokernel_splitMemory with "Hmem") as "(Hinit & Hhandler & #Hfortytwo & Hadv)";
       try assumption.
@@ -866,22 +844,17 @@ Import BlockVerificationDerived2.
     iSplitR "".
     - destruct (env.view δ).
       iApply femtokernel_init_safe.
-      iFrame "Hfortytwo Hpc Hcurpriv Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1 Hinit Hadv Hhandler".
+      iFrame "Hfortytwo Hpc Hcurpriv Hinit Hadv Hhandler".
       iSplitL "Hmstatus". { now iExists _. }
       iSplitL "Hmtvec". { now iExists _. }
       iSplitL "Hmcause". { now iExists _. }
       iSplitL "Hmepc". { now iExists _. }
-      iSplitL "Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7".
-      {rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
-       iSplitL "Hx1". { now iExists _. }
-       iSplitL "Hx2". { now iExists _. }
-       iSplitL "Hx3". { now iExists _. }
-       iSplitL "Hx4". { now iExists _. }
-       iSplitL "Hx5". { now iExists _. }
-       iSplitL "Hx6". { now iExists _. }
-       now iExists _.
-      }
-      now iExists _.
+      repeat iDestruct "H'" as "(? & H')"; iFrame.
+      iSplitR "Hnpc"; last now iExists _.
+      rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
+      do 31 iApply bi.sep_assoc. (* NOTE: this is to invert how the split happens (start with highest-numbered reg first) *)
+      repeat (iRename select (_ ↦ _)%I into "Hptsto"; iSplitR "Hptsto");
+        now iExists _.
     - iIntros "Hmem".
       unfold interp_ptstomem_readonly.
       iInv "Hfortytwo" as ">Hptsto" "_".

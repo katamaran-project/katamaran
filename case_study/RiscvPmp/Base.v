@@ -219,7 +219,7 @@ Inductive Enums : Set :=
 | wordwidth
 .
 
-Definition RegIdx := bv 3.
+Definition RegIdx := bv 5.
 Bind Scope bv_scope with RegIdx.
 
 Inductive AST : Set :=
@@ -531,7 +531,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_word                           := (ty.bvec word).
   Definition ty_byte                           := (ty.bvec byte).
   Definition ty_bytes (bytes : nat)            := (ty.bvec (bytes * byte)).
-  Definition ty_regno                          := (ty.bvec 3).
+  Definition ty_regno                          := (ty.bvec 5).
   Definition ty_privilege                      := (ty.enum privilege).
   Definition ty_priv_level                     := (ty.bvec 2).
   Definition ty_csridx                         := (ty.enum csridx).
@@ -837,6 +837,30 @@ Module Export RiscvPmpBase <: Base.
     | x5            : Reg ty_xlenbits
     | x6            : Reg ty_xlenbits
     | x7            : Reg ty_xlenbits
+    | x8            : Reg ty_xlenbits
+    | x9            : Reg ty_xlenbits
+    | x10           : Reg ty_xlenbits
+    | x11           : Reg ty_xlenbits
+    | x12           : Reg ty_xlenbits
+    | x13           : Reg ty_xlenbits
+    | x14           : Reg ty_xlenbits
+    | x15           : Reg ty_xlenbits
+    | x16           : Reg ty_xlenbits
+    | x17           : Reg ty_xlenbits
+    | x18           : Reg ty_xlenbits
+    | x19           : Reg ty_xlenbits
+    | x20           : Reg ty_xlenbits
+    | x21           : Reg ty_xlenbits
+    | x22           : Reg ty_xlenbits
+    | x23           : Reg ty_xlenbits
+    | x24           : Reg ty_xlenbits
+    | x25           : Reg ty_xlenbits
+    | x26           : Reg ty_xlenbits
+    | x27           : Reg ty_xlenbits
+    | x28           : Reg ty_xlenbits
+    | x29           : Reg ty_xlenbits
+    | x30           : Reg ty_xlenbits
+    | x31           : Reg ty_xlenbits
     | pmp0cfg       : Reg ty_pmpcfg_ent
     | pmp1cfg       : Reg ty_pmpcfg_ent
     | pmpaddr0      : Reg ty_xlenbits
@@ -846,14 +870,38 @@ Module Export RiscvPmpBase <: Base.
     Import bv.notations.
     Definition reg_convert (idx : RegIdx) : option (Reg ty_xlenbits) :=
       match bv.to_bitstring idx with
-      | 000 => None
-      | 001 => Some x1
-      | 010 => Some x2
-      | 011 => Some x3
-      | 100 => Some x4
-      | 101 => Some x5
-      | 110 => Some x6
-      | 111 => Some x7
+      | 00000 => None
+      | 00001 => Some x1
+      | 00010 => Some x2
+      | 00011 => Some x3
+      | 00100 => Some x4
+      | 00101 => Some x5
+      | 00110 => Some x6
+      | 00111 => Some x7
+      | 01000 => Some x8
+      | 01001 => Some x9
+      | 01010 => Some x10
+      | 01011 => Some x11
+      | 01100 => Some x12
+      | 01101 => Some x13
+      | 01110 => Some x14
+      | 01111 => Some x15
+      | 10000 => Some x16
+      | 10001 => Some x17
+      | 10010 => Some x18
+      | 10011 => Some x19
+      | 10100 => Some x20
+      | 10101 => Some x21
+      | 10110 => Some x22
+      | 10111 => Some x23
+      | 11000 => Some x24
+      | 11001 => Some x25
+      | 11010 => Some x26
+      | 11011 => Some x27
+      | 11100 => Some x28
+      | 11101 => Some x29
+      | 11110 => Some x30
+      | 11111 => Some x31
       end.
 
     Section TransparentObligations.
@@ -882,6 +930,30 @@ Module Export RiscvPmpBase <: Base.
         | x5            , x5            => left eq_refl
         | x6            , x6            => left eq_refl
         | x7            , x7            => left eq_refl
+        | x8            , x8            => left eq_refl
+        | x9            , x9            => left eq_refl
+        | x10           , x10           => left eq_refl
+        | x11           , x11           => left eq_refl
+        | x12           , x12           => left eq_refl
+        | x13           , x13           => left eq_refl
+        | x14           , x14           => left eq_refl
+        | x15           , x15           => left eq_refl
+        | x16           , x16           => left eq_refl
+        | x17           , x17           => left eq_refl
+        | x18           , x18           => left eq_refl
+        | x19           , x19           => left eq_refl
+        | x20           , x20           => left eq_refl
+        | x21           , x21           => left eq_refl
+        | x22           , x22           => left eq_refl
+        | x23           , x23           => left eq_refl
+        | x24           , x24           => left eq_refl
+        | x25           , x25           => left eq_refl
+        | x26           , x26           => left eq_refl
+        | x27           , x27           => left eq_refl
+        | x28           , x28           => left eq_refl
+        | x29           , x29           => left eq_refl
+        | x30           , x30           => left eq_refl
+        | x31           , x31           => left eq_refl
         | pmp0cfg       , pmp0cfg       => left eq_refl
         | pmp1cfg       , pmp1cfg       => left eq_refl
         | pmpaddr0      , pmpaddr0      => left eq_refl
@@ -909,6 +981,30 @@ Module Export RiscvPmpBase <: Base.
           existT _ x5;
           existT _ x6;
           existT _ x7;
+          existT _ x8;
+          existT _ x9;
+          existT _ x10;
+          existT _ x11;
+          existT _ x12;
+          existT _ x13;
+          existT _ x14;
+          existT _ x15;
+          existT _ x16;
+          existT _ x17;
+          existT _ x18;
+          existT _ x19;
+          existT _ x20;
+          existT _ x21;
+          existT _ x22;
+          existT _ x23;
+          existT _ x24;
+          existT _ x25;
+          existT _ x26;
+          existT _ x27;
+          existT _ x28;
+          existT _ x29;
+          existT _ x30;
+          existT _ x31;
           existT _ pmp0cfg;
           existT _ pmp1cfg;
           existT _ pmpaddr0;

@@ -55,7 +55,7 @@ Module RiscvPmpIrisInstance2 <:
   Section WithSailGS.
     Context `{sailRegGS2 Σ, invGS Σ, mcMemGS2 Σ}.
 
-    Definition reg_file : gset (bv 3) := list_to_set (bv.finite.enum 3).
+    Definition reg_file : gset (bv 5) := list_to_set (bv.finite.enum 5).
 
     Definition reg_pointsTo21 {τ} (r : Reg τ) (v : Val τ) : iProp Σ :=
       reg_pointsTo2 r v v.

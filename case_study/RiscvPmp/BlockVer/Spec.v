@@ -140,7 +140,31 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     (asn.match_bool (r =? term_val ty_regno (bv.of_N 5)) (asn x5)
     (asn.match_bool (r =? term_val ty_regno (bv.of_N 6)) (asn x6)
     (asn.match_bool (r =? term_val ty_regno (bv.of_N 7)) (asn x7)
-     ⊥))))))).
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 8)) (asn x8)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 9)) (asn x9)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 10)) (asn x10)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 11)) (asn x11)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 12)) (asn x12)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 13)) (asn x13)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 14)) (asn x14)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 15)) (asn x15)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 16)) (asn x16)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 17)) (asn x17)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 18)) (asn x18)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 19)) (asn x19)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 20)) (asn x20)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 21)) (asn x21)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 22)) (asn x22)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 23)) (asn x23)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 24)) (asn x24)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 25)) (asn x25)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 26)) (asn x26)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 27)) (asn x27)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 28)) (asn x28)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 29)) (asn x29)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 30)) (asn x30)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 31)) (asn x31)
+     ⊥))))))))))))))))))))))))))))))).
 
   Definition asn_reg_ptsto {Σ} (r : Term Σ ty_regno) (w : Term Σ ty_word) : Assertion Σ :=
     asn_with_reg r (fun r => asn.chunk (chunk_ptsreg r w)) (w = term_val ty_word bv.zero).

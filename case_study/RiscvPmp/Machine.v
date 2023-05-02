@@ -414,30 +414,78 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Import Bitvector.bv.notations.
   Definition fun_rX : Stm [rs ∷ ty_regno] ty_xlenbits :=
     use lemma open_gprs ;;
-    let: v := match: rs in bvec 3 with
-              | 000 => exp_val ty_xlenbits [bv 0]
-              | 001 => stm_read_register x1
-              | 010 => stm_read_register x2
-              | 011 => stm_read_register x3
-              | 100 => stm_read_register x4
-              | 101 => stm_read_register x5
-              | 110 => stm_read_register x6
-              | 111 => stm_read_register x7
+    let: v := match: rs in bvec 5 with
+              | 00000 => exp_val ty_xlenbits [bv 0]
+              | 00001 => stm_read_register x1
+              | 00010 => stm_read_register x2
+              | 00011 => stm_read_register x3
+              | 00100 => stm_read_register x4
+              | 00101 => stm_read_register x5
+              | 00110 => stm_read_register x6
+              | 00111 => stm_read_register x7
+              | 01000 => stm_read_register x8
+              | 01001 => stm_read_register x9
+              | 01010 => stm_read_register x10
+              | 01011 => stm_read_register x11
+              | 01100 => stm_read_register x12
+              | 01101 => stm_read_register x13
+              | 01110 => stm_read_register x14
+              | 01111 => stm_read_register x15
+              | 10000 => stm_read_register x16
+              | 10001 => stm_read_register x17
+              | 10010 => stm_read_register x18
+              | 10011 => stm_read_register x19
+              | 10100 => stm_read_register x20
+              | 10101 => stm_read_register x21
+              | 10110 => stm_read_register x22
+              | 10111 => stm_read_register x23
+              | 11000 => stm_read_register x24
+              | 11001 => stm_read_register x25
+              | 11010 => stm_read_register x26
+              | 11011 => stm_read_register x27
+              | 11100 => stm_read_register x28
+              | 11101 => stm_read_register x29
+              | 11110 => stm_read_register x30
+              | 11111 => stm_read_register x31
               end in
     use lemma close_gprs ;;
     v.
 
   Definition fun_wX : Stm [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit :=
     use lemma open_gprs ;;
-    match: rd in bvec 3 with
-    | 000 => exp_val ty_xlenbits [bv 0]
-    | 001 => stm_write_register x1 v
-    | 010 => stm_write_register x2 v
-    | 011 => stm_write_register x3 v
-    | 100 => stm_write_register x4 v
-    | 101 => stm_write_register x5 v
-    | 110 => stm_write_register x6 v
-    | 111 => stm_write_register x7 v
+    match: rd in bvec 5 with
+    | 00000 => exp_val ty_xlenbits [bv 0]
+    | 00001 => stm_write_register x1 v
+    | 00010 => stm_write_register x2 v
+    | 00011 => stm_write_register x3 v
+    | 00100 => stm_write_register x4 v
+    | 00101 => stm_write_register x5 v
+    | 00110 => stm_write_register x6 v
+    | 00111 => stm_write_register x7 v
+    | 01000 => stm_write_register x8 v
+    | 01001 => stm_write_register x9 v
+    | 01010 => stm_write_register x10 v
+    | 01011 => stm_write_register x11 v
+    | 01100 => stm_write_register x12 v
+    | 01101 => stm_write_register x13 v
+    | 01110 => stm_write_register x14 v
+    | 01111 => stm_write_register x15 v
+    | 10000 => stm_write_register x16 v
+    | 10001 => stm_write_register x17 v
+    | 10010 => stm_write_register x18 v
+    | 10011 => stm_write_register x19 v
+    | 10100 => stm_write_register x20 v
+    | 10101 => stm_write_register x21 v
+    | 10110 => stm_write_register x22 v
+    | 10111 => stm_write_register x23 v
+    | 11000 => stm_write_register x24 v
+    | 11001 => stm_write_register x25 v
+    | 11010 => stm_write_register x26 v
+    | 11011 => stm_write_register x27 v
+    | 11100 => stm_write_register x28 v
+    | 11101 => stm_write_register x29 v
+    | 11110 => stm_write_register x30 v
+    | 11111 => stm_write_register x31 v
     end ;;
     use lemma close_gprs.
 
