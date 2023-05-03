@@ -30,7 +30,8 @@ From Katamaran Require Import
      Bitvector
      Environment
      Iris.Model
-     RiscvPmp.Machine.
+     RiscvPmp.Machine
+     trace.
 From iris Require Import
      base_logic.lib.gen_heap
      proofmode.tactics.
@@ -52,38 +53,50 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Definition Byte : Set := bv 8.
     Definition MemVal : Set := Byte.
 
+    (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)
+    Class mcMemPreGS Σ := {
+        mc_ghPreGS :> gen_heapGpreS Addr MemVal Σ;
+        mc_gtPreGS :> trace_preG Trace Σ;
+        }.
+    #[export] Existing Instance mc_ghPreGS.
+    #[export] Existing Instance mc_gtPreGS.
+
     Class mcMemGS Σ :=
       McMemGS {
-          (* ghost variable for tracking state of registers *)
-          mc_ghGS : gen_heapGS Addr MemVal Σ
+          (* ghost variable for tracking state of heap *)
+          mc_ghGS : gen_heapGS Addr MemVal Σ;
+          (* tracking traces *)
+          mc_gtGS : traceG Trace Σ;
         }.
     #[export] Existing Instance mc_ghGS.
+    #[export] Existing Instance mc_gtGS.
 
-    Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Addr MemVal Σ.
+    Definition memGpreS : gFunctors -> Set := mcMemPreGS.
     Definition memGS : gFunctors -> Set := mcMemGS.
-    Definition memΣ : gFunctors := gen_heapΣ Addr MemVal.
+    Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace].
 
     Definition liveAddrs := bv.seqBv (@bv.of_nat xlenbits minAddr) lenAddr.
     Lemma NoDup_liveAddrs : NoDup liveAddrs.
     Proof. now eapply Prelude.nodup_fixed. Qed.
-    
+
     #[global] Arguments liveAddrs : simpl never.
 
-    Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
+    Definition initMemMap μ := (list_to_map (map (fun a => (a , memory_ram μ a)) liveAddrs) : gmap Addr MemVal).
 
-    Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
-      fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal).
+    Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
+    Proof. intros. solve_inG. Defined.
 
     Definition mem_inv : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        (∃ memmap, gen_heap_interp memmap ∗
-           ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
+        (∃ memmap, gen_heap_interp memmap
+           ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
+           ∗ tr_auth1 (memory_trace μ)
         )%I.
 
     Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
-      fun μ => ([∗ list] a' ∈ liveAddrs, mapsto a' (DfracOwn 1) (μ a'))%I.
+      fun μ => (([∗ list] a' ∈ liveAddrs, mapsto a' (DfracOwn 1) (memory_ram μ a')) ∗ tr_frag1 (memory_trace μ))%I.
 
-    Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
+    Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
     Proof.
       unfold initMemMap.
       rewrite map_Forall_to_list.
@@ -118,22 +131,20 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Lemma mem_inv_init `{! gen_heapGpreS Addr MemVal Σ} (μ : Memory) :
       ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res μ)%I.
     Proof.
-      iMod (gen_heap_init (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
-
       pose (memmap := initMemMap μ).
-      iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
+      rewrite /memGpreS in gHP. (* Typeclass search blocks on `memGpreS`, as it does not get inlined, unlike `memGS` *)
+      iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
+      iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]".
+
       iModIntro.
-
-      rewrite (right_id empty union memmap).
-
-      iExists (McMemGS gH).
-      iSplitL "inv".
+      iExists (McMemGS gH gT).
+      iSplitL "Hinv Hauth".
       - iExists memmap.
         iFrame.
         iPureIntro.
         apply initMemMap_works.
-      - unfold mem_res, initMemMap in *.
-        iApply (big_sepM_list_to_map (f := μ) (fun a v => mapsto a (DfracOwn 1) v) with "[$]").
+      - unfold mem_res, initMemMap in *. iFrame.
+        iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => mapsto a (DfracOwn 1) v) with "[$]").
         eapply NoDup_liveAddrs.
     Qed.
   End RiscvPmpIrisParams.
