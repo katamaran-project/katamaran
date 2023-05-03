@@ -79,7 +79,9 @@ Proof.
 Qed.
 
 Lemma trace_alloc `{!trace_preG T Σ} t :
-  ⊢ |==> ∃ _ : traceG T Σ, tr_auth trace_name t ∗ tr_frag trace_name t.
+  ⊢ |==> ∃ tG : traceG T Σ,
+
+      @tr_auth _ _ (@traceG_preG _ _ tG) trace_name t ∗ @tr_frag _ _ (@traceG_preG _ _ tG) trace_name t.
 Proof.
   iMod (trace_alloc_names t) as (γ) "Hinit".
   by iExists (TraceG _ _ _ γ).
