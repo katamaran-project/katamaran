@@ -103,11 +103,10 @@ Proof. generalize a. induction size.
          apply _.
 Qed.
 
-(* Definition of machinery required to do MMIO *)
-(* 2. Finite state machine to model the load instruction *)
+(* 2. Definition of machinery required to do MMIO *)
 Class MMIOEnv : Type := {
   State : Type;
-  (* The combination of these two should allow us to simulate a finitely non-deterministic I/O device, by quantifying over these transition functions at the top-level and adding restrictions *)
+  (* The combination of these two allows us to simulate a finitely non-deterministic I/O device, by quantifying over these transition functions at the top-level and adding restrictions *)
   state_tra_read : State -> Addr -> forall (bytes : nat) , State * bv (bytes * 8);
   state_tra_write : State -> Addr -> forall (bytes : nat) , bv (bytes * 8) -> State;
   state_init : State; (* Useful mostly when reasoning about concrete devices *)
