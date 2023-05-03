@@ -1087,6 +1087,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           |}.
 
         (* NOTE: for now, this always returns False, since we do not provide the adversary with access to MMIO. In the future, this could just branch non-deterministically in the post. *)
+        (* TODO: return `is_mmio`-chunk here once untrusted code gains access to MMIO *)
         Definition sep_contract_within_mmio (bytes : nat) : SepContractFunX (within_mmio bytes) :=
           {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "p" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
              sep_contract_localstore      := [term_var "paddr"];
