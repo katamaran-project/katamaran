@@ -14,6 +14,7 @@ case_study/RiscvPmp/Machine.v
 case_study/RiscvPmp/PmpCheck.v
 case_study/RiscvPmp/Sig.v
 case_study/RiscvPmp/Contracts.v
+case_study/RiscvPmp/trace.v
 case_study/RiscvPmp/IrisModel.v
 case_study/RiscvPmp/IrisInstance.v
 case_study/RiscvPmp/Model.v

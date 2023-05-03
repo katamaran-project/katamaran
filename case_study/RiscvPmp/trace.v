@@ -70,12 +70,19 @@ End S.
 Notation tr_auth1 := (tr_auth trace_name).
 Notation tr_frag1 := (tr_frag trace_name).
 
-Lemma trace_alloc `{!trace_preG T Σ} t :
+Lemma trace_alloc_names `{!trace_preG T Σ} t :
   ⊢ |==> ∃ γ, tr_auth γ t ∗ tr_frag γ t.
 Proof.
   iMod (own_alloc (● (Some (Excl (t: leibnizO T))) ⋅ ◯ (Some (Excl (t: leibnizO T))))) as (γ) "[? ?]".
   { apply auth_both_valid_2; done. }
   iModIntro. iExists _. iFrame.
+Qed.
+
+Lemma trace_alloc `{!trace_preG T Σ} t :
+  ⊢ |==> ∃ _ : traceG T Σ, tr_auth trace_name t ∗ tr_frag trace_name t.
+Proof.
+  iMod (trace_alloc_names t) as (γ) "Hinit".
+  by iExists (TraceG _ _ _ γ).
 Qed.
 
 (* Conditional trace fragments *)
