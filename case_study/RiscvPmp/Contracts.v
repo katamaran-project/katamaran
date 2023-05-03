@@ -1361,11 +1361,8 @@ Module RiscvPmpValidContracts.
 
   Lemma valid_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
   Proof.
-    destruct H as [H|[H|H]];
-      rewrite ?H;
-      symbolic_simpl;
-      intros acc paddr p entries Hsub Hacc **;
-        exists acc; split; trivial; exists acc; split; trivial; split; trivial.
+    destruct H as [H|[H|H]]; rewrite H;
+      symbolic_simpl; eauto.
   Qed.
 
   (* TODO: remove? *)
@@ -1398,11 +1395,7 @@ Module RiscvPmpValidContracts.
 
   Lemma valid_contract_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_write bytes H).
   Proof.
-    destruct H as [H|[H|H]];
-      rewrite ?H;
-      symbolic_simpl;
-        intros addr _ p entries acc **;
-        exists acc; split; trivial; exists acc; split; trivial; split; trivial.
+    destruct H as [H|[H|H]]; rewrite H; symbolic_simpl; eauto.
   Qed.
 
   Lemma valid_contract_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_read bytes H).
