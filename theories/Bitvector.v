@@ -1484,7 +1484,7 @@ Module bv.
   End NoDupBvSeq.
 
   Section Sequences.
-    Import List.
+    Import List stdpp.list.
 
     (* why do we have both bv_seq and seqBv? *)
     Definition seqBv {n} (min : bv n) (len : nat) := List.map (@bv.of_Z n) (list_numbers.seqZ (bv.unsigned min) (Z.of_nat len)).
@@ -1492,7 +1492,7 @@ Module bv.
     Lemma seqBv_succ {n} m n1 :
       n > 0 ->
       (N.succ (bin m) < bv.exp2 n)%N ->
-      (@seqBv n m (S n1)) = cons m (seqBv (one + m) n1).
+      (@seqBv n m (S n1)) = cons m (seqBv (one + m) n1)%bv.
     Proof.
       intros nnz ineq.
       unfold seqBv.
@@ -1504,25 +1504,21 @@ Module bv.
       now rewrite unsigned_succ_small.
     Qed.
 
-
     Lemma seqBv_app {n} m n1 n2 :
-      (bin m + N.of_nat n1 + N.of_nat n2 < exp2 n)%N ->
       @seqBv n m (n1 + n2) = seqBv m n1 ++ seqBv (bv.add m (bv.of_nat n1)) n2.
     Proof.
       unfold seqBv.
-      intros ineq.
       rewrite Znat.Nat2Z.inj_add.
       rewrite list_numbers.seqZ_app; try Lia.lia.
       rewrite map_app.
-      repeat f_equal.
-      unfold unsigned, add; cbn.
-      rewrite <-Znat.nat_N_Z, <-Znat.N2Z.inj_add.
       f_equal.
-      apply (@bv.eq2n_to_eq_lt n).
-      - Lia.lia.
-      - rewrite truncn_spec.
-        apply N.mod_lt, exp2_nzero.
-      - now rewrite ?bv.truncn_eq2n.
+      apply list_eq; intro i.
+      rewrite !list_lookup_fmap.
+      destruct (decide (Z.of_nat n2 ≤ Z.of_nat i)%Z).
+      - rewrite !list_numbers.lookup_seqZ_ge ; auto.
+      - rewrite !list_numbers.lookup_seqZ_lt; [cbn|Lia.lia..].
+        f_equal.
+        now rewrite <-!of_Z_add, !of_Z_unsigned, !of_Z_nat.
     Qed.
 
     Lemma in_seqBv n v min len :
