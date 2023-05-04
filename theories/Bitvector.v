@@ -238,6 +238,17 @@ Module bv.
       | S n , xO p => fun w => f_equal N.double (trunc_wf n p w)
       | S n , xH   => fun _ => eq_refl
       end.
+    Lemma trunc_illf (n : nat) (p : positive) :
+      not (Is_true (at_most n p)) -> (trunc n p < N.pos p)%N.
+    Proof. generalize dependent p. induction n as [| n]; cbn.
+     - Lia.lia.
+     - intros p Hp. destruct p.
+       * specialize (IHn _ Hp).
+         now apply (N.succ_double_lt_mono) in IHn.
+       * specialize (IHn _ Hp).
+         now apply (N.double_lt_mono) in IHn.
+       * cbn in Hp. now exfalso.
+    Qed.
 
     Definition truncn_succ_double (n : nat) (x : N) : truncn (S n) (N.succ_double x) = N.succ_double (truncn n x) :=
       match x with
@@ -269,6 +280,20 @@ Module bv.
     Proof.
       destruct x; cbn; auto using trunc_wf.
     Qed.
+    Lemma truncn_illf (n : nat) (x : N) :
+      not (Is_true (is_wf n x)) -> (truncn n x < x)%N.
+    Proof.
+      destruct x; cbn; auto using trunc_illf. contradiction.
+    Qed.
+    Lemma truncn_le {n x} : (truncn n x <= x)%N.
+    Proof. destruct (base.decide (Is_true (is_wf n x))) eqn:Wf.
+    - rewrite truncn_wf; auto.
+    - apply N.lt_le_incl. apply truncn_illf; auto.
+    Qed.
+    Lemma bin_of_N_decr {n} x : (@bin n (of_N x) <= x)%N.
+    Proof. unfold bin, of_N. apply truncn_le. Qed.
+    Lemma bin_of_nat_decr {n} x : (@bin n (of_nat x) <= N.of_nat x)%N.
+    Proof. apply bin_of_N_decr. Qed.
 
     Definition f_equal_dep_alt {A R} (B : A -> Type) (f : forall a, B a -> R) {x y} {px : B x} (eq1 : x = y) :
        forall {py : B y}, (eq_rect x B px y eq1) = py -> f x px = f y py :=
@@ -1484,7 +1509,7 @@ Module bv.
   End NoDupBvSeq.
 
   Section Sequences.
-    Import List stdpp.list.
+    Import List.
 
     (* why do we have both bv_seq and seqBv? *)
     Definition seqBv {n} (min : bv n) (len : nat) := List.map (@bv.of_Z n) (list_numbers.seqZ (bv.unsigned min) (Z.of_nat len)).
@@ -1512,38 +1537,42 @@ Module bv.
       rewrite list_numbers.seqZ_app; try Lia.lia.
       rewrite map_app.
       f_equal.
-      apply list_eq; intro i.
-      rewrite !list_lookup_fmap.
-      destruct (decide (Z.of_nat n2 ≤ Z.of_nat i)%Z).
+      apply list.list_eq; intro i.
+      rewrite !list.list_lookup_fmap.
+      destruct (base.decide (Z.of_nat n2 <= Z.of_nat i)%Z).
       - rewrite !list_numbers.lookup_seqZ_ge ; auto.
       - rewrite !list_numbers.lookup_seqZ_lt; [cbn|Lia.lia..].
         f_equal.
         now rewrite <-!of_Z_add, !of_Z_unsigned, !of_Z_nat.
     Qed.
 
+    (* More powerful version of `in_seqBv` where `len` and `min + len` need not be representable in `n` bits *)
+    Lemma in_seqBv' n v min len :
+      (min <=ᵘ v) -> (bv.bin v < bv.bin min + N.of_nat len)%N ->
+        base.elem_of v (@seqBv n min len).
+    Proof.
+      unfold bv.ule, seqBv.
+      intros mla alm.
+      apply (list.elem_of_list_fmap_1_alt bv.of_Z _ (bv.unsigned v)).
+      - apply list_numbers.elem_of_seqZ.
+        unfold unsigned, Z.of_nat.
+        destruct len; Lia.lia.
+      - now rewrite bv.of_Z_unsigned.
+    Qed.
+
+    (* NOTE: this lemma does not work for the case where `len == bv.exp2 n`, which is a valid case. We have hence proven the more general lemma above. *)
     Lemma in_seqBv n v min len :
-      (bv.bin min + N.of_nat len < bv.exp2 n)%N ->
       (min <=ᵘ v) -> (v <ᵘ bv.add min (bv.of_nat len)) ->
         base.elem_of v (@seqBv n min len).
     Proof.
       unfold bv.ule, bv.ult, seqBv.
-      intros Hbits mla alm.
-      apply (list.elem_of_list_fmap_1_alt bv.of_Z _ (bv.unsigned v)).
-      - apply list_numbers.elem_of_seqZ.
-        unfold unsigned.
-        enough ((bv.bin (min + bv.of_nat len)) = (N.add (bv.bin min) (N.of_nat len))) by Lia.lia.
-        apply (@bv.eq2n_to_eq_lt n); try assumption.
-        + apply bv.is_wf_spec.
-          now destruct (min + bv.of_nat len).
-        + cbn.
-          rewrite truncn_eq2n.
-          apply bv.eq2R.
-          f_equal.
-          rewrite bv.truncn_spec.
-          rewrite N.mod_small; Lia.lia.
-      - now rewrite bv.of_Z_unsigned.
+      intros mla alm.
+      enough (bv.bin v < bv.bin min + N.of_nat len)%N by (apply in_seqBv'; auto).
+      eapply N.lt_le_trans; [exact alm |].
+      unfold add.
+      rewrite bin_of_N_decr. apply N.add_le_mono; auto.
+      now rewrite bin_of_nat_decr.
     Qed.
-
 
   End Sequences.
 
