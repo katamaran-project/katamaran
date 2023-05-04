@@ -852,7 +852,10 @@ Import BlockVerificationDerived2.
       repeat iDestruct "H'" as "(? & H')"; iFrame.
       iSplitR "Hnpc"; last now iExists _.
       rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
-      do 31 iApply bi.sep_assoc. (* NOTE: this is to invert how the split happens (start with highest-numbered reg first) *)
+      repeat match goal with (* NOTE: easier for automation to have the parentheses left-associative, i.e., ((?P ∗ ?Q) ∗ ?R)%I *)
+      | |- context[(?P ∗ (?Q ∗ ?R))%I] =>
+          iApply bi.sep_assoc
+      end.
       repeat (iRename select (_ ↦ _)%I into "Hptsto"; iSplitR "Hptsto");
         now iExists _.
     - iIntros "Hmem".
