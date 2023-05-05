@@ -44,7 +44,8 @@ From Katamaran Require Import
      RiscvPmp.Contracts
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
-     RiscvPmp.Sig.
+     RiscvPmp.Sig
+     trace.
 From Equations Require Import
      Equations.
 
@@ -110,15 +111,15 @@ Module RiscvPmpModel2.
     Proof. apply bv.bin_one, xlenbits_pos. Qed.
 
     Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
-        ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), μ a = v) memmap⌝ -∗
-        gen_heap.gen_heap_interp memmap -∗
+        ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
+        gen_heap.gen_heap_interp memmap -∗ trace.tr_auth trace.trace_name (memory_trace μ) -∗
         mem_inv sailGS_memGS μ.
-    Proof. iIntros (μ memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
+    Proof. iIntros (μ memmap) "Hmap Hmem Htr"; iExists memmap; now iFrame. Qed.
 
     Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
                                 (paddr : Addr) (data : Byte),
-        map_Forall (λ (a : Addr) (v : Byte), μ a = v) memmap ->
-        map_Forall (λ (a : Addr) (v : Byte), write_byte μ paddr data a = v) (<[paddr:=data]> memmap).
+        map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap ->
+        map_Forall (λ (a : Addr) (v : Byte), write_byte (memory_ram μ) paddr data a = v) (<[paddr:=data]> memmap).
     Proof.
       intros μ memmap paddr data Hmap.
       apply map_Forall_lookup.
@@ -149,42 +150,33 @@ Module RiscvPmpModel2.
       ⊢ ∀ (paddr : Addr),
           ⌜(bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N⌝ -∗
       (∃ (w : bv (bytes * byte)), interp_ptstomem paddr w) ∗-∗
-        [∗ list] offset ∈ bv.seqBv paddr bytes,
-            ∃ w, interp_ptsto offset w.
+        ptstoSthL (bv.seqBv paddr bytes).
     Proof.
       iInduction bytes as [|bytes] "IHbytes";
-        iIntros (paddr) "%Hrep"; iSplit.
-      - auto.
-      - iIntros "H". now iExists bv.zero.
-      - iIntros "[%w H]".
-        rewrite bv.seqBv_succ.
-        rewrite big_sepL_cons.
-        destruct (bv.appView byte (bytes * byte) w) as [b bs].
-        rewrite ptstomem_bv_app.
-        iDestruct "H" as "[Hb Hbs]".
-        iSplitL "Hb".
-        + by iExists b.
-        + iApply ("IHbytes" with "[%]").
-          rewrite bv.bin_add_small;
-            rewrite bv_bin_one; lia.
-          now iExists bs.
-        + apply xlenbits_pos.
-        + rewrite <- N.add_1_l; lia.
-      - iIntros "H".
-        rewrite bv.seqBv_succ; try apply xlenbits_pos.
-        rewrite big_sepL_cons.
-        iDestruct "H" as "([%b Hb] & Hbs)".
-        iAssert (∃ (w : bv (bytes * byte)), interp_ptstomem (bv.one + paddr) w)%I with "[Hbs]" as "[%w H]".
-        iApply ("IHbytes" $! (bv.one + paddr) with "[%]").
-        rewrite bv.bin_add_small bv_bin_one; lia.
-        iApply "Hbs".
-        iExists (bv.app b w).
-        rewrite ptstomem_bv_app; iFrame.
-        rewrite <- N.add_1_l; lia.
+        iIntros (paddr) "%Hrep".
+      - unfold ptstoSthL. unshelve auto. exact bv.zero.
+      - rewrite bv.seqBv_succ; [| apply xlenbits_pos | lia].
+        rewrite (app_comm_cons []) ptstoSthL_app.
+        iAssert (_ ∗-∗ _)%I with "[IHbytes]" as "[IHL IHR]".
+        { iSpecialize ("IHbytes" $! (bv.one xlenbits + paddr)). iApply "IHbytes".
+          iPureIntro. rewrite bv.bin_add_small; rewrite bv_bin_one; lia.
+         }
+        iSplit.
+        *  iIntros "[%w H]".
+           destruct (bv.appView byte (bytes * byte) w) as [b bs].
+           rewrite ptstomem_bv_app.
+           iDestruct "H" as "[Hb Hbs]".
+           iSplitL "Hb".
+           + cbn. iSplit; [by iExists _ | auto].
+           + iApply "IHL"; by iExists _.
+        * iIntros "[[[%b Hhd] _] Htl]".
+          iDestruct ("IHR" with "Htl") as "[%btl Htl]".
+          iExists (bv.app b btl).
+          rewrite ptstomem_bv_app. iFrame.
     Qed.
 
     Lemma fun_read_ram_works {bytes memmap μ paddr} {w : bv (bytes * byte)} :
-      map_Forall (λ (a : Addr) (v : Base.Byte), μ a = v) memmap ->
+      map_Forall (λ (a : Addr) (v : Base.Byte), memory_ram μ a = v) memmap ->
            interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ⊢
               ⌜ fun_read_ram μ bytes paddr = w ⌝.
     Proof.

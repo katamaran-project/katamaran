@@ -125,8 +125,7 @@ Module RiscvPmpIrisInstance <:
       else if decide (a ∈ live_addrs) then ptstoSth a
       else True%I.
     Definition interp_addr_access (base : Addr) (width : nat): iProp Σ :=
-      [∗ list] a ∈ bv.seqBv base width,
-        interp_addr_access_byte a.
+      [∗ list] a ∈ bv.seqBv base width, interp_addr_access_byte a.
 
     Definition all_addrs : list Addr := bv.finite.enum xlenbits.
     Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
