@@ -830,10 +830,10 @@ Module ExampleModel.
       Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
         fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
 
-      Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
+      Lemma mem_inv_init `{! gen_heapGpreS Z (Z * (Z + unit)) Σ} (μ : Memory) :
         ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
       Proof.
-        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
+        iMod (gen_heap_init (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
 
         iMod (gen_heap_alloc_big empty μ (map_disjoint_empty_r μ) with "inv") as "(inv & res & _)".
         iModIntro.

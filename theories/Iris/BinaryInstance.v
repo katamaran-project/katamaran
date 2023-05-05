@@ -67,7 +67,7 @@ Module Type IrisParameters2
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
   (Import IP   : IrisPrelims B PROG SEM).
-  Parameter memGpreS2 : gFunctors -> Set.
+  Parameter Inline memGpreS2 : gFunctors -> Set.
   Parameter Inline memGS2 : gFunctors -> Set.
   Existing Class memGS2.
   Parameter memΣ2 : gFunctors.

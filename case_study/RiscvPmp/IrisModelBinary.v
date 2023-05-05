@@ -76,11 +76,11 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
       fun μ1 μ2 => (RiscvPmpIrisBase.mem_res (hG := mc_ghGS2_left) μ1 ∗
                    RiscvPmpIrisBase.mem_res (hG := mc_ghGS2_right) μ2)%I.
 
-    Lemma mem_inv_init2 `{gHP : memGpreS2 Σ} (μ1 μ2 : Memory) :
+    Lemma mem_inv_init2 `{gHP : prod (RiscvPmpIrisBase.memGpreS Σ) (RiscvPmpIrisBase.memGpreS Σ)} (μ1 μ2 : Memory) :
       ⊢ |==> ∃ mG : mcMemGS2 Σ, (mem_inv2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
     Proof.
-      iMod (RiscvPmpIrisBase.mem_inv_init (gHP := fst gHP) μ1) as (mG1) "[inv1 res1]".
-      iMod (RiscvPmpIrisBase.mem_inv_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
+      iMod (RiscvPmpIrisBase.mem_inv_init (gen_heapGpreS0 := fst gHP) μ1) as (mG1) "[inv1 res1]".
+      iMod (RiscvPmpIrisBase.mem_inv_init (gen_heapGpreS0 := snd gHP) μ2) as (mG2) "[inv2 res2]".
       iModIntro.
       iExists (McMemGS2 mG1 mG2).
       iSplitL "inv1 inv2"; iFrame.
