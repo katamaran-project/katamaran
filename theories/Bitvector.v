@@ -1514,21 +1514,6 @@ Module bv.
     (* why do we have both bv_seq and seqBv? *)
     Definition seqBv {n} (min : bv n) (len : nat) := List.map (@bv.of_Z n) (list_numbers.seqZ (bv.unsigned min) (Z.of_nat len)).
 
-    Lemma seqBv_succ {n} m n1 :
-      n > 0 ->
-      (N.succ (bin m) < bv.exp2 n)%N ->
-      (@seqBv n m (S n1)) = cons m (seqBv (one + m) n1)%bv.
-    Proof.
-      intros nnz ineq.
-      unfold seqBv.
-      rewrite list_numbers.seqZ_cons; try Lia.lia.
-      cbn.
-      rewrite of_Z_unsigned.
-      rewrite Znat.Nat2Z.inj_succ.
-      rewrite <-Zpred_succ.
-      now rewrite unsigned_succ_small.
-    Qed.
-
     Lemma seqBv_app {n} m n1 n2 :
       @seqBv n m (n1 + n2) = seqBv m n1 ++ seqBv (bv.add m (bv.of_nat n1)) n2.
     Proof.
@@ -1544,6 +1529,19 @@ Module bv.
       - rewrite !list_numbers.lookup_seqZ_lt; [cbn|Lia.lia..].
         f_equal.
         now rewrite <-!of_Z_add, !of_Z_unsigned, !of_Z_nat.
+    Qed.
+
+    Lemma seqBv_succ {n} m n1 :
+      (@seqBv n m (S n1)) = cons m (seqBv (one + m) n1)%bv.
+    Proof.
+      rewrite <-Nat.add_1_l, seqBv_app.
+      unfold seqBv at 1.
+      rewrite list_numbers.seqZ_cons; [|Lia.lia]. cbn.
+      f_equal.
+      - now rewrite of_Z_unsigned.
+      - rewrite list_numbers.seqZ_nil; [|Lia.lia]. cbn.
+        f_equal.
+        destruct n; cbn; apply add_comm.
     Qed.
 
     (* More powerful version of `in_seqBv` where `len` and `min + len` need not be representable in `n` bits *)
