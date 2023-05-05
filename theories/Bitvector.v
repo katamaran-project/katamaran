@@ -1560,7 +1560,7 @@ Module bv.
       - now rewrite bv.of_Z_unsigned.
     Qed.
 
-    (* NOTE: this lemma does not work for the case where `len == bv.exp2 n`, which is a valid case. We have hence proven the more general lemma above. *)
+    (* NOTE: this lemma does not work for the case where `min == 0` and `len == bv.exp2 n`, which is a valid case. We have hence proven the more general lemma above. *)
     Lemma in_seqBv n v min len :
       (min <=ᵘ v) -> (v <ᵘ bv.add min (bv.of_nat len)) ->
         base.elem_of v (@seqBv n min len).
