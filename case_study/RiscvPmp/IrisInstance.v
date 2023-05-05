@@ -53,6 +53,7 @@ Module RiscvPmpIrisInstance <:
 
   Section WithSailGS.
     Context `{sailRegGS Σ} `{invGS Σ} `{mG : mcMemGS Σ}.
+    Variable (live_addrs : list Addr) (mmio_addrs : list Addr).
 
     Definition reg_file : gset (bv 5) := list_to_set (bv.finite.enum 5).
 
@@ -94,7 +95,6 @@ Module RiscvPmpIrisInstance <:
 
     (* TODO: change back to words instead of bytes... might be an easier first version
              and most likely still conventient in the future *)
-  Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptstomem_readonly").
     Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
       mapsto addr (DfracOwn 1) b.
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
@@ -106,7 +106,6 @@ Module RiscvPmpIrisInstance <:
     Definition interp_ptstomem' {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
       [∗ list] offset ∈ seq 0 width,
         interp_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
-
     Fixpoint interp_ptstomem {width : nat} (addr : Addr) : bv (width * byte) -> iProp Σ :=
       match width with
       | O   => fun _ => True
@@ -116,18 +115,28 @@ Module RiscvPmpIrisInstance <:
             interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
       end%I.
 
+    Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptstomem_readonly").
+    Definition interp_ptstomem_readonly {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
+      inv femto_inv_ns (interp_ptstomem addr b).
+
+    (* Universal contract for single byte/`width` bytes after PMP checks *)
+    Definition interp_addr_access_byte (a : Addr) : iProp Σ :=
+      if decide (a ∈ mmio_addrs) then True%I (* TODO: Change this to a trace filter to grant the adversary access to MMIO *)
+      else if decide (a ∈ live_addrs) then ptstoSth a
+      else True%I.
+    Definition interp_addr_access (base : Addr) (width : nat): iProp Σ :=
+      [∗ list] a ∈ bv.seqBv base width,
+        interp_addr_access_byte a.
+
     Definition all_addrs : list Addr := bv.finite.enum xlenbits.
     Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
     Proof. apply (@bv.finite.elem_of_enum xlenbits). Qed.
+    Definition interp_pmp_addr_access (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+      [∗ list] a ∈ all_addrs,
+        (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ interp_addr_access_byte a)%I.
 
-    Definition interp_ptstomem_readonly {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
-      inv femto_inv_ns (interp_ptstomem addr b).
-    Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-      [∗ list] a ∈ addrs,
-        (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ ptstoSth a)%I.
-
-    Definition interp_pmp_addr_access_without (addr : Addr) (width : nat) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-      ((∃ w, @interp_ptstomem width addr w)  -∗ interp_pmp_addr_access addrs entries m)%I.
+    Definition interp_pmp_addr_access_without (addr : Addr) (width : nat)  (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+      (@interp_addr_access addr width -∗ interp_pmp_addr_access entries m)%I.
 
     (* TODO: introduce constant for nr of word bytes (replace 4) *)
     Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
@@ -142,8 +151,8 @@ Module RiscvPmpIrisInstance <:
     Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | pmp_entries              | [ v ]                => interp_pmp_entries v
-    | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs entries m
-    | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without addr bytes liveAddrs entries m
+    | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
+    | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
