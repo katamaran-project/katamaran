@@ -148,19 +148,14 @@ Module RiscvPmpModel2.
 
     Lemma interp_ptstomem_big_sepS (bytes : nat) :
       ⊢ ∀ (paddr : Addr),
-          ⌜(bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N⌝ -∗
       (∃ (w : bv (bytes * byte)), interp_ptstomem paddr w) ∗-∗
         ptstoSthL (bv.seqBv paddr bytes).
     Proof.
-      iInduction bytes as [|bytes] "IHbytes";
-        iIntros (paddr) "%Hrep".
+      iInduction bytes as [|bytes] "IHbytes"; iIntros (paddr).
       - unfold ptstoSthL. unshelve auto. exact bv.zero.
-      - rewrite bv.seqBv_succ; [| apply xlenbits_pos | lia].
+      - rewrite bv.seqBv_succ.
         rewrite (app_comm_cons []) ptstoSthL_app.
-        iAssert (_ ∗-∗ _)%I with "[IHbytes]" as "[IHL IHR]".
-        { iSpecialize ("IHbytes" $! (bv.one xlenbits + paddr)). iApply "IHbytes".
-          iPureIntro. rewrite bv.bin_add_small; rewrite bv_bin_one; lia.
-         }
+        iDestruct ("IHbytes" $! (bv.one xlenbits + paddr)) as "[IHL IHR]".
         iSplit.
         *  iIntros "[%w H]".
            destruct (bv.appView byte (bytes * byte) w) as [b bs].
