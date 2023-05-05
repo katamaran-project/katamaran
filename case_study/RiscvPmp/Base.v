@@ -90,12 +90,12 @@ Proof. cbv. lia. Qed.
 
 (* 1. Definition of MMIO region *)
 (* For now, we only consider the one femtokernel address to be part of the MMIO-mapped memory. *)
-Definition mmioAddr : list Addr := [bv.of_N 64].
-Definition isMMIO a : Prop := a ∈ mmioAddr.
+Definition mmioAddrs : list Addr := [bv.of_N 64].
+Definition isMMIO a : Prop := a ∈ mmioAddrs.
 Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
   match size with
   | O => True
-  | S size' => a ∈ mmioAddr /\ withinMMIO (bv.add (bv.one _) a) size' end.
+  | S size' => a ∈ mmioAddrs /\ withinMMIO (bv.add (bv.one _) a) size' end.
 #[export] Instance withinMMIODec a size: Decision (withinMMIO a size).
 Proof. generalize a. induction size.
        - apply _.
