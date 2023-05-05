@@ -116,6 +116,19 @@ Module RiscvPmpIrisInstance <:
             interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
       end%I.
 
+    Require Import Nat.
+    Definition all_addrs : list Addr := bv.seqBv bv.zero (pow 2 xlenbits).
+    Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
+    Proof.
+      apply bv.in_seqBv'; unfold bv.ule, bv.ult.
+      - cbn. Lia.lia.
+      - destruct a as [bin Hwf].
+        cbn [bv.bin].
+        rewrite bv.is_wf_spec in Hwf.
+        eapply N.lt_le_trans; [exact|].
+        rewrite bv.exp2_spec Nat2N.inj_pow.
+        Lia.lia.
+    Qed.
     Definition interp_ptstomem_readonly {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
       inv femto_inv_ns (interp_ptstomem addr b).
     Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
