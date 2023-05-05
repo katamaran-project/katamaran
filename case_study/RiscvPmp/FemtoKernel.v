@@ -835,7 +835,6 @@ Import BlockVerificationDerived2.
     iIntros (Σ' H).
     unfold own_regstore.
     cbn.
-
     iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
     rewrite γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc.
     iMod (femtokernel_splitMemory with "Hmem") as "(Hinit & Hhandler & #Hfortytwo & Hadv)";
@@ -844,17 +843,11 @@ Import BlockVerificationDerived2.
     iSplitR "".
     - destruct (env.view δ).
       iApply femtokernel_init_safe.
-      iFrame "Hfortytwo Hpc Hcurpriv Hinit Hadv Hhandler".
-      iSplitL "Hmstatus". { now iExists _. }
-      iSplitL "Hmtvec". { now iExists _. }
-      iSplitL "Hmcause". { now iExists _. }
-      iSplitL "Hmepc". { now iExists _. }
       repeat iDestruct "H'" as "(? & H')"; iFrame.
-      iSplitR "Hnpc"; last now iExists _.
       rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
       repeat (iRename select (_ ↦ _)%I into "Hp";
               iPoseProof (bi.exist_intro with "Hp") as "?").
-      iFrame.
+      now iFrame.
     - iIntros "Hmem".
       unfold interp_ptstomem_readonly.
       iInv "Hfortytwo" as ">Hptsto" "_".
