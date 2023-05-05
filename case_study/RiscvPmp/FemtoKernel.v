@@ -852,12 +852,9 @@ Import BlockVerificationDerived2.
       repeat iDestruct "H'" as "(? & H')"; iFrame.
       iSplitR "Hnpc"; last now iExists _.
       rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
-      repeat match goal with (* NOTE: easier for automation to have the parentheses left-associative, i.e., ((?P ∗ ?Q) ∗ ?R)%I *)
-      | |- context[(?P ∗ (?Q ∗ ?R))%I] =>
-          iApply bi.sep_assoc
-      end.
-      repeat (iRename select (_ ↦ _)%I into "Hptsto"; iSplitR "Hptsto");
-        now iExists _.
+      repeat (iRename select (_ ↦ _)%I into "Hp";
+              iPoseProof (bi.exist_intro with "Hp") as "?").
+      iFrame.
     - iIntros "Hmem".
       unfold interp_ptstomem_readonly.
       iInv "Hfortytwo" as ">Hptsto" "_".
