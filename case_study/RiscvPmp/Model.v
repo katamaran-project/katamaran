@@ -54,6 +54,7 @@ From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require Import weakestpre adequacy.
+From iris.program_logic Require lifting.
 From iris.proofmode Require Import string_ident tactics.
 
 Set Implicit Arguments.
@@ -98,7 +99,8 @@ Module RiscvPmpModel2.
       let s := fresh "s" in
       let f := fresh "f" in
       match goal with
-      | H: prim_step _ _ _ _ _ _ |- _ =>
+      | H: language.prim_step _ _ _ _ _ _ |- _ =>
+          rewrite /language.prim_step in H; cbn in H; (* unfold the Iris `prim_step`*)
           dependent elimination H as [mk_prim_step _ s];
           dependent elimination s as [RiscvPmpSemantics.st_foreign _ _ f];
           rewrite Heq in f;
@@ -189,26 +191,50 @@ Module RiscvPmpModel2.
         f_equal; auto.
     Qed.
 
+    (* Iris does not seem to have a no-fork variant for `language`s, so we prove it here, analogously to `wp_lift_atomic_head_step_no_fork` *)
+    Lemma wp_lift_atomic_step_no_fork:
+      ∀ {Λ : language} {Σ : gFunctors} {irisGS0 : irisGS Λ Σ}
+        {s : stuckness} {E : coPset} {Φ : val Λ → iProp Σ}
+        (e1 : language.expr Λ),
+        language.to_val e1 = None
+        → (∀ (σ1 : state Λ) (ns : nat) (κ κs : list (language.observation Λ)) (nt : nat),
+            state_interp σ1 ns (κ ++ κs) nt ={E}=∗
+            ⌜match s with
+              | NotStuck => reducible e1 σ1
+              | MaybeStuck => True
+              end⌝ ∗
+            ▷ (∀ (e2 : language.expr Λ) (σ2 : language.state Λ) (efs : list (language.expr Λ)),
+                  ⌜language.prim_step e1 σ1 κ e2 σ2 efs⌝ ={E}=∗
+                  ⌜efs = []⌝ ∗ state_interp σ2 (S ns) κs (length efs + nt) ∗
+                  from_option Φ False (language.to_val e2) )) -∗
+          WP e1 @ s; E {{ v, Φ v }}.
+    Proof. intros * Hval. iIntros "H".
+      iApply lifting.wp_lift_atomic_step; [auto | ].
+      iIntros (σ1 ns κ κs nt) "Hσ1".
+      iMod ("H" $! σ1 with "Hσ1") as "[$ H]"; iModIntro.
+      iNext; iIntros (v2 σ2 efs Hstep).
+      iMod ("H" $! v2 σ2 efs with "[//]") as "(-> & ? & ?) /=". by iFrame.
+    Qed.
+
+    Lemma microsail_step_no_fork {Γ τ} e1 σ1 l1 e2 σ2 efs :
+      @language.prim_step (microsail_lang Γ τ) e1 σ1 l1 e2 σ2 efs → efs = [].
+    Proof. intro H. by inversion H. Qed.
+
     Lemma read_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
     Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
-      iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
-      unfold semWP. rewrite wp_unfold.
-      cbn in *.
-      iIntros (? ? ? ? ?) "(Hregs & % & Hmem & %Hmap)".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
+      iIntros "H". cbn in *.
+      iApply (wp_lift_atomic_step_no_fork); [auto | ].
+      iIntros (? ? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
       iSplitR; first auto.
-      iIntros.
       repeat iModIntro.
+      iIntros. iModIntro.
+      iSplitR. iPureIntro; eapply microsail_step_no_fork; eauto.
       eliminate_prim_step Heq.
-      iMod "Hclose" as "_".
-      iModIntro.
       iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "Hmem".
-      iFrame.
-      now iApply wp_value.
+      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+      now iFrame.
     Qed.
 
     Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
