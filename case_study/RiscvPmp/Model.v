@@ -155,8 +155,7 @@ Module RiscvPmpModel2.
     Proof.
       iInduction bytes as [|bytes] "IHbytes"; iIntros (paddr).
       - unfold ptstoSthL. unshelve auto. exact bv.zero.
-      - rewrite bv.seqBv_succ.
-        rewrite (app_comm_cons []) ptstoSthL_app.
+      - rewrite bv.seqBv_succ (app_comm_cons []) ptstoSthL_app.
         iDestruct ("IHbytes" $! (bv.one + paddr)) as "[IHL IHR]".
         iSplit.
         *  iIntros "[%w H]".
@@ -266,6 +265,27 @@ Module RiscvPmpModel2.
       eliminate_prim_step Heq.
       iMod (fun_write_ram_works with "[$H $Hmem $Htr]") as "[$ H]"; [auto | now iFrame].
     Qed.
+
+    Lemma mmio_read_sound (bytes : nat) :
+     ValidContractForeign (sep_contract_mmio_read bytes) (mmio_read bytes).
+    Proof.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+      now iIntros "[%HFalse _]".
+    Qed.
+
+    Lemma mmio_write_sound (bytes : nat) :
+     ValidContractForeign (sep_contract_mmio_write bytes) (mmio_write bytes).
+    Proof.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+      now iIntros "[%HFalse _]".
+    Qed.
+
+    Lemma within_mmio_sound  :
+     ValidContractForeign (sep_contract_within_mmio 80) (within_mmio 80).
+    Proof.
+      intros Γ es δ ι Heq. cbn in Heq. destruct_syminstance ι.
+      (* cbn (* This spins... *) *)
+    Admitted.
 
     Lemma decode_sound :
       ValidContractForeign sep_contract_decode decode.
