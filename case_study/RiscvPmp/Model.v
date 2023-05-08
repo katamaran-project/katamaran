@@ -233,23 +233,23 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
-      map_Forall (λ (a : Addr) (v : Base.Byte), μ a = v) memmap ->
-      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ={⊤}=∗
-      mem_inv sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ (|={⊤}=> interp_ptstomem paddr data).
+      map_Forall (λ (a : Addr) (v : Base.Byte), (memory_ram μ) a = v) memmap ->
+      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗ tr_auth1 (memory_trace μ) ={⊤}=∗
+      mem_inv sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
     Proof.
       iRevert (data w paddr μ memmap).
       iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
-        iIntros (data w paddr μ memmap Hmap) "[Haddr Hmem]".
+        iIntros (data w paddr μ memmap Hmap) "[Haddr [Hmem Htr]]".
       - iModIntro. iSplitL; last done.
-        now iApply (mem_inv_not_modified $! Hmap with "Hmem").
+        now iApply (mem_inv_not_modified $! Hmap with "Hmem Htr").
      -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
         destruct (bv.appView byte (bytes * byte) w) as [bw w].
         iDestruct "Haddr" as "[H Haddr]".
         iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
         iApply ("IHbytes" $! data w
-                       (bv.add bv.one paddr) (write_byte μ paddr bd)
-                    (insert paddr bd memmap) with "[%] [$Haddr $Hmem]").
+                       (bv.add bv.one paddr) (memory_update_ram μ (write_byte (memory_ram μ) paddr bd))
+                    (insert paddr bd memmap) with "[%] [$Haddr $Hmem $Htr]").
         by apply map_Forall_update.
     Qed.
 
@@ -257,23 +257,14 @@ Module RiscvPmpModel2.
       ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
-      iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
-      unfold semWP. rewrite wp_unfold.
-      cbn.
-      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
+      iIntros "[%w H]". cbn in *.
+      iApply (wp_lift_atomic_step_no_fork); [auto | ].
+      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
       iSplitR; first auto.
-      iIntros.
       repeat iModIntro.
-      eliminate_prim_step Heq. clear es1 Heq.
-      iDestruct "H" as "(%w & H)".
-      fold_semWP. rewrite semWP_val.
-      iFrame "Hcp Hes Hregs".
-      iMod "Hclose" as "_".
-      iMod (@fun_write_ram_works μ1 bytes paddr data memmap w Hmap
-                   with "[$H $Hmem]") as "[$ H]".
-      by iSplitL.
+      iIntros.
+      eliminate_prim_step Heq.
+      iMod (fun_write_ram_works with "[$H $Hmem $Htr]") as "[$ H]"; [auto | now iFrame].
     Qed.
 
     Lemma decode_sound :
