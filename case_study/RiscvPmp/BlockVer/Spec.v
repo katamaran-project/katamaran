@@ -402,12 +402,24 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_postcondition   := term_var "result_decode" = term_var "instr";
     |}.
 
+  #[program] Definition sep_contract_vector_subrange {n} (e b : nat) {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} : SepContractFunX (@vector_subrange n e b p q r) :=
+    {| sep_contract_logic_variables := ["v" :: ty.bvec n];
+       sep_contract_localstore      := [term_var "v"];
+       sep_contract_precondition    := ⊤;
+       sep_contract_result          := "result_vector_subrange";
+       sep_contract_postcondition   :=
+         term_var "result_vector_subrange" = @term_vector_subrange _ _ (term_var "v") b (e - b + 1) _;
+    |}.
+  Next Obligation. intros; now apply convert_foreign_vector_subrange_conditions. Qed.
+  #[global] Arguments sep_contract_vector_subrange {_} _ _ {_ _ _}.
+
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
-      | read_ram bytes  => sep_contract_read_ram
-      | write_ram bytes => sep_contract_write_ram
-      | decode    => sep_contract_decode
+      | read_ram bytes      => sep_contract_read_ram
+      | write_ram bytes     => sep_contract_write_ram
+      | decode              => sep_contract_decode
+      | vector_subrange e b => sep_contract_vector_subrange e b
       end.
 
   Lemma linted_cenvex :
@@ -794,12 +806,45 @@ Module RiscvPmpIrisInstanceWithContracts.
     iApply wp_value; auto.
   Qed.
 
+  Lemma vector_subrange_sound `{sailGS Σ} {n} (e b : nat)
+    {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} :
+    ValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_vector_subrange n e b p q r)
+      (vector_subrange e b).
+  Proof.
+    intros Γ es δ ι Heq.
+    destruct (env.view ι) as [ι v].
+    iIntros "_".
+    iApply wp_unfold.
+    cbn in *.
+    iIntros (? ? ? ? ?) "[Hregs Hmem]".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first auto.
+    repeat iModIntro.
+    iIntros (e2 σ efs Hstep).
+    dependent elimination Hstep.
+    fold_semWP.
+    dependent elimination s.
+    rewrite Heq in f1.
+    dependent elimination f1.
+    repeat iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; trivial.
+    destruct (fun_vector_subrange v e b) eqn:Ev.
+    iApply wp_value.
+    iSplitL; first iPureIntro; auto.
+  Qed.
+
   Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
   Proof.
-    intros Δ τ f. destruct f.
+    intros Δ τ f. destruct f;
+      try apply Model.RiscvPmpModel2.foreignSem.
     - apply read_ram_sound.
     - apply write_ram_sound.
     - apply decode_sound.
+    - apply vector_subrange_sound.
   Qed.
 
   Ltac destruct_syminstance ι :=

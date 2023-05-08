@@ -299,10 +299,36 @@ Module RiscvPmpModel2.
         now iExists _.
     Qed.
 
+    Lemma vector_subrange_sound {n} (e b : nat)
+                                {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} :
+      ValidContractForeign (@sep_contract_vector_subrange n e b p q r) (vector_subrange e b).
+    Proof.
+      intros Γ es δ ι Heq.
+      destruct_syminstance ι.
+      iIntros "_".
+      iApply semWp2_unfold.
+      cbn in *.
+      iIntros (? ? ? ?) "[Hregs (Hmem1 & Hmem2)]".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iIntros.
+      repeat iModIntro.
+      eliminate_prim_step Heq.
+      iMod "Hclose" as "_".
+      iModIntro.
+      iExists _, _, _, _.
+      iSplitR.
+      iPureIntro; constructor; now rewrite Heq.
+      iFrame.
+      destruct (fun_vector_subrange bv0 e b) eqn:Ev.
+      rewrite semWp2_val.
+      now iExists _.
+    Qed.
+
     Lemma foreignSem : ForeignSem.
     Proof.
       intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, decode_sound.
+        eauto using read_ram_sound, write_ram_sound, decode_sound, vector_subrange_sound.
     Qed.
   End ForeignProofs.
 

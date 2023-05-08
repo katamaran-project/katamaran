@@ -1106,12 +1106,24 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              sep_contract_postcondition   := ⊤;
           |}.
 
+        Definition sep_contract_vector_subrange {n} (e b : nat)
+          {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat}
+          : SepContractFunX (@vector_subrange n e b _ _ _) :=
+          {| sep_contract_logic_variables := ["bv" :: ty.bvec n];
+             sep_contract_localstore      := [term_var "bv"];
+             sep_contract_precondition    := ⊤;
+             sep_contract_result          := "result_vector_subrange";
+             sep_contract_postcondition   := ⊤;
+          |}.
+        #[global] Arguments sep_contract_vector_subrange {n} e b {p q r}.
+
         Definition CEnvEx : SepContractEnvEx :=
           fun Δ τ fn =>
             match fn with
-            | read_ram bytes  => sep_contract_read_ram bytes
-            | write_ram bytes => sep_contract_write_ram bytes
-            | decode          => sep_contract_decode
+            | read_ram bytes      => sep_contract_read_ram bytes
+            | write_ram bytes     => sep_contract_write_ram bytes
+            | decode              => sep_contract_decode
+            | vector_subrange e b => sep_contract_vector_subrange e b
             end.
 
         Lemma linted_cenvex :

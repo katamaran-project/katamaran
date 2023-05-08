@@ -221,10 +221,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
-  | read_ram (bytes : nat) : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
-  | write_ram (bytes : nat) : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
-  | decode               : FunX [bv ∷ ty_word] ty_ast
+  | read_ram (bytes : nat)                                        : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
+  | write_ram (bytes : nat)                                       : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
+  | decode                                                        : FunX [bv ∷ ty_word] ty_ast
+  | vector_subrange {n : nat} (e' b : nat) {p : IsTrue (0 <=? b)%nat}
+      {q : IsTrue (b <=? e')%nat} {r : IsTrue (e' <? n)%nat}      : FunX [bv :: ty.bvec n] (ty.bvec (e' - b + 1))
   .
+  #[global] Arguments vector_subrange {n} e' b {p q r}.
 
   Inductive Lem : PCtx -> Set :=
   | open_gprs                       : Lem ctx.nil
@@ -497,7 +500,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_shift_right_arith32 : Stm [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32) :=
     let: "v64" :: ty.bvec 64 := exp_sext v in
     let: tmp := exp_binop bop.shiftr (exp_var "v64") (exp_var "shift") in
-    exp_extract 0 32 tmp.
+    stm_foreign (vector_subrange 31 0) [tmp].
 
   Definition fun_extend_value (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes) :=
     match: value in union (memory_op_result bytes) with
@@ -590,11 +593,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     if: exp_int (Z.of_nat n) = exp_int 0%Z
     then
       let: tmp  := stm_read_register pmp0cfg in
-      let: tmp1 := exp_extract 0 8 value in
+      let: tmp1 := stm_foreign (vector_subrange 7 0) [value] in
       let: tmp2 := call pmpWriteCfg tmp tmp1 in
       stm_write_register pmp0cfg tmp2 ;;
       let: tmp  := stm_read_register pmp1cfg in
-      let: tmp1 := exp_extract 8 8 value in
+      let: tmp1 := stm_foreign (vector_subrange 15 8) [value] in
       let: tmp2 := call pmpWriteCfg tmp tmp1 in
       stm_write_register pmp1cfg tmp2 ;;
       stm_val ty.unit tt
@@ -1010,12 +1013,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
        | RISCV_AND  => exp_binop bop.bvand rs1_val rs2_val
        | RISCV_OR   => exp_binop bop.bvor  rs1_val rs2_val
        | RISCV_XOR  => exp_binop bop.bvxor rs1_val rs2_val
-       | RISCV_SLL  => let: tmp := exp_extract 0 5 rs2_val in
+       | RISCV_SLL  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
                        exp_binop bop.shiftl rs1_val tmp
-       | RISCV_SRL  => let: tmp := exp_extract 0 5 rs2_val in
+       | RISCV_SRL  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
                        exp_binop bop.shiftr rs1_val tmp
        | RISCV_SUB  => rs1_val -ᵇ rs2_val
-       | RISCV_SRA  => let: tmp := exp_extract 0 5 rs2_val in
+       | RISCV_SRA  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
                        call shift_right_arith32 rs1_val tmp
        end in
      call wX rd result ;;
@@ -1044,11 +1047,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: rs1_val := call rX rs1 in
     let: result :=
       match: op in sop with
-      | RISCV_SLLI => let: tmp := exp_extract 0 5 shamt in
+      | RISCV_SLLI => let: tmp := stm_foreign (vector_subrange 4 0) [shamt] in
                       exp_binop bop.shiftl rs1_val tmp
-      | RISCV_SRLI => let: tmp := exp_extract 0 5 shamt in
+      | RISCV_SRLI => let: tmp := stm_foreign (vector_subrange 4 0) [shamt] in
                       exp_binop bop.shiftr rs1_val tmp
-      | RISCV_SRAI => let: tmp := exp_extract 0 5 shamt in
+      | RISCV_SRAI => let: tmp := stm_foreign (vector_subrange 4 0) [shamt] in
                       call shift_right_arith32 rs1_val tmp
       end in
     call wX rd result ;;
@@ -1247,6 +1250,28 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end.
   #[global] Arguments fun_write_ram : clear implicits.
 
+  Lemma convert_foreign_vector_subrange_conditions {n e b : nat} :
+    IsTrue (0 <=? b)%nat -> IsTrue (b <=? e)%nat -> IsTrue (e <? n)%nat ->
+    IsTrue (b + (e - b + 1) <=? n)%nat.
+  Proof.
+    intros;
+      repeat match goal with
+        | |- IsTrue (?x <=? ?y)%nat =>
+            destruct (Nat.leb_spec x y)
+        | H: IsTrue (?x <=? ?y)%nat |- _ =>
+            destruct (Nat.leb_spec x y)
+        | H: IsTrue (?x <? ?y)%nat |- _ =>
+            destruct (Nat.ltb_spec x y)
+        end;
+      auto;
+      lia.
+  Qed.
+
+  #[program] Definition fun_vector_subrange {n} (data : Val (ty.bvec n)) (e b : nat) {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} : Val (ty.bvec (e - b + 1)) :=
+    @bv.vector_subrange _ data b (e - b + 1) _.
+  Next Obligation. intros; by apply convert_foreign_vector_subrange_conditions. Qed.
+  #[global] Arguments fun_vector_subrange {n} _ _ _ {_ _ _}.
+    
   #[derive(equations=no)]
   Equations ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
     ForeignCall (read_ram width) [addr] res γ γ' μ μ' :=
@@ -1254,7 +1279,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     ForeignCall (write_ram width) [addr; data] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , @fun_write_ram μ width addr data , inr true);
     ForeignCall decode [code] res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_decode code).
+        (γ' , μ' , res) = (γ , μ , pure_decode code);
+    ForeignCall (vector_subrange e b) [data] res γ γ' μ μ' :=
+        (γ' , μ' , res) = (γ , μ , inr (fun_vector_subrange data e b)).
 
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
