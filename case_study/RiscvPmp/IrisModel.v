@@ -128,11 +128,10 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
           now rewrite map_map map_id.
     Qed.
 
-    Lemma mem_inv_init `{! gen_heapGpreS Addr MemVal Σ} (μ : Memory) :
+    Lemma mem_inv_init `{gHP : !mcMemPreGS Σ} (μ : Memory) :
       ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res μ)%I.
     Proof.
       pose (memmap := initMemMap μ).
-      rewrite /memGpreS in gHP. (* Typeclass search blocks on `memGpreS`, as it does not get inlined, unlike `memGS` *)
       iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
       iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]".
 

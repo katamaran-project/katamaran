@@ -95,7 +95,7 @@ Definition isMMIO a : Prop := a ∈ mmioAddrs.
 Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
   match size with
   | O => True
-  | S size' => a ∈ mmioAddrs /\ withinMMIO (bv.add (bv.one _) a) size' end.
+  | S size' => a ∈ mmioAddrs /\ withinMMIO (bv.add (bv.one) a) size' end.
 #[export] Instance withinMMIODec a size: Decision (withinMMIO a size).
 Proof. generalize a. induction size.
        - apply _.

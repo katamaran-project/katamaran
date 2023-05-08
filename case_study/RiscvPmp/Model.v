@@ -155,7 +155,7 @@ Module RiscvPmpModel2.
       - unfold ptstoSthL. unshelve auto. exact bv.zero.
       - rewrite bv.seqBv_succ.
         rewrite (app_comm_cons []) ptstoSthL_app.
-        iDestruct ("IHbytes" $! (bv.one xlenbits + paddr)) as "[IHL IHR]".
+        iDestruct ("IHbytes" $! (bv.one + paddr)) as "[IHL IHR]".
         iSplit.
         *  iIntros "[%w H]".
            destruct (bv.appView byte (bytes * byte) w) as [b bs].
@@ -179,8 +179,7 @@ Module RiscvPmpModel2.
       iInduction bytes as [|bytes] "IHbytes";
       iIntros (paddr Hmap) "[Haddr Hmem]".
       - now destruct (bv.view w).
-      - change (S bytes * byte)%nat with (byte + bytes * byte)%nat in w.
-        destruct (bv.appView byte (bytes * byte) w) as (w0 & w).
+      - destruct (bv.appView byte (bytes * byte) w) as (w0 & w).
         rewrite ptstomem_bv_app.
         iDestruct "Haddr" as "(Haddr0 & Haddr)".
         iPoseProof (gen_heap.gen_heap_valid with "Hmem Haddr0") as "%".
