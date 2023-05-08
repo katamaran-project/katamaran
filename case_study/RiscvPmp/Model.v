@@ -216,10 +216,6 @@ Module RiscvPmpModel2.
       iMod ("H" $! v2 σ2 efs with "[//]") as "(-> & ? & ?) /=". by iFrame.
     Qed.
 
-    Lemma microsail_step_no_fork {Γ τ} e1 σ1 l1 e2 σ2 efs :
-      @language.prim_step (microsail_lang Γ τ) e1 σ1 l1 e2 σ2 efs → efs = [].
-    Proof. intro H. by inversion H. Qed.
-
     Lemma read_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
     Proof.
@@ -230,7 +226,6 @@ Module RiscvPmpModel2.
       iSplitR; first auto.
       repeat iModIntro.
       iIntros. iModIntro.
-      iSplitR. iPureIntro; eapply microsail_step_no_fork; eauto.
       eliminate_prim_step Heq.
       iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
       iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
