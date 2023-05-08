@@ -113,6 +113,7 @@ Class MMIOEnv : Type := {
 }.
 Parameter mmioenv : MMIOEnv.
 #[export] Existing Instance mmioenv.
+#[export] Instance state_inhabited : Inhabited Base.State := populate (state_init).
 
 Inductive Privilege : Set :=
 | User
@@ -1045,6 +1046,22 @@ Module Export RiscvPmpBase <: Base.
 
   End RegDeclKit.
 
+  Section Inhabited.
+      #[export] Instance val_inhabited σ: Inhabited (Val σ).
+      Proof. generalize dependent σ.
+            induction σ as [| | | | | | | E | | | U | R]; try apply _; cbn.
+            - repeat constructor.
+            - destruct E; repeat constructor.
+            - induction σs; first apply _.
+              cbn. inversion IH. apply prod_inhabited; [apply IHσs |]; auto.
+            - destruct U;  repeat constructor. all: try apply bv.bv_inhabited.
+            - destruct R;  repeat constructor.
+      Qed.
+
+  End Inhabited.
+
   Include BaseMixin.
 
 End RiscvPmpBase.
+
+

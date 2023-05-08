@@ -611,6 +611,8 @@ Module bv.
     Proof.
       destruct n; cbn; now Lia.lia.
     Qed.
+
+    #[export] Instance bv_inhabited n : base.Inhabited (bv n) := base.populate (zero).
   End Constants.
 
   Section Access.

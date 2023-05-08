@@ -102,7 +102,7 @@ Module RiscvPmpModel2.
       | H: language.prim_step _ _ _ _ _ _ |- _ =>
           rewrite /language.prim_step in H; cbn in H; (* unfold the Iris `prim_step`*)
           dependent elimination H as [mk_prim_step _ s];
-          dependent elimination s as [RiscvPmpSemantics.st_foreign _ _ f];
+          destruct (RiscvPmpSemantics.smallinvstep s) as [? ? ? f];
           rewrite Heq in f;
           cbn in f;
           dependent elimination f;
@@ -270,27 +270,15 @@ Module RiscvPmpModel2.
     Lemma decode_sound :
       ValidContractForeign sep_contract_decode decode.
     Proof.
-      intros Γ es δ ι Heq.
-      destruct_syminstance ι.
-      iIntros "_".
-      iApply wp_unfold.
-      cbn in *.
-      iIntros (? ? ? ? ?) "[Hregs Hmem]".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iSplitR; first auto.
-      iIntros.
-      repeat iModIntro.
-      eliminate_prim_step Heq.
-      fold_semWP.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iFrame.
-      iSplitL; trivial.
-      destruct (pure_decode bv0) eqn:Ed.
-      by rewrite semWP_fail.
-      iApply wp_value.
-      iSplitL; first iPureIntro; auto.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+      iIntros "_". cbn in *.
+      iApply (lifting.wp_lift_pure_step_no_fork _ _ ⊤).
+      - cbn; auto.
+      - intros. eliminate_prim_step Heq; auto.
+      - repeat iModIntro. iIntros. eliminate_prim_step Heq; auto.
+        destruct (pure_decode _).
+        * fold_semWP. now rewrite semWP_fail.
+        * iApply wp_value; auto.
     Qed.
 
     Lemma foreignSem : ForeignSem.

@@ -146,6 +146,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
         iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => mapsto a (DfracOwn 1) v) with "[$]").
         eapply NoDup_liveAddrs.
     Qed.
+
   End RiscvPmpIrisParams.
 
   Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
@@ -154,5 +155,13 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
 
   Definition WP_loop `{sg : sailGS Σ} : iProp Σ :=
     semWP (FunDef loop) (fun _ _ => True%I) env.nil.
+
+  (* Useful instance for some of the Iris proofs *)
+  #[export] Instance state_inhabited : Inhabited State.
+  Proof. repeat constructor.
+          - intros ty reg. apply val_inhabited.
+          - intro. apply bv.bv_inhabited.
+          - apply state_inhabited.
+  Qed.
 
 End RiscvPmpIrisBase.
