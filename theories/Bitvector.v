@@ -633,11 +633,12 @@ Module bv.
     Definition zext {m} (v : bv m) {n} {p : IsTrue (m <=? n)} : bv n :=
       match leview m n with is_le k => zext' v k end.
 
-    #[program] Definition truncate {n} (m : nat) (xs : bv n) {p : IsTrue (m <=? n)} : bv m :=
-      let (result, _) := appView m (n - m) xs in
-      result.
-    Next Obligation. intros; destruct (leview m n); Lia.lia. Qed.
-
+    Definition truncate {n} (m : nat) (xs : bv n) {p : IsTrue (m <=? n)} : bv m :=
+      match leview m n in LeView _ sl return bv sl -> bv m with
+      | is_le k => fun (bits : bv (m + k)) =>
+                     let (result, _) := appView m k bits in
+                     result
+      end xs.
   End Extend.
 
   Section Integers.
