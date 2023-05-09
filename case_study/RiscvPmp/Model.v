@@ -316,7 +316,6 @@ Module RiscvPmpModel2.
       (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
       exists l1 l2, all_addrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
     Proof.
-      Search list "perm". "sub".
     Admitted.
 
     (* Induction does not work here due to shape of `interp_pmp_addr_access_without`*)
@@ -353,7 +352,29 @@ Module RiscvPmpModel2.
            - now iIntros "_".
            - now iApply "H".
     Qed.
-    Admitted.
+
+    Lemma interp_pmp_within_mmio_false {liveAddrs mmioAddrs entries m p} paddr bytes:
+      Pmp_access paddr (bv.of_nat bytes) entries m p →
+      interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
+      ⌜fun_within_mmio bytes paddr = false⌝.
+    Proof. Admitted.
+
+    Lemma within_mmio_sound (bytes : nat):
+     ValidContractForeign (sep_contract_within_mmio bytes) (within_mmio bytes).
+    Proof.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
+      iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])".
+      iApply (wp_lift_atomic_step_no_fork); [auto | ].
+      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+      iPoseProof (interp_pmp_within_mmio_false with "Hpmpa") as "%Hnotmmio"; first eauto.
+      iSplitR; first auto.
+      repeat iModIntro.
+      iIntros. iModIntro.
+      eliminate_prim_step Heq.
+      iSplit; first auto. iFrame.
+      iSplit; [iExists _; auto | ].
+      iSplit; auto.
+    Qed.
 
     Lemma decode_sound :
       ValidContractForeign sep_contract_decode decode.
@@ -372,7 +393,7 @@ Module RiscvPmpModel2.
     Lemma foreignSem : ForeignSem.
     Proof.
       intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, decode_sound.
+        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound.
     Qed.
   End ForeignProofs.
 
@@ -438,9 +459,9 @@ Module RiscvPmpModel2.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       iIntros "H".
-      iPoseProof (pmp_entries_ptsto with "H") as "(% & % & % & % & -> & ? & ? & ? & ?)".
+      iPoseProof (pmp_entries_ptsto with "H") as "(% & % & % & % & -> & e1 & e2 & e3 & e4)".
       repeat iExists _.
-      now iFrame.
+      now iFrame "e1 e2 e3 e4".
     Qed.
 
     Lemma close_pmp_entries_sound :
@@ -495,7 +516,7 @@ Module RiscvPmpModel2.
     Opaque minAddr.
     Opaque lenAddr.
     Opaque xlenbits.
-
+elem_of_list_split
     Lemma in_liveAddrs_split : forall (addr : Addr) (bytes : nat),
         (N.of_nat bytes < bv.exp2 xlenbits)%N ->
         (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
