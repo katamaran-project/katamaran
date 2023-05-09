@@ -121,7 +121,7 @@ Module RiscvPmpIrisInstance <:
 
     (* Universal contract for single byte/`width` bytes after PMP checks *)
     Definition interp_addr_access_byte (a : Addr) : iProp Σ :=
-      if decide (a ∈ mmio_addrs) then True%I (* TODO: Change this to a trace filter to grant the adversary access to MMIO *)
+      if decide (a ∈ mmio_addrs) then False%I (* Create a proof obligation that the adversary cannot access MMIO. TODO: Change this to a trace filter to grant the adversary access to MMIO *)
       else if decide (a ∈ live_addrs) then ptstoSth a
       else True%I.
     Definition interp_addr_access (base : Addr) (width : nat): iProp Σ :=
