@@ -127,9 +127,19 @@ Module RiscvPmpIrisInstance <:
     Definition interp_addr_access (base : Addr) (width : nat): iProp Σ :=
       [∗ list] a ∈ bv.seqBv base width, interp_addr_access_byte a.
 
-    Definition all_addrs : list Addr := bv.finite.enum xlenbits.
+    Definition all_addrs : list Addr := bv.seqBv bv.zero (Nat.pow 2 xlenbits).
     Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
-    Proof. apply (@bv.finite.elem_of_enum xlenbits). Qed.
+    Proof.
+      apply bv.in_seqBv'; unfold bv.ule, bv.ult.
+      - cbn. Lia.lia.
+      - destruct a as [bin Hwf].
+        cbn [bv.bin].
+        rewrite bv.is_wf_spec in Hwf.
+        eapply N.lt_le_trans; [exact|].
+        rewrite bv.exp2_spec Nat2N.inj_pow.
+        Lia.lia.
+    Qed.
+    Global Opaque all_addrs.
     Definition interp_pmp_addr_access (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       [∗ list] a ∈ all_addrs,
         (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ interp_addr_access_byte a)%I.
