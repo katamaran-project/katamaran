@@ -870,7 +870,6 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                  (fun K => match K with
                            | OFF => term_var "result_pmpAddrRange" = term_inr (term_val ty.unit tt)
                            | TOR => term_var "result_pmpAddrRange" = term_inl (term_var prev_pmpaddr ,ₜ term_var pmpaddr)
-                           | NA4 => term_var "result_pmpAddrRange" = term_inl (term_var pmpaddr ,ₜ term_binop bop.bvadd (term_var pmpaddr) (term_val ty_xlenbits (Bitvector.bv.of_nat 4)))
                            end);
           |}.
 
@@ -906,16 +905,11 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           |}.
 
         Definition sep_contract_pmpMatchEntry : SepContractFun pmpMatchEntry :=
-          let Σ : LCtx := [addr :: ty_xlenbits; width :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; pmpaddr :: ty_xlenbits; prev_pmpaddr :: ty_xlenbits; L :: ty.bool; A :: ty_pmpaddrmatchtype; X :: ty.bool; W :: ty.bool; R :: ty.bool; lo :: ty_xlenbits; hi :: ty_xlenbits] in
+          let Σ : LCtx := [addr :: ty_xlenbits; width :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; pmpaddr :: ty_xlenbits; prev_pmpaddr :: ty_xlenbits; L :: ty.bool; A :: ty_pmpaddrmatchtype; X :: ty.bool; W :: ty.bool; R :: ty.bool] in
           let entry : Term Σ _ := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
           {| sep_contract_logic_variables := Σ;
              sep_contract_localstore      := [nenv term_var addr; term_var width; term_var acc; term_var priv; entry; term_var pmpaddr; term_var prev_pmpaddr];
-             sep_contract_precondition    := asn.match_enum pmpaddrmatchtype (term_var A)
-                                                (fun K => match K with
-                                                          | OFF => ⊤
-                                                          | TOR => term_var lo = term_var prev_pmpaddr ∗ term_var hi = term_var pmpaddr
-                                                          | NA4 => term_var lo = term_var pmpaddr ∗ term_var hi = term_binop bop.bvadd (term_var pmpaddr) (term_val ty_xlenbits (Bitvector.bv.of_nat 4))
-                                                          end);
+             sep_contract_precondition    := ⊤;
              sep_contract_result          := "result_pmpMatchEntry";
              sep_contract_postcondition   :=
                let entry := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
@@ -924,21 +918,21 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                            | PMP_Continue =>
                                     term_var A = term_val ty_pmpaddrmatchtype OFF
                                     ∨ (asn.formula (formula_relop bop.neq (term_var A) (term_val ty_pmpaddrmatchtype OFF)) ∗
-                                         (asn_bool (term_var hi <ᵘₜ term_var lo)
-                                          ∨ (asn_bool (term_var lo <=ᵘₜ term_var hi) ∗ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var lo))
-                                          ∨ (asn_bool (term_var lo <=ᵘₜ term_var hi) ∗ asn_bool (term_var lo <ᵘₜ term_binop bop.bvadd (term_var addr) (term_var width)) ∗ asn_bool (term_var hi <=ᵘₜ term_var addr))))
+                                         (asn_bool (term_var pmpaddr <ᵘₜ term_var prev_pmpaddr)
+                                          ∨ (asn_bool (term_var prev_pmpaddr <=ᵘₜ term_var pmpaddr) ∗ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var prev_pmpaddr))
+                                          ∨ (asn_bool (term_var prev_pmpaddr <=ᵘₜ term_var pmpaddr) ∗ asn_bool (term_var prev_pmpaddr <ᵘₜ term_binop bop.bvadd (term_var addr) (term_var width)) ∗ asn_bool (term_var pmpaddr <=ᵘₜ term_var addr))))
                            | PMP_Fail     =>
                                asn_bool (term_not
-                                           (term_var lo <=ᵘₜ term_var addr &&ₜ term_var addr <ᵘₜ term_var hi))
+                                           (term_var prev_pmpaddr <=ᵘₜ term_var addr &&ₜ term_var addr <ᵘₜ term_var pmpaddr))
                                ∨ ⊤ (* TODO: either we have a partial match, or we don't have the required permissions! *)
                            | PMP_Success  =>
-                                  (term_var lo) <=ᵘ (term_var hi)
-                                ∗ (term_var lo) <ᵘ  (term_binop bop.bvadd (term_var addr) (term_var width))
-                                ∗ (term_var lo) <=ᵘ (term_var addr)
-                                ∗ (term_var addr) <ᵘ (term_var hi)
-                                ∗ (term_binop bop.bvadd (term_var addr) (term_var width)) <=ᵘ (term_var hi)
-                                ∗ asn_pmp_check_perms entry (term_var acc) (term_var priv)
-                                ∗ asn.formula (formula_relop bop.neq (term_var A) (term_val ty_pmpaddrmatchtype OFF))
+                                  (term_var prev_pmpaddr) <=ᵘ (term_var pmpaddr)
+                                ∗ (term_var prev_pmpaddr) <ᵘ  (term_binop bop.bvadd (term_var addr) (term_var width))
+                                ∗ (term_var prev_pmpaddr) <=ᵘ (term_var addr)
+                                ∗ (term_var addr) <ᵘ (term_var pmpaddr)
+                                ∗ (term_binop bop.bvadd (term_var addr) (term_var width)) <=ᵘ (term_var pmpaddr)
+                               ∗ asn_pmp_check_perms entry (term_var acc) (term_var priv)
+                               ∗ term_var A = term_val ty_pmpaddrmatchtype TOR
                            end);
           |}.
 
@@ -1299,14 +1293,13 @@ Module RiscvPmpValidContracts.
   (* TODO: proof with new PMP addressing mode (NA4) *)
   Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheck bytes H).
   Proof.
-  (*   destruct H as [H|[H|H]]; rewrite ?H; *)
-  (*     apply Symbolic.validcontract_with_erasure_sound; *)
-  (*     vm_compute; constructor; *)
-  (*     cbn; *)
-  (*     repeat (intros; split; bv_comp); *)
-  (*     auto 11. *)
-  (* Qed. *)
-  Admitted.
+    destruct H as [H|[H|H]]; rewrite ?H;
+      apply Symbolic.validcontract_with_erasure_sound;
+      vm_compute; constructor;
+      cbn;
+      repeat (intros; split; bv_comp);
+      auto 11.
+  Qed.
 
   Lemma valid_contract_step : ValidContract step.
   Proof. reflexivity. Qed.

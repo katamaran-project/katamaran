@@ -112,7 +112,6 @@ Import BlockVerificationDerived2.
       fun mt => match mt with
                 | OFF => bv.zero
                 | TOR => bv.one
-                | NA4 => bv.of_nat 2
                 end.
 
     Definition pure_pmpcfg_ent_to_bits : Pmpcfg_ent -> Val (ty.bvec byte) :=

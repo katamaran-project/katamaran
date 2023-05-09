@@ -384,7 +384,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: "A" := if: exp_testbit (exp_var "b") 4
                 then if: exp_testbit (exp_var "b") 3
                      then stm_fail ty_pmpaddrmatchtype "stm_pmpcfg_ent_from_bits NAPOT"
-                     else exp_val ty_pmpaddrmatchtype NA4
+                     else stm_fail ty_pmpaddrmatchtype "stm_pmpcfg_ent_from_bits NA4"
                 else if: exp_testbit (exp_var "b") 3
                      then exp_val ty_pmpaddrmatchtype TOR
                      else exp_val ty_pmpaddrmatchtype OFF in
@@ -405,7 +405,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       let: "A'" := match: A in pmpaddrmatchtype with
                    | OFF => exp_val ty_byte [bv (N.shiftl 0 3)]
                    | TOR => exp_val ty_byte [bv (N.shiftl 1 3)]
-                   | NA4 => exp_val ty_byte [bv (N.shiftl 2 3)]
                    end in
       let: "X'" := if: exp_var "X" then exp_val ty_byte [bv (N.shiftl 1 2)] else exp_val ty_byte [bv 0] in
       let: "W'" := if: exp_var "W" then exp_val ty_byte [bv (N.shiftl 1 1)] else exp_val ty_byte [bv 0] in
@@ -688,7 +687,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         match: A in pmpaddrmatchtype with
         | OFF => None
         | TOR => Some (exp_binop bop.pair prev_pmpaddr pmpaddr)
-        | NA4 => Some (exp_binop bop.pair pmpaddr (exp_binop bop.bvadd pmpaddr (exp_val ty_xlenbits (Bitvector.bv.of_nat 4))))
         end
     end.
 

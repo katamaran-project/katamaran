@@ -76,7 +76,6 @@ Section Implementation.
     match A cfg with
     | OFF => None
     | TOR => Some (prev_pmpaddr , pmpaddr)
-    | NA4 => Some (pmpaddr , bv.add pmpaddr (bv.of_nat 4))
     end.
 
   Definition pmp_match_addr (a : Xlenbits) (width : Xlenbits) (rng : PmpAddrRange) : PmpAddrMatch :=
@@ -167,19 +166,15 @@ End Implementation.
 
 Section AddrMatchType.
   Lemma addr_match_type_neq_off_cases :
-    ∀ a, a ≠ OFF -> a = TOR ∨ a = NA4.
+    ∀ a, a ≠ OFF -> a = TOR.
   Proof. destruct a; firstorder. Qed.
 
   Lemma addr_match_type_TOR_neq_OFF :
     ∀ a, a = TOR -> a ≠ OFF.
   Proof. destruct a; firstorder. Qed.
 
-  Lemma addr_match_type_NA4_neq_OFF :
-    ∀ a, a = NA4 -> a ≠ OFF.
-  Proof. destruct a; firstorder. Qed.
-
   Lemma addr_match_type_neq_OFF :
-    ∀ a, a = TOR \/ a = NA4 -> a ≠ OFF.
+    ∀ a, a = TOR -> a ≠ OFF.
   Proof. destruct a; firstorder. Qed.
 End AddrMatchType.
 
@@ -209,8 +204,7 @@ Section PmpAddrRange.
 
   Lemma pmp_addr_range_Some_1 : ∀ cfg hi lo p,
       pmp_addr_range cfg hi lo = Some p ->
-      (A cfg = TOR /\ p = (lo , hi))
-      \/ (A cfg = NA4 /\ p = (hi , hi + (bv.of_nat 4))).
+      A cfg = TOR /\ p = (lo , hi).
   Proof.
     intros.
     unfold pmp_addr_range in H.
@@ -218,19 +212,18 @@ Section PmpAddrRange.
   Qed.
 
   Lemma pmp_addr_range_Some_2 : ∀ cfg hi lo p,
-      (A cfg = TOR /\ p = (lo , hi))
-      \/ (A cfg = NA4 /\ p = (hi , hi + (bv.of_nat 4))) ->
+      A cfg = TOR /\ p = (lo , hi) ->
       pmp_addr_range cfg hi lo = Some p.
   Proof.
     unfold pmp_addr_range;
-      intros ? ? ? ? [[-> Hp]|[-> Hp]];
+      intros ? ? ? ? [-> Hp];
       subst;
       intuition.
   Qed.
 
   Lemma pmp_addr_range_Some : ∀ cfg hi lo p,
       pmp_addr_range cfg hi lo = Some p <->
-      (A cfg = TOR /\ p = (lo , hi)) \/ (A cfg = NA4 /\ p = (hi , hi + bv.of_nat 4)).
+      A cfg = TOR /\ p = (lo , hi).
   Proof.
     intros; split.
     - apply pmp_addr_range_Some_1.
@@ -253,18 +246,13 @@ Section PmpAddrRange.
       ∃ p, pmp_addr_range cfg pmpaddr prev_pmpaddr = Some p.
   Proof.
     unfold pmp_addr_range;
-      intros cfg ? ? [H|H]%addr_match_type_neq_off_cases;
+      intros cfg ? ? H%addr_match_type_neq_off_cases;
       eexists; rewrite H; auto.
   Qed.
 
   Lemma pmp_addr_range_Some_TOR : ∀ cfg pmpaddr prev_pmpaddr,
       A cfg = TOR ->
       pmp_addr_range cfg pmpaddr prev_pmpaddr = Some (prev_pmpaddr , pmpaddr).
-  Proof. unfold pmp_addr_range; intros ? ? ? ->; auto. Qed.
-
-  Lemma pmp_addr_range_Some_NA4 : ∀ cfg pmpaddr prev_pmpaddr,
-      A cfg = NA4 ->
-      pmp_addr_range cfg pmpaddr prev_pmpaddr = Some (pmpaddr , pmpaddr + (bv.of_nat 4)).
   Proof. unfold pmp_addr_range; intros ? ? ? ->; auto. Qed.
 End PmpAddrRange.
 
