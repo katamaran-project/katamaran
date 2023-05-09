@@ -684,25 +684,20 @@ Module bv.
   End Integers.
 
   Section Extract.
-    Definition vector_subrange {n} (bits : bv n) (start len : nat) :
-      IsTrue (start + len <=? n) -> bv len :=
-      fun _ => @of_Z len (Z.shiftr (unsigned bits) (Z.of_nat start)).
+    Definition vector_subrange {n} (start len : nat)
+      (p : IsTrue (start + len <=? n)) : bv n -> bv len :=
+      match leview (start + len) n in LeView _ sl return bv sl -> bv len with
+      | is_le k =>
+          fun bits =>
+            let (xs,_) := appView (start + len) k bits in
+            let (_,ys) := appView start len xs in
+            ys
+      end.
+    #[global] Arguments vector_subrange {n} _ _ {_} _.
 
-    (* TODO: the appView implementation produces large proof terms, investigate further *)
-    (* Definition vector_subrange {n} (bits : bv n) (start len : nat) *)
-    (*   (p : IsTrue (start + len <=? n)) : bv len := *)
-    (*   match leview (start + len) n in LeView _ sl return bv sl -> bv len with *)
-    (*   | is_le k => *)
-    (*       fun bits => *)
-    (*         let (xs,_) := appView (start + len) k bits in *)
-    (*         let (_,ys) := appView start len xs in *)
-    (*         ys *)
-    (*   end bits. *)
-    #[global] Arguments vector_subrange {n} _ _ _ {_}.
-
-    Goal vector_subrange (@of_nat 1 1) 0 1    = of_nat 1. reflexivity. Qed.
-    Goal vector_subrange (@of_nat 16 256) 0 8 = zero.     reflexivity. Qed.
-    Goal vector_subrange (@of_nat 16 256) 8 8 = one.      reflexivity. Qed.
+    Goal vector_subrange 0 1 (@of_nat 1 1)    = of_nat 1. reflexivity. Qed.
+    Goal vector_subrange 0 8 (@of_nat 16 256) = zero.     reflexivity. Qed.
+    Goal vector_subrange 8 8 (@of_nat 16 256) = one.      reflexivity. Qed.
   End Extract.
 
   Section Shift.

@@ -197,10 +197,10 @@ Module Type PartialEvaluationOn
       | None   => term_truncate m t
       end.
 
-    Definition peval_vector_subrange {n} (t : Term Σ (ty.bvec n)) (s l : nat) {p : IsTrue (s + l <=? n)} : Term Σ (ty.bvec l) :=
+    Definition peval_vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec l) :=
       match term_get_val t with
-      | Some v => term_val (ty.bvec l) (bv.vector_subrange v s l)
-      | None   => term_vector_subrange t s l
+      | Some v => term_val (ty.bvec l) (bv.vector_subrange s l v)
+      | None   => term_vector_subrange s l t
       end.
 
     Definition peval_negate {n} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
@@ -244,7 +244,7 @@ Module Type PartialEvaluationOn
       | term_get_slice_int t       => peval_get_slice_int (peval t)
       | term_unsigned t            => peval_unsigned (peval t)
       | term_truncate m t          => peval_truncate m (peval t)
-      | term_vector_subrange t s l => peval_vector_subrange (peval t) s l
+      | term_vector_subrange s l t => peval_vector_subrange s l (peval t)
       | term_negate t              => peval_negate (peval t)
       | term_tuple ts              => term_tuple (env.map (fun b => @peval b) ts)
       | term_union U K t           => peval_union (peval t)
@@ -287,8 +287,8 @@ Module Type PartialEvaluationOn
       @peval_truncate n m p t ≡ term_truncate m t.
     Proof. unfold peval_truncate; destruct (term_get_val_spec t); now subst. Qed.
 
-    Lemma peval_vector_subrange_sound {n} (t : Term Σ (ty.bvec n)) (s l : nat) {p : IsTrue (s + l <=? n)} :
-      @peval_vector_subrange n t s l p ≡ term_vector_subrange t s l.
+    Lemma peval_vector_subrange_sound {n} (s l : nat) {p : IsTrue (s + l <=? n)} (t : Term Σ (ty.bvec n)) :
+      @peval_vector_subrange n s l p t ≡ term_vector_subrange s l t.
     Proof. unfold peval_vector_subrange; destruct (term_get_val_spec t); now subst. Qed.
 
     Lemma peval_negate_sound {n} (t : Term Σ (ty.bvec n)) :

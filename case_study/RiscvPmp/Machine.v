@@ -1266,8 +1266,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Qed.
 
   #[program] Definition fun_vector_subrange {n} (data : Val (ty.bvec n)) (e b : nat) {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} : Val (ty.bvec (e - b + 1)) :=
-    @bv.vector_subrange _ data b (e - b + 1) _.
-  Next Obligation. intros; by apply convert_foreign_vector_subrange_conditions. Qed.
+    @bv.vector_subrange _ b (e - b + 1) _ data.
+  Next Obligation. intros; by apply convert_foreign_vector_subrange_conditions. Defined.
   #[global] Arguments fun_vector_subrange {n} _ _ _ {_ _ _}.
     
   #[derive(equations=no)]

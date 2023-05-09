@@ -408,9 +408,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_precondition    := ⊤;
        sep_contract_result          := "result_vector_subrange";
        sep_contract_postcondition   :=
-         term_var "result_vector_subrange" = @term_vector_subrange _ _ (term_var "v") b (e - b + 1) _;
+         term_var "result_vector_subrange" = @term_vector_subrange _ _ b (e - b + 1) _ (term_var "v");
     |}.
-  Next Obligation. intros; now apply convert_foreign_vector_subrange_conditions. Qed.
+  Next Obligation. intros; now apply convert_foreign_vector_subrange_conditions. Defined.
   #[global] Arguments sep_contract_vector_subrange {_} _ _ {_ _ _}.
 
   Definition CEnvEx : SepContractEnvEx :=
@@ -831,7 +831,6 @@ Module RiscvPmpIrisInstanceWithContracts.
     iModIntro.
     iFrame.
     iSplitL; trivial.
-    destruct (fun_vector_subrange v e b) eqn:Ev.
     iApply wp_value.
     iSplitL; first iPureIntro; auto.
   Qed.

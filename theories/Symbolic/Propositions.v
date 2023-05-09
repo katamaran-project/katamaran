@@ -1684,7 +1684,7 @@ Module Type SymPropOn
     | eterm_get_slice_int {n} (e : ETerm ty.int) : ETerm (ty.bvec n)
     | eterm_unsigned {n} (e : ETerm (ty.bvec n)) : ETerm ty.int
     | eterm_truncate {n} (m : nat) {p : IsTrue (m <=? n)} (e: ETerm (ty.bvec n)) : ETerm (ty.bvec m)
-    | eterm_vector_subrange {n} (e : ETerm (ty.bvec n)) (s l : nat) {p : IsTrue (s + l <=? n)} : ETerm (ty.bvec l)
+    | eterm_vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} (e : ETerm (ty.bvec n)) : ETerm (ty.bvec l)
     | eterm_negate  {n} (e : ETerm (ty.bvec n)) : ETerm (ty.bvec n)
     | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs)
     | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U)
@@ -1744,7 +1744,7 @@ Module Type SymPropOn
         | term_get_slice_int t       => eterm_get_slice_int (erase t)
         | term_unsigned t            => eterm_unsigned (erase t)
         | term_truncate m t          => eterm_truncate m (erase t)
-        | term_vector_subrange t s l => eterm_vector_subrange (erase t) s l 
+        | term_vector_subrange s l t => eterm_vector_subrange s l (erase t)
         | term_negate t              => eterm_negate (erase t)
         | term_tuple ts              => eterm_tuple (env.map (fun _ => erase) ts)
         | term_union U K t           => eterm_union K (erase t)
@@ -1851,8 +1851,8 @@ Module Type SymPropOn
             bv.unsigned <$> inst_eterm t0
         | @eterm_truncate _ m p t0 =>
             (fun v => bv.truncate m v) <$> inst_eterm t0
-        | @eterm_vector_subrange _ t0 s l _ =>
-            (fun v => bv.vector_subrange v s l) <$> inst_eterm t0
+        | @eterm_vector_subrange _ s l _ t0 =>
+            bv.vector_subrange s l <$> inst_eterm t0
         | eterm_negate t0 =>
             bv.negate <$> inst_eterm t0
         | @eterm_tuple σs ts =>

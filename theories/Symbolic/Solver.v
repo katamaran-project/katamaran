@@ -292,7 +292,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       | term_get_slice_int t => fun v => singleton (formula_relop bop.eq (term_get_slice_int t) (term_val _ v))
       | term_unsigned t     => fun v => singleton (formula_relop bop.eq (term_unsigned t) (term_val _ v))
       | term_truncate m t   => fun v => singleton (formula_relop bop.eq (term_truncate m t) (term_val _ v))
-      | term_vector_subrange t s l => fun v => singleton (formula_relop bop.eq (term_vector_subrange t s l) (term_val _ v))
+      | term_vector_subrange s l t => fun v => singleton (formula_relop bop.eq (term_vector_subrange s l t) (term_val _ v))
       | term_negate t       => fun v => singleton (formula_relop bop.eq (term_negate t) (term_val _ v))
       | term_tuple ts       => env.Env_rect
                                  (fun σs _ => Val (ty.tuple σs) -> DList Σ)

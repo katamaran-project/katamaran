@@ -132,8 +132,8 @@ Import BlockVerificationDerived2.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
     Definition femto_pmpcfg_ent1_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
     Definition femto_pmp0cfg_bits : Val (ty.bvec 32) := bv.zext (bv.app femto_pmpcfg_ent0_bits femto_pmpcfg_ent1_bits).
-    Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := bv.vector_subrange femto_pmp0cfg_bits 0 12.
-    Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := bv.vector_subrange femto_pmp0cfg_bits 12 20.
+    Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := bv.vector_subrange 0 12 femto_pmp0cfg_bits.
+    Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := bv.vector_subrange 12 20 femto_pmp0cfg_bits.
                                                                
     Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N 80); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
 
