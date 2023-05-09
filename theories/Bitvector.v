@@ -1007,21 +1007,18 @@ Module bv.
       Lia.lia.
     Qed.
 
+    Lemma of_N_add {n} x y : @add n (of_N x) (of_N y) = of_N (x + y).
+    Proof.
+      apply bin_inj. cbn. now rewrite <-truncn_add. Qed.
+
     Lemma of_Z_add {n} x y : @add n (of_Z x) (of_Z y) = of_Z (x + y).
     Proof.
-      apply bin_inj.
-      cbn.
-      rewrite truncz_add.
-      replace (truncz n x + truncz n y)%Z with (Z.of_N (Z.to_N (truncz n x + truncz n y))).
-      - rewrite to_N_truncz.
-        rewrite <-truncn_add.
-        rewrite truncn_eq2n.
-        now rewrite Znat.Z2N.inj_add; try apply truncz_ge_0.
-      - apply Znat.Z2N.id.
-        change 0%Z with (0 + 0)%Z.
-        auto using Z.add_le_mono, truncz_ge_0.
+      unfold of_Z. rewrite of_N_add.
+      apply bin_inj. cbn.
+      rewrite <-Znat.Z2N.inj_add; try apply truncz_ge_0.
+      repeat rewrite <-to_N_truncz, Znat.Z2N.id; [ | apply truncz_ge_0 | apply Ztac.add_le; apply truncz_ge_0].
+      now rewrite <-truncz_add, truncz_idemp.
     Qed.
-
 
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
     Proof.
