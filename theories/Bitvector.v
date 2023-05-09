@@ -1516,6 +1516,14 @@ Module bv.
     (* why do we have both bv_seq and seqBv? *)
     Definition seqBv {n} (min : bv n) (len : nat) := List.map (@bv.of_Z n) (list_numbers.seqZ (bv.unsigned min) (Z.of_nat len)).
 
+    Lemma seqBv_zero {n} m : @seqBv n m 0 = nil.
+    Proof. unfold seqBv. now cbv. Qed.
+    Lemma seqBv_one {n} m : @seqBv n m 1 = cons m nil.
+    Proof.
+      unfold seqBv.
+      rewrite list_numbers.seqZ_cons; [|Lia.lia]. cbn.
+      f_equal. now rewrite of_Z_unsigned. Qed.
+
     Lemma seqBv_app {n} m n1 n2 :
       @seqBv n m (n1 + n2) = seqBv m n1 ++ seqBv (bv.add m (bv.of_nat n1)) n2.
     Proof.
@@ -1537,23 +1545,15 @@ Module bv.
       (@seqBv n m (S n1)) = cons m (seqBv (one + m) n1).
     Proof.
       rewrite <-Nat.add_1_l, seqBv_app.
-      unfold seqBv at 1.
-      rewrite list_numbers.seqZ_cons; [|Lia.lia]. cbn.
-      f_equal.
-      - now rewrite of_Z_unsigned.
-      - rewrite list_numbers.seqZ_nil; [|Lia.lia]. cbn.
-        f_equal.
-        destruct n; cbn; apply add_comm.
+      rewrite seqBv_one, add_comm. cbn.
+      repeat f_equal.
+      now destruct n.
     Qed.
 
     Lemma seqBv_succ_end {n} m n1 :
       (@seqBv n m (S n1)) = (seqBv m n1)%bv ++ (cons (m + of_nat n1) nil) .
     Proof.
-      rewrite <-Nat.add_1_r, seqBv_app.
-      f_equal. unfold seqBv.
-      rewrite list_numbers.seqZ_cons; [|Lia.lia]. cbn.
-      f_equal.
-      now rewrite of_Z_unsigned.
+      now rewrite <-Nat.add_1_r, seqBv_app, seqBv_one.
     Qed.
 
     (* More powerful version of `in_seqBv` where `len` and `min + len` need not be representable in `n` bits *)
