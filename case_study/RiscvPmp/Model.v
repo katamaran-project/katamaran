@@ -255,8 +255,8 @@ Module RiscvPmpModel2.
     Lemma write_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
     Proof.
-      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
-      iIntros "[%w H]". cbn in *.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
+      iIntros "[%w H]".
       iApply (wp_lift_atomic_step_no_fork); [auto | ].
       iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
       iSplitR; first auto.
@@ -280,11 +280,79 @@ Module RiscvPmpModel2.
       now iIntros "[%HFalse _]".
     Qed.
 
-    Lemma within_mmio_sound  :
-     ValidContractForeign (sep_contract_within_mmio 80) (within_mmio 80).
+    Lemma interp_addr_access_app {liveAddrs mmioAddrs} base width width':
+      interp_addr_access liveAddrs mmioAddrs base (width + width') ⊣⊢
+      interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat width) width'.
     Proof.
-      intros Γ es δ ι Heq. cbn in Heq. destruct_syminstance ι.
-      (* cbn (* This spins... *) *)
+      unfold interp_addr_access.
+      by rewrite bv.seqBv_app big_sepL_app.
+    Qed.
+
+    Lemma interp_addr_access_cons {liveAddrs mmioAddrs} base width:
+      interp_addr_access liveAddrs mmioAddrs base (S width) ⊣⊢
+      interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access_byte liveAddrs mmioAddrs (base + bv.of_nat width).
+    Proof. rewrite <-Nat.add_1_r.
+           rewrite interp_addr_access_app.
+           unfold interp_addr_access, interp_addr_access_byte.
+           by rewrite bv.seqBv_one big_sepL_singleton.
+    Qed.
+
+    Lemma interp_addr_access_single {liveAddrs mmioAddrs} base:
+      interp_addr_access liveAddrs mmioAddrs base 1 ⊣⊢
+      interp_addr_access_byte liveAddrs mmioAddrs base.
+    Proof. rewrite interp_addr_access_cons  -bv.add_of_nat_0_r.
+           iSplit; iIntros "H"; [iDestruct "H" as "[_ H]"|]; iFrame.
+           rewrite /interp_addr_access. now rewrite bv.seqBv_zero. Qed.
+
+    Lemma pmp_access_is_representable base width entries m p:
+      Pmp_access base (bv.of_nat width) entries m p → (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N. Admitted.
+
+    Lemma pmp_seqBv_restrict base width k y entries m p:
+      bv.seqBv base width !! k = Some y →
+      Pmp_access base (bv.of_nat width) entries m p →
+      Pmp_access y (bv.of_nat 1) entries m p. Admitted.
+
+    Lemma in_allAddrs_split (addr : Addr) (bytes : nat) :
+      (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
+      exists l1 l2, all_addrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
+    Proof.
+      Search list "perm". "sub".
+    Admitted.
+
+    (* Induction does not work here due to shape of `interp_pmp_addr_access_without`*)
+    Lemma interp_pmp_addr_inj_extr base width entries m p :
+      Pmp_access base (bv.of_nat width) entries m p →
+      (⊢ interp_pmp_addr_access liveAddrs mmioAddrs entries m ∗-∗
+      (interp_addr_access liveAddrs mmioAddrs base width ∗ interp_pmp_addr_access_without liveAddrs mmioAddrs base width entries m))%I.
+    Proof.
+      intros Hpmp.
+      (* Discharge easy direction *)
+      iSplit ; last (iIntros "[H Hcont]"; by iApply "Hcont").
+      (* Hard direction: create `interp_addr_access` from scratch*)
+      unfold interp_pmp_addr_access.
+      pose proof (in_allAddrs_split base width (pmp_access_is_representable Hpmp)) as [l1 [l2 Hall]]. rewrite Hall.
+      do 2 rewrite big_sepL_app.
+      iIntros "(Hlow & Hia & Hhigh)".
+      iSplitL "Hia".
+      - iApply (big_sepL_mono with "Hia"). iIntros (? ? ?) "Hyp".
+        iApply "Hyp". iPureIntro.
+        eexists; eapply pmp_seqBv_restrict; eauto.
+      - iIntros "Hia". iDestruct (big_sepL_mono with "Hia") as "Hia"; cycle 1.
+        iDestruct (big_sepL_app with "[$Hlow $Hia]") as "Hia".
+        iDestruct (big_sepL_app with "[$Hia $Hhigh]") as "Hia".
+        by rewrite -app_assoc -Hall.
+        now iIntros.
+      Qed.
+
+    (* TODO: No special case of the above, because of strange semantics of `Pmp_access`*)
+    Lemma interp_pmp_addr_access_without_0 {liveAddrs mmioAddrs entries m} base :
+      interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢ interp_pmp_addr_access_without liveAddrs mmioAddrs base 0 entries m.
+    Proof. unfold interp_pmp_addr_access_without, interp_addr_access.
+           rewrite bv.seqBv_zero.
+           iSplit; iIntros "H".
+           - now iIntros "_".
+           - now iApply "H".
+    Qed.
     Admitted.
 
     Lemma decode_sound :
