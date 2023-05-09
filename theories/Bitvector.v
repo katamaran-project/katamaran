@@ -1534,7 +1534,7 @@ Module bv.
     Qed.
 
     Lemma seqBv_succ {n} m n1 :
-      (@seqBv n m (S n1)) = cons m (seqBv (one + m) n1)%bv.
+      (@seqBv n m (S n1)) = cons m (seqBv (one + m) n1).
     Proof.
       rewrite <-Nat.add_1_l, seqBv_app.
       unfold seqBv at 1.
@@ -1544,6 +1544,16 @@ Module bv.
       - rewrite list_numbers.seqZ_nil; [|Lia.lia]. cbn.
         f_equal.
         destruct n; cbn; apply add_comm.
+    Qed.
+
+    Lemma seqBv_succ_end {n} m n1 :
+      (@seqBv n m (S n1)) = (seqBv m n1)%bv ++ (cons (m + of_nat n1) nil) .
+    Proof.
+      rewrite <-Nat.add_1_r, seqBv_app.
+      f_equal. unfold seqBv.
+      rewrite list_numbers.seqZ_cons; [|Lia.lia]. cbn.
+      f_equal.
+      now rewrite of_Z_unsigned.
     Qed.
 
     (* More powerful version of `in_seqBv` where `len` and `min + len` need not be representable in `n` bits *)
