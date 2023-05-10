@@ -121,15 +121,19 @@ Module RiscvPmpIrisInstance <:
 
     (* Universal contract for single byte/`width` bytes after PMP checks *)
     Definition interp_addr_access_byte (a : Addr) : iProp Σ :=
-      if decide (a ∈ mmio_addrs) then False%I (* Create a proof obligation that the adversary cannot access MMIO. TODO: Change this to a trace filter to grant the adversary access to MMIO *)
+      if decide (a ∈ mmio_addrs) then False%I (* Creates a proof obligation that the adversary cannot access MMIO. TODO: Change this to a trace filter to grant the adversary access to MMIO *)
       else if decide (a ∈ live_addrs) then ptstoSth a
       else True%I.
     Definition interp_addr_access (base : Addr) (width : nat): iProp Σ :=
       [∗ list] a ∈ bv.seqBv base width, interp_addr_access_byte a.
 
-    Definition all_addrs : list Addr := bv.seqBv bv.zero (Nat.pow 2 xlenbits).
+    Definition all_addrs_def : list Addr := bv.seqBv bv.zero (Nat.pow 2 xlenbits).
+    Definition all_addrs_aux : seal (@all_addrs_def). Proof. by eexists. Qed.
+    Definition all_addrs := all_addrs_aux.(unseal).
+    Lemma all_addrs_eq : all_addrs = all_addrs_def. Proof. rewrite -all_addrs_aux.(seal_eq) //. Qed.
     Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
     Proof.
+      rewrite all_addrs_eq.
       apply bv.in_seqBv'; unfold bv.ule, bv.ult.
       - cbn. Lia.lia.
       - destruct a as [bin Hwf].
