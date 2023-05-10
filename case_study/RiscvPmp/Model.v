@@ -312,38 +312,31 @@ Module RiscvPmpModel2.
       Pmp_access base (bv.of_nat width) entries m p →
       Pmp_access y (bv.of_nat 1) entries m p. Admitted.
 
-    Lemma in_allAddrs_split (addr : Addr) (bytes : nat) :
-      (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
-      exists l1 l2, all_addrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
-    Proof.
-    Admitted.
-
     (* Induction does not work here due to shape of `interp_pmp_addr_access_without`*)
-    Lemma interp_pmp_addr_inj_extr base width entries m p :
+    Lemma interp_pmp_addr_inj_extr {liveAddrs mmioAddrs entries m p} base width :
       Pmp_access base (bv.of_nat width) entries m p →
-      (⊢ interp_pmp_addr_access liveAddrs mmioAddrs entries m ∗-∗
+      (interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢
       (interp_addr_access liveAddrs mmioAddrs base width ∗ interp_pmp_addr_access_without liveAddrs mmioAddrs base width entries m))%I.
     Proof.
       intros Hpmp.
       (* Discharge easy direction *)
       iSplit ; last (iIntros "[H Hcont]"; by iApply "Hcont").
-      (* Hard direction: create `interp_addr_access` from scratch*)
+      unfold interp_pmp_addr_access_without, interp_pmp_addr_access.
+      (* Hard direction: create `interp_addr_access` from scratch *)
       unfold interp_pmp_addr_access.
       pose proof (in_allAddrs_split base width (pmp_access_is_representable Hpmp)) as [l1 [l2 Hall]]. rewrite Hall.
-      do 2 rewrite big_sepL_app.
+      rewrite !big_sepL_app.
       iIntros "(Hlow & Hia & Hhigh)".
       iSplitL "Hia".
       - iApply (big_sepL_mono with "Hia"). iIntros (? ? ?) "Hyp".
         iApply "Hyp". iPureIntro.
         eexists; eapply pmp_seqBv_restrict; eauto.
-      - iIntros "Hia". iDestruct (big_sepL_mono with "Hia") as "Hia"; cycle 1.
-        iDestruct (big_sepL_app with "[$Hlow $Hia]") as "Hia".
-        iDestruct (big_sepL_app with "[$Hia $Hhigh]") as "Hia".
-        by rewrite -app_assoc -Hall.
+      - iIntros "Hia". iFrame.
+        iDestruct (big_sepL_mono with "Hia") as "Hia"; last iFrame.
         now iIntros.
       Qed.
 
-    (* TODO: No special case of the above, because of strange semantics of `Pmp_access`*)
+    (* TODO: This lemma is not a special case of the above, because of strange semantics of `Pmp_access`*)
     Lemma interp_pmp_addr_access_without_0 {liveAddrs mmioAddrs entries m} base :
       interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢ interp_pmp_addr_access_without liveAddrs mmioAddrs base 0 entries m.
     Proof. unfold interp_pmp_addr_access_without, interp_addr_access.
