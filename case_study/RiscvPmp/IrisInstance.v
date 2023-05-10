@@ -183,9 +183,10 @@ Module RiscvPmpIrisInstance <:
 Import RiscvPmp.PmpCheck.
 
   Section RiscVPmpIrisInstanceProofs.
-    Context `{sailRegGS Σ} `{invGS Σ} `{mG : mcMemGS Σ}.
+    Context `{sr : sailRegGS Σ} `{igs : invGS Σ} `{mG : mcMemGS Σ}.
     Variable (live_addrs : list Addr) (mmio_addrs : list Addr).
 
+    (* Note that the condition on overflow is required: some illegal set-ups are accepted by `pmp_match_addr` as it does not track overflow, and shrinking those might make the output go from match to no match. *)
     Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
       forall paddr rng,
         (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
@@ -194,12 +195,9 @@ Import RiscvPmp.PmpCheck.
         pmp_match_addr paddr bytes rng = PMP_Match ->
         pmp_match_addr paddr w rng = PMP_Match.
     Proof.
-      unfold bv.ule, bv.ult.
       intros paddr rng Hass H0w Hw Hpmp.
-      assert (Hrep_paddr_w: (bv.bin paddr + bv.bin w < bv.exp2 xlenbits)%N) by lia.
       apply bv.ule_cases in Hw as [Hw|Hw]; last by subst.
       destruct rng as [[lo hi]|]; last by simpl.
-      unfold bv.ule, bv.ult in *.
       assert (Hb: bv.zero <ᵘ bytes).
       apply bv.ult_trans with (y := w); auto.
       apply pmp_match_addr_match in Hpmp as (Hlohi & Hlopw & Hlop & Hphi & Hpwhi); auto.
@@ -209,8 +207,7 @@ Import RiscvPmp.PmpCheck.
       rewrite ?bv.bin_add_small; lia.
       apply bv.ule_trans with (y := paddr + bytes); auto.
       unfold bv.ult, bv.ule in *.
-      rewrite ?bv.bin_add_small; auto.
-      lia.
+      rewrite ?bv.bin_add_small; lia.
     Qed.
 
     Lemma pmp_match_addr_reduced_width_no_match (bytes w : Xlenbits) :
@@ -221,7 +218,7 @@ Import RiscvPmp.PmpCheck.
       pmp_match_addr paddr w rng = PMP_NoMatch.
     Proof.
       intros paddr [[lo hi]|] Hass Hle; last by simpl.
-      intros H; apply pmp_match_addr_nomatch in H as [H|Hcond];
+      intros Hm; apply pmp_match_addr_nomatch in Hm as [Hm|Hcond];
         try discriminate.
       apply pmp_match_addr_nomatch.
       right; intros.
@@ -310,6 +307,9 @@ Import RiscvPmp.PmpCheck.
         apply pmp_check_aux_access_reduced_width with (bytes := bytes); auto.
     Qed.
 
+    Local Lemma bv_bin_one : bv.bin (@bv.one xlenbits) = 1%N.
+    Proof. apply bv.bin_one, xlenbits_pos. Qed.
+
     Lemma pmp_match_addr_addr_S_width_pred (bytes : nat) : forall paddr rng res,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
@@ -349,8 +349,8 @@ Import RiscvPmp.PmpCheck.
         unfold bv.ule, bv.ult in *.
         repeat split; try lia.
         now rewrite bv.of_nat_S bv.add_assoc in Hlopw.
-        rewrite ?bv.bin_add_small ?bv_bin_one; try lia.
-        rewrite ?bv.bin_add_small ?bv_bin_one.
+        rewrite bv.bin_add_small bv_bin_one; try lia.
+        rewrite bv.bin_add_small bv_bin_one.
         rewrite bv.of_nat_S in Hpwhi.
         rewrite ?bv.bin_add_small ?bv_bin_one in Hpwhi; try lia.
         rewrite bv.bin_of_nat_small; lia.
