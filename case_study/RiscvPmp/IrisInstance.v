@@ -143,7 +143,28 @@ Module RiscvPmpIrisInstance <:
         rewrite bv.exp2_spec Nat2N.inj_pow.
         Lia.lia.
     Qed.
-    Global Opaque all_addrs.
+    Local Lemma to_nat_mono (a b : N) : (a < b)%N → N.to_nat a < N.to_nat b.
+    Proof. lia. Qed.
+    Lemma in_allAddrs_split (addr : Addr) (bytes : nat) :
+      (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
+      exists l1 l2, all_addrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
+    Proof.
+      intro Hrep.
+      exists (bv.seqBv bv.zero (N.to_nat (bv.bin addr))), (bv.seqBv (addr + bv.of_nat bytes) (Nat.pow 2 xlenbits - ((N.to_nat (bv.bin addr)) + bytes))).
+      rewrite -bv.seqBv_app.
+      rewrite <-(bv.add_zero_l (x := addr)) at 2.
+      assert (addr = bv.of_nat (N.to_nat (bv.bin addr))) as Heq.
+      { unfold bv.of_nat. now rewrite N2Nat.id bv.of_N_bin. }
+      rewrite ->Heq at 2.
+      rewrite -bv.seqBv_app.
+      rewrite all_addrs_eq /all_addrs_def.
+      remember (2 ^ xlenbits) as p. (* Prevent `reflexivity` from blowing up *)
+      f_equal.
+      apply to_nat_mono in Hrep.
+      rewrite bv.exp2_spec N2Nat.inj_add N2Nat.inj_pow !Nat2N.id -Heqp in Hrep.
+      lia.
+     Qed.
+
     Definition interp_pmp_addr_access (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       [∗ list] a ∈ all_addrs,
         (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ interp_addr_access_byte a)%I.
