@@ -135,42 +135,6 @@ Module RiscvPmpModel2.
         now apply Hmap.
     Qed.
 
-    Lemma ptstomem_bv_app :
-      forall {n} (a : Addr) (b : bv byte) (bs : bv (n * byte)),
-        @interp_ptstomem _ _ (S n)%nat a (bv.app b bs)
-        ⊣⊢
-        (interp_ptsto a b ∗ interp_ptstomem (bv.one + a) bs).
-    Proof. intros; cbn [interp_ptstomem]; now rewrite bv.appView_app. Qed.
-
-    Lemma interp_ptstomem_exists_intro (bytes : nat) :
-      ⊢ ∀ (paddr : Addr) (w : bv (bytes * byte)),
-          interp_ptstomem paddr w -∗
-          ∃ (w : bv (bytes * byte)), interp_ptstomem paddr w.
-    Proof. auto. Qed.
-
-    Lemma interp_ptstomem_big_sepS (bytes : nat) :
-      ⊢ ∀ (paddr : Addr),
-      (∃ (w : bv (bytes * byte)), interp_ptstomem paddr w) ∗-∗
-        ptstoSthL (bv.seqBv paddr bytes).
-    Proof.
-      iInduction bytes as [|bytes] "IHbytes"; iIntros (paddr).
-      - unfold ptstoSthL. unshelve auto. exact bv.zero.
-      - rewrite bv.seqBv_succ (app_comm_cons []) ptstoSthL_app.
-        iDestruct ("IHbytes" $! (bv.one + paddr)) as "[IHL IHR]".
-        iSplit.
-        *  iIntros "[%w H]".
-           destruct (bv.appView byte (bytes * byte) w) as [b bs].
-           rewrite ptstomem_bv_app.
-           iDestruct "H" as "[Hb Hbs]".
-           iSplitL "Hb".
-           + cbn. iSplit; [by iExists _ | auto].
-           + iApply "IHL"; by iExists _.
-        * iIntros "[[[%b Hhd] _] Htl]".
-          iDestruct ("IHR" with "Htl") as "[%btl Htl]".
-          iExists (bv.app b btl).
-          rewrite ptstomem_bv_app. iFrame.
-    Qed.
-
     Lemma fun_read_ram_works {bytes memmap μ paddr} {w : bv (bytes * byte)} :
       map_Forall (λ (a : Addr) (v : Base.Byte), memory_ram μ a = v) memmap ->
            interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ⊢
@@ -280,77 +244,6 @@ Module RiscvPmpModel2.
       now iIntros "[%HFalse _]".
     Qed.
 
-    Lemma interp_addr_access_app {liveAddrs mmioAddrs} base width width':
-      interp_addr_access liveAddrs mmioAddrs base (width + width') ⊣⊢
-      interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat width) width'.
-    Proof.
-      unfold interp_addr_access.
-      by rewrite bv.seqBv_app big_sepL_app.
-    Qed.
-
-    Lemma interp_addr_access_cons {liveAddrs mmioAddrs} base width:
-      interp_addr_access liveAddrs mmioAddrs base (S width) ⊣⊢
-      interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access_byte liveAddrs mmioAddrs (base + bv.of_nat width).
-    Proof. rewrite <-Nat.add_1_r.
-           rewrite interp_addr_access_app.
-           unfold interp_addr_access, interp_addr_access_byte.
-           by rewrite bv.seqBv_one big_sepL_singleton.
-    Qed.
-
-    Lemma interp_addr_access_single {liveAddrs mmioAddrs} base:
-      interp_addr_access liveAddrs mmioAddrs base 1 ⊣⊢
-      interp_addr_access_byte liveAddrs mmioAddrs base.
-    Proof. rewrite interp_addr_access_cons  -bv.add_of_nat_0_r.
-           iSplit; iIntros "H"; [iDestruct "H" as "[_ H]"|]; iFrame.
-           rewrite /interp_addr_access. now rewrite bv.seqBv_zero. Qed.
-
-    Lemma pmp_access_is_representable base width entries m p:
-      Pmp_access base (bv.of_nat width) entries m p → (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N. Admitted.
-
-    Lemma pmp_seqBv_restrict base width k y entries m p:
-      bv.seqBv base width !! k = Some y →
-      Pmp_access base (bv.of_nat width) entries m p →
-      Pmp_access y (bv.of_nat 1) entries m p. Admitted.
-
-    (* Induction does not work here due to shape of `interp_pmp_addr_access_without`*)
-    Lemma interp_pmp_addr_inj_extr {liveAddrs mmioAddrs entries m p} base width :
-      Pmp_access base (bv.of_nat width) entries m p →
-      (interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢
-      (interp_addr_access liveAddrs mmioAddrs base width ∗ interp_pmp_addr_access_without liveAddrs mmioAddrs base width entries m))%I.
-    Proof.
-      intros Hpmp.
-      (* Discharge easy direction *)
-      iSplit ; last (iIntros "[H Hcont]"; by iApply "Hcont").
-      unfold interp_pmp_addr_access_without, interp_pmp_addr_access.
-      (* Hard direction: create `interp_addr_access` from scratch *)
-      unfold interp_pmp_addr_access.
-      pose proof (in_allAddrs_split base width (pmp_access_is_representable Hpmp)) as [l1 [l2 Hall]]. rewrite Hall.
-      rewrite !big_sepL_app.
-      iIntros "(Hlow & Hia & Hhigh)".
-      iSplitL "Hia".
-      - iApply (big_sepL_mono with "Hia"). iIntros (? ? ?) "Hyp".
-        iApply "Hyp". iPureIntro.
-        eexists; eapply pmp_seqBv_restrict; eauto.
-      - iIntros "Hia". iFrame.
-        iDestruct (big_sepL_mono with "Hia") as "Hia"; last iFrame.
-        now iIntros.
-      Qed.
-
-    (* TODO: This lemma is not a special case of the above, because of strange semantics of `Pmp_access`*)
-    Lemma interp_pmp_addr_access_without_0 {liveAddrs mmioAddrs entries m} base :
-      interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢ interp_pmp_addr_access_without liveAddrs mmioAddrs base 0 entries m.
-    Proof. unfold interp_pmp_addr_access_without, interp_addr_access.
-           rewrite bv.seqBv_zero.
-           iSplit; iIntros "H".
-           - now iIntros "_".
-           - now iApply "H".
-    Qed.
-
-    Lemma interp_pmp_within_mmio_false {liveAddrs mmioAddrs entries m p} paddr bytes:
-      Pmp_access paddr (bv.of_nat bytes) entries m p →
-      interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
-      ⌜fun_within_mmio bytes paddr = false⌝.
-    Proof. Admitted.
 
     Lemma within_mmio_sound (bytes : nat):
      ValidContractForeign (sep_contract_within_mmio bytes) (within_mmio bytes).
@@ -433,20 +326,6 @@ Module RiscvPmpModel2.
       now iIntros.
     Qed.
 
-    Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
-        ⊢ interp_pmp_entries entries -∗
-          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr),
-            ⌜entries = [(cfg0, addr0); (cfg1, addr1)]⌝ ∗
-            reg_pointsTo pmp0cfg cfg0 ∗ reg_pointsTo pmpaddr0 addr0 ∗
-            reg_pointsTo pmp1cfg cfg1 ∗ reg_pointsTo pmpaddr1 addr1.
-    Proof.
-      iIntros (entries) "H".
-      unfold interp_pmp_entries.
-      destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|]]] eqn:?; try done.
-      repeat iExists _.
-      now iFrame.
-    Qed.
-
     Lemma open_pmp_entries_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_pmp_entries.
     Proof.
@@ -477,116 +356,6 @@ Module RiscvPmpModel2.
         rewrite bv.bin_of_nat_small in H.
         now apply N2Z.inj_le.
         apply minAddr_rep.
-    Qed.
-
-    Lemma maxAddr_le_ule : forall (addr : Addr) (bytes : nat),
-        (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
-         (bv.unsigned addr + bytes <= maxAddr)%Z -> addr + bv.of_nat bytes <=ᵘ bv.of_nat maxAddr.
-    Proof.
-      unfold bv.ule, bv.unsigned.
-      rewrite <- nat_N_Z.
-      intros addr bytes Hrep H.
-      rewrite bv.bin_of_nat_small; last apply maxAddr_rep.
-      rewrite bv.bin_add_small.
-      rewrite bv.bin_of_nat_small.
-      pose maxAddr_rep.
-      lia.
-      lia.
-      rewrite bv.bin_of_nat_small; lia.
-    Qed.
-
-    Lemma in_liveAddrs : forall (addr : Addr),
-        (bv.of_nat minAddr <=ᵘ addr) ->
-        (addr <ᵘ bv.of_nat maxAddr) ->
-        addr ∈ liveAddrs.
-    Proof.
-      unfold liveAddrs, maxAddr.
-      intros.
-      apply bv.in_seqBv;
-        eauto using maxAddr_rep.
-    Qed.
-
-    Opaque minAddr.
-    Opaque lenAddr.
-    Opaque xlenbits.
-elem_of_list_split
-    Lemma in_liveAddrs_split : forall (addr : Addr) (bytes : nat),
-        (N.of_nat bytes < bv.exp2 xlenbits)%N ->
-        (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
-        (bv.bin addr - @bv.bin xlenbits (bv.of_nat minAddr) < bv.exp2 xlenbits)%N ->
-        (bv.of_nat minAddr <=ᵘ addr) ->
-        (addr + (bv.of_nat bytes) <=ᵘ bv.of_nat maxAddr) ->
-        exists l1 l2, liveAddrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
-    Proof.
-    (* TODO: more efficient proof? *)
-      unfold maxAddr.
-      intros addr bytes bytesfit addrbytesFits addrDiffFits Hmin Hmax.
-      unfold bv.ule, bv.ule in *.
-      unfold liveAddrs.
-      exists (bv.seqBv (bv.of_nat minAddr) (N.to_nat (bv.bin addr - @bv.bin xlenbits (bv.of_nat minAddr)))%N).
-      exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (N.to_nat (@bv.bin xlenbits (bv.of_nat minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes)))).
-      rewrite <-(bv.seqBv_app addr).
-      replace addr with (@bv.of_nat xlenbits minAddr + bv.of_nat (N.to_nat (bv.bin addr - @bv.bin xlenbits (bv.of_nat minAddr)))) at 2.
-      rewrite <-bv.seqBv_app; try lia.
-      f_equal.
-      - unfold bv.ule, bv.ult in *.
-        apply N_of_nat_inj.
-        apply Z_of_N_inj.
-        rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
-        auto using lenAddr_rep.
-        + rewrite (N2Z.inj_add (bv.bin addr)).
-          now Lia.lia.
-        + now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax.
-      - enough (bv.bin (bv.of_nat minAddr) + N.of_nat (N.to_nat (bv.bin addr - bv.bin (bv.of_nat minAddr))) +
-                N.of_nat (bytes + N.to_nat (bv.bin ((bv.of_nat minAddr) + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes))) = @bv.bin xlenbits (bv.of_nat minAddr) + N.of_nat lenAddr)%N as -> by apply maxAddr_rep.
-        apply Z_of_N_inj.
-        rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
-        auto using lenAddr_rep.
-        + rewrite (N2Z.inj_add (bv.bin addr)).
-          now Lia.lia.
-        + rewrite ?bv.bin_add_small ?bv.bin_of_nat_small in Hmax; auto using lenAddr_rep.
-      - unfold bv.of_nat.
-        rewrite N2Nat.id.
-        apply bv.unsigned_inj.
-        unfold bv.unsigned.
-        rewrite bv.bin_add_small.
-        + rewrite N2Z.inj_add.
-          rewrite bv.bin_of_N_small; try assumption.
-          rewrite bv.bin_of_N_small.
-          rewrite N2Z.inj_sub.
-          lia.
-          now rewrite bv.bin_of_nat_small in Hmin.
-          now rewrite bv.bin_of_nat_small in addrDiffFits.
-          now simpl.
-        + replace (@bv.bin xlenbits (bv.of_nat minAddr) + _)%N with (bv.bin addr); try Lia.lia.
-          apply Z_of_N_inj.
-          rewrite N2Z.inj_add.
-          rewrite bv.bin_of_N_small; try assumption.
-          rewrite bv.bin_of_N_small.
-          rewrite N2Z.inj_sub.
-          lia.
-          now rewrite bv.bin_of_nat_small in Hmin.
-          now rewrite bv.bin_of_nat_small in addrDiffFits.
-      - rewrite N2Nat.id.
-        rewrite ?bv.bin_add_small ?bv.bin_of_nat_small; auto using lenAddr_rep.
-        assert (maxAddrFits := maxAddr_rep).
-        remember (bv.bin addr + N.of_nat bytes)%N as p.
-        remember (N.of_nat minAddr + N.of_nat lenAddr)%N as q.
-        rewrite N.add_sub_assoc.
-        rewrite N.add_comm.
-        rewrite N.add_sub.
-        rewrite Heqq.
-        auto.
-        rewrite Heqp.
-        rewrite Heqq.
-        rewrite <- (@bv.bin_of_nat_small xlenbits).
-        rewrite <- bv.bin_add_small.
-        auto.
-        rewrite bv.bin_of_nat_small.
-        rewrite Heqp in addrbytesFits.
-        auto.
-        auto.
-        auto.
     Qed.
 
     Lemma N_of_nat_lt_S : forall w n,
