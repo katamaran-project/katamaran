@@ -588,7 +588,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       else
         stm_exp (exp_union (memory_op_result 1) KMemException E_SAMO_Access_Fault).
 
-  (* TODO: It might have been more elegant to have a universal contract for each individual PMP location (saying the location is either MMIO/RAM/out of range), and extract that after passing the PMP check. This would allow simplifying the contract of `checked_mem_read/write`. Morally, those contracts should not mention PMP, since they are only ever called after the PMP checks succeed. This would also allow us to remove the PMP stuff from the contract of `within_MMIO`. *)
+  (* NOTE: One might think it more elegant to have a universal contract for each individual PMP location (saying the location is either MMIO/RAM/out of range), and extract that after passing the PMP check. This would allow simplifying the contract of `checked_mem_read/write`. Morally, those contracts should not mention PMP, since they are only ever called after the PMP checks succeed. This would also allow us to remove the PMP stuff from the contract of `within_MMIO`. *)
+  (* HOWEVER, the Sail model does not check for overflow as part of the PMP checks; this only happens later, when checking whether an address is an MMIO/RAM/... address. Hence, it would complicate lemma's to extract this pointer early, as the extracted pointer might not be contiguous in memory... *)
   Definition fun_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := stm_call (@pmpCheck bytes H) [paddr; t; p] in
     match: tmp with
