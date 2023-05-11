@@ -309,16 +309,19 @@ Import RiscvPmp.PmpCheck.
 
     Local Lemma bv_bin_one : bv.bin (@bv.one xlenbits) = 1%N.
     Proof. apply bv.bin_one, xlenbits_pos. Qed.
+    Local Lemma rep_end_then_start paddr bytes: (@bv.bin xlenbits paddr + N.of_nat (bytes) < bv.exp2 xlenbits)%N ->
+        (N.of_nat (bytes) < bv.exp2 xlenbits)%N.
+    Proof.  intro Hrep. lia. Qed.
 
     Lemma pmp_match_addr_addr_S_width_pred (bytes : nat) : forall paddr rng res,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         res = PMP_NoMatch ∨ res = PMP_Match ->
         pmp_match_addr paddr (bv.of_nat (S bytes)) rng = res ->
         pmp_match_addr (paddr + bv.one) (bv.of_nat bytes) rng = res.
     Proof.
-      intros paddr rng res Hb Hrep Hrepb.
+      intros paddr rng res Hb Hrep.
+      apply rep_end_then_start in Hrep as Hrepb.
       assert (HrepS: (bv.bin paddr + 1 < bv.exp2 xlenbits)%N).
       { enough (bv.bin paddr + 1 < bv.bin paddr + N.of_nat (S bytes))%N by lia.
         apply N.add_lt_mono_l.
@@ -370,11 +373,10 @@ Import RiscvPmp.PmpCheck.
     Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr p cfg lo hi,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Success ->
         pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Success.
     Proof.
-      intros paddr p cfg lo hi Hb Hrep Hrepb.
+      intros paddr p cfg lo hi Hb Hrep.
       unfold pmp_match_entry.
       intros H.
       destruct (pmp_match_addr paddr _ _) eqn:E;
@@ -387,11 +389,10 @@ Import RiscvPmp.PmpCheck.
     Lemma pmp_match_entry_addr_S_width_pred_continue (bytes : nat) : forall paddr p cfg lo hi,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Continue ->
         pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Continue.
     Proof.
-      intros paddr p cfg lo hi Hb Hrep Hrepb.
+      intros paddr p cfg lo hi Hb Hrep.
       unfold pmp_match_entry.
       intros H.
       destruct (pmp_match_addr paddr _ _) eqn:E;
@@ -404,11 +405,10 @@ Import RiscvPmp.PmpCheck.
     Lemma pmp_check_aux_addr_S_width_pred (bytes : nat) : forall paddr lo entries p acc,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         pmp_check_aux paddr (bv.of_nat (S bytes)) lo entries p acc = true ->
         pmp_check_aux (paddr + bv.one) (bv.of_nat bytes) lo entries p acc = true.
     Proof.
-      intros paddr lo entries p acc Hb Hrep Hrepb.
+      intros paddr lo entries p acc Hb Hrep.
       generalize dependent lo.
       induction entries as [|[cfg0 hi] entries IHentries];
         intros;
@@ -427,14 +427,40 @@ Import RiscvPmp.PmpCheck.
     Lemma pmp_access_addr_S_width_pred (bytes : nat) : forall paddr lo entries p acc,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         Gen_Pmp_access paddr (bv.of_nat (S bytes)) lo entries p acc ->
         Gen_Pmp_access (paddr + bv.one) (bv.of_nat bytes) lo entries p acc.
     Proof.
-      intros paddr lo pmp p acc Hb Hrep Hrepb.
+      intros paddr lo pmp p acc Hb Hrep.
       unfold Gen_Pmp_access.
       now apply pmp_check_aux_addr_S_width_pred.
     Qed.
+
+    Lemma gen_pmp_access_shift (bytes shift: nat) paddr lo entries p acc:
+        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
+        (bv.bin paddr + N.of_nat (bytes + shift) < bv.exp2 xlenbits)%N ->
+        Gen_Pmp_access paddr (bv.of_nat (bytes + shift)) lo entries p acc ->
+        Gen_Pmp_access (paddr + bv.of_nat shift) (bv.of_nat bytes) lo entries p acc.
+    Proof.
+      intros Hzero. generalize dependent paddr.
+      induction shift; intros paddr Hrep Hacc.
+      - rewrite bv.add_zero_r. rewrite Nat.add_0_r in Hacc. auto.
+      - rewrite Nat.add_succ_r in Hacc,Hrep.
+        rewrite Nat2N.inj_succ in Hrep.
+        apply pmp_access_addr_S_width_pred in Hacc.
+        * apply IHshift in Hacc.
+          + rewrite bv.of_nat_S bv.add_assoc. apply Hacc.
+          + rewrite bv.bin_add_small; rewrite bv_bin_one; lia.
+        * eapply N.lt_le_trans; eauto.
+          rewrite !bv.bin_of_nat_small; lia.
+        * lia.
+    Qed.
+
+    Lemma pmp_access_shift (bytes shift: nat) paddr entries p acc:
+        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
+        (bv.bin paddr + N.of_nat (bytes + shift) < bv.exp2 xlenbits)%N ->
+        Pmp_access paddr (bv.of_nat (bytes + shift)) entries p acc ->
+        Pmp_access (paddr + bv.of_nat shift) (bv.of_nat bytes) entries p acc.
+    Proof. apply gen_pmp_access_shift. Qed.
 
     Lemma pmp_seqBv_restrict base width k y entries m p:
       bv.seqBv base width !! k = Some y →
