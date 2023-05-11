@@ -485,10 +485,23 @@ Import RiscvPmp.PmpCheck.
       rewrite seqBv_len bv.seqBv_succ lookup_cons Nat.sub_diag in Hlkup.
       now inversion Hlkup.
     Qed.
+
+    (* Use `seqBv` to get rid of conditions on width *)
     Lemma pmp_seqBv_restrict base width k y entries m p:
+      (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
       bv.seqBv base width !! k = Some y →
       Pmp_access base (bv.of_nat width) entries m p →
-      Pmp_access y (bv.of_nat 1) entries m p. Admitted.
+      Pmp_access y (bv.of_nat 1) entries m p.
+    Proof.
+      intros Hrep Hlkup Hacc.
+      pose proof (seqBv_width_at_least _ _ Hlkup) as [p' ->].
+      apply seqBv_spec in Hlkup; subst y.
+      apply (pmp_access_reduced_width (w := bv.of_nat (1%nat + k))) in Hacc.
+      - apply pmp_access_shift in Hacc; [auto | now rewrite bv_bin_one | lia ].
+      - rewrite bv.bin_of_nat_small; lia.
+      - apply bv.ult_nat_S_zero. lia.
+      - unfold bv.ule. rewrite !bv.bin_of_nat_small; lia.
+    Qed.
 
     Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
     Proof.
