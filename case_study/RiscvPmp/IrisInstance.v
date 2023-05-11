@@ -462,6 +462,29 @@ Import RiscvPmp.PmpCheck.
         Pmp_access (paddr + bv.of_nat shift) (bv.of_nat bytes) entries p acc.
     Proof. apply gen_pmp_access_shift. Qed.
 
+    Lemma seqBv_len n base width : length (@bv.seqBv n base width) = width.
+    Proof. unfold bv.seqBv. rewrite map_length seqZ_length. lia. Qed.
+
+    Lemma seqBv_width_at_least {n width} base k y:
+      @bv.seqBv n base width !! k = Some y → ∃ p , width = (k + S p)%nat.
+    Proof.
+      intros Hlkup.
+      apply lookup_lt_Some in Hlkup as Hw.
+      apply Nat.le_exists_sub in Hw as (p & [Hweq _]).
+      rewrite seqBv_len -Nat.add_succ_comm Nat.add_comm in Hweq.
+      eauto.
+    Qed.
+
+    Lemma seqBv_spec {n width} base k y:
+      @bv.seqBv n base width !! k = Some y →
+      (base + bv.of_nat k) = y.
+    Proof.
+      intros Hlkup.
+      pose proof (seqBv_width_at_least _ _ Hlkup) as [p ->].
+      rewrite bv.seqBv_app lookup_app_r in Hlkup; last now rewrite seqBv_len.
+      rewrite seqBv_len bv.seqBv_succ lookup_cons Nat.sub_diag in Hlkup.
+      now inversion Hlkup.
+    Qed.
     Lemma pmp_seqBv_restrict base width k y entries m p:
       bv.seqBv base width !! k = Some y →
       Pmp_access base (bv.of_nat width) entries m p →
