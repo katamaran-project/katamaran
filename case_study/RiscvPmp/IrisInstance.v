@@ -436,10 +436,6 @@ Import RiscvPmp.PmpCheck.
       now apply pmp_check_aux_addr_S_width_pred.
     Qed.
 
-
-    Lemma pmp_access_is_representable base width entries m p:
-      Pmp_access base (bv.of_nat width) entries m p → (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N. Admitted.
-
     Lemma pmp_seqBv_restrict base width k y entries m p:
       bv.seqBv base width !! k = Some y →
       Pmp_access base (bv.of_nat width) entries m p →
@@ -560,17 +556,18 @@ Import RiscvPmp.PmpCheck.
 
     (* Induction does not work here due to shape of `interp_pmp_addr_access_without`*)
     Lemma interp_pmp_addr_inj_extr {liveAddrs mmioAddrs entries m p} base width :
+      (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
       Pmp_access base (bv.of_nat width) entries m p →
       (interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢
       (interp_addr_access liveAddrs mmioAddrs base width ∗ interp_pmp_addr_access_without liveAddrs mmioAddrs base width entries m))%I.
     Proof.
-      intros Hpmp.
+      intros Hrep Hpmp.
       (* Discharge easy direction *)
       iSplit ; last (iIntros "[H Hcont]"; by iApply "Hcont").
       unfold interp_pmp_addr_access_without, interp_pmp_addr_access.
       (* Hard direction: create `interp_addr_access` from scratch *)
       unfold interp_pmp_addr_access.
-      pose proof (in_allAddrs_split base width (pmp_access_is_representable Hpmp)) as [l1 [l2 Hall]]. rewrite Hall.
+      pose proof (in_allAddrs_split base width Hrep) as [l1 [l2 Hall]]. rewrite Hall.
       rewrite !big_sepL_app.
       iIntros "(Hlow & Hia & Hhigh)".
       iSplitL "Hia".
