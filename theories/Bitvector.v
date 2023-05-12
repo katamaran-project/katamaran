@@ -38,6 +38,7 @@ From Equations Require Import
      Equations.
 From Katamaran Require Import
      Notations Prelude.
+Require stdpp.base.
 Local Set Implicit Arguments.
 
 Declare Scope bv_scope.
@@ -1521,6 +1522,19 @@ Module bv.
       rewrite list_numbers.seqZ_cons; [|Lia.lia]. cbn.
       f_equal. now rewrite of_Z_unsigned. Qed.
 
+    Lemma seqBv_len n base width : length (@seqBv n base width) = width.
+    Proof. unfold seqBv. rewrite map_length, list_numbers.seqZ_length. Lia.lia. Qed.
+
+    Lemma seqBv_width_at_least {n width} base k y :
+      base.lookup k (@seqBv n base width) = Some y -> exists p , width = (k + S p)%nat.
+    Proof.
+      intros Hlkup.
+      apply list.lookup_lt_Some in Hlkup as Hw.
+      apply Nat.le_exists_sub in Hw as (p & [Hweq _]).
+      rewrite seqBv_len, <-Nat.add_succ_comm, Nat.add_comm in Hweq.
+      eauto.
+    Qed.
+
     Lemma seqBv_app {n} m n1 n2 :
       @seqBv n m (n1 + n2) = seqBv m n1 ++ seqBv (bv.add m (bv.of_nat n1)) n2.
     Proof.
@@ -1551,6 +1565,17 @@ Module bv.
       (@seqBv n m (S n1)) = (seqBv m n1)%bv ++ (cons (m + of_nat n1) nil) .
     Proof.
       now rewrite <-Nat.add_1_r, seqBv_app, seqBv_one.
+    Qed.
+
+    Lemma seqBv_spec {n width} base k y:
+      base.lookup k (@seqBv n base width) = Some y ->
+      (base + bv.of_nat k) = y.
+    Proof.
+      intros Hlkup.
+      pose proof (seqBv_width_at_least _ _ Hlkup) as [p ->].
+      rewrite seqBv_app, list.lookup_app_r in Hlkup; [| now rewrite seqBv_len].
+      rewrite seqBv_len, seqBv_succ, list.lookup_cons, Nat.sub_diag in Hlkup.
+      now inversion Hlkup.
     Qed.
 
     (* More powerful version of `in_seqBv` where `len` and `min + len` need not be representable in `n` bits *)
