@@ -408,6 +408,9 @@ Module bv.
       - eapply at_most_spec.
     Qed.
 
+    Lemma bv_is_wf `(a : bv n): (bin a < exp2 n)%N.
+    Proof. destruct a as [? Hwf]. cbn. now rewrite is_wf_spec in Hwf. Qed.
+
   End Conversion.
 
   Section ListLike.
@@ -1604,6 +1607,27 @@ Module bv.
       unfold add.
       rewrite bin_of_N_decr. apply N.add_le_mono; auto.
       now rewrite bin_of_nat_decr.
+    Qed.
+
+    (* Only prove one direction *)
+    Lemma seqBv_no_overlap {n} a a1 a2 b1 b2:
+      (N.of_nat (b1 + b2) < (exp2 n))%N ->
+      a1 + a2 <= b1 ->
+      base.elem_of a (@seqBv n (bv.of_nat a1) a2) ->
+      base.elem_of a (seqBv (bv.of_nat b1) b2) ->
+      False.
+    Proof.
+      intros Hrep Hlt Hain Hbin.
+      rewrite !list.elem_of_list_lookup in Hain, Hbin.
+      destruct Hain as (ai & Hain).
+      destruct Hbin as (bi & Hbin).
+      apply list.lookup_lt_Some in Hain as Halen.
+      apply list.lookup_lt_Some in Hbin as Hblen.
+      rewrite !seqBv_len in Halen, Hblen.
+
+      apply seqBv_spec, (f_equal (@bv.bin n)) in Hain, Hbin.
+      rewrite !@bin_add_small, !@bin_of_nat_small in Hain, Hbin; try Lia.lia;
+      rewrite ?@bin_of_nat_small ; try Lia.lia.
     Qed.
 
   End Sequences.
