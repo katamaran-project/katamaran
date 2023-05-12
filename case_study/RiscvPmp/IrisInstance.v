@@ -184,7 +184,6 @@ Import RiscvPmp.PmpCheck.
 
   Section RiscVPmpIrisInstanceProofs.
     Context `{sr : sailRegGS Σ} `{igs : invGS Σ} `{mG : mcMemGS Σ}.
-    Variable (live_addrs : list Addr) (mmio_addrs : list Addr).
 
     (* Note that the condition on overflow is required: some illegal set-ups are accepted by `pmp_match_addr` as it does not track overflow, and shrinking those might make the output go from match to no match. *)
     Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
@@ -462,31 +461,8 @@ Import RiscvPmp.PmpCheck.
         Pmp_access (paddr + bv.of_nat shift) (bv.of_nat bytes) entries p acc.
     Proof. apply gen_pmp_access_shift. Qed.
 
-    Lemma seqBv_len n base width : length (@bv.seqBv n base width) = width.
-    Proof. unfold bv.seqBv. rewrite map_length seqZ_length. lia. Qed.
-
-    Lemma seqBv_width_at_least {n width} base k y:
-      @bv.seqBv n base width !! k = Some y → ∃ p , width = (k + S p)%nat.
-    Proof.
-      intros Hlkup.
-      apply lookup_lt_Some in Hlkup as Hw.
-      apply Nat.le_exists_sub in Hw as (p & [Hweq _]).
-      rewrite seqBv_len -Nat.add_succ_comm Nat.add_comm in Hweq.
-      eauto.
-    Qed.
-
-    Lemma seqBv_spec {n width} base k y:
-      @bv.seqBv n base width !! k = Some y →
-      (base + bv.of_nat k) = y.
-    Proof.
-      intros Hlkup.
-      pose proof (seqBv_width_at_least _ _ Hlkup) as [p ->].
-      rewrite bv.seqBv_app lookup_app_r in Hlkup; last now rewrite seqBv_len.
-      rewrite seqBv_len bv.seqBv_succ lookup_cons Nat.sub_diag in Hlkup.
-      now inversion Hlkup.
-    Qed.
-
     (* Use `seqBv` to get rid of conditions on width *)
+    (* TODO: intermediate lemma without seqBv that does shift + restrict? *)
     Lemma pmp_seqBv_restrict base width k y entries m p:
       (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
       bv.seqBv base width !! k = Some y →
@@ -494,8 +470,8 @@ Import RiscvPmp.PmpCheck.
       Pmp_access y (bv.of_nat 1) entries m p.
     Proof.
       intros Hrep Hlkup Hacc.
-      pose proof (seqBv_width_at_least _ _ Hlkup) as [p' ->].
-      apply seqBv_spec in Hlkup; subst y.
+      pose proof (bv.seqBv_width_at_least _ _ Hlkup) as [p' ->].
+      apply bv.seqBv_spec in Hlkup; subst y.
       apply (pmp_access_reduced_width (w := bv.of_nat (1%nat + k))) in Hacc.
       - apply pmp_access_shift in Hacc; [auto | now rewrite bv_bin_one | lia ].
       - rewrite bv.bin_of_nat_small; lia.
@@ -592,7 +568,7 @@ Import RiscvPmp.PmpCheck.
           rewrite ptstomem_bv_app. iFrame.
     Qed.
 
-    Lemma interp_addr_access_app {liveAddrs mmioAddrs} base width width':
+    Lemma interp_addr_access_app base width width':
       interp_addr_access liveAddrs mmioAddrs base (width + width') ⊣⊢
       interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat width) width'.
     Proof.
@@ -600,24 +576,25 @@ Import RiscvPmp.PmpCheck.
       by rewrite bv.seqBv_app big_sepL_app.
     Qed.
 
-    Lemma interp_addr_access_cons {liveAddrs mmioAddrs} base width:
+    Lemma interp_addr_access_cons base width:
       interp_addr_access liveAddrs mmioAddrs base (S width) ⊣⊢
-      interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access_byte liveAddrs mmioAddrs (base + bv.of_nat width).
-    Proof. rewrite <-Nat.add_1_r.
+      interp_addr_access_byte liveAddrs mmioAddrs base ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat 1) width.
+    Proof. rewrite <-Nat.add_1_l.
            rewrite interp_addr_access_app.
            unfold interp_addr_access, interp_addr_access_byte.
            by rewrite bv.seqBv_one big_sepL_singleton.
     Qed.
 
-    Lemma interp_addr_access_single {liveAddrs mmioAddrs} base:
+    Lemma interp_addr_access_single base:
       interp_addr_access liveAddrs mmioAddrs base 1 ⊣⊢
       interp_addr_access_byte liveAddrs mmioAddrs base.
-    Proof. rewrite interp_addr_access_cons  -bv.add_of_nat_0_r.
-           iSplit; iIntros "H"; [iDestruct "H" as "[_ H]"|]; iFrame.
-           rewrite /interp_addr_access. now rewrite bv.seqBv_zero. Qed.
+    Proof. rewrite interp_addr_access_cons.
+           iSplit; iIntros "H"; [iDestruct "H" as "[H _]"|]; iFrame.
+           unfold interp_addr_access. now cbn.
+    Qed.
 
     (* Induction does not work here due to shape of `interp_pmp_addr_access_without`*)
-    Lemma interp_pmp_addr_inj_extr {liveAddrs mmioAddrs entries m p} base width :
+    Lemma interp_pmp_addr_inj_extr {entries m p} base width :
       (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
       Pmp_access base (bv.of_nat width) entries m p →
       (interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢
@@ -642,7 +619,7 @@ Import RiscvPmp.PmpCheck.
       Qed.
 
     (* TODO: This lemma is not a special case of the above, because of strange semantics of `Pmp_access`*)
-    Lemma interp_pmp_addr_access_without_0 {liveAddrs mmioAddrs entries m} base :
+    Lemma interp_pmp_addr_access_without_0 {entries m} base :
       interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢ interp_pmp_addr_access_without liveAddrs mmioAddrs base 0 entries m.
     Proof. unfold interp_pmp_addr_access_without, interp_addr_access.
            rewrite bv.seqBv_zero.
@@ -651,21 +628,21 @@ Import RiscvPmp.PmpCheck.
            - now iApply "H".
     Qed.
 
-    Lemma interp_pmp_within_mmio_false {liveAddrs mmioAddrs entries m p} (paddr : Addr) bytes:
+    Lemma interp_pmp_within_mmio_false {entries m p} (paddr : Addr) bytes:
+      (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N →
       Pmp_access paddr (bv.of_nat bytes) entries m p →
       interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
       ⌜fun_within_mmio bytes paddr = (bytes =? 0)%nat⌝.
-    Proof. iIntros (Hpmp) "Hint".
-           rewrite (interp_pmp_addr_inj_extr Hpmp).
+    Proof. iIntros (Hrep Hpmp) "Hint".
+           rewrite interp_pmp_addr_inj_extr; eauto.
            iDestruct "Hint" as "[Hint _]".
-           iInduction bytes as [|] "HInd".
-           - unfold fun_within_mmio. cbn.
-             iPureIntro. now apply bool_decide_true.
-           - Search bool_decide True.
-
-             rewrite bv.seqBv_zero.
-    Admitted.
-
+           destruct bytes as [|bytes]. (* No induction needed: disproving one location suffices. *)
+           - unfold fun_within_mmio. cbn. by rewrite bool_decide_eq_true.
+           - iDestruct (interp_addr_access_cons with "Hint") as "[Hfirst _]".
+             rewrite bool_decide_eq_false not_and_l.
+             unfold interp_addr_access_byte.
+             case_decide; auto.
+    Qed.
 
   End RiscVPmpIrisInstanceProofs.
 
