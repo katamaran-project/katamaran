@@ -248,14 +248,16 @@ Module RiscvPmpModel2.
       iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])".
       iApply (wp_lift_atomic_step_no_fork); [auto | ].
       iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-      iPoseProof (interp_pmp_within_mmio_false with "Hpmpa") as "%Hnotmmio";  [|eauto|]; cycle 1.
+      iPoseProof (interp_pmp_within_mmio_false with "Hpmpa") as "%Hnotmmio"; first eauto.
       iSplitR; first auto.
       repeat iModIntro.
       iIntros. iModIntro.
       eliminate_prim_step Heq.
       iSplit; first auto. iFrame.
       iSplit; [iExists _; auto | ].
-      iSplit; auto.
+      repeat iSplit; auto.
+      iPureIntro.
+      rewrite Hnotmmio; destruct bytes; now simpl.
     Qed.
 
     Lemma decode_sound :
