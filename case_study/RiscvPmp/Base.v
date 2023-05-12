@@ -73,8 +73,7 @@ Definition Addr : Set     := bv xlenbits.
 Definition Word : Set     := bv word.
 Definition Byte : Set     := bv byte.
 
-(* Parameter minAddr : Addr. *)
-(* Parameter maxAddr : Addr. *)
+(* 1. Definition of RAM memory *)
 Definition minAddr : nat := 0.
 Definition lenAddr : nat := 100.
 Definition maxAddr : nat := minAddr + lenAddr.
@@ -87,10 +86,12 @@ Proof. now compute. Qed.
 (* xlenbits is made opaque further on and it really must be non-zero. *)
 Lemma xlenbits_pos : (xlenbits > 0).
 Proof. cbv. lia. Qed.
+(* All addresses present in RAM memory *)
+Definition liveAddrs := bv.seqBv (@bv.of_nat xlenbits minAddr) lenAddr.
 
-(* 1. Definition of MMIO region *)
+(* 1. Definition of MMIO memory *)
 (* For now, we only consider the one femtokernel address to be part of the MMIO-mapped memory. *)
-Definition mmioAddrs : list Addr := [bv.of_N 64].
+Definition mmioAddrs : list Addr := bv.seqBv (@bv.of_nat xlenbits maxAddr) lenAddr.
 Definition isMMIO a : Prop := a ∈ mmioAddrs.
 Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
   match size with
@@ -103,7 +104,7 @@ Proof. generalize a. induction size.
          apply _.
 Qed.
 
-(* 2. Definition of machinery required to do MMIO *)
+(* 3. Definition of machinery required to do MMIO *)
 Class MMIOEnv : Type := {
   State : Type;
   (* The combination of these two allows us to simulate a finitely non-deterministic I/O device, by quantifying over these transition functions at the top-level and adding restrictions *)
@@ -114,6 +115,14 @@ Class MMIOEnv : Type := {
 Parameter mmioenv : MMIOEnv.
 #[export] Existing Instance mmioenv.
 #[export] Instance state_inhabited : Inhabited Base.State := populate (state_init).
+
+Require Import stdpp.finite.
+(* Addresses cannot both be MMIO and RAM. We need to know this when trying to inject pointsto-chunks for RAM back into maps of pointsto chunks. *)
+
+Lemma mmio_ram_False a : a ∈ liveAddrs → a ∈ mmioAddrs -> False.
+Proof. unfold liveAddrs, mmioAddrs, maxAddr, minAddr, lenAddr.
+       apply bv.seqBv_no_overlap; cbn; lia.
+Qed.
 
 Inductive Privilege : Set :=
 | User
