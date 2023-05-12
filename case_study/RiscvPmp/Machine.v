@@ -1292,8 +1292,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   #[global] Arguments fun_write_ram : clear implicits.
 
   (* Separated into a read and a write function in the sail model *)
+  (* NOTE: we have to check overflow here, because the PMP model does not...*)
   Definition fun_within_mmio (data_size : nat) (addr : Val ty_xlenbits) : bool :=
-    bool_decide (withinMMIO addr data_size).
+    bool_decide (withinMMIO addr data_size ∧
+    bv.bin addr + N.of_nat data_size < (bv.exp2 xlenbits))%N.
 
   Definition fun_read_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
     Memory * Val (ty_bytes data_size) :=

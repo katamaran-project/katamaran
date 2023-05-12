@@ -479,14 +479,16 @@ Import RiscvPmp.PmpCheck.
       - unfold bv.ule. rewrite !bv.bin_of_nat_small; lia.
     Qed.
 
+    (* TODO: move to bv? *)
+    Local Lemma bv_is_wf `(a : bv n): (bv.bin a < bv.exp2 n)%N.
+    Proof. destruct a as [? Hwf]. cbn. now rewrite bv.is_wf_spec in Hwf. Qed.
+
     Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
     Proof.
       rewrite all_addrs_eq.
       apply bv.in_seqBv'; unfold bv.ule, bv.ult.
       - cbn. Lia.lia.
-      - destruct a as [bin Hwf].
-        cbn [bv.bin].
-        rewrite bv.is_wf_spec in Hwf.
+      - pose proof (bv_is_wf a) as Hwf.
         eapply N.lt_le_trans; [exact|].
         rewrite bv.exp2_spec Nat2N.inj_pow.
         Lia.lia.
@@ -629,17 +631,21 @@ Import RiscvPmp.PmpCheck.
     Qed.
 
     Lemma interp_pmp_within_mmio_false {entries m p} (paddr : Addr) bytes:
-      (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N →
       Pmp_access paddr (bv.of_nat bytes) entries m p →
       interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
       ⌜fun_within_mmio bytes paddr = (bytes =? 0)%nat⌝.
-    Proof. iIntros (Hrep Hpmp) "Hint".
-           rewrite interp_pmp_addr_inj_extr; eauto.
-           iDestruct "Hint" as "[Hint _]".
+    Proof. iIntros (Hpmp) "Hint".
            destruct bytes as [|bytes]. (* No induction needed: disproving one location suffices. *)
-           - unfold fun_within_mmio. cbn. by rewrite bool_decide_eq_true.
-           - iDestruct (interp_addr_access_cons with "Hint") as "[Hfirst _]".
-             rewrite bool_decide_eq_false not_and_l.
+           - unfold fun_within_mmio. cbn - [xlenbits] in *.
+             rewrite bool_decide_and andb_true_iff; iPureIntro.
+             rewrite !bool_decide_eq_true; split; first auto.
+             pose proof (bv_is_wf paddr) as Hwf; try lia.
+           - destruct (decide (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N) as [Hlt | Hnlt].
+             2 : { rewrite bool_decide_eq_false !not_and_l; auto. }
+             rewrite interp_pmp_addr_inj_extr; eauto.
+             iDestruct "Hint" as "[Hint _]".
+             iDestruct (interp_addr_access_cons with "Hint") as "[Hfirst _]".
+             rewrite bool_decide_eq_false !not_and_l. repeat iLeft.
              unfold interp_addr_access_byte.
              case_decide; auto.
     Qed.

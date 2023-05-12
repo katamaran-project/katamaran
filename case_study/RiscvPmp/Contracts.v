@@ -1065,6 +1065,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
 
       Section ForeignDef.
         Import RiscvPmpSignature.notations.
+        Local Notation "e1 '=?' e2" := (term_binop (bop.relop bop.eq) e1 e2).
 
         Definition sep_contract_read_ram (bytes : nat) : SepContractFunX (read_ram bytes) :=
           {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_bytes bytes];
@@ -1088,6 +1089,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
 
         (* NOTE: for now, this always returns False, since we do not provide the adversary with access to MMIO. In the future, this could just branch non-deterministically in the post. *)
         (* TODO: return `is_mmio`-chunk here once untrusted code gains access to MMIO *)
+
         Definition sep_contract_within_mmio (bytes : nat) : SepContractFunX (within_mmio bytes) :=
           {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "p" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
              sep_contract_localstore      := [term_var "paddr"];
@@ -1097,7 +1099,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                  ∗ asn_pmp_addr_access (term_var "entries") (term_var "p")
                  ∗ (∃ "t", asn_pmp_access (term_var "paddr") (term_val ty_xlenbits (Bitvector.bv.of_nat bytes)) (term_var "entries") (term_var "p") (term_var "t"));
              sep_contract_result          := "result_is_within";
-             sep_contract_postcondition   := term_var "result_is_within" = term_val ty.bool false
+             sep_contract_postcondition   := term_var "result_is_within" = (term_val ty.int (Z.of_nat bytes) =? term_val ty.int 0%Z)
                  ∗ cur_privilege ↦ term_var "p"
                  ∗ asn_pmp_entries (term_var "entries")
                  ∗ asn_pmp_addr_access (term_var "entries") (term_var "p")

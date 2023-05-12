@@ -241,7 +241,6 @@ Module RiscvPmpModel2.
       now iIntros "[%HFalse _]".
     Qed.
 
-
     Lemma within_mmio_sound (bytes : nat):
      ValidContractForeign (sep_contract_within_mmio bytes) (within_mmio bytes).
     Proof.
@@ -249,7 +248,7 @@ Module RiscvPmpModel2.
       iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])".
       iApply (wp_lift_atomic_step_no_fork); [auto | ].
       iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-      iPoseProof (interp_pmp_within_mmio_false with "Hpmpa") as "%Hnotmmio"; first eauto.
+      iPoseProof (interp_pmp_within_mmio_false with "Hpmpa") as "%Hnotmmio";  [|eauto|]; cycle 1.
       iSplitR; first auto.
       repeat iModIntro.
       iIntros. iModIntro.
