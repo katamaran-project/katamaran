@@ -321,52 +321,24 @@ Import RiscvPmp.PmpCheck.
     Proof.
       intros paddr rng res Hb Hrep.
       apply rep_end_then_start in Hrep as Hrepb.
-      assert (HrepS: (bv.bin paddr + 1 < bv.exp2 xlenbits)%N).
-      { enough (bv.bin paddr + 1 < bv.bin paddr + N.of_nat (S bytes))%N by lia.
-        apply N.add_lt_mono_l.
-        rewrite ?Nat2N.inj_succ.
-        rewrite bv.bin_of_nat_small in Hb; lia.
-      }
       destruct rng as [[lo hi]|]; subst; auto.
       intros [Hres|Hres]; subst; auto; intros H.
-      - unfold pmp_match_addr in *.
-        destruct (hi <ᵘ? lo) eqn:?; auto.
-        destruct (hi <=ᵘ? paddr) eqn:Ehipaddr.
-        + apply bv.uleb_ule in Ehipaddr.
-          apply bv.ule_add_r with (p := bv.one) in Ehipaddr; auto.
-          apply bv.uleb_ule in Ehipaddr.
-          rewrite Ehipaddr.
-          now rewrite orb_true_r.
-        + destruct (paddr + bv.of_nat (S bytes) <=ᵘ? lo) eqn:Epblo;
-            rewrite bv.of_nat_S in Epblo;
-            rewrite bv.add_assoc in Epblo;
-            rewrite Epblo.
-          * rewrite orb_true_l in H.
-            now rewrite orb_true_l.
-          * simpl in *.
-            destruct (lo <=ᵘ? paddr);
-              destruct (paddr + bv.of_nat (S bytes) <=ᵘ? hi); now auto.
-      - apply pmp_match_addr_match in H as (Hlohi & Hlopw & Hlop & Hphi & Hpwhi).
-        apply pmp_match_addr_match; auto.
+      - rewrite pmp_match_addr_nomatch in H.
+      destruct H as [|H]; [discriminate | eauto |..].
+      rewrite pmp_match_addr_nomatch; right; intros lo' hi' Hinv;
+      inversion Hinv; subst; auto.
+      specialize (H lo' hi' Hinv).
+      destruct H as [| [|]]; first auto.
+        + right; left. now rewrite bv.of_nat_S bv.add_assoc in H.
+        + right; right. unfold bv.ule in *. rewrite bv.bin_add_small bv_bin_one; lia.
+      - apply pmp_match_addr_match in H as (? & ? & ? & ? & ?).
+        rewrite pmp_match_addr_match.
+        (* TODO: create `zify` for bv to wrap this boilerplate *)
         unfold bv.ule, bv.ult in *.
-        repeat split; try lia.
-        now rewrite bv.of_nat_S bv.add_assoc in Hlopw.
-        rewrite bv.bin_add_small bv_bin_one; try lia.
-        rewrite bv.bin_add_small bv_bin_one.
-        rewrite bv.of_nat_S in Hpwhi.
-        rewrite ?bv.bin_add_small ?bv_bin_one in Hpwhi; try lia.
-        rewrite bv.bin_of_nat_small; lia.
-        rewrite <- bv_bin_one.
-        apply N.le_lt_trans with (m := (bv.bin paddr + N.of_nat (S bytes))%N).
-        apply N.add_le_mono_l.
-        rewrite bv.bin_of_nat_small; try lia.
-        rewrite bv.bin_one; try lia.
-        apply xlenbits_pos.
-        auto.
-        rewrite bv.bin_of_nat_small; try lia.
-        lia.
-        rewrite bv.of_nat_S in Hpwhi.
-        now rewrite bv.add_assoc in Hpwhi.
+        rewrite ->?@bv.bin_add_small in * |- *;
+        rewrite ->?@bv_bin_one in * |- *;
+        rewrite ->?@bv.bin_of_nat_small in * |- *; try lia.
+        rewrite bv.bin_add_small bv_bin_one; lia.
     Qed.
 
     Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr p cfg lo hi,
