@@ -26,6 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+Require Import stdpp.tactics.
 From Katamaran Require Import
      Base
      Bitvector
@@ -181,6 +182,148 @@ Module RiscvPmpIrisInstance <:
   End RiscvPmpIrisPredicates.
 
 Import RiscvPmp.PmpCheck.
+
+    Local Lemma bv_bin_one : bv.bin (@bv.one xlenbits) = 1%N.
+    Proof. by simpl. Qed.
+    Local Lemma bv_bin_zero : bv.bin (@bv.zero xlenbits) = 0%N.
+    Proof. by simpl. Qed.
+
+    (* Faster alternative to [set (H := v) in *] *)
+    (* https://github.com/coq/coq/issues/13788#issuecomment-767217670 *)
+    Ltac fast_set H v :=
+      pose v as H; change v with H;
+      repeat match goal with H' : context[v] |- _ => change v with H in H' end.
+
+    (* Replace term `v` with a fresh variable everywhere *)
+    (* Use this tactic once a spec for `v` has been introduced as a hypothesis *)
+    Ltac fast_set_fresh v :=
+      let fx := fresh "fx" in
+      fast_set fx v;
+      clearbody fx.
+    (* Use this version if an equality of the form `v = trm` is already present in the context after applying a spec. *)
+    Ltac fast_set_fresh_subst v :=
+      let fx := fresh "fx" in
+      fast_set fx v;
+      clearbody fx; subst fx.
+
+    Ltac solve_bv_cbn :=
+      cbn [bv.of_Z bv.unsigned bv.of_N bv.of_nat].
+
+    Ltac solve_bv_cbn_in_all :=
+      cbn [bv.of_Z bv.unsigned bv.of_N bv.of_nat] in *.
+
+    Ltac bv_zify_op_nonbranching_step :=
+        lazymatch goal with
+        (* Options *)
+        | |- @eq (option (bv _)) (Some _) (Some _) =>
+          f_equal
+        | H : @eq (option (bv _)) (Some _) (Some _) |- _ =>
+          apply some_inj in H
+        | |- @eq (option (bv _)) (Some _) None =>
+          exfalso
+        | |- @eq (option (bv _)) None (Some _) =>
+          exfalso
+        | H : @eq (option (bv _)) (Some _) None |- _ =>
+          discriminate H
+        | H : @eq (option (bv _)) None (Some _) |- _ =>
+          discriminate H
+        (* Unfolding *)
+        | |- context [ bv.ult _ _ ] =>
+            unfold bv.ult
+        | H : context [ bv.ult _ _ ] |- _ =>
+          unfold bv.ult in H
+        | |- context [ bv.ule _ _ ] =>
+          unfold bv.ule
+        | H : context [ bv.ule _ _ ] |- _ =>
+            unfold bv.ule in H
+        (* Non-branching specs *)
+        | |- context [ bv.bin (bv.one) ] =>
+          rewrite bv_bin_one (* TODO create spec Ltac for these? *)
+        | H : context [ bv.bin (bv.one) ] |- _ =>
+          rewrite bv_bin_one in H
+        | |- context [ bv.bin (bv.zero) ] =>
+          rewrite bv_bin_zero
+        | H : context [ bv.bin (bv.zero) ] |- _ =>
+          rewrite bv_bin_zero in H
+        end.
+
+    Ltac bv_zify_nonbranching_step :=
+      first [ progress solve_bv_cbn_in_all
+            | bv_zify_op_nonbranching_step ].
+
+    Ltac rename_or_learn H HTy :=
+        lazymatch goal with
+        | H' : HTy |- _ => rename H' into H
+        | _ => destruct (decide HTy) as [H|H] end.
+
+    Ltac bin_add_spec n x y :=
+      let HTy := constr:((bv.bin x + bv.bin y < bv.exp2 n)%N) in
+      (* Check if `HyT` has been assumed before? *)
+      let H := fresh "H" in
+      rename_or_learn H HTy;
+      [generalize (bv.bin_add_small H); intros ?; fast_set_fresh_subst (bv.bin (bv.add x y)) |
+        apply N.nlt_ge in H; fast_set_fresh (bv.bin (bv.add x y)) ..]. (* Note: second tactic is only run if we did not yet know `HTy`  *)
+
+    Ltac bin_of_nat_spec n x :=
+      let HTy := constr:((N.of_nat x < bv.exp2 n)%N) in
+      (* Check if `HyT` has been assumed before? *)
+      let H := fresh "H" in
+      rename_or_learn H HTy;
+      [generalize (bv.bin_of_nat_small H); intros ?; fast_set_fresh_subst (@bv.bin n (bv.of_nat x)) |
+      apply N.nlt_ge in H; fast_set_fresh (@bv.bin n (bv.of_nat x)) ..] (* Note: second tactic is only run if we did not yet know `HTy`  *).
+
+    Ltac bv_zify_op_branching_goal_step :=
+      lazymatch goal with
+      | |- context [ bv.bin (@bv.add ?n ?x ?y) ] =>
+          bin_add_spec n x y
+      | |- context [ bv.bin (@bv.of_nat ?n ?x) ] =>
+          bin_of_nat_spec n x
+      end.
+
+    Ltac bv_zify_op_branching_hyps_step :=
+      lazymatch goal with
+      | _ : context [ bv.bin (@bv.add ?n ?x ?y) ] |- _ =>
+          bin_add_spec n x y
+      | _ : context [ bv.bin (@bv.of_nat ?n ?x) ] |- _ =>
+          bin_of_nat_spec n x
+      end.
+
+    (* Getting rid of all mentions of bv's at the end, by introducing wf-constraints explicitly for lia *)
+    (* TODO: probably better to (also) generate this wf-spec earlier on -> This prevents duplication of goals along the way *)
+    Ltac bv_zify_ty_step_on f :=
+      generalize (bv.bv_is_wf f); intros ?;
+      fast_set_fresh (bv.bin f);
+      first [ clear f | revert dependent f ].
+
+    Ltac bv_zify_ty_step_var :=
+      lazymatch goal with
+      | f : bv _ |- _ => bv_zify_ty_step_on f
+      end.
+
+    Ltac bv_zify_ty_step_subterm :=
+      match goal with
+      | H : context [ ?x ] |- _ =>
+        lazymatch type of x with bv _ =>
+          let X := fresh in
+          set (X := x) in *;
+          bv_zify_ty_step_on X
+        end
+      end.
+
+    Ltac bv_zify_ty_step :=
+      first [ bv_zify_ty_step_var | bv_zify_ty_step_subterm ].
+
+    (* Naive, greedy procedure that converts everything to Z without simplifying bitvectors *)
+    Ltac bv_zify :=
+      intros; solve_bv_cbn;
+      repeat (first [ bv_zify_nonbranching_step
+                    | bv_zify_op_branching_goal_step
+                    | bv_zify_op_branching_hyps_step ]);
+      repeat bv_zify_ty_step; intros.
+
+    Tactic Notation "solve_bv" := bv_zify; lia.
+    Tactic Notation "solve_bv" "-" hyp_list(Hs) := clear Hs; solve_bv.
+    Tactic Notation "solve_bv" "+" hyp_list(Hs) := clear -Hs; solve_bv.
 
   Section RiscVPmpIrisInstanceProofs.
     Context `{sr : sailRegGS Σ} `{igs : invGS Σ} `{mG : mcMemGS Σ}.
@@ -444,22 +587,20 @@ Import RiscvPmp.PmpCheck.
       intros Hrep Hlkup Hacc.
       pose proof (bv.seqBv_width_at_least _ _ Hlkup) as [p' ->].
       apply bv.seqBv_spec in Hlkup; subst y.
-      apply (pmp_access_reduced_width (w := bv.of_nat (1%nat + k))) in Hacc.
-      - apply pmp_access_shift in Hacc; [auto | now rewrite bv_bin_one | lia ].
-      - rewrite bv.bin_of_nat_small; lia.
-      - apply bv.ult_nat_S_zero. lia.
-      - unfold bv.ule. rewrite !bv.bin_of_nat_small; lia.
+      apply (pmp_access_reduced_width (w := bv.of_nat (1%nat + k))) in Hacc; try solve_bv.
+      apply pmp_access_shift in Hacc; try solve_bv.
+      auto.
     Qed.
 
     Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
     Proof.
       rewrite all_addrs_eq.
       apply bv.in_seqBv'; unfold bv.ule, bv.ult.
-      - cbn. Lia.lia.
+      - cbn. lia.
       - pose proof (bv.bv_is_wf a) as Hwf.
         eapply N.lt_le_trans; [exact|].
-        rewrite bv.exp2_spec Nat2N.inj_pow.
-        Lia.lia.
+        rewrite Nat2N.inj_pow bv.exp2_spec .
+        lia.
     Qed.
 
     Local Lemma to_nat_mono (a b : N) : (a < b)%N → N.to_nat a < N.to_nat b.
