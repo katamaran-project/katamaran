@@ -337,19 +337,9 @@ Import RiscvPmp.PmpCheck.
         pmp_match_addr paddr bytes rng = PMP_Match ->
         pmp_match_addr paddr w rng = PMP_Match.
     Proof.
-      intros paddr rng Hass H0w Hw Hpmp.
-      apply bv.ule_cases in Hw as [Hw|Hw]; last by subst.
       destruct rng as [[lo hi]|]; last by simpl.
-      assert (Hb: bv.zero <ᵘ bytes).
-      apply bv.ult_trans with (y := w); auto.
-      apply pmp_match_addr_match in Hpmp as (Hlohi & Hlopw & Hlop & Hphi & Hpwhi); auto.
-      apply pmp_match_addr_match; auto.
-      repeat split; auto.
-      unfold bv.ult, bv.ule in *.
-      rewrite ?bv.bin_add_small; lia.
-      apply bv.ule_trans with (y := paddr + bytes); auto.
-      unfold bv.ult, bv.ule in *.
-      rewrite ?bv.bin_add_small; lia.
+      rewrite !pmp_match_addr_match.
+      solve_bv.
     Qed.
 
     Lemma pmp_match_addr_reduced_width_no_match (bytes w : Xlenbits) :
@@ -360,17 +350,10 @@ Import RiscvPmp.PmpCheck.
       pmp_match_addr paddr w rng = PMP_NoMatch.
     Proof.
       intros paddr [[lo hi]|] Hass Hle; last by simpl.
-      intros Hm; apply pmp_match_addr_nomatch in Hm as [Hm|Hcond];
-        try discriminate.
-      apply pmp_match_addr_nomatch.
-      right; intros.
-      inversion H.
-      subst.
-      destruct (Hcond _ _ H) as [|[|]]; auto.
-      right; left.
-      apply bv.ule_trans with (y := paddr + bytes); auto.
-      unfold bv.ule in *.
-      rewrite ?bv.bin_add_small; lia.
+      rewrite !pmp_match_addr_nomatch.
+      intros [|Hcond]; try discriminate. right. intros ? ? Hinv.
+      specialize (Hcond _ _ Hinv). inversion Hinv.
+      solve_bv.
     Qed.
 
     Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
@@ -449,12 +432,6 @@ Import RiscvPmp.PmpCheck.
         apply pmp_check_aux_access_reduced_width with (bytes := bytes); auto.
     Qed.
 
-    Local Lemma bv_bin_one : bv.bin (@bv.one xlenbits) = 1%N.
-    Proof. apply bv.bin_one, xlenbits_pos. Qed.
-    Local Lemma rep_end_then_start paddr bytes: (@bv.bin xlenbits paddr + N.of_nat (bytes) < bv.exp2 xlenbits)%N ->
-        (N.of_nat (bytes) < bv.exp2 xlenbits)%N.
-    Proof.  intro Hrep. lia. Qed.
-
     Lemma pmp_match_addr_addr_S_width_pred (bytes : nat) : forall paddr rng res,
         (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
@@ -463,25 +440,11 @@ Import RiscvPmp.PmpCheck.
         pmp_match_addr (paddr + bv.one) (bv.of_nat bytes) rng = res.
     Proof.
       intros paddr rng res Hb Hrep.
-      apply rep_end_then_start in Hrep as Hrepb.
       destruct rng as [[lo hi]|]; subst; auto.
-      intros [Hres|Hres]; subst; auto; intros H.
-      - rewrite pmp_match_addr_nomatch in H.
-      destruct H as [|H]; [discriminate | eauto |..].
-      rewrite pmp_match_addr_nomatch; right; intros lo' hi' Hinv;
-      inversion Hinv; subst; auto.
-      specialize (H lo' hi' Hinv).
-      destruct H as [| [|]]; first auto.
-        + right; left. now rewrite bv.of_nat_S bv.add_assoc in H.
-        + right; right. unfold bv.ule in *. rewrite bv.bin_add_small bv_bin_one; lia.
-      - apply pmp_match_addr_match in H as (? & ? & ? & ? & ?).
-        rewrite pmp_match_addr_match.
-        (* TODO: create `zify` for bv to wrap this boilerplate *)
-        unfold bv.ule, bv.ult in *.
-        rewrite ->?@bv.bin_add_small in * |- *;
-        rewrite ->?@bv_bin_one in * |- *;
-        rewrite ->?@bv.bin_of_nat_small in * |- *; try lia.
-        rewrite bv.bin_add_small bv_bin_one; lia.
+      intros [Hres|Hres]; subst.
+      - rewrite !pmp_match_addr_nomatch. intros [|Hcond]; first discriminate. right.
+        intros ? ? Hspec. specialize (Hcond _ _ Hspec). solve_bv.
+      - rewrite !pmp_match_addr_match. solve_bv.
     Qed.
 
     Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr p cfg lo hi,
@@ -560,13 +523,10 @@ Import RiscvPmp.PmpCheck.
       - rewrite bv.add_zero_r. rewrite Nat.add_0_r in Hacc. auto.
       - rewrite Nat.add_succ_r in Hacc,Hrep.
         rewrite Nat2N.inj_succ in Hrep.
-        apply pmp_access_addr_S_width_pred in Hacc.
-        * apply IHshift in Hacc.
+        apply pmp_access_addr_S_width_pred in Hacc; try solve_bv.
+        apply IHshift in Hacc.
           + rewrite bv.of_nat_S bv.add_assoc. apply Hacc.
-          + rewrite bv.bin_add_small; rewrite bv_bin_one; lia.
-        * eapply N.lt_le_trans; eauto.
-          rewrite !bv.bin_of_nat_small; lia.
-        * lia.
+          + solve_bv.
     Qed.
 
     Lemma pmp_access_shift (bytes shift: nat) paddr entries p acc:
