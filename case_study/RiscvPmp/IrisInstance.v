@@ -314,16 +314,49 @@ Import RiscvPmp.PmpCheck.
       first [ bv_zify_ty_step_var | bv_zify_ty_step_subterm ].
 
     (* Naive, greedy procedure that converts everything to Z without simplifying bitvectors *)
-    Ltac bv_zify :=
+    Ltac bv_zify_greedy :=
       intros; solve_bv_cbn;
       repeat (first [ bv_zify_nonbranching_step
                     | bv_zify_op_branching_goal_step
                     | bv_zify_op_branching_hyps_step ]);
       repeat bv_zify_ty_step; intros.
 
-    Tactic Notation "solve_bv" := bv_zify; lia.
-    Tactic Notation "solve_bv" "-" hyp_list(Hs) := clear Hs; solve_bv.
-    Tactic Notation "solve_bv" "+" hyp_list(Hs) := clear -Hs; solve_bv.
+    (* From a high-level perspective, [bv_zify] is equivalent to [bv_zify_greedy] followed by [lia].
+
+    However, this gets very slow when there are branching steps (anything that branches on small-ness) in the context (and some of those may not be relevant to prove the goal at hand), so the implementation is a bit more clever. Instead, we try to call [lia] as soon as possible to quickly terminate sub-goals than can be proved before the whole context gets translated. *)
+
+    Ltac bv_zify_op_goal_step :=
+      first [ bv_zify_nonbranching_step
+            | bv_zify_op_branching_goal_step ].
+
+    Ltac bv_zify_op_deepen :=
+      bv_zify_op_branching_hyps_step;
+      repeat bv_zify_nonbranching_step;
+      try (
+        bv_zify_op_branching_hyps_step;
+        repeat bv_zify_nonbranching_step
+      ).
+
+    Ltac bv_zify_close_proof :=
+      repeat bv_zify_ty_step; intros;
+      solve [ auto | lia | congruence ].
+
+    Ltac bv_zify :=
+      intros; solve_bv_cbn;
+      (* Branches on the goal are always forced: do all of these at once *)
+      repeat bv_zify_op_goal_step;
+      (* Are we done? *)
+      try bv_zify_close_proof;
+      (* Take <=2 branching steps at a time and try to finish the proof *)
+      repeat (
+        bv_zify_op_deepen;
+        try bv_zify_close_proof
+      );
+      bv_zify_close_proof.
+
+    Tactic Notation "solve_bv" := bv_zify.
+    Tactic Notation "solve_bv" "-" hyp_list(Hs) := clear Hs; bv_zify.
+    Tactic Notation "solve_bv" "+" hyp_list(Hs) := clear -Hs; bv_zify.
 
   Section RiscVPmpIrisInstanceProofs.
     Context `{sr : sailRegGS Σ} `{igs : invGS Σ} `{mG : mcMemGS Σ}.
@@ -548,8 +581,7 @@ Import RiscvPmp.PmpCheck.
       pose proof (bv.seqBv_width_at_least _ _ Hlkup) as [p' ->].
       apply bv.seqBv_spec in Hlkup; subst y.
       apply (pmp_access_reduced_width (w := bv.of_nat (1%nat + k))) in Hacc; try solve_bv.
-      apply pmp_access_shift in Hacc; try solve_bv.
-      auto.
+      apply pmp_access_shift in Hacc; solve_bv.
     Qed.
 
     Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
