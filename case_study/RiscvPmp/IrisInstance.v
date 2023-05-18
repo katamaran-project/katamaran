@@ -265,7 +265,7 @@ Import RiscvPmp.PmpCheck.
       [generalize (bv.bin_add_small H); intros ?; fast_set_fresh_subst (bv.bin (bv.add x y)) |
         apply N.nlt_ge in H; fast_set_fresh (bv.bin (bv.add x y)) ..]. (* Note: second tactic is only run if we did not yet know `HTy`  *)
 
-    (* TODO: more precise spec using trunc/shift possible, but might make it harder for `lia` to discharge some goals *)
+    (* TODO: more precise spec using `mod` possible, but might make it harder for `lia` to discharge some goals *)
     Ltac bin_of_nat_spec n x :=
       let HTy := constr:((N.of_nat x < bv.exp2 n)%N) in
       (* Check if `HyT` has been assumed before? *)
