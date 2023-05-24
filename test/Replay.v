@@ -1,5 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2019 Steven Keuchel                                          *)
+(* Copyright (c) 2022 Steven Keuchel, Dominique Devriese, Sander Huyghebaert  *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
