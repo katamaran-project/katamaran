@@ -428,8 +428,6 @@ Proof.
   firstorder.
 Qed.
 
-
-(* We can prove the contract for main valid *with* replay. *)
 Lemma symbolic_replay_valid_contract_main :
   VerificationCondition
     (postprocess
