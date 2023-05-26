@@ -21,7 +21,7 @@ Global Instance: Params (@envs_entails_cocontexts) 1 := {}.
 
 
 Declare Scope cocontexts_scope.
-Delimit Scope cocontexts_scope with env.
+(* Delimit Scope cocontexts_scope with env. *)
 Global Arguments Envs _ _%cocontexts_scope _%cocontexts_scope _.
 Global Arguments Enil {_}.
 Global Arguments Esnoc {_} _%cocontexts_scope _%string _%I.
@@ -60,9 +60,13 @@ Implicit Types A : envs PROP.
 Implicit Types P : PROP.
 
 Lemma envs_simple_replace_sound_2 Δ Δ' i p P Γ :
+  envs_wf Δ ->
   envs_lookup i Δ = Some (p,P) → envs_simple_replace i p Γ Δ = Some Δ' →
   (bi_intuitionistically_if p P -∗ (if p then □ [∧] Γ else [∗] Γ)) ⊢ (of_envs Δ' -∗ of_envs Δ).
-Proof. (* intros. by rewrite envs_lookup_sound// envs_simple_replace_sound'//. *)
+Proof. 
+  intros. 
+  rewrite <-(envs_lookup_sound_2 _ _ _ _ H H0).
+  (* rewrite envs_simple_replace_sound'//. *)
 Admitted.
 
 Lemma tac_and_codestruct Δ i p j1 j2 P P1 P2 Q :
@@ -205,14 +209,19 @@ Global Arguments from_pure_env {_} _ _%I _%type_scope {_}.
 Global Hint Mode FromPureEnv + - ! - : typeclass_instances.
 
 Global Instance from_pure_env_nil :
-  FromPureEnv false (Enil : env PROP) True.
-Admitted.
+  FromPureEnv true (Enil : env PROP) True.
+Proof.
+  now apply affinely_elim_emp.
+Qed.
 
 Global Instance from_pure_env_snoc {a} {Γ : env PROP} {Γt P Pt i} :
   forall `{! FromPureEnv a Γ Γt}
   `{! FromPure a P Pt},
     FromPureEnv a (Esnoc Γ i P) (Γt /\ Pt).
-Admitted.
+Proof.
+  intros HΓ HP.
+  now rewrite /FromPureEnv pure_and affinely_if_and persistent_and_sep_1 sep_comm HΓ HP.
+Qed.
 
 (** * Pure *)
 Lemma tac_pure_intro Δh (Δc : env PROP) φ c' :
@@ -251,13 +260,55 @@ Proof. intros H. induction H; simpl; apply _. Qed.
 
 Lemma tac_empty_cocontext_intro Δ {c} : AffineEnv (env_spatial Δ) → envs_entails_cocontexts Δ (Envs Enil Enil c).
 Proof. intros. rewrite envs_entails_cocontexts_eq.
-       rewrite (of_envs_eq (Envs Enil _ _)); cbn.
-       rewrite intuitionistically_True_emp.
-       rewrite emp_sep.
-       rewrite (affine (of_envs Δ)).
+       rewrite (affine (of_envs Δ)) of_envs_eq; cbn.
+       rewrite intuitionistically_True_emp emp_sep.
+       apply and_intro; try done.
+       apply pure_intro.
+       repeat constructor.
+Qed.
+
+Lemma tac_exist_codestruct {A : Type} Δh Δc i p j P (Φ : A → PROP) (name: ident_name) a :
+  envs_lookup i Δc = Some (p, P) → IntoExist P Φ name →
+  ( (* this let binding makes it easy for the tactic [iExistDestruct] to use
+       [name] (from resolving [IntoExist] in an earlier subgoal) within this
+       goal *)
+    let _ := name in
+     match envs_simple_replace i p (Esnoc Enil j (Φ a)) Δc with
+     | Some Δc' => envs_entails_cocontexts Δh Δc'
+     | None => False
+     end) →
+  envs_entails_cocontexts Δh Δc.
+Proof.
 Admitted.
 
 End tactics.
+
+(** Called by all tactics to perform computation to lookup items in the
+    context.  We avoid reducing anything user-visible here to make sure we
+    do not reduce e.g. before unification happens in [iApply].*)
+Declare Reduction pm_eval_cocontexts := cbv [
+  (* base *)
+  base.negb base.beq
+  base.Pos_succ base.ascii_beq base.string_beq base.positive_beq base.ident_beq
+  (* environments *)
+  env_lookup env_lookup_delete env_delete env_app env_replace
+  env_dom env_intuitionistic env_spatial env_counter env_spatial_is_nil envs_dom
+  envs_lookup envs_lookup_delete envs_delete envs_snoc envs_app
+  envs_simple_replace envs_replace envs_split
+  envs_clear_spatial envs_clear_intuitionistic envs_incr_counter
+  envs_split_go envs_split
+  env_to_prop_go env_to_prop env_to_prop_and_go env_to_prop_and
+  (* PM list and option functions *)
+  pm_app pm_option_bind pm_from_option pm_option_fun
+  denote_env_helper
+].
+Ltac pm_eval t :=
+  eval pm_eval_cocontexts in t.
+Ltac pm_reduce :=
+  (* Use [change_no_check] instead of [change] to avoid performing the
+  conversion check twice. *)
+  match goal with |- ?u => let v := pm_eval u in change_no_check v end.
+
 
 Tactic Notation "iAndCodestructCohyp" constr(H) "as" constr(H1) constr(H2) :=
   eapply tac_and_codestruct with H _ H1 H2 _ _ _;
@@ -354,7 +405,9 @@ Ltac iFrameCohyp Hh :=
     [pm_reflexivity ||
      let H := pretty_ident Hh in
      fail "iFrame:" Hh "not found"
-    |iSolveTC ||
+    |((* not sure why this is needed *)
+     try eauto using lookup_env_here, lookup_env_there;
+     iSolveTC) ||
      let P := match goal with |- LookupEnv _ ?P _ => P end in
      fail "iFrame: cannot frame" P
     |pm_reduce; iFrameFinish].
@@ -415,15 +468,26 @@ Tactic Notation "iPureIntroCohyp" constr(H) tactic(solver):=
     | pm_reduce |  solver ].
 
 Tactic Notation "iPureIntro" :=
-  iStartProof;
-  eapply tac_pure_intro;
-    [iSolveTC ||
-     let P := match goal with |- FromPureEnv _ ?P _ => P end in
-     match goal with |- ?H => idtac H end;
-     fail "iPureIntro:" P "not pure"
-    (* |pm_reduce; iSolveTC || *)
-    (*  fail "iPureIntro: spatial context contains non-affine hypotheses" *)
-    |].
+  iStopProof; iPureIntro.
+  (* iStartProof; *)
+  (* eapply tac_pure_intro; *)
+  (*   [iSolveTC || *)
+  (*    let P := match goal with |- FromPureEnv _ ?P _ => P end in *)
+  (*    match goal with |- ?H => idtac H end; *)
+  (*    fail "iPureIntro:" P "not pure" *)
+  (*   (* |pm_reduce; iSolveTC || *) *)
+  (*   (*  fail "iPureIntro: spatial context contains non-affine hypotheses" *) *)
+  (*   |]. *)
+
+Tactic Notation "iExistCodestruct" constr(H)
+    "as" open_constr(x) constr(Hx) :=
+  eapply tac_exist_codestruct with H _ Hx _ _ _ x; (* (i:=H) (j:=Hx) *)
+    [pm_reflexivity ||
+     let H := pretty_ident H in
+     fail "iExistDestruct:" H "not found"
+    |iSolveTC ||
+     let P := match goal with |- IntoExist ?P _ _ => P end in
+     fail "iExistDestruct: cannot destruct" P|]; pm_reduce.
 
 
 (** [pat0] is the unparsed pattern, and is only used in error messages *)
@@ -452,13 +516,12 @@ Ltac iCodestructCohypGo Hz pat0 pat :=
   (* [% ...] is always interpreted as an existential; there are [IntoExist]
   instances in place to handle conjunctions with a pure left-hand side this way
   as well. *)
-  (* | IList [[IPure IGallinaAnon; ?pat2]] => *)
-  (*    let x := ident_for_pat_default pat2 Hz in *)
-  (*    iExistDestruct Hz as ? x; iDestructHypGo x pat0 pat2 *)
+  | IList [[IPure IGallinaAnon; ?pat2]] =>
+     let x := ident_for_pat_default pat2 Hz in
+     iExistCodestruct Hz as _ x; iCodestructCohypGo x pat0 pat2
   (* | IList [[IPure (IGallinaNamed ?s); ?pat2]] => *)
-  (*    let x := fresh in *)
   (*    let y := ident_for_pat_default pat2 Hz in *)
-  (*    iExistDestruct Hz as x y; *)
+  (*    iExistCodestruct Hz as x y; *)
   (*    rename_by_string x s; *)
   (*    iDestructHypGo y pat0 pat2 *)
   | IList [[?pat1; ?pat2]] =>
@@ -520,7 +583,11 @@ Local Ltac iCodestructCohypFindPat Hgo pat found pats :=
   end.
 Tactic Notation "iCodestruct" constr(H) "as" constr(pat) :=
   let pats := intro_pat.parse pat in iCodestructCohypFindPat H pat false pats.
+Tactic Notation "iCodestruct" "as" constr(pat) :=
+  iCodestruct "Goal" as pat.
 
+Tactic Notation "iIntros" := (try iStopProof; iIntros [IAll]).
+Tactic Notation "iIntros" constr(pat) := (try iStopProof; pm_reduce; iIntros pat).
 
 (* Tactic Notation "iEmpIntroCohyp" := *)
 (*   iStartProof; *)
