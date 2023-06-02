@@ -4,18 +4,19 @@
 -arg "-w -notation-overridden"
 -Q case_study/MinimalCaps Katamaran.MinimalCaps
 case_study/MinimalCaps/Base.v
-case_study/MinimalCaps/Contracts.v
 case_study/MinimalCaps/Machine.v
+case_study/MinimalCaps/Contracts.v
 case_study/MinimalCaps/Model.v
 case_study/MinimalCaps/LoopVerification.v
 -Q case_study/RiscvPmp Katamaran.RiscvPmp
 case_study/RiscvPmp/Base.v
-case_study/RiscvPmp/Contracts.v
 case_study/RiscvPmp/Machine.v
-case_study/RiscvPmp/IrisModel.v
-case_study/RiscvPmp/IrisInstance.v
-case_study/RiscvPmp/Model.v
+case_study/RiscvPmp/PmpCheck.v
 case_study/RiscvPmp/Sig.v
+case_study/RiscvPmp/Contracts.v
+case_study/RiscvPmp/IrisInstance.v
+case_study/RiscvPmp/IrisModel.v
+case_study/RiscvPmp/Model.v
 case_study/RiscvPmp/LoopVerification.v
 case_study/RiscvPmp/BlockVer/Examples.v
 case_study/RiscvPmp/BlockVer/Spec.v

@@ -109,7 +109,7 @@ Import BlockVerificationDerived2.
     Definition pure_pmpAddrMatchType_to_bits : PmpAddrMatchType -> bv 4 :=
       fun mt => match mt with
                 | OFF => bv.zero
-                | TOR => bv.one _
+                | TOR => bv.one
                 end.
 
     Definition pure_pmpcfg_ent_to_bits : Pmpcfg_ent -> Val (ty.bvec byte) :=
@@ -130,8 +130,8 @@ Import BlockVerificationDerived2.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
     Definition femto_pmpcfg_ent1_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
     Definition femto_pmp0cfg_bits : Val (ty.bvec 32) := bv.zext (bv.app femto_pmpcfg_ent0_bits femto_pmpcfg_ent1_bits).
-    Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := bv.extract 0 12 femto_pmp0cfg_bits.
-    Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := bv.extract 12 20 femto_pmp0cfg_bits.
+    Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := bv.vector_subrange 0 12 femto_pmp0cfg_bits.
+    Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := bv.vector_subrange 12 20 femto_pmp0cfg_bits.
                                                                
     Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N 80); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
 
@@ -141,26 +141,26 @@ Import BlockVerificationDerived2.
       [
         UTYPE bv.zero ra RISCV_AUIPC
       ; ITYPE (bv.of_N 80) ra ra RISCV_ADDI
-      ; CSR MPMPADDR0 ra zero CSRRW
+      ; CSR MPMPADDR0 ra zero false CSRRW
       ; UTYPE (bv.of_N femto_address_max) ra RISCV_LUI
-      ; CSR MPMPADDR1 ra zero CSRRW
+      ; CSR MPMPADDR1 ra zero false CSRRW
       ; UTYPE femto_pmp0cfg_bits_2 ra RISCV_LUI
       ; ITYPE femto_pmp0cfg_bits_1 ra ra RISCV_ADDI
-      ; CSR MPMP0CFG ra zero CSRRW
+      ; CSR MPMP0CFG ra zero false CSRRW
       ; UTYPE bv.zero ra RISCV_AUIPC
       ; ITYPE (bv.of_N 32) ra ra RISCV_ADDI
-      ; CSR MTvec ra zero CSRRW
+      ; CSR MTvec ra zero false CSRRW
       ; ITYPE (bv.of_N 16) ra ra RISCV_ADDI
-      ; CSR MEpc ra zero CSRRW
+      ; CSR MEpc ra zero false CSRRW
       ; UTYPE femto_mstatus ra RISCV_LUI
-      ; CSR MStatus ra zero CSRRW
+      ; CSR MStatus ra zero false CSRRW
       ; MRET
       ].
 
     Example femtokernel_handler : list AST :=
       [
         UTYPE bv.zero ra RISCV_AUIPC
-      ; LOAD (bv.of_N 12) ra ra WORD
+      ; LOAD (bv.of_N 12) ra ra false WORD
       ; MRET
       ].
     Definition addPc (l : list AST) : list (nat * AST) :=
@@ -188,13 +188,7 @@ Import BlockVerificationDerived2.
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "v", mepc ↦ term_var "v") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
-      ((∃ "v", x1 ↦ term_var "v") ∗
-      (∃ "v", x2 ↦ term_var "v") ∗
-      (∃ "v", x3 ↦ term_var "v") ∗
-      (∃ "v", x4 ↦ term_var "v") ∗
-      (∃ "v", x5 ↦ term_var "v") ∗
-      (∃ "v", x6 ↦ term_var "v") ∗
-      (∃ "v", x7 ↦ term_var "v")) ∗
+      asn_regs_ptsto ∗
       (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
                                       (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])) ∗
       (term_var "a" + (term_val ty_xlenbits (bv.of_N 76)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
@@ -207,13 +201,7 @@ Import BlockVerificationDerived2.
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
-          ((∃ "v", x1 ↦ term_var "v") ∗
-          (∃ "v", x2 ↦ term_var "v") ∗
-          (∃ "v", x3 ↦ term_var "v") ∗
-          (∃ "v", x4 ↦ term_var "v") ∗
-          (∃ "v", x5 ↦ term_var "v") ∗
-          (∃ "v", x6 ↦ term_var "v") ∗
-          (∃ "v", x7 ↦ term_var "v")) ∗
+          asn_regs_ptsto ∗
           (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 80));
                                        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))])) ∗
           (term_var "a" + (term_val ty_xlenbits (bv.of_N 76)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
@@ -253,13 +241,7 @@ Import BlockVerificationDerived2.
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
-      ((∃ "v", x1 ↦ term_var "v") ∗
-      (∃ "v", x2 ↦ term_var "v") ∗
-      (∃ "v", x3 ↦ term_var "v") ∗
-      (∃ "v", x4 ↦ term_var "v") ∗
-      (∃ "v", x5 ↦ term_var "v") ∗
-      (∃ "v", x6 ↦ term_var "v") ∗
-      (∃ "v", x7 ↦ term_var "v")) ∗
+      asn_regs_ptsto ∗
       (asn_pmp_entries (term_list pmpcfg)) ∗
       (asn_pmp_addr_access (term_list pmpcfg) (term_val ty_privilege User)) ∗
       (term_var "a" + (term_val ty_xlenbits (bv.of_N 12)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
@@ -276,13 +258,7 @@ Import BlockVerificationDerived2.
                          (formula_relop bop.eq (term_var "an")
                                      (term_var "epc")))) ∗
           cur_privilege ↦ term_val ty_privilege User ∗
-          ((∃ "v", x1 ↦ term_var "v") ∗
-          (∃ "v", x2 ↦ term_var "v") ∗
-          (∃ "v", x3 ↦ term_var "v") ∗
-          (∃ "v", x4 ↦ term_var "v") ∗
-          (∃ "v", x5 ↦ term_var "v") ∗
-          (∃ "v", x6 ↦ term_var "v") ∗
-          (∃ "v", x7 ↦ term_var "v")) ∗
+          asn_regs_ptsto ∗
           (asn_pmp_entries (term_list pmpcfg)) ∗
           (asn_pmp_addr_access (term_list pmpcfg) (term_val ty_privilege User)) ∗
           (term_var "a" + (term_val ty_xlenbits (bv.of_N 12)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42)) ∗ ⊤
@@ -725,12 +701,12 @@ Import BlockVerificationDerived2.
     unfold interp_ptstomem.
     rewrite ?bv.appView_app.
     replace (@bv.of_Z xlenbits (0 + bv.unsigned a)%Z) with a by now rewrite bv.of_Z_unsigned.
-    replace (@bv.of_Z xlenbits (1 + bv.unsigned a)%Z) with (bv.add (bv.one _) a) by now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
-    replace (@bv.of_Z xlenbits (2 + bv.unsigned a)%Z) with (bv.add (bv.one word) (bv.add (bv.one word) a)).
-    replace (@bv.of_Z xlenbits (3 + bv.unsigned a)%Z) with (bv.add (bv.one word) (bv.add (bv.one word) (bv.add (bv.one word) a))).
+    replace (@bv.of_Z xlenbits (1 + bv.unsigned a)%Z) with (bv.add bv.one a) by now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+    replace (@bv.of_Z xlenbits (2 + bv.unsigned a)%Z) with (bv.add bv.one (bv.add bv.one a)).
+    replace (@bv.of_Z xlenbits (3 + bv.unsigned a)%Z) with (bv.add bv.one (bv.add bv.one (bv.add bv.one a))).
     now iFrame.
     rewrite ?bv.add_assoc.
-    change (bv.add _ (bv.one word)) with (@bv.of_Z xlenbits 3).
+    change (bv.add _ bv.one) with (@bv.of_Z xlenbits 3).
     now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
     rewrite ?bv.add_assoc.
     now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
@@ -855,7 +831,7 @@ Import BlockVerificationDerived2.
     iIntros (Σ' H).
     unfold own_regstore.
     cbn.
-    iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & _)".
+    iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
     rewrite γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc.
     iMod (femtokernel_splitMemory with "Hmem") as "(Hinit & Hhandler & #Hfortytwo & Hadv)";
       try assumption.
@@ -863,22 +839,11 @@ Import BlockVerificationDerived2.
     iSplitR "".
     - destruct (env.view δ).
       iApply femtokernel_init_safe.
-      iFrame "Hfortytwo Hpc Hcurpriv Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1 Hinit Hadv Hhandler".
-      iSplitL "Hmstatus". { now iExists _. }
-      iSplitL "Hmtvec". { now iExists _. }
-      iSplitL "Hmcause". { now iExists _. }
-      iSplitL "Hmepc". { now iExists _. }
-      iSplitL "Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7".
-      {rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
-       iSplitL "Hx1". { now iExists _. }
-       iSplitL "Hx2". { now iExists _. }
-       iSplitL "Hx3". { now iExists _. }
-       iSplitL "Hx4". { now iExists _. }
-       iSplitL "Hx5". { now iExists _. }
-       iSplitL "Hx6". { now iExists _. }
-       now iExists _.
-      }
-      now iExists _.
+      repeat iDestruct "H'" as "(? & H')"; iFrame.
+      rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
+      repeat (iRename select (_ ↦ _)%I into "Hp";
+              iPoseProof (bi.exist_intro with "Hp") as "?").
+      now iFrame.
     - iIntros "Hmem".
       unfold interp_ptstomem_readonly.
       iInv "Hfortytwo" as ">Hptsto" "_".

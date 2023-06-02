@@ -74,6 +74,10 @@ Module RiscvNotations.
   Notation "'rng'"          := "rng" : string_scope.
   Notation "'bv'"           := "bv" : string_scope.
   Notation "'width'"        := "width" : string_scope.
+  Notation "'is_unsigned'"  := "is_unsigned" : string_scope.
+  Notation "'is_imm'"       := "is_imm" : string_scope.
+  Notation "'isWrite'"      := "isWrite" : string_scope.
+  Notation "'new_val'"      := "new_val" : string_scope.
   Notation "'e'"            := "e" : string_scope.
   Notation "'ctl'"          := "ctl" : string_scope.
   Notation "'c'"            := "c" : string_scope.
@@ -150,7 +154,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Inductive Fun : PCtx -> Ty -> Set :=
   | rX                    : Fun [rs ∷ ty_regno] ty_xlenbits
   | wX                    : Fun [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit
-  | extend_value (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes)
+  | bool_to_bits          : Fun ["x" :: ty.bool] (ty.bvec 1)
+  | shift_right_arith32   : Fun [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32)
+  | extend_value (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes)
   | get_arch_pc           : Fun ctx.nil ty_xlenbits
   | get_next_pc           : Fun ctx.nil ty_xlenbits
   | set_next_pc           : Fun [addr ∷ ty_xlenbits] ty.unit
@@ -173,7 +179,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
   | pmpAddrRange          : Fun [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range
   | pmpMatchAddr          : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch
-  | process_load (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result bytes] ty_retired
+  | process_load (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result bytes; is_unsigned :: ty.bool] ty_retired
   | mem_write_value (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1)
   | main                  : Fun ctx.nil ty.unit
   | init_model            : Fun ctx.nil ty.unit
@@ -206,18 +212,22 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_BTYPE         : Fun [imm ∷ ty.bvec 13; rs2 ∷ ty_regno; rs1 ∷ ty_regno; op ∷ ty_bop] ty_retired
   | execute_RISCV_JAL     : Fun [imm ∷ ty.bvec 21; rd ∷ ty_regno] ty_retired
   | execute_RISCV_JALR    : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired
-  | execute_LOAD          : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; width :: ty_word_width] ty_retired
+  | execute_LOAD          : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; is_unsigned :: ty.bool; width :: ty_word_width] ty_retired
   | execute_STORE         : Fun [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired
   | execute_ECALL         : Fun ctx.nil ty_retired
+  | execute_EBREAK        : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
-  | execute_CSR           : Fun [csr ∷ ty_csridx; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_csrop] ty_retired
+  | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
-  | read_ram (bytes : nat) : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
-  | write_ram (bytes : nat) : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
-  | decode               : FunX [bv ∷ ty_word] ty_ast
+  | read_ram (bytes : nat)                                        : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
+  | write_ram (bytes : nat)                                       : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
+  | decode                                                        : FunX [bv ∷ ty_word] ty_ast
+  | vector_subrange {n : nat} (e' b : nat) {p : IsTrue (0 <=? b)%nat}
+      {q : IsTrue (b <=? e')%nat} {r : IsTrue (e' <? n)%nat}      : FunX [bv :: ty.bvec n] (ty.bvec (e' - b + 1))
   .
+  #[global] Arguments vector_subrange {n} e' b {p q r}.
 
   Inductive Lem : PCtx -> Set :=
   | open_gprs                       : Lem ctx.nil
@@ -303,6 +313,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'idx'"          := (@exp_var _ "idx" _ _) : exp_scope.
     Notation "'locked'"       := (@exp_var _ "locked" _ _) : exp_scope.
     Notation "'width'"        := (@exp_var _ "width" _ _) : exp_scope.
+    Notation "'is_unsigned'"  := (@exp_var _ "is_unsigned" _ _) : exp_scope.
+    Notation "'is_imm'"       := (@exp_var _ "is_imm" _ _) : exp_scope.
+    Notation "'isWrite'"      := (@exp_var _ "isWrite" _ _) : exp_scope.
+    Notation "'new_val'"      := (@exp_var _ "new_val" _ _) : exp_scope.
 
     Notation "'Read'" := (exp_union access_type KRead (exp_val ty.unit tt)) : exp_scope.
     Notation "'Write'" := (exp_union access_type KWrite (exp_val ty.unit tt)) : exp_scope.
@@ -402,37 +416,98 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Import Bitvector.bv.notations.
   Definition fun_rX : Stm [rs ∷ ty_regno] ty_xlenbits :=
     use lemma open_gprs ;;
-    let: v := match: rs in bvec 3 with
-              | 000 => exp_val ty_xlenbits [bv 0]
-              | 001 => stm_read_register x1
-              | 010 => stm_read_register x2
-              | 011 => stm_read_register x3
-              | 100 => stm_read_register x4
-              | 101 => stm_read_register x5
-              | 110 => stm_read_register x6
-              | 111 => stm_read_register x7
+    let: v := match: rs in bvec 5 with
+              | 00000 => exp_val ty_xlenbits [bv 0]
+              | 00001 => stm_read_register x1
+              | 00010 => stm_read_register x2
+              | 00011 => stm_read_register x3
+              | 00100 => stm_read_register x4
+              | 00101 => stm_read_register x5
+              | 00110 => stm_read_register x6
+              | 00111 => stm_read_register x7
+              | 01000 => stm_read_register x8
+              | 01001 => stm_read_register x9
+              | 01010 => stm_read_register x10
+              | 01011 => stm_read_register x11
+              | 01100 => stm_read_register x12
+              | 01101 => stm_read_register x13
+              | 01110 => stm_read_register x14
+              | 01111 => stm_read_register x15
+              | 10000 => stm_read_register x16
+              | 10001 => stm_read_register x17
+              | 10010 => stm_read_register x18
+              | 10011 => stm_read_register x19
+              | 10100 => stm_read_register x20
+              | 10101 => stm_read_register x21
+              | 10110 => stm_read_register x22
+              | 10111 => stm_read_register x23
+              | 11000 => stm_read_register x24
+              | 11001 => stm_read_register x25
+              | 11010 => stm_read_register x26
+              | 11011 => stm_read_register x27
+              | 11100 => stm_read_register x28
+              | 11101 => stm_read_register x29
+              | 11110 => stm_read_register x30
+              | 11111 => stm_read_register x31
               end in
     use lemma close_gprs ;;
     v.
 
   Definition fun_wX : Stm [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit :=
     use lemma open_gprs ;;
-    match: rd in bvec 3 with
-    | 000 => exp_val ty_xlenbits [bv 0]
-    | 001 => stm_write_register x1 v
-    | 010 => stm_write_register x2 v
-    | 011 => stm_write_register x3 v
-    | 100 => stm_write_register x4 v
-    | 101 => stm_write_register x5 v
-    | 110 => stm_write_register x6 v
-    | 111 => stm_write_register x7 v
+    match: rd in bvec 5 with
+    | 00000 => exp_val ty_xlenbits [bv 0]
+    | 00001 => stm_write_register x1 v
+    | 00010 => stm_write_register x2 v
+    | 00011 => stm_write_register x3 v
+    | 00100 => stm_write_register x4 v
+    | 00101 => stm_write_register x5 v
+    | 00110 => stm_write_register x6 v
+    | 00111 => stm_write_register x7 v
+    | 01000 => stm_write_register x8 v
+    | 01001 => stm_write_register x9 v
+    | 01010 => stm_write_register x10 v
+    | 01011 => stm_write_register x11 v
+    | 01100 => stm_write_register x12 v
+    | 01101 => stm_write_register x13 v
+    | 01110 => stm_write_register x14 v
+    | 01111 => stm_write_register x15 v
+    | 10000 => stm_write_register x16 v
+    | 10001 => stm_write_register x17 v
+    | 10010 => stm_write_register x18 v
+    | 10011 => stm_write_register x19 v
+    | 10100 => stm_write_register x20 v
+    | 10101 => stm_write_register x21 v
+    | 10110 => stm_write_register x22 v
+    | 10111 => stm_write_register x23 v
+    | 11000 => stm_write_register x24 v
+    | 11001 => stm_write_register x25 v
+    | 11010 => stm_write_register x26 v
+    | 11011 => stm_write_register x27 v
+    | 11100 => stm_write_register x28 v
+    | 11101 => stm_write_register x29 v
+    | 11110 => stm_write_register x30 v
+    | 11111 => stm_write_register x31 v
     end ;;
     use lemma close_gprs.
 
-  Definition fun_extend_value (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes) :=
+  Definition fun_bool_to_bits : Stm ["x" :: ty.bool] (ty.bvec 1) :=
+    if: exp_var "x"
+    then exp_val (ty.bvec 1) Bitvector.bv.one
+    else exp_val (ty.bvec 1) Bitvector.bv.zero.
+
+  Definition fun_shift_right_arith32 : Stm [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32) :=
+    let: "v64" :: ty.bvec 64 := exp_sext v in
+    let: tmp := exp_binop bop.shiftr (exp_var "v64") (exp_var "shift") in
+    stm_foreign (vector_subrange 31 0) [tmp].
+
+  Definition fun_extend_value (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes) :=
     match: value in union (memory_op_result bytes) with
     |> KMemValue (pat_var "result") =>
-      stm_exp (exp_union (memory_op_result xlenbytes) KMemValue (@exp_zext _ (bytes * byte) (xlenbytes * byte) result _))
+      let: tmp := if: is_unsigned
+                  then @exp_zext _ (bytes * byte) (xlenbytes * byte) result _
+                  else @exp_sext _ (bytes * byte) (xlenbytes * byte) result _ in
+      stm_exp (exp_union (memory_op_result xlenbytes) KMemValue tmp)
     |> KMemException (pat_var "e")  =>
       stm_exp (exp_union (memory_op_result xlenbytes) KMemException (exp_var "e"))
     end.
@@ -517,11 +592,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     if: exp_int (Z.of_nat n) = exp_int 0%Z
     then
       let: tmp  := stm_read_register pmp0cfg in
-      let: tmp1 := exp_extract 0 8 value in
+      let: tmp1 := stm_foreign (vector_subrange 7 0) [value] in
       let: tmp2 := call pmpWriteCfg tmp tmp1 in
       stm_write_register pmp0cfg tmp2 ;;
       let: tmp  := stm_read_register pmp1cfg in
-      let: tmp1 := exp_extract 8 8 value in
+      let: tmp1 := stm_foreign (vector_subrange 15 8) [value] in
       let: tmp2 := call pmpWriteCfg tmp tmp1 in
       stm_write_register pmp1cfg tmp2 ;;
       stm_val ty.unit tt
@@ -632,8 +707,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | inr v => exp_val ty_pmpaddrmatch PMP_NoMatch
     end.
 
-  Definition fun_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ (ty_memory_op_result bytes)] ty_retired :=
-    let: tmp := stm_call (@extend_value _ pr) [value] in
+  Definition fun_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ (ty_memory_op_result bytes); is_unsigned :: ty.bool] ty_retired :=
+    let: tmp := stm_call (@extend_value _ pr) [is_unsigned; value] in
     match: tmp in union (memory_op_result xlenbytes) with
     |> KMemValue (pat_var "result") =>
         call wX rd result ;;
@@ -906,18 +981,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
            function clauses of execute (a scattered definition) *)
   Definition fun_execute : Stm ["ast" ∷ ty_ast] ty_retired :=
     match: exp_var "ast" in union ast with
-    |> KRTYPE (pat_tuple (rs2 , rs1 , rd , op))      => call execute_RTYPE rs2 rs1 rd op
-    |> KITYPE (pat_tuple (imm , rs1 , rd , op))      => call execute_ITYPE imm rs1 rd op
-    |> KSHIFTIOP (pat_tuple (shamt , rs1 , rd , op)) => call execute_SHIFTIOP shamt rs1 rd op
-    |> KUTYPE (pat_tuple (imm , rd , op))            => call execute_UTYPE imm rd op
-    |> KBTYPE (pat_tuple (imm , rs2, rs1 , op))      => call execute_BTYPE imm rs2 rs1 op
-    |> KRISCV_JAL (pat_tuple (imm , rd))             => call execute_RISCV_JAL imm rd
-    |> KRISCV_JALR (pat_tuple (imm , rs1 , rd))      => call execute_RISCV_JALR imm rs1 rd
-    |> KLOAD (pat_tuple (imm , rs1, rd , w))         => call execute_LOAD imm rs1 rd w
-    |> KSTORE (pat_tuple (imm , rs2 , rs1 , w))      => call execute_STORE imm rs2 rs1 w
-    |> KECALL pat_unit                               => call execute_ECALL
-    |> KMRET pat_unit                                => call execute_MRET
-    |> KCSR (pat_tuple (csr , rs1 , rd , op))        => call execute_CSR csr rs1 rd op
+    |> KRTYPE (pat_tuple (rs2 , rs1 , rd , op))            => call execute_RTYPE rs2 rs1 rd op
+    |> KITYPE (pat_tuple (imm , rs1 , rd , op))            => call execute_ITYPE imm rs1 rd op
+    |> KSHIFTIOP (pat_tuple (shamt , rs1 , rd , op))       => call execute_SHIFTIOP shamt rs1 rd op
+    |> KUTYPE (pat_tuple (imm , rd , op))                  => call execute_UTYPE imm rd op
+    |> KBTYPE (pat_tuple (imm , rs2, rs1 , op))            => call execute_BTYPE imm rs2 rs1 op
+    |> KRISCV_JAL (pat_tuple (imm , rd))                   => call execute_RISCV_JAL imm rd
+    |> KRISCV_JALR (pat_tuple (imm , rs1 , rd))            => call execute_RISCV_JALR imm rs1 rd
+    |> KLOAD (pat_tuple (imm , rs1, rd , is_unsigned , w)) => call execute_LOAD imm rs1 rd is_unsigned w
+    |> KSTORE (pat_tuple (imm , rs2 , rs1 , w))            => call execute_STORE imm rs2 rs1 w
+    |> KECALL pat_unit                                     => call execute_ECALL
+    |> KEBREAK pat_unit                                    => call execute_EBREAK
+    |> KMRET pat_unit                                      => call execute_MRET
+    |> KCSR (pat_tuple (csr , rs1 , rd , is_imm , op))     => call execute_CSR csr rs1 rd is_imm op
     end.
 
   Definition fun_execute_RTYPE : Stm [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired :=
@@ -925,8 +1001,23 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: rs2_val := call rX rs2 in
     let: result :=
        match: op in rop with
-       | RISCV_ADD => rs1_val +ᵇ rs2_val
-       | RISCV_SUB => rs1_val -ᵇ rs2_val
+       | RISCV_ADD  => rs1_val +ᵇ rs2_val
+       | RISCV_SLT  => let: tmp := rs1_val <ˢ rs2_val in
+                       let: tmp := call bool_to_bits tmp in
+                       exp_zext tmp
+       | RISCV_SLTU => let: tmp := rs1_val <ᵘ rs2_val in
+                       let: tmp := call bool_to_bits tmp in
+                       exp_zext tmp
+       | RISCV_AND  => exp_binop bop.bvand rs1_val rs2_val
+       | RISCV_OR   => exp_binop bop.bvor  rs1_val rs2_val
+       | RISCV_XOR  => exp_binop bop.bvxor rs1_val rs2_val
+       | RISCV_SLL  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
+                       exp_binop bop.shiftl rs1_val tmp
+       | RISCV_SRL  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
+                       exp_binop bop.shiftr rs1_val tmp
+       | RISCV_SUB  => rs1_val -ᵇ rs2_val
+       | RISCV_SRA  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
+                       call shift_right_arith32 rs1_val tmp
        end in
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
@@ -936,7 +1027,16 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: immext ∷ ty_xlenbits := exp_sext imm in
     let: result :=
        match: op in iop with
-       | RISCV_ADDI => rs1_val +ᵇ immext
+       | RISCV_ADDI  => rs1_val +ᵇ immext
+       | RISCV_SLTI  => let: tmp := rs1_val <ˢ immext in
+                        let: tmp := call bool_to_bits tmp in
+                        exp_zext tmp
+       | RISCV_SLTIU => let: tmp := rs1_val <ᵘ immext in
+                        let: tmp := call bool_to_bits tmp in
+                        exp_zext tmp
+       | RISCV_ANDI  => exp_binop bop.bvand rs1_val immext
+       | RISCV_ORI   => exp_binop bop.bvor  rs1_val immext
+       | RISCV_XORI  => exp_binop bop.bvxor rs1_val immext
        end in
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
@@ -945,14 +1045,18 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: rs1_val := call rX rs1 in
     let: result :=
       match: op in sop with
-      | RISCV_SLRI => let: tmp := exp_extract 0 5 shamt in
+      | RISCV_SLLI => let: tmp := stm_foreign (vector_subrange 4 0) [shamt] in
+                      exp_binop bop.shiftl rs1_val tmp
+      | RISCV_SRLI => let: tmp := stm_foreign (vector_subrange 4 0) [shamt] in
                       exp_binop bop.shiftr rs1_val tmp
+      | RISCV_SRAI => let: tmp := stm_foreign (vector_subrange 4 0) [shamt] in
+                      call shift_right_arith32 rs1_val tmp
       end in
     call wX rd result ;;
     stm_val ty_retired RETIRE_SUCCESS.
 
-  Import Vector.VectorNotations.
   Definition fun_execute_UTYPE : Stm [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired :=
+    (* NOTE: the sign extension only makes sense to support GPRs wider than 32 bits (i.e., 64-bit risc-v needs the sign extension) *)
     let: off ∷ ty_xlenbits := exp_sext (exp_binop bop.bvapp (exp_val (ty.bvec 12) Bitvector.bv.zero) imm) in
     let: ret :=
        match: op in uop with
@@ -1001,7 +1105,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     else
       stm_val ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_LOAD : Stm [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; width :: ty_word_width] ty_retired :=
+  Definition fun_execute_LOAD : Stm [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; is_unsigned :: ty.bool; width :: ty_word_width] ty_retired :=
     let: offset ∷ ty_xlenbits := exp_sext imm in
     let: tmp := call rX rs1 in
     let: paddr := tmp +ᵇ offset in
@@ -1009,13 +1113,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     match: width in wordwidth with
     | BYTE =>
         let: tmp := stm_call (@mem_read 1 restrict_bytes_one) [tmp1; paddr] in
-        stm_call (@process_load 1 _) [rd; paddr; tmp]
+        stm_call (@process_load 1 _) [rd; paddr; tmp; is_unsigned]
     | HALF =>
         let: tmp := stm_call (@mem_read 2 restrict_bytes_two) [tmp1; paddr] in
-        stm_call (@process_load 2 _) [rd; paddr; tmp]
+        stm_call (@process_load 2 _) [rd; paddr; tmp; is_unsigned]
     | WORD =>
         let: tmp := stm_call (@mem_read 4 restrict_bytes_four) [tmp1; paddr] in
-        stm_call (@process_load 4 _) [rd; paddr; tmp]
+        stm_call (@process_load 4 _) [rd; paddr; tmp; is_unsigned]
     end.
 
    Definition fun_execute_STORE : Stm [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired :=
@@ -1052,6 +1156,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call set_next_pc tmp3 ;;
     stm_val ty_retired RETIRE_FAIL.
 
+  (* NOTE: we implement a custom EBREAK instruction for BlockVerifier debugging purposes *)
+  Definition fun_execute_EBREAK : Stm ctx.nil ty_retired :=
+    stm_debugk (stm_val ty_retired RETIRE_FAIL).
+
   Definition fun_execute_MRET : Stm ctx.nil ty_retired :=
     let: tmp1 := stm_read_register cur_privilege in
     match: tmp1 in privilege with
@@ -1065,15 +1173,30 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       stm_val ty_retired RETIRE_FAIL
     end.
 
-  Definition fun_execute_CSR : Stm [csr ∷ ty_csridx; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_csrop] ty_retired :=
-    let: rs1_val := call rX rs1 in
+  Definition fun_execute_CSR : Stm [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired :=
+    let: rs1_val := if: is_imm
+                    then exp_zext rs1
+                    else call rX rs1 in
+    let: isWrite := match: op in csrop with
+                    | CSRRW => exp_val ty.bool true
+                    | _     => if: is_imm
+                               then exp_unsigned rs1_val != exp_val ty.int 0%Z
+                               else exp_unsigned rs1 != exp_val ty.int 0%Z
+                    end in
     let: tmp1 := stm_read_register cur_privilege in
     let: tmp2 := call check_CSR csr tmp1 in
     if: tmp2 (* then and else branch switched, Sail model uses a not here *)
     then
       (use lemma open_pmp_entries ;;
        let: csr_val := call readCSR csr in
-       call writeCSR csr rs1_val ;;
+       (if: isWrite
+        then let: new_val := match: op in csrop with
+                             | CSRRW => rs1_val
+                             | CSRRS => exp_binop bop.bvor csr_val rs1_val
+                             | CSRRC => exp_binop bop.bvand csr_val (exp_negate rs1_val)
+                             end in
+                 call writeCSR csr rs1_val
+        else stm_val ty.unit tt) ;;
        use lemma close_pmp_entries ;;
        call wX rd csr_val ;;
        stm_val ty_retired RETIRE_SUCCESS)
@@ -1094,7 +1217,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Val (ty_bytes data_size) :=
     match data_size with
     | O   => bv.zero
-    | S n => bv.app (μ addr) (fun_read_ram μ n (bv.one _ + addr))
+    | S n => bv.app (μ addr) (fun_read_ram μ n (bv.one + addr))
     end.
 
   (* Small test to show that read_ram reads bitvectors in little
@@ -1120,11 +1243,33 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                let (byte,bytes) := bv.appView 8 (n * 8) data in
                fun_write_ram
                  (write_byte μ addr byte)
-                 (bv.one xlenbits + addr)
+                 (bv.one + addr)
                  bytes
     end.
   #[global] Arguments fun_write_ram : clear implicits.
 
+  Lemma convert_foreign_vector_subrange_conditions {n e b : nat} :
+    IsTrue (0 <=? b)%nat -> IsTrue (b <=? e)%nat -> IsTrue (e <? n)%nat ->
+    IsTrue (b + (e - b + 1) <=? n)%nat.
+  Proof.
+    intros;
+      repeat match goal with
+        | |- IsTrue (?x <=? ?y)%nat =>
+            destruct (Nat.leb_spec x y)
+        | H: IsTrue (?x <=? ?y)%nat |- _ =>
+            destruct (Nat.leb_spec x y)
+        | H: IsTrue (?x <? ?y)%nat |- _ =>
+            destruct (Nat.ltb_spec x y)
+        end;
+      auto;
+      lia.
+  Qed.
+
+  #[program] Definition fun_vector_subrange {n} (data : Val (ty.bvec n)) (e b : nat) {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} : Val (ty.bvec (e - b + 1)) :=
+    @bv.vector_subrange _ b (e - b + 1) _ data.
+  Next Obligation. intros; by apply convert_foreign_vector_subrange_conditions. Defined.
+  #[global] Arguments fun_vector_subrange {n} _ _ _ {_ _ _}.
+    
   #[derive(equations=no)]
   Equations ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
     ForeignCall (read_ram width) [addr] res γ γ' μ μ' :=
@@ -1132,7 +1277,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     ForeignCall (write_ram width) [addr; data] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , @fun_write_ram μ width addr data , inr true);
     ForeignCall decode [code] res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_decode code).
+        (γ' , μ' , res) = (γ , μ , pure_decode code);
+    ForeignCall (vector_subrange e b) [data] res γ γ' μ μ' :=
+        (γ' , μ' , res) = (γ , μ , inr (fun_vector_subrange data e b)).
 
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
@@ -1143,6 +1290,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     match f with
     | rX                      => fun_rX
     | wX                      => fun_wX
+    | bool_to_bits            => fun_bool_to_bits
+    | shift_right_arith32     => fun_shift_right_arith32
     | @extend_value _ p       => @fun_extend_value _ p
     | get_arch_pc             => fun_get_arch_pc
     | get_next_pc             => fun_get_next_pc
@@ -1202,6 +1351,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | execute_LOAD            => fun_execute_LOAD
     | execute_STORE           => fun_execute_STORE
     | execute_ECALL           => fun_execute_ECALL
+    | execute_EBREAK          => fun_execute_EBREAK
     | execute_MRET            => fun_execute_MRET
     | execute_CSR             => fun_execute_CSR
     end.

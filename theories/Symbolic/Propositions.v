@@ -663,6 +663,12 @@ Module Type SymPropOn
       subrelation (sequiv Σ) (Basics.flip (simpl Σ)).
     Proof. intros x y xy ι. apply xy. Qed.
 
+    #[export] Instance proper_safe {Σ} : Proper (sequiv Σ ==> eq ==> Basics.impl) safe.
+    Proof.
+      unfold Proper, sequiv, respectful, Basics.impl.
+      intros p q pq ι ? <-. apply pq.
+    Qed.
+
     #[export] Instance proper_angelic_close0 {Σ Σe} : Proper (sequiv (Σ ▻▻ Σe) ==> sequiv Σ) (angelic_close0 Σe).
     Proof. intros p q pq ι. rewrite ?safe_angelic_close0. now apply base.exist_proper. Qed.
 
@@ -1678,7 +1684,8 @@ Module Type SymPropOn
     | eterm_get_slice_int {n} (e : ETerm ty.int) : ETerm (ty.bvec n)
     | eterm_unsigned {n} (e : ETerm (ty.bvec n)) : ETerm ty.int
     | eterm_truncate {n} (m : nat) {p : IsTrue (m <=? n)} (e: ETerm (ty.bvec n)) : ETerm (ty.bvec m)
-    | eterm_extract {n} (s l : nat) (e : ETerm (ty.bvec n)) : ETerm (ty.bvec l)
+    | eterm_vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} (e : ETerm (ty.bvec n)) : ETerm (ty.bvec l)
+    | eterm_negate  {n} (e : ETerm (ty.bvec n)) : ETerm (ty.bvec n)
     | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs)
     | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U)
     | eterm_record  (R : recordi) (ts : NamedEnv ETerm (recordf_ty R)) : ETerm (ty.record R).
@@ -1725,22 +1732,23 @@ Module Type SymPropOn
     Definition erase_term {Σ} : forall {σ} (t : Term Σ σ), ETerm σ :=
       fix erase {σ} t :=
         match t with
-        | @term_var _ ℓ σ ℓIn => eterm_var ℓ σ (ctx.in_at ℓIn)
-        | term_val σ v => eterm_val σ v
-        | term_binop op t1 t2 => eterm_binop op (erase t1) (erase t2)
-        | term_neg t => eterm_neg (erase t)
-        | term_not t => eterm_not (erase t)
-        | term_inl t => eterm_inl (erase t)
-        | term_inr t => eterm_inr (erase t)
-        | term_sext t => eterm_sext (erase t)
-        | term_zext t => eterm_zext (erase t)
-        | term_get_slice_int t => eterm_get_slice_int (erase t)
-        | term_unsigned t => eterm_unsigned (erase t)
-        | term_truncate m t => eterm_truncate m (erase t)
-        | term_extract s l t => eterm_extract s l (erase t)
-        | term_tuple ts => eterm_tuple (env.map (fun _ => erase) ts)
-        | term_union U K t => eterm_union K (erase t)
-        | term_record R ts => eterm_record R (env.map (fun _ => erase) ts)
+        | @term_var _ ℓ σ ℓIn         => eterm_var ℓ σ (ctx.in_at ℓIn)
+        | term_val σ v               => eterm_val σ v
+        | term_binop op t1 t2        => eterm_binop op (erase t1) (erase t2)
+        | term_neg t                 => eterm_neg (erase t)
+        | term_not t                 => eterm_not (erase t)
+        | term_inl t                 => eterm_inl (erase t)
+        | term_inr t                 => eterm_inr (erase t)
+        | term_sext t                => eterm_sext (erase t)
+        | term_zext t                => eterm_zext (erase t)
+        | term_get_slice_int t       => eterm_get_slice_int (erase t)
+        | term_unsigned t            => eterm_unsigned (erase t)
+        | term_truncate m t          => eterm_truncate m (erase t)
+        | term_vector_subrange s l t => eterm_vector_subrange s l (erase t)
+        | term_negate t              => eterm_negate (erase t)
+        | term_tuple ts              => eterm_tuple (env.map (fun _ => erase) ts)
+        | term_union U K t           => eterm_union K (erase t)
+        | term_record R ts           => eterm_record R (env.map (fun _ => erase) ts)
         end.
 
     Definition erase_formula {Σ} : Formula Σ -> EFormula :=
@@ -1837,14 +1845,16 @@ Module Type SymPropOn
             (fun v => bv.sext v) <$> inst_eterm t0
         | @eterm_zext _ _ t0 p =>
             (fun v => bv.zext v) <$> inst_eterm t0
-        | @eterm_get_slice_int _ t0 =>
-            (fun v => bv.of_Z v) <$> inst_eterm t0
-        | @eterm_unsigned _ t0 =>
-            (fun v => bv.unsigned v) <$> inst_eterm t0
+        | eterm_get_slice_int t0 =>
+            bv.of_Z <$> inst_eterm t0
+        | eterm_unsigned t0 =>
+            bv.unsigned <$> inst_eterm t0
         | @eterm_truncate _ m p t0 =>
             (fun v => bv.truncate m v) <$> inst_eterm t0
-        | @eterm_extract _ s l t0 =>
-            (fun v => bv.extract s l v) <$> inst_eterm t0
+        | @eterm_vector_subrange _ s l _ t0 =>
+            bv.vector_subrange s l <$> inst_eterm t0
+        | eterm_negate t0 =>
+            bv.negate <$> inst_eterm t0
         | @eterm_tuple σs ts =>
             envrec.of_env (σs := σs) <$> inst_env' ι inst_eterm ts
         | @eterm_union U K t0 =>
@@ -1964,6 +1974,7 @@ Module Type SymPropOn
         now rewrite EqDec.eq_dec_refl.
       - reflexivity.
       - now rewrite IHt1, IHt2.
+      - now rewrite IHt.
       - now rewrite IHt.
       - now rewrite IHt.
       - now rewrite IHt.

@@ -151,6 +151,16 @@ Module Type IrisPrelims
       ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> stm_to_val s1 = None.
     Proof. now destruct 1. Qed.
 
+    Definition stm_to_fail {Γ τ} (s : Stm Γ τ) : option string :=
+      match s with
+      | stm_fail _ m => Some m
+      | _           => None
+      end.
+
+    Lemma stm_fail_stuck {Γ τ γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ τ} :
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> stm_to_fail s1 = None.
+    Proof. now destruct 1. Qed.
+
     Definition to_val {Γ} {τ} (t : Conf Γ τ) : option (ValConf Γ τ) :=
       match t with
       | MkConf s δ => option.map (fun v => MkValConf _ v δ) (stm_to_val s)
@@ -189,12 +199,80 @@ Module Type IrisPrelims
       intros; eapply of_to_val; by cbn.
     Defined.
 
+    Lemma stuck_fail {Γ} {τ} (c : Conf Γ τ) state :
+      stuck c state <-> exists m, stm_to_fail (conf_stm c) = Some m.
+    Proof.
+      destruct c as [s δ].
+      destruct state as [γ μ].
+      split.
+      - intros [Hnv Hirred].
+        destruct (SEM.progress s) as [fs|red].
+        + destruct s; inversion fs; inversion Hnv.
+          now exists s.
+        + exfalso.
+          destruct (red γ μ δ) as (γ' & μ' & δ' & s' & step).
+          eapply Hirred. constructor. done.
+     - cbn. intros [m eq].
+       destruct s; inversion eq; subst.
+       split.
+       + now cbn.
+       + intros obs e' σ' efs [γ1 γ2 μ1 μ2 δ2 s2 step].
+         now inversion step.
+    Qed.
+
   End Language.
 
   Section Registers.
 
     Definition SomeReg : Type := sigT 𝑹𝑬𝑮.
     Definition SomeVal : Type := sigT Val.
+
+    Definition RegStore_to_map (γ : RegStore) : gmap SomeReg (exclR (leibnizO SomeVal)) :=
+      list_to_map (K := SomeReg)
+                  (fmap (fun x => match x with
+                                existT _ r =>
+                                  pair (existT _ r) (Excl (existT _ (read_register γ r)))
+                              end)
+                       (finite.enum (sigT 𝑹𝑬𝑮))).
+
+    Lemma RegStore_to_map_Forall (γ : RegStore) :
+      map_Forall (K := SomeReg)
+        (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register γ reg)) = v end)
+        (RegStore_to_map γ).
+    Proof.
+      eapply map_Forall_lookup_2.
+      intros [σ r] x eq.
+      unfold RegStore_to_map in eq.
+      destruct (list_to_map _ !! _) eqn:eq' in eq; inversion eq; subst.
+      rewrite <-elem_of_list_to_map in eq'.
+      - eapply elem_of_list_fmap_2 in eq'.
+        destruct eq' as ([σ' r'] & eq2 & eq3).
+        now inversion eq2.
+      - rewrite <-list_fmap_compose.
+        rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
+            let (x0, r0) := x in (existT x0 r0 , Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl).
+        + rewrite list_fmap_id.
+          eapply finite.NoDup_enum.
+        + now intros [σ' r'].
+    Qed.
+
+    Lemma RegStore_to_map_valid (γ : RegStore) :
+      valid (RegStore_to_map γ).
+    Proof.
+      intros i.
+      cut (exists v, RegStore_to_map γ !! i = Some (Excl v)).
+      - intros [v eq].
+        now rewrite eq.
+      - destruct i as [σ r].
+        exists (existT _ (read_register γ r)).
+        eapply elem_of_list_to_map_1'.
+        + intros y eq.
+          eapply elem_of_list_fmap_2 in eq.
+          destruct eq as ([σ2 r2] & eq1 & eq2).
+          now inversion eq1.
+        + refine (elem_of_list_fmap_1 _ _ (existT _ r) _).
+          eapply finite.elem_of_enum.
+    Qed.
 
     #[export] Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
     #[export] Instance countable_SomeReg : countable.Countable SomeReg := finite.finite_countable.
@@ -291,6 +369,41 @@ Module Type IrisPrelims
       now iApply (regs_inv_update H).
     Qed.
 
+    Lemma own_RegStore_to_map_reg_pointsTos {γ : RegStore} {l : list (sigT 𝑹𝑬𝑮)} :
+      NoDup l ->
+      ⊢ own reg_gv_name (◯ list_to_map (K := SomeReg)
+                           (fmap (fun x => match x with existT _ r =>
+                                                       pair (existT _ r) (Excl (existT _ (read_register γ r)))
+                                        end) l)) -∗
+        [∗ list] x ∈ l,
+          let (x0, r) := (x : sigT 𝑹𝑬𝑮) in reg_pointsTo r (read_register γ r).
+    Proof.
+      iIntros (nodups) "Hregs".
+      iInduction l as [|[x r]] "IH".
+      - now iFrame.
+      - rewrite big_sepL_cons. cbn.
+        rewrite (insert_singleton_op (A := exclR (leibnizO SomeVal)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ r)))).
+        rewrite auth_frag_op.
+        iPoseProof (own_op with "Hregs") as "[Hreg Hregs]".
+        iFrame.
+        iApply ("IH" with "[%] [$]").
+        + refine (NoDup_cons_1_2 (existT x r) l nodups).
+        + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _].
+          refine (not_elem_of_list_to_map_1 _ (existT x r) _).
+          rewrite <-list_fmap_compose.
+          rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
+            let (x0, r0) := x in (existT x0 r0, Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl).
+          now rewrite list_fmap_id.
+          now intros [σ2 r2].
+    Qed.
+
+    Lemma own_RegStore_to_regs_inv {γ} : own reg_gv_name (● RegStore_to_map γ) ⊢ regs_inv γ.
+    Proof.
+      iIntros "Hregs".
+      iExists _; iFrame; iPureIntro.
+      apply RegStore_to_map_Forall.
+    Qed.
+
   End Registers.
 End IrisPrelims.
 
@@ -299,13 +412,13 @@ Module Type IrisParameters
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
   (Import IP   : IrisPrelims B PROG SEM).
-  Parameter memGpreS : gFunctors -> Set.
-  (* The memGS field will normally always be instantiated to a type class. We
+  (* The memGS and memGpreS fields will normally always be instantiated to a type class. We
      inline this field, so that instances declared by the library, e.g. the
      [sailGS_memGS] superclass instance below, will always be instances for the
      user-provided class instead of the [memGS] alias. In your client code, you
-     should always refer to your typeclass and refrain from using the [memGS]
-     alias completely. *)
+     should always refer to your typeclass and refrain from using the [memGS] and [memGpreS]
+     aliases completely. *)
+  Parameter Inline memGpreS : gFunctors -> Set.
   Parameter Inline memGS : gFunctors -> Set.
   Parameter memΣ : gFunctors.
   Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.

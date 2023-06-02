@@ -99,6 +99,7 @@ Inductive CSRIdx : Set :=
 | MPMPADDR1
 .
 
+Definition NumPmpEntries := 2.
 (* NOTE: PMP CSRs limited to 1 for now *)
 Inductive PmpCfgIdx : Set :=
 | PMP0CFG
@@ -140,15 +141,30 @@ Inductive PmpAddrMatch : Set :=
 
 Inductive ROP : Set :=
 | RISCV_ADD
+| RISCV_SLT
+| RISCV_SLTU
+| RISCV_AND
+| RISCV_OR
+| RISCV_XOR
+| RISCV_SLL
+| RISCV_SRL
 | RISCV_SUB
+| RISCV_SRA
 .
 
 Inductive IOP : Set :=
 | RISCV_ADDI
+| RISCV_SLTI
+| RISCV_SLTIU
+| RISCV_ANDI
+| RISCV_ORI
+| RISCV_XORI
 .
 
 Inductive SOP : Set :=
+| RISCV_SLLI
 | RISCV_SRLI
+| RISCV_SRAI
 .
 
 Inductive UOP : Set :=
@@ -168,6 +184,8 @@ Inductive BOP : Set :=
 (* Zicsr extension, only support for Read-Write (no set or clear) *)
 Inductive CSROP : Set :=
 | CSRRW
+| CSRRS
+| CSRRC
 .
 
 Inductive Retired : Set :=
@@ -200,7 +218,7 @@ Inductive Enums : Set :=
 | wordwidth
 .
 
-Definition RegIdx := bv 3.
+Definition RegIdx := bv 5.
 Bind Scope bv_scope with RegIdx.
 
 Inductive AST : Set :=
@@ -211,12 +229,12 @@ Inductive AST : Set :=
 | BTYPE (imm : bv 13) (rs2 rs1 : RegIdx) (op : BOP)
 | RISCV_JAL (imm : bv 21) (rd : RegIdx)
 | RISCV_JALR (imm : bv 12) (rs1 rd : RegIdx)
-| LOAD (imm : bv 12) (rs1 rd : RegIdx) (width : WordWidth)
+| LOAD (imm : bv 12) (rs1 rd : RegIdx) (is_unsigned : bool) (width : WordWidth)
 | STORE (imm : bv 12) (rs2 rs1 : RegIdx) (width : WordWidth)
 | ECALL
+| EBREAK
 | MRET
-(* Ziscr extension, excluding immediate variants *)
-| CSR (csr : CSRIdx) (rs1 rd : RegIdx) (csrop : CSROP)
+| CSR (csr : CSRIdx) (rs1 rd : RegIdx) (is_imm : bool) (csrop : CSROP)
 .
 
 Inductive AccessType : Set :=
@@ -263,6 +281,7 @@ Inductive ASTConstructor : Set :=
 | KLOAD
 | KSTORE
 | KECALL
+| KEBREAK
 | KMRET
 | KCSR
 .
@@ -431,15 +450,15 @@ Section Finite.
 
   #[export,program] Instance ROP_finite :
     Finite ROP :=
-    {| enum := [RISCV_ADD;RISCV_SUB] |}.
+    {| enum := [RISCV_ADD;RISCV_SUB;RISCV_SLT;RISCV_SLTU;RISCV_SLL;RISCV_SRL;RISCV_SRA;RISCV_AND;RISCV_OR;RISCV_XOR] |}.
 
   #[export,program] Instance IOP_finite :
     Finite IOP :=
-    {| enum := [RISCV_ADDI] |}.
+    {| enum := [RISCV_ADDI;RISCV_SLTI;RISCV_SLTIU;RISCV_ANDI;RISCV_ORI;RISCV_XORI] |}.
 
   #[export,program] Instance SOP_finite :
     Finite SOP :=
-    {| enum := [RISCV_SRLI] |}.
+    {| enum := [RISCV_SLLI;RISCV_SRLI;RISCV_SRAI] |}.
 
   #[export,program] Instance UOP_finite :
     Finite UOP :=
@@ -451,7 +470,7 @@ Section Finite.
 
   #[export,program] Instance CSROP_finite :
     Finite CSROP :=
-    {| enum := [CSRRW] |}.
+    {| enum := [CSRRW;CSRRS;CSRRC] |}.
 
   #[export,program] Instance Retired_finite :
     Finite Retired :=
@@ -463,7 +482,7 @@ Section Finite.
 
   #[export,program] Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KMRET;KCSR] |}.
+    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KEBREAK;KMRET;KCSR] |}.
 
   #[export,program] Instance AccessType_finite :
     Finite AccessType :=
@@ -511,7 +530,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_word                           := (ty.bvec word).
   Definition ty_byte                           := (ty.bvec byte).
   Definition ty_bytes (bytes : nat)            := (ty.bvec (bytes * byte)).
-  Definition ty_regno                          := (ty.bvec 3).
+  Definition ty_regno                          := (ty.bvec 5).
   Definition ty_privilege                      := (ty.enum privilege).
   Definition ty_priv_level                     := (ty.bvec 2).
   Definition ty_csridx                         := (ty.enum csridx).
@@ -608,11 +627,12 @@ Module Export RiscvPmpBase <: Base.
                             | KBTYPE      => ty.tuple [ty.bvec 13; ty_regno; ty_regno; ty_bop]
                             | KRISCV_JAL  => ty.tuple [ty.bvec 21; ty_regno]
                             | KRISCV_JALR => ty.tuple [ty.bvec 12; ty_regno; ty_regno]
-                            | KLOAD       => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty_word_width]
+                            | KLOAD       => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty.bool; ty_word_width]
                             | KSTORE      => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty_word_width]
                             | KECALL      => ty.unit
+                            | KEBREAK     => ty.unit
                             | KMRET       => ty.unit
-                            | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty_csrop]
+                            | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty.bool; ty_csrop]
                             end
     | access_type      => fun _ => ty.unit
     | exception_type   => fun _ => ty.unit
@@ -650,18 +670,19 @@ Module Export RiscvPmpBase <: Base.
     match U with
     | ast              => fun Kv =>
                             match Kv with
-                            | RTYPE rs2 rs1 rd op      => existT KRTYPE (tt , rs2 , rs1 , rd , op)
-                            | ITYPE imm rs1 rd op      => existT KITYPE (tt , imm , rs1 , rd , op)
-                            | SHIFTIOP shamt rs1 rd op => existT KSHIFTIOP (tt , shamt , rs1 , rd , op)
-                            | UTYPE imm rd op          => existT KUTYPE (tt , imm , rd , op)
-                            | BTYPE imm rs2 rs1 op     => existT KBTYPE (tt , imm , rs2 , rs1 , op)
-                            | RISCV_JAL imm rd         => existT KRISCV_JAL (tt , imm , rd)
-                            | RISCV_JALR imm rs1 rd    => existT KRISCV_JALR (tt , imm , rs1 , rd)
-                            | LOAD imm rs1 rd w        => existT KLOAD (tt , imm , rs1 , rd , w)
-                            | STORE imm rs2 rs1 w      => existT KSTORE (tt , imm , rs2 , rs1 , w)
-                            | ECALL                    => existT KECALL tt
-                            | MRET                     => existT KMRET tt
-                            | CSR csr rs1 rd op        => existT KCSR (tt , csr , rs1 , rd , op)
+                            | RTYPE rs2 rs1 rd op           => existT KRTYPE (tt , rs2 , rs1 , rd , op)
+                            | ITYPE imm rs1 rd op           => existT KITYPE (tt , imm , rs1 , rd , op)
+                            | SHIFTIOP shamt rs1 rd op      => existT KSHIFTIOP (tt , shamt , rs1 , rd , op)
+                            | UTYPE imm rd op               => existT KUTYPE (tt , imm , rd , op)
+                            | BTYPE imm rs2 rs1 op          => existT KBTYPE (tt , imm , rs2 , rs1 , op)
+                            | RISCV_JAL imm rd              => existT KRISCV_JAL (tt , imm , rd)
+                            | RISCV_JALR imm rs1 rd         => existT KRISCV_JALR (tt , imm , rs1 , rd)
+                            | LOAD imm rs1 rd is_unsigned w => existT KLOAD (tt , imm , rs1 , rd , is_unsigned , w)
+                            | STORE imm rs2 rs1 w           => existT KSTORE (tt , imm , rs2 , rs1 , w)
+                            | ECALL                         => existT KECALL tt
+                            | EBREAK                        => existT KEBREAK tt
+                            | MRET                          => existT KMRET tt
+                            | CSR csr rs1 rd is_imm op      => existT KCSR (tt , csr , rs1 , rd , is_imm , op)
                             end
     | access_type      => fun Kv =>
                             match Kv with
@@ -700,18 +721,19 @@ Module Export RiscvPmpBase <: Base.
       match U with
       | ast              => fun Kv =>
                               match Kv with
-                              | existT KRTYPE (tt , rs2 , rs1 , rd , op)      => RTYPE rs2 rs1 rd op
-                              | existT KITYPE (tt , imm , rs1 , rd , op)      => ITYPE imm rs1 rd op
-                              | existT KSHIFTIOP (tt , shamt , rs1 , rd , op) => SHIFTIOP shamt rs1 rd op
-                              | existT KUTYPE (tt , imm , rd , op)            => UTYPE imm rd op
-                              | existT KBTYPE (tt , imm , rs2 , rs1 , op)     => BTYPE imm rs2 rs1 op
-                              | existT KRISCV_JAL (tt , imm , rd)             => RISCV_JAL imm rd
-                              | existT KRISCV_JALR (tt , imm , rs1 , rd)      => RISCV_JALR imm rs1 rd
-                              | existT KLOAD (tt , imm , rs1 , rd , w)        => LOAD imm rs1 rd w
-                              | existT KSTORE (tt , imm , rs2 , rs1 , w)      => STORE imm rs2 rs1 w
-                              | existT KECALL tt                              => ECALL
-                              | existT KMRET tt                               => MRET
-                              | existT KCSR (tt , csr , rs1 , rd , op)        => CSR csr rs1 rd op
+                              | existT KRTYPE (tt , rs2 , rs1 , rd , op)             => RTYPE rs2 rs1 rd op
+                              | existT KITYPE (tt , imm , rs1 , rd , op)             => ITYPE imm rs1 rd op
+                              | existT KSHIFTIOP (tt , shamt , rs1 , rd , op)        => SHIFTIOP shamt rs1 rd op
+                              | existT KUTYPE (tt , imm , rd , op)                   => UTYPE imm rd op
+                              | existT KBTYPE (tt , imm , rs2 , rs1 , op)            => BTYPE imm rs2 rs1 op
+                              | existT KRISCV_JAL (tt , imm , rd)                    => RISCV_JAL imm rd
+                              | existT KRISCV_JALR (tt , imm , rs1 , rd)             => RISCV_JALR imm rs1 rd
+                              | existT KLOAD (tt , imm , rs1 , rd , is_unsigned , w) => LOAD imm rs1 rd is_unsigned w
+                              | existT KSTORE (tt , imm , rs2 , rs1 , w)             => STORE imm rs2 rs1 w
+                              | existT KECALL tt                                     => ECALL
+                              | existT KEBREAK tt                                    => EBREAK
+                              | existT KMRET tt                                      => MRET
+                              | existT KCSR (tt , csr , rs1 , rd , is_imm , op)      => CSR csr rs1 rd is_imm op
                               end
       | access_type      => fun Kv =>
                               match Kv with
@@ -814,6 +836,30 @@ Module Export RiscvPmpBase <: Base.
     | x5            : Reg ty_xlenbits
     | x6            : Reg ty_xlenbits
     | x7            : Reg ty_xlenbits
+    | x8            : Reg ty_xlenbits
+    | x9            : Reg ty_xlenbits
+    | x10           : Reg ty_xlenbits
+    | x11           : Reg ty_xlenbits
+    | x12           : Reg ty_xlenbits
+    | x13           : Reg ty_xlenbits
+    | x14           : Reg ty_xlenbits
+    | x15           : Reg ty_xlenbits
+    | x16           : Reg ty_xlenbits
+    | x17           : Reg ty_xlenbits
+    | x18           : Reg ty_xlenbits
+    | x19           : Reg ty_xlenbits
+    | x20           : Reg ty_xlenbits
+    | x21           : Reg ty_xlenbits
+    | x22           : Reg ty_xlenbits
+    | x23           : Reg ty_xlenbits
+    | x24           : Reg ty_xlenbits
+    | x25           : Reg ty_xlenbits
+    | x26           : Reg ty_xlenbits
+    | x27           : Reg ty_xlenbits
+    | x28           : Reg ty_xlenbits
+    | x29           : Reg ty_xlenbits
+    | x30           : Reg ty_xlenbits
+    | x31           : Reg ty_xlenbits
     | pmp0cfg       : Reg ty_pmpcfg_ent
     | pmp1cfg       : Reg ty_pmpcfg_ent
     | pmpaddr0      : Reg ty_xlenbits
@@ -823,14 +869,38 @@ Module Export RiscvPmpBase <: Base.
     Import bv.notations.
     Definition reg_convert (idx : RegIdx) : option (Reg ty_xlenbits) :=
       match bv.to_bitstring idx with
-      | 000 => None
-      | 001 => Some x1
-      | 010 => Some x2
-      | 011 => Some x3
-      | 100 => Some x4
-      | 101 => Some x5
-      | 110 => Some x6
-      | 111 => Some x7
+      | 00000 => None
+      | 00001 => Some x1
+      | 00010 => Some x2
+      | 00011 => Some x3
+      | 00100 => Some x4
+      | 00101 => Some x5
+      | 00110 => Some x6
+      | 00111 => Some x7
+      | 01000 => Some x8
+      | 01001 => Some x9
+      | 01010 => Some x10
+      | 01011 => Some x11
+      | 01100 => Some x12
+      | 01101 => Some x13
+      | 01110 => Some x14
+      | 01111 => Some x15
+      | 10000 => Some x16
+      | 10001 => Some x17
+      | 10010 => Some x18
+      | 10011 => Some x19
+      | 10100 => Some x20
+      | 10101 => Some x21
+      | 10110 => Some x22
+      | 10111 => Some x23
+      | 11000 => Some x24
+      | 11001 => Some x25
+      | 11010 => Some x26
+      | 11011 => Some x27
+      | 11100 => Some x28
+      | 11101 => Some x29
+      | 11110 => Some x30
+      | 11111 => Some x31
       end.
 
     Section TransparentObligations.
@@ -859,6 +929,30 @@ Module Export RiscvPmpBase <: Base.
         | x5            , x5            => left eq_refl
         | x6            , x6            => left eq_refl
         | x7            , x7            => left eq_refl
+        | x8            , x8            => left eq_refl
+        | x9            , x9            => left eq_refl
+        | x10           , x10           => left eq_refl
+        | x11           , x11           => left eq_refl
+        | x12           , x12           => left eq_refl
+        | x13           , x13           => left eq_refl
+        | x14           , x14           => left eq_refl
+        | x15           , x15           => left eq_refl
+        | x16           , x16           => left eq_refl
+        | x17           , x17           => left eq_refl
+        | x18           , x18           => left eq_refl
+        | x19           , x19           => left eq_refl
+        | x20           , x20           => left eq_refl
+        | x21           , x21           => left eq_refl
+        | x22           , x22           => left eq_refl
+        | x23           , x23           => left eq_refl
+        | x24           , x24           => left eq_refl
+        | x25           , x25           => left eq_refl
+        | x26           , x26           => left eq_refl
+        | x27           , x27           => left eq_refl
+        | x28           , x28           => left eq_refl
+        | x29           , x29           => left eq_refl
+        | x30           , x30           => left eq_refl
+        | x31           , x31           => left eq_refl
         | pmp0cfg       , pmp0cfg       => left eq_refl
         | pmp1cfg       , pmp1cfg       => left eq_refl
         | pmpaddr0      , pmpaddr0      => left eq_refl
@@ -886,6 +980,30 @@ Module Export RiscvPmpBase <: Base.
           existT _ x5;
           existT _ x6;
           existT _ x7;
+          existT _ x8;
+          existT _ x9;
+          existT _ x10;
+          existT _ x11;
+          existT _ x12;
+          existT _ x13;
+          existT _ x14;
+          existT _ x15;
+          existT _ x16;
+          existT _ x17;
+          existT _ x18;
+          existT _ x19;
+          existT _ x20;
+          existT _ x21;
+          existT _ x22;
+          existT _ x23;
+          existT _ x24;
+          existT _ x25;
+          existT _ x26;
+          existT _ x27;
+          existT _ x28;
+          existT _ x29;
+          existT _ x30;
+          existT _ x31;
           existT _ pmp0cfg;
           existT _ pmp1cfg;
           existT _ pmpaddr0;

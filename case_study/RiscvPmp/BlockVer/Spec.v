@@ -373,12 +373,24 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_postcondition   := term_var "result_decode" = term_var "instr";
     |}.
 
+  #[program] Definition sep_contract_vector_subrange {n} (e b : nat) {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} : SepContractFunX (@vector_subrange n e b p q r) :=
+    {| sep_contract_logic_variables := ["v" :: ty.bvec n];
+       sep_contract_localstore      := [term_var "v"];
+       sep_contract_precondition    := ⊤;
+       sep_contract_result          := "result_vector_subrange";
+       sep_contract_postcondition   :=
+         term_var "result_vector_subrange" = @term_vector_subrange _ _ b (e - b + 1) _ (term_var "v");
+    |}.
+  Next Obligation. intros; now apply convert_foreign_vector_subrange_conditions. Defined.
+  #[global] Arguments sep_contract_vector_subrange {_} _ _ {_ _ _}.
+
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
       | read_ram bytes  => sep_contract_read_ram
       | write_ram bytes => sep_contract_write_ram
       | decode    => sep_contract_decode
+      | vector_subrange e b => sep_contract_vector_subrange e b
       end.
 
   Lemma linted_cenvex :
@@ -458,6 +470,38 @@ Module RiscvPmpSpecVerif.
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
   Import ModalNotations.
+  Import Katamaran.Bitvector.
+  Import bv.notations.
+
+  Ltac bv_comp :=
+    repeat match goal with
+      | H: (?a <ᵘ? ?b) = true |- _ =>
+          rewrite bv.ultb_ult in H
+      | H: (?a <ᵘ? ?b) = false |- _ =>
+          rewrite bv.ultb_uge in H
+      | H: (?a <=ᵘ? ?b) = true |- _ =>
+          rewrite bv.uleb_ule in H
+      | H: (?a <=ᵘ? ?b) = false |- _ =>
+          rewrite bv.uleb_ugt in H
+      | H: (?P || ?Q)%bool = true |- _ =>
+          apply Bool.orb_true_iff in H as [?|?]
+      end.
+
+  Ltac bv_comp_bool :=
+    repeat match goal with
+      | H: ?a <ᵘ ?b |- _ =>
+          rewrite ? (proj2 (bv.ultb_ult _ _) H),
+            ? (proj2 (bv.uleb_ugt _ _) H);
+          clear H
+      | H: ?a <=ᵘ ?b |- _ =>
+          rewrite ? (proj2 (bv.uleb_ule _ _) H),
+            ? (proj2 (bv.ultb_uge _ _) H);
+          clear H
+      | H: ?a <=ᵘ ?b /\ _ |- _ =>
+          destruct H
+      | H: ?a <ᵘ ?b /\ _ |- _ =>
+          destruct H
+      end.
 
   Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
@@ -470,7 +514,6 @@ Module RiscvPmpSpecVerif.
     | Some c => ValidContractWithFuel fuel c (FunDef f)
     | None => False
     end.
-
 
   Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
@@ -525,25 +568,9 @@ Module RiscvPmpSpecVerif.
   Lemma valid_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
   Proof.
     symbolic_simpl.
-    intros.
-    apply Bool.orb_true_iff in H2 as [?%bv.ultb_ult|?%bv.ultb_ult];
-      [left; auto| right; auto].
+    intros; split; intros; bv_comp; auto.
+    destruct (v + v0 <=ᵘ? v1)%bv eqn:?; bv_comp; auto.
   Qed.
-
-  Import Katamaran.Bitvector.
-  Import bv.notations.
-
-  Ltac bv_comp :=
-      repeat match goal with
-      | H: (?a <ᵘ? ?b) = true |- _ =>
-          rewrite bv.ultb_ult in H
-      | H: (?a <ᵘ? ?b) = false |- _ =>
-          rewrite bv.ultb_uge in H
-      | H: (?a <=ᵘ? ?b) = true |- _ =>
-          rewrite bv.uleb_ule in H
-      | H: (?a <=ᵘ? ?b) = false |- _ =>
-          rewrite bv.uleb_ugt in H
-      end.
 
   Opaque pmp_get_perms.
 
@@ -896,12 +923,43 @@ Module RiscvPmpIrisInstanceWithContracts.
     iApply wp_value; auto.
   Qed.
 
+  Lemma vector_subrange_sound `{sailGS Σ} {n} (e b : nat)
+    {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} :
+    ValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_vector_subrange n e b p q r)
+      (vector_subrange e b).
+  Proof.
+    intros Γ es δ ι Heq.
+    destruct (env.view ι) as [ι v].
+    iIntros "_".
+    iApply wp_unfold.
+    cbn in *.
+    iIntros (? ? ? ? ?) "[Hregs Hmem]".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first auto.
+    repeat iModIntro.
+    iIntros (e2 σ efs Hstep).
+    dependent elimination Hstep.
+    fold_semWP.
+    dependent elimination s.
+    rewrite Heq in f1.
+    dependent elimination f1.
+    repeat iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; trivial.
+    iApply wp_value.
+    iSplitL; first iPureIntro; auto.
+  Qed.
+
   Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
   Proof.
     intros Δ τ f. destruct f.
     - apply read_ram_sound.
     - apply write_ram_sound.
     - apply decode_sound.
+    - apply vector_subrange_sound.
   Qed.
 
   Ltac destruct_syminstance ι :=

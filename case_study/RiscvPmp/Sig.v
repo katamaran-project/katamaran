@@ -592,7 +592,10 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           else asn_default.
 
     Definition asn_and_regs {Σ} (f : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
-      f x1 ∗ f x2 ∗ f x3 ∗ f x4 ∗ f x5 ∗ f x6 ∗ f x7.
+      f x1 ∗ f x2 ∗ f x3 ∗ f x4 ∗ f x5 ∗ f x6 ∗ f x7 ∗ f x8 ∗ f x9 ∗
+      f x10 ∗ f x11 ∗ f x12 ∗ f x13 ∗ f x14 ∗ f x15 ∗ f x16 ∗ f x17 ∗ f x18 ∗ f x19 ∗
+      f x20 ∗ f x21 ∗ f x22 ∗ f x23 ∗ f x24 ∗ f x25 ∗ f x26 ∗ f x27 ∗ f x28 ∗ f x29 ∗
+      f x30 ∗ f x31. 
 
     Definition asn_regs_ptsto {Σ} : Assertion Σ :=
       asn_and_regs

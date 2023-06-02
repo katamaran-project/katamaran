@@ -571,7 +571,7 @@ Module bv.
   Section Constants.
 
     Definition zero {n} : bv n := mk 0 I.
-    Definition one n : bv n :=
+    Definition one {n} : bv n :=
       match n with
       | 0   => mk 0 I
       | S u => mk 1 I
@@ -582,7 +582,7 @@ Module bv.
       | S m => cons true (ones m)
       end.
 
-    Lemma bin_one {n} : n > 0 -> bin (one n) = 1%N.
+    Lemma bin_one {n} : n > 0 -> bin (@one n) = 1%N.
     Proof.
       destruct n; cbn; now Lia.lia.
     Qed.
@@ -633,11 +633,12 @@ Module bv.
     Definition zext {m} (v : bv m) {n} {p : IsTrue (m <=? n)} : bv n :=
       match leview m n with is_le k => zext' v k end.
 
-    #[program] Definition truncate {n} (m : nat) (xs : bv n) {p : IsTrue (m <=? n)} : bv m :=
-      let (result, _) := appView m (n - m) xs in
-      result.
-    Next Obligation. intros; destruct (leview m n); Lia.lia. Qed.
-
+    Definition truncate {n} (m : nat) (xs : bv n) {p : IsTrue (m <=? n)} : bv m :=
+      match leview m n in LeView _ sl return bv sl -> bv m with
+      | is_le k => fun (bits : bv (m + k)) =>
+                     let (result, _) := appView m k bits in
+                     result
+      end xs.
   End Extend.
 
   Section Integers.
@@ -684,13 +685,28 @@ Module bv.
   End Integers.
 
   Section Extract.
-    Definition extract {n} (start length : nat) (x : bv n) : bv length :=
-      @of_Z length (Z.shiftr (unsigned x) (Z.of_nat start)).
+    Definition vector_subrange {n} (start len : nat)
+      (p : IsTrue (start + len <=? n)) : bv n -> bv len :=
+      match leview (start + len) n in LeView _ sl return bv sl -> bv len with
+      | is_le k =>
+          fun bits =>
+            let (xs,_) := appView (start + len) k bits in
+            let (_,ys) := appView start len xs in
+            ys
+      end.
+    #[global] Arguments vector_subrange {n} _ _ {_} _.
+
+    Goal vector_subrange 0 1 (@of_nat 1 1)    = of_nat 1. reflexivity. Qed.
+    Goal vector_subrange 0 8 (@of_nat 16 256) = zero.     reflexivity. Qed.
+    Goal vector_subrange 8 8 (@of_nat 16 256) = one.      reflexivity. Qed.
   End Extract.
 
   Section Shift.
     Definition shiftr {m n} (x : bv m) (y : bv n) : bv m :=
       of_Z (Z.shiftr (unsigned x) (unsigned y)).
+
+    Definition shiftl {m n} (x : bv m) (y : bv n) : bv m :=
+      of_Z (Z.shiftl (unsigned x) (unsigned y)).
   End Shift.
 
   Section EqMod2N.
@@ -1033,11 +1049,11 @@ Module bv.
     (* Definition succ {n} : bv n -> bv n := add (one n). *)
 
     Lemma of_nat_S {n} (k : nat) :
-      @of_nat n (S k) = add (one _) (of_nat k).
+      @of_nat n (S k) = add one (of_nat k).
     Proof.
       apply bin_inj.
       cbn -[truncn].
-      replace (bin (one n)) with (truncn n 1) by now destruct n.
+      replace (bin one) with (truncn n 1) by now destruct n.
       rewrite <-truncn_add.
       f_equal.
       Lia.lia.
@@ -1450,7 +1466,7 @@ Module bv.
 
     Lemma unsigned_succ_small n m :
       (N.succ (bin m) < exp2 n)%N ->
-      Z.succ (unsigned m) = @unsigned n (one _ + m).
+      Z.succ (unsigned m) = @unsigned n (one + m).
     Proof.
       intro H. unfold unsigned.
       rewrite bin_add_small.
@@ -1489,7 +1505,7 @@ Module bv.
     Lemma seqBv_succ {n} m n1 :
       n > 0 ->
       (N.succ (bin m) < bv.exp2 n)%N ->
-      (@seqBv n m (S n1)) = cons m (seqBv (one _ + m) n1).
+      (@seqBv n m (S n1)) = cons m (seqBv (one + m) n1).
     Proof.
       intros nnz ineq.
       unfold seqBv.
@@ -1682,11 +1698,11 @@ Module bv.
 
     Lemma lt_S_add_one : forall {n} x,
         (N.of_nat (S x) < bv.exp2 n)%N ->
-        (bv.bin (bv.one n) + (@bv.bin n (bv.of_nat x)) < bv.exp2 n)%N.
+        (bv.bin (@bv.one n) + (@bv.bin n (bv.of_nat x)) < bv.exp2 n)%N.
     Proof.
       destruct n.
       simpl; Lia.lia.
-      assert (bv.bin (bv.one (S n)) = 1%N) by auto.
+      assert (bv.bin (@bv.one (S n)) = 1%N) by auto.
       rewrite H.
       intros.
       rewrite bv.bin_of_nat_small; Lia.lia.
@@ -1748,10 +1764,8 @@ Module bv.
     Goal of_Z (-2)%Z = [bv[3] 6]. reflexivity. Qed.
     Goal of_Z (-1)%Z = [bv[3] 7]. reflexivity. Qed.
 
-    Goal extract 0 8 [bv[16] 256] = [bv[8] 0]. reflexivity. Qed.
-    Goal extract 8 8 [bv[16] 256] = [bv[8] 1]. reflexivity. Qed.
-
     Goal shiftr [bv[8] 16] [bv[5] 4] = [bv[8] 1]. reflexivity. Qed.
+    Goal shiftl [bv[8] 1] [bv[5] 4] = [bv[8] 16]. reflexivity. Qed.
   End Tests.
 
 End bv.

@@ -71,6 +71,7 @@ Module bop.
     | cons {σ : Ty}     : BinOp σ (list σ) (list σ)
     | append {σ : Ty}   : BinOp (list σ) (list σ) (list σ)
     | shiftr {m n}      : BinOp (bvec m) (bvec n) (bvec m)
+    | shiftl {m n}      : BinOp (bvec m) (bvec n) (bvec m)
     | bvadd {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvsub {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvmul {n}         : BinOp (bvec n) (bvec n) (bvec n)
@@ -101,6 +102,8 @@ Module bop.
       ((list σ, list σ, list σ), append).
     Definition binoptel_shiftr (m n : nat) : BinOpTel :=
       ((bvec m, bvec n, bvec m), shiftr).
+    Definition binoptel_shiftl (m n : nat) : BinOpTel :=
+      ((bvec m, bvec n, bvec m), shiftl).
 
     Definition is_eq {σ} (op : RelOp σ) : Datatypes.bool :=
       match op with eq => true | _ => false end.
@@ -158,6 +161,8 @@ Module bop.
         f_equal_dec binoptel_append (ninv _ _) (eq_dec σ τ)
       | @shiftr _ m n , @shiftr _ p q =>
           f_equal2_dec binoptel_shiftr (ninv _ _) (eq_dec m p) (eq_dec n q)
+      | @shiftl _ m n , @shiftl _ p q =>
+          f_equal2_dec binoptel_shiftl (ninv _ _) (eq_dec m p) (eq_dec n q)
       | @bvadd _ m , @bvadd _ n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvadd))
@@ -273,6 +278,7 @@ Module bop.
       | pair       => Datatypes.pair
       | cons       => List.cons
       | shiftr     => fun v1 v2 => bv.shiftr v1 v2
+      | shiftl     => fun v1 v2 => bv.shiftl v1 v2
       | append     => app
       | bvadd      => fun v1 v2 => bv.add v1 v2
       | bvsub      => fun v1 v2 => bv.sub v1 v2

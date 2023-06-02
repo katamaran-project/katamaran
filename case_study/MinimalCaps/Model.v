@@ -513,6 +513,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
   End MinimalCapsPredicates.
 
   Include IrisSignatureRules MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisBase.
+  Include IrisAdequacy MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisBase.
 
 End MinCapsIrisInstance.
 

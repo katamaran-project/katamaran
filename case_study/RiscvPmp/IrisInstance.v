@@ -54,9 +54,9 @@ Module RiscvPmpIrisInstance <:
   Section WithSailGS.
     Context `{sailRegGS Σ} `{invGS Σ} `{mG : mcMemGS Σ}.
 
-    Definition reg_file : gset (bv 3) := list_to_set (bv.finite.enum 3).
+    Definition reg_file : gset (bv 5) := list_to_set (bv.finite.enum 5).
 
-    Definition interp_ptsreg `{sailRegGS Σ} (r : RegIdx) (v : Word) : iProp Σ :=
+    Definition interp_ptsreg (r : RegIdx) (v : Word) : iProp Σ :=
       match reg_convert r with
       | Some x => reg_pointsTo x v
       | None => True
@@ -113,7 +113,7 @@ Module RiscvPmpIrisInstance <:
       | S w =>
           fun bytes =>
             let (byte, bytes) := bv.appView byte (w * byte) bytes in
-            interp_ptsto addr byte ∗ interp_ptstomem (bv.one xlenbits + addr) bytes
+            interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
       end%I.
 
     Definition interp_ptstomem_readonly {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
@@ -169,6 +169,8 @@ Module RiscvPmpIrisInstance <:
   End RiscvPmpIrisPredicates.
 
   Include IrisSignatureRules RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpSignature RiscvPmpIrisBase.
+  Include IrisAdequacy RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
     RiscvPmpSignature RiscvPmpIrisBase.
 
 End RiscvPmpIrisInstance.

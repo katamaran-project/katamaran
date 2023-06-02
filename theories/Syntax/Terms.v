@@ -68,7 +68,8 @@ Module Type TermsOn (Import TY : Types).
   | term_get_slice_int {n} (t : Term Σ ty.int) : Term Σ (ty.bvec n)
   | term_unsigned {n} (t : Term Σ (ty.bvec n)) : Term Σ ty.int
   | term_truncate {n} (m : nat) {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec m)
-  | term_extract {n} (s l : nat) (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec l)
+  | term_vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec l)
+  | term_negate {n} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n)
   | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs)
   | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
   | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
@@ -83,7 +84,8 @@ Module Type TermsOn (Import TY : Types).
   #[global] Arguments term_get_slice_int {_ _} t.
   #[global] Arguments term_unsigned {_ _} t.
   #[global] Arguments term_truncate {_ _} m {p} t.
-  #[global] Arguments term_extract {_ _} s l t.
+  #[global] Arguments term_vector_subrange {_ _} s l {_} t.
+  #[global] Arguments term_negate {_ _} t.
   #[global] Arguments term_tuple {_ _} ts.
   #[global] Arguments term_union {_} U K t.
   #[global] Arguments term_record {_} R ts.
@@ -142,35 +144,94 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (P_get_slice_int : forall {n} (t : Term Σ ty.int), P ty.int t -> P (ty.bvec n) (term_get_slice_int t)).
     Hypothesis (P_unsigned : forall {n} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P ty.int (term_unsigned t)).
     Hypothesis (P_truncate   : forall {n} (m : nat) {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec m) (term_truncate m t)).
-    Hypothesis (P_extract   : forall {n} (s l : nat) (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec l) (term_extract s l t)).
+    Hypothesis (P_vector_subrange : forall {n} (s l : nat) {p : IsTrue (s + l <=? n)} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec l) (term_vector_subrange s l t)).
+    Hypothesis (P_negate     : forall {n} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec n) (term_negate t)).
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs) (IH : PE es), P (ty.tuple σs) (term_tuple es)).
     Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)).
     Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)).
 
     Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) {struct t} : P σ t :=
       match t with
-      | term_var ς          => ltac:(eapply P_var; eauto)
-      | term_val σ v        => ltac:(eapply P_val; eauto)
-      | term_binop op t1 t2 => ltac:(eapply P_binop; eauto)
-      | term_neg t          => ltac:(eapply P_neg; eauto)
-      | term_not t          => ltac:(eapply P_not; eauto)
-      | term_inl t          => ltac:(eapply P_inl; eauto)
-      | term_inr t          => ltac:(eapply P_inr; eauto)
-      | term_sext t         => ltac:(eapply P_sext; eauto)
-      | term_zext t         => ltac:(eapply P_zext; eauto)
-      | term_get_slice_int t => ltac:(eapply P_get_slice_int; eauto)
-      | term_unsigned t     => ltac:(eapply P_unsigned; eauto)
-      | term_truncate m t   => ltac:(eapply P_truncate; eauto)
-      | term_extract s l t  => ltac:(eapply P_extract; eauto)
-      | term_tuple ts       => ltac:(eapply P_tuple, env.all_intro; eauto)
-      | term_union U K t    => ltac:(eapply P_union; eauto)
-      | term_record R ts    => ltac:(eapply P_record, env.all_intro; eauto)
+      | term_var ς                  => ltac:(eapply P_var; eauto)
+      | term_val σ v                => ltac:(eapply P_val; eauto)
+      | term_binop op t1 t2         => ltac:(eapply P_binop; eauto)
+      | term_neg t                  => ltac:(eapply P_neg; eauto)
+      | term_not t                  => ltac:(eapply P_not; eauto)
+      | term_inl t                  => ltac:(eapply P_inl; eauto)
+      | term_inr t                  => ltac:(eapply P_inr; eauto)
+      | term_sext t                 => ltac:(eapply P_sext; eauto)
+      | term_zext t                 => ltac:(eapply P_zext; eauto)
+      | term_get_slice_int t        => ltac:(eapply P_get_slice_int; eauto)
+      | term_unsigned t             => ltac:(eapply P_unsigned; eauto)
+      | term_truncate m t           => ltac:(eapply P_truncate; eauto)
+      | term_vector_subrange s l t  => ltac:(eapply P_vector_subrange; eauto)
+      | term_negate t               => ltac:(eapply P_negate; eauto)
+      | term_tuple ts               => ltac:(eapply P_tuple, env.all_intro; eauto)
+      | term_union U K t            => ltac:(eapply P_union; eauto)
+      | term_record R ts            => ltac:(eapply P_record, env.all_intro; eauto)
       end.
 
   End Term_rect.
 
   Definition Term_rec Σ (P : forall σ, Term Σ σ -> Set) := @Term_rect _ P.
   Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := @Term_rect _ P.
+
+  (* We define some specialized view for certain types to make
+     recusion over terms easier. *)
+  Section TermView.
+    Local Set Elimination Schemes.
+
+    (* A view on list terms. *)
+    Inductive ListView {Σ σ} : Term Σ (ty.list σ) -> Type :=
+    | term_list_var {ς} {ςInΣ : (ς∷ty.list σ) ∈ Σ} :
+      ListView (term_var ς)
+    | term_list_val v :
+      ListView (term_val _ v)
+    | term_list_cons h {t} (lv : ListView t) :
+      ListView (term_binop bop.cons h t)
+    | term_list_append {t1 t2} (lv1 : ListView t1) (lv2 : ListView t2) :
+      ListView (term_binop bop.append t1 t2).
+    #[global] Arguments term_list_var {Σ σ} ς {ςInΣ}.
+    #[global] Arguments term_list_append {Σ σ} [t1 t2] lv1 lv2.
+
+    (* We map each type to a specialized view for that type. *)
+    Definition View {Σ} (σ : Ty) : Term Σ σ -> Type :=
+      match σ with
+      | ty.list τ => ListView
+      | _         => fun _ => unit
+      end.
+
+    Definition view_var {Σ ς σ} : forall ςInΣ, View (@term_var Σ ς σ ςInΣ) :=
+      match σ with
+       | ty.list σ => @term_list_var _ _ ς
+       | _         => fun _ => tt
+       end.
+
+    Definition view_val {Σ σ} : forall v, View (@term_val Σ σ v) :=
+      match σ with
+      | ty.list σ0 => term_list_val
+      | _          => fun _ => tt
+      end.
+
+    Definition view_binop {Σ σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) :
+      forall {t1 : Term Σ σ1} {t2 : Term Σ σ2},
+        View t1 -> View t2 -> View (term_binop op t1 t2) :=
+       match op with
+       | bop.cons   => fun t1 t2 _  v2 => term_list_cons t1 v2
+       | bop.append => term_list_append
+       | _ => fun _ _ _ _ => tt
+       end.
+
+    (* Construct a view for each term. *)
+    Fixpoint view {Σ σ} (t : Term Σ σ) {struct t} : View t :=
+      match t as t1 in (Term _ t0) return (View t1) with
+      | term_var ς          => view_var _
+      | term_val _ v        => view_val v
+      | term_binop op t1 t2 => view_binop op (view t1) (view t2)
+      | _                   => tt
+      end.
+
+  End TermView.
 
   Open Scope lazy_bool_scope.
 
@@ -210,11 +271,11 @@ Module Type TermsOn (Import TY : Types).
           Term_eqb x y;
         Term_eqb _ _ (right _) := false
       };
-    Term_eqb (@term_extract _ a m _ x) (@term_extract _ b n _ y) with eq_dec a b, eq_dec m n => {
-        Term_eqb (@term_extract _ a m p x) (@term_extract _ ?(a) ?(m) p y) (left eq_refl) (left eq_refl) :=
-          Term_eqb x y;
-        Term_eqb _ _ _ _ := false
+    Term_eqb (@term_vector_subrange _ n s l _ x) (@term_vector_subrange _ m s' l _ y) with eq_dec n m, eq_dec s s' => {
+        Term_eqb (@term_vector_subrange _ n s l _ x) (@term_vector_subrange _ ?(n) ?(s) l _ y) (left eq_refl) (left eq_refl) := Term_eqb x y;
+        Term_eqb _ _ _ _ := false;
       };
+    Term_eqb (term_negate x) (term_negate y) := Term_eqb x y;
     Term_eqb (@term_tuple ?(σs) xs) (@term_tuple σs ys) :=
        @env.eqb_hom _ (Term Σ) (@Term_eqb _ ) _ xs ys;
     Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
@@ -270,22 +331,23 @@ Module Type TermsOn (Import TY : Types).
 
     Fixpoint sub_term {σ Σ1} (t : Term Σ1 σ) {Σ2} (ζ : Sub Σ1 Σ2) {struct t} : Term Σ2 σ :=
       match t with
-      | term_var ς                => ζ.[??ς]
-      | term_val σ v              => term_val σ v
-      | term_binop op t1 t2       => term_binop op (sub_term t1 ζ) (sub_term t2 ζ)
-      | term_neg t0               => term_neg (sub_term t0 ζ)
-      | term_not t0               => term_not (sub_term t0 ζ)
-      | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0 ζ)
-      | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0 ζ)
-      | term_sext t               => term_sext (sub_term t ζ)
-      | term_zext t               => term_zext (sub_term t ζ)
-      | term_get_slice_int t      => term_get_slice_int (sub_term t ζ)
-      | term_unsigned t           => term_unsigned (sub_term t ζ)
-      | term_truncate m t         => term_truncate m (sub_term t ζ)
-      | term_extract s l t        => term_extract s l (sub_term t ζ)
-      | term_tuple ts             => term_tuple (env.map (fun _ t => sub_term t ζ) ts)
-      | term_union U K t          => term_union U K (sub_term t ζ)
-      | term_record R ts          => term_record R (env.map (fun _ t => sub_term t ζ) ts)
+      | term_var ς                 => ζ.[??ς]
+      | term_val σ v               => term_val σ v
+      | term_binop op t1 t2        => term_binop op (sub_term t1 ζ) (sub_term t2 ζ)
+      | term_neg t0                => term_neg (sub_term t0 ζ)
+      | term_not t0                => term_not (sub_term t0 ζ)
+      | @term_inl _ σ1 σ2 t0       => term_inl (sub_term t0 ζ)
+      | @term_inr _ σ1 σ2 t0       => term_inr (sub_term t0 ζ)
+      | term_sext t                => term_sext (sub_term t ζ)
+      | term_zext t                => term_zext (sub_term t ζ)
+      | term_get_slice_int t       => term_get_slice_int (sub_term t ζ)
+      | term_unsigned t            => term_unsigned (sub_term t ζ)
+      | term_truncate m t          => term_truncate m (sub_term t ζ)
+      | term_vector_subrange s l t => term_vector_subrange s l (sub_term t ζ)
+      | term_negate t              => term_negate (sub_term t ζ)
+      | term_tuple ts              => term_tuple (env.map (fun _ t => sub_term t ζ) ts)
+      | term_union U K t           => term_union U K (sub_term t ζ)
+      | term_record R ts           => term_record R (env.map (fun _ t => sub_term t ζ) ts)
       end.
 
     #[export] Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=

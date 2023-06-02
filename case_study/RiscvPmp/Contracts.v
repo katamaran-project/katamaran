@@ -39,6 +39,7 @@ From Katamaran Require Import
      Symbolic.Solver
      Symbolic.Propositions
      Symbolic.Worlds
+     RiscvPmp.PmpCheck
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From Equations Require Import
@@ -174,6 +175,14 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition sep_contract_execute_ECALL : SepContractFun execute_ECALL :=
           instr_exec_contract.
 
+        Definition sep_contract_execute_EBREAK : SepContractFun execute_EBREAK :=
+          {| sep_contract_logic_variables := ctx.nil;
+             sep_contract_localstore      := env.nil;
+             sep_contract_precondition    := ⊤;
+             sep_contract_result          := "result_execute_EBREAK";
+             sep_contract_postcondition   := ⊤;
+          |}.
+
         Definition sep_contract_execute_MRET : SepContractFun execute_MRET :=
           instr_exec_contract.
 
@@ -190,8 +199,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
           instr_exec_contract.
 
         Definition sep_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : SepContractFun (process_load bytes) :=
-          {| sep_contract_logic_variables := [rd :: ty_regno; vaddr :: ty_xlenbits; value :: ty_memory_op_result bytes; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mcause" :: ty_mcause];
-             sep_contract_localstore      := [term_var rd; term_var vaddr; term_var value];
+          {| sep_contract_logic_variables := [rd :: ty_regno; vaddr :: ty_xlenbits; value :: ty_memory_op_result bytes; is_unsigned :: ty.bool; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mcause" :: ty_mcause];
+             sep_contract_localstore      := [term_var rd; term_var vaddr; term_var value; term_var is_unsigned];
              sep_contract_precondition    :=
                asn_gprs
                ∗ pc            ↦ term_var "i"
@@ -819,6 +828,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                  (asn_pmp_entries (term_var "entries") ∗ asn_pmp_access (term_var addr) (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var priv) (term_var acc));
           |}.
 
+
         Definition sep_contract_pmpCheckPerms : SepContractFun pmpCheckPerms :=
           let Σ : LCtx := [acc :: ty_access_type; priv :: ty_privilege; L :: ty.bool; A :: ty_pmpaddrmatchtype; X :: ty.bool; W :: ty.bool; R :: ty.bool] in
           let entry : Term Σ _ := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
@@ -876,7 +886,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                     (asn.match_enum pmpaddrmatch (term_var "result_pmpMatchAddr")
                       (fun K => match K with
                                 | PMP_NoMatch =>
-                                    asn_bool (term_var hi <ᵘₜ term_var lo) ∨ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var lo ||ₜ term_var hi <=ᵘₜ term_var addr) ∨ term_var rng = term_inr (term_val ty.unit tt)
+                                    asn_bool (term_var hi <ᵘₜ term_var lo)
+                                    ∨ (asn_bool (term_var lo <=ᵘₜ term_var hi) ∗ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var lo))
+                                    ∨ (asn_bool (term_var lo <=ᵘₜ term_var hi) ∗ asn_bool (term_var lo <ᵘₜ term_binop bop.bvadd (term_var addr) (term_var width)) ∗ asn_bool (term_var hi <=ᵘₜ term_var addr))
                                 | PMP_PartialMatch =>
                                     term_var lo <=ᵘ term_var hi ∗
                                     term_var lo <ᵘ term_binop bop.bvadd (term_var addr) (term_var width) ∗
@@ -904,8 +916,11 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                asn.match_enum pmpmatch (term_var "result_pmpMatchEntry")
                  (fun K => match K with
                            | PMP_Continue =>
-                               asn_bool (term_var pmpaddr <ᵘₜ term_var prev_pmpaddr) ∨ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var prev_pmpaddr ||ₜ term_var pmpaddr <=ᵘₜ term_var addr)
-                               ∨ term_var A = term_val ty_pmpaddrmatchtype OFF
+                                    term_var A = term_val ty_pmpaddrmatchtype OFF
+                                    ∨ (asn.formula (formula_relop bop.neq (term_var A) (term_val ty_pmpaddrmatchtype OFF)) ∗
+                                         (asn_bool (term_var pmpaddr <ᵘₜ term_var prev_pmpaddr)
+                                          ∨ (asn_bool (term_var prev_pmpaddr <=ᵘₜ term_var pmpaddr) ∗ asn_bool (term_binop bop.bvadd (term_var addr) (term_var width) <=ᵘₜ term_var prev_pmpaddr))
+                                          ∨ (asn_bool (term_var prev_pmpaddr <=ᵘₜ term_var pmpaddr) ∗ asn_bool (term_var prev_pmpaddr <ᵘₜ term_binop bop.bvadd (term_var addr) (term_var width)) ∗ asn_bool (term_var pmpaddr <=ᵘₜ term_var addr))))
                            | PMP_Fail     =>
                                asn_bool (term_not
                                            (term_var prev_pmpaddr <=ᵘₜ term_var addr &&ₜ term_var addr <ᵘₜ term_var pmpaddr))
@@ -976,6 +991,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | execute_RISCV_JAL       => Some sep_contract_execute_RISCV_JAL
             | execute_RISCV_JALR      => Some sep_contract_execute_RISCV_JALR
             | execute_ECALL           => Some sep_contract_execute_ECALL
+            | execute_EBREAK          => Some sep_contract_execute_EBREAK
             | execute_MRET            => Some sep_contract_execute_MRET
             | execute_CSR             => Some sep_contract_execute_CSR
             | execute_STORE           => Some sep_contract_execute_STORE
@@ -1084,12 +1100,24 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              sep_contract_postcondition   := ⊤;
           |}.
 
+        Definition sep_contract_vector_subrange {n} (e b : nat)
+          {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat}
+          : SepContractFunX (@vector_subrange n e b _ _ _) :=
+          {| sep_contract_logic_variables := ["bv" :: ty.bvec n];
+             sep_contract_localstore      := [term_var "bv"];
+             sep_contract_precondition    := ⊤;
+             sep_contract_result          := "result_vector_subrange";
+             sep_contract_postcondition   := ⊤;
+          |}.
+        #[global] Arguments sep_contract_vector_subrange {n} e b {p q r}.
+
         Definition CEnvEx : SepContractEnvEx :=
           fun Δ τ fn =>
             match fn with
-            | read_ram bytes  => sep_contract_read_ram bytes
-            | write_ram bytes => sep_contract_write_ram bytes
-            | decode          => sep_contract_decode
+            | read_ram bytes      => sep_contract_read_ram bytes
+            | write_ram bytes     => sep_contract_write_ram bytes
+            | decode              => sep_contract_decode
+            | vector_subrange e b => sep_contract_vector_subrange e b
             end.
 
         Lemma linted_cenvex :
@@ -1216,16 +1244,26 @@ Module RiscvPmpValidContracts.
   Import RiscvPmpExecutor.
   Import RiscvPmpShallowExecutor.
 
+  Inductive Fuel : Set :=
+  | NoInlining
+  | InlineOneLevel.
+
+  Definition fuel_to_nat (f : Fuel) : nat :=
+    match f with
+    | NoInlining     => 1
+    | InlineOneLevel => 2
+    end.
+
   Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContractReflect c (FunDef f)
-    | None => False
+    | None   => False
     end.
 
-  Definition ValidContractWithFuel {Δ τ} (fuel : nat) (f : Fun Δ τ) : Prop :=
+  Definition ValidContractWithFuel {Δ τ} (fuel : Fuel) (f : Fun Δ τ) : Prop :=
     match CEnv f with
-    | Some c => Symbolic.ValidContractReflectWithFuel fuel c (FunDef f)
-    | None => False
+    | Some c => Symbolic.ValidContractReflectWithFuel (fuel_to_nat fuel) c (FunDef f)
+    | None   => False
     end.
 
 
@@ -1251,6 +1289,62 @@ Module RiscvPmpValidContracts.
     Import SymProp.notations.
 
   End Debug.
+
+  Lemma pmp_check_perms_gives_access :
+    forall acc p L0 A0 X0 W0 R0,
+      Pmp_check_perms {| L := L0; A := A0; X := X0; W := W0; R := R0 |} acc p ->
+      decide_access_pmp_perm acc
+                             (pmp_get_perms {| L := L0; A := A0; X := X0; W := W0; R := R0 |} p) = true.
+  Proof.
+    intros; destruct p, acc, L0, X0, W0, R0;
+      simpl; cbv in H; subst; auto.
+  Qed.
+
+  Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheck bytes H).
+  Proof.
+    destruct H as [H|[H|H]]; rewrite ?H;
+    apply Symbolic.validcontract_with_erasure_sound;
+    vm_compute; constructor;
+    cbn;
+    intros addr acc priv addr0 addr1 R0 [] X0 A0 L0 R1 [] X1 A1 L1;
+      repeat
+        (intros;
+         match goal with
+         | |- _ /\ _ => split; intros; subst; auto
+         | H: OFF = TOR |- _ => inversion H
+         | H: (?x || ?y)%bool = true |- _ =>
+             apply Bool.orb_prop in H as [|]
+         | H: ?a <ᵘ [bv 0x0] |- _ =>
+             now apply N.nlt_0_r in H
+         | H: Pmp_check_perms ?cfg ?acc ?priv |- _ =>
+             apply pmp_check_perms_gives_access in H
+         | H: ?x <=ᵘ? ?y = true |- _ =>
+             apply bv.uleb_ule in H
+         end);
+      unfold Pmp_access, decide_pmp_access, check_pmp_access, pmp_check, pmp_match_entry;
+      cbv [pmp_addr_range A];
+      rewrite ?pmp_match_addr_none;
+      auto.
+
+    all: try now rewrite pmp_match_addr_match_conditions_2.
+    all: try now rewrite pmp_match_addr_nomatch_conditions.
+    all: try now rewrite pmp_match_addr_nomatch_conditions_1.
+    all: try now rewrite pmp_match_addr_nomatch_conditions_2.
+    all: try (rewrite pmp_match_addr_nomatch_conditions_1; auto;
+              now rewrite pmp_match_addr_match_conditions_2).
+    all: try (rewrite pmp_match_addr_nomatch_conditions_2; auto;
+              now rewrite pmp_match_addr_match_conditions_2).
+    all: try (rewrite pmp_match_addr_nomatch_conditions_1; auto;
+              now rewrite pmp_match_addr_nomatch_conditions).
+    all: try (rewrite pmp_match_addr_nomatch_conditions_2; auto;
+              now rewrite pmp_match_addr_nomatch_conditions).
+    all: try now rewrite ?pmp_match_addr_nomatch_conditions_1.
+    all: try (rewrite pmp_match_addr_nomatch_conditions_2; auto;
+              now rewrite ?pmp_match_addr_nomatch_conditions_1).
+    all: try (rewrite pmp_match_addr_nomatch_conditions_1; auto;
+              now rewrite ?pmp_match_addr_nomatch_conditions_2).
+    all: try now rewrite ?pmp_match_addr_nomatch_conditions_2.
+  Qed.
 
   Lemma valid_contract_step : ValidContract step.
   Proof. reflexivity. Qed.
@@ -1288,7 +1382,7 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : ValidContractWithFuel 2 (process_load bytes).
+  Lemma valid_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : ValidContractWithFuel InlineOneLevel (process_load bytes).
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
@@ -1364,9 +1458,8 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
   Proof.
     symbolic_simpl.
-    intros.
-    apply Bool.orb_true_iff in H2 as [?%bv.ultb_ult|?%bv.ultb_ult];
-      [left; auto| right; auto].
+    intros; split; intros; bv_comp; auto.
+    destruct (v + v0 <=ᵘ? v1)%bv eqn:?; bv_comp; auto.
   Qed.
 
   Lemma valid_contract_pmpMatchEntry : ValidContract pmpMatchEntry.
@@ -1451,13 +1544,13 @@ Module RiscvPmpValidContracts.
     lia.
   Qed.
 
-  Lemma valid_contract_execute_RTYPE : ValidContract execute_RTYPE.
+  Lemma valid_contract_execute_RTYPE : ValidContractWithFuel InlineOneLevel execute_RTYPE.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_ITYPE : ValidContract execute_ITYPE.
+  Lemma valid_contract_execute_ITYPE : ValidContractWithFuel InlineOneLevel execute_ITYPE.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_SHIFTIOP : ValidContract execute_SHIFTIOP.
+  Lemma valid_contract_execute_SHIFTIOP : ValidContractWithFuel InlineOneLevel execute_SHIFTIOP.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_execute_UTYPE : ValidContract execute_UTYPE.
@@ -1475,6 +1568,9 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_ECALL : ValidContract execute_ECALL.
   Proof. reflexivity. Qed.
 
+  Lemma valid_contract_execute_EBREAK : ValidContractDebug execute_EBREAK.
+  Proof. now symbolic_simpl. Qed.
+
   Lemma valid_contract_execute_MRET : ValidContract execute_MRET.
   Proof. reflexivity. Qed.
 
@@ -1487,75 +1583,7 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_CSR : ValidContract execute_CSR.
   Proof. reflexivity. Qed.
 
-  Lemma pmp_check_perms_gives_access :
-    forall acc p L0 A0 X0 W0 R0,
-      Pmp_check_perms {| L := L0; A := A0; X := X0; W := W0; R := R0 |} acc p ->
-      decide_access_pmp_perm acc
-                             (pmp_get_perms {| L := L0; A := A0; X := X0; W := W0; R := R0 |} p) = true.
-  Proof.
-    intros; destruct p, acc, L0, X0, W0, R0;
-      simpl; cbv in H; subst; auto.
-  Qed.
-
   Open Scope N_scope.
-
-  (* TODO: reprove this contract! notable change: we convert the width to a bitvector in the body of pmpCheck *)
-  (* TODO: the pmpCheck contract requires some manual proof effort in the case
-         that no pmp entry matches (i.e. we end up in the final check of
-         the unrolled loop, more specifically the match on the privilege level,
-         and the Machine case (= the check is true)
-   Ideas:
-   - A lemma capturing the different conditions that can arise that lead to those
-     cases (have the conditions as precond, and asn_pmp_access ... as postcond,
-     we can then proof it sound in the model (which should be equivalent to what        
-     is currently happening in the proof below, but we should be able to define
-     the contract is one that can be proven by reflexivity))
-   *)
-  Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheck bytes H).
-  Proof.
-    destruct H as [H|[H|H]]; rewrite ?H;
-    apply Symbolic.validcontract_with_erasure_sound;
-    vm_compute; constructor;
-    cbn;
-    intros addr acc priv addr0 addr1 R0 [] X0 A0 L0 R1 [] X1 A1 L1;
-      repeat
-        (intros;
-         match goal with
-         | |- _ /\ _ => split; intros; subst; auto
-         | H: OFF = TOR |- _ => inversion H
-         | H: (?x || ?y)%bool = true |- _ =>
-             apply Bool.orb_prop in H as [|]
-         | H: ?a <ᵘ [bv 0x0] |- _ =>
-             now apply N.nlt_0_r in H
-         | H: Pmp_check_perms ?cfg ?acc ?priv |- _ =>
-             apply pmp_check_perms_gives_access in H
-         | H: ?x <=ᵘ? ?y = true |- _ =>
-             apply bv.uleb_ule in H
-         end);
-      unfold Pmp_access, decide_pmp_access, check_pmp_access, pmp_check, pmp_match_entry;
-      cbv [pmp_addr_range A];
-      rewrite ?pmp_match_addr_none;
-      auto.
-
-    all: try now rewrite pmp_match_addr_match_conditions_2.
-    all: try now rewrite pmp_match_addr_nomatch_conditions.
-    all: try now rewrite pmp_match_addr_nomatch_conditions_1.
-    all: try now rewrite pmp_match_addr_nomatch_conditions_2.
-    all: try (rewrite pmp_match_addr_nomatch_conditions_1; auto;
-              now rewrite pmp_match_addr_match_conditions_2).
-    all: try (rewrite pmp_match_addr_nomatch_conditions_2; auto;
-              now rewrite pmp_match_addr_match_conditions_2).
-    all: try (rewrite pmp_match_addr_nomatch_conditions_1; auto;
-              now rewrite pmp_match_addr_nomatch_conditions).
-    all: try (rewrite pmp_match_addr_nomatch_conditions_2; auto;
-              now rewrite pmp_match_addr_nomatch_conditions).
-    all: try now rewrite ?pmp_match_addr_nomatch_conditions_1.
-    all: try (rewrite pmp_match_addr_nomatch_conditions_2; auto;
-              now rewrite ?pmp_match_addr_nomatch_conditions_1).
-    all: try (rewrite pmp_match_addr_nomatch_conditions_1; auto;
-              now rewrite ?pmp_match_addr_nomatch_conditions_2).
-    all: now rewrite ?pmp_match_addr_nomatch_conditions_2.
-  Qed.
 
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
@@ -1570,7 +1598,7 @@ Module RiscvPmpValidContracts.
     apply Hvc.
   Qed.
 
-  Lemma valid_contract_with_fuel : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ) (fuel : nat),
+  Lemma valid_contract_with_fuel : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ) (fuel : Fuel),
       CEnv f = Some c ->
       ValidContractWithFuel fuel f ->
       exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
@@ -1578,7 +1606,7 @@ Module RiscvPmpValidContracts.
     intros ? ? f c fuel Hcenv Hvc.
     unfold ValidContractWithFuel in Hvc.
     rewrite Hcenv in Hvc.
-    exists fuel.
+    exists (fuel_to_nat fuel).
     now apply Symbolic.validcontract_reflect_fuel_sound.
   Qed.
 
@@ -1602,6 +1630,8 @@ Module RiscvPmpValidContracts.
     destruct f.
     - apply (valid_contract _ H valid_contract_rX).
     - apply (valid_contract _ H valid_contract_wX).
+    - cbn in H; inversion H.
+    - cbn in H; inversion H.
     - cbn in H; inversion H.
     - apply (valid_contract _ H valid_contract_get_arch_pc).
     - apply (valid_contract _ H valid_contract_get_next_pc).
@@ -1651,9 +1681,9 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_readCSR).
     - apply (valid_contract _ H valid_contract_writeCSR).
     - apply (valid_contract _ H valid_contract_execute).
-    - apply (valid_contract _ H valid_contract_execute_RTYPE).
-    - apply (valid_contract _ H valid_contract_execute_ITYPE).
-    - apply (valid_contract _ H valid_contract_execute_SHIFTIOP).
+    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_RTYPE).
+    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_ITYPE).
+    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_SHIFTIOP).
     - apply (valid_contract _ H valid_contract_execute_UTYPE).
     - apply (valid_contract _ H valid_contract_execute_BTYPE).
     - apply (valid_contract _ H valid_contract_execute_RISCV_JAL).
@@ -1661,6 +1691,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract _ H valid_contract_execute_LOAD).
     - apply (valid_contract _ H valid_contract_execute_STORE).
     - apply (valid_contract _ H valid_contract_execute_ECALL).
+    - apply (valid_contract_debug _ H valid_contract_execute_EBREAK).
     - apply (valid_contract _ H valid_contract_execute_MRET).
     - apply (valid_contract _ H valid_contract_execute_CSR).
   Qed.

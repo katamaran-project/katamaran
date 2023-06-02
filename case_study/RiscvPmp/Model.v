@@ -105,7 +105,7 @@ Module RiscvPmpModel2.
           cbn
       end.
 
-    Lemma bv_bin_one : bv.bin (bv.one xlenbits) = 1%N.
+    Lemma bv_bin_one : bv.bin (@bv.one xlenbits) = 1%N.
     Proof. apply bv.bin_one, xlenbits_pos. Qed.
 
     Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
@@ -135,7 +135,7 @@ Module RiscvPmpModel2.
       forall {n} (a : Addr) (b : bv byte) (bs : bv (n * byte)),
         @interp_ptstomem _ _ (S n)%nat a (bv.app b bs)
         ⊣⊢
-        (interp_ptsto a b ∗ interp_ptstomem (bv.one xlenbits + a) bs).
+        (interp_ptsto a b ∗ interp_ptstomem (bv.one + a) bs).
     Proof. intros; cbn [interp_ptstomem]; now rewrite bv.appView_app. Qed.
 
     Lemma interp_ptstomem_exists_intro (bytes : nat) :
@@ -173,8 +173,8 @@ Module RiscvPmpModel2.
         rewrite bv.seqBv_succ; try apply xlenbits_pos.
         rewrite big_sepL_cons.
         iDestruct "H" as "([%b Hb] & Hbs)".
-        iAssert (∃ (w : bv (bytes * byte)), interp_ptstomem (bv.one xlenbits + paddr) w)%I with "[Hbs]" as "[%w H]".
-        iApply ("IHbytes" $! (bv.one xlenbits + paddr) with "[%]").
+        iAssert (∃ (w : bv (bytes * byte)), interp_ptstomem (bv.one + paddr) w)%I with "[Hbs]" as "[%w H]".
+        iApply ("IHbytes" $! (bv.one + paddr) with "[%]").
         rewrite bv.bin_add_small bv_bin_one; lia.
         iApply "Hbs".
         iExists (bv.app b w).
@@ -196,7 +196,7 @@ Module RiscvPmpModel2.
         rewrite ptstomem_bv_app.
         iDestruct "Haddr" as "(Haddr0 & Haddr)".
         iPoseProof (gen_heap.gen_heap_valid with "Hmem Haddr0") as "%".
-        iPoseProof ("IHbytes" $! w (bv.one xlenbits + paddr) Hmap with "[$Haddr $Hmem]") as "%eq".
+        iPoseProof ("IHbytes" $! w (bv.one + paddr) Hmap with "[$Haddr $Hmem]") as "%eq".
         iPureIntro.
         simpl.
         f_equal; auto.
@@ -240,7 +240,7 @@ Module RiscvPmpModel2.
         iDestruct "Haddr" as "[H Haddr]".
         iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
         iApply ("IHbytes" $! data w
-                       (bv.add (bv.one xlenbits) paddr) (write_byte μ paddr bd)
+                       (bv.add bv.one paddr) (write_byte μ paddr bd)
                     (insert paddr bd memmap) with "[%] [$Haddr $Hclose $Hmem]").
         by apply map_Forall_update.
     Qed.
@@ -294,10 +294,36 @@ Module RiscvPmpModel2.
       iSplitL; first iPureIntro; auto.
     Qed.
 
+    Lemma vector_subrange_sound {n} (e b : nat)
+                                {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} :
+      ValidContractForeign (@sep_contract_vector_subrange n e b p q r) (vector_subrange e b).
+    Proof.
+      intros Γ es δ ι Heq.
+      destruct_syminstance ι.
+      iIntros "_".
+      iApply wp_unfold.
+      cbn in *.
+      iIntros (? ? ? ? ?) "[Hregs Hmem]".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; first auto.
+      iIntros.
+      repeat iModIntro.
+      eliminate_prim_step Heq.
+      fold_semWP.
+      iMod "Hclose" as "_".
+      iModIntro.
+      iFrame.
+      iSplitL; trivial.
+      destruct (fun_vector_subrange bv0 e b) eqn:Ev.
+      iApply wp_value.
+      iSplitL; first iPureIntro; auto.
+    Qed.
+
     Lemma foreignSem : ForeignSem.
     Proof.
       intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, decode_sound.
+        eauto using read_ram_sound, write_ram_sound, decode_sound, vector_subrange_sound.
     Qed.
   End ForeignProofs.
 
@@ -311,9 +337,9 @@ Module RiscvPmpModel2.
       unfold interp_gprs, reg_file.
       rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
       cbn. iSplit.
-      - iIntros "[_ [Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 [Hx7 _]]]]]]]]". iFrame.
-      - iIntros "[Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 Hx7]]]]]]". iFrame.
-        by iExists bv.zero.
+      - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
+      - iIntros "H"; iSplitR; first by iExists bv.zero.
+        repeat iDestruct "H" as "($ & H)"; iFrame.
     Qed.
 
     Lemma open_gprs_sound :
@@ -641,7 +667,7 @@ Module RiscvPmpModel2.
         (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         res = PMP_NoMatch ∨ res = PMP_Match ->
         pmp_match_addr paddr (bv.of_nat (S bytes)) rng = res ->
-        pmp_match_addr (paddr + bv.one xlenbits) (bv.of_nat bytes) rng = res.
+        pmp_match_addr (paddr + bv.one) (bv.of_nat bytes) rng = res.
     Proof.
       intros paddr rng res Hb Hrep Hrepb.
       assert (HrepS: (bv.bin paddr + 1 < bv.exp2 xlenbits)%N).
@@ -656,7 +682,7 @@ Module RiscvPmpModel2.
         destruct (hi <ᵘ? lo) eqn:?; auto.
         destruct (hi <=ᵘ? paddr) eqn:Ehipaddr.
         + apply bv.uleb_ule in Ehipaddr.
-          apply bv.ule_add_r with (p := bv.one xlenbits) in Ehipaddr; auto.
+          apply bv.ule_add_r with (p := bv.one) in Ehipaddr; auto.
           apply bv.uleb_ule in Ehipaddr.
           rewrite Ehipaddr.
           now rewrite orb_true_r.
@@ -690,7 +716,7 @@ Module RiscvPmpModel2.
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Success ->
-        pmp_match_entry (paddr + bv.one xlenbits) (bv.of_nat bytes) p cfg lo hi = PMP_Success.
+        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Success.
     Proof.
       intros paddr p cfg lo hi Hb Hrep Hrepb.
       unfold pmp_match_entry.
@@ -707,7 +733,7 @@ Module RiscvPmpModel2.
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Continue ->
-        pmp_match_entry (paddr + bv.one xlenbits) (bv.of_nat bytes) p cfg lo hi = PMP_Continue.
+        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Continue.
     Proof.
       intros paddr p cfg lo hi Hb Hrep Hrepb.
       unfold pmp_match_entry.
@@ -724,7 +750,7 @@ Module RiscvPmpModel2.
         (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         (N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
         Pmp_access paddr (bv.of_nat (S bytes)) pmp p acc ->
-        Pmp_access (paddr + bv.one xlenbits) (bv.of_nat bytes) pmp p acc.
+        Pmp_access (paddr + bv.one) (bv.of_nat bytes) pmp p acc.
     Proof.
       intros paddr [|[cfg0 addr0] [|[cfg1 addr1] []]] p acc Hb Hrep Hrepb;
         unfold Pmp_access, decide_pmp_access;
@@ -776,7 +802,7 @@ Module RiscvPmpModel2.
         iSimpl in "Hbs".
         apply pmp_access_addr_S_width_pred in Haccess; try lia.
         rewrite bv.add_comm in Haccess.
-        iApply ("IHbytes" $! (bv.one xlenbits + paddr) pmp p acc Haccess with "[%] [%] Hbs"); try lia.
+        iApply ("IHbytes" $! (bv.one + paddr) pmp p acc Haccess with "[%] [%] Hbs"); try lia.
         rewrite bv.bin_add_small ?bv_bin_one; lia.
         now iExists acc.
         rewrite bv.bin_of_nat_small; lia.
@@ -788,7 +814,7 @@ Module RiscvPmpModel2.
         destruct bytes; first now simpl.
         apply pmp_access_addr_S_width_pred in Hpmp; auto.
         rewrite bv.add_comm in Hpmp.
-        iApply ("IHbytes" $! (bv.one xlenbits + paddr) pmp p p0 Hpmp with "[%] [%]"); auto; try lia.
+        iApply ("IHbytes" $! (bv.one + paddr) pmp p p0 Hpmp with "[%] [%]"); auto; try lia.
         rewrite bv.bin_add_small bv_bin_one; lia.
         rewrite bv.bin_of_nat_small; try lia.
     Qed.
@@ -858,7 +884,7 @@ Module RiscvPmpModel2.
     Lemma lemSem : LemmaSem.
     Proof.
       intros Δ [];
-        eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound,
+        eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound ,
         close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound.
     Qed.
   End LemProofs.
