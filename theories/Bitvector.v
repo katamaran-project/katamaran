@@ -655,7 +655,7 @@ Module bv.
     Lemma unsigned_inj {n} (x y : bv n) : unsigned x = unsigned y -> x = y.
     Proof.
       intros.
-      now apply bin_inj, numbers.Z_of_N_inj.
+      now apply bin_inj, Znat.N2Z.inj.
     Qed.
 
     Definition truncz_idemp (n : nat) (x : Z) :

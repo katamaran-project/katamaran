@@ -642,7 +642,7 @@ Module MinCapsIrisInstanceWithContracts.
   End LemProofs.
 
   Section ForeignProofs.
-    Context `{sg : sailGS Σ} `{invGS}.
+    Context `{sg : sailGS Σ}.
 
     Lemma dI_sound :
       ValidContractForeign sep_contract_dI dI.
@@ -750,10 +750,10 @@ Module MinCapsIrisInstanceWithContracts.
       iModIntro.
       iFrame.
       iSplitL "Hmem'".
-      iApply (mem_inv_not_modified $! H0 with "Hmem'").
+      iApply (mem_inv_not_modified $! H with "Hmem'").
       iApply wp_value; cbn.
       iSplitL; trivial.
-      apply map_Forall_lookup_1 with (i := a) (x := v) in H0; auto.
+      apply map_Forall_lookup_1 with (i := a) (x := v) in H; auto.
       now subst.
     Qed.
 
@@ -784,7 +784,7 @@ Module MinCapsIrisInstanceWithContracts.
       iModIntro.
       iSplitL; trivial.
       iFrame.
-      iApply (mem_inv_update $! H0 with "Hmem'").
+      iApply (mem_inv_update $! H with "Hmem'").
       now iApply wp_value.
     Qed.
 

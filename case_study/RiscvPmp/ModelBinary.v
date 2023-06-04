@@ -459,7 +459,7 @@ Module RiscvPmpModel2.
       f_equal.
       - unfold bv.ule, bv.ult in *.
         apply N_of_nat_inj.
-        apply Z_of_N_inj.
+        apply N2Z.inj.
         rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
         auto using lenAddr_rep.
         + rewrite (N2Z.inj_add (bv.bin addr)).
@@ -467,7 +467,7 @@ Module RiscvPmpModel2.
         + now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax.
       - enough (bv.bin (bv.of_nat minAddr) + N.of_nat (N.to_nat (bv.bin addr - bv.bin (bv.of_nat minAddr))) +
                 N.of_nat (bytes + N.to_nat (bv.bin ((bv.of_nat minAddr) + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes))) = @bv.bin xlenbits (bv.of_nat minAddr) + N.of_nat lenAddr)%N as -> by apply maxAddr_rep.
-        apply Z_of_N_inj.
+        apply N2Z.inj.
         rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
         auto using lenAddr_rep.
         + rewrite (N2Z.inj_add (bv.bin addr)).
@@ -487,7 +487,7 @@ Module RiscvPmpModel2.
           now rewrite bv.bin_of_nat_small in addrDiffFits.
           now simpl.
         + replace (@bv.bin xlenbits (bv.of_nat minAddr) + _)%N with (bv.bin addr); try Lia.lia.
-          apply Z_of_N_inj.
+          apply N2Z.inj.
           rewrite N2Z.inj_add.
           rewrite bv.bin_of_N_small; try assumption.
           rewrite bv.bin_of_N_small.
