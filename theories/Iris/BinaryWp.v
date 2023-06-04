@@ -46,7 +46,7 @@ Definition wp_pre2 `{!irisGS2 Λ1 Λ2 Σ} (s : stuckness)
   | Some v1 => |={E}=> ∃ v2, ⌜ e21 = of_val v2 ⌝ ∗ Φ v1 v2
   | None =>
       (|={E}=> ∀ σ11 σ21, ⌜stuck e11 σ11 -> stuck e21 σ21 ⌝) ∧
-      (∀ σ11 σ21 ns κ1, state_interp2 σ11 σ21 ns ={E,∅}=∗
+      (∀ σ11 σ21 ns κ1, state_interp2 σ11 σ21 ns ∗ £ 1 ={E,∅}=∗
        ⌜if s is NotStuck then reducible e11 σ11 else True⌝ ∗
        (∀ e12 σ12, ⌜prim_step e11 σ11 κ1 e12 σ12 []⌝
          ={∅}▷=∗^(S $ num_laters_per_step2 ns) |={∅,E}=>

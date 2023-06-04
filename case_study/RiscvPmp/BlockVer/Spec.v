@@ -692,8 +692,8 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct (env.view ι) as [ι b].
     destruct (env.view ι). cbn in Heq |- *.
     iIntros "ptsto_addr_w".
-    unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+    rewrite <-semWP_unfold_nolc. cbn.
+    iIntros (γ1 μ1) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %Hmap]".
     destruct b; cbn.
     - iDestruct "ptsto_addr_w" as "#ptsto_addr_w".
@@ -701,11 +701,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iInv "ptsto_addr_w" as "Hptsto" "Hclose_ptsto".
       iMod (fupd_mask_subseteq empty) as "Hclose_rest"; first set_solver.
       iModIntro.
-      iSplitR; first done.
-      iIntros (e2 σ'' efs Hstep).
+      iIntros (s2 δ2 γ2 μ2 Hstep).
       dependent elimination Hstep.
-      fold_semWP.
-      dependent elimination s.
       rewrite Heq in f1.
       dependent elimination f1. cbn.
       do 3 iModIntro.
@@ -717,17 +714,13 @@ Module RiscvPmpIrisInstanceWithContracts.
       iSplitL "Hmem'".
       iExists memmap.
       now iFrame.
-      iSplitL; last easy.
       iApply wp_value.
       iSplitL; last easy.
       now iSplitL.
     - iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
-      iSplitR; first easy.
-      iIntros (e2 σ'' efs Hstep).
+      iIntros (s2 δ2 γ2 μ2 Hstep).
       dependent elimination Hstep.
-      fold_semWP.
-      dependent elimination s.
       rewrite Heq in f1.
       dependent elimination f1. cbn.
       do 3 iModIntro.
@@ -739,7 +732,6 @@ Module RiscvPmpIrisInstanceWithContracts.
       iExists memmap.
       iSplitL "Hmem'"; first iFrame.
       iPureIntro; assumption.
-      iSplitL; last easy.
       iApply wp_value.
       iSplitL; last easy.
       now iSplitL.
@@ -753,16 +745,13 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct (env.view ι) as [ι paddr].
     destruct (env.view ι). cbn in Heq |- *.
     iIntros "[% ptsto_addr]".
-    unfold semWP. rewrite wp_unfold. cbn.
-    iIntros ([γ μ] ns ks1 ks nt) "[Hregs Hmem]".
+    rewrite <-semWP_unfold_nolc. cbn.
+    iIntros (γ1 μ1 ) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %Hmap]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
-    iSplitR; first easy.
-    iIntros (e2 σ'' efs Hstep).
+    iIntros (e2 δ2 γ2 μ2 Hstep).
     dependent elimination Hstep.
-    fold_semWP.
-    dependent elimination s.
     rewrite Heq in f1. cbn in f1.
     dependent elimination f1. cbn.
     do 3 iModIntro.
@@ -781,16 +770,13 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct (env.view ι) as [ι code].
     destruct (env.view ι). cbn.
     iIntros "%Hdecode".
-    unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+    rewrite <-semWP_unfold_nolc. cbn.
+    iIntros (γ1 μ1) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
-    iSplitR; first easy.
-    iIntros (e2 σ'' efs Hstep).
+    iIntros (e2 δ2 γ2 μ2 Hstep).
     dependent elimination Hstep.
-    fold_semWP.
-    dependent elimination s.
     rewrite Heq in f1. cbv in f1.
     dependent elimination f1. rewrite Hdecode. cbn.
     do 3 iModIntro.
@@ -801,7 +787,6 @@ Module RiscvPmpIrisInstanceWithContracts.
     iExists memmap.
     iSplitL "Hmem'"; first iFrame.
     iPureIntro; assumption.
-    iSplitL; last easy.
     iApply wp_value; auto.
   Qed.
 
@@ -813,24 +798,20 @@ Module RiscvPmpIrisInstanceWithContracts.
     intros Γ es δ ι Heq.
     destruct (env.view ι) as [ι v].
     iIntros "_".
-    iApply wp_unfold.
+    rewrite <-semWP_unfold_nolc.
     cbn in *.
-    iIntros (? ? ? ? ?) "[Hregs Hmem]".
+    iIntros (? ?) "[Hregs Hmem]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
-    iSplitR; first auto.
     repeat iModIntro.
-    iIntros (e2 σ efs Hstep).
+    iIntros (e2 δ2 γ2 μ2 Hstep).
     dependent elimination Hstep.
-    fold_semWP.
-    dependent elimination s.
     rewrite Heq in f1.
     dependent elimination f1.
     repeat iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
     iFrame.
-    iSplitL; trivial.
     iApply wp_value.
     iSplitL; first iPureIntro; auto.
   Qed.

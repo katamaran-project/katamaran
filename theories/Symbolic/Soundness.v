@@ -489,7 +489,7 @@ Module Soundness
       intros w0 ι0 Hpc0 Δ msg E1 ? -> E2 ? ->.
       induction E1; env.destroy E2; cbn - [RSat].
       - now apply refine_pure.
-      - eapply refine_bind; auto. apply IHE1.
+      - eapply refine_bind; auto.
         intros w1 ω01 ι1 Hι1 Hpc1 _ _ _.
         apply refine_assert_formula; auto.
         eapply refine_formula_persist; eauto.

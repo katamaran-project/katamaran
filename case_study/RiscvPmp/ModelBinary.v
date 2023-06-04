@@ -214,7 +214,7 @@ Module RiscvPmpModel2.
       iDestruct "H" as "[Hmemres1 Hmemres2]".
       rewrite semWp2_unfold.
       cbn in *.
-      iIntros (? ? ? ?) "(Hregs & (% & Hmem1 & %Hmap1) & (% & Hmem2 & %Hmap2))".
+      iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1) & (% & Hmem2 & %Hmap2)) & Hcred)".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
       iIntros.
@@ -244,7 +244,7 @@ Module RiscvPmpModel2.
       iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & (%vold & H))".
       rewrite semWp2_unfold.
       cbn.
-      iIntros (? ? ? ?) "[Hregs ((% & Hmem1 & %Hmap1) & (% & Hmem2 & %Hmap2))]".
+      iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1) & (% & Hmem2 & %Hmap2)) & Hcred)".
       rewrite <-interp_ptstomem_dedup.
       iDestruct "H" as "[Hmemres1 Hmemres2]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
