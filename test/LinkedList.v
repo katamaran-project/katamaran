@@ -274,7 +274,7 @@ Module Import ExampleProgram <: Program DefaultBase.
          [x] and [xs]*)
       ForeignCall mkcons (env.snoc (env.snoc env.nil _ x) _ xs) res γ γ' μ μ' :=
         (* Determinate the next free address. *)
-        let next := infinite_fresh (elements (dom (gset Z) μ)) in
+        let next := infinite_fresh (elements (dom μ)) in
         γ' = γ /\
         (* Allocate the pair at [next]. *)
         μ' = (<[next := (x, xs)]> μ) /\
@@ -875,7 +875,7 @@ Module ExampleModel.
 
     (* Pattern match on the generic representation of abstract predicates map them
        to their Iris definition. *)
-    Definition luser_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : mcMemGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
+    Definition luser_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} (mG : mcMemGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
       (match p return Env Val (𝑯_Ty p) -> iProp Σ with
       | ptstocons => fun ts => ptstocons_interp (env.head (env.tail (env.tail ts))) (env.head (env.tail ts)) (env.head ts)
       | ptstolist => fun ts => ptstolist_interp (env.head (env.tail ts)) (env.head ts)
@@ -884,7 +884,7 @@ Module ExampleModel.
     (* This definition verifies the soundness if duplicability. However, this
        example does not contain any predicates marked as duplicable and therefore
        the proof is trivial *)
-    Definition lduplicate_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : mcMemGS Σ) :
+    Definition lduplicate_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} (mG : mcMemGS Σ) :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
       is_duplicable p = true -> luser_inst mG p ts -∗ luser_inst mG p ts ∗ luser_inst mG p ts.
     Proof.
@@ -951,28 +951,23 @@ Module ExampleModel.
         destruct (env.view ι) as [ι x].
         destruct (env.view ι). cbn.
         iIntros "_".
-        unfold semWP. rewrite wp_unfold. cbn.
-        iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+        rewrite <-semWP_unfold_nolc. cbn.
+        iIntros (γ1 μ1) "[Hregs Hmem]".
         unfold mem_inv.
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro.
-        iSplitR; first by intuition.
-        iIntros (e2 σ'' efs) "%".
-        dependent elimination H0. cbn.
-        fold_semWP.
-        dependent elimination s.
+        iIntros (e2 δ2 γ2 μ2 step).
+        dependent elimination step. cbn.
         rewrite Heq in f1. cbn in f1.
         destruct_conjs; subst.
         do 3 iModIntro.
-        cbn.
         iMod "Hclose2" as "_".
-        iMod (gen_heap_alloc μ1 (infinite_fresh (A := Z) (elements (dom (gset Z) μ1))) (x, xs) with "Hmem") as "[Hmem [Hres _]]".
+        iMod (gen_heap_alloc μ1 (infinite_fresh (A := Z) (elements (dom μ1))) (x, xs) with "Hmem") as "[Hmem [Hres _]]".
         { rewrite <-not_elem_of_dom, <-elem_of_elements.
           now eapply infinite_is_fresh.
         }
         iModIntro.
         iFrame.
-        iSplitL; last done.
         iApply wp_value.
         now iFrame.
       Qed.
@@ -986,21 +981,18 @@ Module ExampleModel.
         destruct (env.view ι) as [ι vp].
         destruct (env.view ι). cbn.
         iIntros "Hres".
-        unfold semWP. rewrite wp_unfold.
-        iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+        rewrite <-semWP_unfold_nolc.
+        iIntros (γ1 μ1) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro.
-        iSplitR; first done.
-        iIntros (e2 σ'' efs) "%".
-        dependent elimination H0. cbn.
-        fold_semWP.
-        dependent elimination s.
+        iIntros (e2 δ2 γ2 μ2 step).
+        dependent elimination step. cbn.
         rewrite Heq in f1. cbn in f1.
         unfold mem_inv.
         do 3 iModIntro.
         iMod "Hclose2" as "_".
-        iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs) with "Hmem Hres") as "%".
-        rewrite H0 in f1.
+        iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs) with "Hmem Hres") as "%eq".
+        rewrite eq in f1.
         destruct_conjs; subst.
         iModIntro.
         iFrame.
@@ -1017,15 +1009,12 @@ Module ExampleModel.
         destruct (env.view ι) as [ι vp].
         destruct (env.view ι). cbn.
         iIntros "Hres".
-        unfold semWP. rewrite wp_unfold.
-        iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+        rewrite <-semWP_unfold_nolc.
+        iIntros (γ1 μ1) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro.
-        iSplitR; first done.
-        iIntros (e2 σ'' efs) "%".
-        dependent elimination H0. cbn.
-        fold_semWP.
-        dependent elimination s.
+        iIntros (e2 δ2 γ2 μ2) "%step".
+        dependent elimination step. cbn.
         rewrite Heq in f1. cbn in f1.
         unfold mem_inv.
         do 3 iModIntro.
@@ -1049,15 +1038,12 @@ Module ExampleModel.
         destruct (env.view ι). cbn.
         iIntros "Hres".
         iDestruct "Hres" as (vxs__old) "Hres".
-        unfold semWP. rewrite wp_unfold.
-        iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+        rewrite <-semWP_unfold_nolc.
+        iIntros (γ1 μ1) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro.
-        iSplitR; first by intuition.
-        iIntros (e2 σ'' efs) "%".
-        dependent elimination H0. cbn.
-        fold_semWP.
-        dependent elimination s.
+        iIntros (e2 δ2 γ2 μ2 step).
+        dependent elimination step. cbn.
         rewrite Heq in f1. cbn in f1.
         unfold mem_inv.
         do 3 iModIntro.
