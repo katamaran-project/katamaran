@@ -18,10 +18,10 @@ Dependencies
 
 The development version of Katamaran has the following lower bounds:
 ```
-coq            >= 8.15
+coq            >= 8.16
 coq-equations  >= 1.3
-coq-iris       >= 3.5 && < 4.0
-coq-stdpp      >= 1.6
+coq-iris       >= 4.0
+coq-stdpp      >= 1.8
 ```
 and has also been tested with coq 8.16 and iris 3.6.
 
