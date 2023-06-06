@@ -40,9 +40,9 @@ From Katamaran Require Import
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
+     RiscvPmp.PmpCheck
      RiscvPmp.Sig.
 From Katamaran Require
-     RiscvPmp.PmpCheck
      RiscvPmp.Contracts
      RiscvPmp.LoopVerification
      RiscvPmp.Model.
@@ -53,7 +53,6 @@ From iris.program_logic Require weakestpre adequacy.
 From iris.proofmode Require string_ident tactics.
 From stdpp Require namespaces.
 
-Import PmpCheck.
 Import RiscvPmpProgram.
 
 Set Implicit Arguments.
@@ -135,14 +134,10 @@ Import BlockVerificationDerived2.
     Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := bv.vector_subrange 0 12 femto_pmp0cfg_bits.
     Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := bv.vector_subrange 12 20 femto_pmp0cfg_bits.
                                                                
-    Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N 80); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
-
-    Definition femto_mstatus := pure_mstatus_to_bits (MkMstatus User).
-
     Example femtokernel_init : list AST :=
       [
         UTYPE bv.zero ra RISCV_AUIPC
-      ; ITYPE (bv.of_N 80) ra ra RISCV_ADDI
+      ; ITYPE (bv.of_N 76) ra ra RISCV_ADDI
       ; CSR MPMPADDR0 ra zero false CSRRW
       ; ITYPE (bv.negate bv.one) zero ra RISCV_ADDI
       ; CSR MPMPADDR1 ra zero false CSRRW
@@ -150,12 +145,11 @@ Import BlockVerificationDerived2.
       ; ITYPE femto_pmp0cfg_bits_1 ra ra RISCV_ADDI
       ; CSR MPMP0CFG ra zero false CSRRW
       ; UTYPE bv.zero ra RISCV_AUIPC
-      ; ITYPE (bv.of_N 32) ra ra RISCV_ADDI
+      ; ITYPE (bv.of_N 28) ra ra RISCV_ADDI
       ; CSR MTvec ra zero false CSRRW
-      ; ITYPE (bv.of_N 16) ra ra RISCV_ADDI
+      ; ITYPE (bv.of_N 12) ra ra RISCV_ADDI
       ; CSR MEpc ra zero false CSRRW
-      ; UTYPE femto_mstatus ra RISCV_LUI
-      ; CSR MStatus ra zero false CSRRW
+      ; CSR MStatus zero zero false CSRRW
       ; MRET
       ].
 
@@ -165,10 +159,20 @@ Import BlockVerificationDerived2.
       ; LOAD (bv.of_N 12) ra ra false WORD
       ; MRET
       ].
+
     Definition addPc (l : list AST) : list (nat * AST) :=
       map (fun '(i , a) => (i * 4 , a)%nat)
           (combine (seq 0 (List.length l)) l).
     (* Compute addPc (femtokernel_init ++ femtokernel_handler). *)
+
+    (* +1 to include the protected data address *)
+    Definition femtokernel_size : N := N.of_nat (S (List.length femtokernel_init + List.length femtokernel_handler) * 4).
+    Definition handler_size     : N := N.of_nat (List.length femtokernel_handler) * 4.
+    Definition init_address     : N := 0.
+    Definition handler_address  : N := N.of_nat (List.length femtokernel_init) * 4.
+    Definition data_address     : N := femtokernel_size - 4.
+
+    Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N femtokernel_size); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
 
     Import asn.notations.
     Import RiscvPmp.Sig.
@@ -194,20 +198,20 @@ Import BlockVerificationDerived2.
       asn_regs_ptsto ∗
       (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
                                       (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])) ∗
-      (term_var "a" + (term_val ty_xlenbits (bv.of_N 76)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
+      (term_var "a" + (term_val ty_xlenbits (bv.of_N data_address)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
 
     Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
       (
-        asn.formula (formula_relop bop.eq (term_var "an") (term_var "a" + term_val ty_xlenbits (bv.of_N 80))) ∗
+        asn.formula (formula_relop bop.eq (term_var "an") (term_var "a" + term_val ty_xlenbits (bv.of_N femtokernel_size))) ∗
           (∃ "v", mstatus ↦ term_var "v") ∗
-          (mtvec ↦ (term_var "a" + term_val ty_xlenbits (bv.of_N 64))) ∗
+          (mtvec ↦ (term_var "a" + term_val ty_xlenbits (bv.of_N handler_address))) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
-          (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 80));
+          (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N femtokernel_size));
                                        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))])) ∗
-          (term_var "a" + (term_val ty_xlenbits (bv.of_N 76)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
+          (term_var "a" + (term_val ty_xlenbits (bv.of_N data_address)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
       )%exp.
 
     (* (* note that this computation takes longer than directly proving sat__femtoinit below *) *)
@@ -238,23 +242,23 @@ Import BlockVerificationDerived2.
     Example femtokernel_handler_pre : Assertion {| wctx := ["a" :: ty_xlenbits]; wco := []%ctx |} :=
       let pmpcfg := [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16));
                      (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))]%list in
-      (term_var "a" = term_val ty_word (bv.of_N 64)) ∗
+      (term_var "a" = term_val ty_word (bv.of_N handler_address)) ∗
       (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
-      (mtvec ↦ term_val ty_word (bv.of_N 64)) ∗
+      (mtvec ↦ term_val ty_word (bv.of_N handler_address)) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_regs_ptsto ∗
       (asn_pmp_entries (term_list pmpcfg)) ∗
       (asn_pmp_addr_access (term_list pmpcfg) (term_val ty_privilege User)) ∗
-      (term_var "a" + (term_val ty_xlenbits (bv.of_N 12)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
+      (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
 
     Example femtokernel_handler_post : Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := []%ctx |} :=
       let pmpcfg := [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16));
                      (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))]%list in
       (
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
-          (mtvec ↦ term_val ty_word (bv.of_N 64)) ∗
+          (mtvec ↦ term_val ty_word (bv.of_N handler_address)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "epc", (mepc ↦ term_var "epc" ∗
                      asn.formula
@@ -264,7 +268,7 @@ Import BlockVerificationDerived2.
           asn_regs_ptsto ∗
           (asn_pmp_entries (term_list pmpcfg)) ∗
           (asn_pmp_addr_access (term_list pmpcfg) (term_val ty_privilege User)) ∗
-          (term_var "a" + (term_val ty_xlenbits (bv.of_N 12)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42)) ∗ ⊤
+          (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42)) ∗ ⊤
       )%exp.
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
@@ -345,7 +349,7 @@ Import BlockVerificationDerived2.
   (* Import Sound. *)
   Import BlockVerificationDerived2Sem.
 
-  Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N 80) (lenAddr - 80).
+  Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N femtokernel_size) (lenAddr - (N.to_nat femtokernel_size)).
 
   (* Lemma liveAddr_split : liveAddrs = seqZ minAddr 88 ++ advAddrs. *)
   (* Proof. *)
@@ -401,14 +405,14 @@ Import BlockVerificationDerived2.
 
   (* Definition ptsto_readonly `{sailGS Σ} addr v : iProp Σ := *)
   (*       inv.inv femto_inv_ns (interp_ptsto addr v). *)
-  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := @interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N 76) (bv.of_N 42).
+  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := @interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42).
 
   Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
   (* Local Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 79). *)
 
   Definition femto_handler_pre `{sailGS Σ} : iProp Σ :=
       (mstatus ↦ {| MPP := User |}) ∗
-      (mtvec ↦ (bv.of_N 64)) ∗
+      (mtvec ↦ (bv.of_N handler_address)) ∗
       (∃ v, mcause ↦ v) ∗
       (∃ epc, mepc ↦ epc) ∗
       cur_privilege ↦ Machine ∗
@@ -416,13 +420,13 @@ Import BlockVerificationDerived2.
       interp_pmp_entries femto_pmpentries ∗
       interp_pmp_addr_access liveAddrs femto_pmpentries User ∗
       femto_inv_fortytwo ∗
-      pc ↦ (bv.of_N 64) ∗
+      pc ↦ (bv.of_N handler_address) ∗
       (∃ v, nextpc ↦ v) ∗
-      ptsto_instrs (bv.of_N 64) femtokernel_handler.
+      ptsto_instrs (bv.of_N handler_address) femtokernel_handler.
 
     Example femto_handler_post `{sailGS Σ} : iProp Σ :=
       (mstatus ↦ {| MPP := User |}) ∗
-        (mtvec ↦ (bv.of_N 64)) ∗
+        (mtvec ↦ (bv.of_N handler_address)) ∗
         (∃ v, mcause ↦ v) ∗
         cur_privilege ↦ User ∗
         interp_gprs ∗
@@ -432,7 +436,7 @@ Import BlockVerificationDerived2.
         (∃ epc, mepc ↦ epc ∗
                 pc ↦ epc) ∗
         (∃ v, nextpc ↦ v) ∗
-        ptsto_instrs (bv.of_N 64) femtokernel_handler.
+        ptsto_instrs (bv.of_N handler_address) femtokernel_handler.
 
   Definition femto_handler_contract `{sailGS Σ} : iProp Σ :=
     femto_handler_pre -∗
@@ -446,7 +450,7 @@ Import BlockVerificationDerived2.
   Lemma femto_handler_verified : forall `{sailGS Σ}, ⊢ femto_handler_contract.
   Proof.
     iIntros (Σ sG) "Hpre Hk".
-    iApply (sound_VC__addr $! (bv.of_N 64) with "[Hpre] [Hk]").
+    iApply (sound_VC__addr $! (bv.of_N handler_address) with "[Hpre] [Hk]").
     - exact sat__femtohandler.
     Unshelve.
     exact [env].
@@ -479,18 +483,18 @@ Import BlockVerificationDerived2.
 
   Lemma femtokernel_hander_safe `{sailGS Σ} :
     ⊢ mstatus ↦ {| MPP := User |} ∗
-       (mtvec ↦ (bv.of_N 64)) ∗
+       (mtvec ↦ (bv.of_N handler_address)) ∗
         (∃ v, mcause ↦ v) ∗
         (∃ mepcv, mepc ↦ mepcv) ∗
         cur_privilege ↦ Machine ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
         femto_inv_fortytwo ∗
-        (pc ↦ (bv.of_N 64)) ∗
+        (pc ↦ (bv.of_N handler_address)) ∗
         interp_pmp_addr_access liveAddrs femto_pmpentries User ∗
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
-        ptsto_instrs (bv.of_N 64) femtokernel_handler
+        ptsto_instrs (bv.of_N handler_address) femtokernel_handler
         -∗
         WP_loop.
   Proof.
@@ -525,20 +529,20 @@ Import BlockVerificationDerived2.
 
   Lemma femtokernel_manualStep2 `{sailGS Σ} :
     ⊢ (∃ mpp, mstatus ↦ {| MPP := mpp |}) ∗
-       (mtvec ↦ (bv.of_N 64)) ∗
+       (mtvec ↦ (bv.of_N handler_address)) ∗
         (∃ v, mcause ↦ v) ∗
         (∃ v, mepc ↦ v) ∗
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
-         (@interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N 76) (bv.of_N 42)) ∗
-        (pc ↦ (bv.of_N 80)) ∗
+         (@interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42)) ∗
+        (pc ↦ (bv.of_N femtokernel_size)) ∗
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
-        ptsto_instrs (bv.of_N 64) femtokernel_handler ∗
+        ptsto_instrs (bv.of_N handler_address) femtokernel_handler ∗
         ptstoSthL advAddrs
         ={⊤}=∗
-        ∃ mpp, LoopVerification.loop_pre User (bv.of_N 64) (bv.of_N 80) mpp femto_pmpentries.
+        ∃ mpp, LoopVerification.loop_pre User (bv.of_N handler_address) (bv.of_N femtokernel_size) mpp femto_pmpentries.
   Proof.
     iIntros "([%mpp Hmst] & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
     iExists mpp.
@@ -586,24 +590,24 @@ Import BlockVerificationDerived2.
       pmp1cfg ↦ default_pmpcfg_ent ∗
       (pmpaddr0 ↦ bv.zero) ∗
       (pmpaddr1 ↦ bv.zero) ∗
-      interp_ptstomem_readonly (width := xlenbytes) (bv.of_N 76) (bv.of_N 42)) ∗
+      interp_ptstomem_readonly (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
       pc ↦ bv.zero ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs bv.zero femtokernel_init.
 
     Example femto_init_post `{sailGS Σ} : iProp Σ :=
       ((∃ v, mstatus ↦ v) ∗
-        (mtvec ↦ (bv.of_N 64)) ∗
+        (mtvec ↦ (bv.of_N handler_address)) ∗
         (∃ v, mcause ↦ v) ∗
         (∃ v, mepc ↦ v) ∗
         cur_privilege ↦ User ∗
         interp_gprs ∗
         pmp0cfg ↦ femto_pmpcfg_ent0 ∗
         pmp1cfg ↦ femto_pmpcfg_ent1 ∗
-        (pmpaddr0 ↦ (bv.of_N 80)) ∗
+        (pmpaddr0 ↦ (bv.of_N femtokernel_size)) ∗
         (pmpaddr1 ↦ (bv.of_N femto_address_max)) ∗
-        interp_ptstomem_readonly (width := xlenbytes) (bv.of_N 76) (bv.of_N 42)) ∗
-        pc ↦ (bv.of_N 80) ∗
+        interp_ptstomem_readonly (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
+        pc ↦ (bv.of_N femtokernel_size) ∗
         (∃ v, nextpc ↦ v) ∗
         ptsto_instrs bv.zero femtokernel_init.
 
@@ -646,11 +650,11 @@ Import BlockVerificationDerived2.
       reg_pointsTo pmp1cfg default_pmpcfg_ent ∗
       (reg_pointsTo pmpaddr1 bv.zero) ∗
       (pc ↦ bv.zero) ∗
-      interp_ptstomem_readonly (width := xlenbytes) (bv.of_N 76) (bv.of_N 42) ∗
+      interp_ptstomem_readonly (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42) ∗
       ptstoSthL advAddrs ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs bv.zero femtokernel_init ∗
-      ptsto_instrs (bv.of_N 64) femtokernel_handler
+      ptsto_instrs (bv.of_N handler_address) femtokernel_handler
       -∗
       WP_loop.
   Proof.
@@ -687,7 +691,7 @@ Import BlockVerificationDerived2.
   Import iris.bi.big_op.
   Import iris.algebra.big_op.
 
-  Lemma liveAddrs_split : liveAddrs = bv.seqBv (bv.of_N 0) 64 ++ bv.seqBv (bv.of_N 64) 12 ++ bv.seqBv (bv.of_N 76) 4 ++ advAddrs.
+  Lemma liveAddrs_split : liveAddrs = bv.seqBv (bv.of_N init_address) (N.to_nat handler_address) ++ bv.seqBv (bv.of_N handler_address) (N.to_nat handler_size) ++ bv.seqBv (bv.of_N data_address) 4 ++ advAddrs.
   Proof.
     (* TODO: scalable proof *)
     by compute.
@@ -779,13 +783,13 @@ Import BlockVerificationDerived2.
   Qed.
 
   Lemma femtokernel_splitMemory `{sailGS Σ} {μ : Memory} :
-    mem_has_instrs μ (bv.of_N 0) femtokernel_init ->
-    mem_has_instrs μ (bv.of_N 64) femtokernel_handler ->
-    mem_has_word μ (bv.of_N 76) (bv.of_N 42) ->
+    mem_has_instrs μ (bv.of_N init_address) femtokernel_init ->
+    mem_has_instrs μ (bv.of_N handler_address) femtokernel_handler ->
+    mem_has_word μ (bv.of_N data_address) (bv.of_N 42) ->
     @mem_res _ sailGS_memGS μ ⊢ |={⊤}=>
-      ptsto_instrs (bv.of_N 0) femtokernel_init ∗
-      ptsto_instrs (bv.of_N 64) femtokernel_handler ∗
-      interp_ptstomem_readonly (width := xlenbytes) (bv.of_N 76) (bv.of_N 42) ∗
+      ptsto_instrs (bv.of_N init_address) femtokernel_init ∗
+      ptsto_instrs (bv.of_N handler_address) femtokernel_handler ∗
+      interp_ptstomem_readonly (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42) ∗
       ptstoSthL advAddrs.
   Proof.
     iIntros (Hinit Hhandler Hft) "Hmem".
@@ -798,9 +802,9 @@ Import BlockVerificationDerived2.
     iSplitL "Hhandler".
     now iApply (intro_ptsto_instrs (μ := μ)).
     iSplitL "Hfortytwo".
-    - iAssert (interp_ptstomem (bv.of_N 76) (bv.of_N 42)) with "[Hfortytwo]" as "Hfortytwo".
+    - iAssert (interp_ptstomem (bv.of_N data_address) (bv.of_N 42)) with "[Hfortytwo]" as "Hfortytwo".
       { now iApply (intro_ptstomem_word2 Hft with "Hfortytwo"). }
-      iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptstomem (bv.of_N 76) (bv.of_N 42)) with "Hfortytwo") as "Hinv".
+      iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptstomem (bv.of_N data_address) (bv.of_N 42)) with "Hfortytwo") as "Hinv".
       now iModIntro.
     - now iApply (intro_ptstoSthL μ).
   Qed.
@@ -817,20 +821,20 @@ Import BlockVerificationDerived2.
 
   Lemma femtokernel_endToEnd {γ γ' : RegStore} {μ μ' : Memory}
         {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} :
-    mem_has_instrs μ (bv.of_N 0) femtokernel_init ->
-    mem_has_instrs μ (bv.of_N 64) femtokernel_handler ->
-    mem_has_word μ (bv.of_N 76) (bv.of_N 42) ->
+    mem_has_instrs μ (bv.of_N init_address) femtokernel_init ->
+    mem_has_instrs μ (bv.of_N handler_address) femtokernel_handler ->
+    mem_has_word μ (bv.of_N data_address) (bv.of_N 42) ->
     read_register γ cur_privilege = Machine ->
     read_register γ pmp0cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr0 = bv.zero ->
     read_register γ pmp1cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr1 = bv.zero ->
-    read_register γ pc = (bv.of_N 0) ->
+    read_register γ pc = (bv.of_N init_address) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    μ' (bv.of_N 76) = (bv.of_N 42).
+    μ' (bv.of_N data_address) = (bv.of_N 42).
   Proof.
     intros μinit μhandler μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps.
-    refine (adequacy_gen (Q := fun _ _ _ _ => True%I) (μ' (bv.of_N 76) = (bv.of_N 42)) steps _).
+    refine (adequacy_gen (Q := fun _ _ _ _ => True%I) (μ' (bv.of_N data_address) = (bv.of_N 42)) steps _).
     iIntros (Σ' H).
     unfold own_regstore.
     cbn.
