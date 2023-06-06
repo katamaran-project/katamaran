@@ -124,7 +124,7 @@ Import BlockVerificationDerived2.
             bv.app r (bv.app w (bv.app x (bv.app a l)))
         end%Z.
 
-    Definition femto_address_max : N := 2^19 - 1.
+    Definition femto_address_max : N := 2 ^ (N.of_nat xlenbits) - 1.
     Definition femto_pmpcfg_ent0 : Pmpcfg_ent := MkPmpcfg_ent false OFF false false false.
     Definition femto_pmpcfg_ent0_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
@@ -142,7 +142,7 @@ Import BlockVerificationDerived2.
         UTYPE bv.zero ra RISCV_AUIPC
       ; ITYPE (bv.of_N 80) ra ra RISCV_ADDI
       ; CSR MPMPADDR0 ra zero false CSRRW
-      ; UTYPE (bv.of_N femto_address_max) ra RISCV_LUI
+      ; ITYPE (bv.negate bv.one) zero ra RISCV_ADDI
       ; CSR MPMPADDR1 ra zero false CSRRW
       ; UTYPE femto_pmp0cfg_bits_2 ra RISCV_LUI
       ; ITYPE femto_pmp0cfg_bits_1 ra ra RISCV_ADDI
