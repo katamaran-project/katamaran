@@ -336,7 +336,7 @@ Section Soundness.
     (∀ v, P ={⊤}=∗ Q v δ) -∗
                  semTriple δ P s Q.
   Proof.
-    iIntros (Hnv Hnoop) "HPQ HP". rewrite semWP_unfold. rewrite Hnv.
+    iIntros (Hnv Hnoop) "HPQ HP". rewrite <-semWP_unfold_nolc. rewrite Hnv.
     iIntros (γ1 μ1) "state_inv".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
     iIntros (s2 δ2 γ2 μ2) "%".
@@ -429,11 +429,10 @@ Section Adequacy.
       destruct eq' as ([σ' r'] & eq2 & eq3).
       now inversion eq2.
     - rewrite <-list_fmap_compose.
-      rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
-          let (x0, r0) := x in (existT x0 r0 , Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl).
+      rewrite (list_fmap_ext _ id).
       + rewrite list_fmap_id.
         eapply finite.NoDup_enum.
-      + now intros [σ' r'].
+      + now intros i [σ' r'].
   Qed.
 
   Lemma RegStore_to_map_valid (γ : RegStore) :
@@ -502,10 +501,9 @@ Section Adequacy.
       + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _].
         refine (not_elem_of_list_to_map_1 _ (existT x r) _).
         rewrite <-list_fmap_compose.
-        rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
-          let (x0, r0) := x in (existT x0 r0, Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl).
+        rewrite (list_fmap_ext _ id).
         now rewrite list_fmap_id.
-        now intros [σ2 r2].
+        now intros i [σ2 r2].
   Qed.
 
   Definition own_regstore `{sailGS Σ} (γ : RegStore) : iProp Σ :=
@@ -569,7 +567,7 @@ Section Adequacy.
   Proof.
     (* intros steps trips. *)
     intros [n steps]%steps_to_nsteps trips.
-    refine (wp_strong_adequacy sailΣ (microsail_lang Γ σ) _ _ _ _ _ _ _ (fun _ => 0) _ steps).
+    refine (wp_strong_adequacy sailΣ (microsail_lang Γ σ) _ _ _ _ _ _ _ _ (fun _ => 0) _ steps).
     iIntros (Hinv) "".
     assert (eq := RegStore_to_map_Forall γ).
     assert (regsmapv := RegStore_to_map_valid γ).
@@ -586,7 +584,6 @@ Section Adequacy.
       eapply finite.NoDup_enum.
     }
     iModIntro.
-    iExists MaybeStuck.
     iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
     iExists [ fun v => Q _ sailG (valconf_val v) (valconf_store v) ]%list.
     iExists _.
@@ -666,13 +663,13 @@ Module IrisInstanceWithContracts
     rewrite (semWP_unfold (stm_bind s k)). unfold semWP'. cbn.
     iIntros (γ1 μ1) "state_inv".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
-    iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
+    iIntros (s2 δ2 γ2 μ2) "(%step & Hcred)". destruct (smallinvstep step); cbn.
     - rewrite ?semWP_val. do 3 iModIntro. iMod "Hclose". iMod "WPs". by iFrame.
     - rewrite ?semWP_fail. by iFrame.
     - rewrite (semWP_unfold s). rewrite (stm_val_stuck H).
       iSpecialize ("WPs" $! γ1 μ1 with "state_inv").
       iMod "Hclose". iMod "WPs".
-      iSpecialize ("WPs" $! _ _ _ _ H).
+      iSpecialize ("WPs" $! _ _ _ _ with "[$Hcred]"); first easy.
       iMod "WPs". iModIntro. iModIntro. iModIntro.
       iMod "WPs". iMod "WPs" as "[state_inv wps]".
       iModIntro. iFrame "state_inv". by iApply "IH".
@@ -685,13 +682,13 @@ Module IrisInstanceWithContracts
     rewrite (semWP_unfold (stm_block δΔ k)). unfold semWP'. cbn.
     iIntros (γ1 μ1) "state_inv".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
-    iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
+    iIntros (s2 δ2 γ2 μ2) "(%step & Hcred)". destruct (smallinvstep step); cbn.
     - rewrite ?semWP_val. rewrite env.drop_cat. by iFrame.
     - rewrite ?semWP_fail. by iFrame.
     - rewrite (semWP_unfold k). rewrite (stm_val_stuck H).
       iSpecialize ("WPk" $! γ1 μ1 with "state_inv").
       iMod "Hclose". iMod "WPk".
-      iSpecialize ("WPk" $! _ _ _ _ H).
+      iSpecialize ("WPk" $! _ _ _ _ with "[$Hcred]"); first easy.
       iMod "WPk". iModIntro. iModIntro. iModIntro.
       iMod "WPk". iMod "WPk" as "[state_inv wps]".
       iModIntro. iFrame "state_inv". by iApply "IH".
@@ -700,7 +697,7 @@ Module IrisInstanceWithContracts
   Lemma rule_let {Γ τ x σ} (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ) :
     ⊢ semWP' (stm_let x σ s k) ≼ semWP (stm_let x σ s k).
   Proof.
-    iIntros (Q δΓ) "WPs". rewrite (semWP_unfold (stm_let x σ s k)). cbn.
+    iIntros (Q δΓ) "WPs". rewrite <-(semWP_unfold_nolc (stm_let x σ s k)). cbn.
     iIntros (γ1 μ1) "state_inv". unfold semWP'. cbn.
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
     iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -717,13 +714,13 @@ Module IrisInstanceWithContracts
     rewrite (semWP_unfold (stm_assign x s)). unfold semWP'. cbn.
     iIntros (γ1 μ1) "state_inv".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
-    iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
+    iIntros (s2 δ2 γ2 μ2) "(%step & Hcred)". destruct (smallinvstep step); cbn.
     - rewrite ?semWP_val. by iFrame.
     - rewrite ?semWP_fail. by iFrame.
     - rewrite (semWP_unfold s). rewrite (stm_val_stuck H).
       iSpecialize ("WPs" $! γ1 μ1 with "state_inv").
       iMod "Hclose". iMod "WPs".
-      iSpecialize ("WPs" $! _ _ _ _ H).
+      iSpecialize ("WPs" $! _ _ _ _ with "[$Hcred]"); first easy.
       iMod "WPs". iModIntro. iModIntro. iModIntro.
       iMod "WPs". iMod "WPs" as "[state_inv wps]".
       iModIntro. iFrame "state_inv". by iApply "IH".
@@ -736,13 +733,13 @@ Module IrisInstanceWithContracts
     rewrite (semWP_unfold (stm_call_frame δΔ s)). unfold semWP'. cbn.
     iIntros (γ1 μ1) "state_inv".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
-    iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
+    iIntros (s2 δ2 γ2 μ2) "(%step & Hcred)". destruct (smallinvstep step); cbn.
     - rewrite ?semWP_val. by iFrame.
     - rewrite ?semWP_fail. by iFrame.
     - rewrite (semWP_unfold s). rewrite (stm_val_stuck H).
       iSpecialize ("WPs" $! γ1 μ1 with "state_inv").
       iMod "Hclose". iMod "WPs".
-      iSpecialize ("WPs" $! _ _ _ _ H).
+      iSpecialize ("WPs" $! _ _ _ _ with "[$Hcred]"); first easy.
       iMod "WPs". iModIntro. iModIntro. iModIntro.
       iMod "WPs". iMod "WPs" as "[state_inv wps]".
       iModIntro. iFrame "state_inv". by iApply "IH".
@@ -753,7 +750,7 @@ Module IrisInstanceWithContracts
         ▷ semWP (FunDef f) (fun vτ _ => Q vτ δΓ) (evals es δΓ) -∗
         semWP (stm_call f es) Q δΓ.
   Proof.
-    iIntros (Q δΓ) "wpbody". rewrite (semWP_unfold (stm_call f es)). cbn.
+    iIntros (Q δΓ) "wpbody". rewrite <-(semWP_unfold_nolc (stm_call f es)). cbn.
     iIntros (γ1 μ1) "state_inv".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
     iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -790,7 +787,7 @@ Module IrisInstanceWithContracts
   Lemma rule_seq {Γ τ σ} (s : Stm Γ σ) (k : Stm Γ τ) :
     ⊢ semWP' (stm_seq s k) ≼ semWP (stm_seq s k).
   Proof.
-    iIntros (Q δ) "WPs". rewrite (semWP_unfold (stm_seq s k)). cbn.
+    iIntros (Q δ) "WPs". rewrite <-(semWP_unfold_nolc (stm_seq s k)). cbn.
     iIntros (γ1 μ1) "state_inv". unfold semWP'. cbn.
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
     iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -801,7 +798,7 @@ Module IrisInstanceWithContracts
   Lemma rule_assertk {Γ τ} (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ) :
     ⊢ semWP' (stm_assertk e1 e2 k) ≼ semWP (stm_assertk e1 e2 k).
   Proof.
-    iIntros (Q δ) "WPs". rewrite (semWP_unfold (stm_assertk e1 e2 k)). cbn.
+    iIntros (Q δ) "WPs". rewrite <-(semWP_unfold_nolc (stm_assertk e1 e2 k)). cbn.
     iIntros (γ1 μ1) "state_inv". unfold semWP'. cbn.
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
     iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -812,7 +809,7 @@ Module IrisInstanceWithContracts
   Lemma rule_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
     ⊢ semWP' (Γ := Γ) (stm_read_register reg) ≼ semWP (stm_read_register reg).
   Proof.
-    iIntros (Q δ) "[% [Hreg HP]]". rewrite semWP_unfold. cbn.
+    iIntros (Q δ) "[% [Hreg HP]]". rewrite <-semWP_unfold_nolc. cbn.
     iIntros (γ1 μ1) "[Hregs Hmem]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -824,7 +821,7 @@ Module IrisInstanceWithContracts
   Lemma rule_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) :
     ⊢ semWP' (stm_write_register reg e) ≼ semWP (stm_write_register reg e).
   Proof.
-    iIntros (Q δ) "[% [Hreg HP]]". rewrite semWP_unfold. cbn.
+    iIntros (Q δ) "[% [Hreg HP]]". rewrite <-semWP_unfold_nolc. cbn.
     iIntros (γ1 μ1) "[Hregs Hmem]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iMod (reg_update γ1 reg v (eval e δ) with "Hregs Hreg") as "[Hregs Hreg]".
@@ -841,7 +838,7 @@ Module IrisInstanceWithContracts
     (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
     ⊢ semWP' (stm_pattern_match s pat rhs) ≼ semWP (stm_pattern_match s pat rhs).
   Proof.
-    iIntros (Q δΓ) "WPs". rewrite (semWP_unfold (stm_pattern_match s pat rhs)). cbn.
+    iIntros (Q δΓ) "WPs". rewrite <-(semWP_unfold_nolc (stm_pattern_match s pat rhs)). cbn.
     iIntros (γ1 μ1) "state_inv". unfold semWP'. cbn.
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
     iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
