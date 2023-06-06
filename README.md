@@ -23,7 +23,7 @@ coq-equations  >= 1.3
 coq-iris       >= 3.5 && < 4.0
 coq-stdpp      >= 1.6
 ```
-and has also been tested with coq 8.16 and iris 3.6.
+and has also been tested with coq 8.17.
 
 Installation
 ------------
