@@ -59,39 +59,114 @@ Implicit Types Δ : envs PROP.
 Implicit Types A : envs PROP.
 Implicit Types P : PROP.
 
+Lemma env_app_sound  `{! Proper (equiv ==> equiv ==> equiv) op} `{! Monoid op}
+                     {m : PROP -> PROP}
+                     `{! Proper (equiv ==> equiv) m} {Γ1 Γ2 Γ3 : env PROP} :
+  env_app Γ1 Γ2 = Some Γ3 ->
+  ([^op list] k↦x ∈ Γ3, m x) ⊣⊢ op ([^op list] k↦x ∈ Γ1, m x) ([^op list] k↦x ∈ Γ2, m x).
+Proof.
+  revert Γ2 Γ3 ; induction Γ1; intros Γ2 Γ3; cbn.
+  - inversion 1.
+    now rewrite monoid_left_id.
+  - destruct (env_app Γ1 Γ2) eqn:iheq; cbn; last inversion 1.
+    destruct (env_lookup i e); inversion 1; cbn.
+    rewrite <-(monoid_assoc (m a)).
+    now rewrite (IHΓ1 _ _ iheq).
+Qed.
+
+Lemma env_replace_sound_sep
+  `{! Proper (bi_entails ==> bi_entails ==> bi_entails) op}
+  `{! Proper (equiv ==> equiv ==> equiv) op}
+  `{! Monoid op} {m : PROP -> PROP} `{! Proper (equiv ==> equiv) m} `{! Proper (bi_entails ==> bi_entails) m}
+  i (Δ Γ Δ' : env PROP) P :
+  env_lookup i Δ = Some P ->
+  env_replace i Γ Δ = Some Δ' ->
+  (m P ⊢ ([^op list] k↦x ∈ Γ, m x)) -> ([^op list] k↦x ∈ Δ, m x) ⊢ ([^op list] k↦x ∈ Δ', m x).
+Proof.
+  revert Γ Δ';
+  induction Δ; intros Γ Δ'; first inversion 1; cbn.
+  destruct (ident_beq i i0).
+  - inversion 1; subst.
+    intros appeq HPΓ.
+    now rewrite HPΓ (env_app_sound appeq).
+  - intros lkpeq.
+    destruct (env_lookup i0 Γ); first inversion 1.
+    destruct (env_replace i Γ Δ) eqn:rplceq; cbn; inversion 1; subst.
+    cbn. intros HPΓ.
+    now rewrite (IHΔ _ _ lkpeq rplceq).
+Qed.
+
+Lemma env_replace_sound_sep_2 `{! Proper (bi_entails ==> bi_entails ==> bi_entails) op}
+  `{! Proper (equiv ==> equiv ==> equiv) op}
+  `{! Monoid op}
+  `{! Monoid op} {m : PROP -> PROP} `{! Proper (equiv ==> equiv) m} `{! Proper (bi_entails ==> bi_entails) m}
+  i (Δ Γ Δ' : env PROP) P :
+  env_lookup i Δ = Some P ->
+  env_replace i Γ Δ = Some Δ' ->
+  (([^op list] k↦x ∈ Γ, m x) ⊢ m P) -> ([^op list] k↦x ∈ Δ', m x) ⊢ ([^op list] k↦x ∈ Δ, m x).
+Proof.
+  revert Γ Δ';
+  induction Δ; intros Γ Δ'; first inversion 1; cbn.
+  destruct (ident_beq i i0).
+  - inversion 1; subst.
+    intros appeq HPΓ.
+    now rewrite (env_app_sound appeq) HPΓ.
+  - intros lkpeq.
+    destruct (env_lookup i0 Γ); first inversion 1.
+    destruct (env_replace i Γ Δ) eqn:rplceq; inversion 1; subst.
+    cbn. intros HΓP.
+    now rewrite (IHΔ _ _ lkpeq rplceq).
+Qed.
+  
 Lemma envs_simple_replace_sound_2 Δ Δ' i p P Γ :
   envs_wf Δ ->
   envs_lookup i Δ = Some (p,P) → envs_simple_replace i p Γ Δ = Some Δ' →
-  (bi_intuitionistically_if p P -∗ (if p then □ [∧] Γ else [∗] Γ)) ⊢ (of_envs Δ' -∗ of_envs Δ).
+  ((if p then env_and_persistently Γ else [∗] Γ) ⊢ bi_persistently_if p P) -> (of_envs Δ' ⊢ of_envs Δ).
 Proof. 
-  intros. 
-  rewrite <-(envs_lookup_sound_2 _ _ _ _ H H0).
-  (* rewrite envs_simple_replace_sound'//. *)
-Admitted.
+  destruct Δ; cbn in *.
+  intros wfΔ.
+  destruct (env_lookup i env_intuitionistic) eqn:lkpeq.
+  - inversion 1; subst.
+    destruct (env_app Γ env_spatial) eqn:appeq; last inversion 1.
+    destruct (env_replace i Γ env_intuitionistic) eqn:repleq; cbn; inversion 1; subst.
+    rewrite /of_envs /of_envs'; cbn.
+    intros HΓP.
+    rewrite (env_replace_sound_sep_2 (op := bi_and) (m := bi_persistently) _ _ _ _ _ lkpeq repleq HΓP).
+    now apply and_mono_l, pure_mono.
+  - destruct (env_lookup i env_spatial) eqn:lkpeq2; cbn; inversion 1; subst.
+    destruct (env_app Γ env_intuitionistic) eqn:appeq; cbn; last inversion 1.
+    destruct (env_replace i Γ env_spatial) eqn:repleq; cbn; inversion 1; subst.
+    rewrite /of_envs /of_envs'; cbn.
+    intros HΓP.
+    rewrite (env_replace_sound_sep_2 _ _ _ _ _ lkpeq2 repleq HΓP).
+    now apply and_mono_l, pure_mono.
+Qed.
 
 Lemma tac_and_codestruct Δ i p j1 j2 P P1 P2 Q :
+  envs_wf Q ->
   envs_lookup i Q = Some (p, P) →
-  (if p then IntoAnd true P P2 P1 else IntoSep P P2 P1) →
+  (if p then FromAnd P P2 P1 else FromSep P P2 P1) →
   match envs_simple_replace i p (Esnoc (Esnoc Enil j2 P1) j1 P2) Q with
   | None => False
   | Some Q' => envs_entails_cocontexts Δ Q'
   end →
   envs_entails_cocontexts Δ Q.
 Proof.
+  intros wfQ.
   destruct (envs_simple_replace _ _ _ _) as [Δ'|] eqn:Hrep; last done.
   rewrite envs_entails_cocontexts_eq. intros.
   rewrite H1; clear H1 Δ.
   rewrite (wand_entails (of_envs Δ') (of_envs Q)); first done.
-  rewrite <-(envs_simple_replace_sound_2 _ _ _ _ _ _ H Hrep).
+  rewrite <-(envs_simple_replace_sound_2 _ _ _ _ _ _ wfQ H Hrep).
+  { now apply entails_wand. }
   destruct p.
   - cbn.
     rewrite and_True.
-    rewrite <-(into_and true P P2 P1).
-    now apply entails_wand.
+    rewrite <-(from_and P P2 P1).
+    now apply persistently_and_2.
   - cbn.
     rewrite sep_emp.
-    rewrite <-(into_sep P P2 P1).
-    now apply entails_wand.
+    now rewrite <-(from_sep P P2 P1).
 Qed.
 
 Lemma tac_corename Δ i j p P Q :
