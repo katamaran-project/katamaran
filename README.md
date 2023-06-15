@@ -25,6 +25,14 @@ coq-stdpp      >= 1.8
 ```
 and has also been tested with coq 8.17.
 
+An easy way to setup your system is to create a fresh opam switch, pin the Coq and Iris versions and install equations (stdpp will be installed as a dependency of Iris):
+```
+opam switch create katamaran ocaml-base-compiler.5.0.0
+opam pin add coq 8.16.1
+opam pin add coq-iris 4.0.0
+opam install coq-equations
+```
+
 Installation
 ------------
 
