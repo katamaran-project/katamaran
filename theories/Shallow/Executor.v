@@ -39,6 +39,7 @@ From Katamaran Require Import
      Notations
      Prelude
      Signature
+     Symbolic.Propositions
      Specification.
 
 From stdpp Require base list option.
@@ -779,6 +780,58 @@ Module Type ShallowExecOn
     End WithFuel.
 
   End CHeapSpecM.
+
+  Module Replay.
+    Import SymProp.
+    Import CPureSpecM.
+
+    Definition replay_aux : forall {Σ} (ι : Valuation Σ) (s : 𝕊 Σ),
+        CPureSpecM unit :=
+      fix replay {Σ} ι s :=
+        match s with
+        | SymProp.angelic_binary o1 o2 =>
+            angelic_binary (replay ι o1) (replay ι o2)
+        | SymProp.demonic_binary o1 o2 =>
+            demonic_binary (replay ι o1) (replay ι o2)
+        | SymProp.block =>
+            block
+        | SymProp.error msg =>
+            error
+        | SymProp.assertk fml msg k =>
+            fun r => assert_formula (instprop fml ι)
+                       (fun _ => replay ι k r)
+        | SymProp.assumek fml k =>
+            fun r => assume_formula (instprop fml ι)
+                       (fun _ => replay ι k r)
+        | SymProp.angelicv b k =>
+            fun r =>
+              exists v, replay (env.snoc ι b v) k r
+        | SymProp.demonicv b k =>
+            fun r =>
+              forall v, replay (env.snoc ι b v ) k r
+        | @SymProp.assert_vareq _ x σ xIn t msg k =>
+            let ι' := env.remove (x ∷ σ) ι xIn in
+            let x' := ι.[? x∷σ] in
+            let t' := inst t ι' in
+            bind (assert_formula (x' = t'))
+                 (fun _ => replay ι' k)
+        | @SymProp.assume_vareq _ x σ xIn t k =>
+            let ι' := env.remove (x ∷ σ) ι xIn in
+            let x' := ι.[? x∷σ] in
+            let t' := inst t ι' in
+            bind (assume_formula (x' = t'))
+                 (fun _ => replay ι' k)
+        | SymProp.pattern_match s pat rhs =>
+            block
+        | SymProp.pattern_match_var x pat rhs =>
+            block
+        | SymProp.debug b k =>
+            block
+        end.
+
+    Definition replay {Σ} (ι : Valuation Σ) (s : 𝕊 Σ) : Prop :=
+      replay_aux ι s (fun _ => TRUE).
+  End Replay.
 
   Module Shallow.
 

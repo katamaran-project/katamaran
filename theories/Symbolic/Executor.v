@@ -1608,11 +1608,6 @@ Module Type SymbolicExecOn
 
     Definition replay {Σ} (s : 𝕊 Σ) : 𝕊 Σ :=
       replay_aux s acc_refl (fun _ _ _ => SymProp.block).
-
-    Lemma replay_sound {Σ} (s : 𝕊 Σ) :
-      sequiv Σ (replay s) s.
-    Proof. Admitted.
-
   End Replay.
 
   Module Symbolic.
