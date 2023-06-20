@@ -798,17 +798,17 @@ Module Type ShallowExecOn
         | SymProp.error msg =>
             error
         | SymProp.assertk fml msg k =>
-            fun r => assert_formula (instprop fml ι)
-                       (fun _ => replay ι k r)
+            bind (assert_formula (instprop fml ι))
+              (fun _ => replay ι k)
         | SymProp.assumek fml k =>
-            fun r => assume_formula (instprop fml ι)
-                       (fun _ => replay ι k r)
+            bind (assume_formula (instprop fml ι))
+              (fun _ => replay ι k)
         | SymProp.angelicv b k =>
-            fun r =>
-              exists v, replay (env.snoc ι b v) k r
+            fun P => (* TODO: add to purespecm monad? *)
+              exists v, replay (env.snoc ι b v) k P
         | SymProp.demonicv b k =>
-            fun r =>
-              forall v, replay (env.snoc ι b v ) k r
+            fun P => (* TODO: add to purespecm monad? *)
+              forall v, replay (env.snoc ι b v ) k P
         | @SymProp.assert_vareq _ x σ xIn t msg k =>
             let ι' := env.remove (x ∷ σ) ι xIn in
             let x' := ι.[? x∷σ] in

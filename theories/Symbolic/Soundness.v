@@ -1949,7 +1949,6 @@ Module Soundness
     reflexivity.
   Qed.
 
-
   Lemma refine_replay_aux {Σ} (s : 𝕊 Σ) {w : World} :
     forall
       (ω : MkWorld Σ [ctx] ⊒ w)
@@ -1970,38 +1969,28 @@ Module Soundness
       now intros ? ? ? [?%((IHs1 _ _ ι i Hpc) Hi ta a) ?%((IHs2 _ _ ι i  Hpc) Hi ta a)].
     - now cbn. (* TODO: add refinement proof for *PureSpecM.error *)
     - now cbn. (* TODO: add refinement proof for *PureSpecM.block *)
-    - intros ? ? Hrefine; cbn - [RSat wctx Val]. (* TODO: this line should be removed once todo below is done *)
-      apply PureSpecM.refine_assert_formula; auto. (* TODO: use bind again in shallow executor replay! *)
-      + eapply refine_formula_persist; auto.
-        subst.
+    - apply PureSpecM.refine_bind.
+      + apply PureSpecM.refine_assert_formula; auto.
+        eapply refine_formula_persist; eauto.
         now cbn.
-      + unfold four.
-        intros w1 ω1 ι1 Hinst Hpc1 ? ? ?.
-        cbn.
-        intros Hsafe.
-        assert (Hiacc : i = inst (sub_acc (ω ∘ ω1)) ι1) by
-          (subst; now rewrite sub_acc_trans, inst_subst).
-        eapply (IHs w1 (ω ∘ ω1) ι1 i Hpc1 Hiacc _ _ _ Hsafe).
-        Unshelve.
-        cbn; intros ? ? ? Hι1 ? ? ? ?.
-        eapply Hrefine; auto.
-        now (subst; rewrite sub_acc_trans, inst_subst).
-    - intros ? ? Hrefine; cbn - [RSat wctx Val]. (* TODO: this line should be removed once todo below is done *)
-      apply PureSpecM.refine_assume_formula; auto. (* TODO: use bind again in shallow executor replay! *)
-      + eapply refine_formula_persist; auto.
+      + intros w1 ω1 ι1 -> Hpc1.
+        intros ? v Htv.
+        apply IHs; auto.
         subst.
+        rewrite sub_acc_trans.
+        cbn [sub_acc].
+        now rewrite ?inst_subst.
+    - apply PureSpecM.refine_bind.
+      + apply PureSpecM.refine_assume_formula; auto.
+        eapply refine_formula_persist; eauto.
         now cbn.
-      + unfold four.
-        intros w1 ω1 ι1 Hinst Hpc1 ? ? ?.
-        cbn.
-        intros Hsafe.
-        assert (Hiacc : i = inst (sub_acc (ω ∘ ω1)) ι1) by
-          (subst; now rewrite sub_acc_trans, inst_subst).
-        eapply (IHs w1 (ω ∘ ω1) ι1 i Hpc1 Hiacc _ _ _ Hsafe).
-        Unshelve.
-        cbn; intros ? ? ? Hι1 ? ? ? ?.
-        eapply Hrefine; auto.
-        now (subst; rewrite sub_acc_trans, inst_subst).
+      + intros w1 ω1 ι1 -> Hpc1.
+        intros ? v Htv.
+        apply IHs; auto.
+        subst.
+        rewrite sub_acc_trans.
+        cbn [sub_acc].
+        now rewrite ?inst_subst.
     - intros ? ? Hrefine; cbn - [RSat wctx Val]. (* TODO: remove + add lemma angelicv? *)
       cbn.
       intros [v H].
@@ -2088,91 +2077,10 @@ Module Soundness
       apply inst_sub_id.
     - now cbn.
   Qed.
-  (* TODO: remove, proof uses refine_replay_aux now *)
-  (*   induction s; intros * Hpc; cbn - [RSat wctx Val]. *)
-  (*   - cbn. *)
-  (*     intros [?%(IHs1 _ ι Hpc)|?%(IHs2 _ ι Hpc)]. *)
-  (*     + now left. *)
-  (*     + now right. *)
-  (*   - cbn. *)
-  (*     now intros [?%(IHs1 _ ι Hpc) ?%(IHs2 _ ι Hpc)]. *)
-  (*   - now cbn. *)
-  (*   - now cbn. *)
-  (*   - apply PureSpecM.refine_assert_formula. *)
-  (*     + apply ent_acc with (ω := ω) in Hpc. *)
-  (*       now apply instprop_persist. *)
-  (*     + now cbn. *)
-  (*     + unfold four. *)
-  (*       intros w1 ω1 ι1 ? Hpc1 ? ? ?. *)
-  (*       intros ?. *)
-  (*       eapply (IHs _ _ Hpc). *)
-  (*       unfold Replay.replay. *)
-  (*       Search "acc_refl". *)
-  (*       Print acc_trans. *)
-  (*       cbv [acc_trans] in H1. *)
-  (*       rewrite H. *)
-  (*       Search sub_acc. *)
-  (*       eapply H1. *)
-  (*       admit. *)
-  (*   - unfold CPureSpecM.bind. *)
-  (*     apply PureSpecM.refine_assume_formula. *)
-  (*     admit. *)
-  (*     admit. *)
-  (*     admit. *)
-  (*   - cbn. *)
-  (*     intros [v H]. *)
-  (*     exists v. *)
-  (*     admit. *)
-  (*   - cbn. *)
-  (*     intros H v. *)
-  (*     admit. *)
-  (*   - unfold CPureSpecM.bind. *)
-  (*     apply PureSpecM.refine_assert_formula. *)
-  (*     admit. *)
-  (*     admit. *)
-  (*     admit. *)
-  (*   - unfold CPureSpecM.bind. *)
-  (*     apply PureSpecM.refine_assume_formula. *)
-  (*     admit. *)
-  (*     admit. *)
-  (*     admit. *)
-  (*   - now cbn. *)
-  (*   - now cbn. *)
-  (*   - cbn. *)
-  (*     rewrite debug_equiv. *)
-  (*     now intros ?%(IHs _ ι Hpc). *)
-  (* Admitted. *)
 
   Lemma replay_sound {Σ} (s : 𝕊 Σ) :
-    sequiv Σ (Replay.replay s) s.
+    (Replay.replay s) <=> s.
   Proof.
-    intros ι; induction s; simpl; auto.
-    - split; intros [H|H].
-      + left. apply IHs1. admit.
-      + right. apply IHs2. admit.
-      + left. apply IHs1 in H.
-        now unfold Replay.replay in H.
-      + right. apply IHs2 in H.
-        now unfold Replay.replay in H.
-    - split; intros (Hs1 & Hs2).
-      + admit.
-      + apply IHs1 in Hs1.
-        apply IHs2 in Hs2.
-        now unfold Replay.replay in Hs1, Hs2.
-    - admit.
-    - admit.
-    - admit.
-    - split; intros H v.
-      + admit.
-      + specialize (H v).
-        apply IHs in H.
-        admit.
-    - admit.
-    - admit.
-    - split; intros _; cbn; auto.
-      admit.
-    - split; intros _; cbn; auto.
-      admit.
   Admitted.
 
   Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
