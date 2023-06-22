@@ -1601,8 +1601,8 @@ Module Type SymbolicExecOn
               let t1   := subst (T := fun Σ => Term Σ _) t ζ in
               ⟨ r12 ⟩ _ <- assume_formula (formula_relop bop.eq x1 t1) ;;
               replay k (@acc_sub (MkWorld (Σ-x∷σ) ctx.nil) _ ζ entails_nil ∘ r12)
-        | SymProp.pattern_match s pat rhs => fun r P => SymProp.block (* FIXME *)
-        | SymProp.pattern_match_var x pat rhs => fun r P => SymProp.block (* FIXME *)
+        | SymProp.pattern_match s pat rhs => fun r P => SymProp.error amsg.empty (* FIXME *)
+        | SymProp.pattern_match_var x pat rhs => fun r P => SymProp.error amsg.empty (* FIXME *)
         | debug b k => fun r01 P => debug (subst b (sub_acc r01)) (replay k r01 P)
         end.
 

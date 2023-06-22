@@ -1959,16 +1959,10 @@ Module Soundness
       ℛ⟦RPureSpecM RUnit⟧@{ι} (Replay.replay_aux s ω) (SHAL.Replay.replay_aux i s).
   Proof.
     revert w; induction s; intros * Hpc Hi; cbn - [RSat wctx Val].
-    - cbn. (* TODO: add refinement proof for *PureSpecM.angelic_binary *)
-      intros ? ? ? [Hsafe|Hsafe].
-      + apply ((IHs1 _ _ ι i Hpc) Hi ta a) in Hsafe; auto.
-        now left.
-      + apply ((IHs2 _ _ ι i Hpc) Hi ta a) in Hsafe; auto.
-        now right.
-    - cbn. (* TODO: add refinement proof for *PureSpecM.demonic_binary *)
-      now intros ? ? ? [?%((IHs1 _ _ ι i Hpc) Hi ta a) ?%((IHs2 _ _ ι i  Hpc) Hi ta a)].
-    - now cbn. (* TODO: add refinement proof for *PureSpecM.error *)
-    - now cbn. (* TODO: add refinement proof for *PureSpecM.block *)
+    - apply PureSpecM.refine_angelic_binary; auto.
+    - apply PureSpecM.refine_demonic_binary; auto.
+    - apply PureSpecM.refine_error; auto.
+    - apply PureSpecM.refine_block; auto.
     - apply PureSpecM.refine_bind.
       + apply PureSpecM.refine_assert_formula; auto.
         eapply refine_formula_persist; eauto.
@@ -1994,15 +1988,16 @@ Module Soundness
     - intros ? ? Hrefine; cbn - [RSat wctx Val]. (* TODO: remove + add lemma angelicv? *)
       cbn.
       intros [v H].
+      unfold CPureSpecM.bind, CPureSpecM.angelic.
       exists v.
       eapply (IHs _ _ _ _ _ _ _ _ _ H).
       Unshelve.
-      * cbn.
+      + cbn.
         now rewrite instprop_subst, inst_sub_wk1.
-      *  cbn [sub_acc].
+      +  cbn [sub_acc].
          subst.
          now rewrite <- inst_sub_up1.
-      * unfold four.
+      + unfold four.
         cbn.
         intros w1 ω01 ι1 Hιinst Hpc1 ? ? ?.
         eapply Hrefine; auto.
@@ -2016,12 +2011,12 @@ Module Soundness
       intros H v.
       eapply (IHs _ _ _ _ _ _ _ _ _ (H v)).
       Unshelve.
-      *  cbn.
+      +  cbn.
          now rewrite instprop_subst, inst_sub_wk1.
-      *  cbn [sub_acc].
+      +  cbn [sub_acc].
          subst.
          now rewrite <- inst_sub_up1.
-      * unfold four.
+      + unfold four.
         cbn.
         intros w1 ω01 ι1 Hιinst Hpc1 ? ? ?.
         eapply Hrefine; auto.
@@ -2058,7 +2053,11 @@ Module Soundness
         now rewrite <- inst_sub_shift.
     - now cbn.
     - now cbn.
-    - now cbn.
+    - cbn. (* TODO: put in seperate lemma? *)
+      intros ta a P Hreplay.
+      rewrite debug_equiv in Hreplay.
+      revert ta a P Hreplay.
+      apply IHs; auto.
   Qed.
 
   Lemma refine_replay {Σ} (s : 𝕊 Σ) {w : World} :
@@ -2069,7 +2068,6 @@ Module Soundness
       ℛ⟦ℙ⟧@{i} (Replay.replay s) (SHAL.Replay.replay i s).
   Proof.
     intros.
-    unfold Replay.replay, SHAL.Replay.replay.
     apply refine_replay_aux.
     - now cbn.
     - cbn [sub_acc sub_id].
@@ -2078,17 +2076,108 @@ Module Soundness
     - now cbn.
   Qed.
 
-  Lemma replay_sound {Σ} (s : 𝕊 Σ) :
-    (Replay.replay s) <=> s.
+  Lemma shallow_replay_complete {Σ} (s : 𝕊 Σ) {w : World} :
+    forall
+      (ω : MkWorld Σ [ctx] ⊒ w)
+      (ι : Valuation w)
+      (i : Valuation Σ)
+      (Hpc0 : instprop (wco w) ι),
+      i = inst (sub_acc ω) ι ->
+      SHAL.Replay.replay i s ->
+      safe s i.
   Proof.
-  Admitted.
+    revert w; induction s; intros w ω ι i Hpc0 Hi Hreplay.
+    - destruct Hreplay as [H|H].
+      + left.
+        apply (IHs1 w ω ι i Hpc0 Hi H).
+      + right.
+        apply (IHs2 w ω ι i Hpc0 Hi H).
+    - destruct Hreplay as [Hs1 Hs2].
+      split.
+      + apply (IHs1 w ω ι i Hpc0 Hi Hs1).
+      + apply (IHs2 w ω ι i Hpc0 Hi Hs2).
+    - auto.
+    - auto.
+    - cbn in Hreplay.
+      unfold CPureSpecM.bind, CPureSpecM.assert_formula in Hreplay.
+      destruct Hreplay as [Hfml Hs].
+      split; auto.
+      apply (IHs w ω ι i Hpc0 Hi Hs).
+    - cbn in Hreplay.
+      unfold CPureSpecM.bind, CPureSpecM.assume_formula in Hreplay.
+      intros Hfml.
+      apply (IHs w ω ι i Hpc0 Hi (Hreplay Hfml)).
+    - cbn in Hreplay.
+      unfold CPureSpecM.bind, CPureSpecM.angelic in Hreplay.
+      destruct Hreplay as [v Hreplay].
+      exists v.
+      eapply (IHs (wsnoc w b) _ ι.[b ↦ v] _ _ _ Hreplay).
+      Unshelve.
+      + apply acc_sub with (ζ := sub_up1 (sub_acc ω)).
+        apply Entailment.entails_nil.
+      + cbn.
+        now rewrite instprop_subst, inst_sub_wk1.
+      + subst.
+        now rewrite <- inst_sub_up1.
+    - cbn in Hreplay.
+      unfold CPureSpecM.bind, CPureSpecM.demonic in Hreplay.
+      intros v.
+      eapply (IHs (wsnoc w b) _ ι.[b ↦ v] _ _ _ (Hreplay v)).
+      Unshelve.
+      + apply acc_sub with (ζ := sub_up1 (sub_acc ω)).
+        apply Entailment.entails_nil.
+      + cbn.
+        now rewrite instprop_subst, inst_sub_wk1.
+      + subst.
+        now rewrite <- inst_sub_up1.
+    - cbn in Hreplay.
+      unfold CPureSpecM.bind, CPureSpecM.assert_formula in Hreplay.
+      destruct Hreplay as [Heq Hreplay].
+      split; auto.
+      eapply (IHs _ _ (inst (sub_acc ω) ι) _ _ _ Hreplay).
+      Unshelve.
+      + apply acc_sub with (ζ := sub_shift xIn).
+        apply Entailment.entails_nil.
+      + now cbn.
+      + rewrite <- inst_sub_shift.
+        cbn [sub_acc].
+        now subst.
+    - cbn in Hreplay.
+      unfold CPureSpecM.bind, CPureSpecM.assume_formula in Hreplay.
+      intros Heq.
+      eapply (IHs _ _ (inst (sub_acc ω) ι) _ _ _ (Hreplay Heq)).
+      Unshelve.
+      + apply acc_sub with (ζ := sub_shift xIn).
+        apply Entailment.entails_nil.
+      + now cbn.
+      + rewrite <- inst_sub_shift.
+        cbn [sub_acc].
+        now subst.
+    - now cbn in Hreplay.
+    - now cbn in Hreplay.
+    - cbn in Hreplay.
+      apply (IHs _ _ ι _ Hpc0 Hi Hreplay).
+  Qed.
+
+  Lemma replay_sound_nil (s : 𝕊 [ctx]) :
+    forall ι,
+      safe (Replay.replay s) ι -> safe s ι.
+  Proof.
+    intros ι H.
+    destruct (env.view ι).
+    rewrite <- ?safe_debug_safe in H.
+    rewrite <- (@wsafe_safe wnil _ [env]) in H.
+    apply (@refine_replay [ctx] s wnil acc_refl [env]) in H.
+    assert (Hwco: instprop (wco wnil) [env]) by now cbn.
+    apply (@shallow_replay_complete [ctx] s wnil acc_refl [env] [env] Hwco eq_refl H).
+  Qed.
 
   Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
     Symbolic.ValidContract c body ->
     Shallow.ValidContract c body.
   Proof.
     unfold Symbolic.ValidContract. intros [Hwp%postprocess_sound].
-    rewrite replay_sound in Hwp. apply postprocess_sound in Hwp.
+    apply replay_sound_nil in Hwp. apply postprocess_sound in Hwp.
     apply refine_vcgen. now rewrite wsafe_safe, safe_debug_safe.
   Qed.
 
@@ -2097,7 +2186,7 @@ Module Soundness
     Shallow.ValidContractWithFuel fuel c body.
   Proof.
     unfold Symbolic.ValidContractWithFuel. intros [Hwp%postprocess_sound].
-    rewrite replay_sound in Hwp. apply postprocess_sound in Hwp.
+    apply replay_sound_nil in Hwp. apply postprocess_sound in Hwp.
     apply refine_vcgen. now rewrite wsafe_safe, safe_debug_safe.
   Qed.
 

@@ -804,11 +804,11 @@ Module Type ShallowExecOn
             bind (assume_formula (instprop fml ι))
               (fun _ => replay ι k)
         | SymProp.angelicv b k =>
-            fun P => (* TODO: add to purespecm monad? *)
-              exists v, replay (env.snoc ι b v) k P
+            bind (angelic _)
+              (fun v => replay (env.snoc ι b v) k)
         | SymProp.demonicv b k =>
-            fun P => (* TODO: add to purespecm monad? *)
-              forall v, replay (env.snoc ι b v ) k P
+            bind (demonic _)
+              (fun v => replay (env.snoc ι b v ) k)
         | @SymProp.assert_vareq _ x σ xIn t msg k =>
             let ι' := env.remove (x ∷ σ) ι xIn in
             let x' := ι.[? x∷σ] in
@@ -822,11 +822,11 @@ Module Type ShallowExecOn
             bind (assume_formula (x' = t'))
                  (fun _ => replay ι' k)
         | SymProp.pattern_match s pat rhs =>
-            block
+            error
         | SymProp.pattern_match_var x pat rhs =>
-            block
+            error
         | SymProp.debug b k =>
-            block
+            replay ι k
         end.
 
     Definition replay {Σ} (ι : Valuation Σ) (s : 𝕊 Σ) : Prop :=
