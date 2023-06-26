@@ -1990,8 +1990,7 @@ Module Soundness
       intros [v H].
       unfold CPureSpecM.bind, CPureSpecM.angelic.
       exists v.
-      eapply (IHs _ _ _ _ _ _ _ _ _ H).
-      Unshelve.
+      unshelve eapply (IHs _ _ _ _ _ _ _ _ _ H).
       + cbn.
         now rewrite instprop_subst, inst_sub_wk1.
       +  cbn [sub_acc].
@@ -2009,8 +2008,7 @@ Module Soundness
     - intros ? ? Hrefine; cbn - [RSat wctx Val]. (* TODO: remove + add lemma demonicv? *)
       cbn.
       intros H v.
-      eapply (IHs _ _ _ _ _ _ _ _ _ (H v)).
-      Unshelve.
+      unshelve eapply (IHs _ _ _ _ _ _ _ _ _ (H v)).
       +  cbn.
          now rewrite instprop_subst, inst_sub_wk1.
       +  cbn [sub_acc].
@@ -2111,8 +2109,7 @@ Module Soundness
       unfold CPureSpecM.bind, CPureSpecM.angelic in Hreplay.
       destruct Hreplay as [v Hreplay].
       exists v.
-      eapply (IHs (wsnoc w b) _ ι.[b ↦ v] _ _ _ Hreplay).
-      Unshelve.
+      unshelve eapply (IHs (wsnoc w b) _ ι.[b ↦ v] _ _ _ Hreplay).
       + apply acc_sub with (ζ := sub_up1 (sub_acc ω)).
         apply Entailment.entails_nil.
       + cbn.
@@ -2122,8 +2119,7 @@ Module Soundness
     - cbn in Hreplay.
       unfold CPureSpecM.bind, CPureSpecM.demonic in Hreplay.
       intros v.
-      eapply (IHs (wsnoc w b) _ ι.[b ↦ v] _ _ _ (Hreplay v)).
-      Unshelve.
+      unshelve eapply (IHs (wsnoc w b) _ ι.[b ↦ v] _ _ _ (Hreplay v)).
       + apply acc_sub with (ζ := sub_up1 (sub_acc ω)).
         apply Entailment.entails_nil.
       + cbn.
@@ -2134,8 +2130,7 @@ Module Soundness
       unfold CPureSpecM.bind, CPureSpecM.assert_formula in Hreplay.
       destruct Hreplay as [Heq Hreplay].
       split; auto.
-      eapply (IHs _ _ (inst (sub_acc ω) ι) _ _ _ Hreplay).
-      Unshelve.
+      unshelve eapply (IHs _ _ (inst (sub_acc ω) ι) _ _ _ Hreplay).
       + apply acc_sub with (ζ := sub_shift xIn).
         apply Entailment.entails_nil.
       + now cbn.
@@ -2145,8 +2140,7 @@ Module Soundness
     - cbn in Hreplay.
       unfold CPureSpecM.bind, CPureSpecM.assume_formula in Hreplay.
       intros Heq.
-      eapply (IHs _ _ (inst (sub_acc ω) ι) _ _ _ (Hreplay Heq)).
-      Unshelve.
+      unshelve eapply (IHs _ _ (inst (sub_acc ω) ι) _ _ _ (Hreplay Heq)).
       + apply acc_sub with (ζ := sub_shift xIn).
         apply Entailment.entails_nil.
       + now cbn.
