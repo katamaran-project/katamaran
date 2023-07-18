@@ -429,50 +429,24 @@ Module RiscvPmpModel2.
     Proof.
       intros ι; destruct_syminstance ι; cbn - [liveAddrs].
       iIntros "[Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]".
-      (* unfold interp_pmp_addr_access_without, *)
-      (*   interp_pmp_addr_access, *)
-      (*   interp_ptsto, *)
-      (*   MemVal, Word. *)
       assert (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N.
       {
         eapply N.le_lt_trans; last apply lenAddr_rep.
-        unfold bv.unsigned in *. zify. exact Hlemax. (* TODO: why does lia not solve this? *) }
-
+        unfold bv.unsigned in *. zify; auto. (* TODO: why does lia not solve this? *) }
       iDestruct (interp_pmp_addr_inj_extr with "Hmem") as "[Hmemwo Hia]"; eauto.
       iFrame.
-      assert (Hbytes: (N.of_nat bytes < bv.exp2 xlenbits)%N).
-      { destruct (bv.bin paddr).
-        now rewrite N.add_0_l in H.
-        eapply N.lt_trans.
-        2: exact H.
-        apply N.lt_add_pos_l.
-        lia. }
-
-      destruct (@in_liveAddrs_split paddr bytes Hbytes H) as (l1 & l2 & eq).
-      lia.
-      apply minAddr_le_ule; auto.
-      apply maxAddr_le_ule; auto.
-      rewrite eq.
-      rewrite ?big_opL_app.
-      iDestruct "Hmem" as "(Hmem1 & Haddrs & Hmem2)".
-      iSplitR "Haddrs".
-      - iIntros "Hpaddr".
-        iFrame "Hmem1 Hmem2".
-        iApply (big_sepL_pure_impl Hpmp with "[Hpaddr]"); try lia.
-        iIntros "%".
-        now iApply (interp_ptstomem_big_sepS bytes $! paddr H).
-      - unfold ptstoSth.
-        iApply (interp_ptstomem_big_sepS bytes $! paddr H).
-        iApply (big_sepL_pure_impl Hpmp with "Haddrs [%]"); try lia.
-        now exists acc.
+      iApply interp_addr_access_inj_extr; last iFrame; eauto.
+      - unfold bv.unsigned in *. zify; auto. (* TODO idem *)
+      - unfold bv.unsigned in *. zify; auto. (* TODO idem *)
     Qed.
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_return_pmp_ptsto bytes).
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      unfold interp_pmp_addr_access_without.
       iIntros "[Hwithout Hptsto]".
+      (* rewrite -(interp_addr_access_inj_extr with "Hptsto"). *)
+      unfold interp_pmp_addr_access_without.
       iApply ("Hwithout" with "Hptsto").
     Qed.
 
