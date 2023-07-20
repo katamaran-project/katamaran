@@ -766,7 +766,7 @@ Module Type InstantiationOn
 
     Lemma entails_cons `{InstProp A, InstProp B} {Σ} (x : A Σ) (ys : Ctx (B Σ)) (y : B Σ) :
       (x ⊢ ys) /\ (x ⊢ y) <-> (x ⊢ ys ▻ y).
-    Proof. unfold entails; cbn. intuition. Qed.
+    Proof. firstorder. Qed.
 
     Lemma proper_subst_entails `{InstPropSubst A, InstPropSubst B}
       {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (x : A Σ1) (y : B Σ1) :
@@ -794,27 +794,27 @@ Module Type InstantiationOn
 
     Lemma unsatisfiable_snoc_l `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
       Unsatisfiable xs -> Unsatisfiable (xs ▻ x).
-    Proof. unfold Unsatisfiable; intuition. Qed.
+    Proof. firstorder. Qed.
 
     Lemma unsatisfiable_snoc_r `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
       Unsatisfiable x -> Unsatisfiable (xs ▻ x).
-    Proof. unfold Unsatisfiable; intuition. Qed.
+    Proof. firstorder. Qed.
 
     Lemma unsatisfiable_none_some `{InstProp A} [Σ] (x : A Σ) :
       Unsatisfiable x -> None ⊣⊢ Some x.
-    Proof. unfold Unsatisfiable; intros ? ι; cbn; intuition. Qed.
+    Proof. firstorder. Qed.
 
     Lemma unsatisfiable_some_none `{InstProp A} [Σ] (x : A Σ) :
       Unsatisfiable x -> Some x ⊣⊢ None.
-    Proof. unfold Unsatisfiable; intros ? ι; cbn; intuition. Qed.
+    Proof. firstorder. Qed.
 
     Lemma nil_l_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
       Valid xs -> [ctx] ⊣⊢ xs.
-    Proof. unfold Valid; intros ? ι; cbn; intuition. Qed.
+    Proof. firstorder. Qed.
 
     Lemma nil_r_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
       Valid xs -> xs ⊣⊢ [ctx].
-    Proof. unfold Valid; intros ? ι; cbn; intuition. Qed.
+    Proof. firstorder. Qed.
 
     Module tactics.
 

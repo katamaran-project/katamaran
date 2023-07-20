@@ -252,7 +252,7 @@ Module bv.
     Fixpoint truncn_trunc (n : nat) (p : positive) {struct n} :
       truncn n (trunc n p) = trunc n p.
     Proof.
-      destruct n, p; cbn; intuition.
+      destruct n, p; cbn; intuition auto.
       - now rewrite truncn_succ_double, truncn_trunc.
       - now rewrite truncn_double, truncn_trunc.
     Defined.
@@ -362,13 +362,13 @@ Module bv.
     Proof.
       revert x.
       induction n; cbn.
-      - intuition.
+      - intuition Lia.lia.
       - destruct x.
         + rewrite IHn.
           Lia.lia.
         + rewrite IHn.
           Lia.lia.
-        + intuition.
+        + intuition auto.
           generalize (exp2_nzero n).
           destruct (exp2 n); Lia.lia.
     Qed.
@@ -376,7 +376,7 @@ Module bv.
     Lemma is_wf_spec {n x} : Is_true (is_wf n x) <-> (x < exp2 n)%N.
     Proof.
       destruct x; cbn.
-      - intuition.
+      - intuition auto.
         generalize (exp2_nzero n).
         now destruct (exp2 n).
       - eapply at_most_spec.
@@ -506,9 +506,10 @@ Module bv.
     Proof.
       split.
       - induction x1 using bv_rect.
-        + destruct (view y1). rewrite ?app_nil. intuition.
+        + destruct (view y1). rewrite ?app_nil. intuition auto.
         + destruct (view y1) as [c y1]. rewrite ?app_cons.
-          intros [H1 H2]%cons_inj. specialize (IHx1 y1 H2). intuition.
+          intros [H1 H2]%cons_inj. specialize (IHx1 y1 H2).
+          intuition congruence.
       - intros [e1 e2]; now f_equal.
     Qed.
 
@@ -717,7 +718,7 @@ Module bv.
     Lemma eq2np_sym {n} : Symmetric (eq2np n).
     Proof. now intros x y. Qed.
     Lemma eq2np_trans {n} : Transitive (eq2np n).
-    Proof. now intuition. Qed.
+    Proof. intros ? ? ?; unfold eq2np; apply transitivity. Qed.
     #[export] Instance eq2np_setoid {n} : Equivalence (eq2np n).
     Proof.
       constructor; auto using eq2np_refl, eq2np_sym, eq2np_trans.
@@ -731,7 +732,7 @@ Module bv.
     Lemma eq2n_sym {n} : Symmetric (eq2n n).
     Proof. now intros [|px] [|py]. Qed.
     Lemma eq2n_trans {n} : Transitive (eq2n n).
-    Proof. intros [|px] [|py] [|pz]; intuition. Qed.
+    Proof. intros [|px] [|py] [|pz]; unfold eq2n; apply transitivity. Qed.
     #[export] Instance eq2n_setoid {n} : Equivalence (eq2n n).
     Proof.
       constructor; auto using eq2n_refl, eq2n_sym, eq2n_trans.
@@ -749,7 +750,7 @@ Module bv.
     Lemma eq2nz_sym {n} : Symmetric (eq2nz n).
     Proof. now intros. Qed.
     Lemma eq2nz_trans {n} : Transitive (eq2nz n).
-    Proof. intros; intuition. Qed.
+    Proof. intros ? ? ?. unfold eq2nz; apply transitivity. Qed.
     #[export] Instance eq2nz_setoid {n} : Equivalence (eq2nz n).
     Proof.
       constructor; auto using eq2nz_refl, eq2nz_sym, eq2nz_trans.
@@ -1208,7 +1209,7 @@ Module bv.
       - rewrite ?list.elem_of_app. rewrite list.elem_of_app in xIn.
         destruct xIn as [xIn|xIn];
           specialize (IHm (fun k => V (S k)) (fun k => c (S k)) _ b _ xIn);
-          cbn in IHm; rewrite list.elem_of_app in IHm; intuition.
+          cbn in IHm; rewrite list.elem_of_app in IHm; intuition auto.
     Qed.
 
     Definition enum (n : nat) : list (bv n) :=

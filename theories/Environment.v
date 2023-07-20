@@ -133,7 +133,7 @@ Section WithBinding.
         EΓ1 = EΓ2 /\ EΔ1 = EΔ2.
       Proof.
         induction EΔ1; destroy EΔ2; cbn; [easy|].
-        rewrite ?inversion_eq_snoc. intuition.
+        rewrite !inversion_eq_snoc, IHEΔ1. intuition auto.
       Qed.
 
     End Inversions.

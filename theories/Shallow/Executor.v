@@ -229,7 +229,7 @@ Module Type ShallowExecOn
       - split.
         + intros ? vs.
           now destruct (env.view vs).
-        + now intuition.
+        + intros Hpost. apply Hpost.
       - destruct b as [x σ]. cbv [demonic bind pure]. split.
         + intros Hwp vs.
           destruct (env.view vs) as [vs v].
@@ -276,7 +276,7 @@ Module Type ShallowExecOn
         assert_eq_env δ δ' POST <-> δ = δ' /\ POST tt.
     Proof.
       induction δ; intros POST.
-      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ'). intuition auto.
       - destruct (env.view δ'); cbn.
         unfold bind, assert_formula.
         now rewrite IHδ, env.inversion_eq_snoc.
@@ -287,7 +287,7 @@ Module Type ShallowExecOn
         assert_eq_nenv δ δ' POST <-> δ = δ' /\ POST tt.
     Proof.
       induction δ; intros POST.
-      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ'). intuition auto.
       - destruct (env.view δ') as [δ']; cbn in *.
         unfold bind, assert_formula.
         now rewrite IHδ, (@env.inversion_eq_snoc _ _ _ b δ δ').
@@ -298,11 +298,11 @@ Module Type ShallowExecOn
         assume_eq_env δ δ' POST <-> (δ = δ' -> POST tt).
     Proof.
       induction δ; intros POST.
-      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ'). intuition auto.
       - destruct (env.view δ'); cbn.
         unfold bind, assume_formula.
         rewrite IHδ, env.inversion_eq_snoc.
-        intuition.
+        intuition auto.
     Qed.
 
     Lemma wp_assume_eq_nenv {N} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) :
@@ -310,11 +310,11 @@ Module Type ShallowExecOn
         assume_eq_nenv δ δ' POST <-> (δ = δ' -> POST tt).
     Proof.
       induction δ; intros POST.
-      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ'). intuition auto.
       - destruct (env.view δ') as [δ']; cbn in *.
         unfold bind, assume_formula.
         rewrite IHδ, (@env.inversion_eq_snoc _ _ _ b δ δ').
-        intuition.
+        intuition auto.
     Qed.
 
     Definition angelic_pattern_match {N : Set} {A σ} (pat : @Pattern N σ)
@@ -380,8 +380,8 @@ Module Type ShallowExecOn
           * now dependent elimination Heq.
         + split; try contradiction. intros [Heq Hwp]. apply n.
           now dependent elimination Heq.
-      - unfold bind. rewrite IHc1, IHc2. intuition.
-      - unfold bind. rewrite IHc1, IHc2. intuition.
+      - unfold bind. rewrite IHc1, IHc2. intuition congruence.
+      - unfold bind. rewrite IHc1, IHc2. intuition congruence.
     Qed.
 
   End CPureSpecM.

@@ -136,7 +136,7 @@ Module Type FormulasOn
       unfold bv.sle, bv.sleb, bv.slt, bv.sltb;
       unfold bv.ule, bv.uleb, bv.ult, bv.ultb;
       rewrite ?N.ltb_antisym, ?negb_true_iff, ?negb_false_iff, ?N.leb_gt, ?N.leb_le;
-      auto; try Lia.lia; try (now destruct eq_dec; intuition).
+      auto; try Lia.lia; now destruct eq_dec.
   Qed.
 
   Section Reasoning.
@@ -187,7 +187,7 @@ Module Type FormulasOn
 
     Lemma unsatisfiable_formula_bool [Σ] (t : Term Σ ty.bool) :
       base.equiv t (term_val ty.bool false) -> Unsatisfiable (formula_bool t).
-    Proof. intros e ι. specialize (e ι). cbn in *. intuition. Qed.
+    Proof. intros e ι. specialize (e ι). cbn in *. congruence. Qed.
 
     Lemma unsatisfiable_formula_false [Σ] :
       Unsatisfiable (@formula_false Σ).

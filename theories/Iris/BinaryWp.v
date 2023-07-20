@@ -81,13 +81,13 @@ Proof. rewrite -wp_aux2.(seal_eq) //. Qed.
 
 Section wp.
 Context `{!irisGS2 Λ1 Λ2 Σ}.
-Implicit Types s : stuckness.
-Implicit Types P : iProp Σ.
-Implicit Types Φ : val Λ1 → val Λ2 → iProp Σ.
-Implicit Types vA : val Λ1.
-Implicit Types vB : val Λ2.
-Implicit Types eA : expr Λ1.
-Implicit Types eB : expr Λ2.
+Implicit Type s : stuckness.
+Implicit Type P : iProp Σ.
+Implicit Type Φ : val Λ1 → val Λ2 → iProp Σ.
+Implicit Type vA : val Λ1.
+Implicit Type vB : val Λ2.
+Implicit Type eA : expr Λ1.
+Implicit Type eB : expr Λ2.
 
 (* Weakest pre *)
 Lemma wp2_unfold s E eA eB Φ :

@@ -419,7 +419,7 @@ Module Soundness
         unfold four. apply HPOST; cbn; wsimpl; auto.
         unfold PathCondition. rewrite instprop_cat. split; auto.
         now apply entails_triangular_inv.
-      - intuition.
+      - now apply Hsolver in Hfmls0.
     Qed.
 
     Lemma refine_assume_formula :
@@ -427,7 +427,7 @@ Module Soundness
         SPureSpecM.assume_formula CPureSpecM.assume_formula.
     Proof.
       unfold SPureSpecM.assume_formula, CPureSpecM.assume_formula.
-      solve. apply refine_assume_pathcondition; cbn; intuition.
+      solve. apply refine_assume_pathcondition; cbn in *; intuition auto.
     Qed.
 
     Lemma refine_assert_pathcondition :
@@ -449,15 +449,15 @@ Module Soundness
           apply HPOST; cbn; wsimpl; eauto.
           unfold PathCondition. rewrite instprop_cat. split; auto.
           now apply entails_triangular_inv.
-      - intuition.
+      - contradict Hwp.
     Qed.
 
     Lemma refine_assert_formula :
       ℛ⟦RMsg AMessage (RFormula -> RPureSpecM RUnit)⟧
         SPureSpecM.assert_formula CPureSpecM.assert_formula.
     Proof.
-      unfold SPureSpecM.assert_formula, CPureSpecM.assert_formula.
-      solve. apply refine_assert_pathcondition; cbn; intuition.
+      unfold SPureSpecM.assert_formula, CPureSpecM.assert_formula. solve.
+      apply refine_assert_pathcondition; auto. cbn in *. intuition auto.
     Qed.
 
     Lemma refine_angelic_binary `{R : Rel AT A} :

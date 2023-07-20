@@ -30,6 +30,7 @@ From Coq Require Import
      Arith.PeanoNat
      Bool.Bool
      Classes.Morphisms
+     Classes.Morphisms_Prop
      Classes.RelationClasses
      Lists.List
      NArith.NArith
@@ -451,24 +452,40 @@ Module Type SymPropOn
       wsafe p ι <-> safe_debug p ι.
     Proof.
       destruct w as [Σ C]; cbn in *. revert C.
-      induction p; cbn; intros C;
-        rewrite ?debug_equiv; auto; try (intuition; fail).
+      induction p; cbn; intros C.
+      - apply or_iff_morphism; auto.
+      - apply and_iff_morphism; auto.
+      - reflexivity.
+      - reflexivity.
+      - apply and_iff_morphism; eauto.
+      - apply imp_iff_compat_l; eauto.
       - apply base.exist_proper; eauto.
-      - destruct pattern_match_val as [pc ιpat].
-        split; intros Hsafe; intuition.
+      - apply base.forall_proper; eauto.
+      - apply and_iff_morphism; eauto.
+      - apply imp_iff_compat_l; eauto.
       - destruct pattern_match_val; apply H.
+      - destruct pattern_match_val; apply H.
+      - rewrite !debug_equiv; auto.
     Qed.
 
     Lemma safe_debug_safe {Σ : LCtx} (p : 𝕊 Σ) (ι : Valuation Σ) :
       safe_debug p ι <-> safe p ι.
     Proof.
-      induction p; cbn; rewrite ?debug_equiv, ?obligation_equiv; auto;
-        try (intuition; fail).
+      induction p; cbn; rewrite ?obligation_equiv; try progress cbn.
+      - apply or_iff_morphism; auto.
+      - apply and_iff_morphism; auto.
+      - reflexivity.
+      - reflexivity.
+      - apply and_iff_morphism; eauto.
+      - apply imp_iff_compat_l; eauto.
       - apply base.exist_proper; eauto.
-      - apply Morphisms_Prop.and_iff_morphism; cbn; eauto.
-        now rewrite inst_subst, inst_sub_shift.
-      - destruct pattern_match_val; eauto.
-      - destruct pattern_match_val; eauto.
+      - apply base.forall_proper; eauto.
+      - rewrite inst_subst, inst_sub_shift.
+        apply and_iff_morphism; eauto.
+      - apply imp_iff_compat_l; eauto.
+      - destruct pattern_match_val; apply H.
+      - destruct pattern_match_val; apply H.
+      - rewrite debug_equiv; auto.
     Qed.
 
     Lemma safe_assume_pathcondition_without_solver {w0 : World}
@@ -611,7 +628,8 @@ Module Type SymPropOn
     Proof.
       intros ι. induction xs; cbn.
       - intuition.
-      - rewrite IHxs. clear IHxs. intuition.
+      - rewrite IHxs. clear IHxs.
+        intuition (subst; auto).
     Qed.
 
     Lemma safe_demonic_list {A Σ} (P : A Σ -> 𝕊 Σ) (xs : List A Σ) :
@@ -621,7 +639,8 @@ Module Type SymPropOn
     Proof.
       intros ι. destruct xs; cbn.
       - intuition.
-      - rewrite safe_demonic_list'. intuition.
+      - rewrite safe_demonic_list'.
+        intuition (subst; auto).
     Qed.
 
     Definition sequiv Σ : relation (𝕊 Σ) :=
@@ -703,32 +722,32 @@ Module Type SymPropOn
     Qed.
 
     #[export] Instance proper_demonic_binary_impl {Σ} : Proper (simpl Σ ==> simpl Σ ==> simpl Σ) (@demonic_binary Σ).
-    Proof. intros p1 p2 p12 q1 q2 q12 ι. cbn. intuition. Qed.
+    Proof. unfold simpl. intros p1 p2 p12 q1 q2 q12 ι []. cbn. auto. Qed.
 
     #[export] Instance proper_assumek {Σ} (fml : Formula Σ) : Proper (sequiv Σ ==> sequiv Σ) (assumek fml).
-    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply imp_iff_compat_l. Qed.
 
     #[export] Instance proper_assertk {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertk fml msg).
-    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply and_iff_morphism. Qed.
 
     #[export] Instance proper_assertk_impl {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (simpl Σ ==> simpl Σ) (assertk fml msg).
-    Proof. unfold simpl. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold simpl. intros p q pq ι. cbn. intuition auto. Qed.
 
     #[export] Instance proper_assume_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assume_vareq x t).
-    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply imp_iff_compat_l. Qed.
 
     #[export] Instance proper_assume_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       Proper (simpl (Σ - x∷σ) ==> simpl Σ) (assume_vareq x t).
-    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. intuition auto. Qed.
 
     #[export] Instance proper_assert_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assert_vareq x t msg).
-    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply and_iff_morphism. Qed.
 
     #[export] Instance proper_assert_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
       Proper (simpl (Σ - x∷σ) ==> simpl Σ) (assert_vareq x t msg).
-    Proof. unfold simpl. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold simpl. intros p q pq ι. cbn. intuition auto. Qed.
 
     #[export] Instance proper_angelicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (angelicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.exist_proper. Qed.
@@ -1272,7 +1291,7 @@ Module Type SymPropOn
 
       #[export] Instance proper_assert_msgs_formulas {Σ} (mfs : Ctx (Pair AMessage Formula Σ)) :
         Proper (sequiv Σ ==> sequiv Σ) (assert_msgs_formulas mfs).
-      Proof. intros p q pq ι. rewrite ?safe_assert_msgs_formulas. intuition. Qed.
+      Proof. intros p q pq ι. rewrite !safe_assert_msgs_formulas. now apply and_iff_morphism. Qed.
 
       #[export] Instance proper_plug {Σ1 Σ2} (ec : ECtx Σ1 Σ2) :
         Proper (sequiv Σ2 ==> sequiv Σ1) (plug ec).
@@ -1477,11 +1496,14 @@ Module Type SymPropOn
 
       #[export] Instance proper_assume_pathcondition {Σ} (mfs : PathCondition Σ) :
         Proper (sequiv Σ ==> sequiv Σ) (assume_pathcondition mfs).
-      Proof. intros p q pq ι. rewrite ?safe_assume_pathcondition. intuition. Qed.
+      Proof.
+        intros p q pq ι. rewrite !safe_assume_pathcondition.
+        now apply imp_iff_compat_l.
+      Qed.
 
       #[export] Instance proper_assume_pathcondition_impl {Σ} (mfs : PathCondition Σ) :
         Proper (simpl Σ ==> simpl Σ) (assume_pathcondition mfs).
-      Proof. intros p q pq ι. rewrite ?safe_assume_pathcondition. intuition. Qed.
+      Proof. intros p q pq ι. rewrite !safe_assume_pathcondition. auto. Qed.
 
       #[export] Instance proper_plug {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
         Proper (sequiv Σ2 ==> sequiv Σ1) (plug ec).
@@ -1502,8 +1524,8 @@ Module Type SymPropOn
         demonic_binary (assume_pathcondition fmls p1) (assume_pathcondition fmls p2).
       Proof.
         intros ι; cbn.
-        rewrite ?safe_assume_pathcondition.
-        cbn. intuition.
+        rewrite !safe_assume_pathcondition.
+        cbn. intuition auto.
       Qed.
 
       Lemma forall_impl {A : Type} {P : A -> Prop} {Q : Prop} :

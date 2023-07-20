@@ -233,7 +233,7 @@ Module Import ReplayPredicates.
   Inductive PurePredicate : Set :=
   | Q.
 
-  Fixpoint Q_aux (xs : Val ty_X) : bool :=
+  Definition Q_aux (xs : Val ty_X) : bool :=
     match xs with
     | 0 :: xs => (1 =? 7)
     | _       => true

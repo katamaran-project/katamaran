@@ -1084,7 +1084,7 @@ Module Type IrisAdequacy2
 
   Definition sailΣ2 : gFunctors := #[ memΣ2 ; invΣ ; GFunctor regUR; GFunctor regUR].
 
-  Instance subG_sailGpreS {Σ} : subG sailΣ2 Σ -> sailGpreS2 Σ.
+  #[local] Instance subG_sailGpreS {Σ} : subG sailΣ2 Σ -> sailGpreS2 Σ.
   Proof.
     intros.
     lazymatch goal with
