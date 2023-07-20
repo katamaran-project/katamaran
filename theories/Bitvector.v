@@ -878,22 +878,12 @@ Module bv.
     Definition add {n} (x y : bv n) : bv n :=
       of_N (N.add (bin x) (bin y)).
 
-    #[export] Instance add_Proper {n} : Proper (eq ==> eq ==> eq) (@add n).
-    Proof. intuition. Qed.
-
     Definition negate {n} (x : bv n) : bv n := of_N (exp2 n - bin x).
-    Instance negate_Proper {n} : Proper (eq ==> eq) (@negate n).
-    Proof. intuition. Qed.
 
     Definition sub {n} (x y : bv n) : bv n := add x (negate y).
-    Instance sub_Proper {n} : Proper (eq ==> eq ==> eq) (@sub n).
-    Proof. intuition. Qed.
 
     Definition mul {n} (x y : bv n) : bv n :=
       of_N (N.mul (bin x) (bin y)).
-
-    Instance mul_Proper {n} : Proper (eq ==> eq ==> eq) (@mul n).
-    Proof. intuition. Qed.
 
     Lemma bin_of_N_eq2n {n x} : eq2n n (@bin n (@of_N n x)) x.
     Proof.
