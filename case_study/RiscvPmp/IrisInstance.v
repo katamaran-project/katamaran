@@ -96,9 +96,9 @@ Module RiscvPmpIrisInstance <:
       end.
 
     (* TODO: change back to words instead of bytes... might be an easier first version
-             and most likely still conventient in the future *)
+             and most likely still convenient in the future *)
     Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
-      mapsto addr (DfracOwn 1) b.
+      mapsto addr (DfracOwn 1) b ∗ ⌜¬ withinMMIO addr 1⌝.
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
     Definition ptstoSthL : list Addr -> iProp Σ :=
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
@@ -123,7 +123,7 @@ Module RiscvPmpIrisInstance <:
     Definition interp_addr_access_byte (a : Addr) : iProp Σ :=
       if decide (a ∈ mmio_addrs) then False%I (* Creates a proof obligation that the adversary cannot access MMIO. TODO: Change this to a trace filter to grant the adversary access to MMIO *)
       else if decide (a ∈ live_addrs) then ptstoSth a
-      else True%I.
+      else True%I. (* Could be `False` as well *)
     Definition interp_addr_access (base : Addr) (width : nat): iProp Σ :=
       [∗ list] a ∈ bv.seqBv base width, interp_addr_access_byte a.
 
@@ -549,17 +549,20 @@ Module RiscvPmpIrisInstance <:
       (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
       Pmp_access paddr (bv.of_nat bytes) entries m p →
       interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
-      ⌜bool_decide (withinMMIO paddr bytes) = (bytes =? 0)%nat⌝.
+      ⌜bool_decide (withinMMIO paddr bytes) = false%nat⌝.
     Proof.
       iIntros (Hrep Hpmp) "Hint".
       destruct bytes as [|bytes]. (* No induction needed: disproving one location suffices. *)
-      - cbn - [xlenbits] in *. now rewrite bool_decide_eq_true.
+      - cbn - [xlenbits] in *. rewrite bool_decide_eq_false. iPureIntro. by intro HFalse.
       - rewrite interp_pmp_addr_inj_extr; eauto.
         iDestruct "Hint" as "[Hint _]".
         iDestruct (interp_addr_access_cons with "Hint") as "[Hfirst _]".
-        rewrite bool_decide_eq_false !not_and_l. iLeft.
         unfold interp_addr_access_byte.
         case_decide; auto.
+        iPureIntro.
+        rewrite bool_decide_eq_false /withinMMIO.
+        destruct bytes; first congruence.
+        rewrite !not_and_l. left; congruence.
     Qed.
 
     (* Bidirectional version of the Iris lemma *)
@@ -572,45 +575,63 @@ Module RiscvPmpIrisInstance <:
     Qed.
 
     (* Use knowledge of RAM to extract byte *)
-    Lemma interp_addr_access_byte_inj_extr {entries m p} base :
-      Pmp_access base (bv.of_nat 1) entries m p →
+    Lemma interp_addr_access_byte_extr  base :
       base ∈ liveAddrs ->
-      (interp_addr_access_byte liveAddrs mmioAddrs base ⊣⊢
-      ptstoSth base)%I.
+      (interp_addr_access_byte liveAddrs mmioAddrs base ⊢
+      ptstoSth base).
     Proof.
-      intros Hpmp Hlive.
+      intros (* Hpmp *) Hlive.
       unfold interp_addr_access_byte, ptstoSth, interp_ptsto.
-      repeat case_decide; iSplit; auto; iIntros.
-      - by exfalso.
-      - iPureIntro; by eapply mmio_ram_False (* MMIO and RAM cannot overlap! *).
-      - by exfalso.
+      repeat case_decide; auto; iIntros; by exfalso.
+    Qed.
+
+    (* Inserting a byte is always possible *)
+    Lemma interp_addr_access_byte_inj base :
+       ptstoSth base -∗ interp_addr_access_byte liveAddrs mmioAddrs base.
+    Proof.
+      unfold interp_addr_access_byte, ptstoSth, interp_ptsto.
+      iIntros "HFalse". iDestruct "HFalse" as (?) "[Hmapsto %HFalse]".
+      case_decide.
+      - by cbn in HFalse.
+      - case_decide; auto.
     Qed.
 
     (* Use knowledge of RAM to extract range *)
-    Lemma interp_addr_access_inj_extr {entries m p} base width :
+    Lemma interp_addr_access_extr base width :
       (minAddr ≤ N.to_nat (bv.bin base)) →
       (N.to_nat (bv.bin base) + width ≤ maxAddr) →
       (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
-      Pmp_access base (bv.of_nat width) entries m p →
-      (interp_addr_access liveAddrs mmioAddrs base width ⊣⊢
-      (∃ (w : bv (width * byte)), interp_ptstomem base w))%I.
+      interp_addr_access liveAddrs mmioAddrs base width ⊢
+      (∃ (w : bv (width * byte)), interp_ptstomem base w).
     Proof.
-      intros HminOK HmaxOK Hrep Hacc.
+      intros HminOK HmaxOK Hrep.
       rewrite interp_ptstomem_big_sepS.
       unfold interp_addr_access, ptstoSthL.
-      iApply big_sepL_mono_iff.
+      iApply big_sepL_mono.
       iIntros (? y Hseq) "//".
-      iApply interp_addr_access_byte_inj_extr.
-      - eapply pmp_seqBv_restrict; eauto.
-      - apply bv.seqBv_spec in Hseq as Hspec.
-        apply list.lookup_lt_Some in Hseq. rewrite bv.seqBv_len in Hseq.
-        unfold liveAddrs, bv.seqBv.
-        rewrite -(bv.of_Z_unsigned y).
-        apply elem_of_list_fmap_1.
-        rewrite elem_of_seqZ.
-        subst y.
-        unfold maxAddr in HmaxOK.
-        rewrite /bv.unsigned bv.bin_add_small !bv.bin_of_nat_small; lia. (* TODO: use representability of min/maxAddr here, once they are made properly opaque *)
+      iApply interp_addr_access_byte_extr.
+      apply bv.seqBv_spec in Hseq as Hspec.
+      apply list.lookup_lt_Some in Hseq. rewrite bv.seqBv_len in Hseq.
+      unfold liveAddrs, bv.seqBv.
+      rewrite -(bv.of_Z_unsigned y).
+      apply elem_of_list_fmap_1.
+      rewrite elem_of_seqZ.
+      subst y.
+      unfold maxAddr in HmaxOK.
+      rewrite /bv.unsigned bv.bin_add_small !bv.bin_of_nat_small; lia. (* TODO: use representability of min/maxAddr here, once they are made properly opaque *)
+    Qed.
+
+    (* Inserting a range is always possible *)
+    Lemma interp_addr_access_inj base width:
+      (∃ (w : bv (width * byte)), interp_ptstomem base w) ⊢
+      interp_addr_access liveAddrs mmioAddrs base width.
+    Proof.
+      iIntros "Hint".
+      rewrite interp_ptstomem_big_sepS.
+      unfold interp_addr_access, ptstoSthL.
+      iApply big_sepL_mono; last auto.
+      iIntros (? y Hseq) "/=".
+      iApply interp_addr_access_byte_inj.
     Qed.
 
     (* TODO: This lemma is not a special case of the above, because of strange semantics of `Pmp_access`*)

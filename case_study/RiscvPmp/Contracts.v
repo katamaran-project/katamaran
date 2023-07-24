@@ -1099,7 +1099,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                  ∗ asn_pmp_addr_access (term_var "entries") (term_var "p")
                  ∗ (∃ "t", asn_pmp_access (term_var "paddr") (term_val ty_xlenbits (Bitvector.bv.of_nat bytes)) (term_var "entries") (term_var "p") (term_var "t"));
              sep_contract_result          := "result_is_within";
-             sep_contract_postcondition   := term_var "result_is_within" = (term_val ty.int (Z.of_nat bytes) =? term_val ty.int 0%Z)
+             sep_contract_postcondition   := term_var "result_is_within" = term_val ty.bool false
                  ∗ cur_privilege ↦ term_var "p"
                  ∗ asn_pmp_entries (term_var "entries")
                  ∗ asn_pmp_addr_access (term_var "entries") (term_var "p")

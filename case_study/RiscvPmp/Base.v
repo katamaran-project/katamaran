@@ -95,13 +95,14 @@ Definition mmioAddrs : list Addr := bv.seqBv (@bv.of_nat xlenbits maxAddr) lenAd
 Definition isMMIO a : Prop := a ∈ mmioAddrs.
 Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
   match size with
-  | O => True
+  | O => False (* Avoid allowing and hence recording zero-width MMIO events *)
+  | 1 => a ∈ mmioAddrs
   | S size' => a ∈ mmioAddrs /\ withinMMIO (bv.add (bv.one) a) size' end.
 #[export] Instance withinMMIODec a size: Decision (withinMMIO a size).
 Proof. generalize a. induction size.
        - apply _.
-       - intro a'. cbn. apply decidable.and_dec; [|auto].
-         apply _.
+       - intro a'. cbn. destruct size; first apply _.
+         apply decidable.and_dec; [apply _|auto].
 Qed.
 
 (* 3. Definition of machinery required to do MMIO *)

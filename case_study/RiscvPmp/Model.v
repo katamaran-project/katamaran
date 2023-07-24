@@ -143,7 +143,7 @@ Module RiscvPmpModel2.
       - now destruct (bv.view w).
       - destruct (bv.appView byte (bytes * byte) w) as (w0 & w).
         rewrite ptstomem_bv_app.
-        iDestruct "Haddr" as "(Haddr0 & Haddr)".
+        iDestruct "Haddr" as "([Haddr0 HnotM] & Haddr)".
         iPoseProof (gen_heap.gen_heap_valid with "Hmem Haddr0") as "%".
         iPoseProof ("IHbytes" $! w (bv.one + paddr) Hmap with "[$Haddr $Hmem]") as "%eq".
         iPureIntro.
@@ -205,7 +205,7 @@ Module RiscvPmpModel2.
      -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
         destruct (bv.appView byte (bytes * byte) w) as [bw w].
-        iDestruct "Haddr" as "[H Haddr]".
+        iDestruct "Haddr" as "[[H $] Haddr]".
         iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
         iApply ("IHbytes" $! data w
                        (bv.add bv.one paddr) (memory_update_ram μ (write_byte (memory_ram μ) paddr bd))
@@ -244,18 +244,14 @@ Module RiscvPmpModel2.
     Lemma interp_pmp_fun_within_mmio_spec {entries m p} (paddr : Addr) bytes:
       Pmp_access paddr (bv.of_nat bytes) entries m p →
       interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
-      ⌜fun_within_mmio bytes paddr = (bytes =? 0)%nat⌝.
+      ⌜fun_within_mmio bytes paddr = false%nat⌝.
     Proof.
       iIntros (Hpmp) "Hint". rewrite /fun_within_mmio.
-      destruct bytes as [|bytes].
-      - cbn - [xlenbits] in *.
-      rewrite bool_decide_and andb_true_iff; iPureIntro.
-      rewrite !bool_decide_eq_true; split; first auto.
-      pose proof (bv.bv_is_wf paddr) as Hwf; try lia.
-      - destruct (decide (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N) as [Hlt | Hnlt].
-        2 : { rewrite bool_decide_eq_false !not_and_l; auto. }
-        rewrite bool_decide_and.
-        iDestruct (interp_pmp_within_mmio_spec with "Hint") as "->"; eauto.
+      rewrite bool_decide_and andb_false_iff.
+      destruct (decide (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N) as [Hlt | Hnlt].
+      - iDestruct (interp_pmp_within_mmio_spec with "Hint") as "->"; eauto.
+      - iPureIntro. right.
+        by rewrite bool_decide_false.
     Qed.
 
     Lemma within_mmio_sound (bytes : nat):
@@ -273,8 +269,6 @@ Module RiscvPmpModel2.
       iSplit; first auto. iFrame.
       iSplit; [iExists _; auto | ].
       repeat iSplit; auto.
-      iPureIntro.
-      rewrite Hnotmmio; destruct bytes; now simpl.
     Qed.
 
     Lemma decode_sound :
@@ -355,75 +349,6 @@ Module RiscvPmpModel2.
       ValidLemma RiscvPmpSpecification.lemma_close_pmp_entries.
     Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed.
 
-    (* Lemma minAddr_le_ule : forall (addr : Addr), *)
-    (*   (minAddr <= bv.unsigned addr)%Z <-> bv.of_nat minAddr <=ᵘ addr. *)
-    (* Proof. *)
-    (*   unfold bv.ule, bv.unsigned. *)
-    (*   intros. *)
-    (*   split. *)
-    (*   - rewrite <- nat_N_Z. *)
-    (*     intros H. *)
-    (*     rewrite bv.bin_of_nat_small. *)
-    (*     now apply N2Z.inj_le. *)
-    (*     apply minAddr_rep. *)
-    (*   - rewrite <- nat_N_Z. *)
-    (*     intros H. *)
-    (*     rewrite bv.bin_of_nat_small in H. *)
-    (*     now apply N2Z.inj_le. *)
-    (*     apply minAddr_rep. *)
-    (* Qed. *)
-
-    (* Lemma big_sepL_pure_impl (bytes : nat) : *)
-    (*     ∀ (paddr : Addr) *)
-    (*         (entries : list PmpEntryCfg) (p : Privilege) p0, *)
-    (*         (Pmp_access paddr (bv.of_nat bytes) entries p p0) -> *)
-    (*         (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N -> *)
-    (*         (N.of_nat bytes < bv.exp2 xlenbits)%N -> *)
-    (*         ⊢ (([∗ list] offset ∈ bv.seqBv paddr bytes, *)
-    (*            ⌜∃ p0, Pmp_access offset%bv *)
-    (*                     (bv.of_nat 1) entries p p0⌝ -∗ *)
-    (*                     ∃ w : Byte, interp_ptsto offset w) *)
-    (*           ∗-∗ *)
-    (*           (⌜∃ p0, Pmp_access paddr (bv.of_nat bytes) entries p p0⌝ -∗ *)
-    (*                     [∗ list] offset ∈ bv.seqBv paddr bytes, *)
-    (*                       ∃ w : Byte, interp_ptsto offset w))%I. *)
-    (* Proof. *)
-    (*   pose proof xlenbits_pos. *)
-    (*   iInduction bytes as [|bytes] "IHbytes"; iIntros (paddr pmp p p0 Hpmp Hrep Hbytes) "". *)
-    (*   now iSimpl. *)
-    (*   iSplit; iIntros "H". *)
-    (*   - iIntros "[%acc %Haccess]". *)
-    (*     simpl. *)
-    (*     rewrite bv.seqBv_succ; try lia. *)
-    (*     rewrite big_sepL_cons. *)
-    (*     iDestruct "H" as "[Hb Hbs]". *)
-    (*     iSplitL "Hb". *)
-    (*     iApply ("Hb" with "[%]"). *)
-    (*     exists acc. *)
-    (*     assert (Htmp: (N.of_nat 1 < bv.exp2 xlenbits)%N) by lia. *)
-    (*     rewrite <- (@bv.bin_of_nat_small _ _ Hbytes) in Hrep. *)
-    (*     refine (pmp_access_reduced_width Hrep (bv.ult_nat_S_zero Htmp) (bv.ule_nat_one_S Htmp Hbytes) Haccess). *)
-    (*     destruct bytes; first by simpl. (* we need to know a bit more about bytes to finish this case *) *)
-    (*     iSimpl in "Hbs". *)
-    (*     apply pmp_access_addr_S_width_pred in Haccess; try lia. *)
-    (*     rewrite bv.add_comm in Haccess. *)
-    (*     iApply ("IHbytes" $! (bv.one + paddr) pmp p acc Haccess with "[%] [%] Hbs"); try lia. *)
-    (*     rewrite bv.bin_add_small ?bv_bin_one; lia. *)
-    (*     now iExists acc. *)
-    (*     rewrite bv.bin_of_nat_small; lia. *)
-    (*   - iSpecialize ("H" $! (ex_intro _ _ Hpmp)). *)
-    (*     rewrite bv.seqBv_succ; try lia. *)
-    (*     iDestruct "H" as "[Hw H]"; fold seq. *)
-    (*     simpl. *)
-    (*     iSplitL "Hw"; auto. *)
-    (*     destruct bytes; first now simpl. *)
-    (*     apply pmp_access_addr_S_width_pred in Hpmp; auto. *)
-    (*     rewrite bv.add_comm in Hpmp. *)
-    (*     iApply ("IHbytes" $! (bv.one + paddr) pmp p p0 Hpmp with "[%] [%]"); auto; try lia. *)
-    (*     rewrite bv.bin_add_small bv_bin_one; lia. *)
-    (*     rewrite bv.bin_of_nat_small; try lia. *)
-    (* Qed. *)
-
     Lemma extract_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_extract_pmp_ptsto bytes).
     Proof.
@@ -435,7 +360,7 @@ Module RiscvPmpModel2.
         unfold bv.unsigned in *. zify; auto. (* TODO: why does lia not solve this? *) }
       iDestruct (interp_pmp_addr_inj_extr with "Hmem") as "[Hmemwo Hia]"; eauto.
       iFrame.
-      iApply interp_addr_access_inj_extr; last iFrame; eauto.
+      iApply interp_addr_access_extr; last iFrame; eauto.
       - unfold bv.unsigned in *. zify; auto. (* TODO idem *)
       - unfold bv.unsigned in *. zify; auto. (* TODO idem *)
     Qed.
@@ -445,9 +370,9 @@ Module RiscvPmpModel2.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       iIntros "[Hwithout Hptsto]".
-      (* rewrite -(interp_addr_access_inj_extr with "Hptsto"). *)
+      iDestruct (interp_addr_access_inj with "Hptsto") as "Hacc".
       unfold interp_pmp_addr_access_without.
-      iApply ("Hwithout" with "Hptsto").
+      iApply ("Hwithout" with "Hacc").
     Qed.
 
     Lemma lemSem : LemmaSem.
