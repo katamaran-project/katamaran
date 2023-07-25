@@ -4,23 +4,23 @@ From iris.proofmode Require Import base environments classes string_ident ltac_t
 From iris.prelude Require Import options.
 Import bi.
 
-Definition pre_envs_entails_cocontexts_def {PROP : bi} (Γp Γs : env PROP) (Qp Qs : env PROP) :=
-  of_envs' Γp Γs ⊢ of_envs' Qp Qs.
+Definition pre_envs_entails_cocontexts_def {PROP : bi} (Γp Γs : env PROP) (Q : env PROP) :=
+  (of_envs' Γp Γs ⊢ [∗] Q).
 Definition pre_envs_entails_cocontexts_aux : seal (@pre_envs_entails_cocontexts_def). Proof. by eexists. Qed.
 Definition pre_envs_entails_cocontexts := pre_envs_entails_cocontexts_aux.(unseal).
 Definition pre_envs_entails_cocontexts_eq : @pre_envs_entails_cocontexts = @pre_envs_entails_cocontexts_def :=
   pre_envs_entails_cocontexts_aux.(seal_eq).
 
-Definition envs_entails_cocontexts {PROP : bi} (Δ : envs PROP) (Q : envs PROP) : Prop :=
-  pre_envs_entails_cocontexts  PROP (env_intuitionistic Δ) (env_spatial Δ) (env_intuitionistic Q) (env_spatial Q).
+Definition envs_entails_cocontexts {PROP : bi} (Δ : envs PROP) (Q : env PROP) : Prop :=
+  pre_envs_entails_cocontexts  PROP (env_intuitionistic Δ) (env_spatial Δ) Q.
 Definition envs_entails_cocontexts_eq :
-  @envs_entails_cocontexts = λ PROP (Δ : envs PROP) Q, (of_envs Δ ⊢ of_envs Q).
+  @envs_entails_cocontexts = λ PROP (Δ : envs PROP) Q, (of_envs Δ ⊢ [∗] Q).
 Proof. by rewrite /envs_entails_cocontexts pre_envs_entails_cocontexts_eq. Qed.
-Global Arguments envs_entails_cocontexts {PROP} Δ Q%I.
 Global Instance: Params (@envs_entails_cocontexts) 1 := {}.
 
 
 Declare Scope cocontexts_scope.
+Global Arguments envs_entails_cocontexts {PROP} Δ Q%cocontexts_scope.
 (* Delimit Scope cocontexts_scope with env. *)
 Global Arguments Envs _ _%cocontexts_scope _%cocontexts_scope _.
 Global Arguments Enil {_}.
@@ -29,27 +29,20 @@ Global Arguments Esnoc {_} _%cocontexts_scope _%string _%I.
 Notation "" := Enil (only printing) : cocontexts_scope.
 Notation "Γ H : P" := (Esnoc Γ (INamed H) P%I)
   (at level 1, P at level 200,
-   left associativity, format "Γ H  :  '[' P ']' '//'", only printing) : cocontexts_scope.
+   left associativity, format "Γ H  :  '[' P ']' '//'", only printing) : stdpp_scope.
 Notation "Γ '_' : P" := (Esnoc Γ (IAnon _) P%I)
   (at level 1, P at level 200,
-   left associativity, format "Γ '_'  :  '[' P ']' '//'", only printing) : cocontexts_scope.
+   left associativity, format "Γ '_'  :  '[' P ']' '//'", only printing) : stdpp_scope.
 
-Notation "Γ '--------------------------------------' □ Δ '--------------------------------------' ∗ Qi '--------------------------------------' □ Qp " :=
-  (envs_entails_cocontexts (Envs Γ Δ _) (Envs Qi Qp _)%I)
-  (at level 1, Qi at level 200, Qp at level 200, left associativity,
-  format "'[' Γ '--------------------------------------' □ '//' Δ '--------------------------------------' ∗ '//' Qi '--------------------------------------' □ '//' Qp ']'", only printing) :
+Notation "Γ '--------------------------------------' □ Δ '--------------------------------------' ∗ Qp " :=
+  (envs_entails_cocontexts (Envs Γ Δ _) Qp%I)
+  (at level 1, Qp at level 200, left associativity,
+  format "'[' Γ '--------------------------------------' □ '//' Δ '--------------------------------------' ∗ '//' Qp ']'", only printing) :
   stdpp_scope.
 Notation "Δ '--------------------------------------' ∗ Qp" :=
-  (envs_entails_cocontexts (Envs Enil Δ _) (Envs Enil Qp _)%I)
+  (envs_entails_cocontexts (Envs Enil Δ _) Qp%I)
   (at level 1, Qp at level 200, left associativity,
   format "'[' Δ '--------------------------------------' ∗ '//' Qp ']'", only printing) : stdpp_scope.
-Notation "Γ '--------------------------------------' □ Qp" :=
-  (envs_entails_cocontexts (Envs Γ Enil _) (Envs Enil Qp _)%I)
-  (at level 1, Qp at level 200, left associativity,
-  format "'[' Γ '--------------------------------------' □ '//' Qp ']'", only printing)  : stdpp_scope.
-Notation "'--------------------------------------' ∗ Qp" :=
-  (envs_entails_cocontexts (Envs Enil Enil _) (Envs Enil Qp _)%I)
-  (at level 1, Qp at level 200, format "'[' '--------------------------------------' ∗ '//' Qp ']'", only printing) : stdpp_scope.
 
 Section tactics.
 Context {PROP : bi}.
@@ -58,6 +51,20 @@ Implicit Types Γ : env PROP.
 Implicit Types Δ : envs PROP.
 Implicit Types A : envs PROP.
 Implicit Types P : PROP.
+
+Lemma env_lookup_delete_sound  `{! Proper (equiv ==> equiv ==> equiv) op} `{! Monoid op} {i}
+                     {m : PROP -> PROP}
+                     `{! Proper (equiv ==> equiv) m} {Γ : env PROP} {P : PROP} :
+  env_lookup i Γ = Some P ->
+  ([^op list] k↦x ∈ Γ, m x) ⊣⊢ op (m P) ([^op list] k↦x ∈ env_delete i Γ, m x).
+Proof.
+  induction Γ; cbn.
+  - inversion 1.
+  - destruct (ident_beq i i0) eqn:ii0eq; cbn; first by inversion 1.
+    intros Heq.
+    rewrite monoid_assoc (monoid_comm (m P) (m a)) -monoid_assoc.
+    now rewrite -(IHΓ Heq).
+Qed.
 
 Lemma env_app_sound  `{! Proper (equiv ==> equiv ==> equiv) op} `{! Monoid op}
                      {m : PROP -> PROP}
@@ -118,106 +125,119 @@ Proof.
     now rewrite (IHΔ _ _ lkpeq rplceq).
 Qed.
   
-Lemma envs_simple_replace_sound_2 Δ Δ' i p P Γ :
-  envs_wf Δ ->
-  envs_lookup i Δ = Some (p,P) → envs_simple_replace i p Γ Δ = Some Δ' →
-  ((if p then env_and_persistently Γ else [∗] Γ) ⊢ bi_persistently_if p P) -> (of_envs Δ' ⊢ of_envs Δ).
-Proof. 
-  destruct Δ; cbn in *.
-  intros wfΔ.
-  destruct (env_lookup i env_intuitionistic) eqn:lkpeq.
-  - inversion 1; subst.
-    destruct (env_app Γ env_spatial) eqn:appeq; last inversion 1.
-    destruct (env_replace i Γ env_intuitionistic) eqn:repleq; cbn; inversion 1; subst.
-    rewrite /of_envs /of_envs'; cbn.
-    intros HΓP.
-    rewrite (env_replace_sound_sep_2 (op := bi_and) (m := bi_persistently) _ _ _ _ _ lkpeq repleq HΓP).
-    now apply and_mono_l, pure_mono.
-  - destruct (env_lookup i env_spatial) eqn:lkpeq2; cbn; inversion 1; subst.
-    destruct (env_app Γ env_intuitionistic) eqn:appeq; cbn; last inversion 1.
-    destruct (env_replace i Γ env_spatial) eqn:repleq; cbn; inversion 1; subst.
-    rewrite /of_envs /of_envs'; cbn.
-    intros HΓP.
-    rewrite (env_replace_sound_sep_2 _ _ _ _ _ lkpeq2 repleq HΓP).
-    now apply and_mono_l, pure_mono.
-Qed.
+(* Lemma envs_simple_replace_sound_2 Δ Δ' i p P Γ : *)
+(*   envs_lookup i Δ = Some (p,P) → envs_simple_replace i p Γ Δ = Some Δ' → *)
+(*   ((if p then env_and_persistently Γ else [∗] Γ) ⊢ bi_persistently_if p P) -> (of_envs Δ' ⊢ of_envs Δ). *)
+(* Proof.  *)
+(*   destruct Δ; cbn in *. *)
+(*   destruct (env_lookup i env_intuitionistic) eqn:lkpeq. *)
+(*   - inversion 1; subst. *)
+(*     destruct (env_app Γ env_spatial) eqn:appeq; last inversion 1. *)
+(*     destruct (env_replace i Γ env_intuitionistic) eqn:repleq; cbn; inversion 1; subst. *)
+(*     rewrite /of_envs /of_envs'; cbn. *)
+(*     intros HΓP. *)
+(*     rewrite (env_replace_sound_sep_2 (op := bi_and) (m := bi_persistently) _ _ _ _ _ lkpeq repleq HΓP). *)
+(*     apply and_mono_l, pure_mono. *)
+(*     admit. *)
+(*   - destruct (env_lookup i env_spatial) eqn:lkpeq2; cbn; inversion 1; subst. *)
+(*     destruct (env_app Γ env_intuitionistic) eqn:appeq; cbn; last inversion 1. *)
+(*     destruct (env_replace i Γ env_spatial) eqn:repleq; cbn; inversion 1; subst. *)
+(*     rewrite /of_envs /of_envs'; cbn. *)
+(*     intros HΓP. *)
+(*     rewrite (env_replace_sound_sep_2 _ _ _ _ _ lkpeq2 repleq HΓP). *)
+(*     apply and_mono_l, pure_mono. *)
+(*     admit. *)
+(* Admitted. *)
 
-Lemma tac_and_codestruct Δ i p j1 j2 P P1 P2 Q :
-  envs_wf Q ->
-  envs_lookup i Q = Some (p, P) →
-  (if p then FromAnd P P2 P1 else FromSep P P2 P1) →
-  match envs_simple_replace i p (Esnoc (Esnoc Enil j2 P1) j1 P2) Q with
+Lemma tac_and_codestruct Δ i j1 j2 P P1 P2 Q :
+  env_lookup i Q = Some P →
+  FromSep P P2 P1 →
+  match env_replace i (Esnoc (Esnoc Enil j2 P1) j1 P2) Q with
   | None => False
   | Some Q' => envs_entails_cocontexts Δ Q'
   end →
   envs_entails_cocontexts Δ Q.
 Proof.
-  intros wfQ.
-  destruct (envs_simple_replace _ _ _ _) as [Δ'|] eqn:Hrep; last done.
+  destruct (env_replace _ _ _) as [Δ'|] eqn:Hrep; last done.
   rewrite envs_entails_cocontexts_eq. intros.
-  rewrite H1; clear H1 Δ.
-  rewrite (wand_entails (of_envs Δ') (of_envs Q)); first done.
-  rewrite <-(envs_simple_replace_sound_2 _ _ _ _ _ _ wfQ H Hrep).
-  { now apply entails_wand. }
-  destruct p.
-  - cbn.
-    rewrite and_True.
-    rewrite <-(from_and P P2 P1).
-    now apply persistently_and_2.
-  - cbn.
-    rewrite sep_emp.
-    now rewrite <-(from_sep P P2 P1).
+  rewrite H1. clear H1 Δ.
+  apply (env_replace_sound_sep_2 _ _ _ _ _ H Hrep).
+  cbn.
+  now rewrite sep_emp -(from_sep P P2 P1).
 Qed.
 
-Lemma tac_corename Δ i j p P Q :
-  envs_wf Q ->
-  envs_lookup i Q = Some (p,P) →
-  match envs_simple_replace i p (Esnoc Enil j P) Q with
+Lemma tac_corename Δ i j P Q :
+  env_lookup i Q = Some (P) →
+  match env_replace i (Esnoc Enil j P) Q with
   | None => False
   | Some Q' => envs_entails_cocontexts Δ Q'
   end →
   envs_entails_cocontexts Δ Q.
 Proof.
-  intros HwfQ.
-  destruct (envs_simple_replace _ _ _ _) as [Q' |] eqn:Hrep; last done.
+  destruct (env_replace _ _ _) as [Q' |] eqn:Hrep; last done.
   rewrite envs_entails_cocontexts_eq=> Hlkp HΔQp.
   rewrite HΔQp; clear HΔQp.
-  assert ((if p then env_and_persistently (Esnoc Enil j P) else [∗] Esnoc Enil j P) ⊢ bi_persistently_if p P)%I.
-  { destruct p; cbn.
-    - now rewrite and_True.
-    - now rewrite sep_emp.
-  }
-  pose proof (envs_simple_replace_sound_2 _ _ _ _ _ _ HwfQ Hlkp Hrep).
-  now apply H0.
+  apply (env_replace_sound_sep_2 _ _ _ _ _ Hlkp Hrep).
+  cbn.
+  now rewrite sep_emp.
 Qed.
 
-Lemma tac_start_cocontexts P (Γ : envs PROP) : envs_entails_cocontexts Γ (Envs Enil (Esnoc Enil "Goal" P) 1%positive) -> envs_entails Γ P.
+Lemma tac_start_cocontexts P (Γ : envs PROP) : envs_entails_cocontexts Γ (Esnoc Enil "Goal" P) -> envs_entails Γ P.
 Proof.
-  rewrite envs_entails_unseal !of_envs_eq /=.
-  rewrite envs_entails_cocontexts_eq !of_envs_eq /=.
-  rewrite left_id right_id.
-  now rewrite (and_elim_r (bi_pure _) P).
+  rewrite envs_entails_unseal /=.
+  rewrite envs_entails_cocontexts_eq /=.
+  now rewrite right_id.
 Qed.
 
-Lemma tac_stop_cocontexts (Δh : envs PROP) Δg :
-  (of_envs Δh ⊢ of_envs Δg) →
+Lemma tac_stop_cocontexts {s} P (Γ : envs PROP) : envs_entails Γ P -> envs_entails_cocontexts Γ (Esnoc Enil s P).
+Proof.
+  rewrite envs_entails_unseal /=.
+  rewrite envs_entails_cocontexts_eq /=.
+  now rewrite right_id.
+Qed.
+
+Lemma tac_stop_cocontexts_entirely (Δh : envs PROP) (Δg : env PROP) :
+  (of_envs Δh ⊢ [∗] Δg) →
   envs_entails_cocontexts Δh Δg.
 Proof.
   now rewrite envs_entails_cocontexts_eq.
 Qed.
 
-Lemma tac_frame_hyp Δh Δc i j p P :
-  envs_wf Δc ->
-  envs_lookup i Δh = Some (p, P) →
-  envs_lookup j Δc = Some (p, P) →
-  envs_entails_cocontexts (envs_delete false i p Δh) (envs_delete true j p Δc) →
+(* Lemma envs_lookup_sound_2 Δ i p P : *)
+(*   envs_lookup i Δ = Some (p,P) → *)
+(*   envs_lookup i (envs_delete true i p Δ) = None -> *)
+(*   □?p P ∗ of_envs (envs_delete true i p Δ) ⊢ of_envs Δ. *)
+(* Proof. *)
+(*   rewrite /envs_lookup !of_envs_eq=>HΔi HΔii. *)
+(*   destruct Δ as [Γp Γs], (env_lookup i Γp) eqn:Heqo; simplify_eq/=. *)
+(*   - rewrite -persistently_and_intuitionistically_sep_l. *)
+(*     rewrite (env_lookup_perm Γp) //= !assoc (and_comm (<pers> P)%I _). *)
+(*     repeat apply and_mono_l. *)
+(*     apply pure_elim'. intros Hwf. *)
+(*     apply pure_intro. *)
+(*     destruct (env_lookup i (env_delete i Γp)) eqn:HeqΓii; inversion HΔii. *)
+(*     destruct (env_lookup i Γs) eqn:HeqΓsi; inversion HΔii. *)
+(*     admit. *)
+(*   - destruct (env_lookup i Γs) eqn:?; simplify_eq/=. *)
+(*     rewrite (env_lookup_perm Γs) //=. *)
+
+(*     rewrite sep_mono_r. *)
+(*     rewrite (comm _ P) -persistent_and_sep_assoc. *)
+(*     rewrite [(⌜_⌝ ∧ _)%I]and_elim_r. *)
+(*     apply and_mono; first done. rewrite comm //. *)
+(* Qed. *)
+
+Lemma tac_frame_hyp Δh Δc i j P :
+  envs_lookup i Δh = Some (false, P) →
+  env_lookup j Δc = Some P →
+  envs_entails_cocontexts (envs_delete false i false  Δh) (env_delete j Δc) →
   envs_entails_cocontexts Δh Δc.
 Proof.
   rewrite envs_entails_cocontexts_eq.
-  intros Hwf Hhi Hcj Hframe.
+  intros Hhi Hcj Hframe.
   rewrite (envs_lookup_sound' _ false) //.
-  rewrite <-(envs_lookup_sound_2 Δc j p P Hwf Hcj).
-  now rewrite Hframe.
+  rewrite Hframe.
+  now rewrite <-(env_lookup_delete_sound Hcj).
 Qed.
 
 Class LookupEnv (Γ : env PROP) (P : PROP) i :=
@@ -231,14 +251,11 @@ Next Obligation.
   intros. cbn.
   destruct (ident_beq_reflect i i); [done| contradiction].
 Qed.
-Global Program Instance lookup_env_there {i Γ P j Q}: env_wf (Esnoc Γ j Q) -> forall `{! LookupEnv Γ P i}, LookupEnv (Esnoc Γ j Q) P i.
+Global Program Instance lookup_env_there {i Γ P j Q}: forall `{! LookupEnv Γ P i}, ident_beq i j = false -> LookupEnv (Esnoc Γ j Q) P i.
 Next Obligation.
-  intros * Hwf HLE. cbn.
+  intros * HLE Hineq. cbn.
   destruct (ident_beq_reflect i j).
-  - assert (eq := lookup_env_result (LookupEnv := HLE)).
-    inversion Hwf; subst.
-    assert (None = Some P) by (now transitivity (env_lookup j Γ)).
-    inversion H.
+  - inversion Hineq.
   - now apply lookup_env_result.
 Qed.
 
@@ -274,7 +291,8 @@ Qed.
 (* (* Qed. *) *)
 (* Admitted. *)
 
-Lemma lookup_env_envs {Δ j P} : `{LookupEnv (env_spatial Δ) P j} -> envs_wf Δ ->
+Lemma lookup_env_envs {Δ j P} : `{LookupEnv (env_spatial Δ) P j} ->
+                                envs_wf Δ ->
                                   envs_lookup j Δ = Some (false, P).
 Proof.
   intros HLE Hwf.
@@ -288,19 +306,30 @@ Proof.
     now inversion H0.
 Qed.
 
+Lemma use_wf {Δ Q} : (envs_wf Δ -> of_envs Δ ⊢ Q) -> of_envs Δ ⊢ Q.
+Proof.
+  intros.
+  rewrite of_envs_eq.
+  rewrite <-(idemp bi_and (bi_pure (envs_wf Δ))).
+  rewrite -!and_assoc.
+  apply pure_elim_l; intros Hwf.
+  rewrite -of_envs_eq.
+  now apply H.
+Qed.
+
 Lemma tac_frame_cohyp_in_lookup Δh Δc i j P :
-  envs_wf Δh ->
-  envs_wf Δc ->
-  envs_lookup i Δc = Some (false, P) →
+  env_lookup i Δc = Some P →
   LookupEnv (env_spatial Δh) P j ->
-  envs_entails_cocontexts (envs_delete false j false Δh) (envs_delete false i false Δc) →
+  envs_entails_cocontexts (envs_delete false j false Δh) (env_delete i Δc) →
   envs_entails_cocontexts Δh Δc.
 Proof.
-  rewrite envs_entails_cocontexts_eq. intros Hwfh Hwfc Hci Hhj HQ.
+  rewrite envs_entails_cocontexts_eq. intros Hci Hhj HQ.
+  apply use_wf. intros Hwfh.
   assert (Hhj2 := lookup_env_envs Hhj Hwfh).
   rewrite (envs_lookup_sound' _ false) //.
   rewrite HQ.
-  now rewrite (envs_lookup_sound_2 _ _ _ _ Hwfc Hci).
+  cbn.
+  now rewrite -env_lookup_delete_sound.
 Qed.
 
 Class FromPureEnv {PROP : bi} (a : bool) (P : env PROP) (φ : Prop) :=
@@ -325,36 +354,40 @@ Proof.
 Qed.
 
 (** * Pure *)
-Lemma tac_pure_intro Δh (Δc : env PROP) φ c' :
-  envs_wf ((Envs Enil Δc c')) ->
+Lemma tac_pure_intro Δh (Δc : env PROP) φ :
   FromPureEnv false Δc φ →
   (* (if a then AffineEnv (env_spatial Δc) else TCTrue) → *)
   φ →
-  envs_entails_cocontexts Δh (Envs Enil Δc c').
+  envs_entails_cocontexts Δh Δc.
 Proof.
   intros.
-  apply tac_stop_cocontexts.
-  unfold of_envs at 2, of_envs'.
+  apply tac_stop_cocontexts_entirely.
   rewrite <-(from_pure_env false _ _).
-  cbn.
-  rewrite <-!pure_and.
   now apply pure_intro.
 Qed.
 
 Lemma tac_pure_intro_cohyp Δh Δc i P φ :
-  envs_wf Δc ->
-  envs_lookup i Δc = Some (false, P) →
+  env_lookup i Δc = Some P →
   FromPure false P φ →
   (* (if p then TCTrue else TCOr (Affine P) (Absorbing Q)) → *)
-  (envs_entails_cocontexts Δh (envs_delete true i false Δc)) → φ → envs_entails_cocontexts Δh Δc.
+  (envs_entails_cocontexts Δh (env_delete i Δc)) → φ → envs_entails_cocontexts Δh Δc.
 Proof.
   rewrite envs_entails_cocontexts_eq.
   intros.
-  rewrite <-(envs_lookup_sound_2 _ _ _ _ H H0).
+  rewrite (env_lookup_delete_sound H).
   rewrite <-(from_pure false P φ).
-  rewrite <-H2.
   apply sep_intro_emp_valid_l; [|done].
   now apply pure_intro.
+Qed.
+
+Lemma tac_clear_cohyp Δh Δc i P :
+  env_lookup i Δc = Some P →
+  FromPure false P True →
+  (* (if p then TCTrue else TCOr (Affine P) (Absorbing Q)) → *)
+  (envs_entails_cocontexts Δh (env_delete i Δc)) → envs_entails_cocontexts Δh Δc.
+Proof.
+  intros Hci Hpure HQ.
+  now apply (tac_pure_intro_cohyp _ _ _ _ _ Hci Hpure HQ).
 Qed.
 
 (* not sure why this is local in iris.proofmode.coq_tactics.v *)
@@ -362,23 +395,16 @@ Local Instance affine_env_spatial Δ :
   AffineEnv (env_spatial Δ) → Affine ([∗] env_spatial Δ).
 Proof. intros H. induction H; simpl; apply _. Qed.
 
-Lemma tac_empty_cocontext_intro Δ {c} :
-  envs_wf Δ -> AffineEnv (env_spatial Δ) → envs_entails_cocontexts Δ (Envs Enil Enil c).
+Lemma tac_empty_cocontext_intro Δ :
+  AffineEnv (env_spatial Δ) → envs_entails_cocontexts Δ Enil.
 Proof. intros. rewrite envs_entails_cocontexts_eq.
        rewrite (affine (of_envs Δ)); cbn.
        repeat apply and_intro; cbn; last easy.
-       - apply pure_intro. repeat constructor; now cbn.
-       - now apply pure_intro.
 Qed.
 
-Lemma tac_exist_codestruct {A : Type} Δh Δc i p j P (Φ : A → PROP) (name: ident_name) a :
-  envs_wf Δc ->
-  envs_lookup i Δc = Some (p, P) → FromExist P Φ →
-  ( (* this let binding makes it easy for the tactic [iExistDestruct] to use
-       [name] (from resolving [IntoExist] in an earlier subgoal) within this
-       goal *)
-    let _ := name in
-     match envs_simple_replace i p (Esnoc Enil j (Φ a)) Δc with
+Lemma tac_exist_codestruct {A : Type} Δh Δc i j P (Φ : A → PROP) a :
+  env_lookup i Δc = Some P → FromExist P Φ →
+  ( match env_replace i (Esnoc Enil j (Φ a)) Δc with
      | Some Δc' => envs_entails_cocontexts Δh Δc'
      | None => False
      end) →
@@ -386,14 +412,11 @@ Lemma tac_exist_codestruct {A : Type} Δh Δc i p j P (Φ : A → PROP) (name: i
 Proof.
   rewrite envs_entails_cocontexts_eq.
   intros.
-  destruct (envs_simple_replace i p (Esnoc _ j (Φ a)) Δc) eqn:rep; last done.
-  rewrite <-(envs_simple_replace_sound_2 _ _ _ p _ _ H H0 rep); first now cbn.
-  rewrite <-H1.
-  destruct p; cbn.
-  - rewrite and_elim_l.
-    now apply persistently_mono, exist_intro.
-  - rewrite sep_emp.
-    now apply exist_intro.
+  destruct (env_replace i (Esnoc _ j (Φ a)) Δc) eqn:rep; last done.
+  rewrite -(env_replace_sound_sep_2 _ _ _ _ _ H rep) //=.
+  rewrite sep_emp.
+  rewrite <-H0.
+  now apply exist_intro.
 Qed.
 
 End tactics.
@@ -425,7 +448,7 @@ Ltac pm_reduce :=
 
 
 Tactic Notation "iAndCodestructCohyp" constr(H) "as" constr(H1) constr(H2) :=
-  eapply tac_and_codestruct with H _ H1 H2 _ _ _;
+  eapply tac_and_codestruct with H H1 H2  _ _ _;
     [pm_reflexivity ||
      let H := pretty_ident H in
      fail "iCoDestructCoHypAnd:" H "not found"
@@ -468,6 +491,12 @@ Tactic Notation "iStartProof" :=
            eapply tac_start_cocontexts;
                [iSolveTC || fail "iStartProof: not a BI assertion"
                |notypeclasses refine (tac_start _ _)]
+  end.
+
+Ltac iTryStopCocontexts :=
+  lazymatch goal with
+  | |- envs_entails_cocontexts _ (Esnoc Enil _ _) => apply tac_stop_cocontexts; pm_reduce
+  | |- _ => idtac
   end.
 
 Tactic Notation "iStopProof" :=
@@ -515,7 +544,7 @@ Ltac iFrameHyp Hh Hc :=
 
 Ltac iFrameCohyp Hh :=
   iStartProof;
-  eapply tac_frame_cohyp_in_lookup with Hh _ _ _;
+  eapply tac_frame_cohyp_in_lookup with Hh _ _;
     [pm_reflexivity ||
      let H := pretty_ident Hh in
      fail "iFrame:" Hh "not found"
@@ -570,7 +599,7 @@ Local Ltac ident_for_pat_default pat default :=
 
 Tactic Notation "iPureIntroCohyp" constr(H) tactic(solver):=
   iStartProof;
-  eapply tac_pure_intro_cohyp with H _ _ _;
+  eapply tac_pure_intro_cohyp with H _ _;
     [pm_reflexivity ||
      let H := pretty_ident H in
      fail "iFrame:" H "not found"
@@ -594,15 +623,17 @@ Tactic Notation "iPureIntro" :=
   (*   |]. *)
 
 Tactic Notation "iExistCodestruct" constr(H)
-    "as" open_constr(x) constr(Hx) :=
-  eapply tac_exist_codestruct with H _ Hx _ _ _ x; (* (i:=H) (j:=Hx) *)
+    "as" constr(Hx) :=
+  eapply tac_exist_codestruct with H Hx _ _ _; (* (i:=H) (j:=Hx) *)
     [pm_reflexivity ||
      let H := pretty_ident H in
-     fail "iExistDestruct:" H "not found"
+     fail "iExistCodestruct:" H "not found"
     |iSolveTC ||
      let P := match goal with |- IntoExist ?P _ _ => P end in
-     fail "iExistDestruct: cannot destruct" P|]; pm_reduce.
+     fail "iExistCodestruct: cannot destruct" P|]; pm_reduce.
 
+Tactic Notation "iClearCohyp" constr(H) :=
+  iPureIntroCohyp H done.
 
 (** [pat0] is the unparsed pattern, and is only used in error messages *)
 Ltac iCodestructCohypGo Hz pat0 pat :=
@@ -612,7 +643,7 @@ Ltac iCodestructCohypGo Hz pat0 pat :=
      | IAnon _ => idtac
      | INamed ?Hz => let Hz' := iFresh in iCoRename Hz into Hz'
      end
-  (* | IDrop => iClearHyp Hz *)
+  | IDrop => iClearCohyp Hz
   | IFrame => iFrameCohyp Hz
   | IIdent Hz => idtac
   | IIdent ?y => iRename Hz into y
@@ -632,7 +663,7 @@ Ltac iCodestructCohypGo Hz pat0 pat :=
   as well. *)
   | IList [[IPure IGallinaAnon; ?pat2]] =>
      let x := ident_for_pat_default pat2 Hz in
-     iExistCodestruct Hz as _ x; iCodestructCohypGo x pat0 pat2
+     iExistCodestruct Hz as x; iCodestructCohypGo x pat0 pat2
   (* | IList [[IPure (IGallinaNamed ?s); ?pat2]] => *)
   (*    let y := ident_for_pat_default pat2 Hz in *)
   (*    iExistCodestruct Hz as x y; *)
@@ -661,7 +692,8 @@ Ltac iCodestructCohypGo Hz pat0 pat :=
   (* the above patterns don't match [H1 H2|H3] *)
   (* | IList [_;_] => fail "iDestruct: in" pat0 "a disjunct has multiple patterns" *)
 
-  (* | IPure IGallinaAnon => iPure Hz as ? *)
+  | IPure IGallinaAnon =>
+      iPureIntroCohyp Hz (refine _)
   (* | IPure (IGallinaNamed ?s) => *)
   (*    let x := fresh in *)
   (*    iPure Hz as x; *)
@@ -696,12 +728,14 @@ Local Ltac iCodestructCohypFindPat Hgo pat found pats :=
      end
   end.
 Tactic Notation "iCodestruct" constr(H) "as" constr(pat) :=
+  try iStartProof;
   let pats := intro_pat.parse pat in iCodestructCohypFindPat H pat false pats.
 Tactic Notation "iCodestruct" "as" constr(pat) :=
   iCodestruct "Goal" as pat.
 
-Tactic Notation "iIntros" := (try iStopProof; iIntros [IAll]).
-Tactic Notation "iIntros" constr(pat) := (try iStopProof; pm_reduce; iIntros pat).
+Tactic Notation "iIntros" := (iTryStopCocontexts; iIntros [IAll]).
+Tactic Notation "iIntros" constr(pat) := (iTryStopCocontexts; pm_reduce; iIntros pat).
+Tactic Notation "iIntros" constr(pat) := (iTryStopCocontexts; pm_reduce; iIntros pat).
 
 (* Tactic Notation "iEmpIntroCohyp" := *)
 (*   iStartProof; *)
@@ -725,7 +759,7 @@ what [done] can do. *)
 Global Hint Extern 0 (envs_entails_cocontexts _ _) => iPureIntro; try done : core.
 (* Global Hint Extern 0 (envs_entails _ ?Q) => *)
 (*   first [is_evar Q; fail 1|iAssumption] : core. *)
-Global Hint Extern 0 (envs_entails_cocontexts _ (Envs Enil Enil _)) => iEmptyCocontextIntro : core.
+Global Hint Extern 0 (envs_entails_cocontexts _ Enil) => iEmptyCocontextIntro : core.
 
 (* (* TODO: look for a more principled way of adding trivial hints like those *)
 (* below; see the discussion in !75 for further details. *) *)
