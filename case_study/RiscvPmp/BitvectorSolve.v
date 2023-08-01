@@ -61,10 +61,12 @@ Ltac fast_set_fresh_subst v :=
   clearbody fx; subst fx.
 
 Ltac solve_bv_cbn :=
-  cbn [bv.of_Z bv.unsigned bv.of_N bv.of_nat].
+  cbv [bv.ult bv.ule bv.ugt bv.uge bv.unsigned];
+  cbn [bv.of_Z bv.of_N bv.of_nat]. (* Lemmas operate on these; don't always unfold *)
 
 Ltac solve_bv_cbn_in_all :=
-  cbn [bv.of_Z bv.unsigned bv.of_N bv.of_nat] in *.
+  cbv [bv.ult bv.ule bv.ugt bv.uge bv.unsigned] in *;
+  cbn [bv.of_Z bv.of_N bv.of_nat] in *.
 
 Ltac bv_zify_op_nonbranching_step :=
     lazymatch goal with
@@ -81,15 +83,6 @@ Ltac bv_zify_op_nonbranching_step :=
       discriminate H
     | H : @eq (option (bv _)) None (Some _) |- _ =>
       discriminate H
-    (* Unfolding *)
-    | |- context [ bv.ult _ _ ] =>
-        unfold bv.ult
-    | H : context [ bv.ult _ _ ] |- _ =>
-      unfold bv.ult in H
-    | |- context [ bv.ule _ _ ] =>
-      unfold bv.ule
-    | H : context [ bv.ule _ _ ] |- _ =>
-        unfold bv.ule in H
     (* Non-branching specs *)
     | |- context [ bv.bin (bv.one) ] =>
       rewrite bv_bin_one ; [ | cbn; lia] (* TODO create spec Ltac for these? Currently assumes n > 0 *)
