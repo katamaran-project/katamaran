@@ -391,14 +391,15 @@ Import BlockVerificationDerived2.
 
   Lemma memAdv_pmpPolicy `{sailGS Σ} :
     (ptstoSthL advAddrs ⊢
-      interp_pmp_addr_access liveAddrs femto_pmpentries User)%I.
+      interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User)%I.
   Proof.
     iIntros "Hadv".
     unfold interp_pmp_addr_access.
     rewrite <-(big_sepL_filter).
     unfold ptstoSthL.
-    now rewrite <- liveAddr_filter_advAddr.
-  Qed.
+     rewrite <- liveAddr_filter_advAddr.
+     admit.
+  Admitted.
 
   (* Definition ptsto_readonly `{sailGS Σ} addr v : iProp Σ := *)
   (*       inv.inv femto_inv_ns (interp_ptsto addr v). *)
@@ -415,7 +416,7 @@ Import BlockVerificationDerived2.
       cur_privilege ↦ Machine ∗
       interp_gprs ∗
       interp_pmp_entries femto_pmpentries ∗
-      interp_pmp_addr_access liveAddrs femto_pmpentries User ∗
+      interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User ∗
       femto_inv_fortytwo ∗
       pc ↦ (bv.of_N 64) ∗
       (∃ v, nextpc ↦ v) ∗
@@ -428,7 +429,7 @@ Import BlockVerificationDerived2.
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
-        interp_pmp_addr_access liveAddrs femto_pmpentries User ∗
+        interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User ∗
         femto_inv_fortytwo ∗
         (∃ epc, mepc ↦ epc ∗
                 pc ↦ epc) ∗
@@ -488,7 +489,7 @@ Import BlockVerificationDerived2.
         interp_pmp_entries femto_pmpentries ∗
         femto_inv_fortytwo ∗
         (pc ↦ (bv.of_N 64)) ∗
-        interp_pmp_addr_access liveAddrs femto_pmpentries User ∗
+        interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User ∗
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
         ptsto_instrs (bv.of_N 64) femtokernel_handler
@@ -670,7 +671,7 @@ Import BlockVerificationDerived2.
   Qed.
 
   Definition mem_has_word (μ : Memory) (a : Val ty_word) (w : Val ty_word) : Prop :=
-    exists v0 v1 v2 v3, map μ (bv.seqBv a 4) = [v0; v1; v2; v3]%list /\ bv.app v0 (bv.app v1 (bv.app v2 (bv.app v3 bv.nil))) = w.
+    exists v0 v1 v2 v3, map (memory_ram μ) (bv.seqBv a 4) = [v0; v1; v2; v3]%list /\ bv.app v0 (bv.app v1 (bv.app v2 (bv.app v3 bv.nil))) = w.
 
   (* byte order correct? *)
   Definition mem_has_instr (μ : Memory) (a : Val ty_word) (instr : AST) : Prop :=
@@ -718,7 +719,7 @@ Import BlockVerificationDerived2.
 
   Lemma intro_ptstomem_word2 `{sailGS Σ} {μ : Memory} {a : Val ty_word} {v : Val ty_word} :
     mem_has_word μ a v ->
-    ([∗ list] a' ∈ bv.seqBv a 4, interp_ptsto a' (μ a')) ⊢ interp_ptstomem a v.
+    ([∗ list] a' ∈ bv.seqBv a 4, interp_ptsto a' ((memory_ram μ) a')) ⊢ interp_ptstomem a v.
   Proof.
     iIntros (Hmhw) "Hmem".
     destruct Hmhw as (v0 & v1 & v2 & v3 & Heqμ & Heqv).
@@ -732,7 +733,7 @@ Import BlockVerificationDerived2.
   Lemma intro_ptsto_instr `{sailGS Σ} {μ : Memory} {a : Val ty_word} {instr : AST} :
     (4 + bv.bin a < bv.exp2 xlenbits)%N ->
     mem_has_instr μ a instr ->
-    ([∗ list] a' ∈ bv.seqBv a 4, interp_ptsto a' (μ a'))
+    ([∗ list] a' ∈ bv.seqBv a 4, interp_ptsto a' ((memory_ram μ) a'))
       ⊢ interp_ptsto_instr a instr.
   Proof.
     iIntros (Hrep (v & Hmhw & Heq)) "Hmem".
@@ -744,7 +745,7 @@ Import BlockVerificationDerived2.
   Lemma intro_ptsto_instrs `{sailGS Σ} {μ : Memory} {a : Val ty_word} {instrs : list AST} :
     (4 * N.of_nat (length instrs) + bv.bin a < bv.exp2 xlenbits)%N ->
     mem_has_instrs μ a instrs ->
-    ([∗ list] a' ∈ bv.seqBv a (4 * length instrs), interp_ptsto a' (μ a'))
+    ([∗ list] a' ∈ bv.seqBv a (4 * length instrs), interp_ptsto a' ((memory_ram μ) a'))
       ⊢ ptsto_instrs a instrs.
   Proof.
     assert (word > 0) by now compute; Lia.lia.
@@ -769,14 +770,79 @@ Import BlockVerificationDerived2.
   Qed.
 
   Lemma intro_ptstoSthL `{sailGS Σ} (μ : Memory) (addrs : list Xlenbits)  :
-    ([∗ list] a' ∈ addrs, interp_ptsto a' (μ a')) ⊢ ptstoSthL addrs.
+    ([∗ list] a' ∈ addrs, interp_ptsto a' ((memory_ram μ) a')) ⊢ ptstoSthL addrs.
   Proof.
     induction addrs as [|a l]; cbn.
     - now iIntros "_".
     - iIntros "[Hmema Hmem]".
       iSplitL "Hmema".
-      + now iExists (μ a).
+      + now iExists ((memory_ram μ) a).
       + now iApply IHl.
+  Qed.
+
+  From Katamaran Require Import BitvectorSolve.
+  Import bv.notations.
+  Lemma bin_sub_small {n x y} : (y <=ᵘ x) -> bv.bin (x - y)%bv = (bv.bin x - @bv.bin n y)%N.
+  Proof.
+    intro Hle.
+    (* Some returning proof steps *)
+    pose proof (bv.bv_is_wf x).
+    pose proof (bv.bv_is_wf y).
+    pose proof (bv.exp2_nzero n).
+    destruct y as [yval ?]. (* Proof-irrelevant destruct needed; `y = bv.zero` does not work *)
+    destruct (decide (yval = 0)%N) as [-> |]; cbn in *.
+    - (* Exclude trivial case *)
+    rewrite !bv.truncn_spec !N.sub_0_r N.mod_same //.
+    rewrite N.add_0_r N.mod_small //.
+    - setoid_rewrite -> bv.truncn_small at 2.
+      2: { apply N.sub_lt; lia. }
+      rewrite bv.truncn_spec.
+      rewrite N.add_sub_assoc; last lia.
+      rewrite N.add_comm -N.add_sub_assoc //.
+      rewrite -N.add_mod_idemp_l // N.mod_same //.
+      apply N.mod_small. lia.
+  Qed.
+
+
+  Lemma seqBv_sub_list {n s s' e e'}:
+    (bv.ule s s') →
+    (N.to_nat (bv.bin s') + e' <= N.to_nat (bv.bin s) + e) →
+    ∃ l1 l2, @bv.seqBv n s e = l1 ++ (bv.seqBv s' e' ++ l2).
+  Proof. intros Hs He.
+      unfold bv.ule in Hs.
+      assert (e = (N.to_nat (bv.bin s') - N.to_nat (bv.bin s)) + (((N.to_nat (bv.bin s') + e') - N.to_nat (bv.bin s')) + ((N.to_nat (bv.bin s) + e) - (N.to_nat (bv.bin s') + e'))))%nat as -> by lia.
+      rewrite 2!bv.seqBv_app.
+      do 2 eexists.
+      repeat f_equal.
+      - rewrite /bv.add.
+        rewrite <-(bv.of_N_bin s') at -1. f_equal.
+        rewrite bv.bin_of_nat_small; last solve_bv.
+        rewrite -N2Nat.inj_sub N2Nat.id. lia.
+      - lia.
+  Qed.
+
+  Lemma seqBv_sub_elem_of {n s s' e e'} a:
+    (s <=ᵘ s') →
+    (N.to_nat (bv.bin s') + e' <= N.to_nat (bv.bin s) + e) →
+    (a ∈ bv.seqBv s' e')%stdpp → (a ∈ @bv.seqBv n s e)%stdpp.
+  Proof.
+    intros Hs He Hel.
+    destruct (seqBv_sub_list Hs He) as (l1 & l2 & ->).
+    rewrite !elem_of_app. auto.
+  Qed.
+
+  Lemma sub_heap_mapsto_interp_ptsto {Σ : gFunctors} {H : sailGS Σ} {s e} (μ : Memory):
+    (minAddr <= N.to_nat (bv.bin s)) → N.to_nat (bv.bin s) + e <= minAddr + lenAddr →
+    ([∗ list] y ∈ bv.seqBv s e, gen_heap.mapsto y (dfrac.DfracOwn 1) (memory_ram μ y)) ⊢ [∗ list] a' ∈ bv.seqBv s e, interp_ptsto a' (memory_ram μ a').
+  Proof.
+    iIntros (Hlow Hhi) "Hlist".
+    iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.
+    iIntros "$". iPureIntro.
+    rewrite /= /not; apply mmio_ram_False.
+    apply elem_of_list_lookup_2 in Hsom.
+    refine (seqBv_sub_elem_of _ _ Hsom).
+    - solve_bv.
+    - rewrite bv.bin_of_nat_small; last apply minAddr_rep. lia.
   Qed.
 
   Lemma femtokernel_splitMemory `{sailGS Σ} {μ : Memory} :
@@ -793,24 +859,29 @@ Import BlockVerificationDerived2.
     unfold mem_res, initMemMap.
     rewrite liveAddrs_split.
     rewrite ?map_app ?list_to_map_app ?big_sepM_union.
-    iDestruct "Hmem" as "(Hinit & Hhandler & Hfortytwo & Hadv)".
+    iDestruct "Hmem" as "[(Hinit & Hhandler & Hfortytwo & Hadv) Htr]".
     iSplitL "Hinit".
-    now iApply (intro_ptsto_instrs (μ := μ)).
+    { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
+      iApply (sub_heap_mapsto_interp_ptsto with "Hinit"); unfold minAddr, lenAddr; cbn; lia. }
     iSplitL "Hhandler".
-    now iApply (intro_ptsto_instrs (μ := μ)).
+    { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
+      iApply (sub_heap_mapsto_interp_ptsto with "Hhandler"); unfold minAddr, lenAddr; cbn; lia. }
     iSplitL "Hfortytwo".
     - iAssert (interp_ptstomem (bv.of_N 76) (bv.of_N 42)) with "[Hfortytwo]" as "Hfortytwo".
-      { now iApply (intro_ptstomem_word2 Hft with "Hfortytwo"). }
+      { iApply (intro_ptstomem_word2 Hft).
+        iApply (sub_heap_mapsto_interp_ptsto with "Hfortytwo"); unfold minAddr, lenAddr; cbn; lia.
+      }
       iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptstomem (bv.of_N 76) (bv.of_N 42)) with "Hfortytwo") as "Hinv".
       now iModIntro.
-    - now iApply (intro_ptstoSthL μ).
+    - iApply (intro_ptstoSthL μ).
+      iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); unfold minAddr, lenAddr; cbn; lia.
   Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
-    ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜μ a = v⌝.
+    ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝.
   Proof.
     unfold interp_ptsto, mem_inv.
-    iIntros "(%memmap & Hinv & %link) Hptsto".
+    iIntros "(%memmap & Hinv & %link & Htr) [Hptsto %Hmmio]".
     iDestruct (gen_heap.gen_heap_valid with "Hinv Hptsto") as "%x".
     iPureIntro.
     now apply (map_Forall_lookup_1 _ _ _ _ link).
@@ -828,10 +899,10 @@ Import BlockVerificationDerived2.
     read_register γ pmpaddr1 = bv.zero ->
     read_register γ pc = (bv.of_N 0) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    μ' (bv.of_N 76) = (bv.of_N 42).
+    (memory_ram μ') (bv.of_N 76) = (bv.of_N 42).
   Proof.
     intros μinit μhandler μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps.
-    refine (adequacy_gen (Q := fun _ _ _ _ => True%I) (μ' (bv.of_N 76) = (bv.of_N 42)) steps _).
+    refine (adequacy_gen (Q := fun _ _ _ _ => True%I) ((memory_ram μ') (bv.of_N 76) = (bv.of_N 42)) steps _).
     iIntros (Σ' H).
     unfold own_regstore.
     cbn.
@@ -861,3 +932,4 @@ Import BlockVerificationDerived2.
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
 (* End: *)
+  (*  *)

@@ -111,11 +111,11 @@ Section Loop.
      (∃ v : Xlenbits,   mepc          ↦ v)               ∗
                         mstatus       ↦ {| MPP := mpp |} ∗
                         interp_pmp_entries entries       ∗
-                        interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
+                        interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
                         interp_gprs)%I.
 
   Definition Execution (m : Privilege) (h : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
-    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
+    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
      interp_gprs ∗
      interp_pmp_entries entries ∗
      (∃ mc, mcause ↦ mc) ∗
@@ -127,7 +127,7 @@ Section Loop.
      (∃ v, mepc ↦ v))%I.
 
   Definition CSRMod (m : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
-    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
+    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
      interp_gprs ∗
      (∃ entries, interp_pmp_entries entries) ∗
      ⌜m = Machine⌝ ∗
@@ -140,7 +140,7 @@ Section Loop.
      (∃ mepc_v, mepc ↦ mepc_v))%I.
 
   Definition Trap (m : Privilege) (h : Xlenbits) (entries : list (Pmpcfg_ent * Xlenbits)) :=
-    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
+    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
      interp_gprs ∗
      interp_pmp_entries entries ∗
      (∃ mc, mcause ↦ mc) ∗
@@ -152,7 +152,7 @@ Section Loop.
      (∃ mepc_v, mepc ↦ mepc_v))%I.
 
   Definition Recover (m : Privilege) (h : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
-    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
+    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
      interp_gprs ∗
      interp_pmp_entries entries ∗
      ⌜m = Machine⌝ ∗
@@ -167,7 +167,7 @@ Section Loop.
   (* Executing normally *)
   (* TODO: this should be the same as Start of iteration (P), drop one of them *)
   Definition Execution' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
-    (            interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
+    (            interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
                                         interp_gprs ∗
                                         interp_pmp_entries es ∗
                                         (∃ mc,         mcause        ↦ mc) ∗
@@ -180,7 +180,7 @@ Section Loop.
 
   (* Modified CSRs, requires Machine mode *)
   Definition CSRMod' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
-    (                               interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
+    (                               interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
                                                            interp_gprs ∗
                                                            (∃ es : list (Pmpcfg_ent * Addr), interp_pmp_entries es) ∗
                                                            ⌜m = Machine⌝ ∗
@@ -194,7 +194,7 @@ Section Loop.
 
   (* Trap occured -> Go into M-mode *)
   Definition Trap' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
-    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
+    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
                             interp_gprs ∗
                             interp_pmp_entries es ∗
                             (∃ mc, mcause        ↦ mc) ∗
@@ -207,7 +207,7 @@ Section Loop.
 
   (* MRET = Recover *)
   Definition Recover' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
-    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
+    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
                             interp_gprs ∗
                             interp_pmp_entries es ∗
                             ⌜m = Machine⌝ ∗
