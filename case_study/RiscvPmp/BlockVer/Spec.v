@@ -394,6 +394,19 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
                                        term_var "result_write_ram" = term_val ty.bool true;
     |}.
 
+  (* Only deal with case where the call fails *)
+  (* Note; we define the contract like this, because it matches the PRE of `checked_mem_read` quite well*)
+  Definition sep_contract_within_mmio (bytes : nat) : SepContractFunX (within_mmio bytes) :=
+    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits];
+        sep_contract_localstore      := [term_var "paddr"];
+        sep_contract_precondition    :=
+            (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+              (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr);
+        sep_contract_result          := "result_is_within";
+        sep_contract_postcondition   := term_var "result_is_within" = term_val ty.bool false
+    |}.
+
+
   Definition sep_contract_decode    : SepContractFunX decode :=
     {| sep_contract_logic_variables := ["code" :: ty_word; "instr" :: ty_ast];
        sep_contract_localstore      := [term_var "code"];
@@ -407,6 +420,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
       match f with
       | read_ram bytes  => sep_contract_read_ram
       | write_ram bytes => sep_contract_write_ram
+      | within_mmio bytes => sep_contract_within_mmio bytes
+      | mmio_read bytes  => sep_contract_mmio_read bytes
+      | mmio_write bytes => sep_contract_mmio_write bytes
       | decode    => sep_contract_decode
       end.
 
@@ -663,6 +679,8 @@ Module RiscvPmpIrisInstanceWithContracts.
 
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstance.
+  Import RiscvPmp.Model.
+  Import RiscvPmp.BitvectorSolve.
 
   Import iris.bi.interface.
   Import iris.bi.big_op.
@@ -675,131 +693,91 @@ Module RiscvPmpIrisInstanceWithContracts.
   Lemma read_ram_sound `{sailGS Σ} {bytes} :
     ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram (read_ram bytes).
   Proof.
-    intros Γ es δ ι Heq.
-    destruct (env.view ι) as [ι w].
-    destruct (env.view ι) as [ι paddr].
-    destruct (env.view ι) as [ι b].
-    destruct (env.view ι). cbn in Heq |- *.
-    iIntros "ptsto_addr_w".
-    unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-    iDestruct "Hmem" as (memmap) "[Hmem' %Hmap]".
-    destruct b; cbn.
-    - iDestruct "ptsto_addr_w" as "#ptsto_addr_w".
-      unfold interp_ptstomem_readonly.
-      iInv "ptsto_addr_w" as "Hptsto" "Hclose_ptsto".
-      iMod (fupd_mask_subseteq empty) as "Hclose_rest"; first set_solver.
-      iModIntro.
-      iSplitR; first done.
-      iIntros (e2 σ'' efs Hstep).
-      dependent elimination Hstep.
-      fold_semWP.
-      dependent elimination s.
-      rewrite Heq in f1.
-      dependent elimination f1. cbn.
-      do 3 iModIntro.
-      iPoseProof (Model.RiscvPmpModel2.fun_read_ram_works Hmap with "[$Hptsto $Hmem']") as "%eq_fun_read_ram".
-      iMod "Hclose_rest" as "_".
-      iMod ("Hclose_ptsto" with "Hptsto") as "_".
-      iModIntro.
-      iFrame "Hregs".
-      iSplitL "Hmem'".
-      iExists memmap.
-      now iFrame.
-      iSplitL; last easy.
-      iApply wp_value.
-      iSplitL; last easy.
-      now iSplitL.
-    - iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iSplitR; first easy.
-      iIntros (e2 σ'' efs Hstep).
-      dependent elimination Hstep.
-      fold_semWP.
-      dependent elimination s.
-      rewrite Heq in f1.
-      dependent elimination f1. cbn.
-      do 3 iModIntro.
-      iPoseProof (Model.RiscvPmpModel2.fun_read_ram_works Hmap with "[$ptsto_addr_w $Hmem']") as "%eq_fun_read_ram".
-      iMod "Hclose" as "_".
-      iModIntro.
-      iSplitL "Hmem' Hregs".
-      iSplitL "Hregs"; first iFrame.
-      iExists memmap.
-      iSplitL "Hmem'"; first iFrame.
-      iPureIntro; assumption.
-      iSplitL; last easy.
-      iApply wp_value.
-      iSplitL; last easy.
-      now iSplitL.
+      intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
+      iIntros "H". cbn in *.
+      iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
+      iIntros (? ? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
+      iSplitR; first auto.
+      destruct inv; cbn -[prim_step].
+      - (* readonly case *)
+        unfold interp_ptstomem_readonly.
+        iDestruct "H" as "#H".
+        iInv "H" as "Hptsto" "Hclose_ptsto".
+        iDestruct (bi.later_mono _ _ (RiscvPmpModel2.fun_read_ram_works Hmap) with "[$Hptsto $Hmem]") as "#>%eq_fun_read_ram".
+        iMod ("Hclose_ptsto" with "Hptsto") as "_".
+        repeat iModIntro.
+        iIntros. iModIntro.
+        eliminate_prim_step Heq.
+        iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+        now iFrame "% # ∗".
+      - (* old case *)
+        repeat iModIntro.
+        iIntros. iModIntro.
+        eliminate_prim_step Heq.
+        iPoseProof (RiscvPmpModel2.fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
+        iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+        now iFrame.
   Qed.
 
   Lemma write_ram_sound `{sailGS Σ} {bytes} :
     ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_write_ram (write_ram bytes).
   Proof.
-    intros Γ es δ ι Heq.
-    destruct (env.view ι) as [ι data].
-    destruct (env.view ι) as [ι paddr].
-    destruct (env.view ι). cbn in Heq |- *.
-    iIntros "[% ptsto_addr]".
-    unfold semWP. rewrite wp_unfold. cbn.
-    iIntros ([γ μ] ns ks1 ks nt) "[Hregs Hmem]".
-    iDestruct "Hmem" as (memmap) "[Hmem' %Hmap]".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first easy.
-    iIntros (e2 σ'' efs Hstep).
-    dependent elimination Hstep.
-    fold_semWP.
-    dependent elimination s.
-    rewrite Heq in f1. cbn in f1.
-    dependent elimination f1. cbn.
-    do 3 iModIntro.
-    iMod "Hclose" as "_".
-    iMod (@Model.RiscvPmpModel2.fun_write_ram_works _ _ μ1 bytes paddr data memmap v Hmap
-                 with "[$ptsto_addr $Hmem']") as "[Hmem >Haddr]".
-    iFrame.
-    now iApply wp_value.
-  Qed.
+    intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
+      iIntros "[%w H]".
+      iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
+      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+      iSplitR; first auto.
+      repeat iModIntro.
+      iIntros.
+      eliminate_prim_step Heq.
+      iMod (RiscvPmpModel2.fun_write_ram_works with "[$H $Hmem $Htr]") as "[$ H]"; [auto | now iFrame].
+ Qed.
 
   Lemma decode_sound `{sailGS Σ} :
     ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
   Proof.
-    intros Γ es δ ι Heq.
-    destruct (env.view ι) as [ι instr].
-    destruct (env.view ι) as [ι code].
-    destruct (env.view ι). cbn.
+    intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "%Hdecode".
-    unfold semWP. rewrite wp_unfold. cbn.
-    iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-    iDestruct "Hmem" as (memmap) "[Hmem' %]".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first easy.
-    iIntros (e2 σ'' efs Hstep).
-    dependent elimination Hstep.
-    fold_semWP.
-    dependent elimination s.
-    rewrite Heq in f1. cbv in f1.
-    dependent elimination f1. rewrite Hdecode. cbn.
-    do 3 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iSplitL "Hmem' Hregs".
-    iSplitL "Hregs"; first iFrame.
-    iExists memmap.
-    iSplitL "Hmem'"; first iFrame.
-    iPureIntro; assumption.
-    iSplitL; last easy.
-    iApply wp_value; auto.
+    iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
+    iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+    iSplitR; first auto.
+    repeat iModIntro.
+    iIntros.
+    eliminate_prim_step Heq.
+    destruct (pure_decode _); inversion Hdecode.
+    subst; cbn.
+    iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+    now iFrame.
   Qed.
 
-  Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
+  Lemma within_mmio_sound `{sailGS Σ} {bytes}:
+    ValidContractForeign (RiscvPmpBlockVerifSpec.sep_contract_within_mmio bytes) (RiscvPmpProgram.within_mmio bytes).
   Proof.
-    intros Δ τ f. destruct f.
-    - apply read_ram_sound.
-    - apply write_ram_sound.
-    - apply decode_sound.
+    intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
+    iIntros "([%Hlow _] & [%Hhi _])".
+    iApply (lifting.wp_lift_pure_step_no_fork _ _ ⊤).
+    - cbn; auto.
+    - intros. eliminate_prim_step Heq; auto.
+    - repeat iModIntro. iIntros. eliminate_prim_step Heq; auto.
+      rewrite /fun_within_mmio bool_decide_and.
+      assert (bool_decide (withinMMIO paddr bytes) = false) as ->.
+      { rewrite bool_decide_eq_false.
+        destruct bytes; first easy.
+        assert (paddr ∈ liveAddrs)%stdpp.
+        { apply bv.in_seqBv.
+          - cbn (* TODO: add simplifying `xlenbits` to solve_bv *). solve_bv.
+          - assert (Z.of_N (bv.bin paddr) < lenAddr)%Z by solve_bv. cbn.
+            cbv [bv.ult]. now zify. (* `solve_bv` fails because knowledge of concrete `minAddr`, `lenAddr` needed *)}
+        intros HFalse; cbn in HFalse. assert (paddr ∈ mmioAddrs)%stdpp by now destruct bytes.
+        eapply mmio_ram_False; eauto.
+      }
+      iApply wp_value; easy.
+  Qed.
+
+  Lemma foreignSemBlockVerif `{sailGS Σ} : RiscvPmpIrisInstanceWithContracts.ForeignSem.
+  Proof.
+    intros Δ τ f; destruct f;
+        eauto using read_ram_sound, write_ram_sound, RiscvPmpModel2.mmio_read_sound, RiscvPmpModel2.mmio_write_sound, within_mmio_sound, decode_sound.
   Qed.
 
   Ltac destruct_syminstance ι :=
