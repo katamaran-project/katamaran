@@ -127,7 +127,7 @@ Import BlockVerificationDerived2.
             bv.app r (bv.app w (bv.app x (bv.app a l)))
         end%Z.
 
-    Definition femto_address_max : N := 2^19 - 1.
+    Definition femto_address_max : N := N.of_nat maxAddr. (* Change once adversary gets access to MMIO*)
     Definition femto_pmpcfg_ent0 : Pmpcfg_ent := MkPmpcfg_ent false OFF false false false.
     Definition femto_pmpcfg_ent0_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
@@ -135,7 +135,7 @@ Import BlockVerificationDerived2.
     Definition femto_pmp0cfg_bits : Val (ty.bvec 32) := bv.zext (bv.app femto_pmpcfg_ent0_bits femto_pmpcfg_ent1_bits).
     Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := bv.extract 0 12 femto_pmp0cfg_bits.
     Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := bv.extract 12 20 femto_pmp0cfg_bits.
-                                                               
+
     Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N 80); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
 
     Definition femto_mstatus := pure_mstatus_to_bits (MkMstatus User).
@@ -365,11 +365,158 @@ Import BlockVerificationDerived2.
     destruct (pmp_check_aux x (bv.of_nat 1) bv.zero ents p1 p2); [left|right]; easy.
   Defined.
 
-  Lemma liveAddr_filter_advAddr : filter
+  (* TODO move the below *)
+  From Katamaran Require Import BitvectorSolve.
+  Import bv.notations.
+  Lemma bin_sub_small {n x y} : (y <=ᵘ x) -> bv.bin (x - y)%bv = (bv.bin x - @bv.bin n y)%N.
+  Proof.
+    intro Hle.
+    (* Some returning proof steps *)
+    pose proof (bv.bv_is_wf x).
+    pose proof (bv.bv_is_wf y).
+    pose proof (bv.exp2_nzero n).
+    destruct y as [yval ?]. (* Proof-irrelevant destruct needed; `y = bv.zero` does not work *)
+    destruct (decide (yval = 0)%N) as [-> |]; cbn in *.
+    - (* Exclude trivial case *)
+    rewrite !bv.truncn_spec !N.sub_0_r N.mod_same //.
+    rewrite N.add_0_r N.mod_small //.
+    - setoid_rewrite -> bv.truncn_small at 2.
+      2: { apply N.sub_lt; lia. }
+      rewrite bv.truncn_spec.
+      rewrite N.add_sub_assoc; last lia.
+      rewrite N.add_comm -N.add_sub_assoc //.
+      rewrite -N.add_mod_idemp_l // N.mod_same //.
+      apply N.mod_small. lia.
+  Qed.
+
+
+  Lemma seqBv_sub_list {n s s' e e'}:
+    (bv.ule s s') →
+    (N.to_nat (bv.bin s') + e' <= N.to_nat (bv.bin s) + e) →
+    ∃ l1 l2, @bv.seqBv n s e = l1 ++ (bv.seqBv s' e' ++ l2).
+  Proof. intros Hs He.
+      unfold bv.ule in Hs.
+      assert (e = (N.to_nat (bv.bin s') - N.to_nat (bv.bin s)) + (((N.to_nat (bv.bin s') + e') - N.to_nat (bv.bin s')) + ((N.to_nat (bv.bin s) + e) - (N.to_nat (bv.bin s') + e'))))%nat as -> by lia.
+      rewrite 2!bv.seqBv_app.
+      do 2 eexists.
+      repeat f_equal.
+      - rewrite /bv.add.
+        rewrite <-(bv.of_N_bin s') at -1. f_equal.
+        rewrite bv.bin_of_nat_small; last solve_bv.
+        rewrite -N2Nat.inj_sub N2Nat.id. lia.
+      - lia.
+  Qed.
+
+  Lemma seqBv_sub_elem_of {n s s' e e'} a:
+    (s <=ᵘ s') →
+    (N.to_nat (bv.bin s') + e' <= N.to_nat (bv.bin s) + e) →
+    (a ∈ bv.seqBv s' e')%stdpp → (a ∈ @bv.seqBv n s e)%stdpp.
+  Proof.
+    intros Hs He Hel.
+    destruct (seqBv_sub_list Hs He) as (l1 & l2 & ->).
+    rewrite !elem_of_app. auto.
+  Qed.
+
+  Lemma seqBv_in' {n v min len} :
+    (bv.bin min + N.of_nat len <= bv.exp2 n)%N -> (* Required in this direction *)
+    (v ∈ (@bv.seqBv n min len))%stdpp →
+    (min <=ᵘ v) ∧ (bv.bin v < bv.bin min + N.of_nat len)%N.
+  Proof.
+     unfold bv.ule, bv.ult, bv.seqBv.
+     intros Hflow [y [-> Hel%list_numbers.elem_of_seqZ]]%elem_of_list_fmap_2.
+     unfold bv.of_Z.
+     rewrite -(Z2N.id y); last solve_bv.
+     rewrite bv.to_N_truncz.
+     rewrite bv.truncn_small; last solve_bv.
+     rewrite bv.bin_of_N_small; last solve_bv.
+     solve_bv.
+  Qed.
+
+  (* TODO : replace old proof *)
+  Local Lemma to_nat_mono (a b : N) : (a < b)%N → N.to_nat a < N.to_nat b.
+  Proof. lia. Qed.
+  Lemma in_allAddrs_split (addr : Addr) (bytes : nat) :
+    (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
+    exists l1 l2, all_addrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
+  Proof. intros Hrep. rewrite all_addrs_eq.
+    refine (seqBv_sub_list _ _); first solve_bv.
+    apply to_nat_mono in Hrep.
+    rewrite bv.exp2_spec N2Nat.inj_add N2Nat.inj_pow !Nat2N.id in Hrep.
+    apply Nat.lt_le_incl, (Nat.lt_le_trans _ _ _ Hrep).
+    now compute -[Nat.pow].
+  Qed.
+
+  Lemma adv_is_live y : (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
+  Proof. unfold advAddrs, liveAddrs.
+         apply seqBv_sub_elem_of; now compute.
+  Qed.
+
+  Ltac case_if H :=
+    let go P := (destruct P eqn:H) in
+      match goal with
+      | |- context [if ?P then _ else _] => go P
+      | K: context [if ?P then _ else _] |- _ => go P
+      end.
+
+  Lemma adv_in_pmp x : (x ∈ advAddrs)%stdpp -> (∃ p : Val ty_access_type, Pmp_access x (bv.of_nat 1) femto_pmpentries User p).
+  Proof.
+    intro Hin. rewrite /femto_pmpentries.
+    exists Read.
+    cbv [Pmp_access Gen_Pmp_access pmp_check_aux pmp_check_rec pmp_match_entry]. cbn.
+    apply seqBv_in' in Hin as [Hlo Hhi]; last now compute.
+    unfold bv.uleb, bv.ule, bv.ult in *.
+    cbn in Hlo,Hhi.
+    case_if H.
+    { rewrite bv.bin_add_small /= in H; last lia.
+      apply orb_prop in H as [|]; rewrite N.leb_le in H; solve_bv. }
+    clear H. case_if H; first easy.
+    { rewrite bv.bin_add_small /= in H; last lia.
+      apply andb_false_iff in H as [|]; rewrite N.leb_gt in H; solve_bv. }
+  Qed.
+
+  Lemma pmp_in_adv x : (∃ p : Val ty_access_type, Pmp_access x (bv.of_nat 1) femto_pmpentries User p) → (x ∈ advAddrs)%stdpp.
+  Proof.
+    intros [p HPmp]. rewrite /femto_pmpentries.
+    cbv [Pmp_access Gen_Pmp_access pmp_check_aux pmp_check_rec pmp_match_entry] in HPmp. cbn in HPmp.
+    unfold bv.uleb in *.
+    case_if H; first by exfalso.
+    apply orb_false_elim in H as [_ Hhi]. rewrite N.leb_gt in Hhi.
+    case_if H'; last by exfalso.
+    apply andb_prop in H' as [Hlo _]. rewrite N.leb_le in Hlo.
+    apply bv.in_seqBv; exact.
+  Qed.
+
+  Lemma NoDup_seqbv {n min len}:
+    (bv.bin min + N.of_nat len <= bv.exp2 n)%N →
+    NoDup (@bv.seqBv n min len).
+  Proof.
+    intros Hof.
+    apply NoDup_fmap_2_strong; last apply NoDup_seqZ.
+    intros x y Hxin Hyin Heq.
+    rewrite !elem_of_seqZ in Hxin, Hyin.
+    feed pose proof (Z2N.id y); first solve_bv.
+    feed pose proof (Z2N.id x); first solve_bv.
+    unfold bv.unsigned, bv.of_Z in *.
+    rewrite -H -H0 !bv.to_N_truncz !bv.truncn_small in Heq; [|solve_bv..].
+    apply (f_equal (@bv.bin _)) in Heq.
+    rewrite !bv.bin_of_N_small in Heq; solve_bv.
+  Qed.
+
+  (* Use permutation rather than membership to avoid indexes *)
+  Lemma allAddr_filter_advAddr : filter
                  (λ x : Val ty_word ,
                     (∃ p : Val ty_access_type, Pmp_access x (bv.of_nat 1) femto_pmpentries User p)%type)
-                 liveAddrs = advAddrs.
-  Proof. now compute. Qed.
+                 all_addrs ≡ₚ advAddrs.
+  Proof. rewrite (list_filter_iff _ (fun x => x ∈ advAddrs)); last split; auto using adv_in_pmp, pmp_in_adv.
+         apply NoDup_Permutation.
+         - apply NoDup_filter. rewrite all_addrs_eq. refine (NoDup_seqbv _).
+           rewrite bv.exp2_spec Nat2N.inj_pow. now cbn -[xlenbits].
+         - apply NoDup_seqbv. now cbn.
+         - intros x. rewrite elem_of_list_filter.
+           split.
+           + now intros [? ?].
+           + split; [auto | apply addr_in_all_addrs].
+  Qed.
 
   Lemma big_sepL_filter `{BiAffine PROP} {A : Type} {l : list A}
       {φ : A → Prop} (dec : ∀ x, Decision (φ x)) (Φ : A -> PROP) :
@@ -397,9 +544,13 @@ Import BlockVerificationDerived2.
     unfold interp_pmp_addr_access.
     rewrite <-(big_sepL_filter).
     unfold ptstoSthL.
-     rewrite <- liveAddr_filter_advAddr.
-     admit.
-  Admitted.
+    rewrite -> (big_opL_permutation _ _ _ allAddr_filter_advAddr).
+    iApply (big_sepL_mono with "Hadv"). iIntros (? ? Hsom) "Hptsto".
+    unfold interp_addr_access_byte.
+    apply elem_of_list_lookup_2, adv_is_live in Hsom.
+    repeat case_decide; auto.
+    iPureIntro. eapply mmio_ram_False; eauto.
+  Qed.
 
   (* Definition ptsto_readonly `{sailGS Σ} addr v : iProp Σ := *)
   (*       inv.inv femto_inv_ns (interp_ptsto addr v). *)
@@ -780,57 +931,6 @@ Import BlockVerificationDerived2.
       + now iApply IHl.
   Qed.
 
-  From Katamaran Require Import BitvectorSolve.
-  Import bv.notations.
-  Lemma bin_sub_small {n x y} : (y <=ᵘ x) -> bv.bin (x - y)%bv = (bv.bin x - @bv.bin n y)%N.
-  Proof.
-    intro Hle.
-    (* Some returning proof steps *)
-    pose proof (bv.bv_is_wf x).
-    pose proof (bv.bv_is_wf y).
-    pose proof (bv.exp2_nzero n).
-    destruct y as [yval ?]. (* Proof-irrelevant destruct needed; `y = bv.zero` does not work *)
-    destruct (decide (yval = 0)%N) as [-> |]; cbn in *.
-    - (* Exclude trivial case *)
-    rewrite !bv.truncn_spec !N.sub_0_r N.mod_same //.
-    rewrite N.add_0_r N.mod_small //.
-    - setoid_rewrite -> bv.truncn_small at 2.
-      2: { apply N.sub_lt; lia. }
-      rewrite bv.truncn_spec.
-      rewrite N.add_sub_assoc; last lia.
-      rewrite N.add_comm -N.add_sub_assoc //.
-      rewrite -N.add_mod_idemp_l // N.mod_same //.
-      apply N.mod_small. lia.
-  Qed.
-
-
-  Lemma seqBv_sub_list {n s s' e e'}:
-    (bv.ule s s') →
-    (N.to_nat (bv.bin s') + e' <= N.to_nat (bv.bin s) + e) →
-    ∃ l1 l2, @bv.seqBv n s e = l1 ++ (bv.seqBv s' e' ++ l2).
-  Proof. intros Hs He.
-      unfold bv.ule in Hs.
-      assert (e = (N.to_nat (bv.bin s') - N.to_nat (bv.bin s)) + (((N.to_nat (bv.bin s') + e') - N.to_nat (bv.bin s')) + ((N.to_nat (bv.bin s) + e) - (N.to_nat (bv.bin s') + e'))))%nat as -> by lia.
-      rewrite 2!bv.seqBv_app.
-      do 2 eexists.
-      repeat f_equal.
-      - rewrite /bv.add.
-        rewrite <-(bv.of_N_bin s') at -1. f_equal.
-        rewrite bv.bin_of_nat_small; last solve_bv.
-        rewrite -N2Nat.inj_sub N2Nat.id. lia.
-      - lia.
-  Qed.
-
-  Lemma seqBv_sub_elem_of {n s s' e e'} a:
-    (s <=ᵘ s') →
-    (N.to_nat (bv.bin s') + e' <= N.to_nat (bv.bin s) + e) →
-    (a ∈ bv.seqBv s' e')%stdpp → (a ∈ @bv.seqBv n s e)%stdpp.
-  Proof.
-    intros Hs He Hel.
-    destruct (seqBv_sub_list Hs He) as (l1 & l2 & ->).
-    rewrite !elem_of_app. auto.
-  Qed.
-
   Lemma sub_heap_mapsto_interp_ptsto {Σ : gFunctors} {H : sailGS Σ} {s e} (μ : Memory):
     (minAddr <= N.to_nat (bv.bin s)) → N.to_nat (bv.bin s) + e <= minAddr + lenAddr →
     ([∗ list] y ∈ bv.seqBv s e, gen_heap.mapsto y (dfrac.DfracOwn 1) (memory_ram μ y)) ⊢ [∗ list] a' ∈ bv.seqBv s e, interp_ptsto a' (memory_ram μ a').
@@ -862,19 +962,18 @@ Import BlockVerificationDerived2.
     iDestruct "Hmem" as "[(Hinit & Hhandler & Hfortytwo & Hadv) Htr]".
     iSplitL "Hinit".
     { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
-      iApply (sub_heap_mapsto_interp_ptsto with "Hinit"); unfold minAddr, lenAddr; cbn; lia. }
+      iApply (sub_heap_mapsto_interp_ptsto with "Hinit"); compute; lia. }
     iSplitL "Hhandler".
     { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
-      iApply (sub_heap_mapsto_interp_ptsto with "Hhandler"); unfold minAddr, lenAddr; cbn; lia. }
+      iApply (sub_heap_mapsto_interp_ptsto with "Hhandler"); compute; lia. }
     iSplitL "Hfortytwo".
     - iAssert (interp_ptstomem (bv.of_N 76) (bv.of_N 42)) with "[Hfortytwo]" as "Hfortytwo".
       { iApply (intro_ptstomem_word2 Hft).
-        iApply (sub_heap_mapsto_interp_ptsto with "Hfortytwo"); unfold minAddr, lenAddr; cbn; lia.
-      }
+        iApply (sub_heap_mapsto_interp_ptsto with "Hfortytwo"); compute; lia. }
       iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptstomem (bv.of_N 76) (bv.of_N 42)) with "Hfortytwo") as "Hinv".
       now iModIntro.
     - iApply (intro_ptstoSthL μ).
-      iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); unfold minAddr, lenAddr; cbn; lia.
+      iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); compute; lia.
   Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
