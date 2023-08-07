@@ -427,7 +427,7 @@ Module Soundness
         SPureSpecM.assume_formula CPureSpecM.assume_formula.
     Proof.
       unfold SPureSpecM.assume_formula, CPureSpecM.assume_formula.
-      solve. apply refine_assume_pathcondition; cbn; intuition.
+      solve. apply refine_assume_pathcondition; cbn in Htv |- *; intuition auto.
     Qed.
 
     Lemma refine_assert_pathcondition :
@@ -457,7 +457,7 @@ Module Soundness
         SPureSpecM.assert_formula CPureSpecM.assert_formula.
     Proof.
       unfold SPureSpecM.assert_formula, CPureSpecM.assert_formula.
-      solve. apply refine_assert_pathcondition; cbn; intuition.
+      solve. apply refine_assert_pathcondition; cbn in Htv |- *; intuition.
     Qed.
 
     Lemma refine_angelic_binary `{R : Rel AT A} :

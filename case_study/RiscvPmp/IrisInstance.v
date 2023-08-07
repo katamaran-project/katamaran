@@ -29,11 +29,11 @@
 From Katamaran Require Import
      Base
      Bitvector
+     BitvectorSolve
      Iris.Instance
      Iris.Model
      Syntax.Predicates
      RiscvPmp.Base
-     RiscvPmp.BitvectorSolve
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
      RiscvPmp.IrisModel

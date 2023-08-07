@@ -51,7 +51,7 @@ From Katamaran Require Import
      Syntax.Variables
      Tactics.
 
-Import base (Equiv, equiv).
+Import stdpp.base (Equiv, equiv).
 Import (notations) base.
 Import ctx.notations.
 Import env.notations.
@@ -794,11 +794,11 @@ Module Type InstantiationOn
 
     Lemma unsatisfiable_snoc_l `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
       Unsatisfiable xs -> Unsatisfiable (xs ▻ x).
-    Proof. unfold Unsatisfiable; intuition. Qed.
+    Proof. unfold Unsatisfiable; cbn; intuition eauto. Qed.
 
     Lemma unsatisfiable_snoc_r `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
       Unsatisfiable x -> Unsatisfiable (xs ▻ x).
-    Proof. unfold Unsatisfiable; intuition. Qed.
+    Proof. unfold Unsatisfiable; cbn; intuition eauto. Qed.
 
     Lemma unsatisfiable_none_some `{InstProp A} [Σ] (x : A Σ) :
       Unsatisfiable x -> None ⊣⊢ Some x.

@@ -680,7 +680,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstance.
   Import RiscvPmp.Model.
-  Import RiscvPmp.BitvectorSolve.
+  Import BitvectorSolve.
 
   Import iris.bi.interface.
   Import iris.bi.big_op.
@@ -707,13 +707,13 @@ Module RiscvPmpIrisInstanceWithContracts.
         iMod ("Hclose_ptsto" with "Hptsto") as "_".
         repeat iModIntro.
         iIntros. iModIntro.
-        eliminate_prim_step Heq.
+        RiscvPmpModel2.eliminate_prim_step Heq.
         iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
         now iFrame "% # ∗".
       - (* old case *)
         repeat iModIntro.
         iIntros. iModIntro.
-        eliminate_prim_step Heq.
+        RiscvPmpModel2.eliminate_prim_step Heq.
         iPoseProof (RiscvPmpModel2.fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
         iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
         now iFrame.
@@ -729,7 +729,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       iSplitR; first auto.
       repeat iModIntro.
       iIntros.
-      eliminate_prim_step Heq.
+      RiscvPmpModel2.eliminate_prim_step Heq.
       iMod (RiscvPmpModel2.fun_write_ram_works with "[$H $Hmem $Htr]") as "[$ H]"; [auto | now iFrame].
  Qed.
 
@@ -743,7 +743,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iSplitR; first auto.
     repeat iModIntro.
     iIntros.
-    eliminate_prim_step Heq.
+    RiscvPmpModel2.eliminate_prim_step Heq.
     destruct (pure_decode _); inversion Hdecode.
     subst; cbn.
     iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
@@ -757,8 +757,8 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros "([%Hlow _] & [%Hhi _])".
     iApply (lifting.wp_lift_pure_step_no_fork _ _ ⊤).
     - cbn; auto.
-    - intros. eliminate_prim_step Heq; auto.
-    - repeat iModIntro. iIntros. eliminate_prim_step Heq; auto.
+    - intros. RiscvPmpModel2.eliminate_prim_step Heq; auto.
+    - repeat iModIntro. iIntros. RiscvPmpModel2.eliminate_prim_step Heq; auto.
       rewrite /fun_within_mmio bool_decide_and.
       assert (bool_decide (withinMMIO paddr bytes) = false) as ->.
       { rewrite bool_decide_eq_false.

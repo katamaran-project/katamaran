@@ -76,20 +76,6 @@ Ltac destruct_syminstance ι :=
     | _ => idtac
     end.
 
-Ltac eliminate_prim_step Heq :=
-  let s := fresh "s" in
-  let f := fresh "f" in
-  match goal with
-  | H: language.prim_step _ _ _ _ _ _ |- _ =>
-      rewrite /language.prim_step in H; cbn in H; (* unfold the Iris `prim_step`*)
-      dependent elimination H as [RiscvPmpIrisBase.mk_prim_step _ s];
-      destruct (RiscvPmpSemantics.smallinvstep s) as [? ? ? f];
-      rewrite Heq in f;
-      cbn in f;
-      dependent elimination f;
-      cbn
-  end.
-
 Import RiscvPmpIrisBase.
 Import RiscvPmpIrisInstance.
 
@@ -106,8 +92,23 @@ Module RiscvPmpModel2.
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
       RiscvPmpSignature RiscvPmpSpecification RiscvPmpIrisBase RiscvPmpIrisInstance.
 
+  Ltac eliminate_prim_step Heq :=
+    let s := fresh "s" in
+    let f := fresh "f" in
+    match goal with
+    | H: language.prim_step _ _ _ _ _ _ |- _ =>
+        rewrite /language.prim_step in H; cbn in H; (* unfold the Iris `prim_step`*)
+        dependent elimination H as [RiscvPmpIrisBase.mk_prim_step _ s];
+        destruct (RiscvPmpSemantics.smallinvstep s) as [? ? ? f];
+        rewrite Heq in f;
+        cbn in f;
+        dependent elimination f;
+        cbn
+    end.
+
   Section ForeignProofs.
     Context `{sg : sailGS Σ}.
+
 
     Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
