@@ -10,7 +10,6 @@ case_study/MinimalCaps/Model.v
 case_study/MinimalCaps/LoopVerification.v
 -Q case_study/RiscvPmp Katamaran.RiscvPmp
 case_study/RiscvPmp/Base.v
-case_study/RiscvPmp/BitvectorSolve.v
 case_study/RiscvPmp/Machine.v
 case_study/RiscvPmp/PmpCheck.v
 case_study/RiscvPmp/Sig.v
@@ -33,6 +32,8 @@ test/Example.v
 test/LinkedList.v
 test/SumMaxLen.v
 theories/Base.v
+theories/BitvectorBase.v
+theories/BitvectorSolve.v
 theories/Bitvector.v
 theories/Context.v
 theories/Environment.v

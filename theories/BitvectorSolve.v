@@ -26,14 +26,15 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-Require Import stdpp.tactics.
 From Katamaran Require Import
-     Base
-     Bitvector.
+     Prelude
+     BitvectorBase.
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
 From Coq Require Import
      Arith.PeanoNat.
 
+Import bv (bv).
+Import stdpp.tactics.
 Import bv.notations.
 
 (* TODO: replace explicit argument by typeclass instance? *)
