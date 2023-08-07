@@ -424,22 +424,13 @@ Module RiscvPmpIrisInstance <:
     Lemma in_allAddrs_split (addr : Addr) (bytes : nat) :
       (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
       exists l1 l2, all_addrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
-    Proof.
-      intro Hrep.
-      exists (bv.seqBv bv.zero (N.to_nat (bv.bin addr))), (bv.seqBv (addr + bv.of_nat bytes) (Nat.pow 2 xlenbits - ((N.to_nat (bv.bin addr)) + bytes))).
-      rewrite -bv.seqBv_app.
-      rewrite <-(bv.add_zero_l (x := addr)) at 2.
-      assert (addr = bv.of_nat (N.to_nat (bv.bin addr))) as Heq.
-      { unfold bv.of_nat. now rewrite N2Nat.id bv.of_N_bin. }
-      rewrite ->Heq at 2.
-      rewrite -bv.seqBv_app.
-      rewrite all_addrs_eq /all_addrs_def.
-      remember (2 ^ xlenbits) as p. (* Prevent `reflexivity` from blowing up *)
-      f_equal.
-      apply to_nat_mono in Hrep.
-      rewrite bv.exp2_spec N2Nat.inj_add N2Nat.inj_pow !Nat2N.id -Heqp in Hrep.
-      lia.
-     Qed.
+    Proof. intros Hrep. rewrite all_addrs_eq.
+           refine (bv.seqBv_sub_list _ _); first solve_bv.
+           apply to_nat_mono in Hrep.
+           rewrite bv.exp2_spec N2Nat.inj_add N2Nat.inj_pow !Nat2N.id in Hrep.
+           apply Nat.lt_le_incl, (Nat.lt_le_trans _ _ _ Hrep).
+           now compute -[Nat.pow].
+    Qed.
 
     Lemma ptstoSthL_app {l1 l2} : (ptstoSthL (l1 ++ l2) ⊣⊢ ptstoSthL l1 ∗ ptstoSthL l2)%I.
     Proof. eapply big_sepL_app. Qed.

@@ -169,6 +169,64 @@ Module bv.
       rewrite ?@bin_of_nat_small ; try Lia.lia.
     Qed.
 
+  Lemma seqBv_sub_list {n s s' e e'}:
+    (bv.ule s s') ->
+    (N.to_nat (bv.bin s') + e' <= N.to_nat (bv.bin s) + e) ->
+    exists l1 l2, @seqBv n s e = l1 ++ (seqBv s' e' ++ l2).
+  Proof. intros Hs He.
+      unfold bv.ule in Hs.
+      assert (e = (N.to_nat (bv.bin s') - N.to_nat (bv.bin s)) + (((N.to_nat (bv.bin s') + e') - N.to_nat (bv.bin s')) + ((N.to_nat (bv.bin s) + e) - (N.to_nat (bv.bin s') + e'))))%nat as -> by Lia.lia.
+      rewrite 2!seqBv_app.
+      do 2 eexists.
+      repeat f_equal.
+      - unfold bv.add.
+        rewrite <-(bv.of_N_bin s') at -1. f_equal.
+        rewrite bv.bin_of_nat_small; last solve_bv.
+        rewrite <-Nnat.N2Nat.inj_sub, Nnat.N2Nat.id. Lia.lia.
+      - Lia.lia.
+  Qed.
+
+  Lemma seqBv_sub_elem_of {n s s' e e'} a:
+    (s <=ᵘ s') ->
+    (N.to_nat (bv.bin s') + e' <= N.to_nat (bv.bin s) + e) ->
+    (base.elem_of a (seqBv s' e')) -> (base.elem_of a (@seqBv n s e)).
+  Proof.
+    intros Hs He Hel.
+    destruct (seqBv_sub_list Hs He) as (l1 & l2 & ->).
+    rewrite !list.elem_of_app. auto.
+  Qed.
+
+  Lemma seqBv_in' {n v min len} :
+    (bv.bin min + N.of_nat len <= bv.exp2 n)%N -> (* Required in this direction *)
+    (base.elem_of v (@seqBv n min len)) ->
+    and (min <=ᵘ v) (bv.bin v < bv.bin min + N.of_nat len)%N.
+  Proof.
+     unfold bv.ule, bv.ult, seqBv.
+     intros Hflow [y [-> Hel%list_numbers.elem_of_seqZ]]%list.elem_of_list_fmap_2.
+     unfold bv.of_Z.
+     rewrite <-(Znat.Z2N.id y); last solve_bv.
+     rewrite bv.to_N_truncz.
+     rewrite bv.truncn_small; last solve_bv.
+     rewrite bv.bin_of_N_small; last solve_bv.
+     solve_bv.
+  Qed.
+
+  Lemma NoDup_seqbv {n min len}:
+    (bv.bin min + N.of_nat len <= bv.exp2 n)%N ->
+    base.NoDup (@seqBv n min len).
+  Proof.
+    intros Hof.
+    apply list.NoDup_fmap_2_strong; last apply list_numbers.NoDup_seqZ.
+    intros x y Hxin Hyin Heq.
+    rewrite !list_numbers.elem_of_seqZ in Hxin, Hyin.
+    rewrite <-(Znat.Z2N.id y) in Heq; last solve_bv.
+    rewrite <-(Znat.Z2N.id x) in Heq; last solve_bv.
+    unfold bv.unsigned, bv.of_Z in *.
+    rewrite !bv.to_N_truncz, !bv.truncn_small in Heq; [|solve_bv..].
+    apply (f_equal (@bv.bin _)) in Heq.
+    rewrite !bv.bin_of_N_small in Heq; solve_bv.
+  Qed.
+
   End Sequences.
 
 End bv.
