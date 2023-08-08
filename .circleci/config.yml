@@ -10,12 +10,13 @@ defaults: &defaults
   resource_class: large
 
 jobs:
-  coq-8-15: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.15.2_iris-3.6.0_equations-1.3"}]}
-  coq-8-16: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.16.1_iris-3.6.0_equations-1.3"}]}
+  coq-8-17-iris4: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.17.1_iris-4.0.0_equations-1.3"}]}
+  coq-8-16-iris4: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.16.1_iris-4.0.0_equations-1.3"}]}
+
 
 workflows:
   version: 2
   build:
     jobs:
-      - "coq-8-15"
-      - "coq-8-16"
+      - "coq-8-17-iris4"
+      - "coq-8-16-iris4"

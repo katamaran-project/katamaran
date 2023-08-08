@@ -239,7 +239,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - intros ι; arw. split; intros HYP.
         + destruct e. now f_equal.
         + depelim HYP. now dependent elimination e.
-      - intros ι; arw. intuition.
+      - intros ι; arw. congruence.
     Qed.
     #[local] Opaque simplify_eq_union.
 
@@ -266,7 +266,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - intros ι; arw. split; intros HYP.
         + destruct e. now f_equal.
         + depelim HYP. now dependent elimination e.
-      - intros ι; arw. intuition.
+      - intros ι; arw. congruence.
     Qed.
     #[local] Opaque simplify_eq_union_val.
 
@@ -292,7 +292,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       | term_get_slice_int t => fun v => singleton (formula_relop bop.eq (term_get_slice_int t) (term_val _ v))
       | term_unsigned t     => fun v => singleton (formula_relop bop.eq (term_unsigned t) (term_val _ v))
       | term_truncate m t   => fun v => singleton (formula_relop bop.eq (term_truncate m t) (term_val _ v))
-      | term_extract s l t  => fun v => singleton (formula_relop bop.eq (term_extract s l t) (term_val _ v))
+      | term_vector_subrange s l t => fun v => singleton (formula_relop bop.eq (term_vector_subrange s l t) (term_val _ v))
       | term_negate t       => fun v => singleton (formula_relop bop.eq (term_negate t) (term_val _ v))
       | term_tuple ts       => env.Env_rect
                                  (fun σs _ => Val (ty.tuple σs) -> DList Σ)
@@ -668,12 +668,12 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
           | |- context[eq_dec _ _ ] => destruct eq_dec; subst; cbn
           | |- context[Term_eqb ?t1 ?t2] =>
               destruct (Term_eqb_spec t1 t2); cbn;
-              try (constructor; intuition; fail)
+              try (constructor; congruence; fail)
           end.
       - destruct 𝑷_eq_dec.
         + destruct e; cbn.
           destruct (env.eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) ts ts0);
-            constructor; intuition.
+            constructor; [congruence|easy].
         + now constructor.
     Qed.
 
@@ -697,16 +697,16 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       induction C as [|C ? F']; cbn; auto.
       intros [HCι HFι']. specialize (IHC HCι).
       destruct (formula_eqb_spec F F');
-        subst; intuition.
+        subst; intuition auto.
     Qed.
 
     Lemma assumption_pathcondition_spec {Σ} (C : PathCondition Σ) (FS : PathCondition Σ) (k : PathCondition Σ) (ι : Valuation Σ) :
       instprop C ι -> instprop k ι /\ instprop FS ι <-> instprop (assumption_pathcondition C FS k) ι.
     Proof.
       intros HCι. induction FS as [|FS ? F]; cbn.
-      - intuition.
+      - intuition auto.
       - pose proof (assumption_formula_spec C F (assumption_pathcondition C FS k) ι HCι).
-        intuition.
+        intuition auto.
     Qed.
 
     Definition solver_generic_round : Solver :=

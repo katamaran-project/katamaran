@@ -41,7 +41,7 @@ Section S.
     tr_frag t -∗ tr_frag t' -∗ ⌜ False ⌝.
   Proof.
     iIntros "H1 H2". iDestruct (own_valid_2 with "H1 H2") as %Hv.
-    now apply excl_auth.excl_auth_frag_valid_op_1_l in Hv.
+    now apply excl_auth.excl_auth_frag_op_valid in Hv.
   Qed.
 
   Lemma trace_update t t' :

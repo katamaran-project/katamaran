@@ -264,7 +264,7 @@ Module bv.
     Fixpoint truncn_trunc (n : nat) (p : positive) {struct n} :
       truncn n (trunc n p) = trunc n p.
     Proof.
-      destruct n, p; cbn; intuition.
+      destruct n, p; cbn; intuition auto.
       - now rewrite truncn_succ_double, truncn_trunc.
       - now rewrite truncn_double, truncn_trunc.
     Defined.
@@ -388,13 +388,13 @@ Module bv.
     Proof.
       revert x.
       induction n; cbn.
-      - intuition.
+      - intuition Lia.lia.
       - destruct x.
         + rewrite IHn.
           Lia.lia.
         + rewrite IHn.
           Lia.lia.
-        + intuition.
+        + intuition auto.
           generalize (exp2_nzero n).
           destruct (exp2 n); Lia.lia.
     Qed.
@@ -402,7 +402,7 @@ Module bv.
     Lemma is_wf_spec {n x} : Is_true (is_wf n x) <-> (x < exp2 n)%N.
     Proof.
       destruct x; cbn.
-      - intuition.
+      - intuition auto.
         generalize (exp2_nzero n).
         now destruct (exp2 n).
       - eapply at_most_spec.
@@ -535,9 +535,10 @@ Module bv.
     Proof.
       split.
       - induction x1 using bv_rect.
-        + destruct (view y1). rewrite ?app_nil. intuition.
+        + destruct (view y1). rewrite ?app_nil. intuition auto.
         + destruct (view y1) as [c y1]. rewrite ?app_cons.
-          intros [H1 H2]%cons_inj. specialize (IHx1 y1 H2). intuition.
+          intros [H1 H2]%cons_inj. specialize (IHx1 y1 H2).
+          intuition congruence.
       - intros [e1 e2]; now f_equal.
     Qed.
 
@@ -664,11 +665,12 @@ Module bv.
     Definition zext {m} (v : bv m) {n} {p : IsTrue (m <=? n)} : bv n :=
       match leview m n with is_le k => zext' v k end.
 
-    #[program] Definition truncate {n} (m : nat) (xs : bv n) {p : IsTrue (m <=? n)} : bv m :=
-      let (result, _) := appView m (n - m) xs in
-      result.
-    Next Obligation. intros; destruct (leview m n); Lia.lia. Qed.
-
+    Definition truncate {n} (m : nat) (xs : bv n) {p : IsTrue (m <=? n)} : bv m :=
+      match leview m n in LeView _ sl return bv sl -> bv m with
+      | is_le k => fun (bits : bv (m + k)) =>
+                     let (result, _) := appView m k bits in
+                     result
+      end xs.
   End Extend.
 
   Section Integers.
@@ -685,7 +687,7 @@ Module bv.
     Lemma unsigned_inj {n} (x y : bv n) : unsigned x = unsigned y -> x = y.
     Proof.
       intros.
-      now apply bin_inj, numbers.Z_of_N_inj.
+      now apply bin_inj, Znat.N2Z.inj.
     Qed.
 
     Definition truncz_idemp (n : nat) (x : Z) :
@@ -715,8 +717,20 @@ Module bv.
   End Integers.
 
   Section Extract.
-    Definition extract {n} (start length : nat) (x : bv n) : bv length :=
-      @of_Z length (Z.shiftr (unsigned x) (Z.of_nat start)).
+    Definition vector_subrange {n} (start len : nat)
+      (p : IsTrue (start + len <=? n)) : bv n -> bv len :=
+      match leview (start + len) n in LeView _ sl return bv sl -> bv len with
+      | is_le k =>
+          fun bits =>
+            let (xs,_) := appView (start + len) k bits in
+            let (_,ys) := appView start len xs in
+            ys
+      end.
+    #[global] Arguments vector_subrange {n} _ _ {_} _.
+
+    Goal vector_subrange 0 1 (@of_nat 1 1)    = of_nat 1. reflexivity. Qed.
+    Goal vector_subrange 0 8 (@of_nat 16 256) = zero.     reflexivity. Qed.
+    Goal vector_subrange 8 8 (@of_nat 16 256) = one.      reflexivity. Qed.
   End Extract.
 
   Section Shift.
@@ -735,7 +749,7 @@ Module bv.
     Lemma eq2np_sym {n} : Symmetric (eq2np n).
     Proof. now intros x y. Qed.
     Lemma eq2np_trans {n} : Transitive (eq2np n).
-    Proof. now intuition. Qed.
+    Proof. intros ? ? ?; unfold eq2np; apply transitivity. Qed.
     #[export] Instance eq2np_setoid {n} : Equivalence (eq2np n).
     Proof.
       constructor; auto using eq2np_refl, eq2np_sym, eq2np_trans.
@@ -749,7 +763,7 @@ Module bv.
     Lemma eq2n_sym {n} : Symmetric (eq2n n).
     Proof. now intros [|px] [|py]. Qed.
     Lemma eq2n_trans {n} : Transitive (eq2n n).
-    Proof. intros [|px] [|py] [|pz]; intuition. Qed.
+    Proof. intros [|px] [|py] [|pz]; unfold eq2n; apply transitivity. Qed.
     #[export] Instance eq2n_setoid {n} : Equivalence (eq2n n).
     Proof.
       constructor; auto using eq2n_refl, eq2n_sym, eq2n_trans.
@@ -767,7 +781,7 @@ Module bv.
     Lemma eq2nz_sym {n} : Symmetric (eq2nz n).
     Proof. now intros. Qed.
     Lemma eq2nz_trans {n} : Transitive (eq2nz n).
-    Proof. intros; intuition. Qed.
+    Proof. intros ? ? ?. unfold eq2nz; apply transitivity. Qed.
     #[export] Instance eq2nz_setoid {n} : Equivalence (eq2nz n).
     Proof.
       constructor; auto using eq2nz_refl, eq2nz_sym, eq2nz_trans.
@@ -896,22 +910,12 @@ Module bv.
     Definition add {n} (x y : bv n) : bv n :=
       of_N (N.add (bin x) (bin y)).
 
-    #[export] Instance add_Proper {n} : Proper (eq ==> eq ==> eq) (@add n).
-    Proof. intuition. Qed.
-
     Definition negate {n} (x : bv n) : bv n := of_N (exp2 n - bin x).
-    Instance negate_Proper {n} : Proper (eq ==> eq) (@negate n).
-    Proof. intuition. Qed.
 
     Definition sub {n} (x y : bv n) : bv n := add x (negate y).
-    Instance sub_Proper {n} : Proper (eq ==> eq ==> eq) (@sub n).
-    Proof. intuition. Qed.
 
     Definition mul {n} (x y : bv n) : bv n :=
       of_N (N.mul (bin x) (bin y)).
-
-    Instance mul_Proper {n} : Proper (eq ==> eq ==> eq) (@mul n).
-    Proof. intuition. Qed.
 
     Lemma bin_of_N_eq2n {n x} : eq2n n (@bin n (@of_N n x)) x.
     Proof.
@@ -1233,7 +1237,7 @@ Module bv.
       - rewrite ?list.elem_of_app. rewrite list.elem_of_app in xIn.
         destruct xIn as [xIn|xIn];
           specialize (IHm (fun k => V (S k)) (fun k => c (S k)) _ b _ xIn);
-          cbn in IHm; rewrite list.elem_of_app in IHm; intuition.
+          cbn in IHm; rewrite list.elem_of_app in IHm; intuition auto.
     Qed.
 
     Definition enum (n : nat) : list (bv n) :=
@@ -1731,9 +1735,6 @@ Module bv.
     Goal of_Z (-3)%Z = [bv[3] 5]. reflexivity. Qed.
     Goal of_Z (-2)%Z = [bv[3] 6]. reflexivity. Qed.
     Goal of_Z (-1)%Z = [bv[3] 7]. reflexivity. Qed.
-
-    Goal extract 0 8 [bv[16] 256] = [bv[8] 0]. reflexivity. Qed.
-    Goal extract 8 8 [bv[16] 256] = [bv[8] 1]. reflexivity. Qed.
 
     Goal shiftr [bv[8] 16] [bv[5] 4] = [bv[8] 1]. reflexivity. Qed.
     Goal shiftl [bv[8] 1] [bv[5] 4] = [bv[8] 16]. reflexivity. Qed.

@@ -103,26 +103,26 @@ Module Type InstantiationOn
   #[export] Instance inst_term : forall {σ}, Inst (fun Σ => Term Σ σ) (Val σ) :=
     fix inst_term {σ : Ty} [Σ : LCtx] (t : Term Σ σ) (ι : Valuation Σ) {struct t} : Val σ :=
     match t in Term _ σ return Val σ with
-    | @term_var _ _ _ bIn  => env.lookup ι bIn
-    | term_val _ v         => v
-    | term_binop op t1 t2  => bop.eval op
-                                (inst (Inst := @inst_term _) t1 ι)
-                                (inst (Inst := @inst_term _) t2 ι)
-    | term_neg t           => Z.opp (inst_term t ι)
-    | term_not t           => negb (inst_term t ι)
-    | term_inl t           => @inl (Val _) (Val _) (inst (Inst := inst_term) t ι)
-    | term_inr t           => @inr (Val _) (Val _) (inst (Inst := inst_term) t ι)
-    | term_sext t          => bv.sext (inst (Inst := inst_term) t ι)
-    | term_zext t          => bv.zext (inst (Inst := inst_term) t ι)
-    | term_get_slice_int t => bv.of_Z (inst (Inst := inst_term) t ι)
-    | term_unsigned t      => bv.unsigned (inst (Inst := inst_term) t ι)
-    | term_truncate m t    => bv.truncate m (inst (Inst := inst_term) t ι)
-    | term_extract s l t   => bv.extract s l (inst (Inst := inst_term) t ι)
-    | term_negate  t       => bv.negate (inst (Inst := inst_term) t ι)
-    | @term_tuple _ σs ts  =>
+    | @term_var _ _ _ bIn        => env.lookup ι bIn
+    | term_val _ v               => v
+    | term_binop op t1 t2        => bop.eval op
+                                      (inst (Inst := @inst_term _) t1 ι)
+                                      (inst (Inst := @inst_term _) t2 ι)
+    | term_neg t                 => Z.opp (inst_term t ι)
+    | term_not t                 => negb (inst_term t ι)
+    | term_inl t                 => @inl (Val _) (Val _) (inst (Inst := inst_term) t ι)
+    | term_inr t                 => @inr (Val _) (Val _) (inst (Inst := inst_term) t ι)
+    | term_sext t                => bv.sext (inst (Inst := inst_term) t ι)
+    | term_zext t                => bv.zext (inst (Inst := inst_term) t ι)
+    | term_get_slice_int t       => bv.of_Z (inst (Inst := inst_term) t ι)
+    | term_unsigned t            => bv.unsigned (inst (Inst := inst_term) t ι)
+    | term_truncate m t          => bv.truncate m (inst (Inst := inst_term) t ι)
+    | term_vector_subrange s l t => bv.vector_subrange s l (inst (Inst := inst_term) t ι)
+    | term_negate  t             => bv.negate (inst (Inst := inst_term) t ι)
+    | @term_tuple _ σs ts        =>
         envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι)
-    | @term_union _ U K t     => unionv_fold U (existT K (inst (Inst := inst_term) t ι))
-    | @term_record _ R ts     =>
+    | @term_union _ U K t        => unionv_fold U (existT K (inst (Inst := inst_term) t ι))
+    | @term_record _ R ts        =>
         let InstTerm xt := @inst_term (@type recordf Ty xt) in
         recordv_fold R (inst (Inst := inst_env (InstSA := InstTerm)) ts ι)
     end.
@@ -432,7 +432,7 @@ Module Type InstantiationOn
     #[export,program] Instance proper_term_get_slice_int {Σ n} : Proper ((≡) ==> (≡)) (@term_get_slice_int Σ n).
     #[export,program] Instance proper_term_unsigned {Σ n} : Proper ((≡) ==> (≡)) (@term_unsigned Σ n).
     #[export,program] Instance proper_term_truncate {Σ n m p} : Proper ((≡) ==> (≡)) (@term_truncate Σ n m p).
-    #[export,program] Instance proper_term_extract {Σ n s l} : Proper ((≡) ==> (≡)) (@term_extract Σ n s l).
+    #[export,program] Instance proper_term_vector_subrange {Σ n s l p} : Proper ((≡) ==> (≡)) (@term_vector_subrange Σ n s l p).
     #[export,program] Instance proper_term_negate {Σ n} : Proper ((≡) ==> (≡)) (@term_negate Σ n).
     #[export,program] Instance proper_term_tuple {Σ σs} : Proper ((≡) ==> (≡)) (@term_tuple Σ σs).
     #[export,program] Instance proper_term_union {Σ U K} : Proper ((≡) ==> (≡)) (@term_union Σ U K).
@@ -766,7 +766,7 @@ Module Type InstantiationOn
 
     Lemma entails_cons `{InstProp A, InstProp B} {Σ} (x : A Σ) (ys : Ctx (B Σ)) (y : B Σ) :
       (x ⊢ ys) /\ (x ⊢ y) <-> (x ⊢ ys ▻ y).
-    Proof. unfold entails; cbn. intuition. Qed.
+    Proof. firstorder. Qed.
 
     Lemma proper_subst_entails `{InstPropSubst A, InstPropSubst B}
       {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (x : A Σ1) (y : B Σ1) :
@@ -794,27 +794,27 @@ Module Type InstantiationOn
 
     Lemma unsatisfiable_snoc_l `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
       Unsatisfiable xs -> Unsatisfiable (xs ▻ x).
-    Proof. unfold Unsatisfiable; cbn; intuition eauto. Qed.
+    Proof. firstorder. Qed.
 
     Lemma unsatisfiable_snoc_r `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
       Unsatisfiable x -> Unsatisfiable (xs ▻ x).
-    Proof. unfold Unsatisfiable; cbn; intuition eauto. Qed.
+    Proof. firstorder. Qed.
 
     Lemma unsatisfiable_none_some `{InstProp A} [Σ] (x : A Σ) :
       Unsatisfiable x -> None ⊣⊢ Some x.
-    Proof. unfold Unsatisfiable; intros ? ι; cbn; intuition. Qed.
+    Proof. firstorder. Qed.
 
     Lemma unsatisfiable_some_none `{InstProp A} [Σ] (x : A Σ) :
       Unsatisfiable x -> Some x ⊣⊢ None.
-    Proof. unfold Unsatisfiable; intros ? ι; cbn; intuition. Qed.
+    Proof. firstorder. Qed.
 
     Lemma nil_l_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
       Valid xs -> [ctx] ⊣⊢ xs.
-    Proof. unfold Valid; intros ? ι; cbn; intuition. Qed.
+    Proof. firstorder. Qed.
 
     Lemma nil_r_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
       Valid xs -> xs ⊣⊢ [ctx].
-    Proof. unfold Valid; intros ? ι; cbn; intuition. Qed.
+    Proof. firstorder. Qed.
 
     Module tactics.
 

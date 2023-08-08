@@ -214,7 +214,7 @@ Module RiscvPmpModel2.
       iDestruct "H" as "[Hmemres1 Hmemres2]".
       rewrite semWp2_unfold.
       cbn in *.
-      iIntros (? ? ? ?) "(Hregs & (% & Hmem1 & %Hmap1) & (% & Hmem2 & %Hmap2))".
+      iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1) & (% & Hmem2 & %Hmap2)) & Hcred)".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
       iIntros.
@@ -244,7 +244,7 @@ Module RiscvPmpModel2.
       iIntros "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & (%vold & H))".
       rewrite semWp2_unfold.
       cbn.
-      iIntros (? ? ? ?) "[Hregs ((% & Hmem1 & %Hmap1) & (% & Hmem2 & %Hmap2))]".
+      iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1) & (% & Hmem2 & %Hmap2)) & Hcred)".
       rewrite <-interp_ptstomem_dedup.
       iDestruct "H" as "[Hmemres1 Hmemres2]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -299,10 +299,36 @@ Module RiscvPmpModel2.
         now iExists _.
     Qed.
 
+    Lemma vector_subrange_sound {n} (e b : nat)
+                                {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} :
+      ValidContractForeign (@sep_contract_vector_subrange n e b p q r) (vector_subrange e b).
+    Proof.
+      intros Γ es δ ι Heq.
+      destruct_syminstance ι.
+      iIntros "_".
+      iApply semWp2_unfold.
+      cbn in *.
+      iIntros (? ? ? ?) "[Hregs (Hmem1 & Hmem2)]".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iIntros.
+      repeat iModIntro.
+      eliminate_prim_step Heq.
+      iMod "Hclose" as "_".
+      iModIntro.
+      iExists _, _, _, _.
+      iSplitR.
+      iPureIntro; constructor; now rewrite Heq.
+      iFrame.
+      destruct (fun_vector_subrange bv0 e b) eqn:Ev.
+      rewrite semWp2_val.
+      now iExists _.
+    Qed.
+
     Lemma foreignSem : ForeignSem.
     Proof.
       intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, decode_sound.
+        eauto using read_ram_sound, write_ram_sound, decode_sound, vector_subrange_sound.
     Qed.
   End ForeignProofs.
 
@@ -433,7 +459,7 @@ Module RiscvPmpModel2.
       f_equal.
       - unfold bv.ule, bv.ult in *.
         apply N_of_nat_inj.
-        apply Z_of_N_inj.
+        apply N2Z.inj.
         rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
         auto using lenAddr_rep.
         + rewrite (N2Z.inj_add (bv.bin addr)).
@@ -441,7 +467,7 @@ Module RiscvPmpModel2.
         + now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax.
       - enough (bv.bin (bv.of_nat minAddr) + N.of_nat (N.to_nat (bv.bin addr - bv.bin (bv.of_nat minAddr))) +
                 N.of_nat (bytes + N.to_nat (bv.bin ((bv.of_nat minAddr) + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes))) = @bv.bin xlenbits (bv.of_nat minAddr) + N.of_nat lenAddr)%N as -> by apply maxAddr_rep.
-        apply Z_of_N_inj.
+        apply N2Z.inj.
         rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
         auto using lenAddr_rep.
         + rewrite (N2Z.inj_add (bv.bin addr)).
@@ -461,7 +487,7 @@ Module RiscvPmpModel2.
           now rewrite bv.bin_of_nat_small in addrDiffFits.
           now simpl.
         + replace (@bv.bin xlenbits (bv.of_nat minAddr) + _)%N with (bv.bin addr); try Lia.lia.
-          apply Z_of_N_inj.
+          apply N2Z.inj.
           rewrite N2Z.inj_add.
           rewrite bv.bin_of_N_small; try assumption.
           rewrite bv.bin_of_N_small.

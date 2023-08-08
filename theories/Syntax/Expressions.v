@@ -78,7 +78,6 @@ Module Type ExpressionsOn (Import TY : Types).
   | exp_get_slice_int {n} (e : Exp Γ ty.int) : Exp Γ (ty.bvec n)
   | exp_unsigned {n} (e : Exp Γ (ty.bvec n)) : Exp Γ ty.int
   | exp_truncate {n} (m : nat) (e : Exp Γ (ty.bvec n)) {p : IsTrue (m <=? n)} : Exp Γ (ty.bvec m)
-  | exp_extract {n} (s l : nat) (e : Exp Γ (ty.bvec n)) : Exp Γ (ty.bvec l)
   | exp_negate {n} (e : Exp Γ (ty.bvec n)) : Exp Γ (ty.bvec n)
   | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty.list σ)
   (* Experimental features *)
@@ -120,7 +119,6 @@ Module Type ExpressionsOn (Import TY : Types).
     Hypothesis (P_get_slice_int : forall {n} (e : Exp Γ ty.int), P ty.int e -> P (ty.bvec n) (exp_get_slice_int e)).
     Hypothesis (P_unsigned : forall {n} (e : Exp Γ (ty.bvec n)), P (ty.bvec n) e -> P ty.int (exp_unsigned e)).
     Hypothesis (P_truncate : forall {n} (m : nat) (p : IsTrue (Nat.leb m n)) (e : Exp Γ (ty.bvec n)), P (ty.bvec n) e -> P (ty.bvec m) (exp_truncate m e)).
-    Hypothesis (P_extract : forall {n} (s l : nat) (e : Exp Γ (ty.bvec n)), P (ty.bvec n) e -> P (ty.bvec l) (exp_extract s l e)).
     Hypothesis (P_negate  : forall {n} (e : Exp Γ (ty.bvec n)), P (ty.bvec n) e -> P (ty.bvec n) (exp_negate e)).
     Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty.list σ) (exp_list es)).
     Hypothesis (P_bvec    : forall (n : nat) (es : Vector.t (Exp Γ ty.bool) n), PV es -> P (ty.bvec n) (exp_bvec es)).
@@ -142,7 +140,6 @@ Module Type ExpressionsOn (Import TY : Types).
       | exp_get_slice_int e       => ltac:(apply P_get_slice_int; auto)
       | exp_unsigned e            => ltac:(apply P_unsigned; auto)
       | exp_truncate m e          => ltac:(apply P_truncate; auto)
-      | exp_extract s l e         => ltac:(apply P_extract; auto)
       | exp_negate e              => ltac:(apply P_negate; auto)
       | exp_list es               => ltac:(apply P_list; induction es; cbn; auto using unit)
       | exp_bvec es               => ltac:(apply P_bvec; induction es; cbn; auto using unit)
@@ -170,7 +167,6 @@ Module Type ExpressionsOn (Import TY : Types).
     | exp_get_slice_int e => bv.of_Z (eval e δ)
     | exp_unsigned e      => bv.unsigned (eval e δ)
     | exp_truncate m e    => bv.truncate m (eval e δ)
-    | exp_extract s l e   => bv.extract s l (eval e δ)
     | exp_negate e        => bv.negate (eval e δ)
     | exp_list es         => List.map (fun e => eval e δ) es
     | exp_bvec es         => Vector.t_rect

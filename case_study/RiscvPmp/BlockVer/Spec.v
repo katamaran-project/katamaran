@@ -415,6 +415,17 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_postcondition   := term_var "result_decode" = term_var "instr";
     |}.
 
+  #[program] Definition sep_contract_vector_subrange {n} (e b : nat) {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} : SepContractFunX (@vector_subrange n e b p q r) :=
+    {| sep_contract_logic_variables := ["v" :: ty.bvec n];
+       sep_contract_localstore      := [term_var "v"];
+       sep_contract_precondition    := ⊤;
+       sep_contract_result          := "result_vector_subrange";
+       sep_contract_postcondition   :=
+         term_var "result_vector_subrange" = @term_vector_subrange _ _ b (e - b + 1) _ (term_var "v");
+    |}.
+  Next Obligation. intros; now apply convert_foreign_vector_subrange_conditions. Defined.
+  #[global] Arguments sep_contract_vector_subrange {_} _ _ {_ _ _}.
+
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
@@ -424,6 +435,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
       | mmio_read bytes  => sep_contract_mmio_read bytes
       | mmio_write bytes => sep_contract_mmio_write bytes
       | decode    => sep_contract_decode
+      | vector_subrange e b => sep_contract_vector_subrange e b
       end.
 
   Lemma linted_cenvex :
@@ -578,30 +590,29 @@ Module RiscvPmpSpecVerif.
 
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
-  (*   destruct H as [-> |[-> | ->]]; *)
-  (*     hnf; apply verification_condition_with_erasure_sound; vm_compute; *)
-  (*     constructor; cbn; *)
-  (*     repeat (intros; split; intros); *)
-  (*     repeat match goal with *)
-  (*       | H: (?b1 || ?b2)%bool = true |- _ => *)
-  (*           apply Bool.orb_true_iff in H *)
-  (*       | H: ?P /\ ?Q |- _ => *)
-  (*           destruct H *)
-  (*       | H: ?P \/ ?Q |- _ => *)
-  (*           destruct H as [H|H] *)
-  (*       | H: negb ?b = true |- _ => *)
-  (*           apply Bool.negb_true_iff in H; *)
-  (*           subst *)
-  (*       | H1: ?a <=ᵘ ?b, H2: ?b <ᵘ ?a |- False => *)
-  (*           unfold bv.ult, bv.ule in *; apply N.le_ngt in H1; apply (H1 H2) *)
-  (*       end; *)
-  (*     subst; *)
-  (*     unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *; *)
-  (*     simpl in *; *)
-  (*     try discriminate; *)
-  (*     try Lia.lia. *)
-  (* Qed. *)
-  Admitted.
+    destruct H as [-> |[-> | ->]];
+      hnf; apply verification_condition_with_erasure_sound; vm_compute;
+      constructor; cbn;
+      repeat (intros; split; intros);
+      repeat match goal with
+        | H: (?b1 || ?b2)%bool = true |- _ =>
+            apply Bool.orb_true_iff in H
+        | H: ?P /\ ?Q |- _ =>
+            destruct H
+        | H: ?P \/ ?Q |- _ =>
+            destruct H as [H|H]
+        | H: negb ?b = true |- _ =>
+            apply Bool.negb_true_iff in H;
+            subst
+        | H1: ?a <=ᵘ ?b, H2: ?b <ᵘ ?a |- False =>
+            unfold bv.ult, bv.ule in *; apply N.le_ngt in H1; apply (H1 H2)
+        end;
+      subst;
+      unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *;
+      simpl in *;
+      try discriminate;
+      try Lia.lia.
+  Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof.
@@ -693,7 +704,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Lemma read_ram_sound `{sailGS Σ} {bytes} :
     ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram (read_ram bytes).
   Proof.
-      intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
+      intros Γ es δ ι Heq. cbn. destruct_syminstance ι.
       iIntros "H". cbn in *.
       iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
       iIntros (? ? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
@@ -774,10 +785,36 @@ Module RiscvPmpIrisInstanceWithContracts.
       iApply wp_value; easy.
   Qed.
 
-  Lemma foreignSemBlockVerif `{sailGS Σ} : RiscvPmpIrisInstanceWithContracts.ForeignSem.
+  Lemma vector_subrange_sound `{sailGS Σ} {n} (e b : nat)
+    {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} :
+    ValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_vector_subrange n e b p q r)
+      (vector_subrange e b).
+  Proof.
+    intros Γ es δ ι Heq.
+    destruct (env.view ι) as [ι v].
+    iIntros "_".
+    rewrite <-semWP_unfold_nolc.
+    cbn in *.
+    iIntros (? ?) "[Hregs Hmem]".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    repeat iModIntro.
+    iIntros (e2 δ2 γ2 μ2 Hstep).
+    dependent elimination Hstep.
+    rewrite Heq in f1.
+    dependent elimination f1.
+    repeat iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iApply wp_value.
+    iSplitL; first iPureIntro; auto.
+  Qed.
+
+  Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
   Proof.
     intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, RiscvPmpModel2.mmio_read_sound, RiscvPmpModel2.mmio_write_sound, within_mmio_sound, decode_sound.
+        eauto using read_ram_sound, write_ram_sound, RiscvPmpModel2.mmio_read_sound, RiscvPmpModel2.mmio_write_sound, within_mmio_sound, decode_sound, vector_subrange_sound.
   Qed.
 
   Ltac destruct_syminstance ι :=

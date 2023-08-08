@@ -333,7 +333,7 @@ Section Soundness.
                  semTriple δ P s Q.
   Proof.
     iIntros (Hnv Hnoop) "HPQ HP".
-    rewrite semWP_unfold. rewrite Hnv.
+    rewrite <-semWP_unfold_nolc. rewrite Hnv.
     iIntros (γ1 μ1) "state_inv".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
     iIntros (s2 δ2 γ2 μ2) "%".
@@ -397,7 +397,7 @@ Module Type IrisAdequacy
 
   Definition sailΣ : gFunctors := #[ memΣ ; invΣ ; GFunctor regUR].
 
-  Instance subG_sailGpreS {Σ} : subG sailΣ Σ -> sailGpreS Σ.
+  #[local] Instance subG_sailGpreS {Σ} : subG sailΣ Σ -> sailGpreS Σ.
   Proof.
     intros.
     lazymatch goal with
@@ -470,8 +470,7 @@ Module Type IrisAdequacy
       iSplitR "Hs2 Rmem".
       * iFrame.
         now iApply own_RegStore_to_regs_inv.
-      * iApply (wp_mono); first easy.
-        iApply (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]").
+      * iApply (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]").
         iApply (own_RegStore_to_map_reg_pointsTos (srGS := SailRegGS reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
         eapply finite.NoDup_enum.
   Qed.
@@ -486,7 +485,7 @@ Module Type IrisAdequacy
   Proof.
     (* intros steps trips. *)
     intros [n steps]%steps_to_nsteps trips.
-    refine (wp_strong_adequacy sailΣ (microsail_lang Γ σ) _ _ _ _ _ _ _ (fun _ => 0) _ steps).
+    refine (wp_strong_adequacy sailΣ (microsail_lang Γ σ) _ _ _ _ _ _ _ _ (fun _ => 0) _ steps).
     iIntros (Hinv) "".
     assert (regsmapv := RegStore_to_map_valid γ).
     iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
@@ -501,7 +500,6 @@ Module Type IrisAdequacy
       eapply finite.NoDup_enum.
     }
     iModIntro.
-    iExists MaybeStuck.
     iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
     iExists [ fun v => Q _ sailG (valconf_val v) (valconf_store v) ]%list.
     iExists _.

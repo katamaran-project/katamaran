@@ -39,6 +39,7 @@ From Katamaran Require Import
      Notations
      Prelude
      Signature
+     Symbolic.Propositions
      Specification.
 
 From stdpp Require base list option.
@@ -228,7 +229,7 @@ Module Type ShallowExecOn
       - split.
         + intros ? vs.
           now destruct (env.view vs).
-        + now intuition.
+        + intros Hpost. apply Hpost.
       - destruct b as [x σ]. cbv [demonic bind pure]. split.
         + intros Hwp vs.
           destruct (env.view vs) as [vs v].
@@ -275,7 +276,7 @@ Module Type ShallowExecOn
         assert_eq_env δ δ' POST <-> δ = δ' /\ POST tt.
     Proof.
       induction δ; intros POST.
-      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ'). intuition auto.
       - destruct (env.view δ'); cbn.
         unfold bind, assert_formula.
         now rewrite IHδ, env.inversion_eq_snoc.
@@ -286,7 +287,7 @@ Module Type ShallowExecOn
         assert_eq_nenv δ δ' POST <-> δ = δ' /\ POST tt.
     Proof.
       induction δ; intros POST.
-      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ'). intuition auto.
       - destruct (env.view δ') as [δ']; cbn in *.
         unfold bind, assert_formula.
         now rewrite IHδ, (@env.inversion_eq_snoc _ _ _ b δ δ').
@@ -297,11 +298,11 @@ Module Type ShallowExecOn
         assume_eq_env δ δ' POST <-> (δ = δ' -> POST tt).
     Proof.
       induction δ; intros POST.
-      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ'). intuition auto.
       - destruct (env.view δ'); cbn.
         unfold bind, assume_formula.
         rewrite IHδ, env.inversion_eq_snoc.
-        intuition.
+        intuition auto.
     Qed.
 
     Lemma wp_assume_eq_nenv {N} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) :
@@ -309,11 +310,11 @@ Module Type ShallowExecOn
         assume_eq_nenv δ δ' POST <-> (δ = δ' -> POST tt).
     Proof.
       induction δ; intros POST.
-      - destruct (env.view δ'). intuition.
+      - destruct (env.view δ'). intuition auto.
       - destruct (env.view δ') as [δ']; cbn in *.
         unfold bind, assume_formula.
         rewrite IHδ, (@env.inversion_eq_snoc _ _ _ b δ δ').
-        intuition.
+        intuition auto.
     Qed.
 
     Definition angelic_pattern_match {N : Set} {A σ} (pat : @Pattern N σ)
@@ -379,8 +380,8 @@ Module Type ShallowExecOn
           * now dependent elimination Heq.
         + split; try contradiction. intros [Heq Hwp]. apply n.
           now dependent elimination Heq.
-      - unfold bind. rewrite IHc1, IHc2. intuition.
-      - unfold bind. rewrite IHc1, IHc2. intuition.
+      - unfold bind. rewrite IHc1, IHc2. intuition congruence.
+      - unfold bind. rewrite IHc1, IHc2. intuition congruence.
     Qed.
 
   End CPureSpecM.
@@ -779,6 +780,58 @@ Module Type ShallowExecOn
     End WithFuel.
 
   End CHeapSpecM.
+
+  Module Replay.
+    Import SymProp.
+    Import CPureSpecM.
+
+    Definition replay_aux : forall {Σ} (ι : Valuation Σ) (s : 𝕊 Σ),
+        CPureSpecM unit :=
+      fix replay {Σ} ι s :=
+        match s with
+        | SymProp.angelic_binary o1 o2 =>
+            angelic_binary (replay ι o1) (replay ι o2)
+        | SymProp.demonic_binary o1 o2 =>
+            demonic_binary (replay ι o1) (replay ι o2)
+        | SymProp.block =>
+            block
+        | SymProp.error msg =>
+            error
+        | SymProp.assertk fml msg k =>
+            bind (assert_formula (instprop fml ι))
+              (fun _ => replay ι k)
+        | SymProp.assumek fml k =>
+            bind (assume_formula (instprop fml ι))
+              (fun _ => replay ι k)
+        | SymProp.angelicv b k =>
+            bind (angelic _)
+              (fun v => replay (env.snoc ι b v) k)
+        | SymProp.demonicv b k =>
+            bind (demonic _)
+              (fun v => replay (env.snoc ι b v ) k)
+        | @SymProp.assert_vareq _ x σ xIn t msg k =>
+            let ι' := env.remove (x ∷ σ) ι xIn in
+            let x' := ι.[? x∷σ] in
+            let t' := inst t ι' in
+            bind (assert_formula (x' = t'))
+                 (fun _ => replay ι' k)
+        | @SymProp.assume_vareq _ x σ xIn t k =>
+            let ι' := env.remove (x ∷ σ) ι xIn in
+            let x' := ι.[? x∷σ] in
+            let t' := inst t ι' in
+            bind (assume_formula (x' = t'))
+                 (fun _ => replay ι' k)
+        | SymProp.pattern_match s pat rhs =>
+            error
+        | SymProp.pattern_match_var x pat rhs =>
+            error
+        | SymProp.debug b k =>
+            replay ι k
+        end.
+
+    Definition replay {Σ} (ι : Valuation Σ) (s : 𝕊 Σ) : Prop :=
+      replay_aux ι s (fun _ => TRUE).
+  End Replay.
 
   Module Shallow.
 

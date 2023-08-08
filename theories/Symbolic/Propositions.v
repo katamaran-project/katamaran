@@ -30,6 +30,7 @@ From Coq Require Import
      Arith.PeanoNat
      Bool.Bool
      Classes.Morphisms
+     Classes.Morphisms_Prop
      Classes.RelationClasses
      Lists.List
      NArith.NArith
@@ -451,24 +452,40 @@ Module Type SymPropOn
       wsafe p ι <-> safe_debug p ι.
     Proof.
       destruct w as [Σ C]; cbn in *. revert C.
-      induction p; cbn; intros C;
-        rewrite ?debug_equiv; auto; try (intuition; fail).
+      induction p; cbn; intros C.
+      - apply or_iff_morphism; auto.
+      - apply and_iff_morphism; auto.
+      - reflexivity.
+      - reflexivity.
+      - apply and_iff_morphism; eauto.
+      - apply imp_iff_compat_l; eauto.
       - apply base.exist_proper; eauto.
-      - destruct pattern_match_val as [pc ιpat].
-        split; intros Hsafe; intuition.
+      - apply base.forall_proper; eauto.
+      - apply and_iff_morphism; eauto.
+      - apply imp_iff_compat_l; eauto.
       - destruct pattern_match_val; apply H.
+      - destruct pattern_match_val; apply H.
+      - rewrite !debug_equiv; auto.
     Qed.
 
     Lemma safe_debug_safe {Σ : LCtx} (p : 𝕊 Σ) (ι : Valuation Σ) :
       safe_debug p ι <-> safe p ι.
     Proof.
-      induction p; cbn; rewrite ?debug_equiv, ?obligation_equiv; auto;
-        try (intuition; fail).
+      induction p; cbn; rewrite ?obligation_equiv; try progress cbn.
+      - apply or_iff_morphism; auto.
+      - apply and_iff_morphism; auto.
+      - reflexivity.
+      - reflexivity.
+      - apply and_iff_morphism; eauto.
+      - apply imp_iff_compat_l; eauto.
       - apply base.exist_proper; eauto.
-      - apply Morphisms_Prop.and_iff_morphism; cbn; eauto.
-        now rewrite inst_subst, inst_sub_shift.
-      - destruct pattern_match_val; eauto.
-      - destruct pattern_match_val; eauto.
+      - apply base.forall_proper; eauto.
+      - rewrite inst_subst, inst_sub_shift.
+        apply and_iff_morphism; eauto.
+      - apply imp_iff_compat_l; eauto.
+      - destruct pattern_match_val; apply H.
+      - destruct pattern_match_val; apply H.
+      - rewrite debug_equiv; auto.
     Qed.
 
     Lemma safe_assume_pathcondition_without_solver {w0 : World}
@@ -610,7 +627,8 @@ Module Type SymPropOn
     Proof.
       intros ι. induction xs; cbn.
       - intuition.
-      - rewrite IHxs. clear IHxs. intuition.
+      - rewrite IHxs. clear IHxs.
+        intuition (subst; auto).
     Qed.
 
     Lemma safe_demonic_list {A Σ} (P : A Σ -> 𝕊 Σ) (xs : List A Σ) :
@@ -620,7 +638,8 @@ Module Type SymPropOn
     Proof.
       intros ι. destruct xs; cbn.
       - intuition.
-      - rewrite safe_demonic_list'. intuition.
+      - rewrite safe_demonic_list'.
+        intuition (subst; auto).
     Qed.
 
     Definition sequiv Σ : relation (𝕊 Σ) :=
@@ -702,32 +721,32 @@ Module Type SymPropOn
     Qed.
 
     #[export] Instance proper_demonic_binary_impl {Σ} : Proper (simpl Σ ==> simpl Σ ==> simpl Σ) (@demonic_binary Σ).
-    Proof. intros p1 p2 p12 q1 q2 q12 ι. cbn. intuition. Qed.
+    Proof. unfold simpl. intros p1 p2 p12 q1 q2 q12 ι []. cbn. auto. Qed.
 
     #[export] Instance proper_assumek {Σ} (fml : Formula Σ) : Proper (sequiv Σ ==> sequiv Σ) (assumek fml).
-    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply imp_iff_compat_l. Qed.
 
     #[export] Instance proper_assertk {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertk fml msg).
-    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply and_iff_morphism. Qed.
 
     #[export] Instance proper_assertk_impl {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (simpl Σ ==> simpl Σ) (assertk fml msg).
-    Proof. unfold simpl. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold simpl. intros p q pq ι. cbn. intuition auto. Qed.
 
     #[export] Instance proper_assume_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assume_vareq x t).
-    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply imp_iff_compat_l. Qed.
 
     #[export] Instance proper_assume_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       Proper (simpl (Σ - x∷σ) ==> simpl Σ) (assume_vareq x t).
-    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. intuition auto. Qed.
 
     #[export] Instance proper_assert_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assert_vareq x t msg).
-    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply and_iff_morphism. Qed.
 
     #[export] Instance proper_assert_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
       Proper (simpl (Σ - x∷σ) ==> simpl Σ) (assert_vareq x t msg).
-    Proof. unfold simpl. intros p q pq ι. cbn. intuition. Qed.
+    Proof. unfold simpl. intros p q pq ι. cbn. intuition auto. Qed.
 
     #[export] Instance proper_angelicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (angelicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.exist_proper. Qed.
@@ -1271,7 +1290,7 @@ Module Type SymPropOn
 
       #[export] Instance proper_assert_msgs_formulas {Σ} (mfs : Ctx (Pair AMessage Formula Σ)) :
         Proper (sequiv Σ ==> sequiv Σ) (assert_msgs_formulas mfs).
-      Proof. intros p q pq ι. rewrite ?safe_assert_msgs_formulas. intuition. Qed.
+      Proof. intros p q pq ι. rewrite !safe_assert_msgs_formulas. now apply and_iff_morphism. Qed.
 
       #[export] Instance proper_plug {Σ1 Σ2} (ec : ECtx Σ1 Σ2) :
         Proper (sequiv Σ2 ==> sequiv Σ1) (plug ec).
@@ -1476,11 +1495,14 @@ Module Type SymPropOn
 
       #[export] Instance proper_assume_pathcondition {Σ} (mfs : PathCondition Σ) :
         Proper (sequiv Σ ==> sequiv Σ) (assume_pathcondition mfs).
-      Proof. intros p q pq ι. rewrite ?safe_assume_pathcondition. intuition. Qed.
+      Proof.
+        intros p q pq ι. rewrite !safe_assume_pathcondition.
+        now apply imp_iff_compat_l.
+      Qed.
 
       #[export] Instance proper_assume_pathcondition_impl {Σ} (mfs : PathCondition Σ) :
         Proper (simpl Σ ==> simpl Σ) (assume_pathcondition mfs).
-      Proof. intros p q pq ι. rewrite ?safe_assume_pathcondition. intuition. Qed.
+      Proof. intros p q pq ι. rewrite !safe_assume_pathcondition. auto. Qed.
 
       #[export] Instance proper_plug {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
         Proper (sequiv Σ2 ==> sequiv Σ1) (plug ec).
@@ -1501,8 +1523,8 @@ Module Type SymPropOn
         demonic_binary (assume_pathcondition fmls p1) (assume_pathcondition fmls p2).
       Proof.
         intros ι; cbn.
-        rewrite ?safe_assume_pathcondition.
-        cbn. intuition.
+        rewrite !safe_assume_pathcondition.
+        cbn. intuition auto.
       Qed.
 
       Lemma forall_impl {A : Type} {P : A -> Prop} {Q : Prop} :
@@ -1683,7 +1705,7 @@ Module Type SymPropOn
     | eterm_get_slice_int {n} (e : ETerm ty.int) : ETerm (ty.bvec n)
     | eterm_unsigned {n} (e : ETerm (ty.bvec n)) : ETerm ty.int
     | eterm_truncate {n} (m : nat) {p : IsTrue (m <=? n)} (e: ETerm (ty.bvec n)) : ETerm (ty.bvec m)
-    | eterm_extract {n} (s l : nat) (e : ETerm (ty.bvec n)) : ETerm (ty.bvec l)
+    | eterm_vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} (e : ETerm (ty.bvec n)) : ETerm (ty.bvec l)
     | eterm_negate  {n} (e : ETerm (ty.bvec n)) : ETerm (ty.bvec n)
     | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs)
     | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U)
@@ -1731,23 +1753,23 @@ Module Type SymPropOn
     Definition erase_term {Σ} : forall {σ} (t : Term Σ σ), ETerm σ :=
       fix erase {σ} t :=
         match t with
-        | @term_var _ ℓ σ ℓIn => eterm_var ℓ σ (ctx.in_at ℓIn)
-        | term_val σ v => eterm_val σ v
-        | term_binop op t1 t2 => eterm_binop op (erase t1) (erase t2)
-        | term_neg t => eterm_neg (erase t)
-        | term_not t => eterm_not (erase t)
-        | term_inl t => eterm_inl (erase t)
-        | term_inr t => eterm_inr (erase t)
-        | term_sext t => eterm_sext (erase t)
-        | term_zext t => eterm_zext (erase t)
-        | term_get_slice_int t => eterm_get_slice_int (erase t)
-        | term_unsigned t => eterm_unsigned (erase t)
-        | term_truncate m t => eterm_truncate m (erase t)
-        | term_extract s l t => eterm_extract s l (erase t)
-        | term_negate t => eterm_negate (erase t)
-        | term_tuple ts => eterm_tuple (env.map (fun _ => erase) ts)
-        | term_union U K t => eterm_union K (erase t)
-        | term_record R ts => eterm_record R (env.map (fun _ => erase) ts)
+        | @term_var _ ℓ σ ℓIn         => eterm_var ℓ σ (ctx.in_at ℓIn)
+        | term_val σ v               => eterm_val σ v
+        | term_binop op t1 t2        => eterm_binop op (erase t1) (erase t2)
+        | term_neg t                 => eterm_neg (erase t)
+        | term_not t                 => eterm_not (erase t)
+        | term_inl t                 => eterm_inl (erase t)
+        | term_inr t                 => eterm_inr (erase t)
+        | term_sext t                => eterm_sext (erase t)
+        | term_zext t                => eterm_zext (erase t)
+        | term_get_slice_int t       => eterm_get_slice_int (erase t)
+        | term_unsigned t            => eterm_unsigned (erase t)
+        | term_truncate m t          => eterm_truncate m (erase t)
+        | term_vector_subrange s l t => eterm_vector_subrange s l (erase t)
+        | term_negate t              => eterm_negate (erase t)
+        | term_tuple ts              => eterm_tuple (env.map (fun _ => erase) ts)
+        | term_union U K t           => eterm_union K (erase t)
+        | term_record R ts           => eterm_record R (env.map (fun _ => erase) ts)
         end.
 
     Definition erase_formula {Σ} : Formula Σ -> EFormula :=
@@ -1850,8 +1872,8 @@ Module Type SymPropOn
             bv.unsigned <$> inst_eterm t0
         | @eterm_truncate _ m p t0 =>
             (fun v => bv.truncate m v) <$> inst_eterm t0
-        | @eterm_extract _ s l t0 =>
-            (fun v => bv.extract s l v) <$> inst_eterm t0
+        | @eterm_vector_subrange _ s l _ t0 =>
+            bv.vector_subrange s l <$> inst_eterm t0
         | eterm_negate t0 =>
             bv.negate <$> inst_eterm t0
         | @eterm_tuple σs ts =>
