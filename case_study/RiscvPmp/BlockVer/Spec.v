@@ -86,7 +86,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Notation asn_bool t := (asn.formula (formula_bool t)).
   Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
-  Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_mmio bytes_per_word) [a; t])) (at level 70).
+  Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@inv_mmio bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
@@ -188,10 +188,10 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
    *)
   (* Notation "a '*↦ₘ[' n ']' xs" := (asn.chunk (chunk_user (@ptstomem n) [a; xs])) (at level 79). *)
   Local Notation "a '↦ₘ[' bytes ']' t" := (asn.chunk (chunk_user (@ptstomem bytes) [a; t])) (at level 70).
-  Local Notation "a '↦ᵣ[' bytes ']' t" := (asn.chunk (chunk_user (@ptstomem_mmio bytes) [a; t])) (at level 70).
+  Local Notation "a '↦ᵣ[' bytes ']' t" := (asn.chunk (chunk_user (@inv_mmio bytes) [a; t])) (at level 70).
   Local Notation "r '↦' val" := (asn_reg_ptsto r val) : asn_scope.
   Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
-  Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_mmio bytes_per_word) [a; t])) (at level 70).
+  Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@inv_mmio bytes_per_word) [a; t])) (at level 70).
   Local Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
@@ -711,7 +711,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       iSplitR; first auto.
       destruct inv; cbn -[prim_step].
       - (* mmio case *)
-        unfold interp_ptstomem_mmio.
+        unfold interp_inv_mmio.
         iDestruct "H" as "#H".
         iInv "H" as "Hptsto" "Hclose_ptsto".
         iDestruct (bi.later_mono _ _ (RiscvPmpModel2.fun_read_ram_works Hmap) with "[$Hptsto $Hmem]") as "#>%eq_fun_read_ram".

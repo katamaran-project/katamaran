@@ -179,7 +179,7 @@ Import BlockVerificationDerived2.
     Import RiscvPmp.Sig.
     (* Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79). *)
     Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
-    Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (ptstomem_mmio bytes_per_word) [a; t])) (at level 70).
+    Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [a; t])) (at level 70).
     Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
@@ -446,7 +446,7 @@ Import BlockVerificationDerived2.
 
   (* Definition ptsto_mmio `{sailGS Σ} addr v : iProp Σ := *)
   (*       inv.inv femto_inv_ns (interp_ptsto addr v). *)
-  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := @interp_ptstomem_mmio _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42).
+  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := @interp_inv_mmio _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42).
 
   Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
   (* Local Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 79). *)
@@ -576,7 +576,7 @@ Import BlockVerificationDerived2.
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
-         (@interp_ptstomem_mmio _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42)) ∗
+         (@interp_inv_mmio _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42)) ∗
         (pc ↦ (bv.of_N femtokernel_size)) ∗
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
@@ -631,7 +631,7 @@ Import BlockVerificationDerived2.
       pmp1cfg ↦ default_pmpcfg_ent ∗
       (pmpaddr0 ↦ bv.zero) ∗
       (pmpaddr1 ↦ bv.zero) ∗
-      interp_ptstomem_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
+      interp_inv_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
       pc ↦ bv.zero ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs bv.zero femtokernel_init.
@@ -647,7 +647,7 @@ Import BlockVerificationDerived2.
         pmp1cfg ↦ femto_pmpcfg_ent1 ∗
         (pmpaddr0 ↦ (bv.of_N femtokernel_size)) ∗
         (pmpaddr1 ↦ (bv.of_N femto_address_max)) ∗
-        interp_ptstomem_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
+        interp_inv_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
         pc ↦ (bv.of_N femtokernel_size) ∗
         (∃ v, nextpc ↦ v) ∗
         ptsto_instrs bv.zero femtokernel_init.
@@ -691,7 +691,7 @@ Import BlockVerificationDerived2.
       reg_pointsTo pmp1cfg default_pmpcfg_ent ∗
       (reg_pointsTo pmpaddr1 bv.zero) ∗
       (pc ↦ bv.zero) ∗
-      interp_ptstomem_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42) ∗
+      interp_inv_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42) ∗
       ptstoSthL advAddrs ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs bv.zero femtokernel_init ∗
@@ -844,7 +844,7 @@ Import BlockVerificationDerived2.
     @mem_res _ sailGS_memGS μ ⊢ |={⊤}=>
       ptsto_instrs (bv.of_N init_address) femtokernel_init ∗
       ptsto_instrs (bv.of_N handler_address) femtokernel_handler ∗
-      interp_ptstomem_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42) ∗
+      interp_inv_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42) ∗
       ptstoSthL advAddrs.
   Proof.
     iIntros (Hinit Hhandler Hft) "Hmem".
@@ -911,7 +911,7 @@ Import BlockVerificationDerived2.
               iPoseProof (bi.exist_intro with "Hp") as "?").
       now iFrame.
     - iIntros "Hmem".
-      unfold interp_ptstomem_mmio.
+      unfold interp_inv_mmio.
       iInv "Hfortytwo" as ">Hptsto" "_".
       iDestruct "Hptsto" as "(Hptsto0 & Hptsto1 & Hptsto2 & Hptsto3)".
       iDestruct (interp_ptsto_valid with "Hmem Hptsto0") as "%res".

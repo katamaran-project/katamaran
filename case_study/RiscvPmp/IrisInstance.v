@@ -30,6 +30,7 @@ From Katamaran Require Import
      Base
      Bitvector
      BitvectorSolve
+     trace
      Iris.Instance
      Iris.Model
      Syntax.Predicates
@@ -115,9 +116,15 @@ Module RiscvPmpIrisInstance <:
             interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
       end%I.
 
-    Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptstomem_mmio").
-    Definition interp_ptstomem_mmio {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
-      inv femto_inv_ns (interp_ptstomem addr b).
+    (* The address we will perform all writes to is the first legal MMIO address *)
+    Definition write_addr : Addr := bv.of_nat maxAddr.
+    Definition mmio_pred (t : Trace): Prop := forall e : Event, e ∈ t → (e = mkEvent IOWrite write_addr 4 (bv.of_N 42)).
+    Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
+    Definition interp_inv_mmio : iProp Σ :=
+      inv femto_inv_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred t⌝).
+    (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
+    (* NOTE: no local state yet, but this should be an iProp for the general case *)
+    Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
 
     (* Universal contract for single byte/`width` bytes after PMP checks *)
     Definition interp_addr_access_byte (a : Addr) : iProp Σ :=
@@ -156,7 +163,8 @@ Module RiscvPmpIrisInstance <:
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
-    | ptstomem_mmio _      | [ addr; w ]          => interp_ptstomem_mmio addr w
+    | inv_mmio                 | _                    => interp_inv_mmio
+    | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.

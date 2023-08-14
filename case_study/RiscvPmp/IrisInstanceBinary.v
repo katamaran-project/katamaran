@@ -97,7 +97,7 @@ Module RiscvPmpIrisInstance2 <:
 
     (* TODO: change back to words instead of bytes... might be an easier first version
              and most likely still conventient in the future *)
-  Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptstomem_mmio").
+  Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
     Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
       RiscvPmpIrisInstance.interp_ptsto (mG := mc_ghGS2_left) addr b ∗
       RiscvPmpIrisInstance.interp_ptsto (mG := mc_ghGS2_right) addr b.
@@ -120,7 +120,7 @@ Module RiscvPmpIrisInstance2 <:
             interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
       end%I.
 
-    Definition interp_ptstomem_mmio {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
+    Definition interp_inv_mmio {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
       inv femto_inv_ns (interp_ptstomem addr b).
     Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       [∗ list] a ∈ addrs,
@@ -146,7 +146,7 @@ Module RiscvPmpIrisInstance2 <:
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without addr bytes liveAddrs entries m
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
-    | ptstomem_mmio _      | [ addr; w ]          => interp_ptstomem_mmio addr w
+    | inv_mmio _      | [ addr; w ]          => interp_inv_mmio addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.

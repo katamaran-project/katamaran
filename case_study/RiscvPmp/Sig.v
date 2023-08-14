@@ -70,7 +70,8 @@ Inductive Predicate : Set :=
 | pmp_addr_access_without (bytes : nat)
 | gprs
 | ptsto
-| ptstomem_mmio (bytes : nat)
+| inv_mmio
+| mmio_checked_write (bytes : nat)
 | encodes_instr
 | ptstomem (bytes : nat)
 | ptstoinstr
@@ -286,7 +287,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_addr_access_without bytes => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege]
       | gprs                          => ctx.nil
       | ptsto                         => [ty_xlenbits; ty_byte]
-      | ptstomem_mmio width       => [ty_xlenbits; ty.bvec (width * byte)]
+      | inv_mmio                      => ctx.nil
+      | mmio_checked_write width      => [ty_xlenbits; ty.bvec (width * byte)]
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
@@ -297,10 +299,11 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         match p with
         | pmp_entries                => false
         | pmp_addr_access            => false
-        | pmp_addr_access_without  _ => false
+        | pmp_addr_access_without _  => false
         | gprs                       => false
         | ptsto                      => false
-        | ptstomem_mmio width    => true
+        | inv_mmio                   => true
+        | mmio_checked_write _       => false
         | encodes_instr              => true
         | ptstomem _                 => false
         | ptstoinstr                 => false
@@ -313,15 +316,16 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     (* TODO: look up precise predicates again, check if below makes sense *)
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
-      | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
-      | ptstomem_mmio width   => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | pmp_entries               => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
       | pmp_addr_access           => Some (MkPrecise ε [ty.list ty_pmpentry; ty_privilege] eq_refl)
       | pmp_addr_access_without _ => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
+      | gprs                      => Some (MkPrecise ε ε eq_refl)
+      | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
+      | inv_mmio                  => Some (MkPrecise ε ε eq_refl)
+      | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte)] eq_refl) (* There will only be one of these simultaneously; always precise! *)
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
-      | _                         => None
       end.
 
   End PredicateKit.
