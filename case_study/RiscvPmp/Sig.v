@@ -70,7 +70,7 @@ Inductive Predicate : Set :=
 | pmp_addr_access_without (bytes : nat)
 | gprs
 | ptsto
-| ptstomem_readonly (bytes : nat)
+| ptstomem_mmio (bytes : nat)
 | encodes_instr
 | ptstomem (bytes : nat)
 | ptstoinstr
@@ -286,7 +286,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_addr_access_without bytes => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege]
       | gprs                          => ctx.nil
       | ptsto                         => [ty_xlenbits; ty_byte]
-      | ptstomem_readonly width       => [ty_xlenbits; ty.bvec (width * byte)]
+      | ptstomem_mmio width       => [ty_xlenbits; ty.bvec (width * byte)]
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
@@ -300,7 +300,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | pmp_addr_access_without  _ => false
         | gprs                       => false
         | ptsto                      => false
-        | ptstomem_readonly width    => true
+        | ptstomem_mmio width    => true
         | encodes_instr              => true
         | ptstomem _                 => false
         | ptstoinstr                 => false
@@ -314,7 +314,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
       | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
-      | ptstomem_readonly width   => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
+      | ptstomem_mmio width   => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | pmp_entries               => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
       | pmp_addr_access           => Some (MkPrecise ε [ty.list ty_pmpentry; ty_privilege] eq_refl)
       | pmp_addr_access_without _ => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
