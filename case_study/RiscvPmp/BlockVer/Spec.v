@@ -458,16 +458,16 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
                                        term_var "result_write_ram" = term_val ty.bool true;
     |}.
 
-  (* Only deal with case where the call fails *)
   (* Note; we define the contract like this, because it matches the PRE of `checked_mem_read` quite well*)
   Definition sep_contract_within_mmio (bytes : nat) : SepContractFunX (within_mmio bytes) :=
-    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits];
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits];
         sep_contract_localstore      := [term_var "paddr"];
         sep_contract_precondition    :=
-            (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-              (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr);
+        asn.match_bool (term_var "inv")
+          (asn_in_mmio bytes (term_var "paddr"));
+          ((term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr))
         sep_contract_result          := "result_is_within";
-        sep_contract_postcondition   := term_var "result_is_within" = term_val ty.bool false
+        sep_contract_postcondition   := term_var "result_is_within" =  term_var "inv"
     |}.
 
 
