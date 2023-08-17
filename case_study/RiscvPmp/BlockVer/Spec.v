@@ -86,7 +86,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Notation asn_bool t := (asn.formula (formula_bool t)).
   Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
-  Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@inv_mmio bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
@@ -95,6 +94,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
   Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
   Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
+  Notation asn_inv_mmio := (asn.chunk (chunk_user inv_mmio [env])).
+  Notation asn_mmio_checked_write bytes a w := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
     term_binop (bop.relop bop.eq) e1 e2.
@@ -188,10 +189,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
    *)
   (* Notation "a '*↦ₘ[' n ']' xs" := (asn.chunk (chunk_user (@ptstomem n) [a; xs])) (at level 79). *)
   Local Notation "a '↦ₘ[' bytes ']' t" := (asn.chunk (chunk_user (@ptstomem bytes) [a; t])) (at level 70).
-  Local Notation "a '↦ᵣ[' bytes ']' t" := (asn.chunk (chunk_user (@inv_mmio bytes) [a; t])) (at level 70).
   Local Notation "r '↦' val" := (asn_reg_ptsto r val) : asn_scope.
   Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
-  Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@inv_mmio bytes_per_word) [a; t])) (at level 70).
+
   Local Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
@@ -205,6 +205,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   (* TODO: clean up above notations to get rid of the following one *)
   Local Notation asn_cur_privilege val := (asn.chunk (chunk_ptsreg cur_privilege val)).
   Local Notation asn_bool t := (asn.formula (formula_bool t)).
+  Local Notation asn_in_mmio n l := (asn.formula (formula_user (in_mmio n) [l])).
+  Local Notation asn_inv_mmio := (asn.chunk (chunk_user inv_mmio [env])).
+  Local Notation asn_mmio_checked_write bytes a w := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w])).
   Import bv.notations.
 
 
@@ -272,6 +275,23 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
         (term_var "paddr" ↦ₘ[ bytes ] term_var "w");
     |}.
 
+
+  Definition sep_contract_checked_mem_write {bytes} {H: restrict_bytes bytes} : SepContractFun (@checked_mem_write bytes H) :=
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes];
+      sep_contract_localstore      := [term_var "paddr"; term_var "data"];
+      sep_contract_precondition    :=
+        asn.match_bool (term_var "inv")
+          (asn_in_mmio bytes (term_var "paddr") ∗
+           asn_inv_mmio ∗
+           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
+          (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
+           (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr));
+      sep_contract_result          := "result_checked_mem_write";
+      sep_contract_postcondition   :=
+        asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
+    |}.
+
   Definition sep_contract_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : SepContractFun (@pmpCheck bytes H) :=
     {| sep_contract_logic_variables := ["addr" :: ty_xlenbits; "acc" :: ty_access_type; "priv" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [term_var "addr"; term_var "acc"; term_var "priv"];
@@ -304,6 +324,28 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
         asn_pmp_entries (term_var "entries");
     |}.
 
+
+  Definition sep_contract_pmp_mem_write {bytes} {H: restrict_bytes bytes} : SepContractFun (@pmp_mem_write bytes H) :=
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "typ" :: ty_access_type; "m" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
+      sep_contract_localstore      := [term_var "paddr"; term_var "data"; term_var "typ"; term_var "m"];
+      sep_contract_precondition    :=
+        asn.match_bool (term_var "inv")
+          (asn_in_mmio bytes (term_var "paddr") ∗
+           asn_inv_mmio ∗
+           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
+          (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
+           (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr)) ∗
+        asn_cur_privilege (term_var "m") ∗
+        asn_pmp_entries (term_var "entries") ∗
+        asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "m") (term_var "typ");
+      sep_contract_result          := "result_mem_write";
+      sep_contract_postcondition   :=
+        asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
+        asn_cur_privilege (term_var "m") ∗
+        asn_pmp_entries (term_var "entries");
+    |}.
+
   Definition sep_contract_mem_read {bytes} {H : restrict_bytes bytes} : SepContractFun (@mem_read bytes H) :=
     {| sep_contract_logic_variables := ["typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "w" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
@@ -321,6 +363,28 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
           asn_cur_privilege (term_val ty_privilege Machine) ∗
           asn_pmp_entries (term_var "entries");
     |}.
+
+  Definition sep_contract_mem_write_value {bytes} {H: restrict_bytes bytes} : SepContractFun (@mem_write_value bytes H) :=
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "typ" :: ty_access_type; "entries" :: ty.list ty_pmpentry];
+      sep_contract_localstore      := [term_var "paddr"; term_var "data"];
+      sep_contract_precondition    :=
+        asn.match_bool (term_var "inv")
+          (asn_in_mmio bytes (term_var "paddr") ∗
+           asn_inv_mmio ∗
+           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
+          (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
+           (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr)) ∗
+        asn_cur_privilege (term_val ty_privilege Machine) ∗
+        asn_pmp_entries (term_var "entries") ∗
+        asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_var "typ");
+      sep_contract_result          := "result_mem_write";
+      sep_contract_postcondition   :=
+        asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
+        asn_cur_privilege (term_val ty_privilege Machine) ∗
+        asn_pmp_entries (term_var "entries");
+    |}.
+
 
   Definition sep_contract_tick_pc : SepContractFun tick_pc :=
     {| sep_contract_logic_variables := ["ao" :: ty_xlenbits; "an" :: ty_xlenbits];
@@ -351,16 +415,19 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
-      | rX                        => Some sep_contract_rX
-      | wX                        => Some sep_contract_wX
-      | fetch                     => Some sep_contract_fetch_instr
-      | @mem_read bytes H         => Some (@sep_contract_mem_read bytes H)
-      | tick_pc                   => Some sep_contract_tick_pc
-      | @pmpCheck bytes H         => Some (@sep_contract_pmpCheck bytes H)
-      | within_phys_mem           => Some sep_contract_within_phys_mem
-      | pmpMatchAddr              => Some sep_contract_pmpMatchAddr
-      | @pmp_mem_read bytes H     => Some (@sep_contract_pmp_mem_read bytes H)
-      | @checked_mem_read bytes H => Some (@sep_contract_checked_mem_read bytes H)
+      | rX                         => Some sep_contract_rX
+      | wX                         => Some sep_contract_wX
+      | fetch                      => Some sep_contract_fetch_instr
+      | @mem_read bytes H          => Some (@sep_contract_mem_read bytes H)
+      | @mem_write_value bytes H   => Some (@sep_contract_mem_write_value bytes H)
+      | tick_pc                    => Some sep_contract_tick_pc
+      | @pmpCheck bytes H          => Some (@sep_contract_pmpCheck bytes H)
+      | within_phys_mem            => Some sep_contract_within_phys_mem
+      | pmpMatchAddr               => Some sep_contract_pmpMatchAddr
+      | @pmp_mem_read bytes H      => Some (@sep_contract_pmp_mem_read bytes H)
+      | @pmp_mem_write bytes H     => Some (@sep_contract_pmp_mem_write bytes H)
+      | @checked_mem_read bytes H  => Some (@sep_contract_checked_mem_read bytes H)
+      | @checked_mem_write bytes H => Some (@sep_contract_checked_mem_write bytes H)
       | execute_EBREAK            => Some sep_contract_execute_EBREAK
       | _                         => None
       end.
