@@ -146,7 +146,7 @@ Module RiscvPmpIrisInstance2 <:
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without addr bytes liveAddrs entries m
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
-    | inv_mmio _      | [ addr; w ]          => interp_inv_mmio addr w
+    | inv_mmio _               | [ addr; w ]          => interp_inv_mmio addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.

@@ -553,6 +553,32 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        lemma_postcondition   := ⊤;
     |}.
 
+  Definition map_wordwidth (w : WordWidth) : nat :=
+    match w with
+    | BYTE => 1
+    | HALF => 2
+    | WORD => 4 end.
+
+  (* Use bounds Lemma to calculate bounds on truncation *)
+  Local Lemma wordwidth_upper_bound widthh : IsTrue (map_wordwidth widthh * byte <=? bytes_per_word * byte)%nat.
+  Proof. destruct widthh; now compute. Qed.
+  Local Hint Resolve wordwidth_upper_bound : typeclass_instances.
+
+  (* NOTE: for now we assume r1≠r2; could generalize in Cerise-style using finite maps once they're supported. *)
+  Definition lemma_close_mmio_write (immm : bv 12) (r1 r2 :  Reg ty_xlenbits) (widthh : WordWidth): SepLemma (close_mmio_write immm r1 r2 widthh) :=
+    {| lemma_logic_variables := ["addr" :: ty_xlenbits; "val" :: ty_xlenbits; "addr_res" :: ty_xlenbits];
+       lemma_patterns        := [env];
+       lemma_precondition    :=
+        asn.chunk (chunk_ptsreg r1 (term_var "addr")) ∗
+        asn.chunk (chunk_ptsreg r2 (term_var "val")) ∗
+        (term_var "addr_res") = (term_var "addr" + term_sext (term_val (ty.bvec 12) immm)) ∗
+        (term_var "val") = (term_val ty_xlenbits (bv.of_nat 42));
+       lemma_postcondition   :=
+        asn.chunk (chunk_ptsreg r1 (term_var "addr")) ∗
+        asn.chunk (chunk_ptsreg r2 (term_var "val")) ∗
+        asn_mmio_checked_write (map_wordwidth widthh) (term_var "addr_res") (term_truncate (map_wordwidth widthh * byte) (term_var "val"));
+    |}.
+
    Definition LEnv : LemmaEnv :=
      fun Δ l =>
        match l with
