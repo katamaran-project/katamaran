@@ -824,25 +824,13 @@ Module RiscvPmpIrisInstanceWithContracts.
       iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
       iIntros (? ? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
       iSplitR; first auto.
-      destruct inv; cbn -[prim_step].
-      - (* mmio case *)
-        unfold interp_inv_mmio.
-        iDestruct "H" as "#H".
-        iInv "H" as "Hptsto" "Hclose_ptsto".
-        iDestruct (bi.later_mono _ _ (RiscvPmpModel2.fun_read_ram_works Hmap) with "[$Hptsto $Hmem]") as "#>%eq_fun_read_ram".
-        iMod ("Hclose_ptsto" with "Hptsto") as "_".
-        repeat iModIntro.
-        iIntros. iModIntro.
-        RiscvPmpModel2.eliminate_prim_step Heq.
-        iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
-        now iFrame "% # ∗".
-      - (* old case *)
-        repeat iModIntro.
-        iIntros. iModIntro.
-        RiscvPmpModel2.eliminate_prim_step Heq.
-        iPoseProof (RiscvPmpModel2.fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-        iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
-        now iFrame.
+      cbn -[prim_step].
+      repeat iModIntro.
+      iIntros. iModIntro.
+      RiscvPmpModel2.eliminate_prim_step Heq.
+      iPoseProof (RiscvPmpModel2.fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
+      iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+      now iFrame.
   Qed.
 
   Lemma write_ram_sound `{sailGS Σ} {bytes} :
