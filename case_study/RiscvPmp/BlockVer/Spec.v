@@ -197,6 +197,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
   Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
+  Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
   Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
@@ -326,6 +327,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
            (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr)) ∗
         asn_cur_privilege (term_var "m") ∗
+        term_var "m" = term_val ty_privilege Machine ∗
         asn_pmp_entries (term_var "entries") ∗
         asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "m") (term_var "typ");
       sep_contract_result          := "result_mem_write";
@@ -353,8 +355,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
           asn_pmp_entries (term_var "entries");
     |}.
 
+  (* Access type `Write` needed here, as `mem_write_value` calls `pmp_mem_write` with this access type*)
   Definition sep_contract_mem_write_value {bytes} {H: restrict_bytes bytes} : SepContractFun (@mem_write_value bytes H) :=
-    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "typ" :: ty_access_type; "entries" :: ty.list ty_pmpentry];
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry];
       sep_contract_localstore      := [term_var "paddr"; term_var "data"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
@@ -366,7 +369,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr)) ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries") ∗
-        asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_var "typ");
+        asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Write);
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
         asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
@@ -453,10 +456,23 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
         sep_contract_localstore      := [term_var "paddr"];
         sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
-          (asn_in_mmio bytes (term_var "paddr"));
-          ((term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr))
+          (asn_in_mmio bytes (term_var "paddr"))
+          ((term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr));
         sep_contract_result          := "result_is_within";
-        sep_contract_postcondition   := term_var "result_is_within" =  term_var "inv"
+        sep_contract_postcondition   := term_var "result_is_within" = term_var "inv"
+    |}.
+
+  (* NOTE: No new contract for `read`, as femtokernel does not perform any reads for now *)
+  (* NOTE: for now no resources in `POST`; add those once we need to reinstate local state *)
+  Definition sep_contract_mmio_write (bytes : nat) : SepContractFunX (mmio_write bytes) :=
+    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes];
+        sep_contract_localstore      := [term_var "paddr"; term_var "data"];
+        sep_contract_precondition    :=
+           asn_in_mmio bytes (term_var "paddr") ∗
+           asn_inv_mmio ∗
+           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data");
+        sep_contract_result          := "result_write_mmio";
+        sep_contract_postcondition   := ⊤;
     |}.
 
 
@@ -579,6 +595,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        | close_pmp_entries                  => lemma_close_pmp_entries
        | extract_pmp_ptsto bytes => lemma_extract_pmp_ptsto bytes
        | return_pmp_ptsto bytes => lemma_return_pmp_ptsto bytes
+       | close_mmio_write immm r1 r2 widthh => lemma_close_mmio_write immm r1 r2 widthh
       end.
 End RiscvPmpBlockVerifSpec.
 
@@ -653,7 +670,18 @@ Module RiscvPmpSpecVerif.
     now vm_compute.
   Qed.
 
+  Lemma valid_checked_mem_write {bytes} {H : restrict_bytes bytes} : ValidContract (@checked_mem_write bytes H).
+  Proof.
+    destruct H as [->|[->| ->]];
+    now vm_compute.
+  Qed.
+
   Lemma valid_pmp_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@pmp_mem_read bytes H).
+  Proof.
+    destruct H as [->|[->| ->]]; now vm_compute.
+  Qed.
+
+  Lemma valid_pmp_mem_write {bytes} {H : restrict_bytes bytes} : ValidContract (@pmp_mem_write bytes H).
   Proof.
     destruct H as [->|[->| ->]]; now vm_compute.
   Qed.
@@ -694,6 +722,11 @@ Module RiscvPmpSpecVerif.
   Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
+  Proof.
+    destruct H as [->|[->| ->]]; reflexivity.
+  Qed.
+
+  Lemma valid_mem_write_value {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_write_value bytes H).
   Proof.
     destruct H as [->|[->| ->]]; reflexivity.
   Qed.
@@ -750,9 +783,12 @@ Module RiscvPmpSpecVerif.
     - apply (valid_contract_debug _ H valid_contract_within_phys_mem).
     - apply (valid_contract _ H valid_mem_read).
     - apply (valid_contract _ H valid_checked_mem_read).
+    - apply (valid_contract _ H valid_checked_mem_write).
     - apply (valid_contract _ H valid_pmp_mem_read).
+    - apply (valid_contract _ H valid_pmp_mem_write).
     - apply (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
     - apply (valid_contract_debug _ H valid_pmpMatchAddr).
+    - apply (valid_contract _ H valid_mem_write_value).
     - apply (valid_contract _ H valid_execute_fetch).
     - apply (valid_contract_debug _ H valid_contract_execute_EBREAK).
   Qed.
