@@ -272,6 +272,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
+           term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
@@ -321,6 +322,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
+           term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
@@ -362,6 +364,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
+           term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
@@ -456,7 +459,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
         sep_contract_localstore      := [term_var "paddr"];
         sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
-          (asn_in_mmio bytes (term_var "paddr"))
+          (asn_in_mmio bytes (term_var "paddr") ∗
+           term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))))
           ((term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr));
         sep_contract_result          := "result_is_within";
         sep_contract_postcondition   := term_var "result_is_within" = term_var "inv"
@@ -868,24 +872,30 @@ Module RiscvPmpIrisInstanceWithContracts.
     ValidContractForeign (RiscvPmpBlockVerifSpec.sep_contract_within_mmio bytes) (RiscvPmpProgram.within_mmio bytes).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hlow _] & [%Hhi _])".
+    iIntros "Hpre".
     iApply (lifting.wp_lift_pure_step_no_fork _ _ ⊤).
     - cbn; auto.
     - intros. RiscvPmpModel2.eliminate_prim_step Heq; auto.
     - repeat iModIntro. iIntros. RiscvPmpModel2.eliminate_prim_step Heq; auto.
       rewrite /fun_within_mmio bool_decide_and.
-      assert (bool_decide (withinMMIO paddr bytes) = false) as ->.
-      { rewrite bool_decide_eq_false.
-        destruct bytes; first easy.
-        assert (paddr ∈ liveAddrs)%stdpp.
-        { apply bv.in_seqBv.
-          - cbn (* TODO: add simplifying `xlenbits` to solve_bv *). solve_bv.
-          - assert (Z.of_N (bv.bin paddr) < lenAddr)%Z by solve_bv. cbn.
-            cbv [bv.ult]. now zify. (* `solve_bv` fails because knowledge of concrete `minAddr`, `lenAddr` needed *)}
-        intros HFalse; cbn in HFalse. assert (paddr ∈ mmioAddrs)%stdpp by now destruct bytes.
-        eapply mmio_ram_False; eauto.
-      }
-      iApply wp_value; easy.
+      (* destruct inv; cbn. *)
+      (* + admit. *)
+      (* + iDestruct "Hpre" as "([%Hlow _] & [%Hhi _])". *)
+        iAssert (⌜bool_decide (withinMMIO paddr bytes) = inv⌝)%I with "[Hpre]" as %->.
+        { destruct inv; cbn.
+          + admit.
+          + iDestruct "Hpre" as "([%Hlow _] & [%Hhi _])". iPureIntro.
+            rewrite bool_decide_eq_false.
+            destruct bytes; first easy.
+            assert (paddr ∈ liveAddrs)%stdpp.
+            { apply bv.in_seqBv.
+              - cbn (* TODO: add simplifying `xlenbits` to solve_bv *). solve_bv.
+              - assert (Z.of_N (bv.bin paddr) < lenAddr)%Z by solve_bv. cbn.
+                cbv [bv.ult]. now zify. (* `solve_bv` fails because knowledge of concrete `minAddr`, `lenAddr` needed *)}
+            intros HFalse; cbn in HFalse. assert (paddr ∈ mmioAddrs)%stdpp by now destruct bytes.
+            eapply mmio_ram_False; eauto.
+        }
+        iApply wp_value. cbn. easy.
   Qed.
 
   Lemma vector_subrange_sound `{sailGS Σ} {n} (e b : nat)
