@@ -231,17 +231,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
                                        else term_var "rs" ↦ term_var "v"
     |}.
 
-  Definition sep_contract_fetch : SepContractFun fetch :=
-    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "w" :: ty_word];
-       sep_contract_localstore      := [];
-       sep_contract_precondition    := asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
-                                                 term_var "a" ↦ₘ term_var "w";
-       sep_contract_result          := "result_fetch";
-       sep_contract_postcondition   := asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
-                                                 term_var "a" ↦ₘ term_var "w" ∗
-                                                 term_var "result_fetch" = term_union fetch_result KF_Base (term_var "w");
-    |}.
-
   Definition sep_contract_fetch_instr : SepContractFun fetch :=
     {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [];
