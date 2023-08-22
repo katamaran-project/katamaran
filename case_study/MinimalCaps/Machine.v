@@ -269,24 +269,9 @@ Section FunDefKit.
      else stm_val ty.bool false).
 
   Definition fun_is_perm : Stm ["p" :: ty.perm; "p'" :: ty.perm] ty.bool :=
-    match: exp_var "p" in permission with
-    | O  => match: exp_var "p'" in permission with
-            | O => stm_val ty.bool true
-            | _ => stm_val ty.bool false
-            end
-    | R  => match: exp_var "p'" in permission with
-            | R => stm_val ty.bool true
-            | _ => stm_val ty.bool false
-            end
-    | RW => match: exp_var "p'" in permission with
-            | RW => stm_val ty.bool true
-            | _  => stm_val ty.bool false
-            end
-    | E  => match: exp_var "p'" in permission with
-            | E => stm_val ty.bool true
-            | _ => stm_val ty.bool false
-            end
-    end.
+    stm_match_enum permission (exp_var "p") (fun _ => stm_val ty.unit tt) ;;
+    stm_match_enum permission (exp_var "p'") (fun _ => stm_val ty.unit tt) ;;
+    exp_var "p" = exp_var "p'".
 
   Definition fun_add_pc : Stm ["offset" :: ty.int] ty.unit :=
     let: "opc" := stm_read_register pc in
