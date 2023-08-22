@@ -356,6 +356,9 @@ Section FunDefKit.
     Let int : Ty := ty.int.
     Let word : Ty := ty.word.
 
+    (* fun_exec_sd executes the store instruction, where the value in "rs2" is
+       stored on the address denoted by the capability in "rs1" and where its
+       cursor is incremented with "imm". *)
     Definition fun_exec_sd : Stm ["rs1" :: ty.src; "rs2" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: "base_cap" :: cap  := call read_reg_cap (exp_var "rs1") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "base_cap") in
@@ -375,6 +378,9 @@ Section FunDefKit.
        call update_pc ;;
        stm_val ty.bool true).
 
+    (* fun_exec_ld executes the load instruction, where the value at the address
+       denoted by the capability in "cs", with its cursor incremented with
+       "imm", is stored in register "cd". *)
     Definition fun_exec_ld : Stm ["cd" :: ty.dst; "cs" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: "base_cap" :: cap  := call read_reg_cap (exp_var "cs") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "base_cap") in
@@ -394,6 +400,9 @@ Section FunDefKit.
        call update_pc ;;
        stm_val ty.bool true).
 
+    (* fun_exec_cincoffset executes the cincoffset instruction, which increments
+       the cursor of the capability in "cs" with the value from "rs" and stores
+       the resulting capability in register "cd". *)
     Definition fun_exec_cincoffset : Stm ["cd" :: ty.dst; "cs" :: ty.src; "rs" :: ty.src] ty.bool :=
       let: "base_cap" :: cap  := call read_reg_cap (exp_var "cs") in
       let: "offset" :: ty.int := call read_reg_num (exp_var "rs") in
@@ -413,6 +422,10 @@ Section FunDefKit.
            stm_val ty.bool true
        end).
 
+    (* fun_exec_candperm executes the candperm instruction. This instruction
+       performs the and operation on the permissions of the capability in "cs"
+       and the value of "rs" and writes the resulting capability (with updated
+       permission) to "cd". *)
     Definition fun_exec_candperm : Stm ["cd" :: ty.dst; "cs" :: ty.src; "rs" :: ty.src] ty.bool :=
       let: "cs_val" := call read_reg_cap (exp_var "cs") in
       let: "rs_val" := call read_reg_num (exp_var "rs") in
@@ -429,6 +442,8 @@ Section FunDefKit.
       call write_reg (exp_var "cd") (exp_inr (exp_var "new_cap")) ;;
       stm_val ty.bool true.
 
+    (* fun_exec_addi executes the addi instruction. The value of "rs" is
+       incremented with "imm" and stored into "rd". *)
     Definition fun_exec_addi : Stm ["rd" :: ty.dst; "rs" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: "v" :: ty.int := call read_reg_num (exp_var "rs") in
       let: "res" :: ty.int := stm_exp (exp_var "v" + exp_var "imm") in
@@ -437,6 +452,8 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_add executes the add instruction, which stores the addition of
+       "rs1" and "rs2" into "rd". *)
     Definition fun_exec_add : Stm ["rd" :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "rs1") in
       let: "v2" :: int := call read_reg_num (exp_var "rs2") in
@@ -446,6 +463,8 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_sub executes the sub instruction, which stores the subtraction
+       of "rs1" and "rs2" into "rd". *)
     Definition fun_exec_sub : Stm ["rd" :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "rs1") in
       let: "v2" :: int := call read_reg_num (exp_var "rs2") in
@@ -455,16 +474,21 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_abs returns the absolute value of "i". *)
     Definition fun_abs : Stm ["i" :: ty.int] ty.int :=
       if: exp_var "i" < (exp_val ty.int 0%Z)
       then exp_var "i" * (exp_val ty.int (-1)%Z)
       else exp_var "i".
 
+    (* fun_is_not_zero checks whether "i" is not zero. *)
     Definition fun_is_not_zero : Stm ["i" :: ty.int] ty.bool :=
       if: exp_var "i" = exp_val ty.int 0%Z
       then stm_val ty.bool false
       else stm_val ty.bool true.
 
+    (* fun_can_incr_cursor checks if the cursor of the capability "c" can be
+       incremented. If "c" is an enter capability then no increment is allowed
+       (performing an increment with "imm" = 0 is allowed). *)
     Definition fun_can_incr_cursor : Stm ["c" :: ty.cap; "imm" :: ty.int] ty.bool :=
       let*: ["p", "b", "e", "a"] := exp_var "c" in
       let: "tmp1" := call is_perm (exp_var "p") (exp_val ty.perm E) in
@@ -477,6 +501,8 @@ Section FunDefKit.
           stm_val ty.bool true
       else stm_val ty.bool true.
 
+    (* fun_exec_slt executes the set if less than instruction for the values in
+       "rs1" and "rs2", and stores the result in "rd". *)
     Definition fun_exec_slt : Stm ["rd" :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "rs1") in
       let: "v2" :: int := call read_reg_num (exp_var "rs2") in
@@ -490,6 +516,8 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_slti executes the set if less than immediate instruction for the
+       value in "rs1" and the immediate "imm", and stores the result in "rd". *)
     Definition fun_exec_slti : Stm ["rd" :: ty.dst; "rs" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "rs") in
       let: "v2" :: int := exp_var "imm" in
@@ -503,6 +531,9 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_sltu executes the unsigned version of the set if than
+       instruction for the values in "rs1" and "rs2", and stores the result in
+       "rd". *)
     Definition fun_exec_sltu : Stm ["rd" :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "rs1") in
       let: "uv1" :: int := call abs (exp_var "v1") in
@@ -518,6 +549,9 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_sltiu executes the unsigned version of the set if less than
+       immediate instruction for the value in "rs1" and the immediate "imm", and
+       stores the result in "rd". *)
     Definition fun_exec_sltiu : Stm ["rd" :: ty.dst; "rs" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "rs") in
       let: "uv1" :: int := call abs (exp_var "v1") in
@@ -533,6 +567,8 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_perm_to_bits converts "p" into its corresponding integer
+       representation. *)
     Definition fun_perm_to_bits : Stm ["p" :: ty.perm] ty.int :=
       match: exp_var "p" in permission with
       | O  => stm_val ty.int 0%Z
@@ -541,6 +577,8 @@ Section FunDefKit.
       | E  => stm_val ty.int 3%Z
       end.
 
+    (* fun_perm_from_bits converts "i" into its corresponding permission
+       representation. *)
     Definition fun_perm_from_bits : Stm ["i" :: ty.int] ty.perm :=
       if: exp_var "i" = exp_val ty.int 1%Z
       then exp_val ty.perm R
@@ -550,6 +588,8 @@ Section FunDefKit.
                 then exp_val ty.perm E
                 else exp_val ty.perm O.
 
+    (* fun_and_perm performs the and operation on the permissions
+       "p1" and "p2". *)
     Definition fun_and_perm : Stm ["p1" :: ty.perm; "p2" :: ty.perm] ty.perm :=
       match: exp_var "p1" in permission with
       | O  => exp_val ty.perm O
@@ -569,6 +609,7 @@ Section FunDefKit.
               end
       end.
 
+    (* fun_is_sub_perm determines whether "p" is a subpermission of "p'". *)
     Definition fun_is_sub_perm : Stm ["p" :: ty.perm; "p'" :: ty.perm] ty.bool :=
       match: exp_var "p" in permission with
       | O =>
@@ -590,10 +631,19 @@ Section FunDefKit.
             end
       end.
 
+    (* fun_is_within_range checks if "b'" and "e'" are within the bounds denoted
+       by "b" and "e". *)
     Definition fun_is_within_range : Stm ["b'" :: ty.addr; "e'" :: ty.addr;
                                           "b" :: ty.addr; "e" :: ty.addr] ty.bool :=
       (exp_var "b" <= exp_var "b'") && (exp_var "e'" <= exp_var "e").
 
+    (* fun_exec_csetbounds executes the csetbounds instruction. The capability
+       written to the destination register "cd" will have bounds derived from
+       the capability "c" in "cs", where the new "begin" of the capability is
+       the cursor of "c" and the "end" of the capability is the cursor of "c"
+       incremented by the value in "rs". Note that the bounds of the new
+       capability can not exceed the bounds of the capability it was derived
+       from. *)
     Definition fun_exec_csetbounds : Stm ["cd" :: ty.dst; "cs" :: ty.src; "rs" :: ty.src] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "cs") in
       let*: ["p", "b", "e", "a"] := exp_var "c" in
@@ -619,6 +669,13 @@ Section FunDefKit.
            stm_val ty.bool true
        end.
 
+    (* fun_exec_csetboundsimm executes the csetboundsimm instruction. The
+       capability written to the destination register "cd" will have bounds
+       derived from the capability "c" in "cs", where the new "begin" of the
+       capability is the cursor of "c" and the "end" of the capability is the
+       cursor of "c" incremented by "imm". Note that the bounds of the new
+       capability can not exceed the bounds of the capability it was derived
+       from. *)
     Definition fun_exec_csetboundsimm : Stm ["cd" :: ty.dst; "cs" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "cs") in
       let*: ["p", "b", "e", "a"] := exp_var "c" in
@@ -643,6 +700,9 @@ Section FunDefKit.
            stm_val ty.bool true
        end.
 
+    (* fun_exec_cgettag executes the cgettag instruction, which stores the tag
+       of the register "cs" into "rd". If "cs" contains a valid capability the
+       tag is set, otherwise it is not. *)
     Definition fun_exec_cgettag : Stm ["rd" :: ty.dst; "cs" :: ty.src] ty.bool :=
       let: w :: ty.word := call read_reg (exp_var "cs") in
       match: w with
@@ -656,6 +716,8 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_cgetperm executes the cgetperm instruction, where the permission
+       of the capability in "cs" is stored into "rd". *)
     Definition fun_exec_cgetperm : Stm ["rd" :: ty.dst; "cs" :: ty.src] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "cs") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
@@ -665,6 +727,8 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_cgetbase executes the cgetbase instruction, where the base of
+       the capability in "cs" is stored into "rd". *)
     Definition fun_exec_cgetbase : Stm ["rd" :: ty.dst; "cs" :: ty.src] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "cs") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
@@ -673,6 +737,8 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_cgetlen executes the cgetlen instruction, where the length of
+       the capability in "cs" is computed and stored into "rd". *)
     Definition fun_exec_cgetlen : Stm ["rd" :: ty.dst; "cs" :: ty.src] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "cs") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
@@ -682,6 +748,8 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_cgetaddr executes the cgetaddr instruction, where the address,
+       also called the cursor, is stored into "rd". *)
     Definition fun_exec_cgetaddr : Stm ["rd" :: ty.dst; "cs" :: ty.src] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "cs") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
@@ -690,21 +758,32 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_fail executes the fail instruction, resulting in a machine
+       halt. *)
     Definition fun_exec_fail : Stm [] ty.bool :=
       fail "machine failed".
 
+    (* fun_exec_mret executes the ret instruction, which cleanly stops the
+       machine. *)
     Definition fun_exec_ret : Stm [] ty.bool :=
       stm_exp exp_false.
 
+    (* fun_exec_cmove executes the cmove instruction, which copies the
+       capability in "cs" into "cd". *)
     Definition fun_exec_cmove : Stm ["cd" :: ty.dst; "cs" :: ty.src] ty.bool :=
       let: w :: word := call read_reg (exp_var "cs") in
       call write_reg (exp_var "cd") w ;;
       call update_pc ;;
       stm_val ty.bool true.
 
+    (* fun_exec_jalr_cap executes the cjalr instruction with 0 as immediate
+       offset. *)
     Definition fun_exec_jalr_cap : Stm ["cd" :: ty.dst; "cs" :: ty.src] ty.bool :=
       call exec_cjalr (exp_var "cd") (exp_var "cs") (exp_val ty.int 0%Z).
 
+    (* fun_exec_cjalr executes the cjalr instruction, which jumps to the given
+       capability in "cs" with its cursor incremented by "imm". The next pc is
+       installed in the "cd" register. *)
     Definition fun_exec_cjalr : Stm ["cd" :: ty.dst; "cs" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
@@ -727,6 +806,8 @@ Section FunDefKit.
         stm_write_register pc (exp_var "c'") ;;
         stm_val ty.bool true.
 
+    (* fun_exec_cjal executes the cjal instruction, which jumps to the given
+       capability in "cs" with its cursor incremented by "imm". *)
     Definition fun_exec_cjal : Stm ["cd" :: ty.dst; "imm" :: ty.int] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
@@ -736,6 +817,8 @@ Section FunDefKit.
       call add_pc (exp_binop bop.times (exp_var "imm") (exp_int 2)) ;;
       stm_val ty.bool true.
 
+    (* fun_exec_bne executes the branch not equal instruction, which branches if
+       the values in rs1 and rs2 are not equal, by adding "imm" to the pc. *)
     Definition fun_exec_bne : Stm ["rs1" :: ty.src; "rs2" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: "a" :: ty.int := call read_reg_num (exp_var "rs1") in
       let: "b" :: ty.int := call read_reg_num (exp_var "rs2") in
@@ -743,6 +826,8 @@ Section FunDefKit.
              (call update_pc ;; stm_val ty.bool true)
              (call add_pc (exp_var "imm") ;; stm_val ty.bool true).
 
+    (* fun_exec_instr pattern matches on instruction "i" and calls the
+       corresponding execution function. *)
     Definition fun_exec_instr : Stm [i :: ty.instr] ty.bool :=
       stm_match_union_alt
         instruction (exp_var i)
@@ -800,18 +885,24 @@ Section FunDefKit.
                                      (call exec_ret)%exp
            end).
 
+    (* fun_read_mem reads the value at the cursor of the capability "c" if the
+       cursor of the capability is within its bounds. *)
     Definition fun_read_mem : Stm ["c" ∷ ty.cap] ty.memval :=
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       (let: q :: bool := call within_bounds c in
        stm_assert q (exp_string "Err: [read_mem] out of bounds") ;;
        foreign rM (exp_var "cursor")).
 
+    (* fun_write_mem writes the value "v" in memory at the cursor of the
+       capability "c" if the cursor of the capability is within its bounds. *)
     Definition fun_write_mem : Stm ["c" ∷ ty.cap; "v" ∷ ty.memval] ty.unit :=
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       (let: q :: bool := call within_bounds c in
        stm_assert q (exp_string "Err: [write_mem] out of bounds") ;;
        foreign wM (exp_var "cursor") (exp_var "v")).
 
+    (* fun_exec represents one iteration of the fdeCycle. It fetches the next
+       instruction, decodes it and executes it. *)
     Definition fun_exec : Stm [] ty.bool :=
       let: "c" := stm_read_register pc in
       (let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
@@ -824,6 +915,8 @@ Section FunDefKit.
        | inr c => fail "Err [exec]: instructions cannot be capabilities"
        end).
 
+    (* fun_step ensures that the pc is correct (i.e., has the read permission
+       and is not an enter capability) before calling exec. *)
     Definition fun_step : Stm [] ty.unit :=
       let: "tmp1" := stm_read_register pc in
       let: "tmp2" := call is_correct_pc (exp_var "tmp1") in
@@ -834,11 +927,14 @@ Section FunDefKit.
       else
         fail "Err [step]: incorrect PC".
 
+    (* fun_loop is the fdeCycle of the machine. It keeps calling step and itself
+       indefinitely. *)
     Definition fun_loop : Stm [] ty.unit :=
       call step ;; call loop.
 
   End ExecStore.
 
+  (* FunDef binds the function signatures and their implementations together. *)
   Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
     | read_reg           => fun_read_reg
@@ -900,18 +996,27 @@ End FunDefKit.
 Include DefaultRegStoreKit MinCapsBase.
 
 Section ForeignKit.
+  (* ForeignKit contains an implementation for the foreign functions used in the
+     specification of the machine. *)
+
+  (* Memory is a mapping from addresses to words, where words are either an
+     integer or capability. *)
   Definition Memory := Addr -> (Z + Capability).
 
+  (* fun_rM reads the value at "addr" of the memory μ. *)
   Definition fun_rM (μ : Memory) (addr : Val ty.int) : Val ty.memval :=
     μ addr.
 
+  (* fun_wM returns a memory where the value at "addr" now contains "val" and
+     otherwise is the same as μ. *)
   Definition fun_wM (μ : Memory) (addr : Val ty.int) (val : Val ty.memval) : Memory :=
     fun addr' => if Z.eqb addr addr' then val else μ addr'.
 
   (* We postulate a pure decode function and assume that that's what the decode primitive implements. *)
-  (* Similarly for *_{from,to}_bits functions, ideally we would move to actual bitvectors for values... *)
   Axiom pure_decode : Z -> string + Instruction.
 
+  (* ForeignCall binds the signatures of the foreign functions to the
+     implementation *)
   #[derive(equations=no)]
   Equations ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
     ForeignCall rM [addr] res γ γ' μ μ' :=
