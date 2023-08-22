@@ -67,7 +67,6 @@ Section FunDeclKit.
   | write_mem          : Fun ["c" :: ty.cap; "v" :: ty.memval] ty.unit
   | read_allowed       : Fun ["p" :: ty.perm] ty.bool
   | write_allowed      : Fun ["p" :: ty.perm] ty.bool
-  | upper_bound        : Fun ["a" :: ty.addr; "e" :: ty.addr] ty.bool
   | within_bounds      : Fun ["c" :: ty.cap] ty.bool
   | perm_to_bits       : Fun ["p" :: ty.perm] ty.int
   | perm_from_bits     : Fun ["i" :: ty.int] ty.perm
@@ -294,11 +293,7 @@ Section FunDefKit.
 
   Definition fun_within_bounds : Stm ["c" :: ty.cap] ty.bool :=
     let*: ["p", "b", "e", "a"] := (exp_var "c") in
-    (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
-     (exp_var "b" <= exp_var "a") && exp_var "u").
-
-  Definition fun_upper_bound : Stm ["a" :: ty.addr; "e" :: ty.addr] ty.bool :=
-    a <= e.
+    ((exp_var "b" <= exp_var "a") && (exp_var "a" <= exp_var "e")).
 
   Section ExecStore.
 
@@ -809,7 +804,6 @@ Section FunDefKit.
     | write_mem          => fun_write_mem
     | read_allowed       => fun_read_allowed
     | write_allowed      => fun_write_allowed
-    | upper_bound        => fun_upper_bound
     | within_bounds      => fun_within_bounds
     | perm_to_bits       => fun_perm_to_bits
     | perm_from_bits     => fun_perm_from_bits
