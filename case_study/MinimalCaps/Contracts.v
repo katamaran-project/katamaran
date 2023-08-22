@@ -473,16 +473,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           else ⊤
         |}.
 
-      Definition sep_contract_upper_bound : SepContract ["a" :: ty.addr; "e" :: ty.addr ] ty.bool :=
-        {| sep_contract_logic_variables := ["a" :: ty.addr; "e" :: ty.addr];
-          sep_contract_localstore      := [term_var "a"; term_var "e"];
-          sep_contract_precondition    := ⊤;
-          sep_contract_result          := "result_upper_bound";
-          sep_contract_postcondition   :=
-          term_var "result_upper_bound" =
-            term_binop (bop.relop bop.le) (term_var "a") (term_var "e");
-        |}.
-
       Definition sep_contract_within_bounds : SepContract ["c" :: ty.cap] ty.bool :=
         {| sep_contract_logic_variables := ["c" :: ty.cap];
           sep_contract_localstore      := [term_var "c"];
@@ -669,7 +659,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           match f with
           | read_allowed           => Some sep_contract_read_allowed
           | write_allowed          => Some sep_contract_write_allowed
-          | upper_bound            => Some sep_contract_upper_bound
           | within_bounds          => Some sep_contract_within_bounds
           | read_reg               => Some sep_contract_read_reg
           | read_reg_cap           => Some sep_contract_read_reg_cap
@@ -1153,9 +1142,6 @@ Module MinCapsValidContracts.
   Lemma valid_contract_write_allowed : ValidContract write_allowed.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_upper_bound : ValidContract upper_bound.
-  Proof. reflexivity. Qed.
-
   Lemma valid_contract_within_bounds : ValidContract within_bounds.
   Proof. reflexivity. Qed.
 
@@ -1309,7 +1295,6 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_write_mem).
     - apply (valid_contract _ H valid_contract_read_allowed).
     - apply (valid_contract _ H valid_contract_write_allowed).
-    - apply (valid_contract _ H valid_contract_upper_bound).
     - apply (valid_contract _ H valid_contract_within_bounds).
     - apply (valid_contract _ H valid_contract_perm_to_bits).
     - apply (valid_contract _ H valid_contract_perm_from_bits).
@@ -1379,7 +1364,6 @@ Section Statistics.
       existT _ (existT _ write_mem);
       existT _ (existT _ read_allowed);
       existT _ (existT _ write_allowed);
-      existT _ (existT _ upper_bound);
       existT _ (existT _ within_bounds);
       existT _ (existT _ perm_to_bits);
       existT _ (existT _ perm_from_bits);

@@ -68,7 +68,6 @@ Section FunDeclKit.
   | write_mem          : Fun ["c" :: ty.cap; "v" :: ty.memval] ty.unit
   | read_allowed       : Fun ["p" :: ty.perm] ty.bool
   | write_allowed      : Fun ["p" :: ty.perm] ty.bool
-  | upper_bound        : Fun ["a" :: ty.addr; "e" :: ty.addr] ty.bool
   | within_bounds      : Fun ["c" :: ty.cap] ty.bool
   | perm_to_bits       : Fun ["p" :: ty.perm] ty.int
   | perm_from_bits     : Fun ["i" :: ty.int] ty.perm
@@ -318,6 +317,8 @@ Section FunDefKit.
     stm_match_enum permission (exp_var "p'") (fun _ => stm_val ty.unit tt) ;;
     exp_var "p" = exp_var "p'".
 
+  (* fun_add_pc adds the "offset" to the cursor of the pc capability and writes
+     the updated capability to the pc register. *)
   Definition fun_add_pc : Stm ["offset" :: ty.int] ty.unit :=
     let: "opc" := stm_read_register pc in
     let*: ["perm", "beg", "end", "cur"] := (exp_var "opc") in
@@ -331,19 +332,19 @@ Section FunDefKit.
      stm_write_register pc (exp_var "npc") ;;
      stm_val ty.unit tt).
 
+  (* fun_read_allowed checks that "p" has at least read permission. *)
   Definition fun_read_allowed : Stm ["p" :: ty.perm] ty.bool :=
     call is_sub_perm (exp_val (ty.enum permission) R) (exp_var "p").
 
+  (* fun_write_allowed checks that "p" has at least readwrite permission. *)
   Definition fun_write_allowed : Stm ["p" :: ty.perm] ty.bool :=
     call is_sub_perm (exp_val (ty.enum permission) RW) (exp_var "p").
 
+  (* fun_within_bounds checks if the cursor of "c" is within the bounds of
+     "c". *)
   Definition fun_within_bounds : Stm ["c" :: ty.cap] ty.bool :=
     let*: ["p", "b", "e", "a"] := (exp_var "c") in
-    (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
-     (exp_var "b" <= exp_var "a") && exp_var "u").
-
-  Definition fun_upper_bound : Stm ["a" :: ty.addr; "e" :: ty.addr] ty.bool :=
-    a <= e.
+    ((exp_var "b" <= exp_var "a") && (exp_var "a" <= exp_var "e")).
 
   Section ExecStore.
 
@@ -854,7 +855,6 @@ Section FunDefKit.
     | write_mem          => fun_write_mem
     | read_allowed       => fun_read_allowed
     | write_allowed      => fun_write_allowed
-    | upper_bound        => fun_upper_bound
     | within_bounds      => fun_within_bounds
     | perm_to_bits       => fun_perm_to_bits
     | perm_from_bits     => fun_perm_from_bits
