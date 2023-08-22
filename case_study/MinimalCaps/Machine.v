@@ -52,6 +52,7 @@ Import MinCapsBase.
 Module Export MinCapsProgram <: Program MinCapsBase.
 
 Section FunDeclKit.
+  (* Fun defines the signatures of all functions defined for this ISA. *)
   Inductive Fun : PCtx -> Ty -> Set :=
   | read_reg           : Fun ["rs" :: ty.enum regname] ty.word
   | read_reg_cap       : Fun ["cs" :: ty.enum regname] ty.cap
@@ -108,6 +109,10 @@ Section FunDeclKit.
   | loop               : Fun [] ty.unit
   .
 
+  (* FunX defines the signatures of *foreign* functions. These are functions
+     that are not defined as part of the ISA, such as memory
+     operations. Furthermore, we model the decoding of instructions as a foreign
+     function with no implementation. *)
   Inductive FunX : PCtx -> Ty -> Set :=
   (* read memory *)
   | rM    : FunX ["address" :: ty.int] ty.memval
@@ -116,6 +121,11 @@ Section FunDeclKit.
   | dI    : FunX ["code" :: ty.int] ty.instr
   .
 
+  (* Lem defines the signatures of the lemmas we will use in the functions of
+     the ISA.  These effectively enable us to modify the symbolic heap and are
+     what make the verification semi-automatic.  These lemmas are ghost code,
+     they have no implementation whatsoever and are only there to aid in the
+     verification effort. *)
   Inductive Lem : PCtx -> Set :=
   | open_ptsreg                : Lem ["reg" :: ty.enum regname]
   | close_ptsreg (R : RegName) : Lem []
@@ -173,7 +183,8 @@ Section FunDefKit.
   Notation "'use' 'lemma' f args" := (stm_lemma f args%env) (at level 10, f at next level) : exp_scope.
   Notation "'use' 'lemma' f" := (stm_lemma f env.nil) (at level 10, f at next level) : exp_scope.
 
-  (* NOTE: need to wrap s around parentheses when using this notation (not a real let binding!) *)
+  (* NOTE: need to wrap s around parentheses when using this notation (not a
+  real let binding!) *)
   Notation "'let*:' '[' perm ',' beg ',' en ',' cur ']' ':=' cap 'in' s" :=
     (stm_match_record capability cap
       (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
@@ -183,6 +194,10 @@ Section FunDefKit.
        "cap_cursor" cur)
     s) (at level 10) : exp_scope.
 
+  (* lemma_correctPC_not_E is not a lemma in the same sense as the Lem
+     definition.  It's a convenient helper function that invokes multiple lemmas
+     to derive that the given cap has the read (R) permission and is not the
+     enter (E) permission *)
   Definition lemma_correctPC_not_E {Γ} (cap : Stm Γ ty.cap) : Stm Γ ty.unit :=
     let: "c" := cap in
     use lemma correctPC_subperm_R [exp_var "c"] ;;
@@ -190,6 +205,11 @@ Section FunDefKit.
     (let: "tmp" := exp_val ty.perm R in
      use lemma subperm_not_E [exp_var "tmp"; exp_var "perm"]).
 
+  (* fun_read_reg reads the register content of the given register. To do this,
+     we first need to open the GPRS predicate (the open_gprs lemma invocation),
+     which gives us access to (ownership) over all GPRS.  The function then
+     reads the corresponding registers content and closes the GPRS predicate
+     again.  Note that the zeroth register (R0) is hardwired to the value 0. *)
   Definition fun_read_reg : Stm ["rs" :: ty.enum regname] ty.word :=
     use lemma open_gprs ;;
     let: "x" := match: exp_var "rs" in regname with
@@ -203,6 +223,8 @@ Section FunDefKit.
     use lemma close_gprs ;;
     stm_exp x.
 
+  (* fun_read_reg_cap requires that the content we read from "cs" is a
+  capability and not an integer. *)
   Definition fun_read_reg_cap : Stm ["cs" :: ty.enum regname] ty.cap :=
     let: w := call read_reg (exp_var "cs") in
     match: w with
@@ -212,6 +234,8 @@ Section FunDefKit.
         (exp_var "c")
     end.
 
+  (* fun_read_reg_num requires that the content we read from "rs" is an integer
+  and not a capability. *)
   Definition fun_read_reg_num : Stm ["rs" :: ty.enum regname ] ty.int :=
     let: w := call read_reg (exp_var "rs") in
     match: w with
@@ -219,6 +243,10 @@ Section FunDefKit.
     | inr c => fail "Err [read_reg_num]: expect register to hold a number"
     end.
 
+  (* fun_write_reg writes the word "w" to registers "rd". We need to open (and
+     at the end close) the GPRS predicate to get ownership over all GPRS. In the
+     case of R0 we do not perform a write, as this register is hardwired to
+     0. *)
   Definition fun_write_reg : Stm ["rd" :: ty.enum regname; "w" :: ty.word] ty.unit :=
     use lemma open_gprs ;;
     match: exp_var "rd" in regname with
@@ -229,6 +257,8 @@ Section FunDefKit.
     end ;;
     use lemma close_gprs.
 
+  (* fun_next_pc reads the current value of the pc and returns this value with
+  the cursor incremented by one. *)
   Definition fun_next_pc : Stm [] ty.cap :=
     let: "c" := stm_read_register pc in
     let*: ["perm" , "beg" , "end" , "cur"] := (exp_var "c") in
@@ -238,6 +268,10 @@ Section FunDefKit.
            exp_var "end";
            exp_var "cur" + exp_int 1 ]).
 
+  (* fun_update_pc installs the next pc in the pc register. It requires that the
+    next pc is a correct pc (i.e., it should not have the enter permission and
+    that the next pc is safe, which is trivial as it is derived from the current
+    pc with only an update in its cursor field. *)
   Definition fun_update_pc : Stm [] ty.unit :=
     let: "opc" := stm_read_register pc in
     let: "npc" := call next_pc in
@@ -246,6 +280,11 @@ Section FunDefKit.
     stm_write_register pc (exp_var "npc") ;;
     stm_val ty.unit tt.
 
+  (* fun_update_pc_perm returns an updated capability "c". If "c" has the E
+     permission and we have a safe to execute predicate for "c", then we update
+     the permission of "c" to read. If "c" doesn't have the E permission then we
+     leave it as is. The returned capability is expected to be installed in the
+     pc (i.e., we prepare "c" as a pc). *)
   Definition fun_update_pc_perm : Stm ["c" :: ty.cap] ty.cap :=
     let*: ["p" , "b" , "e" , "a"] := (exp_var "c") in
     (match: exp_var "p" in permission with
@@ -259,6 +298,9 @@ Section FunDefKit.
      | _ => exp_var "c"
      end).
 
+  (* fun_is_correct_pc returns a boolean indicating whether "c" is a correct
+     pc. To be a correct pc the capability permissions needs to be read or
+     readwrite and cursor has to be within bounds. *)
   Definition fun_is_correct_pc : Stm ["c" :: ty.cap] ty.bool :=
     let*: ["perm" , "beg" , "end" , "cur"] := (exp_var "c") in
     (let: "tmp1" := call is_perm (exp_var "perm") (exp_val ty.perm R) in
@@ -268,25 +310,13 @@ Section FunDefKit.
      then stm_val ty.bool true
      else stm_val ty.bool false).
 
+  (* fun_is_perm decides whether "p" and "p'" are the same permission. The
+     pattern matches on "p" and "p'" are only needed to instruct Katamaran to
+     destruct these values. *)
   Definition fun_is_perm : Stm ["p" :: ty.perm; "p'" :: ty.perm] ty.bool :=
-    match: exp_var "p" in permission with
-    | O  => match: exp_var "p'" in permission with
-            | O => stm_val ty.bool true
-            | _ => stm_val ty.bool false
-            end
-    | R  => match: exp_var "p'" in permission with
-            | R => stm_val ty.bool true
-            | _ => stm_val ty.bool false
-            end
-    | RW => match: exp_var "p'" in permission with
-            | RW => stm_val ty.bool true
-            | _  => stm_val ty.bool false
-            end
-    | E  => match: exp_var "p'" in permission with
-            | E => stm_val ty.bool true
-            | _ => stm_val ty.bool false
-            end
-    end.
+    stm_match_enum permission (exp_var "p") (fun _ => stm_val ty.unit tt) ;;
+    stm_match_enum permission (exp_var "p'") (fun _ => stm_val ty.unit tt) ;;
+    exp_var "p" = exp_var "p'".
 
   Definition fun_add_pc : Stm ["offset" :: ty.int] ty.unit :=
     let: "opc" := stm_read_register pc in

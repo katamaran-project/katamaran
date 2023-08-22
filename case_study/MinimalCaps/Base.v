@@ -34,8 +34,11 @@ From Equations Require Import
      Equations.
 Require Import Katamaran.Base.
 
-(*** TYPES ***)
+(*** Base.v ***)
+(* In this file we define the different types, enums, unions and records that are used for this ISA.
+   A large part of this file plugs our types into Katamaran's machinery for the case study. *)
 
+(*** TYPES ***)
 Inductive Permission : Set :=
   O | R | RW | E.
 
