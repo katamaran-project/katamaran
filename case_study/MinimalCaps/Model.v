@@ -592,7 +592,8 @@ Module MinCapsIrisInstanceWithContracts.
       iPureIntro.
       destruct H as [[-> _]|[-> _]];
         unfold Subperm in Hsub;
-        unfold Not_is_perm; destruct p'; auto.
+        intros H; inversion H; subst;
+        cbn in Hsub; discriminate.
     Qed.
 
     Lemma safe_move_cursor_sound :
@@ -601,9 +602,8 @@ Module MinCapsIrisInstanceWithContracts.
       intros ι. destruct_syminstance ι. cbn.
       iIntros "(#$ & [[% _] |[% _]])".
       rewrite ?fixpoint_interp1_eq.
-      destruct p; auto.
-      unfold Not_is_perm, MinCapsSignature.is_perm in H.
-      discriminate.
+      destruct p; try now subst.
+      exfalso; exact (H eq_refl).
       now subst.
     Qed.
 
@@ -627,7 +627,7 @@ Module MinCapsIrisInstanceWithContracts.
         destruct Hbounds as [Hb He];
         apply Zle_is_le_bool in Hb;
         apply Zle_is_le_bool in He.
-      iApply (interp_weakening _ _ (Not_is_perm_prop Hp) Hb He (Subperm_refl p) with "IH Hsafe").
+      iApply (interp_weakening _ _ Hp Hb He (Subperm_refl p) with "IH Hsafe").
     Qed.
 
     Lemma lemSem : LemmaSem.

@@ -30,6 +30,7 @@ From Coq Require Import
      Program.Tactics
      Strings.String
      ZArith.ZArith
+     Classes.EquivDec
      micromega.Lia.
 
 From Equations Require Import
@@ -51,12 +52,15 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
+(* PurePredicates used for the contracts. These are not spatial, i.e., they are
+   duplicable. *)
 Inductive PurePredicate : Set :=
 | subperm
 | correctPC
 | not_is_perm
 .
 
+(* Predicate denotes the spatial predicates used in this case study. *)
 Inductive Predicate : Set :=
   ptsreg
 | ptsto
@@ -97,6 +101,8 @@ Section PredicateKit.
      E
      |
      O *)
+  (* decide_subperm is the decision procedure that determines whether p is a
+     subpermission of p' according to the permission lattice given above. *)
   Definition decide_subperm (p p' : Val ty.perm) : bool :=
     match p with
     | O => true
@@ -115,6 +121,7 @@ Section PredicateKit.
             end
     end.
 
+  (* Subperm is the predicate implementation using the decision procedure *)
   Definition Subperm (p p' : Val ty.perm) : Prop :=
     decide_subperm p p' = true.
 
@@ -122,32 +129,26 @@ Section PredicateKit.
       Subperm p p.
   Proof. destruct p; simpl; reflexivity. Qed.
 
-  Equations(noeqns) is_perm (p p' : Val ty.perm) : bool :=
-  | O  | O  := true;
-  | R  | R  := true;
-  | RW | RW := true;
-  | E  | E  := true;
-  | _  | _  := false.
-
   Definition decide_correct_pc (c : Val ty.cap) : bool :=
     match c with
     | {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |} =>
-        (b <=? a) && (a <? e) && (is_perm p R || is_perm p RW)
+        (b <=? a) && (a <? e) && (Base.is_perm p R || Base.is_perm p RW)
     end.
 
   Definition CorrectPC (c : Val ty.cap) : Prop :=
     decide_correct_pc c = true.
 
-  Definition Not_is_perm (p p' : Val ty.perm) : Prop :=
-    (negb (is_perm p p')) = true.
+  Definition Not_is_perm := complement (@equiv Permission _ _).
 
-  Lemma Not_is_perm_prop (p p' : Val ty.perm) :
-    Not_is_perm p p' -> p <> p'.
-  Proof. unfold Not_is_perm; destruct p, p'; intros; auto. Qed.
-
-  Lemma Not_is_perm_iff (p p' : Val ty.perm) :
-    Not_is_perm p p' <-> p <> p'.
-  Proof. unfold Not_is_perm; destruct p, p'; split; intros; auto. Qed.
+  Lemma is_perm_Not_is_perm_false (p p' : Val ty.perm) :
+    Not_is_perm p p' -> Base.is_perm p p' = false.
+  Proof.
+    unfold Not_is_perm, equiv, complement.
+    destruct (Base.is_perm p p') eqn:E; auto.
+    apply is_perm_iff in E; subst.
+    intros H.
+    exfalso; exact (H eq_refl).
+  Qed.
 
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
@@ -978,7 +979,7 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
 
   Definition simplify_not_is_perm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
     match term_get_val p, term_get_val q with
-    | Some p', Some q' => if negb (is_perm p' q') then Some [] else None
+    | Some p', Some q' => if negb (Base.is_perm p' q') then Some [] else None
     | _      , _       => Some [formula_user not_is_perm [p;q]]
     end.
 
@@ -1031,6 +1032,7 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
     - dependent elimination v0; lsolve.
       dependent elimination v; lsolve.
       destruct v, v0; cbn; lsolve.
+      all: (intros ι []; cbn; intuition).
   Qed.
 
   Definition solver : Solver :=
