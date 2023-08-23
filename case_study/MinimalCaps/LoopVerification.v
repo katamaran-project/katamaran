@@ -132,7 +132,7 @@ Section Loop.
 
   Lemma semWP_is_perm {Γ} (e1 e2 : Exp Γ ty.perm) Q δ :
     ⊢ ((⌜eval e1 δ = eval e2 δ⌝ -∗ Q true δ) ∧
-      (⌜is_perm (eval e1 δ) (eval e2 δ) = false⌝ -∗ Q false δ)) -∗
+      (⌜Base.is_perm (eval e1 δ) (eval e2 δ) = false⌝ -∗ Q false δ)) -∗
       semWP (call MinCapsProgram.is_perm e1 e2) Q δ.
   Proof.
     iIntros "HYP".
@@ -144,8 +144,7 @@ Section Loop.
     iApply (semWP_mono with "His_perm").
     iIntros ([] _) "[%H1 _]"; cbn in *; iApply "HYP".
     - auto.
-    - unfold Not_is_perm in H1.
-      now rewrite ?negb_true_iff in H1.
+    - iPureIntro. by apply is_perm_Not_is_perm_false.
   Qed.
 
   Lemma is_correct_pc_false {c cpc} : decide_correct_pc c = cpc ->

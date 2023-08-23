@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Classes.EquivDec
      Strings.String.
 From stdpp Require
      finite.
@@ -143,6 +144,16 @@ Section TransparentObligations.
 End TransparentObligations.
 
 Derive EqDec for Permission.
+Definition is_perm := @equiv_decb _ _ _ Permission_eqdec.
+Lemma is_perm_iff : forall p p',
+    is_perm p p' = true <-> p = p'.
+Proof.
+  unfold is_perm.
+  intros; split.
+  - destruct p, p'; cbn; intros ?; auto; try discriminate.
+  - intros; subst; destruct p'; auto.
+Qed.
+
 Derive EqDec for Capability.
 Derive EqDec for RegName.
 
