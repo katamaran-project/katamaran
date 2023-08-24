@@ -62,7 +62,6 @@ Inductive PurePredicate : Set :=
 
 (* Predicate denotes the spatial predicates used in this case study. *)
 Inductive Predicate : Set :=
-  ptsreg
 | ptsto
 | safe
 | expr
@@ -170,7 +169,6 @@ Section PredicateKit.
   (* 𝑯_Ty defines the signatures of the spatial predicates. *)
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | ptsreg  => [ty.enum regname; ty.word]
     | ptsto   => [ty.addr; ty.memval]
     | safe    => [ty.word]
     | expr    => [ty.cap]
@@ -185,7 +183,6 @@ Section PredicateKit.
   Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
-      | ptsreg  => false
       | ptsto   => false
       | safe    => true
       | expr    => false (* TODO: check if it is duplicable when implemented *)
@@ -201,7 +198,6 @@ Section PredicateKit.
      about the input and output parameters of a predicate. *)
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
-    | ptsreg => Some (MkPrecise [ty.enum regname] [ty.word] eq_refl)
     | ptsto => Some (MkPrecise [ty.addr] [ty.memval] eq_refl)
     | _ => None
     end.
@@ -218,7 +214,6 @@ End PredicateKit.
     Notation "x '≠' y" := (asn.formula (formula_relop bop.neq x y)) (at level 70) : asn_scope.
     Notation "p '<=ₚ' p'" := (asn.formula (formula_user subperm (env.nil ► (ty.perm ↦ p) ► (ty.perm ↦ p')))) (at level 70).
 
-    Notation "r '↦r' t" := (asn.chunk (chunk_user ptsreg (env.nil ► (ty.enum regname ↦ r) ► (ty.word ↦ t)))) (at level 70).
     Notation "a '↦m' t" := (asn.chunk (chunk_user ptsto (env.nil ► (ty.addr ↦ a) ► (ty.int ↦ t)))) (at level 70).
     Notation asn_correctPC c := (asn.formula (formula_user correctPC [c])).
     Notation "p '≠ₚ' p'" := (asn.formula (formula_user not_is_perm [p;p'])) (at level 70).
