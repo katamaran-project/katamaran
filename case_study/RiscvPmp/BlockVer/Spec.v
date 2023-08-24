@@ -850,6 +850,35 @@ Module RiscvPmpIrisInstanceWithContracts.
       iMod (RiscvPmpModel2.fun_write_ram_works with "[$H $Hmem $Htr]") as "[$ H]"; [auto | now iFrame].
  Qed.
 
+  (* Important sanity condition on mmio predicates - NOTE: could be in typeclass, together with the condition that reads are either all accepted, or none of them are *)
+  Lemma mmio_pred_cons {bytes : nat} t e: event_pred bytes e → mmio_pred bytes t → mmio_pred bytes (cons e t).
+  Proof. now apply List.Forall_cons. Qed.
+
+  Lemma mmio_write_sound `{!sailGS Σ} `(H: restrict_bytes bytes) :
+    ValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
+  Proof.
+    intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
+    iIntros "([%Hmmio _] & #Hinv & [-> ->])".
+    iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
+    iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+    iSplitR; first auto.
+    iInv "Hinv" as (t) " [>Htrf >%Hpred]" "Hclose".
+    iDestruct (trace.trace_full_frag_eq with "Htr Htrf") as "%Heqt". subst t.
+    iMod (trace.trace_update _ _ (cons _ _) with "[$Htr $Htrf]") as "[Htr Htrf]".
+    iMod ("Hclose" with "[Htrf]") as "_".
+    {(* Instantiate evars *)
+      iExists _; iFrame. iPureIntro.
+      apply mmio_pred_cons; [|eauto].
+      constructor. }
+    repeat iModIntro. iIntros.
+    RiscvPmpModel2.eliminate_prim_step Heq.
+    iModIntro. iFrame.
+    repeat iSplit; auto.
+    destruct bytes; first contradiction.
+    unfold mem_inv, fun_write_mmio; cbn.
+    iExists _; iFrame "∗ %".
+  Qed.
+
   Lemma decode_sound `{sailGS Σ} :
     ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
   Proof.
@@ -867,8 +896,8 @@ Module RiscvPmpIrisInstanceWithContracts.
     now iFrame.
   Qed.
 
-  Lemma within_mmio_sound `{sailGS Σ} {bytes}:
-    ValidContractForeign (RiscvPmpBlockVerifSpec.sep_contract_within_mmio bytes) (RiscvPmpProgram.within_mmio bytes).
+  Lemma within_mmio_sound `{!sailGS Σ} `(H: restrict_bytes bytes):
+    ValidContractForeign (RiscvPmpBlockVerifSpec.sep_contract_within_mmio H) (RiscvPmpProgram.within_mmio H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "Hpre".
@@ -877,22 +906,21 @@ Module RiscvPmpIrisInstanceWithContracts.
     - intros. RiscvPmpModel2.eliminate_prim_step Heq; auto.
     - repeat iModIntro. iIntros. RiscvPmpModel2.eliminate_prim_step Heq; auto.
       rewrite /fun_within_mmio bool_decide_and.
-      (* destruct inv; cbn. *)
-      (* + admit. *)
-      (* + iDestruct "Hpre" as "([%Hlow _] & [%Hhi _])". *)
-        iAssert (⌜bool_decide (withinMMIO paddr bytes) = inv⌝)%I with "[Hpre]" as %->.
-        { destruct inv; cbn.
-          + admit.
-          + iDestruct "Hpre" as "([%Hlow _] & [%Hhi _])". iPureIntro.
-            rewrite bool_decide_eq_false.
-            destruct bytes; first easy.
-            assert (paddr ∈ liveAddrs)%stdpp.
-            { apply bv.in_seqBv.
-              - cbn (* TODO: add simplifying `xlenbits` to solve_bv *). solve_bv.
-              - assert (Z.of_N (bv.bin paddr) < lenAddr)%Z by solve_bv. cbn.
-                cbv [bv.ult]. now zify. (* `solve_bv` fails because knowledge of concrete `minAddr`, `lenAddr` needed *)}
-            intros HFalse; cbn in HFalse. assert (paddr ∈ mmioAddrs)%stdpp by now destruct bytes.
-            eapply mmio_ram_False; eauto.
+      destruct inv; cbn; iDestruct "Hpre" as "([%Hlft _] & [%Hrght _])".
+      + iApply wp_value; cbn.
+        repeat iSplit; auto.
+        iPureIntro. rewrite -bool_decide_and bool_decide_true //.
+        split; [auto| solve_bv].
+      + assert (bool_decide (withinMMIO paddr bytes) = false) as ->.
+        { rewrite bool_decide_eq_false.
+          destruct bytes; first easy.
+          assert (paddr ∈ liveAddrs)%stdpp.
+          { apply bv.in_seqBv.
+            - cbn (* TODO: add simplifying `xlenbits` to solve_bv *). solve_bv.
+            - assert (Z.of_N (bv.bin paddr) < lenAddr)%Z by solve_bv. cbn.
+              cbv [bv.ult]. now zify. (* `solve_bv` fails because knowledge of concrete `minAddr`, `lenAddr` needed *)}
+          intros HFalse; cbn in HFalse. assert (paddr ∈ mmioAddrs)%stdpp by now destruct bytes.
+          eapply mmio_ram_False; eauto.
         }
         iApply wp_value. cbn. easy.
   Qed.
@@ -959,6 +987,16 @@ Module RiscvPmpIrisInstanceWithContracts.
     now iFrame.
   Qed.
 
+  Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (r1 r2 : Reg ty_xlenbits) (width : WordWidth):
+    ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm r1 r2 width).
+  Proof.
+    intros ι; destruct_syminstance ι; cbn.
+    iIntros "(Hr1 & Hr2 & [<- _] & [-> _])".
+    iFrame. iPureIntro.
+    split; auto.
+    destruct width; now compute.
+  Qed.
+
   Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.
   Proof.
     intros Δ []; intros ι; destruct_syminstance ι; try now iIntros "_".
@@ -966,6 +1004,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     - apply Model.RiscvPmpModel2.close_pmp_entries_sound.
     - apply open_ptsto_instr_sound.
     - apply close_ptsto_instr_sound.
+    - apply close_mmio_write_sound.
   Qed.
 
   Import RiscvPmpBlockVerifSpec.
