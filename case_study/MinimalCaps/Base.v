@@ -404,7 +404,6 @@ Module Export MinCapsBase <: Base.
 
     Inductive Reg : Ty -> Set :=
     | pc   : Reg ty.cap
-    | reg0 : Reg ty.word
     | reg1 : Reg ty.word
     | reg2 : Reg ty.word
     | reg3 : Reg ty.word.
@@ -422,7 +421,7 @@ Module Export MinCapsBase <: Base.
       finite_from_eqdec.
 
     #[export,program] Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) :=
-      {| enum := [ existT _ pc; existT _ reg0; existT _ reg1; existT _ reg2; existT _ reg3 ] |}.
+      {| enum := [ existT _ pc; existT _ reg1; existT _ reg2; existT _ reg3 ] |}.
 
   End RegDeclKit.
 

@@ -116,8 +116,6 @@ Section FunDeclKit.
   .
 
   Inductive Lem : PCtx -> Set :=
-  | open_ptsreg                : Lem ["reg" :: ty.enum regname]
-  | close_ptsreg (R : RegName) : Lem []
   | open_gprs                  : Lem []
   | close_gprs                 : Lem []
   | safe_move_cursor           : Lem ["c'" :: ty.cap; "c" :: ty.cap]

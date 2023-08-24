@@ -196,17 +196,11 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
 
     Definition MinCaps_ptsreg (reg : RegName) (v : Z + Capability) : iProp Σ :=
       match reg with
-      | R0 => reg_pointsTo reg0 v
+      | R0 => True
       | R1 => reg_pointsTo reg1 v
       | R2 => reg_pointsTo reg2 v
       | R3 => reg_pointsTo reg3 v
       end.
-
-    Lemma MinCaps_ptsreg_regtag_to_reg (reg : RegName) (v : Z + Capability) :
-      MinCaps_ptsreg reg v = reg_pointsTo (regtag_to_reg reg) v.
-    Proof.
-      by destruct reg.
-    Qed.
 
     Definition region_addrs (b e : Addr) : list Addr :=
       filter (fun a => and (b ≤ a)%Z (a ≤ e)%Z) liveAddrs.
@@ -250,7 +244,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
 
     Ltac solve_proper ::= (repeat intros ?; simpl; auto_equiv).
 
-    Definition GPRs : list RegName := finite.enum RegName.
+    Definition GPRs : list RegName := [R1; R2; R3].
 
     (* TODO:
        - Make the change to D proposed above, might simplify some stuff
@@ -448,14 +442,14 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       intros Hp; destruct p'; destruct p eqn:Ep; inversion Hp; auto; iIntros "#IH #HA";
         rewrite !fixpoint_interp1_eq; try done.
       - repeat iModIntro.
-        iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
+        iIntros "(Hpc & Hreg1 & Hreg2 & Hreg3 & _)".
         iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
         done.
         iModIntro.
         rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv].
         iApply (interp_cap_inv_weakening p a a (Z.le_refl b) (Z.le_refl e) with "HA").
       - repeat iModIntro.
-        iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
+        iIntros "(Hpc & Hreg1 & Hreg2 & Hreg3 & _)".
         iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
         done.
         iModIntro.
@@ -535,20 +529,6 @@ Module MinCapsIrisInstanceWithContracts.
       iSimpl in "H"; auto.
     Qed.
 
-    Lemma open_ptsreg_sound :
-      ValidLemma lemma_open_ptsreg.
-    Proof.
-      intros ι. destruct_syminstance ι. cbn.
-      destruct reg; auto.
-    Qed.
-
-    Lemma close_ptsreg_sound {R} :
-      ValidLemma (lemma_close_ptsreg R).
-    Proof.
-      intros ι. destruct_syminstance ι. cbn.
-      rewrite MinCaps_ptsreg_regtag_to_reg; auto.
-    Qed.
-
     Lemma open_gprs_sound :
       ValidLemma lemma_open_gprs.
     Proof.
@@ -560,7 +540,7 @@ Module MinCapsIrisInstanceWithContracts.
       ValidLemma lemma_close_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      iIntros "($ & $ & $ & $)".
+      iIntros "($ & $ & $)".
     Qed.
 
     Lemma int_safe_sound :
@@ -633,7 +613,6 @@ Module MinCapsIrisInstanceWithContracts.
     Lemma lemSem : LemmaSem.
     Proof.
       intros Δ []; eauto using
-                         open_ptsreg_sound, close_ptsreg_sound,
         open_gprs_sound, close_gprs_sound, int_safe_sound, correctPC_subperm_R_sound,
         subperm_not_E_sound, safe_move_cursor_sound, safe_sub_perm_sound,
         safe_within_range_sound, safe_to_execute_sound.
