@@ -129,15 +129,20 @@ Section PredicateKit.
       Subperm p p.
   Proof. destruct p; simpl; reflexivity. Qed.
 
+  (* decide_correct_pc returns a boolean indicating whether a pc is correct.  A
+     correct pc means that it doesn't have the E permission and the cursor is
+     within bounds. *)
   Definition decide_correct_pc (c : Val ty.cap) : bool :=
     match c with
     | {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |} =>
         (b <=? a) && (a <? e) && (Base.is_perm p R || Base.is_perm p RW)
     end.
 
+  (* CorrectPC is the predicate implementation of decide_correct_pc. *)
   Definition CorrectPC (c : Val ty.cap) : Prop :=
     decide_correct_pc c = true.
 
+  (* Not_is_perm is the negation of is_perm as a Prop. *)
   Definition Not_is_perm := complement (@equiv Permission _ _).
 
   Lemma is_perm_Not_is_perm_false (p p' : Val ty.perm) :
@@ -150,6 +155,8 @@ Section PredicateKit.
     exfalso; exact (H eq_refl).
   Qed.
 
+  (* 𝑷_inst instructs Katamaran how our defined predicates for this case can be
+     instantiated. *)
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
     | subperm     => Subperm
@@ -160,6 +167,7 @@ Section PredicateKit.
   Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
 
   Definition 𝑯 := Predicate.
+  (* 𝑯_Ty defines the signatures of the spatial predicates. *)
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
     | ptsreg  => [ty.enum regname; ty.word]
@@ -170,6 +178,10 @@ Section PredicateKit.
     | ih      => []
     | wp_loop => []
     end.
+  (* 𝑯_is_dup specifies which predicates are duplicable. A spatial predicate can
+     be duplicable if it is timeless. Note that spatial predicates are defined
+     using the Iris logic, while pure predicates are defined using standard
+     Coq. *)
   Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
@@ -185,6 +197,8 @@ Section PredicateKit.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
 
   Local Arguments Some {_} &.
+  (* 𝑯_precise specifies which predicates are precise and gives information
+     about the input and output parameters of a predicate. *)
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
     | ptsreg => Some (MkPrecise [ty.enum regname] [ty.word] eq_refl)
@@ -239,9 +253,12 @@ Section ContractDefKit.
 
   (* Arguments asn_prop [_] & _. *)
 
+  (* sep_contract_logvars is a helper function to extract the minimum required
+     logical variables from a function signature. *)
   Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
     ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
 
+  (* create_localstore returns a localstore based on a function signature. *)
   Definition create_localstore (Δ : PCtx) (Σ : LCtx) : SStore Δ (sep_contract_logvars Δ Σ) :=
     (env.tabulate (fun '(x::σ) xIn =>
                      @term_var
@@ -257,12 +274,14 @@ Section ContractDefKit.
               (r ↦ (@term_var _ _ _ ctx.in_zero) ∗
                 asn_safe (@term_var _ _ _ ctx.in_zero)).
 
-  (* regInv(r) = ∃ c : cap. r ↦ c * csafe(c) *)
+  (* regInvCap(r) = ∃ c : cap. r ↦ c * csafe(c) *)
   Definition regInvCap {Σ} (r : Reg ty.cap) : Assertion Σ :=
     asn.exist "c" ty.cap
               (r ↦ term_var "c" ∗
                  asn_csafe (term_var "c")).
 
+  (* asn_and_regs is an assertion that takes a function with one parameter, a
+     register. This function is applied for each register of the machine. *)
   Definition asn_and_regs {Σ} (f : Reg ty.word -> Assertion Σ) : Assertion Σ :=
     f reg1 ∗ f reg2 ∗ f reg3.
 
