@@ -5,9 +5,7 @@
   outputs = inputs:
     inputs.flake-utils.lib.eachDefaultSystem (
       system: let
-        pkgs = import inputs.nixpkgs {
-          inherit system;
-        };
+        pkgs = import inputs.nixpkgs {inherit system;};
         # Function to override versions of coq packages. This function takes two arguments:
         # - coqPackages: The set of all Coq packages.
         # - versions: An attribute set of packages with their versions we want to override.
@@ -29,21 +27,28 @@
               versions
           );
 
-        mkDevShell = coqPackages: versions: let
-          cp = patchCoqPackages coqPackages versions;
-        in
-          pkgs.mkShell {
-            buildInputs = with cp; [coq equations stdpp iris];
-          };
         iris40 = {
           iris = "4.0.0";
           stdpp = "1.8.0";
         };
+
+        coqPackages816 = with (patchCoqPackages pkgs.coqPackages_8_16 iris40); [coq equations stdpp iris];
+        coqPackages817 = with (patchCoqPackages pkgs.coqPackages_8_17 iris40); [coq equations stdpp iris];
+
+        emacsPackage = (pkgs.emacsPackagesFor pkgs.emacs).emacsWithPackages (ep:
+          with ep; [
+            company-coq
+            magit
+            proof-general
+          ]);
       in {
-        devShells = {
-          default = mkDevShell pkgs.coqPackages iris40;
-          coq816 = mkDevShell pkgs.coqPackages_8_16 iris40;
-          coq817 = mkDevShell pkgs.coqPackages_8_17 iris40;
+        devShells = rec {
+          default = coq816;
+          coq816 = pkgs.mkShell {buildInputs = coqPackages816;};
+          coq817 = pkgs.mkShell {buildInputs = coqPackages817;};
+
+          emacs816 = pkgs.mkShell {buildInputs = coqPackages816 ++ [emacsPackage];};
+          emacs817 = pkgs.mkShell {buildInputs = coqPackages817 ++ [emacsPackage];};
         };
       }
     );

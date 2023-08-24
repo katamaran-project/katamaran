@@ -25,13 +25,23 @@ coq-stdpp      >= 1.8
 ```
 and has also been tested with coq 8.17.
 
+### Using opam
+
 An easy way to setup your system is to create a fresh opam switch, pin the Coq and Iris versions and install equations (stdpp will be installed as a dependency of Iris):
 ```
-opam switch create katamaran ocaml-base-compiler.5.0.0
+opam switch create katamaran ocaml-base-compiler.4.14.1
 opam pin add coq 8.16.1
 opam pin add coq-iris 4.0.0
 opam install coq-equations
 ```
+
+### Using nix
+
+The repository contains a flake.nix file that defines development shells that install all dependencies. To use it, you need to have [nix](https://nixos.org/download.html) installed. Then, you can enter a development shell with the following command:
+```
+nix develop
+```
+This will install all dependencies and open a shell with them available. Additionally it will set the COQPATH environment variable to include the dependencies. You can then compile the project within that shell or launch your favorite editor from within it.
 
 Installation
 ------------
