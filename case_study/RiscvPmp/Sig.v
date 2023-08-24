@@ -70,7 +70,7 @@ Inductive Predicate : Set :=
 | pmp_addr_access_without (bytes : nat)
 | gprs
 | ptsto
-| inv_mmio
+| inv_mmio (bytes : nat) (* `bytes` needed because size of trace events needs to match size of MMIO writes *)
 | mmio_checked_write (bytes : nat)
 | encodes_instr
 | ptstomem (bytes : nat)
@@ -287,7 +287,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_addr_access_without bytes => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege]
       | gprs                          => ctx.nil
       | ptsto                         => [ty_xlenbits; ty_byte]
-      | inv_mmio                      => ctx.nil
+      | inv_mmio bytes                => ctx.nil
       | mmio_checked_write width      => [ty_xlenbits; ty.bvec (width * byte)]
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
@@ -302,7 +302,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | pmp_addr_access_without _  => false
         | gprs                       => false
         | ptsto                      => false
-        | inv_mmio                   => true
+        | inv_mmio bytes             => true
         | mmio_checked_write _       => false
         | encodes_instr              => true
         | ptstomem _                 => false
@@ -321,7 +321,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_addr_access_without _ => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
       | gprs                      => Some (MkPrecise ε ε eq_refl)
       | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
-      | inv_mmio                  => Some (MkPrecise ε ε eq_refl)
+      | inv_mmio bytes            => Some (MkPrecise ε ε eq_refl)
       | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte)] eq_refl) (* There will only be one of these simultaneously; always precise! *)
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)

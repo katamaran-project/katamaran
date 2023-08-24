@@ -179,7 +179,7 @@ Import BlockVerificationDerived2.
     Import RiscvPmp.Sig.
     (* Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79). *)
     Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
-    Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [a; t])) (at level 70).
+    Local Notation asn_inv_mmio := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [env])).
     Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).

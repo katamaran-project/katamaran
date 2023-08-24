@@ -220,15 +220,16 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
   .
 
+  (* Restrictions on MMIO needed, because MMIO operations leave a trace and are disallowed for 0-length data *)
   Inductive FunX : PCtx -> Ty -> Set :=
   | read_ram (bytes : nat)                                        : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
   | write_ram (bytes : nat)                                       : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
   | mmio_read (bytes : nat)                                       : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
-  | mmio_write (bytes : nat)                                      : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
-  | within_mmio (bytes : nat)                                     : FunX [paddr ∷ ty_xlenbits] ty.bool
-  | decode                                                        : FunX [bv ∷ ty_word] ty_ast
+  | mmio_write `(H: restrict_bytes bytes)                        : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
+  | within_mmio `(H: restrict_bytes bytes)                       : FunX [paddr ∷ ty_xlenbits] ty.bool
+  | decode                                                       : FunX [bv ∷ ty_word] ty_ast
   | vector_subrange {n : nat} (e' b : nat) {p : IsTrue (0 <=? b)%nat}
-      {q : IsTrue (b <=? e')%nat} {r : IsTrue (e' <? n)%nat}      : FunX [bv :: ty.bvec n] (ty.bvec (e' - b + 1))
+      {q : IsTrue (b <=? e')%nat} {r : IsTrue (e' <? n)%nat}       : FunX [bv :: ty.bvec n] (ty.bvec (e' - b + 1))
   .
   #[global] Arguments vector_subrange {n} e' b {p q r}.
 
@@ -551,7 +552,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     stm_call (@pmp_mem_read bytes H) [typ; tmp; paddr].
 
   Definition fun_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
-    let: tmp := stm_foreign (within_mmio bytes) [paddr] in
+    let: tmp := stm_foreign (within_mmio H) [paddr] in
     if: tmp
     then
       let: tmp := stm_foreign (mmio_read bytes) [paddr] in
@@ -576,10 +577,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   (* NOTE: normally the return values of both `write_ram` and `mmio_write` should be wrapped in MemValue but this constructor is currently restricted to bytes and write_ram *ALWAYS* returns true, so we just return a byte representation of 1 *)
   Definition fun_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; data :: ty_bytes bytes] (ty_memory_op_result 1) :=
-    let: tmp := stm_foreign (within_mmio bytes) [paddr] in
+    let: tmp := stm_foreign (within_mmio H) [paddr] in
     if: tmp
     then
-      let: tmp := stm_foreign (mmio_write bytes) [paddr; data] in
+      let: tmp := stm_foreign (mmio_write H) [paddr; data] in
       stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1]))
     else
       let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
@@ -1299,6 +1300,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     bool_decide (withinMMIO addr data_size ∧
     bv.bin addr + N.of_nat data_size < (bv.exp2 xlenbits))%N.
 
+  (* TODO: in principle, restricted bytes don't need a zero-case *)
   Definition fun_read_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
     Memory * Val (ty_bytes data_size) :=
     match data_size with
@@ -1351,9 +1353,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     ForeignCall (mmio_read width) [addr] res γ γ' μ μ' :=
       let (μupd,readv) := fun_read_mmio μ width addr in
       (γ' , μ' , res) = (γ , μupd , inr readv);
-    ForeignCall (mmio_write width) [addr; data] res γ γ' μ μ' :=
+    ForeignCall (@mmio_write width H) [addr; data] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , @fun_write_mmio μ width addr data , inr true);
-    ForeignCall (within_mmio width) [addr] res γ γ' μ μ' :=
+    ForeignCall (@within_mmio width H) [addr] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , μ , inr (fun_within_mmio width addr));
     ForeignCall decode [code] res γ γ' μ μ' :=
         (γ' , μ' , res) = (γ , μ , pure_decode code);

@@ -235,8 +235,8 @@ Module RiscvPmpModel2.
       now iIntros "[%HFalse _]".
     Qed.
 
-    Lemma mmio_write_sound (bytes : nat) :
-     ValidContractForeign (sep_contract_mmio_write bytes) (mmio_write bytes).
+    Lemma mmio_write_sound `(H: restrict_bytes bytes) :
+     ValidContractForeign (sep_contract_mmio_write H) (mmio_write H).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
       now iIntros "[%HFalse _]".
@@ -255,8 +255,8 @@ Module RiscvPmpModel2.
         by rewrite bool_decide_false.
     Qed.
 
-    Lemma within_mmio_sound (bytes : nat):
-     ValidContractForeign (sep_contract_within_mmio bytes) (within_mmio bytes).
+    Lemma within_mmio_sound `(H: restrict_bytes bytes) :
+     ValidContractForeign (@sep_contract_within_mmio bytes H) (within_mmio H).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
       iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])".

@@ -1084,7 +1084,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         (* NOTE: for now, this always returns False, since we do not provide the adversary with access to MMIO. In the future, this could just branch non-deterministically in the post. *)
         (* TODO: return `is_mmio`-chunk here once untrusted code gains access to MMIO *)
 
-        Definition sep_contract_within_mmio (bytes : nat) : SepContractFunX (within_mmio bytes) :=
+        Definition sep_contract_within_mmio (bytes : nat) {H: restrict_bytes bytes}: SepContractFunX (@within_mmio bytes H) :=
           {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "p" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
              sep_contract_localstore      := [term_var "paddr"];
              sep_contract_precondition    :=
@@ -1107,7 +1107,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              sep_contract_result          := "result_read_mmio";
              sep_contract_postcondition   := ⊥;
           |}.
-       Definition sep_contract_mmio_write (bytes : nat) : SepContractFunX (mmio_write bytes) :=
+       Definition sep_contract_mmio_write (bytes : nat) (H : restrict_bytes bytes) : SepContractFunX (mmio_write H) :=
           {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes];
              sep_contract_localstore      := [term_var "paddr"; term_var "data"];
              sep_contract_precondition    := ⊥;
@@ -1139,7 +1139,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             match fn with
             | read_ram bytes  => sep_contract_read_ram bytes
             | write_ram bytes => sep_contract_write_ram bytes
-            | within_mmio bytes => sep_contract_within_mmio bytes
+            | @within_mmio bytes H => @sep_contract_within_mmio bytes H
             | mmio_read bytes  => sep_contract_mmio_read bytes
             | mmio_write bytes => sep_contract_mmio_write bytes
             | decode          => sep_contract_decode

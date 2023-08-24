@@ -118,10 +118,11 @@ Module RiscvPmpIrisInstance <:
 
     (* The address we will perform all writes to is the first legal MMIO address *)
     Definition write_addr : Addr := bv.of_nat maxAddr.
-    Definition mmio_pred (t : Trace): Prop := forall e : Event, e ∈ t → (e = mkEvent IOWrite write_addr 4 (bv.of_N 42)).
+    Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
+    Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
     Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
-    Definition interp_inv_mmio : iProp Σ :=
-      inv femto_inv_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred t⌝).
+    Definition interp_inv_mmio (width : nat) : iProp Σ :=
+      inv femto_inv_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝).
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
     Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
@@ -163,7 +164,7 @@ Module RiscvPmpIrisInstance <:
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
-    | inv_mmio                 | _                    => interp_inv_mmio
+    | inv_mmio bytes           | _                    => interp_inv_mmio bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
