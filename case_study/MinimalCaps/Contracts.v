@@ -264,7 +264,7 @@ Section ContractDefKit.
                  asn_csafe (term_var "c")).
 
   Definition asn_and_regs {Σ} (f : Reg ty.word -> Assertion Σ) : Assertion Σ :=
-    f reg0 ∗ f reg1 ∗ f reg2 ∗ f reg3.
+    f reg1 ∗ f reg2 ∗ f reg3.
 
   Definition asn_regs_ptsto_safe {Σ} : Assertion Σ :=
     asn_and_regs regInv.
@@ -755,21 +755,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
                       asn_expr c);
         |}.
 
-      Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
-        {| lemma_logic_variables := [ "reg" ∷ ty.enum regname; "w" ∷ ty.word];
-          lemma_patterns        := [term_var "reg"];
-          lemma_precondition    := term_var "reg" ↦r term_var "w";
-          lemma_postcondition   :=
-          asn.match_enum
-            regname (term_var "reg")
-            (fun k => match k with
-                      | R0 => reg0 ↦ term_var "w"
-                      | R1 => reg1 ↦ term_var "w"
-                      | R2 => reg2 ↦ term_var "w"
-                      | R3 => reg3 ↦ term_var "w"
-                      end)
-        |}.
-
       Definition lemma_open_gprs : SepLemma open_gprs :=
         {| lemma_logic_variables := [];
           lemma_patterns        := [];
@@ -852,26 +837,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           asn_safe (term_inl (term_var "i"));
         |}.
 
-      Definition regtag_to_reg (R : RegName) : Reg ty.word :=
-        match R with
-        | R0 => reg0
-        | R1 => reg1
-        | R2 => reg2
-        | R3 => reg3
-        end.
-
-      Definition lemma_close_ptsreg (r : RegName) : SepLemma (close_ptsreg r) :=
-        {| lemma_logic_variables := ["w" ∷ ty.word];
-          lemma_patterns        := [];
-          lemma_precondition    := regtag_to_reg r ↦ term_var "w";
-          lemma_postcondition   := term_enum regname r ↦r term_var "w"
-        |}.
-
       Definition LEnv : LemmaEnv :=
         fun Δ l =>
           match l with
-          | open_ptsreg         => lemma_open_ptsreg
-          | close_ptsreg r      => lemma_close_ptsreg r
           | open_gprs           => lemma_open_gprs
           | close_gprs          => lemma_close_gprs
           | safe_move_cursor    => lemma_safe_move_cursor
