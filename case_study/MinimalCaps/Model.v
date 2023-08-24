@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Classes.EquivDec
      Init.Nat
      Program.Tactics
      Strings.String
@@ -244,7 +245,9 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
 
     Ltac solve_proper ::= (repeat intros ?; simpl; auto_equiv).
 
-    Definition GPRs : list RegName := [R1; R2; R3].
+    Definition GPRs : list RegName :=
+      filter (fun r => @nequiv_decb _ _ _ RegName_eqdec r R0)
+        (finite.enum RegName).
 
     (* TODO:
        - Make the change to D proposed above, might simplify some stuff
@@ -487,7 +490,6 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
 
     Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
              (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
-    | ptsreg  | [r; v] => MinCaps_ptsreg r v
     | ptsto   | [a; v] => mapsto a (DfracOwn 1) v
     | safe    | [c]    => interp c
     | expr    | [c]    => interp_expression interp c
@@ -540,7 +542,7 @@ Module MinCapsIrisInstanceWithContracts.
       ValidLemma lemma_close_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      iIntros "($ & $ & $)".
+      by iIntros "($ & $ & $)".
     Qed.
 
     Lemma int_safe_sound :
