@@ -74,33 +74,6 @@ Import BlockVerificationDerived2.
 
     Definition zero : RegIdx := [bv 0].
     Definition ra : RegIdx := [bv 1].
-(*     MAX := 2^30; *)
-(* (*     assembly source: *) *)
-(* CODE:   UTYPE #HERE ra RISCV_AUIPC *) (* 0 *)
-(*         ADDI RA, RA, (ADV - #PREVHERE) *) (* 4 *)
-(*         CSR pmpaddr0 ra r0 CSRRW; *) (* 8 *)
-(*         UTYPE MAX ra RISCV_LUI; *) (* 12 *)
-(*         CSR pmpaddr1 ra r0 CSRRW; *) (* 16 *)
-(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := OFF; X := false; W := false; R := false }) ra RISCV_LUI; *) (* 20 *)
-(*         CSR pmp0cfg ra r0 CSRRW; *) (* 24 *)
-(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := TOR; X := true; W := true; R := true }) ra RISCV_LUI; *) (* 28 *)
-(*         CSR pmp1cfg ra r0 CSRRW; *) (* 32 *)
-(*         UTYPE #HERE ra RISCV_AUIPC *) (* 36 *)
-(*         ADDI RA, RA, (IH - #PREVHERE) *) (* 40 *)
-(*         CSR Tvec ra r0 CSRRW; *) (* 44 *)
-(*         UTYPE #HERE ra RISCV_AUIPC *) (* 48 *)
-(*         ADDI RA, RA, (ADV - #PREVHERE) *) (* 52 *)
-(*         CSR epc ra r0 CSRRW; *) (* 56 *)
-(*         UTYPE (pure_mstatus_to_bits { MPP := User }) ra RISCV_LUI; *) (* 60 *)
-(*         CSR Mstatus ra r0 CSRRW; *) (* 64 *)
-(*         MRET *) (* 68 *)
-
-(*     IH: UTYPE 0 ra RISCV_AUIPC *) (* 72 *)
-(*         load (#HERE - 4 - DATA) ra ra; *) (* 76 *)
-(*         MRET *) (* 80 *)
-(* DATA:   42 *) (* 84 *)
-(* ADV:    ... (anything) *) (* 88 *)
-(*     } *)
 
     Definition pure_privilege_to_bits {n} : Privilege -> bv n :=
       fun p => match p with | Machine => bv.of_N 3 | User => bv.zero end.
@@ -179,6 +152,7 @@ Import BlockVerificationDerived2.
     Import RiscvPmp.Sig.
     (* Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79). *)
     Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
+    Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
     Local Notation asn_inv_mmio := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [env])).
     Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
@@ -444,9 +418,7 @@ Import BlockVerificationDerived2.
     iPureIntro. eapply mmio_ram_False; eauto.
   Qed.
 
-  (* Definition ptsto_mmio `{sailGS Σ} addr v : iProp Σ := *)
-  (*       inv.inv femto_inv_ns (interp_ptsto addr v). *)
-  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := @interp_inv_mmio _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42).
+  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := @interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42).
 
   Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
   (* Local Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 79). *)
@@ -576,7 +548,7 @@ Import BlockVerificationDerived2.
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
-         (@interp_inv_mmio _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42)) ∗
+         (@interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42)) ∗
         (pc ↦ (bv.of_N femtokernel_size)) ∗
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
@@ -589,9 +561,6 @@ Import BlockVerificationDerived2.
     iExists mpp.
     unfold LoopVerification.loop_pre, LoopVerification.Step_pre, LoopVerification.Execution.
     iFrame.
-
-    (* iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptsto 84 42) with "Hfortytwo") as "#Hinv". *)
-    (* change (inv.inv femto_inv_ns (interp_ptsto 84 42)) with femto_inv_fortytwo. *)
     iModIntro.
 
     iSplitL "Hmcause Hmepc Hmemadv".
@@ -631,7 +600,7 @@ Import BlockVerificationDerived2.
       pmp1cfg ↦ default_pmpcfg_ent ∗
       (pmpaddr0 ↦ bv.zero) ∗
       (pmpaddr1 ↦ bv.zero) ∗
-      interp_inv_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
+      interp_ptstomem_readonly (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
       pc ↦ bv.zero ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs bv.zero femtokernel_init.
@@ -647,7 +616,7 @@ Import BlockVerificationDerived2.
         pmp1cfg ↦ femto_pmpcfg_ent1 ∗
         (pmpaddr0 ↦ (bv.of_N femtokernel_size)) ∗
         (pmpaddr1 ↦ (bv.of_N femto_address_max)) ∗
-        interp_inv_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
+        interp_ptstomem_readonly (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
         pc ↦ (bv.of_N femtokernel_size) ∗
         (∃ v, nextpc ↦ v) ∗
         ptsto_instrs bv.zero femtokernel_init.
@@ -691,7 +660,7 @@ Import BlockVerificationDerived2.
       reg_pointsTo pmp1cfg default_pmpcfg_ent ∗
       (reg_pointsTo pmpaddr1 bv.zero) ∗
       (pc ↦ bv.zero) ∗
-      interp_inv_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42) ∗
+      interp_ptstomem_readonly (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42) ∗
       ptstoSthL advAddrs ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs bv.zero femtokernel_init ∗
@@ -844,7 +813,7 @@ Import BlockVerificationDerived2.
     @mem_res _ sailGS_memGS μ ⊢ |={⊤}=>
       ptsto_instrs (bv.of_N init_address) femtokernel_init ∗
       ptsto_instrs (bv.of_N handler_address) femtokernel_handler ∗
-      interp_inv_mmio (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42) ∗
+      interp_ptstomem_readonly (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42) ∗
       ptstoSthL advAddrs.
   Proof.
     iIntros (Hinit Hhandler Hft) "Hmem".
@@ -862,7 +831,7 @@ Import BlockVerificationDerived2.
     - iAssert (interp_ptstomem (bv.of_N data_address) (bv.of_N 42)) with "[Hfortytwo]" as "Hfortytwo".
       { iApply (intro_ptstomem_word2 Hft).
         iApply (sub_heap_mapsto_interp_ptsto with "Hfortytwo"); compute; lia. }
-      iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptstomem (bv.of_N data_address) (bv.of_N 42)) with "Hfortytwo") as "Hinv".
+      iMod (inv.inv_alloc femto_inv_ro_ns ⊤ (interp_ptstomem (bv.of_N data_address) (bv.of_N 42)) with "Hfortytwo") as "Hinv".
       now iModIntro.
     - iApply (intro_ptstoSthL μ).
       iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); compute; lia.
@@ -911,7 +880,7 @@ Import BlockVerificationDerived2.
               iPoseProof (bi.exist_intro with "Hp") as "?").
       now iFrame.
     - iIntros "Hmem".
-      unfold interp_inv_mmio.
+      unfold interp_ptstomem_readonly.
       iInv "Hfortytwo" as ">Hptsto" "_".
       iDestruct "Hptsto" as "(Hptsto0 & Hptsto1 & Hptsto2 & Hptsto3)".
       iDestruct (interp_ptsto_valid with "Hmem Hptsto0") as "%res".
