@@ -130,119 +130,129 @@ Axiom pure_decode : bv 32 -> string + AST.
 Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Section FunDeclKit.
-  Definition width_constraint (width : nat) : bool :=
-    (0 <? width)%nat && (width <=? xlenbytes)%nat.
+    (* width_constraint represents the constraint on operations that take a
+       width.  This can never exceed the xlenbytes of the machine. *)
+    Definition width_constraint (width : nat) : bool :=
+      (0 <? width)%nat && (width <=? xlenbytes)%nat.
 
-  #[export] Instance IsTrue_width_constraint_byte_multiplier (bytes : nat)
-    (H: IsTrue (width_constraint bytes)) :
-    IsTrue (bytes * byte <=? xlenbytes * byte)%nat :=
-    IsTrue_bytes_xlenbytes bytes xlenbytes (IsTrue.andb_r H).
+    #[export] Instance IsTrue_width_constraint_byte_multiplier (bytes : nat)
+      (H: IsTrue (width_constraint bytes)) :
+      IsTrue (bytes * byte <=? xlenbytes * byte)%nat :=
+      IsTrue_bytes_xlenbytes bytes xlenbytes (IsTrue.andb_r H).
 
-  Definition restrict_bytes (bytes : nat) : Prop := 
-    bytes = 1%nat \/ bytes = 2%nat \/ bytes = 4%nat.
+    (* restrict_bytes states that the bytes can only be one of three cases:
+       1 = byte, 2 = halfword and 4 = word. These are the widths supported on
+       the machine. *)
+    Definition restrict_bytes (bytes : nat) : Prop := 
+      bytes = 1%nat \/ bytes = 2%nat \/ bytes = 4%nat.
 
-  Lemma restrict_bytes_one : restrict_bytes 1%nat.
-  Proof. unfold restrict_bytes; auto. Qed.
-  Lemma restrict_bytes_two : restrict_bytes 2%nat.
-  Proof. unfold restrict_bytes; auto. Qed.
-  Lemma restrict_bytes_four : restrict_bytes 4%nat.
-  Proof. unfold restrict_bytes; auto. Qed.
+    Lemma restrict_bytes_one : restrict_bytes 1%nat.
+    Proof. unfold restrict_bytes; auto. Qed.
+    Lemma restrict_bytes_two : restrict_bytes 2%nat.
+    Proof. unfold restrict_bytes; auto. Qed.
+    Lemma restrict_bytes_four : restrict_bytes 4%nat.
+    Proof. unfold restrict_bytes; auto. Qed.
 
-  Import RiscvNotations.
+    Import RiscvNotations.
 
-  (** Functions **)
-  Inductive Fun : PCtx -> Ty -> Set :=
-  | rX                    : Fun [rs ∷ ty_regno] ty_xlenbits
-  | wX                    : Fun [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit
-  | bool_to_bits          : Fun ["x" :: ty.bool] (ty.bvec 1)
-  | shift_right_arith32   : Fun [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32)
-  | extend_value (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes)
-  | get_arch_pc           : Fun ctx.nil ty_xlenbits
-  | get_next_pc           : Fun ctx.nil ty_xlenbits
-  | set_next_pc           : Fun [addr ∷ ty_xlenbits] ty.unit
-  | tick_pc               : Fun ctx.nil ty.unit
-  | to_bits (l : nat)     : Fun [value :: ty.int] (ty.bvec l)
-  (* | abs                   : Fun [v ∷ ty.int] ty.int *)
-  | within_phys_mem       : Fun [paddr ∷ ty_xlenbits; width :: ty.int] ty.bool
-  | mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
-  | checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
-  | checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes] (ty_memory_op_result 1)
-  | pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
-  | pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1)
-  | pmpLocked             : Fun [cfg ∷ ty_pmpcfg_ent] ty.bool
-  | pmpWriteCfgReg(n : nat) {H : n < 1} : Fun [value :: ty_xlenbits] ty.unit
-  | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent
-  | pmpWriteAddr          : Fun [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
-  | pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
-  | pmpCheckPerms         : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool
-  | pmpCheckRWX           : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool
-  | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
-  | pmpAddrRange          : Fun [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range
-  | pmpMatchAddr          : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch
-  | process_load (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result bytes; is_unsigned :: ty.bool] ty_retired
-  | mem_write_value (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1)
-  | main                  : Fun ctx.nil ty.unit
-  | init_model            : Fun ctx.nil ty.unit
-  | loop                  : Fun ctx.nil ty.unit
-  | step                  : Fun ctx.nil ty.unit
-  | fetch                 : Fun ctx.nil ty_fetch_result
-  | init_sys              : Fun ctx.nil ty.unit
-  | init_pmp              : Fun ctx.nil ty.unit
-  | exceptionType_to_bits : Fun [e ∷ ty_exception_type] ty_exc_code
-  | privLevel_to_bits     : Fun [p ∷ ty_privilege] ty_priv_level
-  | handle_mem_exception  : Fun [addr ∷ ty_xlenbits; e ∷ ty_exception_type] ty.unit
-  | exception_handler     : Fun [cur_priv ∷ ty_privilege; ctl ∷ ty_ctl_result; "pc" ∷ ty_xlenbits] ty_xlenbits
-  | exception_delegatee   : Fun [p ∷ ty_privilege] ty_privilege
-  | trap_handler          : Fun [del_priv ∷ ty_privilege; c ∷ ty_exc_code; "pc" ∷ ty_xlenbits] ty_xlenbits
-  | prepare_trap_vector   : Fun [p ∷ ty_privilege; cause ∷ ty_mcause] ty_xlenbits
-  | tvec_addr             : Fun [m ∷ ty_xlenbits; c ∷ ty_mcause] (ty.option ty_xlenbits)
-  | handle_illegal        : Fun ctx.nil ty.unit
-  | check_CSR             : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
-  | is_CSR_defined        : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
-  | csrAccess             : Fun [csr ∷ ty_csridx] ty_access_type
-  | csrPriv               : Fun [csr ∷ ty_csridx] ty_privilege
-  | check_CSR_access      : Fun [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege] ty.bool
-  | readCSR               : Fun [csr ∷ ty_csridx] ty_xlenbits
-  | writeCSR              : Fun [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit
-  | execute               : Fun ["ast" ∷ ty_ast] ty_retired
-  | execute_RTYPE         : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired
-  | execute_ITYPE         : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_iop] ty_retired
-  | execute_SHIFTIOP      : Fun [shamt ∷ ty.bvec 6; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_sop] ty_retired
-  | execute_UTYPE         : Fun [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired
-  | execute_BTYPE         : Fun [imm ∷ ty.bvec 13; rs2 ∷ ty_regno; rs1 ∷ ty_regno; op ∷ ty_bop] ty_retired
-  | execute_RISCV_JAL     : Fun [imm ∷ ty.bvec 21; rd ∷ ty_regno] ty_retired
-  | execute_RISCV_JALR    : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired
-  | execute_LOAD          : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; is_unsigned :: ty.bool; width :: ty_word_width] ty_retired
-  | execute_STORE         : Fun [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired
-  | execute_ECALL         : Fun ctx.nil ty_retired
-  | execute_EBREAK        : Fun ctx.nil ty_retired
-  | execute_MRET          : Fun ctx.nil ty_retired
-  | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
-  .
+    (** Functions **)
+    (* Fun defines the signatures for the functions used for this machine. *)
+    Inductive Fun : PCtx -> Ty -> Set :=
+    | rX                    : Fun [rs ∷ ty_regno] ty_xlenbits
+    | wX                    : Fun [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit
+    | bool_to_bits          : Fun ["x" :: ty.bool] (ty.bvec 1)
+    | shift_right_arith32   : Fun [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32)
+    | extend_value (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes)
+    | get_arch_pc           : Fun ctx.nil ty_xlenbits
+    | get_next_pc           : Fun ctx.nil ty_xlenbits
+    | set_next_pc           : Fun [addr ∷ ty_xlenbits] ty.unit
+    | tick_pc               : Fun ctx.nil ty.unit
+    | to_bits (l : nat)     : Fun [value :: ty.int] (ty.bvec l)
+    (* | abs                   : Fun [v ∷ ty.int] ty.int *)
+    | within_phys_mem       : Fun [paddr ∷ ty_xlenbits; width :: ty.int] ty.bool
+    | mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
+    | checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
+    | checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes] (ty_memory_op_result 1)
+    | pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
+    | pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1)
+    | pmpLocked             : Fun [cfg ∷ ty_pmpcfg_ent] ty.bool
+    | pmpWriteCfgReg(n : nat) {H : n < 1} : Fun [value :: ty_xlenbits] ty.unit
+    | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent
+    | pmpWriteAddr          : Fun [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
+    | pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
+    | pmpCheckPerms         : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool
+    | pmpCheckRWX           : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool
+    | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
+    | pmpAddrRange          : Fun [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range
+    | pmpMatchAddr          : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch
+    | process_load (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result bytes; is_unsigned :: ty.bool] ty_retired
+    | mem_write_value (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1)
+    | main                  : Fun ctx.nil ty.unit
+    | init_model            : Fun ctx.nil ty.unit
+    | loop                  : Fun ctx.nil ty.unit
+    | step                  : Fun ctx.nil ty.unit
+    | fetch                 : Fun ctx.nil ty_fetch_result
+    | init_sys              : Fun ctx.nil ty.unit
+    | init_pmp              : Fun ctx.nil ty.unit
+    | exceptionType_to_bits : Fun [e ∷ ty_exception_type] ty_exc_code
+    | privLevel_to_bits     : Fun [p ∷ ty_privilege] ty_priv_level
+    | handle_mem_exception  : Fun [addr ∷ ty_xlenbits; e ∷ ty_exception_type] ty.unit
+    | exception_handler     : Fun [cur_priv ∷ ty_privilege; ctl ∷ ty_ctl_result; "pc" ∷ ty_xlenbits] ty_xlenbits
+    | exception_delegatee   : Fun [p ∷ ty_privilege] ty_privilege
+    | trap_handler          : Fun [del_priv ∷ ty_privilege; c ∷ ty_exc_code; "pc" ∷ ty_xlenbits] ty_xlenbits
+    | prepare_trap_vector   : Fun [p ∷ ty_privilege; cause ∷ ty_mcause] ty_xlenbits
+    | tvec_addr             : Fun [m ∷ ty_xlenbits; c ∷ ty_mcause] (ty.option ty_xlenbits)
+    | handle_illegal        : Fun ctx.nil ty.unit
+    | check_CSR             : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
+    | is_CSR_defined        : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
+    | csrAccess             : Fun [csr ∷ ty_csridx] ty_access_type
+    | csrPriv               : Fun [csr ∷ ty_csridx] ty_privilege
+    | check_CSR_access      : Fun [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege] ty.bool
+    | readCSR               : Fun [csr ∷ ty_csridx] ty_xlenbits
+    | writeCSR              : Fun [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit
+    | execute               : Fun ["ast" ∷ ty_ast] ty_retired
+    | execute_RTYPE         : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired
+    | execute_ITYPE         : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_iop] ty_retired
+    | execute_SHIFTIOP      : Fun [shamt ∷ ty.bvec 6; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_sop] ty_retired
+    | execute_UTYPE         : Fun [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired
+    | execute_BTYPE         : Fun [imm ∷ ty.bvec 13; rs2 ∷ ty_regno; rs1 ∷ ty_regno; op ∷ ty_bop] ty_retired
+    | execute_RISCV_JAL     : Fun [imm ∷ ty.bvec 21; rd ∷ ty_regno] ty_retired
+    | execute_RISCV_JALR    : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired
+    | execute_LOAD          : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; is_unsigned :: ty.bool; width :: ty_word_width] ty_retired
+    | execute_STORE         : Fun [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired
+    | execute_ECALL         : Fun ctx.nil ty_retired
+    | execute_EBREAK        : Fun ctx.nil ty_retired
+    | execute_MRET          : Fun ctx.nil ty_retired
+    | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
+    .
 
-  Inductive FunX : PCtx -> Ty -> Set :=
-  | read_ram (bytes : nat)                                        : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
-  | write_ram (bytes : nat)                                       : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
-  | decode                                                        : FunX [bv ∷ ty_word] ty_ast
-  | vector_subrange {n : nat} (e' b : nat) {p : IsTrue (0 <=? b)%nat}
-      {q : IsTrue (b <=? e')%nat} {r : IsTrue (e' <? n)%nat}      : FunX [bv :: ty.bvec n] (ty.bvec (e' - b + 1))
-  .
-  #[global] Arguments vector_subrange {n} e' b {p q r}.
+    (* FunX defines the signatures of foreign functions. These are functions
+       that are not part of the ISA but are still needed. For example, the
+       read_ram and write_ram allow interaction with memory. *)
+    Inductive FunX : PCtx -> Ty -> Set :=
+    | read_ram (bytes : nat)                                        : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
+    | write_ram (bytes : nat)                                       : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
+    | decode                                                        : FunX [bv ∷ ty_word] ty_ast
+    | vector_subrange {n : nat} (e' b : nat) {p : IsTrue (0 <=? b)%nat}
+        {q : IsTrue (b <=? e')%nat} {r : IsTrue (e' <? n)%nat}      : FunX [bv :: ty.bvec n] (ty.bvec (e' - b + 1))
+    .
+    #[global] Arguments vector_subrange {n} e' b {p q r}.
 
-  Inductive Lem : PCtx -> Set :=
-  | open_gprs                       : Lem ctx.nil
-  | close_gprs                      : Lem ctx.nil
-  | open_pmp_entries                : Lem ctx.nil
-  | close_pmp_entries               : Lem ctx.nil
-  | extract_pmp_ptsto (bytes : nat) : Lem [paddr :: ty_xlenbits]
-  | return_pmp_ptsto  (bytes : nat) : Lem [paddr :: ty_xlenbits]
-  | open_ptsto_instr                : Lem [paddr :: ty_xlenbits]
-  | close_ptsto_instr               : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits]
-  .
+    (* Lem defines signatures for the lemmas used for verification purposes. *)
+    Inductive Lem : PCtx -> Set :=
+    | open_gprs                       : Lem ctx.nil
+    | close_gprs                      : Lem ctx.nil
+    | open_pmp_entries                : Lem ctx.nil
+    | close_pmp_entries               : Lem ctx.nil
+    | extract_pmp_ptsto (bytes : nat) : Lem [paddr :: ty_xlenbits]
+    | return_pmp_ptsto  (bytes : nat) : Lem [paddr :: ty_xlenbits]
+    | open_ptsto_instr                : Lem [paddr :: ty_xlenbits]
+    | close_ptsto_instr               : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits]
+    .
 
-  Definition 𝑭  : PCtx -> Ty -> Set := Fun.
-  Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
-  Definition 𝑳  : PCtx -> Set := Lem.
+    Definition 𝑭  : PCtx -> Ty -> Set := Fun.
+    Definition 𝑭𝑿 : PCtx -> Ty -> Set := FunX.
+    Definition 𝑳  : PCtx -> Set := Lem.
   End FunDeclKit.
 
   Include FunDeclMixin RiscvPmpBase.
@@ -352,9 +362,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Notation "'use' 'lemma' lem args" := (stm_lemma lem args%env) (at level 10, lem at next level) : exp_scope.
   Notation "'use' 'lemma' lem" := (stm_lemma lem env.nil) (at level 10, lem at next level) : exp_scope.
 
+  (* zero_reg is shorthand for the zeroth register of the machine. *)
   Definition zero_reg {Γ} : Stm Γ ty_xlenbits := exp_val ty_xlenbits (Bitvector.bv.of_N 0).
 
   (** Pure inlined functions **)
+  (* stm_mstatus_from_bits is a statement that converts a bitvector into an
+     instance of the Mstatus record. *)
   Definition stm_mstatus_from_bits {Γ} (b : Stm Γ ty_xlenbits) : Stm Γ ty_mstatus :=
     let: "b"   := b in
     let: "mpp" := let: "mstatus_mpp" := exp_binop bop.bvand (exp_var "b") (exp_val ty_xlenbits (Bitvector.bv.of_N (N.shiftl 3 11))) in
@@ -364,6 +377,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                   stm_fail ty_privilege "mstatus_from_bits"
     in stm_exp (exp_record rmstatus [ exp_var "mpp" ]).
 
+  (* stm_mstatus_to_bits is a statement that converts an Mstatus record into its
+     bitvector representation. *)
   Definition stm_mstatus_to_bits {Γ} (mst : Stm Γ ty_mstatus) : Stm Γ ty_xlenbits :=
     let: "mst" := mst in
     match: exp_var "mst" in rmstatus with
@@ -374,10 +389,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                  in exp_var "mppb"
     end.
 
+  (* exp_testbit is an expression that tests whether a bit is set. *)
   Definition exp_testbit {Γ} (eb : Exp Γ ty_byte) (i : N) : Exp Γ ty.bool :=
     let em := exp_val ty_byte (Bitvector.bv.of_N (N.shiftl 1 i)) in
     exp_binop bop.bvand eb em = em.
 
+  (* stm_pmpcfg_ent_from_bits is a statement that converts a bitvector into
+     its pmp cfg record representation. *)
   Definition stm_pmpcfg_ent_from_bits {Γ} (b : Stm Γ ty_byte) : Stm Γ ty_pmpcfg_ent :=
     let: "b" := b in
     let: "L" := exp_testbit (exp_var "b") 7 in
@@ -395,6 +413,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Notation "x '|bv|' y" := (exp_binop bop.bvor x y)
       (at level 60) : exp_scope.
+  (* stm_pmpcfg_ent_to_bits is a statement that converts a pmp config record
+     into its bitvector representation. *)
   Definition stm_pmpcfg_ent_to_bits {Γ} (cfgent : Stm Γ ty_pmpcfg_ent) : Stm Γ ty_byte :=
     let: "cfgent" := cfgent in
     match: exp_var "cfgent" in rpmpcfg_ent with
@@ -414,6 +434,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   (** Functions **)
   Import Bitvector.bv.notations.
+  (* fun_rX reads the value in the register file at index "rs". Note that the
+     zeroth index (x0) is hardwired to the value 0. For this function we need
+     to get ownership of the GPRs to be able to read from them, this is
+     achieved through the lemma invocation "open_gprs" and we give back
+     ownership of the GPRs by invoking the lemma "close_gprs". *)
   Definition fun_rX : Stm [rs ∷ ty_regno] ty_xlenbits :=
     use lemma open_gprs ;;
     let: v := match: rs in bvec 5 with
@@ -453,6 +478,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     use lemma close_gprs ;;
     v.
 
+  (* fun_wX writes the value "v" in the register file at index "rs". Note that
+     the zeroth index (x0) is hardwired to the value 0 and thus nothing can be
+     written to it. For this function we need to get ownership of the GPRs to be
+     able to write to them, this is achieved through the lemma invocation
+     "open_gprs" and we give back ownership of the GPRs by invoking the lemma
+     "close_gprs". *)
   Definition fun_wX : Stm [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit :=
     use lemma open_gprs ;;
     match: rd in bvec 5 with
@@ -491,16 +522,21 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end ;;
     use lemma close_gprs.
 
+  (* fun_bool_to_bits converts a bool to its bitvector representation. *)
   Definition fun_bool_to_bits : Stm ["x" :: ty.bool] (ty.bvec 1) :=
     if: exp_var "x"
     then exp_val (ty.bvec 1) Bitvector.bv.one
     else exp_val (ty.bvec 1) Bitvector.bv.zero.
 
+  (* fun_shift_right_arith32 performs a right arithmetic shift (for 32-bit
+     values). *)
   Definition fun_shift_right_arith32 : Stm [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32) :=
     let: "v64" :: ty.bvec 64 := exp_sext v in
     let: tmp := exp_binop bop.shiftr (exp_var "v64") (exp_var "shift") in
     stm_foreign (vector_subrange 31 0) [tmp].
 
+  (* fun_extend_value extends the given, possibly signed, value to a bitvector
+     of length xlenbits. *)
   Definition fun_extend_value (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes) :=
     match: value in union (memory_op_result bytes) with
     |> KMemValue (pat_var "result") =>
@@ -512,37 +548,54 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       stm_exp (exp_union (memory_op_result xlenbytes) KMemException (exp_var "e"))
     end.
 
+  (* fun_get_arch_pc reads the program counter (pc) register. *)
   Definition fun_get_arch_pc : Stm ctx.nil ty_xlenbits :=
     stm_read_register pc.
 
+  (* fun_get_next_pc reads the next pc register. *)
   Definition fun_get_next_pc : Stm ctx.nil ty_xlenbits :=
     stm_read_register nextpc.
 
+  (* fun_set_next_pc sets the value of the nextpc register to addr. *)
   Definition fun_set_next_pc : Stm [addr ∷ ty_xlenbits] ty.unit :=
     stm_write_register nextpc addr ;;
     stm_val ty.unit tt.
 
+  (* fun_tick_pc copies the contents of the nextpc into the pc register. *)
   Definition fun_tick_pc : Stm ctx.nil ty.unit :=
     let: tmp := stm_read_register nextpc in
     stm_write_register pc tmp ;;
     stm_val ty.unit tt.
 
+  (* fun_to_bits converts an integer, value, into a bitvector of length l. *)
   Definition fun_to_bits (l : nat) : Stm [value :: ty.int] (ty.bvec l) :=
     exp_get_slice_int value.
 
+  (* fun_abs returns the absolute value of v. *)
   Definition fun_abs : Stm [v ∷ ty.int] ty.int :=
     if: v < exp_int 0
     then v * exp_int (-1)
     else v.
 
+  (* fun_within_phys_mem decides if the physical address, paddr, with the given
+     width is within physical memory. *)
   Definition fun_within_phys_mem : Stm [paddr :: ty_xlenbits; width :: ty.int] ty.bool :=
     let: addr_int := exp_unsigned paddr in
     ((exp_int (Z.of_nat minAddr) <= addr_int)%exp && (addr_int + width <= exp_int (Z.of_nat maxAddr)))%exp.
 
+  (* fun_mem_read delegates reading of memory to pmp_mem_read, with as
+     additional parameter the current privilege level. *)
   Definition fun_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := stm_read_register cur_privilege in
     stm_call (@pmp_mem_read bytes H) [typ; tmp; paddr].
 
+  (* fun_checked_mem_read happens after the pmp check is successful. This
+     function ensure the access with paddr is within physical memory and
+     then reads the contents of memory at address paddr. If the read fails,
+     an exception is returned that depends on the attempted access type.
+     Similar to registers, we require access to the pointsto chunk of memory
+     for the given paddr and bytes, we open and close this pointsto chunk
+     with the lemmas "extract_pmp_ptsto" and "return_pmp_ptsto". *)
   Definition fun_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
     if: tmp
@@ -561,16 +614,26 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
             stm_exp (exp_union (memory_op_result bytes) KMemException E_Fetch_Access_Fault)
          end.
 
+  (* fun_checked_mem_write happens after the pmp check is successful. This
+     function ensure the access with paddr is within physical memory and then
+     writes the data to memory at address paddr. If the write fails, an
+     exception is returned.  Similar to fun_checked_mem_read, we require access
+     to the pointsto chunk of memory for the given paddr and bytes, we open and
+     close this pointsto chunk with the lemmas "extract_pmp_ptsto" and
+     "return_pmp_ptsto". *)
   Definition fun_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; data :: ty_bytes bytes] (ty_memory_op_result 1) :=
     let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
     if: tmp
     then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
           stm_foreign (write_ram bytes) [paddr; data] ;;
           use lemma (return_pmp_ptsto bytes) [paddr] ;;
-          stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1]))) (* NOTE: normally the return value of write_ram should be wrapped in MemValue but this constructor is currently restricted to bytes and write_ram *ALWAYS* returns true, so we just return a byte representation of 1 *)
+          stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1]))) (* NOTE: normally the return value of write_ram should be wrapped in MemValue but this constructor is currently restricted to bytes and write_ram *ALWAYS* returns true, so we just return a bitvector representation of 1 *)
     else
       stm_exp (exp_union (memory_op_result 1) KMemException E_SAMO_Access_Fault).
 
+  (* fun_pmp_mem_read calls the pmpCheck function for the given parameters and
+     if the pmp check passes then the memory read is performed, otherwise an
+     exception is returned. *)
   Definition fun_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := stm_call (@pmpCheck bytes H) [paddr; t; p] in
     match: tmp with
@@ -578,6 +641,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | inr v => stm_call (@checked_mem_read bytes H) [t; paddr]
     end.
 
+  (* fun_pmp_mem_write calls the pmpCheck function for the given parameters and
+     if the pmp check passes then the memory write is performed, otherwise an
+     exception is returned. *)
   Definition fun_pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1) :=
     let: tmp := stm_call (@pmpCheck bytes H) [paddr; typ; priv] in
     match: tmp with
@@ -585,9 +651,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | inr v => stm_call (@checked_mem_write bytes H) [paddr; data]
     end.
 
+  (* fun_pmpLocked returns the lock status of the given pmp config. *)
   Definition fun_pmpLocked : Stm [cfg ∷ ty_pmpcfg_ent] ty.bool :=
     match: cfg in rpmpcfg_ent with [L; A; X; W; R] => L end.
 
+  (* fun_pmpWriteCfgReg writes the given value to the pmp config register. We
+     only support one pmp config register (with two entries), so trying to write
+     to anything but the 0th pmp config register will fail. *)
   Definition fun_pmpWriteCfgReg (n : nat) {H : n < 1} : Stm [value :: ty_xlenbits] ty.unit :=
     if: exp_int (Z.of_nat n) = exp_int 0%Z
     then
@@ -602,13 +672,32 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       stm_val ty.unit tt
     else fail "writing to non-existent cfg".
 
+  (* fun_pmpWriteCfg returns the config that can be overwrite the given cfg.
+     If cfg is locked, it is immutable and thus no real write can happen (and
+     we just return its original value). If it is not locked, then it can be
+     overwritten by "value". *)
   Definition fun_pmpWriteCfg : Stm [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent :=
     let: locked := call pmpLocked cfg in
     if: locked then cfg else stm_pmpcfg_ent_from_bits value.
 
+  (* fun_pmpWriteAddr returns the addr that can be written according to the
+     locked bool. If locked is true, then we can not write a new value and
+     we return the original value "addr". Otherwise "value" is returned. *)
   Definition fun_pmpWriteAddr : Stm [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits :=
     if: locked then addr else value.
 
+  (* fun_pmpCheck performs the pmp check algorithm. It tries to match each
+     pmp entry for the given arguments, if a match succeeds, then the pmp check
+     passes. If a match fails (because of a partial match with an entry) then
+     the pmp check fails as well. If the address doesn't match an entry then
+     the pmp check algorithm proceeds with the next entry. Once all entries
+     have been exhausted, the passing of the pmp check depends on the current
+     privilege level. If the privilege is Machine mode, the check passes,
+     otherwise the check fails. In case the check fails a more descriptive
+     exception is returned based on the access type. To be able to read the pmp
+     entries we require ownership over the entries, we can get this through
+     the "open_pmp_entries" lemma and we give ownership back with the
+     "close_pmp_entries" lemma. *)
   Definition fun_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Stm [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
     use lemma open_pmp_entries ;;
     let: "width" :: ty_xlenbits := stm_call (to_bits xlen) [exp_val ty.int (Z.of_nat bytes)] in  
@@ -646,6 +735,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         |> KExecute pat_unit   => stm_exp (Some E_Fetch_Access_Fault)
         end.
 
+  (* fun_pmpCheckPerms decides if we can access the given pmp entry, ent,
+     with access type acc. If the current privilege level is Machine and the
+     pmp entry is not locked, then we always have access. In the other cases
+     the permissions check is delegated to the "pmpCheckRWX" function. *)
   Definition fun_pmpCheckPerms : Stm [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool :=
     match: priv in privilege with
     | Machine =>
@@ -657,6 +750,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       call pmpCheckRWX ent acc
     end.
 
+  (* fun_pmpCheckRWX checks if the access acc is allowed on pmp entry ent. *)
   Definition fun_pmpCheckRWX : Stm [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool :=
     match: ent in rpmpcfg_ent with
       [L; A; X; W; R] =>
@@ -668,6 +762,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         end
     end.
 
+  (* fun_pmpMatchEntry returns whether the given parameters match the given pmp
+     entry, ent. The result can be "continue", to indicate the paddr and
+     width don't match the given pmp entry at all (and thus the pmp check
+     algorithm should continue with the next pmp entry), "fail" in case of a
+     partial match or insufficient permissions for the requested access type
+     or "success". *)
   Definition fun_pmpMatchEntry : Stm [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch :=
     let: rng := call pmpAddrRange ent pmpaddr prev_pmpaddr in
     let: tmp := call pmpMatchAddr addr width rng in
@@ -681,6 +781,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       else exp_val ty_pmpmatch PMP_Fail
     end.
 
+  (* fun_pmpAddrRange returns the address range of the given pmp config. To
+     compute the range it also requires the current pmp entry's address,
+     pmpaddr, and the address of the previous pmp entry, prev_pmpaddr. The range
+     depends on the addr match type of the entry, this can be either OFF, i.e.,
+     no range, is returned, or TOR (Top-Of-Range), which returns the range
+     [prev_pmpaddr, pmpadr]. *)
   Definition fun_pmpAddrRange : Stm [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range :=
     match: cfg in rpmpcfg_ent with
       [L; A; X; W; R] =>
@@ -690,6 +796,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         end
     end.
 
+  (* fun_pmpMatchAddr returns a match result for the given addr and width
+     against the range rng. If the addr and addr+width fall within the range
+     then a successful match is returned. If only one of them fall within the
+     range then we have a partial match and if none fall within the range, or
+     the range is invalid or unavailable then no match is returned. *)
   Definition fun_pmpMatchAddr : Stm [addr ∷ ty_xlenbits; width :: ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch :=
     match: rng with
     | inl v =>
@@ -707,6 +818,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | inr v => exp_val ty_pmpaddrmatch PMP_NoMatch
     end.
 
+  (* fun_process_load processes the loaded value and saves it into destination
+     register rd. If the loaded value is a MemValue, i.e., a successful load,
+     then the value is extended to the width of the register (xlenbits) and
+     written to rd. Otherwise the memory exception handler is called. *)
   Definition fun_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : Stm [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ (ty_memory_op_result bytes); is_unsigned :: ty.bool] ty_retired :=
     let: tmp := stm_call (@extend_value _ pr) [is_unsigned; value] in
     match: tmp in union (memory_op_result xlenbytes) with
@@ -717,23 +832,31 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                                        stm_val ty_retired RETIRE_FAIL
     end.
 
+  (* fun_mem_write_value delegates writing to memory to pmp_mem_write with as
+     additional parameter the current privilege level (and access type
+     Write). *)
   Definition fun_mem_write_value (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1) :=
     let: tmp1 := Write in
     let: tmp2 := stm_read_register cur_privilege in
     stm_call (@pmp_mem_write bytes H) [paddr; value; tmp1; tmp2].
 
+  (* fun_main initializes the model and calls loop, the fdeCycle. *)
   Definition fun_main : Stm ctx.nil ty.unit :=
     call init_model ;;
     call loop.
 
-  (* NOTE: simplified init_model function, just calls init_sys which just calls
-           init_pmp *)
+  (* fun_init_model calls the init_sys function. Note that on a RISC-V machine
+     with additional extensions etc. more initialization would be required. *)
   Definition fun_init_model : Stm ctx.nil ty.unit :=
     call init_sys.
 
+  (* fun_loop represents the fdeCycle of this machine, it performs one step of
+     the machine and then loops again. *)
   Definition fun_loop : Stm ctx.nil ty.unit :=
     call step ;; call loop.
 
+  (* fun_fetch fetches the instruction at the pc in memory. For this memory
+     read the Execute permission is required. *)
   Definition fun_fetch : Stm ctx.nil ty_fetch_result :=
     let: tmp1 := Execute in 
     let: tmp := stm_read_register pc in
@@ -746,6 +869,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KMemException (pat_var "e")  => stm_exp (F_Error e tmp)
     end.
 
+  (* fun_step performs a single step of the fdeCycle, i.e., it fetches the
+     instruction pointed at by the pc, decodes it and executes the
+     instruction. *)
   Definition fun_step : Stm ctx.nil ty.unit :=
     let: f := call fetch in
     match: f in union fetch_result with
@@ -758,12 +884,16 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end ;;
     call tick_pc.
 
+  (* fun_init_sys initializes the system registers by setting the current
+     privilege level to Machine and calling the init_pmp function. *)
   Definition fun_init_sys : Stm ctx.nil ty.unit :=
     stm_write_register cur_privilege (exp_val ty_privilege Machine) ;;
     use lemma open_pmp_entries ;;
     call init_pmp ;;
     use lemma close_pmp_entries.
 
+  (* fun_init_pmp initializes the pmp registers by setting the address match
+     types of all entries to OFF, i.e., at boot all entries are inactive. *)
   Definition fun_init_pmp : Stm ctx.nil ty.unit :=
     let: tmp := stm_read_register pmp0cfg in
     match: tmp in rpmpcfg_ent with
@@ -790,6 +920,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         stm_val ty.unit tt
     end.
 
+  (* fun_exceptionType_to_bits converts an exception type to its exception
+     code *)
   Definition fun_exceptionType_to_bits : Stm [e ∷ ty_exception_type] ty_exc_code :=
     match: e in union exception_type with
       |> KE_Fetch_Access_Fault pat_unit => stm_val ty_exc_code [bv 1]
@@ -800,12 +932,22 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       |> KE_M_EnvCall          pat_unit => stm_val ty_exc_code [bv 11]
     end.
 
+  (* fun_handle_mem_exception handles memory exception by invoking the exception
+     handler with the location the exception occured (read from the pc) and the
+     current privilege level, which returns the address to continue executing to
+     handle the exception. *)
   Definition fun_handle_mem_exception : Stm [addr ∷ ty_xlenbits; e ∷ ty_exception_type] ty.unit :=
     let: tmp1 := stm_read_register pc in
     let: tmp2 := stm_read_register cur_privilege in
     let: tmp3 := call exception_handler tmp2 (CTL_TRAP e) tmp1 in
     call set_next_pc tmp3.
 
+  (* fun_exception_handler determines the location to handle the exception.
+     The first type of control flow transition can be a trap, for which the right
+     trap handler is retrieved through the invocation of trap_handler. The other
+     control flow transition is when the machine recovers from a trap (an MRET
+     instruction was issued), in this case the machine restores the state back
+     to where the exception occured. *)
   Definition fun_exception_handler : Stm [cur_priv ∷ ty_privilege; ctl ∷ ty_ctl_result; "pc" ∷ ty_xlenbits] ty_xlenbits :=
     match: ctl in union ctl_result with
     |> KCTL_TRAP (pat_var "e") => let: del_priv := call exception_delegatee cur_priv in
@@ -825,52 +967,45 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                          stm_read_register mepc))
     end.
 
+  (* fun_exception_delegatee determines to what level to delegate when a trap
+     occurs. Since our machine only has Machine and User mode, and no user-level
+     interrupts, the only delegatee available is Machine mode. *)
   Definition fun_exception_delegatee : Stm [p ∷ ty_privilege] ty_privilege :=
     stm_val ty_privilege Machine.
 
+  (* fun_trap_handler returns the address for the corresponding trap handler for
+     the given exception code. *)
   Definition fun_trap_handler : Stm [del_priv ∷ ty_privilege; c ∷ ty_exc_code; "pc" ∷ ty_xlenbits] ty_xlenbits :=
     stm_write_register mcause (exp_zext c) ;;
     let: tmp := stm_read_register cur_privilege in
     stm_write_register mstatus (exp_record rmstatus [ tmp ]) ;;
     stm_write_register mepc (exp_var "pc") ;;
     stm_write_register cur_privilege del_priv ;;
-    (* NOTE: the following let can be dropped by just reusing c (the value we are
-             writing into mcause, but this (manual) translation is more faithful to
-             what I expect an automatic translation would produce, i.e. do an 
-             stm_read_register when a register is used as param to a function call,
-             to get the value in the register
-     
-             Also keep into account that the risc-v model trap handler function handles
-             more cases than represented here, i.e. we only have support for M-mode and
-             do not explicitly check for this here. So we could simplify
-             prepare_trap_vector to not take a cause parameter (which it won't use
-             anyway because we only support direct mode for the trap vector, meaning
-             that the trap handler function installed at the memory address denoted
-             by mtvec will need to read the mcause register to dispatch to the
-             corresponding trap handler for the cause). *)
     let: tmp := stm_read_register mcause in
     call prepare_trap_vector del_priv tmp.
 
+  (* fun_prepare_trap_vector computes the address for the trap handler. This
+     depends on which level to delegate to, p, and the cause of the exception.
+     We only support direct-mode trap vectors and no user-level interrupts
+     so essentially, the address returned will always be the value of mtvec 
+     (the trap handler location CSR) and otherwise the machine will fail. *)
   Definition fun_prepare_trap_vector : Stm [p ∷ ty_privilege; cause ∷ ty_mcause] ty_xlenbits :=
     let: tvec := match: p in privilege with
     | Machine => stm_read_register mtvec
     | User => fail "N extension (user-level interrupts) not supported"
     end in
     let: tmp := call tvec_addr tvec cause in
-    (* NOTE: tvec_addr will only ever return Some(epc), because we don't support
-             the 2 mode bits and only have direct mode. The None case only arises
-             for the Reserved mode of trap vectors.
-
-             The given privilege level (p) is ignored, this only makes sense when
-             supervisor mode is supported. *)
     match: tmp with
     | inl epc => epc
     | inr e   => fail "Invalid tvec mode"
     end.
 
+  (* fun_tvec_addr returns its first parameter wrapped in an option. *)
   Definition fun_tvec_addr : Stm [m ∷ ty_xlenbits; c ∷ ty_mcause] (ty.option ty_xlenbits) :=
     Some m.
 
+  (* fun_handle_illegal invokes the exception handler for illegal instruction
+     exceptions. *)
   Definition fun_handle_illegal : Stm ctx.nil ty.unit :=
     let: t := E_Illegal_Instr in
     let: tmp1 := stm_read_register cur_privilege in
@@ -878,6 +1013,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp3 := call exception_handler tmp1 (CTL_TRAP t) tmp2 in
     call set_next_pc tmp3.
 
+  (* fun_check_CSR ensures that the given csr is defined and we have the right
+     permission and privilege level to access it. *)
   Definition fun_check_CSR : Stm [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool :=
     let: tmp1 := call is_CSR_defined csr p in
     let: tmp2 := call csrAccess csr in
@@ -885,6 +1022,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp := call check_CSR_access tmp2 tmp3 p in
     tmp1 && tmp.
 
+  (* fun_is_CSR_defined decides if a CSR is defined on privilege level p. We
+     only implement Machine-level CSRs, so any call to this function with
+     privilege User return false. *)
   Definition fun_is_CSR_defined : Stm [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool :=
     match: csr in csridx with
     | MStatus => match: p in privilege with
@@ -917,26 +1057,36 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                    end
     end.
 
+  (* fun_csrAccess returns the access type available for a CSR. *)
+  Definition fun_csrAccess : Stm [csr ∷ ty_csridx] ty_access_type :=
+    ReadWrite.
+  (* fun_csrPriv returns the privilege level needed to access a CSR. *)
+  Definition fun_csrPriv : Stm [csr ∷ ty_csridx] ty_privilege :=
+    stm_val ty_privilege Machine.
   (* NOTE: - normally this information is part of the CSR bitpattern,
              we are reusing our existing access_type
            - all CSRs we currently support are MRW (= Machine, ReadWrite) *)
-  Definition fun_csrAccess : Stm [csr ∷ ty_csridx] ty_access_type :=
-    ReadWrite.
-  Definition fun_csrPriv : Stm [csr ∷ ty_csridx] ty_privilege :=
-    stm_val ty_privilege Machine.
 
+  (* fun_check_CSR_access determines whether the privilege level needed for the
+     CSR, csrpr, is a lower, or equal privilege level to p. *)
   Definition fun_check_CSR_access : Stm [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege] ty.bool :=
     let: tmp1 := call privLevel_to_bits csrpr in
     let: tmp2 := call privLevel_to_bits p in
-    (* TODO(SK): @Sander please check this *)
     tmp1 <=ᵘ tmp2.
 
+  (* fun_privLevel_to_bits converts the given privilege level to its bitvector
+     representation. *)
   Definition fun_privLevel_to_bits : Stm [p ∷ ty_privilege] ty_priv_level :=
     match: p in privilege with
     | Machine => stm_val ty_priv_level [bits 11]
     | User => stm_val ty_priv_level [bits 00]
     end.
 
+  (* fun_readCSR reads the contents of csr. Note that pmp config registers are
+     packed into a single csr index at the instruction level (i.e., reads and
+     writes happen from/on multiple configs at once), so in the case of
+     MPMP0CFG we need to read two architetural pmp config registers and
+     append them together. *)
   Definition fun_readCSR : Stm [csr ∷ ty_csridx] ty_xlenbits :=
     match: csr in csridx with
     | MStatus   => stm_mstatus_to_bits (stm_read_register mstatus)
@@ -951,6 +1101,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | MPMPADDR1 => stm_read_register pmpaddr1
     end.
 
+  (* fun_writeCSR writes value into csr. Writing to pmp related CSRs requires
+     checking if the corresponding pmp config is locked or not. *)
   Definition fun_writeCSR : Stm [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit :=
     match: csr in csridx with
     | MStatus => let: tmp := stm_mstatus_from_bits value in
@@ -977,8 +1129,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                    stm_val ty.unit tt
     end.
 
-  (* NOTE: normally the definitions of execute_X are inlined and defined as
-           function clauses of execute (a scattered definition) *)
+  (* fun_execute delegates execution of instruction types to the corresponding
+     execute function. For example, RTYPE instructions are executed by the
+     execute_RTYPE function. *)
   Definition fun_execute : Stm ["ast" ∷ ty_ast] ty_retired :=
     match: exp_var "ast" in union ast with
     |> KRTYPE (pat_tuple (rs2 , rs1 , rd , op))            => call execute_RTYPE rs2 rs1 rd op
@@ -1286,6 +1439,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Proof. destruct f; env.destroy args; repeat econstructor. Qed.
   End ForeignKit.
 
+  (* FunDef couples the function signatures defined in Fun together with their
+     implementation. *)
   Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
     | rX                      => fun_rX
