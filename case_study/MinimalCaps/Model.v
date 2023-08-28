@@ -231,15 +231,13 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       lia.
     Qed.
 
-    (* Notation D := (MemVal -d> iPropO Σ). *)
-    (* Notation C := (Capability -d> iPropO Σ). *)
-    (* Implicit Type w : MemVal. *)
-    Notation D := ((leibnizO MemVal) -n> iPropO Σ). (* TODO: try -d>, drop leibnizO, might not need λne *)
-    Notation C := ((leibnizO Capability) -n> iPropO Σ). (* TODO: try -d>, drop leibnizO, might not need λne *)
+    Notation D := ((leibnizO MemVal) -n> iPropO Σ).
+    Notation C := ((leibnizO Capability) -n> iPropO Σ).
     Implicit Type w : (leibnizO MemVal).
 
-    (* Copied from github.com/logsem/cerise *)
-    (* TODO: include copyright notice =) *)
+    (* auto_equiv and solve_proper are copied from
+       github.com/logsem/cerise/theories/logrel.v to solve obligations
+       from the interp definitions. *)
     Ltac auto_equiv :=
       (* Deal with "pointwise_relation" *)
       repeat lazymatch goal with
@@ -262,11 +260,6 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       filter (fun r => @nequiv_decb _ _ _ RegName_eqdec r R0)
         (finite.enum RegName).
 
-    (* TODO:
-       - Make the change to D proposed above, might simplify some stuff
-         Need to look into what the difference induced by that change is...
-       - make the interp definitions more uniform, i.e., they should all take an
-         interp (= safe) and have return type D *)
     (* interp_gprs states that we have ownership of all GPRs and that all
        registers contain a safe value (interp). *)
     Program Definition interp_gprs : D -n> iPropO Σ :=
@@ -285,7 +278,6 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       (λne (c : leibnizO Capability),
         reg_pointsTo pc c ∗ interp_gprs interp -∗ (interp_loop (sg := SailGS _ _ mG)))%I.
 
-    (* TODO: Check if I tried changing this one to a discrete one, should remain non-expansive so we can prove contractiveness *)
     (* interp_ref_inv states that we have ownership of addr a and that predicate
        P holds for the contents at addr a. *)
     Program Definition interp_ref_inv (a : Addr) : D -n> iPropO Σ :=
