@@ -45,6 +45,8 @@ Local Set Implicit Arguments.
 (* Taken from Coq >= 8.15 SigTNotations *)
 Local Notation "( x ; y )" := (existT x y) (only parsing).
 
+(* Helper definitions for byte-related datatypes. This case is for RV32I,
+   so the xlen is 32. *)
 Definition xlen            := 32.
 Definition byte            := 8.
 Definition bytes_per_word  := 4.
@@ -63,6 +65,7 @@ Proof.
   - intros [|y]; cbn; auto.
 Defined.
 
+(* Definitions in terms of bitvectors. *)
 Definition Xlenbits : Set := bv xlenbits.
 Definition Addr : Set     := bv xlenbits.
 Definition Word : Set     := bv word.
@@ -83,12 +86,13 @@ Proof. now compute. Qed.
 Lemma xlenbits_pos : (xlenbits > 0).
 Proof. cbv. lia. Qed.
 
+(* Privilege denotes the privilege levels we support, User and Machine. *)
 Inductive Privilege : Set :=
 | User
 | Machine
 .
 
-(* Enum for available CRSs' *)
+(* CSRIDx is the enum for the available CRSs' on our Machine. *)
 Inductive CSRIdx : Set :=
 | MStatus
 | MTvec
@@ -100,12 +104,15 @@ Inductive CSRIdx : Set :=
 .
 
 Definition NumPmpEntries := 2.
-(* NOTE: PMP CSRs limited to 1 for now *)
+(* NOTE: PMP CSRs limited to 1 for now, each PMP CSR packs multiple configs,
+   which we limit to 2 (sufficient for the FemtoKernel). *)
 Inductive PmpCfgIdx : Set :=
 | PMP0CFG
 | PMP1CFG
 .
 
+(* PmpCfgPerm are the PMP supported permissions. We follow the
+   proposed config layout from the privileged spec for RISC-V. *)
 Inductive PmpCfgPerm : Set :=
 | PmpO
 | PmpR
@@ -116,29 +123,37 @@ Inductive PmpCfgPerm : Set :=
 | PmpWX
 | PmpRWX.
 
+(* PmpAddrIdx denotes the PMP address registers. *)
 Inductive PmpAddrIdx : Set :=
 | PMPADDR0
 | PMPADDR1
 .
 
-(* NOTE: PMP Addr Match Type limited to OFF and TOR for now *)
+(* PmpAddrMatchType are the supported address match types. We limit
+   ourselves to OFF and TOR. *)
 Inductive PmpAddrMatchType : Set :=
 | OFF
 | TOR
 .
 
+(* PmpMatch denotes the result returned from the pmp check algorithm. *)
 Inductive PmpMatch : Set :=
 | PMP_Success
 | PMP_Continue
 | PMP_Fail
 .
 
+(* PmpAddrMatch indicates if an address matches a pmp entry. The possibilities
+   are either no match, match or a partial match. A partial match occurs when,
+   for example, the physical address falls within the bounds of a pmp entry
+   but the total bytes need to be read or written falls out of the bounds. *)
 Inductive PmpAddrMatch : Set :=
 | PMP_NoMatch
 | PMP_PartialMatch
 | PMP_Match
 .
 
+(* ROP are the R-type opcodes. *)
 Inductive ROP : Set :=
 | RISCV_ADD
 | RISCV_SLT
@@ -152,6 +167,7 @@ Inductive ROP : Set :=
 | RISCV_SRA
 .
 
+(* IOP are the I-type opcodes. *)
 Inductive IOP : Set :=
 | RISCV_ADDI
 | RISCV_SLTI
@@ -161,17 +177,20 @@ Inductive IOP : Set :=
 | RISCV_XORI
 .
 
+(* SOP are the S-type opcodes. *)
 Inductive SOP : Set :=
 | RISCV_SLLI
 | RISCV_SRLI
 | RISCV_SRAI
 .
 
+(* UOP are the U-type opcodes. *)
 Inductive UOP : Set :=
 | RISCV_LUI
 | RISCV_AUIPC
 .
 
+(* BOP are the B-type opcodes. *)
 Inductive BOP : Set :=
 | RISCV_BEQ
 | RISCV_BNE
@@ -181,24 +200,28 @@ Inductive BOP : Set :=
 | RISCV_BGEU
 .
 
-(* Zicsr extension, only support for Read-Write (no set or clear) *)
+(* CSROP are the opcodes for the Zicsr extension,
+   we only add support for Read-Write (no set or clear). *)
 Inductive CSROP : Set :=
 | CSRRW
 | CSRRS
 | CSRRC
 .
 
+(* Retired indicates whether an instruction retired or not. *)
 Inductive Retired : Set :=
 | RETIRE_SUCCESS
 | RETIRE_FAIL
 .
 
+(* WordWidth is used to indicate how many bytes need to be interacted with. *)
 Inductive WordWidth :=
 | BYTE
 | HALF
 | WORD
 .
 
+(* Enums is the set of all enums needed for this case. *)
 Inductive Enums : Set :=
 | privilege
 | csridx
@@ -218,9 +241,11 @@ Inductive Enums : Set :=
 | wordwidth
 .
 
+(* RegIdx are the register indexes for the register file. *)
 Definition RegIdx := bv 5.
 Bind Scope bv_scope with RegIdx.
 
+(* AST is the datatype for the instructions of the machine. *)
 Inductive AST : Set :=
 | RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
 | ITYPE (imm : bv 12) (rs1 rd : RegIdx) (op : IOP)
@@ -237,6 +262,8 @@ Inductive AST : Set :=
 | CSR (csr : CSRIdx) (rs1 rd : RegIdx) (is_imm : bool) (csrop : CSROP)
 .
 
+(* Accesstype denotes the supported access types of the machine, used for
+   memory interaction but also for CSR reads and writes. *)
 Inductive AccessType : Set :=
 | Read
 | Write
@@ -244,6 +271,7 @@ Inductive AccessType : Set :=
 | Execute
 .
 
+(* ExceptionType are the exceptions that can occur on the machine. *)
 Inductive ExceptionType : Set :=
 | E_Fetch_Access_Fault
 | E_Load_Access_Fault
@@ -253,23 +281,29 @@ Inductive ExceptionType : Set :=
 | E_Illegal_Instr
 .
 
+(* FetchResult indicates whether a fetch was successful (F_Base), or if an error
+   occured (F_Error). *)
 Inductive FetchResult : Set :=
 | F_Base (v : Word)
 | F_Error (e : ExceptionType) (v : Xlenbits)
 .
 
-(* NOTE: simplified to only take the ctl_trap constructor into account
-         (other constructors are for mret, sret and uret, not considered atm) *)
+(* CtlResult indicates the supported types of privilege transitions. We only
+   support TRAP and MRET, as we don't have supervisor mode nor the user-level
+   interrupts (Next). *)
 Inductive CtlResult : Set :=
 | CTL_TRAP (e : ExceptionType)
 | CTL_MRET
 .
 
+(* MemoryOpresult has two cases, either a memory value is returned or a memory
+   exception occured. *)
 Inductive MemoryOpResult (bytes : nat): Set :=
 | MemValue (bs : bv (bytes * 8))
 | MemException (e : ExceptionType)
 .
 
+(* Next, we define constructors for our (Sail-)union datatypes. *)
 Inductive ASTConstructor : Set :=
 | KRTYPE
 | KITYPE
@@ -317,6 +351,7 @@ Inductive CtlResultConstructor : Set :=
 | KCTL_MRET
 .
 
+(* Unions is the set of all supported unions for this case. *)
 Inductive Unions : Set :=
 | ast
 | access_type
@@ -324,9 +359,10 @@ Inductive Unions : Set :=
 | memory_op_result (bytes : nat)
 | fetch_result
 | ctl_result
-(* | pmp_entries *)
 .
 
+(* Pmpcfg_ent is the record representing a PMP config. We follow the proposed
+   config layout from the RISC-V privileged spec. *)
 Record Pmpcfg_ent : Set :=
   MkPmpcfg_ent
     { L : bool;
@@ -336,11 +372,14 @@ Record Pmpcfg_ent : Set :=
       R : bool;
     }.
 
+(* Mstatus is the structure for the MStatus CSR, we only need the MPP field
+   (Machine Previous Privilege level) for our case. *)
 Record Mstatus : Set :=
   MkMstatus
     { MPP : Privilege
     }.
 
+(* Records denotes the set of all records for this case. *)
 Inductive Records : Set :=
 | rpmpcfg_ent
 | rmstatus
@@ -511,7 +550,6 @@ Section Finite.
 End Finite.
 
 Module Export RiscvPmpBase <: Base.
-
   Import ctx.notations.
   Import ctx.resolution.
   Import env.notations.
@@ -821,6 +859,8 @@ Module Export RiscvPmpBase <: Base.
 
   Section RegDeclKit.
 
+    (* Reg contains all the registers of the machine, so both the CSRs and
+       GPRs. *)
     Inductive Reg : Ty -> Set :=
     | pc            : Reg ty_xlenbits
     | nextpc        : Reg ty_xlenbits
@@ -867,6 +907,8 @@ Module Export RiscvPmpBase <: Base.
     .
 
     Import bv.notations.
+    (* reg_convert converts bitvector register file indexes into a case
+       of the Reg inductive. *)
     Definition reg_convert (idx : RegIdx) : option (Reg ty_xlenbits) :=
       match bv.to_bitstring idx with
       | 00000 => None
