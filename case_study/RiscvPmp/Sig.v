@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Classes.EquivDec
      ZArith.ZArith
      Lists.List
      Strings.String.
@@ -48,6 +49,7 @@ Import ListNotations.
 Open Scope string_scope.
 Open Scope Z_scope.
 
+(* PurePredicate defines the pure predicates for this case. *)
 Inductive PurePredicate : Set :=
 | pmp_access
 | pmp_check_perms
@@ -60,6 +62,7 @@ Inductive PurePredicate : Set :=
 | in_entries
 .
 
+(* Predicate defines the spatial predicates for this case. *)
 Inductive Predicate : Set :=
 | pmp_entries
 | pmp_addr_access
@@ -87,6 +90,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
   Section PredicateKit.
     Definition 𝑷 := PurePredicate.
+    (* 𝑷_Ty gives the parameter types for the pure predicates. *)
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
       match p with
       | pmp_access               => [ty_xlenbits; ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
@@ -100,17 +104,28 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | in_entries               => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
       end.
 
+    (* PmpEntryCfg is an alias for a pmp entry, which consists of the config
+       (Pmpcfg_ent) and the address. *)
     Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
+    (* PmpAddrRange is the range for a pmp entry, this can be None if the pmp
+       entry addr match type is OFF. *)
     Definition PmpAddrRange := option (Xlenbits * Xlenbits).
 
+    (* default_pmpcfg_ent defines the default config for a pmp entry, which is
+       unlocked and OFF. These configurations give full permission to Machine
+       mode and deny all access to User mode. *)
     Example default_pmpcfg_ent : Pmpcfg_ent :=
       {| L := false; A := OFF; X := false; W := false; R := false |}.
 
-    Example default_pmpentries : list (Pmpcfg_ent * Xlenbits) :=
+    (* default_pmpentries is the default list of pmp entries, where each
+       entry has the default config and a zero address. *)
+    Example default_pmpentries : list PmpEntryCfg :=
       [(default_pmpcfg_ent, bv.zero);
        (default_pmpcfg_ent, bv.zero)
       ].
 
+    (* pmp_check_RWX decides if we the requested access type is allowed for
+       the given pmp config. *)
     Definition pmp_check_RWX (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) : bool :=
       match cfg with
       | {| L := _; A := _; X := X; W := W; R := R |} =>
@@ -122,7 +137,9 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           end
       end.
 
-    Definition pmp_get_RWX (cfg : Val ty_pmpcfg_ent) (p : Val ty_privilege) : Val ty_pmpcfgperm :=
+    (* pmp_get_perms returns a PmpCfgperm depending on the fields of the pmp config
+       and given privilege level. *)
+    Definition pmp_get_perms (cfg : Val ty_pmpcfg_ent) (p : Val ty_privilege) : Val ty_pmpcfgperm :=
       match cfg with
       | {| L := L; A := _; X := X; W := W; R := R |} =>
           match L, p with
@@ -141,6 +158,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           end
       end.
 
+    (* decide_pmp_check_perms decides whether we can access pmp config cfg with
+       the requested access type and privilege level. *)
     Definition decide_pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : bool :=
       match p with
       | Machine =>
@@ -151,22 +170,15 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           pmp_check_RWX cfg acc
       end.
 
-    Definition pmp_get_perms (cfg : Val ty_pmpcfg_ent) (p : Val ty_privilege) : Val ty_pmpcfgperm :=
-      match p with
-      | Machine =>
-          if L cfg
-          then pmp_get_RWX cfg p
-          else PmpRWX
-      | User =>
-          pmp_get_RWX cfg p
-      end.
-
+    (* pmp_addr_range returns the addr range based on the addr match type of the
+       pmp config. *)
     Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange :=
       match A cfg with
       | OFF => None
       | TOR => Some (lo , hi)
       end.
 
+    (* pmp_match_addr matches the given addr a and width against the range rng. *)
     Definition pmp_match_addr (a : Val ty_xlenbits) (width : Val ty_xlenbits) (rng : PmpAddrRange) : Val ty_pmpaddrmatch :=
       match rng with
       | Some (lo, hi) =>
@@ -180,6 +192,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | None          => PMP_NoMatch
       end.
 
+  (* bv_comp is a tactic that converts boolean comparison operators into props. *)
   Ltac bv_comp :=
       repeat match goal with
       | H: (?a <ᵘ? ?b) = true |- _ =>
@@ -192,7 +205,9 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           rewrite bv.uleb_ugt in H
       end.
 
-
+  Section PmpMatchAddrConditions.
+    (* In this section we define lemmas that capture the conditions for the
+       different outcomes fo the pmp_addr_match function. *)
     Lemma pmp_match_addr_match_conditions_1 : forall (paddr w lo hi : Val ty_xlenbits),
         bv.zero <ᵘ w ->
         pmp_match_addr paddr w (Some (lo , hi)) = PMP_Match ->
@@ -302,7 +317,10 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       apply pmp_match_addr_nomatch_conditions_1.
       apply pmp_match_addr_nomatch_conditions_2.
     Qed.
+  End PmpMatchAddrConditions.
 
+    (* pmp_match_entry matches the given address, width and privilege against
+       the given config and bounds of a pmp entry. *)
     Definition pmp_match_entry (a : Val ty_xlenbits) (width : Val ty_xlenbits) (m : Val ty_privilege) (cfg : Val ty_pmpcfg_ent) (lo hi : Val ty_xlenbits) : Val ty_pmpmatch :=
       let rng := pmp_addr_range cfg hi lo in
       match pmp_match_addr a width rng with
@@ -311,6 +329,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | PMP_Match        => PMP_Success
       end.
 
+    (* pmp_check is our spec implementation of the pmp check algorithm to be
+       used in our predicates. *)
     Definition pmp_check (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
       match entries with
       | (cfg0 , addr0) :: (cfg1 , addr1) :: [] =>
@@ -333,35 +353,15 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
              end
       end%list.
 
-    Section Old_pmp_check.
-      Definition pmp_check' (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
-        match entries with
-        | [] => match m with
-                | Machine => (true, None)
-                | User    => (false, None)
-                end
-        | (cfg , addr) :: entries =>
-            match pmp_match_entry a width m cfg prev addr with
-            | PMP_Success  => (true, Some (pmp_get_perms cfg m))
-            | PMP_Fail     => (false, None)
-            | PMP_Continue => pmp_check a width entries addr m
-            end
-        end%list.
-    End Old_pmp_check.
-
-    (* check_access is based on the pmpCheck algorithm, main difference
-           is that we can define it less cumbersome because entries will contain
-           the PMP entries in highest-priority order. *)
+    (* check_pmp_access is based on the pmpCheck algorithm, main difference
+       is that we can define it less cumbersome because entries will contain
+       the PMP entries in highest-priority order. *)
     Definition check_pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
       pmp_check a width entries [bv 0] m.
 
-    Equations(noeqns) access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
-    | Read      | Read      := true;
-    | Write     | Write     := true;
-    | ReadWrite | ReadWrite := true;
-    | Execute   | Execute   := true;
-    | _         | _         := false.
+    Definition access_type_eqb := @equiv_decb _ _ _ AccessType_eqdec.
 
+    (* decide_sub_perm decides if a1 is a subpermission of a2. *)
     Equations(noeqns) decide_sub_perm (a1 a2 : Val ty_access_type) : bool :=
     | Read      | Read      := true;
     | Write     | Write     := true;
@@ -378,9 +378,12 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       intros ->; destruct a2; auto.
     Qed.
 
+    (* Sub_perm is the predicate implementation of decide_sub_perm. *)
     Definition Sub_perm (a1 a2 : Val ty_access_type) : Prop :=
       decide_sub_perm a1 a2 = true.
 
+    (* decide_access_pmp_perm decides whether the access type is a subpermission
+       of a pmp config permission. *)
     Equations(noeqns) decide_access_pmp_perm (a : Val ty_access_type) (p : Val ty_pmpcfgperm) : bool :=
     | Read      | PmpR   := true;
     | Read      | PmpRW  := true;
@@ -395,9 +398,14 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     | _         | PmpRWX := true;
     | _         | _      := false.
 
+    (* Access_pmp_perm is the predicate implementation of decide_access_pmp_perm. *)
     Definition Access_pmp_perm (a : Val ty_access_type) (p : Val ty_pmpcfgperm) : Prop :=
       decide_access_pmp_perm a p = true.
 
+    (* decide_pmp_access is the decision procedure for the pmp check. From the
+       pmp check we get whether we have a match and which permissions the
+       matching pmp entry has. We then need to check if the requested access
+       type is a subpermission of the pmp entry permissions. *)
     Definition decide_pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : bool :=
       match check_pmp_access a width entries m with
       | (true, Some p) => decide_access_pmp_perm acc p
@@ -405,28 +413,24 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | (false, _)       => false
       end.
 
+    (* Pmp_access is the predicate implementation of decide_pmp_access. *)
     Definition Pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
       decide_pmp_access a width entries m acc = true.
 
+    (* Pmp_check_perms is the predicate implementation of decide_pmp_check_perms. *)
     Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
       decide_pmp_check_perms cfg acc p = true.
 
+    (* Pmp_check_rwx is the predicate implementation of pmp_check_RWX. *)
     Definition Pmp_check_rwx (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) : Prop :=
       pmp_check_RWX cfg acc = true.
 
-    Equations PmpAddrMatchType_eqb (a1 a2 : PmpAddrMatchType) : bool :=
-    | OFF | OFF := true;
-    | TOR | TOR := true;
-    | _   | _   := false.
+    Definition PmpAddrMatchType_eqb := @equiv_decb _ _ _ PmpAddrMatchType_eqdec.
 
-    Definition pmpcfg_ent_eqb (c1 c2 : Pmpcfg_ent) : bool :=
-      match c1, c2 with
-      | {| L := L1; A := A1; X := X1; W := W1; R := R1 |},
-        {| L := L2; A := A2; X := X2; W := W2; R := R2 |} =>
-          (Bool.eqb L1 L2) && (PmpAddrMatchType_eqb A1 A2) && (Bool.eqb X1 X2)
-          && (Bool.eqb W1 W2) && (Bool.eqb R1 R2)
-      end.
+    Definition pmpcfg_ent_eqb := @equiv_decb _ _ _ Pmpcfg_ent_eqdec.
 
+    (* decide_in_entries decides whether the given pmp entry is in the list of
+       pmp entries at the specified index. *)
     Definition decide_in_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty.list ty_pmpentry)) : bool :=
       match es with
       | cfg0 :: cfg1 :: [] =>
@@ -439,9 +443,12 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | _ => false
       end%list.
 
+    (* In_entries is the predicate implementation of decide_in_entries. *)
     Definition In_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty.list ty_pmpentry)) : Prop :=
       decide_in_entries idx e es = true.
 
+    (* decide_prev_addr decides if the given prev address is the previous
+       address of the given pmp config index in the entries list. *)
     Definition decide_prev_addr (cfg : Val ty_pmpcfgidx) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) : bool :=
       match entries with
       | (c0 , a0) :: (c1 , a1) :: [] =>
@@ -452,18 +459,24 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | _ => false
       end%list.
 
+    (* Prev_addr is the predicate implementation of decide_prev_addr. *)
     Definition Prev_addr (cfg : Val ty_pmpcfgidx) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) : Prop :=
       decide_prev_addr cfg entries prev = true.
 
+    (* decide_within_cfg decides if the given physical adress is within the
+       given bounds according to the addr match type of the pmp config. *)
     Definition decide_within_cfg (paddr : Val ty_xlenbits) (cfg : Val ty_pmpcfg_ent) (prev_addr addr : Val ty_xlenbits) : bool :=
       match A cfg with
       | OFF => false
       | TOR => (prev_addr <=ᵘ? paddr) && (paddr <ᵘ? addr)
       end.
 
+    (* Within_cfg is the predicate implementation of decide_within_cfg. *)
     Definition Within_cfg (paddr : Val ty_xlenbits) (cfg : Val ty_pmpcfg_ent) (prev_addr addr : Val ty_xlenbits) : Prop :=
       decide_within_cfg paddr cfg prev_addr addr = true.
 
+    (* decide_not_within_cfg checks whether the given paddr is within any pmp
+       entry of the entries list. *)
     Definition decide_not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) : bool :=
       match entries with
       | (c0 , a0) :: (c1 , a1) :: [] =>
@@ -472,6 +485,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | _ => false
       end%list.
 
+    (* Not_within_cfg is the predicate implementation of decide_not_within_cfg. *)
     Definition Not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) : Prop :=
       decide_not_within_cfg paddr entries = true.
 
@@ -483,6 +497,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         L cfg = false.
     Proof. intros [[]]; split; auto. Qed.
 
+    (* Pmp_cfg_unlocked is a predicate that indicates whether the lock bit of a
+       config is set or not. *)
     Definition Pmp_cfg_unlocked (cfg : Val ty_pmpcfg_ent) : Prop :=
       is_pmp_cfg_unlocked cfg = true.
 
@@ -491,10 +507,13 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         L cfg = false.
     Proof. unfold Pmp_cfg_unlocked; apply is_pmp_cfg_unlocked_bool. Qed.
 
+    (* Pmp_entry_unlocked is the Pmp_cfg_unlocked predicated lifted to pmp
+       entries (a pair of a config and address). *)
     Definition Pmp_entry_unlocked (ent : Val ty_pmpentry) : Prop :=
       Pmp_cfg_unlocked (fst ent).
     Global Arguments Pmp_entry_unlocked !ent.
 
+    (* 𝑷_inst couples the pure predicates to their implementation. *)
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
       | pmp_access               => Pmp_access
@@ -511,6 +530,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
 
     Definition 𝑯 := Predicate.
+    (* 𝑯_Ty defines the parameter types of the spatial predicates. *)
     Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
       match p with
       | pmp_entries                   => [ty.list ty_pmpentry]
@@ -524,6 +544,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
       end.
 
+    (* 𝑯_is_dup indicates which spatial predicates are duplicable. *)
     Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
       is_duplicable p :=
         match p with
@@ -542,7 +563,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Local Arguments Some {_} &.
 
-    (* TODO: look up precise predicates again, check if below makes sense *)
+    (* 𝑯_precise specifies which predicates are precise and what the input and
+       output parameters of precise predicates are. *)
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
       | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
