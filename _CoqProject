@@ -11,7 +11,6 @@ case_study/MinimalCaps/LoopVerification.v
 -Q case_study/RiscvPmp Katamaran.RiscvPmp
 case_study/RiscvPmp/Base.v
 case_study/RiscvPmp/Machine.v
-case_study/RiscvPmp/PmpCheck.v
 case_study/RiscvPmp/Sig.v
 case_study/RiscvPmp/Contracts.v
 case_study/RiscvPmp/IrisInstance.v
