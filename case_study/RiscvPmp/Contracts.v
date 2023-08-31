@@ -83,17 +83,28 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
       Section ContractDef.
         Import RiscvNotations.
         Import RiscvPmpSignature.notations.
+        (*** ContractDef ***)
+        (* Most of the contracts are similar to the body of the function. The
+           precondition captures the required resources, we give them back in
+           the postcondition and restrict the return value of the function
+           according to its semantics, based on the parameters. *)
 
-        (** Machine Invariant **)
-        (* TODO: - this should work for the execute{,_/x/} functions, but step and loop will update
-                   the pc, so this should be reflected in their contract (2nd pc(i) -> pc(i + 4)?)
-
-
-
-           TODO: short notation out of sync with actual contract
-           @pre ∀ m h i . mode(m) ∗ mtvec(h) ∗ pmp_entries(ents) ∗ pc(i) ∗ mepc(_) ∗ mpp(_)
-           @post pmp_entries(ents) ∗ (mode(m) ∗ pc(i)) ∨ (mode(M) ∗ pc(h) ...)
-           τ f(Δ...)*)
+        (** Instruction Execution Contract **)
+        (* instr_exec_contract is the contract for all execute functions for the
+           instructions of the machine. The precondition is ownership over all
+           registers of the machine and knowledge about the enforced pmp access
+           policy. The postcondition consists of giving back the pmp access
+           policy knowledge, the GPRs, the program counter register and of
+           four disjuncts. Each disjunct represents a different possible state
+           transition that can occur when executing an instruction. First we
+           have execution normally. Second is the modification of CSRs, this
+           requires that the execution of the instruction is running in Machine
+           mode and allows for new values in the CSRs. Third we have a trap
+           that occured, here we go into Machine mode and set the nextpc to
+           point to the trap handler, update the mstatus and mepc registers
+           so we can recover later. Finally is the recover state transition,
+           issued by the MRET instruction, where we restore the state to where
+           the trap occured. *)
         Definition instr_exec_contract {τ Δ} : SepContract Δ τ :=
           let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "i" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits] in
           {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
@@ -174,6 +185,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition sep_contract_execute_ECALL : SepContractFun execute_ECALL :=
           instr_exec_contract.
 
+        (* sep_contract_execute_EBREAK doesn't have the instr_exec_contract,
+           because the only purpose of the EBREAK instruction is debugging. *)
         Definition sep_contract_execute_EBREAK : SepContractFun execute_EBREAK :=
           {| sep_contract_logic_variables := ctx.nil;
              sep_contract_localstore      := env.nil;
@@ -197,6 +210,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition sep_contract_execute : SepContractFun execute :=
           instr_exec_contract.
 
+        (* sep_contract_process_load starts with ownership of all registers and
+           in the postcondition two cases can occur. Either the "value"
+           indicates a successful memory retrieval, or its an error and a trap
+           occurs. *)
         Definition sep_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : SepContractFun (process_load bytes) :=
           {| sep_contract_logic_variables := [rd :: ty_regno; vaddr :: ty_xlenbits; value :: ty_memory_op_result bytes; is_unsigned :: ty.bool; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mcause" :: ty_mcause];
              sep_contract_localstore      := [term_var rd; term_var vaddr; term_var value; term_var is_unsigned];
@@ -578,14 +595,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                ∗ asn_gprs;
           |}.
 
-        (* Definition sep_contract_abs : SepContractFun abs := *)
-        (*   {| sep_contract_logic_variables := [v :: ty.int]; *)
-        (*      sep_contract_localstore      := [term_var v]; *)
-        (*      sep_contract_precondition    := ⊤; *)
-        (*      sep_contract_result          := "result_abs"; *)
-        (*      sep_contract_postcondition   := ⊤; *)
-        (*   |}. *)
-
+        (* sep_contract_step is similar to the instr_exec_contract, the
+           difference being that a full step updates the pc using the nextpc
+           register. *)
         Definition sep_contract_step {τ Δ} : SepContract Δ τ :=
           let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "i" :: ty_xlenbits] in
           {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
@@ -1131,6 +1143,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Import RiscvPmpSignature.notations.
         Import RiscvNotations.
 
+        (* lemma_open_gprs gives individual access to the GPRs, instead of the
+           predicate that wraps them together (asn_gprs). *)
         Definition lemma_open_gprs : SepLemma open_gprs :=
           {| lemma_logic_variables := ctx.nil;
              lemma_patterns        := env.nil;
@@ -1138,6 +1152,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              lemma_postcondition   := asn_regs_ptsto;
           |}.
 
+        (* lemma_close_gprs closes the individual GPRs pointso chunks back into
+           the GPRs predicate. *)
         Definition lemma_close_gprs : SepLemma close_gprs :=
           {| lemma_logic_variables := ctx.nil;
              lemma_patterns        := env.nil;
@@ -1145,6 +1161,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              lemma_postcondition   := asn_gprs;
           |}.
 
+        (* lemma_open_ptsto_instr is trivial, it is only meaningful for the
+           BlockVerifier and FemtoKernel, which provide a more meaningful
+           definition. *)
         Definition lemma_open_ptsto_instr : SepLemma open_ptsto_instr :=
           {| lemma_logic_variables := [paddr :: ty_xlenbits];
              lemma_patterns        := [term_var paddr];
@@ -1152,6 +1171,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              lemma_postcondition   := ⊤;
           |}.
 
+        (* lemma_close_ptsto_instr is trivial, it is only meaningful for the
+           BlockVerifier and FemtoKernel, which provide a more meaningful
+           definition. *)
         Definition lemma_close_ptsto_instr : SepLemma close_ptsto_instr :=
           {| lemma_logic_variables := [paddr :: ty_xlenbits; w :: ty_word];
              lemma_patterns        := [term_var paddr; term_var w];
@@ -1159,6 +1181,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
              lemma_postcondition   := ⊤;
           |}.
 
+        (* lemma_open_pmp_entries gives the pointsto chunks for the PMP config
+           and address registers and states that the entries variable should
+           have a specific shape (pairs of configs and addresses). *)
         Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
           {| lemma_logic_variables := ["entries" :: ty.list ty_pmpentry];
              lemma_patterns        := env.nil;
@@ -1172,6 +1197,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                                                  (term_var "cfg1" ,ₜ term_var "addr1")]);
           |}.
 
+        (* lemma_close_pmp_entries closes the pmp config and address pointsto
+           chunks back into the pmp_entries predicate. *)
         Definition lemma_close_pmp_entries : SepLemma close_pmp_entries :=
           {| lemma_logic_variables := ["cfg0" :: ty_pmpcfg_ent; "addr0" :: _;
                                        "cfg1" :: ty_pmpcfg_ent; "addr1" :: _];
@@ -1184,6 +1211,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                                            (term_var "cfg1" ,ₜ term_var "addr1")]);
           |}.
 
+        (* lemma_extract_pmp_ptsto gives access to an individual memory pointsto
+           chunk and a way to return it (asn_pmp_addr_access_without). To extract
+           the pointsto chunk, we require that the pmp check passes for the
+           address (asn_pmp_access). *)
         Definition lemma_extract_pmp_ptsto (bytes : nat) : SepLemma (extract_pmp_ptsto bytes) :=
           let Σ := [paddr :: ty_xlenbits; acc :: ty_access_type; "entries" :: ty.list ty_pmpentry; p :: ty_privilege] in
           let bv_bytes : Term Σ _ := term_val ty_xlenbits (Bitvector.bv.of_nat bytes) in
@@ -1200,6 +1231,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                 ∗ ∃ "w", asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
           |}.
 
+        (* lemma_return_pmp_ptsto gives back the pointsto chunk and restores
+           the pmp_addr_access predicate again. *)
         Definition lemma_return_pmp_ptsto (bytes : nat) : SepLemma (return_pmp_ptsto bytes) :=
           let Σ := [paddr :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; p :: ty_privilege] in
           let bv_bytes : Term Σ _ := term_val ty_xlenbits (Bitvector.bv.of_nat bytes) in
@@ -1240,6 +1273,9 @@ Module RiscvPmpShallowExecutor :=
   MakeShallowExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
 
 Module RiscvPmpValidContracts.
+  (*** RiscvPmpValidContracts ***)
+  (* In this module we prove that all contracts are valid. For this we use the
+     symbolic executor of Katamaran. *)
   Import RiscvPmpExecutor.
   Import RiscvPmpShallowExecutor.
 
@@ -1253,20 +1289,19 @@ Module RiscvPmpValidContracts.
     | InlineOneLevel => 2
     end.
 
-  Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
+  Definition ValidContractReflect {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContractReflect c (FunDef f)
     | None   => False
     end.
 
-  Definition ValidContractWithFuel {Δ τ} (fuel : Fuel) (f : Fun Δ τ) : Prop :=
+  Definition ValidContractReflectWithFuel {Δ τ} (fuel : Fuel) (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContractReflectWithFuel (fuel_to_nat fuel) c (FunDef f)
     | None   => False
     end.
 
-
-  Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
+  Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContract c (FunDef f)
     | None => False
@@ -1278,17 +1313,6 @@ Module RiscvPmpValidContracts.
     constructor;
     cbn.
 
-  Section Debug.
-    Coercion stm_exp : Exp >-> Stm.
-    Local Notation "'use' 'lemma' lem args" := (stm_lemma lem args%env) (at level 10, lem at next level) : exp_scope.
-    Local Notation "'use' 'lemma' lem" := (stm_lemma lem env.nil) (at level 10, lem at next level) : exp_scope.
-
-    (* Import RiscvNotations.
-     Import RiscvμSailNotations. *)
-    Import SymProp.notations.
-
-  End Debug.
-
   Lemma pmp_check_perms_gives_access :
     forall acc p L0 A0 X0 W0 R0,
       Pmp_check_perms {| L := L0; A := A0; X := X0; W := W0; R := R0 |} acc p ->
@@ -1299,7 +1323,7 @@ Module RiscvPmpValidContracts.
       simpl; cbv in H; subst; auto.
   Qed.
 
-  Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheck bytes H).
+  Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@pmpCheck bytes H).
   Proof.
     destruct H as [H|[H|H]]; rewrite ?H;
     apply Symbolic.validcontract_with_erasure_sound;
@@ -1345,46 +1369,46 @@ Module RiscvPmpValidContracts.
     all: try now rewrite ?pmp_match_addr_nomatch_conditions_2.
   Qed.
 
-  Lemma valid_contract_step : ValidContract step.
+  Lemma valid_contract_step : ValidContractReflect step.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_pmpWriteCfgReg (n : nat) {H : (n < 1)%nat} : ValidContract (@pmpWriteCfgReg n H).
+  Lemma valid_contract_pmpWriteCfgReg (n : nat) {H : (n < 1)%nat} : ValidContractReflect (@pmpWriteCfgReg n H).
   Proof. destruct n; reflexivity. Qed.
 
-  Lemma valid_contract_pmpWriteCfg : ValidContract pmpWriteCfg.
+  Lemma valid_contract_pmpWriteCfg : ValidContractReflect pmpWriteCfg.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_pmpWriteAddr : ValidContract pmpWriteAddr.
+  Lemma valid_contract_pmpWriteAddr : ValidContractReflect pmpWriteAddr.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_init_model : ValidContract init_model.
+  Lemma valid_contract_init_model : ValidContractReflect init_model.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_fetch : ValidContract fetch.
+  Lemma valid_contract_fetch : ValidContractReflect fetch.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute : ValidContract execute.
+  Lemma valid_contract_execute : ValidContractReflect execute.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_init_sys : ValidContract init_sys.
+  Lemma valid_contract_init_sys : ValidContractReflect init_sys.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_init_pmp : ValidContract init_pmp.
+  Lemma valid_contract_init_pmp : ValidContractReflect init_pmp.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_handle_mem_exception : ValidContract handle_mem_exception.
+  Lemma valid_contract_handle_mem_exception : ValidContractReflect handle_mem_exception.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_mem_write_value (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@mem_write_value bytes H).
+  Lemma valid_contract_mem_write_value (bytes : nat) {H : restrict_bytes bytes} : ValidContractReflect (@mem_write_value bytes H).
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
+  Lemma valid_contract_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractReflect (@mem_read bytes H).
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : ValidContractWithFuel InlineOneLevel (process_load bytes).
+  Lemma valid_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : ValidContractReflectWithFuel InlineOneLevel (process_load bytes).
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
+  Lemma valid_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@checked_mem_read bytes H).
   Proof.
     destruct H as [H|[H|H]];
       rewrite ?H;
@@ -1393,35 +1417,7 @@ Module RiscvPmpValidContracts.
         exists acc; split; trivial; exists acc; split; trivial; split; trivial.
   Qed.
 
-  (* TODO: remove? *)
-  (* Lemma valid_contract_checked_mem_read_shallow (bytes : nat) : Shallow.ValidContract (sep_contract_checked_mem_read bytes) (fun_checked_mem_read bytes). *)
-  (* Proof. *)
-  (*   econstructor. *)
-  (*   cbv [CPureSpecM.pure *)
-  (*          CPureSpecM.bind *)
-  (*          CHeapSpecM.bind *)
-  (*          CHeapSpecM.bind_right *)
-  (*          CHeapSpecM.consume *)
-  (*          CHeapSpecM.lift_purem *)
-  (*          CHeapSpecM.assert_eq_nenv *)
-  (*          CPureSpecM.angelic]. *)
-  (*   exists (Z.of_nat bytes). *)
-  (*   cbv [inst inst_store inst_env inst_chunk]. *)
-  (*   cbv [evals eval]. *)
-  (*   compute. *)
-  (* Admitted. *)
-
-  (* Lemma valid_contract_checked_mem_read (bytes : nat) : ValidContractDebug (checked_mem_read bytes). *)
-  (* Proof with trivial. *)
-    (* apply Symbolic.validcontract_with_erasure_sound. *)
-    (* compute. *)
-    (* constructor. *)
-    (* cbn. *)
-    (* intros acc paddr p entries Hsub Hacc **. *)
-    (* exists acc. split... exists acc. split... split... *)
-  (* Admitted. *)
-
-  Lemma valid_contract_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_write bytes H).
+  Lemma valid_contract_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@checked_mem_write bytes H).
   Proof.
     destruct H as [H|[H|H]];
       rewrite ?H;
@@ -1430,14 +1426,14 @@ Module RiscvPmpValidContracts.
         exists acc; split; trivial; exists acc; split; trivial; split; trivial.
   Qed.
 
-  Lemma valid_contract_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_read bytes H).
+  Lemma valid_contract_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@pmp_mem_read bytes H).
   Proof.
     destruct H as [H|[H|H]];
       rewrite ?H;
       now symbolic_simpl.
   Qed.
 
-  Lemma valid_contract_pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_write bytes H).
+  Lemma valid_contract_pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@pmp_mem_write bytes H).
   Proof.
     destruct H as [H|[H|H]];
       rewrite ?H;
@@ -1445,144 +1441,166 @@ Module RiscvPmpValidContracts.
       intros; (split; intros; [now exists Write|now exists ReadWrite]).
   Qed.
 
-  Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
+  Lemma valid_contract_pmpCheckRWX : ValidContractReflect pmpCheckRWX.
   Proof. reflexivity. Qed.
   
-  Lemma valid_contract_pmpCheckPerms : ValidContract pmpCheckPerms.
+  Lemma valid_contract_pmpCheckPerms : ValidContractReflect pmpCheckPerms.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_pmpAddrRange : ValidContract pmpAddrRange.
+  Lemma valid_contract_pmpAddrRange : ValidContractReflect pmpAddrRange.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
+  Lemma valid_contract_pmpMatchAddr : ValidContract pmpMatchAddr.
   Proof.
     symbolic_simpl.
     intros; split; intros; bv_comp; auto.
     destruct (v + v0 <=ᵘ? v1)%bv eqn:?; bv_comp; auto.
   Qed.
 
-  Lemma valid_contract_pmpMatchEntry : ValidContract pmpMatchEntry.
+  Lemma valid_contract_pmpMatchEntry : ValidContractReflect pmpMatchEntry.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_pmpLocked : ValidContract pmpLocked.
+  Lemma valid_contract_pmpLocked : ValidContractReflect pmpLocked.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_readCSR : ValidContract readCSR.
+  Lemma valid_contract_readCSR : ValidContractReflect readCSR.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_writeCSR : ValidContract writeCSR.
+  Lemma valid_contract_writeCSR : ValidContractReflect writeCSR.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_check_CSR : ValidContract check_CSR.
+  Lemma valid_contract_check_CSR : ValidContractReflect check_CSR.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_is_CSR_defined : ValidContract is_CSR_defined.
+  Lemma valid_contract_is_CSR_defined : ValidContractReflect is_CSR_defined.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_check_CSR_access : ValidContract check_CSR_access.
+  Lemma valid_contract_check_CSR_access : ValidContractReflect check_CSR_access.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_csrAccess : ValidContract csrAccess.
+  Lemma valid_contract_csrAccess : ValidContractReflect csrAccess.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_csrPriv : ValidContract csrPriv.
+  Lemma valid_contract_csrPriv : ValidContractReflect csrPriv.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_privLevel_to_bits : ValidContract privLevel_to_bits.
+  Lemma valid_contract_privLevel_to_bits : ValidContractReflect privLevel_to_bits.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exception_handler : ValidContract exception_handler.
+  Lemma valid_contract_exception_handler : ValidContractReflect exception_handler.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_handle_illegal : ValidContract handle_illegal.
+  Lemma valid_contract_handle_illegal : ValidContractReflect handle_illegal.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_trap_handler : ValidContract trap_handler.
+  Lemma valid_contract_trap_handler : ValidContractReflect trap_handler.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_prepare_trap_vector : ValidContract prepare_trap_vector.
+  Lemma valid_contract_prepare_trap_vector : ValidContractReflect prepare_trap_vector.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_tvec_addr : ValidContract tvec_addr.
+  Lemma valid_contract_tvec_addr : ValidContractReflect tvec_addr.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exceptionType_to_bits : ValidContract exceptionType_to_bits.
+  Lemma valid_contract_exceptionType_to_bits : ValidContractReflect exceptionType_to_bits.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exception_delegatee : ValidContract exception_delegatee.
+  Lemma valid_contract_exception_delegatee : ValidContractReflect exception_delegatee.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_get_arch_pc : ValidContract get_arch_pc.
+  Lemma valid_contract_get_arch_pc : ValidContractReflect get_arch_pc.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_get_next_pc : ValidContract get_next_pc.
+  Lemma valid_contract_get_next_pc : ValidContractReflect get_next_pc.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_set_next_pc : ValidContract set_next_pc.
+  Lemma valid_contract_set_next_pc : ValidContractReflect set_next_pc.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_tick_pc : ValidContract tick_pc.
+  Lemma valid_contract_tick_pc : ValidContractReflect tick_pc.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_to_bits (l : nat) : ValidContract (to_bits l).
+  Lemma valid_contract_to_bits (l : nat) : ValidContractReflect (to_bits l).
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_rX : ValidContract rX.
+  Lemma valid_contract_rX : ValidContractReflect rX.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_wX : ValidContract wX.
+  Lemma valid_contract_wX : ValidContractReflect wX.
   Proof. reflexivity. Qed.
 
-  (* Lemma valid_contract_abs : ValidContract abs. *)
-  (* Proof. reflexivity. Qed. *)
-
-  Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
+  Lemma valid_contract_within_phys_mem : ValidContract within_phys_mem.
   Proof.
     apply Symbolic.validcontract_with_erasure_sound.
     vm_compute. constructor. cbn. intros.
     lia.
   Qed.
 
-  Lemma valid_contract_execute_RTYPE : ValidContractWithFuel InlineOneLevel execute_RTYPE.
+  Lemma valid_contract_execute_RTYPE : ValidContractReflectWithFuel InlineOneLevel execute_RTYPE.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_ITYPE : ValidContractWithFuel InlineOneLevel execute_ITYPE.
+  Lemma valid_contract_execute_ITYPE : ValidContractReflectWithFuel InlineOneLevel execute_ITYPE.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_SHIFTIOP : ValidContractWithFuel InlineOneLevel execute_SHIFTIOP.
+  Lemma valid_contract_execute_SHIFTIOP : ValidContractReflectWithFuel InlineOneLevel execute_SHIFTIOP.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_UTYPE : ValidContract execute_UTYPE.
+  Lemma valid_contract_execute_UTYPE : ValidContractReflect execute_UTYPE.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_BTYPE : ValidContract execute_BTYPE.
+  Lemma valid_contract_execute_BTYPE : ValidContractReflect execute_BTYPE.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_RISCV_JAL : ValidContract execute_RISCV_JAL.
+  Lemma valid_contract_execute_RISCV_JAL : ValidContractReflect execute_RISCV_JAL.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_RISCV_JALR : ValidContract execute_RISCV_JALR.
+  Lemma valid_contract_execute_RISCV_JALR : ValidContractReflect execute_RISCV_JALR.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_ECALL : ValidContract execute_ECALL.
+  Lemma valid_contract_execute_ECALL : ValidContractReflect execute_ECALL.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_EBREAK : ValidContractDebug execute_EBREAK.
+  Lemma valid_contract_execute_EBREAK : ValidContract execute_EBREAK.
   Proof. now symbolic_simpl. Qed.
 
-  Lemma valid_contract_execute_MRET : ValidContract execute_MRET.
+  Lemma valid_contract_execute_MRET : ValidContractReflect execute_MRET.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_STORE : ValidContract execute_STORE.
+  Lemma valid_contract_execute_STORE : ValidContractReflect execute_STORE.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_LOAD : ValidContract execute_LOAD.
+  Lemma valid_contract_execute_LOAD : ValidContractReflect execute_LOAD.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_execute_CSR : ValidContract execute_CSR.
+  Lemma valid_contract_execute_CSR : ValidContractReflect execute_CSR.
   Proof. reflexivity. Qed.
 
   Open Scope N_scope.
+
+  Lemma valid_contract_reflect : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
+      CEnv f = Some c ->
+      ValidContractReflect f ->
+      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
+  Proof.
+    intros ? ? f c Hcenv Hvc.
+    unfold ValidContractReflect in Hvc.
+    rewrite Hcenv in Hvc.
+    eexists.
+    apply Symbolic.validcontract_reflect_fuel_sound.
+    apply Hvc.
+  Qed.
+
+  Lemma valid_contract_reflect_with_fuel : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ) (fuel : Fuel),
+      CEnv f = Some c ->
+      ValidContractReflectWithFuel fuel f ->
+      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
+  Proof.
+    intros ? ? f c fuel Hcenv Hvc.
+    unfold ValidContractReflectWithFuel in Hvc.
+    rewrite Hcenv in Hvc.
+    exists (fuel_to_nat fuel).
+    now apply Symbolic.validcontract_reflect_fuel_sound.
+  Qed.
 
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
@@ -1592,32 +1610,7 @@ Module RiscvPmpValidContracts.
     intros ? ? f c Hcenv Hvc.
     unfold ValidContract in Hvc.
     rewrite Hcenv in Hvc.
-    exists 1%nat.
-    apply Symbolic.validcontract_reflect_sound.
-    apply Hvc.
-  Qed.
-
-  Lemma valid_contract_with_fuel : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ) (fuel : Fuel),
-      CEnv f = Some c ->
-      ValidContractWithFuel fuel f ->
-      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
-  Proof.
-    intros ? ? f c fuel Hcenv Hvc.
-    unfold ValidContractWithFuel in Hvc.
-    rewrite Hcenv in Hvc.
-    exists (fuel_to_nat fuel).
-    now apply Symbolic.validcontract_reflect_fuel_sound.
-  Qed.
-
-  Lemma valid_contract_debug : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
-      CEnv f = Some c ->
-      ValidContractDebug f ->
-      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
-  Proof.
-    intros ? ? f c Hcenv Hvc.
-    unfold ValidContractDebug in Hvc.
-    rewrite Hcenv in Hvc.
-    exists 1%nat.
+    eexists.
     apply Hvc.
   Qed.
 
@@ -1627,71 +1620,70 @@ Module RiscvPmpValidContracts.
   Proof.
     intros.
     destruct f.
-    - apply (valid_contract _ H valid_contract_rX).
-    - apply (valid_contract _ H valid_contract_wX).
+    - apply (valid_contract_reflect _ H valid_contract_rX).
+    - apply (valid_contract_reflect _ H valid_contract_wX).
     - cbn in H; inversion H.
     - cbn in H; inversion H.
     - cbn in H; inversion H.
-    - apply (valid_contract _ H valid_contract_get_arch_pc).
-    - apply (valid_contract _ H valid_contract_get_next_pc).
-    - apply (valid_contract _ H valid_contract_set_next_pc).
-    - apply (valid_contract _ H valid_contract_tick_pc).
-    - apply (valid_contract _ H (valid_contract_to_bits l)).
-    (* - apply (valid_contract _ H valid_contract_abs). *)
-    - apply (valid_contract_debug _ H valid_contract_within_phys_mem).
-    - apply (valid_contract _ H (@valid_contract_mem_read bytes H0)).
-    - apply (valid_contract_debug _ H (@valid_contract_checked_mem_read bytes H0)).
-    - apply (valid_contract_debug _ H (@valid_contract_checked_mem_write bytes H0)).
-    - apply (valid_contract_debug _ H (@valid_contract_pmp_mem_read bytes H0)).
-    - apply (valid_contract_debug _ H (@valid_contract_pmp_mem_write bytes H0)).
-    - apply (valid_contract _ H valid_contract_pmpLocked).
-    - apply (valid_contract _ H valid_contract_pmpWriteCfgReg).
-    - apply (valid_contract _ H valid_contract_pmpWriteCfg).
-    - apply (valid_contract _ H valid_contract_pmpWriteAddr).
-    - apply (valid_contract_debug _ H valid_contract_pmpCheck).
-    - apply (valid_contract _ H valid_contract_pmpCheckPerms).
-    - apply (valid_contract _ H valid_contract_pmpCheckRWX).
-    - apply (valid_contract _ H valid_contract_pmpMatchEntry).
-    - apply (valid_contract _ H valid_contract_pmpAddrRange).
-    - apply (valid_contract_debug _ H valid_contract_pmpMatchAddr).
-    - apply (valid_contract_with_fuel _ _ H (@valid_contract_process_load bytes p)).
-    - apply (valid_contract _ H (@valid_contract_mem_write_value bytes H0)).
+    - apply (valid_contract_reflect _ H valid_contract_get_arch_pc).
+    - apply (valid_contract_reflect _ H valid_contract_get_next_pc).
+    - apply (valid_contract_reflect _ H valid_contract_set_next_pc).
+    - apply (valid_contract_reflect _ H valid_contract_tick_pc).
+    - apply (valid_contract_reflect _ H (valid_contract_to_bits l)).
+    - apply (valid_contract _ H valid_contract_within_phys_mem).
+    - apply (valid_contract_reflect _ H (@valid_contract_mem_read bytes H0)).
+    - apply (valid_contract _ H (@valid_contract_checked_mem_read bytes H0)).
+    - apply (valid_contract _ H (@valid_contract_checked_mem_write bytes H0)).
+    - apply (valid_contract _ H (@valid_contract_pmp_mem_read bytes H0)).
+    - apply (valid_contract _ H (@valid_contract_pmp_mem_write bytes H0)).
+    - apply (valid_contract_reflect _ H valid_contract_pmpLocked).
+    - apply (valid_contract_reflect _ H valid_contract_pmpWriteCfgReg).
+    - apply (valid_contract_reflect _ H valid_contract_pmpWriteCfg).
+    - apply (valid_contract_reflect _ H valid_contract_pmpWriteAddr).
+    - apply (valid_contract _ H valid_contract_pmpCheck).
+    - apply (valid_contract_reflect _ H valid_contract_pmpCheckPerms).
+    - apply (valid_contract_reflect _ H valid_contract_pmpCheckRWX).
+    - apply (valid_contract_reflect _ H valid_contract_pmpMatchEntry).
+    - apply (valid_contract_reflect _ H valid_contract_pmpAddrRange).
+    - apply (valid_contract _ H valid_contract_pmpMatchAddr).
+    - apply (valid_contract_reflect_with_fuel _ _ H (@valid_contract_process_load bytes p)).
+    - apply (valid_contract_reflect _ H (@valid_contract_mem_write_value bytes H0)).
     - cbn in H; inversion H.
-    - apply (valid_contract _ H valid_contract_init_model).
+    - apply (valid_contract_reflect _ H valid_contract_init_model).
     - cbn in H; inversion H.
-    - apply (valid_contract _ H valid_contract_step).
-    - apply (valid_contract _ H valid_contract_fetch).
-    - apply (valid_contract _ H valid_contract_init_sys).
-    - apply (valid_contract _ H valid_contract_init_pmp).
-    - apply (valid_contract _ H valid_contract_exceptionType_to_bits).
-    - apply (valid_contract _ H valid_contract_privLevel_to_bits).
-    - apply (valid_contract _ H valid_contract_handle_mem_exception).
-    - apply (valid_contract _ H valid_contract_exception_handler).
-    - apply (valid_contract _ H valid_contract_exception_delegatee).
-    - apply (valid_contract _ H valid_contract_trap_handler).
-    - apply (valid_contract _ H valid_contract_prepare_trap_vector).
-    - apply (valid_contract _ H valid_contract_tvec_addr).
-    - apply (valid_contract _ H valid_contract_handle_illegal).
-    - apply (valid_contract _ H valid_contract_check_CSR).
-    - apply (valid_contract _ H valid_contract_is_CSR_defined).
-    - apply (valid_contract _ H valid_contract_csrAccess).
-    - apply (valid_contract _ H valid_contract_csrPriv).
-    - apply (valid_contract _ H valid_contract_check_CSR_access).
-    - apply (valid_contract _ H valid_contract_readCSR).
-    - apply (valid_contract _ H valid_contract_writeCSR).
-    - apply (valid_contract _ H valid_contract_execute).
-    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_RTYPE).
-    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_ITYPE).
-    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_SHIFTIOP).
-    - apply (valid_contract _ H valid_contract_execute_UTYPE).
-    - apply (valid_contract _ H valid_contract_execute_BTYPE).
-    - apply (valid_contract _ H valid_contract_execute_RISCV_JAL).
-    - apply (valid_contract _ H valid_contract_execute_RISCV_JALR).
-    - apply (valid_contract _ H valid_contract_execute_LOAD).
-    - apply (valid_contract _ H valid_contract_execute_STORE).
-    - apply (valid_contract _ H valid_contract_execute_ECALL).
-    - apply (valid_contract_debug _ H valid_contract_execute_EBREAK).
-    - apply (valid_contract _ H valid_contract_execute_MRET).
-    - apply (valid_contract _ H valid_contract_execute_CSR).
+    - apply (valid_contract_reflect _ H valid_contract_step).
+    - apply (valid_contract_reflect _ H valid_contract_fetch).
+    - apply (valid_contract_reflect _ H valid_contract_init_sys).
+    - apply (valid_contract_reflect _ H valid_contract_init_pmp).
+    - apply (valid_contract_reflect _ H valid_contract_exceptionType_to_bits).
+    - apply (valid_contract_reflect _ H valid_contract_privLevel_to_bits).
+    - apply (valid_contract_reflect _ H valid_contract_handle_mem_exception).
+    - apply (valid_contract_reflect _ H valid_contract_exception_handler).
+    - apply (valid_contract_reflect _ H valid_contract_exception_delegatee).
+    - apply (valid_contract_reflect _ H valid_contract_trap_handler).
+    - apply (valid_contract_reflect _ H valid_contract_prepare_trap_vector).
+    - apply (valid_contract_reflect _ H valid_contract_tvec_addr).
+    - apply (valid_contract_reflect _ H valid_contract_handle_illegal).
+    - apply (valid_contract_reflect _ H valid_contract_check_CSR).
+    - apply (valid_contract_reflect _ H valid_contract_is_CSR_defined).
+    - apply (valid_contract_reflect _ H valid_contract_csrAccess).
+    - apply (valid_contract_reflect _ H valid_contract_csrPriv).
+    - apply (valid_contract_reflect _ H valid_contract_check_CSR_access).
+    - apply (valid_contract_reflect _ H valid_contract_readCSR).
+    - apply (valid_contract_reflect _ H valid_contract_writeCSR).
+    - apply (valid_contract_reflect _ H valid_contract_execute).
+    - apply (valid_contract_reflect_with_fuel _ _ H valid_contract_execute_RTYPE).
+    - apply (valid_contract_reflect_with_fuel _ _ H valid_contract_execute_ITYPE).
+    - apply (valid_contract_reflect_with_fuel _ _ H valid_contract_execute_SHIFTIOP).
+    - apply (valid_contract_reflect _ H valid_contract_execute_UTYPE).
+    - apply (valid_contract_reflect _ H valid_contract_execute_BTYPE).
+    - apply (valid_contract_reflect _ H valid_contract_execute_RISCV_JAL).
+    - apply (valid_contract_reflect _ H valid_contract_execute_RISCV_JALR).
+    - apply (valid_contract_reflect _ H valid_contract_execute_LOAD).
+    - apply (valid_contract_reflect _ H valid_contract_execute_STORE).
+    - apply (valid_contract_reflect _ H valid_contract_execute_ECALL).
+    - apply (valid_contract _ H valid_contract_execute_EBREAK).
+    - apply (valid_contract_reflect _ H valid_contract_execute_MRET).
+    - apply (valid_contract_reflect _ H valid_contract_execute_CSR).
   Qed.
 End RiscvPmpValidContracts.
