@@ -589,11 +589,17 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Local Notation "e1 '=?' e2" := (term_binop (bop.relop bop.eq) e1 e2).
 
+    (* z_term is shorthand for creating integer terms. *)
     Definition z_term {Σ} : Z -> Term Σ ty.int := term_val ty.int.
 
+    (* sep_contract_logvars creates an LCtx representing the logical variables
+       for the given Δ and Σ (function arguments and additional logical
+       variables). *)
     Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
       ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
 
+    (* create_localstore creates the localstore from the given program context
+       and logical context. *)
     Definition create_localstore (Δ : PCtx) (Σ : LCtx) : SStore Δ (sep_contract_logvars Δ Σ) :=
       (env.tabulate (fun '(x::σ) xIn =>
                        @term_var
@@ -602,31 +608,20 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
                          σ
                          (ctx.in_cat_left Σ (ctx.in_map (fun '(y::τ) => y::τ) xIn)))).
 
-    Definition asn_with_reg {Σ} (r : Term Σ ty.int) (asn : Reg ty_xlenbits -> Assertion Σ) (asn_default : Assertion Σ) : Assertion Σ :=
-      if: r =? z_term 1
-      then asn x1
-      else
-        if: r =? z_term 2
-        then asn x2
-        else
-          if: r =? z_term 3
-          then asn x3
-          else asn_default.
-
+    (* asn_and_regs maps f over each GPR. *)
     Definition asn_and_regs {Σ} (f : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
       f x1 ∗ f x2 ∗ f x3 ∗ f x4 ∗ f x5 ∗ f x6 ∗ f x7 ∗ f x8 ∗ f x9 ∗
       f x10 ∗ f x11 ∗ f x12 ∗ f x13 ∗ f x14 ∗ f x15 ∗ f x16 ∗ f x17 ∗ f x18 ∗ f x19 ∗
       f x20 ∗ f x21 ∗ f x22 ∗ f x23 ∗ f x24 ∗ f x25 ∗ f x26 ∗ f x27 ∗ f x28 ∗ f x29 ∗
       f x30 ∗ f x31. 
 
+    (* asn_regs_ptsto asserts ownership over all GPRs. *)
     Definition asn_regs_ptsto {Σ} : Assertion Σ :=
       asn_and_regs
         (fun r => asn.exist "w" _ (r ↦ term_var "w")).
 
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
-    (* TODO: abstract away the concrete type, look into unions for that *)
-    (* TODO: length of list should be 16, no duplicates *)
     Definition term_pmp_entries {Σ} : Term Σ (ty.list (ty.prod ty_pmpcfgidx ty_pmpaddridx)) :=
       term_list
         (cons (term_val ty_pmpcfgidx PMP0CFG ,ₜ term_val ty_pmpaddridx PMPADDR0)
@@ -637,7 +632,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
   Import asn.notations.
 
   Module notations.
-    (* TODO: better notation needed *)
     Notation "a '↦mem' b bs" := (asn.chunk (chunk_user (ptstomem b) [a; bs])) (at level 70).
     Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
     Notation "p '⊑' q" := (asn.formula (formula_user sub_perm [p;q])) (at level 70).
@@ -646,8 +640,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
     Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
-    (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
-    (* Notation asn_pmp_entries_angelic l := (asn.chunk_angelic (chunk_user pmp_entries [l])). *)
     Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Notation asn_pmp_addr_access_without a width l m := (asn.chunk (chunk_user (pmp_addr_access_without width) [a; l; m])).
     Notation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).
@@ -665,6 +657,14 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 End RiscvPmpSignature.
 
 Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
+  (* In the RiscvPmpSolverKit we start by defining simplification functions for
+     the pure predicates. Most of these have a similar structure, if the term
+     is a ground value, then we can just call the decision function of the
+     predicate on it. If this function returns true, then the predicate holds
+     and no other conditions need to be fullfilled. If the result is false,
+     then the predicate cannot be satisfied and we return None to indicate this.
+     To have a sound solver we also prove that our simplification functions
+     are sound. *)
   #[local] Arguments Some {_} _%ctx.
 
   Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (PathCondition Σ) :=
@@ -679,8 +679,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     | _      , _      => Some [formula_user access_pmp_perm [a;p]]
     end%ctx.
 
-  (* TODO: simplify_access_pmp_perm *)
-
   Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (width : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
     match term_get_val paddr , term_get_val width , term_get_val es , term_get_val p with
     | Some paddr , Some width , Some entries , Some p =>
@@ -692,7 +690,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     | _, _ , _ , _ => Some [formula_user pmp_access [paddr; width; es; p; acc]]
     end%ctx.
 
-  (* TODO: User predicates can be simplified smarter *)
   Definition simplify_pmp_check_rwx {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) : option (PathCondition Σ) :=
     match term_get_record cfg, term_get_val acc with
     | Some cfg' , Some acc' =>
@@ -746,6 +743,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
 
   Import DList.
 
+  (* simplify_user couples the predicates and their simplification function. *)
   Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (PathCondition Σ) :=
   | pmp_access               | [ paddr; width; entries; priv; perm ] => simplify_pmp_access paddr width entries priv perm
   | pmp_check_perms          | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
