@@ -49,6 +49,21 @@ Import ListNotations.
 Open Scope string_scope.
 Open Scope Z_scope.
 
+(* bv_comp is a tactic that converts boolean comparison operators into props. *)
+Ltac bv_comp :=
+  repeat match goal with
+    | H: (?a <ᵘ? ?b) = true |- _ =>
+        rewrite bv.ultb_ult in H
+    | H: (?a <ᵘ? ?b) = false |- _ =>
+        rewrite bv.ultb_uge in H
+    | H: (?a <=ᵘ? ?b) = true |- _ =>
+        rewrite bv.uleb_ule in H
+    | H: (?a <=ᵘ? ?b) = false |- _ =>
+        rewrite bv.uleb_ugt in H
+    | H: (?P || ?Q)%bool = true |- _ =>
+        apply Bool.orb_true_iff in H as [?|?]
+    end.
+
 (* PurePredicate defines the pure predicates for this case. *)
 Inductive PurePredicate : Set :=
 | pmp_access
@@ -190,19 +205,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
                     then PMP_Match
                     else PMP_PartialMatch
       | None          => PMP_NoMatch
-      end.
-
-  (* bv_comp is a tactic that converts boolean comparison operators into props. *)
-  Ltac bv_comp :=
-      repeat match goal with
-      | H: (?a <ᵘ? ?b) = true |- _ =>
-          rewrite bv.ultb_ult in H
-      | H: (?a <ᵘ? ?b) = false |- _ =>
-          rewrite bv.ultb_uge in H
-      | H: (?a <=ᵘ? ?b) = true |- _ =>
-          rewrite bv.uleb_ule in H
-      | H: (?a <=ᵘ? ?b) = false |- _ =>
-          rewrite bv.uleb_ugt in H
       end.
 
   Section PmpMatchAddrConditions.

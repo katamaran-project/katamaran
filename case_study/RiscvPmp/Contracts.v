@@ -39,7 +39,6 @@ From Katamaran Require Import
      Symbolic.Solver
      Symbolic.Propositions
      Symbolic.Worlds
-     RiscvPmp.PmpCheck
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From Equations Require Import
