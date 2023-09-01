@@ -39,6 +39,7 @@ Set Implicit Arguments.
 
 Import RiscvPmpProgram.
 
+(*** RiscvPmpIrisBase ***)
 (* Instantiate the Iris framework solely using the operational semantics. At
    this point we do not commit to a set of contracts nor to a set of
    user-defined predicates. *)
@@ -46,6 +47,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
   (* Pull in the definition of the LanguageMixin and register ghost state. *)
   Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
 
+  (** RiscvPmpIrisParams **)
   (* Defines the memory ghost state. *)
   Section RiscvPmpIrisParams.
     Import bv.
