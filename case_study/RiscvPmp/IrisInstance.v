@@ -45,6 +45,10 @@ Module ns := stdpp.namespaces.
 Set Implicit Arguments.
 Import bv.notations.
 
+(*** RiscvPmpIrisInstance ***)
+(* This module defines the interpretation of the spatial predicates. The
+   interpretation is linked to the spatial predicate at the end of the module
+   by the luser_inst definition. *)
 Module RiscvPmpIrisInstance <:
   IrisInstance RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
     RiscvPmpSignature RiscvPmpIrisBase.
@@ -54,17 +58,28 @@ Module RiscvPmpIrisInstance <:
   Section WithSailGS.
     Context `{sailRegGS Σ} `{invGS Σ} `{mG : mcMemGS Σ}.
 
+    (* reg_file of the machine, consisting of all GPRs. The registers are
+       representable by bitvectors of length 5. *)
     Definition reg_file : gset (bv 5) := list_to_set (bv.finite.enum 5).
 
+    (* interp_ptsreg interps pointso chunks for registers. We convert the
+       given register index r into an instance of Reg and state that that
+       register contains the value v. Note that x0 is not an actual register
+       but hardwired to zero, for that case the interpretation is just True. *)
     Definition interp_ptsreg (r : RegIdx) (v : Word) : iProp Σ :=
       match reg_convert r with
       | Some x => reg_pointsTo x v
       | None => True
       end.
 
+    (* interp_gprs is the interpretation for the GPRs predicate, it states
+       ownership over all registers and that they contain some value. *)
     Definition interp_gprs : iProp Σ :=
       [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
 
+    (* interp_pmp_entries requires that entries is a list with two elements,
+       each element being a pmp config and address. It gives the pointsto chunks
+       for the CSRs relating to the pmp entries. *)
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
       match entries with
       | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
@@ -75,57 +90,49 @@ Module RiscvPmpIrisInstance <:
       | _ => False
       end.
 
-    Definition addr_inc (x : bv 32) (n : nat) : bv 32 :=
-      bv.add x (bv.of_nat n).
-
-    Fixpoint get_byte {width : nat} (offset : nat) : bv (width * byte) -> Byte :=
-      match width with
-      | O   => fun _ => bv.zero
-      | S w =>
-          fun bytes =>
-            let (byte, bytes) := bv.appView byte (w * byte) bytes in
-            match offset with
-            | O        => byte
-            | S offset => get_byte offset bytes
-            end
-      end.
-
-    (* TODO: change back to words instead of bytes... might be an easier first version
-             and most likely still conventient in the future *)
   Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptstomem_readonly").
-    Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
-      mapsto addr (DfracOwn 1) b.
-    Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
-    Definition ptstoSthL : list Addr -> iProp Σ :=
-      fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
-    Lemma ptstoSthL_app {l1 l2} : (ptstoSthL (l1 ++ l2) ⊣⊢ ptstoSthL l1 ∗ ptstoSthL l2)%I.
-    Proof. eapply big_sepL_app. Qed.
+  (* interp_ptsto for address to the given byte. *)
+  Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
+    mapsto addr (DfracOwn 1) b.
+  (* ptstoSth is the "pointsto something" predicate. *)
+  Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
+  (* ptstoSthL is ptstoSth lifted to work over a list of values. *)
+  Definition ptstoSthL : list Addr -> iProp Σ :=
+    fun addrs => ([∗ list] _↦a ∈ addrs, ptstoSth a)%I.
+  Lemma ptstoSthL_app {l1 l2} : (ptstoSthL (l1 ++ l2) ⊣⊢ ptstoSthL l1 ∗ ptstoSthL l2)%I.
+  Proof. eapply big_sepL_app. Qed.
 
-    Definition interp_ptstomem' {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
-      [∗ list] offset ∈ seq 0 width,
-        interp_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
+  (* interp_ptstomem gives the pointsto chunks for the individual address
+     involved with the given data (one pointsto for each byte). *)
+  Fixpoint interp_ptstomem {width : nat} (addr : Addr) : bv (width * byte) -> iProp Σ :=
+    match width with
+    | O   => fun _ => True
+    | S w =>
+        fun bytes =>
+          let (byte, bytes) := bv.appView byte (w * byte) bytes in
+          interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
+    end%I.
 
-    Fixpoint interp_ptstomem {width : nat} (addr : Addr) : bv (width * byte) -> iProp Σ :=
-      match width with
-      | O   => fun _ => True
-      | S w =>
-          fun bytes =>
-            let (byte, bytes) := bv.appView byte (w * byte) bytes in
-            interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
-      end%I.
+  Definition interp_ptstomem_readonly {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
+    inv femto_inv_ns (interp_ptstomem addr b).
 
-    Definition interp_ptstomem_readonly {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
-      inv femto_inv_ns (interp_ptstomem addr b).
-    Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-      [∗ list] a ∈ addrs,
-        (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ ptstoSth a)%I.
+  (* interp_pmp_addr_access implements the pmp addr access predicate, which, if
+     we have access according to the pmp policy, gives us access to a pointsto
+     chunk. *)
+  Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+    [∗ list] a ∈ addrs,
+      (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ ptstoSth a)%I.
 
-    Definition interp_pmp_addr_access_without (addr : Addr) (width : nat) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-      ((∃ w, @interp_ptstomem width addr w)  -∗ interp_pmp_addr_access addrs entries m)%I.
+  (* interp_pmp_addr_access_without requires to be given back the pointsto chunks
+     taken out of the pmp addr access predicate. *)
+  Definition interp_pmp_addr_access_without (addr : Addr) (width : nat) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+    ((∃ w, @interp_ptstomem width addr w)  -∗ interp_pmp_addr_access addrs entries m)%I.
 
-    (* TODO: introduce constant for nr of word bytes (replace 4) *)
-    Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
-      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
+  (* interp_ptsto_instr is used for the pointsto chunks involving instructions,
+     which is a 4-byte memory chunk and its decoding of the value it points to
+     should be equal to the given instruction. *)
+  Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
+    (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
 
   End WithSailGS.
 
