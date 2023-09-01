@@ -105,15 +105,29 @@ Import BlockVerificationDerived2.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
     Definition femto_pmpcfg_ent1_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
     Definition femto_pmp0cfg_bits : Val (ty.bvec 32) := bv.zext (bv.app femto_pmpcfg_ent0_bits femto_pmpcfg_ent1_bits).
-    Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := bv.vector_subrange 0 12 femto_pmp0cfg_bits.
-    Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := bv.vector_subrange 12 20 femto_pmp0cfg_bits.
-                                                               
+
+    (* Because of sign extension in the 12-bit immediate of ADDI/SW/LW, one cannot just take subranges to split immediates. Rather, the following function is used: *)
+    (* See e.g.: https://stackoverflow.com/questions/50742420/risc-v-build-32-bit-constants-with-lui-and-addi *)
+    Definition imm_split_bv (imm : bv 32) : (bv 12 * bv 20) :=
+      let (lo , hi) := bv.appView 12 _ imm in
+        if (base.decide (hi = (bv.ones 20))) then (lo , hi) (* Small negative numbers *)
+        else if (bv.msb lo) (* Avoid incorrect sign-extension *)
+             then (bv.of_Z (Z.of_N (bv.bin lo) - 4096), hi + bv.one)
+             else (lo , hi).
+
+    (* TODO: prove this spec for `imm_split_bv`*)
+    (* Lemma imm_split_bv_spec lo hi imm : *)
+    (*    (lo , hi) = imm_split_bv imm -> imm = bv.add (bv.shiftl (bv.zext hi) (@bv.of_N 12 12)) (bv.sext lo). *)
+
+    Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := fst (imm_split_bv femto_pmp0cfg_bits).
+    Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := snd (imm_split_bv femto_pmp0cfg_bits).
+
     Example femtokernel_init : list AST :=
       [
         UTYPE bv.zero ra RISCV_AUIPC
       ; ITYPE (bv.of_N 76) ra ra RISCV_ADDI
       ; CSR MPMPADDR0 ra zero false CSRRW
-      ; ITYPE (bv.negate bv.one) zero ra RISCV_ADDI
+      ; ITYPE (bv.of_N femto_address_max) zero ra RISCV_ADDI
       ; CSR MPMPADDR1 ra zero false CSRRW
       ; UTYPE femto_pmp0cfg_bits_2 ra RISCV_LUI
       ; ITYPE femto_pmp0cfg_bits_1 ra ra RISCV_ADDI
@@ -121,7 +135,7 @@ Import BlockVerificationDerived2.
       ; UTYPE bv.zero ra RISCV_AUIPC
       ; ITYPE (bv.of_N 28) ra ra RISCV_ADDI
       ; CSR MTvec ra zero false CSRRW
-      ; ITYPE (bv.of_N 12) ra ra RISCV_ADDI
+      ; ITYPE (bv.of_N 16) ra ra RISCV_ADDI
       ; CSR MEpc ra zero false CSRRW
       ; CSR MStatus zero zero false CSRRW
       ; MRET
@@ -162,7 +176,6 @@ Import BlockVerificationDerived2.
     Let Σ__femtoinit : LCtx := [].
     Let W__femtoinit : World := MkWorld Σ__femtoinit []%ctx.
 
-    (* DOMI: TODO: replace the pointsto chunk for 84 ↦ 42 with a corresponding invariant *)
     Example femtokernel_init_pre : Assertion {| wctx := [] ▻ ("a"::ty_xlenbits) ; wco := []%ctx |} :=
       (term_var "a" = term_val ty_word bv.zero) ∗
       (∃ "v", mstatus ↦ term_var "v") ∗
