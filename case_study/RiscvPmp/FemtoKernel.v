@@ -122,10 +122,29 @@ Import BlockVerificationDerived2.
     Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := fst (imm_split_bv femto_pmp0cfg_bits).
     Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := snd (imm_split_bv femto_pmp0cfg_bits).
 
-    Example femtokernel_init : list AST :=
+    (* ASTs with a very limited form of labels, that allow us to refer to the address of the current instruction *)
+    Inductive ASM :=
+      | Instr (a: AST)
+      | RelInstr (f : N -> AST).
+    Local Coercion AST_ASM (a : AST) := Instr (a).
+    Local Notation "'Λ' x , a" := (RelInstr (fun x => a))
+      (at level 200) : list_scope.
+    Local Arguments List.cons {_} & _ _. (* Allow projecting individual ASM into AST  - TODO: wrap `cons` in another definition *)
+
+    (* Address resolution *)
+    Fixpoint resolve_ASM (la : list ASM) (cur_off : N) : list AST :=
+      match la with
+      | nil => nil
+      | cons hd tl =>
+          let hd' := (match hd with
+          | Instr a => a
+          | RelInstr f => f cur_off end) in
+          cons hd' (resolve_ASM tl (cur_off + N.of_nat xlenbytes)) end.
+
+    Example femtokernel_init_asm (handler_start : N) (adv_start : N): list ASM :=
       [
         UTYPE bv.zero ra RISCV_AUIPC
-      ; ITYPE (bv.of_N 76) ra ra RISCV_ADDI
+      ; Λ x, ITYPE (bv.of_N (adv_start - (x - 4))) ra ra RISCV_ADDI
       ; CSR MPMPADDR0 ra zero false CSRRW
       ; ITYPE (bv.of_N femto_address_max) zero ra RISCV_ADDI
       ; CSR MPMPADDR1 ra zero false CSRRW
@@ -133,34 +152,38 @@ Import BlockVerificationDerived2.
       ; ITYPE femto_pmp0cfg_bits_1 ra ra RISCV_ADDI
       ; CSR MPMP0CFG ra zero false CSRRW
       ; UTYPE bv.zero ra RISCV_AUIPC
-      ; ITYPE (bv.of_N 28) ra ra RISCV_ADDI
+      ; Λ x, ITYPE (bv.of_N (handler_start - (x - 4))) ra ra RISCV_ADDI
       ; CSR MTvec ra zero false CSRRW
-      ; ITYPE (bv.of_N 16) ra ra RISCV_ADDI
+      ; ITYPE (bv.of_N (adv_start - handler_start)) ra ra RISCV_ADDI
       ; CSR MEpc ra zero false CSRRW
       ; CSR MStatus zero zero false CSRRW
       ; MRET
       ].
 
-    Example femtokernel_handler : list AST :=
+    Example femtokernel_init' (init_addr : N) (handler_start : N) (adv_start : N) :=
+      resolve_ASM (femtokernel_init_asm handler_start adv_start) init_addr.
+    Definition init_size : N := N.of_nat (List.length (femtokernel_init' 0 0 0)) * 4.
+
+    Example femtokernel_handler_asm (data_start : N) : list ASM :=
       [
         UTYPE bv.zero ra RISCV_AUIPC
-      ; LOAD (bv.of_N 12) ra ra false WORD
+      ; Λ x, LOAD (bv.of_N (data_start - (x - 4))) ra ra false WORD
       ; MRET
       ].
+    Example femtokernel_handler' (handler_start : N) (data_start : N) :=
+      resolve_ASM (femtokernel_handler_asm data_start) handler_start.
+    Definition handler_size : N := N.of_nat (List.length (femtokernel_handler' 0 0)) * 4.
 
-    Definition addPc (l : list AST) : list (nat * AST) :=
-      map (fun '(i , a) => (i * 4 , a)%nat)
-          (combine (seq 0 (List.length l)) l).
-    (* Compute addPc (femtokernel_init ++ femtokernel_handler). *)
-
-    (* +1 to include the protected data address *)
-    Definition femtokernel_size : N := N.of_nat (S (List.length femtokernel_init + List.length femtokernel_handler) * 4).
-    Definition handler_size     : N := N.of_nat (List.length femtokernel_handler) * 4.
+    Definition data_size : N := 4.
+    Definition femtokernel_size : N := init_size + handler_size + data_size.
     Definition init_address     : N := 0.
-    Definition handler_address  : N := N.of_nat (List.length femtokernel_init) * 4.
-    Definition data_address     : N := femtokernel_size - 4.
+    Definition handler_address  : N := init_address + init_size.
+    Definition data_address     : N := init_address + femtokernel_size - 4.
 
     Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N femtokernel_size); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
+
+    Definition femtokernel_init := femtokernel_init' init_address handler_address femtokernel_size.
+    Definition femtokernel_handler := femtokernel_handler' handler_address data_address.
 
     Import asn.notations.
     Import RiscvPmp.Sig.
