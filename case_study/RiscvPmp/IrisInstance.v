@@ -65,8 +65,6 @@ Module RiscvPmpIrisInstance <:
     Definition interp_gprs : iProp Σ :=
       [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
 
-    Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
-
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
       match entries with
       | (cfg0, addr0) :: (cfg1, addr1) :: [] =>

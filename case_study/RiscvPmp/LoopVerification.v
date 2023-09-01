@@ -301,7 +301,7 @@ Section Loop.
   Proof.
     iApply (@iris_rule_consequence _ _ _ _ env.nil
              ((∃ p : Privilege, cur_privilege ↦ p) ∗
-              (∃ es : list RiscvPmpIrisInstance.PmpEntryCfg, interp_pmp_entries es))
+              (∃ es : list RiscvPmpSignature.PmpEntryCfg, interp_pmp_entries es))
              _ _ _ fun_init_model _ _).
     iApply valid_init_model_contract.
     Unshelve.
