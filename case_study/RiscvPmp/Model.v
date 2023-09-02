@@ -76,6 +76,9 @@ Ltac destruct_syminstance ι :=
 Import RiscvPmpIrisBase.
 Import RiscvPmpIrisInstance.
 
+(*** RiscvPmpModel2 ***)
+(* In this module we prove that the foreign functions and lemma contracts are
+   sound. *)
 Module RiscvPmpModel2.
   Import RiscvPmpSignature.
   Import RiscvPmpSpecification.
@@ -320,6 +323,7 @@ Module RiscvPmpModel2.
       iSplitL; first iPureIntro; auto.
     Qed.
 
+    (* foreignSem is the soundness of all foreign functions. *)
     Lemma foreignSem : ForeignSem.
     Proof.
       intros Δ τ f; destruct f;
@@ -455,7 +459,6 @@ Module RiscvPmpModel2.
         (addr + (bv.of_nat bytes) <=ᵘ bv.of_nat maxAddr) ->
         exists l1 l2, liveAddrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
     Proof.
-    (* TODO: more efficient proof? *)
       unfold maxAddr.
       intros addr bytes bytesfit addrbytesFits addrDiffFits Hmin Hmax.
       unfold bv.ule, bv.ule in *.
@@ -881,6 +884,7 @@ Module RiscvPmpModel2.
       iApply ("Hwithout" with "Hptsto").
     Qed.
 
+    (* lemSem is the soundness of all lemmas. *)
     Lemma lemSem : LemmaSem.
     Proof.
       intros Δ [];
