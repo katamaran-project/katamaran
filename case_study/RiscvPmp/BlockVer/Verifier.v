@@ -73,8 +73,6 @@ Open Scope Z_scope.
 
 Module ns := stdpp.namespaces.
 
-(*   Definition pmp_entry_cfg := ty_prod ty_pmpcfg_ent ty_xlenbits. *)
-
 Module BlockVerificationDerived2.
 
   Import RiscvPmpBlockVerifSpec.
@@ -135,12 +133,6 @@ Module BlockVerificationDerived2.
         ω2 ∣ apc' <- exec_instruction_any i (persist__term apc ω1) ;;
         @exec_block_addr b' _ (term_binop bop.bvadd (persist__term ainstr (ω1 ∘ ω2)) (term_val ty_word bv_instrsize)) apc'
       end.
-
-  Definition exec_double_addr {Σ : World}
-    (req : Assertion (Σ ▻ ("a":: ty_xlenbits))) (b : list AST) : M (STerm ty_xlenbits) Σ :=
-    ω1 ∣ an <- @demonic _ _ ;;
-    ω2 ∣ _ <- produce (w := wsnoc _ _) req (acc_snoc_left ω1 _ an);;
-    @exec_block_addr b _ (persist__term an ω2) (persist__term an ω2).
 
   Definition exec_triple_addr {Σ : World}
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
@@ -300,12 +292,6 @@ Module BlockVerificationDerived2Sound.
       }
       { reflexivity. }
   Qed.
-
-  Definition exec_double_addr__c {Σ : World} (ι : Valuation Σ)
-    (req : Assertion (wsnoc Σ ("a"::ty_xlenbits))) (b : list AST) : M (Val ty_xlenbits) :=
-    an <- @demonic _ ;;
-    _ <- produce (env.snoc ι ("a"::ty_xlenbits) an) req ;;
-    @exec_block_addr__c b an an.
 
   Definition exec_triple_addr__c {Σ : World} (ι : Valuation Σ)
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
