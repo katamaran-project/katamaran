@@ -296,16 +296,6 @@ Section ContractDefKit.
     asn.exist "c" ty.cap (r ↦ term_var "c" ∗
                           asn_expr (term_var "c")).
 
-  (* mach_inv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * asn_pc_safe pc *)
-  (* Definition mach_inv {Σ} : Assertion Σ :=
-    asn_gprs ∗ asn_pc_safe pc. *)
-
-  (*
-Universal Contract
-{ ∀ r ∈ GPRS . ∃ w . r → w ∗ V(w) ∗ pc ↦ c ∗ V(c) ∗ IH }
-fdeCycle()
-{ interp_loop ≡ wp Loop ⊤ }
-   *)
 End ContractDefKit.
 
 End MinCapsSignature.
@@ -317,6 +307,12 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   Section ContractDefKit.
 
     Section ContractDef.
+      (* mach_inv_contract is the contract used for the machine for an
+         individual step, as well as for all the execute functions. The contract
+         requires ownership over all registers of the machine and gives back
+         the ownership. Note that in the postcondition we can end up with either
+         a safe pc, or a pc for which the expression relation holds (in the case
+         a jump to an enter capability occured). *)
       Definition mach_inv_contract {Δ τ} : SepContract Δ τ :=
         {| sep_contract_logic_variables := sep_contract_logvars Δ [];
           sep_contract_localstore      := create_localstore Δ [];
@@ -341,9 +337,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           sep_contract_localstore      := [term_var "cs"];
           sep_contract_precondition    := asn_gprs;
           sep_contract_result          := "result_read_reg_cap";
-          sep_contract_postcondition   := asn_gprs ∗ (* asn_csafe (term_var "result_read_reg_cap") *)
-                                                   asn_match_cap (term_var "result_read_reg_cap") "p" "b" "e" "a"
-                                                   (asn_csafe (term_var "result_read_reg_cap"));
+          sep_contract_postcondition   := asn_gprs ∗ 
+                                          asn_match_cap (term_var "result_read_reg_cap") "p" "b" "e" "a"
+                                          (asn_csafe (term_var "result_read_reg_cap"));
         |}.
 
       Definition sep_contract_read_reg_num : SepContractFun read_reg_num :=
@@ -401,12 +397,12 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
                     (let c : Term _ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
                      let c' : Term _ _ := term_record capability [term_var "p'"; term_var "b"; term_var "e"; term_var "a"] in
                      term_var "result_update_pc_perm" = c' ∗
-                                                           term_var "p'" ≠ₚ term_val ty.perm E ∗
-                                                           asn.match_enum permission (term_var "p")
-                                                           (fun p => match p with
-                                                                     | E => asn_expr c'
-                                                                     | _ => asn_csafe c' ∗ c = c'
-                                                                     end))
+                     term_var "p'" ≠ₚ term_val ty.perm E ∗
+                     asn.match_enum permission (term_var "p")
+                       (fun p => match p with
+                                 | E => asn_expr c'
+                                 | _ => asn_csafe c' ∗ c = c'
+                                 end))
         |}.
 
       Definition sep_contract_is_correct_pc : SepContract ["c" :: ty.cap] ty.bool :=
@@ -438,8 +434,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           sep_contract_result          := "result_add_pc";
           sep_contract_postcondition   :=
           term_var "result_add_pc" = term_val ty.unit tt ∗
-                                              asn.exist "npc" ty.cap
-                                              (pc ↦ term_var "npc" ∗ asn_csafe (term_var "npc"));
+          asn.exist "npc" ty.cap (pc ↦ term_var "npc" ∗ asn_csafe (term_var "npc"));
         |}.
 
       Definition sep_contract_read_mem : SepContract ["c" :: ty.cap ] ty.memval :=
@@ -577,7 +572,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           sep_contract_precondition    := ⊤;
           sep_contract_result          := "result_and_perm";
           sep_contract_postcondition   :=
-          term_var "result_and_perm" <=ₚ term_var "p1" ∗ term_var "result_and_perm" <=ₚ term_var "p2";
+            term_var "result_and_perm" <=ₚ term_var "p1" ∗
+            term_var "result_and_perm" <=ₚ term_var "p2";
         |}.
 
       Definition sep_contract_abs : SepContractFun abs :=
@@ -743,44 +739,44 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
         let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr]%ctx in
         let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
         {| lemma_logic_variables := Σ;
-          lemma_patterns        := (env.snoc env.nil (_∷_) c);
-          lemma_precondition    := asn_correctPC c;
-          lemma_postcondition   := term_val ty.perm R <=ₚ term_var "p";
+           lemma_patterns        := (env.snoc env.nil (_∷_) c);
+           lemma_precondition    := asn_correctPC c;
+           lemma_postcondition   := term_val ty.perm R <=ₚ term_var "p";
         |}.
 
       Definition lemma_subperm_not_E : SepLemma subperm_not_E :=
         {| lemma_logic_variables := ["p" :: ty.perm; "p'" :: ty.perm];
-          lemma_patterns        := [term_var "p"; term_var "p'"];
-          lemma_precondition    :=
-          (term_var "p" = term_val ty.perm R ∨ term_var "p" = term_val ty.perm RW) ∗
-                                                                                   term_var "p" <=ₚ term_var "p'";
-          lemma_postcondition   := term_var "p'" ≠ₚ term_val ty.perm E;
+           lemma_patterns        := [term_var "p"; term_var "p'"];
+           lemma_precondition    :=
+             (term_var "p" = term_val ty.perm R ∨ term_var "p" = term_val ty.perm RW) ∗
+             term_var "p" <=ₚ term_var "p'";
+           lemma_postcondition   := term_var "p'" ≠ₚ term_val ty.perm E;
         |}.
 
       Definition lemma_safe_to_execute : SepLemma safe_to_execute :=
         let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr]%ctx in
         let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
         {| lemma_logic_variables := Σ;
-          lemma_patterns        := (env.snoc env.nil (_∷_) c);
-          lemma_precondition    := asn_csafe c ∗ term_var "p" = term_val ty.perm E;
-          lemma_postcondition   :=
-            (let p : Term _ (type (_ :: _)) := term_val ty.perm R in
-               let c : Term _ _ := term_record capability [p; term_var "b"; term_var "e"; term_var "a"] in
-                      asn_expr c);
+           lemma_patterns        := (env.snoc env.nil (_∷_) c);
+           lemma_precondition    := asn_csafe c ∗ term_var "p" = term_val ty.perm E;
+           lemma_postcondition   :=
+             (let p : Term _ (type (_ :: _)) := term_val ty.perm R in
+              let c : Term _ _ := term_record capability [p; term_var "b"; term_var "e"; term_var "a"] in
+              asn_expr c);
         |}.
 
       Definition lemma_open_gprs : SepLemma open_gprs :=
         {| lemma_logic_variables := [];
-          lemma_patterns        := [];
-          lemma_precondition    := asn_gprs;
-          lemma_postcondition   := asn_regs_ptsto_safe;
+           lemma_patterns        := [];
+           lemma_precondition    := asn_gprs;
+           lemma_postcondition   := asn_regs_ptsto_safe;
         |}.
 
       Definition lemma_close_gprs : SepLemma close_gprs :=
         {| lemma_logic_variables := [];
-          lemma_patterns        := [];
-          lemma_precondition    := asn_regs_ptsto_safe;
-          lemma_postcondition   := asn_gprs;
+           lemma_patterns        := [];
+           lemma_precondition    := asn_regs_ptsto_safe;
+           lemma_postcondition   := asn_gprs;
         |}.
 
       Definition lemma_safe_move_cursor : SepLemma safe_move_cursor :=
@@ -788,67 +784,45 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
         let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
         let c' : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a'"] in
         {| lemma_logic_variables := Σ;
-          lemma_patterns        := [nenv c'; c];
-          lemma_precondition    := asn_csafe c ∗ (term_var "p" ≠ₚ term_val ty.perm E ∨ term_var "a" = (term_var "a'"));
-          lemma_postcondition   :=
-          asn_csafe c ∗
-                    asn_csafe c';
+           lemma_patterns        := [nenv c'; c];
+           lemma_precondition    := asn_csafe c ∗ (term_var "p" ≠ₚ term_val ty.perm E ∨ term_var "a" = (term_var "a'"));
+           lemma_postcondition   := asn_csafe c ∗ asn_csafe c';
         |}.
 
-      (*
-    @pre c = mkcap(p,b,e,a) ✱ c' = mkcap(p',b,e,a) ✱ csafe(c) ✱ p' ≤ p
-    @post csafe(c) ✱ csafe(c')
-    unit csafe_sub_perm(c : capability, c' : capability);
-       *)
       Definition lemma_safe_sub_perm : SepLemma safe_sub_perm :=
         let Σ : LCtx := ["p" ∷ ty.perm; "p'" ∷ ty.perm; "b" ∷ ty.addr; "e" ∷ ty.addr; "a" ∷ ty.addr]%ctx in
         let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
         let c' : Term Σ _ := term_record capability [term_var "p'"; term_var "b"; term_var "e"; term_var "a"] in
         {| lemma_logic_variables := Σ;
-          lemma_patterns        := [nenv c'; c];
-          lemma_precondition    :=
-          asn_csafe c ∗ term_var "p'" <=ₚ term_var "p" ∗ asn_IH;
-          lemma_postcondition   :=
-          asn_csafe c ∗
-                    asn_csafe c';
+           lemma_patterns        := [nenv c'; c];
+           lemma_precondition    :=
+             asn_csafe c ∗ term_var "p'" <=ₚ term_var "p" ∗ asn_IH;
+           lemma_postcondition   := asn_csafe c ∗ asn_csafe c';
         |}.
 
-      (*
-    @pre c = mkcap(p,b,e,a) ✱ c' = mkcap(p,b',e',a) ✱ csafe(c) ✱ b ≤ b' ✱ e' ≤ e
-    @post csafe(c) ✱ csafe(c')
-    unit csafe_within_range(c' : capability, c : capability);
-       *)
       Definition lemma_safe_within_range : SepLemma safe_within_range :=
         let Σ : LCtx := ["p" ∷ ty.perm; "b" ∷ ty.addr; "b'" ∷ ty.addr; "e" ∷ ty.addr; "e'" ∷ ty.addr; "a" ∷ ty.addr]%ctx in
         let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
         let c' : Term Σ _ := term_record capability [term_var "p"; term_var "b'"; term_var "e'"; term_var "a"] in
         {| lemma_logic_variables := Σ;
-          lemma_patterns        := [nenv c'; c];
-          lemma_precondition    :=
-          asn_csafe c ∗
-                    term_var "p" ≠ₚ term_val ty.perm E ∗
-                    asn_IH ∗
-                    asn.formula
-                    (formula_bool
-                       (term_binop bop.and
-                                   (term_binop (bop.relop bop.le) (term_var "b") (term_var "b'"))
-                                   (term_binop (bop.relop bop.le) (term_var "e'") (term_var "e"))));
-          lemma_postcondition   :=
-          asn_csafe c ∗
-                    asn_csafe c';
+           lemma_patterns        := [nenv c'; c];
+           lemma_precondition    :=
+             asn_csafe c ∗
+             term_var "p" ≠ₚ term_val ty.perm E ∗
+             asn_IH ∗
+             asn.formula
+               (formula_bool
+                  (term_binop bop.and
+                     (term_binop (bop.relop bop.le) (term_var "b") (term_var "b'"))
+                     (term_binop (bop.relop bop.le) (term_var "e'") (term_var "e"))));
+           lemma_postcondition   := asn_csafe c ∗ asn_csafe c';
         |}.
 
-      (*
-    @pre true
-    @post safe(i)
-    unit int_safe(i : int);
-       *)
       Definition lemma_int_safe : SepLemma int_safe :=
         {| lemma_logic_variables := ["i" ∷ ty.int];
-          lemma_patterns        := [term_var "i"];
-          lemma_precondition    := ⊤;
-          lemma_postcondition   :=
-          asn_safe (term_inl (term_var "i"));
+           lemma_patterns        := [term_var "i"];
+           lemma_precondition    := ⊤;
+           lemma_postcondition   := asn_safe (term_inl (term_var "i"));
         |}.
 
       Definition LEnv : LemmaEnv :=
@@ -873,43 +847,41 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
 
       Definition sep_contract_rM : SepContractFunX rM :=
         {| sep_contract_logic_variables := ["address" ∷ ty.addr; "p" ∷ ty.perm; "b" ∷ ty.addr; "e" ∷ ty.addr];
-          sep_contract_localstore      := [term_var "address"];
-          sep_contract_precondition    :=
-          asn_csafe_angelic (term_record capability
-                                         [term_var "p";
-                                          term_var "b";
-                                          term_var "e";
-                                          term_var "address"]) ∗
-                            term_val ty.perm R <=ₚ term_var "p" ∗
-                                                   asn_within_bounds (term_var "address") (term_var "b") (term_var "e");
-          sep_contract_result          := "rM_result";
-          sep_contract_postcondition   :=
-          asn_safe (term_var "rM_result")
+           sep_contract_localstore      := [term_var "address"];
+           sep_contract_precondition    :=
+             asn_csafe_angelic (term_record capability
+                                  [term_var "p";
+                                   term_var "b";
+                                   term_var "e";
+                                   term_var "address"]) ∗
+             term_val ty.perm R <=ₚ term_var "p" ∗
+             asn_within_bounds (term_var "address") (term_var "b") (term_var "e");
+           sep_contract_result          := "rM_result";
+           sep_contract_postcondition   := asn_safe (term_var "rM_result")
         |}.
 
       Definition sep_contract_wM : SepContractFunX wM :=
         {| sep_contract_logic_variables := ["address" ∷ ty.addr; "new_value" ∷ ty.memval; "p" ∷ ty.perm; "b" ∷ ty.addr; "e" ∷ ty.addr];
-          sep_contract_localstore      := [term_var "address"; term_var "new_value"];
-          sep_contract_precondition    :=
-          asn_safe (term_var "new_value")
-                   ∗ asn_csafe_angelic (term_record capability
-                                                    [term_var "p";
-                                                     term_var "b";
-                                                     term_var "e";
-                                                     term_var "address"])
-                   ∗ term_val ty.perm RW <=ₚ term_var "p"
-                                             ∗ asn_within_bounds (term_var "address") (term_var "b") (term_var "e");
-          sep_contract_result          := "wM_result";
-          sep_contract_postcondition   :=
-          term_var "wM_result" = term_val ty.unit tt
+           sep_contract_localstore      := [term_var "address"; term_var "new_value"];
+           sep_contract_precondition    :=
+             asn_safe (term_var "new_value")
+             ∗ asn_csafe_angelic (term_record capability
+                                    [term_var "p";
+                                     term_var "b";
+                                     term_var "e";
+                                     term_var "address"])
+             ∗ term_val ty.perm RW <=ₚ term_var "p"
+             ∗ asn_within_bounds (term_var "address") (term_var "b") (term_var "e");
+           sep_contract_result          := "wM_result";
+           sep_contract_postcondition   := term_var "wM_result" = term_val ty.unit tt
         |}.
 
       Definition sep_contract_dI : SepContractFunX dI :=
         {| sep_contract_logic_variables := ["code" ∷ ty.int];
-          sep_contract_localstore      := [term_var "code"];
-          sep_contract_precondition    := ⊤;
-          sep_contract_result          := "_";
-          sep_contract_postcondition   := ⊤;
+           sep_contract_localstore      := [term_var "code"];
+           sep_contract_precondition    := ⊤;
+           sep_contract_result          := "_";
+           sep_contract_postcondition   := ⊤;
         |}.
 
       Definition CEnvEx : SepContractEnvEx :=
@@ -932,6 +904,9 @@ End ContractDefKit.
 
 End MinCapsSpecification.
 
+(*** MinCapsSolverKit ***)
+(* In the MinCapsSolverKit we provide simplification procedures for the pure
+   predicates and prove that these simplifiers are sound. *)
 Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
   #[local] Arguments Some {_} _%ctx.
 
@@ -1033,6 +1008,8 @@ Module Import MinCapsExecutor :=
 Module Import MinCapsShallowExec :=
   MakeShallowExecutor MinCapsBase MinCapsProgram MinCapsSignature MinCapsSpecification.
 
+(*** MinCapsValidContracts ***)
+(* In this module we prove that all specified contracts are valid. *)
 Module MinCapsValidContracts.
   Import MinCapsExecutor.
 
@@ -1066,13 +1043,13 @@ Module MinCapsValidContracts.
 
   Import MinCapsContractNotations.
 
-  Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
+  Definition ValidContractReflect {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContractReflect c (FunDef f)
     | None => False
     end.
 
-  Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
+  Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContract c (FunDef f)
     | None => False
@@ -1084,158 +1061,170 @@ Module MinCapsValidContracts.
     constructor;
     cbn.
 
-  Lemma valid_contract_read_reg : ValidContract read_reg.
+  Lemma valid_contract_read_reg : ValidContractReflect read_reg.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_read_reg_cap : ValidContract read_reg_cap.
+  Lemma valid_contract_read_reg_cap : ValidContractReflect read_reg_cap.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_read_reg_num : ValidContract read_reg_num.
+  Lemma valid_contract_read_reg_num : ValidContractReflect read_reg_num.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_write_reg : ValidContract write_reg.
+  Lemma valid_contract_write_reg : ValidContractReflect write_reg.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_next_pc : ValidContract next_pc.
+  Lemma valid_contract_next_pc : ValidContractReflect next_pc.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_update_pc : ValidContract update_pc.
+  Lemma valid_contract_update_pc : ValidContractReflect update_pc.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_update_pc_perm : ValidContract update_pc_perm.
+  Lemma valid_contract_update_pc_perm : ValidContractReflect update_pc_perm.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_is_correct_pc : ValidContract is_correct_pc.
+  Lemma valid_contract_is_correct_pc : ValidContractReflect is_correct_pc.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_is_perm : ValidContract MinCapsProgram.is_perm.
+  Lemma valid_contract_is_perm : ValidContractReflect MinCapsProgram.is_perm.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_add_pc : ValidContract add_pc.
+  Lemma valid_contract_add_pc : ValidContractReflect add_pc.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_read_mem : ValidContract read_mem.
+  Lemma valid_contract_read_mem : ValidContractReflect read_mem.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_write_mem : ValidContract write_mem.
+  Lemma valid_contract_write_mem : ValidContractReflect write_mem.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_read_allowed : ValidContract read_allowed.
+  Lemma valid_contract_read_allowed : ValidContractReflect read_allowed.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_write_allowed : ValidContract write_allowed.
+  Lemma valid_contract_write_allowed : ValidContractReflect write_allowed.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_within_bounds : ValidContract within_bounds.
+  Lemma valid_contract_within_bounds : ValidContractReflect within_bounds.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_perm_to_bits : ValidContract perm_to_bits.
+  Lemma valid_contract_perm_to_bits : ValidContractReflect perm_to_bits.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_perm_from_bits : ValidContract perm_from_bits.
+  Lemma valid_contract_perm_from_bits : ValidContractReflect perm_from_bits.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_and_perm : ValidContract and_perm.
+  Lemma valid_contract_and_perm : ValidContractReflect and_perm.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_is_sub_perm : ValidContract is_sub_perm.
+  Lemma valid_contract_is_sub_perm : ValidContractReflect is_sub_perm.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_is_within_range : ValidContract is_within_range.
+  Lemma valid_contract_is_within_range : ValidContractReflect is_within_range.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_abs : ValidContract abs.
+  Lemma valid_contract_abs : ValidContractReflect abs.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_is_not_zero : ValidContract is_not_zero.
+  Lemma valid_contract_is_not_zero : ValidContractReflect is_not_zero.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_can_incr_cursor : ValidContract can_incr_cursor.
+  Lemma valid_contract_can_incr_cursor : ValidContractReflect can_incr_cursor.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_jalr_cap : ValidContract exec_jalr_cap.
+  Lemma valid_contract_exec_jalr_cap : ValidContractReflect exec_jalr_cap.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_cjalr : ValidContract exec_cjalr.
+  Lemma valid_contract_exec_cjalr : ValidContractReflect exec_cjalr.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_cjal : ValidContract exec_cjal.
+  Lemma valid_contract_exec_cjal : ValidContractReflect exec_cjal.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_bne : ValidContract exec_bne.
+  Lemma valid_contract_exec_bne : ValidContractReflect exec_bne.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_cmove : ValidContract exec_cmove.
+  Lemma valid_contract_exec_cmove : ValidContractReflect exec_cmove.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_ld : ValidContract exec_ld.
+  Lemma valid_contract_exec_ld : ValidContractReflect exec_ld.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_sd : ValidContract exec_sd.
+  Lemma valid_contract_exec_sd : ValidContractReflect exec_sd.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_cincoffset : ValidContract exec_cincoffset.
+  Lemma valid_contract_exec_cincoffset : ValidContractReflect exec_cincoffset.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_candperm : ValidContract exec_candperm.
+  Lemma valid_contract_exec_candperm : ValidContractReflect exec_candperm.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_csetbounds : ValidContract exec_csetbounds.
+  Lemma valid_contract_exec_csetbounds : ValidContractReflect exec_csetbounds.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_csetboundsimm : ValidContract exec_csetboundsimm.
+  Lemma valid_contract_exec_csetboundsimm : ValidContractReflect exec_csetboundsimm.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_cgettag : ValidContract exec_cgettag.
+  Lemma valid_contract_exec_cgettag : ValidContractReflect exec_cgettag.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_addi : ValidContract exec_addi.
+  Lemma valid_contract_exec_addi : ValidContractReflect exec_addi.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_add : ValidContract exec_add.
+  Lemma valid_contract_exec_add : ValidContractReflect exec_add.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_sub : ValidContract exec_sub.
+  Lemma valid_contract_exec_sub : ValidContractReflect exec_sub.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_slt : ValidContract exec_slt.
+  Lemma valid_contract_exec_slt : ValidContractReflect exec_slt.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_slti : ValidContract exec_slti.
+  Lemma valid_contract_exec_slti : ValidContractReflect exec_slti.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_sltu : ValidContract exec_sltu.
+  Lemma valid_contract_exec_sltu : ValidContractReflect exec_sltu.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_sltiu : ValidContract exec_sltiu.
+  Lemma valid_contract_exec_sltiu : ValidContractReflect exec_sltiu.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_cgetperm : ValidContract exec_cgetperm.
+  Lemma valid_contract_exec_cgetperm : ValidContractReflect exec_cgetperm.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_cgetbase : ValidContract exec_cgetbase.
+  Lemma valid_contract_exec_cgetbase : ValidContractReflect exec_cgetbase.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_cgetlen : ValidContract exec_cgetlen.
+  Lemma valid_contract_exec_cgetlen : ValidContractReflect exec_cgetlen.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_cgetaddr : ValidContract exec_cgetaddr.
+  Lemma valid_contract_exec_cgetaddr : ValidContractReflect exec_cgetaddr.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_fail : ValidContract exec_fail.
+  Lemma valid_contract_exec_fail : ValidContractReflect exec_fail.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_ret : ValidContract exec_ret.
+  Lemma valid_contract_exec_ret : ValidContractReflect exec_ret.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_instr : ValidContract exec_instr.
+  Lemma valid_contract_exec_instr : ValidContractReflect exec_instr.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec : ValidContract exec.
+  Lemma valid_contract_exec : ValidContractReflect exec.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_step : ValidContract step.
+  Lemma valid_contract_step : ValidContractReflect step.
   Proof. reflexivity. Qed.
+
+  Lemma valid_contract_reflect : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
+      CEnv f = Some c ->
+      ValidContractReflect f ->
+      Symbolic.ValidContract c (FunDef f).
+  Proof.
+    intros ? ? f c Hcenv Hvc.
+    unfold ValidContractReflect in Hvc.
+    rewrite Hcenv in Hvc.
+    apply Symbolic.validcontract_reflect_sound.
+    apply Hvc.
+  Qed.
 
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
@@ -1245,18 +1234,6 @@ Module MinCapsValidContracts.
     intros ? ? f c Hcenv Hvc.
     unfold ValidContract in Hvc.
     rewrite Hcenv in Hvc.
-    apply Symbolic.validcontract_reflect_sound.
-    apply Hvc.
-  Qed.
-
-  Lemma valid_contract_debug : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
-      CEnv f = Some c ->
-      ValidContractDebug f ->
-      Symbolic.ValidContract c (FunDef f).
-  Proof.
-    intros ? ? f c Hcenv Hvc.
-    unfold ValidContractDebug in Hvc.
-    rewrite Hcenv in Hvc.
     apply Hvc.
   Qed.
 
@@ -1265,64 +1242,64 @@ Module MinCapsValidContracts.
       Symbolic.ValidContract c (FunDef f).
   Proof.
     intros; destruct f.
-    - apply (valid_contract _ H valid_contract_read_reg).
-    - apply (valid_contract _ H valid_contract_read_reg_cap).
-    - apply (valid_contract _ H valid_contract_read_reg_num).
-    - apply (valid_contract _ H valid_contract_write_reg).
-    - apply (valid_contract _ H valid_contract_next_pc).
-    - apply (valid_contract _ H valid_contract_update_pc).
-    - apply (valid_contract _ H valid_contract_update_pc_perm).
-    - apply (valid_contract _ H valid_contract_is_correct_pc).
-    - apply (valid_contract _ H valid_contract_is_perm).
-    - apply (valid_contract _ H valid_contract_add_pc).
-    - apply (valid_contract _ H valid_contract_read_mem).
-    - apply (valid_contract _ H valid_contract_write_mem).
-    - apply (valid_contract _ H valid_contract_read_allowed).
-    - apply (valid_contract _ H valid_contract_write_allowed).
-    - apply (valid_contract _ H valid_contract_within_bounds).
-    - apply (valid_contract _ H valid_contract_perm_to_bits).
-    - apply (valid_contract _ H valid_contract_perm_from_bits).
-    - apply (valid_contract _ H valid_contract_and_perm).
-    - apply (valid_contract _ H valid_contract_is_sub_perm).
-    - apply (valid_contract _ H valid_contract_is_within_range).
-    - apply (valid_contract _ H valid_contract_abs).
-    - apply (valid_contract _ H valid_contract_is_not_zero).
-    - apply (valid_contract _ H valid_contract_can_incr_cursor).
-    - apply (valid_contract _ H valid_contract_exec_jalr_cap).
-    - apply (valid_contract _ H valid_contract_exec_cjalr).
-    - apply (valid_contract _ H valid_contract_exec_cjal).
-    - apply (valid_contract _ H valid_contract_exec_bne).
-    - apply (valid_contract _ H valid_contract_exec_ld).
-    - apply (valid_contract _ H valid_contract_exec_sd).
-    - apply (valid_contract _ H valid_contract_exec_addi).
-    - apply (valid_contract _ H valid_contract_exec_add).
-    - apply (valid_contract _ H valid_contract_exec_sub).
-    - apply (valid_contract _ H valid_contract_exec_slt).
-    - apply (valid_contract _ H valid_contract_exec_slti).
-    - apply (valid_contract _ H valid_contract_exec_sltu).
-    - apply (valid_contract _ H valid_contract_exec_sltiu).
-    - apply (valid_contract _ H valid_contract_exec_cmove).
-    - apply (valid_contract _ H valid_contract_exec_cincoffset).
-    - apply (valid_contract _ H valid_contract_exec_candperm).
-    - apply (valid_contract _ H valid_contract_exec_csetbounds).
-    - apply (valid_contract _ H valid_contract_exec_csetboundsimm).
-    - apply (valid_contract _ H valid_contract_exec_cgettag).
-    - apply (valid_contract _ H valid_contract_exec_cgetperm).
-    - apply (valid_contract _ H valid_contract_exec_cgetbase).
-    - apply (valid_contract _ H valid_contract_exec_cgetlen).
-    - apply (valid_contract _ H valid_contract_exec_cgetaddr).
-    - apply (valid_contract _ H valid_contract_exec_fail).
-    - apply (valid_contract _ H valid_contract_exec_ret).
-    - apply (valid_contract _ H valid_contract_exec_instr).
-    - apply (valid_contract _ H valid_contract_exec).
-    - apply (valid_contract _ H valid_contract_step).
+    - apply (valid_contract_reflect _ H valid_contract_read_reg).
+    - apply (valid_contract_reflect _ H valid_contract_read_reg_cap).
+    - apply (valid_contract_reflect _ H valid_contract_read_reg_num).
+    - apply (valid_contract_reflect _ H valid_contract_write_reg).
+    - apply (valid_contract_reflect _ H valid_contract_next_pc).
+    - apply (valid_contract_reflect _ H valid_contract_update_pc).
+    - apply (valid_contract_reflect _ H valid_contract_update_pc_perm).
+    - apply (valid_contract_reflect _ H valid_contract_is_correct_pc).
+    - apply (valid_contract_reflect _ H valid_contract_is_perm).
+    - apply (valid_contract_reflect _ H valid_contract_add_pc).
+    - apply (valid_contract_reflect _ H valid_contract_read_mem).
+    - apply (valid_contract_reflect _ H valid_contract_write_mem).
+    - apply (valid_contract_reflect _ H valid_contract_read_allowed).
+    - apply (valid_contract_reflect _ H valid_contract_write_allowed).
+    - apply (valid_contract_reflect _ H valid_contract_within_bounds).
+    - apply (valid_contract_reflect _ H valid_contract_perm_to_bits).
+    - apply (valid_contract_reflect _ H valid_contract_perm_from_bits).
+    - apply (valid_contract_reflect _ H valid_contract_and_perm).
+    - apply (valid_contract_reflect _ H valid_contract_is_sub_perm).
+    - apply (valid_contract_reflect _ H valid_contract_is_within_range).
+    - apply (valid_contract_reflect _ H valid_contract_abs).
+    - apply (valid_contract_reflect _ H valid_contract_is_not_zero).
+    - apply (valid_contract_reflect _ H valid_contract_can_incr_cursor).
+    - apply (valid_contract_reflect _ H valid_contract_exec_jalr_cap).
+    - apply (valid_contract_reflect _ H valid_contract_exec_cjalr).
+    - apply (valid_contract_reflect _ H valid_contract_exec_cjal).
+    - apply (valid_contract_reflect _ H valid_contract_exec_bne).
+    - apply (valid_contract_reflect _ H valid_contract_exec_ld).
+    - apply (valid_contract_reflect _ H valid_contract_exec_sd).
+    - apply (valid_contract_reflect _ H valid_contract_exec_addi).
+    - apply (valid_contract_reflect _ H valid_contract_exec_add).
+    - apply (valid_contract_reflect _ H valid_contract_exec_sub).
+    - apply (valid_contract_reflect _ H valid_contract_exec_slt).
+    - apply (valid_contract_reflect _ H valid_contract_exec_slti).
+    - apply (valid_contract_reflect _ H valid_contract_exec_sltu).
+    - apply (valid_contract_reflect _ H valid_contract_exec_sltiu).
+    - apply (valid_contract_reflect _ H valid_contract_exec_cmove).
+    - apply (valid_contract_reflect _ H valid_contract_exec_cincoffset).
+    - apply (valid_contract_reflect _ H valid_contract_exec_candperm).
+    - apply (valid_contract_reflect _ H valid_contract_exec_csetbounds).
+    - apply (valid_contract_reflect _ H valid_contract_exec_csetboundsimm).
+    - apply (valid_contract_reflect _ H valid_contract_exec_cgettag).
+    - apply (valid_contract_reflect _ H valid_contract_exec_cgetperm).
+    - apply (valid_contract_reflect _ H valid_contract_exec_cgetbase).
+    - apply (valid_contract_reflect _ H valid_contract_exec_cgetlen).
+    - apply (valid_contract_reflect _ H valid_contract_exec_cgetaddr).
+    - apply (valid_contract_reflect _ H valid_contract_exec_fail).
+    - apply (valid_contract_reflect _ H valid_contract_exec_ret).
+    - apply (valid_contract_reflect _ H valid_contract_exec_instr).
+    - apply (valid_contract_reflect _ H valid_contract_exec).
+    - apply (valid_contract_reflect _ H valid_contract_step).
     - cbn in H; inversion H.
   Qed.
 
 
 (*   Goal True. idtac "Timing before: minimalcaps". Abort. *)
 (*   Lemma valid_contracts : forall {Δ τ} (f : Fun Δ τ), *)
-(*       ValidContract f. *)
+(*       ValidContractReflect f. *)
 (*   Proof. *)
 (*   (* destruct f; reflexivity. *)
 (* Qed. *) *)
