@@ -72,6 +72,13 @@ Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase Risc
 
 Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolver RiscvPmpShallowExecutor RiscvPmpExecutor.
 
+(*** Loop ***)
+(* This file proves the universal contract of the RISC-V PMP case study.
+   The definition of the fdeCycle (the loop) is defined as:
+     step(); loop();
+   so in this file we will write the Iris version of the step contract.
+   We prove the Iris version sound using the soundness lemmas of Katamaran
+   and the already proven contract. *)
 Section Loop.
   Context `{sg : sailGS Σ}.
   Definition step_sem_contract :=
@@ -90,18 +97,8 @@ Section Loop.
   Definition PmpEntry : Set := Pmpcfg_ent * Z.
   Definition PtstosPred : Type := Privilege -> Privilege -> Z -> Z -> list PmpEntry -> list PmpEntry -> Privilege -> Z -> Z -> iProp Σ.
 
-  (* TODO: added some parameters because the interp_pmp_addr_access predicate can get
-              "out of sync" with the current state of the machine.
-
-              Might sound odd, but for a given configuration and privilege mode we will
-              still have that pmp_addr_access holds, however, it won't match up with
-              the current live config (represented by interp_pmp_entries) and so
-              contracts regarding PMP checks will have an unsatisfiable precondition
-              (i.e., we will not be granted access with an "out of sync" pmp_addr_access
-               predicate).
-
-              Maybe sketch a situation that showcases this? *)
-
+  (* Step_pre defines the precondition of the step contract. The following
+     definitions capture the state transitions that can occur on the machine. *)
   Definition Step_pre (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
     (                   cur_privilege ↦ m                ∗
                         mtvec         ↦ h                ∗
@@ -164,68 +161,9 @@ Section Loop.
      mtvec ↦ h ∗
      mstatus ↦ {| MPP := User |})%I.
 
-  (* Executing normally *)
-  (* TODO: this should be the same as Start of iteration (P), drop one of them *)
-  Definition Execution' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
-    (            interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
-                                        interp_gprs ∗
-                                        interp_pmp_entries es ∗
-                                        (∃ mc,         mcause        ↦ mc) ∗
-                                        cur_privilege ↦ cp ∗
-                                        (∃ npc : Addr, nextpc        ↦ npc) ∗
-                                        (∃ cpc : Addr, pc            ↦ cpc) ∗
-                                        mtvec         ↦ h ∗
-                                        mstatus       ↦ {| MPP := mpp |} ∗
-                                        mepc          ↦ mepc_v)%I.
-
-  (* Modified CSRs, requires Machine mode *)
-  Definition CSRMod' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
-    (                               interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
-                                                           interp_gprs ∗
-                                                           (∃ es : list (Pmpcfg_ent * Addr), interp_pmp_entries es) ∗
-                                                           ⌜m = Machine⌝ ∗
-                                                                         (∃ mc : Addr,                  mcause        ↦ mc) ∗
-                                                                         cur_privilege ↦ Machine ∗
-                                                                         (∃ npc : Addr,                 nextpc        ↦ npc ∗
-                                                                                                                      pc            ↦ npc) ∗
-                                                                         (∃ h : Addr,                   mtvec         ↦ h) ∗
-                                                                         (∃ mpp : Privilege,            mstatus       ↦ {| MPP := mpp |}) ∗
-                                                                         (∃ epc : Addr,                 mepc          ↦ epc))%I.
-
-  (* Trap occured -> Go into M-mode *)
-  Definition Trap' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
-    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
-                            interp_gprs ∗
-                            interp_pmp_entries es ∗
-                            (∃ mc, mcause        ↦ mc) ∗
-                            cur_privilege ↦ Machine ∗
-                            nextpc        ↦ h ∗
-                            pc            ↦ h ∗
-                            mtvec         ↦ h ∗
-                            mstatus       ↦ {| MPP := m |} ∗
-                            mepc          ↦ i)%I.
-
-  (* MRET = Recover *)
-  Definition Recover' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
-    (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
-                            interp_gprs ∗
-                            interp_pmp_entries es ∗
-                            ⌜m = Machine⌝ ∗
-                                          (∃ mc, mcause        ↦ mc) ∗
-                                          cur_privilege ↦ mpp ∗
-                                          nextpc        ↦ mepc_v ∗
-                                          pc            ↦ mepc_v ∗
-                                          mtvec         ↦ h ∗
-                                          mstatus       ↦ {| MPP := User |} ∗
-                                          mepc          ↦ mepc_v)%I.
-
-  Definition step_post' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) : iProp Σ :=
-    (Execution' m cp h i entries es mpp mepc_v ∨
-     CSRMod'    m cp h i entries es mpp mepc_v ∨
-     Trap'      m cp h i entries es mpp mepc_v ∨
-     Recover'   m cp h i entries es mpp mepc_v)%I.
-
-  Definition step_post (m : Privilege) (i h mepc_v : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
+  (* Step_post is the postcondition for the step function, combining the above
+     state transitions using disjunctions. *)
+  Definition Step_post (m : Privilege) (i h mepc_v : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
     (Execution m h mpp entries ∨
      CSRMod m entries ∨
      Trap m h entries ∨
@@ -235,7 +173,7 @@ Section Loop.
     (∀ m i h mepc_v mpp entries,
         semTriple env.nil (Step_pre m h i mpp entries)
                   (FunDef step)
-                  (fun _ _ => step_post m i h mepc_v mpp entries))%I.
+                  (fun _ _ => Step_post m i h mepc_v mpp entries))%I.
 
   Definition semTriple_init_model : iProp Σ :=
     semTriple env.nil
@@ -274,27 +212,24 @@ Section Loop.
   Lemma valid_step_semTriple :
     ⊢ semTriple_step.
   Proof.
-    iIntros (m i h mepc_v mpp entries) "(Hcp & Hmtvec & Hpc & Hnpc & Hmc & Hmepc & Hmstatus & Hpe & Hpaa & Hgprs)".
+    iIntros (m i h mepc_v mpp entries) "H".
     iApply (semWP_mono with "[-]").
-    iApply valid_step_contract.
-    Unshelve.
-    3: exact [kv existT (_∷ty_privilege) m; existT (_∷ty_xlenbits) h; existT (_∷ty.list ty_pmpentry) entries; existT (_∷ty_privilege) mpp; existT (_∷ty_xlenbits) i]%env.
+    unshelve iApply valid_step_contract.
+    exact [kv existT (_∷ty_privilege) m; existT (_∷ty_xlenbits) h; existT (_∷ty.list ty_pmpentry) entries; existT (_∷ty_privilege) mpp; existT (_∷ty_xlenbits) i]%env.
     cbn.
-    iFrame.
+    unfold Step_pre; iFrame.
     cbn.
-    unfold step_post.
     iIntros (? ?) "[H | [H | [H | H]]]".
-    - iDestruct "H" as "(Hpaa & Hgprs & Hmc & Hpe & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
-      iLeft; unfold Execution; iFrame.
-    - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
+    - now (iLeft; unfold Execution).
+    - iDestruct "H" as "(? & ? & ? & [% _] & ?)".
       iRight; iLeft; unfold CSRMod; now iFrame.
-    - iDestruct "H" as "(Hpaa & Hgprs & Hentries & Hmc & Hpe & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
-      iRight; iRight; iLeft; unfold Trap; iFrame.
+    - iRight; iRight; iLeft; unfold Trap.
+      iDestruct "H" as "($ & $ & $ & $ & $ & $ & $ & $ & $ & ?)".
       now iExists i.
-    - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hcp & [% (Hmepc & Hnpc & Hpc)] & Hmtvec & Hmstatus)".
-      iRight; iRight; iRight; unfold Recover; iFrame.
+    - iRight; iRight; iRight; unfold Recover.
+      iDestruct "H" as "($ & $ & $ & [% _] & $ & $ & [%a (? & ? & ?)] & $ & $)".
       iSplitR; auto.
-      iExists v0; iFrame.
+      iExists a; iFrame.
   Qed.
 
   Lemma init_model_iprop : ⊢ semTriple_init_model.
@@ -305,21 +240,20 @@ Section Loop.
              _ _ _ fun_init_model _ _).
     iApply valid_init_model_contract.
     Unshelve.
+    done.
     cbn.
-    iIntros "(Hcp & Hin)".
-    iSplitL "Hcp"; iAssumption.
-    cbn.
-    iIntros (? ?) "(_ & Hcp & Hin)".
-    iSplitL "Hcp"; iAssumption.
+    iIntros (? ?) "(_ & $ & $)".
     constructor.
   Qed.
 
+  (* loop_pre is the precondition of the fdeCycle. *)
   Definition loop_pre (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Addr)) : iProp Σ :=
     (Step_pre m h i mpp entries ∗
               ▷ (CSRMod m entries -∗ WP_loop) ∗
               ▷ (Trap m h entries -∗ WP_loop) ∗
               ▷ (Recover m h mpp entries -∗ WP_loop))%I.
 
+  (* semTriple_loop is the universal contract for this case study. *)
   Definition semTriple_loop : iProp Σ :=
     (∀ (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Addr)),
         semTriple env.nil (loop_pre m h i mpp entries)
