@@ -69,6 +69,9 @@ Module Import MinCapsShallowSoundness := MakeShallowSoundness MinCapsBase MinCap
 
 Module Import MinCapsSymbolic := MakeSymbolicSoundness MinCapsBase MinCapsProgram MinCapsSignature MinCapsSpecification MinCapsSolver MinCapsShallowExecutor MinCapsExecutor.
 
+(*** LoopVerification ***)
+(* In this file we prove the universal contract, as defined over the loop
+   function, i.e., the fdeCycle. *)
 Section Loop.
   Context `{sg : sailGS Σ}.
   Import env.notations.
@@ -105,6 +108,7 @@ Section Loop.
   Definition semTriple_loop : iProp Σ :=
     IH -∗ semTriple [env] Step_pre (FunDef loop) (fun _ _ => True)%I.
 
+  (* First we prove the contract of the fdeCycle with the IH as an assumption. *)
   Lemma valid_semContract_loop : ⊢ semTriple_loop.
   Proof.
     iIntros "#IH Hpre".
