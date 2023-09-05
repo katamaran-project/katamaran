@@ -206,7 +206,10 @@ Section Loop.
   Qed.
 
   (* and now without the IH. *)
-  Lemma valid_semContract_loop2 : ⊢ semTriple [env] Step_pre (FunDef loop) (fun _ _ => True).
+  Definition semContract_loop :=
+    semTriple [env] Step_pre (FunDef loop) (fun _ _ => True)%I.
+
+  Lemma valid_semContract_loop2 : ⊢ semContract_loop.
   Proof.
     iIntros.
     iLöb as "IH".
