@@ -51,18 +51,23 @@ All files mentioned in this section are relative to `case_study/MinimalCaps/`.
 
 ## Paper-to-Artifact Correspondence
 
-| Paper                       | File                                        | Definition                               |
-|-----------------------------|---------------------------------------------|------------------------------------------|
-| Figure 4: Store instruction | `case_study/MinimalCaps/Machine.v`          | Definition fun\_exec\_sd                 |
-| Figure 5: Capability safety | `case_study/MinimalCaps/Model.v`            | Definition interp                        |
-| Figure 6: UC Definition     | `case_study/MinimalCaps/LoopVerification.v` | Definition semContract\_loop             |
-| Figure 6: UC Verif.         | `case_study/MinimalCaps/LoopVerification.v` | Lemma valid\_semContract\_loop2          |
-| Figure 10: Store contract   | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_exec\_sd       |
-| Figure 10: Store verif.     | `case_study/MinimalCaps/Contracts.v`        | Lemma valid\_contract\_exec\_sd          |
-| Figure 11: read\_mem        | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_read\_mem      |
-| Figure 11: read\_reg        | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_read\_reg      |
-| Figure 11: read\_reg\_cap   | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_read\_reg\_cap |
-| Figure 11: write\_mem       | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_write\_mem     |
-| Figure 11: update\_pc       | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_update\_pc     |
-| Figure 11: move\_cursor     | `case_study/MinimalCaps/Contracts.v`        | Definition lemma\_safe\_move\_cursor     |
-| Figure 11: subperm\_not\_E  | `case_study/MinimalCaps/Contracts.v`        | Definition lemma\_subperm\_not\_E        |
+| Paper                         | File                                        | Definition                               |
+|-------------------------------|---------------------------------------------|------------------------------------------|
+| Figure 4: Store instruction   | `case_study/MinimalCaps/Machine.v`          | Definition fun\_exec\_sd                 |
+| Figure 5: 𝒱(z)                | `case_study/MinimalCaps/Model.v`            | Definition interp\_z                     |
+| Figure 5: 𝒱(O, -, -, -)       | `case_study/MinimalCaps/Model.v`            | Definition interp\_cap\_O                |
+| Figure 5: 𝒱(R, _b_, _e_, -)   | `case_study/MinimalCaps/Model.v`            | Definition interp\_cap\_R                |
+| Figure 5: 𝒱(RW, _b_, _e_, -)  | `case_study/MinimalCaps/Model.v`            | Definition interp\_cap\_RW               |
+| Figure 5: 𝒱(E, _b_, _e_, _a_) | `case_study/MinimalCaps/Model.v`            | Definition interp\_cap\_E                |
+| Figure 5: ℰ(_w_)              | `case_study/MinimalCaps/Model.v`            | Definition interp\_expr                  |
+| Figure 6: UC Definition       | `case_study/MinimalCaps/LoopVerification.v` | Definition semContract\_loop             |
+| Figure 6: UC Verif.           | `case_study/MinimalCaps/LoopVerification.v` | Lemma valid\_semContract\_loop2          |
+| Figure 10: Store contract     | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_exec\_sd       |
+| Figure 10: Store verif.       | `case_study/MinimalCaps/Contracts.v`        | Lemma valid\_contract\_exec\_sd          |
+| Figure 11: read\_mem          | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_read\_mem      |
+| Figure 11: read\_reg          | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_read\_reg      |
+| Figure 11: read\_reg\_cap     | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_read\_reg\_cap |
+| Figure 11: write\_mem         | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_write\_mem     |
+| Figure 11: update\_pc         | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_update\_pc     |
+| Figure 11: move\_cursor       | `case_study/MinimalCaps/Contracts.v`        | Definition lemma\_safe\_move\_cursor     |
+| Figure 11: subperm\_not\_E    | `case_study/MinimalCaps/Contracts.v`        | Definition lemma\_subperm\_not\_E        |
