@@ -62,6 +62,9 @@ All files mentioned in this section are relative to `case_study/MinimalCaps/`.
 | Figure 5: ℰ(_w_)              | `case_study/MinimalCaps/Model.v`            | Definition interp\_expr                  |
 | Figure 6: UC Definition       | `case_study/MinimalCaps/LoopVerification.v` | Definition semContract\_loop             |
 | Figure 6: UC Verif.           | `case_study/MinimalCaps/LoopVerification.v` | Lemma valid\_semContract\_loop2          |
+| Section 5.1: Step contract    | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_step           |
+| Section 5.1: Step verif.      | `case_study/MinimalCaps/Contracts.v`        | Lemma valid\_contract\_step              |
+| Section 5.1: IH               | `case_study/MinimalCaps/Model.v`            | Definition IH                            |
 | Figure 10: Store contract     | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_exec\_sd       |
 | Figure 10: Store verif.       | `case_study/MinimalCaps/Contracts.v`        | Lemma valid\_contract\_exec\_sd          |
 | Figure 11: read\_mem          | `case_study/MinimalCaps/Contracts.v`        | Definition sep\_contract\_read\_mem      |
