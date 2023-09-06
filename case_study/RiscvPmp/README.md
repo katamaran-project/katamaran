@@ -51,6 +51,7 @@ All files mentioned in this section are relative to `case_study/RiscvPmp/`.
 | Figure 14: extract\_PMP\_ptsto verif.   | `case_study/RiscvPmp/Model.v`            | Lemma extract\_pmp\_ptsto\_sound      |
 | Figure 14: return\_PMP\_ptsto contract  | `case_study/RiscvPmp/Contracts.v`        | Definition lemma\_return\_pmp\_ptsto  |
 | Figure 14: return\_PMP\_ptsto verif.    | `case_study/RiscvPmp/Model.v`            | Lemma return\_pmp\_ptsto\_sound       |
+| Section 6: FemtoKernel invariant        | `case_study/RiscvPmp/FemtoKernel.v`      | Definition femto\_inv\_fortytwo       |
 | Figure 15: FemtoKernel kernel           | `case_study/RiscvPmp/FemtoKernel.v`      | Example femtokernel\_init             |
 | Figure 15: FemtoKernel ih               | `case_study/RiscvPmp/FemtoKernel.v`      | Example femtokernel\_handler          |
 | Figure 15: FemtoKernel end-to-end       | `case_study/RiscvPmp/FemtoKernel.v`      | Lemma femtokernel\_endToEnd           |
