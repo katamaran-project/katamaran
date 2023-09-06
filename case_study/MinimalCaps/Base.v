@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Classes.EquivDec
      Strings.String.
 From stdpp Require
      finite.
@@ -143,6 +144,16 @@ Section TransparentObligations.
 End TransparentObligations.
 
 Derive EqDec for Permission.
+Definition is_perm := @equiv_decb _ _ _ Permission_eqdec.
+Lemma is_perm_iff : forall p p',
+    is_perm p p' = true <-> p = p'.
+Proof.
+  unfold is_perm.
+  intros; split.
+  - destruct p, p'; cbn; intros ?; auto; try discriminate.
+  - intros; subst; destruct p'; auto.
+Qed.
+
 Derive EqDec for Capability.
 Derive EqDec for RegName.
 
@@ -393,7 +404,6 @@ Module Export MinCapsBase <: Base.
 
     Inductive Reg : Ty -> Set :=
     | pc   : Reg ty.cap
-    | reg0 : Reg ty.word
     | reg1 : Reg ty.word
     | reg2 : Reg ty.word
     | reg3 : Reg ty.word.
@@ -411,7 +421,7 @@ Module Export MinCapsBase <: Base.
       finite_from_eqdec.
 
     #[export,program] Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) :=
-      {| enum := [ existT _ pc; existT _ reg0; existT _ reg1; existT _ reg2; existT _ reg3 ] |}.
+      {| enum := [ existT _ pc; existT _ reg1; existT _ reg2; existT _ reg3 ] |}.
 
   End RegDeclKit.
 

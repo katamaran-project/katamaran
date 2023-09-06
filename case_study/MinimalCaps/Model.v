@@ -1,5 +1,7 @@
 (******************************************************************************)
-(* Copyright (c) 2020 Steven Keuchel, Dominique Devriese, Sander Huyghebaert  *)
+(* Copyright (c) 2020 Aïna Linn Georges, Armaël Guéneau, Thomas Van Strydonck,*)
+(* Amin Timany, Alix Trieu, Dominique Devriese, Lars Birkedal                 *)
+(* Copyright (c) 2023 Steven Keuchel, Dominique Devriese, Sander Huyghebaert  *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -12,6 +14,9 @@
 (* 2. Redistributions in binary form must reproduce the above copyright       *)
 (*    notice, this list of conditions and the following disclaimer in the     *)
 (*    documentation and/or other materials provided with the distribution.    *)
+(* 3. Neither the name of the copyright holder nor the names of its           *)
+(*    contributors may be used to endorse or promote products derived from    *)
+(*    this software without specific prior written permission.                *)
 (*                                                                            *)
 (* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS        *)
 (* "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED  *)
@@ -27,6 +32,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Classes.EquivDec
      Init.Nat
      Program.Tactics
      Strings.String
@@ -67,6 +73,8 @@ Module gh := iris.base_logic.lib.gen_heap.
 Module MinCapsSemantics <: Semantics MinCapsBase MinCapsProgram :=
   MakeSemantics MinCapsBase MinCapsProgram.
 
+(* destruct_syminstance is a tactic that destructs the given symbolic instance
+   ι. It uses views to get information about ι. *)
 Ltac destruct_syminstance ι :=
   repeat
     match type of ι with
@@ -79,6 +87,8 @@ Ltac destruct_syminstance ι :=
     | _ => idtac
     end.
 
+(* destruct_syminstances searches for the ι and applies the destruct_syminstance
+   tactic on it. *)
 Ltac destruct_syminstances :=
   repeat
     match goal with
@@ -94,6 +104,8 @@ Import MinCapsSpecification.
 Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSemantics.
   Include IrisPrelims MinCapsBase MinCapsProgram MinCapsSemantics.
 
+  (* eliminate_prim_step eliminate a Step in the assumptions to enable further
+     progress in the proof. *)
   Ltac eliminate_prim_step Heq :=
     let f := fresh "f" in
     match goal with
@@ -194,20 +206,19 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
   Section Predicates.
     Context {Σ} `{sailRegGS Σ} `{invGS Σ} {mG : mcMemGS Σ}.
 
+    (* MinCaps_ptsreg returns a pointsto predicate for the given RegName with
+       value v. Note that R0 is hardwired to 0 and therefore no pointsto chunk
+       can be given for it. *)
     Definition MinCaps_ptsreg (reg : RegName) (v : Z + Capability) : iProp Σ :=
       match reg with
-      | R0 => reg_pointsTo reg0 v
+      | R0 => True
       | R1 => reg_pointsTo reg1 v
       | R2 => reg_pointsTo reg2 v
       | R3 => reg_pointsTo reg3 v
       end.
 
-    Lemma MinCaps_ptsreg_regtag_to_reg (reg : RegName) (v : Z + Capability) :
-      MinCaps_ptsreg reg v = reg_pointsTo (regtag_to_reg reg) v.
-    Proof.
-      by destruct reg.
-    Qed.
-
+    (* region_addrs computer the list of addresses of the machine between the
+       boundary [b, e]. *)
     Definition region_addrs (b e : Addr) : list Addr :=
       filter (fun a => and (b ≤ a)%Z (a ≤ e)%Z) liveAddrs.
 
@@ -250,29 +261,44 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
 
     Ltac solve_proper ::= (repeat intros ?; simpl; auto_equiv).
 
-    Definition GPRs : list RegName := finite.enum RegName.
+    (* GPRs is a list of general-purpose registers of the machine. As R0 is
+       hardwired to 0, we do not consider it general-purpose. *)
+    Definition GPRs : list RegName :=
+      filter (fun r => @nequiv_decb _ _ _ RegName_eqdec r R0)
+        (finite.enum RegName).
 
     (* TODO:
        - Make the change to D proposed above, might simplify some stuff
          Need to look into what the difference induced by that change is...
        - make the interp definitions more uniform, i.e., they should all take an
          interp (= safe) and have return type D *)
+    (* interp_gprs states that we have ownership of all GPRs and that all
+       registers contain a safe value (interp). *)
     Program Definition interp_gprs : D -n> iPropO Σ :=
       λne interp, ([∗ list] r ∈ GPRs, (∃ w, MinCaps_ptsreg r w ∗ interp w))%I.
     Solve Obligations with solve_proper.
 
+    (* interp_loop is the weakest precondition of the loop of our machine
+       with as postcondition True. *)
     Definition interp_loop `{sg : sailGS Σ} : iProp Σ :=
       (WP (MkConf (FunDef loop) env.nil) ?{{_, True}})%I.
 
+    (* interp_expr is the expression relation, stating that if we give
+       the pointsto chunks for the pc and GPRs, then we still satisfy the
+       weakest precondition of the fdeCycle of the machine. *)
     Definition interp_expr (interp : D) : C :=
       (λne (c : leibnizO Capability),
         reg_pointsTo pc c ∗ interp_gprs interp -∗ (interp_loop (sg := SailGS _ _ mG)))%I.
 
-    (* TODO: Check if I tried changing this one to a discrete one, should remain non-expansive so we can proof contractiveness *)
+    (* TODO: Check if I tried changing this one to a discrete one, should remain non-expansive so we can prove contractiveness *)
+    (* interp_ref_inv states that we have ownership of addr a and that predicate
+       P holds for the contents at addr a. *)
     Program Definition interp_ref_inv (a : Addr) : D -n> iPropO Σ :=
       λne P, (∃ w, mapsto a (DfracOwn 1) w ∗ P w)%I.
     Solve Obligations with solve_proper.
 
+    (* interp_cap_inv expresses the safe relation on capabilities. A capability
+       is safe if all the addressable locations are safe as well. *)
     Definition interp_cap_inv (c : Capability) (interp : D) :iProp Σ := 
       match c with
       | MkCap _ b e a =>
@@ -282,8 +308,12 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
           ∨ ⌜(e < b)%Z⌝
       end.
 
+    (* interp_cap_O expresses the safety of a null capability, which trivially
+       holds as no locations are addressable. *)
     Program Definition interp_cap_O : D := λne _, True%I.
 
+    (* interp_cap_R states safety for a readonly capability, which is defined
+       using interp_cap_inv. *)
     Program Definition interp_cap_R (interp : D) : D :=
       λne w, (match w with
               | inr (MkCap R b e a) => interp_cap_inv (MkCap R b e a) interp
@@ -291,6 +321,8 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
               end)%I.
     Solve Obligations with solve_proper.
 
+    (* interp_cap_R states safety for a readwrite capability, which is defined
+       using interp_cap_inv. *)
     Program Definition interp_cap_RW (interp : D) : D :=
       λne w, (match w with
               | inr (MkCap RW b e a) => interp_cap_inv (MkCap RW b e a) interp
@@ -298,16 +330,21 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
               end)%I.
     Solve Obligations with solve_proper.
 
+    (* enter_cond states that later, the expression relation will (always) hold
+       for the readonly capability with the given begin, end and cursor. *)
     Program Definition enter_cond (b e a : Addr) : D -n> iPropO Σ :=
       λne interp, (▷ □ interp_expr interp (MkCap R b e a))%I.
     Solve Obligations with solve_proper.
 
+    (* interp_expression states that the given capability should be readonly
+       and that the enter_cond needs to hold for it. *)
     Program Definition interp_expression (interp : D) : C :=
       λne c, (match c with
                    | {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |} =>
                        ⌜p = R⌝ ∧ enter_cond b e a interp
                    end)%I.
 
+    (* interp_cap_E implements the safety relation for enter capabilities. *)
     Program Definition interp_cap_E (interp : D) : D :=
       λne w, (match w with
               | inr (MkCap E b e a) => enter_cond b e a interp
@@ -315,6 +352,8 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
               end)%I.
     Solve Obligations with solve_proper.
 
+    (* interp_z is the safety relation for integers, which holds trivially. Only
+       capabilities can be used for interaction with memory on this machine. *)
     Program Definition interp_z : D :=
       λne w, ⌜ match w with
                | inl _ => True
@@ -322,6 +361,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
                end ⌝%I.
     Solve Obligations with solve_proper.
 
+    (* interp1 maps the different cases to their respective interp functions. *)
     Definition interp1 (interp : D) : D :=
       λne w, (match w with
               | inl _                => interp_z w
@@ -359,6 +399,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       Contractive interp1.
     Proof. solve_contractive. Qed.
 
+    (* interp is the general definition for our safety relation. *)
     Definition interp : D :=
       λne w, (fixpoint (interp1)) w.
 
@@ -412,6 +453,10 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
     Proof. destruct w; simpl; rewrite fixpoint_interp1_eq; simpl; first apply _.
            destruct c; destruct cap_permission; apply _. Qed.
 
+    (* IH is the induction hypothesis for the machine. If we give back ownership
+       of the GPRs and the pc, and the pc contains a safe capability, then we
+       satisfy the weakest precondition of the loop (with as postcondition
+       True) *)
     Definition IH : iProp Σ :=
       (□ ▷ (∀ p b e a,
                interp_gprs interp
@@ -448,14 +493,14 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       intros Hp; destruct p'; destruct p eqn:Ep; inversion Hp; auto; iIntros "#IH #HA";
         rewrite !fixpoint_interp1_eq; try done.
       - repeat iModIntro.
-        iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
+        iIntros "(Hpc & Hreg1 & Hreg2 & Hreg3 & _)".
         iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
         done.
         iModIntro.
         rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv].
         iApply (interp_cap_inv_weakening p a a (Z.le_refl b) (Z.le_refl e) with "HA").
       - repeat iModIntro.
-        iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
+        iIntros "(Hpc & Hreg1 & Hreg2 & Hreg3 & _)".
         iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
         done.
         iModIntro.
@@ -491,9 +536,10 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
   Section MinimalCapsPredicates.
     Import env.notations.
 
+    (* luser_inst gives the implementation for the predicates defined for this
+       case study. *)
     Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
              (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
-    | ptsreg  | [r; v] => MinCaps_ptsreg r v
     | ptsto   | [a; v] => mapsto a (DfracOwn 1) v
     | safe    | [c]    => interp c
     | expr    | [c]    => interp_expression interp c
@@ -523,6 +569,8 @@ Module MinCapsIrisInstanceWithContracts.
     MinCapsSignature MinCapsSpecification MinCapsIrisBase MinCapsIrisInstance.
 
   Section LemProofs.
+    (* In this section we prove that the lemmas we defined in this case study
+       are sound. *)
     Context {Σ} `{sg : sailGS Σ}.
 
     Lemma safe_to_execute_sound :
@@ -533,20 +581,6 @@ Module MinCapsIrisInstanceWithContracts.
       iFrame.
       rewrite ?fixpoint_interp1_eq.
       iSimpl in "H"; auto.
-    Qed.
-
-    Lemma open_ptsreg_sound :
-      ValidLemma lemma_open_ptsreg.
-    Proof.
-      intros ι. destruct_syminstance ι. cbn.
-      destruct reg; auto.
-    Qed.
-
-    Lemma close_ptsreg_sound {R} :
-      ValidLemma (lemma_close_ptsreg R).
-    Proof.
-      intros ι. destruct_syminstance ι. cbn.
-      rewrite MinCaps_ptsreg_regtag_to_reg; auto.
     Qed.
 
     Lemma open_gprs_sound :
@@ -560,7 +594,7 @@ Module MinCapsIrisInstanceWithContracts.
       ValidLemma lemma_close_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      iIntros "($ & $ & $ & $)".
+      by iIntros "($ & $ & $)".
     Qed.
 
     Lemma int_safe_sound :
@@ -592,7 +626,8 @@ Module MinCapsIrisInstanceWithContracts.
       iPureIntro.
       destruct H as [[-> _]|[-> _]];
         unfold Subperm in Hsub;
-        unfold Not_is_perm; destruct p'; auto.
+        intros H; inversion H; subst;
+        cbn in Hsub; discriminate.
     Qed.
 
     Lemma safe_move_cursor_sound :
@@ -601,9 +636,8 @@ Module MinCapsIrisInstanceWithContracts.
       intros ι. destruct_syminstance ι. cbn.
       iIntros "(#$ & [[% _] |[% _]])".
       rewrite ?fixpoint_interp1_eq.
-      destruct p; auto.
-      unfold Not_is_perm, MinCapsSignature.is_perm in H.
-      discriminate.
+      destruct p; try now subst.
+      exfalso; exact (H eq_refl).
       now subst.
     Qed.
 
@@ -627,13 +661,12 @@ Module MinCapsIrisInstanceWithContracts.
         destruct Hbounds as [Hb He];
         apply Zle_is_le_bool in Hb;
         apply Zle_is_le_bool in He.
-      iApply (interp_weakening _ _ (Not_is_perm_prop Hp) Hb He (Subperm_refl p) with "IH Hsafe").
+      iApply (interp_weakening _ _ Hp Hb He (Subperm_refl p) with "IH Hsafe").
     Qed.
 
     Lemma lemSem : LemmaSem.
     Proof.
       intros Δ []; eauto using
-                         open_ptsreg_sound, close_ptsreg_sound,
         open_gprs_sound, close_gprs_sound, int_safe_sound, correctPC_subperm_R_sound,
         subperm_not_E_sound, safe_move_cursor_sound, safe_sub_perm_sound,
         safe_within_range_sound, safe_to_execute_sound.
@@ -642,6 +675,8 @@ Module MinCapsIrisInstanceWithContracts.
   End LemProofs.
 
   Section ForeignProofs.
+    (* In this section we prove that the contracts for the foreign functions
+       of this case study are sound. *)
     Context `{sg : sailGS Σ}.
 
     Lemma dI_sound :
@@ -802,6 +837,8 @@ Module MinCapsIrisInstanceWithContracts.
   Include Shallow.Soundness.Soundness MinCapsBase MinCapsProgram MinCapsSignature
     MinCapsSpecification MinCapsShallowExec.
 
+  (* contracts_sound proves that all contracts in our contract environment
+     are sound. *)
   Lemma contracts_sound `{sg : sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
   Proof.
     apply (sound foreignSem lemSem).

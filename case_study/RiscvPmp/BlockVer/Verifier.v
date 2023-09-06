@@ -186,11 +186,11 @@ Module BlockVerification3.
 
   Inductive AnnotInstr :=
   | AnnotAST : forall (i : AST), AnnotInstr
-  | AnnotLemmaInvocation : forall (l : 𝑳 [ctx]), AnnotInstr
+  | AnnotLemmaInvocation : forall {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ), AnnotInstr
   .
 
   Fixpoint exec_block_addr (b : list AnnotInstr) : ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
-    fun _ ainstr apc =>
+    fun w0 ainstr apc =>
       match b with
       | nil       => pure apc
       | cons instr b' =>
@@ -198,9 +198,10 @@ Module BlockVerification3.
           | AnnotAST i => ω1 ∣ _ <- assert (formula_relop bop.eq ainstr apc) ;;
                          ω2 ∣ apc' <- exec_instruction_any i (persist__term apc ω1) ;;
                          @exec_block_addr b' _ (term_binop bop.bvadd (persist__term ainstr (ω1 ∘ ω2)) (term_val ty_word bv_instrsize)) apc'
-          | AnnotLemmaInvocation l =>
-              ω ∣ _ <- SHeapSpecM.call_lemma (LEnv l) [env];;
-              @exec_block_addr b' _ (persist__term ainstr ω) (persist__term apc ω)
+          | AnnotLemmaInvocation l es =>
+              ω1 ∣ args <- SHeapSpecM.eval_exps es (w:=w0) ;;
+              ω2 ∣ _ <- SHeapSpecM.call_lemma (LEnv l) args ;;
+              @exec_block_addr b' _ (persist__term ainstr (ω1 ∘ ω2)) (persist__term apc (ω1 ∘ ω2))
           end
       end.
 
@@ -425,8 +426,9 @@ Module BlockVerification3Sound.
           | AnnotAST i => _ <- assert (ainstr = apc) ;;
                          apc' <- exec_instruction_any__c i apc ;;
                          @exec_block_addr__c b' (bv.add ainstr bv_instrsize) apc'
-          | AnnotLemmaInvocation l => 
-              _ <- CHeapSpecM.call_lemma (LEnv l) [env];;
+          | AnnotLemmaInvocation l es => 
+              args <- CHeapSpecM.eval_exps es ;;
+              _ <- CHeapSpecM.call_lemma (LEnv l) args ;;
               exec_block_addr__c b' ainstr apc
           end
       end.
@@ -458,11 +460,14 @@ Module BlockVerification3Sound.
         }
         { reflexivity. }
       + apply refine_bind.
+        apply refine_eval_exps; easy.
+        intros w1 ω1 ι1 -> Hpc1 sargs args ->.
+        apply refine_bind.
         apply refine_call_lemma; easy.
-        intros w ω ι -> Hpc _ _ _.
+        intros w2 ω2 ι2 -> Hpc2 _ _ _.
         apply IHb; auto; cbn.
-        { now rewrite (inst_persist (H := inst_term) _ _ ainstr). }
-        { now rewrite (inst_persist (H := inst_term) _ _ apc). }
+        { now rewrite <-?inst_persist, (persist_trans (A := STerm _)). }
+        { now rewrite <-?inst_persist, (persist_trans (A := STerm _)). }
   Qed.
 
   Definition exec_triple_addr__c {Σ : World} (ι : Valuation Σ)
@@ -822,7 +827,7 @@ Module BlockVerification3Sem.
       iApply "Hk"; iFrame.
       iSplitR; auto.
       now iApply Hverif.
-    - destruct instr as [instr|lem].
+    - destruct instr as [instr|Δ lem es].
       + intros [-> Hverif].
         assert (⊢ semTripleOneInstrStep (interpret_scheap h) instr
                   (fun an =>
@@ -860,7 +865,8 @@ Module BlockVerification3Sem.
         iApply ("Hk" with "[$]").
       + iIntros (Hlemcall) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
         unfold bind, CHeapSpecM.bind in Hlemcall; cbn.
-        assert (CHeapSpecM.call_lemma (LEnv lem) [env] (fun _ => liftP (fun δ => lptsreg pc apc ∗ (∃ v : Val ty_xlenbits, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) -∗
+        unfold CHeapSpecM.eval_exps in Hlemcall.
+        assert (CHeapSpecM.call_lemma (LEnv lem) (evals es [env]) (fun _ => liftP (fun δ => lptsreg pc apc ∗ (∃ v : Val ty_xlenbits, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) -∗
                    (∀ an : Val ty_xlenbits, lptsreg pc an ∗ (∃ v : Val ty_xlenbits, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) ∗ POST an [env] -∗ WP_loop) -∗ WP_loop)%I) [env] h) as Hcalllemma.
         { revert Hlemcall.
           apply call_lemma_monotonic.
@@ -872,7 +878,7 @@ Module BlockVerification3Sem.
           now iApply "Hk".
         }
         pose proof (Hlem := lemSem _ lem).
-        destruct (call_lemma_sound [env] [env] h _ _ Hcalllemma).
+        destruct (call_lemma_sound _ _ h _ _ Hcalllemma).
         cbn in *.
         iPoseProof (H0 with "Hh") as "(%ι & _ & Hreq & Hk2)".
         iApply ("Hk2" with "[Hreq] [$Hpc $Hnpc $Hinstrs] Hk").

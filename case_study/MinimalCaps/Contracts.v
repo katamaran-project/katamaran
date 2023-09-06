@@ -30,6 +30,7 @@ From Coq Require Import
      Program.Tactics
      Strings.String
      ZArith.ZArith
+     Classes.EquivDec
      micromega.Lia.
 
 From Equations Require Import
@@ -51,14 +52,16 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
+(* PurePredicates used for the contracts. These are not spatial, i.e., they are
+   duplicable. *)
 Inductive PurePredicate : Set :=
 | subperm
 | correctPC
 | not_is_perm
 .
 
+(* Predicate denotes the spatial predicates used in this case study. *)
 Inductive Predicate : Set :=
-  ptsreg
 | ptsto
 | safe
 | expr
@@ -97,6 +100,8 @@ Section PredicateKit.
      E
      |
      O *)
+  (* decide_subperm is the decision procedure that determines whether p is a
+     subpermission of p' according to the permission lattice given above. *)
   Definition decide_subperm (p p' : Val ty.perm) : bool :=
     match p with
     | O => true
@@ -115,6 +120,7 @@ Section PredicateKit.
             end
     end.
 
+  (* Subperm is the predicate implementation using the decision procedure *)
   Definition Subperm (p p' : Val ty.perm) : Prop :=
     decide_subperm p p' = true.
 
@@ -122,33 +128,34 @@ Section PredicateKit.
       Subperm p p.
   Proof. destruct p; simpl; reflexivity. Qed.
 
-  Equations(noeqns) is_perm (p p' : Val ty.perm) : bool :=
-  | O  | O  := true;
-  | R  | R  := true;
-  | RW | RW := true;
-  | E  | E  := true;
-  | _  | _  := false.
-
+  (* decide_correct_pc returns a boolean indicating whether a pc is correct.  A
+     correct pc means that it doesn't have the E permission and the cursor is
+     within bounds. *)
   Definition decide_correct_pc (c : Val ty.cap) : bool :=
     match c with
     | {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |} =>
-        (b <=? a) && (a <? e) && (is_perm p R || is_perm p RW)
+        (b <=? a) && (a <? e) && (Base.is_perm p R || Base.is_perm p RW)
     end.
 
+  (* CorrectPC is the predicate implementation of decide_correct_pc. *)
   Definition CorrectPC (c : Val ty.cap) : Prop :=
     decide_correct_pc c = true.
 
-  Definition Not_is_perm (p p' : Val ty.perm) : Prop :=
-    (negb (is_perm p p')) = true.
+  (* Not_is_perm is the negation of is_perm as a Prop. *)
+  Definition Not_is_perm := complement (@equiv Permission _ _).
 
-  Lemma Not_is_perm_prop (p p' : Val ty.perm) :
-    Not_is_perm p p' -> p <> p'.
-  Proof. unfold Not_is_perm; destruct p, p'; intros; auto. Qed.
+  Lemma is_perm_Not_is_perm_false (p p' : Val ty.perm) :
+    Not_is_perm p p' -> Base.is_perm p p' = false.
+  Proof.
+    unfold Not_is_perm, equiv, complement.
+    destruct (Base.is_perm p p') eqn:E; auto.
+    apply is_perm_iff in E; subst.
+    intros H.
+    exfalso; exact (H eq_refl).
+  Qed.
 
-  Lemma Not_is_perm_iff (p p' : Val ty.perm) :
-    Not_is_perm p p' <-> p <> p'.
-  Proof. unfold Not_is_perm; destruct p, p'; split; intros; auto. Qed.
-
+  (* 𝑷_inst instructs Katamaran how our defined predicates for this case can be
+     instantiated. *)
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
     | subperm     => Subperm
@@ -159,9 +166,9 @@ Section PredicateKit.
   Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
 
   Definition 𝑯 := Predicate.
+  (* 𝑯_Ty defines the signatures of the spatial predicates. *)
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | ptsreg  => [ty.enum regname; ty.word]
     | ptsto   => [ty.addr; ty.memval]
     | safe    => [ty.word]
     | expr    => [ty.cap]
@@ -169,10 +176,13 @@ Section PredicateKit.
     | ih      => []
     | wp_loop => []
     end.
+  (* 𝑯_is_dup specifies which predicates are duplicable. A spatial predicate can
+     be duplicable if it is timeless. Note that spatial predicates are defined
+     using the Iris logic, while pure predicates are defined using standard
+     Coq. *)
   Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
-      | ptsreg  => false
       | ptsto   => false
       | safe    => true
       | expr    => false (* TODO: check if it is duplicable when implemented *)
@@ -184,9 +194,10 @@ Section PredicateKit.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
 
   Local Arguments Some {_} &.
+  (* 𝑯_precise specifies which predicates are precise and gives information
+     about the input and output parameters of a predicate. *)
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
-    | ptsreg => Some (MkPrecise [ty.enum regname] [ty.word] eq_refl)
     | ptsto => Some (MkPrecise [ty.addr] [ty.memval] eq_refl)
     | _ => None
     end.
@@ -203,7 +214,6 @@ End PredicateKit.
     Notation "x '≠' y" := (asn.formula (formula_relop bop.neq x y)) (at level 70) : asn_scope.
     Notation "p '<=ₚ' p'" := (asn.formula (formula_user subperm (env.nil ► (ty.perm ↦ p) ► (ty.perm ↦ p')))) (at level 70).
 
-    Notation "r '↦r' t" := (asn.chunk (chunk_user ptsreg (env.nil ► (ty.enum regname ↦ r) ► (ty.word ↦ t)))) (at level 70).
     Notation "a '↦m' t" := (asn.chunk (chunk_user ptsto (env.nil ► (ty.addr ↦ a) ► (ty.int ↦ t)))) (at level 70).
     Notation asn_correctPC c := (asn.formula (formula_user correctPC [c])).
     Notation "p '≠ₚ' p'" := (asn.formula (formula_user not_is_perm [p;p'])) (at level 70).
@@ -238,9 +248,12 @@ Section ContractDefKit.
 
   (* Arguments asn_prop [_] & _. *)
 
+  (* sep_contract_logvars is a helper function to extract the minimum required
+     logical variables from a function signature. *)
   Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
     ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
 
+  (* create_localstore returns a localstore based on a function signature. *)
   Definition create_localstore (Δ : PCtx) (Σ : LCtx) : SStore Δ (sep_contract_logvars Δ Σ) :=
     (env.tabulate (fun '(x::σ) xIn =>
                      @term_var
@@ -256,14 +269,16 @@ Section ContractDefKit.
               (r ↦ (@term_var _ _ _ ctx.in_zero) ∗
                 asn_safe (@term_var _ _ _ ctx.in_zero)).
 
-  (* regInv(r) = ∃ c : cap. r ↦ c * csafe(c) *)
+  (* regInvCap(r) = ∃ c : cap. r ↦ c * csafe(c) *)
   Definition regInvCap {Σ} (r : Reg ty.cap) : Assertion Σ :=
     asn.exist "c" ty.cap
               (r ↦ term_var "c" ∗
                  asn_csafe (term_var "c")).
 
+  (* asn_and_regs is an assertion that takes a function with one parameter, a
+     register. This function is applied for each register of the machine. *)
   Definition asn_and_regs {Σ} (f : Reg ty.word -> Assertion Σ) : Assertion Σ :=
-    f reg0 ∗ f reg1 ∗ f reg2 ∗ f reg3.
+    f reg1 ∗ f reg2 ∗ f reg3.
 
   Definition asn_regs_ptsto_safe {Σ} : Assertion Σ :=
     asn_and_regs regInv.
@@ -473,16 +488,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           else ⊤
         |}.
 
-      Definition sep_contract_upper_bound : SepContract ["a" :: ty.addr; "e" :: ty.addr ] ty.bool :=
-        {| sep_contract_logic_variables := ["a" :: ty.addr; "e" :: ty.addr];
-          sep_contract_localstore      := [term_var "a"; term_var "e"];
-          sep_contract_precondition    := ⊤;
-          sep_contract_result          := "result_upper_bound";
-          sep_contract_postcondition   :=
-          term_var "result_upper_bound" =
-            term_binop (bop.relop bop.le) (term_var "a") (term_var "e");
-        |}.
-
       Definition sep_contract_within_bounds : SepContract ["c" :: ty.cap] ty.bool :=
         {| sep_contract_logic_variables := ["c" :: ty.cap];
           sep_contract_localstore      := [term_var "c"];
@@ -669,7 +674,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           match f with
           | read_allowed           => Some sep_contract_read_allowed
           | write_allowed          => Some sep_contract_write_allowed
-          | upper_bound            => Some sep_contract_upper_bound
           | within_bounds          => Some sep_contract_within_bounds
           | read_reg               => Some sep_contract_read_reg
           | read_reg_cap           => Some sep_contract_read_reg_cap
@@ -765,21 +769,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
                       asn_expr c);
         |}.
 
-      Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
-        {| lemma_logic_variables := [ "reg" ∷ ty.enum regname; "w" ∷ ty.word];
-          lemma_patterns        := [term_var "reg"];
-          lemma_precondition    := term_var "reg" ↦r term_var "w";
-          lemma_postcondition   :=
-          asn.match_enum
-            regname (term_var "reg")
-            (fun k => match k with
-                      | R0 => reg0 ↦ term_var "w"
-                      | R1 => reg1 ↦ term_var "w"
-                      | R2 => reg2 ↦ term_var "w"
-                      | R3 => reg3 ↦ term_var "w"
-                      end)
-        |}.
-
       Definition lemma_open_gprs : SepLemma open_gprs :=
         {| lemma_logic_variables := [];
           lemma_patterns        := [];
@@ -862,26 +851,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
           asn_safe (term_inl (term_var "i"));
         |}.
 
-      Definition regtag_to_reg (R : RegName) : Reg ty.word :=
-        match R with
-        | R0 => reg0
-        | R1 => reg1
-        | R2 => reg2
-        | R3 => reg3
-        end.
-
-      Definition lemma_close_ptsreg (r : RegName) : SepLemma (close_ptsreg r) :=
-        {| lemma_logic_variables := ["w" ∷ ty.word];
-          lemma_patterns        := [];
-          lemma_precondition    := regtag_to_reg r ↦ term_var "w";
-          lemma_postcondition   := term_enum regname r ↦r term_var "w"
-        |}.
-
       Definition LEnv : LemmaEnv :=
         fun Δ l =>
           match l with
-          | open_ptsreg         => lemma_open_ptsreg
-          | close_ptsreg r      => lemma_close_ptsreg r
           | open_gprs           => lemma_open_gprs
           | close_gprs          => lemma_close_gprs
           | safe_move_cursor    => lemma_safe_move_cursor
@@ -989,7 +961,7 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
 
   Definition simplify_not_is_perm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
     match term_get_val p, term_get_val q with
-    | Some p', Some q' => if negb (is_perm p' q') then Some [] else None
+    | Some p', Some q' => if negb (Base.is_perm p' q') then Some [] else None
     | _      , _       => Some [formula_user not_is_perm [p;q]]
     end.
 
@@ -1042,6 +1014,7 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
     - dependent elimination v0; lsolve.
       dependent elimination v; lsolve.
       destruct v, v0; cbn; lsolve.
+      all: (intros ι []; cbn; intuition).
   Qed.
 
   Definition solver : Solver :=
@@ -1151,9 +1124,6 @@ Module MinCapsValidContracts.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_write_allowed : ValidContract write_allowed.
-  Proof. reflexivity. Qed.
-
-  Lemma valid_contract_upper_bound : ValidContract upper_bound.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_within_bounds : ValidContract within_bounds.
@@ -1309,7 +1279,6 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_write_mem).
     - apply (valid_contract _ H valid_contract_read_allowed).
     - apply (valid_contract _ H valid_contract_write_allowed).
-    - apply (valid_contract _ H valid_contract_upper_bound).
     - apply (valid_contract _ H valid_contract_within_bounds).
     - apply (valid_contract _ H valid_contract_perm_to_bits).
     - apply (valid_contract _ H valid_contract_perm_from_bits).
@@ -1379,7 +1348,6 @@ Section Statistics.
       existT _ (existT _ write_mem);
       existT _ (existT _ read_allowed);
       existT _ (existT _ write_allowed);
-      existT _ (existT _ upper_bound);
       existT _ (existT _ within_bounds);
       existT _ (existT _ perm_to_bits);
       existT _ (existT _ perm_from_bits);

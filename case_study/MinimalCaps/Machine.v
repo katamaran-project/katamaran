@@ -67,7 +67,6 @@ Section FunDeclKit.
   | write_mem          : Fun ["c" :: ty.cap; "v" :: ty.memval] ty.unit
   | read_allowed       : Fun ["p" :: ty.perm] ty.bool
   | write_allowed      : Fun ["p" :: ty.perm] ty.bool
-  | upper_bound        : Fun ["a" :: ty.addr; "e" :: ty.addr] ty.bool
   | within_bounds      : Fun ["c" :: ty.cap] ty.bool
   | perm_to_bits       : Fun ["p" :: ty.perm] ty.int
   | perm_from_bits     : Fun ["i" :: ty.int] ty.perm
@@ -117,8 +116,6 @@ Section FunDeclKit.
   .
 
   Inductive Lem : PCtx -> Set :=
-  | open_ptsreg                : Lem ["reg" :: ty.enum regname]
-  | close_ptsreg (R : RegName) : Lem []
   | open_gprs                  : Lem []
   | close_gprs                 : Lem []
   | safe_move_cursor           : Lem ["c'" :: ty.cap; "c" :: ty.cap]
@@ -269,24 +266,9 @@ Section FunDefKit.
      else stm_val ty.bool false).
 
   Definition fun_is_perm : Stm ["p" :: ty.perm; "p'" :: ty.perm] ty.bool :=
-    match: exp_var "p" in permission with
-    | O  => match: exp_var "p'" in permission with
-            | O => stm_val ty.bool true
-            | _ => stm_val ty.bool false
-            end
-    | R  => match: exp_var "p'" in permission with
-            | R => stm_val ty.bool true
-            | _ => stm_val ty.bool false
-            end
-    | RW => match: exp_var "p'" in permission with
-            | RW => stm_val ty.bool true
-            | _  => stm_val ty.bool false
-            end
-    | E  => match: exp_var "p'" in permission with
-            | E => stm_val ty.bool true
-            | _ => stm_val ty.bool false
-            end
-    end.
+    stm_match_enum permission (exp_var "p") (fun _ => stm_val ty.unit tt) ;;
+    stm_match_enum permission (exp_var "p'") (fun _ => stm_val ty.unit tt) ;;
+    exp_var "p" = exp_var "p'".
 
   Definition fun_add_pc : Stm ["offset" :: ty.int] ty.unit :=
     let: "opc" := stm_read_register pc in
@@ -309,11 +291,7 @@ Section FunDefKit.
 
   Definition fun_within_bounds : Stm ["c" :: ty.cap] ty.bool :=
     let*: ["p", "b", "e", "a"] := (exp_var "c") in
-    (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
-     (exp_var "b" <= exp_var "a") && exp_var "u").
-
-  Definition fun_upper_bound : Stm ["a" :: ty.addr; "e" :: ty.addr] ty.bool :=
-    a <= e.
+    ((exp_var "b" <= exp_var "a") && (exp_var "a" <= exp_var "e")).
 
   Section ExecStore.
 
@@ -824,7 +802,6 @@ Section FunDefKit.
     | write_mem          => fun_write_mem
     | read_allowed       => fun_read_allowed
     | write_allowed      => fun_write_allowed
-    | upper_bound        => fun_upper_bound
     | within_bounds      => fun_within_bounds
     | perm_to_bits       => fun_perm_to_bits
     | perm_from_bits     => fun_perm_from_bits
