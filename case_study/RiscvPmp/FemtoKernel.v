@@ -188,7 +188,7 @@ Import BlockVerification3.
       [
         ITYPE (bv.of_N 42) zero t0 RISCV_ADDI
       ; UTYPE bv.zero ra RISCV_AUIPC
-      ; Λ x, AnnotLemmaInvocation (close_mmio_write (bv.of_N (mmio_write_addr - (x - 4))) x5 x1 WORD)(* TODO: notation to avoid lemma call copying LOAD instruction? + avoid specifying x_i; use above noatation *)
+      ; Λ x, AnnotLemmaInvocation (close_mmio_write (bv.of_N (mmio_write_addr - (x - 4))) x5 x1 WORD)(* TODO: notation to avoid lemma call copying LOAD instruction? + avoid specifying x_i; use above notation *) (* TODO: pull in Lemma invocations with arguments from main, and update to use lemma with symbolic arguments, so we can get rid of the meta-level arguments here, and simplify the lemma. This should also fix the first todo *)
       ; Λ x, STORE (bv.of_N (mmio_write_addr - (x - 4))) t0 ra WORD
       ; MRET
       ].
@@ -276,7 +276,7 @@ Import BlockVerification3.
     (* Set Printing Depth 200. *)
     (* Eval vm_compute in vc__femtoinit. *)
 
-    (* NOTE: we take a naive approach to verifying both versions of the initialization code here; we require that `adv_start` takes one of the two values present in the two versions of the initialization code. A more general approach would verify the contract under a logical value for `adv_start`. This would require the block verifier to support taking a list of instructions that can depend on symbolic values as input. However, this is currently unsupported. *)
+    (* NOTE: we take a naive approach to verifying both versions of the initialization code here; we require that `adv_start` takes one of the two values present in the two versions of the initialization code. A more general approach would verify the contract under a logical value for `adv_start`. This would require the block verifier to support taking a list of instructions that can depend on symbolic values as input (i.e. proper terms). However, this is currently unsupported. *)
     Lemma sat__femtoinit (adv_start : N) (H : adv_start = adv_addr \/ adv_start = mmio_adv_addr) : safeE (vc__femtoinit adv_start).
     Proof.
       destruct H as [-> | ->]; now vm_compute.
