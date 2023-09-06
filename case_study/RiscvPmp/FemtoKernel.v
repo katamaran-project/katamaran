@@ -74,6 +74,7 @@ Import BlockVerification3.
 
     Definition zero : RegIdx := [bv 0].
     Definition ra : RegIdx := [bv 1].
+    Definition t0 : RegIdx := [bv 5].
 
     Definition pure_privilege_to_bits {n} : Privilege -> bv n :=
       fun p => match p with | Machine => bv.of_N 3 | User => bv.zero end.
@@ -170,9 +171,8 @@ Import BlockVerification3.
       ; MRET
       ].
 
-    Example femtokernel_init' (init_addr : N) (handler_start : N) (adv_start : N) :=
-      resolve_ASM (femtokernel_init_asm handler_start adv_start) init_addr.
-    Definition init_size : N := N.of_nat (List.length (femtokernel_init' 0 0 0)) * 4.
+    Example femtokernel_init' (init_start : N) (handler_start : N) (adv_start : N) : list AnnotInstr :=
+      resolve_ASM (femtokernel_init_asm handler_start adv_start) init_start.
 
     Example femtokernel_handler_asm (data_start : N) : list ASM :=
       [
@@ -180,20 +180,44 @@ Import BlockVerification3.
       ; Λ x, LOAD (bv.of_N (data_start - (x - 4))) ra ra false WORD
       ; MRET
       ].
-    Example femtokernel_handler' (handler_start : N) (data_start : N) :=
+    Example femtokernel_handler' (handler_start : N) (data_start : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_handler_asm data_start) handler_start.
+
+    Definition mmio_write_addr : N := N.of_nat mmioStartAddr.
+    Example femtokernel_mmio_handler_asm : list ASM :=
+      [
+        ITYPE (bv.of_N 42) zero t0 RISCV_ADDI
+      ; UTYPE bv.zero ra RISCV_AUIPC
+      ; Λ x, AnnotLemmaInvocation (close_mmio_write (bv.of_N (mmio_write_addr - (x - 4))) x5 x1 WORD)(* TODO: notation to avoid lemma call copying LOAD instruction? + avoid specifying x_i; use above noatation *)
+      ; Λ x, STORE (bv.of_N (mmio_write_addr - (x - 4))) t0 ra WORD
+      ; MRET
+      ].
+    Example femtokernel_mmio_handler' (handler_start : N) : list AnnotInstr :=
+      resolve_ASM (femtokernel_mmio_handler_asm) handler_start.
+
+    (* SIZES *)
+    Definition init_size : N := N.of_nat (List.length (femtokernel_init' 0 0 0)) * 4.
+
     Definition handler_size : N := N.of_nat (List.length (femtokernel_handler' 0 0)) * 4.
-
+    Definition mmio_handler_size : N := N.of_nat (List.length (femtokernel_mmio_handler' 0)) * 4.
+    (* Note: MMIO has no `data` region, hence no data size or address. *)
     Definition data_size : N := 4.
-    Definition femtokernel_size : N := init_size + handler_size + data_size.
-    Definition init_address     : N := 0.
-    Definition handler_address  : N := init_address + init_size.
-    Definition data_address     : N := init_address + femtokernel_size - 4.
 
-    Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N femtokernel_size); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
+    (* ADDRESSES *)
+    Definition init_addr     : N := 0.
+    Definition handler_addr  : N := init_addr + init_size.
+    Definition data_addr     : N := handler_addr + handler_size.
+    Definition adv_addr      : N := data_addr + data_size.
+    Definition mmio_adv_addr : N := handler_addr + mmio_handler_size.
 
-    Definition femtokernel_init := femtokernel_init' init_address handler_address femtokernel_size.
-    Definition femtokernel_handler := femtokernel_handler' handler_address data_address.
+    (* CODE DEFINITIONS*)
+    Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_addr); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
+    (* Definition of the femtokernel initialization procedure that works both for the legacy and the MMIO case; solely the address of the adversary differs *)
+    Definition femtokernel_init_gen (adv_start : N) := femtokernel_init' init_addr handler_addr adv_start.
+    Definition femtokernel_init := femtokernel_init_gen adv_addr.
+    Definition femtokernel_mmio_init := femtokernel_init_gen mmio_adv_addr.
+    Definition femtokernel_handler := femtokernel_handler' handler_addr data_addr.
+    Definition femtokernel_mmio_handler := femtokernel_mmio_handler' handler_addr.
 
     Import asn.notations.
     Import RiscvPmp.Sig.
@@ -219,20 +243,20 @@ Import BlockVerification3.
       asn_regs_ptsto ∗
       (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
                                       (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])) ∗
-      (term_var "a" + (term_val ty_xlenbits (bv.of_N data_address)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
+      (term_var "a" + (term_val ty_xlenbits (bv.of_N data_addr)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
 
-    Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
+    Example femtokernel_init_post (adv_start : N): Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
       (
-        asn.formula (formula_relop bop.eq (term_var "an") (term_var "a" + term_val ty_xlenbits (bv.of_N femtokernel_size))) ∗
+        asn.formula (formula_relop bop.eq (term_var "an") (term_var "a" + term_val ty_xlenbits (bv.of_N adv_start))) ∗
           (∃ "v", mstatus ↦ term_var "v") ∗
-          (mtvec ↦ (term_var "a" + term_val ty_xlenbits (bv.of_N handler_address))) ∗
+          (mtvec ↦ (term_var "a" + term_val ty_xlenbits (bv.of_N handler_addr))) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
-          (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N femtokernel_size));
+          (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N adv_start));
                                        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))])) ∗
-          (term_var "a" + (term_val ty_xlenbits (bv.of_N data_address)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
+          (term_var "a" + (term_val ty_xlenbits (bv.of_N data_addr)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
       )%exp.
 
     (* (* note that this computation takes longer than directly proving sat__femtoinit below *) *)
@@ -240,8 +264,8 @@ Import BlockVerification3.
     (*   Eval vm_compute in *)
     (*   simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post). *)
 
-    Definition vc__femtoinit : 𝕊 Σ__femtoinit :=
-      postprocess (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post).
+    Definition vc__femtoinit (adv_start : N) : 𝕊 Σ__femtoinit :=
+      postprocess (VC__addr femtokernel_init_pre (femtokernel_init_gen adv_start) (femtokernel_init_post adv_start)).
     (*   let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in *)
     (*   let vc2 := Postprocessing.prune vc1 in *)
     (*   let vc3 := Postprocessing.solve_evars vc1 in *)
@@ -252,9 +276,10 @@ Import BlockVerification3.
     (* Set Printing Depth 200. *)
     (* Eval vm_compute in vc__femtoinit. *)
 
-    Lemma sat__femtoinit : safeE vc__femtoinit.
+    (* NOTE: we take a naive approach to verifying both versions of the initialization code here; we require that `adv_start` takes one of the two values present in the two versions of the initialization code. A more general approach would verify the contract under a logical value for `adv_start`. This would require the block verifier to support taking a list of instructions that can depend on symbolic values as input. However, this is currently unsupported. *)
+    Lemma sat__femtoinit (adv_start : N) (H : adv_start = adv_addr \/ adv_start = mmio_adv_addr) : safeE (vc__femtoinit adv_start).
     Proof.
-      now vm_compute.
+      destruct H as [-> | ->]; now vm_compute.
     Qed.
 
     Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].
@@ -263,9 +288,9 @@ Import BlockVerification3.
     Example femtokernel_handler_pre : Assertion {| wctx := ["a" :: ty_xlenbits]; wco := []%ctx |} :=
       let pmpcfg := [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16));
                      (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))]%list in
-      (term_var "a" = term_val ty_word (bv.of_N handler_address)) ∗
+      (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗
       (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
-      (mtvec ↦ term_val ty_word (bv.of_N handler_address)) ∗
+      (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
@@ -279,7 +304,7 @@ Import BlockVerification3.
                      (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))]%list in
       (
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
-          (mtvec ↦ term_val ty_word (bv.of_N handler_address)) ∗
+          (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "epc", (mepc ↦ term_var "epc" ∗
                      asn.formula
@@ -316,9 +341,16 @@ Import BlockVerification3.
     Definition femtoinit_stats :=
       SymProp.Statistics.count_to_stats
         (SymProp.Statistics.count_nodes
-           (VC__addr femtokernel_init_pre femtokernel_init (asn.sep femtokernel_init_post asn.debug))
+           (VC__addr femtokernel_init_pre femtokernel_init (asn.sep (femtokernel_init_post adv_addr) asn.debug))
            SymProp.Statistics.empty).
     (* Eval vm_compute in femtoinit_stats. *)
+
+    Definition femto_mmio_init_stats :=
+      SymProp.Statistics.count_to_stats
+        (SymProp.Statistics.count_nodes
+           (VC__addr femtokernel_init_pre femtokernel_mmio_init (asn.sep (femtokernel_init_post mmio_adv_addr) asn.debug))
+           SymProp.Statistics.empty).
+    (* Eval vm_compute in femto_mmio_init_stats. *)
 
     Definition femtohandler_stats :=
       SymProp.Statistics.count_to_stats
@@ -362,7 +394,7 @@ Import BlockVerification3.
   Import BlockVerificationDerived2Sound.
   Import BlockVerificationDerived2Sem.
 
-  Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N femtokernel_size) (lenAddr - (N.to_nat femtokernel_size)).
+  Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N adv_address) (lenAddr - (N.to_nat adv_address)).
 
   Global Instance dec_has_some_access {ents p1} : forall x, Decision (exists p2, Pmp_access x (bv.of_nat 1) ents p1 p2).
   Proof.
@@ -595,13 +627,13 @@ Import BlockVerification3.
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
          (@interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42)) ∗
-        (pc ↦ (bv.of_N femtokernel_size)) ∗
+        (pc ↦ (bv.of_N adv_address)) ∗
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
         ptsto_instrs (bv.of_N handler_address) femtokernel_handler ∗
         ptstoSthL advAddrs
         ={⊤}=∗
-        ∃ mpp, LoopVerification.loop_pre User (bv.of_N handler_address) (bv.of_N femtokernel_size) mpp femto_pmpentries.
+        ∃ mpp, LoopVerification.loop_pre User (bv.of_N handler_address) (bv.of_N adv_address) mpp femto_pmpentries.
   Proof.
     iIntros "([%mpp Hmst] & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
     iExists mpp.
@@ -660,10 +692,10 @@ Import BlockVerification3.
         interp_gprs ∗
         pmp0cfg ↦ femto_pmpcfg_ent0 ∗
         pmp1cfg ↦ femto_pmpcfg_ent1 ∗
-        (pmpaddr0 ↦ (bv.of_N femtokernel_size)) ∗
+        (pmpaddr0 ↦ (bv.of_N adv_address)) ∗
         (pmpaddr1 ↦ (bv.of_N femto_address_max)) ∗
         interp_ptstomem_readonly (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
-        pc ↦ (bv.of_N femtokernel_size) ∗
+        pc ↦ (bv.of_N adv_address) ∗
         (∃ v, nextpc ↦ v) ∗
         ptsto_instrs bv.zero femtokernel_init.
 
