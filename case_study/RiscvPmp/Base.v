@@ -89,9 +89,12 @@ Proof. cbv. lia. Qed.
 (* All addresses present in RAM memory *)
 Definition liveAddrs := bv.seqBv (@bv.of_nat xlenbits minAddr) lenAddr.
 
-(* 1. Definition of MMIO memory *)
+(* 2. Definition of MMIO memory *)
 (* For now, we only consider the one femtokernel address to be part of the MMIO-mapped memory. *)
-Definition mmioAddrs : list Addr := bv.seqBv (@bv.of_nat xlenbits maxAddr) lenAddr.
+(* We place the MMIO memory after the RAM memory, and have the PMP entry for the adversary in the FemtoKernel provide access up to but not including the MMIO memory. The lack of an entry for the MMIO memory will ensure that this memory is addressable by the kernel. *)
+Definition mmioStartAddr := maxAddr.
+Definition mmioLenAddr := maxAddr + lenAddr.
+Definition mmioAddrs : list Addr := bv.seqBv (@bv.of_nat xlenbits mmioStartAddr) mmioLenAddr.
 Definition isMMIO a : Prop := a ∈ mmioAddrs.
 Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
   match size with
@@ -121,7 +124,7 @@ Require Import stdpp.finite.
 (* Addresses cannot both be MMIO and RAM. We need to know this when trying to inject pointsto-chunks for RAM back into maps of pointsto chunks. *)
 
 Lemma mmio_ram_False a : a ∈ liveAddrs → a ∈ mmioAddrs -> False.
-Proof. unfold liveAddrs, mmioAddrs, maxAddr, minAddr, lenAddr.
+Proof. unfold liveAddrs, mmioAddrs, mmioStartAddr, mmioLenAddr, maxAddr, minAddr, lenAddr.
        apply bv.seqBv_no_overlap; cbn; lia.
 Qed.
 
