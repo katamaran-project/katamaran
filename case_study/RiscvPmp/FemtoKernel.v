@@ -65,7 +65,7 @@ Open Scope ctx_scope.
 
 Module inv := invariants.
 
-Import BlockVerificationDerived2.
+Import BlockVerification3.
 
   Section FemtoKernel.
     Import bv.notations.
@@ -124,23 +124,33 @@ Import BlockVerificationDerived2.
 
     (* ASTs with a very limited form of labels, that allow us to refer to the address of the current instruction *)
     Inductive ASM :=
-      | Instr (a: AST)
-      | RelInstr (f : N -> AST).
-    Local Coercion AST_ASM (a : AST) := Instr (a).
+      | Instr (a: AnnotInstr)
+      | RelInstr (f : N -> AnnotInstr).
+    Local Coercion AST_AnnotAST (a : AST) := AnnotAST (a).
+    Local Coercion AnnotAST_ASM (a : AnnotInstr) := Instr (a).
     Local Notation "'Λ' x , a" := (RelInstr (fun x => a))
       (at level 200) : list_scope.
     Local Arguments List.cons {_} & _ _. (* Allow projecting individual ASM into AST  - TODO: wrap `cons` in another definition *)
+    (* The following definition is required for layouting in memory, because otherwise we will count lemma invocations as instructions *)
+
+    Definition is_not_lemma (a : ASM) :=
+      match a with
+      | Instr (AnnotLemmaInvocation _ ) => false
+      | _ => true end .
+    Definition remove_lemmas (l : list ASM) := filter is_not_lemma l.
 
     (* Address resolution *)
-    Fixpoint resolve_ASM (la : list ASM) (cur_off : N) : list AST :=
+    Fixpoint resolve_ASM (la : list ASM) (cur_off : N) : list AnnotInstr :=
       match la with
       | nil => nil
       | cons hd tl =>
           let hd' := (match hd with
           | Instr a => a
           | RelInstr f => f cur_off end) in
-          cons hd' (resolve_ASM tl (cur_off + N.of_nat xlenbytes)) end.
+          let new_off : N := if is_not_lemma hd then (cur_off + N.of_nat xlenbytes)%N else cur_off in (* Lemma calls should not increase the current offset, as they will be filtered out in the end! *)
+          cons hd' (resolve_ASM tl new_off) end.
 
+    (* Init code is the same in both versions of the femtokernel, since MMIO memory is placed after the adversary code, hence not affecting initialization *)
     Example femtokernel_init_asm (handler_start : N) (adv_start : N): list ASM :=
       [
         UTYPE bv.zero ra RISCV_AUIPC
