@@ -32,28 +32,28 @@ All files mentioned in this section are relative to `case_study/RiscvPmp/`.
 
 ## Paper-to-Artifact Correspondence
 
-| Paper                                 | File                                     | Definition                         |
-|---------------------------------------|------------------------------------------|------------------------------------|
-| Figure 7: UC Definition               | `case_study/RiscvPmp/LoopVerification.v` | Definition semTriple_loop          |
-| Figure 7: UC verif.                   | `case_study/RiscvPmp/LoopVerification.v` | Lemma valid_semTriple_loop         |
-| Figure 7: Normal                      | `case_study/RiscvPmp/LoopVerification.v` | Definition Step_pre                |
-| Figure 7: Trap                        | `case_study/RiscvPmp/LoopVerification.v` | Definition Trap                    |
-| Figure 8: PMP_addr_access             | `case_study/RiscvPmp/IrisInstance.v`     | Definition interp_pmp_addr_access  |
-| Figure 12: read_ram contract          | `case_study/RiscvPmp/Contracts.v`        | Definition sep_contract_read_ram   |
-| Figure 12: read_ram verif.            | `case_study/RiscvPmp/Model.v`            | Lemma read_ram_sound               |
-| Figure 12: write_ram contract         | `case_study/RiscvPmp/Contracts.`         | Definition sep_contract_write_ram  |
-| Figure 12: write_ram verif.           | `case_study/RiscvPmp/Model.v`            | Lemma write_ram_sound              |
-| Figure 13: Step contract              | `case_study/RiscvPmp/Contracts.v`        | Definition sep_contract_step       |
-| Figure 13: Step verif.                | `case_study/RiscvPmp/Contracts.v`        | Lemma valid_contract_step          |
-| Figure 14: open_PMP_entries contract  | `case_study/RiscvPmp/Contracts.v`        | Definition lemma_open_pmp_entries  |
-| Figure 14: open_PMP_entries verif.    | `case_study/RiscvPmp/Model.v`            | Lemma open_pmp_entries_sound       |
-| Figure 14: extract_PMP_ptsto contract | `case_study/RiscvPmp/Contracts.v`        | Definition lemma_extract_pmp_ptsto |
-| Figure 14: extract_PM_ptsto verif.    | `case_study/RiscvPmp/Model.v`            | Lemma extract_pmp_ptsto_sound      |
-| Figure 14: return_PMP_ptsto contract  | `case_study/RiscvPmp/Contracts.v`        | Definition lemma_return_pmp_ptsto  |
-| Figure 14: return_PMP_ptsto verif.    | `case_study/RiscvPmp/Model.v`            | Lemma return_pmp_ptsto_sound       |
-| Figure 15: FemtoKernel kernel         | `case_study/RiscvPmp/FemtoKernel.v`      | Example femtokernel_init           |
-| Figure 15: FemtoKernel ih             | `case_study/RiscvPmp/FemtoKernel.v`      | Example femtokernel_handler        |
-| Figure 15: FemtoKernel end-to-end     | `case_study/RiscvPmp/FemtoKernel.v`      | Lemma femtokernel_endToEnd         |
+| Paper                                   | File                                     | Definition                            |
+|-----------------------------------------|------------------------------------------|---------------------------------------|
+| Figure 7: UC Definition                 | `case_study/RiscvPmp/LoopVerification.v` | Definition semTriple\_loop            |
+| Figure 7: UC verif.                     | `case_study/RiscvPmp/LoopVerification.v` | Lemma valid\_semTriple\_loop          |
+| Figure 7: Normal                        | `case_study/RiscvPmp/LoopVerification.v` | Definition Step\_pre                  |
+| Figure 7: Trap                          | `case_study/RiscvPmp/LoopVerification.v` | Definition Trap                       |
+| Figure 8: PMP\_addr\_access             | `case_study/RiscvPmp/IrisInstance.v`     | Definition interp\_pmp\_addr\_access  |
+| Figure 12: read\_ram contract           | `case_study/RiscvPmp/Contracts.v`        | Definition sep\_contract\_read\_ram   |
+| Figure 12: read\_ram verif.             | `case_study/RiscvPmp/Model.v`            | Lemma read\_ram\_sound                |
+| Figure 12: write\_ram contract          | `case_study/RiscvPmp/Contracts.`         | Definition sep\_contract\_write\_ram  |
+| Figure 12: write\_ram verif.            | `case_study/RiscvPmp/Model.v`            | Lemma write\_ram\_sound               |
+| Figure 13: Step contract                | `case_study/RiscvPmp/Contracts.v`        | Definition sep\_contract\_step        |
+| Figure 13: Step verif.                  | `case_study/RiscvPmp/Contracts.v`        | Lemma valid\_contract\_step           |
+| Figure 14: open\_PMP\_entries contract  | `case_study/RiscvPmp/Contracts.v`        | Definition lemma\_open\_pmp\_entries  |
+| Figure 14: open\_PMP\_entries verif.    | `case_study/RiscvPmp/Model.v`            | Lemma open\_pmp\_entries\_sound       |
+| Figure 14: extract\_PMP\_ptsto contract | `case_study/RiscvPmp/Contracts.v`        | Definition lemma\_extract\_pmp\_ptsto |
+| Figure 14: extract\_PMP\_ptsto verif.   | `case_study/RiscvPmp/Model.v`            | Lemma extract\_pmp\_ptsto\_sound      |
+| Figure 14: return\_PMP\_ptsto contract  | `case_study/RiscvPmp/Contracts.v`        | Definition lemma\_return\_pmp\_ptsto  |
+| Figure 14: return\_PMP\_ptsto verif.    | `case_study/RiscvPmp/Model.v`            | Lemma return\_pmp\_ptsto\_sound       |
+| Figure 15: FemtoKernel kernel           | `case_study/RiscvPmp/FemtoKernel.v`      | Example femtokernel\_init             |
+| Figure 15: FemtoKernel ih               | `case_study/RiscvPmp/FemtoKernel.v`      | Example femtokernel\_handler          |
+| Figure 15: FemtoKernel end-to-end       | `case_study/RiscvPmp/FemtoKernel.v`      | Lemma femtokernel\_endToEnd           |
 
 ## Remarks
 Focus is on RV32I, with the PMP extension.
