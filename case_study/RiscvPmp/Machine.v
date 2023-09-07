@@ -242,7 +242,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | return_pmp_ptsto  (bytes : nat) : Lem [paddr :: ty_xlenbits]
   | open_ptsto_instr                : Lem [paddr :: ty_xlenbits]
   | close_ptsto_instr               : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits]
-  | close_mmio_write (imm : Bitvector.bv.bv 12) (r1 r2 :  Reg ty_xlenbits) (width : WordWidth) : Lem ctx.nil (* Statically known quantities; lemma is called in between instructions! *)
+  | close_mmio_write (imm : Bitvector.bv.bv 12) (width : WordWidth) : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits] (* Statically known quantities; lemma is called in between instructions! *)
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.

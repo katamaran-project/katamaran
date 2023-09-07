@@ -1239,9 +1239,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                asn_pmp_addr_access (term_var "entries") (term_var p)
           |}.
 
-        Definition lemma_close_mmio_write (immm : Bitvector.bv.bv 12) (r1 r2 : Reg ty_xlenbits) (widthh : WordWidth): SepLemma (close_mmio_write immm r1 r2 widthh) :=
-          {| lemma_logic_variables := [];
-             lemma_patterns        := [env];
+        Definition lemma_close_mmio_write (immm : Bitvector.bv.bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) :=
+          {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
+             lemma_patterns        := [term_var "paddr"; term_var "w"];
              lemma_precondition    := ⊤;
              lemma_postcondition   := ⊤;
           |}.
@@ -1257,7 +1257,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | close_ptsto_instr       => lemma_close_ptsto_instr
             | extract_pmp_ptsto bytes => lemma_extract_pmp_ptsto bytes
             | return_pmp_ptsto bytes  => lemma_return_pmp_ptsto bytes
-            | close_mmio_write immm r1 r2 widthh => lemma_close_mmio_write immm r1 r2 widthh
+            | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
             end.
 
       End LemDef.

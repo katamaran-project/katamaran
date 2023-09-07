@@ -136,7 +136,7 @@ Import BlockVerification3.
 
     Definition is_not_lemma (a : ASM) :=
       match a with
-      | Instr (AnnotLemmaInvocation _ ) => false
+      | Instr (AnnotLemmaInvocation _ _) => false
       | _ => true end .
     Definition remove_lemmas (l : list ASM) := filter is_not_lemma l.
 
@@ -188,7 +188,7 @@ Import BlockVerification3.
       [
         ITYPE (bv.of_N 42) zero t0 RISCV_ADDI
       ; UTYPE bv.zero ra RISCV_AUIPC
-      ; Λ x, AnnotLemmaInvocation (close_mmio_write (bv.of_N (mmio_write_addr - (x - 4))) x5 x1 WORD)(* TODO: notation to avoid lemma call copying LOAD instruction? + avoid specifying x_i; use above notation *) (* TODO: pull in Lemma invocations with arguments from main, and update to use lemma with symbolic arguments, so we can get rid of the meta-level arguments here, and simplify the lemma. This should also fix the first todo *)
+      ; Λ x, AnnotLemmaInvocation (close_mmio_write (bv.of_N (mmio_write_addr - (x - 4))) WORD) [nenv exp_val ty_xlenbits (bv.of_N (x - 4)); exp_val ty_xlenbits (bv.of_N 42)]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
       ; Λ x, STORE (bv.of_N (mmio_write_addr - (x - 4))) t0 ra WORD
       ; MRET
       ].

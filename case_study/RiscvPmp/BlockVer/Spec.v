@@ -577,19 +577,14 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Proof. destruct widthh; now compute. Qed.
   Local Hint Resolve wordwidth_upper_bound : typeclass_instances.
 
-  (* NOTE: for now we assume r1≠r2; could generalize in Cerise-style using finite maps once they're supported. *)
-  Definition lemma_close_mmio_write (immm : bv 12) (r1 r2 :  Reg ty_xlenbits) (widthh : WordWidth): SepLemma (close_mmio_write immm r1 r2 widthh) :=
-    {| lemma_logic_variables := ["addr" :: ty_xlenbits; "val" :: ty_xlenbits];
-       lemma_patterns        := [env];
+  Definition lemma_close_mmio_write (immm : bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) :=
+    {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
+       lemma_patterns        := [term_var "paddr"; term_var "w"];
        lemma_precondition    :=
-        asn.chunk (chunk_ptsreg r1 (term_var "addr")) ∗
-        asn.chunk (chunk_ptsreg r2 (term_var "val")) ∗
-        (term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "addr" + term_sext (term_val (ty.bvec 12) immm)) ∗
-        (term_var "val") = (term_val ty_xlenbits (bv.of_nat 42));
+        (term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" + term_sext (term_val (ty.bvec 12) immm)) ∗
+        (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42));
        lemma_postcondition   :=
-        asn.chunk (chunk_ptsreg r1 (term_var "addr")) ∗
-        asn.chunk (chunk_ptsreg r2 (term_var "val")) ∗
-        asn_mmio_checked_write (map_wordwidth widthh) (term_var "addr" + term_sext (term_val (ty.bvec 12) immm))%exp (term_truncate (map_wordwidth widthh * byte) (term_var "val"));
+        asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" + term_sext (term_val (ty.bvec 12) immm))%exp (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
     |}.
 
    Definition LEnv : LemmaEnv :=
@@ -603,7 +598,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        | close_pmp_entries                  => lemma_close_pmp_entries
        | extract_pmp_ptsto bytes => lemma_extract_pmp_ptsto bytes
        | return_pmp_ptsto bytes => lemma_return_pmp_ptsto bytes
-       | close_mmio_write immm r1 r2 widthh => lemma_close_mmio_write immm r1 r2 widthh
+       | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
       end.
 End RiscvPmpBlockVerifSpec.
 
@@ -1004,11 +999,11 @@ Module RiscvPmpIrisInstanceWithContracts.
     now iFrame.
   Qed.
 
-  Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (r1 r2 : Reg ty_xlenbits) (width : WordWidth):
-    ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm r1 r2 width).
+  Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (width : WordWidth):
+    ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width).
   Proof.
     intros ι; destruct_syminstance ι; cbn.
-    iIntros "(Hr1 & Hr2 & [<- _] & [-> _])".
+    iIntros "([<- _] & [-> _])".
     iFrame. iPureIntro.
     split; auto.
     destruct width; now compute.

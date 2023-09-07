@@ -392,8 +392,8 @@ Module RiscvPmpModel2.
       iApply ("Hwithout" with "Hacc").
     Qed.
 
-    Lemma close_mmio_write_sound (imm : bv 12) (r1 r2 : Reg ty_xlenbits) (width : WordWidth):
-      ValidLemma (RiscvPmpSpecification.lemma_close_mmio_write imm r1 r2 width).
+    Lemma close_mmio_write_sound (imm : bv 12) (width : WordWidth):
+      ValidLemma (RiscvPmpSpecification.lemma_close_mmio_write imm width).
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       now iIntros.
