@@ -142,7 +142,7 @@ Section PredicateKit.
     decide_correct_pc c = true.
 
   (* Not_is_perm is the negation of is_perm as a Prop. *)
-  Definition Not_is_perm := complement (@equiv Permission _ _).
+  Definition Not_is_perm := complement (@equiv _ _ (@eq_equivalence Permission)).
 
   Lemma is_perm_Not_is_perm_false (p p' : Val ty.perm) :
     Not_is_perm p p' -> Base.is_perm p p' = false.
