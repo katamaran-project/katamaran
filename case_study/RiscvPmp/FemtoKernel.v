@@ -65,6 +65,7 @@ Open Scope ctx_scope.
 
 Module inv := invariants.
 
+Import BlockVerificationDerived2.
 Import BlockVerification3.
 
   Section FemtoKernel.
@@ -216,15 +217,19 @@ Import BlockVerification3.
     Definition femtokernel_init_gen (adv_start : N) := femtokernel_init' init_addr handler_addr adv_start.
     Definition femtokernel_init := femtokernel_init_gen adv_addr.
     Definition femtokernel_mmio_init := femtokernel_init_gen mmio_adv_addr.
+
+    (* The code is different in both cases for the handler, so we cannot derive the concrete cases from the more general one. *)
     Definition femtokernel_handler := femtokernel_handler' handler_addr data_addr.
     Definition femtokernel_mmio_handler := femtokernel_mmio_handler' handler_addr.
+    (* We reflect the booleans present in the contracts, but now at the meta level. This allows us to recycle large parts of the Katamaran and Iris contracts as part of the verification. *)
+    Definition femtokernel_handler_gen (is_mmio : bool) := if is_mmio then femtokernel_mmio_handler else femtokernel_handler.
 
     Import asn.notations.
     Import RiscvPmp.Sig.
     (* Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79). *)
     Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
     Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
-    Local Notation asn_inv_mmio := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [env])).
+    Local Notation asn_inv_mmio := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [env])). (* Fix word length at 4 for this example, as we do not perform any other writes*)
     Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
@@ -282,10 +287,11 @@ Import BlockVerification3.
       destruct H as [-> | ->]; now vm_compute.
     Qed.
 
-    Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].
+    Let Σ__femtohandler : LCtx := [].
     Let W__femtohandler : World := MkWorld Σ__femtohandler []%ctx.
 
-    Example femtokernel_handler_pre : Assertion {| wctx := ["a" :: ty_xlenbits]; wco := []%ctx |} :=
+    (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
+    Example femtokernel_handler_pre (is_mmio : bool) : Assertion {| wctx := ["a" :: ty_xlenbits]; wco := []%ctx |} :=
       let pmpcfg := [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16));
                      (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))]%list in
       (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗
@@ -296,13 +302,13 @@ Import BlockVerification3.
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_regs_ptsto ∗
       (asn_pmp_entries (term_list pmpcfg)) ∗
-      (asn_pmp_addr_access (term_list pmpcfg) (term_val ty_privilege User)) ∗
-      (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
+      if negb is_mmio then
+        (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
+      else asn_inv_mmio.
 
-    Example femtokernel_handler_post : Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := []%ctx |} :=
+    Example femtokernel_handler_post (is_mmio : bool) : Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := []%ctx |} :=
       let pmpcfg := [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16));
                      (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))]%list in
-      (
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
@@ -313,15 +319,16 @@ Import BlockVerification3.
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
           (asn_pmp_entries (term_list pmpcfg)) ∗
-          (asn_pmp_addr_access (term_list pmpcfg) (term_val ty_privilege User)) ∗
-          (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42)) ∗ ⊤
-      )%exp.
+          if negb is_mmio then
+            (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
+          else ⊤ (* Inv is persistent; don't repeat *).
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
     (*   Eval vm_compute in *)
     (*     simplify (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post). *)
-    Definition vc__femtohandler : 𝕊 [] :=
-      postprocess (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post).
+
+    Definition vc__femtohandler (is_mmio : bool) : 𝕊 [] :=
+      postprocess (VC__addr (femtokernel_handler_pre is_mmio) (femtokernel_handler_gen is_mmio) (femtokernel_handler_post is_mmio)).
 
       (* let vc1 := VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post in *)
       (* let vc2 := Postprocessing.prune vc1 in *)
@@ -333,9 +340,10 @@ Import BlockVerification3.
     (* Set Printing Depth 200. *)
     (* Eval vm_compute in vc__femtohandler. *)
 
-    Lemma sat__femtohandler : safeE vc__femtohandler.
+    Lemma sat__femtohandler (is_mmio : bool) : safeE (vc__femtohandler is_mmio).
     Proof.
-      now vm_compute.
+      destruct is_mmio; last now vm_compute.
+      vm_compute.
     Qed.
 
     Definition femtoinit_stats :=
@@ -560,7 +568,7 @@ Import BlockVerification3.
            inst_term env.lookup ctx.view ctx.in_at ctx.in_valid inst_env
            env.map femto_handler_post femtokernel_handler_post].
       cbn.
-      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hregs & Hpmp & HaccM & Hfortytwo & _ & _)".
+      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hregs & Hpmp & HaccM & Hfortytwo)".
       cbn.
       iApply "Hk".
       cbn in eq; destruct eq.
