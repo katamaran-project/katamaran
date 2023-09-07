@@ -186,8 +186,38 @@ Module BlockVerification3.
 
   Inductive AnnotInstr :=
   | AnnotAST : forall (i : AST), AnnotInstr
+  | AnnotDebugBreak : AnnotInstr
   | AnnotLemmaInvocation : forall {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ), AnnotInstr
   .
+
+  Record DebugBlockver (Σ : LCtx) : Type :=
+    MkDebugBlockver {
+        debug_blockver_pathcondition          : PathCondition Σ;
+        debug_blockver_heap                   : SHeap Σ;
+      }.
+  #[export] Instance SubstDebugBlockver : Subst DebugBlockver :=
+    fun Σ0 d Σ1 ζ01 =>
+      match d with
+      | MkDebugBlockver pc1 h => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01)
+      end.
+
+  #[export] Instance SubstLawsDebugBlockver : SubstLaws DebugBlockver.
+  Proof.
+    constructor.
+    - intros ? []; cbn; now rewrite ?subst_sub_id.
+    - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+  Qed.
+
+  Import option.notations.
+  #[export] Instance OccursCheckDebugBlockver : OccursCheck DebugBlockver :=
+    fun Σ x xIn d =>
+      match d with
+      | MkDebugBlockver pc1 h =>
+          pc' <- occurs_check xIn pc1 ;;
+          h'  <- occurs_check xIn h ;;
+          Some (MkDebugBlockver pc' h')
+      end.
+
 
   Fixpoint exec_block_addr (b : list AnnotInstr) : ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
     fun w0 ainstr apc =>
@@ -198,6 +228,13 @@ Module BlockVerification3.
           | AnnotAST i => ω1 ∣ _ <- assert (formula_relop bop.eq ainstr apc) ;;
                          ω2 ∣ apc' <- exec_instruction_any i (persist__term apc ω1) ;;
                          @exec_block_addr b' _ (term_binop bop.bvadd (persist__term ainstr (ω1 ∘ ω2)) (term_val ty_word bv_instrsize)) apc'
+          | AnnotDebugBreak => SHeapSpecM.debug
+                                (fun (δ0 : SStore [ctx] w0) (h0 : SHeap w0) =>
+                                   amsg.mk
+                                     {| debug_blockver_pathcondition := wco w0;
+                                       debug_blockver_heap := h0
+                                     |})
+                                (SHeapSpecM.pure apc)
           | AnnotLemmaInvocation l es =>
               ω1 ∣ args <- SHeapSpecM.eval_exps es (w:=w0) ;;
               ω2 ∣ _ <- SHeapSpecM.call_lemma (LEnv l) args ;;
@@ -426,6 +463,7 @@ Module BlockVerification3Sound.
           | AnnotAST i => _ <- assert (ainstr = apc) ;;
                          apc' <- exec_instruction_any__c i apc ;;
                          @exec_block_addr__c b' (bv.add ainstr bv_instrsize) apc'
+          | AnnotDebugBreak => pure apc
           | AnnotLemmaInvocation l es => 
               args <- CHeapSpecM.eval_exps es ;;
               _ <- CHeapSpecM.call_lemma (LEnv l) args ;;
@@ -459,6 +497,7 @@ Module BlockVerification3Sound.
           now rewrite ?sub_acc_trans, ?inst_subst.
         }
         { reflexivity. }
+      + now apply refine_debug, refine_pure.
       + apply refine_bind.
         apply refine_eval_exps; easy.
         intros w1 ω1 ι1 -> Hpc1 sargs args ->.
@@ -797,6 +836,9 @@ Module BlockVerification3Sem.
         intros res2 h3.
         now apply PQ.
       + intros ainstr apc.
+        cbv [Monotonic' pure CHeapSpecM.pure].
+        intros. now apply PQ.
+      + intros ainstr apc.
         cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpecM.assert_formula].
         intros δ P Q PQ h.
         apply call_lemma_monotonic.
@@ -827,7 +869,7 @@ Module BlockVerification3Sem.
       iApply "Hk"; iFrame.
       iSplitR; auto.
       now iApply Hverif.
-    - destruct instr as [instr|Δ lem es].
+    - destruct instr as [instr| |Δ lem es].
       + intros [-> Hverif].
         assert (⊢ semTripleOneInstrStep (interpret_scheap h) instr
                   (fun an =>
@@ -863,6 +905,9 @@ Module BlockVerification3Sem.
         iApply ("Hk2" with "[$Hpc Hnpc $Hinstrs]"); first by iExists _.
         iIntros (an2) "(Hpc & Hnpc & Hinstrs & HPOST)".
         iApply ("Hk" with "[$]").
+      + iIntros (Hpost) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
+        iApply ("Hk" with "[$Hpc $Hnpc $Hinstrs Hh]").
+        now iApply Hpost.
       + iIntros (Hlemcall) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
         unfold bind, CHeapSpecM.bind in Hlemcall; cbn.
         unfold CHeapSpecM.eval_exps in Hlemcall.
