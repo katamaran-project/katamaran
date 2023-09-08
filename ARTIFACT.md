@@ -19,11 +19,16 @@ coq-iris       >= 4.0
 coq-stdpp      >= 1.8
 ```
 
-To ease building the project, we provide a `Dockerfile`. The project can then be build using the following commands:
+To ease building the project, we provide a `Dockerfile`. The project can then be build locally using the following commands:
 ```bash
 docker build . -t katamaran/ccs23
 docker run katamaran/ccs23
 ```
+ or by downloading the docker container:
+ ```bash
+ docker pull ghcr.io/katamaran-project/artifact:ccs2023
+ docker run ghcr.io/katamaran-project/artifact:ccs2023
+ ```
 
 For further build instructions, see [README.md](./README.md).
 
