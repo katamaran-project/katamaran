@@ -19,6 +19,12 @@ coq-iris       >= 4.0
 coq-stdpp      >= 1.8
 ```
 
+To ease building the project, we provide a `Dockerfile`. The project can then be build using the following commands:
+```bash
+docker build . -t katamaran/ccs23
+docker run katamaran/ccs23
+```
+
 For further build instructions, see [README.md](./README.md).
 
 ## Paper-to-Artifact Correspondence
