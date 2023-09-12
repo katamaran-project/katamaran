@@ -125,6 +125,7 @@ Import BlockVerification3.
     Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := snd (imm_split_bv femto_pmp0cfg_bits).
 
     (* ASTs with a very limited form of labels, that allow us to refer to the address of the current instruction *)
+    (* TODO: have the symbolic executor work with these types of instructions directly? *)
     Inductive ASM :=
       | Instr (a: AnnotInstr)
       | RelInstr (f : N -> AnnotInstr).
@@ -133,13 +134,18 @@ Import BlockVerification3.
     Local Notation "'Λ' x , a" := (RelInstr (fun x => a))
       (at level 200) : list_scope.
     Local Arguments List.cons {_} & _ _. (* Allow projecting individual ASM into AST  - TODO: wrap `cons` in another definition so this bidirectionality does not interfere with lists *)
-    (* The following definition is required for layouting in memory, because otherwise we will count lemma invocations as instructions *)
 
-    Definition is_not_lemma (a : ASM) :=
+    (* The following definition is required for layouting in memory, because otherwise we will count other things than instructions as taking up space *)
+    Definition is_instr (a : ASM) :=
       match a with
-      | Instr (AnnotLemmaInvocation _ _) => false
-      | _ => true end .
-    Definition remove_lemmas (l : list ASM) := filter is_not_lemma l.
+      | Instr (AnnotAST _) => true
+      | RelInstr f =>
+          match f 0%N with
+          | AnnotAST _ => true
+          | _ => false
+          end
+      | _ => false end.
+    Definition filter_instr (l : list ASM) := filter is_instr l.
 
     (* Address resolution *)
     Fixpoint resolve_ASM (la : list ASM) (cur_off : N) : list AnnotInstr :=
@@ -149,7 +155,7 @@ Import BlockVerification3.
           let hd' := (match hd with
           | Instr a => a
           | RelInstr f => f cur_off end) in
-          let new_off : N := if is_not_lemma hd then (cur_off + N.of_nat xlenbytes)%N else cur_off in (* Lemma calls should not increase the current offset, as they will be filtered out in the end! *)
+          let new_off : N := if is_instr hd then (cur_off + N.of_nat xlenbytes)%N else cur_off in (* Only instructions should increase the current offset, whereas lemma and debug calls will be filtered out in the end! *)
           cons hd' (resolve_ASM tl new_off) end.
 
     (* Init code is the same in both versions of the femtokernel, since MMIO memory is placed after the adversary code, hence not affecting initialization *)
@@ -184,7 +190,16 @@ Import BlockVerification3.
     Example femtokernel_handler' (handler_start : N) (data_start : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_handler_asm data_start) handler_start.
 
+    (* Address where we will write in MMIO memory, and proof that our writes will be within the MMIO region*)
     Definition mmio_write_addr : N := N.of_nat mmioStartAddr.
+    Lemma write_word_is_MMIO: withinMMIO (bv.of_N mmio_write_addr) bytes_per_word.
+    Proof.
+      (* Avoid compute in case the list of MMIO addresses ever becomes longer *)
+      repeat split; cbn; unfold mmioAddrs;
+      eassert (mmioLenAddr = _) as -> by now compute. (* Get actual length so we can use successors *)
+      all: rewrite 4!bv.seqBv_succ; repeat constructor.
+    Qed.
+
     Example femtokernel_mmio_handler_asm : list ASM :=
       [
         ITYPE (bv.of_N 42) zero t0 RISCV_ADDI
@@ -344,9 +359,11 @@ Import BlockVerification3.
 
     Lemma sat__femtohandler (is_mmio : bool) : safeE (vc__femtohandler is_mmio).
     Proof.
-      destruct is_mmio; last now vm_compute.
-      vm_compute.
-      Set Printing Depth 200.
+      destruct is_mmio.
+      - (* For the mmio case, we still need to prove that our word falls within mmio *)
+      vm_compute; constructor; cbn.
+      split; [apply write_word_is_MMIO | auto].
+      - now vm_compute.
     Qed.
 
     Definition femtoinit_stats :=
@@ -366,9 +383,16 @@ Import BlockVerification3.
     Definition femtohandler_stats :=
       SymProp.Statistics.count_to_stats
         (SymProp.Statistics.count_nodes
-           (VC__addr femtokernel_handler_pre femtokernel_handler (asn.sep femtokernel_handler_post asn.debug))
+           (VC__addr (femtokernel_handler_pre false) femtokernel_handler (asn.sep (femtokernel_handler_post false) asn.debug))
            SymProp.Statistics.empty).
     (* Eval vm_compute in femtohandler_stats. *)
+
+    Definition femtohandler_mmio_stats :=
+      SymProp.Statistics.count_to_stats
+        (SymProp.Statistics.count_nodes
+           (VC__addr (femtokernel_handler_pre true) femtokernel_mmio_handler (asn.sep (femtokernel_handler_post true) asn.debug))
+           SymProp.Statistics.empty).
+    (* Eval vm_compute in femtohandler_mmio_stats. *)
 
   End FemtoKernel.
 
