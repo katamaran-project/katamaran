@@ -73,6 +73,20 @@ Import BlockVerification3.
     Import ListNotations.
     Open Scope hex_Z_scope.
 
+    (* FIXED ADDRESSES *)
+    (* The first address that is no longer used by the adversary, and hence the address at which the PMP entries should stop granting permission. Note that this address is currently also the first MMIO address. *)
+    Definition adv_addr_end : N := N.of_nat maxAddr. (* Change once adversary gets access to MMIO*)
+    (* Address where we will write in MMIO memory, and proof that our writes will indeed be within the MMIO region*)
+    Definition mmio_write_addr : N := N.of_nat mmioStartAddr.
+    Lemma write_word_is_MMIO: withinMMIO (bv.of_N mmio_write_addr) bytes_per_word.
+    Proof.
+      (* Avoid compute in case the list of MMIO addresses ever becomes longer *)
+      repeat split; cbn; unfold mmioAddrs;
+      eassert (mmioLenAddr = _) as -> by now compute. (* Get actual length so we can use successors *)
+      all: rewrite 4!bv.seqBv_succ; repeat constructor.
+    Qed.
+
+    (* Aliases for registers *)
     Definition zero : RegIdx := [bv 0].
     Definition ra : RegIdx := [bv 1].
     Definition t0 : RegIdx := [bv 5].
@@ -101,7 +115,7 @@ Import BlockVerification3.
             bv.app r (bv.app w (bv.app x (bv.app a l)))
         end%Z.
 
-    Definition femto_address_max : N := N.of_nat maxAddr. (* Change once adversary gets access to MMIO*)
+    (* Definitions for configuration bits of PMP entries *)
     Definition femto_pmpcfg_ent0 : Pmpcfg_ent := MkPmpcfg_ent false OFF false false false.
     Definition femto_pmpcfg_ent0_bits : Val (ty.bvec byte) := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
@@ -164,7 +178,7 @@ Import BlockVerification3.
         UTYPE bv.zero ra RISCV_AUIPC
       ; Λ x, ITYPE (bv.of_N (adv_start - (x - 4))) ra ra RISCV_ADDI
       ; CSR MPMPADDR0 ra zero false CSRRW
-      ; ITYPE (bv.of_N femto_address_max) zero ra RISCV_ADDI
+      ; ITYPE (bv.of_N adv_addr_end) zero ra RISCV_ADDI
       ; CSR MPMPADDR1 ra zero false CSRRW
       ; UTYPE femto_pmp0cfg_bits_2 ra RISCV_LUI
       ; ITYPE femto_pmp0cfg_bits_1 ra ra RISCV_ADDI
@@ -189,16 +203,6 @@ Import BlockVerification3.
       ].
     Example femtokernel_handler' (handler_start : N) (data_start : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_handler_asm data_start) handler_start.
-
-    (* Address where we will write in MMIO memory, and proof that our writes will be within the MMIO region*)
-    Definition mmio_write_addr : N := N.of_nat mmioStartAddr.
-    Lemma write_word_is_MMIO: withinMMIO (bv.of_N mmio_write_addr) bytes_per_word.
-    Proof.
-      (* Avoid compute in case the list of MMIO addresses ever becomes longer *)
-      repeat split; cbn; unfold mmioAddrs;
-      eassert (mmioLenAddr = _) as -> by now compute. (* Get actual length so we can use successors *)
-      all: rewrite 4!bv.seqBv_succ; repeat constructor.
-    Qed.
 
     Example femtokernel_mmio_handler_asm : list ASM :=
       [
@@ -230,10 +234,10 @@ Import BlockVerification3.
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
     (* Shorthand for the pmp entries in both Katamaran and Iris *)
-    (* Note that the PMP config is different in both use cases, as the size of the handler is different. We do however have to same maximum address `femto_address_max`*)
+    (* Note that the PMP config is different in both use cases, as the size of the handler is different. We do however have the same maximum address `adv_addr_end`*)
     Local Notation asn_femto_pmpentries first_addr := ([(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ first_addr);
-                                       (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))])%list. (* NOTE: `first_addr` is usually equal to the logical variable `a` + `adv_start` *)
-    Definition femto_pmpentries (adv_start : N) : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_start); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
+                                       (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N adv_addr_end))])%list. (* NOTE: `first_addr` is usually equal to the logical variable `a` + `adv_start` *)
+    Definition femto_pmpentries (adv_start : N) : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_start); (femto_pmpcfg_ent1, bv.of_N adv_addr_end)]%list.
     (* Definition of the femtokernel initialization procedure that works both for the legacy and the MMIO case; solely the address of the adversary differs *)
     Definition femtokernel_init_gen (adv_start : N) := femtokernel_init' init_addr handler_addr adv_start.
     Definition femtokernel_init := femtokernel_init_gen adv_addr.
@@ -429,7 +433,7 @@ Import BlockVerification3.
   Import BlockVerificationDerived2Sound.
   Import BlockVerificationDerived2Sem.
 
-  Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N adv_address) (lenAddr - (N.to_nat adv_address)).
+  Definition advAddrs (adv_start : N) : list (bv xlenbits) := bv.seqBv (bv.of_N adv_start) (lenAddr - (N.to_nat adv_start)).
 
   Global Instance dec_has_some_access {ents p1} : forall x, Decision (exists p2, Pmp_access x (bv.of_nat 1) ents p1 p2).
   Proof.
@@ -728,7 +732,7 @@ Import BlockVerification3.
         pmp0cfg ↦ femto_pmpcfg_ent0 ∗
         pmp1cfg ↦ femto_pmpcfg_ent1 ∗
         (pmpaddr0 ↦ (bv.of_N adv_address)) ∗
-        (pmpaddr1 ↦ (bv.of_N femto_address_max)) ∗
+        (pmpaddr1 ↦ (bv.of_N adv_addr_end)) ∗
         interp_ptstomem_readonly (width := xlenbytes) (bv.of_N data_address) (bv.of_N 42)) ∗
         pc ↦ (bv.of_N adv_address) ∗
         (∃ v, nextpc ↦ v) ∗
