@@ -27,7 +27,6 @@ case_study/RiscvPmp/BlockVer/Examples.v
 case_study/RiscvPmp/BlockVer/Spec.v
 case_study/RiscvPmp/BlockVer/Verifier.v
 case_study/RiscvPmp/FemtoKernel.v
-case_study/RiscvPmp/FemtoKernelMMIO.v
 case_study/Assumptions.v
 -R theories Katamaran
 test/Example.v
