@@ -132,7 +132,7 @@ Import BlockVerification3.
     Local Coercion AnnotAST_ASM (a : AnnotInstr) := Instr (a).
     Local Notation "'Λ' x , a" := (RelInstr (fun x => a))
       (at level 200) : list_scope.
-    Local Arguments List.cons {_} & _ _. (* Allow projecting individual ASM into AST  - TODO: wrap `cons` in another definition *)
+    Local Arguments List.cons {_} & _ _. (* Allow projecting individual ASM into AST  - TODO: wrap `cons` in another definition so this bidirectionality does not interfere with lists *)
     (* The following definition is required for layouting in memory, because otherwise we will count lemma invocations as instructions *)
 
     Definition is_not_lemma (a : ASM) :=
@@ -207,12 +207,18 @@ Import BlockVerification3.
     (* ADDRESSES *)
     Definition init_addr     : N := 0.
     Definition handler_addr  : N := init_addr + init_size.
-    Definition data_addr     : N := handler_addr + handler_size.
+    Definition data_addr     : N := handler_addr + handler_size. (* No data in MMIO case*)
     Definition adv_addr      : N := data_addr + data_size.
     Definition mmio_adv_addr : N := handler_addr + mmio_handler_size.
 
-    (* CODE DEFINITIONS*)
-    Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_addr); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
+    (* CODE AND CONFIG SHORTANDS*)
+    Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
+
+    (* Shorthand for the pmp entries in both Katamaran and Iris *)
+    (* Note that the PMP config is different in both use cases, as the size of the handler is different. We do however have to same maximum address `femto_address_max`*)
+    Local Notation asn_femto_pmpentries first_addr := ([(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ first_addr);
+                                       (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))])%list. (* NOTE: `first_addr` is usually equal to the logical variable `a` + `adv_start` *)
+    Definition femto_pmpentries (adv_start : N) : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_start); (femto_pmpcfg_ent1, bv.of_N femto_address_max)]%list.
     (* Definition of the femtokernel initialization procedure that works both for the legacy and the MMIO case; solely the address of the adversary differs *)
     Definition femtokernel_init_gen (adv_start : N) := femtokernel_init' init_addr handler_addr adv_start.
     Definition femtokernel_init := femtokernel_init_gen adv_addr.
@@ -224,6 +230,8 @@ Import BlockVerification3.
     (* We reflect the booleans present in the contracts, but now at the meta level. This allows us to recycle large parts of the Katamaran and Iris contracts as part of the verification. *)
     Definition femtokernel_handler_gen (is_mmio : bool) := if is_mmio then femtokernel_mmio_handler else femtokernel_handler.
 
+    Compute femtokernel_mmio_handler.
+
     Import asn.notations.
     Import RiscvPmp.Sig.
     (* Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79). *)
@@ -233,7 +241,6 @@ Import BlockVerification3.
     Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-    Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
     Let Σ__femtoinit : LCtx := [].
     Let W__femtoinit : World := MkWorld Σ__femtoinit []%ctx.
@@ -259,8 +266,7 @@ Import BlockVerification3.
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
-          (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N adv_start));
-                                       (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))])) ∗
+          asn_pmp_entries (term_list (asn_femto_pmpentries (term_val ty_xlenbits (bv.of_N adv_start)))) ∗
           (term_var "a" + (term_val ty_xlenbits (bv.of_N data_addr)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
       )%exp.
 
@@ -292,8 +298,6 @@ Import BlockVerification3.
 
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
     Example femtokernel_handler_pre (is_mmio : bool) : Assertion {| wctx := ["a" :: ty_xlenbits]; wco := []%ctx |} :=
-      let pmpcfg := [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16));
-                     (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))]%list in
       (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗
       (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
       (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
@@ -301,14 +305,12 @@ Import BlockVerification3.
       (∃ "epc", mepc ↦ term_var "epc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_regs_ptsto ∗
-      (asn_pmp_entries (term_list pmpcfg)) ∗
+      asn_pmp_entries (term_list (asn_femto_pmpentries (term_val ty_xlenbits (bv.of_N (if is_mmio then mmio_adv_addr else adv_addr))))) ∗ (* Different handler sizes cause different entries *)
       if negb is_mmio then
         (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
       else asn_inv_mmio.
 
     Example femtokernel_handler_post (is_mmio : bool) : Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := []%ctx |} :=
-      let pmpcfg := [(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ term_var "a" + term_val ty_xlenbits (bv.of_N 16));
-                     (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N femto_address_max))]%list in
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
@@ -318,7 +320,7 @@ Import BlockVerification3.
                                      (term_var "epc")))) ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
-          (asn_pmp_entries (term_list pmpcfg)) ∗
+          asn_pmp_entries (term_list (asn_femto_pmpentries (term_val ty_xlenbits (bv.of_N (if is_mmio then mmio_adv_addr else adv_addr))))) ∗ (* Different handler sizes cause different entries *)
           if negb is_mmio then
             (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
           else ⊤ (* Inv is persistent; don't repeat *).
@@ -344,6 +346,7 @@ Import BlockVerification3.
     Proof.
       destruct is_mmio; last now vm_compute.
       vm_compute.
+      Set Printing Depth 200.
     Qed.
 
     Definition femtoinit_stats :=
