@@ -461,15 +461,18 @@ Import BlockVerification3.
   Proof.
     intro Hin. rewrite /femto_pmpentries.
     exists Read.
-    cbv [Pmp_access Gen_Pmp_access pmp_check_aux pmp_check_rec pmp_match_entry]. cbn.
-    apply bv.seqBv_in' in Hin as [Hlo Hhi]; last now compute.
-    unfold bv.uleb, bv.ule, bv.ult in *.
-    cbn in Hlo,Hhi.
+    cbv [Pmp_access Gen_Pmp_access pmp_check_aux pmp_check_rec pmp_match_entry].
+    apply bv.seqBv_in' in Hin as [Hlo Hhi]; [|clear Hin; now compute].
+    cbn in *. eassert (adv_addr = _) as -> by now compute.
+    unfold bv.uleb, bv.ule, bv.ult, bv.ultb in *.
+    set (y := bv.bin x) in *. (* Avoid this being simplified later on, just sub when we need it *)
+    cbv -[N.le N.lt y] in Hlo,Hhi.
+    case_if H; [now compute | clear H].
     case_if H.
-    { rewrite bv.bin_add_small /= in H; last lia.
-      apply orb_prop in H as [|]; rewrite N.leb_le in H; solve_bv. }
+    { rewrite bv.bin_add_small in H; [| cbn; lia].
+      apply orb_prop in H as [|]; rewrite N.leb_le -/y /= in H; lia. }
     clear H. case_if H; first easy.
-    { rewrite bv.bin_add_small /= in H; last lia.
+    { rewrite bv.bin_add_small /= -/y in H; last lia.
       apply andb_false_iff in H as [|]; rewrite N.leb_gt in H; solve_bv. }
   Qed.
 
@@ -477,6 +480,7 @@ Import BlockVerification3.
   Proof.
     intros [p HPmp]. rewrite /femto_pmpentries.
     cbv [Pmp_access Gen_Pmp_access pmp_check_aux pmp_check_rec pmp_match_entry] in HPmp. cbn in HPmp.
+    case_if H; first now compute. clear H.
     unfold bv.uleb in *.
     case_if H; first by exfalso.
     apply orb_false_elim in H as [_ Hhi]. rewrite N.leb_gt in Hhi.
@@ -494,7 +498,7 @@ Import BlockVerification3.
          apply NoDup_Permutation.
          - apply NoDup_filter. rewrite all_addrs_eq. refine (bv.NoDup_seqbv _).
            rewrite bv.exp2_spec Nat2N.inj_pow. now cbn -[xlenbits].
-         - apply bv.NoDup_seqbv. now cbn.
+         - apply bv.NoDup_seqbv. now compute.
          - intros x. rewrite elem_of_list_filter.
            split.
            + now intros [? ?].
