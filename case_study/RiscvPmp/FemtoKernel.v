@@ -240,10 +240,9 @@ Import BlockVerification3.
     (* CODE AND CONFIG SHORTANDS*)
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     (* Shorthand for the pmp entries in both Katamaran and Iris *)
-    (* Note that the PMP config is different in both use cases, as the size of the handler is different. We do however have the same maximum address `adv_addr_end`*)
-    Local Notation asn_femto_pmpentries first_addr := ([(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ first_addr);
+    Local Notation asn_femto_pmpentries := ([(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ (term_val ty_xlenbits (bv.of_N adv_addr)));
                                        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N adv_addr_end))])%list. (* NOTE: `first_addr` is usually equal to the logical variable `a` + `adv_start` *)
-    Definition femto_pmpentries (adv_start : N) : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_start); (femto_pmpcfg_ent1, bv.of_N adv_addr_end)]%list.
+    Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_addr); (femto_pmpcfg_ent1, bv.of_N adv_addr_end)]%list.
     (* Definition of the femtokernel initialization procedure that works both for the legacy and the MMIO case, since the address of the adversary is equal in both cases *)
     Definition femtokernel_init_gen := femtokernel_init' init_addr handler_addr adv_addr.
 
@@ -289,7 +288,7 @@ Import BlockVerification3.
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
-          asn_pmp_entries (term_list (asn_femto_pmpentries (term_val ty_xlenbits (bv.of_N adv_addr)))) ∗
+          asn_pmp_entries (term_list (asn_femto_pmpentries)) ∗
           (term_var "a" + (term_val ty_xlenbits (bv.of_N data_addr)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
       )%exp.
 
@@ -328,7 +327,7 @@ Import BlockVerification3.
       (∃ "epc", mepc ↦ term_var "epc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_regs_ptsto ∗
-      asn_pmp_entries (term_list (asn_femto_pmpentries (term_val ty_xlenbits (bv.of_N adv_addr)))) ∗ (* Different handler sizes cause different entries *)
+      asn_pmp_entries (term_list asn_femto_pmpentries) ∗ (* Different handler sizes cause different entries *)
       if negb is_mmio then
         (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
       else asn_inv_mmio.
@@ -343,7 +342,7 @@ Import BlockVerification3.
                                      (term_var "epc")))) ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
-          asn_pmp_entries (term_list (asn_femto_pmpentries (term_val ty_xlenbits (bv.of_N adv_addr)))) ∗ (* Different handler sizes cause different entries *)
+          asn_pmp_entries (term_list asn_femto_pmpentries) ∗ (* Different handler sizes cause different entries *)
           if negb is_mmio then
             (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
           else ⊤ (* Inv is persistent; don't repeat *).
@@ -434,7 +433,7 @@ Import BlockVerification3.
   Import BlockVerificationDerived2Sound.
   Import BlockVerificationDerived2Sem.
 
-  Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N adv_start) (N.to_nat (adv_addr_end - adv_start)).
+  Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N adv_addr) (N.to_nat adv_addr_end - N.to_nat adv_addr).
 
   Global Instance dec_has_some_access {ents p1} : forall x, Decision (exists p2, Pmp_access x (bv.of_nat 1) ents p1 p2).
   Proof.
@@ -446,7 +445,7 @@ Import BlockVerification3.
   Defined.
 
 
-  Lemma adv_is_live y adv_start: (adv_start = ) → (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
+  Lemma adv_is_live y : (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
   Proof. unfold advAddrs, liveAddrs.
          apply bv.seqBv_sub_elem_of; now compute.
   Qed.
