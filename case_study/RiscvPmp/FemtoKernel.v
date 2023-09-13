@@ -71,6 +71,8 @@ Import BlockVerification3.
   Section FemtoKernel.
     Import bv.notations.
     Import ListNotations.
+    Import BlockVerification3Sem.
+
     Open Scope hex_Z_scope.
 
     (* FIXED ADDRESSES *)
@@ -150,9 +152,9 @@ Import BlockVerification3.
     Local Arguments List.cons {_} & _ _. (* Allow projecting individual ASM into AST  - TODO: wrap `cons` in another definition so this bidirectionality does not interfere with lists *)
 
     (* The following definitions are required for layouting in memory, because otherwise we will count other things than instructions as taking up space *)
-    Definition filter_AnnotInstr_AST (l : list AnnotInstr) := base.omap BlockVerification3Sem.extract_AST l.
+    Definition filter_AnnotInstr_AST (l : list AnnotInstr) := base.omap extract_AST l.
     Definition ASM_extract_AST (a : ASM) :=
-      BlockVerification3Sem.extract_AST
+      extract_AST
       (match a with
       | Instr a => a
       | RelInstr f => f 0%N end).
@@ -329,7 +331,7 @@ Import BlockVerification3.
       asn_regs_ptsto ∗
       asn_pmp_entries (term_list asn_femto_pmpentries) ∗ (* Different handler sizes cause different entries *)
       if negb is_mmio then
-        (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
+        (term_val ty_xlenbits (bv.of_N data_addr) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
       else asn_inv_mmio.
 
     Example femtokernel_handler_post (is_mmio : bool) : Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := []%ctx |} :=
@@ -344,7 +346,7 @@ Import BlockVerification3.
           asn_regs_ptsto ∗
           asn_pmp_entries (term_list asn_femto_pmpentries) ∗ (* Different handler sizes cause different entries *)
           if negb is_mmio then
-            (term_var "a" + (term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
+            (term_val ty_xlenbits (bv.of_N data_addr) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
           else ⊤ (* Inv is persistent; don't repeat *).
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
@@ -432,6 +434,7 @@ Import BlockVerification3.
   Import RiscvPmpBlockVerifShalExecutor.
   Import BlockVerificationDerived2Sound.
   Import BlockVerificationDerived2Sem.
+  Import BlockVerification3Sem.
 
   Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N adv_addr) (N.to_nat adv_addr_end - N.to_nat adv_addr).
 
@@ -495,14 +498,14 @@ Import BlockVerification3.
                     (∃ p : Val ty_access_type, Pmp_access x (bv.of_nat 1) femto_pmpentries User p)%type)
                  all_addrs ≡ₚ advAddrs.
   Proof. rewrite (list_filter_iff _ (fun x => x ∈ advAddrs)); last split; auto using adv_in_pmp, pmp_in_adv.
-         apply NoDup_Permutation.
-         - apply NoDup_filter. rewrite all_addrs_eq. refine (bv.NoDup_seqbv _).
-           rewrite bv.exp2_spec Nat2N.inj_pow. now cbn -[xlenbits].
-         - apply bv.NoDup_seqbv. now compute.
-         - intros x. rewrite elem_of_list_filter.
-           split.
-           + now intros [? ?].
-           + split; [auto | apply addr_in_all_addrs].
+    apply NoDup_Permutation.
+    - apply NoDup_filter. rewrite all_addrs_eq. refine (bv.NoDup_seqbv _).
+      rewrite bv.exp2_spec Nat2N.inj_pow. now cbn -[xlenbits].
+    - apply bv.NoDup_seqbv. now compute.
+    - intros x. rewrite elem_of_list_filter.
+      split.
+      + now intros [? ?].
+      + split; [auto | apply addr_in_all_addrs].
   Qed.
 
   Lemma big_sepL_filter `{BiAffine PROP} {A : Type} {l : list A}
@@ -510,17 +513,17 @@ Import BlockVerification3.
     ([∗ list] x ∈ filter φ l, Φ x) ⊣⊢
     ([∗ list] x ∈ l, ⌜φ x⌝ -∗ Φ x).
   Proof. induction l.
-         - now cbn.
-         - cbn.
-           destruct (decide (φ a)) as [Hφ|Hnφ].
-           + rewrite big_opL_cons.
-             rewrite <-IHl.
-             iSplit; iIntros "[Ha Hl]"; iFrame; try done.
-             now iApply ("Ha" $! Hφ).
-           + rewrite <-IHl.
-             iSplit.
-             * iIntros "Hl"; iFrame; iIntros "%Hφ"; intuition.
-             * iIntros "[Ha Hl]"; now iFrame.
+    - now cbn.
+    - cbn.
+      destruct (decide (φ a)) as [Hφ|Hnφ].
+      + rewrite big_opL_cons.
+        rewrite <-IHl.
+        iSplit; iIntros "[Ha Hl]"; iFrame; try done.
+        now iApply ("Ha" $! Hφ).
+      + rewrite <-IHl.
+        iSplit.
+        * iIntros "Hl"; iFrame; iIntros "%Hφ"; intuition.
+        * iIntros "[Ha Hl]"; now iFrame.
   Qed.
 
   Lemma memAdv_pmpPolicy `{sailGS Σ} :
@@ -539,53 +542,57 @@ Import BlockVerification3.
     iPureIntro. eapply mmio_ram_False; eauto.
   Qed.
 
-  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := @interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42).
+  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := @interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N data_addr) (bv.of_N 42).
+  Definition femto_inv_mmio `{sailGS Σ} := interp_inv_mmio bytes_per_word.
 
   Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
   (* Local Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 79). *)
 
-  Definition femto_handler_pre `{sailGS Σ} : iProp Σ :=
+  Definition femto_handler_pre `{sailGS Σ} (is_mmio : bool): iProp Σ :=
       (mstatus ↦ {| MPP := User |}) ∗
-      (mtvec ↦ (bv.of_N handler_address)) ∗
+      (mtvec ↦ (bv.of_N handler_addr)) ∗
       (∃ v, mcause ↦ v) ∗
       (∃ epc, mepc ↦ epc) ∗
       cur_privilege ↦ Machine ∗
       interp_gprs ∗
       interp_pmp_entries femto_pmpentries ∗
-      interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User ∗
-      femto_inv_fortytwo ∗
-      pc ↦ (bv.of_N handler_address) ∗
+      (if negb is_mmio
+        then femto_inv_fortytwo
+        else femto_inv_mmio) ∗
+      pc ↦ (bv.of_N handler_addr) ∗
       (∃ v, nextpc ↦ v) ∗
-      ptsto_instrs (bv.of_N handler_address) femtokernel_handler.
+      ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen is_mmio)).
 
-    Example femto_handler_post `{sailGS Σ} : iProp Σ :=
+    Example femto_handler_post `{sailGS Σ} (is_mmio : bool): iProp Σ :=
       (mstatus ↦ {| MPP := User |}) ∗
-        (mtvec ↦ (bv.of_N handler_address)) ∗
-        (∃ v, mcause ↦ v) ∗
-        cur_privilege ↦ User ∗
-        interp_gprs ∗
-        interp_pmp_entries femto_pmpentries ∗
-        interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User ∗
-        femto_inv_fortytwo ∗
-        (∃ epc, mepc ↦ epc ∗
-                pc ↦ epc) ∗
-        (∃ v, nextpc ↦ v) ∗
-        ptsto_instrs (bv.of_N handler_address) femtokernel_handler.
+      (mtvec ↦ (bv.of_N handler_addr)) ∗
+      (∃ v, mcause ↦ v) ∗
+      cur_privilege ↦ User ∗
+      interp_gprs ∗
+      interp_pmp_entries femto_pmpentries ∗
+      (if negb is_mmio
+        then femto_inv_fortytwo
+        else True%I) ∗
+      (∃ epc, mepc ↦ epc ∗
+              pc ↦ epc) ∗
+      (∃ v, nextpc ↦ v) ∗
+      ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen is_mmio)).
 
-  Definition femto_handler_contract `{sailGS Σ} : iProp Σ :=
-    femto_handler_pre -∗
-        (femto_handler_post -∗ WP_loop) -∗
+  Definition femto_handler_contract `{sailGS Σ} (is_mmio : bool): iProp Σ :=
+    femto_handler_pre is_mmio -∗
+        (femto_handler_post is_mmio -∗ WP_loop) -∗
         WP_loop.
 
-  (* Note: temporarily make femtokernel_init_pre opaque to prevent Gallina typechecker from taking extremely long *)
+  (* Note: temporarily make femtokernel_handler_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_handler_pre.
 
   Import env.notations.
-  Lemma femto_handler_verified : forall `{sailGS Σ}, ⊢ femto_handler_contract.
+  Lemma femto_handler_verified (is_mmio: bool): forall `{sailGS Σ}, ⊢ femto_handler_contract is_mmio.
   Proof.
     iIntros (Σ sG) "Hpre Hk".
-    iApply (sound_VC__addr $! (bv.of_N handler_address) with "[Hpre] [Hk]").
-    - exact sat__femtohandler.
+    iApply (sound_VC__addr $! (bv.of_N handler_addr) with "[Hpre] [Hk]").
+    - exact lemSemBlockVerif.
+    - exact (sat__femtohandler is_mmio).
     Unshelve.
     exact [env].
     - cbv [femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
@@ -596,47 +603,54 @@ Import BlockVerification3.
       cbn.
       iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp & Hfortytwo & Hpc & Hnpc & Hhandler)".
       rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
-      now iFrame.
+      iFrame. destruct is_mmio; now iFrame.
     - cbv [femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
            Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
            Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst instprop_formula
            inst_term env.lookup ctx.view ctx.in_at ctx.in_valid inst_env
            env.map femto_handler_post femtokernel_handler_post].
       cbn.
-      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hregs & Hpmp & HaccM & Hfortytwo)".
+      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hregs & Hpmp & Hfortytwo)".
       cbn.
       iApply "Hk".
       cbn in eq; destruct eq.
       rewrite Model.RiscvPmpModel2.gprs_equiv.
-      iFrame "Hmstatus Hmtvec Hmcause Hcurpriv Hregs Hpmp HaccM Hnpc Hhandler Hfortytwo".
-      iExists an; iFrame.
+      iFrame "Hmstatus Hmtvec Hmcause Hcurpriv Hregs Hpmp Hnpc Hhandler".
+      destruct is_mmio; cbn; iFrame.
+      iSplit; auto.
+      all: iExists an; iFrame.
   Qed.
 
   Transparent femtokernel_handler_pre.
   Opaque interp_pmp_entries.
 
-  Lemma femtokernel_hander_safe `{sailGS Σ} :
+  (* Needed when introducing the below conditional *)
+  Local Instance if_persistent `{sailGS Σ} (b : bool) (A B : iProp Σ) (P: Persistent A) (P' : Persistent B)  : Persistent (if b then A else B).
+  Proof. destruct b; apply _. Qed.
+
+  Lemma femtokernel_handler_safe `{sailGS Σ} (is_mmio : bool) :
     ⊢ mstatus ↦ {| MPP := User |} ∗
-       (mtvec ↦ (bv.of_N handler_address)) ∗
+       (mtvec ↦ (bv.of_N handler_addr)) ∗
         (∃ v, mcause ↦ v) ∗
         (∃ mepcv, mepc ↦ mepcv) ∗
         cur_privilege ↦ Machine ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
-        femto_inv_fortytwo ∗
-        (pc ↦ (bv.of_N handler_address)) ∗
-        interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User ∗
+        (if negb is_mmio
+         then femto_inv_fortytwo
+         else femto_inv_mmio) ∗
+        (pc ↦ (bv.of_N handler_addr)) ∗
+        interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User ∗ (* Not needed for handler, but required for the rest of execution *)
         (∃ v, nextpc ↦ v) ∗
-        (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
-        ptsto_instrs (bv.of_N handler_address) femtokernel_handler
+        ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen is_mmio))
         -∗
         WP_loop.
   Proof.
     cbn - [interp_pmp_entries]. iLöb as "Hind".
     iIntros "(Hmstatus & Hmtvec & Hmcause & [%mepcv Hmepc] & Hcurpriv & Hgprs & Hpmpentries & #Hmem & Hpc & HaccU & Hnextpc & Hinstrs)".
-    iApply (femto_handler_verified with "[$Hmstatus $Hmtvec $Hmcause Hmepc $Hcurpriv $Hgprs $Hpmpentries $Hpc $HaccU $Hnextpc $Hinstrs $Hmem] []");
+    iApply (femto_handler_verified with "[$Hmstatus $Hmtvec $Hmcause Hmepc $Hcurpriv $Hgprs $Hpmpentries $Hpc $Hnextpc $Hinstrs $Hmem] [HaccU]");
       first by now iExists mepcv.
-    iIntros "(Hmstatus & Hmtvec & Hmcause & Hcurpriv & Hgprs & Hpmpentries & HaccU & #Hmem' & [%epc (Hmepc & Hpc)] & Hnpc & Hhandler)".
+    iIntros "(Hmstatus & Hmtvec & Hmcause & Hcurpriv & Hgprs & Hpmpentries & #Hmem' & [%epc (Hmepc & Hpc)] & Hnpc & Hhandler)".
     iApply (LoopVerification.valid_semTriple_loop with "[Hmem $Hmstatus $Hmtvec $Hmcause Hmepc $Hpc $Hcurpriv $Hgprs $Hpmpentries $Hnpc $HaccU Hhandler]").
     iSplitL "Hmepc"; first by now iExists epc.
     iSplitL "".
@@ -661,24 +675,26 @@ Import BlockVerification3.
     }
   Qed.
 
-  Lemma femtokernel_manualStep2 `{sailGS Σ} :
+  (* TODO: this lemma feels very incremental wrt to the last one; merge? *)
+  Lemma femtokernel_manualStep2 `{sailGS Σ} (is_mmio : bool):
     ⊢ (∃ mpp, mstatus ↦ {| MPP := mpp |}) ∗
-       (mtvec ↦ (bv.of_N handler_address)) ∗
+       (mtvec ↦ (bv.of_N handler_addr)) ∗
         (∃ v, mcause ↦ v) ∗
         (∃ v, mepc ↦ v) ∗
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
-         (@interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N data_address) (bv.of_N 42)) ∗
-        (pc ↦ (bv.of_N adv_address)) ∗
+        (if negb is_mmio
+         then femto_inv_fortytwo
+         else femto_inv_mmio) ∗
+        (pc ↦ (bv.of_N adv_addr)) ∗
         (∃ v, nextpc ↦ v) ∗
-        (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
-        ptsto_instrs (bv.of_N handler_address) femtokernel_handler ∗
+        ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen is_mmio)) ∗
         ptstoSthL advAddrs
         ={⊤}=∗
-        ∃ mpp, LoopVerification.loop_pre User (bv.of_N handler_address) (bv.of_N adv_address) mpp femto_pmpentries.
+        ∃ mpp, LoopVerification.loop_pre User (bv.of_N handler_addr) (bv.of_N adv_addr) mpp femto_pmpentries.
   Proof.
-    iIntros "([%mpp Hmst] & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
+    iIntros "([%mpp Hmst] & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & #Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
     iExists mpp.
     unfold LoopVerification.loop_pre, LoopVerification.Step_pre, LoopVerification.Execution.
     iFrame.
@@ -701,7 +717,7 @@ Import BlockVerification3.
     unfold LoopVerification.Trap.
     iModIntro.
     iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
-    iApply (femtokernel_hander_safe with "[$Hmem $Hgprs $Hpmpents $Hmcause $Hcurpriv Hnpc $Hpc $Hmtvec $Hmstatus $Hmepc $Hfortytwo $Hhandler]").
+    iApply (femtokernel_handler_safe with "[$Hmem $Hgprs $Hpmpents $Hmcause $Hcurpriv Hnpc $Hpc $Hmtvec $Hmstatus $Hmepc $Hfortytwo $Hhandler]").
     now iExists _.
 
     iModIntro.
