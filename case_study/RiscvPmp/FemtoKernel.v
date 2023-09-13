@@ -150,17 +150,13 @@ Import BlockVerification3.
     Local Arguments List.cons {_} & _ _. (* Allow projecting individual ASM into AST  - TODO: wrap `cons` in another definition so this bidirectionality does not interfere with lists *)
 
     (* The following definitions are required for layouting in memory, because otherwise we will count other things than instructions as taking up space *)
-    Definition is_AnnotInstr_AST (a : AnnotInstr) :=
-      match a with
-       | AnnotAST _ => true
-       | _ => false end.
-    Definition filter_AnnotInstr_AST (l : list AnnotInstr) := filter is_AnnotInstr_AST l.
-    Definition is_ASM_AST (a : ASM) :=
-      is_AnnotInstr_AST
+    Definition filter_AnnotInstr_AST (l : list AnnotInstr) := base.omap BlockVerification3Sem.extract_AST l.
+    Definition ASM_extract_AST (a : ASM) :=
+      BlockVerification3Sem.extract_AST
       (match a with
       | Instr a => a
       | RelInstr f => f 0%N end).
-    Definition filter_ASM_AST (l : list ASM) := filter is_ASM_AST l.
+    Definition filter_ASM_AST (l : list ASM) := base.omap ASM_extract_AST l.
 
     (* Address resolution *)
     Fixpoint resolve_ASM (la : list ASM) (cur_off : N) : list AnnotInstr :=
@@ -170,8 +166,14 @@ Import BlockVerification3.
           let hd' := (match hd with
           | Instr a => a
           | RelInstr f => f cur_off end) in
-          let new_off : N := if is_AnnotInstr_AST hd' then (cur_off + N.of_nat xlenbytes)%N else cur_off in (* Only instructions should increase the current offset, whereas lemma and debug calls will be filtered out in the end! *)
-          cons hd' (resolve_ASM tl new_off) end.
+          let new_off : N :=
+            (* Only instructions should increase the current offset, whereas lemma and debug calls will be filtered out in the end! *)
+            (match BlockVerification3Sem.extract_AST hd' with
+            | Some _ => (cur_off + N.of_nat xlenbytes)%N
+            | _ => cur_off
+            end) in
+              cons hd' (resolve_ASM tl new_off)
+       end.
 
     (* Init code is the same in both versions of the femtokernel, since MMIO memory is placed after the adversary code, hence not affecting initialization *)
     Example femtokernel_init_asm (handler_start : N) (adv_start : N): list ASM :=
