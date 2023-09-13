@@ -278,8 +278,7 @@ Import BlockVerification3.
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_regs_ptsto ∗
       (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
-                                      (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])) ∗
-      (term_var "a" + (term_val ty_xlenbits (bv.of_N data_addr)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp.
+                                      (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])).
 
     Example femtokernel_init_post: Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
       (
@@ -290,8 +289,7 @@ Import BlockVerification3.
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
-          asn_pmp_entries (term_list (asn_femto_pmpentries)) ∗
-          (term_var "a" + (term_val ty_xlenbits (bv.of_N data_addr)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
+          asn_pmp_entries (term_list (asn_femto_pmpentries))
       )%exp.
 
     (* (* note that this computation takes longer than directly proving sat__femtoinit below *) *)
