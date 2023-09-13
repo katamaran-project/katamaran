@@ -42,8 +42,10 @@ From Katamaran Require Import
      Sep.Logic
      Specification
      MinimalCaps.Machine
+     MinimalCaps.Sig
      MinimalCaps.Model
-     MinimalCaps.Contracts.
+     MinimalCaps.Contracts.Definitions
+     MinimalCaps.Contracts.Verification.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.

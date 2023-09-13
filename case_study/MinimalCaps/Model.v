@@ -56,7 +56,9 @@ From Katamaran Require Import
      Symbolic.Executor
      Symbolic.Soundness
      MinimalCaps.Machine
-     MinimalCaps.Contracts.
+     MinimalCaps.Sig
+     MinimalCaps.Contracts.Definitions
+     MinimalCaps.Contracts.Verification.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.
@@ -76,6 +78,7 @@ Module MinCapsSemantics <: Semantics MinCapsBase MinCapsProgram :=
 (* destruct_syminstance is a tactic that destructs the given symbolic instance
    ι. It uses views to get information about ι. *)
 Ltac destruct_syminstance ι :=
+  cbn in ι;
   repeat
     match type of ι with
     | Env _ (ctx.snoc _ (MkB ?s _)) =>
@@ -683,7 +686,7 @@ Module MinCapsIrisInstanceWithContracts.
       ValidContractForeign sep_contract_dI dI.
     Proof.
       iIntros (Γ es δ ι Heq) "_".
-      destruct_syminstances.
+      destruct_syminstance ι.
       iApply (semWP_foreign (f := dI)).
       iIntros (γ μ) "[Hregs Hmem]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -761,7 +764,7 @@ Module MinCapsIrisInstanceWithContracts.
     Lemma rM_sound :
       ValidContractForeign sep_contract_rM rM.
     Proof.
-      intros Γ es δ ι Heq; destruct_syminstances; cbn in *.
+      intros Γ es δ ι Heq; destruct_syminstance ι; cbn in *.
       rename address into a.
       iIntros "(#Hsafe & [%Hsubp _] & [%Hbounds _])".
       apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
@@ -794,7 +797,7 @@ Module MinCapsIrisInstanceWithContracts.
 
     Lemma wM_sound : ValidContractForeign sep_contract_wM wM.
     Proof.
-      intros Γ es δ ι Heq; destruct_syminstances; cbn in *.
+      intros Γ es δ ι Heq; destruct_syminstance ι; cbn in *.
       rename address into a.
       rename new_value into w.
       iIntros "[#Hwsafe [#Hsafe [[%Hsubp _] [%Hbounds _]]]]".
