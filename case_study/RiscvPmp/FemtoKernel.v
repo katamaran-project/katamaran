@@ -254,8 +254,6 @@ Import BlockVerification3.
     (* We reflect the booleans present in the contracts, but now at the meta level. This allows us to recycle large parts of the Katamaran and Iris contracts as part of the verification. *)
     Definition femtokernel_handler_gen (is_mmio : bool) := if is_mmio then femtokernel_mmio_handler else femtokernel_handler.
 
-    Compute femtokernel_mmio_handler.
-
     Import asn.notations.
     Import RiscvPmp.Sig.
     (* Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79). *)
