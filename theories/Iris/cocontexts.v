@@ -366,6 +366,25 @@ Proof.
   now apply pure_intro.
 Qed.
 
+Lemma tac_split_off_cohyp Δh Δc i P js :
+  env_lookup i Δc = Some P →
+  match envs_split Left js Δh with
+  | Some (Δl , Δr) => 
+      envs_entails Δl P /\
+        envs_entails_cocontexts Δr (env_delete i Δc)
+  | None => False
+  end →
+  envs_entails_cocontexts Δh Δc.
+Proof.
+  destruct (envs_split Left js Δh) as [[Δl Δr]|] eqn:Hsplit ; last easy.
+  rewrite envs_entails_cocontexts_eq.
+  rewrite envs_entails_unseal.
+  intros Hlkp [Hl Hr].
+  rewrite (env_lookup_delete_sound Hlkp).
+  rewrite (envs_split_sound _ _ _ _ _ Hsplit).
+  now rewrite Hr Hl.
+Qed.
+
 Lemma tac_pure_intro_cohyp Δh Δc i P φ :
   env_lookup i Δc = Some P →
   FromPure false P φ →
