@@ -464,7 +464,7 @@ Module BlockVerification3Sound.
                          apc' <- exec_instruction_any__c i apc ;;
                          @exec_block_addr__c b' (bv.add ainstr bv_instrsize) apc'
           | AnnotDebugBreak => pure apc
-          | AnnotLemmaInvocation l es => 
+          | AnnotLemmaInvocation l es =>
               args <- CHeapSpecM.eval_exps es ;;
               _ <- CHeapSpecM.call_lemma (LEnv l) args ;;
               exec_block_addr__c b' ainstr apc
