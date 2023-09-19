@@ -38,6 +38,7 @@ From Katamaran Require Import
      Environment
      Notations
      Prelude
+     Bitvector
      Syntax.BinOps
      Syntax.TypeDecl
      Syntax.Variables

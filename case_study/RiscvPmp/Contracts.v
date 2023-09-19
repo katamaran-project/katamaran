@@ -33,6 +33,7 @@ From Coq Require Import
      micromega.Lia.
 From Katamaran Require Import
      Notations
+     Bitvector
      Shallow.Executor
      Specification
      Symbolic.Executor

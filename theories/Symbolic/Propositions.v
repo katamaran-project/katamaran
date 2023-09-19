@@ -44,6 +44,7 @@ From Katamaran Require Import
      Base
      Notations
      Prelude
+     Bitvector
      Symbolic.Worlds
      Syntax.BinOps
      Syntax.Chunks

@@ -40,6 +40,7 @@ From stdpp Require
      finite.
 From Katamaran Require Import
      Base
+     Bitvector
      Syntax.TypeDecl.
 
 Import ListNotations.

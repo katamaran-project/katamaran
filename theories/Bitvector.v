@@ -45,8 +45,8 @@ From Katamaran Require Export
 
 Local Set Implicit Arguments.
 
-Module bv.
-  Include BitvectorBase.bv.
+Module seqBv.
+  Import BitvectorBase.bv.
 
   Section Sequences.
     Import bv.notations.
@@ -229,8 +229,9 @@ Module bv.
 
   End Sequences.
 
-End bv.
+End seqBv.
 
 Export (hints) bv.
 Export (hints) bv.countable.
-Export bv (bv).
+
+Module bv := BitvectorBase.bv <+ seqBv.

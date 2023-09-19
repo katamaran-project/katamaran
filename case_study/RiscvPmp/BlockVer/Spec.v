@@ -36,6 +36,7 @@ From Katamaran Require Import
      Iris.Instance
      Iris.Model
      Notations
+     Bitvector
      Sep.Hoare
      Shallow.Executor
      Shallow.Soundness

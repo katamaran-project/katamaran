@@ -38,6 +38,7 @@ From Katamaran Require Import
      Iris.Model
      Notations
      Semantics
+     Bitvector
      Sep.Hoare
      Sep.Logic
      Shallow.Executor

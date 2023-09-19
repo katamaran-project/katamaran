@@ -40,6 +40,7 @@ From Equations Require Import
 From Katamaran Require Import
      Context
      Environment
+     Bitvector
      Symbolic.Instantiation
      Syntax.BinOps
      Syntax.Terms

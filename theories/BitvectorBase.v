@@ -1746,3 +1746,4 @@ Bind Scope bv_scope with bv.bv.
 Bind Scope bv_bitstring_scope with bv.bitstring.
 Bind Scope bv_bitstring_scope with bv.bitstring.null.
 Bind Scope bv_bitstring_scope with bv.bitstring.digit.
+Export bv (bv).

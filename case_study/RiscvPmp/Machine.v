@@ -35,6 +35,7 @@ From Equations Require Import
 Require Import Equations.Prop.EqDec.
 From Katamaran Require Import
      Program
+     Bitvector
      Semantics
      Semantics.Registers
      Syntax.BinOps.
