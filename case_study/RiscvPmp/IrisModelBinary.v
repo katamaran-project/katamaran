@@ -29,6 +29,7 @@
 From Katamaran Require Import
      Bitvector
      Environment
+     trace
      Iris.Model
      Iris.BinaryWp
      Iris.BinaryInstance
@@ -58,6 +59,8 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
           (* two copies of the unary ghost variables *)
           mc_ghGS2_left : RiscvPmpIrisBase.mcMemGS Σ
         ; mc_ghGS2_right : RiscvPmpIrisBase.mcMemGS Σ
+        ; mc_gtGS2_left : traceG Trace Σ
+        ; mc_gtGS2_right : traceG Trace Σ
         }.
 
     Definition memGpreS2 : gFunctors -> Set := fun Σ => prod (RiscvPmpIrisBase.memGpreS Σ) (RiscvPmpIrisBase.memGpreS Σ).
@@ -81,8 +84,10 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
     Proof.
       iMod (RiscvPmpIrisBase.mem_inv_init (gHP := fst gHP) μ1) as (mG1) "[inv1 res1]".
       iMod (RiscvPmpIrisBase.mem_inv_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
+      iMod (trace_alloc (memory_trace μ1)) as (gT1) "[Hauth1 Hfrag1]".
+      iMod (trace_alloc (memory_trace μ2)) as (gT2) "[Hauth2 Hfrag2]".
       iModIntro.
-      iExists (McMemGS2 mG1 mG2).
+      iExists (McMemGS2 mG1 mG2 gT1 gT2).
       iSplitL "inv1 inv2"; iFrame.
     Qed.
 

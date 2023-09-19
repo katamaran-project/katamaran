@@ -167,7 +167,9 @@ Module RiscvPmpModel2.
       unfold interp_ptstomem, IrisInstance.RiscvPmpIrisInstance.interp_ptstomem.
       destruct (bv.appView byte (width * byte) w).
       rewrite <-IHwidth.
-      iSplit; now iIntros "[[$ $] [$ $]]".
+      iSplit.
+      now iIntros "[([$ %] & $) [$ $]]".
+      iIntros "[($ & $ & _) [$ $]]".
     Qed.
 
     Definition sailGS2_sailGS_left `{sailGS2 Σ} : sailGS Σ :=
@@ -565,56 +567,23 @@ Module RiscvPmpModel2.
         interp_ptsto,
         MemVal, Word.
       assert (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N.
-      { apply Z.lt_eq_cases in Hlemax as [Hlemax|Hlemax].
-        unfold bv.unsigned in Hlemax.
-        apply N2Z.inj_lt.
-        rewrite N2Z.inj_add.
-        rewrite nat_N_Z.
-        eapply Z.lt_trans.
-        2: apply N2Z.inj_lt; apply maxAddr_rep.
-        now rewrite nat_N_Z.
-        apply N2Z.inj_lt.
-        unfold bv.unsigned in Hlemax.
-        rewrite N2Z.inj_add.
-        rewrite nat_N_Z.
-        rewrite Hlemax.
-        rewrite <- nat_N_Z.
-        apply N2Z.inj_lt.
-        apply maxAddr_rep. }
-      assert (Hbytes: (N.of_nat bytes < bv.exp2 xlenbits)%N).
-      { destruct (bv.bin paddr).
-        now rewrite N.add_0_l in H.
-        eapply N.lt_trans.
-        2: exact H.
-        apply N.lt_add_pos_l.
-        lia. }
-
-      destruct (@in_liveAddrs_split paddr bytes Hbytes H) as (l1 & l2 & eq).
-      lia.
-      apply minAddr_le_ule; auto.
-      apply maxAddr_le_ule; auto.
-      rewrite eq.
-      rewrite ?big_opL_app.
-      iDestruct "Hmem" as "(Hmem1 & Haddrs & Hmem2)".
-      iSplitR "Haddrs".
-      - iIntros "Hpaddr".
-        iFrame "Hmem1 Hmem2".
-        iApply (big_sepL_pure_impl Hpmp with "[Hpaddr]"); try lia.
-        iIntros "%".
-        now iApply (interp_ptstomem_big_sepS bytes $! paddr H).
-      - unfold ptstoSth.
-        iApply (interp_ptstomem_big_sepS bytes $! paddr H).
-        iApply (big_sepL_pure_impl Hpmp with "Haddrs [%]"); try lia.
-        now exists acc.
+      { eapply N.le_lt_trans; last apply lenAddr_rep.
+        unfold bv.unsigned in *. zify; auto. (* TODO: why does lia not solve this? *) }
+      iDestruct (interp_pmp_addr_inj_extr with "Hmem") as "[Hmemwo Hia]"; eauto.
+      iFrame.
+      iApply interp_addr_access_extr; last iFrame; eauto.
+      - unfold bv.unsigned in *. zify; auto. (* TODO idem *)
+      - unfold bv.unsigned in *. zify; auto. (* TODO idem *)
     Qed.
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :
       ValidLemma (RiscvPmpSpecification.lemma_return_pmp_ptsto bytes).
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      unfold interp_pmp_addr_access_without.
       iIntros "[Hwithout Hptsto]".
-      iApply ("Hwithout" with "Hptsto").
+      iDestruct (interp_addr_access_inj with "Hptsto") as "Hacc".
+      unfold interp_pmp_addr_access_without.
+      iApply ("Hwithout" with "Hacc").
     Qed.
 
     Lemma lemSem : LemmaSem.
