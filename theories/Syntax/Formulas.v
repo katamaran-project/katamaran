@@ -39,6 +39,7 @@ From Coq Require Import
 
 From Katamaran Require Import
      Prelude
+     Bitvector
      Notations
      Syntax.Predicates
      Base.

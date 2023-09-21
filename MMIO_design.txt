@@ -1,0 +1,32 @@
+Steps involved in implementing MMIO + verification over traces
+
+BASE
+* Define Parameters for isMMIO (possible concrete) + MMIO_STS (copy), change Memory variable (add Trace of Events and a State)
+* Change semantics of read and write to interact with Memory differently:
+    Cfr. Cerise, if MMIO, change a different part of the state (In `Machine.v`)
+* Change regular resources: regular points-to implies non-MMIO (isMMIO = false)
+
+LOOP VERIFICATION
+* This should suffice to reprove the `loop` contract; the contracts only depend on non-MMIO chunks, and should hence be invariant under the addition of traces etc.
+
+FEMTOKERNEL
+* Add machinery for traces resources and predicates from cerise
+* Define a Katamaran `user_chunk` called `trace_pred_holds` which corresponds to an Iris invariant, which expresses that the trace holds with a given predicate resource, and the statement that the invariant holds over our trace resource (QUESTION: how to express the local state/predicate holding on the local state? even without local state; how to express predicate holding on value?)
+* Change read/write-mem contracts to keep this new trace resource in mind; extra boolean conjunct in case our current location is an MMIO location, and a requirement that the update preserves the predicate
+* Change femtokernel implementation; rather than ensuring the 42 never changes, it always writes 42 to the output (immediate <-> from memory?), and we want to make sure that (P = fun x, x = 42) holds over the output
+* Verify the new femtokernel using the new resources, lemma's over them and the new contracts
+
+FUTURE WORK
+* Refine the femtokernel implementation and the predicate we enforce to include a notion of polling, and implementation details for the GPIO pins (see below)
+* If we desire more realism, implement a notion of interrupts connected to the GPIO interrupt pins (to check: other types of interrupts present? Can we turn them off?)
+
+
+####################
+
+Low-level details/notes about GPIO ports (this is below the abstraction level of the Sail spec):
+* The GPIO control registers are memory-mapped by the processor, and the different registers are documented in Chapter 17 of our board's spec.
+* Only 32-bit memory accesses are supported to all of the different control regions (the total length of the MMIO region is >= 44 bytes - this is the size listed in the table, but there's also the iof_en/iof_sel registers), but there are only 19 pins available on the board, so probably only the first 19 bits matter.
+* Many of the pins have to do with interrupts on a bit-wise level. Katamaran currently does not support interrupts, but we should be able to manually read them to implement a form of memory polling (although it remains to be seen whether or not other interrupts are present on the system anyway).
+* Writes on our specific board have to be aligned (and so are the MMIO regions), so no situations in which part of the write goes to the memory mapped region, and part goes to regular memory (thankfully, as this would be annoying to write specs for)
+* UART/SPI input can be configured to run through GPIO ports
+* Why did we pick GPIO over UART again? Easier to connect?

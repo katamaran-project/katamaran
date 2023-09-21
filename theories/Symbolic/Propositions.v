@@ -44,6 +44,7 @@ From Katamaran Require Import
      Base
      Notations
      Prelude
+     Bitvector
      Symbolic.Worlds
      Syntax.BinOps
      Syntax.Chunks
@@ -599,7 +600,6 @@ Module Type SymPropOn
       intros ι. induction xs; cbn.
       - split. now left. now intros [|(x & [] & ?)].
       - rewrite IHxs. clear IHxs. intuition.
-        + right. exists a. auto.
         + destruct H as (x & HIn & Hsafe).
           right. exists x. auto.
         + destruct H0 as (x & [Heq|HIn] & Hsafe).
@@ -1124,7 +1124,7 @@ Module Type SymPropOn
       destruct p1; cbn; auto.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition auto.
       - intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.

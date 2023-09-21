@@ -39,6 +39,7 @@ From Equations Require Import
 
 From Katamaran Require Import
      Signature
+     Bitvector
      Semantics.Registers
      Symbolic.Executor
      Symbolic.Solver

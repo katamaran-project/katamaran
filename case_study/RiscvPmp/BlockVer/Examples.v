@@ -33,6 +33,7 @@ From Coq Require Import
      Strings.String.
 From Katamaran Require Import
      Notations
+     Bitvector
      Semantics
      RiscvPmp.BlockVer.Spec
      RiscvPmp.BlockVer.Verifier

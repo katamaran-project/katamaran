@@ -45,13 +45,14 @@ From Katamaran Require Import
      Environment
      Notations
      Prelude
+     Bitvector
      Syntax.BinOps
      Syntax.Terms
      Syntax.TypeDecl
      Syntax.Variables
      Tactics.
 
-Import base (Equiv, equiv).
+Import stdpp.base (Equiv, equiv).
 Import (notations) base.
 Import ctx.notations.
 Import env.notations.

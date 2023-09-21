@@ -33,6 +33,7 @@ From Coq Require Import
      micromega.Lia.
 From Katamaran Require Import
      Notations
+     Bitvector
      Shallow.Executor
      Specification
      Symbolic.Executor
@@ -1059,37 +1060,60 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
 
       Section ForeignDef.
         Import RiscvPmpSignature.notations.
+        Local Notation "e1 '=?' e2" := (term_binop (bop.relop bop.eq) e1 e2).
 
         Definition sep_contract_read_ram (bytes : nat) : SepContractFunX (read_ram bytes) :=
-          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry; "p" :: ty_privilege; "t" :: ty_access_type];
+          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_bytes bytes];
              sep_contract_localstore      := [term_var "paddr"];
              sep_contract_precondition    :=
-               term_union access_type KRead (term_val ty.unit tt) ⊑ term_var "t"
-               ∗ cur_privilege ↦ term_var "p"
-               ∗ asn_pmp_entries (term_var "entries")
-               ∗ asn_pmp_access (term_var "paddr") (term_val ty_xlenbits (bv.of_nat bytes)) (term_var "entries") (term_var "p") (term_var "t") (* TODO: move predicates that do unification earlier in the precond *)
-               ∗ asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
+               asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
              sep_contract_result          := "result_read_ram";
              sep_contract_postcondition   := term_var "result_read_ram" = term_var "w"
-              ∗ cur_privilege ↦ term_var "p"
-              ∗ asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"])
-              ∗ asn_pmp_entries (term_var "entries");
+              ∗ asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
           |}.
 
         Definition sep_contract_write_ram (bytes : nat) : SepContractFunX (write_ram bytes) :=
-          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry; "p" :: ty_privilege; "t" :: ty_access_type];
+          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes];
              sep_contract_localstore      := [term_var "paddr"; term_var "data"];
              sep_contract_precondition    :=
-               term_union access_type KWrite (term_val ty.unit tt) ⊑ term_var "t"
-               ∗ cur_privilege ↦ term_var "p"
-               ∗ asn_pmp_entries (term_var "entries")
-               ∗ asn_pmp_access (term_var "paddr") (term_val ty_xlenbits (bv.of_nat bytes)) (term_var "entries") (term_var "p") (term_var "t")
-              ∗ ∃ "w", asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
+              ∃ "w", asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
              sep_contract_result          := "result_write_ram";
              sep_contract_postcondition   :=
-               cur_privilege ↦ term_var "p"
-               ∗ asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "data"])
-               ∗ asn_pmp_entries (term_var "entries");
+               asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "data"])
+          |}.
+
+        (* NOTE: for now, this always returns False, since we do not provide the adversary with access to MMIO. In the future, this could just branch non-deterministically in the post. *)
+        (* TODO: return `is_mmio`-chunk here once untrusted code gains access to MMIO *)
+
+        Definition sep_contract_within_mmio (bytes : nat) {H: restrict_bytes bytes}: SepContractFunX (@within_mmio bytes H) :=
+          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "p" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
+             sep_contract_localstore      := [term_var "paddr"];
+             sep_contract_precondition    :=
+                 cur_privilege ↦ term_var "p"
+                 ∗ asn_pmp_entries (term_var "entries")
+                 ∗ asn_pmp_addr_access (term_var "entries") (term_var "p")
+                 ∗ (∃ "t", asn_pmp_access (term_var "paddr") (term_val ty_xlenbits (Bitvector.bv.of_nat bytes)) (term_var "entries") (term_var "p") (term_var "t"));
+             sep_contract_result          := "result_is_within";
+             sep_contract_postcondition   := term_var "result_is_within" = term_val ty.bool false
+                 ∗ cur_privilege ↦ term_var "p"
+                 ∗ asn_pmp_entries (term_var "entries")
+                 ∗ asn_pmp_addr_access (term_var "entries") (term_var "p")
+          |}.
+
+        (* NOTE: no need for sensible contracts for `mmio_read`/`mmio_write` yet, as we will not grant untrusted code access to `mmio` directly *)
+       Definition sep_contract_mmio_read (bytes : nat) : SepContractFunX (mmio_read bytes) :=
+          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits];
+             sep_contract_localstore      := [term_var "paddr"];
+             sep_contract_precondition    := ⊥;
+             sep_contract_result          := "result_read_mmio";
+             sep_contract_postcondition   := ⊥;
+          |}.
+       Definition sep_contract_mmio_write (bytes : nat) (H : restrict_bytes bytes) : SepContractFunX (mmio_write H) :=
+          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes];
+             sep_contract_localstore      := [term_var "paddr"; term_var "data"];
+             sep_contract_precondition    := ⊥;
+             sep_contract_result          := "result_write_mmio";
+             sep_contract_postcondition   := ⊥;
           |}.
 
         Definition sep_contract_decode    : SepContractFunX decode :=
@@ -1114,9 +1138,12 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition CEnvEx : SepContractEnvEx :=
           fun Δ τ fn =>
             match fn with
-            | read_ram bytes      => sep_contract_read_ram bytes
-            | write_ram bytes     => sep_contract_write_ram bytes
-            | decode              => sep_contract_decode
+            | read_ram bytes  => sep_contract_read_ram bytes
+            | write_ram bytes => sep_contract_write_ram bytes
+            | @within_mmio bytes H => @sep_contract_within_mmio bytes H
+            | mmio_read bytes  => sep_contract_mmio_read bytes
+            | mmio_write bytes => sep_contract_mmio_write bytes
+            | decode          => sep_contract_decode
             | vector_subrange e b => sep_contract_vector_subrange e b
             end.
 
@@ -1213,6 +1240,13 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                asn_pmp_addr_access (term_var "entries") (term_var p)
           |}.
 
+        Definition lemma_close_mmio_write (immm : Bitvector.bv.bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) :=
+          {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
+             lemma_patterns        := [term_var "paddr"; term_var "w"];
+             lemma_precondition    := ⊤;
+             lemma_postcondition   := ⊤;
+          |}.
+
         Definition LEnv : LemmaEnv :=
           fun Δ l =>
             match l with
@@ -1224,6 +1258,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | close_ptsto_instr       => lemma_close_ptsto_instr
             | extract_pmp_ptsto bytes => lemma_extract_pmp_ptsto bytes
             | return_pmp_ptsto bytes  => lemma_return_pmp_ptsto bytes
+            | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
             end.
 
       End LemDef.
@@ -1342,11 +1377,8 @@ Module RiscvPmpValidContracts.
 
   Lemma valid_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
   Proof.
-    destruct H as [H|[H|H]];
-      rewrite ?H;
-      symbolic_simpl;
-      intros acc paddr p entries Hsub Hacc **;
-        exists acc; split; trivial; exists acc; split; trivial; split; trivial.
+    destruct H as [H|[H|H]]; rewrite H;
+      symbolic_simpl; eauto.
   Qed.
 
   (* TODO: remove? *)
@@ -1379,11 +1411,7 @@ Module RiscvPmpValidContracts.
 
   Lemma valid_contract_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_write bytes H).
   Proof.
-    destruct H as [H|[H|H]];
-      rewrite ?H;
-      symbolic_simpl;
-        intros addr _ p entries acc **;
-        exists acc; split; trivial; exists acc; split; trivial; split; trivial.
+    destruct H as [H|[H|H]]; rewrite H; symbolic_simpl; eauto.
   Qed.
 
   Lemma valid_contract_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_read bytes H).

@@ -30,6 +30,7 @@ From Katamaran Require Import
      Prelude
      Context
      Environment
+     Bitvector
      Syntax.TypeDecl
      Syntax.Variables.
 

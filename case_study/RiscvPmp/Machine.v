@@ -35,6 +35,7 @@ From Equations Require Import
 Require Import Equations.Prop.EqDec.
 From Katamaran Require Import
      Program
+     Bitvector
      Semantics
      Semantics.Registers
      Syntax.BinOps.
@@ -138,7 +139,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     IsTrue (bytes * byte <=? xlenbytes * byte)%nat :=
     IsTrue_bytes_xlenbytes bytes xlenbytes (IsTrue.andb_r H).
 
-  Definition restrict_bytes (bytes : nat) : Prop := 
+  Definition restrict_bytes (bytes : nat) : Prop :=
     bytes = 1%nat \/ bytes = 2%nat \/ bytes = 4%nat.
 
   Lemma restrict_bytes_one : restrict_bytes 1%nat.
@@ -220,12 +221,16 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
   .
 
+  (* Restrictions on MMIO needed, because MMIO operations leave a trace and are disallowed for 0-length data *)
   Inductive FunX : PCtx -> Ty -> Set :=
   | read_ram (bytes : nat)                                        : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
   | write_ram (bytes : nat)                                       : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
-  | decode                                                        : FunX [bv ∷ ty_word] ty_ast
+  | mmio_read (bytes : nat)                                       : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
+  | mmio_write `(H: restrict_bytes bytes)                        : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
+  | within_mmio `(H: restrict_bytes bytes)                       : FunX [paddr ∷ ty_xlenbits] ty.bool
+  | decode                                                       : FunX [bv ∷ ty_word] ty_ast
   | vector_subrange {n : nat} (e' b : nat) {p : IsTrue (0 <=? b)%nat}
-      {q : IsTrue (b <=? e')%nat} {r : IsTrue (e' <? n)%nat}      : FunX [bv :: ty.bvec n] (ty.bvec (e' - b + 1))
+      {q : IsTrue (b <=? e')%nat} {r : IsTrue (e' <? n)%nat}       : FunX [bv :: ty.bvec n] (ty.bvec (e' - b + 1))
   .
   #[global] Arguments vector_subrange {n} e' b {p q r}.
 
@@ -238,6 +243,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | return_pmp_ptsto  (bytes : nat) : Lem [paddr :: ty_xlenbits]
   | open_ptsto_instr                : Lem [paddr :: ty_xlenbits]
   | close_ptsto_instr               : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits]
+  | close_mmio_write (imm : Bitvector.bv.bv 12) (width : WordWidth) : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits] (* Statically known quantities; lemma is called in between instructions! *)
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -539,38 +545,56 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: addr_int := exp_unsigned paddr in
     ((exp_int (Z.of_nat minAddr) <= addr_int)%exp && (addr_int + width <= exp_int (Z.of_nat maxAddr)))%exp.
 
+  (* TODO: it is currently possible to read/write from/to a mix of MMIO and non-MMIO memory! We can ignore this for now, since we avoid this situation in our examples.
+     Concretely, trusted code reads/writes are aligned manually, and untrusted read/writes will never gain access to MMIO regions.
+     It is worth keeping in mind, as the sail model does perform this check (under certain conditions) in `mem_[read/write_value]_priv_meta`. *)
   Definition fun_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := stm_read_register cur_privilege in
     stm_call (@pmp_mem_read bytes H) [typ; tmp; paddr].
 
   Definition fun_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
-    let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
+    let: tmp := stm_foreign (within_mmio H) [paddr] in
     if: tmp
-    then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
-          let: tmp := stm_foreign (read_ram bytes) [paddr] in
-          use lemma (return_pmp_ptsto bytes) [paddr] ;;
-          stm_exp (exp_union (memory_op_result bytes) KMemValue tmp))
-    else match: t in union access_type with
-         |> KRead pat_unit      =>
-            stm_exp (exp_union (memory_op_result bytes) KMemException E_Load_Access_Fault)
-         |> KWrite pat_unit     =>
-            stm_exp (exp_union (memory_op_result bytes) KMemException E_SAMO_Access_Fault)
-         |> KReadWrite pat_unit =>
-            stm_exp (exp_union (memory_op_result bytes) KMemException E_SAMO_Access_Fault)
-         |> KExecute pat_unit   =>
-            stm_exp (exp_union (memory_op_result bytes) KMemException E_Fetch_Access_Fault)
-         end.
-
-  Definition fun_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; data :: ty_bytes bytes] (ty_memory_op_result 1) :=
-    let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
-    if: tmp
-    then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
-          stm_foreign (write_ram bytes) [paddr; data] ;;
-          use lemma (return_pmp_ptsto bytes) [paddr] ;;
-          stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1]))) (* NOTE: normally the return value of write_ram should be wrapped in MemValue but this constructor is currently restricted to bytes and write_ram *ALWAYS* returns true, so we just return a byte representation of 1 *)
+    then
+      let: tmp := stm_foreign (mmio_read bytes) [paddr] in
+      stm_exp (exp_union (memory_op_result bytes) KMemValue tmp)
     else
-      stm_exp (exp_union (memory_op_result 1) KMemException E_SAMO_Access_Fault).
+      let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
+      if: tmp
+      then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
+            let: tmp := stm_foreign (read_ram bytes) [paddr] in
+            use lemma (return_pmp_ptsto bytes) [paddr] ;;
+            stm_exp (exp_union (memory_op_result bytes) KMemValue tmp))
+      else match: t in union access_type with
+          |> KRead pat_unit      =>
+              stm_exp (exp_union (memory_op_result bytes) KMemException E_Load_Access_Fault)
+          |> KWrite pat_unit     =>
+              stm_exp (exp_union (memory_op_result bytes) KMemException E_SAMO_Access_Fault)
+          |> KReadWrite pat_unit =>
+              stm_exp (exp_union (memory_op_result bytes) KMemException E_SAMO_Access_Fault)
+          |> KExecute pat_unit   =>
+              stm_exp (exp_union (memory_op_result bytes) KMemException E_Fetch_Access_Fault)
+          end.
 
+  (* NOTE: normally the return values of both `write_ram` and `mmio_write` should be wrapped in MemValue but this constructor is currently restricted to bytes and write_ram *ALWAYS* returns true, so we just return a byte representation of 1 *)
+  Definition fun_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Stm [paddr ∷ ty_xlenbits; data :: ty_bytes bytes] (ty_memory_op_result 1) :=
+    let: tmp := stm_foreign (within_mmio H) [paddr] in
+    if: tmp
+    then
+      let: tmp := stm_foreign (mmio_write H) [paddr; data] in
+      stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1]))
+    else
+      let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
+      if: tmp
+      then (use lemma (extract_pmp_ptsto bytes) [paddr] ;;
+            stm_foreign (write_ram bytes) [paddr; data] ;;
+            use lemma (return_pmp_ptsto bytes) [paddr] ;;
+            stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1])))
+      else
+        stm_exp (exp_union (memory_op_result 1) KMemException E_SAMO_Access_Fault).
+
+  (* NOTE: One might think it more elegant to have a universal contract for each individual PMP location (saying the location is either MMIO/RAM/out of range), and extract that after passing the PMP check. This would allow simplifying the contract of `checked_mem_read/write`. Morally, those contracts should not mention PMP, since they are only ever called after the PMP checks succeed. This would also allow us to remove the PMP stuff from the contract of `within_MMIO`. *)
+  (* HOWEVER, the Sail model does not check for overflow as part of the PMP checks; this only happens later, when checking whether an address is an MMIO/RAM/... address. Hence, it would complicate lemma's to extract this pointer early, as the extracted pointer might not be contiguous in memory... *)
   Definition fun_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Stm [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) :=
     let: tmp := stm_call (@pmpCheck bytes H) [paddr; t; p] in
     match: tmp with
@@ -611,7 +635,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Stm [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
     use lemma open_pmp_entries ;;
-    let: "width" :: ty_xlenbits := stm_call (to_bits xlen) [exp_val ty.int (Z.of_nat bytes)] in  
+    let: "width" :: ty_xlenbits := stm_call (to_bits xlen) [exp_val ty.int (Z.of_nat bytes)] in
     let: check%string :=
       let: tmp1 := stm_read_register pmp0cfg in
       let: tmp2 := stm_read_register pmpaddr0 in
@@ -735,7 +759,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call step ;; call loop.
 
   Definition fun_fetch : Stm ctx.nil ty_fetch_result :=
-    let: tmp1 := Execute in 
+    let: tmp1 := Execute in
     let: tmp := stm_read_register pc in
     use lemma open_ptsto_instr [tmp];;
     let: tmp2 := stm_call (@mem_read 4%nat restrict_bytes_four) [tmp1; tmp] in
@@ -836,10 +860,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     stm_write_register cur_privilege del_priv ;;
     (* NOTE: the following let can be dropped by just reusing c (the value we are
              writing into mcause, but this (manual) translation is more faithful to
-             what I expect an automatic translation would produce, i.e. do an 
+             what I expect an automatic translation would produce, i.e. do an
              stm_read_register when a register is used as param to a function call,
              to get the value in the register
-     
+
              Also keep into account that the risc-v model trap handler function handles
              more cases than represented here, i.e. we only have support for M-mode and
              do not explicitly check for this here. So we could simplify
@@ -1210,43 +1234,94 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Section ForeignKit.
   Import bv.notations.
 
+  Definition RAM : Type := Addr -> Byte.
+
+  (* Trace of Events *)
+  Inductive EventTy : Set :=
+  | IOWrite
+  | IORead .
+  Record Event : Set :=
+    mkEvent {
+      event_type : EventTy;
+      event_addr : Addr;
+      event_nbbytes : nat;
+      event_contents : bv (event_nbbytes * 8);
+    }.
+  Definition Trace : Set := list Event.
+
   (* Memory *)
-  Definition Memory := Addr -> Byte.
+  Record MemoryType : Type :=
+    mkMem {
+      memory_ram : RAM;
+      memory_trace : Trace;
+      memory_state : State;
+    } .
+  Definition Memory := MemoryType.
+  Definition memory_update_ram (μ : Memory) (r : RAM) := mkMem r (memory_trace μ) (memory_state μ).
+  Definition memory_update_trace (μ : Memory) (t : Trace) := mkMem (memory_ram μ) t (memory_state μ).
+  Definition memory_append_trace (μ : Memory) (e : Event) := memory_update_trace μ (cons e (memory_trace μ)).
+  Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s.
 
   Fixpoint fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
     Val (ty_bytes data_size) :=
     match data_size with
     | O   => bv.zero
-    | S n => bv.app (μ addr) (fun_read_ram μ n (bv.one + addr))
+    | S n => bv.app ((memory_ram μ) addr) (fun_read_ram μ n (bv.one + addr))
     end.
 
   (* Small test to show that read_ram reads bitvectors in little
      endian order. *)
-  Goal
-    let μ : Memory := fun a =>
+  Goal ∀ μ : Memory,
+    let μ': Memory := memory_update_ram μ (fun a =>
       if eq_dec a [bv 0x0] then [bv 0xEF] else
       if eq_dec a [bv 0x1] then [bv 0xBE] else
       if eq_dec a [bv 0x2] then [bv 0xAD] else
       if eq_dec a [bv 0x3] then [bv 0xDE] else
-      [bv 0]
-    in fun_read_ram μ 4 [bv 0] = [bv 0xDEADBEEF].
+      [bv 0])
+    in fun_read_ram μ' 4 [bv 0] = [bv 0xDEADBEEF].
   Proof. reflexivity. Qed.
 
-  Definition write_byte (μ : Memory) (addr : Val ty_xlenbits) (data : Byte) : Memory :=
-    fun a => if eq_dec addr a then data else μ a.
+  Definition write_byte (r : RAM) (addr : Val ty_xlenbits) (data : Byte) : RAM :=
+    (fun a => if eq_dec addr a then data else r a).
 
   Fixpoint fun_write_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
     Val (ty_bytes data_size) -> Memory :=
     match data_size as n return (Val (ty_bytes n) → Memory) with
     | O   => fun _data => μ
     | S n => fun data : Val (ty_bytes (S n)) =>
-               let (byte,bytes) := bv.appView 8 (n * 8) data in
-               fun_write_ram
-                 (write_byte μ addr byte)
-                 (bv.one + addr)
-                 bytes
+               let (byte , bytes) := bv.appView 8 (n * 8) data in
+               let μ' := (memory_update_ram μ (write_byte (memory_ram μ) addr byte)) in
+               fun_write_ram μ' (bv.one + addr) bytes
     end.
   #[global] Arguments fun_write_ram : clear implicits.
+
+  (* Separated into a read and a write function in the sail model *)
+  (* NOTE: we have to check overflow here, because the PMP model does not...*)
+  Definition fun_within_mmio (data_size : nat) (addr : Val ty_xlenbits) : bool :=
+    bool_decide (withinMMIO addr data_size ∧
+    bv.bin addr + N.of_nat data_size < (bv.exp2 xlenbits))%N.
+
+  (* TODO: in principle, restricted bytes don't need a zero-case *)
+  Definition fun_read_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
+    Memory * Val (ty_bytes data_size) :=
+    match data_size with
+    | O   => (μ , bv.zero)
+    | S n => let (s' , readv) := state_tra_read (memory_state μ) addr data_size in
+             let mmioev := mkEvent IORead addr data_size readv in
+             let μ' := memory_append_trace (memory_update_state μ s') mmioev in
+              (μ' , readv)%type
+    end.
+
+  Definition fun_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
+    Val (ty_bytes data_size) -> Memory :=
+    match data_size as n return (Val (ty_bytes n) → Memory) with
+    | O   => fun _data => μ
+    | S n => fun data : Val (ty_bytes (S n)) =>
+              let s' := state_tra_write (memory_state μ) addr (S n) data in
+              let mmioev := mkEvent IOWrite addr (S n) data in
+              let μ' := memory_append_trace (memory_update_state μ s') mmioev in
+              μ'
+    end.
 
   Lemma convert_foreign_vector_subrange_conditions {n e b : nat} :
     IsTrue (0 <=? b)%nat -> IsTrue (b <=? e)%nat -> IsTrue (e <? n)%nat ->
@@ -1276,14 +1351,23 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       (γ' , μ' , res) = (γ , μ , inr (fun_read_ram μ width addr));
     ForeignCall (write_ram width) [addr; data] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , @fun_write_ram μ width addr data , inr true);
+    ForeignCall (mmio_read width) [addr] res γ γ' μ μ' :=
+      let (μupd,readv) := fun_read_mmio μ width addr in
+      (γ' , μ' , res) = (γ , μupd , inr readv);
+    ForeignCall (@mmio_write width H) [addr; data] res γ γ' μ μ' :=
+      (γ' , μ' , res) = (γ , @fun_write_mmio μ width addr data , inr true);
+    ForeignCall (@within_mmio width H) [addr] res γ γ' μ μ' :=
+      (γ' , μ' , res) = (γ , μ , inr (fun_within_mmio width addr));
     ForeignCall decode [code] res γ γ' μ μ' :=
         (γ' , μ' , res) = (γ , μ , pure_decode code);
     ForeignCall (vector_subrange e b) [data] res γ γ' μ μ' :=
         (γ' , μ' , res) = (γ , μ , inr (fun_vector_subrange data e b)).
 
+  Local Arguments ForeignCall {_ _} f /.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
-  Proof. destruct f; env.destroy args; repeat econstructor. Qed.
+  Proof. destruct f; env.destroy args; [| | cbn; destruct fun_read_mmio|..]; repeat econstructor.
+  Qed.
   End ForeignKit.
 
   Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=

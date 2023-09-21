@@ -30,17 +30,23 @@ From Coq Require Import
      Strings.String
      Bool
      Lia
+     Lists.List
      ZArith.ZArith.
 From Equations Require Import
      Equations.
+From stdpp Require Import
+     base.
 From stdpp Require
      finite.
 From Katamaran Require Import
      Base
+     Bitvector
      Syntax.TypeDecl.
 
+Import ListNotations.
 Local Unset Equations Derive Equations.
 Local Set Implicit Arguments.
+
 
 (* Taken from Coq >= 8.15 SigTNotations *)
 Local Notation "( x ; y )" := (existT x y) (only parsing).
@@ -68,10 +74,9 @@ Definition Addr : Set     := bv xlenbits.
 Definition Word : Set     := bv word.
 Definition Byte : Set     := bv byte.
 
-(* Parameter minAddr : Addr. *)
-(* Parameter maxAddr : Addr. *)
+(* 1. Definition of RAM memory *)
 Definition minAddr : nat := 0.
-Definition lenAddr : nat := 100.
+Definition lenAddr : nat := 200.
 Definition maxAddr : nat := minAddr + lenAddr.
 Lemma minAddr_rep : (N.of_nat minAddr < bv.exp2 xlenbits)%N.
 Proof. now compute. Qed.
@@ -82,6 +87,47 @@ Proof. now compute. Qed.
 (* xlenbits is made opaque further on and it really must be non-zero. *)
 Lemma xlenbits_pos : (xlenbits > 0).
 Proof. cbv. lia. Qed.
+(* All addresses present in RAM memory *)
+Definition liveAddrs := bv.seqBv (@bv.of_nat xlenbits minAddr) lenAddr.
+
+(* 2. Definition of MMIO memory *)
+(* For now, we only consider the one femtokernel address to be part of the MMIO-mapped memory. *)
+(* We place the MMIO memory after the RAM memory, and have the PMP entry for the adversary in the FemtoKernel provide access up to but not including the MMIO memory. The lack of an entry for the MMIO memory will ensure that this memory is addressable by the kernel. *)
+Definition mmioStartAddr := maxAddr.
+Definition mmioLenAddr := maxAddr + lenAddr.
+Definition mmioAddrs : list Addr := bv.seqBv (@bv.of_nat xlenbits mmioStartAddr) mmioLenAddr.
+Definition isMMIO a : Prop := a ∈ mmioAddrs.
+Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
+  match size with
+  | O => False (* Avoid allowing and hence recording zero-width MMIO events *)
+  | 1 => a ∈ mmioAddrs
+  | S size' => a ∈ mmioAddrs /\ withinMMIO (bv.add (bv.one) a) size' end.
+#[export] Instance withinMMIODec a size: Decision (withinMMIO a size).
+Proof. generalize a. induction size.
+       - apply _.
+       - intro a'. cbn. destruct size; first apply _.
+         apply decidable.and_dec; [apply _|auto].
+Qed.
+
+(* 3. Definition of machinery required to do MMIO *)
+Class MMIOEnv : Type := {
+  State : Type;
+  (* The combination of these two allows us to simulate a finitely non-deterministic I/O device, by quantifying over these transition functions at the top-level and adding restrictions *)
+  state_tra_read : State -> Addr -> forall (bytes : nat) , State * bv (bytes * 8);
+  state_tra_write : State -> Addr -> forall (bytes : nat) , bv (bytes * 8) -> State;
+  state_init : State; (* Useful mostly when reasoning about concrete devices *)
+}.
+Parameter mmioenv : MMIOEnv.
+#[export] Existing Instance mmioenv.
+#[export] Instance state_inhabited : Inhabited Base.State := populate (state_init).
+
+Require Import stdpp.finite.
+(* Addresses cannot both be MMIO and RAM. We need to know this when trying to inject pointsto-chunks for RAM back into maps of pointsto chunks. *)
+
+Lemma mmio_ram_False a : a ∈ liveAddrs → a ∈ mmioAddrs -> False.
+Proof. unfold liveAddrs, mmioAddrs, mmioStartAddr, mmioLenAddr, maxAddr, minAddr, lenAddr.
+       apply bv.seqBv_no_overlap; cbn; lia.
+Qed.
 
 Inductive Privilege : Set :=
 | User
@@ -1013,6 +1059,21 @@ Module Export RiscvPmpBase <: Base.
 
   End RegDeclKit.
 
+  Section Inhabited.
+      #[export] Instance val_inhabited σ: Inhabited (Val σ).
+      Proof. generalize dependent σ.
+            induction σ as [| | | | | | | E | | | U | R]; try apply _; cbn.
+            - destruct E; repeat constructor.
+            - induction σs; first apply _.
+              cbn. inversion IH. apply prod_inhabited; [apply IHσs |]; auto.
+            - destruct U;  repeat constructor. all: try apply bv.bv_inhabited.
+            - destruct R;  repeat constructor.
+      Qed.
+
+  End Inhabited.
+
   Include BaseMixin.
 
 End RiscvPmpBase.
+
+

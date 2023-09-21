@@ -55,8 +55,8 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       ).
     Proof.
       dependent elimination step.
-      - intuition. right. eexists. intuition.
-      - intuition. left. eexists. intuition.
+      - intuition auto. right. eexists. intuition.
+      - intuition auto. left. eexists. intuition.
       - match goal with
           H: ⟨_,_,?δ1,_⟩ ---> ⟨_,_,?δ2,_⟩ |- _ => revert H; generalize δ1 δ2
         end.
@@ -72,8 +72,8 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       ).
     Proof.
       dependent elimination step.
-      - intuition. right. eexists. intuition.
-      - intuition. left. eexists. intuition.
+      - intuition auto. right. eexists. intuition.
+      - intuition auto. left. eexists. intuition.
       - match goal with
           H: ⟨_,_,?δ1,_⟩ ---> ⟨_,_,?δ2,_⟩ |- _ =>
             dependent elimination H; cbn in *; try contradiction
@@ -89,8 +89,8 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       ).
     Proof.
       dependent elimination step.
-      - intuition. right. eexists. intuition.
-      - intuition. left. eexists. intuition.
+      - intuition auto. right. eexists. intuition.
+      - intuition auto. left. eexists. intuition.
       - match goal with
           H: ⟨_,_,?δ1,_⟩ ---> ⟨_,_,?δ2,_⟩ |- _ =>
             dependent elimination H; cbn in *; try contradiction
@@ -106,8 +106,8 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       ).
     Proof.
       dependent elimination step.
-      - intuition. right. eexists. intuition.
-      - intuition. left. eexists. intuition.
+      - intuition auto. right. eexists. intuition.
+      - intuition auto. left. eexists. intuition.
       - match goal with
           H: ⟨_,_,?δ1,_⟩ ---> ⟨_,_,?δ2,_⟩ |- _ =>
             dependent elimination H; cbn in *; try contradiction

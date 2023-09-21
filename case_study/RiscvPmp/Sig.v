@@ -33,6 +33,7 @@ From Coq Require Import
 From Katamaran Require Import
      Signature
      Notations
+     Bitvector
      Symbolic.Solver
      RiscvPmp.Base
      RiscvPmp.PmpCheck.
@@ -61,6 +62,7 @@ Inductive PurePredicate : Set :=
 | not_within_cfg
 | prev_addr
 | in_entries
+| in_mmio (bytes : nat)
 .
 
 Inductive Predicate : Set :=
@@ -70,6 +72,8 @@ Inductive Predicate : Set :=
 | gprs
 | ptsto
 | ptstomem_readonly (bytes : nat)
+| inv_mmio (bytes : nat) (* `bytes` needed because size of trace events needs to match size of MMIO writes *)
+| mmio_checked_write (bytes : nat)
 | encodes_instr
 | ptstomem (bytes : nat)
 | ptstoinstr
@@ -102,6 +106,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg  => [ty_xlenbits; ty.list ty_pmpentry]
       | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
       | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
+      | in_mmio _  => [ty_xlenbits]
       end.
 
     Example default_pmpcfg_ent : Pmpcfg_ent :=
@@ -271,6 +276,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg  => Not_within_cfg
       | prev_addr       => Prev_addr
       | in_entries      => In_entries
+      | in_mmio bytes => (fun a => withinMMIO a bytes)
       end.
 
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -284,6 +290,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | gprs                          => ctx.nil
       | ptsto                         => [ty_xlenbits; ty_byte]
       | ptstomem_readonly width       => [ty_xlenbits; ty.bvec (width * byte)]
+      | inv_mmio bytes                => ctx.nil
+      | mmio_checked_write width      => [ty_xlenbits; ty.bvec (width * byte)]
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
@@ -294,10 +302,12 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         match p with
         | pmp_entries                => false
         | pmp_addr_access            => false
-        | pmp_addr_access_without  _ => false
+        | pmp_addr_access_without _  => false
         | gprs                       => false
         | ptsto                      => false
         | ptstomem_readonly width    => true
+        | inv_mmio bytes             => true
+        | mmio_checked_write _       => false
         | encodes_instr              => true
         | ptstomem _                 => false
         | ptstoinstr                 => false
@@ -310,15 +320,17 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     (* TODO: look up precise predicates again, check if below makes sense *)
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
-      | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
-      | ptstomem_readonly width   => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | pmp_entries               => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
       | pmp_addr_access           => Some (MkPrecise ε [ty.list ty_pmpentry; ty_privilege] eq_refl)
       | pmp_addr_access_without _ => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
+      | gprs                      => Some (MkPrecise ε ε eq_refl)
+      | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
+      | ptstomem_readonly width   => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
+      | inv_mmio bytes            => Some (MkPrecise ε ε eq_refl)
+      | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte)] eq_refl) (* There will only be one of these simultaneously; always precise! *)
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
-      | _                         => None
       end.
 
   End PredicateKit.
@@ -902,7 +914,8 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   | within_cfg               | [ paddr; cfg; prevaddr; addr]  => simplify_within_cfg paddr cfg prevaddr addr
   | not_within_cfg           | [ paddr; entries ]             => Some [formula_user not_within_cfg [paddr; entries]]%ctx
   | prev_addr                | [ cfg; entries; prev ]         => simplify_prev_addr cfg entries prev
-  | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx.
+  | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx
+  | in_mmio bytes            | [ a ]                          => Some [formula_user (in_mmio bytes) [a]]%ctx.
 
   Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :
     simplify_sub_perm a1 a2 ⊣⊢ Some [formula_user sub_perm [a1; a2]].
@@ -1005,6 +1018,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     - simple apply simplify_within_cfg_spec.
     - reflexivity.
     - simple apply simplify_prev_addr_spec.
+    - reflexivity.
     - reflexivity.
   Qed.
 

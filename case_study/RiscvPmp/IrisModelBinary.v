@@ -29,6 +29,7 @@
 From Katamaran Require Import
      Bitvector
      Environment
+     trace
      Iris.Model
      Iris.BinaryWp
      Iris.BinaryInstance
@@ -58,6 +59,8 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
           (* two copies of the unary ghost variables *)
           mc_ghGS2_left : RiscvPmpIrisBase.mcMemGS Σ
         ; mc_ghGS2_right : RiscvPmpIrisBase.mcMemGS Σ
+        ; mc_gtGS2_left : traceG Trace Σ
+        ; mc_gtGS2_right : traceG Trace Σ
         }.
 
     Definition memGpreS2 : gFunctors -> Set := fun Σ => prod (RiscvPmpIrisBase.memGpreS Σ) (RiscvPmpIrisBase.memGpreS Σ).
@@ -65,8 +68,8 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
     Definition memΣ2 : gFunctors := gFunctors.app (RiscvPmpIrisBase.memΣ) (RiscvPmpIrisBase.memΣ).
 
     Definition memΣ_GpreS2 : forall {Σ}, subG memΣ2 Σ -> memGpreS2 Σ :=
-      fun {Σ} HsG => (subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal) (fst (subG_inv _ _ _ HsG)),
-                    subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal) (snd (subG_inv _ _ _ HsG))).
+      fun {Σ} HsG => (memΣ_GpreS (Σ := Σ) (fst (subG_inv _ _ _ HsG)),
+                    memΣ_GpreS (Σ := Σ) (snd (subG_inv _ _ _ HsG))).
 
     Definition mem_inv2 : forall {Σ}, mcMemGS2 Σ -> Memory -> Memory -> iProp Σ :=
       fun {Σ} hG μ1 μ2 =>
@@ -79,10 +82,12 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
     Lemma mem_inv_init2 `{gHP : prod (RiscvPmpIrisBase.memGpreS Σ) (RiscvPmpIrisBase.memGpreS Σ)} (μ1 μ2 : Memory) :
       ⊢ |==> ∃ mG : mcMemGS2 Σ, (mem_inv2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
     Proof.
-      iMod (RiscvPmpIrisBase.mem_inv_init (gen_heapGpreS0 := fst gHP) μ1) as (mG1) "[inv1 res1]".
-      iMod (RiscvPmpIrisBase.mem_inv_init (gen_heapGpreS0 := snd gHP) μ2) as (mG2) "[inv2 res2]".
+      iMod (RiscvPmpIrisBase.mem_inv_init (gHP := fst gHP) μ1) as (mG1) "[inv1 res1]".
+      iMod (RiscvPmpIrisBase.mem_inv_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
+      iMod (trace_alloc (memory_trace μ1)) as (gT1) "[Hauth1 Hfrag1]".
+      iMod (trace_alloc (memory_trace μ2)) as (gT2) "[Hauth2 Hfrag2]".
       iModIntro.
-      iExists (McMemGS2 mG1 mG2).
+      iExists (McMemGS2 mG1 mG2 gT1 gT2).
       iSplitL "inv1 inv2"; iFrame.
     Qed.
 
@@ -135,7 +140,7 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
         end.
 
     (* Note: this defaultMemory is only needed for technical reason, it is not used. *)
-    Definition defaultMemory : Memory := fun a => bv.zero.
+    Definition defaultMemory : Memory := mkMem (fun a => bv.zero) [] state_init.
   End RiscvPmpIrisParams2.
 
   Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.

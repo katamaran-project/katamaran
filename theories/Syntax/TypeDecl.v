@@ -32,23 +32,6 @@ From Coq Require Import
      ZArith.BinInt.
 From Equations Require Import
      Equations.
-From stdpp Require
-     finite.
-From Katamaran Require Export
-     Bitvector.
-From Katamaran Require Import
-     Prelude
-     Context
-     Environment
-     Tactics
-     Syntax.Variables.
-
-From Coq Require Import
-     Bool.Bool
-     Strings.String
-     ZArith.BinInt.
-From Equations Require Import
-     Equations.
 From Katamaran Require Import
      Bitvector
      Context

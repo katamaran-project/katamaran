@@ -19,11 +19,12 @@ case_study/RiscvPmp/Machine.v
 case_study/RiscvPmp/PmpCheck.v
 case_study/RiscvPmp/Sig.v
 case_study/RiscvPmp/Contracts.v
-case_study/RiscvPmp/IrisInstance.v
-case_study/RiscvPmp/IrisInstanceBinary.v
+case_study/RiscvPmp/trace.v
 case_study/RiscvPmp/IrisModel.v
-case_study/RiscvPmp/IrisModelBinary.v
+case_study/RiscvPmp/IrisInstance.v
 case_study/RiscvPmp/Model.v
+case_study/RiscvPmp/IrisModelBinary.v
+case_study/RiscvPmp/IrisInstanceBinary.v
 case_study/RiscvPmp/ModelBinary.v
 case_study/RiscvPmp/LoopVerification.v
 case_study/RiscvPmp/BlockVer/Examples.v
@@ -37,6 +38,8 @@ test/LinkedList.v
 test/SumMaxLen.v
 test/Replay.v
 theories/Base.v
+theories/BitvectorBase.v
+theories/BitvectorSolve.v
 theories/Bitvector.v
 theories/Context.v
 theories/Environment.v

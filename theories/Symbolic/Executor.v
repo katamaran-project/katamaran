@@ -46,6 +46,7 @@ From Equations Require Import
      Equations.
 From Katamaran Require Import
      Prelude
+     Bitvector
      Signature
      Symbolic.Propositions
      Symbolic.Worlds
