@@ -492,6 +492,72 @@ Module Import ctx.
       | snoc Δ' b' => f_equal_snoc b' (remove_in_cat_left _ bIn)
       end.
 
+    (* In this section we define a generic Bove-Capretta style accessibility
+       predicate for functions that recurse on smaller contexts by removing an
+       element.
+
+       See: BOVE, ANA, and VENANZIO CAPRETTA. “Modelling General Recursion in
+       Type Theory.” Mathematical Structures in Computer Science, vol. 15,
+       no. 4, 2005, pp. 671–708., doi:10.1017/S0960129505004822. *)
+    Section RemoveAcc.
+
+      (* Coq only generates non-dependent elimination schemes for inductive
+         families in Prop. Hence, we disable the automatic generation and
+         define the elimination schemes for the predicate ourselves. *)
+      #[local] Unset Elimination Schemes.
+
+      Inductive remove_acc (Γ : Ctx B) : Prop :=
+        remove_acc_intro :
+          (forall x (xIn : In x Γ), remove_acc (remove Γ xIn)) -> remove_acc Γ.
+
+      Definition remove_acc_inv {Γ} (d : remove_acc Γ) :
+        forall x (xIn : In x Γ), remove_acc (remove Γ xIn) := let (f) := d in f.
+
+      Definition remove_acc_rect (P : forall Γ, remove_acc Γ -> Type)
+        (f : forall Γ (d : forall x (xIn : In x Γ), remove_acc (remove Γ xIn)),
+            (forall x (xIn : In x Γ),
+                P (remove Γ xIn) (d x xIn)) -> P Γ (remove_acc_intro d)) :=
+        fix F Γ (d : remove_acc Γ) {struct d} : P Γ d :=
+          let (g) return _ := d in
+          f Γ g (fun x xIn => F (remove Γ xIn) (g x xIn)).
+
+      Definition remove_acc_ind (P : forall Γ, remove_acc Γ -> Prop)
+        (f : forall Γ (d : forall x (xIn : In x Γ), remove_acc (remove Γ xIn)),
+            (forall x (xIn : In x Γ),
+                P (remove Γ xIn) (d x xIn)) -> P Γ (remove_acc_intro d)) :=
+        fix F Γ (d : remove_acc Γ) {struct d} : P Γ d :=
+          let (g) return _ := d in
+          f Γ g (fun x xIn => F (remove Γ xIn) (g x xIn)).
+
+      Fixpoint remove_acc_step {Γ x} (d : remove_acc Γ) {struct d} :
+        remove_acc (snoc Γ x) :=
+        remove_acc_intro
+          (fun y (yIn : In y (snoc Γ x)) =>
+             match view yIn in SnocView yIn
+                   return remove_acc (remove _ yIn) with
+             | isZero      => d
+             | isSucc yIn' => remove_acc_step (remove_acc_inv d yIn')
+             end).
+
+      Fixpoint remove_acc_all (Γ : Ctx B) : remove_acc Γ :=
+        match Γ with
+        | nil      => remove_acc_intro
+                        (fun x (xIn : In x nil) =>
+                           match view xIn with end)
+        | snoc Γ b => remove_acc_step (remove_acc_all Γ)
+        end.
+
+      (* Calculating the full predicate is costly. It has quadratic running
+         time in the size of the context. It's better to keep this opaque and
+         not unfold it. To prevent computation from being blocked, clients of
+         this code should never pattern match on a witness of the predicate
+         directly and instead use [remove_acc_inv] in the recursive call. The
+         standard library uses the same style and for examples defines [Fix_F]
+         for well-founded induction using [Acc_inv] for recursive calls. *)
+      #[global] Opaque remove_acc_all.
+
+    End RemoveAcc.
+
   End WithBinding.
   Arguments In_case [B] P fz fs [b Γ] i.
   Arguments In_rect [B] P fz fs [b Γ] : simpl never.
