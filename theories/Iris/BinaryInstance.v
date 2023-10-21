@@ -338,7 +338,7 @@ Section Soundness.
       semWp2 δ1 δ2 (stm_fail τ s) s2 Q ={⊤}=∗
       ⌜ exists m, stm_to_fail s2 = Some m ⌝.
   Proof.
-    rewrite semWp2_unfold; now cbn.
+    rewrite semWp2_unfold. cbn. iIntros "H". iExact "H".
   Qed.
 
   Lemma semWp2_fail_2 {Γ1 Γ2 τ s} Q (δ1 : CStore Γ1) (δ2 : CStore Γ2) s2 m :
@@ -386,7 +386,7 @@ Section Soundness.
       iFrame "Hmem Hregs".
       iApply semWp2_val.
       iExists _; now iSplitR.
-    - rewrite !semWp2_fail_1.
+    - iPoseProof (semWp2_fail_1 with "WPs") as "WPs".
       do 3 iModIntro.
       iMod "Hclose" as "_".
       iMod "WPs" as "(%m & %eqsB)". iModIntro.
@@ -457,7 +457,7 @@ Section Soundness.
       iPureIntro; constructor.
     - do 3 iModIntro.
       iMod "Hclose" as "_".
-      rewrite semWp2_fail_1.
+      iPoseProof (semWp2_fail_1 with "Hs") as "Hs".
       iMod "Hs" as "[%m %eqs2f]". iModIntro.
       destruct s2; inversion eqs2f; subst.
       iExists (fail m)%exp, γ2, μ2, δ2.
@@ -498,7 +498,7 @@ Section Soundness.
       iSplitR; first by iPureIntro; constructor.
       iFrame "Hregs Hmem". iModIntro.
       iExists v2. now iSplitR.
-    - rewrite !semWp2_fail_1.
+    - iPoseProof (semWp2_fail_1 with "WPk") as "WPk".
       do 3 iModIntro. iMod "Hclose" as "_".
       iMod "WPk" as "[%m %eqs2f]".
       iModIntro.
@@ -638,7 +638,7 @@ Section Soundness.
       iSplitR; first by iPureIntro; constructor.
       iFrame "Hregs Hmem". iModIntro.
       iExists v2. now iSplitR.
-    - rewrite !semWp2_fail_1.
+    - iPoseProof (semWp2_fail_1 with "WPs") as "WPs".
       do 3 iModIntro.
       iMod "Hclose" as "_".
       iMod "WPs" as "[%m %eqs2f]".
@@ -1196,7 +1196,8 @@ Module Type IrisAdequacy2
   Proof.
     intros Heval1 Hfinal Hwp.
     destruct (steps_to_nsteps Heval1) as [n Hevaln1].
-    refine (@step_fupdN_soundness_gen sailΣ2 _ _ HasLc n n _).
+    refine (uPred.pure_soundness _
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
     iIntros (Hinv) "Hcred".
     iMod (own_alloc ((● RegStore_to_map γ11 ⋅ ◯ RegStore_to_map γ11 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
     { apply auth_both_valid.
@@ -1266,7 +1267,8 @@ Module Type IrisAdequacy2
   Proof.
     intros Heval1 Hwp.
     destruct (steps_to_nsteps Heval1) as [n Hevaln1].
-    refine (@step_fupdN_soundness_gen sailΣ2 _ _ HasLc n n _).
+    refine (uPred.pure_soundness _
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
     iIntros (Hinv) "".
     iMod (own_alloc ((● RegStore_to_map γ11 ⋅ ◯ RegStore_to_map γ11 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
     { apply auth_both_valid.

@@ -388,7 +388,7 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
     - dependent elimination v0; lsolve.
       dependent elimination v; lsolve.
       destruct v, v0; cbn; lsolve.
-      all: (intros ι []; cbn; intuition).
+      all: (intros ι []; cbn; intuition auto; try easy).
   Qed.
 
   Definition solver : Solver :=

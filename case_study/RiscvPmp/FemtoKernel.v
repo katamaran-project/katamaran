@@ -402,8 +402,6 @@ Import BlockVerification3.
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstance.
   Import RiscvPmpBlockVerifSpec.
-  Import weakestpre.
-  Import tactics.
   Import RiscvPmpIrisInstanceWithContracts.
 
   Import ctx.resolution.
@@ -417,8 +415,8 @@ Import BlockVerification3.
 
   Import Contracts.
   Import RiscvPmpBlockVerifSpec.
-  Import weakestpre.
-  Import tactics.
+  Import iris.program_logic.weakestpre.
+  Import iris.proofmode.tactics.
   Import BlockVerificationDerived2.
   Import Shallow.Executor.
   Import ctx.resolution.
@@ -468,8 +466,9 @@ Import BlockVerification3.
     cbv -[N.le N.lt y] in Hlo,Hhi.
     case_if H; [now compute | clear H].
     case_if H.
-    { rewrite bv.bin_add_small in H; [| cbn; lia].
-      apply orb_prop in H as [|]; rewrite N.leb_le -/y /= in H; lia. }
+    { rewrite bv.bin_add_small in H.
+      - apply orb_prop in H as [|]; rewrite N.leb_le -/y /= in H; lia.
+      - cbn. unfold N.of_nat. cbn. lia. }
     clear H. case_if H; first easy.
     { rewrite bv.bin_add_small /= -/y in H; last lia.
       apply andb_false_iff in H as [|]; rewrite N.leb_gt in H; solve_bv. }
@@ -868,7 +867,7 @@ Import BlockVerification3.
   Proof.
     iIntros (Hmhw) "Hmem".
     destruct Hmhw as (v0 & v1 & v2 & v3 & Heqμ & Heqv).
-    unfold bv.seqBv, seqZ, Z.to_nat, Z.of_nat, Pos.to_nat.
+    unfold bv.seqBv, seqZ. change (seq 0 ?x) with [0;1;2;3].
     cbn -[bv.add interp_ptstomem word].
     iDestruct "Hmem" as "(Hmema & Hmema1 & Hmema2 & Hmema3 & _)".
     inversion Heqμ; subst.

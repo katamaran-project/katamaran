@@ -107,7 +107,8 @@ Proof.
      proper instance for step_fupdN. *)
   induction num_laters_per_step2 as [|k IHk]; simpl; last by rewrite IHk.
   do 10 (f_contractive || f_equiv).
-  rewrite IH; [done|lia|]. intros v. eapply dist_S, HΦ.
+  apply IH; auto. intros v.
+  apply dist_lt with n; auto.
 Qed.
 Global Instance wp2_proper s E eA eB :
   Proper (pointwise_relation _ (≡) ==> (≡)) (wp2 s E eA eB).

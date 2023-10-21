@@ -886,7 +886,7 @@ Module ExampleModel.
        the proof is trivial *)
     Definition lduplicate_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} (mG : mcMemGS Σ) :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
-      is_duplicable p = true -> luser_inst mG p ts -∗ luser_inst mG p ts ∗ luser_inst mG p ts.
+      is_duplicable p = true -> luser_inst mG p ts ⊢ luser_inst mG p ts ∗ luser_inst mG p ts.
     Proof.
       destruct p; now cbn.
     Qed.
@@ -935,13 +935,14 @@ Module ExampleModel.
         repeat
           match type of ι with
           | Env _ (ctx.snoc _ (MkB ?s _)) =>
-              let id := string_to_ident s in
-              let fr := fresh id in
-              destruct (env.view ι) as [ι fr];
-              destruct_syminstance ι
-        | Env _ ctx.nil => destruct (env.view ι)
-        | _ => idtac
-        end.
+              string_to_ident_cps s
+                ltac:(fun id =>
+                        let fr := fresh id in
+                        destruct (env.view ι) as [ι fr];
+                        destruct_syminstance ι)
+          | Env _ ctx.nil => destruct (env.view ι)
+          | _ => idtac
+          end.
 
       Lemma mkcons_sound `{sailGS Σ} :
         ValidContractForeign sep_contract_mkcons mkcons.

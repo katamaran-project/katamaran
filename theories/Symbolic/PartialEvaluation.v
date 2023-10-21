@@ -47,7 +47,7 @@ From Katamaran Require Import
      Syntax.TypeDecl
      Syntax.Variables.
 
-Import (notations) base.
+Import (notations) stdpp.base.
 Import ctx.notations.
 Import env.notations.
 

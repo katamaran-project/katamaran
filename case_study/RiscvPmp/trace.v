@@ -49,7 +49,7 @@ Section S.
     tr_auth t' ∗ tr_frag t'.
   Proof.
     rewrite /tr_auth /tr_frag. rewrite -!own_op.
-    apply own_update, auth_update.
+    iApply own_update. apply auth_update.
     apply option_local_update.
     apply exclusive_local_update. constructor.
   Qed.

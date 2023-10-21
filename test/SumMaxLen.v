@@ -355,7 +355,7 @@ Module Import ExampleModel.
     Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
     Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
       ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
-    Proof. now iIntros "". Qed.
+    Proof. now iStartProof. Qed.
 
     (* Combine the memory and register ghost states. *)
     Include IrisResources DefaultBase ExampleProgram ExampleSemantics.

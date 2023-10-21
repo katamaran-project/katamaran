@@ -67,10 +67,11 @@ Ltac destruct_syminstance ι :=
   repeat
     match type of ι with
     | Env _ (ctx.snoc _ (MkB ?s _)) =>
-        let id := string_to_ident s in
-        let fr := fresh id in
-        destruct (env.view ι) as [ι fr];
-        destruct_syminstance ι
+        string_to_ident_cps s
+          ltac:(fun id =>
+                  let fr := fresh id in
+                  destruct (env.view ι) as [ι fr];
+                  destruct_syminstance ι)
     | Env _ ctx.nil => destruct (env.view ι)
     | _ => idtac
     end.

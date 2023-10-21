@@ -599,10 +599,12 @@ Module Type SymPropOn
     Proof.
       intros ι. induction xs; cbn.
       - split. now left. now intros [|(x & [] & ?)].
-      - rewrite IHxs. clear IHxs. intuition.
-        + destruct H as (x & HIn & Hsafe).
-          right. exists x. auto.
-        + destruct H0 as (x & [Heq|HIn] & Hsafe).
+      - rewrite IHxs. clear IHxs. split; [intros [H|[H|H]]|intros [H|H]].
+        + right. exists a; auto.
+        + left. auto.
+        + destruct H as (x & HIn & Hsafe). right. exists x. auto.
+        + right. left. auto.
+        + destruct H as (x & [Heq|HIn] & Hsafe).
           * left. now subst.
           * right. right. exists x. auto.
     Qed.

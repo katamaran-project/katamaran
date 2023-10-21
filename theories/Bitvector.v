@@ -81,26 +81,16 @@ Module seqBv.
       @seqBv n m (n1 + n2) = seqBv m n1 ++ seqBv (bv.add m (bv.of_nat n1)) n2.
     Proof.
       unfold seqBv.
-      rewrite Znat.Nat2Z.inj_add.
-      rewrite list_numbers.seqZ_app; try Lia.lia.
-      rewrite map_app.
-      f_equal.
-      apply list.list_eq; intro i.
-      rewrite !list.list_lookup_fmap.
-      destruct (base.decide (Z.of_nat n2 <= Z.of_nat i)%Z).
-      - rewrite !list_numbers.lookup_seqZ_ge ; auto.
-      - rewrite !list_numbers.lookup_seqZ_lt; [cbn|Lia.lia..].
-        f_equal.
-        now rewrite <-!of_Z_add, !of_Z_unsigned, !of_Z_nat.
+      rewrite Znat.Nat2Z.inj_add, list_numbers.seqZ_app, map_app; try Lia.lia.
+      f_equal. unfold list_numbers.seqZ. rewrite <- !list.list_fmap_compose.
+      apply list.list_fmap_ext. intros _ x _. cbn.
+      now rewrite <- !of_Z_add, !of_Z_unsigned, !of_Z_nat.
     Qed.
 
     Lemma seqBv_succ {n} m n1 :
       (@seqBv n m (S n1)) = cons m (seqBv (one + m) n1).
     Proof.
-      rewrite <-Nat.add_1_l, seqBv_app.
-      rewrite seqBv_one, add_comm. cbn.
-      repeat f_equal.
-      now destruct n.
+      rewrite <-Nat.add_1_l, seqBv_app, seqBv_one, add_comm. now destruct n.
     Qed.
 
     Lemma seqBv_succ_end {n} m n1 :

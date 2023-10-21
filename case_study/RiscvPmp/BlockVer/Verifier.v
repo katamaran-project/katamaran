@@ -561,9 +561,9 @@ Module BlockVerification3Sound.
 End BlockVerification3Sound.
 
 Module BlockVerificationDerived2Sem.
+  Import iris.program_logic.weakestpre.
+  Import iris.proofmode.tactics.
   Import RiscvPmpBlockVerifSpec.
-  Import weakestpre.
-  Import tactics.
   Import BlockVerificationDerived2.
   Import Shallow.Executor.
   Import ctx.resolution.
@@ -801,9 +801,9 @@ Module BlockVerificationDerived2Sem.
 End BlockVerificationDerived2Sem.
 
 Module BlockVerification3Sem.
+  Import iris.program_logic.weakestpre.
+  Import iris.proofmode.tactics.
   Import RiscvPmpBlockVerifSpec.
-  Import weakestpre.
-  Import tactics.
   Import BlockVerificationDerived2.
   Import Shallow.Executor.
   Import ctx.resolution.
