@@ -296,21 +296,9 @@ Module bv.
     Lemma bin_of_nat_decr {n} x : (@bin n (of_nat x) <= N.of_nat x)%N.
     Proof. apply bin_of_N_decr. Qed.
 
-    Definition f_equal_dep_alt {A R} (B : A -> Type) (f : forall a, B a -> R) {x y} {px : B x} (eq1 : x = y) :
-       forall {py : B y}, (eq_rect x B px y eq1) = py -> f x px = f y py :=
-      (match eq1 in (_ = z) return forall (py : B z), ((eq_rect x B px z eq1) = py -> f x px = f z py) with eq_refl => fun py eq2 => match eq2 with eq_refl => eq_refl end end).
-
-    Definition mk_proof_irr [n] (bs1 bs2 : N) (eq1 : bs1 = bs2) :
-      forall w1 w2, @mk n bs1 w1 = @mk n bs2 w2.
-    Proof.
-      intros w1 w2.
-      refine (f_equal_dep_alt _ mk eq1 _).
-      now apply proof_irrel.Is_true_pi.
-    Qed.
-
     Definition of_N_wf [n] (bs : N) :
       forall w, of_N bs = @mk n bs w.
-    Proof. intros w; now apply mk_proof_irr, truncn_wf. Qed.
+    Proof. intros w. now apply noConfusion, truncn_wf. Qed.
 
     Definition of_N_bin {n} (x : bv n) : of_N (bin x) = x :=
       match x with mk bs w => of_N_wf bs w end.
@@ -822,10 +810,7 @@ Module bv.
     Proof. now intros x y H. Qed.
 
     #[export] Instance of_N_Proper {n} : Proper (eq2n n ==> eq) (@of_N n).
-    Proof.
-      intros [|px] [|py]; cbn in *; intuition;
-      now eapply (mk_proof_irr H).
-    Qed.
+    Proof. intros x y e. now apply noConfusion. Qed.
 
     #[export] Instance of_Z_Proper {n} : Proper (eq2nz n ==> eq) (@of_Z n).
     Proof. unfold of_Z. now intros x y <-. Qed.
