@@ -55,8 +55,8 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
 
     (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)
     Class mcMemPreGS Σ := {
-        mc_ghPreGS :> gen_heapGpreS Addr MemVal Σ;
-        mc_gtPreGS :> trace_preG Trace Σ;
+        mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
+        mc_gtPreGS :: trace_preG Trace Σ;
         }.
     #[export] Existing Instance mc_ghPreGS.
     #[export] Existing Instance mc_gtPreGS.

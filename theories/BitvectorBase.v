@@ -927,7 +927,7 @@ Module bv.
     Proof.
       intros n x y. unfold eq2n.
       rewrite ?truncn_spec.
-      now apply N.add_mod, exp2_nzero.
+      now apply N.Div0.add_mod.
     Qed.
 
     #[export] Instance Nadd_Proper {n} : Proper (eq2n n ==> eq2n n ==> eq2n n) N.add.
@@ -1031,8 +1031,7 @@ Module bv.
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
     Proof.
       intros n x y. unfold eq2n.
-      rewrite ?truncn_spec.
-      rewrite <-N.mul_mod; auto using exp2_nzero.
+      now rewrite ?truncn_spec, <-N.Div0.mul_mod.
     Qed.
 
     #[export] Instance Nmul_Proper {n} : Proper (eq2n n ==> eq2n n ==> eq2n n) N.mul.
@@ -1482,14 +1481,14 @@ Module bv.
       destruct y as [yval ?]. (* Proof-irrelevant destruct needed; `y = bv.zero` does not work *)
       destruct (base.decide (yval = 0)%N) as [-> |]; cbn in *.
       - (* Exclude trivial case *)
-      rewrite !bv.truncn_spec, !N.sub_0_r, N.mod_same; [..|easy].
-      rewrite N.add_0_r, N.mod_small; easy.
+        rewrite !bv.truncn_spec, !N.sub_0_r, N.Div0.mod_same.
+        rewrite N.add_0_r, N.mod_small; easy.
       - setoid_rewrite -> truncn_small at 2.
         2: { apply N.sub_lt; Lia.lia. }
         rewrite bv.truncn_spec.
         rewrite N.add_sub_assoc; [..|Lia.lia].
         rewrite N.add_comm, <-N.add_sub_assoc; [..|easy].
-        rewrite <-N.add_mod_idemp_l, N.mod_same; try easy.
+        rewrite <-N.Div0.add_mod_idemp_l, N.Div0.mod_same.
         apply N.mod_small. Lia.lia.
     Qed.
 

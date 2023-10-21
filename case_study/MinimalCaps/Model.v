@@ -141,7 +141,7 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
 
     Class mcMemGS Σ := McMemGS {
                           (* ghost variable for tracking state of registers *)
-                          mc_ghG :> gh.gen_heapGS Z MemVal Σ;
+                          mc_ghG :: gh.gen_heapGS Z MemVal Σ;
                           mc_invNs : namespace
                         }.
     #[export] Existing Instance mc_ghG.

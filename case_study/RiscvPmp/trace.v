@@ -3,14 +3,14 @@ From iris.base_logic Require Import lib.own.
 From iris.proofmode Require Import tactics.
 
 Class traceG (Trace : Type) Σ := TraceG {
-    trace_inG :> inG Σ (authR (optionUR (exclR (leibnizO Trace))));
+    trace_inG :: inG Σ (authR (optionUR (exclR (leibnizO Trace))));
     trace_name : gname
 }.
 
 Definition tracePreΣ (Trace : Type) : gFunctors := #[GFunctor (authR (optionUR (exclR (leibnizO Trace))))].
 
 Class trace_preG (Trace : Type) Σ := {
-  trace_preG_inG :> inG Σ (authR (optionUR (exclR (leibnizO Trace))));
+  trace_preG_inG :: inG Σ (authR (optionUR (exclR (leibnizO Trace))));
 }.
 
 #[export] Instance traceG_preG `{traceG T Σ} : trace_preG T Σ.

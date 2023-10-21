@@ -1,8 +1,6 @@
 -arg "-w all"
 -arg "-w -disj-pattern-notation"
--arg "-w -notation-incompatible-format"
 -arg "-w -notation-overridden"
--arg "-w -future-coercion-class-field"
 -Q case_study/MinimalCaps Katamaran.MinimalCaps
 case_study/MinimalCaps/Base.v
 case_study/MinimalCaps/Machine.v
