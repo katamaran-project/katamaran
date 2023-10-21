@@ -177,6 +177,50 @@ Module Type TermsOn (Import TY : Types).
   Definition Term_rec Σ (P : forall σ, Term Σ σ -> Set) := @Term_rect _ P.
   Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := @Term_rect _ P.
 
+  Section Term_bool_case.
+
+    Context {Σ : LCtx} [P : Term Σ ty.bool -> Type].
+
+    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.bool ∈ Σ), P (term_var ς)).
+    Variable (pval : forall (v : Val ty.bool), P (term_val ty.bool v)).
+    Variable (pand : forall (e1 : Term Σ ty.bool) (e2 : Term Σ ty.bool), P (term_binop bop.and e1 e2)).
+    Variable (por : forall (e1 : Term Σ ty.bool) (e2 : Term Σ ty.bool), P (term_binop bop.or e1 e2)).
+    Variable (prel : forall σ (op : RelOp σ) (e1 e2 : Term Σ σ), P (term_binop (bop.relop op) e1 e2)).
+    Variable (pnot : forall e : Term Σ ty.bool, P (term_not e)).
+
+    Equations(noeqns) Term_bool_case (t : Term Σ ty.bool) : P t :=
+    | term_var ς                    => @pvar ς _
+    | term_val _ b                  => @pval b
+    | term_binop bop.and s t        => pand s t
+    | term_binop (bop.relop op) s t => prel op s t
+    | term_binop bop.or s t         => por s t
+    | term_not t                    => pnot t.
+
+  End Term_bool_case.
+
+  Section Term_bool_ind.
+
+    Context {Σ : LCtx} [P : Term Σ ty.bool -> Type].
+
+    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.bool ∈ Σ), P (term_var ς)).
+    Variable (pval : forall (v : Val ty.bool), P (term_val ty.bool v)).
+    Variable (pand : forall e1 e2, P e1 -> P e2 -> P (term_binop bop.and e1 e2)).
+    Variable (por : forall e1 e2, P e1 -> P e2 -> P (term_binop bop.or e1 e2)).
+    Variable (prel : forall σ (op : RelOp σ) e1 e2, P (term_binop (bop.relop op) e1 e2)).
+    Variable (pnot : forall e, P e -> P (term_not e)).
+
+    Fixpoint Term_bool_ind (t : Term Σ ty.bool) : P t :=
+      Term_bool_case
+        pvar
+        pval
+        (fun t1 t2 => pand (Term_bool_ind t1) (Term_bool_ind t2))
+        (fun t1 t2 => por (Term_bool_ind t1) (Term_bool_ind t2))
+        prel
+        (fun t1 => pnot (Term_bool_ind t1))
+        t.
+
+  End Term_bool_ind.
+
   (* We define some specialized view for certain types to make
      recusion over terms easier. *)
   Section TermView.
