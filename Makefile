@@ -64,3 +64,7 @@ minimalcaps: Makefile2.coq
 	$(Q)$(MAKE) -f Makefile.coq case_study/MinimalCaps/Contracts.vo
 	$(Q)rm -f case_study/MinimalCaps/Shallow.vo*
 	$(Q)$(MAKE) -f Makefile2.coq case_study/MinimalCaps/Shallow.vo | tr -s '[:space:]' '[\n*]' | scripts/shallow.sh
+
+assumptions: Makefile.coq
+	$(Q)rm -f case_study/Assumptions.vo*
+	$(Q)$(MAKE) -f Makefile.coq case_study/Assumptions.vo
