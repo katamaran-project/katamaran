@@ -5,6 +5,8 @@ Require
   Katamaran.RiscvPmp.LoopVerification.
 Import Coq.Numbers.BinNums Coq.Strings.String Bitvector.
 
+Goal True. idtac "=========== [begin] Assumptions.v ===========". Abort.
+
 Goal True. idtac "Assumptions of MinimalCaps universal contract:". Abort.
 Print Assumptions MinimalCaps.LoopVerification.valid_semContract_loop2.
 
@@ -16,3 +18,5 @@ Print Assumptions RiscvPmp.FemtoKernel.femtokernel_init_safe.
 
 Goal True. idtac "Assumptions of femtokernel end-to-end theorem:". Abort.
 Print Assumptions RiscvPmp.FemtoKernel.femtokernel_endToEnd.
+
+Goal True. idtac "=========== [end] Assumptions.v   ===========". Abort.
