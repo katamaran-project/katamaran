@@ -2,7 +2,7 @@ diff --git a/case_study/MinimalCaps/Base.v b/case_study/MinimalCaps/Base.v
 index 15fe263..77676e1 100644
 --- a/case_study/MinimalCaps/Base.v
 +++ b/case_study/MinimalCaps/Base.v
-@@ -55,6 +55,7 @@ Inductive Instruction : Set :=
+@@ -61,6 +61,7 @@ Inductive Instruction : Set :=
  | sd            (rs1 : Src) (rs2 : Src) (imm : Imm)
  | addi          (rd  : Dst) (rs  : Src) (imm : Imm)
  | add           (rd  : Dst) (rs1 : Src) (rs2 : Src)
@@ -10,7 +10,7 @@ index 15fe263..77676e1 100644
  | sub           (rd  : Dst) (rs1 : Src) (rs2 : Src)
  | slt           (rd  : Dst) (rs1 : Src) (rs2 : Src)
  | slti          (rd  : Dst) (rs  : Src) (imm : Imm)
-@@ -83,6 +84,7 @@ Inductive InstructionConstructor : Set :=
+@@ -88,6 +89,7 @@ Inductive InstructionConstructor : Set :=
  | ksd
  | kaddi
  | kadd
@@ -18,7 +18,7 @@ index 15fe263..77676e1 100644
  | ksub
  | kslt
  | kslti
-@@ -167,7 +169,7 @@ Section Finite.
+@@ -184,7 +187,7 @@ Section Finite.
  
    #[export,program] Instance InstructionConstructor_finite :
      Finite InstructionConstructor :=
@@ -27,7 +27,7 @@ index 15fe263..77676e1 100644
  
  End Finite.
  
-@@ -233,6 +235,7 @@ Module Export MinCapsBase <: Base.
+@@ -249,6 +251,7 @@ Module Export MinCapsBase <: Base.
        | ksd            => ty.tuple [ty.src; ty.src; ty.int]
        | kaddi          => ty.tuple [ty.dst; ty.src; ty.int]
        | kadd           => ty.tuple [ty.dst; ty.src; ty.src]
@@ -35,7 +35,7 @@ index 15fe263..77676e1 100644
        | ksub           => ty.tuple [ty.dst; ty.src; ty.src]
        | kslt           => ty.tuple [ty.dst; ty.src; ty.src]
        | kslti          => ty.tuple [ty.dst; ty.src; ty.int]
-@@ -278,6 +281,7 @@ Module Export MinCapsBase <: Base.
+@@ -293,6 +296,7 @@ Module Export MinCapsBase <: Base.
        | existT ksd            (tt , rs1 , rs2, imm)  => sd            rs1 rs2 imm
        | existT kaddi          (tt , rd , rs , imm)   => addi          rd  rs  imm
        | existT kadd           (tt , rd , rs1 , rs2)  => add           rd  rs1 rs2
@@ -43,7 +43,7 @@ index 15fe263..77676e1 100644
        | existT ksub           (tt , rd , rs1 , rs2)  => sub           rd  rs1 rs2
        | existT kslt           (tt , rd , rs1 , rs2)  => slt           rd  rs1 rs2
        | existT kslti          (tt , rd , rs , imm)   => slti          rd  rs  imm
-@@ -310,6 +314,7 @@ Module Export MinCapsBase <: Base.
+@@ -326,6 +330,7 @@ Module Export MinCapsBase <: Base.
        | sd            rs1 rs2 imm => existT ksd            (tt , rs1 , rs2 , imm)
        | addi          rd  rs  imm => existT kaddi          (tt , rd , rs , imm)
        | add           rd  rs1 rs2 => existT kadd           (tt , rd , rs1 , rs2)
@@ -55,7 +55,7 @@ diff --git a/case_study/MinimalCaps/Contracts.v b/case_study/MinimalCaps/Contrac
 index 860b0a1..9f2c4b2 100644
 --- a/case_study/MinimalCaps/Contracts.v
 +++ b/case_study/MinimalCaps/Contracts.v
-@@ -543,6 +543,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
+@@ -532,6 +532,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        Definition sep_contract_exec_add : SepContractFun exec_add :=
          mach_inv_contract.
  
@@ -65,7 +65,7 @@ index 860b0a1..9f2c4b2 100644
        Definition sep_contract_exec_sub : SepContractFun exec_sub :=
          mach_inv_contract.
  
-@@ -712,6 +715,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
+@@ -706,6 +709,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
            | exec_csetboundsimm     => Some sep_contract_exec_csetboundsimm
            | exec_addi              => Some sep_contract_exec_addi
            | exec_add               => Some sep_contract_exec_add
@@ -73,25 +73,25 @@ index 860b0a1..9f2c4b2 100644
            | exec_sub               => Some sep_contract_exec_sub
            | exec_slt               => Some sep_contract_exec_slt
            | exec_slti              => Some sep_contract_exec_slti
-@@ -1265,6 +1269,9 @@ Module MinCapsValidContracts.
-   Lemma valid_contract_exec_add : ValidContract exec_add.
+@@ -1174,6 +1178,9 @@ Module MinCapsValidContracts.
+   Lemma valid_contract_exec_add : ValidContractReflect exec_add.
    Proof. reflexivity. Qed.
  
-+  Lemma valid_contract_exec_add' : ValidContract exec_add'.
++  Lemma valid_contract_exec_add' : ValidContractReflect exec_add'.
 +  Proof. reflexivity. Qed.
 +
-   Lemma valid_contract_exec_sub : ValidContract exec_sub.
+   Lemma valid_contract_exec_sub : ValidContractReflect exec_sub.
    Proof. reflexivity. Qed.
  
-@@ -1367,6 +1374,7 @@ Module MinCapsValidContracts.
-     - apply (valid_contract _ H valid_contract_exec_sd).
-     - apply (valid_contract _ H valid_contract_exec_addi).
-     - apply (valid_contract _ H valid_contract_exec_add).
-+    - apply (valid_contract _ H valid_contract_exec_add').
-     - apply (valid_contract _ H valid_contract_exec_sub).
-     - apply (valid_contract _ H valid_contract_exec_slt).
-     - apply (valid_contract _ H valid_contract_exec_slti).
-@@ -1443,6 +1451,7 @@ Section Statistics.
+@@ -1275,6 +1281,7 @@ Module MinCapsValidContracts.
+     - apply (valid_contract_reflect _ H valid_contract_exec_sd).
+     - apply (valid_contract_reflect _ H valid_contract_exec_addi).
+     - apply (valid_contract_reflect _ H valid_contract_exec_add).
++    - apply (valid_contract_reflect _ H valid_contract_exec_add').
+     - apply (valid_contract_reflect _ H valid_contract_exec_sub).
+     - apply (valid_contract_reflect _ H valid_contract_exec_slt).
+     - apply (valid_contract_reflect _ H valid_contract_exec_slti).
+@@ -1351,6 +1359,7 @@ Section Statistics.
        existT _ (existT _ exec_cgettag);
        existT _ (existT _ exec_addi);
        existT _ (existT _ exec_add);
@@ -103,7 +103,7 @@ diff --git a/case_study/MinimalCaps/Machine.v b/case_study/MinimalCaps/Machine.v
 index 309fac0..9fff2d4 100644
 --- a/case_study/MinimalCaps/Machine.v
 +++ b/case_study/MinimalCaps/Machine.v
-@@ -85,6 +85,7 @@ Section FunDeclKit.
+@@ -87,6 +87,7 @@ Section FunDeclKit.
    | exec_sd            : Fun ["rs1" :: ty.src; "rs2" :: ty.src; "imm" :: ty.int] ty.bool
    | exec_addi          : Fun ["rd"  :: ty.dst; "rs"  :: ty.src; "imm" :: ty.int] ty.bool
    | exec_add           : Fun ["rd"  :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool
@@ -111,7 +111,7 @@ index 309fac0..9fff2d4 100644
    | exec_sub           : Fun ["rd"  :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool
    | exec_slt           : Fun ["rd"  :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool
    | exec_slti          : Fun ["rd"  :: ty.dst; "rs"  :: ty.src; "imm" :: ty.int] ty.bool
-@@ -416,6 +417,15 @@ Section FunDefKit.
+@@ -462,8 +463,17 @@ Section FunDefKit.
        call update_pc ;;
        stm_val ty.bool true.
  
@@ -124,10 +124,12 @@ index 309fac0..9fff2d4 100644
 +      call update_pc ;;
 +      stm_val ty.bool true.
 +
+     (* fun_exec_sub executes the sub instruction, which stores the subtraction
+        of "rs1" and "rs2" into "rd". *)
      Definition fun_exec_sub : Stm ["rd" :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool :=
        let: "v1" :: int := call read_reg_num (exp_var "rs1") in
        let: "v2" :: int := call read_reg_num (exp_var "rs2") in
-@@ -745,6 +755,8 @@ Section FunDefKit.
+@@ -859,6 +869,8 @@ Section FunDefKit.
                                       (call exec_addi (exp_var "rd") (exp_var "rs") (exp_var "imm"))%exp
             | kadd           => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
                                       (call exec_add (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))%exp
@@ -136,7 +138,7 @@ index 309fac0..9fff2d4 100644
             | ksub           => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
                                       (call exec_sub (exp_var "rd") (exp_var "rs1") (exp_var "rs2"))%exp
             | kslt           => MkAlt (pat_tuple ("rd" , "rs1" , "rs2"))
-@@ -849,6 +861,7 @@ Section FunDefKit.
+@@ -973,6 +985,7 @@ Section FunDefKit.
      | exec_csetboundsimm => fun_exec_csetboundsimm
      | exec_addi          => fun_exec_addi
      | exec_add           => fun_exec_add
