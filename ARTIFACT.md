@@ -4,11 +4,116 @@ Paper: Formalizing, Verifying and Applying ISA Security Guarantees as Universal 
 This artifact contains the Coq development providing the evidence for the paper. At the end of this
 document we provide a paper-to-artifact correspondence. The code itself is documented as well.
 
-## Artifact Instructions
-The artifact consists of three developments: (1) Katamaran, the semi-automatic seperation logic verifier, (2) the MinimalCaps
-case study and (3) the RISC-V with PMP case study. The paper focuses on the general universal contracts approach, which we
-demonstrated for two instruction set architectures with different security primitives, MinimalCaps and RISC-V PMP. Our Coq
-development provides evidence for our claims in the paper.
+The easiest way to get started is by downloading [TODO](todo), the prebuilt image, and loading it into Docker:
+```bash
+docker load < katamaran-ccs23.tar.gz
+docker run -it --rm katamaran/ccs23
+```
+
+## Overview
+The supplementary material of our paper consists of Katamaran, our mechanized
+separation logic verifier for the Sail language, and the MinimalCaps and RISC-V
+PMP case studies.
+
+The different parts can be found in the following directories
+
+| Part                   | Directory                |
+|------------------------|--------------------------|
+| Kataraman              | `theories`               |
+| MinimalCaps            | `case_study/MinimalCaps` |
+| RISC-V 32-bit with PMP | `case_study/RiscvPmp`    |
+
+The assumptions, i.e. unimplemented or unproven parts, can be printed with the
+Coq command [`Print Assumptions`](https://coq.inria.fr/refman/proof-engine/vernacular-commands.html#coq:cmd.Print-Assumptions).
+We have already added these commands to the code in the `case_study/Assumptions.v` file for the key theorems.
+
+The following table contains `make` commands that can be used for this artifact:
+| Command            | Description                                                                                                                       |
+|--------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `make`             | Runs the default command that builds the entire project.                                                                          |
+| `make assumptions` | Forces recompilation of the `case_study/Assumptions.v` file, outputting the result of the different `Print Assumptions` commands. |
+| `make patch`       | Applies the patches that add a duplicate instruction (`add`) to the case studies.                                                 |
+| `make unpatch`     | Removes the patches introduced by running `make patch`, i.e., it reverses the above command.                                      |
+
+### Katamaran
+The Katamaran development can be found in the `theories/` directory. As mentioned in the paper, Katamaran is implemented and
+proven sound using Kripke specification monads. In this artifact we focus on universal contracts and our case studies.
+Those interested in the internals of Katamaran can take a look at its dedicated artifact and documentation:
+[Katamaran artifact](https://doi.org/10.5281/zenodo.6865817).
+
+### MinimalCaps
+The code for MinimalCaps can be found in the `case_study/MinimalCaps/` directory.
+In the MinimalCaps case study, we verify a universal contract enforcing a
+capability-safety property. The following table lists the contents of the
+different files comprising this case study.
+
+| File                             | Description                                                                                        |
+|----------------------------------|----------------------------------------------------------------------------------------------------|
+| `MinimalCaps/Base.v`             | Background theory for case study-specific datatypes and machine registers                          |
+| `MinimalCaps/Machine.v`          | The definitional interpreter for the ISA implemented in μSail                                      |
+| `MinimalCaps/Contracts.v`        | - Declaration of spatial and pure predicates                                                       |
+|                                  | - Solver for pure predicates                                                                       |
+|                                  | - Definition of contracts and ghost lemmas statements                                              |
+|                                  | - (Semi-)automatic verification of the μSail function with Katamaran's symbolic executor           |
+| `MinimalCaps/Model.v`            | - Instantiation of μSail operational semantic and the Iris-based program logic model,              |
+|                                  | - Verification of ghost lemmas and foreign functions                                               |
+|                                  | - Composition of all soundness theorems                                                            |
+| `MinimalCaps/LoopVerification.v` | Manual verification of the contract of the fetch-decode-execute loop, i.e. the universal contract, |
+|                                  | using the semi-automatically verified contract of a single fetch-decode-execute step.              |
+
+The `Assumptions.v` file in the main `case_study` folder contains
+`Print Assumptions` for the various main theorems of the case studies.
+For MinimalCaps it should show the following compile output:
+```
+Assumptions of MinimalCaps universal contract:
+Axioms:
+Machine.MinCapsProgram.pure_decode : Z -> string + Base.Instruction
+Model.MinCapsIrisBase.maxAddr : nat
+```
+
+For this case study we have postulated a decoder, i.e. a function that takes a
+word and gives back a decoded instruction or signals an error, and specify that
+this is what the decode foreign function implements. Furthermore, we have left
+the maximum address of the memory unspecified. No other definitions (or proofs)
+are assumed as axioms.
+
+### RISC-V PMP
+The code for RISC-V PMP can be found in the `case_study/RiscvPmp/` directory. We outline the structure of this directory below.
+
+| File                           | Description                                                                              |
+|--------------------------------|------------------------------------------------------------------------------------------|
+| `RiscvPmp/Base.v`              | See the explanation of MinimalCaps above.                                                |
+| `RiscvPmp/Machine.v`           | See the explanation of MinimalCaps above.                                                |
+| `RiscvPmp/Sig.v`               | - Declaration of spatial and pure predicates                                             |
+|                                | - Solver for pure predicates                                                             |
+| `RiscvPmp/Contracts.v`         | - Definition of contracts and ghost lemmas statements                                    |
+|                                | - (Semi-)automatic verification of the μSail function with Katamaran's symbolic executor |
+| `RiscvPmp/Model.v`             | See the explanation of MinimalCaps above.                                                |
+| `RiscvPmp/IrisModel.v`         | The instantiation of the Iris model                                                      |
+| `RiscvPmp/IrisInstance.v`      | is split over two additional files.                                                      |
+| `RiscvPmp/LoopVerification.v`  | See the explanation of MinimalCaps above.                                                |
+| `RiscvPmp/BlockVer/Spec.v`     | A separate set of function contracts to derive a verifier for assembly code              |
+| `RiscvPmp/BlockVer/Verifier.v` | The assembly code verifier and its soundness proof.                                      |
+| `RiscvPmp/Femtokernel.v`       | Verification of the femtokernel initialization and handler code.                         |
+
+The `Assumptions.v` file should produce the following compile output for RISC-V
+PMP:
+
+```
+Assumptions of Risc-V PMP universal contract:
+Axioms:
+Machine.pure_decode : bv 32 -> string + Base.AST
+Assumptions of FemtoKernel verification:
+Axioms:
+Machine.pure_decode : bv 32 -> string + Base.AST
+Assumptions of femtokernel end-to-end theorem:
+Axioms:
+Machine.pure_decode : bv 32 -> string + Base.AST
+```
+Like the MinimalCaps case study, the instruction decoder is postulated, but no
+other axioms exist. The precondition of the femtokernel init requires that
+the encoded instructions in memory decode to the kernel code via this postulated
+function.
 
 ### Requirements
 The following Coq and Coq libraries are required:
@@ -19,18 +124,21 @@ coq-iris       >= 4.0
 coq-stdpp      >= 1.8
 ```
 
-To ease building the project, we provide a `Dockerfile`. The project can then be build locally using the following commands:
+To ease building the project, we provide a `Dockerfile` and an prebuilt image of this `Dockerfile`. 
+The easiest way to get started is by downloading [TODO](todo) the prebuilt image and loading it into Docker:
+```bash
+docker load < katamaran-ccs23.tar.gz
+docker run -it --rm katamaran/ccs23
+```
+
+The docker image can also be build locally using the following commands:
 ```bash
 docker build . -t katamaran/ccs23
-docker run katamaran/ccs23
+docker run -it --rm katamaran/ccs23
 ```
- or by downloading the docker container:
- ```bash
- docker pull ghcr.io/katamaran-project/artifact:ccs2023
- docker run ghcr.io/katamaran-project/artifact:ccs2023
- ```
+NOTE: we rely on the GitHub Docker Container Registry, please consult [this manual](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry) to setup the required access tokens for this registry in case you receive `Access Denied` errors in the output.
 
-For further build instructions, see [README.md](./README.md).
+For further build instructions, such as the complete manual setup on your system, see [README.md](./README.md).
 
 ## Paper-to-Artifact Correspondence
 | Paper                                   | File                                        | Definition                               |
@@ -70,7 +178,7 @@ For further build instructions, see [README.md](./README.md).
 | Figure 14: open\_PMP\_entries contract  | `case_study/RiscvPmp/Contracts.v`           | Definition lemma\_open\_pmp\_entries     |
 | Figure 14: open\_PMP\_entries verif.    | `case_study/RiscvPmp/Model.v`               | Lemma open\_pmp\_entries\_sound          |
 | Figure 14: extract\_PMP\_ptsto contract | `case_study/RiscvPmp/Contracts.v`           | Definition lemma\_extract\_pmp\_ptsto    |
-| Figure 14: extract\_PMP\_ptsto verif.   | `case_study/RiscvPmp/Model.v`               | Lemma extract\_pmp\_ptsto_sound          |
+| Figure 14: extract\_PMP\_ptsto verif.   | `case_study/RiscvPmp/Model.v`               | Lemma extract\_pmp\_ptsto\_sound          |
 | Figure 14: return\_PMP\_ptsto contract  | `case_study/RiscvPmp/Contracts.v`           | Definition lemma\_return\_pmp\_ptsto     |
 | Figure 14: return\_PMP\_ptsto verif.    | `case_study/RiscvPmp/Model.v`               | Lemma return\_pmp\_ptsto\_sound          |
 | Section 6: FemtoKernel invariant        | `case_study/RiscvPmp/FemtoKernel.v`         | Definition femto\_inv\_fortytwo          |
