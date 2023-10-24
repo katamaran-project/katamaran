@@ -4,9 +4,9 @@ Paper: Formalizing, Verifying and Applying ISA Security Guarantees as Universal 
 This artifact contains the Coq development providing the evidence for the paper. At the end of this
 document we provide a paper-to-artifact correspondence. The code itself is documented as well.
 
-The easiest way to get started is by downloading [katamaran-ccs23.tar.gz](https://github.com/katamaran-project/katamaran/releases/download/ccs23/katamaran-ccs23.tar.gz), the prebuilt image, and loading it into Docker:
+The easiest way to get started is by downloading [katamaran-ccs23-image.tar.gz](https://github.com/katamaran-project/katamaran/releases/download/ccs23/katamaran-ccs23-image.tar.gz), the prebuilt image, and loading it into Docker:
 ```bash
-docker load < katamaran-ccs23.tar.gz
+docker load < katamaran-ccs23-image.tar.gz
 docker run -it --rm katamaran/ccs23
 ```
 
@@ -125,9 +125,9 @@ coq-stdpp      >= 1.8
 ```
 
 To ease building the project, we provide a `Dockerfile` and an prebuilt image of this `Dockerfile`. 
-The easiest way to get started is by downloading [katamaran-ccs23.tar.gz](https://github.com/katamaran-project/katamaran/releases/download/ccs23/katamaran-ccs23.tar.gz) the prebuilt image and loading it into Docker:
+The easiest way to get started is by downloading [katamaran-ccs23-image.tar.gz](https://github.com/katamaran-project/katamaran/releases/download/ccs23/katamaran-ccs23-image.tar.gz) the prebuilt image and loading it into Docker:
 ```bash
-docker load < katamaran-ccs23.tar.gz
+docker load < katamaran-ccs23-image.tar.gz
 docker run -it --rm katamaran/ccs23
 ```
 
