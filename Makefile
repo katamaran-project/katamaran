@@ -68,3 +68,6 @@ minimalcaps: Makefile2.coq
 assumptions: Makefile.coq
 	$(Q)rm -f case_study/Assumptions.vo*
 	$(Q)$(MAKE) -f Makefile.coq case_study/Assumptions.vo
+
+count-loc:
+	$(Q)./scripts/count-loc.sh
