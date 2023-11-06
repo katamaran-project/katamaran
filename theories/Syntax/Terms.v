@@ -41,6 +41,7 @@ From Katamaran Require Import
      Bitvector
      Syntax.BinOps
      Syntax.TypeDecl
+     Syntax.UnOps
      Syntax.Variables
      Tactics.
 
@@ -60,10 +61,7 @@ Module Type TermsOn (Import TY : Types).
   | term_var     (ς : LVar) (σ : Ty) {ςInΣ : ς∷σ ∈ Σ} : Term Σ σ
   | term_val     (σ : Ty) : Val σ -> Term Σ σ
   | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
-  | term_neg     (e : Term Σ ty.int) : Term Σ ty.int
-  | term_not     (e : Term Σ ty.bool) : Term Σ ty.bool
-  | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty.sum σ1 σ2)
-  | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty.sum σ1 σ2)
+  | term_unop    {σ1 σ2 : Ty} (op : UnOp σ1 σ2) (t : Term Σ σ1) : Term Σ σ2
   | term_sext    {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n)
   | term_zext    {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n)
   | term_get_slice_int {n} (t : Term Σ ty.int) : Term Σ (ty.bvec n)
@@ -76,10 +74,6 @@ Module Type TermsOn (Import TY : Types).
   | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
   #[global] Arguments term_var {_} _ {_ _}.
   #[global] Arguments term_val {_} _ _.
-  #[global] Arguments term_neg {_} _.
-  #[global] Arguments term_not {_} _.
-  #[global] Arguments term_inl {_ _ _} _.
-  #[global] Arguments term_inr {_ _ _} _.
   #[global] Arguments term_sext {_ _ _ p} t.
   #[global] Arguments term_zext {_ _ _ p} t.
   #[global] Arguments term_get_slice_int {_ _} t.
@@ -136,10 +130,7 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (P_var        : forall (ς : LVar) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
     Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
     Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
-    Hypothesis (P_neg        : forall e : Term Σ ty.int, P ty.int e -> P ty.int (term_neg e)).
-    Hypothesis (P_not        : forall e : Term Σ ty.bool, P ty.bool e -> P ty.bool (term_not e)).
-    Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty.sum σ1 σ2) (term_inl t)).
-    Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty.sum σ1 σ2) (term_inr t)).
+    Hypothesis (P_unop       : forall (σ1 σ2 : Ty) (op : UnOp σ1 σ2) (t : Term Σ σ1), P σ1 t -> P σ2 (term_unop op t)).
     Hypothesis (P_sext       : forall {m n} {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec m)), P (ty.bvec m) t -> P (ty.bvec n) (term_sext t)).
     Hypothesis (P_zext       : forall {m n} {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec m)), P (ty.bvec m) t -> P (ty.bvec n) (term_zext t)).
     Hypothesis (P_get_slice_int : forall {n} (t : Term Σ ty.int), P ty.int t -> P (ty.bvec n) (term_get_slice_int t)).
@@ -156,10 +147,7 @@ Module Type TermsOn (Import TY : Types).
       | term_var ς                  => ltac:(eapply P_var; eauto)
       | term_val σ v                => ltac:(eapply P_val; eauto)
       | term_binop op t1 t2         => ltac:(eapply P_binop; eauto)
-      | term_neg t                  => ltac:(eapply P_neg; eauto)
-      | term_not t                  => ltac:(eapply P_not; eauto)
-      | term_inl t                  => ltac:(eapply P_inl; eauto)
-      | term_inr t                  => ltac:(eapply P_inr; eauto)
+      | term_unop op t              => ltac:(eapply P_unop; eauto)
       | term_sext t                 => ltac:(eapply P_sext; eauto)
       | term_zext t                 => ltac:(eapply P_zext; eauto)
       | term_get_slice_int t        => ltac:(eapply P_get_slice_int; eauto)
@@ -186,7 +174,7 @@ Module Type TermsOn (Import TY : Types).
     Variable (pand : forall (e1 : Term Σ ty.bool) (e2 : Term Σ ty.bool), P (term_binop bop.and e1 e2)).
     Variable (por : forall (e1 : Term Σ ty.bool) (e2 : Term Σ ty.bool), P (term_binop bop.or e1 e2)).
     Variable (prel : forall σ (op : RelOp σ) (e1 e2 : Term Σ σ), P (term_binop (bop.relop op) e1 e2)).
-    Variable (pnot : forall e : Term Σ ty.bool, P (term_not e)).
+    Variable (pnot : forall t : Term Σ ty.bool, P (term_unop uop.not t)).
 
     Equations(noeqns) Term_bool_case (t : Term Σ ty.bool) : P t :=
     | term_var ς                    => @pvar ς _
@@ -194,7 +182,7 @@ Module Type TermsOn (Import TY : Types).
     | term_binop bop.and s t        => pand s t
     | term_binop (bop.relop op) s t => prel op s t
     | term_binop bop.or s t         => por s t
-    | term_not t                    => pnot t.
+    | term_unop uop.not t           => pnot t.
 
   End Term_bool_case.
 
@@ -207,7 +195,7 @@ Module Type TermsOn (Import TY : Types).
     Variable (pand : forall e1 e2, P e1 -> P e2 -> P (term_binop bop.and e1 e2)).
     Variable (por : forall e1 e2, P e1 -> P e2 -> P (term_binop bop.or e1 e2)).
     Variable (prel : forall σ (op : RelOp σ) e1 e2, P (term_binop (bop.relop op) e1 e2)).
-    Variable (pnot : forall e, P e -> P (term_not e)).
+    Variable (pnot : forall e, P e -> P (term_unop uop.not e)).
 
     Fixpoint Term_bool_ind (t : Term Σ ty.bool) : P t :=
       Term_bool_case
@@ -220,6 +208,51 @@ Module Type TermsOn (Import TY : Types).
         t.
 
   End Term_bool_ind.
+
+  Section Term_tuple_case.
+
+    Context {Σ : LCtx} {σs : Ctx Ty} [P : Term Σ (ty.tuple σs) -> Type].
+
+    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.tuple σs ∈ Σ), P (term_var ς)).
+    Variable (pval : forall (v : Val (ty.tuple σs)), P (term_val (ty.tuple σs) v)).
+    Variable (ptuple : forall (ts : Env (Term Σ) σs), P (term_tuple ts)).
+
+    Equations(noeqns) Term_tuple_case (t : Term Σ (ty.tuple σs)) : P t :=
+    | term_var ς    => @pvar ς _
+    | term_val _ v  => @pval v
+    | term_tuple ts => ptuple ts.
+
+  End Term_tuple_case.
+
+  Section Term_union_case.
+
+    Context {Σ : LCtx} {U : unioni} [P : Term Σ (ty.union U) -> Type].
+
+    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.union U ∈ Σ), P (term_var ς)).
+    Variable (pval : forall (v : Val (ty.union U)), P (term_val (ty.union U) v)).
+    Variable (punion : forall K (t : Term Σ (unionk_ty U K)), P (term_union U K t)).
+
+    Equations(noeqns) Term_union_case (t : Term Σ (ty.union U)) : P t :=
+    | term_var ς       => @pvar ς _
+    | term_val _ v     => @pval v
+    | term_union U K t => punion K t.
+
+  End Term_union_case.
+
+  Section Term_record_case.
+
+    Context {Σ : LCtx} {R : recordi} [P : Term Σ (ty.record R) -> Type].
+
+    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.record R ∈ Σ), P (term_var ς)).
+    Variable (pval : forall (v : Val (ty.record R)), P (term_val (ty.record R) v)).
+    Variable (precord : forall (ts : NamedEnv (Term Σ) (recordf_ty R)), P (term_record R ts)).
+
+    Equations(noeqns) Term_record_case (t : Term Σ (ty.record R)) : P t :=
+    | term_var ς    => @pvar ς _
+    | term_val _ v  => @pval v
+    | term_record ts => precord ts.
+
+  End Term_record_case.
 
   (* We define some specialized view for certain types to make
      recusion over terms easier. *)
@@ -267,12 +300,20 @@ Module Type TermsOn (Import TY : Types).
        | _ => fun _ _ _ _ => tt
        end.
 
+    Definition view_unop {Σ σ1 σ2} (op : UnOp σ1 σ2) :
+      forall {t : Term Σ σ1},
+        View t -> View (term_unop op t) :=
+      match op with
+      | uop.inl | _ => fun _ _ => tt
+      end.
+
     (* Construct a view for each term. *)
     Fixpoint view {Σ σ} (t : Term Σ σ) {struct t} : View t :=
       match t as t1 in (Term _ t0) return (View t1) with
       | term_var ς          => view_var _
       | term_val _ v        => view_val v
       | term_binop op t1 t2 => view_binop op (view t1) (view t2)
+      | term_unop op t      => view_unop op (view t)
       | _                   => tt
       end.
 
@@ -291,10 +332,12 @@ Module Type TermsOn (Import TY : Types).
         Term_eqb x1 x2 &&& Term_eqb y1 y2;
       Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (right _) := false
     };
-    Term_eqb (term_neg x) (term_neg y) := Term_eqb x y;
-    Term_eqb (term_not x) (term_not y) := Term_eqb x y;
-    Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
-    Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
+    Term_eqb (term_unop op1 x1) (term_unop op2 x2)
+      with uop.eqdep_dec op1 op2 => {
+      Term_eqb (term_unop op1 x1) (term_unop ?(op1) x2) (left uop.opeq_refl) :=
+        Term_eqb x1 x2;
+      Term_eqb (term_unop op1 x1) (term_unop op2 x2) (right _) := false
+    };
     Term_eqb (@term_sext _ m ?(k) p x) (@term_sext _ n k q y) with eq_dec m n => {
       Term_eqb (@term_sext _ m ?(k) p x) (@term_sext _ ?(m) k q y) (left eq_refl) :=
           Term_eqb x y;
@@ -339,15 +382,22 @@ Module Type TermsOn (Import TY : Types).
   Proof.
     induction t1 using Term_rect; cbn [Term_eqb]; dependent elimination t2;
       solve_eqb_spec with
-      try match goal with
+      repeat match goal with
           | |- context[eq_dec ?l1 ?l2] => destruct (eq_dec l1 l2)
           | |- context[bop.eqdep_dec ?x ?y] =>
               let e := fresh in
               destruct (bop.eqdep_dec x y) as [e|];
               [dependent elimination e|]
+          | |- context[uop.eqdep_dec ?x ?y] =>
+              let e := fresh in
+              destruct (uop.eqdep_dec x y) as [e|];
+              [dependent elimination e|]
           | H: ~ bop.OpEq ?o ?o |- False => apply H; constructor
+          | H: ~ uop.OpEq ?o ?o |- False => apply H; constructor
           | p : IsTrue (?m <=? ?n), q : IsTrue (?m <=? ?n) |- _ =>
             destruct (IsTrue.proof_irrelevance p q)
+          | |- context[match ?op with | uop.inl => _ | _ => _ end] =>
+            dependent elimination op; try progress cbn
           end.
     - apply (@ssrbool.iffP (es = ts)); solve_eqb_spec.
       apply env.eqb_hom_spec_point, IH.
@@ -379,10 +429,7 @@ Module Type TermsOn (Import TY : Types).
       | term_var ς                 => ζ.[??ς]
       | term_val σ v               => term_val σ v
       | term_binop op t1 t2        => term_binop op (sub_term t1 ζ) (sub_term t2 ζ)
-      | term_neg t0                => term_neg (sub_term t0 ζ)
-      | term_not t0                => term_not (sub_term t0 ζ)
-      | @term_inl _ σ1 σ2 t0       => term_inl (sub_term t0 ζ)
-      | @term_inr _ σ1 σ2 t0       => term_inr (sub_term t0 ζ)
+      | term_unop op t             => term_unop op (sub_term t ζ)
       | term_sext t                => term_sext (sub_term t ζ)
       | term_zext t                => term_zext (sub_term t ζ)
       | term_get_slice_int t       => term_get_slice_int (sub_term t ζ)
@@ -754,5 +801,10 @@ Module Type TermsOn (Import TY : Types).
 
   End SymbolicStore.
   Bind Scope env_scope with SStore.
+
+  Notation term_inl t := (term_unop uop.inl t%exp).
+  Notation term_inr t := (term_unop uop.inr t%exp).
+  Notation term_neg t := (term_unop uop.neg t%exp).
+  Notation term_not t := (term_unop uop.not t%exp).
 
 End TermsOn.

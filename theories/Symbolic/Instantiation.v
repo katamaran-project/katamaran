@@ -49,6 +49,7 @@ From Katamaran Require Import
      Syntax.BinOps
      Syntax.Terms
      Syntax.TypeDecl
+     Syntax.UnOps
      Syntax.Variables
      Tactics.
 
@@ -109,10 +110,8 @@ Module Type InstantiationOn
     | term_binop op t1 t2        => bop.eval op
                                       (inst (Inst := @inst_term _) t1 ι)
                                       (inst (Inst := @inst_term _) t2 ι)
-    | term_neg t                 => Z.opp (inst_term t ι)
-    | term_not t                 => negb (inst_term t ι)
-    | term_inl t                 => @inl (Val _) (Val _) (inst (Inst := inst_term) t ι)
-    | term_inr t                 => @inr (Val _) (Val _) (inst (Inst := inst_term) t ι)
+    | term_unop op t             => uop.eval op
+                                      (inst (Inst := @inst_term _) t ι)
     | term_sext t                => bv.sext (inst (Inst := inst_term) t ι)
     | term_zext t                => bv.zext (inst (Inst := inst_term) t ι)
     | term_get_slice_int t       => bv.of_Z (inst (Inst := inst_term) t ι)
@@ -424,10 +423,8 @@ Module Type InstantiationOn
 
     #[export,program] Instance proper_term_binop {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) [Σ] :
       Proper ((≡) ==> (≡) ==> (≡)) (term_binop (Σ:=Σ) op).
-    #[export,program] Instance proper_term_neg {Σ} : Proper ((≡) ==> (≡)) (term_neg (Σ:=Σ)).
-    #[export,program] Instance proper_term_not {Σ} : Proper ((≡) ==> (≡)) (term_not (Σ:=Σ)).
-    #[export,program] Instance proper_term_inl {Σ σ1 σ2} : Proper ((≡) ==> (≡)) (@term_inl Σ σ1 σ2).
-    #[export,program] Instance proper_term_inr {Σ σ1 σ2} : Proper ((≡) ==> (≡)) (@term_inr Σ σ1 σ2).
+    #[export,program] Instance proper_term_unop {σ1 σ2} (op : UnOp σ1 σ2) [Σ] :
+      Proper ((≡) ==> (≡)) (term_unop (Σ:=Σ) op).
     #[export,program] Instance proper_term_sext {Σ m n p} : Proper ((≡) ==> (≡)) (@term_sext Σ m n p).
     #[export,program] Instance proper_term_zext {Σ m n p} : Proper ((≡) ==> (≡)) (@term_zext Σ m n p).
     #[export,program] Instance proper_term_get_slice_int {Σ n} : Proper ((≡) ==> (≡)) (@term_get_slice_int Σ n).
@@ -458,21 +455,21 @@ Module Type InstantiationOn
       term_binop bop.or b (term_val ty.bool true) ≡ term_val ty.bool true.
     Proof. intro ι; apply orb_true_r. Qed.
     Lemma term_negb_andb [Σ] (b1 b2 : Term Σ ty.bool) :
-      term_not (term_binop bop.and b1 b2) ≡
-      term_binop bop.or (term_not b1) (term_not b2).
+      term_unop uop.not (term_binop bop.and b1 b2) ≡
+      term_binop bop.or (term_unop uop.not b1) (term_unop uop.not b2).
     Proof. intro ι; apply negb_andb. Qed.
     Lemma term_negb_orb [Σ] (b1 b2 : Term Σ ty.bool) :
-      term_not (term_binop bop.or b1 b2) ≡
-      term_binop bop.and (term_not b1) (term_not b2).
+      term_unop uop.not (term_binop bop.or b1 b2) ≡
+      term_binop bop.and (term_unop uop.not b1) (term_unop uop.not b2).
     Proof. intro ι; apply negb_orb. Qed.
     Lemma term_negb_involutive [Σ] (t : Term Σ ty.bool) :
-      term_not (term_not t) ≡ t.
+      term_unop uop.not (term_unop uop.not t) ≡ t.
     Proof. intro ι; apply negb_involutive. Qed.
     Lemma term_negb_val [Σ b] :
-      term_not (Σ:=Σ) (term_val ty.bool b) ≡ term_val ty.bool (negb b).
+      term_unop uop.not (term_val (Σ:=Σ) ty.bool b) ≡ term_val ty.bool (negb b).
     Proof. easy. Qed.
     Lemma term_negb_relop [σ] (op : RelOp σ) [Σ] (t1 t2 : Term Σ σ) :
-      term_not (term_binop (bop.relop op) t1 t2) ≡ term_relop_neg op t1 t2.
+      term_unop uop.not (term_binop (bop.relop op) t1 t2) ≡ term_relop_neg op t1 t2.
     Proof. intro ι. symmetry. apply inst_term_relop_neg. Qed.
 
   End SemanticEquivalence.
@@ -566,10 +563,10 @@ Module Type InstantiationOn
 
     Equations(noeqns) term_get_sum {Σ σ1 σ2} (t : Term Σ (ty.sum σ1 σ2)) :
       option (Term Σ σ1 + Term Σ σ2) :=
-      term_get_sum (term_val _ (inl v)) := Some (inl (term_val _ v));
-      term_get_sum (term_val _ (inr v)) := Some (inr (term_val _ v));
-      term_get_sum (term_inl t)         := Some (inl t);
-      term_get_sum (term_inr t)         := Some (inr t);
+      term_get_sum (term_val _ (inl v))  := Some (inl (term_val _ v));
+      term_get_sum (term_val _ (inr v))  := Some (inr (term_val _ v));
+      term_get_sum (term_unop uop.inl t) := Some (inl t);
+      term_get_sum (term_unop uop.inr t) := Some (inr t);
       term_get_sum _ := None.
 
     Lemma term_get_sum_spec {Σ σ1 σ2} (s : Term Σ (ty.sum σ1 σ2)) :
@@ -585,7 +582,8 @@ Module Type InstantiationOn
         (term_get_sum s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.
-      destruct v; constructor; auto.
+      - destruct v; constructor; auto.
+      - dependent elimination op0; cbn; constructor; auto.
     Qed.
 
     Equations(noeqns) term_get_list {Σ σ} (t : Term Σ (ty.list σ)) :

@@ -80,10 +80,9 @@ Module Type OccursCheckOn
           t1' <- occurs_check_term xIn t1;;
           t2' <- occurs_check_term xIn t2;;
           Some (term_binop op t1' t2')
-      | term_neg t => term_neg <$> occurs_check_term xIn t
-      | term_not t => term_not <$> occurs_check_term xIn t
-      | term_inl t => term_inl <$> occurs_check_term xIn t
-      | term_inr t => term_inr <$> occurs_check_term xIn t
+      | term_unop op t =>
+          t' <- occurs_check_term xIn t;;
+          Some (term_unop op t')
       | term_sext t => term_sext <$> occurs_check_term xIn t
       | term_zext t => term_zext <$> occurs_check_term xIn t
       | term_get_slice_int t => term_get_slice_int <$> occurs_check_term xIn t

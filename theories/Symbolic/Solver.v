@@ -105,9 +105,9 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     with
     simplify_bool_neg [Σ] (t : Term Σ ty.bool) : DList Σ :=
       Term_bool_case
-        (fun (*var*) ς _        => singleton (formula_bool (term_not (term_var ς))))
+        (fun (*var*) ς _        => singleton (formula_bool (term_unop uop.not (term_var ς))))
         (fun (*val*) b          => if b then error else empty)
-        (fun (*and*) t1 t2      => singleton (formula_bool (term_binop bop.or (term_not t1) (term_not t2))))
+        (fun (*and*) t1 t2      => singleton (formula_bool (term_binop bop.or (term_unop uop.not t1) (term_unop uop.not t2))))
         (fun (*or*)  t1 t2      => cat (simplify_bool_neg t1) (simplify_bool_neg t2))
         (fun (*rel*) σ op t1 t2 => singleton (formula_relop_neg op t1 t2))
         (fun (*not*) t1         => simplify_bool t1)
@@ -115,7 +115,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
 
     Lemma simplify_bool_spec_combined {Σ} (t : Term Σ ty.bool) :
       (simplify_bool t ⊣⊢ singleton (formula_bool t)) /\
-      (simplify_bool_neg t ⊣⊢ singleton (formula_bool (term_not t))).
+      (simplify_bool_neg t ⊣⊢ singleton (formula_bool (term_unop uop.not t))).
     Proof.
       induction t using Term_bool_ind; cbn; arw.
       - destruct v; split; arw.
@@ -130,7 +130,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     Proof. apply simplify_bool_spec_combined. Qed.
 
     Lemma simplify_bool_neg_spec [Σ] (t : Term Σ ty.bool) :
-      simplify_bool_neg t ⊣⊢ singleton (formula_bool (term_not t)).
+      simplify_bool_neg t ⊣⊢ singleton (formula_bool (term_unop uop.not t)).
     Proof. apply simplify_bool_spec_combined. Qed.
     #[local] Opaque simplify_bool simplify_bool_neg.
     #[local] Hint Rewrite simplify_bool_spec simplify_bool_neg_spec : katamaran.
@@ -163,6 +163,24 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     Proof. destruct op; arw; destruct v; arw; intro ι; arw. Qed.
     #[local] Opaque simplify_eq_binop_val.
     #[local] Hint Rewrite simplify_eq_binop_val_spec : katamaran.
+
+    Equations(noeqns) simplify_eq_unop_val [Σ σ1 σ2]
+      (op : UnOp σ1 σ2) (t : Term Σ σ1) (v : Val σ2) : DList Σ :=
+    | uop.neg        | t | v      => singleton (formula_relop bop.eq t (term_val ty.int (Z.opp v)))
+    | uop.not        | t | v     => if v then simplify_bool_neg t else simplify_bool t
+    | uop.inl        | t | inl v => singleton (formula_relop bop.eq t (term_val _ v))
+    | uop.inl        | t | inr _ => error
+    | uop.inr        | t | inl _ => error
+    | uop.inr        | t | inr v => singleton (formula_relop bop.eq t (term_val _ v))
+    | op             | t | v     => singleton (formula_relop bop.eq (term_unop op t) (term_val _ v)).
+
+    Lemma simplify_eq_unop_val_spec [Σ σ1 σ2]
+      (op : UnOp σ1 σ2) (t : Term Σ σ1) (v : Val σ2) :
+      simplify_eq_unop_val op t v ⊣⊢
+      singleton (formula_relop bop.eq (term_unop op t) (term_val σ2 v)).
+    Proof. destruct op; arw; destruct v; arw; intro ι; arw; Lia.lia. Qed.
+    #[local] Opaque simplify_eq_unop_val.
+    #[local] Hint Rewrite simplify_eq_unop_val_spec : katamaran.
 
     Definition simplify_eqb {Σ σ} (t1 t2 : Term Σ σ) : DList Σ :=
       if Term_eqb t1 t2 then empty else singleton (formula_relop bop.eq t1 t2).
@@ -197,28 +215,25 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     #[local] Hint Rewrite simplify_eq_binop_spec : katamaran.
     #[local] Opaque simplify_eq_binop.
 
-    Definition simplify_eq_union [Σ U] [K1 K2 : unionk U]
-      (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (unionk_ty U K2)) :
-      DList Σ :=
-      match eq_dec K1 K2 with
-      | left e  => let t2' := eq_rec_r (fun K => Term Σ (unionk_ty U K)) t2 e in
-                   singleton (formula_relop bop.eq t1 t2')
-      | right _ => error
-      end.
+    Equations(noeqns) simplify_eq_unop {Σ σ σ1 σ2}
+      (op1 : UnOp σ1 σ) (t1 : Term Σ σ1)
+      (op2 : UnOp σ2 σ) (t2 : Term Σ σ2)
+      : DList Σ :=
+    | uop.inl | t1 | uop.inl | t2 => singleton (formula_relop bop.eq t1 t2)
+    | uop.inl | t1 | uop.inr | t2 => error
+    | uop.inr | t1 | uop.inl | t2 => error
+    | uop.inr | t1 | uop.inr | t2 => singleton (formula_relop bop.eq t1 t2)
+    | op1     | t1 | op2     | t2 =>
+      simplify_eqb (term_unop op1 t1) (term_unop op2 t2).
 
-    Set Equations With UIP.
-    Lemma simplify_eq_union_spec [Σ U] [K1 K2 : unionk U]
-      (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (unionk_ty U K2)) :
-      simplify_eq_union t1 t2 ⊣⊢
-      singleton (formula_relop bop.eq (term_union U K1 t1) (term_union U K2 t2)).
-    Proof.
-      unfold simplify_eq_union. destruct eq_dec; arw.
-      - intros ι; arw. split; intros HYP.
-        + destruct e. now f_equal.
-        + depelim HYP. now dependent elimination e.
-      - intros ι; arw. congruence.
-    Qed.
-    #[local] Opaque simplify_eq_union.
+    Lemma simplify_eq_unop_spec [Σ σ σ1 σ2]
+      (op1 : UnOp σ1 σ) (t1 : Term Σ σ1)
+      (op2 : UnOp σ2 σ) (t2 : Term Σ σ2) :
+      simplify_eq_unop op1 t1 op2 t2 ⊣⊢
+      singleton (formula_relop bop.eq (term_unop op1 t1) (term_unop op2 t2)).
+    Proof. destruct op1; arw; dependent elimination op2; arw; intro ι; arw. Qed.
+    #[local] Hint Rewrite simplify_eq_unop_spec : katamaran.
+    #[local] Opaque simplify_eq_unop.
 
     Definition simplify_eq_union_val [Σ U] [K1 : unionk U]
       (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) : DList Σ :=
@@ -230,6 +245,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
        | right _ => error
        end.
 
+    Set Equations With UIP.
     Lemma simplify_eq_union_val_spec [Σ U] [K1 : unionk U]
       (t1 : Term Σ (unionk_ty U K1)) (v : Val (ty.union U)) :
       simplify_eq_union_val t1 v ⊣⊢
@@ -252,18 +268,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       | term_var x          => fun v => singleton (formula_relop bop.eq (term_var x) (term_val _ v))
       | term_val σ v        => fun v' => if eq_dec v v' then empty else error
       | term_binop op t1 t2 => simplify_eq_binop_val op t1 t2
-      | term_neg t          => fun v => singleton (formula_relop bop.eq (term_neg t) (term_val ty.int v))
-      | term_not t          => fun v => if v then simplify_bool_neg t else simplify_bool t
-      | term_inl t          => fun v =>
-                                 match v with
-                                 | inl v => simplify_eq_val t v
-                                 | inr _ => error
-                                 end
-      | term_inr t          => fun v =>
-                                 match v with
-                                 | inl _ => error
-                                 | inr v => simplify_eq_val t v
-                                 end
+      | term_unop op t      => simplify_eq_unop_val op t
       | term_sext t         => fun v => singleton (formula_relop bop.eq (term_sext t) (term_val _ v))
       | term_zext t         => fun v => singleton (formula_relop bop.eq (term_zext t) (term_val _ v))
       | term_get_slice_int t => fun v => singleton (formula_relop bop.eq (term_get_slice_int t) (term_val _ v))
@@ -297,10 +302,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - reflexivity.
       - destruct eq_dec; arw.
       - apply simplify_eq_binop_val_spec.
-      - reflexivity.
-      - destruct v; arw. intros ι. arw.
-      - destruct v; arw. rewrite IHt; arw. intros ι. arw.
-      - destruct v; arw. rewrite IHt; arw. intros ι. arw.
+      - apply simplify_eq_unop_val_spec.
       - reflexivity.
       - reflexivity.
       - reflexivity.
@@ -322,7 +324,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     #[local] Opaque simplify_eq_val.
     #[local] Hint Rewrite simplify_eq_val_spec : katamaran.
 
-    Section Bla.
+    Section SimplifyEqCtx.
       Variable simplify_eq : forall {Σ σ} (t1 t2 : Term Σ σ), DList Σ.
 
       Equations(noeqns) formula_eqs_ctx {Σ Δ}
@@ -337,20 +339,20 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       | env.snoc δ _ t, env.snoc δ' _ t' =>
         cat (formula_eqs_nctx δ δ') (simplify_eq t t').
 
-    End Bla.
+    End SimplifyEqCtx.
 
     Equations(noeqns) simplify_eq {Σ σ} (t1 t2 : Term Σ σ) : DList Σ :=
-    | term_val _ v           | t                      => simplify_eq_val t v
-    | t                      | term_val _ v           => simplify_eq_val t v
-    | term_inr _             | term_inl _             => error
-    | term_inl _             | term_inr _             => error
-    | term_inl t1            | term_inl t2            => simplify_eq t1 t2
-    | term_inr t1            | term_inr t2            => simplify_eq t1 t2
-    | term_tuple ts1         | term_tuple ts2         => formula_eqs_ctx (@simplify_eq) ts1 ts2
-    | term_record _ ts1      | term_record _ ts2      => formula_eqs_nctx (@simplify_eq) ts1 ts2
-    | term_binop op1 t11 t12 | term_binop op2 t21 t22 => simplify_eq_binop op1 t11 t12 op2 t21 t22
-    | term_union _ K1 t1     | term_union _ K2 t2     => simplify_eq_union t1 t2
-    | t1                     | t2                     => simplify_eqb t1 t2.
+    simplify_eq (term_val _ v)           t                        := simplify_eq_val t v;
+    simplify_eq t                        (term_val _ v)           := simplify_eq_val t v;
+    simplify_eq (term_binop op1 t11 t12) (term_binop op2 t21 t22) := simplify_eq_binop op1 t11 t12 op2 t21 t22;
+    simplify_eq (term_unop op1 t1)       (term_unop op2 t2)       := simplify_eq_unop op1 t1 op2 t2;
+    simplify_eq (term_tuple ts1)         (term_tuple ts2)         := formula_eqs_ctx (@simplify_eq) ts1 ts2;
+    simplify_eq (term_record _ ts1)      (term_record _ ts2)      := formula_eqs_nctx (@simplify_eq) ts1 ts2;
+    simplify_eq (term_union _ K1 t1)     (term_union _ K2 t2) with eq_dec K1 K2 => {
+      simplify_eq (term_union _ K1 t1)   (term_union _ ?(K1) t2) (left eq_refl) := simplify_eq t1 t2;
+      simplify_eq _ _ (right _) := error
+    };
+    simplify_eq t1              t2   := simplify_eqb t1 t2.
 
     Lemma simplify_eq_spec [Σ σ] (s t : Term Σ σ) :
       simplify_eq s t ⊣⊢ singleton (formula_relop bop.eq s t).
@@ -362,11 +364,6 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - dependent elimination t; arw.
       - dependent elimination t; arw.
       - dependent elimination t; arw.
-        rewrite IHs. arw. intros ι. arw.
-      - dependent elimination t; arw.
-        rewrite IHs. arw. intros ι. arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
       - dependent elimination t; arw.
       - dependent elimination t; arw.
       - dependent elimination t; arw.
@@ -375,8 +372,11 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - dependent elimination t; arw. intros ι. arw.
         induction IH; env.destroy ts; arw.
         rewrite IHIH, (q v ι). arw.
-      - dependent elimination t; arw.
-        apply simplify_eq_union_spec.
+      - dependent elimination t; arw. destruct eq_dec as [Heq|Hneq]; arw.
+        + destruct Heq; cbn. rewrite IHs. intros ι; arw. split; intros HYP.
+          * now f_equal.
+          * now depelim HYP.
+        + intros ι; arw. congruence.
       - dependent elimination t; arw. intros ι. arw.
         induction IH; env.destroy ts0; arw.
         rewrite IHIH, (q v ι). arw.
@@ -481,7 +481,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       option { w' & Tri w w' } :=
       try_unify_bool (@term_var _ x σ xIn) :=
         Some (existT _ (tri_cons x (term_val ty.bool true) tri_id));
-      try_unify_bool (term_not (@term_var _ x σ xIn)) :=
+      try_unify_bool (term_unop uop.not (@term_var _ x σ xIn)) :=
         Some (existT _ (tri_cons x (term_val ty.bool false) tri_id));
       try_unify_bool _ :=
         None.
@@ -513,10 +513,10 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
     Lemma try_unify_bool_spec {w : World} (t : Term w ty.bool) :
       option.wlp (fun '(existT w' ν) => forall ι, inst (T := STerm ty.bool) t ι = true <-> inst_triangular ν ι) (try_unify_bool t).
     Proof.
-      dependent elimination t; cbn; try constructor; auto.
-      intros ι. cbn. intuition.
-      dependent elimination e0; cbn; try constructor; auto.
-      intros ι. cbn. destruct ι.[??ς]; intuition.
+      induction t using Term_bool_ind; cbn; try constructor; auto.
+      - intros ι. cbn. intuition.
+      - induction t using Term_bool_ind; cbn; try constructor; auto.
+        intros ι. cbn. destruct ι.[??ς]; intuition.
     Qed.
 
     Lemma try_unify_eq_spec {w : World} {σ} (t1 t2 : Term w σ) :

@@ -81,6 +81,7 @@ theories/Syntax/Registers.v
 theories/Syntax/Statements.v
 theories/Syntax/Terms.v
 theories/Syntax/TypeDecl.v
+theories/Syntax/UnOps.v
 theories/Syntax/Variables.v
 theories/Tactics.v
 

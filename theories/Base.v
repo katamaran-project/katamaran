@@ -37,6 +37,7 @@ From Katamaran Require Export
      Syntax.BinOps
      Syntax.Registers
      Syntax.TypeDecl
+     Syntax.UnOps
      Syntax.Variables
      Tactics.
 From Katamaran Require Import
@@ -137,8 +138,8 @@ Module Type BaseMixin (Import TY : Types).
       | pat_sum σ0 τ x y =>
           fun b =>
             match b with
-            | true => fun ts => term_inl (env.head ts)
-            | false => fun ts => term_inr (env.head ts)
+            | true => fun ts => term_unop uop.inl (env.head ts)
+            | false => fun ts => term_unop uop.inr (env.head ts)
             end
       | pat_unit =>
           fun pc _ => term_val ty.unit pc
@@ -210,10 +211,7 @@ Module Type BaseMixin (Import TY : Types).
       | exp_var ς          => δ.[??ς]
       | exp_val σ v        => term_val σ v
       | exp_binop op e1 e2 => term_binop op (seval_exp e1) (seval_exp e2)
-      | exp_neg e          => term_neg (seval_exp e)
-      | exp_not e          => term_not (seval_exp e)
-      | exp_inl e          => term_inl (seval_exp e)
-      | exp_inr e          => term_inr (seval_exp e)
+      | exp_unop op e      => term_unop op (seval_exp e)
       | exp_sext e         => term_sext (seval_exp e)
       | exp_zext e         => term_zext (seval_exp e)
       | exp_get_slice_int e => term_get_slice_int (seval_exp e)

@@ -45,6 +45,7 @@ From Katamaran Require Import
      Syntax.BinOps
      Syntax.Terms
      Syntax.TypeDecl
+     Syntax.UnOps
      Syntax.Variables.
 
 Import (notations) stdpp.base.
@@ -114,6 +115,8 @@ Module Type PartialEvaluationOn
         + now destruct v.
         + now constructor.
         + now destruct v.
+        + depelim op.
+      - now depelim op.
       - now depelim op.
     Qed.
 
@@ -149,24 +152,40 @@ Module Type PartialEvaluationOn
         peval_plus_sound.
     Qed.
 
-    Equations(noeqns) peval_neg (t : Term Σ ty.int) : Term Σ ty.int :=
-    | term_val _ v := term_val ty.int (Z.opp v);
-    | t            := term_neg t.
 
     Equations peval_not (t : Term Σ ty.bool) : Term Σ ty.bool :=
     | term_val _ v                    => term_val ty.bool (negb v)
     | term_binop bop.and t1 t2        => term_binop bop.or (peval_not t1) (peval_not t2)
     | term_binop bop.or t1 t2         => term_binop bop.and (peval_not t1) (peval_not t2)
     | term_binop (bop.relop op) t1 t2 => term_relop_neg op t1 t2
-    | t                               => term_not t.
+    | t                               => term_unop uop.not t.
 
-    Equations(noeqns) peval_inl {σ1 σ2} (t : Term Σ σ1) : Term Σ (ty.sum σ1 σ2) :=
-    | term_val _ v := term_val (ty.sum _ _) (@inl (Val _) (Val _) v);
-    | t            := term_inl t.
+    Definition peval_unop' {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) : Term Σ σ2 :=
+      match term_get_val t with
+      | Some v => term_val σ2 (uop.eval op v)
+      | None   => term_unop op t
+      end.
 
-    Equations(noeqns) peval_inr {σ1 σ2} (t : Term Σ σ2) : Term Σ (ty.sum σ1 σ2) :=
-    | term_val _ v := term_val (ty.sum _ _) (@inr (Val _) (Val _) v);
-    | t            := term_inr t.
+    Definition peval_unop {σ1 σ2} (op : UnOp σ1 σ2) : Term Σ σ1 -> Term Σ σ2 :=
+      match op with
+      | uop.not => peval_not
+      | op      => peval_unop' op
+      end.
+
+    Lemma peval_not_sound (t : Term Σ ty.bool) :
+      peval_not t ≡ term_unop uop.not t.
+    Proof. funelim (peval_not t); lsolve; now apply proper_term_binop. Qed.
+
+    Lemma peval_unop'_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
+      peval_unop' op t ≡ term_unop op t.
+    Proof. unfold peval_unop'; destruct (term_get_val_spec t); subst; easy. Qed.
+
+    Lemma peval_unop_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
+      peval_unop op t ≡ term_unop op t.
+    Proof.
+      destruct op; cbn [peval_unop];
+        auto using peval_unop'_sound, peval_not_sound.
+    Qed.
 
     Definition peval_sext {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n) :=
       match term_get_val t with
@@ -236,10 +255,7 @@ Module Type PartialEvaluationOn
       | term_var ς                 => term_var ς
       | term_val _ v               => term_val _ v
       | term_binop op t1 t2        => peval_binop op (peval t1) (peval t2)
-      | term_neg t                 => peval_neg (peval t)
-      | term_not t                 => peval_not (peval t)
-      | term_inl t                 => peval_inl (peval t)
-      | term_inr t                 => peval_inr (peval t)
+      | term_unop op t             => peval_unop op (peval t)
       | term_sext t                => peval_sext (peval t)
       | term_zext t                => peval_zext (peval t)
       | term_get_slice_int t       => peval_get_slice_int (peval t)
@@ -251,22 +267,6 @@ Module Type PartialEvaluationOn
       | term_union U K t           => peval_union (peval t)
       | term_record R ts           => peval_record R (env.map (fun b => peval (σ := type b)) ts)
       end.
-
-    Lemma peval_neg_sound (t : Term Σ ty.int) :
-      peval_neg t ≡ term_neg t.
-    Proof. now dependent elimination t. Qed.
-
-    Lemma peval_not_sound (t : Term Σ ty.bool) :
-      peval_not t ≡ term_not t.
-    Proof. funelim (peval_not t); lsolve; now apply proper_term_binop. Qed.
-
-    Lemma peval_inl_sound {σ1 σ2} (t : Term Σ σ1) :
-      peval_inl (σ2 := σ2) t ≡ term_inl t.
-    Proof. now destruct t. Qed.
-
-    Lemma peval_inr_sound {σ1 σ2} (t : Term Σ σ2) :
-      peval_inr (σ1 := σ1) t ≡ term_inr t.
-    Proof. now destruct t. Qed.
 
     Lemma peval_sext_sound {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) :
       peval_sext (p := p) t ≡ term_sext t.
@@ -326,10 +326,7 @@ Module Type PartialEvaluationOn
       - reflexivity.
       - reflexivity.
       - etransitivity; [apply peval_binop_sound|now apply proper_term_binop].
-      - etransitivity; [apply peval_neg_sound  |now apply proper_term_neg].
-      - etransitivity; [apply peval_not_sound  |now apply proper_term_not].
-      - etransitivity; [apply peval_inl_sound  |now apply proper_term_inl].
-      - etransitivity; [apply peval_inr_sound  |now apply proper_term_inr].
+      - etransitivity; [apply peval_unop_sound|now apply proper_term_unop].
       - etransitivity; [apply peval_sext_sound |now apply proper_term_sext].
       - etransitivity; [apply peval_zext_sound |now apply proper_term_zext].
       - etransitivity; [apply peval_get_slice_int_sound |now apply proper_term_get_slice_int].

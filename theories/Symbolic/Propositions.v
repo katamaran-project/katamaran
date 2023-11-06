@@ -1698,11 +1698,8 @@ Module Type SymPropOn
     Inductive ETerm : Ty -> Set :=
     | eterm_var     (ℓ : LVar) (σ : Ty) (n : nat) : ETerm σ
     | eterm_val     (σ : Ty) (v : Val σ) : ETerm σ
-    | eterm_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (t1 : ETerm σ1) (t2 : ETerm σ2) : ETerm σ3
-    | eterm_neg     (t : ETerm ty.int) : ETerm ty.int
-    | eterm_not     (t : ETerm ty.bool) : ETerm ty.bool
-    | eterm_inl     {σ1 σ2 : Ty} (t : ETerm σ1) : ETerm (ty.sum σ1 σ2)
-    | eterm_inr     {σ1 σ2 : Ty} (t : ETerm σ2) : ETerm (ty.sum σ1 σ2)
+    | eterm_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (t1 : ETerm σ1) (t2 : ETerm σ2) : ETerm σ3
+    | eterm_unop    {σ1 σ2} (op : UnOp σ1 σ2) (t : ETerm σ1) : ETerm σ2
     | eterm_sext    {m n} (e : ETerm (ty.bvec m)) {p : IsTrue (m <=? n)} : ETerm (ty.bvec n)
     | eterm_zext    {m n} (e : ETerm (ty.bvec m)) {p : IsTrue (m <=? n)} : ETerm (ty.bvec n)
     | eterm_get_slice_int {n} (e : ETerm ty.int) : ETerm (ty.bvec n)
@@ -1759,10 +1756,7 @@ Module Type SymPropOn
         | @term_var _ ℓ σ ℓIn         => eterm_var ℓ σ (ctx.in_at ℓIn)
         | term_val σ v               => eterm_val σ v
         | term_binop op t1 t2        => eterm_binop op (erase t1) (erase t2)
-        | term_neg t                 => eterm_neg (erase t)
-        | term_not t                 => eterm_not (erase t)
-        | term_inl t                 => eterm_inl (erase t)
-        | term_inr t                 => eterm_inr (erase t)
+        | term_unop op t             => eterm_unop op (erase t)
         | term_sext t                => eterm_sext (erase t)
         | term_zext t                => eterm_zext (erase t)
         | term_get_slice_int t       => eterm_get_slice_int (erase t)
@@ -1857,14 +1851,8 @@ Module Type SymPropOn
             v1 <- inst_eterm t1;;
             v2 <- inst_eterm t2;;
             Some (bop.eval op v1 v2)
-        | eterm_neg t0 =>
-            BinInt.Z.opp <$> inst_eterm t0
-        | eterm_not t0 =>
-            negb <$> inst_eterm t0
-        | eterm_inl t0 =>
-            inl <$> inst_eterm t0
-        | eterm_inr t0 =>
-            inr <$> inst_eterm t0
+        | @eterm_unop σ1 σ2 op t0  =>
+            uop.eval op <$> inst_eterm t0
         | @eterm_sext _ _ t0 p =>
             (fun v => bv.sext v) <$> inst_eterm t0
         | @eterm_zext _ _ t0 p =>
@@ -1998,9 +1986,6 @@ Module Type SymPropOn
         now rewrite EqDec.eq_dec_refl.
       - reflexivity.
       - now rewrite IHt1, IHt2.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite IHt.
       - now rewrite IHt.
       - now rewrite IHt.
       - now rewrite IHt.
