@@ -511,8 +511,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     match: value in union (memory_op_result bytes) with
     |> KMemValue (pat_var "result") =>
       let: tmp := if: is_unsigned
-                  then @exp_zext _ (bytes * byte) (xlenbytes * byte) result _
-                  else @exp_sext _ (bytes * byte) (xlenbytes * byte) result _ in
+                  then exp_unop (@uop.zext _ (bytes * byte) (xlenbytes * byte) _) result
+                  else exp_unop (@uop.sext _ (bytes * byte) (xlenbytes * byte) _) result in
       stm_exp (exp_union (memory_op_result xlenbytes) KMemValue tmp)
     |> KMemException (pat_var "e")  =>
       stm_exp (exp_union (memory_op_result xlenbytes) KMemException (exp_var "e"))

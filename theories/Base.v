@@ -212,12 +212,6 @@ Module Type BaseMixin (Import TY : Types).
       | exp_val σ v        => term_val σ v
       | exp_binop op e1 e2 => term_binop op (seval_exp e1) (seval_exp e2)
       | exp_unop op e      => term_unop op (seval_exp e)
-      | exp_sext e         => term_sext (seval_exp e)
-      | exp_zext e         => term_zext (seval_exp e)
-      | exp_get_slice_int e => term_get_slice_int (seval_exp e)
-      | exp_unsigned e     => term_unsigned (seval_exp e)
-      | exp_truncate m e   => term_truncate m (seval_exp e)
-      | exp_negate e       => term_negate (seval_exp e)
       | exp_list es        => term_list (List.map seval_exp es)
       | exp_bvec es        => term_bvec (Vector.map seval_exp es)
       | exp_tuple es       => term_tuple (env.map (@seval_exp) es)

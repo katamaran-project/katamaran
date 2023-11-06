@@ -83,13 +83,6 @@ Module Type OccursCheckOn
       | term_unop op t =>
           t' <- occurs_check_term xIn t;;
           Some (term_unop op t')
-      | term_sext t => term_sext <$> occurs_check_term xIn t
-      | term_zext t => term_zext <$> occurs_check_term xIn t
-      | term_get_slice_int t => term_get_slice_int <$> occurs_check_term xIn t
-      | term_unsigned t => term_unsigned <$> occurs_check_term xIn t
-      | term_truncate m t => (fun t' => term_truncate m t') <$> occurs_check_term xIn t
-      | term_vector_subrange s l t => term_vector_subrange s l <$> occurs_check_term xIn t
-      | term_negate t => term_negate <$> occurs_check_term xIn t
       | @term_tuple _ σs ts =>
         @term_tuple _ σs <$> occurs_check (OccursCheck := occurs_check_env (OCT := @occurs_check_term)) xIn ts
       | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0

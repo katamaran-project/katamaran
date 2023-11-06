@@ -72,12 +72,6 @@ Module Type ExpressionsOn (Import TY : Types).
   | exp_val     (σ : Ty) : Val σ -> Exp Γ σ
   | exp_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ σ3
   | exp_unop    {σ1 σ2} (op : UnOp σ1 σ2) (e : Exp Γ σ1) : Exp Γ σ2
-  | exp_sext    {m n} (e : Exp Γ (ty.bvec m)) {p : IsTrue (m <=? n)} : Exp Γ (ty.bvec n)
-  | exp_zext    {m n} (e : Exp Γ (ty.bvec m)) {p : IsTrue (m <=? n)} : Exp Γ (ty.bvec n)
-  | exp_get_slice_int {n} (e : Exp Γ ty.int) : Exp Γ (ty.bvec n)
-  | exp_unsigned {n} (e : Exp Γ (ty.bvec n)) : Exp Γ ty.int
-  | exp_truncate {n} (m : nat) (e : Exp Γ (ty.bvec n)) {p : IsTrue (m <=? n)} : Exp Γ (ty.bvec m)
-  | exp_negate {n} (e : Exp Γ (ty.bvec n)) : Exp Γ (ty.bvec n)
   | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty.list σ)
   | exp_bvec    {n} (es : Vector.t (Exp Γ ty.bool) n) : Exp Γ (ty.bvec n)
   | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty.tuple σs)
@@ -109,12 +103,6 @@ Module Type ExpressionsOn (Import TY : Types).
     Hypothesis (P_val     : forall (σ : Ty) (l : Val σ), P σ (exp_val σ l)).
     Hypothesis (P_binop   : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1), P σ1 e1 -> forall e2 : Exp Γ σ2, P σ2 e2 -> P σ3 (exp_binop op e1 e2)).
     Hypothesis (P_unop    : forall (σ1 σ2 : Ty) (op : UnOp σ1 σ2) (e : Exp Γ σ1), P σ1 e -> P σ2 (exp_unop op e)).
-    Hypothesis (P_sext    : forall {m n} (p : IsTrue (Nat.leb m n)) (e : Exp Γ (ty.bvec m)), P (ty.bvec m) e -> P (ty.bvec n) (exp_sext e)).
-    Hypothesis (P_zext    : forall {m n} (p : IsTrue (Nat.leb m n)) (e : Exp Γ (ty.bvec m)), P (ty.bvec m) e -> P (ty.bvec n) (exp_zext e)).
-    Hypothesis (P_get_slice_int : forall {n} (e : Exp Γ ty.int), P ty.int e -> P (ty.bvec n) (exp_get_slice_int e)).
-    Hypothesis (P_unsigned : forall {n} (e : Exp Γ (ty.bvec n)), P (ty.bvec n) e -> P ty.int (exp_unsigned e)).
-    Hypothesis (P_truncate : forall {n} (m : nat) (p : IsTrue (Nat.leb m n)) (e : Exp Γ (ty.bvec n)), P (ty.bvec n) e -> P (ty.bvec m) (exp_truncate m e)).
-    Hypothesis (P_negate  : forall {n} (e : Exp Γ (ty.bvec n)), P (ty.bvec n) e -> P (ty.bvec n) (exp_negate e)).
     Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty.list σ) (exp_list es)).
     Hypothesis (P_bvec    : forall (n : nat) (es : Vector.t (Exp Γ ty.bool) n), PV es -> P (ty.bvec n) (exp_bvec es)).
     Hypothesis (P_tuple   : forall (σs : Ctx Ty) (es : Env (Exp Γ) σs), PE es -> P (ty.tuple σs) (exp_tuple es)).
@@ -127,12 +115,6 @@ Module Type ExpressionsOn (Import TY : Types).
       | exp_val _ l               => ltac:(apply P_val; auto)
       | exp_binop op e1 e2        => ltac:(apply P_binop; auto)
       | exp_unop op e             => ltac:(apply P_unop; auto)
-      | exp_sext e                => ltac:(apply P_sext; auto)
-      | exp_zext e                => ltac:(apply P_zext; auto)
-      | exp_get_slice_int e       => ltac:(apply P_get_slice_int; auto)
-      | exp_unsigned e            => ltac:(apply P_unsigned; auto)
-      | exp_truncate m e          => ltac:(apply P_truncate; auto)
-      | exp_negate e              => ltac:(apply P_negate; auto)
       | exp_list es               => ltac:(apply P_list; induction es; cbn; auto using unit)
       | exp_bvec es               => ltac:(apply P_bvec; induction es; cbn; auto using unit)
       | exp_tuple es              => ltac:(apply P_tuple; induction es; cbn; auto using unit)
@@ -151,12 +133,6 @@ Module Type ExpressionsOn (Import TY : Types).
     | exp_val _ l         => l
     | exp_binop op e1 e2  => bop.eval op (eval e1 δ) (eval e2 δ)
     | exp_unop op e       => uop.eval op (eval e δ)
-    | exp_sext e          => bv.sext (eval e δ)
-    | exp_zext e          => bv.zext (eval e δ)
-    | exp_get_slice_int e => bv.of_Z (eval e δ)
-    | exp_unsigned e      => bv.unsigned (eval e δ)
-    | exp_truncate m e    => bv.truncate m (eval e δ)
-    | exp_negate e        => bv.negate (eval e δ)
     | exp_list es         => List.map (fun e => eval e δ) es
     | exp_bvec es         => Vector.t_rect
                                _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => bv m)
@@ -183,6 +159,14 @@ Module Type ExpressionsOn (Import TY : Types).
   Notation exp_inr e := (exp_unop uop.inr e%exp).
   Notation exp_neg e := (exp_unop uop.neg e%exp).
   Notation exp_not e := (exp_unop uop.not e%exp).
+  Notation exp_sext e := (exp_unop uop.sext e%exp).
+  Notation exp_zext e := (exp_unop uop.zext e%exp).
+  Notation exp_get_slice_int e := (exp_unop uop.get_slice_int e%exp).
+  Notation exp_unsigned e := (exp_unop uop.unsigned e%exp).
+  Notation exp_truncate m e := (exp_unop (uop.truncate m) e%exp).
+  Notation exp_vector_subrange s l e := (exp_unop (uop.vector_subrange s l) e%exp).
+  Notation exp_negate e := (exp_unop uop.negate e%exp).
+
   Notation "e1 && e2" := (exp_binop bop.and e1 e2) : exp_scope.
   Notation "e1 || e2" := (exp_binop bop.or e1 e2) : exp_scope.
   Notation "e1 + e2" := (exp_binop bop.plus e1 e2) : exp_scope.

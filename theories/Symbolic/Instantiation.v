@@ -112,13 +112,6 @@ Module Type InstantiationOn
                                       (inst (Inst := @inst_term _) t2 ι)
     | term_unop op t             => uop.eval op
                                       (inst (Inst := @inst_term _) t ι)
-    | term_sext t                => bv.sext (inst (Inst := inst_term) t ι)
-    | term_zext t                => bv.zext (inst (Inst := inst_term) t ι)
-    | term_get_slice_int t       => bv.of_Z (inst (Inst := inst_term) t ι)
-    | term_unsigned t            => bv.unsigned (inst (Inst := inst_term) t ι)
-    | term_truncate m t          => bv.truncate m (inst (Inst := inst_term) t ι)
-    | term_vector_subrange s l t => bv.vector_subrange s l (inst (Inst := inst_term) t ι)
-    | term_negate  t             => bv.negate (inst (Inst := inst_term) t ι)
     | @term_tuple _ σs ts        =>
         envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι)
     | @term_union _ U K t        => unionv_fold U (existT K (inst (Inst := inst_term) t ι))
@@ -425,13 +418,6 @@ Module Type InstantiationOn
       Proper ((≡) ==> (≡) ==> (≡)) (term_binop (Σ:=Σ) op).
     #[export,program] Instance proper_term_unop {σ1 σ2} (op : UnOp σ1 σ2) [Σ] :
       Proper ((≡) ==> (≡)) (term_unop (Σ:=Σ) op).
-    #[export,program] Instance proper_term_sext {Σ m n p} : Proper ((≡) ==> (≡)) (@term_sext Σ m n p).
-    #[export,program] Instance proper_term_zext {Σ m n p} : Proper ((≡) ==> (≡)) (@term_zext Σ m n p).
-    #[export,program] Instance proper_term_get_slice_int {Σ n} : Proper ((≡) ==> (≡)) (@term_get_slice_int Σ n).
-    #[export,program] Instance proper_term_unsigned {Σ n} : Proper ((≡) ==> (≡)) (@term_unsigned Σ n).
-    #[export,program] Instance proper_term_truncate {Σ n m p} : Proper ((≡) ==> (≡)) (@term_truncate Σ n m p).
-    #[export,program] Instance proper_term_vector_subrange {Σ n s l p} : Proper ((≡) ==> (≡)) (@term_vector_subrange Σ n s l p).
-    #[export,program] Instance proper_term_negate {Σ n} : Proper ((≡) ==> (≡)) (@term_negate Σ n).
     #[export,program] Instance proper_term_tuple {Σ σs} : Proper ((≡) ==> (≡)) (@term_tuple Σ σs).
     #[export,program] Instance proper_term_union {Σ U K} : Proper ((≡) ==> (≡)) (@term_union Σ U K).
     #[export,program] Instance proper_term_record {Σ R} : Proper ((≡) ==> (≡)) (@term_record Σ R).

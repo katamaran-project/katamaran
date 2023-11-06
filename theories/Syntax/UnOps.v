@@ -65,26 +65,6 @@ Module uop.
     Derive Signature for UnOp.
     Derive NoConfusion for UnOp.
 
-    Import Sigma_Notations.
-
-    Definition UnOpTel : Set :=
-      Σ i : (Σ σ1 : Ty, Ty), UnOp i.1 i.2.
-
-    Definition unoptel_inl (σ1 σ2 : Ty) : UnOpTel :=
-      ((σ1, sum σ1 σ2), inl).
-    Definition unoptel_inr (σ1 σ2 : Ty) : UnOpTel :=
-      ((σ2, sum σ1 σ2), inr).
-    Definition unoptel_sext {m n} {p : IsTrue (m <=? n)} : UnOpTel :=
-      ((bvec m, bvec n), sext).
-    Definition unoptel_zext {m n} {p : IsTrue (m <=? n)} : UnOpTel :=
-      ((bvec m, bvec n), sext).
-    Definition unoptel_get_slice_int (n : nat) : UnOpTel :=
-      ((int,bvec n), get_slice_int).
-    Definition unoptel_unsigned (n : nat) : UnOpTel :=
-      ((bvec n,int), unsigned).
-    Definition unoptel_negate (n : nat) : UnOpTel :=
-      ((bvec n,bvec n), negate).
-
   End WithTypeDecl.
 
   Section WithTypeDef.
@@ -93,88 +73,53 @@ Module uop.
     Context {TDF : TypeDefKit TDN}.
     Import Sigma_Notations.
 
-    Definition unoptel_eq_dec_sext {m1 n1 m2 n2}
-      {p1 : IsTrue (m1 <=? n1)} {p2 : IsTrue (m2 <=? n2)} :
-      dec_eq (A := UnOpTel) ((bvec m1, bvec n1), sext) ((bvec m2, bvec n2), sext).
-    Proof.
-      destruct (eq_dec m1 m2). destruct (eq_dec n1 n2).
-      { subst. left. f_equal. f_equal. apply IsTrue.proof_irrelevance. }
-      all: right; intros Heq; now dependent elimination Heq.
-    Defined.
+    Definition Tel (τ : Ty) : Set :=
+      Σ σ : Ty, UnOp σ τ.
 
-    Definition unoptel_eq_dec_zext {m1 n1 m2 n2}
-      {p1 : IsTrue (m1 <=? n1)} {p2 : IsTrue (m2 <=? n2)} :
-      dec_eq (A := UnOpTel) ((bvec m1, bvec n1), zext) ((bvec m2, bvec n2), zext).
-    Proof.
-      destruct (eq_dec m1 m2). destruct (eq_dec n1 n2).
-      { subst. left. f_equal. f_equal. apply IsTrue.proof_irrelevance. }
-      all: right; intros Heq; now dependent elimination Heq.
-    Defined.
+    Obligation Tactic := cbn; intros;
+      try solve
+        [let e := fresh in intro e; depelim e; try easy;
+         try progress cbn in * |-; congruence
+        |subst; repeat f_equal; apply IsTrue.proof_irrelevance
+        ].
 
-    Definition unoptel_eq_dec_truncate {m1 n1 m2 n2}
-      {p1 : IsTrue (m1 <=? n1)} {p2 : IsTrue (m2 <=? n2)} :
-      dec_eq (A := UnOpTel)
-        ((bvec n1, bvec m1), truncate m1)
-        ((bvec n2, bvec m2), truncate m2).
-    Proof.
-      destruct (eq_dec n1 n2). destruct (eq_dec m1 m2).
-      { subst. left. f_equal. f_equal. apply IsTrue.proof_irrelevance. }
-      all: right; intros Heq; now dependent elimination Heq.
-    Defined.
-
-    Definition unoptel_eq_dec_subrange {n1 s1 l1 n2 s2 l2}
-      {p1 : IsTrue (s1 + l1 <=? n1)} {p2 : IsTrue (s2 + l2 <=? n2)} :
-      dec_eq (A := UnOpTel)
-        ((bvec n1, bvec l1), vector_subrange s1 l1)
-        ((bvec n2, bvec l2), vector_subrange s2 l2).
-    Proof.
-      destruct (eq_dec n1 n2). destruct (eq_dec l1 l2). destruct (eq_dec s1 s2).
-      { subst. left. f_equal. f_equal. apply IsTrue.proof_irrelevance. }
-      all: right; intros Heq; now dependent elimination Heq.
-    Defined.
-
-    Definition unoptel_eq_dec {σ1 σ2 τ1 τ2 : Ty}
-      (op1 : UnOp σ1 σ2) (op2 : UnOp τ1 τ2) :
-      dec_eq (A := UnOpTel) ((σ1,σ2),op1) ((τ1,τ2),op2) :=
-      let ninv := @noConfusion_inv UnOpTel (NoConfusionPackage_UnOp) in
-      match op1 , op2 with
-      | @inl _ σ1 σ2 , @inl _ τ1 τ2  =>
-          f_equal2_dec unoptel_inl (ninv _ _) (eq_dec σ1 τ1) (eq_dec σ2 τ2)
-      | @inr _ σ1 σ2 , @inr _ τ1 τ2  =>
-          f_equal2_dec unoptel_inr (ninv _ _) (eq_dec σ1 τ1) (eq_dec σ2 τ2)
-      | neg  , neg  => left eq_refl
-      | not  , not  => left eq_refl
-      | sext , sext => unoptel_eq_dec_sext
-      | zext , zext => unoptel_eq_dec_zext
-      | @get_slice_int _ m , @get_slice_int _ n =>
-          f_equal_dec unoptel_get_slice_int (ninv _ _) (eq_dec m n)
-      | @unsigned _ m , @unsigned _ n =>
-          f_equal_dec unoptel_unsigned (ninv _ _) (eq_dec m n)
-      | truncate m1 , truncate m2 => unoptel_eq_dec_truncate
-      | vector_subrange s1 l1 , vector_subrange s2 l2 => unoptel_eq_dec_subrange
-      | @negate _ m , @negate _ n =>
-          f_equal_dec unoptel_negate (ninv _ _) (eq_dec m n)
-      | _ , _ => right (ninv _ _)
-      end.
-
-    Inductive OpEq {σ1 σ2} (op1 : UnOp σ1 σ2) : forall {τ1 τ2}, UnOp τ1 τ2 -> Prop :=
-    | opeq_refl : OpEq op1 op1.
-    Derive Signature for OpEq.
-    Global Arguments opeq_refl {_ _ _}.
-
-    Lemma eqdep_dec {σ1 σ2 τ1 τ2} (op1 : UnOp σ1 σ2) (op2 : UnOp τ1 τ2) :
-      {OpEq op1 op2} + {~ OpEq op1 op2}.
-    Proof.
-      destruct (unoptel_eq_dec op1 op2).
-      - left. dependent elimination e. constructor.
-      - right. intro e. apply n. dependent elimination e. reflexivity.
-    Defined.
+    #[derive(equations=no)] Equations tel_eq_dec {σ1 σ2 τ : Ty}
+      (op1 : UnOp σ1 τ) (op2 : UnOp σ2 τ) :
+      dec_eq (A := Tel τ) (σ1,op1) (σ2,op2) :=
+    | inl                              | inl => left eq_refl
+    | inr                              | inr => left eq_refl
+    | neg                              | neg => left eq_refl
+    | not                              | not => left eq_refl
+    | @sext _ m1 ?(n) p1               | @sext _ m2 n p2 with eq_dec m1 m2 => {
+      | left _ => left _
+      | right _ => right _
+      }
+    | @zext _ m1 ?(n) p1               | @zext _ m2 n p2 with eq_dec m1 m2 => {
+      | left _ => left _
+      | right _ => right _
+      }
+    | get_slice_int                    | get_slice_int => left eq_refl
+    | @unsigned _ m                    | @unsigned _ n with eq_dec m n => {
+      | left _ => left _
+      | right _ => right _
+      }
+    | @truncate _ m1 ?(n) p1           | @truncate _ m2 n p2 with eq_dec m1 m2 => {
+      | left _ => left _
+      | right _ => right _
+      }
+    | @vector_subrange _ n1 s1 ?(l) p1 | @vector_subrange _ n2 s2 l p2 with eq_dec n1 n2, eq_dec s1 s2 => {
+      | left _  | left _  => left _
+      | left _  | right _ => right _
+      | right _ | _       => right _
+      }
+    | negate                           | negate => left eq_refl
+    | _                                | _ => right _.
 
     Local Set Equations With UIP.
     Instance eq_dec_unop {σ1 σ2} : EqDec (UnOp σ1 σ2).
     Proof.
       intros x y.
-      destruct (unoptel_eq_dec x y) as [p|p].
+      destruct (tel_eq_dec x y) as [p|p].
       - left. dependent elimination p. reflexivity.
       - right. congruence.
     Defined.

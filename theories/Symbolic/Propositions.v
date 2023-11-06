@@ -1700,13 +1700,6 @@ Module Type SymPropOn
     | eterm_val     (σ : Ty) (v : Val σ) : ETerm σ
     | eterm_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (t1 : ETerm σ1) (t2 : ETerm σ2) : ETerm σ3
     | eterm_unop    {σ1 σ2} (op : UnOp σ1 σ2) (t : ETerm σ1) : ETerm σ2
-    | eterm_sext    {m n} (e : ETerm (ty.bvec m)) {p : IsTrue (m <=? n)} : ETerm (ty.bvec n)
-    | eterm_zext    {m n} (e : ETerm (ty.bvec m)) {p : IsTrue (m <=? n)} : ETerm (ty.bvec n)
-    | eterm_get_slice_int {n} (e : ETerm ty.int) : ETerm (ty.bvec n)
-    | eterm_unsigned {n} (e : ETerm (ty.bvec n)) : ETerm ty.int
-    | eterm_truncate {n} (m : nat) {p : IsTrue (m <=? n)} (e: ETerm (ty.bvec n)) : ETerm (ty.bvec m)
-    | eterm_vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} (e : ETerm (ty.bvec n)) : ETerm (ty.bvec l)
-    | eterm_negate  {n} (e : ETerm (ty.bvec n)) : ETerm (ty.bvec n)
     | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs)
     | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U)
     | eterm_record  (R : recordi) (ts : NamedEnv ETerm (recordf_ty R)) : ETerm (ty.record R).
@@ -1757,13 +1750,6 @@ Module Type SymPropOn
         | term_val σ v               => eterm_val σ v
         | term_binop op t1 t2        => eterm_binop op (erase t1) (erase t2)
         | term_unop op t             => eterm_unop op (erase t)
-        | term_sext t                => eterm_sext (erase t)
-        | term_zext t                => eterm_zext (erase t)
-        | term_get_slice_int t       => eterm_get_slice_int (erase t)
-        | term_unsigned t            => eterm_unsigned (erase t)
-        | term_truncate m t          => eterm_truncate m (erase t)
-        | term_vector_subrange s l t => eterm_vector_subrange s l (erase t)
-        | term_negate t              => eterm_negate (erase t)
         | term_tuple ts              => eterm_tuple (env.map (fun _ => erase) ts)
         | term_union U K t           => eterm_union K (erase t)
         | term_record R ts           => eterm_record R (env.map (fun _ => erase) ts)
@@ -1853,20 +1839,6 @@ Module Type SymPropOn
             Some (bop.eval op v1 v2)
         | @eterm_unop σ1 σ2 op t0  =>
             uop.eval op <$> inst_eterm t0
-        | @eterm_sext _ _ t0 p =>
-            (fun v => bv.sext v) <$> inst_eterm t0
-        | @eterm_zext _ _ t0 p =>
-            (fun v => bv.zext v) <$> inst_eterm t0
-        | eterm_get_slice_int t0 =>
-            bv.of_Z <$> inst_eterm t0
-        | eterm_unsigned t0 =>
-            bv.unsigned <$> inst_eterm t0
-        | @eterm_truncate _ m p t0 =>
-            (fun v => bv.truncate m v) <$> inst_eterm t0
-        | @eterm_vector_subrange _ s l _ t0 =>
-            bv.vector_subrange s l <$> inst_eterm t0
-        | eterm_negate t0 =>
-            bv.negate <$> inst_eterm t0
         | @eterm_tuple σs ts =>
             envrec.of_env (σs := σs) <$> inst_env' ι inst_eterm ts
         | @eterm_union U K t0 =>
@@ -1986,13 +1958,6 @@ Module Type SymPropOn
         now rewrite EqDec.eq_dec_refl.
       - reflexivity.
       - now rewrite IHt1, IHt2.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite IHt.
       - now rewrite IHt.
       - cbn. apply option.map_eq_some.
         induction IH as [|Δ E σ t _ IHE IHt]; cbn in *.

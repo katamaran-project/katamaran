@@ -187,48 +187,6 @@ Module Type PartialEvaluationOn
         auto using peval_unop'_sound, peval_not_sound.
     Qed.
 
-    Definition peval_sext {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n) :=
-      match term_get_val t with
-      | Some v => term_val (ty.bvec n) (bv.sext v)
-      | None   => term_sext t
-      end.
-
-    Definition peval_zext {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n) :=
-      match term_get_val t with
-      | Some v => term_val (ty.bvec n) (bv.zext v)
-      | None   => term_zext t
-      end.
-
-    Definition peval_get_slice_int {n} (t : Term Σ ty.int) : Term Σ (ty.bvec n) :=
-      match term_get_val t with
-      | Some v => term_val (ty.bvec n) (bv.of_Z v)
-      | None   => term_get_slice_int t
-      end.
-
-    Definition peval_unsigned {n} (t : Term Σ (ty.bvec n)) : Term Σ ty.int :=
-      match term_get_val t with
-      | Some v => term_val ty.int (bv.unsigned v)
-      | None   => term_unsigned t
-      end.
-
-    Definition peval_truncate {n} (m : nat) {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec m) :=
-      match term_get_val t with
-      | Some v => term_val (ty.bvec m) (bv.truncate m v)
-      | None   => term_truncate m t
-      end.
-
-    Definition peval_vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec l) :=
-      match term_get_val t with
-      | Some v => term_val (ty.bvec l) (bv.vector_subrange s l v)
-      | None   => term_vector_subrange s l t
-      end.
-
-    Definition peval_negate {n} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
-      match term_get_val t with
-      | Some v => term_val (ty.bvec n) (bv.negate v)
-      | None   => term_negate t
-      end.
-
     Definition peval_union {U K} (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) :=
       match term_get_val t with
       | Some v => term_val (ty.union U) (unionv_fold U (existT K v))
@@ -256,45 +214,10 @@ Module Type PartialEvaluationOn
       | term_val _ v               => term_val _ v
       | term_binop op t1 t2        => peval_binop op (peval t1) (peval t2)
       | term_unop op t             => peval_unop op (peval t)
-      | term_sext t                => peval_sext (peval t)
-      | term_zext t                => peval_zext (peval t)
-      | term_get_slice_int t       => peval_get_slice_int (peval t)
-      | term_unsigned t            => peval_unsigned (peval t)
-      | term_truncate m t          => peval_truncate m (peval t)
-      | term_vector_subrange s l t => peval_vector_subrange s l (peval t)
-      | term_negate t              => peval_negate (peval t)
       | term_tuple ts              => term_tuple (env.map (fun b => @peval b) ts)
       | term_union U K t           => peval_union (peval t)
       | term_record R ts           => peval_record R (env.map (fun b => peval (σ := type b)) ts)
       end.
-
-    Lemma peval_sext_sound {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) :
-      peval_sext (p := p) t ≡ term_sext t.
-    Proof. unfold peval_sext. destruct (term_get_val_spec t); now subst. Qed.
-
-    Lemma peval_zext_sound {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) :
-      peval_zext (p := p) t ≡ term_zext t.
-    Proof. unfold peval_zext. destruct (term_get_val_spec t); now subst. Qed.
-
-    Lemma peval_get_slice_int_sound {n} (t : Term Σ ty.int) :
-      @peval_get_slice_int n t ≡ term_get_slice_int t.
-    Proof. unfold peval_get_slice_int; destruct (term_get_val_spec t); now subst. Qed.
-
-    Lemma peval_unsigned_sound {n} (t : Term Σ (ty.bvec n)) :
-      @peval_unsigned n t ≡ term_unsigned t.
-    Proof. unfold peval_unsigned; destruct (term_get_val_spec t); now subst. Qed.
-
-    Lemma peval_truncate_sound {n} (m : nat) {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec n)) :
-      @peval_truncate n m p t ≡ term_truncate m t.
-    Proof. unfold peval_truncate; destruct (term_get_val_spec t); now subst. Qed.
-
-    Lemma peval_vector_subrange_sound {n} (s l : nat) {p : IsTrue (s + l <=? n)} (t : Term Σ (ty.bvec n)) :
-      @peval_vector_subrange n s l p t ≡ term_vector_subrange s l t.
-    Proof. unfold peval_vector_subrange; destruct (term_get_val_spec t); now subst. Qed.
-
-    Lemma peval_negate_sound {n} (t : Term Σ (ty.bvec n)) :
-      peval_negate t ≡ term_negate t.
-    Proof. unfold peval_negate; destruct (term_get_val_spec t); now subst. Qed.
 
     Lemma peval_union_sound {U K} (t : Term Σ (unionk_ty U K)) :
       peval_union t ≡ term_union U K t.
@@ -327,13 +250,6 @@ Module Type PartialEvaluationOn
       - reflexivity.
       - etransitivity; [apply peval_binop_sound|now apply proper_term_binop].
       - etransitivity; [apply peval_unop_sound|now apply proper_term_unop].
-      - etransitivity; [apply peval_sext_sound |now apply proper_term_sext].
-      - etransitivity; [apply peval_zext_sound |now apply proper_term_zext].
-      - etransitivity; [apply peval_get_slice_int_sound |now apply proper_term_get_slice_int].
-      - etransitivity; [apply peval_unsigned_sound |now apply proper_term_unsigned].
-      - etransitivity; [apply peval_truncate_sound |now apply proper_term_truncate].
-      - etransitivity; [apply peval_vector_subrange_sound |now apply proper_term_vector_subrange].
-      - etransitivity; [apply peval_negate_sound |now apply proper_term_negate].
       - apply proper_term_tuple.
         induction IH; [reflexivity|]; cbn.
         now apply proper_env_snoc.

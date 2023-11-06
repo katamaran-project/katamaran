@@ -62,25 +62,11 @@ Module Type TermsOn (Import TY : Types).
   | term_val     (σ : Ty) : Val σ -> Term Σ σ
   | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
   | term_unop    {σ1 σ2 : Ty} (op : UnOp σ1 σ2) (t : Term Σ σ1) : Term Σ σ2
-  | term_sext    {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n)
-  | term_zext    {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n)
-  | term_get_slice_int {n} (t : Term Σ ty.int) : Term Σ (ty.bvec n)
-  | term_unsigned {n} (t : Term Σ (ty.bvec n)) : Term Σ ty.int
-  | term_truncate {n} (m : nat) {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec m)
-  | term_vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec l)
-  | term_negate {n} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n)
   | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs)
   | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
   | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
   #[global] Arguments term_var {_} _ {_ _}.
   #[global] Arguments term_val {_} _ _.
-  #[global] Arguments term_sext {_ _ _ p} t.
-  #[global] Arguments term_zext {_ _ _ p} t.
-  #[global] Arguments term_get_slice_int {_ _} t.
-  #[global] Arguments term_unsigned {_ _} t.
-  #[global] Arguments term_truncate {_ _} m {p} t.
-  #[global] Arguments term_vector_subrange {_ _} s l {_} t.
-  #[global] Arguments term_negate {_ _} t.
   #[global] Arguments term_tuple {_ _} ts.
   #[global] Arguments term_union {_} U K t.
   #[global] Arguments term_record {_} R ts.
@@ -131,13 +117,6 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
     Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
     Hypothesis (P_unop       : forall (σ1 σ2 : Ty) (op : UnOp σ1 σ2) (t : Term Σ σ1), P σ1 t -> P σ2 (term_unop op t)).
-    Hypothesis (P_sext       : forall {m n} {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec m)), P (ty.bvec m) t -> P (ty.bvec n) (term_sext t)).
-    Hypothesis (P_zext       : forall {m n} {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec m)), P (ty.bvec m) t -> P (ty.bvec n) (term_zext t)).
-    Hypothesis (P_get_slice_int : forall {n} (t : Term Σ ty.int), P ty.int t -> P (ty.bvec n) (term_get_slice_int t)).
-    Hypothesis (P_unsigned : forall {n} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P ty.int (term_unsigned t)).
-    Hypothesis (P_truncate   : forall {n} (m : nat) {p : IsTrue (Nat.leb m n)} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec m) (term_truncate m t)).
-    Hypothesis (P_vector_subrange : forall {n} (s l : nat) {p : IsTrue (s + l <=? n)} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec l) (term_vector_subrange s l t)).
-    Hypothesis (P_negate     : forall {n} (t : Term Σ (ty.bvec n)), P (ty.bvec n) t -> P (ty.bvec n) (term_negate t)).
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs) (IH : PE es), P (ty.tuple σs) (term_tuple es)).
     Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)).
     Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)).
@@ -148,13 +127,6 @@ Module Type TermsOn (Import TY : Types).
       | term_val σ v                => ltac:(eapply P_val; eauto)
       | term_binop op t1 t2         => ltac:(eapply P_binop; eauto)
       | term_unop op t              => ltac:(eapply P_unop; eauto)
-      | term_sext t                 => ltac:(eapply P_sext; eauto)
-      | term_zext t                 => ltac:(eapply P_zext; eauto)
-      | term_get_slice_int t        => ltac:(eapply P_get_slice_int; eauto)
-      | term_unsigned t             => ltac:(eapply P_unsigned; eauto)
-      | term_truncate m t           => ltac:(eapply P_truncate; eauto)
-      | term_vector_subrange s l t  => ltac:(eapply P_vector_subrange; eauto)
-      | term_negate t               => ltac:(eapply P_negate; eauto)
       | term_tuple ts               => ltac:(eapply P_tuple, env.all_intro; eauto)
       | term_union U K t            => ltac:(eapply P_union; eauto)
       | term_record R ts            => ltac:(eapply P_record, env.all_intro; eauto)
@@ -332,40 +304,13 @@ Module Type TermsOn (Import TY : Types).
         Term_eqb x1 x2 &&& Term_eqb y1 y2;
       Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (right _) := false
     };
-    Term_eqb (term_unop op1 x1) (term_unop op2 x2)
-      with uop.eqdep_dec op1 op2 => {
-      Term_eqb (term_unop op1 x1) (term_unop ?(op1) x2) (left uop.opeq_refl) :=
-        Term_eqb x1 x2;
-      Term_eqb (term_unop op1 x1) (term_unop op2 x2) (right _) := false
+    Term_eqb (term_unop op1 t1) (term_unop op2 t2) with uop.tel_eq_dec op1 op2 => {
+      Term_eqb (term_unop op1 t1) (term_unop ?(op1) t2) (left eq_refl) :=
+        Term_eqb t1 t2;
+      Term_eqb (term_unop op1 t1) (term_unop op2 t2) (right _) := false;
     };
-    Term_eqb (@term_sext _ m ?(k) p x) (@term_sext _ n k q y) with eq_dec m n => {
-      Term_eqb (@term_sext _ m ?(k) p x) (@term_sext _ ?(m) k q y) (left eq_refl) :=
-          Term_eqb x y;
-      Term_eqb _ _ (right _) := false
-    };
-    Term_eqb (@term_zext _ m ?(k) p x) (@term_zext _ n k q y) with eq_dec m n => {
-      Term_eqb (@term_zext _ m ?(k) p x) (@term_zext _ ?(m) k q y) (left eq_refl) :=
-          Term_eqb x y;
-      Term_eqb _ _ (right _) := false
-    };
-    Term_eqb (term_get_slice_int x) (term_get_slice_int y) := Term_eqb x y;
-    Term_eqb (@term_unsigned _ m x)   (@term_unsigned _ n y) with eq_dec m n => {
-        Term_eqb (@term_unsigned _ m x) (@term_unsigned _ ?(m) y) (left eq_refl) :=
-          Term_eqb x y;
-        Term_eqb _ _ (right _) := false
-      };
-    Term_eqb (@term_truncate _ a m p x) (@term_truncate _ b m q y) with eq_dec a b => {
-        Term_eqb (@term_truncate _ a m p x) (@term_truncate _ ?(a) m q y) (left eq_refl) :=
-          Term_eqb x y;
-        Term_eqb _ _ (right _) := false
-      };
-    Term_eqb (@term_vector_subrange _ n s l _ x) (@term_vector_subrange _ m s' l _ y) with eq_dec n m, eq_dec s s' => {
-        Term_eqb (@term_vector_subrange _ n s l _ x) (@term_vector_subrange _ ?(n) ?(s) l _ y) (left eq_refl) (left eq_refl) := Term_eqb x y;
-        Term_eqb _ _ _ _ := false;
-      };
-    Term_eqb (term_negate x) (term_negate y) := Term_eqb x y;
     Term_eqb (@term_tuple ?(σs) xs) (@term_tuple σs ys) :=
-       @env.eqb_hom _ (Term Σ) (@Term_eqb _ ) _ xs ys;
+      @env.eqb_hom _ (Term Σ) (@Term_eqb _) _ xs ys;
     Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
       with eq_dec k1 k2 => {
       Term_eqb (term_union k1 e1) (term_union ?(k1) e2) (left eq_refl) :=
@@ -373,7 +318,7 @@ Module Type TermsOn (Import TY : Types).
       Term_eqb _ _ (right _) := false
     };
     Term_eqb (@term_record ?(r) xs) (@term_record r ys) :=
-       @env.eqb_hom _ (fun b => Term Σ (type b)) (fun b => @Term_eqb _ (type b)) _ xs ys;
+      @env.eqb_hom _ (fun b => Term Σ (type b)) (fun b => @Term_eqb _ (type b)) _ xs ys;
     Term_eqb _ _ := false.
 
   Local Set Equations With UIP.
@@ -388,16 +333,11 @@ Module Type TermsOn (Import TY : Types).
               let e := fresh in
               destruct (bop.eqdep_dec x y) as [e|];
               [dependent elimination e|]
-          | |- context[uop.eqdep_dec ?x ?y] =>
+          | |- context[uop.tel_eq_dec ?x ?y] =>
               let e := fresh in
-              destruct (uop.eqdep_dec x y) as [e|];
+              destruct (uop.tel_eq_dec x y) as [e|];
               [dependent elimination e|]
           | H: ~ bop.OpEq ?o ?o |- False => apply H; constructor
-          | H: ~ uop.OpEq ?o ?o |- False => apply H; constructor
-          | p : IsTrue (?m <=? ?n), q : IsTrue (?m <=? ?n) |- _ =>
-            destruct (IsTrue.proof_irrelevance p q)
-          | |- context[match ?op with | uop.inl => _ | _ => _ end] =>
-            dependent elimination op; try progress cbn
           end.
     - apply (@ssrbool.iffP (es = ts)); solve_eqb_spec.
       apply env.eqb_hom_spec_point, IH.
@@ -430,13 +370,6 @@ Module Type TermsOn (Import TY : Types).
       | term_val σ v               => term_val σ v
       | term_binop op t1 t2        => term_binop op (sub_term t1 ζ) (sub_term t2 ζ)
       | term_unop op t             => term_unop op (sub_term t ζ)
-      | term_sext t                => term_sext (sub_term t ζ)
-      | term_zext t                => term_zext (sub_term t ζ)
-      | term_get_slice_int t       => term_get_slice_int (sub_term t ζ)
-      | term_unsigned t            => term_unsigned (sub_term t ζ)
-      | term_truncate m t          => term_truncate m (sub_term t ζ)
-      | term_vector_subrange s l t => term_vector_subrange s l (sub_term t ζ)
-      | term_negate t              => term_negate (sub_term t ζ)
       | term_tuple ts              => term_tuple (env.map (fun _ t => sub_term t ζ) ts)
       | term_union U K t           => term_union U K (sub_term t ζ)
       | term_record R ts           => term_record R (env.map (fun _ t => sub_term t ζ) ts)
@@ -806,5 +739,12 @@ Module Type TermsOn (Import TY : Types).
   Notation term_inr t := (term_unop uop.inr t%exp).
   Notation term_neg t := (term_unop uop.neg t%exp).
   Notation term_not t := (term_unop uop.not t%exp).
+  Notation term_sext t := (term_unop uop.sext t%exp).
+  Notation term_zext t := (term_unop uop.zext t%exp).
+  Notation term_get_slice_int t := (term_unop uop.get_slice_int t%exp).
+  Notation term_unsigned t := (term_unop uop.unsigned t%exp).
+  Notation term_truncate m t := (term_unop (uop.truncate m) t%exp).
+  Notation term_vector_subrange s l t := (term_unop (uop.vector_subrange s l) t%exp).
+  Notation term_negate t := (term_unop uop.negate t%exp).
 
 End TermsOn.

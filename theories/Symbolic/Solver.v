@@ -269,13 +269,6 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       | term_val σ v        => fun v' => if eq_dec v v' then empty else error
       | term_binop op t1 t2 => simplify_eq_binop_val op t1 t2
       | term_unop op t      => simplify_eq_unop_val op t
-      | term_sext t         => fun v => singleton (formula_relop bop.eq (term_sext t) (term_val _ v))
-      | term_zext t         => fun v => singleton (formula_relop bop.eq (term_zext t) (term_val _ v))
-      | term_get_slice_int t => fun v => singleton (formula_relop bop.eq (term_get_slice_int t) (term_val _ v))
-      | term_unsigned t     => fun v => singleton (formula_relop bop.eq (term_unsigned t) (term_val _ v))
-      | term_truncate m t   => fun v => singleton (formula_relop bop.eq (term_truncate m t) (term_val _ v))
-      | term_vector_subrange s l t => fun v => singleton (formula_relop bop.eq (term_vector_subrange s l t) (term_val _ v))
-      | term_negate t       => fun v => singleton (formula_relop bop.eq (term_negate t) (term_val _ v))
       | term_tuple ts       => env.Env_rect
                                  (fun σs _ => Val (ty.tuple σs) -> DList Σ)
                                  (fun _ => empty)
@@ -303,13 +296,6 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - destruct eq_dec; arw.
       - apply simplify_eq_binop_val_spec.
       - apply simplify_eq_unop_val_spec.
-      - reflexivity.
-      - reflexivity.
-      - reflexivity.
-      - reflexivity.
-      - reflexivity.
-      - reflexivity.
-      - reflexivity.
       - induction IH; cbn.
         + now destruct v.
         + destruct v as [vs v]. rewrite q, IHIH. clear.
@@ -360,13 +346,6 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       induction s.
       - dependent elimination t; arw.
       - arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
       - dependent elimination t; arw.
       - dependent elimination t; arw.
       - dependent elimination t; arw. intros ι. arw.

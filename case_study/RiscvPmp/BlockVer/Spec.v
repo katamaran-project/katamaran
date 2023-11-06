@@ -501,7 +501,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_precondition    := ⊤;
        sep_contract_result          := "result_vector_subrange";
        sep_contract_postcondition   :=
-         term_var "result_vector_subrange" = @term_vector_subrange _ _ b (e - b + 1) _ (term_var "v");
+         term_var "result_vector_subrange" = term_unop (@uop.vector_subrange _ _ b (e - b + 1) _) (term_var "v");
     |}.
   Next Obligation. intros; now apply convert_foreign_vector_subrange_conditions. Defined.
   #[global] Arguments sep_contract_vector_subrange {_} _ _ {_ _ _}.
