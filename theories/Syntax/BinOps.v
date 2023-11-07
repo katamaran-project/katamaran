@@ -47,7 +47,7 @@ Module bop.
 
   Import ty.
 
-  Section WithTypeDecl.
+  Section WithTypes.
     Context {TDC : TypeDeclKit}.
 
     Variant RelOp : Ty -> Set :=
@@ -108,39 +108,32 @@ Module bop.
     Definition is_eq {σ} (op : RelOp σ) : Datatypes.bool :=
       match op with eq => true | _ => false end.
 
-  End WithTypeDecl.
-
-  Section WithTypeDef.
-    Context {TDC : TypeDeclKit}.
     Context {TDN : TypeDenoteKit TDC}.
     Context {TDF : TypeDefKit TDN}.
-    Import Sigma_Notations.
-
-    Definition binoptel_reloptel_eq_dec {σ τ} (op1 : RelOp σ) (op2 : RelOp τ) :
-      @dec_eq RelOpTel (σ, op1) (τ, op2) ->
-      @dec_eq BinOpTel ((σ, σ, bool), relop op1) ((τ, τ, bool), relop op2) :=
-      fun Heq =>
-       match Heq with
-       | left e  => left (f_equal2' (fun σ op => ((σ, σ, bool), relop op)) e)
-       | right n =>
-         right (fun e : ((σ, σ, bool), relop op1) = ((τ, τ, bool), relop op2) =>
-                  n (noConfusion_inv e))
-       end.
 
     Definition reloptel_eq_dec {σ τ : Ty} (op1 : RelOp σ) (op2 : RelOp τ) :
-      dec_eq (A := RelOpTel) (σ,op1) (τ,op2).
-    Proof.
-      pose (@noConfusion_inv RelOpTel (NoConfusionPackage_RelOp)) as ninv.
-      destruct op1, op2;
-        try refine (left eq_refl);
-        try refine (right (ninv _ _)).
-      refine (f_equal_dec (fun ρ => (ρ, eq)) (ninv _ _) (eq_dec σ σ0)).
-      refine (f_equal_dec (fun ρ => (ρ, neq)) (ninv _ _) (eq_dec σ σ0)).
-      refine (f_equal_dec (fun n => (bvec n, bvsle)) (ninv _ _) (eq_dec n n0)).
-      refine (f_equal_dec (fun n => (bvec n, bvslt)) (ninv _ _) (eq_dec n n0)).
-      refine (f_equal_dec (fun n => (bvec n, bvule)) (ninv _ _) (eq_dec n n0)).
-      refine (f_equal_dec (fun n => (bvec n, bvult)) (ninv _ _) (eq_dec n n0)).
-    Defined.
+      @dec_eq RelOpTel (σ,op1) (τ,op2) :=
+      let ninv := @noConfusion_inv RelOpTel (NoConfusionPackage_RelOp) in
+      match op1 , op2 with
+      | @eq σ    , @eq  τ   => f_equal_dec (fun ρ => (ρ, eq)) (ninv _ _) (eq_dec σ τ)
+      | @neq σ   , @neq τ   => f_equal_dec (fun ρ => (ρ, neq)) (ninv _ _) (eq_dec σ τ)
+      | le       , le       => left eq_refl
+      | lt       , lt       => left eq_refl
+      | @bvsle m , @bvsle n => f_equal_dec (fun n => (bvec n, bvsle)) (ninv _ _) (eq_dec m n)
+      | @bvslt m , @bvslt n => f_equal_dec (fun n => (bvec n, bvslt)) (ninv _ _) (eq_dec m n)
+      | @bvule m , @bvule n => f_equal_dec (fun n => (bvec n, bvule)) (ninv _ _) (eq_dec m n)
+      | @bvult m , @bvult n => f_equal_dec (fun n => (bvec n, bvult)) (ninv _ _) (eq_dec m n)
+      | _        , _        => right (ninv _ _)
+      end.
+
+    Definition binoptel_eq_dec_relop {σ τ} (op1 : RelOp σ) (op2 : RelOp τ) :
+      @dec_eq BinOpTel ((σ, σ, bool), relop op1) ((τ, τ, bool), relop op2) :=
+      match reloptel_eq_dec op1 op2 with
+      | left e  => left (f_equal2' (fun σ op => ((σ, σ, bool), relop op)) e)
+      | right n =>
+          right (fun e : ((σ, σ, bool), relop op1) = ((τ, τ, bool), relop op2) =>
+                   n (noConfusion_inv e))
+      end.
 
     Definition binoptel_eq_dec {σ1 σ2 σ3 τ1 τ2 τ3 : Ty}
       (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
@@ -153,50 +146,50 @@ Module bop.
       | land  , land   => left eq_refl
       | and   , and    => left eq_refl
       | or    , or     => left eq_refl
-      | @pair _ σ1 σ2 , @pair _ τ1 τ2   =>
+      | @pair σ1 σ2 , @pair τ1 τ2   =>
         f_equal2_dec binoptel_pair (ninv _ _) (eq_dec σ1 τ1) (eq_dec σ2 τ2)
-      | @cons _ σ  , @cons _ τ   =>
+      | @cons σ  , @cons τ   =>
         f_equal_dec binoptel_cons (ninv _ _) (eq_dec σ τ)
-      | @append _ σ , @append _ τ   =>
+      | @append σ , @append τ   =>
         f_equal_dec binoptel_append (ninv _ _) (eq_dec σ τ)
-      | @shiftr _ m n , @shiftr _ p q =>
+      | @shiftr m n , @shiftr p q =>
           f_equal2_dec binoptel_shiftr (ninv _ _) (eq_dec m p) (eq_dec n q)
-      | @shiftl _ m n , @shiftl _ p q =>
+      | @shiftl m n , @shiftl p q =>
           f_equal2_dec binoptel_shiftl (ninv _ _) (eq_dec m p) (eq_dec n q)
-      | @bvadd _ m , @bvadd _ n =>
+      | @bvadd m , @bvadd n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvadd))
           (ninv _ _) (eq_dec m n)
-      | @bvsub _ m , @bvsub _ n =>
+      | @bvsub m , @bvsub n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvsub))
           (ninv _ _) (eq_dec m n)
-      | @bvmul _ m , @bvmul _ n =>
+      | @bvmul m , @bvmul n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvmul))
           (ninv _ _) (eq_dec m n)
-      | @bvand _ m , @bvand _ n =>
+      | @bvand m , @bvand n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvand))
           (ninv _ _) (eq_dec m n)
-      | @bvor _ m , @bvor _ n =>
+      | @bvor m , @bvor n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvor))
           (ninv _ _) (eq_dec m n)
-      | @bvxor _ m , @bvxor _ n =>
+      | @bvxor m , @bvxor n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvxor))
           (ninv _ _) (eq_dec m n)
-      | @bvapp _ m1 m2 , @bvapp _ n1 n2 =>
+      | @bvapp m1 m2 , @bvapp n1 n2 =>
         f_equal2_dec
           (fun m n => ((bvec m, bvec n, bvec (m+n)), bvapp))
           (ninv _ _) (eq_dec m1 n1) (eq_dec m2 n2)
-      | @bvcons _ m , @bvcons _ n =>
+      | @bvcons m , @bvcons n =>
         f_equal_dec
           (fun n => ((bool, bvec n, bvec (S n)), bvcons))
           (ninv _ _) (eq_dec m n)
-      | @relop _ σ op1 , @relop _ τ op2 =>
-        binoptel_reloptel_eq_dec (eq_dec (σ,op1) (τ,op2))
+      | @relop σ op1 , @relop τ op2 =>
+        binoptel_eq_dec_relop op1 op2
       | _           , _            => right (ninv _ _)
       end.
 
@@ -291,7 +284,7 @@ Module bop.
       | relop op   => eval_relop_val op
       end.
 
-  End WithTypeDef.
+  End WithTypes.
   #[export] Existing Instance eq_dec_binop.
 
 End bop.
