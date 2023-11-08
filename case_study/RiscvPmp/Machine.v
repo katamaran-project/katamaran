@@ -1019,13 +1019,14 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KMRET pat_unit                                      => call execute_MRET
     |> KCSR (pat_tuple (csr , rs1 , rd , is_imm , op))     => call execute_CSR csr rs1 rd is_imm op
     end.
-
+  
   Definition fun_execute_RTYPE : Stm [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: result :=
        match: op in rop with
        | RISCV_ADD  => rs1_val +ᵇ rs2_val
+       | RISCV_MUL  => rs1_val *ᵇ rs2_val
        | RISCV_SLT  => let: tmp := rs1_val <ˢ rs2_val in
                        let: tmp := call bool_to_bits tmp in
                        exp_zext tmp
