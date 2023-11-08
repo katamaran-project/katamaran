@@ -388,7 +388,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
                                   | alt9  => rhs9%exp
                                   | alt10 => rhs10%exp
                                   | alt11 => rhs11%exp
-                                  | alt12 => rhs12%exp                                              
+                                  | alt12 => rhs12%exp
                                end))
     (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, alt9 pattern, alt10 pattern, alt11 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' | alt7 => rhs7 '/' | alt8 => rhs8 '/' | alt9 => rhs9 '/' | alt10 => rhs10 '/' | alt11 => rhs11 '/' | alt12 => rhs12 '/' 'end' ']'"
@@ -407,8 +407,8 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
                                   | alt9  => rhs9%exp
                                   | alt10 => rhs10%exp
                                   | alt11 => rhs11%exp
-                                  | alt12 => rhs12%exp                                              
-                                  | alt13 => rhs13%exp                                              
+                                  | alt12 => rhs12%exp
+                                  | alt13 => rhs13%exp
                                end))
     (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, alt9 pattern, alt10 pattern, alt11 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' | alt7 => rhs7 '/' | alt8 => rhs8 '/' | alt9 => rhs9 '/' | alt10 => rhs10 '/' | alt11 => rhs11 '/' | alt12 => rhs12 '/' | alt13 => rhs13 '/' 'end' ']'"
@@ -427,9 +427,9 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
                                   | alt9  => rhs9%exp
                                   | alt10 => rhs10%exp
                                   | alt11 => rhs11%exp
-                                  | alt12 => rhs12%exp                                              
-                                  | alt13 => rhs13%exp                                              
-                                  | alt14 => rhs14%exp                                              
+                                  | alt12 => rhs12%exp
+                                  | alt13 => rhs13%exp
+                                  | alt14 => rhs14%exp
                                end))
     (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, alt9 pattern, alt10 pattern, alt11 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' | alt7 => rhs7 '/' | alt8 => rhs8 '/' | alt9 => rhs9 '/' | alt10 => rhs10 '/' | alt11 => rhs11 '/' | alt12 => rhs12 '/' | alt13 => rhs13 '/' | alt14 => rhs14 '/' 'end' ']'"
