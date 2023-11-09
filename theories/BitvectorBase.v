@@ -905,7 +905,7 @@ Module bv.
     Definition mulh {n m : nat} (fx fy : bv n -> Z) (x y : bv n) : bv n :=
       let product := Z.mul (fx x) (fy y) in
       let shifted_product := Z.shiftr product (Z.of_nat m) in
-      @of_Z n product.
+      @of_Z n shifted_product.
 
     (* Returns higher bits of the multiplication where both operands are interpreted as unsigned integers *)
     Definition mulh_uu {n : nat} (x y : bv n) : bv n :=
