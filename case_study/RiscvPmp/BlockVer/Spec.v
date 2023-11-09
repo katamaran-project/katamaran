@@ -79,14 +79,12 @@ Module Assembly.
     ADDI rd rs1 bv.zero.
   Definition MUL (rd rs1 rs2 : RegIdx) : AST :=
     RTYPE rs2 rs1 rd RISCV_MUL.
-(* TODO MULTIPLICATION
   Definition MULH (rd rs1 rs2 : RegIdx) : AST :=
     RTYPE rs2 rs1 rd RISCV_MULH.
   Definition MULHSU (rd rs1 rs2 : RegIdx) : AST :=
     RTYPE rs2 rs1 rd RISCV_MULHSU.
   Definition MULHU (rd rs1 rs2 : RegIdx) : AST :=
     RTYPE rs2 rs1 rd RISCV_MULHU.
-*)  
 End Assembly.
 
 Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.

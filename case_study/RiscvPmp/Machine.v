@@ -1025,25 +1025,28 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: rs2_val := call rX rs2 in
     let: result :=
        match: op in rop with
-       | RISCV_ADD  => rs1_val +ᵇ rs2_val
-       | RISCV_MUL  => rs1_val *ᵇ rs2_val
-       | RISCV_SLT  => let: tmp := rs1_val <ˢ rs2_val in
-                       let: tmp := call bool_to_bits tmp in
-                       exp_zext tmp
-       | RISCV_SLTU => let: tmp := rs1_val <ᵘ rs2_val in
-                       let: tmp := call bool_to_bits tmp in
-                       exp_zext tmp
-       | RISCV_AND  => exp_binop bop.bvand rs1_val rs2_val
-       | RISCV_OR   => exp_binop bop.bvor  rs1_val rs2_val
-       | RISCV_XOR  => exp_binop bop.bvxor rs1_val rs2_val
-       | RISCV_SLL  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
-                       exp_binop bop.shiftl rs1_val tmp
-       | RISCV_SRL  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
-                       exp_binop bop.shiftr rs1_val tmp
-       | RISCV_SUB  => rs1_val -ᵇ rs2_val
-       | RISCV_SRA  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
-                       call shift_right_arith32 rs1_val tmp
-       end in
+       | RISCV_ADD    => rs1_val +ᵇ rs2_val
+       | RISCV_SLT    => let: tmp := rs1_val <ˢ rs2_val in
+                         let: tmp := call bool_to_bits tmp in
+                         exp_zext tmp
+       | RISCV_SLTU   => let: tmp := rs1_val <ᵘ rs2_val in
+                         let: tmp := call bool_to_bits tmp in
+                         exp_zext tmp
+       | RISCV_AND    => exp_binop bop.bvand rs1_val rs2_val
+       | RISCV_OR     => exp_binop bop.bvor  rs1_val rs2_val
+       | RISCV_XOR    => exp_binop bop.bvxor rs1_val rs2_val
+       | RISCV_SLL    => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
+                         exp_binop bop.shiftl rs1_val tmp
+       | RISCV_SRL    => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
+                         exp_binop bop.shiftr rs1_val tmp
+       | RISCV_SUB    => rs1_val -ᵇ rs2_val
+       | RISCV_SRA    => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
+                         call shift_right_arith32 rs1_val tmp
+       | RISCV_MUL    => rs1_val *ᵇ rs2_val
+       | RISCV_MULH   => exp_binop bop.bvmulhss rs1_val rs2_val
+       | RISCV_MULHU  => exp_binop bop.bvmulhuu rs1_val rs2_val
+       | RISCV_MULHSU => exp_binop bop.bvmulhsu rs1_val rs2_val
+     end in
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
 
