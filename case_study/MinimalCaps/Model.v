@@ -376,12 +376,16 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
     Proof. intros ? ? ? ? [|[[] ? ? ?]]; solve_contractive. Qed.
 
     (* interp is the general definition for our safety relation. *)
-    Definition interp : IMemValne :=
-      λne w, (fixpoint (interp1)) w.
+    Definition interp : IMemVal :=
+      λ w, (fixpoint (interp1)) w.
 
     Lemma fixpoint_interp1_eq w :
       fixpoint interp1 w ≡ interp1 (fixpoint interp1) w.
     Proof. exact: (fixpoint_unfold interp1 w). Qed.
+
+    Lemma fixpoint_interp_eq w :
+      interp w ≡ interp1 (fixpoint interp1) w.
+    Proof. by unfold interp; rewrite fixpoint_interp1_eq. Qed.
 
     Lemma le_liveAddrs (a b e : Addr) :
       b ∈ liveAddrs ∧ e ∈ liveAddrs ->
@@ -425,8 +429,8 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       split; assumption.
     Qed.
 
-    Global Instance interp_Persistent (w : leibnizO MemVal) : Persistent (interp w).
-    Proof. destruct w; simpl; rewrite fixpoint_interp1_eq; simpl; first apply _.
+    Global Instance interp_Persistent (w : MemVal) : Persistent (interp w).
+    Proof. destruct w; simpl; rewrite fixpoint_interp_eq; simpl; first apply _.
            destruct c; destruct cap_permission; apply _. Qed.
 
     (* IH is the induction hypothesis for the machine. If we give back ownership
@@ -467,20 +471,20 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       interp (inr (MkCap p' b e a)).
     Proof.
       intros Hp; destruct p'; destruct p eqn:Ep; inversion Hp; auto; iIntros "#IH #HA";
-        rewrite !fixpoint_interp1_eq; try done.
+        rewrite !fixpoint_interp_eq; try done.
       - repeat iModIntro.
         iIntros "(Hpc & Hreg1 & Hreg2 & Hreg3 & _)".
         iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
         done.
         iModIntro.
-        rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv].
+        rewrite !fixpoint_interp_eq; cbn - [interp_cap_inv].
         iApply (interp_cap_inv_weakening p a a (Z.le_refl b) (Z.le_refl e) with "HA").
       - repeat iModIntro.
         iIntros "(Hpc & Hreg1 & Hreg2 & Hreg3 & _)".
         iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
         done.
         iModIntro.
-        rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv].
+        rewrite !fixpoint_interp_eq; cbn - [interp_cap_inv].
         iApply (interp_cap_inv_weakening p a a (Z.le_refl b) (Z.le_refl e) with "HA").
     Qed.
 
@@ -495,16 +499,16 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
     Proof.
       iIntros (HpnotE Hb He Hsubperm) "#IH #HA".
       destruct p'.
-      - rewrite !fixpoint_interp1_eq; done.
+      - rewrite !fixpoint_interp_eq; done.
       - destruct p eqn:Ep; inversion Hsubperm;
-          rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv];
+          rewrite !fixpoint_interp_eq; cbn - [interp_cap_inv];
           iApply (interp_cap_inv_weakening p a a' Hb He with "HA").
       - destruct p eqn:Ep; inversion Hsubperm;
-          rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv];
+          rewrite !fixpoint_interp_eq; cbn - [interp_cap_inv];
           iApply (interp_cap_inv_weakening p a a' Hb He with "HA").
       - destruct p eqn:Ep; inversion Hsubperm; last contradiction;
           iApply (interp_subperm_weakening _ _ _ Hsubperm with "IH");
-          rewrite !fixpoint_interp1_eq;
+          rewrite !fixpoint_interp_eq;
           iApply (interp_cap_inv_weakening p a a' Hb He with "HA").
     Qed.
   End Predicates.
@@ -555,7 +559,7 @@ Module MinCapsIrisInstanceWithContracts.
       intros ι. destruct_syminstance ι. cbn.
       iIntros "(#H & [-> _])".
       iFrame.
-      rewrite ?fixpoint_interp1_eq.
+      rewrite ?fixpoint_interp_eq.
       iSimpl in "H"; auto.
     Qed.
 
@@ -577,7 +581,7 @@ Module MinCapsIrisInstanceWithContracts.
       ValidLemma lemma_int_safe.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      rewrite fixpoint_interp1_eq; auto.
+      rewrite fixpoint_interp_eq; auto.
     Qed.
 
     Lemma correctPC_subperm_R_sound :
@@ -611,7 +615,7 @@ Module MinCapsIrisInstanceWithContracts.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
       iIntros "(#$ & [[% _] |[% _]])".
-      rewrite ?fixpoint_interp1_eq.
+      rewrite ?fixpoint_interp_eq.
       destruct p; try now subst.
       exfalso; exact (H eq_refl).
       now subst.
@@ -685,7 +689,7 @@ Module MinCapsIrisInstanceWithContracts.
           inv (mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ interp w).
     Proof.
       iIntros (b e a p) "%Hba %Hae %Hsubp #H".
-      simpl; rewrite ?fixpoint_interp1_eq.
+      simpl; rewrite ?fixpoint_interp_eq.
       assert (Hbe: (b <= e)%Z) by (apply (Z.le_trans _ _ _ Hba Hae)).
       destruct p; destruct Hsubp as [|]; try discriminate;
         iDestruct "H" as "[Hsafe | %]"; try lia;
