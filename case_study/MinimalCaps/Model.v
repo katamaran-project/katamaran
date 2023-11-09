@@ -240,12 +240,19 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       lia.
     Qed.
 
-    (* Notation D := (MemVal -d> iPropO Σ). *)
-    (* Notation C := (Capability -d> iPropO Σ). *)
-    (* Implicit Type w : MemVal. *)
-    Notation D := ((leibnizO MemVal) -n> iPropO Σ). (* TODO: try -d>, drop leibnizO, might not need λne *)
-    Notation C := ((leibnizO Capability) -n> iPropO Σ). (* TODO: try -d>, drop leibnizO, might not need λne *)
-    Implicit Type w : (leibnizO MemVal).
+    (* Declare OFE instances for our values *)
+    Canonical Structure CapabilityO := leibnizO Capability.
+    Canonical Structure MemValO     := leibnizO (sumO ZO CapabilityO).
+
+    (* Types for the interpretation of MemVal and Capabilities *)
+    (* TODO: We shouldn't need to write MemValO, there might ba a missing
+             typeclass instance? (Proper?) Changing MemValO to MemVal will
+             provide problems for interp1, generating an obligation *)
+    Definition IMemVal   := MemVal -> iProp Σ.
+    Definition IMemValne := MemValO -n> iProp Σ.
+    Definition ICap      := Capability -> iProp Σ.
+    Definition ICapne    := Capability -n> iProp Σ.
+    Implicit Type w : MemValO.
 
     (* Copied from github.com/logsem/cerise *)
     (* TODO: include copyright notice =) *)
@@ -271,14 +278,9 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       filter (fun r => @nequiv_decb _ _ _ RegName_eqdec r R0)
         (finite.enum RegName).
 
-    (* TODO:
-       - Make the change to D proposed above, might simplify some stuff
-         Need to look into what the difference induced by that change is...
-       - make the interp definitions more uniform, i.e., they should all take an
-         interp (= safe) and have return type D *)
     (* interp_gprs states that we have ownership of all GPRs and that all
        registers contain a safe value (interp). *)
-    Program Definition interp_gprs : D -n> iPropO Σ :=
+    Program Definition interp_gprs : IMemValne -n> iProp Σ :=
       λne interp, ([∗ list] r ∈ GPRs, (∃ w, MinCaps_ptsreg r w ∗ interp w))%I.
     Solve Obligations with solve_proper.
 
@@ -290,83 +292,78 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
     (* interp_expr is the expression relation, stating that if we give
        the pointsto chunks for the pc and GPRs, then we still satisfy the
        weakest precondition of the fdeCycle of the machine. *)
-    Definition interp_expr (interp : D) : C :=
-      (λne (c : leibnizO Capability),
+    Definition interp_expr (interp : IMemValne) : ICapne :=
+      (λne c,
         reg_pointsTo pc c ∗ interp_gprs interp -∗ (interp_loop (sg := SailGS _ _ mG)))%I.
 
-    (* TODO: Check if I tried changing this one to a discrete one, should remain non-expansive so we can prove contractiveness *)
     (* interp_ref_inv states that we have ownership of addr a and that predicate
        P holds for the contents at addr a. *)
-    Program Definition interp_ref_inv (a : Addr) : D -n> iPropO Σ :=
+    Program Definition interp_ref_inv (a : Addr) : IMemValne -n> iProp Σ :=
       λne P, (∃ w, mapsto a (DfracOwn 1) w ∗ P w)%I.
     Solve Obligations with solve_proper.
 
     (* interp_cap_inv expresses the safe relation on capabilities. A capability
        is safe if all the addressable locations are safe as well. *)
-    Definition interp_cap_inv (c : Capability) (interp : D) :iProp Σ := 
+    Definition interp_cap_inv (c : Capability) (interp : IMemValne) :iProp Σ :=
       match c with
       | MkCap _ b e a =>
           (⌜(b <= e)%Z⌝ →
            ⌜b ∈ liveAddrs /\ e ∈ liveAddrs⌝ ∗
                                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs .@ a) (interp_ref_inv a interp))
           ∨ ⌜(e < b)%Z⌝
-      end.
+      end%I.
 
     (* interp_cap_O expresses the safety of a null capability, which trivially
        holds as no locations are addressable. *)
-    Program Definition interp_cap_O : D := λne _, True%I.
+    Definition interp_cap_O : IMemVal := λ _, True%I.
 
     (* interp_cap_R states safety for a readonly capability, which is defined
        using interp_cap_inv. *)
-    Program Definition interp_cap_R (interp : D) : D :=
-      λne w, (match w with
+    Definition interp_cap_R (interp : IMemValne) : IMemVal :=
+      λ w, (match w with
               | inr (MkCap R b e a) => interp_cap_inv (MkCap R b e a) interp
-              | _                   => False
+              |  _                  => True
               end)%I.
-    Solve Obligations with solve_proper.
 
     (* interp_cap_R states safety for a readwrite capability, which is defined
        using interp_cap_inv. *)
-    Program Definition interp_cap_RW (interp : D) : D :=
-      λne w, (match w with
-              | inr (MkCap RW b e a) => interp_cap_inv (MkCap RW b e a) interp
-              | _                    => False
-              end)%I.
-    Solve Obligations with solve_proper.
+    Definition interp_cap_RW (interp : IMemValne) : IMemVal :=
+      λ w, (match w with
+            | inr (MkCap RW b e a) => interp_cap_inv (MkCap RW b e a) interp
+            | _                    => False
+            end)%I.
 
     (* enter_cond states that later, the expression relation will (always) hold
        for the readonly capability with the given begin, end and cursor. *)
-    Program Definition enter_cond (b e a : Addr) : D -n> iPropO Σ :=
+    Program Definition enter_cond (b e a : Addr) : IMemValne -n> iProp Σ :=
       λne interp, (▷ □ interp_expr interp (MkCap R b e a))%I.
     Solve Obligations with solve_proper.
 
     (* interp_expression states that the given capability should be readonly
        and that the enter_cond needs to hold for it. *)
-    Program Definition interp_expression (interp : D) : C :=
-      λne c, (match c with
-                   | {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |} =>
-                       ⌜p = R⌝ ∧ enter_cond b e a interp
-                   end)%I.
+    Definition interp_expression (interp : IMemValne) : ICap :=
+      λ c, (match c with
+            | {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |} =>
+                ⌜p = R⌝ ∧ enter_cond b e a interp
+            end)%I.
 
     (* interp_cap_E implements the safety relation for enter capabilities. *)
-    Program Definition interp_cap_E (interp : D) : D :=
-      λne w, (match w with
-              | inr (MkCap E b e a) => enter_cond b e a interp
-              | _                   => False
-              end)%I.
-    Solve Obligations with solve_proper.
+    Definition interp_cap_E (interp : IMemValne) : IMemVal :=
+      λ w, (match w with
+            | inr (MkCap E b e a) => enter_cond b e a interp
+            | _                   => False
+            end)%I.
 
     (* interp_z is the safety relation for integers, which holds trivially. Only
        capabilities can be used for interaction with memory on this machine. *)
-    Program Definition interp_z : D :=
-      λne w, ⌜ match w with
-               | inl _ => True
-               | _     => False
-               end ⌝%I.
-    Solve Obligations with solve_proper.
+    Definition interp_z : IMemVal :=
+      λ w, ⌜ match w with
+             | inl _ => True
+             | _     => False
+             end ⌝%I.
 
     (* interp1 maps the different cases to their respective interp functions. *)
-    Definition interp1 (interp : D) : D :=
+    Definition interp1 (interp : IMemValne) : IMemValne :=
       λne w, (match w with
               | inl _                => interp_z w
               | inr (MkCap O _ _ _)  => interp_cap_O w
@@ -375,36 +372,11 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
               | inr (MkCap E _ _ _)  => interp_cap_E interp w
               end)%I.
 
-    Global Instance interp_cap_O_contractive :
-      Contractive interp_cap_O.
-    Proof. solve_contractive. Qed.
-    Global Instance interp_cap_R_contractive :
-      Contractive interp_cap_R.
-    Proof.
-      intros n x y Hdist w.
-      destruct w; auto.
-      destruct c; destruct cap_permission; solve_contractive.
-    Qed.
-    Global Instance interp_cap_RW_contractive :
-      Contractive interp_cap_RW.
-    Proof.
-      intros n x y Hdist w.
-      destruct w; auto.
-      destruct c; destruct cap_permission; solve_contractive.
-    Qed.
-    Global Instance interp_cap_E_contractive :
-      Contractive interp_cap_E.
-    Proof.
-      intros n x y Hdist w.
-      destruct w; auto.
-      destruct c; destruct cap_permission; solve_contractive.
-    Qed.
-    Global Instance interp1_contractive :
-      Contractive interp1.
-    Proof. solve_contractive. Qed.
+    #[global] Instance interp1_contractive : Contractive interp1.
+    Proof. intros ? ? ? ? [|[[] ? ? ?]]; solve_contractive. Qed.
 
     (* interp is the general definition for our safety relation. *)
-    Definition interp : D :=
+    Definition interp : IMemValne :=
       λne w, (fixpoint (interp1)) w.
 
     Lemma fixpoint_interp1_eq w :
