@@ -75,6 +75,9 @@ Module bop.
     | bvadd {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvsub {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvmul {n}         : BinOp (bvec n) (bvec n) (bvec n)
+    | bvmulhss {n}      : BinOp (bvec n) (bvec n) (bvec n)
+    | bvmulhuu {n}      : BinOp (bvec n) (bvec n) (bvec n)
+    | bvmulhsu {n}      : BinOp (bvec n) (bvec n) (bvec n)
     | bvand {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvor {n}          : BinOp (bvec n) (bvec n) (bvec n)
     | bvxor {n}         : BinOp (bvec n) (bvec n) (bvec n)
@@ -174,6 +177,18 @@ Module bop.
       | @bvmul _ m , @bvmul _ n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvmul))
+          (ninv _ _) (eq_dec m n)
+      | @bvmulhss _ m , @bvmulhss _ n =>
+        f_equal_dec
+          (fun n => ((bvec n, bvec n, bvec n), bvmulhss))
+          (ninv _ _) (eq_dec m n)
+      | @bvmulhuu _ m , @bvmulhuu _ n =>
+        f_equal_dec
+          (fun n => ((bvec n, bvec n, bvec n), bvmulhuu))
+          (ninv _ _) (eq_dec m n)
+      | @bvmulhsu _ m , @bvmulhsu _ n =>
+        f_equal_dec
+          (fun n => ((bvec n, bvec n, bvec n), bvmulhsu))
           (ninv _ _) (eq_dec m n)
       | @bvand _ m , @bvand _ n =>
         f_equal_dec
@@ -283,11 +298,14 @@ Module bop.
       | bvadd      => fun v1 v2 => bv.add v1 v2
       | bvsub      => fun v1 v2 => bv.sub v1 v2
       | bvmul      => fun v1 v2 => bv.mul v1 v2
+      | bvmulhss   => fun v1 v2 => bv.mulh_ss v1 v2
+      | bvmulhsu   => fun v1 v2 => bv.mulh_su v1 v2
+      | bvmulhuu   => fun v1 v2 => bv.mulh_uu v1 v2
       | bvand      => fun v1 v2 => bv.land v1 v2
       | bvor       => fun v1 v2 => bv.lor v1 v2
       | bvxor      => fun v1 v2 => bv.lxor v1 v2
       | bvapp      => fun v1 v2 => bv.app v1 v2
-      | bvcons     => fun b bs => bv.cons b bs
+      | bvcons     => fun b bs  => bv.cons b bs
       | relop op   => eval_relop_val op
       end.
 
