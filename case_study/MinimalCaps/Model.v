@@ -322,7 +322,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
     Definition interp_cap_R (interp : IMemValne) : IMemVal :=
       λ w, (match w with
               | inr (MkCap R b e a) => interp_cap_inv (MkCap R b e a) interp
-              |  _                  => True
+              |  _                  => False
               end)%I.
 
     (* interp_cap_R states safety for a readwrite capability, which is defined
