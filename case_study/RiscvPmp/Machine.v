@@ -88,6 +88,9 @@ Module RiscvNotations.
   Notation "'cur_priv'"     := "cur_priv" : string_scope.
   Notation "'del_priv'"     := "del_priv" : string_scope.
   Notation "'p'"            := "p" : string_scope.
+  Notation "'signed1'"      := "signed1" : string_scope.
+  Notation "'signed2'"      := "signed2" : string_scope.
+  Notation "'high'"         := "high" : string_scope.
   Notation "'rs1_val'"      := "rs1_val" : string_scope.
   Notation "'rs2_val'"      := "rs2_val" : string_scope.
   Notation "'csr_val'"      := "csr_val" : string_scope.
@@ -281,6 +284,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'rs1_int'"      := (@exp_var _ "rs1_int" _ _) : exp_scope.
     Notation "'rs2_int'"      := (@exp_var _ "rs2_int" _ _) : exp_scope.
     Notation "'result_wide'"  := (@exp_var _ "result_wide" _ _) : exp_scope.
+    Notation "'signed1'"      := (@exp_var _ "signed1" _ _) : exp_scope.
+    Notation "'signed2'"      := (@exp_var _ "signed2" _ _) : exp_scope.
+    Notation "'high'   "      := (@exp_var _ "high" _ _) : exp_scope.
     Notation "'t'"            := (@exp_var _ "t" _ _) : exp_scope.
     Notation "'e'"            := (@exp_var _ "e" _ _) : exp_scope.
     Notation "'addr'"         := (@exp_var _ "addr" _ _) : exp_scope.
@@ -1025,7 +1031,24 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KMRET pat_unit                                      => call execute_MRET
     |> KCSR (pat_tuple (csr , rs1 , rd , is_imm , op))     => call execute_CSR csr rs1 rd is_imm op
     end.
+
   
+  Definition execute_MUL : Stm [rs1_val ∷ ty_xlenbits; rs2_val ∷ ty_xlenbits; high ∷ ty.bool; signed1 ∷ ty.bool; signed2 :: ty.bool] ty_xlenbits :=
+     let tb := to_bits (2 * xlenbits) in
+     (let: rs1_int := if: signed1
+                      then exp_unop (@uop.signed _ xlen) rs1_val
+                      else exp_unop (@uop.unsigned _ xlen) rs1_val
+     in
+     let: rs2_int := if: signed2
+                     then exp_unop (@uop.signed _ xlen) rs2_val
+                     else exp_unop (@uop.unsigned _ xlen) rs2_val
+     in
+     let: result_wide := call tb (rs1_int * rs2_int) in
+     if: high
+     then exp_vector_subrange xlen xlen result_wide
+     else exp_vector_subrange 0 xlen result_wide)%exp.
+
+
   Definition fun_execute_RTYPE : Stm [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
@@ -1048,26 +1071,30 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
        | RISCV_SUB    => rs1_val -ᵇ rs2_val
        | RISCV_SRA    => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
                          call shift_right_arith32 rs1_val tmp
-       | RISCV_MUL    => let tb := to_bits (2 * xlenbits) in
-                         let: rs1_int := exp_signed rs1_val in
-                         let: rs2_int := exp_signed rs2_val in
-                         let: result_wide := call tb (rs1_int * rs2_int) in
-                         exp_vector_subrange 0 xlen result_wide
-       | RISCV_MULH   => let tb := to_bits (2 * xlenbits) in
-                         let: rs1_int := exp_signed rs1_val in
-                         let: rs2_int := exp_signed rs2_val in
-                         let: result_wide := call tb (rs1_int * rs2_int) in
-                         exp_vector_subrange xlen xlen result_wide
-       | RISCV_MULHU  => let tb := to_bits (2 * xlenbits) in
-                         let: rs1_int := exp_unsigned rs1_val in
-                         let: rs2_int := exp_unsigned rs2_val in
-                         let: result_wide := call tb (rs1_int * rs2_int) in
-                         exp_vector_subrange xlen xlen result_wide
-       | RISCV_MULHSU => let tb := to_bits (2 * xlenbits) in
-                         let: rs1_int := exp_signed rs1_val in
-                         let: rs2_int := exp_unsigned rs2_val in
-                         let: result_wide := call tb (rs1_int * rs2_int) in
-                         exp_vector_subrange xlen xlen result_wide
+       | RISCV_MUL    => execute_MUL rs1_val rs2_val exp_false exp_true exp_true
+                         (* let tb := to_bits (2 * xlenbits) in *)
+                         (* let: rs1_int := exp_signed rs1_val in *)
+                         (* let: rs2_int := exp_signed rs2_val in *)
+                         (* let: result_wide := call tb (rs1_int * rs2_int) in *)
+                         (* exp_vector_subrange 0 xlen result_wide *)
+       | RISCV_MULH   => execute_MUL rs1_val rs2_val exp_true exp_true exp_true
+                         (* let tb := to_bits (2 * xlenbits) in *)
+                         (* let: rs1_int := exp_signed rs1_val in *)
+                         (* let: rs2_int := exp_signed rs2_val in *)
+                         (* let: result_wide := call tb (rs1_int * rs2_int) in *)
+                         (* exp_vector_subrange xlen xlen result_wide *)
+       | RISCV_MULHU  => execute_MUL rs1_val rs2_val exp_true exp_false exp_false
+                         (* let tb := to_bits (2 * xlenbits) in *)
+                         (* let: rs1_int := exp_unsigned rs1_val in *)
+                         (* let: rs2_int := exp_unsigned rs2_val in *)
+                         (* let: result_wide := call tb (rs1_int * rs2_int) in *)
+                         (* exp_vector_subrange xlen xlen result_wide *)
+       | RISCV_MULHSU => execute_MUL rs1_val rs2_val exp_true exp_true exp_false
+                         (* let tb := to_bits (2 * xlenbits) in *)
+                         (* let: rs1_int := exp_signed rs1_val in *)
+                         (* let: rs2_int := exp_unsigned rs2_val in *)
+                         (* let: result_wide := call tb (rs1_int * rs2_int) in *)
+                         (* exp_vector_subrange xlen xlen result_wide *)
      end in
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
