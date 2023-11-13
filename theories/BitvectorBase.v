@@ -902,24 +902,6 @@ Module bv.
     Definition mul {n} (x y : bv n) : bv n :=
       of_N (N.mul (bin x) (bin y)).
 
-    Definition mulh {n m : nat} (fx fy : bv n -> Z) (x y : bv n) : bv n :=
-      let product := Z.mul (fx x) (fy y) in
-      let shifted_product := Z.shiftr product (Z.of_nat m) in
-      @of_Z n shifted_product.
-
-    (* Returns higher bits of the multiplication where both operands are interpreted as unsigned integers *)
-    Definition mulh_uu {n : nat} (x y : bv n) : bv n :=
-      @mulh n n unsigned unsigned x y.
-
-    Definition mulh_su {n : nat} (x y : bv n) : bv n :=
-      @mulh n n signed unsigned x y.
-
-    Definition mulh_us {n : nat} (x y : bv n) : bv n :=
-      @mulh n n unsigned signed x y.
-
-    Definition mulh_ss {n : nat} (x y : bv n) : bv n :=
-      @mulh n n signed signed x y.
-    
     Lemma bin_of_N_eq2n {n x} : eq2n n (@bin n (@of_N n x)) x.
     Proof.
       destruct x; cbn;
