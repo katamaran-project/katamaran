@@ -1051,26 +1051,22 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
        | RISCV_MUL    => let tb := to_bits (2 * xlenbits) in
                          let: rs1_int := exp_signed rs1_val in
                          let: rs2_int := exp_signed rs2_val in
-                         let: tmp := rs1_int * rs2_int in
-                         let: result_wide := call tb tmp in
+                         let: result_wide := call tb (rs1_int * rs2_int) in
                          exp_vector_subrange 0 xlen result_wide
        | RISCV_MULH   => let tb := to_bits (2 * xlenbits) in
                          let: rs1_int := exp_signed rs1_val in
                          let: rs2_int := exp_signed rs2_val in
-                         let: tmp := rs1_int * rs2_int in
-                         let: result_wide := call tb tmp in
+                         let: result_wide := call tb (rs1_int * rs2_int) in
                          exp_vector_subrange xlen xlen result_wide
        | RISCV_MULHU  => let tb := to_bits (2 * xlenbits) in
                          let: rs1_int := exp_unsigned rs1_val in
                          let: rs2_int := exp_unsigned rs2_val in
-                         let: tmp := rs1_int * rs2_int in
-                         let: result_wide := call tb tmp in
+                         let: result_wide := call tb (rs1_int * rs2_int) in
                          exp_vector_subrange xlen xlen result_wide
        | RISCV_MULHSU => let tb := to_bits (2 * xlenbits) in
                          let: rs1_int := exp_signed rs1_val in
                          let: rs2_int := exp_unsigned rs2_val in
-                         let: tmp := rs1_int * rs2_int in
-                         let: result_wide := call tb tmp in
+                         let: result_wide := call tb (rs1_int * rs2_int) in
                          exp_vector_subrange xlen xlen result_wide
      end in
      call wX rd result ;;
