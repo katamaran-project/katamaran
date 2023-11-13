@@ -225,6 +225,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_EBREAK        : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
   | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
+  | execute_MUL           : Fun [rs1_val ∷ ty_xlenbits; rs2_val ∷ ty_xlenbits; high ∷ ty.bool; signed1 ∷ ty.bool; signed2 :: ty.bool] ty_xlenbits
   .
 
   (* Restrictions on MMIO needed, because MMIO operations leave a trace and are disallowed for 0-length data *)
@@ -1033,7 +1034,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end.
 
   
-  Definition execute_MUL : Stm [rs1_val ∷ ty_xlenbits; rs2_val ∷ ty_xlenbits; high ∷ ty.bool; signed1 ∷ ty.bool; signed2 :: ty.bool] ty_xlenbits :=
+  Definition fun_execute_MUL : Stm [rs1_val ∷ ty_xlenbits; rs2_val ∷ ty_xlenbits; high ∷ ty.bool; signed1 ∷ ty.bool; signed2 :: ty.bool] ty_xlenbits :=
      let tb := to_bits (2 * xlenbits) in
      (let: rs1_int := if: signed1
                       then exp_unop (@uop.signed _ xlen) rs1_val
@@ -1071,25 +1072,25 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
        | RISCV_SUB    => rs1_val -ᵇ rs2_val
        | RISCV_SRA    => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
                          call shift_right_arith32 rs1_val tmp
-       | RISCV_MUL    => execute_MUL rs1_val rs2_val exp_false exp_true exp_true
+       | RISCV_MUL    => call execute_MUL rs1_val rs2_val exp_false exp_true exp_true
                          (* let tb := to_bits (2 * xlenbits) in *)
                          (* let: rs1_int := exp_signed rs1_val in *)
                          (* let: rs2_int := exp_signed rs2_val in *)
                          (* let: result_wide := call tb (rs1_int * rs2_int) in *)
                          (* exp_vector_subrange 0 xlen result_wide *)
-       | RISCV_MULH   => execute_MUL rs1_val rs2_val exp_true exp_true exp_true
+       | RISCV_MULH   => call execute_MUL rs1_val rs2_val exp_true exp_true exp_true
                          (* let tb := to_bits (2 * xlenbits) in *)
                          (* let: rs1_int := exp_signed rs1_val in *)
                          (* let: rs2_int := exp_signed rs2_val in *)
                          (* let: result_wide := call tb (rs1_int * rs2_int) in *)
                          (* exp_vector_subrange xlen xlen result_wide *)
-       | RISCV_MULHU  => execute_MUL rs1_val rs2_val exp_true exp_false exp_false
+       | RISCV_MULHU  => call execute_MUL rs1_val rs2_val exp_true exp_false exp_false
                          (* let tb := to_bits (2 * xlenbits) in *)
                          (* let: rs1_int := exp_unsigned rs1_val in *)
                          (* let: rs2_int := exp_unsigned rs2_val in *)
                          (* let: result_wide := call tb (rs1_int * rs2_int) in *)
                          (* exp_vector_subrange xlen xlen result_wide *)
-       | RISCV_MULHSU => execute_MUL rs1_val rs2_val exp_true exp_true exp_false
+       | RISCV_MULHSU => call execute_MUL rs1_val rs2_val exp_true exp_true exp_false
                          (* let tb := to_bits (2 * xlenbits) in *)
                          (* let: rs1_int := exp_signed rs1_val in *)
                          (* let: rs2_int := exp_unsigned rs2_val in *)
@@ -1491,6 +1492,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | execute_EBREAK          => fun_execute_EBREAK
     | execute_MRET            => fun_execute_MRET
     | execute_CSR             => fun_execute_CSR
+    | execute_MUL             => fun_execute_MUL
     end.
 
   Include ProgramMixin RiscvPmpBase.
