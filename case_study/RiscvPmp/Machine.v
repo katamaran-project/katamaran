@@ -102,6 +102,9 @@ Module RiscvNotations.
   Notation "'tmp1'"         := "tmp1" : string_scope.
   Notation "'tmp2'"         := "tmp2" : string_scope.
   Notation "'tmp3'"         := "tmp3" : string_scope.
+  Notation "'rs1_int'"      := "rs1_int" : string_scope.
+  Notation "'rs2_int'"      := "rs2_int" : string_scope.
+  Notation "'result_wide'"  := "result_wide" : string_scope.
   Notation "'taken'"        := "taken" : string_scope.
   Notation "'check'"        := "check" : string_scope.
   Notation "'L'"            := "L" : string_scope.
@@ -275,6 +278,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'tmp1'"         := (@exp_var _ "tmp1" _ _) : exp_scope.
     Notation "'tmp2'"         := (@exp_var _ "tmp2" _ _) : exp_scope.
     Notation "'tmp3'"         := (@exp_var _ "tmp3" _ _) : exp_scope.
+    Notation "'rs1_int'"      := (@exp_var _ "rs1_int" _ _) : exp_scope.
+    Notation "'rs2_int'"      := (@exp_var _ "rs2_int" _ _) : exp_scope.
+    Notation "'result_wide'"  := (@exp_var _ "result_wide" _ _) : exp_scope.
     Notation "'t'"            := (@exp_var _ "t" _ _) : exp_scope.
     Notation "'e'"            := (@exp_var _ "e" _ _) : exp_scope.
     Notation "'addr'"         := (@exp_var _ "addr" _ _) : exp_scope.
@@ -1042,10 +1048,30 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
        | RISCV_SUB    => rs1_val -ᵇ rs2_val
        | RISCV_SRA    => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
                          call shift_right_arith32 rs1_val tmp
-       | RISCV_MUL    => rs1_val *ᵇ rs2_val
-       | RISCV_MULH   => exp_binop bop.bvmulhss rs1_val rs2_val
-       | RISCV_MULHU  => exp_binop bop.bvmulhuu rs1_val rs2_val
-       | RISCV_MULHSU => exp_binop bop.bvmulhsu rs1_val rs2_val
+       | RISCV_MUL    => let tb := to_bits (2 * xlenbits) in
+                         let: rs1_int := exp_signed rs1_val in
+                         let: rs2_int := exp_signed rs2_val in
+                         let: tmp := rs1_int * rs2_int in
+                         let: result_wide := call tb tmp in
+                         exp_vector_subrange 0 xlen result_wide
+       | RISCV_MULH   => let tb := to_bits (2 * xlenbits) in
+                         let: rs1_int := exp_signed rs1_val in
+                         let: rs2_int := exp_signed rs2_val in
+                         let: tmp := rs1_int * rs2_int in
+                         let: result_wide := call tb tmp in
+                         exp_vector_subrange xlen xlen result_wide
+       | RISCV_MULHU  => let tb := to_bits (2 * xlenbits) in
+                         let: rs1_int := exp_unsigned rs1_val in
+                         let: rs2_int := exp_unsigned rs2_val in
+                         let: tmp := rs1_int * rs2_int in
+                         let: result_wide := call tb tmp in
+                         exp_vector_subrange xlen xlen result_wide
+       | RISCV_MULHSU => let tb := to_bits (2 * xlenbits) in
+                         let: rs1_int := exp_signed rs1_val in
+                         let: rs2_int := exp_unsigned rs2_val in
+                         let: tmp := rs1_int * rs2_int in
+                         let: result_wide := call tb tmp in
+                         exp_vector_subrange xlen xlen result_wide
      end in
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
