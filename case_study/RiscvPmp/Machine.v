@@ -1073,29 +1073,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
        | RISCV_SRA    => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
                          call shift_right_arith32 rs1_val tmp
        | RISCV_MUL    => call execute_MUL rs1_val rs2_val exp_false exp_true exp_true
-                         (* let tb := to_bits (2 * xlenbits) in *)
-                         (* let: rs1_int := exp_signed rs1_val in *)
-                         (* let: rs2_int := exp_signed rs2_val in *)
-                         (* let: result_wide := call tb (rs1_int * rs2_int) in *)
-                         (* exp_vector_subrange 0 xlen result_wide *)
        | RISCV_MULH   => call execute_MUL rs1_val rs2_val exp_true exp_true exp_true
-                         (* let tb := to_bits (2 * xlenbits) in *)
-                         (* let: rs1_int := exp_signed rs1_val in *)
-                         (* let: rs2_int := exp_signed rs2_val in *)
-                         (* let: result_wide := call tb (rs1_int * rs2_int) in *)
-                         (* exp_vector_subrange xlen xlen result_wide *)
        | RISCV_MULHU  => call execute_MUL rs1_val rs2_val exp_true exp_false exp_false
-                         (* let tb := to_bits (2 * xlenbits) in *)
-                         (* let: rs1_int := exp_unsigned rs1_val in *)
-                         (* let: rs2_int := exp_unsigned rs2_val in *)
-                         (* let: result_wide := call tb (rs1_int * rs2_int) in *)
-                         (* exp_vector_subrange xlen xlen result_wide *)
        | RISCV_MULHSU => call execute_MUL rs1_val rs2_val exp_true exp_true exp_false
-                         (* let tb := to_bits (2 * xlenbits) in *)
-                         (* let: rs1_int := exp_signed rs1_val in *)
-                         (* let: rs2_int := exp_unsigned rs2_val in *)
-                         (* let: result_wide := call tb (rs1_int * rs2_int) in *)
-                         (* exp_vector_subrange xlen xlen result_wide *)
      end in
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
