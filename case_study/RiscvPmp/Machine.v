@@ -1041,22 +1041,21 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: rs1_int := if: signed1
-                     then exp_unop uop.signed rs1_val
-                     else exp_unop uop.unsigned rs1_val
-     in
-     let: rs2_int := if: signed2
-                     then exp_unop uop.signed rs2_val
-                     else exp_unop uop.unsigned rs2_val
-     in
-     let: result_wide := call tb (rs1_int * rs2_int) in
-     let: result := if: high
-                    then exp_vector_subrange xlen xlen result_wide
-                    else exp_vector_subrange 0 xlen result_wide
-     in
-     call wX rd result ;;
-     stm_val ty_retired RETIRE_SUCCESS.
-
-
+                    then exp_unop uop.signed rs1_val
+                    else exp_unop uop.unsigned rs1_val
+    in
+    let: rs2_int := if: signed2
+                    then exp_unop uop.signed rs2_val
+                    else exp_unop uop.unsigned rs2_val
+    in
+    let: result_wide := call tb (rs1_int * rs2_int) in
+    let: result := if: high
+                   then exp_vector_subrange xlen xlen result_wide
+                   else exp_vector_subrange 0 xlen result_wide
+    in
+    call wX rd result ;;
+    stm_val ty_retired RETIRE_SUCCESS.
+  
   Definition fun_execute_RTYPE : Stm [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
