@@ -225,7 +225,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_EBREAK        : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
   | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
-  | execute_MUL           : Fun [rs1_val ∷ ty_xlenbits; rs2_val ∷ ty_xlenbits; high ∷ ty.bool; signed1 ∷ ty.bool; signed2 :: ty.bool] ty_xlenbits
+  | execute_MUL           : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; high :: ty.bool; signed1 :: ty.bool; signed2 :: ty.bool] ty_retired
   .
 
   (* Restrictions on MMIO needed, because MMIO operations leave a trace and are disallowed for 0-length data *)
@@ -1378,7 +1378,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     @bv.vector_subrange _ b (e - b + 1) _ data.
   Next Obligation. intros; by apply convert_foreign_vector_subrange_conditions. Defined.
   #[global] Arguments fun_vector_subrange {n} _ _ _ {_ _ _}.
-    
+
   #[derive(equations=no)]
   Equations ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
     ForeignCall (read_ram width) [addr] res γ γ' μ μ' :=

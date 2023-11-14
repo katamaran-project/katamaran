@@ -196,10 +196,6 @@ Inductive ROP : Set :=
 | RISCV_SRL
 | RISCV_SUB
 | RISCV_SRA
-| RISCV_MUL
-| RISCV_MULH
-| RISCV_MULHSU
-| RISCV_MULHU
 .
 
 Inductive IOP : Set :=
@@ -238,6 +234,13 @@ Inductive CSROP : Set :=
 | CSRRC
 .
 
+Inductive MOP : Set :=
+| RISCV_MUL
+| RISCV_MULH
+| RISCV_MULHSU
+| RISCV_MULHU
+.
+
 Inductive Retired : Set :=
 | RETIRE_SUCCESS
 | RETIRE_FAIL
@@ -266,6 +269,7 @@ Inductive Enums : Set :=
 | csrop
 | retired
 | wordwidth
+| mop
 .
 
 Definition RegIdx := bv 5.
@@ -285,6 +289,7 @@ Inductive AST : Set :=
 | EBREAK
 | MRET
 | CSR (csr : CSRIdx) (rs1 rd : RegIdx) (is_imm : bool) (csrop : CSROP)
+| MUL (rs2 rs1 rd : RegIdx) (high signed1 signed2 : bool)
 .
 
 Inductive AccessType : Set :=
@@ -334,6 +339,7 @@ Inductive ASTConstructor : Set :=
 | KEBREAK
 | KMRET
 | KCSR
+| KMUL
 .
 
 Inductive AccessTypeConstructor : Set :=
@@ -414,6 +420,7 @@ Section TransparentObligations.
   Derive NoConfusion for UOP.
   Derive NoConfusion for BOP.
   Derive NoConfusion for CSROP.
+  Derive NoConfusion for MOP.
   Derive NoConfusion for Retired.
   Derive NoConfusion for WordWidth.
   Derive NoConfusion for Unions.
@@ -449,6 +456,7 @@ Derive EqDec for SOP.
 Derive EqDec for UOP.
 Derive EqDec for BOP.
 Derive EqDec for CSROP.
+Derive EqDec for MOP.
 Derive EqDec for Retired.
 Derive EqDec for WordWidth.
 Derive EqDec for Unions.
@@ -500,7 +508,7 @@ Section Finite.
 
   #[export,program] Instance ROP_finite :
     Finite ROP :=
-    {| enum := [RISCV_ADD;RISCV_SUB;RISCV_SLT;RISCV_SLTU;RISCV_SLL;RISCV_SRL;RISCV_SRA;RISCV_AND;RISCV_OR;RISCV_XOR;RISCV_MUL;RISCV_MULH;RISCV_MULHSU;RISCV_MULHU ] |}.
+    {| enum := [RISCV_ADD;RISCV_SUB;RISCV_SLT;RISCV_SLTU;RISCV_SLL;RISCV_SRL;RISCV_SRA;RISCV_AND;RISCV_OR;RISCV_XOR] |}.
 
   #[export,program] Instance IOP_finite :
     Finite IOP :=
@@ -522,6 +530,10 @@ Section Finite.
     Finite CSROP :=
     {| enum := [CSRRW;CSRRS;CSRRC] |}.
 
+  #[export,program] Instance MOP_finite :
+    Finite MOP :=
+    {| enum := [RISCV_MUL; RISCV_MULH; RISCV_MULHU; RISCV_MULHSU] |}.
+
   #[export,program] Instance Retired_finite :
     Finite Retired :=
     {| enum := [RETIRE_SUCCESS; RETIRE_FAIL] |}.
@@ -532,7 +544,7 @@ Section Finite.
 
   #[export,program] Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KEBREAK;KMRET;KCSR] |}.
+    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KEBREAK;KMRET;KCSR;KMUL] |}.
 
   #[export,program] Instance AccessType_finite :
     Finite AccessType :=
@@ -597,6 +609,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_uop                            := (ty.enum uop).
   Definition ty_bop                            := (ty.enum bop).
   Definition ty_csrop                          := (ty.enum csrop).
+  Definition ty_mop                            := (ty.enum mop).
   Definition ty_retired                        := (ty.enum retired).
   Definition ty_word_width                     := (ty.enum wordwidth).
   Definition ty_mcause                         := (ty_xlenbits).
@@ -628,6 +641,7 @@ Module Export RiscvPmpBase <: Base.
     | uop              => UOP
     | bop              => BOP
     | csrop            => CSROP
+    | mop              => MOP
     | retired          => Retired
     | wordwidth        => WordWidth
     end.
@@ -683,6 +697,7 @@ Module Export RiscvPmpBase <: Base.
                             | KEBREAK     => ty.unit
                             | KMRET       => ty.unit
                             | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty.bool; ty_csrop]
+                            | KMUL        => ty.tuple [ty_regno; ty_regno; ty_regno; ty.bool; ty.bool; ty.bool]
                             end
     | access_type      => fun _ => ty.unit
     | exception_type   => fun _ => ty.unit
@@ -733,6 +748,7 @@ Module Export RiscvPmpBase <: Base.
                             | EBREAK                        => existT KEBREAK tt
                             | MRET                          => existT KMRET tt
                             | CSR csr rs1 rd is_imm op      => existT KCSR (tt , csr , rs1 , rd , is_imm , op)
+                            | MUL rs2 rs1 rd h s1 s2        => existT KMUL (tt, rs2 , rs1 , rd , h, s1, s2 )
                             end
     | access_type      => fun Kv =>
                             match Kv with
@@ -784,6 +800,7 @@ Module Export RiscvPmpBase <: Base.
                               | existT KEBREAK tt                                    => EBREAK
                               | existT KMRET tt                                      => MRET
                               | existT KCSR (tt , csr , rs1 , rd , is_imm , op)      => CSR csr rs1 rd is_imm op
+                              | existT KMUL (tt, rs2 , rs1 , rd , h, s1, s2 )        => MUL rs2 rs1 rd h s1 s2
                               end
       | access_type      => fun Kv =>
                               match Kv with
@@ -1079,5 +1096,3 @@ Module Export RiscvPmpBase <: Base.
   Include BaseMixin.
 
 End RiscvPmpBase.
-
-

@@ -78,13 +78,13 @@ Module Assembly.
   Definition MV (rd rs1 : RegIdx) : AST :=
     ADDI rd rs1 bv.zero.
   Definition MUL (rd rs1 rs2 : RegIdx) : AST :=
-    RTYPE rs2 rs1 rd RISCV_MUL.
+    Base.MUL rs2 rs1 rd false true true.
   Definition MULH (rd rs1 rs2 : RegIdx) : AST :=
-    RTYPE rs2 rs1 rd RISCV_MULH.
+    Base.MUL rs2 rs1 rd true true true.
   Definition MULHSU (rd rs1 rs2 : RegIdx) : AST :=
-    RTYPE rs2 rs1 rd RISCV_MULHSU.
+    Base.MUL rs2 rs1 rd true true false.
   Definition MULHU (rd rs1 rs2 : RegIdx) : AST :=
-    RTYPE rs2 rs1 rd RISCV_MULHU.
+    Base.MUL rs2 rs1 rd true false false.
 End Assembly.
 
 Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
