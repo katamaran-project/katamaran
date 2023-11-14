@@ -1041,12 +1041,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: rs1_int := if: signed1
-                     then exp_unop (@uop.signed _ xlen) rs1_val
-                     else exp_unop (@uop.unsigned _ xlen) rs1_val
+                     then exp_unop uop.signed rs1_val
+                     else exp_unop uop.unsigned rs1_val
      in
      let: rs2_int := if: signed2
-                     then exp_unop (@uop.signed _ xlen) rs2_val
-                     else exp_unop (@uop.unsigned _ xlen) rs2_val
+                     then exp_unop uop.signed rs2_val
+                     else exp_unop uop.unsigned rs2_val
      in
      let: result_wide := call tb (rs1_int * rs2_int) in
      let: result := if: high
