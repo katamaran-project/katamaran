@@ -212,9 +212,9 @@ Module RiscvPmpModel2.
       iIntros "H".
       rewrite <-interp_ptstomem_dedup.
       iDestruct "H" as "[Hmemres1 Hmemres2]".
-      rewrite semWp2_unfold.
+      rewrite fixpoint_semWp2_eq.
       cbn in *.
-      iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1 & Htrace1) & (% & Hmem2 & %Hmap2 & Htrace2)) & Hcred)".
+      iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1 & Htrace1) & (% & Hmem2 & %Hmap2 & Htrace2)))".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
       iIntros.
@@ -244,9 +244,9 @@ Module RiscvPmpModel2.
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
       iIntros "(%vold & H)".
-      rewrite semWp2_unfold.
+      rewrite fixpoint_semWp2_eq.
       cbn.
-      iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1 & Htrace1) & (% & Hmem2 & %Hmap2 & Htrace2)) & Hcred)".
+      iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1 & Htrace1) & (% & Hmem2 & %Hmap2 & Htrace2)))".
       rewrite <-interp_ptstomem_dedup.
       iDestruct "H" as "[Hmemres1 Hmemres2]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -279,7 +279,7 @@ Module RiscvPmpModel2.
       intros Γ es δ ι Heq.
       destruct_syminstance ι.
       iIntros "_".
-      iApply semWp2_unfold.
+      rewrite fixpoint_semWp2_eq.
       cbn in *.
       iIntros (? ? ? ?) "[Hregs (Hmem1 & Hmem2)]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -294,7 +294,9 @@ Module RiscvPmpModel2.
       { iPureIntro. constructor. now rewrite Heq. }
       iFrame.
       destruct (pure_decode bv0).
-      - now iApply semWp2_fail_2.
+      - rewrite fixpoint_semWp2_fix_eq.
+        rewrite -fixpoint_semWp2_eq.
+        now iApply semWp2_fail_2.
       - rewrite semWp2_val.
         now iExists _.
     Qed.
@@ -306,7 +308,7 @@ Module RiscvPmpModel2.
       intros Γ es δ ι Heq.
       destruct_syminstance ι.
       iIntros "_".
-      iApply semWp2_unfold.
+      rewrite fixpoint_semWp2_eq.
       cbn in *.
       iIntros (? ? ? ?) "[Hregs (Hmem1 & Hmem2)]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
