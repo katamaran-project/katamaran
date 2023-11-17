@@ -1062,7 +1062,7 @@ Module Export RiscvPmpBase <: Base.
   Section Inhabited.
       #[export] Instance val_inhabited σ: Inhabited (Val σ).
       Proof. generalize dependent σ.
-            induction σ as [| | | | | | | E | | | U | R | | ]; try apply _; cbn.
+            induction σ as [| | | | | | | E | | | U | R]; try apply _; cbn.
             - destruct E; repeat constructor.
             - induction σs; first apply _.
               cbn. inversion IH. apply prod_inhabited; [apply IHσs |]; auto.

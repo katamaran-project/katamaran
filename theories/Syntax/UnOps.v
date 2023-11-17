@@ -60,11 +60,7 @@ Module uop.
     | unsigned {n}      : UnOp (bvec n) int
     | truncate {n} (m : nat) {p : IsTrue (m <=? n)} : UnOp (bvec n) (bvec m)
     | vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} : UnOp (bvec n) (bvec l)
-    | negate {n}        : UnOp (bvec n) (bvec n)
-    | hl_injl           : UnOp hl_val hl_val
-    | hl_injr           : UnOp hl_val hl_val
-    | hl_locv           : UnOp hl_loc hl_val
-    .
+    | negate {n}        : UnOp (bvec n) (bvec n).
     Set Transparent Obligations.
     Derive Signature for UnOp.
     Derive NoConfusion for UnOp.
@@ -116,9 +112,6 @@ Module uop.
       | right _ | _       => right _
       }
     | negate                           | negate => left eq_refl
-    | hl_injl                          | hl_injl => left eq_refl
-    | hl_injr                          | hl_injr => left eq_refl
-    | hl_locv                          | hl_locv => left eq_refl
     | _                                | _ => right _.
 
     #[local] Instance eq_dec_unop [σ1 σ2] : EqDec (UnOp σ1 σ2) :=
@@ -143,9 +136,6 @@ Module uop.
       | truncate m          => fun v => bv.truncate m v
       | vector_subrange s l => bv.vector_subrange s l
       | negate              => bv.negate
-      | hl_injl             => lang.heap_lang.InjLV
-      | hl_injr             => lang.heap_lang.InjRV
-      | hl_locv             => fun l => lang.heap_lang.LitV (lang.heap_lang.LitLoc l)
       end.
 
   End WithTypeDef.
