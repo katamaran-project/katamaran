@@ -75,10 +75,9 @@ Module uop.
     Context {TDC : TypeDeclKit}.
     Context {TDN : TypeDenoteKit TDC}.
     Context {TDF : TypeDefKit TDN}.
-    Import Sigma_Notations.
 
     Definition Tel (τ : Ty) : Set :=
-      Σ σ : Ty, UnOp σ τ.
+      sigma (fun σ : Ty => UnOp σ τ).
 
     Obligation Tactic := cbn; intros;
       try solve
@@ -89,7 +88,7 @@ Module uop.
 
     #[derive(equations=no)] Equations tel_eq_dec {σ1 σ2 τ : Ty}
       (op1 : UnOp σ1 τ) (op2 : UnOp σ2 τ) :
-      dec_eq (A := Tel τ) (σ1,op1) (σ2,op2) :=
+      dec_eq (A := Tel τ) (sigmaI _ σ1 op1) (sigmaI _ σ2 op2) :=
     | inl                              | inl => left eq_refl
     | inr                              | inr => left eq_refl
     | neg                              | neg => left eq_refl

@@ -88,12 +88,13 @@ Module bop.
     Derive NoConfusionHom for RelOp.
     Derive EqDec for RelOp.
 
-    Import Sigma_Notations.
+    #[local] Notation "( x , .. , y , z )" :=
+      (@sigmaI _ _ x .. (@sigmaI _ _ y z) ..).
 
     Definition RelOpTel : Set :=
-      Σ σ : Ty, RelOp σ.
+      sigma RelOp_sig.
     Definition BinOpTel : Set :=
-      Σ i : (Σ σ1 σ2 : Ty, Ty), BinOp i.1 (i.2).1 (i.2).2.
+      sigma BinOp_sig.
 
     Definition binoptel_pair (σ1 σ2 : Ty) : BinOpTel :=
       ((σ1, σ2, prod σ1 σ2), pair).

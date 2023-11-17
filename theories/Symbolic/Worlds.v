@@ -382,7 +382,7 @@ Module Type WorldsOn
     Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal_scope.
     Notation "'∀' x .. y , P " :=
       (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
-        (at level 99, x binder, y binder, right associativity)
+        (at level 200, x binder, y binder, right associativity)
       : modal_scope.
     Notation "w1 ⊒ w2" := (Acc w1 w2) (at level 80).
     Notation "f <$> a" := (fmap_box f a).

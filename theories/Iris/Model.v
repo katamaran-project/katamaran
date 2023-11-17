@@ -368,6 +368,8 @@ Module Type IrisPrelims
       now iApply (regs_inv_update H).
     Qed.
 
+    Import stdpp.list.
+
     Lemma own_RegStore_to_map_reg_pointsTos {γ : RegStore} {l : list (sigT 𝑹𝑬𝑮)} :
       NoDup l ->
       ⊢ own reg_gv_name (◯ list_to_map (K := SomeReg)

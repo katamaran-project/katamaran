@@ -36,7 +36,6 @@ From Katamaran Require Import
 
 Import ctx.notations.
 Import env.notations.
-Import SigTNotations.
 
 Module Type PatternsOn (Import TY : Types).
 
@@ -233,7 +232,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_bvec_exhaustive m  => fun _ => [ctx]
       | @pat_tuple _ Δ _       => fun _ => Δ
       | pat_record _ Δ _       => fun _ => Δ
-      | pat_union U p          => fun '(K; pc) =>
+      | pat_union U p          => fun '(existT K pc) =>
                                     @PatternCaseCtx (unionk_ty U K) (p K) pc
       end%ctx.
 
@@ -247,44 +246,44 @@ Module Type PatternsOn (Import TY : Types).
     Fixpoint pattern_match_val {σ} (p : Pattern σ) : Val σ -> MatchResult p :=
       match p with
       | pat_var x =>
-          fun v => (tt; [env].[x∷_ ↦ v])
+          fun v => existT tt [env].[x∷_ ↦ v]
       | pat_bool       =>
-          fun b => (b; [env])
+          fun b => existT b [env]
       | pat_list σ x y =>
           fun v : Val (ty.list σ) =>
             match v with
-            | nil       => (true; [env])
-            | cons v vs => (false; [env].[x∷σ ↦ v].[y∷ty.list σ ↦ vs])
+            | nil       => existT true [env]
+            | cons v vs => existT false [env].[x∷σ ↦ v].[y∷ty.list σ ↦ vs]
             end
       | pat_pair x y =>
-          fun '(a, b) => (tt; [env].[x∷_ ↦ a].[y∷_ ↦ b])
+          fun '(a, b) => existT tt [env].[x∷_ ↦ a].[y∷_ ↦ b]
       | pat_sum σ τ x y =>
           fun v =>
             match v with
-            | inl a => (true; [env].[x∷σ ↦ a])
-            | inr b => (false; [env].[y∷τ ↦ b])
+            | inl a => existT true [env].[x∷σ ↦ a]
+            | inr b => existT false [env].[y∷τ ↦ b]
             end
       | pat_unit =>
-          fun _ => (tt; [env])
+          fun _ => existT tt [env]
       | pat_enum E =>
-          fun v : enumt E => (v; [env])
+          fun v : enumt E => existT v [env]
       | pat_bvec_split m n x y =>
           fun v =>
             match bv.appView m n v with
             | bv.isapp xs ys =>
-                (tt; [env].[x∷ty.bvec m ↦ xs].[y∷ty.bvec n ↦ ys])
+                existT tt ([env].[x∷ty.bvec m ↦ xs].[y∷ty.bvec n ↦ ys])
             end
       | pat_bvec_exhaustive m =>
-          fun v => (v; [env])
+          fun v => existT v [env]
       | pat_tuple p =>
-          fun v => (tt; tuple_pattern_match_val p v)
+          fun v => existT tt (tuple_pattern_match_val p v)
       | pat_record R Δ p =>
-          fun v => (tt; record_pattern_match_val p v)
+          fun v => existT tt (record_pattern_match_val p v)
       | pat_union U p =>
           fun v =>
             let (K, u)    := unionv_unfold U v in
             let (pc, δpc) := pattern_match_val (p K) u in
-            ((K; pc); δpc)
+            (existT (existT K pc) δpc)
       end.
 
     (* Reverse a pattern match. Given a [PatternCase] and an environment with
@@ -330,8 +329,8 @@ Module Type PatternsOn (Import TY : Types).
       | pat_record R Δ p =>
           fun _ vs => recordv_fold R (record_pattern_match_env_reverse p vs)
       | pat_union U p =>
-          fun '(K; pc) δpc =>
-            unionv_fold U (K; pattern_match_val_reverse (p K) pc δpc)
+          fun '(existT K pc) δpc =>
+            unionv_fold U (existT K (pattern_match_val_reverse (p K) pc δpc))
       end.
 
     (* A curried version of the above. *)
@@ -365,14 +364,14 @@ Module Type PatternsOn (Import TY : Types).
       - destruct pc as [K pc].
         rewrite unionv_unfold_fold.
         change (pattern_match_val_reverse _ ?pc ?vs) with
-          (pattern_match_val_reverse' _ (pc;vs)).
+          (pattern_match_val_reverse' _ (existT pc vs)).
         now rewrite H.
     Qed.
 
     Lemma pattern_match_val_inverse_right {σ} (pat : Pattern σ)
       (pc : PatternCase pat) (δpc : NamedEnv Val (PatternCaseCtx pc)) :
-      pattern_match_val pat (pattern_match_val_reverse pat pc δpc) = (pc; δpc).
-    Proof. apply (pattern_match_val_inverse_right' pat (pc;δpc)). Qed.
+      pattern_match_val pat (pattern_match_val_reverse pat pc δpc) = (existT pc δpc).
+    Proof. apply (pattern_match_val_inverse_right' pat (existT pc δpc)). Qed.
 
     Lemma pattern_match_val_inverse_left {σ} (pat : Pattern σ) :
       forall v : Val σ,
@@ -399,7 +398,7 @@ Module Type PatternsOn (Import TY : Types).
         rewrite unionv_fold_unfold in Heq. subst.
         destruct pattern_match_val eqn:Heq; cbn.
         change (pattern_match_val_reverse _ ?pc ?vs) with
-          (pattern_match_val_reverse' _ (pc;vs)).
+          (pattern_match_val_reverse' _ (existT pc vs)).
         now rewrite <- Heq, H.
     Qed.
 
@@ -635,7 +634,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_union U p          =>
              fun Kpc : {K : unionk U & PatternCase (p K)} =>
                let (K,pc) := Kpc in
-               (K; freshen_patterncase Σ (p K) pc)
+               (existT K (freshen_patterncase Σ (p K) pc))
       end.
 
     (* The context of bound variables of a variable is the same as calculating
@@ -663,7 +662,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_bvec_exhaustive m  => fun _ => eq_refl
       | pat_tuple _            => fun _ => eq_refl
       | pat_record _ _ _       => fun _ => eq_refl
-      | pat_union _ p          => fun '(K; pc) =>
+      | pat_union _ p          => fun '(existT K pc) =>
                                     freshen_patterncasectx Σ (p K) pc
       end.
 
@@ -712,7 +711,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_bvec_exhaustive _ => fun _ _ => [env]
       | pat_tuple _ => fun _ => freshen_namedenv
       | pat_record _ Δ _ => fun _ => freshen_namedenv
-      | pat_union U p => fun '(K;pc) => freshen_patterncaseenv (p K) pc
+      | pat_union U p => fun '(existT K pc) => freshen_patterncaseenv (p K) pc
       end.
 
     Fixpoint unfreshen_patterncaseenv {D : Ty -> Set} {Σ σ} (p : @Pattern N σ) :
@@ -750,18 +749,18 @@ Module Type PatternsOn (Import TY : Types).
       | pat_bvec_exhaustive _ => fun _ _ => [env]
       | pat_tuple _ => fun _ => unfreshen_namedenv
       | pat_record _ Δ _ => fun _ => unfreshen_namedenv
-      | pat_union U p => fun '(K;pc) => unfreshen_patterncaseenv (p K) pc
+      | pat_union U p => fun '(existT K pc) => unfreshen_patterncaseenv (p K) pc
       end.
 
     Definition freshen_matchresult {Σ σ} (p : @Pattern N σ) (r : MatchResult p) :
       MatchResult (freshen_pattern Σ p) :=
       let (pc, vs) := r in
-      (freshen_patterncase Σ p pc; freshen_patterncaseenv p pc vs).
+      existT (freshen_patterncase Σ p pc) (freshen_patterncaseenv p pc vs).
 
     Definition unfreshen_matchresult {Σ σ} (p : @Pattern N σ)
       (r : MatchResult (freshen_pattern Σ p)) : MatchResult p :=
       let (pc, vs) := r in
-      (unfreshen_patterncase Σ p pc; unfreshen_patterncaseenv p pc vs).
+      existT (unfreshen_patterncase Σ p pc) (unfreshen_patterncaseenv p pc vs).
 
     Lemma pattern_match_val_freshen {Σ : LCtx} {σ} (p : @Pattern N σ) (v : Val σ) :
       unfreshen_matchresult p (pattern_match_val (freshen_pattern Σ p) v) =

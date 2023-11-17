@@ -43,7 +43,6 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
 
   Import ctx.notations.
   Import env.notations.
-  Import SigTNotations.
 
   Inductive Step {Γ : PCtx} {τ : Ty} (γ : RegStore) (μ : Memory) (δ : CStore Γ) :
     forall (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s1 s2 : Stm Γ τ), Prop :=

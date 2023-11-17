@@ -50,7 +50,6 @@ From stdpp Require base list option.
 Import ctx.notations.
 Import env.notations.
 Import ListNotations.
-Import SigTNotations.
 
 Set Implicit Arguments.
 
@@ -60,7 +59,7 @@ Local Notation "A ::> R" :=
     : signature_scope.
 Local Notation "'∀' x .. y , R " :=
   (forall_relation (fun x => .. (forall_relation (fun y => R)) ..))
-    (at level 99, x binder, y binder, right associativity,
+    (at level 200, x binder, y binder, right associativity,
       format "'[  ' '[  ' ∀  x  ..  y ']' ,  '/' R ']'")
     : signature_scope.
 

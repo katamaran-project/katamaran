@@ -30,7 +30,7 @@ From Coq Require Import
      Bool.Bool.
 From Equations Require Import Equations.
 From Katamaran Require Import
-     Context Notations Prelude.
+     Prelude Context Notations.
 Import ctx.notations.
 
 Local Set Implicit Arguments.

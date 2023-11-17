@@ -634,3 +634,12 @@ Create HintDb katamaran.
   @option.spec_none  @option.wlp_none @option.wp_none
   @option.spec_some  @option.wlp_some @option.wp_some
   : katamaran.
+
+(* We use the katamaran scope for definitions that do not fit into a specific
+   one. This also concerns types / propositions which normally would go into
+   [type_scope]. The stdpp library opens its own scope [stdpp_scope] globally
+   so overriding any of those notations has to be done in [katamaran_scope] and
+   it should be higher up on the scope stack. *)
+Declare Scope katamaran_scope.
+Delimit Scope katamaran_scope with katamaran.
+Open Scope katamaran_scope.

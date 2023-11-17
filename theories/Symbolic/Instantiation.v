@@ -54,7 +54,7 @@ From Katamaran Require Import
      Tactics.
 
 Import stdpp.base (Equiv, equiv).
-Import (notations) stdpp.base.
+Import (notations) stdpp.base Prelude.
 Import ctx.notations.
 Import env.notations.
 

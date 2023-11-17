@@ -595,7 +595,7 @@ Module Import ctx.
     Notation "'ε'" := nil (only parsing) : ctx_scope.
     Infix "▻" := snoc : ctx_scope.
     Notation "Γ1 ▻▻ Γ2" := (cat Γ1%ctx Γ2%ctx) : ctx_scope.
-    Notation "b ∈ Γ" := (In b%ctx Γ%ctx) : type_scope.
+    Notation "b ∈ Γ" := (In b%ctx Γ%ctx) : katamaran_scope.
 
     (* Use the same notations as in ListNotations. *)
     Notation "[ ]" := (nil) : ctx_scope.

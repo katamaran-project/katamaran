@@ -192,7 +192,7 @@ Module Soundness
       Notation "□ A"    := (RBox A%R) : rel_scope.
       Notation "'∀' x .. y , R " :=
         (RForall (fun x => .. (RForall (fun y => R)) ..))
-          (at level 99, x binder, y binder, right associativity,
+          (at level 200, x binder, y binder, right associativity,
             format "'[  ' '[  ' ∀  x  ..  y ']' ,  '/' R ']'")
           : rel_scope.
     End notations.

@@ -112,11 +112,11 @@ Module sep.
     Infix "→" := limpl : logic_scope.
     Notation "'∃' x .. y , P " :=
       (lex (fun x => .. (lex (fun y => P)) ..))
-      (at level 99, x binder, y binder, right associativity,
+      (at level 200, x binder, y binder, right associativity,
       format "'[  ' '[  ' ∃  x  ..  y ']' ,  '/' P ']'") : logic_scope.
     Notation "'∀' x .. y , P " :=
       (lall (fun x => .. (lall (fun y => P)) ..))
-      (at level 99, x binder, y binder, right associativity,
+      (at level 200, x binder, y binder, right associativity,
       format "'[  ' '[  ' ∀  x  ..  y ']' ,  '/' P ']'") : logic_scope.
     Notation "'!!' e" := (lprop e) : logic_scope.
     Notation "⊤" := (lprop True) : logic_scope.

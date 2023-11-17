@@ -49,8 +49,6 @@ From Katamaran Require Import
      Symbolic.OccursCheck
      Symbolic.PartialEvaluation.
 
-Import SigTNotations.
-
 Module Type BaseMixin (Import TY : Types).
   Include
     ExpressionsOn TY <+
@@ -157,7 +155,7 @@ Module Type BaseMixin (Import TY : Types).
       | pat_record R Δ p =>
           fun _ ts => term_record R (record_pattern_match_env_reverse p ts)
       | pat_union U x =>
-          fun '(K;pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts)
+          fun '(existT K pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts)
       end.
 
     Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : @Pattern N σ) :

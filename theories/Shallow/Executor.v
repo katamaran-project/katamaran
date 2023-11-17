@@ -47,7 +47,6 @@ From stdpp Require base list option.
 Import ctx.notations.
 Import env.notations.
 Import ListNotations.
-Import SigTNotations.
 
 Set Implicit Arguments.
 
@@ -520,11 +519,11 @@ Module Type ShallowExecOn
         - intros (pc & Hin & δpc & <- & Hwp).
           now rewrite pattern_match_val_inverse_right.
         - intros Hwp.
-          exists (pattern_match_val pat v).1.
+          exists (projT1 (pattern_match_val pat v)).
           split.
           rewrite <- base.elem_of_list_In.
           apply finite.elem_of_enum.
-          exists (pattern_match_val pat v).2.
+          exists (projT2 (pattern_match_val pat v)).
           split.
           apply pattern_match_val_inverse_left.
           apply Hwp.

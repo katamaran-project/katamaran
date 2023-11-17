@@ -460,8 +460,8 @@ Module Type SymPropOn
       - reflexivity.
       - apply and_iff_morphism; eauto.
       - apply imp_iff_compat_l; eauto.
-      - apply base.exist_proper; eauto.
-      - apply base.forall_proper; eauto.
+      - apply ex_iff_morphism; intros v; eauto.
+      - apply all_iff_morphism; intros v; eauto.
       - apply and_iff_morphism; eauto.
       - apply imp_iff_compat_l; eauto.
       - destruct pattern_match_val; apply H.
@@ -479,8 +479,8 @@ Module Type SymPropOn
       - reflexivity.
       - apply and_iff_morphism; eauto.
       - apply imp_iff_compat_l; eauto.
-      - apply base.exist_proper; eauto.
-      - apply base.forall_proper; eauto.
+      - apply ex_iff_morphism; intros v; eauto.
+      - apply all_iff_morphism; intros v; eauto.
       - rewrite inst_subst, inst_sub_shift.
         apply and_iff_morphism; eauto.
       - apply imp_iff_compat_l; eauto.
@@ -691,7 +691,7 @@ Module Type SymPropOn
     Qed.
 
     #[export] Instance proper_angelic_close0 {Σ Σe} : Proper (sequiv (Σ ▻▻ Σe) ==> sequiv Σ) (angelic_close0 Σe).
-    Proof. intros p q pq ι. rewrite ?safe_angelic_close0. now apply base.exist_proper. Qed.
+    Proof. intros p q pq ι. rewrite ?safe_angelic_close0. now apply ex_iff_morphism. Qed.
 
     #[export] Instance proper_angelic_binary {Σ} : Proper (sequiv Σ ==> sequiv Σ ==> sequiv Σ) (@angelic_binary Σ).
     Proof.
@@ -708,7 +708,7 @@ Module Type SymPropOn
     Qed.
 
     #[export] Instance proper_demonic_close0 {Σ Σu} : Proper (sequiv (Σ ▻▻ Σu) ==> sequiv Σ) (demonic_close0 Σu).
-    Proof. intros p q pq ι. rewrite ?safe_demonic_close0. now apply base.forall_proper. Qed.
+    Proof. intros p q pq ι. rewrite ?safe_demonic_close0. now apply all_iff_morphism. Qed.
 
     #[export] Instance proper_demonic_close0_impl {Σ Σu} : Proper (simpl (Σ ▻▻ Σu) ==> simpl Σ) (demonic_close0 Σu).
     Proof.
@@ -752,13 +752,13 @@ Module Type SymPropOn
     Proof. unfold simpl. intros p q pq ι. cbn. intuition auto. Qed.
 
     #[export] Instance proper_angelicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (angelicv b).
-    Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.exist_proper. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply ex_iff_morphism. Qed.
 
     #[export] Instance proper_angelicv_impl {Σ b} : Proper (simpl (Σ ▻ b) ==> simpl Σ) (angelicv b).
     Proof. unfold simpl. intros p q pq ι [v H]. exists v. now apply pq. Qed.
 
     #[export] Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
-    Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.forall_proper. Qed.
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply all_iff_morphism. Qed.
 
     #[export] Instance proper_pattern_match {Σ σ} (s : Term Σ σ) (pat : Pattern σ) :
       Proper
@@ -1203,10 +1203,10 @@ Module Type SymPropOn
       - rewrite prune_assumek_sound; cbn.
         now rewrite IHp.
       - rewrite prune_angelicv_sound; cbn.
-        apply base.exist_proper; intros.
+        apply ex_iff_morphism; intros v.
         now rewrite IHp.
       - rewrite prune_demonicv_sound; cbn.
-        apply base.forall_proper; intros.
+        apply all_iff_morphism; intros v.
         now rewrite IHp.
       - rewrite prune_assert_vareq_sound; cbn.
         now rewrite IHp.
@@ -1317,12 +1317,12 @@ Module Type SymPropOn
       Proof.
         intros ι; cbn.
         rewrite safe_assert_msgs_formulas. cbn.
-        rewrite and_comm, <- exists_and.
-        apply base.exist_proper. intros v.
+        rewrite Logic.and_comm, <- exists_and.
+        apply ex_iff_morphism. intros v.
         rewrite safe_assert_msgs_formulas.
         rewrite instprop_subst.
         rewrite inst_sub_wk1.
-        apply and_comm.
+        apply Logic.and_comm.
       Qed.
 
       Lemma plug_eq_rect {Σ1 Σ2 Σ2'} (eq : Σ2 = Σ2') (ec : ECtx Σ1 Σ2) (p : 𝕊 Σ2') :
@@ -1541,7 +1541,7 @@ Module Type SymPropOn
         intros ι; cbn.
         rewrite safe_assume_pathcondition. cbn.
         rewrite forall_impl.
-        apply base.forall_proper. intros v.
+        apply all_iff_morphism. intros v.
         rewrite safe_assume_pathcondition.
         rewrite instprop_subst.
         rewrite inst_sub_wk1.
@@ -2012,8 +2012,8 @@ Module Type SymPropOn
       - apply Morphisms_Prop.iff_iff_iff_impl_morphism.
         + now rewrite inst_eformula_erase.
         + auto.
-      - apply base.exist_proper. intros v. apply (IHp (env.snoc ι b v)).
-      - apply base.forall_proper. intros v. apply (IHp (env.snoc ι b v)).
+      - apply ex_iff_morphism. intros v. apply (IHp (env.snoc ι b v)).
+      - apply all_iff_morphism. intros v. apply (IHp (env.snoc ι b v)).
       - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)).
         rewrite erase_valuation_remove, !inst_eterm_erase.
         now apply Morphisms_Prop.and_iff_morphism.

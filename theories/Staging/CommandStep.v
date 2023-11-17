@@ -38,7 +38,6 @@ From Katamaran Require Import
 
 Import ctx.notations.
 Import env.notations.
-Import SigTNotations.
 
 Set Implicit Arguments.
 
