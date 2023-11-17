@@ -115,14 +115,14 @@ Module uop.
     | negate                           | negate => left eq_refl
     | _                                | _ => right _.
 
-    Local Set Equations With UIP.
-    Instance eq_dec_unop {σ1 σ2} : EqDec (UnOp σ1 σ2).
-    Proof.
-      intros x y.
-      destruct (tel_eq_dec x y) as [p|p].
-      - left. dependent elimination p. reflexivity.
-      - right. congruence.
-    Defined.
+    #[local] Instance eq_dec_unop [σ1 σ2] : EqDec (UnOp σ1 σ2) :=
+      fun x y =>
+        match tel_eq_dec x y with
+        | left e => left
+                      (* Uses decidable equality of Ty. *)
+                      (inj_right_sigma _ _ _ e)
+        | right b => right (fun e => b (f_equal _ e))
+        end.
 
     Definition eval {σ1 σ2 : Ty} (op : UnOp σ1 σ2) : Val σ1 -> Val σ2 :=
       match op in UnOp σ1 σ2 return Val σ1 -> Val σ2 with
