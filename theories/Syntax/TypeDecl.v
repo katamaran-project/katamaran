@@ -39,6 +39,7 @@ From Katamaran Require Import
 From Coq Require Import
      Strings.String
      ZArith.BinInt.
+From iris.heap_lang Require lang.
 From Katamaran Require Import
      Context
      Environment
@@ -79,6 +80,8 @@ Module ty.
     | tuple (σs : Ctx Ty)
     | union (U : unioni)
     | record (R : recordi)
+    | hl_val
+    | hl_loc
     .
     Derive NoConfusion for Ty.
 
@@ -100,6 +103,8 @@ Module ty.
       Hypothesis (P_tuple  : forall σs (IH : ctx.All P σs), P (tuple σs)).
       Hypothesis (P_union  : forall U, P (union U)).
       Hypothesis (P_record : forall R, P (record R)).
+      Hypothesis (P_hl_val : P hl_val).
+      Hypothesis (P_hl_loc : P hl_loc).
 
       Fixpoint Ty_rect (σ : Ty) : P σ :=
         match σ with
@@ -115,6 +120,8 @@ Module ty.
         | tuple σs => ltac:(apply P_tuple, ctx.all_intro, Ty_rect)
         | union U  => ltac:(apply P_union; auto)
         | record R => ltac:(apply P_record; auto)
+        | hl_val   => ltac:(apply P_hl_val; auto)
+        | hl_loc   => ltac:(apply P_hl_loc; auto)
         end.
 
     End Ty_rect.
@@ -152,6 +159,8 @@ Module ty.
       | tuple σs => EnvRec Val σs
       | union U => uniont U
       | record R => recordt R
+      | hl_val => lang.heap_lang.val
+      | hl_loc => iris.heap_lang.locations.loc
       end%type.
 
   End WithTypeDenote.
@@ -229,6 +238,8 @@ Module ty.
                                        (eq_dec (EqDec := ctx.eq_dec_ctx ty_eqdec) σs τs)
         | union U1   , union U2   => f_equal_dec union noConfusion_inv (eq_dec U1 U2)
         | record R1  , record R2  => f_equal_dec record noConfusion_inv (eq_dec R1 R2)
+        | hl_val     , hl_val     => left eq_refl
+        | hl_loc     , hl_loc     => left eq_refl
         | _          , _          => right noConfusion_inv
         end.
 
@@ -254,6 +265,8 @@ Module ty.
                         σs
         | union U  => eq_dec (A := uniont U)
         | record R => eq_dec (A := recordt R)
+        | hl_val   => iris.heap_lang.lang.heap_lang.val_eq_dec
+        | hl_loc   => iris.heap_lang.locations.Loc.eq_dec
         end.
 
     Lemma unionv_fold_inj {U} (v1 v2 : {K : unionk U & Val (unionk_ty U K)}) :

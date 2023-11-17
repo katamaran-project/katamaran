@@ -80,6 +80,7 @@ Module bop.
     | bvxor {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvapp {m n}       : BinOp (bvec m) (bvec n) (bvec (m + n))
     | bvcons {m}        : BinOp (bool) (bvec m) (bvec (S m))
+    | hl_pair           : BinOp hl_val hl_val hl_val
     | relop {σ} (r : RelOp σ) : BinOp σ σ bool
     .
     Set Transparent Obligations.
@@ -188,6 +189,7 @@ Module bop.
         f_equal_dec
           (fun n => ((bool, bvec n, bvec (S n)), bvcons))
           (ninv _ _) (eq_dec m n)
+      | hl_pair , hl_pair => left eq_refl
       | @relop σ op1 , @relop τ op2 =>
         binoptel_eq_dec_relop op1 op2
       | _           , _            => right (ninv _ _)
@@ -281,6 +283,7 @@ Module bop.
       | bvxor      => fun v1 v2 => bv.lxor v1 v2
       | bvapp      => fun v1 v2 => bv.app v1 v2
       | bvcons     => fun b bs => bv.cons b bs
+      | hl_pair    => lang.heap_lang.PairV
       | relop op   => eval_relop_val op
       end.
 

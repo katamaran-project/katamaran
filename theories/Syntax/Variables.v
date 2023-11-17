@@ -29,6 +29,8 @@
 From Coq Require Import
      Strings.String.
 
+From stdpp Require Import
+  binders.
 From Equations Require Import
      Equations.
 
@@ -51,6 +53,9 @@ Class VarKit : Type :=
     LVar : Set;
     LVar_eq_dec : EqDec LVar;
 
+    (* Conversion of program variables to stdpp binders. *)
+    PVartoBinder : PVar -> binder;
+
     (* Conversion of program variables to logic variables. *)
     PVartoLVar : PVar -> LVar;
 
@@ -70,6 +75,7 @@ Definition DefaultVarKit : VarKit :=
      PVar_eq_dec := string_dec;
      LVar := string;
      LVar_eq_dec := string_dec;
+     PVartoBinder x := BNamed x;
      PVartoLVar x := x;
      fresh_pvar := ctx.fresh;
      fresh_lvar := ctx.fresh;
