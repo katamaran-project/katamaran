@@ -29,6 +29,7 @@
 From Coq Require Import
      Bool.Bool
      Classes.Morphisms
+     Classes.Morphisms_Prop
      Classes.RelationClasses
      Lists.List
      NArith.NArith
@@ -71,14 +72,14 @@ Module Type NewShallowExecOn
   (Import SIG : Signature B)
   (Import SPEC : Specification B PROG SIG).
 
-  Import sep.
-  Import sep.instances.
-  Import sep.notations.
+  Import iris.proofmode.tactics.
 
   Module CPureSpecM.
   Section WithProp.
 
-    Context {L} {PI : PredicateDef L}.
+    Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
+
+    Bind Scope bi_scope with L.
 
     (* The pure backwards predicate transformer monad. We use this monad in some
        of the definition of primitives that do no need access to the store and
@@ -87,7 +88,7 @@ Module Type NewShallowExecOn
       (A -> L) -> L.
 
     Definition Monotonic {A} : relation (CPureSpecM A) :=
-      (A ::> lentails) ==> lentails.
+      (A ::> (⊢)) ==> (⊢).
 
     #[export] Instance monotonic_transitive {A} : Transitive (@Monotonic A).
     Proof.
@@ -103,27 +104,31 @@ Module Type NewShallowExecOn
             these steps are always complete. *)
          | x : NamedEnv Val [ctx] |- _ => destruct (env.view x)
          | x: NamedEnv Val (_ ▻ _) |- _ => destruct (env.view x)
-         | |- _ ⊣⊢ _ => split
-         | |- ⊥ ⊢ _ => apply lfalse_left
-         | |- _ ⊢ ⊤ => apply ltrue_right
-         | |- context[_ ∧ !! _] => rewrite lprop_float
-         | |- !! ?P ∧ ?Q ⊢ ?R => apply (land_prop_left (P := P) (Q := Q) (R := R)); intros ?
-         (* | |- !! ?P ⊢ _ => apply lprop_left; intros ? *)
-         | |- (∃ x : _, _) ⊢ _ => apply lex_left; intros ?
-         | |- _ ⊢ ∀ x : _, _ => apply lall_right; intros ?
-         | |- ?P ⊢ ?P ∨ _ => apply lor_right1; reflexivity
-         | |- ?P ∧ _ ⊢ ?P => apply land_left1
-         | H : ?P |- _ ⊢ !! ?P => apply lprop_right; exact H
-         | |- _ ⊢ !! (?x = ?x) => apply lprop_right; reflexivity
-         | |- _ ⊢ !! _ → _ => apply lprop_intro_impl; intro
-         | |- _ ⊢ !! _ -∗ _ => apply lprop_intro_wand; intro
-         | H : _ \/ _ |- _ => destruct H
-         | |- _ ∨ _ ⊢ _ => apply lor_left
-         | |- _ ⊢ _ ∧ _ => apply land_right
-         (* Everything below is incomplete. *)
-         | |- _ ⊢ ∃ x : _, _ => eapply lex_right
-         | |- (∀ x : _, _) ⊢ _ => eapply lall_left
-         | |- _ ⊢ !! ?P  => is_ground P; apply lprop_right; auto; fail
+         | |- _ ⊣⊢ _ => apply bi.entails_anti_sym
+         | |- False ⊢ _ => apply bi.False_elim
+         | |- _ ⊢ True => apply bi.True_intro
+         (* | |- context[(_ ∧ ⌜_⌝)%I] => rewrite lprop_float *)
+         (* | |- ⌜?P⌝ ∧ ?Q ⊢ ?R => apply (land_prop_left (P := P) (Q := Q) (R := R)); intros ? *)
+         (* (* | |- !! ?P ⊢ _ => apply lprop_left; intros ? *) *)
+         | |- (∃ x : _, _) ⊢ _ => apply bi.exist_elim; intros ?
+         | |- _ ⊢ ∀ x : _, _ => apply bi.forall_intro; intros ?
+         (* | |- ?P ⊢ ?P ∨ _ => apply lor_right1; reflexivity *)
+         | |- ?P ∧ _  ⊢ ?P => apply bi.and_elim_l
+         | |- _  ∧ ?P ⊢ ?P => apply bi.and_elim_r
+         | |- ⌜_⌝ ∧ _ ⊢ _ => apply bi.impl_elim_r'
+         | |- _ ∧ ⌜_⌝ ⊢ _ => apply bi.impl_elim_l'
+         (* | H : ?P |- _ ⊢ ⌜?P⌝ => apply lprop_right; exact H *)
+         | |- _ ⊢ ⌜?x = ?x⌝ => apply bi.pure_intro; reflexivity
+         | |- _ ⊢ ⌜_⌝ → _ => rewrite bi.pure_impl_forall;
+                             apply bi.forall_intro; intros ?
+         (* | |- _ ⊢ ⌜_⌝ -∗ _ => apply lprop_intro_wand; intro *)
+         (* | H : _ \/ _ |- _ => destruct H *)
+         (* | |- _ ∨ _ ⊢ _ => apply lor_left *)
+         | |- _ ⊢ _ ∧ _ => apply bi.and_intro
+         (* (* Everything below is incomplete. *) *)
+         (* | |- _ ⊢ ∃ x : _, _ => eapply lex_right *)
+         (* | |- (∀ x : _, _) ⊢ _ => eapply lall_left *)
+         | |- _ ⊢ ⌜?P⌝  => is_ground P; apply bi.pure_intro; intuition auto; fail
          | _ => easy
          end).
 
@@ -148,9 +153,9 @@ Module Type NewShallowExecOn
          and FALSE represent execution paths that are pruned, i.e. do not reach
          the end of a function, and FINISH encodes the successful execution
          case. *)
-      Definition FALSE : L := lprop False.
-      Definition TRUE : L := lprop True.
-      Definition FINISH : L := lprop True.
+      Definition FALSE : L := False.
+      Definition TRUE : L := True.
+      Definition FINISH : L := True.
       Global Typeclasses Opaque TRUE.
       Global Typeclasses Opaque FALSE.
       Global Typeclasses Opaque FINISH.
@@ -169,14 +174,14 @@ Module Type NewShallowExecOn
     Section Nondeterminism.
 
       Definition angelic (σ : Ty) : CPureSpecM (Val σ) :=
-        fun POST => ∃ v : Val σ, POST v.
+        fun POST => (∃ v : Val σ, POST v)%I.
       #[global] Arguments angelic σ _ /.
 
       Definition angelic_ctx {N : Set} :
         forall Δ : NCtx N Ty, CPureSpecM (NamedEnv Val Δ) :=
         fix rec Δ {struct Δ} :=
           match Δ with
-          | []%ctx  => pure []
+          | [ctx]   => pure [env]
           | Δ ▻ x∷σ => vs <- rec Δ;;
                        v  <- angelic σ;;
                        pure (vs ► (x∷σ ↦ v))
@@ -184,14 +189,14 @@ Module Type NewShallowExecOn
       #[global] Arguments angelic_ctx {N} Δ.
 
       Definition demonic σ : CPureSpecM (Val σ) :=
-        fun POST => ∀ v : Val σ, POST v.
+        fun POST => (∀ v : Val σ, POST v)%I.
       #[global] Arguments demonic σ _ /.
 
       Definition demonic_ctx {N : Set} :
         forall Δ : NCtx N Ty, CPureSpecM (NamedEnv Val Δ) :=
         fix rec Δ {struct Δ} :=
           match Δ with
-          | []      => pure env.nil
+          | [ctx]   => pure [env]
           | Δ ▻ x∷σ => vs <- rec Δ;;
                        v  <- demonic σ;;
                        pure (vs ► (x∷σ ↦ v))
@@ -201,11 +206,11 @@ Module Type NewShallowExecOn
       Definition angelic_binary {A} :
         CPureSpecM A -> CPureSpecM A -> CPureSpecM A :=
         fun m1 m2 POST =>
-          m1 POST ∨ m2 POST.
+          (m1 POST ∨ m2 POST)%I.
       Definition demonic_binary {A} :
         CPureSpecM A -> CPureSpecM A -> CPureSpecM A :=
         fun m1 m2 POST =>
-          m1 POST ∧ m2 POST.
+          (m1 POST ∧ m2 POST)%I.
 
       Definition angelic_list' {A} :
         A -> list A -> CPureSpecM A :=
@@ -245,66 +250,61 @@ Module Type NewShallowExecOn
         demonic_list (finite.enum F).
       #[global] Arguments demonic_finite F {_ _}.
 
-      Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> L) :
-        angelic_ctx Δ POST ⊣⊢ ∃ vs : NamedEnv Val Δ, POST vs.
-      Proof. induction Δ; cbn; [|rewrite IHΔ]; solve_wp. Qed.
+      Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (Φ : NamedEnv Val Δ -> L) :
+        angelic_ctx Δ Φ ⊣⊢ ∃ vs : NamedEnv Val Δ, Φ vs.
+      Proof. induction Δ; cbn; [|rewrite IHΔ]; solve_wp. Admitted.
 
-      Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> L) :
-        demonic_ctx Δ POST ⊣⊢ ∀ vs : NamedEnv Val Δ, POST vs.
-      Proof. induction Δ; cbn; [|rewrite IHΔ]; solve_wp. Qed.
+      Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (Φ : NamedEnv Val Δ -> L) :
+        demonic_ctx Δ Φ ⊣⊢ ∀ vs : NamedEnv Val Δ, Φ vs.
+      Proof. induction Δ; cbn; [|rewrite IHΔ]; solve_wp. Admitted.
 
-      Lemma wp_angelic_list' {A} (xs : list A) (POST : A -> L) :
-        forall d, angelic_list' d xs POST ⊣⊢
-                    ∃ x : A, !! (d = x \/ In x xs) ∧ POST x.
+      Lemma wp_angelic_list' {A} (xs : list A) (Φ : A -> L) :
+        ∀ d, angelic_list' d xs Φ ⊣⊢
+               ∃ x : A, ⌜d = x \/ In x xs⌝ ∧ Φ x.
       Proof.
         induction xs; cbn; intros d.
-        - split.
-          + apply (lex_right d), land_right; [apply lprop_right;left|]; easy.
-          + apply lex_left; intros x. apply land_prop_left.
-            intros [H|H]; now destruct H.
-        - cbv [angelic_binary pure]. rewrite IHxs. clear IHxs. split.
-          + apply lor_left.
-            * apply (lex_right d), land_right; [apply lprop_right;left|]; easy.
-            * apply proper_lex_entails. intros x.
-              apply proper_land_entails; [|easy].
-              apply proper_lprop_entails.
-              unfold Basics.impl; cbn. intuition.
-          + apply lex_left; intros x. apply land_prop_left.
-            intros [H|H]; [apply lor_right1|apply lor_right2].
-            * now subst.
-            * apply (lex_right x), land_right; [apply lprop_right|]; easy.
+        - iSplit.
+          + iIntros "HΦ". iExists d. iSplit; auto.
+          + iIntros "(%x & %Heq & HΦ)". destruct Heq; now subst.
+        - cbv [angelic_binary pure]. rewrite IHxs. clear IHxs. iSplit.
+          + iIntros "[HΦ|(%x & %Heq & HΦ)]".
+            * iExists d. iSplit; auto.
+            * iExists x. iSplit; auto.
+          + iIntros "(%x & %Heq & HΦ)". destruct Heq.
+            * iLeft. now subst.
+            * iRight. iExists x. iSplit; auto.
       Qed.
 
-      Lemma wp_angelic_list {A} (xs : list A) (POST : A -> L) :
-        angelic_list xs POST ⊣⊢ ∃ x : A, !! List.In x xs ∧ POST x.
+      Lemma wp_angelic_list {A} (xs : list A) (Φ : A -> L) :
+        angelic_list xs Φ ⊣⊢ ∃ x : A, ⌜List.In x xs⌝ ∧ Φ x.
       Proof.
         destruct xs; cbn.
-        - unfold error, FALSE. split; solve_wp.
+        - unfold error, FALSE. solve_wp.
         - apply wp_angelic_list'.
       Qed.
 
-      Lemma wp_demonic_list' {A} (xs : list A) (POST : A -> L) :
-        forall d, demonic_list' d xs POST ⊣⊢
-                    ∀ x : A, !! (d = x \/ In x xs) → POST x.
+      Lemma wp_demonic_list' {A} (xs : list A) (Φ : A -> L) :
+        ∀ d, demonic_list' d xs Φ ⊣⊢
+               ∀ x : A, ⌜d = x \/ In x xs⌝ → Φ x.
       Proof.
         induction xs; cbn; intros d.
-        - split.
-          + solve_wp.
-          + apply (lall_left d), lentails_apply, lprop_right; now left.
-        - cbv [demonic_binary pure]. rewrite IHxs. clear IHxs. split.
-          + solve_wp; apply land_left2, (lall_left v), lentails_apply, lprop_right;
-              [left|right]; assumption.
-          + apply land_right.
-            * apply (lall_left d), lentails_apply, lprop_right; auto.
-            * apply lall_right; intro x; apply lprop_intro_impl; intro HIn.
-              apply (lall_left x), lentails_apply, lprop_right; auto.
+        - iSplit.
+          + iIntros "HΦ %x %Heq". destruct Heq; now subst.
+          + iIntros "H". iApply "H". now iLeft.
+        - cbv [demonic_binary pure]. rewrite IHxs. clear IHxs. iSplit.
+          + iIntros "HΦ %x %Heq". destruct Heq; [subst|].
+            * now rewrite bi.and_elim_l.
+            * rewrite bi.and_elim_r. now iApply "HΦ".
+          + iIntros "HΦ". iSplit.
+            * iApply "HΦ"; auto.
+            * iIntros "%x %Heq". iApply "HΦ". auto.
       Qed.
 
       Lemma wp_demonic_list {A} (xs : list A) (POST : A -> L) :
-        demonic_list xs POST ⊣⊢ ∀ x : A, !! List.In x xs → POST x.
+        demonic_list xs POST ⊣⊢ ∀ x : A, ⌜List.In x xs⌝ → POST x.
       Proof.
         destruct xs; cbn.
-        - unfold block, TRUE. split; solve_wp.
+        - unfold block, TRUE. solve_wp.
         - apply wp_demonic_list'.
       Qed.
 
@@ -313,16 +313,16 @@ Module Type NewShallowExecOn
     Section Guards.
 
       Definition assume_formula (fml : Prop) : CPureSpecM unit :=
-        fun POST => !! fml → POST tt.
+        fun POST => (⌜fml⌝ → POST tt)%I.
       #[global] Arguments assume_formula _ _ /.
       Definition assert_formula (fml : Prop) : CPureSpecM unit :=
-        fun POST => !! fml ∧ POST tt.
+        fun POST => (⌜fml⌝ ∧ POST tt)%I.
       #[global] Arguments assert_formula _ _ /.
       Definition produce_chunk (c : SCChunk) : CPureSpecM unit :=
-        fun POST => interpret_scchunk c -∗ POST tt.
+        fun POST => (interpret_scchunk c -∗ POST tt)%I.
       #[global] Arguments produce_chunk c _ /.
       Definition consume_chunk (c : SCChunk) : CPureSpecM unit :=
-        fun POST => interpret_scchunk c ∗ POST tt.
+        fun POST => (interpret_scchunk c ∗ POST tt)%I.
       #[global] Arguments consume_chunk c _/.
 
       (* The paper uses asserted equalities between multiple types, but the
@@ -341,33 +341,32 @@ Module Type NewShallowExecOn
         assert_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
           bind (assert_eq_nenv δ δ') (fun _ => assert_formula (t = t')).
 
-      Lemma wp_assert_formula {F : Prop} (POST : unit -> L) :
-        assert_formula F POST ⊣⊢ (!! F ∧ lemp) ∗ POST tt.
-      Proof. now rewrite lemp_true, land_true, lprop_sep_and. Qed.
-      Lemma wp_assume_formula {F : Prop} (POST : unit -> L) :
-        assume_formula F POST ⊣⊢ ((!! F ∧ lemp) -∗ POST tt).
-      Proof. now rewrite lemp_true, land_true, lprop_wand_impl. Qed.
+      Lemma wp_assert_formula {F : Prop} (Φ : unit -> L) :
+        assert_formula F Φ ⊣⊢ (⌜F⌝ ∧ emp) ∗ Φ tt.
+      Proof. cbn. now rewrite bi.and_emp bi.persistent_and_sep. Qed.
+
+      Lemma wp_assume_formula {F : Prop} (Φ : unit -> L) :
+        assume_formula F Φ ⊣⊢ ((⌜F⌝ ∧ emp) -∗ Φ tt).
+      Proof. cbn. now rewrite bi.and_emp bi.impl_wand. Qed.
 
       Lemma wp_assert_eq_env {Δ : Ctx Ty} (δ δ' : Env Val Δ) :
-        forall POST,
-          assert_eq_env δ δ' POST ⊣⊢ !! (δ = δ') ∧ POST tt.
+        forall Φ,
+          assert_eq_env δ δ' Φ ⊣⊢ ⌜δ = δ'⌝ ∧ Φ tt.
       Proof.
-        induction δ; intros POST; env.destroy δ'; cbn;
+        induction δ; intros Φ; env.destroy δ'; cbn;
           cbv [bind assert_formula pure].
         - solve_wp.
-        - rewrite IHδ, env.inversion_eq_snoc. clear IHδ.
-          solve_wp; now apply lprop_right.
+        - rewrite IHδ env.inversion_eq_snoc. solve_wp.
       Qed.
 
       Lemma wp_assert_eq_nenv {N} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) :
         forall POST,
-          assert_eq_nenv δ δ' POST ⊣⊢ !! (δ = δ') ∧ POST tt.
+          assert_eq_nenv δ δ' POST ⊣⊢ ⌜δ = δ'⌝ ∧ POST tt.
       Proof.
         unfold NamedEnv.
         induction δ; intros POST; env.destroy δ'; cbn; cbv [bind assert_formula].
         - solve_wp.
-        - rewrite IHδ, env.inversion_eq_snoc.
-          rewrite <- lprop_and_distr, land_assoc.
+        - rewrite IHδ env.inversion_eq_snoc.
           solve_wp.
       Qed.
 
@@ -447,11 +446,12 @@ Module Type NewShallowExecOn
         - unfold produce_chunk; now rewrite interpret_scchunk_inst.
         - unfold produce_chunk; now rewrite interpret_scchunk_inst.
         - destruct pattern_match_val; auto.
-        - now rewrite IHasn1, IHasn2, lwand_curry.
-        - unfold demonic_binary. now rewrite IHasn1, IHasn2, lwand_disj_distr.
-        - unfold demonic. rewrite lwand_exists_comm.
-          now apply proper_lall_equiv.
-        - now rewrite lwand_emp.
+        - now rewrite IHasn1 IHasn2 bi.wand_curry.
+        - unfold demonic_binary.
+          now rewrite IHasn1 IHasn2 wand_or_distr.
+        - rewrite bi.exist_wand_forall.
+          now apply bi.forall_proper.
+        - now rewrite bi.emp_wand.
       Qed.
 
       Lemma wp_consume {Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : unit -> L) :
@@ -462,10 +462,12 @@ Module Type NewShallowExecOn
         - unfold consume_chunk; now rewrite interpret_scchunk_inst.
         - unfold consume_chunk; now rewrite interpret_scchunk_inst.
         - destruct pattern_match_val; auto.
-        - now rewrite IHasn1, IHasn2, <- lsep_assoc.
-        - rewrite lsep_disj_distr. now apply proper_lor_equiv.
-        - rewrite lsep_exists_comm. now apply proper_lex_equiv.
-        - now rewrite lsep_comm, lsep_emp.
+        - now rewrite IHasn1 IHasn2 bi.sep_assoc.
+        - unfold angelic_binary. rewrite bi.sep_or_r.
+          now apply bi.or_proper.
+        - rewrite bi.sep_exist_r.
+          now apply bi.exist_proper.
+        - now rewrite bi.emp_sep.
       Qed.
 
     End ProduceConsume.
@@ -489,9 +491,9 @@ Module Type NewShallowExecOn
         fun POST =>
           match ctr with
           | MkSepContract _ _ Σe δ req result ens =>
-              ∃ ι : Valuation Σe, !! (args = inst δ ι) ∧
+              ∃ ι : Valuation Σe, ⌜args = inst δ ι⌝ ∧
               asn.interpret req ι ∗ (∀ v : Val τ, asn.interpret ens ι.[result∷τ ↦ v] -∗ POST v)
-          end.
+          end%I.
 
       Definition call_lemma {Δ} (lem : Lemma Δ) (args : CStore Δ) : CPureSpecM unit :=
           match lem with
@@ -506,9 +508,9 @@ Module Type NewShallowExecOn
         fun POST =>
           match lem with
           | MkLemma _ Σe δ req ens =>
-              ∃ ι : Valuation Σe, !! (args = inst δ ι) ∧
+              ∃ ι : Valuation Σe, ⌜args = inst δ ι⌝ ∧
               asn.interpret req ι ∗ (asn.interpret ens ι -∗ POST tt)
-          end.
+          end%I.
 
       Lemma equiv_call_contract {Δ τ} (ctr : SepContract Δ τ) (args : CStore Δ) :
         forall (POST : Val τ -> L),
@@ -516,11 +518,10 @@ Module Type NewShallowExecOn
       Proof.
         intros POST; destruct ctr as [Σe δΔ req res ens].
         cbv [call_contract call_contract' bind demonic].
-        rewrite wp_angelic_ctx. apply proper_lex_equiv. intros ι.
-        rewrite wp_assert_eq_nenv. apply proper_land_equiv; [easy|].
-        rewrite wp_consume. apply proper_lsep_equiv; [easy|].
-        apply proper_lall_equiv. intros v.
-        apply wp_produce.
+        rewrite wp_angelic_ctx. apply bi.exist_proper. intros ι.
+        rewrite wp_assert_eq_nenv. apply bi.and_proper; [easy|].
+        rewrite wp_consume. apply bi.sep_proper; [easy|].
+        apply bi.forall_proper. intros v. apply wp_produce.
       Qed.
 
       Lemma equiv_call_lemma {Δ} (lem : Lemma Δ) (args : CStore Δ) :
@@ -529,9 +530,9 @@ Module Type NewShallowExecOn
       Proof.
         intros POST; destruct lem as [Σe δΔ req ens].
         cbv [call_lemma call_lemma' bind demonic].
-        rewrite wp_angelic_ctx. apply proper_lex_equiv. intros ι.
-        rewrite wp_assert_eq_nenv. apply proper_land_equiv; [easy|].
-        rewrite wp_consume. apply proper_lsep_equiv; [easy|].
+        rewrite wp_angelic_ctx. apply bi.exist_proper. intros ι.
+        rewrite wp_assert_eq_nenv. apply bi.and_proper; [easy|].
+        rewrite wp_consume. apply bi.sep_proper; [easy|].
         apply wp_produce.
       Qed.
 
@@ -559,7 +560,7 @@ Module Type NewShallowExecOn
   Module CHeapSpecM.
   Section WithProp.
 
-    Context {L} {PI : PredicateDef L}.
+    Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
 
     (* The main specification monad that we use for execution. It is indexed by
        two program variable contexts Γ1 Γ2 that encode the shape of the program
@@ -588,20 +589,20 @@ Module Type NewShallowExecOn
         fun POST => ma (fun a => POST (f a)).
 
       Definition error {Γ1 Γ2 A} : CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ => ⊥.
+        fun POST δ => False%I.
       Definition block {Γ1 Γ2 A} : CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ => ⊤.
+        fun POST δ => True%I.
       #[global] Arguments block {_ _ _} _ /.
 
       Definition demonic_binary {Γ1 Γ2 A} (m1 m2 : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ => m1 POST δ ∧ m2 POST δ.
+        fun POST δ => (m1 POST δ ∧ m2 POST δ)%I.
       Definition angelic_binary {Γ1 Γ2 A} (m1 m2 : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        fun POST δ => m1 POST δ ∨ m2 POST δ.
+        fun POST δ => (m1 POST δ ∨ m2 POST δ)%I.
 
       Definition demonic {Γ} (σ : Ty) : CHeapSpecM Γ Γ (Val σ) :=
-        fun POST δ => ∀ v : Val σ, POST v δ.
+        fun POST δ => (∀ v : Val σ, POST v δ)%I.
       Definition angelic {Γ} (σ : Ty) : CHeapSpecM Γ Γ (Val σ) :=
-        fun POST δ => ∃ v : Val σ, POST v δ.
+        fun POST δ => (∃ v : Val σ, POST v δ)%I.
       #[global] Arguments angelic {Γ} σ _ /.
     End Basic.
     #[local] Notation "x <- ma ;; mb" :=
@@ -663,7 +664,7 @@ Module Type NewShallowExecOn
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CHeapSpecM Γ Γ (CStore σs) :=
         fun POST δ => POST (evals es δ) δ.
       #[global] Arguments eval_exps {_ _} es _ /.
-      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Val σ) : CHeapSpecM Γ Γ unit :=
+      Definition assign {Γ} x {σ} {xIn : (x∷σ ∈ Γ)%katamaran} (v : Val σ) : CHeapSpecM Γ Γ unit :=
         fun POST δ => POST tt (δ ⟪ x ↦ v ⟫).
       #[global] Arguments assign {Γ} x {σ xIn} v _ /.
 
@@ -804,7 +805,7 @@ Module Type NewShallowExecOn
           let δΔ : CStore Δ := inst (sep_contract_localstore c) ι in
           (* We use the FINISH alias of True for the purpose of counting
              nodes in a shallowly-generated VC. *)
-          ⊤ ⊢ exec_contract c body ι (fun _ _ => ⊤) δΔ).
+          ⊢ exec_contract c body ι (fun _ _ => CPureSpecM.FINISH) δΔ).
 
       Definition vcgen' {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
         match c with
@@ -821,14 +822,12 @@ Module Type NewShallowExecOn
        transformers. Which is a necessity for the main soundness theorems. *)
     Section Monotonicity.
 
-      Import sep.instances.
-
       #[local] Open Scope signature.
 
       Definition Monotonic {Γ1 Γ2 A} : relation (CHeapSpecM Γ1 Γ2 A) :=
-        (A ::> CStore Γ2 ::> lentails) ==> CStore Γ1 ::> lentails.
+        (A ::> CStore Γ2 ::> (⊢)) ==> CStore Γ1 ::> (⊢).
       Definition Monotonic' {Γ1 Γ2 A} : relation (CHeapSpecM Γ1 Γ2 A) :=
-        (A -> CStore Γ2 -> L) ::> CStore Γ1 ::> lentails.
+        (A -> CStore Γ2 -> L) ::> CStore Γ1 ::> (⊢).
 
       Definition MonotonicExec : relation Exec :=
         ∀ Γ τ, Stm Γ τ ::> Monotonic.
@@ -855,12 +854,12 @@ Module Type NewShallowExecOn
         repeat
           lazymatch goal with
           | |- ?x           ⊢ ?x => reflexivity
-          | |- Basics.flip lentails ?x ?y => change_no_check (lentails y x)
-          | |- limpl _ _    ⊢ _  => apply proper_limpl_entails; [easy|]
-          | |- lsep _ _     ⊢ _  => apply proper_lsep_entails
-          | |- lwand _ _    ⊢ _  => apply proper_lwand_entails
-          | |- lex _        ⊢ _  => apply proper_lex_entails; intros ?
-          | H : (_ ::> CStore _ ::> lentails) ?P ?Q |- ?P ?x ?δ ⊢ ?Q ?x ?δ =>
+          | |- Basics.flip (⊢) ?x ?y => change_no_check (y ⊢ x)
+          | |- bi_impl _ _    ⊢ _  => apply bi.impl_mono'; [easy|]
+          | |- bi_sep _ _     ⊢ _  => apply bi.sep_mono'
+          | |- bi_wand _ _    ⊢ _  => apply bi.wand_mono'
+          | |- bi_exist _     ⊢ _  => apply bi.exist_mono'; intros ?
+          | H : (_ ::> CStore _ ::> (⊢)) ?P ?Q |- ?P ?x ?δ ⊢ ?Q ?x ?δ =>
               apply H
           | H : Monotonic ?m1 ?m2 |- ?m1 _ ?δ ⊢ ?m2 _ ?δ =>
               apply H; intros ? ?
@@ -936,7 +935,7 @@ Module Type NewShallowExecOn
 
       Lemma exec_error_initial (ex : Exec) :
         MonotonicExec exec_error ex.
-      Proof. intros ? ? ? ? ? ? ?. apply lfalse_left. Qed.
+      Proof. intros ? ? ? ? ? ? ?. apply bi.False_elim. Qed.
 
       Lemma exec_monotonic n : Proper MonotonicExec (exec n).
       Proof.
@@ -961,20 +960,15 @@ Module Type NewShallowExecOn
 
     End Monotonicity.
 
-    Import sep.instances.
-
     Lemma vcgen_equiv {Δ τ} n (c : SepContract Δ τ) (body : Stm Δ τ) :
       vcgen n c body <-> vcgen' n c body.
     Proof.
-      destruct c as [Σ δ req result ens]; cbn.
-      rewrite env.Forall_forall.
-      apply base.forall_proper; intros ι.
-      rewrite CPureSpecM.wp_produce.
-      rewrite <- lwand_sep_adjoint.
-      apply proper_entails_equiv_iff.
-      rewrite lsep_true. reflexivity.
-      split; apply exec_monotonic; intros v δ';
-        now rewrite CPureSpecM.wp_consume, lsep_comm, lsep_true.
+      destruct c as [Σ δ req result ens]; cbn. unfold CPureSpecM.FINISH.
+      rewrite env.Forall_forall. apply all_iff_morphism; intros ι.
+      rewrite CPureSpecM.wp_produce entails_wand_iff.
+      apply bi.bi_emp_valid_proper. apply bi.wand_proper; [easy|].
+      apply bi.entails_anti_sym; apply exec_monotonic; intros v δ';
+        now rewrite CPureSpecM.wp_consume ?bi.sep_True ?bi.True_sep.
     Qed.
 
   End WithProp.
@@ -984,10 +978,8 @@ Module Type NewShallowExecOn
 
   Module Shallow.
 
-    Import sep.instances.
-
     Section Soundness.
-      Context {L} {PI : PredicateDef L}.
+      Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
 
       Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
         (* Use inline_fuel = 1 by default. *)
@@ -1028,75 +1020,74 @@ Module Type NewShallowExecOn
         ∀ Δ σ (f : 𝑭 Δ σ),
           match CEnv f with
           | Some c => ValidContractSem ex (FunDef f) c
-          | None   => ⊤
-          end.
+          | None   => True
+          end%I.
 
       Lemma validcontractsem_monotonic :
         Proper
-          (MonotonicExec ==> ∀ Γ τ, Stm Γ τ ::> SepContract Γ τ ::> lentails)
+          (MonotonicExec ==> ∀ Γ τ, Stm Γ τ ::> SepContract Γ τ ::> (⊢))
           ValidContractSem.
       Proof.
         intros ex1 ex2 ex_mon Γ τ s [Σe δΔ req res ens]; cbn.
-        apply proper_lall_entails; intros ι.
-        apply proper_lwand_entails; [easy|].
+        apply bi.forall_mono'; intros ι.
+        apply bi.wand_mono'; [easy|].
         now apply ex_mon.
       Qed.
 
       Instance validcontractenvsem_monotonic :
-        Proper (MonotonicExec ==> lentails) ValidContractEnvSem.
+        Proper (MonotonicExec ==> (⊢)) ValidContractEnvSem.
       Proof.
         intros ex1 ex2 ex_mon.
         unfold ValidContractEnvSem.
-        apply proper_lall_entails; intros Δ.
-        apply proper_lall_entails; intros σ.
-        apply proper_lall_entails; intros f.
+        apply bi.forall_mono'; intros Δ.
+        apply bi.forall_mono'; intros σ.
+        apply bi.forall_mono'; intros f.
         destruct CEnv; [|easy].
         now apply validcontractsem_monotonic.
       Qed.
 
       Definition sound_shallow (vcenv : ValidContractCEnv) :
-        ⊤ ⊢ ValidContractEnvSem (exec 1).
+        ⊢ ValidContractEnvSem (exec 1).
       Proof.
-        apply lall_right; intros Δ.
-        apply lall_right; intros σ.
-        apply lall_right; intros f.
+        iIntros (Δ σ f).
         specialize (vcenv Δ σ f).
-        destruct (CEnv f) as [ctr|]; [|easy].
+        destruct (CEnv f) as [ctr|]; [|auto].
         specialize (vcenv _ eq_refl).
         unfold ValidContract in vcenv.
         rewrite vcgen_equiv in vcenv.
         destruct ctr as [Σe δΔ req res ens].
-        apply lall_right; intros ι.
+        iIntros (ι) "Hreq".
         specialize (vcenv ι).
-        apply lwand_sep_adjoint.
-        now rewrite lsep_true.
+        now iApply vcenv.
       Qed.
 
       Lemma soundness (ex : Exec) (exmdl : Model ex) :
-        ValidContractCEnv -> ⊤ ⊢ ValidContractEnvSem ex.
+        ValidContractCEnv -> ⊢ ValidContractEnvSem ex.
       Proof.
         unfold ValidContractCEnv.
         intros vcenv.
-        apply lall_right; intros Δ.
-        apply lall_right; intros σ.
-        apply lall_right; intros f.
+        apply bi.forall_intro. intros Δ.
+        apply bi.forall_intro. intros σ.
+        apply bi.forall_intro. intros f.
         specialize (vcenv Δ σ f).
-        destruct (CEnv f) as [ctr|]; [|easy].
+        destruct (CEnv f) as [ctr|]; [|auto].
         specialize (vcenv ctr eq_refl).
         destruct ctr as [ctxΣ θΔ req res ens]; cbn in *.
-        apply lall_right; intros ι.
+        apply bi.forall_intro. intros ι.
         rewrite env.Forall_forall in vcenv.
+        change (emp ⊢ ?P) with (⊢ P).
         specialize (vcenv ι). revert vcenv.
-        apply proper_entails_entails_impl; [easy|].
+        apply bi.bi_emp_valid_mono.
         rewrite CPureSpecM.wp_produce.
-        apply proper_lwand_entails; [easy|].
+        apply bi.wand_mono'; [easy|].
         apply rule_syntactic'; auto.
         apply exec_call_with_contracts_monotonic.
         apply exec_error_initial.
         apply rule_contract; auto.
         intros ? ?.
         rewrite CPureSpecM.wp_consume.
-        now rewrite lsep_comm, lsep_true.
+        unfold CPureSpecM.FINISH.
+        now rewrite bi.sep_True.
       Qed.
 
     End Soundness.
@@ -1156,7 +1147,7 @@ Module Type NewShallowExecOn
         end.
 
       Section WithSepLogic.
-        Context {L : SepLogic}.
+        Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
         (* This typeclass approach seems to be much faster than the reifyProp
            tactic above. *)
         Class ShallowStats (P : L) :=
@@ -1165,7 +1156,7 @@ Module Type NewShallowExecOn
 
         (* We make these instances global so that users can simply use the
            calc tactic qualified without importing the rest of this module. *)
-        #[global] Instance stats_true {L : SepLogic} : ShallowStats CPureSpecM.TRUE :=
+        #[global] Instance stats_true {L : bi} : ShallowStats CPureSpecM.TRUE :=
           {| branches := 1; pruned := 1 |}.
         #[global] Instance stats_false : ShallowStats CPureSpecM.FALSE :=
           {| branches := 1; pruned := 1 |}.
@@ -1174,14 +1165,14 @@ Module Type NewShallowExecOn
         (* We do not count regular True and False towards the statistics
            because they do not (should not) represent leaves of the shallow
            execution. *)
-        #[global] Instance stats_true' : ShallowStats ⊤ :=
+        #[global] Instance stats_true' : ShallowStats True :=
           {| branches := 0; pruned := 0 |}.
-        #[global] Instance stats_false' : ShallowStats ⊥ :=
+        #[global] Instance stats_false' : ShallowStats False :=
           {| branches := 0; pruned := 0 |}.
 
-        #[global] Instance stats_eq {A} {x y : A} : ShallowStats (!! (x = y)) :=
+        #[global] Instance stats_eq {A} {x y : A} : ShallowStats ⌜x = y⌝ :=
           {| branches := 0; pruned := 0 |}.
-        #[global] Instance stats_zle {x y : Z} : ShallowStats (!! Z.le x y) :=
+        #[global] Instance stats_zle {x y : Z} : ShallowStats ⌜Z.le x y⌝ :=
           {| branches := 0; pruned := 0 |}.
 
         #[global] Instance stats_and `{ShallowStats P, ShallowStats Q} :

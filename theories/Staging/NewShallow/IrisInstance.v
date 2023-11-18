@@ -97,7 +97,7 @@ Section Soundness.
 
   Context `{sG : sailGS Σ}.
 
-  #[export] Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
+  #[export] Instance PredicateDefIProp : PredicateDef (iProp Σ) :=
     {| lptsreg σ r v        := reg_pointsTo r v;
        luser p ts           := luser_inst sailGS_memGS ts;
        lduplicate p ts Hdup := lduplicate_inst (sRG := sailGS_sailRegGS) sailGS_memGS ts Hdup
@@ -350,7 +350,7 @@ Section Soundness.
   Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
     match contract with
     | MkSepContract _ _ ctxΣ θΔ pre result post =>
-      sep.Forall (fun (ι : Valuation ctxΣ) =>
+      Sep.Logic.Forall (fun (ι : Valuation ctxΣ) =>
         semTriple (inst θΔ ι) (asn.interpret pre ι) body
                   (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
     end.
@@ -372,10 +372,6 @@ Section Soundness.
         ⊢ semTriple δ (asn.interpret req ι) (stm_foreign f es)
           (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
       end.
-
-  Lemma Forall_forall {B : Set} {D : B -> Set} (Δ : Ctx B) (P : Env D Δ → iProp Σ) :
-    sep.Forall P ⊣⊢ (∀ E : Env D Δ, P E).
-  Proof. apply bi.equiv_entails, sep.Forall_forall. Qed.
 
   Definition valid_contract_curry {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) :
     ValidContractSem body contract ⊣⊢ ValidContractSemCurried body contract.
@@ -767,9 +763,10 @@ Module IrisInstanceWithContracts
     ⊢ semWP' (stm_foreign f es) ≼ semWP (stm_foreign f es).
   Proof. iIntros (extSem POST δΓ) "WPs". by iApply extSem. Qed.
 
-  Lemma equiv_call_lemma {Δ} (lem : Lemma Δ) (args : CStore Δ) POST :
-    CPureSpecM.call_lemma lem args POST ⊣⊢ CPureSpecM.call_lemma' lem args POST.
-  Proof. apply bi.entails_anti_sym; apply CPureSpecM.equiv_call_lemma. Qed.
+(*   Lemma equiv_call_lemma {Δ} (lem : Lemma Δ) (args : CStore Δ) POST : *)
+(*     CPureSpecM.call_lemma lem args POST ⊣⊢ CPureSpecM.call_lemma' lem args POST. *)
+(*   Proof. apply CPureSpecM.equiv_call_lemma. Qed. *)
+(* c *)
 
   Lemma rule_lemma {Γ τ Δ} (L : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (s : Stm Γ τ) :
     LemmaSem ->
@@ -778,7 +775,7 @@ Module IrisInstanceWithContracts
     iIntros (lemSem POST δ) "WPs". specialize (lemSem _ L).
     iApply semWP_lemmak.
     unfold semWP'; cbn.
-    rewrite equiv_call_lemma.
+    rewrite CPureSpecM.equiv_call_lemma.
     destruct LEnv as [Σe δΔ req ens]. cbn in lemSem |- *.
     iDestruct "WPs" as "[% [% [req ens]]]".
     iApply "ens". by iApply lemSem.
@@ -891,8 +888,6 @@ Module IrisInstanceWithContracts
     - unfold pointwise_relation. easy.
   Admitted.
 
-  Import sep.instances.
-
   Lemma sound :
     ForeignSem -> LemmaSem -> Shallow.ValidContractCEnv ->
     ⊢ Shallow.ValidContractEnvSem semWP.
@@ -909,7 +904,7 @@ Module IrisInstanceWithContracts
     specialize (vcenv ι).
     rewrite CPureSpecM.wp_produce in vcenv.
     cbn in vcenv.
-    iPoseProof (vcenv with "[$] PRE") as "vcenv". clear vcenv.
+    iPoseProof (vcenv with "PRE") as "vcenv". clear vcenv.
     iApply (sound_stm extSem lemSem).
     iRevert "vcenv".
     iApply CHeapSpecM.exec_aux_monotonic.

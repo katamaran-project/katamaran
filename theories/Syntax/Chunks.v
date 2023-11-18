@@ -39,7 +39,6 @@ From Coq Require Import
 From Katamaran Require Import
      Prelude
      Tactics
-     Sep.Logic
      Syntax.Predicates
      Syntax.Registers
      Base.
@@ -237,7 +236,8 @@ Module Type ChunksOn
   Qed.
 
   Section Interpretation.
-    Import sep.notations.
+    Import iris.bi.interface.
+
     Context {HProp} `{PI : PredicateDef HProp}.
 
     Fixpoint interpret_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : HProp :=
@@ -257,7 +257,7 @@ Module Type ChunksOn
       end.
 
     Definition interpret_scheap : SCHeap -> HProp :=
-      List.fold_right (fun c h => interpret_scchunk c ∗ h) lemp.
+      List.fold_right (fun c h => interpret_scchunk c ∗ h)%I emp%I.
     #[global] Arguments interpret_scheap !h.
 
     Lemma interpret_scchunk_inst {Σ} (c : Chunk Σ) (ι : Valuation Σ) :

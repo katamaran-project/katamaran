@@ -587,20 +587,18 @@ Import BlockVerification3.
     iIntros (Σ sG) "Hpre Hk".
     iApply (sound_VC__addr lemSemBlockVerif $! (bv.of_N handler_addr) with "[Hpre] [Hk]").
     - exact (sat__femtohandler is_mmio). Unshelve. exact [env].
-    - cbv [femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
-           Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
-           Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst instprop_formula
-           inst_term env.lookup ctx.view ctx.in_at ctx.in_valid inst_env
+    - cbv [femtokernel_handler_pre interpret_chunk lptsreg PredicateDefIProp
+           inst instprop_formula inst_term env.lookup ctx.view ctx.in_at
+           ctx.in_valid inst_env
            env.map].
       cbn.
       iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp & Hfortytwo & Hpc & Hnpc & Hhandler)".
       rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
       iFrame. destruct is_mmio; now iFrame.
-    - cbv [femtokernel_handler_pre Logic.sep.lsep Logic.sep.lcar
-           Logic.sep.land Logic.sep.lprop Logic.sep.lemp interpret_chunk
-           Model.IProp Logic.sep.lex lptsreg PredicateDefIProp inst instprop_formula
-           inst_term env.lookup ctx.view ctx.in_at ctx.in_valid inst_env
-           env.map femto_handler_post femtokernel_handler_post].
+    - cbv [femtokernel_handler_pre interpret_chunk lptsreg PredicateDefIProp
+           inst instprop_formula inst_term env.lookup ctx.view ctx.in_at
+           ctx.in_valid inst_env env.map femto_handler_post
+           femtokernel_handler_post].
       cbn.
       iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hregs & Hpmp & Hfortytwo)".
       cbn.
@@ -1068,8 +1066,8 @@ Import BlockVerification3.
         now iIntros "_".
   Qed.
 
-  (* Print Assumptions femtokernel_endToEnd. *)
+(* Print Assumptions femtokernel_endToEnd. *)
+
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
 (* End: *)
-  (*  *)

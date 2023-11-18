@@ -201,7 +201,7 @@ Section Soundness.
 
   Context `{sG : sailGS2 Σ}.
 
-  #[export] Program Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
+  #[export] Program Instance PredicateDefIProp : PredicateDef (iProp Σ) :=
     {| lptsreg σ r v        := reg_pointsTo2 r v v;
        luser p ts           := luser_inst2 ts;
        lduplicate p ts Hdup := lduplicate_inst2 ts Hdup
@@ -1006,7 +1006,7 @@ Section Soundness.
   Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
     match contract with
     | MkSepContract _ _ ctxΣ θΔ pre result post =>
-      sep.Forall (fun (ι : Valuation ctxΣ) =>
+      Sep.Logic.Forall (fun (ι : Valuation ctxΣ) =>
         semTriple (inst θΔ ι) (asn.interpret pre ι) body
                   (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
     end.
@@ -1028,10 +1028,6 @@ Section Soundness.
         ⊢ semTriple δ (asn.interpret req ι) (stm_foreign f es)
           (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
       end.
-
-  Lemma Forall_forall {B : Set} {D : B -> Set} (Δ : Ctx B) (P : Env D Δ → iProp Σ) :
-    sep.Forall P ⊣⊢ (∀ E : Env D Δ, P E).
-  Proof. apply bi.equiv_entails, sep.Forall_forall. Qed.
 
   Definition valid_contract_curry {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) :
     ValidContractSem body contract ⊣⊢ ValidContractSemCurried body contract.
@@ -1391,8 +1387,8 @@ Module IrisInstanceWithContracts2
     iIntros (lemSem ltrip) "tripk P". iApply semWp2_lemmak. iApply "tripk".
     specialize (lemSem _ l). remember (LEnv l) as contractL.
     clear - lemSem ltrip.
-    dependent elimination ltrip; cbn in lemSem.
-    iPoseProof (l with "P") as (ι Heq) "[req consr]".
+    destruct ltrip as [Ψ' pats req ens ent]; cbn in lemSem.
+    iPoseProof (ent with "P") as (ι Heq) "[req consr]".
     iApply "consr". by iApply lemSem.
   Qed.
 

@@ -442,11 +442,7 @@ Module Import ExampleModel.
 
     Lemma interpret_assertion_pure_or_not `{sailGS Σ} {Γ} A (Hasn : asn.is_pure A) (ι : Valuation Γ) :
       asn.interpret A ι ⊣⊢ (⌜ asn.interpret_pure A ι ⌝)%I.
-    Proof.
-      assert (asn.is_pure A = true) as Hasn' by now apply Is_true_eq_true.
-      destruct (asn.interpret_pure_equiv A Hasn' ι) as [H1 H2].
-      apply bi.equiv_entails_2; auto.
-    Qed.
+    Proof. now apply asn.interpret_pure_equiv, Is_true_eq_true. Qed.
 
     (* Derive the pure adequacy lemma from the more general lemma
        ExampleModel.adequacy defined in the library. *)
@@ -468,7 +464,7 @@ Module Import ExampleModel.
         iSplit; [trivial|].
         iSplitL; [trivial|].
         iIntros (v0) "post".
-        by rewrite interpret_assertion_pure_or_not.
+        rewrite interpret_assertion_pure_or_not; auto.
       - iApply contracts_sound.
     Qed.
 

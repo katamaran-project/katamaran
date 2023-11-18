@@ -40,7 +40,6 @@ From Katamaran Require Import
      Semantics
      Bitvector
      Sep.Hoare
-     Sep.Logic
      Shallow.Executor
      Shallow.Soundness
      Specification
@@ -697,7 +696,7 @@ Module BlockVerificationDerived2Sem.
                    lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (bv.add apc bv_instrsize) instrs -∗
                    (∀ an2 : Val ty_word, pc ↦ an2 ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (bv.add apc bv_instrsize) instrs ∗ POST an2 [env] -∗ WP_loop) -∗
                      WP_loop) apc) as Hverif2.
-      { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (bv.add apc bv_instrsize) instrs -∗ (∀ an2 : Val ty_word, pc ↦ an2 ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs (bv.add apc bv_instrsize) instrs ∗ POST an2 [env] -∗ WP_loop) -∗ WP_loop)%I).
+      { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an) ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (bv.add apc bv_instrsize) instrs -∗ (∀ an2 : Val ty_word, pc ↦ an2 ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs (bv.add apc bv_instrsize) instrs ∗ POST an2 [env] -∗ WP_loop) -∗ WP_loop)%I).
         revert Hverif.
         apply mono_exec_instruction_any__c.
         intros an h2.
@@ -743,7 +742,7 @@ Module BlockVerificationDerived2Sem.
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
       WP_loop)%I as Hverif.
-    { refine (@produce_sound _ _ _ _ (ι.[("a"::ty_word) ↦ a]) pre (fun _ =>
+    { refine (@produce_sound _ _ _ _ _ (ι.[("a"::ty_word) ↦ a]) pre (fun _ =>
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
       WP_loop)%I [env] []%list _).
@@ -762,8 +761,9 @@ Module BlockVerificationDerived2Sem.
                   (fun an δ => asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ an])%I).
         refine (mono_exec_block_addr _ _ _ _ _ Hexec).
         intros res h2 Hcons. cbn.
-        rewrite <-(bi.sep_True (asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ res] : iProp Σ)).
-        eapply (consume_sound (fun _ => True%I : iProp Σ)).
+        unfold liftP.
+        rewrite <- (bi.sep_True (asn.interpret _ _)).
+        eapply (consume_sound (fun _ => True%I)).
         revert Hcons.
         refine (consume_monotonic _ _ _ _ _).
         cbn. now iIntros.
@@ -952,7 +952,7 @@ Module BlockVerification3Sem.
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
       WP_loop)%I as Hverif.
-    { refine (@produce_sound _ _ _ _ (ι.[("a"::ty_word) ↦ a]) pre (fun _ =>
+    { refine (@produce_sound _ _ _ _ _ (ι.[("a"::ty_word) ↦ a]) pre (fun _ =>
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
       WP_loop)%I [env] []%list _).
@@ -971,8 +971,9 @@ Module BlockVerification3Sem.
                   (fun an δ => asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ an])%I); first easy.
         refine (mono_exec_block_addr _ _ _ _ _ Hexec).
         intros res h2 Hcons. cbn.
-        rewrite <-(bi.sep_True (asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ res] : iProp Σ)).
-        eapply (consume_sound (fun _ => True%I : iProp Σ)).
+        unfold liftP.
+        rewrite <-(bi.sep_True (asn.interpret _ _)).
+        eapply (consume_sound (fun _ => True%I)).
         revert Hcons.
         refine (consume_monotonic _ _ _ _ _).
         cbn. now iIntros.

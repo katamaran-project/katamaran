@@ -47,18 +47,18 @@ Module Type ProgramLogicOn
 Module ProgramLogic.
 
   Section Triples.
+    Import iris.proofmode.tactics.
 
-    Import sep.instances.
-    Import sep.notations.
+    Context {L : bi} {PI : PredicateDef L}.
 
-    Context {L : SepLogic} {PI : PredicateDef L}.
+    Bind Scope bi_scope with L.
 
     (* Hoare triples for SepContract *)
 
     Definition CTriple {Δ σ} (pre : L) (c : SepContract Δ σ) (δΔ : CStore Δ) (post : Val σ -> L) : Prop :=
       match c with
       | MkSepContract _ _ Σe θΔ req result ens =>
-          pre ⊢ ∃ ι : Valuation Σe, !! (δΔ = inst θΔ ι) ∧ asn.interpret req ι ∗
+          pre ⊢ ∃ ι : Valuation Σe, ⌜δΔ = inst θΔ ι⌝ ∧ asn.interpret req ι ∗
                 ∀ v : Val σ, asn.interpret ens (env.snoc ι (result∷σ) v) -∗ post v
       end.
 
@@ -66,7 +66,7 @@ Module ProgramLogic.
       Lemma Δ -> Prop :=
     | rule_ltriple
         (Σ  : LCtx) (θΔ : SStore Δ Σ) (req ens : Assertion Σ) :
-        (pre ⊢ ∃ ι : Valuation Σ, !! (δΔ = inst θΔ ι) ∧ asn.interpret req ι ∗
+        (pre ⊢ ∃ ι : Valuation Σ, ⌜δΔ = inst θΔ ι⌝ ∧ asn.interpret req ι ∗
                  (asn.interpret ens ι -∗ post)) ->
         LTriple δΔ pre post (MkLemma _ _ θΔ req ens).
 
@@ -84,7 +84,7 @@ Module ProgramLogic.
     | rule_pull
         (s : Stm Γ τ) (P : L) (Q : Prop) (R : Val τ -> CStore Γ -> L) :
         (Q -> ⦃ P ⦄ s ; δ ⦃ R ⦄) ->
-        ⦃ P ∧ !!Q ⦄ s ; δ ⦃ R ⦄
+        ⦃ P ∧ ⌜Q⌝ ⦄ s ; δ ⦃ R ⦄
     | rule_exist
         (s : Stm Γ τ) {A : Type} {P : A -> L} {Q : Val τ -> CStore Γ -> L} :
         (forall x, ⦃ P x ⦄ s ; δ ⦃ Q ⦄) ->
@@ -124,20 +124,20 @@ Module ProgramLogic.
         ⦃ P ⦄ stm_assertk e1 e2 k ; δ ⦃ Q ⦄
     | rule_stm_fail
         (s : Val ty.string) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ ⊤ ⦄ stm_fail τ s ; δ ⦃ Q ⦄
+        ⦃ True ⦄ stm_fail τ s ; δ ⦃ Q ⦄
     | rule_stm_read_register
         (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
         ⦃ lptsreg r v ⦄
           stm_read_register r ; δ
-        ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = v) ∧ lptsreg r v ⦄
+        ⦃ fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = v⌝ ∧ lptsreg r v ⦄
     | rule_stm_write_register
         (r : 𝑹𝑬𝑮 τ) (w : Exp Γ τ) (v : Val τ)
         (Q : Val τ -> CStore Γ -> L) :
         ⦃ lptsreg r v ⦄
           stm_write_register r w ; δ
-        ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ) ∧ lptsreg r v' ⦄
+        ⦃ fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v' ⦄
     | rule_stm_assign
-        (x : PVar) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
+        (x : PVar) (xIn : (x∷τ ∈ Γ)%katamaran) (s : Stm Γ τ)
         (P : L) (R : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ fun v δ' => R v (δ' ⟪ x ↦ v ⟫)%env ⦄ ->
         ⦃ P ⦄ stm_assign x s ; δ ⦃ R ⦄
@@ -192,9 +192,9 @@ Module ProgramLogic.
            ⦃ fun v2 δ' => R v2 (env.drop (PatternCaseCtx pc) δ') ⦄) ->
         ⦃ P ⦄ stm_pattern_match s pat rhs ; δ ⦃ R ⦄
 
-    where "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P s Q).
+    where "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P%I s Q%I).
 
-    Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P s Q).
+    Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P%I s Q%I).
 
     Lemma rule_consequence_left {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
       (P1 : L) {P2 : L} {Q : Val σ -> CStore Γ -> L} :
@@ -219,8 +219,7 @@ Module ProgramLogic.
       apply rule_exist.
       intros x.
       apply (rule_consequence_right (Q x) (hyp x)).
-      intros.
-      now apply lex_right with x.
+      iIntros (? ?) "?". now iExists x.
     Qed.
 
     Lemma rule_disj {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
@@ -231,9 +230,7 @@ Module ProgramLogic.
       intros H1 H2.
       apply (rule_consequence_left (∃ b : bool, if b then P else Q)).
       - apply rule_exist; intros []; assumption.
-      - apply lor_left.
-        + now apply lex_right with true.
-        + now apply lex_right with false.
+      - iIntros "[H|H]"; [iExists true| iExists false]; easy.
     Qed.
 
     Lemma rule_disj' {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
@@ -244,39 +241,47 @@ Module ProgramLogic.
       intros H1 H2.
       apply rule_disj.
       - apply (rule_consequence_right _ H1).
-        intros. now apply lor_right1.
+        iIntros (? ?) "H". now iLeft.
       - apply (rule_consequence_right _ H2).
-        intros. now apply lor_right2.
+        iIntros (? ?) "H". now iRight.
     Qed.
 
     Lemma rule_false {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
       {Q : Val σ -> CStore Γ -> L} :
-      ⦃ ⊥ ⦄ s ; δ ⦃ Q ⦄.
+      ⦃ False ⦄ s ; δ ⦃ Q ⦄.
     Proof.
-      apply (rule_consequence_left (∃ (x : Empty_set), ⊤)).
+      apply (rule_consequence_left (∃ (x : Empty_set), True)).
       - apply rule_exist; intros [].
-      - apply lfalse_left.
+      - auto.
     Qed.
 
     Definition WP {Γ τ} (s : Stm Γ τ) (POST :  Val τ -> CStore Γ -> L) : CStore Γ -> L :=
-      fun δ => ∃ (P : L), P ∧ !! (⦃ P ⦄ s; δ ⦃ POST ⦄).
+      fun δ => (∃ (P : L), P ∧ ⌜⦃ P ⦄ s; δ ⦃ POST ⦄⌝)%I.
 
     Lemma rule_wp {Γ σ} (s : Stm Γ σ) (POST :  Val σ -> CStore Γ -> L) (δ : CStore Γ) :
       ⦃ WP s POST δ ⦄ s ; δ ⦃ POST ⦄.
     Proof. apply rule_exist; intros P; now apply rule_pull. Qed.
 
     #[export] Instance proper_triple_entails {Γ δ τ} :
-      Proper (Basics.flip lentails ==> eq ==> pointwise_relation _ (pointwise_relation _ lentails) ==> Basics.impl) (@Triple Γ δ τ).
+      Proper (Basics.flip (⊢) ==> eq ==> pointwise_relation _ (pointwise_relation _ (⊢)) ==> Basics.impl) (@Triple Γ δ τ).
     Proof.
       intros P Q qp s s' eq__s R S rs H; subst s'.
       eapply rule_consequence. apply qp. apply rs. apply H.
     Qed.
 
     #[export] Instance proper_triple_equiv {Γ δ τ} :
-      Proper (lequiv ==> eq ==> pointwise_relation _ (pointwise_relation _ lequiv) ==> iff) (@Triple Γ δ τ).
+      Proper ((⊣⊢) ==> eq ==> pointwise_relation _ (pointwise_relation _ (⊣⊢)) ==> iff) (@Triple Γ δ τ).
     Proof.
       intros P Q pq s s' eq__s R S rs; subst s'.
-      split; intro H; (eapply rule_consequence; [apply pq | apply rs | exact H ]).
+      split; intro H.
+      - eapply rule_consequence; intros.
+        + rewrite -pq. reflexivity.
+        + rewrite -rs. reflexivity.
+        + exact H.
+      - eapply rule_consequence; intros.
+        + rewrite pq. reflexivity.
+        + rewrite rs. reflexivity.
+        + exact H.
     Qed.
 
     Lemma rule_stm_read_register_backwards {Γ δ σ r v} (Q : Val σ -> CStore Γ -> L) :
@@ -284,22 +289,11 @@ Module ProgramLogic.
         stm_read_register r ; δ
       ⦃ Q ⦄.
     Proof.
-      rewrite lsep_comm.
+      rewrite bi.sep_comm.
       eapply rule_consequence_right.
       apply rule_frame, rule_stm_read_register.
-      cbn; intros.
-      rewrite lsep_comm.
-      apply lwand_sep_adjoint.
-      rewrite <- land_assoc.
-      rewrite lprop_and_distr.
-      apply limpl_and_adjoint.
-      apply lprop_left; intros []; subst.
-      apply limpl_and_adjoint.
-      apply land_left2.
-      apply lwand_sep_adjoint.
-      rewrite lsep_comm.
-      apply lwand_sep_adjoint.
-      reflexivity.
+      cbn. iIntros (? ?) "(H1 & %H2 & %H3 & H4)".
+      subst. now iApply "H1".
     Qed.
 
     Lemma rule_stm_write_register_backwards {Γ δ σ r v} {e : Exp Γ σ}
@@ -308,23 +302,12 @@ Module ProgramLogic.
         stm_write_register r e ; δ
       ⦃ Q ⦄.
     Proof.
-      rewrite lsep_comm.
+      rewrite bi.sep_comm.
       eapply rule_consequence_right.
       apply rule_frame, rule_stm_write_register.
-      apply Q.
-      cbn; intros.
-      rewrite lsep_comm.
-      apply lwand_sep_adjoint.
-      rewrite <- land_assoc.
-      rewrite lprop_and_distr.
-      apply limpl_and_adjoint.
-      apply lprop_left; intros []; subst.
-      apply limpl_and_adjoint.
-      apply land_left2.
-      apply lwand_sep_adjoint.
-      rewrite lsep_comm.
-      apply lwand_sep_adjoint.
-      reflexivity.
+      apply Q. cbn.
+      iIntros (? ?) "(H1 & %H2 & %H3 & H4)".
+      subst. now iApply "H1".
     Qed.
 
     Definition ValidContract {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) : Prop :=
@@ -340,7 +323,7 @@ Module ProgramLogic.
 
   End Triples.
 
-  Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ _ _ δ _ P s Q).
+  Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ _ _ δ _ P%I s Q%I).
 
 End ProgramLogic.
 End ProgramLogicOn.

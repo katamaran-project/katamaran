@@ -52,14 +52,12 @@ Module Type Soundness
   (Import EXEC : NewShallowExecOn B PROG SIG SPEC)
   (Import HOAR : ProgramLogicOn B PROG SIG SPEC).
 
-  Import sep.instances.
-  Import sep.notations.
   Import CHeapSpecM.
   Import ProgramLogic.
 
   Section Soundness.
 
-    Context {L} {PI : PredicateDef L}.
+    Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
 
     Lemma call_contract_sound {Δ τ}
       (c : SepContract Δ τ) (δΔ : CStore Δ) (POST : Val τ -> L) :
@@ -129,12 +127,12 @@ Module Type Soundness
       - (* stm_assert *)
         apply rule_stm_assert; intro Heval.
         eapply rule_consequence_left. apply IHs.
-        now apply lentails_apply, lprop_right.
+        now apply entails_apply, bi.pure_intro.
 
       - (* stm_fail *)
         eapply rule_consequence_left.
         apply rule_stm_fail.
-        apply ltrue_right.
+        reflexivity.
 
       - (* stm_pattern_match *)
         eapply rule_stm_pattern_match. apply IHs. cbn.

@@ -69,8 +69,7 @@ Module Type HeapPredicateKit (Import B : Base).
 End HeapPredicateKit.
 
 Module Type PredicateMixin (Import B : Base) (Import PP : PurePredicateKit B) (Import HP : HeapPredicateKit B).
-  Import sep.notations.
-  Class PredicateDef (HProp : SepLogic) : Type :=
+  Class PredicateDef (HProp : bi) : Type :=
   { lptsreg    : forall {σ : Ty}, 𝑹𝑬𝑮 σ -> Val σ -> HProp;
     luser      : forall (p : 𝑯), Env Val (𝑯_Ty p) -> HProp;
     lduplicate : forall (p : 𝑯) (ts : Env Val (𝑯_Ty p)),

@@ -51,14 +51,14 @@ Module Type Soundness
   (Import EXEC : ShallowExecOn B PROG SIG SPEC)
   (Import HOAR : ProgramLogicOn B PROG SIG SPEC).
 
-  Import sep.instances.
-  Import sep.notations.
   Import CHeapSpecM.
   Import ProgramLogic.
 
   Section Soundness.
 
-    Context {L} {PI : PredicateDef L}.
+    Import iris.proofmode.tactics.
+
+    Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
 
     (* This section verifies the monotonicity of the calculated predicate
        transformers. Which is a necessity for the main soundness theorems. *)
@@ -209,10 +209,15 @@ Module Type Soundness
     End Monotonicity.
 
     Lemma scchunk_duplicate (c : SCChunk) :
-      is_duplicable c = true -> interpret_scchunk c ⊢@{L} interpret_scchunk c ∗ interpret_scchunk c.
+      is_duplicable c = true ->
+      interpret_scchunk c ⊣⊢@{L} interpret_scchunk c ∗ interpret_scchunk c.
     Proof.
-      destruct c; cbn; try discriminate.
-      eauto using lduplicate.
+      destruct c; cbn; try discriminate; intros H.
+      apply bi.entails_anti_sym.
+      - now apply lduplicate.
+      - transitivity (luser p vs ∗ emp)%I.
+        + apply bi.sep_mono'; auto.
+        + now rewrite bi.sep_emp.
     Qed.
 
     Lemma in_heap_extractions {h : SCHeap} {c1 h1} (hyp : List.In (c1 , h1) (heap_extractions h)) :
@@ -223,29 +228,17 @@ Module Type Soundness
       - contradict hyp.
       - destruct hyp as [hyp|hyp].
         + destruct (is_duplicable a) eqn:Heqdup;
-            inversion hyp; subst; clear hyp.
-          { split.
-            - transitivity ((interpret_scchunk c1 ∗ interpret_scchunk c1) ∗ interpret_scheap h).
-              apply lsep_entails; [|reflexivity].
-              apply scchunk_duplicate; assumption.
-              rewrite <- lsep_assoc. reflexivity.
-            - apply lsep_entails; [reflexivity|]. cbn.
-              transitivity (lemp ∗ interpret_scheap h).
-              apply lsep_entails; [|reflexivity].
-              apply lsep_leak.
-              now rewrite lsep_comm, lsep_emp.
-          }
-          { split; reflexivity. }
+            inversion hyp; subst; clear hyp; cbn.
+          * rewrite bi.sep_assoc -scchunk_duplicate; auto.
+          * reflexivity.
         + cbn in *.
           apply List.in_map_iff in hyp.
           destruct hyp as [[c2 h2] [H1 H2]].
-          inversion H1; subst; clear H1.
+          inversion H1; subst; clear H1; cbn.
           apply IHh in H2; rewrite H2; clear IHh H2.
-          rewrite lsep_comm.
-          rewrite <- lsep_assoc.
-          split; apply lsep_entails; try reflexivity.
-          apply lsep_comm.
-          apply lsep_comm.
+          rewrite !bi.sep_assoc.
+          apply bi.sep_proper; [|easy].
+          now rewrite bi.sep_comm.
     Qed.
 
     (* liftP converts the "proof theoretic" predicates (CStore Γ -> L), with L
@@ -267,7 +260,7 @@ Module Type Soundness
       rewrite CPureSpecM.wp_assert_eq_chunk in Hwp.
       destruct Hwp as [Hc HPOST]. subst c'.
       apply in_heap_extractions in HIn; rewrite HIn; clear HIn.
-      apply lsep_entails. reflexivity. apply HPOST.
+      now apply bi.sep_mono'.
     Qed.
 
     Lemma assert_formula_sound {Γ Σ} {ι : Valuation Σ} {fml : Formula Σ}
@@ -275,15 +268,11 @@ Module Type Soundness
       forall δ h,
         assert_formula (instprop fml ι)
           (fun _ => liftP POST) δ h ->
-      interpret_scheap h ⊢ (!! instprop fml ι ∧ lemp) ∗ POST δ.
+      interpret_scheap h ⊢ (⌜instprop fml ι⌝ ∧ emp) ∗ POST δ.
     Proof.
       intros ? ? [Hfml HP].
-      rewrite <- lsep_emp at 1.
-      rewrite lsep_comm.
-      apply lsep_entails; auto.
-      apply land_right.
-      apply lprop_right; assumption.
-      reflexivity.
+      transitivity (emp ∗ interpret_scheap h)%I; auto.
+      apply bi.sep_mono'; auto.
     Qed.
 
     Lemma assume_formula_sound {Γ Σ} {ι : Valuation Σ} {fml : Formula Σ}
@@ -291,19 +280,10 @@ Module Type Soundness
       forall δ h,
         assume_formula (instprop fml ι)
           (fun _ => liftP POST) δ h ->
-      interpret_scheap h ∗ (!! instprop fml ι ∧ lemp) ⊢ POST δ.
+      interpret_scheap h ∗ (⌜instprop fml ι⌝ ∧ emp) ⊢ POST δ.
     Proof.
-      intros ? ? HYP.
-      rewrite lsep_comm.
-      apply lwand_sep_adjoint.
-      apply limpl_and_adjoint.
-      apply lprop_left. intros Hfml.
-      apply limpl_and_adjoint.
-      apply land_left2.
-      apply lwand_sep_adjoint.
-      rewrite lsep_comm.
-      rewrite lsep_emp.
-      now apply HYP.
+      iIntros (? ? HYP) "(Hh & %Hfml & _)".
+      now iApply HYP.
     Qed.
 
     Lemma consume_sound {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
@@ -319,21 +299,21 @@ Module Type Soundness
         now rewrite interpret_scchunk_inst in Hc.
       - rewrite wp_angelic_pattern_match.
         destruct pattern_match_val; auto.
-      - unfold bind. intros Hwp. rewrite <- lsep_assoc.
-        apply (IHasn1 ι (fun δ => asn.interpret asn2 ι ∗ POST δ) δ1 h1); clear IHasn1.
+      - unfold bind. intros Hwp. rewrite <- bi.sep_assoc.
+        apply (IHasn1 ι (fun δ => asn.interpret asn2 ι ∗ POST δ)%I δ1 h1); clear IHasn1.
         revert Hwp. apply consume_monotonic. intros _ h2.
         now apply (IHasn2 ι POST δ1 h2).
-      - intros []; rewrite lsep_disj_distr.
-        + apply lor_right1; apply IHasn1; assumption.
-        + apply lor_right2; apply IHasn2; assumption.
+      - rewrite bi.sep_or_r; intros [].
+        + apply bi.or_intro_l'; apply IHasn1; assumption.
+        + apply bi.or_intro_r'; apply IHasn2; assumption.
       - intros [v Hwp].
-        transitivity (asn.interpret asn (env.snoc ι (ς∷τ) v) ∗ POST δ1).
+        transitivity (asn.interpret asn (env.snoc ι (ς∷τ) v) ∗ POST δ1)%I.
         + now apply IHasn.
-        + apply lsep_entails.
-          apply lex_right with v.
+        + apply bi.sep_mono'.
+          apply bi.exist_intro' with v.
           reflexivity.
           reflexivity.
-      - now rewrite lsep_comm, lsep_emp.
+      - now rewrite bi.emp_sep.
     Qed.
 
     Lemma produce_sound {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
@@ -346,35 +326,35 @@ Module Type Soundness
     Proof.
       revert POST. induction asn; cbn - [assume_formula]; intros POST δ1 h1.
       - now apply assume_formula_sound.
-      - rewrite lsep_comm.
+      - rewrite bi.sep_comm.
         unfold produce_chunk, liftP; cbn.
         now rewrite interpret_scchunk_inst.
-      - rewrite lsep_comm.
+      - rewrite bi.sep_comm.
         unfold produce_chunk, liftP; cbn.
         now rewrite interpret_scchunk_inst.
       - rewrite wp_demonic_pattern_match.
         destruct pattern_match_val; auto.
       - unfold bind. intros Hwp.
-        rewrite lsep_assoc.
-        apply lwand_sep_adjoint.
-        apply (IHasn1 ι (fun δ => asn.interpret asn2 ι -∗ POST δ) δ1 h1 ); clear IHasn1.
+        rewrite bi.sep_assoc.
+        apply wand_sep_adjoint.
+        apply (IHasn1 ι (fun δ => asn.interpret asn2 ι -∗ POST δ) δ1 h1)%I; clear IHasn1.
         revert Hwp. apply produce_monotonic. intros _ h2 Hwp.
-        unfold liftP. apply lwand_sep_adjoint.
+        unfold liftP. apply wand_sep_adjoint.
         now apply (IHasn2 ι POST δ1 h2).
       - intros [].
-        rewrite lsep_comm.
-        rewrite lsep_disj_distr.
-        apply lor_left; rewrite lsep_comm.
+        rewrite bi.sep_comm.
+        rewrite bi.sep_or_r.
+        apply bi.or_elim; rewrite bi.sep_comm.
         + apply IHasn1; assumption.
         + apply IHasn2; assumption.
       - intros Hwp.
-        rewrite lsep_comm.
-        apply lwand_sep_adjoint.
-        apply lex_left. intro v.
-        apply lwand_sep_adjoint.
-        rewrite lsep_comm.
+        rewrite bi.sep_comm.
+        apply wand_sep_adjoint.
+        apply bi.exist_elim. intro v.
+        apply wand_sep_adjoint.
+        rewrite bi.sep_comm.
         now apply IHasn.
-      - now rewrite lsep_emp.
+      - now rewrite bi.sep_emp.
     Qed.
 
     Lemma produce_sound' {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
@@ -382,7 +362,7 @@ Module Type Soundness
         produce ι asn (fun _ => liftP POST) δ h ->
         asn.interpret asn ι ⊢ interpret_scheap h -∗ POST δ.
     Proof.
-      intros. apply lwand_sep_adjoint. rewrite lsep_comm.
+      intros. apply wand_sep_adjoint. rewrite bi.sep_comm.
       now apply produce_sound.
     Qed.
 
@@ -400,15 +380,15 @@ Module Type Soundness
       unfold assert_eq_nenv, lift_purem.
       rewrite CPureSpecM.wp_assert_eq_nenv.
       intros [Hfmls Hwp]. cbn.
-      apply (lex_right ι). apply land_right.
-      { now apply lprop_right. }
-      apply (consume_sound (fun δ => ∀ v, asn.interpret ens (env.snoc ι (result∷_) v) -∗ POST v δ)).
+      apply bi.exist_intro' with ι.
+      apply bi.and_intro; auto.
+      apply (consume_sound (fun δ => ∀ v, asn.interpret ens (env.snoc ι (result∷_) v) -∗ POST v δ))%I.
       revert Hwp. apply consume_monotonic.
       intros _ h2. unfold demonic.
       intros HYP.
-      apply lall_right; intro v.
+      apply bi.forall_intro; intro v.
       specialize (HYP v).
-      now apply lwand_sep_adjoint, produce_sound.
+      now apply wand_sep_adjoint, produce_sound.
     Qed.
 
     Lemma call_lemma_sound {Γ Δ} (δΓ : CStore Γ) (δΔ : CStore Δ)
@@ -425,16 +405,16 @@ Module Type Soundness
       unfold assert_eq_nenv, lift_purem.
       rewrite CPureSpecM.wp_assert_eq_nenv.
       intros [Hfmls Hwp]. constructor.
-      apply (lex_right ι). apply land_right.
-      { now apply lprop_right. }
-      transitivity (asn.interpret req ι ∗ (∀ _ : Val ty.unit, asn.interpret ens ι -∗ POST δΓ)).
-      - apply (consume_sound (fun δ => ∀ v, asn.interpret ens ι -∗ POST δΓ) δΓ).
+      apply bi.exist_intro' with ι.
+      apply bi.and_intro; auto.
+      transitivity (asn.interpret req ι ∗ (∀ _ : Val ty.unit, asn.interpret ens ι -∗ POST δΓ))%I.
+      - apply (consume_sound (fun δ => ∀ v, asn.interpret ens ι -∗ POST δΓ) δΓ)%I.
         revert Hwp. apply consume_monotonic.
         intros _ h2. intros HYP.
-        apply lall_right; intro v.
-        now apply lwand_sep_adjoint, produce_sound.
-      - apply proper_lsep_entails; [easy|].
-        now apply (lall_left tt).
+        apply bi.forall_intro; intro v.
+        now apply wand_sep_adjoint, produce_sound.
+      - apply bi.sep_mono'; [easy|]. etransitivity.
+        now apply (bi.forall_elim tt). auto.
     Qed.
 
     Definition SoundExec (rec : Exec) :=
@@ -464,17 +444,17 @@ Module Type Soundness
         eapply rule_consequence_left.
         eapply rule_stm_let; intros; apply rule_wp.
 
-        apply lex_right with (interpret_scheap h1).
-        apply land_right.
+        apply bi.exist_intro' with (interpret_scheap h1).
+        apply bi.and_intro.
         reflexivity.
-        apply lprop_right.
+        apply bi.pure_intro.
         apply IHs1; clear IHs1.
         revert HYP. apply exec_aux_monotonic; auto.
         intros v2 δ2 h2. intros HYP.
-        apply lex_right with (interpret_scheap h2).
-        apply land_right.
+        apply bi.exist_intro' with (interpret_scheap h2).
+        apply bi.and_intro.
         reflexivity.
-        apply lprop_right.
+        apply bi.pure_intro.
         apply IHs2.
         auto.
 
@@ -507,10 +487,10 @@ Module Type Soundness
         eapply call_lemma_monotonic.
         intros _ δ2 h2 HYP.
         unfold liftP. unfold WP.
-        apply lex_right with (interpret_scheap h2).
-        apply land_right.
+        apply bi.exist_intro' with (interpret_scheap h2).
+        apply bi.and_intro.
         reflexivity.
-        apply lprop_right.
+        apply bi.pure_intro.
         now apply IHs.
 
       - (* stm_seq *)
@@ -520,9 +500,9 @@ Module Type Soundness
           intros _ δ1' h1' H.
           specialize (IHs2 POST δ1' h1' H).
           unfold liftP, WP.
-          apply lex_right with (interpret_scheap h1').
-          apply land_right. reflexivity.
-          apply lprop_right. assumption.
+          apply bi.exist_intro' with (interpret_scheap h1').
+          apply bi.and_intro. reflexivity.
+          apply bi.pure_intro. assumption.
         + apply rule_wp.
 
       - (* stm_assert *)
@@ -532,7 +512,7 @@ Module Type Soundness
       - (* stm_fail *)
         eapply rule_consequence_left.
         apply rule_stm_fail.
-        apply ltrue_right.
+        apply bi.True_intro.
 
       - (* stm_match_newpattern *)
         apply
@@ -549,57 +529,57 @@ Module Type Soundness
           eapply rule_consequence_left.
           apply rule_wp.
           now rewrite pattern_match_val_inverse_right.
-        + apply lex_right with (interpret_scheap h1).
-          apply land_right.
+        + apply bi.exist_intro' with (interpret_scheap h1).
+          apply bi.and_intro.
           reflexivity.
-          apply lprop_right.
+          apply bi.pure_intro.
           apply IHs; clear IHs.
           revert HYP. apply exec_aux_monotonic; auto.
           intros v2 δ2 h2 HYP; cbn.
           rewrite wp_demonic_pattern_match in HYP.
           destruct pattern_match_val. cbn in HYP.
-          apply lex_right with (interpret_scheap h2).
-          apply land_right.
+          apply bi.exist_intro' with (interpret_scheap h2).
+          apply bi.and_intro.
           reflexivity.
-          apply lprop_right.
+          apply bi.pure_intro.
           now apply H.
 
       - (* stm_read_register *)
         destruct HYP as [v HYP].
         eapply rule_consequence_left.
         apply (rule_stm_read_register_backwards (v := v)).
-        apply (@consume_chunk_sound Γ (scchunk_ptsreg reg v) (fun δ => _ -∗ POST _ δ)).
+        apply (@consume_chunk_sound Γ (scchunk_ptsreg reg v) (fun δ => _ -∗ POST _ δ))%I.
         revert HYP. apply consume_chunk_monotonic.
         intros _ h2.
         unfold produce_chunk, liftP. cbn.
-        now rewrite lsep_comm, lwand_sep_adjoint.
+        now rewrite bi.sep_comm wand_sep_adjoint.
 
       - (* stm_write_register *)
         destruct HYP as [v HYP].
         eapply rule_consequence_left.
         apply (rule_stm_write_register_backwards (v := v)).
-        apply (@consume_chunk_sound Γ (scchunk_ptsreg reg v) (fun δ => _ -∗ POST _ δ)).
+        apply (@consume_chunk_sound Γ (scchunk_ptsreg reg v) (fun δ => _ -∗ POST _ δ))%I.
         revert HYP. apply consume_chunk_monotonic.
         intros _ h2.
         unfold produce_chunk, liftP. cbn.
-        now rewrite lsep_comm, lwand_sep_adjoint.
+        now rewrite bi.sep_comm wand_sep_adjoint.
 
       - (* stm_bind *)
         eapply rule_consequence_left.
         eapply rule_stm_bind; intros; apply rule_wp.
 
-        apply lex_right with (interpret_scheap h1).
-        apply land_right.
+        apply bi.exist_intro' with (interpret_scheap h1).
+        apply bi.and_intro.
         reflexivity.
-        apply lprop_right.
+        apply bi.pure_intro.
         apply IHs; clear IHs.
         revert HYP. apply exec_aux_monotonic; auto.
         intros v2 δ2 h2 HYP; cbn.
 
-        apply lex_right with (interpret_scheap h2).
-        apply land_right.
+        apply bi.exist_intro' with (interpret_scheap h2).
+        apply bi.and_intro.
         reflexivity.
-        apply lprop_right.
+        apply bi.pure_intro.
         now apply H.
       - constructor. auto.
     Qed.
@@ -619,10 +599,10 @@ Module Type Soundness
       cbn in *; intros.
       unfold WP.
       apply exec_sound in H.
-      apply lex_right with (interpret_scheap h1).
-      apply land_right.
+      apply bi.exist_intro' with (interpret_scheap h1).
+      apply bi.and_intro.
       reflexivity.
-      now apply lprop_right.
+      now apply bi.pure_intro.
     Qed.
 
     Lemma vcgen_sound n {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
@@ -637,24 +617,18 @@ Module Type Soundness
       - specialize (HYP ι). remember (inst δΣ ι) as δ.
         eapply rule_consequence_left.
         apply rule_wp.
-        transitivity (interpret_scheap nil -∗ WP body (fun (v : Val τ) (_ : CStore Δ) => asn.interpret ens (env.snoc ι (result∷τ) v)) δ).
+        transitivity (interpret_scheap nil -∗ WP body (fun (v : Val τ) (_ : CStore Δ) => asn.interpret ens (env.snoc ι (result∷τ) v)) δ)%I; [|now rewrite bi.emp_wand].
         apply produce_sound'.
-        2: {
-          rewrite <- lsep_emp.
-          apply lwand_sep_adjoint.
-          reflexivity.
-        }
         revert HYP. apply produce_monotonic.
         intros _ h2 HYP. apply exec_sound' with n.
         revert HYP. apply exec_monotonic.
         intros v3 δ3 h3 HYP.
-        enough (interpret_scheap h3 ⊢ asn.interpret ens (env.snoc ι (result∷τ) v3) ∗ lemp)
-          by now rewrite lsep_emp in H.
-        change lemp with ((fun _ => @lemp L) δ3).
+        enough (interpret_scheap h3 ⊢ asn.interpret ens (env.snoc ι (result∷τ) v3) ∗ emp)
+          by now rewrite bi.sep_emp in H.
+        change emp%I with ((fun _ => @bi_emp L) δ3).
         apply (consume_sound (asn := ens)).
         revert HYP. apply consume_monotonic.
-        intros _ h4 HYP. unfold liftP.
-        apply lsep_leak.
+        intros _ h4 HYP. unfold liftP. auto.
     Qed.
 
     Lemma shallow_vcgen_soundness {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :

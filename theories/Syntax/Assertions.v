@@ -29,11 +29,11 @@
 
 From Coq Require Import
      Bool.Bool.
+From iris Require bi.interface.
 From Katamaran Require Import
      Base
      Notations
      Prelude
-     Sep.Logic
      Syntax.Chunks
      Syntax.Formulas
      Syntax.Predicates.
@@ -164,7 +164,10 @@ Module Import asn.
   end.
 
   Section Interpretation.
-    Import sep.notations.
+    (* Import iris.bi.interface. *)
+    (* Import iris.bi.derived_laws. *)
+    (* Import iris.bi.extensions. *)
+    Import iris.proofmode.tactics.
 
     Fixpoint interpret_pure {Σ} (a : Assertion Σ) (ι : Valuation Σ) : Prop :=
       match a with
@@ -181,11 +184,11 @@ Module Import asn.
       | debug => True
     end.
 
-    Context {HProp} `{PI : PredicateDef HProp}.
+    Context {PROP : bi} {biA : BiAffine PROP} {PI : PredicateDef PROP}.
 
-    Fixpoint interpret {Σ} (A : Assertion Σ) (ι : Valuation Σ) : HProp :=
+    Fixpoint interpret {Σ} (A : Assertion Σ) (ι : Valuation Σ) : PROP :=
       match A with
-      | formula F => !!(instprop F ι) ∧ lemp
+      | formula F => ⌜instprop F ι⌝ ∧ emp
       | chunk c => interpret_chunk c ι
       | chunk_angelic c => interpret_chunk c ι
       | pattern_match s pat rhs =>
@@ -195,27 +198,28 @@ Module Import asn.
       | sep A1 A2 => interpret A1 ι ∗ interpret A2 ι
       | or A1 A2  => interpret A1 ι ∨ interpret A2 ι
       | exist ς τ A => ∃ (v : Val τ), interpret A (ι ► (ς∷τ ↦ v))
-      | debug => lemp
-    end.
-
-    Import sep.instances.
+      | debug => emp
+    end%I.
 
     Lemma interpret_pure_equiv {Σ} (a : Assertion Σ) (a_pure : is_pure a = true) :
       forall (ι : Valuation Σ),
-        interpret a ι ⊣⊢ !!(interpret_pure a ι).
+        interpret a ι ⊣⊢ ⌜interpret_pure a ι⌝.
     Proof.
       induction a; cbn in *; intros ι; try discriminate a_pure.
-      - now rewrite lemp_true, land_true.
+      - now rewrite bi.and_emp.
       - destruct pattern_match_val.
         apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
         apply base.elem_of_list_In. apply finite.elem_of_enum.
-      - apply andb_true_iff in a_pure. destruct a_pure.
-        rewrite IHa1, IHa2; auto. now rewrite lprop_sep_distr.
-      - apply andb_true_iff in a_pure. destruct a_pure.
-        rewrite IHa1, IHa2; auto. now rewrite lprop_or_distr.
-      - setoid_rewrite IHa; auto.
-        now rewrite lprop_exists_comm.
-      - apply lemp_true.
+      - apply andb_true_iff in a_pure. destruct a_pure as [H1 H2].
+        rewrite (IHa1 H1) (IHa2 H2). clear. iSplit.
+        + iIntros ([H1 H2]). now iPureIntro.
+        + iIntros (H). iSplit; now iPureIntro.
+      - apply andb_true_iff in a_pure. destruct a_pure as [H1 H2].
+        rewrite (IHa1 H1) (IHa2 H2). clear. iSplit.
+        + iIntros ([H|H]); iPureIntro; [left|right]; easy.
+        + iIntros ([H|H]); [iLeft|iRight]; now iPureIntro.
+      - setoid_rewrite IHa; auto. now rewrite -bi.pure_exist.
+      - now rewrite bi.True_emp.
     Qed.
 
   End Interpretation.
@@ -391,19 +395,20 @@ Section Contracts.
   End Experimental.
 
   Section ContractInt.
+    Import iris.bi.interface.
 
-    Context {HProp} `{PI : PredicateDef HProp}.
+    Context {PROP : bi} {PI : PredicateDef PROP}.
 
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
       (ι : Valuation (sep_contract_logic_variables c)) : CStore Δ :=
       inst (sep_contract_localstore c) ι.
 
     Definition interpret_contract_precondition {Δ τ} (c : SepContract Δ τ)
-      (ι : Valuation (sep_contract_logic_variables c)) : HProp :=
+      (ι : Valuation (sep_contract_logic_variables c)) : PROP :=
       interpret (sep_contract_precondition c) ι.
 
     Definition interpret_contract_postcondition {Δ τ} (c : SepContract Δ τ)
-      (ι : Valuation (sep_contract_logic_variables c)) (result : Val τ) : HProp :=
+      (ι : Valuation (sep_contract_logic_variables c)) (result : Val τ) : PROP :=
         interpret (sep_contract_postcondition c) (env.snoc ι (sep_contract_result c ∷ τ) result).
 
   End ContractInt.

@@ -55,52 +55,6 @@ Section TransparentObligations.
   Derive NoConfusion for iris.algebra.excl.excl.
 End TransparentObligations.
 
-Program Definition IProp Σ : SepLogic :=
-  {| lcar              := iProp Σ;
-     lentails          := bi_entails;
-     sep.land          := bi_and;
-     sep.lor           := bi_or;
-     limpl             := bi_impl;
-     lprop             := bi_pure;
-     lex               := @bi_exist _;
-     lall              := @bi_forall _;
-     lemp              := bi_emp;
-     lsep              := bi_sep;
-     lwand             := bi_wand;
-     lentails_preorder := bi.entails_po;
-     land_right        := bi.and_intro;
-     land_left1        := bi.and_elim_l';
-     land_left2        := bi.and_elim_r';
-     lor_left          := bi.or_elim;
-     lor_right1        := bi.or_intro_l';
-     lor_right2        := bi.or_intro_r';
-     lex_right         := fun B x P Q => @bi.exist_intro' _ B P Q x;
-     lex_left          := @bi.exist_elim _;
-     lall_left         := fun B x P Q => transitivity (bi.forall_elim x);
-     lall_right        := fun B => bi.forall_intro;
-     limpl_and_adjoint := fun P Q R => conj (bi.impl_intro_r P Q R) (bi.impl_elim_l' P Q R);
-     lprop_left        := bi.pure_elim';
-     lprop_right       := bi.pure_intro;
-     lsep_assoc        := fun P Q R => proj1 (bi.equiv_entails _ _) (bi.sep_assoc P Q R);
-     lsep_comm         := fun P Q => proj1 (bi.equiv_entails _ _) (bi.sep_comm P Q);
-     lwand_sep_adjoint := fun P Q R => conj (bi.wand_intro_r P Q R) (bi.wand_elim_l' P Q R);
-     lsep_andp_prop    := _;
-     lsep_entails      := fun P P' Q Q' => bi.sep_mono P Q P' Q';
-     lsep_emp          := fun P => proj1 (bi.equiv_entails _ _) (bi.sep_emp P);
-     lsep_leak         := _;
-  |}.
-Next Obligation.
-  intros Σ P R Q. split.
-  - iIntros "[P [% R]]".
-    by iSplit; iFrame.
-  - iIntros "[% [P R]]".
-    by iFrame.
-Qed.
-Next Obligation.
-  now iIntros (Σ P) "HP".
-Qed.
-Canonical IProp.
-
 (* TODO: export, back to module instead of module type *)
 Module Type IrisPrelims
     (Import B    : Base)
