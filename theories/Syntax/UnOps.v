@@ -57,6 +57,7 @@ Module uop.
     | sext {m n} {p : IsTrue (m <=? n)} : UnOp (bvec m) (bvec n)
     | zext {m n} {p : IsTrue (m <=? n)} : UnOp (bvec m) (bvec n)
     | get_slice_int {n} : UnOp int (bvec n)
+    | signed {n}        : UnOp (bvec n) int
     | unsigned {n}      : UnOp (bvec n) int
     | truncate {n} (m : nat) {p : IsTrue (m <=? n)} : UnOp (bvec n) (bvec m)
     | vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} : UnOp (bvec n) (bvec l)
@@ -102,6 +103,10 @@ Module uop.
       | left _ => left _
       | right _ => right _
       }
+    | @signed _ m                      | @signed _ n with eq_dec m n => {
+      | left _ => left _
+      | right _ => right _
+      }
     | @truncate _ m1 ?(n) p1           | @truncate _ m2 n p2 with eq_dec m1 m2 => {
       | left _ => left _
       | right _ => right _
@@ -132,6 +137,7 @@ Module uop.
       | sext                => fun v => bv.sext v
       | zext                => fun v => bv.zext v
       | get_slice_int       => bv.of_Z
+      | signed              => fun v => bv.signed v
       | unsigned            => fun v => bv.unsigned v
       | truncate m          => fun v => bv.truncate m v
       | vector_subrange s l => bv.vector_subrange s l

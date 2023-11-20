@@ -155,6 +155,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
         Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
           instr_exec_contract.
 
+        Definition sep_contract_execute_MUL : SepContractFun execute_MUL :=
+          instr_exec_contract.
+
         Definition sep_contract_execute_ITYPE : SepContractFun execute_ITYPE :=
           instr_exec_contract.
 
@@ -997,6 +1000,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
             | execute_CSR             => Some sep_contract_execute_CSR
             | execute_STORE           => Some sep_contract_execute_STORE
             | execute_LOAD            => Some sep_contract_execute_LOAD
+            | execute_MUL             => Some sep_contract_execute_MUL
             | process_load bytes      => Some (sep_contract_process_load bytes)
             | get_arch_pc             => Some sep_contract_get_arch_pc
             | get_next_pc             => Some sep_contract_get_next_pc
@@ -1431,7 +1435,7 @@ Module RiscvPmpValidContracts.
 
   Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
   Proof. reflexivity. Qed.
-  
+
   Lemma valid_contract_pmpCheckPerms : ValidContract pmpCheckPerms.
   Proof. reflexivity. Qed.
 
@@ -1566,6 +1570,10 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_CSR : ValidContract execute_CSR.
   Proof. reflexivity. Qed.
 
+  Lemma valid_contract_execute_MUL : ValidContract execute_MUL.
+  Proof. reflexivity. Qed.
+
+
   Lemma pmp_check_perms_gives_access :
     forall acc p L0 A0 X0 W0 R0,
       Pmp_check_perms {| L := L0; A := A0; X := X0; W := W0; R := R0 |} acc p ->
@@ -1687,5 +1695,6 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract_debug _ H valid_contract_execute_EBREAK).
     - apply (valid_contract _ H valid_contract_execute_MRET).
     - apply (valid_contract _ H valid_contract_execute_CSR).
+    - apply (valid_contract _ H valid_contract_execute_MUL).
   Qed.
 End RiscvPmpValidContracts.

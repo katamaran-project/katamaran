@@ -88,6 +88,9 @@ Module RiscvNotations.
   Notation "'cur_priv'"     := "cur_priv" : string_scope.
   Notation "'del_priv'"     := "del_priv" : string_scope.
   Notation "'p'"            := "p" : string_scope.
+  Notation "'signed1'"      := "signed1" : string_scope.
+  Notation "'signed2'"      := "signed2" : string_scope.
+  Notation "'high'"         := "high" : string_scope.
   Notation "'rs1_val'"      := "rs1_val" : string_scope.
   Notation "'rs2_val'"      := "rs2_val" : string_scope.
   Notation "'csr_val'"      := "csr_val" : string_scope.
@@ -102,6 +105,9 @@ Module RiscvNotations.
   Notation "'tmp1'"         := "tmp1" : string_scope.
   Notation "'tmp2'"         := "tmp2" : string_scope.
   Notation "'tmp3'"         := "tmp3" : string_scope.
+  Notation "'rs1_int'"      := "rs1_int" : string_scope.
+  Notation "'rs2_int'"      := "rs2_int" : string_scope.
+  Notation "'result_wide'"  := "result_wide" : string_scope.
   Notation "'taken'"        := "taken" : string_scope.
   Notation "'check'"        := "check" : string_scope.
   Notation "'L'"            := "L" : string_scope.
@@ -219,6 +225,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_EBREAK        : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
   | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
+  | execute_MUL           : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; high :: ty.bool; signed1 :: ty.bool; signed2 :: ty.bool] ty_retired
   .
 
   (* Restrictions on MMIO needed, because MMIO operations leave a trace and are disallowed for 0-length data *)
@@ -275,6 +282,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'tmp1'"         := (@exp_var _ "tmp1" _ _) : exp_scope.
     Notation "'tmp2'"         := (@exp_var _ "tmp2" _ _) : exp_scope.
     Notation "'tmp3'"         := (@exp_var _ "tmp3" _ _) : exp_scope.
+    Notation "'rs1_int'"      := (@exp_var _ "rs1_int" _ _) : exp_scope.
+    Notation "'rs2_int'"      := (@exp_var _ "rs2_int" _ _) : exp_scope.
+    Notation "'result_wide'"  := (@exp_var _ "result_wide" _ _) : exp_scope.
+    Notation "'signed1'"      := (@exp_var _ "signed1" _ _) : exp_scope.
+    Notation "'signed2'"      := (@exp_var _ "signed2" _ _) : exp_scope.
+    Notation "'high'   "      := (@exp_var _ "high" _ _) : exp_scope.
     Notation "'t'"            := (@exp_var _ "t" _ _) : exp_scope.
     Notation "'e'"            := (@exp_var _ "e" _ _) : exp_scope.
     Notation "'addr'"         := (@exp_var _ "addr" _ _) : exp_scope.
@@ -1005,44 +1018,67 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
            function clauses of execute (a scattered definition) *)
   Definition fun_execute : Stm ["ast" ∷ ty_ast] ty_retired :=
     match: exp_var "ast" in union ast with
-    |> KRTYPE (pat_tuple (rs2 , rs1 , rd , op))            => call execute_RTYPE rs2 rs1 rd op
-    |> KITYPE (pat_tuple (imm , rs1 , rd , op))            => call execute_ITYPE imm rs1 rd op
-    |> KSHIFTIOP (pat_tuple (shamt , rs1 , rd , op))       => call execute_SHIFTIOP shamt rs1 rd op
-    |> KUTYPE (pat_tuple (imm , rd , op))                  => call execute_UTYPE imm rd op
-    |> KBTYPE (pat_tuple (imm , rs2, rs1 , op))            => call execute_BTYPE imm rs2 rs1 op
-    |> KRISCV_JAL (pat_tuple (imm , rd))                   => call execute_RISCV_JAL imm rd
-    |> KRISCV_JALR (pat_tuple (imm , rs1 , rd))            => call execute_RISCV_JALR imm rs1 rd
-    |> KLOAD (pat_tuple (imm , rs1, rd , is_unsigned , w)) => call execute_LOAD imm rs1 rd is_unsigned w
-    |> KSTORE (pat_tuple (imm , rs2 , rs1 , w))            => call execute_STORE imm rs2 rs1 w
-    |> KECALL pat_unit                                     => call execute_ECALL
-    |> KEBREAK pat_unit                                    => call execute_EBREAK
-    |> KMRET pat_unit                                      => call execute_MRET
-    |> KCSR (pat_tuple (csr , rs1 , rd , is_imm , op))     => call execute_CSR csr rs1 rd is_imm op
+    |> KRTYPE (pat_tuple (rs2 , rs1 , rd , op))                        => call execute_RTYPE rs2 rs1 rd op
+    |> KITYPE (pat_tuple (imm , rs1 , rd , op))                        => call execute_ITYPE imm rs1 rd op
+    |> KSHIFTIOP (pat_tuple (shamt , rs1 , rd , op))                   => call execute_SHIFTIOP shamt rs1 rd op
+    |> KUTYPE (pat_tuple (imm , rd , op))                              => call execute_UTYPE imm rd op
+    |> KBTYPE (pat_tuple (imm , rs2, rs1 , op))                        => call execute_BTYPE imm rs2 rs1 op
+    |> KRISCV_JAL (pat_tuple (imm , rd))                               => call execute_RISCV_JAL imm rd
+    |> KRISCV_JALR (pat_tuple (imm , rs1 , rd))                        => call execute_RISCV_JALR imm rs1 rd
+    |> KLOAD (pat_tuple (imm , rs1, rd , is_unsigned , w))             => call execute_LOAD imm rs1 rd is_unsigned w
+    |> KSTORE (pat_tuple (imm , rs2 , rs1 , w))                        => call execute_STORE imm rs2 rs1 w
+    |> KECALL pat_unit                                                 => call execute_ECALL
+    |> KEBREAK pat_unit                                                => call execute_EBREAK
+    |> KMRET pat_unit                                                  => call execute_MRET
+    |> KCSR (pat_tuple (csr , rs1 , rd , is_imm , op))                 => call execute_CSR csr rs1 rd is_imm op
+    |> KMUL (pat_tuple (rs2 , rs1 , rd , high , signed1 , signed2))    => call execute_MUL rs2 rs1 rd high signed1 signed2
     end.
 
+
+  Definition fun_execute_MUL : Stm [rs2 :: ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; high ∷ ty.bool; signed1 ∷ ty.bool; signed2 :: ty.bool] ty_retired :=
+    (* TODO if haveMulDiv() | haveZmmul() then *)
+    let tb := to_bits (2 * xlenbits) in
+    let: rs1_val := call rX rs1 in
+    let: rs2_val := call rX rs2 in
+    let: rs1_int := if: signed1
+                    then exp_unop uop.signed rs1_val
+                    else exp_unop uop.unsigned rs1_val
+    in
+    let: rs2_int := if: signed2
+                    then exp_unop uop.signed rs2_val
+                    else exp_unop uop.unsigned rs2_val
+    in
+    let: result_wide := call tb (rs1_int * rs2_int) in
+    let: result := if: high
+                   then exp_vector_subrange xlen xlen result_wide
+                   else exp_vector_subrange 0 xlen result_wide
+    in
+    call wX rd result ;;
+    stm_val ty_retired RETIRE_SUCCESS.
+  
   Definition fun_execute_RTYPE : Stm [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: result :=
        match: op in rop with
-       | RISCV_ADD  => rs1_val +ᵇ rs2_val
-       | RISCV_SLT  => let: tmp := rs1_val <ˢ rs2_val in
-                       let: tmp := call bool_to_bits tmp in
-                       exp_zext tmp
-       | RISCV_SLTU => let: tmp := rs1_val <ᵘ rs2_val in
-                       let: tmp := call bool_to_bits tmp in
-                       exp_zext tmp
-       | RISCV_AND  => exp_binop bop.bvand rs1_val rs2_val
-       | RISCV_OR   => exp_binop bop.bvor  rs1_val rs2_val
-       | RISCV_XOR  => exp_binop bop.bvxor rs1_val rs2_val
-       | RISCV_SLL  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
-                       exp_binop bop.shiftl rs1_val tmp
-       | RISCV_SRL  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
-                       exp_binop bop.shiftr rs1_val tmp
-       | RISCV_SUB  => rs1_val -ᵇ rs2_val
-       | RISCV_SRA  => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
-                       call shift_right_arith32 rs1_val tmp
-       end in
+       | RISCV_ADD    => rs1_val +ᵇ rs2_val
+       | RISCV_SLT    => let: tmp := rs1_val <ˢ rs2_val in
+                         let: tmp := call bool_to_bits tmp in
+                         exp_zext tmp
+       | RISCV_SLTU   => let: tmp := rs1_val <ᵘ rs2_val in
+                         let: tmp := call bool_to_bits tmp in
+                         exp_zext tmp
+       | RISCV_AND    => exp_binop bop.bvand rs1_val rs2_val
+       | RISCV_OR     => exp_binop bop.bvor  rs1_val rs2_val
+       | RISCV_XOR    => exp_binop bop.bvxor rs1_val rs2_val
+       | RISCV_SLL    => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
+                         exp_binop bop.shiftl rs1_val tmp
+       | RISCV_SRL    => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
+                         exp_binop bop.shiftr rs1_val tmp
+       | RISCV_SUB    => rs1_val -ᵇ rs2_val
+       | RISCV_SRA    => let: tmp := stm_foreign (vector_subrange 4 0) [rs2_val] in
+                         call shift_right_arith32 rs1_val tmp
+     end in
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
 
@@ -1344,7 +1380,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     @bv.vector_subrange _ b (e - b + 1) _ data.
   Next Obligation. intros; by apply convert_foreign_vector_subrange_conditions. Defined.
   #[global] Arguments fun_vector_subrange {n} _ _ _ {_ _ _}.
-    
+
   #[derive(equations=no)]
   Equations ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
     ForeignCall (read_ram width) [addr] res γ γ' μ μ' :=
@@ -1438,6 +1474,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | execute_EBREAK          => fun_execute_EBREAK
     | execute_MRET            => fun_execute_MRET
     | execute_CSR             => fun_execute_CSR
+    | execute_MUL             => fun_execute_MUL
     end.
 
   Include ProgramMixin RiscvPmpBase.

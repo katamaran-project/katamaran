@@ -77,6 +77,14 @@ Module Assembly.
     JALR (bv.of_N 0) (bv.of_N 1) bv.zero.
   Definition MV (rd rs1 : RegIdx) : AST :=
     ADDI rd rs1 bv.zero.
+  Definition MUL (rd rs1 rs2 : RegIdx) : AST :=
+    Base.MUL rs2 rs1 rd false true true.
+  Definition MULH (rd rs1 rs2 : RegIdx) : AST :=
+    Base.MUL rs2 rs1 rd true true true.
+  Definition MULHSU (rd rs1 rs2 : RegIdx) : AST :=
+    Base.MUL rs2 rs1 rd true true false.
+  Definition MULHU (rd rs1 rs2 : RegIdx) : AST :=
+    Base.MUL rs2 rs1 rd true false false.
 End Assembly.
 
 Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.

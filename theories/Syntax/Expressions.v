@@ -162,6 +162,7 @@ Module Type ExpressionsOn (Import TY : Types).
   Notation exp_sext e := (exp_unop uop.sext e%exp).
   Notation exp_zext e := (exp_unop uop.zext e%exp).
   Notation exp_get_slice_int e := (exp_unop uop.get_slice_int e%exp).
+  Notation exp_signed e := (exp_unop uop.signed e%exp).
   Notation exp_unsigned e := (exp_unop uop.unsigned e%exp).
   Notation exp_truncate m e := (exp_unop (uop.truncate m) e%exp).
   Notation exp_vector_subrange s l e := (exp_unop (uop.vector_subrange s l) e%exp).
