@@ -294,9 +294,8 @@ Module RiscvPmpModel2.
       { iPureIntro. constructor. now rewrite Heq. }
       iFrame.
       destruct (pure_decode bv0).
-      - rewrite fixpoint_semWp2_fix_eq.
-        rewrite -fixpoint_semWp2_eq.
-        now iApply semWp2_fail_2.
+      - rewrite fixpoint_semWp2_eq.
+        now iExists _.
       - rewrite semWp2_val.
         now iExists _.
     Qed.
