@@ -221,14 +221,14 @@ Section Soundness.
 
   (* TODO: these don't need to be "-n>", but discrete? *)
   Definition Wp {Γ1 Γ2 τ} :=
-    CStore Γ1 -n> CStore Γ2 -n>
-    Stm Γ1 τ -n> Stm Γ2 τ -n>
-    Post Γ1 Γ2 τ -n>
+    CStore Γ1 -d> CStore Γ2 -d>
+    Stm Γ1 τ -d> Stm Γ2 τ -d>
+    Post Γ1 Γ2 τ -d>
     iProp Σ.
 
   Definition semWp2_fix {Γ1 Γ2 τ}
     (wp : Wp) : Wp :=
-    (λne (δ1 : CStore Γ1) (δ2 : CStore Γ2)
+    (λ (δ1 : CStore Γ1) (δ2 : CStore Γ2)
          (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
          (POST : Post Γ1 Γ2 τ),
       match stm_to_val s1 with
@@ -248,14 +248,25 @@ Section Soundness.
                                        wp δ12 δ22 s12 s22 POST)))
           end
       end)%I.
-  Arguments semWp2_fix {_ _}%ctx_scope {_} wp.
+  Global Arguments semWp2_fix {_ _}%ctx_scope {_} wp /.
 
-  Local Instance semWp2_fix_Contractive {Γ1 Γ2 τ} :
+  Ltac f_equiv_more_arities := match goal with
+  | H:_ ?f ?g |- ?R (?f ?x ?y ?z1) (?g ?x ?y ?z1) => solve [ simple apply H ]
+  | H:_ ?f ?g |- ?R (?f ?x ?y ?z1 ?z2) (?g ?x ?y ?z1 ?z2) => solve [ simple apply H ]
+  | H:_ ?f ?g |- ?R (?f ?x ?y ?z1 ?z2 ?z3) (?g ?x ?y ?z1 ?z2 ?z3) => solve [ simple apply H ]
+  end.
+
+  Ltac solve_contractive_more_arities := solve_proper_core ltac:(fun _ => first [ f_contractive | f_equiv | f_equiv_more_arities]).
+
+  Global Instance semWp2_fix_Contractive {Γ1 Γ2 τ} :
     Contractive (@semWp2_fix Γ1 Γ2 τ).
-  Proof. solve_contractive. Qed.
+  Proof.
+    unfold Wp.
+    solve_contractive_more_arities.
+  Qed.
 
   Definition semWp2 {Γ1 Γ2 τ} : Wp :=
-    λne δ1 δ2 s1 s2 POST, (fixpoint (@semWp2_fix Γ1 Γ2 τ)) δ1 δ2 s1 s2 POST.
+    λ δ1 δ2 s1 s2 POST, (fixpoint (@semWp2_fix Γ1 Γ2 τ)) δ1 δ2 s1 s2 POST.
 
   Lemma fixpoint_semWp2_fix_eq {Γ1 Γ2 τ} (δ1 : CStore Γ1) (δ2 : CStore Γ2)
     (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) (POST : Post Γ1 Γ2 τ) :
@@ -264,7 +275,7 @@ Section Soundness.
 
   Lemma fixpoint_semWp2_eq {Γ1 Γ2 τ} (δ1 : CStore Γ1) (δ2 : CStore Γ2)
     (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) (POST : Post Γ1 Γ2 τ) :
-    semWp2 δ1 δ2 s1 s2 POST ≡ semWp2_fix (fixpoint semWp2_fix) δ1 δ2 s1 s2 POST.
+    semWp2 δ1 δ2 s1 s2 POST ≡ semWp2_fix semWp2 δ1 δ2 s1 s2 POST.
   Proof. by unfold semWp2; rewrite fixpoint_semWp2_fix_eq. Qed.
 
   Lemma semWp2_mono [Γ τ] (s1 s2 : Stm Γ τ)
