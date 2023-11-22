@@ -228,7 +228,12 @@ Module RiscvPmpModel2.
       iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_right) $! Hmap2 with "Hmem2") as "Hmem2".
       iExists _, _, _, _.
       iSplitR.
-      { iPureIntro. constructor. rewrite Heq. now cbn.  }
+      { iPureIntro.
+        eapply RiscvPmpSemantics.step_trans.
+        constructor.
+        now rewrite Heq.
+        rewrite eq_fun_read_ram2.
+        apply RiscvPmpSemantics.step_refl. }
       iSpecialize ("Hmem1" with "Htrace1").
       iSpecialize ("Hmem2" with "Htrace2").
       iFrame.
@@ -262,7 +267,11 @@ Module RiscvPmpModel2.
       iModIntro.
       iExists _, _, _, _.
       iSplitR.
-      { iPureIntro. constructor. now rewrite Heq. }
+      { iPureIntro.
+        eapply RiscvPmpSemantics.step_trans.
+        constructor.
+        now rewrite Heq.
+        apply RiscvPmpSemantics.step_refl. }
       cbn.
       rewrite semWp2_val.
       iFrame "Hregs".
@@ -291,7 +300,11 @@ Module RiscvPmpModel2.
       iModIntro.
       iExists _, _, _, _.
       iSplitR.
-      { iPureIntro. constructor. now rewrite Heq. }
+      { iPureIntro.
+        eapply RiscvPmpSemantics.step_trans.
+        constructor.
+        now rewrite Heq.
+        apply RiscvPmpSemantics.step_refl. }
       iFrame.
       destruct (pure_decode bv0).
       - rewrite fixpoint_semWp2_eq.
@@ -319,7 +332,11 @@ Module RiscvPmpModel2.
       iModIntro.
       iExists _, _, _, _.
       iSplitR.
-      iPureIntro; constructor; now rewrite Heq.
+      { iPureIntro.
+        eapply RiscvPmpSemantics.step_trans.
+        constructor.
+        now rewrite Heq.
+        apply RiscvPmpSemantics.step_refl. }
       iFrame.
       destruct (fun_vector_subrange bv0 e b) eqn:Ev.
       rewrite semWp2_val.

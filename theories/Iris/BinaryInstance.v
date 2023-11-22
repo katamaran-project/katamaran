@@ -26,6 +26,8 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Coq Require Import
+  Program.Equality.
 From Equations Require Import
      Equations Signature.
 Require Import Equations.Prop.EqDec.
@@ -243,7 +245,7 @@ Section Soundness.
                                  (γ12 : RegStore) (μ12 : Memory),
                                   ⌜⟨ γ1, μ1, δ1 , s1 ⟩ ---> ⟨ γ12, μ12, δ12, s12 ⟩⌝ ={∅}▷=∗ (* TODO: can probably just remove this later and the later credit above. *)
                                     |={∅,⊤}=> ∃ s22 γ22 μ22 δ22,
-                                      ⌜⟨ γ2, μ2, δ2 , s2 ⟩ ---> ⟨ γ22, μ22, δ22, s22 ⟩⌝ ∗
+                                      ⌜⟨ γ2, μ2, δ2 , s2 ⟩ --->* ⟨ γ22, μ22, δ22, s22 ⟩⌝ ∗
                                       (regs_inv2 γ12 γ22 ∗ mem_inv2_sail μ12 μ22) ∗
                                        wp δ12 δ22 s12 s22 POST)))
           end
@@ -345,7 +347,7 @@ Section Soundness.
     iMod "Hclose" as "_". iModIntro.
     iExists (stm_val _ (eval eB δB)), _ , _, _.
     iSplitR.
-    - iPureIntro; repeat constructor.
+    - iPureIntro; repeat econstructor.
     - iFrame "Hregs Hmem".
       now iApply semWp2_val'.
   Qed.
@@ -364,8 +366,8 @@ Section Soundness.
       do 3 iModIntro.
       iMod "Hclose" as "_".
       iMod "WPs" as "(%v2 & -> & HQ)". iModIntro.
-      iExists _, _, _, _.
-      iSplitR; first (iPureIntro; constructor).
+      iExists (stm_val _ _), _, _, _.
+      iSplitR; first (iPureIntro; repeat econstructor).
       iFrame "Hmem Hregs".
       iApply semWp2_val.
       iExists _; now iSplitR.
@@ -377,7 +379,8 @@ Section Soundness.
       iSplitR.
       { iPureIntro.
         destruct sB; inversion eqsB; subst.
-        constructor.
+        eapply step_trans; last apply step_refl.
+        apply st_call_frame_fail.
       }
       iFrame "Hregs Hmem".
       now iApply semWp2_fail_2.
@@ -389,10 +392,17 @@ Section Soundness.
       iMod "WPs". iModIntro. iModIntro. iModIntro.
       iMod "WPs". iMod "WPs" as "( %s22 & %γ22 & %μ22 & %δ22 & %Hstep & state_inv & Hwps )".
       iModIntro.
-      iExists _, _, _, _.
-      iSplitR; first (iPureIntro; constructor; eassumption).
-      iFrame "state_inv".
-      now iApply ("IH" with "Hwps").
+      iExists _, γ22, μ22, _.
+
+      iSplitR.
+      + iPureIntro.
+        induction Hstep; first constructor.
+        eapply step_trans.
+        apply st_call_frame_step.
+        eassumption.
+        assumption.
+      + iFrame "state_inv".
+        now iApply ("IH" with "Hwps").
   Qed.
 
   Lemma semWp2_call_inline_later {Γ τ Δ} (f1 f2 : 𝑭 Δ τ) (es1 es2 : NamedEnv (Exp Γ) Δ) :
@@ -406,7 +416,7 @@ Section Soundness.
     iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
     iModIntro. iModIntro. iModIntro. iMod "Hclose" as "_". iModIntro.
     iExists _, _, _, _.
-    iSplitR; first (iPureIntro; constructor).
+    iSplitR; first (iPureIntro; eapply step_trans; constructor).
     iFrame "Hregs Hmem". by iApply semWp2_call_frame.
   Qed.
 
@@ -437,14 +447,16 @@ Section Soundness.
       iMod "Hs" as "(%v2 & -> & Hk)".
       iExists _, _, _, _.
       iFrame "Hk Hregs Hmem".
-      iPureIntro; constructor.
+      iPureIntro; eapply step_trans.
+      apply st_bind_value.
+      constructor.
     - do 3 iModIntro.
       iMod "Hclose" as "_".
       iPoseProof (semWp2_fail_1 with "Hs") as "Hs".
       iMod "Hs" as "[%m %eqs2f]". iModIntro.
       destruct s2; inversion eqs2f; subst.
       iExists (fail m)%exp, γ2, μ2, δ2.
-      iSplitR; first (iPureIntro; constructor).
+      iSplitR; first (iPureIntro; eapply step_trans; constructor).
       iFrame.
       now iApply semWp2_fail_2.
     - rewrite (fixpoint_semWp2_eq _ _ s); cbn.
@@ -457,9 +469,15 @@ Section Soundness.
       iMod "Hs" as "Hs". iModIntro.
       iMod "Hs" as "(%s22 & %γ22 & %μ22 & %δ22 & %Hstep & Hstate & Hwp)". iModIntro.
       iExists (stm_bind s22 k2), γ22, μ22, δ22.
-      iSplitR; first by iPureIntro; constructor.
-      iFrame "Hstate".
-      now iApply "IH".
+      iSplitR.
+      + iPureIntro.
+        induction Hstep; first constructor.
+        eapply step_trans.
+        apply st_bind_step.
+        eassumption.
+        assumption.
+      + iFrame "Hstate".
+        now iApply "IH".
   Qed.
 
   Lemma semWp2_block {Γ1 Γ2 τ Δ1 Δ2} (δΔ1 : CStore Δ1) (δΔ2 : CStore Δ2) (s1 : Stm (Γ1 ▻▻ Δ1) τ) (s2 : Stm (Γ2 ▻▻ Δ2) τ) :
@@ -478,7 +496,7 @@ Section Soundness.
       iMod "WPk" as "(%v2 & -> & HQ)". iModIntro.
       iExists _, _, _, _.
       rewrite semWp2_val.
-      iSplitR; first by iPureIntro; constructor.
+      iSplitR; first by iPureIntro; eapply step_trans; constructor.
       iFrame "Hregs Hmem". iModIntro.
       iExists v2. now iSplitR.
     - iPoseProof (semWp2_fail_1 with "WPk") as "WPk".
@@ -489,6 +507,7 @@ Section Soundness.
       iFrame "Hregs Hmem".
       iSplitR.
       { iPureIntro.
+        eapply step_trans; last constructor.
         destruct s2; inversion eqs2f; subst.
         constructor.
       }
@@ -501,10 +520,25 @@ Section Soundness.
       iMod "WPk". iModIntro. iModIntro. iModIntro.
       iMod "WPk". iMod "WPk" as "(%s22 & %γ22 & %μ22 & %δ22 & %step2 & state_inv & WPk)". iModIntro.
       destruct (env.catView δ22) as (δΓ22 & δΔ22).
-      iExists _, _, _, _.
-      iSplitR; first by iPureIntro; constructor.
-      iFrame.
-      by iApply "IH".
+      iExists (stm_block δΔ22 s22), γ22, μ22, δΓ22.
+      iSplitR.
+      iPureIntro.
+      (* TODO: get rid of dependent induction (introduces an additional axiom) *)
+      + dependent induction step2.
+        * match goal with
+          | H: ?x ►► ?y = ?x' ►► ?y' |- _ =>
+              rewrite env.inversion_eq_cat in H;
+              destruct H as [? ?]
+          end.
+          subst.
+          constructor.
+        * destruct (env.catView δ2).
+          eapply step_trans.
+          apply st_block_step.
+          eassumption.
+          eapply IHstep2; eauto.
+      + iFrame.
+        by iApply "IH".
   Qed.
 
   Lemma semWp2_let {Γ τ x σ} (s1 s2 : Stm Γ σ) (k1 k2 : Stm (Γ ▻ x∷σ) τ)
@@ -522,7 +556,7 @@ Section Soundness.
     iMod "Hclose" as "_". iModIntro.
     iExists _, _, _, _.
     iSplitR.
-    - iPureIntro; repeat constructor.
+    - iPureIntro; eapply step_trans; constructor.
     - iFrame "Hregs Hmem".
       iApply semWp2_bind.
       iApply (semWp2_mono with "Hs"). iIntros (v1 δ21 v2 δ22) "WPk".
@@ -539,7 +573,7 @@ Section Soundness.
     iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
     do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
     iExists _, _, _, _. iFrame "Hregs Hmem".
-    iSplitR; first by iPureIntro; constructor.
+    iSplitR; first by iPureIntro; eapply step_trans; constructor.
     by iApply semWp2_bind.
   Qed.
 
@@ -555,7 +589,7 @@ Section Soundness.
     iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
     do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
     iExists _, _, _, _.
-    iSplitR; first by iPureIntro; constructor.
+    iSplitR; first by iPureIntro; eapply step_trans; constructor.
     iFrame "Hregs Hmem".
     rewrite Heq.
     destruct (eval e21 δ2).
@@ -577,7 +611,7 @@ Section Soundness.
     iDestruct (@reg_valid with "Hregs2 Hreg2") as %Heq2.
     iSpecialize ("HP" with "[$Hreg1 $Hreg2]").
     iExists _, _, _, _.
-    iSplitR; first by iPureIntro; constructor.
+    iSplitR; first by iPureIntro; eapply step_trans; constructor.
     iFrame "Hregs1 Hregs2 Hmem". rewrite Heq2.
     iApply semWp2_val.
     iExists _; now iSplitR.
@@ -597,7 +631,7 @@ Section Soundness.
     do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
     iSpecialize ("HP" with "[$Hreg1 $Hreg2]").
     iExists _, _, _, _.
-    iSplitR; first by iPureIntro; constructor.
+    iSplitR; first by iPureIntro; eapply step_trans; constructor.
     iFrame "Hregs1 Hregs2 Hmem".
     iApply semWp2_val.
     iModIntro. iExists _. now iSplitR.
@@ -618,7 +652,7 @@ Section Soundness.
       iMod "WPs" as "(%v2 & -> & HQ)". iModIntro.
       iExists _, _, _, _.
       rewrite semWp2_val.
-      iSplitR; first by iPureIntro; constructor.
+      iSplitR; first by iPureIntro; eapply step_trans; constructor.
       iFrame "Hregs Hmem". iModIntro.
       iExists v2. now iSplitR.
     - iPoseProof (semWp2_fail_1 with "WPs") as "WPs".
@@ -629,7 +663,7 @@ Section Soundness.
       iExists _, _, _, _.
       iFrame "Hregs Hmem".
       iSplitR.
-      { iPureIntro; destruct s2; inversion eqs2f; constructor. }
+      { iPureIntro; eapply step_trans; destruct s2; inversion eqs2f; constructor. }
       iApply semWp2_fail_2.
       eassumption.
     - rewrite (fixpoint_semWp2_eq _ _ s). cbn. rewrite (stm_val_stuck H).
@@ -641,9 +675,15 @@ Section Soundness.
       iMod "WPs". iMod "WPs" as "(%s22 & %γ22 & %μ22 & %δ22 & %step & state_inv & wps)".
       iModIntro.
       iExists _, _, _, _.
-      iSplitR; first by iPureIntro; constructor.
-      iFrame.
-      by iApply "IH".
+      iSplitR.
+      + iPureIntro.
+        induction step; first constructor.
+        eapply step_trans.
+        apply st_assign_step.
+        eassumption.
+        assumption.
+      + iFrame.
+        by iApply "IH".
   Qed.
 
   Lemma semWp2_pattern_match {Γ τ σ} (s1 s2 : Stm Γ σ) (pat : Pattern σ)
@@ -664,7 +704,7 @@ Section Soundness.
     iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
     do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
     iExists _, _, _, _.
-    iSplitR; first by iPureIntro; constructor.
+    iSplitR; first by iPureIntro; eapply step_trans; constructor.
     iFrame "Hregs Hmem".
     iApply semWp2_bind. iApply (semWp2_mono with "WPs"). iIntros (v1 δ21 v2 δ22) "WPrhs".
     destruct pattern_match_val as [pc1 δpc1].
@@ -700,7 +740,7 @@ Section Soundness.
     iMod "H" as "(%res2 & %γ2' & %μ2' & %Hcall & Hstate & Hwp)".
     iModIntro.
     iExists _, _, _, _.
-    iSplitR; first (iPureIntro; by constructor).
+    iSplitR; first (iPureIntro; eapply step_trans; by constructor).
     now iFrame.
   Qed.
 
@@ -713,7 +753,7 @@ Section Soundness.
     iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
     do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
     iExists _, _, _, _.
-    iSplitR; first (iPureIntro; constructor).
+    iSplitR; first (iPureIntro; eapply step_trans; constructor).
     now iFrame.
   Qed.
 
@@ -726,7 +766,7 @@ Section Soundness.
     iIntros (s12 δ12 γ12 μ12 step). destruct (smallinvstep step); cbn.
     do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
     iExists _, _, _, _.
-    iSplitR; first (iPureIntro; constructor).
+    iSplitR; first (iPureIntro; eapply step_trans; constructor).
     now iFrame.
   Qed.
 
@@ -1002,7 +1042,7 @@ Section Soundness.
       iFrame. iModIntro.
       iExists _, _, _, _.
       iSplitR.
-      { iPureIntro. apply Hsteps. }
+      { iPureIntro. eapply step_trans; last constructor. apply Hsteps. }
       iFrame.
       rewrite semWp2_val.
       iExists v.
@@ -1010,7 +1050,8 @@ Section Soundness.
       now iApply "HPQ".
     - do 3 iModIntro. iMod "Hclose" as "_".
       iExists _, _, _, _.
-      iSplitR; first by iPureIntro.
+      iSplitR.
+      { iPureIntro. eapply step_trans; last constructor. apply Hsteps. }
       iFrame. now iApply semWp2_fail_2.
   Qed.
 
@@ -1233,7 +1274,13 @@ Module Type IrisAdequacy2
       apply result_or_fail_mono.
       intros v (γ23 & μ23 & δ23 & v23 & Hsteps223 & HQ).
       do 4 eexists.
-      eauto using step_trans.
+      split; last eassumption.
+      induction Hstep2.
+      apply Hsteps223.
+      eapply step_trans.
+      eassumption.
+      apply IHHstep2.
+      apply Hsteps223.
   Qed.
 
   Lemma adequacy_gen {Γ σ} (s11 s21 : Stm Γ σ) {γ11 γ12 γ21} {μ11 μ12 μ21}
