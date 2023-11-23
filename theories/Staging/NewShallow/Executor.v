@@ -51,18 +51,10 @@ From stdpp Require base list option.
 Import ctx.notations.
 Import env.notations.
 Import ListNotations.
+Import SignatureNotations.
 
 Set Implicit Arguments.
 
-Local Notation "A ::> R" :=
-  (pointwise_relation A R)
-    (at level 55, right associativity)
-    : signature_scope.
-Local Notation "'∀' x .. y , R " :=
-  (forall_relation (fun x => .. (forall_relation (fun y => R)) ..))
-    (at level 200, x binder, y binder, right associativity,
-      format "'[  ' '[  ' ∀  x  ..  y ']' ,  '/' R ']'")
-    : signature_scope.
 
 Open Scope signature_scope.
 

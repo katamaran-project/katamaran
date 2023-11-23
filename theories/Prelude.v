@@ -30,8 +30,10 @@ From Coq Require Export
      Numbers.BinNums.
 From Coq Require Import
      Bool.Bool
+     Classes.Morphisms
      Lists.List
      NArith.NArith
+     Relations.Relation_Definitions
      Strings.String
      ZArith.BinInt.
 From Katamaran Require Export
@@ -643,3 +645,20 @@ Create HintDb katamaran.
 Declare Scope katamaran_scope.
 Delimit Scope katamaran_scope with katamaran.
 Open Scope katamaran_scope.
+
+Module SignatureNotations.
+  Bind Scope signature_scope with relation.
+
+  Notation "A ::> R" :=
+    (pointwise_relation A R%signature)
+      (at level 55, right associativity)
+      : signature_scope.
+  Notation "'∀' x .. y , R " :=
+    (forall_relation (fun x => .. (forall_relation (fun y => R%signature)) ..))
+      (at level 200, x binder, y binder, right associativity,
+        format "'[  ' '[  ' ∀  x  ..  y ']' ,  '/' R ']'")
+      : signature_scope.
+  Notation "R * R'" :=
+    (base.prod_relation R%signature R'%signature)
+      : signature_scope.
+End SignatureNotations.
