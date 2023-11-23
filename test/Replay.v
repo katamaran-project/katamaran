@@ -54,133 +54,13 @@ Import env.notations.
 Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope ctx_scope.
+Import DefaultBase.
 
-(*** TYPES ***)
-
-(** Enums **)
-Inductive Enums : Set :=.
-
-(** Unions **)
-Inductive Unions : Set :=.
-  
-(** Records **)
-Inductive Records : Set :=.
-
-Section TransparentObligations.
-  Local Set Transparent Obligations.
-
-  Derive NoConfusion for Enums.
-  Derive NoConfusion for Unions.
-  Derive NoConfusion for Records.
-
-End TransparentObligations.
-
-Derive EqDec for Enums.
-Derive EqDec for Unions.
-Derive EqDec for Records.
-
-Module Import ReplayBase <: Base.
-  Import stdpp.finite.
-
-  #[export] Instance typedeclkit : TypeDeclKit :=
-    {| enumi := Enums;
-       unioni := Unions;
-       recordi := Records;
-    |}.
-
-  Definition enum_denote (E : Enums) : Set :=
-    match E with end.
-
-  Definition union_denote (U : Unions) : Set :=
-    match U with end.
-
-  Definition record_denote (R : Records) : Set :=
-    match R with end.
-
-  #[export] Instance typedenotekit : TypeDenoteKit typedeclkit :=
-    {| enumt := enum_denote;
-       uniont := union_denote;
-       recordt := record_denote;
-    |}.
-
-  Definition union_constructors (U : Unions) : Set :=
-    match U with end.
-
-  Definition union_constructor_type (U : Unions) : union_constructors U -> Ty :=
-    match U with end.
-
-  Definition union_unfold (U : unioni) : uniont U -> { K & Val (union_constructor_type U K) } :=
-    match U with end.
-
-  Definition union_fold (U : unioni) : { K & Val (union_constructor_type U K) } -> uniont U :=
-    match U with end.
-
-  Definition record_field_type (R : recordi) : NCtx Empty_set Ty :=
-    match R with end.
-
-  Definition record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R :=
-    match R with end.
-  Definition record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) :=
-    match R with end.
-
-  #[export] Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
-    ltac:(destruct E; auto with typeclass_instances).
-  #[export] Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
-    ltac:(destruct E; auto with typeclass_instances).
-  #[export] Instance eqdec_union_denote U : EqDec (union_denote U) :=
-    ltac:(destruct U; cbn; auto with typeclass_instances).
-  #[export] Instance eqdec_union_constructors U : EqDec (union_constructors U) :=
-    ltac:(destruct U; cbn; auto with typeclass_instances).
-  #[export] Instance finite_union_constructors U : finite.Finite (union_constructors U) :=
-    ltac:(destruct U; cbn; auto with typeclass_instances).
-  #[export] Instance eqdec_record_denote R : EqDec (record_denote R) :=
-    ltac:(destruct R; auto with typeclass_instances).
-
-  #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
-    {| unionk         := union_constructors;
-       unionk_ty      := union_constructor_type;
-       unionv_fold    := union_fold;
-       unionv_unfold  := union_unfold;
-       recordf        := Empty_set;
-       recordf_ty     := record_field_type;
-       recordv_fold   := record_fold;
-       recordv_unfold := record_unfold;
-    |}.
-  Proof.
-    - abstract (now intros [] []).
-    - abstract (now intros [] [[]]).
-    - abstract (intros []).
-    - abstract (intros []).
-  Defined.
-
-  Definition ty_X := ty.list ty.int.
-
-  #[export] Instance varkit : VarKit := DefaultVarKit.
-
-  Section RegDeclKit.
-    Inductive Reg : Ty -> Set :=.
-
-    Section TransparentObligations.
-      Local Set Transparent Obligations.
-      Derive Signature NoConfusion EqDec for Reg.
-    End TransparentObligations.
-
-    Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
-    #[export] Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg) :=
-      sigma_eqdec _ _.
-
-    Local Obligation Tactic :=
-      finite_from_eqdec.
-
-    #[export,program] Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) :=
-      {| enum := [] |}.
-  End RegDeclKit.
-  Include BaseMixin.
-End ReplayBase.
+Definition ty_X := ty.list ty.int.
 
 (*** PROGRAM ***)
 
-Module Import ReplayProgram <: Program ReplayBase.
+Module Import ReplayProgram <: Program DefaultBase.
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
@@ -195,7 +75,7 @@ Module Import ReplayProgram <: Program ReplayBase.
 
   End FunDeclKit.
 
-  Include FunDeclMixin ReplayBase.
+  Include FunDeclMixin DefaultBase.
 
   Section FunDefKit.
     Import ctx.resolution.
@@ -212,7 +92,7 @@ Module Import ReplayProgram <: Program ReplayBase.
       end.
   End FunDefKit.
 
-  Include DefaultRegStoreKit ReplayBase.
+  Include DefaultRegStoreKit DefaultBase.
 
   Section ForeignKit.
     Definition Memory : Set := unit.
@@ -223,7 +103,7 @@ Module Import ReplayProgram <: Program ReplayBase.
     Proof. destruct f. Qed.
   End ForeignKit.
 
-  Include ProgramMixin ReplayBase.
+  Include ProgramMixin DefaultBase.
 
 End ReplayProgram.
 
@@ -257,7 +137,7 @@ Module Import ReplayPredicates.
   Derive EqDec for Predicate.
 End ReplayPredicates.
 
-Module Import ReplaySig <: Signature ReplayBase.
+Module Import ReplaySig <: Signature DefaultBase.
   Section PredicateKit.
     Definition 𝑷 := PurePredicate.
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
@@ -287,12 +167,12 @@ Module Import ReplaySig <: Signature ReplayBase.
       end.
   End PredicateKit.
 
-  Include PredicateMixin ReplayBase.
-  Include SignatureMixin ReplayBase.
+  Include PredicateMixin DefaultBase.
+  Include SignatureMixin DefaultBase.
 End ReplaySig.
 
-Module Import ReplaySpecification <: Specification ReplayBase ReplayProgram ReplaySig.
-  Include SpecificationMixin ReplayBase ReplayProgram ReplaySig.
+Module Import ReplaySpecification <: Specification DefaultBase ReplayProgram ReplaySig.
+  Include SpecificationMixin DefaultBase ReplayProgram ReplaySig.
   Import ctx.resolution.
   Import List.ListNotations.
 
@@ -341,7 +221,7 @@ Module Import ReplaySpecification <: Specification ReplayBase ReplayProgram Repl
 
 End ReplaySpecification.
 
-Module ReplaySolverKit <: SolverKit ReplayBase ReplaySig.
+Module ReplaySolverKit <: SolverKit DefaultBase ReplaySig.
   Import List.ListNotations.
   Import Entailment.
 
@@ -397,12 +277,12 @@ Module ReplaySolverKit <: SolverKit ReplayBase ReplaySig.
   Qed.
 End ReplaySolverKit.
 
-Module ReplaySolver := MakeSolver ReplayBase ReplaySig ReplaySolverKit.
+Module ReplaySolver := MakeSolver DefaultBase ReplaySig ReplaySolverKit.
 
 Module Import ReplayExecutor :=
-  MakeExecutor ReplayBase ReplayProgram ReplaySig ReplaySpecification ReplaySolver.
+  MakeExecutor DefaultBase ReplayProgram ReplaySig ReplaySpecification ReplaySolver.
 Module Import ReplayShallowExecutor :=
-  MakeShallowExecutor ReplayBase ReplayProgram ReplaySig ReplaySpecification.
+  MakeShallowExecutor DefaultBase ReplayProgram ReplaySig ReplaySpecification.
 
 Lemma shallow_valid_contract_main : Shallow.ValidContract sep_contract_main (FunDef main).
 Proof.
