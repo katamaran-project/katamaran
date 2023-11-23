@@ -325,20 +325,7 @@ Export ty
     recordv_fold_unfold, recordv_unfold_fold,
     recordv_fold_inj, recordv_unfold_inj
   ).
-(* Reexport all instances from the ty submodule. Coq >= 8.15 can do this with
-     Export (hints) ty.
-   but we currently still support Coq 8.14. *)
-#[export] Existing Instance ty.Ty_eq_dec.
-#[export] Existing Instance ty.Val_eq_dec.
-#[export] Existing Instance ty.enum_eqdec.
-#[export] Existing Instance ty.union_eqdec.
-#[export] Existing Instance ty.record_eqdec.
-#[export] Existing Instance ty.enumt_eqdec.
-#[export] Existing Instance ty.enumt_finite.
-#[export] Existing Instance ty.uniont_eqdec.
-#[export] Existing Instance ty.unionk_eqdec.
-#[export] Existing Instance ty.unionk_finite.
-#[export] Existing Instance ty.recordt_eqdec.
+Export (hints) ty.
 
 Module Type Types.
 
