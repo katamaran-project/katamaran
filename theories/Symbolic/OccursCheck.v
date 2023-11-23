@@ -71,10 +71,10 @@ Module Type OccursCheckOn
   #[export] Instance occurs_check_term : forall σ, OccursCheck (fun Σ => Term Σ σ) :=
     fix occurs_check_term {τ Σ x} xIn (t : Term Σ τ) {struct t} : option (Term (Σ - x) τ) :=
       match t with
-      | @term_var _ y _ yIn => match ctx.occurs_check_view xIn yIn with
-                              | ctx.Same _      => None
-                              | ctx.Diff _ yIn' => Some (@term_var _ _ _ yIn')
-                              end
+      | term_var_in yIn => match ctx.occurs_check_view xIn yIn with
+                           | ctx.Same _      => None
+                           | ctx.Diff _ yIn' => Some (term_var_in yIn')
+                           end
       | term_val σ v => Some (term_val σ v)
       | term_binop op t1 t2 =>
           t1' <- occurs_check_term xIn t1;;
@@ -83,8 +83,8 @@ Module Type OccursCheckOn
       | term_unop op t =>
           t' <- occurs_check_term xIn t;;
           Some (term_unop op t')
-      | @term_tuple _ σs ts =>
-        @term_tuple _ σs <$> occurs_check (OccursCheck := occurs_check_env (OCT := @occurs_check_term)) xIn ts
+      | term_tuple ts =>
+        term_tuple <$> occurs_check (OccursCheck := occurs_check_env (OCT := @occurs_check_term)) xIn ts
       | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0
       | term_record R ts =>
         let OCTerm xt := @occurs_check_term (@type recordf Ty xt) in
@@ -188,19 +188,19 @@ Module Type OccursCheckOn
       apply wp_monotonic. intros ? <-. reflexivity.
     - generalize (occurs_check_env_shift_point IH).
       apply wp_monotonic. intros ? <-. reflexivity.
-    - change_no_check
-        (@wlp (Term (Σ - x) (@type _ _ (ς∷σ)))
-           (fun t' : Term (Σ - x) (@type _ _ (ς∷σ)) =>
-              @term_var Σ (@name _ _ (ς∷σ)) (@type _ _ (ς∷σ)) ςInΣ =
-                @subst (fun Σ => Term Σ (@type _ _ (ς∷σ)))
-                  (@SubstTerm (@type _ _ (ς∷σ)))
-                  (Σ - x) t' Σ (sub_shift xIn))
-           match @ctx.occurs_check_view _ Σ x xIn (ς∷σ) ςInΣ
+    - change
+        (@wlp (Term (Σ - x) (type (ς∷σ)))
+           (fun t' : Term (Σ - x) (type (ς∷σ)) =>
+              term_var (name (ς∷σ)) (σ := type (ς∷σ)) =
+                subst (T := fun Σ => Term Σ (type (ς∷σ)))
+                  (Subst := SubstTerm (σ := type (ς∷σ)))
+                  t' (sub_shift xIn))
+           match ctx.occurs_check_view xIn ςInΣ
            in ctx.OccursCheckView _ i
            return option (Term (Σ - x) _)
            with
            | ctx.Same _      => None
-           | ctx.Diff _ yIn' => Some (@term_var _ _ _ yIn')
+           | ctx.Diff _ yIn' => Some (term_var_in yIn')
            end).
       revert ςInΣ. generalize (ς∷σ). intros y yIn.
       destruct ctx.occurs_check_view; constructor; cbn.

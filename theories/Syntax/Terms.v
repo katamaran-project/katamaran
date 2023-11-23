@@ -735,6 +735,7 @@ Module Type TermsOn (Import TY : Types).
   End SymbolicStore.
   Bind Scope env_scope with SStore.
 
+  Notation term_var_in ςIn := (term_var _ (ςInΣ := ςIn)) (only parsing).
   Notation term_inl t := (term_unop uop.inl t%exp).
   Notation term_inr t := (term_unop uop.inr t%exp).
   Notation term_neg t := (term_unop uop.neg t%exp).

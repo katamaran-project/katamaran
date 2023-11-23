@@ -105,14 +105,14 @@ Module Type InstantiationOn
   #[export] Instance inst_term : forall {σ}, Inst (fun Σ => Term Σ σ) (Val σ) :=
     fix inst_term {σ : Ty} [Σ : LCtx] (t : Term Σ σ) (ι : Valuation Σ) {struct t} : Val σ :=
     match t in Term _ σ return Val σ with
-    | @term_var _ _ _ bIn        => env.lookup ι bIn
+    | term_var_in bIn            => env.lookup ι bIn
     | term_val _ v               => v
     | term_binop op t1 t2        => bop.eval op
                                       (inst (Inst := @inst_term _) t1 ι)
                                       (inst (Inst := @inst_term _) t2 ι)
     | term_unop op t             => uop.eval op
                                       (inst (Inst := @inst_term _) t ι)
-    | @term_tuple _ σs ts        =>
+    | term_tuple ts              =>
         envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι)
     | @term_union _ U K t        => unionv_fold U (existT K (inst (Inst := inst_term) t ι))
     | @term_record _ R ts        =>

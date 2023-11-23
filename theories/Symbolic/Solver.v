@@ -440,7 +440,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
 
     Definition occurs_check_lt {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
       match t with
-      | @term_var _ y σ yIn =>
+      | term_var_in yIn =>
         if Nat.ltb (ctx.in_at xIn) (ctx.in_at yIn) then occurs_check xIn t else None
       | _ => occurs_check xIn t
       end.
