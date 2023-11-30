@@ -2036,6 +2036,34 @@ Module Type SymPropOn
 
     #[global] Arguments eterm_var _ {_ _}.
 
+    Module notations.
+
+      Notation "x" := (eterm_var x%string) (at level 1, only printing).
+      Notation "s = t" := (eformula_relop bop.eq s t) (only printing).
+      Notation "s <> t" := (eformula_relop bop.neq s t) (only printing).
+      Notation "x" := (eterm_val _ x) (at level 1, only printing).
+      Notation "F ∧ P" := (eassertk F P) (only printing).
+      Notation "F → P" := (eassumek F P) (only printing).
+      Notation "'∃' x '∷' σ , P" := (eangelicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'∃'  x '∷' σ ,  '/' P").
+      Notation "'∀' x '∷' σ , P" := (edemonicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'∀'  x '∷' σ ,  '/' P").
+      Notation "x ↦ t ∧ k" := (eassert_vareq x _ t k) (at level 99, right associativity, only printing).
+      Notation "x ↦ t → k" := (eassume_vareq x _ t k) (at level 99, right associativity, only printing).
+      Notation "P ∧ Q" := (edemonic_binary P Q) (at level 80, right associativity, only printing).
+      Notation "P ∧ Q" := (eformula_and P Q) (at level 80, right associativity, only printing).
+      Notation "P ∨ Q" := (eangelic_binary P Q) (at level 85, right associativity, only printing).
+      Notation "P ∨ Q" := (eformula_or P Q) (at level 85, right associativity, only printing).
+
+      Notation "e1 +ᵇ e2" := (eterm_binop bop.bvadd e1 e2) (only printing).
+      Notation "e1 -ᵇ e2" := (eterm_binop bop.bvsub e1 e2) (only printing).
+      Notation "e1 *ᵇ e2" := (eterm_binop bop.bvmul e1 e2) (only printing).
+
+      Notation "e1 >=ᵘ e2" := (eformula_relop bop.bvule e2 e1) (only printing).
+      Notation "e1 >ᵘ e2" := (eformula_relop bop.bvult e2 e1) (only printing).
+      Notation "e1 <=ᵘ e2" := (eformula_relop bop.bvule e1 e2) (only printing).
+      Notation "e1 <ᵘ e2" := (eformula_relop bop.bvult e1 e2) (only printing).
+
+    End notations.
+
   End Erasure.
 
 End SymPropOn.
