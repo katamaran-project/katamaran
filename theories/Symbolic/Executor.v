@@ -343,9 +343,6 @@ Module Type SymbolicExecOn
           SymProp.block
       end.
 
-  Definition SMatchResult {N σ} (pat : @Pattern N σ) (w : World) : Type :=
-    { pc : PatternCase pat & NamedEnv (Term w) (PatternCaseCtx pc) }.
-
   Definition SPureSpecM (A : TYPE) : TYPE :=
     □(A -> 𝕊) -> 𝕊.
 

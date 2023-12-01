@@ -63,7 +63,7 @@ Module Type SymPropOn
   (Import PK   : PredicateKit B)
   (Import FML  : FormulasOn B PK)
   (Import CHK  : ChunksOn B PK)
-  (Import WRLD : WorldsOn B PK FML).
+  (Import WRLD : WorldsOn B PK FML CHK).
 
   Section Messages.
 
@@ -1690,6 +1690,32 @@ Module Type SymPropOn
     Qed.
 
   End PostProcess.
+
+  Section logicalrelation.
+    Import SymProp logicalrelation logicalrelation.notations.
+
+    (* Relatedness of symbolic and shallow propositions. The driving base case! *)
+    #[export] Instance RProp : Rel SymProp Prop :=
+      MkRel (fun _ ι SP P => (wsafe SP ι -> P)%type).
+
+    Lemma refine_symprop_angelic_binary :
+      ℛ⟦RProp -> RProp -> RProp⟧ (@angelic_binary) (@or).
+    Proof.
+      intros w ι Hpc.
+      intros PS1 PC1 HP1 PS2 PC2 HP2.
+      intros [H1|H2]; [left|right]; auto.
+    Qed.
+
+    Lemma refine_symprop_demonic_binary :
+      ℛ⟦RProp -> RProp -> RProp⟧ (@demonic_binary) (@and).
+    Proof.
+      intros w ι Hpc.
+      intros PS1 PC1 HP1 PS2 PC2 HP2.
+      intros [H1 H2]; split; auto.
+    Qed.
+
+  End logicalrelation.
+  Notation "'ℙ'" := (RProp) : rel_scope.
 
   Module Erasure.
 

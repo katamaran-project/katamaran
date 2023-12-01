@@ -61,6 +61,9 @@ Module Type BaseMixin (Import TY : Types).
   Notation Valuation Σ := (Env (fun xt : Binding LVar Ty => Val (type xt)) Σ).
   Notation CStore := (@NamedEnv PVar Ty Val).
 
+  Definition SMatchResult {N σ} (pat : @Pattern N σ) (Σ : LCtx) : Type :=
+    { pc : PatternCase pat & NamedEnv (Term Σ) (PatternCaseCtx pc) }.
+
   Section PatternMatching.
     Context {N : Set}.
 

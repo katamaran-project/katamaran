@@ -302,7 +302,7 @@ Module BlockVerificationDerived2Sound.
       _ <- consume_chunk (scchunk_ptsreg pc na) ;; (* TODO: a + 4! *)
       pure na.
 
-  Import refinement.notations.
+  Import logicalrelation logicalrelation.notations.
 
   Lemma refine_exec_instruction_any (i : AST) :
     ℛ⟦RVal ty_xlenbits -> RHeapSpecM [ctx] [ctx] (RVal ty_xlenbits)⟧
@@ -471,7 +471,7 @@ Module BlockVerification3Sound.
           end
       end.
 
-  Import refinement.notations.
+  Import logicalrelation logicalrelation.notations.
 
   Lemma refine_exec_block_addr (b : list AnnotInstr) :
     ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpecM [ctx] [ctx] (RVal ty_xlenbits)⟧
