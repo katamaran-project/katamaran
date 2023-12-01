@@ -51,10 +51,10 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Specification
-     Shallow.Executor
-     Shallow.Soundness
-     Symbolic.Executor
-     Symbolic.Soundness
+     MicroSail.ShallowVCGen
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicVCGen
+     MicroSail.SymbolicSoundness
      MinimalCaps.Machine
      MinimalCaps.Sig
      MinimalCaps.Contracts.Definitions

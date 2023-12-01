@@ -41,10 +41,7 @@ From Katamaran Require Import
      MinimalCaps.Sig
      MinimalCaps.Contracts.Notations
      Notations
-     Specification
-     Shallow.Executor
-     Symbolic.Executor
-     Symbolic.Solver.
+     Specification.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -54,8 +51,8 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
-Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram MinCapsSignature.
-  Include SpecificationMixin MinCapsBase MinCapsProgram MinCapsSignature.
+Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature MinCapsProgram.
+  Include SpecificationMixin MinCapsBase MinCapsSignature MinCapsProgram.
   Import MinCapsSignature.
   Import MinCapsContractNotations.
   Import Notations.

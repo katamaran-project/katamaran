@@ -31,9 +31,9 @@ From Coq Require Import
 From Katamaran Require Import
      Bitvector
      Environment
-     Shallow.Executor
-     Shallow.Soundness
-     Symbolic.Soundness
+     MicroSail.ShallowVCGen
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicSoundness
      Iris.Instance
      Iris.Model
      Program

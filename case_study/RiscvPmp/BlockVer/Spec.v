@@ -38,11 +38,11 @@ From Katamaran Require Import
      Notations
      Bitvector
      Sep.Hoare
-     Shallow.Executor
-     Shallow.Soundness
+     MicroSail.ShallowVCGen
+     MicroSail.ShallowSoundness
      Specification
-     Symbolic.Executor
-     Symbolic.Soundness
+     MicroSail.SymbolicVCGen
+     MicroSail.SymbolicSoundness
      RiscvPmp.PmpCheck
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance

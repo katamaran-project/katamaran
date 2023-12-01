@@ -31,9 +31,9 @@ From Coq Require Import
 From Katamaran Require Import
      Bitvector
      Environment
-     Shallow.Executor
-     Shallow.Soundness
-     Symbolic.Soundness
+     MicroSail.ShallowVCGen
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicSoundness
      Iris.Instance
      Iris.Model
      Program
@@ -65,8 +65,6 @@ Import RiscvPmpModel2.
 Import RiscvPmpValidContracts.
 
 Import RiscvPmpSignature.
-Module Import RiscvPmpShallowExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
 
 Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpProgramLogic.
 

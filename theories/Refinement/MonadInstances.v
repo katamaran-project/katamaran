@@ -1,5 +1,6 @@
 (******************************************************************************)
-(* Copyright (c) 2020 Dominique Devriese, Sander Huyghebaert, Steven Keuchel  *)
+(* Copyright (c) 2020 Dominique Devriese, Georgy Lukyanov,                    *)
+(*   Sander Huyghebaert, Steven Keuchel                                       *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -27,55 +28,32 @@
 (******************************************************************************)
 
 From Coq Require Import
-     Bool.Bool
-     Program.Tactics
-     ZArith.ZArith
-     Strings.String
-     Classes.Morphisms
-     Classes.RelationClasses
-     Classes.Morphisms_Prop
-     Classes.Morphisms_Relations.
-Require Import Basics.
-
-From Coq Require Lists.List.
-
+     Classes.Morphisms.
 From Equations Require Import
      Equations.
-
 From Katamaran Require Import
+     Prelude
      Signature
-     Specification
-     Shallow.MonadInterface
+     Base
      Shallow.MonadInstances
-     Shallow.Replay
-     Symbolic.MonadInterface
-     Symbolic.MonadInstances
-     Symbolic.Replay
-     Program
-     Tactics.
-
-Set Implicit Arguments.
+     Symbolic.MonadInstances.
 
 Import ctx.notations.
 Import env.notations.
 
-Module Type MonadInstancesSoundnessOn
-  (Import B        : Base)
-  (Import PROG     : Program B)
-  (Import SIG      : Signature B)
-  (Import SPEC     : Specification B PROG SIG)
-  (Import SHALINST : ShallowMonadInstancesOn B SIG)
-  (Import SHALREPL : Shallow.Replay.ReplayOn B PROG SIG)
-  (Import SOLV     : SolverKit B SIG)
-  (Import MINST    : SymbolicMonadInstancesOn B SIG SOLV)
-  (Import SYMBREPL : Symbolic.Replay.ReplayOn B PROG SIG).
+Set Implicit Arguments.
+
+Module Type RefinementMonadInstancesOn
+  (Import B : Base)
+  (Import SIG : Signature B)
+  (Import SOLV : SolverKit B SIG)
+  (Import SHAL : ShallowMonadInstancesOn B SIG)
+  (Import SYMB : SymbolicMonadInstancesOn B SIG SOLV).
 
   Import ModalNotations.
-  Import SymProp.
-
-
-
-  (* Notation RPureSpecM R := (□(R -> ℙ) -> ℙ)%R. *)
+  Import Postprocessing.
+  Import logicalrelation.
+  Import logicalrelation.notations.
 
   #[export] Instance RPureSpec {AT A} (R : Rel AT A) :
     Rel (SPureSpec AT) (CPureSpec A) := □(R -> ℙ) -> ℙ.
@@ -205,7 +183,8 @@ Module Type MonadInstancesSoundnessOn
         rewrite inst_triangular_right_inverse in Hsolver; auto.
         inster Hsolver by now try apply entails_triangular_inv.
         destruct Hsolver as [Hsolver _]. inster Hsolver by auto.
-        rewrite safe_assume_triangular, safe_assume_pathcondition_without_solver in Hwp.
+        rewrite SymProp.safe_assume_triangular,
+          SymProp.safe_assume_pathcondition_without_solver in Hwp.
         specialize (Hwp Hν Hsolver). revert Hwp.
         unfold four. apply HPOST; cbn; wsimpl; auto.
         unfold PathCondition. rewrite instprop_cat. split; auto.
@@ -233,8 +212,8 @@ Module Type MonadInstancesSoundnessOn
       intros w0 ι0 Hpc0 msg fmls0 p Heq POST__s POST__c HPOST Hwp.
       destruct (solver_spec _ fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
-        rewrite safe_assert_triangular in Hwp. destruct Hwp as [Hν Hwp].
-        rewrite safe_assert_pathcondition_without_solver in Hwp.
+        rewrite SymProp.safe_assert_triangular in Hwp. destruct Hwp as [Hν Hwp].
+        rewrite SymProp.safe_assert_pathcondition_without_solver in Hwp.
         destruct Hwp as [Hfmls Hwp].
         split.
         + apply Hsolver in Hfmls; rewrite ?inst_triangular_right_inverse; auto.
@@ -925,24 +904,6 @@ Module Type MonadInstancesSoundnessOn
       now apply PureSpec.refine_demonic_pattern_match.
     Qed.
 
-    Lemma refine_box_assume_formula :
-      ℛ⟦RFormula -> □(RHeapSpec RUnit)⟧
-        SPureSpecM.box_assume_formula CPureSpecM.assume_formula.
-    Proof.
-      intros w0 ι0 Hpc0 P p Hp w1 r01 ι1 Hι1 Hpc1.
-      apply refine_assume_formula; auto.
-      eapply refine_formula_persist; eauto.
-    Qed.
-
-    Lemma refine_box_assert_formula :
-      ℛ⟦RMsg _ (RFormula -> □(RHeapSpec RUnit))⟧
-        SPureSpecM.box_assert_formula CPureSpecM.assert_formula.
-    Proof.
-      intros w0 ι0 Hpc0 msg P p Hp w1 r01 ι1 Hι1 Hpc1.
-      apply refine_assert_formula; auto.
-      eapply refine_formula_persist; eauto.
-    Qed.
-
     Lemma refine_get_heap :
       ℛ⟦RHeapSpec RHeap⟧ SHeapSpec.get_heap CHeapSpec.get_heap.
     Proof.
@@ -1216,12 +1177,15 @@ Module Type MonadInstancesSoundnessOn
       }
     Qed.
 
-    Lemma refine_produce {Σ0 pc0} (asn : Assertion Σ0) :
-      let w0 := @MkWorld Σ0 pc0 in
-      forall
-        (ι0 : Valuation w0)
-        (Hpc0 : instprop (wco w0) ι0),
-        ℛ⟦□(RHeapSpec RUnit)⟧@{ι0} (SHeapSpecM.produce (w:=w0) asn) (CHeapSpecM.produce asn ι0).
+    #[export] Instance RPureSpec {AT A} (R : Rel AT A) :
+      Rel (SPureSpec AT) (CPureSpec A) := □(R -> ℙ) -> ℙ.
+
+    Lemma refine_produce {Σ0} (asn : Assertion Σ0) : Prop.
+      Search CReaderT.
+
+        ℛ⟦□(RHeapSpec RUnit)⟧@{ι0}
+          (produce (w:=w0) asn)
+          (cproduce asn ι0).
     Proof.
       induction asn; intros w0 * Hpc; cbn - [RSat wctx Val].
       - now apply refine_box_assume_formula.
@@ -1339,210 +1303,4 @@ Module Type MonadInstancesSoundnessOn
 
   End HeapSpec.
 
-  Module Replay.
-
-    (* Lemma refine_replay_aux_debug : *)
-    (*   forall *)
-    (*     {Σ} *)
-    (*     {w : World} *)
-    (*     (b : AMessage Σ) *)
-    (*     (s : 𝕊 Σ) *)
-    (*     (ω : {| wctx := Σ; wco := [ctx] |} ⊒ w) *)
-    (*     (ι : Valuation w) *)
-    (*     (i : Valuation Σ), *)
-    (*     i = inst (sub_acc ω) ι -> *)
-    (*     ℛ⟦RPureSpec RUnit⟧@{ι} (SYMBREPL.replay_aux s ω) (SHALREPL.replay_aux s i) -> *)
-    (*     ℛ⟦RPureSpec RUnit⟧@{ι} (fun P => debug (subst b (sub_acc ω)) (SYMBREPL.replay_aux s ω P)) (SHALREPL.replay_aux i s). *)
-    (* Proof. *)
-    (*   intros Σ w b s ω ι i Hi H. *)
-    (*   intros ta a ? Hdebug. *)
-    (*   cbn in Hdebug. *)
-    (*   rewrite debug_equiv in Hdebug. *)
-    (*   apply H with (ta := ta); auto. *)
-    (* Qed. *)
-
-    Lemma refine_produce {Σ0 pc0} (asn : Assertion Σ0) :
-      let w0 := @MkWorld Σ0 pc0 in
-      forall
-        (ι0 : Valuation w0)
-        (Hpc0 : instprop (wco w0) ι0),
-        ℛ⟦□(RHeapSpec RUnit)⟧@{ι0} (SHeapSpecM.produce (w:=w0) asn) (CHeapSpecM.produce asn ι0).
-    Proof.
-
-    Lemma refine_replay_aux {Σ0} (s : 𝕊 Σ0) :
-      let w0 := @MkWorld Σ0 pc0 in
-      forall
-        (ι0 : Valuation w0)
-        (Hpc0 : instprop (wco w0) ι0),
-        ℛ⟦RPureSpec RUnit⟧@{ι} (SYMBREPL.replay_aux s ω) (SHALREPL.replay_aux s i).
-    Proof.
-      revert w; induction s; intros * Hpc Hi; cbn - [RSat wctx Val].
-      - apply PureSpecM.refine_angelic_binary; auto.
-      - apply PureSpecM.refine_demonic_binary; auto.
-      - apply PureSpecM.refine_error; auto.
-      - apply PureSpecM.refine_block; auto.
-      - apply PureSpecM.refine_bind.
-        + apply PureSpecM.refine_assert_formula; auto.
-          eapply refine_formula_persist; eauto.
-          now cbn.
-        + intros w2 ω12 ι2 Hι2 Hpc2 _ _ _. apply IHs; auto.
-          subst. now rewrite sub_acc_trans, inst_subst, <- inst_persist.
-      - apply PureSpecM.refine_bind.
-        + apply PureSpecM.refine_assume_formula; auto.
-          eapply refine_formula_persist; eauto.
-          now cbn.
-        + intros w2 ω12 ι2 Hι2 Hpc2 _ _ _. apply IHs; auto.
-          subst. now rewrite sub_acc_trans, inst_subst, <- inst_persist.
-      - intros ? ? Hrefine; cbn - [RSat wctx Val].
-        cbn.
-        intros [v H].
-        unfold CPureSpecM.bind, CPureSpecM.angelic.
-        exists v.
-        unshelve eapply (IHs _ _ _ _ _ _ _ _ _ H).
-        + cbn.
-          now rewrite instprop_subst, inst_sub_wk1.
-        +  cbn [sub_acc].
-           subst.
-           now rewrite <- inst_sub_up1.
-        + unshelve eapply (refine_four _ _ Hrefine).
-          cbn. now rewrite inst_sub_wk1.
-      - intros ? ? Hrefine; cbn - [RSat wctx Val].
-        cbn.
-        intros H v.
-        unshelve eapply (IHs _ _ _ _ _ _ _ _ _ (H v)).
-        +  cbn.
-           now rewrite instprop_subst, inst_sub_wk1.
-        +  cbn [sub_acc].
-           subst.
-           now rewrite <- inst_sub_up1.
-        + unshelve eapply (refine_four _ _ Hrefine).
-          cbn. now rewrite inst_sub_wk1.
-      - apply PureSpecM.refine_bind.
-        + apply PureSpecM.refine_assert_formula; auto.
-          cbn. subst.
-          now rewrite <- inst_sub_shift, <- ?inst_subst, <- subst_sub_comp, <- inst_lookup.
-        + intros w2 ω12 ι2 Hι2 Hpc2 _ _ _. apply IHs; auto.
-          subst. rewrite sub_acc_trans. cbn [sub_acc]. now rewrite ?inst_subst, <- inst_sub_shift.
-      - apply PureSpecM.refine_bind.
-        + apply PureSpecM.refine_assume_formula; auto.
-          cbn. subst.
-          now rewrite <- inst_sub_shift, <- ?inst_subst, <- subst_sub_comp, <- inst_lookup.
-        + intros w2 ω12 ι2 Hι2 Hpc2 _ _ _. apply IHs; auto.
-          subst. rewrite sub_acc_trans. cbn [sub_acc]. now rewrite ?inst_subst, <- inst_sub_shift.
-      - now cbn.
-      - now cbn.
-      - apply refine_replay_aux_debug; auto.
-    Qed.
-
-    Lemma refine_replay {Σ} (s : 𝕊 Σ) {w : World} :
-      forall
-        (ω : MkWorld Σ [ctx] ⊒ w)
-        (ι : Valuation w),
-        let i := inst (sub_acc ω) ι in
-        ℛ⟦ℙ⟧@{i} (Replay.replay s) (SHAL.Replay.replay i s).
-    Proof.
-      intros.
-      apply refine_replay_aux.
-      - now cbn.
-      - cbn [sub_acc sub_id].
-        symmetry.
-        apply inst_sub_id.
-      - now cbn.
-    Qed.
-
-    Lemma shallow_replay_complete {Σ} (s : 𝕊 Σ) {w : World} :
-      forall
-        (ω : MkWorld Σ [ctx] ⊒ w)
-        (ι : Valuation w)
-        (i : Valuation Σ)
-        (Hpc0 : instprop (wco w) ι),
-        i = inst (sub_acc ω) ι ->
-        SHAL.Replay.replay i s ->
-        safe s i.
-    Proof.
-      revert w; induction s; intros w ω ι i Hpc0 Hi Hreplay.
-      - destruct Hreplay as [H|H].
-        + left.
-          apply (IHs1 w ω ι i Hpc0 Hi H).
-        + right.
-          apply (IHs2 w ω ι i Hpc0 Hi H).
-      - destruct Hreplay as [Hs1 Hs2].
-        split.
-        + apply (IHs1 w ω ι i Hpc0 Hi Hs1).
-        + apply (IHs2 w ω ι i Hpc0 Hi Hs2).
-      - auto.
-      - auto.
-      - cbn in Hreplay.
-        unfold CPureSpecM.bind, CPureSpecM.assert_formula in Hreplay.
-        destruct Hreplay as [Hfml Hs].
-        split; auto.
-        apply (IHs w ω ι i Hpc0 Hi Hs).
-      - cbn in Hreplay.
-        unfold CPureSpecM.bind, CPureSpecM.assume_formula in Hreplay.
-        intros Hfml.
-        apply (IHs w ω ι i Hpc0 Hi (Hreplay Hfml)).
-      - cbn in Hreplay.
-        unfold CPureSpecM.bind, CPureSpecM.angelic in Hreplay.
-        destruct Hreplay as [v Hreplay].
-        exists v.
-        unshelve eapply (IHs (wsnoc w b) _ ι.[b ↦ v] _ _ _ Hreplay).
-        + apply acc_sub with (ζ := sub_up1 (sub_acc ω)).
-          apply Entailment.entails_nil.
-        + cbn.
-          now rewrite instprop_subst, inst_sub_wk1.
-        + subst.
-          now rewrite <- inst_sub_up1.
-      - cbn in Hreplay.
-        unfold CPureSpecM.bind, CPureSpecM.demonic in Hreplay.
-        intros v.
-        unshelve eapply (IHs (wsnoc w b) _ ι.[b ↦ v] _ _ _ (Hreplay v)).
-        + apply acc_sub with (ζ := sub_up1 (sub_acc ω)).
-          apply Entailment.entails_nil.
-        + cbn.
-          now rewrite instprop_subst, inst_sub_wk1.
-        + subst.
-          now rewrite <- inst_sub_up1.
-      - cbn in Hreplay.
-        unfold CPureSpecM.bind, CPureSpecM.assert_formula in Hreplay.
-        destruct Hreplay as [Heq Hreplay].
-        split; auto.
-        unshelve eapply (IHs _ _ (inst (sub_acc ω) ι) _ _ _ Hreplay).
-        + apply acc_sub with (ζ := sub_shift xIn).
-          apply Entailment.entails_nil.
-        + now cbn.
-        + rewrite <- inst_sub_shift.
-          cbn [sub_acc].
-          now subst.
-      - cbn in Hreplay.
-        unfold CPureSpecM.bind, CPureSpecM.assume_formula in Hreplay.
-        intros Heq.
-        unshelve eapply (IHs _ _ (inst (sub_acc ω) ι) _ _ _ (Hreplay Heq)).
-        + apply acc_sub with (ζ := sub_shift xIn).
-          apply Entailment.entails_nil.
-        + now cbn.
-        + rewrite <- inst_sub_shift.
-          cbn [sub_acc].
-          now subst.
-      - now cbn in Hreplay.
-      - now cbn in Hreplay.
-      - cbn in Hreplay.
-        apply (IHs _ _ ι _ Hpc0 Hi Hreplay).
-    Qed.
-
-    Lemma replay_sound_nil (s : 𝕊 [ctx]) :
-      forall ι,
-        safe (Replay.replay s) ι -> safe s ι.
-    Proof.
-      intros ι H.
-      destruct (env.view ι).
-      rewrite <- ?safe_debug_safe in H.
-      rewrite <- (@wsafe_safe wnil _ [env]) in H.
-      apply (@refine_replay [ctx] s wnil acc_refl [env]) in H.
-      assert (Hwco: instprop (wco wnil) [env]) by now cbn.
-      apply (@shallow_replay_complete [ctx] s wnil acc_refl [env] [env] Hwco eq_refl H).
-    Qed.
-
-
-  End Replay.
-
-End MonadSoundness.
+End RefinementMonadInstancesOn.

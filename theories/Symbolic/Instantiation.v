@@ -538,7 +538,7 @@ Module Type InstantiationOn
       option.wlp
         (fun '(t1,t2) =>
            forall ι : Valuation Σ,
-             inst (T := fun Σ => Term Σ (ty.prod σ1 σ2)) (A := Val σ1 * Val σ2) s ι =
+             inst (T := fun Σ => Term Σ (ty.prod σ1 σ2)) (A := Val (ty.prod σ1 σ2)) s ι =
              (inst (A := Val σ1) t1 ι, inst (A := Val σ2) t2 ι))
         (term_get_pair s).
     Proof.

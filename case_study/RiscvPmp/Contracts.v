@@ -34,11 +34,11 @@ From Coq Require Import
 From Katamaran Require Import
      Notations
      Bitvector
-     Shallow.Executor
+     MicroSail.ShallowVCGen
      Specification
-     Symbolic.Executor
      Symbolic.Solver
      Symbolic.Propositions
+     MicroSail.SymbolicVCGen
      Symbolic.Worlds
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
@@ -61,8 +61,9 @@ Open Scope Z_scope.
 (* NOTE: same as for mincaps, avoid Lemma in definition body for coqwc *)
 Definition KatamaranLem := Lemma.
 
-Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
-  Include SpecificationMixin RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
+Module Import RiscvPmpSpecification <:
+  Specification RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
+  Include (SpecificationMixin RiscvPmpBase RiscvPmpSignature RiscvPmpProgram).
 
   Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
     SepContract Δ τ.
@@ -1273,15 +1274,15 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
 
 End RiscvPmpSpecification.
 
-Module RiscvPmpExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolver.
+Module RiscvPmpVCGen :=
+  SymbolicVCGen.MakeVCGen RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification RiscvPmpSolver.
 
-Module RiscvPmpShallowExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
+Module RiscvPmpShallowVCGen :=
+  MakeShallowVCGen RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
 
 Module RiscvPmpValidContracts.
-  Import RiscvPmpExecutor.
-  Import RiscvPmpShallowExecutor.
+  Import RiscvPmpVCGen.
+  Import RiscvPmpShallowVCGen.
 
   Inductive Fuel : Set :=
   | NoInlining

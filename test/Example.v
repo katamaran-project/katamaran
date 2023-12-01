@@ -41,7 +41,7 @@ From Katamaran Require Import
      Signature
      Bitvector
      Semantics.Registers
-     Symbolic.Executor
+     MicroSail.SymbolicVCGen
      Symbolic.Solver
      Specification
      Program.
@@ -339,8 +339,8 @@ Module Import ExampleSig <: Signature ExampleBase.
   Include SignatureMixin ExampleBase.
 End ExampleSig.
 
-Module Import ExampleSpecification <: Specification ExampleBase ExampleProgram ExampleSig.
-  Include SpecificationMixin ExampleBase ExampleProgram ExampleSig.
+Module Import ExampleSpecification <: Specification ExampleBase ExampleSig ExampleProgram.
+  Include SpecificationMixin ExampleBase ExampleSig ExampleProgram.
   Import ctx.resolution.
 
   Section ContractDefKit.
@@ -438,8 +438,8 @@ End ExampleSpecification.
 Module ExampleSolverKit := DefaultSolverKit ExampleBase ExampleSig.
 Module ExampleSolver := MakeSolver ExampleBase ExampleSig ExampleSolverKit.
 
-Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleProgram ExampleSig ExampleSpecification ExampleSolver.
+Module Import ExampleVCGgen :=
+  MakeVCGen ExampleBase ExampleSig ExampleProgram ExampleSpecification ExampleSolver.
 
 Local Ltac solve :=
   repeat

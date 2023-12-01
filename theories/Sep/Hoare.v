@@ -41,9 +41,9 @@ Import env.notations.
 
 Module Type ProgramLogicOn
   (Import B : Base)
-  (Import PROG : Program B)
   (Import SIG : Signature B)
-  (Import SPEC : Specification B PROG SIG).
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG).
 Module ProgramLogic.
 
   Section Triples.

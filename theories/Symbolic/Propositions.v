@@ -77,7 +77,7 @@ Module Type SymPropOn
           msg_heap            : SHeap Σ;
           msg_pathcondition   : PathCondition Σ;
         }.
-    Global Arguments MkMessage {Σ} _ _ _ _ _ _.
+    Global Arguments MkMessage {Σ} _ _ _ & _ _ _.
 
     #[export] Instance SubstMessage : Subst Message :=
       fun Σ1 msg Σ2 ζ12 =>
@@ -112,6 +112,9 @@ Module Type SymPropOn
 
   Inductive Debug {B : LCtx -> Type} {Σ : LCtx} (b : B Σ) (P : Prop) : Prop :=
   | debug (p : P).
+
+  #[export] Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
+  Proof. intros P Q PQ. split; intros []; constructor; intuition. Qed.
 
   Section Util.
 

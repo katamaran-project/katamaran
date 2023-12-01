@@ -53,18 +53,18 @@ From Katamaran Require Import
      Iris.Instance
      Iris.Model
      Notations
+     MicroSail.ShallowSoundness
+     MicroSail.ShallowVCGen
+     MicroSail.SymbolicSoundness
+     MicroSail.SymbolicVCGen
      Program
      Semantics
      Semantics.Registers
      Sep.Hoare
      Sep.Logic
-     Shallow.Executor
-     Shallow.Soundness
      Signature
      Specification
-     Symbolic.Executor
-     Symbolic.Solver
-     Symbolic.Soundness.
+     Symbolic.Solver.
 
 From stdpp Require decidable finite list fin_maps infinite.
 From iris.proofmode Require string_ident tactics.

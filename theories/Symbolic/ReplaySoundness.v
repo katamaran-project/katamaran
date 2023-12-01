@@ -1,6 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2020 Dominique Devriese, Georgy Lukyanov,                    *)
-(*   Sander Huyghebaert, Steven Keuchel                                       *)
+(* Copyright (c) 2020 Dominique Devriese, Sander Huyghebaert, Steven Keuchel  *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -27,36 +26,48 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Katamaran Require Export
-     Base
-     Program
-     Refinement.MonadInterface
+From Coq Require Import
+     Bool.Bool
+     Program.Tactics
+     ZArith.ZArith
+     Strings.String
+     Classes.Morphisms
+     Classes.RelationClasses
+     Classes.Morphisms_Prop
+     Classes.Morphisms_Relations.
+Require Import Basics.
+
+From Coq Require Lists.List.
+
+From Equations Require Import
+     Equations.
+
+From Katamaran Require Import
+     Signature
+     Specification
      Shallow.MonadInterface
-     Syntax.Formulas
-     Syntax.Chunks
-     Syntax.Predicates
-     Syntax.Assertions
+     Shallow.MonadInstances
      Symbolic.MonadInterface
-     Symbolic.Propositions
-     Symbolic.Worlds.
+     Symbolic.MonadInstances
+     Program
+     Tactics.
 
-Module Type SignatureMixin (B : Base) (PK : PredicateKit B) :=
-  FormulasOn B PK <+ ChunksOn B PK <+ AssertionsOn B PK <+ WorldsOn B PK <+
-    ShallowMonadInterfaceOn B PK <+ SymbolicMonadInterfaceOn B PK <+
-    RefinementMonadInterfaceOn B PK <+ SymPropOn B PK.
-Module Type Signature (B : Base) :=
-  PredicateKit B <+ SignatureMixin B.
+Set Implicit Arguments.
 
-Module Type SolverKit (B : Base) (Import SIG : Signature B).
-  Local Set Implicit Arguments.
+Import ctx.notations.
+Import env.notations.
 
-  Parameter solver      : Solver.
-  Parameter solver_spec : SolverSpec solver.
-End SolverKit.
+Module Type ReplaySoundnessOn
+  (Import B        : Base)
+  (Import PROG     : Program B)
+  (Import SIG      : Signature B)
+  (Import SPEC     : Specification B PROG SIG)
+  (Import SHALINT  : ShallowMonadInterfaceOn B SIG)
+  (Import SHALINST : ShallowMonadInstancesOn B SIG SHALINT)
+  (Import SOLV     : SolverKit B SIG)
+  (Import MINT     : SymbolicMonadInterfaceOn B SIG)
+  (Import MINST    : SymbolicMonadInstancesOn B SIG SOLV MINT)
+  (Import REPL     :
 
-Module DefaultSolverKit (B : Base) (Import SIG : Signature B) <: SolverKit B SIG.
-
-  Definition solver : Solver := solver_null.
-  Definition solver_spec : SolverSpec solver := solver_null_spec.
-
-End DefaultSolverKit.
+  Import ModalNotations.
+  Import SymProp.

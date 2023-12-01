@@ -46,17 +46,17 @@ From Katamaran Require Import
      Iris.Instance
      Iris.Model
      Program
+     MicroSail.ShallowSoundness
+     MicroSail.ShallowVCGen
+     MicroSail.SymbolicSoundness
+     MicroSail.SymbolicVCGen
      Semantics
      Semantics.Registers
      Sep.Hoare
-     Shallow.Executor
-     Shallow.Soundness
      Signature
      Specification
-     Symbolic.Executor
      Symbolic.Propositions
      Symbolic.Solver
-     Symbolic.Soundness
      Symbolic.Worlds
      Syntax.Predicates
      Syntax.Terms.

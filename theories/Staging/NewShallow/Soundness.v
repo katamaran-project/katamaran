@@ -46,11 +46,11 @@ Import env.notations.
 
 Module Type Soundness
   (Import B : Base)
-  (Import PROG : Program B)
   (Import SIG : Signature B)
-  (Import SPEC : Specification B PROG SIG)
-  (Import EXEC : NewShallowExecOn B PROG SIG SPEC)
-  (Import HOAR : ProgramLogicOn B PROG SIG SPEC).
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG)
+  (Import EXEC : NewShallowExecOn B SIG PROG SPEC)
+  (Import HOAR : ProgramLogicOn B SIG PROG SPEC).
 
   Import CHeapSpecM.
   Import ProgramLogic.

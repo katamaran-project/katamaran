@@ -15,7 +15,7 @@ endif
 SRCS := $(shell egrep '^.*\.v$$' _CoqProject | grep -v '^#')
 AUXS := $(join $(dir $(SRCS)), $(addprefix ., $(notdir $(SRCS:.v=.aux))))
 
-.PHONY: coq clean summaxlen install uninstall pretty-timed make-pretty-timed-before make-pretty-timed-after print-pretty-timed-diff
+.PHONY: coq clean summaxlen install uninstall pretty-timed make-pretty-timed-before make-pretty-timed-after print-pretty-timed-diff print-pretty-timed
 
 coq: Makefile.coq
 	$(E) "MAKE Makefile.coq"

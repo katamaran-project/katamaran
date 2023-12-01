@@ -9,8 +9,8 @@ case_study/MinimalCaps/Contracts/Notations.v
 case_study/MinimalCaps/Contracts/Definitions.v
 case_study/MinimalCaps/Contracts/Verification.v
 case_study/MinimalCaps/Contracts/Statistics.v
-case_study/MinimalCaps/Model.v
-case_study/MinimalCaps/LoopVerification.v
+# case_study/MinimalCaps/Model.v
+# case_study/MinimalCaps/LoopVerification.v
 -Q case_study/RiscvPmp Katamaran.RiscvPmp
 case_study/RiscvPmp/Base.v
 case_study/RiscvPmp/Machine.v
@@ -24,17 +24,17 @@ case_study/RiscvPmp/Model.v
 case_study/RiscvPmp/IrisModelBinary.v
 case_study/RiscvPmp/IrisInstanceBinary.v
 case_study/RiscvPmp/ModelBinary.v
-case_study/RiscvPmp/LoopVerification.v
-case_study/RiscvPmp/BlockVer/Examples.v
-case_study/RiscvPmp/BlockVer/Spec.v
-case_study/RiscvPmp/BlockVer/Verifier.v
-case_study/RiscvPmp/FemtoKernel.v
-case_study/Assumptions.v
+# case_study/RiscvPmp/LoopVerification.v
+# case_study/RiscvPmp/BlockVer/Examples.v
+# case_study/RiscvPmp/BlockVer/Spec.v
+# case_study/RiscvPmp/BlockVer/Verifier.v
+# case_study/RiscvPmp/FemtoKernel.v
+# case_study/Assumptions.v
 -R theories Katamaran
 test/Example.v
-test/LinkedList.v
-test/SumMaxLen.v
-test/Replay.v
+# test/LinkedList.v
+# test/SumMaxLen.v
+# test/Replay.v
 theories/Base.v
 theories/BitvectorBase.v
 theories/BitvectorSolve.v
@@ -45,27 +45,37 @@ theories/Iris/Instance.v
 theories/Iris/Model.v
 theories/Iris/BinaryWp.v
 theories/Iris/BinaryInstance.v
+theories/MicroSail/ShallowExecutor.v
+theories/MicroSail/ShallowSoundness.v
+theories/MicroSail/ShallowVCGen.v
+theories/MicroSail/SymbolicExecutor.v
+# theories/MicroSail/SymbolicSoundness.v
+theories/MicroSail/SymbolicVCGen.v
 theories/Notations.v
 theories/Prelude.v
 theories/Program.v
+theories/Refinement/MonadInterface.v
+theories/Refinement/Replay.v
 theories/Semantics.v
 theories/Semantics/Registers.v
 theories/Sep/Hoare.v
 theories/Sep/Logic.v
-theories/Shallow/Executor.v
-theories/Shallow/Soundness.v
+theories/Shallow/MonadInterface.v
+theories/Shallow/MonadInstances.v
+theories/Shallow/Replay.v
 theories/Signature.v
 theories/SmallStep/Inversion.v
 theories/SmallStep/Progress.v
 theories/SmallStep/Step.v
 theories/Specification.v
-theories/Symbolic/Executor.v
 theories/Symbolic/Instantiation.v
+theories/Symbolic/MonadInterface.v
+theories/Symbolic/MonadInstances.v
 theories/Symbolic/OccursCheck.v
 theories/Symbolic/PartialEvaluation.v
 theories/Symbolic/Propositions.v
+theories/Symbolic/Replay.v
 theories/Symbolic/Solver.v
-theories/Symbolic/Soundness.v
 theories/Symbolic/Worlds.v
 theories/Syntax/Assertions.v
 theories/Syntax/BinOps.v

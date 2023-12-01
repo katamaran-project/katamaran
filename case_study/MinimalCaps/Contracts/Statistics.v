@@ -42,7 +42,7 @@ From Katamaran Require Import
      MinimalCaps.Contracts.Verification.
 
 Section Statistics.
-  Import MinCapsExecutor.
+  Import MinCapsVCGen.
   Import List.ListNotations.
 
   Definition all_functions : list { Δ & { σ & Fun Δ σ } } :=
