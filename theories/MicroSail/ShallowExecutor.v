@@ -132,6 +132,10 @@ Module Type ShallowExecOn
     Definition bind {Γ1 Γ2 Γ3 A B} (m : CStoreT Γ1 Γ2 A) (f : A -> CStoreT Γ2 Γ3 B) : CStoreT Γ1 Γ3 B :=
       fun δ1 => bind (m δ1) (fun '(a,δ2) => f a δ2).
 
+    Definition debug {Γ A} :
+      CStoreT Γ Γ A -> CStoreT Γ Γ A :=
+      fun m δ => CPureSpecM.debug (m δ).
+
     #[global] Typeclasses Opaque evalCReaderT.
     #[export] Instance mon_pure `{RA : relation A} {Γ} (a : A) :
       Monotonic RA a -> Monotonic (MStoreT RA) (pure (Γ := Γ) a).
@@ -148,6 +152,14 @@ Module Type ShallowExecOn
       eapply CPureSpecM.mon_bind. now apply rm.
       intros [] [] [ra Heq]. cbn in ra, Heq. subst.
       now apply rf.
+    Qed.
+
+    #[export] Instance mon_debug {Γ} `{RA : relation A} m :
+      Monotonic (MStoreT RA) m ->
+      Monotonic (MStoreT RA) (debug (Γ := Γ) m).
+    Proof.
+      intros rm δ1 ? <-. unfold debug. cbn.
+      now apply mon_debug, rm.
     Qed.
 
     #[local] Notation "' x <- ma ;; mb" :=
@@ -308,7 +320,7 @@ Module Type ShallowExecOn
               v  <- exec_aux s ;;
               exec_aux (k v)
           | stm_debugk k =>
-              exec_aux k
+              debug (exec_aux k)
           end.
 
       Context

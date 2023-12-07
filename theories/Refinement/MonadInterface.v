@@ -73,8 +73,8 @@ Module Type RefinementMonadInterfaceOn
         ℛ⟦R -> RM R⟧ SPureSpecM.pure CPureSpecM.pure;
         rel_bind `{RA : Rel AT A, RB : Rel BT B} :
         ℛ⟦RM RA -> □(RA -> RM RB) -> RM RB⟧ SPureSpecM.bind CPureSpecM.bind;
-        rel_error `{RA : Rel AT A} :
-        ℛ⟦RMsg □(SHeap -> AMessage) (RM RA)⟧ SPureSpecM.error CPureSpecM.error;
+        rel_error `{RA : Rel AT A} m :
+        ℛ⟦RMsg □(SHeap -> AMessage) (RM RA)⟧ SPureSpecM.error m;
         rel_block `{R : Rel AT A} :
         ℛ⟦RM R⟧ (@SPureSpecM.block MT _ AT) CPureSpecM.block;
         rel_angelic (x : option LVar) :

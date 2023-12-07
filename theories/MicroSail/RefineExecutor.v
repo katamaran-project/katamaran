@@ -98,6 +98,104 @@ Module Soundness
       apply rel_pure; auto.
     Qed.
 
+    Lemma rbind `{RA : Rel AT A, RB : Rel BT B} {Γ1 Γ2 Γ3} :
+      ℛ⟦RStoreT Γ1 Γ2 RA -> □(RA -> RStoreT Γ2 Γ3 RB) -> RStoreT Γ1 Γ3 RB⟧
+        SYMB.bind SHAL.bind.
+    Proof.
+      unfold SYMB.bind, SHAL.bind.
+      intros w0 ι0 Hpc0 sm cm rm sf cf rf sδ cδ rδ.
+      eapply rel_bind; auto.
+      intros w1 θ1 ι1 Heq1 Hpc1 [sa sδ2] [ca cδ2] [ra rδ2].
+      apply rf; auto.
+    Qed.
+
+    Lemma rstate {Γ1 Γ2} `{RA : Rel AT A} :
+      ℛ⟦(RInst _ _ -> RProd RA (RInst _ _)) -> RStoreT Γ1 Γ2 RA⟧
+        SYMB.state SHAL.state.
+    Proof.
+      unfold SYMB.state, SHAL.state.
+      intros w0 ι0 Hpc0 sf cf rf sδ cδ rδ.
+      apply rel_pure; auto.
+    Qed.
+
+    Lemma reval_exp {Γ τ} (e : Exp Γ τ) :
+      ℛ⟦RStoreT Γ Γ (RVal τ)⟧ (@SYMB.eval_exp _ _ _ _ e) (SHAL.eval_exp e).
+    Proof.
+      unfold SYMB.eval_exp, SHAL.eval_exp.
+      intros w0 ι0 Hpc0. apply rstate; auto.
+      intros sδ cδ rδ. constructor; auto. cbn.
+      rewrite peval_sound, <- eval_exp_inst. now f_equal.
+    Qed.
+
+    Lemma reval_exps {Γ Δ} (es : NamedEnv (Exp Γ) Δ) :
+      ℛ⟦RStoreT Γ Γ (RNEnv Δ)⟧ (@SYMB.eval_exps _ _ _ _ es) (SHAL.eval_exps es).
+    Proof.
+      unfold SYMB.eval_exps, SHAL.eval_exps.
+      intros w0 ι0 Hpc0. apply rstate; auto.
+      intros sδ cδ rδ. constructor; auto. cbn.
+      apply env.lookup_extensional; cbn; intros [x σ] xIn.
+      unfold evals, inst, inst_store, inst_env. rewrite !env.lookup_map.
+      rewrite peval_sound, <- eval_exp_inst. now f_equal.
+    Qed.
+
+    Lemma rpushpop `{RA : Rel AT A} {Γ1 Γ2} (x : PVar) (σ : Ty) :
+      ℛ⟦RVal σ -> RStoreT (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) RA -> RStoreT Γ1 Γ2 RA⟧
+        SYMB.pushpop SHAL.pushpop.
+    Proof.
+      unfold SYMB.pushpop, SHAL.pushpop.
+      intros w0 ι0 Hpc0 sv cv rv sm cm rm sδ cδ rδ.
+      eapply rel_bind; auto.
+      { apply rm. cbn. f_equal; auto. }
+      intros w1 θ1 ι1 Heq1 Hpc1 [sa sδ2] [ca cδ2] [ra rδ2].
+      apply rel_pure; auto.
+      constructor; auto.
+      destruct (env.view sδ2), (env.view cδ2); cbn.
+      cbn in rδ2. apply env.inversion_eq_snoc in rδ2.
+      now destruct rδ2.
+    Qed.
+
+    Lemma rpushspops `{RA : Rel AT A} {Γ1 Γ2 Δ} :
+      ℛ⟦RInst (SStore Δ) (CStore Δ) ->
+        RStoreT (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) RA ->
+        RStoreT Γ1 Γ2 RA⟧
+        SYMB.pushspops SHAL.pushspops.
+    Proof.
+      unfold SYMB.pushspops, SHAL.pushspops.
+      intros w0 ι0 Hpc0 sv cv rv sm cm rm sδ cδ rδ.
+      eapply rel_bind; auto.
+      { apply rm. cbn.
+        unfold inst, inst_store, inst_env.
+        rewrite env.map_cat. now f_equal.
+      }
+      intros w1 θ1 ι1 Heq1 Hpc1 [sa sδ2] [ca cδ2] [ra rδ2].
+      apply rel_pure; auto.
+      constructor; auto.
+      destruct (env.catView sδ2), (env.catView cδ2); cbn.
+      rewrite !env.drop_cat.
+      cbn in rδ2. unfold inst, inst_store, inst_env in rδ2.
+      rewrite env.map_cat in rδ2. apply env.inversion_eq_cat in rδ2. now destruct rδ2.
+    Qed.
+
+    Lemma rassign {Γ x σ} (xIn : x∷σ ∈ Γ) :
+      ℛ⟦RVal σ -> RStoreT Γ Γ RUnit⟧
+        (@SYMB.assign _ _ _ x _ _) (SHAL.assign x).
+    Proof.
+      unfold SYMB.assign, SHAL.assign.
+      intros w0 ι0 Hpc0 sv cv rv. apply rstate; auto.
+      intros sδ cδ rδ. constructor. constructor. cbn in *.
+      unfold inst, inst_store, inst_env.
+      rewrite env.map_update. now subst.
+    Qed.
+
+    Lemma rputlocal {Γ Δ} :
+      ℛ⟦RInst _ _ -> RStoreT Γ Δ (RNEnv Γ)⟧
+        SYMB.put_local SHAL.put_local.
+    Proof.
+      unfold SYMB.put_local, SHAL.put_local.
+      intros w0 ι0 Hpc0 sδΔ cδΔ rδΔ. apply rstate; auto.
+      intros sδΓ cδΓ rδΓ. constructor; auto.
+    Qed.
+
     Context (sexec_call_foreign : SYMB.ExecCallForeign MT).
     Context (sexec_lemma : SYMB.ExecLemma MT).
     Context (sexec_call : SYMB.ExecCall MT).
@@ -114,6 +212,8 @@ Module Soundness
                ℛ⟦RNEnv Δ -> RM (RUnit)⟧
                  (sexec_lemma lem)
                  (cexec_lemma lem)).
+    Context (rexec_call : forall [Δ τ] (f : 𝑭 Δ τ),
+               ℛ⟦RNEnv Δ -> RM (RVal τ)⟧ (sexec_call f) (cexec_call f)).
 
     Lemma rexec_aux [Γ τ] (s : Stm Γ τ) :
       ℛ⟦RStoreT Γ Γ (RVal τ)⟧
@@ -122,221 +222,108 @@ Module Soundness
     Proof.
       induction s; cbn [SYMB.exec_aux SHAL.exec_aux]; intros w0 ι0 Hpc0.
       - apply rpure; auto. easy.
-      - admit.
-    Admitted.
-
-
-    (* Lemma refine_exec_aux {cfg} srec crec (HYP : ExecRefine srec crec) : *)
-    (*   ExecRefine (@SStoreSpec.exec_aux cfg srec) (@CHeapSpecM.exec_aux crec). *)
-    (* Proof. *)
-    (*   unfold ExecRefine. *)
-    (*   induction s; cbn; intros * w0 ι0 Hpc0. *)
-    (*   - apply refine_pure; auto. reflexivity. *)
-    (*   - now apply refine_eval_exp. *)
-    (*   - apply refine_bind; auto. *)
-    (*     intros w1 ω01 ι1 -> Hpc1. *)
-    (*     intros t v Htv. *)
-    (*     apply refine_pushpop; auto. *)
-    (*   - apply refine_pushspops; auto. *)
-    (*     apply refine_lift. *)
-    (*   - apply refine_bind; auto. *)
-    (*     intros w1 ω01 ι1 -> Hpc1. *)
-    (*     intros t v ->. *)
-    (*     apply refine_bind; auto. *)
-    (*     apply refine_assign; auto. *)
-    (*     reflexivity. *)
-    (*     intros w2 ω12 ι2 -> Hpc2 _ _ _. *)
-    (*     apply refine_pure; auto. *)
-    (*     hnf in H. now rewrite <- inst_persist in H. *)
-    (*   - apply refine_bind; auto. *)
-    (*     apply refine_eval_exps; auto. *)
-    (*     intros w1 ω01 ι1 -> Hpc1. *)
-    (*     intros args__s args__c Hargs. *)
-    (*     destruct (CEnv f). *)
-    (*     + unfold SStoreSpec.call_contract_debug. *)
-    (*       destruct (config_debug_function cfg f). *)
-    (*       apply refine_debug; auto. *)
-    (*       apply refine_call_contract; auto. *)
-    (*       apply refine_call_contract; auto. *)
-    (*     + intros POST__s POST__c HPOST. *)
-    (*       intros δs1 δc1 ->. *)
-    (*       apply HYP; auto. *)
-    (*       intros w2 ω12 ι2 -> Hpc2. *)
-    (*       intros t v ->. *)
-    (*       intros _ _ _. *)
-    (*       apply HPOST; auto. *)
-    (*       reflexivity. *)
-    (*       rewrite <- inst_persist. *)
-    (*       reflexivity. *)
-    (*   - apply refine_bind; auto. *)
-    (*     apply refine_get_local; auto. *)
-    (*     intros w1 ω01 ι1 -> Hpc1. *)
-    (*     intros δs1 δc1 ->. *)
-    (*     apply refine_bind; auto. *)
-    (*     apply refine_put_local; auto. *)
-    (*     apply refine_lift. *)
-    (*     intros w2 ω12 ι2 -> Hpc2 _ _ _. *)
-    (*     apply refine_bind; auto. *)
-    (*     intros w3 ω23 ι3 -> Hpc3. *)
-    (*     intros t v ->. *)
-    (*     apply refine_bind; auto. *)
-    (*     apply refine_put_local; auto. *)
-    (*     rewrite persist_subst. *)
-    (*     hnf. rewrite sub_acc_trans, ?inst_subst; auto. *)
-    (*     intros w4 ω34 ι4 -> Hpc4 _ _ _. *)
-    (*     apply refine_pure; auto. *)
-    (*     eapply refine_inst_persist; eauto. *)
-    (*     reflexivity. *)
-    (*   - apply refine_bind; auto. *)
-    (*     apply refine_eval_exps; auto. *)
-    (*     intros w1 ω01 ι1 -> Hpc1. *)
-    (*     intros args__s args__c Hargs. *)
-    (*     apply refine_call_contract; auto. *)
-    (*   - apply refine_bind; auto. *)
-    (*     apply refine_eval_exps; auto. *)
-    (*     intros w1 ω01 ι1 -> Hpc1 δΔ ? ?. *)
-    (*     apply refine_bind; auto. *)
-    (*     apply refine_call_lemma; auto. *)
-    (*     intros w2 ω12 ι2 -> Hpc2 _ _ _; auto. *)
-    (*   - apply refine_bind; auto. *)
-    (*     intros ? ? ? -> ? _ _ _; auto. *)
-    (*   - apply refine_bind; auto. *)
-    (*     apply (refine_eval_exp e1); auto. *)
-    (*     intros w1 ω01 ι1 -> Hpc1. *)
-    (*     intros t v ->. *)
-    (*     apply refine_bind; auto. *)
-    (*     apply refine_assume_formula; auto. *)
-    (*     cbn. reflexivity. *)
-    (*     intros w2 ω12 ι2 -> Hpc2 _ _ _. *)
-    (*     now apply IHs. *)
-    (*   - apply refine_block; auto. *)
-    (*   - apply refine_bind; auto. *)
-    (*     intros w1 ω01 ι1 -> Hpc1. *)
-    (*     intros t v Htv. *)
-    (*     apply refine_demonic_pattern_match; auto. *)
-    (*     intros pc w2 r12 ι2 -> Hpc2. *)
-    (*     intros ts vs Htvs. *)
-    (*     apply refine_pushspops; auto. *)
-    (*     apply H; auto. *)
-    (*   - apply refine_bind; auto. *)
-    (*     apply refine_angelic; auto. *)
-    (*     intros w1 ω01 ι1 -> Hpc1 t v Htv. hnf in Htv; subst. *)
-    (*     apply refine_bind; auto. *)
-    (*     apply refine_consume_chunk; auto. *)
-    (*     cbn. reflexivity. *)
-    (*     intros w2 ω12 ι2 -> Hpc2 _ _ _. *)
-    (*     apply refine_bind; auto. *)
-    (*     apply refine_produce_chunk; auto. *)
-    (*     rewrite <- inst_persist; auto. *)
-    (*     cbn. reflexivity. *)
-    (*     intros w3 ω23 ι3 -> Hpc3 _ _ _. *)
-    (*     apply refine_pure; auto. *)
-    (*     rewrite (persist_trans (A := STerm _)). *)
-    (*     now rewrite <- ?inst_persist. *)
-    (*   - apply refine_bind; auto. *)
-    (*     apply refine_angelic; auto. *)
-    (*     intros w1 ω01 ι1 -> Hpc1. *)
-    (*     intros told v ->. *)
-    (*     apply refine_bind; auto. *)
-    (*     apply refine_consume_chunk; auto. *)
-    (*     cbn. reflexivity. *)
-    (*     intros w2 ω12 ι2 -> Hpc2 _ _ _. *)
-    (*     apply refine_bind; auto. *)
-    (*     apply (refine_eval_exp e); auto. *)
-    (*     intros w3 ω23 ι3 -> Hpc3. *)
-    (*     intros tnew v Htnew. hnf in Htnew. subst v. *)
-    (*     apply refine_bind; auto. *)
-    (*     apply refine_produce_chunk; auto. *)
-    (*     cbn. reflexivity. *)
-    (*     intros w4 ω34 ι4 -> Hpc4 _ _ _. *)
-    (*     apply refine_pure; auto. *)
-    (*     now rewrite <- inst_persist. *)
-    (*   - apply refine_error; auto. *)
-    (*   - apply refine_debug; auto. *)
-    (* Qed. *)
-
-    (* Lemma refine_exec {cfg n} : *)
-    (*   ExecRefine (@SStoreSpec.exec cfg n) (@CHeapSpecM.exec n). *)
-    (* Proof. *)
-    (*   induction n; cbn. *)
-    (*   - unfold ExecRefine. intros Γ τ s w ι Hpc. *)
-    (*     apply refine_error; auto. *)
-    (*   - now apply refine_exec_aux. *)
-    (* Qed. *)
-
-    (* Lemma refine_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) : *)
-    (*   let w0 := {| wctx := sep_contract_logic_variables c; wco := ctx.nil |} in *)
-    (*   forall (ι0 : Valuation w0), *)
-    (*   ℛ⟦RStoreSpec Γ Γ RUnit⟧@{ι0} *)
-    (*     (SStoreSpec.exec_contract cfg n c s) (CHeapSpecM.exec_contract n c s ι0). *)
-    (* Proof. *)
-    (*   unfold SStoreSpec.exec_contract, CHeapSpecM.exec_contract; *)
-    (*                                    destruct c as [Σ δ pre result post]; cbn - [RSat] in *. *)
-    (*   intros ι0. *)
-    (*   apply refine_bind. *)
-    (*   apply refine_produce; wsimpl; cbn; auto. *)
-    (*   intros w1 ω01 ι1 -> Hpc1 _ _ _. *)
-    (*   apply refine_bind; auto. *)
-    (*   apply refine_exec; auto. *)
-    (*   intros w2 ω12 ι2 -> Hpc2. *)
-    (*   intros res__s res__c Hres. *)
-    (*   apply refine_consume; cbn - [inst]; wsimpl; auto. *)
-    (*   f_equal; auto. *)
-    (* Qed. *)
-
-    (* Lemma refine_demonic_close {w : World} (P : 𝕊 w) (p : Valuation w -> Prop) : *)
-    (*   (forall (ι : Valuation w), ℛ⟦_⟧@{ι} P (p ι)) -> *)
-    (*   RSat RProp (w := wnil) env.nil (demonic_close P) (ForallNamed p). *)
-    (* Proof. *)
-    (*   intros HYP Hwp. unfold ForallNamed. *)
-    (*   rewrite env.Forall_forall. intros ι. *)
-    (*   apply HYP. revert Hwp. clear. *)
-    (*   rewrite ?wsafe_safe, ?safe_debug_safe. *)
-    (*   intros Hwp. now apply safe_demonic_close. *)
-    (* Qed. *)
-
-    (* Lemma refine_vcgen {Γ τ} n (c : SepContract Γ τ) (body : Stm Γ τ) : *)
-    (*   RSat RProp (w := wnil) env.nil (SStoreSpec.vcgen default_config n c body) (CHeapSpecM.vcgen n c body). *)
-    (* Proof. *)
-    (*   unfold SStoreSpec.vcgen, CHeapSpecM.vcgen. *)
-    (*   apply (refine_demonic_close *)
-    (*            (w := {| wctx := sep_contract_logic_variables c; wco := ctx.nil |})). *)
-    (*   intros ι. *)
-    (*   apply refine_exec_contract; auto. *)
-    (*   now intros w1 ω01 ι1 -> Hpc1. *)
-    (*   reflexivity. *)
-    (*   reflexivity. *)
-    (* Qed. *)
-
-
-    (* Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) : *)
-    (*   Symbolic.ValidContract c body -> *)
-    (*   Shallow.ValidContract c body. *)
-    (* Proof. *)
-    (*   unfold Symbolic.ValidContract. intros [Hwp%postprocess_sound]. *)
-    (*   apply replay_sound_nil in Hwp. apply postprocess_sound in Hwp. *)
-    (*   apply refine_vcgen. now rewrite wsafe_safe, safe_debug_safe. *)
-    (* Qed. *)
-
-    (* Lemma symbolic_vcgen_fuel_soundness {Γ τ} (fuel : nat) (c : SepContract Γ τ) (body : Stm Γ τ) : *)
-    (*   Symbolic.ValidContractWithFuel fuel c body -> *)
-    (*   Shallow.ValidContractWithFuel fuel c body. *)
-    (* Proof. *)
-    (*   unfold Symbolic.ValidContractWithFuel. intros [Hwp%postprocess_sound]. *)
-    (*   apply replay_sound_nil in Hwp. apply postprocess_sound in Hwp. *)
-    (*   apply refine_vcgen. now rewrite wsafe_safe, safe_debug_safe. *)
-    (* Qed. *)
+      - apply reval_exp; auto.
+      - apply rbind; auto.
+        intros w1 θ1 ι1 Heq1 Hpc1 sv cv rv.
+        apply rpushpop; auto.
+      - apply rpushspops; auto.
+        apply refine_lift.
+      - apply rbind; auto.
+        intros w1 θ1 ι1 Heq1 Hpc1 sv cv rv.
+        apply rbind; auto.
+        apply rassign; auto.
+        intros w2 θ2 ι2 Heq2 Hpc2 _ _ _.
+        apply rpure; auto.
+        eapply refine_inst_persist; subst; auto.
+      - apply rbind; auto.
+        apply reval_exps; auto.
+        intros w1 θ1 ι1 Heq1 Hpc1 sδΔ cδΔ rδΔ.
+        apply rliftM; auto.
+        apply rexec_call; auto.
+      - apply rbind; auto.
+        apply rputlocal; auto.
+        apply refine_lift.
+        intros w1 θ1 ι1 Heq1 Hpc1 sδΓ cδΓ rδΓ.
+        apply rbind; auto.
+        intros w2 θ2 ι2 Heq2 Hpc2 sv cv rv.
+        apply rbind; auto.
+        apply rputlocal; auto.
+        eapply refine_inst_persist; subst; auto.
+        intros w3 θ3 ι3 Heq3 Hpc3 _ _ _.
+        apply rpure; auto.
+        eapply refine_inst_persist; subst; auto.
+      - apply rbind; auto.
+        apply reval_exps; auto.
+        intros w1 θ1 ι1 Heq1 Hpc1 sδΔ cδΔ rδΔ.
+        apply rliftM; auto.
+        apply rexec_call_foreign; auto.
+      - apply rbind; auto.
+        apply reval_exps; auto.
+        intros w1 θ1 ι1 Heq1 Hpc1 sδΔ cδΔ rδΔ.
+        apply rbind; auto.
+        apply rliftM; auto.
+        apply rexec_call_lemma; auto.
+        intros w2 θ2 ι2 Heq2 Hpc2 _ _ _; auto.
+      - apply rbind; auto.
+        intros w1 θ1 ι1 Heq1 Hpc1 sv cv rv; auto.
+      - apply rbind; auto.
+        apply reval_exp; auto.
+        intros w1 θ1 ι1 Heq1 Hpc1 sv cv rv; auto.
+        apply rbind; auto.
+        apply rliftM; auto.
+        apply rel_assume_formula; auto.
+        cbn. now rewrite rv.
+        intros w2 θ2 ι2 Heq2 Hpc2 _ _ _; auto.
+      - apply rliftM; auto.
+        apply rel_block; auto.
+      - apply rbind; auto.
+        intros w1 θ1 ι1 Heq1 Hpc1 sv cv rv; auto.
+        apply rbind; auto.
+        apply rliftM; auto.
+        apply rel_demonic_pattern_match; auto.
+        intros w2 θ2 ι2 Heq2 Hpc2 [pc sδpc] [pc' cδpc] [<- rδpc]; cbn in rδpc.
+        apply rpushspops; auto.
+        apply H; auto.
+      - apply rbind; auto.
+        apply rliftM; auto.
+        apply rel_angelic; auto.
+        intros w1 θ1 ι1 Heq1 Hpc1 sv cv rv; auto.
+        apply rbind; auto.
+        apply rliftM; auto.
+        apply rel_consume_chunk; auto. cbn. now f_equal.
+        intros w2 θ2 ι2 Heq2 Hpc2 _ _ _.
+        apply rbind; auto.
+        apply rliftM; auto.
+        apply rel_produce_chunk; auto.
+        cbn. f_equal. rewrite rv. subst.
+        now rewrite <- inst_persist.
+        intros w3 θ3 ι3 Heq3 Hpc3 _ _ _.
+        apply rpure; auto. subst.
+        rewrite rv.
+        eapply refine_inst_persist; eauto.
+        now rewrite sub_acc_trans, inst_subst.
+      - apply rbind; auto.
+        apply rliftM; auto.
+        apply rel_angelic; auto.
+        intros w1 θ1 ι1 Heq1 Hpc1 svold cvold rvold; auto.
+        apply rbind; auto.
+        apply rliftM; auto.
+        apply rel_consume_chunk; auto. cbn. now f_equal.
+        intros w2 θ2 ι2 Heq2 Hpc2 _ _ _.
+        apply rbind; auto.
+        apply reval_exp; auto.
+        intros w3 θ3 ι3 Heq3 Hpc3 svnew cvnew rvnew.
+        apply rbind; auto.
+        apply rliftM; auto.
+        apply rel_produce_chunk; auto. cbn. now f_equal.
+        intros w4 θ4 ι4 Heq4 Hpc4 _ _ _.
+        apply rpure; auto. subst.
+        now eapply refine_inst_persist; eauto.
+      - intros sδ cδ rδ. apply rel_error; auto.
+      - intros sδ cδ rδ. apply rel_debug; auto.
+        apply IHs; auto.
+    Qed.
 
   End Exec.
 
 End Soundness.
-
-Module MakeSymbolicSoundness
-  (Import B    : Base)
-  (Import SIG  : Signature B)
-  (Import PROG : Program B)
-  (Import SHAL : ShallowExecOn B SIG PROG)
-  (Import SYMB : SymbolicExecOn B SIG PROG).
-
-  Include Soundness B SIG PROG SHAL SYMB.
-End MakeSymbolicSoundness.
