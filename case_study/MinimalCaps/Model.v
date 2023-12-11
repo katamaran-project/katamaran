@@ -200,7 +200,7 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
   Include IrisResources MinCapsBase MinCapsProgram MinCapsSemantics.
 End MinCapsIrisBase.
 
-Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisBase.
+Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase.
   Import env.notations.
   Import iris.bi.interface.
   Import iris.bi.big_op.
@@ -538,15 +538,15 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
 
   End MinimalCapsPredicates.
 
-  Include IrisSignatureRules MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisBase.
-  Include IrisAdequacy MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisBase.
+  Include IrisSignatureRules MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase.
+  Include IrisAdequacy MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase.
 
 End MinCapsIrisInstance.
 
 Module MinCapsIrisInstanceWithContracts.
-  Include ProgramLogicOn MinCapsBase MinCapsProgram MinCapsSignature MinCapsSpecification.
-  Include IrisInstanceWithContracts MinCapsBase MinCapsProgram MinCapsSemantics
-    MinCapsSignature MinCapsSpecification MinCapsIrisBase MinCapsIrisInstance.
+  Include ProgramLogicOn MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
+  Include IrisInstanceWithContracts MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics
+    MinCapsSpecification MinCapsIrisBase MinCapsIrisInstance.
 
   Section LemProofs.
     (* In this section we prove that the lemmas we defined in this case study
@@ -812,9 +812,9 @@ Module MinCapsIrisInstanceWithContracts.
   End ForeignProofs.
 
   (* Import the soundness proofs for the shallow and symbolic executors. *)
-  Include Symbolic.Soundness.Soundness MinCapsBase MinCapsProgram MinCapsSignature
-    MinCapsSpecification MinCapsSolver MinCapsShallowExec MinCapsExecutor.
-  Include Shallow.Soundness.Soundness MinCapsBase MinCapsProgram MinCapsSignature
+  Include Symbolic.Soundness.Soundness MinCapsBase MinCapsSignature MinCapsSolver
+    MinCapsProgram MinCapsSpecification MinCapsShallowExec MinCapsExecutor.
+  Include Shallow.Soundness.Soundness MinCapsBase MinCapsSignature MinCapsProgram
     MinCapsSpecification MinCapsShallowExec.
 
   (* contracts_sound proves that all contracts in our contract environment

@@ -60,9 +60,9 @@ Open Scope signature_scope.
 
 Module Type NewShallowExecOn
   (Import B : Base)
-  (Import PROG : Program B)
   (Import SIG : Signature B)
-  (Import SPEC : Specification B PROG SIG).
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG).
 
   Import iris.proofmode.tactics.
 
@@ -1207,10 +1207,10 @@ End NewShallowExecOn.
 
 Module MakeNewShallowExecutor
   (Import B    : Base)
+  (Import SIG  : Signature B)
   (Import PROG : Program B)
-  (Import SIG : Signature B)
-  (Import SPEC : Specification B PROG SIG).
+  (Import SPEC : Specification B SIG PROG).
 
-  Include NewShallowExecOn B PROG SIG SPEC.
+  Include NewShallowExecOn B SIG PROG SPEC.
 
 End MakeNewShallowExecutor.

@@ -42,7 +42,7 @@ From Katamaran Require Export
 Import ctx.notations.
 Import env.notations.
 
-Module Type SpecificationMixin (B : Base) (Import P : Program B) (Import SIG : Signature B).
+Module Type SpecificationMixin (B : Base) (Import SIG : Signature B) (Import P : Program B).
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), option (SepContract Δ τ).
@@ -53,8 +53,8 @@ Module Type SpecificationMixin (B : Base) (Import P : Program B) (Import SIG : S
 
 End SpecificationMixin.
 
-Module Type SpecificationKit (B : Base) (P : Program B)
-  (Import SIG : Signature B) (Import SM : SpecificationMixin B P SIG).
+Module Type SpecificationKit (B : Base) (Import SIG : Signature B) (P : Program B)
+  (Import SM : SpecificationMixin B SIG P).
 
   Local Set Implicit Arguments.
 
@@ -64,7 +64,7 @@ Module Type SpecificationKit (B : Base) (P : Program B)
 
 End SpecificationKit.
 
-Module Type Specification (B : Base) (P : Program B) (SIG : Signature B).
-  Include SpecificationMixin B P SIG.
-  Include SpecificationKit B P SIG.
+Module Type Specification (B : Base) (SIG : Signature B) (P : Program B).
+  Include SpecificationMixin B SIG P.
+  Include SpecificationKit B SIG P.
 End Specification.

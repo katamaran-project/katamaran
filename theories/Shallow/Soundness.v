@@ -45,11 +45,11 @@ Import env.notations.
 
 Module Type Soundness
   (Import B : Base)
-  (Import PROG : Program B)
   (Import SIG : Signature B)
-  (Import SPEC : Specification B PROG SIG)
-  (Import EXEC : ShallowExecOn B PROG SIG SPEC)
-  (Import HOAR : ProgramLogicOn B PROG SIG SPEC).
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG)
+  (Import EXEC : ShallowExecOn B SIG PROG SPEC)
+  (Import HOAR : ProgramLogicOn B SIG PROG SPEC).
 
   Import CHeapSpecM.
   Import ProgramLogic.
@@ -649,12 +649,12 @@ End Soundness.
 
 Module MakeShallowSoundness
   (Import B : Base)
-  (Import PROG : Program B)
   (Import SIG : Signature B)
-  (Import SPEC : Specification B PROG SIG)
-  (Import EXEC : ShallowExecOn B PROG SIG SPEC)
-  (Import HOAR : ProgramLogicOn B PROG SIG SPEC).
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG)
+  (Import EXEC : ShallowExecOn B SIG PROG SPEC)
+  (Import HOAR : ProgramLogicOn B SIG PROG SPEC).
 
-  Include Soundness B PROG SIG SPEC EXEC HOAR.
+  Include Soundness B SIG PROG SPEC EXEC HOAR.
 
 End MakeShallowSoundness.

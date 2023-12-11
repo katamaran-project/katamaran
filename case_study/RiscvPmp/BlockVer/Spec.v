@@ -87,8 +87,8 @@ Module Assembly.
     Base.MUL rs2 rs1 rd true false false.
 End Assembly.
 
-Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
-  Include SpecificationMixin RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
+Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
+  Include SpecificationMixin RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
   Section ContractDefKit.
 
   Import asn.notations.
@@ -614,9 +614,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
 End RiscvPmpBlockVerifSpec.
 
 Module RiscvPmpBlockVerifShalExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifSpec.
 Module RiscvPmpBlockVerifExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpSolver RiscvPmpProgram RiscvPmpBlockVerifSpec.
 
 Module RiscvPmpSpecVerif.
   Import RiscvPmpBlockVerifSpec.
@@ -809,13 +809,16 @@ Module RiscvPmpSpecVerif.
 End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
-  Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
-  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpIrisBase RiscvPmpIrisInstance.
-  Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature
-    RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
-  Include Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature
-    RiscvPmpBlockVerifSpec RiscvPmpSolver RiscvPmpBlockVerifShalExecutor RiscvPmpBlockVerifExecutor.
+  Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpBlockVerifSpec.
+  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
+    RiscvPmpProgram RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase
+    RiscvPmpIrisInstance.
+  Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature
+    RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
+  Include Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpSignature
+    RiscvPmpSolver RiscvPmpProgram RiscvPmpBlockVerifSpec
+    RiscvPmpBlockVerifShalExecutor RiscvPmpBlockVerifExecutor.
 
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstance.

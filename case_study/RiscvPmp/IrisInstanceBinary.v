@@ -48,8 +48,8 @@ Set Implicit Arguments.
 Import bv.notations.
 
 Module RiscvPmpIrisInstance2 <:
-  IrisInstance2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpSignature RiscvPmpIrisBase2.
+  IrisInstance2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpIrisBase2.
   Import RiscvPmpIrisBase2.
   Import RiscvPmpProgram.
 
@@ -320,9 +320,9 @@ Module RiscvPmpIrisInstance2 <:
     Qed.
   End RiscVPmpIrisInstanceProofs.
 
-  Include IrisSignatureRules2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpSignature RiscvPmpIrisBase2.
-  Include IrisAdequacy2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpSignature RiscvPmpIrisBase2.
+  Include IrisSignatureRules2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpSemantics RiscvPmpIrisBase2.
+  Include IrisAdequacy2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpSemantics RiscvPmpIrisBase2.
 
 End RiscvPmpIrisInstance2.

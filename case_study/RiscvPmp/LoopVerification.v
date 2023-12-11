@@ -66,11 +66,11 @@ Import RiscvPmpValidContracts.
 
 Import RiscvPmpSignature.
 Module Import RiscvPmpShallowExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
+  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
 
-Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpProgramLogic.
+Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpProgramLogic.
 
-Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolver RiscvPmpShallowExecutor RiscvPmpExecutor.
+Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpSolver RiscvPmpProgram RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpExecutor.
 
 Section Loop.
   Context `{sg : sailGS Σ}.

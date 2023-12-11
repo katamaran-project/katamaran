@@ -65,11 +65,11 @@ Import MinCapsValidContracts.
 
 Import MinCapsSignature.
 Module Import MinCapsShallowExecutor :=
-  MakeShallowExecutor MinCapsBase MinCapsProgram MinCapsSignature MinCapsSpecification.
+  MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
 
-Module Import MinCapsShallowSoundness := MakeShallowSoundness MinCapsBase MinCapsProgram MinCapsSignature MinCapsSpecification MinCapsShallowExecutor MinCapsIrisInstanceWithContracts.
+Module Import MinCapsShallowSoundness := MakeShallowSoundness MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification MinCapsShallowExecutor MinCapsIrisInstanceWithContracts.
 
-Module Import MinCapsSymbolic := MakeSymbolicSoundness MinCapsBase MinCapsProgram MinCapsSignature MinCapsSpecification MinCapsSolver MinCapsShallowExecutor MinCapsExecutor.
+Module Import MinCapsSymbolic := MakeSymbolicSoundness MinCapsBase MinCapsSignature MinCapsSolver MinCapsProgram MinCapsSpecification MinCapsShallowExecutor MinCapsExecutor.
 
 Section Loop.
   Context `{sg : sailGS Σ}.

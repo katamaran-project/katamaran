@@ -84,13 +84,13 @@ Module RiscvPmpModel2.
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.
 
-  Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
+  Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
+    Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
   End RiscvPmpProgramLogic.
   Include RiscvPmpProgramLogic.
 
-  Include IrisInstanceWithContracts2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-      RiscvPmpSignature RiscvPmpSpecification RiscvPmpIrisBase2 RiscvPmpIrisInstance2.
+  Include IrisInstanceWithContracts2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase2 RiscvPmpIrisInstance2.
 
   Section ForeignProofs.
     Context `{sg : sailGS2 Σ}.

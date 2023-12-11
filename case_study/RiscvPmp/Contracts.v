@@ -61,8 +61,8 @@ Open Scope Z_scope.
 (* NOTE: same as for mincaps, avoid Lemma in definition body for coqwc *)
 Definition KatamaranLem := Lemma.
 
-Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
-  Include SpecificationMixin RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
+Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
+  Include SpecificationMixin RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
 
   Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
     SepContract Δ τ.
@@ -1274,10 +1274,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
 End RiscvPmpSpecification.
 
 Module RiscvPmpExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolver.
+  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpSolver RiscvPmpProgram RiscvPmpSpecification.
 
 Module RiscvPmpShallowExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
+  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
 
 Module RiscvPmpValidContracts.
   Import RiscvPmpExecutor.

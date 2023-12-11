@@ -605,13 +605,13 @@ Module Type IrisInstance (B : Base) (PROG : Program B) (SEM : Semantics B PROG) 
  *)
 Module IrisInstanceWithContracts
   (Import B     : Base)
+  (Import SIG   : Signature B)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
-  (Import SIG   : Signature B)
-  (Import SPEC  : Specification B PROG SIG)
+  (Import SPEC  : Specification B SIG PROG)
   (Import IB    : IrisBase B PROG SEM)
   (Import II    : IrisInstance B PROG SEM SIG IB)
-  (Import NS    : NewShallowExecOn B PROG SIG SPEC).
+  (Import NS    : NewShallowExecOn B SIG PROG SPEC).
 
   Section WithSailGS.
   Context {Σ} {sG : sailGS Σ}.

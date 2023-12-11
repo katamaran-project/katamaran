@@ -407,8 +407,8 @@ Module Import ExampleSignature <: Signature DefaultBase.
 End ExampleSignature.
 
 (* The specification module contains the contracts for all μSail and foreign functions. *)
-Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram ExampleSignature.
-  Include SpecificationMixin DefaultBase ExampleProgram ExampleSignature.
+Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature ExampleProgram.
+  Include SpecificationMixin DefaultBase ExampleSignature ExampleProgram.
   Section ContractDefKit.
 
     Import ctx.resolution.
@@ -698,7 +698,7 @@ Module ExampleSolver := MakeSolver DefaultBase ExampleSignature ExampleSolverKit
 (* Use the specification and the solver module to compose the symbolic executor
    and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
-  MakeExecutor DefaultBase ExampleProgram ExampleSignature ExampleSpecification ExampleSolver.
+  MakeExecutor DefaultBase ExampleSignature ExampleSolver ExampleProgram ExampleSpecification.
 
 Section DebugExample.
   Import SymProp.notations.
@@ -760,7 +760,7 @@ End ContractVerification.
 (* Also instantiate the shallow executor for the soundness proofs and the
    statistics. *)
 Module Import ExampleShalExec :=
-  MakeShallowExecutor DefaultBase ExampleProgram ExampleSignature ExampleSpecification.
+  MakeShallowExecutor DefaultBase ExampleSignature ExampleProgram ExampleSpecification.
 
 (* Instantiate the operational semantics which is an input to the Iris model. *)
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
@@ -853,7 +853,7 @@ Module ExampleModel.
      this logic. This is then provided to the library as part of the
      [IrisInstance] module. *)
   Module Import ExampleIrisInstance <:
-    IrisInstance DefaultBase ExampleProgram ExampleSemantics ExampleSignature
+    IrisInstance DefaultBase ExampleSignature ExampleProgram ExampleSemantics
       ExampleIrisBase.
 
     Import iris.base_logic.lib.gen_heap.
@@ -893,8 +893,8 @@ Module ExampleModel.
 
     (* At this point we have enough information to instantiate the program logic
        rules of Iris that do not refer to specific contracts. *)
-    Include IrisSignatureRules DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisBase.
-    Include IrisAdequacy DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisBase.
+    Include IrisSignatureRules DefaultBase ExampleSignature ExampleProgram ExampleSemantics ExampleIrisBase.
+    Include IrisAdequacy DefaultBase ExampleSignature ExampleProgram ExampleSemantics ExampleIrisBase.
 
   End ExampleIrisInstance.
 
@@ -908,17 +908,18 @@ Module ExampleModel.
     (* Include our axiomatic program logic. Note that the program logic is
        parameterized over a given set of contracts so it is included here
        instead of [IrisInstance].  *)
-    Include ProgramLogicOn DefaultBase ExampleProgram
-      ExampleSignature ExampleSpecification.
-    Include IrisInstanceWithContracts DefaultBase
-      ExampleProgram ExampleSemantics ExampleSignature ExampleSpecification
+    Include ProgramLogicOn DefaultBase ExampleSignature ExampleProgram
+      ExampleSpecification.
+    Include IrisInstanceWithContracts DefaultBase ExampleSignature
+      ExampleProgram ExampleSemantics ExampleSpecification
       ExampleIrisBase ExampleIrisInstance.
 
     (* Import the soundness proofs for the shallow and symbolic executors. *)
-    Include Shallow.Soundness.Soundness DefaultBase ExampleProgram
-      ExampleSignature ExampleSpecification ExampleShalExec.
-    Include Symbolic.Soundness.Soundness DefaultBase ExampleProgram
-      ExampleSignature ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
+    Include Shallow.Soundness.Soundness DefaultBase ExampleSignature
+      ExampleProgram ExampleSpecification ExampleShalExec.
+    Include Symbolic.Soundness.Soundness DefaultBase ExampleSignature
+      ExampleSolver ExampleProgram ExampleSpecification ExampleShalExec
+      ExampleExecutor.
 
     (* In this section we verify the contracts of the foreign functions defined in
        Coq and the entailments encoded in ghost lemmas using Iris Proof Mode. *)

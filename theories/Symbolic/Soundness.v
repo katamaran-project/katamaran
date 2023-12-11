@@ -57,12 +57,12 @@ Import env.notations.
 
 Module Soundness
   (Import B    : Base)
-  (Import PROG : Program B)
   (Import SIG  : Signature B)
-  (Import SPEC : Specification B PROG SIG)
   (Import SOLV : SolverKit B SIG)
-  (Import SHAL : ShallowExecOn B PROG SIG SPEC)
-  (Import SYMB : SymbolicExecOn B PROG SIG SPEC SOLV).
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG)
+  (Import SHAL : ShallowExecOn B SIG PROG SPEC)
+  (Import SYMB : SymbolicExecOn B SIG SOLV PROG SPEC).
 
   Import ModalNotations.
   Import SymProp.
@@ -1949,12 +1949,12 @@ End Soundness.
 
 Module MakeSymbolicSoundness
   (Import B    : Base)
-  (Import PROG : Program B)
   (Import SIG  : Signature B)
-  (Import SPEC : Specification B PROG SIG)
   (Import SOLV : SolverKit B SIG)
-  (Import SHAL : ShallowExecOn B PROG SIG SPEC)
-  (Import SYMB : SymbolicExecOn B PROG SIG SPEC SOLV).
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG)
+  (Import SHAL : ShallowExecOn B SIG PROG SPEC)
+  (Import SYMB : SymbolicExecOn B SIG SOLV PROG SPEC).
 
-  Include Soundness B PROG SIG SPEC SOLV SHAL SYMB.
+  Include Soundness B SIG SOLV PROG SPEC SHAL SYMB.
 End MakeSymbolicSoundness.

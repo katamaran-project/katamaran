@@ -52,9 +52,9 @@ Set Implicit Arguments.
 
 Module Type ShallowExecOn
   (Import B : Base)
-  (Import PROG : Program B)
   (Import SIG : Signature B)
-  (Import SPEC : Specification B PROG SIG).
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG).
 
   (* The pure backwards predicate transformer monad. We use this monad in some
      of the definition of primitives that do no need access to the store or heap
@@ -956,10 +956,10 @@ End ShallowExecOn.
 
 Module MakeShallowExecutor
   (Import B    : Base)
+  (Import SIG  : Signature B)
   (Import PROG : Program B)
-  (Import SIG : Signature B)
-  (Import SPEC : Specification B PROG SIG).
+  (Import SPEC : Specification B SIG PROG).
 
-  Include ShallowExecOn B PROG SIG SPEC.
+  Include ShallowExecOn B SIG PROG SPEC.
 
 End MakeShallowExecutor.

@@ -171,8 +171,8 @@ Module Import ExampleSig <: Signature DefaultBase.
 End ExampleSig.
 
 (* The specification module defines the contract for the [summaxlen] function. *)
-Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram ExampleSig.
-  Include SpecificationMixin DefaultBase ExampleProgram ExampleSig.
+Module Import ExampleSpecification <: Specification DefaultBase ExampleSig ExampleProgram.
+  Include SpecificationMixin DefaultBase ExampleSig ExampleProgram.
 
   Import ctx.resolution.
   Import asn.notations.
@@ -217,7 +217,7 @@ Module ExampleSolver := MakeSolver DefaultBase ExampleSig ExampleSolverKit.
 (* Use the specification and the solver module to compose the symbolic executor
    and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
-  MakeExecutor DefaultBase ExampleProgram ExampleSig ExampleSpecification ExampleSolver.
+  MakeExecutor DefaultBase ExampleSig ExampleSolver ExampleProgram ExampleSpecification.
 
 (* Some simple Ltac tactic to solve the shallow and symbolic VCs. *)
 Local Ltac solve :=
@@ -239,7 +239,7 @@ Local Ltac solve :=
 
 (* Also instantiate the shallow verification condition generator. *)
 Module Import ExampleShalExec :=
-  MakeShallowExecutor DefaultBase ExampleProgram ExampleSig ExampleSpecification.
+  MakeShallowExecutor DefaultBase ExampleSig ExampleProgram ExampleSpecification.
 
 (* This computes and proves the shallow VC. Make sure to not unfold the
    definition of the binary operators and Coq predicates used in the example. *)
@@ -365,7 +365,7 @@ Module Import ExampleModel.
   (* Finally, include the constructed operational model, the axiomatic program
      logic, and the Iris implementation of the axioms. *)
   Module Import ExampleIrisInstance <:
-    IrisInstance DefaultBase ExampleProgram ExampleSemantics ExampleSig
+    IrisInstance DefaultBase ExampleSig ExampleProgram ExampleSemantics
       ExampleIrisBase.
 
     (* There are no user-defined spatial predicates, also use trivial definitions
@@ -379,13 +379,13 @@ Module Import ExampleModel.
         fun Σ sRG iG mG p ts dup => match p with end.
     End ExampleIrisPredicates.
 
-    Include IrisSignatureRules DefaultBase ExampleProgram ExampleSemantics ExampleSig
+    Include IrisSignatureRules DefaultBase ExampleSig ExampleProgram
+      ExampleSemantics ExampleIrisBase.
+    Include IrisAdequacy DefaultBase ExampleSig ExampleProgram ExampleSemantics
       ExampleIrisBase.
-    Include IrisAdequacy DefaultBase ExampleProgram ExampleSemantics ExampleSig
-      ExampleIrisBase.
-    Include ProgramLogicOn DefaultBase ExampleProgram ExampleSig ExampleSpecification.
-    Include IrisInstanceWithContracts DefaultBase ExampleProgram ExampleSemantics
-      ExampleSig ExampleSpecification ExampleIrisBase.
+    Include ProgramLogicOn DefaultBase ExampleSig ExampleProgram ExampleSpecification.
+    Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleProgram
+      ExampleSemantics ExampleSpecification ExampleIrisBase.
 
     (* Verification of the absent foreign functions. *)
     Lemma foreignSem `{sailGS Σ} : ForeignSem.
@@ -396,10 +396,10 @@ Module Import ExampleModel.
     Proof. intros Γ l. destruct l. Qed.
 
     (* Import the soundness proofs for the shallow and symbolic executors. *)
-    Include Shallow.Soundness.Soundness DefaultBase ExampleProgram ExampleSig
+    Include Shallow.Soundness.Soundness DefaultBase ExampleSig ExampleProgram
       ExampleSpecification ExampleShalExec.
-    Include Symbolic.Soundness.Soundness DefaultBase ExampleProgram ExampleSig
-      ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
+    Include Symbolic.Soundness.Soundness DefaultBase ExampleSig ExampleSolver
+      ExampleProgram ExampleSpecification ExampleShalExec ExampleExecutor.
 
     (* Show that all the contracts are sound in the Iris model. *)
     Lemma contracts_sound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.

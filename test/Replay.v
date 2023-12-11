@@ -171,8 +171,8 @@ Module Import ReplaySig <: Signature DefaultBase.
   Include SignatureMixin DefaultBase.
 End ReplaySig.
 
-Module Import ReplaySpecification <: Specification DefaultBase ReplayProgram ReplaySig.
-  Include SpecificationMixin DefaultBase ReplayProgram ReplaySig.
+Module Import ReplaySpecification <: Specification DefaultBase ReplaySig ReplayProgram.
+  Include SpecificationMixin DefaultBase ReplaySig ReplayProgram.
   Import ctx.resolution.
   Import List.ListNotations.
 
@@ -280,9 +280,9 @@ End ReplaySolverKit.
 Module ReplaySolver := MakeSolver DefaultBase ReplaySig ReplaySolverKit.
 
 Module Import ReplayExecutor :=
-  MakeExecutor DefaultBase ReplayProgram ReplaySig ReplaySpecification ReplaySolver.
+  MakeExecutor DefaultBase ReplaySig ReplaySolver ReplayProgram ReplaySpecification.
 Module Import ReplayShallowExecutor :=
-  MakeShallowExecutor DefaultBase ReplayProgram ReplaySig ReplaySpecification.
+  MakeShallowExecutor DefaultBase ReplaySig ReplayProgram ReplaySpecification.
 
 Lemma shallow_valid_contract_main : Shallow.ValidContract sep_contract_main (FunDef main).
 Proof.

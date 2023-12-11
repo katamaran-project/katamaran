@@ -65,10 +65,10 @@ Set Implicit Arguments.
 
 Module Type SymbolicExecOn
   (Import B : Base)
-  (Import PROG : Program B)
   (Import SIG : Signature B)
-  (Import SPEC : Specification B PROG SIG)
-  (Import SOLV : SolverKit B SIG).
+  (Import SOLV : SolverKit B SIG)
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG).
 
   Import Entailment.
   Import ModalNotations.
@@ -1708,11 +1708,11 @@ End SymbolicExecOn.
 
 Module MakeExecutor
   (Import B    : Base)
-  (Import PROG : Program B)
   (Import SIG  : Signature B)
-  (Import SPEC : Specification B PROG SIG)
-  (Import SOLV : SolverKit B SIG).
+  (Import SOLV : SolverKit B SIG)
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG).
 
-  Include SymbolicExecOn B PROG SIG SPEC SOLV.
+  Include SymbolicExecOn B SIG SOLV PROG SPEC .
 
 End MakeExecutor.

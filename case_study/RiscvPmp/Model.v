@@ -85,13 +85,14 @@ Module RiscvPmpModel2.
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.
 
-  Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
+  Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
+    Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
   End RiscvPmpProgramLogic.
   Include RiscvPmpProgramLogic.
 
-  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-      RiscvPmpSignature RiscvPmpSpecification RiscvPmpIrisBase RiscvPmpIrisInstance.
+  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
+    RiscvPmpProgram RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase
+    RiscvPmpIrisInstance.
 
   Ltac eliminate_prim_step Heq :=
     let s := fresh "s" in
