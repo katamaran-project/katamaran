@@ -598,6 +598,52 @@ Module BlockVerificationDerived2Sem.
     now apply PQ.
   Qed.
 
+  Lemma sound_stm_aux `{sailGS Σ} {τ} {PRE} {s : Stm [ctx] τ} {POST} :
+    ProgramLogic.Triple [env] PRE s POST ->
+    ⊢ semTriple [env] PRE s POST.
+  Proof.
+    iIntros (Htrip) "PRE".
+    iApply wp_mono.
+    2: {
+      iApply sound_stm.
+      - apply foreignSemBlockVerif.
+      - apply lemSemBlockVerif.
+      - apply Htrip.
+      - iApply contractsSound.
+      - iFrame.
+    }
+    now iIntros.
+  Qed.
+
+  Lemma sound_exec_instruction_any_aux `{sailGS Σ} {instr} (h : SCHeap) (POST : Val ty_xlenbits -> CStore [ctx] -> iProp Σ) :
+    forall a npc,
+    exec_instruction_any__c instr a (fun res => liftP (POST res)) [] h ->
+    ProgramLogic.Triple []
+      (interpret_scheap (scchunk_ptsreg nextpc npc :: scchunk_user ptstoinstr [a; instr] :: scchunk_ptsreg pc a :: h)%list)
+      (FunDef RiscvPmpProgram.step)
+      (fun res => (fun δ' => interp_ptsto_instr a instr ∗ (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I).
+  Proof.
+    intros a npc Htrip.
+    apply (exec_sound 10).
+    specialize (Htrip npc).
+    refine (exec_monotonic 10 _ _ _ _ _ _ Htrip).
+    intros [] δ0 h0 HYP.
+    cbn.
+    refine (consume_chunk_sound (scchunk_user ptstoinstr [a; instr]) (fun δ' => (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I δ0 h0 _).
+    refine (consume_chunk_monotonic _ _ _ _ _ HYP).
+    intros [] h1 [an Hrest]; revert Hrest.
+    cbn.
+    iIntros (HYP') "Hh1".
+    iExists an.
+    iStopProof.
+    refine (consume_chunk_sound (scchunk_ptsreg nextpc an) (fun δ' => lptsreg pc an ∗ POST an δ')%I δ0 h1 _).
+    refine (consume_chunk_monotonic _ _ _ _ _ HYP').
+    intros [] h2 HYP2.
+    refine (consume_chunk_sound (scchunk_ptsreg pc an) (fun δ' => POST an δ')%I δ0 h2 _).
+    refine (consume_chunk_monotonic _ _ _ _ _ HYP2).
+    now intros [] h3 HYP3.
+  Qed.
+
 
   Lemma sound_exec_instruction_any `{sailGS Σ} {instr} (h : SCHeap) (POST : Val ty_xlenbits -> CStore [ctx] -> iProp Σ) :
     forall a,
@@ -607,43 +653,14 @@ Module BlockVerificationDerived2Sem.
     intros a.
     intros Hverif.
     iIntros "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
-    unfold exec_instruction_any__c, bind, CHeapSpecM.bind, produce_chunk, CHeapSpecM.produce_chunk, demonic, CHeapSpecM.demonic, consume_chunk in Hverif.
-    specialize (Hverif npc).
-    assert (ProgramLogic.Triple [] (interpret_scheap (scchunk_ptsreg nextpc npc :: scchunk_user ptstoinstr [a; instr] :: scchunk_ptsreg pc a :: h)%list) (FunDef RiscvPmpProgram.step) (fun res => (fun δ' => interp_ptsto_instr a instr ∗ (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I)) as Htriple.
-    { apply (exec_sound 10).
-      refine (exec_monotonic 10 _ _ _ _ _ _ Hverif).
-      intros [] δ0 h0 HYP.
-      cbn.
-      refine (consume_chunk_sound (scchunk_user ptstoinstr [a; instr]) (fun δ' => (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I δ0 h0 _).
-      refine (consume_chunk_monotonic _ _ _ _ _ HYP).
-      intros [] h1 [an Hrest]; revert Hrest.
-      cbn.
-      iIntros (HYP') "Hh1".
-      iExists an.
-      iStopProof.
-      refine (consume_chunk_sound (scchunk_ptsreg nextpc an) (fun δ' => lptsreg pc an ∗ POST an δ')%I δ0 h1 _).
-      refine (consume_chunk_monotonic _ _ _ _ _ HYP').
-      intros [] h2 HYP2.
-      refine (consume_chunk_sound (scchunk_ptsreg pc an) (fun δ' => POST an δ')%I δ0 h2 _).
-      refine (consume_chunk_monotonic _ _ _ _ _ HYP2).
-      now intros [] h3 HYP3.
-    }
-    apply sound_stm in Htriple.
-    unfold semTriple in Htriple.
-    iApply wp_mono.
-    all: cycle 1.
-    { iApply Htriple.
-      iApply contractsSound.
-      { cbn. now iFrame. }
-    }
-    apply foreignSemBlockVerif.
-    apply lemSemBlockVerif.
-    { iIntros ([[] store]) "[Hinstr [%an (Hnextpc & Hpc & HPOST)]]".
-      destruct (env.view store).
-      iFrame.
-      iExists an.
-      iFrame.
-    }
+    apply (sound_exec_instruction_any_aux _ npc) in Hverif.
+    iApply (semWP_mono with "[-]").
+    iApply (sound_stm_aux Hverif with "[$Hnpc $Hinstrs $Hpc $Hheap]").
+    iIntros ([] store) "[Hinstr [%an (Hnextpc & Hpc & HPOST)]]".
+    destruct (env.view store).
+    iFrame.
+    iExists an.
+    iFrame.
   Qed.
 
   Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
