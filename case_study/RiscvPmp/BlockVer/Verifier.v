@@ -921,44 +921,25 @@ Module BlockVerification3Sem.
     iIntros (a) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
     specialize (Hexec a).
     unfold bind, CHeapSpecM.bind, produce in Hexec.
-    assert (interpret_scheap []%list ∗ asn.interpret pre ι.[("a"::ty_word) ↦ a] ⊢
-    (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
+    iApply ((produce_sound (fun _ =>
+    (lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
-      WP_loop)%I as Hverif.
-    { refine (@produce_sound _ _ _ _ _ (ι.[("a"::ty_word) ↦ a]) pre (fun _ =>
-    (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
-      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
-      WP_loop)%I [env] []%list _).
-      revert Hexec.
-      apply produce_monotonic.
-      unfold consume.
-      intros _ h Hexec.
-      cbn.
-      assert (
-          ⊢ ((interpret_scheap h ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
-               (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗
-                        asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ an]
-                         -∗ WP_loop) -∗
-               WP_loop)%I) as Hverifblock.
-      { apply (sound_exec_block_addr h
-                  (fun an δ => asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ an])%I); first easy.
-        refine (mono_exec_block_addr _ _ _ _ _ Hexec).
-        intros res h2 Hcons. cbn.
-        unfold liftP.
-        rewrite <-(bi.sep_True (asn.interpret _ _)).
-        eapply (consume_sound (fun _ => True%I)).
-        revert Hcons.
-        refine (consume_monotonic _ _ _ _ _).
-        cbn. now iIntros.
-      }
-      iIntros "Hh".
-      clear -Hverifblock.
-      iIntros "(_ & Hpc & Hnpc & Hinstrs) Hk".
-      iApply (Hverifblock with "[Hh Hpc Hnpc Hinstrs] Hk").
-      iFrame.
-    }
-    iApply (Hverif with "[Hpre] [Hpc Hnpc Hinstrs]");
-      cbn; iFrame.
+      WP_loop)%I [env] []%list) with "[$Hpre //] [$Hpc $Hnpc $Hinstrs //] [$Hk]").
+    revert Hexec.
+    apply produce_monotonic.
+    iIntros (_ h Hexec) "Hh (Hpc & Hnpc & Hinstrs) Hk".
+    iApply ((sound_exec_block_addr (apc := a) h
+                  (fun an δ => asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ an])%I)
+               with "[$Hh $Hpc $Hnpc $Hinstrs] Hk"); first easy.
+    revert Hexec.
+    apply mono_exec_block_addr.
+    intros res h2 Hcons. cbn.
+    unfold liftP.
+    rewrite <-(bi.sep_True (asn.interpret _ _)).
+    eapply (consume_sound (fun _ => True%I) [env]).
+    revert Hcons.
+    apply consume_monotonic.
+    now iIntros.
   Qed.
 
   Lemma sound_VC__addr `{sailGS Σ} {Γ} {pre post instrs} :
