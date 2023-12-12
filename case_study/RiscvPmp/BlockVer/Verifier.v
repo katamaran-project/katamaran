@@ -860,21 +860,6 @@ Module BlockVerification3Sem.
       now iApply Hverif.
     - destruct instr as [instr| |Δ lem es].
       + intros [-> Hverif].
-        assert (⊢ semTripleOneInstrStep (interpret_scheap h) instr
-                  (fun an =>
-                     lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (bv.add apc bv_instrsize) (omap extract_AST instrs) -∗
-                     (∀ an2 : Val ty_word, pc ↦ an2 ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (bv.add apc bv_instrsize) (omap extract_AST instrs) ∗ POST an2 [env] -∗ WP_loop) -∗
-                       WP_loop) apc) as Hverif2.
-        { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (bv.add apc bv_instrsize) (omap extract_AST instrs) -∗ (∀ an2 : Val ty_word, pc ↦ an2 ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs (bv.add apc bv_instrsize) (omap extract_AST instrs) ∗ POST an2 [env] -∗ WP_loop) -∗ WP_loop)%I).
-          revert Hverif.
-          apply mono_exec_instruction_any__c.
-          intros an h2.
-          unfold liftP; cbn.
-          iIntros (Hverif) "Hh2 (Hpc & Hnpc & Hinstrs) Hk".
-          iApply (IHinstrs (bv.add apc bv_instrsize)%Z an _ _ Hverif with "[$]").
-          iIntros (an2) "(Hpc & Hinstrs & HPOST)".
-          iApply "Hk"; now iFrame.
-        }
         iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs) Hk".
         iApply semWP_seq.
         iApply semWP_call_inline.
