@@ -616,7 +616,7 @@ End RiscvPmpBlockVerifSpec.
 Module RiscvPmpBlockVerifShalExecutor :=
   MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifSpec.
 Module RiscvPmpBlockVerifExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpSolver RiscvPmpProgram RiscvPmpBlockVerifSpec.
+  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifSpec.
 
 Module RiscvPmpSpecVerif.
   Import RiscvPmpBlockVerifSpec.
@@ -802,8 +802,8 @@ Module RiscvPmpIrisInstanceWithContracts.
   Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature
     RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
   Include Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpSignature
-    RiscvPmpSolver RiscvPmpProgram RiscvPmpBlockVerifSpec
-    RiscvPmpBlockVerifShalExecutor RiscvPmpBlockVerifExecutor.
+    RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor
+    RiscvPmpBlockVerifExecutor.
 
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstance.

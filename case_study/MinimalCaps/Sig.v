@@ -203,6 +203,106 @@ Module Import MinCapsSignature <: Signature MinCapsBase.
   End PredicateKit.
 
   Include PredicateMixin MinCapsBase.
+  Include WorldsMixin MinCapsBase.
+
+  (* In the MinCapsSolverKit we provide simplification procedures for the pure
+     predicates and prove that these simplifiers are sound. *)
+  Section MinCapsSolverKit.
+    Open Scope string.
+    #[local] Arguments Some {_} _%ctx.
+
+    Definition simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
+      match term_get_val p, term_get_val q with
+      | Some O , _       => Some []
+      | Some p', Some q' => if decide_subperm p' q' then Some [] else None
+      | _      , _       => Some [formula_user subperm [p;q]]
+      end%ctx.
+
+    Definition simplify_correctPC {Σ} (c : Term Σ ty.cap) : option (PathCondition Σ) :=
+      match term_get_record c with
+      | Some c' => match term_get_val c'.[??"cap_permission"] with
+                   | Some O => None
+                   | Some E => None
+                   | Some _ =>
+                       let b := c'.[??"cap_begin"] in
+                       let e := c'.[??"cap_end"] in
+                       let a := c'.[??"cap_cursor"] in
+                       Some [formula_bool (term_binop bop.and
+                                             (term_binop (bop.relop bop.le) b a)
+                                             (term_binop (bop.relop bop.lt) a e))]
+                   | None   => Some [formula_user correctPC [c]]
+                   end
+      | _       => Some [formula_user correctPC [c]]
+      end%ctx.
+
+    Definition simplify_not_is_perm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
+      match term_get_val p, term_get_val q with
+      | Some p', Some q' => if negb (Base.is_perm p' q') then Some [] else None
+      | _      , _       => Some [formula_user not_is_perm [p;q]]
+      end.
+
+    Definition solve_user : SolverUserOnly :=
+      fun Σ p =>
+        match p with
+        | subperm     => fun ts =>
+                           let (ts,q) := env.view ts in
+                           let (ts,p) := env.view ts in
+                           simplify_subperm p q
+        | correctPC   => fun ts =>
+                           let (ts,c) := env.view ts in
+                           simplify_correctPC c
+        | not_is_perm => fun ts =>
+                           let (ts,q) := env.view ts in
+                           let (ts,p) := env.view ts in
+                           simplify_not_is_perm p q
+        end.
+
+    Lemma subperm_O : forall p, Subperm O p.
+    Proof. destruct p; reflexivity. Qed.
+
+    Import Entailment.
+
+    Local Ltac lsolve :=
+      repeat
+        lazymatch goal with
+        | |- Some _             ⊣⊢ Some _             => apply @proper_some
+        | |- ctx.snoc ctx.nil _ ⊣⊢ ctx.snoc ctx.nil _ => apply proper_snoc; [easy|]
+        | |- None               ⊣⊢ Some _             => apply @unsatisfiable_none_some
+        | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
+        | op : BinOp _ _ ty.perm |- _                 => dependent elimination op
+        end; try easy; auto.
+
+    Lemma solve_user_spec : SolverUserOnlySpec solve_user.
+    Proof.
+      intros Σ p ts.
+      destruct p; cbv in ts; env.destroy ts; cbn.
+      - dependent elimination v0; lsolve.
+        dependent elimination v; lsolve.
+        * destruct v0; cbn; lsolve.
+        * destruct v, v0; cbn; lsolve.
+      - dependent elimination v; lsolve.
+        + destruct v as [[] b e a]; cbn; lsolve;
+            intros ι; cbn; unfold CorrectPC; cbn; lia.
+        + cbn in ts0; env.destroy ts0.
+          dependent elimination v2; cbn; lsolve.
+          destruct v2; lsolve;
+            intros ι; cbn; unfold CorrectPC; cbn; try lia.
+      - dependent elimination v0; lsolve.
+        dependent elimination v; lsolve.
+        destruct v, v0; cbn; lsolve.
+        all: (intros ι []; cbn; intuition auto; try easy).
+    Qed.
+
+    Definition solver : Solver :=
+      solveruseronly_to_solver solve_user.
+
+    Lemma solver_spec : SolverSpec solver.
+    Proof.
+      apply solveruseronly_to_solver_spec, solve_user_spec.
+    Qed.
+
+  End MinCapsSolverKit.
+
   Include SignatureMixin MinCapsBase.
 
   Module MinCapsContractNotations.
@@ -302,105 +402,3 @@ Module Import MinCapsSignature <: Signature MinCapsBase.
   End ContractDefKit.
 
 End MinCapsSignature.
-
-(*** MinCapsSolverKit ***)
-(* In the MinCapsSolverKit we provide simplification procedures for the pure
-   predicates and prove that these simplifiers are sound. *)
-Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
-  Open Scope string.
-  #[local] Arguments Some {_} _%ctx.
-
-  Definition simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
-    match term_get_val p, term_get_val q with
-    | Some O , _       => Some []
-    | Some p', Some q' => if decide_subperm p' q' then Some [] else None
-    | _      , _       => Some [formula_user subperm [p;q]]
-    end%ctx.
-
-  Definition simplify_correctPC {Σ} (c : Term Σ ty.cap) : option (PathCondition Σ) :=
-    match term_get_record c with
-    | Some c' => match term_get_val c'.[??"cap_permission"] with
-                 | Some O => None
-                 | Some E => None
-                 | Some _ =>
-                     let b := c'.[??"cap_begin"] in
-                     let e := c'.[??"cap_end"] in
-                     let a := c'.[??"cap_cursor"] in
-                     Some [formula_bool (term_binop bop.and
-                                           (term_binop (bop.relop bop.le) b a)
-                                           (term_binop (bop.relop bop.lt) a e))]
-                 | None   => Some [formula_user correctPC [c]]
-                 end
-    | _       => Some [formula_user correctPC [c]]
-    end%ctx.
-
-  Definition simplify_not_is_perm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
-    match term_get_val p, term_get_val q with
-    | Some p', Some q' => if negb (Base.is_perm p' q') then Some [] else None
-    | _      , _       => Some [formula_user not_is_perm [p;q]]
-    end.
-
-  Definition solve_user : SolverUserOnly :=
-    fun Σ p =>
-      match p with
-      | subperm     => fun ts =>
-                         let (ts,q) := env.view ts in
-                         let (ts,p) := env.view ts in
-                         simplify_subperm p q
-      | correctPC   => fun ts =>
-                         let (ts,c) := env.view ts in
-                         simplify_correctPC c
-      | not_is_perm => fun ts =>
-                         let (ts,q) := env.view ts in
-                         let (ts,p) := env.view ts in
-                         simplify_not_is_perm p q
-      end.
-
-  Lemma subperm_O : forall p, Subperm O p.
-  Proof. destruct p; reflexivity. Qed.
-
-  Import Entailment.
-
-  Local Ltac lsolve :=
-    repeat
-      lazymatch goal with
-      | |- Some _             ⊣⊢ Some _             => apply @proper_some
-      | |- ctx.snoc ctx.nil _ ⊣⊢ ctx.snoc ctx.nil _ => apply proper_snoc; [easy|]
-      | |- None               ⊣⊢ Some _             => apply @unsatisfiable_none_some
-      | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
-      | op : BinOp _ _ ty.perm |- _                 => dependent elimination op
-      end; try easy; auto.
-
-  Lemma solve_user_spec : SolverUserOnlySpec solve_user.
-  Proof.
-    intros Σ p ts.
-    destruct p; cbv in ts; env.destroy ts; cbn.
-    - dependent elimination v0; lsolve.
-      dependent elimination v; lsolve.
-      * destruct v0; cbn; lsolve.
-      * destruct v, v0; cbn; lsolve.
-    - dependent elimination v; lsolve.
-      + destruct v as [[] b e a]; cbn; lsolve;
-          intros ι; cbn; unfold CorrectPC; cbn; lia.
-      + cbn in ts0; env.destroy ts0.
-        dependent elimination v2; cbn; lsolve.
-        destruct v2; lsolve;
-          intros ι; cbn; unfold CorrectPC; cbn; try lia.
-    - dependent elimination v0; lsolve.
-      dependent elimination v; lsolve.
-      destruct v, v0; cbn; lsolve.
-      all: (intros ι []; cbn; intuition auto; try easy).
-  Qed.
-
-  Definition solver : Solver :=
-    solveruseronly_to_solver solve_user.
-
-  Lemma solver_spec : SolverSpec solver.
-  Proof.
-    apply solveruseronly_to_solver_spec, solve_user_spec.
-  Qed.
-
-End MinCapsSolverKit.
-
-Module MinCapsSolver :=
-  MakeSolver MinCapsBase MinCapsSignature MinCapsSolverKit.

@@ -167,6 +167,10 @@ End ExampleProgram.
 Module Import ExampleSig <: Signature DefaultBase.
   Include DefaultPredicateKit DefaultBase.
   Include PredicateMixin DefaultBase.
+  Include WorldsMixin DefaultBase.
+  (* We do not provide any user-defined simplifier/solver. Just rely on the
+     generic one defined by the framework. *)
+  Include DefaultSolverKit DefaultBase.
   Include SignatureMixin DefaultBase.
 End ExampleSig.
 
@@ -209,15 +213,10 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSig Examp
 
 End ExampleSpecification.
 
-(* We do not provide any user-defined simplifier/solver. Just rely on the generic
-   one defined by the framework. *)
-Module ExampleSolverKit := DefaultSolverKit DefaultBase ExampleSig.
-Module ExampleSolver := MakeSolver DefaultBase ExampleSig ExampleSolverKit.
-
 (* Use the specification and the solver module to compose the symbolic executor
    and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
-  MakeExecutor DefaultBase ExampleSig ExampleSolver ExampleProgram ExampleSpecification.
+  MakeExecutor DefaultBase ExampleSig ExampleProgram ExampleSpecification.
 
 (* Some simple Ltac tactic to solve the shallow and symbolic VCs. *)
 Local Ltac solve :=
@@ -398,7 +397,7 @@ Module Import ExampleModel.
     (* Import the soundness proofs for the shallow and symbolic executors. *)
     Include Shallow.Soundness.Soundness DefaultBase ExampleSig ExampleProgram
       ExampleSpecification ExampleShalExec.
-    Include Symbolic.Soundness.Soundness DefaultBase ExampleSig ExampleSolver
+    Include Symbolic.Soundness.Soundness DefaultBase ExampleSig
       ExampleProgram ExampleSpecification ExampleShalExec ExampleExecutor.
 
     (* Show that all the contracts are sound in the Iris model. *)

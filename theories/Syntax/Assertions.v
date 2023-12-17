@@ -34,6 +34,7 @@ From Katamaran Require Import
      Base
      Notations
      Prelude
+     Symbolic.Worlds
      Syntax.Chunks
      Syntax.Formulas
      Syntax.Predicates.
@@ -46,8 +47,7 @@ Local Set Implicit Arguments.
 Module Type AssertionsOn
   (Import B : Base)
   (Import P : PredicateKit B)
-  (Import F : FormulasOn B P)
-  (Import C : ChunksOn B P).
+  (Import W : WorldsMixin B P).
 Module Import asn.
 
   Local Obligation Tactic := idtac.

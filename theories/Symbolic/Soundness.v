@@ -58,11 +58,10 @@ Import env.notations.
 Module Soundness
   (Import B    : Base)
   (Import SIG  : Signature B)
-  (Import SOLV : SolverKit B SIG)
   (Import PROG : Program B)
   (Import SPEC : Specification B SIG PROG)
   (Import SHAL : ShallowExecOn B SIG PROG SPEC)
-  (Import SYMB : SymbolicExecOn B SIG SOLV PROG SPEC).
+  (Import SYMB : SymbolicExecOn B SIG PROG SPEC).
 
   Import ModalNotations.
   Import SymProp.
@@ -188,7 +187,7 @@ Module Soundness
       unfold SPureSpecM.assume_pathcondition, symprop_assume_pathcondition.
       intros w0 ι0 Hpc0 fmls0 p Heq POST__s POST__c HPOST.
       intros Hwp Hfmls0. apply Heq in Hfmls0.
-      destruct (solver_spec _ fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      destruct (combined_solver_spec _ fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0).
         destruct Hsolver as [Hν Hsolver]. inster Hν by auto.
         specialize (Hsolver (inst (sub_triangular_inv ζ) ι0)).
@@ -217,7 +216,7 @@ Module Soundness
     Proof.
       unfold SPureSpecM.assert_pathcondition, CPureSpecM.assert_formula.
       intros w0 ι0 Hpc0 msg fmls0 p Heq POST__s POST__c HPOST Hwp.
-      destruct (solver_spec _ fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      destruct (combined_solver_spec _ fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
         rewrite safe_assert_triangular in Hwp. destruct Hwp as [Hν Hwp].
         rewrite safe_assert_pathcondition_without_solver in Hwp.
@@ -1950,11 +1949,10 @@ End Soundness.
 Module MakeSymbolicSoundness
   (Import B    : Base)
   (Import SIG  : Signature B)
-  (Import SOLV : SolverKit B SIG)
   (Import PROG : Program B)
   (Import SPEC : Specification B SIG PROG)
   (Import SHAL : ShallowExecOn B SIG PROG SPEC)
-  (Import SYMB : SymbolicExecOn B SIG SOLV PROG SPEC).
+  (Import SYMB : SymbolicExecOn B SIG PROG SPEC).
 
-  Include Soundness B SIG SOLV PROG SPEC SHAL SYMB.
+  Include Soundness B SIG PROG SPEC SHAL SYMB.
 End MakeSymbolicSoundness.

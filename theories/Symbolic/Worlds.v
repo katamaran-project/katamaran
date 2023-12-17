@@ -816,3 +816,21 @@ Module Type WorldsOn
          ?sub_acc_trans, ?sub_acc_triangular, ?inst_triangular_right_inverse).
 
 End WorldsOn.
+
+Module Type WorldsMixin (B : Base) (PK : PredicateKit B) :=
+  FormulasOn B PK <+ ChunksOn B PK <+ WorldsOn B PK.
+
+Module Type SolverKit (B : Base) (P : PredicateKit B) (Import W : WorldsMixin B P).
+  Local Set Implicit Arguments.
+
+  Parameter solver      : Solver.
+  Parameter solver_spec : SolverSpec solver.
+End SolverKit.
+
+Module DefaultSolverKit (B : Base) (P : PredicateKit B)
+  (Import W : WorldsMixin B P) <: SolverKit B P W.
+
+  Definition solver : Solver := solver_null.
+  Definition solver_spec : SolverSpec solver := solver_null_spec.
+
+End DefaultSolverKit.

@@ -39,7 +39,8 @@ From Coq Require Import
 From Katamaran Require Import
      Base
      Prelude
-     Signature
+     Syntax.Predicates
+     Symbolic.Propositions
      Symbolic.Worlds.
 
 From Equations Require Import
@@ -51,9 +52,13 @@ Import env.notations.
 Local Set Implicit Arguments.
 Local Set Equations Transparent.
 
-Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
+Module Type GenericSolverOn
+  (Import B : Base)
+  (Import P : PredicateKit B)
+  (Import W : WorldsMixin B P)
+  (Import S : SolverKit B P W).
 
-  Module Solver.
+  Module Import GenericSolver.
 
     Import option.notations.
     Import Entailment.
@@ -665,16 +670,16 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         intuition auto.
     Qed.
 
-    Definition solver_generic_round : Solver :=
+    Definition solver_generic : Solver :=
       fun w0 C0 =>
         match DList.run (simplify_pathcondition C0) with
         | Some C1 => Some (unify_pathcondition (assumption_pathcondition (wco w0) C1 ctx.nil))
         | None => None
         end.
 
-    Lemma solver_generic_round_spec : SolverSpec solver_generic_round.
+    Lemma solver_generic_spec : SolverSpec solver_generic.
     Proof.
-      unfold solver_generic_round. intros w0 C0.
+      unfold solver_generic. intros w0 C0.
       pose proof (simplify_pathcondition_spec C0) as Hequiv.
       destruct run as [C0'|]; constructor; cbn.
       - pose proof (unify_pathcondition_spec (assumption_pathcondition (wco w0) C0' ctx.nil)) as Hunify.
@@ -698,37 +703,21 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
       - intros ι. specialize (Hequiv ι). cbn in Hequiv. intuition.
     Qed.
 
-    Definition generic (user : Solver) : Solver :=
-      let g   := solver_generic_round in
-      let gg  := solver_compose g g in
-      let ggu := solver_compose gg user in
-      solver_compose ggu (solver_compose ggu gg).
+  End GenericSolver.
 
-    Lemma generic_spec {user} (H : SolverSpec user) :
-      SolverSpec (generic user).
-    Proof.
-      unfold generic.
-      auto using solver_compose_spec, solver_generic_round_spec.
-    Qed.
+  Definition combined_solver : Solver :=
+    let g   := solver_generic in
+    let gg  := solver_compose g g in
+    let ggu := solver_compose gg solver in
+    solver_compose ggu (solver_compose ggu gg).
 
-  End Solver.
+  Lemma combined_solver_spec : SolverSpec combined_solver.
+  Proof.
+    unfold combined_solver.
+    auto using solver_compose_spec, solver_generic_spec, solver_spec.
+  Qed.
 
-End SolverOn.
-
-Module MakeSolver
-  (B : Base)
-  (Import SIG : Signature B)
-  (SOLV : SolverKit B SIG)
-  <: SolverKit B SIG.
-
-  Include SolverOn B SIG.
-
-  Definition solver : Solver :=
-    Solver.generic SOLV.solver.
-  Definition solver_spec : SolverSpec solver :=
-    Solver.generic_spec SOLV.solver_spec.
-
-End MakeSolver.
+End GenericSolverOn.
 
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)

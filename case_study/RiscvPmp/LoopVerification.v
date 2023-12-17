@@ -70,7 +70,7 @@ Module Import RiscvPmpShallowExecutor :=
 
 Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpProgramLogic.
 
-Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpSolver RiscvPmpProgram RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpExecutor.
+Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpExecutor.
 
 Section Loop.
   Context `{sg : sailGS Σ}.

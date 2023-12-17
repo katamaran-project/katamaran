@@ -336,6 +336,8 @@ End ExampleProgram.
 Module Import ExampleSig <: Signature ExampleBase.
   Include DefaultPredicateKit ExampleBase.
   Include PredicateMixin ExampleBase.
+  Include WorldsMixin ExampleBase.
+  Include DefaultSolverKit ExampleBase.
   Include SignatureMixin ExampleBase.
 End ExampleSig.
 
@@ -435,11 +437,8 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
 
 End ExampleSpecification.
 
-Module ExampleSolverKit := DefaultSolverKit ExampleBase ExampleSig.
-Module ExampleSolver := MakeSolver ExampleBase ExampleSig ExampleSolverKit.
-
 Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleSig ExampleSolver ExampleProgram ExampleSpecification.
+  MakeExecutor ExampleBase ExampleSig ExampleProgram ExampleSpecification.
 
 Local Ltac solve :=
   repeat

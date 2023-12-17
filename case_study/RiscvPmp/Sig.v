@@ -336,77 +336,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
   End PredicateKit.
 
   Include PredicateMixin RiscvPmpBase.
-  Include SignatureMixin RiscvPmpBase.
+  Include WorldsMixin RiscvPmpBase.
 
-  Section ContractDefKit.
-
-    Import asn.notations.
-
-    Local Notation "e1 '=?' e2" := (term_binop (bop.relop bop.eq) e1 e2).
-
-    Definition z_term {Σ} : Z -> Term Σ ty.int := term_val ty.int.
-
-    Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
-      ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
-
-    Definition create_localstore (Δ : PCtx) (Σ : LCtx) : SStore Δ (sep_contract_logvars Δ Σ) :=
-      (env.tabulate (fun '(x::σ) xIn =>
-                       @term_var
-                         (sep_contract_logvars Δ Σ)
-                         x
-                         σ
-                         (ctx.in_cat_left Σ (ctx.in_map (fun '(y::τ) => y::τ) xIn)))).
-
-    Definition asn_and_regs {Σ} (f : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
-      f x1 ∗ f x2 ∗ f x3 ∗ f x4 ∗ f x5 ∗ f x6 ∗ f x7 ∗ f x8 ∗ f x9 ∗
-      f x10 ∗ f x11 ∗ f x12 ∗ f x13 ∗ f x14 ∗ f x15 ∗ f x16 ∗ f x17 ∗ f x18 ∗ f x19 ∗
-      f x20 ∗ f x21 ∗ f x22 ∗ f x23 ∗ f x24 ∗ f x25 ∗ f x26 ∗ f x27 ∗ f x28 ∗ f x29 ∗
-      f x30 ∗ f x31. 
-
-    Definition asn_regs_ptsto {Σ} : Assertion Σ :=
-      asn_and_regs
-        (fun r => asn.exist "w" _ (r ↦ term_var "w")).
-
-    Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
-
-    (* TODO: abstract away the concrete type, look into unions for that *)
-    (* TODO: length of list should be 16, no duplicates *)
-    Definition term_pmp_entries {Σ} : Term Σ (ty.list (ty.prod ty_pmpcfgidx ty_pmpaddridx)) :=
-      term_list
-        (cons (term_val ty_pmpcfgidx PMP0CFG ,ₜ term_val ty_pmpaddridx PMPADDR0)
-              (cons (term_val ty_pmpcfgidx PMP1CFG ,ₜ term_val ty_pmpaddridx PMPADDR1) nil)).
-
-  End ContractDefKit.
-
-  Import asn.notations.
-
-  Module notations.
-    (* TODO: better notation needed *)
-    Notation "a '↦mem' b bs" := (asn.chunk (chunk_user (ptstomem b) [a; bs])) (at level 70).
-    Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
-    Notation "p '⊑' q" := (asn.formula (formula_user sub_perm [p;q])) (at level 70).
-
-    Notation asn_bool t := (asn.formula (formula_bool t)).
-    Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
-    Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-
-    Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-    Notation asn_pmp_addr_access_without a width l m := (asn.chunk (chunk_user (pmp_addr_access_without width) [a; l; m])).
-    Notation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).
-    Notation asn_within_cfg a cfg prev_addr addr := (asn.formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
-    Notation asn_not_within_cfg a es := (asn.formula (formula_user not_within_cfg [a; es])).
-    Notation asn_prev_addr cfg es prev := (asn.formula (formula_user prev_addr [cfg; es; prev])).
-    Notation asn_in_entries idx e es := (asn.formula (formula_user in_entries [idx; e; es])).
-    Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
-    Notation asn_pmp_check_perms cfg acc p := (asn.formula (formula_user pmp_check_perms [cfg;acc;p])).
-    Notation asn_pmp_check_rwx cfg acc := (asn.formula (formula_user pmp_check_rwx [cfg;acc])).
-    Notation asn_expand_pmpcfg_ent cfg := (asn.match_record rpmpcfg_ent cfg
-      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
-      (asn.formula (formula_bool (term_val ty.bool true)))).
-  End notations.
-End RiscvPmpSignature.
-
-Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   Import Entailment.
 
   Local Ltac lsolve :=
@@ -1030,5 +961,73 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     apply solveruseronly_to_solver_spec, simplify_user_spec.
   Qed.
 
-End RiscvPmpSolverKit.
-Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
+  Include SignatureMixin RiscvPmpBase.
+
+  Section ContractDefKit.
+
+    Import asn.notations.
+
+    Local Notation "e1 '=?' e2" := (term_binop (bop.relop bop.eq) e1 e2).
+
+    Definition z_term {Σ} : Z -> Term Σ ty.int := term_val ty.int.
+
+    Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
+      ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
+
+    Definition create_localstore (Δ : PCtx) (Σ : LCtx) : SStore Δ (sep_contract_logvars Δ Σ) :=
+      (env.tabulate (fun '(x::σ) xIn =>
+                       @term_var
+                         (sep_contract_logvars Δ Σ)
+                         x
+                         σ
+                         (ctx.in_cat_left Σ (ctx.in_map (fun '(y::τ) => y::τ) xIn)))).
+
+    Definition asn_and_regs {Σ} (f : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
+      f x1 ∗ f x2 ∗ f x3 ∗ f x4 ∗ f x5 ∗ f x6 ∗ f x7 ∗ f x8 ∗ f x9 ∗
+      f x10 ∗ f x11 ∗ f x12 ∗ f x13 ∗ f x14 ∗ f x15 ∗ f x16 ∗ f x17 ∗ f x18 ∗ f x19 ∗
+      f x20 ∗ f x21 ∗ f x22 ∗ f x23 ∗ f x24 ∗ f x25 ∗ f x26 ∗ f x27 ∗ f x28 ∗ f x29 ∗
+      f x30 ∗ f x31.
+
+    Definition asn_regs_ptsto {Σ} : Assertion Σ :=
+      asn_and_regs
+        (fun r => asn.exist "w" _ (r ↦ term_var "w")).
+
+    Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
+
+    (* TODO: abstract away the concrete type, look into unions for that *)
+    (* TODO: length of list should be 16, no duplicates *)
+    Definition term_pmp_entries {Σ} : Term Σ (ty.list (ty.prod ty_pmpcfgidx ty_pmpaddridx)) :=
+      term_list
+        (cons (term_val ty_pmpcfgidx PMP0CFG ,ₜ term_val ty_pmpaddridx PMPADDR0)
+              (cons (term_val ty_pmpcfgidx PMP1CFG ,ₜ term_val ty_pmpaddridx PMPADDR1) nil)).
+
+  End ContractDefKit.
+
+  Import asn.notations.
+
+  Module notations.
+    (* TODO: better notation needed *)
+    Notation "a '↦mem' b bs" := (asn.chunk (chunk_user (ptstomem b) [a; bs])) (at level 70).
+    Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
+    Notation "p '⊑' q" := (asn.formula (formula_user sub_perm [p;q])) (at level 70).
+
+    Notation asn_bool t := (asn.formula (formula_bool t)).
+    Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+    Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+
+    Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
+    Notation asn_pmp_addr_access_without a width l m := (asn.chunk (chunk_user (pmp_addr_access_without width) [a; l; m])).
+    Notation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).
+    Notation asn_within_cfg a cfg prev_addr addr := (asn.formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
+    Notation asn_not_within_cfg a es := (asn.formula (formula_user not_within_cfg [a; es])).
+    Notation asn_prev_addr cfg es prev := (asn.formula (formula_user prev_addr [cfg; es; prev])).
+    Notation asn_in_entries idx e es := (asn.formula (formula_user in_entries [idx; e; es])).
+    Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
+    Notation asn_pmp_check_perms cfg acc p := (asn.formula (formula_user pmp_check_perms [cfg;acc;p])).
+    Notation asn_pmp_check_rwx cfg acc := (asn.formula (formula_user pmp_check_rwx [cfg;acc])).
+    Notation asn_expand_pmpcfg_ent cfg := (asn.match_record rpmpcfg_ent cfg
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
+      (asn.formula (formula_bool (term_val ty.bool true)))).
+  End notations.
+
+End RiscvPmpSignature.

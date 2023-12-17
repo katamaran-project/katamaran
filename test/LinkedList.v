@@ -403,6 +403,102 @@ Module Import ExampleSignature <: Signature DefaultBase.
   (* A mixin that defines Formulas, Chunks and assertions to write contract and
      that defines Worlds and symbolic propositions for the executor. *)
   Include PredicateMixin DefaultBase.
+  Include WorldsMixin DefaultBase.
+
+  (* The SolverKit module is the user-defined part of the solver that is linked
+     with a generic part in MakeSolver. Here we can automatically simplify or
+     solve the user-defined predicate case of formulas. We also prove
+     correctness by showing that all runs of the simplifier produce unsolved
+     residual formulas (that are hopefully simpler) that are equivalent to the
+     input. *)
+  Section ExampleSolverKit.
+    #[local] Arguments Some {_} _%ctx.
+    #[local] Unset Implicit Arguments.
+    #[local] Set Equations Transparent.
+
+    (* Simplification of the [plength] predicate with arguments [xs] and [n]. *)
+    Equations simplify_plength {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) : Option PathCondition Σ :=
+    | term_binop bop.cons x xs       | term_binop bop.plus (term_val ?(ty.int) 1%Z) n => Some [formula_user plength [xs;n]]
+    | term_val ?(ty.list ty.int) nil | term_val ?(ty.int) 0%Z                         => Some []
+    | xs                             | n                                              => Some [formula_user plength [xs;n]].
+
+    (* Simplification of the [preverseappend] predicate with arguments [xs], [ys],
+     and [zs]. *)
+    Equations simplify_preverseappend {Σ} (xs ys zs: Term Σ (ty.list ty.int)) : Option PathCondition Σ :=
+    (* | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty.int) 1%Z) n := *)
+    (*   Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list; *)
+    | term_val ?(ty.list ty.int) nil | ys | zs => Some [formula_relop bop.eq ys zs]
+    | xs | term_val ?(ty.list ty.int) nil | zs => Some [formula_user preverse [xs;zs]]
+    | term_binop bop.cons x xs | ys       | zs => Some [formula_user preverseappend [xs; term_binop bop.cons x ys; zs]]
+    | xs | ys | zs                             => Some [formula_user preverseappend [xs;ys;zs]].
+
+    Import Entailment.
+
+    Local Ltac lsolve := repeat Entailment.tactics.mixin; try easy; auto.
+
+    (* Prove that the simplifier of [plength] is sound and complete. *)
+    Goal True. idtac "Timing before: llist/simplify_plength_spec". Abort.
+    Lemma simplify_plength_spec {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) :
+      simplify_plength xs n ⊣⊢ Some [formula_user plength [xs;n]].
+    Proof.
+      pattern (simplify_plength xs n).
+      apply_funelim (simplify_plength xs n); intros *; lsolve;
+        intro ι; cbn; lia.
+    Qed.
+    Goal True. idtac "Timing after: llist/simplify_plength_spec". Abort.
+
+    (* Prove that the simplifier of [preverseappend] is sound and complete. *)
+    Goal True. idtac "Timing before: llist/simplify_preverseappend_spec". Abort.
+    Lemma simplify_preverseappend_spec {Σ} (xs ys zs : Term Σ (ty.list ty.int)) :
+      simplify_preverseappend xs ys zs ⊣⊢ Some [formula_user preverseappend [xs;ys;zs]].
+    Proof.
+      pattern (simplify_preverseappend xs ys zs).
+      apply_funelim (simplify_preverseappend xs ys zs); intros *; lsolve;
+        intro ι; cbn.
+      - now rewrite rev_alt.
+      - now rewrite rev_append_rev.
+      - now rewrite rev_alt.
+    Qed.
+    Goal True. idtac "Timing after: llist/simplify_preverseappend_spec". Abort.
+
+    (* Combined the solvers to a solver for the [formula_user] case. *)
+    Definition solve_user : SolverUserOnly :=
+      fun Σ p =>
+        match p with
+        | plength => fun ts =>
+                       let (ts,n)  := env.view ts in
+                       let (ts,xs) := env.view ts in
+                       simplify_plength xs n
+        | preverse => fun ts => Some [formula_user preverse ts]
+        | preverseappend =>
+            fun ts =>
+              let (ts,zs) := env.view ts in
+              let (ts,ys) := env.view ts in
+              let (ts,xs) := env.view ts in
+              simplify_preverseappend xs ys zs
+        end.
+
+    (* Combine the correctness proofs. *)
+    Lemma solve_user_spec : SolverUserOnlySpec solve_user.
+    Proof.
+      intros Σ p ts.
+      destruct p; cbv in ts; env.destroy ts.
+      - apply simplify_plength_spec.
+      - reflexivity.
+      - apply simplify_preverseappend_spec.
+    Qed.
+
+    (* Lift the solver for the [formula_user] case to a solver over any set
+       of formulas. *)
+    Definition solver : Solver :=
+      solveruseronly_to_solver solve_user.
+    Lemma solver_spec : SolverSpec solver.
+    Proof.
+      apply solveruseronly_to_solver_spec, solve_user_spec.
+    Qed.
+
+  End ExampleSolverKit.
+
   Include SignatureMixin DefaultBase.
 End ExampleSignature.
 
@@ -601,104 +697,11 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
 
 End ExampleSpecification.
 
-(* The SolverKit module is the user-defined part of the solver that is linked
-   with a generic part in MakeSolver. Here we can automatically simplify or
-   solve the user-defined predicate case of formulas. We also prove correctness
-   by showing that all runs of the simplifier produce unsolved residual formulas
-   (that are hopefully simpler) that are equivalent to the input. *)
-Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
-  #[local] Arguments Some {_} _%ctx.
-  #[local] Unset Implicit Arguments.
-  #[local] Set Equations Transparent.
-
-  (* Simplification of the [plength] predicate with arguments [xs] and [n]. *)
-  Equations simplify_plength {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) : Option PathCondition Σ :=
-  | term_binop bop.cons x xs       | term_binop bop.plus (term_val ?(ty.int) 1%Z) n => Some [formula_user plength [xs;n]]
-  | term_val ?(ty.list ty.int) nil | term_val ?(ty.int) 0%Z                         => Some []
-  | xs                             | n                                              => Some [formula_user plength [xs;n]].
-
-  (* Simplification of the [preverseappend] predicate with arguments [xs], [ys],
-     and [zs]. *)
-  Equations simplify_preverseappend {Σ} (xs ys zs: Term Σ (ty.list ty.int)) : Option PathCondition Σ :=
-  (* | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty.int) 1%Z) n := *)
-  (*   Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list; *)
-  | term_val ?(ty.list ty.int) nil | ys | zs => Some [formula_relop bop.eq ys zs]
-  | xs | term_val ?(ty.list ty.int) nil | zs => Some [formula_user preverse [xs;zs]]
-  | term_binop bop.cons x xs | ys       | zs => Some [formula_user preverseappend [xs; term_binop bop.cons x ys; zs]]
-  | xs | ys | zs                             => Some [formula_user preverseappend [xs;ys;zs]].
-
-  Import Entailment.
-
-  Local Ltac lsolve := repeat Entailment.tactics.mixin; try easy; auto.
-
-  (* Prove that the simplifier of [plength] is sound and complete. *)
-  Goal True. idtac "Timing before: llist/simplify_plength_spec". Abort.
-  Lemma simplify_plength_spec {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) :
-    simplify_plength xs n ⊣⊢ Some [formula_user plength [xs;n]].
-  Proof.
-    pattern (simplify_plength xs n).
-    apply_funelim (simplify_plength xs n); intros *; lsolve;
-      intro ι; cbn; lia.
-  Qed.
-  Goal True. idtac "Timing after: llist/simplify_plength_spec". Abort.
-
-  (* Prove that the simplifier of [preverseappend] is sound and complete. *)
-  Goal True. idtac "Timing before: llist/simplify_preverseappend_spec". Abort.
-  Lemma simplify_preverseappend_spec {Σ} (xs ys zs : Term Σ (ty.list ty.int)) :
-    simplify_preverseappend xs ys zs ⊣⊢ Some [formula_user preverseappend [xs;ys;zs]].
-  Proof.
-    pattern (simplify_preverseappend xs ys zs).
-    apply_funelim (simplify_preverseappend xs ys zs); intros *; lsolve;
-      intro ι; cbn.
-    - now rewrite rev_alt.
-    - now rewrite rev_append_rev.
-    - now rewrite rev_alt.
-  Qed.
-  Goal True. idtac "Timing after: llist/simplify_preverseappend_spec". Abort.
-
-  (* Combined the solvers to a solver for the [formula_user] case. *)
-  Definition solve_user : SolverUserOnly :=
-    fun Σ p =>
-      match p with
-      | plength => fun ts =>
-                     let (ts,n)  := env.view ts in
-                     let (ts,xs) := env.view ts in
-                     simplify_plength xs n
-      | preverse => fun ts => Some [formula_user preverse ts]
-      | preverseappend =>
-          fun ts =>
-            let (ts,zs) := env.view ts in
-            let (ts,ys) := env.view ts in
-            let (ts,xs) := env.view ts in
-            simplify_preverseappend xs ys zs
-      end.
-
-  (* Combine the correctness proofs. *)
-  Lemma solve_user_spec : SolverUserOnlySpec solve_user.
-  Proof.
-    intros Σ p ts.
-    destruct p; cbv in ts; env.destroy ts.
-    - apply simplify_plength_spec.
-    - reflexivity.
-    - apply simplify_preverseappend_spec.
-  Qed.
-
-  (* Lift the solver for the [formula_user] case to a solver over any set
-     of formulas. *)
-  Definition solver : Solver :=
-    solveruseronly_to_solver solve_user.
-  Lemma solver_spec : SolverSpec solver.
-  Proof.
-    apply solveruseronly_to_solver_spec, solve_user_spec.
-  Qed.
-
-End ExampleSolverKit.
-Module ExampleSolver := MakeSolver DefaultBase ExampleSignature ExampleSolverKit.
 
 (* Use the specification and the solver module to compose the symbolic executor
    and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
-  MakeExecutor DefaultBase ExampleSignature ExampleSolver ExampleProgram ExampleSpecification.
+  MakeExecutor DefaultBase ExampleSignature ExampleProgram ExampleSpecification.
 
 Section DebugExample.
   Import SymProp.notations.
@@ -918,8 +921,7 @@ Module ExampleModel.
     Include Shallow.Soundness.Soundness DefaultBase ExampleSignature
       ExampleProgram ExampleSpecification ExampleShalExec.
     Include Symbolic.Soundness.Soundness DefaultBase ExampleSignature
-      ExampleSolver ExampleProgram ExampleSpecification ExampleShalExec
-      ExampleExecutor.
+      ExampleProgram ExampleSpecification ExampleShalExec ExampleExecutor.
 
     (* In this section we verify the contracts of the foreign functions defined in
        Coq and the entailments encoded in ghost lemmas using Iris Proof Mode. *)

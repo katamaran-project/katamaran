@@ -57,7 +57,7 @@ Open Scope Z_scope.
 Import MinCapsSpecification.
 
 Module Import MinCapsExecutor :=
-  MakeExecutor MinCapsBase MinCapsSignature MinCapsSolver MinCapsProgram MinCapsSpecification.
+  MakeExecutor MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
 Module Import MinCapsShallowExec :=
   MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
 

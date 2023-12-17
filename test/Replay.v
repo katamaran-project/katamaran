@@ -168,6 +168,64 @@ Module Import ReplaySig <: Signature DefaultBase.
   End PredicateKit.
 
   Include PredicateMixin DefaultBase.
+  Include WorldsMixin DefaultBase.
+
+  Section ReplaySolverKit.
+    Import List.ListNotations.
+    Import Entailment.
+
+    Definition simplify_Q {Σ} (xs : Term Σ ty_X) : option (PathCondition Σ) :=
+      let no_simplification := Some [formula_user Q [xs]] in
+      match term_get_val xs with
+      | Some ls => match ls with
+                   | 0 :: _ => Some [formula_relop bop.eq (term_val ty.int 1%Z) (term_val ty.int 7%Z)]%ctx
+                   | _      => no_simplification
+                   end%list
+      | _       => no_simplification
+      end.
+
+    Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (PathCondition Σ) :=
+    | Q | [env xs ] => simplify_Q xs.
+
+    Local Ltac lsolve :=
+      repeat
+        lazymatch goal with
+        | |- Some _             ⊣⊢ Some _             => apply @proper_some
+        | |- ctx.snoc ctx.nil _ ⊣⊢ ctx.snoc ctx.nil _ => apply proper_snoc; [easy|]
+        | |- None               ⊣⊢ Some _             => apply @unsatisfiable_none_some
+        | |- [ctx]              ⊣⊢ _                  => apply nil_l_valid
+        | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
+        | |- match @term_get_val ?Σ ?σ ?v with _ => _ end ⊣⊢ _ =>
+            destruct (@term_get_val_spec Σ σ v); subst; try progress cbn
+        | |- match @term_get_list ?Σ ?σ ?v with _ =>_ end ⊣⊢ _ =>
+            destruct (@term_get_list_spec Σ σ v) as [[] ?|]; subst; try progress cbn
+        | |- match @term_get_pair ?Σ ?σ₁ ?σ₂ ?v with _ =>_ end ⊣⊢ _ =>
+            destruct (@term_get_pair_spec Σ σ₁ σ₂ v); subst; try progress cbn
+        | |- match @term_get_record ?r ?Σ ?v with _ =>_ end ⊣⊢ _ =>
+            destruct (@term_get_record_spec Σ r v); subst; try progress cbn
+        | H: ?fst * ?snd |- _ =>
+            destruct H; subst; try progress cbn
+        end; try easy; auto.
+
+    Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.
+    Proof.
+      intros Σ p ts.
+      destruct p; cbv in ts; env.destroy ts.
+      cbn.
+      unfold simplify_Q; lsolve.
+      destruct a; lsolve.
+      destruct v; lsolve.
+    Qed.
+
+    Definition solver : Solver :=
+      solveruseronly_to_solver simplify_user.
+
+    Lemma solver_spec : SolverSpec solver.
+    Proof.
+      apply solveruseronly_to_solver_spec, simplify_user_spec.
+    Qed.
+  End ReplaySolverKit.
+
   Include SignatureMixin DefaultBase.
 End ReplaySig.
 
@@ -221,66 +279,8 @@ Module Import ReplaySpecification <: Specification DefaultBase ReplaySig ReplayP
 
 End ReplaySpecification.
 
-Module ReplaySolverKit <: SolverKit DefaultBase ReplaySig.
-  Import List.ListNotations.
-  Import Entailment.
-
-  Definition simplify_Q {Σ} (xs : Term Σ ty_X) : option (PathCondition Σ) :=
-    let no_simplification := Some [formula_user Q [xs]] in
-    match term_get_val xs with
-    | Some ls => match ls with
-                 | 0 :: _ => Some [formula_relop bop.eq (term_val ty.int 1%Z) (term_val ty.int 7%Z)]%ctx
-                 | _      => no_simplification
-                 end%list
-    | _       => no_simplification
-    end.
-
-  Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (PathCondition Σ) :=
-  | Q | [env xs ] => simplify_Q xs.
-
-  Local Ltac lsolve :=
-    repeat
-      lazymatch goal with
-      | |- Some _             ⊣⊢ Some _             => apply @proper_some
-      | |- ctx.snoc ctx.nil _ ⊣⊢ ctx.snoc ctx.nil _ => apply proper_snoc; [easy|]
-      | |- None               ⊣⊢ Some _             => apply @unsatisfiable_none_some
-      | |- [ctx]              ⊣⊢ _                  => apply nil_l_valid
-      | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
-      | |- match @term_get_val ?Σ ?σ ?v with _ => _ end ⊣⊢ _ =>
-          destruct (@term_get_val_spec Σ σ v); subst; try progress cbn
-      | |- match @term_get_list ?Σ ?σ ?v with _ =>_ end ⊣⊢ _ =>
-          destruct (@term_get_list_spec Σ σ v) as [[] ?|]; subst; try progress cbn
-      | |- match @term_get_pair ?Σ ?σ₁ ?σ₂ ?v with _ =>_ end ⊣⊢ _ =>
-          destruct (@term_get_pair_spec Σ σ₁ σ₂ v); subst; try progress cbn
-      | |- match @term_get_record ?r ?Σ ?v with _ =>_ end ⊣⊢ _ =>
-          destruct (@term_get_record_spec Σ r v); subst; try progress cbn
-      | H: ?fst * ?snd |- _ =>
-          destruct H; subst; try progress cbn
-      end; try easy; auto.
-
-  Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.
-  Proof.
-    intros Σ p ts.
-    destruct p; cbv in ts; env.destroy ts.
-    cbn.
-    unfold simplify_Q; lsolve.
-    destruct a; lsolve.
-    destruct v; lsolve.
-  Qed.
-
-  Definition solver : Solver :=
-    solveruseronly_to_solver simplify_user.
-
-  Lemma solver_spec : SolverSpec solver.
-  Proof.
-    apply solveruseronly_to_solver_spec, simplify_user_spec.
-  Qed.
-End ReplaySolverKit.
-
-Module ReplaySolver := MakeSolver DefaultBase ReplaySig ReplaySolverKit.
-
 Module Import ReplayExecutor :=
-  MakeExecutor DefaultBase ReplaySig ReplaySolver ReplayProgram ReplaySpecification.
+  MakeExecutor DefaultBase ReplaySig ReplayProgram ReplaySpecification.
 Module Import ReplayShallowExecutor :=
   MakeShallowExecutor DefaultBase ReplaySig ReplayProgram ReplaySpecification.
 

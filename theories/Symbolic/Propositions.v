@@ -59,11 +59,9 @@ Local Set Implicit Arguments.
 Local Obligation Tactic := idtac.
 
 Module Type SymPropOn
-  (Import B    : Base)
-  (Import PK   : PredicateKit B)
-  (Import FML  : FormulasOn B PK)
-  (Import CHK  : ChunksOn B PK)
-  (Import WRLD : WorldsOn B PK FML CHK).
+  (Import B : Base)
+  (Import P : PredicateKit B)
+  (Import W : WorldsMixin B P).
 
   Section Messages.
 

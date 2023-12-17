@@ -48,7 +48,6 @@ From Katamaran Require Import
      Prelude
      Bitvector
      Signature
-     Symbolic.Propositions
      Symbolic.Worlds
      Specification
      Base.
@@ -66,7 +65,6 @@ Set Implicit Arguments.
 Module Type SymbolicExecOn
   (Import B : Base)
   (Import SIG : Signature B)
-  (Import SOLV : SolverKit B SIG)
   (Import PROG : Program B)
   (Import SPEC : Specification B SIG PROG).
 
@@ -326,7 +324,7 @@ Module Type SymbolicExecOn
   Definition symprop_assume_pathcondition :
     ⊢ PathCondition -> □SymProp -> SymProp :=
     fun w0 C0 POST =>
-      match solver _ C0 with
+      match combined_solver _ C0 with
       | Some (existT w1 (ν , C1)) =>
           (* Assume variable equalities and the residual constraints *)
           assume_triangular ν
@@ -436,7 +434,7 @@ Module Type SymbolicExecOn
     Definition assert_pathcondition :
       ⊢ AMessage -> PathCondition -> SPureSpecM Unit :=
       fun w0 msg C0 POST =>
-        match solver _ C0 with
+        match combined_solver _ C0 with
         | Some (existT w1 (ν , C1)) =>
           (* Assert variable equalities and the residual constraints *)
           assert_triangular msg ν
@@ -1709,10 +1707,9 @@ End SymbolicExecOn.
 Module MakeExecutor
   (Import B    : Base)
   (Import SIG  : Signature B)
-  (Import SOLV : SolverKit B SIG)
   (Import PROG : Program B)
   (Import SPEC : Specification B SIG PROG).
 
-  Include SymbolicExecOn B SIG SOLV PROG SPEC .
+  Include SymbolicExecOn B SIG PROG SPEC .
 
 End MakeExecutor.

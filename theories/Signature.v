@@ -28,30 +28,18 @@
 (******************************************************************************)
 
 From Katamaran Require Export
-     Base
-     Program
-     Syntax.Formulas
-     Syntax.Chunks
-     Syntax.Predicates
-     Syntax.Assertions
-     Symbolic.Propositions
-     Symbolic.Worlds.
+  Base
+  Syntax.Formulas
+  Syntax.Chunks
+  Syntax.Predicates
+  Syntax.Assertions
+  Symbolic.Propositions
+  Symbolic.Solver
+  Symbolic.Worlds.
 
-Module Type SignatureMixin (B : Base) (PK : PredicateKit B) :=
-  FormulasOn B PK <+ ChunksOn B PK <+ AssertionsOn B PK <+ WorldsOn B PK <+ SymPropOn B PK.
+Module Type SignatureMixin
+  (B : Base) (P : PredicateKit B) (W : WorldsMixin B P) (S : SolverKit B P W) :=
+  AssertionsOn B P W <+ SymPropOn B P W <+ GenericSolverOn B P W S.
+
 Module Type Signature (B : Base) :=
-  PredicateKit B <+ SignatureMixin B.
-
-Module Type SolverKit (B : Base) (Import SIG : Signature B).
-  Local Set Implicit Arguments.
-
-  Parameter solver      : Solver.
-  Parameter solver_spec : SolverSpec solver.
-End SolverKit.
-
-Module DefaultSolverKit (B : Base) (Import SIG : Signature B) <: SolverKit B SIG.
-
-  Definition solver : Solver := solver_null.
-  Definition solver_spec : SolverSpec solver := solver_null_spec.
-
-End DefaultSolverKit.
+  PredicateKit B <+ WorldsMixin B <+ SolverKit B <+ SignatureMixin B.

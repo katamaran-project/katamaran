@@ -41,10 +41,7 @@ From Katamaran Require Import
      MinimalCaps.Sig
      MinimalCaps.Contracts.Notations
      Notations
-     Specification
-     Shallow.Executor
-     Symbolic.Executor
-     Symbolic.Solver.
+     Specification.
 
 Set Implicit Arguments.
 Import ctx.notations.

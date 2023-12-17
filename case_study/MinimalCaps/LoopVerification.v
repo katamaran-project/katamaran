@@ -69,7 +69,7 @@ Module Import MinCapsShallowExecutor :=
 
 Module Import MinCapsShallowSoundness := MakeShallowSoundness MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification MinCapsShallowExecutor MinCapsIrisInstanceWithContracts.
 
-Module Import MinCapsSymbolic := MakeSymbolicSoundness MinCapsBase MinCapsSignature MinCapsSolver MinCapsProgram MinCapsSpecification MinCapsShallowExecutor MinCapsExecutor.
+Module Import MinCapsSymbolic := MakeSymbolicSoundness MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification MinCapsShallowExecutor MinCapsExecutor.
 
 Section Loop.
   Context `{sg : sailGS Σ}.

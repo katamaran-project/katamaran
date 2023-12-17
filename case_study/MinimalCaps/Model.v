@@ -812,7 +812,7 @@ Module MinCapsIrisInstanceWithContracts.
   End ForeignProofs.
 
   (* Import the soundness proofs for the shallow and symbolic executors. *)
-  Include Symbolic.Soundness.Soundness MinCapsBase MinCapsSignature MinCapsSolver
+  Include Symbolic.Soundness.Soundness MinCapsBase MinCapsSignature
     MinCapsProgram MinCapsSpecification MinCapsShallowExec MinCapsExecutor.
   Include Shallow.Soundness.Soundness MinCapsBase MinCapsSignature MinCapsProgram
     MinCapsSpecification MinCapsShallowExec.
