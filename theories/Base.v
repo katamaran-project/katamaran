@@ -56,9 +56,18 @@ Module Type BaseMixin (Import TY : Types).
     OccursCheckOn TY <+ InstantiationOn TY <+
     MessagesOn TY <+ PartialEvaluationOn TY.
 
+  Notation Ty := (@ty.Ty typedeclkit).
+  Notation LVar := (@Variables.LVar varkit).
+  Notation PVar := (@Variables.PVar varkit).
   Notation PCtx := (NCtx PVar Ty).
   Notation LCtx := (NCtx LVar Ty).
-  Notation Valuation Σ := (Env (fun xt : Binding LVar Ty => Val (type xt)) Σ).
+  Notation Val := (@ty.Val typedeclkit typedenotekit).
+
+  Notation Valuation Σ :=
+    (@Env (Binding LVar Ty)
+       (fun xt : Binding LVar Ty =>
+          Val (@type _ _ xt)) Σ).
+
   Notation CStore := (@NamedEnv PVar Ty Val).
 
   Definition SMatchResult {N σ} (pat : @Pattern N σ) (Σ : LCtx) : Type :=
