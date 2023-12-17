@@ -111,6 +111,9 @@ Module Type SymPropOn
   Inductive Debug {B : LCtx -> Type} {Σ : LCtx} (b : B Σ) (P : Prop) : Prop :=
   | debug (p : P).
 
+  #[export] Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
+  Proof. intros P Q PQ. split; intros []; constructor; intuition. Qed.
+
   Section Util.
 
     Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :

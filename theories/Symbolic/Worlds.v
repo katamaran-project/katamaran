@@ -687,7 +687,7 @@ Module Type WorldsOn
       RInst (fun Σ => Term Σ σ) (Val σ).
 
     #[export] Instance RNEnv (N : Set) (Δ : NCtx N Ty) : Rel _ _ :=
-      RInst (fun Σ => Env (fun τ => Term Σ (type τ)) Δ) (NamedEnv Val Δ).
+      RInst (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv Val Δ).
     #[export] Instance REnv (Δ : Ctx Ty) : Rel _ _ :=
         RInst (fun Σ : LCtx => Env (Term Σ) Δ) (Env Val Δ).
     #[export] Instance RUnit : Rel Unit unit := RInst Unit unit.
@@ -788,6 +788,10 @@ Module Type WorldsOn
         ℛ⟦RFormula⟧@{ι1} f p ->
         ℛ⟦RFormula⟧@{ι2} (persist f r12) p.
     Proof. cbn. intros * ->. now rewrite instprop_persist. Qed.
+
+    Lemma refine_formula_subst {Σ} (fml : Formula Σ) {w0 : World} (ι0 : Valuation w0) :
+      ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RFormula⟧@{ι0} (subst fml) (instprop fml).
+    Proof. intros ζ ? ->. apply instprop_subst. Qed.
 
     Lemma refine_env_snoc {N : Set} (Δ : NCtx N Ty) :
       ℛ⟦RNEnv Δ -> ∀ b, RVal (type b) -> RNEnv (Δ ▻ b)⟧

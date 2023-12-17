@@ -387,10 +387,12 @@ Module Soundness
       intros Hsafe. refine (HPOST _ _ _ _ _ _ _ _ Hsafe); clear Hsafe;
         cbn - [sub_cat_left sub_cat_right sub_id];
         rewrite ?inst_subst, ?instprop_subst, ?inst_sub_id, ?inst_sub_cat_left; try easy.
-      - rewrite inst_pattern_match_term_reverse. split; auto. rewrite <- H.
-        f_equal. symmetry. apply inst_sub_cat_right.
-      - exists eq_refl; cbn. rewrite inst_unfreshen_patterncaseenv.
-        f_equal. symmetry. apply inst_sub_cat_right.
+      - rewrite inst_pattern_match_term_reverse.
+        split; auto. symmetry. rewrite <- H.
+        f_equal. apply inst_sub_cat_right.
+      - exists eq_refl; cbn. symmetry. etransitivity.
+        apply inst_unfreshen_patterncaseenv.
+        f_equal. apply inst_sub_cat_right.
     Qed.
 
     Lemma refine_pattern_match_var {N : Set} (n : N -> LVar) {σ} (p : @Pattern N σ) :
@@ -438,8 +440,9 @@ Module Soundness
         + now apply refine_pattern_match_basic with (p := pat_bvec_exhaustive m).
       - destruct (term_get_tuple_spec t) as [ts ->|].
         + apply refine_pure; auto. exists eq_refl; cbn; auto.
-          unfold tuple_pattern_match_val.
-          now rewrite envrec.to_of_env, inst_tuple_pattern_match.
+          unfold tuple_pattern_match_val. symmetry. etransitivity.
+          apply inst_tuple_pattern_match.
+          now rewrite envrec.to_of_env.
         + now apply refine_pattern_match_basic.
       - destruct (term_get_record_spec t) as [ts ->|].
         + apply refine_pure; auto. exists eq_refl; cbn; auto.
