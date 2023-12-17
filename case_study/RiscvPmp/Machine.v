@@ -145,15 +145,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     IsTrue (bytes * byte <=? xlenbytes * byte)%nat :=
     IsTrue_bytes_xlenbytes bytes xlenbytes (IsTrue.andb_r H).
 
-  Definition restrict_bytes (bytes : nat) : Prop :=
-    bytes = 1%nat \/ bytes = 2%nat \/ bytes = 4%nat.
-
-  Lemma restrict_bytes_one : restrict_bytes 1%nat.
-  Proof. unfold restrict_bytes; auto. Qed.
-  Lemma restrict_bytes_two : restrict_bytes 2%nat.
-  Proof. unfold restrict_bytes; auto. Qed.
-  Lemma restrict_bytes_four : restrict_bytes 4%nat.
-  Proof. unfold restrict_bytes; auto. Qed.
+  Inductive restrict_bytes : nat -> Prop :=
+  | restrict_bytes_one : restrict_bytes 1%nat
+  | restrict_bytes_two : restrict_bytes 2%nat
+  | restrict_bytes_four : restrict_bytes 4%nat.
 
   Import RiscvNotations.
 

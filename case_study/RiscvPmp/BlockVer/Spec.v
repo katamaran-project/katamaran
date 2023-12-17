@@ -679,26 +679,16 @@ Module RiscvPmpSpecVerif.
   Import RiscvPmpBlockVerifExecutor.
 
   Lemma valid_checked_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@checked_mem_read bytes H).
-  Proof.
-    destruct H as [->|[->| ->]];
-    now vm_compute.
-  Qed.
+  Proof. destruct H; now vm_compute. Qed.
 
   Lemma valid_checked_mem_write {bytes} {H : restrict_bytes bytes} : ValidContract (@checked_mem_write bytes H).
-  Proof.
-    destruct H as [->|[->| ->]];
-    now vm_compute.
-  Qed.
+  Proof. destruct H; now vm_compute. Qed.
 
   Lemma valid_pmp_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@pmp_mem_read bytes H).
-  Proof.
-    destruct H as [->|[->| ->]]; now vm_compute.
-  Qed.
+  Proof. destruct H; now vm_compute. Qed.
 
   Lemma valid_pmp_mem_write {bytes} {H : restrict_bytes bytes} : ValidContract (@pmp_mem_write bytes H).
-  Proof.
-    destruct H as [->|[->| ->]]; now vm_compute.
-  Qed.
+  Proof. destruct H; now vm_compute. Qed.
 
   Import Bitvector.bv.notations.
 
@@ -711,8 +701,7 @@ Module RiscvPmpSpecVerif.
 
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
-    destruct H as [-> |[-> | ->]];
-      hnf; apply verification_condition_with_erasure_sound; vm_compute;
+    destruct H; apply verification_condition_with_erasure_sound; vm_compute;
       constructor; cbn;
       repeat (intros; split; intros);
       repeat match goal with
@@ -736,14 +725,10 @@ Module RiscvPmpSpecVerif.
   Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
-  Proof.
-    destruct H as [->|[->| ->]]; reflexivity.
-  Qed.
+  Proof. now destruct H. Qed.
 
   Lemma valid_mem_write_value {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_write_value bytes H).
-  Proof.
-    destruct H as [->|[->| ->]]; reflexivity.
-  Qed.
+  Proof. now destruct H. Qed.
 
   Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
   Proof. symbolic_simpl. intros. Lia.lia. Qed.

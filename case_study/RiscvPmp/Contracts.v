@@ -1332,12 +1332,8 @@ Module RiscvPmpValidContracts.
   (* TODO: proof with new PMP addressing mode (NA4) *)
   Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheck bytes H).
   Proof.
-    destruct H as [H|[H|H]]; rewrite ?H;
-      apply Symbolic.validcontract_with_erasure_sound;
-      vm_compute; constructor;
-      cbn;
-      repeat (intros; split; bv_comp);
-      auto 11.
+    destruct H; apply Symbolic.validcontract_with_erasure_sound; vm_compute;
+      constructor; cbn; repeat (intros; split; bv_comp); auto 11.
   Qed.
 
   Lemma valid_contract_step : ValidContract step.
@@ -1380,10 +1376,7 @@ Module RiscvPmpValidContracts.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
-  Proof.
-    destruct H as [H|[H|H]]; rewrite H;
-      symbolic_simpl; eauto.
-  Qed.
+  Proof. destruct H; symbolic_simpl; eauto. Qed.
 
   (* TODO: remove? *)
   (* Lemma valid_contract_checked_mem_read_shallow (bytes : nat) : Shallow.ValidContract (sep_contract_checked_mem_read bytes) (fun_checked_mem_read bytes). *)
@@ -1414,22 +1407,14 @@ Module RiscvPmpValidContracts.
   (* Admitted. *)
 
   Lemma valid_contract_checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_write bytes H).
-  Proof.
-    destruct H as [H|[H|H]]; rewrite H; symbolic_simpl; eauto.
-  Qed.
+  Proof. destruct H; symbolic_simpl; eauto. Qed.
 
   Lemma valid_contract_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_read bytes H).
-  Proof.
-    destruct H as [H|[H|H]];
-      rewrite ?H;
-      now symbolic_simpl.
-  Qed.
+  Proof. destruct H; now symbolic_simpl. Qed.
 
   Lemma valid_contract_pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_write bytes H).
   Proof.
-    destruct H as [H|[H|H]];
-      rewrite ?H;
-      symbolic_simpl;
+    destruct H; symbolic_simpl;
       intros; (split; intros; [now exists Write|now exists ReadWrite]).
   Qed.
 
