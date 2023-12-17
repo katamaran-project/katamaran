@@ -74,9 +74,9 @@ Set Implicit Arguments.
    proofs. *)
 Module Type IrisPredicates
   (Import B    : Base)
+  (Import SIG  : Signature B)
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
-  (Import SIG  : Signature B)
   (Import IB   : IrisBase B PROG SEM).
   Parameter luser_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
   Parameter lduplicate_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
@@ -86,11 +86,11 @@ End IrisPredicates.
 
 Module Type IrisSignatureRules
   (Import B     : Base)
+  (Import SIG   : Signature B)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
-  (Import SIG   : Signature B)
   (Import IB    : IrisBase B PROG SEM)
-  (Import IPred : IrisPredicates B PROG SEM SIG IB).
+  (Import IPred : IrisPredicates B SIG PROG SEM IB).
 Section Soundness.
 
   Import SmallStepNotations.
@@ -596,8 +596,9 @@ Section Adequacy.
 End Adequacy.
 End IrisSignatureRules.
 
-Module Type IrisInstance (B : Base) (PROG : Program B) (SEM : Semantics B PROG) (SIG : Signature B) (IB : IrisBase B PROG SEM) :=
-  IrisPredicates B PROG SEM SIG IB <+ IrisSignatureRules B PROG SEM SIG IB.
+Module Type IrisInstance (B : Base) (SIG : Signature B) (PROG : Program B)
+  (SEM : Semantics B PROG) (IB : IrisBase B PROG SEM) :=
+  IrisPredicates B SIG PROG SEM IB <+ IrisSignatureRules B SIG PROG SEM IB.
 
 (*
  * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature.
@@ -610,7 +611,7 @@ Module IrisInstanceWithContracts
   (Import SEM   : Semantics B PROG)
   (Import SPEC  : Specification B SIG PROG)
   (Import IB    : IrisBase B PROG SEM)
-  (Import II    : IrisInstance B PROG SEM SIG IB)
+  (Import II    : IrisInstance B SIG PROG SEM IB)
   (Import NS    : NewShallowExecOn B SIG PROG SPEC).
 
   Section WithSailGS.
