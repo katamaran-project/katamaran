@@ -460,7 +460,6 @@ Module Soundness
 
     #[export] Instance RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
       RInst (SStore Γ) (CStore Γ).
-    #[export] Instance RHeap : Rel SHeap SCHeap := RInst SHeap SCHeap.
 
     #[export] Instance RHeapSpecM Γ1 Γ2 `(R : Rel AT A) :
       Rel (SHeapSpecM Γ1 Γ2 AT) (CHeapSpecM Γ1 Γ2 A) :=

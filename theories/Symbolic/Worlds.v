@@ -698,9 +698,11 @@ Module Type WorldsOn
       MkRel (fun w ι f p => instprop f ι <-> p).
 
     #[export] Instance RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
+    #[export] Instance RHeap : Rel SHeap SCHeap := RInst SHeap SCHeap.
 
     #[export] Instance RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A :=
       MkRel (fun w ι t v => forall m, RSat RA ι (t m) v).
+    #[global] Arguments RMsg M%modal {AT A} RA%R.
 
     Inductive RList' {AT A} (R : Rel AT A) [w : World] (ι : Valuation w) :
       WList AT w -> list A -> Prop :=
