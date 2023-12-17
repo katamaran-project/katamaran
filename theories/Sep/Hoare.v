@@ -215,11 +215,9 @@ Module ProgramLogic.
       (forall x, ⦃ P x ⦄ s ; δ ⦃ Q x ⦄) ->
       ⦃ ∃ x, P x ⦄ s ; δ ⦃ fun v δ' => ∃ x, Q x v δ' ⦄.
     Proof.
-      intros hyp.
-      apply rule_exist.
-      intros x.
+      intros hyp. apply rule_exist. intros x.
       apply (rule_consequence_right (Q x) (hyp x)).
-      iIntros (? ?) "?". now iExists x.
+      intros v δ'. now apply bi.exist_intro' with x.
     Qed.
 
     Lemma rule_disj {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
@@ -230,7 +228,9 @@ Module ProgramLogic.
       intros H1 H2.
       apply (rule_consequence_left (∃ b : bool, if b then P else Q)).
       - apply rule_exist; intros []; assumption.
-      - iIntros "[H|H]"; [iExists true| iExists false]; easy.
+      - apply bi.or_elim.
+        + now apply bi.exist_intro' with true.
+        + now apply bi.exist_intro' with false.
     Qed.
 
     Lemma rule_disj' {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
@@ -241,9 +241,9 @@ Module ProgramLogic.
       intros H1 H2.
       apply rule_disj.
       - apply (rule_consequence_right _ H1).
-        iIntros (? ?) "H". now iLeft.
+        intros ? ?. apply bi.or_intro_l.
       - apply (rule_consequence_right _ H2).
-        iIntros (? ?) "H". now iRight.
+        intros ? ?. apply bi.or_intro_r.
     Qed.
 
     Lemma rule_false {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
