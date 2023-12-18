@@ -48,12 +48,14 @@ theories/Iris/BinaryInstance.v
 theories/Notations.v
 theories/Prelude.v
 theories/Program.v
+theories/Refinement/Monads.v
 theories/Semantics.v
 theories/Semantics/Registers.v
 theories/Sep/Hoare.v
 theories/Sep/Logic.v
 theories/Shallow/Executor.v
 theories/Shallow/Soundness.v
+theories/Shallow/Monads.v
 theories/Signature.v
 theories/SmallStep/Inversion.v
 theories/SmallStep/Progress.v
@@ -61,6 +63,7 @@ theories/SmallStep/Step.v
 theories/Specification.v
 theories/Symbolic/Executor.v
 theories/Symbolic/Instantiation.v
+theories/Symbolic/Monads.v
 theories/Symbolic/OccursCheck.v
 theories/Symbolic/PartialEvaluation.v
 theories/Symbolic/Propositions.v

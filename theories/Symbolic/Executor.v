@@ -273,349 +273,6 @@ Module Type SymbolicExecOn
 
   End VerificationConditions.
 
-  Definition symprop_assume_pathcondition :
-    ⊢ PathCondition -> □SymProp -> SymProp :=
-    fun w0 C0 POST =>
-      match combined_solver _ C0 with
-      | Some (existT w1 (ν , C1)) =>
-          (* Assume variable equalities and the residual constraints *)
-          assume_triangular ν
-            (assume_pathcondition_without_solver C1
-               (* Run POST in the world with the variable and residual formulas
-                  included. This is a critical piece of code since this is the
-                  place where we really meaningfully change the world. We
-                  changed the type of assume_pathcondition_without_solver just
-                  to not forget adding the new path constraints. *)
-               (four POST (acc_triangular ν) (acc_pathcondition_right w1 C1)))
-      | None =>
-          (* The new path constraints are inconsistent with the old path
-             constraints. *)
-          SymProp.block
-      end.
-
-  Definition SPureSpecM (A : TYPE) : TYPE :=
-    □(A -> 𝕊) -> 𝕊.
-
-  Module SPureSpecM.
-
-    Definition pure {A : TYPE} :
-      ⊢ A -> SPureSpecM A :=
-      fun w0 a POST => T POST a.
-
-    Definition map {A B} :
-      ⊢ □(A -> B) -> SPureSpecM A -> SPureSpecM B :=
-      fun w0 f m POST => m (comp <$> POST <*> f).
-
-    Definition bind {A B} :
-      ⊢ SPureSpecM A -> □(A -> SPureSpecM B) -> SPureSpecM B :=
-      fun w0 m f POST => m (fun w1 ω01 a1 => f w1 ω01 a1 (four POST ω01)).
-    #[global] Arguments bind {A B} [w] m f _ /.
-
-    Definition error {A} :
-      ⊢ AMessage -> SPureSpecM A := fun w msg POST => SymProp.error msg.
-    Definition block {A} : ⊢ SPureSpecM A :=
-      fun w POST => SymProp.block.
-    Global Arguments block {A w}.
-
-    Definition angelic (x : option LVar) :
-      ⊢ ∀ σ, SPureSpecM (STerm σ) :=
-      fun w σ k =>
-        let y := fresh_lvar w x in
-        angelicv
-          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
-    Global Arguments angelic x [w] σ k : rename.
-
-    Module Import notations.
-      Notation "⟨ ω ⟩ x <- ma ;; mb" :=
-        (bind ma (fun _ ω x => mb))
-          (at level 80, x at next level,
-            ma at next level, mb at level 200,
-            right associativity).
-      (* Notation "⟨ w , ω ⟩ x <- ma ;; mb" := *)
-      (*   (bind ma (fun w ω x => mb)) *)
-      (*     (at level 80, x at next level, *)
-      (*       ma at next level, mb at level 200, *)
-      (*       right associativity, only printing). *)
-      Notation "x ⟨ ω ⟩" := (persist x ω).
-    End notations.
-
-    Local Hint Extern 2 (Persistent (WTerm ?σ)) =>
-      refine (@persistent_subst (STerm σ) (@SubstTerm σ)) : typeclass_instances.
-    Local Hint Extern 2 (Persistent (fun w : World => NamedEnv (Term (wctx w)) ?Γ)) =>
-      refine (@persistent_subst (fun Σ : LCtx => NamedEnv (Term Σ) Γ) _) : typeclass_instances.
-
-    Definition angelic_ctx {N : Set} (n : N -> LVar) :
-      ⊢ ∀ Δ : NCtx N Ty, SPureSpecM (fun w => NamedEnv (Term w) Δ) :=
-      fix rec {w} Δ {struct Δ} :=
-        match Δ with
-         | []%ctx => pure []%env
-         | Γ ▻ x∷σ => ⟨ ω1 ⟩ tΔ <- rec Γ;;
-                      ⟨ ω2 ⟩ tσ <- angelic (Some (n x)) σ;;
-                      pure (tΔ⟨ω2⟩ ► (x∷σ ↦ tσ))
-         end.
-    Global Arguments angelic_ctx {N} n [w] Δ : rename.
-
-    Definition demonic (x : option LVar) :
-      ⊢ ∀ σ, SPureSpecM (STerm σ) :=
-      fun w σ k =>
-        let y := fresh_lvar w x in
-        demonicv
-          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
-    Global Arguments demonic x [w] σ k : rename.
-
-    Definition demonic_ctx {N : Set} (n : N -> LVar) :
-      ⊢ ∀ Δ : NCtx N Ty, SPureSpecM (fun w => NamedEnv (Term w) Δ) :=
-      fix rec {w} Δ {struct Δ} :=
-        match Δ with
-        | []%ctx  => pure []%env
-        | Δ ▻ x∷σ => ⟨ ω1 ⟩ tΔ <- rec Δ;;
-                     ⟨ ω2 ⟩ tσ <- demonic (Some (n x)) σ;;
-                     pure (tΔ⟨ω2⟩ ► (x∷σ ↦ tσ))
-        end%ctx.
-    Global Arguments demonic_ctx {_} n [w] Δ : rename.
-
-    Definition assume_pathcondition :
-      ⊢ PathCondition -> SPureSpecM Unit :=
-      fun w C POST =>
-        symprop_assume_pathcondition C (POST <*> (fun w r => tt)).
-
-    Definition assume_formula :
-      ⊢ Formula -> SPureSpecM Unit :=
-      fun w F => assume_pathcondition ([ctx] ▻ F).
-
-    Definition assert_pathcondition :
-      ⊢ AMessage -> PathCondition -> SPureSpecM Unit :=
-      fun w0 msg C0 POST =>
-        match combined_solver _ C0 with
-        | Some (existT w1 (ν , C1)) =>
-          (* Assert variable equalities and the residual constraints *)
-          assert_triangular msg ν
-            (fun msg' =>
-               assert_pathcondition_without_solver msg' C1
-                 (* Critical code. Like for assume_pathcondition. *)
-                 (four POST (acc_triangular ν) (acc_pathcondition_right w1 C1) tt))
-        | None =>
-          (* The new path constraints are inconsistent with the old path
-             constraints. *)
-          SymProp.error msg
-        end.
-
-    Definition assert_formula :
-      ⊢ AMessage -> Formula -> SPureSpecM Unit :=
-      fun w0 msg fml0 =>
-        assert_pathcondition msg (ctx.nil ▻ fml0 ).
-
-    Equations(noeqns) assert_eq_env :
-      let E Δ := fun w : World => Env (Term w) Δ in
-      ⊢ ∀ Δ : Ctx Ty, AMessage -> E Δ -> E Δ -> SPureSpecM Unit :=
-      assert_eq_env msg env.nil          env.nil            := pure tt;
-      assert_eq_env msg (env.snoc δ _ t) (env.snoc δ' _ t') :=
-        ⟨ ω ⟩ _ <- assert_eq_env msg δ δ' ;;
-        assert_formula msg⟨ω⟩ (formula_relop bop.eq t t')⟨ω⟩.
-
-    Equations(noeqns) assert_eq_nenv {N} :
-      let E Δ := fun w : World => NamedEnv (Term w) Δ in
-      ⊢ ∀ Δ : NCtx N Ty, AMessage -> E Δ -> E Δ -> SPureSpecM Unit :=
-      assert_eq_nenv msg env.nil          env.nil            := pure tt;
-      assert_eq_nenv msg (env.snoc δ _ t) (env.snoc δ' _ t') :=
-        ⟨ ω ⟩ _ <- assert_eq_nenv msg δ δ' ;;
-        assert_formula msg⟨ω⟩ (formula_relop bop.eq t t')⟨ω⟩.
-
-    Definition assert_eq_chunk : ⊢ AMessage -> Chunk -> Chunk -> □(SPureSpecM Unit) :=
-      fix assert_eq w0 msg c1 c2 w1 ω01 {struct c1} :=
-        match c1 , c2 with
-        | chunk_user p1 vs1 as c1 , chunk_user p2 vs2 as c2 =>
-            match eq_dec p1 p2 with
-            | left e => assert_eq_env msg⟨ω01⟩
-                          (eq_rect p1 (fun p => Env (Term w1) (𝑯_Ty p)) vs1⟨ω01⟩ p2 e)
-                          (persist (A := fun w => (fun Σ => Env (Term Σ) _) (wctx w)) vs2 ω01)
-            | right _ => error msg⟨ω01⟩
-            end
-        | chunk_ptsreg r1 v1 as c1 , chunk_ptsreg r2 v2 as c2 =>
-            match eq_dec_het r1 r2 with
-            | left e => assert_formula msg⟨ω01⟩
-                          (formula_relop bop.eq (eq_rect _ (Term w1) v1⟨ω01⟩ _ (f_equal projT1 e)) v2⟨ω01⟩)
-            | right _ => error msg⟨ω01⟩
-            end
-        | chunk_conj c11 c12 , chunk_conj c21 c22 =>
-            ⟨ ω12 ⟩ _ <- assert_eq _ msg c11 c21 w1 ω01 ;;
-            assert_eq _ msg c12 c22 _ (ω01 ∘ ω12)
-        | chunk_wand c11 c12 , chunk_wand c21 c22 =>
-            ⟨ ω12 ⟩ _ <- assert_eq _ msg c11 c21 w1 ω01 ;;
-            assert_eq _ msg c12 c22 _ (ω01 ∘ ω12)
-        | _ , _ => error msg⟨ω01⟩
-        end.
-
-    Definition angelic_binary {A} :
-      ⊢ SPureSpecM A -> SPureSpecM A -> SPureSpecM A :=
-      fun w m1 m2 POST =>
-        angelic_binary (m1 POST) (m2 POST).
-    Definition demonic_binary {A} :
-      ⊢ SPureSpecM A -> SPureSpecM A -> SPureSpecM A :=
-      fun w m1 m2 POST =>
-        demonic_binary (m1 POST) (m2 POST).
-
-    Definition angelic_list' {A} :
-      ⊢ A -> WList A -> SPureSpecM A :=
-      fun w =>
-        fix rec d xs :=
-        match xs with
-        | nil        => pure d
-        | cons x xs  => angelic_binary (pure d) (rec x xs)
-        end.
-    #[global] Arguments angelic_list' {A} [w].
-
-    Definition angelic_list {A} :
-      ⊢ AMessage -> WList A -> SPureSpecM A :=
-      fun w msg xs =>
-        match xs with
-        | nil        => error msg
-        | cons x xs  => angelic_list' x xs
-        end.
-
-    Definition demonic_list' {A} :
-      ⊢ A -> WList A -> SPureSpecM A :=
-      fun w =>
-        fix rec d xs :=
-        match xs with
-        | nil        => pure d
-        | cons x xs  => demonic_binary (pure d) (rec x xs)
-        end.
-
-    Definition demonic_list {A} :
-      ⊢ WList A -> SPureSpecM A :=
-      fun w xs =>
-        match xs with
-        | nil        => block
-        | cons x xs  => demonic_list' x xs
-        end.
-
-    Definition angelic_finite F `{finite.Finite F} :
-      ⊢ AMessage -> SPureSpecM ⌜F⌝ :=
-      fun w msg => angelic_list msg (finite.enum F).
-    #[global] Arguments angelic_finite F {_ _} [w].
-
-    Definition demonic_finite F `{finite.Finite F} :
-      ⊢ SPureSpecM ⌜F⌝ :=
-      fun w => demonic_list (finite.enum F).
-    #[global] Arguments demonic_finite F {_ _} [w].
-
-    #[export] Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
-    Proof. intros P Q PQ. split; intros []; constructor; intuition. Qed.
-
-    Definition pattern_match_regular {N : Set} (n : N -> LVar) {σ} (pat : @Pattern N σ) :
-      ⊢ STerm σ -> SPureSpecM (SMatchResult pat) :=
-      fun w0 scr POST =>
-        SymProp.pattern_match scr (freshen_pattern n w0 pat)
-          (fun pc : PatternCase _ =>
-             let w1 : World   := wmatch w0 scr _ pc in
-             let r1 : w0 ⊒ w1 := acc_match_right pc in
-             POST w1 r1
-               (existT
-                  (unfreshen_patterncase n w0 pat pc)
-                  (unfreshen_patterncaseenv n pat pc (sub_cat_right _)))).
-    #[global] Arguments pattern_match_regular {N} n {σ} pat [w] t.
-
-    Definition pattern_match_var {N : Set} (n : N -> LVar) {σ} (pat : @Pattern N σ) :
-      ⊢ ∀ x, ctx.In (x∷σ) -> SPureSpecM (SMatchResult pat) :=
-      fun w0 x xIn POST =>
-        let pat' := freshen_pattern n w0 pat in
-        SymProp.pattern_match_var x pat'
-          (fun pc : PatternCase _ =>
-             let Δ   : LCtx       := PatternCaseCtx pc in
-             let w1  : World      := wcat w0 Δ in
-             let r1  : w0 ⊒ w1    := acc_cat_right w0 Δ in
-             let ts  : NamedEnv (Term (ctx.remove (ctx.in_cat_left Δ xIn))) Δ
-                                  := eq_rect _ (fun Σ => NamedEnv (Term Σ) Δ)
-                                       (sub_cat_right Δ) _
-                                       (eq_sym (ctx.remove_in_cat_left xIn)) in
-             let t   : Term (ctx.remove (ctx.in_cat_left Δ xIn)) σ
-                                  := pattern_match_term_reverse pat' pc ts in
-             let w2  : World      := wsubst w1 x t in
-             let r2  : w1 ⊒ w2    := @acc_subst_right w1 x σ _ t in
-             let r12 : w0 ⊒ w2    := r1 ∘ r2 in
-             POST w2 r12
-               (existT
-                  (unfreshen_patterncase n w0 pat pc)
-                  (unfreshen_patterncaseenv n pat pc ts))).
-    #[global] Arguments pattern_match_var {N} n {σ} pat [w x] xIn : rename.
-
-    Definition pattern_match_basic {N : Set} (n : N -> LVar) {σ} (pat : @Pattern N σ) :
-      ⊢ STerm σ -> SPureSpecM (SMatchResult pat) :=
-      fun w0 scr =>
-        match scr with
-        | @term_var _ x σ xIn => fun pat => pattern_match_var n pat xIn
-        | t => fun pat => pattern_match_regular n pat t
-        end pat.
-    #[global] Arguments pattern_match_basic {N} n {σ} pat [w] t.
-
-    Fixpoint pattern_match {N : Set} (n : N -> LVar) {σ} (pat : @Pattern N σ) :
-      ⊢ WTerm σ -> SPureSpecM (SMatchResult pat) :=
-      fun w0 : World =>
-        match pat as p in (Pattern t) return (forall _ : Term (wctx w0) t, SPureSpecM (@SMatchResult N t p) w0) with
-        | pat_var x       => fun scr => pure (existT tt [env].[x∷_ ↦ scr])
-        | pat_bool        =>
-            fun scr => match term_get_val scr with
-                       | Some a => pure (existT a [env])
-                       | None => pattern_match_basic n pat_bool scr
-                       end
-        | pat_list σ x y  =>
-            fun scr => pattern_match_basic n (pat_list σ x y) scr
-        | pat_pair x y    =>
-            fun scr =>
-              match term_get_pair scr with
-              | Some (a, b) => pure (existT tt [env].[x∷_ ↦ a].[y∷_ ↦ b])
-              | None        => pattern_match_basic n (pat_pair x y) scr
-              end
-        | pat_sum σ τ x y =>
-            fun scr => match term_get_sum scr with
-                       | Some (inl a) => pure (existT true [env].[x∷σ ↦ a])
-                       | Some (inr b) => pure (existT false [env].[y∷τ ↦ b])
-                       | None => pattern_match_basic n (pat_sum σ τ x y) scr
-                       end
-        | pat_unit        => fun _ => pure (existT tt [env])
-        | pat_enum E      =>
-            fun scr => match term_get_val scr with
-                       | Some a => pure (existT a [env])
-                       | None => pattern_match_basic n (pat_enum E) scr
-                       end
-        | pat_bvec_split m k x y =>
-            fun scr => pattern_match_basic n (pat_bvec_split m k x y) scr
-        | pat_bvec_exhaustive m =>
-            fun scr =>
-              match term_get_val scr with
-              | Some a => pure (existT a [env])
-              | None => pattern_match_basic n (pat_bvec_exhaustive m) scr
-              end
-        | @pat_tuple _ σs Δ p =>
-            fun scr =>
-              match term_get_tuple scr with
-              | Some a => pure (existT tt (tuple_pattern_match_env p a))
-              | None => pattern_match_basic n (pat_tuple p) scr
-              end
-        | pat_record R Δ p =>
-            fun scr =>
-              match term_get_record scr with
-              | Some a => pure (existT tt (record_pattern_match_env p a))
-              | None => pattern_match_basic n (pat_record R Δ p) scr
-              end
-        | pat_union U p =>
-            fun scr =>
-              match term_get_union scr with
-              | Some (existT K t) =>
-                  @map (SMatchResult (p K)) (SMatchResult (pat_union U p)) _
-                    (fun w1 _ '(existT pc ts) =>
-                       @existT (PatternCase (pat_union U p))
-                         (fun pc => NamedEnv (Term w1) (PatternCaseCtx pc))
-                         (existT (P := fun K => PatternCase (p K)) K pc) ts)
-                    (pattern_match n t)
-              | None => pattern_match_basic n (pat_union U p) scr
-              end
-        end.
-    #[global] Arguments pattern_match {N} n {σ} pat [w].
-
-  End SPureSpecM.
-
   Section Configuration.
 
     Record Config : Type :=
@@ -641,7 +298,7 @@ Module Type SymbolicExecOn
     Section Basic.
 
       Definition lift_purem {Γ} {A : TYPE} :
-        ⊢ SPureSpecM A -> SHeapSpecM Γ Γ A :=
+        ⊢ SPureSpec A -> SHeapSpecM Γ Γ A :=
         fun w0 m POST δ0 h0 =>
           m (fun w1 ω01 a1 => POST w1 ω01 a1 (persist δ0 ω01) (persist h0 ω01)).
 
@@ -655,10 +312,6 @@ Module Type SymbolicExecOn
       Definition bind_box {Γ1 Γ2 Γ3 A B} :
         ⊢ □(SHeapSpecM Γ1 Γ2 A) -> □(A -> SHeapSpecM Γ2 Γ3 B) -> □(SHeapSpecM Γ1 Γ3 B) :=
         fun w0 m f => bind <$> m <*> four f.
-
-      Definition bind_right {Γ1 Γ2 Γ3 A B} :
-        ⊢ SHeapSpecM Γ1 Γ2 A -> □(SHeapSpecM Γ2 Γ3 B) -> SHeapSpecM Γ1 Γ3 B :=
-        fun _ m k POST => m (fun _ ω1 _ => k _ ω1 (four POST ω1)).
 
       Definition error {Γ1 Γ2 A} :
         ⊢ (SStore Γ1 -> SHeap -> AMessage) -> SHeapSpecM Γ1 Γ2 A :=
@@ -678,26 +331,21 @@ Module Type SymbolicExecOn
 
       Definition angelic_list {A Γ} :
         ⊢ (SStore Γ -> SHeap -> AMessage) -> WList A -> SHeapSpecM Γ Γ A :=
-        fun w msg xs POST δ h => lift_purem (SPureSpecM.angelic_list (msg δ h) xs) POST δ h.
+        fun w msg xs POST δ h => lift_purem (SPureSpec.angelic_list (msg δ h) xs) POST δ h.
 
       Definition angelic_finite F `{finite.Finite F} {Γ} :
         ⊢ (SStore Γ -> SHeap -> AMessage) -> SHeapSpecM Γ Γ ⌜F⌝ :=
-        fun w msg POST δ h => lift_purem (SPureSpecM.angelic_finite F (msg δ h)) POST δ h.
+        fun w msg POST δ h => lift_purem (SPureSpec.angelic_finite F (msg δ h)) POST δ h.
       #[global] Arguments angelic_finite F {_ _ Γ w}.
-
-      Definition demonic_finite F `{finite.Finite F} {Γ} :
-        ⊢ SHeapSpecM Γ Γ ⌜F⌝ :=
-        fun w => lift_purem (SPureSpecM.demonic_finite F (w:=w)).
-      #[global] Arguments demonic_finite F {_ _ Γ w}.
 
       Definition angelic {Γ} (x : option LVar) :
         ⊢ ∀ σ, SHeapSpecM Γ Γ (STerm σ) :=
-        fun w σ => lift_purem (SPureSpecM.angelic x σ).
+        fun w σ => lift_purem (SPureSpec.angelic x σ).
       Global Arguments angelic {Γ} x [w] σ : rename.
 
       Definition demonic {Γ} (x : option LVar) :
         ⊢ ∀ σ, SHeapSpecM Γ Γ (STerm σ) :=
-        fun w σ => lift_purem (SPureSpecM.demonic x σ).
+        fun w σ => lift_purem (SPureSpec.demonic x σ).
       Global Arguments demonic {Γ} x [w] σ : rename.
 
       Definition debug {AT} {Γ1 Γ2} :
@@ -706,12 +354,12 @@ Module Type SymbolicExecOn
 
       Definition angelic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
-        fun w Δ => lift_purem (SPureSpecM.angelic_ctx n Δ).
+        fun w Δ => lift_purem (SPureSpec.angelic_ctx n Δ).
       Global Arguments angelic_ctx {N} n {Γ} [w] Δ : rename.
 
       Definition demonic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
-        fun w Δ => lift_purem (SPureSpecM.demonic_ctx n Δ).
+        fun w Δ => lift_purem (SPureSpec.demonic_ctx n Δ).
       Global Arguments demonic_ctx {N} n {Γ} [w] Δ : rename.
 
     End Basic.
@@ -746,7 +394,7 @@ Module Type SymbolicExecOn
       (* Add the provided formula to the path condition. *)
       Definition assume_formula {Γ} :
         ⊢ Formula -> SHeapSpecM Γ Γ Unit :=
-        fun w0 fml => lift_purem (SPureSpecM.assume_formula fml).
+        fun w0 fml => lift_purem (SPureSpec.assume_formula fml).
 
       Definition box_assume_formula {Γ} :
         ⊢ Formula -> □(SHeapSpecM Γ Γ Unit) :=
@@ -756,7 +404,7 @@ Module Type SymbolicExecOn
         ⊢ Formula -> SHeapSpecM Γ Γ Unit :=
         fun w0 fml POST δ0 h0 =>
           lift_purem
-            (SPureSpecM.assert_formula
+            (SPureSpec.assert_formula
                (amsg.mk (MkDebugAssertFormula (wco w0) δ0 h0 fml)) fml)
             POST δ0 h0.
 
@@ -768,7 +416,7 @@ Module Type SymbolicExecOn
         ⊢ PathCondition -> SHeapSpecM Γ Γ Unit :=
         fun w0 fmls POST δ0 h0 =>
           lift_purem
-            (SPureSpecM.assert_pathcondition
+            (SPureSpec.assert_pathcondition
                (amsg.mk
                   {| msg_function := "smut_assert_formula";
                      msg_message := "Proof obligation";
@@ -783,7 +431,7 @@ Module Type SymbolicExecOn
         ⊢ E -> E -> SHeapSpecM Γ Γ Unit :=
         fun w0 E1 E2 POST δ0 h0 =>
           lift_purem
-            (SPureSpecM.assert_eq_env
+            (SPureSpec.assert_eq_env
                (amsg.mk
                   {| msg_function := "smut/assert_eq_env";
                      msg_message := "Proof obligation";
@@ -799,7 +447,7 @@ Module Type SymbolicExecOn
         ⊢ E -> E -> SHeapSpecM Γ Γ Unit :=
         fun w0 E1 E2 POST δ0 h0 =>
           lift_purem
-            (SPureSpecM.assert_eq_nenv
+            (SPureSpec.assert_eq_nenv
                (amsg.mk
                   {| msg_function := "smut/assert_eq_env";
                      msg_message := "Proof obligation";
@@ -814,7 +462,7 @@ Module Type SymbolicExecOn
         ⊢ Chunk -> Chunk -> SHeapSpecM Γ Γ Unit :=
         fun w0 c1 c2 POST δ0 h0 =>
           lift_purem
-            (T (SPureSpecM.assert_eq_chunk
+            (T (SPureSpec.assert_eq_chunk
                   (amsg.mk
                      {| msg_function := "SHeapSpecM.assert_eq_chunk";
                         msg_message := "Proof obligation";
@@ -829,208 +477,31 @@ Module Type SymbolicExecOn
 
     Section PatternMatching.
 
-      Definition angelic_pattern_match' {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @Pattern N σ) :
-        ⊢ STerm σ ->
-        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
-        SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ pc <- angelic_finite (PatternCase pat)
-                         (fun δ h =>
-                            amsg.mk
-                              {| msg_function := "SHeapSpecM.angelic_pattern_match";
-                                 msg_message := "pattern match assertion";
-                                 msg_program_context := Γ1;
-                                 msg_localstore := δ;
-                                 msg_heap := h;
-                                 msg_pathcondition := wco w0
-                              |});;
-          ⟨ ω2 ⟩ ts <- angelic_ctx n (PatternCaseCtx pc) ;;
-          let ω12 := ω1 ∘ ω2 in
-          ⟨ ω3 ⟩ _  <- assert_formula (formula_relop bop.eq (pattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
-          k pc _ (ω12 ∘ ω3) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) _) (wctx w)) ts ω3).
+      Definition angelic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
+        ⊢ STerm σ -> SHeapSpecM Γ Γ (SMatchResult pat) :=
+        fun w0 t Φ δ h =>
+          SPureSpec.angelic_pattern_match n pat
+            (amsg.mk
+               {| msg_function := "SHeapSpecM.angelic_pattern_match";
+                 msg_message := "pattern match assertion";
+                 msg_program_context := Γ;
+                 msg_localstore := δ;
+                 msg_heap := h;
+                 msg_pathcondition := wco w0
+               |}) t
+            (fun w1 θ1 mr => Φ w1 θ1 mr δ⟨θ1⟩ h⟨θ1⟩).
+      #[global] Arguments angelic_pattern_match {N} n {Γ σ} pat [w].
 
-      Definition angelic_pattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2} :
-        forall {σ} (pat : @Pattern N σ),
-          ⊢ STerm σ ->
-          (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
-          SHeapSpecM Γ1 Γ2 AT :=
-        fix angelic (σ : Ty) (pat : Pattern σ) {struct pat} :
-          ⊢ WTerm σ ->
-          (∀ pc : PatternCase pat,
-              □((fun w : World => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
-          SHeapSpecM Γ1 Γ2 AT :=
-          match pat with
-          | pat_var x => fun w0 scr k => k tt w0 acc_refl [env].[x∷_ ↦ scr]
-          | pat_bool => fun w0 scr k =>
-                          match term_get_val scr with
-                          | Some v => k v w0 acc_refl [env]
-                          | None => angelic_pattern_match' n _ scr k
-                          end
-          | pat_pair x y => fun w0 scr k =>
-                              match term_get_pair scr with
-                              | Some (tl, tr) => k tt w0 acc_refl [env].[x∷_ ↦ tl].[y∷_ ↦ tr]
-                              | None => angelic_pattern_match' n (pat_pair x y) scr k
-                              end
-          | pat_sum _ _ _ _ => fun w0 scr k =>
-                                 match term_get_sum scr with
-                                 | Some (inl tl) => k true w0 acc_refl [env].[_∷_ ↦ tl]
-                                 | Some (inr tr) => k false w0 acc_refl [env].[_∷_ ↦ tr]
-                                 | None => angelic_pattern_match' n (pat_sum _ _ _ _) scr k
-                                 end
-          | pat_unit => fun w0 scr k => k tt w0 acc_refl [env]
-          | pat_enum E => fun w0 scr k => match term_get_val scr with
-                                          | Some v => k v w0 acc_refl [env]
-                                          | None => angelic_pattern_match' n _ scr k
-                                          end
-          | pat_bvec_exhaustive m => fun w0 scr k => match term_get_val scr with
-                                                     | Some v => k v w0 acc_refl [env]
-                                                     | None => angelic_pattern_match' n _ scr k
-                                                     end
-          | pat_tuple p => fun w0 scr k =>
-                             match term_get_tuple scr with
-                             | Some a => k tt w0 acc_refl (tuple_pattern_match_env p a)
-                             | None => angelic_pattern_match' n (pat_tuple p) scr k
-                             end
-          | pat_record R Δ p => fun w0 scr k =>
-                                  match term_get_record scr with
-                                  | Some a => k tt w0 acc_refl (record_pattern_match_env p a)
-                                  | None => angelic_pattern_match' n (pat_record R Δ p) scr k
-                                  end
-          | pat_union U p => fun w0 scr k =>
-                               match term_get_union scr with
-                               | Some (existT K scr') =>
-                                   angelic (unionk_ty U K) (p K) w0 scr'
-                                     (fun pc => k (existT K pc))
-                               | None => angelic_pattern_match' n (pat_union U p) scr k
-                               end
-          | _ => angelic_pattern_match' n _
-          end.
-
-      Definition demonic_pattern_match' {N : Set} (n : N -> LVar) {AT Γ1 Γ2 σ} (pat : @Pattern N σ) :
-        ⊢ STerm σ ->
-        (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)  ) ->
-        SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ pc <- demonic_finite (PatternCase pat) ;;
-          ⟨ ω2 ⟩ ts <- demonic_ctx n (PatternCaseCtx pc) ;;
-          let ω12 := ω1 ∘ ω2 in
-          ⟨ ω3 ⟩ _  <- assume_formula (formula_relop bop.eq (pattern_match_term_reverse pat pc ts) t⟨ω12⟩) ;;
-          k pc _ (ω12 ∘ ω3) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) _) (wctx w)) ts ω3).
-
-      Definition demonic_pattern_match {N : Set} (n : N -> LVar) {AT Γ1 Γ2} :
-        forall {σ} (pat : @Pattern N σ),
-          ⊢ STerm σ ->
-          (∀ pc : PatternCase pat, □((fun w => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
-          SHeapSpecM Γ1 Γ2 AT :=
-        fix demonic (σ : Ty) (pat : Pattern σ) {struct pat} :
-          ⊢ WTerm σ ->
-          (∀ pc : PatternCase pat,
-              □((fun w : World => NamedEnv (Term w) (PatternCaseCtx pc)) -> SHeapSpecM Γ1 Γ2 AT)) ->
-          SHeapSpecM Γ1 Γ2 AT :=
-          match pat with
-          | pat_var x => fun w0 scr k => k tt w0 acc_refl [env].[x∷_ ↦ scr]
-          | pat_bool => fun w0 scr k =>
-                          match term_get_val scr with
-                          | Some v => k v w0 acc_refl [env]
-                          | None => demonic_pattern_match' n _ scr k
-                          end
-          | pat_pair x y => fun w0 scr k =>
-                              match term_get_pair scr with
-                              | Some (tl, tr) => k tt w0 acc_refl [env].[x∷_ ↦ tl].[y∷_ ↦ tr]
-                              | None => demonic_pattern_match' n (pat_pair x y) scr k
-                              end
-          | pat_sum _ _ _ _ => fun w0 scr k =>
-                                 match term_get_sum scr with
-                                 | Some (inl tl) => k true w0 acc_refl [env].[_∷_ ↦ tl]
-                                 | Some (inr tr) => k false w0 acc_refl [env].[_∷_ ↦ tr]
-                                 | None => demonic_pattern_match' n (pat_sum _ _ _ _) scr k
-                                 end
-          | pat_unit => fun w0 scr k => k tt w0 acc_refl [env]
-          | pat_enum E => fun w0 scr k => match term_get_val scr with
-                                          | Some v => k v w0 acc_refl [env]
-                                          | None => demonic_pattern_match' n _ scr k
-                                          end
-          | pat_bvec_exhaustive m => fun w0 scr k => match term_get_val scr with
-                                                     | Some v => k v w0 acc_refl [env]
-                                                     | None => demonic_pattern_match' n _ scr k
-                                                     end
-          | pat_tuple p => fun w0 scr k =>
-                             match term_get_tuple scr with
-                             | Some a => k tt w0 acc_refl (tuple_pattern_match_env p a)
-                             | None => demonic_pattern_match' n (pat_tuple p) scr k
-                             end
-          | pat_record R Δ p => fun w0 scr k =>
-                                  match term_get_record scr with
-                                  | Some a => k tt w0 acc_refl (record_pattern_match_env p a)
-                                  | None => demonic_pattern_match' n (pat_record R Δ p) scr k
-                                  end
-          | pat_union U p => fun w0 scr k =>
-                               match term_get_union scr with
-                               | Some (existT K scr') =>
-                                   demonic (unionk_ty U K) (p K) w0 scr'
-                                     (fun pc => k (existT K pc))
-                               | None => demonic_pattern_match' n (pat_union U p) scr k
-                               end
-          | _ => demonic_pattern_match' n _
-          end.
-
-      Definition angelic_match_bvec' {AT n} {Γ1 Γ2} :
-        ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ b <- angelic_finite (bv n)
-                        (fun (δ : SStore Γ1 w0) (h : SHeap w0) =>
-                           (amsg.mk {| msg_function := "SHeapSpecM.angelic_match_bvec";
-                              msg_message := "pattern match assertion";
-                              msg_program_context := Γ1;
-                              msg_localstore := δ;
-                              msg_heap := h;
-                              msg_pathcondition := wco w0
-                           |})) ;;
-          let t1 := persist__term t ω1 in
-          ⟨ ω2 ⟩ _ <- assert_formula (formula_relop bop.eq t1 (term_val (ty.bvec n) b)) ;;
-          four (k b) ω1 ω2.
-
-      Definition angelic_match_bvec {AT n} {Γ1 Γ2} :
-        ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          match term_get_val t with
-          | Some b => T (k b)
-          | None   => angelic_match_bvec' t k
-          end.
-
-      Definition demonic_match_bvec' {AT n} {Γ1 Γ2} :
-        ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ b <- demonic_finite (bv n) ;;
-          let s1 := term_val (ty.bvec n) b in
-          let t1 := persist__term t ω1 in
-          ⟨ ω2 ⟩ _ <- assume_formula (formula_relop bop.eq s1 t1) ;;
-          four (k b) ω1 ω2.
-
-      Definition demonic_match_bvec {AT n} {Γ1 Γ2} :
-        ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          match term_get_val t with
-          | Some b => T (k b)
-          | None   => demonic_match_bvec' t k
-          end.
-
-      Definition demonic_match_bvec_split {AT m n} (x y : LVar) {Γ1 Γ2} :
-        ⊢ STerm (ty.bvec (m + n)) -> □(STerm (ty.bvec m) -> STerm (ty.bvec n) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
-        fun w0 t k =>
-          ⟨ ω1 ⟩ t1 <- demonic (Some x) (ty.bvec m) ;;
-          ⟨ ω2 ⟩ t2 <- demonic (Some y) (ty.bvec n) ;;
-          let ω12 := ω1 ∘ ω2 in
-          let t   := persist__term t ω12 in
-          let t1  := persist__term t1 ω2 in
-          ⟨ ω3 ⟩ _  <- assume_formula (formula_relop bop.eq (term_binop (@bop.bvapp _ m n) t1 t2) t) ;;
-          let t1 := persist__term t1 ω3 in
-          let t2 := persist__term t2 ω3 in
-          k _ (ω12 ∘ ω3) t1 t2.
+      Definition demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
+        ⊢ STerm σ -> SHeapSpecM Γ Γ (SMatchResult pat) :=
+        fun w0 t Φ δ h =>
+          SPureSpec.demonic_pattern_match n pat t
+            (fun w1 θ1 mr => Φ w1 θ1 mr δ⟨θ1⟩ h⟨θ1⟩).
+      #[global] Arguments demonic_pattern_match {N} n {Γ σ} pat [w].
 
       Definition pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
         ⊢ WTerm σ -> SHeapSpecM Γ Γ (SMatchResult pat) :=
-        fun w t => lift_purem (SPureSpecM.pattern_match n pat t).
+        fun w t => lift_purem (SPureSpec.new_pattern_match n pat t).
       #[global] Arguments pattern_match {N} n {Γ σ} pat [w].
 
     End PatternMatching.
@@ -1213,14 +684,9 @@ Module Type SymbolicExecOn
           | asn.chunk c => produce_chunk <$> persist c
           | asn.chunk_angelic c => produce_chunk <$> persist c
           | asn.pattern_match s pat rhs =>
-             fun w1 r01 =>
-               demonic_pattern_match id pat s⟨r01⟩
-                 (fun pc w2 r12 ζ =>
-                    produce (wcat w0 (PatternCaseCtx pc))
-                      (rhs pc) w2 (acc_cat_left (r01 ∘ r12) ζ))
-               (* ⟨ r12 ⟩ '(existT pc ζ) <- pattern_match id pat s⟨r01⟩ ;; *)
-               (* produce (wcat w0 (PatternCaseCtx pc)) *)
-               (*   (rhs pc) _ (acc_cat_left (r01 ∘ r12) ζ) *)
+             fun w1 θ1 =>
+               ⟨ θ2 ⟩ '(existT pc ζ) <- demonic_pattern_match id pat s⟨θ1⟩ ;;
+               produce (wcat w0 (PatternCaseCtx pc)) (rhs pc) _ (acc_cat_left (θ1 ∘ θ2) ζ)
            | asn.sep a1 a2 =>
              fun w1 ω01 =>
                ⟨ ω12 ⟩ _ <- produce w0 a1 w1 ω01 ;;
@@ -1251,14 +717,9 @@ Module Type SymbolicExecOn
           | asn.chunk c => consume_chunk <$> persist c
           | asn.chunk_angelic c => consume_chunk_angelic <$> persist c
           | asn.pattern_match s pat rhs =>
-             fun w1 r01 =>
-               angelic_pattern_match id pat s⟨r01⟩
-                 (fun pc w2 r12 ζ =>
-                    consume (wcat w0 (PatternCaseCtx pc))
-                      (rhs pc) w2 (acc_cat_left (r01 ∘ r12) ζ))
-               (* ⟨ r12 ⟩ '(existT pc ζ) <- wip_pattern_match id pat s⟨r01⟩ ;; *)
-               (* consume (wcat w0 (PatternCaseCtx pc)) *)
-               (*   (rhs pc) _ (acc_cat_left (r01 ∘ r12) ζ) *)
+             fun w1 θ1 =>
+               ⟨ θ2 ⟩ '(existT pc ζ) <- angelic_pattern_match id pat s⟨θ1⟩ ;;
+               consume (wcat w0 (PatternCaseCtx pc)) (rhs pc) _ (acc_cat_left (θ1 ∘ θ2) ζ)
           | asn.sep a1 a2 =>
             fun w1 ω01 =>
               ⟨ ω12 ⟩ _ <- consume w0 a1 w1 ω01 ;;
@@ -1415,14 +876,9 @@ Module Type SymbolicExecOn
                 ⟨ ω34 ⟩ _ <- T (produce (asn.chunk (chunk_ptsreg reg tnew))) ;;
                 pure (persist__term tnew ω34)
             | stm_pattern_match s pat rhs =>
-                ⟨ ω1 ⟩ v  <- exec_aux s ;;
-                demonic_pattern_match
-                  PVartoLVar pat v
-                  (fun pc w2 ω2 vs =>
-                     pushspops vs (exec_aux (rhs pc)))
-                (* ⟨ r1 ⟩ v  <- exec_aux s ;; *)
-                (* ⟨ r2 ⟩ '(existT pc vs) <- wip_pattern_match PVartoLVar pat v ;; *)
-                (* pushspops vs (exec_aux (rhs pc)) *)
+                ⟨ θ1 ⟩ v  <- exec_aux s ;;
+                ⟨ θ2 ⟩ '(existT pc vs) <- demonic_pattern_match PVartoLVar pat v ;;
+                pushspops vs (exec_aux (rhs pc))
             | stm_bind _ _ =>
                 error
                   (fun δ h =>
@@ -1495,11 +951,10 @@ Module Type SymbolicExecOn
 
   Module Replay.
 
-    Import SPureSpecM.
-    Import SPureSpecM.notations.
+    Import SPureSpec SPureSpec.notations.
 
     Definition replay_aux : forall {Σ} (s : 𝕊 Σ) {w : World},
-        MkWorld Σ ctx.nil ⊒ w -> SPureSpecM Unit w :=
+        MkWorld Σ ctx.nil ⊒ w -> SPureSpec Unit w :=
       fix replay {Σ} s {w} {struct s} :=
         match s with
         | SymProp.angelic_binary o1 o2 =>
@@ -1551,7 +1006,7 @@ Module Type SymbolicExecOn
               replay k (@acc_sub (MkWorld (Σ-x∷σ) ctx.nil) _ ζ entails_nil ∘ r12)
         | SymProp.pattern_match s pat rhs => fun r P => SymProp.error amsg.empty (* FIXME *)
         | SymProp.pattern_match_var x pat rhs => fun r P => SymProp.error amsg.empty (* FIXME *)
-        | debug b k => fun r01 P => debug (subst b (sub_acc r01)) (replay k r01 P)
+        | SymProp.debug b k => fun r01 P => SymProp.debug (subst b (sub_acc r01)) (replay k r01 P)
         end.
 
     Definition replay {Σ} (s : 𝕊 Σ) : 𝕊 Σ :=

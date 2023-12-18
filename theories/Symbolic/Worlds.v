@@ -700,7 +700,8 @@ Module Type WorldsOn
     #[export] Instance RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
     #[export] Instance RHeap : Rel SHeap SCHeap := RInst SHeap SCHeap.
 
-    #[export] Instance RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A :=
+    (* Give the [RMsg] instance a lower priority (3) than [RImpl]. *)
+    #[export] Instance RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A | 3 :=
       MkRel (fun w ι t v => forall m, RSat RA ι (t m) v).
     #[global] Arguments RMsg M%modal {AT A} RA%R.
 

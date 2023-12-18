@@ -80,23 +80,24 @@ Module Type Soundness
       Lemma consume_chunk_monotonic {Γ} {c : SCChunk} :
         Monotonic' (consume_chunk (Γ := Γ) c).
       Proof.
-        cbv [Monotonic' consume_chunk bind bind_right get_heap angelic_list
-             lift_purem assert_formula put_heap CPureSpecM.assert_formula
+        cbv [Monotonic' consume_chunk bind get_heap angelic_list
+             lift_purem assert_formula put_heap CPureSpec.assert_formula
              assert_eq_chunk].
-        intros δ P Q PQ h. rewrite ?CPureSpecM.wp_angelic_list.
+        intros δ P Q PQ h. rewrite ?CPureSpec.wp_angelic_list.
         intros [ch' Hwp]; exists ch'; revert Hwp. destruct ch'.
-        rewrite ?CPureSpecM.wp_assert_eq_chunk. intuition.
+        rewrite ?CPureSpec.wp_assert_eq_chunk. intuition.
       Qed.
 
       Lemma consume_monotonic {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
         Monotonic' (consume (Γ := Γ) ι asn).
       Proof.
         intros δ. induction asn; cbn; intros * PQ *.
-        - unfold assert_formula, lift_purem, CPureSpecM.assert_formula.
+        - unfold assert_formula, lift_purem, CPureSpec.assert_formula,
+            CPureSpec.assert_pathcondition.
           intuition.
         - now apply consume_chunk_monotonic.
         - now apply consume_chunk_monotonic.
-        - rewrite !wp_angelic_pattern_match.
+        - unfold bind. rewrite !wp_angelic_pattern_match.
           destruct pattern_match_val. now apply H.
         - unfold bind.
           apply IHasn1; eauto.
@@ -112,11 +113,12 @@ Module Type Soundness
         Monotonic' (produce (Γ := Γ) ι asn).
       Proof.
         intros δ. induction asn; cbn; intros * PQ *.
-        - unfold assume_formula, lift_purem, CPureSpecM.assume_formula.
+        - unfold assume_formula, lift_purem, CPureSpec.assume_formula,
+            CPureSpec.assume_pathcondition.
           intuition.
         - unfold produce_chunk; eauto.
         - unfold produce_chunk; eauto.
-        - rewrite !wp_demonic_pattern_match.
+        - unfold bind. rewrite !wp_demonic_pattern_match.
           destruct pattern_match_val. now apply H.
         - unfold bind.
           apply IHasn1; eauto.
@@ -124,7 +126,7 @@ Module Type Soundness
           split.
           + apply IHasn1 with (P := P); assumption.
           + apply IHasn2 with (P := P); assumption.
-        - unfold bind, demonic, lift_purem, CPureSpecM.demonic. eauto.
+        - unfold bind, demonic, lift_purem, CPureSpec.demonic. eauto.
         - unfold pure; eauto.
       Qed.
 
@@ -132,13 +134,13 @@ Module Type Soundness
         Monotonic (call_lemma (Γ := Γ) lem δΔ).
       Proof.
         destruct lem; intros P Q PQ δ h;
-          cbv [call_lemma bind bind_right
+          cbv [call_lemma bind
                angelic_ctx lift_purem assert_formula
-               CPureSpecM.assert_formula].
-        rewrite ?CPureSpecM.wp_angelic_ctx.
+               CPureSpec.assert_formula].
+        rewrite ?CPureSpec.wp_angelic_ctx.
         intros [ι Hwp]. exists ι. revert Hwp.
         unfold assert_eq_nenv, lift_purem.
-        rewrite ?CPureSpecM.wp_assert_eq_nenv.
+        rewrite ?CPureSpec.wp_assert_eq_nenv.
         intros [Hfmls Hwp]; split; auto; revert Hwp.
         apply consume_monotonic. intros _ ?.
         apply produce_monotonic; auto.
@@ -148,13 +150,13 @@ Module Type Soundness
         Monotonic (call_contract (Γ := Γ) c δΔ).
       Proof.
         destruct c; intros P Q PQ δ h;
-          cbv [call_contract bind_right bind pure demonic
+          cbv [call_contract bind pure demonic
                angelic_ctx demonic lift_purem assert_formula
-               CPureSpecM.assert_formula].
-        rewrite ?CPureSpecM.wp_angelic_ctx.
+               CPureSpec.assert_formula].
+        rewrite ?CPureSpec.wp_angelic_ctx.
         intros [ι Hwp]. exists ι. revert Hwp.
         unfold assert_eq_nenv, lift_purem.
-        rewrite ?CPureSpecM.wp_assert_eq_nenv.
+        rewrite ?CPureSpec.wp_assert_eq_nenv.
         intros [Hfmls Hwp]; split; auto; revert Hwp.
         apply consume_monotonic. intros _ ? Hwp v.
         specialize (Hwp v); revert Hwp.
@@ -190,6 +192,7 @@ Module Type Soundness
         - auto.
         - apply IHs. intros ? ? ?.
           rewrite !wp_demonic_pattern_match.
+          destruct pattern_match_val.
           apply H; auto.
         - intros [v Hwp]; exists v; revert Hwp.
           apply consume_chunk_monotonic. auto.
@@ -253,11 +256,11 @@ Module Type Soundness
         consume_chunk c (fun _ => liftP POST) δ h ->
         interpret_scheap h ⊢ interpret_scchunk c ∗ POST δ.
     Proof.
-      cbv [bind bind_right get_heap consume_chunk angelic_list assert_eq_chunk
-           CPureSpecM.assert_formula lift_purem assert_formula put_heap].
-      intros δ h. rewrite CPureSpecM.wp_angelic_list.
+      cbv [bind get_heap consume_chunk angelic_list assert_eq_chunk
+           CPureSpec.assert_formula lift_purem assert_formula put_heap].
+      intros δ h. rewrite CPureSpec.wp_angelic_list.
       intros [[c' h'] [HIn Hwp]].
-      rewrite CPureSpecM.wp_assert_eq_chunk in Hwp.
+      rewrite CPureSpec.wp_assert_eq_chunk in Hwp.
       destruct Hwp as [Hc HPOST]. subst c'.
       apply in_heap_extractions in HIn; rewrite HIn; clear HIn.
       now apply bi.sep_mono'.
@@ -297,7 +300,7 @@ Module Type Soundness
         now rewrite interpret_scchunk_inst in Hc.
       - intros Hc%consume_chunk_sound.
         now rewrite interpret_scchunk_inst in Hc.
-      - rewrite wp_angelic_pattern_match.
+      - unfold bind. rewrite wp_angelic_pattern_match.
         destruct pattern_match_val; auto.
       - unfold bind. intros Hwp. rewrite <- bi.sep_assoc.
         apply (IHasn1 ι (fun δ => asn.interpret asn2 ι ∗ POST δ)%I δ1 h1); clear IHasn1.
@@ -332,7 +335,7 @@ Module Type Soundness
       - rewrite bi.sep_comm.
         unfold produce_chunk, liftP; cbn.
         now rewrite interpret_scchunk_inst.
-      - rewrite wp_demonic_pattern_match.
+      - unfold bind. rewrite wp_demonic_pattern_match.
         destruct pattern_match_val; auto.
       - unfold bind. intros Hwp.
         rewrite bi.sep_assoc.
@@ -373,12 +376,12 @@ Module Type Soundness
       CTriple (interpret_scheap h) c δΔ  (fun v => POST v δΓ).
     Proof.
       destruct c as [Σe δe req result ens].
-      unfold call_contract. unfold bind_right, bind.
+      unfold call_contract. unfold bind.
       unfold angelic_ctx, lift_purem.
-      rewrite CPureSpecM.wp_angelic_ctx.
+      rewrite CPureSpec.wp_angelic_ctx.
       intros [ι Hwp]; revert Hwp.
       unfold assert_eq_nenv, lift_purem.
-      rewrite CPureSpecM.wp_assert_eq_nenv.
+      rewrite CPureSpec.wp_assert_eq_nenv.
       intros [Hfmls Hwp]. cbn.
       apply bi.exist_intro' with ι.
       apply bi.and_intro; auto.
@@ -398,12 +401,12 @@ Module Type Soundness
       LTriple δΔ (interpret_scheap h) (POST δΓ) lem.
     Proof.
       destruct lem as [Σe δe req ens].
-      unfold call_lemma. unfold bind_right, bind.
+      unfold call_lemma. unfold bind.
       unfold angelic_ctx, lift_purem.
-      rewrite CPureSpecM.wp_angelic_ctx.
+      rewrite CPureSpec.wp_angelic_ctx.
       intros [ι Hwp]; revert Hwp.
       unfold assert_eq_nenv, lift_purem.
-      rewrite CPureSpecM.wp_assert_eq_nenv.
+      rewrite CPureSpec.wp_assert_eq_nenv.
       intros [Hfmls Hwp]. constructor.
       apply bi.exist_intro' with ι.
       apply bi.and_intro; auto.

@@ -681,7 +681,7 @@ Module BlockVerificationDerived2Sem.
       cbv [pure CHeapSpecM.pure].
       apply PQ.
     - intros ainstr apc.
-      cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpecM.assert_formula].
+      cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpec.assert_formula].
       intros δ P Q PQ h [<- Hverif].
       split; [reflexivity|].
       revert Hverif.
@@ -815,7 +815,7 @@ Module BlockVerification3Sem.
       apply PQ.
     - destruct instr.
       + intros ainstr apc.
-        cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpecM.assert_formula].
+        cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpec.assert_formula].
         intros δ P Q PQ h [<- Hverif].
         split; [reflexivity|].
         revert Hverif.
@@ -828,7 +828,7 @@ Module BlockVerification3Sem.
         cbv [Monotonic' pure CHeapSpecM.pure].
         intros. now apply PQ.
       + intros ainstr apc.
-        cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpecM.assert_formula].
+        cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpec.assert_formula].
         intros δ P Q PQ h.
         apply call_lemma_monotonic.
         intros res δ1 h2.
