@@ -39,6 +39,7 @@ From Katamaran Require Import
   Base
   Syntax.Chunks
   Syntax.Predicates
+  Symbolic.Propositions
   Symbolic.Worlds.
 
 Import SignatureNotations ctx.notations env.notations.
@@ -67,12 +68,16 @@ End Monotonic.
   (forall a, Monotonic MB (f a)) -> Monotonic (eq ==> MB) f.
 Proof. unfold Monotonic. intros pf ? ? <-. auto. Qed.
 
+#[export] Instance monotonic_pointwise {A B} {MB : relation B} {f : A -> B} :
+  (forall a, Monotonic MB (f a)) -> Monotonic (A ::> MB) f.
+Proof. intros pf a. apply pf. Qed.
+
 #[export] Instance monotonic_eq_refl {A} {a : A} :
   Monotonic eq a.
 Proof. easy. Qed.
 
 Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
-  (Import W : WorldsMixin B P).
+  (Import W : WorldsMixin B P) (Import SP : SymPropOn B P W).
 
   (* This is used by potentially multiple instances, but ultimately should be
      moved somewhere else. *)
@@ -324,6 +329,53 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       | _ , _ => error
       end.
 
+    Definition replay_aux :
+      forall {Σ} (s : 𝕊 Σ) (ι : Valuation Σ), CPureSpec unit :=
+      fix replay {Σ} s ι :=
+        match s with
+        | SymProp.angelic_binary o1 o2 =>
+            angelic_binary (replay o1 ι) (replay o2 ι)
+        | SymProp.demonic_binary o1 o2 =>
+            demonic_binary (replay o1 ι) (replay o2 ι)
+        | SymProp.block =>
+            block
+        | SymProp.error msg =>
+            error
+        | SymProp.assertk fml msg k =>
+            assert_formula (instprop fml ι) ;;
+            replay k ι
+        | SymProp.assumek fml k =>
+            assume_formula (instprop fml ι) ;;
+            replay k ι
+        | SymProp.angelicv b k =>
+            v <- angelic _ ;;
+            replay k (env.snoc ι b v)
+        | SymProp.demonicv b k =>
+            v <- demonic _ ;;
+            replay k (env.snoc ι b v )
+        | @SymProp.assert_vareq _ x σ xIn t msg k =>
+            let ι' := env.remove (x ∷ σ) ι xIn in
+            let x' := ι.[? x∷σ] in
+            let t' := inst t ι' in
+            assert_formula (x' = t') ;;
+            replay k ι'
+        | @SymProp.assume_vareq _ x σ xIn t k =>
+            let ι' := env.remove (x ∷ σ) ι xIn in
+            let x' := ι.[? x∷σ] in
+            let t' := inst t ι' in
+            assume_formula (x' = t') ;;
+            replay k ι'
+        | SymProp.pattern_match s pat rhs =>
+            error
+        | SymProp.pattern_match_var x pat rhs =>
+            error
+        | SymProp.debug b k =>
+            debug (replay k ι)
+        end.
+
+    Definition replay [Σ] (P : 𝕊 Σ) (ι : Valuation Σ) :Prop :=
+      run (replay_aux P ι).
+
     #[export] Instance mon_run :
       Monotonic (MPureSpec eq ==> impl) run.
     Proof. firstorder. Qed.
@@ -443,6 +495,17 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     #[export] Instance mon_assert_eq_chunk {c1 c2} :
       Monotonic (MPureSpec eq) (@assert_eq_chunk c1 c2).
     Proof. revert c2; induction c1; intros []; cbn; typeclasses eauto. Qed.
+
+    #[export] Instance mon_replay_aux {Σ} (P : 𝕊 Σ) (ι : Valuation Σ) :
+      Monotonic (MPureSpec eq) (replay_aux P ι).
+    Proof. induction P; typeclasses eauto. Qed.
+
+    #[export] Instance mon_replay {Σ} (P : 𝕊 Σ) :
+      Monotonic (Valuation Σ ::> impl) (replay P).
+    Proof.
+      apply monotonic_pointwise. intros ι.
+      apply mon_run, mon_replay_aux.
+    Qed.
 
     Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
       angelic_ctx Δ POST <-> exists vs : NamedEnv Val Δ, POST vs.
@@ -585,6 +648,26 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           now dependent elimination Heq.
       - rewrite IHc1, IHc2. intuition congruence.
       - rewrite IHc1, IHc2. intuition congruence.
+    Qed.
+
+    Lemma replay_sound {Σ} (s : 𝕊 Σ) (ι : Valuation Σ) :
+      replay s ι -> SymProp.safe s ι.
+    Proof.
+      unfold replay, run.
+      induction s; cbn.
+      - intros [|]; intuition auto.
+      - intros []; intuition auto.
+      - inversion 1.
+      - auto.
+      - intros []. intuition auto.
+      - intuition auto.
+      - apply ex_impl_morphism. intros v; red; apply IHs.
+      - apply all_impl_morphism. intros v; red; apply IHs.
+      - intros []. intuition auto.
+      - intuition auto.
+      - inversion 1.
+      - inversion 1.
+      - unfold debug. apply IHs.
     Qed.
 
   End CPureSpec.

@@ -949,76 +949,12 @@ Module Type SymbolicExecOn
 
   End SStoreSpec.
 
-  Module Replay.
-
-    Import SPureSpec SPureSpec.notations.
-
-    Definition replay_aux : forall {Σ} (s : 𝕊 Σ) {w : World},
-        MkWorld Σ ctx.nil ⊒ w -> SPureSpec Unit w :=
-      fix replay {Σ} s {w} {struct s} :=
-        match s with
-        | SymProp.angelic_binary o1 o2 =>
-            fun r => angelic_binary (replay o1 r) (replay o2 r)
-        | SymProp.demonic_binary o1 o2 =>
-            fun r => demonic_binary (replay o1 r) (replay o2 r)
-        | SymProp.block =>
-            fun r => block
-        | SymProp.error msg =>
-            fun r => error msg⟨r⟩
-        | assertk fml msg k =>
-            fun r01 =>
-              ⟨ r12 ⟩ _ <- assert_formula msg⟨r01⟩ fml⟨r01⟩ ;;
-              replay k (r01 ∘ r12)
-        | assumek fml k =>
-            fun r01 =>
-              ⟨ r12 ⟩ _ <- assume_formula fml⟨r01⟩ ;;
-              replay k (r01 ∘ r12)
-        | angelicv b k =>
-            fun r01 P =>
-              angelicv b
-                (replay k
-                   (@acc_sub (MkWorld (Σ▻b) ctx.nil) (wsnoc w b)
-                      (sub_up1 (sub_acc r01))
-                      entails_nil)
-                   (four P acc_snoc_right))
-        | demonicv b k =>
-            fun r01 P =>
-              demonicv b
-                (replay k
-                   (@acc_sub (MkWorld (Σ▻b) ctx.nil) (wsnoc w b)
-                      (sub_up1 (sub_acc r01))
-                      entails_nil)
-                   (four P acc_snoc_right))
-        | @assert_vareq _ x σ xIn t msg k =>
-            fun r01 =>
-              let ζ    := subst (sub_shift xIn) (sub_acc r01) in
-              let msg1 := subst msg ζ in
-              let x1   := subst (T := fun Σ => Term Σ _) (term_var x) (sub_acc r01) in
-              let t1   := subst (T := fun Σ => Term Σ _) t ζ in
-              ⟨ r12 ⟩ _ <- assert_formula msg1 (formula_relop bop.eq x1 t1) ;;
-              replay k (@acc_sub (MkWorld (Σ-x∷σ) ctx.nil) _ ζ entails_nil ∘ r12)
-        | @assume_vareq _ x σ xIn t k =>
-            fun r01 =>
-              let ζ    := subst (sub_shift xIn) (sub_acc r01) in
-              let x1   := subst (T := fun Σ => Term Σ _) (term_var x) (sub_acc r01) in
-              let t1   := subst (T := fun Σ => Term Σ _) t ζ in
-              ⟨ r12 ⟩ _ <- assume_formula (formula_relop bop.eq x1 t1) ;;
-              replay k (@acc_sub (MkWorld (Σ-x∷σ) ctx.nil) _ ζ entails_nil ∘ r12)
-        | SymProp.pattern_match s pat rhs => fun r P => SymProp.error amsg.empty (* FIXME *)
-        | SymProp.pattern_match_var x pat rhs => fun r P => SymProp.error amsg.empty (* FIXME *)
-        | SymProp.debug b k => fun r01 P => SymProp.debug (subst b (sub_acc r01)) (replay k r01 P)
-        end.
-
-    Definition replay {Σ} (s : 𝕊 Σ) : 𝕊 Σ :=
-      replay_aux s acc_refl (fun _ _ _ => SymProp.block).
-  End Replay.
-
   Module Symbolic.
     Import SStoreSpec.
 
     Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition
-        (postprocess (Replay.replay (postprocess (vcgen default_config fuel c body)))).
+        (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body)))).
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)
@@ -1039,7 +975,7 @@ Module Type SymbolicExecOn
     Qed.
 
     Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (ok (postprocess (Replay.replay (postprocess (vcgen default_config fuel c body))))).
+      is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body))))).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       ValidContractReflectWithFuel 1 c body.
@@ -1061,7 +997,7 @@ Module Type SymbolicExecOn
     Qed.
 
     Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
-      Erasure.erase_symprop (postprocess (Replay.replay (postprocess (vcgen default_config 1 c body)))).
+      Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen default_config 1 c body)))).
 
     Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasure c body).

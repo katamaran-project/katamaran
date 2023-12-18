@@ -311,7 +311,7 @@ Qed.
 Lemma symbolic_replay_valid_contract_main :
   VerificationCondition
     (postprocess
-       (ReplayExecutor.Replay.replay (postprocess (SStoreSpec.vcgen default_config 1 sep_contract_main (FunDef main))))).
+       (SPureSpec.replay (postprocess (SStoreSpec.vcgen default_config 1 sep_contract_main (FunDef main))))).
 Proof.
   compute. (* Output: with the replay functionality the residu VC is trivial. *)
   firstorder.

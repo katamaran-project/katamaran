@@ -55,7 +55,7 @@ Module Type RefinementMonadsOn
   (Import SK : SolverKit B PK WR)
   (Import SP : SymPropOn B PK WR)
   (Import GS : GenericSolverOn B PK WR SK)
-  (Import SHAL : ShallowMonadsOn B PK WR)
+  (Import SHAL : ShallowMonadsOn B PK WR SP)
   (Import SYMB : SymbolicMonadsOn B PK WR SK SP GS).
 
   Import ModalNotations logicalrelation logicalrelation.notations.
@@ -704,6 +704,80 @@ Module Type RefinementMonadsOn
       - eapply refine_bind; eauto. apply IHc1; auto.
         intros w2 ω12 ι2 Hι2 Hpc2 _ _ _. apply IHc2; auto.
         subst. now rewrite sub_acc_trans, inst_subst, <- inst_persist.
+    Qed.
+
+    Lemma refine_replay_aux {Σ} (s : 𝕊 Σ) :
+      ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RPureSpec RUnit⟧
+        (SPureSpec.replay_aux s) (CPureSpec.replay_aux s).
+    Proof.
+      unfold RValid, RImpl. cbn.
+      induction s; cbn [SPureSpec.replay CPureSpec.replay];
+        intros w ι Hpc sδ cδ rδ.
+      - apply refine_angelic_binary; auto.
+      - apply refine_demonic_binary; auto.
+      - apply refine_error; auto.
+      - apply refine_block; auto.
+      - eapply refine_bind; auto.
+        + apply refine_assert_formula; auto.
+          now apply refine_formula_subst.
+        + intros w1 θ1 ι1 Hι1 Hpc1 _ _ _.
+          apply IHs; auto. subst.
+          now rewrite <- inst_persist.
+      - eapply refine_bind; auto.
+        + apply refine_assume_formula; auto.
+          now apply refine_formula_subst.
+        + intros w1 θ1 ι1 Hι1 Hpc1 _ _ _.
+          apply IHs; auto. subst.
+          now rewrite <- inst_persist.
+      - eapply refine_bind; auto.
+        + apply refine_angelic; auto.
+        + intros w1 θ1 ι1 Hι1 Hpc1 t v ->.
+          apply IHs; auto. subst.
+          now rewrite <- inst_persist.
+      - eapply refine_bind; auto.
+        + apply refine_demonic; auto.
+        + intros w1 θ1 ι1 Hι1 Hpc1 t v ->.
+          apply IHs; auto. subst.
+          now rewrite <- inst_persist.
+      - eapply refine_bind; auto.
+        + apply refine_assert_formula; auto.
+          cbn. subst.
+          rewrite !inst_subst.
+          rewrite inst_sub_shift.
+          now rewrite <- inst_lookup.
+        + intros w1 θ1 ι1 Hι1 Hpc1 _ _ _.
+          apply IHs; auto. subst.
+          rewrite <- inst_subst.
+          rewrite <- persist_subst.
+          rewrite <- inst_sub_shift.
+          rewrite <- inst_subst.
+          rewrite sub_comp_shift.
+          reflexivity.
+      - eapply refine_bind; auto.
+        + apply refine_assume_formula; auto.
+          cbn. subst.
+          rewrite !inst_subst.
+          rewrite inst_sub_shift.
+          now rewrite <- inst_lookup.
+        + intros w1 θ1 ι1 Hι1 Hpc1 _ _ _.
+          apply IHs; auto. subst.
+          rewrite <- inst_subst.
+          rewrite <- persist_subst.
+          rewrite <- inst_sub_shift.
+          rewrite <- inst_subst.
+          rewrite sub_comp_shift.
+          reflexivity.
+      - apply refine_error; auto.
+      - apply refine_error; auto.
+      - apply refine_debug; auto.
+    Qed.
+
+    Lemma refine_replay {w : World} (s : 𝕊 w) ι (Hpc : instprop (wco w) ι) :
+      ℛ⟦ℙ⟧@{ι} (SPureSpec.replay s) (CPureSpec.replay s ι).
+    Proof.
+      apply refine_run; auto.
+      apply refine_replay_aux; auto.
+      cbn. now rewrite inst_sub_id.
     Qed.
 
   End RPureSpec.
