@@ -51,7 +51,7 @@ Module Type Soundness
   (Import EXEC : ShallowExecOn B SIG PROG SPEC)
   (Import HOAR : ProgramLogicOn B SIG PROG SPEC).
 
-  Import CHeapSpecM.
+  Import CStoreSpec.
   Import ProgramLogic.
 
   Section Soundness.
@@ -64,14 +64,14 @@ Module Type Soundness
        transformers. Which is a necessity for the main soundness theorems. *)
     Section Monotonicity.
 
-      Definition Monotonic {Γ1 Γ2 A} (m : CHeapSpecM Γ1 Γ2 A) : Prop :=
+      Definition Monotonic {Γ1 Γ2 A} (m : CStoreSpec Γ1 Γ2 A) : Prop :=
         forall
           (P Q : A -> CStore Γ2 -> SCHeap -> Prop)
           (PQ : forall x δ h, P x δ h -> Q x δ h),
           forall δ h, m P δ h -> m Q δ h.
 
       (* Stronger version for those that do not change the store. *)
-      Definition Monotonic' {Γ A} (m : CHeapSpecM Γ Γ A) : Prop :=
+      Definition Monotonic' {Γ A} (m : CStoreSpec Γ Γ A) : Prop :=
         forall δ
           (P Q : A -> CStore Γ -> SCHeap -> Prop)
           (PQ : forall x h, P x δ h -> Q x δ h),
@@ -609,10 +609,10 @@ Module Type Soundness
     Qed.
 
     Lemma vcgen_sound n {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-      CHeapSpecM.vcgen n c body ->
+      CStoreSpec.vcgen n c body ->
       ProgramLogic.ValidContract c body.
     Proof.
-      unfold CHeapSpecM.vcgen, ProgramLogic.ValidContract.
+      unfold CStoreSpec.vcgen, ProgramLogic.ValidContract.
       unfold inst_contract_localstore.
       unfold exec_contract, bind.
       destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.

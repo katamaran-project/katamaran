@@ -83,20 +83,20 @@ Module BlockVerificationDerived2.
 
   Import ModalNotations.
 
-  Definition M : TYPE -> TYPE := SHeapSpecM [] [].
+  Definition M : TYPE -> TYPE := SStoreSpec [] [].
 
-  Definition pure {A} : ⊢ A -> M A := SHeapSpecM.pure.
-  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SHeapSpecM.bind.
-  Definition angelic : ⊢ ∀ σ : Ty, M (STerm σ) := @SHeapSpecM.angelic [] None.
-  Definition demonic : ⊢ ∀ σ : Ty, M (STerm σ) := @SHeapSpecM.demonic [] None.
-  Definition assert : ⊢ Formula -> M Unit := SHeapSpecM.assert_formula.
-  Definition assume : ⊢ Formula -> M Unit := SHeapSpecM.assume_formula.
+  Definition pure {A} : ⊢ A -> M A := SStoreSpec.pure.
+  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SStoreSpec.bind.
+  Definition angelic : ⊢ ∀ σ : Ty, M (STerm σ) := @SStoreSpec.angelic [] None.
+  Definition demonic : ⊢ ∀ σ : Ty, M (STerm σ) := @SStoreSpec.demonic [] None.
+  Definition assert : ⊢ Formula -> M Unit := SStoreSpec.assert_formula.
+  Definition assume : ⊢ Formula -> M Unit := SStoreSpec.assume_formula.
 
-  Definition produce_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.produce_chunk.
-  Definition consume_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.consume_chunk.
+  Definition produce_chunk : ⊢ Chunk -> M Unit := SStoreSpec.produce_chunk.
+  Definition consume_chunk : ⊢ Chunk -> M Unit := SStoreSpec.consume_chunk.
 
-  Definition produce : ⊢ Assertion -> □(M Unit) := SHeapSpecM.produce.
-  Definition consume : ⊢ Assertion -> □(M Unit) := SHeapSpecM.consume.
+  Definition produce : ⊢ Assertion -> □(M Unit) := SStoreSpec.produce.
+  Definition consume : ⊢ Assertion -> □(M Unit) := SStoreSpec.consume.
 
   Notation "ω ∣ x <- ma ;; mb" :=
     (bind ma (fun _ ω x => mb))
@@ -111,7 +111,7 @@ Module BlockVerificationDerived2.
       ω4 ∣ _ <- produce_chunk (chunk_user ptstoinstr [persist__term a ω2; term_val ty_ast i]) ;;
       ω6 ∣ an <- @demonic _ _ ;;
       ω7 ∣ _ <- produce_chunk (chunk_ptsreg nextpc an) ;;
-      ω8 ∣ _ <- SHeapSpecM.exec default_config inline_fuel (FunDef step) ;;
+      ω8 ∣ _ <- SStoreSpec.exec default_config inline_fuel (FunDef step) ;;
       ω9 ∣ _ <- consume_chunk (chunk_user ptstoinstr [persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8); term_val ty_ast i]) ;;
       ω10 ∣ na <- @angelic _ _ ;;
       ω11 ∣ _ <- consume_chunk (chunk_ptsreg nextpc na) ;;
@@ -228,16 +228,16 @@ Module BlockVerification3.
           | AnnotAST i => ω1 ∣ _ <- assert (formula_relop bop.eq ainstr apc) ;;
                          ω2 ∣ apc' <- exec_instruction_any i (persist__term apc ω1) ;;
                          @exec_block_addr b' _ (term_binop bop.bvadd (persist__term ainstr (ω1 ∘ ω2)) (term_val ty_word bv_instrsize)) apc'
-          | AnnotDebugBreak => SHeapSpecM.debug
+          | AnnotDebugBreak => SStoreSpec.debug
                                 (fun (δ0 : SStore [ctx] w0) (h0 : SHeap w0) =>
                                    amsg.mk
                                      {| debug_blockver_pathcondition := wco w0;
                                        debug_blockver_heap := h0
                                      |})
-                                (SHeapSpecM.pure apc)
+                                (SStoreSpec.pure apc)
           | AnnotLemmaInvocation l es =>
-              ω1 ∣ args <- SHeapSpecM.eval_exps es (w:=w0) ;;
-              ω2 ∣ _ <- SHeapSpecM.call_lemma (LEnv l) args ;;
+              ω1 ∣ args <- SStoreSpec.eval_exps es (w:=w0) ;;
+              ω2 ∣ _ <- SStoreSpec.call_lemma (LEnv l) args ;;
               @exec_block_addr b' _ (persist__term ainstr (ω1 ∘ ω2)) (persist__term apc (ω1 ∘ ω2))
           end
       end.
@@ -269,20 +269,20 @@ Module BlockVerificationDerived2Sound.
   Import RiscvPmpBlockVerifShalExecutor.
   Import RiscvPmpIrisInstanceWithContracts.
 
-  Definition M : Type -> Type := CHeapSpecM [] [].
+  Definition M : Type -> Type := CStoreSpec [] [].
 
-  Definition pure {A} : A -> M A := CHeapSpecM.pure.
-  Definition bind {A B} : M A -> (A -> M B) -> M B := CHeapSpecM.bind.
-  Definition angelic {σ} : M (Val σ) := @CHeapSpecM.angelic [] σ.
-  Definition demonic {σ} : M (Val σ) := @CHeapSpecM.demonic [] σ.
-  Definition assert : Prop -> M unit := CHeapSpecM.assert_formula.
-  Definition assume : Prop -> M unit := CHeapSpecM.assume_formula.
+  Definition pure {A} : A -> M A := CStoreSpec.pure.
+  Definition bind {A B} : M A -> (A -> M B) -> M B := CStoreSpec.bind.
+  Definition angelic {σ} : M (Val σ) := @CStoreSpec.angelic [] σ.
+  Definition demonic {σ} : M (Val σ) := @CStoreSpec.demonic [] σ.
+  Definition assert : Prop -> M unit := CStoreSpec.assert_formula.
+  Definition assume : Prop -> M unit := CStoreSpec.assume_formula.
 
-  Definition produce_chunk : SCChunk -> M unit := CHeapSpecM.produce_chunk.
-  Definition consume_chunk : SCChunk -> M unit := CHeapSpecM.consume_chunk.
+  Definition produce_chunk : SCChunk -> M unit := CStoreSpec.produce_chunk.
+  Definition consume_chunk : SCChunk -> M unit := CStoreSpec.consume_chunk.
 
-  Definition produce {Σ} : Valuation Σ -> Assertion Σ -> M unit := CHeapSpecM.produce.
-  Definition consume {Σ} : Valuation Σ -> Assertion Σ -> M unit := CHeapSpecM.consume.
+  Definition produce {Σ} : Valuation Σ -> Assertion Σ -> M unit := CStoreSpec.produce.
+  Definition consume {Σ} : Valuation Σ -> Assertion Σ -> M unit := CStoreSpec.consume.
 
   Notation "x <- ma ;; mb" :=
     (bind ma (fun x => mb))
@@ -295,7 +295,7 @@ Module BlockVerificationDerived2Sound.
       _ <- produce_chunk (scchunk_user ptstoinstr [a; i]) ;;
       an <- @demonic _ ;;
       _ <- produce_chunk (scchunk_ptsreg nextpc an) ;;
-      _ <- CHeapSpecM.exec inline_fuel (FunDef step) ;;
+      _ <- CStoreSpec.exec inline_fuel (FunDef step) ;;
       _ <- consume_chunk (scchunk_user ptstoinstr [a ; i]) ;;
       na <- @angelic _ ;;
       _ <- consume_chunk (scchunk_ptsreg nextpc na) ;;
@@ -305,7 +305,7 @@ Module BlockVerificationDerived2Sound.
   Import logicalrelation logicalrelation.notations.
 
   Lemma refine_exec_instruction_any (i : AST) :
-    ℛ⟦RVal ty_xlenbits -> RHeapSpecM [ctx] [ctx] (RVal ty_xlenbits)⟧
+    ℛ⟦RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits)⟧
       (BlockVerificationDerived2.exec_instruction_any i)
       (exec_instruction_any__c i).
   Proof.
@@ -366,7 +366,7 @@ Module BlockVerificationDerived2Sound.
       end.
 
   Lemma refine_exec_block_addr (b : list AST) :
-    ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpecM [ctx] [ctx] (RVal ty_xlenbits)⟧
+    ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits)⟧
       (@BlockVerificationDerived2.exec_block_addr b)
       (exec_block_addr__c b).
   Proof.
@@ -410,7 +410,7 @@ Module BlockVerificationDerived2Sound.
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
     forall {ι0 : Valuation Σ} (Hpc0 : instprop (wco Σ) ι0),
-      ℛ⟦RHeapSpecM [ctx] [ctx] RUnit⟧@{ι0}
+      ℛ⟦RStoreSpec [ctx] [ctx] RUnit⟧@{ι0}
         (@BlockVerificationDerived2.exec_triple_addr Σ req b ens)
         (exec_triple_addr__c ι0 req b ens).
   Proof.
@@ -465,8 +465,8 @@ Module BlockVerification3Sound.
                          @exec_block_addr__c b' (bv.add ainstr bv_instrsize) apc'
           | AnnotDebugBreak => pure apc
           | AnnotLemmaInvocation l es =>
-              args <- CHeapSpecM.eval_exps es ;;
-              _ <- CHeapSpecM.call_lemma (LEnv l) args ;;
+              args <- CStoreSpec.eval_exps es ;;
+              _ <- CStoreSpec.call_lemma (LEnv l) args ;;
               exec_block_addr__c b' ainstr apc
           end
       end.
@@ -474,7 +474,7 @@ Module BlockVerification3Sound.
   Import logicalrelation logicalrelation.notations.
 
   Lemma refine_exec_block_addr (b : list AnnotInstr) :
-    ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpecM [ctx] [ctx] (RVal ty_xlenbits)⟧
+    ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits)⟧
       (@BlockVerification3.exec_block_addr b)
       (exec_block_addr__c b).
   Proof.
@@ -523,7 +523,7 @@ Module BlockVerification3Sound.
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AnnotInstr)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
     forall {ι0 : Valuation Σ} (Hpc0 : instprop (wco Σ) ι0),
-      ℛ⟦RHeapSpecM [ctx] [ctx] RUnit⟧@{ι0}
+      ℛ⟦RStoreSpec [ctx] [ctx] RUnit⟧@{ι0}
         (@BlockVerification3.exec_triple_addr Σ req b ens)
         (exec_triple_addr__c ι0 req b ens).
   Proof.
@@ -581,7 +581,7 @@ Module BlockVerificationDerived2Sem.
 
   Lemma mono_exec_instruction_any__c {i a} : Monotonic' (exec_instruction_any__c i a).
   Proof.
-    cbv [Monotonic' exec_instruction_any__c bind CHeapSpecM.bind produce_chunk CHeapSpecM.produce_chunk demonic CHeapSpecM.demonic angelic CHeapSpecM.angelic pure CHeapSpecM.pure].
+    cbv [Monotonic' exec_instruction_any__c bind CStoreSpec.bind produce_chunk CStoreSpec.produce_chunk demonic CStoreSpec.demonic angelic CStoreSpec.angelic pure CStoreSpec.pure].
     intros δ P Q PQ h eP v.
     destruct (env.view δ).
     specialize (eP v); revert eP.
@@ -678,10 +678,10 @@ Module BlockVerificationDerived2Sem.
     revert ainstr apc.
     induction instrs; cbn.
     - intros ainstr apc δ P Q PQ h.
-      cbv [pure CHeapSpecM.pure].
+      cbv [pure CStoreSpec.pure].
       apply PQ.
     - intros ainstr apc.
-      cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpec.assert_formula].
+      cbv [Monotonic' bind CStoreSpec.bind assert CStoreSpec.assert_formula CStoreSpec.lift_purem CPureSpec.assert_formula].
       intros δ P Q PQ h [<- Hverif].
       split; [reflexivity|].
       revert Hverif.
@@ -744,7 +744,7 @@ Module BlockVerificationDerived2Sem.
     intros Hexec.
     iIntros (a) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
     specialize (Hexec a).
-    unfold bind, CHeapSpecM.bind, produce in Hexec.
+    unfold bind, CStoreSpec.bind, produce in Hexec.
     iApply (produce_sound (fun _ =>
                              (lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
                              (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
@@ -811,11 +811,11 @@ Module BlockVerification3Sem.
     revert ainstr apc.
     induction instrs as [|instr instrs]; cbn.
     - intros ainstr apc δ P Q PQ h.
-      cbv [pure CHeapSpecM.pure].
+      cbv [pure CStoreSpec.pure].
       apply PQ.
     - destruct instr.
       + intros ainstr apc.
-        cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpec.assert_formula].
+        cbv [Monotonic' bind CStoreSpec.bind assert CStoreSpec.assert_formula CStoreSpec.lift_purem CPureSpec.assert_formula].
         intros δ P Q PQ h [<- Hverif].
         split; [reflexivity|].
         revert Hverif.
@@ -825,10 +825,10 @@ Module BlockVerification3Sem.
         intros res2 h3.
         now apply PQ.
       + intros ainstr apc.
-        cbv [Monotonic' pure CHeapSpecM.pure].
+        cbv [Monotonic' pure CStoreSpec.pure].
         intros. now apply PQ.
       + intros ainstr apc.
-        cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpec.assert_formula].
+        cbv [Monotonic' bind CStoreSpec.bind assert CStoreSpec.assert_formula CStoreSpec.lift_purem CPureSpec.assert_formula].
         intros δ P Q PQ h.
         apply call_lemma_monotonic.
         intros res δ1 h2.
@@ -883,9 +883,9 @@ Module BlockVerification3Sem.
         iApply ("Hk" with "[$Hpc $Hnpc $Hinstrs Hh]").
         now iApply Hpost.
       + iIntros (Hlemcall) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-        unfold bind, CHeapSpecM.bind in Hlemcall; cbn.
-        unfold CHeapSpecM.eval_exps in Hlemcall.
-        assert (CHeapSpecM.call_lemma (LEnv lem) (evals es [env]) (fun _ => liftP (fun δ => lptsreg pc apc ∗ (∃ v : Val ty_xlenbits, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) -∗
+        unfold bind, CStoreSpec.bind in Hlemcall; cbn.
+        unfold CStoreSpec.eval_exps in Hlemcall.
+        assert (CStoreSpec.call_lemma (LEnv lem) (evals es [env]) (fun _ => liftP (fun δ => lptsreg pc apc ∗ (∃ v : Val ty_xlenbits, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) -∗
                    (∀ an : Val ty_xlenbits, lptsreg pc an ∗ (∃ v : Val ty_xlenbits, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) ∗ POST an [env] -∗ WP_loop) -∗ WP_loop)%I) [env] h) as Hcalllemma.
         { revert Hlemcall.
           apply call_lemma_monotonic.
@@ -920,7 +920,7 @@ Module BlockVerification3Sem.
     intros lemSem Hexec.
     iIntros (a) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
     specialize (Hexec a).
-    unfold bind, CHeapSpecM.bind, produce in Hexec.
+    unfold bind, CStoreSpec.bind, produce in Hexec.
     iApply ((produce_sound (fun _ =>
     (lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
