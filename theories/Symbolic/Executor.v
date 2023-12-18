@@ -249,54 +249,6 @@ Module Type SymbolicExecOn
 
   End DebugInfo.
 
-  Module WorldInstance.
-
-    Record WInstance (w : World) : Set :=
-      MkWInstance
-        { ιassign :> Valuation w;
-          ιvalid  : instprop (wco w) ιassign;
-        }.
-
-    Program Definition winstance_formula {w} (ι : WInstance w) (fml : Formula w) (p : instprop fml ι) :
-      WInstance (wformula w fml) :=
-      {| ιassign := ι; |}.
-    Next Obligation.
-    Proof. intros. cbn. split; auto. apply ιvalid. Qed.
-
-    Program Definition winstance_snoc {w} (ι : WInstance w) {b : LVar ∷ Ty} (v : Val (type b)) :
-      WInstance (wsnoc w b) :=
-      {| ιassign := env.snoc (ιassign ι) b v; |}.
-    Next Obligation.
-    Proof.
-      intros. unfold wsnoc. cbn [wctx wco].
-      rewrite instprop_subst, inst_sub_wk1.
-      apply ιvalid.
-    Qed.
-
-    Program Definition winstance_subst {w} (ι : WInstance w) {x σ} {xIn : x∷σ ∈ w}
-      (t : Term (w - x∷σ) σ) (p : inst t (env.remove (x∷σ) (ιassign ι) xIn) = env.lookup (ιassign ι) xIn) :
-      WInstance (wsubst w x t) :=
-      @MkWInstance (wsubst w x t) (env.remove _ (ιassign ι) xIn) _.
-    Next Obligation.
-      intros * p. cbn. rewrite instprop_subst, <- inst_sub_shift in *.
-      rewrite inst_sub_single_shift; auto using ιvalid.
-    Qed.
-
-    Program Definition instacc {w0 w1} (ω01 : w0 ⊒ w1) : WInstance w1 -> WInstance w0 :=
-      match ω01 in (_ ⊒ w) return (WInstance w -> WInstance w0) with
-      | acc_refl            => fun ι => ι
-      | @acc_sub _ w1 ζ ent => fun ι1 => {| ιassign := inst ζ ι1; |}
-      end.
-    Next Obligation.
-    Proof.
-      intros. specialize (ent ι1).
-      rewrite <- instprop_subst.
-      apply ent.
-      apply ιvalid.
-    Qed.
-
-  End WorldInstance.
-
   Definition PROP : TYPE :=
     fun _ => Prop.
 

@@ -89,3 +89,4 @@ theories/Staging/CommandStep.v
 theories/Staging/NewShallow/Executor.v
 theories/Staging/NewShallow/IrisInstance.v
 theories/Staging/NewShallow/Soundness.v
+theories/Staging/WorldInstance.v
