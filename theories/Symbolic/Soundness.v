@@ -571,7 +571,7 @@ Module Soundness
         split; auto. revert Hwp.
         apply HPOST; wsimpl; auto; reflexivity.
     }
-    destruct (try_consume_chunk_precise hs c1) as [[h' eqs]|] eqn:?.
+    destruct (try_consume_chunk_precise_spec hs c1) as [[h' eqs] HIn|].
     { intros POST__s POST__c HPOST.
       intros δs δc Hδ hs' hc' Hh'.
       cbv [SStoreSpec.put_heap SStoreSpec.bind T]. cbn. intros Hwp.
@@ -582,25 +582,10 @@ Module Soundness
       cbv [CStoreSpec.bind CStoreSpec.put_heap CStoreSpec.assert_formula
            T CStoreSpec.angelic_list CStoreSpec.lift_purem].
       rewrite CPureSpec.wp_angelic_list.
-      destruct c1; cbn in Heqo; try discriminate Heqo; cbn.
-      - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; try discriminate Heqo.
-        remember (eq_rect (𝑯_Ty p) (Env (Term w1)) ts (ΔI ▻▻ ΔO) prec) as ts'.
-        destruct (env.catView ts') as [tsI tsO].
-        destruct (find_chunk_user_precise_spec prec tsI tsO hs) as [[h'' eqs''] HIn|];
-          inversion Heqo; subst; clear Heqo.
-        specialize (HIn ι1 Heqs). rewrite Heqts' in HIn.
-        rewrite rew_opp_l in HIn. rewrite Heqc1 in HIn.
-        rewrite peval_chunk_sound in HIn.
-        eexists; split; eauto. clear HIn.
-        hnf. rewrite CPureSpec.wp_assert_eq_chunk.
-        split; auto. now rewrite <- inst_persist.
-      - destruct (find_chunk_ptsreg_precise_spec r t hs) as [[h'' eqs''] HIn|];
-          inversion Heqo; subst; clear Heqo.
-        specialize (HIn ι1 Heqs). rewrite Heqc1 in HIn.
-        rewrite peval_chunk_sound in HIn.
-        eexists; split; eauto. clear HIn.
-        hnf. rewrite CPureSpec.wp_assert_eq_chunk.
-        split; auto. now rewrite <- inst_persist.
+      eexists. split. apply (HIn _ Heqs). hnf.
+      rewrite CPureSpec.wp_assert_eq_chunk.
+      split; auto. rewrite <- inst_persist.
+      subst. now rewrite peval_chunk_sound.
     }
     { intros POST__s POST__c HPOST.
       intros δs δc ? hs' hc' ? [].
@@ -636,37 +621,21 @@ Module Soundness
         rewrite CPureSpec.wp_assert_eq_chunk.
         split; auto. revert Hwp. apply HPOST; wsimpl; auto; reflexivity.
     }
-    destruct (try_consume_chunk_precise hs c1) as [[h' eqs]|] eqn:?.
+    destruct (try_consume_chunk_precise_spec hs c1) as [[h' eqs] HIn|].
     { intros POST__s POST__c HPOST.
-      intros δs δc -> hs' hc' ->.
-      cbv [SStoreSpec.put_heap T]. cbn. intros Hwp.
-      eapply (refine_assert_pathcondition Hpc1) in Hwp; eauto.
-      2: cbn; reflexivity.
+      intros δs δc Hδ hs' hc' Hh'.
+      cbv [SStoreSpec.put_heap SStoreSpec.bind T]. cbn. intros Hwp.
+      eapply (refine_assert_pathcondition Hpc1 (ta := eqs)) in Hwp; eauto.
       2: cbn; reflexivity.
       2: cbn; reflexivity.
       destruct Hwp as [Heqs HPOST1].
       cbv [CStoreSpec.bind CStoreSpec.put_heap CStoreSpec.assert_formula
            T CStoreSpec.angelic_list CStoreSpec.lift_purem].
       rewrite CPureSpec.wp_angelic_list.
-      destruct c1; cbn in Heqo; try discriminate Heqo; cbn.
-      - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; try discriminate Heqo.
-        remember (eq_rect (𝑯_Ty p) (Env (Term w1)) ts (ΔI ▻▻ ΔO) prec) as ts'.
-        destruct (env.catView ts') as [tsI tsO].
-        destruct (find_chunk_user_precise_spec prec tsI tsO hs) as [[h'' eqs''] HIn|];
-          inversion Heqo; subst; clear Heqo.
-        specialize (HIn ι1 Heqs). rewrite Heqts' in HIn.
-        rewrite rew_opp_l in HIn. rewrite Heqc1 in HIn.
-        rewrite peval_chunk_sound in HIn.
-        eexists; split; eauto. clear HIn.
-        hnf. rewrite CPureSpec.wp_assert_eq_chunk.
-        split; auto. now rewrite <- inst_persist.
-      - destruct (find_chunk_ptsreg_precise_spec r t hs) as [[h'' eqs''] HIn|];
-          inversion Heqo; subst.
-        specialize (HIn ι1 Heqs). rewrite Heqc1 in HIn.
-        rewrite peval_chunk_sound in HIn.
-        eexists; split; eauto. clear HIn.
-        hnf. rewrite CPureSpec.wp_assert_eq_chunk.
-        split; auto. now rewrite <- inst_persist.
+      eexists. split. apply (HIn _ Heqs). hnf.
+      rewrite CPureSpec.wp_assert_eq_chunk.
+      split; auto. rewrite <- inst_persist.
+      subst. now rewrite peval_chunk_sound.
     }
     { apply refine_bind; auto.
       apply refine_angelic_list; auto.
@@ -676,7 +645,6 @@ Module Soundness
             cbn; constructor; cbn; auto. }
         eauto using inst_is_duplicable.
       }
-      clear Heqo.
       intros w2 ω12 ι2 -> Hpc2.
       intros [cs' hs'] [cc' hc']. intros Hch'.
       inversion Hch'; subst; clear Hch'.
