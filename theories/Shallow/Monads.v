@@ -148,7 +148,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
   Module CPureSpec.
 
     Definition run : CPureSpec unit -> Prop :=
-      fun m => m (fun _ => True).
+      fun m => m (fun _ => FINISH).
 
     Definition pure {A : Type} : A -> CPureSpec A :=
       fun a Φ => Φ a.
