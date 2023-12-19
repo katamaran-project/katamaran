@@ -120,12 +120,6 @@ Module Type SymPropOn
       (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
     Proof. firstorder. Qed.
 
-    Lemma inst_eq_rect `{Inst AT A} {Σ Σ'} (t : AT Σ) (eq : Σ = Σ') (ι : Valuation Σ'):
-      inst (eq_rect Σ AT t Σ' eq) ι = inst t (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
-    Proof.
-      now subst.
-    Qed.
-
     Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
       eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
     Proof.

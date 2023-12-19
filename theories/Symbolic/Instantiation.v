@@ -79,6 +79,25 @@ Module Type InstantiationOn
   #[global] Arguments inst {T A _ Σ} !_ ι.
   #[global] Arguments lift {T A _ Σ} !_.
 
+  Lemma inst_eq_rect `{Inst AT A}
+    {Σ Σ'} (t : AT Σ) (e : Σ = Σ') (ι : Valuation Σ'):
+    inst (eq_rect Σ AT t Σ' e) ι =
+    inst t (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym e)).
+  Proof. now subst. Qed.
+
+  Lemma inst_eq_rect_indexed {I} {T : I -> LCtx -> Type} {A : I -> Type}
+    {instTA : forall i, Inst (T i) (A i)} (i j : I) (e : j = i) :
+    forall Σ (t : T j Σ) (ι : Valuation Σ),
+    inst (eq_rect j (fun i => T i Σ) t i e) ι =
+    eq_rect j A (inst t ι) i e.
+  Proof. now destruct e. Qed.
+
+  Lemma inst_eq_rect_indexed_r {I} {T : I -> LCtx -> Type} {A : I -> Type}
+    {instTA : forall i, Inst (T i) (A i)} (i j : I) (e : i = j) :
+    forall Σ (t : T j Σ) (ι : Valuation Σ),
+    inst (eq_rect_r (fun i => T i Σ) t e) ι = eq_rect_r A (inst t ι) e.
+  Proof. now destruct e. Qed.
+
   #[export] Instance inst_list {T : LCtx -> Type} {A : Type} `{Inst T A} :
     Inst (List T) (list A) := fun Σ xs ι => List.map (fun x => inst x ι) xs.
   #[export] Instance lift_list {T : LCtx -> Type} {A : Type} `{Lift T A} :

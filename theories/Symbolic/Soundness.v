@@ -565,19 +565,6 @@ Module Soundness
     destruct c; now cbn.
   Qed.
 
-  Lemma inst_eq_rect {I} {T : I -> LCtx -> Type} {A : I -> Type}
-    {instTA : forall i, Inst (T i) (A i)} (i j : I) (e : j = i) :
-    forall Σ (t : T j Σ) (ι : Valuation Σ),
-      inst (eq_rect j (fun i => T i Σ) t i e) ι =
-      eq_rect j A (inst t ι) i e.
-  Proof. now destruct e. Qed.
-
-  Lemma inst_eq_rect_r {I} {T : I -> LCtx -> Type} {A : I -> Type}
-    {instTA : forall i, Inst (T i) (A i)} (i j : I) (e : i = j) :
-    forall Σ (t : T j Σ) (ι : Valuation Σ),
-      inst (eq_rect_r (fun i => T i Σ) t e) ι = eq_rect_r A (inst t ι) e.
-  Proof. now destruct e. Qed.
-
   Lemma find_chunk_user_precise_spec {Σ p ΔI ΔO} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO) (h : SHeap Σ) :
     option.wlp
       (fun '(h', eqs) =>
@@ -597,10 +584,10 @@ Module Soundness
       destruct (env.eqb_hom_spec Term_eqb (@Term_eqb_spec Σ) tsI tsI'); try discriminate.
       apply noConfusion_inv in Heqo. cbn in Heqo. subst.
       apply instprop_formula_eqs_ctx in Heqs.
-      rewrite (@inst_eq_rect_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
+      rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
       rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat.
       change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.
-      rewrite (@inst_eq_rect (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
+      rewrite (@inst_eq_rect_indexed (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
       rewrite rew_opp_l. now destruct is_duplicable.
     - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
       intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
