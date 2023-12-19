@@ -30,8 +30,10 @@
 From Coq Require Import
   Classes.Morphisms
   Classes.Morphisms_Prop
+  NArith.BinNat
   Program.Basics
-  Relations.Relation_Definitions.
+  Relations.Relation_Definitions
+  ZArith.BinInt.
 From Equations Require Import
   Equations.
 From Katamaran Require Import
@@ -672,5 +674,102 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
   End CPureSpec.
   Export (hints) CPureSpec.
+
+  Module CStatistics.
+
+    Inductive PropShape : Type :=
+    | psfork (P Q : PropShape)
+    | psquant (P : PropShape)
+    | pspruned
+    | psfinish
+    | psother.
+
+    Fixpoint shape_to_stats (s : PropShape) : Stats :=
+      match s with
+      | psfork p q => plus_stats (shape_to_stats p) (shape_to_stats q)
+      | psquant p  => shape_to_stats p
+      | pspruned   => {| branches := 1; pruned := 1 |}
+      | psfinish   => {| branches := 1; pruned := 0 |}
+      | psother     => {| branches := 0; pruned := 0 |}
+      end.
+
+    (* See: Building a Reification Tactic that Recurses Under Binders *)
+    (*          http://adam.chlipala.net/cpdt/html/Cpdt.Reflection.html *)
+
+    (*          This calculates a deeply-embedded PropShape for a given Prop P *)
+    (*          for which we can then run shape_to_stats to calculate the *)
+    (*          number of different kinds of execution paths. *)
+    Ltac reifyProp P :=
+      match eval simpl in P with
+      | forall (x : ?T), TRUE => pspruned
+      | forall (x : ?T), FALSE => pspruned
+      | forall (x : ?T), FINISH => psfinish
+      | forall (x : ?T), True => psother
+      | forall (x : ?T), False => psother
+      | forall (x : ?T), @?P1 x /\ @?P2 x =>
+          let t1 := reifyProp (forall x : T, P1 x) in
+          let t2 := reifyProp (forall x : T, P2 x) in
+          constr:(psfork t1 t2)
+      | forall (x : ?T), @?P1 x \/ @?P2 x =>
+          let t1 := reifyProp (forall x : T, P1 x) in
+          let t2 := reifyProp (forall x : T, P2 x) in
+          constr:(psfork t1 t2)
+      | forall (x : ?T), @?P1 x -> @?P2 x =>
+          let t1 := reifyProp (forall x : T, P1 x) in
+          let t2 := reifyProp (forall x : T, P2 x) in
+          constr:(psfork t1 t2)
+      | forall (x : ?T), forall (v : ?U), @?P x v =>
+          let t := reifyProp (forall xv : T * U, P (fst xv) (snd xv)) in
+          constr:(psquant t)
+      | forall (x : ?T), exists (v : ?U), @?P x v =>
+          let t := reifyProp (forall xv : T * U, P (fst xv) (snd xv)) in
+          constr:(psquant t)
+      | forall (x : ?T), _ = _ => psother
+      | forall (x : ?T), Z.le _ _ => psother
+      (* | _ => constr:(sprop P) *)
+      end.
+
+    (* This typeclass approach seems to be much faster than the reifyProp *)
+    (* tactic above. *)
+    Class ShallowStats (P : Prop) :=
+      stats : Stats.
+    Arguments stats P {_}.
+
+    (* We make these instances global so that users can simply use the *)
+    (* calc tactic qualified without importing the rest of this module. *)
+    #[global] Instance stats_true : ShallowStats TRUE :=
+      {| branches := 1; pruned := 1 |}.
+    #[global] Instance stats_false : ShallowStats FALSE :=
+      {| branches := 1; pruned := 1 |}.
+    #[global] Instance stats_finish : ShallowStats FINISH :=
+      {| branches := 1; pruned := 0 |}.
+    (* We do not count regular True and False towards the statistics *)
+    (* because they do not (should not) represent leaves of the shallow *)
+    (* execution. *)
+    #[global] Instance stats_true' : ShallowStats True :=
+      {| branches := 0; pruned := 0 |}.
+    #[global] Instance stats_false' : ShallowStats False :=
+      {| branches := 0; pruned := 0 |}.
+
+    #[global] Instance stats_eq {A} {x y : A} : ShallowStats (x = y) :=
+      {| branches := 0; pruned := 0 |}.
+    #[global] Instance stats_zle {x y : Z} : ShallowStats (Z.le x y) :=
+      {| branches := 0; pruned := 0 |}.
+
+    #[global] Instance stats_and `{ShallowStats P, ShallowStats Q} :
+      ShallowStats (P /\ Q) := plus_stats (stats P) (stats Q).
+    #[global] Instance stats_or `{ShallowStats P, ShallowStats Q} :
+      ShallowStats (P \/ Q) := plus_stats (stats P) (stats Q).
+    #[global] Instance stats_impl `{ShallowStats P, ShallowStats Q} :
+      ShallowStats (P -> Q) := plus_stats (stats P) (stats Q).
+
+    Axiom undefined : forall A, A.
+
+    #[global] Instance stats_forall {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
+      ShallowStats (forall a : A, B a) := SP (undefined A).
+    #[global] Instance stats_exists {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
+      ShallowStats (exists a : A, B a) := SP (undefined A).
+
+  End CStatistics.
 
 End ShallowMonadsOn.
