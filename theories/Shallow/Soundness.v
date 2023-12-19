@@ -211,39 +211,6 @@ Module Type Soundness
 
     End Monotonicity.
 
-    Lemma scchunk_duplicate (c : SCChunk) :
-      is_duplicable c = true ->
-      interpret_scchunk c ⊣⊢@{L} interpret_scchunk c ∗ interpret_scchunk c.
-    Proof.
-      destruct c; cbn; try discriminate; intros H.
-      apply bi.entails_anti_sym.
-      - now apply lduplicate.
-      - transitivity (luser p vs ∗ emp)%I.
-        + apply bi.sep_mono'; auto.
-        + now rewrite bi.sep_emp.
-    Qed.
-
-    Lemma in_heap_extractions {h : SCHeap} {c1 h1} (hyp : List.In (c1 , h1) (heap_extractions h)) :
-      interpret_scheap h ⊣⊢@{L} interpret_scchunk c1 ∗ interpret_scheap h1.
-    Proof.
-      revert c1 h1 hyp.
-      induction h; cbn -[is_duplicable]; intros.
-      - contradict hyp.
-      - destruct hyp as [hyp|hyp].
-        + destruct (is_duplicable a) eqn:Heqdup;
-            inversion hyp; subst; clear hyp; cbn.
-          * rewrite bi.sep_assoc -scchunk_duplicate; auto.
-          * reflexivity.
-        + cbn in *.
-          apply List.in_map_iff in hyp.
-          destruct hyp as [[c2 h2] [H1 H2]].
-          inversion H1; subst; clear H1; cbn.
-          apply IHh in H2; rewrite H2; clear IHh H2.
-          rewrite !bi.sep_assoc.
-          apply bi.sep_proper; [|easy].
-          now rewrite bi.sep_comm.
-    Qed.
-
     (* liftP converts the "proof theoretic" predicates (CStore Γ -> L), with L
        being a type of separation logic propositions, to the "model theoretic"
        heap predicates (CStore Γ -> SCHeap -> Prop) that are used as the type of
