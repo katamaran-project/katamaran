@@ -543,89 +543,10 @@ Module Type SymbolicExecOn
     End State.
 
     Section ProduceConsume.
-      Import EqNotations.
 
       Definition produce_chunk {Γ} :
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
         fun w0 c k δ h => T k tt δ (cons (peval_chunk c) h).
-
-      Fixpoint try_consume_chunk_exact {Σ} (h : SHeap Σ) (c : Chunk Σ) {struct h} : option (SHeap Σ) :=
-        match h with
-        | nil       => None
-        | cons c' h =>
-          if chunk_eqb c c'
-          then Some (if is_duplicable c then (cons c h) else h)
-          else option_map (cons c') (try_consume_chunk_exact h c)
-        end.
-
-      Section ConsumePreciseUser.
-
-        Context {Σ} (p : 𝑯) {ΔI ΔO : Ctx Ty} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO).
-
-        Equations(noeqns) match_chunk_user_precise (c : Chunk Σ) : option (PathCondition Σ) :=
-        match_chunk_user_precise (chunk_user p' ts')
-        with eq_dec p p' => {
-          match_chunk_user_precise (chunk_user ?(p) ts') (left eq_refl) :=
-            match env.catView (rew prec in ts') with
-            | env.isCat tsI' tsO' =>
-                if env.eqb_hom Term_eqb tsI tsI'
-                then Some (formula_eqs_ctx tsO tsO')
-                else None
-            end;
-          match_chunk_user_precise (chunk_user p' ts') (right _) := None
-        };
-        match_chunk_user_precise _ := None.
-
-        Fixpoint find_chunk_user_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) :=
-          match h with
-          | nil => None
-          | cons c h' =>
-              match match_chunk_user_precise c with
-              | Some eqs => Some (if is_duplicable p then cons c h' else h', eqs)
-              | None => option_map (base.prod_map (cons c) id) (find_chunk_user_precise h')
-              end
-          end.
-
-      End ConsumePreciseUser.
-
-      Section ConsumePrecisePtsreg.
-
-        Context {Σ σ} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
-
-        Equations(noeqns) match_chunk_ptsreg_precise (c : Chunk Σ) : option (Formula Σ) :=
-        match_chunk_ptsreg_precise (chunk_ptsreg r' t')
-        with eq_dec_het r r' => {
-          match_chunk_ptsreg_precise (chunk_ptsreg ?(r) t') (left eq_refl) :=
-                Some (formula_relop bop.eq t t');
-          match_chunk_ptsreg_precise (chunk_ptsreg r' t') (right _) := None
-        };
-        match_chunk_ptsreg_precise _ := None.
-
-        Fixpoint find_chunk_ptsreg_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) :=
-          match h with
-          | nil => None
-          | cons c h' =>
-              match match_chunk_ptsreg_precise c with
-              | Some fml => Some (h', ctx.nil ▻ fml)
-              | None => option_map (base.prod_map (cons c) id) (find_chunk_ptsreg_precise h')
-              end
-          end.
-
-      End ConsumePrecisePtsreg.
-
-      Definition try_consume_chunk_precise {Σ} (h : SHeap Σ) (c : Chunk Σ) : option (SHeap Σ * PathCondition Σ) :=
-        match c with
-        | chunk_user p ts =>
-            match 𝑯_precise p with
-            | Some (MkPrecise ΔI ΔO Δeq) =>
-                match env.catView (rew Δeq in ts) with
-                | env.isCat tsI tsO => find_chunk_user_precise Δeq tsI tsO h
-                end
-            | None => None
-            end
-        | chunk_ptsreg r t => find_chunk_ptsreg_precise r t h
-        | _ => None
-        end.
 
       Definition consume_chunk {Γ} :
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=

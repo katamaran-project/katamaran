@@ -540,88 +540,6 @@ Module Soundness
       reflexivity.
   Qed.
 
-  Lemma try_consume_chunk_exact_spec {Σ} (h : SHeap Σ) (c : Chunk Σ) :
-    option.wlp
-      (fun h' => List.In (c , h') (heap_extractions h))
-      (SStoreSpec.try_consume_chunk_exact h c).
-  Proof.
-    induction h as [|c' h].
-    - now constructor.
-    - cbn -[is_duplicable].
-      destruct (chunk_eqb_spec c c').
-      + constructor. left. subst.
-        remember (is_duplicable c') as dup.
-        destruct dup; reflexivity.
-      + apply option.wlp_map. revert IHh.
-        apply option.wlp_monotonic; auto.
-        intros h' HIn. right.
-        rewrite List.in_map_iff.
-        exists (c,h'). auto.
-  Qed.
-
-  Lemma inst_is_duplicable {w : World} (c : Chunk w) (ι : Valuation w) :
-    is_duplicable (inst c ι) = is_duplicable c.
-  Proof.
-    destruct c; now cbn.
-  Qed.
-
-  Lemma find_chunk_user_precise_spec {Σ p ΔI ΔO} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO) (h : SHeap Σ) :
-    option.wlp
-      (fun '(h', eqs) =>
-         forall ι : Valuation Σ, instprop eqs ι ->
-           List.In
-             (inst (chunk_user p (eq_rect_r (fun c : Ctx Ty => Env (Term Σ) c) (tsI ►► tsO) prec)) ι, inst h' ι)
-             (heap_extractions (inst h ι)))
-      (SStoreSpec.find_chunk_user_precise prec tsI tsO h).
-  Proof.
-    induction h as [|c h]; [now constructor|]. cbn [SStoreSpec.find_chunk_user_precise].
-    destruct SStoreSpec.match_chunk_user_precise as [eqs|] eqn:?.
-    - clear IHh. constructor. intros ι Heqs. left.
-      destruct c; try discriminate Heqo. cbn in *.
-      destruct (eq_dec p p0); cbn in Heqo; try discriminate Heqo. destruct e.
-      remember (eq_rect (𝑯_Ty p) (Env (Term Σ)) ts (ΔI ▻▻ ΔO) prec) as ts'.
-      destruct (env.catView ts') as [tsI' tsO'].
-      destruct (env.eqb_hom_spec Term_eqb (@Term_eqb_spec Σ) tsI tsI'); try discriminate.
-      apply noConfusion_inv in Heqo. cbn in Heqo. subst.
-      apply instprop_formula_eqs_ctx in Heqs.
-      rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
-      rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat.
-      change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.
-      rewrite (@inst_eq_rect_indexed (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
-      rewrite rew_opp_l. now destruct is_duplicable.
-    - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
-      intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
-      remember (inst (chunk_user p (eq_rect_r (fun c0 : Ctx Ty => Env (Term Σ) c0) (tsI ►► tsO) prec)) ι) as c'.
-      change (inst (cons c h) ι) with (cons (inst c ι) (inst h ι)).
-      cbn [fst heap_extractions]. right. apply List.in_map_iff.
-      eexists (c', inst h' ι); auto.
-  Qed.
-
-  Lemma find_chunk_ptsreg_precise_spec {Σ σ} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ) (h : SHeap Σ) :
-    option.wlp
-      (fun '(h', eqs) =>
-         forall ι : Valuation Σ, instprop eqs ι ->
-           List.In
-             (inst (chunk_ptsreg r t) ι, inst h' ι)
-             (heap_extractions (inst h ι)))
-      (SStoreSpec.find_chunk_ptsreg_precise r t h).
-  Proof.
-    induction h; cbn [SStoreSpec.find_chunk_ptsreg_precise]; [now constructor|].
-    destruct SStoreSpec.match_chunk_ptsreg_precise eqn:?.
-    - constructor. intros ι [Hpc Hf]. clear IHh.
-      destruct a; cbn in Heqo; try discriminate Heqo.
-      destruct (eq_dec_het r r0); try discriminate Heqo.
-      dependent elimination e. cbn in Heqo. dependent elimination Heqo.
-      change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
-      cbn. left. f_equal. f_equal. symmetry. exact Hf.
-    - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
-      intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
-      remember (inst (chunk_ptsreg r t) ι) as c'.
-      change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
-      cbn [fst heap_extractions]. right. apply List.in_map_iff.
-      eexists (c', inst h' ι); auto.
-  Qed.
-
   Lemma refine_consume_chunk {Γ} :
     ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
       SStoreSpec.consume_chunk CStoreSpec.consume_chunk.
@@ -653,7 +571,7 @@ Module Soundness
         split; auto. revert Hwp.
         apply HPOST; wsimpl; auto; reflexivity.
     }
-    destruct (SStoreSpec.try_consume_chunk_precise hs c1) as [[h' eqs]|] eqn:?.
+    destruct (try_consume_chunk_precise hs c1) as [[h' eqs]|] eqn:?.
     { intros POST__s POST__c HPOST.
       intros δs δc Hδ hs' hc' Hh'.
       cbv [SStoreSpec.put_heap SStoreSpec.bind T]. cbn. intros Hwp.
@@ -718,7 +636,7 @@ Module Soundness
         rewrite CPureSpec.wp_assert_eq_chunk.
         split; auto. revert Hwp. apply HPOST; wsimpl; auto; reflexivity.
     }
-    destruct (SStoreSpec.try_consume_chunk_precise hs c1) as [[h' eqs]|] eqn:?.
+    destruct (try_consume_chunk_precise hs c1) as [[h' eqs]|] eqn:?.
     { intros POST__s POST__c HPOST.
       intros δs δc -> hs' hc' ->.
       cbv [SStoreSpec.put_heap T]. cbn. intros Hwp.

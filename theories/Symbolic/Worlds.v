@@ -48,7 +48,7 @@ Module Type WorldsOn
   (Import B : Base)
   (Import P : PredicateKit B)
   (Import F : FormulasOn B P)
-  (Import C : ChunksOn B P).
+  (Import C : ChunksOn B P F).
 
   Section Worlds.
 
