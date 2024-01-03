@@ -97,32 +97,6 @@ Module Type SymbolicExecOn
           debug_stm_heap                   : SHeap Σ;
         }.
 
-    Record DebugAsn (Σ : LCtx) : Type :=
-      MkDebugAsn
-        { debug_asn_program_context        : PCtx;
-          debug_asn_pathcondition          : PathCondition Σ;
-          debug_asn_localstore             : SStore debug_asn_program_context Σ;
-          debug_asn_heap                   : SHeap Σ;
-        }.
-
-    Record DebugConsumeChunk (Σ : LCtx) : Type :=
-      MkDebugConsumeChunk
-        { debug_consume_chunk_program_context        : PCtx;
-          debug_consume_chunk_pathcondition          : PathCondition Σ;
-          debug_consume_chunk_localstore             : SStore debug_consume_chunk_program_context Σ;
-          debug_consume_chunk_heap                   : SHeap Σ;
-          debug_consume_chunk_chunk                  : Chunk Σ;
-        }.
-
-    Record DebugAssertFormula (Σ : LCtx) : Type :=
-      MkDebugAssertFormula
-        { debug_assert_formula_program_context : PCtx;
-          debug_assert_formula_pathcondition   : PathCondition Σ;
-          debug_assert_formula_localstore      : SStore debug_assert_formula_program_context Σ;
-          debug_assert_formula_heap            : SHeap Σ;
-          debug_assert_formula_formula         : Formula Σ;
-        }.
-
     #[export] Instance SubstDebugCall : Subst DebugCall :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
@@ -173,80 +147,6 @@ Module Type SymbolicExecOn
             Some (MkDebugStm s pc' δ' h')
         end.
 
-    #[export] Instance SubstDebugAsn : Subst DebugAsn :=
-      fun Σ0 d Σ1 ζ01 =>
-        match d with
-        | MkDebugAsn pc δ h =>
-          MkDebugAsn (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
-        end.
-
-    #[export] Instance SubstLawsDebugAsn : SubstLaws DebugAsn.
-    Proof.
-      constructor.
-      - intros ? []; cbn; now rewrite ?subst_sub_id.
-      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
-    Qed.
-
-    #[export] Instance OccursCheckDebugAsn : OccursCheck DebugAsn :=
-      fun Σ x xIn d =>
-        match d with
-        | MkDebugAsn pc δ h =>
-            pc' <- occurs_check xIn pc ;;
-            δ'  <- occurs_check xIn δ ;;
-            h'  <- occurs_check xIn h ;;
-            Some (MkDebugAsn pc' δ' h')
-        end.
-
-    #[export] Instance SubstDebugConsumeChunk : Subst DebugConsumeChunk :=
-      fun Σ0 d Σ1 ζ01 =>
-        match d with
-        | MkDebugConsumeChunk pc δ h c =>
-          MkDebugConsumeChunk (subst pc ζ01) (subst δ ζ01) (subst h ζ01) (subst c ζ01)
-        end.
-
-    #[export] Instance SubstLawsDebugConsumeChunk : SubstLaws DebugConsumeChunk.
-    Proof.
-      constructor.
-      - intros ? []; cbn; now rewrite ?subst_sub_id.
-      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
-    Qed.
-
-    #[export] Instance OccursCheckDebugConsumeChunk : OccursCheck DebugConsumeChunk :=
-      fun Σ x xIn d =>
-        match d with
-        | MkDebugConsumeChunk pc δ h c =>
-            pc' <- occurs_check xIn pc ;;
-            δ'  <- occurs_check xIn δ ;;
-            h'  <- occurs_check xIn h ;;
-            c'  <- occurs_check xIn c ;;
-            Some (MkDebugConsumeChunk pc' δ' h'  c')
-        end.
-
-    #[export] Instance SubstDebugAssertFormula : Subst DebugAssertFormula :=
-      fun Σ0 d Σ1 ζ01 =>
-        match d with
-        | MkDebugAssertFormula pc δ h fml =>
-          MkDebugAssertFormula (subst pc ζ01) (subst δ ζ01) (subst h ζ01) (subst fml ζ01)
-        end.
-
-    #[export] Instance SubstLawsDebugAssertFormula : SubstLaws DebugAssertFormula.
-    Proof.
-      constructor.
-      - intros ? []; cbn; now rewrite ?subst_sub_id.
-      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
-    Qed.
-
-    #[export] Instance OccursCheckDebugAssertFormula : OccursCheck DebugAssertFormula :=
-      fun Σ x xIn d =>
-        match d with
-        | MkDebugAssertFormula pc δ h fml =>
-            pc' <- occurs_check xIn pc ;;
-            δ'  <- occurs_check xIn δ ;;
-            h'  <- occurs_check xIn h ;;
-            fml'  <- occurs_check xIn fml ;;
-            Some (MkDebugAssertFormula pc' δ' h' fml')
-        end.
-
   End DebugInfo.
 
   Definition PROP : TYPE :=
@@ -288,7 +188,6 @@ Module Type SymbolicExecOn
 
   Definition SStoreSpec (Γ1 Γ2 : PCtx) (A : TYPE) : TYPE :=
     □(A -> SStore Γ2 -> SHeap -> 𝕊) -> SStore Γ1 -> SHeap -> 𝕊.
-  Bind Scope mut_scope with SStoreSpec.
 
   Module SStoreSpec.
 
@@ -296,6 +195,10 @@ Module Type SymbolicExecOn
       refine (@persistent_subst (STerm σ) (@SubstTerm σ)) : typeclass_instances.
 
     Section Basic.
+
+      Definition evalStoreSpec {Γ1 Γ2 A} :
+        ⊢ SStoreSpec Γ1 Γ2 A -> SStore Γ1 -> SHeapSpec A :=
+        fun w m δ Φ => m (fun w1 θ1 a1 _ => Φ w1 θ1 a1) δ.
 
       Definition lift_purem {Γ} {A : TYPE} :
         ⊢ SPureSpec A -> SStoreSpec Γ Γ A :=
@@ -308,10 +211,6 @@ Module Type SymbolicExecOn
       Definition bind {Γ1 Γ2 Γ3 A B} :
         ⊢ SStoreSpec Γ1 Γ2 A -> □(A -> SStoreSpec Γ2 Γ3 B) -> SStoreSpec Γ1 Γ3 B :=
         fun w0 ma f k => ma (fun w1 ω01 a1 => f w1 ω01 a1 (four k ω01)).
-
-      Definition bind_box {Γ1 Γ2 Γ3 A B} :
-        ⊢ □(SStoreSpec Γ1 Γ2 A) -> □(A -> SStoreSpec Γ2 Γ3 B) -> □(SStoreSpec Γ1 Γ3 B) :=
-        fun w0 m f => bind <$> m <*> four f.
 
       Definition error {Γ1 Γ2 A} :
         ⊢ (SStore Γ1 -> SHeap -> AMessage) -> SStoreSpec Γ1 Γ2 A :=
@@ -328,15 +227,6 @@ Module Type SymbolicExecOn
         ⊢ SStoreSpec Γ1 Γ2 A -> SStoreSpec Γ1 Γ2 A -> SStoreSpec Γ1 Γ2 A :=
         fun w m1 m2 POST δ1 h1 =>
           demonic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
-
-      Definition angelic_list {A Γ} :
-        ⊢ (SStore Γ -> SHeap -> AMessage) -> WList A -> SStoreSpec Γ Γ A :=
-        fun w msg xs POST δ h => lift_purem (SPureSpec.angelic_list (msg δ h) xs) POST δ h.
-
-      Definition angelic_finite F `{finite.Finite F} {Γ} :
-        ⊢ (SStore Γ -> SHeap -> AMessage) -> SStoreSpec Γ Γ ⌜F⌝ :=
-        fun w msg POST δ h => lift_purem (SPureSpec.angelic_finite F (msg δ h)) POST δ h.
-      #[global] Arguments angelic_finite F {_ _ Γ w}.
 
       Definition angelic {Γ} (x : option LVar) :
         ⊢ ∀ σ, SStoreSpec Γ Γ (STerm σ) :=
@@ -396,21 +286,13 @@ Module Type SymbolicExecOn
         ⊢ Formula -> SStoreSpec Γ Γ Unit :=
         fun w0 fml => lift_purem (SPureSpec.assume_formula fml).
 
-      Definition box_assume_formula {Γ} :
-        ⊢ Formula -> □(SStoreSpec Γ Γ Unit) :=
-        fun w0 fml => assume_formula <$> persist fml.
-
       Definition assert_formula {Γ} :
         ⊢ Formula -> SStoreSpec Γ Γ Unit :=
         fun w0 fml POST δ0 h0 =>
           lift_purem
             (SPureSpec.assert_formula
-               (amsg.mk (MkDebugAssertFormula (wco w0) δ0 h0 fml)) fml)
+               (amsg.mk (MkDebugAssertFormula (wco w0) h0 fml)) fml)
             POST δ0 h0.
-
-      Definition box_assert_formula {Γ} :
-        ⊢ Formula -> □(SStoreSpec Γ Γ Unit) :=
-        fun w0 fml => assert_formula <$> persist fml.
 
       Definition assert_pathcondition {Γ} :
         ⊢ PathCondition -> SStoreSpec Γ Γ Unit :=
@@ -418,7 +300,7 @@ Module Type SymbolicExecOn
           lift_purem
             (SPureSpec.assert_pathcondition
                (amsg.mk
-                  {| msg_function := "smut_assert_formula";
+                  {| msg_function := "SStoreSpec._assert_pathcondition";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
                      msg_localstore := δ0;
@@ -433,7 +315,7 @@ Module Type SymbolicExecOn
           lift_purem
             (SPureSpec.assert_eq_env
                (amsg.mk
-                  {| msg_function := "smut/assert_eq_env";
+                  {| msg_function := "SStoreSpec.assert_eq_env";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
                      msg_localstore := δ0;
@@ -449,7 +331,7 @@ Module Type SymbolicExecOn
           lift_purem
             (SPureSpec.assert_eq_nenv
                (amsg.mk
-                  {| msg_function := "smut/assert_eq_env";
+                  {| msg_function := "SStoreSpec.assert_eq_env";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
                      msg_localstore := δ0;
@@ -458,39 +340,9 @@ Module Type SymbolicExecOn
                   |}) E1 E2)
             POST δ0 h0.
 
-      Definition assert_eq_chunk {Γ} :
-        ⊢ Chunk -> Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c1 c2 POST δ0 h0 =>
-          lift_purem
-            (T (SPureSpec.assert_eq_chunk
-                  (amsg.mk
-                     {| msg_function := "SStoreSpec.assert_eq_chunk";
-                        msg_message := "Proof obligation";
-                        msg_program_context := Γ;
-                        msg_localstore := δ0;
-                        msg_heap := h0;
-                        msg_pathcondition := wco w0
-                     |}) c1 c2))
-         POST δ0 h0.
-
     End AssumeAssert.
 
     Section PatternMatching.
-
-      Definition angelic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
-        ⊢ STerm σ -> SStoreSpec Γ Γ (SMatchResult pat) :=
-        fun w0 t Φ δ h =>
-          SPureSpec.angelic_pattern_match n pat
-            (amsg.mk
-               {| msg_function := "SStoreSpec.angelic_pattern_match";
-                 msg_message := "pattern match assertion";
-                 msg_program_context := Γ;
-                 msg_localstore := δ;
-                 msg_heap := h;
-                 msg_pathcondition := wco w0
-               |}) t
-            (fun w1 θ1 mr => Φ w1 θ1 mr δ⟨θ1⟩ h⟨θ1⟩).
-      #[global] Arguments angelic_pattern_match {N} n {Γ σ} pat [w].
 
       Definition demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
         ⊢ STerm σ -> SStoreSpec Γ Γ (SMatchResult pat) :=
@@ -498,11 +350,6 @@ Module Type SymbolicExecOn
           SPureSpec.demonic_pattern_match n pat t
             (fun w1 θ1 mr => Φ w1 θ1 mr δ⟨θ1⟩ h⟨θ1⟩).
       #[global] Arguments demonic_pattern_match {N} n {Γ σ} pat [w].
-
-      Definition pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
-        ⊢ WTerm σ -> SStoreSpec Γ Γ (SMatchResult pat) :=
-        fun w t => lift_purem (SPureSpec.new_pattern_match n pat t).
-      #[global] Arguments pattern_match {N} n {Γ σ} pat [w].
 
     End PatternMatching.
 
@@ -522,10 +369,6 @@ Module Type SymbolicExecOn
         fun w0 POST δ => T POST δ δ.
       Definition put_local {Γ1 Γ2} : ⊢ SStore Γ2 -> SStoreSpec Γ1 Γ2 Unit :=
         fun w0 δ POST _ => T POST tt δ.
-      Definition get_heap {Γ} : ⊢ SStoreSpec Γ Γ SHeap :=
-        fun w0 POST δ h => T POST h δ h.
-      Definition put_heap {Γ} : ⊢ SHeap -> SStoreSpec Γ Γ Unit :=
-        fun w0 h POST δ _ => T POST tt δ h.
 
       Definition eval_exp {Γ σ} (e : Exp Γ σ) :
         ⊢ SStoreSpec Γ Γ (STerm σ) :=
@@ -546,122 +389,39 @@ Module Type SymbolicExecOn
 
       Definition produce_chunk {Γ} :
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c k δ h => T k tt δ (cons (peval_chunk c) h).
+        fun w0 c Φ δ =>
+          SHeapSpec.produce_chunk c (fun w1 θ1 u1 => Φ w1 θ1 u1 δ⟨θ1⟩).
 
       Definition consume_chunk {Γ} :
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c =>
-          ⟨ ω1 ⟩ h <- get_heap (w := _) ;;
-          match try_consume_chunk_exact h (peval_chunk c⟨ω1⟩) with
-          | Some h' => put_heap h'
-          | None =>
-            match try_consume_chunk_precise h (peval_chunk c⟨ω1⟩) with
-            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_pathcondition Fs⟨ω2⟩
-            | None =>
-              error
-                (fun δ1 h1 =>
-                   amsg.mk
-                   {| debug_consume_chunk_program_context := Γ;
-                      debug_consume_chunk_pathcondition := wco _;
-                      debug_consume_chunk_localstore := δ1;
-                      debug_consume_chunk_heap := h1;
-                      debug_consume_chunk_chunk := peval_chunk c⟨ω1⟩
-                   |})
-              end
-          end.
+        fun w0 c Φ δ =>
+          SHeapSpec.consume_chunk c (fun w1 θ1 u1 => Φ w1 θ1 u1 δ⟨θ1⟩).
 
       Definition consume_chunk_angelic {Γ} :
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c =>
-          ⟨ ω1 ⟩ h <- get_heap (w := _) ;;
-          match try_consume_chunk_exact h (peval_chunk c⟨ω1⟩) with
-          | Some h' => put_heap h'
-          | None =>
-            match try_consume_chunk_precise h (peval_chunk c⟨ω1⟩) with
-            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_pathcondition Fs⟨ω2⟩
-            | None =>
-                ⟨ ω2 ⟩ '(c',h') <-
-                  angelic_list
-                    (A := Pair Chunk SHeap)
-                    (fun δ1 h1 =>
-                       amsg.mk
-                       {| debug_consume_chunk_program_context := Γ;
-                          debug_consume_chunk_pathcondition := wco _;
-                          debug_consume_chunk_localstore := δ1;
-                          debug_consume_chunk_heap := h1;
-                          debug_consume_chunk_chunk := peval_chunk c⟨ω1⟩
-                       |})
-                    (heap_extractions h);;
-                ⟨ ω3 ⟩ _ <- assert_eq_chunk (peval_chunk c⟨ω1 ∘ ω2⟩) c' ;;
-                put_heap h'⟨ω3⟩
-              end
-          end.
+        fun w0 c Φ δ =>
+          SHeapSpec.consume_chunk_angelic c (fun w1 θ1 u1 => Φ w1 θ1 u1 δ⟨θ1⟩).
 
       Definition produce {Γ} :
         ⊢ Assertion -> □(SStoreSpec Γ Γ Unit) :=
-        fix produce w0 asn :=
-          match asn with
-          | asn.formula fml => box_assume_formula fml
-          | asn.chunk c => produce_chunk <$> persist c
-          | asn.chunk_angelic c => produce_chunk <$> persist c
-          | asn.pattern_match s pat rhs =>
-             fun w1 θ1 =>
-               ⟨ θ2 ⟩ '(existT pc ζ) <- demonic_pattern_match id pat s⟨θ1⟩ ;;
-               produce (wcat w0 (PatternCaseCtx pc)) (rhs pc) _ (acc_cat_left (θ1 ∘ θ2) ζ)
-           | asn.sep a1 a2 =>
-             fun w1 ω01 =>
-               ⟨ ω12 ⟩ _ <- produce w0 a1 w1 ω01 ;;
-               produce w0 a2 _ (ω01 ∘ ω12)
-          | asn.or a1 a2 => demonic_binary <$> produce w0 a1 <*> produce w0 a2
-          | asn.exist ς τ a =>
-            fun w1 ω01 =>
-              ⟨ ω12 ⟩ t2 <- demonic (Some ς) τ;;
-              produce (wsnoc w0 (ς∷τ)) a _ (acc_snoc_left (ω01 ∘ ω12) (ς∷τ) t2)
-          | asn.debug =>
-            fun w1 _ =>
-              debug
-                (fun δ1 h1 =>
-                   amsg.mk
-                   {| debug_asn_program_context := Γ;
-                      debug_asn_pathcondition := wco w1;
-                      debug_asn_localstore := δ1;
-                      debug_asn_heap := h1
-                   |})
-                (pure tt)
-         end.
+        fun w0 asn w1 θ1 Φ δ =>
+          SHeapSpec.produce asn (sub_acc θ1) (fun w2 θ2 u2 => Φ w2 θ2 u2 δ⟨θ2⟩).
 
       Definition consume {Γ} :
         ⊢ Assertion -> □(SStoreSpec Γ Γ Unit) :=
-        fix consume w0 asn :=
-          match asn with
-          | asn.formula fml => box_assert_formula fml
-          | asn.chunk c => consume_chunk <$> persist c
-          | asn.chunk_angelic c => consume_chunk_angelic <$> persist c
-          | asn.pattern_match s pat rhs =>
-             fun w1 θ1 =>
-               ⟨ θ2 ⟩ '(existT pc ζ) <- angelic_pattern_match id pat s⟨θ1⟩ ;;
-               consume (wcat w0 (PatternCaseCtx pc)) (rhs pc) _ (acc_cat_left (θ1 ∘ θ2) ζ)
-          | asn.sep a1 a2 =>
-            fun w1 ω01 =>
-              ⟨ ω12 ⟩ _ <- consume w0 a1 w1 ω01 ;;
-              consume w0 a2 _ (ω01 ∘ ω12)
-          | asn.or a1 a2 => angelic_binary <$> consume w0 a1 <*> consume w0 a2
-          | asn.exist ς τ a =>
-            fun w1 ω01 =>
-              ⟨ ω12 ⟩ t2 <- angelic (Some ς) τ;;
-              consume (wsnoc w0 (ς∷τ)) a _ (acc_snoc_left (ω01 ∘ ω12) (ς∷τ) t2)
-          | asn.debug =>
-            fun w1 ω01 =>
-              debug
-                (fun δ1 h1 =>
-                 amsg.mk
-                 {| debug_asn_program_context := Γ;
-                    debug_asn_pathcondition := wco w1;
-                    debug_asn_localstore := δ1;
-                    debug_asn_heap := h1
-                 |})
-                (pure tt)
-          end.
+        fun w0 asn w1 θ1 Φ δ =>
+       SHeapSpec.consume asn (sub_acc θ1) (fun w2 θ2 u2 => Φ w2 θ2 u2 δ⟨θ2⟩).
+
+      Definition read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) :
+        ⊢ SStoreSpec Γ Γ (WTerm τ) :=
+        fun w Φ δ =>
+          SHeapSpec.read_register r (fun w1 θ1 t' => Φ w1 θ1 t' δ⟨θ1⟩).
+      #[global] Arguments read_register {Γ τ} r {w}.
+
+      Definition write_register {Γ τ} (r : 𝑹𝑬𝑮 τ) :
+        ⊢ WTerm τ -> SStoreSpec Γ Γ (WTerm τ) :=
+        fun w t Φ δ =>
+          SHeapSpec.write_register r t (fun w1 θ1 t' => Φ w1 θ1 t' δ⟨θ1⟩).
 
     End ProduceConsume.
 
@@ -786,16 +546,10 @@ Module Type SymbolicExecOn
                 (* Same as stm_assert: partial correctness of failure. *)
                 block (w:=w0)
             | stm_read_register reg =>
-                ⟨ ω01 ⟩ t <- angelic None _ ;;
-                ⟨ ω12 ⟩ _ <- T (consume (asn.chunk (chunk_ptsreg reg t))) ;;
-                ⟨ ω23 ⟩ _ <- T (produce (asn.chunk (chunk_ptsreg reg (persist__term t ω12))));;
-                pure (persist__term t (ω12 ∘ ω23))
+                read_register reg
             | stm_write_register reg e =>
-                ⟨ ω01 ⟩ told <- angelic None _ ;;
-                ⟨ ω12 ⟩ _    <- T (consume (asn.chunk (chunk_ptsreg reg told))) ;;
-                ⟨ ω23 ⟩ tnew <- eval_exp e (w:=_) ;;
-                ⟨ ω34 ⟩ _ <- T (produce (asn.chunk (chunk_ptsreg reg tnew))) ;;
-                pure (persist__term tnew ω34)
+                ⟨ _ ⟩ tnew <- eval_exp e (w:=_) ;;
+                write_register reg tnew
             | stm_pattern_match s pat rhs =>
                 ⟨ θ1 ⟩ v  <- exec_aux s ;;
                 ⟨ θ2 ⟩ '(existT pc vs) <- demonic_pattern_match PVartoLVar pat v ;;

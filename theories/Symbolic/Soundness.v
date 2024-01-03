@@ -76,6 +76,15 @@ Module Soundness
       Rel (SStoreSpec Γ1 Γ2 AT) (CStoreSpec Γ1 Γ2 A) :=
       □(R -> RStore Γ2 -> RHeap -> ℙ) -> RStore Γ1 -> RHeap -> ℙ.
 
+    Lemma refine_evalStoreSpec {Γ1 Γ2} `{RA : Rel SA CA} :
+      ℛ⟦RStoreSpec Γ1 Γ2 RA -> RStore Γ1 -> RHeapSpec RA⟧
+        SStoreSpec.evalStoreSpec CStoreSpec.evalStoreSpec.
+    Proof.
+      unfold SStoreSpec.evalStoreSpec, CStoreSpec.evalStoreSpec.
+      intros w ι Hpc sm cm rm sδ cδ rδ sΦ cΦ rΦ. apply rm; auto.
+      intros w1 r01 ι1 Hι1 Hpc1 sa ca ra _ _ _. apply rΦ; auto.
+    Qed.
+
     Lemma refine_lift_purem {Γ} `{R : Rel AT A} :
       ℛ⟦RPureSpec R -> RStoreSpec Γ Γ R⟧
         SStoreSpec.lift_purem CStoreSpec.lift_purem.
@@ -193,29 +202,6 @@ Module Soundness
       apply Hm1; auto. apply Hm2; auto.
     Qed.
 
-    Lemma refine_angelic_list `{Subst M, OccursCheck M, R : Rel AT A} {Γ} :
-      ℛ⟦RMsg _ (RList R -> RStoreSpec Γ Γ R)⟧
-        SStoreSpec.angelic_list CStoreSpec.angelic_list.
-    Proof.
-      intros w ι Hpc msg ls lc Hl.
-      intros POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0.
-      unfold SStoreSpec.angelic_list, CStoreSpec.angelic_list.
-      apply refine_lift_purem; auto.
-      apply RPureSpec.refine_angelic_list; auto.
-    Qed.
-
-    Lemma refine_angelic_finite `{finite.Finite F} {Γ} :
-      ℛ⟦RMsg _ (RStoreSpec Γ Γ (RConst F))⟧
-        (@SStoreSpec.angelic_finite F _ _ Γ)
-        (CStoreSpec.angelic_finite F).
-    Proof.
-      intros w ι Hpc msg.
-      intros POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0.
-      unfold SStoreSpec.angelic_finite, CStoreSpec.angelic_finite.
-      eapply refine_lift_purem; eauto.
-      apply RPureSpec.refine_angelic_finite; auto.
-    Qed.
-
   End Basics.
 
   Section AssumeAssert.
@@ -229,16 +215,6 @@ Module Soundness
       apply RPureSpec.refine_assume_formula; auto.
     Qed.
 
-    Lemma refine_box_assume_formula {Γ} :
-      ℛ⟦RFormula -> □(RStoreSpec Γ Γ RUnit)⟧
-        SStoreSpec.box_assume_formula CStoreSpec.assume_formula.
-    Proof.
-      unfold SStoreSpec.box_assume_formula, fmap_box.
-      intros w0 ι0 Hpc0 P p Hp w1 r01 ι1 Hι1 Hpc1.
-      apply refine_assume_formula; auto.
-      eapply refine_formula_persist; eauto.
-    Qed.
-
     Lemma refine_assert_formula {Γ} :
       ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
         SStoreSpec.assert_formula CStoreSpec.assert_formula.
@@ -248,16 +224,6 @@ Module Soundness
       intros POST__s POST__c HPOST δs δc Hδ hs hc Hh.
       apply refine_lift_purem; auto.
       now apply RPureSpec.refine_assert_formula.
-    Qed.
-
-    Lemma refine_box_assert_formula {Γ} :
-      ℛ⟦RFormula -> □(RStoreSpec Γ Γ RUnit)⟧
-        SStoreSpec.box_assert_formula CStoreSpec.assert_formula.
-    Proof.
-      unfold SStoreSpec.box_assert_formula, fmap_box.
-      intros w0 ι0 Hpc0 P p Hp w1 r01 ι1 Hι1 Hpc1.
-      apply refine_assert_formula; auto.
-      eapply refine_formula_persist; eauto.
     Qed.
 
     Lemma refine_assert_pathcondition {Γ} :
@@ -279,32 +245,9 @@ Module Soundness
       apply RPureSpec.refine_assert_eq_nenv; auto.
     Qed.
 
-    Lemma refine_assert_eq_chunk {Γ} :
-      ℛ⟦RChunk -> RChunk -> RStoreSpec Γ Γ RUnit⟧
-        SStoreSpec.assert_eq_chunk CStoreSpec.assert_eq_chunk.
-    Proof.
-      intros w ι Hpc c1 ? ? E2 ? ? POST__s POST__c HPOST δs δc Hδ hs hc Hh.
-      unfold SStoreSpec.assert_eq_chunk, CStoreSpec.assert_eq_chunk.
-      apply refine_lift_purem; auto. apply refine_T; auto.
-      apply RPureSpec.refine_assert_eq_chunk; cbn; eauto.
-    Qed.
-
   End AssumeAssert.
 
   Section PatternMatching.
-
-    Lemma refine_angelic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
-      ℛ⟦RVal σ -> RStoreSpec Γ Γ (RMatchResult pat)⟧
-        (SStoreSpec.angelic_pattern_match n pat)
-        (CStoreSpec.angelic_pattern_match pat).
-    Proof.
-      intros w ι Hpc sv cv rv sΦ cΦ rΦ sδ cδ rδ sh ch rh.
-      unfold SStoreSpec.angelic_pattern_match, CStoreSpec.angelic_pattern_match, CStoreSpec.lift_purem.
-      apply RPureSpec.refine_angelic_pattern_match; auto.
-      intros w1 θ1 ι1 Heq1 Hpc1 smr cmr rmr. apply rΦ; auto.
-      eapply refine_inst_persist; eauto.
-      eapply refine_inst_persist; eauto.
-    Qed.
 
     Lemma refine_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
       ℛ⟦RVal σ -> RStoreSpec Γ Γ (RMatchResult pat)⟧
@@ -383,29 +326,6 @@ Module Soundness
       reflexivity.
     Qed.
 
-    Lemma refine_get_heap {Γ} :
-      ℛ⟦RStoreSpec Γ Γ RHeap⟧ SStoreSpec.get_heap CStoreSpec.get_heap.
-    Proof.
-      intros w ι Hpc POST__s POST__c HPOST δs0 δc0 Hδ hs0 hc0 Hh0.
-      unfold SStoreSpec.get_heap, CStoreSpec.get_heap.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      apply refine_T; eauto.
-    Qed.
-
-    Lemma refine_put_heap {Γ} :
-      ℛ⟦RHeap -> RStoreSpec Γ Γ RUnit⟧ SStoreSpec.put_heap CStoreSpec.put_heap.
-    Proof.
-      intros w ι Hpc hs hc Hh POST__s POST__c HPOST δs0 δc0 Hδ hs0 hc0 Hh0.
-      unfold SStoreSpec.put_heap, CStoreSpec.put_heap.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      apply refine_T; eauto.
-      reflexivity.
-    Qed.
-
     Lemma refine_peval {w : World} {ι : Valuation w} {σ} t v :
       ℛ⟦RVal σ⟧@{ι} t v -> ℛ⟦RVal σ⟧@{ι} (peval t) v.
     Proof. intros ->. symmetry. apply peval_sound. Qed.
@@ -466,20 +386,38 @@ Module Soundness
 
   End State.
 
-  Lemma refine_produce_chunk {Γ} {w0 : World} (ι0 : Valuation w0)
-    (Hpc0 : instprop (wco w0) ι0) :
-    ℛ⟦_⟧@{ι0} (@SStoreSpec.produce_chunk Γ w0) (CStoreSpec.produce_chunk).
-  Proof.
-    intros cs cc ->.
-    intros POST__s POST__c HPOST.
-    intros δs δc -> hs hc ->.
-    unfold SStoreSpec.produce_chunk, CStoreSpec.produce_chunk.
-    apply HPOST; cbn; rewrite ?inst_sub_id; auto.
-    hnf. cbn. now rewrite peval_chunk_sound.
-  Qed.
-
   Local Hint Unfold RSat : core.
   Local Hint Unfold RInst : core.
+
+  Lemma refine_produce_chunk {Γ} :
+    ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
+      SStoreSpec.produce_chunk CStoreSpec.produce_chunk.
+  Proof.
+    intros w0 ι0 Hpc0 sc cc rc sΦ cΦ rΦ sδ cδ rδ sh ch rh.
+    apply RHeapSpec.refine_produce_chunk; auto.
+    intros w1 θ1 ι1 Hι1 Hpc1 su cu ru. apply rΦ; auto.
+    eapply refine_inst_persist; eauto.
+  Qed.
+
+  Lemma refine_consume_chunk {Γ} :
+    ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
+      SStoreSpec.consume_chunk CStoreSpec.consume_chunk.
+  Proof.
+    intros w0 ι0 Hpc0 sc cc rc sΦ cΦ rΦ sδ cδ rδ sh ch rh.
+    apply RHeapSpec.refine_consume_chunk; auto.
+    intros w1 θ1 ι1 Hι1 Hpc1 su cu ru. apply rΦ; auto.
+    eapply refine_inst_persist; eauto.
+  Qed.
+
+  Lemma refine_consume_chunk_angelic {Γ} :
+    ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
+      SStoreSpec.consume_chunk_angelic CStoreSpec.consume_chunk.
+  Proof.
+    intros w0 ι0 Hpc0 sc cc rc sΦ cΦ rΦ sδ cδ rδ sh ch rh.
+    apply RHeapSpec.refine_consume_chunk_angelic; auto.
+    intros w1 θ1 ι1 Hι1 Hpc1 su cu ru. apply rΦ; auto.
+    eapply refine_inst_persist; eauto.
+  Qed.
 
   Lemma refine_produce {Γ Σ0 pc0} (asn : Assertion Σ0) :
     let w0 := @MkWorld Σ0 pc0 in
@@ -488,173 +426,11 @@ Module Soundness
       (Hpc0 : instprop (wco w0) ι0),
       ℛ⟦□(RStoreSpec Γ Γ RUnit)⟧@{ι0} (@SStoreSpec.produce Γ w0 asn) (CStoreSpec.produce ι0 asn).
   Proof.
-    induction asn; intros w0 * Hpc; cbn - [RSat wctx Val].
-    - now apply refine_box_assume_formula.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_produce_chunk; auto.
-      eapply refine_inst_persist; auto.
-      reflexivity.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_produce_chunk; auto.
-      eapply refine_inst_persist; auto.
-      reflexivity.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_bind.
-      apply refine_demonic_pattern_match; eauto.
-      eapply refine_inst_persist; auto.
-      reflexivity.
-      intros w2 ω12 ι2 -> Hpc2.
-      intros [? ?] [pc vs] [-> ->].
-      apply H; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
-      { rewrite <- ?inst_subst.
-        unfold NamedEnv.
-        fold (@inst_sub (PatternCaseCtx pc)).
-        fold (Sub (PatternCaseCtx pc)).
-        rewrite <- inst_sub_cat.
-        rewrite <- instprop_subst.
-        rewrite <- subst_sub_comp.
-        rewrite sub_comp_cat_left.
-        now rewrite instprop_subst, inst_subst.
-      }
-      now rewrite inst_sub_cat, inst_subst.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_bind.
-      apply IHasn1; auto.
-      intros ? ? ? -> ? _ _ _.
-      apply IHasn2; auto.
-      rewrite ?inst_sub_snoc, ?sub_acc_trans, ?inst_subst, ?inst_sub_wk1; eauto.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_demonic_binary;
-        try apply IHasn1; try apply IHasn2;
-        cbn - [inst sub_wk1];
-        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?inst_subst, ?inst_sub_wk1; eauto.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_bind.
-      apply refine_demonic; auto.
-      intros w2 ω02 ι2 -> Hpc2. intros t v ->.
-      apply IHasn; cbn - [inst sub_wk1];
-        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?instprop_subst, ?inst_subst, ?inst_sub_wk1; eauto.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_debug; auto.
-      apply refine_pure; auto.
-      reflexivity.
-  Qed.
-
-  Lemma refine_consume_chunk {Γ} :
-    ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
-      SStoreSpec.consume_chunk CStoreSpec.consume_chunk.
-  Proof.
-    intros w0 ι0 Hpc0 cs cc ->.
-    unfold SStoreSpec.consume_chunk, CStoreSpec.consume_chunk.
-    apply refine_bind; auto.
-    apply refine_get_heap; auto.
-    intros w1 ω01 ι1 -> Hpc1.
-    intros hs hc ->.
-    remember (peval_chunk (persist cs ω01)) as c1.
-    destruct (try_consume_chunk_exact_spec hs c1) as [h' HIn|].
-    { intros POST__s POST__c HPOST.
-      intros δs δc -> hs' hc' ->.
-      cbn. intros Hwp.
-      cbv [CStoreSpec.assert_formula CStoreSpec.assert_eq_chunk CStoreSpec.bind
-           SStoreSpec.put_heap CStoreSpec.put_heap T
-           CStoreSpec.angelic_list CStoreSpec.lift_purem ].
-      rewrite CPureSpec.wp_angelic_list.
-      change (SHeap w1) in h'.
-      exists (inst c1 ι1, inst h' ι1).
-      split.
-      - unfold inst at 3, inst_heap, inst_list.
-        rewrite heap_extractions_map, List.in_map_iff.
-        + exists (c1 , h'). split. reflexivity. assumption.
-        + eauto using inst_is_duplicable.
-      - rewrite CPureSpec.wp_assert_eq_chunk. subst.
-        rewrite peval_chunk_sound, inst_persist.
-        split; auto. revert Hwp.
-        apply HPOST; wsimpl; auto; reflexivity.
-    }
-    destruct (try_consume_chunk_precise_spec hs c1) as [[h' eqs] HIn|].
-    { intros POST__s POST__c HPOST.
-      intros δs δc Hδ hs' hc' Hh'.
-      cbv [SStoreSpec.put_heap SStoreSpec.bind T]. cbn. intros Hwp.
-      eapply (refine_assert_pathcondition Hpc1 (ta := eqs)) in Hwp; eauto.
-      2: cbn; reflexivity.
-      2: cbn; reflexivity.
-      destruct Hwp as [Heqs HPOST1].
-      cbv [CStoreSpec.bind CStoreSpec.put_heap CStoreSpec.assert_formula
-           T CStoreSpec.angelic_list CStoreSpec.lift_purem].
-      rewrite CPureSpec.wp_angelic_list.
-      eexists. split. apply (HIn _ Heqs). hnf.
-      rewrite CPureSpec.wp_assert_eq_chunk.
-      split; auto. rewrite <- inst_persist.
-      subst. now rewrite peval_chunk_sound.
-    }
-    { intros POST__s POST__c HPOST.
-      intros δs δc ? hs' hc' ? [].
-    }
-  Qed.
-
-  Lemma refine_consume_chunk_angelic {Γ} :
-    ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
-      SStoreSpec.consume_chunk_angelic CStoreSpec.consume_chunk.
-  Proof.
-    intros w0 ι0 Hpc0 cs cc ->.
-    unfold SStoreSpec.consume_chunk_angelic, CStoreSpec.consume_chunk.
-    apply refine_bind; auto.
-    apply refine_get_heap; auto.
-    intros w1 ω01 ι1 -> Hpc1.
-    intros hs hc ->.
-    remember (peval_chunk (persist cs ω01)) as c1.
-    destruct (try_consume_chunk_exact_spec hs c1) as [h' HIn|].
-    { intros POST__s POST__c HPOST.
-      intros δs δc -> hs' hc' ->.
-      cbv [SStoreSpec.put_heap CStoreSpec.bind CStoreSpec.put_heap CStoreSpec.assert_formula
-                         T CStoreSpec.angelic_list CStoreSpec.lift_purem].
-      intros Hwp.
-      rewrite CPureSpec.wp_angelic_list.
-      change (SHeap w1) in h'.
-      exists (inst c1 ι1, inst h' ι1).
-      split.
-      - unfold inst at 3, inst_heap, inst_list.
-        rewrite heap_extractions_map, List.in_map_iff.
-        + exists (c1 , h'). split. reflexivity. assumption.
-        + eauto using inst_is_duplicable.
-      - hnf. subst. rewrite peval_chunk_sound, inst_persist.
-        rewrite CPureSpec.wp_assert_eq_chunk.
-        split; auto. revert Hwp. apply HPOST; wsimpl; auto; reflexivity.
-    }
-    destruct (try_consume_chunk_precise_spec hs c1) as [[h' eqs] HIn|].
-    { intros POST__s POST__c HPOST.
-      intros δs δc Hδ hs' hc' Hh'.
-      cbv [SStoreSpec.put_heap SStoreSpec.bind T]. cbn. intros Hwp.
-      eapply (refine_assert_pathcondition Hpc1 (ta := eqs)) in Hwp; eauto.
-      2: cbn; reflexivity.
-      2: cbn; reflexivity.
-      destruct Hwp as [Heqs HPOST1].
-      cbv [CStoreSpec.bind CStoreSpec.put_heap CStoreSpec.assert_formula
-           T CStoreSpec.angelic_list CStoreSpec.lift_purem].
-      rewrite CPureSpec.wp_angelic_list.
-      eexists. split. apply (HIn _ Heqs). hnf.
-      rewrite CPureSpec.wp_assert_eq_chunk.
-      split; auto. rewrite <- inst_persist.
-      subst. now rewrite peval_chunk_sound.
-    }
-    { apply refine_bind; auto.
-      apply refine_angelic_list; auto.
-      { hnf. unfold inst at 1, inst_heap, inst_list.
-        rewrite heap_extractions_map.
-        { clear. induction (heap_extractions hs) as [|[]];
-            cbn; constructor; cbn; auto. }
-        eauto using inst_is_duplicable.
-      }
-      intros w2 ω12 ι2 -> Hpc2.
-      intros [cs' hs'] [cc' hc']. intros Hch'.
-      inversion Hch'; subst; clear Hch'.
-      apply refine_bind; auto.
-      - apply refine_assert_eq_chunk; auto. hnf.
-        now rewrite peval_chunk_sound, inst_persist, sub_acc_trans, inst_subst.
-      - intros w3 ω23 ι3 -> Hpc3 _ _ _.
-        apply refine_put_heap; auto.
-        eapply refine_inst_persist; eauto.
-    }
+    unfold SStoreSpec.produce, CStoreSpec.produce.
+    intros ι0 Hpc0 w1 θ1 ι1 Hι1 Hpc1 sΦ cΦ rΦ sδ cδ rδ sh ch rh.
+    apply RHeapSpec.refine_produce; auto.
+    intros w2 θ2 ι2 Hι2 Hpc2 su cu ru. apply rΦ; auto.
+    eapply refine_inst_persist; eauto.
   Qed.
 
   Lemma refine_consume {Γ Σ0 pc0} (asn : Assertion Σ0) :
@@ -662,57 +438,34 @@ Module Soundness
     forall
       (ι0 : Valuation w0)
       (Hpc0 : instprop (wco w0) ι0),
-      ℛ⟦□(RStoreSpec Γ Γ RUnit)⟧@{ι0}
-        (@SStoreSpec.consume Γ w0 asn) (CStoreSpec.consume ι0 asn).
+      ℛ⟦□(RStoreSpec Γ Γ RUnit)⟧@{ι0} (@SStoreSpec.consume Γ w0 asn) (CStoreSpec.consume ι0 asn).
   Proof.
-    induction asn; intros w0 * Hpc; cbn - [RSat wctx Val].
-    - now apply refine_box_assert_formula.
-    - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_persist.
-      now apply refine_consume_chunk.
-    - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_persist.
-      now apply refine_consume_chunk_angelic.
-    - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_persist.
-      apply refine_bind.
-      apply refine_angelic_pattern_match; eauto.
-      cbn. reflexivity.
-      intros w2 ω12 ι2 -> Hpc2.
-      intros [? ?] [pc vs] [-> ->].
-      apply H; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
-      { rewrite <- ?inst_subst.
-        unfold NamedEnv.
-        fold (@inst_sub (PatternCaseCtx pc)).
-        fold (Sub (PatternCaseCtx pc)).
-        rewrite <- inst_sub_cat.
-        rewrite <- instprop_subst.
-        rewrite <- subst_sub_comp.
-        rewrite sub_comp_cat_left.
-        now rewrite instprop_subst, inst_subst.
-      }
-      now rewrite inst_sub_cat, inst_subst.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_bind.
-      apply IHasn1; auto.
-      intros ? ? ? -> ? _ _ _.
-      apply IHasn2; auto.
-      rewrite ?inst_sub_snoc, ?sub_acc_trans, ?inst_subst, ?inst_sub_wk1; eauto.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_angelic_binary;
-        try apply IHasn1; try apply IHasn2;
-        cbn - [inst sub_wk1];
-        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?inst_subst, ?inst_sub_wk1; eauto.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_bind; auto.
-      apply refine_angelic; auto.
-      intros w2 ω02 ι2 -> Hpc2. intros t v ->.
-      apply IHasn; cbn - [inst sub_wk1];
-        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?instprop_subst, ?inst_subst, ?inst_sub_wk1; eauto.
-    - intros w1 ω01 ι1 -> Hpc1.
-      apply refine_debug; auto.
-      apply refine_pure; auto.
-      reflexivity.
+    unfold SStoreSpec.consume, CStoreSpec.consume.
+    intros ι0 Hpc0 w1 θ1 ι1 Hι1 Hpc1 sΦ cΦ rΦ sδ cδ rδ sh ch rh.
+    apply RHeapSpec.refine_consume; auto.
+    intros w2 θ2 ι2 Hι2 Hpc2 su cu ru. apply rΦ; auto.
+    eapply refine_inst_persist; eauto.
+  Qed.
+
+
+  Lemma refine_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
+    ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧
+      (@SStoreSpec.read_register Γ τ reg) (CStoreSpec.read_register reg).
+  Proof.
+    intros w0 ι0 Hpc0 sΦ cΦ rΦ sδ cδ rδ sh ch rh.
+    apply RHeapSpec.refine_read_register; auto.
+    intros w1 θ1 ι1 Hι1 Hpc1 sv cv rv. apply rΦ; auto.
+    eapply refine_inst_persist; eauto.
+  Qed.
+
+  Lemma refine_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
+    ℛ⟦RVal τ -> RStoreSpec Γ Γ (RVal τ)⟧
+      (@SStoreSpec.write_register Γ τ reg) (CStoreSpec.write_register reg).
+  Proof.
+    intros w0 ι0 Hpc0 svnew cvnew rvnew sΦ cΦ rΦ sδ cδ rδ sh ch rh.
+    apply RHeapSpec.refine_write_register; auto.
+    intros w1 θ1 ι1 Hι1 Hpc1 sv cv rv. apply rΦ; auto.
+    eapply refine_inst_persist; eauto.
   Qed.
 
   Lemma refine_call_contract {Γ Δ τ} (c : SepContract Δ τ) :
@@ -879,39 +632,11 @@ Module Soundness
       intros [? ?] [pc vs] [-> ?].
       apply refine_pushspops; auto.
       apply H; auto.
+    - now apply refine_read_register.
     - apply refine_bind; auto.
-      apply refine_angelic; auto.
-      intros w1 ω01 ι1 -> Hpc1 t v Htv. hnf in Htv; subst.
-      apply refine_bind; auto.
-      apply refine_consume_chunk; auto.
-      cbn. reflexivity.
-      intros w2 ω12 ι2 -> Hpc2 _ _ _.
-      apply refine_bind; auto.
-      apply refine_produce_chunk; auto.
-      rewrite <- inst_persist; auto.
-      cbn. reflexivity.
-      intros w3 ω23 ι3 -> Hpc3 _ _ _.
-      apply refine_pure; auto.
-      rewrite (persist_trans (A := STerm _)).
-      now rewrite <- ?inst_persist.
-    - apply refine_bind; auto.
-      apply refine_angelic; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros told v ->.
-      apply refine_bind; auto.
-      apply refine_consume_chunk; auto.
-      cbn. reflexivity.
-      intros w2 ω12 ι2 -> Hpc2 _ _ _.
-      apply refine_bind; auto.
       apply (refine_eval_exp e); auto.
-      intros w3 ω23 ι3 -> Hpc3.
-      intros tnew v Htnew. hnf in Htnew. subst v.
-      apply refine_bind; auto.
-      apply refine_produce_chunk; auto.
-      cbn. reflexivity.
-      intros w4 ω34 ι4 -> Hpc4 _ _ _.
-      apply refine_pure; auto.
-      now rewrite <- inst_persist.
+      intros w1 ω01 ι1 -> Hpc1 svnew cvnew rvnew.
+      now apply refine_write_register.
     - apply refine_error; auto.
     - apply refine_debug; auto.
   Qed.

@@ -351,19 +351,19 @@ Module Type ChunksOn
           };
         match_chunk_ptsreg_precise _ := None.
 
-      Fixpoint find_chunk_ptsreg_precise (h : SHeap Σ) : option (SHeap Σ * Term Σ σ) :=
+      Fixpoint find_chunk_ptsreg_precise (h : SHeap Σ) : option (Term Σ σ * SHeap Σ) :=
         match h with
         | nil => None
         | cons c h' =>
             match match_chunk_ptsreg_precise c with
-            | Some t => Some (h', t)
-            | None => option_map (base.prod_map (cons c) id) (find_chunk_ptsreg_precise h')
+            | Some t => Some (t, h')
+            | None => option_map (base.prod_map id (cons c)) (find_chunk_ptsreg_precise h')
             end
         end.
 
       Lemma find_chunk_ptsreg_precise_spec (h : SHeap Σ) :
         option.wlp
-          (fun '(h', t) =>
+          (fun '(t, h') =>
              forall ι : Valuation Σ,
              List.In
                (inst (chunk_ptsreg r t) ι, inst h' ι)
@@ -379,7 +379,7 @@ Module Type ChunksOn
           change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
           cbn. now left.
         - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
-          intros [h' t] HYP ι. specialize (HYP ι).
+          intros [t h'] HYP ι. specialize (HYP ι).
           change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
           cbn [fst heap_extractions]. right. apply List.in_map_iff.
           eexists (inst (chunk_ptsreg r t) ι, inst h' ι). split; auto.
@@ -390,7 +390,7 @@ Module Type ChunksOn
       Definition try_consume_chunk_ptsreg_precise :
         option (SHeap Σ * PathCondition Σ) :=
         option.map
-          (fun '(h', t') => (h', ctx.nil ▻ formula_relop bop.eq t t'))
+          (fun '(t', h') => (h', ctx.nil ▻ formula_relop bop.eq t t'))
           (find_chunk_ptsreg_precise h).
 
       Lemma try_consume_chunk_ptsreg_precise_spec :

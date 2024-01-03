@@ -623,25 +623,29 @@ Module BlockVerificationDerived2Sem.
       (FunDef RiscvPmpProgram.step)
       (fun res => (fun δ' => interp_ptsto_instr a instr ∗ (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I).
   Proof.
-    intros a npc Htrip.
-    apply (exec_sound 10).
-    specialize (Htrip npc).
-    refine (exec_monotonic 10 _ _ _ _ _ _ Htrip).
-    intros [] δ0 h0 HYP.
-    cbn.
+    cbv [exec_instruction_any__c bind CStoreSpec.bind produce_chunk consume_chunk
+      CStoreSpec.produce_chunk CHeapSpec.produce_chunk CPureSpec.produce_chunk
+      CPureSpec.pure demonic CStoreSpec.demonic CStoreSpec.lift_purem
+      CPureSpec.demonic].
+    intros a npc Htrip. specialize (Htrip npc).
+    apply (exec_sound 10). revert Htrip.
+    apply exec_monotonic.
+    intros _ δ0 h0 HYP.
     refine (consume_chunk_sound (scchunk_user ptstoinstr [a; instr]) (fun δ' => (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I δ0 h0 _).
-    refine (consume_chunk_monotonic _ _ _ _ _ HYP).
-    intros [] h1 [an Hrest]; revert Hrest.
+    revert HYP. apply consume_chunk_monotonic.
+    intros _ h1 [an Hrest]; revert Hrest.
     cbn.
     iIntros (HYP') "Hh1".
     iExists an.
     iStopProof.
     refine (consume_chunk_sound (scchunk_ptsreg nextpc an) (fun δ' => lptsreg pc an ∗ POST an δ')%I δ0 h1 _).
-    refine (consume_chunk_monotonic _ _ _ _ _ HYP').
-    intros [] h2 HYP2.
+    revert HYP'.
+    apply consume_chunk_monotonic.
+    intros _ h2 HYP2.
     refine (consume_chunk_sound (scchunk_ptsreg pc an) (fun δ' => POST an δ')%I δ0 h2 _).
-    refine (consume_chunk_monotonic _ _ _ _ _ HYP2).
-    now intros [] h3 HYP3.
+    revert HYP2.
+    apply consume_chunk_monotonic.
+    now intros _ h3 HYP3.
   Qed.
 
 

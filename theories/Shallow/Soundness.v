@@ -54,162 +54,155 @@ Module Type Soundness
   Import CStoreSpec.
   Import ProgramLogic.
 
+  (* This section verifies the monotonicity of the calculated predicate
+     transformers. Which is a necessity for the main soundness theorems. *)
+  Section Monotonicity.
+
+    Definition Monotonic {Γ1 Γ2 A} (m : CStoreSpec Γ1 Γ2 A) : Prop :=
+      forall
+        (P Q : A -> CStore Γ2 -> SCHeap -> Prop)
+        (PQ : forall x δ h, P x δ h -> Q x δ h),
+      forall δ h, m P δ h -> m Q δ h.
+
+    (* Stronger version for those that do not change the store. *)
+    Definition Monotonic' {Γ A} (m : CStoreSpec Γ Γ A) : Prop :=
+      forall δ
+        (P Q : A -> CStore Γ -> SCHeap -> Prop)
+        (PQ : forall x h, P x δ h -> Q x δ h),
+      forall h, m P δ h -> m Q δ h.
+
+    Lemma consume_chunk_monotonic {Γ} (c : SCChunk) :
+      Monotonic' (consume_chunk (Γ := Γ) c).
+    Proof.
+      unfold consume_chunk, Monotonic. intros δ P Q PQ.
+      apply CHeapSpec.mon_consume_chunk. intros ? ? ->.
+      unfold pointwise_relation, impl. apply PQ.
+    Qed.
+
+    Lemma produce_chunk_monotonic {Γ} (c : SCChunk) :
+      Monotonic' (produce_chunk (Γ := Γ) c).
+    Proof.
+      unfold produce_chunk, Monotonic. intros δ P Q PQ.
+      apply CHeapSpec.mon_produce_chunk. intros ? ? ->.
+      unfold pointwise_relation, impl. apply PQ.
+    Qed.
+
+    Lemma consume_monotonic {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
+      Monotonic' (consume (Γ := Γ) ι asn).
+    Proof.
+      unfold consume, Monotonic'. intros * PQ δ.
+      apply CHeapSpec.mon_consume. intros ? ? ->.
+      unfold pointwise_relation, impl. apply PQ.
+    Qed.
+
+    Lemma produce_monotonic {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
+      Monotonic' (produce (Γ := Γ) ι asn).
+    Proof.
+      unfold produce, Monotonic'. intros * PQ.
+      apply CHeapSpec.mon_produce. intros ? ? ->.
+      unfold pointwise_relation, impl. apply PQ.
+    Qed.
+
+    Lemma read_register_monotonic {Γ τ} (r : 𝑹𝑬𝑮 τ) :
+      Monotonic (read_register (Γ := Γ) r).
+    Proof.
+      unfold read_register, Monotonic. intros * PQ δ.
+      apply CHeapSpec.mon_read_register. intros ? ? ->.
+      unfold pointwise_relation, impl. apply PQ.
+    Qed.
+
+    Lemma write_register_monotonic {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
+      Monotonic (write_register (Γ := Γ) r v).
+    Proof.
+      unfold write_register, Monotonic. intros * PQ δ.
+      apply CHeapSpec.mon_write_register. intros ? ? ->.
+      unfold pointwise_relation, impl. apply PQ.
+    Qed.
+
+    Lemma call_lemma_monotonic {Γ Δ} (lem : Lemma Δ) (δΔ : CStore Δ) :
+      Monotonic (call_lemma (Γ := Γ) lem δΔ).
+    Proof.
+      destruct lem; intros P Q PQ δ h;
+        cbv [call_lemma bind
+               angelic_ctx lift_purem assert_formula
+               CPureSpec.assert_formula].
+      rewrite ?CPureSpec.wp_angelic_ctx.
+      intros [ι Hwp]. exists ι. revert Hwp.
+      unfold assert_eq_nenv, lift_purem.
+      rewrite ?CPureSpec.wp_assert_eq_nenv.
+      intros [Hfmls Hwp]; split; auto; revert Hwp.
+      apply consume_monotonic. intros _ ?.
+      apply produce_monotonic; auto.
+    Qed.
+
+    Lemma call_contract_monotonic {Γ Δ τ} (c : SepContract Δ τ) (δΔ : CStore Δ) :
+      Monotonic (call_contract (Γ := Γ) c δΔ).
+    Proof.
+      destruct c; intros P Q PQ δ h;
+        cbv [call_contract bind pure demonic
+               angelic_ctx demonic lift_purem assert_formula
+               CPureSpec.assert_formula].
+      rewrite ?CPureSpec.wp_angelic_ctx.
+      intros [ι Hwp]. exists ι. revert Hwp.
+      unfold assert_eq_nenv, lift_purem.
+      rewrite ?CPureSpec.wp_assert_eq_nenv.
+      intros [Hfmls Hwp]; split; auto; revert Hwp.
+      apply consume_monotonic. intros _ ? Hwp v.
+      specialize (Hwp v); revert Hwp.
+      apply produce_monotonic; auto.
+    Qed.
+
+    Definition MonotonicExec (ex : Exec) : Prop :=
+      forall Γ τ (s : Stm Γ τ),
+      Monotonic (ex _ _ s).
+
+    Lemma exec_aux_monotonic rec (rec_mono : MonotonicExec rec) :
+      MonotonicExec (@exec_aux rec).
+    Proof.
+      unfold MonotonicExec. intros ? ? s.
+      induction s; cbn; intros P Q PQ *;
+        cbv [pure bind angelic pushpop pushspops
+               put_local get_local eval_exp eval_exps assign].
+      - auto.
+      - auto.
+      - apply IHs1. intros *. apply IHs2. auto.
+      - apply IHs. auto.
+      - apply IHs. auto.
+      - destruct (CEnv f); cbn; auto.
+        + apply call_contract_monotonic; auto.
+        + apply rec_mono; auto.
+      - apply IHs. auto.
+      - apply call_contract_monotonic; auto.
+      - apply call_lemma_monotonic; intros ? ? ?.
+        apply IHs. auto.
+      - apply IHs1. intros ? ? ?. apply IHs2. auto.
+      - intros HYP Heq. specialize (HYP Heq). revert HYP.
+        apply IHs; auto.
+      - auto.
+      - apply IHs. intros ? ? ?.
+        rewrite !wp_demonic_pattern_match.
+        destruct pattern_match_val.
+        apply H; auto.
+      - now apply read_register_monotonic.
+      - now apply write_register_monotonic.
+      - apply IHs; intros *; apply H; auto.
+      - apply IHs; auto.
+    Qed.
+
+    Lemma exec_monotonic n : MonotonicExec (@exec n).
+    Proof.
+      induction n; cbn.
+      - unfold MonotonicExec, Monotonic; cbn; auto.
+      - now apply exec_aux_monotonic.
+    Qed.
+
+  End Monotonicity.
+
   Section Soundness.
 
     Import iris.proofmode.tactics.
 
     Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
-
-    (* This section verifies the monotonicity of the calculated predicate
-       transformers. Which is a necessity for the main soundness theorems. *)
-    Section Monotonicity.
-
-      Definition Monotonic {Γ1 Γ2 A} (m : CStoreSpec Γ1 Γ2 A) : Prop :=
-        forall
-          (P Q : A -> CStore Γ2 -> SCHeap -> Prop)
-          (PQ : forall x δ h, P x δ h -> Q x δ h),
-          forall δ h, m P δ h -> m Q δ h.
-
-      (* Stronger version for those that do not change the store. *)
-      Definition Monotonic' {Γ A} (m : CStoreSpec Γ Γ A) : Prop :=
-        forall δ
-          (P Q : A -> CStore Γ -> SCHeap -> Prop)
-          (PQ : forall x h, P x δ h -> Q x δ h),
-          forall h, m P δ h -> m Q δ h.
-
-      Lemma consume_chunk_monotonic {Γ} {c : SCChunk} :
-        Monotonic' (consume_chunk (Γ := Γ) c).
-      Proof.
-        cbv [Monotonic' consume_chunk bind get_heap angelic_list
-             lift_purem assert_formula put_heap CPureSpec.assert_formula
-             assert_eq_chunk].
-        intros δ P Q PQ h. rewrite ?CPureSpec.wp_angelic_list.
-        intros [ch' Hwp]; exists ch'; revert Hwp. destruct ch'.
-        rewrite ?CPureSpec.wp_assert_eq_chunk. intuition.
-      Qed.
-
-      Lemma consume_monotonic {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
-        Monotonic' (consume (Γ := Γ) ι asn).
-      Proof.
-        intros δ. induction asn; cbn; intros * PQ *.
-        - unfold assert_formula, lift_purem, CPureSpec.assert_formula,
-            CPureSpec.assert_pathcondition.
-          intuition.
-        - now apply consume_chunk_monotonic.
-        - now apply consume_chunk_monotonic.
-        - unfold bind. rewrite !wp_angelic_pattern_match.
-          destruct pattern_match_val. now apply H.
-        - unfold bind.
-          apply IHasn1; eauto.
-        - intros [|].
-          + left. apply IHasn1 with (P := P); assumption.
-          + right. apply IHasn2 with (P := P); assumption.
-        - unfold bind, angelic.
-          intros [v ?]; exists v; eauto.
-        - unfold pure; eauto.
-      Qed.
-
-      Lemma produce_monotonic {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
-        Monotonic' (produce (Γ := Γ) ι asn).
-      Proof.
-        intros δ. induction asn; cbn; intros * PQ *.
-        - unfold assume_formula, lift_purem, CPureSpec.assume_formula,
-            CPureSpec.assume_pathcondition.
-          intuition.
-        - unfold produce_chunk; eauto.
-        - unfold produce_chunk; eauto.
-        - unfold bind. rewrite !wp_demonic_pattern_match.
-          destruct pattern_match_val. now apply H.
-        - unfold bind.
-          apply IHasn1; eauto.
-        - intros [Hasn1 Hasn2].
-          split.
-          + apply IHasn1 with (P := P); assumption.
-          + apply IHasn2 with (P := P); assumption.
-        - unfold bind, demonic, lift_purem, CPureSpec.demonic. eauto.
-        - unfold pure; eauto.
-      Qed.
-
-      Lemma call_lemma_monotonic {Γ Δ} (lem : Lemma Δ) (δΔ : CStore Δ) :
-        Monotonic (call_lemma (Γ := Γ) lem δΔ).
-      Proof.
-        destruct lem; intros P Q PQ δ h;
-          cbv [call_lemma bind
-               angelic_ctx lift_purem assert_formula
-               CPureSpec.assert_formula].
-        rewrite ?CPureSpec.wp_angelic_ctx.
-        intros [ι Hwp]. exists ι. revert Hwp.
-        unfold assert_eq_nenv, lift_purem.
-        rewrite ?CPureSpec.wp_assert_eq_nenv.
-        intros [Hfmls Hwp]; split; auto; revert Hwp.
-        apply consume_monotonic. intros _ ?.
-        apply produce_monotonic; auto.
-      Qed.
-
-      Lemma call_contract_monotonic {Γ Δ τ} (c : SepContract Δ τ) (δΔ : CStore Δ) :
-        Monotonic (call_contract (Γ := Γ) c δΔ).
-      Proof.
-        destruct c; intros P Q PQ δ h;
-          cbv [call_contract bind pure demonic
-               angelic_ctx demonic lift_purem assert_formula
-               CPureSpec.assert_formula].
-        rewrite ?CPureSpec.wp_angelic_ctx.
-        intros [ι Hwp]. exists ι. revert Hwp.
-        unfold assert_eq_nenv, lift_purem.
-        rewrite ?CPureSpec.wp_assert_eq_nenv.
-        intros [Hfmls Hwp]; split; auto; revert Hwp.
-        apply consume_monotonic. intros _ ? Hwp v.
-        specialize (Hwp v); revert Hwp.
-        apply produce_monotonic; auto.
-      Qed.
-
-      Definition MonotonicExec (ex : Exec) : Prop :=
-        forall Γ τ (s : Stm Γ τ),
-          Monotonic (ex _ _ s).
-
-      Lemma exec_aux_monotonic rec (rec_mono : MonotonicExec rec) :
-        MonotonicExec (@exec_aux rec).
-      Proof.
-        unfold MonotonicExec. intros ? ? s.
-        induction s; cbn; intros P Q PQ *;
-          cbv [pure bind angelic pushpop pushspops
-               produce_chunk put_local get_local eval_exp eval_exps assign].
-        - auto.
-        - auto.
-        - apply IHs1. intros *. apply IHs2. auto.
-        - apply IHs. auto.
-        - apply IHs. auto.
-        - destruct (CEnv f); cbn; auto.
-          + apply call_contract_monotonic; auto.
-          + apply rec_mono; auto.
-        - apply IHs. auto.
-        - apply call_contract_monotonic; auto.
-        - apply call_lemma_monotonic; intros ? ? ?.
-          apply IHs. auto.
-        - apply IHs1. intros ? ? ?. apply IHs2. auto.
-        - intros HYP Heq. specialize (HYP Heq). revert HYP.
-          apply IHs; auto.
-        - auto.
-        - apply IHs. intros ? ? ?.
-          rewrite !wp_demonic_pattern_match.
-          destruct pattern_match_val.
-          apply H; auto.
-        - intros [v Hwp]; exists v; revert Hwp.
-          apply consume_chunk_monotonic. auto.
-        - intros [v Hwp]; exists v; revert Hwp.
-          apply consume_chunk_monotonic. auto.
-        - apply IHs; intros *; apply H; auto.
-        - apply IHs; auto.
-      Qed.
-
-      Lemma exec_monotonic n : MonotonicExec (@exec n).
-      Proof.
-        induction n; cbn.
-        - unfold MonotonicExec, Monotonic; cbn; auto.
-        - now apply exec_aux_monotonic.
-      Qed.
-
-    End Monotonicity.
 
     (* liftP converts the "proof theoretic" predicates (CStore Γ -> L), with L
        being a type of separation logic propositions, to the "model theoretic"
@@ -223,14 +216,10 @@ Module Type Soundness
         consume_chunk c (fun _ => liftP POST) δ h ->
         interpret_scheap h ⊢ interpret_scchunk c ∗ POST δ.
     Proof.
-      cbv [bind get_heap consume_chunk angelic_list assert_eq_chunk
-           CPureSpec.assert_formula lift_purem assert_formula put_heap].
-      intros δ h. rewrite CPureSpec.wp_angelic_list.
-      intros [[c' h'] [HIn Hwp]].
-      rewrite CPureSpec.wp_assert_eq_chunk in Hwp.
-      destruct Hwp as [Hc HPOST]. subst c'.
-      apply in_heap_extractions in HIn; rewrite HIn; clear HIn.
-      now apply bi.sep_mono'.
+      unfold consume_chunk. intros δ h ->%CPureSpec.wp_consume_chunk.
+      apply bi.sep_mono'. easy.
+      apply bi.exist_elim. intros h'.
+      now apply bi.pure_elim_r.
     Qed.
 
     Lemma assert_formula_sound {Γ Σ} {ι : Valuation Σ} {fml : Formula Σ}
@@ -261,70 +250,21 @@ Module Type Soundness
         consume ι asn (fun _ => liftP POST) δ h ->
         interpret_scheap h ⊢ asn.interpret asn ι ∗ POST δ.
     Proof.
-      revert POST. induction asn; cbn - [inst inst_term]; intros POST δ1 h1.
-      - now apply assert_formula_sound.
-      - intros Hc%consume_chunk_sound.
-        now rewrite interpret_scchunk_inst in Hc.
-      - intros Hc%consume_chunk_sound.
-        now rewrite interpret_scchunk_inst in Hc.
-      - unfold bind. rewrite wp_angelic_pattern_match.
-        destruct pattern_match_val; auto.
-      - unfold bind. intros Hwp. rewrite <- bi.sep_assoc.
-        apply (IHasn1 ι (fun δ => asn.interpret asn2 ι ∗ POST δ)%I δ1 h1); clear IHasn1.
-        revert Hwp. apply consume_monotonic. intros _ h2.
-        now apply (IHasn2 ι POST δ1 h2).
-      - rewrite bi.sep_or_r; intros [].
-        + apply bi.or_intro_l'; apply IHasn1; assumption.
-        + apply bi.or_intro_r'; apply IHasn2; assumption.
-      - intros [v Hwp].
-        transitivity (asn.interpret asn (env.snoc ι (ς∷τ) v) ∗ POST δ1)%I.
-        + now apply IHasn.
-        + apply bi.sep_mono'.
-          apply bi.exist_intro' with v.
-          reflexivity.
-          reflexivity.
-      - now rewrite bi.emp_sep.
+      intros ? ? ->%CHeapSpec.consume_sound. apply bi.sep_mono'; [easy|].
+      iIntros "(%h' & Hh' & %HΦ)". now iApply HΦ.
     Qed.
 
     Lemma produce_sound {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         produce ι asn (fun _ => liftP POST) δ h ->
+        (* Alternatively, we could write this as *)
+        (* interpret_scheap h ⊢ interpret_assertion asn ι -∗ POST δ. *)
+        (* which more closely resembles the assume guard. Why didn't we do this? *)
         interpret_scheap h ∗ asn.interpret asn ι ⊢ POST δ.
-        (* Alternatively, we could write this as
-             interpret_scheap h ⊢ interpret_assertion asn ι -∗ POST δ.
-           which more closely resembles the assume guard. Why didn't we do this? *)
     Proof.
-      revert POST. induction asn; cbn - [assume_formula]; intros POST δ1 h1.
-      - now apply assume_formula_sound.
-      - rewrite bi.sep_comm.
-        unfold produce_chunk, liftP; cbn.
-        now rewrite interpret_scchunk_inst.
-      - rewrite bi.sep_comm.
-        unfold produce_chunk, liftP; cbn.
-        now rewrite interpret_scchunk_inst.
-      - unfold bind. rewrite wp_demonic_pattern_match.
-        destruct pattern_match_val; auto.
-      - unfold bind. intros Hwp.
-        rewrite bi.sep_assoc.
-        apply wand_sep_adjoint.
-        apply (IHasn1 ι (fun δ => asn.interpret asn2 ι -∗ POST δ) δ1 h1)%I; clear IHasn1.
-        revert Hwp. apply produce_monotonic. intros _ h2 Hwp.
-        unfold liftP. apply wand_sep_adjoint.
-        now apply (IHasn2 ι POST δ1 h2).
-      - intros [].
-        rewrite bi.sep_comm.
-        rewrite bi.sep_or_r.
-        apply bi.or_elim; rewrite bi.sep_comm.
-        + apply IHasn1; assumption.
-        + apply IHasn2; assumption.
-      - intros Hwp.
-        rewrite bi.sep_comm.
-        apply wand_sep_adjoint.
-        apply bi.exist_elim. intro v.
-        apply wand_sep_adjoint.
-        rewrite bi.sep_comm.
-        now apply IHasn.
-      - now rewrite bi.sep_emp.
+      intros ? ? ->%CHeapSpec.produce_sound.
+      apply wand_sep_adjoint. apply bi.wand_mono'; [easy|].
+      iIntros "(%h' & Hh' & %HΦ)". now iApply HΦ.
     Qed.
 
     Lemma produce_sound' {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
@@ -518,21 +458,29 @@ Module Type Soundness
         destruct HYP as [v HYP].
         eapply rule_consequence_left.
         apply (rule_stm_read_register_backwards (v := v)).
-        apply (@consume_chunk_sound Γ (scchunk_ptsreg reg v) (fun δ => _ -∗ POST _ δ))%I.
-        revert HYP. apply consume_chunk_monotonic.
-        intros _ h2.
-        unfold produce_chunk, liftP. cbn.
-        now rewrite bi.sep_comm wand_sep_adjoint.
+        apply CPureSpec.wp_consume_chunk in HYP.
+        rewrite HYP. clear HYP. cbn.
+        apply bi.sep_mono'. easy.
+        apply bi.exist_elim. intros h2.
+        apply bi.pure_elim_r.
+        intros ->%CPureSpec.wp_produce_chunk.
+        apply bi.wand_mono'. easy.
+        apply bi.exist_elim. intros h3.
+        now apply bi.pure_elim_r.
 
       - (* stm_write_register *)
         destruct HYP as [v HYP].
         eapply rule_consequence_left.
         apply (rule_stm_write_register_backwards (v := v)).
-        apply (@consume_chunk_sound Γ (scchunk_ptsreg reg v) (fun δ => _ -∗ POST _ δ))%I.
-        revert HYP. apply consume_chunk_monotonic.
-        intros _ h2.
-        unfold produce_chunk, liftP. cbn.
-        now rewrite bi.sep_comm wand_sep_adjoint.
+        apply CPureSpec.wp_consume_chunk in HYP.
+        rewrite HYP. clear HYP. cbn.
+        apply bi.sep_mono'. easy.
+        apply bi.exist_elim. intros h2.
+        apply bi.pure_elim_r.
+        intros ->%CPureSpec.wp_produce_chunk.
+        apply bi.wand_mono'. easy.
+        apply bi.exist_elim. intros h3.
+        now apply bi.pure_elim_r.
 
       - (* stm_bind *)
         eapply rule_consequence_left.

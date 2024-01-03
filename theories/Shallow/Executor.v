@@ -61,13 +61,14 @@ Module Type ShallowExecOn
      variable store before and after execution. *)
   Definition CStoreSpec (Γ1 Γ2 : PCtx) (A : Type) : Type :=
     (A -> CStore Γ2 -> SCHeap -> Prop) -> CStore Γ1 -> SCHeap -> Prop.
-  Bind Scope mut_scope with CStoreSpec.
-
-  Local Open Scope mut_scope.
 
   Module CStoreSpec.
 
     Section Basic.
+
+      Definition evalStoreSpec {Γ1 Γ2 A} :
+        CStoreSpec Γ1 Γ2 A -> CStore Γ1 -> CHeapSpec A :=
+        fun m δ Φ => m (fun a1 _ => Φ a1) δ.
 
       Definition lift_purem {Γ} {A : Type} :
         CPureSpec A -> CStoreSpec Γ Γ A :=
@@ -97,13 +98,6 @@ Module Type ShallowExecOn
         forall Δ : NCtx N Ty, CStoreSpec Γ Γ (NamedEnv Val Δ) :=
         fun Δ => lift_purem (CPureSpec.angelic_ctx Δ).
       #[global] Arguments angelic_ctx {N Γ} Δ.
-
-      Definition angelic_list {A Γ} (xs : list A) : CStoreSpec Γ Γ A :=
-        lift_purem (CPureSpec.angelic_list xs).
-
-      Definition angelic_finite F `{finite.Finite F} {Γ} : CStoreSpec Γ Γ F :=
-        lift_purem (CPureSpec.angelic_finite F).
-      #[global] Arguments angelic_finite F {_ _ Γ}.
 
       Definition demonic_ctx {N : Set} {Γ} :
         forall Δ : NCtx N Ty, CStoreSpec Γ Γ (NamedEnv Val Δ) :=
@@ -140,30 +134,15 @@ Module Type ShallowExecOn
         lift_purem (CPureSpec.assert_eq_env δ δ').
       Definition assert_eq_nenv {N Γ} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) : CStoreSpec Γ Γ unit :=
         lift_purem (CPureSpec.assert_eq_nenv δ δ').
-      Definition assert_eq_chunk {Γ} (c c' : SCChunk) : CStoreSpec Γ Γ unit :=
-        lift_purem (CPureSpec.assert_eq_chunk c c').
 
     End AssumeAssert.
 
     Section PatternMatching.
 
-      Definition angelic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ) :
-        CStoreSpec Γ Γ (MatchResult pat) :=
-        lift_purem (CPureSpec.angelic_pattern_match pat v).
-      #[global] Arguments angelic_pattern_match {N Γ σ} pat v.
-
       Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ) :
         CStoreSpec Γ Γ (MatchResult pat) :=
         lift_purem (CPureSpec.demonic_pattern_match pat v).
       #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
-
-      Lemma wp_angelic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ)
-        (Φ : MatchResult pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
-        angelic_pattern_match pat v Φ δ h <-> Φ (pattern_match_val pat v) δ h.
-      Proof.
-        unfold angelic_pattern_match, lift_purem.
-        now rewrite CPureSpec.wp_angelic_pattern_match.
-      Qed.
 
       Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ)
         (Φ : MatchResult pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
@@ -187,10 +166,6 @@ Module Type ShallowExecOn
         fun POST δ => POST δ δ.
       Definition put_local {Γ1 Γ2} (δ : CStore Γ2) : CStoreSpec Γ1 Γ2 unit :=
         fun POST _ => POST tt δ.
-      Definition get_heap {Γ} : CStoreSpec Γ Γ SCHeap :=
-        fun POST δ h => POST h δ h.
-      Definition put_heap {Γ} (h : SCHeap) : CStoreSpec Γ Γ unit :=
-        fun POST δ _ => POST tt δ h.
 
       Definition eval_exp {Γ σ} (e : Exp Γ σ) : CStoreSpec Γ Γ (Val σ) :=
         fun POST δ => POST (eval e δ) δ.
@@ -204,55 +179,20 @@ Module Type ShallowExecOn
 
     Section ProduceConsume.
 
+      Definition produce {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CStoreSpec Γ Γ unit :=
+        fun Φ δ => CHeapSpec.produce asn ι (fun x => Φ x δ).
+      Definition consume {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CStoreSpec Γ Γ unit :=
+        fun Φ δ => CHeapSpec.consume asn ι (fun x => Φ x δ).
+
       Definition produce_chunk {Γ} (c : SCChunk) : CStoreSpec Γ Γ unit :=
-        fun POST δ h => POST tt δ (cons c h).
-
+        fun Φ δ => CHeapSpec.produce_chunk c (fun u => Φ u δ).
       Definition consume_chunk {Γ} (c : SCChunk) : CStoreSpec Γ Γ unit :=
-        h         <- get_heap ;;
-        '(c', h') <- angelic_list (heap_extractions h) ;;
-        assert_eq_chunk c c' ;;
-        put_heap h'.
+        fun Φ δ => CHeapSpec.consume_chunk c (fun u => Φ u δ).
 
-      Global Arguments produce_chunk {Γ} _.
-      Global Arguments consume_chunk {Γ} _.
-
-      Fixpoint produce {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CStoreSpec Γ Γ unit :=
-        match asn with
-        | asn.formula fml => assume_formula (instprop fml ι)
-        | asn.chunk c     => produce_chunk (inst c ι)
-        | asn.chunk_angelic c => produce_chunk (inst c ι)
-        | asn.pattern_match s pat rhs =>
-            let v := (inst (T := fun Σ => Term Σ _) s ι) in
-            '(existT pc vs) <- demonic_pattern_match pat v ;;
-            produce (ι ►► vs) (rhs pc)
-        | asn.sep a1 a2   => _ <- produce ι a1 ;; produce ι a2
-        | asn.or a1 a2 =>
-          demonic_binary (produce ι a1)
-                         (produce ι a2)
-        | asn.exist ς τ a =>
-          v <- demonic τ ;;
-          produce (env.snoc ι (ς∷τ) v) a
-        | asn.debug => pure tt
-        end.
-
-      Fixpoint consume {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CStoreSpec Γ Γ unit :=
-        match asn with
-        | asn.formula fml => assert_formula (instprop fml ι)
-        | asn.chunk c     => consume_chunk (inst c ι)
-        | asn.chunk_angelic c     => consume_chunk (inst c ι)
-        | asn.pattern_match s pat rhs =>
-            let v := (inst (T := fun Σ => Term Σ _) s ι) in
-            '(existT pc vs) <- angelic_pattern_match pat v ;;
-            consume (ι ►► vs) (rhs pc)
-        | asn.sep a1 a2   => _ <- consume ι a1;; consume ι a2
-        | asn.or a1 a2 =>
-          angelic_binary (consume ι a1)
-                         (consume ι a2)
-        | asn.exist ς τ a =>
-          v <- angelic τ ;;
-          consume (env.snoc ι (ς∷τ) v) a
-        | asn.debug => pure tt
-        end.
+      Definition read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) : CStoreSpec Γ Γ (Val τ) :=
+        fun Φ δ => CHeapSpec.read_register r (fun v' => Φ v' δ).
+      Definition write_register {Γ τ} (r : 𝑹𝑬𝑮 τ) : Val τ -> CStoreSpec Γ Γ (Val τ) :=
+        fun v Φ δ => CHeapSpec.write_register r v (fun v' => Φ v' δ).
 
     End ProduceConsume.
 
@@ -339,17 +279,10 @@ Module Type ShallowExecOn
               '(existT pc δpc) <- demonic_pattern_match pat v ;;
               pushspops δpc (exec_aux (rhs pc))
             | stm_read_register reg =>
-              v <- angelic τ ;;
-              let c := scchunk_ptsreg reg v in
-              _ <- consume_chunk c ;;
-              _ <- produce_chunk c ;;
-              pure v
+                read_register reg
             | stm_write_register reg e =>
-              v__old <- angelic τ ;;
-              _    <- consume_chunk (scchunk_ptsreg reg v__old) ;;
-              v__new <- eval_exp e ;;
-              _    <- produce_chunk (scchunk_ptsreg reg v__new) ;;
-              pure v__new
+                v__new <- eval_exp e ;;
+                write_register reg v__new
             | stm_bind s k =>
               v <- exec_aux s ;;
               exec_aux (k v)

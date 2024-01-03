@@ -39,11 +39,13 @@ From Equations Require Import
 From Katamaran Require Import
   Prelude
   Base
+  Syntax.Assertions
   Syntax.Chunks
   Syntax.Predicates
   Symbolic.Propositions
   Symbolic.Worlds.
 
+Import Katamaran.Sep.Logic (wand_sep_adjoint).
 Import SignatureNotations ctx.notations env.notations.
 
 #[local] Set Implicit Arguments.
@@ -79,7 +81,8 @@ Proof. intros pf a. apply pf. Qed.
 Proof. easy. Qed.
 
 Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
-  (Import W : WorldsMixin B P) (Import SP : SymPropOn B P W).
+  (Import W : WorldsMixin B P) (Import SP : SymPropOn B P W)
+  (Import AS : AssertionsOn B P W).
 
   (* This is used by potentially multiple instances, but ultimately should be
      moved somewhere else. *)
@@ -378,6 +381,27 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Definition replay [Σ] (P : 𝕊 Σ) (ι : Valuation Σ) :Prop :=
       run (replay_aux P ι).
 
+    Definition produce_chunk (c : SCChunk) (h : SCHeap) : CPureSpec SCHeap :=
+      pure (cons c h).
+
+    Definition consume_chunk (c : SCChunk) (h : SCHeap) : CPureSpec SCHeap :=
+      '(c', h') <- angelic_list (heap_extractions h) ;;
+      assert_eq_chunk c c' ;;
+      pure h'.
+
+    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) (h0 : SCHeap) : CPureSpec (Val τ * SCHeap) :=
+      v  <- angelic _ ;;
+      h1 <- consume_chunk (scchunk_ptsreg reg v) h0 ;;
+      h2 <- produce_chunk (scchunk_ptsreg reg v) h1 ;;
+      pure (v , h2).
+
+    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : Val τ) (h0 : SCHeap) :
+      CPureSpec (Val τ * SCHeap) :=
+      vold <- angelic _ ;;
+      h1   <- consume_chunk (scchunk_ptsreg reg vold) h0 ;;
+      h2   <- produce_chunk (scchunk_ptsreg reg vnew) h1 ;;
+      pure (vnew, h2).
+
     #[export] Instance mon_run :
       Monotonic (MPureSpec eq ==> impl) run.
     Proof. firstorder. Qed.
@@ -508,6 +532,21 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       apply monotonic_pointwise. intros ι.
       apply mon_run, mon_replay_aux.
     Qed.
+
+    #[export] Instance mon_produce_chunk c h :
+      Monotonic (MPureSpec eq) (produce_chunk c h).
+    Proof. firstorder. Qed.
+    #[export] Instance mon_consume_chunk c h :
+      Monotonic (MPureSpec eq) (consume_chunk c h).
+    Proof. unfold consume_chunk. typeclasses eauto. Qed.
+
+    #[export] Instance mon_read_register {τ} (reg : 𝑹𝑬𝑮 τ) :
+      Monotonic (SCHeap ::> MPureSpec eq) (read_register reg).
+    Proof. unfold read_register. typeclasses eauto. Qed.
+
+    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) :
+      Monotonic (Val τ ::> SCHeap ::> MPureSpec eq) (write_register reg).
+    Proof. unfold write_register. typeclasses eauto. Qed.
 
     Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
       angelic_ctx Δ POST <-> exists vs : NamedEnv Val Δ, POST vs.
@@ -672,8 +711,316 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       - unfold debug. apply IHs.
     Qed.
 
+    Section WithBI.
+
+      Import iris.bi.interface iris.bi.derived_laws iris.bi.extensions.
+
+      Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
+
+      Lemma wp_consume_chunk (c : SCChunk) (h : SCHeap) (Φ : SCHeap -> Prop) :
+        consume_chunk c h Φ ->
+        (interpret_scheap h ⊢ interpret_scchunk c ∗
+         (∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ h'⌝))%I.
+      Proof.
+        unfold consume_chunk. cbn.
+        rewrite wp_angelic_list.
+        intros ([c' h'] & HIn & H). cbn in H.
+        rewrite CPureSpec.wp_assert_eq_chunk in H.
+        destruct H as [Heq Hput]. subst. hnf in Hput.
+        apply in_heap_extractions in HIn. rewrite HIn.
+        apply bi.sep_mono'; [easy|].
+        apply bi.exist_intro' with h'.
+        apply bi.and_intro; auto.
+      Qed.
+      #[global] Arguments consume_chunk : simpl never.
+
+      Lemma wp_produce_chunk (c : SCChunk) (h : SCHeap) (Φ : SCHeap -> Prop) :
+        produce_chunk c h Φ ->
+        (interpret_scheap h ⊢
+           interpret_scchunk c -∗ ∃ h', interpret_scheap h' ∧ ⌜Φ h'⌝).
+      Proof.
+        cbn. intros HΦ. apply wand_sep_adjoint.
+        apply bi.exist_intro' with (c :: h), bi.and_intro.
+        - now rewrite bi.sep_comm.
+        - now apply bi.pure_intro.
+      Qed.
+      #[global] Arguments produce_chunk : simpl never.
+
+    End WithBI.
+
   End CPureSpec.
   Export (hints) CPureSpec.
+
+  Definition CHeapSpec (A : Type) : Type :=
+    (A -> SCHeap -> Prop) -> SCHeap -> Prop.
+
+  Definition MHeapSpec [A] (MA : relation A) : relation (CHeapSpec A) :=
+    (MA ==> SCHeap ::> impl) ==> SCHeap ::> impl.
+
+  Module CHeapSpec.
+
+    Definition run : CHeapSpec unit -> Prop :=
+      fun m => m (fun _ h1 => FINISH) List.nil.
+
+    Definition lift_purespec {A : Type} :
+      CPureSpec A -> CHeapSpec A :=
+      fun m Φ h0 => m (fun a1 => Φ a1 h0).
+
+    Definition pure {A} a := lift_purespec (@CPureSpec.pure A a).
+
+    Definition bind {A B} : CHeapSpec A -> (A -> CHeapSpec B) -> CHeapSpec B :=
+      fun m f Φ h => m (fun a1 => f a1 Φ) h.
+
+    Module Import notations.
+      Notation "' x <- ma ;; mb" :=
+        (bind ma (fun x => mb))
+          (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
+             format "' x  <-  ma  ;;  mb").
+      Notation "x <- ma ;; mb" :=
+        (bind ma (fun x => mb))
+          (at level 80, ma at level 90, mb at level 200, right associativity).
+      Notation "ma ;; mb" := (bind ma (fun _ => mb)).
+    End notations.
+
+    Definition angelic (σ : Ty) : CHeapSpec (Val σ) :=
+      lift_purespec (CPureSpec.angelic σ).
+    #[global] Arguments angelic σ Φ : rename.
+    Definition demonic (σ : Ty) : CHeapSpec (Val σ) :=
+      lift_purespec (CPureSpec.demonic σ).
+    #[global] Arguments demonic σ Φ : rename.
+
+    Definition angelic_binary {A} : CHeapSpec A -> CHeapSpec A -> CHeapSpec A :=
+      fun m1 m2 Φ h => m1 Φ h \/ m2 Φ h.
+    Definition demonic_binary {A} : CHeapSpec A -> CHeapSpec A -> CHeapSpec A :=
+      fun m1 m2 Φ h => m1 Φ h /\ m2 Φ h.
+
+    Definition debug {A} : CHeapSpec A -> CHeapSpec A :=
+      fun m => m.
+
+    Definition assert_formula : Prop -> CHeapSpec unit :=
+      fun fml => lift_purespec (CPureSpec.assert_formula fml).
+    Definition assume_formula : Prop -> CHeapSpec unit :=
+      fun fml => lift_purespec (CPureSpec.assume_formula fml).
+
+    Definition produce_chunk (c : SCChunk) : CHeapSpec unit :=
+      fun Φ h => CPureSpec.produce_chunk c h (Φ tt).
+    Definition consume_chunk (c : SCChunk) : CHeapSpec unit :=
+      fun Φ h => CPureSpec.consume_chunk c h (Φ tt).
+
+    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) : CHeapSpec (Val τ) :=
+      fun Φ h => CPureSpec.read_register reg h (fun '(t,h') => Φ t h').
+    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) : CHeapSpec (Val τ) :=
+      fun Φ h => CPureSpec.write_register reg v h (fun '(v',h') => Φ v' h').
+
+    Fixpoint produce {Σ} (asn : Assertion Σ) (ι : Valuation Σ) : CHeapSpec unit :=
+      match asn with
+      | asn.formula fml =>
+          assume_formula (instprop fml ι)
+      | asn.chunk c =>
+          produce_chunk (inst c ι)
+      | asn.chunk_angelic c =>
+          produce_chunk (inst c ι)
+      | asn.pattern_match s pat rhs =>
+          '(existT pc δpc) <-
+            lift_purespec (CPureSpec.demonic_pattern_match pat (inst s ι)) ;;
+          produce (rhs pc) (ι ►► δpc)
+      | asn.sep a1 a2 =>
+          _ <- produce a1 ι ;;
+          produce a2 ι
+      | asn.or a1 a2 =>
+          demonic_binary (produce a1 ι) (produce a2 ι)
+      | asn.exist ς τ a =>
+          t <- demonic τ ;;
+          produce a (env.snoc ι (ς∷τ) t)
+      | asn.debug =>
+          debug (pure tt)
+      end.
+
+    Fixpoint consume {Σ} (asn : Assertion Σ) (ι : Valuation Σ) : CHeapSpec unit :=
+      match asn with
+      | asn.formula fml =>
+          assert_formula (instprop fml ι)
+      | asn.chunk c =>
+          consume_chunk (inst c ι)
+      | asn.chunk_angelic c =>
+          consume_chunk (inst c ι)
+      | asn.pattern_match s pat rhs =>
+          '(existT pc δpc) <-
+            lift_purespec (CPureSpec.angelic_pattern_match pat (inst s ι)) ;;
+          consume (rhs pc) (ι ►► δpc)
+      | asn.sep a1 a2 =>
+          _ <- consume a1 ι ;;
+          consume a2 ι
+      | asn.or a1 a2 =>
+          angelic_binary (consume a1 ι) (consume a2 ι)
+      | asn.exist ς τ a =>
+          t <- angelic τ ;;
+          consume a (env.snoc ι (ς∷τ) t)
+      | asn.debug =>
+          debug (pure tt)
+      end.
+
+    Lemma mon_lift_purespec' `{MA : relation A} :
+      Monotonic (MPureSpec MA ==> MHeapSpec MA) (lift_purespec).
+    Proof. intros ? ? rm ? ? rΦ h. apply rm. intros ? ? ra. now apply rΦ. Qed.
+
+    #[export] Instance mon_lift_purespec `{MA : relation A} m :
+      Monotonic (MPureSpec MA) m -> Monotonic (MHeapSpec MA) (lift_purespec m).
+    Proof. intros rm. now apply mon_lift_purespec'. Qed.
+
+    Lemma mon_pure' `{MA : relation A} :
+      Monotonic (MA ==> MHeapSpec MA) pure.
+    Proof. firstorder. Qed.
+
+    #[export] Instance mon_pure `{MA : relation A} x :
+      Monotonic MA x -> Monotonic (MHeapSpec MA) (pure x).
+    Proof. firstorder. Qed.
+
+    Lemma mon_bind' `{MA : relation A, RB : relation B} :
+      Monotonic (MHeapSpec MA ==> (MA ==> MHeapSpec RB) ==> MHeapSpec RB) bind.
+    Proof.
+      intros ? ? rm ? ? rf ? ? rΦ. apply rm. intros ? ? ra.
+      apply rf. apply ra. intros ? ? rb. apply rΦ, rb.
+    Qed.
+
+    #[export] Instance mon_bind `{MA : relation A, RB : relation B}
+      (m : CHeapSpec A) (f : A -> CHeapSpec B) :
+      Monotonic (MHeapSpec MA) m ->
+      Monotonic (MA ==> MHeapSpec RB) f ->
+      Monotonic (MHeapSpec RB) (bind m f).
+    Proof. intros rm rf. eapply mon_bind'; eauto. Qed.
+
+    #[export] Instance mon_angelic_binary `{MA : relation A} m1 m2 :
+      Monotonic (MHeapSpec MA) m1 -> Monotonic (MHeapSpec MA) m2 ->
+      Monotonic (MHeapSpec MA) (angelic_binary m1 m2).
+    Proof. firstorder. Qed.
+
+    #[export] Instance mon_demonic_binary `{MA : relation A} m1 m2 :
+      Monotonic (MHeapSpec MA) m1 -> Monotonic (MHeapSpec MA) m2 ->
+      Monotonic (MHeapSpec MA) (demonic_binary m1 m2).
+    Proof. firstorder. Qed.
+
+    #[export] Instance mon_angelic σ :
+      Monotonic (MHeapSpec eq) (angelic σ).
+    Proof. typeclasses eauto. Qed.
+    #[export] Instance mon_demonic σ :
+      Monotonic (MHeapSpec eq) (demonic σ).
+    Proof. typeclasses eauto. Qed.
+
+    #[export] Instance mon_debug `{MA : relation A} m :
+      Monotonic (MHeapSpec MA) m -> Monotonic (MHeapSpec MA) (debug m).
+    Proof. now unfold debug. Qed.
+    #[global] Typeclasses Opaque debug.
+
+    #[export] Instance mon_produce_chunk c : Monotonic (MHeapSpec eq) (produce_chunk c).
+    Proof.
+      intros Φ1 Φ2 mΦ h.
+      apply CPureSpec.mon_produce_chunk.
+      intros ? ? ->. now apply mΦ.
+    Qed.
+
+    #[export] Instance mon_consume_chunk c : Monotonic (MHeapSpec eq) (consume_chunk c).
+    Proof.
+      intros Φ1 Φ2 mΦ h.
+      apply CPureSpec.mon_consume_chunk.
+      intros ? ? ->. now apply mΦ.
+    Qed.
+
+    #[export] Instance mon_produce {Σ} (asn : Assertion Σ) ι :
+      Monotonic (MHeapSpec eq) (produce asn ι).
+    Proof. induction asn; cbn; typeclasses eauto. Qed.
+
+    #[export] Instance mon_consume {Σ} (asn : Assertion Σ) ι :
+      Monotonic (MHeapSpec eq) (consume asn ι).
+    Proof. induction asn; cbn; typeclasses eauto. Qed.
+
+    #[export] Instance mon_read_register {τ} (reg : 𝑹𝑬𝑮 τ) :
+      Monotonic (MHeapSpec eq) (read_register reg).
+    Proof.
+      intros Φ1 Φ2 mΦ h.
+      apply CPureSpec.mon_read_register.
+      intros ? [] ->. now apply mΦ.
+    Qed.
+
+    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) :
+      Monotonic (Val τ ::> MHeapSpec eq) (write_register reg).
+    Proof.
+      intros v Φ1 Φ2 mΦ h.
+      apply CPureSpec.mon_write_register.
+      intros ? [] ->. now apply mΦ.
+    Qed.
+
+    Section WithBI.
+
+      Import iris.bi.interface iris.bi.derived_laws iris.bi.extensions.
+
+      Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
+
+      #[local] Arguments CHeapSpec.bind {_ _} _ _ _ /.
+      #[local] Arguments CHeapSpec.angelic_binary {_} _ _ /.
+      #[local] Arguments CHeapSpec.demonic_binary {_} _ _ /.
+      #[local] Arguments CHeapSpec.lift_purespec {_} _ _ /.
+
+      Lemma consume_sound {Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
+        forall (Φ : unit -> SCHeap -> Prop) h,
+          consume asn ι Φ h ->
+          (interpret_scheap h ⊢ asn.interpret asn ι ∗ ∃ h', interpret_scheap h' ∧ ⌜ Φ tt h' ⌝)%I.
+      Proof.
+        induction asn; cbn - [inst inst_term]; intros Φ h1.
+        - intros [Hfmle HΦ]. rewrite <-bi.emp_sep at 1. apply bi.sep_mono'.
+          + rewrite bi.and_emp; auto.
+          + apply bi.exist_intro' with h1. apply bi.and_intro; auto.
+        - intros ->%CPureSpec.wp_consume_chunk. now rewrite interpret_scchunk_inst.
+        - intros ->%CPureSpec.wp_consume_chunk. now rewrite interpret_scchunk_inst.
+        - rewrite CPureSpec.wp_angelic_pattern_match.
+          destruct pattern_match_val; auto.
+        - intros ->%IHasn1. rewrite -bi.sep_assoc. apply bi.sep_mono'; [easy|].
+          apply bi.exist_elim. intros h2. apply bi.pure_elim_r. apply IHasn2.
+        - intros [->%IHasn1 | ->%IHasn2]; apply bi.sep_mono'; auto.
+        - intros (v & ->%IHasn). apply bi.sep_mono'; [|easy].
+          now apply bi.exist_intro' with v.
+        - intros HΦ. rewrite bi.emp_sep. apply bi.exist_intro' with h1.
+          apply bi.and_intro; auto.
+      Qed.
+
+      Lemma produce_sound {Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
+        forall (Φ : unit -> SCHeap -> Prop) h,
+          produce asn ι Φ h ->
+          (interpret_scheap h ⊢
+             asn.interpret asn ι -∗ ∃ h', interpret_scheap h' ∧ ⌜Φ tt h'⌝).
+      Proof.
+        induction asn; cbn - [CPureSpec.assume_formula inst inst_term]; intros Φ h1.
+        - cbn. intros HΦ. rewrite bi.and_emp.
+          apply wand_sep_adjoint. rewrite bi.sep_comm. apply wand_sep_adjoint.
+          apply bi.pure_elim'. intros Hfml.
+          apply wand_sep_adjoint. rewrite bi.True_sep.
+          apply bi.exist_intro' with h1.
+          apply bi.and_intro; auto.
+        - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst.
+        - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst.
+        - rewrite CPureSpec.wp_demonic_pattern_match.
+          destruct pattern_match_val; auto.
+        - intros ->%IHasn1. rewrite -bi.wand_curry. apply bi.wand_mono'; [easy|].
+          apply bi.exist_elim. intros h2.
+          apply bi.pure_elim_r. apply IHasn2.
+        - intros [HΦ1%IHasn1 HΦ2%IHasn2].
+          apply wand_sep_adjoint. rewrite bi.sep_or_l.
+          apply bi.or_elim; now apply wand_sep_adjoint.
+        - intros HΦ.
+          apply wand_sep_adjoint. rewrite bi.sep_comm. apply wand_sep_adjoint.
+          apply bi.exist_elim. intros v.
+          apply wand_sep_adjoint. rewrite bi.sep_comm. apply wand_sep_adjoint.
+          apply IHasn, HΦ.
+        - intros HΦ. rewrite bi.emp_wand.
+          apply bi.exist_intro' with h1.
+          apply bi.and_intro. reflexivity.
+          now apply bi.pure_intro.
+      Qed.
+
+    End WithBI.
+
+  End CHeapSpec.
+  Export (hints) CHeapSpec.
 
   Module CStatistics.
 

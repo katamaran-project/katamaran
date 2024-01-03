@@ -27,11 +27,14 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Coq Require Import
+  Strings.String.
 From Equations Require Import
   Equations.
 From Katamaran Require Import
   Prelude
   Base
+  Syntax.Assertions
   Syntax.Chunks
   Syntax.Predicates
   Symbolic.Propositions
@@ -45,7 +48,8 @@ Import env.notations.
 
 Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
   (Import W : WorldsMixin B P) (Import SK : SolverKit B P W)
-  (Import SP : SymPropOn B P W) (Import GS : GenericSolverOn B P W SK).
+  (Import SP : SymPropOn B P W) (Import GS : GenericSolverOn B P W SK)
+  (Import A : AssertionsOn B P W).
 
   Import ModalNotations.
   #[local] Open Scope modal.
@@ -54,6 +58,201 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
     refine (@persistent_subst (STerm σ) (@SubstTerm σ)) : typeclass_instances.
   #[local] Hint Extern 2 (Persistent (fun w : World => NamedEnv (Term (wctx w)) ?Γ)) =>
     refine (@persistent_subst (fun Σ : LCtx => NamedEnv (Term Σ) Γ) _) : typeclass_instances.
+
+  Section DebugInfo.
+
+    Import option.notations.
+
+    Record DebugAsn (Σ : LCtx) : Type :=
+      MkDebugAsn
+        { (* debug_asn_program_context        : PCtx; *)
+          debug_asn_pathcondition          : PathCondition Σ;
+          (* debug_asn_localstore             : SStore debug_asn_program_context Σ; *)
+          debug_asn_heap                   : SHeap Σ;
+        }.
+
+    #[export] Instance SubstDebugAsn : Subst DebugAsn :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkDebugAsn pc (* δ *) h =>
+          MkDebugAsn (subst pc ζ01) (* (subst δ ζ01) *) (subst h ζ01)
+        end.
+
+    #[export] Instance SubstLawsDebugAsn : SubstLaws DebugAsn.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance OccursCheckDebugAsn : OccursCheck DebugAsn :=
+      fun Σ x xIn d =>
+        match d with
+        | MkDebugAsn pc (* δ *) h =>
+            pc' <- occurs_check xIn pc ;;
+            (* δ'  <- occurs_check xIn δ ;; *)
+            h'  <- occurs_check xIn h ;;
+            Some (MkDebugAsn pc' (* δ' *) h')
+        end.
+
+    Record DebugConsumeChunk (Σ : LCtx) : Type :=
+      MkDebugConsumeChunk
+        { (* debug_consume_chunk_program_context        : PCtx; *)
+          debug_consume_chunk_pathcondition          : PathCondition Σ;
+          (* debug_consume_chunk_localstore             : SStore debug_consume_chunk_program_context Σ; *)
+          debug_consume_chunk_heap                   : SHeap Σ;
+          debug_consume_chunk_chunk                  : Chunk Σ;
+        }.
+
+    #[export] Instance SubstDebugConsumeChunk : Subst DebugConsumeChunk :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkDebugConsumeChunk pc (* δ *) h c =>
+            MkDebugConsumeChunk (subst pc ζ01) (* (subst δ ζ01) *) (subst h ζ01) (subst c ζ01)
+        end.
+
+    #[export] Instance SubstLawsDebugConsumeChunk : SubstLaws DebugConsumeChunk.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance OccursCheckDebugConsumeChunk : OccursCheck DebugConsumeChunk :=
+      fun Σ x xIn d =>
+        match d with
+        | MkDebugConsumeChunk pc (* δ *) h c =>
+            pc' <- occurs_check xIn pc ;;
+            (* δ'  <- occurs_check xIn δ ;; *)
+            h'  <- occurs_check xIn h ;;
+            c'  <- occurs_check xIn c ;;
+            Some (MkDebugConsumeChunk pc' (* δ' *) h'  c')
+        end.
+
+    Record DebugReadRegister (Σ : LCtx) : Type :=
+      MkDebugReadRegister
+        { debug_read_register_pathcondition : PathCondition Σ;
+          debug_read_register_heap          : SHeap Σ;
+          debug_read_register_type          : Ty;
+          debug_read_register_register      : 𝑹𝑬𝑮 debug_read_register_type;
+        }.
+
+    #[export] Instance SubstDebugReadRegister : Subst DebugReadRegister :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkDebugReadRegister pc h r =>
+            MkDebugReadRegister (subst pc ζ01) (subst h ζ01) r
+        end.
+
+    #[export] Instance SubstLawsDebugReadRegister : SubstLaws DebugReadRegister.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance OccursCheckDebugReadRegister : OccursCheck DebugReadRegister :=
+      fun Σ x xIn d =>
+        match d with
+        | MkDebugReadRegister pc h r =>
+            pc' <- occurs_check xIn pc ;;
+            h'  <- occurs_check xIn h ;;
+            Some (MkDebugReadRegister pc' h' r)
+        end.
+
+    Record DebugWriteRegister (Σ : LCtx) : Type :=
+      MkDebugWriteRegister
+        { debug_write_register_pathcondition : PathCondition Σ;
+          debug_write_register_heap          : SHeap Σ;
+          debug_write_register_type          : Ty;
+          debug_write_register_register      : 𝑹𝑬𝑮 debug_write_register_type;
+          debug_write_register_value         : Term Σ debug_write_register_type;
+        }.
+
+    #[export] Instance SubstDebugWriteRegister : Subst DebugWriteRegister :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkDebugWriteRegister pc h r t =>
+            MkDebugWriteRegister (subst pc ζ01) (subst h ζ01) r (subst t ζ01)
+        end.
+
+    #[export] Instance SubstLawsDebugWriteRegister : SubstLaws DebugWriteRegister.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance OccursCheckDebugWriteRegister : OccursCheck DebugWriteRegister :=
+      fun Σ x xIn d =>
+        match d with
+        | MkDebugWriteRegister pc h r t =>
+            pc' <- occurs_check xIn pc ;;
+            h'  <- occurs_check xIn h ;;
+            t'  <- occurs_check xIn t ;;
+            Some (MkDebugWriteRegister pc' h' r t')
+        end.
+
+    Record DebugString (Σ : LCtx) : Type :=
+      MkDebugString
+        { debug_string_pathcondition : PathCondition Σ;
+          debug_string_message       : string;
+        }.
+
+    #[export] Instance SubstDebugString : Subst DebugString :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkDebugString pc s =>
+            MkDebugString (subst pc ζ01) s
+        end.
+
+    #[export] Instance SubstLawsDebugString : SubstLaws DebugString.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance OccursCheckDebugString : OccursCheck DebugString :=
+      fun Σ x xIn d =>
+        match d with
+        | MkDebugString pc s =>
+            pc' <- occurs_check xIn pc ;;
+            Some (MkDebugString pc' s)
+        end.
+
+    Record DebugAssertFormula (Σ : LCtx) : Type :=
+      MkDebugAssertFormula
+        { debug_assert_formula_pathcondition   : PathCondition Σ;
+          debug_assert_formula_heap            : SHeap Σ;
+          debug_assert_formula_formula         : Formula Σ;
+        }.
+
+    #[export] Instance SubstDebugAssertFormula : Subst DebugAssertFormula :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkDebugAssertFormula pc h fml =>
+          MkDebugAssertFormula (subst pc ζ01) (subst h ζ01) (subst fml ζ01)
+        end.
+
+    #[export] Instance SubstLawsDebugAssertFormula : SubstLaws DebugAssertFormula.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance OccursCheckDebugAssertFormula : OccursCheck DebugAssertFormula :=
+      fun Σ x xIn d =>
+        match d with
+        | MkDebugAssertFormula pc h fml =>
+            pc' <- occurs_check xIn pc ;;
+            h'  <- occurs_check xIn h ;;
+            fml'  <- occurs_check xIn fml ;;
+            Some (MkDebugAssertFormula pc' h' fml')
+        end.
+
+  End DebugInfo.
 
   Definition SPureSpec (A : TYPE) : TYPE :=
     □(A -> 𝕊) -> 𝕊.
@@ -64,46 +263,46 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun w m => m (fun w1 θ1 _ => SymProp.block).
 
     Definition pure {A : TYPE} : ⊢ A -> SPureSpec A :=
-      fun w0 a POST => T POST a.
+      fun w0 a Φ => T Φ a.
 
     Definition bind {A B} :
       ⊢ SPureSpec A -> □(A -> SPureSpec B) -> SPureSpec B :=
-      fun w0 m f POST => m (fun w1 ω01 a1 => f w1 ω01 a1 (four POST ω01)).
+      fun w0 m f Φ => m (fun w1 ω01 a1 => f w1 ω01 a1 (four Φ ω01)).
     #[global] Arguments bind {A B} [w] m f _ /.
 
     Module Import notations.
-      Notation "⟨ ω ⟩ ' x <- ma ;; mb" :=
-        (bind ma (fun _ ω x => mb))
+      Notation "⟨ θ ⟩ ' x <- ma ;; mb" :=
+        (bind ma (fun _ θ x => mb))
           (at level 80, x pattern,
              ma at next level, mb at level 200,
                right associativity).
-      Notation "⟨ ω ⟩ x <- ma ;; mb" :=
-        (bind ma (fun _ ω x => mb))
+      Notation "⟨ θ ⟩ x <- ma ;; mb" :=
+        (bind ma (fun _ θ x => mb))
           (at level 80, x at next level,
              ma at next level, mb at level 200,
                right associativity).
-      Notation "x ⟨ ω ⟩" := (persist x ω).
+      Notation "x ⟨ θ ⟩" := (persist x θ).
     End notations.
 
     Definition block {A} : ⊢ SPureSpec A :=
-      fun w POST => SymProp.block.
+      fun w Φ => SymProp.block.
     #[global] Arguments block {A w}.
     Definition error {A} : ⊢ AMessage -> SPureSpec A :=
-      fun w msg POST => SymProp.error msg.
+      fun w msg Φ => SymProp.error msg.
 
     Definition angelic (x : option LVar) : ⊢ ∀ σ, SPureSpec (STerm σ) :=
-      fun w σ k =>
+      fun w σ Φ =>
         let y := fresh_lvar w x in
         SymProp.angelicv
-          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
-    #[global] Arguments angelic x [w] σ k : rename.
+          (y∷σ) (Φ (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
+    #[global] Arguments angelic x [w] σ Φ : rename.
 
     Definition demonic (x : option LVar) : ⊢ ∀ σ, SPureSpec (STerm σ) :=
-      fun w σ k =>
+      fun w σ Φ =>
         let y := fresh_lvar w x in
         SymProp.demonicv
-          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
-    #[global] Arguments demonic x [w] σ k : rename.
+          (y∷σ) (Φ (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
+    #[global] Arguments demonic x [w] σ Φ : rename.
 
     Definition angelic_ctx {N : Set} (n : N -> LVar) :
       ⊢ ∀ Δ : NCtx N Ty, SPureSpec (fun w => NamedEnv (Term w) Δ) :=
@@ -625,15 +824,23 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             ⟨ θ ⟩ _ <- assume_formula (subst fml δ) ;;
             replay k (env.remove (x∷_) δ⟨θ⟩ _)
         | SymProp.pattern_match s pat rhs =>
-            error (amsg.mk tt)
-        (* FIXME *)
-        (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst s δ) ;; *)
-        (* replay (rhs pc) (persist δ θ ►► δpc) *)
+            (* FIXME *)
+            (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst s δ) ;; *)
+            (* replay (rhs pc) (persist δ θ ►► δpc) *)
+            error (amsg.mk
+                     {| debug_string_pathcondition := wco _;
+                        debug_string_message       :=
+                          "NOT IMPLEMENTED: replay_aux.pattern_match";
+                     |})
         | SymProp.pattern_match_var x pat rhs =>
-            error (amsg.mk tt)
-        (* FIXME *)
-        (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst (term_var x) δ) ;; *)
-        (* replay (rhs pc) (env.remove _ (δ⟨θ⟩ ►► δpc) _) *)
+            (* FIXME *)
+            (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst (term_var x) δ) ;; *)
+            (* replay (rhs pc) (env.remove _ (δ⟨θ⟩ ►► δpc) _) *)
+            error (amsg.mk
+                     {| debug_string_pathcondition := wco _;
+                        debug_string_message       :=
+                          "NOT IMPLEMENTED: replay_aux.pattern_match_var";
+                     |})
         | SymProp.debug msg k =>
             debug (subst msg δ) (replay k δ)
         end.
@@ -641,7 +848,254 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Definition replay : ⊢ 𝕊 -> 𝕊 :=
       fun w P => run (replay_aux P (sub_id w)).
 
+    Definition produce_chunk :
+      ⊢ Chunk -> SHeap -> SPureSpec SHeap :=
+      fun w0 c h => pure (cons (peval_chunk c) h).
+
+    Definition consume_chunk : ⊢ Chunk -> SHeap -> SPureSpec SHeap :=
+      fun w0 c h =>
+        let c1 := peval_chunk c in
+        match try_consume_chunk_exact h c1 with
+        | Some h' => pure h'
+        | None =>
+            match try_consume_chunk_precise h c1 with
+            | Some (h', Fs) =>
+                ⟨ θ ⟩ _ <-
+                  assert_pathcondition
+                    (amsg.mk
+                       {| debug_consume_chunk_pathcondition := wco _;
+                          debug_consume_chunk_heap := h;
+                          debug_consume_chunk_chunk := c1;
+                       |})
+                    Fs ;;
+                pure h'⟨θ⟩
+            | None =>
+                error
+                  (amsg.mk
+                     {| debug_consume_chunk_pathcondition := wco _;
+                        debug_consume_chunk_heap := h;
+                        debug_consume_chunk_chunk := c1;
+                     |})
+            end
+        end.
+
+    Definition consume_chunk_angelic : ⊢ Chunk -> SHeap -> SPureSpec SHeap :=
+      fun w0 c h =>
+        let c1 := peval_chunk c in
+        match try_consume_chunk_exact h c1 with
+        | Some h' => pure h'
+        | None =>
+            match try_consume_chunk_precise h c1 with
+            | Some (h', Fs) =>
+                ⟨ θ ⟩ _ <-
+                  assert_pathcondition
+                    (amsg.mk
+                       {| debug_consume_chunk_pathcondition := wco _;
+                          debug_consume_chunk_heap := h;
+                          debug_consume_chunk_chunk := c1;
+                       |})
+                    Fs ;;
+                pure h'⟨θ⟩
+            | None =>
+                ⟨ θ2 ⟩ '(c',h') <-
+                  angelic_list
+                    (A := Pair Chunk SHeap)
+                    (amsg.mk
+                       {| debug_consume_chunk_pathcondition := wco _;
+                          debug_consume_chunk_heap := h ;
+                          debug_consume_chunk_chunk := c1;
+                       |})
+                    (heap_extractions h) ;;
+                let c2 := c1⟨θ2⟩ in
+                ⟨ θ3 ⟩ _ <-
+                  assert_eq_chunk
+                    (amsg.mk
+                       {| debug_consume_chunk_pathcondition := wco _;
+                          debug_consume_chunk_heap := persist (A := SHeap) h θ2;
+                          debug_consume_chunk_chunk := c2;
+                       |})
+                    c2 c' acc_refl ;;
+                pure (persist (A := SHeap) h' θ3)
+            end
+          end.
+
+    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) :
+      ⊢ SHeap -> SPureSpec (Pair (STerm τ) SHeap) :=
+      fun w h =>
+        match find_chunk_ptsreg_precise reg h with
+        | Some (t', h') => pure (t', cons (chunk_ptsreg reg t') h')
+        | None => error (amsg.mk (MkDebugReadRegister (wco w) h reg))
+        end.
+
+    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) :
+      ⊢ WTerm τ -> SHeap -> SPureSpec (Pair (STerm τ) SHeap) :=
+      fun w t h =>
+        match find_chunk_ptsreg_precise reg h with
+        | Some (_, h') => pure (t, cons (chunk_ptsreg reg t) h')
+        | None => error (amsg.mk (MkDebugWriteRegister (wco w) h reg t))
+        end.
+
   End SPureSpec.
   Export (hints) SPureSpec.
+
+  Definition SHeapSpec (A : TYPE) : TYPE :=
+    □(A -> SHeap -> 𝕊) -> SHeap -> 𝕊.
+
+  Module SHeapSpec.
+
+    Definition run : ⊢ SHeapSpec Unit -> 𝕊 :=
+      fun w m => m (fun w1 θ1 _ h1 => SymProp.block) List.nil.
+
+    Definition lift_purespec {A} : ⊢ SPureSpec A -> SHeapSpec A :=
+      fun w0 m Φ h0 =>
+        m (fun w1 ω01 a1 => Φ w1 ω01 a1 (persist h0 ω01)).
+
+    Definition pure {A} : ⊢ A -> SHeapSpec A :=
+      fun w a Φ h => T Φ a h.
+
+    Definition bind {A B} : ⊢ SHeapSpec A -> □(A -> SHeapSpec B) -> SHeapSpec B :=
+      fun w m f Φ => m (fun w1 θ1 a1 => f w1 θ1 a1 (four Φ θ1)).
+
+    Module Import notations.
+      Notation "⟨ ω ⟩ ' x <- ma ;; mb" :=
+        (bind ma (fun _ ω x => mb))
+          (at level 80, x pattern,
+             ma at next level, mb at level 200,
+               right associativity).
+      Notation "⟨ ω ⟩ x <- ma ;; mb" :=
+        (bind ma (fun _ ω x => mb))
+          (at level 80, x at next level,
+             ma at next level, mb at level 200,
+               right associativity).
+      Notation "x ⟨ ω ⟩" := (persist x ω).
+    End notations.
+
+    Definition angelic (x : option LVar) : ⊢ ∀ σ, SHeapSpec (STerm σ) :=
+      fun w σ => lift_purespec (SPureSpec.angelic x σ).
+    #[global] Arguments angelic x [w] σ Φ : rename.
+    Definition demonic (x : option LVar) : ⊢ ∀ σ, SHeapSpec (STerm σ) :=
+      fun w σ => lift_purespec (SPureSpec.demonic x σ).
+    #[global] Arguments demonic x [w] σ Φ : rename.
+
+    Definition angelic_binary {A} : ⊢ SHeapSpec A -> SHeapSpec A -> SHeapSpec A :=
+      fun w m1 m2 Φ h =>
+        SymProp.angelic_binary (m1 Φ h) (m2 Φ h).
+    Definition demonic_binary {A} : ⊢ SHeapSpec A -> SHeapSpec A -> SHeapSpec A :=
+      fun w m1 m2 Φ h =>
+        SymProp.demonic_binary (m1 Φ h) (m2 Φ h).
+
+    Definition debug {A} : ⊢ (SHeap -> AMessage) -> SHeapSpec A -> SHeapSpec A :=
+      fun w msg m Φ h => SymProp.debug (msg h) (m Φ h).
+
+    Definition assert_formula :
+      ⊢ (SHeap -> AMessage) -> Formula -> SHeapSpec Unit :=
+      fun w msg C Φ h =>
+        SPureSpec.assert_formula (msg h) C
+          (fun w1 θ1 x => Φ w1 θ1 x h⟨θ1⟩).
+    Definition assume_formula :
+      ⊢ Formula -> SHeapSpec Unit :=
+      fun w fml => lift_purespec (@SPureSpec.assume_formula w fml).
+
+    Definition produce_chunk : ⊢ Chunk -> SHeapSpec Unit :=
+      fun w0 c Φ h => SPureSpec.produce_chunk c h
+                        (fun w1 θ1 => Φ w1 θ1 tt).
+    Definition consume_chunk : ⊢ Chunk -> SHeapSpec Unit :=
+      fun w0 c Φ h => SPureSpec.consume_chunk c h
+                        (fun w1 θ1 => Φ w1 θ1 tt).
+    Definition consume_chunk_angelic : ⊢ Chunk -> SHeapSpec Unit :=
+      fun w0 c Φ h => SPureSpec.consume_chunk_angelic c h
+                        (fun w1 θ1 => Φ w1 θ1 tt).
+
+    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) : ⊢ SHeapSpec (WTerm τ) :=
+      fun w0 Φ h => SPureSpec.read_register reg h
+                      (fun w1 θ1 '(t,h') => Φ w1 θ1 t h').
+    #[global] Arguments read_register {τ} reg {w}.
+
+    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) :
+      ⊢ WTerm τ -> SHeapSpec (WTerm τ) :=
+      fun w0 t Φ h => SPureSpec.write_register reg t h
+                        (fun w1 θ1 '(t',h') => Φ w1 θ1 t' h').
+
+    Definition produce :
+      forall {Σ} (asn : Assertion Σ), ⊢ Sub Σ -> SHeapSpec Unit :=
+    fix produce {Σ} asn {w} ζ :=
+      match asn with
+      | asn.formula fml =>
+          assume_formula (subst fml ζ)
+      | asn.chunk c =>
+          produce_chunk (subst c ζ)
+      | asn.chunk_angelic c =>
+          produce_chunk (subst c ζ)
+      | asn.pattern_match s pat rhs =>
+          ⟨ θ ⟩ '(existT pc δpc) <-
+            lift_purespec
+              (SPureSpec.demonic_pattern_match id pat (subst s ζ)) ;;
+          produce (rhs pc) (persist ζ θ ►► δpc)
+      | asn.sep a1 a2 =>
+          ⟨ θ ⟩ _ <- produce a1 ζ ;;
+          produce a2 (persist ζ θ)
+      | asn.or a1 a2 =>
+          demonic_binary (produce a1 ζ) (produce a2 ζ)
+      | asn.exist ς τ a =>
+          ⟨ θ ⟩ t <- demonic (Some ς) τ ;;
+          produce a (env.snoc (persist ζ θ) (ς∷τ) t)
+      | asn.debug =>
+          debug
+            (fun h1 =>
+               amsg.mk
+                 {| debug_asn_pathcondition := wco _;
+                    debug_asn_heap := h1;
+                 |})
+            (pure tt)
+      end.
+
+    Definition consume :
+      forall {Σ} (asn : Assertion Σ), ⊢ Sub Σ -> SHeapSpec Unit :=
+    fix consume {Σ} asn {w} ζ :=
+      match asn with
+      | asn.formula fml =>
+          let fml := subst fml ζ in
+          assert_formula
+            (fun h =>
+               amsg.mk
+                 {| debug_assert_formula_pathcondition := wco _;
+                    debug_assert_formula_heap          := h;
+                    debug_assert_formula_formula       := fml;
+                 |})
+            fml
+      | asn.chunk c =>
+          consume_chunk (subst c ζ)
+      | asn.chunk_angelic c =>
+          consume_chunk_angelic (subst c ζ)
+      | asn.pattern_match s pat rhs =>
+          ⟨ θ ⟩ '(existT pc δpc) <-
+            lift_purespec
+              (SPureSpec.angelic_pattern_match id pat
+                 (amsg.mk
+                    {| debug_string_pathcondition := wco _;
+                       debug_string_message       :=
+                        "SHeapSpec.consume.pattern_match";
+                    |})
+                 (subst s ζ)) ;;
+          consume (rhs pc) (persist ζ θ ►► δpc)
+      | asn.sep a1 a2 =>
+          ⟨ θ ⟩ _ <- consume a1 ζ ;;
+          consume a2 (persist ζ θ)
+      | asn.or a1 a2 =>
+          angelic_binary (consume a1 ζ) (consume a2 ζ)
+      | asn.exist ς τ a =>
+          ⟨ θ ⟩ t <- angelic (Some ς) τ ;;
+          consume a (env.snoc (persist ζ θ) (ς∷τ) t)
+      | asn.debug =>
+          debug
+            (fun h1 =>
+               amsg.mk
+                 {| debug_asn_pathcondition := wco _;
+                    debug_asn_heap := h1;
+                 |})
+            (pure tt)
+      end.
+
+  End SHeapSpec.
 
 End SymbolicMonadsOn.
