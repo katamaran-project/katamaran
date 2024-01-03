@@ -293,17 +293,17 @@ Module Type ChunksOn
           };
         match_chunk_user_precise _ := None.
 
-      Fixpoint find_chunk_user_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) :=
+      Fixpoint try_consume_chunk_user_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) :=
         match h with
         | nil => None
         | cons c h' =>
             match match_chunk_user_precise c with
             | Some eqs => Some (if is_duplicable p then cons c h' else h', eqs)
-            | None => option_map (base.prod_map (cons c) id) (find_chunk_user_precise h')
+            | None => option_map (base.prod_map (cons c) id) (try_consume_chunk_user_precise h')
             end
         end.
 
-      Lemma find_chunk_user_precise_spec (h : SHeap Σ) :
+      Lemma try_consume_chunk_user_precise_spec (h : SHeap Σ) :
         option.wlp
           (fun '(h', eqs) =>
              forall ι : Valuation Σ,
@@ -311,9 +311,9 @@ Module Type ChunksOn
              List.In
                (inst (chunk_user p (eq_rect_r (fun c : Ctx Ty => Env (Term Σ) c) (tsI ►► tsO) prec)) ι, inst h' ι)
                (heap_extractions (inst h ι)))
-          (find_chunk_user_precise h).
+          (try_consume_chunk_user_precise h).
       Proof.
-        induction h as [|c h]; [now constructor|]. cbn [find_chunk_user_precise].
+        induction h as [|c h]; [now constructor|]. cbn [try_consume_chunk_user_precise].
         destruct match_chunk_user_precise as [eqs|] eqn:?.
         - clear IHh. constructor. intros ι Heqs. left.
           destruct c; try discriminate Heqo. cbn in *.
@@ -340,28 +340,60 @@ Module Type ChunksOn
 
     Section PrecisePtsreg.
 
-      Context {Σ σ} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
+      Context {Σ : LCtx} {σ} (r : 𝑹𝑬𝑮 σ).
 
-      Equations(noeqns) match_chunk_ptsreg_precise (c : Chunk Σ) : option (Formula Σ) :=
-        match_chunk_ptsreg_precise (chunk_ptsreg r' t')
+      Equations(noeqns) match_chunk_ptsreg_precise (c : Chunk Σ) : option (Term Σ σ) :=
+        match_chunk_ptsreg_precise (chunk_ptsreg r' t)
           with eq_dec_het r r' => {
-            match_chunk_ptsreg_precise (chunk_ptsreg ?(r) t') (left eq_refl) :=
-              Some (formula_relop bop.eq t t');
-            match_chunk_ptsreg_precise (chunk_ptsreg r' t') (right _) := None
+            match_chunk_ptsreg_precise (chunk_ptsreg ?(r) t) (left eq_refl) :=
+              Some t;
+            match_chunk_ptsreg_precise (chunk_ptsreg r' t) (right _) := None
           };
         match_chunk_ptsreg_precise _ := None.
 
-      Fixpoint find_chunk_ptsreg_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) :=
+      Fixpoint find_chunk_ptsreg_precise (h : SHeap Σ) : option (SHeap Σ * Term Σ σ) :=
         match h with
         | nil => None
         | cons c h' =>
             match match_chunk_ptsreg_precise c with
-            | Some fml => Some (h', ctx.nil ▻ fml)
+            | Some t => Some (h', t)
             | None => option_map (base.prod_map (cons c) id) (find_chunk_ptsreg_precise h')
             end
         end.
 
       Lemma find_chunk_ptsreg_precise_spec (h : SHeap Σ) :
+        option.wlp
+          (fun '(h', t) =>
+             forall ι : Valuation Σ,
+             List.In
+               (inst (chunk_ptsreg r t) ι, inst h' ι)
+               (heap_extractions (inst h ι)))
+          (find_chunk_ptsreg_precise h).
+      Proof.
+        induction h as [|c h]; [now constructor|]; cbn [find_chunk_ptsreg_precise].
+        destruct match_chunk_ptsreg_precise eqn:?.
+        - constructor. intros ι. clear IHh.
+          destruct c; cbn in Heqo; try discriminate Heqo.
+          destruct (eq_dec_het r r0); try discriminate Heqo.
+          dependent elimination e. cbn in Heqo. dependent elimination Heqo.
+          change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
+          cbn. now left.
+        - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
+          intros [h' t] HYP ι. specialize (HYP ι).
+          change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
+          cbn [fst heap_extractions]. right. apply List.in_map_iff.
+          eexists (inst (chunk_ptsreg r t) ι, inst h' ι). split; auto.
+      Qed.
+
+      Context (h : SHeap Σ) (t : Term Σ σ).
+
+      Definition try_consume_chunk_ptsreg_precise :
+        option (SHeap Σ * PathCondition Σ) :=
+        option.map
+          (fun '(h', t') => (h', ctx.nil ▻ formula_relop bop.eq t t'))
+          (find_chunk_ptsreg_precise h).
+
+      Lemma try_consume_chunk_ptsreg_precise_spec :
         option.wlp
           (fun '(h', eqs) =>
              forall ι : Valuation Σ,
@@ -369,22 +401,12 @@ Module Type ChunksOn
              List.In
                (inst (chunk_ptsreg r t) ι, inst h' ι)
                (heap_extractions (inst h ι)))
-          (find_chunk_ptsreg_precise h).
+          try_consume_chunk_ptsreg_precise.
       Proof.
-        induction h; cbn [find_chunk_ptsreg_precise]; [now constructor|].
-        destruct match_chunk_ptsreg_precise eqn:?.
-        - constructor. intros ι [Hpc Hf]. clear IHh.
-          destruct a; cbn in Heqo; try discriminate Heqo.
-          destruct (eq_dec_het r r0); try discriminate Heqo.
-          dependent elimination e. cbn in Heqo. dependent elimination Heqo.
-          change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
-          cbn. left. f_equal. f_equal. symmetry. exact Hf.
-        - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
-          intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
-          remember (inst (chunk_ptsreg r t) ι) as c'.
-          change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
-          cbn [fst heap_extractions]. right. apply List.in_map_iff.
-          eexists (c', inst h' ι); auto.
+        unfold try_consume_chunk_ptsreg_precise. apply option.wlp_map.
+        generalize (find_chunk_ptsreg_precise_spec h).
+        apply option.wlp_monotonic. intros [h' t'] HIn ι [_ Heq].
+        specialize (HIn ι). cbn in Heq |- *. now rewrite Heq.
       Qed.
 
     End PrecisePtsreg.
@@ -396,11 +418,11 @@ Module Type ChunksOn
           match 𝑯_precise p with
           | Some (MkPrecise ΔI ΔO Δeq) =>
               match env.catView (rew Δeq in ts) with
-              | env.isCat tsI tsO => find_chunk_user_precise Δeq tsI tsO h
+              | env.isCat tsI tsO => try_consume_chunk_user_precise Δeq tsI tsO h
               end
           | None => None
           end
-      | chunk_ptsreg r t => find_chunk_ptsreg_precise r t h
+      | chunk_ptsreg r t => try_consume_chunk_ptsreg_precise r h t
       | _ => None
       end.
 
@@ -418,11 +440,11 @@ Module Type ChunksOn
       - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; [|constructor].
         remember (eq_rect (𝑯_Ty p) (Env (Term Σ)) ts (ΔI ▻▻ ΔO) prec) as ts'.
         destruct (env.catView ts') as [tsI tsO].
-        generalize (find_chunk_user_precise_spec prec tsI tsO h).
+        generalize (try_consume_chunk_user_precise_spec prec tsI tsO h).
         apply option.wlp_monotonic. intros [h' eqs].
         intros HIn ι Heqs. specialize (HIn ι Heqs).
         now rewrite Heqts', rew_opp_l in HIn.
-      - apply find_chunk_ptsreg_precise_spec.
+      - apply try_consume_chunk_ptsreg_precise_spec.
     Qed.
 
   End Consume.
