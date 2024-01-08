@@ -30,7 +30,6 @@ From Katamaran Require Import
      Base
      Bitvector
      Iris.BinaryInstance
-     Iris.BinaryWp
      trace
      Syntax.Predicates
      RiscvPmp.Base

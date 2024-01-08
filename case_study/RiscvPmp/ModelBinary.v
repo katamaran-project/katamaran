@@ -33,7 +33,6 @@ From Katamaran Require Import
      Bitvector
      Environment
      Iris.BinaryInstance
-     Iris.BinaryWp
      Program
      Semantics
      Sep.Hoare
