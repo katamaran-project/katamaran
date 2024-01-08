@@ -49,7 +49,6 @@ From iris Require Import
 
 From Katamaran Require Import
      Iris.Model
-     Iris.BinaryWp
      Iris.Instance
      Prelude
      Semantics
@@ -63,6 +62,38 @@ Import ctx.notations.
 Import env.notations.
 
 Set Implicit Arguments.
+
+Class irisGS2 (Λ1 Λ2 : language) (Σ : gFunctors) := IrisG {
+  iris_invGS2 :: invGS Σ;
+
+  (** The state interpretation is an invariant that should hold in
+  between each step of reduction. Here [Λstate] is the global state,
+  the first [nat] is the number of steps already performed by the
+  program. *)
+  state_interp2 : state Λ1 -> state Λ2 → nat → iProp Σ;
+
+  (** Number of additional logical steps (i.e., later modality in the
+  definition of WP) per physical step, depending on the physical steps
+  counter. In addition to these steps, the definition of WP adds one
+  extra later per physical step to make sure that there is at least
+  one later for each physical step. *)
+  num_laters_per_step2 : nat → nat;
+
+  (** When performing pure steps, the state interpretation needs to be
+  adapted for the change in the [ns] parameter.
+
+  Note that we use an empty-mask fancy update here. We could also use
+  a basic update or a bare magic wand, the expressiveness of the
+  framework would be the same. If we removed the modality here, then
+  the client would have to include the modality it needs as part of
+  the definition of [state_interp]. Since adding the modality as part
+  of the definition [state_interp_mono] does not significantly
+  complicate the formalization in Iris, we prefer simplifying the
+  client. *)
+  state_interp_mono2 σ1 σ2 ns :
+    state_interp2 σ1 σ2 ns ={∅}=∗ state_interp2 σ1 σ2 (S ns)
+}.
+Global Opaque iris_invGS2.
 
 Module Type IrisParameters2
   (Import B    : Base)
