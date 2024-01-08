@@ -43,7 +43,6 @@ theories/Context.v
 theories/Environment.v
 theories/Iris/Instance.v
 theories/Iris/Model.v
-theories/Iris/BinaryWp.v
 theories/Iris/BinaryInstance.v
 theories/Notations.v
 theories/Prelude.v
