@@ -212,19 +212,13 @@ Module Type IrisPrelims
     Lemma RegStore_to_map_valid (γ : RegStore) :
       valid (RegStore_to_map γ).
     Proof.
-      intros i.
-      cut (exists v, RegStore_to_map γ !! i = Some (Excl v)).
-      - intros [v eq].
-        now rewrite eq.
-      - destruct i as [σ r].
-        exists (existT _ (read_register γ r)).
-        eapply elem_of_list_to_map_1'.
-        + intros y eq.
-          eapply elem_of_list_fmap_2 in eq.
-          destruct eq as ([σ2 r2] & eq1 & eq2).
-          now inversion eq1.
-        + refine (elem_of_list_fmap_1 _ _ (existT _ r) _).
-          eapply finite.elem_of_enum.
+      intros [σ r].
+      rewrite (elem_of_list_to_map_1' _ _ (Excl (existT _ (read_register γ r))));
+        first done.
+      - intros y ([y1 y2] & eq & _)%elem_of_list_fmap_2.
+        now inversion eq.
+      - eapply (elem_of_list_fmap_1 (λ x : SomeReg, let (x0, r0) := x in _) _ (existT σ r)).
+        eapply finite.elem_of_enum.
     Qed.
 
     #[export] Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
