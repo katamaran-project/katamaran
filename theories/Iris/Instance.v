@@ -344,6 +344,29 @@ Section Soundness.
       iFrame. now iApply semWP_fail.
   Qed.
 
+  Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
+    (s : Stm Γ σ) (pat : Pattern σ)
+    (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
+    (P : iProp Σ) (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
+    ⊢ semTriple δΓ P s Q -∗
+      (∀ pc δpc δΓ1,
+         semTriple (δΓ1 ►► δpc) (Q (pattern_match_val_reverse pat pc δpc) δΓ1) (rhs pc)
+           (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))) -∗
+      semTriple δΓ P (stm_pattern_match s pat rhs) R.
+  Proof.
+    iIntros "WPs WPrhs P".
+    iSpecialize ("WPs" with "P").
+    iApply semWP_pattern_match.
+    iApply (semWP_mono with "WPs").
+    iIntros (vσ δΓ') "Q".
+    destruct pattern_match_val as [pc δpc] eqn:Heq.
+    iApply "WPrhs".
+    change (pattern_match_val_reverse pat pc δpc) with
+      (pattern_match_val_reverse' pat (existT pc δpc)).
+    rewrite <- Heq.
+    now rewrite pattern_match_val_inverse_left.
+  Qed.
+
   Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
     match contract with
     | MkSepContract _ _ ctxΣ θΔ pre result post =>
@@ -609,29 +632,6 @@ Module IrisInstanceWithContracts
     destruct ltrip as [Ψ' pats req ens ent]; cbn in lemSem.
     iPoseProof (ent with "P") as (ι Heq) "[req consr]".
     iApply "consr". by iApply lemSem.
-  Qed.
-
-  Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
-    (s : Stm Γ σ) (pat : Pattern σ)
-    (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
-    (P : iProp Σ) (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
-    ⊢ semTriple δΓ P s Q -∗
-      (∀ pc δpc δΓ1,
-         semTriple (δΓ1 ►► δpc) (Q (pattern_match_val_reverse pat pc δpc) δΓ1) (rhs pc)
-           (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))) -∗
-      semTriple δΓ P (stm_pattern_match s pat rhs) R.
-  Proof.
-    iIntros "WPs WPrhs P".
-    iSpecialize ("WPs" with "P").
-    iApply semWP_pattern_match.
-    iApply (semWP_mono with "WPs").
-    iIntros (vσ δΓ') "Q".
-    destruct pattern_match_val as [pc δpc] eqn:Heq.
-    iApply "WPrhs".
-    change (pattern_match_val_reverse pat pc δpc) with
-      (pattern_match_val_reverse' pat (existT pc δpc)).
-    rewrite <- Heq.
-    now rewrite pattern_match_val_inverse_left.
   Qed.
 
   Lemma sound_stm
