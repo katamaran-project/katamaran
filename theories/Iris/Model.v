@@ -55,6 +55,31 @@ Section TransparentObligations.
   Derive NoConfusion for iris.algebra.excl.excl.
 End TransparentObligations.
 
+Module Type IrisParameters
+  (Import B    : Base).
+
+  (* The memGS and memGpreS fields will normally always be instantiated to a type class. We
+     inline this field, so that instances declared by the library, e.g. the
+     [sailGS_memGS] superclass instance below, will always be instances for the
+     user-provided class instead of the [memGS] alias. In your client code, you
+     should always refer to your typeclass and refrain from using the [memGS] and [memGpreS]
+     aliases completely. *)
+  Parameter Inline memGpreS : gFunctors -> Set.
+  Parameter Inline memGS : gFunctors -> Set.
+  Parameter memΣ : gFunctors.
+  Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
+  Parameter mem_inv : forall `{mG : memGS Σ}, Memory -> iProp Σ.
+  Parameter mem_res : forall `{mG : memGS Σ}, Memory -> iProp Σ.
+
+    (* Definition mem_inv `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
+    (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
+    (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
+    (*   )%I. *)
+
+  Parameter mem_inv_init : forall `{mGS : memGpreS Σ} (μ : Memory),
+                                         ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
+End IrisParameters.
+
 (* TODO: export, back to module instead of module type *)
 Module Type IrisPrelims
     (Import B    : Base)
@@ -355,39 +380,12 @@ Module Type IrisPrelims
   End Registers.
 End IrisPrelims.
 
-Module Type IrisParameters
-  (Import B    : Base)
-  (Import PROG : Program B)
-  (Import SEM  : Semantics B PROG)
-  (Import IP   : IrisPrelims B PROG SEM).
-  (* The memGS and memGpreS fields will normally always be instantiated to a type class. We
-     inline this field, so that instances declared by the library, e.g. the
-     [sailGS_memGS] superclass instance below, will always be instances for the
-     user-provided class instead of the [memGS] alias. In your client code, you
-     should always refer to your typeclass and refrain from using the [memGS] and [memGpreS]
-     aliases completely. *)
-  Parameter Inline memGpreS : gFunctors -> Set.
-  Parameter Inline memGS : gFunctors -> Set.
-  Parameter memΣ : gFunctors.
-  Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
-  Parameter mem_inv : forall `{mG : memGS Σ}, Memory -> iProp Σ.
-  Parameter mem_res : forall `{mG : memGS Σ}, Memory -> iProp Σ.
-
-    (* Definition mem_inv `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
-    (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
-    (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
-    (*   )%I. *)
-
-  Parameter mem_inv_init : forall `{mGS : memGpreS Σ} (μ : Memory),
-                                         ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
-End IrisParameters.
-
 Module Type IrisResources
   (Import B    : Base)
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
   (Import IPre : IrisPrelims B PROG SEM)
-  (Import IP   : IrisParameters B PROG SEM IPre).
+  (Import IP   : IrisParameters B).
   Class sailGpreS Σ := SailGpreS { (* resources for the implementation side *)
                        sailGpresS_invGpreS : invGpreS Σ; (* for fancy updates, invariants... *)
 
@@ -796,4 +794,4 @@ Module Type IrisResources
 End IrisResources.
 
 Module Type IrisBase (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
-  IrisPrelims B PROG SEM <+ IrisParameters B PROG SEM <+ IrisResources B PROG SEM.
+  IrisPrelims B PROG SEM <+ IrisParameters B <+ IrisResources B PROG SEM.
