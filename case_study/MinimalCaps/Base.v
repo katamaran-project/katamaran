@@ -37,9 +37,6 @@ Require Import Katamaran.Base.
 
 (*** TYPES ***)
 
-Inductive Permission : Set :=
-  O | R | RW | E.
-
 Inductive RegName : Set :=
   R0 | R1 | R2 | R3.
 
@@ -101,20 +98,18 @@ Inductive InstructionConstructor : Set :=
 | kfail
 | kret.
 
-Section Records.
-  (* Local Set Primitive Projections. *)
+Inductive Permission : Set :=
+  O | R | RW | E.
 
-  Definition Addr : Set := Z.
+Definition Addr : Set := Z.
 
-  Record Capability : Set :=
-    MkCap
-      { cap_permission : Permission;
-        cap_begin      : Addr;
-        cap_end        : Addr;
-        cap_cursor     : Addr;
-      }.
-
-End Records.
+Record Capability : Set :=
+  MkCap
+    { cap_permission : Permission;
+      cap_begin      : Addr;
+      cap_end        : Addr;
+      cap_cursor     : Addr;
+    }.
 
 (** Enums **)
 Inductive Enums : Set :=
@@ -424,6 +419,10 @@ Module Export MinCapsBase <: Base.
       {| enum := [ existT _ pc; existT _ reg1; existT _ reg2; existT _ reg3 ] |}.
 
   End RegDeclKit.
+
+  Section MemoryModel.
+    Definition Memory := Addr -> (Z + Capability).
+  End MemoryModel.
 
   Include BaseMixin.
 

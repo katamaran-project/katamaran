@@ -38,8 +38,6 @@ From Katamaran Require Import
 Module Type FunDefKit (Import B : Base) (Import F : FunDecl B).
   Include RegStoreKit B.
 
-  (* Memory model *)
-  Parameter Memory : Type.
   (* Step relation for calling an external function. The complete function call
      is done in one step. The result of an external call is either a failure
      with an error message msg (res = inl msg) or a successful computation with

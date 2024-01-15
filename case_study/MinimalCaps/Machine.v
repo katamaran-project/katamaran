@@ -847,8 +847,6 @@ End FunDefKit.
 Include DefaultRegStoreKit MinCapsBase.
 
 Section ForeignKit.
-  Definition Memory := Addr -> (Z + Capability).
-
   Definition fun_rM (μ : Memory) (addr : Val ty.int) : Val ty.memval :=
     μ addr.
 

@@ -209,6 +209,9 @@ Module Import ExampleBase <: Base.
   #[export] Instance varkit : VarKit := DefaultVarKit.
 
   Include DefaultRegDeclKit.
+
+  Definition Memory : Set := unit.
+
   Include BaseMixin.
 
 End ExampleBase.
@@ -321,7 +324,6 @@ Module Import ExampleProgram <: Program ExampleBase.
   Include DefaultRegStoreKit ExampleBase.
 
   Section ForeignKit.
-    Definition Memory : Set := unit.
     Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
       (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop := False.
     Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :

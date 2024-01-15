@@ -267,9 +267,19 @@ Module Type BaseMixin (Import TY : Types).
 
 End BaseMixin.
 
-Module Type Base := Types <+ RegDeclKit <+ BaseMixin.
+Module Type OperationalModel.
+
+  (* Memory model *)
+  Parameter Memory : Type.
+  
+End OperationalModel.
+
+
+Module Type Base := Types <+ RegDeclKit <+ OperationalModel <+ BaseMixin.
 
 Module DefaultBase <: Base.
+
+  Definition Memory : Set := unit.
 
   #[export] Instance typedeclkit : TypeDeclKit := DefaultTypeDeclKit.
   #[export] Instance typedenotekit : TypeDenoteKit typedeclkit := DefaultTypeDenoteKit.
