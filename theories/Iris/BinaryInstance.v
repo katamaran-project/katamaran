@@ -311,8 +311,8 @@ Section Soundness.
     semWp2 δ1 δ2 s1 s2 POST ≡ semWp2_fix semWp2 δ1 δ2 s1 s2 POST.
   Proof. by unfold semWp2; rewrite fixpoint_semWp2_fix_eq. Qed.
 
-  Lemma semWp2_mono [Γ τ] (s1 s2 : Stm Γ τ)
-    (Q1 Q2 : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ) :
+  Lemma semWp2_mono [Γ1 Γ2 τ] (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
+    (Q1 Q2 : Val τ → CStore Γ1 → Val τ → CStore Γ2 → iProp Σ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
     ⊢ semWp2 δ1 δ2 s1 s2 Q1 -∗ (∀ v1 δ1 v2 δ2, Q1 v1 δ1 v2 δ2 -∗ Q2 v1 δ1 v2 δ2) -∗ semWp2 δ1 δ2 s1 s2 Q2.
   Proof.
     iIntros "H HQ".
