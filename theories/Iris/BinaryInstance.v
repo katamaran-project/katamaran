@@ -742,7 +742,7 @@ Section Soundness.
     destruct pattern_match_val as [pc2 δpc2]. by iApply (semWp2_block δpc1 δpc2).
   Qed.
 
-  Lemma semWP_foreign {Γ Δ τ} {f1 f2 : 𝑭𝑿 Δ τ} {es1 es2 : NamedEnv (Exp Γ) Δ} {Q δ1 δ2} :
+  Lemma semWp2_foreign {Γ Δ τ} {f1 f2 : 𝑭𝑿 Δ τ} {es1 es2 : NamedEnv (Exp Γ) Δ} {Q δ1 δ2} :
     ⊢ (∀ γ1 γ2 μ1 μ2,
           (regs_inv2 γ1 γ2 ∗ mem_inv2 μ1 μ2)
           ={⊤,∅}=∗
