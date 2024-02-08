@@ -166,12 +166,8 @@ Module BlockVerificationDerived2.
   Definition safeE {Σ} : 𝕊 Σ -> Prop :=
     fun P => VerificationConditionWithErasure (Erasure.erase_symprop P).
 
-  Definition safeE_safe (p : 𝕊 wnil) (ι : Valuation wnil) : safeE p -> SymProp.safe p [].
-  Proof.
-    unfold safeE.
-    destruct 1 as [H].
-    now apply Erasure.erase_safe'.
-  Qed.
+  Lemma safeE_safe (p : 𝕊 wnil) (ι : Valuation wnil) : safeE p -> SymProp.safe p [].
+  Proof. apply verification_condition_with_erasure_sound. Qed.
 
 End BlockVerificationDerived2.
 
