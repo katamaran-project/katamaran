@@ -45,6 +45,7 @@ theories/Environment.v
 theories/Iris/Instance.v
 theories/Iris/Model.v
 theories/Iris/BinaryInstance.v
+theories/Iris/cointro_patterns.v
 theories/Notations.v
 theories/Prelude.v
 theories/Program.v

@@ -1,8 +1,11 @@
+From stdpp Require Import hlist.
 From iris.prelude Require Export prelude.
 From iris.bi Require Export bi.
 From iris.proofmode Require Import base environments classes string_ident ltac_tactics coq_tactics reduction intro_patterns ltac_tactics.
 From iris.prelude Require Import options.
 Import bi.
+
+From Katamaran.Iris Require Import cointro_patterns.
 
 Definition pre_envs_entails_cocontexts_def {PROP : bi} (Γp Γs : env PROP) (Q : env PROP) :=
   (of_envs' Γp Γs ⊢ [∗] Q).
@@ -125,6 +128,25 @@ Proof.
     now rewrite (IHΔ _ _ lkpeq rplceq).
 Qed.
   
+Lemma env_replace_sound_sep_3 {i Γ} {Δ Δ' : env PROP} {P : PROP}: 
+  env_lookup i Δ = Some P ->
+  env_replace i Γ Δ = Some Δ' ->
+  [∗] Δ' ⊣⊢ [∗] (env_delete i Δ) ∗ [∗] Γ.
+Proof.
+  revert Δ'.
+  induction Δ; first done. cbn.
+  destruct (ident_beq i i0) eqn:Hii0; cbn.
+  - induction 1. intros.
+    rewrite sep_comm.
+    rewrite env_app_sound //.
+  - destruct (env_lookup i0 Γ); first by done.
+    destruct (env_replace i Γ Δ) as [Δ2'| ] eqn:Hrep; last by done.
+    intros Δ' HidP Hrep2.
+    inversion Hrep2; subst; clear Hrep2.
+    rewrite <-sep_assoc.
+    now rewrite <-(IHΔ _ HidP eq_refl).
+Qed.
+
 (* Lemma envs_simple_replace_sound_2 Δ Δ' i p P Γ : *)
 (*   envs_lookup i Δ = Some (p,P) → envs_simple_replace i p Γ Δ = Some Δ' → *)
 (*   ((if p then env_and_persistently Γ else [∗] Γ) ⊢ bi_persistently_if p P) -> (of_envs Δ' ⊢ of_envs Δ). *)
@@ -311,7 +333,7 @@ Proof.
   intros.
   rewrite of_envs_eq.
   rewrite <-(idemp bi_and (bi_pure (envs_wf Δ))).
-  rewrite -!and_assoc.
+  rewrite -!bi.and_assoc.
   apply pure_elim_l; intros Hwf.
   rewrite -of_envs_eq.
   now apply H.
@@ -471,7 +493,7 @@ Tactic Notation "iAndCodestructCohyp" constr(H) "as" constr(H1) constr(H2) :=
     [pm_reflexivity ||
      let H := pretty_ident H in
      fail "iCoDestructCoHypAnd:" H "not found"
-    |pm_reduce; iSolveTC ||
+    |pm_reduce; tc_solve ||
      let P :=
        lazymatch goal with
        | |- IntoSep ?P _ _ => P
@@ -508,7 +530,7 @@ Tactic Notation "iStartProof" :=
   | |- envs_entails_cocontexts _ _ => idtac
   | |- ?φ => notypeclasses refine (as_emp_valid_2 φ _ _);
            eapply tac_start_cocontexts;
-               [iSolveTC || fail "iStartProof: not a BI assertion"
+               [tc_solve || fail "iStartProof: not a BI assertion"
                |notypeclasses refine (tac_start _ _)]
   end.
 
@@ -545,7 +567,7 @@ Ltac iFrameHyp Hh Hc :=
 (*     |pm_reflexivity || *)
 (*      let H := pretty_ident Hh in *)
 (*      fail "iFrame:" Hh "not found" *)
-(*     |iSolveTC || *)
+(*     |tc_solve || *)
 (*      let R := match goal with |- Frame _ ?R _ _ => R end in *)
 (*      fail "iFrame: cannot frame" R *)
 (*     |pm_reduce; iFrameFinish]. *)
@@ -556,7 +578,7 @@ Ltac iFrameHyp Hh Hc :=
 (*     [pm_reflexivity || *)
 (*      let H := pretty_ident Hh in *)
 (*      fail "iFrame:" Hh "not found" *)
-(*     |iSolveTC || *)
+(*     |tc_solve || *)
 (*      let P := match goal with |- LookupEnv _ ?P _ => P end in *)
 (*      fail "iFrame: cannot frame" P *)
 (*     |pm_reduce; iFrameFinish]. *)
@@ -569,7 +591,7 @@ Ltac iFrameCohyp Hh :=
      fail "iFrame:" Hh "not found"
     |((* not sure why this is needed *)
      try eauto using lookup_env_here, lookup_env_there;
-     iSolveTC) ||
+     tc_solve) ||
      let P := match goal with |- LookupEnv _ ?P _ => P end in
      fail "iFrame: cannot frame" P
     |pm_reduce; iFrameFinish].
@@ -622,10 +644,10 @@ Tactic Notation "iPureIntroCohyp" constr(H) tactic(solver):=
     [pm_reflexivity ||
      let H := pretty_ident H in
      fail "iFrame:" H "not found"
-    |iSolveTC ||
+    |tc_solve ||
      let P := match goal with |- FromPure _ ?P _ => P end in
      fail "iPureIntroCohyp:" P "not pure"
-    (* |pm_reduce; iSolveTC || *)
+    (* |pm_reduce; tc_solve || *)
     (*  fail "iPureIntro: spatial context contains non-affine hypotheses" *)
     | pm_reduce |  solver ].
 
@@ -633,11 +655,11 @@ Tactic Notation "iPureIntro" :=
   iStopProof; iPureIntro.
   (* iStartProof; *)
   (* eapply tac_pure_intro; *)
-  (*   [iSolveTC || *)
+  (*   [tc_solve || *)
   (*    let P := match goal with |- FromPureEnv _ ?P _ => P end in *)
   (*    match goal with |- ?H => idtac H end; *)
   (*    fail "iPureIntro:" P "not pure" *)
-  (*   (* |pm_reduce; iSolveTC || *) *)
+  (*   (* |pm_reduce; tc_solve || *) *)
   (*   (*  fail "iPureIntro: spatial context contains non-affine hypotheses" *) *)
   (*   |]. *)
 
@@ -647,14 +669,74 @@ Tactic Notation "iExistCodestruct" constr(H)
     [pm_reflexivity ||
      let H := pretty_ident H in
      fail "iExistCodestruct:" H "not found"
-    |iSolveTC ||
-     let P := match goal with |- IntoExist ?P _ _ => P end in
-     fail "iExistCodestruct: cannot destruct" P|]; pm_reduce.
+    |tc_solve ||
+     let P := match goal with |- FromExist ?P _ => P end in
+     fail "iExistCodestruct: cannot codestruct" P|]; pm_reduce.
 
 Tactic Notation "iClearCohyp" constr(H) :=
   iPureIntroCohyp H done.
 
 (** [pat0] is the unparsed pattern, and is only used in error messages *)
+Ltac iCodestructCohypCointroGo Hz pat0 pat :=
+  lazymatch pat with
+  (* | IFresh => *)
+  (*    lazymatch Hz with *)
+  (*    | IAnon _ => idtac *)
+  (*    | INamed ?Hz => let Hz' := iFresh in iCoRename Hz into Hz' *)
+  (*    end *)
+  | SDrop => iClearCohyp Hz
+  | SFrame => iFrameCohyp Hz
+  | SFrameByName ?Hh _ => iFrameHyp Hh Hz
+  | SPureGoal ?pd =>
+      iPureIntroCohyp Hz (refine _; match pd with
+                                    | true => done
+                                    | _ => idtac
+                                    end)
+  | SCoHyp ?y => iRename Hz into y
+  | SSplitGoal ?cg => idtac
+  | SRefl => iPureIntroCohyp Hz reflexivity
+  | SList [[]] => iExFalso; iExact Hz
+  (* conjunctive patterns like [H1 H2] *)
+  (* [% ...] is always interpreted as an existential; there are [IntoExist]
+  instances in place to handle conjunctions with a pure left-hand side this way
+  as well. *)
+  | SList [SPureGoal ?pd; ?pat2] =>
+      (* guard (¬pd); *)
+      let x := ident_for_pat_default pat2 Hz in
+      iExistCodestruct Hz as x; iCodestructCohypCointroGo x pat0 pat2
+  | SList [?pat1; ?pat2] =>
+     (* We have to take care of not using the same name for the two hypotheses: *)
+  (*       [ident_for_pat_default] will thus only reuse [Hz] (which could in principle *)
+  (*       clash with a name from [pat2]) if it is an anonymous name. *)
+     let x1 := ident_for_pat_default pat1 Hz in
+     let x2 := ident_for_pat pat2 in
+     iAndCodestructCohyp Hz as x1 x2;
+     iCodestructCohypCointroGo x1 pat0 pat1;
+     iCodestructCohypCointroGo x2 pat0 pat2
+  | _ => fail "iDestruct:" pat0 "is not supported due to" pat
+  end.
+
+
+Ltac iCodestructCohypCointroFindPat Hgo pat found pats :=
+  lazymatch pats with
+  | [] =>
+    lazymatch found with
+    | true => pm_prettify (* post-tactic prettification *)
+    | false => fail "iDestruct:" pat "should contain exactly one proper introduction pattern"
+    end
+  | ?pat1 :: ?pats =>
+     lazymatch found with
+     | false => iCodestructCohypCointroGo Hgo pat pat1; iCodestructCohypCointroFindPat Hgo pat true pats
+     | true => fail "iCoestructCointro:" pat "should contain exactly one proper introduction pattern"
+     end
+  end.
+Tactic Notation "iCodestructCointro" constr(H) "as" constr(pat) :=
+  try iStartProof;
+  let pats := cointro_pat.parse pat in iCodestructCohypCointroFindPat H pat false pats.
+Tactic Notation "iCodestructCointro" "as" constr(pat) :=
+  iCodestructCointro "Goal" as pat.
+(** [pat0] is the unparsed pattern, and is only used in error messages *)
+
 Ltac iCodestructCohypGo Hz pat0 pat :=
   lazymatch pat with
   | IFresh =>
@@ -759,13 +841,13 @@ Tactic Notation "iIntros" constr(pat) := (iTryStopCocontexts; pm_reduce; iIntros
 (* Tactic Notation "iEmpIntroCohyp" := *)
 (*   iStartProof; *)
 (*   eapply tac_emp_intro_cohyp; *)
-(*     [pm_reduce; iSolveTC || *)
+(*     [pm_reduce; tc_solve || *)
 (*      fail "iEmpIntro: spatial context contains non-affine hypotheses"]. *)
 
 Tactic Notation "iEmptyCocontextIntro" :=
   iStartProof;
   eapply tac_empty_cocontext_intro;
-    [pm_reduce; iSolveTC ||
+    [pm_reduce; tc_solve ||
      fail "iEmpIntro: spatial context contains non-affine hypotheses"].
 
 (** Automation *)
@@ -822,6 +904,339 @@ Global Hint Extern 0 (envs_entails_cocontexts _ Enil) => iEmptyCocontextIntro : 
 (* Global Hint Extern 2 (envs_entails _ (|={_}=> _)) => iModIntro : core. *)
 
 (* Global Hint Extern 2 (envs_entails _ (_ ∗ _)) => progress iFrame : iFrame. *)
+
+Fixpoint bi_wands {PROP : bi} (q : bool) (Ps : list PROP) (Q : PROP) : PROP :=
+  match Ps with
+  | nil => Q
+  | P :: Ps => □?q P -∗ bi_wands q Ps Q
+  end.
+
+Class IntoWands {PROP : bi} {p q : bool} {R : PROP} {Ps : list PROP} {Q : PROP} :=
+  into_wands : □?p R ⊢ bi_wands q Ps Q.
+Global Arguments IntoWands {_} _ _ _%I _%I _%I : simpl never.
+Global Arguments into_wands {_} _ _ _%I _%I _%I {_}.
+Global Hint Mode IntoWands + + + ! - - : typeclass_instances.
+
+Global Program Instance intoWandsNil {PROP : bi} {q} {R : PROP} : IntoWands false q R nil R.
+Next Obligation. now cbn. Qed.
+
+Global Program Instance intoWandsCons {PROP : bi} {Ps} {P R Q : PROP} 
+  (iwR : IntoWands false false R Ps Q) : IntoWands false false (P -∗ R) (P :: Ps) Q.
+Next Obligation.
+  cbn. intros.
+  pose proof (H := into_wands false _ _ _ Q (IntoWands := iwR)).
+  cbn in H.
+  now rewrite H.
+Qed.
+
+Lemma wands_elim_r {PROP : bi} {Ps : list PROP} {Q : PROP} `{!Affine (emp%I : PROP)} :
+  [∗] Ps ∗ bi_wands false Ps Q ⊢ Q.
+Proof.
+  induction Ps; cbn.
+  - apply sep_elim_r.
+    now apply TCOr_l.
+  - rewrite <-sep_assoc, <-sep_comm, <-sep_assoc.
+    now rewrite wand_elim_l.
+Qed.
+
+Fixpoint list_to_env {A} (E : list A) (vs : list ident) : env A :=
+  match (E, vs) with
+  | (nil, nil) => Enil
+  | (P :: Ps, v :: vs) => Esnoc (list_to_env Ps vs) v P 
+  | _ => Enil
+  end.
+Global Instance: Params (@env_to_list) 1 := {}.
+
+Lemma big_sep_list_to_env {PROP : bi} {Ps : list PROP} {vs} :
+  length Ps = length vs ->
+  [∗] list_to_env Ps vs ⊣⊢ [∗] Ps.
+Proof.
+  revert vs. induction Ps; intros vs.
+  - destruct vs; now cbn.
+  - destruct vs; first done.
+    cbn. intros Heq.
+    rewrite IHPs //.
+    now lia.
+Qed.
+
+
+Lemma tac_apply_cocon {PROP : bi} Δh Δg i j vs Ps p (Q Q2 : PROP) P Δg2 :
+  env_lookup i Δg = Some Q →
+  envs_lookup j Δh = Some (p, P) →
+  IntoWands p false P Ps Q2 →
+  length vs = length Ps ->
+  TCEq Q Q2 ->
+  env_replace i (list_to_env Ps vs) Δg = Some Δg2 ->
+  envs_entails_cocontexts (envs_delete true j p Δh) Δg2 ->
+  envs_entails_cocontexts Δh Δg.
+Proof.
+  rewrite envs_entails_cocontexts_eq.
+  intros lidgQ ljdhP PPsQ Hlen Qeq riPdg dh2dg2.
+  induction Qeq.
+  rewrite envs_lookup_sound //.
+  clear ljdhP.
+  rewrite (into_wands _ _ _ _ _ (IntoWands := PPsQ)).
+  clear PPsQ.
+  rewrite dh2dg2.
+  clear dh2dg2.
+  rewrite (env_replace_sound_sep_3 lidgQ riPdg).
+  clear riPdg.
+  rewrite sep_assoc sep_comm sep_assoc.
+  rewrite big_sep_list_to_env //.
+  rewrite wands_elim_r.
+  now rewrite (env_lookup_delete_sound lidgQ).
+Qed.
+
+Ltac iApplyHypCocon H G Hs :=
+  eapply (tac_apply_cocon _ _ G H Hs);
+  [pm_reflexivity
+  |pm_reflexivity
+  |tc_solve
+  |pm_reduce; tc_solve].
+
+
+(** There is some hacky stuff going on here: because of Coq bug #6583, unresolved
+type classes in e.g. the arguments [xs] of [iSpecializeArgs_go] are resolved at
+arbitrary moments. That is because tactics like [apply], [split] and [eexists]
+wrongly trigger type class search. To avoid TC being triggered too eagerly, the
+tactics below use [notypeclasses refine] instead of [apply], [split] and
+[eexists]. *)
+Local Ltac iSpecializeArgs_go H xs :=
+  lazymatch xs with
+  | hnil => idtac
+  | hcons ?x ?xs =>
+     notypeclasses refine (tac_forall_specialize _ H _ _ _ _ _ _ _);
+       [pm_reflexivity ||
+        let H := pretty_ident H in
+        fail "iSpecialize:" H "not found"
+       |tc_solve ||
+        let P := match goal with |- IntoForall ?P _ => P end in
+        fail "iSpecialize: cannot instantiate" P "with" x
+       |lazymatch goal with (* Force [A] in [ex_intro] to deal with coercions. *)
+        | |- ∃ _ : ?A, _ =>
+          notypeclasses refine (@ex_intro A _ x _)
+        end; [shelve..|pm_reduce; iSpecializeArgs_go H xs]]
+  end.
+Local Tactic Notation "iSpecializeArgs" constr(H) open_constr(xs) :=
+  iSpecializeArgs_go H xs.
+
+Ltac iSpecializePatCointro_go H1 pats :=
+  let solve_to_wand H1 :=
+    tc_solve ||
+    let P := match goal with |- IntoWand _ _ ?P _ _ => P end in
+    fail "iSpecialize:" P "not an implication/wand" in
+  let solve_done d :=
+    lazymatch d with
+    | true =>
+       first [ done
+             | let Q := match goal with |- envs_entails _ ?Q => Q end in
+               fail 1 "iSpecialize: cannot solve" Q "using done"
+             | let Q := match goal with |- ?Q => Q end in
+               fail 1 "iSpecialize: cannot solve" Q "using done" ]
+    | false => idtac
+    end in
+  let Δ := iGetCtx in
+  lazymatch pats with
+    | [] => idtac
+    (* | SIdent ?H2 [] :: ?pats => *)
+    (*    (* If we not need to specialize [H2] we can avoid a lot of unncessary *)
+    (*    context manipulation. *) *)
+    (*    notypeclasses refine (tac_specialize false _ H2 _ H1 _ _ _ _ _ _ _ _ _); *)
+    (*      [pm_reflexivity || *)
+    (*       let H2 := pretty_ident H2 in *)
+    (*       fail "iSpecialize:" H2 "not found" *)
+    (*      |pm_reflexivity || *)
+    (*       let H1 := pretty_ident H1 in *)
+    (*       fail "iSpecialize:" H1 "not found" *)
+    (*      |tc_solve || *)
+    (*       let P := match goal with |- IntoWand _ _ ?P ?Q _ => P end in *)
+    (*       let Q := match goal with |- IntoWand _ _ ?P ?Q _ => Q end in *)
+    (*       fail "iSpecialize: cannot instantiate" P "with" Q *)
+    (*      |pm_reduce; iSpecializePat_go H1 pats] *)
+    (* | SIdent ?H2 ?pats1 :: ?pats => *)
+    (*    (* If [H2] is in the intuitionistic context, we copy it into a new *)
+    (*    hypothesis [Htmp], so that it can be used multiple times. *) *)
+    (*    let H2tmp := iFresh in *)
+    (*    iPoseProofCoreHyp H2 as H2tmp; *)
+    (*    (* Revert [H1] and re-introduce it later so that it will not be consumsed *)
+    (*    by [pats1]. *) *)
+    (*    iRevertHyp H1 with (fun p => *)
+    (*      iSpecializePatCointro_go H2tmp pats1; *)
+    (*        [.. (* side-conditions of [iSpecialize] *) *)
+    (*        |iIntro H1 as p]); *)
+    (*      (* We put the stuff below outside of the closure to get less verbose *)
+    (*      Ltac backtraces (which would otherwise include the whole closure). *) *)
+    (*      [.. (* side-conditions of [iSpecialize] *) *)
+    (*      |(* Use [remove_intuitionistic = true] to remove the copy [Htmp]. *) *)
+    (*       notypeclasses refine (tac_specialize true _ H2tmp _ H1 _ _ _ _ _ _ _ _ _); *)
+    (*         [pm_reflexivity || *)
+    (*          let H2tmp := pretty_ident H2tmp in *)
+    (*          fail "iSpecialize:" H2tmp "not found" *)
+    (*         |pm_reflexivity || *)
+    (*          let H1 := pretty_ident H1 in *)
+    (*          fail "iSpecialize:" H1 "not found" *)
+    (*         |tc_solve || *)
+    (*          let P := match goal with |- IntoWand _ _ ?P ?Q _ => P end in *)
+    (*          let Q := match goal with |- IntoWand _ _ ?P ?Q _ => Q end in *)
+    (*          fail "iSpecialize: cannot instantiate" P "with" Q *)
+    (*         |pm_reduce; iSpecializePat_go H1 pats]] *)
+    (* | SPureGoal ?d :: ?pats => *)
+    (*    notypeclasses refine (tac_specialize_assert_pure _ H1 _ _ _ _ _ _ _ _ _ _ _ _); *)
+    (*      [pm_reflexivity || *)
+    (*       let H1 := pretty_ident H1 in *)
+    (*       fail "iSpecialize:" H1 "not found" *)
+    (*      |solve_to_wand H1 *)
+    (*      |tc_solve || *)
+    (*       let Q := match goal with |- FromPure _ ?Q _ => Q end in *)
+    (*       fail "iSpecialize:" Q "not pure" *)
+    (*      |solve_done d (*goal*) *)
+    (*      |pm_reduce; *)
+    (*       iSpecializePat_go H1 pats] *)
+    (* | SGoal (SpecGoal GIntuitionistic false ?Hs_frame [] ?d) :: ?pats => *)
+    (*    notypeclasses refine (tac_specialize_assert_intuitionistic _ H1 _ _ _ _ _ _ _ _ _ _ _ _); *)
+    (*      [pm_reflexivity || *)
+    (*       let H1 := pretty_ident H1 in *)
+    (*       fail "iSpecialize:" H1 "not found" *)
+    (*      |solve_to_wand H1 *)
+    (*      |tc_solve || *)
+    (*       let Q := match goal with |- Persistent ?Q => Q end in *)
+    (*       fail "iSpecialize:" Q "not persistent" *)
+    (*      |tc_solve *)
+    (*      |pm_reduce; iFrame Hs_frame; solve_done d (*goal*) *)
+    (*      |pm_reduce; iSpecializePat_go H1 pats] *)
+    (* | SGoal (SpecGoal GIntuitionistic _ _ _ _) :: ?pats => *)
+    (*    fail "iSpecialize: cannot select hypotheses for intuitionistic premise" *)
+    (* | SGoal (SpecGoal ?m ?lr ?Hs_frame ?Hs ?d) :: ?pats => *)
+    (*    let Hs' := eval cbv in (if lr then Hs else Hs_frame ++ Hs) in *)
+    (*    notypeclasses refine (tac_specialize_assert _ H1 _ *)
+    (*        (if m is GModal then true else false) lr Hs' _ _ _ _ _ _ _ _ _); *)
+    (*      [pm_reflexivity || *)
+    (*       let H1 := pretty_ident H1 in *)
+    (*       fail "iSpecialize:" H1 "not found" *)
+    (*      |solve_to_wand H1 *)
+    (*      |tc_solve || fail "iSpecialize: goal not a modality" *)
+    (*      |pm_reduce; *)
+    (*       lazymatch goal with *)
+    (*       | |- False => *)
+    (*         let Hs' := iMissingHypsCore Δ Hs' in *)
+    (*         fail "iSpecialize: hypotheses" Hs' "not found" *)
+    (*       | _ => *)
+    (*         notypeclasses refine (conj _ _); *)
+    (*           [iFrame Hs_frame; solve_done d (*goal*) *)
+    (*           |iSpecializePat_go H1 pats] *)
+    (*       end] *)
+    (* | SAutoFrame GIntuitionistic :: ?pats => *)
+    (*    notypeclasses refine (tac_specialize_assert_intuitionistic _ H1 _ _ _ _ _ _ _ _ _ _ _ _); *)
+    (*      [pm_reflexivity || *)
+    (*       let H1 := pretty_ident H1 in *)
+    (*       fail "iSpecialize:" H1 "not found" *)
+    (*      |solve_to_wand H1 *)
+    (*      |tc_solve || *)
+    (*       let Q := match goal with |- Persistent ?Q => Q end in *)
+    (*       fail "iSpecialize:" Q "not persistent" *)
+    (*      |tc_solve || *)
+    (*       fail "iSpecialize: Cannot find IntoAbsorbingly;" *)
+    (*            "this should not happen, please report a bug" *)
+    (*      |pm_reduce; solve [iFrame "∗ #"] *)
+    (*      |pm_reduce; iSpecializePat_go H1 pats] *)
+    (* | SAutoFrame ?m :: ?pats => *)
+    (*    notypeclasses refine (tac_specialize_frame _ H1 _ *)
+    (*        (if m is GModal then true else false) _ _ _ _ _ _ _ _ _ _ _); *)
+    (*      [pm_reflexivity || *)
+    (*       let H1 := pretty_ident H1 in *)
+    (*       fail "iSpecialize:" H1 "not found" *)
+    (*      |solve_to_wand H1 *)
+    (*      |tc_solve || fail "iSpecialize: goal not a modality" *)
+    (*      |pm_reduce; *)
+    (*       first *)
+    (*         [notypeclasses refine (tac_unlock_emp _ _ _) *)
+    (*         |notypeclasses refine (tac_unlock_True _ _ _) *)
+    (*         |iFrame "∗ #"; notypeclasses refine (tac_unlock _ _ _) *)
+    (*         |let P := *)
+    (*            match goal with |- envs_entails _ (?P ∗ locked _)%I => P end in *)
+    (*          fail 1 "iSpecialize: premise" P "cannot be solved by framing"] *)
+    (*      |exact eq_refl]; iIntro H1; iSpecializePat_go H1 pats *)
+    end.
+
+Local Tactic Notation "iSpecializePatCointro" open_constr(H) constr(pat) :=
+  let pats := cointro_pat.parse pat in iSpecializePatCointro_go H pats.
+
+
+(** The argument [p] of [iSpecializeCore] can either be a Boolean, or an
+introduction pattern that is coerced into [true] when it solely contains [#] or
+[%] patterns at the top-level. *)
+Tactic Notation "iSpecializeCoreCointro" open_constr(H)
+    "with" open_constr(xs) open_constr(pat) "as" constr(p) :=
+  let p := intro_pat_intuitionistic p in
+  let pat := cointro_pat.parse pat in
+  let H :=
+    lazymatch type of H with
+    | string => constr:(INamed H)
+    | _ => H
+    end in
+  iSpecializeArgs H xs; [..|
+    lazymatch type of H with
+    | ident =>
+       let pat := cointro_pat.parse pat in
+       let Δ := iGetCtx in
+       (* Check if we should use [tac_specialize_intuitionistic_helper]. Notice
+       that [pm_eval] does not unfold [use_tac_specialize_intuitionistic_helper],
+       so we should do that first. *)
+       let b := eval cbv [use_tac_specialize_intuitionistic_helper] in
+         (if p then use_tac_specialize_intuitionistic_helper Δ pat else false) in
+       lazymatch eval pm_eval in b with
+       | true =>
+          (* Check that the BI is either affine, or the hypothesis [H] resides
+          in the intuitionistic context. *)
+          lazymatch iTypeOf H with
+          | Some (?q, _) =>
+             let PROP := iBiOfGoal in
+             lazymatch eval compute in (q || tc_to_bool (BiAffine PROP)) with
+             | true =>
+                notypeclasses refine (tac_specialize_intuitionistic_helper _ H _ _ _ _ _ _ _ _ _ _);
+                  [pm_reflexivity
+                   (* This premise, [envs_lookup j Δ = Some (q,P)],
+                   holds because the [iTypeOf] above succeeded *)
+                  |pm_reduce; tc_solve
+                   (* This premise, [if q then TCTrue else BiAffine PROP], holds
+                   because we established that [q || TC_to_bool (BiAffine PROP)]
+                   is true *)
+                  |iSpecializePatCointro H pat;
+                    [..
+                    |notypeclasses refine (tac_specialize_intuitionistic_helper_done _ H _ _ _);
+                     pm_reflexivity]
+                  |tc_solve ||
+                   let Q := match goal with |- IntoPersistent _ ?Q _ => Q end in
+                   fail "iSpecialize:" Q "not persistent"
+                  |pm_reduce (* goal *)]
+             | false => iSpecializePatCointro H pat
+             end
+          | None =>
+             let H := pretty_ident H in
+             fail "iSpecialize:" H "not found"
+          end
+       | false => iSpecializePatCointro H pat
+       end
+    | _ => fail "iSpecialize:" H "should be a hypothesis, use iPoseProof instead"
+    end].
+
+Tactic Notation "iSpecializeCoreCointro" open_constr(t) "as" constr(p) :=
+  lazymatch type of t with
+  | string => iSpecializeCore t with hnil "" as p
+  | ident => iSpecializeCore t with hnil "" as p
+  | _ =>
+    lazymatch t with
+    | ITrm ?H ?xs ?pat => iSpecializeCore H with xs pat as p
+    | _ => fail "iSpecialize:" t "should be a proof mode term"
+    end
+  end.
+
+Tactic Notation "iSpecializeCointro" open_constr(t) :=
+  iSpecializeCoreCointro t as false.
+Tactic Notation "iSpecializeCointro" open_constr(t) "as" "#" :=
+  iSpecializeCoreCointro t as true.
+
+
 
 (* DOMI: Cocontexts ideas not yet there *)
 (* less hard:
