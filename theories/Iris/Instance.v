@@ -403,18 +403,44 @@ Section Soundness.
 End Soundness.
 End IrisSignatureRules.
 
+Module Type IrisAdeqParameters
+  (Import B : Base)
+  (Import IP : IrisParameters B).
+
+  Parameter Inline memGpreS : gFunctors -> Set.
+  Parameter memΣ : gFunctors.
+  Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
+  Parameter mem_res : forall `{mG : memGS Σ}, Memory -> iProp Σ.
+  Parameter mem_inv_init : forall `{mGS : memGpreS Σ} (μ : Memory),
+                                         ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
+
+End IrisAdeqParameters.
+
 Module Type IrisAdequacy
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
   (Import IB    : IrisBase B PROG SEM)
+  (Import IAP   : IrisAdeqParameters B IB)
   (Import IPred : IrisPredicates B SIG PROG SEM IB)
   (Import IRules : IrisSignatureRules B SIG PROG SEM IB IPred).
 
   Import SmallStepNotations.
 
   Definition sailΣ : gFunctors := #[ memΣ ; invΣ ; GFunctor regUR].
+
+  Class sailGpreS Σ := SailGpreS { (* resources for the implementation side *)
+                       sailGpresS_invGpreS : invGpreS Σ; (* for fancy updates, invariants... *)
+
+                       (* ghost variable for tracking state of registers *)
+                       reg_pre_inG : inG Σ regUR;
+
+                       (* ghost variable for tracking state of memory cells *)
+                       sailPreG_gen_memGpreS : memGpreS Σ
+                     }.
+  #[export] Existing Instance sailGpresS_invGpreS.
+  #[export] Existing Instance reg_pre_inG.
 
   #[local] Instance subG_sailGpreS {Σ} : subG sailΣ Σ -> sailGpreS Σ.
   Proof.
@@ -533,8 +559,8 @@ Module Type IrisAdequacy
 
 End IrisAdequacy.
 
-Module Type IrisInstance (B : Base) (SIG : Signature B) (PROG : Program B) (SEM : Semantics B PROG) (IB : IrisBase B PROG SEM) :=
-  IrisPredicates B SIG PROG SEM IB <+ IrisSignatureRules B SIG PROG SEM IB <+ IrisAdequacy B SIG PROG SEM IB.
+Module Type IrisInstance (B : Base) (SIG : Signature B) (PROG : Program B) (SEM : Semantics B PROG) (IB : IrisBase B PROG SEM) (IAP : IrisAdeqParameters B IB) :=
+  IrisPredicates B SIG PROG SEM IB <+ IrisSignatureRules B SIG PROG SEM IB <+ IrisAdequacy B SIG PROG SEM IB IAP.
 
 (*
  * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature.
@@ -547,7 +573,8 @@ Module IrisInstanceWithContracts
   (Import SEM   : Semantics B PROG)
   (Import SPEC  : Specification B SIG PROG)
   (Import IB    : IrisBase B PROG SEM)
-  (Import II    : IrisInstance B SIG PROG SEM IB)
+  (Import IAP   : IrisAdeqParameters B IB)
+  (Import II    : IrisInstance B SIG PROG SEM IB IAP)
   (Import PLOG  : ProgramLogicOn B SIG PROG SPEC).
 
   Section WithSailGS.

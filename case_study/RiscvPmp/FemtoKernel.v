@@ -825,6 +825,7 @@ Import BlockVerification3.
     end.
 
   Import RiscvPmpSemantics.
+  Import RiscvPmpIrisAdeqParameters.
   Import SmallStepNotations.
 
   Import iris.bi.big_op.

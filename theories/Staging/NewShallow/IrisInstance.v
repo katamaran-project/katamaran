@@ -47,6 +47,7 @@ From iris Require Import
 
 From Katamaran Require Import
      Iris.Model
+     Iris.Instance
      Prelude
      Semantics
      Sep.Logic
@@ -381,25 +382,20 @@ Section Soundness.
   Qed.
 
 End Soundness.
+End IrisSignatureRules.
 
-Section Adequacy.
+Module Type IrisAdequacy
+  (Import B     : Base)
+  (Import SIG   : Signature B)
+  (Import PROG  : Program B)
+  (Import SEM   : Semantics B PROG)
+  (Import IB    : IrisBase B PROG SEM)
+  (Import IAP   : IrisAdeqParameters B IB)
+  (Import IPred : IrisPredicates B SIG PROG SEM IB)
+  (Import ISR   : IrisSignatureRules B SIG PROG SEM IB IPred).
+
 
   Import SmallStepNotations.
-
-  Definition sailΣ : gFunctors := #[ memΣ ; invΣ ; GFunctor regUR].
-
-  Instance subG_sailGpreS {Σ} : subG sailΣ Σ -> sailGpreS Σ.
-  Proof.
-    intros.
-    lazymatch goal with
-    | H:subG ?xΣ _ |- _ => try unfold xΣ in H
-    end.
-    repeat match goal with
-           | H:subG (gFunctors.app _ _) _ |- _ => apply subG_inv in H; destruct H
-           end.
-    split; eauto using memΣ_GpreS, subG_invΣ.
-    solve_inG.
- Qed.
 
   Definition RegStore_to_map (γ : RegStore) : gmap SomeReg (exclR (leibnizO SomeVal)) :=
     list_to_map (K := SomeReg)
@@ -506,6 +502,35 @@ Section Adequacy.
     [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮),
       match x with | existT _ r => reg_pointsTo r (read_register γ r) end.
 
+
+  Definition sailΣ : gFunctors := #[ memΣ ; invΣ ; GFunctor regUR].
+
+  Class sailGpreS Σ := SailGpreS { (* resources for the implementation side *)
+                       sailGpresS_invGpreS : invGpreS Σ; (* for fancy updates, invariants... *)
+
+                       (* ghost variable for tracking state of registers *)
+                       reg_pre_inG : inG Σ regUR;
+
+                       (* ghost variable for tracking state of memory cells *)
+                       sailPreG_gen_memGpreS : memGpreS Σ
+                     }.
+  #[export] Existing Instance sailGpresS_invGpreS.
+  #[export] Existing Instance reg_pre_inG.
+
+
+  Instance subG_sailGpreS {Σ} : subG sailΣ Σ -> sailGpreS Σ.
+  Proof.
+    intros.
+    lazymatch goal with
+    | H:subG ?xΣ _ |- _ => try unfold xΣ in H
+    end.
+    repeat match goal with
+           | H:subG (gFunctors.app _ _) _ |- _ => apply subG_inv in H; destruct H
+           end.
+    split; eauto using memΣ_GpreS, subG_invΣ.
+    solve_inG.
+  Qed.
+
   Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : Val σ -> Prop} :
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
@@ -593,12 +618,11 @@ Section Adequacy.
       now iApply "Hφ".
   Qed.
 
-End Adequacy.
-End IrisSignatureRules.
+End IrisAdequacy.
 
 Module Type IrisInstance (B : Base) (SIG : Signature B) (PROG : Program B)
-  (SEM : Semantics B PROG) (IB : IrisBase B PROG SEM) :=
-  IrisPredicates B SIG PROG SEM IB <+ IrisSignatureRules B SIG PROG SEM IB.
+  (SEM : Semantics B PROG) (IB : IrisBase B PROG SEM) (IAP : IrisAdeqParameters B IB) :=
+  IrisPredicates B SIG PROG SEM IB <+ IrisSignatureRules B SIG PROG SEM IB <+ IrisAdequacy B SIG PROG SEM IB IAP.
 
 (*
  * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature.
@@ -611,7 +635,8 @@ Module IrisInstanceWithContracts
   (Import SEM   : Semantics B PROG)
   (Import SPEC  : Specification B SIG PROG)
   (Import IB    : IrisBase B PROG SEM)
-  (Import II    : IrisInstance B SIG PROG SEM IB)
+  (Import IAP   : IrisAdeqParameters B IB)
+  (Import II    : IrisInstance B SIG PROG SEM IB IAP)
   (Import NS    : NewShallowExecOn B SIG PROG SPEC).
 
   Section WithSailGS.
@@ -876,7 +901,8 @@ Module IrisInstanceWithContracts
   Proof.
     intros.
     apply (CHeapSpecM.fold_exec_aux (ex := semWP) (ec := semCall)).
-    - admit.
+    - intros Γ' τ' f δ'.
+      admit.
     - clear - extSem lemSem.
       intros Γ τ s.
       intros P Q PQ δ. cbn.

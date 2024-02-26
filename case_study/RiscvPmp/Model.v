@@ -92,7 +92,7 @@ Module RiscvPmpModel2.
 
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
     RiscvPmpProgram RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase
-    RiscvPmpIrisInstance.
+    RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance.
 
   Ltac eliminate_prim_step Heq :=
     let s := fresh "s" in

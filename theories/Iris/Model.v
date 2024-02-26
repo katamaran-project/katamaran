@@ -58,26 +58,14 @@ End TransparentObligations.
 Module Type IrisParameters
   (Import B    : Base).
 
-  (* The memGS and memGpreS fields will normally always be instantiated to a type class. We
+  (* The memGS field will normally always be instantiated to a type class. We
      inline this field, so that instances declared by the library, e.g. the
      [sailGS_memGS] superclass instance below, will always be instances for the
      user-provided class instead of the [memGS] alias. In your client code, you
-     should always refer to your typeclass and refrain from using the [memGS] and [memGpreS]
+     should always refer to your typeclass and refrain from using the [memGS]
      aliases completely. *)
-  Parameter Inline memGpreS : gFunctors -> Set.
   Parameter Inline memGS : gFunctors -> Set.
-  Parameter memΣ : gFunctors.
-  Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
   Parameter mem_inv : forall `{mG : memGS Σ}, Memory -> iProp Σ.
-  Parameter mem_res : forall `{mG : memGS Σ}, Memory -> iProp Σ.
-
-    (* Definition mem_inv `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
-    (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
-    (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
-    (*   )%I. *)
-
-  Parameter mem_inv_init : forall `{mGS : memGpreS Σ} (μ : Memory),
-                                         ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
 End IrisParameters.
 
 (* TODO: export, back to module instead of module type *)
@@ -386,17 +374,6 @@ Module Type IrisResources
   (Import SEM  : Semantics B PROG)
   (Import IPre : IrisPrelims B PROG SEM)
   (Import IP   : IrisParameters B).
-  Class sailGpreS Σ := SailGpreS { (* resources for the implementation side *)
-                       sailGpresS_invGpreS : invGpreS Σ; (* for fancy updates, invariants... *)
-
-                       (* ghost variable for tracking state of registers *)
-                       reg_pre_inG : inG Σ regUR;
-
-                       (* ghost variable for tracking state of memory cells *)
-                       sailPreG_gen_memGpreS : memGpreS Σ
-                     }.
-  #[export] Existing Instance sailGpresS_invGpreS.
-  #[export] Existing Instance reg_pre_inG.
   Class sailGS Σ := SailGS { (* resources for the implementation side *)
                        sailGS_invGS : invGS Σ; (* for fancy updates, invariants... *)
                        sailGS_sailRegGS : sailRegGS Σ;

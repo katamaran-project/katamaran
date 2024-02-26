@@ -146,12 +146,7 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
                         }.
     #[export] Existing Instance mc_ghG.
 
-    Definition memGpreS : gFunctors -> Set := fun Σ => gh.gen_heapGpreS Z MemVal Σ.
     Definition memGS : gFunctors -> Set := mcMemGS.
-    Definition memΣ : gFunctors := gh.gen_heapΣ Z MemVal.
-
-    Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
-      fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := MemVal).
 
     Definition mem_inv `{mG : mcMemGS Σ} (μ : Memory) : iProp Σ :=
         (∃ memmap, gen_heap_interp (hG := mc_ghG (mcMemGS := mG)) memmap ∗
@@ -175,32 +170,44 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
       by destruct el as (a' & <- & _).
     Qed.
 
-    Definition mem_res `{mG : mcMemGS Σ} (μ : Memory) : iProp Σ :=
-        ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v) %I.
-
-    Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
-                                                ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
-    Proof.
-      iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
-      pose (memmap := initMemMap μ).
-      iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
-      iModIntro.
-
-      rewrite (right_id empty union memmap).
-
-      iExists (McMemGS gH (nroot .@ "addr_inv")).
-      iFrame.
-      iExists memmap.
-      iFrame.
-      iPureIntro.
-      apply initMemMap_works.
-    Qed.
   End WithIrisNotations.
 
   Include IrisResources MinCapsBase MinCapsProgram MinCapsSemantics.
 End MinCapsIrisBase.
 
-Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase.
+Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBase.
+  Import iris.base_logic.lib.gen_heap.
+
+  Definition memGpreS : gFunctors -> Set := fun Σ => gh.gen_heapGpreS Z MemVal Σ.
+  Definition memΣ : gFunctors := gh.gen_heapΣ Z MemVal.
+
+  Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
+    fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := MemVal).
+
+  Definition mem_res `{mG : mcMemGS Σ} (μ : Memory) : iProp Σ :=
+      ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v) %I.
+
+  Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
+                                              ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
+  Proof.
+    iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
+    pose (memmap := initMemMap μ).
+    iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
+    iModIntro.
+
+    rewrite (right_id empty union memmap).
+
+    iExists (McMemGS gH (nroot .@ "addr_inv")).
+    iFrame.
+    iExists memmap.
+    iFrame.
+    iPureIntro.
+    apply initMemMap_works.
+  Qed.
+
+End MinCapsIrisAdeqParameters.
+
+Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase MinCapsIrisAdeqParameters.
   Import env.notations.
   Import iris.bi.interface.
   Import iris.bi.big_op.
@@ -539,14 +546,14 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
   End MinimalCapsPredicates.
 
   Include IrisSignatureRules MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase.
-  Include IrisAdequacy MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase.
+  Include IrisAdequacy MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase MinCapsIrisAdeqParameters.
 
 End MinCapsIrisInstance.
 
 Module MinCapsIrisInstanceWithContracts.
   Include ProgramLogicOn MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
   Include IrisInstanceWithContracts MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics
-    MinCapsSpecification MinCapsIrisBase MinCapsIrisInstance.
+    MinCapsSpecification MinCapsIrisBase MinCapsIrisAdeqParameters MinCapsIrisInstance.
 
   Section LemProofs.
     (* In this section we prove that the lemmas we defined in this case study

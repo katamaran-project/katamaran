@@ -96,49 +96,19 @@ Class irisGS2 (Λ1 Λ2 : language) (Σ : gFunctors) := IrisG {
 Global Opaque iris_invGS2.
 
 Module Type IrisParameters2
-  (Import B    : Base)
-  (Import PROG : Program B)
-  (Import SEM  : Semantics B PROG)
-  (Import IP   : IrisPrelims B PROG SEM).
-  Parameter Inline memGpreS2 : gFunctors -> Set.
+  (Import B    : Base).
+
   Parameter Inline memGS2 : gFunctors -> Set.
   Existing Class memGS2.
-  Parameter memΣ2 : gFunctors.
-  Parameter memΣ_GpreS2 : forall {Σ}, subG memΣ2 Σ -> memGpreS2 Σ.
   Parameter mem_inv2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
-  Parameter mem_res2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
-
-    (* Definition mem_inv `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
-    (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
-    (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
-    (*   )%I. *)
-
-  Parameter mem_inv_init2 : forall `{mGS : memGpreS2 Σ} (μ1 μ2 : Memory),
-                                         ⊢ |==> ∃ mG : memGS2 Σ, (mem_inv2 (mG := mG) μ1 μ2 ∗ mem_res2 (mG := mG) μ1 μ2)%I.
-
-  
-  (* used as a technical helper in stuck_fail *)
-  Parameter defaultRegStore : RegStore.
-  Parameter defaultMemory : Memory.
 End IrisParameters2.
 
 Module Type IrisResources2
   (Import B    : Base)
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
-  (Import IPre : IrisPrelims B PROG SEM)
-  (Import IP   : IrisParameters2 B PROG SEM IPre).
-  Class sailGpreS2 Σ := SailGpreS2 { (* resources for the implementation side *)
-                       sailGpresS_invGpreS2 : invGpreS Σ; (* for fancy updates, invariants... *)
-
-                       (* ghost variables for tracking state of registers *)
-                       reg_pre_inG2_left : inG Σ regUR;
-                       reg_pre_inG2_right : inG Σ regUR;
-
-                       (* ghost variable for tracking state of memory cells *)
-                       sailPreG_gen_memGpreS2 : memGpreS2 Σ
-                     }.
-  #[export] Existing Instance sailGpresS_invGpreS2.
+  (Import IP   : IrisParameters2 B)
+  (Import IPre : IrisPrelims B PROG SEM).
 
   Class sailRegGS2 Σ := SailRegGS2 {
                             sailRegGS2_sailRegGS_left : sailRegGS Σ;
@@ -193,7 +163,7 @@ Module Type IrisResources2
 End IrisResources2.
 
 Module Type IrisBase2 (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
-  IrisPrelims B PROG SEM <+ IrisParameters2 B PROG SEM <+ IrisResources2 B PROG SEM.
+  IrisParameters2 B <+ IrisPrelims B PROG SEM <+ IrisResources2 B PROG SEM.
 
 (* The following three modules define the Iris instance of the program logic
    depending solely on the operational semantics (through IrisBase) and the
@@ -1150,16 +1120,52 @@ End Soundness.
 
 End IrisSignatureRules2.
 
+Module Type IrisAdeqParameters2
+  (Import B     : Base)
+  (Import IPP  : IrisParameters2 B)
+  (Import PROG : Program B)
+  (Import SEM  : Semantics B PROG)
+  (Import IP   : IrisPrelims B PROG SEM).
+
+  Parameter Inline memGpreS2 : gFunctors -> Set.
+  Parameter memΣ2 : gFunctors.
+  Parameter memΣ_GpreS2 : forall {Σ}, subG memΣ2 Σ -> memGpreS2 Σ.
+  Parameter mem_res2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
+
+    (* Definition mem_inv `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
+    (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
+    (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
+    (*   )%I. *)
+
+  Parameter mem_inv_init2 : forall `{mGS : memGpreS2 Σ} (μ1 μ2 : Memory),
+                                         ⊢ |==> ∃ mG : memGS2 Σ, (mem_inv2 (mG := mG) μ1 μ2 ∗ mem_res2 (mG := mG) μ1 μ2)%I.
+
+End IrisAdeqParameters2.
+
 Module Type IrisAdequacy2
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
   (Import IB    : IrisBase2 B PROG SEM)
+  (Import IAP   : IrisAdeqParameters2 B IB PROG SEM IB)
   (Import IPred : IrisPredicates2 B SIG PROG SEM IB)
   (Import IRules : IrisSignatureRules2 B SIG PROG SEM IB IPred).
 
   Import SmallStepNotations.
+
+  Class sailGpreS2 Σ := SailGpreS2 { (* resources for the implementation side *)
+                       sailGpresS_invGpreS2 : invGpreS Σ; (* for fancy updates, invariants... *)
+
+                       (* ghost variables for tracking state of registers *)
+                       reg_pre_inG2_left : inG Σ regUR;
+                       reg_pre_inG2_right : inG Σ regUR;
+
+                       (* ghost variable for tracking state of memory cells *)
+                       sailPreG_gen_memGpreS2 : memGpreS2 Σ
+                     }.
+
+  Existing Instance sailGpresS_invGpreS2.
 
   Definition sailΣ2 : gFunctors := #[ memΣ2 ; invΣ ; GFunctor regUR; GFunctor regUR].
 
@@ -1402,9 +1408,9 @@ Module Type IrisAdequacy2
 End IrisAdequacy2.
 
 Module Type IrisInstance2 (B : Base) (SIG : Signature B) (PROG : Program B)
-  (SEM : Semantics B PROG) (IB : IrisBase2 B PROG SEM) :=
+  (SEM : Semantics B PROG) (IB : IrisBase2 B PROG SEM) (IAP : IrisAdeqParameters2 B IB PROG SEM IB) :=
   IrisPredicates2 B SIG PROG SEM IB <+ IrisSignatureRules2 B SIG PROG SEM IB
-    <+ IrisAdequacy2 B SIG PROG SEM IB.
+    <+ IrisAdequacy2 B SIG PROG SEM IB IAP.
 
 (*  * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature. *)
 (*  * This is kept to a minimum (see comment for the IrisPredicates module). *)
@@ -1416,7 +1422,8 @@ Module IrisInstanceWithContracts2
   (Import SEM   : Semantics B PROG)
   (Import SPEC  : Specification B SIG PROG)
   (Import IB    : IrisBase2 B PROG SEM)
-  (Import II    : IrisInstance2 B SIG PROG SEM IB)
+  (Import IAP   : IrisAdeqParameters2 B IB PROG SEM IB)
+  (Import II    : IrisInstance2 B SIG PROG SEM IB IAP)
   (Import PLOG  : ProgramLogicOn B SIG PROG SPEC).
 
   Section WithSailGS.

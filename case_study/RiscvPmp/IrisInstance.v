@@ -48,9 +48,88 @@ Module ns := stdpp.namespaces.
 Set Implicit Arguments.
 Import bv.notations.
 
+Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIrisBase.
+  (* Pull in the definition of the LanguageMixin and register ghost state. *)
+  Import RiscvPmpIrisBase.
+
+  Class mcMemPreGS Σ := {
+      mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
+      mc_gtPreGS :: trace_preG Trace Σ;
+      }.
+  #[export] Existing Instance mc_ghPreGS.
+  #[export] Existing Instance mc_gtPreGS.
+
+  Definition memGpreS : gFunctors -> Set := mcMemPreGS.
+  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace].
+
+  Lemma NoDup_liveAddrs : NoDup liveAddrs.
+  Proof. now eapply Prelude.nodup_fixed. Qed.
+
+  #[global] Arguments liveAddrs : simpl never.
+
+  Definition initMemMap μ := (list_to_map (map (fun a => (a , memory_ram μ a)) liveAddrs) : gmap Addr MemVal).
+
+  Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
+  Proof. intros. solve_inG. Defined.
+
+  Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
+    fun μ => (([∗ list] a' ∈ liveAddrs, mapsto a' (DfracOwn 1) (memory_ram μ a')) ∗ tr_frag1 (memory_trace μ))%I.
+
+  Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
+  Proof.
+    unfold initMemMap.
+    rewrite map_Forall_to_list.
+    rewrite Forall_forall.
+    intros (a , v).
+    rewrite elem_of_map_to_list.
+    intros el.
+    apply elem_of_list_to_map_2 in el.
+    apply elem_of_list_In in el.
+    apply in_map_iff in el.
+    by destruct el as (a' & <- & _).
+  Qed.
+
+  Lemma big_sepM_list_to_map {Σ} {A B : Type} `{Countable A} {l : list A} {f : A -> B} (F : A -> B -> iProp Σ) :
+    NoDup l ->
+    ([∗ map] l↦v ∈ (list_to_map (map (λ a : A, (a, f a)) l)), F l v)
+      ⊢
+      [∗ list] v ∈ l, F v (f v).
+  Proof.
+    intros ndl.
+    induction ndl.
+    - now iIntros "_".
+    - cbn.
+      rewrite big_sepM_insert.
+      + iIntros "[$ Hrest]".
+        now iApply IHndl.
+      + apply not_elem_of_list_to_map_1.
+        change (fmap fst ?l) with (map fst l).
+        now rewrite map_map map_id.
+  Qed.
+
+  Lemma mem_inv_init `{gHP : !mcMemPreGS Σ} (μ : Memory) :
+    ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res μ)%I.
+  Proof.
+    pose (memmap := initMemMap μ).
+    iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
+    iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]".
+
+    iModIntro.
+    iExists (McMemGS gH gT).
+    iSplitL "Hinv Hauth".
+    - iExists memmap.
+      iFrame.
+      iPureIntro.
+      apply initMemMap_works.
+    - unfold mem_res, initMemMap in *. iFrame.
+      iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => mapsto a (DfracOwn 1) v) with "[$]").
+      eapply NoDup_liveAddrs.
+  Qed.
+End RiscvPmpIrisAdeqParameters.
+
 Module RiscvPmpIrisInstance <:
   IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpIrisBase.
+    RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
   Import RiscvPmpIrisBase.
   Import RiscvPmpProgram.
 
@@ -655,6 +734,6 @@ Module RiscvPmpIrisInstance <:
   Include IrisSignatureRules RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     RiscvPmpSemantics RiscvPmpIrisBase.
   Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase.
+    RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
 
 End RiscvPmpIrisInstance.

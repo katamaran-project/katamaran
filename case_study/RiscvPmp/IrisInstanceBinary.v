@@ -46,9 +46,40 @@ Module ns := stdpp.namespaces.
 Set Implicit Arguments.
 Import bv.notations.
 
+Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpIrisBase2 RiscvPmpProgram RiscvPmpSemantics RiscvPmpIrisBase2.
+
+  Import RiscvPmpIrisAdeqParameters.
+  Import RiscvPmpIrisBase2.
+
+  Definition memGpreS2 : gFunctors -> Set := fun Σ => prod (memGpreS Σ) (memGpreS Σ).
+
+  Definition memΣ2 : gFunctors := gFunctors.app memΣ memΣ.
+
+  Definition memΣ_GpreS2 : forall {Σ}, subG memΣ2 Σ -> memGpreS2 Σ :=
+    fun {Σ} HsG => (memΣ_GpreS (Σ := Σ) (fst (subG_inv _ _ _ HsG)),
+                  memΣ_GpreS (Σ := Σ) (snd (subG_inv _ _ _ HsG))).
+
+  Definition mem_res2 `{hG : mcMemGS2 Σ} : Memory -> Memory -> iProp Σ :=
+    fun μ1 μ2 => (mem_res (hG := mc_ghGS2_left) μ1 ∗
+                 mem_res (hG := mc_ghGS2_right) μ2)%I.
+
+  Lemma mem_inv_init2 `{gHP : prod (memGpreS Σ) (memGpreS Σ)} (μ1 μ2 : Memory) :
+    ⊢ |==> ∃ mG : mcMemGS2 Σ, (mem_inv2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
+  Proof.
+    iMod (mem_inv_init (gHP := fst gHP) μ1) as (mG1) "[inv1 res1]".
+    iMod (mem_inv_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
+    iMod (trace_alloc (memory_trace μ1)) as (gT1) "[Hauth1 Hfrag1]".
+    iMod (trace_alloc (memory_trace μ2)) as (gT2) "[Hauth2 Hfrag2]".
+    iModIntro.
+    iExists (McMemGS2 mG1 mG2 gT1 gT2).
+    iSplitL "inv1 inv2"; iFrame.
+  Qed.
+
+End RiscvPmpIrisAdeqParams2.
+
 Module RiscvPmpIrisInstance2 <:
   IrisInstance2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpIrisBase2.
+    RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
   Import RiscvPmpIrisBase2.
   Import RiscvPmpProgram.
 
@@ -321,7 +352,8 @@ Module RiscvPmpIrisInstance2 <:
 
   Include IrisSignatureRules2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     RiscvPmpSemantics RiscvPmpIrisBase2.
+
   Include IrisAdequacy2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase2.
+    RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
 
 End RiscvPmpIrisInstance2.

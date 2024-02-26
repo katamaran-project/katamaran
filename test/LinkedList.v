@@ -818,12 +818,7 @@ Module ExampleModel.
           }.
       #[export] Existing Instance mc_ghGS.
 
-      Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
       Definition memGS : gFunctors -> Set := mcMemGS.
-      Definition memΣ : gFunctors := gen_heapΣ Z (Z * (Z + unit)).
-
-      Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
-        fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := (Z * (Z + unit))).
 
       Lemma fst_pair_id2 : forall {A} {B},
           (λ (x : A) (y : B), (Datatypes.fst ∘ pair x) y) = (λ (x : A) (y : B), x).
@@ -842,27 +837,38 @@ Module ExampleModel.
 
       Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
         fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) μ)%I.
-
-      Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-        fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
-
-      Lemma mem_inv_init `{! gen_heapGpreS Z (Z * (Z + unit)) Σ} (μ : Memory) :
-        ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
-      Proof.
-        iMod (gen_heap_init (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
-
-        iMod (gen_heap_alloc_big empty μ (map_disjoint_empty_r μ) with "inv") as "(inv & res & _)".
-        iModIntro.
-        rewrite (right_id empty union μ).
-
-        iExists (McMemGS gH (nroot .@ "mem_inv")).
-        iFrame.
-      Qed.
     End ExampleIrisParameters.
 
     Include IrisResources ExampleBase ExampleProgram ExampleSemantics.
 
   End ExampleIrisBase.
+
+  Module ExampleIrisAdeqParams <: IrisAdeqParameters ExampleBase ExampleIrisBase.
+    Import iris.base_logic.lib.gen_heap.
+    Import iris.proofmode.tactics.
+
+    Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
+    Definition memΣ : gFunctors := gen_heapΣ Z (Z * (Z + unit)).
+
+    Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
+      fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := (Z * (Z + unit))).
+
+    Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+      fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
+
+    Lemma mem_inv_init `{! gen_heapGpreS Z (Z * (Z + unit)) Σ} (μ : Memory) :
+      ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+    Proof.
+      iMod (gen_heap_init (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
+
+      iMod (gen_heap_alloc_big empty μ (map_disjoint_empty_r μ) with "inv") as "(inv & res & _)".
+      iModIntro.
+      rewrite (right_id empty union μ).
+
+      iExists (McMemGS gH (nroot .@ "mem_inv")).
+      iFrame.
+    Qed.
+  End ExampleIrisAdeqParams.
 
   (* After instantiating [IrisBase] we have access to the Iris base logic
      with the given ghost state and can interpret the user-defined predicates in
@@ -870,7 +876,7 @@ Module ExampleModel.
      [IrisInstance] module. *)
   Module Import ExampleIrisInstance <:
     IrisInstance ExampleBase ExampleSignature ExampleProgram ExampleSemantics
-      ExampleIrisBase.
+      ExampleIrisBase ExampleIrisAdeqParams.
 
     Import iris.base_logic.lib.gen_heap.
     Import iris.base_logic.lib.iprop.
@@ -910,7 +916,7 @@ Module ExampleModel.
     (* At this point we have enough information to instantiate the program logic
        rules of Iris that do not refer to specific contracts. *)
     Include IrisSignatureRules ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleIrisBase.
-    Include IrisAdequacy ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleIrisBase.
+    Include IrisAdequacy ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleIrisBase ExampleIrisAdeqParams.
 
   End ExampleIrisInstance.
 
@@ -928,7 +934,7 @@ Module ExampleModel.
       ExampleSpecification.
     Include IrisInstanceWithContracts ExampleBase ExampleSignature
       ExampleProgram ExampleSemantics ExampleSpecification
-      ExampleIrisBase ExampleIrisInstance.
+      ExampleIrisBase ExampleIrisAdeqParams ExampleIrisInstance.
 
     (* Import the soundness proofs for the shallow and symbolic executors. *)
     Include Shallow.Soundness.Soundness ExampleBase ExampleSignature

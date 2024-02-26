@@ -798,6 +798,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     RiscvPmpBlockVerifSpec.
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
     RiscvPmpProgram RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase
+    RiscvPmpIrisAdeqParameters
     RiscvPmpIrisInstance.
   Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature
     RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.

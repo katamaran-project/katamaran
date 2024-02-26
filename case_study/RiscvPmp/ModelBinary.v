@@ -89,7 +89,7 @@ Module RiscvPmpModel2.
   Include RiscvPmpProgramLogic.
 
   Include IrisInstanceWithContracts2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase2 RiscvPmpIrisInstance2.
+    RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase2  RiscvPmpIrisAdeqParams2 RiscvPmpIrisInstance2.
 
   Section ForeignProofs.
     Context `{sg : sailGS2 Σ}.
