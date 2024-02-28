@@ -216,8 +216,9 @@ Module RiscvPmpModel2.
       iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1 & Htrace1) & (% & Hmem2 & %Hmap2 & Htrace2)))".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
-      iIntros.
+      iIntros (? ? ? ? ? ? ? ?) "(%Hstepl & %Hstepr)".
       repeat iModIntro.
+      eliminate_prim_step Heq.
       eliminate_prim_step Heq.
       iMod "Hclose" as "_".
       iModIntro.
@@ -225,14 +226,6 @@ Module RiscvPmpModel2.
       iDestruct (RiscvPmpModel2.fun_read_ram_works (sg := sailGS2_sailGS_right) Hmap2 with "[$Hmemres2 $Hmem2]") as "%eq_fun_read_ram2".
       iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_left) $! Hmap1 with "Hmem1") as "Hmem1".
       iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_right) $! Hmap2 with "Hmem2") as "Hmem2".
-      iExists _, _, _, _.
-      iSplitR.
-      { iPureIntro.
-        eapply RiscvPmpSemantics.step_trans.
-        constructor.
-        now rewrite Heq.
-        rewrite eq_fun_read_ram2.
-        apply RiscvPmpSemantics.step_refl. }
       iSpecialize ("Hmem1" with "Htrace1").
       iSpecialize ("Hmem2" with "Htrace2").
       iFrame.
@@ -255,8 +248,9 @@ Module RiscvPmpModel2.
       iDestruct "H" as "[Hmemres1 Hmemres2]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
-      iIntros.
+      iIntros (? ? ? ? ? ? ? ?) "(%Hstepl & %Hstepr)".
       repeat iModIntro.
+      eliminate_prim_step Heq.
       eliminate_prim_step Heq.
       iMod "Hclose" as "_".
       iMod (RiscvPmpModel2.fun_write_ram_works (sg := sailGS2_sailGS_left) μ1 paddr data Hmap1
@@ -264,14 +258,6 @@ Module RiscvPmpModel2.
       iMod (RiscvPmpModel2.fun_write_ram_works (sg := sailGS2_sailGS_right) μ2 paddr data Hmap2
                    with "[$Hmemres2 $Hmem2 $Htrace2]") as "[Hmem2 Hmemres2]".
       iModIntro.
-      iExists _, _, _, _.
-      iSplitR.
-      { iPureIntro.
-        eapply RiscvPmpSemantics.step_trans.
-        constructor.
-        now rewrite Heq.
-        apply RiscvPmpSemantics.step_refl. }
-      cbn.
       rewrite semWp2_val.
       iFrame "Hregs".
       iSplitL "Hmem1 Hmem2"; first iFrame.
@@ -292,22 +278,15 @@ Module RiscvPmpModel2.
       iIntros (? ? ? ?) "[Hregs (Hmem1 & Hmem2)]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
-      iIntros.
+      iIntros (? ? ? ? ? ? ? ?) "(%Hstepl & %Hstepr)".
       repeat iModIntro.
+      eliminate_prim_step Heq.
       eliminate_prim_step Heq.
       iMod "Hclose" as "_".
       iModIntro.
-      iExists _, _, _, _.
-      iSplitR.
-      { iPureIntro.
-        eapply RiscvPmpSemantics.step_trans.
-        constructor.
-        now rewrite Heq.
-        apply RiscvPmpSemantics.step_refl. }
       iFrame.
       destruct (pure_decode bv0).
-      - rewrite fixpoint_semWp2_eq.
-        now iExists _.
+      - by iApply semWp2_fail_2.
       - rewrite semWp2_val.
         now iExists _.
     Qed.
@@ -324,18 +303,12 @@ Module RiscvPmpModel2.
       iIntros (? ? ? ?) "[Hregs (Hmem1 & Hmem2)]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
-      iIntros.
+      iIntros (? ? ? ? ? ? ? ?) "(%Hstepl & %Hstepr)".
       repeat iModIntro.
+      eliminate_prim_step Heq.
       eliminate_prim_step Heq.
       iMod "Hclose" as "_".
       iModIntro.
-      iExists _, _, _, _.
-      iSplitR.
-      { iPureIntro.
-        eapply RiscvPmpSemantics.step_trans.
-        constructor.
-        now rewrite Heq.
-        apply RiscvPmpSemantics.step_refl. }
       iFrame.
       destruct (fun_vector_subrange bv0 e b) eqn:Ev.
       rewrite semWp2_val.
