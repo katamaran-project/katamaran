@@ -540,7 +540,7 @@ Import BlockVerification3.
   Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := @interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N data_addr) (bv.of_N 42).
   Definition femto_inv_mmio `{sailGS Σ} := interp_inv_mmio bytes_per_word.
 
-  Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
+  Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 70).
   (* Local Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 79). *)
 
   Definition femto_handler_pre `{sailGS Σ} (is_mmio : bool): iProp Σ :=

@@ -663,8 +663,8 @@ Module BlockVerificationDerived2Sem.
     iFrame.
   Qed.
 
-  Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
-  Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 79).
+  Notation "a '↦' t" := (reg_pointsTo a t) (at level 70).
+  Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
 
   Fixpoint ptsto_instrs `{sailGS Σ} (a : Val ty_word) (instrs : list AST) : iProp Σ :=
     match instrs with
