@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Arith.PeanoNat
      Bool.Bool
      Classes.Morphisms
      NArith.BinNat
@@ -351,7 +352,7 @@ Module Import ctx.
         (In_eqb b1inΓ b2inΓ).
     Proof.
       destruct b1inΓ as [m p], b2inΓ as [n q]; cbn.
-      destruct (NPeano.Nat.eqb_spec m n); constructor.
+      destruct (Nat.eqb_spec m n); constructor.
       - subst. pose proof (proof_irrelevance_het_nth_is p q) as Heq.
         now dependent elimination Heq.
       - intros e. depelim e. destruct n, m; cbn in H; congruence.

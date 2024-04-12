@@ -508,12 +508,12 @@ Module Type IrisAdequacy
       iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
       pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
-      iMod (mem_inv_init (mGS := mGS)) as (memG) "[Hmem Rmem]".
+      iMod (mem_inv_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
       iModIntro.
       iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
       iExists _.
       iSplitR "Hs2 Rmem".
-      * iFrame.
+      * iFrame "Hmem".
         now iApply own_RegStore_to_regs_inv.
       * iApply (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]").
         iApply (own_RegStore_to_map_reg_pointsTos (srGS := SailRegGS reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
@@ -536,7 +536,7 @@ Module Type IrisAdequacy
     iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
     pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
-    iMod (mem_inv_init (mGS := mGS)) as (memG) "[Hmem Rmem]".
+    iMod (mem_inv_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
     pose (regsG := {| reg_inG := @reg_pre_inG sailΣ (@subG_sailGpreS sailΣ (subG_refl sailΣ)); reg_gv_name := spec_name |}).
     pose (sailG := SailGS Hinv regsG memG).
     iMod (trips sailΣ sailG with "[$Rmem Hs2]") as "[trips Hφ]".
@@ -550,7 +550,7 @@ Module Type IrisAdequacy
     iExists _.
     iExists _.
     iSplitR "trips Hφ".
-    * iFrame.
+    * iFrame "Hmem".
       now iApply own_RegStore_to_regs_inv.
     * cbn. iFrame.
       iIntros (es' t2') "_ _ _ [Hregsinv Hmeminv] _ _".

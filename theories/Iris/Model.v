@@ -320,12 +320,13 @@ Module Type IrisPrelims
       specialize (regsmapv (existT _ r)).
       rewrite eq1 in regsmapv.
       destruct y as [y|]; inversion regsmapv.
-      iMod (own_update_2 with "Hregs Hreg") as "[Hregs $]".
+      iMod (own_update_2 with "Hregs Hreg") as "Hregs".
       {
         eapply auth_update.
         apply (singleton_local_update regsmap (existT _ r) (Excl y) (Excl (existT _ v1)) (Excl (existT _ v2)) (Excl (existT _ v2)) eq1).
         by eapply exclusive_local_update.
       }
+      iDestruct "Hregs" as "[Hregs $]".
       now iApply (regs_inv_update H).
     Qed.
 

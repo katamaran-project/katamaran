@@ -38,7 +38,7 @@ From Equations Require Import
      Equations.
 From Katamaran Require Import
      Notations Prelude.
-Require stdpp.base.
+Require Import stdpp.base.
 Local Set Implicit Arguments.
 
 Declare Scope bv_scope.
@@ -287,7 +287,7 @@ Module bv.
       destruct x; cbn; auto using trunc_illf. contradiction.
     Qed.
     Lemma truncn_le {n x} : (truncn n x <= x)%N.
-    Proof. destruct (base.decide (Is_true (is_wf n x))) eqn:Wf.
+    Proof. destruct (decide (Is_true (is_wf n x))) eqn:Wf.
     - rewrite truncn_wf; auto.
     - apply N.lt_le_incl. apply truncn_illf; auto.
     Qed.
@@ -605,7 +605,7 @@ Module bv.
       destruct n; cbn; now Lia.lia.
     Qed.
 
-    #[export] Instance bv_inhabited n : base.Inhabited (bv n) := base.populate (zero).
+    #[export] Instance bv_inhabited n : Inhabited (bv n) := populate (zero).
   End Constants.
 
   Section Access.
@@ -1186,8 +1186,8 @@ Module bv.
       (c_inj : forall k b1 b2 v1 v2, c k b1 v1 = c k b2 v2 -> b1 = b2 /\ v1 = v2)
       (n1 n2 : V O) (Heq : n1 <> n2) (m : nat) :
       forall (x : V m),
-        base.elem_of_list x (enumV c n1 m) ->
-        base.elem_of_list x (enumV c n2 m) -> False.
+        elem_of_list x (enumV c n1 m) ->
+        elem_of_list x (enumV c n2 m) -> False.
     Proof.
       revert V c c_inj n1 n2 Heq. induction m; intros V c c_inj n1 n2 Heq; cbn [enumV].
       - intros x xIn1%list.elem_of_list_singleton xIn2% list.elem_of_list_singleton.
@@ -1199,7 +1199,7 @@ Module bv.
 
     Lemma nodup_enumV {V : forall k : nat, Type} (c : forall k, bool -> V k -> V (S k))
       (c_inj : forall k b1 b2 v1 v2, c k b1 v1 = c k b2 v2 -> b1 = b2 /\ v1 = v2)
-      (n : V O) (m : nat) : base.NoDup (enumV c n m).
+      (n : V O) (m : nat) : NoDup (enumV c n m).
     Proof.
       revert V c c_inj n. induction m; intros V c c_inj n; cbn [enumV].
       - apply list.NoDup_singleton.
@@ -1212,8 +1212,8 @@ Module bv.
 
     Lemma elem_of_enumV {V : forall k : nat, Type} (c : forall k, bool -> V k -> V (S k)) (n : V O) (m : nat) :
       forall (b : bool) (x : V m),
-        base.elem_of x (enumV c n m) ->
-        base.elem_of (c m b x) (enumV c n (S m)).
+        elem_of x (enumV c n m) ->
+        elem_of (c m b x) (enumV c n (S m)).
     Proof.
       revert V c n. induction m; cbn; intros V c n b x xIn.
       - apply list.elem_of_list_singleton in xIn. subst x.

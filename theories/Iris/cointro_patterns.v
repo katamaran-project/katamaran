@@ -74,7 +74,9 @@ with parse_goal (ts : list token)
   match ts with
   | TName s :: ts => parse_goal ts ki neg (INamed s :: hyps) k
   | TMinus :: ts =>
-     guard (¬neg ∧ hyps = []); parse_goal ts ki true hyps k
+      if decide (¬neg ∧ hyps = [])
+      then parse_goal ts ki true hyps k
+      else None
   | TBracketR :: ts =>
      parse_go ts (StPat (SSplitGoal (SpecGoal ki neg (reverse hyps))) :: k)
   | _ => None

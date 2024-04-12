@@ -148,7 +148,7 @@ Ltac bv_zify_op_branching_hyps_step :=
 Ltac bv_zify_ty_step_on f :=
   generalize (bv.bv_is_wf f); intros ?;
   fast_set_fresh (bv.bin f);
-  first [ clear f | revert dependent f ].
+  first [ clear f | generalize dependent f ].
 
 Ltac bv_zify_ty_step_var :=
   lazymatch goal with
