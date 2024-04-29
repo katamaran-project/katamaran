@@ -517,5 +517,6 @@ Module Pred
       - done.
     Qed.
 
+  End LRCompat.
 
 End Pred.
