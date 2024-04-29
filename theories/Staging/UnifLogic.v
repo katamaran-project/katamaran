@@ -185,6 +185,7 @@ Module Pred
         | [ a : ?A |- exists (a : ?A), _ ] => exists a
         | [ H : sepₚ _ _ _ |- _ ] => destruct H
         | [ |- sepₚ _ _ _ ] => split
+        | [ |- eqₚ ?t1 ?t2 ?ι ] => intro
         | [ |- wandₚ _ _ _ ] => constructor; intros
         | [ H : wandₚ _ _ _ |- _ ] => destruct H; cbn in H
         | [ H : (fun x => _) _ |- _ ] => cbn in H
@@ -234,6 +235,7 @@ Module Pred
   Ltac punfold_connectives :=
     change (@interface.bi_and (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι /\ Q ι) in *;
     change (@interface.bi_sep (@bi_pred _) ?P ?Q ?ι) with (sepₚ P Q ι) in *;
+    change (@eqₚ ?T ?A ?instTA ?w ?t1 ?t2 ?ι) with (instprop (wco w) ι -> inst t1 ι = inst t2 ι) in *;
     change (@interface.bi_emp (@bi_pred _) ?ι) with (empₚ ι) in *;
     change (@interface.bi_wand (@bi_pred _) ?P ?Q ?ι) with (wandₚ P Q ι) in *;
     change (@interface.bi_entails (@bi_pred _) ?P ?Q) with (entails P Q) in *;
@@ -242,9 +244,9 @@ Module Pred
     change (@interface.bi_impl (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι -> Q ι) in *;
     change (@derived_connectives.bi_iff (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> iff (P ι) (Q ι)) in *;
     change (@interface.bi_pure (@bi_pred _) ?P _) with P in *;
-    change (@interface.bi_forall (@bi_pred _) ?A ?P) with (fun ι => forall a : A, P a ι) in *;
-    change (@interface.bi_exist (@bi_pred _) ?A ?P) with (fun ι => exists a : A, P a ι) in *;
-    unfold derived_connectives.bi_intuitionistically, derived_connectives.bi_affinely in *;
+    change (@interface.bi_forall (@bi_pred ?w) ?A ?P) with (fun ι => instprop (wco w) ι -> forall a : A, P a ι) in *;
+    change (@interface.bi_exist (@bi_pred ?w) ?A ?P) with (fun ι => instprop (wco w) ι -> exists a : A, P a ι) in *;
+    unfold derived_connectives.bi_intuitionistically, derived_connectives.bi_affinely, interface.bi_emp_valid in *;
     (* change (@subst Pred subst_pred _ _ ?P _ ?θ ?ι) with (P (inst θ ι)) in *; *)
     try progress (cbn beta).
   (* Ltac crushPredEntailsMatch3 := *)
@@ -262,7 +264,8 @@ Module Pred
   (*   | [ |- interface.bi_emp _ ] => constructor *)
   (*   end. *)
   Ltac crushPredEntails3 := cbn; intros;
-                            repeat (punfold_connectives; crushPredEntailsMatch1 || crushPredEntailsMatch2);
+                            repeat punfold_connectives;
+                            repeat (repeat punfold_connectives; crushPredEntailsMatch1 || crushPredEntailsMatch2);
                             intuition.
                                  
   Module Import notations.
@@ -415,10 +418,10 @@ Module Pred
 
     Lemma exists_l {I : Type} {w} (P : I -> Pred w) (Q : Pred w) :
       (forall x : I, P x ⊢ₚ Q) -> (∃ₚ x : I, P x) ⊢ₚ Q.
-    Proof. crushPredEntails3; firstorder. Qed.
+    Proof. crushPredEntails3. Qed.
     Lemma exists_r {I : Type} {w} P (Q : I -> Pred w) :
       (exists x : I, P ⊢ₚ Q x) -> P ⊢ₚ (∃ₚ x : I, Q x).
-    Proof. crushPredEntails3; firstorder. Qed.
+    Proof. crushPredEntails3. Qed.
     #[global] Arguments exists_r {I w P Q} _.
 
     Lemma wand_is_impl [w] (P Q : Pred w) : (P -∗ Q)%I ⊣⊢ₚ (P ->ₚ Q).
@@ -435,20 +438,16 @@ Module Pred
       Context {T A} {instTA : Inst T A}.
 
       Lemma eqₚ_intro {w : World} (t : T w) : ⊢ (t =ₚ t)%P.
-      Admitted.
-      (* Proof. crushPredEntails3. Qed. *)
+      Proof. crushPredEntails3. Qed.
 
       Lemma eqₚ_refl {w : World} (t : T w) : t =ₚ t ⊣⊢ₚ ⊤ₚ.
-      Admitted.
-      (* Proof. crushPredEntails3. Qed. *)
+      Proof. crushPredEntails3. Qed.
 
       Lemma eqₚ_sym {w : World} (s t : T w) : s =ₚ t ⊣⊢ₚ t =ₚ s.
-      Admitted.
-      (* Proof. crushPredEntails3. Qed. *)
+      Proof. crushPredEntails3. Qed.
 
       Lemma eqₚ_trans {w : World} (s t u : T w) : s =ₚ t /\ₚ t =ₚ u ⊢ₚ s =ₚ u.
-      Admitted.
-      (* Proof. crushPredEntails3. Qed. *)
+      Proof. crushPredEntails3. now transitivity (inst t ι). Qed.
 
     End Eq.
     #[global] Arguments eqₚ_trans {T A _ w} s t u.
