@@ -478,8 +478,8 @@ Module Pred
     Import logicalrelation.
     Import ModalNotations.
     
-    Definition Related {AT A} (R : Rel AT A) : ⊢ AT -> Const A -> Pred :=
-      fun w t v ι => (instprop (wco w) ι -> RSat R ι t v)%type.
+    Definition Related {AT A} (R : Rel AT A) : A -> ⊢ AT -> Pred :=
+      fun v w t ι => (instprop (wco w) ι -> RSat R ι t v)%type.
 
   End LogicalRelation.
 
@@ -505,7 +505,7 @@ Module Pred
     
 
     Lemma refine_four {w1 w2} {ω : Acc w2 w1} {AT A} (RA : Rel AT A) :
-      (⊢ ∀ (v__s : Box AT w2) v, (after ω (ℛ⟦□ᵣ RA⟧ w2 v__s v) ->ₚ ℛ⟦RBox RA⟧ w1 (four v__s ω) v))%P.
+      (⊢ ∀ (v__s : Box AT w2) v, (after ω (ℛ⟦□ᵣ RA⟧ v w2 v__s) ->ₚ ℛ⟦RBox RA⟧ v w1 (four v__s ω)))%P.
     Proof.
       constructor.
       intros ι2 Hpc _ _ v__s _ v _ Htv _ w0 r01 ι0 -> Hpc0.
@@ -516,6 +516,51 @@ Module Pred
       - now rewrite <-inst_subst, sub_acc_trans.
       - done.
     Qed.
+
+    Lemma refine_T {AT A} (R : Rel AT A) :
+      forall v (w : World) t, (⊢ ((ℛ⟦ □ᵣ R ⟧ v w t) → ℛ⟦R⟧ v w (T t)))%I.
+    Proof.
+      constructor.
+      intros * Hpc _ _ Hbr _.
+      apply Hbr; try assumption.
+      now rewrite inst_sub_id.
+    Qed.
+
+    Lemma refine_apply {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
+      forall (w : World) F f t v,
+        (⊢ ℛ⟦RA -> RB⟧ f w F → ℛ⟦RA⟧ v w t → ℛ⟦RB⟧ (f v) w (F t))%I.
+    Proof. constructor. intros * _ _ _ rf _ ra Hpc. now apply rf, ra. Qed.
+
+    Lemma refine_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} :
+      forall (v : A) (w1 w2 : World) (r12 : Acc w1 w2)
+             (t : AT w1),
+        ⊢ (after r12 (ℛ⟦RInst AT A⟧ v w1 t) →
+           ℛ⟦RInst AT A⟧ v w2 (persist t r12))%I.
+    Proof. constructor. intros ι2 Hpc _ _ Hfut _. cbn.
+           rewrite inst_persist.
+           now apply Hfut, acc_pathcond.
+    Qed.
+
+    Lemma refine_formula_persist :
+      forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop),
+       ⊢ after r12 (ℛ⟦RFormula⟧ p w1 f) → ℛ⟦RFormula⟧ p w2 (persist f r12).
+    Proof.
+      constructor.
+      intros * Hpc _ _ Hfut _. cbn.
+      rewrite instprop_persist.
+      now apply Hfut, acc_pathcond.
+    Qed.
+
+    Lemma refine_formula_subst {Σ} (fml : Formula Σ) {w : World} :
+      ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RFormula⟧ (instprop fml) w (subst fml).
+    Proof.
+      constructor. intros * Hpc _ _ ζ ι2 ->.
+      now apply instprop_subst.
+    Qed.
+
+    Lemma refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) :
+      ⊢ ℛ⟦RInst AT A⟧ a w (lift (T := AT) a).
+    Proof. constructor. intros * Hpc _ _. cbn. now rewrite inst_lift. Qed.
 
   End LRCompat.
 
