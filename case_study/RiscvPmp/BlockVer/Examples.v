@@ -51,285 +51,274 @@ Import bv.notations.
 Import env.notations.
 Import ListNotations.
 
-Module SWAP.
+From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
+From iris.bi Require interface big_op.
+From iris.algebra Require dfrac big_op.
+From iris.program_logic Require weakestpre adequacy.
+From iris.proofmode Require string_ident tactics.
+From stdpp Require namespaces.
+From Katamaran Require Import RiscvPmp.LoopVerification.
 
-  Import asn.notations.
+Module Examples.
+    Import RiscvPmpBlockVerifExecutor.
+    Import BlockVerificationDerived2.
+    Import BlockVerificationDerived2Sem.
+    Import Assembly.
+    Import asn.notations.
+    Import RiscvPmp.Sig.
+    Import iris.proofmode.tactics.
+    Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
+    Local Notation "x - y" := (term_binop bop.bvsub x y) : exp_scope.
+    Local Notation "a <=ᵘ b" := (term_binop (bop.relop bop.bvule) a b) : exp_scope.
+    Local Notation "a = b" := (term_binop (bop.relop bop.eq) a b) : exp_scope.
+    Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
+    Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
-  Example block1 : list AST :=
-	[ ADD [bv 1] [bv 1] [bv 2]
-	; SUB [bv 2] [bv 1] [bv 2]
-	; SUB [bv 1] [bv 1] [bv 2]
-	].
+    Definition X0 : RegIdx := bv.zero.
+    Definition X1 : RegIdx := bv.one.
+    Definition X2 : RegIdx := bv.of_nat 2.
+    Definition X3 : RegIdx := bv.of_nat 3.
+    Definition X4 : RegIdx := bv.of_nat 4.
 
-  Import RiscvPmpSignature.notations.
+    (* minimal_pre asserts that we start executing at address 0 in Machine mode.
+       We choose an arbitrary list for the pmp entries (pmp is not used in these
+       examples). *)
+    Definition minimal_pre {Σ} : Assertion Σ :=
+      (* asn.exist "_" _ (nextpc ↦ term_var "_")
+      ∗ *)cur_privilege ↦ term_val ty_privilege Machine
+      ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ;
+                                    (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]).
 
-  Example pre1 `{"a"∷ty_xlenbits ∈ Σ} `{"y"∷ty_xlenbits ∈ Σ} `{"x"∷ty_xlenbits ∈ Σ} : Assertion Σ :=
-    (term_var "a" = term_val ty_word bv.zero) ∗
-    cur_privilege ↦ term_val ty_privilege Machine ∗
-      asn_pmp_entries (term_val ty_pmpentries default_pmpentries) ∗
-	    x1 ↦ term_var "x" ∗
-	    x2 ↦ term_var "y".
+    (* minimal_post asserts ownership of the cur_privilege CSR,
+       but do not care in which mode we end up. *)
+    Definition minimal_post {Σ} : Assertion Σ :=
+      (* asn.exist "_" _ (nextpc ↦ term_var "_")
+      ∗ *) cur_privilege ↦ term_val ty_privilege Machine
+      ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ;
+                                    (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]).
 
-  Example post1 `{"y"∷ty_xlenbits ∈ Σ} `{"x"∷ty_xlenbits ∈ Σ} : Assertion Σ :=
-    cur_privilege ↦ term_val ty_privilege Machine ∗
-      asn_pmp_entries (term_val ty_pmpentries default_pmpentries) ∗
-	    x1 ↦ term_var "y" ∗
-	    x2 ↦ term_var "x".
+    Definition extend_to_minimal_pre {Σ} (P : Assertion Σ) : Assertion Σ :=
+      P ∗ minimal_pre.
 
-  (* Example vc1 : 𝕊 ε := *)
-	(* SymProp.demonic_close (BlockVerification.VC pre1 block1 post1). *)
+    Definition extend_to_minimal_post {Σ} (Q : Assertion Σ) : Assertion Σ :=
+      Q ∗ minimal_post.
 
-  (* Lemma sat_vc1 : VerificationConditionWithErasure (Erasure.erase_symprop vc1). *)
-  (* Proof. vm_compute. constructor. cbv - [Z.sub Z.add]. lia. Qed. *)
+    Definition VC_triple {Σ} (P : Assertion (Σ ▻ "a" :: ty_xlenbits)) (i : list AST) (Q : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)) :=
+      VC__addr (extend_to_minimal_pre P) i (extend_to_minimal_post Q).
 
-  Definition Σ1 : LCtx := ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
+    Definition Valid_VC {Σ} (P : Assertion (Σ ▻ "a" :: ty_xlenbits)) (i : list AST) (Q : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)) :=
+      safeE (postprocess (VC_triple P i Q)).
 
-  Example vc2 : 𝕊 ε :=
-	let vc1 := BlockVerificationDerived2.VC__addr (Σ := Σ1) pre1 block1 post1 in
-	let vc2 := Postprocessing.prune vc1 in
-	let vc3 := Postprocessing.solve_evars vc2 in
-	let vc4 := Postprocessing.solve_uvars vc3 in
-	vc4.
+    Definition Debug_VC {Σ} (P : Assertion (Σ ▻ "a" :: ty_xlenbits)) (i : list AST) (Q : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)) :=
+      VerificationCondition (postprocess (VC_triple P i Q)).
 
-  Lemma sat_vc2 : VerificationCondition vc2.
-  Proof. vm_compute. constructor.
-         cbv - [bv.unsigned bv.sub bv.add].
-         repeat split.
-  Admitted.
+    Record BlockVerifierContract {Σ} :=
+      MkBlockVerifierContract
+      { precondition  : Assertion (Σ ▻ "a" :: ty_xlenbits)
+      ; instrs        : list AST
+      ; postcondition : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)
+      }.
 
-  Section ContractAddr.
+    Definition map {Σ A} (c : @BlockVerifierContract Σ)
+      (f : Assertion (Σ ▻ "a" :: ty_xlenbits) -> list AST -> Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits) -> A)
+      : A :=
+      match c with
+      | {| precondition := pre; instrs := i; postcondition := post |} =>
+          f pre i post
+      end.
 
-	Example pre1' : Assertion  {| wctx := Σ1 ▻ ("a"::ty_xlenbits) ; wco := []%ctx |} :=
-    cur_privilege ↦ term_val ty_privilege Machine ∗
-      asn_pmp_entries (term_val ty_pmpentries default_pmpentries) ∗
-	  (x1 ↦ term_var "x") ∗ x2 ↦ term_var "y".
+    Definition ValidBlockVerifierContract {Σ} (c : @BlockVerifierContract Σ) : Prop :=
+      map c Valid_VC.
 
-	Example post1' : Assertion	{| wctx := Σ1 ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
-    cur_privilege ↦ term_val ty_privilege Machine ∗
-      asn_pmp_entries (term_val ty_pmpentries default_pmpentries) ∗
-		x1 ↦ term_var "y" ∗
-		x2 ↦ term_var "x" ∗
-		term_var "an" = term_binop bop.bvadd (term_var "a") (term_val _ (bv.of_nat 12 : Val ty_xlenbits)).
+    Definition DebugBlockVerifierContract {Σ} (c : @BlockVerifierContract Σ) : Prop :=
+      map c Debug_VC.
 
-  End ContractAddr.
+    Local Notation "'{{' P '}}' i '{{' Q '}}'" := (@MkBlockVerifierContract [ctx] P%asn i Q%asn)
+        (at level 90, format "'[v' '{{'  P  '}}' '/'  i '/' '{{'  Q  '}}' ']'").
+    Local Notation "'{{' P '}}' i '{{' Q '}}' 'with' logvars" := (@MkBlockVerifierContract logvars P%asn i Q%asn)
+        (at level 90, format "'[v' '{{'  P  '}}' '/'  i '/' '{{'  Q  '}}' '/' 'with'  logvars ']'").
 
-  Example vc3 : 𝕊 ε :=
-    RiscvPmpSignature.postprocess
-          (BlockVerificationDerived2.VC__addr pre1' block1 post1').
+    Local Ltac solve_bv :=
+      repeat match goal with
+        | |- context[bv.add ?x (@BitvectorBase.bv.mk ?n 0 I)] =>
+            fold (@bv.zero n)
+        | |- context[bv.add ?x bv.zero] =>
+            rewrite BitvectorBase.bv.add_zero_r
+        end.
 
-  Lemma sat_vc3' : BlockVerificationDerived2.safeE vc2.
-  Proof. vm_compute. constructor. cbv - [bv.sub bv.add].
-  Admitted.
+    Local Ltac solve_vc :=
+      vm_compute; constructor; cbn; intros; repeat split; try solve_bv; auto.
 
-End SWAP.
+    Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
+      match reg_convert r with
+      | None     => ⊤
+      | Some reg => P reg
+      end.
 
-Module SUM.
+    Notation "r '↦ᵣ' v" := (with_regidx r (fun reg => asn.chunk (chunk_ptsreg reg v))) (at level 70) : asn_scope.
+    Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
 
-  Definition zero : RegIdx := [bv 0].
-  Definition ra : RegIdx := [bv 1].
-  Definition a0 : RegIdx := [bv 2].
-  Definition a4 : RegIdx := [bv 3].
-  Definition a5 : RegIdx := [bv 4].
-  Definition rra := x1.
-  Definition ra0 := x2.
-  Definition ra4 := x3.
-  Definition ra5 := x4.
+    Definition asn_init_pc {Σ} : Assertion (Σ ▻ "a" :: ty_xlenbits) :=
+      term_var "a" = term_val ty_xlenbits bv.zero.
 
-  (* C SOURCE *)
-  (* int sum(int n) { *)
-  (*	 int s = 0; *)
-  (*	 for (int i = 0; i != n; ++i) { *)
-  (*		 s = s + i; *)
-  (*	 } *)
-  (*	 return s; *)
-  (* } *)
+    Definition asn_pc_eq {Σ} (t : Term (Σ ▻ "a" :: ty_xlenbits) ty_xlenbits) : Assertion (Σ ▻ "a" :: ty_xlenbits) :=
+      term_var "a" = t.
 
-  (* 0000000000000000 <sum>: *)
-  (*	0:	00050713			addi	a4,a0,0 *)
-  (*	4:	00050e63			beq	a0,zero,20 <.L4> *)
-  (*	8:	00000793			addi	a5,zero,0 *)
-  (*	c:	00000513			addi	a0,zero,0 *)
-  (* 0000000000000010 <.L3>: *)
-  (*   10:	00f5053b			addw	a0,a0,a5 *)
-  (*   14:	0017879b			addiw	a5,a5,1 *)
-  (*   18:	fef71ce3			bne	a4,a5,10 <.L3> *)
-  (*   1c:	00008067			jalr	zero,0(ra) *)
-  (* 0000000000000020 <.L4>: *)
-  (*   20:	00008067			jalr	zero,0(ra) *)
+    Local Notation term_pc_val := (term_var "a").
 
-  Example block_sum : list AST :=
-	[ ADDI a4 a0 bv.zero
-	; BEQ a0 bv.zero (bv.of_N 0x20)
-	; ADDI a5 bv.zero bv.zero
-	; ADDI a0 bv.zero bv.zero
-	].
+    Definition asn_next_pc_eq {Σ} (t : Term (Σ ▻ "an" :: ty_xlenbits) ty_xlenbits) : Assertion (Σ ▻ "an" :: ty_xlenbits) :=
+      term_var "an" = t.
 
-  Example block_l3 : list AST :=
-	[ ADD a0 a0 a5
-	; ADDI a5 a5 (bv.of_N 1)
-	; BNE a4 a5 (bv.of_Z (-0x8))
-	].
+    Definition mv_zero_ex : BlockVerifierContract :=
+      {{ asn_init_pc ∗ ∃ "v", X1 ↦ᵣ term_var "v" }}
+        [MV X1 X0]
+      {{ X1 ↦ᵣ term_val ty_xlenbits bv.zero }}.
 
-  Example block_l4 : list AST :=
-	[ RET
-	].
+    Example valid_mv_zero_ex : ValidBlockVerifierContract mv_zero_ex.
+    Proof. solve_vc. Qed.
 
-  Example sum : list AST :=
-	block_sum ++ block_l3 ++ block_l4.
+    Definition mv_same_reg_ex : BlockVerifierContract :=
+      {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x" }} [MV X1 X1] {{ X1 ↦ᵣ term_var "x" }}
+      with ["x" :: ty_xlenbits].
 
-  Import asn.notations.
-  Local Notation "x - y" := (term_binop bop.bvsub x y) : exp_scope.
-  Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
-  (* Local Notation "x * y" := (term_binop bop.bvtimes x y) : exp_scope. *)
+    Example valid_mv_same_reg_ex : ValidBlockVerifierContract mv_same_reg_ex.
+    Proof. solve_vc. Qed.
 
-  Section BlockSum.
+    Definition mv_ex : BlockVerifierContract :=
+      {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" }}
+        [MV X1 X2]
+      {{ X1 ↦ᵣ term_var "y" ∗ X2 ↦ᵣ term_var "y" }}
+      with ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
-	(* Let Σ1 : LCtx := ["n" ∷ ty_xlenbits]. *)
+    Example valid_mv_ex : ValidBlockVerifierContract mv_ex.
+    Proof. solve_vc. Qed.
 
-	(* Example sum_pre : Assertion Σ1 := *)
-	(*   asn.exist "s" _ (ra0 ↦ term_var "s") ∗ *)
-	(*   ra4 ↦ term_var "n" ∗ *)
-	(*   asn.exist "i" _ (ra5 ↦ term_var "i") ∗ *)
-	(*   term_val ty_xlenbits bv.zero <= term_var "n". *)
+    (* swap_two registers using a third, temporary, register (X3) *)
+    Definition swap_ex : BlockVerifierContract :=
+      {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" ∗ ∃ "v", X3 ↦ᵣ term_var "v" }}
+        [ MV X3 X2
+        ; MV X2 X1
+        ; MV X1 X3
+        ]
+      {{ X1 ↦ᵣ term_var "y" ∗ X2 ↦ᵣ term_var "x" ∗ ∃ "v", X3 ↦ᵣ term_var "v" }}
+      with ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
-	(* Example sum_post : Assertion Σ1 := *)
-	(*   ra0 ↦ term_val ty.int 0%Z ∗ *)
-	(*   ra4 ↦ term_var "n" ∗ *)
-	(*   ra5 ↦ term_val ty.int 0%Z ∗ *)
-	(*   term_val ty.int 0%Z <= term_var "n". *)
+    Example valid_swap_ex : ValidBlockVerifierContract swap_ex.
+    Proof. solve_vc. Qed.
 
-	(* Example vc_sum : 𝕊 Σ1 := *)
-	(*   BlockVerification.VC sum_pre block_sum sum_post. *)
+    (* TODO: move into Spec.v *)
+    Definition JAL (rd : RegIdx) (imm : bv 21) : AST :=
+      RISCV_JAL imm rd.
+    Definition LW (rd rs : RegIdx) (imm : bv 12) : AST :=
+      LOAD imm rs rd false WORD.
+    Definition SW (rs2 rs1 : RegIdx) (imm : bv 12) : AST :=
+      STORE imm rs2 rs1 WORD.
 
-	(* Eval compute in vc_sum. *)
+    Definition true_offset : bv 13 := bv.of_N 8.
 
-  End BlockSum.
+    (* TODO: would rather write jump_if_zero (true_offset : bv 13) ... *)
+    (* Jumps to `true_offset` when the value of X1 is equal to zero. The
+         default offset allows one instruction between this block and the true
+         block. *)
+    Definition jump_if_zero : BlockVerifierContract :=
+      {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x1" }}
+        [ BEQ X1 X0 true_offset ]
+      {{ if: term_var "x1" = term_val ty_xlenbits bv.zero
+         then asn_next_pc_eq (term_pc_val + term_val ty_xlenbits (bv.zext true_offset))
+         else asn_next_pc_eq (term_pc_val + term_val ty_xlenbits (bv.of_N 4)) }}
+      with ["x1" :: ty_xlenbits].
 
-  Definition Σ1 : LCtx := ["n" ∷ ty.int; "s" ∷ ty.int; "i" ∷ ty.int].
+    (* TODO: would rather write ∀ true_offset, ... but verification than explodes *)
+    Lemma valid_jump_if_zero : ValidBlockVerifierContract jump_if_zero.
+    Proof. solve_vc. Qed.
 
-  (* Example sum_pre : Assertion Σ1 := *)
-  (*   ra0 ↦ term_var "s" ∗ *)
-  (*   ra4 ↦ term_var "n" ∗ *)
-  (*   ra5 ↦ term_var "i" ∗ *)
-  (*   asn_bool (term_binop bop.le (term_val ty.int 0%Z) (term_var "n")) ∗ *)
-  (*   asn_eq (term_val ty.int 0%Z) (term_var "s") ∗ *)
-  (*   asn_eq (term_val ty.int 0%Z) (term_var "i"). *)
+    (* Sets the contents of register X2 to value 42. The contract reflects
+         this, we require ownership of X2, and after executing we know that
+         the PC will be pointing to the next instructions and X2 will contain
+         42. *)
+    Definition set_X2_to_42 : BlockVerifierContract :=
+      {{ asn_init_pc ∗ ∃ "_", X2 ↦ᵣ term_var "_" }}
+        [ ADDI X2 X0 (bv.of_N 42) ]
+      {{ asn_next_pc_eq (term_pc_val + term_val ty_xlenbits (bv.of_N 4))
+         ∗ X2 ↦ᵣ term_val ty_xlenbits (bv.of_N 42) }}.
 
-  (* Example sum_loop : Assertion Σ1 := *)
-  (*   ra0 ↦ term_var "s" ∗ *)
-  (*   ra4 ↦ term_var "n" ∗ *)
-  (*   ra5 ↦ term_var "i" ∗ *)
-  (*   asn_eq *)
-  (*	 (term_val ty.int 2%Z * term_var "s") *)
-  (*	 (term_var "i" * (term_var "i" - term_val ty.int 1%Z)). *)
+    Lemma valid_set_X2_to_42 : ValidBlockVerifierContract set_X2_to_42.
+    Proof. solve_vc. Qed.
 
-  (* Example sum_post : Assertion Σ1 := *)
-  (*   ra0 ↦ term_var "s" ∗ *)
-  (*   ra4 ↦ term_var "n" ∗ *)
-  (*   ra5 ↦ term_var "i" ∗ *)
-  (*   asn_eq (term_var "i") (term_var "n") ∗ *)
-  (*   asn_eq *)
-  (*	 (term_val ty.int 2%Z * term_var "s") *)
-  (*	 (term_var "n" * (term_var "n" - term_val ty.int 1%Z)). *)
+    Section WithSailResources.
+      Import IrisModel.RiscvPmpIrisBase.
+      Import IrisInstance.RiscvPmpIrisInstance.
+      Import RiscvPmpIrisInstanceWithContracts.
 
-End SUM.
+      Context `{sailGS Σ} `{sailGS2 Σ}.
 
-Module MEMCOPY.
+      Definition extract_pre_from_contract {Σ} (c : BlockVerifierContract)
+        : Assertion (Σ ▻ "a" ∷ ty_xlenbits) :=
+        map c (fun P _ _ => extend_to_minimal_pre P).
 
-  Open Scope hex_Z_scope.
+      Definition extract_post_from_contract {Σ} (c : BlockVerifierContract)
+        : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) :=
+        map c (fun _ _ Q => extend_to_minimal_post Q).
 
-  (* C SOURCE *)
-  (* #include <stdlib.h> *)
-  (* void mcpy(char* dst, char* src, size_t size) { *)
-  (*	 for (; size != 0; --size) { *)
-  (*		 *dst = *src; *)
-  (*		 ++dst; *)
-  (*		 ++src; *)
-  (*	 } *)
-  (* } *)
+      Definition extract_instrs_from_contract {Σ} (c : @BlockVerifierContract Σ) : list AST :=
+        map c (fun _ i _ => i).
 
-  (* ASSEMBLY SOURCE (modified) *)
-  (* mcpy: *)
-  (*   beq a2,zero,.L2 *)
-  (* .L1: *)
-  (*   lb a3,0(a1) *)
-  (*   sb a3,0(a0) *)
-  (*   addi a0,a0,1 *)
-  (*   addi a1,a1,1 *)
-  (*   addi a2,a2,-1 *)
-  (*   bne a2,zero,.L1 *)
-  (* .L2: *)
-  (*   ret *)
+      Definition ptsto_instrs_from_contract {Γ} (c : @BlockVerifierContract Γ) (a : Val ty_xlenbits) : iProp Σ :=
+        ptsto_instrs a (extract_instrs_from_contract c).
 
-  (* DISASSEMBLY *)
-  (* 0000000000000000 <mcpy>: *)
-  (*	0:	00060e63			beqz	a2,1c <.L2> *)
-  (* 0000000000000004 <.L1>: *)
-  (*	4:	00058683			lb	a3,0(a1) *)
-  (*	8:	00d50023			sb	a3,0(a0) *)
-  (*	c:	00150513			addi	a0,a0,1 *)
-  (*   10:	00158593			addi	a1,a1,1 *)
-  (*   14:	fff60613			addi	a2,a2,-1 *)
-  (*   18:	fe0616e3			bnez	a2,4 <.L1> *)
-  (* 000000000000001c <.L2>: *)
-  (*   1c:	00008067			ret *)
+      Definition jump_if_zero_pre (x1 : Val ty_xlenbits) : iProp Σ :=
+        asn.interpret (extract_pre_from_contract jump_if_zero)
+          [env].["x1"∷ty_xlenbits ↦ x1].["a"∷ty_xlenbits ↦ bv.zero]
+        ∗ reg_pointsTo pc bv.zero ∗ (∃ npc, reg_pointsTo nextpc npc)
+        ∗ ptsto_instrs_from_contract jump_if_zero bv.zero.
 
-  Definition zero : RegIdx := [bv 0].
-  Definition ra : RegIdx := [bv 1].
-  Definition a0 : RegIdx := [bv 2].
-  Definition a1 : RegIdx := [bv 3].
-  Definition a2 : RegIdx := [bv 4].
-  Definition a3 : RegIdx := [bv 5].
-  Definition rra := x1.
-  Definition ra0 := x2.
-  Definition ra1 := x3.
-  Definition ra2 := x4.
-  Definition ra3 := x5.
+      Definition jump_if_zero_post (x1 : Val ty_xlenbits) : iProp Σ :=
+        ∃ (an : Val ty_xlenbits),
+          reg_pointsTo pc an ∗ (∃ npc, reg_pointsTo nextpc npc)
+          ∗ ptsto_instrs_from_contract jump_if_zero bv.zero
+          ∗ asn.interpret (extract_post_from_contract jump_if_zero)
+          [env].["x1"∷ty_xlenbits ↦ x1].["a"∷ty_xlenbits ↦ bv.zero].["an"∷ty_xlenbits ↦ an].
 
-  Example memcpy : list AST :=
-	[ BEQ a2 bv.zero (bv.of_N 0x1c)
-	; LOAD bv.zero a1 a3 false BYTE
-	; STORE bv.zero a3 a0 BYTE
-	; ADDI a0 a0 (bv.of_N 1)
-	; ADDI a1 a1 (bv.of_N 1)
-	; ADDI a2 a2 (bv.of_Z (-1))
-	; BNE a2 zero (bv.of_Z (-0x14))
-	; RET
-	].
+      Definition iris_contract (pre post : iProp Σ) : iProp Σ :=
+        pre -∗ (post -∗ WP_loop) -∗ WP_loop.
 
-  Definition Σ1 : LCtx :=
-		["dst" :: ty_xlenbits; "src" :: ty_xlenbits; "size" :: ty.int;
-		 "srcval" :: ty.list ty_word; "ret" :: ty_xlenbits].
+      Definition jump_if_zero_contract : iProp Σ := ∀ x1,
+          iris_contract (jump_if_zero_pre x1) (jump_if_zero_post x1).
 
-  Import asn.notations.
-  Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
-  Local Notation "'∃' w ',' a" := (asn.exist w _ a) (at level 79, right associativity).
+      Lemma jump_if_zero_verified :
+        ⊢ jump_if_zero_contract.
+      Proof.
+        iIntros (x1) "Hpre Hk".
+        iApply (sound_VC__addr valid_jump_if_zero [env].["x1"∷ty_xlenbits ↦ x1] $! bv.zero with "Hpre [Hk]").
+        iIntros (an) "H".
+        iApply "Hk".
+        by iExists an.
+      Qed.
 
-  (* Example memcpy_pre : Assertion Σ1 := *)
-	(* rra ↦ term_var "ret" ∗ *)
-	(* ra0 ↦ term_var "dst" ∗ *)
-	(* ra1 ↦ term_var "src" ∗ *)
-	(* ra2 ↦ term_var "size" ∗ *)
-	(* term_var "src" ↦[ term_var "size" ] term_var "srcval" ∗ *)
-	(* (∃ "dstval", term_var "dst" ↦[ term_var "size" ] term_var "dstval"). *)
+      Definition set_X2_to_42_pre (instrs_loc : Val ty_xlenbits) : iProp Σ :=
+        asn.interpret (extract_pre_from_contract set_X2_to_42)
+          [env].["a"∷ty_xlenbits ↦ instrs_loc]
+        ∗ reg_pointsTo pc instrs_loc ∗ (∃ npc, reg_pointsTo nextpc npc)
+        ∗ ptsto_instrs_from_contract set_X2_to_42 instrs_loc.
 
-  (* Example memcpy_post : Assertion Σ1 := *)
-	(* pc ↦ term_var "ret" ∗ *)
-	(* rra ↦ term_var "ret" ∗ *)
-	(* (∃ "v", ra0 ↦ term_var "v") ∗ *)
-	(* (∃ "v", ra1 ↦ term_var "v") ∗ *)
-	(* (∃ "v", ra2 ↦ term_var "v") ∗ *)
-	(* term_var "src" ↦[ term_var "size" ] term_var "srcval" ∗ *)
-	(* term_var "dst" ↦[ term_var "size" ] term_var "srcval". *)
+      Definition set_X2_to_42_post (instrs_loc : Val ty_xlenbits) : iProp Σ :=
+        ∃ (an : Val ty_xlenbits),
+          reg_pointsTo pc an ∗ (∃ npc, reg_pointsTo nextpc npc)
+          ∗ ptsto_instrs_from_contract set_X2_to_42 instrs_loc
+          ∗ asn.interpret (extract_post_from_contract set_X2_to_42)
+              [env].["a"∷ty_xlenbits ↦ instrs_loc].["an"∷ty_xlenbits ↦ an].
 
-  (* Example memcpy_loop : Assertion Σ1 := *)
-	(* pc	↦ term_val ty_xlenbits 0%Z ∗ *)
-	(* rra ↦ term_var "ret" ∗ *)
-	(* ra0 ↦ term_var "dst" ∗ *)
-	(* ra1 ↦ term_var "src" ∗ *)
-	(* ra2 ↦ term_var "size" ∗ *)
-	(* asn.formula (formula_relop bop.neq (term_var "size") (term_val ty.int 0)) ∗ *)
-	(* term_var "src" ↦[ term_var "size" ] term_var "srcval" ∗ *)
-	(* (∃ "dstval", term_var "dst" ↦[ term_var "size" ] term_var "dstval"). *)
+      Definition set_X2_to_42_contract (instrs_loc : Val ty_xlenbits) : iProp Σ :=
+        iris_contract (set_X2_to_42_pre instrs_loc) (set_X2_to_42_post instrs_loc).
 
-End MEMCOPY.
+      Lemma set_X2_to_42_verified : ∀ instrs_loc,
+          ⊢ set_X2_to_42_contract instrs_loc.
+      Proof.
+        iIntros (instrs_loc) "Hpre Hk".
+        iApply (sound_VC__addr valid_set_X2_to_42 [env] $! instrs_loc with "Hpre [Hk]").
+        iIntros (an) "H".
+        iApply "Hk".
+        by iExists an.
+      Qed.
+    End WithSailResources.
+End Examples.
