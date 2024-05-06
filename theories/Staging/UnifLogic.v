@@ -71,11 +71,11 @@ Module Pred
     
     Definition eqₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : ⊢ Tm T -> Tm T -> Pred :=
       fun w t1 t2 ι => (instprop (wco w) ι -> inst t1 ι = inst t2 ι)%type.
-    #[global] Arguments eqₚ {T A _} [w] _ _.
+    #[global] Arguments eqₚ {T A _} [w] _ _ _/.
     
     Definition repₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : A -> ⊢ Tm T -> Pred :=
       fun t2 w t1 ι => (instprop (wco w) ι -> inst t1 ι = t2)%type.
-    #[global] Arguments repₚ {T A _} _ [w] _.
+    #[global] Arguments repₚ {T A _} _ [w] _ _/.
     
   End Definitions.
   
