@@ -347,9 +347,9 @@ Module Type WorldsOn
 
   Section S4.
 
-    Notation "⊢ A" := (Valid A%modal) (at level 100).
+    Notation "⊢ A" := (Valid A%modal) (at level 20, A at level 200).
     Notation "A -> B" := (Impl A%modal B%modal) : modal_scope.
-    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal_scope.
+    Notation "□ A" := (Box A%modal) (at level 20, format "□ A", right associativity) : modal_scope.
 
     Definition K {A B} :
       ⊢ □(A -> B) -> (□A -> □B) :=
@@ -381,10 +381,10 @@ Module Type WorldsOn
 
   Module Import ModalNotations.
 
-    Notation "⊢ A" := (Valid A%modal) (at level 100).
+    Notation "⊢ A" := (Valid A%modal) (at level 20, A at level 200) : modal_scope.
     Notation "A -> B" := (Impl A%modal B%modal) : modal_scope.
-    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal_scope.
-    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal_scope.
+    Notation "□ A" := (Box A%modal) (at level 20, format "□ A", right associativity) : modal_scope.
+    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 1, A at level 200, format "⌜ A ⌝") : modal_scope.
     Notation "'∀' x .. y , P " :=
       (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
         (at level 200, x binder, y binder, right associativity)
@@ -404,7 +404,7 @@ Module Type WorldsOn
     Class Persistent (A : TYPE) : Type :=
       persist : ⊢ A -> □A.
 
-    #[export] Instance persistent_box {A} : Persistent □A := four.
+    #[export] Instance persistent_box {A} : Persistent (□A) := four.
 
     #[export] Instance persistent_subst {A} `{Subst A} : Persistent A :=
       fun w0 x w1 ω01 =>
