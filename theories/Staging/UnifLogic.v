@@ -77,6 +77,10 @@ Module Pred
       fun t2 w t1 ι => (instprop (wco w) ι -> inst t1 ι = t2)%type.
     #[global] Arguments repₚ {T A _} _ [w] _ _/.
     
+    Definition proprepₚ {T : LCtx -> Type} {instTA : InstProp T} : Prop -> ⊢ Tm T -> Pred :=
+      fun t2 w t1 ι => (instprop (wco w) ι -> instprop t1 ι <-> t2)%type.
+    #[global] Arguments proprepₚ {T _} _ [w] _ _/.
+
   End Definitions.
   
   Section EntailmentDefinitions.
@@ -503,12 +507,26 @@ Module Pred
       now eapply H0, inst_sub_id.
     Qed.
 
+    Lemma lift_repₚ `{InstLift AT A} (v : A) {w : World} :
+      ⊢ repₚ v (lift v : AT w).
+    Proof.
+      crushPredEntails3.
+    Qed.
+
     Lemma after_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
       (repₚ v (persist t ω) ⊣⊢ after ω (repₚ v t))%I.
     Proof.
       rewrite persist_subst.
       unfold after, repₚ.
       constructor. split; rewrite inst_subst; auto using acc_pathcond.
+    Qed.
+
+    Lemma after_proprepₚ `{InstPropSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
+      (proprepₚ v (persist t ω) ⊣⊢ after ω (proprepₚ v t))%I.
+    Proof.
+      unfold after, proprepₚ.
+      constructor. split;
+      rewrite instprop_persist; auto using acc_pathcond.
     Qed.
   End SubstMod.
 
@@ -557,9 +575,9 @@ Module Pred
     #[export] Instance RUnit : Rel Unit unit := RInst Unit unit.
 
     #[export] Instance RPathCondition : Rel PathCondition Prop :=
-      MkRel (fun p w fs ι => instprop fs ι <-> p).
+      MkRel proprepₚ.
     #[export] Instance RFormula : Rel Formula Prop :=
-      MkRel (fun p w f ι => instprop f ι <-> p).
+      MkRel proprepₚ.
 
     #[export] Instance RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
     #[export] Instance RHeap : Rel SHeap SCHeap := RInst SHeap SCHeap.
@@ -649,26 +667,27 @@ Module Pred
       now iApply after_repₚ.
     Qed.
 
-  (*   Lemma refine_formula_persist : *)
-  (*     forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop), *)
-  (*      ⊢ after r12 (ℛ⟦RFormula⟧ p w1 f) → ℛ⟦RFormula⟧ p w2 (persist f r12). *)
-  (*   Proof. *)
-  (*     constructor. *)
-  (*     intros * Hpc _ _ Hfut _. cbn. *)
-  (*     rewrite instprop_persist. *)
-  (*     now apply Hfut, acc_pathcond. *)
-  (*   Qed. *)
+    Lemma refine_formula_persist :
+      forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop),
+        ⊢ after r12 (ℛ⟦RFormula⟧ p f) → ℛ⟦RFormula⟧ p (persist f r12).
+    Proof.
+      iIntros (v w1 w2 ω t) "Hvt".
+      now iApply after_proprepₚ.
+    Qed.
 
-  (*   Lemma refine_formula_subst {Σ} (fml : Formula Σ) {w : World} : *)
-  (*     ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RFormula⟧ (instprop fml) w (subst fml). *)
-  (*   Proof. *)
-  (*     constructor. intros * Hpc _ _ ζ ι2 ->. *)
-  (*     now apply instprop_subst. *)
-  (*   Qed. *)
+    Lemma refine_formula_subst {Σ} (fml : Formula Σ) {w : World} :
+      ⊢ ℛ⟦ (RInst (Sub Σ) (Valuation Σ) -> RFormula) ⟧ (instprop fml) (subst fml : Sub Σ w -> Formula w)%I.
+    Proof.
+      (* manual proof because we don't have an after modality for substitutions and associated primitives. *)
+      unfold RFormula, RInst, after, proprepₚ, repₚ; cbn.
+      constructor.
+      intros ι Hpc _ _ ι' _ ω _ Heq _.
+      now rewrite instprop_subst Heq.
+    Qed.
 
-  (*   Lemma refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) : *)
-  (*     ⊢ ℛ⟦RInst AT A⟧ a w (lift (T := AT) a). *)
-  (*   Proof. constructor. intros * Hpc _ _. cbn. now rewrite inst_lift. Qed. *)
+    Lemma refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) :
+      ⊢ ℛ⟦RInst AT A⟧ a (lift a : AT w).
+    Proof. iApply lift_repₚ. Qed.
 
   End LRCompat.
 
