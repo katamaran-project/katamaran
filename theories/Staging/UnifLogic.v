@@ -71,7 +71,11 @@ Module Pred
     
     Definition eqₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : ⊢ Tm T -> Tm T -> Pred :=
       fun w t1 t2 ι => (instprop (wco w) ι -> inst t1 ι = inst t2 ι)%type.
-    #[global] Arguments eqₚ {T A _} [w] _ _ _/.
+    #[global] Arguments eqₚ {T A _} [w] _ _.
+    
+    Definition repₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : A -> ⊢ Tm T -> Pred :=
+      fun t2 w t1 ι => (instprop (wco w) ι -> inst t1 ι = t2)%type.
+    #[global] Arguments repₚ {T A _} _ [w] _.
     
   End Definitions.
   
@@ -187,6 +191,7 @@ Module Pred
         | [ H : sepₚ _ _ _ |- _ ] => destruct H
         | [ |- sepₚ _ _ _ ] => split
         | [ |- eqₚ ?t1 ?t2 ?ι ] => intro
+        (* | [ |- ∀ₚ _ ] => intro *)
         | [ |- wandₚ _ _ _ ] => constructor; intros
         | [ H : wandₚ _ _ _ |- _ ] => destruct H; cbn in H
         | [ H : (fun x => _) _ |- _ ] => cbn in H
@@ -234,19 +239,21 @@ Module Pred
   End proofmode.
 
   Ltac punfold_connectives :=
-    change (@interface.bi_and (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι /\ Q ι) in *;
-    change (@interface.bi_sep (@bi_pred _) ?P ?Q ?ι) with (sepₚ P Q ι) in *;
-    change (@eqₚ ?T ?A ?instTA ?w ?t1 ?t2 ?ι) with (instprop (wco w) ι -> inst t1 ι = inst t2 ι) in *;
-    change (@interface.bi_emp (@bi_pred _) ?ι) with (empₚ ι) in *;
-    change (@interface.bi_wand (@bi_pred _) ?P ?Q ?ι) with (wandₚ P Q ι) in *;
-    change (@interface.bi_entails (@bi_pred _) ?P ?Q) with (entails P Q) in *;
-    change (@interface.bi_persistently (@bi_pred _) ?P ?ι) with (persistently P ι) in *;
-    change (@interface.bi_or (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι \/ Q ι) in *;
-    change (@interface.bi_impl (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι -> Q ι) in *;
-    change (@derived_connectives.bi_iff (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> iff (P ι) (Q ι)) in *;
-    change (@interface.bi_pure (@bi_pred _) ?P _) with P in *;
-    change (@interface.bi_forall (@bi_pred ?w) ?A ?P) with (fun ι => instprop (wco w) ι -> forall a : A, P a ι) in *;
-    change (@interface.bi_exist (@bi_pred ?w) ?A ?P) with (fun ι => instprop (wco w) ι -> exists a : A, P a ι) in *;
+    change (@interface.bi_and (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι /\ Q ι) in * ||
+    change (@interface.bi_sep (@bi_pred _) ?P ?Q ?ι) with (sepₚ P Q ι) in * ||
+    change (@eqₚ ?T ?A ?instTA ?w ?t1 ?t2 ?ι) with (instprop (wco w) ι -> inst t1 ι = inst t2 ι) in * ||
+    change (@repₚ ?T ?A ?instTA ?t2 ?w ?t1 ?ι) with (instprop (wco w) ι -> inst t1 ι = t2) in *||
+    change (@interface.bi_emp (@bi_pred _) ?ι) with (empₚ ι) in *||
+    change (@interface.bi_wand (@bi_pred _) ?P ?Q ?ι) with (wandₚ P Q ι) in *||
+    change (@interface.bi_entails (@bi_pred _) ?P ?Q) with (entails P Q) in *||
+    change (@interface.bi_persistently (@bi_pred _) ?P ?ι) with (persistently P ι) in *||
+    change (@interface.bi_or (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι \/ Q ι) in *||
+    change (@interface.bi_impl (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι -> Q ι) in *||
+    change (@derived_connectives.bi_iff (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> iff (P ι) (Q ι)) in *||
+    change (@interface.bi_pure (@bi_pred _) ?P _) with P in *||
+    change (@interface.bi_forall (@bi_pred ?w) ?A ?f ?ι) with (instprop (wco w) ι -> forall a, f a ι) ||
+    (* the change seems to trigger some coq binding bug, so I removed the "in *" for now... *)
+    change (@interface.bi_exist (@bi_pred ?w) ?A ?P) with (fun ι => instprop (wco w) ι -> exists a : A, P a ι) in *||
     unfold derived_connectives.bi_intuitionistically, derived_connectives.bi_affinely, interface.bi_emp_valid in *;
     (* change (@subst Pred subst_pred _ _ ?P _ ?θ ?ι) with (P (inst θ ι)) in *; *)
     try progress (cbn beta).
@@ -410,12 +417,12 @@ Module Pred
     Lemma impl_and [w] (P Q R : Pred w) : ((P /\ₚ Q) ->ₚ R) ⊣⊢ₚ (P ->ₚ Q ->ₚ R).
     Proof. crushPredEntails3. Qed.
 
-    (* Lemma forall_l {I : Type} {w} (P : I -> Pred w) Q : *)
-    (*   (exists x : I, P x ⊢ₚ Q) -> (∀ x : I, P x)%I ⊢ₚ Q. *)
-    (* Proof. crushPredEntails3. firstorder. Qed. *)
-    (* Lemma forall_r {I : Type} {w} P (Q : I -> Pred w) : *)
-    (*   (P ⊢ₚ (∀ₚ x : I, Q x)) <-> (forall x : I, P ⊢ₚ Q x). *)
-    (* Proof. crushPredEntails3. firstorder. Qed. *)
+    Lemma forall_l {I : Type} {w} (P : I -> Pred w) Q :
+      (exists x : I, P x ⊢ₚ Q) -> (∀ x : I, P x)%I ⊢ₚ Q.
+    Proof. crushPredEntails3. Qed.
+    Lemma forall_r {I : Type} {w} P (Q : I -> Pred w) :
+      (P ⊢ₚ (∀ₚ x : I, Q x)) <-> (forall x : I, P ⊢ₚ Q x).
+    Proof. crushPredEntails3. Qed.
 
     Lemma exists_l {I : Type} {w} (P : I -> Pred w) (Q : Pred w) :
       (forall x : I, P x ⊢ₚ Q) -> (∃ₚ x : I, P x) ⊢ₚ Q.
@@ -466,27 +473,137 @@ Module Pred
       now apply (ent_acc_sub ω ι H).
     Qed.
 
+    Import iris.bi.interface.
 
-    (* update: one of these requires an assumption of the path condition... *)
+    (* update: better/more standard names? *)
+    (* update: one of these requires an assumption of the path condition? *)
     Definition before {w1 w2} (ω : w2 ⊒ w1) : Pred w1 -> Pred w2 :=
-      fun Rpast ι => forall ιpast, inst (sub_acc ω) ιpast = ι -> Rpast ιpast.
+      fun Rpast ι => forall (ιpast : Valuation w1), inst (sub_acc ω) ιpast = ι -> Rpast ιpast.
+    Definition previously {w} : (□ Pred) w -> Pred w :=
+      fun P => (∀ {w2} (ω : w ⊒ w2), before ω (P w2 ω))%I.
     Definition after {w1 w2} (ω : w2 ⊒ w1) : Pred w2 -> Pred w1 :=
       fun Rfut ι => Rfut (inst (sub_acc ω) ι).
+
+    Lemma after_previously {w1 w2} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
+      after ω (previously P) ⊢ previously (four P ω).
+    Proof.
+      unfold after, previously, before.
+      crushPredEntails3.
+      eapply H0.
+      - now apply acc_pathcond.
+      - now apply acc_pathcond.
+      - now rewrite <-H3, <-inst_subst, <-sub_acc_trans.
+    Qed.
+
+    Lemma previously_T {w} (P : (□ Pred) w) :
+      previously P ⊢ T P.
+    Proof.
+      unfold T, previously, before.
+      crushPredEntails3.
+      now eapply H0, inst_sub_id.
+    Qed.
+
+    Lemma after_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
+      (repₚ v (persist t ω) ⊣⊢ after ω (repₚ v t))%I.
+    Proof.
+      rewrite persist_subst.
+      unfold after, repₚ.
+      constructor. split; rewrite inst_subst; auto using acc_pathcond.
+    Qed.
   End SubstMod.
 
-  Section LogicalRelation.
-    Import logicalrelation.
+  Module logicalrelation.
     Import ModalNotations.
-    
-    Definition Related {AT A} (R : Rel AT A) : A -> ⊢ AT -> Pred :=
-      fun v w t ι => (instprop (wco w) ι -> RSat R ι t v)%type.
+    Import iris.bi.interface.
+    Class Rel (AT : TYPE) (A : Type) : Type :=
+      MkRel { RSat : A -> (⊢ AT -> Pred)%modal }.
+    Bind Scope rel_scope with Rel.
 
-  End LogicalRelation.
+    #[global] Arguments MkRel [AT A] &.
+    #[global] Arguments RSat {_ _} _ _ {w} _.
+    (* We use the same script ℛ as in the paper. This encodes (ι,x,y) ∈ ℛ[_,_]
+       from the paper as (ℛ ι x y), i.e. the types of the relation are
+       implicit. *)
+    #[local] Notation "ℛ⟦ R ⟧" := (RSat R%R) (format "ℛ⟦ R ⟧").
+
+    
+    (* This instance can be used for any (first-class) symbolic data that can be
+       instantiated with a valuation, i.e. symbolic terms, stores, heaps etc. *)
+    Definition RInst AT A {instA : Inst AT A} : Rel AT A :=
+      MkRel repₚ.
+    Arguments RInst _ _ {_}.
+
+    #[export] Instance RBox {AT A} (RA : Rel AT A) : Rel (Box AT) A :=
+      MkRel 
+        (fun v w t => previously (fun w2 ω => ℛ⟦ RA ⟧ v (t w2 ω))).
+
+    #[export] Instance RImpl {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
+      Rel (Impl AT BT) (A -> B) :=
+      MkRel (fun fc w fs => ∀ a ta, ℛ⟦ RA ⟧ a ta → ℛ⟦ RB ⟧ (fc a) (fs ta))%I.
+
+    #[export] Instance RForall {𝑲}
+      {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
+      (RA : forall K, Rel (AT K) (A K)) :
+      Rel (@WR.Forall 𝑲 AT) (forall K : 𝑲, A K) :=
+      MkRel (fun fc w fs => ∀ₚ K : 𝑲, ℛ⟦ RA K ⟧ (fc K) (fs K))%P.
+
+    #[export] Instance RVal (σ : Ty) : Rel (fun Σ => Term Σ σ) (Val σ) :=
+      RInst (fun Σ => Term Σ σ) (Val σ).
+
+    #[export] Instance RNEnv (N : Set) (Δ : NCtx N Ty) : Rel _ _ :=
+      RInst (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv Val Δ).
+    #[export] Instance REnv (Δ : Ctx Ty) : Rel _ _ :=
+        RInst (fun Σ : LCtx => Env (Term Σ) Δ) (Env Val Δ).
+    #[export] Instance RUnit : Rel Unit unit := RInst Unit unit.
+
+    #[export] Instance RPathCondition : Rel PathCondition Prop :=
+      MkRel (fun p w fs ι => instprop fs ι <-> p).
+    #[export] Instance RFormula : Rel Formula Prop :=
+      MkRel (fun p w f ι => instprop f ι <-> p).
+
+    #[export] Instance RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
+    #[export] Instance RHeap : Rel SHeap SCHeap := RInst SHeap SCHeap.
+
+    (* Give the [RMsg] instance a lower priority (3) than [RImpl]. *)
+    #[export] Instance RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A | 3 :=
+      MkRel (fun v w t => ∀ₚ m, RSat RA v (t m))%P.
+    #[global] Arguments RMsg M%modal {AT A} RA%R.
+
+    Inductive RList' {AT A} (R : Rel AT A) :
+      list A -> ∀ [w : World], WList AT w -> Pred w :=
+    | rlist_nil : ∀ w ι, @RList' _ _ R nil w nil ι
+    | rlist_cons {w v ts vs} {t : AT w}: ∀ ι,
+      RSat R v t ι -> RList' R vs ts ι ->
+      RList' R (cons v vs) (cons t ts) ι.
+
+    #[export] Instance RList {AT A} (R : Rel AT A) : Rel (WList AT) (list A) :=
+      MkRel (RList' R).
+
+    #[export] Instance RConst A : Rel (Const A) A := RInst (Const A) A.
+
+    #[export] Instance RProd `(RA : Rel AT A, RB : Rel BT B) :
+      Rel (WProd AT BT) (A * B)%type :=
+      MkRel (fun '(va,vb) w '(ta,tb) => ℛ⟦RA⟧ va ta /\ₚ ℛ⟦RB⟧ vb tb)%P.
+
+    #[export] Instance RMatchResult {N σ} (p : @Pattern N σ) :
+      Rel (SMatchResult p) (MatchResult p) :=
+      MkRel
+        (fun '(existT pc2 vs) w '(existT pc1 ts) =>
+           ∃ₚ e : pc1 = pc2,
+             ℛ⟦RNEnv _ (PatternCaseCtx pc2)⟧
+               vs
+               (eq_rect pc1 (fun pc => NamedEnv (Term w) (PatternCaseCtx pc))
+                  ts pc2 e)
+               )%P.
+
+    #[export] Instance RIn b : Rel (ctx.In b) (Val (type b)) :=
+      MkRel (fun v w bIn ι => env.lookup ι bIn = v).
+  End logicalrelation.
 
   Module Import ufl_notations.
     Import logicalrelation.
     Open Scope rel_scope.
-    Notation "ℛ⟦ R ⟧" := (Related R%R) (format "ℛ⟦ R ⟧").
+    Notation "ℛ⟦ R ⟧" := (RSat R%R) (format "ℛ⟦ R ⟧").
     Notation "A -> B" := (RImpl A%R B%R) : rel_scope.
     Notation "□ᵣ A"    := (RBox A%R) (at level 9) : rel_scope.
     Notation "'∀ᵣ' x .. y , R " :=
@@ -505,62 +622,53 @@ Module Pred
     
 
     Lemma refine_four {w1 w2} {ω : Acc w2 w1} {AT A} (RA : Rel AT A) :
-      (⊢ ∀ (v__s : Box AT w2) v, (after ω (ℛ⟦□ᵣ RA⟧ v w2 v__s) ->ₚ ℛ⟦RBox RA⟧ v w1 (four v__s ω)))%P.
+      (⊢ ∀ (v__s : Box AT w2) v, (after ω (ℛ⟦□ᵣ RA⟧ v v__s) → ℛ⟦□ᵣ RA⟧ v (four v__s ω)))%I.
     Proof.
-      constructor.
-      intros ι2 Hpc _ _ v__s _ v _ Htv _ w0 r01 ι0 -> Hpc0.
-      unfold four, after in *.
-      unfold RBox, Related in Htv. cbn in Htv.
-      apply Htv.
-      - now apply acc_pathcond.
-      - now rewrite <-inst_subst, sub_acc_trans.
-      - done.
+      iIntros (v__s v) "Hbox".
+      now iApply (after_previously (λ (w0 : World) (ω0 : Acc w2 w0), ℛ⟦RA⟧ v (v__s w0 ω0))).
     Qed.
 
     Lemma refine_T {AT A} (R : Rel AT A) :
-      forall v (w : World) t, (⊢ ((ℛ⟦ □ᵣ R ⟧ v w t) → ℛ⟦R⟧ v w (T t)))%I.
+      forall v (w : World), (⊢ ∀ (t : Box AT w), (ℛ⟦ □ᵣ R ⟧ v t) → ℛ⟦R⟧ v (T t))%I.
     Proof.
-      constructor.
-      intros * Hpc _ _ Hbr _.
-      apply Hbr; try assumption.
-      now rewrite inst_sub_id.
+      iIntros (v w t) "Hvt".
+      unfold RBox; cbn.
+      now iApply (previously_T (λ (w2 : World) (ω : Acc w w2), ℛ⟦R⟧ v (t w2 ω))).
     Qed.
 
-    Lemma refine_apply {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
-      forall (w : World) F f t v,
-        (⊢ ℛ⟦RA -> RB⟧ f w F → ℛ⟦RA⟧ v w t → ℛ⟦RB⟧ (f v) w (F t))%I.
-    Proof. constructor. intros * _ _ _ rf _ ra Hpc. now apply rf, ra. Qed.
+      Lemma refine_apply {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
+        forall v f (w : World),
+          (⊢ ∀ F (t : AT w), ℛ⟦RA -> RB⟧ f F → ℛ⟦RA⟧ v t → ℛ⟦RB⟧ (f v) (F t))%I.
+      Proof. iIntros (v f w F t) "#Hf #Hv". now iApply "Hf". Qed.
 
     Lemma refine_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} :
-      forall (v : A) (w1 w2 : World) (r12 : Acc w1 w2)
-             (t : AT w1),
-        ⊢ (after r12 (ℛ⟦RInst AT A⟧ v w1 t) →
-           ℛ⟦RInst AT A⟧ v w2 (persist t r12))%I.
-    Proof. constructor. intros ι2 Hpc _ _ Hfut _. cbn.
-           rewrite inst_persist.
-           now apply Hfut, acc_pathcond.
+      forall (v : A) (w1 w2 : World) (ω : Acc w1 w2),
+        ⊢ ∀ (t : AT w1), (after ω (ℛ⟦RInst AT A⟧ v t) → ℛ⟦RInst AT A⟧ v (persist t ω))%I.
+    Proof. 
+      iIntros (v w1 w2 ω t) "Hvt".
+      now iApply after_repₚ.
     Qed.
 
-    Lemma refine_formula_persist :
-      forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop),
-       ⊢ after r12 (ℛ⟦RFormula⟧ p w1 f) → ℛ⟦RFormula⟧ p w2 (persist f r12).
-    Proof.
-      constructor.
-      intros * Hpc _ _ Hfut _. cbn.
-      rewrite instprop_persist.
-      now apply Hfut, acc_pathcond.
-    Qed.
+  (*   Lemma refine_formula_persist : *)
+  (*     forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop), *)
+  (*      ⊢ after r12 (ℛ⟦RFormula⟧ p w1 f) → ℛ⟦RFormula⟧ p w2 (persist f r12). *)
+  (*   Proof. *)
+  (*     constructor. *)
+  (*     intros * Hpc _ _ Hfut _. cbn. *)
+  (*     rewrite instprop_persist. *)
+  (*     now apply Hfut, acc_pathcond. *)
+  (*   Qed. *)
 
-    Lemma refine_formula_subst {Σ} (fml : Formula Σ) {w : World} :
-      ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RFormula⟧ (instprop fml) w (subst fml).
-    Proof.
-      constructor. intros * Hpc _ _ ζ ι2 ->.
-      now apply instprop_subst.
-    Qed.
+  (*   Lemma refine_formula_subst {Σ} (fml : Formula Σ) {w : World} : *)
+  (*     ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RFormula⟧ (instprop fml) w (subst fml). *)
+  (*   Proof. *)
+  (*     constructor. intros * Hpc _ _ ζ ι2 ->. *)
+  (*     now apply instprop_subst. *)
+  (*   Qed. *)
 
-    Lemma refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) :
-      ⊢ ℛ⟦RInst AT A⟧ a w (lift (T := AT) a).
-    Proof. constructor. intros * Hpc _ _. cbn. now rewrite inst_lift. Qed.
+  (*   Lemma refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) : *)
+  (*     ⊢ ℛ⟦RInst AT A⟧ a w (lift (T := AT) a). *)
+  (*   Proof. constructor. intros * Hpc _ _. cbn. now rewrite inst_lift. Qed. *)
 
   End LRCompat.
 
