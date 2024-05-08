@@ -480,9 +480,8 @@ Module Pred
     Import iris.bi.interface.
 
     (* update: better/more standard names? *)
-    (* update: one of these requires an assumption of the path condition? *)
     Definition before {w1 w2} (ω : w2 ⊒ w1) : Pred w1 -> Pred w2 :=
-      fun Rpast ι => forall (ιpast : Valuation w1), inst (sub_acc ω) ιpast = ι -> Rpast ιpast.
+      fun Rpast ι => forall (ιpast : Valuation w1), inst (sub_acc ω) ιpast = ι -> instprop (wco w1) ιpast -> Rpast ιpast.
     Definition previously {w} : (□ Pred) w -> Pred w :=
       fun P => (∀ {w2} (ω : w ⊒ w2), before ω (P w2 ω))%I.
     Definition after {w1 w2} (ω : w2 ⊒ w1) : Pred w2 -> Pred w1 :=
@@ -497,6 +496,7 @@ Module Pred
       - now apply acc_pathcond.
       - now apply acc_pathcond.
       - now rewrite <-H3, <-inst_subst, <-sub_acc_trans.
+      - assumption.
     Qed.
 
     Lemma previously_T {w} (P : (□ Pred) w) :
@@ -504,7 +504,8 @@ Module Pred
     Proof.
       unfold T, previously, before.
       crushPredEntails3.
-      now eapply H0, inst_sub_id.
+      eapply H0; try assumption.
+      eapply inst_sub_id.
     Qed.
 
     Lemma lift_repₚ `{InstLift AT A} (v : A) {w : World} :
@@ -528,6 +529,67 @@ Module Pred
       constructor. split;
       rewrite instprop_persist; auto using acc_pathcond.
     Qed.
+
+    Lemma before_refl {w} {P : Pred w} : before acc_refl P ⊣⊢ P.
+    Proof.
+      rewrite /before.
+      crushPredEntails3.
+      - apply H0; [apply inst_sub_id|done].
+      - rewrite inst_sub_id in H1; now subst.
+    Qed.
+
+    Lemma after_refl {w} {P : Pred w} : after acc_refl P ⊣⊢ P.
+    Proof.
+      rewrite /after.
+      crushPredEntails3.
+      - now rewrite <-inst_sub_id.
+      - now rewrite inst_sub_id.
+    Qed.
+
+    Lemma after_before {w1 w2} {ω : Acc w1 w2} {P : Pred w2} :
+      after ω (before ω P) ⊢ P.
+    Proof.
+      rewrite /after /before.
+      now crushPredEntails3.
+    Qed.
+
+    Lemma before_after {w1 w2} {ω : Acc w1 w2} {P : Pred w1} :
+      P ⊢ before ω (after ω P).
+    Proof.
+      rewrite /after /before.
+      crushPredEntails3.
+      now rewrite H1.
+    Qed.
+
+    Lemma after_before_adjoint {w1 w2} {ω : Acc w1 w2} {P Q} :
+      (after ω P ⊢ Q) <-> (P ⊢ before ω Q).
+    Proof.
+      rewrite /after /before.
+      split; crushPredEntails3.
+      - now subst.
+      - apply (fromEntails _ _ H) with (inst (sub_acc ω) ι);
+          auto using acc_pathcond.
+    Qed.
+
+    Import iris.proofmode.modalities.
+    Import iris.proofmode.classes.
+    Import iris.proofmode.tactics.
+
+    Global Instance elim_modal_previously {w} {P : Box Pred w} {Q : Pred w} :
+      ElimModal True false false (previously P) (P w acc_refl) Q Q.
+    Proof.
+      iIntros (_) "[#HP Hk]".
+      iApply "Hk".
+      iSpecialize ("HP" $! w acc_refl).
+      now rewrite /ElimModal /previously before_refl.
+    Qed.
+
+    (* Definition modality_before {w1 w2} {ω : Acc w1 w2} : modality (Pred w1) (Pred w2) := *)
+    (*   Modality (before ω) MIEnvId MIEnvId. *)
+    (* (* Definition modality_previously {w} : modality (Pred w) (Box Pred w) := *) *)
+    (* (*   Modality previously MIEnvId MIEnvId. *) *)
+
+
   End SubstMod.
 
   Module logicalrelation.
@@ -557,7 +619,7 @@ Module Pred
 
     #[export] Instance RImpl {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
       Rel (Impl AT BT) (A -> B) :=
-      MkRel (fun fc w fs => ∀ a ta, ℛ⟦ RA ⟧ a ta → ℛ⟦ RB ⟧ (fc a) (fs ta))%I.
+      MkRel (fun fc w fs => ∀ a ta, ℛ⟦ RA ⟧ a ta -∗ ℛ⟦ RB ⟧ (fc a) (fs ta))%I.
 
     #[export] Instance RForall {𝑲}
       {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
@@ -681,7 +743,9 @@ Module Pred
       (* manual proof because we don't have an after modality for substitutions and associated primitives. *)
       unfold RFormula, RInst, after, proprepₚ, repₚ; cbn.
       constructor.
-      intros ι Hpc _ _ ι' _ ω _ Heq _.
+      intros ι Hpc _ _ ι' _ ω.
+      constructor.
+      intros _ Heq _.
       now rewrite instprop_subst Heq.
     Qed.
 
