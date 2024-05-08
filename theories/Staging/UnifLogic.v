@@ -480,29 +480,28 @@ Module Pred
     Import iris.bi.interface.
 
     (* update: better/more standard names? *)
-    Definition before {w1 w2} (ω : w2 ⊒ w1) : Pred w1 -> Pred w2 :=
+    Definition assuming {w1 w2} (ω : w2 ⊒ w1) : Pred w1 -> Pred w2 :=
       fun Rpast ι => forall (ιpast : Valuation w1), inst (sub_acc ω) ιpast = ι -> instprop (wco w1) ιpast -> Rpast ιpast.
-    Definition previously {w} : (□ Pred) w -> Pred w :=
-      fun P => (∀ {w2} (ω : w ⊒ w2), before ω (P w2 ω))%I.
-    Definition after {w1 w2} (ω : w2 ⊒ w1) : Pred w2 -> Pred w1 :=
+    Definition knowing {w1 w2} (ω : w2 ⊒ w1) : Pred w1 -> Pred w2 :=
+      fun Rpast ι => (exists (ιpast : Valuation w1), inst (sub_acc ω) ιpast = ι /\ instprop (wco w1) ιpast /\ Rpast ιpast)%type.
+    Definition forgetting {w1 w2} (ω : w2 ⊒ w1) : Pred w2 -> Pred w1 :=
       fun Rfut ι => Rfut (inst (sub_acc ω) ι).
+    Definition unconditionally {w} : (□ Pred) w -> Pred w :=
+      fun P => (∀ {w2} (ω : w ⊒ w2), assuming ω (P w2 ω))%I.
 
-    Lemma after_previously {w1 w2} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
-      after ω (previously P) ⊢ previously (four P ω).
+    Lemma forgetting_unconditionally {w1 w2} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
+      forgetting ω (unconditionally P) ⊢ unconditionally (four P ω).
     Proof.
-      unfold after, previously, before.
+      unfold forgetting, unconditionally, assuming.
       crushPredEntails3.
-      eapply H0.
-      - now apply acc_pathcond.
-      - now apply acc_pathcond.
-      - now rewrite <-H3, <-inst_subst, <-sub_acc_trans.
-      - assumption.
+      eapply H0; eauto using acc_pathcond.
+      now rewrite <-H3, <-inst_subst, <-sub_acc_trans.
     Qed.
 
-    Lemma previously_T {w} (P : (□ Pred) w) :
-      previously P ⊢ T P.
+    Lemma unconditionally_T {w} (P : (□ Pred) w) :
+      unconditionally P ⊢ T P.
     Proof.
-      unfold T, previously, before.
+      unfold T, unconditionally, assuming.
       crushPredEntails3.
       eapply H0; try assumption.
       eapply inst_sub_id.
@@ -514,81 +513,145 @@ Module Pred
       crushPredEntails3.
     Qed.
 
-    Lemma after_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
-      (repₚ v (persist t ω) ⊣⊢ after ω (repₚ v t))%I.
+    Lemma forgetting_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
+      (repₚ v (persist t ω) ⊣⊢ forgetting ω (repₚ v t))%I.
     Proof.
       rewrite persist_subst.
-      unfold after, repₚ.
+      unfold forgetting, repₚ.
       constructor. split; rewrite inst_subst; auto using acc_pathcond.
     Qed.
 
-    Lemma after_proprepₚ `{InstPropSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
-      (proprepₚ v (persist t ω) ⊣⊢ after ω (proprepₚ v t))%I.
+    Lemma forgetting_proprepₚ `{InstPropSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
+      (proprepₚ v (persist t ω) ⊣⊢ forgetting ω (proprepₚ v t))%I.
     Proof.
-      unfold after, proprepₚ.
+      unfold forgetting, proprepₚ.
       constructor. split;
       rewrite instprop_persist; auto using acc_pathcond.
     Qed.
 
-    Lemma before_refl {w} {P : Pred w} : before acc_refl P ⊣⊢ P.
+    Lemma assuming_refl {w} {P : Pred w} : assuming acc_refl P ⊣⊢ P.
     Proof.
-      rewrite /before.
+      rewrite /assuming.
       crushPredEntails3.
       - apply H0; [apply inst_sub_id|done].
       - rewrite inst_sub_id in H1; now subst.
     Qed.
 
-    Lemma after_refl {w} {P : Pred w} : after acc_refl P ⊣⊢ P.
+    Lemma forgetting_refl {w} {P : Pred w} : forgetting acc_refl P ⊣⊢ P.
     Proof.
-      rewrite /after.
+      rewrite /forgetting.
       crushPredEntails3.
       - now rewrite <-inst_sub_id.
       - now rewrite inst_sub_id.
     Qed.
 
-    Lemma after_before {w1 w2} {ω : Acc w1 w2} {P : Pred w2} :
-      after ω (before ω P) ⊢ P.
+    Lemma forgetting_assuming {w1 w2} {ω : Acc w1 w2} {P : Pred w2} :
+      forgetting ω (assuming ω P) ⊢ P.
     Proof.
-      rewrite /after /before.
+      rewrite /forgetting /assuming.
       now crushPredEntails3.
     Qed.
 
-    Lemma before_after {w1 w2} {ω : Acc w1 w2} {P : Pred w1} :
-      P ⊢ before ω (after ω P).
+    Lemma knowing_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} :
+      knowing ω (forgetting ω P) ⊢ P.
     Proof.
-      rewrite /after /before.
+      rewrite /forgetting /knowing.
+      crushPredEntails3.
+      now rewrite <-H0.
+    Qed.
+
+    Lemma forgetting_knowing {w1 w2} {ω : Acc w1 w2} {P : Pred w2} :
+      P ⊢ forgetting ω (knowing ω P).
+    Proof.
+      rewrite /forgetting /knowing.
+      now crushPredEntails3.
+    Qed.
+
+    Lemma assuming_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} :
+      P ⊢ assuming ω (forgetting ω P).
+    Proof.
+      rewrite /forgetting /assuming.
       crushPredEntails3.
       now rewrite H1.
     Qed.
 
-    Lemma after_before_adjoint {w1 w2} {ω : Acc w1 w2} {P Q} :
-      (after ω P ⊢ Q) <-> (P ⊢ before ω Q).
+    Lemma forgetting_assuming_adjoint {w1 w2} {ω : Acc w1 w2} {P Q} :
+      (forgetting ω P ⊢ Q) <-> (P ⊢ assuming ω Q).
     Proof.
-      rewrite /after /before.
+      rewrite /forgetting /assuming.
       split; crushPredEntails3.
       - now subst.
       - apply (fromEntails _ _ H) with (inst (sub_acc ω) ι);
           auto using acc_pathcond.
     Qed.
 
+    Lemma forgetting_knowing_adjoint {w1 w2} {ω : Acc w1 w2} {P Q} :
+      (knowing ω P ⊢ Q) <-> (P ⊢ forgetting ω Q).
+    Proof.
+      rewrite /forgetting /assuming /knowing.
+      split; crushPredEntails3.
+      - apply (fromEntails _ _ H); auto using acc_pathcond.
+        now exists ι.
+      - now subst.
+    Qed.
+
     Import iris.proofmode.modalities.
     Import iris.proofmode.classes.
     Import iris.proofmode.tactics.
 
-    Global Instance elim_modal_previously {w} {P : Box Pred w} {Q : Pred w} :
-      ElimModal True false false (previously P) (P w acc_refl) Q Q.
+    Global Instance elim_modal_unconditionally {w} {P : Box Pred w} {Q : Pred w} :
+      ElimModal True false false (unconditionally P) (P w acc_refl) Q Q.
     Proof.
       iIntros (_) "[#HP Hk]".
       iApply "Hk".
       iSpecialize ("HP" $! w acc_refl).
-      now rewrite /ElimModal /previously before_refl.
+      now rewrite /ElimModal /unconditionally assuming_refl.
     Qed.
 
-    (* Definition modality_before {w1 w2} {ω : Acc w1 w2} : modality (Pred w1) (Pred w2) := *)
-    (*   Modality (before ω) MIEnvId MIEnvId. *)
-    (* (* Definition modality_previously {w} : modality (Pred w) (Box Pred w) := *) *)
-    (* (*   Modality previously MIEnvId MIEnvId. *) *)
+    Class IntoAssuming {w1 w2} (ω : Acc w1 w2) (P : Pred w1) (Q : Pred w2) :=
+      into_assuming : P ⊢ assuming ω Q.
 
+    #[export] Instance into_assuming_default {w1 w2} {ω : Acc w1 w2} (P : Pred w1) :
+      IntoAssuming ω P (forgetting ω P) | 10.
+    Proof. unfold IntoAssuming. now apply assuming_forgetting. Qed.
+
+    #[export] Instance into_assuming_assuming {w1 w2} {ω : Acc w1 w2} (P : Pred w2) :
+      IntoAssuming ω (assuming ω P) P | 0.
+    Proof. now unfold IntoAssuming. Qed.
+
+    (* TODO: define typeclass FromAssuming to preserve other assuming assumptions *)
+    Lemma modality_mixin_assuming {w1 w2} {ω : Acc w1 w2} : modality_mixin (assuming ω) (MIEnvTransform (IntoAssuming ω)) (MIEnvTransform (IntoAssuming ω)).
+    Proof.
+      constructor; cbn; try done; rewrite /assuming; crushPredEntails3.
+      destruct into_assuming as [HPQ].
+      crushPredEntails3.
+    Qed.
+
+    Definition modality_assuming {w1 w2} (ω : Acc w1 w2) : modality (Pred w2) (Pred w1) :=
+      Modality (assuming ω) modality_mixin_assuming.
+
+    (* TODO: define typeclass FromForgetting to preserve other forgetting assumptions *)
+    Lemma modality_mixin_forgetting {w1 w2} {ω : Acc w1 w2} : modality_mixin (forgetting ω) MIEnvIsEmpty MIEnvIsEmpty.
+    Proof.
+      constructor; cbn; try done; rewrite /forgetting; crushPredEntails3.
+      - destruct H as [H]. apply H; last done. now apply acc_pathcond.
+      - now apply acc_pathcond.
+    Qed.
+
+    Definition modality_forgetting {w1 w2} (ω : Acc w1 w2) : modality (Pred w1) (Pred w2) :=
+      Modality (forgetting ω) modality_mixin_forgetting.
+
+    #[export] Instance fromModal_assuming {w1 w2} {ω : Acc w1 w2} {P} :
+      FromModal True (modality_assuming ω) tt (assuming ω P) P.
+    Proof.
+      constructor; crushPredEntails3.
+    Qed.
+
+    #[export] Instance fromModal_forgetting {w1 w2} {ω : Acc w1 w2} {P} :
+      FromModal True (modality_forgetting ω) tt (forgetting ω P) P.
+    Proof.
+      constructor; crushPredEntails3.
+    Qed.
 
   End SubstMod.
 
@@ -615,7 +678,7 @@ Module Pred
 
     #[export] Instance RBox {AT A} (RA : Rel AT A) : Rel (Box AT) A :=
       MkRel 
-        (fun v w t => previously (fun w2 ω => ℛ⟦ RA ⟧ v (t w2 ω))).
+        (fun v w t => unconditionally (fun w2 ω => ℛ⟦ RA ⟧ v (t w2 ω))).
 
     #[export] Instance RImpl {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
       Rel (Impl AT BT) (A -> B) :=
@@ -702,10 +765,10 @@ Module Pred
     
 
     Lemma refine_four {w1 w2} {ω : Acc w2 w1} {AT A} (RA : Rel AT A) :
-      (⊢ ∀ (v__s : Box AT w2) v, (after ω (ℛ⟦□ᵣ RA⟧ v v__s) → ℛ⟦□ᵣ RA⟧ v (four v__s ω)))%I.
+      (⊢ ∀ (v__s : Box AT w2) v, (forgetting ω (ℛ⟦□ᵣ RA⟧ v v__s) → ℛ⟦□ᵣ RA⟧ v (four v__s ω)))%I.
     Proof.
       iIntros (v__s v) "Hbox".
-      now iApply (after_previously (λ (w0 : World) (ω0 : Acc w2 w0), ℛ⟦RA⟧ v (v__s w0 ω0))).
+      now iApply (forgetting_unconditionally (λ (w0 : World) (ω0 : Acc w2 w0), ℛ⟦RA⟧ v (v__s w0 ω0))).
     Qed.
 
     Lemma refine_T {AT A} (R : Rel AT A) :
@@ -713,7 +776,7 @@ Module Pred
     Proof.
       iIntros (v w t) "Hvt".
       unfold RBox; cbn.
-      now iApply (previously_T (λ (w2 : World) (ω : Acc w w2), ℛ⟦R⟧ v (t w2 ω))).
+      now iApply (unconditionally_T (λ (w2 : World) (ω : Acc w w2), ℛ⟦R⟧ v (t w2 ω))).
     Qed.
 
       Lemma refine_apply {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
@@ -723,25 +786,25 @@ Module Pred
 
     Lemma refine_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} :
       forall (v : A) (w1 w2 : World) (ω : Acc w1 w2),
-        ⊢ ∀ (t : AT w1), (after ω (ℛ⟦RInst AT A⟧ v t) → ℛ⟦RInst AT A⟧ v (persist t ω))%I.
+        ⊢ ∀ (t : AT w1), (forgetting ω (ℛ⟦RInst AT A⟧ v t) → ℛ⟦RInst AT A⟧ v (persist t ω))%I.
     Proof. 
       iIntros (v w1 w2 ω t) "Hvt".
-      now iApply after_repₚ.
+      now iApply forgetting_repₚ.
     Qed.
 
     Lemma refine_formula_persist :
       forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop),
-        ⊢ after r12 (ℛ⟦RFormula⟧ p f) → ℛ⟦RFormula⟧ p (persist f r12).
+        ⊢ forgetting r12 (ℛ⟦RFormula⟧ p f) → ℛ⟦RFormula⟧ p (persist f r12).
     Proof.
       iIntros (v w1 w2 ω t) "Hvt".
-      now iApply after_proprepₚ.
+      now iApply forgetting_proprepₚ.
     Qed.
 
     Lemma refine_formula_subst {Σ} (fml : Formula Σ) {w : World} :
       ⊢ ℛ⟦ (RInst (Sub Σ) (Valuation Σ) -> RFormula) ⟧ (instprop fml) (subst fml : Sub Σ w -> Formula w)%I.
     Proof.
-      (* manual proof because we don't have an after modality for substitutions and associated primitives. *)
-      unfold RFormula, RInst, after, proprepₚ, repₚ; cbn.
+      (* manual proof because we don't have an forgetting modality for substitutions and associated primitives. *)
+      unfold RFormula, RInst, forgetting, proprepₚ, repₚ; cbn.
       constructor.
       intros ι Hpc _ _ ι' _ ω.
       constructor.

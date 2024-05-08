@@ -91,22 +91,22 @@ Module Soundness
        | error msg => False
        | SymProp.block => True
        | assertk fml msg o =>
-           (Obligation msg fml : Pred w) ∧ after (acc_formula_right fml) (psafe o)
-       | assumek fml o => (instprop fml : Pred w) → after (acc_formula_right fml) (psafe o)
-       | angelicv b k => ∃ v, after (acc_snoc_left' b v) (@psafe (wsnoc w b) k)
-       | demonicv b k => ∀ v, after (acc_snoc_left' b v) (@psafe (wsnoc w b) k)
+           (Obligation msg fml : Pred w) ∧ forgetting (acc_formula_right fml) (psafe o)
+       | assumek fml o => (instprop fml : Pred w) → forgetting (acc_formula_right fml) (psafe o)
+       | angelicv b k => ∃ v, forgetting (acc_snoc_left' b v) (@psafe (wsnoc w b) k)
+       | demonicv b k => ∀ v, forgetting (acc_snoc_left' b v) (@psafe (wsnoc w b) k)
        | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
            Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∧
-            before (acc_subst_right (xIn := xIn) t) (psafe (w := wsubst w x t) k)
+            assuming (acc_subst_right (xIn := xIn) t) (psafe (w := wsubst w x t) k)
        | @assume_vareq _ x σ xIn t k =>
            eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) →
            let ω := acc_subst_right (xIn := xIn) t in
-           before ω (psafe (w := wsubst w x t) k)
+           assuming ω (psafe (w := wsubst w x t) k)
         | pattern_match s pat rhs =>
             ∀ (pc : PatternCase pat), 
               let ω : w ⊒ wmatch w s pat pc := acc_match_right pc in
-              before ω (eqₚ (persist s ω) (pattern_match_term_reverse pat pc (sub_wmatch_patctx pc)) →
+              assuming ω (eqₚ (persist s ω) (pattern_match_term_reverse pat pc (sub_wmatch_patctx pc)) →
                         psafe (w := wmatch w s pat pc) (rhs pc))
         | pattern_match_var x pat rhs => False
           (* | pattern_match_var x pat rhs => *)
@@ -146,6 +146,9 @@ Module Soundness
       - now iApply "HP2".
     Qed.
 
+    Global Instance frompure_RProp_block {w} {P} :
+      FromPure false (RSat RProp P (w := w) SymProp.block) P.
+    Proof. now constructor. Qed.
   End logicalrelation.
   Notation "'ℙ'" := (RProp) : rel_scope.
 
@@ -157,29 +160,45 @@ Module Soundness
     #[export] Instance RPureSpec [SA CA] (RA : Rel SA CA) :
       Rel (SPureSpec SA) (CPureSpec CA) := □ᵣ(RA -> ℙ) -> ℙ.
 
+    Import iris.bi.interface iris.proofmode.tactics.
     Lemma refine_run {w} :
       ⊢ ℛ⟦RPureSpec RUnit -> ℙ⟧ CPureSpec.run (SPureSpec.run (w := w)).
-    Admitted.
-    (* Proof. *)
-    (*   iIntros (c cs) "#Hc". *)
-    (*   iApply "Hc". *)
-    (*   unfold RBox; cbn. *)
-    (* Qed. *)
+    Proof.
+      iIntros (c cs) "Hc".
+      iApply "Hc".
+      iIntros (w2 ω).
+      iModIntro.
+      iIntros (k K) "_".
+      now iPureIntro.
+    Qed.
 
-    (* Lemma refine_pure `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RA -> RPureSpec RA⟧ SPureSpec.pure CPureSpec.pure. *)
-    (* Proof. *)
-    (*   unfold RPureSpec, SPureSpec.pure, CPureSpec.pure. *)
-    (*   rsolve. eapply refine_apply; rsolve. *)
-    (* Qed. *)
+    Lemma refine_pure `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RA -> RPureSpec RA⟧ CPureSpec.pure (SPureSpec.pure (w := w)).
+    Proof.
+      iIntros (v va) "Hv".
+      iIntros (k K) "Hk".
+      iMod "Hk".
+      now iApply "Hk".
+    Qed.
 
-    (* Lemma refine_bind `{RA : Rel SA CA, RB : Rel SB CB} : *)
-    (*   ℛ⟦RPureSpec RA -> □(RA -> RPureSpec RB) -> RPureSpec RB⟧ *)
-    (*     SPureSpec.bind CPureSpec.bind. *)
-    (* Proof. *)
-    (*   unfold RPureSpec, SPureSpec.bind, CPureSpec.bind. *)
-    (*   intros. rsolve. do 3 (eapply refine_apply; rsolve). *)
-    (* Qed. *)
+    Lemma refine_bind `{RA : Rel SA CA, RB : Rel SB CB} {w} :
+      ⊢ ℛ⟦RPureSpec RA -> □ᵣ(RA -> RPureSpec RB) -> RPureSpec RB⟧
+        CPureSpec.bind (SPureSpec.bind (w := w)).
+    Proof.
+      iIntros (c cs) "Hc".
+      iIntros (k ks) "Hk".
+      iIntros (kk kks) "Hkk".
+      unfold CPureSpec.bind, SPureSpec.bind.
+      iApply "Hc".
+      iIntros (w2 ω2).
+      iSpecialize ("Hk" $! _ ω2).
+      iModIntro.
+      iIntros (v vs) "Hv".
+      iApply ("Hk" with "Hv").
+      rewrite !forgetting_unconditionally.
+      iIntros (w3 ω3).
+      iApply "Hkk".
+    Qed.
 
     (* Lemma refine_block `{R : Rel AT A} : *)
     (*   ℛ⟦RPureSpec R⟧ (@SPureSpec.block AT) CPureSpec.block. *)
