@@ -93,8 +93,8 @@ Module Soundness
        | assertk fml msg o =>
            (Obligation msg fml : Pred w) ∧ forgetting (acc_formula_right fml) (psafe o)
        | assumek fml o => (instprop fml : Pred w) → forgetting (acc_formula_right fml) (psafe o)
-       | angelicv b k => ∃ v, forgetting (acc_snoc_left' b v) (@psafe (wsnoc w b) k)
-       | demonicv b k => ∀ v, forgetting (acc_snoc_left' b v) (@psafe (wsnoc w b) k)
+       | angelicv b k => ∃ v, forgetting (acc_snoc_left' b (term_val _ v)) (@psafe (wsnoc w b) k)
+       | demonicv b k => ∀ v, forgetting (acc_snoc_left' b (term_val _ v)) (@psafe (wsnoc w b) k)
        | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
            Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∧
@@ -125,7 +125,7 @@ Module Soundness
 
     (* Relatedness of symbolic and shallow propositions. The driving base case! *)
     #[export] Instance RProp : Rel SymProp Prop :=
-      MkRel (fun P w SP => (psafe SP → ⌜ P ⌝)%I).
+      MkRel (fun P w SP => (psafe SP -∗ ⌜ P ⌝)%I).
 
     Lemma refine_symprop_angelic_binary {w : World} :
       ⊢ ℛ⟦RProp -> RProp -> RProp⟧ (@or) (@angelic_binary w).
@@ -135,6 +135,10 @@ Module Soundness
       - iLeft. now iApply "HP1".
       - iRight. now iApply "HP2".
     Qed.
+
+    Lemma evalTerm {σ} {w : World} (t : Term w σ) :
+      ⊢ ∃ v, repₚ v (w := w) t.
+    Proof. crushPredEntails3. now eexists. Qed.
 
     Lemma refine_symprop_demonic_binary {w : World} :
       ⊢ ℛ⟦RProp -> RProp -> RProp⟧ (@and) (@demonic_binary w).
@@ -200,23 +204,32 @@ Module Soundness
       iApply "Hkk".
     Qed.
 
-    (* Lemma refine_block `{R : Rel AT A} : *)
-    (*   ℛ⟦RPureSpec R⟧ (@SPureSpec.block AT) CPureSpec.block. *)
-    (* Proof. constructor. Qed. *)
+    Lemma refine_block `{R : Rel AT A} {w} :
+      ⊢ ℛ⟦RPureSpec R⟧ CPureSpec.block (@SPureSpec.block AT w).
+    Proof. done. Qed.
 
-    (* Lemma refine_error `{RA : Rel AT A} m : *)
-    (*   ℛ⟦RMsg _ (RPureSpec RA)⟧ (@SPureSpec.error _) m. *)
-    (* Proof. intros w ι Hpc msg sΦ cΦ rΦ. inversion 1. Qed. *)
+    Lemma refine_error `{RA : Rel AT A} {w} m :
+      ⊢ ℛ⟦RMsg _ (RPureSpec RA)⟧ m (@SPureSpec.error _ w).
+    Proof.
+      unfold RMsg. cbn.
+      iIntros (msg k K) "Hk %abs".
+      inversion abs.
+    Qed.
 
-    (* Lemma refine_angelic (x : option LVar) : *)
-    (*   ℛ⟦∀ σ, RPureSpec (RVal σ)⟧ (SPureSpec.angelic x) CPureSpec.angelic. *)
-    (* Proof. *)
-    (*   intros w0 ι0 Hpc0 σ sΦ cΦ rΦ. *)
-    (*   intros [v HΦ]. exists v. revert HΦ. *)
-    (*   apply rΦ; cbn; eauto. *)
-    (*   - now rewrite inst_sub_wk1. *)
-    (*   - now rewrite instprop_subst, inst_sub_wk1. *)
-    (* Qed. *)
+    Lemma refine_angelic (x : option LVar) {w} :
+      ⊢ ℛ⟦∀ᵣ σ, RPureSpec (RVal σ)⟧ CPureSpec.angelic (SPureSpec.angelic (w := w) x).
+    Proof.
+      iIntros (σ k K) "HK".
+      iIntros "[%v HSP]".
+      iSpecialize ("HK" $! _ acc_snoc_right).
+      iPoseProof (assuming_acc_snoc_right with "HK") as "HK".
+      iSpecialize ("HK" $! v).
+      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val (type (fresh_lvar w x∷σ)) v)) (P := CPureSpec.angelic σ k)).
+      iModIntro.
+      iExists v.
+      iApply ("HK" with "[] HSP").
+      (* DOMI: it would be nice if we were now in a world with a pathcondition saying repₚ v (term_var x) *)
+    Admitted.
 
     (* Lemma refine_demonic (x : option LVar) : *)
     (*   ℛ⟦∀ σ, RPureSpec (RVal σ)⟧ (SPureSpec.demonic x) CPureSpec.demonic. *)

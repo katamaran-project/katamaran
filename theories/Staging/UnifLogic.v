@@ -489,6 +489,27 @@ Module Pred
     Definition unconditionally {w} : (□ Pred) w -> Pred w :=
       fun P => (∀ {w2} (ω : w ⊒ w2), assuming ω (P w2 ω))%I.
 
+    Lemma knowing_assuming {w1 w2} (ω : w2 ⊒ w1) {P Q} :
+      knowing ω P ∗ assuming ω Q ⊢ knowing ω (P ∗ Q).
+    Proof.
+      unfold knowing, assuming.
+      crushPredEntails3.
+    Qed.
+
+    Lemma knowing_pure {w1 w2} (ω : w2 ⊒ w1) {P} :
+      knowing ω (bi_pure P) ⊢ bi_pure P.
+    Proof.
+      unfold knowing.
+      crushPredEntails3.
+    Qed.
+
+    Lemma forgetting_pure {w1 w2} (ω : w2 ⊒ w1) {P} :
+      forgetting ω (bi_pure P) ⊣⊢ bi_pure P.
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+    Qed.
+
     Lemma forgetting_unconditionally {w1 w2} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
       forgetting ω (unconditionally P) ⊢ unconditionally (four P ω).
     Proof.
@@ -619,7 +640,6 @@ Module Pred
       IntoAssuming ω (assuming ω P) P | 0.
     Proof. now unfold IntoAssuming. Qed.
 
-    (* TODO: define typeclass FromAssuming to preserve other assuming assumptions *)
     Lemma modality_mixin_assuming {w1 w2} {ω : Acc w1 w2} : modality_mixin (assuming ω) (MIEnvTransform (IntoAssuming ω)) (MIEnvTransform (IntoAssuming ω)).
     Proof.
       constructor; cbn; try done; rewrite /assuming; crushPredEntails3.
@@ -630,27 +650,82 @@ Module Pred
     Definition modality_assuming {w1 w2} (ω : Acc w1 w2) : modality (Pred w2) (Pred w1) :=
       Modality (assuming ω) modality_mixin_assuming.
 
-    (* TODO: define typeclass FromForgetting to preserve other forgetting assumptions *)
-    Lemma modality_mixin_forgetting {w1 w2} {ω : Acc w1 w2} : modality_mixin (forgetting ω) MIEnvIsEmpty MIEnvIsEmpty.
-    Proof.
-      constructor; cbn; try done; rewrite /forgetting; crushPredEntails3.
-      - destruct H as [H]. apply H; last done. now apply acc_pathcond.
-      - now apply acc_pathcond.
-    Qed.
-
-    Definition modality_forgetting {w1 w2} (ω : Acc w1 w2) : modality (Pred w1) (Pred w2) :=
-      Modality (forgetting ω) modality_mixin_forgetting.
-
     #[export] Instance fromModal_assuming {w1 w2} {ω : Acc w1 w2} {P} :
       FromModal True (modality_assuming ω) tt (assuming ω P) P.
     Proof.
       constructor; crushPredEntails3.
     Qed.
 
+    Class IntoForgetting {w1 w2} (ω : Acc w1 w2) (P : Pred w2) (Q : Pred w1) :=
+      into_forgetting : P ⊢ forgetting ω Q.
+
+    #[export] Instance into_forgetting_default {w1 w2} {ω : Acc w1 w2} (P : Pred w2) :
+      IntoForgetting ω P (knowing ω P) | 10.
+    Proof. unfold IntoForgetting. now apply forgetting_knowing. Qed.
+
+    #[export] Instance into_forgetting_forgetting {w1 w2} {ω : Acc w1 w2} (P : Pred w1) :
+      IntoForgetting ω (forgetting ω P) P | 0.
+    Proof. now unfold IntoForgetting. Qed.
+
+
+    (* TODO: define typeclass FromForgetting to preserve other forgetting assumptions *)
+    Lemma modality_mixin_forgetting {w1 w2} {ω : Acc w1 w2} : modality_mixin (forgetting ω) (MIEnvTransform (IntoForgetting ω)) (MIEnvTransform (IntoForgetting ω)).
+    Proof.
+      constructor; cbn; try done; rewrite /forgetting; crushPredEntails3.
+      - destruct H as [H]. apply H; done.
+      - apply H; last done. now apply acc_pathcond.
+      - now apply acc_pathcond.
+    Qed.
+
+    Definition modality_forgetting {w1 w2} (ω : Acc w1 w2) : modality (Pred w1) (Pred w2) :=
+      Modality (forgetting ω) modality_mixin_forgetting.
+
     #[export] Instance fromModal_forgetting {w1 w2} {ω : Acc w1 w2} {P} :
       FromModal True (modality_forgetting ω) tt (forgetting ω P) P.
     Proof.
       constructor; crushPredEntails3.
+    Qed.
+
+    Lemma knowing_proper {w1 w2} {ω : Acc w1 w2} :
+      Proper (entails ==> entails) (knowing ω).
+    Proof.
+      unfold knowing.
+      crushPredEntails3.
+    Qed.
+
+    Lemma knowing_acc_snoc_right {w b P} :
+      knowing (@acc_snoc_right w b) P ⊣⊢ ∃ v, forgetting (acc_snoc_left' b (term_val _ v)) P.
+    Proof.
+      unfold knowing, forgetting.
+      crushPredEntails3.
+      - destruct (env.view x) as [ιp v].
+        exists v.
+        change (P (env.snoc (inst (sub_id w) ι) b v)).
+        rewrite inst_sub_id.
+        rewrite inst_sub_wk1 in H0.
+        now subst.
+      - exists (env.snoc ι b x).
+        change (P (env.snoc (inst (sub_id w) ι) b x)) in H0.
+        rewrite inst_sub_id in H0.
+        repeat split; eauto using inst_sub_wk1.
+        now rewrite instprop_subst inst_sub_wk1.
+    Qed.
+
+    Lemma assuming_acc_snoc_right {w b P} :
+      assuming (@acc_snoc_right w b) P ⊣⊢ ∀ v, forgetting (acc_snoc_left' b (term_val _ v)) P.
+    Proof.
+      unfold assuming, forgetting.
+      crushPredEntails3.
+      - change (P (env.snoc (inst (sub_id w) ι) b a)).
+        rewrite inst_sub_id.
+        apply H0.
+        + eapply inst_sub_wk1.
+        + now rewrite instprop_subst inst_sub_wk1.
+      - destruct (env.view ιpast) as [ι' v].
+        rewrite inst_sub_wk1 in H1; subst.
+        specialize (H0 v).
+        change (P (env.snoc (inst (sub_id w) ι) b v)) in H0.
+        now rewrite inst_sub_id in H0.
     Qed.
 
   End SubstMod.
