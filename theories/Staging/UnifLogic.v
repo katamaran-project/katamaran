@@ -489,6 +489,29 @@ Module Pred
     Definition unconditionally {w} : (□ Pred) w -> Pred w :=
       fun P => (∀ {w2} (ω : w ⊒ w2), assuming ω (P w2 ω))%I.
 
+    Lemma knowing_proper {w1 w2} {ω : Acc w1 w2} :
+      Proper (entails ==> entails) (knowing ω).
+    Proof.
+      unfold knowing.
+      crushPredEntails3.
+    Qed.
+
+    Lemma assuming_proper {w1 w2} {ω : Acc w1 w2} :
+      Proper (entails ==> entails) (assuming ω).
+    Proof.
+      unfold assuming.
+      crushPredEntails3.
+    Qed.
+
+    Lemma forgetting_proper {w1 w2} {ω : Acc w1 w2} :
+      Proper (entails ==> entails) (forgetting ω).
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+      apply (fromEntails _ _ H); last done.
+      now apply acc_pathcond.
+    Qed.
+
     Lemma knowing_assuming {w1 w2} (ω : w2 ⊒ w1) {P Q} :
       knowing ω P ∗ assuming ω Q ⊢ knowing ω (P ∗ Q).
     Proof.
@@ -588,12 +611,77 @@ Module Pred
       now crushPredEntails3.
     Qed.
 
+    Lemma knowing_forgetting_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w1}
+      (H : IsIsomorphism ω ω') :
+      P ⊣⊢ knowing ω (forgetting ω P).
+    Proof.
+      rewrite /forgetting /knowing.
+      crushPredEntails3.
+      - exists (inst (sub_acc ω') ι).
+        rewrite wiso_there; intuition.
+        now apply acc_pathcond.
+      - now subst.
+    Qed.
+
+    Lemma forgetting_knowing_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w2}
+      (H : IsIsomorphism ω ω') :
+      P ⊣⊢ forgetting ω (knowing ω P).
+    Proof.
+      rewrite /forgetting /knowing.
+      crushPredEntails3.
+      apply (f_equal (inst (sub_acc ω'))) in H1.
+      rewrite !wiso_back in H1; intuition.
+      now subst.
+    Qed.
+
     Lemma assuming_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} :
       P ⊢ assuming ω (forgetting ω P).
     Proof.
       rewrite /forgetting /assuming.
       crushPredEntails3.
       now rewrite H1.
+    Qed.
+
+    Lemma assuming_forgetting_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w1}
+      (H : IsIsomorphism ω ω') :
+      P ⊣⊢ assuming ω (forgetting ω P).
+    Proof.
+      rewrite /forgetting /assuming.
+      crushPredEntails3.
+      - now subst.
+      - specialize (H1 (inst (sub_acc ω') ι)).
+        rewrite wiso_there in H1; intuition.
+        now apply H2, acc_pathcond.
+    Qed.
+
+    Lemma forgetting_assuming_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w2}
+      (iso : IsIsomorphism ω ω') :
+      P ⊣⊢ forgetting ω (assuming ω P).
+    Proof.
+      rewrite /forgetting /assuming.
+      crushPredEntails3.
+      apply (f_equal (inst (sub_acc ω'))) in H1.
+      rewrite !wiso_back in H1; intuition.
+      now subst.
+    Qed.
+
+    Lemma cancel_forgetting_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} `{iso : IsIsomorphism ω ω'}
+      {P Q : Pred w1} :
+      (forgetting ω P ⊢ forgetting ω Q) -> P ⊢ Q.
+    Proof.
+      intros H.
+      apply (knowing_proper (ω := ω)) in H.
+      now rewrite (knowing_forgetting_iso (P := P) iso) (knowing_forgetting_iso (P := Q) iso).
+    Qed.
+
+    Lemma cancel_knowing_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} `{iso : IsIsomorphism ω ω'}
+      {P Q : Pred w2} :
+      (knowing ω P ⊢ knowing ω Q) -> P ⊢ Q.
+    Proof.
+      intros H.
+      apply (forgetting_proper (ω := ω)) in H.
+      now rewrite (forgetting_knowing_iso (P := P) iso)
+        (forgetting_knowing_iso (P := Q) iso).
     Qed.
 
     Lemma forgetting_assuming_adjoint {w1 w2} {ω : Acc w1 w2} {P Q} :
@@ -684,13 +772,6 @@ Module Pred
       FromModal True (modality_forgetting ω) tt (forgetting ω P) P.
     Proof.
       constructor; crushPredEntails3.
-    Qed.
-
-    Lemma knowing_proper {w1 w2} {ω : Acc w1 w2} :
-      Proper (entails ==> entails) (knowing ω).
-    Proof.
-      unfold knowing.
-      crushPredEntails3.
     Qed.
 
     Lemma knowing_acc_snoc_right {w b P} :
