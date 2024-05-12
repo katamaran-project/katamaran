@@ -68,6 +68,12 @@ Module Type WorldsOn
        "allocating" it in a quantifier in the proposition. *)
     Definition wsnoc (w : World) (b : LVar ∷ Ty) : World :=
       @MkWorld (wctx w ▻ b) (subst (wco w) sub_wk1).
+    Definition term_var_zero {Σ} {b} : Term (Σ ▻ b) (type b) :=
+      @term_var (Σ ▻ b) (name b) (type b) ctx.in_zero.
+    Definition wlet (w : World) (b : LVar ∷ Ty) (v : Val (type b)): World :=
+      @MkWorld  (wctx w ▻ b) (subst (wco w) sub_wk1 ▻ 
+                                formula_relop bop.eq (term_var_zero) (term_val _ v)).
+
     (* Add [Δ] many logic variables to the world [w]. *)
     Definition wcat (w : World) (Δ : LCtx) : World :=
       @MkWorld (wctx w ▻▻ Δ) (subst (wco w) (sub_cat_left Δ)).
@@ -263,6 +269,13 @@ Module Type WorldsOn
         now rewrite ?sub_comp_id_left, ?sub_comp_id_right.
     Qed.
 
+
+    Record IsIsomorphism {w1 w2} (ω12 : w1 ⊒ w2) (ω21 : w2 ⊒ w1) :=
+      MkIsIsomorphism {
+          wiso_there : forall ι, instprop (wco w1) ι -> inst (sub_acc ω12) (inst (sub_acc ω21) ι) = ι;
+          wiso_back : forall ι, instprop (wco w2) ι -> inst (sub_acc ω21) (inst (sub_acc ω12) ι) = ι
+        }.
+
     Definition Box (A : TYPE) : TYPE :=
       fun w0 => forall w1, w0 ⊒ w1 -> A w1.
 
@@ -272,6 +285,34 @@ Module Type WorldsOn
 
     Definition acc_snoc_right {w} {b : LVar ∷ Ty} : w ⊒ wsnoc w b :=
       @acc_sub w (wsnoc w b) sub_wk1 (entails_refl (subst (wco w) sub_wk1)).
+
+    Program Definition acc_let_right {w} (b : LVar ∷ Ty) v : w ⊒ wlet w b v :=
+      @acc_sub w (wlet w b v) sub_wk1 _.
+    Next Obligation.
+      intros * ι Hpc.
+      now apply proj1 in Hpc.
+    Defined.
+
+    Program Definition acc_let_left {w} (b : LVar ∷ Ty) v : wlet w b v ⊒ w :=
+      acc_sub (sub_snoc (sub_id w) b (term_val _ v)) _.
+    Next Obligation.
+      intros * ι Hpc.
+      split; last reflexivity.
+      change (subst_ctx ?pc ?ς)
+        with (subst pc ς).
+      now rewrite <-subst_sub_comp, sub_comp_wk1_tail, subst_sub_id.
+    Defined.
+    
+    Lemma acc_let_iso {w b v} : IsIsomorphism (@acc_let_right w b v) (acc_let_left b v).
+    Proof.
+      constructor; intros; simpl.
+      - now rewrite inst_sub_snoc, inst_sub_id, inst_sub_wk1.
+      - rewrite inst_sub_snoc, inst_sub_id.
+        destruct (env.view ι) as (ι & v').
+        destruct H as (Hpc & Hbv); cbn in Hbv.
+        subst.
+        now rewrite inst_sub_wk1.
+    Qed.
 
     Definition acc_cat_right w (Δ : LCtx) : w ⊒ wcat w Δ :=
       @acc_sub w (wcat w Δ) (@sub_cat_left w Δ)
@@ -288,6 +329,17 @@ Module Type WorldsOn
 
     Definition acc_snoc_left' {w : World} b (t : Term w (type b)) :
       wsnoc w b ⊒ w := acc_snoc_left acc_refl b t.
+
+    (* Lemma acc_snoc_left_right_iso {w : World} {b} {t : Term w (type b)}: *)
+    (*   IsIsomorphism acc_snoc_right (acc_snoc_left' b t). *)
+    (* Proof. *)
+    (*   constructor. *)
+    (*   - intros. simpl. *)
+    (*     now rewrite inst_sub_snoc, inst_sub_id, inst_sub_wk1. *)
+    (*   - intros. simpl. *)
+    (*     rewrite inst_sub_snoc, inst_sub_id. *)
+    (*     (* Not true. The world `wsnoc w b` lacks a path condition saying that the extra variable is equal to t. *) *)
+    (* Admitted. *)
 
     Program Definition acc_cat_left {w1 w2} (ω12 : w1 ⊒ w2) {Δ : LCtx} (ζ : Sub Δ w2) :
       wcat w1 Δ ⊒ w2 := acc_sub (sub_acc ω12 ►► ζ) _.
