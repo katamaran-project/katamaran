@@ -44,6 +44,9 @@ theories/Context.v
 theories/Environment.v
 theories/Iris/Instance.v
 theories/Iris/Model.v
+theories/Iris/BinaryModel.v
+theories/Iris/BinaryWP.v
+theories/Iris/BinaryAdequacy.v
 theories/Iris/BinaryInstance.v
 theories/Iris/cointro_patterns.v
 theories/Notations.v

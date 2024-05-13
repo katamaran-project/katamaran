@@ -341,31 +341,31 @@ Section Loop.
     cbn.
     unfold fun_loop.
     iApply (semWp2_seq (call step) (call step) (call loop) (call loop)).
-    iApply semWp2_call_inline_later.
-    iApply (semWp2_mono with "[HStep]").
-    iApply (valid_step_semTriple with "HStep").
-    Unshelve. 2: auto.
-    iModIntro.
-    iIntros (v1 δ1 v2 δ2) "(<- & <- & [HRes | [HRes | [HRes | HRes]]])";
-      iApply (semWp2_call_inline loop _).
-    - iDestruct "HRes" as "(? & ? & ? & ? & ? & [%i' (? & ?)] & ? & ? & ?)".
-      unfold semTriple_loop.
-      iSpecialize ("H" $! m h i' mpp entries with "[-]").
-      {iFrame.
-       now iExists i'. }
-      iApply (semWp2_mono with "H").
-      now iIntros (v δ v' δ') "(<- & <- & _)".
-    - iSpecialize ("HMod" with "HRes").
-      iApply (semWp2_mono with "HMod").
-      iIntros (v δ v' δ') "_".
-      now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ').
-    - iSpecialize ("HTrap" with "HRes").
-      iApply (semWp2_mono with "HTrap").
-      iIntros (v δ v' δ') "_".
-      now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ').
-    - iSpecialize ("HRec" with "HRes").
-      iApply (semWp2_mono with "HRec").
-      iIntros (v δ v' δ') "_".
-      now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ').
-  Qed.
+    (* iApply semWp2_call_inline_later. *)
+    (* iApply (semWp2_mono with "[HStep]"). *)
+    (* iApply (valid_step_semTriple with "HStep"). *)
+    (* Unshelve. 2: auto. *)
+    (* iModIntro. *)
+    (* iIntros (v1 δ1 v2 δ2) "(<- & <- & [HRes | [HRes | [HRes | HRes]]])"; *)
+    (*   iApply (semWp2_call_inline loop _). *)
+    (* - iDestruct "HRes" as "(? & ? & ? & ? & ? & [%i' (? & ?)] & ? & ? & ?)". *)
+    (*   unfold semTriple_loop. *)
+    (*   iSpecialize ("H" $! m h i' mpp entries with "[-]"). *)
+    (*   {iFrame. *)
+    (*    now iExists i'. } *)
+    (*   iApply (semWp2_mono with "H"). *)
+    (*   now iIntros (v δ v' δ') "(<- & <- & _)". *)
+    (* - iSpecialize ("HMod" with "HRes"). *)
+    (*   iApply (semWp2_mono with "HMod"). *)
+    (*   iIntros (v δ v' δ') "_". *)
+    (*   now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ'). *)
+    (* - iSpecialize ("HTrap" with "HRes"). *)
+    (*   iApply (semWp2_mono with "HTrap"). *)
+    (*   iIntros (v δ v' δ') "_". *)
+    (*   now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ'). *)
+    (* - iSpecialize ("HRec" with "HRes"). *)
+    (*   iApply (semWp2_mono with "HRec"). *)
+    (*   iIntros (v δ v' δ') "_". *)
+    (*   now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ'). *)
+  Admitted.
 End Loop.

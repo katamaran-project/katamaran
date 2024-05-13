@@ -31,7 +31,7 @@ From Katamaran Require Import
      Environment
      trace
      Iris.Model
-     Iris.BinaryInstance
+     Iris.BinaryModel
      RiscvPmp.Machine
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance.

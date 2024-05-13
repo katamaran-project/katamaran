@@ -29,6 +29,8 @@
 From Katamaran Require Import
      Base
      Bitvector
+     Iris.BinaryWP
+     Iris.BinaryAdequacy
      Iris.BinaryInstance
      trace
      Syntax.Predicates

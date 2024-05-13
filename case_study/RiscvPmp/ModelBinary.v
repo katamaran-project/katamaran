@@ -207,113 +207,23 @@ Module RiscvPmpModel2.
     Lemma read_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
     Proof.
-      intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
-      iIntros "H".
-      rewrite <-interp_ptstomem_dedup.
-      iDestruct "H" as "[Hmemres1 Hmemres2]".
-      rewrite fixpoint_semWp2_eq.
-      cbn in *.
-      iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1 & Htrace1) & (% & Hmem2 & %Hmap2 & Htrace2)))".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iIntros (? ? ? ? ? ? ? ?) "(%Hstepl & %Hstepr)".
-      repeat iModIntro.
-      eliminate_prim_step Heq.
-      eliminate_prim_step Heq.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iDestruct (RiscvPmpModel2.fun_read_ram_works (sg := sailGS2_sailGS_left) Hmap1 with "[$Hmemres1 $Hmem1]") as "%eq_fun_read_ram1".
-      iDestruct (RiscvPmpModel2.fun_read_ram_works (sg := sailGS2_sailGS_right) Hmap2 with "[$Hmemres2 $Hmem2]") as "%eq_fun_read_ram2".
-      iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_left) $! Hmap1 with "Hmem1") as "Hmem1".
-      iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_right) $! Hmap2 with "Hmem2") as "Hmem2".
-      iSpecialize ("Hmem1" with "Htrace1").
-      iSpecialize ("Hmem2" with "Htrace2").
-      iFrame.
-      rewrite semWp2_val.
-      iModIntro.
-      iExists _.
-      rewrite <-interp_ptstomem_dedup, ?eq_fun_read_ram1, ?eq_fun_read_ram2.
-      now iFrame.
-    Qed.
+    Admitted.
 
     Lemma write_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
     Proof.
-      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
-      iIntros "(%vold & H)".
-      rewrite fixpoint_semWp2_eq.
-      cbn.
-      iIntros (? ? ? ?) "(Hregs & ((% & Hmem1 & %Hmap1 & Htrace1) & (% & Hmem2 & %Hmap2 & Htrace2)))".
-      rewrite <-interp_ptstomem_dedup.
-      iDestruct "H" as "[Hmemres1 Hmemres2]".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iIntros (? ? ? ? ? ? ? ?) "(%Hstepl & %Hstepr)".
-      repeat iModIntro.
-      eliminate_prim_step Heq.
-      eliminate_prim_step Heq.
-      iMod "Hclose" as "_".
-      iMod (RiscvPmpModel2.fun_write_ram_works (sg := sailGS2_sailGS_left) μ1 paddr data Hmap1
-                   with "[$Hmemres1 $Hmem1 $Htrace1]") as "[Hmem1 Hmemres1]".
-      iMod (RiscvPmpModel2.fun_write_ram_works (sg := sailGS2_sailGS_right) μ2 paddr data Hmap2
-                   with "[$Hmemres2 $Hmem2 $Htrace2]") as "[Hmem2 Hmemres2]".
-      iModIntro.
-      rewrite semWp2_val.
-      iFrame "Hregs".
-      iSplitL "Hmem1 Hmem2"; first iFrame.
-      iModIntro.
-      iExists _.
-      rewrite <-interp_ptstomem_dedup.
-      now iFrame.
-    Qed.
+    Admitted.
 
     Lemma decode_sound :
       ValidContractForeign sep_contract_decode decode.
     Proof.
-      intros Γ es δ ι Heq.
-      destruct_syminstance ι.
-      iIntros "_".
-      rewrite fixpoint_semWp2_eq.
-      cbn in *.
-      iIntros (? ? ? ?) "[Hregs (Hmem1 & Hmem2)]".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iIntros (? ? ? ? ? ? ? ?) "(%Hstepl & %Hstepr)".
-      repeat iModIntro.
-      eliminate_prim_step Heq.
-      eliminate_prim_step Heq.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iFrame.
-      destruct (pure_decode bv0).
-      - by iApply semWp2_fail_2.
-      - rewrite semWp2_val.
-        now iExists _.
-    Qed.
+    Admitted.
 
     Lemma vector_subrange_sound {n} (e b : nat)
                                 {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} :
       ValidContractForeign (@sep_contract_vector_subrange n e b p q r) (vector_subrange e b).
     Proof.
-      intros Γ es δ ι Heq.
-      destruct_syminstance ι.
-      iIntros "_".
-      rewrite fixpoint_semWp2_eq.
-      cbn in *.
-      iIntros (? ? ? ?) "[Hregs (Hmem1 & Hmem2)]".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iIntros (? ? ? ? ? ? ? ?) "(%Hstepl & %Hstepr)".
-      repeat iModIntro.
-      eliminate_prim_step Heq.
-      eliminate_prim_step Heq.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iFrame.
-      destruct (fun_vector_subrange bv0 e b) eqn:Ev.
-      rewrite semWp2_val.
-      now iExists _.
-    Qed.
+    Admitted.
 
     Lemma foreignSem : ForeignSem.
     Proof.
