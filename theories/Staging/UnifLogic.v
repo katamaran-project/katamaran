@@ -809,6 +809,22 @@ Module Pred
         now rewrite inst_sub_id in H0.
     Qed.
 
+    Lemma assuming_acc_let_right {w b v P} :
+      assuming (@acc_let_right w b v) P ⊣⊢ forgetting (acc_let_left b v) P.
+    Proof.
+      unfold assuming, forgetting.
+      crushPredEntails3.
+      - change (P (env.snoc (inst (sub_id w) ι) b v)).
+        rewrite inst_sub_id.
+        apply H0.
+        + eapply inst_sub_wk1.
+        + now rewrite instprop_subst inst_sub_wk1.
+      - destruct (env.view ιpast) as [ι' v'].
+        rewrite inst_sub_wk1 in H1; subst.
+        change (P (env.snoc (inst (sub_id w) ι) b v')) in H0.
+        now rewrite inst_sub_id in H0.
+    Qed.
+
   End SubstMod.
 
   Module logicalrelation.
