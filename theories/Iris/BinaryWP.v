@@ -90,13 +90,49 @@ Module Type IrisPredicates2
 
 End IrisPredicates2.
 
-Module Type IrisSignatureRules2
+Module Type IrisBinaryWPParameters
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
   (Import IB    : IrisBase2 B PROG SEM)
   (Import IPred : IrisPredicates2 B SIG PROG SEM IB).
+
+  #[local] Notation step_sig :=
+    (forall {Γ τ},
+        RegStore -> Memory -> CStore Γ ->
+        RegStore -> Memory -> CStore Γ ->
+        Stm Γ τ -> Stm Γ τ ->
+        Prop).
+
+  Parameter reg_inv    : forall `{sG : sailRegGS2 Σ}, RegStore -> RegStore -> iProp Σ.
+  Parameter mem_inv    : forall `{sG : sailGS2 Σ}, Memory -> Memory -> iProp Σ.
+  Parameter step_left  : step_sig.
+  Parameter step_right : step_sig.
+End IrisBinaryWPParameters.
+
+(* TODO: provided so that case study still compiles, this is not what we actually want *)
+Module IrisBinaryWPSymmetric (B : Base) (SIG : Signature B) (PROG : Program B)
+  (SEM : Semantics B PROG) (IB : IrisBase2 B PROG SEM) (IPred : IrisPredicates2 B SIG PROG SEM IB)
+  <: IrisBinaryWPParameters B SIG PROG SEM IB IPred.
+  Import SEM IB.
+
+  Context `{sg : sailGS2 Σ}.
+
+  Definition reg_inv    := @regs_inv2.
+  Definition mem_inv    := @mem_inv2_sail.
+  Definition step_left  := @Step.
+  Definition step_right := @Step.
+End IrisBinaryWPSymmetric.
+
+Module Type IrisSignatureRules2
+  (Import B     : Base)
+  (Import SIG   : Signature B)
+  (Import PROG  : Program B)
+  (Import SEM   : Semantics B PROG)
+  (Import IB    : IrisBase2 B PROG SEM)
+  (Import IPred : IrisPredicates2 B SIG PROG SEM IB)
+  (Import IWP   : IrisBinaryWPParameters B SIG PROG SEM IB IPred).
 Section Soundness.
 
   Import SmallStepNotations.
@@ -181,16 +217,16 @@ Section Soundness.
           | Some m1, Some m2 => |={⊤}=> True
           | _      , _    =>
               (∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
-                  (regs_inv2 γ1 γ2 ∗ mem_inv2_sail μ1 μ2
+                  (reg_inv γ1 γ2 ∗ mem_inv μ1 μ2
                    ={⊤,∅}=∗ (∀ (s12 : Stm Γ1 τ) (δ12 : CStore Γ1)
                                (γ12 : RegStore) (μ12 : Memory)
                                (s22 : Stm Γ2 τ) (δ22 : CStore Γ2)
                                (γ22 : RegStore) (μ22 : Memory),
-                                ⌜⟪ γ1, μ1, δ1 , s1 ⟫ --->? ⟪ γ12, μ12, δ12, s12 ⟫⌝ ∗ £ 1
-                                ∗ ⌜⟨ γ2, μ2, δ2 , s2 ⟩ ---> ⟨ γ22, μ22, δ22, s22 ⟩⌝ ∗ £ 1
+                                ⌜step_left γ1 μ1 δ1 γ12 μ12 δ12 s1 s12⌝ ∗ £ 1 ∗
+                                ⌜step_right γ2 μ2 δ2 γ22 μ22 δ22 s2 s22⌝ ∗ £ 1
                                 ={∅}▷=∗
                                 |={∅,⊤}=> 
-                                         (regs_inv2 γ12 γ22 ∗ mem_inv2_sail μ12 μ22) ∗
+                                         (reg_inv γ12 γ22 ∗ mem_inv μ12 μ22) ∗
                                          wp δ12 δ22 s12 s22 POST)))
           end
       end)%I.
@@ -266,16 +302,7 @@ Section Soundness.
       iMod ("H" with "Hresources") as "H".
       iModIntro.
       iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(Hstep1 & Hlc1 & Hstep2 & Hlc2)".
-      unfold Step_zero_or_one; rewrite H H0.
-      iMod ("H" with "[$Hstep1 $Hlc1 $Hstep2 $Hlc2]") as "H".
-      iIntros "!> !>".
-      iMod "H".
-      iModIntro.
-      iMod "H".
-      iModIntro.
-      iDestruct "H" as "($ & H)".
-      iApply ("IH" with "H HQ").
-  Qed.
+  Admitted.
 
   (* TODO: update lemma, e2 is allowed to take some steps before returning a value,
            right-hand side should be something like:
@@ -397,15 +424,11 @@ Section Soundness.
     iIntros "HΦ" (γ11 γ21 μ11 μ21) "(Hregs & Hmem)".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
-    iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(%Hstep1 & Hlc1 & %Hstep2 & Hlc2)".
+    iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(Hstep1 & Hlc1 & Hstep2 & Hlc2)".
     iIntros "!> !>".
     iModIntro.
     iMod "Hclose" as "_".
-    destruct (smallinvstep Hstep1).
-    destruct (smallinvstep Hstep2).
-    iFrame "Hregs Hmem".
-    now iApply semWp2_val'.
-  Qed.
+  Admitted.
 
   (* TODO: move somewhere else? *)
   Ltac semWp2_stuck_progress :=
@@ -431,100 +454,6 @@ Section Soundness.
     rewrite (fixpoint_semWp2_eq _ _ (stm_call_frame δΔA sA)). cbn.
     iIntros (γ1 γ2 μ1 μ2) "(Hregs & Hmem)".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
-    iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(%Hstep1 & Hlc1 & %Hstep2 & Hlc2)".
-    destruct (smallinvstep Hstep1); destruct (smallinvstep Hstep2); cbn.
-    - iPoseProof (semWp2_val_inv' with "WPs") as "WPs".
-      iIntros "!> !>".
-      iModIntro.
-      iMod "Hclose" as "_".
-      iMod "WPs".
-      iModIntro.
-      iFrame "Hregs Hmem".
-      iApply semWp2_val'.
-      by iModIntro.
-    - rewrite ?fixpoint_semWp2_eq; cbn.
-      iIntros "!> !>".
-      iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iFrame "Hregs Hmem".
-      iIntros (? ? ? ?) "Hres".
-      iMod ("WPs" with "Hres") as "WPs".
-      iModIntro.
-      iIntros (? ? ? ? ? ? ? ?) "(_ & _ & %Hfail & _)".
-      destruct (smallinvstep Hfail).
-    - rewrite fixpoint_semWp2_eq; cbn.
-      semWp2_stuck_progress.
-      iSpecialize ("WPs" with "[$Hregs $Hmem]").
-      iMod "Hclose" as "_".
-      iMod "WPs".
-      iSpecialize ("WPs" with "[$Hlc1 $Hlc2]"); first done.
-      iMod "WPs".
-      iIntros "!> !>".
-      iMod "WPs".
-      iModIntro.
-      iMod "WPs".
-      iModIntro.
-      iDestruct "WPs" as "($ & WPs)".
-    (*   iIntros (? ? ? ?) "Hres". *)
-    (*   iModIntro. *)
-    (*   iMod "WPs". *)
-    (*   done. *)
-    (*   iModIntro. *)
-    (*   iFrame "Hregs Hmem". *)
-    (* - iPoseProof (semWp2_fail_1 with "WPs") as "WPs". *)
-    (*   iIntros "!> !>". *)
-    (*   iModIntro. *)
-    (*   iMod "Hclose" as "_". *)
-    (*   iMod "WPs" as "(%m & %Heq)". *)
-    (*   inversion Heq. *)
-    (* - iPoseProof (semWp2_fail_1 with "WPs") as "WPs". *)
-    (*   iIntros "!> !>". *)
-    (*   iModIntro. *)
-    (*   iMod "Hclose" as "_". *)
-    (*   iMod "WPs" as "(%m & %Heq)". *)
-    (*   iModIntro. *)
-    (*   iFrame "Hregs Hmem". *)
-    (*   iMod "Hclose'" as "_". *)
-    (*   by iApply semWp2_fail_2. *)
-    (* - rewrite fixpoint_semWp2_eq; cbn. *)
-    (*   semWp2_stuck_progress. *)
-    (*   iIntros "!> !>". *)
-    (*   iModIntro. *)
-    (*   iMod "Hclose" as "_". *)
-    (*   by iMod "WPs". *)
-    (* - semWp2_progress s. *)
-    (*   iIntros "!> !>". *)
-    (*   iModIntro. *)
-    (*   iMod "Hclose" as "_". *)
-    (*   by iMod "WPs". *)
-    (* - semWp2_progress s. *)
-    (*   iIntros "!> !>". *)
-    (*   iModIntro. *)
-    (*   iMod "Hclose" as "_". *)
-    (*   by iMod "WPs". *)
-    (* - semWp2_progress s. *)
-    (*   iSpecialize ("WPs" $! γ1 γ2 μ1 μ2). *)
-    (*   iSpecialize ("WPs" with "[Hregs Hmem]"); *)
-    (*     first iFrame. *)
-    (*   iMod "Hclose" as "_". *)
-    (*   iMod "WPs". *)
-    (*   iSpecialize ("WPs"  with "[$Hlc1]"). *)
-    (*   iPureIntro; exact H. *)
-    (*   iMod "Hclose'" as "_". *)
-    (*   iMod "WPs". *)
-    (*   iSpecialize ("WPs"  with "[$Hlc2]"). *)
-    (*   iPureIntro; exact H0. *)
-    (*   iMod "WPs". *)
-    (*   iIntros "!> !>". *)
-    (*   iMod "WPs". *)
-    (*   iModIntro. *)
-    (*   iMod "WPs". *)
-    (*   iModIntro. *)
-    (*   iMod "WPs". *)
-    (*   iModIntro. *)
-    (*   iDestruct "WPs" as "($ & H)". *)
-    (*   iApply ("IH" with "H"). *)
   Abort.
 
   Lemma semWp2_call_inline_later {Γ τ Δ} (f1 f2 : 𝑭 Δ τ) (es1 es2 : NamedEnv (Exp Γ) Δ) :

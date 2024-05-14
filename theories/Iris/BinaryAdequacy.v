@@ -95,7 +95,8 @@ Module Type IrisAdequacy2
   (Import IB    : IrisBase2 B PROG SEM)
   (Import IAP   : IrisAdeqParameters2 B IB PROG SEM IB)
   (Import IPred : IrisPredicates2 B SIG PROG SEM IB)
-  (Import IRules : IrisSignatureRules2 B SIG PROG SEM IB IPred).
+  (Import IWP   : IrisBinaryWPParameters B SIG PROG SEM IB IPred)
+  (Import IRules : IrisSignatureRules2 B SIG PROG SEM IB IPred IWP).
 
   Import SmallStepNotations.
 
