@@ -140,6 +140,7 @@ Module Pred
   Module Import proofmode.
 
     Import iris.bi.interface.
+    Import iris.bi.extensions.
 
     Variant empₚ {w} (ι : Valuation w) : Prop :=
       MkEmp : empₚ ι.
@@ -242,6 +243,9 @@ Module Pred
       derived_connectives.Affine P.
     Proof. constructor. intros ι HP. now constructor. Qed.
 
+
+    #[export] Instance pred_pure_forall {w} : BiPureForall (Pred w).
+    Proof. constructor. crushPredEntails2. Qed.
   End proofmode.
 
   Ltac punfold_connectives :=

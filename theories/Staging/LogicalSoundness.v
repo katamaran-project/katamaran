@@ -237,18 +237,24 @@ Module Soundness
       now exists v.
     Qed.
 
-    (* Lemma refine_demonic (x : option LVar) : *)
-    (*   ℛ⟦∀ σ, RPureSpec (RVal σ)⟧ (SPureSpec.demonic x) CPureSpec.demonic. *)
-    (* Proof. *)
-    (*   intros w0 ι0 Hpc0 σ sΦ cΦ rΦ. *)
-    (*   intros HΦ v. cbn in HΦ. specialize (HΦ v). *)
-    (*   remember (fresh_lvar w0 x) as ℓ. *)
-    (*   revert HΦ. apply rΦ; *)
-    (*     [ (* Boilerplate #1 *) cbn; now rewrite inst_sub_wk1 *)
-    (*     | (* Boilerplate #2 *) cbn; now rewrite instprop_subst, inst_sub_wk1 *)
-    (*     | ]. *)
-    (*   reflexivity. *)
-    (* Qed. *)
+    Lemma refine_demonic (x : option LVar) {w} :
+      ⊢ ℛ⟦∀ᵣ σ, RPureSpec (RVal σ)⟧ CPureSpec.demonic (SPureSpec.demonic (w := w) x).
+    Proof.
+      iIntros (σ k K) "HK HSP".
+      iIntros (v).
+      iSpecialize ("HK" $! _ (acc_snoc_right (b := fresh_lvar w x∷σ))).
+      rewrite assuming_acc_snoc_right_let.
+      iSpecialize ("HK" $! v).
+      iSpecialize ("HSP" $! v).
+      change (_ (wsnoc w (fresh_lvar w x∷σ)) (K (wsnoc w (fresh_lvar w x∷σ)) acc_snoc_right (term_var (fresh_lvar w x)))) with (psafe (K (wsnoc w (fresh_lvar w x∷σ)) acc_snoc_right term_var_zero)).
+      rewrite <-(forgetting_pure (acc_let_left (fresh_lvar w x∷σ) v)).
+      iModIntro.
+      iStopProof.
+      apply entails_let_snoc_wkn.
+      rewrite bi_sep_let_snoc_wkn.
+      iIntros "[Hrep [HK HSP]]".
+      now iSpecialize ("HK" $! v term_var_zero with "Hrep HSP").
+    Qed.
 
   End Monads.
     
