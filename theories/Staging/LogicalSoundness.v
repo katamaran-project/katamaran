@@ -93,8 +93,8 @@ Module Soundness
        | assertk fml msg o =>
            (Obligation msg fml : Pred w) ∧ forgetting (acc_formula_right fml) (psafe o)
        | assumek fml o => (instprop fml : Pred w) → forgetting (acc_formula_right fml) (psafe o)
-       | angelicv b k => ∃ v, forgetting (acc_snoc_left' b (term_val _ v)) (@psafe (wsnoc w b) k)
-       | demonicv b k => ∀ v, forgetting (acc_snoc_left' b (term_val _ v)) (@psafe (wsnoc w b) k)
+       | angelicv b k => ∃ v, forgetting (acc_let_left b v) (@psafe (wsnoc w b) k)
+       | demonicv b k => ∀ v, forgetting (acc_let_left b v) (@psafe (wsnoc w b) k)
        | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
            Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∧
@@ -221,15 +221,21 @@ Module Soundness
     Proof.
       iIntros (σ k K) "HK".
       iIntros "[%v HSP]".
+      change (_ (wsnoc w (fresh_lvar w x∷σ)) (K (wsnoc w (fresh_lvar w x∷σ)) acc_snoc_right (term_var (fresh_lvar w x)))) with (psafe (K (wsnoc w (fresh_lvar w x∷σ)) acc_snoc_right term_var_zero)).
+      rewrite <-(forgetting_pure (acc_let_left (fresh_lvar w x∷σ) v)).
       iSpecialize ("HK" $! _ acc_snoc_right).
-      iPoseProof (assuming_acc_snoc_right with "HK") as "HK".
+      iPoseProof (assuming_acc_snoc_right_let (b := fresh_lvar w x∷σ) with "HK") as "HK".
       iSpecialize ("HK" $! v).
-      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val (type (fresh_lvar w x∷σ)) v)) (P := CPureSpec.angelic σ k)).
       iModIntro.
-      iExists v.
-      iApply ("HK" with "[] HSP").
-      (* DOMI: it would be nice if we were now in a world with a pathcondition saying repₚ v (term_var x) *)
-    Admitted.
+      iStopProof.
+      apply entails_let_snoc_wkn.
+      rewrite bi_sep_let_snoc_wkn.
+      iIntros "[ Hrep [HSP HK] ]".
+      iDestruct ("HK" $! v term_var_zero with "Hrep HSP") as "%Hkv".
+      change (@bi_pure (@bi_pred (wlet w ?b _)) ?P) with (@bi_pure (@bi_pred (wsnoc w b)) P).
+      iPureIntro.
+      now exists v.
+    Qed.
 
     (* Lemma refine_demonic (x : option LVar) : *)
     (*   ℛ⟦∀ σ, RPureSpec (RVal σ)⟧ (SPureSpec.demonic x) CPureSpec.demonic. *)
