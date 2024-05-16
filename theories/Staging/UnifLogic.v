@@ -250,7 +250,7 @@ Module Pred
 
   Ltac punfold_connectives :=
     change (@interface.bi_and (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι /\ Q ι) in * ||
-    change (@interface.bi_sep (@bi_pred _) ?P ?Q ?ι) with (sepₚ P Q ι) in * ||
+    change (@interface.bi_sep (@bi_pred ?w) ?P ?Q ?ι) with (sepₚ (w := w) P Q ι) in * ||
     change (@eqₚ ?T ?A ?instTA ?w ?t1 ?t2 ?ι) with (instprop (wco w) ι -> inst t1 ι = inst t2 ι) in * ||
     change (@repₚ ?T ?A ?instTA ?t2 ?w ?t1 ?ι) with (instprop (wco w) ι -> inst t1 ι = t2) in *||
     change (@interface.bi_emp (@bi_pred _) ?ι) with (empₚ ι) in *||
@@ -958,13 +958,7 @@ Module Pred
 
     Lemma bi_sep_let_snoc_wkn {w b v} {P Q} :
       @bientails (wsnoc w b) (bi_sep (PROP := bi_pred (w := wlet w b v)) P Q)%I (bi_sep (PROP := bi_pred (w := wsnoc w b)) P Q)%I.
-    Proof.
-      crushPredEntails3.
-      - change (sepₚ (w := wsnoc w b) P Q ι).
-        crushPredEntails3.
-      - change (sepₚ (w := wsnoc w b) P Q ι) in H0.
-        crushPredEntails3.
-    Qed.
+    Proof. crushPredEntails3. Qed.
     
   End SubstMod.
 
