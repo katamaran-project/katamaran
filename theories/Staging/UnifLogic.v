@@ -575,6 +575,15 @@ Module Pred
       now rewrite <-H1, <-inst_subst, <-sub_acc_trans.
     Qed.
 
+    Lemma forgetting_unconditionally_drastic {w1 w2} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
+      forgetting ω (unconditionally P) ⊢ P _ ω.
+    Proof.
+      unfold forgetting, unconditionally, assuming.
+      constructor.
+      intros.
+      now apply (H0 w1 ω ι).
+    Qed.
+
     Lemma unconditionally_T {w} (P : (□ Pred) w) :
       unconditionally P ⊢ T P.
     Proof.

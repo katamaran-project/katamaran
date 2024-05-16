@@ -251,78 +251,112 @@ Module Soundness
 
   End Monads.
     
-  (* Section Basics. *)
+  Section Basics.
 
-  (*     Import logicalrelation. *)
-  (*   Import ufl_notations. *)
+    Import logicalrelation.
+    Import ufl_notations.
 
-  (*   #[export] Instance RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) := *)
-  (*     RInst (SStore Γ) (CStore Γ). *)
+    #[export] Instance RHeapSpec [SA CA] (RA : Rel SA CA) :
+      Rel (SHeapSpec SA) (CHeapSpec CA) := □ᵣ(RA -> RHeap -> ℙ) -> RHeap -> ℙ.
 
-  (*   #[export] Instance RStoreSpec Γ1 Γ2 `(R : Rel AT A) : *)
-  (*     Rel (SStoreSpec Γ1 Γ2 AT) (CStoreSpec Γ1 Γ2 A) := *)
-  (*     □ᵣ (R -> RStore Γ2 -> RHeap -> ℙ) -> RStore Γ1 -> RHeap -> ℙ. *)
+    #[export] Instance RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
+      RInst (SStore Γ) (CStore Γ).
 
-  (*   Lemma refine_evalStoreSpec {Γ1 Γ2} `{RA : Rel SA CA} {w : World} : *)
-  (*     ⊢ ℛ⟦RStoreSpec Γ1 Γ2 RA -> RStore Γ1 -> RHeapSpec RA⟧ *)
-  (*       CStoreSpec.evalStoreSpec w (fun w => SStoreSpec.evalStoreSpec w). *)
-  (*   Proof. *)
-  (*     unfold SStoreSpec.evalStoreSpec, CStoreSpec.evalStoreSpec. *)
-  (*     iIntros. *)
-  (*     intros w ι Hpc sm cm rm sδ cδ rδ sΦ cΦ rΦ. apply rm; auto. *)
-  (*     intros w1 r01 ι1 Hι1 Hpc1 sa ca ra _ _ _. apply rΦ; auto. *)
-  (*   Qed. *)
+    #[export] Instance RStoreSpec Γ1 Γ2 `(R : Rel AT A) :
+      Rel (SStoreSpec Γ1 Γ2 AT) (CStoreSpec Γ1 Γ2 A) :=
+      □ᵣ (R -> RStore Γ2 -> RHeap -> ℙ) -> RStore Γ1 -> RHeap -> ℙ.
 
-  (*   Lemma refine_lift_purem {Γ} `{R : Rel AT A} : *)
-  (*     ℛ⟦RPureSpec R -> RStoreSpec Γ Γ R⟧ *)
-  (*       SStoreSpec.lift_purem CStoreSpec.lift_purem. *)
-  (*   Proof. *)
-  (*     unfold RPureSpec, RStoreSpec, SStoreSpec.lift_purem, CStoreSpec.lift_purem. *)
-  (*     intros w ι Hpc ms mc Hm POST__s POST__c HPOST. *)
-  (*     intros δs δc Hδ hs hc Hh. apply Hm. *)
-  (*     intros w1 r01 ι1 Hι1 Hpc1 a1 a Ha. *)
-  (*     eapply refine_apply; eauto. *)
-  (*     eapply refine_apply; eauto. *)
-  (*     eapply refine_apply; eauto. *)
-  (*     eapply refine_inst_persist; eauto. *)
-  (*     eapply refine_inst_persist; eauto. *)
-  (*   Qed. *)
+    Lemma refine_evalStoreSpec {Γ1 Γ2} `{RA : Rel SA CA} {w : World} :
+      ⊢ (ℛ⟦RStoreSpec Γ1 Γ2 RA -> RStore Γ1 -> RHeapSpec RA⟧
+           CStoreSpec.evalStoreSpec (fun w => SStoreSpec.evalStoreSpec w) : Pred w).
+    Proof.
+      unfold SStoreSpec.evalStoreSpec, CStoreSpec.evalStoreSpec.
+      iIntros (ss tss) "Hss".
+      iIntros (s ts) "Hs".
+      iIntros (k ks) "Hk".
+      iIntros (h hs) "Hh".
+      iIntros "Hsym".
+      iApply ("Hss" with "[Hk] Hs Hh Hsym").
+      iIntros (w' ω).
+      iSpecialize ("Hk" $! _ ω).
+      iModIntro.
+      iIntros (a ta) "Ha".
+      iIntros (s2 ts2) "Hs2".
+      iIntros (h2 th2) "Hh2".
+      now iApply ("Hk" with "Ha Hh2").
+    Qed.
 
-  (*   Lemma refine_block {Γ1 Γ2} `{R : Rel AT A} : *)
-  (*     ℛ⟦RStoreSpec Γ1 Γ2 R⟧ SStoreSpec.block CStoreSpec.block. *)
-  (*   Proof. constructor. Qed. *)
+    Lemma refine_lift_purem {Γ} `{R : Rel AT A} {w : World}:
+      ⊢ ℛ⟦RPureSpec R -> RStoreSpec Γ Γ R⟧
+        CStoreSpec.lift_purem (SStoreSpec.lift_purem (w := w)).
+    Proof.
+      unfold RPureSpec, RStoreSpec, SStoreSpec.lift_purem, CStoreSpec.lift_purem.
+      iIntros (p ps) "Hp".
+      iIntros (k ks) "Hk".
+      iIntros (s ss) "Hs".
+      iIntros (h hs) "Hh".
+      iApply "Hp".
+      iIntros (w' ω).
+      iSpecialize ("Hk" $! _ ω).
+      iModIntro.
+      iIntros (k2 k2s) "Hk2".
+      iApply ("Hk" with "Hk2 [Hs]").
+      - iApply (refine_inst_persist s).
+        now iModIntro.
+      - iApply (refine_inst_persist h).
+        now iModIntro.
+    Qed.
 
-  (*   Lemma refine_error `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} : *)
-  (*     forall (cm : CStoreSpec Γ1 Γ2 A), *)
-  (*       ℛ⟦RMsg _ (RStoreSpec Γ1 Γ2 R)⟧ SStoreSpec.error cm. *)
-  (*   Proof. intros cm w ι Hpc msg POST__s POST__c HPOST δs δc Hδ hs hc Hh []. Qed. *)
+    Lemma refine_block_store {Γ1 Γ2} `{R : Rel AT A} {w : World} :
+      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R⟧ CStoreSpec.block (SStoreSpec.block (w := w)).
+    Proof.
+      iIntros (k ks) "Hk".
+      iIntros (s ss) "Hs".
+      iIntros (h hs) "Hh _".
+      now iPureIntro.
+    Qed.
 
-  (*   Lemma refine_pure `{R : Rel AT A} {Γ} : *)
-  (*     ℛ⟦R -> RStoreSpec Γ Γ R⟧ SStoreSpec.pure CStoreSpec.pure. *)
-  (*   Proof. *)
-  (*     unfold SStoreSpec.pure, CStoreSpec.pure. *)
-  (*     intros w ι Hpc t v Htv POST__s POST__c HPOST. *)
-  (*     eapply refine_apply; eauto. *)
-  (*     eapply refine_T; eauto. *)
-  (*   Qed. *)
+    Lemma refine_error_ss `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} {w : World} :
+      forall (cm : CStoreSpec Γ1 Γ2 A),
+        ⊢ ℛ⟦RMsg _ (RStoreSpec Γ1 Γ2 R)⟧ cm (SStoreSpec.error (w := w)).
+    Proof.
+      iIntros (cm msg k ks) "Hk".
+      iIntros (s ss) "Hs".
+      iIntros (h hs) "Hh []".
+    Qed.
 
-  (*   Lemma refine_bind `{RA : Rel AT A, RB : Rel BT B} {Γ1 Γ2 Γ3} : *)
-  (*     forall (w : World) (ι : Valuation w), *)
-  (*       ℛ⟦RStoreSpec Γ1 Γ2 RA -> □(RA -> RStoreSpec Γ2 Γ3 RB) -> RStoreSpec Γ1 Γ3 RB⟧@{ι} *)
-  (*         (SStoreSpec.bind (w := w)) CStoreSpec.bind. *)
-  (*   Proof. *)
-  (*     unfold SStoreSpec.bind, CStoreSpec.bind. *)
-  (*     intros w ι ms mc Hm fs fc Hf POST__s POST__c HPOST δs δc Hδ hs hc Hh. *)
-  (*     apply Hm; eauto. intros w1 r01 ι1 Hι1 Hpc1 t v Htv. *)
-  (*     eapply refine_apply; eauto. *)
-  (*     eapply refine_apply; eauto. *)
-  (*     eapply refine_four; eauto. *)
-  (*   Qed. *)
+    Lemma refine_pure_ss `{R : Rel AT A} {Γ} {w : World} :
+      ⊢ ℛ⟦R -> RStoreSpec Γ Γ R⟧ CStoreSpec.pure (SStoreSpec.pure (w := w)).
+    Proof.
+      unfold SStoreSpec.pure, CStoreSpec.pure.
+      iIntros (r rs) "Hr".
+      iIntros (k ks) "Hk".
+      iIntros (s ss) "Hs".
+      iIntros (h hs) "Hh HPS".
+      iMod "Hk".
+      now iApply ("Hk" with "Hr Hs Hh HPS").
+    Qed.
 
-  (*   Lemma refine_bind' `{RA : Rel AT A, RB : Rel BT B} {Γ1 Γ2 Γ3} : *)
-  (*     ℛ⟦RStoreSpec Γ1 Γ2 RA -> □(RA -> RStoreSpec Γ2 Γ3 RB) -> RStoreSpec Γ1 Γ3 RB⟧ *)
-  (*       SStoreSpec.bind CStoreSpec.bind. *)
-  (*   Proof. intros ? ? _. apply refine_bind. Qed. *)
+    Lemma refine_bind_ss `{RA : Rel AT A, RB : Rel BT B} {Γ1 Γ2 Γ3} {w : World} :
+      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 RA -> □ᵣ(RA -> RStoreSpec Γ2 Γ3 RB) -> RStoreSpec Γ1 Γ3 RB⟧
+        CStoreSpec.bind (SStoreSpec.bind (w := w)).
+    Proof.
+      unfold SStoreSpec.bind, CStoreSpec.bind.
+      iIntros (m ms) "Hm".
+      iIntros (c cs) "Hc".
+      iIntros (k ks) "Hk".
+      iIntros (s ss) "Hs".
+      iIntros (h hs) "Hh HPS".
+      iApply ("Hm" with "[Hk Hc] Hs Hh HPS").
+      iIntros (w' ω).
+      iModIntro.
+      iPoseProof (forgetting_unconditionally_drastic with "Hc") as "Hc".
+      iPoseProof (forgetting_unconditionally with "Hk") as "Hk".
+      iIntros (a aas) "Ha".
+      iIntros (s2 s2s) "Hs".
+      iIntros (h2 h2s) "Hh".
+      now iApply ("Hc" with "Ha Hk Hs Hh").
+    Qed.
 
   (*   Lemma refine_angelic (x : option LVar) {Γ} : *)
   (*     ℛ⟦∀ σ, RStoreSpec Γ Γ (RVal σ)⟧ (SStoreSpec.angelic x) CStoreSpec.angelic. *)
@@ -390,7 +424,7 @@ Module Soundness
   (*     apply Hm1; auto. apply Hm2; auto. *)
   (*   Qed. *)
 
-  (* End Basics. *)
+  End Basics.
 
   (* Section AssumeAssert. *)
 
