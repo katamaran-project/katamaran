@@ -309,6 +309,17 @@ Module Type WorldsOn
         with (subst pc ς).
       now rewrite <-subst_sub_comp, sub_comp_wk1_tail, subst_sub_id.
     Defined.
+
+    Program Definition acc_let_snoc {w} (b : LVar ∷ Ty) v : wsnoc w b ⊒ wlet w b v :=
+      acc_sub (sub_id (w ▻ b) : Sub (wsnoc w b) (wlet w b v)) _.
+    Next Obligation.
+      intros * ι.
+      destruct (env.view ι) as [ι v'].
+      unfold wlet; simpl.
+      intros Hpc.
+      destruct (proj1 (instprop_snoc _ _ _) Hpc) as [Hpc' H].
+      now rewrite instprop_subst, inst_sub_id.
+    Defined.
     
     Lemma acc_let_iso w b v : IsIsomorphism (@acc_let_right w b v) (acc_let_left b v).
     Proof.

@@ -559,6 +559,13 @@ Module Pred
       crushPredEntails3.
     Qed.
 
+    Lemma assuming_pure {w1 w2} (ω : w2 ⊒ w1) {P} :
+      bi_pure P ⊢ assuming ω (bi_pure P).
+    Proof.
+      unfold assuming.
+      crushPredEntails3.
+    Qed.
+
     Lemma forgetting_unconditionally {w1 w2} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
       forgetting ω (unconditionally P) ⊢ unconditionally (four P ω).
     Proof.
@@ -858,12 +865,12 @@ Module Pred
       crushPredEntails3.
       - destruct (env.view x) as [ιp v].
         exists v.
-        change (P (env.snoc (inst (sub_id w) ι) b v)).
+        change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b v).
         rewrite inst_sub_id.
         rewrite inst_sub_wk1 in H0.
         now subst.
       - exists (env.snoc ι b x).
-        change (P (env.snoc (inst (sub_id w) ι) b x)) in H0.
+        change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b x) in H0.
         rewrite inst_sub_id in H0.
         repeat split; eauto using inst_sub_wk1.
         now rewrite instprop_subst inst_sub_wk1.
@@ -873,6 +880,13 @@ Module Pred
       assuming (@acc_snoc_right w b) P ⊢ assuming (@acc_let_right w b v) P.
     Proof.
       unfold assuming.
+      now crushPredEntails3.
+    Qed.
+
+    Lemma forgetting_acc_snoc_left_repₚ {w1 w2 b} {ω : Acc w1 w2} {v} :
+      ⊢ forgetting (acc_snoc_left ω b (term_val _ v)) (repₚ v term_var_zero).
+    Proof.
+      unfold forgetting.
       now crushPredEntails3.
     Qed.
 
@@ -889,8 +903,9 @@ Module Pred
       - destruct (env.view ιpast) as [ι' v].
         rewrite inst_sub_wk1 in H1; subst.
         specialize (H0 v).
-        change (P (env.snoc (inst (sub_id w) ι) b v)) in H0.
-        now rewrite inst_sub_id in H0.
+        change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b v) in H0.
+        rewrite inst_sub_id in H0.
+        now apply H0.
     Qed.
 
     Lemma assuming_acc_snoc_right_let {w b} {P : Pred (wsnoc w b)} :

@@ -93,8 +93,8 @@ Module Soundness
        | assertk fml msg o =>
            (Obligation msg fml : Pred w) ∧ forgetting (acc_formula_right fml) (psafe o)
        | assumek fml o => (instprop fml : Pred w) → forgetting (acc_formula_right fml) (psafe o)
-       | angelicv b k => ∃ v, forgetting (acc_let_left b v) (@psafe (wsnoc w b) k)
-       | demonicv b k => ∀ v, forgetting (acc_let_left b v) (@psafe (wsnoc w b) k)
+       | angelicv b k => knowing acc_snoc_right (@psafe (wsnoc w b) k)
+       | demonicv b k => assuming acc_snoc_right (@psafe (wsnoc w b) k)
        | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
            Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∧
@@ -219,41 +219,34 @@ Module Soundness
     Lemma refine_angelic (x : option LVar) {w} :
       ⊢ ℛ⟦∀ᵣ σ, RPureSpec (RVal σ)⟧ CPureSpec.angelic (SPureSpec.angelic (w := w) x).
     Proof.
+      unfold SPureSpec.angelic; simpl.
       iIntros (σ k K) "HK".
+      rewrite knowing_acc_snoc_right.
       iIntros "[%v HSP]".
-      change (_ (wsnoc w (fresh_lvar w x∷σ)) (K (wsnoc w (fresh_lvar w x∷σ)) acc_snoc_right (term_var (fresh_lvar w x)))) with (psafe (K (wsnoc w (fresh_lvar w x∷σ)) acc_snoc_right term_var_zero)).
-      rewrite <-(forgetting_pure (acc_let_left (fresh_lvar w x∷σ) v)).
       iSpecialize ("HK" $! _ acc_snoc_right).
-      iPoseProof (assuming_acc_snoc_right_let (b := fresh_lvar w x∷σ) with "HK") as "HK".
+      rewrite assuming_acc_snoc_right.
       iSpecialize ("HK" $! v).
+      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v))).
+      iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep".
       iModIntro.
-      iStopProof.
-      apply entails_let_snoc_wkn.
-      rewrite bi_sep_let_snoc_wkn.
-      iIntros "[ Hrep [HSP HK] ]".
-      iDestruct ("HK" $! v term_var_zero with "Hrep HSP") as "%Hkv".
-      change (@bi_pure (@bi_pred (wlet w ?b _)) ?P) with (@bi_pure (@bi_pred (wsnoc w b)) P).
-      iPureIntro.
-      now exists v.
+      iDestruct ("HK" with "Hrep HSP") as "%Hkv".
+      now iExists v.
     Qed.
 
     Lemma refine_demonic (x : option LVar) {w} :
       ⊢ ℛ⟦∀ᵣ σ, RPureSpec (RVal σ)⟧ CPureSpec.demonic (SPureSpec.demonic (w := w) x).
     Proof.
+      unfold SPureSpec.angelic; simpl.
       iIntros (σ k K) "HK HSP".
       iIntros (v).
       iSpecialize ("HK" $! _ (acc_snoc_right (b := fresh_lvar w x∷σ))).
-      rewrite assuming_acc_snoc_right_let.
+      rewrite !assuming_acc_snoc_right.
+      iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep".
       iSpecialize ("HK" $! v).
       iSpecialize ("HSP" $! v).
-      change (_ (wsnoc w (fresh_lvar w x∷σ)) (K (wsnoc w (fresh_lvar w x∷σ)) acc_snoc_right (term_var (fresh_lvar w x)))) with (psafe (K (wsnoc w (fresh_lvar w x∷σ)) acc_snoc_right term_var_zero)).
-      rewrite <-(forgetting_pure (acc_let_left (fresh_lvar w x∷σ) v)).
+      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v))).
       iModIntro.
-      iStopProof.
-      apply entails_let_snoc_wkn.
-      rewrite bi_sep_let_snoc_wkn.
-      iIntros "[Hrep [HK HSP]]".
-      now iSpecialize ("HK" $! v term_var_zero with "Hrep HSP").
+      now iSpecialize ("HK" with "Hrep HSP").
     Qed.
 
   End Monads.
