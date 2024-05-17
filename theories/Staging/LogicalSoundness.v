@@ -281,8 +281,6 @@ Module Soundness
                    ).
             intros.
             now rewrite inst_env_snoc.
-
-            admit.
     Qed.
 
     (* Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} : *)
