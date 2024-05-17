@@ -40,6 +40,7 @@ From stdpp Require Import base.
 From Katamaran Require Import
      Prelude
      Base
+     Environment
      (* Shallow.Monads *)
      (* Symbolic.Monads *)
      (* Symbolic.Propositions *)
@@ -597,6 +598,25 @@ Module Pred
       ⊢ repₚ v (lift v : AT w).
     Proof.
       crushPredEntails3.
+    Qed.
+
+    Lemma repₚ_triv {T : LCtx -> Type} `{Inst T A} {a : A} {w : World} {vt : T w}:
+      (∀ ι : Valuation w, inst vt ι = a) ->
+      ⊢ repₚ a vt.
+    Proof.
+      crushPredEntails3.
+    Qed.
+
+    Lemma repₚ_cong₂ {T1 : LCtx -> Type} `{Inst T1 A1}
+      {T2 : LCtx -> Type} `{Inst T2 A2}
+      {T3 : LCtx -> Type} `{Inst T3 A3}
+      (f : A1 -> A2 -> A3) {w : World} (fs : T1 w -> T2 w -> T3 w)
+      {v1 : A1} {vs1 : T1 w} {v2 : A2} {vs2 : T2 w} :
+      (∀ (ι : Valuation w) vs1 vs2, inst (fs vs1 vs2) ι = f (inst vs1 ι) (inst vs2 ι)) ->
+      repₚ v1 vs1 ∗ repₚ v2 vs2 ⊢ repₚ (f v1 v2) (fs vs1 vs2).
+    Proof.
+      crushPredEntails3.
+      now rewrite H2 H4 H6.
     Qed.
 
     Lemma forgetting_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
