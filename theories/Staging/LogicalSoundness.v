@@ -1214,7 +1214,7 @@ Module Soundness
       now iApply refine_demonic.
     Qed.
 
-    Lemma refine_angelic_ctx {N : Set} {n : N -> LVar} {Γ} {w} :
+    Lemma refine_angelic_ctx_ss {N : Set} {n : N -> LVar} {Γ} {w} :
       ⊢ ℛ⟦∀ᵣ Δ, RStoreSpec Γ Γ (RNEnv N Δ)⟧
         CStoreSpec.angelic_ctx (SStoreSpec.angelic_ctx (w := w) n).
     Proof.
@@ -1222,8 +1222,6 @@ Module Soundness
       iIntros (Δ).
       iApply (refine_lift_purem (R := RNEnv N Δ)).
       iApply refine_angelic_ctx.
-      intros w ι Hpc Δ. apply refine_lift_purem; auto.
-      apply RPureSpec.refine_angelic_ctx; auto.
     Qed.
 
   (*   Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} {Γ} : *)
