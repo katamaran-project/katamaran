@@ -276,6 +276,13 @@ Module Type WorldsOn
           wiso_back : forall ι, instprop (wco w2) ι -> inst (sub_acc ω21) (inst (sub_acc ω12) ι) = ι
         }.
 
+    Lemma iso_symm {w1 w2} {ω12 : w1 ⊒ w2} {ω21 : w2 ⊒ w1} :
+      IsIsomorphism ω12 ω21 -> IsIsomorphism ω21 ω12.
+    Proof.
+      intros [Ht Hb].
+      now constructor.
+    Qed.
+
     Definition Box (A : TYPE) : TYPE :=
       fun w0 => forall w1, w0 ⊒ w1 -> A w1.
 
@@ -302,8 +309,19 @@ Module Type WorldsOn
         with (subst pc ς).
       now rewrite <-subst_sub_comp, sub_comp_wk1_tail, subst_sub_id.
     Defined.
+
+    Program Definition acc_let_snoc {w} (b : LVar ∷ Ty) v : wsnoc w b ⊒ wlet w b v :=
+      acc_sub (sub_id (w ▻ b) : Sub (wsnoc w b) (wlet w b v)) _.
+    Next Obligation.
+      intros * ι.
+      destruct (env.view ι) as [ι v'].
+      unfold wlet; simpl.
+      intros Hpc.
+      destruct (proj1 (instprop_snoc _ _ _) Hpc) as [Hpc' H].
+      now rewrite instprop_subst, inst_sub_id.
+    Defined.
     
-    Lemma acc_let_iso {w b v} : IsIsomorphism (@acc_let_right w b v) (acc_let_left b v).
+    Lemma acc_let_iso w b v : IsIsomorphism (@acc_let_right w b v) (acc_let_left b v).
     Proof.
       constructor; intros; simpl.
       - now rewrite inst_sub_snoc, inst_sub_id, inst_sub_wk1.
