@@ -253,54 +253,51 @@ Module Soundness
       ⊢ ℛ⟦∀ᵣ Δ, RPureSpec (RNEnv N Δ)⟧
         CPureSpec.angelic_ctx (SPureSpec.angelic_ctx (w := w) n).
     Proof.
-      iIntros (Δ). iStopProof.
-      induction Δ; iIntros "_";
-      iIntros (k K) "HK HSP".
-      - iMod "HK".
-        iApply ("HK" $! [env] [env] with "[] HSP").
-        unfold RNEnv; simpl.
+      iIntros (Δ).
+      iInduction Δ as [|Δ IHΔ b] "Hind";
+        unfold SPureSpec.angelic_ctx, CPureSpec.angelic_ctx.
+      - iApply (refine_pure (RA := RNEnv N [ctx])).
         now iApply (repₚ_triv (T := λ Σ, NamedEnv (Term Σ) [ctx])).
-      - unfold SPureSpec.angelic_ctx, CPureSpec.angelic_ctx.
-        iApply (refine_bind (RA := RNEnv N Δ) (RB := RNEnv N (Δ ▻ b)) with "[] [] HK HSP").
-        + now iApply IHΔ.
-        + iIntros (w1 ω1).
-          iModIntro.
-          iIntros (v vs) "Hv".
-          iApply (refine_bind (RA := RVal (type b)) (RB := RNEnv N (Δ ▻ b))).
-          * now iApply refine_angelic.
-          * iIntros (w2 ω2).
-            iModIntro.
-            iIntros (v2 vs2) "Hv2".
-            iApply (refine_pure (RA := RNEnv N (Δ ▻ b))).
-            simpl.
-            rewrite <-forgetting_repₚ.
-            iApply (repₚ_cong₂ (T1 := λ Σ, NamedEnv (Term Σ) Δ) (T2 := fun Σ => Term Σ (type b))
-                      (T3 := λ Σ, NamedEnv (Term Σ) (Δ ▻ b))
-                      (fun v v2 => v.[b ↦ v2]) (fun vs vs2 => vs.[ b ↦ vs2 ])
-                      with "[$Hv $Hv2]"
-                   ).
-            intros.
-            now rewrite inst_env_snoc.
+      - iApply (refine_bind (RA := RNEnv N Δ) (RB := RNEnv N (Δ ▻ b)) with "Hind []").
+        iIntros (w1 ω1) "!> %v %vs Hv".
+        iApply (refine_bind (RA := RVal (type b)) (RB := RNEnv N (Δ ▻ b))).
+        { now iApply refine_angelic. }
+        iIntros (w2 ω2) "!> %v2 %vs2 Hv2".
+        iApply (refine_pure (RA := RNEnv N (Δ ▻ b))).
+        simpl. rewrite <-forgetting_repₚ.
+        iApply (repₚ_cong₂ (T1 := λ Σ, NamedEnv (Term Σ) Δ) (T2 := fun Σ => Term Σ (type b))
+                  (T3 := λ Σ, NamedEnv (Term Σ) (Δ ▻ b))
+                  (fun v v2 => v.[b ↦ v2]) (fun vs vs2 => vs.[ b ↦ vs2 ])
+                 with "[$Hv $Hv2]"
+               ).
+        intros. now rewrite inst_env_snoc.
     Qed.
 
-    (* Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} : *)
-    (*   ℛ⟦∀ Δ : NCtx N Ty, RPureSpec (RNEnv Δ)⟧ *)
-    (*     (SPureSpec.demonic_ctx n) CPureSpec.demonic_ctx. *)
-    (* Proof. *)
-    (*   intros w ι Hpc Δ; revert w ι Hpc; induction Δ as [|Δ IHΔ [x σ]]; *)
-    (*     intros w0 ι0 Hpc0; cbn [SPureSpec.demonic_ctx CPureSpec.demonic_ctx]. *)
-    (*   - now apply refine_pure. *)
-    (*   - eapply refine_bind; auto. *)
-    (*     intros w1 ω01 ι1 Hι1 Hpc1. *)
-    (*     intros svs cvs rvs. *)
-    (*     eapply refine_bind; auto. *)
-    (*     apply refine_demonic; auto. *)
-    (*     intros w2 ω12 ι2 Hι2 Hpc2. *)
-    (*     intros sv cv rv. *)
-    (*     apply refine_pure; auto. *)
-    (*     apply refine_env_snoc; auto. *)
-    (*     eapply refine_inst_persist; eauto. *)
-    (* Qed. *)
+    Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} {w} :
+      ⊢ ℛ⟦∀ᵣ Δ : NCtx N Ty, RPureSpec (RNEnv N Δ)⟧
+        CPureSpec.demonic_ctx (SPureSpec.demonic_ctx (w := w) n).
+    Proof.
+      iIntros (Δ).
+      iInduction Δ as [|Δ IHΔ b] "Hind";
+        unfold SPureSpec.demonic_ctx, CPureSpec.demonic_ctx.
+      - iApply (refine_pure (RA := RNEnv N [ctx])).
+        now iApply (repₚ_triv (T := λ Σ, NamedEnv (Term Σ) [ctx])).
+      - iApply (refine_bind (RA := RNEnv N Δ) (RB := RNEnv N (Δ ▻ b)) with "Hind []").
+        iIntros (w1 ω1) "!> %v %vs Hv".
+        iApply (refine_bind (RA := RVal (type b)) (RB := RNEnv N (Δ ▻ b))).
+        { now iApply refine_demonic. }
+        iIntros (w2 ω2) "!> %v2 %vs2 Hv2".
+        iApply (refine_pure (RA := RNEnv N (Δ ▻ b))).
+        simpl.
+        rewrite <-forgetting_repₚ.
+        iApply (repₚ_cong₂ (T1 := λ Σ, NamedEnv (Term Σ) Δ) (T2 := fun Σ => Term Σ (type b))
+                  (T3 := λ Σ, NamedEnv (Term Σ) (Δ ▻ b))
+                  (fun v v2 => v.[b ↦ v2]) (fun vs vs2 => vs.[ b ↦ vs2 ])
+                 with "[$Hv $Hv2]"
+               ).
+        intros.
+        now rewrite inst_env_snoc.
+    Qed.
 
     (* Lemma refine_assert_pathcondition : *)
     (*   ℛ⟦RMsg _ (RPathCondition -> RPureSpec RUnit)⟧ *)
@@ -1122,7 +1119,7 @@ Module Soundness
       now iApply ("Hk" with "Ha Hh2").
     Qed.
 
-    Lemma refine_lift_purem {Γ} `{R : Rel AT A} {w : World}:
+    Lemma refine_lift_purem {Γ} `(R : Rel AT A) {w : World}:
       ⊢ ℛ⟦RPureSpec R -> RStoreSpec Γ Γ R⟧
         CStoreSpec.lift_purem (SStoreSpec.lift_purem (w := w)).
     Proof.
@@ -1199,7 +1196,7 @@ Module Soundness
     Proof.
       unfold SStoreSpec.angelic, CStoreSpec.angelic.
       iIntros (σ).
-      iApply (refine_lift_purem (R := RVal σ)).
+      iApply (refine_lift_purem (RVal σ)).
       now iApply refine_angelic.
     Qed.
 
@@ -1208,7 +1205,7 @@ Module Soundness
     Proof.
       unfold SStoreSpec.angelic, CStoreSpec.angelic.
       iIntros (σ).
-      iApply (refine_lift_purem (R := RVal σ)).
+      iApply (refine_lift_purem (RVal σ)).
       now iApply refine_demonic.
     Qed.
 
@@ -1218,18 +1215,19 @@ Module Soundness
     Proof.
       unfold SStoreSpec.angelic_ctx, CStoreSpec.angelic_ctx.
       iIntros (Δ).
-      iApply (refine_lift_purem (R := RNEnv N Δ)).
+      iApply (refine_lift_purem (RNEnv N Δ)).
       iApply refine_angelic_ctx.
     Qed.
 
-  (*   Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} {Γ} : *)
-  (*     ℛ⟦∀ Δ, RStoreSpec Γ Γ (RNEnv Δ)⟧ *)
-  (*       (SStoreSpec.demonic_ctx n) CStoreSpec.demonic_ctx. *)
-  (*   Proof. *)
-  (*     unfold SStoreSpec.demonic_ctx, CStoreSpec.demonic_ctx. *)
-  (*     intros w ι Hpc Δ. apply refine_lift_purem; auto. *)
-  (*     apply RPureSpec.refine_demonic_ctx; auto. *)
-  (*   Qed. *)
+    Lemma refine_demonic_ctx_ss {N : Set} {n : N -> LVar} {Γ} {w} :
+      ⊢ ℛ⟦∀ᵣ Δ, RStoreSpec Γ Γ (RNEnv N Δ)⟧
+        CStoreSpec.demonic_ctx (SStoreSpec.demonic_ctx (w := w) n).
+    Proof.
+      unfold SStoreSpec.demonic_ctx, CStoreSpec.demonic_ctx.
+      iIntros (Δ).
+      iApply (refine_lift_purem (RNEnv N Δ)).
+      iApply refine_demonic_ctx.
+    Qed.
 
   (*   Lemma refine_debug {AT A} `{R : Rel AT A} *)
   (*     {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0) *)
