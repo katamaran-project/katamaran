@@ -83,6 +83,16 @@ Module Soundness
     Inductive DebugPred (B : LCtx → Type) {w : World} (b : B w) (P : Pred w) : Pred w := 
         MkDebugPred : ∀ w, P w -> DebugPred B b P w.
 
+    Section DebugPred.
+      Lemma elim_debugPred {B : LCtx → Type} {w : World} {b : B w} {P : Pred w} :
+        DebugPred B b P ⊢ P.
+      Proof.
+        crushPredEntails3.
+        now destruct H0.
+      Qed.
+    End DebugPred.
+
+
     (* nicer version of wsafe *)
     Fixpoint psafe {w : World} (p : SymProp w) : Pred w := 
       (match p with
@@ -359,21 +369,24 @@ Module Soundness
     (*   rsolve. apply refine_assume_pathcondition; cbn in *; intuition auto. *)
     (* Qed. *)
 
-    (* Lemma refine_angelic_binary `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧ *)
-    (*       SPureSpec.angelic_binary CPureSpec.angelic_binary. *)
-    (* Proof. *)
-    (*   unfold RPureSpec, SPureSpec.angelic_binary, CPureSpec.angelic_binary. *)
-    (*   rsolve. apply refine_symprop_angelic_binary; rsolve. *)
-    (* Qed. *)
+    Lemma refine_angelic_binary `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧
+        CPureSpec.angelic_binary (SPureSpec.angelic_binary (w := w)).
+    Proof.
+      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %k %ks Hk [HSP | HSP]".
+      - iLeft. iApply ("Hc1" with "Hk HSP").
+      - iRight. iApply ("Hc2" with "Hk HSP").
+    Qed.
 
-    (* Lemma refine_demonic_binary `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧ *)
-    (*       SPureSpec.demonic_binary CPureSpec.demonic_binary. *)
-    (* Proof. *)
-    (*   unfold RPureSpec, SPureSpec.demonic_binary, CPureSpec.demonic_binary. *)
-    (*   rsolve. apply refine_symprop_demonic_binary; rsolve. *)
-    (* Qed. *)
+    Lemma refine_demonic_binary `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧
+        CPureSpec.demonic_binary (SPureSpec.demonic_binary (w := w)).
+    Proof.
+      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %k %ks #Hk [HSP1 HSP2]".
+      iSplitL "Hc1 HSP1".
+      - iApply ("Hc1" with "Hk HSP1").
+      - iApply ("Hc2" with "Hk HSP2").
+    Qed.
 
     (* Lemma refine_angelic_list' `{RA : Rel SA CA} : *)
     (*   ℛ⟦RA -> RList RA -> RPureSpec RA⟧ *)
@@ -1229,15 +1242,15 @@ Module Soundness
       iApply refine_demonic_ctx.
     Qed.
 
-  (*   Lemma refine_debug {AT A} `{R : Rel AT A} *)
-  (*     {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0) *)
-  (*         (Hpc : instprop (wco w0) ι0) f ms mc : *)
-  (*     ℛ⟦RStoreSpec Γ1 Γ2 R⟧@{ι0} ms mc -> *)
-  (*     ℛ⟦RStoreSpec Γ1 Γ2 R⟧@{ι0} (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms) mc. *)
-  (*   Proof. *)
-  (*     intros Hap POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0. *)
-  (*     intros [HP]. revert HP. apply Hap; auto. *)
-  (*   Qed. *)
+    Lemma refine_debug {AT A} `{R : Rel AT A}
+      {Γ1 Γ2} {w0 : World} :
+      ⊢ ∀ f ms mc, ℛ⟦RStoreSpec Γ1 Γ2 R⟧ mc ms →
+                   ℛ⟦RStoreSpec Γ1 Γ2 R⟧ mc (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms).
+    Proof.
+      iIntros (f ms mc) "Hm %K %Ks HK %s %ss Hs %h %hs Hh HSP".
+      iApply ("Hm" with "HK Hs Hh [HSP]").
+      now iApply elim_debugPred.
+    Qed.
 
   (*   Lemma refine_angelic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} : *)
   (*     ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧ *)
