@@ -104,7 +104,7 @@ Module ExamplesSymmetricBinaryWP (B : Base) (SIG : Signature B) (PROG : Program 
     iFrame "Hptsl Hptsr".
   Qed.
 
-  Let N := nroot .@ "constant_assignment_inv".
+  Let N := nroot .@ "reg_public_inv".
 
   Definition reg_public_inv {τ} (reg : 𝑹𝑬𝑮 τ) : iProp Σ :=
     invariants.inv N (∃ v, reg_pointsTo2 reg v v).
@@ -139,4 +139,32 @@ Module ExamplesSymmetricBinaryWP (B : Base) (SIG : Signature B) (PROG : Program 
     by rewrite fixpoint_semWp2_eq.
   Qed.
 
+  Lemma diff_constant_assignment_inv : forall {τ} (reg : 𝑹𝑬𝑮 τ) (v1 v2 : Val τ),
+      v1 ≠ v2 ->
+      ⊢ reg_public_inv reg -∗
+        semWp2 [env] [env]
+          (stm_write_register reg (exp_val τ v1))
+          (stm_write_register reg (exp_val τ v2))
+          (λ _ _ _ _, True).
+  Proof.
+    iIntros (τ reg v1 v2 Hneq) "Hreg".
+    rewrite fixpoint_semWp2_eq; cbn.
+    iIntros (γ1 γ2 μ1 μ2) "([Hregsl Hregsr] & Hmem)".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(%Hstepl & Hlc1 & %Hstepr & Hlc2)".
+    destruct (smallinvstep Hstepl), (smallinvstep Hstepr); cbn.
+    iFrame "Hmem".
+    iIntros "!> !> !>".
+    iMod "Hclose" as "_".
+    iInv "Hreg" as "H".
+    iMod (lc_fupd_elim_later with "Hlc1 H") as "(%v0 & Hptsl & Hptsr)".
+    iMod (reg_update _ _ v0 v1 with "Hregsl Hptsl") as "[Hregsl Hptsl]".
+    iMod (reg_update _ _ v0 v2 with "Hregsr Hptsr") as "[Hregsr Hptsr]".
+    iModIntro.
+    iSplitL "Hptsl Hptsr".
+    iModIntro.
+    unfold reg_pointsTo2.
+    (* We cannot prove that the invariant still holds here (expected). *)
+  Abort.
 End ExamplesSymmetricBinaryWP.
