@@ -804,7 +804,7 @@ Module Soundness
         CPureSpec.assert_eq_nenv (SPureSpec.assert_eq_nenv (w := w)).
     Proof.
       iIntros (Δ msg E1 Es1) "HE1 %E2 %Es2 HE2".
-      iInduction Es1 as [x|y] "IHEs1";
+      iInduction Es1 as [|Es1] "IHEs1";
       env.destroy Es2; env.destroy E1; env.destroy E2; cbn -[RSat].
       - iApply (refine_pure (RA := RUnit)).
         now iApply (repₚ_triv (T := Unit)).
