@@ -41,9 +41,10 @@ From Katamaran Require Import
      Prelude
      Base
      Environment
+     Signature
      (* Shallow.Monads *)
      (* Symbolic.Monads *)
-     (* Symbolic.Propositions *)
+     Symbolic.Propositions
      (* Symbolic.Solver *)
      Symbolic.Worlds
      (* Syntax.Assertions *)
@@ -58,8 +59,7 @@ Delimit Scope pred_scope with P.
 
 Module Pred
   (Import B : Base)
-  (Import PK : PredicateKit B)
-  (Import WR : WorldsMixin B PK).
+  (Import SIG  : Signature B).
 
   Definition Pred : TYPE := fun w => Valuation w -> Prop.
   
@@ -254,6 +254,9 @@ Module Pred
     change (@interface.bi_sep (@bi_pred ?w) ?P ?Q ?ι) with (sepₚ (w := w) P Q ι) in * ||
     change (@eqₚ ?T ?A ?instTA ?w ?t1 ?t2 ?ι) with (inst t1 ι = inst t2 ι) in * ||
     change (@repₚ ?T ?A ?instTA ?t2 ?w ?t1 ?ι) with (inst t1 ι = t2) in *||
+    change (@eqₚ ?T ?A ?instTA ?w ?t1 ?t2 ?ι) with (inst t1 ι = inst t2 ι) in * ||
+    change (@repₚ ?T ?A ?instTA ?t2 ?w ?t1 ?ι) with (inst t1 ι = t2) in *||
+    change (@proprepₚ ?T ?instTP ?t2 ?w ?t1 ?ι) with (instprop t1 ι <-> t2) in *||
     change (@interface.bi_emp (@bi_pred _) ?ι) with (empₚ ι) in *||
     change (@interface.bi_wand (@bi_pred _) ?P ?Q ?ι) with (wandₚ P Q ι) in *||
     change (@interface.bi_entails (@bi_pred _) ?P ?Q) with (entails P Q) in *||
@@ -538,7 +541,20 @@ Module Pred
         (apply (fromBientails _ _ H); last done;
          now apply acc_pathcond).
     Qed.
+    
+    Lemma forgetting_forall {w1 w2} {ω : Acc w1 w2} {A} {P : A -> Pred w1} :
+      (∀ v : A, forgetting ω (P v)) ⊣⊢ forgetting ω (∀ v : A, P v).
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+    Qed.
 
+    Lemma forgetting_wand {w1 w2} {ω : Acc w1 w2} {P1 P2 : Pred w1} :
+      (forgetting ω P1 -∗ forgetting ω P2) ⊣⊢ forgetting ω (P1 -∗ P2).
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+    Qed.
 
     Lemma knowing_assuming {w1 w2} (ω : w2 ⊒ w1) {P Q} :
       knowing ω P ∗ assuming ω Q ⊢ knowing ω (P ∗ Q).
@@ -549,6 +565,13 @@ Module Pred
 
     Lemma knowing_pure {w1 w2} (ω : w2 ⊒ w1) {P} :
       knowing ω (bi_pure P) ⊢ bi_pure P.
+    Proof.
+      unfold knowing.
+      crushPredEntails3.
+    Qed.
+
+    Lemma knowing_forall {w1 w2} {ω : Acc w1 w2} {A} {P : A -> Pred w2} :
+      knowing ω (∀ v : A, P v) ⊢ (∀ v : A, knowing ω (P v)).
     Proof.
       unfold knowing.
       crushPredEntails3.
@@ -608,6 +631,24 @@ Module Pred
       crushPredEntails3.
     Qed.
 
+    Lemma proprepₚ_triv {T : LCtx -> Type} `{InstProp T} {a : Prop} {w : World} {vt : T w}:
+      (∀ ι : Valuation w, instprop vt ι <-> a) ->
+      ⊢ proprepₚ a vt.
+    Proof.
+      crushPredEntails3.
+    Qed.
+
+    Lemma repₚ_cong {T1 : LCtx -> Type} `{Inst T1 A1}
+      {T2 : LCtx -> Type} `{Inst T2 A2}
+      (f : A1 -> A2) {w : World} (fs : T1 w -> T2 w)
+      {v1 : A1} {vs1 : T1 w} :
+      (∀ (ι : Valuation w) vs1, inst (fs vs1) ι = f (inst vs1 ι)) ->
+      repₚ v1 vs1 ⊢ repₚ (f v1) (fs vs1).
+    Proof.
+      crushPredEntails3.
+      now rewrite H1 H3.
+    Qed.
+
     Lemma repₚ_cong₂ {T1 : LCtx -> Type} `{Inst T1 A1}
       {T2 : LCtx -> Type} `{Inst T2 A2}
       {T3 : LCtx -> Type} `{Inst T3 A3}
@@ -620,6 +661,40 @@ Module Pred
       now rewrite H2 H4 H5.
     Qed.
 
+    Lemma proprepₚ_cong₂ {T1 : LCtx -> Type} `{Inst T1 A1}
+      {T2 : LCtx -> Type} `{Inst T2 A2}
+      {T3 : LCtx -> Type} `{InstProp T3}
+      (f : A1 -> A2 -> Prop) {w : World} (fs : T1 w -> T2 w -> T3 w)
+      {v1 : A1} {vs1 : T1 w} {v2 : A2} {vs2 : T2 w} :
+      (∀ (ι : Valuation w) vs1 vs2, instprop (fs vs1 vs2) ι <-> f (inst vs1 ι) (inst vs2 ι)) ->
+      repₚ v1 vs1 ∗ repₚ v2 vs2 ⊢ proprepₚ (f v1 v2) (fs vs1 vs2).
+    Proof.
+      crushPredEntails3; now subst.
+    Qed.
+
+    Lemma repₚ_elim {T : LCtx -> Type} `{Inst T A} {a b : A} {w : World} {vt : T w}:
+      (∀ ι : Valuation w, inst vt ι = a) ->
+      repₚ b vt ⊢ ⌜ b = a ⌝.
+    Proof.
+      crushPredEntails3.
+      now transitivity (inst vt ι).
+    Qed.
+
+    Section WithEnvironments.
+      Import ctx.notations.
+      Import env.notations.
+      
+      Lemma repₚ_invert_snoc
+        (T : Set) {S : LCtx → T → Set} {A : T → Set} {Σ : Ctx T}
+        {w : World} {b : T} {E1 : Env A Σ} {Es1 : Env (S w) Σ} {v : A b} {db : S w b} 
+        (instSA : ∀ τ : T, Inst (λ Σ : LCtx, S Σ τ) (A τ)) :
+        @repₚ _ _ inst_env (env.snoc E1 b v) w (env.snoc Es1 b db) ⊢  repₚ E1 Es1 ∗ repₚ v db.
+      Proof.
+        crushPredEntails3;
+        now apply env.inversion_eq_snoc in H0.
+      Qed.
+    End WithEnvironments.
+        
     Lemma forgetting_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
       (repₚ v (persist t ω) ⊣⊢ forgetting ω (repₚ v t))%I.
     Proof.
@@ -1027,6 +1102,13 @@ Module Pred
       MkRel repₚ.
     Arguments RInst _ _ {_}.
 
+    (* huh? missing instance? *)
+    #[export] Instance instprop_symprop : InstProp 𝕊 := fun Σ v ι => SymProp.safe v ι.
+
+    Definition RInstPropIff AT {instA : InstProp AT} : Rel AT Prop :=
+      MkRel proprepₚ.
+    Arguments RInstPropIff _ {_}.
+
     #[export] Instance RBox {AT A} (RA : Rel AT A) : Rel (Box AT) A :=
       MkRel 
         (fun v w t => unconditionally (fun w2 ω => ℛ⟦ RA ⟧ v (t w2 ω))).
@@ -1038,7 +1120,7 @@ Module Pred
     #[export] Instance RForall {𝑲}
       {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
       (RA : forall K, Rel (AT K) (A K)) :
-      Rel (@WR.Forall 𝑲 AT) (forall K : 𝑲, A K) :=
+      Rel (@SIG.Forall 𝑲 AT) (forall K : 𝑲, A K) :=
       MkRel (fun fc w fs => ∀ₚ K : 𝑲, ℛ⟦ RA K ⟧ (fc K) (fs K))%P.
 
     #[export] Instance RVal (σ : Ty) : Rel (fun Σ => Term Σ σ) (Val σ) :=
@@ -1130,10 +1212,10 @@ Module Pred
       now iApply (unconditionally_T (λ (w2 : World) (ω : Acc w w2), ℛ⟦R⟧ v (t w2 ω))).
     Qed.
 
-      Lemma refine_apply {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
-        forall v f (w : World),
-          (⊢ ∀ F (t : AT w), ℛ⟦RA -> RB⟧ f F → ℛ⟦RA⟧ v t → ℛ⟦RB⟧ (f v) (F t))%I.
-      Proof. iIntros (v f w F t) "#Hf #Hv". now iApply "Hf". Qed.
+    Lemma refine_apply {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
+      forall v f (w : World),
+        (⊢ ∀ F (t : AT w), ℛ⟦RA -> RB⟧ f F → ℛ⟦RA⟧ v t → ℛ⟦RB⟧ (f v) (F t))%I.
+    Proof. iIntros (v f w F t) "#Hf #Hv". now iApply "Hf". Qed.
 
     Lemma refine_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} :
       forall (v : A) (w1 w2 : World) (ω : Acc w1 w2),
@@ -1145,28 +1227,36 @@ Module Pred
 
     Lemma refine_formula_persist :
       forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop),
-        ⊢ forgetting r12 (ℛ⟦RFormula⟧ p f) → ℛ⟦RFormula⟧ p (persist f r12).
+        ⊢ forgetting r12 (ℛ⟦RFormula⟧ p f) -∗ ℛ⟦RFormula⟧ p (persist f r12).
     Proof.
       iIntros (v w1 w2 ω t) "Hvt".
       now iApply forgetting_proprepₚ.
     Qed.
 
-    Lemma refine_formula_subst {Σ} (fml : Formula Σ) {w : World} :
-      ⊢ ℛ⟦ (RInst (Sub Σ) (Valuation Σ) -> RFormula) ⟧ (instprop fml) (subst fml : Sub Σ w -> Formula w)%I.
+    Lemma refine_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
+      ⊢ ℛ⟦ RInst (Sub Σ) (Valuation Σ) -> RInst T A ⟧ (inst vs) (subst vs : Sub Σ w -> T w)%I.
     Proof.
-      (* manual proof because we don't have an forgetting modality for substitutions and associated primitives. *)
-      unfold RFormula, RInst, forgetting, proprepₚ, repₚ; cbn.
-      constructor.
-      intros ι Hpc _ ι' ω.
-      constructor.
-      intros Heq.
-      now rewrite instprop_subst Heq.
+      crushPredEntails3.
+      now rewrite inst_subst H4.
+    Qed.
+
+    Lemma refine_instprop_subst {Σ} {T : LCtx -> Type} `{InstPropSubst T}
+      (vs : T Σ) {w : World} :
+      ⊢ ℛ⟦ (RInst (Sub Σ) (Valuation Σ) -> RInstPropIff T) ⟧ (instprop vs) (subst vs : Sub Σ w -> T w)%I.
+    Proof.
+      crushPredEntails3; subst.
+      - now rewrite <-instprop_subst.
+      - now rewrite instprop_subst.
     Qed.
 
     Lemma refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) :
       ⊢ ℛ⟦RInst AT A⟧ a (lift a : AT w).
     Proof. iApply lift_repₚ. Qed.
 
+    Lemma refine_rinst_sub_initial {w : World} {ι : Valuation w}: 
+      ℛ⟦RInst (Sub w) (Valuation w)⟧ ι (sub_id w) ι.
+    Proof.
+      apply inst_sub_id.
+    Qed.
   End LRCompat.
-
 End Pred.
