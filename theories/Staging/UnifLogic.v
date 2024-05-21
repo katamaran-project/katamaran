@@ -71,15 +71,15 @@ Module Pred
       fun w => A w.
     
     Definition eqₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : ⊢ Tm T -> Tm T -> Pred :=
-      fun w t1 t2 ι => (instprop (wco w) ι -> inst t1 ι = inst t2 ι)%type.
+      fun w t1 t2 ι => (inst t1 ι = inst t2 ι)%type.
     #[global] Arguments eqₚ {T A _} [w] _ _ _/.
     
     Definition repₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : A -> ⊢ Tm T -> Pred :=
-      fun t2 w t1 ι => (instprop (wco w) ι -> inst t1 ι = t2)%type.
+      fun t2 w t1 ι => (inst t1 ι = t2)%type.
     #[global] Arguments repₚ {T A _} _ [w] _ _/.
     
     Definition proprepₚ {T : LCtx -> Type} {instTA : InstProp T} : Prop -> ⊢ Tm T -> Pred :=
-      fun t2 w t1 ι => (instprop (wco w) ι -> instprop t1 ι <-> t2)%type.
+      fun t2 w t1 ι => (instprop t1 ι <-> t2)%type.
     #[global] Arguments proprepₚ {T _} _ [w] _ _/.
 
   End Definitions.
@@ -220,11 +220,11 @@ Module Pred
           bi_entails := entails;
           bi_emp := empₚ;
           bi_pure P _ := P;
-          bi_and P Q ι := instprop (wco w) ι -> P ι /\ Q ι;
-          bi_or P Q ι := instprop (wco w) ι -> P ι \/ Q ι;
+          bi_and P Q ι := P ι /\ Q ι;
+          bi_or P Q ι := P ι \/ Q ι;
           bi_impl P Q ι := P ι -> Q ι;
           bi_forall A f ι :=  forall a, f a ι;
-          bi_exist A f ι := instprop (wco w) ι -> exists a, f a ι;
+          bi_exist A f ι := exists a, f a ι;
           bi_sep := sepₚ;
           bi_wand := wandₚ;
           bi_persistently := persistently;
@@ -250,21 +250,21 @@ Module Pred
   End proofmode.
 
   Ltac punfold_connectives :=
-    change (@interface.bi_and (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι /\ Q ι) in * ||
+    change (@interface.bi_and (@bi_pred ?w) ?P ?Q ?ι) with (P ι /\ Q ι) in * ||
     change (@interface.bi_sep (@bi_pred ?w) ?P ?Q ?ι) with (sepₚ (w := w) P Q ι) in * ||
-    change (@eqₚ ?T ?A ?instTA ?w ?t1 ?t2 ?ι) with (instprop (wco w) ι -> inst t1 ι = inst t2 ι) in * ||
-    change (@repₚ ?T ?A ?instTA ?t2 ?w ?t1 ?ι) with (instprop (wco w) ι -> inst t1 ι = t2) in *||
+    change (@eqₚ ?T ?A ?instTA ?w ?t1 ?t2 ?ι) with (inst t1 ι = inst t2 ι) in * ||
+    change (@repₚ ?T ?A ?instTA ?t2 ?w ?t1 ?ι) with (inst t1 ι = t2) in *||
     change (@interface.bi_emp (@bi_pred _) ?ι) with (empₚ ι) in *||
     change (@interface.bi_wand (@bi_pred _) ?P ?Q ?ι) with (wandₚ P Q ι) in *||
     change (@interface.bi_entails (@bi_pred _) ?P ?Q) with (entails P Q) in *||
     change (@interface.bi_persistently (@bi_pred _) ?P ?ι) with (persistently P ι) in *||
-    change (@interface.bi_or (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> P ι \/ Q ι) in *||
+    change (@interface.bi_or (@bi_pred ?w) ?P ?Q ?ι) with (P ι \/ Q ι) in *||
     change (@interface.bi_impl (@bi_pred ?w) ?P ?Q ?ι) with (P ι -> Q ι) in *||
-    change (@derived_connectives.bi_iff (@bi_pred ?w) ?P ?Q ?ι) with (instprop (wco w) ι -> iff (P ι) (Q ι)) in *||
+    change (@derived_connectives.bi_iff (@bi_pred ?w) ?P ?Q ?ι) with (iff (P ι) (Q ι)) in *||
     change (@interface.bi_pure (@bi_pred _) ?P _) with P in *||
     change (@interface.bi_forall (@bi_pred ?w) ?A ?f ?ι) with (forall a, f a ι) ||
     (* the change seems to trigger some coq binding bug, so I removed the "in *" for now... *)
-    change (@interface.bi_exist (@bi_pred ?w) ?A ?P) with (fun ι => instprop (wco w) ι -> exists a : A, P a ι) in *||
+    change (@interface.bi_exist (@bi_pred ?w) ?A ?P) with (fun ι => exists a : A, P a ι) in *||
     unfold derived_connectives.bi_intuitionistically, derived_connectives.bi_affinely, interface.bi_emp_valid in *;
     (* change (@subst Pred subst_pred _ _ ?P _ ?θ ?ι) with (P (inst θ ι)) in *; *)
     try progress (cbn beta).
@@ -285,6 +285,7 @@ Module Pred
   Ltac crushPredEntails3 := cbn; intros;
                             repeat punfold_connectives;
                             repeat (repeat punfold_connectives; crushPredEntailsMatch1 || crushPredEntailsMatch2);
+                            repeat punfold_connectives;
                             intuition.
                                  
   Module Import notations.
@@ -616,7 +617,7 @@ Module Pred
       repₚ v1 vs1 ∗ repₚ v2 vs2 ⊢ repₚ (f v1 v2) (fs vs1 vs2).
     Proof.
       crushPredEntails3.
-      now rewrite H2 H4 H6.
+      now rewrite H2 H4 H5.
     Qed.
 
     Lemma forgetting_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
@@ -978,10 +979,9 @@ Module Pred
       - rewrite instprop_subst inst_sub_wk1 in H; subst.
         constructor.
         crushPredEntails3.
-        rewrite instprop_subst inst_sub_wk1 in H1; subst.
         rewrite inst_sub_wk1.
         apply H0; try done.
-        f_equal.
+        f_equal; try done.
         now apply inst_sub_id.
       - destruct H0 as [H0].
         rewrite inst_sub_wk1 in H0.
@@ -1159,7 +1159,7 @@ Module Pred
       constructor.
       intros ι Hpc _ ι' ω.
       constructor.
-      intros Heq _.
+      intros Heq.
       now rewrite instprop_subst Heq.
     Qed.
 
