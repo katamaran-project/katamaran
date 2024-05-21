@@ -1299,7 +1299,7 @@ Module Soundness
       iApply refine_demonic_ctx.
     Qed.
 
-    Lemma refine_debug {AT A} `{R : Rel AT A}
+    Lemma refine_debug_ss {AT A} `{R : Rel AT A}
       {Γ1 Γ2} {w0 : World} :
       ⊢ ∀ f ms mc, ℛ⟦RStoreSpec Γ1 Γ2 R⟧ mc ms →
                    ℛ⟦RStoreSpec Γ1 Γ2 R⟧ mc (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms).
