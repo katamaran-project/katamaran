@@ -97,20 +97,20 @@ Module Soundness
     Fixpoint psafe {w : World} (p : SymProp w) : Pred w := 
       (match p with
        | angelic_binary o1 o2 => psafe o1 ∨ psafe o2
-       | demonic_binary o1 o2 => psafe o1 ∧ psafe o2
+       | demonic_binary o1 o2 => psafe o1 ∗ psafe o2
        | error msg => False
        | SymProp.block => True
        | assertk fml msg o =>
-           (Obligation msg fml : Pred w) ∧ forgetting (acc_formula_right fml) (psafe o)
+           (Obligation msg fml : Pred w) ∗ psafe (w := wformula w fml) o
        | assumek fml o => (instprop fml : Pred w) → forgetting (acc_formula_right fml) (psafe o)
        | angelicv b k => knowing acc_snoc_right (@psafe (wsnoc w b) k)
        | demonicv b k => assuming acc_snoc_right (@psafe (wsnoc w b) k)
        | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
-           Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∧
+           Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∗
             assuming (acc_subst_right (xIn := xIn) t) (psafe (w := wsubst w x t) k)
        | @assume_vareq _ x σ xIn t k =>
-           eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) →
+           eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) -∗
            let ω := acc_subst_right (xIn := xIn) t in
            assuming ω (psafe (w := wsubst w x t) k)
         | pattern_match s pat rhs =>
@@ -165,6 +165,41 @@ Module Soundness
     Proof. now constructor. Qed.
   End logicalrelation.
   Notation "'ℙ'" := (RProp) : rel_scope.
+
+  Section SolverSpec.
+    (* Try a relatively direct translation first.
+     * TODO: looks more like a knowing modality actually.
+     *)
+    Definition SolverSpec (s : Solver) (w : World) : Prop :=
+      forall (C0 : PathCondition w),
+        option.spec
+          (fun '(existT w1 (ζ, C1)) =>
+             (knowing (acc_triangular ζ) (instprop C1)) ⊣⊢ (instprop C0 : Pred w))%I
+          ((instprop C0 : Pred w) ⊢ False)%I
+          (s w C0).
+
+    Lemma SolverSpec_old_to_logical {s} : SIG.SolverSpec s -> forall w, SolverSpec s w.
+    Proof.
+      unfold SIG.SolverSpec.
+      intros oldspec w C.
+      destruct (oldspec w C) as [(w1 & (ζ , C1)) | H];
+        cbn in *;
+        constructor;
+        unfold forgetting, assuming, knowing;
+        crushPredEntails3.
+      - apply H2; last done.
+        now rewrite sub_acc_triangular in H1.
+      - exists (inst (sub_triangular_inv ζ) ι).
+        rewrite sub_acc_triangular.
+        rewrite inst_triangular_right_inverse; last done.
+        repeat split.
+        + now apply entails_triangular_inv.
+        + apply H2; last done.
+          * now apply entails_triangular_inv. 
+          * now rewrite inst_triangular_right_inverse.
+    Qed.
+
+  End SolverSpec.
 
   Section Monads.
 
@@ -309,49 +344,123 @@ Module Soundness
         now rewrite inst_env_snoc.
     Qed.
 
-    (* Lemma refine_assert_pathcondition : *)
-    (*   ℛ⟦RMsg _ (RPathCondition -> RPureSpec RUnit)⟧ *)
-    (*     SPureSpec.assert_pathcondition CPureSpec.assert_formula. *)
-    (* Proof. *)
-    (*   unfold SPureSpec.assert_pathcondition, CPureSpec.assert_formula. *)
-    (*   intros w0 ι0 Hpc0 msg sC cC rC sΦ cΦ rΦ HΦ. *)
-    (*   destruct (combined_solver_spec _ sC) as [[w1 [ζ sc1]] Hsolver|Hsolver]. *)
-    (*   - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver]. *)
-    (*     rewrite SymProp.safe_assert_triangular in HΦ. destruct HΦ as [Hν HΦ]. *)
-    (*     rewrite SymProp.safe_assert_pathcondition_without_solver in HΦ. *)
-    (*     destruct HΦ as [HC HΦ]. *)
-    (*     split. *)
-    (*     + apply Hsolver in HC; rewrite ?inst_triangular_right_inverse; auto. *)
-    (*       now apply rC. *)
-    (*       now apply entails_triangular_inv. *)
-    (*     + revert HΦ. unfold four. *)
-    (*       apply rΦ; cbn; wsimpl; eauto. *)
-    (*       unfold PathCondition. rewrite instprop_cat. split; auto. *)
-    (*       now apply entails_triangular_inv. *)
-    (*   - contradict HΦ. *)
-    (* Qed. *)
+    Lemma obligation_equiv {w : World} (msg : AMessage w) (fml : Formula w) :
+      (Obligation msg fml : Pred w) ⊣⊢ instprop fml.
+    Proof. crushPredEntails3.
+           - now destruct H0. 
+           - now constructor.
+    Qed.
 
-    (* Lemma refine_assume_pathcondition : *)
-    (*   ℛ⟦RPathCondition -> RPureSpec RUnit⟧ *)
-    (*     SPureSpec.assume_pathcondition CPureSpec.assume_formula. *)
-    (* Proof. *)
-    (*   unfold SPureSpec.assume_pathcondition, CPureSpec.assume_formula. *)
-    (*   intros w0 ι0 Hpc0 sC cC rC sΦ cΦ rΦ HΦ HC. apply rC in HC. *)
-    (*   destruct (combined_solver_spec _ sC) as [[w1 [ζ sc1]] Hsolver|Hsolver]. *)
-    (*   - specialize (Hsolver ι0 Hpc0). *)
-    (*     destruct Hsolver as [Hν Hsolver]. inster Hν by auto. *)
-    (*     specialize (Hsolver (inst (sub_triangular_inv ζ) ι0)). *)
-    (*     rewrite inst_triangular_right_inverse in Hsolver; auto. *)
-    (*     inster Hsolver by now try apply entails_triangular_inv. *)
-    (*     destruct Hsolver as [Hsolver _]. inster Hsolver by auto. *)
-    (*     rewrite SymProp.safe_assume_triangular, *)
-    (*       SymProp.safe_assume_pathcondition_without_solver in HΦ. *)
-    (*     specialize (HΦ Hν Hsolver). revert HΦ. *)
-    (*     unfold four. apply rΦ; cbn; wsimpl; auto. *)
-    (*     unfold PathCondition. rewrite instprop_cat. split; auto. *)
-    (*     now apply entails_triangular_inv. *)
-    (*   - now apply Hsolver in HC. *)
-    (* Qed. *)
+    Lemma safe_assume_triangular {w0 w1} (ζ : Tri w0 w1) (o : 𝕊 w1) :
+      (psafe (assume_triangular ζ o) ⊣⊢ (assuming (acc_triangular ζ) (psafe o))).
+    Proof.
+    Admitted.
+
+    Lemma safe_assume_pathcondition_without_solver {w0 : World}
+        (C : PathCondition w0) (p : 𝕊 w0) :
+      psafe (assume_pathcondition_without_solver C p) ⊣⊢
+        ((instprop C : Pred w0) -∗ psafe (w := wpathcondition w0 C) p).
+    Proof.
+    Admitted.
+
+    (* TODO: more logical inst_triangular *)
+    Lemma safe_assert_triangular {w0 w1} msg (ζ : Tri w0 w1)
+      (o : AMessage w1 -> 𝕊 w1) :
+      (psafe (assert_triangular msg ζ o) ⊣⊢
+         (knowing (acc_triangular ζ) (psafe (o (subst msg (sub_triangular ζ)))))).
+    Proof.
+      induction ζ.
+      - now rewrite knowing_refl subst_sub_id.
+      - cbn [psafe assert_triangular acc_triangular].
+        rewrite obligation_equiv.
+        rewrite knowing_trans.
+        rewrite subst_sub_comp.
+        rewrite (IHζ (subst msg (sub_single xIn t)) o).
+        rewrite ?inst_subst.
+        admit.
+    Admitted.
+
+    Lemma safe_assert_pathcondition_without_solver {w0 : World}
+        (msg : AMessage w0) (C : PathCondition w0) (p : 𝕊 w0) :
+      psafe (assert_pathcondition_without_solver msg C p) ⊣⊢
+        ((instprop C : Pred w0) ∗ psafe (w := wpathcondition w0 C) p).
+    Proof.
+      unfold assert_pathcondition_without_solver. revert p.
+      induction C; cbn; intros p.
+      - rewrite bi.True_sep.
+        now destruct w0.
+      - rewrite IHC; cbn.
+        change (λ ι : Valuation _, (instprop C ι ∧ instprop b ι)%type) with ((instprop C : Pred _) ∧ instprop b)%I.
+        rewrite <-sep_is_and, <-bi.sep_assoc.
+        change (@bi_sep (@bi_pred (wpathcondition w0 C)) ?P ?Q) with (@sepₚ w0 P Q).
+        now rewrite obligation_equiv.
+    Qed.
+
+      Lemma refine_assert_pathcondition {w} :
+        ⊢ ℛ⟦RMsg _ (RPathCondition -> RPureSpec RUnit)⟧
+          CPureSpec.assert_formula (SPureSpec.assert_pathcondition (w := w)).
+      Proof.
+        unfold SPureSpec.assert_pathcondition, CPureSpec.assert_formula, CPureSpec.assert_pathcondition.
+        iIntros (msg cC sC) "HC %cΦ %sΦ rΦ HΦ".
+        destruct (SolverSpec_old_to_logical combined_solver_spec w sC) as [[w1 [ζ sc1]] Hsolver|Hsolver].
+        - rewrite safe_assert_triangular.
+          rewrite safe_assert_pathcondition_without_solver.
+          iSplit.
+          + iDestruct (knowing_sepₚ with "HΦ") as "[Hsc1 _]".
+            rewrite Hsolver.
+            iDestruct "HC" as "[HC1 _]".
+            iApply ("HC1" with "Hsc1").
+          + iSpecialize ("rΦ" $! (wpathcondition w1 sc1) (acc_trans (acc_triangular ζ) (acc_pathcondition_right w1 sc1))).
+            rewrite assuming_trans.
+            iPoseProof (knowing_assuming (acc_triangular ζ) with "[$HΦ $rΦ]") as "H".
+            iApply knowing_pure.
+            iApply (knowing_proper with "H").
+            iIntros "((Hsc1 & HsΦ) & HΦ)".
+            iPoseProof (assuming_acc_pathcondition_right with "[$HΦ $Hsc1]") as "HΦ".
+            cbn.
+            repeat change (@bi_forall (@bi_pred (wpathcondition w1 sc1)) ?A ?P) with (@bi_forall (@bi_pred w1) A P).
+            repeat change (@bi_wand (@bi_pred (wpathcondition w1 sc1)) ?P ?Q) with (@bi_wand (@bi_pred w1) P Q).
+            repeat change (@repₚ ?T  ?A ?instTA ?t1 (wpathcondition w1 sc1) ?t2) with (@repₚ T A instTA t1 w1 t2).
+            iApply ("HΦ" with "[] HsΦ").
+            now iApply (repₚ_triv (T := Unit)).
+      - cbn.
+        iDestruct "HΦ" as "%fls".
+        destruct fls.
+    Qed.
+
+    Lemma refine_assume_pathcondition {w} :
+      ⊢ ℛ⟦RPathCondition -> RPureSpec RUnit⟧
+        CPureSpec.assume_formula (SPureSpec.assume_pathcondition (w := w)).
+    Proof.
+      unfold SPureSpec.assume_pathcondition, CPureSpec.assume_formula, CPureSpec.assume_pathcondition.
+      iIntros "%C %Cs HC %Φ %Φs HΦ Hsp %HC".
+      destruct (SolverSpec_old_to_logical combined_solver_spec _ Cs) as [[w1 [ζ sc1]] Hsolver|Hsolver].
+      - rewrite safe_assume_triangular.
+        rewrite safe_assume_pathcondition_without_solver.
+        iDestruct "HC" as "[_ HC2]".
+        iSpecialize ("HC2" $! HC).
+        rewrite <-Hsolver.
+        iSpecialize ("HΦ" $! _ (acc_trans (acc_triangular ζ) (acc_pathcondition_right w1 sc1))).
+        rewrite assuming_trans.
+        iDestruct (assuming_sepₚ with "[HΦ Hsp]") as "H".
+        { now iSplitL "HΦ". }
+        iDestruct (knowing_assuming with "[$HC2 $H]") as "H".
+        iApply knowing_pure.
+        iApply (knowing_proper with "H").
+        iIntros "(#Hsc1 & H & HΦ)".
+        iDestruct (@assuming_acc_pathcondition_right w1 with "[$Hsc1 $H]") as "H".
+        iSpecialize ("HΦ" with "Hsc1").
+        cbn.
+        repeat change (@bi_forall (@bi_pred (wpathcondition w1 sc1)) ?A ?P) with (@bi_forall (@bi_pred w1) A P).
+        repeat change (@bi_wand (@bi_pred (wpathcondition w1 sc1)) ?P ?Q) with (@bi_wand (@bi_pred w1) P Q).
+        repeat change (@repₚ ?T  ?A ?instTA ?t1 (wpathcondition w1 sc1) ?t2) with (@repₚ T A instTA t1 w1 t2).
+        iApply ("H" with "[] HΦ").
+        now iApply (repₚ_triv (T := Unit)).
+      - iExFalso.
+        iApply Hsolver.
+        iDestruct "HC" as "[_ HC2]".
+        now iApply "HC2".
+    Qed.
 
     Lemma refine_assert_formula {w} :
       ⊢ ℛ⟦RMsg _ (RFormula -> RPureSpec RUnit)⟧
@@ -1309,60 +1418,62 @@ Module Soundness
       now iApply elim_debugPred.
     Qed.
 
-  (*   Lemma refine_angelic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} : *)
-  (*     ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧ *)
-  (*       SStoreSpec.angelic_binary CStoreSpec.angelic_binary. *)
-  (*   Proof. *)
-  (*     intros w ι Hpc ms1 mc1 Hm1 ms2 mc2 Hm2. *)
-  (*     intros POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0. *)
-  (*     unfold SStoreSpec.angelic_binary, CStoreSpec.angelic_binary. *)
-  (*     apply refine_symprop_angelic_binary; auto. *)
-  (*     apply Hm1; auto. apply Hm2; auto. *)
-  (*   Qed. *)
+    Lemma refine_angelic_binary_ss {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
+      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧
+        CStoreSpec.angelic_binary (SStoreSpec.angelic_binary (w := w)).
+    Proof.
+      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %K %Ks #HK %s %ss #Hs %h %hs #Hh".
+      unfold SStoreSpec.angelic_binary, CStoreSpec.angelic_binary.
+      iApply (refine_symprop_angelic_binary with "[Hc1] [Hc2]").
+      - now iApply "Hc1".
+      - now iApply "Hc2".
+    Qed.
 
-  (*   Lemma refine_demonic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} : *)
-  (*     ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧ *)
-  (*       SStoreSpec.demonic_binary CStoreSpec.demonic_binary. *)
-  (*   Proof. *)
-  (*     intros w ι Hpc ms1 mc1 Hm1 ms2 mc2 Hm2. *)
-  (*     intros POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0. *)
-  (*     unfold SStoreSpec.angelic_binary, CStoreSpec.angelic_binary. *)
-  (*     apply refine_symprop_demonic_binary; auto. *)
-  (*     apply Hm1; auto. apply Hm2; auto. *)
-  (*   Qed. *)
+    Lemma refine_demonic_binary_ss {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
+      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧
+        CStoreSpec.demonic_binary (SStoreSpec.demonic_binary (w := w)).
+    Proof.
+      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %K %Ks #HK %s %ss #Hs %h %hs #Hh".
+      unfold SStoreSpec.angelic_binary, CStoreSpec.angelic_binary.
+      iApply (refine_symprop_demonic_binary with "[Hc1] [Hc2]").
+      - now iApply "Hc1".
+      - now iApply "Hc2".
+    Qed.
 
   End Basics.
 
-  (* Section AssumeAssert. *)
+  Section AssumeAssert.
+    Import logicalrelation.
+    Import ufl_notations.
+    
+    Lemma refine_assume_formula_ss {Γ} {w} :
+      ⊢ ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.assume_formula (SStoreSpec.assume_formula (w := w)).
+    Proof.
+      unfold SStoreSpec.assume_formula, CStoreSpec.assume_formula.
+      iIntros (fml fmls) "Hfml %K %Ks HK %s %ss Hs %h %hs Hh".
+      iApply (refine_lift_purem with "[Hfml] HK Hs Hh").
+      iApply (refine_assume_formula with "Hfml").
+    Qed.
 
-  (*   Lemma refine_assume_formula {Γ} : *)
-  (*     ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧ *)
-  (*       SStoreSpec.assume_formula CStoreSpec.assume_formula. *)
-  (*   Proof. *)
-  (*     unfold SStoreSpec.assume_formula, CStoreSpec.assume_formula. *)
-  (*     intros w ι Hpc P p Hp. apply refine_lift_purem; auto. *)
-  (*     apply RPureSpec.refine_assume_formula; auto. *)
-  (*   Qed. *)
+    Lemma refine_assert_formula_ss {Γ} {w} :
+      ⊢ ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.assert_formula (SStoreSpec.assert_formula (w := w)).
+    Proof.
+      unfold SStoreSpec.assert_formula, CStoreSpec.assert_formula.
+      iIntros (fml fmls) "Hfml %K %Ks HK %s %ss Hs %h %hs Hh".
+      iApply (refine_lift_purem with "[Hfml] HK Hs Hh").
+      iApply (refine_assert_formula with "Hfml").
+    Qed.
 
-  (*   Lemma refine_assert_formula {Γ} : *)
-  (*     ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧ *)
-  (*       SStoreSpec.assert_formula CStoreSpec.assert_formula. *)
-  (*   Proof. *)
-  (*     intros w ι Hpc P p Hp. *)
-  (*     unfold SStoreSpec.assert_formula, CStoreSpec.assert_formula. *)
-  (*     intros POST__s POST__c HPOST δs δc Hδ hs hc Hh. *)
-  (*     apply refine_lift_purem; auto. *)
-  (*     now apply RPureSpec.refine_assert_formula. *)
-  (*   Qed. *)
-
-  (*   Lemma refine_assert_pathcondition {Γ} : *)
-  (*     ℛ⟦RPathCondition -> RStoreSpec Γ Γ RUnit⟧ *)
-  (*       SStoreSpec.assert_pathcondition CStoreSpec.assert_formula. *)
-  (*   Proof. *)
-  (*     intros w ι Hpc Ps ps Hps POST__s POST__c HPOST δs δc Hδ hs hc Hh. *)
-  (*     apply refine_lift_purem; auto. *)
-  (*     now apply RPureSpec.refine_assert_pathcondition. *)
-  (*   Qed. *)
+    Lemma refine_assert_pathcondition_ss {Γ} {w} :
+      ⊢ ℛ⟦RPathCondition -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.assert_formula (SStoreSpec.assert_pathcondition (w := w)).
+    Proof.
+      iIntros (pc pcs) "Hpc %K %Ks HK %δ %δs Hδ %h %hs Hh".
+      iApply (refine_lift_purem with "[] HK Hδ Hh").
+      iApply refine_assert_pathcondition.
+    Qed.
 
   (*   Lemma refine_assert_eq_nenv {N Γ} (Δ : NCtx N Ty) : *)
   (*     ℛ⟦RNEnv Δ -> RNEnv Δ -> RStoreSpec Γ Γ RUnit⟧ *)
