@@ -925,7 +925,9 @@ Module Soundness
         iApply refine_assert_formula.
         iApply refine_formula_persist.
         iModIntro.
-        now iApply (proprepₚ_cong₂ (T1 := STerm (type b)) (T2 := STerm (type b)) eq (formula_relop bop.eq) with "[$Hv0db $Hv1v]").
+        iApply (proprepₚ_cong₂ (T1 := STerm (type b)) (T2 := STerm (type b)) eq (formula_relop bop.eq) with "[Hv0db Hv1v]").
+        { now cbn. }
+        now iSplitL "Hv0db". 
     Qed.
 
     Lemma refine_assert_eq_env {w} :
@@ -944,7 +946,9 @@ Module Soundness
         iApply refine_assert_formula.
         iApply refine_formula_persist.
         iModIntro.
-        now iApply (proprepₚ_cong₂ (T1 := STerm b) (T2 := STerm b) eq (formula_relop bop.eq) with "[$Hvdb $Hv0v1]").
+        iApply (proprepₚ_cong₂ (T1 := STerm b) (T2 := STerm b) eq (formula_relop bop.eq) with "[Hvdb Hv0v1]").
+        { done. }
+        now iSplitL "Hvdb".
     Qed.
 
     Lemma refine_assert_eq_chunk {w} :
@@ -1471,8 +1475,8 @@ Module Soundness
         CStoreSpec.assert_formula (SStoreSpec.assert_pathcondition (w := w)).
     Proof.
       iIntros (pc pcs) "Hpc %K %Ks HK %δ %δs Hδ %h %hs Hh".
-      iApply (refine_lift_purem with "[] HK Hδ Hh").
-      iApply refine_assert_pathcondition.
+      iApply (refine_lift_purem with "[Hpc] HK Hδ Hh").
+      now iApply refine_assert_pathcondition.
     Qed.
 
   (*   Lemma refine_assert_eq_nenv {N Γ} (Δ : NCtx N Ty) : *)
@@ -1485,7 +1489,7 @@ Module Soundness
   (*     apply RPureSpec.refine_assert_eq_nenv; auto. *)
   (*   Qed. *)
 
-  (* End AssumeAssert. *)
+  End AssumeAssert.
 
   (* Section PatternMatching. *)
 
