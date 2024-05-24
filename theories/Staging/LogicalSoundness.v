@@ -102,7 +102,7 @@ Module Soundness
        | SymProp.block => True
        | assertk fml msg o =>
            (Obligation msg fml : Pred w) ∗ psafe (w := wformula w fml) o
-       | assumek fml o => (instprop fml : Pred w) → forgetting (acc_formula_right fml) (psafe o)
+       | assumek fml o => (instprop fml : Pred w) -∗ psafe (w := wformula w fml) o
        | angelicv b k => knowing acc_snoc_right (@psafe (wsnoc w b) k)
        | demonicv b k => assuming acc_snoc_right (@psafe (wsnoc w b) k)
        | @assert_vareq _ x σ xIn t msg k =>
@@ -110,7 +110,7 @@ Module Soundness
            Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∗
             assuming (acc_subst_right (xIn := xIn) t) (psafe (w := wsubst w x t) k)
        | @assume_vareq _ x σ xIn t k =>
-           eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) -∗
+           (* eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) -∗ *)
            let ω := acc_subst_right (xIn := xIn) t in
            assuming ω (psafe (w := wsubst w x t) k)
         | pattern_match s pat rhs =>
@@ -354,14 +354,27 @@ Module Soundness
     Lemma safe_assume_triangular {w0 w1} (ζ : Tri w0 w1) (o : 𝕊 w1) :
       (psafe (assume_triangular ζ o) ⊣⊢ (assuming (acc_triangular ζ) (psafe o))).
     Proof.
-    Admitted.
+      induction ζ; first by rewrite assuming_refl.
+      rewrite assuming_trans.
+      cbn.
+      now rewrite IHζ.
+    Qed.
 
     Lemma safe_assume_pathcondition_without_solver {w0 : World}
         (C : PathCondition w0) (p : 𝕊 w0) :
       psafe (assume_pathcondition_without_solver C p) ⊣⊢
         ((instprop C : Pred w0) -∗ psafe (w := wpathcondition w0 C) p).
     Proof.
-    Admitted.
+      revert p. induction C; cbn; intros p.
+      - change (λ _ : Valuation w0, True%type) with (True%I : Pred w0).
+        destruct w0. (* needed to make coq see that wpathcondition w0 [ctx] is the same as w0 *)
+        iSplit.
+        + now iIntros "$ _".
+        + iIntros "H". now iApply "H".
+      - rewrite IHC.
+        change (λ ι : Valuation w0, (instprop C ι /\ instprop b ι)) with ((instprop C : Pred w0) ∗ instprop b)%I.
+        now rewrite <-bi.wand_curry.
+    Qed.
 
     (* TODO: more logical inst_triangular *)
     Lemma safe_assert_triangular {w0 w1} msg (ζ : Tri w0 w1)
@@ -369,16 +382,15 @@ Module Soundness
       (psafe (assert_triangular msg ζ o) ⊣⊢
          (knowing (acc_triangular ζ) (psafe (o (subst msg (sub_triangular ζ)))))).
     Proof.
-      induction ζ.
+      revert o. induction ζ; intros o.
       - now rewrite knowing_refl subst_sub_id.
       - cbn [psafe assert_triangular acc_triangular].
         rewrite obligation_equiv.
         rewrite knowing_trans.
         rewrite subst_sub_comp.
         rewrite (IHζ (subst msg (sub_single xIn t)) o).
-        rewrite ?inst_subst.
-        admit.
-    Admitted.
+        now rewrite knowing_acc_subst_right.
+    Qed.
 
     Lemma safe_assert_pathcondition_without_solver {w0 : World}
         (msg : AMessage w0) (C : PathCondition w0) (p : 𝕊 w0) :
@@ -465,20 +477,24 @@ Module Soundness
     Lemma refine_assert_formula {w} :
       ⊢ ℛ⟦RMsg _ (RFormula -> RPureSpec RUnit)⟧
         CPureSpec.assert_formula (SPureSpec.assert_formula (w := w)).
-    Admitted.
-    (* Proof. *)
-    (*   unfold RPureSpec, SPureSpec.assert_formula, CPureSpec.assert_formula. *)
-    (*   rsolve. apply refine_assert_pathcondition; auto. cbn in *. intuition auto. *)
-    (* Qed. *)
+    Proof.
+      unfold RPureSpec, SPureSpec.assert_formula, CPureSpec.assert_formula.
+      iIntros "%msg %fml %fmls Hfml".
+      iApply refine_assert_pathcondition.
+      iApply (proprepₚ_cong (T2 := PathCondition) with "Hfml").
+      cbn. intuition.
+    Qed.
 
     Lemma refine_assume_formula {w} :
       ⊢ ℛ⟦RFormula -> RPureSpec RUnit⟧
         CPureSpec.assume_formula (SPureSpec.assume_formula (w := w)).
-    Admitted.
-    (* Proof. *)
-    (*   unfold RPureSpec, SPureSpec.assume_formula, CPureSpec.assume_formula. *)
-    (*   rsolve. apply refine_assume_pathcondition; cbn in *; intuition auto. *)
-    (* Qed. *)
+    Proof.
+      unfold RPureSpec, SPureSpec.assume_formula, CPureSpec.assume_formula.
+      iIntros "%fml %fmls Hfml".
+      iApply refine_assume_pathcondition.
+      iApply (proprepₚ_cong (T2 := PathCondition) with "Hfml").
+      cbn. intuition.
+    Qed.
 
     Lemma refine_angelic_binary `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧

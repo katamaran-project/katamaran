@@ -254,8 +254,8 @@ Module Pred
     change (@interface.bi_sep (@bi_pred ?w) ?P ?Q ?ι) with (sepₚ (w := w) P Q ι) in * ||
     change (@eqₚ ?T ?A ?instTA ?w ?t1 ?t2 ?ι) with (inst t1 ι = inst t2 ι) in * ||
     change (@repₚ ?T ?A ?instTA ?t2 ?w ?t1 ?ι) with (inst t1 ι = t2) in *||
-    change (@wandₚ ?w ?P ?Q ?ι) with (P ι -> Q ι) in *||
-    change (@proprepₚ ?T ?instTP ?t2 ?w ?t1 ?ι) with (instprop t1 ι <-> t2) in *||
+    change (@wandₚ ?w ?P ?Q ?ι) with (P ι -> Q ι)%type in *||
+    change (@proprepₚ ?T ?instTP ?t2 ?w ?t1 ?ι) with (instprop t1 ι <-> t2)%type in *||
     change (@interface.bi_emp (@bi_pred _) ?ι) with (empₚ ι) in *||
     change (@interface.bi_wand (@bi_pred ?w) ?P ?Q ?ι) with (@wandₚ w P Q ι) in *||
     change (@interface.bi_entails (@bi_pred _) ?P ?Q) with (entails P Q) in *||
@@ -690,6 +690,16 @@ Module Pred
     Proof.
       crushPredEntails3.
       now rewrite H2 H4 H5.
+    Qed.
+
+    Lemma proprepₚ_cong {T1 : LCtx -> Type} `{InstProp T1}
+      {T2 : LCtx -> Type} `{InstProp T2}
+      {w : World} (fs : T1 w -> T2 w)
+      {v1 : Prop} {vs1 : T1 w} :
+      (∀ (ι : Valuation w) vs1, instprop (fs vs1) ι <-> instprop vs1 ι) ->
+      proprepₚ v1 vs1 ⊢ proprepₚ v1 (fs vs1).
+    Proof.
+      crushPredEntails3.
     Qed.
 
     Lemma proprepₚ_cong₂ {T1 : LCtx -> Type} `{Inst T1 A1}
@@ -1235,6 +1245,11 @@ Module Pred
       - now rewrite inst_sub_id.
     Qed.
       
+    (* Lemma assuming_acc_subst_right_let  {w : World} x {σ} {xIn : x∷σ ∈ w} *)
+    (*   (t : Term (w - x∷σ) σ) {P} : *)
+    (*   assuming (acc_subst_right x t) P ⊣⊢ *)
+    (*     eqₚ (term_var xIn) (subst (sub_wk1 xIn) t) ∗ *)
+    (*     forgetting (acc_subst_left x) P. *)
   End SubstMod.
 
   Module logicalrelation.
