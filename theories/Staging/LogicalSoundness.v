@@ -1010,6 +1010,7 @@ Module Soundness
         CPureSpec.assert_eq_chunk (SPureSpec.assert_eq_chunk (w := w)).
     Proof.
       iIntros (msg c1 cs1) "Hc1".
+      (* TODO: induction on RChunk instead *)
       iInduction cs1 as [] "IHcs";
         iIntros (c2 cs2) "Hcs2 %w2 %ω2 !>"; destruct cs2;
         cbn - [RSat]; try (now iApply (refine_error (RA := RUnit))).
@@ -1145,9 +1146,10 @@ Module Soundness
       cbn. now apply refine_rinst_sub_initial.
     Qed.
 
-    Lemma refine_produce_chunk :
-      ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧
-        SPureSpec.produce_chunk CPureSpec.produce_chunk.
+    Lemma refine_produce_chunk {w} :
+      ⊢ ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧
+        CPureSpec.produce_chunk  (SPureSpec.produce_chunk (w := w)).
+    Admitted.
     (* Proof. *)
     (*   intros w ι Hpc sc cc rc sh ch rh. *)
     (*   unfold SPureSpec.produce_chunk, CPureSpec.produce_chunk. *)
