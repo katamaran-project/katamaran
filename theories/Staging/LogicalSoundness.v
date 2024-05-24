@@ -515,63 +515,101 @@ Module Soundness
       - iApply ("Hc2" with "Hk HSP2").
     Qed.
 
+    Lemma RList'_ind_log {AT : TYPE} {A : Type} {R : Rel AT A}
+      (P : Rel (WList AT) (list A)) :
+          ∀ (w : World), 
+          (ℛ⟦P⟧ [] ([] : WList AT w) ∗ 
+             (∀ (v : A) (ts : WList AT w) (vs : list A) (t : AT w),
+                 ℛ⟦R⟧ v t -∗ RList' R vs ts -∗ ℛ⟦P⟧ vs ts -∗ ℛ⟦P⟧ (v :: vs) (t :: ts)) ⊢
+             ∀ (l : list A) (l0 : WList AT w), RList' R l l0 -∗ ℛ⟦P⟧ l l0)%I.
+    Proof.
+      intros w. constructor.
+      intros ι Hpc (Hnil & Hcons) l l0 HRList.
+      induction HRList.
+      - now apply Hnil.
+      - apply Hcons; try done.
+        now apply IHHRList.
+    Qed.
+
     Lemma refine_angelic_list' `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RA -> RList RA -> RPureSpec RA⟧
         CPureSpec.angelic_list' (SPureSpec.angelic_list' (w := w)).
     Proof.
       iIntros "%v %sv Hv %vs %svs Hvs".
-      (* induction on RList? interpret RList_ind as logical term?  *)
-    Admitted.
-    (*   intros w ι Hpc sv cv rv svs cvs rvs. revert sv cv rv. *)
-    (*   induction rvs; cbn [SPureSpec.angelic_list' CPureSpec.angelic_list']. *)
-    (*   - now apply refine_pure. *)
-    (*   - intros sv cv rv. apply refine_angelic_binary; auto. *)
-    (*     now apply refine_pure. *)
-    (* Qed. *)
+      iRevert (v sv) "Hv".
+      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list' v vs) (SPureSpec.angelic_list' (w := w) sv svs))%I) w with "[] Hvs").
+      iSplit.
+      - iApply refine_pure.
+      - clear. iIntros (v sv vs svs) "Hv Hvs IHvs %v2 %sv2 Hv2".
+        iApply (refine_angelic_binary with "[Hv2]").
+        + now iApply refine_pure.
+        + now iApply "IHvs".
+    Qed.
 
-    (* Lemma refine_angelic_list `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RMsg _ (RList RA -> RPureSpec RA)⟧ *)
-    (*     SPureSpec.angelic_list CPureSpec.angelic_list. *)
-    (* Proof. *)
-    (*   intros w ι Hpc msg sv cv []. *)
-    (*   - now apply refine_error. *)
-    (*   - now apply refine_angelic_list'. *)
-    (* Qed. *)
+    Lemma refine_angelic_list `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RMsg _ (RList RA -> RPureSpec RA)⟧
+        CPureSpec.angelic_list (SPureSpec.angelic_list (w := w)).
+    Proof.
+      iIntros (msg vs svs) "Hvs".
+      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ∀ msg, ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list vs) (SPureSpec.angelic_list (w := w) msg svs))%I) w with "[] Hvs").
+      clear.
+      iSplit.
+      - now iApply refine_error.
+      - iIntros (v svs vs sv) "Hv Hvs _ %msg".
+        cbn -[RSat].
+        now iApply (refine_angelic_list' with "Hv Hvs").
+    Qed.
 
-    (* Lemma refine_demonic_list' `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RA -> RList RA -> RPureSpec RA⟧ *)
-    (*     SPureSpec.demonic_list' CPureSpec.demonic_list'. *)
-    (* Proof. *)
-    (*   intros w ι Hpc sv cv rv svs cvs rvs. revert sv cv rv. *)
-    (*   induction rvs; cbn [SPureSpec.demonic_list' CPureSpec.demonic_list']. *)
-    (*   - now apply refine_pure. *)
-    (*   - intros sv cv rv. apply refine_demonic_binary; auto. now apply refine_pure. *)
-    (* Qed. *)
+    Lemma refine_demonic_list' `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RA -> RList RA -> RPureSpec RA⟧
+        CPureSpec.demonic_list' (SPureSpec.demonic_list' (w := w)).
+    Proof.
+      iIntros "%v %sv Hv %vs %svs Hvs".
+      iRevert (v sv) "Hv".
+      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list' v vs) (SPureSpec.demonic_list' (w := w) sv svs))%I) w with "[] Hvs").
+      iSplit.
+      - iApply refine_pure.
+      - clear. iIntros (v sv vs svs) "Hv Hvs IHvs %v2 %sv2 Hv2".
+        iApply (refine_demonic_binary with "[Hv2]").
+        + now iApply refine_pure.
+        + now iApply "IHvs".
+    Qed.
 
-    (* Lemma refine_demonic_list `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RList RA -> RPureSpec RA⟧ *)
-    (*     SPureSpec.demonic_list CPureSpec.demonic_list. *)
-    (* Proof. *)
-    (*   intros w ι Hpc sv cv []. *)
-    (*   - now apply refine_block. *)
-    (*   - now apply refine_demonic_list'. *)
-    (* Qed. *)
+    Lemma refine_demonic_list `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RList RA -> RPureSpec RA⟧
+        CPureSpec.demonic_list (SPureSpec.demonic_list (w := w)).
+    Proof.
+      iIntros (vs svs) "Hvs".
+      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list vs) (SPureSpec.demonic_list (w := w) svs))%I) w with "[] Hvs").
+      clear.
+      iSplit.
+      - now iApply refine_block.
+      - iIntros (v svs vs sv) "Hv Hvs _".
+        now iApply (refine_demonic_list' with "Hv Hvs").
+    Qed.
 
-    (* Lemma refine_angelic_finite {F} `{finite.Finite F} : *)
-    (*   ℛ⟦RMsg _ (RPureSpec (RConst F))⟧ *)
-    (*     (@SPureSpec.angelic_finite F _ _) (CPureSpec.angelic_finite F). *)
-    (* Proof. *)
-    (*   intros w ι Hpc msg. apply refine_angelic_list; auto. *)
-    (*   induction (finite.enum F); now constructor. *)
-    (* Qed. *)
+    Lemma refine_angelic_finite {F} `{finite.Finite F} {w} :
+      ⊢ ℛ⟦RMsg _ (RPureSpec (RConst F))⟧
+        (CPureSpec.angelic_finite F) (@SPureSpec.angelic_finite F _ _ w).
+    Proof.
+      iIntros (msg).
+      unfold CPureSpec.angelic_finite, SPureSpec.angelic_finite.
+      iApply (refine_angelic_list (RA := RConst F)).
+      iStopProof.
+      crushPredEntails3.
+      induction (finite.enum F); now constructor.
+    Qed.
 
-    (* Lemma refine_demonic_finite {F} `{finite.Finite F} : *)
-    (*   ℛ⟦RPureSpec (RConst F)⟧ *)
-    (*     (@SPureSpec.demonic_finite F _ _) (CPureSpec.demonic_finite F). *)
-    (* Proof. *)
-    (*   intros w ι Hpc. apply refine_demonic_list; auto. *)
-    (*   induction (finite.enum F); now constructor. *)
-    (* Qed. *)
+    Lemma refine_demonic_finite {F} `{finite.Finite F} {w} :
+      ⊢ ℛ⟦RPureSpec (RConst F)⟧
+        (CPureSpec.demonic_finite F) (@SPureSpec.demonic_finite F _ _ w).
+    Proof.
+      unfold CPureSpec.angelic_finite, SPureSpec.angelic_finite.
+      iApply (refine_demonic_list (RA := RConst F)).
+      iStopProof.
+      crushPredEntails3.
+      induction (finite.enum F); now constructor.
+    Qed.
 
     (* Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar) *)
     (*   {σ} (pat : @Pattern N σ) : *)
@@ -1107,9 +1145,9 @@ Module Soundness
       cbn. now apply refine_rinst_sub_initial.
     Qed.
 
-    (* Lemma refine_produce_chunk : *)
-    (*   ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧ *)
-    (*     SPureSpec.produce_chunk CPureSpec.produce_chunk. *)
+    Lemma refine_produce_chunk :
+      ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧
+        SPureSpec.produce_chunk CPureSpec.produce_chunk.
     (* Proof. *)
     (*   intros w ι Hpc sc cc rc sh ch rh. *)
     (*   unfold SPureSpec.produce_chunk, CPureSpec.produce_chunk. *)
