@@ -125,6 +125,37 @@ Module IrisBinaryWPSymmetric (B : Base) (SIG : Signature B) (PROG : Program B)
   Definition step_right := @Step.
 End IrisBinaryWPSymmetric.
 
+(* IrisBinaryWPAsymmetric allows asymmetry between the executions. The left
+   program is allowed to take zero or one step, the right one always needs to
+   be able to take a step. *)
+Module IrisBinaryWPAsymmetric (B : Base) (SIG : Signature B) (PROG : Program B)
+  (SEM : Semantics B PROG) (IB : IrisBase2 B PROG SEM) (IPred : IrisPredicates2 B SIG PROG SEM IB)
+  <: IrisBinaryWPParameters B SIG PROG SEM IB IPred.
+  Import B SIG PROG SEM IB IPred.
+
+  Context `{sg : sailGS2 Σ}.
+
+  Definition Step_zero_or_one {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ)
+    (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s1 s2 : Stm Γ σ) : Prop :=
+    match stm_to_val s1 with
+    | Some v1 => s1 = s2 ∧ γ1 = γ2 ∧ δ1 = δ2 ∧ μ1 = μ2
+    | _       =>
+        match stm_to_fail s1 with
+        | Some m1 => s1 = s2 ∧ γ1 = γ2 ∧ δ1 = δ2 ∧ μ1 = μ2
+        | _       => ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩
+        end
+    end.
+
+  (* TODO: would rather use the brackets for other step definitions, but these don't work?
+           Should move the definition and notation into SmallStep/Step.v and properly investigate... *)
+  Notation "⟪ γ1 , μ1 , δ1 , s1 ⟫ --->? ⟪ γ2 , μ2 , δ2 , s2 ⟫" := (@Step_zero_or_one _ _ γ1 μ1 δ1 γ2 μ2 δ2 s1 s2).
+
+  Definition reg_inv    := @regs_inv2.
+  Definition mem_inv    := @mem_inv2_sail.
+  Definition step_left  := @Step_zero_or_one.
+  Definition step_right := @Step.
+End IrisBinaryWPAsymmetric.
+
 Module Type IrisSignatureRules2
   (Import B     : Base)
   (Import SIG   : Signature B)
@@ -162,21 +193,6 @@ Section Soundness.
     Stm Γ1 τ -d> Stm Γ2 τ -d>
     Post Γ1 Γ2 τ -d>
     iProp Σ.
-
-  Definition Step_zero_or_one {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ) (s1 : Stm Γ σ)
-    (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s2 : Stm Γ σ) : Prop :=
-    match stm_to_val s1 with
-    | Some v1 => s1 = s2 ∧ γ1 = γ2 ∧ δ1 = δ2 ∧ μ1 = μ2
-    | _       =>
-        match stm_to_fail s1 with
-        | Some m1 => s1 = s2 ∧ γ1 = γ2 ∧ δ1 = δ2 ∧ μ1 = μ2
-        | _       => ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩
-        end
-    end.
-
-  (* TODO: would rather use the brackets for other step definitions, but these don't work?
-           Should move the definition and notation into SmallStep/Step.v and properly investigate... *)
-  Notation "⟪ γ1 , μ1 , δ1 , s1 ⟫ --->? ⟪ γ2 , μ2 , δ2 , s2 ⟫" := (@Step_zero_or_one _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2).
 
   (* IDEA: borrow idea of Atomic of Iris. When s1 and s2 are atomic, they are
            allowed to open the invariants and close them.
