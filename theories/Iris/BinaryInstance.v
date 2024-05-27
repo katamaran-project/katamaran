@@ -87,7 +87,7 @@ Module IrisInstanceWithContracts2
 
   Section WithSailGS.
   Import ProgramLogic.
-  Context {Σ} {sG : sailGS2 Σ}.
+  Context `{sG : sailGS2 Σ}.
 
   Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
     (∀ σs σ (f : 𝑭 σs σ),

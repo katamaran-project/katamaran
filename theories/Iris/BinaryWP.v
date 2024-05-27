@@ -109,6 +109,9 @@ Module Type IrisBinaryWPParameters
   Parameter mem_inv    : forall `{sG : sailGS2 Σ}, Memory -> Memory -> iProp Σ.
   Parameter step_left  : step_sig.
   Parameter step_right : step_sig.
+
+  Global Transparent step_left.
+  Global Transparent step_right.
 End IrisBinaryWPParameters.
 
 (* TODO: provided so that case study still compiles, this is not what we actually want *)
@@ -116,8 +119,6 @@ Module IrisBinaryWPSymmetric (B : Base) (SIG : Signature B) (PROG : Program B)
   (SEM : Semantics B PROG) (IB : IrisBase2 B PROG SEM) (IPred : IrisPredicates2 B SIG PROG SEM IB)
   <: IrisBinaryWPParameters B SIG PROG SEM IB IPred.
   Import SEM IB.
-
-  Context `{sg : sailGS2 Σ}.
 
   Definition reg_inv    := @regs_inv2.
   Definition mem_inv    := @mem_inv2_sail.
@@ -132,8 +133,6 @@ Module IrisBinaryWPAsymmetric (B : Base) (SIG : Signature B) (PROG : Program B)
   (SEM : Semantics B PROG) (IB : IrisBase2 B PROG SEM) (IPred : IrisPredicates2 B SIG PROG SEM IB)
   <: IrisBinaryWPParameters B SIG PROG SEM IB IPred.
   Import B SIG PROG SEM IB IPred.
-
-  Context `{sg : sailGS2 Σ}.
 
   Definition Step_zero_or_one {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ)
     (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s1 s2 : Stm Γ σ) : Prop :=
@@ -156,7 +155,7 @@ Module IrisBinaryWPAsymmetric (B : Base) (SIG : Signature B) (PROG : Program B)
   Definition step_right := @Step.
 End IrisBinaryWPAsymmetric.
 
-Module Type IrisSignatureRules2
+Module IrisBinaryWP
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
@@ -164,10 +163,8 @@ Module Type IrisSignatureRules2
   (Import IB    : IrisBase2 B PROG SEM)
   (Import IPred : IrisPredicates2 B SIG PROG SEM IB)
   (Import IWP   : IrisBinaryWPParameters B SIG PROG SEM IB IPred).
-Section Soundness.
 
-  Import SmallStepNotations.
-
+  Section WithSailGS2.
   Context `{sG : sailGS2 Σ}.
 
   #[export] Program Instance PredicateDefIProp : PredicateDef (iProp Σ) :=
@@ -275,6 +272,24 @@ Section Soundness.
     (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) (POST : Post Γ1 Γ2 τ) :
     semWp2 δ1 δ2 s1 s2 POST ≡ semWp2_fix semWp2 δ1 δ2 s1 s2 POST.
   Proof. by unfold semWp2; rewrite fixpoint_semWp2_fix_eq. Qed.
+  End WithSailGS2.
+End IrisBinaryWP.
+
+Module IrisBinaryWPAsymmetricLaws
+  (Import B     : Base)
+  (Import SIG   : Signature B)
+  (Import PROG  : Program B)
+  (Import SEM   : Semantics B PROG)
+  (Import IB    : IrisBase2 B PROG SEM)
+  (Import IPred : IrisPredicates2 B SIG PROG SEM IB).
+
+  Module Export IWPP := IrisBinaryWPAsymmetric B SIG PROG SEM IB IPred.
+  Module Export IWP := IrisBinaryWP B SIG PROG SEM IB IPred IWPP.
+
+  Section WithSailGS2.
+  Context `{sG : sailGS2 Σ}.
+
+  Import SmallStepNotations.
 
   Lemma semWp2_mono [Γ1 Γ2 τ] (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
     (Q1 Q2 : Val τ → CStore Γ1 → Val τ → CStore Γ2 → iProp Σ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
@@ -602,6 +617,25 @@ Section Soundness.
     ⊢ ∀ Q δ1 δ2, semWp2 δ1 δ2 s1 s2 Q -∗ semWp2 δ1 δ2 (stm_lemmak l1 es1 s1) (stm_lemmak l2 es2 s2) Q.
   Proof.
   Admitted.
+  End WithSailGS2.
+End IrisBinaryWPAsymmetricLaws.
+
+Module Type IrisSignatureRules2
+  (Import B     : Base)
+  (Import SIG   : Signature B)
+  (Import PROG  : Program B)
+  (Import SEM   : Semantics B PROG)
+  (Import IB    : IrisBase2 B PROG SEM)
+  (Import IPred : IrisPredicates2 B SIG PROG SEM IB).
+
+  (* We fix the binary wp to the asymmetric one. A different one would have
+     different laws. *)
+  Module Export IWPLaws := IrisBinaryWPAsymmetricLaws B SIG PROG SEM IB IPred.
+
+  Section WithSailGS2.
+  Context `{sG : sailGS2 Σ}.
+
+Section Soundness.
 
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
@@ -825,5 +859,6 @@ Section Soundness.
   Qed.
 
 End Soundness.
+End WithSailGS2.
 
 End IrisSignatureRules2.

@@ -352,8 +352,8 @@ Module RiscvPmpIrisInstance2 <:
     Qed.
   End RiscVPmpIrisInstanceProofs.
 
-  Include IrisBinaryWPSymmetric RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-                          RiscvPmpSemantics RiscvPmpIrisBase2.
+  Include IrisBinaryWPAsymmetric RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpSemantics RiscvPmpIrisBase2.
 
   Include IrisSignatureRules2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     RiscvPmpSemantics RiscvPmpIrisBase2.

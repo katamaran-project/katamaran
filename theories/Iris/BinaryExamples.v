@@ -68,8 +68,10 @@ Set Implicit Arguments.
 Module ExamplesSymmetricBinaryWP (B : Base) (SIG : Signature B) (PROG : Program B)
        (SEM : Semantics B PROG) (IB : IrisBase2 B PROG SEM) (IPred : IrisPredicates2 B SIG PROG SEM IB).
   Import B SIG PROG SEM IB IPred.
-  Include IrisBinaryWPSymmetric B SIG PROG SEM IB IPred.
-  Include IrisSignatureRules2 B SIG PROG SEM IB IPred.
+  Module Import IWPP := IrisBinaryWPSymmetric B SIG PROG SEM IB IPred.
+  Include IrisBinaryWP B SIG PROG SEM IB IPred IWPP.
+
+  Context `{sG : sailGS2 Σ}.
 
   Lemma constant_value : forall {τ} (v : Val τ),
       ⊢ semWp2 [env] [env] (stm_val τ v) (stm_val τ v)
