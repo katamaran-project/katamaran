@@ -133,9 +133,116 @@ Module Soundness
         end)%I.
     #[global] Arguments psafe {w} p ι.
 
+    Lemma psafe_safe {w p} : psafe (w := w) p ⊣⊢ safe p.
+    Proof.
+      refine (SymProp_ind (fun Σ p => forall (w : World) (eq : Σ = w), (psafe (w := w) (eq_rect Σ 𝕊 p w eq) : Pred w) ⊣⊢ safe (eq_rect Σ 𝕊 p w eq)) _ _ _ _ _ _ _ _ _ _ _ _ _ p w eq_refl);
+        clear; intros; subst; cbn.
+      5, 6:  specialize (H (wformula w fml) eq_refl); cbn in H.
+      7, 8:  specialize (H (wsnoc w b) eq_refl); cbn in H.
+      9, 10: specialize (H (wsubst w x t)%ctx eq_refl); cbn in H.
+      all: crushPredEntails3.
+      all: repeat match goal with
+        [ H : forall (x : @eq ?A ?y ?y), _ |- _ ] => specialize (H eq_refl); cbn in H
+      end; crushPredEntails3.
+      - now rewrite obligation_equiv in H1.
+      - apply H; last done.
+        split; first done.
+        now rewrite obligation_equiv in H1.
+      - now rewrite obligation_equiv.
+      - apply H; last done.
+        now split.
+      - apply H; last done.
+        now split.
+      - apply H; last done.
+        now split.
+      - destruct H1 as (ι' & <- & Hpc' & Hsafe).
+        destruct (env.view ι') as [ι v].
+        exists v.
+        apply H; cbn; now rewrite ?instprop_subst inst_sub_wk1.
+      - exists (ι.[b ↦ x]).
+        split.
+        + apply inst_sub_wk1.
+        + split; cbn.
+          * now rewrite instprop_subst inst_sub_wk1.
+          * apply H; last done.
+            now rewrite instprop_subst inst_sub_wk1.
+      - apply H; cbn.
+        + now rewrite instprop_subst inst_sub_wk1.
+        + apply H1; cbn; now rewrite ?instprop_subst inst_sub_wk1.
+      - intros ιpast <- Hpc2.
+        apply H; first done.
+        destruct (env.view ιpast) as [ι v].
+        specialize (H1 v); cbn in H1.
+        now rewrite inst_sub_wk1 in H1.
+      - rewrite <-inst_sub_shift.
+        rewrite obligation_equiv in H1; cbn in H1.
+        now rewrite <-inst_subst.
+      - rewrite <-inst_sub_shift.
+        rewrite obligation_equiv in H1; cbn in H1.
+        rewrite inst_subst in H1.
+        assert (instprop (wco (wsubst w x t)) (inst (sub_shift xIn) ι)).
+        { rewrite instprop_subst.
+          now rewrite inst_sub_single_shift.
+        }
+        apply H; first done.
+        apply H2; last done.
+        now rewrite inst_sub_single_shift.
+      - rewrite obligation_equiv.
+        cbn.
+        now rewrite inst_subst inst_sub_shift.
+      - intros ιpast <- Hpc2.
+        apply H; first done.
+        cbn in H2.
+        now rewrite <-inst_sub_shift, <-inst_subst, sub_comp_shift_single, inst_sub_id in H2.
+      - rewrite <-inst_sub_shift.
+        rewrite <-inst_sub_shift in H2.
+        assert (instprop (wco (wsubst w x t)) (inst (sub_shift xIn) ι)).
+        { rewrite instprop_subst.
+          now rewrite inst_sub_single_shift.
+        }
+        apply H; first done.
+        apply H1; last done.
+        now rewrite inst_sub_single_shift.
+      - intros ιpast <- Hpc.
+        apply H; first done.
+        rewrite <-inst_sub_shift in H1.
+        rewrite <-!inst_subst in H1.
+        rewrite sub_comp_shift_single inst_sub_id in H1.
+        apply H1.
+        rewrite <-inst_lookup.
+        rewrite lookup_sub_single_eq.
+        rewrite <-subst_sub_comp.
+        now rewrite sub_comp_shift_single subst_sub_id.
+      - admit.
+      - admit.
+      - admit.
+      - now destruct H1.
+      - now constructor.
+    Admitted.
+
+
+    #[export] Instance proper_psafe: ∀ {w : World}, Proper (sequiv w ==> entails (w := w)) psafe.
+    Proof.
+      intros w P sP HP.
+      rewrite !psafe_safe.
+      constructor.
+      intros.
+      now apply HP.
+    Qed.
+
     (* Relatedness of symbolic and shallow propositions. The driving base case! *)
     #[export] Instance RProp : Rel SymProp Prop :=
       MkRel (fun P w SP => (psafe SP -∗ ⌜ P ⌝)%I).
+
+    #[export] Instance rprop_proper {w : World} : Proper (impl ==> sequiv _ ==> entails (w := w)) (fun P => ℛ⟦ RProp ⟧ P).
+    Proof.
+      iIntros (P1 P2 HP sP1 sP2 HsP) "H1 HSP".
+      rewrite <-HsP.
+      iDestruct ("H1" with "HSP") as "%HP1".
+      iPureIntro.
+      now apply HP.
+    Qed.
+
 
     Lemma refine_symprop_angelic_binary {w : World} :
       ⊢ ℛ⟦RProp -> RProp -> RProp⟧ (@or) (@angelic_binary w).
@@ -515,29 +622,13 @@ Module Soundness
       - iApply ("Hc2" with "Hk HSP2").
     Qed.
 
-    Lemma RList'_ind_log {AT : TYPE} {A : Type} {R : Rel AT A}
-      (P : Rel (WList AT) (list A)) :
-          ∀ (w : World), 
-          (ℛ⟦P⟧ [] ([] : WList AT w) ∗ 
-             (∀ (v : A) (ts : WList AT w) (vs : list A) (t : AT w),
-                 ℛ⟦R⟧ v t -∗ RList' R vs ts -∗ ℛ⟦P⟧ vs ts -∗ ℛ⟦P⟧ (v :: vs) (t :: ts)) ⊢
-             ∀ (l : list A) (l0 : WList AT w), RList' R l l0 -∗ ℛ⟦P⟧ l l0)%I.
-    Proof.
-      intros w. constructor.
-      intros ι Hpc (Hnil & Hcons) l l0 HRList.
-      induction HRList.
-      - now apply Hnil.
-      - apply Hcons; try done.
-        now apply IHHRList.
-    Qed.
-
     Lemma refine_angelic_list' `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RA -> RList RA -> RPureSpec RA⟧
         CPureSpec.angelic_list' (SPureSpec.angelic_list' (w := w)).
     Proof.
       iIntros "%v %sv Hv %vs %svs Hvs".
       iRevert (v sv) "Hv".
-      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list' v vs) (SPureSpec.angelic_list' (w := w) sv svs))%I) w with "[] Hvs").
+      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list' v vs) (SPureSpec.angelic_list' (w := w) sv svs))%I) w with "[] Hvs").
       iSplit.
       - iApply refine_pure.
       - clear. iIntros (v sv vs svs) "Hv Hvs IHvs %v2 %sv2 Hv2".
@@ -551,7 +642,7 @@ Module Soundness
         CPureSpec.angelic_list (SPureSpec.angelic_list (w := w)).
     Proof.
       iIntros (msg vs svs) "Hvs".
-      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ∀ msg, ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list vs) (SPureSpec.angelic_list (w := w) msg svs))%I) w with "[] Hvs").
+      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ∀ msg, ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list vs) (SPureSpec.angelic_list (w := w) msg svs))%I) w with "[] Hvs").
       clear.
       iSplit.
       - now iApply refine_error.
@@ -566,7 +657,7 @@ Module Soundness
     Proof.
       iIntros "%v %sv Hv %vs %svs Hvs".
       iRevert (v sv) "Hv".
-      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list' v vs) (SPureSpec.demonic_list' (w := w) sv svs))%I) w with "[] Hvs").
+      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list' v vs) (SPureSpec.demonic_list' (w := w) sv svs))%I) w with "[] Hvs").
       iSplit.
       - iApply refine_pure.
       - clear. iIntros (v sv vs svs) "Hv Hvs IHvs %v2 %sv2 Hv2".
@@ -580,7 +671,7 @@ Module Soundness
         CPureSpec.demonic_list (SPureSpec.demonic_list (w := w)).
     Proof.
       iIntros (vs svs) "Hvs".
-      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list vs) (SPureSpec.demonic_list (w := w) svs))%I) w with "[] Hvs").
+      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list vs) (SPureSpec.demonic_list (w := w) svs))%I) w with "[] Hvs").
       clear.
       iSplit.
       - now iApply refine_block.
@@ -1268,41 +1359,97 @@ Module Soundness
       cbn. now apply refine_rinst_sub_initial.
     Qed.
 
-    Lemma refine_produce_chunk {w} :
-      ⊢ ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧
-        CPureSpec.produce_chunk  (SPureSpec.produce_chunk (w := w)).
-    Admitted.
-    (* Proof. *)
-    (*   intros w ι Hpc sc cc rc sh ch rh. *)
-    (*   unfold SPureSpec.produce_chunk, CPureSpec.produce_chunk. *)
-    (*   apply refine_pure; auto. cbn. *)
-    (*   rewrite peval_chunk_sound. now f_equal. *)
-    (* Qed. *)
+    Lemma refine_peval_chunk {w} :
+      ⊢ ℛ⟦RChunk -> RChunk⟧ id (peval_chunk : Impl _ _ w).
+    Proof.
+      crushPredEntails3.
+      now rewrite peval_chunk_sound.
+    Qed.
 
-    (* Lemma refine_consume_chunk : *)
-    (*   ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧ *)
-    (*     SPureSpec.consume_chunk CPureSpec.consume_chunk. *)
-    (* Proof. *)
-    (*   intros w0 ι0 Hpc0 cs cc -> sh ch ->. *)
-    (*   unfold SPureSpec.consume_chunk. *)
-    (*   set (c1 := peval_chunk cs). *)
-    (*   destruct (try_consume_chunk_exact_spec sh c1) as [sh' HIn|]. *)
-    (*   { intros POST__s POST__c HPOST. *)
-    (*     unfold CPureSpec.consume_chunk. *)
-    (*     cbn. intros Hwp. *)
-    (*     rewrite CPureSpec.wp_angelic_list. *)
-    (*     change (SHeap w0) in sh'. *)
-    (*     exists (inst c1 ι0, inst sh' ι0). *)
-    (*     split. *)
-    (*     - unfold inst at 3, inst_heap, inst_list. *)
-    (*       rewrite heap_extractions_map, List.in_map_iff. *)
-    (*       + exists (c1 , sh'). split. reflexivity. assumption. *)
-    (*       + eauto using inst_is_duplicable. *)
-    (*     - cbn. rewrite CPureSpec.wp_assert_eq_chunk. subst. *)
-    (*       split; auto. *)
-    (*       + subst c1. now rewrite peval_chunk_sound. *)
-    (*       + revert Hwp. apply HPOST; now wsimpl. *)
-    (*   } *)
+    Lemma refine_produce_chunk {w} :
+          ⊢ ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧
+            CPureSpec.produce_chunk  (SPureSpec.produce_chunk (w := w)).
+    Proof.
+      iIntros (c sc) "Hc %h %sh Hh".
+      unfold SPureSpec.produce_chunk, CPureSpec.produce_chunk.
+      iApply (refine_pure (RA := RHeap)).
+      iApply (refine_cons (R := RChunk) with "[Hc] Hh").
+      now iApply refine_peval_chunk.
+    Qed.
+
+    Lemma refine_is_duplicable {w} :
+      ⊢ ℛ⟦ RChunk -> RConst bool ⟧ is_duplicable (@is_duplicable (Chunk w) _ : Impl Chunk (Const bool) w).
+    Proof.
+      crushPredEntails3; subst.
+      now destruct a0.
+    Qed.
+
+    Lemma refine_heap_extractions {w} :
+      ⊢ ℛ⟦RHeap -> RList (RProd RChunk RHeap)⟧
+        (heap_extractions)
+        (heap_extractions : Impl SHeap (fun w => list (Chunk w * SHeap w)) w).
+    Proof.
+      iIntros (h sh) "Hh".
+      iApply (RList_ind (MkRel (fun h w sh => ℛ⟦RList (RProd RChunk RHeap)⟧ (heap_extractions h) (heap_extractions sh))) with "[] Hh").
+      clear.
+      iSplit.
+      - iApply (refine_nil (R := RProd RChunk RHeap)).
+      - iIntros (v svs vs sv) "#Hv #Hvs IHvs".
+        iApply (refine_cons (R := RProd RChunk RHeap) with "[Hv Hvs] [Hvs IHvs]").
+         + iSplitL; first done.
+           iApply (refine_if (R := RHeap)); last done.
+           * now iApply refine_is_duplicable.
+           * now iApply (refine_cons (R := RChunk)).
+         + iApply (refine_map (R1 := RProd RChunk RHeap) (R2 := RProd RChunk RHeap) with "[] IHvs").
+           iIntros ([c1 h1] [sc1 sh1]) "[Hc1 Hh1]".
+           iFrame "Hc1".
+           now iApply (refine_cons (R := RChunk)).
+    Qed.
+
+    Lemma refine_In `{R : Rel AT A} {w} {sv : AT w} {sl l} :
+      ⊢ ℛ⟦ RList R ⟧ l sl -∗ ⌜ In sv sl ⌝ -∗ ∃ v, ⌜ In v l ⌝ ∗ ℛ⟦ R ⟧ v sv.
+    Proof.
+      iIntros "Hl %Hin".
+      iApply (RList_ind (R := R) (MkRel (fun l w sl => ∀ sv, ⌜ In sv sl ⌝ -∗ ∃ v, ⌜ In v l ⌝ ∗ ℛ⟦ R ⟧ v sv))%I with "[] Hl [%//]").
+      clear.
+      iSplit.
+      - iIntros "%sv %Hin".
+        now inversion Hin.
+      - iIntros (v sv vs svs) "Hv Hvs IHvs %sv2 %Hin".
+        destruct Hin as [<- | Hin].
+        + iExists v.
+          iFrame.
+          now iLeft.
+        + iDestruct ("IHvs" with "[% //]") as "(%v2 & Hin & Hv2)".
+          iExists v2. iFrame.
+          now iRight.
+    Qed.
+
+    Lemma refine_consume_chunk {w} :
+      ⊢ ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧
+        CPureSpec.consume_chunk (SPureSpec.consume_chunk (w := w)).
+    Proof.
+      iIntros (c sc) "#Hc %h %sh #Hh".
+      unfold SPureSpec.consume_chunk.
+      iPoseProof (refine_peval_chunk with "Hc") as "Hcp"; cbn -[RSat].
+      set (sc1 := peval_chunk sc).
+      destruct (try_consume_chunk_exact_spec sh sc1) as [sh' HsIn|].
+      iPoseProof (refine_heap_extractions with "Hh") as "Hexts".
+      iDestruct (refine_In with "Hexts [%//]") as "(%c1 & %HIn & Hc1)".
+      { iIntros "%K %sK HK HSP".
+        unfold CPureSpec.consume_chunk.
+        unfold CPureSpec.bind.
+        rewrite CPureSpec.wp_angelic_list.
+        change (SHeap w) in sh'.
+        iExists c1.
+        iSplit; first done.
+        destruct c1.
+        iDestruct "Hc1" as "(Hc1 & Hh1)".
+        rewrite CPureSpec.wp_assert_eq_chunk.
+        iDestruct (repₚ_antisym_left with "Hcp Hc1") as "->".
+        iSplitR; first done.
+        now iApply (refine_T with "HK Hh1 HSP").
+      }
     (*   destruct (try_consume_chunk_precise_spec sh c1) as [[sh' eqs] HIn|]. *)
     (*   { cbv [SPureSpec.bind SPureSpec.pure]. *)
     (*     intros POST__s POST__c HPOST. *)
@@ -1327,19 +1474,7 @@ Module Soundness
     (*   } *)
     (*   { intros POST__s POST__c HPOST. now apply refine_error. } *)
     (* Qed. *)
-
-    (* Lemma refine_heap_extractions : *)
-    (*   ℛ⟦RHeap -> RList (RProd RChunk RHeap)⟧ *)
-    (*     (fun w h => heap_extractions h) *)
-    (*     (heap_extractions). *)
-    (* Proof. *)
-    (*   intros w0 ι0 Hpc0 sh ch ->. hnf. *)
-    (*   unfold inst, inst_heap, inst_list. *)
-    (*   rewrite heap_extractions_map. *)
-    (*   { clear. induction (heap_extractions sh) as [|[]]; *)
-    (*       cbn; constructor; cbn; auto. } *)
-    (*   eauto using inst_is_duplicable. *)
-    (* Qed. *)
+    Admitted.
 
     (* Lemma refine_consume_chunk_angelic : *)
     (*   ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧ *)
@@ -1495,10 +1630,9 @@ Module Soundness
       iModIntro.
       iIntros (k2 k2s) "Hk2".
       iApply ("Hk" with "Hk2 [Hs]").
-      - iApply (refine_inst_persist s).
-        now iModIntro.
-      - iApply (refine_inst_persist h).
-        now iModIntro.
+      - now iApply (refine_inst_persist s).
+      - rewrite !RList_RInst.
+        now iApply refine_inst_persist.
     Qed.
 
     Lemma refine_block_store {Γ1 Γ2} `{R : Rel AT A} {w : World} :

@@ -661,6 +661,12 @@ Module Pred
       crushPredEntails3.
     Qed.
 
+    Lemma repₚ_antisym_left {T : LCtx -> Type} `{Inst T A} {a1 a2 : A} {w : World} {sa : T w} :
+      ⊢ repₚ a1 sa -∗ repₚ a2 sa -∗ ⌜ a1 = a2 ⌝.
+    Proof.
+      crushPredEntails3. now subst.
+    Qed.
+
     Lemma proprepₚ_triv {T : LCtx -> Type} `{InstProp T} {a : Prop} {w : World} {vt : T w}:
       (∀ ι : Valuation w, instprop vt ι <-> a) ->
       ⊢ proprepₚ a vt.
@@ -1322,7 +1328,6 @@ Module Pred
     #[export] Instance RFormula : Rel Formula Prop := RInstPropIff Formula.
 
     #[export] Instance RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
-    #[export] Instance RHeap : Rel SHeap SCHeap := RInst SHeap SCHeap.
 
     (* Give the [RMsg] instance a lower priority (3) than [RImpl]. *)
     #[export] Instance RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A | 3 :=
@@ -1339,11 +1344,12 @@ Module Pred
     #[export] Instance RList {AT A} (R : Rel AT A) : Rel (WList AT) (list A) :=
       MkRel (RList' R).
 
+    #[export] Instance RHeap : Rel SHeap SCHeap := RList RChunk.
     #[export] Instance RConst A : Rel (Const A) A := RInst (Const A) A.
 
     #[export] Instance RProd `(RA : Rel AT A, RB : Rel BT B) :
       Rel (WProd AT BT) (A * B)%type :=
-      MkRel (fun '(va,vb) w '(ta,tb) => ℛ⟦RA⟧ va ta /\ₚ ℛ⟦RB⟧ vb tb)%P.
+      MkRel (fun '(va,vb) w '(ta,tb) => ℛ⟦RA⟧ va ta ∗ ℛ⟦RB⟧ vb tb)%I.
 
     #[export] Instance RMatchResult {N σ} (p : @Pattern N σ) :
       Rel (SMatchResult p) (MatchResult p) :=
@@ -1395,6 +1401,68 @@ Module Pred
     (* Import ModalNotations. *)
     Import iris.proofmode.tactics.
     
+    Lemma refine_nil {AT A} {R : Rel AT A} {w} :
+      ⊢ ℛ⟦ RList R ⟧ nil (nil : list (AT w)).
+    Proof.
+      crushPredEntails3.
+      constructor.
+    Qed.
+
+    Lemma refine_cons {AT A} {R : Rel AT A} {w} :
+      ⊢ ℛ⟦ R -> RList R -> RList R ⟧ cons (@cons (AT w)).
+    Proof.
+      crushPredEntails3.
+      now constructor.
+    Qed.
+
+    Lemma refine_if {AT A} {R : Rel AT A} {w} {v1 sv1 v2 sv2 c sc}:
+      ⊢ ℛ⟦ RConst bool ⟧ c sc -∗ ℛ⟦ R ⟧ v1 sv1 -∗ ℛ⟦ R ⟧ v2 sv2 -∗
+        ℛ⟦ R ⟧ (if c then v1 else v2) (if sc then sv1 else sv2 : AT w).
+    Proof.
+      crushPredEntails3; subst.
+      now destruct sc.
+    Qed.
+
+    Lemma RList_ind {AT : TYPE} {A : Type} {R : Rel AT A}
+      (P : Rel (WList AT) (list A)) :
+      ∀ (w : World),
+        (ℛ⟦P⟧ [] ([] : WList AT w) ∗
+           (∀ (v : A) (t : AT w) (vs : list A) (ts : WList AT w),
+               ℛ⟦R⟧ v t -∗ ℛ⟦ RList R ⟧ vs ts -∗ ℛ⟦P⟧ vs ts -∗ ℛ⟦P⟧ (v :: vs) (t :: ts)) ⊢
+           ∀ (l : list A) (l0 : WList AT w), ℛ⟦ RList R ⟧ l l0 -∗ ℛ⟦P⟧ l l0)%I.
+    Proof.
+      intros w. constructor.
+      intros ι Hpc (Hnil & Hcons) l l0 HRList.
+      induction HRList.
+      - now apply Hnil.
+      - apply Hcons; try done.
+        now apply IHHRList.
+    Qed.
+
+    Lemma refine_map {AT1 A1} {R1 : Rel AT1 A1} {AT2 A2} {R2 : Rel AT2 A2} {w} :
+      ⊢ ℛ⟦ (R1 -> R2) -> RList R1 -> RList R2 ⟧ (@map _ _) (@map _ _ : Impl _ _ w).
+    Proof.
+      iIntros (f sf) "Hf %l %sl Hl".
+      iApply (RList_ind (R := R1) (MkRel (fun l w sl => ℛ⟦ (R1 -> R2) -> RList R2 ⟧ (fun f => map f l) (fun sf => map sf sl : list (AT2 w)))) with "[] Hl Hf").
+      clear; iIntros; iSplit.
+      - iIntros (f sf) "Hf".
+        iApply (refine_nil (R := R2)).
+      - iIntros (v sv vs svs) "Hv Hvs IHvs %f %sf #Hf".
+        iApply (refine_cons (R := R2) with "[Hf Hv]").
+        + now iApply ("Hf" $! v sv with "Hv").
+        + now iApply ("IHvs" $! f sf with "Hf").
+    Qed.
+
+    Lemma RList_RInst {AT A} `{InstSubst AT A, @SubstLaws AT _} :
+      forall (v : list A) (w : World) (t : list (AT w)),
+        ℛ⟦RList (RInst AT A)⟧ v t ⊣⊢ ℛ⟦RInst (fun w => list (AT w)) (list A)⟧ v t.
+    Proof.
+      crushPredEntails3.
+      - induction H4; first done.
+        now rewrite <-H4, <-IHRList'.
+      - revert v H4. induction t; intros v H4; subst; repeat constructor.
+        now apply IHt.
+    Qed.
 
     Lemma refine_four {w1 w2} {ω : Acc w2 w1} {AT A} (RA : Rel AT A) :
       (⊢ ∀ (v__s : Box AT w2) v, (forgetting ω (ℛ⟦□ᵣ RA⟧ v v__s) → ℛ⟦□ᵣ RA⟧ v (four v__s ω)))%I.

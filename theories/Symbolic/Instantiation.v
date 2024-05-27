@@ -354,6 +354,17 @@ Module Type InstantiationOn
     inst (env.lookup ζ xIn) ι = env.lookup (inst (A := Valuation Σ0) ζ ι) xIn.
   Proof. unfold inst, inst_sub, inst_env. now rewrite env.lookup_map. Qed.
 
+  Lemma inst_sub_single_shift_2 {Σ} (ι : Valuation Σ) {x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
+    inst (sub_single xIn t) (inst (sub_shift xIn) ι) = ι ->
+    inst t (inst (sub_shift xIn) ι) = env.lookup ι xIn.
+  Proof.
+    intros <-.
+    rewrite <-inst_lookup.
+    rewrite lookup_sub_single_eq.
+    rewrite <-!inst_subst.
+    now rewrite subst_shift_single.
+  Qed.
+
   #[export] Instance inst_unit : Inst Unit unit :=
     fun _ x ι => x.
   #[export] Instance lift_unit : Lift Unit unit :=
