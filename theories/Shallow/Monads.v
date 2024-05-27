@@ -362,13 +362,13 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
             let ι' := env.remove (x ∷ σ) ι xIn in
             let x' := ι.[? x∷σ] in
             let t' := inst t ι' in
-            assert_formula (x' = t') ;;
+            assert_formula (t' = x') ;;
             replay k ι'
         | @SymProp.assume_vareq _ x σ xIn t k =>
             let ι' := env.remove (x ∷ σ) ι xIn in
             let x' := ι.[? x∷σ] in
             let t' := inst t ι' in
-            assume_formula (x' = t') ;;
+            assume_formula (t' = x') ;;
             replay k ι'
         | SymProp.pattern_match s pat rhs =>
             error

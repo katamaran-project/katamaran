@@ -68,7 +68,7 @@ Module Soundness
 
   Import iris.bi.interface iris.proofmode.tactics.
   Import SymProp.
-  Module Import P := Pred B SIG SIG.
+  Module Import P := Pred B SIG.
   Import ufl_notations.
   Import proofmode.
 
@@ -83,24 +83,34 @@ Module Soundness
     Inductive DebugPred (B : LCtx → Type) {w : World} (b : B w) (P : Pred w) : Pred w := 
         MkDebugPred : ∀ w, P w -> DebugPred B b P w.
 
+    Section DebugPred.
+      Lemma elim_debugPred {B : LCtx → Type} {w : World} {b : B w} {P : Pred w} :
+        DebugPred B b P ⊢ P.
+      Proof.
+        crushPredEntails3.
+        now destruct H0.
+      Qed.
+    End DebugPred.
+
+
     (* nicer version of wsafe *)
     Fixpoint psafe {w : World} (p : SymProp w) : Pred w := 
       (match p with
        | angelic_binary o1 o2 => psafe o1 ∨ psafe o2
-       | demonic_binary o1 o2 => psafe o1 ∧ psafe o2
+       | demonic_binary o1 o2 => psafe o1 ∗ psafe o2
        | error msg => False
        | SymProp.block => True
        | assertk fml msg o =>
-           (Obligation msg fml : Pred w) ∧ forgetting (acc_formula_right fml) (psafe o)
-       | assumek fml o => (instprop fml : Pred w) → forgetting (acc_formula_right fml) (psafe o)
+           (Obligation msg fml : Pred w) ∗ psafe (w := wformula w fml) o
+       | assumek fml o => (instprop fml : Pred w) -∗ psafe (w := wformula w fml) o
        | angelicv b k => knowing acc_snoc_right (@psafe (wsnoc w b) k)
        | demonicv b k => assuming acc_snoc_right (@psafe (wsnoc w b) k)
        | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
-           Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∧
+           Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∗
             assuming (acc_subst_right (xIn := xIn) t) (psafe (w := wsubst w x t) k)
        | @assume_vareq _ x σ xIn t k =>
-           eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) →
+           (* eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) -∗ *)
            let ω := acc_subst_right (xIn := xIn) t in
            assuming ω (psafe (w := wsubst w x t) k)
         | pattern_match s pat rhs =>
@@ -156,17 +166,52 @@ Module Soundness
   End logicalrelation.
   Notation "'ℙ'" := (RProp) : rel_scope.
 
+  Section SolverSpec.
+    (* Try a relatively direct translation first.
+     * TODO: looks more like a knowing modality actually.
+     *)
+    Definition SolverSpec (s : Solver) (w : World) : Prop :=
+      forall (C0 : PathCondition w),
+        option.spec
+          (fun '(existT w1 (ζ, C1)) =>
+             (knowing (acc_triangular ζ) (instprop C1)) ⊣⊢ (instprop C0 : Pred w))%I
+          ((instprop C0 : Pred w) ⊢ False)%I
+          (s w C0).
+
+    Lemma SolverSpec_old_to_logical {s} : SIG.SolverSpec s -> forall w, SolverSpec s w.
+    Proof.
+      unfold SIG.SolverSpec.
+      intros oldspec w C.
+      destruct (oldspec w C) as [(w1 & (ζ , C1)) | H];
+        cbn in *;
+        constructor;
+        unfold forgetting, assuming, knowing;
+        crushPredEntails3.
+      - apply H2; last done.
+        now rewrite sub_acc_triangular in H1.
+      - exists (inst (sub_triangular_inv ζ) ι).
+        rewrite sub_acc_triangular.
+        rewrite inst_triangular_right_inverse; last done.
+        repeat split.
+        + now apply entails_triangular_inv.
+        + apply H2; last done.
+          * now apply entails_triangular_inv. 
+          * now rewrite inst_triangular_right_inverse.
+    Qed.
+
+  End SolverSpec.
+
   Section Monads.
 
     Import logicalrelation.
     Import ufl_notations.
 
     #[export] Instance RPureSpec [SA CA] (RA : Rel SA CA) :
-      Rel (SPureSpec SA) (CPureSpec CA) := □ᵣ(RA -> ℙ) -> ℙ.
+      Rel (SPureSpec SA) (CPureSpec CA) := □ᵣ(RA -> RProp) -> RProp.
 
     Import iris.bi.interface iris.proofmode.tactics.
     Lemma refine_run {w} :
-      ⊢ ℛ⟦RPureSpec RUnit -> ℙ⟧ CPureSpec.run (SPureSpec.run (w := w)).
+      ⊢ ℛ⟦RPureSpec RUnit -> RProp ⟧ CPureSpec.run (SPureSpec.run (w := w)).
     Proof.
       iIntros (c cs) "Hc".
       iApply "Hc".
@@ -299,136 +344,272 @@ Module Soundness
         now rewrite inst_env_snoc.
     Qed.
 
-    (* Lemma refine_assert_pathcondition : *)
-    (*   ℛ⟦RMsg _ (RPathCondition -> RPureSpec RUnit)⟧ *)
-    (*     SPureSpec.assert_pathcondition CPureSpec.assert_formula. *)
-    (* Proof. *)
-    (*   unfold SPureSpec.assert_pathcondition, CPureSpec.assert_formula. *)
-    (*   intros w0 ι0 Hpc0 msg sC cC rC sΦ cΦ rΦ HΦ. *)
-    (*   destruct (combined_solver_spec _ sC) as [[w1 [ζ sc1]] Hsolver|Hsolver]. *)
-    (*   - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver]. *)
-    (*     rewrite SymProp.safe_assert_triangular in HΦ. destruct HΦ as [Hν HΦ]. *)
-    (*     rewrite SymProp.safe_assert_pathcondition_without_solver in HΦ. *)
-    (*     destruct HΦ as [HC HΦ]. *)
-    (*     split. *)
-    (*     + apply Hsolver in HC; rewrite ?inst_triangular_right_inverse; auto. *)
-    (*       now apply rC. *)
-    (*       now apply entails_triangular_inv. *)
-    (*     + revert HΦ. unfold four. *)
-    (*       apply rΦ; cbn; wsimpl; eauto. *)
-    (*       unfold PathCondition. rewrite instprop_cat. split; auto. *)
-    (*       now apply entails_triangular_inv. *)
-    (*   - contradict HΦ. *)
-    (* Qed. *)
+    Lemma obligation_equiv {w : World} (msg : AMessage w) (fml : Formula w) :
+      (Obligation msg fml : Pred w) ⊣⊢ instprop fml.
+    Proof. crushPredEntails3.
+           - now destruct H0. 
+           - now constructor.
+    Qed.
 
-    (* Lemma refine_assume_pathcondition : *)
-    (*   ℛ⟦RPathCondition -> RPureSpec RUnit⟧ *)
-    (*     SPureSpec.assume_pathcondition CPureSpec.assume_formula. *)
-    (* Proof. *)
-    (*   unfold SPureSpec.assume_pathcondition, CPureSpec.assume_formula. *)
-    (*   intros w0 ι0 Hpc0 sC cC rC sΦ cΦ rΦ HΦ HC. apply rC in HC. *)
-    (*   destruct (combined_solver_spec _ sC) as [[w1 [ζ sc1]] Hsolver|Hsolver]. *)
-    (*   - specialize (Hsolver ι0 Hpc0). *)
-    (*     destruct Hsolver as [Hν Hsolver]. inster Hν by auto. *)
-    (*     specialize (Hsolver (inst (sub_triangular_inv ζ) ι0)). *)
-    (*     rewrite inst_triangular_right_inverse in Hsolver; auto. *)
-    (*     inster Hsolver by now try apply entails_triangular_inv. *)
-    (*     destruct Hsolver as [Hsolver _]. inster Hsolver by auto. *)
-    (*     rewrite SymProp.safe_assume_triangular, *)
-    (*       SymProp.safe_assume_pathcondition_without_solver in HΦ. *)
-    (*     specialize (HΦ Hν Hsolver). revert HΦ. *)
-    (*     unfold four. apply rΦ; cbn; wsimpl; auto. *)
-    (*     unfold PathCondition. rewrite instprop_cat. split; auto. *)
-    (*     now apply entails_triangular_inv. *)
-    (*   - now apply Hsolver in HC. *)
-    (* Qed. *)
+    Lemma safe_assume_triangular {w0 w1} (ζ : Tri w0 w1) (o : 𝕊 w1) :
+      (psafe (assume_triangular ζ o) ⊣⊢ (assuming (acc_triangular ζ) (psafe o))).
+    Proof.
+      induction ζ; first by rewrite assuming_refl.
+      rewrite assuming_trans.
+      cbn.
+      now rewrite IHζ.
+    Qed.
 
-    (* Lemma refine_assert_formula : *)
-    (*   ℛ⟦RMsg _ (RFormula -> RPureSpec RUnit)⟧ *)
-    (*     SPureSpec.assert_formula CPureSpec.assert_formula. *)
-    (* Proof. *)
-    (*   unfold RPureSpec, SPureSpec.assert_formula, CPureSpec.assert_formula. *)
-    (*   rsolve. apply refine_assert_pathcondition; auto. cbn in *. intuition auto. *)
-    (* Qed. *)
+    Lemma safe_assume_pathcondition_without_solver {w0 : World}
+        (C : PathCondition w0) (p : 𝕊 w0) :
+      psafe (assume_pathcondition_without_solver C p) ⊣⊢
+        ((instprop C : Pred w0) -∗ psafe (w := wpathcondition w0 C) p).
+    Proof.
+      revert p. induction C; cbn; intros p.
+      - change (λ _ : Valuation w0, True%type) with (True%I : Pred w0).
+        destruct w0. (* needed to make coq see that wpathcondition w0 [ctx] is the same as w0 *)
+        iSplit.
+        + now iIntros "$ _".
+        + iIntros "H". now iApply "H".
+      - rewrite IHC.
+        change (λ ι : Valuation w0, (instprop C ι /\ instprop b ι)) with ((instprop C : Pred w0) ∗ instprop b)%I.
+        now rewrite <-bi.wand_curry.
+    Qed.
 
-    (* Lemma refine_assume_formula : *)
-    (*   ℛ⟦RFormula -> RPureSpec RUnit⟧ *)
-    (*     SPureSpec.assume_formula CPureSpec.assume_formula. *)
-    (* Proof. *)
-    (*   unfold RPureSpec, SPureSpec.assume_formula, CPureSpec.assume_formula. *)
-    (*   rsolve. apply refine_assume_pathcondition; cbn in *; intuition auto. *)
-    (* Qed. *)
+    (* TODO: more logical inst_triangular *)
+    Lemma safe_assert_triangular {w0 w1} msg (ζ : Tri w0 w1)
+      (o : AMessage w1 -> 𝕊 w1) :
+      (psafe (assert_triangular msg ζ o) ⊣⊢
+         (knowing (acc_triangular ζ) (psafe (o (subst msg (sub_triangular ζ)))))).
+    Proof.
+      revert o. induction ζ; intros o.
+      - now rewrite knowing_refl subst_sub_id.
+      - cbn [psafe assert_triangular acc_triangular].
+        rewrite obligation_equiv.
+        rewrite knowing_trans.
+        rewrite subst_sub_comp.
+        rewrite (IHζ (subst msg (sub_single xIn t)) o).
+        now rewrite knowing_acc_subst_right.
+    Qed.
 
-    (* Lemma refine_angelic_binary `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧ *)
-    (*       SPureSpec.angelic_binary CPureSpec.angelic_binary. *)
-    (* Proof. *)
-    (*   unfold RPureSpec, SPureSpec.angelic_binary, CPureSpec.angelic_binary. *)
-    (*   rsolve. apply refine_symprop_angelic_binary; rsolve. *)
-    (* Qed. *)
+    Lemma safe_assert_pathcondition_without_solver {w0 : World}
+        (msg : AMessage w0) (C : PathCondition w0) (p : 𝕊 w0) :
+      psafe (assert_pathcondition_without_solver msg C p) ⊣⊢
+        ((instprop C : Pred w0) ∗ psafe (w := wpathcondition w0 C) p).
+    Proof.
+      unfold assert_pathcondition_without_solver. revert p.
+      induction C; cbn; intros p.
+      - rewrite bi.True_sep.
+        now destruct w0.
+      - rewrite IHC; cbn.
+        change (λ ι : Valuation _, (instprop C ι ∧ instprop b ι)%type) with ((instprop C : Pred _) ∧ instprop b)%I.
+        rewrite <-sep_is_and, <-bi.sep_assoc.
+        change (@bi_sep (@bi_pred (wpathcondition w0 C)) ?P ?Q) with (@sepₚ w0 P Q).
+        now rewrite obligation_equiv.
+    Qed.
 
-    (* Lemma refine_demonic_binary `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧ *)
-    (*       SPureSpec.demonic_binary CPureSpec.demonic_binary. *)
-    (* Proof. *)
-    (*   unfold RPureSpec, SPureSpec.demonic_binary, CPureSpec.demonic_binary. *)
-    (*   rsolve. apply refine_symprop_demonic_binary; rsolve. *)
-    (* Qed. *)
+      Lemma refine_assert_pathcondition {w} :
+        ⊢ ℛ⟦RMsg _ (RPathCondition -> RPureSpec RUnit)⟧
+          CPureSpec.assert_formula (SPureSpec.assert_pathcondition (w := w)).
+      Proof.
+        unfold SPureSpec.assert_pathcondition, CPureSpec.assert_formula, CPureSpec.assert_pathcondition.
+        iIntros (msg cC sC) "HC %cΦ %sΦ rΦ HΦ".
+        destruct (SolverSpec_old_to_logical combined_solver_spec w sC) as [[w1 [ζ sc1]] Hsolver|Hsolver].
+        - rewrite safe_assert_triangular.
+          rewrite safe_assert_pathcondition_without_solver.
+          iSplit.
+          + iDestruct (knowing_sepₚ with "HΦ") as "[Hsc1 _]".
+            rewrite Hsolver.
+            iDestruct "HC" as "[HC1 _]".
+            iApply ("HC1" with "Hsc1").
+          + iSpecialize ("rΦ" $! (wpathcondition w1 sc1) (acc_trans (acc_triangular ζ) (acc_pathcondition_right w1 sc1))).
+            rewrite assuming_trans.
+            iPoseProof (knowing_assuming (acc_triangular ζ) with "[$HΦ $rΦ]") as "H".
+            iApply knowing_pure.
+            iApply (knowing_proper with "H").
+            iIntros "((Hsc1 & HsΦ) & HΦ)".
+            iPoseProof (assuming_acc_pathcondition_right with "[$HΦ $Hsc1]") as "HΦ".
+            cbn.
+            repeat change (@bi_forall (@bi_pred (wpathcondition w1 sc1)) ?A ?P) with (@bi_forall (@bi_pred w1) A P).
+            repeat change (@bi_wand (@bi_pred (wpathcondition w1 sc1)) ?P ?Q) with (@bi_wand (@bi_pred w1) P Q).
+            repeat change (@repₚ ?T  ?A ?instTA ?t1 (wpathcondition w1 sc1) ?t2) with (@repₚ T A instTA t1 w1 t2).
+            iApply ("HΦ" with "[] HsΦ").
+            now iApply (repₚ_triv (T := Unit)).
+      - cbn.
+        iDestruct "HΦ" as "%fls".
+        destruct fls.
+    Qed.
 
-    (* Lemma refine_angelic_list' `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RA -> RList RA -> RPureSpec RA⟧ *)
-    (*     SPureSpec.angelic_list' CPureSpec.angelic_list'. *)
-    (* Proof. *)
-    (*   intros w ι Hpc sv cv rv svs cvs rvs. revert sv cv rv. *)
-    (*   induction rvs; cbn [SPureSpec.angelic_list' CPureSpec.angelic_list']. *)
-    (*   - now apply refine_pure. *)
-    (*   - intros sv cv rv. apply refine_angelic_binary; auto. *)
-    (*     now apply refine_pure. *)
-    (* Qed. *)
+    Lemma refine_assume_pathcondition {w} :
+      ⊢ ℛ⟦RPathCondition -> RPureSpec RUnit⟧
+        CPureSpec.assume_formula (SPureSpec.assume_pathcondition (w := w)).
+    Proof.
+      unfold SPureSpec.assume_pathcondition, CPureSpec.assume_formula, CPureSpec.assume_pathcondition.
+      iIntros "%C %Cs HC %Φ %Φs HΦ Hsp %HC".
+      destruct (SolverSpec_old_to_logical combined_solver_spec _ Cs) as [[w1 [ζ sc1]] Hsolver|Hsolver].
+      - rewrite safe_assume_triangular.
+        rewrite safe_assume_pathcondition_without_solver.
+        iDestruct "HC" as "[_ HC2]".
+        iSpecialize ("HC2" $! HC).
+        rewrite <-Hsolver.
+        iSpecialize ("HΦ" $! _ (acc_trans (acc_triangular ζ) (acc_pathcondition_right w1 sc1))).
+        rewrite assuming_trans.
+        iDestruct (assuming_sepₚ with "[HΦ Hsp]") as "H".
+        { now iSplitL "HΦ". }
+        iDestruct (knowing_assuming with "[$HC2 $H]") as "H".
+        iApply knowing_pure.
+        iApply (knowing_proper with "H").
+        iIntros "(#Hsc1 & H & HΦ)".
+        iDestruct (@assuming_acc_pathcondition_right w1 with "[$Hsc1 $H]") as "H".
+        iSpecialize ("HΦ" with "Hsc1").
+        cbn.
+        repeat change (@bi_forall (@bi_pred (wpathcondition w1 sc1)) ?A ?P) with (@bi_forall (@bi_pred w1) A P).
+        repeat change (@bi_wand (@bi_pred (wpathcondition w1 sc1)) ?P ?Q) with (@bi_wand (@bi_pred w1) P Q).
+        repeat change (@repₚ ?T  ?A ?instTA ?t1 (wpathcondition w1 sc1) ?t2) with (@repₚ T A instTA t1 w1 t2).
+        iApply ("H" with "[] HΦ").
+        now iApply (repₚ_triv (T := Unit)).
+      - iExFalso.
+        iApply Hsolver.
+        iDestruct "HC" as "[_ HC2]".
+        now iApply "HC2".
+    Qed.
 
-    (* Lemma refine_angelic_list `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RMsg _ (RList RA -> RPureSpec RA)⟧ *)
-    (*     SPureSpec.angelic_list CPureSpec.angelic_list. *)
-    (* Proof. *)
-    (*   intros w ι Hpc msg sv cv []. *)
-    (*   - now apply refine_error. *)
-    (*   - now apply refine_angelic_list'. *)
-    (* Qed. *)
+    Lemma refine_assert_formula {w} :
+      ⊢ ℛ⟦RMsg _ (RFormula -> RPureSpec RUnit)⟧
+        CPureSpec.assert_formula (SPureSpec.assert_formula (w := w)).
+    Proof.
+      unfold RPureSpec, SPureSpec.assert_formula, CPureSpec.assert_formula.
+      iIntros "%msg %fml %fmls Hfml".
+      iApply refine_assert_pathcondition.
+      iApply (proprepₚ_cong (T2 := PathCondition) with "Hfml").
+      cbn. intuition.
+    Qed.
 
-    (* Lemma refine_demonic_list' `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RA -> RList RA -> RPureSpec RA⟧ *)
-    (*     SPureSpec.demonic_list' CPureSpec.demonic_list'. *)
-    (* Proof. *)
-    (*   intros w ι Hpc sv cv rv svs cvs rvs. revert sv cv rv. *)
-    (*   induction rvs; cbn [SPureSpec.demonic_list' CPureSpec.demonic_list']. *)
-    (*   - now apply refine_pure. *)
-    (*   - intros sv cv rv. apply refine_demonic_binary; auto. now apply refine_pure. *)
-    (* Qed. *)
+    Lemma refine_assume_formula {w} :
+      ⊢ ℛ⟦RFormula -> RPureSpec RUnit⟧
+        CPureSpec.assume_formula (SPureSpec.assume_formula (w := w)).
+    Proof.
+      unfold RPureSpec, SPureSpec.assume_formula, CPureSpec.assume_formula.
+      iIntros "%fml %fmls Hfml".
+      iApply refine_assume_pathcondition.
+      iApply (proprepₚ_cong (T2 := PathCondition) with "Hfml").
+      cbn. intuition.
+    Qed.
 
-    (* Lemma refine_demonic_list `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RList RA -> RPureSpec RA⟧ *)
-    (*     SPureSpec.demonic_list CPureSpec.demonic_list. *)
-    (* Proof. *)
-    (*   intros w ι Hpc sv cv []. *)
-    (*   - now apply refine_block. *)
-    (*   - now apply refine_demonic_list'. *)
-    (* Qed. *)
+    Lemma refine_angelic_binary `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧
+        CPureSpec.angelic_binary (SPureSpec.angelic_binary (w := w)).
+    Proof.
+      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %k %ks Hk [HSP | HSP]".
+      - iLeft. iApply ("Hc1" with "Hk HSP").
+      - iRight. iApply ("Hc2" with "Hk HSP").
+    Qed.
 
-    (* Lemma refine_angelic_finite {F} `{finite.Finite F} : *)
-    (*   ℛ⟦RMsg _ (RPureSpec (RConst F))⟧ *)
-    (*     (@SPureSpec.angelic_finite F _ _) (CPureSpec.angelic_finite F). *)
-    (* Proof. *)
-    (*   intros w ι Hpc msg. apply refine_angelic_list; auto. *)
-    (*   induction (finite.enum F); now constructor. *)
-    (* Qed. *)
+    Lemma refine_demonic_binary `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧
+        CPureSpec.demonic_binary (SPureSpec.demonic_binary (w := w)).
+    Proof.
+      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %k %ks #Hk [HSP1 HSP2]".
+      iSplitL "Hc1 HSP1".
+      - iApply ("Hc1" with "Hk HSP1").
+      - iApply ("Hc2" with "Hk HSP2").
+    Qed.
 
-    (* Lemma refine_demonic_finite {F} `{finite.Finite F} : *)
-    (*   ℛ⟦RPureSpec (RConst F)⟧ *)
-    (*     (@SPureSpec.demonic_finite F _ _) (CPureSpec.demonic_finite F). *)
-    (* Proof. *)
-    (*   intros w ι Hpc. apply refine_demonic_list; auto. *)
-    (*   induction (finite.enum F); now constructor. *)
-    (* Qed. *)
+    Lemma RList'_ind_log {AT : TYPE} {A : Type} {R : Rel AT A}
+      (P : Rel (WList AT) (list A)) :
+          ∀ (w : World), 
+          (ℛ⟦P⟧ [] ([] : WList AT w) ∗ 
+             (∀ (v : A) (ts : WList AT w) (vs : list A) (t : AT w),
+                 ℛ⟦R⟧ v t -∗ RList' R vs ts -∗ ℛ⟦P⟧ vs ts -∗ ℛ⟦P⟧ (v :: vs) (t :: ts)) ⊢
+             ∀ (l : list A) (l0 : WList AT w), RList' R l l0 -∗ ℛ⟦P⟧ l l0)%I.
+    Proof.
+      intros w. constructor.
+      intros ι Hpc (Hnil & Hcons) l l0 HRList.
+      induction HRList.
+      - now apply Hnil.
+      - apply Hcons; try done.
+        now apply IHHRList.
+    Qed.
+
+    Lemma refine_angelic_list' `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RA -> RList RA -> RPureSpec RA⟧
+        CPureSpec.angelic_list' (SPureSpec.angelic_list' (w := w)).
+    Proof.
+      iIntros "%v %sv Hv %vs %svs Hvs".
+      iRevert (v sv) "Hv".
+      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list' v vs) (SPureSpec.angelic_list' (w := w) sv svs))%I) w with "[] Hvs").
+      iSplit.
+      - iApply refine_pure.
+      - clear. iIntros (v sv vs svs) "Hv Hvs IHvs %v2 %sv2 Hv2".
+        iApply (refine_angelic_binary with "[Hv2]").
+        + now iApply refine_pure.
+        + now iApply "IHvs".
+    Qed.
+
+    Lemma refine_angelic_list `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RMsg _ (RList RA -> RPureSpec RA)⟧
+        CPureSpec.angelic_list (SPureSpec.angelic_list (w := w)).
+    Proof.
+      iIntros (msg vs svs) "Hvs".
+      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ∀ msg, ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list vs) (SPureSpec.angelic_list (w := w) msg svs))%I) w with "[] Hvs").
+      clear.
+      iSplit.
+      - now iApply refine_error.
+      - iIntros (v svs vs sv) "Hv Hvs _ %msg".
+        cbn -[RSat].
+        now iApply (refine_angelic_list' with "Hv Hvs").
+    Qed.
+
+    Lemma refine_demonic_list' `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RA -> RList RA -> RPureSpec RA⟧
+        CPureSpec.demonic_list' (SPureSpec.demonic_list' (w := w)).
+    Proof.
+      iIntros "%v %sv Hv %vs %svs Hvs".
+      iRevert (v sv) "Hv".
+      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list' v vs) (SPureSpec.demonic_list' (w := w) sv svs))%I) w with "[] Hvs").
+      iSplit.
+      - iApply refine_pure.
+      - clear. iIntros (v sv vs svs) "Hv Hvs IHvs %v2 %sv2 Hv2".
+        iApply (refine_demonic_binary with "[Hv2]").
+        + now iApply refine_pure.
+        + now iApply "IHvs".
+    Qed.
+
+    Lemma refine_demonic_list `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RList RA -> RPureSpec RA⟧
+        CPureSpec.demonic_list (SPureSpec.demonic_list (w := w)).
+    Proof.
+      iIntros (vs svs) "Hvs".
+      iApply (RList'_ind_log (R := RA) (MkRel (fun vs w svs => ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list vs) (SPureSpec.demonic_list (w := w) svs))%I) w with "[] Hvs").
+      clear.
+      iSplit.
+      - now iApply refine_block.
+      - iIntros (v svs vs sv) "Hv Hvs _".
+        now iApply (refine_demonic_list' with "Hv Hvs").
+    Qed.
+
+    Lemma refine_angelic_finite {F} `{finite.Finite F} {w} :
+      ⊢ ℛ⟦RMsg _ (RPureSpec (RConst F))⟧
+        (CPureSpec.angelic_finite F) (@SPureSpec.angelic_finite F _ _ w).
+    Proof.
+      iIntros (msg).
+      unfold CPureSpec.angelic_finite, SPureSpec.angelic_finite.
+      iApply (refine_angelic_list (RA := RConst F)).
+      iStopProof.
+      crushPredEntails3.
+      induction (finite.enum F); now constructor.
+    Qed.
+
+    Lemma refine_demonic_finite {F} `{finite.Finite F} {w} :
+      ⊢ ℛ⟦RPureSpec (RConst F)⟧
+        (CPureSpec.demonic_finite F) (@SPureSpec.demonic_finite F _ _ w).
+    Proof.
+      unfold CPureSpec.angelic_finite, SPureSpec.angelic_finite.
+      iApply (refine_demonic_list (RA := RConst F)).
+      iStopProof.
+      crushPredEntails3.
+      induction (finite.enum F); now constructor.
+    Qed.
 
     (* Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar) *)
     (*   {σ} (pat : @Pattern N σ) : *)
@@ -772,145 +953,325 @@ Module Soundness
     (*     + now apply refine_new_pattern_match'. *)
     (* Qed. *)
 
-    (* Lemma refine_debug `{RA : Rel SA CA} : *)
-    (*   ℛ⟦RMsg _ (RPureSpec RA -> RPureSpec RA)⟧ *)
-    (*     SPureSpec.debug CPureSpec.debug. *)
-    (* Proof. *)
-    (*   intros w0 ι0 Hpc0 msg sm cm rm. cbn - [RSat]. *)
-    (*   intros sΦ cΦ rΦ [HΦ]. revert HΦ. now apply rm. *)
-    (* Qed. *)
+    Lemma refine_debug `{RA : Rel SA CA} {w} :
+      ⊢ ℛ⟦RMsg _ (RPureSpec RA -> RPureSpec RA)⟧
+        CPureSpec.debug (SPureSpec.debug (w := w)).
+    Proof.
+      iIntros (msg m ms) "Hm %k %ks Hk HSP".
+      iApply ("Hm" with "Hk [HSP]").
+      now iApply elim_debugPred.
+    Qed.
 
-    (* Lemma refine_assert_eq_nenv {N : Set} : *)
-    (*   ℛ⟦∀ Δ : NCtx N Ty, RMsg _ (RNEnv Δ -> RNEnv Δ -> RPureSpec RUnit)⟧ *)
-    (*     SPureSpec.assert_eq_nenv CPureSpec.assert_eq_nenv. *)
-    (* Proof. *)
-    (*   intros w0 ι0 Hpc0 Δ msg E1 ? -> E2 ? ->. *)
-    (*   induction E1; env.destroy E2; cbn - [RSat]. *)
-    (*   - now apply refine_pure. *)
-    (*   - eapply refine_bind; eauto. *)
-    (*     intros w1 ω01 ι1 Hι1 Hpc1 _ _ _. *)
-    (*     apply refine_assert_formula; auto. *)
-    (*     eapply refine_formula_persist; eauto. *)
-    (*     cbn. reflexivity. *)
-    (* Qed. *)
+    Lemma refine_assert_eq_nenv {N : Set} {w} :
+      ⊢ ℛ⟦∀ᵣ Δ : NCtx N Ty, RMsg _ (RNEnv _ Δ -> RNEnv _ Δ -> RPureSpec RUnit)⟧
+        CPureSpec.assert_eq_nenv (SPureSpec.assert_eq_nenv (w := w)).
+    Proof.
+      iIntros (Δ msg E1 Es1) "HE1 %E2 %Es2 HE2".
+      iInduction Es1 as [|Es1] "IHEs1";
+      env.destroy Es2; env.destroy E1; env.destroy E2; cbn -[RSat].
+      - iApply (refine_pure (RA := RUnit)).
+        now iApply (repₚ_triv (T := Unit)).
+      - iDestruct (repₚ_invert_snoc with "HE1") as "(HE1 & Hv0db)".
+        iDestruct (repₚ_invert_snoc with "HE2") as "(HE2 & Hv1v)".
+        iSpecialize ("IHEs1" with "HE1 HE2").
+        iApply (refine_bind (RA := RUnit) (RB := RUnit) with "IHEs1").
+        iIntros (w2 ω2) "!> %u %us _".
+        iApply refine_assert_formula.
+        iApply refine_formula_persist.
+        iModIntro.
+        iApply (proprepₚ_cong₂ (T1 := STerm (type b)) (T2 := STerm (type b)) eq (formula_relop bop.eq) with "[Hv0db Hv1v]").
+        { now cbn. }
+        now iSplitL "Hv0db". 
+    Qed.
 
-    (* Lemma refine_assert_eq_env : *)
-    (*   ℛ⟦∀ Δ, RMsg _ (REnv Δ -> REnv Δ -> RPureSpec RUnit)⟧ *)
-    (*     SPureSpec.assert_eq_env CPureSpec.assert_eq_env. *)
-    (* Proof. *)
-    (*   intros w0 ι0 Hpc0 Δ msg E1 ? -> E2 ? ->. *)
-    (*   induction E1; env.destroy E2; cbn - [RSat]. *)
-    (*   - now apply refine_pure. *)
-    (*   - eapply refine_bind; eauto. *)
-    (*     intros w1 ω01 ι1 Hι1 Hpc1 _ _ _. *)
-    (*     apply refine_assert_formula; auto. *)
-    (*     eapply refine_formula_persist; eauto. *)
-    (*     cbn. reflexivity. *)
-    (* Qed. *)
+    Lemma refine_assert_eq_env {w} :
+      ⊢ ℛ⟦∀ᵣ Δ, RMsg _ (REnv Δ -> REnv Δ -> RPureSpec RUnit)⟧
+        CPureSpec.assert_eq_env (SPureSpec.assert_eq_env (w := w)).
+    Proof.
+      iIntros (Δ msg E1 Es1) "HE1 %E2 %Es2 HE2".
+      iInduction Es1 as [] "IHE"; env.destroy E1; env.destroy E2; env.destroy Es2; cbn - [RSat].
+      - iApply (refine_pure (RA := RUnit)).
+        now iApply (repₚ_triv (T := Unit)).
+      - iDestruct (repₚ_invert_snoc with "HE1") as "(HE1 & Hvdb)".
+        iDestruct (repₚ_invert_snoc with "HE2") as "(HE2 & Hv0v1)".
+        iSpecialize ("IHE" with "HE1 HE2").
+        iApply (refine_bind (RA := RUnit) (RB := RUnit) with "IHE").
+        iIntros (w2 ω2) "!> %u %us _".
+        iApply refine_assert_formula.
+        iApply refine_formula_persist.
+        iModIntro.
+        iApply (proprepₚ_cong₂ (T1 := STerm b) (T2 := STerm b) eq (formula_relop bop.eq) with "[Hvdb Hv0v1]").
+        { done. }
+        now iSplitL "Hvdb".
+    Qed.
+    
+    Lemma RChunk_ind (P : Rel Chunk SCChunk) {w : World} :
+      (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (scchunk_user p args) (chunk_user p sargs)) ∗
+        (∀ σ r v sv, ℛ⟦ RVal σ ⟧ v sv -∗ ℛ⟦ P ⟧ (scchunk_ptsreg r v) (chunk_ptsreg r sv)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ c1 sc1 -∗ ℛ⟦ P ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_conj c1 c2) (chunk_conj sc1 sc2)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ c1 sc1 -∗ ℛ⟦ P ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_wand c1 c2) (chunk_wand sc1 sc2))
+        ⊢
+        ∀ c (sc : Chunk w), ℛ⟦ RChunk ⟧ c sc → ℛ⟦ P ⟧ c sc.
+    Proof.
+      constructor. intros ι Hpc (Huser & Hptsreg & Hconj & Hwand) c sc Hsc.
+      revert c Hsc; induction sc; intros c Hsc; inversion Hsc.
+      - now eapply Huser.
+      - now eapply Hptsreg.
+      - eapply Hconj; try now cbn.
+        + now eapply IHsc1.
+        + now eapply IHsc2.
+      - eapply Hwand; try now cbn.
+        + now eapply IHsc1.
+        + now eapply IHsc2.
+    Qed.
 
-    (* Lemma refine_assert_eq_chunk : *)
-    (*   ℛ⟦RMsg _ (RChunk -> RChunk -> □(RPureSpec RUnit))⟧ *)
-    (*     SPureSpec.assert_eq_chunk CPureSpec.assert_eq_chunk. *)
-    (* Proof. *)
-    (*   intros w0 ι0 Hpc0 msg c ? -> c' ? ->. revert c'. *)
-    (*   induction c; intros [] w1 ω01 ι1 Hι1 Hpc1; cbn - [RSat]; *)
-    (*     auto; try (now apply refine_error). *)
-    (*   - destruct eq_dec. *)
-    (*     + destruct e; cbn. *)
-    (*       apply refine_assert_eq_env; auto. *)
-    (*       eapply refine_inst_persist; eauto; easy. *)
-    (*       eapply refine_inst_persist; eauto; easy. *)
-    (*     + now apply refine_error. *)
-    (*   - destruct eq_dec_het. *)
-    (*     + dependent elimination e; cbn. *)
-    (*       apply refine_assert_formula; auto. subst. *)
-    (*       now do 2 rewrite <- inst_persist. *)
-    (*     + now apply refine_error. *)
-    (*   - eapply refine_bind; eauto. apply IHc1; auto. *)
-    (*     intros w2 ω12 ι2 Hι2 Hpc2 _ _ _. apply IHc2; auto. *)
-    (*     subst. now rewrite sub_acc_trans, inst_subst, <- inst_persist. *)
-    (*   - eapply refine_bind; eauto. apply IHc1; auto. *)
-    (*     intros w2 ω12 ι2 Hι2 Hpc2 _ _ _. apply IHc2; auto. *)
-    (*     subst. now rewrite sub_acc_trans, inst_subst, <- inst_persist. *)
-    (* Qed. *)
+    Lemma RChunk_case (P : Rel Chunk SCChunk) {w : World} :
+      (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (scchunk_user p args) (chunk_user p sargs)) ∗
+        (∀ σ r v sv, ℛ⟦ RVal σ ⟧ v sv -∗ ℛ⟦ P ⟧ (scchunk_ptsreg r v) (chunk_ptsreg r sv)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_conj c1 c2) (chunk_conj sc1 sc2)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_wand c1 c2) (chunk_wand sc1 sc2))
+        ⊢
+        ∀ c (sc : Chunk w), ℛ⟦ RChunk ⟧ c sc → ℛ⟦ P ⟧ c sc.
+    Proof.
+      iIntros "(Huser & Hptsreg & Hconj & Hwand) %c %sc #Hsc".
+      iApply (RChunk_ind P with "[Huser Hptsreg Hconj Hwand] Hsc").
+      iSplitL "Huser". { iExact "Huser". }
+      iSplitL "Hptsreg". { iExact "Hptsreg". }
+      iSplitL "Hconj".
+      - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 _ _". 
+        now iApply ("Hconj" with "Hc1 Hc2").
+      - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 _ _". 
+        now iApply ("Hwand" with "Hc1 Hc2").
+    Qed.
 
-    (* Lemma refine_replay_aux {Σ} (s : 𝕊 Σ) : *)
-    (*   ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RPureSpec RUnit⟧ *)
-    (*     (SPureSpec.replay_aux s) (CPureSpec.replay_aux s). *)
-    (* Proof. *)
-    (*   unfold RValid, RImpl. cbn - [RPureSpec]. *)
-    (*   induction s; cbn [SPureSpec.replay_aux CPureSpec.replay_aux]; *)
-    (*     intros w ι Hpc sδ cδ rδ. *)
-    (*   - apply refine_angelic_binary; auto. *)
-    (*   - apply refine_demonic_binary; auto. *)
-    (*   - apply refine_error; auto. *)
-    (*   - apply refine_block; auto. *)
-    (*   - eapply refine_bind; auto. *)
-    (*     + apply refine_assert_formula; auto. *)
-    (*       now apply refine_formula_subst. *)
-    (*     + intros w1 θ1 ι1 Hι1 Hpc1 _ _ _. *)
-    (*       apply IHs; auto. subst. *)
-    (*       now rewrite <- inst_persist. *)
-    (*   - eapply refine_bind; auto. *)
-    (*     + apply refine_assume_formula; auto. *)
-    (*       now apply refine_formula_subst. *)
-    (*     + intros w1 θ1 ι1 Hι1 Hpc1 _ _ _. *)
-    (*       apply IHs; auto. subst. *)
-    (*       now rewrite <- inst_persist. *)
-    (*   - eapply refine_bind; auto. *)
-    (*     + apply refine_angelic; auto. *)
-    (*     + intros w1 θ1 ι1 Hι1 Hpc1 t v ->. *)
-    (*       apply IHs; auto. subst. *)
-    (*       now rewrite <- inst_persist. *)
-    (*   - eapply refine_bind; auto. *)
-    (*     + apply refine_demonic; auto. *)
-    (*     + intros w1 θ1 ι1 Hι1 Hpc1 t v ->. *)
-    (*       apply IHs; auto. subst. *)
-    (*       now rewrite <- inst_persist. *)
-    (*   - eapply refine_bind; auto. *)
-    (*     + apply refine_assert_formula; auto. *)
-    (*       cbn. subst. *)
-    (*       rewrite !inst_subst. *)
-    (*       rewrite inst_sub_shift. *)
-    (*       now rewrite <- inst_lookup. *)
-    (*     + intros w1 θ1 ι1 Hι1 Hpc1 _ _ _. *)
-    (*       apply IHs; auto. subst. *)
-    (*       rewrite <- inst_subst. *)
-    (*       rewrite <- persist_subst. *)
-    (*       rewrite <- inst_sub_shift. *)
-    (*       rewrite <- inst_subst. *)
-    (*       rewrite sub_comp_shift. *)
-    (*       reflexivity. *)
-    (*   - eapply refine_bind; auto. *)
-    (*     + apply refine_assume_formula; auto. *)
-    (*       cbn. subst. *)
-    (*       rewrite !inst_subst. *)
-    (*       rewrite inst_sub_shift. *)
-    (*       now rewrite <- inst_lookup. *)
-    (*     + intros w1 θ1 ι1 Hι1 Hpc1 _ _ _. *)
-    (*       apply IHs; auto. subst. *)
-    (*       rewrite <- inst_subst. *)
-    (*       rewrite <- persist_subst. *)
-    (*       rewrite <- inst_sub_shift. *)
-    (*       rewrite <- inst_subst. *)
-    (*       rewrite sub_comp_shift. *)
-    (*       reflexivity. *)
-    (*   - apply refine_error; auto. *)
-    (*   - apply refine_error; auto. *)
-    (*   - apply refine_debug; auto. *)
-    (* Qed. *)
+      Lemma refine_assert_eq_chunk {w} :
+        ⊢ ℛ⟦RMsg _ (RChunk -> RChunk -> □ᵣ(RPureSpec RUnit))⟧
+          CPureSpec.assert_eq_chunk (SPureSpec.assert_eq_chunk (w := w)).
+      Proof.
+        iIntros (msg c1 sc1) "Hc1".
+        iApply (RChunk_ind (MkRel (fun c w sc => ∀ (msg : AMessage w), ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c) (SPureSpec.assert_eq_chunk (w := w) msg sc))%I) with "[] Hc1").
+        clear.
+        repeat iSplit.
+        - iIntros (p args sargs) "Hargs %msg %c2 %sc2 Hc2".
+          iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg p args sargs, ℛ⟦REnv (𝑯_Ty p)⟧ args sargs -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_user p args) c2) (SPureSpec.assert_eq_chunk msg (chunk_user p sargs) sc2))%I) with "[] Hc2 Hargs").
+          clear.
+          repeat iSplit.
+          + iIntros (p args sargs) "Hargs %msg %p2 %args2 %sargs2 Hargs2 %w1 %ω1".
+            iModIntro.
+            cbn -[RSat].
+            destruct (eq_dec p2 p); last by iApply (refine_error (RA := RUnit)).
+            subst; cbn.
+            rewrite <- !forgetting_repₚ.
+            now iApply (refine_assert_eq_env with "Hargs2 Hargs").
+          + iIntros (σ r v sv) "Hv %msg %p %args %sargs Hargs %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c1 sc1 c2 sc2) "_ _ %msg %p %args %sargs Hargs %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c1 sc1 c2 sc2) "_ _ %msg %p %args %sargs Hargs %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+        - iIntros (σ r v sv) "Hv %msg %c2 %sc2 Hc2".
+          iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg σ r v sv, ℛ⟦RVal σ⟧ v sv -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_ptsreg r v) c2) (SPureSpec.assert_eq_chunk msg (chunk_ptsreg r sv) sc2))%I) with "[] Hc2 Hv").
+          clear.
+          repeat iSplit.
+          + iIntros (p args sargs) "Hargs %msg %σ %r %v %sv Hv %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (σ2 r2 v2 sv2) "Hv2 %msg %σ %r %v %sv Hv %w1 %ω1".
+            iModIntro.
+            cbn -[RSat].
+            destruct (eq_dec_het r r2).
+            * dependent elimination e; cbn -[RSat].
+              iApply refine_assert_formula.
+              cbn.
+              rewrite <-!forgetting_repₚ.
+              iApply (proprepₚ_cong₂ (T1 := STerm σ) (T2 := STerm σ) (T3 := Formula) eq (formula_relop bop.eq) with "[Hv2 Hv]").
+              { intuition. }
+              now iSplitL "Hv".
+            * iApply (refine_error (RA := RUnit)).
+          + iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 %msg %σ %r %v %sv Hv %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 %msg %σ %r %v %sv Hv %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+        - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 IHc1 IHc2 %msg %c3 %sc3 Hc3".
+          iApply (RChunk_case (MkRel (fun c3 w sc3 => ∀ msg c1 sc1 c2 sc2,
+                                          ℛ⟦RChunk⟧ c1 sc1 -∗
+                                          ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c1) (SPureSpec.assert_eq_chunk msg sc1) -∗
+                                          ℛ⟦RChunk⟧ c2 sc2 -∗
+                                          ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c2) (SPureSpec.assert_eq_chunk msg sc2) -∗
+                                          ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_conj c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_conj sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
+          clear. repeat iSplitL.
+          + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (σ r v sv) "Hv %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_bind (RA := RUnit) (RB := RUnit) with "[Hc1 IHc1 Hc3] [Hc2 IHc2 Hc4]").
+            * unfold RSat at 2; cbn -[RSat].
+              rewrite forgetting_RImpl.
+              iSpecialize ("IHc1" with "Hc3").
+              now rewrite forgetting_unconditionally_drastic.
+            * iIntros (w2 ω2) "!> %u %su _".
+              rewrite <-!forgetting_trans.
+              unfold RSat at 2; cbn -[RSat].
+              rewrite forgetting_RImpl.
+              iSpecialize ("IHc2" with "Hc4").
+              now rewrite forgetting_unconditionally_drastic.
+          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+        - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 IHc1 IHc2 %msg %c3 %sc3 Hc3".
+          iApply (RChunk_case (MkRel (fun c3 w sc3 => ∀ msg c1 sc1 c2 sc2,
+                                          ℛ⟦RChunk⟧ c1 sc1 -∗
+                                          ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c1) (SPureSpec.assert_eq_chunk msg sc1) -∗
+                                          ℛ⟦RChunk⟧ c2 sc2 -∗
+                                          ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c2) (SPureSpec.assert_eq_chunk msg sc2) -∗
+                                          ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_wand c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_wand sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
+          clear. repeat iSplitL.
+          + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (σ r v sv) "Hv %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_bind (RA := RUnit) (RB := RUnit) with "[Hc1 IHc1 Hc3] [Hc2 IHc2 Hc4]").
+            * unfold RSat at 2; cbn -[RSat].
+              rewrite forgetting_RImpl.
+              iSpecialize ("IHc1" with "Hc3").
+              now rewrite forgetting_unconditionally_drastic.
+            * iIntros (w2 ω2) "!> %u %su _".
+              rewrite <-!forgetting_trans.
+              unfold RSat at 2; cbn -[RSat].
+              rewrite forgetting_RImpl.
+              iSpecialize ("IHc2" with "Hc4").
+              now rewrite forgetting_unconditionally_drastic.
+    Qed.
 
-    (* Lemma refine_replay {w : World} (s : 𝕊 w) ι (Hpc : instprop (wco w) ι) : *)
-    (*   ℛ⟦ℙ⟧@{ι} (SPureSpec.replay s) (CPureSpec.replay s ι). *)
-    (* Proof. *)
-    (*   apply refine_run; auto. *)
-    (*   apply refine_replay_aux; auto. *)
-    (*   cbn. now rewrite inst_sub_id. *)
-    (* Qed. *)
+    Lemma refine_replay_aux {Σ} (s : 𝕊 Σ) {w} :
+      ⊢ ℛ⟦RBox (RInst (Sub Σ) (Valuation Σ) -> RPureSpec RUnit)⟧
+        (CPureSpec.replay_aux s) (fun w' (ω : Acc w w') => SPureSpec.replay_aux (w := w') s).
+    Proof.
+      iInduction s as [] "IH"; iIntros (w' ω) "!> %ι %ιs #Hι";
+        cbn -[RSat].
+      - rewrite !forgetting_unconditionally_drastic.
+        iApply (refine_angelic_binary (RA := RUnit)).
+        + now iApply "IH".
+        + now iApply "IH1".
+      - rewrite !forgetting_unconditionally_drastic.
+        iApply (refine_demonic_binary (RA := RUnit)).
+        + now iApply "IH".
+        + now iApply "IH1".
+      - now iApply (refine_error (RA := RUnit)).
+      - now iApply (refine_block (R := RUnit)).
+      - iApply (refine_bind (RA := RUnit) (RB := RUnit)).
+        + iApply refine_assert_formula.
+          now iApply refine_instprop_subst.
+        + rewrite forgetting_unconditionally.
+          iIntros (w1 ω1) "!> %u %us _".
+          rewrite forgetting_unconditionally_drastic.
+          iApply "IH".
+          cbn.
+          now rewrite forgetting_repₚ.
+      - iApply (refine_bind (RA := RUnit) (RB := RUnit)).
+        + iApply refine_assume_formula.
+          now iApply refine_instprop_subst.
+        + rewrite forgetting_unconditionally.
+          iIntros (w1 ω1) "!> %u %us _".
+          rewrite forgetting_unconditionally_drastic.
+          iApply "IH".
+          cbn; now rewrite forgetting_repₚ.
+      - iApply (refine_bind (RA := RInst (STerm (type b)) (Val _)) (RB := RUnit)).
+        + iApply refine_angelic.
+        + rewrite forgetting_unconditionally.
+          iIntros (w1 ω1) "!> %v %vs Hv".
+          rewrite forgetting_unconditionally_drastic.
+          iApply "IH".
+          iApply (repₚ_cong₂ (T1 := Sub Σ) (T2 := STerm (type b)) (T3 := Sub (Σ ▻ b)) (fun vs v => env.snoc vs b v) (fun vs v => env.snoc vs b v) with "[Hι $Hv]").
+          { intros; now cbn. }
+          now rewrite forgetting_repₚ.
+      - iApply (refine_bind (RA := RInst (STerm (type b)) (Val _)) (RB := RUnit)).
+        + iApply refine_demonic.
+        + rewrite forgetting_unconditionally.
+          iIntros (w1 ω1) "!> %v %vs Hv".
+          rewrite forgetting_unconditionally_drastic.
+          iApply "IH".
+          iApply (repₚ_cong₂ (T1 := Sub Σ) (T2 := STerm (type b)) (T3 := Sub (Σ ▻ b)) (fun vs v => env.snoc vs b v) (fun vs v => env.snoc vs b v) with "[Hι $Hv]").
+          { intros; now cbn. }
+          now rewrite forgetting_repₚ.
+      - iApply (refine_bind (RA := RUnit) (RB := RUnit)).
+        + iApply refine_assert_formula.
+          iApply (proprepₚ_cong₂ (T1 := STerm σ) (T2 := STerm σ) eq (formula_relop bop.eq)).
+          { intros; now cbn. }
+          iSplitL.
+          * rewrite <-inst_sub_shift.
+            rewrite <-inst_subst.
+            iApply (refine_inst_subst (T := STerm σ) with "Hι").
+          * iApply (repₚ_cong (T1 := Sub Σ) (T2 := STerm σ) (fun ι => env.lookup ι xIn) (fun ιs => env.lookup ιs xIn) with "Hι").
+            intros. now rewrite inst_lookup.
+        + rewrite forgetting_unconditionally.
+          iIntros (w1 ω1) "!> %u %us _".
+          rewrite forgetting_unconditionally_drastic.
+          iApply "IH".
+          iApply (repₚ_cong (T1 := Sub Σ) (T2 := Sub (Σ - (x∷σ))) (fun vs => env.remove (x∷σ) vs xIn) (fun vs => env.remove (x∷σ) vs xIn) with "[Hι]").
+          { intros. now rewrite <- inst_sub_shift, <- inst_subst, sub_comp_shift. }
+          now rewrite forgetting_repₚ.
+      - iApply (refine_bind (RA := RUnit) (RB := RUnit)).
+        + iApply refine_assume_formula.
+          iApply (proprepₚ_cong₂ (T1 := STerm σ) (T2 := STerm σ) eq (formula_relop bop.eq)).
+          { intros; now cbn. }
+          iSplitL.
+          * rewrite <-inst_sub_shift.
+            rewrite <-inst_subst.
+            iApply (refine_inst_subst (T := STerm σ) with "Hι").
+          * iApply (repₚ_cong (T1 := Sub Σ) (T2 := STerm σ) (fun ι => env.lookup ι xIn) (fun ιs => env.lookup ιs xIn) with "Hι").
+            intros. now rewrite inst_lookup.
+        + rewrite forgetting_unconditionally.
+          iIntros (w1 ω1) "!> %u %us _".
+          rewrite forgetting_unconditionally_drastic.
+          iApply "IH".
+          iApply (repₚ_cong (T1 := Sub Σ) (T2 := Sub (Σ - (x∷σ))) (fun vs => env.remove (x∷σ) vs xIn) (fun vs => env.remove (x∷σ) vs xIn) with "[Hι]").
+          { intros. now rewrite <- inst_sub_shift, <- inst_subst, sub_comp_shift. }
+          now rewrite forgetting_repₚ.
+      - iApply (refine_error (RA := RUnit)).
+      - iApply (refine_error (RA := RUnit)).
+      - iApply (refine_debug (RA := RUnit)).
+        rewrite forgetting_unconditionally_drastic.
+        now iApply "IH".
+    Qed.
 
-    (* Lemma refine_produce_chunk : *)
-    (*   ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧ *)
-    (*     SPureSpec.produce_chunk CPureSpec.produce_chunk. *)
+    Lemma refine_replay_aux2 {Σ} (s : 𝕊 Σ) {w} :
+      ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RPureSpec RUnit⟧
+        (CPureSpec.replay_aux s) (SPureSpec.replay_aux (w := w) s).
+    Proof.
+      iPoseProof (refine_replay_aux s) as "Hreplay".
+      iSpecialize ("Hreplay" $! w acc_refl).
+      now rewrite assuming_refl.
+    Qed.
+
+    Lemma refine_replay {w : World} (s : 𝕊 w) ι (Hpc : instprop (wco w) ι) :
+      (ℛ⟦ RProp ⟧ (CPureSpec.replay s ι) (SPureSpec.replay s)) ι.
+    Proof.
+      eapply refine_run; try done.
+      eapply (refine_replay_aux2 s); try done.
+      cbn. now apply refine_rinst_sub_initial.
+    Qed.
+
+    Lemma refine_produce_chunk {w} :
+      ⊢ ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧
+        CPureSpec.produce_chunk  (SPureSpec.produce_chunk (w := w)).
+    Admitted.
     (* Proof. *)
     (*   intros w ι Hpc sc cc rc sh ch rh. *)
     (*   unfold SPureSpec.produce_chunk, CPureSpec.produce_chunk. *)
@@ -1229,70 +1590,72 @@ Module Soundness
       iApply refine_demonic_ctx.
     Qed.
 
-  (*   Lemma refine_debug {AT A} `{R : Rel AT A} *)
-  (*     {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0) *)
-  (*         (Hpc : instprop (wco w0) ι0) f ms mc : *)
-  (*     ℛ⟦RStoreSpec Γ1 Γ2 R⟧@{ι0} ms mc -> *)
-  (*     ℛ⟦RStoreSpec Γ1 Γ2 R⟧@{ι0} (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms) mc. *)
-  (*   Proof. *)
-  (*     intros Hap POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0. *)
-  (*     intros [HP]. revert HP. apply Hap; auto. *)
-  (*   Qed. *)
+    Lemma refine_debug_ss {AT A} `{R : Rel AT A}
+      {Γ1 Γ2} {w0 : World} :
+      ⊢ ∀ f ms mc, ℛ⟦RStoreSpec Γ1 Γ2 R⟧ mc ms →
+                   ℛ⟦RStoreSpec Γ1 Γ2 R⟧ mc (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms).
+    Proof.
+      iIntros (f ms mc) "Hm %K %Ks HK %s %ss Hs %h %hs Hh HSP".
+      iApply ("Hm" with "HK Hs Hh [HSP]").
+      now iApply elim_debugPred.
+    Qed.
 
-  (*   Lemma refine_angelic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} : *)
-  (*     ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧ *)
-  (*       SStoreSpec.angelic_binary CStoreSpec.angelic_binary. *)
-  (*   Proof. *)
-  (*     intros w ι Hpc ms1 mc1 Hm1 ms2 mc2 Hm2. *)
-  (*     intros POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0. *)
-  (*     unfold SStoreSpec.angelic_binary, CStoreSpec.angelic_binary. *)
-  (*     apply refine_symprop_angelic_binary; auto. *)
-  (*     apply Hm1; auto. apply Hm2; auto. *)
-  (*   Qed. *)
+    Lemma refine_angelic_binary_ss {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
+      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧
+        CStoreSpec.angelic_binary (SStoreSpec.angelic_binary (w := w)).
+    Proof.
+      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %K %Ks #HK %s %ss #Hs %h %hs #Hh".
+      unfold SStoreSpec.angelic_binary, CStoreSpec.angelic_binary.
+      iApply (refine_symprop_angelic_binary with "[Hc1] [Hc2]").
+      - now iApply "Hc1".
+      - now iApply "Hc2".
+    Qed.
 
-  (*   Lemma refine_demonic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} : *)
-  (*     ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧ *)
-  (*       SStoreSpec.demonic_binary CStoreSpec.demonic_binary. *)
-  (*   Proof. *)
-  (*     intros w ι Hpc ms1 mc1 Hm1 ms2 mc2 Hm2. *)
-  (*     intros POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0. *)
-  (*     unfold SStoreSpec.angelic_binary, CStoreSpec.angelic_binary. *)
-  (*     apply refine_symprop_demonic_binary; auto. *)
-  (*     apply Hm1; auto. apply Hm2; auto. *)
-  (*   Qed. *)
+    Lemma refine_demonic_binary_ss {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
+      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧
+        CStoreSpec.demonic_binary (SStoreSpec.demonic_binary (w := w)).
+    Proof.
+      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %K %Ks #HK %s %ss #Hs %h %hs #Hh".
+      unfold SStoreSpec.angelic_binary, CStoreSpec.angelic_binary.
+      iApply (refine_symprop_demonic_binary with "[Hc1] [Hc2]").
+      - now iApply "Hc1".
+      - now iApply "Hc2".
+    Qed.
 
   End Basics.
 
-  (* Section AssumeAssert. *)
+  Section AssumeAssert.
+    Import logicalrelation.
+    Import ufl_notations.
+    
+    Lemma refine_assume_formula_ss {Γ} {w} :
+      ⊢ ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.assume_formula (SStoreSpec.assume_formula (w := w)).
+    Proof.
+      unfold SStoreSpec.assume_formula, CStoreSpec.assume_formula.
+      iIntros (fml fmls) "Hfml %K %Ks HK %s %ss Hs %h %hs Hh".
+      iApply (refine_lift_purem with "[Hfml] HK Hs Hh").
+      iApply (refine_assume_formula with "Hfml").
+    Qed.
 
-  (*   Lemma refine_assume_formula {Γ} : *)
-  (*     ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧ *)
-  (*       SStoreSpec.assume_formula CStoreSpec.assume_formula. *)
-  (*   Proof. *)
-  (*     unfold SStoreSpec.assume_formula, CStoreSpec.assume_formula. *)
-  (*     intros w ι Hpc P p Hp. apply refine_lift_purem; auto. *)
-  (*     apply RPureSpec.refine_assume_formula; auto. *)
-  (*   Qed. *)
+    Lemma refine_assert_formula_ss {Γ} {w} :
+      ⊢ ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.assert_formula (SStoreSpec.assert_formula (w := w)).
+    Proof.
+      unfold SStoreSpec.assert_formula, CStoreSpec.assert_formula.
+      iIntros (fml fmls) "Hfml %K %Ks HK %s %ss Hs %h %hs Hh".
+      iApply (refine_lift_purem with "[Hfml] HK Hs Hh").
+      iApply (refine_assert_formula with "Hfml").
+    Qed.
 
-  (*   Lemma refine_assert_formula {Γ} : *)
-  (*     ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧ *)
-  (*       SStoreSpec.assert_formula CStoreSpec.assert_formula. *)
-  (*   Proof. *)
-  (*     intros w ι Hpc P p Hp. *)
-  (*     unfold SStoreSpec.assert_formula, CStoreSpec.assert_formula. *)
-  (*     intros POST__s POST__c HPOST δs δc Hδ hs hc Hh. *)
-  (*     apply refine_lift_purem; auto. *)
-  (*     now apply RPureSpec.refine_assert_formula. *)
-  (*   Qed. *)
-
-  (*   Lemma refine_assert_pathcondition {Γ} : *)
-  (*     ℛ⟦RPathCondition -> RStoreSpec Γ Γ RUnit⟧ *)
-  (*       SStoreSpec.assert_pathcondition CStoreSpec.assert_formula. *)
-  (*   Proof. *)
-  (*     intros w ι Hpc Ps ps Hps POST__s POST__c HPOST δs δc Hδ hs hc Hh. *)
-  (*     apply refine_lift_purem; auto. *)
-  (*     now apply RPureSpec.refine_assert_pathcondition. *)
-  (*   Qed. *)
+    Lemma refine_assert_pathcondition_ss {Γ} {w} :
+      ⊢ ℛ⟦RPathCondition -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.assert_formula (SStoreSpec.assert_pathcondition (w := w)).
+    Proof.
+      iIntros (pc pcs) "Hpc %K %Ks HK %δ %δs Hδ %h %hs Hh".
+      iApply (refine_lift_purem with "[Hpc] HK Hδ Hh").
+      now iApply refine_assert_pathcondition.
+    Qed.
 
   (*   Lemma refine_assert_eq_nenv {N Γ} (Δ : NCtx N Ty) : *)
   (*     ℛ⟦RNEnv Δ -> RNEnv Δ -> RStoreSpec Γ Γ RUnit⟧ *)
@@ -1304,7 +1667,7 @@ Module Soundness
   (*     apply RPureSpec.refine_assert_eq_nenv; auto. *)
   (*   Qed. *)
 
-  (* End AssumeAssert. *)
+  End AssumeAssert.
 
   (* Section PatternMatching. *)
 
