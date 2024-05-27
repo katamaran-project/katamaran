@@ -1004,38 +1004,160 @@ Module Soundness
         { done. }
         now iSplitL "Hvdb".
     Qed.
-
-    Lemma refine_assert_eq_chunk {w} :
-      ⊢ ℛ⟦RMsg _ (RChunk -> RChunk -> □ᵣ(RPureSpec RUnit))⟧
-        CPureSpec.assert_eq_chunk (SPureSpec.assert_eq_chunk (w := w)).
+    
+    Lemma RChunk_ind (P : Rel Chunk SCChunk) {w : World} :
+      (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (scchunk_user p args) (chunk_user p sargs)) ∗
+        (∀ σ r v sv, ℛ⟦ RVal σ ⟧ v sv -∗ ℛ⟦ P ⟧ (scchunk_ptsreg r v) (chunk_ptsreg r sv)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ c1 sc1 -∗ ℛ⟦ P ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_conj c1 c2) (chunk_conj sc1 sc2)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ c1 sc1 -∗ ℛ⟦ P ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_wand c1 c2) (chunk_wand sc1 sc2))
+        ⊢
+        ∀ c (sc : Chunk w), ℛ⟦ RChunk ⟧ c sc → ℛ⟦ P ⟧ c sc.
     Proof.
-      iIntros (msg c1 cs1) "Hc1".
-      (* TODO: induction on RChunk instead *)
-      iInduction cs1 as [] "IHcs";
-        iIntros (c2 cs2) "Hcs2 %w2 %ω2 !>"; destruct cs2;
-        cbn - [RSat]; try (now iApply (refine_error (RA := RUnit))).
-      - destruct eq_dec.
-        + subst; cbn - [RSat].
-          admit.
-          (* iApply (refine_assert_eq_env). *)
-          (* eapply refine_inst_persist; eauto; easy. *)
-          (* eapply refine_inst_persist; eauto; easy. *)
-        + now iApply (refine_error (RA := RUnit)).
-      - destruct eq_dec_het.
-        + dependent elimination e; cbn -[RSat].
-          admit.
-          (* iApply refine_assert_formula; auto. subst. *)
-          (* now do 2 rewrite <- inst_persist. *)
-        + now iApply (refine_error (RA := RUnit)).
-      - admit.
-        (* iApply refine_bind; eauto. apply IHc1; auto. *)
-        (* intros w2 ω12 ι2 Hι2 Hpc2 _ _ _. apply IHc2; auto. *)
-        (* subst. now rewrite sub_acc_trans, inst_subst, <- inst_persist. *)
-      - admit.
-        (* iApply refine_bind; eauto. apply IHc1; auto. *)
-        (* intros w2 ω12 ι2 Hι2 Hpc2 _ _ _. apply IHc2; auto. *)
-        (* subst. now rewrite sub_acc_trans, inst_subst, <- inst_persist. *)
-    Admitted.
+      constructor. intros ι Hpc (Huser & Hptsreg & Hconj & Hwand) c sc Hsc.
+      revert c Hsc; induction sc; intros c Hsc; inversion Hsc.
+      - now eapply Huser.
+      - now eapply Hptsreg.
+      - eapply Hconj; try now cbn.
+        + now eapply IHsc1.
+        + now eapply IHsc2.
+      - eapply Hwand; try now cbn.
+        + now eapply IHsc1.
+        + now eapply IHsc2.
+    Qed.
+
+    Lemma RChunk_case (P : Rel Chunk SCChunk) {w : World} :
+      (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (scchunk_user p args) (chunk_user p sargs)) ∗
+        (∀ σ r v sv, ℛ⟦ RVal σ ⟧ v sv -∗ ℛ⟦ P ⟧ (scchunk_ptsreg r v) (chunk_ptsreg r sv)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_conj c1 c2) (chunk_conj sc1 sc2)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_wand c1 c2) (chunk_wand sc1 sc2))
+        ⊢
+        ∀ c (sc : Chunk w), ℛ⟦ RChunk ⟧ c sc → ℛ⟦ P ⟧ c sc.
+    Proof.
+      iIntros "(Huser & Hptsreg & Hconj & Hwand) %c %sc #Hsc".
+      iApply (RChunk_ind P with "[Huser Hptsreg Hconj Hwand] Hsc").
+      iSplitL "Huser". { iExact "Huser". }
+      iSplitL "Hptsreg". { iExact "Hptsreg". }
+      iSplitL "Hconj".
+      - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 _ _". 
+        now iApply ("Hconj" with "Hc1 Hc2").
+      - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 _ _". 
+        now iApply ("Hwand" with "Hc1 Hc2").
+    Qed.
+
+      Lemma refine_assert_eq_chunk {w} :
+        ⊢ ℛ⟦RMsg _ (RChunk -> RChunk -> □ᵣ(RPureSpec RUnit))⟧
+          CPureSpec.assert_eq_chunk (SPureSpec.assert_eq_chunk (w := w)).
+      Proof.
+        iIntros (msg c1 sc1) "Hc1".
+        iApply (RChunk_ind (MkRel (fun c w sc => ∀ (msg : AMessage w), ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c) (SPureSpec.assert_eq_chunk (w := w) msg sc))%I) with "[] Hc1").
+        clear.
+        repeat iSplit.
+        - iIntros (p args sargs) "Hargs %msg %c2 %sc2 Hc2".
+          iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg p args sargs, ℛ⟦REnv (𝑯_Ty p)⟧ args sargs -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_user p args) c2) (SPureSpec.assert_eq_chunk msg (chunk_user p sargs) sc2))%I) with "[] Hc2 Hargs").
+          clear.
+          repeat iSplit.
+          + iIntros (p args sargs) "Hargs %msg %p2 %args2 %sargs2 Hargs2 %w1 %ω1".
+            iModIntro.
+            cbn -[RSat].
+            destruct (eq_dec p2 p); last by iApply (refine_error (RA := RUnit)).
+            subst; cbn.
+            rewrite <- !forgetting_repₚ.
+            now iApply (refine_assert_eq_env with "Hargs2 Hargs").
+          + iIntros (σ r v sv) "Hv %msg %p %args %sargs Hargs %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c1 sc1 c2 sc2) "_ _ %msg %p %args %sargs Hargs %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c1 sc1 c2 sc2) "_ _ %msg %p %args %sargs Hargs %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+        - iIntros (σ r v sv) "Hv %msg %c2 %sc2 Hc2".
+          iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg σ r v sv, ℛ⟦RVal σ⟧ v sv -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_ptsreg r v) c2) (SPureSpec.assert_eq_chunk msg (chunk_ptsreg r sv) sc2))%I) with "[] Hc2 Hv").
+          clear.
+          repeat iSplit.
+          + iIntros (p args sargs) "Hargs %msg %σ %r %v %sv Hv %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (σ2 r2 v2 sv2) "Hv2 %msg %σ %r %v %sv Hv %w1 %ω1".
+            iModIntro.
+            cbn -[RSat].
+            destruct (eq_dec_het r r2).
+            * dependent elimination e; cbn -[RSat].
+              iApply refine_assert_formula.
+              cbn.
+              rewrite <-!forgetting_repₚ.
+              iApply (proprepₚ_cong₂ (T1 := STerm σ) (T2 := STerm σ) (T3 := Formula) eq (formula_relop bop.eq) with "[Hv2 Hv]").
+              { intuition. }
+              now iSplitL "Hv".
+            * iApply (refine_error (RA := RUnit)).
+          + iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 %msg %σ %r %v %sv Hv %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 %msg %σ %r %v %sv Hv %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+        - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 IHc1 IHc2 %msg %c3 %sc3 Hc3".
+          iApply (RChunk_case (MkRel (fun c3 w sc3 => ∀ msg c1 sc1 c2 sc2,
+                                          ℛ⟦RChunk⟧ c1 sc1 -∗
+                                          ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c1) (SPureSpec.assert_eq_chunk msg sc1) -∗
+                                          ℛ⟦RChunk⟧ c2 sc2 -∗
+                                          ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c2) (SPureSpec.assert_eq_chunk msg sc2) -∗
+                                          ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_conj c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_conj sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
+          clear. repeat iSplitL.
+          + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (σ r v sv) "Hv %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_bind (RA := RUnit) (RB := RUnit) with "[Hc1 IHc1 Hc3] [Hc2 IHc2 Hc4]").
+            * unfold RSat at 2; cbn -[RSat].
+              rewrite forgetting_RImpl.
+              iSpecialize ("IHc1" with "Hc3").
+              now rewrite forgetting_unconditionally_drastic.
+            * iIntros (w2 ω2) "!> %u %su _".
+              rewrite <-!forgetting_trans.
+              unfold RSat at 2; cbn -[RSat].
+              rewrite forgetting_RImpl.
+              iSpecialize ("IHc2" with "Hc4").
+              now rewrite forgetting_unconditionally_drastic.
+          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+        - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 IHc1 IHc2 %msg %c3 %sc3 Hc3".
+          iApply (RChunk_case (MkRel (fun c3 w sc3 => ∀ msg c1 sc1 c2 sc2,
+                                          ℛ⟦RChunk⟧ c1 sc1 -∗
+                                          ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c1) (SPureSpec.assert_eq_chunk msg sc1) -∗
+                                          ℛ⟦RChunk⟧ c2 sc2 -∗
+                                          ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c2) (SPureSpec.assert_eq_chunk msg sc2) -∗
+                                          ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_wand c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_wand sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
+          clear. repeat iSplitL.
+          + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (σ r v sv) "Hv %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_error (RA := RUnit)).
+          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
+            iModIntro.
+            iApply (refine_bind (RA := RUnit) (RB := RUnit) with "[Hc1 IHc1 Hc3] [Hc2 IHc2 Hc4]").
+            * unfold RSat at 2; cbn -[RSat].
+              rewrite forgetting_RImpl.
+              iSpecialize ("IHc1" with "Hc3").
+              now rewrite forgetting_unconditionally_drastic.
+            * iIntros (w2 ω2) "!> %u %su _".
+              rewrite <-!forgetting_trans.
+              unfold RSat at 2; cbn -[RSat].
+              rewrite forgetting_RImpl.
+              iSpecialize ("IHc2" with "Hc4").
+              now rewrite forgetting_unconditionally_drastic.
+    Qed.
 
     Lemma refine_replay_aux {Σ} (s : 𝕊 Σ) {w} :
       ⊢ ℛ⟦RBox (RInst (Sub Σ) (Valuation Σ) -> RPureSpec RUnit)⟧

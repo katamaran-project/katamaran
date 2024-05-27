@@ -721,6 +721,12 @@ Module Pred
       now transitivity (inst vt ι).
     Qed.
 
+    Lemma repₚ_elim_repₚ {T : LCtx -> Type} `{Inst T A} {a1 : A} (a2 : A) {w : World} {vt1 : T w} (vt2 : T w):
+      (∀ ι : Valuation w, inst vt1 ι = a1 -> inst vt2 ι = a2) ->
+      repₚ a1 vt1 ⊢ repₚ a2 vt2.
+    Proof. now crushPredEntails3. Qed.
+
+
     Section WithEnvironments.
       Import ctx.notations.
       Import env.notations.
@@ -797,6 +803,15 @@ Module Pred
       - rewrite sub_acc_trans inst_subst in H1.
         apply (H0 (inst (sub_acc ω23) ιpast)); try done.
         now apply acc_pathcond.
+    Qed.
+
+    Lemma forgetting_trans {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3} {P : Pred w1} :
+      forgetting (acc_trans ω12 ω23) P ⊣⊢ forgetting ω23 (forgetting ω12 P).
+    Proof.
+      rewrite /forgetting.
+      crushPredEntails3.
+      - now rewrite sub_acc_trans inst_subst in H0.
+      - now rewrite sub_acc_trans inst_subst.
     Qed.
 
     Lemma forgetting_refl {w} {P : Pred w} : forgetting acc_refl P ⊣⊢ P.
@@ -1357,6 +1372,21 @@ Module Pred
           format "'[  ' '[  ' ∀ᵣ  x  ..  y ']' ,  '/' R ']'")
         : rel_scope.
   End ufl_notations.
+
+  Section ModalRel.
+    Import logicalrelation ufl_notations iris.bi.interface notations ModalNotations.
+    Lemma forgetting_RImpl {AT A BT B} {RA : Rel AT A} {RB : Rel BT B} {w1 w2} {ω : w1 ⊒ w2} {f sf} :
+      forgetting ω (ℛ⟦ RImpl RA RB ⟧ f sf) ⊣⊢ (∀ a sa, forgetting ω (ℛ⟦ RA ⟧ a sa) -∗ forgetting ω (ℛ⟦ RB ⟧ (f a) (sf sa))).
+    Proof.
+      unfold RSat at 1; cbn -[RSat].
+      rewrite <-forgetting_forall.
+      apply derived_laws.bi.forall_proper; intros a.
+      rewrite <-forgetting_forall.
+      apply derived_laws.bi.forall_proper; intros sa.
+      rewrite <-forgetting_wand.
+      now apply derived_laws.bi.wand_proper.
+    Qed.
+  End ModalRel.
 
   Section LRCompat.
     Import notations.
