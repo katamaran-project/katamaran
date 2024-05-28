@@ -409,7 +409,18 @@ Module IrisBinaryWPAsymmetricLaws
       iIntros (v1 δ1 v2 δ2) "H".
       iApply ("H" with "HP").
   Qed.
-    
+
+  Lemma semWp2_frame_l {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
+    (δ1 : CStore Γ1) (δ2 : CStore Γ2) (POST : Post Γ1 Γ2 τ)
+    (R : iProp Σ) :
+    R ∗ semWp2 δ1 δ2 s1 s2 POST -∗
+    semWp2 δ1 δ2 s1 s2 (fun v1 δ1 v2 δ2 => R ∗ POST v1 δ1 v2 δ2).
+  Proof.
+    iIntros "(R & Hwp)".
+    iApply (semWp2_mono with "Hwp").
+    iIntros; by iFrame.
+  Qed.
+
   Lemma semWp2_exp {Γ τ} (Φ : Val τ -> CStore Γ -> Val τ -> CStore Γ -> iProp Σ) eA eB δA δB :
     Φ (eval eA δA) δA (eval eB δB) δB ⊢ semWp2 δA δB (stm_exp eA) (stm_exp eB) Φ.
   Proof.
@@ -635,7 +646,13 @@ Section Soundness.
         (R P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) (s : Stm Γ σ) :
         (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
   Proof.
-  Admitted.
+    iIntros "Htriple [HR HP]".
+    iSpecialize ("Htriple" with "HP").
+    iPoseProof (semWp2_frame_l with "[HR Htriple]") as "Hwp".
+    { iSplitL "HR". iExact "HR". iExact "Htriple". }
+    iApply (semWp2_mono with "Hwp").
+    iIntros (? ? ? ?) "($ & $ & $ & $)".
+  Qed.
 
   Lemma iris_rule_pull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ)
         (P : iProp Σ) (Q : Prop) (R : Val σ -> CStore Γ -> iProp Σ) :
