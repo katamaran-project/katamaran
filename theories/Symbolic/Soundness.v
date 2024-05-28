@@ -355,7 +355,7 @@ Module Soundness
       eapply refine_apply; eauto.
       apply refine_T; eauto.
       apply env.lookup_extensional; cbn; intros [x σ] xIn.
-      unfold evals, inst, inst_store, inst_env. rewrite ?env.lookup_map.
+      unfold evals, inst, inst_store, inst_env, seval_exps. rewrite ?env.lookup_map.
       symmetry. etransitivity. apply peval_sound.
       rewrite <- eval_exp_inst. f_equal. symmetry. exact Hδ0.
     Qed.

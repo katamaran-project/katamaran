@@ -78,6 +78,8 @@ Module Pred
       fun t2 w t1 ι => (inst t1 ι = t2)%type.
     #[global] Arguments repₚ {T A _} _ [w] _ _/.
     
+    Definition curval {w : World} : Valuation w -> Pred w :=
+      fun ι1 ι2 => ι1 = ι2.
   End Definitions.
   
   Section EntailmentDefinitions.
@@ -1408,6 +1410,10 @@ Module Pred
     Import logicalrelation.
     (* Import ModalNotations. *)
     Import iris.proofmode.tactics.
+    
+    Lemma refine_unit {w} :
+      ⊢ (ℛ⟦ RUnit ⟧ () () : Pred w).
+    Proof. now crushPredEntails3. Qed.
     
     Lemma refine_nil {AT A} {R : Rel AT A} {w} :
       ⊢ ℛ⟦ RList R ⟧ nil (nil : list (AT w)).

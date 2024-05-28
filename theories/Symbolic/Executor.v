@@ -377,7 +377,7 @@ Module Type SymbolicExecOn
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) :
         ⊢ SStoreSpec Γ Γ (SStore σs) :=
         fun w POST δ =>
-          T POST (env.map (fun (b : PVar∷Ty) (e : Exp Γ (type b)) => peval (seval_exp δ e)) es) δ.
+          T POST (seval_exps δ es) δ.
 
       Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} : ⊢ STerm σ -> SStoreSpec Γ Γ Unit :=
         fun w0 t POST δ => T POST tt (δ ⟪ x ↦ t ⟫).
