@@ -333,63 +333,25 @@ Module IrisBinaryWPAsymmetricLaws
       iMod ("H" with "Hresources") as "H".
       iModIntro.
       iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(Hstep1 & Hlc1 & Hstep2 & Hlc2)".
-  Admitted.
-
-  (* TODO: update lemma, e2 is allowed to take some steps before returning a value,
-           right-hand side should be something like:
-           |={⊤}=> ∃ v2, ⌜⟨ _, _, _, e2 ⟩ --->* ⟨ _, _, _, stm_val τ v2⟩⌝ ∗ Q v1 δ1 v2 δ2 *)
-  Lemma semWp2_val {Γ1 Γ2 τ} (v1 : Val τ) e2 (Q : Val τ → CStore Γ1 → Val τ → CStore Γ2 → iProp Σ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
-    semWp2 δ1 δ2 (stm_val τ v1) e2 Q ⊣⊢ |={⊤}=> ∃ v2, ⌜ e2 = stm_val τ v2 ⌝ ∗ Q v1 δ1 v2 δ2.
-  Proof.
-    (* case_match eqn:Ee2; *)
-    (*   iSplit; iIntros "H"; iMod "H"; iModIntro. *)
-    (* - iExists v. *)
-    (*   iFrame "H". *)
-    (*   destruct e2; try discriminate; iPureIntro. *)
-    (*   by inversion Ee2. *)
-    (* - iDestruct "H" as "(%v2 & -> & HQ)". *)
-    (*   by inversion Ee2. *)
-    (* - done. *)
-    (* - by iDestruct "H" as "(% & -> & _)". *)
-  Abort.
-
-  Lemma semWp2_val' {Γ τ} (Φ : Val τ -> CStore Γ -> Val τ -> CStore Γ -> iProp Σ) vA vB δA δB :
-    (|={⊤}=> Φ vA δA vB δB) ⊢ semWp2 δA δB (stm_val _ vA) (stm_val _ vB) Φ.
-  Proof. iIntros "H"; now rewrite fixpoint_semWp2_eq. Qed.
-
-  Lemma semWp2_val_inv' {Γ τ} (Φ : Val τ -> CStore Γ -> Val τ -> CStore Γ -> iProp Σ) vA vB δA δB :
-    semWp2 δA δB (stm_val _ vA) (stm_val _ vB) Φ ={⊤}=∗ Φ vA δA vB δB.
-  Proof. iIntros "H"; now rewrite fixpoint_semWp2_eq. Qed.
-
-  Lemma semWp2_fail_1 {Γ1 Γ2 τ s} Q (δ1 : CStore Γ1) (δ2 : CStore Γ2) s2 :
-      semWp2 δ1 δ2 (stm_fail τ s) s2 Q ={⊤}=∗
-      ⌜ exists m, stm_to_fail s2 = Some m ⌝.
-  Proof.
-    (* rewrite fixpoint_semWp2_eq. cbn. iIntros "H". *)
-    (* repeat case_match; iMod "H"; auto. *)
-    (* iModIntro. *)
-    (* iPureIntro. *)
-    (* by exists s0. *)
-  Abort.
-
-  Lemma semWp2_fail_2 {Γ1 Γ2 τ s} Q (δ1 : CStore Γ1) (δ2 : CStore Γ2) s2 m :
-    stm_to_fail s2 = Some m -> ⊢ semWp2 δ1 δ2 (stm_fail τ s) s2 Q.
-  Proof.
-    iIntros (eqs2f) "".
-    rewrite fixpoint_semWp2_eq; cbn.
-    rewrite eqs2f.
-    by iModIntro.
+      iMod ("H" with "[$Hstep1 $Hlc1 $Hstep2 $Hlc2]") as "H".
+      iModIntro.
+      iIntros "!>".
+      iMod "H".
+      iModIntro.
+      iMod "H".
+      iModIntro.
+      iDestruct "H" as "($ & Hwp)".
+      iApply ("IH" with "Hwp HQ").
   Qed.
 
-  Lemma semWp2_fail_steps {Γ τ} Q (δ11 δ21 δ12 δ22 : CStore Γ)
-                          (γ11 γ21 γ12 γ22 : RegStore)
-                          (μ11 μ21 μ12 μ22 : Memory)
-                          (s11 s21 : Stm Γ τ)
-                          (v1 v2 : Val ty.string) :
-    ⟨ γ11, μ11, δ11, s11 ⟩ --->* ⟨ γ12, μ12, δ12, stm_fail τ v1 ⟩ ->
-    ⟨ γ21, μ21, δ21, s21 ⟩ --->* ⟨ γ22, μ22, δ22, stm_fail τ v2 ⟩ ->
-     ⊢ semWp2 δ11 δ21 s11 s21 Q.
-  Proof. Admitted.
+  Lemma semWp2_val {Γ1 Γ2 τ} (v1 : Val τ) (v2 : Val τ) (Q : Post Γ1 Γ2 τ) :
+    forall δ1 δ2,
+      semWp2 δ1 δ2 (stm_val τ v1) (stm_val τ v2) Q ⊣⊢ |={⊤}=> Q v1 δ1 v2 δ2.
+  Proof.
+    iIntros (δ1 δ2).
+    iSplit; iIntros "H";
+      rewrite fixpoint_semWp2_eq; cbn; auto.
+  Qed.
 
   Lemma fupd_semWp2 {Γ1 Γ2 τ} E (δA : CStore Γ1) (δB : CStore Γ2)
     (eA : Stm Γ1 τ) (eB : Stm Γ2 τ) Φ : 
