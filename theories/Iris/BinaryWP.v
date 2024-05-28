@@ -658,21 +658,29 @@ Section Soundness.
         (P : iProp Σ) (Q : Prop) (R : Val σ -> CStore Γ -> iProp Σ) :
         (⊢ (⌜ Q ⌝ → semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R).
   Proof.
-  Admitted.
+    iIntros "QP [P %]".
+    by iApply "QP".
+  Qed.
 
   Lemma iris_rule_exist {σ Γ} (δ : CStore Γ)
         (s : Stm Γ σ) {A : Type} {P : A -> iProp Σ}
         {Q :  Val σ -> CStore Γ -> iProp Σ} :
         ⊢ ((∀ x, semTriple δ (P x) s Q) -∗ semTriple δ (∃ x, P x) s Q).
   Proof.
-  Admitted.
+    iIntros "Htriple [% P]".
+    by iApply "Htriple".
+  Qed.
 
   Lemma iris_rule_stm_val {Γ} (δ : CStore Γ)
         {τ : Ty} {v : Val τ}
         {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
         ⊢ ((P -∗ Q v δ)%I -∗ semTriple δ P (stm_val τ v) Q).
   Proof.
-  Admitted.
+    iIntros "PQ P".
+    iApply semWp2_val.
+    iSpecialize ("PQ" with "P").
+    iModIntro; by iFrame.
+  Qed.
 
   Lemma iris_rule_stm_exp {Γ} (δ : CStore Γ)
         {τ : Ty} {e : Exp Γ τ}
