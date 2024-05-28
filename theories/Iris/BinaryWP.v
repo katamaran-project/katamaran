@@ -623,7 +623,13 @@ Section Soundness.
         (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') ->
         semTriple δ P' s Q' -∗ semTriple δ P s Q.
   Proof.
-  Admitted.
+    iIntros (PP QQ) "Htriple P".
+    iApply (semWp2_mono with "[Htriple P]").
+    - iApply "Htriple".
+      now iApply PP.
+    - iIntros (v1 δ1 v2 δ2) "(-> & -> & Q')".
+      iPoseProof (QQ with "Q'") as "Q"; auto.
+  Qed.
 
   Lemma iris_rule_frame {Γ σ} {δ : CStore Γ}
         (R P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) (s : Stm Γ σ) :
