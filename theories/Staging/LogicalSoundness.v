@@ -253,10 +253,6 @@ Module Soundness
       - iRight. now iApply "HP2".
     Qed.
 
-    Lemma evalTerm {σ} {w : World} (t : Term w σ) :
-      ⊢ ∃ v, repₚ v (w := w) t.
-    Proof. crushPredEntails3. now eexists. Qed.
-
     Lemma refine_symprop_demonic_binary {w : World} :
       ⊢ ℛ⟦RProp -> RProp -> RProp⟧ (@and) (@demonic_binary w).
     Proof.
@@ -1450,94 +1446,120 @@ Module Soundness
         iSplitR; first done.
         now iApply (refine_T with "HK Hh1 HSP").
       }
-    (*   destruct (try_consume_chunk_precise_spec sh c1) as [[sh' eqs] HIn|]. *)
-    (*   { cbv [SPureSpec.bind SPureSpec.pure]. *)
-    (*     intros POST__s POST__c HPOST. *)
-    (*     match goal with | |- context[amsg.mk ?m] => generalize (amsg.mk m) end. *)
-    (*     intros msg Hwp. *)
-    (*     pose proof (refine_assert_pathcondition Hpc0 msg (ta := eqs)) as Hassert. *)
-    (*     inster Hassert by (cbn; reflexivity). *)
-    (*     match goal with *)
-    (*     | H: SymProp.wsafe (SPureSpec.assert_pathcondition msg eqs ?P) _ |- _ => *)
-    (*         specialize (Hassert P (fun _ => POST__c (inst sh' ι0))) *)
-    (*     end. *)
-    (*     apply Hassert in Hwp; clear Hassert. *)
-    (*     - destruct Hwp as [Heqs HP]. *)
-    (*       unfold CPureSpec.consume_chunk, CPureSpec.bind, CPureSpec.pure. *)
-    (*       rewrite CPureSpec.wp_angelic_list. *)
-    (*       exists (inst c1 ι0, inst sh' ι0). split; [auto|]. subst c1. *)
-    (*       now rewrite CPureSpec.wp_assert_eq_chunk, peval_chunk_sound. *)
-    (*     - intros w1 θ1 ι1 -> Hpc1 _ _ _. unfold T, four. *)
-    (*       apply HPOST; auto. *)
-    (*       + rewrite sub_acc_trans. cbn. now rewrite subst_sub_id. *)
-    (*       + now eapply refine_inst_persist; eauto. *)
-    (*   } *)
-    (*   { intros POST__s POST__c HPOST. now apply refine_error. } *)
-    (* Qed. *)
-    Admitted.
+      destruct (try_consume_chunk_precise_spec sh sc1) as [[sh' eqs] HIn|].
+      { cbv [SPureSpec.bind SPureSpec.pure].
+        assert (⊢ ∀ eq c h' h, proprepₚ eq eqs -∗ repₚ c sc1 -∗ repₚ h' sh' -∗ repₚ h sh -∗ ⌜ eq ⌝ -∗ ⌜In (c , h') (heap_extractions h)⌝)%I as HInLog.
+        { clear -HIn. crushPredEntails3. now subst. }
+        iDestruct (eval_prop eqs) as "(%eq & Heq)".
+        iAssert (∃ h', ℛ⟦RHeap⟧ h' sh')%I as "(%h' & Hh')".
+        { iDestruct (eval sh') as "(%h' & Heqh')".
+          iExists h'.
+          now iApply (RList_RInst with "Heqh'"). } 
+        match goal with | |- context[amsg.mk ?m] => generalize (amsg.mk m) end.
+        iIntros (msg).
+        iIntros (K sK) "HK HSP".
+        iAssert (⌜eq /\ K h'⌝)%I with "[HK HSP]" as "%HeqKh'".
+        { iPoseProof (refine_assert_pathcondition $! msg eq eqs with "Heq") as "Hapc".
+          iApply ("Hapc" $! (fun _ => K h') with "[HK] HSP").
+          iIntros (w2 ω2) "!> %u %su _".
+          rewrite forgetting_unconditionally.
+          iApply (refine_T with "HK").
+          rewrite !(RList_RInst h').
+          cbn.
+          now rewrite forgetting_repₚ.
+        }
+        destruct HeqKh' as (Heq & HKh').
+        iPoseProof (HInLog $! eq c h' h with "Heq Hcp [Hh'] [Hh] [// ]") as "HInch'".
+        { now rewrite (RList_RInst h').  }
+        { now rewrite (RList_RInst h).  }
+        unfold CPureSpec.consume_chunk, CPureSpec.bind.
+        rewrite CPureSpec.wp_angelic_list.
+        iExists (c, h').
+        iSplit; first done.
+        rewrite CPureSpec.wp_assert_eq_chunk.
+        now iSplit.
+      }
+      now iApply (refine_error (RA := RHeap)).
+    Qed.
 
-    (* Lemma refine_consume_chunk_angelic : *)
-    (*   ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧ *)
-    (*     SPureSpec.consume_chunk_angelic CPureSpec.consume_chunk. *)
-    (* Proof. *)
-    (*   intros w0 ι0 Hpc0 cs cc -> sh ch ->. *)
-    (*   unfold SPureSpec.consume_chunk_angelic. *)
-    (*   set (c1 := peval_chunk cs). *)
-    (*   destruct (try_consume_chunk_exact_spec sh c1) as [sh' HIn|]. *)
-    (*   { intros POST__s POST__c HPOST. *)
-    (*     unfold CPureSpec.consume_chunk. *)
-    (*     cbn. intros Hwp. *)
-    (*     rewrite CPureSpec.wp_angelic_list. *)
-    (*     change (SHeap w0) in sh'. *)
-    (*     exists (inst c1 ι0, inst sh' ι0). *)
-    (*     split. *)
-    (*     - unfold inst at 3, inst_heap, inst_list. *)
-    (*       rewrite heap_extractions_map, List.in_map_iff. *)
-    (*       + exists (c1 , sh'). split. reflexivity. assumption. *)
-    (*       + eauto using inst_is_duplicable. *)
-    (*     - cbn. rewrite CPureSpec.wp_assert_eq_chunk. subst. *)
-    (*       split; auto. *)
-    (*       + subst c1. now rewrite peval_chunk_sound. *)
-    (*       + revert Hwp. apply HPOST; now wsimpl. *)
-    (*   } *)
-    (*   destruct (try_consume_chunk_precise_spec sh c1) as [[sh' eqs] HIn|]. *)
-    (*   { cbv [SPureSpec.bind SPureSpec.pure]. *)
-    (*     intros POST__s POST__c HPOST. *)
-    (*     match goal with | |- context[amsg.mk ?m] => generalize (amsg.mk m) end. *)
-    (*     intros msg Hwp. *)
-    (*     pose proof (refine_assert_pathcondition Hpc0 msg (ta := eqs)) as Hassert. *)
-    (*     inster Hassert by (cbn; reflexivity). *)
-    (*     match goal with *)
-    (*     | H: SymProp.wsafe (SPureSpec.assert_pathcondition msg eqs ?P) _ |- _ => *)
-    (*         specialize (Hassert P (fun _ => POST__c (inst sh' ι0))) *)
-    (*     end. *)
-    (*     apply Hassert in Hwp; clear Hassert. *)
-    (*     - destruct Hwp as [Heqs HP]. *)
-    (*       unfold CPureSpec.consume_chunk, CPureSpec.bind, CPureSpec.pure. *)
-    (*       rewrite CPureSpec.wp_angelic_list. *)
-    (*       exists (inst c1 ι0, inst sh' ι0). split; [auto|]. subst c1. *)
-    (*       now rewrite CPureSpec.wp_assert_eq_chunk, peval_chunk_sound. *)
-    (*     - intros w1 θ1 ι1 -> Hpc1 _ _ _. unfold T, four. *)
-    (*       apply HPOST; auto. *)
-    (*       + rewrite sub_acc_trans. cbn. now rewrite subst_sub_id. *)
-    (*       + now eapply refine_inst_persist; eauto. *)
-    (*   } *)
-    (*   { apply refine_bind; auto. *)
-    (*     apply refine_angelic_list; auto. *)
-    (*     now apply refine_heap_extractions. *)
-    (*     intros w2 ω12 ι2 -> Hpc2. *)
-    (*     intros [sc' sh'] [cc' ch'] [rc rh']. *)
-    (*     apply refine_bind; auto. *)
-    (*     - eapply refine_assert_eq_chunk; eauto. *)
-    (*       + eapply refine_inst_persist; eauto. *)
-    (*         subst c1. cbn. *)
-    (*         now rewrite peval_chunk_sound. *)
-    (*       + cbn. now rewrite inst_sub_id. *)
-    (*     - intros w3 ω23 ι3 -> Hpc3 _ _ _. *)
-    (*       apply refine_pure; auto. *)
-    (*       eapply refine_inst_persist; eauto. *)
-    (*   } *)
-    (* Qed. *)
+    Lemma refine_consume_chunk_angelic {w} :
+      ⊢ ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧
+        CPureSpec.consume_chunk (SPureSpec.consume_chunk_angelic (w := w)).
+    Proof.
+      iIntros (c sc) "Hc %h %sh Hh".
+      unfold SPureSpec.consume_chunk_angelic.
+      iDestruct (refine_peval_chunk with "Hc") as "Hc1".
+      set (sc1 := peval_chunk sc).
+      destruct (try_consume_chunk_exact_spec sh sc1) as [sh' HsIn|].
+      { change (SHeap w) in sh'.
+        iPoseProof (refine_heap_extractions with "Hh") as "Hexts".
+        iDestruct (refine_In with "Hexts [//]") as "(%v & %HIn & HH)".
+        destruct v as (c1 & h').
+        iDestruct "HH" as "(Hc1' & Hh')".
+        iIntros (K sK) "HK HSP".
+        unfold CPureSpec.consume_chunk, CPureSpec.bind.
+        rewrite CPureSpec.wp_angelic_list.
+        iDestruct (repₚ_antisym_left with "Hc1 Hc1'") as "<-".
+        iExists (c, h').
+        iSplit; first done.
+        rewrite CPureSpec.wp_assert_eq_chunk.
+        iSplit; first done.
+        now iApply (refine_T with "HK Hh' HSP").
+      }
+      destruct (try_consume_chunk_precise_spec sh sc1) as [[sh' eqs] HIn|].
+      { cbv [SPureSpec.bind SPureSpec.pure].
+        assert (⊢ ∀ eq c h' h, proprepₚ eq eqs -∗ repₚ c sc1 -∗ repₚ h' sh' -∗ repₚ h sh -∗ ⌜ eq ⌝ -∗ ⌜In (c , h') (heap_extractions h)⌝)%I as HInLog.
+        { clear -HIn. crushPredEntails3. now subst. }
+        iDestruct (eval_prop eqs) as "(%eq & Heq)".
+        iAssert (∃ h', ℛ⟦RHeap⟧ h' sh')%I as "(%h' & Hh')".
+        { iDestruct (eval sh') as "(%h' & Heqh')".
+          iExists h'.
+          now iApply (RList_RInst with "Heqh'"). } 
+        match goal with | |- context[amsg.mk ?m] => generalize (amsg.mk m) end.
+        iIntros (msg).
+        iIntros (K sK) "HK HSP".
+        iAssert (⌜eq /\ K h'⌝)%I with "[HK HSP]" as "%HeqKh'".
+        { iPoseProof (refine_assert_pathcondition $! msg eq eqs with "Heq") as "Hapc".
+          iApply ("Hapc" $! (fun _ => K h') with "[HK] HSP").
+          iIntros (w2 ω2) "!> %u %su _".
+          rewrite forgetting_unconditionally.
+          iApply (refine_T with "HK").
+          rewrite !(RList_RInst h').
+          cbn.
+          now rewrite forgetting_repₚ.
+        }
+        destruct HeqKh' as (Heq & HKh').
+        iPoseProof (HInLog $! eq c h' h with "Heq Hc1 [Hh'] [Hh] [// ]") as "HInch'".
+        { now rewrite (RList_RInst h').  }
+        { now rewrite (RList_RInst h).  }
+        unfold CPureSpec.consume_chunk, CPureSpec.bind.
+        rewrite CPureSpec.wp_angelic_list.
+        iExists (c, h').
+        iSplit; first done.
+        rewrite CPureSpec.wp_assert_eq_chunk.
+        now iSplit.
+      }
+      { iApply (refine_bind (RA := RProd RChunk RHeap) (RB := RHeap) with "[Hh] [Hc1]").
+        { iApply (refine_angelic_list (RA := RProd RChunk RHeap)).
+          now iApply refine_heap_extractions.
+        }
+        iIntros (w2 ω2) "!> %ch %sch Hch".
+        destruct ch as (c', h').
+        destruct sch as (sc', sh').
+        iDestruct "Hch" as "(Hc' & Hh')".
+        iApply (refine_bind (RA := RUnit) (RB := RHeap) with "[Hc1 Hc'] [Hh']").
+        { change (ℛ⟦RChunk⟧ (id c) sc1) with (repₚ c sc1).
+          rewrite <-forgetting_repₚ.
+          change (repₚ c (persist sc1 ω2)) with (ℛ⟦RChunk⟧ c (persist sc1 ω2)).
+          iPoseProof (refine_assert_eq_chunk with "Hc1 Hc'") as "Haec".
+          iApply (refine_T with "Haec").
+        }
+        iIntros "%w3 %ω3 !> %u %su _".
+        iApply (refine_pure (RA := RHeap)).
+        rewrite !RList_RInst.
+        now iApply forgetting_repₚ. 
+      } 
+    Qed.
 
     (* Lemma refine_read_register {τ} (reg : 𝑹𝑬𝑮 τ) : *)
     (*   ℛ⟦RHeap -> RPureSpec (RProd (RVal τ) RHeap)⟧ *)

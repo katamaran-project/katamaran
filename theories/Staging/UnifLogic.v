@@ -648,6 +648,14 @@ Module Pred
       eapply inst_sub_id.
     Qed.
 
+    Lemma eval `{Inst AT A} {w : World} (t : AT w) :
+      ⊢ ∃ v, repₚ v (w := w) t.
+    Proof. crushPredEntails3. now eexists. Qed.
+
+    Lemma eval_prop `{InstProp AT} {w : World} (t : AT w) :
+      ⊢ ∃ P, proprepₚ P (w := w) t.
+    Proof. crushPredEntails3. now eexists. Qed.
+
     Lemma lift_repₚ `{InstLift AT A} (v : A) {w : World} :
       ⊢ repₚ v (lift v : AT w).
     Proof.
