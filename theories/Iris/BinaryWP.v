@@ -421,18 +421,24 @@ Module IrisBinaryWPAsymmetricLaws
     iIntros; by iFrame.
   Qed.
 
-  Lemma semWp2_exp {Γ τ} (Φ : Val τ -> CStore Γ -> Val τ -> CStore Γ -> iProp Σ) eA eB δA δB :
+  Lemma semWp2_exp {Γ τ} (Φ : Post Γ Γ τ) eA eB δA δB :
     Φ (eval eA δA) δA (eval eB δB) δB ⊢ semWp2 δA δB (stm_exp eA) (stm_exp eB) Φ.
   Proof.
     rewrite fixpoint_semWp2_eq; cbn.
-    iIntros "HΦ" (γ11 γ21 μ11 μ21) "(Hregs & Hmem)".
+    iIntros "HΦ" (γ11 γ21 μ11 μ21) "Hres".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
-    iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(Hstep1 & Hlc1 & Hstep2 & Hlc2)".
+    iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(%Hstepl & Hlcl & %Hstepr & Hlcr)".
+    unfold step_right in Hstepr.
+    destruct (smallinvstep Hstepl).
+    destruct (smallinvstep Hstepr).
     iIntros "!> !>".
     iModIntro.
     iMod "Hclose" as "_".
-  Admitted.
+    iModIntro.
+    iFrame "Hres".
+    now iApply semWp2_val.
+  Qed.
 
   (* TODO: move somewhere else? *)
   Ltac semWp2_stuck_progress :=
@@ -687,7 +693,11 @@ Section Soundness.
         {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
         ⊢ ((P -∗ Q (eval e δ) δ) -∗ semTriple δ P (stm_exp e) Q).
   Proof.
-  Admitted.
+    iIntros "PQ P".
+    iApply semWp2_exp.
+    iSpecialize ("PQ" with "P").
+    now iFrame.
+  Qed.
 
   Lemma iris_rule_stm_let {Γ} (δ : CStore Γ)
         (x : PVar) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
