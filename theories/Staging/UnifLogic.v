@@ -490,6 +490,7 @@ Module Pred
   Section SubstMod.
     Import ModalNotations.
     Import ctx.notations.
+    Import classes.
 
     Lemma acc_pathcond {w1 w2} (ω : w2 ⊒ w1) :
       forall ι,  instprop (wco w1) ι -> instprop (wco w2) (inst (sub_acc ω) ι).
@@ -657,6 +658,13 @@ Module Pred
     Lemma eval_prop `{InstProp AT} {w : World} (t : AT w) :
       ⊢ ∃ P, proprepₚ P (w := w) t.
     Proof. crushPredEntails3. now eexists. Qed.
+
+    Lemma forgetting_curval {w w2} {ω2 : Acc w w2} {ι : Valuation w} :
+      forgetting ω2 (curval ι) ⊣⊢ repₚ ι (sub_acc ω2).
+    Proof.
+      unfold forgetting, curval.
+      now crushPredEntails3.
+    Qed.
 
     Lemma lift_repₚ `{InstLift AT A} (v : A) {w : World} :
       ⊢ repₚ v (lift v : AT w).
@@ -991,6 +999,26 @@ Module Pred
     Import iris.proofmode.modalities.
     Import iris.proofmode.classes.
     Import iris.proofmode.tactics.
+
+    #[export] Instance intowand_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} {Q R}:
+      IntoWand false false P Q R -> IntoWand false false (forgetting ω P) (forgetting ω Q) (forgetting ω R).
+    Proof.
+      iIntros (Hiw).
+      unfold IntoWand; cbn.
+      rewrite forgetting_wand.
+      pose proof (into_wand false false P Q R) as H.
+      cbn in H.
+      now rewrite H.
+    Qed.
+
+    #[export] Instance intoforall_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} {A} {Φ}:
+      IntoForall (A := A) P Φ -> IntoForall (forgetting ω P) (fun a => forgetting ω (Φ a)).
+    Proof.
+      iIntros (Hiw).
+      unfold IntoForall; cbn.
+      rewrite forgetting_forall.
+      now rewrite (into_forall P).
+    Qed.
 
     #[export] Instance fromExist_knowing {w1 w2} {A} {ω : Acc w1 w2} {P} {Φ : A -> Pred _}:
       FromExist P Φ -> FromExist (knowing ω P) (fun v => knowing ω (Φ v)).
@@ -1411,9 +1439,9 @@ Module Pred
     (* Import ModalNotations. *)
     Import iris.proofmode.tactics.
     
-    Lemma refine_unit {w} :
-      ⊢ (ℛ⟦ RUnit ⟧ () () : Pred w).
-    Proof. now crushPredEntails3. Qed.
+    Lemma refine_unit {w} {u su} :
+      ⊢ (ℛ⟦ RUnit ⟧ u su : Pred w).
+    Proof. destruct u, su. now crushPredEntails3. Qed.
     
     Lemma refine_nil {AT A} {R : Rel AT A} {w} :
       ⊢ ℛ⟦ RList R ⟧ nil (nil : list (AT w)).
