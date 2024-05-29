@@ -495,6 +495,10 @@ Module IrisBinaryWPAsymmetricLaws
     (* by iApply semWp2_call_inline_later. *)
   Abort.
 
+  Lemma semWp2_fail {Γ1 Γ2 τ} (s1 s2 : string) (Q : Post Γ1 Γ2 τ)
+    (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
+    ⊢ semWp2 δ1 δ2 (fail s1)%exp (fail s2)%exp Q.
+  Proof. rewrite fixpoint_semWp2_eq; cbn; now iIntros. Qed.
   Lemma semWp2_bind {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Val σ → Stm Γ τ)
     (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ) :
     semWp2 δ1 δ2 s1 s2 (fun v1 δ12 v2 δ22 => semWp2 δ12 δ22 (k1 v1) (k2 v2) Q) ⊢
