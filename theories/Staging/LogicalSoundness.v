@@ -2262,90 +2262,93 @@ Module Soundness
     - now iApply (refine_inst_persist with "Hδ").
   Qed.
 
-  Lemma refine_produce {Γ} {w : World} (asn : Assertion w) {ι : Valuation w} :
-    curval ι ⊢ ℛ⟦□ᵣ(RStoreSpec Γ Γ RUnit)⟧ (CStoreSpec.produce ι asn) (@SStoreSpec.produce Γ w asn).
+  Lemma refine_produce {Γ} {w1 w2 : World} (ω : Acc w1 w2) (asn : Assertion w1) (ι : Valuation w1):
+    repₚ ι (sub_acc ω) ⊢ ℛ⟦RStoreSpec Γ Γ RUnit⟧ (CStoreSpec.produce ι asn) (SStoreSpec.produce (w := w1) asn ω).
   Proof.
     unfold SStoreSpec.produce, CStoreSpec.produce.
-    iIntros "Hι %w2 %ω2 !> %K %sK HK %δ %sδ Hδ".
-    iPoseProof (HeapSpec.refine_produce asn) as "Hprod".
-    iApply (refine_T with "Hprod [Hι]").
-    { now iApply forgetting_curval. }
-    iIntros (w3 ω3) "!> %u %su _".
-    iApply (forgetting_unconditionally_drastic with "HK [] [Hδ]").
-    - now iApply refine_unit.
-    - now iApply (refine_inst_persist with "Hδ").
-  Qed.
-
-  Lemma refine_consume {Γ} {w : World} (asn : Assertion w) {ι}:
-    curval ι ⊢ ℛ⟦□ᵣ(RStoreSpec Γ Γ RUnit)⟧ (CStoreSpec.consume ι asn) (SStoreSpec.consume (w := w) asn).
-  Proof.
-    unfold SStoreSpec.consume, CStoreSpec.consume.
-    iIntros "Hι %w2 %ω2 !> %Φ %sΦ rΦ %δ %sδ rδ".
-    iPoseProof (HeapSpec.refine_consume asn) as "Hcons".
-    iApply (refine_T with "Hcons [Hι]").
-    { now iApply forgetting_curval. }
+    iIntros "Hι %Φ %sΦ rΦ %δ %sδ rδ".
+    iPoseProof (HeapSpec.refine_produce asn) as "Hcons".
+    iApply (refine_T with "Hcons Hι").
     iIntros (w3 ω3) "!> %u %su _".
     iApply (forgetting_unconditionally_drastic with "rΦ [] [rδ]").
     - now iApply refine_unit.
     - now iApply (refine_inst_persist with "rδ").
   Qed.
 
-  (* Lemma refine_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) : *)
-  (*   ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧ *)
-  (*     (@SStoreSpec.read_register Γ τ reg) (CStoreSpec.read_register reg). *)
-  (* Proof. *)
-  (*   intros w0 ι0 Hpc0 sΦ cΦ rΦ sδ cδ rδ sh ch rh. *)
-  (*   apply RHeapSpec.refine_read_register; auto. *)
-  (*   intros w1 θ1 ι1 Hι1 Hpc1 sv cv rv. apply rΦ; auto. *)
-  (*   eapply refine_inst_persist; eauto. *)
-  (* Qed. *)
+  Lemma refine_consume {Γ} {w1 w2 : World} (ω : Acc w1 w2) (asn : Assertion w1) (ι : Valuation w1):
+    repₚ ι (sub_acc ω) ⊢ ℛ⟦RStoreSpec Γ Γ RUnit⟧ (CStoreSpec.consume ι asn) (SStoreSpec.consume (w := w1) asn ω).
+  Proof.
+    unfold SStoreSpec.consume, CStoreSpec.consume.
+    iIntros "Hι %Φ %sΦ rΦ %δ %sδ rδ".
+    iPoseProof (HeapSpec.refine_consume asn) as "Hcons".
+    iApply (refine_T with "Hcons Hι").
+    iIntros (w3 ω3) "!> %u %su _".
+    iApply (forgetting_unconditionally_drastic with "rΦ [] [rδ]").
+    - now iApply refine_unit.
+    - now iApply (refine_inst_persist with "rδ").
+  Qed.
 
-  (* Lemma refine_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) : *)
-  (*   ℛ⟦RVal τ -> RStoreSpec Γ Γ (RVal τ)⟧ *)
-  (*     (@SStoreSpec.write_register Γ τ reg) (CStoreSpec.write_register reg). *)
-  (* Proof. *)
-  (*   intros w0 ι0 Hpc0 svnew cvnew rvnew sΦ cΦ rΦ sδ cδ rδ sh ch rh. *)
-  (*   apply RHeapSpec.refine_write_register; auto. *)
-  (*   intros w1 θ1 ι1 Hι1 Hpc1 sv cv rv. apply rΦ; auto. *)
-  (*   eapply refine_inst_persist; eauto. *)
-  (* Qed. *)
+  Lemma refine_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :
+    ⊢ ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧
+      (CStoreSpec.read_register reg) (SStoreSpec.read_register (w := w) reg).
+  Proof.
+    iIntros (Φ sΦ) "rΦ %δ %sδ rδ".
+    iApply HeapSpec.refine_read_register.
+    iIntros (w1 θ1) "!> %v %sv rv".
+    iApply (forgetting_unconditionally_drastic with "rΦ rv").
+    iApply (refine_inst_persist with "rδ").
+  Qed.
 
-  (* Lemma refine_call_contract {Γ Δ τ} (c : SepContract Δ τ) : *)
-  (*   ℛ⟦RStore Δ -> RStoreSpec Γ Γ (RVal τ)⟧ *)
-  (*     (SStoreSpec.call_contract c) (CStoreSpec.call_contract c). *)
-  (* Proof. *)
-  (*   intros w0 ι0 Hpc0 args__s args__c Hargs. *)
-  (*   destruct c; cbv [SStoreSpec.call_contract CStoreSpec.call_contract]. *)
-  (*   apply refine_bind; auto. *)
-  (*   apply refine_angelic_ctx; auto. *)
-  (*   intros w1 ω01 ι1 -> Hpc1 evars__s evars__c Hevars. *)
-  (*   apply refine_bind; auto. *)
-  (*   { apply refine_assert_eq_nenv; auto; hnf. *)
-  (*     now rewrite -> Hevars, inst_subst. *)
-  (*     now rewrite -> Hargs, inst_persist. *)
-  (*   } *)
-  (*   intros w2 ω12 ι2 -> Hpc2 _ _ _. *)
-  (*   apply refine_bind; auto. *)
-  (*   { apply refine_consume; wsimpl; auto. *)
-  (*     constructor. *)
-  (*   } *)
-  (*   intros w3 ω23 ι3 -> Hpc3 _ _ _. *)
-  (*   apply refine_bind; auto. *)
-  (*   { apply refine_demonic; auto. } *)
-  (*   intros w4 ω34 ι4 -> Hpc4. *)
-  (*   intros res__s res__c Hres. *)
-  (*   apply refine_bind; auto. *)
-  (*   { apply refine_produce; auto. *)
-  (*     constructor. *)
-  (*     cbn - [inst_env sub_snoc]. *)
-  (*     rewrite inst_sub_snoc, inst_persist, ?sub_acc_trans, ?inst_subst. *)
-  (*     now rewrite Hevars, Hres. *)
-  (*   } *)
-  (*   intros w5 ω45 ι5 -> Hpc5 _ _ _. *)
-  (*   apply refine_pure; auto. *)
-  (*   rewrite Hres. rewrite <- inst_persist. *)
-  (*   reflexivity. *)
-  (* Qed. *)
+  Lemma refine_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :
+    ⊢ ℛ⟦RVal τ -> RStoreSpec Γ Γ (RVal τ)⟧
+      (CStoreSpec.write_register reg) (SStoreSpec.write_register (w := w) reg).
+  Proof.
+    iIntros (vnew svnew) "rvnew %Φ %sΦ rΦ %δ %sδ rδ".
+    iApply (HeapSpec.refine_write_register with "rvnew").
+    iIntros (w1 θ1) "!> %v %sv rv".
+    iApply (forgetting_unconditionally_drastic with "rΦ rv").
+    iApply (refine_inst_persist with "rδ").
+  Qed.
+
+  Lemma refine_call_contract {Γ Δ τ} (c : SepContract Δ τ) {w} :
+    ⊢ ℛ⟦RStore Δ -> RStoreSpec Γ Γ (RVal τ)⟧
+      (CStoreSpec.call_contract c) (SStoreSpec.call_contract (w := w) c).
+  Proof.
+    iIntros (args sargs) "Hargs".
+    destruct c; cbv [SStoreSpec.call_contract CStoreSpec.call_contract].
+    iApply (refine_bind (RA := RNEnv _ _) (RB := RVal _)).
+    { iApply refine_angelic_ctx. }
+    iIntros (w1 ω01) "!> %evars %sevars #Hevars".
+    iApply (refine_bind (RA := RUnit) (RB := RVal _) with "[Hargs Hevars]").
+    { iApply (refine_assert_eq_nenv with "[Hevars] [Hargs]").
+      - now iApply (refine_inst_subst  sep_contract_localstore0).
+      - now iApply (refine_inst_persist with "Hargs").
+    }
+    iIntros (w2 ω12) "!> %u %su _".
+    iApply (refine_bind (RA := RUnit) (RB := RVal _)).
+    { set (w3 := {| wctx := sep_contract_logic_variables0; wco := [ctx] |}).
+      set (ω31 := acc_sub (sevars : Sub w3 w1) (λ (ι : Valuation w1) (_ : instprop (wco w1) ι), I)).
+      iApply (refine_consume (acc_trans ω31 ω12) sep_contract_precondition0 evars).
+      rewrite sub_acc_trans -persist_subst.
+      now rewrite forgetting_repₚ.
+    }
+    iIntros (w3 ω23) "!> %u2 %su2 _".
+    iApply (refine_bind (RA := RVal _) (RB := RVal _)).
+    { iApply refine_demonic. }
+    iIntros (w4 ω34) "!> %res %sres #Hres".
+    iApply (refine_bind (RA := RUnit) (RB := RVal _) with "[Hres]").
+    { set (w5 := {| wctx := sep_contract_logic_variables0 ▻ sep_contract_result0∷τ; wco := [ctx] |}).
+      set (ω54 := acc_sub ((persist sevars (acc_trans (acc_trans ω12 ω23) ω34)).[sep_contract_result0∷τ ↦ sres]: Sub w5 w4) (λ (ι : Valuation w4) (_ : instprop (wco w4) ι), I)).
+      iApply (refine_produce ω54 sep_contract_postcondition0 (evars.[sep_contract_result0∷τ ↦ res])).
+      iApply (repₚ_cong₂ (T1 := STerm τ) (T2 := fun Σ => NamedEnv (Term Σ) sep_contract_logic_variables0) (T3 := fun Σ => Sub _ Σ) (fun v δ => δ.[_ ↦ v]) (fun (v : STerm _ _) δ => δ.[_∷τ ↦ v]) with "[Hres Hevars]").
+      { intros. now rewrite inst_env_snoc. }
+      iFrame "Hres".
+      now iApply (forgetting_repₚ with "Hevars").
+    }
+    iIntros (w5 ω45) "!> %u3 %su3 _".
+    iApply (refine_pure (R := RVal _)).
+    now iApply (refine_inst_persist with "Hres").
+  Qed.
 
   (* Lemma refine_call_lemma {Γ Δ : PCtx} (lem : Lemma Δ) : *)
   (*   ℛ⟦RStore Δ -> RStoreSpec Γ Γ RUnit⟧ *)
