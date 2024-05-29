@@ -1203,13 +1203,9 @@ Module Soundness
             iModIntro.
             iApply (refine_bind (RA := RUnit) (RB := RUnit) with "[Hc1 IHc1 Hc3] [Hc2 IHc2 Hc4]").
             * unfold RSat at 2; cbn -[RSat].
-              rewrite forgetting_RImpl.
               iSpecialize ("IHc1" with "Hc3").
               now rewrite forgetting_unconditionally_drastic.
             * iIntros (w2 ω2) "!> %u %su _".
-              rewrite <-!forgetting_trans.
-              unfold RSat at 2; cbn -[RSat].
-              rewrite forgetting_RImpl.
               iSpecialize ("IHc2" with "Hc4").
               now rewrite forgetting_unconditionally_drastic.
           + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
@@ -1223,26 +1219,19 @@ Module Soundness
                                           ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c2) (SPureSpec.assert_eq_chunk msg sc2) -∗
                                           ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_wand c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_wand sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
           clear. repeat iSplitL.
-          + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
-            iModIntro.
+          + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
             iApply (refine_error (RA := RUnit)).
-          + iIntros (σ r v sv) "Hv %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
-            iModIntro.
+          + iIntros (σ r v sv) "Hv %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
             iApply (refine_error (RA := RUnit)).
-          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
-            iModIntro.
+          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
             iApply (refine_error (RA := RUnit)).
-          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1".
-            iModIntro.
+          + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
             iApply (refine_bind (RA := RUnit) (RB := RUnit) with "[Hc1 IHc1 Hc3] [Hc2 IHc2 Hc4]").
             * unfold RSat at 2; cbn -[RSat].
-              rewrite forgetting_RImpl.
               iSpecialize ("IHc1" with "Hc3").
               now rewrite forgetting_unconditionally_drastic.
             * iIntros (w2 ω2) "!> %u %su _".
-              rewrite <-!forgetting_trans.
               unfold RSat at 2; cbn -[RSat].
-              rewrite forgetting_RImpl.
               iSpecialize ("IHc2" with "Hc4").
               now rewrite forgetting_unconditionally_drastic.
     Qed.
@@ -1253,39 +1242,30 @@ Module Soundness
     Proof.
       iInduction s as [] "IH"; iIntros (w' ω) "!> %ι %ιs #Hι";
         cbn -[RSat].
-      - rewrite !forgetting_unconditionally_drastic.
-        iApply (refine_angelic_binary (RA := RUnit)).
-        + now iApply "IH".
-        + now iApply "IH1".
-      - rewrite !forgetting_unconditionally_drastic.
-        iApply (refine_demonic_binary (RA := RUnit)).
-        + now iApply "IH".
-        + now iApply "IH1".
+      - iApply (refine_angelic_binary (RA := RUnit)).
+        + now iApply (forgetting_unconditionally_drastic with "IH").
+        + now iApply (forgetting_unconditionally_drastic with "IH1").
+      - iApply (refine_demonic_binary (RA := RUnit)).
+        + now iApply (forgetting_unconditionally_drastic with "IH").
+        + now iApply (forgetting_unconditionally_drastic with "IH1").
       - now iApply (refine_error (RA := RUnit)).
       - now iApply (refine_block (R := RUnit)).
       - iApply (refine_bind (RA := RUnit) (RB := RUnit)).
         + iApply refine_assert_formula.
           now iApply refine_instprop_subst.
-        + rewrite forgetting_unconditionally.
-          iIntros (w1 ω1) "!> %u %us _".
-          rewrite forgetting_unconditionally_drastic.
-          iApply "IH".
-          cbn.
-          now rewrite forgetting_repₚ.
+        + iIntros (w1 ω1) "!> %u %us _".
+          iApply (forgetting_unconditionally_drastic with "IH").
+          now iApply (refine_inst_persist (AT := Sub _)).
       - iApply (refine_bind (RA := RUnit) (RB := RUnit)).
         + iApply refine_assume_formula.
           now iApply refine_instprop_subst.
-        + rewrite forgetting_unconditionally.
-          iIntros (w1 ω1) "!> %u %us _".
-          rewrite forgetting_unconditionally_drastic.
-          iApply "IH".
-          cbn; now rewrite forgetting_repₚ.
+        + iIntros (w1 ω1) "!> %u %us _".
+          iApply (forgetting_unconditionally_drastic with "IH").
+          now iApply (refine_inst_persist (AT := Sub _)).
       - iApply (refine_bind (RA := RInst (STerm (type b)) (Val _)) (RB := RUnit)).
         + iApply refine_angelic.
-        + rewrite forgetting_unconditionally.
-          iIntros (w1 ω1) "!> %v %vs Hv".
-          rewrite forgetting_unconditionally_drastic.
-          iApply "IH".
+        + iIntros (w1 ω1) "!> %v %vs Hv".
+          iApply (forgetting_unconditionally_drastic with "IH").
           iApply (repₚ_cong₂ (T1 := Sub Σ) (T2 := STerm (type b)) (T3 := Sub (Σ ▻ b)) (fun vs v => env.snoc vs b v) (fun vs v => env.snoc vs b v) with "[Hι $Hv]").
           { intros; now cbn. }
           now rewrite forgetting_repₚ.
@@ -1293,8 +1273,7 @@ Module Soundness
         + iApply refine_demonic.
         + rewrite forgetting_unconditionally.
           iIntros (w1 ω1) "!> %v %vs Hv".
-          rewrite forgetting_unconditionally_drastic.
-          iApply "IH".
+          iApply (forgetting_unconditionally_drastic with "IH").
           iApply (repₚ_cong₂ (T1 := Sub Σ) (T2 := STerm (type b)) (T3 := Sub (Σ ▻ b)) (fun vs v => env.snoc vs b v) (fun vs v => env.snoc vs b v) with "[Hι $Hv]").
           { intros; now cbn. }
           now rewrite forgetting_repₚ.
@@ -1310,8 +1289,7 @@ Module Soundness
             intros. now rewrite inst_lookup.
         + rewrite forgetting_unconditionally.
           iIntros (w1 ω1) "!> %u %us _".
-          rewrite forgetting_unconditionally_drastic.
-          iApply "IH".
+          iApply (forgetting_unconditionally_drastic with "IH").
           iApply (repₚ_cong (T1 := Sub Σ) (T2 := Sub (Σ - (x∷σ))) (fun vs => env.remove (x∷σ) vs xIn) (fun vs => env.remove (x∷σ) vs xIn) with "[Hι]").
           { intros. now rewrite <- inst_sub_shift, <- inst_subst, sub_comp_shift. }
           now rewrite forgetting_repₚ.
@@ -1327,16 +1305,14 @@ Module Soundness
             intros. now rewrite inst_lookup.
         + rewrite forgetting_unconditionally.
           iIntros (w1 ω1) "!> %u %us _".
-          rewrite forgetting_unconditionally_drastic.
-          iApply "IH".
+          iApply (forgetting_unconditionally_drastic with "IH").
           iApply (repₚ_cong (T1 := Sub Σ) (T2 := Sub (Σ - (x∷σ))) (fun vs => env.remove (x∷σ) vs xIn) (fun vs => env.remove (x∷σ) vs xIn) with "[Hι]").
           { intros. now rewrite <- inst_sub_shift, <- inst_subst, sub_comp_shift. }
           now rewrite forgetting_repₚ.
       - iApply (refine_error (RA := RUnit)).
       - iApply (refine_error (RA := RUnit)).
       - iApply (refine_debug (RA := RUnit)).
-        rewrite forgetting_unconditionally_drastic.
-        now iApply "IH".
+        now iApply (forgetting_unconditionally_drastic with "IH").
     Qed.
 
     Lemma refine_replay_aux2 {Σ} (s : 𝕊 Σ) {w} :
@@ -2161,8 +2137,7 @@ Module Soundness
       iApply ("Hm" with "[HK] [Hδ Hv] Hh").
       - clear.
         iIntros (w2 ω2) "!> %v %sv Hv %δ %sδ Hδ".
-        rewrite forgetting_unconditionally_drastic.
-        iApply ("HK" with "Hv").
+        iApply (forgetting_unconditionally_drastic with "HK Hv").
         iApply (repₚ_cong (T1 := SStore (Γ2 ▻ x∷σ)) (T2 := SStore Γ2) env.tail env.tail with "Hδ").
         intros. now env.destroy vs1.
       - iApply (repₚ_cong₂ (T1 := SStore Γ1) (T2 := STerm σ) (T3 := SStore (Γ1 ▻ x∷σ)) (fun δ v => δ.[x∷σ ↦ v]) (w := w) (fun δ v => δ.[x∷σ ↦ v]) with "[$Hδ $Hv]").
@@ -2177,8 +2152,7 @@ Module Soundness
       unfold SStoreSpec.pushspops, CStoreSpec.pushspops.
       iApply ("Hm" with "[HK] [Hδ Hc] Hh").
       - iIntros (w1 ω1) "!> %v %sv Hv %δ1 %sδ1 Hδ1 %h1 %sh1 Hh1".
-        rewrite forgetting_unconditionally_drastic.
-        iApply ("HK" with "Hv [Hδ1] Hh1").
+        iApply (forgetting_unconditionally_drastic with "HK Hv [Hδ1] Hh1").
         iApply (repₚ_cong (T1 := SStore (Γ2 ▻▻ Δ)) (T2 := SStore Γ2) (env.drop Δ) (env.drop Δ) with "Hδ1").
         intros. env.destroy vs1.
         now rewrite inst_env_cat !env.drop_cat.
@@ -2283,10 +2257,9 @@ Module Soundness
     iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ %h %sh Hh".
     iApply (PureSpec.refine_produce_chunk with "Hc Hh [HΦ Hδ]").
     iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
-    rewrite forgetting_unconditionally_drastic.
-    iPoseProof refine_unit as "Hunit".
-    iApply ("HΦ" with "Hunit [Hδ] Hh2").
-    now iApply (refine_inst_persist (AT := SStore Γ)).
+    iApply (forgetting_unconditionally_drastic with "HΦ [] [Hδ] Hh2").
+    - now iApply refine_unit.
+    - now iApply (refine_inst_persist (AT := SStore Γ)).
   Qed.
 
   Lemma refine_consume_chunk {Γ} {w} :
@@ -2296,10 +2269,9 @@ Module Soundness
     iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ %h %sh Hh".
     iApply (PureSpec.refine_consume_chunk with "Hc Hh").
     iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
-    rewrite forgetting_unconditionally_drastic.
-    iPoseProof refine_unit as "Hunit".
-    iApply ("HΦ" with "Hunit [Hδ] Hh2").
-    now iApply (refine_inst_persist (AT := SStore Γ)).
+    iApply (forgetting_unconditionally_drastic with "HΦ [] [Hδ] Hh2").
+    - now iApply refine_unit.
+    - now iApply (refine_inst_persist (AT := SStore Γ)).
   Qed.
 
   Lemma refine_consume_chunk_angelic {Γ} {w} :
@@ -2309,10 +2281,9 @@ Module Soundness
     iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ %h %sh Hh".
     iApply (PureSpec.refine_consume_chunk_angelic with "Hc Hh").
     iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
-    rewrite forgetting_unconditionally_drastic.
-    iPoseProof refine_unit as "Hunit".
-    iApply ("HΦ" with "Hunit [Hδ] Hh2").
-    now iApply (refine_inst_persist (AT := SStore Γ)).
+    iApply (forgetting_unconditionally_drastic with "HΦ [] [Hδ] Hh2").
+    - now iApply refine_unit.
+    - now iApply (refine_inst_persist with "Hδ").
   Qed.
 
   Lemma refine_produce {Γ} {w : World} (asn : Assertion w) {ι : Valuation w} :
@@ -2324,27 +2295,24 @@ Module Soundness
     iApply (refine_T with "Hprod [Hι]").
     { now iApply forgetting_curval. }
     iIntros (w3 ω3) "!> %u %su _".
-    rewrite !forgetting_unconditionally_drastic.
-    iPoseProof (refine_inst_persist with "Hδ") as "Hδp".
-    iApply ("HK" with "[] Hδp").
-    Set Printing Implicit.
-    now iApply refine_unit.
+    iApply (forgetting_unconditionally_drastic with "HK [] [Hδ]").
+    - now iApply refine_unit.
+    - now iApply (refine_inst_persist with "Hδ").
   Qed.
 
-  (* Lemma refine_consume {Γ Σ0 pc0} (asn : Assertion Σ0) : *)
-  (*   let w0 := @MkWorld Σ0 pc0 in *)
-  (*   forall *)
-  (*     (ι0 : Valuation w0) *)
-  (*     (Hpc0 : instprop (wco w0) ι0), *)
-  (*     ℛ⟦□(RStoreSpec Γ Γ RUnit)⟧@{ι0} (@SStoreSpec.consume Γ w0 asn) (CStoreSpec.consume ι0 asn). *)
-  (* Proof. *)
-  (*   unfold SStoreSpec.consume, CStoreSpec.consume. *)
-  (*   intros ι0 Hpc0 w1 θ1 ι1 Hι1 Hpc1 sΦ cΦ rΦ sδ cδ rδ sh ch rh. *)
-  (*   apply RHeapSpec.refine_consume; auto. *)
-  (*   intros w2 θ2 ι2 Hι2 Hpc2 su cu ru. apply rΦ; auto. *)
-  (*   eapply refine_inst_persist; eauto. *)
-  (* Qed. *)
-
+  Lemma refine_consume {Γ} {w : World} (asn : Assertion w) {ι}:
+    curval ι ⊢ ℛ⟦□ᵣ(RStoreSpec Γ Γ RUnit)⟧ (CStoreSpec.consume ι asn) (SStoreSpec.consume (w := w) asn).
+  Proof.
+    unfold SStoreSpec.consume, CStoreSpec.consume.
+    iIntros "Hι %w2 %ω2 !> %Φ %sΦ rΦ %δ %sδ rδ".
+    iPoseProof (HeapSpec.refine_consume asn) as "Hcons".
+    iApply (refine_T with "Hcons [Hι]").
+    { now iApply forgetting_curval. }
+    iIntros (w3 ω3) "!> %u %su _".
+    iApply (forgetting_unconditionally_drastic with "rΦ [] [rδ]").
+    - now iApply refine_unit.
+    - now iApply (refine_inst_persist with "rδ").
+  Qed.
 
   (* Lemma refine_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) : *)
   (*   ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧ *)

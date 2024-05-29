@@ -1011,6 +1011,13 @@ Module Pred
       now rewrite H.
     Qed.
 
+    #[export] Instance intowand_unconditionally {w} {P : ((□ Pred) w)%modal} {Q R}:
+      IntoWand false false (P w acc_refl) Q R -> IntoWand false false (unconditionally P) Q R.
+    Proof.
+      unfold IntoWand; cbn.
+      now rewrite unconditionally_T.
+    Qed.
+
     #[export] Instance intoforall_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} {A} {Φ}:
       IntoForall (A := A) P Φ -> IntoForall (forgetting ω P) (fun a => forgetting ω (Φ a)).
     Proof.
@@ -1018,6 +1025,13 @@ Module Pred
       unfold IntoForall; cbn.
       rewrite forgetting_forall.
       now rewrite (into_forall P).
+    Qed.
+
+    #[export] Instance intoforall_unconditionally {w} {P : (□ Pred) w} {A} {Φ}:
+      IntoForall (A := A) (P w acc_refl) Φ -> IntoForall (unconditionally P) Φ.
+    Proof.
+      unfold IntoForall; cbn.
+      now rewrite unconditionally_T.
     Qed.
 
     #[export] Instance fromExist_knowing {w1 w2} {A} {ω : Acc w1 w2} {P} {Φ : A -> Pred _}:
@@ -1068,6 +1082,10 @@ Module Pred
       IntoAssuming ω (assuming ω P) P | 0.
     Proof. now unfold IntoAssuming. Qed.
 
+    #[export] Instance into_assuming_forgetting {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3 }(P : Pred w1) :
+      IntoAssuming ω23 (forgetting ω12 P) (forgetting (acc_trans ω12 ω23) P) | 0.
+    Proof. unfold IntoAssuming. rewrite forgetting_trans. now apply assuming_forgetting. Qed.
+
     Lemma modality_mixin_assuming {w1 w2} {ω : Acc w1 w2} : modality_mixin (assuming ω) (MIEnvTransform (IntoAssuming ω)) (MIEnvTransform (IntoAssuming ω)).
     Proof.
       constructor; cbn; try done; rewrite /assuming; crushPredEntails3.
@@ -1090,6 +1108,10 @@ Module Pred
     #[export] Instance into_forgetting_default {w1 w2} {ω : Acc w1 w2} (P : Pred w2) :
       IntoForgetting ω P (knowing ω P) | 10.
     Proof. unfold IntoForgetting. now apply forgetting_knowing. Qed.
+
+    #[export] Instance into_forgetting_knowing {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3 }(P : Pred w3) :
+      IntoForgetting ω12 (knowing ω23 P) (knowing (acc_trans ω12 ω23) P) | 0.
+    Proof. unfold IntoForgetting. rewrite knowing_trans. now apply forgetting_knowing. Qed.
 
     #[export] Instance into_forgetting_forgetting {w1 w2} {ω : Acc w1 w2} (P : Pred w1) :
       IntoForgetting ω (forgetting ω P) P | 0.
