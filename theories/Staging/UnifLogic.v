@@ -1461,6 +1461,9 @@ Module Pred
     (* Import ModalNotations. *)
     Import iris.proofmode.tactics.
     
+    Lemma refine_term_val {w τ v} : ⊢ (ℛ⟦RVal τ⟧ v (term_val τ v) : Pred w).
+    Proof. crushPredEntails3. Qed.
+
     Lemma refine_unit {w} {u su} :
       ⊢ (ℛ⟦ RUnit ⟧ u su : Pred w).
     Proof. destruct u, su. now crushPredEntails3. Qed.
@@ -1555,6 +1558,10 @@ Module Pred
       iIntros (v w1 w2 ω t) "Hvt".
       now iApply forgetting_repₚ.
     Qed.
+
+    Lemma refine_formula_bool {w : World} {v} {sv : Term w ty.bool} :
+      ℛ⟦RVal ty.bool⟧ v sv ⊢ ℛ⟦RFormula⟧ (v = true) (formula_bool sv).
+    Proof. crushPredEntails3; cbn in *; now subst. Qed.
 
     Lemma refine_formula_persist :
       forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop),

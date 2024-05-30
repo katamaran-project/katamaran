@@ -1918,7 +1918,7 @@ Module Soundness
         now iApply refine_inst_persist.
     Qed.
 
-    Lemma refine_block_store {Γ1 Γ2} `{R : Rel AT A} {w : World} :
+    Lemma refine_block {Γ1 Γ2} `{R : Rel AT A} {w : World} :
       ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R⟧ CStoreSpec.block (SStoreSpec.block (w := w)).
     Proof.
       iIntros (k ks) "Hk".
@@ -2350,170 +2350,168 @@ Module Soundness
     now iApply (refine_inst_persist with "Hres").
   Qed.
 
-  (* Lemma refine_call_lemma {Γ Δ : PCtx} (lem : Lemma Δ) : *)
-  (*   ℛ⟦RStore Δ -> RStoreSpec Γ Γ RUnit⟧ *)
-  (*     (SStoreSpec.call_lemma lem) (CStoreSpec.call_lemma lem). *)
-  (* Proof. *)
-  (*   destruct lem; cbv [SStoreSpec.call_lemma CStoreSpec.call_lemma]. *)
-  (*   intros w0 ι0 Hpc0. *)
-  (*   intros args__s args__c Hargs. *)
-  (*   apply refine_bind; auto. *)
-  (*   apply refine_angelic_ctx; auto. *)
-  (*   intros w1 ω01 ι1 -> Hpc1. *)
-  (*   intros evars__s evars__c Hevars. *)
-  (*   apply refine_bind; auto. *)
-  (*   { apply refine_assert_eq_nenv; auto; hnf. *)
-  (*     now rewrite Hevars, inst_subst. *)
-  (*     now rewrite Hargs, inst_persist. *)
-  (*   } *)
-  (*   intros w2 ω12 ι2 -> Hpc2 _ _ _. *)
-  (*   apply refine_bind; auto. *)
-  (*   { apply refine_consume; wsimpl; auto. *)
-  (*     constructor. *)
-  (*   } *)
-  (*   intros w3 ω23 ι3 -> Hpc3 _ _ _. *)
-  (*   { apply refine_produce; auto. *)
-  (*     constructor. *)
-  (*     cbn - [inst_env sub_snoc]. *)
-  (*     rewrite inst_persist, sub_acc_trans, inst_subst. *)
-  (*     now rewrite Hevars. *)
-  (*   } *)
-  (* Qed. *)
+  Lemma refine_call_lemma {Γ Δ : PCtx} (lem : Lemma Δ) {w} :
+    ⊢ ℛ⟦RStore Δ -> RStoreSpec Γ Γ RUnit⟧
+      (CStoreSpec.call_lemma lem) (SStoreSpec.call_lemma (w := w) lem).
+  Proof.
+    destruct lem; cbv [SStoreSpec.call_lemma CStoreSpec.call_lemma].
+    iIntros (args sargs) "Hargs".
+    iApply (refine_bind (RA := RNEnv _ _) (RB := RUnit)).
+    { iApply refine_angelic_ctx. }
+    iIntros (w1 ω01) "!> %evars %sevars #Hevars".
+    iApply (refine_bind (RA := RUnit) (RB := RUnit) with "[Hevars Hargs]").
+    { iApply (refine_assert_eq_nenv with "[Hevars] [Hargs]").
+      now iApply (refine_inst_subst lemma_patterns0  with "Hevars").
+      now iApply (refine_inst_persist with "Hargs").
+    }
+    iIntros (w2 ω12) "!> %u %su _".
+    set (w3 := {| wctx := lemma_logic_variables0; wco := [ctx] |}).
+    set (ω := acc_sub (sevars : Sub w3 w1) (λ (ι : Valuation w1) (_ : instprop (wco w1) ι), I)).
+    iApply (refine_bind (RA := RUnit) (RB := RUnit)).
+    { iApply (refine_consume (acc_trans ω ω12)).
+      now rewrite sub_acc_trans -persist_subst forgetting_repₚ.
+    }
+    iIntros (w4 ω24) "!> %u2 %su2 _".
+    { rewrite persist_subst.
+      rewrite <-(sub_acc_trans ω).
+      iApply (refine_produce (acc_trans ω (acc_trans ω12 ω24))).
+      rewrite (sub_acc_trans ω) -persist_subst.
+      now iApply (refine_inst_persist with "Hevars").
+    }
+  Qed.
 
-  (* Definition ExecRefine (sexec : SStoreSpec.Exec) (cexec : CStoreSpec.Exec) := *)
-  (*   forall Γ τ (s : Stm Γ τ), *)
-  (*     ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧ (@sexec Γ τ s) (cexec Γ τ s). *)
+  Definition ExecRefine (sexec : SStoreSpec.Exec) (cexec : CStoreSpec.Exec) :=
+    forall Γ τ (s : Stm Γ τ) w,
+      ⊢ ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧ (cexec Γ τ s) (@sexec Γ τ s w).
 
-  (* Lemma refine_exec_aux {cfg} srec crec (HYP : ExecRefine srec crec) : *)
-  (*   ExecRefine (@SStoreSpec.exec_aux cfg srec) (@CStoreSpec.exec_aux crec). *)
-  (* Proof. *)
-  (*   unfold ExecRefine. *)
-  (*   induction s; cbn; intros * w0 ι0 Hpc0. *)
-  (*   - apply refine_pure; auto. reflexivity. *)
-  (*   - now apply refine_eval_exp. *)
-  (*   - apply refine_bind; auto. *)
-  (*     intros w1 ω01 ι1 -> Hpc1. *)
-  (*     intros t v Htv. *)
-  (*     apply refine_pushpop; auto. *)
-  (*   - apply refine_pushspops; auto. *)
-  (*     apply refine_lift. *)
-  (*   - apply refine_bind; auto. *)
-  (*     intros w1 ω01 ι1 -> Hpc1. *)
-  (*     intros t v ->. *)
-  (*     apply refine_bind; auto. *)
-  (*     apply refine_assign; auto. *)
-  (*     reflexivity. *)
-  (*     intros w2 ω12 ι2 -> Hpc2 _ _ _. *)
-  (*     apply refine_pure; auto. *)
-  (*     hnf in H. now rewrite <- inst_persist in H. *)
-  (*   - apply refine_bind; auto. *)
-  (*     apply refine_eval_exps; auto. *)
-  (*     intros w1 ω01 ι1 -> Hpc1. *)
-  (*     intros args__s args__c Hargs. *)
-  (*     destruct (CEnv f). *)
-  (*     + unfold SStoreSpec.call_contract_debug. *)
-  (*       destruct (config_debug_function cfg f). *)
-  (*       apply refine_debug; auto. *)
-  (*       apply refine_call_contract; auto. *)
-  (*       apply refine_call_contract; auto. *)
-  (*     + intros POST__s POST__c HPOST. *)
-  (*       intros δs1 δc1 ->. *)
-  (*       apply HYP; auto. *)
-  (*       intros w2 ω12 ι2 -> Hpc2. *)
-  (*       intros t v ->. *)
-  (*       intros _ _ _. *)
-  (*       apply HPOST; auto. *)
-  (*       reflexivity. *)
-  (*       rewrite <- inst_persist. *)
-  (*       reflexivity. *)
-  (*   - apply refine_bind; auto. *)
-  (*     apply refine_get_local; auto. *)
-  (*     intros w1 ω01 ι1 -> Hpc1. *)
-  (*     intros δs1 δc1 ->. *)
-  (*     apply refine_bind; auto. *)
-  (*     apply refine_put_local; auto. *)
-  (*     apply refine_lift. *)
-  (*     intros w2 ω12 ι2 -> Hpc2 _ _ _. *)
-  (*     apply refine_bind; auto. *)
-  (*     intros w3 ω23 ι3 -> Hpc3. *)
-  (*     intros t v ->. *)
-  (*     apply refine_bind; auto. *)
-  (*     apply refine_put_local; auto. *)
-  (*     rewrite persist_subst. *)
-  (*     hnf. rewrite sub_acc_trans, ?inst_subst; auto. *)
-  (*     intros w4 ω34 ι4 -> Hpc4 _ _ _. *)
-  (*     apply refine_pure; auto. *)
-  (*     eapply refine_inst_persist; eauto. *)
-  (*     reflexivity. *)
-  (*   - apply refine_bind; auto. *)
-  (*     apply refine_eval_exps; auto. *)
-  (*     intros w1 ω01 ι1 -> Hpc1. *)
-  (*     intros args__s args__c Hargs. *)
-  (*     apply refine_call_contract; auto. *)
-  (*   - apply refine_bind; auto. *)
-  (*     apply refine_eval_exps; auto. *)
-  (*     intros w1 ω01 ι1 -> Hpc1 δΔ ? ?. *)
-  (*     apply refine_bind; auto. *)
-  (*     apply refine_call_lemma; auto. *)
-  (*     intros w2 ω12 ι2 -> Hpc2 _ _ _; auto. *)
-  (*   - apply refine_bind; auto. *)
-  (*     intros ? ? ? -> ? _ _ _; auto. *)
-  (*   - apply refine_bind; auto. *)
-  (*     apply (refine_eval_exp e1); auto. *)
-  (*     intros w1 ω01 ι1 -> Hpc1. *)
-  (*     intros t v ->. *)
-  (*     apply refine_bind; auto. *)
-  (*     apply refine_assume_formula; auto. *)
-  (*     cbn. reflexivity. *)
-  (*     intros w2 ω12 ι2 -> Hpc2 _ _ _. *)
-  (*     now apply IHs. *)
-  (*   - apply refine_block; auto. *)
-  (*   - apply refine_bind; auto. *)
-  (*     intros w1 ω01 ι1 -> Hpc1. *)
-  (*     intros t v Htv. *)
-  (*     apply refine_bind; auto. *)
-  (*     apply refine_demonic_pattern_match; auto. *)
+  Lemma refine_exec_aux {cfg} srec crec (HYP : ExecRefine srec crec) :
+    ExecRefine (@SStoreSpec.exec_aux cfg srec) (@CStoreSpec.exec_aux crec).
+  Proof.
+    unfold ExecRefine.
+    induction s; cbn -[RSat]; intros w.
+    - iApply (refine_pure (R := RVal _)).
+      iApply refine_term_val.
+    - now iApply refine_eval_exp.
+    - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
+      { iApply IHs1. }
+      iIntros (w1 ω01) "!> %v %sv Hv".
+      iApply (refine_pushpop (R := RVal _) with "Hv").
+      now iApply IHs2.
+    - iApply (refine_pushspops (R := RVal _)).
+      now iApply refine_lift.
+      now iApply IHs.
+    - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
+      now iApply IHs.
+      iIntros (w1 ω01) "!> %v %sv #Hv".
+      iApply (refine_bind (RA := RUnit) (RB := RVal _) with "[Hv]").
+      now iApply refine_assign.
+      iIntros (w2 ω12) "!> %u %su _".
+      iApply (refine_pure (R := RVal _)).
+      now iApply (refine_inst_persist (AT := STerm τ)).
+    - iApply (refine_bind (RA := RNEnv _ _) (RB := RVal _)).
+      iApply refine_eval_exps.
+      iIntros (w1 ω01) "!> %args %sargs Hargs".
+      destruct (CEnv f).
+      + unfold SStoreSpec.call_contract_debug.
+        destruct (config_debug_function cfg f).
+        iApply (refine_debug (R := RVal _)).
+        now iApply refine_call_contract.
+        now iApply refine_call_contract.
+      + iIntros (POST sPOST) "HPOST %δ1 %sδ1 Hδ1".
+        iApply (HYP with "[HPOST Hδ1] Hargs").
+        iIntros (w2 ω12) "!> %v %sv Hv %δ %sδ Hδ".
+        iApply (forgetting_unconditionally_drastic with "HPOST Hv").
+        iApply (refine_inst_persist with "Hδ1").
+    - iApply (refine_bind (RA := RStore Γ) (RB := RVal _)).
+      { now iApply refine_get_local. }
+      iIntros (w1 ω01) "!> %δ1 %sδ1 Hδ1".
+      iApply (refine_bind (RA := RUnit) (RB := RVal _)).
+      { iApply refine_put_local. now iApply refine_lift. }
+      iIntros (w2 ω12) "!> %u %su _".
+      iApply (refine_bind (RA := RVal _) (RB := RVal _)).
+      { now iApply IHs. }
+      iIntros (w3 ω23) "!> %v %sv Hv".
+      iApply (refine_bind (RA := RUnit) (RB := RVal _) with "[Hδ1]").
+      { iApply refine_put_local. now iApply (refine_inst_persist with "Hδ1"). }
+      iIntros (w4 ω34) "!> %u2 %su2 _".
+      iApply (refine_pure (R := RVal _)).
+      iApply (refine_inst_persist with "Hv").
+    - iApply (refine_bind (RA := RNEnv _ _) (RB := RVal _)).
+      iApply refine_eval_exps.
+      iIntros (w1 ω01) "!> %args %sargs Hargs".
+      now iApply refine_call_contract.
+    - iApply (refine_bind (RA := RNEnv _ _) (RB := RVal _)).
+      iApply refine_eval_exps.
+      iIntros (w1 ω01) "!> %δΔ %sδΔ HδΔ".
+      iApply (refine_bind (RA := RUnit) (RB := RVal _) with "[HδΔ]").
+      { now iApply refine_call_lemma. }
+      iIntros (w2 ω12) "!> %u %su _".
+      iApply IHs.
+    - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
+      iApply IHs1.
+      iIntros (w1 ω01) "!> %v %sv Hv".
+      now iApply IHs2.
+    - (* strange, the refine_bind iApply loops if I don't pass He1 immediately? *)
+      iPoseProof (refine_eval_exp e1) as "He1".
+      iApply (refine_bind (RA := RVal _) (RB := RVal _) with "He1").
+      iIntros (w1 ω01) "!> %v %sv Hv".
+      iApply (refine_bind (RA := RUnit) (RB := RVal _) with "[Hv]").
+      iApply refine_assume_formula.
+      iClear "He1". clear.
+      iApply (refine_formula_bool with "Hv").
+      iIntros (w2 ω12) "!> %u %su _".
+      now iApply IHs.
+    - iApply (refine_block (R := RVal _)).
+    - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
+      { iApply IHs. }
+      iIntros (w1 ω01) "!> %v %sv Hv".
+      admit.
+      (* iApply (refine_bind (RA := RNEnv _ _) (RB := RVal _)). *)
+  (*     iApply refine_demonic_pattern_match. *)
   (*     intros w2 r12 ι2 -> Hpc2. *)
   (*     intros [? ?] [pc vs] [-> ?]. *)
-  (*     apply refine_pushspops; auto. *)
-  (*     apply H; auto. *)
-  (*   - now apply refine_read_register. *)
-  (*   - apply refine_bind; auto. *)
-  (*     apply (refine_eval_exp e); auto. *)
-  (*     intros w1 ω01 ι1 -> Hpc1 svnew cvnew rvnew. *)
-  (*     now apply refine_write_register. *)
-  (*   - apply refine_error; auto. *)
-  (*   - apply refine_debug; auto. *)
-  (* Qed. *)
+  (*     iApply refine_pushspops. *)
+  (*     iApply H. *)
+    - now iApply refine_read_register.
+    - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
+      { now iApply (refine_eval_exp e). }
+      iIntros (w1 ω01) "!> %vnew %svnew Hvnew".
+      now iApply refine_write_register.
+    - iApply (refine_error (R := RVal _)).
+    - iApply (refine_debug (R := RVal _)).
+      iApply IHs.
+  Admitted.
 
-  (* Lemma refine_exec {cfg n} : *)
-  (*   ExecRefine (@SStoreSpec.exec cfg n) (@CStoreSpec.exec n). *)
-  (* Proof. *)
-  (*   induction n; cbn. *)
-  (*   - unfold ExecRefine. intros Γ τ s w ι Hpc. *)
-  (*     apply refine_error; auto. *)
-  (*   - now apply refine_exec_aux. *)
-  (* Qed. *)
+  Lemma refine_exec {cfg n} :
+    ExecRefine (@SStoreSpec.exec cfg n) (@CStoreSpec.exec n).
+  Proof.
+    induction n; cbn.
+    - unfold ExecRefine. iIntros (Γ τ s w).
+      iApply (refine_error (R := RVal _)).
+    - now apply refine_exec_aux.
+  Qed.
 
-  (* Lemma refine_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) : *)
-  (*   let w0 := {| wctx := sep_contract_logic_variables c; wco := ctx.nil |} in *)
-  (*   forall (ι0 : Valuation w0), *)
-  (*     ℛ⟦RStoreSpec Γ Γ RUnit⟧@{ι0} *)
-  (*       (SStoreSpec.exec_contract cfg n c s) (CStoreSpec.exec_contract n c s ι0). *)
-  (* Proof. *)
-  (*   unfold SStoreSpec.exec_contract, CStoreSpec.exec_contract; *)
-  (*     destruct c as [Σ δ pre result post]; cbn - [RSat] in *. *)
-  (*   intros ι0. *)
-  (*   apply refine_bind. *)
-  (*   apply refine_produce; wsimpl; cbn; auto. *)
-  (*   intros w1 ω01 ι1 -> Hpc1 _ _ _. *)
-  (*   apply refine_bind; auto. *)
-  (*   apply refine_exec; auto. *)
-  (*   intros w2 ω12 ι2 -> Hpc2. *)
-  (*   intros res__s res__c Hres. *)
-  (*   apply refine_consume; cbn - [inst]; wsimpl; auto. *)
-  (*   f_equal; auto. *)
-  (* Qed. *)
+  Lemma refine_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) :
+    let w0 := {| wctx := sep_contract_logic_variables c; wco := ctx.nil |} in
+    ⊢ ∀ (ι : Valuation w0), curval ι -∗ ℛ⟦RStoreSpec Γ Γ RUnit⟧
+        (CStoreSpec.exec_contract n c s ι) (SStoreSpec.exec_contract cfg n c s).
+  Proof.
+    unfold SStoreSpec.exec_contract, CStoreSpec.exec_contract;
+      destruct c as [Σ δ pre result post]; cbn - [RSat] in *.
+    iIntros (ι) "#Hι".
+    iApply (refine_bind (RA := RUnit) (RB := RUnit)).
+    { iApply (refine_produce acc_refl).
+      iApply forgetting_curval.
+      now iApply forgetting_refl. }
+    iIntros (w1 ω01) "!> %u %su _".
+    iApply (refine_bind (RA := RVal _) (RB := RUnit)).
+    iApply refine_exec.
+    iIntros (w2 ω12) "!> %res %sres Hres".
+    iApply (refine_consume (acc_snoc_left (acc_trans ω01 ω12) (result∷τ) sres)).
+    iApply (repₚ_cong₂ (T1 := Sub Σ) (T2 := STerm τ) (T3 := Sub _) (fun ι res => ι.[result∷τ ↦ res]) (fun ι res => ι.[result∷τ ↦ res]) with "[$Hres]").
+    { intros. now rewrite inst_env_snoc. }
+    { iApply (forgetting_curval with "Hι"). }
+  Qed.
 
   End StoreSpec.
 
