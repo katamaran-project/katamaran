@@ -1324,12 +1324,14 @@ Module Soundness
       now rewrite assuming_refl.
     Qed.
 
-    Lemma refine_replay {w : World} (s : 𝕊 w) ι (Hpc : instprop (wco w) ι) :
-      (ℛ⟦ RProp ⟧ (CPureSpec.replay s ι) (SPureSpec.replay s)) ι.
+    Lemma refine_replay {w : World} (s : 𝕊 w) ι :
+      curval ι ⊢ (ℛ⟦ RProp ⟧ (CPureSpec.replay s ι) (SPureSpec.replay s)).
     Proof.
-      eapply refine_run; try done.
-      eapply (refine_replay_aux2 s); try done.
-      cbn. now apply refine_rinst_sub_initial.
+      unfold CPureSpec.replay, SPureSpec.replay.
+      iIntros "Hι".
+      iApply refine_run.
+      iApply (refine_replay_aux2 s).
+      now iApply refine_rinst_sub_initial.
     Qed.
 
     Lemma refine_peval_chunk {w} :

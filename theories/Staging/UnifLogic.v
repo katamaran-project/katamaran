@@ -651,6 +651,10 @@ Module Pred
       eapply inst_sub_id.
     Qed.
 
+    Lemma getcurval {w : World} :
+      ⊢ ∃ (ι : Valuation w), curval ι.
+    Proof. unfold curval. crushPredEntails3. Qed.
+
     Lemma eval `{Inst AT A} {w : World} (t : AT w) :
       ⊢ ∃ v, repₚ v (w := w) t.
     Proof. crushPredEntails3. now eexists. Qed.
@@ -1592,9 +1596,7 @@ Module Pred
     Proof. iApply lift_repₚ. Qed.
 
     Lemma refine_rinst_sub_initial {w : World} {ι : Valuation w}: 
-      ℛ⟦RInst (Sub w) (Valuation w)⟧ ι (sub_id w) ι.
-    Proof.
-      apply inst_sub_id.
-    Qed.
+      curval ι ⊢ ℛ⟦RInst (Sub w) (Valuation w)⟧ ι (sub_id w).
+    Proof. crushPredEntails3. now rewrite inst_sub_id. Qed.
   End LRCompat.
 End Pred.
