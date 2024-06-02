@@ -281,6 +281,16 @@ Module Type InstantiationOn
     now rewrite env.lookup_cat_left.
   Qed.
 
+  Lemma inst_sub_cat_left_drop {Σ Δ : LCtx} (ι : Valuation (Σ ▻▻ Δ)) :
+    inst (sub_cat_left Δ) ι = env.drop Δ ι.
+  Proof.
+    eapply env.lookup_extensional.
+    intros b bInΔ.
+    unfold inst, inst_sub, inst_env, sub_cat_left.
+    rewrite ?env.lookup_map, env.lookup_tabulate. cbn.
+    now rewrite env.lookup_drop.
+  Qed.
+
   Lemma inst_sub_cat_right {Σ Δ : LCtx} (ι : Valuation Δ) (ιΔ : Valuation Σ) :
     inst (sub_cat_right Δ) (ιΔ ►► ι) = ι.
   Proof.
@@ -289,6 +299,16 @@ Module Type InstantiationOn
     unfold inst, inst_sub, inst_env, sub_cat_right.
     rewrite ?env.lookup_map, env.lookup_tabulate. cbn.
     now rewrite env.lookup_cat_right.
+  Qed.
+
+  Lemma inst_sub_cat_right_take {Σ Δ : LCtx} (ι : Valuation (Σ ▻▻ Δ)) :
+    inst (sub_cat_right Δ) ι = env.take Δ ι.
+  Proof.
+    eapply env.lookup_extensional.
+    intros b bInΔ.
+    unfold inst, inst_sub, inst_env, sub_cat_right.
+    rewrite ?env.lookup_map, env.lookup_tabulate. cbn.
+    now rewrite env.lookup_take.
   Qed.
 
   Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : Valuation Σ2) (v : Val (type b)) :
@@ -324,6 +344,13 @@ Module Type InstantiationOn
     rewrite env.lookup_map, env.lookup_tabulate.
     destruct (ctx.occurs_check_view); [easy|cbn].
     unfold env.remove'. now rewrite env.lookup_tabulate.
+  Qed.
+
+  Lemma inst_remove {Σ1 Σ2 : LCtx} (ι : Valuation Σ2) (E : Sub Σ1 Σ2) {b} (bIn : b ∈ Σ1) :
+    inst (env.remove b E bIn) ι = env.remove b (inst E ι) bIn.
+  Proof.
+    unfold inst, inst_sub, inst_env, Sub in *.
+    now apply env.remove_map.
   Qed.
 
   Lemma sub_single_zero {Σ : LCtx} {x : LVar∷Ty} (t : Term Σ (type x)) :

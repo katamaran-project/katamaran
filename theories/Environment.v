@@ -282,6 +282,18 @@ Section WithBinding.
       lookup (insert bIn E v) bIn = v.
     Proof. induction Γ; destroy bIn; destroy E; cbn; auto. Qed.
 
+    Lemma lookup_drop {b Σ Γ} (bIn : b ∈ Γ) (E : Env (Γ ▻▻ Σ)) :
+      lookup (drop Σ E) bIn = lookup E (ctx.in_cat_left Σ bIn).
+    Proof. induction Σ; destroy bIn; destroy E; cbn; auto. Qed.
+
+    Lemma lookup_take {b Σ Γ} (bIn : b ∈ Σ) (E : Env (Γ ▻▻ Σ)) :
+      lookup (take Σ E) bIn = lookup E (ctx.in_cat_right bIn).
+    Proof. induction Σ; destroy bIn; destroy E; cbn; auto. Qed.
+
+    Lemma lookup_remove {x b Γ} (xIn : x ∈ Γ) (bIn : b ∈ Γ - x) (E : Env Γ) :
+      lookup (remove x E xIn) bIn = lookup E (ctx.shift_var xIn bIn).
+    Proof. induction Γ; destroy xIn; destroy bIn; destroy E; cbn; auto. Qed.
+
     Lemma lookup_insert_shift {b Γ} {bIn : b ∈ Γ}
           {E : Env (Γ - b)} {v : D b}
           (b' : B) (i : b' ∈ Γ - b) :
@@ -315,6 +327,15 @@ Section WithBinding.
     Lemma drop_cat {Γ Δ} (δΔ : Env Δ) (δΓ : Env Γ) :
       drop Δ (cat δΓ δΔ) = δΓ.
     Proof. induction δΔ; cbn; auto. Qed.
+
+    Lemma drop_take {Γ Δ} (δ : Env (Γ ▻▻ Δ)) :
+      cat (drop Δ δ) (take Δ δ) = δ.
+    Proof.
+      induction Δ; [easy|].
+      destroy δ.
+      cbn.
+      now rewrite IHΔ.
+    Qed.
 
     Lemma update_update {Γ} (E : Env Γ) :
       forall {b} (bInΓ : b ∈ Γ) (d1 d2 : D b),
@@ -384,6 +405,22 @@ Section WithBinding.
       snoc (eq_rect Γ1 Env E Γ2 e) v =
       eq_rect Γ1 (fun Γ => Env (Γ ▻ b)) (snoc E v) Γ2 e.
     Proof. now destruct e. Qed.
+
+    Lemma snoc_eq_rect2 {Γ1 Γ2 b v} (e : Γ1 = Γ2) (E : Env Γ1) :
+      snoc (eq_rect Γ1 Env E Γ2 e) v =
+      eq_rect (Γ1 ▻ b) Env (snoc E v) (Γ2 ▻ b) (ctx.f_equal_snoc b e).
+    Proof. now destruct e. Qed.
+
+    Lemma remove_drop {x Γ Δ} {E : Env (Γ ▻▻ Δ)} (xIn : x ∈ Γ):
+      remove x (drop Δ E) xIn = drop Δ (eq_rect ((Γ ▻▻ Δ) - x) Env (remove x E (ctx.in_cat_left Δ xIn)) ((Γ - x) ▻▻ Δ) (ctx.remove_in_cat_left xIn)).
+    Proof.
+      induction Δ; cbn; [ easy |].
+      rewrite IHΔ.
+      destroy E.
+      cbn.
+      change (drop Δ ?E) with (drop Δ (tail (snoc E v))) at 1.
+      now rewrite snoc_eq_rect2.
+    Qed.
 
     Lemma remove_cat_right {Γ1 Γ2 x} (xIn : x ∈ Γ2) (E1 : Env Γ1) (E2 : Env Γ2) :
       remove x (cat E1 E2) (ctx.in_cat_right xIn) =
@@ -548,6 +585,16 @@ Section WithBinding.
     Proof.
       induction E; intros ? [n e]; try destruct e;
         destruct n; cbn in *; subst; auto.
+    Qed.
+
+    Lemma remove_map {b Γ} (E : Env D1 Γ) (bIn : b ∈ Γ) :
+      map (remove b E bIn) = remove b (map E) bIn.
+    Proof.
+      rewrite !remove_remove'.
+      unfold remove'.
+      apply lookup_extensional.
+      intros.
+      now rewrite lookup_map, !lookup_tabulate, lookup_map.
     Qed.
 
   End Map.

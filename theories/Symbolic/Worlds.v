@@ -100,6 +100,16 @@ Module Type WorldsOn
                                     (pattern_match_term_reverse _ pc ts) in
       wformula (wcat w Δ) F1.
 
+    Definition wmatchvar (w : World) {x σ} (xIn : x∷σ ∈ w) (p : @Pattern LVar σ)
+      (pc : PatternCase p) : World :=
+      let Δ   : LCtx           := PatternCaseCtx pc in
+      let w1  : World          := wcat w Δ in
+      let eq : ((w ▻▻ Δ) - x∷σ) = (w - x∷σ ▻▻ Δ) := ctx.remove_in_cat_left xIn in
+      let ts  : Sub Δ (w - x∷σ ▻▻ Δ) := sub_cat_right Δ in
+      let t   : Term (w - x∷σ ▻▻ Δ) σ := pattern_match_term_reverse _ pc ts in
+      let t'   : Term ((w ▻▻ Δ) - x∷σ) σ := eq_rect (w - x∷σ ▻▻ Δ) (fun Σ => Term Σ σ) (pattern_match_term_reverse _ pc ts) ((w ▻▻ Δ) - x∷σ) (eq_sym eq) in
+      wsubst w1 x t'.
+
     (* Define a shorthand [TYPE] for the category of world indexed types. *)
     Definition TYPE : Type := World -> Type.
     Bind Scope modal_scope with TYPE.
@@ -395,6 +405,24 @@ Module Type WorldsOn
       {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatch w s p pc :=
       @acc_sub w (wmatch w s p pc) (sub_cat_left (PatternCaseCtx pc))
         (fun ι HCι => proj1 HCι).
+
+    Program Definition acc_matchvar_right {w : World} {x σ} {xIn : x∷σ ∈ w}
+      {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatchvar w xIn p pc :=
+      let Δ   : LCtx           := PatternCaseCtx pc in
+      let w1  : World          := wcat w Δ in
+      let eq : ((w ▻▻ Δ) - x∷σ) = (w - x∷σ ▻▻ Δ) := ctx.remove_in_cat_left xIn in
+      let ts  : Sub Δ (w - x∷σ ▻▻ Δ) := sub_cat_right Δ in
+      let t   : Term (w - x∷σ ▻▻ Δ) σ := pattern_match_term_reverse _ pc ts in
+      let t'   : Term ((w ▻▻ Δ) - x∷σ) σ := eq_rect (w - x∷σ ▻▻ Δ) (fun Σ => Term Σ σ) (pattern_match_term_reverse _ pc ts) ((w ▻▻ Δ) - x∷σ) (eq_sym eq) in
+      let wmv : World          := wsubst w1 x t' in
+      let sub₁ : Sub w (w ▻▻ Δ) := sub_cat_left Δ in
+      let sub₂ : Sub (w ▻▻ Δ) ((w ▻▻ Δ) - x∷σ) := sub_single _ t' in
+      let sub : Sub w wmv := subst sub₁ sub₂ in
+      @acc_sub w wmv sub _.
+    Next Obligation.
+      intros. cbn -[sub_single].
+      now rewrite <-subst_sub_comp.
+    Qed.
 
     Fixpoint acc_triangular {w1 w2} (ν : Tri w1 w2) : w1 ⊒ w2 :=
       match ν with
