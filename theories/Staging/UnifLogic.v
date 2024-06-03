@@ -749,6 +749,10 @@ Module Pred
       now transitivity (inst vt ι).
     Qed.
 
+    Lemma repₚ_const {A} {v sv} {w} : repₚ (w := w) (T := Const A) sv v ⊣⊢  ⌜ v = sv ⌝.
+    Proof. crushPredEntails3. Qed.
+      
+
     Lemma repₚ_elim_repₚ {T : LCtx -> Type} `{Inst T A} {a1 : A} (a2 : A) {w : World} {vt1 : T w} (vt2 : T w):
       (∀ ι : Valuation w, inst vt1 ι = a1 -> inst vt2 ι = a2) ->
       repₚ a1 vt1 ⊢ repₚ a2 vt2.

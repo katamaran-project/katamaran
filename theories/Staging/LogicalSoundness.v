@@ -802,65 +802,69 @@ Module Soundness
       induction (finite.enum F); now constructor.
     Qed.
 
-    (* Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar) *)
-    (*   {σ} (pat : @Pattern N σ) : *)
-    (*   ℛ⟦RMsg _ (RVal σ -> RPureSpec (RMatchResult pat))⟧ *)
-    (*     (SPureSpec.angelic_pattern_match' n pat) *)
-    (*     (CPureSpec.angelic_pattern_match pat). *)
-    (* Proof. *)
-    (*   intros w ι Hpc msg t v ->. *)
-    (*   unfold SPureSpec.angelic_pattern_match'. *)
-    (*   unfold CPureSpec.angelic_pattern_match. *)
-    (*   apply refine_bind; auto. *)
-    (*   { now apply refine_angelic_finite. } *)
-    (*   intros w1 r01 ι1 Hι1 Hpc1. *)
-    (*   intros pc ? ->. *)
-    (*   apply refine_bind; auto. *)
-    (*   { now apply refine_angelic_ctx. } *)
-    (*   intros w2 r12 ι2 Hι2 Hpc2. *)
-    (*   intros ts vs Htvs. *)
-    (*   apply refine_bind; auto. *)
-    (*   { apply refine_assert_formula; try assumption. cbn. *)
-    (*     rewrite (inst_persist (AT := fun Σ => Term Σ _)). *)
-    (*     rewrite !sub_acc_trans, inst_subst. *)
-    (*     rewrite inst_pattern_match_term_reverse. *)
-    (*     hnf in Htvs. subst. reflexivity. *)
-    (*   } *)
-    (*   intros w3 r23 ι3 Hι3 Hpc3 _ _ _. *)
-    (*   apply refine_pure; auto. *)
-    (*   exists eq_refl. eapply refine_inst_persist; eauto. *)
-    (* Qed. *)
-    (* #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat. *)
+    Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar)
+      {σ} (pat : @Pattern N σ) {w} :
+      ⊢ ℛ⟦RMsg _ (RVal σ -> RPureSpec (RMatchResult pat))⟧
+        (CPureSpec.angelic_pattern_match pat)
+        (SPureSpec.angelic_pattern_match' (w := w) n pat).
+    Proof.
+      iIntros (msg v t) "Hv".
+      unfold SPureSpec.angelic_pattern_match'.
+      unfold CPureSpec.angelic_pattern_match.
+      iApply (refine_bind (RA := RConst _) (RB := RMatchResult _)).
+      { now iApply refine_angelic_finite. }
+      iIntros (w1 r01) "!> %ι1 %sι1 Hι1".
+      unfold RSat at 2; cbn -[RSat].
+      rewrite repₚ_const.
+      iDestruct "Hι1" as "<-".
+      iApply (refine_bind (RA := RNEnv _ (PatternCaseCtx _)) (RB := RMatchResult pat)).
+      { now iApply refine_angelic_ctx. }
+      iIntros (w2 r12) "!> %vs %svs #Hvs".
+      iApply (refine_bind (RA := RUnit) (RB := RMatchResult _) with "[Hv Hvs]").
+      { iApply refine_assert_formula.
+        cbn.
+        rewrite <-forgetting_repₚ.
+        iApply (proprepₚ_cong₂ (T1 := STerm σ) (T2 := fun w => NamedEnv (Term w) _) (T3 := Formula) (fun v vs => pattern_match_val_reverse pat sι1 vs = v) (fun v vs => formula_relop bop.eq (pattern_match_term_reverse pat sι1 vs) v) with "[$Hv $Hvs]").
+        intros; cbn; now rewrite inst_pattern_match_term_reverse.
+      }
+      iIntros (w3 r23) "!> %u %su _".
+      iApply (refine_pure (RA := RMatchResult _)).
+      iExists eq_refl; cbn.
+      now rewrite <-forgetting_repₚ.
+    Qed.
+    #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
 
-    (* Lemma refine_demonic_pattern_match' {N : Set} (n : N -> LVar) *)
-    (*   {σ} (pat : @Pattern N σ) : *)
-    (*   ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧ *)
-    (*     (SPureSpec.demonic_pattern_match' n pat) *)
-    (*     (CPureSpec.demonic_pattern_match pat). *)
-    (* Proof. *)
-    (*   intros w ι Hpc t v ->. *)
-    (*   unfold SPureSpec.demonic_pattern_match'. *)
-    (*   unfold CPureSpec.demonic_pattern_match. *)
-    (*   apply refine_bind; auto. *)
-    (*   { now apply refine_demonic_finite. } *)
-    (*   intros w1 r01 ι1 Hι1 Hpc1. *)
-    (*   intros pc ? ->. *)
-    (*   apply refine_bind; auto. *)
-    (*   { now apply refine_demonic_ctx. } *)
-    (*   intros w2 r12 ι2 Hι2 Hpc2. *)
-    (*   intros ts vs Htvs. *)
-    (*   apply refine_bind; auto. *)
-    (*   { apply refine_assume_formula; try assumption. cbn. *)
-    (*     rewrite (inst_persist (AT := fun Σ => Term Σ _)). *)
-    (*     rewrite !sub_acc_trans, inst_subst. *)
-    (*     rewrite inst_pattern_match_term_reverse. *)
-    (*     hnf in Htvs. subst. reflexivity. *)
-    (*   } *)
-    (*   intros w3 r23 ι3 Hι3 Hpc3 _ _ _. *)
-    (*   apply refine_pure; auto. *)
-    (*   exists eq_refl. eapply refine_inst_persist; eauto. *)
-    (* Qed. *)
-    (* #[global] Arguments refine_demonic_pattern_match' {N} n {σ} pat. *)
+    Lemma refine_demonic_pattern_match' {N : Set} (n : N -> LVar)
+      {σ} (pat : @Pattern N σ) {w} :
+      ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧
+        (CPureSpec.demonic_pattern_match pat)
+        (SPureSpec.demonic_pattern_match' (w := w) n pat).
+    Proof.
+      iIntros (v t) "Hv".
+      unfold SPureSpec.demonic_pattern_match'.
+      unfold CPureSpec.demonic_pattern_match.
+      iApply (refine_bind (RA := RConst _) (RB := RMatchResult _)).
+      { now iApply refine_demonic_finite. }
+      iIntros (w1 r01) "!> %ι1 %sι1 Hι1".
+      unfold RSat at 2; cbn -[RSat].
+      rewrite repₚ_const.
+      iDestruct "Hι1" as "<-".
+      iApply (refine_bind (RA := RNEnv _ (PatternCaseCtx _)) (RB := RMatchResult pat)).
+      { now iApply refine_demonic_ctx. }
+      iIntros (w2 r12) "!> %vs %svs #Hvs".
+      iApply (refine_bind (RA := RUnit) (RB := RMatchResult _) with "[Hv Hvs]").
+      { iApply refine_assume_formula.
+        cbn.
+        rewrite <-forgetting_repₚ.
+        iApply (proprepₚ_cong₂ (T1 := STerm σ) (T2 := fun w => NamedEnv (Term w) _) (T3 := Formula) (fun v vs => pattern_match_val_reverse pat sι1 vs = v) (fun v vs => formula_relop bop.eq (pattern_match_term_reverse pat sι1 vs) v) with "[$Hv $Hvs]").
+        intros; cbn; now rewrite inst_pattern_match_term_reverse.
+      }
+      iIntros (w3 r23) "!> %u %su _".
+      iApply (refine_pure (RA := RMatchResult _)).
+      iExists eq_refl; cbn.
+      now rewrite <-forgetting_repₚ.
+    Qed.
+    #[global] Arguments refine_demonic_pattern_match' {N} n {σ} pat.
 
     (* Lemma refine_angelic_pattern_match {N : Set} (n : N -> LVar) *)
     (*   {σ} (pat : @Pattern N σ) : *)
