@@ -2691,14 +2691,14 @@ Module Soundness
     - now apply refine_exec_aux.
   Qed.
 
-  Lemma refine_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) :
-    let w0 := {| wctx := sep_contract_logic_variables c; wco := ctx.nil |} in
-    ⊢ ∀ (ι : Valuation w0), curval ι -∗ ℛ⟦RStoreSpec Γ Γ RUnit⟧
-        (CStoreSpec.exec_contract n c s ι) (SStoreSpec.exec_contract cfg n c s).
+  Lemma refine_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) ι :
+    ⊢ forgetting (acc_wlctx_valuation ι) (ℛ⟦RStoreSpec Γ Γ RUnit⟧
+        (CStoreSpec.exec_contract n c s ι) (SStoreSpec.exec_contract cfg n c s)).
   Proof.
     unfold SStoreSpec.exec_contract, CStoreSpec.exec_contract;
       destruct c as [Σ δ pre result post]; cbn - [RSat] in *.
-    iIntros (ι) "#Hι".
+    iPoseProof (forgetting_valuation_curval (ι := ι)) as "#Hι".
+    iModIntro.
     iApply (refine_bind (RA := RUnit) (RB := RUnit)).
     { iApply (refine_produce acc_refl).
       iApply forgetting_curval.
@@ -2715,59 +2715,80 @@ Module Soundness
 
   End StoreSpec.
 
-  (* Lemma refine_demonic_close {w : World} (P : 𝕊 w) (p : Valuation w -> Prop) : *)
-  (*   (forall (ι : Valuation w), ℛ⟦_⟧@{ι} P (p ι)) -> *)
-  (*   RSat RProp (w := wnil) env.nil (demonic_close P) (ForallNamed p). *)
-  (* Proof. *)
-  (*   intros HYP Hwp. unfold ForallNamed. *)
-  (*   rewrite env.Forall_forall. intros ι. *)
-  (*   apply HYP. revert Hwp. clear. *)
-  (*   rewrite ?wsafe_safe, ?safe_debug_safe. *)
-  (*   intros Hwp. now apply safe_demonic_close. *)
-  (* Qed. *)
+  Lemma refine_psafe_demonic_close {Σ} (P : SymProp Σ):
+    psafe (demonic_close P : SymProp wnil) ⊢ ∀ ι, forgetting (acc_wlctx_valuation ι) (psafe (P : SymProp (wlctx Σ))).
+  Proof.
+    unfold forgetting.
+    crushPredEntails3.
+    rewrite inst_lift.
+    destruct (env.view ι).
+    apply psafe_safe; first done.
+    apply psafe_safe in H0; last done.
+    now apply safe_demonic_close.
+  Qed.
 
-  (* Lemma refine_vcgen {Γ τ} n (c : SepContract Γ τ) (body : Stm Γ τ) : *)
-  (*   RSat RProp (w := wnil) env.nil (SStoreSpec.vcgen default_config n c body) (CStoreSpec.vcgen n c body). *)
-  (* Proof. *)
-  (*   unfold SStoreSpec.vcgen, CStoreSpec.vcgen. *)
-  (*   apply (refine_demonic_close *)
-  (*            (w := {| wctx := sep_contract_logic_variables c; wco := ctx.nil |})). *)
-  (*   intros ι. *)
-  (*   apply refine_exec_contract; auto. *)
-  (*   now intros w1 ω01 ι1 -> Hpc1. *)
-  (*   reflexivity. *)
-  (*   reflexivity. *)
-  (* Qed. *)
+  Lemma refine_demonic_close {Σ} (P : 𝕊 (wlctx Σ)) (p : Valuation Σ -> Prop) :
+    (∀ ι, forgetting (acc_wlctx_valuation ι) (ℛ⟦RProp⟧ (p ι) P)) ⊢
+      ℛ⟦RProp⟧ (ForallNamed p) (demonic_close P : SymProp wnil).
+  Proof.
+    iIntros "HYP Hwp".
+    unfold ForallNamed.
+    rewrite env.Forall_forall. iIntros (ι).
+    iSpecialize ("HYP" $! ι).
+    rewrite <-(forgetting_pure (acc_wlctx_valuation ι) (P := p ι)).
+    iPoseProof (refine_psafe_demonic_close P with "Hwp") as "HP".
+    iSpecialize ("HP" $! ι).
+    iModIntro.
+    now iApply "HYP".
+  Qed.
 
-  (* Lemma replay_sound {w : World} (s : 𝕊 w) ι (Hpc : instprop (wco w) ι) : *)
-  (*   safe (SPureSpec.replay s) ι -> safe s ι. *)
-  (* Proof. *)
-  (*   intros H. *)
-  (*   apply CPureSpec.replay_sound, RPureSpec.refine_replay; auto. *)
-  (*   now rewrite wsafe_safe, safe_debug_safe. *)
-  (* Qed. *)
+  Lemma refine_vcgen {Γ τ} n (c : SepContract Γ τ) (body : Stm Γ τ) :
+    ⊢ ℛ⟦RProp⟧ (CStoreSpec.vcgen n c body) (SStoreSpec.vcgen default_config n c body : SymProp wnil).
+  Proof.
+    unfold SStoreSpec.vcgen, CStoreSpec.vcgen.
+    iApply refine_demonic_close.
+    iIntros (ι).
+    iPoseProof (StoreSpec.refine_exec_contract n c body ι) as "H".
+    iPoseProof (forgetting_valuation_curval (ι := ι)) as "#Hι".
+    iModIntro.
+    iApply ("H").
+    - iIntros (w ω) "!> %u %su _ %δ %sδ Hδ %h %sh Hh HSP".
+      now iPureIntro.
+    - iApply (repₚ_inst_curval (T := SStore Γ) (w := wlctx (sep_contract_logic_variables c)) (t := sep_contract_localstore c) with "Hι").
+    - iApply (refine_nil (AT := Chunk)).
+  Qed.
 
-  (* Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) : *)
-  (*   Symbolic.ValidContract c body -> *)
-  (*   Shallow.ValidContract c body. *)
-  (* Proof. *)
-  (*   unfold Symbolic.ValidContract. intros [Hwp%postprocess_sound]. *)
-  (*   apply (replay_sound (w:=wnil)) in Hwp; [|easy]. *)
-  (*   apply postprocess_sound in Hwp. apply refine_vcgen. *)
-  (*   now rewrite wsafe_safe, safe_debug_safe. *)
-  (* Qed. *)
+  Lemma replay_sound {w : World} (s : 𝕊 w) ι (Hpc : instprop (wco w) ι) :
+    safe (SPureSpec.replay s) ι -> safe s ι.
+  Proof.
+    intros H.
+    apply CPureSpec.replay_sound, RPureSpec.refine_replay; auto.
+    now rewrite wsafe_safe safe_debug_safe.
+  Qed.
 
-  (* Lemma symbolic_vcgen_fuel_soundness {Γ τ} (fuel : nat) (c : SepContract Γ τ) (body : Stm Γ τ) : *)
-  (*   Symbolic.ValidContractWithFuel fuel c body -> *)
-  (*   Shallow.ValidContractWithFuel fuel c body. *)
-  (* Proof. *)
-  (*   unfold Symbolic.ValidContractWithFuel. intros [Hwp%postprocess_sound]. *)
-  (*   apply (replay_sound (w:=wnil)) in Hwp; [|easy]. *)
-  (*   apply postprocess_sound in Hwp. apply refine_vcgen. *)
-  (*   now rewrite wsafe_safe, safe_debug_safe. *)
-  (* Qed. *)
+  Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
+    Symbolic.ValidContract c body ->
+    Shallow.ValidContract c body.
+  Proof.
+    unfold Symbolic.ValidContract. intros [Hwp%postprocess_sound].
+    apply (replay_sound (w:=wnil)) in Hwp; [|easy].
+    apply postprocess_sound in Hwp.
+    apply (fromEntails _ _ (refine_vcgen _ _ _) [env]); try done.
+    now apply psafe_safe.
+  Qed.
 
-  (* Print Assumptions symbolic_vcgen_soundness. *)
+  Lemma symbolic_vcgen_fuel_soundness {Γ τ} (fuel : nat) (c : SepContract Γ τ) (body : Stm Γ τ) :
+    Symbolic.ValidContractWithFuel fuel c body ->
+    Shallow.ValidContractWithFuel fuel c body.
+  Proof.
+    unfold Symbolic.ValidContractWithFuel. intros [Hwp%postprocess_sound].
+    apply (replay_sound (w:=wnil)) in Hwp; [|easy].
+    apply postprocess_sound in Hwp.
+    apply (fromEntails _ _ (refine_vcgen fuel c body) [env]); try done.
+    now apply (psafe_safe (w := wnil)).
+  Qed.
+
+  Print Assumptions symbolic_vcgen_soundness.
 
 End Soundness.
 

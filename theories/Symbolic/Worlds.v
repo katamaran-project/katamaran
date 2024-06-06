@@ -63,6 +63,7 @@ Module Type WorldsOn
 
     (* The empty world without logic variables and constraints. *)
     Definition wnil : World := @MkWorld ctx.nil ctx.nil.
+    Definition wlctx : LCtx -> World := fun Σ => MkWorld Σ [ctx].
 
     (* This adds one new logic variable binding [b] to the world, i.e. after
        "allocating" it in a quantifier in the proposition. *)
@@ -299,6 +300,12 @@ Module Type WorldsOn
     Lemma ent_acc_sub {w1 w2} (ω : w1 ⊒ w2) :
       wco w2 ⊢ subst (wco w1) (sub_acc ω).
     Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
+
+    Definition acc_wnil_init {w} : Acc wnil w :=
+      @acc_sub wnil w [env] entails_nil.
+
+    Definition acc_wlctx_valuation {Σ} : Valuation Σ -> Acc (wlctx Σ) wnil :=
+      fun ι => @acc_sub (wlctx Σ) wnil (lift ι) entails_nil.
 
     Definition acc_snoc_right {w} {b : LVar ∷ Ty} : w ⊒ wsnoc w b :=
       @acc_sub w (wsnoc w b) sub_wk1 (entails_refl (subst (wco w) sub_wk1)).

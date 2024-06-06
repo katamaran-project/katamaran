@@ -663,6 +663,20 @@ Module Pred
       ⊢ ∃ P, proprepₚ P (w := w) t.
     Proof. crushPredEntails3. now eexists. Qed.
 
+    Lemma forgetting_valuation_curval {Σ} {ι : Valuation Σ} :
+      ⊢ forgetting (acc_wlctx_valuation ι) (curval (ι : Valuation (wlctx Σ))).
+    Proof.
+      unfold curval, forgetting.
+      crushPredEntails3.
+      now rewrite inst_lift.
+    Qed.
+
+    Lemma repₚ_inst_curval {w : World} {ι : Valuation w} {T : LCtx -> Type} `{Inst T A} { t : T w} :
+      curval ι ⊢ repₚ (inst t ι) t.
+    Proof.
+      unfold curval. crushPredEntails3. now subst.
+    Qed.
+
     Lemma forgetting_curval {w w2} {ω2 : Acc w w2} {ι : Valuation w} :
       forgetting ω2 (curval ι) ⊣⊢ repₚ ι (sub_acc ω2).
     Proof.
