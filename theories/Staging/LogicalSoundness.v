@@ -2042,7 +2042,9 @@ Module Soundness
         now iApply (refine_inst_subst (T := Chunk)).
       - iApply (refine_bind (RA := RMatchResult pat) (RB := RUnit)).
         iApply (refine_lift_purespec (RA := RMatchResult pat)).
-        admit.
+        { iApply refine_demonic_pattern_match.
+          now iApply (refine_inst_subst (T := STerm σ) with "rδ").
+        }
         iIntros (w1 θ1) "!> %mr %smr Hmr".
         destruct mr as [pc sub].
         destruct smr as [spc ssub].
@@ -2070,7 +2072,7 @@ Module Soundness
       - iApply (refine_debug (RA := RUnit)).
         iApply (refine_pure (RA := RUnit)).
         iApply refine_unit.
-    Admitted.
+    Qed.
 
     Lemma refine_consume {Σ} (asn : Assertion Σ) {w} :
       ⊢ ℛ⟦□ᵣ (RInst (Sub Σ) (Valuation Σ) -> RHeapSpec RUnit)⟧
@@ -2085,7 +2087,9 @@ Module Soundness
         now iApply (refine_inst_subst (T := Chunk)).
       - iApply (refine_bind (RA := RMatchResult pat) (RB := RUnit)).
         iApply (refine_lift_purespec (RA := RMatchResult pat)).
-        admit.
+        { iApply refine_angelic_pattern_match.
+          now iApply (refine_inst_subst (T := STerm σ) with "rδ").
+        }
         iIntros (w1 θ1) "!> %mr %smr Hmr".
         destruct mr as [pc sub].
         destruct smr as [spc ssub].
@@ -2113,7 +2117,7 @@ Module Soundness
       - iApply (refine_debug (RA := RUnit)).
         iApply (refine_pure (RA := RUnit)).
         iApply refine_unit.
-    Admitted.
+    Qed.
 
     Lemma refine_read_register {τ} (reg : 𝑹𝑬𝑮 τ) {w} :
       ⊢ ℛ⟦RHeapSpec (RVal τ)⟧ (CHeapSpec.read_register reg) (SHeapSpec.read_register reg (w := w)).
@@ -2363,22 +2367,26 @@ Module Soundness
 
   End AssumeAssert.
 
-  (* Section PatternMatching. *)
+  Section PatternMatching.
+    Import logicalrelation.
 
-  (*   Lemma refine_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) : *)
-  (*     ℛ⟦RVal σ -> RStoreSpec Γ Γ (RMatchResult pat)⟧ *)
-  (*       (SStoreSpec.demonic_pattern_match n pat) *)
-  (*       (CStoreSpec.demonic_pattern_match pat). *)
-  (*   Proof. *)
-  (*     intros w ι Hpc sv cv rv sΦ cΦ rΦ sδ cδ rδ sh ch rh. *)
-  (*     unfold SStoreSpec.demonic_pattern_match, CStoreSpec.demonic_pattern_match, CStoreSpec.lift_purem. *)
-  (*     apply RPureSpec.refine_demonic_pattern_match; auto. *)
-  (*     intros w1 θ1 ι1 Heq1 Hpc1 smr cmr rmr. apply rΦ; auto. *)
-  (*     eapply refine_inst_persist; eauto. *)
-  (*     eapply refine_inst_persist; eauto. *)
-  (*   Qed. *)
+    Lemma refine_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) {w} :
+      ⊢ ℛ⟦RVal σ -> RStoreSpec Γ Γ (RMatchResult pat)⟧
+        (CStoreSpec.demonic_pattern_match pat)
+      (SStoreSpec.demonic_pattern_match (w := w) n pat).
+    Proof.
+      iIntros (v sv) "rv %Φ %sΦ rΦ %δ %sδ rδ %h %sh rh".
+      unfold SStoreSpec.demonic_pattern_match, CStoreSpec.demonic_pattern_match, CStoreSpec.lift_purem.
+      iApply (PureSpec.refine_demonic_pattern_match with "rv").
+      iIntros (w1 θ1) "!> %mr %smr rmr".
+      rewrite forgetting_unconditionally_drastic.
+      iApply ("rΦ" with "rmr [rδ] [rh]").
+      - iApply (refine_inst_persist with "rδ").
+      - rewrite !RList_RInst.
+        iApply (refine_inst_persist with "rh").
+    Qed.
 
-  (* End PatternMatching. *)
+  End PatternMatching.
 
   Section State.
     Import logicalrelation.
@@ -2743,13 +2751,14 @@ Module Soundness
     - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
       { iApply IHs. }
       iIntros (w1 ω01) "!> %v %sv Hv".
-      admit.
-      (* iApply (refine_bind (RA := RNEnv _ _) (RB := RVal _)). *)
-  (*     iApply refine_demonic_pattern_match. *)
-  (*     intros w2 r12 ι2 -> Hpc2. *)
-  (*     intros [? ?] [pc vs] [-> ?]. *)
-  (*     iApply refine_pushspops. *)
-  (*     iApply H. *)
+      iApply (refine_bind (RA := RMatchResult _) (RB := RVal _) with "[Hv]").
+      { now iApply refine_demonic_pattern_match. }
+      iIntros (w2 r12) "!> %mr %smr Hmr".
+      destruct mr, smr.
+      iDestruct "Hmr" as "[%e Hvs]".
+      subst x0.
+      iApply (refine_pushspops (R := RVal _) with "Hvs []").
+      now iApply H.
     - now iApply refine_read_register.
     - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
       { now iApply (refine_eval_exp e). }
@@ -2758,7 +2767,7 @@ Module Soundness
     - iApply (refine_error (R := RVal _)).
     - iApply (refine_debug (R := RVal _)).
       iApply IHs.
-  Admitted.
+  Qed.
 
   Lemma refine_exec {cfg n} :
     ExecRefine (@SStoreSpec.exec cfg n) (@CStoreSpec.exec n).
