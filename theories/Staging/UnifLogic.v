@@ -683,6 +683,21 @@ Module Pred
       crushPredEntails3.
     Qed.
 
+    Lemma repₚ_eqₚ {T : LCtx -> Type} `{Inst T A} {a : A} {w : World} {vt1 vt2 : T w}:
+      repₚ a vt1 ∗ eqₚ vt1 vt2 ⊢ repₚ a vt2.
+    Proof.
+      crushPredEntails3. now rewrite <-H1.
+    Qed.
+
+
+    Lemma eqₚ_triv {T : LCtx -> Type} `{Inst T A} {w : World} {vt1 vt2 : T w}:
+      (∀ ι : Valuation w, inst vt1 ι = inst vt2 ι) ->
+      ⊢ eqₚ vt1 vt2.
+    Proof.
+      crushPredEntails3.
+    Qed.
+
+
     Lemma repₚ_antisym_left {T : LCtx -> Type} `{Inst T A} {a1 a2 : A} {w : World} {sa : T w} :
       ⊢ repₚ a1 sa -∗ repₚ a2 sa -∗ ⌜ a1 = a2 ⌝.
     Proof.
@@ -718,6 +733,16 @@ Module Pred
     Proof.
       crushPredEntails3.
       now rewrite H2 H4 H5.
+    Qed.
+
+    Lemma repₚ_term_prod {σ1 σ2} {v1 : Val σ1} {v2 : Val σ2} {w : World} {sv1 : STerm σ1 w} {sv2 : STerm σ2 w} :
+      repₚ (T := STerm (ty.prod σ1 σ2)) (v1,v2) (term_binop bop.pair sv1 sv2) ⊣⊢ repₚ v1 sv1 ∗ repₚ v2 sv2.
+    Proof.
+      unfold repₚ.
+      crushPredEntails3.
+      - now inversion H0.
+      - now inversion H0.
+      - now f_equal.
     Qed.
 
     Lemma proprepₚ_cong {T1 : LCtx -> Type} `{InstProp T1}
@@ -758,6 +783,46 @@ Module Pred
       repₚ a1 vt1 ⊢ repₚ a2 vt2.
     Proof. now crushPredEntails3. Qed.
 
+    Lemma repₚ_inversion_term_inl {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svl : STerm σ w) :
+      (repₚ v (term_inl svl) : Pred w) ⊢ ∃ (vl : Val σ), ⌜ v = inl vl ⌝ ∗ repₚ vl svl.
+    Proof.
+      unfold repₚ.
+      destruct v; crushPredEntails3; now inversion H0.
+    Qed.
+
+    Lemma repₚ_inversion_term_inr {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svr : STerm τ w) :
+      (repₚ v (term_inr svr) : Pred w) ⊢ ∃ vr, ⌜ v = inr vr ⌝ ∗ repₚ vr svr.
+    Proof.
+      unfold repₚ.
+      destruct v; crushPredEntails3; now inversion H0.
+    Qed.
+
+
+    Lemma repₚ_inversion_record {N R} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ)
+      {w : World} {v : recordt R} {svs : NamedEnv (λ τ : Ty, Term w τ) (recordf_ty R)} :
+      repₚ (T := STerm (ty.record R)) v (term_record R svs) ⊢
+        ∃ (vs : NamedEnv Val (recordf_ty R)), ⌜ v = recordv_fold R vs ⌝ ∗ repₚ vs svs.
+    Proof.
+      unfold repₚ. crushPredEntails3.
+      exists (recordv_unfold R v).
+      rewrite recordv_fold_unfold.
+      crushPredEntails3.
+      now rewrite <-H0, recordv_unfold_fold.
+    Qed.
+
+    Lemma repₚ_inversion_union {U} (K : unionk U) {v : Val (ty.union U)}
+      {w : World} {st : STerm (unionk_ty U K) w} :
+      repₚ (T := STerm (ty.union U)) v (term_union U K st) ⊢
+        ∃ (t : Val (unionk_ty U K)), ⌜ v = unionv_fold U (existT K t) ⌝ ∗ repₚ t st.
+    Proof.
+      unfold repₚ. crushPredEntails3.
+      destruct (unionv_unfold U v) as [K' t] eqn:Heqv .
+      rewrite <-H0 in Heqv.
+      rewrite unionv_unfold_fold in Heqv.
+      dependent elimination Heqv.
+      exists (inst (st : STerm _ w) ι).
+      now crushPredEntails3.
+    Qed.
 
     Section WithEnvironments.
       Import ctx.notations.
