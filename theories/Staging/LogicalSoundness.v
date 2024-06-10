@@ -1242,8 +1242,7 @@ Module Soundness
       iIntros (Δ msg E1 Es1) "HE1 %E2 %Es2 HE2".
       iInduction Es1 as [|Es1] "IHEs1";
       env.destroy Es2; env.destroy E1; env.destroy E2; cbn -[RSat].
-      - iApply (refine_pure (RA := RUnit)).
-        now iApply refine_unit.
+      - now iApply (refine_pure (RA := RUnit)).
       - iDestruct (repₚ_invert_snoc with "HE1") as "(HE1 & Hv0db)".
         iDestruct (repₚ_invert_snoc with "HE2") as "(HE2 & Hv1v)".
         iSpecialize ("IHEs1" with "HE1 HE2").
@@ -1263,8 +1262,7 @@ Module Soundness
     Proof.
       iIntros (Δ msg E1 Es1) "HE1 %E2 %Es2 HE2".
       iInduction Es1 as [] "IHE"; env.destroy E1; env.destroy E2; env.destroy Es2; cbn - [RSat].
-      - iApply (refine_pure (RA := RUnit)).
-        now iApply refine_unit.
+      - now iApply (refine_pure (RA := RUnit)).
       - iDestruct (repₚ_invert_snoc with "HE1") as "(HE1 & Hvdb)".
         iDestruct (repₚ_invert_snoc with "HE2") as "(HE2 & Hv0v1)".
         iSpecialize ("IHE" with "HE1 HE2").
@@ -1899,8 +1897,7 @@ Module Soundness
       unfold SHeapSpec.produce_chunk, CHeapSpec.produce_chunk.
       iApply (PureSpec.refine_produce_chunk with "rc rh").
       iIntros (w1 θ1) "!>".
-      iApply "rΦ".
-      now iApply refine_unit.
+      now iApply "rΦ".
     Qed.
 
     Lemma refine_consume_chunk {w} :
@@ -1911,8 +1908,7 @@ Module Soundness
       unfold SHeapSpec.consume_chunk, CHeapSpec.consume_chunk.
       iApply (PureSpec.refine_consume_chunk with "rc rh").
       iIntros (w1 θ1) "!>".
-      iApply "rΦ".
-      now iApply refine_unit.
+      now iApply "rΦ".
     Qed.
 
     Lemma refine_consume_chunk_angelic {w} :
@@ -1923,8 +1919,7 @@ Module Soundness
       unfold SHeapSpec.consume_chunk_angelic, CHeapSpec.consume_chunk.
       iApply (PureSpec.refine_consume_chunk_angelic with "rc rh").
       iIntros (w1 θ1) "!>".
-      iApply "rΦ".
-      now iApply refine_unit.
+      now iApply "rΦ".
     Qed.
 
     Lemma refine_produce {Σ} (asn : Assertion Σ) {w} :
@@ -1968,8 +1963,7 @@ Module Soundness
           iApply (repₚ_cong₂ (T1 := Sub _) (T2 := STerm _) (T3 := Sub (Σ ▻ ς∷τ)) (fun δ => env.snoc δ (ς∷τ)) (fun δ => env.snoc δ (ς∷τ)) with "[$rδp $Hv]").
           now intros.
       - iApply (refine_debug (RA := RUnit)).
-        iApply (refine_pure (RA := RUnit)).
-        iApply refine_unit.
+        now iApply (refine_pure (RA := RUnit)).
     Qed.
 
     Lemma refine_consume {Σ} (asn : Assertion Σ) {w} :
@@ -2013,8 +2007,7 @@ Module Soundness
           iApply (repₚ_cong₂ (T1 := Sub _) (T2 := STerm _) (T3 := Sub (Σ ▻ ς∷τ)) (fun δ => env.snoc δ (ς∷τ)) (fun δ => env.snoc δ (ς∷τ)) with "[$rδp $Hv]").
           now intros.
       - iApply (refine_debug (RA := RUnit)).
-        iApply (refine_pure (RA := RUnit)).
-        iApply refine_unit.
+        now iApply (refine_pure (RA := RUnit)).
     Qed.
 
     Lemma refine_read_register {τ} (reg : 𝑹𝑬𝑮 τ) {w} :
@@ -2332,8 +2325,7 @@ Module Soundness
     Proof.
       iIntros (δ2 sδ2) "Hδ2 %K %sK HK %δ %sδ Hδ %h %sh Hh".
       unfold SStoreSpec.put_local, CStoreSpec.put_local.
-      iApply (refine_T with "HK [] Hδ2 Hh").
-      now iApply refine_unit.
+      iApply (refine_T with "HK [//] Hδ2 Hh").
     Qed.
 
     Lemma refine_peval {w : World} {σ} (t : STerm σ w) v :
@@ -2395,8 +2387,7 @@ Module Soundness
     Proof.
       iIntros (v sv) "Hv %K %sK HK %δ %sδ Hδ %h %sh Hh".
       unfold SStoreSpec.assign, CStoreSpec.assign.
-      iApply (refine_T with "HK [] [Hv Hδ] Hh").
-      { iApply refine_unit. }
+      iApply (refine_T with "HK [//] [Hv Hδ] Hh").
       now iApply (refine_env_update with "[$Hv $Hδ]").
     Qed.
 
@@ -2415,9 +2406,8 @@ Module Soundness
     iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ %h %sh Hh".
     iApply (PureSpec.refine_produce_chunk with "Hc Hh [HΦ Hδ]").
     iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
-    iApply ("HΦ" with "[] [Hδ] Hh2").
-    - now iApply refine_unit.
-    - now iApply (refine_inst_persist (AT := SStore Γ)).
+    iApply ("HΦ" with "[//] [Hδ] Hh2").
+    now iApply (refine_inst_persist (AT := SStore Γ)).
   Qed.
 
   Lemma refine_consume_chunk {Γ} {w} :
@@ -2427,9 +2417,8 @@ Module Soundness
     iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ %h %sh Hh".
     iApply (PureSpec.refine_consume_chunk with "Hc Hh").
     iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
-    iApply ("HΦ" with "[] [Hδ] Hh2").
-    - now iApply refine_unit.
-    - now iApply (refine_inst_persist (AT := SStore Γ)).
+    iApply ("HΦ" with "[//] [Hδ] Hh2").
+    now iApply (refine_inst_persist (AT := SStore Γ)).
   Qed.
 
   Lemma refine_consume_chunk_angelic {Γ} {w} :
@@ -2439,9 +2428,8 @@ Module Soundness
     iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ %h %sh Hh".
     iApply (PureSpec.refine_consume_chunk_angelic with "Hc Hh").
     iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
-    iApply ("HΦ" with "[] [Hδ] Hh2").
-    - now iApply refine_unit.
-    - now iApply (refine_inst_persist with "Hδ").
+    iApply ("HΦ" with "[//] [Hδ] Hh2").
+    now iApply (refine_inst_persist with "Hδ").
   Qed.
 
   Lemma refine_produce {Γ} {w1 w2 : World} (ω : Acc w1 w2) (asn : Assertion w1) (ι : Valuation w1):
@@ -2452,9 +2440,8 @@ Module Soundness
     iPoseProof (HeapSpec.refine_produce asn) as "Hcons".
     iApply (refine_T with "Hcons Hι").
     iIntros (w3 ω3) "!> %u %su _".
-    iApply ("rΦ" with "[] [rδ]").
-    - now iApply refine_unit.
-    - now iApply (refine_inst_persist with "rδ").
+    iApply ("rΦ" with "[//] [rδ]").
+    now iApply (refine_inst_persist with "rδ").
   Qed.
 
   Lemma refine_consume {Γ} {w1 w2 : World} (ω : Acc w1 w2) (asn : Assertion w1) (ι : Valuation w1):
@@ -2465,9 +2452,8 @@ Module Soundness
     iPoseProof (HeapSpec.refine_consume asn) as "Hcons".
     iApply (refine_T with "Hcons Hι").
     iIntros (w3 ω3) "!> %u %su _".
-    iApply ("rΦ" with "[] [rδ]").
-    - now iApply refine_unit.
-    - now iApply (refine_inst_persist with "rδ").
+    iApply ("rΦ" with "[//] [rδ]").
+    now iApply (refine_inst_persist with "rδ").
   Qed.
 
   Lemma refine_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :

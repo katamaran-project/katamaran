@@ -1559,7 +1559,7 @@ Module Pred
     Proof. crushPredEntails3. Qed.
 
     Lemma refine_unit {w} {u su} :
-      ⊢ (ℛ⟦ RUnit ⟧ u su : Pred w).
+      ⊢ ℛ⟦ RUnit ⟧ u su : Pred w.
     Proof. destruct u, su. now crushPredEntails3. Qed.
     
     Lemma refine_nil {AT A} {R : Rel AT A} {w} :
@@ -1568,6 +1568,7 @@ Module Pred
       crushPredEntails3.
       constructor.
     Qed.
+    Hint Resolve refine_nil : core.
 
     Lemma refine_cons {AT A} {R : Rel AT A} {w} :
       ⊢ ℛ⟦ R -> RList R -> RList R ⟧ cons (@cons (AT w)).
@@ -1689,4 +1690,7 @@ Module Pred
       curval ι ⊢ ℛ⟦RInst (Sub w) (Valuation w)⟧ ι (sub_id w).
     Proof. crushPredEntails3. now rewrite inst_sub_id. Qed.
   End LRCompat.
+
+  Import notations ufl_notations logicalrelation iris.proofmode.tactics.
+  Global Hint Extern 0 (environments.envs_entails _ (ℛ⟦ RUnit ⟧ _ _)) => iApply refine_unit : core.
 End Pred.
