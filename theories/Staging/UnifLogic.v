@@ -1087,8 +1087,15 @@ Module Pred
     Import iris.proofmode.classes.
     Import iris.proofmode.tactics.
 
+    #[export] Instance intowand_forgetting_unconditionally {p q} {w1 w2} {ω : w1 ⊒ w2} {P : ((□ Pred) w1)%modal} {Q R} :
+      IntoWand p q (P w2 ω) Q R -> IntoWand p q (forgetting ω (unconditionally P)) Q R | 0.
+    Proof.
+      unfold IntoWand; cbn.
+      now rewrite forgetting_unconditionally_drastic.
+    Qed.
+
     #[export] Instance intowand_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} {Q R}:
-      IntoWand false false P Q R -> IntoWand false false (forgetting ω P) (forgetting ω Q) (forgetting ω R).
+      IntoWand false false P Q R -> IntoWand false false (forgetting ω P) (forgetting ω Q) (forgetting ω R) | 1.
     Proof.
       iIntros (Hiw).
       unfold IntoWand; cbn.
@@ -1098,8 +1105,8 @@ Module Pred
       now rewrite H.
     Qed.
 
-    #[export] Instance intowand_unconditionally {w} {P : ((□ Pred) w)%modal} {Q R}:
-      IntoWand false false (P w acc_refl) Q R -> IntoWand false false (unconditionally P) Q R.
+    #[export] Instance intowand_unconditionally {p q} {w} {P : ((□ Pred) w)%modal} {Q R}:
+      IntoWand p q (P w acc_refl) Q R -> IntoWand p q (unconditionally P) Q R.
     Proof.
       unfold IntoWand; cbn.
       now rewrite unconditionally_T.
