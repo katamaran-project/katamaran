@@ -2548,6 +2548,45 @@ Module Soundness
     }
   Qed.
 
+  Import iris.proofmode.environments.
+
+  Ltac rsolve :=
+    iStartProof;
+    repeat
+      (match goal with
+      | |- envs_entails _ (ℛ⟦RStoreSpec _ _ ?R⟧ (CStoreSpec.pure _) (SStoreSpec.pure _)) => iApply (refine_pure (R := R))
+      | |- envs_entails _ (ℛ⟦RVal ?τ⟧ ?v (term_val ?τ ?v)) => iApply refine_term_val
+      | |- envs_entails _ (ℛ⟦RStoreSpec _ _ ?R⟧ (CStoreSpec.bind _ _) (@SStoreSpec.bind _ _ _ ?AT ?BT _ _ _)) => iApply (refine_bind (AT := AT) (RB := R))
+      | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
+      | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
+
+      | |- envs_entails _ (ℛ⟦RStoreSpec _ _ ?R⟧ (CStoreSpec.pushpop _ _) (SStoreSpec.pushpop _ _)) => iApply (refine_pushpop (R := R))
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ ?R⟧ (CStoreSpec.pushspops _ _) (SStoreSpec.pushspops _ _)) => iApply (refine_pushspops (R := R))
+       | |- envs_entails _ (ℛ⟦_⟧ _ (lift _)) => iApply refine_lift
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ _⟧ (CStoreSpec.assign _ _) (SStoreSpec.assign _ _)) => iApply refine_assign
+       | |- envs_entails _ (ℛ⟦RVal _⟧ _ (persist__term _ _)) => iApply (refine_inst_persist (AT := STerm _))
+       | |- envs_entails _ (ℛ⟦_⟧ _ (@persist _ (@persistent_subst ?AT _) _ _ _ _)) => iApply (refine_inst_persist (AT := AT))
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ (RVal _)⟧ (CStoreSpec.eval_exp _) (SStoreSpec.eval_exp _ (w:=_))) => iApply refine_eval_exp
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ (RNEnv PVar _)⟧ (CStoreSpec.eval_exps _) (SStoreSpec.eval_exps _ (w:=_))) => iApply refine_eval_exps
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ (RNEnv _ _)⟧ CStoreSpec.get_local (SStoreSpec.get_local (w:=_))) => iApply refine_get_local
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ _⟧ (CStoreSpec.put_local _) (SStoreSpec.put_local _)) => iApply refine_put_local
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ _⟧ (CStoreSpec.call_contract _ _) (SStoreSpec.call_contract _ _)) => iApply refine_call_contract
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ _⟧ (CStoreSpec.call_lemma _ _) (SStoreSpec.call_lemma _ _)) => iApply refine_call_lemma
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ _⟧ (CStoreSpec.assume_formula _) (SStoreSpec.assume_formula _)) => iApply refine_assume_formula
+       | |- envs_entails _ (ℛ⟦RFormula⟧ (_ = true) (formula_bool _)) => iApply refine_formula_bool
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ ?R⟧ CStoreSpec.block (SStoreSpec.block (w:=_))) => iApply (refine_block (R := R))
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ _⟧ (CStoreSpec.read_register _) (SStoreSpec.read_register _)) => iApply refine_read_register
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ _⟧ (CStoreSpec.write_register _ _) (SStoreSpec.write_register _ _)) => iApply refine_write_register
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ ?R⟧ _ (SStoreSpec.error _)) => iApply (refine_error (R := R))
+       | |- envs_entails _ (ℛ⟦RStoreSpec _ _ ?R⟧ _ (SStoreSpec.debug _ _)) => iApply (refine_debug (R := R))
+                                                                                   | |- envs_entails _ (ℛ⟦RStoreSpec _ _ _⟧ (CStoreSpec.demonic_pattern_match _ _) (SStoreSpec.demonic_pattern_match _ _ _)) => iApply refine_demonic_pattern_match
+       end; try iAssumption);
+  repeat match goal with
+    | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
+    | H : (forall (w : World), _) |- @envs_entails _ _ (@RSat _ _ _ _ ?w _) => specialize (H w)
+    | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
+    end.
+  
   Definition ExecRefine (sexec : SStoreSpec.Exec) (cexec : CStoreSpec.Exec) :=
     forall Γ τ (s : Stm Γ τ) w,
       ⊢ ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧ (cexec Γ τ s) (@sexec Γ τ s w).
@@ -2556,99 +2595,22 @@ Module Soundness
     ExecRefine (@SStoreSpec.exec_aux cfg srec) (@CStoreSpec.exec_aux crec).
   Proof.
     unfold ExecRefine.
-    induction s; cbn -[RSat]; intros w.
-    - iApply (refine_pure (R := RVal _)).
-      iApply refine_term_val.
-    - now iApply refine_eval_exp.
-    - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
-      { iApply IHs1. }
-      iIntros (w1 ω01) "!> %v %sv Hv".
-      iApply (refine_pushpop (R := RVal _) with "Hv").
-      now iApply IHs2.
-    - iApply (refine_pushspops (R := RVal _)).
-      now iApply refine_lift.
-      now iApply IHs.
-    - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
-      now iApply IHs.
-      iIntros (w1 ω01) "!> %v %sv #Hv".
-      iApply (refine_bind (RA := RUnit) (RB := RVal _) with "[Hv]").
-      now iApply refine_assign.
-      iIntros (w2 ω12) "!> %u %su _".
-      iApply (refine_pure (R := RVal _)).
-      now iApply (refine_inst_persist (AT := STerm τ)).
-    - iApply (refine_bind (RA := RNEnv _ _) (RB := RVal _)).
-      iApply refine_eval_exps.
-      iIntros (w1 ω01) "!> %args %sargs Hargs".
-      destruct (CEnv f).
+    induction s; cbn -[RSat]; intros w; rsolve.
+    - destruct (CEnv f).
       + unfold SStoreSpec.call_contract_debug.
-        destruct (config_debug_function cfg f).
-        iApply (refine_debug (R := RVal _)).
-        now iApply refine_call_contract.
-        now iApply refine_call_contract.
-      + iIntros (POST sPOST) "HPOST %δ1 %sδ1 Hδ1".
-        iApply (HYP with "[HPOST Hδ1] Hargs").
-        iIntros (w2 ω12) "!> %v %sv Hv %δ %sδ Hδ".
-        iApply ("HPOST" with "Hv").
-        iApply (refine_inst_persist with "Hδ1").
-    - iApply (refine_bind (RA := RStore Γ) (RB := RVal _)).
-      { now iApply refine_get_local. }
-      iIntros (w1 ω01) "!> %δ1 %sδ1 Hδ1".
-      iApply (refine_bind (RA := RUnit) (RB := RVal _)).
-      { iApply refine_put_local. now iApply refine_lift. }
-      iIntros (w2 ω12) "!> %u %su _".
-      iApply (refine_bind (RA := RVal _) (RB := RVal _)).
-      { now iApply IHs. }
-      iIntros (w3 ω23) "!> %v %sv Hv".
-      iApply (refine_bind (RA := RUnit) (RB := RVal _) with "[Hδ1]").
-      { iApply refine_put_local. now iApply (refine_inst_persist with "Hδ1"). }
-      iIntros (w4 ω34) "!> %u2 %su2 _".
-      iApply (refine_pure (R := RVal _)).
-      iApply (refine_inst_persist with "Hv").
-    - iApply (refine_bind (RA := RNEnv _ _) (RB := RVal _)).
-      iApply refine_eval_exps.
-      iIntros (w1 ω01) "!> %args %sargs Hargs".
-      now iApply refine_call_contract.
-    - iApply (refine_bind (RA := RNEnv _ _) (RB := RVal _)).
-      iApply refine_eval_exps.
-      iIntros (w1 ω01) "!> %δΔ %sδΔ HδΔ".
-      iApply (refine_bind (RA := RUnit) (RB := RVal _) with "[HδΔ]").
-      { now iApply refine_call_lemma. }
-      iIntros (w2 ω12) "!> %u %su _".
-      iApply IHs.
-    - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
-      iApply IHs1.
-      iIntros (w1 ω01) "!> %v %sv Hv".
-      now iApply IHs2.
-    - (* strange, the refine_bind iApply loops if I don't pass He1 immediately? *)
-      iPoseProof (refine_eval_exp e1) as "He1".
-      iApply (refine_bind (RA := RVal _) (RB := RVal _) with "He1").
-      iIntros (w1 ω01) "!> %v %sv Hv".
-      iApply (refine_bind (RA := RUnit) (RB := RVal _) with "[Hv]").
-      iApply refine_assume_formula.
-      iClear "He1". clear.
-      iApply (refine_formula_bool with "Hv").
-      iIntros (w2 ω12) "!> %u %su _".
-      now iApply IHs.
-    - iApply (refine_block (R := RVal _)).
-    - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
-      { iApply IHs. }
-      iIntros (w1 ω01) "!> %v %sv Hv".
-      iApply (refine_bind (RA := RMatchResult _) (RB := RVal _) with "[Hv]").
-      { now iApply refine_demonic_pattern_match. }
-      iIntros (w2 r12) "!> %mr %smr Hmr".
-      destruct mr, smr.
+        destruct (config_debug_function cfg f); rsolve.
+      + iIntros (POST sPOST) "#HPOST %δ1 %sδ1 #Hδ1".
+        iApply HYP; try done; rsolve.
+        iApply ("HPOST"); try done.
+        now iApply (refine_inst_persist (AT := SStore _)).
+    - destruct a0, ta0.
+      iRename select (ℛ⟦RMatchResult pat⟧ (existT x n) (existT x0 n0)) into "Hmr".
       iDestruct "Hmr" as "[%e Hvs]".
       subst x0.
-      iApply (refine_pushspops (R := RVal _) with "Hvs []").
+      rsolve.
       now iApply H.
-    - now iApply refine_read_register.
-    - iApply (refine_bind (RA := RVal _) (RB := RVal _)).
-      { now iApply (refine_eval_exp e). }
-      iIntros (w1 ω01) "!> %vnew %svnew Hvnew".
-      now iApply refine_write_register.
-    - iApply (refine_error (R := RVal _)).
-    - iApply (refine_debug (R := RVal _)).
-      iApply IHs.
+
+    Unshelve. all: eauto with *.
   Qed.
 
   Lemma refine_exec {cfg n} :
