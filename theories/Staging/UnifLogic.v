@@ -1647,8 +1647,8 @@ Module Pred
     Proof. iIntros (v f w F t) "#Hf #Hv". now iApply "Hf". Qed.
 
     Lemma refine_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} :
-      forall (v : A) (w1 w2 : World) (ω : Acc w1 w2),
-        ⊢ ∀ (t : AT w1), (forgetting ω (ℛ⟦RInst AT A⟧ v t) → ℛ⟦RInst AT A⟧ v (persist t ω))%I.
+      forall (v : A) (w1 w2 : World) (ω : Acc w1 w2) (t : AT w1),
+        forgetting ω (ℛ⟦RInst AT A⟧ v t) ⊢ ℛ⟦RInst AT A⟧ v (persist t ω).
     Proof. 
       iIntros (v w1 w2 ω t) "Hvt".
       now iApply forgetting_repₚ.
