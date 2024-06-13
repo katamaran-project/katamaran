@@ -355,6 +355,8 @@ Module Type SymPropOn
         end%type.
     Global Arguments safe {Σ} p ι.
 
+    #[export] Instance instprop_symprop : InstProp 𝕊 := fun Σ v ι => SymProp.safe v ι.
+
     Fixpoint safe_debug {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) : Prop :=
       (* ⊢ 𝕊 -> Valuation -> PROP := *)
         match p with

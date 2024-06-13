@@ -1448,9 +1448,6 @@ Module Pred
       MkRel repₚ.
     Arguments RInst _ _ {_}.
 
-    (* huh? missing instance? *)
-    #[export] Instance instprop_symprop : InstProp 𝕊 := fun Σ v ι => SymProp.safe v ι.
-
     Definition RInstPropIff AT {instA : InstProp AT} : Rel AT Prop :=
       MkRel proprepₚ.
     Arguments RInstPropIff _ {_}.
