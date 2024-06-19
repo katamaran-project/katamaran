@@ -42,14 +42,8 @@ From Katamaran Require Import
      Base
      Environment
      Signature
-     (* Shallow.Monads *)
-     (* Symbolic.Monads *)
-     Symbolic.Propositions
-     (* Symbolic.Solver *)
+     (* Symbolic.Propositions *)
      Symbolic.Worlds
-     (* Syntax.Assertions *)
-     (* Syntax.Chunks *)
-     (* Syntax.Formulas *)
      Syntax.Predicates
      .
 From iris Require bi.derived_connectives bi.interface proofmode.tactics.
@@ -122,12 +116,12 @@ Module Pred
 
     #[export] Instance entails_rewriterelation : RewriteRelation (@entails w) := {}.
 
-    (* #[export] Instance proper_bientails : *)
-    (*   Proper (@bientails w ==> @bientails w ==> iff) bientails. *)
-    (* Proof. crushPredEntails1. Qed. *)
-    (* #[export] Instance proper_entails_bientails : *)
-    (*   Proper ((≡@{Pred w}) ==> (≡@{Pred w}) ==> iff) entails. *)
-    (* Proof. crushPredEntails1. Qed. *)
+    #[export] Instance proper_bientails :
+      Proper (@bientails w ==> @bientails w ==> iff) bientails.
+    Proof. crushPredEntails1. Qed.
+    #[export] Instance proper_entails_bientails :
+      Proper ((≡@{Pred w}) ==> (≡@{Pred w}) ==> iff) entails.
+    Proof. crushPredEntails1. Qed.
     #[export] Instance proper_entails_entails :
       Proper (Basics.flip (entails (w := w)) ==> (entails (w := w)) ==> Basics.impl) entails.
     Proof. crushPredEntails1. Qed.
@@ -147,8 +141,7 @@ Module Pred
     Arguments sepₚ {w} P Q ι /.
     Definition wandₚ {w} (P Q : Pred w) (ι : Valuation w) : Prop := P ι -> Q ι.
     Arguments wandₚ {w} P Q ι /.
-    Variant persistently {w} (P : Pred w) (ι : Valuation w) : Prop :=
-      MkSubstly : P ι -> persistently P ι.
+    Definition persistently {w : World} (P : Pred w) (ι : Valuation w) : Prop := P ι.
 
     #[export] Instance ofe_dist_pred {w} : ofe.Dist (Pred w) :=
       ofe.discrete_dist.
@@ -202,8 +195,8 @@ Module Pred
         | [ H : (fun x => _) _ |- _ ] => cbn in H
         | [ |- True ] => trivial
         | [ |- empₚ _ ] => constructor
-        | [ |- persistently _ _ ] => constructor
-        | [ H: persistently _ _ |- _ ] => destruct H
+        | [ |- persistently _ _ ] => unfold persistently
+        | [ H: persistently _ _ |- _ ] => unfold persistently in H
         | [ |- later _ _ ] => constructor
         | [ H: later _ _ |- _ ] => destruct H
         | [ |- later (λ _ , False) _ ∨ _ ] => right
@@ -239,7 +232,7 @@ Module Pred
 
     #[export] Instance persistent_pred {w} {P : Pred w} :
       derived_connectives.Persistent P.
-    Proof. constructor. intros ι HP. now constructor. Qed.
+    Proof. constructor. now intros ι HP. Qed.
 
     #[export] Instance affine_pred {w} {P : Pred w} :
       derived_connectives.Affine P.
@@ -1686,6 +1679,26 @@ Module Pred
     Lemma refine_rinst_sub_initial {w : World} {ι : Valuation w}: 
       curval ι ⊢ ℛ⟦RInst (Sub w) (Valuation w)⟧ ι (sub_id w).
     Proof. crushPredEntails3. now rewrite inst_sub_id. Qed.
+
+    Section WithNotations.
+      Import env.notations.
+      Import ctx.notations.
+      Lemma refine_namedenv_snoc {N} {Δ : NCtx N Ty} {b : N∷Ty} {w : World} {vs : NamedEnv Val Δ} {svs : NamedEnv (Term w) Δ} {v : Val (type b)} {sv : Term w (type b)} :
+        ℛ⟦RNEnv N Δ⟧ vs svs ∗ ℛ⟦RVal (type b)⟧ v sv ⊢ ℛ⟦RNEnv N (Δ ▻ b)⟧ (vs.[b ↦ v])%env (svs.[name b∷type b ↦ sv])%env.
+      Proof.
+        iIntros "[Hvs Hv]".
+        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Δ) (T2 := STerm (type b)) (T3 := fun w => NamedEnv (Term w) (Δ ▻ b)) (fun vs v => vs.[b ↦ v]) (fun vs (v : Term w (type b)) => vs.[b ↦ v]) with "[$Hvs $Hv]").
+        now intros.
+      Qed.
+
+      Lemma refine_namedenv_nil {N} {w : World} :
+         ⊢ ℛ⟦RNEnv N [ctx] ⟧ env.nil (env.nil : NamedEnv (Term w) [ctx]).
+      Proof.
+        iApply (repₚ_triv (T := fun w => NamedEnv (Term w) [ctx])).
+        now intros.
+      Qed.
+    End WithNotations.
+
   End LRCompat.
 
   Import notations ufl_notations logicalrelation iris.proofmode.tactics.

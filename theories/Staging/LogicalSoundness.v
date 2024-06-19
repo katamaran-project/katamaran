@@ -512,13 +512,9 @@ Module Soundness
         { now iApply refine_angelic. }
         iIntros (w2 ω2) "!> %v2 %vs2 Hv2".
         iApply (refine_pure (RA := RNEnv N (Δ ▻ b))).
-        simpl. rewrite <-forgetting_repₚ.
-        iApply (repₚ_cong₂ (T1 := λ Σ, NamedEnv (Term Σ) Δ) (T2 := fun Σ => Term Σ (type b))
-                  (T3 := λ Σ, NamedEnv (Term Σ) (Δ ▻ b))
-                  (fun v v2 => v.[b ↦ v2]) (fun vs vs2 => vs.[ b ↦ vs2 ])
-                 with "[$Hv $Hv2]"
-               ).
-        intros. now rewrite inst_env_snoc.
+        iApply (refine_namedenv_snoc with "[$Hv2 Hv]").
+        simpl.
+        now rewrite <-forgetting_repₚ.
     Qed.
 
     Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} {w} :
@@ -536,15 +532,9 @@ Module Soundness
         { now iApply refine_demonic. }
         iIntros (w2 ω2) "!> %v2 %vs2 Hv2".
         iApply (refine_pure (RA := RNEnv N (Δ ▻ b))).
+        iApply (refine_namedenv_snoc with "[$Hv2 Hv]").
         simpl.
-        rewrite <-forgetting_repₚ.
-        iApply (repₚ_cong₂ (T1 := λ Σ, NamedEnv (Term Σ) Δ) (T2 := fun Σ => Term Σ (type b))
-                  (T3 := λ Σ, NamedEnv (Term Σ) (Δ ▻ b))
-                  (fun v v2 => v.[b ↦ v2]) (fun vs vs2 => vs.[ b ↦ vs2 ])
-                 with "[$Hv $Hv2]"
-               ).
-        intros.
-        now rewrite inst_env_snoc.
+        now rewrite <-forgetting_repₚ.
     Qed.
 
     Lemma obligation_equiv {w : World} (msg : AMessage w) (fml : Formula w) :
@@ -909,8 +899,9 @@ Module Soundness
           iApply ("rΦ" with "[Hv'] HSP").
           iDestruct (repₚ_inversion_term_inl with "Hv'") as "(%vl & -> & Hvl)".
           iExists eq_refl.
-          iApply (repₚ_cong (T1 := STerm σ) (A2 := NamedEnv Val _) (T2 := fun w => NamedEnv (Term w) _) (fun vl => [env].[x∷σ ↦ vl]) (fun svl => [env].[x∷σ ↦ svl]) with "Hvl").
-          now intros.
+          cbn -[RSat].
+          iApply (refine_namedenv_snoc (b := x ∷ σ) with "[$Hvl]").
+          iApply refine_namedenv_nil.
         + iPoseProof (eqₚ_triv (vt2 := term_inr svr : STerm (ty.sum σ τ) w) Heq) as "Heq".
           iDestruct (repₚ_eqₚ (T := STerm (ty.sum _ _)) with "[$Heq $Hv]") as "Hv'".
           iIntros (Φ sΦ) "rΦ HSP".
@@ -918,8 +909,8 @@ Module Soundness
           iApply ("rΦ" with "[Hv'] HSP").
           iDestruct (repₚ_inversion_term_inr with "Hv'") as "(%vr & -> & Hvr)".
           iExists eq_refl.
-          iApply (repₚ_cong (T1 := STerm _) (A2 := NamedEnv Val _) (T2 := fun w => NamedEnv (Term w) _) (fun vr => [env].[y∷τ ↦ vr]) (fun svr => [env].[y∷τ ↦ svr]) with "Hvr").
-          now intros.
+          iApply (refine_namedenv_snoc (b := y ∷ τ) with "[$Hvr]").
+          iApply refine_namedenv_nil.
         + now iApply (refine_angelic_pattern_match' n (pat_sum _ _ _ _)).
       - iIntros (msg v sv) "Hv %Φ %sΦ rΦ HSP".
         rewrite CPureSpec.wp_angelic_pattern_match.
