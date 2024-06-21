@@ -303,24 +303,6 @@ Module BlockVerificationDerived2Sound.
   Import proofmode.
   Import iris.proofmode.tactics.
 
-  Local Ltac rsolve_step := (first
-    [ match goal with
-      | |- environments.envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros ( ? ? ) "!>"
-      | |- environments.envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros ( ? ? ) "#?"
-      | |- environments.envs_entails _ (ℛ⟦RStoreSpec _ _ ?R⟧ _ (RiscvPmpBlockVerifExecutor.SStoreSpec.error _)) =>
-            iApply refine_error
-      end
-    | match goal with
-      | |- environments.envs_entails _ (ℛ⟦?R⟧ ?v ?vs) =>
-          unshelve iApply (refine_compat_lemma (R := R) (v := v) (vs := vs) );
-          idtac "rsolve-after-iApply";
-          lazymatch goal with
-          | |- RefineCompat _ _ _ _ => solve [ once typeclasses eauto ]
-          | _ => idtac
-          end; cbn; rewrite ?bi.emp_sep
-      | |- environments.envs_entails _ (_ ∗ _) => iSplit
-      end ]).
-
   Lemma refine_exec_instruction_any (i : AST) {w} :
     ⊢ ℛ⟦RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits)⟧
       (exec_instruction_any__c i)
