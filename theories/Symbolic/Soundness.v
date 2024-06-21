@@ -66,640 +66,908 @@ Module Soundness
   Import ModalNotations.
   Import SymProp.
   Import logicalrelation logicalrelation.notations.
+  Import LogicalSoundness.
+  Import proofmode.
+  Import iris.proofmode.tactics.
 
-  Section Basics.
+  Module StoreSpec.
+    Import PureSpec.
+    Import HeapSpec.
 
     #[export] Instance RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
       RInst (SStore Γ) (CStore Γ).
 
     #[export] Instance RStoreSpec Γ1 Γ2 `(R : Rel AT A) :
       Rel (SStoreSpec Γ1 Γ2 AT) (CStoreSpec Γ1 Γ2 A) :=
-      □(R -> RStore Γ2 -> RHeap -> ℙ) -> RStore Γ1 -> RHeap -> ℙ.
+      □ᵣ (R -> RStore Γ2 -> RHeap -> ℙ) -> RStore Γ1 -> RHeap -> ℙ.
 
-    Lemma refine_evalStoreSpec {Γ1 Γ2} `{RA : Rel SA CA} :
-      ℛ⟦RStoreSpec Γ1 Γ2 RA -> RStore Γ1 -> RHeapSpec RA⟧
-        SStoreSpec.evalStoreSpec CStoreSpec.evalStoreSpec.
+    Lemma refine_evalStoreSpec {Γ1 Γ2} `{RA : Rel SA CA} {w : World} :
+      ⊢ (ℛ⟦RStoreSpec Γ1 Γ2 RA -> RStore Γ1 -> RHeapSpec RA⟧
+           CStoreSpec.evalStoreSpec (fun w => SStoreSpec.evalStoreSpec w) : Pred w).
     Proof.
       unfold SStoreSpec.evalStoreSpec, CStoreSpec.evalStoreSpec.
-      intros w ι Hpc sm cm rm sδ cδ rδ sΦ cΦ rΦ. apply rm; auto.
-      intros w1 r01 ι1 Hι1 Hpc1 sa ca ra _ _ _. apply rΦ; auto.
+      iIntros (ss tss) "Hss".
+      iIntros (s ts) "Hs".
+      iIntros (k ks) "Hk".
+      iIntros (h hs) "Hh".
+      iIntros "Hsym".
+      iApply ("Hss" with "[Hk] Hs Hh Hsym").
+      iIntros (w' ω).
+      iSpecialize ("Hk" $! _ ω).
+      iModIntro.
+      iIntros (a ta) "Ha".
+      iIntros (s2 ts2) "Hs2".
+      iIntros (h2 th2) "Hh2".
+      now iApply ("Hk" with "Ha Hh2").
     Qed.
 
-    Lemma refine_lift_purem {Γ} `{R : Rel AT A} :
-      ℛ⟦RPureSpec R -> RStoreSpec Γ Γ R⟧
-        SStoreSpec.lift_purem CStoreSpec.lift_purem.
+    Lemma refine_lift_purem {Γ} `(R : Rel AT A) {w : World}:
+      ⊢ ℛ⟦RPureSpec R -> RStoreSpec Γ Γ R⟧
+        CStoreSpec.lift_purem (SStoreSpec.lift_purem (w := w)).
     Proof.
       unfold RPureSpec, RStoreSpec, SStoreSpec.lift_purem, CStoreSpec.lift_purem.
-      intros w ι Hpc ms mc Hm POST__s POST__c HPOST.
-      intros δs δc Hδ hs hc Hh. apply Hm.
-      intros w1 r01 ι1 Hι1 Hpc1 a1 a Ha.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      eapply refine_inst_persist; eauto.
-      eapply refine_inst_persist; eauto.
+      iIntros (p ps) "Hp".
+      iIntros (k ks) "Hk".
+      iIntros (s ss) "Hs".
+      iIntros (h hs) "Hh".
+      iApply "Hp".
+      iIntros (w' ω).
+      iSpecialize ("Hk" $! _ ω).
+      iModIntro.
+      iIntros (k2 k2s) "Hk2".
+      iApply ("Hk" with "Hk2 [Hs]").
+      - now iApply (refine_inst_persist s).
+      - rewrite !RList_RInst.
+        now iApply refine_inst_persist.
     Qed.
 
-    Lemma refine_block {Γ1 Γ2} `{R : Rel AT A} :
-      ℛ⟦RStoreSpec Γ1 Γ2 R⟧ SStoreSpec.block CStoreSpec.block.
-    Proof. constructor. Qed.
+    Class RefineCompat `(R : Rel AT A) (v : A)  w (vs : AT w) :=
+      MkRefineCompat {
+          RefineCompatAssumption : Pred w
+        ; refine_compat_lemma : RefineCompatAssumption ⊢ ℛ⟦ R ⟧ v vs
+        }.
+    Arguments RefineCompatAssumption {AT A R v w vs} rci / : rename.
 
-    Lemma refine_error `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} :
+    #[export] Program Instance refine_compat_impl `{RA : Rel AT A} `{RB : Rel BT B} {f v w fs vs}
+      (compatf : RefineCompat (RA -> RB) f w fs) : RefineCompat RB (f v) w (fs vs) :=
+      @MkRefineCompat _ _ RB _ _ _ (@RefineCompatAssumption _ _ _ _ _ _ compatf ∗ RSat RA v vs)%I _.
+    Next Obligation.
+      iIntros (AT A RA BT B RB f v w fs vs compatf) "[Hcf Hv]".
+      now iApply (@refine_compat_lemma _ _ (RA -> RB) _ _ _ compatf with "Hcf").
+    Qed.
+
+    #[export] Program Instance refine_compat_forall {𝑲} {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type} (RA : forall K, Rel (AT K) (A K)) {f w fs k}
+      (compatf : RefineCompat (RForall RA) f w fs) : RefineCompat (RA k) (f k) w (fs k) :=
+      @MkRefineCompat _ _ (RA k) _ _ _ (@RefineCompatAssumption _ _ _ _ _ _ compatf)%I _.
+    Next Obligation.
+      iIntros (𝑲 AT A RA f w fs k compatf) "Hcf".
+      now iApply (@refine_compat_lemma _ _ (RForall RA) _ _ _ compatf with "Hcf").
+    Qed.
+
+    #[export] Instance refine_compat_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} {v} {w1 w2} {ω : Acc w1 w2} {t} :
+      RefineCompat (RInst AT A) v w2 (persist t ω) :=
+      MkRefineCompat _ _ _ (refine_inst_persist v w1 w2 ω t).
+
+    #[export] Instance refine_compat_inst_persist_term {σ} {v} {w1 w2} {ω : Acc w1 w2} {t} :
+      RefineCompat (RVal σ) v w2 (persist__term t ω) :=
+      MkRefineCompat _ _ _ (refine_inst_persist v w1 w2 ω t).
+
+    (* #[export] Instance refine_compat_rnenv_sub_acc {Σ : LCtx} {ι : Valuation Σ} {w : World} {ω2 : wlctx Σ ⊒ w} : *)
+    (*   RefineCompat (RNEnv LVar Σ) ι w (sub_acc ω2) := *)
+    (*   MkRefineCompat _ _ _ refine_rnenv_sub_acc. *)
+
+    #[export] Instance refine_lift `{InstLift AT A} {w : World} (a : A) :
+      RefineCompat (RInst AT A) a w (lift a) :=
+      MkRefineCompat _ _ _ (refine_lift a).
+
+    #[export] Instance refine_compat_term_val {σ} {v w} : RefineCompat (RVal σ) v w (term_val σ v) :=
+      MkRefineCompat _ _ _ refine_term_val.
+
+    #[export] Instance refine_compat_term_binop {w τ1 τ2 τ3} {op : BinOp τ1 τ2 τ3} {a1 sa1 a2 sa2}:
+        RefineCompat (RVal τ3) (bop.eval op a1 a2)  w (term_binop op sa1 sa2) :=
+      MkRefineCompat _ _ _ refine_term_binop.
+
+    #[export] Instance refine_compat_formula_bool {w : World} {v} {sv : Term w ty.bool} :
+      RefineCompat RFormula (v = true) w (formula_bool sv) :=
+      MkRefineCompat _ _ _ refine_formula_bool.
+
+      #[export] Instance refine_compat_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ}:
+        RefineCompat RFormula (bop.eval_relop_prop relop v1 v2) w (formula_relop relop sv1 sv2) :=
+        MkRefineCompat _ _ _ refine_formula_relop.
+
+      #[export] Instance refine_compat_chunk_ptsreg {w σ} {pc a ta} : 
+        RefineCompat RChunk (scchunk_ptsreg pc a) w(chunk_ptsreg (σ := σ) pc ta) :=
+        MkRefineCompat _ _ _ refine_chunk_ptsreg.
+
+    #[export] Instance refine_compat_chunk_user {w c vs svs} :
+      RefineCompat RChunk (scchunk_user c vs) w (chunk_user c svs) :=
+      MkRefineCompat _ _ _ refine_chunk_user.
+    
+    #[export] Instance refine_compat_env_snoc {Δ : Ctx Ty} {τ} {w : World} {vs : Env Val Δ} {svs : Env (Term w) Δ} {v : Val τ} {sv : Term w τ} :
+      RefineCompat (REnv (Δ ▻ τ)) (vs ► ( τ ↦ v ))%env w (svs ► (τ ↦ sv ))%env :=
+      MkRefineCompat _ _ _ refine_env_snoc.
+
+    #[export] Instance refine_compat_sub_snoc {τ : Ty} {Γ : LCtx} {x : LVar}
+        {w : World} {vs : NamedEnv Val Γ} {svs : NamedEnv (Term w) Γ}
+        {v : Val τ} {sv : Term w τ} :
+      RefineCompat (RNEnv LVar (Γ ▻ x∷τ)) (vs.[x∷τ ↦ v])%env w (sub_snoc svs (x∷τ) sv) :=
+      MkRefineCompat _ _ _ refine_sub_snoc.
+
+    #[export] Instance refine_compat_env_nil {w : World} {vs : Env Val [ctx]} {svs : Env (Term w) [ctx]} :
+        RefineCompat (REnv [ctx]) vs  w svs :=
+      MkRefineCompat _ _ _ refine_env_nil.
+
+    Lemma refine_block {Γ1 Γ2} `{R : Rel AT A} {w : World} :
+      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R⟧ CStoreSpec.block (SStoreSpec.block (w := w)).
+    Proof.
+      iIntros (k ks) "Hk".
+      iIntros (s ss) "Hs".
+      iIntros (h hs) "Hh _".
+      now iPureIntro.
+    Qed.
+
+    Lemma refine_error `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} {w : World} :
       forall (cm : CStoreSpec Γ1 Γ2 A),
-        ℛ⟦RMsg _ (RStoreSpec Γ1 Γ2 R)⟧ SStoreSpec.error cm.
-    Proof. intros cm w ι Hpc msg POST__s POST__c HPOST δs δc Hδ hs hc Hh []. Qed.
+        ⊢ ℛ⟦RMsg _ (RStoreSpec Γ1 Γ2 R)⟧ cm (SStoreSpec.error (w := w)).
+    Proof.
+      iIntros (cm msg k ks) "Hk".
+      iIntros (s ss) "Hs".
+      iIntros (h hs) "Hh []".
+    Qed.
 
-    Lemma refine_pure `{R : Rel AT A} {Γ} :
-      ℛ⟦R -> RStoreSpec Γ Γ R⟧ SStoreSpec.pure CStoreSpec.pure.
+    (* #[export] Program Instance refine_compat_msg `{R : Rel AT A} {M v w vs} *)
+    (*   (compatf : forall RefineCompat R v w (vs msg)) : RefineCompat (RMsg M R) v w vs := *)
+    (*   @MkRefineCompat _ _ (RMsg M R) _ _ _ (RefineCompatAssumption compatf)%I _. *)
+    (* Next Obligation. *)
+    (*   iIntros (AT A R M v w vs msg compatf) "Hcf %msg2". *)
+    (*   iApply (@refine_compat_lemma _ _ R _ _ _ compatf with "Hcf"). *)
+    (* Qed. *)
+
+
+    Lemma refine_pure `{R : Rel AT A} {Γ} {w : World} :
+      ⊢ ℛ⟦R -> RStoreSpec Γ Γ R⟧ CStoreSpec.pure (SStoreSpec.pure (w := w)).
     Proof.
       unfold SStoreSpec.pure, CStoreSpec.pure.
-      intros w ι Hpc t v Htv POST__s POST__c HPOST.
-      eapply refine_apply; eauto.
-      eapply refine_T; eauto.
+      iIntros (r rs) "Hr".
+      iIntros (k ks) "Hk".
+      iIntros (s ss) "Hs".
+      iIntros (h hs) "Hh HPS".
+      iMod "Hk".
+      now iApply ("Hk" with "Hr Hs Hh HPS").
     Qed.
 
-    Lemma refine_bind `{RA : Rel AT A, RB : Rel BT B} {Γ1 Γ2 Γ3} :
-      forall (w : World) (ι : Valuation w),
-        ℛ⟦RStoreSpec Γ1 Γ2 RA -> □(RA -> RStoreSpec Γ2 Γ3 RB) -> RStoreSpec Γ1 Γ3 RB⟧@{ι}
-          (SStoreSpec.bind (w := w)) CStoreSpec.bind.
+    Lemma refine_bind `{RA : Rel AT A, RB : Rel BT B} {Γ1 Γ2 Γ3} {w : World} :
+      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 RA -> □ᵣ(RA -> RStoreSpec Γ2 Γ3 RB) -> RStoreSpec Γ1 Γ3 RB⟧
+        CStoreSpec.bind (SStoreSpec.bind (w := w)).
     Proof.
       unfold SStoreSpec.bind, CStoreSpec.bind.
-      intros w ι ms mc Hm fs fc Hf POST__s POST__c HPOST δs δc Hδ hs hc Hh.
-      apply Hm; eauto. intros w1 r01 ι1 Hι1 Hpc1 t v Htv.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      eapply refine_four; eauto.
+      iIntros (m ms) "Hm".
+      iIntros (c cs) "Hc".
+      iIntros (k ks) "Hk".
+      iIntros (s ss) "Hs".
+      iIntros (h hs) "Hh HPS".
+      iApply ("Hm" with "[Hk Hc] Hs Hh HPS").
+      iIntros (w' ω).
+      iModIntro.
+      iIntros (a aas) "Ha".
+      iIntros (s2 s2s) "Hs".
+      iIntros (h2 h2s) "Hh".
+      iApply ("Hc" with "Ha [Hk] Hs Hh").
+      now iApply refine_four.
     Qed.
 
-    Lemma refine_bind' `{RA : Rel AT A, RB : Rel BT B} {Γ1 Γ2 Γ3} :
-      ℛ⟦RStoreSpec Γ1 Γ2 RA -> □(RA -> RStoreSpec Γ2 Γ3 RB) -> RStoreSpec Γ1 Γ3 RB⟧
-        SStoreSpec.bind CStoreSpec.bind.
-    Proof. intros ? ? _. apply refine_bind. Qed.
-
-    Lemma refine_angelic (x : option LVar) {Γ} :
-      ℛ⟦∀ σ, RStoreSpec Γ Γ (RVal σ)⟧ (SStoreSpec.angelic x) CStoreSpec.angelic.
+    Lemma refine_angelic (x : option LVar) {Γ} {w : World} :
+      ⊢ ℛ⟦∀ᵣ σ, RStoreSpec Γ Γ (RVal σ)⟧ CStoreSpec.angelic (SStoreSpec.angelic (w := w) x).
     Proof.
       unfold SStoreSpec.angelic, CStoreSpec.angelic.
-      intros w ι Hpc σ. apply refine_lift_purem; auto.
-      apply RPureSpec.refine_angelic; auto.
+      iIntros (σ).
+      iApply (refine_lift_purem (RVal σ)).
+      now iApply PureSpec.refine_angelic.
     Qed.
 
-    Lemma refine_demonic (x : option LVar) {Γ} :
-      ℛ⟦∀ σ, RStoreSpec Γ Γ (RVal σ)⟧ (SStoreSpec.demonic x) CStoreSpec.demonic.
+    Lemma refine_demonic (x : option LVar) {Γ} {w : World} :
+      ⊢ ℛ⟦∀ᵣ σ, RStoreSpec Γ Γ (RVal σ)⟧ CStoreSpec.demonic (SStoreSpec.demonic (w := w) x).
     Proof.
       unfold SStoreSpec.demonic, CStoreSpec.demonic.
-      intros w ι Hpc σ. apply refine_lift_purem; auto.
-      apply RPureSpec.refine_demonic; auto.
+      iIntros (σ).
+      iApply (refine_lift_purem (RVal σ)).
+      now iApply PureSpec.refine_demonic.
     Qed.
 
-    Lemma refine_angelic_ctx {N : Set} {n : N -> LVar} {Γ} :
-      ℛ⟦∀ Δ, RStoreSpec Γ Γ (RNEnv Δ)⟧
-        (SStoreSpec.angelic_ctx n) CStoreSpec.angelic_ctx.
+    Lemma refine_angelic_ctx {N : Set} {n : N -> LVar} {Γ} {w} :
+      ⊢ ℛ⟦∀ᵣ Δ, RStoreSpec Γ Γ (RNEnv N Δ)⟧
+        CStoreSpec.angelic_ctx (SStoreSpec.angelic_ctx (w := w) n).
     Proof.
       unfold SStoreSpec.angelic_ctx, CStoreSpec.angelic_ctx.
-      intros w ι Hpc Δ. apply refine_lift_purem; auto.
-      apply RPureSpec.refine_angelic_ctx; auto.
+      iIntros (Δ).
+      iApply (refine_lift_purem (RNEnv N Δ)).
+      iApply refine_angelic_ctx.
     Qed.
 
-    Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} {Γ} :
-      ℛ⟦∀ Δ, RStoreSpec Γ Γ (RNEnv Δ)⟧
-        (SStoreSpec.demonic_ctx n) CStoreSpec.demonic_ctx.
+    Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} {Γ} {w} :
+      ⊢ ℛ⟦∀ᵣ Δ, RStoreSpec Γ Γ (RNEnv N Δ)⟧
+        CStoreSpec.demonic_ctx (SStoreSpec.demonic_ctx (w := w) n).
     Proof.
       unfold SStoreSpec.demonic_ctx, CStoreSpec.demonic_ctx.
-      intros w ι Hpc Δ. apply refine_lift_purem; auto.
-      apply RPureSpec.refine_demonic_ctx; auto.
+      iIntros (Δ).
+      iApply (refine_lift_purem (RNEnv N Δ)).
+      iApply refine_demonic_ctx.
     Qed.
 
-    Lemma refine_debug {AT A} `{R : Rel AT A}
-      {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0)
-          (Hpc : instprop (wco w0) ι0) f ms mc :
-      ℛ⟦RStoreSpec Γ1 Γ2 R⟧@{ι0} ms mc ->
-      ℛ⟦RStoreSpec Γ1 Γ2 R⟧@{ι0} (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms) mc.
+    Lemma refine_debug `{R : Rel AT A}
+      {Γ1 Γ2} {w0 : World} {f ms mc} :
+      ℛ⟦RStoreSpec Γ1 Γ2 R⟧ mc ms ⊢
+                   ℛ⟦RStoreSpec Γ1 Γ2 R⟧ mc (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms).
     Proof.
-      intros Hap POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0.
-      intros [HP]. revert HP. apply Hap; auto.
+      iIntros "Hm %K %Ks HK %s %ss Hs %h %hs Hh HSP".
+      iApply ("Hm" with "HK Hs Hh [HSP]").
+      now iApply elim_debugPred.
     Qed.
 
-    Lemma refine_angelic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} :
-      ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧
-        SStoreSpec.angelic_binary CStoreSpec.angelic_binary.
+    Lemma refine_angelic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
+      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧
+        CStoreSpec.angelic_binary (SStoreSpec.angelic_binary (w := w)).
     Proof.
-      intros w ι Hpc ms1 mc1 Hm1 ms2 mc2 Hm2.
-      intros POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0.
+      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %K %Ks #HK %s %ss #Hs %h %hs #Hh".
       unfold SStoreSpec.angelic_binary, CStoreSpec.angelic_binary.
-      apply refine_symprop_angelic_binary; auto.
-      apply Hm1; auto. apply Hm2; auto.
+      iApply (refine_symprop_angelic_binary with "[Hc1] [Hc2]").
+      - now iApply "Hc1".
+      - now iApply "Hc2".
     Qed.
 
-    Lemma refine_demonic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} :
-      ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧
-        SStoreSpec.demonic_binary CStoreSpec.demonic_binary.
+    Lemma refine_demonic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
+      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧
+        CStoreSpec.demonic_binary (SStoreSpec.demonic_binary (w := w)).
     Proof.
-      intros w ι Hpc ms1 mc1 Hm1 ms2 mc2 Hm2.
-      intros POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0.
+      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %K %Ks #HK %s %ss #Hs %h %hs #Hh".
       unfold SStoreSpec.angelic_binary, CStoreSpec.angelic_binary.
-      apply refine_symprop_demonic_binary; auto.
-      apply Hm1; auto. apply Hm2; auto.
+      iApply (refine_symprop_demonic_binary with "[Hc1] [Hc2]").
+      - now iApply "Hc1".
+      - now iApply "Hc2".
     Qed.
 
-  End Basics.
+    Section BasicsCompatLemmas.
+      Import logicalrelation.
+
+      #[export] Instance refine_compat_block {Γ1 Γ2} `{R : Rel AT A} {w : World} :
+        RefineCompat (RStoreSpec Γ1 Γ2 R) CStoreSpec.block w (SStoreSpec.block (w := w)) :=
+        MkRefineCompat _ _ _ refine_block.
+
+      #[export] Instance refine_compat_pure {Γ : PCtx} `{R : Rel AT A} {w} : RefineCompat (R -> RStoreSpec Γ Γ R) CStoreSpec.pure w (SStoreSpec.pure (w := w)) :=
+        MkRefineCompat _ _ _ (refine_pure (R := R)).
+
+      #[export] Instance refine_compat_bind {Γ1 Γ2 Γ3 : PCtx} `{RA : Rel AT A} `{RB : Rel BT B} {w} : RefineCompat (RStoreSpec Γ1 Γ2 RA -> (□ᵣ (RA -> RStoreSpec Γ2 Γ3 RB)) -> RStoreSpec Γ1 Γ3 RB) CStoreSpec.bind w (SStoreSpec.bind (w := w)) :=
+        MkRefineCompat _ _ _ refine_bind.
+
+      #[export] Program Instance refine_compat_angelic (x : option LVar) {Γ} {w : World} {σ}:
+        RefineCompat (RStoreSpec Γ Γ (RVal σ)) (CStoreSpec.angelic σ) w (SStoreSpec.angelic (w := w) x σ) := 
+        MkRefineCompat _ _ _ (RefineCompatAssumption := True%I) _.
+      Next Obligation.
+        iIntros (? ? ? ?) "_".
+        iApply refine_angelic.
+      Qed.
+
+      #[export] Program Instance refine_compat_demonic (x : option LVar) {Γ} {w : World} {σ} :
+        RefineCompat (RStoreSpec Γ Γ (RVal σ)) (CStoreSpec.demonic σ) w (SStoreSpec.demonic (w := w) x σ) :=
+        MkRefineCompat _ _ _ (RefineCompatAssumption := True%I)_.
+      Next Obligation.
+        iIntros (? ? ? ?) "_".
+        iApply refine_demonic.
+      Qed.
+
+      #[export] Program Instance refine_compat_angelic_ctx {N : Set} {n : N -> LVar} {Γ} {w} {Δ}:
+        RefineCompat (RStoreSpec Γ Γ (RNEnv N Δ)) (CStoreSpec.angelic_ctx Δ) w (SStoreSpec.angelic_ctx (w := w) n Δ) :=
+        MkRefineCompat _ _ _ (RefineCompatAssumption := True%I) _.
+      Next Obligation. 
+        iIntros (N n Γ w Δ) "_".
+        now iApply refine_angelic_ctx.
+      Qed.
+
+      #[export] Program Instance refine_compat_demonic_ctx {N : Set} {n : N -> LVar} {Γ} {w} {Δ} :
+        RefineCompat (RStoreSpec Γ Γ (RNEnv N Δ)) (CStoreSpec.demonic_ctx Δ) w (SStoreSpec.demonic_ctx (w := w) n Δ) :=
+        MkRefineCompat _ _ _ (RefineCompatAssumption := True%I) _.
+      Next Obligation. 
+        iIntros (N n Γ w Δ) "_".
+        now iApply refine_demonic_ctx.
+      Qed.
+
+      #[export] Instance refine_compat_debug `{R : Rel AT A} {Γ1 Γ2} {w0 : World} {f} {mc ms} :
+        RefineCompat (RStoreSpec Γ1 Γ2 R) mc w0 (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms) :=
+        MkRefineCompat _ _ _ refine_debug.
+      Arguments refine_compat_debug /.
+
+      #[export] Instance refine_compat_angelic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
+        RefineCompat (RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R) CStoreSpec.angelic_binary w (SStoreSpec.angelic_binary (w := w)) :=
+        MkRefineCompat _ _ _ refine_angelic_binary.
+
+      #[export] Instance refine_compat_demonic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
+        RefineCompat (RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R) CStoreSpec.demonic_binary w (SStoreSpec.demonic_binary (w := w)) :=
+        MkRefineCompat _ _ _ refine_demonic_binary.
+
+      #[export] Instance refine_compat_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
+        RefineCompat (RInst (Sub Σ) (Valuation Σ) -> RInst T A) (inst vs) w (subst vs) :=
+        MkRefineCompat _ _ _ (refine_inst_subst vs).
+
+      #[export] Instance refine_compat_inst_subst2 {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
+        RefineCompat (RNEnv LVar Σ -> RInst T A) (inst vs) w (subst vs) :=
+        MkRefineCompat _ _ _ (refine_inst_subst vs).
+
+      #[export] Instance refine_compat_inst_subst3 {Δ Σ} (vs : SStore Δ Σ) {w : World} :
+        RefineCompat (RNEnv LVar Σ -> RInst (SStore Δ) (CStore Δ)) (inst vs) w (subst vs) :=
+        MkRefineCompat _ _ _ (refine_inst_subst vs).
+    End BasicsCompatLemmas.
+
+    Import iris.proofmode.environments.
+
+    #[export] Ltac rsolve_step :=
+      first [
+           (match goal with
+            | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
+            | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
+            | |- envs_entails _ (ℛ⟦RStoreSpec _ _ ?R⟧ _ (SStoreSpec.error _)) => iApply (refine_error (R := R))
+            end)
+         | match goal with
+           | |- envs_entails _ (ℛ⟦ ?R ⟧ ?v ?vs) => 
+               unshelve (iApply (refine_compat_lemma (R := R) (vs := vs)));
+               lazymatch goal with | |- RefineCompat _ _ _ _ => solve [once (typeclasses eauto)] | _ => idtac end;
+               cbn;
+               rewrite ?bi.emp_sep
+           | |- envs_entails _ (_ ∗ _) => iSplit
+           | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
+           end
+      ].
+
+    #[export] Ltac rsolve :=
+      iStartProof;
+      repeat (rsolve_step; try done)
+      ;
+        (* After walking through the symbolic computation using the above lemmas,
+         * we try to apply induction hypotheses.
+         * To do this, we determine the right world to apply the IH in by looking at the current goal. 
+         *)
+        repeat match goal with
+          | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
+          | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
+          | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
+          end.
 
   Section AssumeAssert.
-
-    Lemma refine_assume_formula {Γ} :
-      ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
-        SStoreSpec.assume_formula CStoreSpec.assume_formula.
+    Import logicalrelation.
+    Import logicalrelation.notations.
+    
+    Lemma refine_assume_formula {Γ} {w} :
+      ⊢ ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.assume_formula (SStoreSpec.assume_formula (w := w)).
     Proof.
       unfold SStoreSpec.assume_formula, CStoreSpec.assume_formula.
-      intros w ι Hpc P p Hp. apply refine_lift_purem; auto.
-      apply RPureSpec.refine_assume_formula; auto.
+      iIntros (fml fmls) "Hfml %K %Ks HK %s %ss Hs %h %hs Hh".
+      iApply (refine_lift_purem with "[Hfml] HK Hs Hh").
+      iApply (PureSpec.refine_assume_formula with "Hfml").
     Qed.
 
-    Lemma refine_assert_formula {Γ} :
-      ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
-        SStoreSpec.assert_formula CStoreSpec.assert_formula.
+    Lemma refine_assert_formula {Γ} {w} :
+      ⊢ ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.assert_formula (SStoreSpec.assert_formula (w := w)).
     Proof.
-      intros w ι Hpc P p Hp.
       unfold SStoreSpec.assert_formula, CStoreSpec.assert_formula.
-      intros POST__s POST__c HPOST δs δc Hδ hs hc Hh.
-      apply refine_lift_purem; auto.
-      now apply RPureSpec.refine_assert_formula.
+      iIntros (fml fmls) "Hfml %K %Ks HK %s %ss Hs %h %hs Hh".
+      iApply (refine_lift_purem with "[Hfml] HK Hs Hh").
+      iApply (PureSpec.refine_assert_formula with "Hfml").
     Qed.
 
-    Lemma refine_assert_pathcondition {Γ} :
-      ℛ⟦RPathCondition -> RStoreSpec Γ Γ RUnit⟧
-        SStoreSpec.assert_pathcondition CStoreSpec.assert_formula.
+    Lemma refine_assert_pathcondition {Γ} {w} :
+      ⊢ ℛ⟦RPathCondition -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.assert_formula (SStoreSpec.assert_pathcondition (w := w)).
     Proof.
-      intros w ι Hpc Ps ps Hps POST__s POST__c HPOST δs δc Hδ hs hc Hh.
-      apply refine_lift_purem; auto.
-      now apply RPureSpec.refine_assert_pathcondition.
+      iIntros (pc pcs) "Hpc %K %Ks HK %δ %δs Hδ %h %hs Hh".
+      iApply (refine_lift_purem with "[Hpc] HK Hδ Hh").
+      now iApply PureSpec.refine_assert_pathcondition.
     Qed.
 
-    Lemma refine_assert_eq_nenv {N Γ} (Δ : NCtx N Ty) :
-      ℛ⟦RNEnv Δ -> RNEnv Δ -> RStoreSpec Γ Γ RUnit⟧
-        SStoreSpec.assert_eq_nenv CStoreSpec.assert_eq_nenv.
+    Lemma refine_assert_eq_nenv {N Γ} (Δ : NCtx N Ty) {w} :
+      ⊢ ℛ⟦RNEnv N Δ -> RNEnv N Δ -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.assert_eq_nenv (SStoreSpec.assert_eq_nenv (w := w)).
     Proof.
-      intros w ι Hpc E1 ? ? E2 ? ? POST__s POST__c HPOST δs δc Hδ hs hc Hh.
-      unfold SStoreSpec.assert_eq_nenv, CStoreSpec.assert_eq_nenv.
-      apply refine_lift_purem; auto.
-      apply RPureSpec.refine_assert_eq_nenv; auto.
+      iIntros (E1 sE1) "HE1 %E2 %sE2 HE2 %K %sK HK %δ %sδ Hδ %h %sh Hh".
+      iApply (refine_lift_purem RUnit $! _ _ with "[HE1 HE2] HK Hδ Hh").
+      now iApply (PureSpec.refine_assert_eq_nenv with "HE1 HE2").
     Qed.
 
   End AssumeAssert.
 
+  Section AssumeAssertCompatLemmas.
+    Import logicalrelation.
+
+    #[export] Instance refine_compat_assume_formula {Γ} {w} :
+    RefineCompat (RFormula -> RStoreSpec Γ Γ RUnit) CStoreSpec.assume_formula w (SStoreSpec.assume_formula (w := w)) :=
+    MkRefineCompat _ _ _ refine_assume_formula.
+
+    #[export] Instance refine_compat_assert_formula {Γ} {w} :
+    RefineCompat (RFormula -> RStoreSpec Γ Γ RUnit) CStoreSpec.assert_formula w (SStoreSpec.assert_formula (w := w)) :=
+    MkRefineCompat _ _ _ refine_assert_formula.
+
+    #[export] Instance refine_compat_assert_pathcondition {Γ} {w} :
+    RefineCompat (RPathCondition -> RStoreSpec Γ Γ RUnit) CStoreSpec.assert_formula w (SStoreSpec.assert_pathcondition (w := w)) :=
+    MkRefineCompat _ _ _ refine_assert_pathcondition.
+
+    #[export] Instance refine_compat_assert_eq_nenv {N Γ} (Δ : NCtx N Ty) {w} :
+      RefineCompat (RNEnv N Δ -> RNEnv N Δ -> RStoreSpec Γ Γ RUnit) CStoreSpec.assert_eq_nenv w (SStoreSpec.assert_eq_nenv (w := w)) :=
+      MkRefineCompat _ _ _ (refine_assert_eq_nenv Δ).
+
+  End AssumeAssertCompatLemmas.
+
   Section PatternMatching.
+    Import logicalrelation.
 
-    Lemma refine_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
-      ℛ⟦RVal σ -> RStoreSpec Γ Γ (RMatchResult pat)⟧
-        (SStoreSpec.demonic_pattern_match n pat)
-        (CStoreSpec.demonic_pattern_match pat).
+    Lemma refine_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) {w} :
+      ⊢ ℛ⟦RVal σ -> RStoreSpec Γ Γ (RMatchResult pat)⟧
+        (CStoreSpec.demonic_pattern_match pat)
+        (SStoreSpec.demonic_pattern_match (w := w) n pat).
     Proof.
-      intros w ι Hpc sv cv rv sΦ cΦ rΦ sδ cδ rδ sh ch rh.
+      iIntros (v sv) "rv %Φ %sΦ rΦ %δ %sδ rδ %h %sh rh".
       unfold SStoreSpec.demonic_pattern_match, CStoreSpec.demonic_pattern_match, CStoreSpec.lift_purem.
-      apply RPureSpec.refine_demonic_pattern_match; auto.
-      intros w1 θ1 ι1 Heq1 Hpc1 smr cmr rmr. apply rΦ; auto.
-      eapply refine_inst_persist; eauto.
-      eapply refine_inst_persist; eauto.
+      iApply (PureSpec.refine_demonic_pattern_match with "rv").
+      iIntros (w1 θ1) "!> %mr %smr rmr".
+      iApply ("rΦ" with "rmr [rδ] [rh]").
+      - iApply (refine_inst_persist with "rδ").
+      - rewrite !RList_RInst.
+        iApply (refine_inst_persist with "rh").
     Qed.
-
   End PatternMatching.
 
+  Section PatternMatchingCompatLemmas.
+    Import logicalrelation.
+
+    #[export] Instance refine_compat_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) {w} :
+      RefineCompat (RVal σ -> RStoreSpec Γ Γ (RMatchResult pat)) (CStoreSpec.demonic_pattern_match pat) w (SStoreSpec.demonic_pattern_match (w := w) n pat) :=
+      MkRefineCompat _ _ _ (refine_demonic_pattern_match n pat).
+  End PatternMatchingCompatLemmas.
+
   Section State.
-
-    Lemma refine_pushpop `{R : Rel AT A} {Γ1 Γ2 x σ} :
-      ℛ⟦RVal σ -> RStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) R -> RStoreSpec Γ1 Γ2 R⟧
-        SStoreSpec.pushpop CStoreSpec.pushpop.
+    Import logicalrelation.
+    Lemma refine_pushpop `{R : Rel AT A} {Γ1 Γ2 x σ} {w} :
+      ⊢ ℛ⟦RVal σ -> RStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) R -> RStoreSpec Γ1 Γ2 R⟧
+        CStoreSpec.pushpop (SStoreSpec.pushpop (w := w)).
     Proof.
-      intros w0 ι0 Hpc0 t v Htv ms mc Hm.
+      iIntros (v sv) "Hv %m %sm Hm %K %sK HK %δ %sδ Hδ %h %sh Hh".
       unfold SStoreSpec.pushpop, CStoreSpec.pushpop.
-      intros POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh0.
-      apply Hm; eauto.
-      - intros w1 r01 ι1 Hι1 Hpc1 a1 a Ha δs1 δc1 -> hs1 hc1 Hh1.
-        apply HPOST; auto. now destruct (env.view δs1).
-      - now apply refine_env_snoc.
+      iApply ("Hm" with "[HK] [Hδ Hv] Hh").
+      - clear.
+        iIntros (w2 ω2) "!> %v %sv Hv %δ %sδ Hδ".
+        iApply ("HK" with "Hv").
+        iApply (repₚ_cong (T1 := SStore (Γ2 ▻ x∷σ)) (T2 := SStore Γ2) env.tail env.tail with "Hδ").
+        intros. now env.destroy vs1.
+      - iApply (repₚ_cong₂ (T1 := SStore Γ1) (T2 := STerm σ) (T3 := SStore (Γ1 ▻ x∷σ)) (fun δ v => δ.[x∷σ ↦ v]) (w := w) (fun δ v => δ.[x∷σ ↦ v]) with "[$Hδ $Hv]").
+        now intros.
     Qed.
 
-    Lemma refine_pushspops `{R : Rel AT A} {Γ1 Γ2 Δ} :
-      ℛ⟦RStore Δ -> RStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) R -> RStoreSpec Γ1 Γ2 R⟧
-        SStoreSpec.pushspops CStoreSpec.pushspops.
+    Lemma refine_pushspops `{R : Rel AT A} {Γ1 Γ2 Δ} {w} :
+      ⊢ ℛ⟦RStore Δ -> RStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) R -> RStoreSpec Γ1 Γ2 R⟧
+        CStoreSpec.pushspops (SStoreSpec.pushspops (w := w)).
     Proof.
-      intros w0 ι0 Hpc0 ts vs -> ms mc Hm.
-      intros POST__s POST__c HPOST δs0 δc0 -> hs0 hc0 Hh0.
+      iIntros (c sc) "Hc %m %sm Hm %K %sK HK %δ %sδ Hδ %h %sh Hh".
       unfold SStoreSpec.pushspops, CStoreSpec.pushspops.
-      apply Hm; auto.
-      - intros w1 ω01 ι1 Hι1 Hpc1 a1 a Ha δs1 δc1 -> hs1 hc1 Hh1.
-        apply HPOST; auto.
-        destruct (env.catView δs1).
-        unfold inst, inst_store, inst_env at 1.
-        rewrite <- env.map_drop.
-        rewrite ?env.drop_cat.
-        reflexivity.
-      - cbn.
-        unfold inst, inst_store, inst_env at 3.
-        now rewrite env.map_cat.
+      iApply ("Hm" with "[HK] [Hδ Hc] Hh").
+      - iIntros (w1 ω1) "!> %v %sv Hv %δ1 %sδ1 Hδ1 %h1 %sh1 Hh1".
+        iApply ("HK" with "Hv [Hδ1] Hh1").
+        iApply (repₚ_cong (T1 := SStore (Γ2 ▻▻ Δ)) (T2 := SStore Γ2) (env.drop Δ) (env.drop Δ) with "Hδ1").
+        intros. env.destroy vs1.
+        now rewrite inst_env_cat !env.drop_cat.
+      - iApply (repₚ_cong₂ (T1 := SStore Γ1) (T2 := SStore Δ) (T3 := SStore (Γ1 ▻▻ Δ)) env.cat env.cat with "[$Hδ $Hc]").
+        intros; now rewrite inst_env_cat.
     Qed.
 
-    Lemma refine_get_local {Γ} :
-      ℛ⟦RStoreSpec Γ Γ (RStore Γ)⟧
-        SStoreSpec.get_local CStoreSpec.get_local.
+    Lemma refine_get_local {Γ} {w} :
+      ⊢ ℛ⟦RStoreSpec Γ Γ (RStore Γ)⟧ CStoreSpec.get_local (SStoreSpec.get_local (w := w)).
     Proof.
-      intros w ι Hpc POST__s POST__c HPOST.
-      intros δs0 δc0 Hδ hs0 hc0 Hh0.
+      iIntros (K sK) "HK %δ %sδ #Hδ %h %sh Hh".
       unfold SStoreSpec.get_local, CStoreSpec.get_local.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      apply refine_T; eauto.
+      now iApply (refine_T with "HK Hδ Hδ Hh").
     Qed.
 
-    Lemma refine_put_local {Γ1 Γ2} :
-      ℛ⟦RStore Γ2 -> RStoreSpec Γ1 Γ2 RUnit⟧
-        SStoreSpec.put_local CStoreSpec.put_local.
+    #[export] Instance refine_compat_get_local {Γ} {w} :
+      RefineCompat (RStoreSpec Γ Γ (RStore Γ)) CStoreSpec.get_local w (SStoreSpec.get_local (w := w)) :=
+      MkRefineCompat _ _ _ refine_get_local.
+
+    Lemma refine_put_local {Γ1 Γ2} {w} :
+      ⊢ ℛ⟦RStore Γ2 -> RStoreSpec Γ1 Γ2 RUnit⟧
+        CStoreSpec.put_local (SStoreSpec.put_local (w := w)).
     Proof.
-      intros w ι Hpc δs2 δc2 Hδ2 POST__s POST__c HPOST.
-      intros δs0 δc0 Hδ hs0 hc0 Hh0.
+      iIntros (δ2 sδ2) "Hδ2 %K %sK HK %δ %sδ Hδ %h %sh Hh".
       unfold SStoreSpec.put_local, CStoreSpec.put_local.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      apply refine_T; eauto.
-      reflexivity.
+      iApply (refine_T with "HK [//] Hδ2 Hh").
     Qed.
 
-    Lemma refine_peval {w : World} {ι : Valuation w} {σ} t v :
-      ℛ⟦RVal σ⟧@{ι} t v -> ℛ⟦RVal σ⟧@{ι} (peval t) v.
-    Proof. intros ->. symmetry. apply peval_sound. Qed.
+    #[export] Instance refine_compat_put_local {Γ1 Γ2} {w} :
+      RefineCompat (RStore Γ2 -> RStoreSpec Γ1 Γ2 RUnit) CStoreSpec.put_local w (SStoreSpec.put_local (w := w)) :=
+      MkRefineCompat _ _ _ refine_put_local.
 
-    Lemma refine_eval_exp {Γ σ} (e : Exp Γ σ) :
-      ℛ⟦RStoreSpec Γ Γ (RVal σ)⟧ (SStoreSpec.eval_exp e) (CStoreSpec.eval_exp e).
+    Lemma refine_peval {w : World} {σ} (t : STerm σ w) v :
+      ℛ⟦RVal σ⟧ v t ⊢ ℛ⟦RVal σ⟧ v (peval t).
+    Proof. unfold RVal, RInst. crushPredEntails3. now rewrite peval_sound. Qed.
+
+    Lemma refine_seval_exp {Γ σ} (e : Exp Γ σ) {w : World} {δ} {sδ : SStore Γ w} :
+      ℛ⟦ RStore Γ ⟧ δ sδ ⊢ ℛ⟦RVal σ⟧ (B.eval e δ) (seval_exp sδ e).
     Proof.
-      intros w ι Hpc POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh.
+      unfold RStore, RVal, RInst. crushPredEntails3.
+      rewrite <-eval_exp_inst.
+      now subst.
+    Qed.
+
+    Lemma refine_seval_exps {Γ Δ : PCtx} {es : NamedEnv (Exp Γ) Δ} {w : World} {δ : CStore Γ} {sδ : SStore Γ w} :
+      ℛ⟦RStore Γ⟧ δ sδ ⊢ ℛ⟦RStore Δ⟧ (evals es δ) (seval_exps sδ es).
+    Proof.
+      unfold RStore, RInst; cbn.
+      crushPredEntails3.
+      unfold seval_exps, inst, inst_store, inst_env, evals.
+      rewrite env.map_map.
+      apply env.map_ext.
+      intros.
+      rewrite peval_sound.
+      now apply refine_seval_exp.
+    Qed.
+       
+    Lemma refine_eval_exp {Γ σ} (e : Exp Γ σ) {w} :
+        ⊢ ℛ⟦RStoreSpec Γ Γ (RVal σ)⟧ (CStoreSpec.eval_exp e) (SStoreSpec.eval_exp (w := w) e).
+    Proof.
+      iIntros (K sK) "HK %δ0 %sδ0 #Hδ0 %h0 %sh0 Hh0".
       unfold SStoreSpec.eval_exp, CStoreSpec.eval_exp.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      apply refine_T; eauto.
-      apply refine_peval.
-      cbn. rewrite <- eval_exp_inst.
-      f_equal. exact Hδ0.
+      iApply (refine_T with "HK [Hδ0] Hδ0 Hh0").
+      iApply refine_peval.
+      now iApply refine_seval_exp.
     Qed.
 
-    Lemma refine_eval_exps {Γ Δ} (es : NamedEnv (Exp Γ) Δ) :
-      ℛ⟦RStoreSpec Γ Γ (RStore Δ)⟧
-        (SStoreSpec.eval_exps es) (CStoreSpec.eval_exps es).
+    Lemma refine_eval_exps {Γ Δ} (es : NamedEnv (Exp Γ) Δ) {w} :
+      ⊢ ℛ⟦RStoreSpec Γ Γ (RStore Δ)⟧
+        (CStoreSpec.eval_exps es) (SStoreSpec.eval_exps (w := w) es).
     Proof.
-      intros w ι Hpc POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh.
+      iIntros (K sK) "HK %δ0 %sδ0 #Hδ0 %h0 %sh0 Hh0".
       unfold SStoreSpec.eval_exps, CStoreSpec.eval_exps.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      apply refine_T; eauto.
-      apply env.lookup_extensional; cbn; intros [x σ] xIn.
-      unfold evals, inst, inst_store, inst_env, seval_exps. rewrite ?env.lookup_map.
-      symmetry. etransitivity. apply peval_sound.
-      rewrite <- eval_exp_inst. f_equal. symmetry. exact Hδ0.
+      iApply (refine_T with "HK [Hδ0] Hδ0 Hh0").
+      now iApply refine_seval_exps.
     Qed.
 
-    Lemma refine_env_update {Γ x σ} (xIn : x∷σ ∈ Γ) (w : World) (ι : Valuation w)
-      (t : Term w σ) (v : Val σ) (Htv : ℛ⟦RVal σ⟧@{ι} t v)
-      (δs : SStore Γ w) (δc : CStore Γ) (Hδ : ℛ⟦RStore Γ⟧@{ι} δs δc) :
-      ℛ⟦RStore Γ⟧@{ι} (δs ⟪ x ↦ t ⟫) (δc ⟪ x ↦ v ⟫).
+    Lemma refine_env_update {Γ x σ} (xIn : (x∷σ ∈ Γ)%katamaran) (w : World)
+      (t : Term w σ) (v : Val σ) (δs : SStore Γ w) (δc : CStore Γ) :
+      ℛ⟦RVal σ⟧ v t ∗ ℛ⟦RStore Γ⟧ δc δs ⊢ ℛ⟦RStore Γ⟧ (δc ⟪ x ↦ v ⟫) (δs ⟪ x ↦ t ⟫).
     Proof.
-      cbn in *. subst.
+      unfold RVal, RStore, RInst.
+      crushPredEntails3; subst.
       unfold inst, inst_store, inst_env.
       now rewrite env.map_update.
     Qed.
 
-    Lemma refine_assign {Γ x σ} {xIn : x∷σ ∈ Γ} :
-      ℛ⟦RVal σ -> RStoreSpec Γ Γ RUnit⟧
-        (SStoreSpec.assign x) (CStoreSpec.assign x).
+    Lemma refine_assign {Γ x σ} {xIn : (x∷σ ∈ Γ)%katamaran} {w} :
+      ⊢ ℛ⟦RVal σ -> RStoreSpec Γ Γ RUnit⟧
+        (CStoreSpec.assign x) (SStoreSpec.assign (w := w) x).
     Proof.
-      intros w ι Hpc t v Htv POST__s POST__c HPOST δs0 δc0 Hδ0 hs0 hc0 Hh.
+      iIntros (v sv) "Hv %K %sK HK %δ %sδ Hδ %h %sh Hh".
       unfold SStoreSpec.assign, CStoreSpec.assign.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      eapply refine_apply; eauto.
-      apply refine_T; eauto.
-      reflexivity.
-      now apply refine_env_update.
+      iApply (refine_T with "HK [//] [Hv Hδ] Hh").
+      now iApply (refine_env_update with "[$Hv $Hδ]").
+    Qed.
+
+    Lemma refine_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :
+      ⊢ ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧
+        (CStoreSpec.read_register reg) (SStoreSpec.read_register (w := w) reg).
+    Proof.
+      iIntros (Φ sΦ) "rΦ %δ %sδ rδ".
+      iApply HeapSpec.refine_read_register.
+      iIntros (w1 θ1) "!> %v %sv rv".
+      iApply ("rΦ" with "rv").
+      iApply (refine_inst_persist with "rδ").
+    Qed.
+
+    Lemma refine_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :
+      ⊢ ℛ⟦RVal τ -> RStoreSpec Γ Γ (RVal τ)⟧
+        (CStoreSpec.write_register reg) (SStoreSpec.write_register (w := w) reg).
+    Proof.
+      iIntros (vnew svnew) "rvnew %Φ %sΦ rΦ %δ %sδ rδ".
+      iApply (HeapSpec.refine_write_register with "rvnew").
+      iIntros (w1 θ1) "!> %v %sv rv".
+      iApply ("rΦ" with "rv").
+      iApply (refine_inst_persist with "rδ").
     Qed.
 
   End State.
 
-  Local Hint Unfold RSat : core.
-  Local Hint Unfold RInst : core.
+  Section StateCompatLemmas.
+    Import logicalrelation.
+    
+    #[export] Instance refine_compat_pushpop `{R : Rel AT A} {Γ1 Γ2 x σ} {w} : RefineCompat (RVal σ -> RStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) R -> RStoreSpec Γ1 Γ2 R) CStoreSpec.pushpop w (SStoreSpec.pushpop (w := w)) :=
+    MkRefineCompat _ _ _ refine_pushpop.
 
-  Lemma refine_produce_chunk {Γ} :
-    ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
-      SStoreSpec.produce_chunk CStoreSpec.produce_chunk.
+    #[export] Instance refine_compat_pushspops `{R : Rel AT A} {Γ1 Γ2 Δ} {w} :
+    RefineCompat (RStore Δ -> RStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) R -> RStoreSpec Γ1 Γ2 R) CStoreSpec.pushspops w (SStoreSpec.pushspops (w := w)) :=
+    MkRefineCompat _ _ _ refine_pushspops.
+
+    #[export] Instance refine_compat_peval {w : World} {σ} (t : STerm σ w) v : RefineCompat (RVal σ) v w (peval t) :=
+    MkRefineCompat _ _ _ (refine_peval t v).
+
+    #[export] Instance refine_compat_seval_exp {Γ σ} (e : Exp Γ σ) {w : World} {δ} {sδ : SStore Γ w} :
+    RefineCompat (RVal σ) (B.eval e δ) w (seval_exp sδ e) :=
+    MkRefineCompat _ _ _ (refine_seval_exp e).
+
+    #[export] Instance refine_compat_seval_exps {Γ Δ : PCtx} {es : NamedEnv (Exp Γ) Δ} {w : World} {δ : CStore Γ} {sδ : SStore Γ w} : RefineCompat (RStore Δ) (evals es δ) w (seval_exps sδ es) :=
+      MkRefineCompat _ _ _ refine_seval_exps.
+
+    #[export] Instance refine_compat_eval_exp {Γ σ} (e : Exp Γ σ) {w} : RefineCompat _ _ _ (SStoreSpec.eval_exp (w := w) e) :=
+      MkRefineCompat _ _ _ (refine_eval_exp e).
+
+    #[export] Instance refine_compat_eval_exps {Γ Δ} (es : NamedEnv (Exp Γ) Δ) {w} : RefineCompat (RStoreSpec Γ Γ (RStore Δ)) (CStoreSpec.eval_exps es) w (SStoreSpec.eval_exps (w := w) es) :=
+    MkRefineCompat _ _ _ (refine_eval_exps es).
+
+    #[export] Instance refine_compat_env_update {Γ x σ} (xIn : (x∷σ ∈ Γ)%katamaran) (w : World)
+      (t : Term w σ) (v : Val σ) (δs : SStore Γ w) (δc : CStore Γ) :
+      RefineCompat (RStore Γ) (δc ⟪ x ↦ v ⟫) w (δs ⟪ x ↦ t ⟫) :=
+      MkRefineCompat _ _ _ (refine_env_update xIn w t v δs δc).
+
+    #[export] Instance refine_compat_assign {Γ x σ} {xIn : (x∷σ ∈ Γ)%katamaran} {w} :
+      RefineCompat (RVal σ -> RStoreSpec Γ Γ RUnit) (CStoreSpec.assign x) w (SStoreSpec.assign (w := w) x) :=
+      MkRefineCompat _ _ _ refine_assign.
+
+  End StateCompatLemmas.
+
+  (* Local Hint Unfold RSat : core. *)
+  (* Local Hint Unfold RInst : core. *)
+
+  Section ProduceConsume.
+    Import logicalrelation.
+    Import logicalrelation.notations.
+
+    Lemma refine_produce_chunk {Γ} {w} :
+      ⊢ ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.produce_chunk (SStoreSpec.produce_chunk (w := w)).
+    Proof.
+      iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ %h %sh Hh".
+      iApply (PureSpec.refine_produce_chunk with "Hc Hh [HΦ Hδ]").
+      iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
+      iApply ("HΦ" with "[//] [Hδ] Hh2").
+      now iApply (refine_inst_persist (AT := SStore Γ)).
+    Qed.
+
+    Lemma refine_consume_chunk {Γ} {w} :
+      ⊢ ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.consume_chunk (SStoreSpec.consume_chunk (w := w)).
+    Proof.
+      iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ %h %sh Hh".
+      iApply (PureSpec.refine_consume_chunk with "Hc Hh").
+      iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
+      iApply ("HΦ" with "[//] [Hδ] Hh2").
+      now iApply (refine_inst_persist (AT := SStore Γ)).
+    Qed.
+
+    Lemma refine_consume_chunk_angelic {Γ} {w} :
+      ⊢ ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
+        CStoreSpec.consume_chunk (SStoreSpec.consume_chunk_angelic (w := w)).
+    Proof.
+      iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ %h %sh Hh".
+      iApply (PureSpec.refine_consume_chunk_angelic with "Hc Hh").
+      iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
+      iApply ("HΦ" with "[//] [Hδ] Hh2").
+      now iApply (refine_inst_persist with "Hδ").
+    Qed.
+
+    Lemma refine_produce {Γ} {w1 w2 : World} (ω : Acc w1 w2) (asn : Assertion w1) (ι : Valuation w1):
+      ℛ⟦RNEnv LVar w1 ⟧ ι (sub_acc ω) ⊢ ℛ⟦RStoreSpec Γ Γ RUnit⟧ (CStoreSpec.produce ι asn) (SStoreSpec.produce (w := w1) asn ω).
+    Proof.
+      unfold SStoreSpec.produce, CStoreSpec.produce.
+      iIntros "Hι %Φ %sΦ rΦ %δ %sδ rδ".
+      iPoseProof (HeapSpec.refine_produce asn) as "Hcons".
+      iApply (refine_T with "Hcons Hι").
+      iIntros (w3 ω3) "!> %u %su _".
+      iApply ("rΦ" with "[//] [rδ]").
+      now iApply (refine_inst_persist with "rδ").
+    Qed.
+
+    Lemma refine_consume {Γ} {w1 w2 : World} (ω : Acc w1 w2) (asn : Assertion w1) (ι : Valuation w1):
+      ℛ⟦RNEnv LVar w1 ⟧ ι (sub_acc ω) ⊢ ℛ⟦RStoreSpec Γ Γ RUnit⟧ (CStoreSpec.consume ι asn) (SStoreSpec.consume (w := w1) asn ω).
+    Proof.
+      unfold SStoreSpec.consume, CStoreSpec.consume.
+      iIntros "Hι %Φ %sΦ rΦ %δ %sδ rδ".
+      iPoseProof (HeapSpec.refine_consume asn) as "Hcons".
+      iApply (refine_T with "Hcons Hι").
+      iIntros (w3 ω3) "!> %u %su _".
+      iApply ("rΦ" with "[//] [rδ]").
+      now iApply (refine_inst_persist with "rδ").
+    Qed.
+
+  End ProduceConsume.
+
+  Section ProduceConsumeCompatLemmas.
+    Import logicalrelation.
+
+    #[export] Instance refine_compat_produce_chunk {Γ} {w} :
+      RefineCompat (RChunk -> RStoreSpec Γ Γ RUnit) CStoreSpec.produce_chunk w (SStoreSpec.produce_chunk (w := w)) :=
+      MkRefineCompat _ _ _ refine_produce_chunk.
+
+    #[export] Instance refine_compat_consume_chunk {Γ} {w} :
+      RefineCompat (RChunk -> RStoreSpec Γ Γ RUnit) CStoreSpec.consume_chunk w (SStoreSpec.consume_chunk (w := w)) :=
+      MkRefineCompat _ _ _ refine_consume_chunk.
+
+    #[export] Instance refine_compat_consume_chunk_angelic {Γ} {w} :
+      RefineCompat (RChunk -> RStoreSpec Γ Γ RUnit) CStoreSpec.consume_chunk w (SStoreSpec.consume_chunk_angelic (w := w)) :=
+      MkRefineCompat _ _ _ refine_consume_chunk_angelic.
+
+      #[export] Instance refine_compat_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :
+      RefineCompat (RStoreSpec Γ Γ (RVal τ)) (CStoreSpec.read_register reg) w (SStoreSpec.read_register (w := w) reg) :=
+      MkRefineCompat _ _ _ (refine_read_register reg).
+
+      #[export] Instance refine_compat_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :
+      RefineCompat (RVal τ -> RStoreSpec Γ Γ (RVal τ)) (CStoreSpec.write_register reg) w (SStoreSpec.write_register (w := w) reg) :=
+        MkRefineCompat _ _ _ (refine_write_register reg).
+
+      #[export] Instance refine_compat_produce {Γ} {w1 w2 : World} (ω : Acc w1 w2) (asn : Assertion w1) (ι : Valuation w1):
+        RefineCompat (RStoreSpec Γ Γ RUnit) (CStoreSpec.produce ι asn) w2 (SStoreSpec.produce asn ω) :=
+        MkRefineCompat _ _ _ (refine_produce ω asn ι).
+
+      #[export] Instance refine_compat_consume {Γ} {w1 w2 : World} (ω : Acc w1 w2) (asn : Assertion w1) (ι : Valuation w1):
+        RefineCompat (RStoreSpec Γ Γ RUnit) (CStoreSpec.consume ι asn) w2 (SStoreSpec.consume (w := w1) asn ω) :=
+        MkRefineCompat _ _ _ (refine_consume ω asn ι).
+
+  End ProduceConsumeCompatLemmas.
+
+
+  Section CallContracts.
+    Import logicalrelation.
+
+    Lemma refine_call_contract {Γ Δ τ} (c : SepContract Δ τ) {w} :
+      ⊢ ℛ⟦RStore Δ -> RStoreSpec Γ Γ (RVal τ)⟧
+        (CStoreSpec.call_contract c) (SStoreSpec.call_contract (w := w) c).
+    Proof.
+      iIntros (args sargs) "Hargs".
+      destruct c; cbv [SStoreSpec.call_contract CStoreSpec.call_contract]; rsolve.
+      - now iApply (refine_inst_subst  sep_contract_localstore0).
+      - rewrite sub_acc_trans.
+        rewrite <-persist_subst.
+        now rsolve.
+    Qed.
+
+    Lemma refine_call_lemma {Γ Δ : PCtx} (lem : Lemma Δ) {w} :
+      ⊢ ℛ⟦RStore Δ -> RStoreSpec Γ Γ RUnit⟧
+        (CStoreSpec.call_lemma lem) (SStoreSpec.call_lemma (w := w) lem).
+    Proof.
+      destruct lem; cbv [SStoreSpec.call_lemma CStoreSpec.call_lemma].
+      iIntros (args sargs) "Hargs".
+      rsolve.
+      - now iApply (refine_inst_subst lemma_patterns0).
+      - rewrite sub_acc_trans -persist_subst.
+        now rsolve.
+    Qed.
+
+    (* #[export] Instance refine_compat_error `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} {w : World} {cm : CStoreSpec Γ1 Γ2 A} : *)
+    (*   RefineCompat (RMsg _ (RStoreSpec Γ1 Γ2 R)) cm w (SStoreSpec.error (w := w)) := *)
+    (*   MkRefineCompat _ _ _ (refine_error cm). *)
+
+  End CallContracts.
+
+  Section CallContractsCompatLemmas.
+    Import logicalrelation.
+
+    #[export] Instance refine_compat_call_contract {Γ Δ τ} (c : SepContract Δ τ) {w} :
+      RefineCompat (RStore Δ -> RStoreSpec Γ Γ (RVal τ)) (CStoreSpec.call_contract c) w (SStoreSpec.call_contract (w := w) c) :=
+      MkRefineCompat _ _ _ (refine_call_contract c).
+
+    #[export] Instance refine_compat_call_lemma {Γ Δ : PCtx} (lem : Lemma Δ) {w} : RefineCompat (RStore Δ -> RStoreSpec Γ Γ RUnit) (CStoreSpec.call_lemma lem) w (SStoreSpec.call_lemma (w := w) lem) :=
+      MkRefineCompat _ _ _ (refine_call_lemma lem).
+
+  End CallContractsCompatLemmas.
+
+  Section ExecRefine.
+    Import logicalrelation.
+
+    Definition ExecRefine (sexec : SStoreSpec.Exec) (cexec : CStoreSpec.Exec) :=
+      forall Γ τ (s : Stm Γ τ) w,
+        ⊢ ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧ (cexec Γ τ s) (@sexec Γ τ s w).
+
+    Lemma refine_exec_aux {cfg} srec crec (HYP : ExecRefine srec crec) :
+      ExecRefine (@SStoreSpec.exec_aux cfg srec) (@CStoreSpec.exec_aux crec).
+    Proof.
+      unfold ExecRefine.
+      induction s; cbn; intros w; rsolve.
+      - destruct (CEnv f).
+        + unfold SStoreSpec.call_contract_debug.
+          destruct (config_debug_function cfg f); rsolve.
+        + iIntros (POST sPOST) "#HPOST %δ1 %sδ1 #Hδ1".
+          iApply HYP; try done; rsolve.
+          iApply ("HPOST"); try done.
+          now iApply (refine_inst_persist (AT := SStore _)).
+      - destruct a0, ta0.
+        iRename select (ℛ⟦RMatchResult pat⟧ (existT x n) (existT x0 n0)) into "Hmr".
+        iDestruct "Hmr" as "[%e Hvs]".
+        subst x0.
+        rsolve.
+        now iApply H.
+    Qed.
+
+    Lemma refine_exec {cfg n} :
+      ExecRefine (@SStoreSpec.exec cfg n) (@CStoreSpec.exec n).
+    Proof.
+      induction n; cbn.
+      - unfold ExecRefine. iIntros (Γ τ s w).
+        iApply (refine_error (R := RVal _)).
+      - now apply refine_exec_aux.
+    Qed.
+
+    #[export] Instance refine_compat_exec_gen {w cfg n Γ τ s} :
+    RefineCompat (RStoreSpec Γ Γ (RVal τ)) (@CStoreSpec.exec n Γ τ s) w (@SStoreSpec.exec cfg n Γ τ s w) :=
+    MkRefineCompat _ _ _ (refine_exec s w).
+
+    Lemma refine_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) ι :
+      ⊢ forgetting (acc_wlctx_valuation ι) (ℛ⟦RStoreSpec Γ Γ RUnit⟧
+          (CStoreSpec.exec_contract n c s ι) (SStoreSpec.exec_contract cfg n c s)).
+    Proof.
+      unfold SStoreSpec.exec_contract, CStoreSpec.exec_contract;
+        destruct c as [Σ δ pre result post]; cbn - [RSat] in *.
+      iPoseProof (forgetting_valuation_curval (ι := ι)) as "#Hι".
+      iModIntro.
+      rsolve.
+      - now iApply refine_rinst_sub_initial.
+      - now iApply (refine_rnenv_sub_acc (w := wlctx _)).
+    Qed.
+  End ExecRefine.
+
+  Section ExecRefineCompat.
+
+    (* #[export] Instance refine_compat_exec_unit {w cfg n Γ s} : *)
+    (* RefineCompat (RStoreSpec Γ Γ (RVal ty.unit)) (@CStoreSpec.exec n Γ ty.unit s) w (@SStoreSpec.exec cfg n Γ ty.unit s w) := *)
+    (* MkRefineCompat _ _ _ (refine_exec s w). *)
+  End ExecRefineCompat.
+  
+  End StoreSpec.
+
+  Lemma refine_psafe_demonic_close {Σ} (P : SymProp Σ):
+    psafe (demonic_close P : SymProp wnil) ⊢ ∀ ι, forgetting (acc_wlctx_valuation ι) (psafe (P : SymProp (wlctx Σ))).
   Proof.
-    intros w0 ι0 Hpc0 sc cc rc sΦ cΦ rΦ sδ cδ rδ sh ch rh.
-    apply RHeapSpec.refine_produce_chunk; auto.
-    intros w1 θ1 ι1 Hι1 Hpc1 su cu ru. apply rΦ; auto.
-    eapply refine_inst_persist; eauto.
+    unfold forgetting.
+    crushPredEntails3.
+    rewrite inst_lift.
+    destruct (env.view ι).
+    apply psafe_safe; first done.
+    apply psafe_safe in H0; last done.
+    now apply safe_demonic_close.
   Qed.
 
-  Lemma refine_consume_chunk {Γ} :
-    ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
-      SStoreSpec.consume_chunk CStoreSpec.consume_chunk.
+  Lemma refine_demonic_close {Σ} (P : 𝕊 (wlctx Σ)) (p : Valuation Σ -> Prop) :
+    (∀ ι, forgetting (acc_wlctx_valuation ι) (ℛ⟦RProp⟧ (p ι) P)) ⊢
+      ℛ⟦RProp⟧ (ForallNamed p) (demonic_close P : SymProp wnil).
   Proof.
-    intros w0 ι0 Hpc0 sc cc rc sΦ cΦ rΦ sδ cδ rδ sh ch rh.
-    apply RHeapSpec.refine_consume_chunk; auto.
-    intros w1 θ1 ι1 Hι1 Hpc1 su cu ru. apply rΦ; auto.
-    eapply refine_inst_persist; eauto.
-  Qed.
-
-  Lemma refine_consume_chunk_angelic {Γ} :
-    ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
-      SStoreSpec.consume_chunk_angelic CStoreSpec.consume_chunk.
-  Proof.
-    intros w0 ι0 Hpc0 sc cc rc sΦ cΦ rΦ sδ cδ rδ sh ch rh.
-    apply RHeapSpec.refine_consume_chunk_angelic; auto.
-    intros w1 θ1 ι1 Hι1 Hpc1 su cu ru. apply rΦ; auto.
-    eapply refine_inst_persist; eauto.
-  Qed.
-
-  Lemma refine_produce {Γ Σ0 pc0} (asn : Assertion Σ0) :
-    let w0 := @MkWorld Σ0 pc0 in
-    forall
-      (ι0 : Valuation w0)
-      (Hpc0 : instprop (wco w0) ι0),
-      ℛ⟦□(RStoreSpec Γ Γ RUnit)⟧@{ι0} (@SStoreSpec.produce Γ w0 asn) (CStoreSpec.produce ι0 asn).
-  Proof.
-    unfold SStoreSpec.produce, CStoreSpec.produce.
-    intros ι0 Hpc0 w1 θ1 ι1 Hι1 Hpc1 sΦ cΦ rΦ sδ cδ rδ sh ch rh.
-    apply RHeapSpec.refine_produce; auto.
-    intros w2 θ2 ι2 Hι2 Hpc2 su cu ru. apply rΦ; auto.
-    eapply refine_inst_persist; eauto.
-  Qed.
-
-  Lemma refine_consume {Γ Σ0 pc0} (asn : Assertion Σ0) :
-    let w0 := @MkWorld Σ0 pc0 in
-    forall
-      (ι0 : Valuation w0)
-      (Hpc0 : instprop (wco w0) ι0),
-      ℛ⟦□(RStoreSpec Γ Γ RUnit)⟧@{ι0} (@SStoreSpec.consume Γ w0 asn) (CStoreSpec.consume ι0 asn).
-  Proof.
-    unfold SStoreSpec.consume, CStoreSpec.consume.
-    intros ι0 Hpc0 w1 θ1 ι1 Hι1 Hpc1 sΦ cΦ rΦ sδ cδ rδ sh ch rh.
-    apply RHeapSpec.refine_consume; auto.
-    intros w2 θ2 ι2 Hι2 Hpc2 su cu ru. apply rΦ; auto.
-    eapply refine_inst_persist; eauto.
-  Qed.
-
-
-  Lemma refine_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
-    ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧
-      (@SStoreSpec.read_register Γ τ reg) (CStoreSpec.read_register reg).
-  Proof.
-    intros w0 ι0 Hpc0 sΦ cΦ rΦ sδ cδ rδ sh ch rh.
-    apply RHeapSpec.refine_read_register; auto.
-    intros w1 θ1 ι1 Hι1 Hpc1 sv cv rv. apply rΦ; auto.
-    eapply refine_inst_persist; eauto.
-  Qed.
-
-  Lemma refine_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
-    ℛ⟦RVal τ -> RStoreSpec Γ Γ (RVal τ)⟧
-      (@SStoreSpec.write_register Γ τ reg) (CStoreSpec.write_register reg).
-  Proof.
-    intros w0 ι0 Hpc0 svnew cvnew rvnew sΦ cΦ rΦ sδ cδ rδ sh ch rh.
-    apply RHeapSpec.refine_write_register; auto.
-    intros w1 θ1 ι1 Hι1 Hpc1 sv cv rv. apply rΦ; auto.
-    eapply refine_inst_persist; eauto.
-  Qed.
-
-  Lemma refine_call_contract {Γ Δ τ} (c : SepContract Δ τ) :
-    ℛ⟦RStore Δ -> RStoreSpec Γ Γ (RVal τ)⟧
-      (SStoreSpec.call_contract c) (CStoreSpec.call_contract c).
-  Proof.
-    intros w0 ι0 Hpc0 args__s args__c Hargs.
-    destruct c; cbv [SStoreSpec.call_contract CStoreSpec.call_contract].
-    apply refine_bind; auto.
-    apply refine_angelic_ctx; auto.
-    intros w1 ω01 ι1 -> Hpc1 evars__s evars__c Hevars.
-    apply refine_bind; auto.
-    { apply refine_assert_eq_nenv; auto; hnf.
-      now rewrite -> Hevars, inst_subst.
-      now rewrite -> Hargs, inst_persist.
-    }
-    intros w2 ω12 ι2 -> Hpc2 _ _ _.
-    apply refine_bind; auto.
-    { apply refine_consume; wsimpl; auto.
-      constructor.
-    }
-    intros w3 ω23 ι3 -> Hpc3 _ _ _.
-    apply refine_bind; auto.
-    { apply refine_demonic; auto. }
-    intros w4 ω34 ι4 -> Hpc4.
-    intros res__s res__c Hres.
-    apply refine_bind; auto.
-    { apply refine_produce; auto.
-      constructor.
-      cbn - [inst_env sub_snoc].
-      rewrite inst_sub_snoc, inst_persist, ?sub_acc_trans, ?inst_subst.
-      now rewrite Hevars, Hres.
-    }
-    intros w5 ω45 ι5 -> Hpc5 _ _ _.
-    apply refine_pure; auto.
-    rewrite Hres. rewrite <- inst_persist.
-    reflexivity.
-  Qed.
-
-  Lemma refine_call_lemma {Γ Δ : PCtx} (lem : Lemma Δ) :
-    ℛ⟦RStore Δ -> RStoreSpec Γ Γ RUnit⟧
-      (SStoreSpec.call_lemma lem) (CStoreSpec.call_lemma lem).
-  Proof.
-    destruct lem; cbv [SStoreSpec.call_lemma CStoreSpec.call_lemma].
-    intros w0 ι0 Hpc0.
-    intros args__s args__c Hargs.
-    apply refine_bind; auto.
-    apply refine_angelic_ctx; auto.
-    intros w1 ω01 ι1 -> Hpc1.
-    intros evars__s evars__c Hevars.
-    apply refine_bind; auto.
-    { apply refine_assert_eq_nenv; auto; hnf.
-      now rewrite Hevars, inst_subst.
-      now rewrite Hargs, inst_persist.
-    }
-    intros w2 ω12 ι2 -> Hpc2 _ _ _.
-    apply refine_bind; auto.
-    { apply refine_consume; wsimpl; auto.
-      constructor.
-    }
-    intros w3 ω23 ι3 -> Hpc3 _ _ _.
-    { apply refine_produce; auto.
-      constructor.
-      cbn - [inst_env sub_snoc].
-      rewrite inst_persist, sub_acc_trans, inst_subst.
-      now rewrite Hevars.
-    }
-  Qed.
-
-  Definition ExecRefine (sexec : SStoreSpec.Exec) (cexec : CStoreSpec.Exec) :=
-    forall Γ τ (s : Stm Γ τ),
-      ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧ (@sexec Γ τ s) (cexec Γ τ s).
-
-  Lemma refine_exec_aux {cfg} srec crec (HYP : ExecRefine srec crec) :
-    ExecRefine (@SStoreSpec.exec_aux cfg srec) (@CStoreSpec.exec_aux crec).
-  Proof.
-    unfold ExecRefine.
-    induction s; cbn; intros * w0 ι0 Hpc0.
-    - apply refine_pure; auto. reflexivity.
-    - now apply refine_eval_exp.
-    - apply refine_bind; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      apply refine_pushpop; auto.
-    - apply refine_pushspops; auto.
-      apply refine_lift.
-    - apply refine_bind; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v ->.
-      apply refine_bind; auto.
-      apply refine_assign; auto.
-      reflexivity.
-      intros w2 ω12 ι2 -> Hpc2 _ _ _.
-      apply refine_pure; auto.
-      hnf in H. now rewrite <- inst_persist in H.
-    - apply refine_bind; auto.
-      apply refine_eval_exps; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros args__s args__c Hargs.
-      destruct (CEnv f).
-      + unfold SStoreSpec.call_contract_debug.
-        destruct (config_debug_function cfg f).
-        apply refine_debug; auto.
-        apply refine_call_contract; auto.
-        apply refine_call_contract; auto.
-      + intros POST__s POST__c HPOST.
-        intros δs1 δc1 ->.
-        apply HYP; auto.
-        intros w2 ω12 ι2 -> Hpc2.
-        intros t v ->.
-        intros _ _ _.
-        apply HPOST; auto.
-        reflexivity.
-        rewrite <- inst_persist.
-        reflexivity.
-    - apply refine_bind; auto.
-      apply refine_get_local; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros δs1 δc1 ->.
-      apply refine_bind; auto.
-      apply refine_put_local; auto.
-      apply refine_lift.
-      intros w2 ω12 ι2 -> Hpc2 _ _ _.
-      apply refine_bind; auto.
-      intros w3 ω23 ι3 -> Hpc3.
-      intros t v ->.
-      apply refine_bind; auto.
-      apply refine_put_local; auto.
-      rewrite persist_subst.
-      hnf. rewrite sub_acc_trans, ?inst_subst; auto.
-      intros w4 ω34 ι4 -> Hpc4 _ _ _.
-      apply refine_pure; auto.
-      eapply refine_inst_persist; eauto.
-      reflexivity.
-    - apply refine_bind; auto.
-      apply refine_eval_exps; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros args__s args__c Hargs.
-      apply refine_call_contract; auto.
-    - apply refine_bind; auto.
-      apply refine_eval_exps; auto.
-      intros w1 ω01 ι1 -> Hpc1 δΔ ? ?.
-      apply refine_bind; auto.
-      apply refine_call_lemma; auto.
-      intros w2 ω12 ι2 -> Hpc2 _ _ _; auto.
-    - apply refine_bind; auto.
-      intros ? ? ? -> ? _ _ _; auto.
-    - apply refine_bind; auto.
-      apply (refine_eval_exp e1); auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v ->.
-      apply refine_bind; auto.
-      apply refine_assume_formula; auto.
-      cbn. reflexivity.
-      intros w2 ω12 ι2 -> Hpc2 _ _ _.
-      now apply IHs.
-    - apply refine_block; auto.
-    - apply refine_bind; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      apply refine_bind; auto.
-      apply refine_demonic_pattern_match; auto.
-      intros w2 r12 ι2 -> Hpc2.
-      intros [? ?] [pc vs] [-> ?].
-      apply refine_pushspops; auto.
-      apply H; auto.
-    - now apply refine_read_register.
-    - apply refine_bind; auto.
-      apply (refine_eval_exp e); auto.
-      intros w1 ω01 ι1 -> Hpc1 svnew cvnew rvnew.
-      now apply refine_write_register.
-    - apply refine_error; auto.
-    - apply refine_debug; auto.
-  Qed.
-
-  Lemma refine_exec {cfg n} :
-    ExecRefine (@SStoreSpec.exec cfg n) (@CStoreSpec.exec n).
-  Proof.
-    induction n; cbn.
-    - unfold ExecRefine. intros Γ τ s w ι Hpc.
-      apply refine_error; auto.
-    - now apply refine_exec_aux.
-  Qed.
-
-  Lemma refine_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) :
-    let w0 := {| wctx := sep_contract_logic_variables c; wco := ctx.nil |} in
-    forall (ι0 : Valuation w0),
-      ℛ⟦RStoreSpec Γ Γ RUnit⟧@{ι0}
-        (SStoreSpec.exec_contract cfg n c s) (CStoreSpec.exec_contract n c s ι0).
-  Proof.
-    unfold SStoreSpec.exec_contract, CStoreSpec.exec_contract;
-      destruct c as [Σ δ pre result post]; cbn - [RSat] in *.
-    intros ι0.
-    apply refine_bind.
-    apply refine_produce; wsimpl; cbn; auto.
-    intros w1 ω01 ι1 -> Hpc1 _ _ _.
-    apply refine_bind; auto.
-    apply refine_exec; auto.
-    intros w2 ω12 ι2 -> Hpc2.
-    intros res__s res__c Hres.
-    apply refine_consume; cbn - [inst]; wsimpl; auto.
-    f_equal; auto.
-  Qed.
-
-  Lemma refine_demonic_close {w : World} (P : 𝕊 w) (p : Valuation w -> Prop) :
-    (forall (ι : Valuation w), ℛ⟦_⟧@{ι} P (p ι)) ->
-    RSat RProp (w := wnil) env.nil (demonic_close P) (ForallNamed p).
-  Proof.
-    intros HYP Hwp. unfold ForallNamed.
-    rewrite env.Forall_forall. intros ι.
-    apply HYP. revert Hwp. clear.
-    rewrite ?wsafe_safe, ?safe_debug_safe.
-    intros Hwp. now apply safe_demonic_close.
+    iIntros "HYP Hwp".
+    unfold ForallNamed.
+    rewrite env.Forall_forall. iIntros (ι).
+    iSpecialize ("HYP" $! ι).
+    rewrite <-(forgetting_pure (acc_wlctx_valuation ι) (P := p ι)).
+    iPoseProof (refine_psafe_demonic_close P with "Hwp") as "HP".
+    iSpecialize ("HP" $! ι).
+    iModIntro.
+    now iApply "HYP".
   Qed.
 
   Lemma refine_vcgen {Γ τ} n (c : SepContract Γ τ) (body : Stm Γ τ) :
-    RSat RProp (w := wnil) env.nil (SStoreSpec.vcgen default_config n c body) (CStoreSpec.vcgen n c body).
+    ⊢ ℛ⟦RProp⟧ (CStoreSpec.vcgen n c body) (SStoreSpec.vcgen default_config n c body : SymProp wnil).
   Proof.
     unfold SStoreSpec.vcgen, CStoreSpec.vcgen.
-    apply (refine_demonic_close
-             (w := {| wctx := sep_contract_logic_variables c; wco := ctx.nil |})).
-    intros ι.
-    apply refine_exec_contract; auto.
-    now intros w1 ω01 ι1 -> Hpc1.
-    reflexivity.
-    reflexivity.
+    iApply refine_demonic_close.
+    iIntros (ι).
+    iPoseProof (StoreSpec.refine_exec_contract n c body ι) as "H".
+    iPoseProof (forgetting_valuation_curval (ι := ι)) as "#Hι".
+    iModIntro.
+    iApply ("H").
+    - iIntros (w ω) "!> %u %su _ %δ %sδ Hδ %h %sh Hh HSP".
+      now iPureIntro.
+    - iApply (repₚ_inst_curval (T := SStore Γ) (w := wlctx (sep_contract_logic_variables c)) (t := sep_contract_localstore c) with "Hι").
+    - iApply (refine_nil (AT := Chunk)).
   Qed.
 
   Lemma replay_sound {w : World} (s : 𝕊 w) ι (Hpc : instprop (wco w) ι) :
     safe (SPureSpec.replay s) ι -> safe s ι.
   Proof.
     intros H.
-    apply CPureSpec.replay_sound, RPureSpec.refine_replay; auto.
-    now rewrite wsafe_safe, safe_debug_safe.
+    apply CPureSpec.replay_sound.
+    pose proof (PureSpec.refine_replay s ι).
+    unfold RProp in H0; cbn in H0.
+    rewrite psafe_safe in H0.
+    now apply (fromEntails _ _ H0 ι).
   Qed.
 
   Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
@@ -708,8 +976,9 @@ Module Soundness
   Proof.
     unfold Symbolic.ValidContract. intros [Hwp%postprocess_sound].
     apply (replay_sound (w:=wnil)) in Hwp; [|easy].
-    apply postprocess_sound in Hwp. apply refine_vcgen.
-    now rewrite wsafe_safe, safe_debug_safe.
+    apply postprocess_sound in Hwp.
+    apply (fromEntails _ _ (refine_vcgen _ _ _) [env]); try done.
+    now apply psafe_safe.
   Qed.
 
   Lemma symbolic_vcgen_fuel_soundness {Γ τ} (fuel : nat) (c : SepContract Γ τ) (body : Stm Γ τ) :
@@ -718,11 +987,12 @@ Module Soundness
   Proof.
     unfold Symbolic.ValidContractWithFuel. intros [Hwp%postprocess_sound].
     apply (replay_sound (w:=wnil)) in Hwp; [|easy].
-    apply postprocess_sound in Hwp. apply refine_vcgen.
-    now rewrite wsafe_safe, safe_debug_safe.
+    apply postprocess_sound in Hwp.
+    apply (fromEntails _ _ (refine_vcgen fuel c body) [env]); try done.
+    now apply (psafe_safe (w := wnil)).
   Qed.
 
-  (* Print Assumptions symbolic_vcgen_soundness. *)
+  Print Assumptions symbolic_vcgen_soundness.
 
 End Soundness.
 

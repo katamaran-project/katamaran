@@ -34,6 +34,7 @@ From Katamaran Require Export
   Symbolic.Monads
   Symbolic.Propositions
   Symbolic.Solver
+  Symbolic.UnifLogic
   Symbolic.Worlds
   Syntax.Assertions
   Syntax.Chunks
@@ -41,8 +42,9 @@ From Katamaran Require Export
 
 Module Type SignatureMixin
   (B : Base) (P : PredicateKit B) (W : WorldsMixin B P) (S : SolverKit B P W) :=
-  AssertionsOn B P W <+ SymPropOn B P W <+ GenericSolverOn B P W S <+
-  ShallowMonadsOn B P W <+ SymbolicMonadsOn B P W S <+ RefinementMonadsOn B P W S.
+  AssertionsOn B P W <+ UnifLogicOn B P W <+ SymPropOn B P W <+ LogSymPropOn B P W <+
+    GenericSolverOn B P W S <+ ShallowMonadsOn B P W <+ SymbolicMonadsOn B P W S <+
+    RefinementMonadsOn B P W S.
 
 Module Type Signature (B : Base) :=
   PredicateKit B <+ WorldsMixin B <+ SolverKit B <+ SignatureMixin B.

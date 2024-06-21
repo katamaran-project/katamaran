@@ -41,19 +41,19 @@ From Katamaran Require Import
      Prelude
      Base
      Environment
-     Signature
      (* Symbolic.Propositions *)
      Symbolic.Worlds
      Syntax.Predicates
-     .
+.
 From iris Require bi.derived_connectives bi.interface proofmode.tactics.
 
 Declare Scope pred_scope.
 Delimit Scope pred_scope with P.
 
-Module Pred
+Module Type UnifLogicOn
   (Import B : Base)
-  (Import SIG  : Signature B).
+  (Import P : PredicateKit B)
+  (Import W : WorldsMixin B P).
 
   Definition Pred : TYPE := fun w => Valuation w -> Prop.
   
@@ -74,6 +74,9 @@ Module Pred
     
     Definition curval {w : World} : Valuation w -> Pred w :=
       fun ι1 ι2 => ι1 = ι2.
+
+    Inductive DebugPred (B : LCtx → Type) {w : World} (b : B w) (P : Pred w) : Pred w := 
+        MkDebugPred : ∀ w, P w -> DebugPred B b P w.
   End Definitions.
   
   Section EntailmentDefinitions.
@@ -459,6 +462,13 @@ Module Pred
     Lemma pApply_r {w} {P Q R : Pred w} : Q ⊢ₚ R -> P ⊢ₚ Q -> P ⊢ₚ R.
     Proof. now transitivity Q. Qed.
 
+    Lemma elim_debugPred {B : LCtx → Type} {w : World} {b : B w} {P : Pred w} :
+      DebugPred B b P ⊢ P.
+    Proof.
+      crushPredEntails3.
+      now destruct H0.
+    Qed.
+
     Section Eq.
 
       Context {T A} {instTA : Inst T A}.
@@ -648,7 +658,7 @@ Module Pred
       ⊢ ∃ (ι : Valuation w), curval ι.
     Proof. unfold curval. crushPredEntails3. Qed.
 
-    Lemma eval `{Inst AT A} {w : World} (t : AT w) :
+    Lemma eval_ex `{Inst AT A} {w : World} (t : AT w) :
       ⊢ ∃ v, repₚ v (w := w) t.
     Proof. crushPredEntails3. now eexists. Qed.
 
@@ -1423,12 +1433,14 @@ Module Pred
   Module logicalrelation.
     Import ModalNotations.
     Import iris.bi.interface.
+    Import iris.proofmode.classes.
+    Import iris.proofmode.tactics.
     Class Rel (AT : TYPE) (A : Type) : Type :=
       MkRel { RSat : A -> (⊢ AT -> Pred)%modal }.
     Bind Scope rel_scope with Rel.
 
     #[global] Arguments MkRel [AT A] &.
-    #[global] Arguments RSat {_ _} _ _ {w} _.
+    #[global] Arguments RSat {_ _} !Rel _ {w} _.
     (* We use the same script ℛ as in the paper. This encodes (ι,x,y) ∈ ℛ[_,_]
        from the paper as (ℛ ι x y), i.e. the types of the relation are
        implicit. *)
@@ -1439,7 +1451,7 @@ Module Pred
        instantiated with a valuation, i.e. symbolic terms, stores, heaps etc. *)
     Definition RInst AT A {instA : Inst AT A} : Rel AT A :=
       MkRel repₚ.
-    Arguments RInst _ _ {_}.
+    Arguments RInst _ _ {_} : simpl never.
 
     Definition RInstPropIff AT {instA : InstProp AT} : Rel AT Prop :=
       MkRel proprepₚ.
@@ -1448,19 +1460,39 @@ Module Pred
     #[export] Instance RBox {AT A} (RA : Rel AT A) : Rel (Box AT) A :=
       MkRel 
         (fun v w t => unconditionally (fun w2 ω => ℛ⟦ RA ⟧ v (t w2 ω))).
+    Arguments RBox {AT A} RA : simpl never.
 
     #[export] Instance RImpl {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
       Rel (Impl AT BT) (A -> B) :=
       MkRel (fun fc w fs => ∀ a ta, ℛ⟦ RA ⟧ a ta -∗ ℛ⟦ RB ⟧ (fc a) (fs ta))%I.
+    Arguments RImpl {_ _ _ _} RA RB : simpl never.
+
+    #[export] Instance intowand_rimpl {A AT B BT} {RA : Rel AT A} {RB : Rel BT B}  {w} {a sa f} {sf} :
+      IntoWand false false (RSat (RImpl RA RB) f sf) (RSat RA a sa) (RSat RB (f a) (w := w) (sf sa)).
+    Proof.
+      unfold IntoWand, RImpl; cbn.
+      iIntros "H".
+      now iApply "H".
+    Qed.
 
     #[export] Instance RForall {𝑲}
       {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
       (RA : forall K, Rel (AT K) (A K)) :
-      Rel (@SIG.Forall 𝑲 AT) (forall K : 𝑲, A K) :=
+      Rel (@W.Forall 𝑲 AT) (forall K : 𝑲, A K) :=
       MkRel (fun fc w fs => ∀ₚ K : 𝑲, ℛ⟦ RA K ⟧ (fc K) (fs K))%P.
+    Arguments RForall {_ _ _} RA : simpl never.
+    #[export] Instance intoforall_rforall {𝑲}
+      {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
+      {RA : forall K, Rel (AT K) (A K)} {f w} {sf : forall K, AT K w} :
+      IntoForall (RSat (RForall RA) f sf) (fun K => RSat (RA K) (f K) (sf K)).
+    Proof.
+      unfold IntoForall, RForall.
+      now cbn.
+    Qed.
 
     #[export] Instance RVal (σ : Ty) : Rel (fun Σ => Term Σ σ) (Val σ) :=
       RInst (fun Σ => Term Σ σ) (Val σ).
+    Arguments RVal σ : simpl never.
 
     #[export] Instance RNEnv (N : Set) (Δ : NCtx N Ty) : Rel _ _ :=
       RInst (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv Val Δ).
@@ -1469,7 +1501,9 @@ Module Pred
     #[export] Instance RUnit : Rel Unit unit := RInst Unit unit.
 
     #[export] Instance RPathCondition : Rel PathCondition Prop := RInstPropIff PathCondition.
+    Arguments RPathCondition : simpl never.
     #[export] Instance RFormula : Rel Formula Prop := RInstPropIff Formula.
+    Arguments RFormula : simpl never.
 
     #[export] Instance RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
 
@@ -1508,27 +1542,27 @@ Module Pred
 
     #[export] Instance RIn b : Rel (ctx.In b) (Val (type b)) :=
       MkRel (fun v w bIn ι => env.lookup ι bIn = v).
+
+    Module Import notations.
+      Open Scope rel_scope.
+      Notation "ℛ⟦ R ⟧" := (RSat R%R) (format "ℛ⟦ R ⟧").
+      Notation "A -> B" := (RImpl A%R B%R) : rel_scope.
+      Notation "□ᵣ A"    := (RBox A%R) (at level 9) : rel_scope.
+      Notation "'∀ᵣ' x .. y , R " :=
+        (RForall (fun x => .. (RForall (fun y => R)) ..))
+          (at level 200, x binder, y binder, right associativity,
+            format "'[  ' '[  ' ∀ᵣ  x  ..  y ']' ,  '/' R ']'")
+          : rel_scope.
+    End notations.
+
   End logicalrelation.
 
-  Module Import ufl_notations.
-    Import logicalrelation.
-    Open Scope rel_scope.
-    Notation "ℛ⟦ R ⟧" := (RSat R%R) (format "ℛ⟦ R ⟧").
-    Notation "A -> B" := (RImpl A%R B%R) : rel_scope.
-    Notation "□ᵣ A"    := (RBox A%R) (at level 9) : rel_scope.
-    Notation "'∀ᵣ' x .. y , R " :=
-      (RForall (fun x => .. (RForall (fun y => R)) ..))
-        (at level 200, x binder, y binder, right associativity,
-          format "'[  ' '[  ' ∀ᵣ  x  ..  y ']' ,  '/' R ']'")
-        : rel_scope.
-  End ufl_notations.
-
   Section ModalRel.
-    Import logicalrelation ufl_notations iris.bi.interface notations ModalNotations.
+    Import logicalrelation logicalrelation.notations iris.bi.interface notations ModalNotations.
     Lemma forgetting_RImpl {AT A BT B} {RA : Rel AT A} {RB : Rel BT B} {w1 w2} {ω : w1 ⊒ w2} {f sf} :
       forgetting ω (ℛ⟦ RImpl RA RB ⟧ f sf) ⊣⊢ (∀ a sa, forgetting ω (ℛ⟦ RA ⟧ a sa) -∗ forgetting ω (ℛ⟦ RB ⟧ (f a) (sf sa))).
     Proof.
-      unfold RSat at 1; cbn -[RSat].
+      unfold RImpl at 1. cbn.
       rewrite <-forgetting_forall.
       apply derived_laws.bi.forall_proper; intros a.
       rewrite <-forgetting_forall.
@@ -1540,14 +1574,21 @@ Module Pred
 
   Section LRCompat.
     Import notations.
-    Import ufl_notations.
     Import logicalrelation.
+    Import logicalrelation.notations.
     (* Import ModalNotations. *)
     Import iris.proofmode.tactics.
     
     Lemma refine_term_val {w τ v} : ⊢ (ℛ⟦RVal τ⟧ v (term_val τ v) : Pred w).
-    Proof. crushPredEntails3. Qed.
+    Proof. unfold RVal, RInst. crushPredEntails3. Qed.
 
+    Lemma refine_term_binop {w τ1 τ2 τ3} {op : BinOp τ1 τ2 τ3} {a1 sa1 a2 sa2}:
+      ℛ⟦RVal τ1⟧ a1 sa1 ∗ ℛ⟦RVal τ2⟧ a2 sa2 ⊢
+        ℛ⟦RVal τ3⟧ (bop.eval op a1 a2) (w := w) (term_binop op sa1 sa2).
+    Proof.
+      unfold RVal, RInst; crushPredEntails3; now subst.
+    Qed.
+    
     Lemma refine_unit {w} {u su} :
       ⊢ ℛ⟦ RUnit ⟧ u su : Pred w.
     Proof. destruct u, su. now crushPredEntails3. Qed.
@@ -1571,6 +1612,7 @@ Module Pred
       ⊢ ℛ⟦ RConst bool ⟧ c sc -∗ ℛ⟦ R ⟧ v1 sv1 -∗ ℛ⟦ R ⟧ v2 sv2 -∗
         ℛ⟦ R ⟧ (if c then v1 else v2) (if sc then sv1 else sv2 : AT w).
     Proof.
+      unfold RConst, RInst; cbn.
       crushPredEntails3; subst.
       now destruct sc.
     Qed.
@@ -1609,7 +1651,7 @@ Module Pred
       forall (v : list A) (w : World) (t : list (AT w)),
         ℛ⟦RList (RInst AT A)⟧ v t ⊣⊢ ℛ⟦RInst (fun w => list (AT w)) (list A)⟧ v t.
     Proof.
-      crushPredEntails3.
+      unfold RInst. crushPredEntails3.
       - induction H4; first done.
         now rewrite <-H4, <-IHRList'.
       - revert v H4. induction t; intros v H4; subst; repeat constructor.
@@ -1646,7 +1688,14 @@ Module Pred
 
     Lemma refine_formula_bool {w : World} {v} {sv : Term w ty.bool} :
       ℛ⟦RVal ty.bool⟧ v sv ⊢ ℛ⟦RFormula⟧ (v = true) (formula_bool sv).
-    Proof. crushPredEntails3; cbn in *; now subst. Qed.
+    Proof. unfold RVal, RInst. crushPredEntails3; cbn in *; now subst. Qed.
+
+    Lemma refine_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ}:
+      ℛ⟦ RVal σ ⟧ v1 sv1 ∗ ℛ⟦ RVal σ ⟧ v2 sv2 ⊢
+        ℛ⟦RFormula⟧ (bop.eval_relop_prop relop v1 v2) (formula_relop relop sv1 sv2).
+    Proof.
+      unfold RFormula, RVal, RInst. crushPredEntails3; now subst.
+    Qed.
 
     Lemma refine_formula_persist :
       forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop),
@@ -1659,6 +1708,7 @@ Module Pred
     Lemma refine_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
       ⊢ ℛ⟦ RInst (Sub Σ) (Valuation Σ) -> RInst T A ⟧ (inst vs) (subst vs : Sub Σ w -> T w)%I.
     Proof.
+      unfold RImpl, RInst. cbn.
       crushPredEntails3.
       now rewrite inst_subst H4.
     Qed.
@@ -1667,6 +1717,7 @@ Module Pred
       (vs : T Σ) {w : World} :
       ⊢ ℛ⟦ (RInst (Sub Σ) (Valuation Σ) -> RInstPropIff T) ⟧ (instprop vs) (subst vs : Sub Σ w -> T w)%I.
     Proof.
+      unfold RImpl, RInst. cbn.
       crushPredEntails3; subst.
       - now rewrite <-instprop_subst.
       - now rewrite instprop_subst.
@@ -1678,7 +1729,14 @@ Module Pred
 
     Lemma refine_rinst_sub_initial {w : World} {ι : Valuation w}: 
       curval ι ⊢ ℛ⟦RInst (Sub w) (Valuation w)⟧ ι (sub_id w).
-    Proof. crushPredEntails3. now rewrite inst_sub_id. Qed.
+    Proof. unfold RInst. crushPredEntails3. now rewrite inst_sub_id. Qed.
+
+    Import ModalNotations. 
+    Lemma refine_rnenv_sub_acc {w : World} {ι : Valuation w} {w2 : World} {ω2 : w ⊒ w2} :
+      forgetting ω2 (curval (w := w) ι) ⊢ ℛ⟦RNEnv LVar w⟧ ι (sub_acc ω2).
+    Proof.
+      unfold forgetting, RNEnv, RInst, curval; now crushPredEntails3.
+    Qed.
 
     Section WithNotations.
       Import env.notations.
@@ -1691,6 +1749,35 @@ Module Pred
         now intros.
       Qed.
 
+      Lemma refine_sub_snoc {τ : Ty} {Γ : LCtx} {x : LVar}
+        {w : World} {vs : NamedEnv Val Γ} {svs : NamedEnv (Term w) Γ}
+        {v : Val τ} {sv : Term w τ} :
+        (ℛ⟦RNEnv LVar Γ⟧ vs svs) ∗  ℛ⟦RVal τ⟧ v sv ⊢
+          ℛ⟦RNEnv LVar (Γ ▻ x∷τ)⟧ (vs.[x∷τ ↦ v])%env (sub_snoc svs (x∷τ) sv).
+      Proof.
+        iIntros "[H1 H2]".
+        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Γ) (T2 := STerm τ) (T3 := fun w => NamedEnv (Term w) (Γ ▻ (x∷τ))) (fun vs v => vs.[x∷τ ↦ v]) (fun vs (v : Term w τ) => sub_snoc vs (x∷τ) v) with "[$H1 $H2]").
+        now intros.
+      Qed.
+
+      Lemma refine_env_snoc {Δ : Ctx Ty} {τ} {w : World} {vs : Env Val Δ} {svs : Env (Term w) Δ} {v : Val τ} {sv : Term w τ} :
+        ℛ⟦REnv Δ⟧ vs svs ∗ ℛ⟦RVal τ⟧ v sv ⊢ ℛ⟦REnv (Δ ▻ τ)⟧ (vs ► ( τ ↦ v ))%env (svs ► (τ ↦ sv ))%env.
+      Proof.
+        iIntros "[Hvs Hv]".
+        iApply (repₚ_cong₂ (T1 := fun w => Env (Term w) Δ) (T2 := STerm τ) (T3 := fun w => Env (Term w) (Δ ▻ τ)) (fun vs v => vs ► ( τ ↦ v )) (fun vs (v : Term w τ) => vs ► ( τ ↦ v )) with "[$Hvs $Hv]").
+        now intros.
+      Qed.
+
+      Lemma refine_env_nil {w : World} {vs : Env Val [ctx]} {svs : Env (Term w) [ctx]} :
+        ⊢ ℛ⟦REnv [ctx]⟧ vs (w := w) svs.
+      Proof.
+        unfold REnv, RInst; cbn.
+        env.destroy vs.
+        env.destroy svs.
+        now iApply (repₚ_triv (T := fun w => Env (Term w) [ctx])).
+      Qed.
+
+
       Lemma refine_namedenv_nil {N} {w : World} :
          ⊢ ℛ⟦RNEnv N [ctx] ⟧ env.nil (env.nil : NamedEnv (Term w) [ctx]).
       Proof.
@@ -1699,8 +1786,21 @@ Module Pred
       Qed.
     End WithNotations.
 
+    Lemma refine_chunk_ptsreg {w τ} {pc a ta} : 
+      ℛ⟦RVal τ ⟧ a ta ⊢ ℛ⟦RChunk⟧ (scchunk_ptsreg pc a) (w := w)(chunk_ptsreg pc ta).
+    Proof.
+      unfold RChunk, RVal, RInst; cbn.
+      crushPredEntails3; now subst.
+    Qed.
+
+    Lemma refine_chunk_user {w : World} { c vs svs} :
+      ℛ⟦REnv (𝑯_Ty c)⟧ vs svs ⊢ ℛ⟦RChunk⟧ (scchunk_user c vs) (w := w) (chunk_user c svs).
+    Proof.
+      unfold REnv, RChunk, RInst; crushPredEntails3.
+      now subst.
+    Qed.
   End LRCompat.
 
-  Import notations ufl_notations logicalrelation iris.proofmode.tactics.
+  Import notations logicalrelation.notations logicalrelation iris.proofmode.tactics.
   Global Hint Extern 0 (environments.envs_entails _ (ℛ⟦ RUnit ⟧ _ _)) => iApply refine_unit : core.
-End Pred.
+End UnifLogicOn.

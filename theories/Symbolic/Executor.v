@@ -391,11 +391,13 @@ Module Type SymbolicExecOn
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
         fun w0 c Φ δ =>
           SHeapSpec.produce_chunk c (fun w1 θ1 u1 => Φ w1 θ1 u1 δ⟨θ1⟩).
+      Arguments produce_chunk {Γ} w c Φ δ : simpl never.
 
       Definition consume_chunk {Γ} :
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
         fun w0 c Φ δ =>
           SHeapSpec.consume_chunk c (fun w1 θ1 u1 => Φ w1 θ1 u1 δ⟨θ1⟩).
+      Arguments consume_chunk {Γ} w c Φ δ : simpl never.
 
       Definition consume_chunk_angelic {Γ} :
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
@@ -580,24 +582,25 @@ Module Type SymbolicExecOn
             end.
 
       End ExecAux.
+      Arguments exec_aux rec {Γ τ} !s.
 
       (* The constructed closed executor. *)
       Fixpoint exec (inline_fuel : nat) : Exec :=
         match inline_fuel with
         | O   => fun _ _ _ _ =>
-                   error
-                     (fun δ h =>
-                        amsg.mk
-                        {| msg_function := "SStoreSpec.exec";
+                  error
+                    (fun δ h =>
+                       amsg.mk
+                         {| msg_function := "SStoreSpec.exec";
                            msg_message := "out of fuel for inlining";
                            msg_program_context := _;
                            msg_localstore := δ;
                            msg_heap := h;
                            msg_pathcondition := wco _
-                        |})
+                         |})
         | S n => @exec_aux (@exec n)
         end.
-      Global Arguments exec _ {_ _} _ {w} _ _ _.
+      Global Arguments exec _ {_ _} s {w} : simpl never.
 
       Import Notations.
 

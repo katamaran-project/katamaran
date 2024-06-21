@@ -299,95 +299,71 @@ Module BlockVerificationDerived2Sound.
       pure na.
 
   Import logicalrelation logicalrelation.notations.
+  Import StoreSpec.
+  Import proofmode.
+  Import iris.proofmode.tactics.
 
-  Lemma refine_exec_instruction_any (i : AST) :
-    ℛ⟦RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits)⟧
-      (BlockVerificationDerived2.exec_instruction_any i)
-      (exec_instruction_any__c i).
+  Local Ltac rsolve_step := (first
+    [ match goal with
+      | |- environments.envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros ( ? ? ) "!>"
+      | |- environments.envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros ( ? ? ) "#?"
+      | |- environments.envs_entails _ (ℛ⟦RStoreSpec _ _ ?R⟧ _ (RiscvPmpBlockVerifExecutor.SStoreSpec.error _)) =>
+            iApply refine_error
+      end
+    | match goal with
+      | |- environments.envs_entails _ (ℛ⟦?R⟧ ?v ?vs) =>
+          unshelve iApply (refine_compat_lemma (R := R) (v := v) (vs := vs) );
+          idtac "rsolve-after-iApply";
+          lazymatch goal with
+          | |- RefineCompat _ _ _ _ => solve [ once typeclasses eauto ]
+          | _ => idtac
+          end; cbn; rewrite ?bi.emp_sep
+      | |- environments.envs_entails _ (_ ∗ _) => iSplit
+      end ]).
+
+  Lemma refine_exec_instruction_any (i : AST) {w} :
+    ⊢ ℛ⟦RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits)⟧
+      (exec_instruction_any__c i)
+      (BlockVerificationDerived2.exec_instruction_any (w := w) i).
   Proof.
     unfold BlockVerificationDerived2.exec_instruction_any, exec_instruction_any__c.
-    intros w0 ι0 Hpc0 a a0 ->.
-    apply refine_bind.
-    apply refine_produce_chunk; auto.
-    { reflexivity. }
-    intros w1 ω1 ι1 -> Hpc1 [] [] _.
-    apply refine_bind.
-    apply refine_produce_chunk; auto.
-    { now rewrite H, <-inst_persist. }
-    intros w2 ω2 ι2 -> Hpc2 [] [] _.
-    apply refine_bind.
-    apply refine_demonic; auto.
-    intros w3 ω3 ι3 -> Hpc3 an anv ->.
-    apply refine_bind.
-    apply refine_produce_chunk; auto.
-    { reflexivity. }
-    intros w4 ω4 ι4 -> Hpc4 [] [] _.
-    apply refine_bind.
-    { apply refine_exec; auto. }
-    intros w5 ω5 ι5 -> Hpc5 res ? ->.
-    apply refine_bind.
-    apply refine_consume_chunk; auto.
-    { cbn. repeat f_equal.
-      rewrite (inst_persist (H := inst_term) _ _ a).
-      now rewrite ?sub_acc_trans, ?inst_subst.
-    }
-    intros w6 ω6 ι6 -> Hpc6 [] ? ->.
-    apply refine_bind.
-    apply refine_angelic; auto.
-    intros w7 ω7 ι7 -> Hpc7 na ? ->.
-    apply refine_bind.
-    apply refine_consume_chunk; auto.
-    { reflexivity. }
-    intros w8 ω8 ι8 -> Hpc8 [] [] _.
-    apply refine_bind.
-    apply refine_consume_chunk; auto.
-    { cbn. repeat f_equal.
-      now rewrite (inst_persist (H := inst_term) _ _ na).
-    }
-    intros w9 ω9 ι9 -> Hpc9 [] [] _.
-    apply refine_pure; auto.
-    cbn.
-    rewrite (inst_persist (H := inst_term) _ _ na).
-    now rewrite ?sub_acc_trans, ?inst_subst.
+    rsolve.
   Qed.
+
+  #[export] Instance refine_compat_exec_instruction_any {i : AST} {w} :
+    RefineCompat (RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits))
+      (exec_instruction_any__c i) w (BlockVerificationDerived2.exec_instruction_any (w := w) i) :=
+    MkRefineCompat _ _ _ (refine_exec_instruction_any i).
 
   Fixpoint exec_block_addr__c (b : list AST) : Val ty_xlenbits -> Val ty_xlenbits -> M (Val ty_xlenbits) :=
     fun ainstr apc =>
       match b with
       | nil       => pure apc
       | cons i b' =>
-        _ <- assert (ainstr = apc) ;;
-        apc' <- exec_instruction_any__c i apc ;;
-        @exec_block_addr__c b' (bv.add ainstr bv_instrsize) apc'
+          _ <- assert (ainstr = apc) ;;
+          apc' <- exec_instruction_any__c i apc ;;
+          @exec_block_addr__c b' (bv.add ainstr bv_instrsize) apc'
       end.
 
-  Lemma refine_exec_block_addr (b : list AST) :
-    ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits)⟧
-      (@BlockVerificationDerived2.exec_block_addr b)
-      (exec_block_addr__c b).
+  Lemma refine_exec_block_addr (b : list AST) {w} :
+    ⊢ ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits)⟧
+      (exec_block_addr__c b)
+      (@BlockVerificationDerived2.exec_block_addr b w).
   Proof.
-    induction b.
-    - intros w0 ι0 Hpc0 a ? ->.
-      now apply refine_pure.
-    - intros w0 ι0 Hpc0 ainstr ? -> apc ? ->.
-      apply refine_bind.
-      apply refine_assert_formula; easy.
-      intros w1 ω1 ι1 -> Hpc1 _ _ _.
-      apply refine_bind.
-      apply refine_exec_instruction_any; auto.
-      eapply refine_inst_persist; eauto; easy.
-      intros w2 ω2 ι2 -> Hpc2 napc ? ->.
-      apply IHb; auto.
-      { cbn. f_equal.
-        change (inst_term ?t ?ι) with (inst t ι).
-        rewrite (inst_persist (H := inst_term) (acc_trans ω1 ω2) _ ainstr).
-        now rewrite ?sub_acc_trans, ?inst_subst.
-      }
-      { reflexivity. }
+    iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits))⟧
+               (exec_block_addr__c b)
+               (fun w' ω => @BlockVerificationDerived2.exec_block_addr b w')) as "H".
+    { 
+      unfold exec_block_addr__c, BlockVerificationDerived2.exec_block_addr.
+      iInduction b as [*|*] "IHb"; rsolve.
+      iApply ("IHb" with "[] [$]").
+      rsolve.
+    } 
+    iApply (unconditionally_T with "H").
   Qed.
 
   Definition exec_double_addr__c {Σ : World} (ι : Valuation Σ)
-    (req : Assertion (wsnoc Σ ("a"::ty_xlenbits))) (b : list AST) : M (Val ty_xlenbits) :=
+    (req : Assertion (wsnoc Σ ("a"∷ty_xlenbits))) (b : list AST) : M (Val ty_xlenbits) :=
     an <- @demonic _ ;;
     _ <- produce (env.snoc ι ("a"::ty_xlenbits) an) req ;;
     @exec_block_addr__c b an an.
@@ -405,39 +381,18 @@ Module BlockVerificationDerived2Sound.
   Lemma refine_exec_triple_addr {Σ : World}
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-    forall {ι0 : Valuation Σ} (Hpc0 : instprop (wco Σ) ι0),
-      ℛ⟦RStoreSpec [ctx] [ctx] RUnit⟧@{ι0}
-        (@BlockVerificationDerived2.exec_triple_addr Σ req b ens)
-        (exec_triple_addr__c ι0 req b ens).
+    forall {ι : Valuation Σ},
+      curval ι ⊢ ℛ⟦RStoreSpec [ctx] [ctx] RUnit⟧
+        (exec_triple_addr__c ι req b ens)
+        (@BlockVerificationDerived2.exec_triple_addr Σ req b ens).
   Proof.
-    intros ι0 Hpc0.
+    iIntros (ι) "Hι".
     unfold BlockVerificationDerived2.exec_triple_addr, exec_triple_addr__c.
-    apply refine_bind.
-    { apply refine_demonic; auto. }
-    intros w1 ω1 ι1 -> Hpc1 a ? ->.
-    apply refine_bind.
-    { apply refine_produce; auto.
-      cbn.
-      now rewrite instprop_subst, inst_sub_wk1.
-    }
-    intros w2 ω2 ι2 -> Hpc2 [] [] _.
-    apply refine_bind.
-    { apply refine_exec_block_addr; auto;
-        eapply refine_inst_persist; eauto.
-    }
-    intros w3 ω3 ι3 -> Hpc3 na ? ->.
-    apply refine_consume; auto.
-    cbn -[sub_wk1].
-    now rewrite ?instprop_subst, ?inst_sub_wk1.
-    cbn [acc_snoc_left sub_acc].
-    refine (eq_trans _ (eq_sym (inst_sub_snoc ι3 (sub_snoc (sub_acc (ω1 ∘ ω2 ∘ ω3)) ("a"∷ty_word) (persist__term a (ω2 ∘ ω3))) ("an"::ty_word) na))).
-    f_equal.
-    rewrite inst_sub_snoc.
-    rewrite <-?inst_subst.
-    rewrite H, ?sub_acc_trans.
-    repeat f_equal.
-    change (persist__term a (ω2 ∘ ω3)) with (persist a (ω2 ∘ ω3)).
-    now rewrite (inst_persist (ω2 ∘ ω3) ι3 a), sub_acc_trans, inst_subst.
+    rsolve.
+    - now iApply refine_rnenv_sub_acc.
+    - iApply refine_exec_block_addr;
+        rsolve.
+    - now iApply refine_rnenv_sub_acc.
   Qed.
 
 End BlockVerificationDerived2Sound.
@@ -468,41 +423,23 @@ Module BlockVerification3Sound.
       end.
 
   Import logicalrelation logicalrelation.notations.
+  Import iris.bi.interface iris.proofmode.tactics.
+  Import StoreSpec.
+  Import proofmode.
 
-  Lemma refine_exec_block_addr (b : list AnnotInstr) :
-    ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits)⟧
-      (@BlockVerification3.exec_block_addr b)
-      (exec_block_addr__c b).
+  Lemma refine_exec_block_addr (b : list AnnotInstr) {w} :
+    ⊢ ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits)⟧
+      (exec_block_addr__c b)
+      (@BlockVerification3.exec_block_addr b w).
   Proof.
-    induction b as [|instr b].
-    - intros w0 ι0 Hpc0 a ? ->.
-      now apply refine_pure.
-    - intros w0 ι0 Hpc0 ainstr ? -> apc ? ->.
-      destruct instr.
-      + apply refine_bind.
-        apply refine_assert_formula; easy.
-        intros w1 ω1 ι1 -> Hpc1 _ _ _.
-        apply refine_bind.
-        apply refine_exec_instruction_any; auto.
-        eapply refine_inst_persist; eauto; easy.
-        intros w2 ω2 ι2 -> Hpc2 napc ? ->.
-        apply IHb; auto.
-        { cbn. f_equal.
-          change (inst_term ?t ?ι) with (inst t ι).
-          rewrite (inst_persist (H := inst_term) (acc_trans ω1 ω2) _ ainstr).
-          now rewrite ?sub_acc_trans, ?inst_subst.
-        }
-        { reflexivity. }
-      + now apply refine_debug, refine_pure.
-      + apply refine_bind.
-        apply refine_eval_exps; easy.
-        intros w1 ω1 ι1 -> Hpc1 sargs args ->.
-        apply refine_bind.
-        apply refine_call_lemma; easy.
-        intros w2 ω2 ι2 -> Hpc2 _ _ _.
-        apply IHb; auto; cbn.
-        { now rewrite <-?inst_persist, (persist_trans (A := STerm _)). }
-        { now rewrite <-?inst_persist, (persist_trans (A := STerm _)). }
+    iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits))⟧
+               (exec_block_addr__c b)
+               (fun w ω => @BlockVerification3.exec_block_addr b w)) as "H".
+    { iInduction b as [|instr b] "IHb"; rsolve.
+      destruct instr; cbn; rsolve.
+      - iApply "IHb"; now rsolve.
+      - iApply "IHb"; now rsolve. }
+    now iApply (unconditionally_T with "H").
   Qed.
 
   Definition exec_triple_addr__c {Σ : World} (ι : Valuation Σ)
@@ -515,42 +452,20 @@ Module BlockVerification3Sound.
 
   Import ModalNotations.
 
-  Lemma refine_exec_triple_addr {Σ : World}
-    (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AnnotInstr)
-    (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-    forall {ι0 : Valuation Σ} (Hpc0 : instprop (wco Σ) ι0),
-      ℛ⟦RStoreSpec [ctx] [ctx] RUnit⟧@{ι0}
-        (@BlockVerification3.exec_triple_addr Σ req b ens)
-        (exec_triple_addr__c ι0 req b ens).
+  Lemma refine_exec_triple_addr {w : World}
+    (req : Assertion (w ▻ ("a"::ty_xlenbits))) (b : list AnnotInstr)
+    (ens : Assertion (w ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
+    forall {ι0 : Valuation w},
+      curval ι0 ⊢ ℛ⟦RStoreSpec [ctx] [ctx] RUnit⟧
+        (exec_triple_addr__c ι0 req b ens)
+        (@BlockVerification3.exec_triple_addr w req b ens).
   Proof.
-    intros ι0 Hpc0.
-    unfold BlockVerificationDerived2.exec_triple_addr, exec_triple_addr__c.
-    apply refine_bind.
-    { apply refine_demonic; auto. }
-    intros w1 ω1 ι1 -> Hpc1 a ? ->.
-    apply refine_bind.
-    { apply refine_produce; auto.
-      cbn.
-      now rewrite instprop_subst, inst_sub_wk1.
-    }
-    intros w2 ω2 ι2 -> Hpc2 [] [] _.
-    apply refine_bind.
-    { apply refine_exec_block_addr; auto;
-        eapply refine_inst_persist; eauto.
-    }
-    intros w3 ω3 ι3 -> Hpc3 na ? ->.
-    apply refine_consume; auto.
-    cbn -[sub_wk1].
-    now rewrite ?instprop_subst, ?inst_sub_wk1.
-    cbn [acc_snoc_left sub_acc].
-    refine (eq_trans _ (eq_sym (inst_sub_snoc ι3 (sub_snoc (sub_acc (ω1 ∘ ω2 ∘ ω3)) ("a"∷ty_word) (persist__term a (ω2 ∘ ω3))) ("an"::ty_word) na))).
-    f_equal.
-    rewrite inst_sub_snoc.
-    rewrite <-?inst_subst.
-    rewrite H, ?sub_acc_trans.
-    repeat f_equal.
-    change (persist__term a (ω2 ∘ ω3)) with (persist a (ω2 ∘ ω3)).
-    now rewrite (inst_persist (ω2 ∘ ω3) ι3 a), sub_acc_trans, inst_subst.
+    iIntros (ι) "Hι".
+    unfold BlockVerification3.exec_triple_addr, exec_triple_addr__c.
+    rsolve.
+    - now iApply refine_rnenv_sub_acc.
+    - iApply refine_exec_block_addr; now rsolve.
+    - now iApply refine_rnenv_sub_acc.
   Qed.
 
 End BlockVerification3Sound.
@@ -775,15 +690,15 @@ Module BlockVerificationDerived2Sem.
   Proof.
     intros Hverif ι.
     apply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := []%ctx |}) (pre := pre) (post := post) (instrs := instrs)).
-    eapply (refine_exec_triple_addr (Σ := {| wctx := Γ ; wco := []%ctx |}) I (ta := λ w1 _ _ _ _, SymProp.block)).
+    eapply (fromEntails (w := wlctx Γ) _ _ (refine_exec_triple_addr (Σ := wlctx Γ) _ _ _) ι I eq_refl).
     all: cycle 3.
-    - rewrite SymProp.wsafe_safe SymProp.safe_debug_safe.
+    - apply (fromBientails (w := wlctx Γ) _ _ (LogicalSoundness.psafe_safe) ι I).
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       rewrite SymProp.safe_demonic_close in Hverif.
       now apply Hverif.
-    - cbn. now intros.
+    - done.
     - reflexivity.
-    - reflexivity.
+    - constructor.
   Qed.
 
 End BlockVerificationDerived2Sem.
@@ -952,15 +867,15 @@ Module BlockVerification3Sem.
   Proof.
     intros lemSem Hverif ι.
     apply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := []%ctx |}) (pre := pre) (post := post) (instrs := instrs)); first easy.
-    eapply (refine_exec_triple_addr (Σ := {| wctx := Γ ; wco := []%ctx |}) I (ta := λ w1 _ _ _ _, SymProp.block)).
+    eapply (fromEntails (w := wlctx Γ) _ _ (refine_exec_triple_addr _ _ _) ι I eq_refl _ (λ w1 _ _ _ _, SymProp.block)).
     all: cycle 3.
-    - rewrite SymProp.wsafe_safe SymProp.safe_debug_safe.
+    - apply (fromBientails (w := wlctx Γ) _ _ (LogicalSoundness.psafe_safe) ι I).
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       rewrite SymProp.safe_demonic_close in Hverif.
       now apply Hverif.
-    - cbn. now intros.
+    - now intros.
     - reflexivity.
-    - reflexivity.
+    - constructor.
   Qed.
 
 End BlockVerification3Sem.

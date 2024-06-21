@@ -208,6 +208,7 @@ Module Type ShallowExecOn
           produce (env.snoc ι (result∷τ) v) ens ;;
           pure v
         end.
+      Arguments call_contract {Γ Δ τ} !contract args.
 
       Definition call_lemma {Γ Δ} (lem : Lemma Δ) (vs : CStore Δ) : CStoreSpec Γ Γ unit :=
         match lem with
@@ -217,6 +218,7 @@ Module Type ShallowExecOn
           consume ι req ;;
           produce ι ens
         end.
+      Arguments call_lemma {Γ Δ} !lem vs.
 
       (* The paper discusses the case that a function call is replaced by
          interpreting the contract instead. However, this is not always
@@ -291,6 +293,7 @@ Module Type ShallowExecOn
             end.
 
       End ExecAux.
+      Arguments exec_aux rec {Γ τ} !s.
 
       (* The constructed closed executor. *)
       Fixpoint exec (inline_fuel : nat) : Exec :=
@@ -298,7 +301,7 @@ Module Type ShallowExecOn
         | O   => fun _ _ _ => error
         | S n => @exec_aux (@exec n)
         end.
-      Global Arguments exec _ {_ _} s _ _ _.
+      Global Arguments exec _ {_ _} s _ _ _ : simpl never.
 
     End Exec.
 
