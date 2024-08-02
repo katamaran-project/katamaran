@@ -651,22 +651,10 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           let pat' := freshen_pattern n w0 pat in
           SymProp.pattern_match_var x pat'
             (fun pc : PatternCase _ =>
-               let Δ   : LCtx       := PatternCaseCtx pc in
-               let w1  : World      := wcat w0 Δ in
-               let r1  : w0 ⊒ w1    := acc_cat_right w0 Δ in
-               let ts  : NamedEnv (Term (ctx.remove (ctx.in_cat_left Δ xIn))) Δ
-                 := eq_rect _ (fun Σ => NamedEnv (Term Σ) Δ)
-                      (sub_cat_right Δ) _
-                      (eq_sym (ctx.remove_in_cat_left xIn)) in
-               let t   : Term (ctx.remove (ctx.in_cat_left Δ xIn)) σ
-                 := pattern_match_term_reverse pat' pc ts in
-               let w2  : World      := wsubst w1 x t in
-               let r2  : w1 ⊒ w2    := @acc_subst_right w1 x σ _ t in
-               let r12 : w0 ⊒ w2    := r1 ∘ r2 in
-               POST w2 r12
+               POST (wmatchvar w0 xIn pat' pc) (acc_matchvar_right pc)
                  (existT
                     (unfreshen_patterncase n w0 pat pc)
-                    (unfreshen_patterncaseenv n pat pc ts))).
+                    (unfreshen_patterncaseenv (D := Term (wmatchvar w0 xIn pat' pc)) n pat pc (wmatchvar_patternvars pc)))).
       #[global] Arguments new_pattern_match_var [σ x] pat [w] xIn : rename.
 
       Definition new_pattern_match' {σ} (pat : @Pattern N σ) :

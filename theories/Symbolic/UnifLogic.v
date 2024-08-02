@@ -1428,6 +1428,16 @@ Module Type UnifLogicOn
     (*   assuming (acc_subst_right x t) P ⊣⊢ *)
     (*     eqₚ (term_var xIn) (subst (sub_wk1 xIn) t) ∗ *)
     (*     forgetting (acc_subst_left x) P. *)
+
+    Definition assuming_acc_match_right {w : World} {σ} {s : Term w σ}
+      {p : @Pattern LVar σ} (pc : PatternCase p) : 
+      ⊢ assuming (acc_match_right (s := s) pc)
+        (eqₚ (persist s (acc_match_right pc)) (pattern_match_term_reverse p pc (sub_wmatch_patctx pc))).
+    Proof.
+      unfold assuming.
+      crushPredEntails3.
+    Qed.
+
   End SubstMod.
 
   Module logicalrelation.
@@ -1580,6 +1590,9 @@ Module Type UnifLogicOn
     Import iris.proofmode.tactics.
     
     Lemma refine_term_val {w τ v} : ⊢ (ℛ⟦RVal τ⟧ v (term_val τ v) : Pred w).
+    Proof. unfold RVal, RInst. crushPredEntails3. Qed.
+
+    Lemma refine_term_val2 {w τ v1 v2} : bi_pure (v1 = v2) ⊣⊢ (ℛ⟦RVal τ⟧ v1 (term_val τ v2) : Pred w).
     Proof. unfold RVal, RInst. crushPredEntails3. Qed.
 
     Lemma refine_term_binop {w τ1 τ2 τ3} {op : BinOp τ1 τ2 τ3} {a1 sa1 a2 sa2}:
@@ -1741,11 +1754,11 @@ Module Type UnifLogicOn
     Section WithNotations.
       Import env.notations.
       Import ctx.notations.
-      Lemma refine_namedenv_snoc {N} {Δ : NCtx N Ty} {b : N∷Ty} {w : World} {vs : NamedEnv Val Δ} {svs : NamedEnv (Term w) Δ} {v : Val (type b)} {sv : Term w (type b)} :
-        ℛ⟦RNEnv N Δ⟧ vs svs ∗ ℛ⟦RVal (type b)⟧ v sv ⊢ ℛ⟦RNEnv N (Δ ▻ b)⟧ (vs.[b ↦ v])%env (svs.[name b∷type b ↦ sv])%env.
+      Lemma refine_namedenv_snoc {N} {Δ : NCtx N Ty} {x : N} {σ : Ty} {w : World} {vs : NamedEnv Val Δ} {svs : NamedEnv (Term w) Δ} {v : Val σ} {sv : Term w σ} :
+        ℛ⟦RNEnv N Δ⟧ vs svs ∗ ℛ⟦RVal σ⟧ v sv ⊢ ℛ⟦RNEnv N (Δ ▻ x∷σ)⟧ (vs.[x∷σ ↦ v])%env (svs.[x∷σ ↦ sv])%env.
       Proof.
         iIntros "[Hvs Hv]".
-        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Δ) (T2 := STerm (type b)) (T3 := fun w => NamedEnv (Term w) (Δ ▻ b)) (fun vs v => vs.[b ↦ v]) (fun vs (v : Term w (type b)) => vs.[b ↦ v]) with "[$Hvs $Hv]").
+        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Δ) (T2 := STerm σ) (T3 := fun w => NamedEnv (Term w) (Δ ▻ x∷σ)) (fun vs v => vs.[x∷σ ↦ v]) (fun vs (v : Term w σ) => vs.[x∷σ ↦ v]) with "[$Hvs $Hv]").
         now intros.
       Qed.
 
@@ -1784,6 +1797,15 @@ Module Type UnifLogicOn
         iApply (repₚ_triv (T := fun w => NamedEnv (Term w) [ctx])).
         now intros.
       Qed.
+
+      Lemma refine_namedenv_singleton {N : Set} {x : N} {σ : Ty} {w : World} {v : Val σ} {sv : Term w σ} :
+        ℛ⟦RVal σ⟧ v sv ⊢ ℛ⟦RNEnv N (ctx.nil ▻ x∷σ)⟧ ([env].[x∷σ ↦ v])%env ([env].[x∷σ ↦ sv])%env.
+      Proof.
+        iIntros "Hv".
+        iApply (refine_namedenv_snoc with "[$Hv]").
+        iApply refine_namedenv_nil.
+      Qed.
+
     End WithNotations.
 
     Lemma refine_chunk_ptsreg {w τ} {pc a ta} : 
@@ -1799,6 +1821,159 @@ Module Type UnifLogicOn
       unfold REnv, RChunk, RInst; crushPredEntails3.
       now subst.
     Qed.
+
+    Lemma refine_pattern_match {w : World} {σ} {v : Val σ} {sv : Term w σ}
+      {p : @Pattern LVar σ} : 
+      ℛ⟦ RVal σ ⟧ v sv ⊢
+        let (pc, δpc) := pattern_match_val p v in
+        knowing (acc_match_right (s := sv) pc)
+        (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc
+           (sub_cat_right (PatternCaseCtx pc) : NamedEnv _ _)).
+    Proof.
+      pose proof (pattern_match_val_inverse_left p v) as eq.
+      destruct (pattern_match_val p v) as [pc args].
+      unfold pattern_match_val_reverse' in eq; cbn in eq.
+      unfold knowing, RVal, RNEnv, RInst.
+      crushPredEntails3.
+      exists (env.cat ι args).
+      now rewrite instprop_subst inst_subst !inst_sub_cat_left
+        inst_pattern_match_term_reverse inst_sub_cat_right eq.
+    Qed.
+
+    Import ctx.notations.
+    Lemma refine_pattern_match_var {w : World} {σ} {v : Val σ} {x : LVar} {xIn : ctx.In (x∷σ) w}
+      {p : @Pattern LVar σ} : 
+      ℛ⟦ RIn (x∷σ) ⟧ v xIn ⊢
+        let (pc, δpc) := pattern_match_val p v in
+        knowing (acc_matchvar_right (x := x) pc)
+        (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc
+           (wmatchvar_patternvars pc : NamedEnv (Term (wmatchvar w xIn p pc)) _)).
+    Proof.
+      pose proof (pattern_match_val_inverse_left p v) as eq.
+      destruct (pattern_match_val p v) as [pc args].
+      unfold pattern_match_val_reverse' in eq; cbn in eq.
+      unfold knowing, RVal, RNEnv, RInst.
+      crushPredEntails3.
+      exists (env.remove (x∷σ) (env.cat ι args) (ctx.in_cat_left (PatternCaseCtx pc) xIn)).
+      rewrite !instprop_subst !inst_subst.
+      rewrite inst_sub_single2 inst_pattern_match_term_reverse.
+      unfold wmatchvar_patternvars.
+      rewrite inst_eq_rect.
+      rewrite env.remove_cat_left.
+      rewrite eq_rect_sym1.
+      rewrite inst_sub_cat_right.
+      rewrite eq.
+      rewrite <-env.insert_cat_left.
+      rewrite <-H0.
+      rewrite env.insert_remove.
+      now rewrite inst_sub_cat_left.
+    Qed.
+
+    Lemma refine_unfreshen_patterncaseenv {N : Set} {w : World} {Σ} {n : N -> LVar} {σ}
+      {p : @Pattern N σ} {pc : PatternCase (freshen_pattern n Σ p)}
+      {vs : NamedEnv Val (PatternCaseCtx pc)}
+      {svs : NamedEnv (Term w) (PatternCaseCtx pc)} :
+      ℛ⟦RNEnv LVar (PatternCaseCtx pc)⟧ vs svs
+          ⊢ ℛ⟦RNEnv N (PatternCaseCtx (unfreshen_patterncase n Σ p pc))⟧ (unfreshen_patterncaseenv n p pc vs) (unfreshen_patterncaseenv n p pc svs).
+    Proof.
+      unfold RNEnv, RInst, repₚ; cbn.
+      crushPredEntails3.
+      now rewrite inst_unfreshen_patterncaseenv H0.
+    Qed.
+
+
+    Lemma RVal_eqₚ {σ v} {w : World} {sv1 sv2 : Term w σ}:
+      ℛ⟦ RVal σ ⟧ v sv1 ∗ eqₚ sv1 sv2 ⊢ ℛ⟦ RVal σ ⟧ v sv2.
+    Proof.
+      unfold RVal, RInst.
+      crushPredEntails3.
+      now subst.
+    Qed.
+
+    Lemma RVal_pair {σ1 σ2 v1 v2} {w : World} {sv1 : Term w σ1} {sv2 : Term w σ2}:
+      ℛ⟦ RVal σ1 ⟧ v1 sv1 ∗ ℛ⟦ RVal σ2 ⟧ v2 sv2 ⊣⊢ ℛ⟦ RVal (ty.prod σ1 σ2) ⟧ (v1 , v2) (term_binop bop.pair sv1 sv2).
+    Proof.
+      unfold RVal, RInst, repₚ.
+      crushPredEntails3.
+      - now f_equal.
+      - now inversion H0.
+      - now inversion H0.
+    Qed.
+
+    Lemma RVal_union_invertK {U : unioni} {K1 K2 : unionk U} {vf : Val (unionk_ty U K1)} {w : World} {tf : Term w (unionk_ty U K2)} :
+      ℛ⟦RVal (ty.union U)⟧ (unionv_fold U (existT K1 vf)) (term_union U K2 tf) ⊢ bi_pure (K1 = K2).
+    Proof.
+      unfold RVal, RInst, repₚ; crushPredEntails3.
+      rewrite unionv_fold_inj in H0.
+      now inversion H0.
+    Qed.
+
+    Lemma RVal_union {U : unioni} {K : unionk U} {vf : Val (unionk_ty U K)} {w : World} {tf : Term w (unionk_ty U K)} :
+      ℛ⟦RVal (ty.union U)⟧ (unionv_fold U (existT K vf)) (term_union U K tf) ⊣⊢
+        ℛ⟦RVal (unionk_ty U K)⟧ vf tf.
+    Proof.
+      unfold RVal, RInst, repₚ; crushPredEntails3; last by subst.
+      rewrite unionv_fold_inj in H0.
+      now apply inj_right_pair in H0.
+    Qed.
+
+    Lemma refine_tuple_pattern_match_env {N Δ σs} {p : TuplePat σs Δ} {w : World} :
+      ⊢ ℛ⟦REnv σs -> RNEnv N Δ⟧ (tuple_pattern_match_env p) (tuple_pattern_match_env (T := Term w) p).
+    Proof.
+      iIntros (e se) "He". iStopProof.
+      unfold RNEnv, REnv, RInst, repₚ.
+      crushPredEntails3; subst.
+      now rewrite inst_tuple_pattern_match.
+    Qed.
+
+    Lemma RVal_tuple {σs} {v : Val (ty.tuple σs)} {w : World} {a : Env (Term w) σs} :
+      ℛ⟦RVal (ty.tuple σs)⟧ v (term_tuple a) ⊣⊢ ℛ⟦REnv σs⟧ (envrec.to_env σs v) a.
+    Proof.
+      unfold RVal, REnv, RInst, repₚ.
+      crushPredEntails3; subst.
+      - now rewrite envrec.to_of_env.
+      - now rewrite H0 envrec.of_to_env.
+    Qed.
+
+    Lemma refine_record_pattern_match_env {N R Δ} {p : RecordPat (recordf_ty R) Δ} {w : World}
+      {e} {se : NamedEnv (Term w) (recordf_ty R)} :
+      ℛ⟦RNEnv recordf (recordf_ty R)⟧ e se ⊣⊢
+        ℛ⟦RNEnv N Δ⟧ (record_pattern_match_env p e) (record_pattern_match_env p se).
+    Proof.
+      unfold RNEnv, RInst, repₚ.
+      crushPredEntails3; subst.
+      - now rewrite inst_record_pattern_match.
+      - rewrite inst_record_pattern_match in H0.
+        apply (f_equal (record_pattern_match_env_reverse p)) in H0.
+        now rewrite !record_pattern_match_env_inverse_left in H0.
+    Qed.
+
+    Lemma RVal_record {R} {w : World} {v : NamedEnv Val (recordf_ty R)} {a : NamedEnv (Term w) (recordf_ty R)} :
+      ℛ⟦RNEnv recordf (recordf_ty R)⟧ v a ⊣⊢
+       ℛ⟦RVal (ty.record R)⟧ (recordv_fold R v) (term_record R a).
+    Proof.
+      unfold RNEnv, RVal, RInst, repₚ.
+      crushPredEntails3; subst; first done.
+      apply (f_equal (recordv_unfold R)) in H0.
+      now rewrite !recordv_unfold_fold in H0.
+    Qed.
+
+    Lemma RVal_invert_inl {σ τ} {v} {w : World} {sl : Term w σ} : 
+      ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inl sl) ⊢ ∃ (vl : Val σ), bi_pure (v = inl vl) ∗ ℛ⟦RVal σ⟧ vl sl.
+    Proof.
+      unfold RVal, RInst, repₚ, bi_pure; simpl.
+      crushPredEntails3; subst.
+      eexists. split; reflexivity.
+    Qed.
+
+    Lemma RVal_invert_inr {σ τ} {v} {w : World} {sl : Term w τ} : 
+      ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inr sl) ⊢ ∃ (vl : Val τ), bi_pure (v = inr vl) ∗ ℛ⟦RVal τ⟧ vl sl.
+    Proof.
+      unfold RVal, RInst, repₚ, bi_pure; simpl.
+      crushPredEntails3; subst.
+      eexists. split; reflexivity.
+    Qed.
+
   End LRCompat.
 
   Import notations logicalrelation.notations logicalrelation iris.proofmode.tactics.

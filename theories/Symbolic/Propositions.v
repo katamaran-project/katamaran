@@ -116,26 +116,6 @@ Module Type SymPropOn
   #[export] Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
   Proof. intros P Q PQ. split; intros []; constructor; intuition. Qed.
 
-  Section Util.
-
-    Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
-      (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
-    Proof. firstorder. Qed.
-
-    Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
-      eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
-    Proof.
-      now subst.
-    Qed.
-
-    Lemma eq_rect_sym2 {A : Type} {P : A -> Type} {a a' : A} (eq : a' = a) (v : P a) :
-      eq_rect a' P (eq_rect a P v a' (eq_sym eq)) a eq = v.
-    Proof.
-      now subst.
-    Qed.
-
-  End Util.
-
   Module SymProp.
 
     Import ModalNotations.
@@ -258,9 +238,8 @@ Module Type SymPropOn
       (k : forall pc : PatternCase pat, 𝕊 (ctx.remove (ctx.in_cat_left (PatternCaseCtx pc) xIn))) : 𝕊 Σ :=
       angelic_finite (PatternCase pat) amsg.empty
         (fun pc => angelic_close0 (PatternCaseCtx pc)
-           (let e := eq_sym (ctx.remove_in_cat_left xIn) in
-            assert_vareq x
-              (eq_rect _ (STerm σ) (pattern_match_term_reverse pat pc (sub_cat_right (PatternCaseCtx pc))) _ e)
+           (assert_vareq x
+              (pattern_match_term_reverse pat pc (wmatchvar_patternvars pc))
               amsg.empty
               (k pc))).
 
@@ -844,8 +823,8 @@ Module Type SymPropOn
       rewrite safe_angelic_list.
       setoid_rewrite safe_angelic_close0. cbn.
       setoid_rewrite env.lookup_cat_left.
-      setoid_rewrite inst_eq_rect.
       setoid_rewrite inst_pattern_match_term_reverse.
+      setoid_rewrite inst_eq_rect.
       setoid_rewrite eq_sym_involutive.
       split.
       - intros (pc & HIn & ιpat & Hmatch & Hsafe). revert Hsafe.
@@ -2104,8 +2083,7 @@ Module Type LogSymPropOn
            ∀ (pc : PatternCase pat),
              let wm : World := wmatch w s pat pc in
              let ω : w ⊒ wm := acc_match_right pc in
-             assuming ω (eqₚ (persist s ω) (pattern_match_term_reverse pat pc (sub_wmatch_patctx pc)) →
-                         psafe (w := wmatch w s pat pc) (rhs pc))
+             assuming ω (psafe (w := wmatch w s pat pc) (rhs pc))
        | @pattern_match_var _ x σ xIn pat rhs =>
            ∀ (pc : PatternCase pat),
              let wmv : World := wmatchvar w xIn pat pc in
@@ -2212,11 +2190,6 @@ Module Type LogSymPropOn
         apply H; first done.
         apply H1; try done.
         * apply inst_sub_cat_left.
-        * cbn.
-          rewrite inst_subst inst_sub_cat_left.
-          rewrite inst_pattern_match_term_reverse inst_sub_cat_right.
-          apply (f_equal (pattern_match_val_reverse' pat)) in Hpmv.
-          now rewrite pattern_match_val_inverse_left in Hpmv.
       - unfold assuming; crushPredEntails3.
         env.destroy ιpast.
         rewrite inst_sub_cat_left in H2; subst.
@@ -2236,10 +2209,10 @@ Module Type LogSymPropOn
           apply (f_equal (pattern_match_val_reverse' pat)) in Hpmv.
           now rewrite pattern_match_val_inverse_left in Hpmv.
       - rewrite <-inst_sub_shift.
-        assert (inst (eq_rect (w - x∷σ ▻▻ PatternCaseCtx c) (STerm σ) (pattern_match_term_reverse pat c (sub_cat_right (PatternCaseCtx c))) ((w ▻▻ PatternCaseCtx c) - x∷σ)%ctx (eq_sym (ctx.remove_in_cat_left xIn))) (inst (sub_shift (ctx.in_cat_left (PatternCaseCtx c) xIn)) (ι ►► ι__pat)) = env.lookup (ι ►► ι__pat) (ctx.in_cat_left _ xIn)).
-        { rewrite inst_eq_rect.
+        assert (inst (pattern_match_term_reverse pat c (eq_rect (w - x∷σ ▻▻ PatternCaseCtx c) (fun w => NamedEnv (Term w) (PatternCaseCtx c)) (sub_cat_right (PatternCaseCtx c)) ((w ▻▻ PatternCaseCtx c) - x∷σ)%ctx (eq_sym (ctx.remove_in_cat_left xIn)))) (inst (sub_shift (ctx.in_cat_left (PatternCaseCtx c) xIn)) (ι ►► ι__pat)) = env.lookup (ι ►► ι__pat) (ctx.in_cat_left _ xIn)).
+        { rewrite inst_pattern_match_term_reverse.
+          rewrite inst_eq_rect.
           rewrite eq_sym_involutive.
-          rewrite inst_pattern_match_term_reverse.
           rewrite inst_sub_shift.
           change (wcat w (PatternCaseCtx c) : LCtx) with (ctx.cat w (PatternCaseCtx c)).
           change (fun Σ => Env (fun xt => Val (type xt)) Σ) with (@Env (Binding LVar Ty) (fun xt => Val (type xt))).
@@ -2263,13 +2236,13 @@ Module Type LogSymPropOn
       - unfold assuming. crushPredEntails3.
         rewrite inst_subst in H2.
         pose proof (f_equal (fun ι => env.lookup ι xIn) H2) as Hlkp.
-        rewrite inst_sub_single2 inst_eq_rect eq_sym_involutive -inst_lookup env.lookup_tabulate in Hlkp.
+        rewrite inst_sub_single2 -inst_lookup env.lookup_tabulate in Hlkp.
         cbn in Hlkp.
         rewrite env.lookup_insert inst_pattern_match_term_reverse in Hlkp.
         apply (f_equal (pattern_match_val pat)) in Hlkp.
         rewrite pattern_match_val_inverse_right Hpmv in Hlkp.
         dependent elimination Hlkp.
-        set (ι__pat := inst (sub_cat_right (PatternCaseCtx a)) (eq_rect ((w ▻▻ PatternCaseCtx a) - x∷σ)%ctx (λ Σ : LCtx, Valuation Σ) ιpast (w - x∷σ ▻▻ PatternCaseCtx a) (ctx.remove_in_cat_left xIn))).
+        set (ι__pat := inst (wmatchvar_patternvars a) ιpast).
         assert (eq_rect ((w ▻▻ PatternCaseCtx a) - x∷σ)%ctx (λ Σ : LCtx, Valuation Σ) (env.remove (x∷σ) (ι ►► ι__pat) (ctx.in_cat_left (PatternCaseCtx a) xIn)) (w - x∷σ ▻▻ PatternCaseCtx a) (ctx.remove_in_cat_left xIn) = env.remove (x∷σ) ι xIn ►► ι__pat) as Hremcat.
         { change (wcat w (PatternCaseCtx a) : LCtx) with (ctx.cat w (PatternCaseCtx a)).
           change (fun Σ => Env (fun xt => Val (type xt)) Σ) with (@Env (Binding LVar Ty) (fun xt => Val (type xt))).
@@ -2280,13 +2253,13 @@ Module Type LogSymPropOn
           rewrite Hremcat.
           now rewrite inst_sub_cat_right.
         }
-
         apply (f_equal (pattern_match_val_reverse' pat)) in Hpmv.
         rewrite pattern_match_val_inverse_left in Hpmv.
-        assert (inst (eq_rect (w - x∷σ ▻▻ PatternCaseCtx a) (STerm σ) (pattern_match_term_reverse pat a (sub_cat_right (PatternCaseCtx a))) ((w ▻▻ PatternCaseCtx a) - x∷σ)%ctx (eq_sym (ctx.remove_in_cat_left xIn))) (inst (sub_shift (ctx.in_cat_left (PatternCaseCtx a) xIn)) (ι ►► ι__pat)) = ι.[? x∷σ]).
-        { rewrite inst_eq_rect.
+        unfold pattern_match_val_reverse' in Hpmv; cbn in Hpmv.
+        assert (inst (pattern_match_term_reverse pat a (eq_rect (w - x∷σ ▻▻ PatternCaseCtx a) (fun w => NamedEnv (Term w) (PatternCaseCtx a)) (sub_cat_right (PatternCaseCtx a)) ((w ▻▻ PatternCaseCtx a) - x∷σ)%ctx (eq_sym (ctx.remove_in_cat_left xIn)))) (inst (sub_shift (ctx.in_cat_left (PatternCaseCtx a) xIn)) (ι ►► ι__pat)) = ι.[? x∷σ]).
+        { rewrite inst_pattern_match_term_reverse.
+          rewrite inst_eq_rect.
           rewrite eq_sym_involutive.
-          rewrite inst_pattern_match_term_reverse.
           now rewrite H4.
         }
         assert (instprop (wco (wmatchvar w xIn pat a)) (inst (sub_shift (ctx.in_cat_left (PatternCaseCtx a) xIn)) (ι ►► ι__pat))).
@@ -2297,13 +2270,17 @@ Module Type LogSymPropOn
         }
         apply H; first done.
         replace ιpast with (env.remove (x∷σ) (ι ►► ι__pat) (ctx.in_cat_left (PatternCaseCtx a) xIn)); first done.
-        unfold ι__pat.
-        rewrite <-H2.
-        rewrite inst_sub_cat_left_drop inst_sub_cat_right_take.
-        rewrite inst_sub_single2.
         rewrite env.remove_cat_left.
+        rewrite <-H2.
+        rewrite inst_sub_cat_left_drop.
         rewrite env.remove_drop.
+        rewrite inst_sub_single2.
         rewrite env.remove_insert.
+        unfold ι__pat.
+        unfold wmatchvar_patternvars.
+        rewrite inst_eq_rect.
+        rewrite eq_sym_involutive.
+        rewrite inst_sub_cat_right_take.
         rewrite env.drop_take.
         now rewrite eq_rect_sym1.
       - now destruct H1.
