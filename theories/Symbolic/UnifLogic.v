@@ -1533,7 +1533,8 @@ Module Type UnifLogicOn
       MkRel (RList' R).
 
     #[export] Instance RHeap : Rel SHeap SCHeap := RList RChunk.
-    #[export] Instance RConst A : Rel (Const A) A := RInst (Const A) A.
+    (* priority 1 so that RUnit is picked first (not sure why we have both) *)
+    #[export] Instance RConst A : Rel (Const A) A | 1 := RInst (Const A) A.
 
     #[export] Instance RProd `(RA : Rel AT A, RB : Rel BT B) :
       Rel (WProd AT BT) (A * B)%type :=

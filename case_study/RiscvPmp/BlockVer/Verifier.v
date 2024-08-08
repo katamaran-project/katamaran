@@ -314,8 +314,8 @@ Module BlockVerificationDerived2Sound.
 
   #[export] Instance refine_compat_exec_instruction_any {i : AST} {w} :
     RefineCompat (RVal ty_xlenbits -> RStoreSpec [ctx] [ctx] (RVal ty_xlenbits))
-      (exec_instruction_any__c i) w (BlockVerificationDerived2.exec_instruction_any (w := w) i) :=
-    MkRefineCompat _ _ _ (refine_exec_instruction_any i).
+      (exec_instruction_any__c i) w (BlockVerificationDerived2.exec_instruction_any (w := w) i) _ :=
+    MkRefineCompat (refine_exec_instruction_any i).
 
   Fixpoint exec_block_addr__c (b : list AST) : Val ty_xlenbits -> Val ty_xlenbits -> M (Val ty_xlenbits) :=
     fun ainstr apc =>
@@ -339,7 +339,7 @@ Module BlockVerificationDerived2Sound.
       unfold exec_block_addr__c, BlockVerificationDerived2.exec_block_addr.
       iInduction b as [*|*] "IHb"; rsolve.
       iApply ("IHb" with "[] [$]").
-      rsolve.
+      now rsolve.
     } 
     iApply (unconditionally_T with "H").
   Qed.
