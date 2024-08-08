@@ -395,28 +395,13 @@ Module Soundness
         RefineCompat (RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R) CStoreSpec.demonic_binary w (SStoreSpec.demonic_binary (w := w)) _ :=
         MkRefineCompat refine_demonic_binary.
 
-      #[export] Instance refine_compat_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
+      Definition refine_compat_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
         RefineCompat (RInst (Sub Σ) (Valuation Σ) -> RInst T A) (inst vs) w (subst vs) _ :=
         MkRefineCompat (refine_inst_subst vs).
-
-      #[export] Instance refine_compat_inst_subst2 {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
-        RefineCompat (RNEnv LVar Σ -> RInst T A) (inst vs) w (subst vs) _ :=
-        MkRefineCompat (refine_inst_subst vs).
-
-      #[export] Instance refine_compat_inst_subst2_spec {N Δ} {Σ} (vs : NamedEnv (Term Σ) Δ) {w : World} :
-        RefineCompat (RNEnv LVar Σ -> RNEnv N Δ) (inst vs) w (subst vs) _ :=
-        MkRefineCompat (refine_inst_subst vs).
-
-
-      #[export] Instance refine_compat_inst_subst3 {Δ Σ} (vs : SStore Δ Σ) {w : World} :
-        RefineCompat (RNEnv LVar Σ -> RInst (SStore Δ) (CStore Δ)) (inst vs) w (subst vs) _ :=
-        MkRefineCompat (refine_inst_subst vs).
-
-      (* #[export] Instance refine_compat_inst_subst4 {N1} {N2} {Σ  : NCtx N1 Ty} {Δ : NCtx N2 Ty} {w : World} (vs : NamedEnv (Term w) Δ): *)
-      (*   RefineCompat (RNEnv N1 Σ -> RNEnv N2 Δ) (inst vs : NamedEnv Val Σ -> NamedEnv Val Δ) w (subst vs) _ := *)
-      (*   MkRefineCompat (refine_inst_subst vs). *)
+      Opaque refine_compat_inst_subst.
 
     End BasicsCompatLemmas.
+    #[export] Hint Extern 0 (RefineCompat _ (inst ?vs) _ (subst ?vs) _) => refine (refine_compat_inst_subst vs) : typeclass_instances.
 
     Import iris.proofmode.environments.
 
