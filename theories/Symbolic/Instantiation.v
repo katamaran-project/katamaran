@@ -785,6 +785,7 @@ Module Type InstantiationOn
           intros ι; apply xy.
       Qed.
 
+      #[export] Instance bientails_rewriterelation : RewriteRelation (@bientails A IA Σ). Qed.
     End WithA.
 
     #[global] Instance: Params (@entails) 5 := {}.

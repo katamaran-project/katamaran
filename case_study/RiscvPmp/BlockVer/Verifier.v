@@ -310,6 +310,8 @@ Module BlockVerificationDerived2Sound.
   Proof.
     unfold BlockVerificationDerived2.exec_instruction_any, exec_instruction_any__c.
     rsolve.
+    now rewrite !sub_acc_trans.
+    now rewrite !sub_acc_trans.
   Qed.
 
   #[export] Instance refine_compat_exec_instruction_any {i : AST} {w} :
@@ -339,7 +341,8 @@ Module BlockVerificationDerived2Sound.
       unfold exec_block_addr__c, BlockVerificationDerived2.exec_block_addr.
       iInduction b as [*|*] "IHb"; rsolve.
       iApply ("IHb" with "[] [$]").
-      now rsolve.
+      rsolve.
+      now rewrite sub_acc_trans.
     } 
     iApply (unconditionally_T with "H").
   Qed.
@@ -374,7 +377,9 @@ Module BlockVerificationDerived2Sound.
     - now iApply refine_rnenv_sub_acc.
     - iApply refine_exec_block_addr;
         rsolve.
-    - now iApply refine_rnenv_sub_acc.
+    - iApply refine_rnenv_sub_acc.
+      now rewrite !sub_acc_trans.
+    - now rewrite !sub_acc_trans.
   Qed.
 
 End BlockVerificationDerived2Sound.
@@ -419,8 +424,8 @@ Module BlockVerification3Sound.
                (fun w ω => @BlockVerification3.exec_block_addr b w)) as "H".
     { iInduction b as [|instr b] "IHb"; rsolve.
       destruct instr; cbn; rsolve.
-      - iApply "IHb"; now rsolve.
-      - iApply "IHb"; now rsolve. }
+      - iApply "IHb"; rsolve; now rewrite ?sub_acc_trans.
+      - iApply "IHb"; rsolve; now rewrite ?sub_acc_trans. }
     now iApply (unconditionally_T with "H").
   Qed.
 
@@ -447,7 +452,9 @@ Module BlockVerification3Sound.
     rsolve.
     - now iApply refine_rnenv_sub_acc.
     - iApply refine_exec_block_addr; now rsolve.
-    - now iApply refine_rnenv_sub_acc.
+    - iApply refine_rnenv_sub_acc.
+      now rewrite !sub_acc_trans.
+    - now rewrite sub_acc_trans.
   Qed.
 
 End BlockVerification3Sound.
@@ -672,9 +679,9 @@ Module BlockVerificationDerived2Sem.
   Proof.
     intros Hverif ι.
     apply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := []%ctx |}) (pre := pre) (post := post) (instrs := instrs)).
-    eapply (fromEntails (w := wlctx Γ) _ _ (refine_exec_triple_addr (Σ := wlctx Γ) _ _ _) ι I eq_refl).
+    eapply (fromEntails (w := wlctx Γ) (refine_exec_triple_addr (Σ := wlctx Γ) _ _ _) ι I eq_refl).
     all: cycle 3.
-    - apply (fromBientails (w := wlctx Γ) _ _ (LogicalSoundness.psafe_safe) ι I).
+    - apply (fromBientails (w := wlctx Γ) (LogicalSoundness.psafe_safe) ι I).
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       rewrite SymProp.safe_demonic_close in Hverif.
       now apply Hverif.
@@ -849,9 +856,9 @@ Module BlockVerification3Sem.
   Proof.
     intros lemSem Hverif ι.
     apply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := []%ctx |}) (pre := pre) (post := post) (instrs := instrs)); first easy.
-    eapply (fromEntails (w := wlctx Γ) _ _ (refine_exec_triple_addr _ _ _) ι I eq_refl _ (λ w1 _ _ _ _, SymProp.block)).
+    eapply (fromEntails (w := wlctx Γ) (refine_exec_triple_addr _ _ _) ι I eq_refl _ (λ w1 _ _ _ _, SymProp.block)).
     all: cycle 3.
-    - apply (fromBientails (w := wlctx Γ) _ _ (LogicalSoundness.psafe_safe) ι I).
+    - apply (fromBientails (w := wlctx Γ) (LogicalSoundness.psafe_safe) ι I).
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       rewrite SymProp.safe_demonic_close in Hverif.
       now apply Hverif.

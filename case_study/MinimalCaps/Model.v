@@ -609,9 +609,8 @@ Module MinCapsIrisInstanceWithContracts.
       ValidLemma lemma_subperm_not_E.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      iIntros "(%H & %Hsub & $)".
-      iPureIntro.
-      destruct H as [[-> _]|[-> _]];
+      iIntros "([[ -> _ ]|[ -> _ ]] & %Hsub & $)";
+      iPureIntro;
         unfold Subperm in Hsub;
         intros H; inversion H; subst;
         cbn in Hsub; discriminate.

@@ -2059,6 +2059,17 @@ Module Type LogSymPropOn
     Import ModalNotations.
     Import proofmode logicalrelation.
 
+    Lemma inst_triangular_knowing {w0 w1} (ζ : Tri w0 w1) :
+      (inst_triangular ζ : Pred w0) ⊣⊢ knowing (sub_triangular ζ) True%I. 
+    Proof.
+      unfold knowing; crushPredEntails3.
+      - exists (inst (sub_triangular_inv ζ) ι).
+        rewrite inst_triangular_right_inverse; last done.
+        now intuition (eapply entails_triangular_inv).
+      - rewrite <-H0.
+        eapply inst_triangular_valid.
+    Qed.
+
     (* logical version of wsafe *)
     Fixpoint psafe {w : World} (p : SymProp w) : Pred w :=
       (match p with
@@ -2069,25 +2080,25 @@ Module Type LogSymPropOn
        | assertk fml msg o =>
            (Obligation msg fml : Pred w) ∗ psafe (w := wformula w fml) o
        | assumek fml o => (instprop fml : Pred w) -∗ psafe (w := wformula w fml) o
-       | angelicv b k => knowing acc_snoc_right (@psafe (wsnoc w b) k)
-       | demonicv b k => assuming acc_snoc_right (@psafe (wsnoc w b) k)
+       | angelicv b k => knowing (w1 := wsnoc w b) sub_wk1 (@psafe (wsnoc w b) k)
+       | demonicv b k => assuming (w1 := wsnoc w b) sub_wk1 (@psafe (wsnoc w b) k)
        | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
            Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∗
-            assuming (acc_subst_right (xIn := xIn) t) (psafe (w := wsubst w x t) k)
+            assuming (w1 := wsubst w x t) (sub_single xIn t) (psafe (w := wsubst w x t) k)
        | @assume_vareq _ x σ xIn t k =>
            (* eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) -∗ *)
-           let ω := acc_subst_right (xIn := xIn) t in
-           assuming ω (psafe (w := wsubst w x t) k)
+           let ω := sub_single xIn t in
+           assuming (w1 := wsubst w x t) ω (psafe (w := wsubst w x t) k)
        | pattern_match s pat rhs =>
            ∀ (pc : PatternCase pat),
              let wm : World := wmatch w s pat pc in
-             let ω : w ⊒ wm := acc_match_right pc in
+             let ω : Sub w wm := sub_cat_left (PatternCaseCtx pc) in
              assuming ω (psafe (w := wmatch w s pat pc) (rhs pc))
        | @pattern_match_var _ x σ xIn pat rhs =>
            ∀ (pc : PatternCase pat),
              let wmv : World := wmatchvar w xIn pat pc in
-             let ω : w ⊒ wmv := acc_matchvar_right pc in
+             let ω : Sub w wmv := sub_matchvar_right pc in
              assuming ω (@psafe wmv (rhs pc))
         | debug d k => DebugPred _ d (psafe k)
         end)%I.
@@ -2336,43 +2347,9 @@ Module Type LogSymPropOn
 
   End LogicalSoundness.
 
-  Module LogicalSolverSpec.
+  Import iris.bi.interface iris.proofmode.tactics.
+  Import SymProp.
+  Import logicalrelation.notations.
+  Import proofmode.
 
-    Import iris.bi.interface iris.proofmode.tactics.
-    Import SymProp.
-    Import logicalrelation.notations.
-    Import proofmode.
-
-    Section SolverSpec.
-      Definition SolverSpec (s : Solver) (w : World) : Prop :=
-        forall (C0 : PathCondition w),
-          option.spec
-            (fun '(existT w1 (ζ, C1)) =>
-               (knowing (acc_triangular ζ) (instprop C1)) ⊣⊢ (instprop C0 : Pred w))%I
-            ((instprop C0 : Pred w) ⊢ False)%I
-            (s w C0).
-
-      Lemma SolverSpec_old_to_logical {s} : W.SolverSpec s -> forall w, SolverSpec s w.
-      Proof.
-        unfold W.SolverSpec.
-        intros oldspec w C.
-        destruct (oldspec w C) as [(w1 & (ζ , C1)) | H];
-          cbn in *;
-          constructor;
-          unfold forgetting, assuming, knowing;
-          crushPredEntails3.
-        - apply H2; last done.
-          now rewrite sub_acc_triangular in H1.
-        - exists (inst (sub_triangular_inv ζ) ι).
-          rewrite sub_acc_triangular.
-          rewrite inst_triangular_right_inverse; last done.
-          repeat split.
-          + now apply entails_triangular_inv.
-          + apply H2; last done.
-            * now apply entails_triangular_inv. 
-            * now rewrite inst_triangular_right_inverse.
-      Qed.
-    End SolverSpec.
-
-  End LogicalSolverSpec.
-End LogSymPropOn.
+  End LogSymPropOn.

@@ -162,7 +162,7 @@ Module RiscvPmpModel2.
         interp_ptstomem paddr w.
     Proof.
       revert paddr w. induction width; intros paddr w.
-      { now iSplit. }
+      { iSplit. now iIntros "[? ?]". iIntros "#H". now iSplit. }
       change (S width * byte)%nat with (byte + width * byte)%nat in w.
       unfold interp_ptstomem, IrisInstance.RiscvPmpIrisInstance.interp_ptstomem.
       destruct (bv.appView byte (width * byte) w).
@@ -514,7 +514,7 @@ Module RiscvPmpModel2.
     Proof.
       pose proof xlenbits_pos.
       iInduction bytes as [|bytes] "IHbytes"; iIntros (paddr pmp p p0 Hpmp Hrep Hbytes) "".
-      now iSimpl.
+      { now iSimpl; iSplit; iIntros. }
       iSplit; iIntros "H".
       - iIntros "[%acc %Haccess]".
         simpl.

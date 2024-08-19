@@ -41,7 +41,6 @@ From Katamaran Require Import
      Prelude
      Base
      Environment
-     (* Symbolic.Propositions *)
      Symbolic.Worlds
      Syntax.Predicates
 .
@@ -54,198 +53,6 @@ Module Type UnifLogicOn
   (Import B : Base)
   (Import P : PredicateKit B)
   (Import W : WorldsMixin B P).
-
-  Definition Pred : TYPE := fun w => Valuation w -> Prop.
-  
-  Bind Scope pred_scope with Pred.
-
-  Section Definitions.
-    Import ModalNotations.
-    Definition Tm (A : LCtx -> Type) : TYPE :=
-      fun w => A w.
-    
-    Definition eqₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : ⊢ Tm T -> Tm T -> Pred :=
-      fun w t1 t2 ι => (inst t1 ι = inst t2 ι)%type.
-    #[global] Arguments eqₚ {T A _} [w] _ _ _/.
-    
-    Definition repₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : A -> ⊢ Tm T -> Pred :=
-      fun t2 w t1 ι => (inst t1 ι = t2)%type.
-    #[global] Arguments repₚ {T A _} _ [w] _ _/.
-    
-    Definition curval {w : World} : Valuation w -> Pred w :=
-      fun ι1 ι2 => ι1 = ι2.
-
-    Inductive DebugPred (B : LCtx → Type) {w : World} (b : B w) (P : Pred w) : Pred w := 
-        MkDebugPred : ∀ w, P w -> DebugPred B b P w.
-  End Definitions.
-  
-  Section EntailmentDefinitions.
-
-    Context {w : World}.
-
-    Record bientails (P Q : Pred w) : Prop :=
-      MkBientails { fromBientails : forall ι, instprop (wco w) ι -> P ι <-> Q ι }.
-    Record entails (P Q : Pred w) : Prop :=
-      MkEntails { fromEntails : forall ι, instprop (wco w) ι -> P ι -> Q ι }.
-
-    #[export] Instance pred_equiv : Equiv (Pred w) := bientails.
-
-  End EntailmentDefinitions.
-
-  Ltac crushPredEntailsMatch1 :=
-    match goal with
-    | [ H : ?P /\ ?Q |- _ ] => destruct H
-    | [ H : ?P \/ ?Q |- _ ] => destruct H
-    | [ H: entails ?x ?y, ι : Valuation ?w, Hpc : instprop ?pc ?ι |- _ ] => (pose proof (fromEntails x y H ι Hpc); clear H)
-    | [ H: equiv ?x ?y, ι : Valuation ?w, Hpc : instprop ?pc ?ι |- _ ] => (pose proof (fromBientails x y H ι Hpc); clear H)
-    | [ H: bientails ?x ?y, ι : Valuation ?w, Hpc : instprop ?pc ?ι |- _ ] => (pose proof (fromBientails x y H ι Hpc); clear H)
-    end.
-  Ltac crushPredEntails1 := repeat constructor; intros; cbn in *; repeat crushPredEntailsMatch1; intuition.
-  
-  Section RewriteRelations.
-    Context {w : World}.
-    
-    #[export] Instance pred_equivalence : Equivalence (≡@{Pred w}).
-    Proof. crushPredEntails1. Qed.
-
-    #[export] Instance preorder_entails : RelationClasses.PreOrder (entails (w := w)).
-    Proof. crushPredEntails1. Qed.
-    #[export] Instance subrelation_bientails_entails :
-      subrelation (≡@{Pred w}) entails.
-    Proof. crushPredEntails1. Qed.
-    #[export] Instance subrelation_bientails_flip_entails :
-      subrelation (≡@{Pred w}) (Basics.flip entails).
-    Proof. crushPredEntails1. Qed.
-
-    #[export] Instance entails_rewriterelation : RewriteRelation (@entails w) := {}.
-
-    #[export] Instance proper_bientails :
-      Proper (@bientails w ==> @bientails w ==> iff) bientails.
-    Proof. crushPredEntails1. Qed.
-    #[export] Instance proper_entails_bientails :
-      Proper ((≡@{Pred w}) ==> (≡@{Pred w}) ==> iff) entails.
-    Proof. crushPredEntails1. Qed.
-    #[export] Instance proper_entails_entails :
-      Proper (Basics.flip (entails (w := w)) ==> (entails (w := w)) ==> Basics.impl) entails.
-    Proof. crushPredEntails1. Qed.
-
-  End RewriteRelations.
-  #[global] Arguments bientails {w} (_ _)%P.
-  #[global] Arguments entails {w} (_ _)%P.
-
-  Module Import proofmode.
-
-    Import iris.bi.interface.
-    Import iris.bi.extensions.
-
-    Definition empₚ {w} (ι : Valuation w) : Prop := True.
-    Arguments empₚ {w} ι /.
-    Definition sepₚ {w} (P Q : Pred w) (ι : Valuation w) : Prop := P ι /\ Q ι.
-    Arguments sepₚ {w} P Q ι /.
-    Definition wandₚ {w} (P Q : Pred w) (ι : Valuation w) : Prop := P ι -> Q ι.
-    Arguments wandₚ {w} P Q ι /.
-    Definition persistently {w : World} (P : Pred w) (ι : Valuation w) : Prop := P ι.
-
-    #[export] Instance ofe_dist_pred {w} : ofe.Dist (Pred w) :=
-      ofe.discrete_dist.
-
-    (* Iris defines [bi_later_mixin_id] for BI algebras without later. However,
-       the identity function as later still causes some later-specific
-       typeclasses to be picked. We just define our own trivial modality and
-       mixin to avoid that. *)
-    Variant later {w} (P : Pred w) (ι : Valuation w) : Prop :=
-      MkLater : P ι -> later P ι.
-
-    (* Note domi: This tactic is defined specifically to prove bi_pred below because firstorder enters a rabbit hole somewhere.
-       Note: order of matches is important.
-     *)
-    Ltac crushPredEntailsMatch2 :=
-        match goal with
-        | [ |- True ] => constructor
-        | [ H : dist _ _ _ |- _ ] => cbv in H
-        | [ H : ?P |- ?P \/ _ ] => left
-        | [ H : ?P |- _ \/ ?P ] => right
-        | [ |- iff _ _ ] => split
-        | [ |- _ -> _ ] => intro
-        | [ |- _ /\ _ ] => split
-        | [ |- forall P, _ ] => intro
-        | [ H1: instprop ?pc ?ι -> ?Q, H2 : instprop ?pc ?ι |- _ ] => specialize (H1 H2)
-        | [ |- Reflexive _] => intro
-        | [ |- Transitive _] => intro
-        | [ |- PreOrder _] => constructor
-        | [ |- entails _ _] => constructor
-        | [ |- bientails _ _] => constructor
-        | [ |- equiv _ _] => constructor
-        | [ H : ?H |- ?H ] => assumption
-        | [ H1 : ?P1 -> ?P2, H2: ?P1  |- ?P2 ] => apply (H1 H2)
-        | [ H : ?H1 <-> ?H2 |- ?H2 ] => apply (proj1 H); clear H
-        | [ H : ?H1 <-> ?H2 |- ?H1 ] => apply (proj2 H); clear H
-        | [ H : ?P1 <-> ?P2, H2 : ?P1 |- _ ] => apply (proj1 H) in H2; clear H
-        | [ H : ?P1 <-> ?P2, H2 : ?P2 |- _ ] => apply (proj2 H) in H2; clear H
-        | [ |- Proper _ _ ] => intro; intros
-        | [ |- dist _ ?P ?Q ] => change (equiv P Q)
-        | [ |- respectful _ _ ?P ?Q ] => intro; intro; intro
-        | [ H1 : pointwise_relation ?A _ _ _, H2: ?A |- _ ] => specialize (H1 H2)
-        | [ H1 : (forall (a : ?A), _), H2: ?A |- _ ] => specialize (H1 H2)
-        | [ H1 : (exists (a : ?A), _) |- _ ] => destruct H1
-        | [ a : ?A |- exists (a : ?A), _ ] => exists a
-        | [ H : sepₚ _ _ _ |- _ ] => destruct H
-        | [ |- sepₚ _ _ _ ] => split
-        | [ |- eqₚ ?t1 ?t2 ?ι ] => intro
-        (* | [ |- ∀ₚ _ ] => intro *)
-        | [ |- wandₚ _ _ _ ] => intro
-        | [ H : wandₚ _ _ _ |- _ ] => cbn in H
-        | [ H : (fun x => _) _ |- _ ] => cbn in H
-        | [ |- True ] => trivial
-        | [ |- empₚ _ ] => constructor
-        | [ |- persistently _ _ ] => unfold persistently
-        | [ H: persistently _ _ |- _ ] => unfold persistently in H
-        | [ |- later _ _ ] => constructor
-        | [ H: later _ _ |- _ ] => destruct H
-        | [ |- later (λ _ , False) _ ∨ _ ] => right
-        end.
-    Ltac crushPredEntails2 := cbn; intros; cbn in *; repeat (crushPredEntailsMatch1 || crushPredEntailsMatch2); intuition.
-
-    Canonical bi_pred {w : World} : bi.
-    Proof.
-      refine
-        {| bi_car := Pred w;
-          bi_entails := entails;
-          bi_emp := empₚ;
-          bi_pure P _ := P;
-          bi_and P Q ι := P ι /\ Q ι;
-          bi_or P Q ι := P ι \/ Q ι;
-          bi_impl P Q ι := P ι -> Q ι;
-          bi_forall A f ι :=  forall a, f a ι;
-          bi_exist A f ι := exists a, f a ι;
-          bi_sep := sepₚ;
-          bi_wand := wandₚ;
-          bi_persistently := persistently;
-          bi_later := later;
-        |}.
-      - constructor; crushPredEntails2.
-        apply H1; crushPredEntails2.
-      - constructor; crushPredEntails2.
-      - constructor; crushPredEntails2.
-    Defined.
-
-    Definition proprepₚ {T : LCtx -> Type} {instTA : InstProp T} : Prop -> forall w, Tm T w -> Pred w :=
-      fun t2 w t1 => ((instprop t1 : Pred w) ∗-∗ bi_pure t2)%I.
-    #[global] Arguments proprepₚ {T _} _ [w] _ _/.
-
-    #[export] Instance persistent_pred {w} {P : Pred w} :
-      derived_connectives.Persistent P.
-    Proof. constructor. now intros ι HP. Qed.
-
-    #[export] Instance affine_pred {w} {P : Pred w} :
-      derived_connectives.Affine P.
-    Proof. constructor. intros ι HP. now constructor. Qed.
-
-
-    #[export] Instance pred_pure_forall {w} : BiPureForall (Pred w).
-    Proof. constructor. crushPredEntails2. Qed.
-
-  End proofmode.
 
   Ltac punfold_connectives :=
     change (@interface.bi_and (@bi_pred ?w) ?P ?Q ?ι) with (P ι /\ Q ι) in * ||
@@ -505,144 +312,186 @@ Module Type UnifLogicOn
 
     Import iris.bi.interface.
 
-    (* update: better/more standard names? *)
-    Definition assuming {w1 w2} (ω : w2 ⊒ w1) : Pred w1 -> Pred w2 :=
-      fun Rpast ι => forall (ιpast : Valuation w1), inst (sub_acc ω) ιpast = ι -> instprop (wco w1) ιpast -> Rpast ιpast.
-    Definition knowing {w1 w2} (ω : w2 ⊒ w1) : Pred w1 -> Pred w2 :=
-      fun Rpast ι => (exists (ιpast : Valuation w1), inst (sub_acc ω) ιpast = ι /\ instprop (wco w1) ιpast /\ Rpast ιpast)%type.
-    Definition forgetting {w1 w2} (ω : w1 ⊒ w2) : Pred w1 -> Pred w2 :=
-      fun Rfut ι => Rfut (inst (sub_acc ω) ι).
-    Definition unconditionally {w} : (□ Pred) w -> Pred w :=
-      fun P => (∀ {w2} (ω : w ⊒ w2), assuming ω (P w2 ω))%I.
-
     (* #[export] Instance knowing_params : *)
     (*   Params (@knowing) 3. Qed. *)
 
-    #[export] Instance knowing_proper {w1 w2} {ω : Acc w1 w2} :
+    #[export] Instance knowing_proper {w1 w2 : World} {ω : Sub w1 w2} :
       Proper (entails ==> entails) (knowing ω).
     Proof.
       unfold knowing.
       crushPredEntails3.
     Qed.
 
-    Lemma knowing_exists {w1 w2} {ω : Acc w1 w2} {A} (P : A -> Pred w2) :
+    #[export] Instance knowing_proper_bientails {w1 w2 : World} {ω : Sub w1 w2} :
+      Proper (bientails ==> bientails) (knowing ω).
+    Proof.
+      unfold knowing.
+      crushPredEntails3.
+    Qed.
+
+
+    Lemma knowing_exists {w1 w2 : World} {ω : Sub w1 w2} {A} (P : A -> Pred w2) :
       (∃ v, knowing ω (P v)) ⊣⊢ knowing ω (∃ v, P v).
     Proof.
       unfold knowing.
       crushPredEntails3.
     Qed.
 
-    Lemma knowing_sepₚ {w1 w2} {ω : Acc w1 w2} (P1 P2 : Pred w2) :
+    Lemma knowing_sepₚ {w1 w2 : World} {ω : Sub w1 w2} (P1 P2 : Pred w2) :
       (knowing ω (P1 ∗ P2)) ⊢ knowing ω P1 ∗ knowing ω P2.
     Proof.
       unfold knowing.
       crushPredEntails3.
     Qed.
 
-    Lemma assuming_sepₚ {w1 w2} {ω : Acc w1 w2} (P1 P2 : Pred w2) :
+    Lemma assuming_sepₚ {w1 w2 : World} {ω : Sub w1 w2} (P1 P2 : Pred w2) :
       (assuming ω (P1 ∗ P2)) ⊣⊢ assuming ω P1 ∗ assuming ω P2.
     Proof.
       unfold assuming.
       crushPredEntails3.
     Qed.
 
-    #[export] Instance assuming_proper {w1 w2} {ω : Acc w1 w2} :
+    Lemma assuming_True {w1 w2 : World} {ω : Sub w1 w2}  :
+      assuming ω True ⊣⊢ True.
+    Proof.
+      unfold assuming.
+      crushPredEntails3.
+    Qed.
+
+    #[export] Instance assuming_proper {w1 w2 : World} {ω : Sub w1 w2} :
       Proper (entails ==> entails) (assuming ω).
     Proof.
       unfold assuming.
       crushPredEntails3.
     Qed.
 
-    #[export] Instance assuming_proper_bientails {w1 w2} {ω : Acc w1 w2} :
+    #[export] Instance assuming_proper_bientails {w1 w2 : World} {ω : Sub w1 w2} :
       Proper (bientails ==> bientails) (assuming ω).
     Proof.
       unfold assuming.
       crushPredEntails3.
     Qed.
 
-    #[export] Instance forgetting_proper {w1 w2} {ω : Acc w1 w2} :
-      Proper (entails ==> entails) (forgetting ω).
+    Class IntoWorldAcc {w1 w2 : World} (sub : Sub w1 w2) (ω : w1 ⊒ w2) :=
+      intoacc_eq : sub_acc ω = sub.
+
+    #[export] Instance intoacc_sub_acc  {w1 w2 : World} (ω : w1 ⊒ w2) : IntoWorldAcc (sub_acc ω) ω :=
+      eq_refl.
+
+    #[export] Instance intoacc_trans  {w1 w2 w3 : World} {sub12 : Sub w1 w2} {sub23 : Sub w2 w3}
+      {ω12 ω23} {intoacc12 : IntoWorldAcc sub12 ω12} {intoacc23 : IntoWorldAcc sub23 ω23}
+      : IntoWorldAcc (subst sub12 sub23) (acc_trans ω12 ω23).
+    Proof.
+      unfold IntoWorldAcc.
+      now rewrite sub_acc_trans intoacc12 intoacc23.
+    Qed.
+
+    #[export] Instance intoacc_sub_triangular {w1 w2} {ζ : Tri w1 w2} :
+      IntoWorldAcc (sub_triangular ζ) (acc_triangular ζ).
+    Proof.
+      unfold IntoWorldAcc.
+      now rewrite sub_acc_triangular.
+    Qed.
+
+    #[export] Instance intoacc_refl {w} : IntoWorldAcc (sub_id _) (acc_refl (w := w)). Proof. now cbn. Qed.
+
+    #[export] Instance intoacc_lift {Σ : LCtx} {ι : Valuation Σ} : IntoWorldAcc (w1 := wlctx Σ) (w2 := wnil) (lift ι) (acc_wlctx_valuation ι).
+    Proof. by cbn. Qed.
+    
+    #[export] Instance forgetting_proper {w1 w2 : World} `{IntoWorldAcc w1 w2 sub ω} :
+      Proper (entails ==> entails) (forgetting sub).
     Proof.
       unfold forgetting.
+      rewrite <-H.
       crushPredEntails3.
-      apply (fromEntails _ _ H); last done.
+      apply (fromEntails H0); last done.
       now apply acc_pathcond.
     Qed.
 
-    #[export] Instance forgetting_proper_bientails {w1 w2} {ω : Acc w1 w2} :
-      Proper (equiv ==> equiv) (forgetting ω).
+    #[export] Instance forgetting_proper_bientails {w1 w2 : World} `{IntoWorldAcc w1 w2 sub ω} :
+      Proper (equiv ==> equiv) (forgetting sub).
     Proof.
       unfold forgetting.
+      rewrite <-H.
       crushPredEntails3;
-        (apply (fromBientails _ _ H); last done;
+        (apply (fromBientails H0); last done;
          now apply acc_pathcond).
     Qed.
     
-    Lemma forgetting_forall {w1 w2} {ω : Acc w1 w2} {A} {P : A -> Pred w1} :
+    Lemma forgetting_forall {w1 w2 : World} {ω : Sub w1 w2} {A} {P : A -> Pred w1} :
       (∀ v : A, forgetting ω (P v)) ⊣⊢ forgetting ω (∀ v : A, P v).
     Proof.
       unfold forgetting.
       crushPredEntails3.
     Qed.
 
-    Lemma forgetting_wand {w1 w2} {ω : Acc w1 w2} {P1 P2 : Pred w1} :
+    Lemma forgetting_wand {w1 w2 : World} {ω : Sub w1 w2} {P1 P2 : Pred w1} :
       (forgetting ω P1 -∗ forgetting ω P2) ⊣⊢ forgetting ω (P1 -∗ P2).
     Proof.
       unfold forgetting.
       crushPredEntails3.
     Qed.
 
-    Lemma knowing_assuming {w1 w2} (ω : w2 ⊒ w1) {P Q} :
+    Lemma knowing_assuming {w1 w2 : World} (ω : Sub w2 w1) {P Q} :
       knowing ω P ∗ assuming ω Q ⊢ knowing ω (P ∗ Q).
     Proof.
       unfold knowing, assuming.
       crushPredEntails3.
     Qed.
 
-    Lemma knowing_pure {w1 w2} (ω : w2 ⊒ w1) {P} :
+    Lemma knowing_absorb_forgetting {w1 w2 : World} (ω : Sub w2 w1) {P Q} :
+      knowing ω P ∗ Q ⊣⊢ knowing ω (P ∗ forgetting ω Q).
+    Proof.
+      unfold knowing, forgetting.
+      crushPredEntails3; now subst.
+    Qed.
+
+    Lemma knowing_pure {w1 w2 : World} (ω : Sub w2 w1) {P} :
       knowing ω (bi_pure P) ⊢ bi_pure P.
     Proof.
       unfold knowing.
       crushPredEntails3.
     Qed.
 
-    Lemma knowing_forall {w1 w2} {ω : Acc w1 w2} {A} {P : A -> Pred w2} :
+    Lemma knowing_forall {w1 w2 : World} {ω : Sub w1 w2} {A} {P : A -> Pred w2} :
       knowing ω (∀ v : A, P v) ⊢ (∀ v : A, knowing ω (P v)).
     Proof.
       unfold knowing.
       crushPredEntails3.
     Qed.
 
-    Lemma forgetting_pure {w1 w2} (ω : w2 ⊒ w1) {P} :
+    Lemma forgetting_pure {w1 w2 : World} (ω : Sub w2 w1) {P} :
       forgetting ω (bi_pure P) ⊣⊢ bi_pure P.
     Proof.
       unfold forgetting.
       crushPredEntails3.
     Qed.
 
-    Lemma assuming_pure {w1 w2} (ω : w2 ⊒ w1) {P} :
+    Lemma assuming_pure {w1 w2 : World} (ω : Sub w2 w1) {P} :
       bi_pure P ⊢ assuming ω (bi_pure P).
     Proof.
       unfold assuming.
       crushPredEntails3.
     Qed.
 
-    Lemma forgetting_unconditionally {w1 w2} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
-      forgetting ω (unconditionally P) ⊢ unconditionally (four P ω).
+    Lemma forgetting_unconditionally {w1 w2 : World} `{IntoWorldAcc w2 w1 sub ω} (P : (□ Pred) w2) :
+      forgetting sub (unconditionally P) ⊢ unconditionally (four P ω).
     Proof.
+      rewrite -H.
       unfold forgetting, unconditionally, assuming.
       crushPredEntails3.
-      eapply H0; eauto using acc_pathcond.
-      now rewrite <-H1, <-inst_subst, <-sub_acc_trans.
+      eapply H1; eauto using acc_pathcond.
+      now rewrite <-H2, <-inst_subst, <-sub_acc_trans.
     Qed.
 
-    Lemma forgetting_unconditionally_drastic {w1 w2} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
-      forgetting ω (unconditionally P) ⊢ P _ ω.
+    Lemma forgetting_unconditionally_drastic {w1 w2 : World} `{IntoWorldAcc w2 w1 sub ω} {P} :
+      forgetting sub (unconditionally P) ⊢ P _ ω.
     Proof.
+      rewrite -H.
       unfold forgetting, unconditionally, assuming.
       constructor.
       intros.
-      now apply (H0 w1 ω ι).
+      now apply (H1 w1 ω ι).
     Qed.
 
     Lemma unconditionally_T {w} (P : (□ Pred) w) :
@@ -667,7 +516,7 @@ Module Type UnifLogicOn
     Proof. crushPredEntails3. now eexists. Qed.
 
     Lemma forgetting_valuation_curval {Σ} {ι : Valuation Σ} :
-      ⊢ forgetting (acc_wlctx_valuation ι) (curval (ι : Valuation (wlctx Σ))).
+      ⊢ forgetting (w1 := wlctx Σ) (w2 := wnil) (lift ι) (curval (ι : Valuation (wlctx Σ))).
     Proof.
       unfold curval, forgetting.
       crushPredEntails3.
@@ -680,8 +529,8 @@ Module Type UnifLogicOn
       unfold curval. crushPredEntails3. now subst.
     Qed.
 
-    Lemma forgetting_curval {w w2} {ω2 : Acc w w2} {ι : Valuation w} :
-      forgetting ω2 (curval ι) ⊣⊢ repₚ ι (sub_acc ω2).
+    Lemma forgetting_curval {w w2 : World} {ω2 : Sub w w2} {ι : Valuation w} :
+      forgetting ω2 (curval ι) ⊣⊢ repₚ ι ω2.
     Proof.
       unfold forgetting, curval.
       now crushPredEntails3.
@@ -856,27 +705,29 @@ Module Type UnifLogicOn
       Qed.
     End WithEnvironments.
         
-    Lemma forgetting_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
-      (repₚ v (persist t ω) ⊣⊢ forgetting ω (repₚ v t))%I.
+    Lemma forgetting_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2}  `{IntoWorldAcc w1 w2 sub ω} (t : AT w1) :
+      (repₚ v (persist t ω) ⊣⊢ forgetting sub (repₚ v t))%I.
     Proof.
       rewrite persist_subst.
       unfold forgetting, repₚ.
+      rewrite <-H3.
       constructor. split; rewrite inst_subst; auto using acc_pathcond.
     Qed.
 
-    Lemma forgetting_proprepₚ `{InstPropSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
-      (proprepₚ v (persist t ω) ⊣⊢ forgetting ω (proprepₚ v t))%I.
+    Lemma forgetting_proprepₚ `{InstPropSubst AT, @SubstLaws AT _} {v w1 w2} `{IntoWorldAcc w1 w2 sub ω}  (t : AT w1) :
+      (proprepₚ v (persist t ω) ⊣⊢ forgetting sub (proprepₚ v t))%I.
     Proof.
       unfold forgetting, proprepₚ, derived_connectives.bi_wand_iff.
+      rewrite <-H3.
       constructor.
       crushPredEntails3.
-      - now apply H4, instprop_persist.
+      - now apply H5, instprop_persist.
       - now apply instprop_persist.
-      - now apply H4, instprop_persist.
+      - now apply H5, instprop_persist.
       - now apply instprop_persist.
     Qed.
 
-    Lemma assuming_refl {w} {P : Pred w} : assuming acc_refl P ⊣⊢ P.
+    Lemma assuming_id {w} {P : Pred w} : assuming (sub_id _) P ⊣⊢ P.
     Proof.
       rewrite /assuming.
       crushPredEntails3.
@@ -884,51 +735,44 @@ Module Type UnifLogicOn
       - rewrite inst_sub_id in H1; now subst.
     Qed.
 
-    Lemma knowing_refl {w} {P : Pred w} : knowing acc_refl P ⊣⊢ P.
+    Lemma knowing_trans {w1 w2 w3 : World} {sub12 : Sub w1 w2} `{IntoWorldAcc w2 w3 sub23 ω23} {P : Pred w3} :
+      knowing (subst sub12 sub23) P ⊣⊢ knowing sub12 (knowing sub23 P).
     Proof.
       rewrite /knowing.
+      rewrite <-H.
       crushPredEntails3.
-      - rewrite inst_sub_id in H0. now subst.
-      - now rewrite inst_sub_id.
-    Qed.
-
-    Lemma knowing_trans {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3} {P : Pred w3} :
-      knowing (acc_trans ω12 ω23) P ⊣⊢ knowing ω12 (knowing ω23 P).
-    Proof.
-      rewrite /knowing.
-      crushPredEntails3.
-      - rewrite sub_acc_trans inst_subst in H0.
+      - rewrite inst_subst in H1.
         exists (inst (sub_acc ω23) x).
         repeat split; try done.
         { now apply acc_pathcond. }
         now exists x.
-      - rewrite sub_acc_trans inst_subst.
+      - rewrite inst_subst.
         now subst.
     Qed.
 
-    Lemma assuming_trans {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3} {P : Pred w3} :
-      assuming (acc_trans ω12 ω23) P ⊣⊢ assuming ω12 (assuming ω23 P).
+    Lemma assuming_trans {w1 w2 w3 : World} {sub12 : Sub w1 w2} `{IntoWorldAcc w2 w3 sub23 ω23} {P : Pred w3} :
+      assuming (subst sub12 sub23) P ⊣⊢ assuming sub12 (assuming sub23 P).
     Proof.
-      rewrite /assuming.
+      rewrite /assuming -H.
       crushPredEntails3.
-      - rewrite sub_acc_trans inst_subst in H0.
-        apply H0; last done.
-        now rewrite H3.
-      - rewrite sub_acc_trans inst_subst in H1.
-        apply (H0 (inst (sub_acc ω23) ιpast)); try done.
+      - rewrite inst_subst in H1.
+        apply H1; last done.
+        now rewrite H4.
+      - rewrite inst_subst in H2.
+        apply (H1 (inst (sub_acc ω23) ιpast)); try done.
         now apply acc_pathcond.
     Qed.
 
-    Lemma forgetting_trans {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3} {P : Pred w1} :
-      forgetting (acc_trans ω12 ω23) P ⊣⊢ forgetting ω23 (forgetting ω12 P).
+    Lemma forgetting_trans {w1 w2 w3 : World} {ω12 : Sub w1 w2} {ω23 : Sub w2 w3} {P : Pred w1} :
+      forgetting (subst ω12 ω23) P ⊣⊢ forgetting ω23 (forgetting ω12 P).
     Proof.
       rewrite /forgetting.
       crushPredEntails3.
-      - now rewrite sub_acc_trans inst_subst in H0.
-      - now rewrite sub_acc_trans inst_subst.
+      - now rewrite inst_subst in H0.
+      - now rewrite inst_subst.
     Qed.
 
-    Lemma forgetting_refl {w} {P : Pred w} : forgetting acc_refl P ⊣⊢ P.
+    Lemma forgetting_id {w} {P : Pred w} : forgetting (sub_id _) P ⊣⊢ P.
     Proof.
       rewrite /forgetting.
       crushPredEntails3.
@@ -936,25 +780,14 @@ Module Type UnifLogicOn
       - now rewrite inst_sub_id.
     Qed.
 
-    Lemma forgetting_refl' {w} {P : Pred w} (ω : w ⊒ w) :
-      sub_acc ω = sub_id w ->
-      forgetting ω P ⊣⊢ P.
-    Proof.
-      rewrite /forgetting.
-      crushPredEntails3.
-      - rewrite H in H1.
-        now rewrite <-inst_sub_id.
-      - now rewrite H inst_sub_id.
-    Qed.
-
-    Lemma forgetting_assuming {w1 w2} {ω : Acc w1 w2} {P : Pred w2} :
+    Lemma forgetting_assuming {w1 w2 : World} {ω : Sub w1 w2} {P : Pred w2} :
       forgetting ω (assuming ω P) ⊢ P.
     Proof.
       rewrite /forgetting /assuming.
       now crushPredEntails3.
     Qed.
 
-    Lemma knowing_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} :
+    Lemma knowing_forgetting {w1 w2 : World} {ω : Sub w1 w2} {P : Pred w1} :
       knowing ω (forgetting ω P) ⊢ P.
     Proof.
       rewrite /forgetting /knowing.
@@ -962,73 +795,14 @@ Module Type UnifLogicOn
       now rewrite <-H0.
     Qed.
 
-    Lemma forgetting_knowing {w1 w2} {ω : Acc w1 w2} {P : Pred w2} :
+    Lemma forgetting_knowing {w1 w2 : World} {ω : Sub w1 w2} {P : Pred w2} :
       P ⊢ forgetting ω (knowing ω P).
     Proof.
       rewrite /forgetting /knowing.
       now crushPredEntails3.
     Qed.
 
-    Lemma knowing_forgetting_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w1}
-      (H : IsIsomorphism ω ω') :
-      P ⊣⊢ knowing ω (forgetting ω P).
-    Proof.
-      rewrite /forgetting /knowing.
-      crushPredEntails3.
-      - exists (inst (sub_acc ω') ι).
-        rewrite wiso_there; intuition.
-        now apply acc_pathcond.
-      - now subst.
-    Qed.
-
-    Lemma assuming_forgetting_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w1}
-      (H : IsIsomorphism ω ω') :
-      P ⊣⊢ assuming ω (forgetting ω P).
-    Proof.
-      rewrite /forgetting /assuming.
-      crushPredEntails3.
-      - now subst.
-      - specialize (H1 (inst (sub_acc ω') ι)).
-        rewrite wiso_there in H1; intuition.
-        now apply H2, acc_pathcond.
-    Qed.
-
-    Lemma forgetting_knowing_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w2}
-      (H : IsIsomorphism ω ω') :
-      P ⊣⊢ forgetting ω (knowing ω P).
-    Proof.
-      rewrite /forgetting /knowing.
-      crushPredEntails3.
-      apply (f_equal (inst (sub_acc ω'))) in H1.
-      rewrite !wiso_back in H1; intuition.
-      now subst.
-    Qed.
-
-    Lemma knowing_knowing_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w1}
-      (H : IsIsomorphism ω ω') :
-      knowing ω (knowing ω' P) ⊣⊢ P.
-    Proof.
-      unfold knowing.
-      crushPredEntails3.
-      - subst.
-        now rewrite wiso_there.
-      - exists (inst (sub_acc ω') ι).
-        repeat split.
-        + now apply wiso_there.
-        + now apply acc_pathcond.
-        + now exists ι.
-    Qed.
-
-
-    Lemma forgetting_knowing_iso2 {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w1}
-      (H : IsIsomorphism ω ω') :
-      knowing ω' P ⊣⊢ forgetting ω P.
-    Proof.
-      rewrite (forgetting_knowing_iso (P := (knowing ω' P)) H).
-      now rewrite knowing_knowing_iso.
-    Qed.
-
-    Lemma assuming_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} :
+    Lemma assuming_forgetting {w1 w2 : World} {ω : Sub w1 w2} {P : Pred w1} :
       P ⊢ assuming ω (forgetting ω P).
     Proof.
       rewrite /forgetting /assuming.
@@ -1036,76 +810,29 @@ Module Type UnifLogicOn
       now rewrite H1.
     Qed.
 
-    Lemma forgetting_assuming_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w2}
-      (iso : IsIsomorphism ω ω') :
-      P ⊣⊢ forgetting ω (assuming ω P).
-    Proof.
-      rewrite /forgetting /assuming.
-      crushPredEntails3.
-      apply (f_equal (inst (sub_acc ω'))) in H1.
-      rewrite !wiso_back in H1; intuition.
-      now subst.
-    Qed.
-
-    Lemma cancel_forgetting_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} `{iso : IsIsomorphism ω ω'}
-      {P Q : Pred w1} :
-      (forgetting ω P ⊢ forgetting ω Q) -> P ⊢ Q.
-    Proof.
-      intros H.
-      rewrite (knowing_forgetting_iso (P := P) iso) (knowing_forgetting_iso (P := Q) iso).
-      now rewrite H.
-    Qed.
-
-    Lemma cancel_knowing_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} `{iso : IsIsomorphism ω ω'}
-      {P Q : Pred w2} :
-      (knowing ω P ⊢ knowing ω Q) -> P ⊢ Q.
-    Proof.
-      intros H.
-      rewrite (forgetting_knowing_iso (P := P) iso)
-        (forgetting_knowing_iso (P := Q) iso).
-      now rewrite H.
-    Qed.
-
-    Lemma forgetting_assuming_adjoint {w1 w2} {ω : Acc w1 w2} {P Q} :
-      (forgetting ω P ⊢ Q) <-> (P ⊢ assuming ω Q).
-    Proof.
-      rewrite /forgetting /assuming.
-      split; crushPredEntails3.
-      - subst; now apply H4.
-      - apply (fromEntails _ _ H) with (inst (sub_acc ω) ι);
-          auto using acc_pathcond.
-    Qed.
-
-    Lemma forgetting_knowing_adjoint {w1 w2} {ω : Acc w1 w2} {P Q} :
-      (knowing ω P ⊢ Q) <-> (P ⊢ forgetting ω Q).
-    Proof.
-      rewrite /forgetting /assuming /knowing.
-      split; crushPredEntails3.
-      - apply (fromEntails _ _ H); auto using acc_pathcond.
-        now exists ι.
-      - now subst.
-    Qed.
-
     Import iris.proofmode.modalities.
     Import iris.proofmode.classes.
     Import iris.proofmode.tactics.
 
-    #[export] Instance intowand_forgetting_unconditionally {p q} {w1 w2} {ω : w1 ⊒ w2} {P : ((□ Pred) w1)%modal} {Q R} :
-      IntoWand p q (P w2 ω) Q R -> IntoWand p q (forgetting ω (unconditionally P)) Q R | 0.
+    #[export] Instance intowand_forgetting_unconditionally {p q} {w1 w2 : World} `{IntoWorldAcc w1 w2 sub ω} {P : ((□ Pred) w1)%modal} {Q R} :
+      IntoWand p q (P w2 ω) Q R -> IntoWand p q (forgetting sub (unconditionally P)) Q R | 0.
     Proof.
       unfold IntoWand; cbn.
+      unfold IntoWorldAcc in H; rewrite -H.
       now rewrite forgetting_unconditionally_drastic.
     Qed.
 
-    #[export] Instance intowand_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} {Q R}:
-      IntoWand false false P Q R -> IntoWand false false (forgetting ω P) (forgetting ω Q) (forgetting ω R) | 1.
+    #[export] Instance intowand_forgetting {w1 w2 : World} {sub : Sub w1 w2} `{IntoWorldAcc _ _ sub ω} {P : Pred w1} {Q R}:
+      IntoWand false false P Q R -> IntoWand false false (forgetting sub P) (forgetting sub Q) (forgetting sub R) | 1.
     Proof.
       iIntros (Hiw).
       unfold IntoWand; cbn.
+      unfold IntoWorldAcc in H.
+      rewrite <-H.
       rewrite forgetting_wand.
-      pose proof (into_wand false false P Q R) as H.
-      cbn in H.
-      now rewrite H.
+      pose proof (into_wand false false P Q R) as Hwand.
+      cbn in Hwand.
+      now rewrite Hwand.
     Qed.
 
     #[export] Instance intowand_unconditionally {p q} {w} {P : ((□ Pred) w)%modal} {Q R}:
@@ -1115,10 +842,11 @@ Module Type UnifLogicOn
       now rewrite unconditionally_T.
     Qed.
 
-    #[export] Instance intoforall_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} {A} {Φ}:
-      IntoForall (A := A) P Φ -> IntoForall (forgetting ω P) (fun a => forgetting ω (Φ a)).
+    #[export] Instance intoforall_forgetting {w1 w2 : World} `{IntoWorldAcc w1 w2 sub ω} {P : Pred w1} {A} {Φ}:
+      IntoForall (A := A) P Φ -> IntoForall (forgetting sub P) (fun a => forgetting sub (Φ a)).
     Proof.
       iIntros (Hiw).
+      rewrite -H.
       unfold IntoForall; cbn.
       rewrite forgetting_forall.
       now rewrite (into_forall P).
@@ -1131,7 +859,7 @@ Module Type UnifLogicOn
       now rewrite unconditionally_T.
     Qed.
 
-    #[export] Instance fromExist_knowing {w1 w2} {A} {ω : Acc w1 w2} {P} {Φ : A -> Pred _}:
+    #[export] Instance fromExist_knowing {w1 w2 : World} {A} {ω : Sub w1 w2} {P} {Φ : A -> Pred _}:
       FromExist P Φ -> FromExist (knowing ω P) (fun v => knowing ω (Φ v)).
     Proof.
       unfold FromExist.
@@ -1144,7 +872,7 @@ Module Type UnifLogicOn
       now iExists v.
     Qed.
 
-    #[export] Instance fromExist_assuming {w1 w2} {A} {ω : Acc w1 w2} {P} {Φ : A -> Pred _}:
+    #[export] Instance fromExist_assuming {w1 w2 : World} {A} {ω : Sub w1 w2} {P} {Φ : A -> Pred _}:
       FromExist P Φ -> FromExist (assuming ω P) (fun v => assuming ω (Φ v)).
     Proof.
       unfold FromExist.
@@ -1165,84 +893,83 @@ Module Type UnifLogicOn
       iIntros (_) "[#HP Hk]".
       iApply "Hk".
       iSpecialize ("HP" $! w acc_refl).
-      now rewrite /ElimModal /unconditionally assuming_refl.
+      now rewrite /ElimModal /unconditionally assuming_id.
     Qed.
 
-    Class IntoAssuming {w1 w2} (ω : Acc w1 w2) (P : Pred w1) (Q : Pred w2) :=
+    Class IntoAssuming {w1 w2 : World} (ω : Sub w1 w2) (P : Pred w1) (Q : Pred w2) :=
       into_assuming : P ⊢ assuming ω Q.
 
-    #[export] Instance into_assuming_default {w1 w2} {ω : Acc w1 w2} (P : Pred w1) :
+    #[export] Instance into_assuming_default {w1 w2 : World} {ω : Sub w1 w2} (P : Pred w1) :
       IntoAssuming ω P (forgetting ω P) | 10.
     Proof. unfold IntoAssuming. now apply assuming_forgetting. Qed.
 
-    #[export] Instance into_assuming_assuming {w1 w2} {ω : Acc w1 w2} (P : Pred w2) :
+    #[export] Instance into_assuming_assuming {w1 w2 : World} {ω : Sub w1 w2} (P : Pred w2) :
       IntoAssuming ω (assuming ω P) P | 0.
     Proof. now unfold IntoAssuming. Qed.
 
-    #[export] Instance into_assuming_forgetting {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3 }(P : Pred w1) :
-      IntoAssuming ω23 (forgetting ω12 P) (forgetting (acc_trans ω12 ω23) P) | 0.
+    #[export] Instance into_assuming_forgetting {w1 w2 w3 : World} {ω12 : Sub w1 w2} {ω23 : Sub w2 w3 }(P : Pred w1) :
+      IntoAssuming ω23 (forgetting ω12 P) (forgetting (subst ω12 ω23) P) | 0.
     Proof. unfold IntoAssuming. rewrite forgetting_trans. now apply assuming_forgetting. Qed.
 
-    Lemma modality_mixin_assuming {w1 w2} {ω : Acc w1 w2} : modality_mixin (assuming ω) (MIEnvTransform (IntoAssuming ω)) (MIEnvTransform (IntoAssuming ω)).
+    Lemma modality_mixin_assuming {w1 w2 : World} {ω : Sub w1 w2} : modality_mixin (assuming ω) (MIEnvTransform (IntoAssuming ω)) (MIEnvTransform (IntoAssuming ω)).
     Proof.
       constructor; cbn; try done; rewrite /assuming; crushPredEntails3.
       destruct into_assuming as [HPQ].
       crushPredEntails3.
     Qed.
 
-    Definition modality_assuming {w1 w2} (ω : Acc w1 w2) : modality (Pred w2) (Pred w1) :=
+    Definition modality_assuming {w1 w2 : World} (ω : Sub w1 w2) : modality (Pred w2) (Pred w1) :=
       Modality (assuming ω) modality_mixin_assuming.
 
-    #[export] Instance fromModal_assuming {w1 w2} {ω : Acc w1 w2} {P} :
+    #[export] Instance fromModal_assuming {w1 w2 : World} {ω : Sub w1 w2} {P} :
       FromModal True (modality_assuming ω) tt (assuming ω P) P.
     Proof.
       constructor; crushPredEntails3.
     Qed.
 
-    Class IntoForgetting {w1 w2} (ω : Acc w1 w2) (P : Pred w2) (Q : Pred w1) :=
+    Class IntoForgetting {w1 w2 : World} (ω : Sub w1 w2) (P : Pred w2) (Q : Pred w1) :=
       into_forgetting : P ⊢ forgetting ω Q.
 
-    #[export] Instance into_forgetting_default {w1 w2} {ω : Acc w1 w2} (P : Pred w2) :
+    #[export] Instance into_forgetting_default {w1 w2 : World} {ω : Sub w1 w2} (P : Pred w2) :
       IntoForgetting ω P (knowing ω P) | 10.
     Proof. unfold IntoForgetting. now apply forgetting_knowing. Qed.
 
-    #[export] Instance into_forgetting_knowing {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3 }(P : Pred w3) :
-      IntoForgetting ω12 (knowing ω23 P) (knowing (acc_trans ω12 ω23) P) | 0.
+    #[export] Instance into_forgetting_knowing {w1 w2 w3 : World} `{IntoWorldAcc w1 w2 sub12 ω12} `{IntoWorldAcc w2 w3 sub23 ω23} (P : Pred w3) :
+      IntoForgetting sub12 (knowing sub23 P) (knowing (subst sub12 sub23) P) | 0.
     Proof. unfold IntoForgetting. rewrite knowing_trans. now apply forgetting_knowing. Qed.
 
-    #[export] Instance into_forgetting_forgetting {w1 w2} {ω : Acc w1 w2} (P : Pred w1) :
+    #[export] Instance into_forgetting_forgetting {w1 w2 : World} {ω : Sub w1 w2} (P : Pred w1) :
       IntoForgetting ω (forgetting ω P) P | 0.
     Proof. now unfold IntoForgetting. Qed.
 
 
     (* TODO: define typeclass FromForgetting to preserve other forgetting assumptions *)
-    Lemma modality_mixin_forgetting {w1 w2} {ω : Acc w1 w2} : modality_mixin (forgetting ω) (MIEnvTransform (IntoForgetting ω)) (MIEnvTransform (IntoForgetting ω)).
+    Lemma modality_mixin_forgetting {w1 w2 : World} `{IntoWorldAcc w1 w2 sub ω} : modality_mixin (forgetting sub) (MIEnvTransform (IntoForgetting sub)) (MIEnvTransform (IntoForgetting sub)).
     Proof.
+      rewrite -H.
       constructor; cbn; try done; rewrite /forgetting; crushPredEntails3.
-      - destruct H as [H]. apply H; done.
-      - apply H; last done. now apply acc_pathcond.
+      - destruct H0 as [H0]. apply H0; done.
+      - apply H0; last done. now apply acc_pathcond.
     Qed.
 
-    Definition modality_forgetting {w1 w2} (ω : Acc w1 w2) : modality (Pred w1) (Pred w2) :=
-      Modality (forgetting ω) modality_mixin_forgetting.
+    Definition modality_forgetting {w1 w2 : World} `{IntoWorldAcc w1 w2 sub ω} : modality (Pred w1) (Pred w2) :=
+      Modality (forgetting sub) modality_mixin_forgetting.
 
-    #[export] Instance fromModal_forgetting {w1 w2} {ω : Acc w1 w2} {P} :
-      FromModal True (modality_forgetting ω) tt (forgetting ω P) P.
+    #[export] Instance fromModal_forgetting {w1 w2 : World} `{IntoWorldAcc w1 w2 sub ω} {P} :
+      FromModal True modality_forgetting tt (forgetting sub P) P.
     Proof.
       constructor; crushPredEntails3.
     Qed.
 
     Lemma knowing_acc_snoc_right {w b P} :
-      knowing (@acc_snoc_right w b) P ⊣⊢ ∃ v, forgetting (acc_snoc_left' b (term_val _ v)) P.
+      knowing (w1 := wsnoc w b) sub_wk1 P ⊣⊢ ∃ v, forgetting (w1 := wsnoc w b) (sub_snoc (sub_id w) b (term_val _ v)) P.
     Proof.
       unfold knowing, forgetting.
       crushPredEntails3.
       - destruct (env.view x) as [ιp v].
         exists v.
         change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b v).
-        rewrite inst_sub_id.
-        rewrite inst_sub_wk1 in H0.
-        now subst.
+        now rewrite inst_sub_id -H0 inst_sub_wk1.
       - exists (env.snoc ι b x).
         change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b x) in H0.
         rewrite inst_sub_id in H0.
@@ -1252,9 +979,9 @@ Module Type UnifLogicOn
 
     Lemma knowing_acc_subst_right {w : World} {x σ} `{xIn : (x∷σ ∈ w)%katamaran}
       {t : Term (w - x∷σ) σ} {P} :
-      (knowing (acc_subst_right t) P : Pred w) ⊣⊢ 
+      (knowing (w1 := wsubst w x t) (sub_single xIn t) P : Pred w) ⊣⊢ 
         (eqₚ (term_var_in xIn) (subst t (sub_shift xIn)) ∗
-           assuming (acc_subst_right t) P)%I.
+           assuming (w1 := wsubst w x t) (sub_single xIn t) P)%I.
     Proof.
       unfold knowing, assuming.
       crushPredEntails3.
@@ -1282,22 +1009,15 @@ Module Type UnifLogicOn
     Qed.
       
 
-    Lemma assuming_acc_snoc_let {w b P v} :
-      assuming (@acc_snoc_right w b) P ⊢ assuming (@acc_let_right w b v) P.
-    Proof.
-      unfold assuming.
-      now crushPredEntails3.
-    Qed.
-
-    Lemma forgetting_acc_snoc_left_repₚ {w1 w2 b} {ω : Acc w1 w2} {v} :
-      ⊢ forgetting (acc_snoc_left ω b (term_val _ v)) (repₚ v term_var_zero).
+    Lemma forgetting_acc_snoc_left_repₚ {w1 w2 : World} {b} {ω : Sub w1 w2} {v} :
+      ⊢ forgetting (w1 := wsnoc w1 b) (sub_snoc ω b (term_val _ v)) (repₚ v term_var_zero).
     Proof.
       unfold forgetting.
       now crushPredEntails3.
     Qed.
 
     Lemma assuming_acc_snoc_right {w b P} :
-      assuming (@acc_snoc_right w b) P ⊣⊢ ∀ v, forgetting (acc_snoc_left' b (term_val _ v)) P.
+      assuming (w1 := wsnoc w b) sub_wk1 P ⊣⊢ ∀ v, forgetting (w1 := wsnoc w b) (sub_snoc (sub_id _) b (term_val _ v)) P.
     Proof.
       unfold assuming, forgetting.
       crushPredEntails3.
@@ -1314,86 +1034,20 @@ Module Type UnifLogicOn
         now apply H0.
     Qed.
 
-    Lemma assuming_acc_snoc_right_let {w b} {P : Pred (wsnoc w b)} :
-      assuming (@acc_snoc_right w b) P ⊣⊢ ∀ v, forgetting (acc_let_left b v) P.
-    Proof.
-      unfold assuming, forgetting.
-      crushPredEntails3.
-      - change (P (env.snoc (inst (sub_id w) ι) b a)).
-        rewrite inst_sub_id.
-        apply H0.
-        + eapply inst_sub_wk1.
-        + now rewrite instprop_subst inst_sub_wk1.
-      - destruct (env.view ιpast) as [ι' v].
-        rewrite inst_sub_wk1 in H1; subst.
-        specialize (H0 v).
-        change (P (env.snoc (inst (sub_id w) ι) b v)) in H0.
-        now rewrite inst_sub_id in H0.
-    Qed.
-
-    Lemma assuming_acc_let_right {w b v P} :
-      assuming (@acc_let_right w b v) P ⊣⊢ forgetting (acc_let_left b v) P.
-    Proof.
-      unfold assuming, forgetting.
-      crushPredEntails3.
-      - change (P (env.snoc (inst (sub_id w) ι) b v)).
-        rewrite inst_sub_id.
-        apply H0.
-        + eapply inst_sub_wk1.
-        + now rewrite instprop_subst inst_sub_wk1.
-      - destruct (env.view ιpast) as [ι' v'].
-        rewrite inst_sub_wk1 in H1; subst.
-        change (P (env.snoc (inst (sub_id w) ι) b v')) in H0.
-        now rewrite inst_sub_id in H0.
-    Qed.
-
-    Lemma assuming_acc_let_snoc {w b v P} :
-      assuming (acc_let_left (w := w) b v) P ⊣⊢ (repₚ v term_var_zero -∗ forgetting acc_snoc_right P).
-    Proof.
-      unfold assuming, forgetting, repₚ.
-      crushPredEntails3; destruct (env.view ι) as [ι v']; subst; cbn in *.
-      - rewrite instprop_subst inst_sub_wk1 in H; subst.
-        crushPredEntails3.
-        rewrite inst_sub_wk1.
-        apply H0; try done.
-        f_equal; try done.
-        now apply inst_sub_id.
-      - rewrite inst_sub_wk1 in H0.
-        change (env.map _ _) with (inst (sub_id w) ιpast) in H1.
-        rewrite inst_sub_id in H1.
-        destruct (proj1 (env.inversion_eq_snoc ιpast ι v v') H1) as [-> ->].
-        now apply H0.
-    Qed.
-
-    Lemma entails_let_snoc_wkn {w b v} {P Q} :
-      @entails (wsnoc w b) (repₚ v term_var_zero ∗ P)%I Q <-> @entails (wlet w b v) P Q.
-    Proof.
-      crushPredEntails3.
-      - rewrite instprop_snoc in H0.
-        crushPredEntails3.
-        apply H3; crushPredEntails3.
-      - now apply (fromEntails _ _ H).
-    Qed.
-
-    Lemma bi_sep_let_snoc_wkn {w b v} {P Q} :
-      @bientails (wsnoc w b) (bi_sep (PROP := bi_pred (w := wlet w b v)) P Q)%I (bi_sep (PROP := bi_pred (w := wsnoc w b)) P Q)%I.
-    Proof. crushPredEntails3. Qed.
-    
-    Lemma forgetting_acc_pathcondition_right_snoc {w : World}
-      {C : PathCondition w} {b : Formula w} 
-      {P : Pred (wpathcondition w (C ▻ b))} :
-      (forgetting (acc_pathcondition_right w (C ▻ b)) P : Pred w) ⊣⊢ 
-        forgetting (acc_pathcondition_right w C) (forgetting (acc_formula_right (w := wpathcondition w C) b) P).
+    Lemma forgetting_acc_pathcondition_right {w : World}
+      {C : PathCondition w}
+      {P : Pred (wpathcondition w C)} :
+      (forgetting (w2 := wpathcondition w C) (sub_id _) P : Pred w) ⊣⊢ P.
     Proof.
       unfold forgetting, acc_pathcondition_right, wpathcondition; cbn.
       crushPredEntails3.
-      - now rewrite inst_sub_id.
       - now rewrite inst_sub_id in H0.
+      - now rewrite inst_sub_id.
     Qed.
 
     Lemma assuming_acc_pathcondition_right
       {w : World} {sc : PathCondition w} {P : Pred w} :
-      (instprop sc : Pred w) ∗ assuming (acc_pathcondition_right w sc) P ⊢ P.
+      (instprop sc : Pred w) ∗ assuming (w2 := wpathcondition w sc) (sub_id _) P ⊢ P.
     Proof.
       unfold assuming.
       crushPredEntails3.
@@ -1405,8 +1059,8 @@ Module Type UnifLogicOn
     
     Lemma forgetting_acc_pathcondition_right_sep {w : World} {P : Pred w} {C : PathCondition w}
       {Q : Pred (wpathcondition w C)} :
-      (forgetting (acc_pathcondition_right w C) (P ∗ Q) : Pred w) ⊣⊢ 
-        P ∗ forgetting (acc_pathcondition_right w C) Q.
+      (forgetting (w1 := wpathcondition w C) (sub_id _) (P ∗ Q) : Pred w) ⊣⊢ 
+        P ∗ forgetting (w2 := wpathcondition w C) (sub_id _) Q.
     Proof.
       unfold forgetting, acc_pathcondition_right, wpathcondition; cbn.
       crushPredEntails3.
@@ -1414,16 +1068,7 @@ Module Type UnifLogicOn
       - now rewrite inst_sub_id.
     Qed.
     
-    Lemma forgetting_acc_pathcondition_right {w : World} {P : Pred w} {C : PathCondition w} :
-      (forgetting (acc_pathcondition_right w C) P : Pred w) ⊣⊢ P.
-    Proof.
-      unfold forgetting, acc_pathcondition_right, wpathcondition; cbn.
-      crushPredEntails3.
-      - now rewrite inst_sub_id in H0.
-      - now rewrite inst_sub_id.
-    Qed.
-      
-    (* Lemma assuming_acc_subst_right_let  {w : World} x {σ} {xIn : x∷σ ∈ w} *)
+    (* Lemma assuming_acc_subst_right_left  {w : World} x {σ} {xIn : x∷σ ∈ w} *)
     (*   (t : Term (w - x∷σ) σ) {P} : *)
     (*   assuming (acc_subst_right x t) P ⊣⊢ *)
     (*     eqₚ (term_var xIn) (subst (sub_wk1 xIn) t) ∗ *)
@@ -1431,7 +1076,7 @@ Module Type UnifLogicOn
 
     Definition assuming_acc_match_right {w : World} {σ} {s : Term w σ}
       {p : @Pattern LVar σ} (pc : PatternCase p) : 
-      ⊢ assuming (acc_match_right (s := s) pc)
+      ⊢ assuming (w1 := wmatch w s p pc) (sub_cat_left (PatternCaseCtx pc))
         (eqₚ (persist s (acc_match_right pc)) (pattern_match_term_reverse p pc (sub_wmatch_patctx pc))).
     Proof.
       unfold assuming.
@@ -1570,7 +1215,7 @@ Module Type UnifLogicOn
 
   Section ModalRel.
     Import logicalrelation logicalrelation.notations iris.bi.interface notations ModalNotations.
-    Lemma forgetting_RImpl {AT A BT B} {RA : Rel AT A} {RB : Rel BT B} {w1 w2} {ω : w1 ⊒ w2} {f sf} :
+    Lemma forgetting_RImpl {AT A BT B} {RA : Rel AT A} {RB : Rel BT B} {w1 w2 : World} {ω : Sub w1 w2} {f sf} :
       forgetting ω (ℛ⟦ RImpl RA RB ⟧ f sf) ⊣⊢ (∀ a sa, forgetting ω (ℛ⟦ RA ⟧ a sa) -∗ forgetting ω (ℛ⟦ RB ⟧ (f a) (sf sa))).
     Proof.
       unfold RImpl at 1. cbn.
@@ -1672,8 +1317,8 @@ Module Type UnifLogicOn
         now apply IHt.
     Qed.
 
-    Lemma refine_four {w1 w2} {ω : Acc w2 w1} {AT A} (RA : Rel AT A) :
-      (⊢ ∀ (v__s : Box AT w2) v, (forgetting ω (ℛ⟦□ᵣ RA⟧ v v__s) → ℛ⟦□ᵣ RA⟧ v (four v__s ω)))%I.
+    Lemma refine_four {w1 w2} `{IntoWorldAcc w2 w1 sub ω} {AT A} (RA : Rel AT A) :
+      (⊢ ∀ (v__s : Box AT w2) v, (forgetting sub (ℛ⟦□ᵣ RA⟧ v v__s) → ℛ⟦□ᵣ RA⟧ v (four v__s ω)))%I.
     Proof.
       iIntros (v__s v) "Hbox".
       now iApply (forgetting_unconditionally (λ (w0 : World) (ω0 : Acc w2 w0), ℛ⟦RA⟧ v (v__s w0 ω0))).
@@ -1692,11 +1337,11 @@ Module Type UnifLogicOn
         (⊢ ∀ F (t : AT w), ℛ⟦RA -> RB⟧ f F → ℛ⟦RA⟧ v t → ℛ⟦RB⟧ (f v) (F t))%I.
     Proof. iIntros (v f w F t) "#Hf #Hv". now iApply "Hf". Qed.
 
-    Lemma refine_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} :
-      forall (v : A) (w1 w2 : World) (ω : Acc w1 w2) (t : AT w1),
-        forgetting ω (ℛ⟦RInst AT A⟧ v t) ⊢ ℛ⟦RInst AT A⟧ v (persist t ω).
+    Lemma refine_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _}
+      {v : A} {w1 w2 : World} `{IntoWorldAcc w1 w2 sub ω} (t : AT w1) :
+        forgetting sub (ℛ⟦RInst AT A⟧ v t) ⊢ ℛ⟦RInst AT A⟧ v (persist t ω).
     Proof. 
-      iIntros (v w1 w2 ω t) "Hvt".
+      iIntros "Hvt".
       now iApply forgetting_repₚ.
     Qed.
 
@@ -1712,10 +1357,10 @@ Module Type UnifLogicOn
     Qed.
 
     Lemma refine_formula_persist :
-      forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop),
-        ⊢ forgetting r12 (ℛ⟦RFormula⟧ p f) -∗ ℛ⟦RFormula⟧ p (persist f r12).
+      forall (w1 w2 : World) `{IntoWorldAcc w1 w2 sub ω} (f : Formula w1) (p : Prop),
+        ⊢ forgetting sub (ℛ⟦RFormula⟧ p f) -∗ ℛ⟦RFormula⟧ p (persist f ω).
     Proof.
-      iIntros (v w1 w2 ω t) "Hvt".
+      iIntros (v w1 w2 sub ω Hsubω t) "Hvt".
       now iApply forgetting_proprepₚ.
     Qed.
 
@@ -1746,8 +1391,8 @@ Module Type UnifLogicOn
     Proof. unfold RInst. crushPredEntails3. now rewrite inst_sub_id. Qed.
 
     Import ModalNotations. 
-    Lemma refine_rnenv_sub_acc {w : World} {ι : Valuation w} {w2 : World} {ω2 : w ⊒ w2} :
-      forgetting ω2 (curval (w := w) ι) ⊢ ℛ⟦RNEnv LVar w⟧ ι (sub_acc ω2).
+    Lemma refine_rnenv_sub_acc {w : World} {ι : Valuation w} {w2 : World} {ω2 : Sub w w2} :
+      forgetting ω2 (curval (w := w) ι) ⊢ ℛ⟦RNEnv LVar w⟧ ι ω2.
     Proof.
       unfold forgetting, RNEnv, RInst, curval; now crushPredEntails3.
     Qed.
@@ -1827,9 +1472,9 @@ Module Type UnifLogicOn
       {p : @Pattern LVar σ} : 
       ℛ⟦ RVal σ ⟧ v sv ⊢
         let (pc, δpc) := pattern_match_val p v in
-        knowing (acc_match_right (s := sv) pc)
-        (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc
-           (sub_cat_right (PatternCaseCtx pc) : NamedEnv _ _)).
+        knowing (w1 := wmatch w sv p pc) (sub_cat_left (PatternCaseCtx pc))
+          (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc
+             (sub_cat_right (PatternCaseCtx pc) : NamedEnv _ _)).
     Proof.
       pose proof (pattern_match_val_inverse_left p v) as eq.
       destruct (pattern_match_val p v) as [pc args].
@@ -1846,7 +1491,7 @@ Module Type UnifLogicOn
       {p : @Pattern LVar σ} : 
       ℛ⟦ RIn (x∷σ) ⟧ v xIn ⊢
         let (pc, δpc) := pattern_match_val p v in
-        knowing (acc_matchvar_right (x := x) pc)
+        knowing (w1 := wmatchvar w xIn p pc) (sub_matchvar_right (x := x) pc)
         (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc
            (wmatchvar_patternvars pc : NamedEnv (Term (wmatchvar w xIn p pc)) _)).
     Proof.

@@ -56,17 +56,16 @@ Module Type RefinementMonadsOn
   (Import PK : PredicateKit B)
   (Import WR : WorldsMixin B PK)
   (Import SK : SolverKit B PK WR)
-  (Import UL : UnifLogicOn B PK WR)
   (Import SP : SymPropOn B PK WR)
+  (Import UL : UnifLogicOn B PK WR)
   (Import LSP : LogSymPropOn B PK WR SP UL)
-  (Import GS : GenericSolverOn B PK WR SK)
+  (Import GS : GenericSolverOn B PK WR SK SP UL LSP)
   (Import AS : AssertionsOn B PK WR)
   (Import SHAL : ShallowMonadsOn B PK WR SP AS)
-  (Import SYMB : SymbolicMonadsOn B PK WR SK SP GS AS).
+  (Import SYMB : SymbolicMonadsOn B PK WR SK SP UL LSP GS AS).
 
   Import ModalNotations.
   Import LogicalSoundness.
-  Import LogicalSolverSpec.
   Import SymProp.
 
   Section WithNotations.
@@ -113,7 +112,7 @@ Module Type RefinementMonadsOn
       iIntros (w2 ω2) "!>".
       iIntros (v vs) "Hv".
       iApply ("Hk" with "Hv").
-      now iApply refine_four.
+      now iApply (refine_four with "Hkk").
     Qed.
 
     Lemma refine_block `{R : Rel AT A} {w} :
@@ -138,7 +137,7 @@ Module Type RefinementMonadsOn
       iSpecialize ("HK" $! _ acc_snoc_right).
       rewrite assuming_acc_snoc_right.
       iSpecialize ("HK" $! v).
-      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v))).
+      rewrite <-(forgetting_pure (sub_acc (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v)))).
       iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep".
       iModIntro.
       iDestruct ("HK" with "Hrep HSP") as "%Hkv".
@@ -156,7 +155,7 @@ Module Type RefinementMonadsOn
       iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep".
       iSpecialize ("HK" $! v).
       iSpecialize ("HSP" $! v).
-      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v))).
+      rewrite <-(forgetting_pure (sub_acc (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v)))).
       iModIntro.
       now iApply ("HK" with "Hrep HSP").
     Qed.
@@ -207,10 +206,11 @@ Module Type RefinementMonadsOn
     Qed.
 
     Lemma safe_assume_triangular {w0 w1} (ζ : Tri w0 w1) (o : 𝕊 w1) :
-      (psafe (assume_triangular ζ o) ⊣⊢ (assuming (acc_triangular ζ) (psafe o))).
+      (psafe (assume_triangular ζ o) ⊣⊢ (assuming (sub_triangular ζ) (psafe o))).
     Proof.
-      induction ζ; first by rewrite assuming_refl.
-      rewrite assuming_trans.
+      induction ζ; first by rewrite assuming_id.
+      cbn [sub_triangular].
+      rewrite (assuming_trans (ω23 := acc_triangular ζ)).
       cbn.
       now rewrite IHζ.
     Qed.
@@ -235,13 +235,14 @@ Module Type RefinementMonadsOn
     Lemma safe_assert_triangular {w0 w1} msg (ζ : Tri w0 w1)
       (o : AMessage w1 -> 𝕊 w1) :
       (psafe (assert_triangular msg ζ o) ⊣⊢
-         (knowing (acc_triangular ζ) (psafe (o (subst msg (sub_triangular ζ)))))).
+         (knowing (sub_triangular ζ) (psafe (o (subst msg (sub_triangular ζ)))))).
     Proof.
       revert o. induction ζ; intros o.
-      - now rewrite knowing_refl subst_sub_id.
+      - now rewrite knowing_id subst_sub_id.
       - cbn [psafe assert_triangular acc_triangular].
         rewrite obligation_equiv.
-        rewrite knowing_trans.
+        cbn [sub_triangular].
+        rewrite (knowing_trans (w2 := wsubst _ _ _)).
         rewrite subst_sub_comp.
         rewrite (IHζ (subst msg (sub_single xIn t)) o).
         now rewrite knowing_acc_subst_right.
@@ -269,7 +270,7 @@ Module Type RefinementMonadsOn
     Proof.
       unfold SPureSpec.assert_pathcondition, CPureSpec.assert_formula, CPureSpec.assert_pathcondition.
       iIntros (msg cC sC) "HC %cΦ %sΦ rΦ HΦ".
-      destruct (SolverSpec_old_to_logical combined_solver_spec w sC) as [[w1 [ζ sc1]] Hsolver|Hsolver].
+      destruct (combined_solver_spec w sC) as [[w1 [ζ sc1]] Hsolver|Hsolver].
       - rewrite safe_assert_triangular.
         rewrite safe_assert_pathcondition_without_solver.
         iSplit.
@@ -278,8 +279,8 @@ Module Type RefinementMonadsOn
           iDestruct "HC" as "[HC1 _]".
           iApply ("HC1" with "Hsc1").
         + iSpecialize ("rΦ" $! (wpathcondition w1 sc1) (acc_trans (acc_triangular ζ) (acc_pathcondition_right w1 sc1))).
-          rewrite assuming_trans.
-          iPoseProof (knowing_assuming (acc_triangular ζ) with "[$HΦ $rΦ]") as "H".
+          rewrite sub_acc_trans assuming_trans sub_acc_triangular.
+          iPoseProof (knowing_assuming (sub_triangular ζ) with "[$HΦ $rΦ]") as "H".
           iApply knowing_pure.
           iApply (knowing_proper with "H").
           iIntros "((Hsc1 & HsΦ) & HΦ)".
@@ -301,14 +302,14 @@ Module Type RefinementMonadsOn
     Proof.
       unfold SPureSpec.assume_pathcondition, CPureSpec.assume_formula, CPureSpec.assume_pathcondition.
       iIntros "%C %Cs HC %Φ %Φs HΦ Hsp %HC".
-      destruct (SolverSpec_old_to_logical combined_solver_spec _ Cs) as [[w1 [ζ sc1]] Hsolver|Hsolver].
+      destruct (combined_solver_spec _ Cs) as [[w1 [ζ sc1]] Hsolver|Hsolver].
       - rewrite safe_assume_triangular.
         rewrite safe_assume_pathcondition_without_solver.
         iDestruct "HC" as "[_ HC2]".
         iSpecialize ("HC2" $! HC).
         rewrite <-Hsolver.
         iSpecialize ("HΦ" $! _ (acc_trans (acc_triangular ζ) (acc_pathcondition_right w1 sc1))).
-        rewrite assuming_trans.
+        rewrite sub_acc_trans assuming_trans sub_acc_triangular.
         iDestruct (assuming_sepₚ with "[HΦ Hsp]") as "H".
         { now iSplitL "HΦ". }
         iDestruct (knowing_assuming with "[$HC2 $H]") as "H".
@@ -786,8 +787,8 @@ Module Type RefinementMonadsOn
       iSpecialize ("rpost" $! _ (acc_match_right pc)).
       iDestruct (knowing_assuming with "[$Hpm $Hsp]") as "H".
       iDestruct (knowing_assuming with "[$H $rpost]") as "H".
-      iApply (knowing_pure (acc_match_right pc)).
-      iApply (knowing_proper (ω := acc_match_right pc) _ _ with "H").
+      iApply (knowing_pure (w1 := wmatch _ _ _ _) (sub_cat_left (PatternCaseCtx pc))).
+      iApply (knowing_proper (w2 := wmatch _ _ _ _) (ω := sub_cat_left (PatternCaseCtx pc)) _ _ with "H").
       iIntros "[[Hargs Hsp] rpost]".
       iApply ("rpost" with "[Hargs] Hsp").
       iExists eq_refl.
@@ -809,8 +810,8 @@ Module Type RefinementMonadsOn
       iSpecialize ("Hpost" $! _ (acc_matchvar_right pc)).
       iDestruct (knowing_assuming with "[$Hpm $Hsp]") as "H".
       iDestruct (knowing_assuming with "[$H $Hpost]") as "H".
-      iApply (knowing_pure (acc_matchvar_right pc)).
-      iApply (knowing_proper (ω := acc_matchvar_right pc) _ _ with "H").
+      iApply (knowing_pure (sub_matchvar_right pc)).
+      iApply (knowing_proper (ω := sub_matchvar_right pc) _ _ with "H").
       iIntros "[[Hargs Hsp] Hpost]".
       iApply ("Hpost" with "[Hargs] Hsp").
       iExists eq_refl; cbn.
@@ -1136,13 +1137,13 @@ Module Type RefinementMonadsOn
           now iApply refine_instprop_subst.
         + iIntros (w1 ω1) "!> %u %us _".
           iApply "IH".
-          now iApply (refine_inst_persist (AT := Sub _)).
+          now iApply (refine_inst_persist with "Hι").
       - iApply (refine_bind (RA := RUnit) (RB := RUnit)).
         + iApply refine_assume_formula.
           now iApply refine_instprop_subst.
         + iIntros (w1 ω1) "!> %u %us _".
           iApply "IH".
-          now iApply (refine_inst_persist (AT := Sub _)).
+          now iApply (refine_inst_persist (AT := Sub _) with "Hι").
       - iApply (refine_bind (RA := RInst (STerm (type b)) (Val _)) (RB := RUnit)).
         + iApply refine_angelic.
         + iIntros (w1 ω1) "!> %v %vs Hv".
@@ -1199,7 +1200,7 @@ Module Type RefinementMonadsOn
     Proof.
       iPoseProof (refine_replay_aux s) as "Hreplay".
       iSpecialize ("Hreplay" $! w acc_refl).
-      now rewrite assuming_refl.
+      now rewrite assuming_id.
     Qed.
 
     Lemma refine_replay {w : World} (s : 𝕊 w) ι :
@@ -1413,7 +1414,7 @@ Module Type RefinementMonadsOn
         iIntros "%w3 %ω3 !> %u %su _".
         iApply (refine_pure (RA := RHeap)).
         rewrite !RList_RInst.
-        now iApply forgetting_repₚ. 
+        now iApply (forgetting_repₚ with "Hh'").
       } 
     Qed.
 
@@ -1507,7 +1508,7 @@ Module Type RefinementMonadsOn
       iIntros (w1 ω1) "!> %a %sa Ha".
       iApply ("HK" with "Ha").
       rewrite !RList_RInst.
-      now iApply (refine_inst_persist).
+      now iApply (refine_inst_persist with "Hh").
     Qed.
 
     Lemma refine_pure `{RA : Rel SA CA} {w} :
@@ -1525,7 +1526,7 @@ Module Type RefinementMonadsOn
       unfold SHeapSpec.bind, CHeapSpec.bind. iApply ("rm" with "[rf rΦ] rh").
       iIntros (w1 θ1) "!> %ca %sa ra %ch1 %sh1 rh1".
       iApply ("rf" with "ra [rΦ] rh1").
-      now iApply refine_four.
+      now iApply (refine_four with "rΦ").
     Qed.
 
     Lemma refine_angelic x {w} :
@@ -1584,7 +1585,7 @@ Module Type RefinementMonadsOn
       iIntros (w1 θ1) "!> %cu %su ru".
       iApply ("rΦ" with "ru").
       rewrite !RList_RInst.
-      now iApply refine_inst_persist.
+      now iApply (refine_inst_persist with "rh").
     Qed.
 
     Lemma refine_assume_formula {w} :
@@ -1650,8 +1651,7 @@ Module Type RefinementMonadsOn
         destruct smr as [spc ssub].
         iDestruct "Hmr" as "(%e & Hmr)"; subst; cbn -[RSat].
         iDestruct (refine_inst_persist with "rδ") as "rδp".
-        iSpecialize ("IHasn" $! pc).
-        iApply "IHasn".
+        iApply ("IHasn" $! pc).
         iApply (repₚ_cong₂ (T1 := Sub _) (T2 := Sub _) (T3 := Sub (Σ ▻▻ PatternCaseCtx pc)) env.cat env.cat with "[$rδp $Hmr]").
         intros. now rewrite inst_env_cat.
       - iApply (refine_bind (RA := RUnit) (RB := RUnit)).

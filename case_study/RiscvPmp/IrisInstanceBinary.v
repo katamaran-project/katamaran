@@ -228,7 +228,7 @@ Module RiscvPmpIrisInstance2 <:
         (luser_inst2 p ts) ⊢ (luser_inst2 p ts ∗ luser_inst2 p ts).
     Proof.
       destruct p; intros ts Heq; try discriminate Heq;
-        clear Heq; cbn in *; env.destroy ts; destruct_pmp_entries; auto.
+        clear Heq; cbn in *; env.destroy ts; cbn; destruct_pmp_entries; auto.
     Qed.
 
   End RiscvPmpIrisPredicates.

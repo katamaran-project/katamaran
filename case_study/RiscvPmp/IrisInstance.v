@@ -221,7 +221,7 @@ Module RiscvPmpIrisInstance <:
 
     Definition all_addrs_def : list Addr := bv.seqBv bv.zero (Nat.pow 2 xlenbits).
     Definition all_addrs_aux : seal (@all_addrs_def). Proof. by eexists. Qed.
-    Definition all_addrs := all_addrs_aux.(unseal).
+    Definition all_addrs : list Addr := all_addrs_aux.(unseal).
     Lemma all_addrs_eq : all_addrs = all_addrs_def. Proof. rewrite -all_addrs_aux.(seal_eq) //. Qed.
 
     Definition interp_pmp_addr_access (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
@@ -271,7 +271,7 @@ Module RiscvPmpIrisInstance <:
         (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
     Proof.
       destruct p; intros ts Heq; try discriminate Heq;
-        clear Heq; cbn in *; env.destroy ts; destruct_pmp_entries; auto.
+        clear Heq; cbn in *; env.destroy ts; cbn; destruct_pmp_entries; auto.
     Qed.
 
   End RiscvPmpIrisPredicates.

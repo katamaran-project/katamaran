@@ -116,9 +116,9 @@ Module Soundness
       iModIntro.
       iIntros (k2 k2s) "Hk2".
       iApply ("Hk" with "Hk2 [Hs]").
-      - now iApply (refine_inst_persist s).
+      - now iApply (refine_inst_persist with "Hs").
       - rewrite !RList_RInst.
-        now iApply refine_inst_persist.
+        now iApply (refine_inst_persist with "Hh").
     Qed.
 
     Class RefineCompat `(R : Rel AT A) (v : A)  w (vs : AT w) (Ob : Pred w) :=
@@ -150,15 +150,15 @@ Module Soundness
 
     #[export] Instance refine_compat_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} {v} {w1 w2} {ω : Acc w1 w2} {t} :
       RefineCompat (RInst AT A) v w2 (persist t ω) _ :=
-      MkRefineCompat (refine_inst_persist v w1 w2 ω t).
+      MkRefineCompat (refine_inst_persist _).
 
     #[export] Instance refine_compat_inst_persist_term {σ} {v} {w1 w2} {ω : Acc w1 w2} {t} :
       RefineCompat (RVal σ) v w2 (persist__term t ω) _ :=
-      MkRefineCompat (refine_inst_persist v w1 w2 ω t).
+      MkRefineCompat (refine_inst_persist _).
 
     #[export] Instance refine_compat_inst_persist_sub {N Σ} {v} {w1 w2} {ω : Acc w1 w2} {t} :
       RefineCompat (RNEnv N Σ) v w2 (persist t ω) _ :=
-      MkRefineCompat (refine_inst_persist v w1 w2 ω t).
+      MkRefineCompat (refine_inst_persist _).
 
     (* #[export] Instance refine_compat_rnenv_sub_acc {Σ : LCtx} {ι : Valuation Σ} {w : World} {ω2 : wlctx Σ ⊒ w} : *)
     (*   RefineCompat (RNEnv LVar Σ) ι w (sub_acc ω2) := *)
@@ -265,7 +265,7 @@ Module Soundness
       iIntros (s2 s2s) "Hs".
       iIntros (h2 h2s) "Hh".
       iApply ("Hc" with "Ha [Hk] Hs Hh").
-      now iApply refine_four.
+      now iApply (refine_four with "Hk").
     Qed.
 
     Lemma refine_angelic (x : option LVar) {Γ} {w : World} :
@@ -727,7 +727,7 @@ Module Soundness
       iApply (PureSpec.refine_produce_chunk with "Hc Hh [HΦ Hδ]").
       iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
       iApply ("HΦ" with "[//] [Hδ] Hh2").
-      now iApply (refine_inst_persist (AT := SStore Γ)).
+      now iApply (refine_inst_persist with "Hδ").
     Qed.
 
     Lemma refine_consume_chunk {Γ} {w} :
@@ -738,7 +738,7 @@ Module Soundness
       iApply (PureSpec.refine_consume_chunk with "Hc Hh").
       iIntros (w2 ω2) "!> %h2 %sh2 Hh2".
       iApply ("HΦ" with "[//] [Hδ] Hh2").
-      now iApply (refine_inst_persist (AT := SStore Γ)).
+      now iApply (refine_inst_persist with "Hδ").
     Qed.
 
     Lemma refine_consume_chunk_angelic {Γ} {w} :
@@ -819,11 +819,10 @@ Module Soundness
       ⊢ ℛ⟦RStore Δ -> RStoreSpec Γ Γ (RVal τ)⟧
         (CStoreSpec.call_contract c) (SStoreSpec.call_contract (w := w) c).
     Proof.
-      iIntros (args sargs) "Hargs".
+      iIntros (args sargs) "#Hargs".
       destruct c; cbv [SStoreSpec.call_contract CStoreSpec.call_contract]. 
-      rsolve.
-      rewrite sub_acc_trans -persist_subst.
-      cbn.
+      rsolve; rewrite !sub_acc_trans; last done.
+      rewrite -(persist_subst (a := ta)).
       rsolve.
     Qed.
 
@@ -833,9 +832,9 @@ Module Soundness
     Proof.
       destruct lem; cbv [SStoreSpec.call_lemma CStoreSpec.call_lemma].
       iIntros (args sargs) "Hargs".
+      rsolve; rewrite !sub_acc_trans; last done.
+      rewrite -(persist_subst (a := ta)).
       rsolve.
-      rewrite sub_acc_trans -persist_subst.
-      now rsolve.
     Qed.
 
     #[export] Instance refine_compat_error `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} {w : World} {cm : CStoreSpec Γ1 Γ2 A} :
@@ -874,7 +873,8 @@ Module Soundness
         + iIntros (POST sPOST) "#HPOST %δ1 %sδ1 #Hδ1".
           iApply HYP; try done; rsolve.
           iApply ("HPOST"); try done.
-          now iApply (refine_inst_persist (AT := SStore _)).
+          now iApply (refine_inst_persist with "Hδ1").
+      - now rewrite sub_acc_trans.
       - destruct a0, ta0.
         iRename select (ℛ⟦RMatchResult pat⟧ (existT x n) (existT x0 n0)) into "Hmr".
         iDestruct "Hmr" as "[%e Hvs]".
@@ -897,16 +897,19 @@ Module Soundness
     MkRefineCompat (refine_exec s w).
 
     Lemma refine_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) ι :
-      ⊢ forgetting (acc_wlctx_valuation ι) (ℛ⟦RStoreSpec Γ Γ RUnit⟧
-          (CStoreSpec.exec_contract n c s ι) (SStoreSpec.exec_contract cfg n c s)).
+      ⊢ forgetting (w2 := wnil) (lift ι)
+        (ℛ⟦RStoreSpec Γ Γ RUnit⟧
+           (CStoreSpec.exec_contract n c s ι) (SStoreSpec.exec_contract cfg n c s)).
     Proof.
       unfold SStoreSpec.exec_contract, CStoreSpec.exec_contract;
         destruct c as [Σ δ pre result post]; cbn - [RSat] in *.
-      iPoseProof (forgetting_valuation_curval (ι := ι)) as "#Hι".
+      iPoseProof (forgetting_valuation_curval (Σ := Σ) (ι := ι)) as "#Hι".
+      change (lift ι) with (sub_acc (acc_wlctx_valuation ι)).
       iModIntro.
       rsolve.
       - now iApply refine_rinst_sub_initial.
-      - now iApply (refine_rnenv_sub_acc (w := wlctx _)).
+      - iApply (refine_rnenv_sub_acc (w := wlctx _)).
+        now rewrite sub_acc_trans.
     Qed.
   End ExecRefine.
 
@@ -920,7 +923,7 @@ Module Soundness
   End StoreSpec.
 
   Lemma refine_psafe_demonic_close {Σ} (P : SymProp Σ):
-    psafe (demonic_close P : SymProp wnil) ⊢ ∀ ι, forgetting (acc_wlctx_valuation ι) (psafe (P : SymProp (wlctx Σ))).
+    psafe (demonic_close P : SymProp wnil) ⊢ ∀ ι, forgetting (lift ι) (psafe (P : SymProp (wlctx Σ))).
   Proof.
     unfold forgetting.
     crushPredEntails3.
@@ -932,14 +935,14 @@ Module Soundness
   Qed.
 
   Lemma refine_demonic_close {Σ} (P : 𝕊 (wlctx Σ)) (p : Valuation Σ -> Prop) :
-    (∀ ι, forgetting (acc_wlctx_valuation ι) (ℛ⟦RProp⟧ (p ι) P)) ⊢
+    (∀ ι, forgetting (lift ι) (ℛ⟦RProp⟧ (p ι) P)) ⊢
       ℛ⟦RProp⟧ (ForallNamed p) (demonic_close P : SymProp wnil).
   Proof.
     iIntros "HYP Hwp".
     unfold ForallNamed.
     rewrite env.Forall_forall. iIntros (ι).
     iSpecialize ("HYP" $! ι).
-    rewrite <-(forgetting_pure (acc_wlctx_valuation ι) (P := p ι)).
+    rewrite <-(forgetting_pure (w2 := wlctx Σ) (lift ι)).
     iPoseProof (refine_psafe_demonic_close P with "Hwp") as "HP".
     iSpecialize ("HP" $! ι).
     iModIntro.
@@ -970,7 +973,7 @@ Module Soundness
     pose proof (PureSpec.refine_replay s ι).
     unfold RProp in H0; cbn in H0.
     rewrite psafe_safe in H0.
-    now apply (fromEntails _ _ H0 ι).
+    now apply (fromEntails H0 ι).
   Qed.
 
   Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
@@ -980,7 +983,7 @@ Module Soundness
     unfold Symbolic.ValidContract. intros [Hwp%postprocess_sound].
     apply (replay_sound (w:=wnil)) in Hwp; [|easy].
     apply postprocess_sound in Hwp.
-    apply (fromEntails _ _ (refine_vcgen _ _ _) [env]); try done.
+    apply (fromEntails (refine_vcgen _ _ _) [env]); try done.
     now apply psafe_safe.
   Qed.
 
@@ -991,7 +994,7 @@ Module Soundness
     unfold Symbolic.ValidContractWithFuel. intros [Hwp%postprocess_sound].
     apply (replay_sound (w:=wnil)) in Hwp; [|easy].
     apply postprocess_sound in Hwp.
-    apply (fromEntails _ _ (refine_vcgen fuel c body) [env]); try done.
+    apply (fromEntails (refine_vcgen fuel c body) [env]); try done.
     now apply (psafe_safe (w := wnil)).
   Qed.
 

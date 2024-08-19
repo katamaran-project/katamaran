@@ -34,6 +34,7 @@ From Katamaran Require Import
      Syntax.Formulas
      Syntax.Predicates
      Base.
+From stdpp Require Import base.
 
 Import ctx.notations.
 Import env.notations.
@@ -43,6 +44,9 @@ Local Obligation Tactic := idtac.
 
 Declare Scope rel_scope.
 Delimit Scope rel_scope with R.
+
+Declare Scope pred_scope.
+Delimit Scope pred_scope with P.
 
 Module Type WorldsOn
   (Import B : Base)
@@ -87,8 +91,8 @@ Module Type WorldsOn
       @MkWorld (wctx w) (ctx.cat (wco w) C).
 
     (* Change the world after a unifying variable [x] with term [t]. *)
-    Definition wsubst (w : World) x {σ} {xIn : x∷σ ∈ w} (t : Term (w - x∷σ) σ) : World :=
-      {| wctx := wctx w - x∷σ; wco := subst (wco w) (sub_single xIn t) |}.
+    Definition wsubst (w : World) x {σ} {xIn : (x∷σ ∈ w)%katamaran} (t : Term (w - x∷σ) σ) : World :=
+      {| wctx := (wctx w - x∷σ); wco := subst (wco w) (sub_single xIn t) |}.
     Global Arguments wsubst w x {σ xIn} t.
 
     Definition wmatch (w : World) {σ} (s : Term w σ) (p : @Pattern LVar σ)
@@ -101,7 +105,7 @@ Module Type WorldsOn
                                     (pattern_match_term_reverse _ pc ts) in
       wformula (wcat w Δ) F1.
 
-    Definition wmatchvar_patternvars {Σ : LCtx} {x σ} {xIn : x∷σ ∈ Σ}
+    Definition wmatchvar_patternvars {Σ : LCtx} {x σ} {xIn : (x∷σ ∈ Σ)%katamaran}
       {p : @Pattern LVar σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) ((Σ ▻▻ PatternCaseCtx pc) - x∷σ) :=
       let Δ   : LCtx           := PatternCaseCtx pc in
       let Σ1  : LCtx              := Σ ▻▻ Δ in
@@ -109,7 +113,7 @@ Module Type WorldsOn
       let ts  : Sub Δ (Σ - x∷σ ▻▻ Δ) := sub_cat_right Δ in
       eq_rect (Σ - x∷σ ▻▻ Δ) (fun Σ => Sub Δ Σ) ts ((Σ ▻▻ Δ) - x∷σ) (eq_sym eq).
 
-    Definition wmatchvar (w : World) {x σ} (xIn : x∷σ ∈ w) (p : @Pattern LVar σ)
+    Definition wmatchvar (w : World) {x σ} (xIn : (x∷σ ∈ w)%katamaran) (p : @Pattern LVar σ)
       (pc : PatternCase p) : World :=
       let Δ   : LCtx           := PatternCaseCtx pc in
       let w1  : World          := wcat w Δ in
@@ -144,7 +148,7 @@ Module Type WorldsOn
     Inductive Tri (w : World) : World -> Type :=
     | tri_id        : Tri w w
     | tri_cons {w' x σ}
-        (xIn : x∷σ ∈ w) (t : Term (wctx w - x∷σ) σ)
+        (xIn : (x∷σ ∈ w)%katamaran) (t : Term (wctx w - x∷σ) σ)
         (ν : Tri (wsubst w x t) w') : Tri w w'.
     Global Arguments tri_id {_}.
     Global Arguments tri_cons {_ _} x {_ _} t ν.
@@ -288,20 +292,6 @@ Module Type WorldsOn
         now rewrite ?sub_comp_id_left, ?sub_comp_id_right.
     Qed.
 
-
-    Record IsIsomorphism {w1 w2} (ω12 : w1 ⊒ w2) (ω21 : w2 ⊒ w1) :=
-      MkIsIsomorphism {
-          wiso_there : forall ι, instprop (wco w1) ι -> inst (sub_acc ω12) (inst (sub_acc ω21) ι) = ι;
-          wiso_back : forall ι, instprop (wco w2) ι -> inst (sub_acc ω21) (inst (sub_acc ω12) ι) = ι
-        }.
-
-    Lemma iso_symm {w1 w2} {ω12 : w1 ⊒ w2} {ω21 : w2 ⊒ w1} :
-      IsIsomorphism ω12 ω21 -> IsIsomorphism ω21 ω12.
-    Proof.
-      intros [Ht Hb].
-      now constructor.
-    Qed.
-
     Definition Box (A : TYPE) : TYPE :=
       fun w0 => forall w1, w0 ⊒ w1 -> A w1.
 
@@ -317,45 +307,6 @@ Module Type WorldsOn
 
     Definition acc_snoc_right {w} {b : LVar ∷ Ty} : w ⊒ wsnoc w b :=
       @acc_sub w (wsnoc w b) sub_wk1 (entails_refl (subst (wco w) sub_wk1)).
-
-    Program Definition acc_let_right {w} (b : LVar ∷ Ty) v : w ⊒ wlet w b v :=
-      @acc_sub w (wlet w b v) sub_wk1 _.
-    Next Obligation.
-      intros * ι Hpc.
-      now apply proj1 in Hpc.
-    Defined.
-
-    Program Definition acc_let_left {w} (b : LVar ∷ Ty) v : wlet w b v ⊒ w :=
-      acc_sub (sub_snoc (sub_id w) b (term_val _ v)) _.
-    Next Obligation.
-      intros * ι Hpc.
-      split; last reflexivity.
-      change (subst_ctx ?pc ?ς)
-        with (subst pc ς).
-      now rewrite <-subst_sub_comp, sub_comp_wk1_tail, subst_sub_id.
-    Defined.
-
-    Program Definition acc_let_snoc {w} (b : LVar ∷ Ty) v : wsnoc w b ⊒ wlet w b v :=
-      acc_sub (sub_id (w ▻ b) : Sub (wsnoc w b) (wlet w b v)) _.
-    Next Obligation.
-      intros * ι.
-      destruct (env.view ι) as [ι v'].
-      unfold wlet; simpl.
-      intros Hpc.
-      destruct (proj1 (instprop_snoc _ _ _) Hpc) as [Hpc' H].
-      now rewrite instprop_subst, inst_sub_id.
-    Defined.
-    
-    Lemma acc_let_iso w b v : IsIsomorphism (@acc_let_right w b v) (acc_let_left b v).
-    Proof.
-      constructor; intros; simpl.
-      - now rewrite inst_sub_snoc, inst_sub_id, inst_sub_wk1.
-      - rewrite inst_sub_snoc, inst_sub_id.
-        destruct (env.view ι) as (ι & v').
-        destruct H as (Hpc & Hbv); cbn in Hbv.
-        subst.
-        now rewrite inst_sub_wk1.
-    Qed.
 
     Definition acc_cat_right w (Δ : LCtx) : w ⊒ wcat w Δ :=
       @acc_sub w (wcat w Δ) (@sub_cat_left w Δ)
@@ -409,7 +360,7 @@ Module Type WorldsOn
     Next Obligation.
     Proof. intros w C ι H%instprop_cat. now rewrite subst_sub_id. Qed.
 
-    Definition acc_subst_right {w : World} x {σ} {xIn : x∷σ ∈ w} (t : Term (w - x∷σ) σ) :
+    Definition acc_subst_right {w : World} x {σ} {xIn : (x∷σ ∈ w)%katamaran} (t : Term (w - x∷σ) σ) :
       w ⊒ wsubst w x t :=
       let ζ  := sub_single xIn t in
       let w' := {| wctx := w - x∷σ; wco := subst (wco w) ζ |}  in
@@ -421,16 +372,25 @@ Module Type WorldsOn
       @acc_sub w (wmatch w s p pc) (sub_cat_left (PatternCaseCtx pc))
         (fun ι HCι => proj1 HCι).
 
-    Program Definition acc_matchvar_right {w : World} {x σ} {xIn : x∷σ ∈ w}
-        {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatchvar w xIn p pc :=
+    Definition sub_matchvar_right {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
+        {p : @Pattern LVar σ} (pc : PatternCase p) : Sub w (wmatchvar w xIn p pc) :=
         let Δ   : LCtx           := PatternCaseCtx pc in
         let w1  : World          := wcat w Δ in
         let t   : Term ((w ▻▻ Δ) - x∷σ) σ := pattern_match_term_reverse _ pc (wmatchvar_patternvars pc) in
         let wmv : World          := wsubst w1 x t in
         let sub₁ : Sub w (w ▻▻ Δ) := sub_cat_left Δ in
         let sub₂ : Sub (w ▻▻ Δ) ((w ▻▻ Δ) - x∷σ) := sub_single _ t in
-        let sub : Sub w wmv := subst sub₁ sub₂ in
-        @acc_sub w wmv sub _.
+        subst sub₁ sub₂.
+    Arguments sub_matchvar_right {w} {x σ xIn p} pc : simpl never.
+
+    Program Definition acc_matchvar_right {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
+      {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatchvar w xIn p pc :=
+      let Δ   : LCtx           := PatternCaseCtx pc in
+      let w1  : World          := wcat w Δ in
+      let t   : Term ((w ▻▻ Δ) - x∷σ) σ := pattern_match_term_reverse _ pc (wmatchvar_patternvars pc) in
+      let wmv : World          := wsubst w1 x t in
+      let sub : Sub w wmv := sub_matchvar_right pc in
+      @acc_sub w wmv sub _.
     Next Obligation.
       intros. cbn -[sub_single].
       now rewrite <-subst_sub_comp.
@@ -451,6 +411,10 @@ Module Type WorldsOn
       - now rewrite sub_acc_trans, IHζ.
     Qed.
 
+    (* Lemma sub_triangular_left_inverse2 {w1 w2} (ζ : Tri w1 w2) : Inverse (sub_triangular_inv ζ)  (sub_triangular ζ). *)
+    (* Proof. *)
+    (*   intros ι Hpc. now rewrite inst_triangular_left_inverse. *)
+    (* Qed. *)
   End Accessibility.
 
   #[export] Instance preorder_acc : CRelationClasses.PreOrder Acc :=
@@ -558,6 +522,239 @@ Module Type WorldsOn
   Notation persist__term t :=
     (@persist (WTerm _) (@persistent_subst (STerm _) (@SubstTerm _)) _ t).
 
+  Definition Pred : TYPE := fun w => (Valuation w -> Prop)%type.
+
+  Bind Scope pred_scope with Pred.
+
+  Definition Tm (A : LCtx -> Type) : TYPE :=
+    fun w => A w.
+
+  Definition eqₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : ⊢ Tm T -> Tm T -> Pred :=
+    fun w t1 t2 ι => (inst t1 ι = inst t2 ι)%type.
+  #[global] Arguments eqₚ {T A _} [w] _ _ _/.
+
+  Definition repₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : A -> ⊢ Tm T -> Pred :=
+    fun t2 w t1 ι => (inst t1 ι = t2)%type.
+  #[global] Arguments repₚ {T A _} _ [w] _ _/.
+
+  Definition curval {w : World} : Valuation w -> Pred w :=
+    fun ι1 ι2 => ι1 = ι2.
+
+  Inductive DebugPred (B : LCtx -> Type) {w : World} (b : B w) (P : Pred w) : Pred w := 
+    MkDebugPred : forall ι, P ι -> DebugPred B b P ι.
+
+  Definition empₚ {w} : Pred w := fun _ => True.
+  Arguments empₚ {w} ι /.
+  Definition sepₚ {w} (P Q : Pred w) : Pred w := fun ι => P ι /\ Q ι.
+  Arguments sepₚ {w} P Q ι /.
+  Definition wandₚ {w} (P Q : Pred w) : Pred w := fun ι => (P ι -> Q ι)%type.
+  Arguments wandₚ {w} P Q ι /.
+  Definition persistently {w : World} (P : Pred w) : Pred w := P.
+  Arguments persistently {w} P ι /.
+  (* Iris defines [bi_later_mixin_id] for BI algebras without later. However,
+     the identity function as later still causes some later-specific
+     typeclasses to be picked. We just define our own trivial modality and
+     mixin to avoid that. *)
+  Variant laterₚ {w} (P : Pred w) (ι : Valuation w) : Prop :=
+    MkLater : P ι -> laterₚ P ι.
+
+
+  Section EntailmentDefinitions.
+
+    Context {w : World}.
+
+    Record bientails (P Q : Pred w) : Prop :=
+      MkBientails { fromBientails : forall ι, instprop (wco w) ι -> P ι <-> Q ι }.
+    Record entails (P Q : Pred w) : Prop :=
+      MkEntails { fromEntails : forall ι, instprop (wco w) ι -> P ι -> Q ι }.
+
+    #[export] Instance pred_equiv : Equiv (Pred w) := bientails.
+
+  End EntailmentDefinitions.
+
+  #[export] Ltac crushPredEntailsMatch1 :=
+    match goal with
+    | [ H : ?P /\ ?Q |- _ ] => destruct H
+    | [ H : ?P \/ ?Q |- _ ] => destruct H
+    | [ H: entails ?x ?y, ι : Valuation ?w, Hpc : instprop ?pc ?ι |- _ ] => (pose proof (fromEntails H ι Hpc); clear H)
+    | [ H: equiv ?x ?y, ι : Valuation ?w, Hpc : instprop ?pc ?ι |- _ ] => (pose proof (fromBientails H ι Hpc); clear H)
+    | [ H: bientails ?x ?y, ι : Valuation ?w, Hpc : instprop ?pc ?ι |- _ ] => (pose proof (fromBientails H ι Hpc); clear H)
+    end.
+  Ltac crushPredEntails1 := repeat constructor; intros; cbn in *; repeat crushPredEntailsMatch1; intuition.
+
+  Section RewriteRelations.
+    Context {w : World}.
+
+    #[export] Instance pred_equivalence : Equivalence (≡@{Pred w}).
+    Proof. crushPredEntails1. Qed.
+
+    #[export] Instance preorder_entails : RelationClasses.PreOrder (entails (w := w)).
+    Proof. crushPredEntails1. Qed.
+    #[export] Instance subrelation_bientails_entails :
+      subrelation (≡@{Pred w}) entails.
+    Proof. crushPredEntails1. Qed.
+    #[export] Instance subrelation_bientails_flip_entails :
+      subrelation (≡@{Pred w}) (Basics.flip entails).
+    Proof. crushPredEntails1. Qed.
+
+    #[export] Instance entails_rewriterelation : RewriteRelation (@entails w) := {}.
+
+    #[export] Instance proper_bientails :
+      Proper (@bientails w ==> @bientails w ==> iff) bientails.
+    Proof. crushPredEntails1. Qed.
+    #[export] Instance proper_entails_bientails :
+      Proper ((≡@{Pred w}) ==> (≡@{Pred w}) ==> iff) entails.
+    Proof. crushPredEntails1. Qed.
+    #[export] Instance proper_entails_entails :
+      Proper (Basics.flip (entails (w := w)) ==> (entails (w := w)) ==> Basics.impl) entails.
+    Proof. crushPredEntails1. Qed.
+
+  End RewriteRelations.
+  #[global] Arguments bientails {w} (_ _)%P.
+  #[global] Arguments entails {w} (_ _)%P.
+
+  Import iris.bi.interface.
+(* Note domi: This tactic is defined specifically to prove bi_pred below because firstorder enters a rabbit hole somewhere.
+     Note: order of matches is important.
+   *)
+  #[export] Ltac crushPredEntailsMatch2 :=
+      match goal with
+      | [ |- True ] => constructor
+      | [ H : dist _ _ _ |- _ ] => cbv in H
+      | [ H : ?P |- ?P \/ _ ] => left
+      | [ H : ?P |- _ \/ ?P ] => right
+      | [ |- iff _ _ ] => split
+      | [ |- _ -> _ ] => intro
+      | [ |- _ /\ _ ] => split
+      | [ |- forall P, _ ] => intro
+      | [ H1: instprop ?pc ?ι -> ?Q, H2 : instprop ?pc ?ι |- _ ] => specialize (H1 H2)
+      | [ |- Reflexive _] => intro
+      | [ |- Transitive _] => intro
+      | [ |- PreOrder _] => constructor
+      | [ |- entails _ _] => constructor
+      | [ |- bientails _ _] => constructor
+      | [ |- equiv _ _] => constructor
+      | [ H : ?H |- ?H ] => assumption
+      | [ H1 : ?P1 -> ?P2, H2: ?P1  |- ?P2 ] => apply (H1 H2)
+      | [ H : ?H1 <-> ?H2 |- ?H2 ] => apply (proj1 H); clear H
+      | [ H : ?H1 <-> ?H2 |- ?H1 ] => apply (proj2 H); clear H
+      | [ H : ?P1 <-> ?P2, H2 : ?P1 |- _ ] => apply (proj1 H) in H2; clear H
+      | [ H : ?P1 <-> ?P2, H2 : ?P2 |- _ ] => apply (proj2 H) in H2; clear H
+      | [ |- Proper _ _ ] => intro; intros
+      | [ |- dist _ ?P ?Q ] => change (equiv P Q)
+      | [ |- respectful _ _ ?P ?Q ] => intro; intro; intro
+      | [ H1 : pointwise_relation ?A _ _ _, H2: ?A |- _ ] => specialize (H1 H2)
+      | [ H1 : (forall (a : ?A), _), H2: ?A |- _ ] => specialize (H1 H2)
+      | [ H1 : (exists (a : ?A), _) |- _ ] => destruct H1
+      | [ a : ?A |- exists (a : ?A), _ ] => exists a
+      | [ H : sepₚ _ _ _ |- _ ] => destruct H
+      | [ |- sepₚ _ _ _ ] => split
+      | [ |- eqₚ ?t1 ?t2 ?ι ] => intro
+      (* | [ |- ∀ₚ _ ] => intro *)
+      | [ |- wandₚ _ _ _ ] => intro
+      | [ H : wandₚ _ _ _ |- _ ] => cbn in H
+      | [ H : (fun x => _) _ |- _ ] => cbn in H
+      | [ |- True ] => trivial
+      | [ |- empₚ _ ] => constructor
+      | [ |- persistently _ _ ] => unfold persistently
+      | [ H: persistently _ _ |- _ ] => unfold persistently in H
+      | [ |- laterₚ _ _ ] => constructor
+      | [ H: laterₚ _ _ |- _ ] => destruct H
+      | [ |- laterₚ (λ _ , False) _ ∨ _ ] => right
+      end.
+  Ltac crushPredEntails2 := cbn; intros; cbn in *; repeat (crushPredEntailsMatch1 || crushPredEntailsMatch2); intuition.
+
+  Section proofmode.
+
+    Import iris.bi.extensions.
+
+    #[export] Instance ofe_dist_pred {w} : ofe.Dist (Pred w) :=
+      ofe.discrete_dist.
+
+    Canonical bi_pred {w : World} : bi.
+    Proof.
+      refine
+        {| bi_car := Pred w;
+          bi_entails := entails;
+          bi_emp := empₚ;
+          bi_pure P _ := P;
+          bi_and P Q ι := (P ι /\ Q ι)%type;
+          bi_or P Q ι := (P ι \/ Q ι)%type;
+          bi_impl P Q ι := (P ι -> Q ι)%type;
+          bi_forall A f ι :=  (forall a, f a ι)%type;
+          bi_exist A f ι := (exists a, f a ι)%type;
+          bi_sep := sepₚ;
+          bi_wand := wandₚ;
+          bi_persistently := persistently;
+          bi_later := laterₚ;
+        |}.
+      - constructor; crushPredEntails2.
+        apply H1; crushPredEntails2.
+      - constructor; crushPredEntails2.
+      - constructor; crushPredEntails2.
+    Defined.
+
+    Definition proprepₚ {T : LCtx -> Type} {instTA : InstProp T} : Prop -> forall w, Tm T w -> Pred w :=
+      fun t2 w t1 => ((instprop t1 : Pred w) ∗-∗ bi_pure t2)%I.
+    #[global] Arguments proprepₚ {T _} _ [w] _ _/.
+
+    #[export] Instance persistent_pred {w} {P : Pred w} :
+      derived_connectives.Persistent P.
+    Proof. constructor. now intros ι HP. Qed.
+
+    #[export] Instance affine_pred {w} {P : Pred w} :
+      derived_connectives.Affine P.
+    Proof. constructor. intros ι HP. now constructor. Qed.
+
+
+    #[export] Instance pred_pure_forall {w} : BiPureForall (Pred w).
+    Proof. constructor. crushPredEntails2. Qed.
+
+    Definition instprop_pred {T : LCtx -> Type} `{InstProp T} {w : World} : T w -> Pred w
+      := instprop.
+
+    #[export] Instance instprop_pred_proper_bientails {w : World} `{InstProp A} : Proper (Entailment.bientails ==> equiv) (instprop_pred (w := w)).
+    Proof.
+      intros P Q HPQ.
+      constructor; intros.
+      now apply HPQ.
+    Qed.
+
+    Lemma instprop_pred_cat {w : World} `{InstProp A} (x y : Ctx (A w)) : instprop_pred (x ▻▻ y) ⊣⊢ instprop_pred x ∗ instprop_pred y.
+    Proof.
+      constructor. intros. now apply instprop_cat.
+    Qed.
+
+    Lemma instprop_pred_singleton {w : World} `{InstProp A} (x : A w) : instprop_pred (w := w) [x]%ctx ⊣⊢ instprop_pred x.
+    Proof. crushPredEntails2. Qed.
+
+    Lemma wco_valid {w : World} : ⊢ instprop_pred (wco w).
+    Proof. constructor. crushPredEntails2. Qed.
+
+  End proofmode.
+
+  Section modalities.
+    Import iris.bi.interface.
+    (* update: better/more standard names? *)
+    Definition assuming {w1 w2 : World } (ω : Sub w2 w1) : Pred w1 -> Pred w2 :=
+      fun Rpast ι => forall (ιpast : Valuation w1), inst ω ιpast = ι -> instprop (wco w1) ιpast -> Rpast ιpast.
+    Definition knowing {w1 w2 : World} (ω : Sub w2 w1) : Pred w1 -> Pred w2 :=
+      fun Rpast ι => (exists (ιpast : Valuation w1), inst ω ιpast = ι /\ instprop (wco w1) ιpast /\ Rpast ιpast)%type.
+    Definition forgetting {w1 w2 : World} (ω : Sub w1 w2) : Pred w1 -> Pred w2 :=
+      fun Rfut ι => Rfut (inst ω ι).
+    Definition unconditionally {w : World} : (□ Pred) w -> Pred w :=
+      fun P => (∀ {w2} (ω : w ⊒ w2), assuming (sub_acc ω) (P w2 ω))%I.
+
+    Lemma knowing_id {w} {P : Pred w} : knowing (sub_id _) P ⊣⊢ P.
+    Proof.
+      rewrite /knowing.
+      crushPredEntails2.
+      - rewrite inst_sub_id in H0. now subst.
+      - now rewrite inst_sub_id.
+    Qed.
+
+  End modalities.
+
   Section SolverInterface.
     Import Entailment.
 
@@ -565,28 +762,8 @@ Module Type WorldsOn
       forall (w0 : World) (C0 : PathCondition w0),
         option { w1 & Tri w0 w1 * PathCondition w1 }%type.
 
-    Definition SolverSpec (s : Solver) : Prop :=
-      forall (w0 : World) (C0 : PathCondition w0),
-        option.spec
-          (fun '(existT w1 (ζ, C1)) =>
-             forall ι0,
-               instprop (wco w0) ι0 ->
-               (instprop C0 ι0 -> inst_triangular ζ ι0) /\
-                 (forall ι1,
-                     instprop (wco w1) ι1 ->
-                     ι0 = inst (sub_triangular ζ) ι1 ->
-                     instprop C0 ι0 <-> instprop C1 ι1))
-          (forall ι, instprop (wco w0) ι -> ~ instprop C0 ι)
-          (s w0 C0).
-
     Definition solver_null : Solver :=
       fun w C => Some (existT w (tri_id , C)).
-
-    Lemma solver_null_spec : SolverSpec solver_null.
-    Proof.
-      intros w C. constructor. cbn. intros ι Hpc. split. auto.
-      intros ι' Hpc' ->. now rewrite inst_sub_id.
-    Qed.
 
     Definition SolverUserOnly : Type :=
       forall Σ (p : 𝑷), Env (Term Σ) (𝑷_Ty p) -> Option PathCondition Σ.
@@ -607,21 +784,25 @@ Module Type WorldsOn
               k' <- simplify_all C k ;;
               g F k'
           end.
+    End SimplifyAll.
 
+    Section SimplifyAllSpec.
+      Import option.notations.
+      Import iris.bi.interface.
+      Import iris.proofmode.tactics.
+      Context {w : World} (g : Formula w -> PathCondition w -> option (PathCondition w)).
       Context (g_spec : forall F k,
                   option.spec
-                    (fun r : PathCondition Σ =>
-                       forall ι : Valuation Σ,
-                         instprop (k ▻ F) ι <-> instprop r ι)
-                    (forall ι : Valuation Σ, ~ instprop F ι)
+                    (fun r : PathCondition w =>
+                       instprop_pred (w := w) (k ▻ F) ⊣⊢ instprop_pred r)
+                    (instprop_pred F ⊢ False)
                     (g F k)).
 
-      Lemma simplify_all_spec (C k : PathCondition Σ) :
+      Lemma simplify_all_spec (C k : PathCondition w) :
         option.spec
-          (fun r : PathCondition Σ =>
-             forall ι : Valuation Σ,
-               instprop (k ▻▻ C) ι <-> instprop r ι)
-          (forall ι : Valuation Σ, ~ instprop C ι)
+          (fun r : PathCondition w =>
+             instprop_pred (w := w) (k ▻▻ C) ⊣⊢ instprop_pred r)%I
+          (instprop_pred (w := w) C ⊢ False)%I
           (simplify_all g C k).
       Proof.
         induction C as [|C IHC F]; cbn; [constructor; reflexivity|].
@@ -629,12 +810,40 @@ Module Type WorldsOn
         apply option.spec_monotonic.
         - intros tmp Htmp. specialize (g_spec F tmp). revert g_spec.
           apply option.spec_monotonic.
-          + intros res Hres ι. rewrite (Htmp ι). apply (Hres ι).
-          + intros HnF ι [HCι HFι]. now apply (HnF ι).
-        - intros HnC ι [HCι HFι]. now apply (HnC ι).
+          + iIntros (res Hres).
+            change (λ ι, ?P ι ∧ ?Q ι) with (P ∗ Q)%I.
+            rewrite Htmp.
+            apply Hres.
+          + change (λ ι, ?P ι ∧ ?Q ι) with (P ∗ Q)%I.
+            iIntros (HnF) "[HC HF]".
+            now iApply (HnF with "HF").
+        - change (λ ι, ?P ι ∧ ?Q ι) with (P ∗ Q)%I.
+          iIntros (HnC) "[HC HF]".
+          now iApply HnC.
       Qed.
 
-    End SimplifyAll.
+    End SimplifyAllSpec.
+
+    Section SolverSpec.
+      Require Import iris.bi.interface.
+      Definition SolverSpec (s : Solver) : Prop :=
+        forall (w : World) (C0 : PathCondition w),
+          option.spec
+            (fun '(existT w1 (ζ, C1)) =>
+               (knowing (sub_triangular ζ) (instprop_pred C1)) ⊣⊢ (instprop_pred C0))%I
+            ((instprop_pred C0) ⊢ False)%I
+            (s w C0).
+
+      Lemma solver_null_spec : SolverSpec solver_null.
+      Proof.
+        intros w C. constructor.
+        unfold knowing; crushPredEntails2.
+        - rewrite inst_sub_id in H0.
+          now subst.
+        - now rewrite inst_sub_id.
+      Qed.
+    End SolverSpec.
+
 
     Section WithUserOnlySolver.
 
@@ -654,32 +863,45 @@ Module Type WorldsOn
 
       Context (user_spec : SolverUserOnlySpec user).
 
-      Lemma solveruseronly_simplify_formula_spec {Σ} (F : Formula Σ) (k : PathCondition Σ) :
+      Import Entailment.
+      Import iris.bi.interface.
+      Import iris.proofmode.tactics.
+
+      Lemma solveruseronly_simplify_formula_spec {w : World} (F : Formula w) (k : PathCondition w) :
         option.spec
-          (fun r : PathCondition Σ =>
-             forall ι : Valuation Σ,
-               instprop (k ▻ F) ι <-> instprop r ι)
-          (forall ι : Valuation Σ, ~ instprop F ι)
+          (fun r : PathCondition w =>
+             instprop_pred (k ▻ F) ⊣⊢ instprop_pred r)%I
+          (instprop_pred (w := w) F ⊢ False)%I
           (solveruseronly_simplify_formula F k).
       Proof.
         destruct F; try (constructor; reflexivity). apply option.spec_map.
         specialize (user_spec ts).
-        destruct user; constructor; intros ι; specialize (@user_spec ι); cbn in *.
-        - unfold PathCondition. rewrite instprop_cat. intuition.
-        - intuition.
+        destruct user; constructor; cbn in *.
+        - change (env.uncurry (𝑷_inst p) (inst ts ?ι)) with ((fun ι' => env.uncurry (𝑷_inst p) (inst ts ι')) ι).
+          change ((fun ι' => env.uncurry (𝑷_inst p) (inst ts ι')) ?ι)
+            with (instprop_pred (formula_user p ts) ι).
+          change (λ ι, ?P ι ∧ ?Q ι) with (P ∗ Q)%I.
+          rewrite (instprop_pred_cat k p0).
+          change (instprop_pred p0) with (instprop_pred (T := PathCondition) p0).
+          change (bientails p0 [formula_user p ts]%ctx) in user_spec.
+          now rewrite user_spec instprop_pred_singleton.
+        - change (fun ι' => env.uncurry (𝑷_inst p) (inst ts ι'))
+            with (instprop_pred (formula_user p ts)).
+          rewrite <-instprop_pred_singleton.
+          change (instprop_pred (Some [formula_user p ts]%ctx) ⊢ False)%stdpp.
+          now rewrite <-user_spec.
       Qed.
 
       Lemma solveruseronly_to_solver_spec : SolverSpec solveruseronly_to_solver.
       Proof.
-        intros w0 C. unfold solveruseronly_to_solver.
+        iIntros (w0 C). unfold solveruseronly_to_solver.
         apply option.spec_map.
-        generalize (simplify_all_spec solveruseronly_simplify_formula solveruseronly_simplify_formula_spec C ctx.nil).
-        apply option.spec_monotonic.
-        - intros r H ι Hpc. split; [constructor|].
-          specialize (H ι). unfold PathCondition in H.
-          rewrite instprop_cat in H. cbn in H. rewrite leftid_true_and in H.
-          intros ι' Hpc'. cbn. rewrite inst_sub_id. intros. now subst.
-        - intros Hnf ι Hpc. apply Hnf.
+        generalize (simplify_all_spec (w := w0) solveruseronly_simplify_formula solveruseronly_simplify_formula_spec C ctx.nil).
+        apply option.spec_monotonic; last done.
+        iIntros (r H).
+        rewrite knowing_id.
+        rewrite instprop_pred_cat in H.
+        now rewrite bi.emp_sep in H.
       Qed.
 
     End WithUserOnlySolver.
@@ -697,39 +919,6 @@ Module Type WorldsOn
                   existT w2 (tri_comp ν01 ν12 , fmls2))
                (s2 _ fmls1)).
 
-    Lemma solver_compose_spec {s1 s2} (spec1 : SolverSpec s1) (spec2 : SolverSpec s2) : SolverSpec (solver_compose s1 s2).
-    Proof.
-      unfold SolverSpec, solver_compose. intros w0 fmls0.
-      apply option.spec_bind.
-      generalize (spec1 _ fmls0); clear spec1.
-      apply option.spec_monotonic; auto.
-      intros (w1 & ν01 & fmls1) H1.
-      apply option.spec_map.
-      generalize (spec2 _ fmls1); clear spec2.
-      apply option.spec_monotonic; auto.
-      - intros (w2 & ν12 & fmls2) H2. intros ι0 Hpc0.
-        specialize (H1 ι0 Hpc0). destruct H1 as [H01 H10].
-        rewrite inst_tri_comp. split.
-        + intros Hfmls0. split; auto.
-          remember (inst (sub_triangular_inv ν01) ι0) as ι1.
-          assert (instprop (wco w1) ι1) as Hpc1 by
-              (subst; apply entails_triangular_inv; auto).
-          apply H2; auto. apply H10; auto.
-          subst; rewrite inst_triangular_right_inverse; auto.
-        + intros ι2 Hpc2 Hι0. rewrite sub_triangular_comp, inst_subst in Hι0.
-          remember (inst (sub_triangular ν12) ι2) as ι1.
-          assert (instprop (wco w1) ι1) as Hpc1 by
-              (revert Hpc2; subst; rewrite <- sub_acc_triangular, <- instprop_persist; apply ent_acc).
-          rewrite H10; eauto. apply H2; auto.
-      - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
-        destruct H1 as [H01 H10]. inster H01 by auto.
-        pose (inst (sub_triangular_inv ν01) ι0) as ι1.
-        assert (instprop (wco w1) ι1) as Hpc1 by
-            (subst; apply entails_triangular_inv; auto).
-        apply (Hfmls1 ι1 Hpc1). revert Hfmls0.
-        apply H10; auto. subst ι1.
-        now rewrite inst_triangular_right_inverse.
-    Qed.
   End SolverCompose.
 
   Ltac wsimpl :=

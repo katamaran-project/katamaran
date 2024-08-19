@@ -1005,7 +1005,8 @@ Module RiscvPmpIrisInstanceWithContracts.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
     iIntros "([<- _] & [-> _])".
-    iFrame. iPureIntro.
+    unfold interp_mmio_checked_write.
+    iPureIntro.
     split; auto.
     destruct width; now compute.
   Qed.

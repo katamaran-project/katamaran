@@ -1541,7 +1541,8 @@ Module Type IrisAdequacy2
     induction Hevaln1.
     - iIntros (γ21 μ21 δ21 s21) "(Hmem & Hwp2 & Hregs) Hcred".
       iMod "Hwp2" as "[_ Hcont]".
-      now iMod ("Hcont" with "Hmem") as "%Hφ".
+      iMod ("Hcont" with "Hmem") as "%Hφ".
+      now cbn.
     - iIntros (γ21 μ21 δ21 s21) "(Hregs & Hwp2 & Hmem) Hcred".
       specialize (IHHevaln1 (nsteps_to_steps Hevaln1)).
       rewrite fixpoint_semWp2_eq; cbn.
