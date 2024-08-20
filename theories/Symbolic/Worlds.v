@@ -558,6 +558,12 @@ Module Type WorldsOn
   Variant laterₚ {w} (P : Pred w) (ι : Valuation w) : Prop :=
     MkLater : P ι -> laterₚ P ι.
 
+  Lemma sepₚ_unfold {w} {P Q : Pred w} {ι} : (sepₚ P Q) ι <-> P ι /\ Q ι.
+  Proof.
+    split.
+    - now destruct 1 as [HP HQ].
+    - now constructor.
+  Qed.
 
   Section EntailmentDefinitions.
 
@@ -694,9 +700,13 @@ Module Type WorldsOn
       - constructor; crushPredEntails2.
     Defined.
 
-    Definition proprepₚ {T : LCtx -> Type} {instTA : InstProp T} : Prop -> forall w, Tm T w -> Pred w :=
-      fun t2 w t1 => ((instprop t1 : Pred w) ∗-∗ bi_pure t2)%I.
-    #[global] Arguments proprepₚ {T _} _ [w] _ _/.
+    Lemma bi_sep_unfold {w} {P Q : Pred w} {ι} : (bi_sep P Q) ι <-> P ι /\ Q ι.
+    Proof.
+      apply sepₚ_unfold.
+    Qed.
+
+    Lemma bi_or_unfold {w} {P Q : Pred w} {ι} : (bi_or P Q) ι <-> P ι \/ Q ι.
+    Proof. by cbn. Qed.
 
     #[export] Instance persistent_pred {w} {P : Pred w} :
       derived_connectives.Persistent P.
@@ -708,27 +718,6 @@ Module Type WorldsOn
 
 
     #[export] Instance pred_pure_forall {w} : BiPureForall (Pred w).
-    Proof. constructor. crushPredEntails2. Qed.
-
-    Definition instprop_pred {T : LCtx -> Type} `{InstProp T} {w : World} : T w -> Pred w
-      := instprop.
-
-    #[export] Instance instprop_pred_proper_bientails {w : World} `{InstProp A} : Proper (Entailment.bientails ==> equiv) (instprop_pred (w := w)).
-    Proof.
-      intros P Q HPQ.
-      constructor; intros.
-      now apply HPQ.
-    Qed.
-
-    Lemma instprop_pred_cat {w : World} `{InstProp A} (x y : Ctx (A w)) : instprop_pred (x ▻▻ y) ⊣⊢ instprop_pred x ∗ instprop_pred y.
-    Proof.
-      constructor. intros. now apply instprop_cat.
-    Qed.
-
-    Lemma instprop_pred_singleton {w : World} `{InstProp A} (x : A w) : instprop_pred (w := w) [x]%ctx ⊣⊢ instprop_pred x.
-    Proof. crushPredEntails2. Qed.
-
-    Lemma wco_valid {w : World} : ⊢ instprop_pred (wco w).
     Proof. constructor. crushPredEntails2. Qed.
 
   End proofmode.
@@ -754,6 +743,130 @@ Module Type WorldsOn
     Qed.
 
   End modalities.
+
+  Section InstPred.
+    Import iris.bi.interface.
+
+    Class InstPred (T : LCtx -> Type) : Type :=
+      MkInstPred
+        {  instpred_instprop :: InstProp T
+        ;  instpred : forall {w : World}, T w -> Pred w
+        ;  instpred_prop : forall {w : World} (ι : Valuation w) (t : T w), instpred t ι <-> instprop t ι
+        }.
+
+    Class InstPredSubst (T : LCtx -> Type) `{InstPred T, Subst T} : Prop :=
+      { instpred_subst : forall {w w' : World} (ζ : Sub w w') (t : T w),
+          instpred (subst t ζ) ⊣⊢ forgetting ζ (instpred t)
+      ; instpredsubst_instpropsubst :: InstPropSubst T
+      }.
+
+    #[global] Arguments instpred {T _ w} !_.
+    #[global] Arguments instpred_instprop {T} !_.
+    #[global] Arguments MkInstPred [T] {_} instpred%I _.
+    #[global] Arguments InstPredSubst T {_ _}.
+
+    #[export] Instance instpred_proper_bientails {w : World} `{InstPred A} : Proper (Entailment.bientails ==> equiv) (instpred (w := w)).
+    Proof.
+      intros P Q HPQ.
+      constructor; intros.
+      rewrite !instpred_prop.
+      now apply HPQ.
+    Qed.
+
+    #[export] Program Instance instpred_option `{InstPred A} : InstPred (Option A) :=
+      MkInstPred
+        (fun Σ o =>
+           match o with
+           | Some C => instpred C
+           | None   => False%I
+           end) _.
+    Next Obligation.
+      intros. destruct t; cbn; last done. now apply instpred_prop.
+    Qed.
+
+    #[export] Program Instance instpred_pair `{InstPred A, InstPred B} : InstPred (Pair A B) :=
+      MkInstPred (fun Σ '(a,b) => instpred a ∗ instpred b)%I _.
+    Next Obligation.
+      intros. destruct t; cbn; now rewrite bi_sep_unfold !instpred_prop.
+    Qed.
+
+    (* #[export] Instance instpredsubst_pair `{InstPredSubst A, InstPredSubst B} : InstPredSubst (Pair A B). *)
+    (* Proof. hnf. intros ? ? ζ [a b]. rewrite forgetting_sepₚ. apply and_iff_morphism; apply instpred_subst. Qed. *)
+
+    Fixpoint instpred_ctx `{InstPred A} {w : World} (xs : Ctx (A w)) :=
+      match xs with
+      | ctx.nil       => emp%I
+      | ctx.snoc xs x => (instpred_ctx xs ∗ instpred x)%I
+      end.
+
+    #[export] Program Instance instpred_ctx_inst `{InstPred A} : InstPred (fun Σ => Ctx (A Σ)) :=
+      MkInstPred (fun w => instpred_ctx) _.
+    Next Obligation.
+      intros. induction t; cbn; first done.
+      now rewrite bi_sep_unfold instpred_prop IHt.
+    Qed.
+
+    Lemma instpred_nil `{InstPred A} {w} :
+      instpred (w := w) ctx.nil ⊣⊢ True%I.
+    Proof. reflexivity. Qed.
+
+    Lemma instpred_snoc `{InstPred A} {w : World} (xs : Ctx (A w)) (x : A w) :
+      instpred (xs ▻ x) ⊣⊢ instpred xs ∗ instpred x.
+    Proof. reflexivity. Qed.
+
+    Lemma instpred_cat `{InstPred A} {w : World} (x y : Ctx (A w)) :
+      instpred (x ▻▻ y) ⊣⊢
+        instpred x ∗ instpred y.
+    Proof. induction y.
+           - now rewrite ?derived_laws.bi.sep_emp.
+           - change (instpred (x ▻▻ y) ∗ instpred b ⊣⊢ instpred x ∗ (instpred y ∗ instpred b)).
+             now rewrite IHy derived_laws.bi.sep_assoc.
+    Qed.
+
+    Lemma instpred_singleton {w : World} `{InstPred A} (x : A w) : instpred (w := w) [x]%ctx ⊣⊢ instpred x.
+    Proof. cbn. now rewrite derived_laws.bi.emp_sep. Qed.
+
+    #[export] Program Instance instpred_formula : InstPred Formula :=
+      MkInstPred (fix inst_formula {w : World} (fml : Formula w) :=
+        match fml with
+        | formula_user p ts      => fun ι => env.uncurry (𝑷_inst p) (inst ts ι)
+        | formula_bool t         => repₚ true (A := Val ty.bool) t 
+        | formula_prop ζ P       => fun ι => uncurry_named P (inst ζ ι)
+        | formula_relop op t1 t2 => fun ι => bop.eval_relop_prop op (inst t1 ι) (inst t2 ι)
+        | formula_true           => True%I
+        | formula_false          => False%I
+        | formula_and F1 F2      => (inst_formula F1 ∗ inst_formula F2)%I
+        | formula_or F1 F2       => (inst_formula F1 ∨ inst_formula F2)%I
+        end) _.
+    Next Obligation.
+      intros.
+      induction t;
+        unfold repₚ, eqₚ;
+        rewrite ?bi_sep_unfold ?bi_or_unfold;
+        crushPredEntails2.
+    Qed.
+
+    #[export] Instance instpred_subst_formula : InstPredSubst Formula.
+    Proof.
+      constructor; last by typeclasses eauto.
+      intros ? ? ? f. constructor; intros ι Hpc.
+      unfold forgetting.
+      induction f; cbn;
+        rewrite ?inst_subst ?bi_sep_unfold; auto.
+      now apply Morphisms_Prop.and_iff_morphism.
+      now apply Morphisms_Prop.or_iff_morphism.
+    Qed.
+
+    Lemma wco_valid {w : World} : ⊢ instpred (w := w) (wco w).
+    Proof. constructor. crushPredEntails2. now rewrite instpred_prop. Qed.
+
+    Import iris.bi.extensions.
+    Definition proprepₚ {T : LCtx -> Type} {instTA : InstPred T} : Prop -> forall w, Tm T w -> Pred w :=
+      fun t2 w t1 => (instpred t1 ∗-∗ bi_pure t2)%I.
+    #[global] Arguments proprepₚ {T _} _ [w] _ _/.
+
+  End InstPred.
+
 
   Section SolverInterface.
     Import Entailment.
@@ -794,15 +907,15 @@ Module Type WorldsOn
       Context (g_spec : forall F k,
                   option.spec
                     (fun r : PathCondition w =>
-                       instprop_pred (w := w) (k ▻ F) ⊣⊢ instprop_pred r)
-                    (instprop_pred F ⊢ False)
+                       instpred (w := w) (k ▻ F) ⊣⊢ instpred r)
+                    (instpred F ⊢ False)
                     (g F k)).
 
       Lemma simplify_all_spec (C k : PathCondition w) :
         option.spec
           (fun r : PathCondition w =>
-             instprop_pred (w := w) (k ▻▻ C) ⊣⊢ instprop_pred r)%I
-          (instprop_pred (w := w) C ⊢ False)%I
+             instpred (w := w) (k ▻▻ C) ⊣⊢ instpred r)%I
+          (instpred (w := w) C ⊢ False)%I
           (simplify_all g C k).
       Proof.
         induction C as [|C IHC F]; cbn; [constructor; reflexivity|].
@@ -811,14 +924,10 @@ Module Type WorldsOn
         - intros tmp Htmp. specialize (g_spec F tmp). revert g_spec.
           apply option.spec_monotonic.
           + iIntros (res Hres).
-            change (λ ι, ?P ι ∧ ?Q ι) with (P ∗ Q)%I.
-            rewrite Htmp.
-            apply Hres.
-          + change (λ ι, ?P ι ∧ ?Q ι) with (P ∗ Q)%I.
-            iIntros (HnF) "[HC HF]".
+            now rewrite -Hres instpred_snoc -Htmp.
+          + iIntros (HnF) "[HC HF]".
             now iApply (HnF with "HF").
-        - change (λ ι, ?P ι ∧ ?Q ι) with (P ∗ Q)%I.
-          iIntros (HnC) "[HC HF]".
+        - iIntros (HnC) "[HC HF]".
           now iApply HnC.
       Qed.
 
@@ -830,8 +939,8 @@ Module Type WorldsOn
         forall (w : World) (C0 : PathCondition w),
           option.spec
             (fun '(existT w1 (ζ, C1)) =>
-               (knowing (sub_triangular ζ) (instprop_pred C1)) ⊣⊢ (instprop_pred C0))%I
-            ((instprop_pred C0) ⊢ False)%I
+               (knowing (sub_triangular ζ) (instpred C1)) ⊣⊢ (instpred C0))%I
+            ((instpred C0) ⊢ False)%I
             (s w C0).
 
       Lemma solver_null_spec : SolverSpec solver_null.
@@ -870,25 +979,23 @@ Module Type WorldsOn
       Lemma solveruseronly_simplify_formula_spec {w : World} (F : Formula w) (k : PathCondition w) :
         option.spec
           (fun r : PathCondition w =>
-             instprop_pred (k ▻ F) ⊣⊢ instprop_pred r)%I
-          (instprop_pred (w := w) F ⊢ False)%I
+             instpred (k ▻ F) ⊣⊢ instpred r)%I
+          (instpred (w := w) F ⊢ False)%I
           (solveruseronly_simplify_formula F k).
       Proof.
         destruct F; try (constructor; reflexivity). apply option.spec_map.
         specialize (user_spec ts).
         destruct user; constructor; cbn in *.
-        - change (env.uncurry (𝑷_inst p) (inst ts ?ι)) with ((fun ι' => env.uncurry (𝑷_inst p) (inst ts ι')) ι).
-          change ((fun ι' => env.uncurry (𝑷_inst p) (inst ts ι')) ?ι)
-            with (instprop_pred (formula_user p ts) ι).
-          change (λ ι, ?P ι ∧ ?Q ι) with (P ∗ Q)%I.
-          rewrite (instprop_pred_cat k p0).
-          change (instprop_pred p0) with (instprop_pred (T := PathCondition) p0).
+        - change (λ ι : Valuation w, env.uncurry (𝑷_inst p) (inst ts ι))
+            with (instpred (formula_user p ts)).
+          rewrite (instpred_cat k p0).
+          change (instpred p0) with (instpred (T := PathCondition) p0).
           change (bientails p0 [formula_user p ts]%ctx) in user_spec.
-          now rewrite user_spec instprop_pred_singleton.
+          now rewrite user_spec instpred_singleton.
         - change (fun ι' => env.uncurry (𝑷_inst p) (inst ts ι'))
-            with (instprop_pred (formula_user p ts)).
-          rewrite <-instprop_pred_singleton.
-          change (instprop_pred (Some [formula_user p ts]%ctx) ⊢ False)%stdpp.
+            with (instpred (formula_user p ts)).
+          rewrite <-instpred_singleton.
+          change (instpred (Some [formula_user p ts]%ctx) ⊢ False)%stdpp.
           now rewrite <-user_spec.
       Qed.
 
@@ -900,7 +1007,7 @@ Module Type WorldsOn
         apply option.spec_monotonic; last done.
         iIntros (r H).
         rewrite knowing_id.
-        rewrite instprop_pred_cat in H.
+        rewrite instpred_cat in H.
         now rewrite bi.emp_sep in H.
       Qed.
 

@@ -74,6 +74,10 @@ Module Type GenericSolverOn
     #[local] Hint Rewrite @bop.eval_relop_equiv : katamaran.
     #[local] Hint Rewrite formula_bool_and formula_bool_relop formula_bool_relop_neg : katamaran.
 
+    #[export] Program Instance instpred_dlist : InstPred DList :=
+      MkInstPred (fun w x => instpred (raw x [ctx])) _.
+    Next Obligation. now rewrite instpred_prop. Qed.
+
     Lemma valid_formula_bool [Σ] (t : Term Σ ty.bool) :
       base.equiv t (term_val ty.bool true) -> Valid (formula_bool t).
     Proof. easy. Qed.
@@ -439,34 +443,38 @@ Module Type GenericSolverOn
 
     Import iris.bi.interface iris.proofmode.tactics proofmode LogicalSoundness.
 
-    (* #[export] Instance instprop_pred_proper_bientails {w : World} : Proper (bientails ==> equiv) (instprop_pred (w := w)). *)
-    (* Proof. *)
-    (*   intros x y Hxy. *)
-    (*   constructor. intros ι Hpc. *)
-    (*   now apply Hxy. *)
-    (* Qed. *)
-
-    Lemma instprop_pred_dlist_singleton {w : World} (F : Formula w) : instprop_pred (DList.singleton F) ⊣⊢ instprop_pred F.
-    Proof.
-      unfold instprop_pred, instprop at 1, instprop_dlist, DList.singleton, raw.
-      now cbn.
+    #[export] Instance instpredsubst_ctx `{InstPredSubst A} : InstPredSubst (fun Σ => Ctx (A Σ)).
+    Proof. constructor; last by typeclasses eauto.
+           intros ? ? ζ x. induction x; cbn.
+           - now rewrite forgetting_emp.
+           - rewrite forgetting_sep.
+             change (instpred_ctx ?P) with (instpred P).
+             now rewrite IHx instpred_subst.
     Qed.
 
-    Lemma instprop_pred_dlist_cat {w : World} (x y : DList w) :
-      instprop_pred (w := w) (cat x y) ⊣⊢ instprop_pred x ∗ instprop_pred y.
+    Lemma instpred_dlist_singleton {w : World} (F : Formula w) : instpred (DList.singleton F) ⊣⊢ instpred F.
     Proof.
-      unfold instprop_pred.
+      unfold instpred at 1, instpred_dlist, instpred at 1, instpred_option, DList.singleton, raw.
+      now rewrite instpred_singleton.
+    Qed.
+
+    Lemma instpred_dlist_cat {w : World} (x y : DList w) :
+      instpred (w := w) (cat x y) ⊣⊢ instpred x ∗ instpred y.
+    Proof.
       constructor; intros.
+      rewrite bi_sep_unfold !instpred_prop.
       now rewrite instprop_dlist_cat.
     Qed.
 
     Lemma simplify_pathcondition_spec {w : World} (C : PathCondition w) :
-        instprop_pred (w := w) (run (simplify_pathcondition C)) ⊣⊢ instprop_pred C.
+        instpred (w := w) (run (simplify_pathcondition C)) ⊣⊢ instpred C.
     Proof.
-      change (instprop_pred (simplify_pathcondition C) ⊣⊢ instprop_pred C).
+      change (instpred (simplify_pathcondition C) ⊣⊢ instpred C).
       induction C as [|C IHC F]; cbn.
       - crushPredEntails3.
-      - now rewrite instprop_pred_dlist_cat IHC simplify_formula_spec instprop_pred_dlist_singleton.
+      - rewrite instpred_dlist_cat IHC.
+        rewrite (instpred_proper_bientails (H := instpred_dlist) (simplify_formula_spec F)).
+        now rewrite instpred_dlist_singleton.
     Qed.
 
     Definition occurs_check_lt {Σ x} (xIn : (x ∈ Σ)%katamaran) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
@@ -550,7 +558,7 @@ Module Type GenericSolverOn
 
     Lemma try_unify_formula_spec {w : World} (fml : Formula w) :
       option.wlp 
-        (fun '(existT w' ν) => (instprop_pred fml) ⊣⊢ inst_triangular ν) (try_unify_formula fml).
+        (fun '(existT w' ν) => instpred fml ⊣⊢ inst_triangular ν) (try_unify_formula fml).
     Proof.
       unfold try_unify_formula; destruct fml; cbn; try (constructor; auto; fail).
       - apply try_unify_bool_spec.
@@ -571,14 +579,14 @@ Module Type GenericSolverOn
     Lemma unify_formula_spec {w0 : World} (fml : Formula w0) :
       match unify_formula fml with
       | existT w1 (ν01 , fmls) =>
-         (instprop_pred fml) ⊣⊢ knowing (sub_triangular ν01) (instprop_pred fmls)
+         (instpred fml) ⊣⊢ knowing (sub_triangular ν01) (instpred fmls)
       end.
     Proof.
       unfold unify_formula.
       destruct (try_unify_formula_spec fml).
       - destruct a as [w1 ν01].
         now rewrite H inst_triangular_knowing.
-      - rewrite knowing_id. now cbn.
+      - now rewrite knowing_id instpred_singleton.
     Qed.
 
     Fixpoint unify_pathcondition {w0 : World} (C : PathCondition w0) :
@@ -599,17 +607,10 @@ Module Type GenericSolverOn
       constructor. intros. now rewrite instprop_cat.
     Qed.
 
-    Lemma instprop_pred_persist {T : LCtx -> Type} `{InstPropSubst T} {_ : SubstLaws T} `{IntoWorldAcc w1 w2 sub ω} (t : T w1) :
-      instprop_pred (persist t ω) ⊣⊢ forgetting sub (instprop_pred t).
-    Proof.
-      unfold forgetting, instprop_pred. constructor. intros.
-      now rewrite instprop_persist H2.
-    Qed.
-
     Lemma unify_pathcondition_spec {w0 : World} (C0 : PathCondition w0) :
       match unify_pathcondition C0 with
       | existT w1 (ν01 , C1) =>
-          instprop_pred C0 ⊣⊢ knowing (sub_triangular ν01) (instprop_pred C1)
+          instpred C0 ⊣⊢ knowing (sub_triangular ν01) (instpred C1)
       end.
     Proof.
       induction C0 as [|C0 IHC F0]; cbn.
@@ -617,17 +618,16 @@ Module Type GenericSolverOn
       - destruct unify_pathcondition as (w1 & ν01 & C1).
         pose proof (unify_formula_spec (persist F0 (acc_triangular ν01))) as IHF.
         destruct (unify_formula (persist F0 (acc_triangular ν01))) as (w2 & ν12 & C2).
-        change (λ ι : Valuation w0, (instprop_pred C0 ι ∧ instprop F0 ι)%type)
-          with (instprop_pred (w := w0) C0 ∗ instprop_pred F0)%I.
+        change (instpred_ctx C0) with (instpred C0).
         rewrite IHC sub_triangular_comp.
-        rewrite instprop_pred_cat.
+        rewrite instpred_cat.
         rewrite knowing_trans.
         rewrite knowing_absorb_forgetting.
-        rewrite instprop_pred_persist in IHF.
+        rewrite instpred_persist in IHF.
         rewrite IHF.
-        rewrite instprop_pred_persist.
+        rewrite instpred_persist.
         apply knowing_proper_bientails.
-        rewrite (bi.sep_comm _ (instprop C2 : Pred w2)).
+        rewrite (bi.sep_comm _ (instpred C2)).
         rewrite <-knowing_absorb_forgetting.
         now rewrite bi.sep_comm.
     Qed.
@@ -681,37 +681,26 @@ Module Type GenericSolverOn
       end.
 
     Lemma assumption_formula_spec {w : World} (C : PathCondition w) (F : Formula w) (k : PathCondition w) :
-      ⊢ instprop_pred C -∗ instprop_pred k ∗ instprop_pred F ∗-∗ instprop_pred (assumption_formula C F k).
+      ⊢ instpred C -∗ instpred k ∗ instpred F ∗-∗ instpred (assumption_formula C F k).
     Proof.
       induction C as [|C ? F']; cbn; auto.
-      - change (λ _ : Valuation w, True%type) with (emp%I : Pred w).
-        change (λ ι : Valuation w, (instprop_pred k ι ∧ instprop F ι)%type) with
-          (instprop_pred k ∗ instprop_pred F)%I.
-        iIntros "_".
-        now iApply bi.wand_iff_refl.
-      - change (λ ι : Valuation w, (instprop_pred C ι ∧ instprop F' ι)%type) with
-          (instprop_pred C ∗ instprop_pred F')%I.
-        iIntros "[#HC #HF']".
-        destruct (formula_eqb_spec F F');
-          subst; intuition auto.
-        iSplitL.
-        + iIntros "[? ?]"; now iFrame.
-        + iIntros "?"; now iFrame.
-        + now iApply (IHC with "HC").
+      iIntros "[#HC #HF']".
+      destruct (formula_eqb_spec F F');
+        subst; intuition auto.
+      iSplitL.
+      + iIntros "[? ?]"; now iFrame.
+      + iIntros "?"; now iFrame.
+      + now iApply (IHC with "HC").
     Qed.
 
     Lemma assumption_pathcondition_spec {w : World} (C : PathCondition w) (FS : PathCondition w) (k : PathCondition w) :
-      instprop_pred C -∗ ((instprop_pred (w := w) k ∗ instprop_pred FS ∗-∗ instprop_pred (assumption_pathcondition C FS k))).
+      instpred C -∗ ((instpred (w := w) k ∗ instpred FS ∗-∗ instpred (assumption_pathcondition C FS k))).
     Proof.
       induction FS as [|FS ? F]; cbn; iIntros "#HC".
-      - change (λ _ : Valuation w, True%type) with (emp%I : Pred w).
-        rewrite bi.sep_emp.
+      - rewrite bi.sep_emp.
         now iApply bi.wand_iff_refl.
       - iPoseProof (assumption_formula_spec C F (assumption_pathcondition C FS k) with "HC") as "HCF".
         iPoseProof (IHFS with "HC") as "HCFS".
-        change (λ ι : Valuation w, (instprop_pred FS ι ∧ instprop F ι)%type) with
-          (instprop_pred FS ∗ instprop F)%I.
-        change (instprop F) with (instprop_pred F).
         iApply (bi.wand_iff_trans with "[HCFS HCF]").
         iSplitR "HCF"; last iExact "HCF".
         iSplit.

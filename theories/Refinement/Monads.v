@@ -205,6 +205,13 @@ Module Type RefinementMonadsOn
            - now constructor.
     Qed.
 
+    Lemma obligation_equiv_pred {w : World} (msg : AMessage w) (fml : Formula w) :
+      (Obligation msg fml : Pred w) ⊣⊢ instpred fml.
+    Proof. crushPredEntails3.
+           - rewrite ?instpred_prop. now destruct H0.
+           - rewrite instpred_prop in H0. now constructor.
+    Qed.
+
     Lemma safe_assume_triangular {w0 w1} (ζ : Tri w0 w1) (o : 𝕊 w1) :
       (psafe (assume_triangular ζ o) ⊣⊢ (assuming (sub_triangular ζ) (psafe o))).
     Proof.
@@ -215,20 +222,24 @@ Module Type RefinementMonadsOn
       now rewrite IHζ.
     Qed.
 
-    Lemma safe_assume_pathcondition_without_solver {w0 : World}
-      (C : PathCondition w0) (p : 𝕊 w0) :
+    Lemma safe_assume_pathcondition_without_solver {w : World}
+      (C : PathCondition w) (p : 𝕊 w) :
       psafe (assume_pathcondition_without_solver C p) ⊣⊢
-        ((instprop C : Pred w0) -∗ psafe (w := wpathcondition w0 C) p).
+        (instpred C -∗ psafe (w := wpathcondition w C) p).
     Proof.
       revert p. induction C; cbn; intros p.
-      - change (λ _ : Valuation w0, True%type) with (True%I : Pred w0).
-        destruct w0. (* needed to make coq see that wpathcondition w0 [ctx] is the same as w0 *)
-        iSplit.
-        + now iIntros "$ _".
-        + iIntros "H". now iApply "H".
+      - destruct w. (* needed to make coq see that wpathcondition w0 [ctx] is the same as w0 *)
+        now rewrite bi.emp_wand.
       - rewrite IHC.
-        change (λ ι : Valuation w0, (instprop C ι /\ instprop b ι)) with ((instprop C : Pred w0) ∗ instprop b)%I.
-        now rewrite <-bi.wand_curry.
+        cbn.
+        change (instpred_ctx C) with (instpred C).
+        rewrite <-bi.wand_curry.
+        (* Coq doesn't see that instpred is parametric in the world. Fortunately,
+         * instpred_prop happens to imply this.
+         *)
+        enough (instpred (w := w) b ⊣⊢ instpred (w := wpathcondition w C) b) as H by now rewrite H.
+        constructor; intros.
+        now rewrite !instpred_prop.
     Qed.
 
     (* TODO: more logical inst_triangular *)
@@ -251,17 +262,15 @@ Module Type RefinementMonadsOn
     Lemma safe_assert_pathcondition_without_solver {w0 : World}
       (msg : AMessage w0) (C : PathCondition w0) (p : 𝕊 w0) :
       psafe (assert_pathcondition_without_solver msg C p) ⊣⊢
-        ((instprop C : Pred w0) ∗ psafe (w := wpathcondition w0 C) p).
+        (instpred C ∗ psafe (w := wpathcondition w0 C) p).
     Proof.
       unfold assert_pathcondition_without_solver. revert p.
       induction C; cbn; intros p.
       - rewrite bi.True_sep.
         now destruct w0.
       - rewrite IHC; cbn.
-        change (λ ι : Valuation _, (instprop C ι ∧ instprop b ι)%type) with ((instprop C : Pred _) ∧ instprop b)%I.
-        rewrite <-sep_is_and, <-bi.sep_assoc.
-        change (@bi_sep (@bi_pred (wpathcondition w0 C)) ?P ?Q) with (@sepₚ w0 P Q).
-        now rewrite obligation_equiv.
+        rewrite bi.sep_assoc.
+        now rewrite <-obligation_equiv_pred.
     Qed.
 
     Lemma refine_assert_pathcondition {w} :
@@ -338,7 +347,7 @@ Module Type RefinementMonadsOn
       iIntros "%msg %fml %fmls Hfml".
       iApply refine_assert_pathcondition.
       iApply (proprepₚ_cong (T2 := PathCondition) with "Hfml").
-      cbn. intuition.
+      intros. cbn. now apply bi.emp_sep.
     Qed.
 
     Lemma refine_assume_formula {w} :
@@ -349,7 +358,7 @@ Module Type RefinementMonadsOn
       iIntros "%fml %fmls Hfml".
       iApply refine_assume_pathcondition.
       iApply (proprepₚ_cong (T2 := PathCondition) with "Hfml").
-      cbn. intuition.
+      intros. cbn. now apply bi.emp_sep.
     Qed.
 
     Lemma refine_angelic_binary `{RA : Rel SA CA} {w} :
@@ -1307,7 +1316,7 @@ Module Type RefinementMonadsOn
       destruct (try_consume_chunk_precise_spec sh sc1) as [[sh' eqs] HIn|].
       { cbv [SPureSpec.bind SPureSpec.pure].
         assert (⊢ ∀ eq c h' h, proprepₚ eq eqs -∗ repₚ c sc1 -∗ repₚ h' sh' -∗ repₚ h sh -∗ ⌜ eq ⌝ -∗ ⌜In (c , h') (heap_extractions h)⌝)%I as HInLog.
-        { clear -HIn. crushPredEntails3. now subst. }
+        { clear -HIn. crushPredEntails3. subst. apply HIn. now rewrite instpred_prop in H2. }
         iDestruct (eval_prop eqs) as "(%eq & Heq)".
         iAssert (∃ h', ℛ⟦RHeap⟧ h' sh')%I as "(%h' & Hh')".
         { iDestruct (eval_ex sh') as "(%h' & Heqh')".
@@ -1366,7 +1375,7 @@ Module Type RefinementMonadsOn
       destruct (try_consume_chunk_precise_spec sh sc1) as [[sh' eqs] HIn|].
       { cbv [SPureSpec.bind SPureSpec.pure].
         assert (⊢ ∀ eq c h' h, proprepₚ eq eqs -∗ repₚ c sc1 -∗ repₚ h' sh' -∗ repₚ h sh -∗ ⌜ eq ⌝ -∗ ⌜In (c , h') (heap_extractions h)⌝)%I as HInLog.
-        { clear -HIn. crushPredEntails3. now subst. }
+        { clear -HIn. crushPredEntails3. subst. apply HIn. now rewrite instpred_prop in H2. }
         iDestruct (eval_prop eqs) as "(%eq & Heq)".
         iAssert (∃ h', ℛ⟦RHeap⟧ h' sh')%I as "(%h' & Hh')".
         { iDestruct (eval_ex sh') as "(%h' & Heqh')".

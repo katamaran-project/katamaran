@@ -570,7 +570,6 @@ Module Type InstantiationOn
 
   End InstProp.
 
-
   Section Utils.
 
     Definition term_get_val {Σ σ} (t : Term Σ σ) : option (Val σ) :=

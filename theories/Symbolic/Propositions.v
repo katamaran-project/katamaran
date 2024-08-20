@@ -2079,7 +2079,7 @@ Module Type LogSymPropOn
        | SymProp.block => True
        | assertk fml msg o =>
            (Obligation msg fml : Pred w) ∗ psafe (w := wformula w fml) o
-       | assumek fml o => (instprop fml : Pred w) -∗ psafe (w := wformula w fml) o
+       | assumek fml o => instpred fml -∗ (psafe (w := wformula w fml) o : Pred w)
        | angelicv b k => knowing (w1 := wsnoc w b) sub_wk1 (@psafe (wsnoc w b) k)
        | demonicv b k => assuming (w1 := wsnoc w b) sub_wk1 (@psafe (wsnoc w b) k)
        | @assert_vareq _ x σ xIn t msg k =>
@@ -2128,9 +2128,11 @@ Module Type LogSymPropOn
       - now rewrite obligation_equiv.
       - apply H; last done.
         now split.
-      - apply H; last done.
+      - rewrite instpred_prop in H1.
+        apply H; last intuition.
         now split.
-      - apply H; last done.
+      - rewrite instpred_prop in H2.
+        apply H; last intuition.
         now split.
       - destruct H1 as (ι' & <- & Hpc' & Hsafe).
         destruct (env.view ι') as [ι v].
@@ -2192,7 +2194,8 @@ Module Type LogSymPropOn
         now rewrite sub_comp_shift_single subst_sub_id.
       - assert (instprop (wco (wmatch w s pat c)) (ι ►► ι__pat)).
         { cbn. split.
-          + now rewrite instprop_subst inst_sub_cat_left.
+          + change (instprop_ctx ?z ?ι) with (instprop z ι).
+            now rewrite instprop_subst inst_sub_cat_left.
           + rewrite inst_subst inst_sub_cat_left.
             rewrite inst_pattern_match_term_reverse inst_sub_cat_right.
             apply (f_equal (pattern_match_val_reverse' pat)) in Hpmv.

@@ -432,6 +432,14 @@ Module Type UnifLogicOn
       crushPredEntails3.
     Qed.
 
+    Lemma forgetting_wand_iff {w1 w2 : World} {ω : Sub w1 w2} {P1 P2 : Pred w1} :
+      (forgetting ω P1 ∗-∗ forgetting ω P2) ⊣⊢ forgetting ω (P1 ∗-∗ P2).
+    Proof.
+      unfold forgetting, bi_wand_iff.
+      crushPredEntails3.
+    Qed.
+
+
     Lemma knowing_assuming {w1 w2 : World} (ω : Sub w2 w1) {P Q} :
       knowing ω P ∗ assuming ω Q ⊢ knowing ω (P ∗ Q).
     Proof.
@@ -462,6 +470,20 @@ Module Type UnifLogicOn
 
     Lemma forgetting_pure {w1 w2 : World} (ω : Sub w2 w1) {P} :
       forgetting ω (bi_pure P) ⊣⊢ bi_pure P.
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+    Qed.
+
+    Lemma forgetting_emp {w1 w2 : World} (ω : Sub w2 w1) :
+      forgetting ω emp ⊣⊢ emp.
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+    Qed.
+
+    Lemma forgetting_sep {w1 w2 : World} (ω : Sub w2 w1) {P Q}:
+      forgetting ω (P ∗ Q) ⊣⊢ forgetting ω P ∗ forgetting ω Q.
     Proof.
       unfold forgetting.
       crushPredEntails3.
@@ -511,9 +533,9 @@ Module Type UnifLogicOn
       ⊢ ∃ v, repₚ v (w := w) t.
     Proof. crushPredEntails3. now eexists. Qed.
 
-    Lemma eval_prop `{InstProp AT} {w : World} (t : AT w) :
+    Lemma eval_prop `{InstPred AT} {w : World} (t : AT w) :
       ⊢ ∃ P, proprepₚ P (w := w) t.
-    Proof. crushPredEntails3. now eexists. Qed.
+    Proof. crushPredEntails3. now exists (instpred t ι). Qed.
 
     Lemma forgetting_valuation_curval {Σ} {ι : Valuation Σ} :
       ⊢ forgetting (w1 := wlctx Σ) (w2 := wnil) (lift ι) (curval (ι : Valuation (wlctx Σ))).
@@ -570,12 +592,14 @@ Module Type UnifLogicOn
       crushPredEntails3. now subst.
     Qed.
 
-    Lemma proprepₚ_triv {T : LCtx -> Type} `{InstProp T} {a : Prop} {w : World} {vt : T w}:
+    Lemma proprepₚ_triv {T : LCtx -> Type} `{InstPred T} {a : Prop} {w : World} {vt : T w}:
       (∀ ι : Valuation w, instprop vt ι <-> a) ->
       ⊢ proprepₚ a vt.
     Proof.
       unfold proprepₚ.
       crushPredEntails3.
+      - now rewrite instpred_prop in H3.
+      - now rewrite instpred_prop.
     Qed.
 
     Lemma repₚ_cong {T1 : LCtx -> Type} `{Inst T1 A1}
@@ -611,11 +635,11 @@ Module Type UnifLogicOn
       - now f_equal.
     Qed.
 
-    Lemma proprepₚ_cong {T1 : LCtx -> Type} `{InstProp T1}
-      {T2 : LCtx -> Type} `{InstProp T2}
+    Lemma proprepₚ_cong {T1 : LCtx -> Type} `{InstPred T1}
+      {T2 : LCtx -> Type} `{InstPred T2}
       {w : World} (fs : T1 w -> T2 w)
       {v1 : Prop} {vs1 : T1 w} :
-      (∀ (ι : Valuation w) vs1, instprop (fs vs1) ι <-> instprop vs1 ι) ->
+      (forall vs1, instpred (fs vs1) ⊣⊢ instpred vs1) ->
       proprepₚ v1 vs1 ⊢ proprepₚ v1 (fs vs1).
     Proof.
       crushPredEntails3.
@@ -623,10 +647,10 @@ Module Type UnifLogicOn
 
     Lemma proprepₚ_cong₂ {T1 : LCtx -> Type} `{Inst T1 A1}
       {T2 : LCtx -> Type} `{Inst T2 A2}
-      {T3 : LCtx -> Type} `{InstProp T3}
+      {T3 : LCtx -> Type} `{InstPred T3}
       (f : A1 -> A2 -> Prop) {w : World} (fs : T1 w -> T2 w -> T3 w)
       {v1 : A1} {vs1 : T1 w} {v2 : A2} {vs2 : T2 w} :
-      (∀ (ι : Valuation w) vs1 vs2, instprop (fs vs1 vs2) ι <-> f (inst vs1 ι) (inst vs2 ι)) ->
+      (∀ (ι : Valuation w) vs1 vs2, instpred (fs vs1 vs2) ι <-> f (inst vs1 ι) (inst vs2 ι)) ->
       repₚ v1 vs1 ∗ repₚ v2 vs2 ⊢ proprepₚ (f v1 v2) (fs vs1 vs2).
     Proof.
       crushPredEntails3; now subst.
@@ -714,17 +738,17 @@ Module Type UnifLogicOn
       constructor. split; rewrite inst_subst; auto using acc_pathcond.
     Qed.
 
-    Lemma forgetting_proprepₚ `{InstPropSubst AT, @SubstLaws AT _} {v w1 w2} `{IntoWorldAcc w1 w2 sub ω}  (t : AT w1) :
+    Lemma instpred_persist {T : LCtx -> Type} `{InstPredSubst T} {_ : SubstLaws T} `{IntoWorldAcc w1 w2 sub ω} (t : T w1) :
+      instpred (persist t ω) ⊣⊢ forgetting sub (instpred t).
+    Proof.
+      now rewrite persist_subst instpred_subst H2.
+    Qed.
+
+    Lemma forgetting_proprepₚ `{InstPredSubst AT, @SubstLaws AT _} {v w1 w2} `{IntoWorldAcc w1 w2 sub ω}  (t : AT w1) :
       (proprepₚ v (persist t ω) ⊣⊢ forgetting sub (proprepₚ v t))%I.
     Proof.
-      unfold forgetting, proprepₚ, derived_connectives.bi_wand_iff.
-      rewrite <-H3.
-      constructor.
-      crushPredEntails3.
-      - now apply H5, instprop_persist.
-      - now apply instprop_persist.
-      - now apply H5, instprop_persist.
-      - now apply instprop_persist.
+      unfold proprepₚ.
+      now rewrite instpred_persist -forgetting_wand_iff forgetting_pure.
     Qed.
 
     Lemma assuming_id {w} {P : Pred w} : assuming (sub_id _) P ⊣⊢ P.
@@ -1047,13 +1071,14 @@ Module Type UnifLogicOn
 
     Lemma assuming_acc_pathcondition_right
       {w : World} {sc : PathCondition w} {P : Pred w} :
-      (instprop sc : Pred w) ∗ assuming (w2 := wpathcondition w sc) (sub_id _) P ⊢ P.
+      instpred sc ∗ assuming (w2 := wpathcondition w sc) (sub_id _) P ⊢ P.
     Proof.
       unfold assuming.
       crushPredEntails3.
       apply H1.
       - apply inst_sub_id.
-      - now apply instprop_cat.
+      - rewrite instpred_prop in H0.
+        now apply instprop_cat.
     Qed.
 
     
@@ -1108,7 +1133,7 @@ Module Type UnifLogicOn
       MkRel repₚ.
     Arguments RInst _ _ {_} : simpl never.
 
-    Definition RInstPropIff AT {instA : InstProp AT} : Rel AT Prop :=
+    Definition RInstPropIff AT {instA : InstPred AT} : Rel AT Prop :=
       MkRel proprepₚ.
     Arguments RInstPropIff _ {_}.
 
@@ -1372,14 +1397,16 @@ Module Type UnifLogicOn
       now rewrite inst_subst H4.
     Qed.
 
-    Lemma refine_instprop_subst {Σ} {T : LCtx -> Type} `{InstPropSubst T}
+    Lemma refine_instprop_subst {Σ} {T : LCtx -> Type} `{InstPredSubst T}
       (vs : T Σ) {w : World} :
       ⊢ ℛ⟦ (RInst (Sub Σ) (Valuation Σ) -> RInstPropIff T) ⟧ (instprop vs) (subst vs : Sub Σ w -> T w)%I.
     Proof.
       unfold RImpl, RInst. cbn.
+      unfold proprepₚ; cbn.
       crushPredEntails3; subst.
-      - now rewrite <-instprop_subst.
-      - now rewrite instprop_subst.
+      - rewrite instpred_prop in H5.
+        now rewrite <-instprop_subst.
+      - now rewrite instpred_prop instprop_subst.
     Qed.
 
     Lemma refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) :
