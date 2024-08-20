@@ -148,21 +148,15 @@ Module Soundness
       now iApply (refine_compat_lemma compatf with "Hcf").
     Qed.
 
-    #[export] Instance refine_compat_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} {v} {w1 w2} {ω : Acc w1 w2} {t} :
+    Definition refine_compat_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} {v} {w1 w2} {ω : Acc w1 w2} {t} :
       RefineCompat (RInst AT A) v w2 (persist t ω) _ :=
       MkRefineCompat (refine_inst_persist _).
+    Opaque refine_compat_inst_persist.
+    Hint Extern 0 (RefineCompat _ ?v _ (persist ?t ?ω) _) => refine (refine_compat_inst_persist (v := v) (t := t) (ω := ω)) : typeclass_instances.
 
     #[export] Instance refine_compat_inst_persist_term {σ} {v} {w1 w2} {ω : Acc w1 w2} {t} :
       RefineCompat (RVal σ) v w2 (persist__term t ω) _ :=
       MkRefineCompat (refine_inst_persist _).
-
-    #[export] Instance refine_compat_inst_persist_sub {N Σ} {v} {w1 w2} {ω : Acc w1 w2} {t} :
-      RefineCompat (RNEnv N Σ) v w2 (persist t ω) _ :=
-      MkRefineCompat (refine_inst_persist _).
-
-    (* #[export] Instance refine_compat_rnenv_sub_acc {Σ : LCtx} {ι : Valuation Σ} {w : World} {ω2 : wlctx Σ ⊒ w} : *)
-    (*   RefineCompat (RNEnv LVar Σ) ι w (sub_acc ω2) := *)
-    (*   MkRefineCompat _ _ _ refine_rnenv_sub_acc. *)
 
     #[export] Instance refine_lift `{InstLift AT A} {w : World} (a : A) :
       RefineCompat (RInst AT A) a w (lift a) _ :=
@@ -228,7 +222,7 @@ Module Soundness
     Qed.
 
     #[export] Program Instance refine_compat_msg `{R : Rel AT A} {M v w vs msg Ob}
-      (compatf : RefineCompat (RMsg M R) v w vs Ob) : RefineCompat R v w (vs msg) Ob :=
+      (compatf : RefineCompat (RMsg M R) v w vs Ob) : RefineCompat R v w (vs msg) Ob | 4 :=
       MkRefineCompat _.
     Next Obligation.
       iIntros (AT A R M v w vs msg Ob compatf) "Hcf".
@@ -821,9 +815,9 @@ Module Soundness
     Proof.
       iIntros (args sargs) "#Hargs".
       destruct c; cbv [SStoreSpec.call_contract CStoreSpec.call_contract]. 
-      rsolve; rewrite !sub_acc_trans; last done.
+      rsolve; rewrite ?sub_acc_trans; last done.
       rewrite -(persist_subst (a := ta)).
-      rsolve.
+      now rsolve.
     Qed.
 
     Lemma refine_call_lemma {Γ Δ : PCtx} (lem : Lemma Δ) {w} :
