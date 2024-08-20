@@ -138,7 +138,7 @@ Module Soundness
       now iApply (refine_compat_lemma compatf with "Hcf").
     Qed.
     (* The Hint Resolve used "simple apply", which wasn't instantiating evars sufficiently strongly. Hint Extern with eapply works better. *)
-    Hint Extern 1 (RefineCompat _ (_ _) _ (_ _) _) => eapply refine_compat_impl : typeclass_instances.
+    Hint Extern 1 (RefineCompat ?RB (?f ?v) ?w (?fs ?vs) _) => eapply (refine_compat_impl (RB := RB) (fs := fs) (vs := vs) (f := f) (v := v) (w := w)) : typeclass_instances.
 
     #[export] Program Instance refine_compat_forall {𝑲} {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type} (RA : forall K, Rel (AT K) (A K)) {f w fs k P}
       (compatf : RefineCompat (RForall RA) f w fs P) : RefineCompat (RA k) (f k) w (fs k) P :=
