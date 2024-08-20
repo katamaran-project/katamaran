@@ -221,12 +221,27 @@ Module Soundness
       iIntros (h hs) "Hh []".
     Qed.
 
-    #[export] Program Instance refine_compat_msg `{R : Rel AT A} {M v w vs msg Ob}
-      (compatf : RefineCompat (RMsg M R) v w vs Ob) : RefineCompat R v w (vs msg) Ob | 4 :=
+    (* Disable refine_compat_msg because it gets spuriously searched very often during instance search and is only used in refine_compat_error.
+     * Better to integrate into refine_compat_error.
+     *)
+    (* #[export] Program Instance refine_compat_msg `{R : Rel AT A} {M v w vs msg Ob} *)
+    (*   (compatf : RefineCompat (RMsg M R) v w vs Ob) : RefineCompat R v w (vs msg) Ob | 4 := *)
+    (*   MkRefineCompat _. *)
+    (* Next Obligation. *)
+    (*   iIntros (AT A R M v w vs msg Ob compatf) "Hcf". *)
+    (*   iApply (refine_compat_lemma compatf with "Hcf"). *)
+    (* Qed. *)
+
+    (* #[export] Instance refine_compat_error `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} {w : World} {cm : CStoreSpec Γ1 Γ2 A} : *)
+    (*   RefineCompat (RMsg _ (RStoreSpec Γ1 Γ2 R)) cm w (SStoreSpec.error (w := w)) _ := *)
+    (*   MkRefineCompat (refine_error cm). *)
+
+    #[export] Program Instance refine_compat_error `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} {w : World} {cm : CStoreSpec Γ1 Γ2 A} {msg} :
+      RefineCompat (RStoreSpec Γ1 Γ2 R) cm w (SStoreSpec.error (w := w) msg) emp :=
       MkRefineCompat _.
     Next Obligation.
-      iIntros (AT A R M v w vs msg Ob compatf) "Hcf".
-      iApply (refine_compat_lemma compatf with "Hcf").
+       iIntros (M HsubstM HocM AT A R Γ1 Γ2 w cm msg) "_".
+       now iApply refine_error.
     Qed.
 
 
@@ -830,10 +845,6 @@ Module Soundness
       - rewrite sub_acc_trans -(persist_subst (a := ta)); rsolve.
       - cbn; rsolve; rewrite sub_acc_trans; now rsolve.
     Qed.
-
-    #[export] Instance refine_compat_error `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} {w : World} {cm : CStoreSpec Γ1 Γ2 A} :
-      RefineCompat (RMsg _ (RStoreSpec Γ1 Γ2 R)) cm w (SStoreSpec.error (w := w)) _ :=
-      MkRefineCompat (refine_error cm).
 
   End CallContracts.
 
