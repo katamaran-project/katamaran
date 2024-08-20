@@ -432,8 +432,7 @@ Module Soundness
 
     #[export] Ltac rsolve :=
       iStartProof;
-      repeat (rsolve_step; try done)
-      ;
+      repeat rsolve_step; try done;
         (* After walking through the symbolic computation using the above lemmas,
          * we try to apply induction hypotheses.
          * To do this, we determine the right world to apply the IH in by looking at the current goal. 
