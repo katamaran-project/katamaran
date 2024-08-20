@@ -826,9 +826,9 @@ Module Soundness
     Proof.
       destruct lem; cbv [SStoreSpec.call_lemma CStoreSpec.call_lemma].
       iIntros (args sargs) "Hargs".
-      rsolve; rewrite !sub_acc_trans; last done.
-      rewrite -(persist_subst (a := ta)).
       rsolve.
+      - rewrite sub_acc_trans -(persist_subst (a := ta)); rsolve.
+      - cbn; rsolve; rewrite sub_acc_trans; now rsolve.
     Qed.
 
     #[export] Instance refine_compat_error `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} {w : World} {cm : CStoreSpec Γ1 Γ2 A} :
