@@ -1115,12 +1115,12 @@ Module Type UnifLogicOn
     Import iris.bi.interface.
     Import iris.proofmode.classes.
     Import iris.proofmode.tactics.
-    Class Rel (AT : TYPE) (A : Type) : Type :=
+    Record Rel (AT : TYPE) (A : Type) : Type :=
       MkRel { RSat : A -> (⊢ AT -> Pred)%modal }.
     Bind Scope rel_scope with Rel.
 
     #[global] Arguments MkRel [AT A] &.
-    #[global] Arguments RSat {_ _} !Rel _ {w} _.
+    #[global] Arguments RSat {_ _} !Rel _ {w} _ : rename.
     (* We use the same script ℛ as in the paper. This encodes (ι,x,y) ∈ ℛ[_,_]
        from the paper as (ℛ ι x y), i.e. the types of the relation are
        implicit. *)
@@ -1137,17 +1137,17 @@ Module Type UnifLogicOn
       MkRel proprepₚ.
     Arguments RInstPropIff _ {_}.
 
-    #[export] Instance RBox {AT A} (RA : Rel AT A) : Rel (Box AT) A :=
+    Definition RBox {AT A} (RA : Rel AT A) : Rel (Box AT) A :=
       MkRel 
         (fun v w t => unconditionally (fun w2 ω => ℛ⟦ RA ⟧ v (t w2 ω))).
     Arguments RBox {AT A} RA : simpl never.
 
-    #[export] Instance RImpl {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
+    Definition RImpl {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
       Rel (Impl AT BT) (A -> B) :=
       MkRel (fun fc w fs => ∀ a ta, ℛ⟦ RA ⟧ a ta -∗ ℛ⟦ RB ⟧ (fc a) (fs ta))%I.
     Arguments RImpl {_ _ _ _} RA RB : simpl never.
 
-    #[export] Instance intowand_rimpl {A AT B BT} {RA : Rel AT A} {RB : Rel BT B}  {w} {a sa f} {sf} :
+    Definition intowand_rimpl {A AT B BT} {RA : Rel AT A} {RB : Rel BT B}  {w} {a sa f} {sf} :
       IntoWand false false (RSat (RImpl RA RB) f sf) (RSat RA a sa) (RSat RB (f a) (w := w) (sf sa)).
     Proof.
       unfold IntoWand, RImpl; cbn.
@@ -1155,7 +1155,7 @@ Module Type UnifLogicOn
       now iApply "H".
     Qed.
 
-    #[export] Instance RForall {𝑲}
+    Definition RForall {𝑲}
       {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
       (RA : forall K, Rel (AT K) (A K)) :
       Rel (@W.Forall 𝑲 AT) (forall K : 𝑲, A K) :=
@@ -1170,25 +1170,25 @@ Module Type UnifLogicOn
       now cbn.
     Qed.
 
-    #[export] Instance RVal (σ : Ty) : Rel (fun Σ => Term Σ σ) (Val σ) :=
+    Definition RVal (σ : Ty) : Rel (fun Σ => Term Σ σ) (Val σ) :=
       RInst (fun Σ => Term Σ σ) (Val σ).
     Arguments RVal σ : simpl never.
 
-    #[export] Instance RNEnv (N : Set) (Δ : NCtx N Ty) : Rel _ _ :=
+    Definition RNEnv (N : Set) (Δ : NCtx N Ty) : Rel _ _ :=
       RInst (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv Val Δ).
-    #[export] Instance REnv (Δ : Ctx Ty) : Rel _ _ :=
+    Definition REnv (Δ : Ctx Ty) : Rel _ _ :=
         RInst (fun Σ : LCtx => Env (Term Σ) Δ) (Env Val Δ).
-    #[export] Instance RUnit : Rel Unit unit := RInst Unit unit.
+    Definition RUnit : Rel Unit unit := RInst Unit unit.
 
-    #[export] Instance RPathCondition : Rel PathCondition Prop := RInstPropIff PathCondition.
+    Definition RPathCondition : Rel PathCondition Prop := RInstPropIff PathCondition.
     Arguments RPathCondition : simpl never.
-    #[export] Instance RFormula : Rel Formula Prop := RInstPropIff Formula.
+    Definition RFormula : Rel Formula Prop := RInstPropIff Formula.
     Arguments RFormula : simpl never.
 
-    #[export] Instance RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
+    Definition RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
 
     (* Give the [RMsg] instance a lower priority (3) than [RImpl]. *)
-    #[export] Instance RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A | 3 :=
+    Definition RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A :=
       MkRel (fun v w t => ∀ₚ m, RSat RA v (t m))%P.
     #[global] Arguments RMsg M%modal {AT A} RA%R.
 
@@ -1199,18 +1199,18 @@ Module Type UnifLogicOn
       RSat R v t ι -> RList' R vs ts ι ->
       RList' R (cons v vs) (cons t ts) ι.
 
-    #[export] Instance RList {AT A} (R : Rel AT A) : Rel (WList AT) (list A) :=
+    Definition RList {AT A} (R : Rel AT A) : Rel (WList AT) (list A) :=
       MkRel (RList' R).
 
-    #[export] Instance RHeap : Rel SHeap SCHeap := RList RChunk.
+    Definition RHeap : Rel SHeap SCHeap := RList RChunk.
     (* priority 1 so that RUnit is picked first (not sure why we have both) *)
-    #[export] Instance RConst A : Rel (Const A) A | 1 := RInst (Const A) A.
+    Definition RConst A : Rel (Const A) A := RInst (Const A) A.
 
-    #[export] Instance RProd `(RA : Rel AT A, RB : Rel BT B) :
+    Definition RProd `(RA : Rel AT A, RB : Rel BT B) :
       Rel (WProd AT BT) (A * B)%type :=
       MkRel (fun '(va,vb) w '(ta,tb) => ℛ⟦RA⟧ va ta ∗ ℛ⟦RB⟧ vb tb)%I.
 
-    #[export] Instance RMatchResult {N σ} (p : @Pattern N σ) :
+    Definition RMatchResult {N σ} (p : @Pattern N σ) :
       Rel (SMatchResult p) (MatchResult p) :=
       MkRel
         (fun '(existT pc2 vs) w '(existT pc1 ts) =>
@@ -1221,7 +1221,7 @@ Module Type UnifLogicOn
                   ts pc2 e)
                )%P.
 
-    #[export] Instance RIn b : Rel (ctx.In b) (Val (type b)) :=
+    Definition RIn b : Rel (ctx.In b) (Val (type b)) :=
       MkRel (fun v w bIn ι => env.lookup ι bIn = v).
 
     Module Import notations.

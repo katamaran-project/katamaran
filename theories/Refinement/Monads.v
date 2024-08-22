@@ -72,7 +72,7 @@ Module Type RefinementMonadsOn
     Import logicalrelation logicalrelation.notations proofmode.
     Import iris.bi.interface iris.proofmode.tactics.
 
-    #[export] Instance RPureSpec [SA CA] (RA : Rel SA CA) :
+    Definition RPureSpec [SA CA] (RA : Rel SA CA) :
       Rel (SPureSpec SA) (CPureSpec CA) := □ᵣ(RA -> ℙ) -> ℙ.
   End WithNotations.
 
@@ -80,7 +80,7 @@ Module Type RefinementMonadsOn
     Section WithNotations.
     Import logicalrelation logicalrelation.notations proofmode.
     Import iris.bi.interface iris.proofmode.tactics.
-    #[export] Instance RPureSpec [SA CA] (RA : Rel SA CA) :
+    Definition RPureSpec [SA CA] (RA : Rel SA CA) :
     Rel (SPureSpec SA) (CPureSpec CA) := □ᵣ(RA -> RProp) -> RProp.
 
     Lemma refine_run {w} :
@@ -1494,7 +1494,7 @@ Module Type RefinementMonadsOn
     Import logicalrelation logicalrelation.notations proofmode.
     Import iris.bi.interface iris.proofmode.tactics.
 
-    #[export] Instance RHeapSpec [SA CA] (RA : Rel SA CA) :
+    Definition RHeapSpec [SA CA] (RA : Rel SA CA) :
     Rel (SHeapSpec SA) (CHeapSpec CA) := □ᵣ(RA -> RHeap -> ℙ) -> RHeap -> ℙ.
 
     Lemma refine_run {w} :

@@ -2312,7 +2312,7 @@ Module Type LogSymPropOn
     Qed.
 
     (* Relatedness of symbolic and shallow propositions. The driving base case! *)
-    #[export] Instance RProp : Rel SymProp Prop :=
+    Definition RProp : Rel SymProp Prop :=
       MkRel (fun P w SP => (psafe SP -∗ ⌜ P ⌝)%I).
     Arguments RProp : simpl never.
     #[export] Instance intowand_rprop {P w SP} :

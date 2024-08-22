@@ -74,10 +74,10 @@ Module Soundness
     Import PureSpec.
     Import HeapSpec.
 
-    #[export] Instance RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
+    Definition RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
       RInst (SStore Γ) (CStore Γ).
 
-    #[export] Instance RStoreSpec Γ1 Γ2 `(R : Rel AT A) :
+    Definition RStoreSpec Γ1 Γ2 `(R : Rel AT A) :
       Rel (SStoreSpec Γ1 Γ2 AT) (CStoreSpec Γ1 Γ2 A) :=
       □ᵣ (R -> RStore Γ2 -> RHeap -> ℙ) -> RStore Γ1 -> RHeap -> ℙ.
 
@@ -125,7 +125,7 @@ Module Soundness
       MkRefineCompat {
           refine_compat_lemma : Ob ⊢ ℛ⟦ R ⟧ v vs
         }.
-    Hint Mode RefineCompat + + + - + + - : typeclass_instances.
+    Hint Mode RefineCompat - - - + + + - : typeclass_instances.
     Arguments refine_compat_lemma {AT A R v w vs Ob} rci : rename.
     Arguments RefineCompat {AT A} R v w vs Ob%I.
     Arguments MkRefineCompat {AT A R v w vs Ob%I} rci : rename.
@@ -357,7 +357,7 @@ Module Soundness
       #[export] Instance refine_compat_pure {Γ : PCtx} `{R : Rel AT A} {w} : RefineCompat (R -> RStoreSpec Γ Γ R) CStoreSpec.pure w (SStoreSpec.pure (w := w)) _ :=
         MkRefineCompat (refine_pure (R := R)).
 
-      #[export] Instance refine_compat_bind {Γ1 Γ2 Γ3 : PCtx} `{RA : Rel AT A} `{RB : Rel BT B} {w} : RefineCompat (RStoreSpec Γ1 Γ2 RA -> (□ᵣ (RA -> RStoreSpec Γ2 Γ3 RB)) -> RStoreSpec Γ1 Γ3 RB) CStoreSpec.bind w (SStoreSpec.bind (w := w)) _ :=
+      #[export] Instance refine_compat_bind {Γ1 Γ2 Γ3 : PCtx} `{RA : Rel AT A} `{RB : Rel BT B} {w} : RefineCompat (RStoreSpec Γ1 Γ2 RA -> (□ᵣ (RA -> RStoreSpec Γ2 Γ3 RB)) -> RStoreSpec Γ1 Γ3 RB) CStoreSpec.bind w (SStoreSpec.bind (w := w)) _ | (RefineCompat _ _ _ SStoreSpec.bind _) :=
         MkRefineCompat refine_bind.
 
       #[export] Program Instance refine_compat_angelic (x : option LVar) {Γ} {w : World} {σ}:
@@ -879,6 +879,7 @@ Module Soundness
           iApply ("HPOST"); try done.
           now iApply (refine_inst_persist with "Hδ1").
       - now rewrite sub_acc_trans.
+      - iApply IHs1.
       - destruct a0, ta0.
         iRename select (ℛ⟦RMatchResult pat⟧ (existT x n) (existT x0 n0)) into "Hmr".
         iDestruct "Hmr" as "[%e Hvs]".
