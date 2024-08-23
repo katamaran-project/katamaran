@@ -203,6 +203,63 @@ Module Soundness
       RefineCompat (REnv [ctx]) vs  w svs _ :=
       MkRefineCompat refine_env_nil.
 
+    Class RefineCompatGen (w : World) (P : Pred w) (Ob : Pred w) (withbase : bool):=
+      MkRefineCompatGen {
+        refine_compat_gen_lemma : Ob ⊢ P
+        }.
+    Arguments RefineCompatGen w P%I Ob%I withbase.
+    Arguments MkRefineCompatGen {w} {P} _%I _ {_}.
+    Arguments refine_compat_gen_lemma {w} P%I {Ob} withbase rcg : rename.
+
+    #[export] Program Instance refine_compat_gen_step `(R : Rel AT A) (v : A) (w : World) (vs : AT w) Ob1 Ob2 b
+      (rc : RefineCompat R v w vs Ob1)
+      (iter : RefineCompatGen Ob1 Ob2 b) :
+      RefineCompatGen (ℛ⟦ R ⟧ v vs) Ob2 b := MkRefineCompatGen Ob2 _.
+    Next Obligation.
+      iIntros (AT A R v w vs Ob1 Ob2 b rc iter) "H".
+      iApply (refine_compat_lemma with "[H]").
+      now iApply (refine_compat_gen_lemma with "[H]").
+    Qed.
+
+    #[export] Program Instance refine_compat_gen_base_true {w} {b} :
+      RefineCompatGen (w := w) True emp b := MkRefineCompatGen emp _.
+    Next Obligation.
+      now iIntros.
+    Qed.
+
+    #[export] Program Instance refine_compat_gen_base_emp {w} {b} :
+      RefineCompatGen (w := w) emp emp b := MkRefineCompatGen emp _.
+    Next Obligation.
+      now iIntros.
+    Qed.
+
+    #[export] Program Instance refine_compat_gen_base {w} (P : Pred w):
+      RefineCompatGen (w := w) P P true | 10 := MkRefineCompatGen P _.
+    Next Obligation.
+      now iIntros.
+    Qed.
+
+    Class ObSep {w} (P1 P2 P3 : Pred w) : Prop :=
+      obsep_equiv : P1 ∗ P2 ⊣⊢ P3.
+    #[export] Instance obsep_empL {w} {P : Pred w} : ObSep emp%I P P.
+    Proof. apply bi.emp_sep. Qed.
+    #[export] Instance obsep_empR {w} {P : Pred w} : ObSep P emp%I P.
+    Proof. apply bi.sep_emp. Qed.
+    #[export] Instance obsep_sep {w} {P1 P2 : Pred w} : ObSep P1 P2 (P1 ∗ P2)%I | 1.
+    Proof. done. Qed.
+
+    #[export] Program Instance refine_compat_gen_split {w} {P1 P2 : Pred w} {Ob1 Ob2 Ob} {b}
+      (rcg1 : RefineCompatGen P1 Ob1 b) (rcg2 : RefineCompatGen P2 Ob2 b) {_ : ObSep Ob1 Ob2 Ob} :
+      RefineCompatGen (w := w) (P1 ∗ P2) Ob b | 1 := MkRefineCompatGen Ob _.
+    Next Obligation.
+      iIntros (w P1 P2 Ob1 Ob2 Ob b rcg1 rcg2 obsep) "H".
+      rewrite -(obsep_equiv (ObSep := obsep)).
+      iDestruct "H" as "(H1 & H2)".
+      iSplitL "H1".
+      - iApply (refine_compat_gen_lemma with "H1").
+      - iApply (refine_compat_gen_lemma with "H2").
+    Qed.
+
     Lemma refine_block {Γ1 Γ2} `{R : Rel AT A} {w : World} :
       ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R⟧ CStoreSpec.block (SStoreSpec.block (w := w)).
     Proof.
@@ -433,6 +490,31 @@ Module Soundness
     #[export] Ltac rsolve :=
       iStartProof;
       repeat rsolve_step; try done;
+        (* After walking through the symbolic computation using the above lemmas,
+         * we try to apply induction hypotheses.
+         * To do this, we determine the right world to apply the IH in by looking at the current goal. 
+         *)
+        repeat match goal with
+          | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
+          | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
+          | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
+          end.
+
+    #[export] Ltac rsolve2_step :=
+      first [
+           (lazymatch goal with
+            | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
+            | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
+            end)
+         | lazymatch goal with
+           | |- envs_entails _ ?P => iApply (refine_compat_gen_lemma P true)
+           | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
+           end
+      ].
+
+    #[export] Ltac rsolve2 :=
+      iStartProof;
+      progress rsolve2_step; try done;
         (* After walking through the symbolic computation using the above lemmas,
          * we try to apply induction hypotheses.
          * To do this, we determine the right world to apply the IH in by looking at the current goal. 
@@ -829,9 +911,35 @@ Module Soundness
     Proof.
       iIntros (args sargs) "#Hargs".
       destruct c; cbv [SStoreSpec.call_contract CStoreSpec.call_contract]. 
-      rsolve; rewrite ?sub_acc_trans; last done.
-      rewrite -(persist_subst (a := ta)).
-      now rsolve.
+      rsolve.
+      - rewrite sub_acc_trans -(persist_subst (a := ta)).
+        now rsolve.
+      - rewrite !sub_acc_trans.
+        now rsolve.
+      (* rsolve2_step. *)
+      (* iIntros (? ?) "!>". *)
+      (* rsolve2_step. *)
+      (* rsolve2_step. *)
+      (* iRename select (ℛ⟦_⟧ _ _) into "Ha". *)
+      (* iFrame "Hargs Ha". *)
+      (* iIntros (? ?) "!>". *)
+      (* rsolve2_step. *)
+      (* rsolve2_step. *)
+      (* rewrite sub_acc_trans -(persist_subst (a := ta)). *)
+      (* rsolve2_step. *)
+      (* iFrame "Ha". *)
+      (* rsolve2_step. *)
+      (* iIntros (? ?) "_". *)
+      (* rsolve2_step. *)
+      (* iIntros (? ?) "!>". *)
+      (* rsolve2_step. *)
+      (* rsolve2_step. *)
+      (* rewrite !sub_acc_trans. *)
+      (* iRename select (ℛ⟦_⟧ a2 _) into "Ha2". *)
+      (* iFrame "Ha Ha2". *)
+      (* iIntros (? ?) "!>". *)
+      (* rsolve2_step. *)
+      (* now rsolve2_step. *)
     Qed.
 
     Lemma refine_call_lemma {Γ Δ : PCtx} (lem : Lemma Δ) {w} :
@@ -843,6 +951,25 @@ Module Soundness
       rsolve.
       - rewrite sub_acc_trans -(persist_subst (a := ta)); rsolve.
       - cbn; rsolve; rewrite sub_acc_trans; now rsolve.
+      (*   rsolve2. *)
+      (* iIntros (? ?) "!>". *)
+      (* rsolve2_step. *)
+      (* rsolve2_step. *)
+      (* iRename select (ℛ⟦_⟧ _ _) into "Ha". *)
+      (* iFrame "Ha Hargs". *)
+      (* rsolve2_step. *)
+      (* rsolve2_step. *)
+      (* rsolve2_step. *)
+      (* rewrite sub_acc_trans. *)
+      (* rewrite -(persist_subst). *)
+      (* rsolve2_step. *)
+      (* iFrame "Ha". *)
+      (* rsolve2_step. *)
+      (* rsolve2_step. *)
+      (* rsolve2_step. *)
+      (* cbn. *)
+      (* rsolve2_step. *)
+      (* now rewrite sub_acc_trans. *)
     Qed.
 
   End CallContracts.
