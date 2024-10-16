@@ -1069,6 +1069,24 @@ Import BlockVerification3.
 
 (* Print Assumptions femtokernel_endToEnd. *)
 
+  (* special case of the previous theorem, for easy reference. *)
+  Lemma femtokernel_endToEnd_mmio {γ γ' : RegStore} {μ μ' : Memory}
+        {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} :
+    mem_has_instrs μ (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
+    mem_has_instrs μ (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen true)) ->
+    mmio_pred bytes_per_word (memory_trace μ) ->
+    read_register γ cur_privilege = Machine ->
+    read_register γ pmp0cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr0 = bv.zero ->
+    read_register γ pmp1cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr1 = bv.zero ->
+    read_register γ pc = (bv.of_N init_addr) ->
+    ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
+    mmio_pred bytes_per_word (memory_trace μ').
+  Proof.
+    apply (femtokernel_endToEnd true).
+  Qed.
+
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
 (* End: *)
