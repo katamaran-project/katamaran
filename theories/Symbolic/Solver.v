@@ -443,11 +443,12 @@ Module Type GenericSolverOn
 
     Import iris.bi.interface iris.proofmode.tactics proofmode LogicalSoundness.
 
-    #[export] Instance instpredsubst_ctx `{InstPredSubst A} : InstPredSubst (fun Σ => Ctx (A Σ)).
+    #[export] Instance instpredsubst_ctx `{InstPredSubst A, !SubstLaws A} : InstPredSubst (fun Σ => Ctx (A Σ)).
     Proof. constructor; last by typeclasses eauto.
            intros ? ? ζ x. induction x; cbn.
-           - now rewrite forgetting_emp.
+           - now rewrite persist_subst forgetting_emp.
            - rewrite forgetting_sep.
+             rewrite persist_subst; cbn; rewrite -!persist_subst.
              change (instpred_ctx ?P) with (instpred P).
              now rewrite IHx instpred_subst.
     Qed.
@@ -579,7 +580,7 @@ Module Type GenericSolverOn
     Lemma unify_formula_spec {w0 : World} (fml : Formula w0) :
       match unify_formula fml with
       | existT w1 (ν01 , fmls) =>
-         (instpred fml) ⊣⊢ knowing (sub_triangular ν01) (instpred fmls)
+         (instpred fml) ⊣⊢ knowing (acc_triangular ν01) (instpred fmls)
       end.
     Proof.
       unfold unify_formula.
@@ -607,10 +608,18 @@ Module Type GenericSolverOn
       constructor. intros. now rewrite instprop_cat.
     Qed.
 
+    Lemma knowing_tri_comp {w0 w1 w2} {ν01 : Tri w0 w1} {ν12 : Tri w1 w2} {P} :
+      knowing (acc_triangular (tri_comp ν01 ν12)) P ⊣⊢ knowing (acc_trans (acc_triangular ν01) (acc_triangular ν12)) P.
+    Proof.
+      apply knowing_resp_sub_acc.
+      now rewrite sub_acc_trans !sub_acc_triangular sub_triangular_comp.
+    Qed.
+
+
     Lemma unify_pathcondition_spec {w0 : World} (C0 : PathCondition w0) :
       match unify_pathcondition C0 with
       | existT w1 (ν01 , C1) =>
-          instpred C0 ⊣⊢ knowing (sub_triangular ν01) (instpred C1)
+          instpred C0 ⊣⊢ knowing (acc_triangular ν01) (instpred C1)
       end.
     Proof.
       induction C0 as [|C0 IHC F0]; cbn.
@@ -619,7 +628,8 @@ Module Type GenericSolverOn
         pose proof (unify_formula_spec (persist F0 (acc_triangular ν01))) as IHF.
         destruct (unify_formula (persist F0 (acc_triangular ν01))) as (w2 & ν12 & C2).
         change (instpred_ctx C0) with (instpred C0).
-        rewrite IHC sub_triangular_comp.
+        rewrite IHC.
+        rewrite knowing_tri_comp.
         rewrite instpred_cat.
         rewrite knowing_trans.
         rewrite knowing_absorb_forgetting.
@@ -750,10 +760,8 @@ Module Type GenericSolverOn
     generalize (spec2 w1 fmls1); clear spec2.
     apply option.spec_monotonic; auto.
     - intros (w2 & ν12 & fmls2) H2.
-      rewrite sub_triangular_comp.
-      rewrite <-(sub_acc_triangular ν12).
+      rewrite knowing_tri_comp.
       rewrite knowing_trans.
-      rewrite sub_acc_triangular.
       now rewrite H2.
     - intros Hfmls1.
       now rewrite <-H1, Hfmls1, knowing_pure.

@@ -2060,13 +2060,13 @@ Module Type LogSymPropOn
     Import proofmode logicalrelation.
 
     Lemma inst_triangular_knowing {w0 w1} (ζ : Tri w0 w1) :
-      (inst_triangular ζ : Pred w0) ⊣⊢ knowing (sub_triangular ζ) True%I. 
+      (inst_triangular ζ : Pred w0) ⊣⊢ knowing (acc_triangular ζ) True%I. 
     Proof.
       unfold knowing; crushPredEntails3.
       - exists (inst (sub_triangular_inv ζ) ι).
-        rewrite inst_triangular_right_inverse; last done.
+        rewrite sub_acc_triangular inst_triangular_right_inverse; last done.
         now intuition (eapply entails_triangular_inv).
-      - rewrite <-H0.
+      - rewrite <-H0, sub_acc_triangular.
         eapply inst_triangular_valid.
     Qed.
 
@@ -2080,25 +2080,25 @@ Module Type LogSymPropOn
        | assertk fml msg o =>
            (Obligation msg fml : Pred w) ∗ psafe (w := wformula w fml) o
        | assumek fml o => instpred fml -∗ (psafe (w := wformula w fml) o : Pred w)
-       | angelicv b k => knowing (w1 := wsnoc w b) sub_wk1 (@psafe (wsnoc w b) k)
-       | demonicv b k => assuming (w1 := wsnoc w b) sub_wk1 (@psafe (wsnoc w b) k)
+       | angelicv b k => knowing (w1 := wsnoc w b) acc_snoc_right (@psafe (wsnoc w b) k)
+       | demonicv b k => assuming (w1 := wsnoc w b) acc_snoc_right (@psafe (wsnoc w b) k)
        | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
            Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∗
-            assuming (w1 := wsubst w x t) (sub_single xIn t) (psafe (w := wsubst w x t) k)
+            assuming (w1 := wsubst w x t) (acc_subst_right t) (psafe (w := wsubst w x t) k)
        | @assume_vareq _ x σ xIn t k =>
            (* eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) -∗ *)
-           let ω := sub_single xIn t in
+           let ω := acc_subst_right t in
            assuming (w1 := wsubst w x t) ω (psafe (w := wsubst w x t) k)
        | pattern_match s pat rhs =>
            ∀ (pc : PatternCase pat),
              let wm : World := wmatch w s pat pc in
-             let ω : Sub w wm := sub_cat_left (PatternCaseCtx pc) in
+             let ω : w ⊒ wm := acc_match_right pc in
              assuming ω (psafe (w := wmatch w s pat pc) (rhs pc))
        | @pattern_match_var _ x σ xIn pat rhs =>
            ∀ (pc : PatternCase pat),
              let wmv : World := wmatchvar w xIn pat pc in
-             let ω : Sub w wmv := sub_matchvar_right pc in
+             let ω : w ⊒ wmv := acc_matchvar_right pc in
              assuming ω (@psafe wmv (rhs pc))
         | debug d k => DebugPred _ d (psafe k)
         end)%I.

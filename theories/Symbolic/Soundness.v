@@ -914,8 +914,6 @@ Module Soundness
       rsolve.
       - rewrite sub_acc_trans -(persist_subst (a := ta)).
         now rsolve.
-      - rewrite !sub_acc_trans.
-        now rsolve.
       (* rsolve2_step. *)
       (* iIntros (? ?) "!>". *)
       (* rsolve2_step. *)
@@ -1005,7 +1003,6 @@ Module Soundness
           iApply HYP; try done; rsolve.
           iApply ("HPOST"); try done.
           now iApply (refine_inst_persist with "Hδ1").
-      - now rewrite sub_acc_trans.
       - iApply IHs1.
       - destruct a0, ta0.
         iRename select (ℛ⟦RMatchResult pat⟧ (existT x n) (existT x0 n0)) into "Hmr".
@@ -1029,19 +1026,17 @@ Module Soundness
     MkRefineCompat (refine_exec s w).
 
     Lemma refine_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) ι :
-      ⊢ forgetting (w2 := wnil) (lift ι)
+      ⊢ forgetting (acc_wlctx_valuation ι)
         (ℛ⟦RStoreSpec Γ Γ RUnit⟧
            (CStoreSpec.exec_contract n c s ι) (SStoreSpec.exec_contract cfg n c s)).
     Proof.
       unfold SStoreSpec.exec_contract, CStoreSpec.exec_contract;
         destruct c as [Σ δ pre result post]; cbn - [RSat] in *.
       iPoseProof (forgetting_valuation_curval (Σ := Σ) (ι := ι)) as "#Hι".
-      change (lift ι) with (sub_acc (acc_wlctx_valuation ι)).
       iModIntro.
       rsolve.
       - now iApply refine_rinst_sub_initial.
-      - iApply (refine_rnenv_sub_acc (w := wlctx _)).
-        now rewrite sub_acc_trans.
+      - now iApply (refine_rnenv_sub_acc (w := wlctx _)).
     Qed.
   End ExecRefine.
 
@@ -1055,7 +1050,7 @@ Module Soundness
   End StoreSpec.
 
   Lemma refine_psafe_demonic_close {Σ} (P : SymProp Σ):
-    psafe (demonic_close P : SymProp wnil) ⊢ ∀ ι, forgetting (lift ι) (psafe (P : SymProp (wlctx Σ))).
+    psafe (demonic_close P : SymProp wnil) ⊢ ∀ ι, forgetting (acc_wlctx_valuation ι) (psafe (P : SymProp (wlctx Σ))).
   Proof.
     unfold forgetting.
     crushPredEntails3.
@@ -1067,14 +1062,14 @@ Module Soundness
   Qed.
 
   Lemma refine_demonic_close {Σ} (P : 𝕊 (wlctx Σ)) (p : Valuation Σ -> Prop) :
-    (∀ ι, forgetting (lift ι) (ℛ⟦RProp⟧ (p ι) P)) ⊢
+    (∀ ι, forgetting (acc_wlctx_valuation ι) (ℛ⟦RProp⟧ (p ι) P)) ⊢
       ℛ⟦RProp⟧ (ForallNamed p) (demonic_close P : SymProp wnil).
   Proof.
     iIntros "HYP Hwp".
     unfold ForallNamed.
     rewrite env.Forall_forall. iIntros (ι).
     iSpecialize ("HYP" $! ι).
-    rewrite <-(forgetting_pure (w2 := wlctx Σ) (lift ι)).
+    rewrite <-(forgetting_pure (w2 := wlctx Σ) (acc_wlctx_valuation ι)).
     iPoseProof (refine_psafe_demonic_close P with "Hwp") as "HP".
     iSpecialize ("HP" $! ι).
     iModIntro.
@@ -1090,9 +1085,8 @@ Module Soundness
     iPoseProof (StoreSpec.refine_exec_contract n c body ι) as "H".
     iPoseProof (forgetting_valuation_curval (ι := ι)) as "#Hι".
     iModIntro.
-    iApply ("H").
-    - iIntros (w ω) "!> %u %su _ %δ %sδ Hδ %h %sh Hh HSP".
-      now iPureIntro.
+    iApply "H".
+    - now iIntros (w ω) "!> %u %su _ %δ %sδ Hδ %h %sh Hh HSP".
     - iApply (repₚ_inst_curval (T := SStore Γ) (w := wlctx (sep_contract_logic_variables c)) (t := sep_contract_localstore c) with "Hι").
     - iApply (refine_nil (AT := Chunk)).
   Qed.

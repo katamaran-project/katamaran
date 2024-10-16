@@ -137,7 +137,7 @@ Module Type RefinementMonadsOn
       iSpecialize ("HK" $! _ acc_snoc_right).
       rewrite assuming_acc_snoc_right.
       iSpecialize ("HK" $! v).
-      rewrite <-(forgetting_pure (sub_acc (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v)))).
+      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v))).
       iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep".
       iModIntro.
       iDestruct ("HK" with "Hrep HSP") as "%Hkv".
@@ -155,7 +155,7 @@ Module Type RefinementMonadsOn
       iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep".
       iSpecialize ("HK" $! v).
       iSpecialize ("HSP" $! v).
-      rewrite <-(forgetting_pure (sub_acc (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v)))).
+      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v))).
       iModIntro.
       now iApply ("HK" with "Hrep HSP").
     Qed.
@@ -213,7 +213,7 @@ Module Type RefinementMonadsOn
     Qed.
 
     Lemma safe_assume_triangular {w0 w1} (ζ : Tri w0 w1) (o : 𝕊 w1) :
-      (psafe (assume_triangular ζ o) ⊣⊢ (assuming (sub_triangular ζ) (psafe o))).
+      (psafe (assume_triangular ζ o) ⊣⊢ (assuming (acc_triangular ζ) (psafe o))).
     Proof.
       induction ζ; first by rewrite assuming_id.
       cbn [sub_triangular].
@@ -246,7 +246,7 @@ Module Type RefinementMonadsOn
     Lemma safe_assert_triangular {w0 w1} msg (ζ : Tri w0 w1)
       (o : AMessage w1 -> 𝕊 w1) :
       (psafe (assert_triangular msg ζ o) ⊣⊢
-         (knowing (sub_triangular ζ) (psafe (o (subst msg (sub_triangular ζ)))))).
+         (knowing (acc_triangular ζ) (psafe (o (subst msg (sub_triangular ζ)))))).
     Proof.
       revert o. induction ζ; intros o.
       - now rewrite knowing_id subst_sub_id.
@@ -288,8 +288,8 @@ Module Type RefinementMonadsOn
           iDestruct "HC" as "[HC1 _]".
           iApply ("HC1" with "Hsc1").
         + iSpecialize ("rΦ" $! (wpathcondition w1 sc1) (acc_trans (acc_triangular ζ) (acc_pathcondition_right w1 sc1))).
-          rewrite sub_acc_trans assuming_trans sub_acc_triangular.
-          iPoseProof (knowing_assuming (sub_triangular ζ) with "[$HΦ $rΦ]") as "H".
+          rewrite assuming_trans.
+          iPoseProof (knowing_assuming (acc_triangular ζ) with "[$HΦ $rΦ]") as "H".
           iApply knowing_pure.
           iApply (knowing_proper with "H").
           iIntros "((Hsc1 & HsΦ) & HΦ)".
@@ -318,7 +318,7 @@ Module Type RefinementMonadsOn
         iSpecialize ("HC2" $! HC).
         rewrite <-Hsolver.
         iSpecialize ("HΦ" $! _ (acc_trans (acc_triangular ζ) (acc_pathcondition_right w1 sc1))).
-        rewrite sub_acc_trans assuming_trans sub_acc_triangular.
+        rewrite assuming_trans.
         iDestruct (assuming_sepₚ with "[HΦ Hsp]") as "H".
         { now iSplitL "HΦ". }
         iDestruct (knowing_assuming with "[$HC2 $H]") as "H".
@@ -796,8 +796,8 @@ Module Type RefinementMonadsOn
       iSpecialize ("rpost" $! _ (acc_match_right pc)).
       iDestruct (knowing_assuming with "[$Hpm $Hsp]") as "H".
       iDestruct (knowing_assuming with "[$H $rpost]") as "H".
-      iApply (knowing_pure (w1 := wmatch _ _ _ _) (sub_cat_left (PatternCaseCtx pc))).
-      iApply (knowing_proper (w2 := wmatch _ _ _ _) (ω := sub_cat_left (PatternCaseCtx pc)) _ _ with "H").
+      iApply (knowing_pure (acc_match_right pc)).
+      iApply (knowing_proper (ω := acc_match_right pc) _ _ with "H").
       iIntros "[[Hargs Hsp] rpost]".
       iApply ("rpost" with "[Hargs] Hsp").
       iExists eq_refl.
@@ -819,8 +819,8 @@ Module Type RefinementMonadsOn
       iSpecialize ("Hpost" $! _ (acc_matchvar_right pc)).
       iDestruct (knowing_assuming with "[$Hpm $Hsp]") as "H".
       iDestruct (knowing_assuming with "[$H $Hpost]") as "H".
-      iApply (knowing_pure (sub_matchvar_right pc)).
-      iApply (knowing_proper (ω := sub_matchvar_right pc) _ _ with "H").
+      iApply (knowing_pure (acc_matchvar_right pc)).
+      iApply (knowing_proper (ω := acc_matchvar_right pc) _ _ with "H").
       iIntros "[[Hargs Hsp] Hpost]".
       iApply ("Hpost" with "[Hargs] Hsp").
       iExists eq_refl; cbn.

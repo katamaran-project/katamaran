@@ -309,9 +309,7 @@ Module BlockVerificationDerived2Sound.
       (BlockVerificationDerived2.exec_instruction_any (w := w) i).
   Proof.
     unfold BlockVerificationDerived2.exec_instruction_any, exec_instruction_any__c.
-    rsolve.
-    now rewrite !sub_acc_trans.
-    now rewrite !sub_acc_trans.
+    now rsolve.
   Qed.
 
   #[export] Instance refine_compat_exec_instruction_any {i : AST} {w} :
@@ -339,10 +337,9 @@ Module BlockVerificationDerived2Sound.
                (fun w' ω => @BlockVerificationDerived2.exec_block_addr b w')) as "H".
     { 
       unfold exec_block_addr__c, BlockVerificationDerived2.exec_block_addr.
-      iInduction b as [*|*] "IHb"; rsolve.
+      iInduction b as [|*] "IHb"; rsolve.
       iApply ("IHb" with "[] [$]").
-      rsolve.
-      now rewrite sub_acc_trans.
+      now rsolve.
     } 
     iApply (unconditionally_T with "H").
   Qed.
@@ -377,9 +374,7 @@ Module BlockVerificationDerived2Sound.
     - now iApply refine_rnenv_sub_acc.
     - iApply refine_exec_block_addr;
         rsolve.
-    - iApply refine_rnenv_sub_acc.
-      now rewrite !sub_acc_trans.
-    - now rewrite !sub_acc_trans.
+    - now iApply refine_rnenv_sub_acc.
   Qed.
 
 End BlockVerificationDerived2Sound.
@@ -452,9 +447,7 @@ Module BlockVerification3Sound.
     rsolve.
     - now iApply refine_rnenv_sub_acc.
     - iApply refine_exec_block_addr; now rsolve.
-    - iApply refine_rnenv_sub_acc.
-      now rewrite !sub_acc_trans.
-    - now rewrite sub_acc_trans.
+    - now iApply refine_rnenv_sub_acc.
   Qed.
 
 End BlockVerification3Sound.
