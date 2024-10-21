@@ -371,32 +371,6 @@ Module Type UnifLogicOn
       unfold assuming.
       crushPredEntails3.
     Qed.
-
-    (* Class IntoWorldAcc {w1 w2 : World} (sub : w1 ⊒ w2) (ω : w1 ⊒ w2) := *)
-    (*   intoacc_eq : sub_acc ω = sub. *)
-
-    (* #[export] Instance intoacc_sub_acc  {w1 w2 : World} (ω : w1 ⊒ w2) : IntoWorldAcc (sub_acc ω) ω := *)
-    (*   eq_refl. *)
-
-    (* #[export] Instance intoacc_trans  {w1 w2 w3 : World} {sub12 : w1 ⊒ w2} {sub23 : Sub w2 w3} *)
-    (*   {ω12 ω23} {intoacc12 : IntoWorldAcc sub12 ω12} {intoacc23 : IntoWorldAcc sub23 ω23} *)
-    (*   : IntoWorldAcc (subst sub12 sub23) (acc_trans ω12 ω23). *)
-    (* Proof. *)
-    (*   unfold IntoWorldAcc. *)
-    (*   now rewrite sub_acc_trans intoacc12 intoacc23. *)
-    (* Qed. *)
-
-    (* #[export] Instance intoacc_sub_triangular {w1 w2} {ζ : Tri w1 w2} : *)
-    (*   IntoWorldAcc (sub_triangular ζ) (acc_triangular ζ). *)
-    (* Proof. *)
-    (*   unfold IntoWorldAcc. *)
-    (*   now rewrite sub_acc_triangular. *)
-    (* Qed. *)
-
-    (* #[export] Instance intoacc_refl {w} : IntoWorldAcc (sub_id _) (acc_refl (w := w)). Proof. now cbn. Qed. *)
-
-    (* #[export] Instance intoacc_lift {Σ : LCtx} {ι : Valuation Σ} : IntoWorldAcc (w1 := wlctx Σ) (w2 := wnil) (lift ι) (acc_wlctx_valuation ι). *)
-    (* Proof. by cbn. Qed. *)
     
     #[export] Instance forgetting_proper {w1 w2 : World} {ω : w1 ⊒ w2} :
       Proper (entails ==> entails) (forgetting ω).
