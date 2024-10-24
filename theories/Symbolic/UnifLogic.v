@@ -495,10 +495,6 @@ Module Type UnifLogicOn
       eapply inst_sub_id.
     Qed.
 
-    Lemma getcurval {w : World} :
-      ⊢ ∃ (ι : Valuation w), curval ι.
-    Proof. unfold curval. crushPredEntails3. Qed.
-
     Lemma eval_ex `{Inst AT A} {w : World} (t : AT w) :
       ⊢ ∃ v, repₚ v (w := w) t.
     Proof. crushPredEntails3. now eexists. Qed.
@@ -507,37 +503,12 @@ Module Type UnifLogicOn
       ⊢ ∃ P, proprepₚ P (w := w) t.
     Proof. crushPredEntails3. now exists (instpred t ι). Qed.
 
-    Lemma forgetting_valuation_curval {Σ} {ι : Valuation Σ} :
-      ⊢ forgetting (acc_wlctx_valuation ι) (curval (ι : Valuation (wlctx Σ))).
+    Lemma forgetting_valuation_repₚ {w : World} (ι : Valuation w) {T : LCtx -> Type} `{Inst T A} ( t : T w) :
+      ⊢ forgetting (acc_wlctx_valuation ι) (repₚ (inst t ι) t).
     Proof.
-      unfold curval, forgetting.
+      unfold forgetting.
       crushPredEntails3.
       now rewrite inst_lift.
-    Qed.
-
-    Lemma repₚ_inst_curval {w : World} {ι : Valuation w} {T : LCtx -> Type} `{Inst T A} { t : T w} :
-      curval ι ⊢ repₚ (inst t ι) t.
-    Proof.
-      unfold curval. crushPredEntails3. now subst.
-    Qed.
-
-    Lemma knowing_valuation_curval {Σ} {ι : Valuation Σ} {P} :
-      knowing (acc_wlctx_valuation ι) P ⊢ curval (w := wlctx Σ) ι.
-    Proof.
-      unfold curval, knowing.
-      constructor; intros ι2 _ (ι3 & <- & _ & HP); cbn.
-      unfold inst, inst_sub, inst_env, lift.
-      rewrite env.map_map.
-      symmetry.
-      apply env.map_id_eq.
-      now unfold lift.
-    Qed.
-
-    Lemma forgetting_curval {w w2 : World} {ω2 : w ⊒ w2} {ι : Valuation w} :
-      forgetting ω2 (curval ι) ⊣⊢ repₚ ι (sub_acc ω2).
-    Proof.
-      unfold forgetting, curval.
-      now crushPredEntails3.
     Qed.
 
     Lemma lift_repₚ `{InstLift AT A} (v : A) {w : World} :
@@ -1388,17 +1359,7 @@ Module Type UnifLogicOn
       ⊢ ℛ⟦RInst AT A⟧ a (lift a : AT w).
     Proof. iApply lift_repₚ. Qed.
 
-    Lemma refine_rinst_sub_initial {w : World} {ι : Valuation w}: 
-      curval ι ⊢ ℛ⟦RInst (Sub w) (Valuation w)⟧ ι (sub_id w).
-    Proof. unfold RInst. crushPredEntails3. now rewrite inst_sub_id. Qed.
-
     Import ModalNotations. 
-    Lemma refine_rnenv_sub_acc {w : World} {ι : Valuation w} {w2 : World} {ω2 : Acc w w2} :
-      forgetting ω2 (curval (w := w) ι) ⊢ ℛ⟦RNEnv LVar w⟧ ι (sub_acc ω2).
-    Proof.
-      unfold forgetting, RNEnv, RInst, curval; now crushPredEntails3.
-    Qed.
-
     Section WithNotations.
       Import env.notations.
       Import ctx.notations.
@@ -1452,6 +1413,22 @@ Module Type UnifLogicOn
         iIntros "Hv".
         iApply (refine_namedenv_snoc with "[$Hv]").
         iApply refine_namedenv_nil.
+      Qed.
+
+      Lemma refine_namedenv_sub_acc_trans {Σ : LCtx} {w1 w2 : World} {ι : Valuation Σ} { ω1 : wlctx Σ ⊒ w1} {ω2 : w1 ⊒ w2}:
+        forgetting ω2 (repₚ (w := w1) ι (sub_acc ω1)) ⊢
+          ℛ⟦RNEnv LVar (wlctx Σ)⟧ ι (sub_acc (acc_trans ω1 ω2)).
+      Proof.
+        rewrite <-forgetting_repₚ.
+        now rewrite sub_acc_trans persist_subst.
+      Qed.
+
+      Lemma refine_namedenv_sub_acc {Σ : LCtx} {w : World} {ι : Valuation Σ} {ω : wlctx Σ ⊒ w}:
+        forgetting ω (repₚ (w := wlctx Σ) ι (sub_id Σ)) ⊢
+          ℛ⟦RNEnv LVar (wlctx Σ)⟧ ι (sub_acc ω).
+      Proof.
+        rewrite <-forgetting_repₚ.
+        now rewrite persist_subst sub_comp_id_left.
       Qed.
 
     End WithNotations.

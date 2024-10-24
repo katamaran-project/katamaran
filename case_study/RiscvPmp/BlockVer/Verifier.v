@@ -350,7 +350,7 @@ Module BlockVerificationDerived2Sound.
     _ <- produce (env.snoc ι ("a"::ty_xlenbits) an) req ;;
     @exec_block_addr__c b an an.
 
-  Definition exec_triple_addr__c {Σ : World} (ι : Valuation Σ)
+  Definition exec_triple_addr__c {Σ : LCtx} (ι : Valuation Σ)
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) : M unit :=
     a <- @demonic _ ;;
@@ -360,21 +360,28 @@ Module BlockVerificationDerived2Sound.
 
   Import ModalNotations.
 
-  Lemma refine_exec_triple_addr {Σ : World}
+  Lemma refine_exec_triple_addr {Σ : LCtx}
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
-    (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-    forall {ι : Valuation Σ},
-      curval ι ⊢ ℛ⟦RStoreSpec [ctx] [ctx] RUnit⟧
-        (exec_triple_addr__c ι req b ens)
-        (@BlockVerificationDerived2.exec_triple_addr Σ req b ens).
+    (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits)))
+    (ι : Valuation Σ) :
+    ⊢ forgetting (acc_wlctx_valuation ι)
+      (ℛ⟦RStoreSpec [ctx] [ctx] RUnit⟧
+         (exec_triple_addr__c ι req b ens)
+         (@BlockVerificationDerived2.exec_triple_addr (wlctx Σ) req b ens)).
   Proof.
-    iIntros (ι) "Hι".
     unfold BlockVerificationDerived2.exec_triple_addr, exec_triple_addr__c.
+    iPoseProof (forgetting_valuation_repₚ (w := wlctx Σ) ι (sub_id Σ)) as "#Hιs".
+    rewrite inst_sub_id.
+    iModIntro.
     rsolve.
-    - now iApply refine_rnenv_sub_acc.
+    - rewrite <-forgetting_repₚ.
+      now rewrite persist_subst sub_comp_id_left.
     - iApply refine_exec_block_addr;
         rsolve.
-    - now iApply refine_rnenv_sub_acc.
+    - rewrite forgetting_trans.
+      iModIntro.
+      rewrite <-forgetting_repₚ.
+      now rewrite persist_subst sub_comp_id_left.
   Qed.
 
 End BlockVerificationDerived2Sound.
@@ -434,20 +441,25 @@ Module BlockVerification3Sound.
 
   Import ModalNotations.
 
-  Lemma refine_exec_triple_addr {w : World}
-    (req : Assertion (w ▻ ("a"::ty_xlenbits))) (b : list AnnotInstr)
-    (ens : Assertion (w ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-    forall {ι0 : Valuation w},
-      curval ι0 ⊢ ℛ⟦RStoreSpec [ctx] [ctx] RUnit⟧
-        (exec_triple_addr__c ι0 req b ens)
-        (@BlockVerification3.exec_triple_addr w req b ens).
+  Lemma refine_exec_triple_addr {Σ : LCtx}
+    (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AnnotInstr)
+    (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) (ι : Valuation Σ) :
+    ⊢ forgetting (acc_wlctx_valuation ι)
+      (ℛ⟦RStoreSpec [ctx] [ctx] RUnit⟧
+         (exec_triple_addr__c (Σ := wlctx Σ) ι req b ens)
+         (@BlockVerification3.exec_triple_addr (wlctx Σ) req b ens)).
   Proof.
-    iIntros (ι) "Hι".
+    iPoseProof (forgetting_valuation_repₚ (w := wlctx Σ) ι (sub_id Σ)) as "#Hιs".
     unfold BlockVerification3.exec_triple_addr, exec_triple_addr__c.
+    iModIntro.
     rsolve.
-    - now iApply refine_rnenv_sub_acc.
+    - rewrite inst_sub_id.
+      now iApply refine_namedenv_sub_acc.
     - iApply refine_exec_block_addr; now rsolve.
-    - now iApply refine_rnenv_sub_acc.
+    - rewrite forgetting_trans.
+      iModIntro.
+      rewrite inst_sub_id.
+      now iApply refine_namedenv_sub_acc.
   Qed.
 
 End BlockVerification3Sound.
@@ -672,15 +684,15 @@ Module BlockVerificationDerived2Sem.
   Proof.
     intros Hverif ι.
     apply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := []%ctx |}) (pre := pre) (post := post) (instrs := instrs)).
-    eapply (fromEntails (w := wlctx Γ) (refine_exec_triple_addr (Σ := wlctx Γ) _ _ _) ι I eq_refl).
-    all: cycle 3.
-    - apply (fromBientails (w := wlctx Γ) (LogicalSoundness.psafe_safe) ι I).
+    eapply (fromEntails (w := wnil) (refine_exec_triple_addr (Σ := wlctx Γ) _ _ _ ι) [env] I I).
+    - done.
+    - eapply refine_lift; now cbn.
+    - now eapply logicalrelation.rlist_nil.
+    - rewrite inst_lift.
+      apply (fromBientails (w := wlctx Γ) LogicalSoundness.psafe_safe ι I).
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       rewrite SymProp.safe_demonic_close in Hverif.
       now apply Hverif.
-    - done.
-    - reflexivity.
-    - constructor.
   Qed.
 
 End BlockVerificationDerived2Sem.
@@ -849,15 +861,15 @@ Module BlockVerification3Sem.
   Proof.
     intros lemSem Hverif ι.
     apply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := []%ctx |}) (pre := pre) (post := post) (instrs := instrs)); first easy.
-    eapply (fromEntails (w := wlctx Γ) (refine_exec_triple_addr _ _ _) ι I eq_refl _ (λ w1 _ _ _ _, SymProp.block)).
-    all: cycle 3.
-    - apply (fromBientails (w := wlctx Γ) (LogicalSoundness.psafe_safe) ι I).
+    eapply (fromEntails (refine_exec_triple_addr _ _ _ _) [env] I I _ (λ w1 _ _ _ _, SymProp.block)).
+    - done.
+    - eapply refine_lift; now cbn.
+    - now eapply logicalrelation.rlist_nil.
+    - rewrite inst_lift.
+      apply (fromBientails (w := wlctx Γ) LogicalSoundness.psafe_safe ι I).
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       rewrite SymProp.safe_demonic_close in Hverif.
       now apply Hverif.
-    - now intros.
-    - reflexivity.
-    - constructor.
   Qed.
 
 End BlockVerification3Sem.

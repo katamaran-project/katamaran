@@ -203,6 +203,14 @@ Module Soundness
       RefineCompat (REnv [ctx]) vs  w svs _ :=
       MkRefineCompat refine_env_nil.
 
+    #[export] Instance refine_compat_named_env_sub_acc_trans {Σ : LCtx} {w1 w2 : World} {ι : Valuation Σ} {ω1 : wlctx Σ ⊒ w1} {ω2 : w1 ⊒ w2}:
+      RefineCompat (RNEnv LVar (wlctx Σ)) ι w2 (sub_acc (acc_trans ω1 ω2)) _ :=
+      MkRefineCompat refine_namedenv_sub_acc_trans.
+
+    (* #[export] Instance refine_compat_named_env_sub_acc {Σ : LCtx} {w : World} {ι : Valuation Σ} {ω : wlctx Σ ⊒ w} : *)
+    (*   RefineCompat (RNEnv LVar (wlctx Σ)) ι w (sub_acc ω) _ | 10 := *)
+    (*   MkRefineCompat refine_namedenv_sub_acc. *)
+
     Class RefineCompatGen (w : World) (P : Pred w) (Ob : Pred w) (withbase : bool):=
       MkRefineCompatGen {
         refine_compat_gen_lemma : Ob ⊢ P
@@ -912,8 +920,6 @@ Module Soundness
       iIntros (args sargs) "#Hargs".
       destruct c; cbv [SStoreSpec.call_contract CStoreSpec.call_contract]. 
       rsolve.
-      - rewrite sub_acc_trans -(persist_subst (a := ta)).
-        now rsolve.
       (* rsolve2_step. *)
       (* iIntros (? ?) "!>". *)
       (* rsolve2_step. *)
@@ -947,8 +953,8 @@ Module Soundness
       destruct lem; cbv [SStoreSpec.call_lemma CStoreSpec.call_lemma].
       iIntros (args sargs) "Hargs".
       rsolve.
-      - rewrite sub_acc_trans -(persist_subst (a := ta)); rsolve.
-      - cbn; rsolve; rewrite sub_acc_trans; now rsolve.
+      cbn.
+      rsolve. 
       (*   rsolve2. *)
       (* iIntros (? ?) "!>". *)
       (* rsolve2_step. *)
@@ -1032,11 +1038,14 @@ Module Soundness
     Proof.
       unfold SStoreSpec.exec_contract, CStoreSpec.exec_contract;
         destruct c as [Σ δ pre result post]; cbn - [RSat] in *.
-      iPoseProof (forgetting_valuation_curval (Σ := Σ) (ι := ι)) as "#Hι".
+      iPoseProof (forgetting_valuation_repₚ (w := wlctx Σ) ι (sub_id Σ)) as "#Hιid".
+      rewrite inst_sub_id.
       iModIntro.
       rsolve.
-      - now iApply refine_rinst_sub_initial.
-      - now iApply (refine_rnenv_sub_acc (w := wlctx _)).
+      rewrite forgetting_trans.
+      iModIntro.
+      rewrite <-forgetting_repₚ.
+      now rewrite !persist_subst sub_comp_id_left.
     Qed.
   End ExecRefine.
 
@@ -1083,23 +1092,22 @@ Module Soundness
     iApply refine_demonic_close.
     iIntros (ι).
     iPoseProof (StoreSpec.refine_exec_contract n c body ι) as "H".
-    iPoseProof (forgetting_valuation_curval (ι := ι)) as "#Hι".
+    iPoseProof (forgetting_valuation_repₚ (w := wlctx _) ι (sep_contract_localstore c)) as "Hιs".
     iModIntro.
-    iApply "H".
+    iApply ("H" with "[] Hιs").
     - now iIntros (w ω) "!> %u %su _ %δ %sδ Hδ %h %sh Hh HSP".
-    - iApply (repₚ_inst_curval (T := SStore Γ) (w := wlctx (sep_contract_logic_variables c)) (t := sep_contract_localstore c) with "Hι").
     - iApply (refine_nil (AT := Chunk)).
   Qed.
 
-  Lemma replay_sound {w : World} (s : 𝕊 w) ι (Hpc : instprop (wco w) ι) :
-    safe (SPureSpec.replay s) ι -> safe s ι.
+  Lemma replay_sound (s : 𝕊 wnil) :
+    safe (SPureSpec.replay s) [env] -> safe s [env].
   Proof.
     intros H.
     apply CPureSpec.replay_sound.
-    pose proof (PureSpec.refine_replay s ι).
+    pose proof (PureSpec.refine_replay s).
     unfold RProp in H0; cbn in H0.
     rewrite psafe_safe in H0.
-    now apply (fromEntails H0 ι).
+    now apply (fromEntails H0 [env]).
   Qed.
 
   Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
@@ -1107,7 +1115,7 @@ Module Soundness
     Shallow.ValidContract c body.
   Proof.
     unfold Symbolic.ValidContract. intros [Hwp%postprocess_sound].
-    apply (replay_sound (w:=wnil)) in Hwp; [|easy].
+    apply replay_sound in Hwp.
     apply postprocess_sound in Hwp.
     apply (fromEntails (refine_vcgen _ _ _) [env]); try done.
     now apply psafe_safe.
@@ -1118,7 +1126,7 @@ Module Soundness
     Shallow.ValidContractWithFuel fuel c body.
   Proof.
     unfold Symbolic.ValidContractWithFuel. intros [Hwp%postprocess_sound].
-    apply (replay_sound (w:=wnil)) in Hwp; [|easy].
+    apply replay_sound in Hwp.
     apply postprocess_sound in Hwp.
     apply (fromEntails (refine_vcgen fuel c body) [env]); try done.
     now apply (psafe_safe (w := wnil)).

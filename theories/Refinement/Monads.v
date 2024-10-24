@@ -1212,14 +1212,13 @@ Module Type RefinementMonadsOn
       now rewrite assuming_id.
     Qed.
 
-    Lemma refine_replay {w : World} (s : 𝕊 w) ι :
-      curval ι ⊢ (ℛ⟦ RProp ⟧ (CPureSpec.replay s ι) (SPureSpec.replay s)).
+    Lemma refine_replay (s : 𝕊 wnil) :
+      ⊢ (ℛ⟦ RProp ⟧ (CPureSpec.replay s [env]) (SPureSpec.replay s)).
     Proof.
       unfold CPureSpec.replay, SPureSpec.replay.
-      iIntros "Hι".
       iApply refine_run.
       iApply (refine_replay_aux2 s).
-      now iApply refine_rinst_sub_initial.
+      now iApply (refine_lift (AT := Sub [ctx])).
     Qed.
 
     Lemma refine_peval_chunk {w} :

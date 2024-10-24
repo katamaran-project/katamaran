@@ -537,9 +537,6 @@ Module Type WorldsOn
     fun t2 w t1 ι => (inst t1 ι = t2)%type.
   #[global] Arguments repₚ {T A _} _ [w] _ _/.
 
-  Definition curval {w : World} : Valuation w -> Pred w :=
-    fun ι1 ι2 => ι1 = ι2.
-
   Inductive DebugPred (B : LCtx -> Type) {w : World} (b : B w) (P : Pred w) : Pred w := 
     MkDebugPred : forall ι, P ι -> DebugPred B b P ι.
 
