@@ -41,7 +41,7 @@ From Katamaran Require Import
      Signature
      Bitvector
      Semantics.Registers
-     Symbolic.Executor
+     MicroSail.SymbolicVCGen
      Symbolic.Solver
      Specification
      Program.

@@ -42,8 +42,8 @@ From Katamaran Require Import
      MinimalCaps.Contracts.Definitions
      Notations
      Specification
-     Shallow.Executor
-     Symbolic.Executor
+     MicroSail.ShallowVCGen
+     MicroSail.SymbolicVCGen
      Symbolic.Solver.
 
 Set Implicit Arguments.
@@ -56,16 +56,17 @@ Open Scope Z_scope.
 
 Import MinCapsSpecification.
 
-Module Import MinCapsExecutor :=
-  MakeExecutor MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
-Module Import MinCapsShallowExec :=
-  MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
+Module Import MinCapsVCGen :=
+  MakeSymbolicVCGen MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
+Module Import MinCapsShallowVCGen :=
+  MakeShallowVCGen MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
 
 (*** MinCapsValidContracts ***)
 (* In this module we prove that all specified contracts are valid. *)
 Module MinCapsValidContracts.
-  Import MinCapsExecutor.
   Import MinCapsSignature.
+  Import MinCapsVCGen.
+  Import MinCapsProgram.
 
   Local Ltac solve :=
     repeat

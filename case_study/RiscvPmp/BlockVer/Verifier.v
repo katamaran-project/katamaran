@@ -37,16 +37,16 @@ From Katamaran Require Import
      Iris.Instance
      Iris.Model
      Notations
-     Semantics
      Bitvector
+     MicroSail.ShallowSoundness
+     MicroSail.ShallowVCGen
+     MicroSail.SymbolicSoundness
+     MicroSail.SymbolicVCGen
+     Semantics
      Sep.Hoare
-     Shallow.Executor
-     Shallow.Soundness
      Specification
-     Symbolic.Executor
      Symbolic.Propositions
      Symbolic.Solver
-     Symbolic.Soundness
      Symbolic.Worlds
      RiscvPmp.BlockVer.Spec
      RiscvPmp.IrisModel

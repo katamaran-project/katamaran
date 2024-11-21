@@ -1,6 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2020 Dominique Devriese, Georgy Lukyanov,                    *)
-(*   Sander Huyghebaert, Steven Keuchel                                       *)
+(* Copyright (c) 2020 Dominique Devriese, Sander Huyghebaert, Steven Keuchel  *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -27,21 +26,32 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Katamaran Require Export
-  Base
-  Refinement.Monads
-  Shallow.Monads
-  Symbolic.Monads
-  Symbolic.Propositions
-  Symbolic.Solver
-  Symbolic.Worlds
-  Syntax.Assertions
-  Syntax.Predicates.
+From Katamaran Require Import
+  Signature
+  Sep.Hoare
+  Specification
+  Prelude
+  Program
+  Refinement.MonadInstances
+  MicroSail.ShallowVCGen
+  MicroSail.SymbolicVCGen
+  MicroSail.RefineExecutor
+  MicroSail.RefineVCGen
+  MicroSail.ShallowSoundness.
 
-Module Type SignatureMixin
-  (B : Base) (P : PredicateKit B) (W : WorldsMixin B P) (S : SolverKit B P W) :=
-  AssertionsOn B P W <+ SymPropOn B P W <+ GenericSolverOn B P W S <+
-  ShallowMonadsOn B P W <+ SymbolicMonadsOn B P W S <+ RefinementMonadsOn B P W S.
+Module MakeSoundness
+  (Import B : Base)
+  (Import SIG : Signature B)
+  (Import SOLV : SolverKit B SIG)
+  (Import PROG : Program B)
+  (Import SPEC : Specification B SIG PROG)
+  (Import CVCG : ShallowVCGen B SIG PROG SPEC)
+  (Import SVCG : SymbolicVCGen B SIG SOLV PROG SPEC).
 
-Module Type Signature (B : Base) :=
-  PredicateKit B <+ WorldsMixin B <+ SolverKit B <+ SignatureMixin B.
+  Include ProgramLogicOn B SIG PROG SPEC.
+  Include VCGenSoundnessOn B SIG PROG SPEC CVCG.
+  Include RefinementMonadInstancesOn B SIG SOLV CVCG SVCG.
+  Include RefineExecutorOn B SIG PROG CVCG SVCG.
+  Include RefineVCGenOn B SIG PROG SPEC CVCG SOLV SVCG.
+
+End MakeSoundness.

@@ -34,11 +34,11 @@ From Coq Require Import
 From Katamaran Require Import
      Notations
      Bitvector
-     Shallow.Executor
+     (* MicroSail.ShallowVCGen *)
      Specification
-     Symbolic.Executor
      Symbolic.Solver
      Symbolic.Propositions
+     MicroSail.SymbolicVCGen
      Symbolic.Worlds
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
@@ -1273,15 +1273,15 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
 
 End RiscvPmpSpecification.
 
-Module RiscvPmpExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
+Module RiscvPmpVCGen :=
+  MakeSymbolicVCGen RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
 
-Module RiscvPmpShallowExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
+(* Module RiscvPmpShallowVCGen := *)
+(*   MakeShallowVCGen RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification. *)
 
 Module RiscvPmpValidContracts.
-  Import RiscvPmpExecutor.
-  Import RiscvPmpShallowExecutor.
+  Import RiscvPmpVCGen.
+  (* Import RiscvPmpShallowVCGen. *)
 
   Inductive Fuel : Set :=
   | NoInlining

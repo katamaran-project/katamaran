@@ -46,17 +46,19 @@ From Katamaran Require Import
      Iris.Instance
      Iris.Model
      Program
+     MicroSail.RefineVCGen
+     MicroSail.ShallowSoundness
+     MicroSail.ShallowVCGen
+     MicroSail.Soundness
+     MicroSail.SymbolicVCGen
+     Refinement.MonadInstances
      Semantics
      Semantics.Registers
      Sep.Hoare
-     Shallow.Executor
-     Shallow.Soundness
      Signature
      Specification
-     Symbolic.Executor
      Symbolic.Propositions
      Symbolic.Solver
-     Symbolic.Soundness
      Symbolic.Worlds
      Syntax.Predicates
      Syntax.Terms.
@@ -215,8 +217,11 @@ End ExampleSpecification.
 
 (* Use the specification and the solver module to compose the symbolic executor
    and symbolic verification condition generator. *)
-Module Import ExampleExecutor :=
-  MakeExecutor DefaultBase ExampleSig ExampleProgram ExampleSpecification.
+Module Import ExampleSymbolicVCGen <:
+  SymbolicVCGen DefaultBase ExampleSig ExampleProgram
+    ExampleSpecification :=
+  MakeSymbolicVCGen DefaultBase ExampleSig ExampleProgram
+    ExampleSpecification.
 
 (* Some simple Ltac tactic to solve the shallow and symbolic VCs. *)
 Local Ltac solve :=
@@ -237,8 +242,8 @@ Local Ltac solve :=
   auto.
 
 (* Also instantiate the shallow verification condition generator. *)
-Module Import ExampleShalExec :=
-  MakeShallowExecutor DefaultBase ExampleSig ExampleProgram ExampleSpecification.
+Module Import ExampleShallowVCGen :=
+  MakeShallowVCGen DefaultBase ExampleSig ExampleProgram ExampleSpecification.
 
 (* This computes and proves the shallow VC. Make sure to not unfold the
    definition of the binary operators and Coq predicates used in the example. *)
@@ -378,13 +383,13 @@ Module Import ExampleModel.
         fun Σ sRG iG mG p ts dup => match p with end.
     End ExampleIrisPredicates.
 
-    Include IrisSignatureRules DefaultBase ExampleSig ExampleProgram
-      ExampleSemantics ExampleIrisBase.
+    Include IrisSignatureRules DefaultBase ExampleSig ExampleProgram ExampleSemantics
+      ExampleIrisBase.
     Include IrisAdequacy DefaultBase ExampleSig ExampleProgram ExampleSemantics
       ExampleIrisBase.
-    Include ProgramLogicOn DefaultBase ExampleSig ExampleProgram ExampleSpecification.
-    Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleProgram
-      ExampleSemantics ExampleSpecification ExampleIrisBase.
+    Include ProgramLogicOn DefaultBase ExampleProgram ExampleSig ExampleSpecification.
+    Include IrisInstanceWithContracts DefaultBase ExampleProgram ExampleSemantics
+      ExampleSig ExampleSpecification ExampleIrisBase.
 
     (* Verification of the absent foreign functions. *)
     Lemma foreignSem `{sailGS Σ} : ForeignSem.

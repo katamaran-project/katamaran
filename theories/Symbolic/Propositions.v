@@ -46,6 +46,7 @@ From Katamaran Require Import
      Prelude
      Bitvector
      Symbolic.Worlds
+     Syntax.Assertions
      Syntax.BinOps
      Syntax.Chunks
      Syntax.Formulas
