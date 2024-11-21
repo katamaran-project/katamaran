@@ -860,6 +860,26 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           debug (pure tt)
       end.
 
+    Definition call_contract [Δ τ] (c : SepContract Δ τ) (args : CStore Δ) : CHeapSpec (Val τ) :=
+      match c with
+      | MkSepContract _ _ Σe δ req result ens =>
+          ι <- lift_purespec (CPureSpec.angelic_ctx Σe) ;;
+          lift_purespec (CPureSpec.assert_eq_nenv (inst δ ι) args) ;;
+          consume req ι ;;
+          v <- demonic τ ;;
+          produce ens (env.snoc ι (result∷τ) v) ;;
+          pure v
+      end.
+
+    Definition call_lemma [Δ] (lem : Lemma Δ) (vs : CStore Δ) : CHeapSpec unit :=
+      match lem with
+      | MkLemma _ Σe δ req ens =>
+          ι <- lift_purespec (CPureSpec.angelic_ctx Σe) ;;
+          lift_purespec (CPureSpec.assert_eq_nenv (inst δ ι) vs) ;;
+          consume req ι ;;
+          produce ens ι
+      end.
+
     Lemma mon_lift_purespec' `{MA : relation A} :
       Monotonic (MPureSpec MA ==> MHeapSpec MA) (lift_purespec).
     Proof. intros ? ? rm ? ? rΦ h. apply rm. intros ? ? ra. now apply rΦ. Qed.
@@ -949,6 +969,16 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       apply CPureSpec.mon_write_register.
       intros ? [] ->. now apply mΦ.
     Qed.
+
+    #[export] Instance mon_call_contract
+      [Δ τ] (c : SepContract Δ τ) (args : CStore Δ) :
+      Monotonic (MHeapSpec eq) (call_contract c args).
+    Proof. destruct c; typeclasses eauto. Qed.
+
+    #[export] Instance mon_call_lemma
+      [Δ] (lem : Lemma Δ) (vs : CStore Δ) :
+      Monotonic (MHeapSpec eq) (call_lemma lem vs).
+    Proof. destruct lem; typeclasses eauto. Qed.
 
     Section WithBI.
 

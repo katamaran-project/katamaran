@@ -1089,6 +1089,50 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             (pure tt)
       end.
 
+    Definition call_contract {Δ τ} (c : SepContract Δ τ) :
+      ⊢ SStore Δ -> SHeapSpec (STerm τ) :=
+      fun w0 args =>
+        match c with
+        | MkSepContract _ _ Σe δe req result ens =>
+            ⟨ θ1 ⟩ evars <-
+              lift_purespec (SPureSpec.angelic_ctx id Σe) ;;
+            ⟨ θ2 ⟩ _     <-
+              lift_purespec
+                (SPureSpec.assert_eq_nenv
+                   (amsg.mk
+                      {| debug_string_pathcondition := wco _;
+                         debug_string_message       := "SHeapSpec.call_contract";
+                      |})
+                   (subst δe evars) args⟨θ1⟩) ;;
+            let evars2 := persist (A := Sub _) evars θ2 in
+            ⟨ θ3 ⟩ _     <- consume req evars2 ;;
+            ⟨ θ4 ⟩ res   <- demonic (Some result) τ ;;
+            let evars4 := persist (A := Sub _) evars2 (θ3 ∘ θ4) in
+            ⟨ θ5 ⟩ _     <- produce ens (sub_snoc evars4 (result∷τ) res) ;;
+            pure res⟨θ5⟩
+        end.
+
+    Definition call_lemma {Δ} (lem : Lemma Δ) :
+      ⊢ SStore Δ -> SHeapSpec Unit :=
+      fun w0 args =>
+        match lem with
+        | MkLemma _ Σe δe req ens =>
+            ⟨ θ1 ⟩ evars <-
+              lift_purespec (SPureSpec.angelic_ctx id Σe) ;;
+            ⟨ θ2 ⟩ _     <-
+              lift_purespec
+                (SPureSpec.assert_eq_nenv
+                   (amsg.mk
+                      {| debug_string_pathcondition := wco _;
+                         debug_string_message       := "SHeapSpec.call_lemma";
+                      |})
+                   (subst δe evars) args⟨θ1⟩) ;;
+            let evars2 := persist (A := Sub _) evars θ2 in
+            ⟨ θ3 ⟩ _     <- consume req evars2 ;;
+            let evars3 := persist (A := Sub _) evars2 θ3 in
+            produce ens evars3
+        end.
+
   End SHeapSpec.
 
 End SymbolicMonadsOn.

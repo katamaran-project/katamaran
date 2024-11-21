@@ -1748,7 +1748,78 @@ Module Type RefinementMonadsOn
       iDestruct "Hvh" as "[Hv2 Hh2]".
       now iApply ("rΦ" with "Hv2").
     Qed.
+
+    Lemma refine_call_contract {Δ τ} (c : SepContract Δ τ) {w} :
+      ⊢  ℛ⟦RInst (SStore Δ) (CStore Δ) -> RHeapSpec (RVal τ)⟧
+        (CHeapSpec.call_contract c) (SHeapSpec.call_contract c (w := w)).
+    Proof.
+      iIntros (cδ sδ) "#rδ".
+      destruct c as [lvars pats req res ens]; cbn.
+      iApply refine_bind.
+      iApply refine_lift_purespec.
+      iApply PureSpec.refine_angelic_ctx.
+      iIntros (w1 θ1)  "!> %cevars %sevars #revars".
+      iApply refine_bind.
+      iApply refine_lift_purespec.
+      iApply PureSpec.refine_assert_eq_nenv.
+      iApply (refine_inst_subst (T := (SStore Δ))); auto.
+      iApply (refine_inst_persist (AT := SStore Δ)); auto.
+      iIntros (w2 θ2) "!> %cu %su _". clear cu su.
+      iApply refine_bind.
+      iApply refine_consume.
+      iApply (refine_inst_persist (AT := Sub lvars)); auto.
+      iIntros (w3 θ3) "!> %cu %su _". clear cu su.
+      iApply refine_bind.
+      iApply refine_demonic.
+      iIntros (w4 θ4) "!> %v %sv #rv".
+      iApply refine_bind.
+      iApply refine_produce.
+      iApply refine_sub_snoc.
+      iSplit; auto.
+      rewrite !forgetting_trans.
+      rewrite persist_trans.
+      iApply (refine_inst_persist (AT := Sub lvars)). iModIntro.
+      iApply (refine_inst_persist (AT := Sub lvars)). iModIntro.
+      iApply (refine_inst_persist (AT := Sub lvars)). auto.
+      iIntros (w5 θ5) "!> %cu %su #_". clear cu su.
+      iApply refine_pure.
+      iApply (refine_inst_persist (AT := STerm _) (A := Val _)).
+      auto.
+      Unshelve.
+      all: eauto with typeclass_instances.
+    Qed.
+
+    Lemma refine_call_lemma {Δ} (lem : Lemma Δ) w :
+      ⊢ ℛ⟦RInst (SStore Δ) (CStore Δ) -> RHeapSpec RUnit⟧
+          (CHeapSpec.call_lemma lem) (SHeapSpec.call_lemma lem (w := w)).
+    Proof.
+      iIntros (cδ sδ) "#rδ".
+      destruct lem as [lvars pats req ens]; cbn.
+      iApply refine_bind.
+      iApply refine_lift_purespec.
+      iApply PureSpec.refine_angelic_ctx.
+      iIntros (w1 θ1)  "!> %cevars %sevars #revars".
+      iApply refine_bind.
+      iApply refine_lift_purespec.
+      iApply PureSpec.refine_assert_eq_nenv.
+      iApply (refine_inst_subst (T := (SStore Δ))); auto.
+      iApply (refine_inst_persist (AT := SStore Δ)); auto.
+      iIntros (w2 θ2) "!> %cu %su _". clear cu su.
+      iApply refine_bind.
+      iApply refine_consume.
+      iApply (refine_inst_persist (AT := Sub lvars)); auto.
+      iIntros (w3 θ3) "!> %cu %su _". clear cu su.
+      iApply refine_produce.
+      rewrite !forgetting_trans.
+      iApply (refine_inst_persist (AT := Sub lvars)). iModIntro.
+      iApply (refine_inst_persist (AT := Sub lvars)). auto.
+    Qed.
+
     End WithNotations.
   End HeapSpec.
 
 End RefinementMonadsOn.
+
+(* Local Variables: *)
+(* proof-omit-proofs-option: t *)
+(* End: *)
