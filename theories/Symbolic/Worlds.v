@@ -853,16 +853,16 @@ Module Type WorldsOn
     Qed.
 
     #[export] Instance instpred_subst_formula : InstPredSubst Formula.
-    Admitted.
-    (* Proof. *)
-    (*   constructor; last by typeclasses eauto. *)
-    (*   intros ? ? ? f. constructor; intros ι Hpc. *)
-    (*   unfold forgetting. *)
-    (*   induction f; cbn; *)
-    (*     rewrite ?inst_subst ?bi_sep_unfold; auto. *)
-    (*   now apply Morphisms_Prop.and_iff_morphism. *)
-    (*   now apply Morphisms_Prop.or_iff_morphism. *)
-    (* Qed. *)
+    Proof.
+      constructor; [|typeclasses eauto].
+      intros ? ? ? f. constructor; intros ι Hpc.
+      unfold forgetting.
+      destruct ζ; cbn; [now rewrite inst_sub_id|].
+      induction f; cbn;
+        rewrite ?inst_subst ?bi_sep_unfold; auto.
+      now apply Morphisms_Prop.and_iff_morphism.
+      now apply Morphisms_Prop.or_iff_morphism.
+    Qed.
 
     Lemma wco_valid {w : World} : ⊢ instpred (w := w) (wco w).
     Proof. constructor. crushPredEntails2. now rewrite instpred_prop. Qed.
