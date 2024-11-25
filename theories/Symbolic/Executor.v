@@ -205,6 +205,11 @@ Module Type SymbolicExecOn
         fun w0 m POST δ0 h0 =>
           m (fun w1 ω01 a1 => POST w1 ω01 a1 (persist δ0 ω01) (persist h0 ω01)).
 
+      Definition lift_heapspec {Γ} {A : TYPE} :
+        ⊢ SHeapSpec A -> SStoreSpec Γ Γ A :=
+        fun w0 m Φ δ0 =>
+          m (fun w1 θ1 a1 => Φ w1 θ1 a1 (persist δ0 θ1)).
+
       Definition pure {Γ} {A : TYPE} :
         ⊢ A -> SStoreSpec Γ Γ A := fun _ a k => T k a.
 
@@ -389,41 +394,34 @@ Module Type SymbolicExecOn
 
       Definition produce_chunk {Γ} :
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c Φ δ =>
-          SHeapSpec.produce_chunk c (fun w1 θ1 u1 => Φ w1 θ1 u1 δ⟨θ1⟩).
+        fun w0 c => lift_heapspec (SHeapSpec.produce_chunk c).
       Arguments produce_chunk {Γ} w c Φ δ : simpl never.
 
       Definition consume_chunk {Γ} :
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c Φ δ =>
-          SHeapSpec.consume_chunk c (fun w1 θ1 u1 => Φ w1 θ1 u1 δ⟨θ1⟩).
+        fun w0 c => lift_heapspec (SHeapSpec.consume_chunk c).
       Arguments consume_chunk {Γ} w c Φ δ : simpl never.
 
       Definition consume_chunk_angelic {Γ} :
         ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c Φ δ =>
-          SHeapSpec.consume_chunk_angelic c (fun w1 θ1 u1 => Φ w1 θ1 u1 δ⟨θ1⟩).
+        fun w0 c => lift_heapspec (SHeapSpec.consume_chunk_angelic c).
 
-      Definition produce {Γ} :
-        ⊢ Assertion -> □(SStoreSpec Γ Γ Unit) :=
-        fun w0 asn w1 θ1 Φ δ =>
-          SHeapSpec.produce asn (sub_acc θ1) (fun w2 θ2 u2 => Φ w2 θ2 u2 δ⟨θ2⟩).
+      Definition produce {Σ Γ} (asn : Assertion Σ) :
+        ⊢ Sub Σ -> SStoreSpec Γ Γ Unit :=
+        fun w θ => lift_heapspec (SHeapSpec.produce asn θ).
 
-      Definition consume {Γ} :
-        ⊢ Assertion -> □(SStoreSpec Γ Γ Unit) :=
-        fun w0 asn w1 θ1 Φ δ =>
-       SHeapSpec.consume asn (sub_acc θ1) (fun w2 θ2 u2 => Φ w2 θ2 u2 δ⟨θ2⟩).
+      Definition consume {Σ Γ} (asn : Assertion Σ) :
+        ⊢ Sub Σ -> SStoreSpec Γ Γ Unit :=
+        fun w θ => lift_heapspec (SHeapSpec.consume asn θ).
 
       Definition read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) :
         ⊢ SStoreSpec Γ Γ (WTerm τ) :=
-        fun w Φ δ =>
-          SHeapSpec.read_register r (fun w1 θ1 t' => Φ w1 θ1 t' δ⟨θ1⟩).
+        fun w => lift_heapspec (SHeapSpec.read_register r).
       #[global] Arguments read_register {Γ τ} r {w}.
 
       Definition write_register {Γ τ} (r : 𝑹𝑬𝑮 τ) :
         ⊢ WTerm τ -> SStoreSpec Γ Γ (WTerm τ) :=
-        fun w t Φ δ =>
-          SHeapSpec.write_register r t (fun w1 θ1 t' => Φ w1 θ1 t' δ⟨θ1⟩).
+        fun w t => lift_heapspec (SHeapSpec.write_register r t).
 
     End ProduceConsume.
 
@@ -433,35 +431,11 @@ Module Type SymbolicExecOn
 
       Definition call_contract {Γ Δ τ} (c : SepContract Δ τ) :
         ⊢ SStore Δ -> SStoreSpec Γ Γ (STerm τ) :=
-        match c with
-        | MkSepContract _ _ Σe δe req result ens =>
-          fun w0 args =>
-            ⟨ ω1 ⟩ evars <- angelic_ctx id Σe ;;
-            ⟨ ω2 ⟩ _     <- assert_eq_nenv (subst δe evars) args⟨ω1⟩ ;;
-
-            ⟨ ω3 ⟩ _     <- (let we := @MkWorld Σe ctx.nil in
-                            consume (w := we)
-                              req (@acc_sub we _ evars (fun _ _ => I) ∘ ω2)) ;;
-            ⟨ ω4 ⟩ res   <- demonic (Some result) τ;;
-            ⟨ ω5 ⟩ _     <- (let we := @MkWorld (Σe ▻ result∷τ) ctx.nil in
-                            let evars' := persist (A := Sub _) evars (ω2 ∘ ω3 ∘ ω4) in
-                            let ζ      := sub_snoc evars' (result∷τ) res in
-                            produce (w := we) ens (@acc_sub we _ ζ (fun _ _ => I))) ;;
-            pure res⟨ω5⟩
-       end.
+        fun w δΔ => lift_heapspec (SHeapSpec.call_contract c δΔ).
 
       Definition call_lemma {Γ Δ} (lem : Lemma Δ) :
         ⊢ SStore Δ -> SStoreSpec Γ Γ Unit :=
-        match lem with
-        | MkLemma _ Σe δe req ens =>
-          fun w0 args =>
-            ⟨ ω1 ⟩ evars <- angelic_ctx id Σe ;;
-            ⟨ ω2 ⟩ _     <- assert_eq_nenv (subst δe evars) args⟨ω1⟩ ;;
-            let we := @MkWorld Σe ctx.nil in
-            ⟨ ω3 ⟩ _     <- consume (w := we) req (@acc_sub we _ evars (fun _ _ => I) ∘ ω2) ;;
-                           (let evars' := persist (A := Sub _) evars (ω2 ∘ ω3) in
-                            produce (w := we) ens (@acc_sub we _ evars' (fun _ _ => I)))
-        end.
+        fun w δΔ => lift_heapspec (SHeapSpec.call_lemma lem δΔ).
 
       Definition call_contract_debug {Γ Δ τ} (f : 𝑭 Δ τ) (c : SepContract Δ τ) :
         ⊢ SStore Δ -> SStoreSpec Γ Γ (STerm τ) :=
@@ -602,26 +576,25 @@ Module Type SymbolicExecOn
         end.
       Global Arguments exec _ {_ _} s {w} : simpl never.
 
-      Import Notations.
-
       Variable inline_fuel : nat.
 
-      Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
-        SStoreSpec Δ Δ Unit {| wctx := sep_contract_logic_variables c; wco := ctx.nil |} :=
-        match c with
-        | MkSepContract _ _ _ _ req result ens =>
-          ⟨ ω01 ⟩ _   <- produce (w:=@MkWorld _ _) req acc_refl ;;
-          ⟨ ω12 ⟩ res <- exec inline_fuel s ;;
-          consume
-            (w:=wsnoc (@MkWorld _ ctx.nil) (result∷τ)%ctx)
-            ens
-            (acc_snoc_left (acc_trans ω01 ω12) (result∷τ)%ctx res)
-        end.
+      Import SHeapSpec.notations.
 
-      Definition vcgen {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) : 𝕊 wnil :=
-        demonic_close
-          (exec_contract c s (fun w1 ω01 _ δ1 h1 => SymProp.block)
-             (sep_contract_localstore c) nil).
+      Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
+        ⊢ SHeapSpec Unit :=
+        fun w =>
+          match c with
+          | MkSepContract _ _ lvars pats req result ens =>
+              ⟨ θ1 ⟩ lenv  <- SHeapSpec.demonic_ctx id lvars ;;
+              ⟨ θ2 ⟩ _     <- SHeapSpec.produce req lenv ;;
+              let lenv2 := persist (A := Sub _) lenv θ2 in
+              ⟨ θ3 ⟩ res   <- evalStoreSpec (exec inline_fuel s) (subst pats lenv2) ;;
+              let lenv3 := persist (A := Sub _) lenv2 θ3 in
+              SHeapSpec.consume ens (sub_snoc lenv3 (result∷τ) res)
+          end.
+
+      Definition vcgen {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
+        fun w => SHeapSpec.run (exec_contract c s (w := w)).
 
     End Exec.
 
@@ -632,7 +605,7 @@ Module Type SymbolicExecOn
 
     Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition
-        (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body)))).
+        (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil)))).
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)
@@ -653,7 +626,7 @@ Module Type SymbolicExecOn
     Qed.
 
     Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body))))).
+      is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil))))).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       ValidContractReflectWithFuel 1 c body.
@@ -675,7 +648,7 @@ Module Type SymbolicExecOn
     Qed.
 
     Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
-      Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen default_config 1 c body)))).
+      Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen default_config 1 c body wnil)))).
 
     Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasure c body).
@@ -714,7 +687,7 @@ Module Type SymbolicExecOn
         | Some contract =>
             let contract' := extend_postcond_with_debug contract in
             let body      := FunDef f in
-            let vc        := vcgen default_config 1 contract' body in
+            let vc        := vcgen default_config 1 contract' body wnil in
             Some (count_to_stats (count_nodes vc empty))
         | None   => None
         end.

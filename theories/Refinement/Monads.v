@@ -87,6 +87,7 @@ Module Type RefinementMonadsOn
       ⊢ ℛ⟦RPureSpec RUnit -> RProp ⟧ CPureSpec.run (SPureSpec.run (w := w)).
     Proof.
       iIntros (c cs) "Hc".
+      unfold CPureSpec.run.
       iApply "Hc".
       now iIntros (w2 ω) "!> %k %K _".
     Qed.
@@ -97,6 +98,7 @@ Module Type RefinementMonadsOn
       iIntros (v va) "Hv".
       iIntros (k K) "Hk".
       iMod "Hk".
+      unfold CPureSpec.pure.
       now iApply "Hk".
     Qed.
 
@@ -130,7 +132,7 @@ Module Type RefinementMonadsOn
     Lemma refine_angelic (x : option LVar) {w} :
       ⊢ ℛ⟦∀ᵣ σ, RPureSpec (RVal σ)⟧ CPureSpec.angelic (SPureSpec.angelic (w := w) x).
     Proof.
-      unfold SPureSpec.angelic; simpl.
+      unfold CPureSpec.angelic, SPureSpec.angelic; simpl.
       iIntros (σ k K) "HK".
       rewrite knowing_acc_snoc_right.
       iIntros "[%v HSP]".
@@ -147,7 +149,7 @@ Module Type RefinementMonadsOn
     Lemma refine_demonic (x : option LVar) {w} :
       ⊢ ℛ⟦∀ᵣ σ, RPureSpec (RVal σ)⟧ CPureSpec.demonic (SPureSpec.demonic (w := w) x).
     Proof.
-      unfold SPureSpec.angelic; simpl.
+      unfold CPureSpec.demonic, SPureSpec.angelic; simpl.
       iIntros (σ k K) "HK HSP".
       iIntros (v).
       iSpecialize ("HK" $! _ (acc_snoc_right (b := fresh_lvar w x∷σ))).
@@ -275,9 +277,9 @@ Module Type RefinementMonadsOn
 
     Lemma refine_assert_pathcondition {w} :
       ⊢ ℛ⟦RMsg _ (RPathCondition -> RPureSpec RUnit)⟧
-        CPureSpec.assert_formula (SPureSpec.assert_pathcondition (w := w)).
+        CPureSpec.assert_pathcondition (SPureSpec.assert_pathcondition (w := w)).
     Proof.
-      unfold SPureSpec.assert_pathcondition, CPureSpec.assert_formula, CPureSpec.assert_pathcondition.
+      unfold SPureSpec.assert_pathcondition, CPureSpec.assert_pathcondition.
       iIntros (msg cC sC) "HC %cΦ %sΦ rΦ HΦ".
       destruct (combined_solver_spec w sC) as [[w1 [ζ sc1]] Hsolver|Hsolver].
       - rewrite safe_assert_triangular.
@@ -307,9 +309,9 @@ Module Type RefinementMonadsOn
 
     Lemma refine_assume_pathcondition {w} :
       ⊢ ℛ⟦RPathCondition -> RPureSpec RUnit⟧
-        CPureSpec.assume_formula (SPureSpec.assume_pathcondition (w := w)).
+        CPureSpec.assume_pathcondition (SPureSpec.assume_pathcondition (w := w)).
     Proof.
-      unfold SPureSpec.assume_pathcondition, CPureSpec.assume_formula, CPureSpec.assume_pathcondition.
+      unfold SPureSpec.assume_pathcondition, CPureSpec.assume_pathcondition.
       iIntros "%C %Cs HC %Φ %Φs HΦ Hsp %HC".
       destruct (combined_solver_spec _ Cs) as [[w1 [ζ sc1]] Hsolver|Hsolver].
       - rewrite safe_assume_triangular.
@@ -365,19 +367,22 @@ Module Type RefinementMonadsOn
       ⊢ ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧
         CPureSpec.angelic_binary (SPureSpec.angelic_binary (w := w)).
     Proof.
-      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %k %ks Hk [HSP | HSP]".
-      - iLeft. iApply ("Hc1" with "Hk HSP").
-      - iRight. iApply ("Hc2" with "Hk HSP").
+      unfold CPureSpec.angelic_binary, SPureSpec.angelic_binary.
+      iIntros (c1 cs1) "#Hc1 %c2 %cs2 #Hc2 %k %ks #Hk".
+      iApply refine_symprop_angelic_binary.
+      - now iApply "Hc1".
+      - now iApply "Hc2".
     Qed.
 
     Lemma refine_demonic_binary `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧
         CPureSpec.demonic_binary (SPureSpec.demonic_binary (w := w)).
     Proof.
-      iIntros (c1 cs1) "Hc1 %c2 %cs2 Hc2 %k %ks #Hk [HSP1 HSP2]".
-      iSplitL "Hc1 HSP1".
-      - iApply ("Hc1" with "Hk HSP1").
-      - iApply ("Hc2" with "Hk HSP2").
+      unfold CPureSpec.demonic_binary, SPureSpec.demonic_binary. simpl.
+      iIntros (c1 cs1) "#Hc1 %c2 %cs2 #Hc2 %k %ks #Hk".
+      iApply refine_symprop_demonic_binary.
+      - now iApply "Hc1".
+      - now iApply "Hc2".
     Qed.
 
     Lemma refine_angelic_list' `{RA : Rel SA CA} {w} :
@@ -386,7 +391,7 @@ Module Type RefinementMonadsOn
     Proof.
       iIntros "%v %sv Hv %vs %svs Hvs".
       iRevert (v sv) "Hv".
-      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list' v vs) (SPureSpec.angelic_list' (w := w) sv svs))%I) w with "[] Hvs").
+      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list' v vs) (SPureSpec.angelic_list' (w := w) sv svs))%I) w with "[] Hvs"); cbn.
       iSplit.
       - iApply refine_pure.
       - clear. iIntros (v sv vs svs) "Hv Hvs IHvs %v2 %sv2 Hv2".
@@ -400,7 +405,7 @@ Module Type RefinementMonadsOn
         CPureSpec.angelic_list (SPureSpec.angelic_list (w := w)).
     Proof.
       iIntros (msg vs svs) "Hvs".
-      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ∀ msg, ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list vs) (SPureSpec.angelic_list (w := w) msg svs))%I) w with "[] Hvs").
+      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ∀ msg, ℛ⟦RPureSpec RA⟧ (CPureSpec.angelic_list vs) (SPureSpec.angelic_list (w := w) msg svs))%I) w with "[] Hvs"); cbn.
       clear.
       iSplit.
       - now iApply refine_error.
@@ -415,7 +420,7 @@ Module Type RefinementMonadsOn
     Proof.
       iIntros "%v %sv Hv %vs %svs Hvs".
       iRevert (v sv) "Hv".
-      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list' v vs) (SPureSpec.demonic_list' (w := w) sv svs))%I) w with "[] Hvs").
+      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ∀ (v : CA) (sv : SA w), ℛ⟦RA⟧ v sv -∗ ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list' v vs) (SPureSpec.demonic_list' (w := w) sv svs))%I) w with "[] Hvs"); cbn.
       iSplit.
       - iApply refine_pure.
       - clear. iIntros (v sv vs svs) "Hv Hvs IHvs %v2 %sv2 Hv2".
@@ -429,7 +434,7 @@ Module Type RefinementMonadsOn
         CPureSpec.demonic_list (SPureSpec.demonic_list (w := w)).
     Proof.
       iIntros (vs svs) "Hvs".
-      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list vs) (SPureSpec.demonic_list (w := w) svs))%I) w with "[] Hvs").
+      iApply (RList_ind (R := RA) (MkRel (fun vs w svs => ℛ⟦RPureSpec RA⟧ (CPureSpec.demonic_list vs) (SPureSpec.demonic_list (w := w) svs))%I) w with "[] Hvs"); cbn.
       clear.
       iSplit.
       - now iApply refine_block.
@@ -453,7 +458,7 @@ Module Type RefinementMonadsOn
       ⊢ ℛ⟦RPureSpec (RConst F)⟧
         (CPureSpec.demonic_finite F) (@SPureSpec.demonic_finite F _ _ w).
     Proof.
-      unfold CPureSpec.angelic_finite, SPureSpec.angelic_finite.
+      unfold CPureSpec.demonic_finite, SPureSpec.demonic_finite.
       iApply (refine_demonic_list (RA := RConst F)).
       iStopProof.
       crushPredEntails3.
@@ -1494,22 +1499,24 @@ Module Type RefinementMonadsOn
     Import iris.bi.interface iris.proofmode.tactics.
 
     Definition RHeapSpec [SA CA] (RA : Rel SA CA) :
-    Rel (SHeapSpec SA) (CHeapSpec CA) := □ᵣ(RA -> RHeap -> ℙ) -> RHeap -> ℙ.
+      Rel (SHeapSpec SA) (CHeapSpec CA) :=
+      □ᵣ(RA -> RHeap -> ℙ) -> RHeap -> ℙ.
 
     Lemma refine_run {w} :
       ⊢ ℛ⟦RHeapSpec RUnit -> ℙ⟧ CHeapSpec.run (SHeapSpec.run (w := w)).
-    Proof. iIntros (m sm) "Hm".
-           iApply "Hm".
-           - iIntros (w2 ω2) "!> %u %su _ %h %sh Hh _".
-             now iPureIntro.
-           - now iApply (refine_nil (R := RChunk)).
+    Proof.
+      unfold CHeapSpec.run, SHeapSpec.run.
+      iIntros (m sm) "Hm".
+      iApply "Hm".
+      - iIntros (w2 ω2) "!> %u %su _ %h %sh Hh _".
+        now iPureIntro.
+      - now iApply (refine_nil (R := RChunk)).
     Qed.
 
     Lemma refine_lift_purespec `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RPureSpec RA -> RHeapSpec RA⟧
         CHeapSpec.lift_purespec (SHeapSpec.lift_purespec (w := w)).
     Proof.
-      unfold RPureSpec, RHeapSpec.
       unfold SHeapSpec.lift_purespec, CHeapSpec.lift_purespec.
       iIntros (m sm) "Hm %K %sK HK %h %sh Hh".
       iApply "Hm".
@@ -1541,6 +1548,7 @@ Module Type RefinementMonadsOn
       ⊢ ℛ⟦∀ᵣ σ, RHeapSpec (RVal σ)⟧
         (CHeapSpec.angelic) (SHeapSpec.angelic (w := w) x).
     Proof.
+      unfold CHeapSpec.angelic, SHeapSpec.angelic.
       iIntros (σ).
       iApply (refine_lift_purespec (RA := RVal _)).
       iApply (PureSpec.refine_angelic).
@@ -1550,44 +1558,70 @@ Module Type RefinementMonadsOn
       ⊢ ℛ⟦∀ᵣ σ, RHeapSpec (RVal σ)⟧
         (CHeapSpec.demonic) (SHeapSpec.demonic (w := w) x).
     Proof.
+      unfold CHeapSpec.demonic, SHeapSpec.demonic.
       iIntros (σ).
-      iApply (refine_lift_purespec (RA := RVal _)).
+      iApply refine_lift_purespec.
       iApply PureSpec.refine_demonic.
+    Qed.
+
+    Lemma refine_angelic_ctx {N : Set} {n : N -> LVar} {w} :
+      ⊢ ℛ⟦∀ᵣ Δ, RHeapSpec (RNEnv N Δ)⟧
+          CHeapSpec.angelic_ctx (SHeapSpec.angelic_ctx (w := w) n).
+    Proof.
+      unfold CHeapSpec.angelic_ctx, SHeapSpec.angelic_ctx.
+      iIntros (Δ).
+      iApply refine_lift_purespec.
+      iApply PureSpec.refine_angelic_ctx.
+    Qed.
+
+    Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} {w} :
+      ⊢ ℛ⟦∀ᵣ Δ, RHeapSpec (RNEnv N Δ)⟧
+          CHeapSpec.demonic_ctx (SHeapSpec.demonic_ctx (w := w) n).
+    Proof.
+      unfold CHeapSpec.demonic_ctx, SHeapSpec.demonic_ctx.
+      iIntros (Δ).
+      iApply refine_lift_purespec.
+      iApply PureSpec.refine_demonic_ctx.
     Qed.
 
     Lemma refine_angelic_binary `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RHeapSpec RA -> RHeapSpec RA -> RHeapSpec RA⟧
         CHeapSpec.angelic_binary (SHeapSpec.angelic_binary (w := w)).
     Proof.
-      iIntros (cm1 sm1) "rm1 %cm2 %sm2 rm2 %cΦ %sΦ #rΦ %ch %sh rh HSP".
-      iDestruct "HSP" as "[HSP|HSP]"; [iLeft|iRight].
-      - now iApply ("rm1" with "rΦ rh HSP").
-      - now iApply ("rm2" with "rΦ rh HSP").
+      unfold CHeapSpec.angelic_binary, SHeapSpec.angelic_binary.
+      iIntros (cm1 sm1) "#rm1 %cm2 %sm2 #rm2 %cΦ %sΦ #rΦ %ch %sh #rh".
+      iApply refine_symprop_angelic_binary.
+      - now iApply "rm1".
+      - now iApply "rm2".
     Qed.
 
     Lemma refine_demonic_binary `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RHeapSpec RA -> RHeapSpec RA -> RHeapSpec RA⟧
         CHeapSpec.demonic_binary (SHeapSpec.demonic_binary (w := w)).
     Proof.
-      iIntros (cm1 sm1) "rm1 %cm2 %sm2 rm2 %cΦ %sΦ #rΦ %ch %sh #rh HSP".
-      iDestruct "HSP" as "[HSP1 HSP2]"; iSplitL "HSP1 rm1".
-      - now iApply ("rm1" with "rΦ rh HSP1").
-      - now iApply ("rm2" with "rΦ rh HSP2").
+      unfold CHeapSpec.demonic_binary, SHeapSpec.demonic_binary.
+      iIntros (cm1 sm1) "#rm1 %cm2 %sm2 #rm2 %cΦ %sΦ #rΦ %ch %sh #rh".
+      iApply refine_symprop_demonic_binary.
+      - now iApply "rm1".
+      - now iApply "rm2".
     Qed.
 
     Lemma refine_debug `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RMsg _ (RHeapSpec RA -> RHeapSpec RA)⟧
         CHeapSpec.debug (SHeapSpec.debug (w := w)).
     Proof.
-      iIntros (msg cm sm) "rm %cΦ %sΦ rΦ %ch %sh rh HΦ".
-      iDestruct (elim_debugPred with "HΦ") as "HΦ".
-      now iApply ("rm" with "rΦ rh HΦ").
+      unfold CHeapSpec.debug, SHeapSpec.debug.
+      iIntros (msg cm sm) "rm %cΦ %sΦ #rΦ %ch %sh rh".
+      iApply refine_symprop_debug.
+      iApply "rm"; auto.
     Qed.
 
     Lemma refine_assert_formula {w} :
       ⊢ ℛ⟦RMsg _ (RFormula -> RHeapSpec RUnit)⟧
         CHeapSpec.assert_formula (SHeapSpec.assert_formula (w := w)).
     Proof.
+      unfold CHeapSpec.assert_formula, SHeapSpec.assert_formula,
+               CHeapSpec.lift_purespec.
       iIntros (msg cF sF) "rF %cΦ %sΦ rΦ %ch %sh rh".
       iApply (PureSpec.refine_assert_formula with "rF").
       iIntros (w1 θ1) "!> %cu %su ru".
@@ -1600,8 +1634,9 @@ Module Type RefinementMonadsOn
       ⊢ ℛ⟦RFormula -> RHeapSpec RUnit⟧
         CHeapSpec.assume_formula (SHeapSpec.assume_formula (w := w)).
     Proof.
+      unfold CHeapSpec.assume_formula, SHeapSpec.assume_formula.
       iIntros (cF sF) "rF".
-      iApply (refine_lift_purespec (RA := RUnit)).
+      iApply refine_lift_purespec.
       now iApply PureSpec.refine_assume_formula.
     Qed.
 
@@ -1638,11 +1673,11 @@ Module Type RefinementMonadsOn
       now iApply "rΦ".
     Qed.
 
-    Lemma refine_produce {Σ} (asn : Assertion Σ) {w} :
-      ⊢ ℛ⟦ □ᵣ (RInst (Sub Σ) (Valuation Σ) -> RHeapSpec RUnit)⟧
-        (CHeapSpec.produce asn) (fun w' (ω : Acc w w') => SHeapSpec.produce (w := w') asn).
+    Lemma refine_produce {Σ} (asn : Assertion Σ) :
+      ∀ w, ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RHeapSpec RUnit⟧
+               (CHeapSpec.produce asn) (SHeapSpec.produce (w := w) asn).
     Proof.
-      iInduction asn as [*|*|*|*|*|*|*|*] "IHasn"; iIntros (w2 ω2) "!> %cδ %sδ #rδ"; cbn - [RSat].
+      induction asn; cbn - [RSat]; iIntros (w δ sδ) "#rδ".
       - iApply refine_assume_formula.
         now iApply refine_instprop_subst.
       - iApply refine_produce_chunk.
@@ -1658,22 +1693,22 @@ Module Type RefinementMonadsOn
         destruct mr as [pc sub].
         destruct smr as [spc ssub].
         iDestruct "Hmr" as "(%e & Hmr)"; subst; cbn -[RSat].
+        iApply H.
         iDestruct (refine_inst_persist with "rδ") as "rδp".
-        iApply ("IHasn" $! pc).
         iApply (repₚ_cong₂ (T1 := Sub _) (T2 := Sub _) (T3 := Sub (Σ ▻▻ PatternCaseCtx pc)) env.cat env.cat with "[$rδp $Hmr]").
         intros. now rewrite inst_env_cat.
       - iApply (refine_bind (RA := RUnit) (RB := RUnit)).
-        + now iApply "IHasn".
+        + now iApply IHasn1.
         + iIntros (w1 θ1) "!> %u %su _".
-          iApply "IHasn1".
+          iApply IHasn2.
           iApply (refine_inst_persist with "rδ").
       - iApply (refine_demonic_binary (RA := RUnit)).
-        + now iApply "IHasn".
-        + now iApply "IHasn1".
+        + now iApply IHasn1.
+        + now iApply IHasn2.
       - iApply (refine_bind (RA := RVal τ) (RB := RUnit)).
         + iApply refine_demonic.
         + iIntros (w3 ω3) "!> %v %sv Hv".
-          iApply "IHasn".
+          iApply IHasn.
           iDestruct (refine_inst_persist with "rδ") as "rδp".
           iApply (repₚ_cong₂ (T1 := Sub _) (T2 := STerm _) (T3 := Sub (Σ ▻ ς∷τ)) (fun δ => env.snoc δ (ς∷τ)) (fun δ => env.snoc δ (ς∷τ)) with "[$rδp $Hv]").
           now intros.
@@ -1681,11 +1716,11 @@ Module Type RefinementMonadsOn
         now iApply (refine_pure (RA := RUnit)).
     Qed.
 
-    Lemma refine_consume {Σ} (asn : Assertion Σ) {w} :
-      ⊢ ℛ⟦□ᵣ (RInst (Sub Σ) (Valuation Σ) -> RHeapSpec RUnit)⟧
-        (CHeapSpec.consume asn) (fun w' (ω : Acc w w') => SHeapSpec.consume (w := w') asn).
+    Lemma refine_consume {Σ} (asn : Assertion Σ) :
+      ∀ w, ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RHeapSpec RUnit⟧
+               (CHeapSpec.consume asn) (SHeapSpec.consume asn (w := w) ).
     Proof.
-      iInduction asn as [*|*|*|*|*|*|*|*] "IHasn"; iIntros (w2 ω2) "!> %cδ %sδ #rδ"; cbn - [RSat].
+      induction asn; cbn - [RSat]; iIntros (w δ sδ) "#rδ".
       - iApply refine_assert_formula.
         now iApply refine_instprop_subst.
       - iApply refine_consume_chunk.
@@ -1702,22 +1737,21 @@ Module Type RefinementMonadsOn
         destruct smr as [spc ssub].
         iDestruct "Hmr" as "(%e & Hmr)"; subst; cbn -[RSat].
         iDestruct (refine_inst_persist with "rδ") as "rδp".
-        iSpecialize ("IHasn" $! pc).
-        iApply "IHasn".
+        iApply H.
         iApply (repₚ_cong₂ (T1 := Sub _) (T2 := Sub _) (T3 := Sub (Σ ▻▻ PatternCaseCtx pc)) env.cat env.cat with "[$rδp $Hmr]").
         intros. now rewrite inst_env_cat.
       - iApply (refine_bind (RA := RUnit) (RB := RUnit)).
-        + now iApply "IHasn".
+        + now iApply IHasn1.
         + iIntros (w1 θ1) "!> %u %su _".
-          iApply "IHasn1".
+          iApply IHasn2.
           iApply (refine_inst_persist with "rδ").
       - iApply (refine_angelic_binary (RA := RUnit)).
-        + now iApply "IHasn".
-        + now iApply "IHasn1".
+        + now iApply IHasn1.
+        + now iApply IHasn2.
       - iApply (refine_bind (RA := RVal τ) (RB := RUnit)).
         + iApply refine_angelic.
         + iIntros (w3 ω3) "!> %v %sv Hv".
-          iApply "IHasn".
+          iApply IHasn.
           iDestruct (refine_inst_persist with "rδ") as "rδp".
           iApply (repₚ_cong₂ (T1 := Sub _) (T2 := STerm _) (T3 := Sub (Σ ▻ ς∷τ)) (fun δ => env.snoc δ (ς∷τ)) (fun δ => env.snoc δ (ς∷τ)) with "[$rδp $Hv]").
           now intros.
@@ -1729,6 +1763,7 @@ Module Type RefinementMonadsOn
       ⊢ ℛ⟦RHeapSpec (RVal τ)⟧ (CHeapSpec.read_register reg) (SHeapSpec.read_register reg (w := w)).
     Proof.
       iIntros (Φ sΦ) "rΦ %ch %sh rh".
+      unfold CHeapSpec.read_register, SHeapSpec.read_register.
       iApply (PureSpec.refine_read_register with "rh").
       iIntros (w1 θ1) "!> %vh %svh  Hvh".
       destruct vh as [v h2].
@@ -1741,6 +1776,7 @@ Module Type RefinementMonadsOn
       ⊢ ℛ⟦RVal τ -> RHeapSpec (RVal τ)⟧ (CHeapSpec.write_register reg) (SHeapSpec.write_register reg (w := w)).
     Proof.
       iIntros (v sv) "rv %Φ %sΦ rΦ %h %sh rh".
+      unfold CHeapSpec.write_register, SHeapSpec.write_register.
       iApply (PureSpec.refine_write_register with "rv rh").
       iIntros (w1 θ1) "!> %vh %svh Hvh".
       destruct vh as [v2 h2].

@@ -151,6 +151,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
   Module CPureSpec.
 
     Definition run : CPureSpec unit -> Prop :=
+      (* We use the FINISH alias of True for the purpose
+         of counting nodes in a shallowly-generated VC. *)
       fun m => m (fun _ => FINISH).
 
     Definition pure {A : Type} : A -> CPureSpec A :=
@@ -174,8 +176,27 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
     Definition block {A} : CPureSpec A :=
       fun Φ => TRUE.
+    Definition debug {A} : CPureSpec A -> CPureSpec A :=
+      fun m => m.
     Definition error {A} : CPureSpec A :=
       fun Φ => FALSE.
+
+    Definition assert_pathcondition : Prop -> CPureSpec unit :=
+      fun C Φ => C /\ Φ tt.
+    Definition assume_pathcondition : Prop -> CPureSpec unit :=
+      fun C Φ => C -> Φ tt.
+
+    Definition assert_formula : Prop -> CPureSpec unit :=
+      fun fml => assert_pathcondition fml.
+    Definition assume_formula : Prop -> CPureSpec unit :=
+      fun fml => assume_pathcondition fml.
+
+    Definition angelic_binary {A} :
+      CPureSpec A -> CPureSpec A -> CPureSpec A :=
+      fun m1 m2 Φ => m1 Φ \/ m2 Φ.
+    Definition demonic_binary {A} :
+      CPureSpec A -> CPureSpec A -> CPureSpec A :=
+      fun m1 m2 Φ => m1 Φ /\ m2 Φ.
 
     Definition angelic (σ : Ty) : CPureSpec (Val σ) :=
       fun Φ => exists (v : Val σ), Φ v.
@@ -203,23 +224,6 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
                      pure (vs ► (x∷σ ↦ v))
         end%ctx.
     #[global] Arguments demonic_ctx {N} Δ.
-
-    Definition assert_pathcondition : Prop -> CPureSpec unit :=
-      fun C Φ => C /\ Φ tt.
-    Definition assume_pathcondition : Prop -> CPureSpec unit :=
-      fun C Φ => C -> Φ tt.
-
-    Definition assert_formula : Prop -> CPureSpec unit :=
-      fun fml => assert_pathcondition fml.
-    Definition assume_formula : Prop -> CPureSpec unit :=
-      fun fml => assume_pathcondition fml.
-
-    Definition angelic_binary {A} :
-      CPureSpec A -> CPureSpec A -> CPureSpec A :=
-      fun m1 m2 Φ => m1 Φ \/ m2 Φ.
-    Definition demonic_binary {A} :
-      CPureSpec A -> CPureSpec A -> CPureSpec A :=
-      fun m1 m2 Φ => m1 Φ /\ m2 Φ.
 
     Definition angelic_list' {A} :
       A -> list A -> CPureSpec A :=
@@ -283,9 +287,6 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       #[global] Arguments new_pattern_match {σ} pat v _.
 
     End PatternMatching.
-
-    Definition debug {A} : CPureSpec A -> CPureSpec A :=
-      fun m => m.
 
     (* The paper uses asserted equalities between multiple types, but the
        symbolic executor can in fact only assert equalities between symbolic
@@ -427,14 +428,16 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MA ==> MPureSpec RB) f ->
       Monotonic (MPureSpec RB) (bind m f).
     Proof. intros rm rf. eapply mon_bind'; eauto. Qed.
-    #[global] Typeclasses Opaque bind.
 
-    #[export] Instance mon_error `{MA : relation A} :
-      Monotonic (MPureSpec MA) error.
-    Proof. firstorder. Qed.
     #[export] Instance mon_block `{MA : relation A} :
       Monotonic (MPureSpec MA) block.
-    Proof. firstorder. Qed.
+    Proof. easy. Qed.
+    #[export] Instance mon_debug `{MA : relation A} m :
+      Monotonic (MPureSpec MA) m -> Monotonic (MPureSpec MA) (debug m).
+    Proof. easy. Qed.
+    #[export] Instance mon_error `{MA : relation A} :
+      Monotonic (MPureSpec MA) error.
+    Proof. easy. Qed.
 
     #[export] Instance mon_angelic {σ} :
       Monotonic (MPureSpec eq) (angelic σ).
@@ -443,12 +446,12 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MPureSpec eq) (demonic σ).
     Proof. intros ? ? Φ. apply all_impl_morphism; firstorder. Qed.
 
-    #[export] Instance mon_angelic_ctx {N : Set} {Δ} :
-      Monotonic (MPureSpec eq) (@angelic_ctx N Δ).
-    Proof. induction Δ; cbn [angelic_ctx]; typeclasses eauto. Qed.
-    #[export] Instance mon_demonic_ctx {N : Set} {Δ} :
-      Monotonic (MPureSpec eq) (@demonic_ctx N Δ).
-    Proof. induction Δ; cbn [demonic_ctx]; typeclasses eauto. Qed.
+    #[export] Instance mon_assert_pathcondition fml :
+      Monotonic (MPureSpec eq) (assert_pathcondition fml).
+    Proof. firstorder. Qed.
+    #[export] Instance mon_assume_pathcondition fml :
+      Monotonic (MPureSpec eq) (assume_pathcondition fml).
+    Proof. firstorder. Qed.
 
     #[export] Instance mon_assert_formula fml :
       Monotonic (MPureSpec eq) (assert_formula fml).
@@ -465,6 +468,17 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MPureSpec MA) m1 -> Monotonic (MPureSpec MA) m2 ->
       Monotonic (MPureSpec MA) (demonic_binary m1 m2).
     Proof. firstorder. Qed.
+
+    #[global] Typeclasses Opaque run pure bind block debug error angelic demonic
+      assert_pathcondition assume_pathcondition assert_formula assume_formula
+      angelic_binary demonic_binary.
+
+    #[export] Instance mon_angelic_ctx {N : Set} {Δ} :
+      Monotonic (MPureSpec eq) (@angelic_ctx N Δ).
+    Proof. induction Δ; cbn [angelic_ctx]; typeclasses eauto. Qed.
+    #[export] Instance mon_demonic_ctx {N : Set} {Δ} :
+      Monotonic (MPureSpec eq) (@demonic_ctx N Δ).
+    Proof. induction Δ; cbn [demonic_ctx]; typeclasses eauto. Qed.
 
     #[export] Instance mon_angelic_list' {A} {x : A} {xs : list A} :
       Monotonic (MPureSpec eq) (angelic_list' x xs).
@@ -496,11 +510,6 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     #[export] Instance mon_new_pattern_match {N σ} (pat : @Pattern N σ) v :
       Monotonic (MPureSpec eq) (@new_pattern_match _ _ pat v).
     Proof. typeclasses eauto. Qed.
-
-    #[export] Instance mon_debug `{MA : relation A} m :
-      Monotonic (MPureSpec MA) m -> Monotonic (MPureSpec MA) (debug m).
-    Proof. now unfold debug. Qed.
-    #[global] Typeclasses Opaque debug.
 
     #[export] Instance mon_assert_eq_env {Δ E1 E2} :
       Monotonic (MPureSpec eq) (@assert_eq_env Δ E1 E2).
@@ -547,6 +556,16 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) :
       Monotonic (Val τ ::> SCHeap ::> MPureSpec eq) (write_register reg).
     Proof. unfold write_register. typeclasses eauto. Qed.
+
+    #[global] Typeclasses Opaque angelic_ctx demonic_ctx angelic_list'
+      demonic_list' angelic_list demonic_list angelic_finite demonic_finite
+      angelic_pattern_match demonic_pattern_match new_pattern_match
+      assert_eq_env assert_eq_nenv assume_eq_env assume_eq_nenv assert_eq_chunk
+      replay_aux replay produce_chunk consume_chunk read_register write_register.
+
+    Lemma wp_bind {A B} (m : CPureSpec A) (f : A -> CPureSpec B) (Φ : B -> Prop) :
+      bind m f Φ <-> m (fun a => f a Φ).
+    Proof. easy. Qed.
 
     Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
       angelic_ctx Δ POST <-> exists vs : NamedEnv Val Δ, POST vs.
@@ -719,8 +738,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
       Lemma wp_consume_chunk (c : SCChunk) (h : SCHeap) (Φ : SCHeap -> Prop) :
         consume_chunk c h Φ ->
-        (interpret_scheap h ⊢ interpret_scchunk c ∗
-         (∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ h'⌝))%I.
+        (interpret_scheap h ⊢
+         interpret_scchunk c ∗ ∃ h', interpret_scheap h' ∧ ⌜Φ h'⌝).
       Proof.
         unfold consume_chunk. cbn.
         rewrite wp_angelic_list.
@@ -737,7 +756,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Lemma wp_produce_chunk (c : SCChunk) (h : SCHeap) (Φ : SCHeap -> Prop) :
         produce_chunk c h Φ ->
         (interpret_scheap h ⊢
-           interpret_scchunk c -∗ ∃ h', interpret_scheap h' ∧ ⌜Φ h'⌝).
+         interpret_scchunk c -∗ ∃ h', interpret_scheap h' ∧ ⌜Φ h'⌝).
       Proof.
         cbn. intros HΦ. apply wand_sep_adjoint.
         apply bi.exist_intro' with (c :: h), bi.and_intro.
@@ -745,6 +764,38 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         - now apply bi.pure_intro.
       Qed.
       #[global] Arguments produce_chunk : simpl never.
+
+      Lemma wp_read_register {τ} (reg : 𝑹𝑬𝑮 τ) (h0 : SCHeap) Φ :
+        read_register reg h0 Φ ->
+        interpret_scheap h0 ⊢
+        ∃ v, lptsreg reg v ∗
+             (lptsreg reg v -∗ ∃ h1, interpret_scheap h1 ∧ ⌜Φ (v, h1)⌝).
+      Proof.
+        cbv [read_register angelic pure bind].
+        intros [v ->%wp_consume_chunk].
+        apply bi.exist_intro' with v.
+        apply bi.sep_mono'. easy.
+        apply bi.exist_elim. intros h1.
+        apply bi.pure_elim_r.
+        intros ->%wp_produce_chunk.
+        now apply bi.wand_mono'.
+      Qed.
+
+      Lemma wp_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : Val τ) (h0 : SCHeap) Φ :
+        write_register reg vnew h0 Φ ->
+        interpret_scheap h0 ⊢
+        ∃ vold, lptsreg reg vold ∗
+                (lptsreg reg vnew -∗ ∃ h1, interpret_scheap h1 ∧ ⌜Φ (vnew, h1)⌝).
+      Proof.
+        cbv [write_register angelic pure bind].
+        intros [v ->%wp_consume_chunk].
+        apply bi.exist_intro' with v.
+        apply bi.sep_mono'. easy.
+        apply bi.exist_elim. intros h1.
+        apply bi.pure_elim_r.
+        intros ->%wp_produce_chunk.
+        now apply bi.wand_mono'.
+      Qed.
 
     End WithBI.
 
@@ -760,6 +811,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
   Module CHeapSpec.
 
     Definition run : CHeapSpec unit -> Prop :=
+      (* We use the FINISH alias of True for the purpose
+         of counting nodes in a shallowly-generated VC. *)
       fun m => m (fun _ h1 => FINISH) List.nil.
 
     Definition lift_purespec {A : Type} :
@@ -782,6 +835,14 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Notation "ma ;; mb" := (bind ma (fun _ => mb)).
     End notations.
 
+    Definition debug {A} : CHeapSpec A -> CHeapSpec A :=
+      fun m => m.
+
+    Definition angelic_binary {A} : CHeapSpec A -> CHeapSpec A -> CHeapSpec A :=
+      fun m1 m2 Φ h => m1 Φ h \/ m2 Φ h.
+    Definition demonic_binary {A} : CHeapSpec A -> CHeapSpec A -> CHeapSpec A :=
+      fun m1 m2 Φ h => m1 Φ h /\ m2 Φ h.
+
     Definition angelic (σ : Ty) : CHeapSpec (Val σ) :=
       lift_purespec (CPureSpec.angelic σ).
     #[global] Arguments angelic σ Φ : rename.
@@ -789,13 +850,12 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       lift_purespec (CPureSpec.demonic σ).
     #[global] Arguments demonic σ Φ : rename.
 
-    Definition angelic_binary {A} : CHeapSpec A -> CHeapSpec A -> CHeapSpec A :=
-      fun m1 m2 Φ h => m1 Φ h \/ m2 Φ h.
-    Definition demonic_binary {A} : CHeapSpec A -> CHeapSpec A -> CHeapSpec A :=
-      fun m1 m2 Φ h => m1 Φ h /\ m2 Φ h.
-
-    Definition debug {A} : CHeapSpec A -> CHeapSpec A :=
-      fun m => m.
+    Definition angelic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv Val Δ) :=
+      lift_purespec (CPureSpec.angelic_ctx Δ).
+    #[global] Arguments angelic_ctx {N} Δ.
+    Definition demonic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv Val Δ) :=
+      lift_purespec (CPureSpec.demonic_ctx Δ).
+    #[global] Arguments demonic_ctx {N} Δ.
 
     Definition assert_formula : Prop -> CHeapSpec unit :=
       fun fml => lift_purespec (CPureSpec.assert_formula fml).
@@ -880,6 +940,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           produce ens ι
       end.
 
+    #[export] Instance mon_run :
+      Monotonic (MHeapSpec eq ==> impl) run.
+    Proof. intros m1 m2 mm. now apply mm. Qed.
+
     Lemma mon_lift_purespec' `{MA : relation A} :
       Monotonic (MPureSpec MA ==> MHeapSpec MA) (lift_purespec).
     Proof. intros ? ? rm ? ? rΦ h. apply rm. intros ? ? ra. now apply rΦ. Qed.
@@ -910,6 +974,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MHeapSpec RB) (bind m f).
     Proof. intros rm rf. eapply mon_bind'; eauto. Qed.
 
+    #[export] Instance mon_debug `{MA : relation A} m :
+      Monotonic (MHeapSpec MA) m -> Monotonic (MHeapSpec MA) (debug m).
+    Proof. now unfold debug. Qed.
+
     #[export] Instance mon_angelic_binary `{MA : relation A} m1 m2 :
       Monotonic (MHeapSpec MA) m1 -> Monotonic (MHeapSpec MA) m2 ->
       Monotonic (MHeapSpec MA) (angelic_binary m1 m2).
@@ -920,6 +988,9 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MHeapSpec MA) (demonic_binary m1 m2).
     Proof. firstorder. Qed.
 
+    #[global] Typeclasses Opaque run lift_purespec pure bind debug angelic_binary
+      demonic_binary.
+
     #[export] Instance mon_angelic σ :
       Monotonic (MHeapSpec eq) (angelic σ).
     Proof. typeclasses eauto. Qed.
@@ -927,10 +998,12 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MHeapSpec eq) (demonic σ).
     Proof. typeclasses eauto. Qed.
 
-    #[export] Instance mon_debug `{MA : relation A} m :
-      Monotonic (MHeapSpec MA) m -> Monotonic (MHeapSpec MA) (debug m).
-    Proof. now unfold debug. Qed.
-    #[global] Typeclasses Opaque debug.
+    #[export] Instance mon_assert_formula fml :
+      Monotonic (MHeapSpec eq) (assert_formula fml).
+    Proof. firstorder. Qed.
+    #[export] Instance mon_assume_formula fml :
+      Monotonic (MHeapSpec eq) (assume_formula fml).
+    Proof. firstorder. Qed.
 
     #[export] Instance mon_produce_chunk c : Monotonic (MHeapSpec eq) (produce_chunk c).
     Proof.
@@ -945,14 +1018,6 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       apply CPureSpec.mon_consume_chunk.
       intros ? ? ->. now apply mΦ.
     Qed.
-
-    #[export] Instance mon_produce {Σ} (asn : Assertion Σ) ι :
-      Monotonic (MHeapSpec eq) (produce asn ι).
-    Proof. induction asn; cbn; typeclasses eauto. Qed.
-
-    #[export] Instance mon_consume {Σ} (asn : Assertion Σ) ι :
-      Monotonic (MHeapSpec eq) (consume asn ι).
-    Proof. induction asn; cbn; typeclasses eauto. Qed.
 
     #[export] Instance mon_read_register {τ} (reg : 𝑹𝑬𝑮 τ) :
       Monotonic (MHeapSpec eq) (read_register reg).
@@ -970,6 +1035,17 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       intros ? [] ->. now apply mΦ.
     Qed.
 
+    #[global] Typeclasses Opaque angelic demonic assert_formula assume_formula
+      produce_chunk consume_chunk read_register write_register.
+
+    #[export] Instance mon_produce {Σ} (asn : Assertion Σ) ι :
+      Monotonic (MHeapSpec eq) (produce asn ι).
+    Proof. induction asn; cbn; typeclasses eauto. Qed.
+
+    #[export] Instance mon_consume {Σ} (asn : Assertion Σ) ι :
+      Monotonic (MHeapSpec eq) (consume asn ι).
+    Proof. induction asn; cbn; typeclasses eauto. Qed.
+
     #[export] Instance mon_call_contract
       [Δ τ] (c : SepContract Δ τ) (args : CStore Δ) :
       Monotonic (MHeapSpec eq) (call_contract c args).
@@ -979,6 +1055,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       [Δ] (lem : Lemma Δ) (vs : CStore Δ) :
       Monotonic (MHeapSpec eq) (call_lemma lem vs).
     Proof. destruct lem; typeclasses eauto. Qed.
+
+    #[global] Typeclasses Opaque produce consume call_contract call_lemma.
 
     Section WithBI.
 

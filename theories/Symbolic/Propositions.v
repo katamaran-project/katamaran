@@ -2324,6 +2324,14 @@ Module Type LogSymPropOn
     Section logicalrelation.
       Import SymProp logicalrelation logicalrelation.notations.
 
+      Lemma refine_symprop_debug {w : World} PC PS (msg : AMessage w) :
+        ⊢ ℛ⟦RProp⟧ PC PS -∗ ℛ⟦RProp⟧ PC (debug msg PS).
+      Proof.
+        iIntros "HP HPS". cbn.
+        iDestruct (elim_debugPred with "HPS") as "HPS".
+        iApply ("HP" with "HPS").
+      Qed.
+
       Lemma refine_symprop_angelic_binary {w : World} :
         ⊢ ℛ⟦RProp -> RProp -> RProp⟧ (@or) (@angelic_binary w).
       Proof.

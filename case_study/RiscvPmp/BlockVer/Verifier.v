@@ -95,8 +95,8 @@ Module BlockVerificationDerived2.
   Definition produce_chunk : ⊢ Chunk -> M Unit := SStoreSpec.produce_chunk.
   Definition consume_chunk : ⊢ Chunk -> M Unit := SStoreSpec.consume_chunk.
 
-  Definition produce : ⊢ Assertion -> □(M Unit) := SStoreSpec.produce.
-  Definition consume : ⊢ Assertion -> □(M Unit) := SStoreSpec.consume.
+  Definition produce {Σ} (asn : Assertion Σ) : ⊢ Sub Σ -> M Unit := SStoreSpec.produce asn.
+  Definition consume {Σ} (asn : Assertion Σ) : ⊢ Sub Σ -> M Unit := SStoreSpec.consume asn.
 
   Notation "ω ∣ x <- ma ;; mb" :=
     (bind ma (fun _ ω x => mb))
@@ -146,10 +146,11 @@ Module BlockVerificationDerived2.
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) : M Unit Σ :=
     ω1 ∣ a <- @demonic _ _ ;;
-    ω2 ∣ _ <- produce (w := wsnoc _ _) req (acc_snoc_left ω1 _ a) ;;
+    ω2 ∣ _ <- produce  req (sub_snoc (sub_acc ω1) _ a) ;;
     ω3 ∣ na <- @exec_block_addr b _ (persist__term a ω2) (persist__term a ω2) ;;
-    consume (w := wsnoc (wsnoc _ ("a"::ty_xlenbits)) ("an"::ty_xlenbits)) ens
-      (acc_snoc_left (acc_snoc_left (ω1 ∘ ω2 ∘ ω3) _ (persist__term a (ω2 ∘ ω3))) ("an"::ty_xlenbits) na).
+    consume ens
+      (sub_snoc (sub_snoc (sub_acc (ω1 ∘ ω2 ∘ ω3)) ("a"∷ty_xlenbits) (persist__term a (ω2 ∘ ω3)))
+         ("an"∷ty_xlenbits) na).
 
   (* This is a VC for triples, for doubles we probably need to talk
      about the continuation of a block. *)
@@ -242,10 +243,10 @@ Module BlockVerification3.
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AnnotInstr)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) : M Unit Σ :=
     ω1 ∣ a <- @demonic _ _ ;;
-    ω2 ∣ _ <- produce (w := wsnoc _ _) req (acc_snoc_left ω1 _ a) ;;
+    ω2 ∣ _ <- produce req (sub_snoc (sub_acc ω1) _ a) ;;
     ω3 ∣ na <- @exec_block_addr b _ (persist__term a ω2) (persist__term a ω2) ;;
-    consume (w := wsnoc (wsnoc _ ("a"::ty_xlenbits)) ("an"::ty_xlenbits)) ens
-      (acc_snoc_left (acc_snoc_left (ω1 ∘ ω2 ∘ ω3) _ (persist__term a (ω2 ∘ ω3))) ("an"::ty_xlenbits) na).
+    consume ens
+      (sub_snoc (sub_snoc (sub_acc (ω1 ∘ ω2 ∘ ω3)) _ (persist__term a (ω2 ∘ ω3))) ("an"::ty_xlenbits) na).
 
   (* This is a VC for triples, for doubles we probably need to talk *)
   (*    about the continuation of a block. *)
@@ -277,8 +278,8 @@ Module BlockVerificationDerived2Sound.
   Definition produce_chunk : SCChunk -> M unit := CStoreSpec.produce_chunk.
   Definition consume_chunk : SCChunk -> M unit := CStoreSpec.consume_chunk.
 
-  Definition produce {Σ} : Valuation Σ -> Assertion Σ -> M unit := CStoreSpec.produce.
-  Definition consume {Σ} : Valuation Σ -> Assertion Σ -> M unit := CStoreSpec.consume.
+  Definition produce {Σ} : Assertion Σ -> Valuation Σ -> M unit := CStoreSpec.produce.
+  Definition consume {Σ} : Assertion Σ -> Valuation Σ -> M unit := CStoreSpec.consume.
 
   Notation "x <- ma ;; mb" :=
     (bind ma (fun x => mb))
@@ -347,16 +348,16 @@ Module BlockVerificationDerived2Sound.
   Definition exec_double_addr__c {Σ : World} (ι : Valuation Σ)
     (req : Assertion (wsnoc Σ ("a"∷ty_xlenbits))) (b : list AST) : M (Val ty_xlenbits) :=
     an <- @demonic _ ;;
-    _ <- produce (env.snoc ι ("a"::ty_xlenbits) an) req ;;
+    _ <- produce req (env.snoc ι ("a"::ty_xlenbits) an)  ;;
     @exec_block_addr__c b an an.
 
   Definition exec_triple_addr__c {Σ : LCtx} (ι : Valuation Σ)
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) : M unit :=
     a <- @demonic _ ;;
-    _ <- produce (ι ► ( _ ↦ a )) req ;;
+    _ <- produce req (ι ► ( _ ↦ a ))  ;;
     na <- @exec_block_addr__c b a a ;;
-    consume (ι ► ( ("a"::ty_xlenbits) ↦ a ) ► ( ("an"::ty_xlenbits) ↦ na )) ens.
+    consume ens (ι ► ( ("a"::ty_xlenbits) ↦ a ) ► ( ("an"::ty_xlenbits) ↦ na )).
 
   Import ModalNotations.
 
@@ -435,9 +436,9 @@ Module BlockVerification3Sound.
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AnnotInstr)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) : M unit :=
     a <- @demonic _ ;;
-    _ <- produce (ι ► ( _ ↦ a )) req ;;
+    _ <- produce req (ι ► ( _ ↦ a )) ;;
     na <- @exec_block_addr__c b a a ;;
-    consume (ι ► ( ("a"::ty_xlenbits) ↦ a ) ► ( ("an"::ty_xlenbits) ↦ na )) ens.
+    consume ens (ι ► ( ("a"::ty_xlenbits) ↦ a ) ► ( ("an"::ty_xlenbits) ↦ na )).
 
   Import ModalNotations.
 
@@ -653,26 +654,21 @@ Module BlockVerificationDerived2Sem.
     intros Hexec.
     iIntros (a) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
     specialize (Hexec a).
-    unfold bind, CStoreSpec.bind, produce in Hexec.
-    iApply (produce_sound (fun _ =>
-                             (lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
-                             (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
-                             WP_loop)%I [env] []%list with "[$Hpre //] [$Hpc $Hnpc $Hinstrs //] [$Hk]").
-    revert Hexec.
-    apply produce_monotonic.
-    iIntros (_ h Hexec) "Hh (Hpc & Hnpc & Hinstrs) Hk".
+    unfold bind, CStoreSpec.bind, produce, CStoreSpec.produce, CStoreSpec.lift_heapspec in Hexec.
+    apply CHeapSpec.produce_sound in Hexec.
+    iPoseProof (Hexec with "[//] Hpre") as "(%h & Hh & %Hexec')". clear Hexec.
     iApply (sound_exec_block_addr h
                   (fun an δ => asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ an])%I
              with "[$Hh $Hpc $Hnpc $Hinstrs] Hk").
-    revert Hexec.
+    revert Hexec'.
     apply mono_exec_block_addr.
     intros res h2 Hcons. cbn.
     unfold liftP.
     rewrite <- (bi.sep_True (asn.interpret _ _)).
-    eapply (consume_sound (fun _ => True%I) [env] ).
+    iApply consume_sound.
     revert Hcons.
-    apply consume_monotonic.
-    now iIntros.
+    apply CHeapSpec.mon_consume.
+    intros _ _ _ h3 _. auto.
   Qed.
 
   Lemma sound_VC__addr `{sailGS Σ} {Γ} {pre post instrs} :
@@ -806,7 +802,7 @@ Module BlockVerification3Sem.
           now iApply "Hk".
         }
         pose proof (Hlem := lemSem _ lem).
-        destruct (call_lemma_sound _ _ h _ _ Hcalllemma).
+        destruct (call_lemma_sound _ _ _ _ Hcalllemma).
         cbn in *.
         iPoseProof (H0 with "Hh") as "(%ι & _ & Hreq & Hk2)".
         iApply ("Hk2" with "[Hreq] [$Hpc $Hnpc $Hinstrs] Hk").
@@ -830,25 +826,20 @@ Module BlockVerification3Sem.
     iIntros (a) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
     specialize (Hexec a).
     unfold bind, CStoreSpec.bind, produce in Hexec.
-    iApply ((produce_sound (fun _ =>
-    (lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
-      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
-      WP_loop)%I [env] []%list) with "[$Hpre //] [$Hpc $Hnpc $Hinstrs //] [$Hk]").
-    revert Hexec.
-    apply produce_monotonic.
-    iIntros (_ h Hexec) "Hh (Hpc & Hnpc & Hinstrs) Hk".
+    apply CHeapSpec.produce_sound in Hexec.
+    iPoseProof (Hexec with "[//] Hpre") as "(%h & Hh & %Hexec')". clear Hexec.
     iApply ((sound_exec_block_addr (apc := a) h
                   (fun an δ => asn.interpret post ι.["a"∷ty_word ↦ a].["an"∷ty_word ↦ an])%I)
                with "[$Hh $Hpc $Hnpc $Hinstrs] Hk"); first easy.
-    revert Hexec.
+    revert Hexec'.
     apply mono_exec_block_addr.
     intros res h2 Hcons. cbn.
     unfold liftP.
     rewrite <-(bi.sep_True (asn.interpret _ _)).
-    eapply (consume_sound (fun _ => True%I) [env]).
+    eapply consume_sound.
     revert Hcons.
-    apply consume_monotonic.
-    now iIntros.
+    apply CHeapSpec.mon_consume.
+    intros _ _ _ h3 _. auto.
   Qed.
 
   Lemma sound_VC__addr `{sailGS Σ} {Γ} {pre post instrs} :

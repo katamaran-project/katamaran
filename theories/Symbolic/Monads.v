@@ -970,6 +970,16 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun w σ => lift_purespec (SPureSpec.demonic x σ).
     #[global] Arguments demonic x [w] σ Φ : rename.
 
+    Definition angelic_ctx {N : Set} (n : N -> LVar) :
+      ⊢ ∀ Δ : NCtx N Ty, SHeapSpec (fun w => NamedEnv (Term w) Δ) :=
+    fun w Δ => lift_purespec (SPureSpec.angelic_ctx n Δ).
+    #[global] Arguments angelic_ctx {N} n [w] Δ : rename.
+
+    Definition demonic_ctx {N : Set} (n : N -> LVar) :
+      ⊢ ∀ Δ : NCtx N Ty, SHeapSpec (fun w => NamedEnv (Term w) Δ) :=
+    fun w Δ => lift_purespec (SPureSpec.demonic_ctx n Δ).
+    #[global] Arguments demonic_ctx {N} n [w] Δ : rename.
+
     Definition angelic_binary {A} : ⊢ SHeapSpec A -> SHeapSpec A -> SHeapSpec A :=
       fun w m1 m2 Φ h =>
         SymProp.angelic_binary (m1 Φ h) (m2 Φ h).
