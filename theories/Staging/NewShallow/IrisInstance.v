@@ -518,7 +518,7 @@ Module Type IrisAdequacy
   #[export] Existing Instance reg_pre_inG.
 
 
-  Instance subG_sailGpreS {Σ} : subG sailΣ Σ -> sailGpreS Σ.
+  #[export] Instance subG_sailGpreS {Σ} : subG sailΣ Σ -> sailGpreS Σ.
   Proof.
     intros.
     lazymatch goal with

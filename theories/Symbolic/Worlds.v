@@ -575,7 +575,7 @@ Module Type WorldsOn
 
   End EntailmentDefinitions.
 
-  #[export] Ltac crushPredEntailsMatch1 :=
+  Ltac crushPredEntailsMatch1 :=
     match goal with
     | [ H : ?P /\ ?Q |- _ ] => destruct H
     | [ H : ?P \/ ?Q |- _ ] => destruct H
@@ -620,7 +620,7 @@ Module Type WorldsOn
 (* Note domi: This tactic is defined specifically to prove bi_pred below because firstorder enters a rabbit hole somewhere.
      Note: order of matches is important.
    *)
-  #[export] Ltac crushPredEntailsMatch2 :=
+  Ltac crushPredEntailsMatch2 :=
       match goal with
       | [ |- True ] => constructor
       | [ H : dist _ _ _ |- _ ] => cbv in H
@@ -729,7 +729,7 @@ Module Type WorldsOn
     Definition forgetting {w1 w2 : World} (ω : w1 ⊒ w2) : Pred w1 -> Pred w2 :=
       fun Rfut ι => Rfut (inst (sub_acc ω) ι).
     Definition unconditionally {w : World} : (□ Pred) w -> Pred w :=
-      fun P => (∀ {w2} (ω : w ⊒ w2), assuming ω (P w2 ω))%I.
+      fun P => (∀ w2 (ω : w ⊒ w2), assuming ω (P w2 ω))%I.
 
     Lemma knowing_id {w} {P : Pred w} : knowing acc_refl P ⊣⊢ P.
     Proof.
@@ -941,7 +941,7 @@ Module Type WorldsOn
     End SimplifyAllSpec.
 
     Section SolverSpec.
-      Require Import iris.bi.interface.
+      Import iris.bi.interface.
       Definition SolverSpec (s : Solver) : Prop :=
         forall (w : World) (C0 : PathCondition w),
           option.spec

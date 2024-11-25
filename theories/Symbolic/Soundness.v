@@ -497,7 +497,7 @@ Module Soundness
 
     Import iris.proofmode.environments.
 
-    #[export] Ltac rsolve_step :=
+    Ltac rsolve_step :=
       first [
            (lazymatch goal with
             | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
@@ -513,7 +513,7 @@ Module Soundness
            end
       ].
 
-    #[export] Ltac rsolve :=
+    Ltac rsolve :=
       iStartProof;
       repeat rsolve_step; try done;
         (* After walking through the symbolic computation using the above lemmas,
@@ -526,7 +526,7 @@ Module Soundness
           | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
           end.
 
-    #[export] Ltac rsolve2_step :=
+    Ltac rsolve2_step :=
       first [
            (lazymatch goal with
             | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
@@ -538,7 +538,7 @@ Module Soundness
            end
       ].
 
-    #[export] Ltac rsolve2 :=
+    Ltac rsolve2 :=
       iStartProof;
       progress rsolve2_step; try done;
         (* After walking through the symbolic computation using the above lemmas,
