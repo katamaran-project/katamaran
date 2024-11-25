@@ -286,6 +286,16 @@ Module Soundness
     Section BasicsCompatLemmas.
       Import logicalrelation.
 
+      #[export] Instance refine_compat_evalStoreSpec {Γ1 Γ2} `{RA : Rel SA CA} {w : World} :
+        RefineCompat (RStoreSpec Γ1 Γ2 RA -> RStore Γ1 -> RHeapSpec RA)
+          CStoreSpec.evalStoreSpec w (SStoreSpec.evalStoreSpec (w := w)) emp :=
+        MkRefineCompat (refine_evalStoreSpec).
+
+      #[export] Instance refine_compat_lift_heapspec {Γ} `(R : Rel AT A) {w : World}:
+        RefineCompat (RHeapSpec R -> RStoreSpec Γ Γ R)
+            CStoreSpec.lift_heapspec w (SStoreSpec.lift_heapspec (w := w)) emp :=
+        MkRefineCompat (refine_lift_heapspec R).
+
       #[export] Instance refine_compat_block {Γ1 Γ2} `{R : Rel AT A} {w : World} :
         RefineCompat (RStoreSpec Γ1 Γ2 R) CStoreSpec.block w (SStoreSpec.block (w := w)) _ :=
         MkRefineCompat refine_block.
@@ -795,7 +805,6 @@ Module Soundness
       iIntros (args sargs) "#Hargs".
       destruct c; cbv [SStoreSpec.call_contract CStoreSpec.call_contract].
       rsolve.
-      iApply refine_lift_heapspec.
       now iApply HeapSpec.refine_call_contract.
       (* rsolve2_step. *)
       (* iIntros (? ?) "!>". *)
@@ -830,7 +839,6 @@ Module Soundness
       destruct lem; cbv [SStoreSpec.call_lemma CStoreSpec.call_lemma].
       iIntros (args sargs) "Hargs".
       rsolve.
-      iApply refine_lift_heapspec.
       now iApply HeapSpec.refine_call_lemma.
       (* cbn. *)
       (* rsolve.  *)
@@ -917,23 +925,11 @@ Module Soundness
           (SStoreSpec.exec_contract cfg n c s (w := w)).
     Proof.
       unfold SStoreSpec.exec_contract, CStoreSpec.exec_contract;
-        destruct c as [Σ δ pre result post]; cbn - [RSat].
-      iApply HeapSpec.refine_bind.
-      iApply HeapSpec.refine_demonic_ctx.
-      iIntros (w1 θ1) "!> %lenv %slenv #rlenv".
-      iApply HeapSpec.refine_bind.
-      iApply HeapSpec.refine_produce; auto.
-      iIntros (w2 θ2) "!> %cu %su _".
-      iApply HeapSpec.refine_bind.
-      iApply refine_evalStoreSpec.
-      iApply refine_exec.
-      iApply (refine_inst_subst (T := SStore _)).
-      iApply (refine_inst_persist (AT := Sub _)); auto.
-      iIntros (w3 θ3) "!> %v %sv rv".
-      iApply HeapSpec.refine_consume; auto.
-      iApply refine_sub_snoc; iFrame.
-      rewrite <- persist_trans.
-      iApply (refine_inst_persist with "rlenv").
+        destruct c as [Σ δ pre result post]; cbn.
+      rsolve.
+      rewrite forgetting_trans.
+      iModIntro.
+      rsolve.
     Qed.
 
   End ExecRefine.
