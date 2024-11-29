@@ -145,14 +145,57 @@ Module IrisBinaryWPAsymmetric (B : Base) (SIG : Signature B) (PROG : Program B)
         end
     end.
 
+  Inductive StepsPlus (Γ : PCtx) (σ : Ty) (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ) (s1 : Stm Γ σ)
+    : RegStore -> Memory -> CStore Γ -> Stm Γ σ -> Prop :=
+  | step_once : ∀ (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s2 : Stm Γ σ),
+                   ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
+                   StepsPlus γ1 μ1 δ1 s1 γ2 μ2 δ2 s2
+  | step_more : ∀ (γ2 γ3 : RegStore) (μ2 μ3 : Memory) (δ2 δ3 : CStore Γ) (s2 s3 : Stm Γ σ),
+                   ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩
+                   → StepsPlus γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 → StepsPlus γ1 μ1 δ1 s1 γ3 μ3 δ3 s3.
+
+  (* Inductive StepsAtMostOnce (Γ : PCtx) (σ : Ty) (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ) (s1 : Stm Γ σ)
+    : RegStore -> Memory -> CStore Γ -> Stm Γ σ -> Prop :=
+  | step_refl : StepsAtMostOnce γ1 μ1 δ1 s1 γ1 μ1 δ1 s1
+  | step_one  : ∀ (γ2 γ3 : RegStore) (μ2 μ3 : Memory) (δ2 δ3 : CStore Γ) (s2 s3 : Stm Γ σ),
+                   ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
+                   StepsAtMostOnce γ1 μ1 δ1 s1 γ2 μ2 δ2 s2. *)
+  Inductive StepsAtMostOnce (Γ : PCtx) (σ : Ty) (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ)
+    : Stm Γ σ -> RegStore -> Memory -> CStore Γ -> Stm Γ σ -> Prop :=
+  | step_val  : ∀ (v : Val σ), StepsAtMostOnce γ1 μ1 δ1 (stm_val σ v) γ1 μ1 δ1 (stm_val σ v) 
+  | step_fail : ∀ (m : string), StepsAtMostOnce γ1 μ1 δ1 (stm_fail σ m) γ1 μ1 δ1 (stm_fail σ m) 
+  | step_refl : ∀ (s : Stm Γ σ), StepsAtMostOnce γ1 μ1 δ1 s γ1 μ1 δ1 s
+  | step_one  : ∀ (γ2 γ3 : RegStore) (μ2 μ3 : Memory) (δ2 δ3 : CStore Γ) (s1 s2 s3 : Stm Γ σ),
+                   ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
+                   StepsAtMostOnce γ1 μ1 δ1 s1 γ2 μ2 δ2 s2.
+
   (* TODO: would rather use the brackets for other step definitions, but these don't work?
            Should move the definition and notation into SmallStep/Step.v and properly investigate... *)
   Notation "⟪ γ1 , μ1 , δ1 , s1 ⟫ --->? ⟪ γ2 , μ2 , δ2 , s2 ⟫" := (@Step_zero_or_one _ _ γ1 μ1 δ1 γ2 μ2 δ2 s1 s2).
+  (* TODO: maybe we should make it step one or more? feels odd to allow
+     zero steps, that means one execution doesn't have to make any progress? *)
+
+  Definition steps Γ σ γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 :=
+    @Steps Γ σ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2.
+  #[global] Arguments steps Γ σ γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 /.
+
+  Definition steps_plus Γ σ γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 :=
+    @StepsPlus Γ σ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2.
+  #[global] Arguments steps_plus Γ σ γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 /.
+
+  Definition steps_at_most_once Γ σ γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 :=
+    @StepsAtMostOnce Γ σ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2.
+  #[global] Arguments steps_at_most_once Γ σ γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 /.
 
   Definition reg_inv    := @regs_inv2.
   Definition mem_inv    := @mem_inv2_sail.
-  Definition step_left  := @Step_zero_or_one.
+  (* Definition step_left  := @Step_zero_or_one. *)
+  (* Definition step_left  := steps. *)
+  (* Definition step_left  := steps_plus. *)
+  Definition step_left  := steps_at_most_once.
+  #[global] Arguments step_left /.
   Definition step_right := @Step.
+  #[global] Arguments step_right /.
 End IrisBinaryWPAsymmetric.
 
 Module IrisBinaryWP
@@ -181,15 +224,58 @@ Module IrisBinaryWP
   Canonical Structure StmO Γ τ  := leibnizO (Stm Γ τ).
   Canonical Structure ValO τ    := leibnizO (Val τ).
 
-  Definition Post Γ1 Γ2 τ :=
+  Definition Post2 Γ1 Γ2 τ :=
     Val τ -> CStore Γ1 -> Val τ -> CStore Γ2 -> iProp Σ.
-  Canonical Structure PostO Γ1 Γ2 τ := leibnizO (Post Γ1 Γ2 τ).
+  Canonical Structure Post2O Γ1 Γ2 τ := leibnizO (Post2 Γ1 Γ2 τ).
 
-  Definition Wp {Γ1 Γ2 τ} :=
+  Definition Post Γ τ :=
+    Val τ -> CStore Γ -> iProp Σ.
+  Canonical Structure PostO Γ τ := leibnizO (Post Γ τ).
+
+  Definition Wp {Γ τ} :=
+    CStore Γ -d> Stm Γ τ -d> Post Γ τ -d> iProp Σ.
+
+  Definition Wp2 {Γ1 Γ2 τ} :=
     CStore Γ1 -d> CStore Γ2 -d>
     Stm Γ1 τ -d> Stm Γ2 τ -d>
-    Post Γ1 Γ2 τ -d>
+    Post2 Γ1 Γ2 τ -d>
     iProp Σ.
+
+  (* TODO: no steps for val, fail, otherwise one of the following:
+     - right has to take a step
+     - left has to take a step
+     - both take a step
+     This forces progress but still allows steps to differ *)
+  (* TODO: simplify by using Final? instead of explicit val, fail cases... *)
+  Inductive StepsAtMostOnce (Γ1 Γ2 : PCtx) (σ : Ty) (γ1 γ2 : RegStore)
+    (μ1 μ2 : Memory) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
+    Stm Γ1 σ -> RegStore -> Memory -> CStore Γ1 -> Stm Γ1 σ ->
+    Stm Γ2 σ -> RegStore -> Memory -> CStore Γ2 -> Stm Γ2 σ -> Prop :=
+  | step_vals  : ∀ (v1 v2 : Val σ), StepsAtMostOnce γ1 γ2 μ1 μ2 δ1 δ2 (stm_val σ v1) γ1 μ1 δ1 (stm_val σ v1) (stm_val σ v2) γ2 μ2 δ2 (stm_val σ v2)
+  | step_val_l : ∀ (v1 : Val σ) (γ2' : RegStore) (μ2' : Memory) (δ2' : CStore Γ2) (s2 s2' : Stm Γ2 σ),
+      ⟨ γ2, μ2, δ2, s2 ⟩ ---> ⟨ γ2', μ2', δ2', s2' ⟩ ->
+      StepsAtMostOnce γ1 γ2 μ1 μ2 δ1 δ2 (stm_val σ v1) γ1 μ1 δ1 (stm_val σ v1) s2 γ2' μ2' δ2' s2'
+  | step_val_r : ∀ (v2 : Val σ) (γ1' : RegStore) (μ1' : Memory) (δ1' : CStore Γ1) (s1 s1' : Stm Γ1 σ),
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ1', μ1', δ1', s1' ⟩ ->
+      StepsAtMostOnce γ1 γ2 μ1 μ2 δ1 δ2 s1 γ1' μ1' δ1' s1' (stm_val σ v2) γ2 μ2 δ2 (stm_val σ v2)
+  | step_fails  : ∀ (m1 m2 : string), StepsAtMostOnce γ1 γ2 μ1 μ2 δ1 δ2 (stm_fail σ m1) γ1 μ1 δ1 (stm_fail σ m1) (stm_fail σ m2) γ2 μ2 δ2 (stm_fail σ m2)
+  | step_fail_l : ∀ (m1 : string) (γ2' : RegStore) (μ2' : Memory) (δ2' : CStore Γ2) (s2 s2' : Stm Γ2 σ),
+      ⟨ γ2, μ2, δ2, s2 ⟩ ---> ⟨ γ2', μ2', δ2', s2' ⟩ ->
+      StepsAtMostOnce γ1 γ2 μ1 μ2 δ1 δ2 (stm_fail σ m1) γ1 μ1 δ1 (stm_fail σ m1) s2 γ2' μ2' δ2' s2'
+  | step_fail_r : ∀ (m2 : string) (γ1' : RegStore) (μ1' : Memory) (δ1' : CStore Γ1) (s1 s1' : Stm Γ1 σ),
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ1', μ1', δ1', s1' ⟩ ->
+      StepsAtMostOnce γ1 γ2 μ1 μ2 δ1 δ2 s1 γ1' μ1' δ1' s1' (stm_fail σ m2) γ2 μ2 δ2 (stm_fail σ m2)
+  (* | step_r : ∀ (s1 : Stm Γ1 σ) (γ2' : RegStore) (μ2' : Memory) (δ2' : CStore Γ2) (s2 s2' : Stm Γ2 σ),
+      ⟨ γ2, μ2, δ2, s2 ⟩ ---> ⟨ γ2', μ2', δ2', s2' ⟩ ->
+      StepsAtMostOnce γ1 γ2 μ1 μ2 δ1 δ2 s1 γ1 μ1 δ1 s1 s2 γ2' μ2' δ2' s2'
+  | step_l : ∀ (s2 : Stm Γ2 σ) (γ1' : RegStore) (μ1' : Memory) (δ1' : CStore Γ1) (s1 s1' : Stm Γ1 σ),
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ1', μ1', δ1', s1' ⟩ ->
+      StepsAtMostOnce γ1 γ2 μ1 μ2 δ1 δ2 s1 γ1' μ1' δ1' s1' s2 γ2 μ2 δ2 s2. *)
+  | step_lr : ∀ (γ1' : RegStore) (μ1' : Memory) (δ1' : CStore Γ1) (s1 s1' : Stm Γ1 σ)
+      (γ2' : RegStore) (μ2' : Memory) (δ2' : CStore Γ2) (s2 s2' : Stm Γ2 σ),
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ1', μ1', δ1', s1' ⟩ ->
+      ⟨ γ2, μ2, δ2, s2 ⟩ ---> ⟨ γ2', μ2', δ2', s2' ⟩ ->
+      StepsAtMostOnce γ1 γ2 μ1 μ2 δ1 δ2 s1 γ1' μ1' δ1' s1' s2 γ2' μ2' δ2' s2'.
 
   (* IDEA: borrow idea of Atomic of Iris. When s1 and s2 are atomic, they are
            allowed to open the invariants and close them.
@@ -218,33 +304,6 @@ Module IrisBinaryWP
              rules that allow taking a step either on the left or right (for
              example, see the rule rel-pure-l).
    *)
-  Definition semWp2_fix {Γ1 Γ2 τ}
-    (wp : Wp) : Wp :=
-    (λ (δ1 : CStore Γ1) (δ2 : CStore Γ2)
-         (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
-         (POST : Post Γ1 Γ2 τ),
-      match stm_to_val s1, stm_to_val s2 with
-      | Some v1, Some v2 => |={⊤}=> POST v1 δ1 v2 δ2
-      | _      , _    =>
-          match stm_to_fail s1, stm_to_fail s2 with
-          | Some m1, Some m2 => |={⊤}=> True
-          | _      , _    =>
-              (∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
-                  (reg_inv γ1 γ2 ∗ mem_inv μ1 μ2
-                   ={⊤,∅}=∗ (∀ (s12 : Stm Γ1 τ) (δ12 : CStore Γ1)
-                               (γ12 : RegStore) (μ12 : Memory)
-                               (s22 : Stm Γ2 τ) (δ22 : CStore Γ2)
-                               (γ22 : RegStore) (μ22 : Memory),
-                                ⌜step_left γ1 μ1 δ1 γ12 μ12 δ12 s1 s12⌝ ∗ £ 1 ∗
-                                ⌜step_right γ2 μ2 δ2 γ22 μ22 δ22 s2 s22⌝ ∗ £ 1
-                                ={∅}▷=∗
-                                |={∅,⊤}=> 
-                                         (reg_inv γ12 γ22 ∗ mem_inv μ12 μ22) ∗
-                                         wp δ12 δ22 s12 s22 POST)))
-          end
-      end)%I.
-  Global Arguments semWp2_fix {_ _}%ctx_scope {_} wp /.
-
   Ltac f_equiv_more_arities := match goal with
   | H:_ ?f ?g |- ?R (?f ?x ?y ?z1) (?g ?x ?y ?z1) => solve [ simple apply H ]
   | H:_ ?f ?g |- ?R (?f ?x ?y ?z1 ?z2) (?g ?x ?y ?z1 ?z2) => solve [ simple apply H ]
@@ -253,25 +312,92 @@ Module IrisBinaryWP
 
   Ltac solve_contractive_more_arities := solve_proper_core ltac:(fun _ => first [ f_contractive | f_equiv | f_equiv_more_arities]).
 
+  Definition semWp_fix {Γ τ} (wp : Wp) : Wp :=
+    (λ (δ : CStore Γ) (s : Stm Γ τ) (POST : Post Γ τ),
+      match stm_to_val s with
+      | Some v => |={∅,⊤}=> POST v δ
+      | _      => (* TODO: ignoring fail for now... *)
+          (* TODO: only allowing right... incorporate left as well... *)
+          (∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
+              (reg_inv γ1 γ2 ∗ mem_inv μ1 μ2 -∗
+               (∀ (s' : Stm Γ τ) (δ' : CStore Γ)
+                  (γ' : RegStore) (μ' : Memory),
+                   ⌜⟨ γ2, μ2, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩⌝ ={∅}▷=∗
+                    (reg_inv γ1 γ' ∗ mem_inv μ1 μ') ∗ wp δ' s' POST)))
+      end)%I.
+  Global Arguments semWp_fix {_}%ctx_scope {_} wp /.
+
+  Global Instance semWp_fix_Contractive {Γ τ} :
+    Contractive (@semWp_fix Γ τ).
+  Proof. unfold Wp; solve_contractive_more_arities. Qed.
+
+  Definition semWp {Γ τ} : Wp :=
+    λ δ s POST, (fixpoint (@semWp_fix Γ τ)) δ s POST.
+
+  Lemma fixpoint_semWp_fix_eq {Γ τ} (δ : CStore Γ) (s : Stm Γ τ)
+    (POST : Post Γ τ) :
+    fixpoint semWp_fix δ s POST ≡ semWp_fix (fixpoint semWp_fix) δ s POST.
+  Proof. exact: (fixpoint_unfold semWp_fix δ s POST). Qed.
+
+  Lemma fixpoint_semWp_eq {Γ τ} (δ : CStore Γ) (s : Stm Γ τ)
+    (POST : Post Γ τ) :
+    semWp δ s POST ≡ semWp_fix semWp δ s POST.
+  Proof. by unfold semWp; rewrite fixpoint_semWp_fix_eq. Qed.
+
+  Definition semWp2_fix {Γ1 Γ2 τ}
+    (wp : Wp2) : Wp2 :=
+    (λ (δ1 : CStore Γ1) (δ2 : CStore Γ2)
+         (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
+         (POST : Post2 Γ1 Γ2 τ),
+      match stm_to_val s1, stm_to_fail s1 with
+      | Some v1, _       => semWp δ2 s2 (λ v2 δ2, POST v1 δ1 v2 δ2)
+      (* | _      , Some m1 => |={∅,⊤}=> False *) (* TODO: not implemented yet, just false for now... *)
+      | _      , _       =>
+              (∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
+                  (reg_inv γ1 γ2 ∗ mem_inv μ1 μ2 -∗
+                   (∀ (s12 : Stm Γ1 τ) (δ12 : CStore Γ1)
+                      (γ12 : RegStore) (μ12 : Memory),
+                       ⌜⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ12, μ12, δ12, s12 ⟩ ⌝
+                       ={∅}▷=∗
+                            (reg_inv γ12 γ2 ∗ mem_inv μ12 μ2) ∗
+                            wp δ12 δ2 s12 s2 POST)))
+      end)%I.
+  Global Arguments semWp2_fix {_ _}%ctx_scope {_} wp /.
+
   Global Instance semWp2_fix_Contractive {Γ1 Γ2 τ} :
     Contractive (@semWp2_fix Γ1 Γ2 τ).
   Proof.
-    unfold Wp.
+    unfold Wp2.
     solve_contractive_more_arities.
   Qed.
 
-  Definition semWp2 {Γ1 Γ2 τ} : Wp :=
+  Definition semWp2_close {Γ1 Γ2 τ} : Wp2 :=
     λ δ1 δ2 s1 s2 POST, (fixpoint (@semWp2_fix Γ1 Γ2 τ)) δ1 δ2 s1 s2 POST.
 
   Lemma fixpoint_semWp2_fix_eq {Γ1 Γ2 τ} (δ1 : CStore Γ1) (δ2 : CStore Γ2)
-    (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) (POST : Post Γ1 Γ2 τ) :
+    (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) (POST : Post2 Γ1 Γ2 τ) :
     fixpoint semWp2_fix δ1 δ2 s1 s2 POST ≡ semWp2_fix (fixpoint semWp2_fix) δ1 δ2 s1 s2 POST.
   Proof. exact: (fixpoint_unfold semWp2_fix δ1 δ2 s1 s2 POST). Qed.
 
-  Lemma fixpoint_semWp2_eq {Γ1 Γ2 τ} (δ1 : CStore Γ1) (δ2 : CStore Γ2)
-    (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) (POST : Post Γ1 Γ2 τ) :
-    semWp2 δ1 δ2 s1 s2 POST ≡ semWp2_fix semWp2 δ1 δ2 s1 s2 POST.
-  Proof. by unfold semWp2; rewrite fixpoint_semWp2_fix_eq. Qed.
+  Lemma fixpoint_semWp2_close_eq {Γ1 Γ2 τ} (δ1 : CStore Γ1) (δ2 : CStore Γ2)
+    (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) (POST : Post2 Γ1 Γ2 τ) :
+    semWp2_close δ1 δ2 s1 s2 POST ≡ semWp2_fix semWp2_close δ1 δ2 s1 s2 POST.
+  Proof. by unfold semWp2_close; rewrite fixpoint_semWp2_fix_eq. Qed.
+
+  Definition semWp2_open {Γ1 Γ2 τ} : Wp2 :=
+    (λ (δ1 : CStore Γ1) (δ2 : CStore Γ2)
+         (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
+         (POST : Post2 Γ1 Γ2 τ),
+      |={⊤,∅}=> semWp2_close δ1 δ2 s1 s2 POST)%I.
+  Arguments semWp2_open _ _ _ /.
+
+  Definition semWp2 {Γ1 Γ2 τ} := @semWp2_open Γ1 Γ2 τ.
+
+  Lemma semWp2_unfold {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
+    (δ1 : CStore Γ1) (δ2 : CStore Γ2) (POST : Post2 Γ1 Γ2 τ) :
+    semWp2 δ1 δ2 s1 s2 POST ⊣⊢ |={⊤,∅}=> semWp2_close δ1 δ2 s1 s2 POST.
+  Proof. by unfold semWp2, semWp2_open. Qed.
+    
   End WithSailGS2.
 End IrisBinaryWP.
 
@@ -291,73 +417,134 @@ Module IrisBinaryWPAsymmetricLaws
 
   Import SmallStepNotations.
 
-  Lemma semWp2_mono [Γ1 Γ2 τ] (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
-    (Q1 Q2 : Val τ → CStore Γ1 → Val τ → CStore Γ2 → iProp Σ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
-    ⊢ semWp2 δ1 δ2 s1 s2 Q1 -∗ (∀ v1 δ1 v2 δ2, Q1 v1 δ1 v2 δ2 -∗ Q2 v1 δ1 v2 δ2) -∗ semWp2 δ1 δ2 s1 s2 Q2.
+  Lemma semWp_mono [Γ τ] (s : Stm Γ τ) (Q1 Q2 : Post Γ τ) (δ : CStore Γ) :
+    ⊢ semWp δ s Q1 -∗ (∀ v δ, Q1 v δ -∗ Q2 v δ) -∗ semWp δ s Q2.
+  Proof.
+    iIntros "H HQ".
+    iLöb as "IH" forall (δ s).
+    rewrite ?fixpoint_semWp_eq; cbn.
+    case_match eqn:Esv.
+    - iMod "H". iModIntro.
+      by iApply "HQ".
+    - iIntros (? ? ? ?) "Hres".
+      iIntros (s' δ' γ' μ' Hs).
+      iSpecialize ("H" with "Hres []"); first eauto.
+      iMod "H". iIntros "!> !>". iMod "H" as "($ & H)".
+      iModIntro. iApply ("IH" with "H HQ").
+  Qed.
+
+  Lemma semWp2_close_mono [Γ1 Γ2 τ] (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
+    (Q1 Q2 : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
+    ⊢ semWp2_close δ1 δ2 s1 s2 Q1 -∗ (∀ v1 δ1 v2 δ2, Q1 v1 δ1 v2 δ2 -∗ Q2 v1 δ1 v2 δ2) -∗ semWp2_close δ1 δ2 s1 s2 Q2.
   Proof.
     iIntros "H HQ".
     iLöb as "IH" forall (δ1 δ2 s1 s2).
-    rewrite (fixpoint_semWp2_eq _ _ s1).
-    rewrite (fixpoint_semWp2_eq _ _ s1).
+    rewrite (fixpoint_semWp2_close_eq _ _ s1).
+    rewrite (fixpoint_semWp2_close_eq _ _ s1).
     cbn.
     repeat case_match; try done.
-    - iMod "H".
-      iModIntro.
-      iApply ("HQ" with "H").
-    - destruct s1; discriminate.
-    - iIntros (γ1 γ2 μ1 μ2) "Hresources".
-      iMod ("H" with "Hresources") as "H".
-      iModIntro.
-      iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(Hstep1 & Hlc1 & Hstep2 & Hlc2)".
-      iMod ("H" with "[$Hstep1 $Hlc1 $Hstep2 $Hlc2]") as "H".
-      iIntros "!> !>".
-      iMod "H".
-      iModIntro.
-      iMod "H".
-      iModIntro.
-      iDestruct "H" as "($ & H)".
-      iApply ("IH" with "H HQ").
-    - iIntros (γ1 γ2 μ1 μ2) "Hresources".
-      iMod ("H" with "Hresources") as "H".
-      iModIntro.
-      iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(Hstep1 & Hlc1 & Hstep2 & Hlc2)".
-      iMod ("H" with "[$Hstep1 $Hlc1 $Hstep2 $Hlc2]") as "H".
-      iIntros "!> !>".
-      iMod "H".
-      iModIntro.
-      iMod "H".
-      iModIntro.
-      iDestruct "H" as "($ & H)".
-      iApply ("IH" with "H HQ").
-    - iIntros (γ1 γ2 μ1 μ2) "Hresources".
-      iMod ("H" with "Hresources") as "H".
-      iModIntro.
-      iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(Hstep1 & Hlc1 & Hstep2 & Hlc2)".
-      iMod ("H" with "[$Hstep1 $Hlc1 $Hstep2 $Hlc2]") as "H".
-      iModIntro.
-      iIntros "!>".
-      iMod "H".
-      iModIntro.
-      iMod "H".
-      iModIntro.
-      iDestruct "H" as "($ & Hwp)".
-      iApply ("IH" with "Hwp HQ").
+    - iApply (semWp_mono with "H HQ").
+    - iIntros (γ1 γ2 μ1 μ2) "Hres".
+      iSpecialize ("H" with "Hres").
+      iIntros (? ? ? ?) "Hsteps".
+      iSpecialize ("H" with "Hsteps").
+      iMod "H". iIntros "!> !>". iMod "H" as "($ & H)".
+      iModIntro. iApply ("IH" with "H HQ").
   Qed.
 
-  Lemma semWp2_val {Γ1 Γ2 τ} (v1 : Val τ) (v2 : Val τ) (Q : Post Γ1 Γ2 τ) :
+  Lemma semWp2_mono [Γ1 Γ2 τ] (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
+    (Q1 Q2 : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
+    ⊢ semWp2 δ1 δ2 s1 s2 Q1 -∗ (∀ v1 δ1 v2 δ2, Q1 v1 δ1 v2 δ2 -∗ Q2 v1 δ1 v2 δ2) -∗ semWp2 δ1 δ2 s1 s2 Q2.
+  Proof.
+    rewrite ?semWp2_unfold.
+    iIntros "H HQ". iMod "H". iModIntro.
+    now iApply (semWp2_close_mono with "H").
+  Qed.
+
+  Lemma semWp_val {Γ τ} (v : Val τ) (Q : Post Γ τ) :
+    forall δ,
+      semWp δ (stm_val τ v) Q ⊣⊢ |={∅,⊤}=> Q v δ.
+  Proof.
+    iIntros (δ).
+    iSplit; iIntros "H";
+      rewrite fixpoint_semWp_eq; cbn; auto.
+  Qed.
+
+  Lemma semWp2_close_val_l {Γ1 Γ2 τ} (v1 : Val τ) (s2 : Stm Γ2 τ)
+                           (Q : Post2 Γ1 Γ2 τ) :
+    forall δ1 δ2,
+      semWp2_close δ1 δ2 (stm_val τ v1) s2 Q ⊣⊢ semWp δ2 s2 (Q v1 δ1).
+  Proof.
+    intros δ1 δ2.
+    iSplit; iIntros "H";
+      rewrite fixpoint_semWp2_close_eq; cbn; done.
+  Qed.
+
+  Lemma semWp2_close_val {Γ1 Γ2 τ} (v1 : Val τ) (v2 : Val τ) (Q : Post2 Γ1 Γ2 τ) :
+    forall δ1 δ2,
+      (semWp2_close δ1 δ2 (stm_val τ v1) (stm_val τ v2) Q) ⊣⊢ |={∅,⊤}=> Q v1 δ1 v2 δ2.
+  Proof. intros; rewrite semWp2_close_val_l semWp_val; done. Qed.
+
+  Lemma semWp2_val {Γ1 Γ2 τ} (v1 : Val τ) (v2 : Val τ) (Q : Post2 Γ1 Γ2 τ) :
     forall δ1 δ2,
       semWp2 δ1 δ2 (stm_val τ v1) (stm_val τ v2) Q ⊣⊢ |={⊤}=> Q v1 δ1 v2 δ2.
   Proof.
     iIntros (δ1 δ2).
-    iSplit; iIntros "H";
-      rewrite fixpoint_semWp2_eq; cbn; auto.
+    rewrite semWp2_unfold; rewrite semWp2_close_val.
+    iSplit; iIntros "H".
+    - now repeat iMod "H".
+    - iMod "H".
+      now iApply fupd_mask_intro_subseteq; first set_solver.
+  Qed.
+
+  Lemma fupd_semWp {Γ τ} (δ : CStore Γ) (s : Stm Γ τ) Φ :
+    (|={∅}=> semWp δ s Φ) ⊢ semWp δ s Φ.
+  Proof.
+    rewrite fixpoint_semWp_eq; cbn.
+    iIntros "H".
+    repeat case_match;
+      iMod "H"; done.
+  Qed.
+
+  Lemma semWp_fupd {Γ τ} (δ : CStore Γ) (s : Stm Γ τ) Φ :
+    semWp δ s Φ ⊢ |={∅}=> semWp δ s Φ.
+  Proof. by iIntros "H !>". Qed.
+
+  Lemma semWp_fupd_intro {Γ τ} (δ : CStore Γ) (s : Stm Γ τ) Φ :
+    (|={∅}=> semWp δ s (λ v δ, |={∅}=> Φ v δ)) ⊢ semWp δ s Φ.
+  Proof.
+    iLöb as "IH" forall (δ s).
+    rewrite ?fixpoint_semWp_eq; cbn.
+    case_match eqn:Esv.
+    - iIntros "H".
+      repeat iMod "H".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iMod "H". iMod "Hclose". done.
+    - iIntros "H".
+      iIntros (? ? ? ?) "Hres".
+      iIntros (? ? ? ? Hs). iMod "H".
+      iSpecialize ("H" with "Hres []"); first eauto.
+      iMod "H". iIntros "!> !>". iMod "H" as "($ & H)".
+      iSpecialize ("IH" with "[H]"); now iModIntro.
+  Qed.
+
+  Lemma fupd_semWp2_close {Γ1 Γ2 τ} (δA : CStore Γ1) (δB : CStore Γ2)
+    (eA : Stm Γ1 τ) (eB : Stm Γ2 τ) Φ : 
+    (|={∅}=> semWp2_close δA δB eA eB Φ) ⊢ semWp2_close δA δB eA eB Φ.
+  Proof.
+    rewrite fixpoint_semWp2_close_eq; cbn.
+    iIntros "H".
+    repeat case_match.
+    - by iApply fupd_semWp.
+    - now repeat iMod "H".
   Qed.
 
   Lemma fupd_semWp2 {Γ1 Γ2 τ} E (δA : CStore Γ1) (δB : CStore Γ2)
     (eA : Stm Γ1 τ) (eB : Stm Γ2 τ) Φ : 
     (|={E}=> semWp2 δA δB eA eB Φ) ⊢ semWp2 δA δB eA eB Φ.
   Proof.
-    rewrite fixpoint_semWp2_eq; cbn; unfold semWp2_fix.
+    rewrite ?semWp2_unfold.
+    rewrite fixpoint_semWp2_close_eq; cbn; unfold semWp2_fix.
     iIntros "H".
     repeat case_match;
       iMod (fupd_mask_subseteq E) as "Hclose"; auto;
@@ -374,44 +561,36 @@ Module IrisBinaryWPAsymmetricLaws
     semWp2 δA δB eA eB (λ v1 δA v2 δB, P -∗ Φ v1 δA v2 δB) -∗
     semWp2 δA δB eA eB Φ.
   Proof.
-    rewrite ?fixpoint_semWp2_eq; cbn.
+    rewrite ?semWp2_unfold ?fixpoint_semWp2_close_eq; cbn.
     iIntros (HeA HeB) "HP".
     repeat case_match;
       inversion HeA;
       inversion HeB; iIntros "H";
       try done.
-    - iIntros (γ1 γ2 μ1 μ2) "Hres".
-      iMod ("H" with "Hres") as "H".
-      iModIntro.
-      iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(HstepeA & Hlc1 & HstepeB & Hlc2)".
-      iMod ("H" with "[$HstepeA $Hlc1 $HstepeB $Hlc2]") as "H".
-      iIntros "!> !>".
-      iMod "H".
-      iModIntro.
-      iMod "H".
-      iModIntro.
+    - iMod "H". iModIntro.
+      iIntros (? ? ? ?) "Hres".
+      iSpecialize ("H" with "Hres").
+      iIntros (? ? ? ?) "Hsteps".
+      iSpecialize ("H" with "Hsteps").
+      iMod "H". iIntros "!> !>". iMod "H". iModIntro.
       iDestruct "H" as "($ & H)".
-      iApply (semWp2_mono with "H").
-      iIntros (v1 δ1 v2 δ2) "H".
-      iApply ("H" with "HP").
-    - iIntros (γ1 γ2 μ1 μ2) "Hres".
-      iMod ("H" with "Hres") as "H".
-      iModIntro.
-      iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(HstepeA & Hlc1 & HstepeB & Hlc2)".
-      iMod ("H" with "[$HstepeA $Hlc1 $HstepeB $Hlc2]") as "H".
-      iIntros "!> !>".
-      iMod "H".
-      iModIntro.
-      iMod "H".
-      iModIntro.
-      iDestruct "H" as "($ & H)".
-      iApply (semWp2_mono with "H").
-      iIntros (v1 δ1 v2 δ2) "H".
-      iApply ("H" with "HP").
+      iApply (semWp2_close_mono with "H").
+      iIntros (? ? ? ?) "HPΦ".
+      iApply ("HPΦ" with "HP").
+  Qed.
+
+  Lemma semWp_frame_l {Γ τ} (δ : CStore Γ) (s : Stm Γ τ) (POST : Post Γ τ)
+                      (R : iProp Σ) :
+    R ∗ semWp δ s POST -∗
+    semWp δ s (λ v δ, R ∗ POST v δ).
+  Proof.
+    iIntros "(R & H)".
+    iApply (semWp_mono with "H").
+    iFrame "R"; auto.
   Qed.
 
   Lemma semWp2_frame_l {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
-    (δ1 : CStore Γ1) (δ2 : CStore Γ2) (POST : Post Γ1 Γ2 τ)
+    (δ1 : CStore Γ1) (δ2 : CStore Γ2) (POST : Post2 Γ1 Γ2 τ)
     (R : iProp Σ) :
     R ∗ semWp2 δ1 δ2 s1 s2 POST -∗
     semWp2 δ1 δ2 s1 s2 (fun v1 δ1 v2 δ2 => R ∗ POST v1 δ1 v2 δ2).
@@ -421,23 +600,51 @@ Module IrisBinaryWPAsymmetricLaws
     iIntros; by iFrame.
   Qed.
 
-  Lemma semWp2_exp {Γ τ} (Φ : Post Γ Γ τ) eA eB δA δB :
+  Ltac discriminate_step :=
+    match goal with
+    | H: ⟨ ?γ, ?μ, ?δ, stm_fail ?τ ?m ⟩ ---> ⟨ ?γ', ?μ', ?δ', ?s ⟩ |- _ =>
+        inversion H
+    | H: ⟨ ?γ, ?μ, ?δ, stm_val ?τ ?v ⟩ ---> ⟨ ?γ', ?μ', ?δ', ?s ⟩ |- _ =>
+        inversion H
+    end.
+
+  Ltac close_later H :=
+    iMod (fupd_mask_subseteq empty) as H; first set_solver.
+
+  Ltac stm_val_fail_stuck :=
+    repeat match goal with
+    | H: ⟨ ?γ, ?μ, ?δ, ?s ⟩ ---> ⟨ ?γ', ?μ', ?δ', ?s' ⟩
+      |- context[stm_to_val ?s] => rewrite (stm_val_stuck H)
+    | H: ⟨ ?γ, ?μ, ?δ, ?s ⟩ ---> ⟨ ?γ', ?μ', ?δ', ?s' ⟩
+      |- context[stm_to_fail ?s] => rewrite (stm_fail_stuck H)
+    end.
+
+  Lemma semWp_exp {Γ τ} (Φ : Post Γ τ) e δ :
+    Φ (eval e δ) δ ⊢ |={⊤,∅}=> semWp δ (stm_exp e) Φ.
+  Proof.
+    rewrite fixpoint_semWp_eq; cbn.
+    iIntros "HΦ".
+    close_later "Hclose". iModIntro.
+    iIntros (? ? ? ?) "Hres".
+    iIntros (? ? ? ? Hs).
+    destruct (smallinvstep Hs).
+    iFrame "Hres". rewrite semWp_val.
+    iIntros "!> !> !>". now iMod "Hclose".
+  Qed.
+
+  Lemma semWp2_exp {Γ τ} (Φ : Post2 Γ Γ τ) eA eB δA δB :
     Φ (eval eA δA) δA (eval eB δB) δB ⊢ semWp2 δA δB (stm_exp eA) (stm_exp eB) Φ.
   Proof.
-    rewrite fixpoint_semWp2_eq; cbn.
-    iIntros "HΦ" (γ11 γ21 μ11 μ21) "Hres".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22) "(%Hstepl & Hlcl & %Hstepr & Hlcr)".
-    unfold step_right in Hstepr.
-    destruct (smallinvstep Hstepl).
-    destruct (smallinvstep Hstepr).
-    iIntros "!> !>".
-    iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame "Hres".
-    now iApply semWp2_val.
+    rewrite semWp2_unfold.
+    rewrite fixpoint_semWp2_close_eq; cbn.
+    iIntros "HΦ".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (γ11 γ21 μ11 μ21) "Hres".
+    iIntros (s12 δ12 γ12 μ12 HeA).
+    destruct (smallinvstep HeA).
+    rewrite semWp2_close_val_l semWp_exp.
+    iFrame "Hres". iMod "Hclose".
+    now iMod "HΦ".
   Qed.
 
   (* TODO: move somewhere else? *)
@@ -452,55 +659,168 @@ Module IrisBinaryWPAsymmetricLaws
       end.
 
   Ltac semWp2_progress s :=
-    rewrite (fixpoint_semWp2_eq _ _ s); cbn;
+    rewrite (fixpoint_semWp2_close_eq _ _ s); cbn;
     semWp2_stuck_progress.
 
-  Lemma semWp2_call_frame {Γ τ Δ} (δΔA δΔB : CStore Δ) (sA sB : Stm Δ τ) :
-    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δA δB : CStore Γ),
-        semWp2 δΔA δΔB sA sB (fun vA _ vB _ => Q vA δA vB δB) -∗
-        semWp2 δA δB (stm_call_frame δΔA sA) (stm_call_frame δΔB sB) Q.
+  Lemma semWp_fail {Γ τ} (m : string) (Q : Post Γ τ) (δ : CStore Γ) :
+    semWp δ (fail m)%exp Q ⊣⊢ True.
   Proof.
-    iIntros (Q δA δB) "WPs". iLöb as "IH" forall (δΔA δΔB sA sB Q).
-    rewrite (fixpoint_semWp2_eq _ _ (stm_call_frame δΔA sA)). cbn.
-    iIntros (γ1 γ2 μ1 μ2) "(Hregs & Hmem)".
+    iSplit; auto; iIntros "_".
+    rewrite fixpoint_semWp_eq; cbn.
+    iIntros (? ? ? ?) "Hres".
+    iIntros (? ? ? ? Hfail).
+    discriminate_step.
+  Qed.
+
+  Lemma semWp2_close_fail_l {Γ1 Γ2 τ} (m1 : string) (s2 : Stm Γ2 τ)
+    (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
+    semWp2_close δ1 δ2 (fail m1)%exp s2 Q ⊣⊢ True.
+  Proof.
+    iSplit; auto; iIntros "_".
+    rewrite fixpoint_semWp2_close_eq; cbn.
+    iIntros (? ? ? ?) "Hres".
+    iIntros (? ? ? ? Hfail).
+    discriminate_step.
+  Qed.
+
+  Lemma not_final_expanded : ∀ {Γ τ} (s : Stm Γ τ),
+      ~ Final s -> stm_to_val s = None ∧ stm_to_fail s = None.
+  Proof.
+    intros Γ τ s H; unfold Final in H; destruct s; auto; contradiction.
+  Qed.
+
+  Lemma stm_to_val_not_fail {Γ τ} {s : Stm Γ τ} :
+    forall {v}, stm_to_val s = Some v -> stm_to_fail s = None.
+  Proof. intros; by destruct s. Qed.
+
+  Lemma semWp2_close_val_step_r {Γ τ} (s21 s22 : Stm Γ τ) (v1 : Val τ)
+    γ1 γ21 γ22 μ1 μ21 μ22 δ21 δ22 
+    (Q : Post2 Γ Γ τ) (δ1 : CStore Γ) :
+    ⟨ γ21, μ21, δ21, s21 ⟩ ---> ⟨ γ22, μ22, δ22, s22 ⟩ ->
+    (reg_inv sailGS2_regGS2 γ1 γ21 ∗ mem_inv sG μ1 μ21) ∗ semWp2_close δ1 δ21 (stm_val τ v1) s21 Q ={∅}▷=∗
+     ((reg_inv sailGS2_regGS2 γ1 γ22 ∗ mem_inv sG μ1 μ22) ∗ semWp2_close δ1 δ22 (stm_val τ v1) s22 Q).
+  Proof.
+    iIntros (Hsteps) "(Hres & Hwp)".
+    rewrite fixpoint_semWp2_close_eq; cbn.
+    rewrite fixpoint_semWp_eq; cbn.
+    stm_val_fail_stuck. iSpecialize ("Hwp" with "Hres []"); first eauto.
+    iMod "Hwp". iIntros "!> !>". iMod "Hwp" as "($ & Hwp)". iModIntro.
+    rewrite fixpoint_semWp2_close_eq; cbn. done.
+  Qed.
+
+  Lemma semWp_bind {Γ τ σ} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
+                   (Q : Post Γ τ) (δ : CStore Γ) :
+    semWp δ s (λ v δ, semWp δ (k v) Q) ⊢
+    semWp δ (stm_bind s k) Q.
+  Proof.
+    iLöb as "IH" forall (s δ).
+    iIntros "Hwp". rewrite (fixpoint_semWp_eq _ (stm_bind s k) _); cbn.
+    iIntros (? ? ? ?) "Hres". iIntros (? ? ? ? Hs).
+    destruct (smallinvstep Hs).
+    - rewrite semWp_val. iFrame "Hres".
+      iMod "Hwp". now close_later "Hclose".
+    - iFrame "Hres". iIntros "!> !> !>".
+      rewrite (fixpoint_semWp_eq _ _ Q); cbn.
+      iIntros (? ? ? ?) "Hres".
+      iIntros (? ? ? ? Hfail).
+      discriminate_step.
+    - rewrite fixpoint_semWp_eq; cbn.
+      stm_val_fail_stuck.
+      iSpecialize ("Hwp" with "Hres []"); first eauto.
+      iMod "Hwp". iIntros "!> !>". iMod "Hwp" as "($ & Hwp)".
+      iModIntro. now iApply ("IH" with "Hwp").
+  Qed.
+
+  Lemma semWp_step {Γ τ} (δ1 δ2 : CStore Γ) (s1 s2 : Stm Γ τ) (Q : Post Γ τ) :
+    ∀ γ γ1 μ μ1 γ2 μ2,
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
+      reg_inv _ γ γ1 ∗ mem_inv _ μ μ1 -∗
+      semWp δ1 s1 Q -∗
+      |={∅}▷=> (reg_inv _ γ γ2 ∗ mem_inv _ μ μ2) ∗ semWp δ2 s2 Q.
+  Proof.
+    iIntros (? ? ? ? ? ? Hs1) "Hres Hwp".
+    rewrite fixpoint_semWp_eq; cbn.
+    stm_val_fail_stuck.
+    iSpecialize ("Hwp" with "Hres []"); first eauto.
+    done.
+  Qed.
+
+  Lemma semWp2_close_right {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
+                           (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
+    semWp2_close δ1 δ2 s1 s2 Q
+    ⊢ |={⊤,∅}=> semWp δ2 s2 (λ v2 δ2', semWp2_close δ1 δ2' s1 (stm_val τ v2) Q).
+  Proof.
+    iLöb as "IH" forall (δ2 s2).
+    iIntros "H".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
-  Abort.
+    rewrite fixpoint_semWp_eq; cbn.
+    case_match eqn:Es2v.
+    - destruct s2; try discriminate; inversion Es2v; subst.
+      now iMod "Hclose".
+    - iIntros (? ? ? ?) "Hres".
+      iIntros (? ? ? ? Hs2).
+      iSpecialize ("IH" $! δ' s' with "[H Hres]").
+      admit. (* resources (-.-') *)
+  Admitted.
 
-  Lemma semWp2_call_inline_later {Γ τ Δ} (f1 f2 : 𝑭 Δ τ) (es1 es2 : NamedEnv (Exp Γ) Δ) :
-    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δΓ1 δΓ2 : CStore Γ),
-        ▷ semWp2 (evals es1 δΓ1) (evals es2 δΓ2) (FunDef f1) (FunDef f2) (fun v1 _ v2 _ => Q v1 δΓ1 v2 δΓ2) -∗
-        semWp2 δΓ1 δΓ2 (stm_call f1 es1) (stm_call f2 es2) Q.
+  Lemma semWp_bind_semWp2_close {Γ1 Γ2 τ σ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 σ)
+    (k : Val σ -> Stm Γ2 τ) (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
+    semWp δ2 s2 (λ v δ2', semWp2_close δ1 δ2' s1 (k v) Q) ⊢
+    semWp2_close δ1 δ2 s1 (stm_bind s2 k) Q.
   Proof.
-    iIntros (Q δΓ1 δΓ2) "wpbody". rewrite (fixpoint_semWp2_eq _ _ (stm_call f1 es1)). cbn.
-    iIntros (γ1 γ2 μ1 μ2) "(Hregs & Hmem)".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
-    (* iIntros (s12 δ12 γ12 μ12) "(%Hstep1 & Hlc1)". *)
-    (* iMod (fupd_mask_subseteq empty) as "Hclose'"; first set_solver. iModIntro. *)
-    (* iIntros (s22 δ22 γ22 μ22) "(%Hstep2 & Hlc2)". *)
-    (* destruct (smallinvstep Hstep1); cbn. *)
-    (* iModIntro. iModIntro. iModIntro. *)
-    (* iMod "Hclose" as "_". iModIntro. *)
-    (* iMod "Hclose'" as "_". iModIntro. *)
-    (* destruct (smallinvstep Hstep2); cbn. *)
-    (* iFrame "Hregs Hmem". *)
-    (* by iApply semWp2_call_frame. *)
-  Abort.
+    iLöb as "IH" forall (δ1 s1).
+    iIntros "H".
+    rewrite fixpoint_semWp2_close_eq; cbn.
+    case_match eqn:Es1v.
+    - iApply semWp_bind.
+      iApply (semWp_mono with "H").
+      iIntros (v2 δ2').
+      destruct s1; try discriminate.
+      inversion Es1v; subst.
+      rewrite semWp2_close_val_l.
+      iIntros "H".
+      iApply (semWp_mono with "H").
+      iIntros (? ?) "$".
+    - iIntros (? ? ? ?) "Hres".
+      iIntros (? ? ? ? Hs1).
+      iPoseProof (semWp_mono with "H [Hres]") as "H".
+      { iIntros (v δ) "H".
+        rewrite fixpoint_semWp2_close_eq; cbn.
+        stm_val_fail_stuck.
+        iSpecialize ("H" with "Hres []"); first eauto.
+        iApply "H". }
+      iIntros "!> !>".
+      iSpecialize ("IH" with "[H]").
+      { admit. (* Y u like dis? (-.-') RESOURCES lost... *) }
+      iFrame "IH".
+  Admitted.
 
-  Lemma semWp2_call_inline {Γ τ Δ} (f1 f2 : 𝑭 Δ τ) (es1 es2 : NamedEnv (Exp Γ) Δ) :
-    ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δΓ1 δΓ2 : CStore Γ),
-        semWp2 (evals es1 δΓ1) (evals es2 δΓ2) (FunDef f1) (FunDef f2) (fun v1 _ v2 _ => Q v1 δΓ1 v2 δΓ2) -∗
-        semWp2 δΓ1 δΓ2 (stm_call f1 es1) (stm_call f2 es2) Q.
+  Lemma semWp2_close_bind {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Val σ → Stm Γ τ)
+    (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ) :
+    semWp2_close δ1 δ2 s1 s2 (fun v1 δ12 v2 δ22 => semWp2_close δ12 δ22 (k1 v1) (k2 v2) Q) ⊢
+      semWp2_close δ1 δ2 (stm_bind s1 k1) (stm_bind s2 k2) Q.
   Proof.
-    iIntros (Q δΓ1 δΓ2) "wpbody".
-    (* by iApply semWp2_call_inline_later. *)
-  Abort.
+    iLöb as "IH" forall (δ1 s1).
+    iIntros "Hwp".
+    rewrite (fixpoint_semWp2_close_eq _ _ (stm_bind s1 k1) _ _); cbn.
+    iIntros (? ? ? ?) "Hres".
+    iIntros (? ? ? ? Hl).
+    destruct (smallinvstep Hl).
+    - rewrite fixpoint_semWp2_close_eq; cbn.
+      iPoseProof (semWp_bind_semWp2_close with "Hwp") as "Hwp".
+      iFrame "Hres Hwp". done.
+    - iFrame "Hres". iIntros "!> !> !>".
+      rewrite (fixpoint_semWp2_close_eq _ _ (fail s)%exp (stm_bind _ _) _); cbn.
+      iIntros; discriminate_step.
+    - rewrite fixpoint_semWp2_close_eq; cbn.
+      stm_val_fail_stuck.
+      iSpecialize ("Hwp" with "Hres []"); first eauto.
+      iMod "Hwp". iIntros "!> !>". iMod "Hwp" as "($ & Hwp)". iModIntro.
+      iApply ("IH" with "Hwp").
+  Admitted.
 
-  Lemma semWp2_fail {Γ1 Γ2 τ} (s1 s2 : string) (Q : Post Γ1 Γ2 τ)
-    (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
-    ⊢ semWp2 δ1 δ2 (fail s1)%exp (fail s2)%exp Q.
-  Proof. rewrite fixpoint_semWp2_eq; cbn; now iIntros. Qed.
   Lemma semWp2_bind {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Val σ → Stm Γ τ)
-    (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ) :
+    (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ) :
     semWp2 δ1 δ2 s1 s2 (fun v1 δ12 v2 δ22 => semWp2 δ12 δ22 (k1 v1) (k2 v2) Q) ⊢
       semWp2 δ1 δ2 (stm_bind s1 k1) (stm_bind s2 k2) Q.
   Proof.
@@ -514,14 +834,14 @@ Module IrisBinaryWPAsymmetricLaws
   Admitted.
 
   Lemma semWp2_let {Γ τ x σ} (s1 s2 : Stm Γ σ) (k1 k2 : Stm (Γ ▻ x∷σ) τ)
-    (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ) :
+    (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ) :
     ⊢ semWp2 δ1 δ2 s1 s2 (fun v1 δ12 v2 δ22 => semWp2 δ12.[x∷σ ↦ v1] δ22.[x∷σ ↦ v2] k1 k2 (fun v12 δ13 v22 δ23 => Q v12 (env.tail δ13) v22 (env.tail δ23)) ) -∗
         semWp2 δ1 δ2 (let: x ∷ σ := s1 in k1)%exp (let: x ∷ σ := s2 in k2)%exp Q.
   Proof.
   Admitted.
 
   Lemma semWp2_seq {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Stm Γ τ) :
-    ⊢ ∀ (Q : Post Γ Γ τ) (δ1 δ2 : CStore Γ),
+    ⊢ ∀ (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ),
         semWp2 δ1 δ2 s1 s2 (fun v1 δ21 v2 δ22 => semWp2 δ21 δ22 k1 k2 Q) -∗ semWp2 δ1 δ2 (s1;;k1)%exp (s2;;k2)%exp Q.
   Proof.
   Admitted.
@@ -712,7 +1032,16 @@ Section Soundness.
                          semTriple (env.snoc δ' (x∷σ) v) (Q v δ') k (fun v δ'' => R v (env.tail δ'')) ) -∗
                      semTriple δ P (let: x := s in k) R).
   Proof.
-  Admitted.
+    iIntros "Hs Hk P".
+    iApply semWp2_let.
+    iSpecialize ("Hs" with "P").
+    iApply (semWp2_mono with "Hs").
+    iIntros (v1 δ1 v2 δ2) "(<- & <- & Q)".
+    iSpecialize ("Hk" $! v1 δ1 with "Q").
+    iApply (semWp2_mono with "Hk").
+    iIntros (? ? ? ?) "(<- & <- & R)".
+    by iFrame"R".
+  Qed.
 
   Lemma iris_rule_stm_block {Γ} (δ : CStore Γ)
         (Δ : PCtx) (δΔ : CStore Δ)
@@ -779,7 +1108,13 @@ Section Soundness.
                semTriple δ' (Q v__σ δ') (k v__σ) R) -∗
            semTriple δ P (stm_bind s k) R).
   Proof.
-  Admitted.
+    iIntros "trips tripk P".
+    iSpecialize ("trips" with "P").
+    iApply semWp2_bind.
+    iApply (semWp2_mono with "trips").
+    iIntros (v1 δ1 v2 δ2) "(<- & <- & HR)".
+    now iApply ("tripk" with "HR").
+  Qed.
 
   Lemma iris_rule_stm_call_inline_later
     {Γ} (δΓ : CStore Γ)

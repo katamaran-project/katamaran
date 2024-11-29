@@ -41,7 +41,7 @@ From Katamaran Require Import
      Prelude
      Sep.Logic
      Semantics
-     Iris.Model.
+     Iris.Resources.
 
 Require Import Coq.Program.Equality.
 
@@ -49,48 +49,13 @@ Import ctx.notations.
 Import env.notations.
 Set Implicit Arguments.
 
-Section TransparentObligations.
-  Local Set Transparent Obligations.
-  (* Derive NoConfusion for SomeReg. *)
-  (* Derive NoConfusion for SomeVal. *)
-  Derive NoConfusion for iris.algebra.excl.excl.
-End TransparentObligations.
-
-(* TODO: Split up IrisResources, so that we can have seperate WP and TWP using the same resources (sailgs etc) *)
-Module Type IrisResources
+Module Type IrisTotalWeakestPre
   (Import B    : Base)
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
   (Import IPre : IrisPrelims B PROG SEM)
-  (Import IP   : IrisParameters B).
-  Class sailGS Σ := SailGS { (* resources for the implementation side *)
-                       sailGS_invGS : invGS Σ; (* for fancy updates, invariants... *)
-                       sailGS_sailRegGS : sailRegGS Σ;
-
-                       (* ghost variable for tracking state of memory cells *)
-                       sailGS_memGS : memGS Σ
-                     }.
-  #[export] Existing Instance sailGS_invGS.
-  #[export] Existing Instance sailGS_sailRegGS.
-
-  (* We declare the memGS field as a class so that we can define the
-     [sailGS_memGS] field as an instance as well. Currently, the [Existing
-     Class] command does not support specifying a locality
-     (local/export/global), so it is not clear what the scope of this command
-     is. Because [memGS] will be inline on module functor applications, the
-     [sailGS_memGS] instance will refer to the user-provided class instead of
-     the [memGS] field. *)
-  Existing Class memGS.
-  #[export] Existing Instance sailGS_memGS.
-
-  #[export] Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
-    iris_invGS := sailGS_invGS;
-    state_interp σ ns κs nt := (regs_inv σ.1 ∗ mem_inv σ.2)%I;
-    fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
-    num_laters_per_step _ := 0;
-    state_interp_mono _ _ _ _ := fupd_intro _ _;
-                                                                                }.
-  Global Opaque iris_invGS.
+  (Import IP   : IrisParameters B)
+  (Import IR   : IrisResources B PROG SEM IPre IP).
 
   Definition semTWP {Σ} `{sG : sailGS Σ} [Γ τ] (s : Stm Γ τ)
     (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ) : iProp Σ :=
@@ -497,8 +462,4 @@ Module Type IrisResources
       end.
   End twptactics.
 
-End IrisResources.
-
-(* TODO: IrisBase should end with <+ IrisResources <+ IrisWP <+ IrisTWP *)
-Module Type IrisBase (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
-  IrisPrelims B PROG SEM <+ IrisParameters B <+ IrisResources B PROG SEM.
+End IrisTotalWeakestPre.

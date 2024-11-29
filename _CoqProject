@@ -43,12 +43,14 @@ theories/Bitvector.v
 theories/Context.v
 theories/Environment.v
 theories/Iris/Instance.v
-theories/Iris/Model.v
+theories/Iris/Resources.v
+theories/Iris/WeakestPre.v
+theories/Iris/TotalWeakestPre.v
+theories/Iris/Base.v
 theories/Iris/BinaryModel.v
 theories/Iris/BinaryWP.v
 theories/Iris/BinaryAdequacy.v
 theories/Iris/BinaryInstance.v
-theories/Iris/BinaryExamples.v
 theories/Iris/cointro_patterns.v
 theories/Notations.v
 theories/Prelude.v

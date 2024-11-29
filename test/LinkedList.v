@@ -51,7 +51,7 @@ From Equations Require Import
 
 From Katamaran Require Import
      Iris.Instance
-     Iris.Model
+     Iris.Base
      Notations
      Program
      Semantics
@@ -840,6 +840,8 @@ Module ExampleModel.
     End ExampleIrisParameters.
 
     Include IrisResources ExampleBase ExampleProgram ExampleSemantics.
+    Include IrisWeakestPre ExampleBase ExampleProgram ExampleSemantics.
+    Include IrisTotalWeakestPre ExampleBase ExampleProgram ExampleSemantics.
 
   End ExampleIrisBase.
 

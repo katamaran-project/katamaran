@@ -44,7 +44,7 @@ From Equations Require Import
 
 From Katamaran Require Import
      Iris.Instance
-     Iris.Model
+     Iris.Base
      Program
      Semantics
      Semantics.Registers
@@ -351,6 +351,8 @@ Module Import ExampleModel.
 
     (* Combine the memory and register ghost states. *)
     Include IrisResources DefaultBase ExampleProgram ExampleSemantics.
+    Include IrisWeakestPre DefaultBase ExampleProgram ExampleSemantics.
+    Include IrisTotalWeakestPre DefaultBase ExampleProgram ExampleSemantics.
 
   End ExampleIrisBase.
 
