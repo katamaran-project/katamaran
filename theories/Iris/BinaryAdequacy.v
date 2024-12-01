@@ -57,7 +57,7 @@ From Katamaran Require Import
      Signature
      SmallStep.Step
      Specification
-     BinaryModel
+     BinaryResources
      BinaryWP.
 
 Import ctx.notations.

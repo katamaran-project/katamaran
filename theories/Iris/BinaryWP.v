@@ -57,7 +57,7 @@ From Katamaran Require Import
      Signature
      SmallStep.Step
      Specification
-     BinaryModel.
+     BinaryResources.
 
 Import ctx.notations.
 Import env.notations.
