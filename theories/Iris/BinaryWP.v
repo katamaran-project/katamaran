@@ -48,7 +48,7 @@ From iris Require Import
      proofmode.tactics.
 
 From Katamaran Require Import
-     Iris.Model
+     Iris.Base
      Iris.Instance
      Prelude
      Semantics

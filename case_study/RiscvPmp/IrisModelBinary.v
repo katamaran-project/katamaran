@@ -30,7 +30,7 @@ From Katamaran Require Import
      Bitvector
      Environment
      trace
-     Iris.Model
+     Iris.Base
      Iris.BinaryModel
      RiscvPmp.Machine
      RiscvPmp.IrisModel

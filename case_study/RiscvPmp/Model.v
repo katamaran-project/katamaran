@@ -33,7 +33,7 @@ From Katamaran Require Import
      Bitvector
      Environment
      Iris.Instance
-     Iris.Model
+     Iris.Base
      Program
      Semantics
      Sep.Hoare
