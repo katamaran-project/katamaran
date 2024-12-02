@@ -46,7 +46,7 @@ From Equations Require Import
 From Katamaran Require Import
      Environment
      Iris.Instance
-     Iris.Model
+     Iris.Base
      Semantics
      Sep.Hoare
      Sep.Logic
@@ -173,6 +173,8 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
   End WithIrisNotations.
 
   Include IrisResources MinCapsBase MinCapsProgram MinCapsSemantics.
+  Include IrisWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics.
+  Include IrisTotalWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics.
 End MinCapsIrisBase.
 
 Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBase.

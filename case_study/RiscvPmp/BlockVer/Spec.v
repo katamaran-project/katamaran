@@ -34,7 +34,7 @@ From Equations Require Import
      Equations.
 From Katamaran Require Import
      Iris.Instance
-     Iris.Model
+     Iris.Base
      Notations
      Bitvector
      Sep.Hoare

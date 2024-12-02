@@ -29,7 +29,7 @@
 From Katamaran Require Import
      Bitvector
      Environment
-     Iris.Model
+     Iris.Base
      RiscvPmp.Machine
      trace.
 From iris Require Import
@@ -76,6 +76,8 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
   End RiscvPmpIrisParams.
 
   Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+  Include IrisWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+  Include IrisTotalWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
 
   Import iris.program_logic.weakestpre.
 

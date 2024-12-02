@@ -35,7 +35,7 @@ From Katamaran Require Import
      Shallow.Soundness
      Symbolic.Soundness
      Iris.Instance
-     Iris.Model
+     Iris.Base
      Program
      Semantics
      Sep.Hoare

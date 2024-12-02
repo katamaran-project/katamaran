@@ -1,5 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2020 Steven Keuchel, Dominique Devriese, Sander Huyghebaert  *)
+(* Copyright (c) 2020 Dominique Devriese, Sander Huyghebaert, Steven Keuchel  *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -27,52 +27,13 @@
 (******************************************************************************)
 
 From Katamaran Require Import
-     Bitvector
-     Environment
-     trace
-     Iris.Base
-     Iris.BinaryResources
-     RiscvPmp.Machine
-     RiscvPmp.IrisModel
-     RiscvPmp.IrisInstance.
-From iris Require Import
-     base_logic.lib.gen_heap
-     proofmode.tactics.
+     Prelude
+     Semantics.
 
-Set Implicit Arguments.
+From Katamaran Require Export
+     Iris.Resources
+     Iris.WeakestPre
+     Iris.TotalWeakestPre.
 
-Import RiscvPmpProgram.
-
-(* Instantiate the Iris framework solely using the operational semantics. At
-   this point we do not commit to a set of contracts nor to a set of
-   user-defined predicates. *)
-Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
-  (* Pull in the definition of the LanguageMixin and register ghost state. *)
-  Include RiscvPmpIrisBase.
-  Import RiscvPmpIrisAdeqParameters.
-
-  (* Defines the memory ghost state. *)
-  Section RiscvPmpIrisParams2.
-    Import bv.
-
-    Class mcMemGS2 Σ :=
-      McMemGS2 {
-          (* two copies of the unary ghost variables *)
-          mc_ghGS2_left : RiscvPmpIrisBase.mcMemGS Σ
-        ; mc_ghGS2_right : RiscvPmpIrisBase.mcMemGS Σ
-        ; mc_gtGS2_left : traceG Trace Σ
-        ; mc_gtGS2_right : traceG Trace Σ
-        }.
-
-    Definition memGS2 : gFunctors -> Set := mcMemGS2.
-    Definition memGS2_memGS_left := @mc_ghGS2_left.
-    Definition memGS2_memGS_right := @mc_ghGS2_right.
-    Definition mem_inv2 : forall {Σ}, mcMemGS2 Σ -> Memory -> Memory -> iProp Σ :=
-      fun {Σ} hG μ1 μ2 =>
-        (RiscvPmpIrisBase.mem_inv mc_ghGS2_left μ1 ∗ RiscvPmpIrisBase.mem_inv mc_ghGS2_right μ2)%I.
-  End RiscvPmpIrisParams2.
-
-  Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
-
-End RiscvPmpIrisBase2.
-
+Module Type IrisBase (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
+  IrisPrelims B PROG SEM <+ IrisParameters B <+ IrisResources B PROG SEM <+ IrisWeakestPre B PROG SEM <+ IrisTotalWeakestPre B PROG SEM.
