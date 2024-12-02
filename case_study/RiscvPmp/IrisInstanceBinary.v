@@ -29,7 +29,7 @@
 From Katamaran Require Import
      Base
      Bitvector
-     Iris.BinaryWP
+     Iris.BinaryWeakestPre
      Iris.BinaryAdequacy
      Iris.BinaryInstance
      trace
@@ -48,7 +48,7 @@ Module ns := stdpp.namespaces.
 Set Implicit Arguments.
 Import bv.notations.
 
-Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpIrisBase2 RiscvPmpProgram RiscvPmpSemantics RiscvPmpIrisBase2.
+Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisBase2 RiscvPmpIrisBase2.
 
   Import RiscvPmpIrisAdeqParameters.
   Import RiscvPmpIrisBase2.
@@ -352,7 +352,7 @@ Module RiscvPmpIrisInstance2 <:
     Qed.
   End RiscVPmpIrisInstanceProofs.
 
-  Include IrisBinaryWPAsymmetric RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+  Include IrisBinaryWP RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     RiscvPmpSemantics RiscvPmpIrisBase2.
 
   Include IrisSignatureRules2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram

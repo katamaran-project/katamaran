@@ -95,7 +95,6 @@ Module IrisBinaryWP
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
-  (Import IB    : IrisBase B PROG SEM)
   (Import IB2   : IrisBase2 B PROG SEM)
   (Import IPred : IrisPredicates2 B SIG PROG SEM IB2).
 
@@ -346,11 +345,10 @@ Module Type IrisSignatureRules2
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
-  (Import IB    : IrisBase B PROG SEM)
   (Import IB2   : IrisBase2 B PROG SEM)
   (Import IPred : IrisPredicates2 B SIG PROG SEM IB2).
 
-  Module Export IWP := IrisBinaryWP B SIG PROG SEM IB IB2 IPred.
+  Module Export IWP := IrisBinaryWP B SIG PROG SEM IB2 IPred.
 
   Section WithSailGS2.
   Context `{sG : sailGS2 Σ}.

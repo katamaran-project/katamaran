@@ -91,9 +91,7 @@ Global Opaque iris_invGS2.
 
 Module Type IrisParameters2
   (Import B    : Base)
-  (Import PROG : Program B)
-  (Import SEM  : Semantics B PROG)
-  (Import IB   : IrisBase B PROG SEM).
+  (Import IB   : IrisParameters B).
 
   Parameter Inline memGS2 : gFunctors -> Set.
   Existing Class memGS2.
@@ -106,8 +104,10 @@ Module Type IrisResources2
   (Import B    : Base)
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
-  (Import IB   : IrisBase B PROG SEM)
-  (Import IP   : IrisParameters2 B PROG SEM IB).
+  (Import IPre : IrisPrelims B PROG SEM)
+  (Import IP   : IrisParameters B)
+  (Import IP2  : IrisParameters2 B IP)
+  (Import IR   : IrisResources B PROG SEM IPre IP).
 
   Class sailRegGS2 Σ := SailRegGS2 {
                             sailRegGS2_sailRegGS_left : sailRegGS Σ;
@@ -151,4 +151,4 @@ Module Type IrisResources2
 End IrisResources2.
 
 Module Type IrisBase2 (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
-  IrisBase B PROG SEM <+ IrisParameters2 B PROG SEM <+ IrisResources2 B PROG SEM.
+  IrisBase B PROG SEM <+ IrisParameters2 B <+ IrisResources2 B PROG SEM.

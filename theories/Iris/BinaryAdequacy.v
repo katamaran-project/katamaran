@@ -66,11 +66,12 @@ Import env.notations.
 Set Implicit Arguments.
 
 Module Type IrisAdeqParameters2
-  (Import B     : Base)
-  (Import IPP  : IrisParameters2 B)
+  (Import B    : Base)
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
-  (Import IP   : IrisPrelims B PROG SEM).
+  (Import IPre : IrisPrelims B PROG SEM)
+  (Import IP   : IrisParameters B)
+  (Import IPP  : IrisParameters2 B IP).
 
   Parameter Inline memGpreS2 : gFunctors -> Set.
   Parameter memΣ2 : gFunctors.
@@ -88,14 +89,14 @@ Module Type IrisAdeqParameters2
 End IrisAdeqParameters2.
 
 Module Type IrisAdequacy2
-  (Import B     : Base)
-  (Import SIG   : Signature B)
-  (Import PROG  : Program B)
-  (Import SEM   : Semantics B PROG)
-  (Import IB    : IrisBase2 B PROG SEM)
-  (Import IAP   : IrisAdeqParameters2 B IB PROG SEM IB)
-  (Import IPred : IrisPredicates2 B SIG PROG SEM IB)
-  (Import IRules : IrisSignatureRules2 B SIG PROG SEM IB IPred).
+  (Import B      : Base)
+  (Import SIG    : Signature B)
+  (Import PROG   : Program B)
+  (Import SEM    : Semantics B PROG)
+  (Import IB2    : IrisBase2 B PROG SEM)
+  (Import IAP    : IrisAdeqParameters2 B PROG SEM IB2 IB2 IB2)
+  (Import IPred  : IrisPredicates2 B SIG PROG SEM IB2)
+  (Import IRules : IrisSignatureRules2 B SIG PROG SEM IB2 IPred).
 
   Import SmallStepNotations.
 
@@ -236,27 +237,27 @@ Module Type IrisAdequacy2
     by apply Hprogress.
   Qed.
 
-  Lemma adequacy {Γ τ} (s1 s2 : Stm Γ τ)
-    {γ11 γ12 γ21 γ22 : RegStore} {μ11 μ12 μ21 μ22 : Memory}
-    {δ1 δ2 : CStore Γ}
-    {Q : Val τ -> Prop} :
-    ⟨ γ11, μ11, δ1, s1 ⟩ --->* ⟨ γ12, μ12, δ2, s2 ⟩ ->
-    ⟨ γ21, μ21, δ1, s1 ⟩ --->* ⟨ γ22, μ22, δ2, s2 ⟩ ->
-    Final s2 ->
-    (forall `{sailGS2 Σ},
-        ⊢ semTriple δ1 (mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21) s1 (fun v _ => ⌜Q v⌝)) ->
-    ResultOrFail s2 Q.
-  Admitted.
+  (* Lemma adequacy {Γ τ} (s1 s2 : Stm Γ τ) *)
+  (*   {γ11 γ12 γ21 γ22 : RegStore} {μ11 μ12 μ21 μ22 : Memory} *)
+  (*   {δ1 δ2 : CStore Γ} *)
+  (*   {Q : Val τ -> Prop} : *)
+  (*   ⟨ γ11, μ11, δ1, s1 ⟩ --->* ⟨ γ12, μ12, δ2, s2 ⟩ -> *)
+  (*   ⟨ γ21, μ21, δ1, s1 ⟩ --->* ⟨ γ22, μ22, δ2, s2 ⟩ -> *)
+  (*   Final s2 -> *)
+  (*   (forall `{sailGS2 Σ}, *)
+  (*       ⊢ semTriple δ1 (mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21) s1 (fun v _ => ⌜Q v⌝)) -> *)
+  (*   ResultOrFail s2 Q. *)
+  (* Admitted. *)
 
-  Lemma adequacy_gen {Γ1 Γ2 τ} (s11 s12 : Stm Γ1 τ) (s21 s22 : Stm Γ2 τ)
-    {γ11 γ12 γ21 γ22 : RegStore} {μ11 μ12 μ21 μ22 : Memory}
-    {δ11 δ12 : CStore Γ1} {δ21 δ22 : CStore Γ2}
-    {Q : forall `{sailGS2 Σ}, Val τ -> CStore Γ1 -> Val τ -> CStore Γ2 -> iProp Σ} (φ : Prop) :
-    ⟨ γ11, μ11, δ11, s11 ⟩ --->* ⟨ γ12, μ12, δ12, s12 ⟩ ->
-    ⟨ γ21, μ21, δ21, s21 ⟩ --->* ⟨ γ22, μ22, δ22, s22 ⟩ ->
-    (forall `{sailGS2 Σ},
-        mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢
-                 semWp2 δ11 δ21 s11 s21 Q ∗ (mem_inv2 μ11 μ21 ={⊤,∅}=∗ ⌜φ⌝)) ->
-    φ.
-    Admitted.
+  (* Lemma adequacy_gen {Γ1 Γ2 τ} (s11 s12 : Stm Γ1 τ) (s21 s22 : Stm Γ2 τ) *)
+  (*   {γ11 γ12 γ21 γ22 : RegStore} {μ11 μ12 μ21 μ22 : Memory} *)
+  (*   {δ11 δ12 : CStore Γ1} {δ21 δ22 : CStore Γ2} *)
+  (*   {Q : forall `{sailGS2 Σ}, Val τ -> CStore Γ1 -> Val τ -> CStore Γ2 -> iProp Σ} (φ : Prop) : *)
+  (*   ⟨ γ11, μ11, δ11, s11 ⟩ --->* ⟨ γ12, μ12, δ12, s12 ⟩ -> *)
+  (*   ⟨ γ21, μ21, δ21, s21 ⟩ --->* ⟨ γ22, μ22, δ22, s22 ⟩ -> *)
+  (*   (forall `{sailGS2 Σ}, *)
+  (*       mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ *)
+  (*                semWp2 δ11 δ21 s11 s21 Q ∗ (mem_inv2 μ11 μ21 ={⊤,∅}=∗ ⌜φ⌝)) -> *)
+  (*   φ. *)
+  (*   Admitted. *)
 End IrisAdequacy2.
