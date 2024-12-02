@@ -95,8 +95,9 @@ Module IrisBinaryWP
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
-  (Import IB    : IrisBase2 B PROG SEM)
-  (Import IPred : IrisPredicates2 B SIG PROG SEM IB).
+  (Import IB    : IrisBase B PROG SEM)
+  (Import IB2   : IrisBase2 B PROG SEM)
+  (Import IPred : IrisPredicates2 B SIG PROG SEM IB2).
 
   Section WithSailGS2.
     Context `{sG : sailGS2 Σ}.
@@ -145,10 +146,21 @@ Module IrisBinaryWP
 
     Ltac solve_contractive_more_arities := solve_proper_core ltac:(fun _ => first [ f_contractive | f_equiv | f_equiv_more_arities]).
 
-    Definition semWp2 {Γ1 Γ2 τ} : Wp2 Γ1 Γ2 τ.
-    Admitted.
-
     Import SmallStepNotations.
+
+    Definition semWp2 {Γ1 Γ2 τ} : Wp2 Γ1 Γ2 τ :=
+      let sG_left    := sailGS2_sailGS_left in
+      let srGS_right := sailRegGS2_sailRegGS_right in
+      let mG_right   := memGS2_memGS_right in
+      (λ δ1 δ2 s1 s2 Q,
+        ∀ γ21 μ21,
+          regs_inv (srGS := srGS_right) γ21 ∗ mem_inv (mG := mG_right) μ21 -∗
+            semWP (sG := sG_left) s1 (λ v1 δ1',
+              ∃ γ22 μ22 δ2' v2,
+                ⌜⟨ γ21, μ21, δ2, s2 ⟩ --->* ⟨ γ22, μ22, δ2', stm_val τ v2 ⟩⌝
+                ∗ regs_inv (srGS := srGS_right) γ22 ∗ mem_inv (mG := mG_right) μ22
+                ∗ Q v1 δ1' v2 δ2'
+          ) δ1)%I.
 
     Lemma semWp2_mono [Γ1 Γ2 τ] (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
       (Q1 Q2 : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
@@ -334,10 +346,11 @@ Module Type IrisSignatureRules2
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
-  (Import IB    : IrisBase2 B PROG SEM)
-  (Import IPred : IrisPredicates2 B SIG PROG SEM IB).
+  (Import IB    : IrisBase B PROG SEM)
+  (Import IB2   : IrisBase2 B PROG SEM)
+  (Import IPred : IrisPredicates2 B SIG PROG SEM IB2).
 
-  Module Export IWP := IrisBinaryWP B SIG PROG SEM IB IPred.
+  Module Export IWP := IrisBinaryWP B SIG PROG SEM IB IB2 IPred.
 
   Section WithSailGS2.
   Context `{sG : sailGS2 Σ}.

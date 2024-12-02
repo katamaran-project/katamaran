@@ -90,10 +90,15 @@ Class irisGS2 (Λ1 Λ2 : language) (Σ : gFunctors) := IrisG {
 Global Opaque iris_invGS2.
 
 Module Type IrisParameters2
-  (Import B    : Base).
+  (Import B    : Base)
+  (Import PROG : Program B)
+  (Import SEM  : Semantics B PROG)
+  (Import IB   : IrisBase B PROG SEM).
 
   Parameter Inline memGS2 : gFunctors -> Set.
   Existing Class memGS2.
+  Parameter memGS2_memGS_left : forall `{memGS2 Σ}, memGS Σ.
+  Parameter memGS2_memGS_right : forall `{memGS2 Σ}, memGS Σ.
   Parameter mem_inv2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
 End IrisParameters2.
 
@@ -101,8 +106,8 @@ Module Type IrisResources2
   (Import B    : Base)
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
-  (Import IP   : IrisParameters2 B)
-  (Import IPre : IrisPrelims B PROG SEM).
+  (Import IB   : IrisBase B PROG SEM)
+  (Import IP   : IrisParameters2 B PROG SEM IB).
 
   Class sailRegGS2 Σ := SailRegGS2 {
                             sailRegGS2_sailRegGS_left : sailRegGS Σ;
@@ -126,6 +131,12 @@ Module Type IrisResources2
     fun reg v1 v2 =>
     (@reg_pointsTo _ sailRegGS2_sailRegGS_left _ reg v1 ∗ @reg_pointsTo _ sailRegGS2_sailRegGS_right _ reg v2)%I.
 
+  Definition sailGS2_sailGS_left `{sG2 : sailGS2 Σ} : sailGS Σ :=
+    {| sailGS_invGS     := sailGS2_invGS;
+       sailGS_sailRegGS := sailRegGS2_sailRegGS_left;
+       sailGS_memGS     := memGS2_memGS_left;
+    |}.
+
   #[export] Program Instance sailGS2_irisGS2 `{sailGS2 Σ} {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
     {|
       iris_invGS2 := sailGS2_invGS;
@@ -140,4 +151,4 @@ Module Type IrisResources2
 End IrisResources2.
 
 Module Type IrisBase2 (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
-  IrisParameters2 B <+ IrisPrelims B PROG SEM <+ IrisResources2 B PROG SEM.
+  IrisBase B PROG SEM <+ IrisParameters2 B PROG SEM <+ IrisResources2 B PROG SEM.
