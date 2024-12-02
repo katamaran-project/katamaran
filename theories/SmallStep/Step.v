@@ -296,6 +296,14 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Steps _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2).
   End SmallStepNotations.
 
+  Lemma Steps_bind {Γ σ τ} :
+    forall {γ1 γ2 γ3 μ1 μ2 μ3 δ1 δ2 δ3} {s1 : Stm Γ σ} {k} {s3 : Stm Γ τ} {v1},
+    ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_val σ v1 ⟩ ->
+    ⟨ γ2, μ2, δ2, k v1 ⟩ --->* ⟨ γ3, μ3, δ3, s3 ⟩ ->
+    ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ --->* ⟨ γ3, μ3, δ3, s3 ⟩.
+  Proof.
+  Admitted.
+
   (* Tests if a statement is a final one, i.e. a finished computation. *)
   Ltac microsail_stm_is_final s :=
     lazymatch s with

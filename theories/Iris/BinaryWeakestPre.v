@@ -164,12 +164,29 @@ Module IrisBinaryWP
     Lemma semWP2_mono [Γ1 Γ2 τ] (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
       (Q1 Q2 : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
       ⊢ semWP2 δ1 δ2 s1 s2 Q1 -∗ (∀ v1 δ1 v2 δ2, Q1 v1 δ1 v2 δ2 -∗ Q2 v1 δ1 v2 δ2) -∗ semWP2 δ1 δ2 s1 s2 Q2.
-    Admitted.
+    Proof.
+      iIntros "Hwp H". rewrite /semWP2.
+      iIntros (γ21 μ21) "Hres". iSpecialize ("Hwp" with "Hres").
+      iApply (semWP_mono with "Hwp").
+      iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %v2 & Hk)".
+      iExists γ22, μ22, δ2', v2. iDestruct "Hk" as "($ & $ & $ & HQ1)".
+      by iApply ("H" with "HQ1").
+    Qed.
 
+    Lemma semWP2_val_1 {Γ1 Γ2 τ} (v1 : Val τ) (v2 : Val τ) (Q : Post2 Γ1 Γ2 τ) :
+      ∀ δ1 δ2,
+        (|={⊤}=> Q v1 δ1 v2 δ2) ⊢ semWP2 δ1 δ2 (stm_val τ v1) (stm_val τ v2) Q.
+    Proof.
+      iIntros (δ1 δ2) "HQ". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      rewrite semWP_val. iMod "HQ". iModIntro. iExists γ21, μ21, δ2, v2.
+      iFrame "HQ Hres". iPureIntro. apply step_refl.
+    Qed.
+
+    (* TODO: doesn't hold (resources!) *)
     Lemma semWP2_val {Γ1 Γ2 τ} (v1 : Val τ) (v2 : Val τ) (Q : Post2 Γ1 Γ2 τ) :
       forall δ1 δ2,
         semWP2 δ1 δ2 (stm_val τ v1) (stm_val τ v2) Q ⊣⊢ |={⊤}=> Q v1 δ1 v2 δ2.
-    Admitted.
+    Abort.
 
     Lemma fupd_semWP2 {Γ1 Γ2 τ} E (δA : CStore Γ1) (δB : CStore Γ2)
       (eA : Stm Γ1 τ) (eB : Stm Γ2 τ) Φ : 
@@ -181,16 +198,21 @@ Module IrisBinaryWP
       to_val {| conf_stm := eA; conf_store := δA |} = None ->
       to_val {| conf_stm := eB; conf_store := δB |} = None ->
       P -∗
-           semWP2 δA δB eA eB (λ v1 δA v2 δB, P -∗ Φ v1 δA v2 δB) -∗
-                                                                     semWP2 δA δB eA eB Φ.
+      semWP2 δA δB eA eB (λ v1 δA v2 δB, P -∗ Φ v1 δA v2 δB) -∗
+      semWP2 δA δB eA eB Φ.
     Admitted.
 
     Lemma semWP2_frame_l {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
       (δ1 : CStore Γ1) (δ2 : CStore Γ2) (POST : Post2 Γ1 Γ2 τ)
       (R : iProp Σ) :
       R ∗ semWP2 δ1 δ2 s1 s2 POST -∗
-                                     semWP2 δ1 δ2 s1 s2 (fun v1 δ1 v2 δ2 => R ∗ POST v1 δ1 v2 δ2).
-    Admitted.
+      semWP2 δ1 δ2 s1 s2 (λ v1 δ1 v2 δ2, R ∗ POST v1 δ1 v2 δ2).
+    Proof.
+      iIntros "(HR & H)". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iSpecialize ("H" with "Hres"). iApply (semWP_mono with "H").
+      iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %v2 & H)".
+      iExists γ22, μ22, δ2', v2. now iDestruct "H" as "($ & $ & $ & $)".
+    Qed.
 
     Ltac discriminate_step :=
       match goal with
@@ -238,10 +260,18 @@ Module IrisBinaryWP
 
     Lemma semWP2_bind {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Val σ → Stm Γ τ)
       (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ) :
-      semWP2 δ1 δ2 s1 s2 (fun v1 δ12 v2 δ22 => semWP2 δ12 δ22 (k1 v1) (k2 v2) Q) ⊢
+      semWP2 δ1 δ2 s1 s2 (λ v1 δ12 v2 δ22, semWP2 δ12 δ22 (k1 v1) (k2 v2) Q) ⊢
         semWP2 δ1 δ2 (stm_bind s1 k1) (stm_bind s2 k2) Q.
     Proof.
-    Admitted.
+      iIntros "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iSpecialize ("H" with "Hres"). iApply semWP_bind.
+      iApply (semWP_mono with "H").
+      iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %v2 & %Hsteps & Hregs & Hmem & H)".
+      iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (semWP_mono with "H").
+      iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %v2' & H)".
+      iExists γ23, μ23, δ2'', v2'. iDestruct "H" as "(%Hsteps' & $ & $ & $)".
+      iPureIntro. apply (Steps_bind Hsteps Hsteps').
+    Qed.
 
     Lemma semWP2_block {Γ1 Γ2 τ Δ1 Δ2} (δΔ1 : CStore Δ1) (δΔ2 : CStore Δ2) (s1 : Stm (Γ1 ▻▻ Δ1) τ) (s2 : Stm (Γ2 ▻▻ Δ2) τ) :
       ⊢ ∀ (Q : Val τ → CStore Γ1 → Val τ → CStore Γ2 → iProp Σ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
