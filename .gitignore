@@ -16,4 +16,6 @@ Makefile.coq.conf
 .lia.cache
 .nia.cache
 .coq-native/
+.direnv/
+.vscode/
 _build/

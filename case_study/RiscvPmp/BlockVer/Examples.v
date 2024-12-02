@@ -61,8 +61,6 @@ From Katamaran Require Import RiscvPmp.LoopVerification.
 
 Module Examples.
     Import RiscvPmpBlockVerifExecutor.
-    Import BlockVerificationDerived2.
-    Import BlockVerificationDerived2Sem.
     Import Assembly.
     Import asn.notations.
     Import RiscvPmp.Sig.
@@ -104,7 +102,7 @@ Module Examples.
       Q ∗ minimal_post.
 
     Definition VC_triple {Σ} (P : Assertion (Σ ▻ "a" :: ty_xlenbits)) (i : list AST) (Q : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)) :=
-      VC__addr (extend_to_minimal_pre P) i (extend_to_minimal_post Q).
+      sblock_verification_condition (extend_to_minimal_pre P) i (extend_to_minimal_post Q) wnil.
 
     Definition Valid_VC {Σ} (P : Assertion (Σ ▻ "a" :: ty_xlenbits)) (i : list AST) (Q : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)) :=
       safeE (postprocess (VC_triple P i Q)).
@@ -289,7 +287,8 @@ Module Examples.
         ⊢ jump_if_zero_contract.
       Proof.
         iIntros (x1) "Hpre Hk".
-        iApply (sound_VC__addr valid_jump_if_zero [env].["x1"∷ty_xlenbits ↦ x1] $! bv.zero with "Hpre [Hk]").
+        iApply (sound_sblock_verification_condition valid_jump_if_zero
+                  [env].["x1"∷ty_xlenbits ↦ x1] $! bv.zero with "Hpre [Hk]").
         iIntros (an) "H".
         iApply "Hk".
         by iExists an.
@@ -315,7 +314,8 @@ Module Examples.
           ⊢ set_X2_to_42_contract instrs_loc.
       Proof.
         iIntros (instrs_loc) "Hpre Hk".
-        iApply (sound_VC__addr valid_set_X2_to_42 [env] $! instrs_loc with "Hpre [Hk]").
+        iApply (sound_sblock_verification_condition valid_set_X2_to_42
+                  [env] $! instrs_loc with "Hpre [Hk]").
         iIntros (an) "H".
         iApply "Hk".
         by iExists an.

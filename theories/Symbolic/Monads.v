@@ -38,6 +38,7 @@ From Katamaran Require Import
   Syntax.Chunks
   Syntax.Predicates
   Symbolic.Propositions
+  Symbolic.UnifLogic
   Symbolic.Solver
   Symbolic.Worlds.
 
@@ -47,8 +48,12 @@ Import env.notations.
 #[local] Set Implicit Arguments.
 
 Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
-  (Import W : WorldsMixin B P) (Import SK : SolverKit B P W)
-  (Import SP : SymPropOn B P W) (Import GS : GenericSolverOn B P W SK)
+  (Import W : WorldsMixin B P)
+  (Import SK : SolverKit B P W)
+  (Import SP : SymPropOn B P W)
+  (Import UL : UnifLogicOn B P W)
+  (Import LSP : LogSymPropOn B P W SP UL)
+  (Import GS : GenericSolverOn B P W SK SP UL LSP)
   (Import A : AssertionsOn B P W).
 
   Import ModalNotations.
@@ -651,22 +656,10 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           let pat' := freshen_pattern n w0 pat in
           SymProp.pattern_match_var x pat'
             (fun pc : PatternCase _ =>
-               let Δ   : LCtx       := PatternCaseCtx pc in
-               let w1  : World      := wcat w0 Δ in
-               let r1  : w0 ⊒ w1    := acc_cat_right w0 Δ in
-               let ts  : NamedEnv (Term (ctx.remove (ctx.in_cat_left Δ xIn))) Δ
-                 := eq_rect _ (fun Σ => NamedEnv (Term Σ) Δ)
-                      (sub_cat_right Δ) _
-                      (eq_sym (ctx.remove_in_cat_left xIn)) in
-               let t   : Term (ctx.remove (ctx.in_cat_left Δ xIn)) σ
-                 := pattern_match_term_reverse pat' pc ts in
-               let w2  : World      := wsubst w1 x t in
-               let r2  : w1 ⊒ w2    := @acc_subst_right w1 x σ _ t in
-               let r12 : w0 ⊒ w2    := r1 ∘ r2 in
-               POST w2 r12
+               POST (wmatchvar w0 xIn pat' pc) (acc_matchvar_right pc)
                  (existT
                     (unfreshen_patterncase n w0 pat pc)
-                    (unfreshen_patterncaseenv n pat pc ts))).
+                    (unfreshen_patterncaseenv (D := Term (wmatchvar w0 xIn pat' pc)) n pat pc (wmatchvar_patternvars pc)))).
       #[global] Arguments new_pattern_match_var [σ x] pat [w] xIn : rename.
 
       Definition new_pattern_match' {σ} (pat : @Pattern N σ) :
@@ -977,6 +970,16 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun w σ => lift_purespec (SPureSpec.demonic x σ).
     #[global] Arguments demonic x [w] σ Φ : rename.
 
+    Definition angelic_ctx {N : Set} (n : N -> LVar) :
+      ⊢ ∀ Δ : NCtx N Ty, SHeapSpec (fun w => NamedEnv (Term w) Δ) :=
+    fun w Δ => lift_purespec (SPureSpec.angelic_ctx n Δ).
+    #[global] Arguments angelic_ctx {N} n [w] Δ : rename.
+
+    Definition demonic_ctx {N : Set} (n : N -> LVar) :
+      ⊢ ∀ Δ : NCtx N Ty, SHeapSpec (fun w => NamedEnv (Term w) Δ) :=
+    fun w Δ => lift_purespec (SPureSpec.demonic_ctx n Δ).
+    #[global] Arguments demonic_ctx {N} n [w] Δ : rename.
+
     Definition angelic_binary {A} : ⊢ SHeapSpec A -> SHeapSpec A -> SHeapSpec A :=
       fun w m1 m2 Φ h =>
         SymProp.angelic_binary (m1 Φ h) (m2 Φ h).
@@ -1095,6 +1098,50 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                  |})
             (pure tt)
       end.
+
+    Definition call_contract {Δ τ} (c : SepContract Δ τ) :
+      ⊢ SStore Δ -> SHeapSpec (STerm τ) :=
+      fun w0 args =>
+        match c with
+        | MkSepContract _ _ Σe δe req result ens =>
+            ⟨ θ1 ⟩ evars <-
+              lift_purespec (SPureSpec.angelic_ctx id Σe) ;;
+            ⟨ θ2 ⟩ _     <-
+              lift_purespec
+                (SPureSpec.assert_eq_nenv
+                   (amsg.mk
+                      {| debug_string_pathcondition := wco _;
+                         debug_string_message       := "SHeapSpec.call_contract";
+                      |})
+                   (subst δe evars) args⟨θ1⟩) ;;
+            let evars2 := persist (A := Sub _) evars θ2 in
+            ⟨ θ3 ⟩ _     <- consume req evars2 ;;
+            ⟨ θ4 ⟩ res   <- demonic (Some result) τ ;;
+            let evars4 := persist (A := Sub _) evars2 (θ3 ∘ θ4) in
+            ⟨ θ5 ⟩ _     <- produce ens (sub_snoc evars4 (result∷τ) res) ;;
+            pure res⟨θ5⟩
+        end.
+
+    Definition call_lemma {Δ} (lem : Lemma Δ) :
+      ⊢ SStore Δ -> SHeapSpec Unit :=
+      fun w0 args =>
+        match lem with
+        | MkLemma _ Σe δe req ens =>
+            ⟨ θ1 ⟩ evars <-
+              lift_purespec (SPureSpec.angelic_ctx id Σe) ;;
+            ⟨ θ2 ⟩ _     <-
+              lift_purespec
+                (SPureSpec.assert_eq_nenv
+                   (amsg.mk
+                      {| debug_string_pathcondition := wco _;
+                         debug_string_message       := "SHeapSpec.call_lemma";
+                      |})
+                   (subst δe evars) args⟨θ1⟩) ;;
+            let evars2 := persist (A := Sub _) evars θ2 in
+            ⟨ θ3 ⟩ _     <- consume req evars2 ;;
+            let evars3 := persist (A := Sub _) evars2 θ3 in
+            produce ens evars3
+        end.
 
   End SHeapSpec.
 

@@ -65,13 +65,9 @@ Open Scope ctx_scope.
 
 Module inv := invariants.
 
-Import BlockVerificationDerived2.
-Import BlockVerification3.
-
   Section FemtoKernel.
     Import bv.notations.
     Import ListNotations.
-    Import BlockVerification3Sem.
 
     Open Scope hex_Z_scope.
 
@@ -170,7 +166,7 @@ Import BlockVerification3.
           | RelInstr f => f cur_off end) in
           let new_off : N :=
             (* Only instructions should increase the current offset, whereas lemma and debug calls will be filtered out in the end! *)
-            (match BlockVerification3Sem.extract_AST hd' with
+            (match extract_AST hd' with
             | Some _ => (cur_off + N.of_nat xlenbytes)%N
             | _ => cur_off
             end) in
@@ -296,7 +292,7 @@ Import BlockVerification3.
     (*   simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post). *)
 
     Definition vc__femtoinit : 𝕊 Σ__femtoinit :=
-      postprocess (VC__addr femtokernel_init_pre femtokernel_init_gen femtokernel_init_post).
+      postprocess (sannotated_block_verification_condition femtokernel_init_pre femtokernel_init_gen femtokernel_init_post wnil).
     (*   let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in *)
     (*   let vc2 := Postprocessing.prune vc1 in *)
     (*   let vc3 := Postprocessing.solve_evars vc1 in *)
@@ -330,7 +326,8 @@ Import BlockVerification3.
         (term_val ty_xlenbits (bv.of_N data_addr) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
       else asn_inv_mmio.
 
-    Example femtokernel_handler_post (is_mmio : bool) : Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := []%ctx |} :=
+    Example femtokernel_handler_post (is_mmio : bool) :
+      Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := []%ctx |} :=
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
@@ -350,7 +347,10 @@ Import BlockVerification3.
     (*     simplify (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post). *)
 
     Definition vc__femtohandler (is_mmio : bool) : 𝕊 [] :=
-      postprocess (VC__addr (femtokernel_handler_pre is_mmio) (femtokernel_handler_gen is_mmio) (femtokernel_handler_post is_mmio)).
+      postprocess (sannotated_block_verification_condition
+                     (femtokernel_handler_pre is_mmio)
+                     (femtokernel_handler_gen is_mmio)
+                     (femtokernel_handler_post is_mmio) wnil).
 
       (* let vc1 := VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post in *)
       (* let vc2 := Postprocessing.prune vc1 in *)
@@ -374,7 +374,11 @@ Import BlockVerification3.
     Definition femtoinit_stats :=
       SymProp.Statistics.count_to_stats
         (SymProp.Statistics.count_nodes
-           (VC__addr femtokernel_init_pre femtokernel_init_gen (asn.sep femtokernel_init_post asn.debug))
+           (sannotated_block_verification_condition
+              femtokernel_init_pre
+              femtokernel_init_gen
+              (asn.sep femtokernel_init_post asn.debug)
+              wnil)
            SymProp.Statistics.empty).
     (* Eval vm_compute in femtoinit_stats. *)
 
@@ -385,14 +389,22 @@ Import BlockVerification3.
     Definition femtohandler_stats :=
       SymProp.Statistics.count_to_stats
         (SymProp.Statistics.count_nodes
-           (VC__addr (femtokernel_handler_pre false) femtokernel_handler (asn.sep (femtokernel_handler_post false) asn.debug))
+           (sannotated_block_verification_condition
+              (femtokernel_handler_pre false)
+              femtokernel_handler
+              (asn.sep (femtokernel_handler_post false) asn.debug)
+              wnil)
            SymProp.Statistics.empty).
     (* Eval vm_compute in femtohandler_stats. *)
 
     Definition femtohandler_mmio_stats :=
       SymProp.Statistics.count_to_stats
         (SymProp.Statistics.count_nodes
-           (VC__addr (femtokernel_handler_pre true) femtokernel_mmio_handler (asn.sep (femtokernel_handler_post true) asn.debug))
+           (sannotated_block_verification_condition
+              (femtokernel_handler_pre true)
+              femtokernel_mmio_handler
+              (asn.sep (femtokernel_handler_post true) asn.debug)
+              wnil)
            SymProp.Statistics.empty).
     (* Eval vm_compute in femtohandler_mmio_stats. *)
 
@@ -417,7 +429,6 @@ Import BlockVerification3.
   Import RiscvPmpBlockVerifSpec.
   Import iris.program_logic.weakestpre.
   Import iris.proofmode.tactics.
-  Import BlockVerificationDerived2.
   Import Shallow.Executor.
   Import ctx.resolution.
   Import ctx.notations.
@@ -426,9 +437,6 @@ Import BlockVerification3.
   Import RiscvPmpIrisInstance.
   Import RiscvPmpIrisInstanceWithContracts.
   Import RiscvPmpBlockVerifShalExecutor.
-  Import BlockVerificationDerived2Sound.
-  Import BlockVerificationDerived2Sem.
-  Import BlockVerification3Sem.
 
   Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N adv_addr) (N.to_nat adv_addr_end - N.to_nat adv_addr).
 
@@ -440,7 +448,6 @@ Import BlockVerification3.
     unfold Pmp_access, Gen_Pmp_access.
     destruct (pmp_check_aux x (bv.of_nat 1) bv.zero ents p1 p2); [left|right]; easy.
   Defined.
-
 
   Lemma adv_is_live y : (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
   Proof. unfold advAddrs, liveAddrs.
@@ -585,7 +592,7 @@ Import BlockVerification3.
   Lemma femto_handler_verified (is_mmio: bool): forall `{sailGS Σ}, ⊢ femto_handler_contract is_mmio.
   Proof.
     iIntros (Σ sG) "Hpre Hk".
-    iApply (sound_VC__addr lemSemBlockVerif $! (bv.of_N handler_addr) with "[Hpre] [Hk]").
+    iApply (sound_sannotated_block_verification_condition lemSemBlockVerif $! (bv.of_N handler_addr) with "[Hpre] [Hk]").
     - exact (sat__femtohandler is_mmio). Unshelve. exact [env].
     - cbv [femtokernel_handler_pre interpret_chunk lptsreg PredicateDefIProp
            inst instprop_formula inst_term env.lookup ctx.view ctx.in_at
@@ -760,7 +767,7 @@ Import BlockVerification3.
   Lemma femto_init_verified : forall `{sailGS Σ}, ⊢ femto_init_contract.
   Proof.
     iIntros (Σ sG) "Hpre Hk".
-    iApply (sound_VC__addr lemSemBlockVerif sat__femtoinit [env] $! bv.zero with "[Hpre] [Hk]").
+    iApply (sound_sannotated_block_verification_condition lemSemBlockVerif sat__femtoinit [env] $! bv.zero with "[Hpre] [Hk]").
     - unfold femto_init_pre. cbn -[ptsto_instrs].
       iDestruct "Hpre" as "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1) & Hpc & Hnpc & Hinit)".
       rewrite Model.RiscvPmpModel2.gprs_equiv.
@@ -1068,6 +1075,24 @@ Import BlockVerification3.
   Qed.
 
 (* Print Assumptions femtokernel_endToEnd. *)
+
+  (* special case of the previous theorem, for easy reference. *)
+  Lemma femtokernel_endToEnd_mmio {γ γ' : RegStore} {μ μ' : Memory}
+        {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} :
+    mem_has_instrs μ (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
+    mem_has_instrs μ (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen true)) ->
+    mmio_pred bytes_per_word (memory_trace μ) ->
+    read_register γ cur_privilege = Machine ->
+    read_register γ pmp0cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr0 = bv.zero ->
+    read_register γ pmp1cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr1 = bv.zero ->
+    read_register γ pc = (bv.of_N init_addr) ->
+    ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
+    mmio_pred bytes_per_word (memory_trace μ').
+  Proof.
+    apply (femtokernel_endToEnd true).
+  Qed.
 
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)

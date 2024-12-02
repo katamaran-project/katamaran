@@ -88,7 +88,7 @@ Module Type Soundness
     Qed.
 
     Lemma consume_monotonic {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
-      Monotonic' (consume (Γ := Γ) ι asn).
+      Monotonic' (consume (Γ := Γ) asn ι).
     Proof.
       unfold consume, Monotonic'. intros * PQ δ.
       apply CHeapSpec.mon_consume. intros ? ? ->.
@@ -96,7 +96,7 @@ Module Type Soundness
     Qed.
 
     Lemma produce_monotonic {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
-      Monotonic' (produce (Γ := Γ) ι asn).
+      Monotonic' (produce (Γ := Γ) asn ι).
     Proof.
       unfold produce, Monotonic'. intros * PQ.
       apply CHeapSpec.mon_produce. intros ? ? ->.
@@ -122,34 +122,17 @@ Module Type Soundness
     Lemma call_lemma_monotonic {Γ Δ} (lem : Lemma Δ) (δΔ : CStore Δ) :
       Monotonic (call_lemma (Γ := Γ) lem δΔ).
     Proof.
-      destruct lem; intros P Q PQ δ h;
-        cbv [call_lemma bind
-               angelic_ctx lift_purem assert_formula
-               CPureSpec.assert_formula].
-      rewrite ?CPureSpec.wp_angelic_ctx.
-      intros [ι Hwp]. exists ι. revert Hwp.
-      unfold assert_eq_nenv, lift_purem.
-      rewrite ?CPureSpec.wp_assert_eq_nenv.
-      intros [Hfmls Hwp]; split; auto; revert Hwp.
-      apply consume_monotonic. intros _ ?.
-      apply produce_monotonic; auto.
+      unfold call_lemma, Monotonic. intros * PQ δ.
+      apply CHeapSpec.mon_call_lemma. intros ? ? ->.
+      unfold pointwise_relation, impl. apply PQ.
     Qed.
 
     Lemma call_contract_monotonic {Γ Δ τ} (c : SepContract Δ τ) (δΔ : CStore Δ) :
       Monotonic (call_contract (Γ := Γ) c δΔ).
     Proof.
-      destruct c; intros P Q PQ δ h;
-        cbv [call_contract bind pure demonic
-               angelic_ctx demonic lift_purem assert_formula
-               CPureSpec.assert_formula].
-      rewrite ?CPureSpec.wp_angelic_ctx.
-      intros [ι Hwp]. exists ι. revert Hwp.
-      unfold assert_eq_nenv, lift_purem.
-      rewrite ?CPureSpec.wp_assert_eq_nenv.
-      intros [Hfmls Hwp]; split; auto; revert Hwp.
-      apply consume_monotonic. intros _ ? Hwp v.
-      specialize (Hwp v); revert Hwp.
-      apply produce_monotonic; auto.
+      unfold call_contract, Monotonic. intros * PQ δ.
+      apply CHeapSpec.mon_call_contract. intros ? ? ->.
+      unfold pointwise_relation, impl. apply PQ.
     Qed.
 
     Definition MonotonicExec (ex : Exec) : Prop :=
@@ -245,86 +228,67 @@ Module Type Soundness
       now iApply HYP.
     Qed.
 
-    Lemma consume_sound {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
-      forall δ h,
-        consume ι asn (fun _ => liftP POST) δ h ->
-        interpret_scheap h ⊢ asn.interpret asn ι ∗ POST δ.
+    Lemma consume_sound {Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : L) :
+      forall h,
+      CHeapSpec.consume asn ι (fun _ h' => interpret_scheap h' ⊢ POST) h ->
+      interpret_scheap h ⊢ asn.interpret asn ι ∗ POST.
     Proof.
-      intros ? ? ->%CHeapSpec.consume_sound. apply bi.sep_mono'; [easy|].
+      intros ? ->%CHeapSpec.consume_sound. apply bi.sep_mono'; [easy|].
       iIntros "(%h' & Hh' & %HΦ)". now iApply HΦ.
     Qed.
 
-    Lemma produce_sound {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
-      forall δ h,
-        produce ι asn (fun _ => liftP POST) δ h ->
-        (* Alternatively, we could write this as *)
-        (* interpret_scheap h ⊢ interpret_assertion asn ι -∗ POST δ. *)
-        (* which more closely resembles the assume guard. Why didn't we do this? *)
-        interpret_scheap h ∗ asn.interpret asn ι ⊢ POST δ.
+    Lemma produce_sound {Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : L) :
+      forall h,
+        CHeapSpec.produce asn ι (fun _ h' => interpret_scheap h' ⊢ POST) h ->
+        interpret_scheap h ⊢ asn.interpret asn ι -∗ POST.
     Proof.
-      intros ? ? ->%CHeapSpec.produce_sound.
-      apply wand_sep_adjoint. apply bi.wand_mono'; [easy|].
+      intros ? ->%CHeapSpec.produce_sound.
+      apply bi.wand_mono'; [easy|].
       iIntros "(%h' & Hh' & %HΦ)". now iApply HΦ.
     Qed.
 
-    Lemma produce_sound' {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
-      forall δ h,
-        produce ι asn (fun _ => liftP POST) δ h ->
-        asn.interpret asn ι ⊢ interpret_scheap h -∗ POST δ.
-    Proof.
-      intros. apply wand_sep_adjoint. rewrite bi.sep_comm.
-      now apply produce_sound.
-    Qed.
-
-    Lemma call_contract_sound {Γ Δ τ} (δΓ : CStore Γ) (δΔ : CStore Δ)
-          (h : SCHeap) (POST : Val τ -> CStore Γ -> L)
-          (c : SepContract Δ τ) :
-      call_contract c δΔ (fun a => liftP (POST a)) δΓ h ->
-      CTriple (interpret_scheap h) c δΔ  (fun v => POST v δΓ).
+    Lemma call_contract_sound {Δ τ} (c : SepContract Δ τ) (args : CStore Δ)
+      (h : SCHeap) (Φ : Val τ -> L) :
+      CHeapSpec.call_contract c args (fun v h' => interpret_scheap h' ⊢ Φ v) h ->
+      CTriple (interpret_scheap h) c args Φ.
     Proof.
       destruct c as [Σe δe req result ens].
-      unfold call_contract. unfold bind.
-      unfold angelic_ctx, lift_purem.
+      unfold CHeapSpec.call_contract.
+      unfold CHeapSpec.bind, CHeapSpec.lift_purespec.
       rewrite CPureSpec.wp_angelic_ctx.
       intros [ι Hwp]; revert Hwp.
-      unfold assert_eq_nenv, lift_purem.
       rewrite CPureSpec.wp_assert_eq_nenv.
       intros [Hfmls Hwp]. cbn.
       apply bi.exist_intro' with ι.
       apply bi.and_intro; auto.
-      apply (consume_sound (fun δ => ∀ v, asn.interpret ens (env.snoc ι (result∷_) v) -∗ POST v δ))%I.
-      revert Hwp. apply consume_monotonic.
-      intros _ h2. unfold demonic.
-      intros HYP.
+      apply consume_sound.
+      revert Hwp.
+      apply CHeapSpec.mon_consume.
+      intros _ _ _ h' Hwp. hnf in Hwp.
       apply bi.forall_intro; intro v.
-      specialize (HYP v).
-      now apply wand_sep_adjoint, produce_sound.
+      specialize (Hwp v).
+      now apply produce_sound.
     Qed.
 
-    Lemma call_lemma_sound {Γ Δ} (δΓ : CStore Γ) (δΔ : CStore Δ)
-          (h : SCHeap) (POST : CStore Γ -> L)
-          (lem : Lemma Δ) :
-      call_lemma lem δΔ (fun _ : unit => liftP POST) δΓ h ->
-      LTriple δΔ (interpret_scheap h) (POST δΓ) lem.
+    Lemma call_lemma_sound {Δ} (args : CStore Δ) (h : SCHeap) (Φ : L) (l : Lemma Δ) :
+      CHeapSpec.call_lemma l args (fun _ h' => interpret_scheap h' ⊢ Φ) h ->
+      LTriple args (interpret_scheap h) Φ l.
     Proof.
-      destruct lem as [Σe δe req ens].
-      unfold call_lemma. unfold bind.
-      unfold angelic_ctx, lift_purem.
+      destruct l as [Σe δe req ens].
+      unfold CHeapSpec.call_lemma.
+      unfold CHeapSpec.bind, CHeapSpec.lift_purespec.
       rewrite CPureSpec.wp_angelic_ctx.
       intros [ι Hwp]; revert Hwp.
-      unfold assert_eq_nenv, lift_purem.
       rewrite CPureSpec.wp_assert_eq_nenv.
-      intros [Hfmls Hwp]. constructor.
+      intros [Hfmls Hwp].
+      constructor.
       apply bi.exist_intro' with ι.
       apply bi.and_intro; auto.
-      transitivity (asn.interpret req ι ∗ (∀ _ : Val ty.unit, asn.interpret ens ι -∗ POST δΓ))%I.
-      - apply (consume_sound (fun δ => ∀ v, asn.interpret ens ι -∗ POST δΓ) δΓ)%I.
-        revert Hwp. apply consume_monotonic.
-        intros _ h2. intros HYP.
-        apply bi.forall_intro; intro v.
-        now apply wand_sep_adjoint, produce_sound.
-      - apply bi.sep_mono'; [easy|]. etransitivity.
-        now apply (bi.forall_elim tt). auto.
+      apply consume_sound.
+      revert Hwp.
+      apply CHeapSpec.mon_consume.
+      intros _ _ _ h' Hwp.
+      now apply produce_sound.
     Qed.
 
     Definition SoundExec (rec : Exec) :=
@@ -394,9 +358,9 @@ Module Type Soundness
         2: apply rule_wp.
         eapply call_lemma_sound.
         revert HYP.
-        eapply call_lemma_monotonic.
-        intros _ δ2 h2 HYP.
-        unfold liftP. unfold WP.
+        eapply CHeapSpec.mon_call_lemma.
+        intros _ _ _ h2 HYP.
+        unfold WP.
         apply bi.exist_intro' with (interpret_scheap h2).
         apply bi.and_intro.
         reflexivity.
@@ -509,6 +473,15 @@ Module Type Soundness
       - apply exec_aux_sound; auto using exec_monotonic.
     Qed.
 
+    Lemma exec_sound_forwards {n Γ σ} (s : Stm Γ σ) Φ δ1 h1 :
+      exec n s Φ δ1 h1 ->
+      ⦃ interpret_scheap h1 ⦄ s; δ1
+      ⦃ fun v δ2 => ∃ h, interpret_scheap h ∧ ⌜Φ v δ2 h⌝ ⦄.
+    Proof.
+      intros HΦ. apply (exec_sound n). revert HΦ. apply exec_monotonic.
+      unfold liftP. intros v δ h HΦ. apply bi.exist_intro' with h. auto.
+    Qed.
+
     Lemma exec_sound' n {Γ σ} (s : Stm Γ σ) (POST : Val σ -> CStore Γ -> L) :
       forall δ1 h1,
         exec n s (fun v2 => liftP (POST v2)) δ1 h1 ->
@@ -523,6 +496,20 @@ Module Type Soundness
       now apply bi.pure_intro.
     Qed.
 
+    Lemma exec_sound_forwards' {n Γ σ} (s : Stm Γ σ) Φ δ1 h1 :
+      exec n s Φ δ1 h1 ->
+      interpret_scheap h1 ⊢
+      WP s (fun v δ2 => ∃ h2, interpret_scheap h2 ∧ ⌜Φ v δ2 h2⌝) δ1.
+    Proof.
+      cbn in *; intros.
+      unfold WP.
+      apply exec_sound_forwards in H.
+      apply bi.exist_intro' with (interpret_scheap h1).
+      apply bi.and_intro.
+      reflexivity.
+      now apply bi.pure_intro.
+    Qed.
+
     Lemma vcgen_sound n {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       CStoreSpec.vcgen n c body ->
       ProgramLogic.ValidContract c body.
@@ -531,22 +518,24 @@ Module Type Soundness
       unfold inst_contract_localstore.
       unfold exec_contract, bind.
       destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
-      rewrite env.Forall_forall in HYP.
-      - specialize (HYP ι). remember (inst δΣ ι) as δ.
-        eapply rule_consequence_left.
-        apply rule_wp.
-        transitivity (interpret_scheap nil -∗ WP body (fun (v : Val τ) (_ : CStore Δ) => asn.interpret ens (env.snoc ι (result∷τ) v)) δ)%I; [|now rewrite bi.emp_wand].
-        apply produce_sound'.
-        revert HYP. apply produce_monotonic.
-        intros _ h2 HYP. apply exec_sound' with n.
-        revert HYP. apply exec_monotonic.
-        intros v3 δ3 h3 HYP.
-        enough (interpret_scheap h3 ⊢ asn.interpret ens (env.snoc ι (result∷τ) v3) ∗ emp)
-          by now rewrite bi.sep_emp in H.
-        change emp%I with ((fun _ => @bi_emp L) δ3).
-        apply (consume_sound (asn := ens)).
-        revert HYP. apply consume_monotonic.
-        intros _ h4 HYP. unfold liftP. auto.
+      hnf in HYP.
+      rewrite CPureSpec.wp_demonic_ctx in HYP.
+      specialize (HYP ι). remember (inst δΣ ι) as δ.
+      apply CHeapSpec.produce_sound, wand_sep_adjoint in HYP. cbn in HYP.
+      rewrite bi.emp_sep in HYP.
+      eapply rule_consequence_left.
+      apply rule_wp. rewrite HYP. clear HYP.
+      apply bi.exist_elim. intros h1.
+      apply bi.pure_elim_r. intros HΦ%exec_sound_forwards'.
+      rewrite HΦ. clear HΦ. unfold WP.
+      apply bi.exist_mono; intros P.
+      apply bi.and_mono; auto.
+      apply bi.pure_mono. intros Htriple.
+      apply (rule_consequence_right _ Htriple). clear Htriple. intros.
+      apply bi.exist_elim. intros h2.
+      apply bi.pure_elim_r. intros Hheap%CHeapSpec.consume_sound.
+      rewrite Hheap.
+      apply bi.sep_elim_l; auto with typeclass_instances.
     Qed.
 
     Lemma shallow_vcgen_soundness {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :

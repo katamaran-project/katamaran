@@ -41,213 +41,18 @@ From Katamaran Require Import
      Prelude
      Base
      Environment
-     Signature
-     (* Shallow.Monads *)
-     (* Symbolic.Monads *)
-     Symbolic.Propositions
-     (* Symbolic.Solver *)
      Symbolic.Worlds
-     (* Syntax.Assertions *)
-     (* Syntax.Chunks *)
-     (* Syntax.Formulas *)
      Syntax.Predicates
-     .
+.
 From iris Require bi.derived_connectives bi.interface proofmode.tactics.
 
 Declare Scope pred_scope.
 Delimit Scope pred_scope with P.
 
-Module Pred
+Module Type UnifLogicOn
   (Import B : Base)
-  (Import SIG  : Signature B).
-
-  Definition Pred : TYPE := fun w => Valuation w -> Prop.
-  
-  Bind Scope pred_scope with Pred.
-
-  Section Definitions.
-    Import ModalNotations.
-    Definition Tm (A : LCtx -> Type) : TYPE :=
-      fun w => A w.
-    
-    Definition eqₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : ⊢ Tm T -> Tm T -> Pred :=
-      fun w t1 t2 ι => (inst t1 ι = inst t2 ι)%type.
-    #[global] Arguments eqₚ {T A _} [w] _ _ _/.
-    
-    Definition repₚ {T : LCtx -> Type} {A : Type} {instTA : Inst T A} : A -> ⊢ Tm T -> Pred :=
-      fun t2 w t1 ι => (inst t1 ι = t2)%type.
-    #[global] Arguments repₚ {T A _} _ [w] _ _/.
-    
-  End Definitions.
-  
-  Section EntailmentDefinitions.
-
-    Context {w : World}.
-
-    Record bientails (P Q : Pred w) : Prop :=
-      MkBientails { fromBientails : forall ι, instprop (wco w) ι -> P ι <-> Q ι }.
-    Record entails (P Q : Pred w) : Prop :=
-      MkEntails { fromEntails : forall ι, instprop (wco w) ι -> P ι -> Q ι }.
-
-    #[export] Instance pred_equiv : Equiv (Pred w) := bientails.
-
-  End EntailmentDefinitions.
-
-  Ltac crushPredEntailsMatch1 :=
-    match goal with
-    | [ H : ?P /\ ?Q |- _ ] => destruct H
-    | [ H : ?P \/ ?Q |- _ ] => destruct H
-    | [ H: entails ?x ?y, ι : Valuation ?w, Hpc : instprop ?pc ?ι |- _ ] => (pose proof (fromEntails x y H ι Hpc); clear H)
-    | [ H: equiv ?x ?y, ι : Valuation ?w, Hpc : instprop ?pc ?ι |- _ ] => (pose proof (fromBientails x y H ι Hpc); clear H)
-    | [ H: bientails ?x ?y, ι : Valuation ?w, Hpc : instprop ?pc ?ι |- _ ] => (pose proof (fromBientails x y H ι Hpc); clear H)
-    end.
-  Ltac crushPredEntails1 := repeat constructor; intros; cbn in *; repeat crushPredEntailsMatch1; intuition.
-  
-  Section RewriteRelations.
-    Context {w : World}.
-    
-    #[export] Instance pred_equivalence : Equivalence (≡@{Pred w}).
-    Proof. crushPredEntails1. Qed.
-
-    #[export] Instance preorder_entails : RelationClasses.PreOrder (entails (w := w)).
-    Proof. crushPredEntails1. Qed.
-    #[export] Instance subrelation_bientails_entails :
-      subrelation (≡@{Pred w}) entails.
-    Proof. crushPredEntails1. Qed.
-    #[export] Instance subrelation_bientails_flip_entails :
-      subrelation (≡@{Pred w}) (Basics.flip entails).
-    Proof. crushPredEntails1. Qed.
-
-    #[export] Instance entails_rewriterelation : RewriteRelation (@entails w) := {}.
-
-    (* #[export] Instance proper_bientails : *)
-    (*   Proper (@bientails w ==> @bientails w ==> iff) bientails. *)
-    (* Proof. crushPredEntails1. Qed. *)
-    (* #[export] Instance proper_entails_bientails : *)
-    (*   Proper ((≡@{Pred w}) ==> (≡@{Pred w}) ==> iff) entails. *)
-    (* Proof. crushPredEntails1. Qed. *)
-    #[export] Instance proper_entails_entails :
-      Proper (Basics.flip (entails (w := w)) ==> (entails (w := w)) ==> Basics.impl) entails.
-    Proof. crushPredEntails1. Qed.
-
-  End RewriteRelations.
-  #[global] Arguments bientails {w} (_ _)%P.
-  #[global] Arguments entails {w} (_ _)%P.
-
-  Module Import proofmode.
-
-    Import iris.bi.interface.
-    Import iris.bi.extensions.
-
-    Definition empₚ {w} (ι : Valuation w) : Prop := True.
-    Arguments empₚ {w} ι /.
-    Definition sepₚ {w} (P Q : Pred w) (ι : Valuation w) : Prop := P ι /\ Q ι.
-    Arguments sepₚ {w} P Q ι /.
-    Definition wandₚ {w} (P Q : Pred w) (ι : Valuation w) : Prop := P ι -> Q ι.
-    Arguments wandₚ {w} P Q ι /.
-    Variant persistently {w} (P : Pred w) (ι : Valuation w) : Prop :=
-      MkSubstly : P ι -> persistently P ι.
-
-    #[export] Instance ofe_dist_pred {w} : ofe.Dist (Pred w) :=
-      ofe.discrete_dist.
-
-    (* Iris defines [bi_later_mixin_id] for BI algebras without later. However,
-       the identity function as later still causes some later-specific
-       typeclasses to be picked. We just define our own trivial modality and
-       mixin to avoid that. *)
-    Variant later {w} (P : Pred w) (ι : Valuation w) : Prop :=
-      MkLater : P ι -> later P ι.
-
-    (* Note domi: This tactic is defined specifically to prove bi_pred below because firstorder enters a rabbit hole somewhere.
-       Note: order of matches is important.
-     *)
-    Ltac crushPredEntailsMatch2 :=
-        match goal with
-        | [ |- True ] => constructor
-        | [ H : dist _ _ _ |- _ ] => cbv in H
-        | [ H : ?P |- ?P \/ _ ] => left
-        | [ H : ?P |- _ \/ ?P ] => right
-        | [ |- iff _ _ ] => split
-        | [ |- _ -> _ ] => intro
-        | [ |- _ /\ _ ] => split
-        | [ |- forall P, _ ] => intro
-        | [ H1: instprop ?pc ?ι -> ?Q, H2 : instprop ?pc ?ι |- _ ] => specialize (H1 H2)
-        | [ |- Reflexive _] => intro
-        | [ |- Transitive _] => intro
-        | [ |- PreOrder _] => constructor
-        | [ |- entails _ _] => constructor
-        | [ |- bientails _ _] => constructor
-        | [ |- equiv _ _] => constructor
-        | [ H : ?H |- ?H ] => assumption
-        | [ H1 : ?P1 -> ?P2, H2: ?P1  |- ?P2 ] => apply (H1 H2)
-        | [ H : ?H1 <-> ?H2 |- ?H2 ] => apply (proj1 H); clear H
-        | [ H : ?H1 <-> ?H2 |- ?H1 ] => apply (proj2 H); clear H
-        | [ H : ?P1 <-> ?P2, H2 : ?P1 |- _ ] => apply (proj1 H) in H2; clear H
-        | [ H : ?P1 <-> ?P2, H2 : ?P2 |- _ ] => apply (proj2 H) in H2; clear H
-        | [ |- Proper _ _ ] => intro; intros
-        | [ |- dist _ ?P ?Q ] => change (equiv P Q)
-        | [ |- respectful _ _ ?P ?Q ] => intro; intro; intro
-        | [ H1 : pointwise_relation ?A _ _ _, H2: ?A |- _ ] => specialize (H1 H2)
-        | [ H1 : (forall (a : ?A), _), H2: ?A |- _ ] => specialize (H1 H2)
-        | [ H1 : (exists (a : ?A), _) |- _ ] => destruct H1
-        | [ a : ?A |- exists (a : ?A), _ ] => exists a
-        | [ H : sepₚ _ _ _ |- _ ] => destruct H
-        | [ |- sepₚ _ _ _ ] => split
-        | [ |- eqₚ ?t1 ?t2 ?ι ] => intro
-        (* | [ |- ∀ₚ _ ] => intro *)
-        | [ |- wandₚ _ _ _ ] => intro
-        | [ H : wandₚ _ _ _ |- _ ] => cbn in H
-        | [ H : (fun x => _) _ |- _ ] => cbn in H
-        | [ |- True ] => trivial
-        | [ |- empₚ _ ] => constructor
-        | [ |- persistently _ _ ] => constructor
-        | [ H: persistently _ _ |- _ ] => destruct H
-        | [ |- later _ _ ] => constructor
-        | [ H: later _ _ |- _ ] => destruct H
-        | [ |- later (λ _ , False) _ ∨ _ ] => right
-        end.
-    Ltac crushPredEntails2 := cbn; intros; cbn in *; repeat (crushPredEntailsMatch1 || crushPredEntailsMatch2); intuition.
-
-    Canonical bi_pred {w : World} : bi.
-    Proof.
-      refine
-        {| bi_car := Pred w;
-          bi_entails := entails;
-          bi_emp := empₚ;
-          bi_pure P _ := P;
-          bi_and P Q ι := P ι /\ Q ι;
-          bi_or P Q ι := P ι \/ Q ι;
-          bi_impl P Q ι := P ι -> Q ι;
-          bi_forall A f ι :=  forall a, f a ι;
-          bi_exist A f ι := exists a, f a ι;
-          bi_sep := sepₚ;
-          bi_wand := wandₚ;
-          bi_persistently := persistently;
-          bi_later := later;
-        |}.
-      - constructor; crushPredEntails2.
-        apply H1; crushPredEntails2.
-      - constructor; crushPredEntails2.
-      - constructor; crushPredEntails2.
-    Defined.
-
-    Definition proprepₚ {T : LCtx -> Type} {instTA : InstProp T} : Prop -> forall w, Tm T w -> Pred w :=
-      fun t2 w t1 => ((instprop t1 : Pred w) ∗-∗ bi_pure t2)%I.
-    #[global] Arguments proprepₚ {T _} _ [w] _ _/.
-
-    #[export] Instance persistent_pred {w} {P : Pred w} :
-      derived_connectives.Persistent P.
-    Proof. constructor. intros ι HP. now constructor. Qed.
-
-    #[export] Instance affine_pred {w} {P : Pred w} :
-      derived_connectives.Affine P.
-    Proof. constructor. intros ι HP. now constructor. Qed.
-
-
-    #[export] Instance pred_pure_forall {w} : BiPureForall (Pred w).
-    Proof. constructor. crushPredEntails2. Qed.
-
-  End proofmode.
+  (Import P : PredicateKit B)
+  (Import W : WorldsMixin B P).
 
   Ltac punfold_connectives :=
     change (@interface.bi_and (@bi_pred ?w) ?P ?Q ?ι) with (P ι /\ Q ι) in * ||
@@ -464,6 +269,13 @@ Module Pred
     Lemma pApply_r {w} {P Q R : Pred w} : Q ⊢ₚ R -> P ⊢ₚ Q -> P ⊢ₚ R.
     Proof. now transitivity Q. Qed.
 
+    Lemma elim_debugPred {B : LCtx → Type} {w : World} {b : B w} {P : Pred w} :
+      DebugPred B b P ⊢ P.
+    Proof.
+      crushPredEntails3.
+      now destruct H0.
+    Qed.
+
     Section Eq.
 
       Context {T A} {instTA : Inst T A}.
@@ -488,6 +300,7 @@ Module Pred
   Section SubstMod.
     Import ModalNotations.
     Import ctx.notations.
+    Import classes.
 
     Lemma acc_pathcond {w1 w2} (ω : w2 ⊒ w1) :
       forall ι,  instprop (wco w1) ι -> instprop (wco w2) (inst (sub_acc ω) ι).
@@ -499,129 +312,163 @@ Module Pred
 
     Import iris.bi.interface.
 
-    (* update: better/more standard names? *)
-    Definition assuming {w1 w2} (ω : w2 ⊒ w1) : Pred w1 -> Pred w2 :=
-      fun Rpast ι => forall (ιpast : Valuation w1), inst (sub_acc ω) ιpast = ι -> instprop (wco w1) ιpast -> Rpast ιpast.
-    Definition knowing {w1 w2} (ω : w2 ⊒ w1) : Pred w1 -> Pred w2 :=
-      fun Rpast ι => (exists (ιpast : Valuation w1), inst (sub_acc ω) ιpast = ι /\ instprop (wco w1) ιpast /\ Rpast ιpast)%type.
-    Definition forgetting {w1 w2} (ω : w1 ⊒ w2) : Pred w1 -> Pred w2 :=
-      fun Rfut ι => Rfut (inst (sub_acc ω) ι).
-    Definition unconditionally {w} : (□ Pred) w -> Pred w :=
-      fun P => (∀ {w2} (ω : w ⊒ w2), assuming ω (P w2 ω))%I.
-
     (* #[export] Instance knowing_params : *)
     (*   Params (@knowing) 3. Qed. *)
 
-    #[export] Instance knowing_proper {w1 w2} {ω : Acc w1 w2} :
+    #[export] Instance knowing_proper {w1 w2 : World} {ω : w1 ⊒ w2} :
       Proper (entails ==> entails) (knowing ω).
     Proof.
       unfold knowing.
       crushPredEntails3.
     Qed.
 
-    Lemma knowing_exists {w1 w2} {ω : Acc w1 w2} {A} (P : A -> Pred w2) :
+    #[export] Instance knowing_proper_bientails {w1 w2 : World} {ω : w1 ⊒ w2} :
+      Proper (bientails ==> bientails) (knowing ω).
+    Proof.
+      unfold knowing.
+      crushPredEntails3.
+    Qed.
+
+
+    Lemma knowing_exists {w1 w2 : World} {ω : w1 ⊒ w2} {A} (P : A -> Pred w2) :
       (∃ v, knowing ω (P v)) ⊣⊢ knowing ω (∃ v, P v).
     Proof.
       unfold knowing.
       crushPredEntails3.
     Qed.
 
-    Lemma knowing_sepₚ {w1 w2} {ω : Acc w1 w2} (P1 P2 : Pred w2) :
+    Lemma knowing_sepₚ {w1 w2 : World} {ω : w1 ⊒ w2} (P1 P2 : Pred w2) :
       (knowing ω (P1 ∗ P2)) ⊢ knowing ω P1 ∗ knowing ω P2.
     Proof.
       unfold knowing.
       crushPredEntails3.
     Qed.
 
-    Lemma assuming_sepₚ {w1 w2} {ω : Acc w1 w2} (P1 P2 : Pred w2) :
+    Lemma assuming_sepₚ {w1 w2 : World} {ω : w1 ⊒ w2} (P1 P2 : Pred w2) :
       (assuming ω (P1 ∗ P2)) ⊣⊢ assuming ω P1 ∗ assuming ω P2.
     Proof.
       unfold assuming.
       crushPredEntails3.
     Qed.
 
-    #[export] Instance assuming_proper {w1 w2} {ω : Acc w1 w2} :
+    Lemma assuming_True {w1 w2 : World} {ω : w1 ⊒ w2}  :
+      assuming ω True ⊣⊢ True.
+    Proof.
+      unfold assuming.
+      crushPredEntails3.
+    Qed.
+
+    #[export] Instance assuming_proper {w1 w2 : World} {ω : w1 ⊒ w2} :
       Proper (entails ==> entails) (assuming ω).
     Proof.
       unfold assuming.
       crushPredEntails3.
     Qed.
 
-    #[export] Instance assuming_proper_bientails {w1 w2} {ω : Acc w1 w2} :
+    #[export] Instance assuming_proper_bientails {w1 w2 : World} {ω : w1 ⊒ w2} :
       Proper (bientails ==> bientails) (assuming ω).
     Proof.
       unfold assuming.
       crushPredEntails3.
     Qed.
-
-    #[export] Instance forgetting_proper {w1 w2} {ω : Acc w1 w2} :
+    
+    #[export] Instance forgetting_proper {w1 w2 : World} {ω : w1 ⊒ w2} :
       Proper (entails ==> entails) (forgetting ω).
     Proof.
       unfold forgetting.
       crushPredEntails3.
-      apply (fromEntails _ _ H); last done.
+      apply (fromEntails H); last done.
       now apply acc_pathcond.
     Qed.
 
-    #[export] Instance forgetting_proper_bientails {w1 w2} {ω : Acc w1 w2} :
+    #[export] Instance forgetting_proper_bientails {w1 w2 : World} {ω : w1 ⊒ w2} :
       Proper (equiv ==> equiv) (forgetting ω).
     Proof.
       unfold forgetting.
       crushPredEntails3;
-        (apply (fromBientails _ _ H); last done;
+        (apply (fromBientails H); last done;
          now apply acc_pathcond).
     Qed.
     
-    Lemma forgetting_forall {w1 w2} {ω : Acc w1 w2} {A} {P : A -> Pred w1} :
+    Lemma forgetting_forall {w1 w2 : World} {ω : w1 ⊒ w2} {A} {P : A -> Pred w1} :
       (∀ v : A, forgetting ω (P v)) ⊣⊢ forgetting ω (∀ v : A, P v).
     Proof.
       unfold forgetting.
       crushPredEntails3.
     Qed.
 
-    Lemma forgetting_wand {w1 w2} {ω : Acc w1 w2} {P1 P2 : Pred w1} :
+    Lemma forgetting_wand {w1 w2 : World} {ω : w1 ⊒ w2} {P1 P2 : Pred w1} :
       (forgetting ω P1 -∗ forgetting ω P2) ⊣⊢ forgetting ω (P1 -∗ P2).
     Proof.
       unfold forgetting.
       crushPredEntails3.
     Qed.
 
-    Lemma knowing_assuming {w1 w2} (ω : w2 ⊒ w1) {P Q} :
+    Lemma forgetting_wand_iff {w1 w2 : World} {ω : w1 ⊒ w2} {P1 P2 : Pred w1} :
+      (forgetting ω P1 ∗-∗ forgetting ω P2) ⊣⊢ forgetting ω (P1 ∗-∗ P2).
+    Proof.
+      unfold forgetting, bi_wand_iff.
+      crushPredEntails3.
+    Qed.
+
+
+    Lemma knowing_assuming {w1 w2 : World} (ω : w2 ⊒ w1) {P Q} :
       knowing ω P ∗ assuming ω Q ⊢ knowing ω (P ∗ Q).
     Proof.
       unfold knowing, assuming.
       crushPredEntails3.
     Qed.
 
-    Lemma knowing_pure {w1 w2} (ω : w2 ⊒ w1) {P} :
+    Lemma knowing_absorb_forgetting {w1 w2 : World} (ω : w2 ⊒ w1) {P Q} :
+      knowing ω P ∗ Q ⊣⊢ knowing ω (P ∗ forgetting ω Q).
+    Proof.
+      unfold knowing, forgetting.
+      crushPredEntails3; now subst.
+    Qed.
+
+    Lemma knowing_pure {w1 w2 : World} (ω : w2 ⊒ w1) {P} :
       knowing ω (bi_pure P) ⊢ bi_pure P.
     Proof.
       unfold knowing.
       crushPredEntails3.
     Qed.
 
-    Lemma knowing_forall {w1 w2} {ω : Acc w1 w2} {A} {P : A -> Pred w2} :
+    Lemma knowing_forall {w1 w2 : World} {ω : w1 ⊒ w2} {A} {P : A -> Pred w2} :
       knowing ω (∀ v : A, P v) ⊢ (∀ v : A, knowing ω (P v)).
     Proof.
       unfold knowing.
       crushPredEntails3.
     Qed.
 
-    Lemma forgetting_pure {w1 w2} (ω : w2 ⊒ w1) {P} :
+    Lemma forgetting_pure {w1 w2 : World} (ω : w2 ⊒ w1) {P} :
       forgetting ω (bi_pure P) ⊣⊢ bi_pure P.
     Proof.
       unfold forgetting.
       crushPredEntails3.
     Qed.
 
-    Lemma assuming_pure {w1 w2} (ω : w2 ⊒ w1) {P} :
+    Lemma forgetting_emp {w1 w2 : World} (ω : w2 ⊒ w1) :
+      forgetting ω emp ⊣⊢ emp.
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+    Qed.
+
+    Lemma forgetting_sep {w1 w2 : World} (ω : w2 ⊒ w1) {P Q}:
+      forgetting ω (P ∗ Q) ⊣⊢ forgetting ω P ∗ forgetting ω Q.
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+    Qed.
+
+    Lemma assuming_pure {w1 w2 : World} (ω : w2 ⊒ w1) {P} :
       bi_pure P ⊢ assuming ω (bi_pure P).
     Proof.
       unfold assuming.
       crushPredEntails3.
     Qed.
 
-    Lemma forgetting_unconditionally {w1 w2} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
+    Lemma forgetting_unconditionally {w1 w2 : World} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
       forgetting ω (unconditionally P) ⊢ unconditionally (four P ω).
     Proof.
       unfold forgetting, unconditionally, assuming.
@@ -630,13 +477,13 @@ Module Pred
       now rewrite <-H1, <-inst_subst, <-sub_acc_trans.
     Qed.
 
-    Lemma forgetting_unconditionally_drastic {w1 w2} {ω : w2 ⊒ w1} (P : (□ Pred) w2) :
+    Lemma forgetting_unconditionally_drastic {w1 w2 : World} {ω : w1 ⊒ w2} {P} :
       forgetting ω (unconditionally P) ⊢ P _ ω.
     Proof.
       unfold forgetting, unconditionally, assuming.
       constructor.
       intros.
-      now apply (H0 w1 ω ι).
+      now apply (H0 w2 ω ι).
     Qed.
 
     Lemma unconditionally_T {w} (P : (□ Pred) w) :
@@ -646,6 +493,22 @@ Module Pred
       crushPredEntails3.
       eapply H0; try assumption.
       eapply inst_sub_id.
+    Qed.
+
+    Lemma eval_ex `{Inst AT A} {w : World} (t : AT w) :
+      ⊢ ∃ v, repₚ v (w := w) t.
+    Proof. crushPredEntails3. now eexists. Qed.
+
+    Lemma eval_prop `{InstPred AT} {w : World} (t : AT w) :
+      ⊢ ∃ P, proprepₚ P (w := w) t.
+    Proof. crushPredEntails3. now exists (instpred t ι). Qed.
+
+    Lemma forgetting_valuation_repₚ {w : World} (ι : Valuation w) {T : LCtx -> Type} `{Inst T A} ( t : T w) :
+      ⊢ forgetting (acc_wlctx_valuation ι) (repₚ (inst t ι) t).
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+      now rewrite inst_lift.
     Qed.
 
     Lemma lift_repₚ `{InstLift AT A} (v : A) {w : World} :
@@ -661,12 +524,35 @@ Module Pred
       crushPredEntails3.
     Qed.
 
-    Lemma proprepₚ_triv {T : LCtx -> Type} `{InstProp T} {a : Prop} {w : World} {vt : T w}:
+    Lemma repₚ_eqₚ {T : LCtx -> Type} `{Inst T A} {a : A} {w : World} {vt1 vt2 : T w}:
+      repₚ a vt1 ∗ eqₚ vt1 vt2 ⊢ repₚ a vt2.
+    Proof.
+      crushPredEntails3. now rewrite <-H1.
+    Qed.
+
+
+    Lemma eqₚ_triv {T : LCtx -> Type} `{Inst T A} {w : World} {vt1 vt2 : T w}:
+      (∀ ι : Valuation w, inst vt1 ι = inst vt2 ι) ->
+      ⊢ eqₚ vt1 vt2.
+    Proof.
+      crushPredEntails3.
+    Qed.
+
+
+    Lemma repₚ_antisym_left {T : LCtx -> Type} `{Inst T A} {a1 a2 : A} {w : World} {sa : T w} :
+      ⊢ repₚ a1 sa -∗ repₚ a2 sa -∗ ⌜ a1 = a2 ⌝.
+    Proof.
+      crushPredEntails3. now subst.
+    Qed.
+
+    Lemma proprepₚ_triv {T : LCtx -> Type} `{InstPred T} {a : Prop} {w : World} {vt : T w}:
       (∀ ι : Valuation w, instprop vt ι <-> a) ->
       ⊢ proprepₚ a vt.
     Proof.
       unfold proprepₚ.
       crushPredEntails3.
+      - now rewrite instpred_prop in H3.
+      - now rewrite instpred_prop.
     Qed.
 
     Lemma repₚ_cong {T1 : LCtx -> Type} `{Inst T1 A1}
@@ -692,11 +578,21 @@ Module Pred
       now rewrite H2 H4 H5.
     Qed.
 
-    Lemma proprepₚ_cong {T1 : LCtx -> Type} `{InstProp T1}
-      {T2 : LCtx -> Type} `{InstProp T2}
+    Lemma repₚ_term_prod {σ1 σ2} {v1 : Val σ1} {v2 : Val σ2} {w : World} {sv1 : STerm σ1 w} {sv2 : STerm σ2 w} :
+      repₚ (T := STerm (ty.prod σ1 σ2)) (v1,v2) (term_binop bop.pair sv1 sv2) ⊣⊢ repₚ v1 sv1 ∗ repₚ v2 sv2.
+    Proof.
+      unfold repₚ.
+      crushPredEntails3.
+      - now inversion H0.
+      - now inversion H0.
+      - now f_equal.
+    Qed.
+
+    Lemma proprepₚ_cong {T1 : LCtx -> Type} `{InstPred T1}
+      {T2 : LCtx -> Type} `{InstPred T2}
       {w : World} (fs : T1 w -> T2 w)
       {v1 : Prop} {vs1 : T1 w} :
-      (∀ (ι : Valuation w) vs1, instprop (fs vs1) ι <-> instprop vs1 ι) ->
+      (forall vs1, instpred (fs vs1) ⊣⊢ instpred vs1) ->
       proprepₚ v1 vs1 ⊢ proprepₚ v1 (fs vs1).
     Proof.
       crushPredEntails3.
@@ -704,10 +600,10 @@ Module Pred
 
     Lemma proprepₚ_cong₂ {T1 : LCtx -> Type} `{Inst T1 A1}
       {T2 : LCtx -> Type} `{Inst T2 A2}
-      {T3 : LCtx -> Type} `{InstProp T3}
+      {T3 : LCtx -> Type} `{InstPred T3}
       (f : A1 -> A2 -> Prop) {w : World} (fs : T1 w -> T2 w -> T3 w)
       {v1 : A1} {vs1 : T1 w} {v2 : A2} {vs2 : T2 w} :
-      (∀ (ι : Valuation w) vs1 vs2, instprop (fs vs1 vs2) ι <-> f (inst vs1 ι) (inst vs2 ι)) ->
+      (∀ (ι : Valuation w) vs1 vs2, instpred (fs vs1 vs2) ι <-> f (inst vs1 ι) (inst vs2 ι)) ->
       repₚ v1 vs1 ∗ repₚ v2 vs2 ⊢ proprepₚ (f v1 v2) (fs vs1 vs2).
     Proof.
       crushPredEntails3; now subst.
@@ -721,11 +617,55 @@ Module Pred
       now transitivity (inst vt ι).
     Qed.
 
+    Lemma repₚ_const {A} {v sv} {w} : repₚ (w := w) (T := Const A) sv v ⊣⊢  ⌜ v = sv ⌝.
+    Proof. crushPredEntails3. Qed.
+      
+
     Lemma repₚ_elim_repₚ {T : LCtx -> Type} `{Inst T A} {a1 : A} (a2 : A) {w : World} {vt1 : T w} (vt2 : T w):
       (∀ ι : Valuation w, inst vt1 ι = a1 -> inst vt2 ι = a2) ->
       repₚ a1 vt1 ⊢ repₚ a2 vt2.
     Proof. now crushPredEntails3. Qed.
 
+    Lemma repₚ_inversion_term_inl {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svl : STerm σ w) :
+      (repₚ v (term_inl svl) : Pred w) ⊢ ∃ (vl : Val σ), ⌜ v = inl vl ⌝ ∗ repₚ vl svl.
+    Proof.
+      unfold repₚ.
+      destruct v; crushPredEntails3; now inversion H0.
+    Qed.
+
+    Lemma repₚ_inversion_term_inr {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svr : STerm τ w) :
+      (repₚ v (term_inr svr) : Pred w) ⊢ ∃ vr, ⌜ v = inr vr ⌝ ∗ repₚ vr svr.
+    Proof.
+      unfold repₚ.
+      destruct v; crushPredEntails3; now inversion H0.
+    Qed.
+
+
+    Lemma repₚ_inversion_record {N R} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ)
+      {w : World} {v : recordt R} {svs : NamedEnv (λ τ : Ty, Term w τ) (recordf_ty R)} :
+      repₚ (T := STerm (ty.record R)) v (term_record R svs) ⊢
+        ∃ (vs : NamedEnv Val (recordf_ty R)), ⌜ v = recordv_fold R vs ⌝ ∗ repₚ vs svs.
+    Proof.
+      unfold repₚ. crushPredEntails3.
+      exists (recordv_unfold R v).
+      rewrite recordv_fold_unfold.
+      crushPredEntails3.
+      now rewrite <-H0, recordv_unfold_fold.
+    Qed.
+
+    Lemma repₚ_inversion_union {U} (K : unionk U) {v : Val (ty.union U)}
+      {w : World} {st : STerm (unionk_ty U K) w} :
+      repₚ (T := STerm (ty.union U)) v (term_union U K st) ⊢
+        ∃ (t : Val (unionk_ty U K)), ⌜ v = unionv_fold U (existT K t) ⌝ ∗ repₚ t st.
+    Proof.
+      unfold repₚ. crushPredEntails3.
+      destruct (unionv_unfold U v) as [K' t] eqn:Heqv .
+      rewrite <-H0 in Heqv.
+      rewrite unionv_unfold_fold in Heqv.
+      dependent elimination Heqv.
+      exists (inst (st : STerm _ w) ι).
+      now crushPredEntails3.
+    Qed.
 
     Section WithEnvironments.
       Import ctx.notations.
@@ -742,7 +682,7 @@ Module Pred
       Qed.
     End WithEnvironments.
         
-    Lemma forgetting_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
+    Lemma forgetting_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2}  {ω : w1 ⊒ w2} (t : AT w1) :
       (repₚ v (persist t ω) ⊣⊢ forgetting ω (repₚ v t))%I.
     Proof.
       rewrite persist_subst.
@@ -750,19 +690,20 @@ Module Pred
       constructor. split; rewrite inst_subst; auto using acc_pathcond.
     Qed.
 
-    Lemma forgetting_proprepₚ `{InstPropSubst AT, @SubstLaws AT _} {v w1 w2} {ω : Acc w1 w2}  (t : AT w1) :
-      (proprepₚ v (persist t ω) ⊣⊢ forgetting ω (proprepₚ v t))%I.
+    Lemma instpred_persist {T : LCtx -> Type} `{InstPredSubst T} {_ : SubstLaws T} {w1 w2} {ω : w1 ⊒ w2} (t : T w1) :
+      instpred (persist t ω) ⊣⊢ forgetting ω (instpred t).
     Proof.
-      unfold forgetting, proprepₚ, derived_connectives.bi_wand_iff.
-      constructor.
-      crushPredEntails3.
-      - now apply H4, instprop_persist.
-      - now apply instprop_persist.
-      - now apply H4, instprop_persist.
-      - now apply instprop_persist.
+      now rewrite instpred_subst.
     Qed.
 
-    Lemma assuming_refl {w} {P : Pred w} : assuming acc_refl P ⊣⊢ P.
+    Lemma forgetting_proprepₚ `{InstPredSubst AT, @SubstLaws AT _} {v w1 w2} {ω : w1 ⊒ w2}  (t : AT w1) :
+      (proprepₚ v (persist t ω) ⊣⊢ forgetting ω (proprepₚ v t))%I.
+    Proof.
+      unfold proprepₚ.
+      now rewrite instpred_persist -forgetting_wand_iff forgetting_pure.
+    Qed.
+
+    Lemma assuming_id {w} {P : Pred w} : assuming acc_refl P ⊣⊢ P.
     Proof.
       rewrite /assuming.
       crushPredEntails3.
@@ -770,15 +711,7 @@ Module Pred
       - rewrite inst_sub_id in H1; now subst.
     Qed.
 
-    Lemma knowing_refl {w} {P : Pred w} : knowing acc_refl P ⊣⊢ P.
-    Proof.
-      rewrite /knowing.
-      crushPredEntails3.
-      - rewrite inst_sub_id in H0. now subst.
-      - now rewrite inst_sub_id.
-    Qed.
-
-    Lemma knowing_trans {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3} {P : Pred w3} :
+    Lemma knowing_trans {w1 w2 w3 : World} {ω12 : w1 ⊒ w2} `{ω23 : w2 ⊒ w3} {P : Pred w3} :
       knowing (acc_trans ω12 ω23) P ⊣⊢ knowing ω12 (knowing ω23 P).
     Proof.
       rewrite /knowing.
@@ -792,8 +725,8 @@ Module Pred
         now subst.
     Qed.
 
-    Lemma assuming_trans {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3} {P : Pred w3} :
-      assuming (acc_trans ω12 ω23) P ⊣⊢ assuming ω12 (assuming ω23 P).
+    Lemma assuming_trans {w1 w2 w3 : World} {sub12 : w1 ⊒ w2} `{ω23 : w2 ⊒ w3} {P : Pred w3} :
+      assuming (acc_trans sub12 ω23) P ⊣⊢ assuming sub12 (assuming ω23 P).
     Proof.
       rewrite /assuming.
       crushPredEntails3.
@@ -805,7 +738,7 @@ Module Pred
         now apply acc_pathcond.
     Qed.
 
-    Lemma forgetting_trans {w1 w2 w3} {ω12 : Acc w1 w2} {ω23 : Acc w2 w3} {P : Pred w1} :
+    Lemma forgetting_trans {w1 w2 w3 : World} {ω12 : w1 ⊒ w2} {ω23 : w2 ⊒ w3} {P : Pred w1} :
       forgetting (acc_trans ω12 ω23) P ⊣⊢ forgetting ω23 (forgetting ω12 P).
     Proof.
       rewrite /forgetting.
@@ -814,7 +747,7 @@ Module Pred
       - now rewrite sub_acc_trans inst_subst.
     Qed.
 
-    Lemma forgetting_refl {w} {P : Pred w} : forgetting acc_refl P ⊣⊢ P.
+    Lemma forgetting_id {w} {P : Pred w} : forgetting acc_refl P ⊣⊢ P.
     Proof.
       rewrite /forgetting.
       crushPredEntails3.
@@ -822,25 +755,14 @@ Module Pred
       - now rewrite inst_sub_id.
     Qed.
 
-    Lemma forgetting_refl' {w} {P : Pred w} (ω : w ⊒ w) :
-      sub_acc ω = sub_id w ->
-      forgetting ω P ⊣⊢ P.
-    Proof.
-      rewrite /forgetting.
-      crushPredEntails3.
-      - rewrite H in H1.
-        now rewrite <-inst_sub_id.
-      - now rewrite H inst_sub_id.
-    Qed.
-
-    Lemma forgetting_assuming {w1 w2} {ω : Acc w1 w2} {P : Pred w2} :
+    Lemma forgetting_assuming {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w2} :
       forgetting ω (assuming ω P) ⊢ P.
     Proof.
       rewrite /forgetting /assuming.
       now crushPredEntails3.
     Qed.
 
-    Lemma knowing_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} :
+    Lemma knowing_forgetting {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w1} :
       knowing ω (forgetting ω P) ⊢ P.
     Proof.
       rewrite /forgetting /knowing.
@@ -848,73 +770,14 @@ Module Pred
       now rewrite <-H0.
     Qed.
 
-    Lemma forgetting_knowing {w1 w2} {ω : Acc w1 w2} {P : Pred w2} :
+    Lemma forgetting_knowing {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w2} :
       P ⊢ forgetting ω (knowing ω P).
     Proof.
       rewrite /forgetting /knowing.
       now crushPredEntails3.
     Qed.
 
-    Lemma knowing_forgetting_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w1}
-      (H : IsIsomorphism ω ω') :
-      P ⊣⊢ knowing ω (forgetting ω P).
-    Proof.
-      rewrite /forgetting /knowing.
-      crushPredEntails3.
-      - exists (inst (sub_acc ω') ι).
-        rewrite wiso_there; intuition.
-        now apply acc_pathcond.
-      - now subst.
-    Qed.
-
-    Lemma assuming_forgetting_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w1}
-      (H : IsIsomorphism ω ω') :
-      P ⊣⊢ assuming ω (forgetting ω P).
-    Proof.
-      rewrite /forgetting /assuming.
-      crushPredEntails3.
-      - now subst.
-      - specialize (H1 (inst (sub_acc ω') ι)).
-        rewrite wiso_there in H1; intuition.
-        now apply H2, acc_pathcond.
-    Qed.
-
-    Lemma forgetting_knowing_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w2}
-      (H : IsIsomorphism ω ω') :
-      P ⊣⊢ forgetting ω (knowing ω P).
-    Proof.
-      rewrite /forgetting /knowing.
-      crushPredEntails3.
-      apply (f_equal (inst (sub_acc ω'))) in H1.
-      rewrite !wiso_back in H1; intuition.
-      now subst.
-    Qed.
-
-    Lemma knowing_knowing_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w1}
-      (H : IsIsomorphism ω ω') :
-      knowing ω (knowing ω' P) ⊣⊢ P.
-    Proof.
-      unfold knowing.
-      crushPredEntails3.
-      - subst.
-        now rewrite wiso_there.
-      - exists (inst (sub_acc ω') ι).
-        repeat split.
-        + now apply wiso_there.
-        + now apply acc_pathcond.
-        + now exists ι.
-    Qed.
-
-
-    Lemma forgetting_knowing_iso2 {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w1}
-      (H : IsIsomorphism ω ω') :
-      knowing ω' P ⊣⊢ forgetting ω P.
-    Proof.
-      rewrite (forgetting_knowing_iso (P := (knowing ω' P)) H).
-      now rewrite knowing_knowing_iso.
-    Qed.
-
-    Lemma assuming_forgetting {w1 w2} {ω : Acc w1 w2} {P : Pred w1} :
+    Lemma assuming_forgetting {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w1} :
       P ⊢ assuming ω (forgetting ω P).
     Proof.
       rewrite /forgetting /assuming.
@@ -922,61 +785,52 @@ Module Pred
       now rewrite H1.
     Qed.
 
-    Lemma forgetting_assuming_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} {P : Pred w2}
-      (iso : IsIsomorphism ω ω') :
-      P ⊣⊢ forgetting ω (assuming ω P).
-    Proof.
-      rewrite /forgetting /assuming.
-      crushPredEntails3.
-      apply (f_equal (inst (sub_acc ω'))) in H1.
-      rewrite !wiso_back in H1; intuition.
-      now subst.
-    Qed.
-
-    Lemma cancel_forgetting_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} `{iso : IsIsomorphism ω ω'}
-      {P Q : Pred w1} :
-      (forgetting ω P ⊢ forgetting ω Q) -> P ⊢ Q.
-    Proof.
-      intros H.
-      rewrite (knowing_forgetting_iso (P := P) iso) (knowing_forgetting_iso (P := Q) iso).
-      now rewrite H.
-    Qed.
-
-    Lemma cancel_knowing_iso {w1 w2} {ω : Acc w1 w2} {ω' : Acc w2 w1} `{iso : IsIsomorphism ω ω'}
-      {P Q : Pred w2} :
-      (knowing ω P ⊢ knowing ω Q) -> P ⊢ Q.
-    Proof.
-      intros H.
-      rewrite (forgetting_knowing_iso (P := P) iso)
-        (forgetting_knowing_iso (P := Q) iso).
-      now rewrite H.
-    Qed.
-
-    Lemma forgetting_assuming_adjoint {w1 w2} {ω : Acc w1 w2} {P Q} :
-      (forgetting ω P ⊢ Q) <-> (P ⊢ assuming ω Q).
-    Proof.
-      rewrite /forgetting /assuming.
-      split; crushPredEntails3.
-      - subst; now apply H4.
-      - apply (fromEntails _ _ H) with (inst (sub_acc ω) ι);
-          auto using acc_pathcond.
-    Qed.
-
-    Lemma forgetting_knowing_adjoint {w1 w2} {ω : Acc w1 w2} {P Q} :
-      (knowing ω P ⊢ Q) <-> (P ⊢ forgetting ω Q).
-    Proof.
-      rewrite /forgetting /assuming /knowing.
-      split; crushPredEntails3.
-      - apply (fromEntails _ _ H); auto using acc_pathcond.
-        now exists ι.
-      - now subst.
-    Qed.
-
     Import iris.proofmode.modalities.
     Import iris.proofmode.classes.
     Import iris.proofmode.tactics.
 
-    #[export] Instance fromExist_knowing {w1 w2} {A} {ω : Acc w1 w2} {P} {Φ : A -> Pred _}:
+    #[export] Instance intowand_forgetting_unconditionally {p q} {w1 w2 : World} {ω : w1 ⊒ w2} {P : ((□ Pred) w1)%modal} {Q R} :
+      IntoWand p q (P w2 ω) Q R -> IntoWand p q (forgetting ω (unconditionally P)) Q R | 0.
+    Proof.
+      unfold IntoWand; cbn.
+      now rewrite forgetting_unconditionally_drastic.
+    Qed.
+
+    #[export] Instance intowand_forgetting {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w1} {Q R}:
+      IntoWand false false P Q R -> IntoWand false false (forgetting ω P) (forgetting ω Q) (forgetting ω R) | 1.
+    Proof.
+      iIntros (Hiw).
+      unfold IntoWand; cbn.
+      rewrite forgetting_wand.
+      pose proof (into_wand false false P Q R) as Hwand.
+      cbn in Hwand.
+      now rewrite Hwand.
+    Qed.
+
+    #[export] Instance intowand_unconditionally {p q} {w} {P : ((□ Pred) w)%modal} {Q R}:
+      IntoWand p q (P w acc_refl) Q R -> IntoWand p q (unconditionally P) Q R.
+    Proof.
+      unfold IntoWand; cbn.
+      now rewrite unconditionally_T.
+    Qed.
+
+    #[export] Instance intoforall_forgetting {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w1} {A} {Φ}:
+      IntoForall (A := A) P Φ -> IntoForall (forgetting ω P) (fun a => forgetting ω (Φ a)).
+    Proof.
+      iIntros (Hiw).
+      unfold IntoForall; cbn.
+      rewrite forgetting_forall.
+      now rewrite (into_forall P).
+    Qed.
+
+    #[export] Instance intoforall_unconditionally {w} {P : (□ Pred) w} {A} {Φ}:
+      IntoForall (A := A) (P w acc_refl) Φ -> IntoForall (unconditionally P) Φ.
+    Proof.
+      unfold IntoForall; cbn.
+      now rewrite unconditionally_T.
+    Qed.
+
+    #[export] Instance fromExist_knowing {w1 w2 : World} {A} {ω : w1 ⊒ w2} {P} {Φ : A -> Pred _}:
       FromExist P Φ -> FromExist (knowing ω P) (fun v => knowing ω (Φ v)).
     Proof.
       unfold FromExist.
@@ -989,7 +843,7 @@ Module Pred
       now iExists v.
     Qed.
 
-    #[export] Instance fromExist_assuming {w1 w2} {A} {ω : Acc w1 w2} {P} {Φ : A -> Pred _}:
+    #[export] Instance fromExist_assuming {w1 w2 : World} {A} {ω : w1 ⊒ w2} {P} {Φ : A -> Pred _}:
       FromExist P Φ -> FromExist (assuming ω P) (fun v => assuming ω (Φ v)).
     Proof.
       unfold FromExist.
@@ -1010,76 +864,82 @@ Module Pred
       iIntros (_) "[#HP Hk]".
       iApply "Hk".
       iSpecialize ("HP" $! w acc_refl).
-      now rewrite /ElimModal /unconditionally assuming_refl.
+      now rewrite /ElimModal /unconditionally assuming_id.
     Qed.
 
-    Class IntoAssuming {w1 w2} (ω : Acc w1 w2) (P : Pred w1) (Q : Pred w2) :=
+    Class IntoAssuming {w1 w2 : World} (ω : w1 ⊒ w2) (P : Pred w1) (Q : Pred w2) :=
       into_assuming : P ⊢ assuming ω Q.
 
-    #[export] Instance into_assuming_default {w1 w2} {ω : Acc w1 w2} (P : Pred w1) :
+    #[export] Instance into_assuming_default {w1 w2 : World} {ω : w1 ⊒ w2} (P : Pred w1) :
       IntoAssuming ω P (forgetting ω P) | 10.
     Proof. unfold IntoAssuming. now apply assuming_forgetting. Qed.
 
-    #[export] Instance into_assuming_assuming {w1 w2} {ω : Acc w1 w2} (P : Pred w2) :
+    #[export] Instance into_assuming_assuming {w1 w2 : World} {ω : w1 ⊒ w2} (P : Pred w2) :
       IntoAssuming ω (assuming ω P) P | 0.
     Proof. now unfold IntoAssuming. Qed.
 
-    Lemma modality_mixin_assuming {w1 w2} {ω : Acc w1 w2} : modality_mixin (assuming ω) (MIEnvTransform (IntoAssuming ω)) (MIEnvTransform (IntoAssuming ω)).
+    #[export] Instance into_assuming_forgetting {w1 w2 w3 : World} {ω12 : w1 ⊒ w2} {ω23 : w2 ⊒ w3 }(P : Pred w1) :
+      IntoAssuming ω23 (forgetting ω12 P) (forgetting (acc_trans ω12 ω23) P) | 0.
+    Proof. unfold IntoAssuming. rewrite forgetting_trans. now apply assuming_forgetting. Qed.
+
+    Lemma modality_mixin_assuming {w1 w2 : World} {ω : w1 ⊒ w2} : modality_mixin (assuming ω) (MIEnvTransform (IntoAssuming ω)) (MIEnvTransform (IntoAssuming ω)).
     Proof.
       constructor; cbn; try done; rewrite /assuming; crushPredEntails3.
       destruct into_assuming as [HPQ].
       crushPredEntails3.
     Qed.
 
-    Definition modality_assuming {w1 w2} (ω : Acc w1 w2) : modality (Pred w2) (Pred w1) :=
+    Definition modality_assuming {w1 w2 : World} (ω : w1 ⊒ w2) : modality (Pred w2) (Pred w1) :=
       Modality (assuming ω) modality_mixin_assuming.
 
-    #[export] Instance fromModal_assuming {w1 w2} {ω : Acc w1 w2} {P} :
+    #[export] Instance fromModal_assuming {w1 w2 : World} {ω : w1 ⊒ w2} {P} :
       FromModal True (modality_assuming ω) tt (assuming ω P) P.
     Proof.
       constructor; crushPredEntails3.
     Qed.
 
-    Class IntoForgetting {w1 w2} (ω : Acc w1 w2) (P : Pred w2) (Q : Pred w1) :=
+    Class IntoForgetting {w1 w2 : World} (ω : w1 ⊒ w2) (P : Pred w2) (Q : Pred w1) :=
       into_forgetting : P ⊢ forgetting ω Q.
 
-    #[export] Instance into_forgetting_default {w1 w2} {ω : Acc w1 w2} (P : Pred w2) :
+    #[export] Instance into_forgetting_default {w1 w2 : World} {ω : w1 ⊒ w2} (P : Pred w2) :
       IntoForgetting ω P (knowing ω P) | 10.
     Proof. unfold IntoForgetting. now apply forgetting_knowing. Qed.
 
-    #[export] Instance into_forgetting_forgetting {w1 w2} {ω : Acc w1 w2} (P : Pred w1) :
+    #[export] Instance into_forgetting_knowing {w1 w2 w3 : World} {ω12 : w1 ⊒ w2} {ω23 : w2 ⊒ w3} (P : Pred w3) :
+      IntoForgetting ω12 (knowing ω23 P) (knowing (acc_trans ω12 ω23) P) | 0.
+    Proof. unfold IntoForgetting. rewrite knowing_trans. now apply forgetting_knowing. Qed.
+
+    #[export] Instance into_forgetting_forgetting {w1 w2 : World} {ω : w1 ⊒ w2} (P : Pred w1) :
       IntoForgetting ω (forgetting ω P) P | 0.
     Proof. now unfold IntoForgetting. Qed.
 
 
     (* TODO: define typeclass FromForgetting to preserve other forgetting assumptions *)
-    Lemma modality_mixin_forgetting {w1 w2} {ω : Acc w1 w2} : modality_mixin (forgetting ω) (MIEnvTransform (IntoForgetting ω)) (MIEnvTransform (IntoForgetting ω)).
+    Lemma modality_mixin_forgetting {w1 w2 : World} `{ω : w1 ⊒ w2} : modality_mixin (forgetting ω) (MIEnvTransform (IntoForgetting ω)) (MIEnvTransform (IntoForgetting ω)).
     Proof.
       constructor; cbn; try done; rewrite /forgetting; crushPredEntails3.
       - destruct H as [H]. apply H; done.
       - apply H; last done. now apply acc_pathcond.
     Qed.
 
-    Definition modality_forgetting {w1 w2} (ω : Acc w1 w2) : modality (Pred w1) (Pred w2) :=
+    Definition modality_forgetting {w1 w2 : World} {ω : w1 ⊒ w2} : modality (Pred w1) (Pred w2) :=
       Modality (forgetting ω) modality_mixin_forgetting.
 
-    #[export] Instance fromModal_forgetting {w1 w2} {ω : Acc w1 w2} {P} :
-      FromModal True (modality_forgetting ω) tt (forgetting ω P) P.
+    #[export] Instance fromModal_forgetting {w1 w2 : World} {ω : w1 ⊒ w2} {P} :
+      FromModal True (modality_forgetting (ω := ω)) tt (forgetting ω P) P.
     Proof.
       constructor; crushPredEntails3.
     Qed.
 
     Lemma knowing_acc_snoc_right {w b P} :
-      knowing (@acc_snoc_right w b) P ⊣⊢ ∃ v, forgetting (acc_snoc_left' b (term_val _ v)) P.
+      knowing (w1 := wsnoc w b) acc_snoc_right P ⊣⊢ ∃ v, forgetting (w1 := wsnoc w b) (acc_snoc_left acc_refl b (term_val _ v)) P.
     Proof.
       unfold knowing, forgetting.
       crushPredEntails3.
       - destruct (env.view x) as [ιp v].
         exists v.
         change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b v).
-        rewrite inst_sub_id.
-        rewrite inst_sub_wk1 in H0.
-        now subst.
+        now rewrite inst_sub_id -H0 inst_sub_wk1.
       - exists (env.snoc ι b x).
         change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b x) in H0.
         rewrite inst_sub_id in H0.
@@ -1089,9 +949,9 @@ Module Pred
 
     Lemma knowing_acc_subst_right {w : World} {x σ} `{xIn : (x∷σ ∈ w)%katamaran}
       {t : Term (w - x∷σ) σ} {P} :
-      (knowing (acc_subst_right t) P : Pred w) ⊣⊢ 
+      (knowing (w1 := wsubst w x t) (acc_subst_right t) P : Pred w) ⊣⊢ 
         (eqₚ (term_var_in xIn) (subst t (sub_shift xIn)) ∗
-           assuming (acc_subst_right t) P)%I.
+           assuming (w1 := wsubst w x t) (acc_subst_right t) P)%I.
     Proof.
       unfold knowing, assuming.
       crushPredEntails3.
@@ -1119,22 +979,15 @@ Module Pred
     Qed.
       
 
-    Lemma assuming_acc_snoc_let {w b P v} :
-      assuming (@acc_snoc_right w b) P ⊢ assuming (@acc_let_right w b v) P.
-    Proof.
-      unfold assuming.
-      now crushPredEntails3.
-    Qed.
-
-    Lemma forgetting_acc_snoc_left_repₚ {w1 w2 b} {ω : Acc w1 w2} {v} :
-      ⊢ forgetting (acc_snoc_left ω b (term_val _ v)) (repₚ v term_var_zero).
+    Lemma forgetting_acc_snoc_left_repₚ {w1 w2 : World} {b} {ω : w1 ⊒ w2} {v} :
+      ⊢ forgetting (w1 := wsnoc w1 b) (acc_snoc_left ω b (term_val _ v)) (repₚ v term_var_zero).
     Proof.
       unfold forgetting.
       now crushPredEntails3.
     Qed.
 
     Lemma assuming_acc_snoc_right {w b P} :
-      assuming (@acc_snoc_right w b) P ⊣⊢ ∀ v, forgetting (acc_snoc_left' b (term_val _ v)) P.
+      assuming (w1 := wsnoc w b) (acc_snoc_right) P ⊣⊢ ∀ v, forgetting (w1 := wsnoc w b) (acc_snoc_left acc_refl b (term_val _ v)) P.
     Proof.
       unfold assuming, forgetting.
       crushPredEntails3.
@@ -1151,99 +1004,34 @@ Module Pred
         now apply H0.
     Qed.
 
-    Lemma assuming_acc_snoc_right_let {w b} {P : Pred (wsnoc w b)} :
-      assuming (@acc_snoc_right w b) P ⊣⊢ ∀ v, forgetting (acc_let_left b v) P.
-    Proof.
-      unfold assuming, forgetting.
-      crushPredEntails3.
-      - change (P (env.snoc (inst (sub_id w) ι) b a)).
-        rewrite inst_sub_id.
-        apply H0.
-        + eapply inst_sub_wk1.
-        + now rewrite instprop_subst inst_sub_wk1.
-      - destruct (env.view ιpast) as [ι' v].
-        rewrite inst_sub_wk1 in H1; subst.
-        specialize (H0 v).
-        change (P (env.snoc (inst (sub_id w) ι) b v)) in H0.
-        now rewrite inst_sub_id in H0.
-    Qed.
-
-    Lemma assuming_acc_let_right {w b v P} :
-      assuming (@acc_let_right w b v) P ⊣⊢ forgetting (acc_let_left b v) P.
-    Proof.
-      unfold assuming, forgetting.
-      crushPredEntails3.
-      - change (P (env.snoc (inst (sub_id w) ι) b v)).
-        rewrite inst_sub_id.
-        apply H0.
-        + eapply inst_sub_wk1.
-        + now rewrite instprop_subst inst_sub_wk1.
-      - destruct (env.view ιpast) as [ι' v'].
-        rewrite inst_sub_wk1 in H1; subst.
-        change (P (env.snoc (inst (sub_id w) ι) b v')) in H0.
-        now rewrite inst_sub_id in H0.
-    Qed.
-
-    Lemma assuming_acc_let_snoc {w b v P} :
-      assuming (acc_let_left (w := w) b v) P ⊣⊢ (repₚ v term_var_zero -∗ forgetting acc_snoc_right P).
-    Proof.
-      unfold assuming, forgetting, repₚ.
-      crushPredEntails3; destruct (env.view ι) as [ι v']; subst; cbn in *.
-      - rewrite instprop_subst inst_sub_wk1 in H; subst.
-        crushPredEntails3.
-        rewrite inst_sub_wk1.
-        apply H0; try done.
-        f_equal; try done.
-        now apply inst_sub_id.
-      - rewrite inst_sub_wk1 in H0.
-        change (env.map _ _) with (inst (sub_id w) ιpast) in H1.
-        rewrite inst_sub_id in H1.
-        destruct (proj1 (env.inversion_eq_snoc ιpast ι v v') H1) as [-> ->].
-        now apply H0.
-    Qed.
-
-    Lemma entails_let_snoc_wkn {w b v} {P Q} :
-      @entails (wsnoc w b) (repₚ v term_var_zero ∗ P)%I Q <-> @entails (wlet w b v) P Q.
-    Proof.
-      crushPredEntails3.
-      - rewrite instprop_snoc in H0.
-        crushPredEntails3.
-        apply H3; crushPredEntails3.
-      - now apply (fromEntails _ _ H).
-    Qed.
-
-    Lemma bi_sep_let_snoc_wkn {w b v} {P Q} :
-      @bientails (wsnoc w b) (bi_sep (PROP := bi_pred (w := wlet w b v)) P Q)%I (bi_sep (PROP := bi_pred (w := wsnoc w b)) P Q)%I.
-    Proof. crushPredEntails3. Qed.
-    
-    Lemma forgetting_acc_pathcondition_right_snoc {w : World}
-      {C : PathCondition w} {b : Formula w} 
-      {P : Pred (wpathcondition w (C ▻ b))} :
-      (forgetting (acc_pathcondition_right w (C ▻ b)) P : Pred w) ⊣⊢ 
-        forgetting (acc_pathcondition_right w C) (forgetting (acc_formula_right (w := wpathcondition w C) b) P).
+    Lemma forgetting_acc_pathcondition_right {w : World}
+      {C : PathCondition w}
+      {P : Pred (wpathcondition w C)} :
+      (forgetting (w2 := wpathcondition w C) acc_refl P : Pred w) ⊣⊢ P.
     Proof.
       unfold forgetting, acc_pathcondition_right, wpathcondition; cbn.
       crushPredEntails3.
-      - now rewrite inst_sub_id.
       - now rewrite inst_sub_id in H0.
+      - now rewrite inst_sub_id.
     Qed.
 
     Lemma assuming_acc_pathcondition_right
       {w : World} {sc : PathCondition w} {P : Pred w} :
-      (instprop sc : Pred w) ∗ assuming (acc_pathcondition_right w sc) P ⊢ P.
+      instpred sc ∗ assuming (w2 := wpathcondition w sc) acc_refl P ⊢ P.
     Proof.
       unfold assuming.
       crushPredEntails3.
       apply H1.
       - apply inst_sub_id.
-      - now apply instprop_cat.
+      - rewrite instpred_prop in H0.
+        now apply instprop_cat.
     Qed.
 
     
     Lemma forgetting_acc_pathcondition_right_sep {w : World} {P : Pred w} {C : PathCondition w}
       {Q : Pred (wpathcondition w C)} :
-      (forgetting (acc_pathcondition_right w C) (P ∗ Q) : Pred w) ⊣⊢ 
-        P ∗ forgetting (acc_pathcondition_right w C) Q.
+      (forgetting (w1 := wpathcondition w C) acc_refl (P ∗ Q) : Pred w) ⊣⊢ 
+        P ∗ forgetting (w2 := wpathcondition w C) acc_refl Q.
     Proof.
       unfold forgetting, acc_pathcondition_right, wpathcondition; cbn.
       crushPredEntails3.
@@ -1251,31 +1039,34 @@ Module Pred
       - now rewrite inst_sub_id.
     Qed.
     
-    Lemma forgetting_acc_pathcondition_right {w : World} {P : Pred w} {C : PathCondition w} :
-      (forgetting (acc_pathcondition_right w C) P : Pred w) ⊣⊢ P.
-    Proof.
-      unfold forgetting, acc_pathcondition_right, wpathcondition; cbn.
-      crushPredEntails3.
-      - now rewrite inst_sub_id in H0.
-      - now rewrite inst_sub_id.
-    Qed.
-      
-    (* Lemma assuming_acc_subst_right_let  {w : World} x {σ} {xIn : x∷σ ∈ w} *)
+    (* Lemma assuming_acc_subst_right_left  {w : World} x {σ} {xIn : x∷σ ∈ w} *)
     (*   (t : Term (w - x∷σ) σ) {P} : *)
     (*   assuming (acc_subst_right x t) P ⊣⊢ *)
     (*     eqₚ (term_var xIn) (subst (sub_wk1 xIn) t) ∗ *)
     (*     forgetting (acc_subst_left x) P. *)
+
+    Definition assuming_acc_match_right {w : World} {σ} {s : Term w σ}
+      {p : @Pattern LVar σ} (pc : PatternCase p) : 
+      ⊢ assuming (w1 := wmatch w s p pc) (acc_match_right pc)
+        (eqₚ (persist s (acc_match_right pc)) (pattern_match_term_reverse p pc (sub_wmatch_patctx pc))).
+    Proof.
+      unfold assuming.
+      crushPredEntails3.
+    Qed.
+
   End SubstMod.
 
   Module logicalrelation.
     Import ModalNotations.
     Import iris.bi.interface.
-    Class Rel (AT : TYPE) (A : Type) : Type :=
+    Import iris.proofmode.classes.
+    Import iris.proofmode.tactics.
+    Record Rel (AT : TYPE) (A : Type) : Type :=
       MkRel { RSat : A -> (⊢ AT -> Pred)%modal }.
     Bind Scope rel_scope with Rel.
 
     #[global] Arguments MkRel [AT A] &.
-    #[global] Arguments RSat {_ _} _ _ {w} _.
+    #[global] Arguments RSat {_ _} !Rel _ {w} _ : rename.
     (* We use the same script ℛ as in the paper. This encodes (ι,x,y) ∈ ℛ[_,_]
        from the paper as (ℛ ι x y), i.e. the types of the relation are
        implicit. *)
@@ -1286,46 +1077,64 @@ Module Pred
        instantiated with a valuation, i.e. symbolic terms, stores, heaps etc. *)
     Definition RInst AT A {instA : Inst AT A} : Rel AT A :=
       MkRel repₚ.
-    Arguments RInst _ _ {_}.
+    Arguments RInst _ _ {_} : simpl never.
 
-    (* huh? missing instance? *)
-    #[export] Instance instprop_symprop : InstProp 𝕊 := fun Σ v ι => SymProp.safe v ι.
-
-    Definition RInstPropIff AT {instA : InstProp AT} : Rel AT Prop :=
+    Definition RInstPropIff AT {instA : InstPred AT} : Rel AT Prop :=
       MkRel proprepₚ.
     Arguments RInstPropIff _ {_}.
 
-    #[export] Instance RBox {AT A} (RA : Rel AT A) : Rel (Box AT) A :=
+    Definition RBox {AT A} (RA : Rel AT A) : Rel (Box AT) A :=
       MkRel 
         (fun v w t => unconditionally (fun w2 ω => ℛ⟦ RA ⟧ v (t w2 ω))).
+    Arguments RBox {AT A} RA : simpl never.
 
-    #[export] Instance RImpl {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
+    Definition RImpl {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
       Rel (Impl AT BT) (A -> B) :=
       MkRel (fun fc w fs => ∀ a ta, ℛ⟦ RA ⟧ a ta -∗ ℛ⟦ RB ⟧ (fc a) (fs ta))%I.
+    Arguments RImpl {_ _ _ _} RA RB : simpl never.
 
-    #[export] Instance RForall {𝑲}
+    Definition intowand_rimpl {A AT B BT} {RA : Rel AT A} {RB : Rel BT B}  {w} {a sa f} {sf} :
+      IntoWand false false (RSat (RImpl RA RB) f sf) (RSat RA a sa) (RSat RB (f a) (w := w) (sf sa)).
+    Proof.
+      unfold IntoWand, RImpl; cbn.
+      iIntros "H".
+      now iApply "H".
+    Qed.
+
+    Definition RForall {𝑲}
       {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
       (RA : forall K, Rel (AT K) (A K)) :
-      Rel (@SIG.Forall 𝑲 AT) (forall K : 𝑲, A K) :=
+      Rel (@W.Forall 𝑲 AT) (forall K : 𝑲, A K) :=
       MkRel (fun fc w fs => ∀ₚ K : 𝑲, ℛ⟦ RA K ⟧ (fc K) (fs K))%P.
+    Arguments RForall {_ _ _} RA : simpl never.
+    #[export] Instance intoforall_rforall {𝑲}
+      {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
+      {RA : forall K, Rel (AT K) (A K)} {f w} {sf : forall K, AT K w} :
+      IntoForall (RSat (RForall RA) f sf) (fun K => RSat (RA K) (f K) (sf K)).
+    Proof.
+      unfold IntoForall, RForall.
+      now cbn.
+    Qed.
 
-    #[export] Instance RVal (σ : Ty) : Rel (fun Σ => Term Σ σ) (Val σ) :=
+    Definition RVal (σ : Ty) : Rel (fun Σ => Term Σ σ) (Val σ) :=
       RInst (fun Σ => Term Σ σ) (Val σ).
+    Arguments RVal σ : simpl never.
 
-    #[export] Instance RNEnv (N : Set) (Δ : NCtx N Ty) : Rel _ _ :=
+    Definition RNEnv (N : Set) (Δ : NCtx N Ty) : Rel _ _ :=
       RInst (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv Val Δ).
-    #[export] Instance REnv (Δ : Ctx Ty) : Rel _ _ :=
+    Definition REnv (Δ : Ctx Ty) : Rel _ _ :=
         RInst (fun Σ : LCtx => Env (Term Σ) Δ) (Env Val Δ).
-    #[export] Instance RUnit : Rel Unit unit := RInst Unit unit.
+    Definition RUnit : Rel Unit unit := RInst Unit unit.
 
-    #[export] Instance RPathCondition : Rel PathCondition Prop := RInstPropIff PathCondition.
-    #[export] Instance RFormula : Rel Formula Prop := RInstPropIff Formula.
+    Definition RPathCondition : Rel PathCondition Prop := RInstPropIff PathCondition.
+    Arguments RPathCondition : simpl never.
+    Definition RFormula : Rel Formula Prop := RInstPropIff Formula.
+    Arguments RFormula : simpl never.
 
-    #[export] Instance RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
-    #[export] Instance RHeap : Rel SHeap SCHeap := RInst SHeap SCHeap.
+    Definition RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
 
     (* Give the [RMsg] instance a lower priority (3) than [RImpl]. *)
-    #[export] Instance RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A | 3 :=
+    Definition RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A :=
       MkRel (fun v w t => ∀ₚ m, RSat RA v (t m))%P.
     #[global] Arguments RMsg M%modal {AT A} RA%R.
 
@@ -1336,16 +1145,18 @@ Module Pred
       RSat R v t ι -> RList' R vs ts ι ->
       RList' R (cons v vs) (cons t ts) ι.
 
-    #[export] Instance RList {AT A} (R : Rel AT A) : Rel (WList AT) (list A) :=
+    Definition RList {AT A} (R : Rel AT A) : Rel (WList AT) (list A) :=
       MkRel (RList' R).
 
-    #[export] Instance RConst A : Rel (Const A) A := RInst (Const A) A.
+    Definition RHeap : Rel SHeap SCHeap := RList RChunk.
+    (* priority 1 so that RUnit is picked first (not sure why we have both) *)
+    Definition RConst A : Rel (Const A) A := RInst (Const A) A.
 
-    #[export] Instance RProd `(RA : Rel AT A, RB : Rel BT B) :
+    Definition RProd `(RA : Rel AT A, RB : Rel BT B) :
       Rel (WProd AT BT) (A * B)%type :=
-      MkRel (fun '(va,vb) w '(ta,tb) => ℛ⟦RA⟧ va ta /\ₚ ℛ⟦RB⟧ vb tb)%P.
+      MkRel (fun '(va,vb) w '(ta,tb) => ℛ⟦RA⟧ va ta ∗ ℛ⟦RB⟧ vb tb)%I.
 
-    #[export] Instance RMatchResult {N σ} (p : @Pattern N σ) :
+    Definition RMatchResult {N σ} (p : @Pattern N σ) :
       Rel (SMatchResult p) (MatchResult p) :=
       MkRel
         (fun '(existT pc2 vs) w '(existT pc1 ts) =>
@@ -1356,29 +1167,29 @@ Module Pred
                   ts pc2 e)
                )%P.
 
-    #[export] Instance RIn b : Rel (ctx.In b) (Val (type b)) :=
+    Definition RIn b : Rel (ctx.In b) (Val (type b)) :=
       MkRel (fun v w bIn ι => env.lookup ι bIn = v).
+
+    Module Import notations.
+      Open Scope rel_scope.
+      Notation "ℛ⟦ R ⟧" := (RSat R%R) (format "ℛ⟦ R ⟧").
+      Notation "A -> B" := (RImpl A%R B%R) : rel_scope.
+      Notation "□ᵣ A"    := (RBox A%R) (at level 9) : rel_scope.
+      Notation "'∀ᵣ' x .. y , R " :=
+        (RForall (fun x => .. (RForall (fun y => R)) ..))
+          (at level 200, x binder, y binder, right associativity,
+            format "'[  ' '[  ' ∀ᵣ  x  ..  y ']' ,  '/' R ']'")
+          : rel_scope.
+    End notations.
+
   End logicalrelation.
 
-  Module Import ufl_notations.
-    Import logicalrelation.
-    Open Scope rel_scope.
-    Notation "ℛ⟦ R ⟧" := (RSat R%R) (format "ℛ⟦ R ⟧").
-    Notation "A -> B" := (RImpl A%R B%R) : rel_scope.
-    Notation "□ᵣ A"    := (RBox A%R) (at level 9) : rel_scope.
-    Notation "'∀ᵣ' x .. y , R " :=
-      (RForall (fun x => .. (RForall (fun y => R)) ..))
-        (at level 200, x binder, y binder, right associativity,
-          format "'[  ' '[  ' ∀ᵣ  x  ..  y ']' ,  '/' R ']'")
-        : rel_scope.
-  End ufl_notations.
-
   Section ModalRel.
-    Import logicalrelation ufl_notations iris.bi.interface notations ModalNotations.
-    Lemma forgetting_RImpl {AT A BT B} {RA : Rel AT A} {RB : Rel BT B} {w1 w2} {ω : w1 ⊒ w2} {f sf} :
+    Import logicalrelation logicalrelation.notations iris.bi.interface notations ModalNotations.
+    Lemma forgetting_RImpl {AT A BT B} {RA : Rel AT A} {RB : Rel BT B} {w1 w2 : World} {ω : w1 ⊒ w2} {f sf} :
       forgetting ω (ℛ⟦ RImpl RA RB ⟧ f sf) ⊣⊢ (∀ a sa, forgetting ω (ℛ⟦ RA ⟧ a sa) -∗ forgetting ω (ℛ⟦ RB ⟧ (f a) (sf sa))).
     Proof.
-      unfold RSat at 1; cbn -[RSat].
+      unfold RImpl at 1. cbn.
       rewrite <-forgetting_forall.
       apply derived_laws.bi.forall_proper; intros a.
       rewrite <-forgetting_forall.
@@ -1390,11 +1201,92 @@ Module Pred
 
   Section LRCompat.
     Import notations.
-    Import ufl_notations.
     Import logicalrelation.
+    Import logicalrelation.notations.
     (* Import ModalNotations. *)
     Import iris.proofmode.tactics.
     
+    Lemma refine_term_val {w τ v} : ⊢ (ℛ⟦RVal τ⟧ v (term_val τ v) : Pred w).
+    Proof. unfold RVal, RInst. crushPredEntails3. Qed.
+
+    Lemma refine_term_val2 {w τ v1 v2} : bi_pure (v1 = v2) ⊣⊢ (ℛ⟦RVal τ⟧ v1 (term_val τ v2) : Pred w).
+    Proof. unfold RVal, RInst. crushPredEntails3. Qed.
+
+    Lemma refine_term_binop {w τ1 τ2 τ3} {op : BinOp τ1 τ2 τ3} {a1 sa1 a2 sa2}:
+      ℛ⟦RVal τ1⟧ a1 sa1 ∗ ℛ⟦RVal τ2⟧ a2 sa2 ⊢
+        ℛ⟦RVal τ3⟧ (bop.eval op a1 a2) (w := w) (term_binop op sa1 sa2).
+    Proof.
+      unfold RVal, RInst; crushPredEntails3; now subst.
+    Qed.
+    
+    Lemma refine_unit {w} {u su} :
+      ⊢ ℛ⟦ RUnit ⟧ u su : Pred w.
+    Proof. destruct u, su. now crushPredEntails3. Qed.
+    
+    Lemma refine_nil {AT A} {R : Rel AT A} {w} :
+      ⊢ ℛ⟦ RList R ⟧ nil (nil : list (AT w)).
+    Proof.
+      crushPredEntails3.
+      constructor.
+    Qed.
+    Hint Resolve refine_nil : core.
+
+    Lemma refine_cons {AT A} {R : Rel AT A} {w} :
+      ⊢ ℛ⟦ R -> RList R -> RList R ⟧ cons (@cons (AT w)).
+    Proof.
+      crushPredEntails3.
+      now constructor.
+    Qed.
+
+    Lemma refine_if {AT A} {R : Rel AT A} {w} {v1 sv1 v2 sv2 c sc}:
+      ⊢ ℛ⟦ RConst bool ⟧ c sc -∗ ℛ⟦ R ⟧ v1 sv1 -∗ ℛ⟦ R ⟧ v2 sv2 -∗
+        ℛ⟦ R ⟧ (if c then v1 else v2) (if sc then sv1 else sv2 : AT w).
+    Proof.
+      unfold RConst, RInst; cbn.
+      crushPredEntails3; subst.
+      now destruct sc.
+    Qed.
+
+    Lemma RList_ind {AT : TYPE} {A : Type} {R : Rel AT A}
+      (P : Rel (WList AT) (list A)) :
+      ∀ (w : World),
+        (ℛ⟦P⟧ [] ([] : WList AT w) ∗
+           (∀ (v : A) (t : AT w) (vs : list A) (ts : WList AT w),
+               ℛ⟦R⟧ v t -∗ ℛ⟦ RList R ⟧ vs ts -∗ ℛ⟦P⟧ vs ts -∗ ℛ⟦P⟧ (v :: vs) (t :: ts)) ⊢
+           ∀ (l : list A) (l0 : WList AT w), ℛ⟦ RList R ⟧ l l0 -∗ ℛ⟦P⟧ l l0)%I.
+    Proof.
+      intros w. constructor.
+      intros ι Hpc (Hnil & Hcons) l l0 HRList.
+      induction HRList.
+      - now apply Hnil.
+      - apply Hcons; try done.
+        now apply IHHRList.
+    Qed.
+
+    Lemma refine_map {AT1 A1} {R1 : Rel AT1 A1} {AT2 A2} {R2 : Rel AT2 A2} {w} :
+      ⊢ ℛ⟦ (R1 -> R2) -> RList R1 -> RList R2 ⟧ (@map _ _) (@map _ _ : Impl _ _ w).
+    Proof.
+      iIntros (f sf) "Hf %l %sl Hl".
+      iApply (RList_ind (R := R1) (MkRel (fun l w sl => ℛ⟦ (R1 -> R2) -> RList R2 ⟧ (fun f => map f l) (fun sf => map sf sl : list (AT2 w)))) with "[] Hl Hf").
+      clear; iIntros; iSplit.
+      - iIntros (f sf) "Hf".
+        iApply (refine_nil (R := R2)).
+      - iIntros (v sv vs svs) "Hv Hvs IHvs %f %sf #Hf".
+        iApply (refine_cons (R := R2) with "[Hf Hv]").
+        + now iApply ("Hf" $! v sv with "Hv").
+        + now iApply ("IHvs" $! f sf with "Hf").
+    Qed.
+
+    Lemma RList_RInst {AT A} `{InstSubst AT A, @SubstLaws AT _} :
+      forall (v : list A) (w : World) (t : list (AT w)),
+        ℛ⟦RList (RInst AT A)⟧ v t ⊣⊢ ℛ⟦RInst (fun w => list (AT w)) (list A)⟧ v t.
+    Proof.
+      unfold RInst. crushPredEntails3.
+      - induction H4; first done.
+        now rewrite <-H4, <-IHRList'.
+      - revert v H4. induction t; intros v H4; subst; repeat constructor.
+        now apply IHt.
+    Qed.
 
     Lemma refine_four {w1 w2} {ω : Acc w2 w1} {AT A} (RA : Rel AT A) :
       (⊢ ∀ (v__s : Box AT w2) v, (forgetting ω (ℛ⟦□ᵣ RA⟧ v v__s) → ℛ⟦□ᵣ RA⟧ v (four v__s ω)))%I.
@@ -1416,46 +1308,299 @@ Module Pred
         (⊢ ∀ F (t : AT w), ℛ⟦RA -> RB⟧ f F → ℛ⟦RA⟧ v t → ℛ⟦RB⟧ (f v) (F t))%I.
     Proof. iIntros (v f w F t) "#Hf #Hv". now iApply "Hf". Qed.
 
-    Lemma refine_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} :
-      forall (v : A) (w1 w2 : World) (ω : Acc w1 w2),
-        ⊢ ∀ (t : AT w1), (forgetting ω (ℛ⟦RInst AT A⟧ v t) → ℛ⟦RInst AT A⟧ v (persist t ω))%I.
+    Lemma refine_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _}
+      {v : A} {w1 w2 : World} {ω : Acc w1 w2} (t : AT w1) :
+        forgetting ω (ℛ⟦RInst AT A⟧ v t) ⊢ ℛ⟦RInst AT A⟧ v (persist t ω).
     Proof. 
-      iIntros (v w1 w2 ω t) "Hvt".
+      iIntros "Hvt".
       now iApply forgetting_repₚ.
     Qed.
 
-    Lemma refine_formula_persist :
-      forall (w1 w2 : World) (r12 : Acc w1 w2) (f : Formula w1) (p : Prop),
-        ⊢ forgetting r12 (ℛ⟦RFormula⟧ p f) -∗ ℛ⟦RFormula⟧ p (persist f r12).
+    Lemma refine_formula_bool {w : World} {v} {sv : Term w ty.bool} :
+      ℛ⟦RVal ty.bool⟧ v sv ⊢ ℛ⟦RFormula⟧ (v = true) (formula_bool sv).
+    Proof. unfold RVal, RInst. crushPredEntails3; cbn in *; now subst. Qed.
+
+    Lemma refine_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ}:
+      ℛ⟦ RVal σ ⟧ v1 sv1 ∗ ℛ⟦ RVal σ ⟧ v2 sv2 ⊢
+        ℛ⟦RFormula⟧ (bop.eval_relop_prop relop v1 v2) (formula_relop relop sv1 sv2).
     Proof.
-      iIntros (v w1 w2 ω t) "Hvt".
+      unfold RFormula, RVal, RInst. crushPredEntails3; now subst.
+    Qed.
+
+    Lemma refine_formula_persist :
+      forall (w1 w2 : World) {ω : Acc w1 w2} (f : Formula w1) (p : Prop),
+        ⊢ forgetting ω (ℛ⟦RFormula⟧ p f) -∗ ℛ⟦RFormula⟧ p (persist f ω).
+    Proof.
+      iIntros (w1 w2 ω f p) "Hvt".
       now iApply forgetting_proprepₚ.
     Qed.
 
     Lemma refine_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
       ⊢ ℛ⟦ RInst (Sub Σ) (Valuation Σ) -> RInst T A ⟧ (inst vs) (subst vs : Sub Σ w -> T w)%I.
     Proof.
+      unfold RImpl, RInst. cbn.
       crushPredEntails3.
       now rewrite inst_subst H4.
     Qed.
 
-    Lemma refine_instprop_subst {Σ} {T : LCtx -> Type} `{InstPropSubst T}
+    Lemma refine_instprop_subst {Σ} {T : LCtx -> Type} `{InstPredSubst T}
       (vs : T Σ) {w : World} :
       ⊢ ℛ⟦ (RInst (Sub Σ) (Valuation Σ) -> RInstPropIff T) ⟧ (instprop vs) (subst vs : Sub Σ w -> T w)%I.
     Proof.
+      unfold RImpl, RInst. cbn.
+      unfold proprepₚ; cbn.
       crushPredEntails3; subst.
-      - now rewrite <-instprop_subst.
-      - now rewrite instprop_subst.
+      - rewrite instpred_prop in H5.
+        now rewrite <-instprop_subst.
+      - now rewrite instpred_prop instprop_subst.
     Qed.
 
     Lemma refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) :
       ⊢ ℛ⟦RInst AT A⟧ a (lift a : AT w).
     Proof. iApply lift_repₚ. Qed.
 
-    Lemma refine_rinst_sub_initial {w : World} {ι : Valuation w}: 
-      ℛ⟦RInst (Sub w) (Valuation w)⟧ ι (sub_id w) ι.
+    Import ModalNotations. 
+    Section WithNotations.
+      Import env.notations.
+      Import ctx.notations.
+      Lemma refine_namedenv_snoc {N} {Δ : NCtx N Ty} {x : N} {σ : Ty} {w : World} {vs : NamedEnv Val Δ} {svs : NamedEnv (Term w) Δ} {v : Val σ} {sv : Term w σ} :
+        ℛ⟦RNEnv N Δ⟧ vs svs ∗ ℛ⟦RVal σ⟧ v sv ⊢ ℛ⟦RNEnv N (Δ ▻ x∷σ)⟧ (vs.[x∷σ ↦ v])%env (svs.[x∷σ ↦ sv])%env.
+      Proof.
+        iIntros "[Hvs Hv]".
+        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Δ) (T2 := STerm σ) (T3 := fun w => NamedEnv (Term w) (Δ ▻ x∷σ)) (fun vs v => vs.[x∷σ ↦ v]) (fun vs (v : Term w σ) => vs.[x∷σ ↦ v]) with "[$Hvs $Hv]").
+        now intros.
+      Qed.
+
+      Lemma refine_sub_snoc {τ : Ty} {Γ : LCtx} {x : LVar}
+        {w : World} {vs : NamedEnv Val Γ} {svs : NamedEnv (Term w) Γ}
+        {v : Val τ} {sv : Term w τ} :
+        (ℛ⟦RNEnv LVar Γ⟧ vs svs) ∗  ℛ⟦RVal τ⟧ v sv ⊢
+          ℛ⟦RNEnv LVar (Γ ▻ x∷τ)⟧ (vs.[x∷τ ↦ v])%env (sub_snoc svs (x∷τ) sv).
+      Proof.
+        iIntros "[H1 H2]".
+        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Γ) (T2 := STerm τ) (T3 := fun w => NamedEnv (Term w) (Γ ▻ (x∷τ))) (fun vs v => vs.[x∷τ ↦ v]) (fun vs (v : Term w τ) => sub_snoc vs (x∷τ) v) with "[$H1 $H2]").
+        now intros.
+      Qed.
+
+      Lemma refine_env_snoc {Δ : Ctx Ty} {τ} {w : World} {vs : Env Val Δ} {svs : Env (Term w) Δ} {v : Val τ} {sv : Term w τ} :
+        ℛ⟦REnv Δ⟧ vs svs ∗ ℛ⟦RVal τ⟧ v sv ⊢ ℛ⟦REnv (Δ ▻ τ)⟧ (vs ► ( τ ↦ v ))%env (svs ► (τ ↦ sv ))%env.
+      Proof.
+        iIntros "[Hvs Hv]".
+        iApply (repₚ_cong₂ (T1 := fun w => Env (Term w) Δ) (T2 := STerm τ) (T3 := fun w => Env (Term w) (Δ ▻ τ)) (fun vs v => vs ► ( τ ↦ v )) (fun vs (v : Term w τ) => vs ► ( τ ↦ v )) with "[$Hvs $Hv]").
+        now intros.
+      Qed.
+
+      Lemma refine_env_nil {w : World} {vs : Env Val [ctx]} {svs : Env (Term w) [ctx]} :
+        ⊢ ℛ⟦REnv [ctx]⟧ vs (w := w) svs.
+      Proof.
+        unfold REnv, RInst; cbn.
+        env.destroy vs.
+        env.destroy svs.
+        now iApply (repₚ_triv (T := fun w => Env (Term w) [ctx])).
+      Qed.
+
+
+      Lemma refine_namedenv_nil {N} {w : World} :
+         ⊢ ℛ⟦RNEnv N [ctx] ⟧ env.nil (env.nil : NamedEnv (Term w) [ctx]).
+      Proof.
+        iApply (repₚ_triv (T := fun w => NamedEnv (Term w) [ctx])).
+        now intros.
+      Qed.
+
+      Lemma refine_namedenv_singleton {N : Set} {x : N} {σ : Ty} {w : World} {v : Val σ} {sv : Term w σ} :
+        ℛ⟦RVal σ⟧ v sv ⊢ ℛ⟦RNEnv N (ctx.nil ▻ x∷σ)⟧ ([env].[x∷σ ↦ v])%env ([env].[x∷σ ↦ sv])%env.
+      Proof.
+        iIntros "Hv".
+        iApply (refine_namedenv_snoc with "[$Hv]").
+        iApply refine_namedenv_nil.
+      Qed.
+
+      Lemma refine_namedenv_sub_acc_trans {Σ : LCtx} {w1 w2 : World} {ι : Valuation Σ} { ω1 : wlctx Σ ⊒ w1} {ω2 : w1 ⊒ w2}:
+        forgetting ω2 (repₚ (w := w1) ι (sub_acc ω1)) ⊢
+          ℛ⟦RNEnv LVar (wlctx Σ)⟧ ι (sub_acc (acc_trans ω1 ω2)).
+      Proof.
+        rewrite <-forgetting_repₚ.
+        now rewrite sub_acc_trans persist_subst.
+      Qed.
+
+      Lemma refine_namedenv_sub_acc {Σ : LCtx} {w : World} {ι : Valuation Σ} {ω : wlctx Σ ⊒ w}:
+        forgetting ω (repₚ (w := wlctx Σ) ι (sub_id Σ)) ⊢
+          ℛ⟦RNEnv LVar (wlctx Σ)⟧ ι (sub_acc ω).
+      Proof.
+        rewrite <-forgetting_repₚ.
+        now rewrite persist_subst sub_comp_id_left.
+      Qed.
+
+    End WithNotations.
+
+    Lemma refine_chunk_ptsreg {w τ} {pc a ta} : 
+      ℛ⟦RVal τ ⟧ a ta ⊢ ℛ⟦RChunk⟧ (scchunk_ptsreg pc a) (w := w)(chunk_ptsreg pc ta).
     Proof.
-      apply inst_sub_id.
+      unfold RChunk, RVal, RInst; cbn.
+      crushPredEntails3; now subst.
     Qed.
+
+    Lemma refine_chunk_user {w : World} { c vs svs} :
+      ℛ⟦REnv (𝑯_Ty c)⟧ vs svs ⊢ ℛ⟦RChunk⟧ (scchunk_user c vs) (w := w) (chunk_user c svs).
+    Proof.
+      unfold REnv, RChunk, RInst; crushPredEntails3.
+      now subst.
+    Qed.
+
+    Lemma refine_pattern_match {w : World} {σ} {v : Val σ} {sv : Term w σ}
+      {p : @Pattern LVar σ} : 
+      ℛ⟦ RVal σ ⟧ v sv ⊢
+        let (pc, δpc) := pattern_match_val p v in
+        knowing (w1 := wmatch w sv p pc) (acc_match_right pc)
+          (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc
+             (sub_cat_right (PatternCaseCtx pc) : NamedEnv _ _)).
+    Proof.
+      pose proof (pattern_match_val_inverse_left p v) as eq.
+      destruct (pattern_match_val p v) as [pc args].
+      unfold pattern_match_val_reverse' in eq; cbn in eq.
+      unfold knowing, RVal, RNEnv, RInst.
+      crushPredEntails3.
+      exists (env.cat ι args).
+      now rewrite instprop_subst inst_subst !inst_sub_cat_left
+        inst_pattern_match_term_reverse inst_sub_cat_right eq.
+    Qed.
+
+    Import ctx.notations.
+    Lemma refine_pattern_match_var {w : World} {σ} {v : Val σ} {x : LVar} {xIn : ctx.In (x∷σ) w}
+      {p : @Pattern LVar σ} : 
+      ℛ⟦ RIn (x∷σ) ⟧ v xIn ⊢
+        let (pc, δpc) := pattern_match_val p v in
+        knowing (w1 := wmatchvar w xIn p pc) (acc_matchvar_right (x := x) pc)
+        (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc
+           (wmatchvar_patternvars pc : NamedEnv (Term (wmatchvar w xIn p pc)) _)).
+    Proof.
+      pose proof (pattern_match_val_inverse_left p v) as eq.
+      destruct (pattern_match_val p v) as [pc args].
+      unfold pattern_match_val_reverse' in eq; cbn in eq.
+      unfold knowing, RVal, RNEnv, RInst.
+      crushPredEntails3.
+      exists (env.remove (x∷σ) (env.cat ι args) (ctx.in_cat_left (PatternCaseCtx pc) xIn)).
+      rewrite !instprop_subst !inst_subst.
+      rewrite inst_sub_single2 inst_pattern_match_term_reverse.
+      unfold wmatchvar_patternvars.
+      rewrite inst_eq_rect.
+      rewrite env.remove_cat_left.
+      rewrite eq_rect_sym1.
+      rewrite inst_sub_cat_right.
+      rewrite eq.
+      rewrite <-env.insert_cat_left.
+      rewrite <-H0.
+      rewrite env.insert_remove.
+      now rewrite inst_sub_cat_left.
+    Qed.
+
+    Lemma refine_unfreshen_patterncaseenv {N : Set} {w : World} {Σ} {n : N -> LVar} {σ}
+      {p : @Pattern N σ} {pc : PatternCase (freshen_pattern n Σ p)}
+      {vs : NamedEnv Val (PatternCaseCtx pc)}
+      {svs : NamedEnv (Term w) (PatternCaseCtx pc)} :
+      ℛ⟦RNEnv LVar (PatternCaseCtx pc)⟧ vs svs
+          ⊢ ℛ⟦RNEnv N (PatternCaseCtx (unfreshen_patterncase n Σ p pc))⟧ (unfreshen_patterncaseenv n p pc vs) (unfreshen_patterncaseenv n p pc svs).
+    Proof.
+      unfold RNEnv, RInst, repₚ; cbn.
+      crushPredEntails3.
+      now rewrite inst_unfreshen_patterncaseenv H0.
+    Qed.
+
+
+    Lemma RVal_eqₚ {σ v} {w : World} {sv1 sv2 : Term w σ}:
+      ℛ⟦ RVal σ ⟧ v sv1 ∗ eqₚ sv1 sv2 ⊢ ℛ⟦ RVal σ ⟧ v sv2.
+    Proof.
+      unfold RVal, RInst.
+      crushPredEntails3.
+      now subst.
+    Qed.
+
+    Lemma RVal_pair {σ1 σ2 v1 v2} {w : World} {sv1 : Term w σ1} {sv2 : Term w σ2}:
+      ℛ⟦ RVal σ1 ⟧ v1 sv1 ∗ ℛ⟦ RVal σ2 ⟧ v2 sv2 ⊣⊢ ℛ⟦ RVal (ty.prod σ1 σ2) ⟧ (v1 , v2) (term_binop bop.pair sv1 sv2).
+    Proof.
+      unfold RVal, RInst, repₚ.
+      crushPredEntails3.
+      - now f_equal.
+      - now inversion H0.
+      - now inversion H0.
+    Qed.
+
+    Lemma RVal_union_invertK {U : unioni} {K1 K2 : unionk U} {vf : Val (unionk_ty U K1)} {w : World} {tf : Term w (unionk_ty U K2)} :
+      ℛ⟦RVal (ty.union U)⟧ (unionv_fold U (existT K1 vf)) (term_union U K2 tf) ⊢ bi_pure (K1 = K2).
+    Proof.
+      unfold RVal, RInst, repₚ; crushPredEntails3.
+      rewrite unionv_fold_inj in H0.
+      now inversion H0.
+    Qed.
+
+    Lemma RVal_union {U : unioni} {K : unionk U} {vf : Val (unionk_ty U K)} {w : World} {tf : Term w (unionk_ty U K)} :
+      ℛ⟦RVal (ty.union U)⟧ (unionv_fold U (existT K vf)) (term_union U K tf) ⊣⊢
+        ℛ⟦RVal (unionk_ty U K)⟧ vf tf.
+    Proof.
+      unfold RVal, RInst, repₚ; crushPredEntails3; last by subst.
+      rewrite unionv_fold_inj in H0.
+      now apply inj_right_pair in H0.
+    Qed.
+
+    Lemma refine_tuple_pattern_match_env {N Δ σs} {p : TuplePat σs Δ} {w : World} :
+      ⊢ ℛ⟦REnv σs -> RNEnv N Δ⟧ (tuple_pattern_match_env p) (tuple_pattern_match_env (T := Term w) p).
+    Proof.
+      iIntros (e se) "He". iStopProof.
+      unfold RNEnv, REnv, RInst, repₚ.
+      crushPredEntails3; subst.
+      now rewrite inst_tuple_pattern_match.
+    Qed.
+
+    Lemma RVal_tuple {σs} {v : Val (ty.tuple σs)} {w : World} {a : Env (Term w) σs} :
+      ℛ⟦RVal (ty.tuple σs)⟧ v (term_tuple a) ⊣⊢ ℛ⟦REnv σs⟧ (envrec.to_env σs v) a.
+    Proof.
+      unfold RVal, REnv, RInst, repₚ.
+      crushPredEntails3; subst.
+      - now rewrite envrec.to_of_env.
+      - now rewrite H0 envrec.of_to_env.
+    Qed.
+
+    Lemma refine_record_pattern_match_env {N R Δ} {p : RecordPat (recordf_ty R) Δ} {w : World}
+      {e} {se : NamedEnv (Term w) (recordf_ty R)} :
+      ℛ⟦RNEnv recordf (recordf_ty R)⟧ e se ⊣⊢
+        ℛ⟦RNEnv N Δ⟧ (record_pattern_match_env p e) (record_pattern_match_env p se).
+    Proof.
+      unfold RNEnv, RInst, repₚ.
+      crushPredEntails3; subst.
+      - now rewrite inst_record_pattern_match.
+      - rewrite inst_record_pattern_match in H0.
+        apply (f_equal (record_pattern_match_env_reverse p)) in H0.
+        now rewrite !record_pattern_match_env_inverse_left in H0.
+    Qed.
+
+    Lemma RVal_record {R} {w : World} {v : NamedEnv Val (recordf_ty R)} {a : NamedEnv (Term w) (recordf_ty R)} :
+      ℛ⟦RNEnv recordf (recordf_ty R)⟧ v a ⊣⊢
+       ℛ⟦RVal (ty.record R)⟧ (recordv_fold R v) (term_record R a).
+    Proof.
+      unfold RNEnv, RVal, RInst, repₚ.
+      crushPredEntails3; subst; first done.
+      apply (f_equal (recordv_unfold R)) in H0.
+      now rewrite !recordv_unfold_fold in H0.
+    Qed.
+
+    Lemma RVal_invert_inl {σ τ} {v} {w : World} {sl : Term w σ} : 
+      ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inl sl) ⊢ ∃ (vl : Val σ), bi_pure (v = inl vl) ∗ ℛ⟦RVal σ⟧ vl sl.
+    Proof.
+      unfold RVal, RInst, repₚ, bi_pure; simpl.
+      crushPredEntails3; subst.
+      eexists. split; reflexivity.
+    Qed.
+
+    Lemma RVal_invert_inr {σ τ} {v} {w : World} {sl : Term w τ} : 
+      ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inr sl) ⊢ ∃ (vl : Val τ), bi_pure (v = inr vl) ∗ ℛ⟦RVal τ⟧ vl sl.
+    Proof.
+      unfold RVal, RInst, repₚ, bi_pure; simpl.
+      crushPredEntails3; subst.
+      eexists. split; reflexivity.
+    Qed.
+
   End LRCompat.
-End Pred.
+
+  Import notations logicalrelation.notations logicalrelation iris.proofmode.tactics.
+  Global Hint Extern 0 (environments.envs_entails _ (ℛ⟦ RUnit ⟧ _ _)) => iApply refine_unit : core.
+End UnifLogicOn.

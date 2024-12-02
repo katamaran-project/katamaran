@@ -34,6 +34,7 @@ From Coq Require Import
      Classes.RelationClasses
      Lists.List
      NArith.NArith
+     Program.Basics
      Relations.Relation_Definitions
      Strings.String.
 
@@ -46,6 +47,7 @@ From Katamaran Require Import
      Prelude
      Bitvector
      Symbolic.Worlds
+     Symbolic.UnifLogic
      Syntax.BinOps
      Syntax.Chunks
      Syntax.Formulas
@@ -113,26 +115,6 @@ Module Type SymPropOn
 
   #[export] Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
   Proof. intros P Q PQ. split; intros []; constructor; intuition. Qed.
-
-  Section Util.
-
-    Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
-      (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
-    Proof. firstorder. Qed.
-
-    Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
-      eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
-    Proof.
-      now subst.
-    Qed.
-
-    Lemma eq_rect_sym2 {A : Type} {P : A -> Type} {a a' : A} (eq : a' = a) (v : P a) :
-      eq_rect a' P (eq_rect a P v a' (eq_sym eq)) a eq = v.
-    Proof.
-      now subst.
-    Qed.
-
-  End Util.
 
   Module SymProp.
 
@@ -256,9 +238,8 @@ Module Type SymPropOn
       (k : forall pc : PatternCase pat, 𝕊 (ctx.remove (ctx.in_cat_left (PatternCaseCtx pc) xIn))) : 𝕊 Σ :=
       angelic_finite (PatternCase pat) amsg.empty
         (fun pc => angelic_close0 (PatternCaseCtx pc)
-           (let e := eq_sym (ctx.remove_in_cat_left xIn) in
-            assert_vareq x
-              (eq_rect _ (STerm σ) (pattern_match_term_reverse pat pc (sub_cat_right (PatternCaseCtx pc))) _ e)
+           (assert_vareq x
+              (pattern_match_term_reverse pat pc (wmatchvar_patternvars pc))
               amsg.empty
               (k pc))).
 
@@ -354,6 +335,8 @@ Module Type SymPropOn
         | debug d k => safe k ι
         end%type.
     Global Arguments safe {Σ} p ι.
+
+    #[export] Instance instprop_symprop : InstProp 𝕊 := fun Σ v ι => SymProp.safe v ι.
 
     Fixpoint safe_debug {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) : Prop :=
       (* ⊢ 𝕊 -> Valuation -> PROP := *)
@@ -840,8 +823,8 @@ Module Type SymPropOn
       rewrite safe_angelic_list.
       setoid_rewrite safe_angelic_close0. cbn.
       setoid_rewrite env.lookup_cat_left.
-      setoid_rewrite inst_eq_rect.
       setoid_rewrite inst_pattern_match_term_reverse.
+      setoid_rewrite inst_eq_rect.
       setoid_rewrite eq_sym_involutive.
       split.
       - intros (pc & HIn & ιpat & Hmatch & Hsafe). revert Hsafe.
@@ -1686,32 +1669,6 @@ Module Type SymPropOn
 
   End PostProcess.
 
-  Section logicalrelation.
-    Import SymProp logicalrelation logicalrelation.notations.
-
-    (* Relatedness of symbolic and shallow propositions. The driving base case! *)
-    #[export] Instance RProp : Rel SymProp Prop :=
-      MkRel (fun _ ι SP P => (wsafe SP ι -> P)%type).
-
-    Lemma refine_symprop_angelic_binary :
-      ℛ⟦RProp -> RProp -> RProp⟧ (@angelic_binary) (@or).
-    Proof.
-      intros w ι Hpc.
-      intros PS1 PC1 HP1 PS2 PC2 HP2.
-      intros [H1|H2]; [left|right]; auto.
-    Qed.
-
-    Lemma refine_symprop_demonic_binary :
-      ℛ⟦RProp -> RProp -> RProp⟧ (@demonic_binary) (@and).
-    Proof.
-      intros w ι Hpc.
-      intros PS1 PC1 HP1 PS2 PC2 HP2.
-      intros [H1 H2]; split; auto.
-    Qed.
-
-  End logicalrelation.
-  Notation "'ℙ'" := (RProp) : rel_scope.
-
   Module Erasure.
 
     Import SymProp.
@@ -2088,3 +2045,322 @@ Module Type SymPropOn
   End Erasure.
 
 End SymPropOn.
+
+Module Type LogSymPropOn
+  (Import B : Base)
+  (Import P : PredicateKit B)
+  (Import W : WorldsMixin B P)
+  (Import SP : SymPropOn B P W)
+  (Import UL : UnifLogicOn B P W).
+
+  Module LogicalSoundness.
+    Import iris.bi.interface iris.proofmode.tactics.
+    Import SymProp.
+    Import ModalNotations.
+    Import proofmode logicalrelation.
+
+    Lemma inst_triangular_knowing {w0 w1} (ζ : Tri w0 w1) :
+      (inst_triangular ζ : Pred w0) ⊣⊢ knowing (acc_triangular ζ) True%I. 
+    Proof.
+      unfold knowing; crushPredEntails3.
+      - exists (inst (sub_triangular_inv ζ) ι).
+        rewrite sub_acc_triangular inst_triangular_right_inverse; last done.
+        now intuition (eapply entails_triangular_inv).
+      - rewrite <-H0, sub_acc_triangular.
+        eapply inst_triangular_valid.
+    Qed.
+
+    (* logical version of wsafe *)
+    Fixpoint psafe {w : World} (p : SymProp w) : Pred w :=
+      (match p with
+       | angelic_binary o1 o2 => psafe o1 ∨ psafe o2
+       | demonic_binary o1 o2 => psafe o1 ∗ psafe o2
+       | error msg => False
+       | SymProp.block => True
+       | assertk fml msg o =>
+           (Obligation msg fml : Pred w) ∗ psafe (w := wformula w fml) o
+       | assumek fml o => instpred fml -∗ (psafe (w := wformula w fml) o : Pred w)
+       | angelicv b k => knowing (w1 := wsnoc w b) acc_snoc_right (@psafe (wsnoc w b) k)
+       | demonicv b k => assuming (w1 := wsnoc w b) acc_snoc_right (@psafe (wsnoc w b) k)
+       | @assert_vareq _ x σ xIn t msg k =>
+          (let ζ := sub_shift xIn in
+           Obligation (subst msg ζ) (formula_relop bop.eq (term_var x) (subst t ζ)) : Pred w) ∗
+            assuming (w1 := wsubst w x t) (acc_subst_right t) (psafe (w := wsubst w x t) k)
+       | @assume_vareq _ x σ xIn t k =>
+           (* eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) -∗ *)
+           let ω := acc_subst_right t in
+           assuming (w1 := wsubst w x t) ω (psafe (w := wsubst w x t) k)
+       | pattern_match s pat rhs =>
+           ∀ (pc : PatternCase pat),
+             let wm : World := wmatch w s pat pc in
+             let ω : w ⊒ wm := acc_match_right pc in
+             assuming ω (psafe (w := wmatch w s pat pc) (rhs pc))
+       | @pattern_match_var _ x σ xIn pat rhs =>
+           ∀ (pc : PatternCase pat),
+             let wmv : World := wmatchvar w xIn pat pc in
+             let ω : w ⊒ wmv := acc_matchvar_right pc in
+             assuming ω (@psafe wmv (rhs pc))
+        | debug d k => DebugPred _ d (psafe k)
+        end)%I.
+    #[global] Arguments psafe {w} p ι.
+
+    Lemma psafe_safe {w p} : psafe (w := w) p ⊣⊢ safe p.
+    Proof.
+      refine (SymProp_ind (fun Σ p => forall (w : World) (eq : Σ = w), (psafe (w := w) (eq_rect Σ 𝕊 p w eq) : Pred w) ⊣⊢ safe (eq_rect Σ 𝕊 p w eq)) _ _ _ _ _ _ _ _ _ _ _ _ _ p w eq_refl);
+        clear; intros; subst; cbn.
+      5, 6:  specialize (H (wformula w fml) eq_refl); cbn in H.
+      7, 8:  specialize (H (wsnoc w b) eq_refl); cbn in H.
+      9, 10: specialize (H (wsubst w x t)%ctx eq_refl); cbn in H.
+      11: constructor; intros ι;
+        destruct (pattern_match_val pat (inst s ι)) as [c ι__pat] eqn:Hpmv;
+        specialize (H c (wmatch w s pat c) eq_refl); cbn in H.
+      12: constructor; intros ι;
+        destruct (pattern_match_val pat ι.[? x∷σ]) as [c ι__pat] eqn:Hpmv;
+        specialize (H c (wmatchvar w xIn pat c) eq_refl); cbn in H.
+      all: crushPredEntails3.
+      all: repeat match goal with
+        [ H : forall (x : @eq ?A ?y ?y), _ |- _ ] => specialize (H eq_refl); cbn in H
+      end; crushPredEntails3.
+      - now rewrite obligation_equiv in H1.
+      - apply H; last done.
+        split; first done.
+        now rewrite obligation_equiv in H1.
+      - now rewrite obligation_equiv.
+      - apply H; last done.
+        now split.
+      - rewrite instpred_prop in H1.
+        apply H; last intuition.
+        now split.
+      - rewrite instpred_prop in H2.
+        apply H; last intuition.
+        now split.
+      - destruct H1 as (ι' & <- & Hpc' & Hsafe).
+        destruct (env.view ι') as [ι v].
+        exists v.
+        apply H; cbn; now rewrite ?instprop_subst inst_sub_wk1.
+      - exists (ι.[b ↦ x]).
+        split.
+        + apply inst_sub_wk1.
+        + split; cbn.
+          * now rewrite instprop_subst inst_sub_wk1.
+          * apply H; last done.
+            now rewrite instprop_subst inst_sub_wk1.
+      - apply H; cbn.
+        + now rewrite instprop_subst inst_sub_wk1.
+        + apply H1; cbn; now rewrite ?instprop_subst inst_sub_wk1.
+      - intros ιpast <- Hpc2.
+        apply H; first done.
+        destruct (env.view ιpast) as [ι v].
+        specialize (H1 v); cbn in H1.
+        now rewrite inst_sub_wk1 in H1.
+      - rewrite <-inst_sub_shift.
+        rewrite obligation_equiv in H1; cbn in H1.
+        now rewrite <-inst_subst.
+      - rewrite <-inst_sub_shift.
+        rewrite obligation_equiv in H1; cbn in H1.
+        rewrite inst_subst in H1.
+        assert (instprop (wco (wsubst w x t)) (inst (sub_shift xIn) ι)).
+        { rewrite instprop_subst.
+          now rewrite inst_sub_single_shift.
+        }
+        apply H; first done.
+        apply H2; last done.
+        now rewrite inst_sub_single_shift.
+      - rewrite obligation_equiv.
+        cbn.
+        now rewrite inst_subst inst_sub_shift.
+      - intros ιpast <- Hpc2.
+        apply H; first done.
+        cbn in H2.
+        now rewrite <-inst_sub_shift, <-inst_subst, sub_comp_shift_single, inst_sub_id in H2.
+      - rewrite <-inst_sub_shift.
+        rewrite <-inst_sub_shift in H2.
+        assert (instprop (wco (wsubst w x t)) (inst (sub_shift xIn) ι)).
+        { rewrite instprop_subst.
+          now rewrite inst_sub_single_shift.
+        }
+        apply H; first done.
+        apply H1; last done.
+        now rewrite inst_sub_single_shift.
+      - intros ιpast <- Hpc.
+        apply H; first done.
+        rewrite <-inst_sub_shift in H1.
+        rewrite <-!inst_subst in H1.
+        rewrite sub_comp_shift_single inst_sub_id in H1.
+        apply H1.
+        rewrite <-inst_lookup.
+        rewrite lookup_sub_single_eq.
+        rewrite <-subst_sub_comp.
+        now rewrite sub_comp_shift_single subst_sub_id.
+      - assert (instprop (wco (wmatch w s pat c)) (ι ►► ι__pat)).
+        { cbn. split.
+          + change (instprop_ctx ?z ?ι) with (instprop z ι).
+            now rewrite instprop_subst inst_sub_cat_left.
+          + rewrite inst_subst inst_sub_cat_left.
+            rewrite inst_pattern_match_term_reverse inst_sub_cat_right.
+            apply (f_equal (pattern_match_val_reverse' pat)) in Hpmv.
+            now rewrite pattern_match_val_inverse_left in Hpmv.
+        }
+        apply H; first done.
+        apply H1; try done.
+        * apply inst_sub_cat_left.
+      - unfold assuming; crushPredEntails3.
+        env.destroy ιpast.
+        rewrite inst_sub_cat_left in H2; subst.
+        rewrite inst_subst in H4.
+        rewrite instprop_subst in H3.
+        rewrite inst_sub_cat_left in H3,H4.
+        rewrite inst_pattern_match_term_reverse in H4.
+        rewrite inst_sub_cat_right in H4.
+        apply (f_equal (pattern_match_val pat)) in H4.
+        rewrite pattern_match_val_inverse_right in H4.
+        rewrite Hpmv in H4; dependent elimination H4; subst.
+        apply H; last done.
+        cbn. split.
+        + now rewrite instprop_subst inst_sub_cat_left.
+        + rewrite inst_subst inst_sub_cat_left.
+          rewrite inst_pattern_match_term_reverse inst_sub_cat_right.
+          apply (f_equal (pattern_match_val_reverse' pat)) in Hpmv.
+          now rewrite pattern_match_val_inverse_left in Hpmv.
+      - rewrite <-inst_sub_shift.
+        assert (inst (pattern_match_term_reverse pat c (eq_rect (w - x∷σ ▻▻ PatternCaseCtx c) (fun w => NamedEnv (Term w) (PatternCaseCtx c)) (sub_cat_right (PatternCaseCtx c)) ((w ▻▻ PatternCaseCtx c) - x∷σ)%ctx (eq_sym (ctx.remove_in_cat_left xIn)))) (inst (sub_shift (ctx.in_cat_left (PatternCaseCtx c) xIn)) (ι ►► ι__pat)) = env.lookup (ι ►► ι__pat) (ctx.in_cat_left _ xIn)).
+        { rewrite inst_pattern_match_term_reverse.
+          rewrite inst_eq_rect.
+          rewrite eq_sym_involutive.
+          rewrite inst_sub_shift.
+          change (wcat w (PatternCaseCtx c) : LCtx) with (ctx.cat w (PatternCaseCtx c)).
+          change (fun Σ => Env (fun xt => Val (type xt)) Σ) with (@Env (Binding LVar Ty) (fun xt => Val (type xt))).
+          rewrite <-(env.cat_remove_left xIn ι ι__pat).
+          rewrite inst_sub_cat_right.
+          rewrite env.lookup_cat_left.
+          apply (f_equal (pattern_match_val_reverse' pat)) in Hpmv.
+          now rewrite pattern_match_val_inverse_left in Hpmv.
+        }
+        assert (instprop (wco (wmatchvar w xIn pat c)) (inst (sub_shift (ctx.in_cat_left (PatternCaseCtx c) xIn)) (ι ►► ι__pat))).
+        { rewrite !instprop_subst.
+          rewrite inst_sub_single_shift; last done.
+          now rewrite inst_sub_cat_left.
+        }
+        apply H; first done.
+        apply H1; last done.
+        cbn.
+        rewrite inst_subst.
+        rewrite inst_sub_single_shift; last done.
+        now rewrite inst_sub_cat_left.
+      - unfold assuming. crushPredEntails3.
+        rewrite inst_subst in H2.
+        pose proof (f_equal (fun ι => env.lookup ι xIn) H2) as Hlkp.
+        rewrite inst_sub_single2 -inst_lookup env.lookup_tabulate in Hlkp.
+        cbn in Hlkp.
+        rewrite env.lookup_insert inst_pattern_match_term_reverse in Hlkp.
+        apply (f_equal (pattern_match_val pat)) in Hlkp.
+        rewrite pattern_match_val_inverse_right Hpmv in Hlkp.
+        dependent elimination Hlkp.
+        set (ι__pat := inst (wmatchvar_patternvars a) ιpast).
+        assert (eq_rect ((w ▻▻ PatternCaseCtx a) - x∷σ)%ctx (λ Σ : LCtx, Valuation Σ) (env.remove (x∷σ) (ι ►► ι__pat) (ctx.in_cat_left (PatternCaseCtx a) xIn)) (w - x∷σ ▻▻ PatternCaseCtx a) (ctx.remove_in_cat_left xIn) = env.remove (x∷σ) ι xIn ►► ι__pat) as Hremcat.
+        { change (wcat w (PatternCaseCtx a) : LCtx) with (ctx.cat w (PatternCaseCtx a)).
+          change (fun Σ => Env (fun xt => Val (type xt)) Σ) with (@Env (Binding LVar Ty) (fun xt => Val (type xt))).
+          now rewrite <-(env.cat_remove_left xIn ι ι__pat).
+        }
+        assert (inst (sub_cat_right (PatternCaseCtx a)) (eq_rect ((w ▻▻ PatternCaseCtx a) - x∷σ)%ctx (λ Σ : LCtx, Valuation Σ) (inst (sub_shift (ctx.in_cat_left (PatternCaseCtx a) xIn)) (ι ►► ι__pat)) (w - x∷σ ▻▻ PatternCaseCtx a) (ctx.remove_in_cat_left xIn)) = ι__pat).
+        { rewrite inst_sub_shift.
+          rewrite Hremcat.
+          now rewrite inst_sub_cat_right.
+        }
+        apply (f_equal (pattern_match_val_reverse' pat)) in Hpmv.
+        rewrite pattern_match_val_inverse_left in Hpmv.
+        unfold pattern_match_val_reverse' in Hpmv; cbn in Hpmv.
+        assert (inst (pattern_match_term_reverse pat a (eq_rect (w - x∷σ ▻▻ PatternCaseCtx a) (fun w => NamedEnv (Term w) (PatternCaseCtx a)) (sub_cat_right (PatternCaseCtx a)) ((w ▻▻ PatternCaseCtx a) - x∷σ)%ctx (eq_sym (ctx.remove_in_cat_left xIn)))) (inst (sub_shift (ctx.in_cat_left (PatternCaseCtx a) xIn)) (ι ►► ι__pat)) = ι.[? x∷σ]).
+        { rewrite inst_pattern_match_term_reverse.
+          rewrite inst_eq_rect.
+          rewrite eq_sym_involutive.
+          now rewrite H4.
+        }
+        assert (instprop (wco (wmatchvar w xIn pat a)) (inst (sub_shift (ctx.in_cat_left (PatternCaseCtx a) xIn)) (ι ►► ι__pat))).
+        { rewrite !instprop_subst.
+          rewrite inst_sub_single_shift.
+          + now rewrite inst_sub_cat_left.
+          + now rewrite env.lookup_cat_left.
+        }
+        apply H; first done.
+        replace ιpast with (env.remove (x∷σ) (ι ►► ι__pat) (ctx.in_cat_left (PatternCaseCtx a) xIn)); first done.
+        rewrite env.remove_cat_left.
+        rewrite <-H2.
+        rewrite inst_sub_cat_left_drop.
+        rewrite env.remove_drop.
+        rewrite inst_sub_single2.
+        rewrite env.remove_insert.
+        unfold ι__pat.
+        unfold wmatchvar_patternvars.
+        rewrite inst_eq_rect.
+        rewrite eq_sym_involutive.
+        rewrite inst_sub_cat_right_take.
+        rewrite env.drop_take.
+        now rewrite eq_rect_sym1.
+      - now destruct H1.
+      - now constructor.
+    Qed.
+
+
+    #[export] Instance proper_psafe: ∀ {w : World}, Proper (sequiv w ==> entails (w := w)) psafe.
+    Proof.
+      intros w P sP HP.
+      rewrite !psafe_safe.
+      constructor.
+      intros.
+      now apply HP.
+    Qed.
+
+    (* Relatedness of symbolic and shallow propositions. The driving base case! *)
+    Definition RProp : Rel SymProp Prop :=
+      MkRel (fun P w SP => (psafe SP -∗ ⌜ P ⌝)%I).
+    Arguments RProp : simpl never.
+    #[export] Instance intowand_rprop {P w SP} :
+      IntoWand false false (RSat RProp P SP) (psafe (w := w) SP) (⌜ P ⌝).
+    Proof.
+      unfold IntoWand, RProp; now cbn.
+    Qed.
+
+    Section logicalrelation.
+      Import SymProp logicalrelation logicalrelation.notations.
+
+      Lemma refine_symprop_debug {w : World} PC PS (msg : AMessage w) :
+        ⊢ ℛ⟦RProp⟧ PC PS -∗ ℛ⟦RProp⟧ PC (debug msg PS).
+      Proof.
+        iIntros "HP HPS". cbn.
+        iDestruct (elim_debugPred with "HPS") as "HPS".
+        iApply ("HP" with "HPS").
+      Qed.
+
+      Lemma refine_symprop_angelic_binary {w : World} :
+        ⊢ ℛ⟦RProp -> RProp -> RProp⟧ (@or) (@angelic_binary w).
+      Proof.
+        iIntros (PC1 PS1) "#HP1 %PC2 %PS2 #HP2 [#HPS1 | #HPS2]"; cbn.
+        - iLeft. now iApply "HP1".
+        - iRight. now iApply "HP2".
+      Qed.
+
+      Lemma refine_symprop_demonic_binary {w : World} :
+        ⊢ ℛ⟦RProp -> RProp -> RProp⟧ (@and) (@demonic_binary w).
+      Proof.
+        iIntros (PC1 PS1) "#HP1 %PC2 %PS2 #HP2 [#HPS1 #HPS2]"; cbn.
+        iSplitL "HP1 HPS1".
+        - now iApply "HP1".
+        - now iApply "HP2".
+      Qed.
+
+      Global Instance frompure_RProp_block {w} {P} :
+        FromPure false (RSat RProp P (w := w) SymProp.block) P.
+      Proof. now constructor. Qed.
+
+    End logicalrelation.
+    Notation "'ℙ'" := (RProp) : rel_scope.
+
+  End LogicalSoundness.
+
+  Import iris.bi.interface iris.proofmode.tactics.
+  Import SymProp.
+  Import logicalrelation.notations.
+  Import proofmode.
+
+  End LogSymPropOn.

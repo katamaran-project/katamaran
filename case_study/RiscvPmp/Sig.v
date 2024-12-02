@@ -1005,7 +1005,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
   Import asn.notations.
 
-  Module notations.
+  Module rv_notations.
     (* TODO: better notation needed *)
     Notation "a '↦mem' b bs" := (asn.chunk (chunk_user (ptstomem b) [a; bs])) (at level 70).
     Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
@@ -1028,6 +1028,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Notation asn_expand_pmpcfg_ent cfg := (asn.match_record rpmpcfg_ent cfg
       (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
       (asn.formula (formula_bool (term_val ty.bool true)))).
-  End notations.
+  End rv_notations.
 
 End RiscvPmpSignature.

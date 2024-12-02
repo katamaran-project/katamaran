@@ -76,6 +76,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
   Section Contracts.
     Section ContractDefKit.
       Import asn.notations.
+      Import rv_notations.
       Local Notation "a <ᵘₜ b" := (term_binop (bop.relop bop.bvult) a b) (at level 60).
       Local Notation "a <=ᵘₜ b" := (term_binop (bop.relop bop.bvule) a b) (at level 60).
       Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).

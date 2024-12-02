@@ -73,6 +73,9 @@ Module Type ShallowExecOn
       Definition lift_purem {Γ} {A : Type} :
         CPureSpec A -> CStoreSpec Γ Γ A :=
         fun m POST δ h => m (fun a => POST a δ h).
+      Definition lift_heapspec {Γ} {A : Type} :
+        CHeapSpec A -> CStoreSpec Γ Γ A :=
+        fun m POST δ => m (fun a => POST a δ).
 
       Definition pure {Γ A} (a : A) : CStoreSpec Γ Γ A :=
         fun POST => POST a.
@@ -130,6 +133,8 @@ Module Type ShallowExecOn
         lift_purem (CPureSpec.assume_formula fml).
       Definition assert_formula {Γ} (fml : Prop) : CStoreSpec Γ Γ unit :=
         lift_purem (CPureSpec.assert_formula fml).
+      Definition assert_pathcondition {Γ} (fml : Prop) : CStoreSpec Γ Γ unit :=
+        lift_purem (CPureSpec.assert_pathcondition fml).
       Definition assert_eq_env {Γ} {Δ : Ctx Ty} (δ δ' : Env Val Δ) : CStoreSpec Γ Γ unit :=
         lift_purem (CPureSpec.assert_eq_env δ δ').
       Definition assert_eq_nenv {N Γ} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) : CStoreSpec Γ Γ unit :=
@@ -179,44 +184,32 @@ Module Type ShallowExecOn
 
     Section ProduceConsume.
 
-      Definition produce {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CStoreSpec Γ Γ unit :=
-        fun Φ δ => CHeapSpec.produce asn ι (fun x => Φ x δ).
-      Definition consume {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CStoreSpec Γ Γ unit :=
-        fun Φ δ => CHeapSpec.consume asn ι (fun x => Φ x δ).
+      Definition produce {Γ Σ} (asn : Assertion Σ) (ι : Valuation Σ) : CStoreSpec Γ Γ unit :=
+        lift_heapspec (CHeapSpec.produce asn ι).
+      Definition consume {Γ Σ} (asn : Assertion Σ) (ι : Valuation Σ) : CStoreSpec Γ Γ unit :=
+        lift_heapspec (CHeapSpec.consume asn ι).
 
       Definition produce_chunk {Γ} (c : SCChunk) : CStoreSpec Γ Γ unit :=
-        fun Φ δ => CHeapSpec.produce_chunk c (fun u => Φ u δ).
+        lift_heapspec (CHeapSpec.produce_chunk c).
       Definition consume_chunk {Γ} (c : SCChunk) : CStoreSpec Γ Γ unit :=
-        fun Φ δ => CHeapSpec.consume_chunk c (fun u => Φ u δ).
+        lift_heapspec (CHeapSpec.consume_chunk c).
 
       Definition read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) : CStoreSpec Γ Γ (Val τ) :=
-        fun Φ δ => CHeapSpec.read_register r (fun v' => Φ v' δ).
-      Definition write_register {Γ τ} (r : 𝑹𝑬𝑮 τ) : Val τ -> CStoreSpec Γ Γ (Val τ) :=
-        fun v Φ δ => CHeapSpec.write_register r v (fun v' => Φ v' δ).
+        lift_heapspec (CHeapSpec.read_register r).
+      Definition write_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) : CStoreSpec Γ Γ (Val τ) :=
+        lift_heapspec (CHeapSpec.write_register r v).
 
     End ProduceConsume.
 
     Section Exec.
 
       Definition call_contract {Γ Δ τ} (contract : SepContract Δ τ) (args : CStore Δ) : CStoreSpec Γ Γ (Val τ) :=
-        match contract with
-        | MkSepContract _ _ Σe δ req result ens =>
-          ι <- angelic_ctx Σe ;;
-          assert_eq_nenv (inst δ ι) args ;;
-          consume ι req  ;;
-          v <- demonic τ ;;
-          produce (env.snoc ι (result∷τ) v) ens ;;
-          pure v
-        end.
+        lift_heapspec (CHeapSpec.call_contract contract args).
+      Arguments call_contract {Γ Δ τ} !contract args.
 
       Definition call_lemma {Γ Δ} (lem : Lemma Δ) (vs : CStore Δ) : CStoreSpec Γ Γ unit :=
-        match lem with
-        | MkLemma _ Σe δ req ens =>
-          ι <- angelic_ctx Σe ;;
-          assert_eq_nenv (inst δ ι) vs ;;
-          consume ι req ;;
-          produce ι ens
-        end.
+        lift_heapspec (CHeapSpec.call_lemma lem vs).
+      Arguments call_lemma {Γ Δ} !lem vs.
 
       (* The paper discusses the case that a function call is replaced by
          interpreting the contract instead. However, this is not always
@@ -291,6 +284,7 @@ Module Type ShallowExecOn
             end.
 
       End ExecAux.
+      Arguments exec_aux rec {Γ τ} !s.
 
       (* The constructed closed executor. *)
       Fixpoint exec (inline_fuel : nat) : Exec :=
@@ -298,7 +292,7 @@ Module Type ShallowExecOn
         | O   => fun _ _ _ => error
         | S n => @exec_aux (@exec n)
         end.
-      Global Arguments exec _ {_ _} s _ _ _.
+      Global Arguments exec _ {_ _} s _ _ _ : simpl never.
 
     End Exec.
 
@@ -306,22 +300,19 @@ Module Type ShallowExecOn
 
       Variable inline_fuel : nat.
 
-      Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
-       Valuation (sep_contract_logic_variables c) -> CStoreSpec Δ Δ unit :=
+      Import CHeapSpec.notations.
+
+      Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : CHeapSpec unit :=
         match c with
-        | MkSepContract _ _ _ _ req result ens =>
-          fun ι =>
-          _ <- produce ι req ;;
-          v <- exec inline_fuel s ;;
-          consume (env.snoc ι (result∷τ) v) ens
-        end%mut.
+        | MkSepContract _ _ lvars pats req result ens =>
+            lenv <- CHeapSpec.demonic_ctx lvars ;;
+            _    <- CHeapSpec.produce req lenv ;;
+            v    <- evalStoreSpec (exec inline_fuel s) (inst pats lenv) ;;
+            CHeapSpec.consume ens (env.snoc lenv (result∷τ) v)
+        end.
 
       Definition vcgen {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-        ForallNamed (fun ι : Valuation (sep_contract_logic_variables c) =>
-          let δΔ : CStore Δ := inst (sep_contract_localstore c) ι in
-          (* We use the FINISH alias of True for the purpose of counting
-             nodes in a shallowly-generated VC. *)
-          exec_contract c body ι (fun _ _ _ => FINISH) δΔ nil).
+        CHeapSpec.run (exec_contract c body).
 
     End WithFuel.
 

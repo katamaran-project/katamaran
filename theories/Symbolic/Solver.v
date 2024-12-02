@@ -41,6 +41,7 @@ From Katamaran Require Import
      Prelude
      Syntax.Predicates
      Symbolic.Propositions
+     Symbolic.UnifLogic
      Symbolic.Worlds.
 
 From Equations Require Import
@@ -56,7 +57,10 @@ Module Type GenericSolverOn
   (Import B : Base)
   (Import P : PredicateKit B)
   (Import W : WorldsMixin B P)
-  (Import S : SolverKit B P W).
+  (Import S : SolverKit B P W)
+  (Import SP : SymPropOn B P W)
+  (Import UL : UnifLogicOn B P W)
+  (Import LSP : LogSymPropOn B P W SP UL).
 
   Module Import GenericSolver.
 
@@ -69,6 +73,10 @@ Module Type GenericSolverOn
     #[local] Hint Rewrite @recordv_fold_inj @unionv_fold_inj : katamaran.
     #[local] Hint Rewrite @bop.eval_relop_equiv : katamaran.
     #[local] Hint Rewrite formula_bool_and formula_bool_relop formula_bool_relop_neg : katamaran.
+
+    #[export] Program Instance instpred_dlist : InstPred DList :=
+      MkInstPred (fun w x => instpred (raw x [ctx])) _.
+    Next Obligation. now rewrite instpred_prop. Qed.
 
     Lemma valid_formula_bool [Σ] (t : Term Σ ty.bool) :
       base.equiv t (term_val ty.bool true) -> Valid (formula_bool t).
@@ -433,24 +441,51 @@ Module Type GenericSolverOn
       - arw.
     Qed.
 
-    Lemma simplify_pathcondition_spec {Σ} (C : PathCondition Σ) (ι : Valuation Σ) :
-      instprop (run (simplify_pathcondition C)) ι <-> instprop C ι.
-    Proof.
-      change (instprop (simplify_pathcondition C) ι <-> instprop C ι).
-      induction C as [|C IHC F]; cbn.
-      - reflexivity.
-      - rewrite instprop_dlist_cat. apply and_iff_morphism; [easy|].
-        now rewrite (simplify_formula_spec F ι), instprop_dlist_singleton.
+    Import iris.bi.interface iris.proofmode.tactics proofmode LogicalSoundness.
+
+    #[export] Instance instpredsubst_ctx `{InstPredSubst A, !SubstLaws A} : InstPredSubst (fun Σ => Ctx (A Σ)).
+    Proof. constructor; last by typeclasses eauto.
+           intros ? ? ζ x. induction x; cbn.
+           - now rewrite persist_subst forgetting_emp.
+           - rewrite forgetting_sep.
+             rewrite persist_subst; cbn; rewrite -!persist_subst.
+             change (instpred_ctx ?P) with (instpred P).
+             now rewrite IHx instpred_subst.
     Qed.
 
-    Definition occurs_check_lt {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
+    Lemma instpred_dlist_singleton {w : World} (F : Formula w) : instpred (DList.singleton F) ⊣⊢ instpred F.
+    Proof.
+      unfold instpred at 1, instpred_dlist, instpred at 1, instpred_option, DList.singleton, raw.
+      now rewrite instpred_singleton.
+    Qed.
+
+    Lemma instpred_dlist_cat {w : World} (x y : DList w) :
+      instpred (w := w) (cat x y) ⊣⊢ instpred x ∗ instpred y.
+    Proof.
+      constructor; intros.
+      rewrite bi_sep_unfold !instpred_prop.
+      now rewrite instprop_dlist_cat.
+    Qed.
+
+    Lemma simplify_pathcondition_spec {w : World} (C : PathCondition w) :
+        instpred (w := w) (run (simplify_pathcondition C)) ⊣⊢ instpred C.
+    Proof.
+      change (instpred (simplify_pathcondition C) ⊣⊢ instpred C).
+      induction C as [|C IHC F]; cbn.
+      - crushPredEntails3.
+      - rewrite instpred_dlist_cat IHC.
+        rewrite (instpred_proper_bientails (H := instpred_dlist) (simplify_formula_spec F)).
+        now rewrite instpred_dlist_singleton.
+    Qed.
+
+    Definition occurs_check_lt {Σ x} (xIn : (x ∈ Σ)%katamaran) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
       match t with
       | term_var_in yIn =>
         if Nat.ltb (ctx.in_at xIn) (ctx.in_at yIn) then occurs_check xIn t else None
       | _ => occurs_check xIn t
       end.
 
-    Lemma occurs_check_lt_sound {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) (t' : Term (Σ - x) σ) :
+    Lemma occurs_check_lt_sound {Σ x} (xIn : (x ∈ Σ)%katamaran) {σ} (t : Term Σ σ) (t' : Term (Σ - x) σ) :
       occurs_check_lt xIn t = Some t' -> t = subst t' (sub_shift xIn).
     Proof.
       unfold occurs_check_lt. intros Hwlp.
@@ -495,34 +530,44 @@ Module Type GenericSolverOn
       end.
 
     Lemma try_unify_bool_spec {w : World} (t : Term w ty.bool) :
-      option.wlp (fun '(existT w' ν) => forall ι, inst (T := STerm ty.bool) t ι = true <-> inst_triangular ν ι) (try_unify_bool t).
+      option.wlp
+        (fun '(existT w' ν) => repₚ (T := STerm ty.bool) true t ⊣⊢ inst_triangular ν)
+        (try_unify_bool t).
     Proof.
       induction t using Term_bool_ind; cbn; try constructor; auto.
-      - intros ι. cbn. intuition.
-      - induction t using Term_bool_ind; cbn; try constructor; auto.
-        intros ι. cbn. destruct ι.[??ς]; intuition.
+      - rewrite inst_triangular_knowing.
+        rewrite (knowing_trans (w2 := wsubst _ _ _)).
+        rewrite knowing_id knowing_acc_subst_right.
+        now crushPredEntails3.
+      - induction t using Term_bool_ind; cbn; try constructor.
+        rewrite inst_triangular_knowing (knowing_trans (ω23 := acc_refl)) knowing_id knowing_acc_subst_right.
+        unfold assuming; crushPredEntails3; cbn;
+          now apply negb_true_iff.
     Qed.
 
     Lemma try_unify_eq_spec {w : World} {σ} (t1 t2 : Term w σ) :
-      option.wlp (fun '(existT w' ν) => forall ι, inst t1 ι = inst t2 ι <-> inst_triangular ν ι) (try_unify_eq t1 t2).
+      option.wlp
+        (fun '(existT w' ν) => eqₚ t1 t2 ⊣⊢ inst_triangular ν)
+        (try_unify_eq t1 t2).
     Proof.
       unfold try_unify_eq. destruct t1; cbn; try (constructor; auto; fail).
       destruct (occurs_check_lt ςInΣ t2) eqn:Heq; constructor; auto.
-      apply occurs_check_lt_sound in Heq. subst.
-      intros ι. rewrite inst_subst, inst_sub_shift.
-      cbn. intuition.
+      apply occurs_check_lt_sound in Heq.
+      rewrite inst_triangular_knowing (knowing_trans (ω23 := acc_refl)) knowing_id knowing_acc_subst_right assuming_True bi.sep_True.
+      now subst.
     Qed.
 
     Lemma try_unify_formula_spec {w : World} (fml : Formula w) :
-      option.wlp (fun '(existT w' ν) => forall ι, instprop fml ι <-> inst_triangular ν ι) (try_unify_formula fml).
+      option.wlp 
+        (fun '(existT w' ν) => instpred fml ⊣⊢ inst_triangular ν) (try_unify_formula fml).
     Proof.
       unfold try_unify_formula; destruct fml; cbn; try (constructor; auto; fail).
       - apply try_unify_bool_spec.
       - destruct rop; try constructor; cbn.
         destruct (try_unify_eq_spec t1 t2) as [[w' ν] HYP|]. constructor. auto.
-        destruct (try_unify_eq_spec t2 t1) as [[w' ν] HYP|]. constructor.
-        intros ι. specialize (HYP ι). intuition.
-        now constructor.
+        destruct (try_unify_eq_spec t2 t1) as [[w' ν] HYP|]; constructor.
+        rewrite <-HYP.
+        now unfold eqₚ.
     Qed.
 
     Definition unify_formula {w0 : World} (F : Formula w0) :
@@ -535,21 +580,14 @@ Module Type GenericSolverOn
     Lemma unify_formula_spec {w0 : World} (fml : Formula w0) :
       match unify_formula fml with
       | existT w1 (ν01 , fmls) =>
-        (forall ι0 : Valuation w0,
-            instprop fml ι0 ->
-            inst_triangular ν01 ι0 /\
-            instprop fmls (inst (sub_triangular_inv ν01) ι0)) /\
-        (forall ι1 : Valuation w1,
-            instprop fmls ι1 ->
-            instprop fml (inst (sub_triangular ν01) ι1))
+         (instpred fml) ⊣⊢ knowing (acc_triangular ν01) (instpred fmls)
       end.
     Proof.
       unfold unify_formula.
       destruct (try_unify_formula_spec fml).
-      - destruct a as [w1 ν01]. split.
-        + intros ι0 Hfml. specialize (H ι0). intuition. constructor.
-        + intros ι1 []. apply H. apply inst_triangular_valid.
-      - cbn. split; intros ?; rewrite inst_sub_id; intuition.
+      - destruct a as [w1 ν01].
+        now rewrite H inst_triangular_knowing.
+      - now rewrite knowing_id instpred_singleton.
     Qed.
 
     Fixpoint unify_pathcondition {w0 : World} (C : PathCondition w0) :
@@ -564,44 +602,44 @@ Module Type GenericSolverOn
         refine (persist C1 (acc_triangular ν12) ▻▻ C2).
     Defined.
 
+    Lemma instprop_cat_pred `{H : InstProp A} (w : World) (C1 C2 : Ctx (A w)) :
+      instprop (C1 ▻▻ C2) ⊣⊢ (instprop C1 : Pred w) ∗ instprop C2.
+    Proof.
+      constructor. intros. now rewrite instprop_cat.
+    Qed.
+
+    Lemma knowing_tri_comp {w0 w1 w2} {ν01 : Tri w0 w1} {ν12 : Tri w1 w2} {P} :
+      knowing (acc_triangular (tri_comp ν01 ν12)) P ⊣⊢ knowing (acc_trans (acc_triangular ν01) (acc_triangular ν12)) P.
+    Proof.
+      apply knowing_resp_sub_acc.
+      now rewrite sub_acc_trans !sub_acc_triangular sub_triangular_comp.
+    Qed.
+
+
     Lemma unify_pathcondition_spec {w0 : World} (C0 : PathCondition w0) :
       match unify_pathcondition C0 with
       | existT w1 (ν01 , C1) =>
-        (forall ι0 : Valuation w0,
-            instprop C0 ι0 ->
-            inst_triangular ν01 ι0 /\
-            instprop C1 (inst (sub_triangular_inv ν01) ι0)) /\
-        (forall ι1 : Valuation w1,
-            instprop C1 ι1 ->
-            instprop C0 (inst (sub_triangular ν01) ι1))
+          instpred C0 ⊣⊢ knowing (acc_triangular ν01) (instpred C1)
       end.
     Proof.
       induction C0 as [|C0 IHC F0]; cbn.
-      - intuition.
+      - now rewrite knowing_id.
       - destruct unify_pathcondition as (w1 & ν01 & C1).
         pose proof (unify_formula_spec (persist F0 (acc_triangular ν01))) as IHF.
         destruct (unify_formula (persist F0 (acc_triangular ν01))) as (w2 & ν12 & C2).
-        destruct IHC as [IHC01 IHC10].
-        destruct IHF as [IHF12 IHF21].
-        split.
-        + intros ι0. intros [HCι0 HFι0].
-          specialize (IHC01 ι0 HCι0). destruct IHC01 as [Hν01 HCι1].
-          specialize (IHF12 (inst (sub_triangular_inv ν01) ι0)).
-          rewrite instprop_persist, sub_acc_triangular in IHF12.
-          rewrite inst_triangular_right_inverse in IHF12; auto.
-          specialize (IHF12 HFι0). destruct IHF12 as [Hν12 Hfmls2].
-          unfold PathCondition. rewrite instprop_cat.
-          rewrite instprop_persist, inst_tri_comp, sub_acc_triangular.
-          split; auto. rewrite sub_triangular_inv_comp, inst_subst. split; auto.
-          revert HCι1. remember (inst (sub_triangular_inv ν01) ι0) as ι1.
-          rewrite inst_triangular_right_inverse; auto.
-        + intros ι2. unfold PathCondition.
-          rewrite !instprop_cat, instprop_persist, sub_acc_triangular.
-          intros [HCι1 HFι2].
-          specialize (IHF21 ι2 HFι2). rewrite instprop_persist, sub_acc_triangular in IHF21.
-          specialize (IHC10 (inst (sub_triangular ν12) ι2) HCι1).
-          rewrite sub_triangular_comp, inst_subst.
-          split; auto.
+        change (instpred_ctx C0) with (instpred C0).
+        rewrite IHC.
+        rewrite knowing_tri_comp.
+        rewrite instpred_cat.
+        rewrite knowing_trans.
+        rewrite knowing_absorb_forgetting.
+        rewrite instpred_persist in IHF.
+        rewrite IHF.
+        rewrite instpred_persist.
+        apply knowing_proper_bientails.
+        rewrite (bi.sep_comm _ (instpred C2)).
+        rewrite <-knowing_absorb_forgetting.
+        now rewrite bi.sep_comm.
     Qed.
 
     Open Scope lazy_bool_scope.
@@ -646,28 +684,43 @@ Module Type GenericSolverOn
                      else assumption_formula C F k
       end.
 
-    Fixpoint assumption_pathcondition {Σ} (C : PathCondition Σ) (FS : PathCondition Σ) (k : PathCondition Σ) {struct FS} : PathCondition Σ :=
-      match FS with
+    Fixpoint assumption_pathcondition {Σ} (C : PathCondition Σ) (Fs : PathCondition Σ) (k : PathCondition Σ) {struct Fs} : PathCondition Σ :=
+      match Fs with
       | [ctx]  => k
-      | FS ▻ F => assumption_formula C F (assumption_pathcondition C FS k)
+      | Fs ▻ F => assumption_formula C F (assumption_pathcondition C Fs k)
       end.
 
-    Lemma assumption_formula_spec {Σ} (C : PathCondition Σ) (F : Formula Σ) (k : PathCondition Σ) (ι : Valuation Σ) :
-      instprop C ι -> instprop k ι /\ instprop F ι <-> instprop (assumption_formula C F k) ι.
+    Lemma assumption_formula_spec {w : World} (C : PathCondition w) (F : Formula w) (k : PathCondition w) :
+      ⊢ instpred C -∗ instpred k ∗ instpred F ∗-∗ instpred (assumption_formula C F k).
     Proof.
       induction C as [|C ? F']; cbn; auto.
-      intros [HCι HFι']. specialize (IHC HCι).
+      iIntros "[#HC #HF']".
       destruct (formula_eqb_spec F F');
         subst; intuition auto.
+      iSplitL.
+      + iIntros "[? ?]"; now iFrame.
+      + iIntros "?"; now iFrame.
+      + now iApply (IHC with "HC").
     Qed.
 
-    Lemma assumption_pathcondition_spec {Σ} (C : PathCondition Σ) (FS : PathCondition Σ) (k : PathCondition Σ) (ι : Valuation Σ) :
-      instprop C ι -> instprop k ι /\ instprop FS ι <-> instprop (assumption_pathcondition C FS k) ι.
+    Lemma assumption_pathcondition_spec {w : World} (C : PathCondition w) (FS : PathCondition w) (k : PathCondition w) :
+      instpred C -∗ ((instpred (w := w) k ∗ instpred FS ∗-∗ instpred (assumption_pathcondition C FS k))).
     Proof.
-      intros HCι. induction FS as [|FS ? F]; cbn.
-      - intuition auto.
-      - pose proof (assumption_formula_spec C F (assumption_pathcondition C FS k) ι HCι).
-        intuition auto.
+      induction FS as [|FS ? F]; cbn; iIntros "#HC".
+      - rewrite bi.sep_emp.
+        now iApply bi.wand_iff_refl.
+      - iPoseProof (assumption_formula_spec C F (assumption_pathcondition C FS k) with "HC") as "HCF".
+        iPoseProof (IHFS with "HC") as "HCFS".
+        iApply (bi.wand_iff_trans with "[HCFS HCF]").
+        iSplitR "HCF"; last iExact "HCF".
+        iSplit.
+        + iIntros "(Hk & HFS & HF)"; iFrame.
+          iApply "HCFS".
+          now iFrame.
+        + iIntros "(HFS & HF)".
+          iDestruct "HCFS" as "[_ HCFS2]".
+          iDestruct ("HCFS2" with "HFS") as "(Hk & HFS)".
+          now iFrame.
     Qed.
 
     Definition solver_generic : Solver :=
@@ -679,31 +732,41 @@ Module Type GenericSolverOn
 
     Lemma solver_generic_spec : SolverSpec solver_generic.
     Proof.
-      unfold solver_generic. intros w0 C0.
+      unfold solver_generic. intros w C0.
       pose proof (simplify_pathcondition_spec C0) as Hequiv.
       destruct run as [C0'|]; constructor; cbn.
-      - pose proof (unify_pathcondition_spec (assumption_pathcondition (wco w0) C0' ctx.nil)) as Hunify.
-        destruct (unify_pathcondition (assumption_pathcondition (wco w0) C0' ctx.nil)) as (w1 & ν01 & C1).
-        intros ι0 Hpc0. specialize (Hequiv ι0). cbn in Hequiv.
-        pose proof (assumption_pathcondition_spec (wco w0) C0' ctx.nil ι0 Hpc0) as Hassumption.
-        destruct Hassumption as [Hassumption01 Hassumption10].
-        destruct Hunify as [Hunify01 Hunify10]. specialize (Hunify01 ι0).
-        split.
-        + intros HC0. apply Hunify01. apply Hassumption01.
-          split. constructor. apply Hequiv. auto.
-        + intros ι1 Heqι. specialize (Hunify10 ι1).
-          split.
-          * intros HC0. destruct Hequiv as [_ Hequiv].
-            inster Hequiv by auto.
-            inster Hassumption01 by split; auto; constructor.
-            inster Hunify01 by auto. destruct Hunify01 as [Hν01 HC1].
-            revert HC1. subst. now rewrite inst_triangular_left_inverse.
-          * intros HC1. inster Hunify10 by subst; auto.
-            apply Hequiv. apply Hassumption10. subst; auto.
-      - intros ι. specialize (Hequiv ι). cbn in Hequiv. intuition.
+      - pose proof (unify_pathcondition_spec (assumption_pathcondition (wco w) C0' ctx.nil)) as Hunify.
+        destruct (unify_pathcondition (assumption_pathcondition (wco w) C0' ctx.nil)) as (w1 & ν01 & C1).
+        rewrite <-Hunify.
+        rewrite <-Hequiv.
+        pose proof (assumption_pathcondition_spec (wco w) C0' ctx.nil) as Hassumption.
+        iPoseProof wco_valid as "Hwco".
+        iDestruct (Hassumption with "Hwco") as "Hassumption".
+        rewrite bi.emp_sep.
+        now iApply (bi.wand_iff_sym with "Hassumption").
+      - now rewrite <-Hequiv.
     Qed.
 
   End GenericSolver.
+
+  Lemma solver_compose_spec {s1 s2} (spec1 : SolverSpec s1) (spec2 : SolverSpec s2) : SolverSpec (solver_compose s1 s2).
+  Proof.
+    unfold SolverSpec, solver_compose. intros w0 fmls0.
+    apply option.spec_bind.
+    generalize (spec1 w0 fmls0); clear spec1.
+    apply option.spec_monotonic; auto.
+    intros (w1 & ν01 & fmls1) H1.
+    apply option.spec_map.
+    generalize (spec2 w1 fmls1); clear spec2.
+    apply option.spec_monotonic; auto.
+    - intros (w2 & ν12 & fmls2) H2.
+      rewrite knowing_tri_comp.
+      rewrite knowing_trans.
+      now rewrite H2.
+    - intros Hfmls1.
+      now rewrite <-H1, Hfmls1, knowing_pure.
+  Qed.
+
 
   Definition combined_solver : Solver :=
     let g   := solver_generic in

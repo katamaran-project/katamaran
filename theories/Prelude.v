@@ -129,6 +129,18 @@ Section Equality.
     - now apply f_equal.
   Qed.
 
+    Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
+      eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
+    Proof.
+      now subst.
+    Qed.
+
+    Lemma eq_rect_sym2 {A : Type} {P : A -> Type} {a a' : A} (eq : a' = a) (v : P a) :
+      eq_rect a' P (eq_rect a P v a' (eq_sym eq)) a eq = v.
+    Proof.
+      now subst.
+    Qed.
+
 End Equality.
 
 Ltac finite_from_eqdec :=
@@ -585,6 +597,10 @@ Proof. firstorder. Qed.
 
 Lemma forall_and_compat {A} (P Q : A -> Prop):
   (forall a, P a /\ Q a) <-> (forall a, P a) /\ (forall a, Q a).
+Proof. firstorder. Qed.
+
+Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
+  (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
 Proof. firstorder. Qed.
 
 Declare Scope alt_scope.

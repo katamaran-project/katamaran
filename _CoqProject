@@ -1,6 +1,7 @@
 -arg "-w all"
 -arg "-w -disj-pattern-notation"
 -arg "-w -notation-overridden"
+-arg "-w -redundant-canonical-projection"
 -Q case_study/MinimalCaps Katamaran.MinimalCaps
 case_study/MinimalCaps/Base.v
 case_study/MinimalCaps/Machine.v
@@ -76,6 +77,7 @@ theories/Symbolic/PartialEvaluation.v
 theories/Symbolic/Propositions.v
 theories/Symbolic/Solver.v
 theories/Symbolic/Soundness.v
+theories/Symbolic/UnifLogic.v
 theories/Symbolic/Worlds.v
 theories/Syntax/Assertions.v
 theories/Syntax/BinOps.v
@@ -100,5 +102,4 @@ theories/Staging/NewShallow/Executor.v
 theories/Staging/NewShallow/IrisInstance.v
 theories/Staging/NewShallow/Soundness.v
 theories/Staging/WorldInstance.v
-theories/Staging/UnifLogic.v
-theories/Staging/LogicalSoundness.v
+# theories/Staging/WorldIsomorphisms.v
