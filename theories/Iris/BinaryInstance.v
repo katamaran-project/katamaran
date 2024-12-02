@@ -58,7 +58,7 @@ From Katamaran Require Import
      SmallStep.Step
      Specification
      BinaryResources
-     BinaryWP
+     BinaryWeakestPre
      BinaryAdequacy.
 
 Import ctx.notations.

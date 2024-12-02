@@ -48,7 +48,7 @@ theories/Iris/WeakestPre.v
 theories/Iris/TotalWeakestPre.v
 theories/Iris/Base.v
 theories/Iris/BinaryResources.v
-theories/Iris/BinaryWP.v
+theories/Iris/BinaryWeakestPre.v
 theories/Iris/BinaryAdequacy.v
 theories/Iris/BinaryInstance.v
 theories/Iris/cointro_patterns.v
