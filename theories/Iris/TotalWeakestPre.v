@@ -59,7 +59,7 @@ Module Type IrisTotalWeakestPre
 
   Definition semTWP {Σ} `{sG : sailGS Σ} [Γ τ] (s : Stm Γ τ)
     (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ) : iProp Σ :=
-    WP {| conf_stm := s; conf_store := δ |} ?[{ v, Q (valconf_val v) (valconf_store v) }].
+    WP (MkConf s δ) ?[{ v, Q (valconf_val v) (valconf_store v) }].
   Global Arguments semTWP {Σ} {sG} [Γ] [τ] s%exp Q%I δ.
 
   Ltac fold_semTWP :=
@@ -179,7 +179,7 @@ Module Type IrisTotalWeakestPre
       iPoseProof (twp_wand _ _ _ _ Φ with "H [HΦ]") as "H".
       { iIntros (v) "HQ". by iApply ("HΦ" with "HQ"). }
       remember (⊤ : coPset) as E eqn:HE.
-      remember ({| conf_stm := s; conf_store := δ ►► δΔ |} : expr (microsail_lang _ τ)) as e eqn:He.
+      remember (MkConf s (δ ►► δΔ) : expr (microsail_lang _ τ)) as e eqn:He.
       iRevert (s δ δΔ HE He) "HΦ". iRevert (e E Φ) "H".
       iApply twp_ind; first solve_proper.
       iIntros "!>" (e E Φ) "IH". iIntros (s δ δΔ -> ->) "#HΦ".
@@ -213,7 +213,7 @@ Module Type IrisTotalWeakestPre
       iPoseProof (twp_wand _ _ _ _ Φ with "H [HΦ]") as "H".
       { iIntros (v) "HQ". by iApply ("HΦ" with "HQ"). }
       remember (⊤ : coPset) as E eqn:HE.
-      remember ({| conf_stm := s; conf_store := δΔ |} : expr (microsail_lang _ τ)) as e eqn:He.
+      remember (MkConf s δΔ : expr (microsail_lang _ τ)) as e eqn:He.
       iRevert (s δ δΔ HE He) "HΦ". iRevert (e E Φ) "H".
       iApply twp_ind; first solve_proper.
       iIntros "!>" (e E Φ) "IH". iIntros (s δ δΔ -> ->) "#HΦ".
@@ -250,14 +250,14 @@ Module Type IrisTotalWeakestPre
           semTWP s (fun v => semTWP (k v) Q) δ -∗ semTWP (stm_bind s k) Q δ.
     Proof.
       iIntros (Q δ) "H". rewrite /semTWP.
-      iAssert (∃ Φ, ∀ v, Φ v ∗-∗ WP {| conf_stm := k (valconf_val v); conf_store := valconf_store v |}
+      iAssert (∃ Φ, ∀ v, Φ v ∗-∗ WP (MkConf (k (valconf_val v)) (valconf_store v))
                                  ?[{ v', Q (valconf_val v') (valconf_store v') }])%I as "(%Φ & HΦ)".
-      { iExists (λ v, WP {| conf_stm := k (valconf_val v); conf_store := valconf_store v |}
+      { iExists (λ v, WP (MkConf (k (valconf_val v)) (valconf_store v))
                         ?[{ v', Q (valconf_val v') (valconf_store v') }])%I. auto. }
       iPoseProof (twp_wand _ _ _ _ _ with "H [HΦ]") as "H".
       { iIntros (v) "HQ". by iApply ("HΦ" with "HQ"). }
       remember (⊤ : coPset) as E eqn:HE.
-      remember ({| conf_stm := s; conf_store := δ |}) as e eqn:He.
+      remember (MkConf s δ) as e eqn:He.
       iRevert (s δ He HE) "HΦ". iRevert (e E Φ) "H".
       iApply twp_ind; first solve_proper.
       iIntros "!>" (e E Φ) "IH". iIntros (s δ -> ->) "#HΦ".
@@ -358,7 +358,7 @@ Module Type IrisTotalWeakestPre
       iPoseProof (twp_wand _ _ _ _ Φ with "H [HΦ]") as "H".
       { iIntros (v) "HQ". by iApply ("HΦ" with "HQ"). }
       remember (⊤ : coPset) as E eqn:HE.
-      remember ({| conf_stm := s; conf_store := δ |} : expr (microsail_lang _ τ)) as e eqn:He.
+      remember (MkConf s δ : expr (microsail_lang _ τ)) as e eqn:He.
       iRevert (s δ HE He) "HΦ". iRevert (e E Φ) "H".
       iApply twp_ind; first solve_proper.
       iIntros "!>" (e E Φ) "IH". iIntros (s δ -> ->) "#HΦ".
