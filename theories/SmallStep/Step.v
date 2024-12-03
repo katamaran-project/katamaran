@@ -333,6 +333,25 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     assumption.
   Qed.
 
+  Lemma Steps_block {Γ τ} :
+    forall {γ1 γ2 μ1 μ2 δ1 δ2 Δ δΔ1 δΔ2} {s1 s2 : Stm (Γ ▻▻ Δ) τ},
+      ⟨ γ1, μ1, δ1 ►► δΔ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2 ►► δΔ2, s2 ⟩ ->
+      ⟨ γ1, μ1, δ1, stm_block δΔ1 s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_block δΔ2 s2 ⟩.
+  Proof.
+    intros ? ? ? ? ? ? ? ? ? ? ? H.
+    remember (δ1 ►► δΔ1) as δ1' eqn:Eδ1'.
+    remember (δ2 ►► δΔ2) as δ2' eqn:Eδ2'.
+    revert δ1 δΔ1 Eδ1' δ2 Eδ2'.
+    induction H;
+      intros δ1' δΔ1 Eδ1' δ2' Eδ2'.
+    - rewrite Eδ1' in Eδ2'.
+      destruct (proj1 (env.inversion_eq_cat _ _ _ _) Eδ2') as (-> & ->).
+      apply step_refl.
+    - destruct (env.catView δ2). rewrite Eδ1' in H.
+      eapply step_trans. apply st_block_step.
+      apply H. apply IHSteps; auto.
+  Qed.
+
   (* Tests if a statement is a final one, i.e. a finished computation. *)
   Ltac microsail_stm_is_final s :=
     lazymatch s with
