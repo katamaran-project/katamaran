@@ -76,7 +76,7 @@ Section Loop.
   Context `{sg : sailGS2 Σ}.
 
   Definition WP2_loop : iProp Σ :=
-    semWp2 env.nil env.nil (FunDef loop) (FunDef loop) (fun _ _ _ _ => True%I).
+    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (fun _ _ _ _ => True%I).
 
   Definition step_sem_contract :=
     Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
@@ -279,7 +279,7 @@ Section Loop.
     ⊢ semTriple_step.
   Proof.
     iIntros (m i h mepc_v mpp entries) "(Hcp & Hmtvec & Hpc & Hnpc & Hmc & Hmepc & Hmstatus & Hpe & Hpaa & Hgprs)".
-    iApply (semWp2_mono with "[-]").
+    iApply (semWP2_mono with "[-]").
     iApply valid_step_contract.
     Unshelve.
     3: exact [kv existT (_∷ty_privilege) m; existT (_∷ty_xlenbits) h; existT (_∷ty.list ty_pmpentry) entries; existT (_∷ty_privilege) mpp; existT (_∷ty_xlenbits) i]%env.
@@ -340,31 +340,31 @@ Section Loop.
     iIntros (m h i mpp entries) "(HStep & HMod & HTrap & HRec)".
     cbn.
     unfold fun_loop.
-    iApply (semWp2_seq (call step) (call step) (call loop) (call loop)).
-    (* iApply semWp2_call_inline_later. *)
-    (* iApply (semWp2_mono with "[HStep]"). *)
+    iApply (semWP2_seq (call step) (call step) (call loop) (call loop)).
+    (* iApply semWP2_call_inline_later. *)
+    (* iApply (semWP2_mono with "[HStep]"). *)
     (* iApply (valid_step_semTriple with "HStep"). *)
     (* Unshelve. 2: auto. *)
     (* iModIntro. *)
     (* iIntros (v1 δ1 v2 δ2) "(<- & <- & [HRes | [HRes | [HRes | HRes]]])"; *)
-    (*   iApply (semWp2_call_inline loop _). *)
+    (*   iApply (semWP2_call_inline loop _). *)
     (* - iDestruct "HRes" as "(? & ? & ? & ? & ? & [%i' (? & ?)] & ? & ? & ?)". *)
     (*   unfold semTriple_loop. *)
     (*   iSpecialize ("H" $! m h i' mpp entries with "[-]"). *)
     (*   {iFrame. *)
     (*    now iExists i'. } *)
-    (*   iApply (semWp2_mono with "H"). *)
+    (*   iApply (semWP2_mono with "H"). *)
     (*   now iIntros (v δ v' δ') "(<- & <- & _)". *)
     (* - iSpecialize ("HMod" with "HRes"). *)
-    (*   iApply (semWp2_mono with "HMod"). *)
+    (*   iApply (semWP2_mono with "HMod"). *)
     (*   iIntros (v δ v' δ') "_". *)
     (*   now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ'). *)
     (* - iSpecialize ("HTrap" with "HRes"). *)
-    (*   iApply (semWp2_mono with "HTrap"). *)
+    (*   iApply (semWP2_mono with "HTrap"). *)
     (*   iIntros (v δ v' δ') "_". *)
     (*   now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ'). *)
     (* - iSpecialize ("HRec" with "HRes"). *)
-    (*   iApply (semWp2_mono with "HRec"). *)
+    (*   iApply (semWP2_mono with "HRec"). *)
     (*   iIntros (v δ v' δ') "_". *)
     (*   now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ'). *)
   Admitted.
