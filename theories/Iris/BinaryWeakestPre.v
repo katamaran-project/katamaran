@@ -713,7 +713,6 @@ Section Soundness.
   Lemma iris_rule_noop {Γ σ} {δ : CStore Γ}
         {P} {Q : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
     stm_to_val s = None ->
-    stm_to_fail s = None ->
     (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
                             (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
                               (forall {s2 : Stm Γ σ} {γ2 μ2} {δ2 : CStore Γ}, ⟨ γ2, μ2, δ2, s2 ⟩ ---> ⟨ γ2, μ2, δ2, s' ⟩) /\
@@ -721,7 +720,19 @@ Section Soundness.
     (∀ v, P ={⊤}=∗ Q v δ) -∗
                  semTriple δ P s Q.
   Proof.
-  Admitted.
+    iIntros (Hnv Hnoop) "HPQ HP". rewrite /semWP2. iIntros (γ21 μ21) "(Hreg2 & Hmem2)".
+    rewrite <-semWP_unfold_nolc. rewrite Hnv. iIntros (γ11 μ11) "Hres1".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iIntros "!>" (s12 δ12 γ12 μ12 Hs).
+    destruct (Hnoop _ _ _ _ _ _ Hs) as (-> & -> & -> & Hs2 & [[v ->]|[msg ->]]).
+    - do 3 iModIntro. iMod "Hclose" as "_".
+      iFrame. iModIntro. iApply semWP_val. iExists γ21, μ21, δ, v.
+      iMod ("HPQ" $! v with "HP") as "$". iModIntro. iFrame "Hreg2 Hmem2".
+      repeat iSplit; auto. iPureIntro. eapply step_trans. apply Hs2.
+      apply step_refl.
+    - do 3 iModIntro. iMod "Hclose" as "_". iFrame "Hres1".
+      now iApply semWP_fail.
+  Qed.
 
   Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
     (s : Stm Γ σ) (pat : Pattern σ)
