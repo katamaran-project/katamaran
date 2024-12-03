@@ -235,7 +235,12 @@ Module IrisBinaryWP
 
     Lemma semWP2_exp {Γ τ} (Φ : Post2 Γ Γ τ) eA eB δA δB :
       Φ (eval eA δA) δA (eval eB δB) δB ⊢ semWP2 δA δB (stm_exp eA) (stm_exp eB) Φ.
-    Admitted.
+    Proof.
+      iIntros "HΦ". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iApply semWP_exp. iExists γ21, μ21, δB, (eval eB δB).
+      iFrame "HΦ Hres". iPureIntro. eapply step_trans.
+      constructor. apply step_refl.
+    Qed.
 
     (* TODO: move somewhere else? *)
     Ltac semWP2_stuck_progress :=
@@ -292,28 +297,58 @@ Module IrisBinaryWP
     Lemma semWP2_let {Γ τ x σ} (s1 s2 : Stm Γ σ) (k1 k2 : Stm (Γ ▻ x∷σ) τ)
       (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ) :
       ⊢ semWP2 δ1 δ2 s1 s2 (fun v1 δ12 v2 δ22 => semWP2 δ12.[x∷σ ↦ v1] δ22.[x∷σ ↦ v2] k1 k2 (fun v12 δ13 v22 δ23 => Q v12 (env.tail δ13) v22 (env.tail δ23)) ) -∗
-                                                                                                                                                                  semWP2 δ1 δ2 (let: x ∷ σ := s1 in k1)%exp (let: x ∷ σ := s2 in k2)%exp Q.
+        semWP2 δ1 δ2 (let: x ∷ σ := s1 in k1)%exp (let: x ∷ σ := s2 in k2)%exp Q.
     Proof.
-    Admitted.
+      iIntros "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iSpecialize ("H" with "Hres"). iApply semWP_let.
+      iApply (semWP_mono with "H").
+      iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %v2 & %Hsteps & Hregs & Hmem & H)".
+      iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (semWP_mono with "H").
+      iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %v2' & %Hsteps' & Hregs & Hmem & H)".
+      iExists γ23, μ23, (env.tail δ2''), v2'. iFrame "Hregs Hmem H".
+      iPureIntro. destruct (env.view δ2''). eapply step_trans.
+      constructor. apply (Steps_bind Hsteps).
+      eapply Steps_trans. eapply Steps_block. cbn.
+      assert (E.[x∷σ ↦ v] = E ►► [env].[x∷σ ↦ v]) as <- by reflexivity.
+      eassumption. eapply step_trans. constructor. cbn. apply step_refl.
+    Qed.
 
     Lemma semWP2_seq {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Stm Γ τ) :
       ⊢ ∀ (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ),
-          semWP2 δ1 δ2 s1 s2 (fun v1 δ21 v2 δ22 => semWP2 δ21 δ22 k1 k2 Q) -∗ semWP2 δ1 δ2 (s1;;k1)%exp (s2;;k2)%exp Q.
+          semWP2 δ1 δ2 s1 s2 (fun v1 δ21 v2 δ22 => semWP2 δ21 δ22 k1 k2 Q) -∗
+          semWP2 δ1 δ2 (s1;;k1)%exp (s2;;k2)%exp Q.
     Proof.
-    Admitted.
+      iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iSpecialize ("H" with "Hres"). iApply semWP_seq.
+      iApply (semWP_mono with "H").
+      iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %v2 & %Hsteps & Hregs & Hmem & H)".
+      iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (semWP_mono with "H").
+      iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %v2' & %Hsteps' & Hregs & Hmem & H)".
+      iExists γ23, μ23, δ2'', v2'. iFrame "Hregs Hmem H".
+      iPureIntro. eapply step_trans. constructor.
+      apply (Steps_bind Hsteps Hsteps').
+    Qed.
 
     Lemma semWP2_assertk {Γ τ} (e11 e21 : Exp Γ ty.bool) (e12 e22 : Exp Γ ty.string) (k1 k2 : Stm Γ τ) :
       ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
           ⌜eval e11 δ1 = eval e21 δ2⌝ -∗
-                                         (⌜eval e11 δ1 = true⌝ → ⌜eval e21 δ2 = true⌝ → semWP2 δ1 δ2 k1 k2 Q) -∗
-                                                                                                                 semWP2 δ1 δ2 (stm_assertk e11 e12 k1) (stm_assertk e21 e22 k2) Q.
+          (⌜eval e11 δ1 = true⌝ → ⌜eval e21 δ2 = true⌝ → semWP2 δ1 δ2 k1 k2 Q) -∗
+          semWP2 δ1 δ2 (stm_assertk e11 e12 k1) (stm_assertk e21 e22 k2) Q.
     Proof.
-    Admitted.
+      iIntros (Q δ1 δ2) "%He H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iApply semWP_assertk. iIntros "%He1".
+      iSpecialize ("H" with "[] [] Hres"); eauto.
+      iApply (semWP_mono with "H").
+      iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %v2 & %Hsteps & Hregs & Hmem & H)".
+      iExists γ22, μ22, δ2', v2. iFrame "Hregs Hmem H".
+      iPureIntro. eapply step_trans. constructor.
+      rewrite He in He1. rewrite He1. assumption.
+    Qed.
 
     Lemma semWP2_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
       ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
           (∃ v1 v2 : Val τ, reg_pointsTo2 reg v1 v2 ∗ (reg_pointsTo2 reg v1 v2 -∗ Q v1 δ1 v2 δ2)) -∗
-                                                                                                     semWP2 δ1 δ2 (stm_read_register reg) (stm_read_register reg) Q.
+          semWP2 δ1 δ2 (stm_read_register reg) (stm_read_register reg) Q.
     Proof.
     Admitted.
 
