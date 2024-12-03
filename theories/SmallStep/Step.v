@@ -296,13 +296,43 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Steps _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2).
   End SmallStepNotations.
 
+  Lemma Steps_trans {Γ τ} :
+    forall {γ1 γ2 γ3 μ1 μ2 μ3 δ1 δ2 δ3} {s1 s2 s3 : Stm Γ τ},
+      ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s2 ⟩ ->
+      ⟨ γ2, μ2, δ2, s2 ⟩ --->* ⟨ γ3, μ3, δ3, s3 ⟩ ->
+      ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ3, μ3, δ3, s3 ⟩.
+  Proof.
+    intros γ1 γ2 γ3 μ1 μ2 μ3 δ1 δ2 δ3 s1 s2 s3 Hs1s2 Hs2s3.
+    revert γ3 μ3 δ3 s3 Hs2s3. 
+    induction Hs1s2; first auto.
+    intros γ4 μ4 δ4 s4 Hs3s4.
+    eapply step_trans. eassumption.
+    now apply IHHs1s2.
+  Qed.
+
+  Lemma Steps_bind_val {Γ σ τ} :
+    forall {γ1 γ2 μ1 μ2 δ1 δ2} {s1 : Stm Γ σ} {v1} (k : Val σ -> Stm Γ τ),
+    ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_val σ v1 ⟩ ->
+    ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ --->* ⟨ γ2, μ2, δ2, stm_bind (stm_val σ v1) k ⟩.
+  Proof.
+    intros ? ? ? ? ? ? ? ? ? H.
+    induction H; first apply step_refl.
+    eapply step_trans. apply st_bind_step. eauto.
+    assumption.
+  Qed.
+
   Lemma Steps_bind {Γ σ τ} :
     forall {γ1 γ2 γ3 μ1 μ2 μ3 δ1 δ2 δ3} {s1 : Stm Γ σ} {k} {s3 : Stm Γ τ} {v1},
     ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_val σ v1 ⟩ ->
     ⟨ γ2, μ2, δ2, k v1 ⟩ --->* ⟨ γ3, μ3, δ3, s3 ⟩ ->
     ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ --->* ⟨ γ3, μ3, δ3, s3 ⟩.
   Proof.
-  Admitted.
+    intros ? ? ? ? ? ? ? ? ? ? ? ? ? Hs1 Hk.
+    pose proof (Steps_bind_val k Hs1) as H.
+    apply (Steps_trans H).
+    eapply step_trans; first constructor.
+    assumption.
+  Qed.
 
   (* Tests if a statement is a final one, i.e. a finished computation. *)
   Ltac microsail_stm_is_final s :=
