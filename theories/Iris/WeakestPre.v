@@ -145,6 +145,14 @@ Module Type IrisWeakestPre
       by iApply "PQ".
     Qed.
 
+    Lemma fupd_semWP {Γ τ} E (δ : CStore Γ) (s : Stm Γ τ) Φ :
+      (|={E}=> semWP s Φ δ) ⊢ semWP s Φ δ.
+    Proof.
+      unfold semWP. iIntros "WP".
+      iApply fupd_wp. iMod (fupd_mask_subseteq E) as "Hclose"; first auto.
+      iMod "WP". iMod "Hclose" as "_". now iModIntro.
+    Qed.
+
     Lemma semWP_val {Γ τ} (v : Val τ) (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ) :
       semWP (stm_val τ v) Q δ ⊣⊢ |={⊤}=> Q v δ.
     Proof. rewrite semWP_unfold. reflexivity. Qed.
