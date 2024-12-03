@@ -387,13 +387,19 @@ Module IrisBinaryWP
       iPureIntro. eapply step_trans. constructor. apply step_refl.
     Qed.
 
-    (* TODO: notation for cstore update not working? (import env.notations doesn't solve it) Investigate and define lemma *)
-    (* Lemma semWP2_assign {Γ τ x} (xInΓ : x∷τ ∈ Γ) (s1 s2 : Stm Γ τ) : *)
-    (*   ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ), *)
-    (*       semWP2 δ1 δ2 s1 s2 (λ v1 δ21 v2 δ22, Q v1 (δ21 ⟪ x ↦ v1 ⟫) v2 (δ22 ⟪ x ↦ v2 ⟫)) -∗ *)
-    (*       semWP2 δ1 δ2 (stm_assign x s1) (stm_assign x s2) Q. *)
-    (* Proof. *)
-    (* Admitted. *)
+    Lemma semWP2_assign {Γ τ x} (xInΓ : x∷τ ∈ Γ) (s1 s2 : Stm Γ τ) :
+      ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+          semWP2 δ1 δ2 s1 s2 (λ v1 δ21 v2 δ22, Q v1 (δ21 ⟪ x ↦ v1 ⟫) v2 (δ22 ⟪ x ↦ v2 ⟫)) -∗
+          semWP2 δ1 δ2 (stm_assign x s1) (stm_assign x s2) Q.
+    Proof.
+      iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iSpecialize ("H" with "Hres"). iApply semWP_assign.
+      iApply (semWP_mono with "H").
+      iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %v2 & %Hs2 & H)".
+      iExists γ22, μ22, (δ2' ⟪ x ↦ v2 ⟫), v2. iFrame "H". iPureIntro.
+      eapply Steps_trans. apply (Steps_assign Hs2).
+      eapply step_trans. constructor. apply step_refl.
+    Qed.
 
     Lemma semWP2_pattern_match {Γ τ σ} (s1 s2 : Stm Γ σ) (pat : Pattern σ)
       (rhs1 rhs2 : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
@@ -655,8 +661,10 @@ Section Soundness.
         ⊢ (semTriple δ P s (fun v δ' => R v (@env.update _ _ _ δ' (x∷_) _ v)) -∗
            semTriple δ P (stm_assign x s) R).
   Proof.
-    iIntros "Hk P". (* iApply semWP_assign. *)
-  Admitted.
+    iIntros "Hk P". iApply semWP2_assign. iSpecialize ("Hk" with "P").
+    iApply (semWP2_mono with "Hk"). iIntros (? ? ? ?) "(<- & <- & R)".
+    now iFrame "R".
+  Qed.
 
   Lemma iris_rule_stm_bind {Γ} (δ : CStore Γ)
         {σ τ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
