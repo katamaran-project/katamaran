@@ -452,7 +452,7 @@ Section Soundness.
         ⊢ ((P -∗ Q v δ)%I -∗ semTriple δ P (stm_val τ v) Q).
   Proof.
     iIntros "PQ P".
-    iApply semWP2_val.
+    iApply semWP2_val_1.
     iSpecialize ("PQ" with "P").
     iModIntro; by iFrame.
   Qed.
