@@ -98,6 +98,8 @@ Module Type IrisParameters2
   Parameter memGS2_memGS_left : forall `{memGS2 Σ}, memGS Σ.
   Parameter memGS2_memGS_right : forall `{memGS2 Σ}, memGS Σ.
   Parameter mem_inv2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
+  Parameter mem_inv2_mem_inv : forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
+      mem_inv2 μ1 μ2 ⊣⊢ @mem_inv _ memGS2_memGS_left μ1 ∗ @mem_inv _ memGS2_memGS_right μ2.
 End IrisParameters2.
 
 Module Type IrisResources2
