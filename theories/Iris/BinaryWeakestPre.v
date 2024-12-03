@@ -715,7 +715,7 @@ Section Soundness.
     stm_to_val s = None ->
     (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
                             (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
-                              (forall {s2 : Stm Γ σ} {γ2 μ2} {δ2 : CStore Γ}, ⟨ γ2, μ2, δ2, s2 ⟩ ---> ⟨ γ2, μ2, δ2, s' ⟩) /\
+                              (forall {γ2 μ2} {δ2 : CStore Γ}, ⟨ γ2, μ2, δ2, s ⟩ ---> ⟨ γ2, μ2, δ2, s' ⟩) /\
                             ((exists v, s' = stm_val _ v) \/ (exists msg, s' = stm_fail _ msg))) ->
     (∀ v, P ={⊤}=∗ Q v δ) -∗
                  semTriple δ P s Q.
