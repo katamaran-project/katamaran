@@ -205,15 +205,6 @@ Module IrisBinaryWP
       by iApply "WP".
     Qed.
 
-    Lemma semWP2_step_fupd {Γ1 Γ2 τ} (δA : CStore Γ1) (δB : CStore Γ2)
-      (eA : Stm Γ1 τ) (eB : Stm Γ2 τ) (P :iProp Σ) Φ : 
-      to_val {| conf_stm := eA; conf_store := δA |} = None ->
-      to_val {| conf_stm := eB; conf_store := δB |} = None ->
-      P -∗
-      semWP2 δA δB eA eB (λ v1 δA v2 δB, P -∗ Φ v1 δA v2 δB) -∗
-      semWP2 δA δB eA eB Φ.
-    Admitted.
-
     Lemma semWP2_frame_l {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
       (δ1 : CStore Γ1) (δ2 : CStore Γ2) (POST : Post2 Γ1 Γ2 τ)
       (R : iProp Σ) :
