@@ -362,6 +362,16 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     eapply step_trans; last apply IHSteps. constructor. auto.
   Qed.
 
+  Lemma Steps_call_frame {Γ τ} :
+    forall {Δ} {γ1 γ2 μ1 μ2} {δ : CStore Γ} {δΔ1 δΔ2 : CStore Δ} {s1 s2 : Stm Δ τ},
+      ⟨ γ1, μ1, δΔ1, s1 ⟩ --->* ⟨ γ2, μ2, δΔ2, s2 ⟩ ->
+      ⟨ γ1, μ1, δ, stm_call_frame δΔ1 s1 ⟩ --->* ⟨ γ2, μ2, δ, stm_call_frame δΔ2 s2 ⟩.
+  Proof.
+    intros Δ γ1 γ2 μ1 μ2 δ δΔ1 δΔ2 s1 s2 H.
+    induction H; first apply step_refl.
+    eapply step_trans; last apply IHSteps. constructor. auto.
+  Qed.
+
   (* Tests if a statement is a final one, i.e. a finished computation. *)
   Ltac microsail_stm_is_final s :=
     lazymatch s with

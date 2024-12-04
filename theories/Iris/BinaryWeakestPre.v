@@ -266,6 +266,27 @@ Module IrisBinaryWP
       forall {v}, stm_to_val s = Some v -> stm_to_fail s = None.
     Proof. intros; by destruct s. Qed.
 
+    (* TODO: this and bind, have a Γ1 and Γ2 instead of just Γ *)
+    Lemma semWP2_call_inline_later {Γ τ Δ} (f1 f2 : 𝑭 Δ τ) (es1 es2 : NamedEnv (Exp Γ) Δ) :
+      ⊢ ∀ (Q : Post2 Γ Γ τ) (δΓ1 δΓ2 : CStore Γ),
+          ▷ semWP2 (evals es1 δΓ1) (evals es2 δΓ2) (FunDef f1) (FunDef f2) (λ v1τ _ v2τ _, Q v1τ δΓ1 v2τ δΓ2) -∗
+          semWP2 δΓ1 δΓ2 (stm_call f1 es1) (stm_call f2 es2) Q.
+    Proof.
+      iIntros (Q δΓ1 δΓ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iApply semWP_call_inline_later. iModIntro. iSpecialize ("H" with "Hres").
+      iApply (semWP_mono with "H").
+      iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %v2 & %Hf2 & H)".
+      iExists γ22, μ22, δΓ2, v2. iFrame "H". iPureIntro. eapply step_trans.
+      constructor. eapply Steps_trans. apply (Steps_call_frame Hf2).
+      eapply step_trans. constructor. apply step_refl.
+    Qed.
+
+    Lemma semWP2_call_inline {Γ τ Δ} (f1 f2 : 𝑭 Δ τ) (es1 es2 : NamedEnv (Exp Γ) Δ) :
+      ⊢ ∀ (Q : Post2 Γ Γ τ) (δΓ1 δΓ2 : CStore Γ),
+          semWP2 (evals es1 δΓ1) (evals es2 δΓ2) (FunDef f1) (FunDef f2) (λ v1τ _ v2τ _, Q v1τ δΓ1 v2τ δΓ2) -∗
+          semWP2 δΓ1 δΓ2 (stm_call f1 es1) (stm_call f2 es2) Q.
+    Proof. iIntros (? ? ?) "?". by iApply semWP2_call_inline_later. Qed.
+
     Lemma semWP2_bind {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Val σ → Stm Γ τ)
       (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ) :
       semWP2 δ1 δ2 s1 s2 (λ v1 δ12 v2 δ22, semWP2 δ12 δ22 (k1 v1) (k2 v2) Q) ⊢
@@ -681,7 +702,10 @@ Section Soundness.
     ⊢ ▷ semTriple (evals es δΓ) P (FunDef f) (fun v _ => Q v δΓ) -∗
       semTriple δΓ P (stm_call f es) Q.
   Proof.
-  Admitted.
+    iIntros "Hk P". iApply semWP2_call_inline_later. iModIntro.
+    iSpecialize ("Hk" with "P"). iApply (semWP2_mono with "Hk").
+    iIntros (? ? ? ?) "(<- & <- & Q)". now iFrame "Q".
+  Qed.
 
   Lemma iris_rule_stm_call_inline
     {Γ} (δΓ : CStore Γ)
@@ -690,7 +714,8 @@ Section Soundness.
     ⊢ semTriple (evals es δΓ) P (FunDef f) (fun v _ => Q v δΓ) -∗
       semTriple δΓ P (stm_call f es) Q.
   Proof.
-  Admitted.
+    iIntros "Hk". now iApply iris_rule_stm_call_inline_later.
+  Qed.
 
   Lemma iris_rule_stm_debugk
     {Γ τ} (δ : CStore Γ) (k : Stm Γ τ)
