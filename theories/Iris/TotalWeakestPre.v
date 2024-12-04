@@ -437,6 +437,46 @@ Module Type IrisTotalWeakestPre
       iModIntro. iMod "Hclose" as "_". iModIntro. now iFrame "state_inv".
     Qed.
 
+    Import SmallStepNotations.
+
+    Lemma semTWP_Steps {Γ τ} {s1 : Stm Γ τ} {Q δ1} :
+      ∀ {γ1 : RegStore} {μ1 : Memory},
+        regs_inv γ1 ∗ mem_inv μ1 -∗
+        semTWP s1 Q δ1 ={⊤}=∗
+        ∃ γ2 μ2 δ2 v, ⌜⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_val τ v ⟩ ⌝
+                     ∗ regs_inv γ2 ∗ mem_inv μ2 ∗ Q v δ2.
+    Proof.
+      iIntros (γ1 μ1) "Hres HTWP".
+      iAssert (∃ Φ, ∀ v, Φ v ∗-∗ Q (valconf_val v) (valconf_store v))%I as "(%Φ & HΦ)".
+      { iExists (λ v, Q (valconf_val v) (valconf_store v)). auto. }
+      iPoseProof (twp_wand _ _ _ _ Φ with "HTWP [HΦ]") as "HTWP".
+      { iIntros (v) "HQ". by iApply ("HΦ" with "HQ"). }
+      remember (⊤ : coPset) as E eqn:HE.
+      remember (MkConf s1 δ1 : expr (microsail_lang Γ τ)) as e eqn:He.
+      iRevert (s1 δ1 γ1 μ1 HE He) "Hres HΦ". iRevert (e E Φ) "HTWP".
+      iApply twp_ind; first solve_proper.
+      iIntros "!>" (e E Φ) "IH". iIntros (s1 δ1 γ1 μ1 HE He) "Hres #HΦ".
+      rewrite /twp_pre. cbn. destruct (to_val e) as [[v δ]|] eqn:Ee.
+      - iMod "IH". iModIntro.
+        iExists γ1, μ1, δ1, v. iDestruct "Hres" as "($ & $)".
+        rewrite He in Ee. destruct s1; try discriminate; inversion Ee; subst.
+        iSplitR. iPureIntro. apply step_refl. iApply ("HΦ" with "IH").
+      - iSpecialize ("IH" $! (γ1, μ1) O nil O with "Hres").
+        iMod "IH" as "(_ & IH)". pose proof (progress s1) as [H|H].
+        + destruct s1; cbn in H; try discriminate; try contradiction.
+          rewrite He in Ee. cbn in Ee. inversion Ee.
+          admit.
+        + destruct (H γ1 μ1 δ1) as (γ2 & μ2 & δ2 & s2 & Hs).
+          iSpecialize ("IH" $! nil (MkConf s2 δ2) _ nil with "[]").
+          { iPureIntro. constructor. rewrite He; simpl. apply Hs. }
+          iMod "IH" as "(_ & Hres & [IH _] & _)".
+          iMod ("IH" with "[] [] Hres HΦ") as "IH"; auto. iModIntro.
+          iDestruct "IH" as "(%γ3 & %μ3 & %δ3 & %v' & IH)".
+          iExists γ3, μ3, δ3, v'. iDestruct "IH" as "(%Hs2 & $)".
+          iPureIntro. eapply Steps_trans; last apply Hs2.
+          apply (step_trans Hs). apply step_refl.
+    Admitted.
+
   End TotalWeakestPre.
 
   Module twptactics.

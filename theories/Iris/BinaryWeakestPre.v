@@ -496,6 +496,25 @@ Module IrisBinaryWP
       iExists γ22, μ22, δ2', v2. iFrame "H". iPureIntro. eapply step_trans.
       constructor. assumption.
     Qed.
+
+    Lemma semWP2_focus {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
+      ⊢ ∀ Q1 Q2 Q δ1 δ2,
+          @semTWP _ sailGS2_sailGS_left _ _ s1 Q1 δ1 -∗
+          @semTWP _ sailGS2_sailGS_right _ _ s2 Q2 δ2 -∗
+          (∀ v1 δ1 v2 δ2, Q1 v1 δ1 ∗ Q2 v2 δ2 -∗ Q v1 δ1 v2 δ2) -∗
+          semWP2 δ1 δ2 s1 s2 Q.
+    Proof.
+      iIntros (Q1 Q2 Q δ1 δ2) "HTWP1 HTWP2 H". rewrite /semWP2.
+      iIntros (γ21 μ21) "Hres". iPoseProof (semTWP_semWP with "HTWP1") as "HWP1".
+      iApply (fupd_semWP ⊤). iPoseProof (semTWP_Steps with "[Hres] HTWP2") as "H2".
+      { iDestruct "Hres" as "($ & $)". }
+      iMod "H2". iModIntro. iApply (semWP_mono with "HWP1").
+      iIntros (v1 δ1') "HQ1".
+      iDestruct "H2" as "(%γ22 & %μ22 & %δ2' & %v2 & %Hs2 & Hreg & Hmem & HQ2)".
+      iSpecialize ("H" with "[$HQ1 $HQ2]"). iExists γ22, μ22, δ2', v2.
+      now iFrame "H Hreg Hmem".
+    Qed.
+
   End WithSailGS2.
 End IrisBinaryWP.
 
