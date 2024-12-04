@@ -236,7 +236,7 @@ Module IrisBinaryWP
           |- context[stm_to_fail ?s] => rewrite (stm_fail_stuck H)
         end.
 
-    Lemma semWP2_exp {Γ τ} (Φ : Post2 Γ Γ τ) eA eB δA δB :
+    Lemma semWP2_exp {Γ1 Γ2 τ} (Φ : Post2 Γ1 Γ2 τ) eA eB δA δB :
       Φ (eval eA δA) δA (eval eB δB) δB ⊢ semWP2 δA δB (stm_exp eA) (stm_exp eB) Φ.
     Proof.
       iIntros "HΦ". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
@@ -266,9 +266,9 @@ Module IrisBinaryWP
       forall {v}, stm_to_val s = Some v -> stm_to_fail s = None.
     Proof. intros; by destruct s. Qed.
 
-    (* TODO: this and bind, have a Γ1 and Γ2 instead of just Γ *)
-    Lemma semWP2_call_inline_later {Γ τ Δ} (f1 f2 : 𝑭 Δ τ) (es1 es2 : NamedEnv (Exp Γ) Δ) :
-      ⊢ ∀ (Q : Post2 Γ Γ τ) (δΓ1 δΓ2 : CStore Γ),
+    Lemma semWP2_call_inline_later {Γ1 Γ2 τ Δ} (f1 f2 : 𝑭 Δ τ)
+      (es1 : NamedEnv (Exp Γ1) Δ) (es2 : NamedEnv (Exp Γ2) Δ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δΓ1 : CStore Γ1) (δΓ2 : CStore Γ2),
           ▷ semWP2 (evals es1 δΓ1) (evals es2 δΓ2) (FunDef f1) (FunDef f2) (λ v1τ _ v2τ _, Q v1τ δΓ1 v2τ δΓ2) -∗
           semWP2 δΓ1 δΓ2 (stm_call f1 es1) (stm_call f2 es2) Q.
     Proof.
@@ -281,14 +281,16 @@ Module IrisBinaryWP
       eapply step_trans. constructor. apply step_refl.
     Qed.
 
-    Lemma semWP2_call_inline {Γ τ Δ} (f1 f2 : 𝑭 Δ τ) (es1 es2 : NamedEnv (Exp Γ) Δ) :
-      ⊢ ∀ (Q : Post2 Γ Γ τ) (δΓ1 δΓ2 : CStore Γ),
+    Lemma semWP2_call_inline {Γ1 Γ2 τ Δ} (f1 f2 : 𝑭 Δ τ)
+      (es1 : NamedEnv (Exp Γ1) Δ) (es2 : NamedEnv (Exp Γ2) Δ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δΓ1 : CStore Γ1) (δΓ2 : CStore Γ2),
           semWP2 (evals es1 δΓ1) (evals es2 δΓ2) (FunDef f1) (FunDef f2) (λ v1τ _ v2τ _, Q v1τ δΓ1 v2τ δΓ2) -∗
           semWP2 δΓ1 δΓ2 (stm_call f1 es1) (stm_call f2 es2) Q.
     Proof. iIntros (? ? ?) "?". by iApply semWP2_call_inline_later. Qed.
 
-    Lemma semWP2_bind {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Val σ → Stm Γ τ)
-      (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ) :
+    Lemma semWP2_bind {Γ1 Γ2 τ σ} (s1 : Stm Γ1 σ) (s2 : Stm Γ2 σ)
+      (k1 : Val σ -> Stm Γ1 τ) (k2 : Val σ → Stm Γ2 τ) (Q : Post2 Γ1 Γ2 τ)
+      (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
       semWP2 δ1 δ2 s1 s2 (λ v1 δ12 v2 δ22, semWP2 δ12 δ22 (k1 v1) (k2 v2) Q) ⊢
         semWP2 δ1 δ2 (stm_bind s1 k1) (stm_bind s2 k2) Q.
     Proof.
@@ -318,8 +320,9 @@ Module IrisBinaryWP
       rewrite env.drop_cat. apply step_refl.
     Qed.
 
-    Lemma semWP2_let {Γ τ x σ} (s1 s2 : Stm Γ σ) (k1 k2 : Stm (Γ ▻ x∷σ) τ)
-      (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ) :
+    Lemma semWP2_let {Γ1 Γ2 τ x σ} (s1 : Stm Γ1 σ) (s2 : Stm Γ2 σ)
+      (k1 : Stm (Γ1 ▻ x∷σ) τ) (k2 : Stm (Γ2 ▻ x∷σ) τ)
+      (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
       ⊢ semWP2 δ1 δ2 s1 s2 (fun v1 δ12 v2 δ22 => semWP2 δ12.[x∷σ ↦ v1] δ22.[x∷σ ↦ v2] k1 k2 (fun v12 δ13 v22 δ23 => Q v12 (env.tail δ13) v22 (env.tail δ23)) ) -∗
         semWP2 δ1 δ2 (let: x ∷ σ := s1 in k1)%exp (let: x ∷ σ := s2 in k2)%exp Q.
     Proof.
@@ -337,8 +340,9 @@ Module IrisBinaryWP
       eassumption. eapply step_trans. constructor. cbn. apply step_refl.
     Qed.
 
-    Lemma semWP2_seq {Γ τ σ} (s1 s2 : Stm Γ σ) (k1 k2 : Stm Γ τ) :
-      ⊢ ∀ (Q : Post2 Γ Γ τ) (δ1 δ2 : CStore Γ),
+    Lemma semWP2_seq {Γ1 Γ2 τ σ} (s1 : Stm Γ1 σ) (s2 : Stm Γ2 σ)
+      (k1 : Stm Γ1 τ) (k2 : Stm Γ2 τ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
           semWP2 δ1 δ2 s1 s2 (fun v1 δ21 v2 δ22 => semWP2 δ21 δ22 k1 k2 Q) -∗
           semWP2 δ1 δ2 (s1;;k1)%exp (s2;;k2)%exp Q.
     Proof.
@@ -353,8 +357,9 @@ Module IrisBinaryWP
       apply (Steps_bind Hsteps Hsteps').
     Qed.
 
-    Lemma semWP2_assertk {Γ τ} (e11 e21 : Exp Γ ty.bool) (e12 e22 : Exp Γ ty.string) (k1 k2 : Stm Γ τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+    Lemma semWP2_assertk {Γ1 Γ2 τ} (e11 : Exp Γ1 ty.bool) (e21 : Exp Γ2 ty.bool)
+      (e12 : Exp Γ1 ty.string) (e22 : Exp Γ2 ty.string) (k1 : Stm Γ1 τ) (k2 : Stm Γ2 τ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
           ⌜eval e11 δ1 = eval e21 δ2⌝ -∗
           (⌜eval e11 δ1 = true⌝ → ⌜eval e21 δ2 = true⌝ → semWP2 δ1 δ2 k1 k2 Q) -∗
           semWP2 δ1 δ2 (stm_assertk e11 e12 k1) (stm_assertk e21 e22 k2) Q.
@@ -369,8 +374,8 @@ Module IrisBinaryWP
       rewrite He in He1. rewrite He1. assumption.
     Qed.
 
-    Lemma semWP2_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+    Lemma semWP2_read_register {Γ1 Γ2 τ} (reg : 𝑹𝑬𝑮 τ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
           (∃ v1 v2 : Val τ, reg_pointsTo2 reg v1 v2 ∗ (reg_pointsTo2 reg v1 v2 -∗ Q v1 δ1 v2 δ2)) -∗
           semWP2 δ1 δ2 (stm_read_register reg) (stm_read_register reg) Q.
     Proof.
@@ -384,8 +389,8 @@ Module IrisBinaryWP
       iPureIntro. eapply step_trans. constructor. rewrite H. apply step_refl.
     Qed.
 
-    Lemma semWP2_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) (e1 e2 : Exp Γ τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+    Lemma semWP2_write_register {Γ1 Γ2 τ} (reg : 𝑹𝑬𝑮 τ) (e1 : Exp Γ1 τ) (e2 : Exp Γ2 τ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
           (∃ v1 v2 : Val τ, reg_pointsTo2 reg v1 v2 ∗ (reg_pointsTo2 reg (eval e1 δ1) (eval e2 δ2) -∗ Q (eval e1 δ1) δ1 (eval e2 δ2) δ2)) -∗
           semWP2 δ1 δ2 (stm_write_register reg e1) (stm_write_register reg e2) Q.
     Proof.
@@ -399,8 +404,9 @@ Module IrisBinaryWP
       iPureIntro. eapply step_trans. constructor. apply step_refl.
     Qed.
 
-    Lemma semWP2_assign {Γ τ x} (xInΓ : x∷τ ∈ Γ) (s1 s2 : Stm Γ τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+    Lemma semWP2_assign {Γ1 Γ2 τ x} (xInΓ1 : x∷τ ∈ Γ1) (xInΓ2 : x∷τ ∈ Γ2)
+      (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
           semWP2 δ1 δ2 s1 s2 (λ v1 δ21 v2 δ22, Q v1 (δ21 ⟪ x ↦ v1 ⟫) v2 (δ22 ⟪ x ↦ v2 ⟫)) -∗
           semWP2 δ1 δ2 (stm_assign x s1) (stm_assign x s2) Q.
     Proof.
@@ -413,9 +419,10 @@ Module IrisBinaryWP
       eapply step_trans. constructor. apply step_refl.
     Qed.
 
-    Lemma semWP2_pattern_match {Γ τ σ} (s1 s2 : Stm Γ σ) (pat : Pattern σ)
-      (rhs1 rhs2 : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
-      ⊢ ∀ (Q : Val τ → CStore Γ → Val τ → CStore Γ → iProp Σ) (δ1 δ2 : CStore Γ),
+    Lemma semWP2_pattern_match {Γ1 Γ2 τ σ} (s1 : Stm Γ1 σ) (s2 : Stm Γ2 σ) (pat : Pattern σ)
+      (rhs1 : ∀ pc : PatternCase pat, Stm (Γ1 ▻▻ PatternCaseCtx pc) τ)
+      (rhs2 : ∀ pc : PatternCase pat, Stm (Γ2 ▻▻ PatternCaseCtx pc) τ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
           semWP2 δ1 δ2 s1 s2
             (fun vσ1 δ12 vσ2 δ22 =>
                let (pc1,δpc1) := pattern_match_val pat vσ1 in
@@ -441,7 +448,8 @@ Module IrisBinaryWP
     Qed.
 
     (* TODO: we need a different lemma here, the current definition won't work? *)
-    Lemma semWP2_foreign {Γ Δ τ} {f1 f2 : 𝑭𝑿 Δ τ} {es1 es2 : NamedEnv (Exp Γ) Δ} {Q δ1 δ2} :
+    Lemma semWP2_foreign {Γ1 Γ2 Δ τ} {f1 f2 : 𝑭𝑿 Δ τ}
+      {es1 : NamedEnv (Exp Γ1) Δ} {es2 : NamedEnv (Exp Γ2) Δ} {Q δ1 δ2} :
       let srGS_left := sailRegGS2_sailRegGS_left in
       let mG_left   := memGS2_memGS_left in
       ⊢ (∀ γ1 μ1,
@@ -466,7 +474,7 @@ Module IrisBinaryWP
       now iApply "H".
     Qed.
 
-    Lemma semWP2_debugk {Γ τ} (s1 s2 : Stm Γ τ) :
+    Lemma semWP2_debugk {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) :
       ⊢ ∀ Q δ1 δ2, semWP2 δ1 δ2 s1 s2 Q -∗ semWP2 δ1 δ2 (stm_debugk s1) (stm_debugk s2) Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
@@ -477,7 +485,8 @@ Module IrisBinaryWP
       constructor. assumption.
     Qed.
 
-    Lemma semWP2_lemmak {Γ τ} {Δ} (l1 l2 : 𝑳 Δ) (es1 es2 : NamedEnv (Exp Γ) Δ) (s1 s2 : Stm Γ τ) :
+    Lemma semWP2_lemmak {Γ1 Γ2 τ} {Δ} (l1 l2 : 𝑳 Δ) (es1 : NamedEnv (Exp Γ1) Δ)
+      (es2 : NamedEnv (Exp Γ2) Δ) (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) :
       ⊢ ∀ Q δ1 δ2, semWP2 δ1 δ2 s1 s2 Q -∗ semWP2 δ1 δ2 (stm_lemmak l1 es1 s1) (stm_lemmak l2 es2 s2) Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
