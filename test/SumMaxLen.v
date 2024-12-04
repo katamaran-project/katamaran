@@ -353,6 +353,7 @@ Module Import ExampleModel.
     Include IrisResources DefaultBase ExampleProgram ExampleSemantics.
     Include IrisWeakestPre DefaultBase ExampleProgram ExampleSemantics.
     Include IrisTotalWeakestPre DefaultBase ExampleProgram ExampleSemantics.
+    Include IrisTotalPartialWeakestPre DefaultBase ExampleProgram ExampleSemantics.
 
   End ExampleIrisBase.
 

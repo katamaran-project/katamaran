@@ -30,10 +30,36 @@ From Katamaran Require Import
      Prelude
      Semantics.
 
+From iris Require Import
+     program_logic.adequacy
+     program_logic.total_weakestpre
+     program_logic.weakestpre
+     proofmode.tactics.
+
 From Katamaran Require Export
      Iris.Resources
      Iris.WeakestPre
      Iris.TotalWeakestPre.
 
+(* TotalPartialWeakestPre adds some lemmas that involve both the twp and wp. *)
+Module Type IrisTotalPartialWeakestPre
+  (Import B    : Base)
+  (Import PROG : Program B)
+  (Import SEM  : Semantics B PROG)
+  (Import IPre : IrisPrelims B PROG SEM)
+  (Import IP   : IrisParameters B)
+  (Import IR   : IrisResources B PROG SEM IPre IP)
+  (Import IWP  : IrisWeakestPre B PROG SEM IPre IP IR)
+  (Import ITWP : IrisTotalWeakestPre B PROG SEM IPre IP IR).
+
+  Section WithSailGS.
+    Context `{sG : sailGS Σ}.
+
+    Lemma semTWP_semWP {Γ τ} {s : Stm Γ τ} {δ Q} : 
+      semTWP s Q δ ⊢ semWP s Q δ.
+    Proof. iApply twp_wp. Qed.
+  End WithSailGS.
+End IrisTotalPartialWeakestPre.
+
 Module Type IrisBase (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
-  IrisPrelims B PROG SEM <+ IrisParameters B <+ IrisResources B PROG SEM <+ IrisWeakestPre B PROG SEM <+ IrisTotalWeakestPre B PROG SEM.
+  IrisPrelims B PROG SEM <+ IrisParameters B <+ IrisResources B PROG SEM <+ IrisWeakestPre B PROG SEM <+ IrisTotalWeakestPre B PROG SEM <+ IrisTotalPartialWeakestPre B PROG SEM.

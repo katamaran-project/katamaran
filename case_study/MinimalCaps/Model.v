@@ -175,6 +175,7 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
   Include IrisResources MinCapsBase MinCapsProgram MinCapsSemantics.
   Include IrisWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics.
   Include IrisTotalWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics.
+  Include IrisTotalPartialWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics.
 End MinCapsIrisBase.
 
 Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBase.

@@ -842,6 +842,7 @@ Module ExampleModel.
     Include IrisResources ExampleBase ExampleProgram ExampleSemantics.
     Include IrisWeakestPre ExampleBase ExampleProgram ExampleSemantics.
     Include IrisTotalWeakestPre ExampleBase ExampleProgram ExampleSemantics.
+    Include IrisTotalPartialWeakestPre ExampleBase ExampleProgram ExampleSemantics.
 
   End ExampleIrisBase.
 

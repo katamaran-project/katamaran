@@ -78,6 +78,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
   Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
   Include IrisWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
   Include IrisTotalWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+  Include IrisTotalPartialWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
 
   Import iris.program_logic.weakestpre.
 
