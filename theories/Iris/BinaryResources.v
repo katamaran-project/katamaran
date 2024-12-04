@@ -139,6 +139,12 @@ Module Type IrisResources2
        sailGS_memGS     := memGS2_memGS_left;
     |}.
 
+  Definition sailGS2_sailGS_right `{sG2 : sailGS2 Σ} : sailGS Σ :=
+    {| sailGS_invGS     := sailGS2_invGS;
+       sailGS_sailRegGS := sailRegGS2_sailRegGS_right;
+       sailGS_memGS     := memGS2_memGS_right;
+    |}.
+
   #[export] Program Instance sailGS2_irisGS2 `{sailGS2 Σ} {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
     {|
       iris_invGS2 := sailGS2_invGS;
