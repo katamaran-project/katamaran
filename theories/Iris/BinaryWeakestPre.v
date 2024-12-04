@@ -442,29 +442,29 @@ Module IrisBinaryWP
 
     (* TODO: we need a different lemma here, the current definition won't work? *)
     Lemma semWP2_foreign {Γ Δ τ} {f1 f2 : 𝑭𝑿 Δ τ} {es1 es2 : NamedEnv (Exp Γ) Δ} {Q δ1 δ2} :
-      ⊢ (∀ γ1 γ2 μ1 μ2,
-            (regs_inv2 γ1 γ2 ∗ mem_inv2 μ1 μ2)
+      let srGS_left := sailRegGS2_sailRegGS_left in
+      let mG_left   := memGS2_memGS_left in
+      ⊢ (∀ γ1 μ1,
+            (regs_inv γ1 ∗ mem_inv μ1)
             ={⊤,∅}=∗
-              (∀ res1 γ1' μ1' res2 γ2' μ2',
+              (∀ res1 γ1' μ1',
                    ⌜ForeignCall f1 (evals es1 δ1) res1 γ1 γ1' μ1 μ1'⌝
-                   ∗ ⌜ ForeignCall f2 (evals es2 δ2) res2 γ2 γ2' μ2 μ2' ⌝
                    ={∅}▷=∗
                      |={∅,⊤}=>
-                       (regs_inv2 γ1' γ2' ∗ mem_inv2 μ1' μ2') ∗
+                       (regs_inv γ1' ∗ mem_inv μ1') ∗
                        semWP2 δ1 δ2 (match res1 with inr v => stm_val _ v
                                                    | inl s => stm_fail _ s
                                      end)
-                                    (match res2 with inr v => stm_val _ v
-                                                   | inl s => stm_fail _ s
-                                     end) Q)) -∗
+                                     (stm_foreign f2 es2) Q)) -∗
         semWP2 δ1 δ2 (stm_foreign f1 es1) (stm_foreign f2 es2) Q.
     Proof.
-      iIntros "H". rewrite /semWP2. iIntros (γ21 μ21) "(Hreg2 & Hmem2)".
-      iApply semWP_foreign. iIntros (γ11 μ11) "(Hreg1 & Hmem1)".
-      iSpecialize ("H" with "[$Hreg1 $Hreg2 Hmem1 Hmem2]").
-      { iApply mem_inv2_mem_inv. iFrame "Hmem1 Hmem2". }
-      iMod "H". iIntros "!>" (res1 γ12 μ12).
-    Admitted.
+      simpl. iIntros "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres2".
+      iApply semWP_foreign. iIntros (γ11 μ11) "Hres1".
+      iMod ("H" with "Hres1") as "H". iIntros "!>" (res1 γ12 μ12 Hf1).
+      iMod ("H" $! _ _ _ Hf1) as "H". iModIntro. iModIntro. iMod "H".
+      iModIntro. iMod "H". iModIntro. iDestruct "H" as "($ & H)".
+      now iApply "H".
+    Qed.
 
     Lemma semWP2_debugk {Γ τ} (s1 s2 : Stm Γ τ) :
       ⊢ ∀ Q δ1 δ2, semWP2 δ1 δ2 s1 s2 Q -∗ semWP2 δ1 δ2 (stm_debugk s1) (stm_debugk s2) Q.
