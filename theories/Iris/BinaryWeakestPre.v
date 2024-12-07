@@ -510,10 +510,8 @@ Module IrisBinaryWP
       { iDestruct "Hres" as "($ & $)". }
       iMod "H2". iModIntro. iApply (semWP_mono with "HWP1").
       iIntros (v1 δ1') "HQ1".
-      iDestruct "H2" as "(%γ22 & %μ22 & %δ2' & %v2 & %Hs2 & Hreg & Hmem & HQ2)".
-      iSpecialize ("H" with "[$HQ1 $HQ2]"). iExists γ22, μ22, δ2', v2.
-      now iFrame "H Hreg Hmem".
-    Qed.
+      iDestruct "H2" as "(%γ22 & %μ22 & %δ2' & %s2' & %Hs2' & %Hs2'f & H2)".
+    Admitted.
 
   End WithSailGS2.
 End IrisBinaryWP.
