@@ -443,8 +443,9 @@ Module Type IrisTotalWeakestPre
       ∀ {γ1 : RegStore} {μ1 : Memory},
         regs_inv γ1 ∗ mem_inv μ1 -∗
         semTWP s1 Q δ1 ={⊤}=∗
-        ∃ γ2 μ2 δ2 v, ⌜⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_val τ v ⟩ ⌝
-                     ∗ regs_inv γ2 ∗ mem_inv μ2 ∗ Q v δ2.
+        ∃ γ2 μ2 δ2 s2, ⌜⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s2 ⟩ ⌝
+                        ∗ ⌜Final s2⌝
+                        ∗ (∀ v, ⌜stm_to_val s2 = Some v⌝ -∗ regs_inv γ2 ∗ mem_inv μ2 ∗ Q v δ2).
     Proof.
       iIntros (γ1 μ1) "Hres HTWP".
       iAssert (∃ Φ, ∀ v, Φ v ∗-∗ Q (valconf_val v) (valconf_store v))%I as "(%Φ & HΦ)".
@@ -458,15 +459,19 @@ Module Type IrisTotalWeakestPre
       iIntros "!>" (e E Φ) "IH". iIntros (s1 δ1 γ1 μ1 HE He) "Hres #HΦ".
       rewrite /twp_pre. cbn. destruct (to_val e) as [[v δ]|] eqn:Ee.
       - iMod "IH". iModIntro.
-        iExists γ1, μ1, δ1, v. iDestruct "Hres" as "($ & $)".
+        iExists γ1, μ1, δ1, (stm_val _ v). iDestruct "Hres" as "($ & $)".
         rewrite He in Ee. destruct s1; try discriminate; inversion Ee; subst.
-        iSplitR. iPureIntro. apply step_refl. iApply ("HΦ" with "IH").
+        iSplitR. iPureIntro. apply step_refl. iIntros (? Heq).
+        inversion Heq; subst. iApply ("HΦ" with "IH").
       - iSpecialize ("IH" $! (γ1, μ1) O nil O with "Hres").
-        iMod "IH" as "(_ & IH)". pose proof (progress s1) as [H|H].
+        pose proof (progress s1) as [H|H].
         + destruct s1; cbn in H; try discriminate; try contradiction.
-          rewrite He in Ee. cbn in Ee. inversion Ee.
-          admit.
-        + destruct (H γ1 μ1 δ1) as (γ2 & μ2 & δ2 & s2 & Hs).
+          { rewrite He in Ee. cbn in Ee. inversion Ee. }
+          iModIntro. iExists γ1, μ1, δ1, (stm_fail _ s).
+          repeat iSplitR. iPureIntro. constructor. iPureIntro. auto.
+          iIntros (? HCon). inversion HCon.
+        + iMod "IH" as "(_ & IH)".
+          destruct (H γ1 μ1 δ1) as (γ2 & μ2 & δ2 & s2 & Hs).
           iSpecialize ("IH" $! nil (MkConf s2 δ2) _ nil with "[]").
           { iPureIntro. constructor. rewrite He; simpl. apply Hs. }
           iMod "IH" as "(_ & Hres & [IH _] & _)".
@@ -475,7 +480,7 @@ Module Type IrisTotalWeakestPre
           iExists γ3, μ3, δ3, v'. iDestruct "IH" as "(%Hs2 & $)".
           iPureIntro. eapply Steps_trans; last apply Hs2.
           apply (step_trans Hs). apply step_refl.
-    Admitted.
+    Qed.
 
   End TotalWeakestPre.
 
