@@ -21,8 +21,8 @@ workflows:
       - "coq-8-17":
           filters:
             branches:
-              ignore: binary-wp
+              ignore: wp2-fail
       - "coq-8-18":
           filters:
             branches:
-              ignore: binary-wp
+              ignore: wp2-fail
