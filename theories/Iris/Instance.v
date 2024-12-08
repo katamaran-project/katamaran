@@ -104,9 +104,14 @@ Section Soundness.
        lduplicate p ts Hdup := lduplicate_inst sailGS_memGS ts Hdup
     |}.
 
+  (* semTriple currently wraps the given POST, if we end up with fail, we get
+     True, otherwise we do POST v δ. *)
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
-    PRE -∗ semWP s POST δ.
+    PRE -∗ semWP s (λ v δ, match v with
+                           | inl v => POST v δ
+                           | inr m => True%I
+                           end) δ.
   (* always modality needed? perhaps not because sail not higher-order? *)
   Global Arguments semTriple {Γ} {τ} δ PRE%I s%exp POST%I.
 
@@ -131,7 +136,7 @@ Section Soundness.
     iApply (semWP_mono with "[trips P]").
     + iApply "trips".
       now iApply PP.
-    + iIntros (v δ') "Qp".
+    + iIntros ([v|m] δ') "Qp"; last auto.
       now iApply QQ.
   Qed.
 
@@ -140,8 +145,8 @@ Section Soundness.
         (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
   Proof.
     iIntros "trips [HR HP]".
-    iApply (wp_frame_l _ _ (MkConf s δ) (fun v => match v with MkValConf _ v δ' => Q v δ' end) R with "[$HR HP trips]").
-    by iApply "trips".
+    iSpecialize ("trips" with "HP"). iApply (semWP_mono with "trips").
+    iIntros ([v|m] ?) "HQ"; auto. iFrame "HR HQ".
   Qed.
 
   Lemma iris_rule_pull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ)
@@ -193,7 +198,8 @@ Section Soundness.
     iIntros "trips tripk P".
     iApply semWP_let.
     iSpecialize ("trips" with "P").
-    by iApply (semWP_mono with "trips").
+    iApply (semWP_mono with "trips"). iIntros ([v|m] ?) "H"; auto.
+    now iSpecialize ("tripk" with "H").
   Qed.
 
   Lemma iris_rule_stm_block {Γ} (δ : CStore Γ)
@@ -217,8 +223,8 @@ Section Soundness.
     iIntros "trips1 trips2 P".
     iSpecialize ("trips1" with "P").
     iApply semWP_seq.
-    iApply (semWP_mono with "[$]").
-    by iFrame.
+    iApply (semWP_mono with "[$]"). iIntros ([v|m] ?) "H"; auto.
+    by iApply ("trips2" with "H").
   Qed.
 
   Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
@@ -228,9 +234,11 @@ Section Soundness.
       semTriple δ P (stm_assertk e1 e2 k) Q.
   Proof.
     iIntros "tripk P".
-    iApply semWP_assertk.
-    iIntros (->).
-    by iApply "tripk".
+    iApply (semWP_assertk with "[tripk P] []").
+    - iIntros (->).
+      by iApply "tripk".
+    - iIntros (?).
+      now rewrite semWP_fail.
   Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
@@ -289,8 +297,9 @@ Section Soundness.
   Proof.
     iIntros "trips tripk P".
     iSpecialize ("trips" with "P").
-    iApply semWP_bind.
-    by iApply (semWP_mono with "trips").
+    iApply semWP_bind. iApply (semWP_mono with "trips"). iIntros ([v|m] ?) "H".
+    - simpl. by iApply "tripk".
+    - simpl. by iApply semWP_fail.
   Qed.
 
   Lemma iris_rule_stm_call_inline_later
@@ -358,7 +367,7 @@ Section Soundness.
     iSpecialize ("WPs" with "P").
     iApply semWP_pattern_match.
     iApply (semWP_mono with "WPs").
-    iIntros (vσ δΓ') "Q".
+    iIntros ([vσ|m] δΓ') "Q"; auto.
     destruct pattern_match_val as [pc δpc] eqn:Heq.
     iApply "WPrhs".
     change (pattern_match_val_reverse pat pc δpc) with
@@ -493,16 +502,19 @@ Module Type IrisAdequacy
     cut (adequate MaybeStuck (MkConf s δ) (γ,μ)
              (λ (v : val (microsail_lang Γ σ)) (_ : state (microsail_lang Γ σ)),
                 (λ v0 : val (microsail_lang Γ σ), match v0 with
-                                                  | MkValConf _ v' _ => Q v'
+                                                  | MkValConf v' _ => match v' with
+                                                                      | inl v' => Q v'
+                                                                      | inr m  => True
+                                                                      end
                                                   end) v)).
     - destruct s'; cbn in fins; destruct fins; last done.
       intros adeq.
-      apply (adequate_result MaybeStuck (MkConf s δ) (γ , μ) (fun v _ => match v with | MkValConf _ v' δ' => Q v' end) adeq nil (γ' , μ') (MkValConf _ v δ')).
+      apply (adequate_result MaybeStuck (MkConf s δ) (γ , μ) (fun v _ => match v with | MkValConf v' δ' => match v' with inl v' => Q v' | inr m => True end end) adeq nil (γ' , μ') (MkValConf (inl v) δ')).
       by apply steps_to_erased.
     - constructor; last done.
       intros t2 σ2 [v2 δ2] eval.
       assert (regsmapv := RegStore_to_map_valid γ).
-      pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) MaybeStuck (MkConf s δ) (γ , μ) (fun v => match v with | MkValConf _ v' δ' => Q v' end)) as adeq.
+      pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) MaybeStuck (MkConf s δ) (γ , μ) (fun v => match v with | MkValConf v' δ' => match v' with inl v' => Q v' | inr m => True end end)) as adeq.
       refine (adequate_result _ _ _ _ (adeq _) _ _ _ eval); clear adeq.
       iIntros (Hinv κs) "".
       iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
@@ -515,16 +527,21 @@ Module Type IrisAdequacy
       iSplitR "Hs2 Rmem".
       * iFrame "Hmem".
         now iApply own_RegStore_to_regs_inv.
-      * iApply (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]").
+      * iPoseProof (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]") as "H".
         iApply (own_RegStore_to_map_reg_pointsTos (srGS := SailRegGS reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
         eapply finite.NoDup_enum.
+        iApply (wp_mono with "H"). iIntros ([]) "H"; auto.
+        simpl. now case_match.
   Qed.
 
   Lemma adequacy_gen {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : forall `{sailGS Σ}, Val σ -> CStore Γ -> iProp Σ} (φ : Prop):
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     (forall `{sailGS Σ'},
-        mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP s Q δ
+        mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP s (λ v δ, match v with
+                                                             | inl v => Q v δ
+                                                             | inr m => True
+                                                             end) δ
           ∗ (mem_inv μ' ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.
@@ -546,7 +563,10 @@ Module Type IrisAdequacy
     }
     iModIntro.
     iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
-    iExists [ fun v => Q _ sailG (valconf_val v) (valconf_store v) ]%list.
+    iExists [ fun v => match valconf_val v with
+                       | inl v' => Q _ sailG v' (valconf_store v)
+                       | inr m  => True%I
+                       end]%list.
     iExists _.
     iExists _.
     iSplitR "trips Hφ".
@@ -614,7 +634,7 @@ Module IrisInstanceWithContracts
     iPoseProof (ctrip with "P") as (ι Heq) "[req consr]". clear ctrip.
     iPoseProof ("cenv" $! ι with "req") as "wpf0". rewrite Heq.
     iApply (semWP_mono with "wpf0").
-    by iIntros (v _).
+    iIntros ([] _) "H"; auto. by iApply "consr".
   Qed.
 
   Lemma iris_rule_stm_call_frame {Γ} (δ : CStore Γ)
@@ -641,7 +661,7 @@ Module IrisInstanceWithContracts
     iPoseProof (ctrip with "P") as "[%ι [%Heq [req consr]]]". clear ctrip.
     iPoseProof (forSem ι Heq with "req") as "WPf". clear forSem.
     iApply (semWP_mono with "WPf").
-    iIntros (v δΓ') "[ens ->]".
+    iIntros ([v|m] δΓ'); auto; iIntros "[ens ->]".
     by iApply "consr".
   Qed.
 

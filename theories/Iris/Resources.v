@@ -78,6 +78,10 @@ Module Type IrisPrelims
 
   Section Language.
 
+    (* IVal designates the values in our language, allowing for succesful
+       termination with a value, or failure termination with a string. *)
+    Definition IVal (τ : Ty) : Type := Val τ + Val ty.string.
+
     (* The "expressions" of the LanguageMixin are configurations consisting of a
        statement and a local variable store. *)
     Record Conf (Γ : PCtx) τ : Type :=
@@ -98,20 +102,22 @@ Module Type IrisPrelims
       Local Set Primitive Projections.
       Record ValConf (Γ : PCtx) τ : Type :=
         MkValConf
-          { valconf_val   : Val τ;
+          { valconf_val   : IVal τ;
             valconf_store : CStore Γ
           }.
     End ValConf.
 
     Definition of_val {Γ} {τ} (v : ValConf Γ τ) : Conf Γ τ :=
       match v with
-        MkValConf _ v δ => MkConf (stm_val _ v) δ
+      | MkValConf (inl v) δ => MkConf (stm_val _ v) δ
+      | MkValConf (inr m) δ => MkConf (stm_fail _ m) δ
       end.
 
-    Definition stm_to_val {Γ τ} (s : Stm Γ τ) : option (Val τ) :=
+    Definition stm_to_val {Γ τ} (s : Stm Γ τ) : option (IVal τ) :=
       match s with
-      | stm_val _ v => Some v
-      | _           => None
+      | stm_val _ v  => Some (inl v)
+      | stm_fail _ m => Some (inr m)
+      | _            => None
       end.
 
     Lemma stm_val_stuck {Γ τ γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ τ} :
@@ -130,17 +136,18 @@ Module Type IrisPrelims
 
     Definition to_val {Γ} {τ} (t : Conf Γ τ) : option (ValConf Γ τ) :=
       match t with
-      | MkConf s δ => option.map (fun v => MkValConf _ v δ) (stm_to_val s)
+      | MkConf s δ => option.map (fun v => MkValConf v δ) (stm_to_val s)
       end.
 
     Lemma to_of_val {Γ} {τ} (v : ValConf Γ τ) : to_val (of_val v) = Some v.
     Proof.
-      by destruct v.
+      by destruct v as [[] ?].
     Qed.
 
     Lemma of_to_val {Γ} {τ} (s : Conf Γ τ) v : to_val s = Some v → of_val v = s.
     Proof.
       destruct s as [s δ]; destruct s; try done.
+      by intros [= <-].
       by intros [= <-].
     Qed.
 
@@ -162,30 +169,9 @@ Module Type IrisPrelims
 
     Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-    #[export] Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf _ v δ).
+    #[export] Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf (inl v) δ).
       intros; eapply of_to_val; by cbn.
     Defined.
-
-    Lemma stuck_fail {Γ} {τ} (c : Conf Γ τ) state :
-      stuck c state <-> exists m, stm_to_fail (conf_stm c) = Some m.
-    Proof.
-      destruct c as [s δ].
-      destruct state as [γ μ].
-      split.
-      - intros [Hnv Hirred].
-        destruct (SEM.progress s) as [fs|red].
-        + destruct s; inversion fs; inversion Hnv.
-          now exists s.
-        + exfalso.
-          destruct (red γ μ δ) as (γ' & μ' & δ' & s' & step).
-          eapply Hirred. constructor. done.
-     - cbn. intros [m eq].
-       destruct s; inversion eq; subst.
-       split.
-       + now cbn.
-       + intros obs e' σ' efs [γ1 γ2 μ1 μ2 δ2 s2 step].
-         now inversion step.
-    Qed.
 
   End Language.
 
@@ -403,4 +389,14 @@ Module Type IrisResources
     state_interp_mono _ _ _ _ := fupd_intro _ _;
                                                                                 }.
   Global Opaque iris_invGS.
+
+  Definition Post {Σ} (Γ : PCtx) (τ : Ty) : Type :=
+    IVal τ -> CStore Γ -> iProp Σ.
+
+  Definition lift_cnt {Γ τ σ} (k : Val σ -> Stm Γ τ) (v : IVal σ) : Stm Γ τ :=
+    match v with
+    | inl v => k v
+    | inr m => stm_fail _ m
+    end.
+
 End IrisResources.
