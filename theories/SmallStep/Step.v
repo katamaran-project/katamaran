@@ -310,27 +310,16 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     now apply IHHs1s2.
   Qed.
 
-  Lemma Steps_bind_val {Γ σ τ} :
-    forall {γ1 γ2 μ1 μ2 δ1 δ2} {s1 : Stm Γ σ} {v1} (k : Val σ -> Stm Γ τ),
-    ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_val σ v1 ⟩ ->
-    ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ --->* ⟨ γ2, μ2, δ2, stm_bind (stm_val σ v1) k ⟩.
-  Proof.
-    intros ? ? ? ? ? ? ? ? ? H.
-    induction H; first apply step_refl.
-    eapply step_trans. apply st_bind_step. eauto.
-    assumption.
-  Qed.
-
   Lemma Steps_bind {Γ σ τ} :
-    forall {γ1 γ2 γ3 μ1 μ2 μ3 δ1 δ2 δ3} {s1 : Stm Γ σ} {k} {s3 : Stm Γ τ} {v1},
-    ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_val σ v1 ⟩ ->
-    ⟨ γ2, μ2, δ2, k v1 ⟩ --->* ⟨ γ3, μ3, δ3, s3 ⟩ ->
-    ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ --->* ⟨ γ3, μ3, δ3, s3 ⟩.
+    forall {γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ σ} {k : Val σ -> Stm Γ τ},
+      ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s2 ⟩ ->
+      ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ --->* ⟨ γ2, μ2, δ2, stm_bind s2 k ⟩.
   Proof.
-    intros ? ? ? ? ? ? ? ? ? ? ? ? ? Hs1 Hk.
-    apply (Steps_trans (Steps_bind_val k Hs1)).
-    eapply step_trans; first constructor.
-    assumption.
+    intros γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 k H.
+    induction H; first apply step_refl.
+    eapply Steps_trans; last eauto.
+    eapply step_trans. apply st_bind_step. eauto.
+    apply step_refl.
   Qed.
 
   Lemma Steps_block {Γ τ} :
