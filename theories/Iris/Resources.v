@@ -124,6 +124,20 @@ Module Type IrisPrelims
       ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> stm_to_val s1 = None.
     Proof. now destruct 1. Qed.
 
+    Lemma stm_to_val_Some_inl {Γ τ} {s : Stm Γ τ} {v : Val τ} :
+      stm_to_val s = Some (inl v) ->
+      s = stm_val _ v.
+    Proof.
+      intros H; destruct s; try discriminate; inversion H; subst; auto.
+    Qed.
+
+    Lemma stm_to_val_Some_inr {Γ τ} {s : Stm Γ τ} {m : Val ty.string} :
+      stm_to_val s = Some (inr m) ->
+      s = stm_fail _ m.
+    Proof.
+      intros H; destruct s; try discriminate; inversion H; subst; auto.
+    Qed.
+
     Definition stm_to_fail {Γ τ} (s : Stm Γ τ) : option string :=
       match s with
       | stm_fail _ m => Some m
