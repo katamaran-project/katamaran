@@ -107,11 +107,14 @@ Module Type IrisPrelims
           }.
     End ValConf.
 
-    Definition of_val {Γ} {τ} (v : ValConf Γ τ) : Conf Γ τ :=
+    Definition of_ival {Γ τ} (v : IVal τ) : Stm Γ τ :=
       match v with
-      | MkValConf (inl v) δ => MkConf (stm_val _ v) δ
-      | MkValConf (inr m) δ => MkConf (stm_fail _ m) δ
+      | inl v => stm_val _ v
+      | inr m => stm_fail _ m
       end.
+
+    Definition of_val {Γ} {τ} (v : ValConf Γ τ) : Conf Γ τ :=
+      MkConf (of_ival (valconf_val v)) (valconf_store v).
 
     Definition stm_to_val {Γ τ} (s : Stm Γ τ) : option (IVal τ) :=
       match s with
@@ -136,6 +139,15 @@ Module Type IrisPrelims
       s = stm_fail _ m.
     Proof.
       intros H; destruct s; try discriminate; inversion H; subst; auto.
+    Qed.
+
+    Lemma stm_to_val_Some_cases {Γ τ} {s : Stm Γ τ} {v : IVal τ} :
+      stm_to_val s = Some v ->
+      (∃ v', s = stm_val τ v' ∧ v = inl v') ∨ (∃ m, s = stm_fail τ m ∧ v = inr m).
+    Proof.
+      intros H; destruct s, v; try discriminate; inversion H; subst.
+      - left. eexists. split; reflexivity.
+      - right. eexists. split; reflexivity.
     Qed.
 
     Definition stm_to_fail {Γ τ} (s : Stm Γ τ) : option string :=
@@ -163,6 +175,17 @@ Module Type IrisPrelims
       destruct s as [s δ]; destruct s; try done.
       by intros [= <-].
       by intros [= <-].
+    Qed.
+
+    Lemma stm_to_val_of_ival {Γ τ} (v : IVal τ) :
+      @stm_to_val Γ τ (of_ival v) = Some v.
+    Proof. by destruct v. Qed.
+
+    Lemma stm_to_val_eq {Γ τ} {s : Stm Γ τ} {v : IVal τ} :
+      stm_to_val s = Some v ->
+      s = of_ival v.
+    Proof.
+      destruct s, v; try discriminate; intros H; inversion H; subst; auto.
     Qed.
 
     Definition observation := Empty_set.
