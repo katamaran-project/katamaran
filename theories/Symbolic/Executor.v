@@ -200,7 +200,7 @@ Module Type SymbolicExecOn
         ⊢ SStoreSpec Γ1 Γ2 A -> SStore Γ1 -> SHeapSpec A :=
         fun w m δ Φ => m (fun w1 θ1 a1 _ => Φ w1 θ1 a1) δ.
 
-      Definition lift_purem {Γ} {A : TYPE} :
+      Definition lift_purespec {Γ} {A : TYPE} :
         ⊢ SPureSpec A -> SStoreSpec Γ Γ A :=
         fun w0 m POST δ0 h0 =>
           m (fun w1 ω01 a1 => POST w1 ω01 a1 (persist δ0 ω01) (persist h0 ω01)).
@@ -235,12 +235,12 @@ Module Type SymbolicExecOn
 
       Definition angelic {Γ} (x : option LVar) :
         ⊢ ∀ σ, SStoreSpec Γ Γ (STerm σ) :=
-        fun w σ => lift_purem (SPureSpec.angelic x σ).
+        fun w σ => lift_purespec (SPureSpec.angelic x σ).
       Global Arguments angelic {Γ} x [w] σ : rename.
 
       Definition demonic {Γ} (x : option LVar) :
         ⊢ ∀ σ, SStoreSpec Γ Γ (STerm σ) :=
-        fun w σ => lift_purem (SPureSpec.demonic x σ).
+        fun w σ => lift_purespec (SPureSpec.demonic x σ).
       Global Arguments demonic {Γ} x [w] σ : rename.
 
       Definition debug {AT} {Γ1 Γ2} :
@@ -249,12 +249,12 @@ Module Type SymbolicExecOn
 
       Definition angelic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SStoreSpec Γ Γ (fun w => NamedEnv (Term w) Δ) :=
-        fun w Δ => lift_purem (SPureSpec.angelic_ctx n Δ).
+        fun w Δ => lift_purespec (SPureSpec.angelic_ctx n Δ).
       Global Arguments angelic_ctx {N} n {Γ} [w] Δ : rename.
 
       Definition demonic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SStoreSpec Γ Γ (fun w => NamedEnv (Term w) Δ) :=
-        fun w Δ => lift_purem (SPureSpec.demonic_ctx n Δ).
+        fun w Δ => lift_purespec (SPureSpec.demonic_ctx n Δ).
       Global Arguments demonic_ctx {N} n {Γ} [w] Δ : rename.
 
     End Basic.
@@ -289,12 +289,12 @@ Module Type SymbolicExecOn
       (* Add the provided formula to the path condition. *)
       Definition assume_formula {Γ} :
         ⊢ Formula -> SStoreSpec Γ Γ Unit :=
-        fun w0 fml => lift_purem (SPureSpec.assume_formula fml).
+        fun w0 fml => lift_purespec (SPureSpec.assume_formula fml).
 
       Definition assert_formula {Γ} :
         ⊢ Formula -> SStoreSpec Γ Γ Unit :=
         fun w0 fml POST δ0 h0 =>
-          lift_purem
+          lift_purespec
             (SPureSpec.assert_formula
                (amsg.mk (MkDebugAssertFormula (wco w0) h0 fml)) fml)
             POST δ0 h0.
@@ -302,7 +302,7 @@ Module Type SymbolicExecOn
       Definition assert_pathcondition {Γ} :
         ⊢ PathCondition -> SStoreSpec Γ Γ Unit :=
         fun w0 fmls POST δ0 h0 =>
-          lift_purem
+          lift_purespec
             (SPureSpec.assert_pathcondition
                (amsg.mk
                   {| msg_function := "SStoreSpec._assert_pathcondition";
@@ -317,7 +317,7 @@ Module Type SymbolicExecOn
         let E := fun w : World => Env (Term w) Δ in
         ⊢ E -> E -> SStoreSpec Γ Γ Unit :=
         fun w0 E1 E2 POST δ0 h0 =>
-          lift_purem
+          lift_purespec
             (SPureSpec.assert_eq_env
                (amsg.mk
                   {| msg_function := "SStoreSpec.assert_eq_env";
@@ -333,7 +333,7 @@ Module Type SymbolicExecOn
         let E := fun w : World => NamedEnv (Term w) Δ in
         ⊢ E -> E -> SStoreSpec Γ Γ Unit :=
         fun w0 E1 E2 POST δ0 h0 =>
-          lift_purem
+          lift_purespec
             (SPureSpec.assert_eq_nenv
                (amsg.mk
                   {| msg_function := "SStoreSpec.assert_eq_env";

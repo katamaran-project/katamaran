@@ -70,7 +70,7 @@ Module Type ShallowExecOn
         CStoreSpec Γ1 Γ2 A -> CStore Γ1 -> CHeapSpec A :=
         fun m δ Φ => m (fun a1 _ => Φ a1) δ.
 
-      Definition lift_purem {Γ} {A : Type} :
+      Definition lift_purespec {Γ} {A : Type} :
         CPureSpec A -> CStoreSpec Γ Γ A :=
         fun m POST δ h => m (fun a => POST a δ h).
       Definition lift_heapspec {Γ} {A : Type} :
@@ -93,18 +93,18 @@ Module Type ShallowExecOn
         fun POST δ h => m1 POST δ h \/ m2 POST δ h.
 
       Definition demonic {Γ} (σ : Ty) : CStoreSpec Γ Γ (Val σ) :=
-        lift_purem (CPureSpec.demonic σ).
+        lift_purespec (CPureSpec.demonic σ).
       Definition angelic {Γ} (σ : Ty) : CStoreSpec Γ Γ (Val σ) :=
-        lift_purem (CPureSpec.angelic σ).
+        lift_purespec (CPureSpec.angelic σ).
 
       Definition angelic_ctx {N : Set} {Γ} :
         forall Δ : NCtx N Ty, CStoreSpec Γ Γ (NamedEnv Val Δ) :=
-        fun Δ => lift_purem (CPureSpec.angelic_ctx Δ).
+        fun Δ => lift_purespec (CPureSpec.angelic_ctx Δ).
       #[global] Arguments angelic_ctx {N Γ} Δ.
 
       Definition demonic_ctx {N : Set} {Γ} :
         forall Δ : NCtx N Ty, CStoreSpec Γ Γ (NamedEnv Val Δ) :=
-        fun Δ => lift_purem (CPureSpec.demonic_ctx Δ).
+        fun Δ => lift_purespec (CPureSpec.demonic_ctx Δ).
       #[global] Arguments demonic_ctx {N Γ} Δ.
 
     End Basic.
@@ -130,15 +130,15 @@ Module Type ShallowExecOn
     Section AssumeAssert.
 
       Definition assume_formula {Γ} (fml : Prop) : CStoreSpec Γ Γ unit :=
-        lift_purem (CPureSpec.assume_formula fml).
+        lift_purespec (CPureSpec.assume_formula fml).
       Definition assert_formula {Γ} (fml : Prop) : CStoreSpec Γ Γ unit :=
-        lift_purem (CPureSpec.assert_formula fml).
+        lift_purespec (CPureSpec.assert_formula fml).
       Definition assert_pathcondition {Γ} (fml : Prop) : CStoreSpec Γ Γ unit :=
-        lift_purem (CPureSpec.assert_pathcondition fml).
+        lift_purespec (CPureSpec.assert_pathcondition fml).
       Definition assert_eq_env {Γ} {Δ : Ctx Ty} (δ δ' : Env Val Δ) : CStoreSpec Γ Γ unit :=
-        lift_purem (CPureSpec.assert_eq_env δ δ').
+        lift_purespec (CPureSpec.assert_eq_env δ δ').
       Definition assert_eq_nenv {N Γ} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) : CStoreSpec Γ Γ unit :=
-        lift_purem (CPureSpec.assert_eq_nenv δ δ').
+        lift_purespec (CPureSpec.assert_eq_nenv δ δ').
 
     End AssumeAssert.
 
@@ -146,14 +146,14 @@ Module Type ShallowExecOn
 
       Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ) :
         CStoreSpec Γ Γ (MatchResult pat) :=
-        lift_purem (CPureSpec.demonic_pattern_match pat v).
+        lift_purespec (CPureSpec.demonic_pattern_match pat v).
       #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
 
       Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ)
         (Φ : MatchResult pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
         demonic_pattern_match pat v Φ δ h <-> Φ (pattern_match_val pat v) δ h.
       Proof.
-        unfold demonic_pattern_match, lift_purem.
+        unfold demonic_pattern_match, lift_purespec.
         now rewrite CPureSpec.wp_demonic_pattern_match.
       Qed.
 

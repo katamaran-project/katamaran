@@ -101,11 +101,11 @@ Module Soundness
       now iApply ("Hk" with "Ha Hh2").
     Qed.
 
-    Lemma refine_lift_purem {Γ} `(R : Rel AT A) {w : World}:
+    Lemma refine_lift_purespec {Γ} `(R : Rel AT A) {w : World}:
       ⊢ ℛ⟦RPureSpec R -> RStoreSpec Γ Γ R⟧
-        CStoreSpec.lift_purem (SStoreSpec.lift_purem (w := w)).
+        CStoreSpec.lift_purespec (SStoreSpec.lift_purespec (w := w)).
     Proof.
-      unfold RPureSpec, RStoreSpec, SStoreSpec.lift_purem, CStoreSpec.lift_purem.
+      unfold RPureSpec, RStoreSpec, SStoreSpec.lift_purespec, CStoreSpec.lift_purespec.
       iIntros (p ps) "Hp".
       iIntros (k ks) "Hk".
       iIntros (s ss) "Hs".
@@ -218,7 +218,7 @@ Module Soundness
     Proof.
       unfold SStoreSpec.angelic, CStoreSpec.angelic.
       iIntros (σ).
-      iApply (refine_lift_purem (RVal σ)).
+      iApply (refine_lift_purespec (RVal σ)).
       now iApply PureSpec.refine_angelic.
     Qed.
 
@@ -227,7 +227,7 @@ Module Soundness
     Proof.
       unfold SStoreSpec.demonic, CStoreSpec.demonic.
       iIntros (σ).
-      iApply (refine_lift_purem (RVal σ)).
+      iApply (refine_lift_purespec (RVal σ)).
       now iApply PureSpec.refine_demonic.
     Qed.
 
@@ -237,7 +237,7 @@ Module Soundness
     Proof.
       unfold SStoreSpec.angelic_ctx, CStoreSpec.angelic_ctx.
       iIntros (Δ).
-      iApply (refine_lift_purem (RNEnv N Δ)).
+      iApply (refine_lift_purespec (RNEnv N Δ)).
       iApply PureSpec.refine_angelic_ctx.
     Qed.
 
@@ -247,7 +247,7 @@ Module Soundness
     Proof.
       unfold SStoreSpec.demonic_ctx, CStoreSpec.demonic_ctx.
       iIntros (Δ).
-      iApply (refine_lift_purem (RNEnv N Δ)).
+      iApply (refine_lift_purespec (RNEnv N Δ)).
       iApply PureSpec.refine_demonic_ctx.
     Qed.
 
@@ -307,7 +307,7 @@ Module Soundness
         MkRefineCompat refine_bind.
 
       #[export] Program Instance refine_compat_angelic (x : option LVar) {Γ} {w : World} {σ}:
-        RefineCompat (RStoreSpec Γ Γ (RVal σ)) (CStoreSpec.angelic σ) w (SStoreSpec.angelic (w := w) x σ) emp := 
+        RefineCompat (RStoreSpec Γ Γ (RVal σ)) (CStoreSpec.angelic σ) w (SStoreSpec.angelic (w := w) x σ) emp :=
         MkRefineCompat _.
       Next Obligation.
         iIntros (? ? ? ?) "_".
@@ -325,7 +325,7 @@ Module Soundness
       #[export] Program Instance refine_compat_angelic_ctx {N : Set} {n : N -> LVar} {Γ} {w} {Δ}:
         RefineCompat (RStoreSpec Γ Γ (RNEnv N Δ)) (CStoreSpec.angelic_ctx Δ) w (SStoreSpec.angelic_ctx (w := w) n Δ) emp :=
         MkRefineCompat _.
-      Next Obligation. 
+      Next Obligation.
         iIntros (N n Γ w Δ) "_".
         now iApply refine_angelic_ctx.
       Qed.
@@ -333,7 +333,7 @@ Module Soundness
       #[export] Program Instance refine_compat_demonic_ctx {N : Set} {n : N -> LVar} {Γ} {w} {Δ} :
         RefineCompat (RStoreSpec Γ Γ (RNEnv N Δ)) (CStoreSpec.demonic_ctx Δ) w (SStoreSpec.demonic_ctx (w := w) n Δ) emp :=
         MkRefineCompat _.
-      Next Obligation. 
+      Next Obligation.
         iIntros (N n Γ w Δ) "_".
         now iApply refine_demonic_ctx.
       Qed.
@@ -367,7 +367,7 @@ Module Soundness
             | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
             end)
          | lazymatch goal with
-           | |- envs_entails _ (ℛ⟦ ?R ⟧ ?v ?vs) => 
+           | |- envs_entails _ (ℛ⟦ ?R ⟧ ?v ?vs) =>
                (iApply (refine_compat_lemma (R := R) (vs := vs));
                   lazymatch goal with | |- RefineCompat _ _ _ _ _ => fail | _ => idtac end
                )
@@ -381,7 +381,7 @@ Module Soundness
       repeat rsolve_step; try done;
         (* After walking through the symbolic computation using the above lemmas,
          * we try to apply induction hypotheses.
-         * To do this, we determine the right world to apply the IH in by looking at the current goal. 
+         * To do this, we determine the right world to apply the IH in by looking at the current goal.
          *)
         repeat match goal with
           | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
@@ -406,7 +406,7 @@ Module Soundness
       progress rsolve2_step; try done;
         (* After walking through the symbolic computation using the above lemmas,
          * we try to apply induction hypotheses.
-         * To do this, we determine the right world to apply the IH in by looking at the current goal. 
+         * To do this, we determine the right world to apply the IH in by looking at the current goal.
          *)
         repeat match goal with
           | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
@@ -417,14 +417,14 @@ Module Soundness
   Section AssumeAssert.
     Import logicalrelation.
     Import logicalrelation.notations.
-    
+
     Lemma refine_assume_formula {Γ} {w} :
       ⊢ ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
         CStoreSpec.assume_formula (SStoreSpec.assume_formula (w := w)).
     Proof.
       unfold SStoreSpec.assume_formula, CStoreSpec.assume_formula.
       iIntros (fml fmls) "Hfml %K %Ks HK %s %ss Hs %h %hs Hh".
-      iApply (refine_lift_purem with "[Hfml] HK Hs Hh").
+      iApply (refine_lift_purespec with "[Hfml] HK Hs Hh").
       iApply (PureSpec.refine_assume_formula with "Hfml").
     Qed.
 
@@ -434,7 +434,7 @@ Module Soundness
     Proof.
       unfold SStoreSpec.assert_formula, CStoreSpec.assert_formula.
       iIntros (fml fmls) "Hfml %K %Ks HK %s %ss Hs %h %hs Hh".
-      iApply (refine_lift_purem with "[Hfml] HK Hs Hh").
+      iApply (refine_lift_purespec with "[Hfml] HK Hs Hh").
       iApply (PureSpec.refine_assert_formula with "Hfml").
     Qed.
 
@@ -444,7 +444,7 @@ Module Soundness
     Proof.
       iIntros (pc pcs) "Hpc %K %Ks HK %δ %δs Hδ %h %hs Hh".
       unfold CStoreSpec.assert_formula, SStoreSpec.assert_pathcondition.
-      iApply (refine_lift_purem with "[Hpc] HK Hδ Hh").
+      iApply (refine_lift_purespec with "[Hpc] HK Hδ Hh").
       now iApply PureSpec.refine_assert_pathcondition.
     Qed.
 
@@ -453,7 +453,7 @@ Module Soundness
         CStoreSpec.assert_eq_nenv (SStoreSpec.assert_eq_nenv (w := w)).
     Proof.
       iIntros (E1 sE1) "HE1 %E2 %sE2 HE2 %K %sK HK %δ %sδ Hδ %h %sh Hh".
-      iApply (refine_lift_purem RUnit $! _ _ with "[HE1 HE2] HK Hδ Hh").
+      iApply (refine_lift_purespec RUnit $! _ _ with "[HE1 HE2] HK Hδ Hh").
       now iApply (PureSpec.refine_assert_eq_nenv with "HE1 HE2").
     Qed.
 
@@ -489,7 +489,8 @@ Module Soundness
         (SStoreSpec.demonic_pattern_match (w := w) n pat).
     Proof.
       iIntros (v sv) "rv %Φ %sΦ rΦ %δ %sδ rδ %h %sh rh".
-      unfold SStoreSpec.demonic_pattern_match, CStoreSpec.demonic_pattern_match, CStoreSpec.lift_purem.
+      unfold SStoreSpec.demonic_pattern_match, CStoreSpec.demonic_pattern_match,
+               CStoreSpec.lift_purespec.
       iApply (PureSpec.refine_demonic_pattern_match with "rv").
       iIntros (w1 θ1) "!> %mr %smr rmr".
       iApply ("rΦ" with "rmr [rδ] [rh]").
@@ -590,7 +591,7 @@ Module Soundness
       rewrite peval_sound.
       now apply refine_seval_exp.
     Qed.
-       
+
     Lemma refine_eval_exp {Γ σ} (e : Exp Γ σ) {w} :
         ⊢ ℛ⟦RStoreSpec Γ Γ (RVal σ)⟧ (CStoreSpec.eval_exp e) (SStoreSpec.eval_exp (w := w) e).
     Proof.
@@ -657,7 +658,7 @@ Module Soundness
 
   Section StateCompatLemmas.
     Import logicalrelation.
-    
+
     #[export] Instance refine_compat_pushpop `{R : Rel AT A} {Γ1 Γ2 x σ} {w} : RefineCompat (RVal σ -> RStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) R -> RStoreSpec Γ1 Γ2 R) CStoreSpec.pushpop w (SStoreSpec.pushpop (w := w)) _ :=
     MkRefineCompat refine_pushpop.
 
@@ -940,7 +941,7 @@ Module Soundness
     (* RefineCompat (RStoreSpec Γ Γ (RVal ty.unit)) (@CStoreSpec.exec n Γ ty.unit s) w (@SStoreSpec.exec cfg n Γ ty.unit s w) := *)
     (* MkRefineCompat _ _ _ (refine_exec s w). *)
   End ExecRefineCompat.
-  
+
   End StoreSpec.
 
   Lemma refine_psafe_demonic_close {Σ} (P : SymProp Σ):
@@ -1010,7 +1011,7 @@ Module Soundness
     now apply (psafe_safe (w := wnil)).
   Qed.
 
-  Print Assumptions symbolic_vcgen_soundness.
+  (* Print Assumptions symbolic_vcgen_soundness. *)
 
 End Soundness.
 
