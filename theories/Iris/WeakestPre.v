@@ -365,11 +365,7 @@ Module Type IrisWeakestPre
            | inl vσ =>
                let (pc,δpc) := pattern_match_val pat vσ in
                semWP (rhs pc)
-                 (fun vτ δ2 =>
-                    match vτ with
-                    | inl vτ => Q (inl vτ) (env.drop (PatternCaseCtx pc) δ2)
-                    | inr m  => Q (inr m) (env.drop (PatternCaseCtx pc) δ2)
-                    end)
+                 (fun vτ δ2 => Q vτ (env.drop (PatternCaseCtx pc) δ2))
                  (δ1 ►► δpc)
            | inr m => |={⊤}=> Q (inr m) δ1
            end) δ -∗
