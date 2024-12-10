@@ -648,9 +648,9 @@ Section Soundness.
 
   Lemma iris_rule_stm_seq {Γ} (δ : CStore Γ)
         (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
-        (P : iProp Σ) (Q : CStore Γ -> iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
-    ⊢ (semTriple δ P s1 (fun _ => Q) -∗
-        (∀ δ', semTriple δ' (Q δ') s2 R) -∗
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
+    ⊢ (semTriple δ P s1 Q -∗
+        (∀ v δ', semTriple δ' (Q v δ') s2 R) -∗
                  semTriple δ P (s1 ;; s2) R).
   Proof.
     iIntros "Hs Hk P". iApply semWP2_seq. iSpecialize ("Hs" with "P").

@@ -368,7 +368,7 @@ Module Type Soundness
         now apply IHs.
 
       - (* stm_seq *)
-        apply rule_stm_seq with (WP s2 POST).
+        apply rule_stm_seq with (fun _ => WP s2 POST).
         + apply IHs1. revert HYP.
           apply exec_aux_monotonic; auto.
           intros _ δ1' h1' H.
@@ -377,7 +377,7 @@ Module Type Soundness
           apply bi.exist_intro' with (interpret_scheap h1').
           apply bi.and_intro. reflexivity.
           apply bi.pure_intro. assumption.
-        + apply rule_wp.
+        + intros. apply rule_wp.
 
       - (* stm_assert *)
         apply rule_stm_assert; intro Heval.
