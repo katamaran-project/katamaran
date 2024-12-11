@@ -341,7 +341,7 @@ Module IrisBinaryWP
                                              | inl v1, inl v2 => semWP2 δ12.[x∷σ ↦ v1] δ22.[x∷σ ↦ v2] k1 k2 (λ v12 δ13 v22 δ23, Q v12 (env.tail δ13) v22 (env.tail δ23))
                                              | inr m1, inl v2 => semWP2 δ12 δ22.[x∷σ ↦ v2] (stm_fail _ m1) k2 (λ v12 δ13 v22 δ23, Q v12 δ13 v22 (env.tail δ23))
                                              | inl v1, inr m2 => semWP2 δ12.[x∷σ ↦ v1] δ22 k1 (stm_fail _ m2) (λ v12 δ13 v22 δ23, Q v12 (env.tail δ13) v22 δ23)
-                                             | inr m1, inr m2 => |={⊤}=> Q (inr m1) δ12 (inr m2) δ22
+                                             | inr m1, inr m2 => semWP2 δ12 δ22 (of_ival (inr m1)) (of_ival (inr m2)) Q 
                                              end) -∗
         semWP2 δ1 δ2 (let: x ∷ σ := s1 in k1)%exp (let: x ∷ σ := s2 in k2)%exp Q.
     Proof.
@@ -404,11 +404,13 @@ Module IrisBinaryWP
           assert (E.[x∷σ ↦ v] = E ►► [env].[x∷σ ↦ v]) as <- by reflexivity.
           inversion Hv2; subst. eassumption. eapply step_trans.
           constructor. subst. simpl. apply step_refl.
-      - pose proof (stm_to_val_Some_inr Hval) as Hs2'. iMod "H". iModIntro.
-        iExists γ22, μ22, δ2', (stm_fail _ m2), (inr m2). iFrame.
+      - pose proof (stm_to_val_Some_inr Hval) as Hs2'. simpl.
+        iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite semWP_fail fupd_idemp.
+        iMod "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
+        iModIntro. iExists γ23, μ23, δ2'', s2'', v2'. iFrame.
         iPureIntro. split; auto. eapply step_trans. constructor.
         apply (Steps_trans (Steps_bind Hsteps)). rewrite Hs2'. eapply step_trans.
-        apply st_bind_fail. constructor.
+        apply st_bind_fail. auto.
     Qed.
 
     Lemma semWP2_seq {Γ1 Γ2 τ σ} (s1 : Stm Γ1 σ) (s2 : Stm Γ2 σ)
@@ -416,9 +418,9 @@ Module IrisBinaryWP
       ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
           semWP2 δ1 δ2 s1 s2 (λ v1 δ21 v2 δ22,
               match v1, v2 with
-              | inr m1, inr m2 => |={⊤}=> Q (inr m1) δ21 (inr m2) δ22
-              | inr m1, inl v2 => semWP2 δ21 δ22 (stm_fail _ m1) k2 Q
-              | inl v1, inr m2 => semWP2 δ21 δ22 k1 (stm_fail _ m2) Q
+              | inr m1, inr m2 => semWP2 δ21 δ22 (of_ival (inr m1)) (of_ival (inr m2)) Q
+              | inr m1, inl v2 => semWP2 δ21 δ22 (of_ival (inr m1)) k2 Q
+              | inl v1, inr m2 => semWP2 δ21 δ22 k1 (of_ival (inr m2)) Q
               | inl v1, inl v2 => semWP2 δ21 δ22 k1 k2 Q
               end) -∗
           semWP2 δ1 δ2 (s1;;k1)%exp (s2;;k2)%exp Q.
@@ -455,11 +457,13 @@ Module IrisBinaryWP
         rewrite (stm_to_val_Some_inl Hval) in Hsteps.
         eapply step_trans. constructor. apply (Steps_trans (Steps_bind Hsteps)).
         eapply step_trans. constructor. auto.
-      - iMod "H". iModIntro. iExists γ22, μ22, δ2', (of_ival (inr m2)), (inr m2).
-        iFrame "Hregs Hmem H". iPureIntro; split; last apply stm_to_val_of_ival.
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite semWP_fail fupd_idemp.
+        iMod "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
+        iModIntro. iExists γ23, μ23, δ2'', s2'', v2'.
+        iFrame "Hregs Hmem H". iPureIntro; split; auto.
         rewrite (stm_to_val_eq Hval) in Hsteps. eapply step_trans. constructor.
         apply (Steps_trans (Steps_bind Hsteps)). simpl. eapply step_trans.
-        constructor. apply step_refl.
+        constructor. auto.
     Qed.
 
     Lemma semWP2_assertk {Γ1 Γ2 τ} (e11 : Exp Γ1 ty.bool) (e21 : Exp Γ2 ty.bool)
@@ -771,7 +775,7 @@ Module Type IrisSignatureRules2
 Section Soundness.
 
   Definition semTriple {Γ τ} (δ : CStore Γ)
-             (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
+             (PRE : iProp Σ) (s : Stm Γ τ) (POST : IVal τ -> CStore Γ -> iProp Σ) : iProp Σ :=
     PRE -∗
       semWP2 δ δ s s (fun v1 δ1 v2 δ2 => ⌜ v1 = v2 ⌝ ∗ ⌜ δ1 = δ2 ⌝ ∗ POST v1 δ1)%I.
   (* always modality needed? perhaps not because sail not higher-order? *)
@@ -790,7 +794,7 @@ Section Soundness.
     end.
 
   Lemma iris_rule_consequence {Γ σ} {δ : CStore Γ}
-        {P P'} {Q Q' : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
+        {P P'} {Q Q' : IVal σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
         (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') ->
         semTriple δ P' s Q' -∗ semTriple δ P s Q.
   Proof.
@@ -803,7 +807,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_frame {Γ σ} {δ : CStore Γ}
-        (R P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) (s : Stm Γ σ) :
+        (R P : iProp Σ) (Q : IVal σ -> CStore Γ -> iProp Σ) (s : Stm Γ σ) :
         (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
   Proof.
     iIntros "Htriple [HR HP]".
@@ -815,7 +819,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_pull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ)
-        (P : iProp Σ) (Q : Prop) (R : Val σ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : Prop) (R : IVal σ -> CStore Γ -> iProp Σ) :
         (⊢ (⌜ Q ⌝ → semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R).
   Proof.
     iIntros "QP [P %]".
@@ -824,7 +828,7 @@ Section Soundness.
 
   Lemma iris_rule_exist {σ Γ} (δ : CStore Γ)
         (s : Stm Γ σ) {A : Type} {P : A -> iProp Σ}
-        {Q :  Val σ -> CStore Γ -> iProp Σ} :
+        {Q :  IVal σ -> CStore Γ -> iProp Σ} :
         ⊢ ((∀ x, semTriple δ (P x) s Q) -∗ semTriple δ (∃ x, P x) s Q).
   Proof.
     iIntros "Htriple [% P]".
@@ -833,8 +837,8 @@ Section Soundness.
 
   Lemma iris_rule_stm_val {Γ} (δ : CStore Γ)
         {τ : Ty} {v : Val τ}
-        {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
-        ⊢ ((P -∗ Q v δ)%I -∗ semTriple δ P (stm_val τ v) Q).
+        {P : iProp Σ} {Q : IVal τ -> CStore Γ -> iProp Σ} :
+        ⊢ ((P -∗ Q (inl v) δ)%I -∗ semTriple δ P (stm_val τ v) Q).
   Proof.
     iIntros "PQ P".
     iApply semWP2_val_1.
@@ -844,8 +848,8 @@ Section Soundness.
 
   Lemma iris_rule_stm_exp {Γ} (δ : CStore Γ)
         {τ : Ty} {e : Exp Γ τ}
-        {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
-        ⊢ ((P -∗ Q (eval e δ) δ) -∗ semTriple δ P (stm_exp e) Q).
+        {P : iProp Σ} {Q : IVal τ -> CStore Γ -> iProp Σ} :
+        ⊢ ((P -∗ Q (inl (eval e δ)) δ) -∗ semTriple δ P (stm_exp e) Q).
   Proof.
     iIntros "PQ P".
     iApply semWP2_exp.
@@ -855,11 +859,16 @@ Section Soundness.
 
   Lemma iris_rule_stm_let {Γ} (δ : CStore Γ)
         (x : PVar) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
-        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
-        (R : Val τ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : IVal σ -> CStore Γ -> iProp Σ)
+        (R : IVal τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s Q -∗
-            (∀ (v : Val σ) (δ' : CStore Γ),
-              semTriple (env.snoc δ' (x∷σ) v) (Q v δ') k (fun v δ'' => R v (env.tail δ'')) ) -∗
+            (∀ (v : IVal σ) (δ' : CStore Γ),
+                match v with
+                | inl v' =>
+                    semTriple (env.snoc δ' (x∷σ) v') (Q v δ') k (fun v δ'' => R v (env.tail δ''))
+                | inr m  =>
+                    semTriple δ' (Q v δ') (of_ival (inr m)) (λ v δ, R v δ)
+                end) -∗
                 semTriple δ P (let: x := s in k) R).
   Proof.
     iIntros "Hs Hk P".
@@ -867,16 +876,21 @@ Section Soundness.
     iSpecialize ("Hs" with "P").
     iApply (semWP2_mono with "Hs").
     iIntros (v1 δ1 v2 δ2) "(<- & <- & Q)".
-    iSpecialize ("Hk" $! v1 δ1 with "Q").
-    iApply (semWP2_mono with "Hk").
-    iIntros (? ? ? ?) "(<- & <- & R)".
-    by iFrame "R".
+    iSpecialize ("Hk" $! v1 δ1).
+    destruct v1 as [v1|m1];
+      iSpecialize ("Hk" with "Q").
+    - iApply (semWP2_mono with "Hk").
+      iIntros (? ? ? ?) "(<- & <- & R)".
+      by iFrame "R".
+    - iApply (semWP2_mono with "Hk").
+      iIntros (? ? ? ?) "(<- & <- & R)".
+      by iFrame "R".
   Qed.
 
   Lemma iris_rule_stm_block {Γ} (δ : CStore Γ)
         (Δ : PCtx) (δΔ : CStore Δ)
         (τ : Ty) (k : Stm (Γ ▻▻ Δ) τ)
-        (P : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (R : IVal τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env.drop Δ δ'')) -∗
             semTriple δ P (stm_block δΔ k) R).
   Proof.
@@ -887,35 +901,48 @@ Section Soundness.
 
   Lemma iris_rule_stm_seq {Γ} (δ : CStore Γ)
         (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
-        (P : iProp Σ) (Q : CStore Γ -> iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
-    ⊢ (semTriple δ P s1 (fun _ => Q) -∗
-        (∀ δ', semTriple δ' (Q δ') s2 R) -∗
-                 semTriple δ P (s1 ;; s2) R).
+        (P : iProp Σ) (Q : IVal τ -> CStore Γ -> iProp Σ) (R : IVal σ -> CStore Γ -> iProp Σ) :
+    ⊢ semTriple δ P s1 Q -∗
+      (∀ v δ', semTriple δ' (Q v δ') (lift_cnt (λ _, s2) v) R) -∗
+      semTriple δ P (s1 ;; s2) R.
   Proof.
     iIntros "Hs Hk P". iApply semWP2_seq. iSpecialize ("Hs" with "P").
     iApply (semWP2_mono with "Hs"). iIntros (v1 δ1 v2 δ2) "(<- & <- & Q)".
-    iApply ("Hk" with "Q").
+    iSpecialize ("Hk" with "Q"). destruct v1 as [v1|m1]; simpl; auto.
   Qed.
 
   Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
         (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
-                      (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-    ⊢ (⌜ eval e1 δ = true ⌝ → semTriple δ P k Q) -∗
-        semTriple δ P (stm_assertk e1 e2 k) Q.
+                      (P : iProp Σ) (Q : IVal τ -> CStore Γ -> iProp Σ) :
+    ⊢ (⌜eval e1 δ = true⌝ -∗ semTriple δ P k Q) -∗
+      (⌜eval e1 δ = false⌝ -∗ semTriple δ P (of_ival (inr (eval e2 δ))) Q) -∗
+      semTriple δ P (stm_assertk e1 e2 k) Q.
   Proof.
-    iIntros "Hk P". iApply semWP2_assertk; first auto. iIntros (_ He1).
-    iApply ("Hk" $! He1 with "P").
+    iIntros "Ht Hf". destruct (eval e1 δ) eqn:Ee1.
+    - iIntros "P". iSpecialize ("Ht" with "[] P"); auto.
+      iApply (semWP2_assertk with "[Ht]"); iIntros (H1e H2e);
+        try (rewrite H1e in H2e, Ee1; discriminate);
+        auto.
+    - iIntros "P". iSpecialize ("Hf" with "[] P"); auto.
+      iApply (semWP2_assertk with "[] [] [] [Hf]"); iIntros (H1e H2e);
+        try (rewrite H1e in H2e, Ee1; discriminate);
+        auto.
   Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
-        (τ : Ty) (s : Val ty.string) :
-        forall (Q : Val τ -> CStore Γ -> iProp Σ),
-          ⊢ semTriple δ True (stm_fail τ s) Q.
-  Proof. iIntros (?) "_". now iApply semWP2_fail. Qed.
+        (τ : Ty) (s : Val ty.string) {P : iProp Σ} {Q : IVal τ -> CStore Γ -> iProp Σ} :
+    ⊢ ((P -∗ Q (inr s) δ)%I -∗ semTriple δ P (stm_fail τ s) Q).
+  Proof.
+    iIntros "PQ P".
+    iApply semWP2_fail.
+    iSpecialize ("PQ" with "P").
+    iModIntro; by iFrame.
+  Qed.
 
   Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
-        ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v)).
+    ⊢ (semTriple δ (lptsreg r v) (stm_read_register r)
+         (λ v' δ', ⌜δ' = δ⌝ ∧ ⌜v' = inl v⌝ ∧ lptsreg r v)).
   Proof.
     iIntros "H". iApply semWP2_read_register. iExists v, v.
     iFrame. iIntros "H". repeat iSplit; auto.
@@ -926,7 +953,8 @@ Section Soundness.
                               (Q : Val σ -> CStore Γ -> iProp Σ)
                               (v : Val σ) :
         ⊢ semTriple δ (lptsreg r v) (stm_write_register r w)
-                  (fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v').
+            (λ v' δ',
+              ⌜δ' = δ⌝ ∧ ⌜v' = inl (eval w δ)⌝ ∧ lptsreg r (eval w δ)).
   Proof.
     iIntros "H". iApply semWP2_write_register. iExists v, v.
     iFrame. iIntros "H". repeat iSplit; auto.
@@ -934,22 +962,25 @@ Section Soundness.
 
   Lemma iris_rule_stm_assign {Γ} (δ : CStore Γ)
         (x : PVar) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
-        (P : iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
-        ⊢ (semTriple δ P s (fun v δ' => R v (@env.update _ _ _ δ' (x∷_) _ v)) -∗
+        (P : iProp Σ) (R : IVal σ -> CStore Γ -> iProp Σ) :
+    ⊢ (semTriple δ P s (fun v δ' => R v match v with
+                                        | inl v => (@env.update _ _ _ δ' (x∷_) _ v)
+                                        | inr m => δ'
+                                        end) -∗
            semTriple δ P (stm_assign x s) R).
   Proof.
     iIntros "Hk P". iApply semWP2_assign. iSpecialize ("Hk" with "P").
     iApply (semWP2_mono with "Hk"). iIntros (? ? ? ?) "(<- & <- & R)".
-    now iFrame "R".
+    destruct v1 as [v1|m1]; auto.
   Qed.
 
   Lemma iris_rule_stm_bind {Γ} (δ : CStore Γ)
         {σ τ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
-        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
-        (R : Val τ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : IVal σ -> CStore Γ -> iProp Σ)
+        (R : IVal τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s Q -∗
-           (∀ (v__σ : Val σ) (δ' : CStore Γ),
-               semTriple δ' (Q v__σ δ') (k v__σ) R) -∗
+           (∀ (v__σ : IVal σ) (δ' : CStore Γ),
+               semTriple δ' (Q v__σ δ') (lift_cnt k v__σ) R) -∗
            semTriple δ P (stm_bind s k) R).
   Proof.
     iIntros "trips tripk P".
@@ -963,7 +994,7 @@ Section Soundness.
   Lemma iris_rule_stm_call_inline_later
     {Γ} (δΓ : CStore Γ)
     {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
-    (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) :
+    (P : iProp Σ) (Q : IVal σ -> CStore Γ -> iProp Σ) :
     ⊢ ▷ semTriple (evals es δΓ) P (FunDef f) (fun v _ => Q v δΓ) -∗
       semTriple δΓ P (stm_call f es) Q.
   Proof.
@@ -975,7 +1006,7 @@ Section Soundness.
   Lemma iris_rule_stm_call_inline
     {Γ} (δΓ : CStore Γ)
     {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
-    (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) :
+    (P : iProp Σ) (Q : IVal σ -> CStore Γ -> iProp Σ) :
     ⊢ semTriple (evals es δΓ) P (FunDef f) (fun v _ => Q v δΓ) -∗
       semTriple δΓ P (stm_call f es) Q.
   Proof.
@@ -984,7 +1015,7 @@ Section Soundness.
 
   Lemma iris_rule_stm_debugk
     {Γ τ} (δ : CStore Γ) (k : Stm Γ τ)
-    (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+    (P : iProp Σ) (Q : IVal τ -> CStore Γ -> iProp Σ) :
     ⊢ (semTriple δ P k Q -∗
        semTriple δ P (stm_debugk k) Q).
   Proof.
@@ -992,7 +1023,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_noop {Γ σ} {δ : CStore Γ}
-        {P} {Q : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
+        {P} {Q : IVal σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
     stm_to_val s = None ->
     (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
                             (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
@@ -1007,33 +1038,44 @@ Section Soundness.
     iIntros "!>" (s12 δ12 γ12 μ12 Hs).
     destruct (Hnoop _ _ _ _ _ _ Hs) as (-> & -> & -> & Hs2 & [[v ->]|[msg ->]]).
     - do 3 iModIntro. iMod "Hclose" as "_".
-      iFrame. iModIntro. iApply semWP_val. iExists γ21, μ21, δ, v.
-      iMod ("HPQ" $! v with "HP") as "$". iModIntro. iFrame "Hreg2 Hmem2".
-      repeat iSplit; auto. iPureIntro. eapply step_trans. apply Hs2.
-      apply step_refl.
+      iFrame. iModIntro. iApply semWP_val.
+      iExists γ21, μ21, δ, (of_ival (inl v)), (inl v).
+      iMod ("HPQ" $! (inl v) with "HP") as "$". repeat iModIntro.
+      iFrame "Hreg2 Hmem2". repeat iSplit; auto. iPureIntro. eapply step_trans.
+      apply Hs2. apply step_refl.
     - do 3 iModIntro. iMod "Hclose" as "_". iFrame "Hres1".
-      now iApply semWP_fail.
+      iModIntro. iApply semWP_fail. iMod ("HPQ" $! (inr msg) with "HP") as "HQ".
+      repeat iModIntro. iExists γ21, μ21, δ, (of_ival (inr msg)), (inr msg).
+      iFrame "Hreg2 Hmem2 HQ". repeat iSplit; auto. iPureIntro.
+      eapply step_trans. apply Hs2. simpl. apply step_refl.
   Qed.
 
   Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
     (s : Stm Γ σ) (pat : Pattern σ)
     (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
-    (P : iProp Σ) (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
+    (P : iProp Σ) (Q : IVal σ → CStore Γ → iProp Σ) (R : IVal τ → CStore Γ → iProp Σ) :
     ⊢ semTriple δΓ P s Q -∗
-      (∀ pc δpc δΓ1,
-         semTriple (δΓ1 ►► δpc) (Q (pattern_match_val_reverse pat pc δpc) δΓ1) (rhs pc)
-           (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))) -∗
+      (∀ v δΓ1,
+          match v with
+          | inl v =>
+              ∀ pc δpc,
+                semTriple (δΓ1 ►► δpc) (Q (inl (pattern_match_val_reverse pat pc δpc)) δΓ1) (rhs pc)
+                  (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))
+          | inr m => semTriple δΓ1 (Q v δΓ1) (of_ival (inr m)) R
+          end) -∗
       semTriple δΓ P (stm_pattern_match s pat rhs) R.
   Proof.
     iIntros "Hs Hk P". iApply semWP2_pattern_match. iSpecialize ("Hs" with "P").
     iApply (semWP2_mono with "Hs"). iIntros (v1 δ1 v2 δ2) "(<- & <- & Q)".
-    destruct (pattern_match_val pat v1) as [pc δpc] eqn:Ev1.
-    iSpecialize ("Hk" $! pc δpc δ1 with "[Q]").
-    { change (pattern_match_val_reverse pat pc δpc) with
-        (pattern_match_val_reverse' pat (existT pc δpc)).
-      rewrite <- Ev1. now rewrite pattern_match_val_inverse_left. }
-    iApply (semWP2_mono with "Hk"). iIntros (? ? ? ?) "(<- & <- & R)".
-    now iFrame "R".
+    destruct v1 as [v1|m1].
+    - destruct (pattern_match_val pat v1) as [pc δpc] eqn:Ev1.
+      iSpecialize ("Hk" $! (inl v1) δ1 pc δpc with "[Q]").
+      { change (pattern_match_val_reverse pat pc δpc) with
+          (pattern_match_val_reverse' pat (existT pc δpc)).
+        rewrite <- Ev1. now rewrite pattern_match_val_inverse_left. }
+      iApply (semWP2_mono with "Hk"). iIntros (? ? ? ?) "(<- & <- & R)".
+      now iFrame "R".
+    - now iSpecialize ("Hk" $! (inr m1) with "Q").
   Qed.
 
   Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
@@ -1041,7 +1083,11 @@ Section Soundness.
     | MkSepContract _ _ ctxΣ θΔ pre result post =>
       Sep.Logic.Forall (fun (ι : Valuation ctxΣ) =>
         semTriple (inst θΔ ι) (asn.interpret pre ι) body
-                  (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
+          (λ v δ,
+            match v with
+            | inl v => asn.interpret post (env.snoc ι (result∷σ) v)
+            | inr m => True%I (* TODO: we can do something better here *)
+            end))
     end.
 
   Definition ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
@@ -1049,7 +1095,11 @@ Section Soundness.
     | MkSepContract _ _ ctxΣ θΔ pre result post =>
       ∀ (ι : Valuation ctxΣ),
         semTriple (inst θΔ ι) (asn.interpret pre ι) body
-                  (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v))
+          (λ v δ,
+            match v with
+            | inl v => asn.interpret post (env.snoc ι (result∷σ) v)
+            | inr m => True%I (* TODO: we can do something better here *)
+            end)
     end.
 
   Definition ValidContractForeign {Δ τ} (contract : SepContract Δ τ) (f : 𝑭𝑿 Δ τ) : Prop :=
@@ -1059,7 +1109,11 @@ Section Soundness.
         forall (ι : Valuation Σ'),
         evals es δ = inst θΔ ι ->
         ⊢ semTriple δ (asn.interpret req ι) (stm_foreign f es)
-          (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
+          (λ v δ',
+            match v with
+            | inl v => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ)
+            | inr m => True%I (* TODO: we can do something better here *)
+            end)
       end.
 
   Definition valid_contract_curry {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) :
