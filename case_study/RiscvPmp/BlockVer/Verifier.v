@@ -240,8 +240,8 @@ Section BlockVerificationDerived.
       Monotonic (MHeapSpec eq) (CStoreSpec.evalStoreSpec (CStoreSpec.exec n s) δ).
     Proof.
       intros P Q PQ h. unfold Basics.impl, CStoreSpec.evalStoreSpec.
-      apply RiscvPmpIrisInstanceWithContracts.exec_monotonic.
-      intros ? ? ?. now apply PQ.
+      apply CStoreSpec.mon_exec.
+      intros ? ? <- ? ?. now apply PQ.
     Qed.
 
     #[export] Instance mono_cexec_instruction {i a} :
@@ -368,9 +368,9 @@ Section BlockVerificationDerived.
       cbv [cexec_instruction exec_instruction_prologue bind produce demonic
              produce_chunk lift_purespec CPureSpec.produce_chunk CPureSpec.pure
              CPureSpec.demonic CStoreSpec.evalStoreSpec].
-      cbn - [consume].
+      cbn - [consume CStoreSpec.exec].
       iIntros (Hverif) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
-      specialize (Hverif npc). apply exec_sound_forwards in Hverif.
+      specialize (Hverif npc). apply exec_sound in Hverif.
       iApply (semWP_mono with "[-]").
       iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
       iApply contractsSound.
