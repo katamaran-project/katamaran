@@ -285,7 +285,7 @@ Module Type IrisTotalWeakestPre
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
           semTWP s (fun v1 δ1 => match v1 with
                                 | inl v1 => semTWP k (fun v2 δ2 => Q v2 (env.tail δ2)) δ1.[x∷σ ↦ v1]
-                                | inr m => |={⊤}=> Q (inr m) δ1
+                                | inr m1 => semTWP (of_ival (inr m1)) Q δ1
                                 end) δ -∗
           semTWP (let: x ∷ σ := s in k) Q δ.
     Proof.
@@ -297,7 +297,7 @@ Module Type IrisTotalWeakestPre
       iApply semTWP_bind. iApply (semTWP_mono with "WPs"). iIntros ([v|m] δ) "wpk".
       - iApply (semTWP_block [env].[_∷_ ↦ v]). iApply (semTWP_mono with "wpk").
         clear. iIntros (? δ) "HQ". by destruct (env.view δ).
-      - simpl. now rewrite semTWP_fail.
+      - now simpl.
     Qed.
 
     Lemma semTWP_seq {Γ τ σ} (s : Stm Γ σ) (k : Stm Γ τ) :

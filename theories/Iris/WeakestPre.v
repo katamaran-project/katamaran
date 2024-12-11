@@ -258,7 +258,7 @@ Module Type IrisWeakestPre
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
           semWP s (fun v1 δ1 => match v1 with
                                 | inl v1 => semWP k (fun v2 δ2 => Q v2 (env.tail δ2)) δ1.[x∷σ ↦ v1]
-                                | inr m => |={⊤}=> Q (inr m) δ1
+                                | inr m1 => semWP (of_ival (inr m1)) Q δ1
                                 end) δ -∗
           semWP (let: x ∷ σ := s in k) Q δ.
     Proof.
@@ -270,7 +270,7 @@ Module Type IrisWeakestPre
       iApply semWP_bind. iApply (semWP_mono with "WPs"). iIntros ([v|m] δ) "wpk".
       - simpl. iApply (semWP_block [env].[_∷_ ↦ v]). iApply (semWP_mono with "wpk").
         clear. iIntros (? δ) "HQ". by destruct (env.view δ).
-      - simpl. by rewrite semWP_fail.
+      - simpl. done.
     Qed.
 
     Lemma semWP_seq {Γ τ σ} (s : Stm Γ σ) (k : Stm Γ τ) :

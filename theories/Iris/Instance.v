@@ -198,8 +198,9 @@ Section Soundness.
     iIntros "trips tripk P".
     iApply semWP_let.
     iSpecialize ("trips" with "P").
-    iApply (semWP_mono with "trips"). iIntros ([v|m] ?) "H"; auto.
-    now iSpecialize ("tripk" with "H").
+    iApply (semWP_mono with "trips"). iIntros ([v|m] ?) "H".
+    - now iSpecialize ("tripk" with "H").
+    - simpl. now iApply semWP_fail.
   Qed.
 
   Lemma iris_rule_stm_block {Γ} (δ : CStore Γ)
