@@ -258,6 +258,7 @@ Section BlockVerificationDerived.
 
     Import iris.proofmode.tactics logicalrelation logicalrelation.notations.
     Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
+    Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpSignature.HeapSpec.
 
     Lemma rexec_instruction (i : AST) {w} :
@@ -621,6 +622,7 @@ Section AnnotatedBlockVerification.
 
   Section Relational.
 
+    Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
     Import logicalrelation logicalrelation.notations.
     Import proofmode.

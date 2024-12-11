@@ -68,18 +68,73 @@ Module Soundness
   Import logicalrelation logicalrelation.notations.
   Import LogicalSoundness.
   Import proofmode.
+  Import iris.proofmode.environments.
   Import iris.proofmode.tactics.
+
+  Ltac rsolve_step :=
+    first [
+        (lazymatch goal with
+         | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
+         | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
+         end)
+      | lazymatch goal with
+        | |- envs_entails _ (ℛ⟦ ?R ⟧ ?v ?vs) =>
+            (iApply (refine_compat_lemma (R := R) (vs := vs));
+             lazymatch goal with | |- RefineCompat _ _ _ _ _ => fail | _ => idtac end
+            )
+        | |- envs_entails _ (_ ∗ _) => iSplit
+        | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
+        end
+      ].
+
+  Ltac rsolve :=
+    iStartProof;
+    repeat rsolve_step; try done;
+    (* After walking through the symbolic computation using the above lemmas,
+     * we try to apply induction hypotheses.
+     * To do this, we determine the right world to apply the IH in by looking at the current goal.
+     *)
+    repeat match goal with
+      | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
+      | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
+      | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
+      end.
+
+  Ltac rsolve2_step :=
+    first [
+        (lazymatch goal with
+         | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
+         | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
+         end)
+      | lazymatch goal with
+        | |- envs_entails _ ?P => iApply (refine_compat_gen_lemma P true)
+        | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
+        end
+      ].
+
+  Ltac rsolve2 :=
+    iStartProof;
+    progress rsolve2_step; try done;
+    (* After walking through the symbolic computation using the above lemmas,
+     * we try to apply induction hypotheses.
+     * To do this, we determine the right world to apply the IH in by looking at the current goal.
+     *)
+    repeat match goal with
+      | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
+      | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
+      | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
+      end.
+
+  Definition RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
+    RInst (SStore Γ) (CStore Γ).
+
+  Definition RStoreSpec Γ1 Γ2 `(R : Rel AT A) :
+    Rel (SStoreSpec Γ1 Γ2 AT) (CStoreSpec Γ1 Γ2 A) :=
+    □ᵣ (R -> RStore Γ2 -> RHeap -> ℙ) -> RStore Γ1 -> RHeap -> ℙ.
 
   Module StoreSpec.
     Import PureSpec.
     Import HeapSpec.
-
-    Definition RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
-      RInst (SStore Γ) (CStore Γ).
-
-    Definition RStoreSpec Γ1 Γ2 `(R : Rel AT A) :
-      Rel (SStoreSpec Γ1 Γ2 AT) (CStoreSpec Γ1 Γ2 A) :=
-      □ᵣ (R -> RStore Γ2 -> RHeap -> ℙ) -> RStore Γ1 -> RHeap -> ℙ.
 
     Lemma refine_evalStoreSpec {Γ1 Γ2} `{RA : Rel SA CA} {w : World} :
       ⊢ (ℛ⟦RStoreSpec Γ1 Γ2 RA -> RStore Γ1 -> RHeapSpec RA⟧
@@ -357,62 +412,6 @@ Module Soundness
 
     End BasicsCompatLemmas.
     #[export] Hint Extern 0 (RefineCompat _ (inst ?vs) _ (subst ?vs) _) => refine (refine_compat_inst_subst vs) : typeclass_instances.
-
-    Import iris.proofmode.environments.
-
-    Ltac rsolve_step :=
-      first [
-           (lazymatch goal with
-            | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
-            | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
-            end)
-         | lazymatch goal with
-           | |- envs_entails _ (ℛ⟦ ?R ⟧ ?v ?vs) =>
-               (iApply (refine_compat_lemma (R := R) (vs := vs));
-                  lazymatch goal with | |- RefineCompat _ _ _ _ _ => fail | _ => idtac end
-               )
-           | |- envs_entails _ (_ ∗ _) => iSplit
-           | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
-           end
-      ].
-
-    Ltac rsolve :=
-      iStartProof;
-      repeat rsolve_step; try done;
-        (* After walking through the symbolic computation using the above lemmas,
-         * we try to apply induction hypotheses.
-         * To do this, we determine the right world to apply the IH in by looking at the current goal.
-         *)
-        repeat match goal with
-          | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
-          | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
-          | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
-          end.
-
-    Ltac rsolve2_step :=
-      first [
-           (lazymatch goal with
-            | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
-            | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
-            end)
-         | lazymatch goal with
-           | |- envs_entails _ ?P => iApply (refine_compat_gen_lemma P true)
-           | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
-           end
-      ].
-
-    Ltac rsolve2 :=
-      iStartProof;
-      progress rsolve2_step; try done;
-        (* After walking through the symbolic computation using the above lemmas,
-         * we try to apply induction hypotheses.
-         * To do this, we determine the right world to apply the IH in by looking at the current goal.
-         *)
-        repeat match goal with
-          | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
-          | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
-          | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
-          end.
 
   Section AssumeAssert.
     Import logicalrelation.
