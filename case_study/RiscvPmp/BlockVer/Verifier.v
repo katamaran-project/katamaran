@@ -724,28 +724,13 @@ Section AnnotatedBlockVerification.
           iIntros (->) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
           now iApply ("Hk" with "[$Hpc $Hnpc $Hinstrs Hh]").
         + iIntros (Hlemcall) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-          assert (call_lemma (LEnv lem) (evals es [env])
-                    (fun _ h2 =>
-                       interpret_scheap h2 ⊢
-                       lptsreg pc apc ∗ (∃ v : Val ty_xlenbits, lptsreg nextpc v) ∗
-                       ptsto_instrs ainstr (omap extract_AST instrs) -∗
-                       (∀ an : Val ty_xlenbits,
-                          lptsreg pc an ∗ (∃ v : Val ty_xlenbits, lptsreg nextpc v) ∗
-                          ptsto_instrs ainstr (omap extract_AST instrs) ∗ POST an -∗ WP_loop)
-                       -∗ WP_loop) h) as Hcalllemma.
-          { revert Hlemcall. apply mon_call_lemma. intros _ _ _.
-            iIntros (h2 Heb) "Hh2 (Hpc & Hnpc & Hinstrs) Hk".
-            iApply (IHinstrs _ _ _ _ Heb with "[$Hh2 $Hpc $Hnpc $Hinstrs]").
-            now iApply "Hk".
-          }
-          clear Hlemcall.
           pose proof (Hlem := lemSem _ lem).
-          apply call_lemma_sound in Hcalllemma.
-          destruct Hcalllemma.
-          cbn in *.
-          iPoseProof (H with "Hh") as "(%ι & _ & Hreq & Hk2)".
-          iApply ("Hk2" with "[Hreq] [$Hpc $Hnpc $Hinstrs] Hk").
-          now iApply Hlem.
+          apply call_lemma_sound in Hlemcall. destruct Hlemcall. cbn in *.
+          iPoseProof (H with "Hh") as "(%ι & %Heq & Hreq & Hk2)". clear H.
+          iPoseProof (Hlem with "Hreq") as "Hens".
+          iPoseProof ("Hk2" with "Hens") as "(%h' & Hh' & %Hk2)".
+          apply IHinstrs in Hk2.
+          iApply (Hk2 with "[$Hh' $Hpc $Hnpc $Hinstrs] Hk").
     Qed.
 
     Definition semTripleAnnotatedBlock (PRE : Val ty_word -> iProp Σ)

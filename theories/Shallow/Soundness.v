@@ -270,9 +270,10 @@ Module Type Soundness
       now apply produce_sound.
     Qed.
 
-    Lemma call_lemma_sound {Δ} (args : CStore Δ) (h : SCHeap) (Φ : L) (l : Lemma Δ) :
-      CHeapSpec.call_lemma l args (fun _ h' => interpret_scheap h' ⊢ Φ) h ->
-      LTriple args (interpret_scheap h) Φ l.
+    Lemma call_lemma_sound [Δ] (l : Lemma Δ) (δ : CStore Δ)
+      (Φ : () → SCHeap → Prop) (h : SCHeap)   :
+      CHeapSpec.call_lemma l δ Φ h →
+      LTriple δ (interpret_scheap h) (∃ h', interpret_scheap h' ∧ ⌜Φ tt h'⌝) l.
     Proof.
       destruct l as [Σe δe req ens].
       unfold CHeapSpec.call_lemma.
@@ -280,15 +281,15 @@ Module Type Soundness
       rewrite CPureSpec.wp_angelic_ctx.
       intros [ι Hwp]; revert Hwp.
       rewrite CPureSpec.wp_assert_eq_nenv.
-      intros [Hfmls Hwp].
+      intros [Hfmls Hwp%CHeapSpec.consume_sound].
       constructor.
       apply bi.exist_intro' with ι.
       apply bi.and_intro; auto.
-      apply consume_sound.
-      revert Hwp.
-      apply CHeapSpec.mon_consume.
-      intros _ _ _ h' Hwp.
-      now apply produce_sound.
+      rewrite Hwp. clear Hwp.
+      apply bi.sep_mono'; auto.
+      apply bi.exist_elim. intros h'.
+      apply bi.pure_elim_r.
+      apply CHeapSpec.produce_sound.
     Qed.
 
     Definition SoundExec (rec : Exec) :=
@@ -353,18 +354,10 @@ Module Type Soundness
         now apply call_contract_sound.
 
       - (* stm_lemmak *)
-        unfold eval_exps in HYP.
         eapply rule_stm_lemmak.
-        2: apply rule_wp.
-        eapply call_lemma_sound.
-        revert HYP.
-        eapply CHeapSpec.mon_call_lemma.
-        intros _ _ _ h2 HYP.
-        unfold WP.
-        apply bi.exist_intro' with (interpret_scheap h2).
-        apply bi.and_intro.
-        reflexivity.
-        apply bi.pure_intro.
+        apply (call_lemma_sound _ _ _ _ HYP).
+        apply rule_exist. intros h.
+        apply rule_pull.
         now apply IHs.
 
       - (* stm_seq *)
