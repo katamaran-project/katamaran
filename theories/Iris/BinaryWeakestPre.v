@@ -348,7 +348,7 @@ Module IrisBinaryWP
       iIntros "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
       iSpecialize ("H" with "Hres"). iApply semWP_let.
       iApply (semWP_mono with "H"). iIntros (v1 δ1') "H".
-      destruct v1 as [v1|m1]; first iApply (fupd_semWP ⊤);
+      destruct v1 as [v1|m1]; iApply (fupd_semWP ⊤);
         iMod "H" as  "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hsteps & %Hval & Hregs & Hmem & H)";
         iModIntro; destruct v2 as [v2|m2].
       - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (semWP_mono with "H").
@@ -384,8 +384,8 @@ Module IrisBinaryWP
           iPureIntro. split; auto. eapply step_trans.
           constructor. apply (Steps_trans (Steps_bind Hsteps)).
           eapply step_trans. rewrite Hs2'. constructor. auto.
-      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite semWP_fail. repeat iMod "H".
-        iModIntro.
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?semWP_fail. repeat iMod "H".
+        repeat iModIntro.
         iDestruct "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         pose proof (stm_to_val_Some_inl Hval) as Hs2'.
         iExists γ23, μ23, (env.tail δ2''), (of_ival v2'), v2'.
@@ -405,7 +405,7 @@ Module IrisBinaryWP
           inversion Hv2; subst. eassumption. eapply step_trans.
           constructor. subst. simpl. apply step_refl.
       - pose proof (stm_to_val_Some_inr Hval) as Hs2'. simpl.
-        iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite semWP_fail fupd_idemp.
+        iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?semWP_fail ?fupd_idemp.
         iMod "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         iModIntro. iExists γ23, μ23, δ2'', s2'', v2'. iFrame.
         iPureIntro. split; auto. eapply step_trans. constructor.
@@ -428,7 +428,7 @@ Module IrisBinaryWP
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
       iSpecialize ("H" with "Hres"). iApply semWP_seq.
       iApply (semWP_mono with "H"). iIntros (v1 δ1') "H".
-      destruct v1 as [v1|m1]; first iApply (fupd_semWP ⊤);
+      destruct v1 as [v1|m1]; iApply (fupd_semWP ⊤);
         iMod "H" as  "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hsteps & %Hval & Hregs & Hmem & H)";
         iModIntro; destruct v2 as [v2|m2].
       - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (semWP_mono with "H").
@@ -448,8 +448,8 @@ Module IrisBinaryWP
         rewrite (stm_to_val_Some_inr Hval) in Hsteps.
         eapply step_trans. constructor. apply (Steps_trans (Steps_bind Hsteps)).
         eapply step_trans. constructor. auto.
-      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite semWP_fail. repeat iMod "H".
-        iModIntro.
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?semWP_fail. repeat iMod "H".
+        repeat iModIntro.
         iDestruct "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         iExists γ23, μ23, δ2'', (of_ival v2'), v2'. iFrame "Hregs Hmem H".
         iPureIntro. split; last apply stm_to_val_of_ival.
@@ -457,7 +457,7 @@ Module IrisBinaryWP
         rewrite (stm_to_val_Some_inl Hval) in Hsteps.
         eapply step_trans. constructor. apply (Steps_trans (Steps_bind Hsteps)).
         eapply step_trans. constructor. auto.
-      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite semWP_fail fupd_idemp.
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?semWP_fail ?fupd_idemp.
         iMod "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         iModIntro. iExists γ23, μ23, δ2'', s2'', v2'.
         iFrame "Hregs Hmem H". iPureIntro; split; auto.
