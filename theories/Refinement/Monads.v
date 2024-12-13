@@ -1984,6 +1984,14 @@ Module Type RefinementMonadsOn
     RefineCompat (RNEnv LVar Σ -> RHeapSpec RUnit) (CHeapSpec.consume asn) w (SHeapSpec.consume asn (w := w)) _ :=
     MkRefineCompat (HeapSpec.refine_consume asn w).
 
+  #[export] Instance refine_compat_heapspec_read_register {τ} (r : 𝑹𝑬𝑮 τ) {w} :
+    RefineCompat (RHeapSpec (RVal τ)) (CHeapSpec.read_register r) w (SHeapSpec.read_register r (w := w)) _ :=
+    MkRefineCompat (HeapSpec.refine_read_register r).
+
+  #[export] Instance refine_compat_heapspec_write_register {τ} (r : 𝑹𝑬𝑮 τ) {w} :
+    RefineCompat (RVal τ -> RHeapSpec (RVal τ)) (CHeapSpec.write_register r) w (SHeapSpec.write_register r (w := w)) _ :=
+    MkRefineCompat (HeapSpec.refine_write_register r).
+
   Class RefineCompatGen (w : World) (P : Pred w) (Ob : Pred w) (withbase : bool):=
     MkRefineCompatGen {
         refine_compat_gen_lemma : Ob ⊢ P
