@@ -277,7 +277,7 @@ Module Type IrisWeakestPre
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
           semWP s (λ v δ, match v with
                           | inl _ => semWP k Q δ
-                          | inr m => |={⊤}=> Q (inr m) δ
+                          | inr m => semWP (of_ival (inr m)) Q δ
                           end) δ -∗ semWP (s;;k) Q δ.
     Proof.
       iIntros (Q δ) "WPs". rewrite <-(semWP_unfold_nolc (stm_seq s k)). cbn.
@@ -287,7 +287,7 @@ Module Type IrisWeakestPre
       do 3 iModIntro. iMod "Hclose" as "_". iModIntro. iFrame "state_inv".
       iApply semWP_bind. iApply (semWP_mono with "WPs"). iIntros ([v|m] δ').
       - simpl. iIntros "$".
-      - simpl. iIntros "H". now rewrite semWP_fail.
+      - simpl. now iIntros "H".
     Qed.
 
     Lemma semWP_assertk {Γ τ} (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ) :

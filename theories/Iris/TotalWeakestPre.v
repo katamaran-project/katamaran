@@ -304,7 +304,7 @@ Module Type IrisTotalWeakestPre
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
           semTWP s (λ v δ, match v with
                           | inl _ => semTWP k Q δ
-                          | inr m => |={⊤}=> Q (inr m) δ
+                          | inr m => semTWP (of_ival (inr m)) Q δ
                           end) δ -∗ semTWP (s;;k) Q δ.
     Proof.
       iIntros (Q δ) "WPs". rewrite <-(semTWP_unfold_nolc (stm_seq s k)). cbn.
@@ -314,7 +314,7 @@ Module Type IrisTotalWeakestPre
       iModIntro. iMod "Hclose" as "_". iModIntro. iFrame "state_inv".
       iApply semTWP_bind. iApply (semTWP_mono with "WPs"). iIntros ([v|m] ?).
       - simpl. iIntros "$".
-      - simpl. iIntros "H". now rewrite semTWP_fail.
+      - simpl. now iIntros "H".
     Qed.
 
     Lemma semTWP_assertk {Γ τ} (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ) :
