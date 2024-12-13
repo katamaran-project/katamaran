@@ -1027,10 +1027,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       intros ? [] ->. now apply mΦ.
     Qed.
 
-    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) :
-      Monotonic (Val τ ::> MHeapSpec eq) (write_register reg).
+    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) :
+      Monotonic (MHeapSpec eq) (write_register reg v).
     Proof.
-      intros v Φ1 Φ2 mΦ h.
+      intros Φ1 Φ2 mΦ h.
       apply CPureSpec.mon_write_register.
       intros ? [] ->. now apply mΦ.
     Qed.

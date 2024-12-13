@@ -216,41 +216,6 @@ Module Type ShallowExecOn
     Import CStoreSpecNotations.
     Local Open Scope mut_scope.
 
-    Section AssumeAssert.
-
-      Definition assume_formula {Γ} (fml : Prop) : CStoreSpec Γ Γ unit :=
-        lift_purespec (CPureSpec.assume_formula fml).
-      Definition assert_formula {Γ} (fml : Prop) : CStoreSpec Γ Γ unit :=
-        lift_purespec (CPureSpec.assert_formula fml).
-      Definition assert_pathcondition {Γ} (fml : Prop) : CStoreSpec Γ Γ unit :=
-        lift_purespec (CPureSpec.assert_pathcondition fml).
-      Definition assert_eq_env {Γ} {Δ : Ctx Ty} (δ δ' : Env Val Δ) : CStoreSpec Γ Γ unit :=
-        lift_purespec (CPureSpec.assert_eq_env δ δ').
-      Definition assert_eq_nenv {N Γ} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) : CStoreSpec Γ Γ unit :=
-        lift_purespec (CPureSpec.assert_eq_nenv δ δ').
-
-      #[export] Instance mon_assume_formula {Γ} (fml : Prop) :
-        Monotonic (MStoreSpec Γ Γ eq) (assume_formula fml).
-      Proof. typeclasses eauto. Qed.
-
-      #[export] Instance mon_assert_formula {Γ} (fml : Prop) :
-        Monotonic (MStoreSpec Γ Γ eq) (assert_formula fml).
-      Proof. typeclasses eauto. Qed.
-
-      #[export] Instance mon_assert_pathcondition {Γ} (fml : Prop) :
-        Monotonic (MStoreSpec Γ Γ eq) (assert_pathcondition fml).
-      Proof. typeclasses eauto. Qed.
-
-      #[export] Instance mon_assert_eq_env {Γ} {Δ : Ctx Ty} (δ δ' : Env Val Δ) :
-        Monotonic (MStoreSpec Γ Γ eq) (assert_eq_env δ δ').
-      Proof. typeclasses eauto. Qed.
-
-      #[export] Instance mon_assert_eq_nenv {N Γ} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) :
-        Monotonic (MStoreSpec Γ Γ eq) (assert_eq_nenv δ δ').
-      Proof. typeclasses eauto. Qed.
-
-    End AssumeAssert.
-
     Section PatternMatching.
 
       Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ) :
@@ -323,49 +288,6 @@ Module Type ShallowExecOn
 
     End State.
 
-    Section ProduceConsume.
-
-      Definition produce {Γ Σ} (asn : Assertion Σ) (ι : Valuation Σ) : CStoreSpec Γ Γ unit :=
-        lift_heapspec (CHeapSpec.produce asn ι).
-      Definition consume {Γ Σ} (asn : Assertion Σ) (ι : Valuation Σ) : CStoreSpec Γ Γ unit :=
-        lift_heapspec (CHeapSpec.consume asn ι).
-
-      Definition produce_chunk {Γ} (c : SCChunk) : CStoreSpec Γ Γ unit :=
-        lift_heapspec (CHeapSpec.produce_chunk c).
-      Definition consume_chunk {Γ} (c : SCChunk) : CStoreSpec Γ Γ unit :=
-        lift_heapspec (CHeapSpec.consume_chunk c).
-
-      Definition read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) : CStoreSpec Γ Γ (Val τ) :=
-        lift_heapspec (CHeapSpec.read_register r).
-      Definition write_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) : CStoreSpec Γ Γ (Val τ) :=
-        lift_heapspec (CHeapSpec.write_register r v).
-
-      Lemma mon_produce {Γ Σ} (asn : Assertion Σ) (ι : Valuation Σ) :
-        Monotonic (MStoreSpec Γ Γ eq) (produce asn ι).
-      Proof. typeclasses eauto. Qed.
-
-      Lemma mon_consume {Γ Σ} (asn : Assertion Σ) (ι : Valuation Σ) :
-        Monotonic (MStoreSpec Γ Γ eq) (consume asn ι).
-      Proof. typeclasses eauto. Qed.
-
-      Lemma mon_produce_chunk {Γ} (c : SCChunk) :
-        Monotonic (MStoreSpec Γ Γ eq) (produce_chunk c).
-      Proof. typeclasses eauto. Qed.
-
-      Lemma mon_consume_chunk {Γ} (c : SCChunk) :
-        Monotonic (MStoreSpec Γ Γ eq) (consume_chunk c).
-      Proof. typeclasses eauto. Qed.
-
-      #[export] Instance mon_read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) :
-        Monotonic (MStoreSpec Γ Γ eq) (read_register r).
-      Proof. typeclasses eauto. Qed.
-
-      #[export] Instance mon_write_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
-        Monotonic (MStoreSpec Γ Γ eq) (write_register (Γ := Γ) r v).
-      Proof. apply mon_lift_heapspec, CHeapSpec.mon_write_register. Qed.
-
-    End ProduceConsume.
-
     Section ExecAux.
 
       Variable exec_call_foreign : ExecCallForeign.
@@ -406,7 +328,7 @@ Module Type ShallowExecOn
           | stm_seq e k => _ <- exec_aux e ;; exec_aux k
           | stm_assertk e1 _ k =>
               v <- eval_exp e1 ;;
-              _ <- assume_formula (v = true) ;;
+              _ <- lift_heapspec (CHeapSpec.assume_formula (v = true)) ;;
               exec_aux k
           | stm_fail _ s =>
               block
@@ -415,10 +337,10 @@ Module Type ShallowExecOn
               '(existT pc δpc) <- demonic_pattern_match pat v ;;
               pushspops δpc (exec_aux (rhs pc))
           | stm_read_register reg =>
-              read_register reg
+              lift_heapspec (CHeapSpec.read_register reg)
           | stm_write_register reg e =>
               v__new <- eval_exp e ;;
-              write_register reg v__new
+              lift_heapspec (CHeapSpec.write_register reg v__new)
           | stm_bind s k =>
               v <- exec_aux s ;;
               exec_aux (k v)

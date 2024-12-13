@@ -294,69 +294,6 @@ Module Type SymbolicExecOn
     End notations.
     Local Open Scope mut_scope.
 
-    Section AssumeAssert.
-
-      (* Add the provided formula to the path condition. *)
-      Definition assume_formula {Γ} :
-        ⊢ Formula -> SStoreSpec Γ Γ Unit :=
-        fun w0 fml => lift_purespec (SPureSpec.assume_formula fml).
-
-      Definition assert_formula {Γ} :
-        ⊢ Formula -> SStoreSpec Γ Γ Unit :=
-        fun w0 fml POST δ0 h0 =>
-          lift_purespec
-            (SPureSpec.assert_formula
-               (amsg.mk (MkDebugAssertFormula (wco w0) h0 fml)) fml)
-            POST δ0 h0.
-
-      Definition assert_pathcondition {Γ} :
-        ⊢ PathCondition -> SStoreSpec Γ Γ Unit :=
-        fun w0 fmls POST δ0 h0 =>
-          lift_purespec
-            (SPureSpec.assert_pathcondition
-               (amsg.mk
-                  {| msg_function := "SStoreSpec._assert_pathcondition";
-                     msg_message := "Proof obligation";
-                     msg_program_context := Γ;
-                     msg_localstore := δ0;
-                     msg_heap := h0;
-                     msg_pathcondition := wco w0
-                  |}) fmls) POST δ0 h0.
-
-      Definition assert_eq_env {Γ} {Δ : Ctx Ty} :
-        let E := fun w : World => Env (Term w) Δ in
-        ⊢ E -> E -> SStoreSpec Γ Γ Unit :=
-        fun w0 E1 E2 POST δ0 h0 =>
-          lift_purespec
-            (SPureSpec.assert_eq_env
-               (amsg.mk
-                  {| msg_function := "SStoreSpec.assert_eq_env";
-                     msg_message := "Proof obligation";
-                     msg_program_context := Γ;
-                     msg_localstore := δ0;
-                     msg_heap := h0;
-                     msg_pathcondition := wco w0
-                  |}) E1 E2)
-            POST δ0 h0.
-
-      Definition assert_eq_nenv {N Γ} {Δ : NCtx N Ty} :
-        let E := fun w : World => NamedEnv (Term w) Δ in
-        ⊢ E -> E -> SStoreSpec Γ Γ Unit :=
-        fun w0 E1 E2 POST δ0 h0 =>
-          lift_purespec
-            (SPureSpec.assert_eq_nenv
-               (amsg.mk
-                  {| msg_function := "SStoreSpec.assert_eq_env";
-                     msg_message := "Proof obligation";
-                     msg_program_context := Γ;
-                     msg_localstore := δ0;
-                     msg_heap := h0;
-                     msg_pathcondition := wco w0
-                  |}) E1 E2)
-            POST δ0 h0.
-
-    End AssumeAssert.
-
     Section PatternMatching.
 
       Definition demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
@@ -399,41 +336,6 @@ Module Type SymbolicExecOn
       Global Arguments assign {Γ} x {σ xIn} [w] v.
 
     End State.
-
-    Section ProduceConsume.
-
-      Definition produce_chunk {Γ} :
-        ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c => lift_heapspec (SHeapSpec.produce_chunk c).
-      Arguments produce_chunk {Γ} w c Φ δ : simpl never.
-
-      Definition consume_chunk {Γ} :
-        ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c => lift_heapspec (SHeapSpec.consume_chunk c).
-      Arguments consume_chunk {Γ} w c Φ δ : simpl never.
-
-      Definition consume_chunk_angelic {Γ} :
-        ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c => lift_heapspec (SHeapSpec.consume_chunk_angelic c).
-
-      Definition produce {Σ Γ} (asn : Assertion Σ) :
-        ⊢ Sub Σ -> SStoreSpec Γ Γ Unit :=
-        fun w θ => lift_heapspec (SHeapSpec.produce asn θ).
-
-      Definition consume {Σ Γ} (asn : Assertion Σ) :
-        ⊢ Sub Σ -> SStoreSpec Γ Γ Unit :=
-        fun w θ => lift_heapspec (SHeapSpec.consume asn θ).
-
-      Definition read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) :
-        ⊢ SStoreSpec Γ Γ (WTerm τ) :=
-        fun w => lift_heapspec (SHeapSpec.read_register r).
-      #[global] Arguments read_register {Γ τ} r {w}.
-
-      Definition write_register {Γ τ} (r : 𝑹𝑬𝑮 τ) :
-        ⊢ WTerm τ -> SStoreSpec Γ Γ (WTerm τ) :=
-        fun w t => lift_heapspec (SHeapSpec.write_register r t).
-
-    End ProduceConsume.
 
     Section ExecAux.
 
@@ -478,17 +380,17 @@ Module Type SymbolicExecOn
         | stm_assertk e _ k =>
             ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
             (* This uses assume_formula for a partial correctness
-                interpretation of the object language failure effect. *)
-            ⟨ ω12 ⟩ _ <- assume_formula (formula_bool t) ;;
+               interpretation of the object language failure effect. *)
+            ⟨ ω12 ⟩ _ <- lift_heapspec (SHeapSpec.assume_formula (formula_bool t)) ;;
             exec_aux k
         | stm_fail _ _ =>
             (* Same as stm_assert: partial correctness of failure. *)
             block (w:=w0)
         | stm_read_register reg =>
-            read_register reg
+            lift_heapspec (SHeapSpec.read_register reg)
         | stm_write_register reg e =>
             ⟨ _ ⟩ tnew <- eval_exp e (w:=_) ;;
-            write_register reg tnew
+            lift_heapspec (SHeapSpec.write_register reg tnew)
         | stm_pattern_match s pat rhs =>
             ⟨ θ1 ⟩ v  <- exec_aux s ;;
             ⟨ θ2 ⟩ '(existT pc vs) <- demonic_pattern_match PVartoLVar pat v ;;

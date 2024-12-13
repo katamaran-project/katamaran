@@ -427,72 +427,6 @@ Module Soundness
     End BasicsCompatLemmas.
     #[export] Hint Extern 0 (RefineCompat _ (inst ?vs) _ (subst ?vs) _) => refine (refine_compat_inst_subst vs) : typeclass_instances.
 
-  Section AssumeAssert.
-    Import logicalrelation.
-    Import logicalrelation.notations.
-
-    Lemma refine_assume_formula {Γ} {w} :
-      ⊢ ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
-        CStoreSpec.assume_formula (SStoreSpec.assume_formula (w := w)).
-    Proof.
-      unfold SStoreSpec.assume_formula, CStoreSpec.assume_formula.
-      iIntros (fml fmls) "Hfml %K %Ks HK %s %ss Hs %h %hs Hh".
-      iApply (refine_lift_purespec with "[Hfml] HK Hs Hh").
-      iApply (PureSpec.refine_assume_formula with "Hfml").
-    Qed.
-
-    Lemma refine_assert_formula {Γ} {w} :
-      ⊢ ℛ⟦RFormula -> RStoreSpec Γ Γ RUnit⟧
-        CStoreSpec.assert_formula (SStoreSpec.assert_formula (w := w)).
-    Proof.
-      unfold SStoreSpec.assert_formula, CStoreSpec.assert_formula.
-      iIntros (fml fmls) "Hfml %K %Ks HK %s %ss Hs %h %hs Hh".
-      iApply (refine_lift_purespec with "[Hfml] HK Hs Hh").
-      iApply (PureSpec.refine_assert_formula with "Hfml").
-    Qed.
-
-    Lemma refine_assert_pathcondition {Γ} {w} :
-      ⊢ ℛ⟦RPathCondition -> RStoreSpec Γ Γ RUnit⟧
-        CStoreSpec.assert_pathcondition (SStoreSpec.assert_pathcondition (w := w)).
-    Proof.
-      iIntros (pc pcs) "Hpc %K %Ks HK %δ %δs Hδ %h %hs Hh".
-      unfold CStoreSpec.assert_formula, SStoreSpec.assert_pathcondition.
-      iApply (refine_lift_purespec with "[Hpc] HK Hδ Hh").
-      now iApply PureSpec.refine_assert_pathcondition.
-    Qed.
-
-    Lemma refine_assert_eq_nenv {N Γ} (Δ : NCtx N Ty) {w} :
-      ⊢ ℛ⟦RNEnv N Δ -> RNEnv N Δ -> RStoreSpec Γ Γ RUnit⟧
-        CStoreSpec.assert_eq_nenv (SStoreSpec.assert_eq_nenv (w := w)).
-    Proof.
-      iIntros (E1 sE1) "HE1 %E2 %sE2 HE2 %K %sK HK %δ %sδ Hδ %h %sh Hh".
-      iApply (refine_lift_purespec RUnit $! _ _ with "[HE1 HE2] HK Hδ Hh").
-      now iApply (PureSpec.refine_assert_eq_nenv with "HE1 HE2").
-    Qed.
-
-  End AssumeAssert.
-
-  Section AssumeAssertCompatLemmas.
-    Import logicalrelation.
-
-    #[export] Instance refine_compat_assume_formula {Γ} {w} :
-    RefineCompat (RFormula -> RStoreSpec Γ Γ RUnit) CStoreSpec.assume_formula w (SStoreSpec.assume_formula (w := w)) _ :=
-    MkRefineCompat refine_assume_formula.
-
-    #[export] Instance refine_compat_assert_formula {Γ} {w} :
-    RefineCompat (RFormula -> RStoreSpec Γ Γ RUnit) CStoreSpec.assert_formula w (SStoreSpec.assert_formula (w := w)) _ :=
-    MkRefineCompat refine_assert_formula.
-
-    #[export] Instance refine_compat_assert_pathcondition {Γ} {w} :
-    RefineCompat (RPathCondition -> RStoreSpec Γ Γ RUnit) CStoreSpec.assert_formula w (SStoreSpec.assert_pathcondition (w := w)) _ :=
-    MkRefineCompat refine_assert_pathcondition.
-
-    #[export] Instance refine_compat_assert_eq_nenv {N Γ} (Δ : NCtx N Ty) {w} :
-      RefineCompat (RNEnv N Δ -> RNEnv N Δ -> RStoreSpec Γ Γ RUnit) CStoreSpec.assert_eq_nenv w (SStoreSpec.assert_eq_nenv (w := w)) _ :=
-      MkRefineCompat (refine_assert_eq_nenv Δ).
-
-  End AssumeAssertCompatLemmas.
-
   Section PatternMatching.
     Import logicalrelation.
 
@@ -645,28 +579,6 @@ Module Soundness
       now iApply (refine_env_update with "[$Hv $Hδ]").
     Qed.
 
-    Lemma refine_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :
-      ⊢ ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧
-        (CStoreSpec.read_register reg) (SStoreSpec.read_register (w := w) reg).
-    Proof.
-      iIntros (Φ sΦ) "rΦ %δ %sδ rδ".
-      iApply HeapSpec.refine_read_register.
-      iIntros (w1 θ1) "!> %v %sv rv".
-      iApply ("rΦ" with "rv").
-      iApply (refine_inst_persist with "rδ").
-    Qed.
-
-    Lemma refine_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :
-      ⊢ ℛ⟦RVal τ -> RStoreSpec Γ Γ (RVal τ)⟧
-        (CStoreSpec.write_register reg) (SStoreSpec.write_register (w := w) reg).
-    Proof.
-      iIntros (vnew svnew) "rvnew %Φ %sΦ rΦ %δ %sδ rδ".
-      iApply (HeapSpec.refine_write_register with "rvnew").
-      iIntros (w1 θ1) "!> %v %sv rv".
-      iApply ("rΦ" with "rv").
-      iApply (refine_inst_persist with "rδ").
-    Qed.
-
   End State.
 
   Section StateCompatLemmas.
@@ -708,105 +620,6 @@ Module Soundness
 
   (* Local Hint Unfold RSat : core. *)
   (* Local Hint Unfold RInst : core. *)
-
-  Section ProduceConsume.
-    Import logicalrelation.
-    Import logicalrelation.notations.
-
-    Lemma refine_produce_chunk {Γ} {w} :
-      ⊢ ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
-        CStoreSpec.produce_chunk (SStoreSpec.produce_chunk (w := w)).
-    Proof.
-      iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ".
-      unfold CStoreSpec.produce_chunk, SStoreSpec.produce_chunk.
-      iApply (HeapSpec.refine_produce_chunk with "Hc").
-      iIntros (w2 ω2) "!> %v %sv rv".
-      iApply ("HΦ" with "[//] [Hδ]").
-      now iApply (refine_inst_persist with "Hδ").
-    Qed.
-
-    Lemma refine_consume_chunk {Γ} {w} :
-      ⊢ ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
-        CStoreSpec.consume_chunk (SStoreSpec.consume_chunk (w := w)).
-    Proof.
-      iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ".
-      unfold CStoreSpec.consume_chunk, SStoreSpec.consume_chunk.
-      iApply (HeapSpec.refine_consume_chunk with "Hc").
-      iIntros (w2 ω2) "!> %v %sv rv".
-      iApply ("HΦ" with "[//] [Hδ]").
-      now iApply (refine_inst_persist with "Hδ").
-    Qed.
-
-    Lemma refine_consume_chunk_angelic {Γ} {w} :
-      ⊢ ℛ⟦RChunk -> RStoreSpec Γ Γ RUnit⟧
-        CStoreSpec.consume_chunk (SStoreSpec.consume_chunk_angelic (w := w)).
-    Proof.
-      iIntros (c sc) "Hc %Φ %sΦ HΦ %δ %sδ Hδ".
-      unfold CStoreSpec.consume_chunk, SStoreSpec.consume_chunk_angelic.
-      iApply (HeapSpec.refine_consume_chunk_angelic with "Hc").
-      iIntros (w2 ω2) "!> %v %sv rv".
-      iApply ("HΦ" with "[//] [Hδ]").
-      now iApply (refine_inst_persist with "Hδ").
-    Qed.
-
-    Lemma refine_produce {Σ Γ} (asn : Assertion Σ) w :
-      ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RStoreSpec Γ Γ RUnit⟧
-          (CStoreSpec.produce asn) (SStoreSpec.produce (w := w) asn).
-    Proof.
-      unfold SStoreSpec.produce, CStoreSpec.produce.
-      iIntros (ι sι) "rι %Φ %sΦ rΦ %δ %sδ rδ".
-      iApply (HeapSpec.refine_produce asn with "rι").
-      iIntros (w1 ω1) "!> %u %su _".
-      iApply ("rΦ" with "[//] [rδ]").
-      now iApply (refine_inst_persist with "rδ").
-    Qed.
-
-    Lemma refine_consume {Σ Γ} (asn : Assertion Σ) w :
-      ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RStoreSpec Γ Γ RUnit⟧
-        (CStoreSpec.consume asn) (SStoreSpec.consume (w := w) asn).
-    Proof.
-      unfold SStoreSpec.consume, CStoreSpec.consume.
-      iIntros (ι sι) "rι %Φ %sΦ rΦ %δ %sδ rδ".
-      iApply (HeapSpec.refine_consume asn with "rι").
-      iIntros (w3 ω3) "!> %u %su _".
-      iApply ("rΦ" with "[//] [rδ]").
-      now iApply (refine_inst_persist with "rδ").
-    Qed.
-
-  End ProduceConsume.
-
-  Section ProduceConsumeCompatLemmas.
-    Import logicalrelation.
-
-    #[export] Instance refine_compat_produce_chunk {Γ} {w} :
-      RefineCompat (RChunk -> RStoreSpec Γ Γ RUnit) CStoreSpec.produce_chunk w (SStoreSpec.produce_chunk (w := w)) _ :=
-      MkRefineCompat refine_produce_chunk.
-
-    #[export] Instance refine_compat_consume_chunk {Γ} {w} :
-      RefineCompat (RChunk -> RStoreSpec Γ Γ RUnit) CStoreSpec.consume_chunk w (SStoreSpec.consume_chunk (w := w)) _ :=
-      MkRefineCompat refine_consume_chunk.
-
-    #[export] Instance refine_compat_consume_chunk_angelic {Γ} {w} :
-      RefineCompat (RChunk -> RStoreSpec Γ Γ RUnit) CStoreSpec.consume_chunk w (SStoreSpec.consume_chunk_angelic (w := w)) _ :=
-      MkRefineCompat refine_consume_chunk_angelic.
-
-      #[export] Instance refine_compat_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :
-      RefineCompat (RStoreSpec Γ Γ (RVal τ)) (CStoreSpec.read_register reg) w (SStoreSpec.read_register (w := w) reg) _ :=
-      MkRefineCompat (refine_read_register reg).
-
-      #[export] Instance refine_compat_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) {w} :
-      RefineCompat (RVal τ -> RStoreSpec Γ Γ (RVal τ)) (CStoreSpec.write_register reg) w (SStoreSpec.write_register (w := w) reg) _ :=
-        MkRefineCompat (refine_write_register reg).
-
-      #[export] Instance refine_compat_produce {Γ} {Σ} (asn : Assertion Σ) {w : World} :
-        RefineCompat (RInst (Sub Σ) (Valuation Σ) -> RStoreSpec Γ Γ RUnit) (CStoreSpec.produce asn) w (SStoreSpec.produce asn (w := w)) _ :=
-        MkRefineCompat (refine_produce asn _).
-
-      #[export] Instance refine_compat_consume {Γ} {Σ} (asn : Assertion Σ) {w : World} :
-        RefineCompat (RInst (Sub Σ) (Valuation Σ) -> RStoreSpec Γ Γ RUnit) (CStoreSpec.consume asn) w (SStoreSpec.consume asn (w := w)) _ :=
-        MkRefineCompat (refine_consume asn _).
-
-  End ProduceConsumeCompatLemmas.
 
   Section ExecAux.
     Import logicalrelation.
