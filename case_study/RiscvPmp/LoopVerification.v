@@ -283,7 +283,8 @@ Section Loop.
     iFrame.
     cbn.
     unfold step_post.
-    iIntros (? ?) "[H | [H | [H | H]]]".
+    iIntros ([v|e] _); last auto;
+      iIntros "[H | [H | [H | H]]]".
     - iDestruct "H" as "(Hpaa & Hgprs & Hmc & Hpe & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
       iLeft; unfold Execution; iFrame.
     - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
@@ -338,7 +339,8 @@ Section Loop.
     iApply (valid_step_semTriple with "HStep").
     Unshelve. 2: auto.
     iModIntro.
-    iIntros (v δ) "[HRes | [HRes | [HRes | HRes]]]";
+    iIntros ([v|e] δ); last (iIntros "_"; by rewrite semWP_fail);
+      iIntros "[HRes | [HRes | [HRes | HRes]]]";
       iApply (semWP_call_inline loop _).
     - iDestruct "HRes" as "(? & ? & ? & ? & ? & [%i' (? & ?)] & ? & ? & ?)".
       unfold semTriple_loop.
@@ -346,8 +348,14 @@ Section Loop.
       unfold loop_pre.
       iFrame.
       now iExists i'.
-    - iApply ("HMod" with "HRes").
-    - iApply ("HTrap" with "HRes").
-    - iApply ("HRec" with "HRes").
+    - iSpecialize ("HMod" with "HRes").
+      iApply (semWP_mono with "HMod").
+      iIntros ([] ?); auto.
+    - iSpecialize ("HTrap" with "HRes").
+      iApply (semWP_mono with "HTrap").
+      iIntros ([] ?); auto.
+    - iSpecialize ("HRec" with "HRes").
+      iApply (semWP_mono with "HRec").
+      iIntros ([] ?); auto.
   Qed.
 End Loop.

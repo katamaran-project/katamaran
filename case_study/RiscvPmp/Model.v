@@ -284,7 +284,7 @@ Module RiscvPmpModel2.
       - intros. eliminate_prim_step Heq; auto.
       - repeat iModIntro. iIntros. eliminate_prim_step Heq; auto.
         destruct (pure_decode _).
-        * fold_semWP. now rewrite semWP_fail.
+        * iApply wp_value. now cbn.
         * iApply wp_value; auto.
     Qed.
 
