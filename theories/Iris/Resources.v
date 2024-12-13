@@ -210,6 +210,10 @@ Module Type IrisPrelims
       intros; eapply of_to_val; by cbn.
     Defined.
 
+    #[export] Instance intoVal_failconf {Γ τ δ m} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_fail _ m) δ) (MkValConf (inr m) δ).
+      intros; eapply of_to_val; by cbn.
+    Defined.
+
   End Language.
 
   Section Registers.
