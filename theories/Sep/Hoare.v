@@ -29,11 +29,13 @@
 From Coq Require Import
   Classes.Morphisms.
 
+From iris Require Import
+  proofmode.tactics.
+
 From Katamaran Require Import
   Context
   Environment
   Notations
-  Sep.Logic
   Specification.
 
 Import ctx.notations.
@@ -47,11 +49,8 @@ Module Type ProgramLogicOn
 Module ProgramLogic.
 
   Section Triples.
-    Import iris.proofmode.tactics.
 
     Context {L : bi} {PI : PredicateDef L}.
-
-    Bind Scope bi_scope with L.
 
     (* Hoare triples for SepContract *)
 

@@ -49,7 +49,6 @@ From Katamaran Require Import
      Iris.Base
      Semantics
      Sep.Hoare
-     Sep.Logic
      Specification
      MicroSail.ShallowExecutor
      MicroSail.ShallowSoundness

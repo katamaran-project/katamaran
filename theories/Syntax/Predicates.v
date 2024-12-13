@@ -27,11 +27,12 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From iris Require Import
+     bi.interface.
 From Katamaran Require Import
      Context
      Environment
      Prelude
-     Sep.Logic
      Base.
 
 From Equations Require Import

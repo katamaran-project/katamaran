@@ -57,7 +57,6 @@ From Katamaran Require Import
      Semantics
      Semantics.Registers
      Sep.Hoare
-     Sep.Logic
      Signature
      Specification
      Symbolic.Solver

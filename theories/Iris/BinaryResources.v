@@ -47,7 +47,6 @@ From Katamaran Require Import
      Prelude
      Semantics
      Sep.Hoare
-     Sep.Logic
      Signature
      SmallStep.Step
      Specification.
@@ -151,10 +150,6 @@ Module Type IrisResources2
       state_interp2 σ1 σ2 κ := (regs_inv2 σ1.1 σ2.1 ∗ mem_inv2_sail σ1.2 σ2.2)%I;
       num_laters_per_step2 := fun _ => 0
     |}.
-  Next Obligation.
-    iIntros (Σ sG Γ1 Γ2 τ σ1 σ2 ns) "((Hreg1 & Hreg2) & Hmem)".
-    now iFrame.
-  Qed.
 
 End IrisResources2.
 

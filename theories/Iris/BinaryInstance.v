@@ -53,7 +53,6 @@ From Katamaran Require Import
      Prelude
      Semantics
      Sep.Hoare
-     Sep.Logic
      Signature
      SmallStep.Step
      Specification

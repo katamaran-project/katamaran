@@ -36,7 +36,6 @@ From Katamaran Require Import
      Program
      Semantics
      Sep.Hoare
-     Sep.Logic
      Specification
      MicroSail.ShallowExecutor
      MicroSail.ShallowSoundness

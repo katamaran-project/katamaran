@@ -81,20 +81,9 @@ Section WithBi.
         apply bi.wand_elim_r.
   Qed.
 
-  Lemma wand_sep_adjoint {P Q R : L} :
-    (P ∗ Q ⊢ R) <-> (P ⊢ Q -∗ R).
-  Proof. split. apply bi.wand_intro_r. apply bi.wand_elim_l'. Qed.
-
   Lemma entails_wand_iff {P Q : L} :
     (P ⊢ Q) ↔ (P -∗ Q).
   Proof. split. apply bi.entails_wand. apply bi.wand_entails. Qed.
-
-  Lemma entails_mono' : Proper (flip (⊢) ==> (⊢) ==> impl) (bi_entails : relation L).
-  Proof.
-    intros P Q QP R S RS. intros H.
-    transitivity P; auto.
-    transitivity R; auto.
-  Qed.
 
   Lemma entails_apply {P Q : L} :
     (True ⊢ P) -> ((P → Q) ⊢ Q).

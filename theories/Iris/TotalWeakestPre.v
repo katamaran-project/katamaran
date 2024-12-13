@@ -39,7 +39,6 @@ From iris Require Import
 
 From Katamaran Require Import
      Prelude
-     Sep.Logic
      Semantics
      Iris.Resources.
 

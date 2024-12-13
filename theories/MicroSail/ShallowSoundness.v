@@ -32,7 +32,6 @@ From Coq Require Import
 From Katamaran Require Import
      Signature
      Sep.Hoare
-     Sep.Logic
      Specification
      Prelude
      Program
@@ -312,7 +311,7 @@ Module Type Soundness
         intros HYP ι.
         rewrite CPureSpec.wp_demonic_ctx in HYP.
         specialize (HYP ι). remember (inst δΣ ι) as δ.
-        apply CHeapSpec.produce_sound, wand_sep_adjoint in HYP.
+        apply CHeapSpec.produce_sound, bi.wand_elim_l' in HYP.
         refine (rule_consequence_left _ _ HYP). clear HYP.
         apply rule_exist. intros h'.
         apply rule_pull. intros HYP.
