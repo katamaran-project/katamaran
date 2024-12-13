@@ -75,6 +75,24 @@ Section Loop.
   Context `{sg : sailGS Σ}.
   Import env.notations.
 
+  Definition semWP' {Γ τ} (s : Stm Γ τ) (Q : Val τ -> CStore Γ -> iProp Σ)
+    (δ : CStore Γ) : iProp Σ :=
+    semWP s (λ v δ, match v with
+                    | inl v => Q v δ
+                    | inr m => True%I
+                    end) δ.
+
+  Lemma semWP'_semWP {Γ τ} {s : Stm Γ τ} {Q POST} {δ} :
+    (∀ v δ, match v with
+            | inl v => Q v δ
+            | inr m => True
+            end -∗ POST v δ) -∗
+    semWP' s Q δ -∗
+    semWP s POST δ.
+  Proof.
+    iIntros "H Hwp". unfold semWP'. iApply (semWP_mono with "Hwp"). auto.
+  Qed.
+
   Local Notation "r '↦' val" := (reg_pointsTo r val) (at level 70).
 
   Definition Step_pre : iProp Σ :=
@@ -115,17 +133,20 @@ Section Loop.
     iApply semWP_call_inline.
     iPoseProof (valid_semTriple_step with "IH Hpre") as "trip_step".
     iApply (semWP_mono with "trip_step").
-    iIntros (_ _) "Hpost".
+    iIntros ([v|m] ?) "Hpost"; auto.
     iApply (semWP_call_inline_later loop).
     iDestruct "Hpost" as "(Hgprs & [[%c [Hpc' #Hsafe']] | [%c [Hpc' Hexpr]]])".
     - iModIntro.
       destruct c as [p b e a].
-      by iApply ("IH" $! p b e a with "Hgprs Hpc'").
+      iSpecialize ("IH" $! p b e a with "Hgprs Hpc' Hsafe'").
+      unfold interp_loop. rewrite /semWP. cbn.
+      iApply (wp_mono with "IH"). iIntros ([[|] ?] _); auto.
     - destruct c as [p b e a].
       cbn - [interp_gprs interp].
-      iDestruct "Hexpr" as "[%Hp #Hexpr]".
-      subst.
-      now iApply ("Hexpr" with "[$]").
+      iDestruct "Hexpr" as "[%Hp #Hexpr]". iModIntro. subst.
+      iSpecialize ("Hexpr" with "[$Hpc' $Hgprs]").
+      unfold interp_loop. rewrite /semWP.
+      iApply (wp_mono with "Hexpr"). iIntros ([[|] ?] _); auto.
   Qed.
 
   Import ctx.notations.
