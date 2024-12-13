@@ -147,6 +147,7 @@ Section Loop.
       iSpecialize ("Hexpr" with "[$Hpc' $Hgprs]").
       unfold interp_loop. rewrite /semWP.
       iApply (wp_mono with "Hexpr"). iIntros ([[|] ?] _); auto.
+    - now rewrite semWP_fail.
   Qed.
 
   Import ctx.notations.
@@ -156,7 +157,7 @@ Section Loop.
   Lemma semWP_is_perm {Γ} (e1 e2 : Exp Γ ty.perm) Q δ :
     ⊢ ((⌜eval e1 δ = eval e2 δ⌝ -∗ Q true δ) ∧
       (⌜Base.is_perm (eval e1 δ) (eval e2 δ) = false⌝ -∗ Q false δ)) -∗
-      semWP (call MinCapsProgram.is_perm e1 e2) Q δ.
+      semWP' (call MinCapsProgram.is_perm e1 e2) Q δ.
   Proof.
     iIntros "HYP".
     iApply (semWP_call_inline MinCapsProgram.is_perm).
@@ -165,24 +166,31 @@ Section Loop.
     unfold ValidContractSemCurried, sep_contract_is_perm; cbn.
     iPoseProof ("His_perm" $! (eval e1 δ) (eval e2 δ) with "[%]") as "His_perm"; [by auto|].
     iApply (semWP_mono with "His_perm").
-    iIntros ([] _) "[%H1 _]"; cbn in *; iApply "HYP".
-    - auto.
-    - iPureIntro. by apply is_perm_Not_is_perm_false.
+    iIntros ([[]|m] _) "H"; auto; cbn; iApply "HYP".
+    - iDestruct "H" as "($ & _)".
+    - iDestruct "H" as "(%H & _)". iPureIntro.
+      by apply is_perm_Not_is_perm_false.
   Qed.
 
   Lemma is_correct_pc_false {c cpc} : decide_correct_pc c = cpc ->
-    ⊢ semWP (FunDef is_correct_pc) (fun x y => ⌜ x = cpc ⌝ ) [env].[ "c" ∷ ty.cap ↦ c ].
+    ⊢ semWP' (FunDef is_correct_pc) (fun x y => ⌜ x = cpc ⌝ ) [env].[ "c" ∷ ty.cap ↦ c ].
   Proof.
     destruct c as [p b e a]. cbn.
-    intros Heq. iIntros.
-    kEval. kStep. kStep. cbn. kStep.
+    intros Heq. iIntros. rewrite /semWP'.
+    kEval. kStep. kStep. cbn. kStep. iApply semWP'_semWP.
+    { iIntros ([v|m] δ) "HQ". iExact "HQ". simpl.
+      iApply semWP_fail. auto. }
     iApply semWP_is_perm; cbn. iSplit.
     - iIntros "%H1". subst p. cbn in *. kStep.
+      iApply semWP'_semWP.
+      { iIntros ([|] ?) "HQ"; [iExact "HQ"|now iApply semWP_fail]. }
       iApply semWP_is_perm; cbn. iSplit.
       iIntros "%H1". discriminate.
       iIntros "_". kStep. kStep. cbn.
       kStep; rewrite semWP_val; auto.
     - iIntros "%H1". kStep.
+      iApply semWP'_semWP.
+      { iIntros ([|] ?) "HQ"; [iExact "HQ"|now iApply semWP_fail]. }
       iApply semWP_is_perm; cbn. iSplit.
       iIntros "%H2". subst p. cbn in *. kStep.
       cbn. kStep. cbn.
@@ -208,10 +216,12 @@ Section Loop.
     iApply semWP_call_inline.
     cbn.
     iApply (semWP_mono $! (is_correct_pc_false wrongPC)).
-    iIntros (? _ Heq). subst.
-    unfold stm_if.
-    kStep. kStep. kEval.
-    now rewrite semWP_fail.
+    iIntros ([?|?] _ Heq).
+    - subst.
+      unfold stm_if.
+      kStep. kStep. kEval.
+      now rewrite semWP_fail.
+    - now rewrite semWP_fail.
   Qed.
 
   Lemma wrongPC_crashes {c Q} : decide_correct_pc c = false ->
@@ -221,7 +231,10 @@ Section Loop.
     unfold FunDef, fun_loop.
     iApply semWP_seq.
     iApply semWP_call_inline.
-    now iApply (wrongPC_crashes_step wrongPc).
+    iPoseProof (wrongPC_crashes_step wrongPc with "Hpc") as "H".
+    iApply (semWP_mono with "H"). iIntros ([v|?] δ) "HQ".
+    iExact "HQ".
+    now rewrite semWP_fail.
   Qed.
 
   (* and now without the IH. *)
@@ -236,11 +249,14 @@ Section Loop.
     do 2 iModIntro.
     iIntros (p b e a) "Hgprs Hpc #Hpcvalid".
     destruct (decide_correct_pc {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) eqn:Heqdpc.
-    - iApply ("IH" with "[$Hgprs Hpc]").
-      iExists _.
-      now iFrame "Hpc Hpcvalid %".
+    - iSpecialize ("IH" with "[$Hgprs Hpc]").
+      { iExists _. now iFrame "Hpc Hpcvalid %". }
+      unfold interp_loop. iApply (wp_mono with "IH").
+      now iIntros ([[|] ?]).
     - unfold interp_loop.
-      now iApply (wrongPC_crashes (Q := fun _ _ => True)%I with "[$]").
+      iPoseProof (wrongPC_crashes Heqdpc (Q := fun _ _ => True)%I with "[$]") as "H".
+      iApply (wp_mono with "H").
+      now iIntros ([[|] ?]).
   Qed.
 
 End Loop.
