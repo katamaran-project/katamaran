@@ -36,7 +36,7 @@ From Katamaran Require Import
      Specification
      Prelude
      Program
-     Shallow.Executor.
+     MicroSail.ShallowExecutor.
 
 Set Implicit Arguments.
 

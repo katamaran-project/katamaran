@@ -42,14 +42,15 @@ From Katamaran Require Import
      Bitvector
      Refinement.Monads
      Sep.Hoare
-     Shallow.Executor
-     Shallow.Soundness
      Specification
-     Symbolic.Executor
      Symbolic.Propositions
      Symbolic.Solver
-     Symbolic.Soundness
      Symbolic.Worlds
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.RefineExecutor
+     MicroSail.Soundness
      RiscvPmp.BlockVer.Spec
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance

@@ -34,12 +34,12 @@ From Coq Require Import
 From Katamaran Require Import
      Notations
      Bitvector
-     Shallow.Executor
      Specification
-     Symbolic.Executor
      Symbolic.Solver
      Symbolic.Propositions
      Symbolic.Worlds
+     MicroSail.ShallowExecutor
+     MicroSail.SymbolicExecutor
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
      RiscvPmp.Sig.

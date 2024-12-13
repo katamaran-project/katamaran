@@ -40,8 +40,8 @@ From Equations Require Import
 From Katamaran Require Import
      Signature
      Semantics.Registers
-     Symbolic.Executor
-     Shallow.Executor
+     MicroSail.SymbolicExecutor
+     MicroSail.ShallowExecutor
      Symbolic.Solver
      Specification
      Program.

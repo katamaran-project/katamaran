@@ -49,17 +49,18 @@ From Katamaran Require Import
      Semantics
      Semantics.Registers
      Sep.Hoare
-     Shallow.Executor
-     Shallow.Soundness
      Signature
      Specification
-     Symbolic.Executor
      Symbolic.Propositions
      Symbolic.Solver
-     Symbolic.Soundness
      Symbolic.Worlds
      Syntax.Predicates
-     Syntax.Terms.
+     Syntax.Terms
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.RefineExecutor
+     MicroSail.Soundness.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -405,9 +406,9 @@ Module Import ExampleModel.
     Proof. intros Γ l. destruct l. Qed.
 
     (* Import the soundness proofs for the shallow and symbolic executors. *)
-    Include Shallow.Soundness.Soundness DefaultBase ExampleSig ExampleProgram
+    Include MicroSail.ShallowSoundness.Soundness DefaultBase ExampleSig ExampleProgram
       ExampleSpecification ExampleShalExec.
-    Include Symbolic.Soundness.Soundness DefaultBase ExampleSig
+    Include MicroSail.RefineExecutor.RefineExecOn DefaultBase ExampleSig
       ExampleProgram ExampleSpecification ExampleShalExec ExampleExecutor.
 
     (* Show that all the contracts are sound in the Iris model. *)

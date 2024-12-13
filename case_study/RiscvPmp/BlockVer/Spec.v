@@ -38,11 +38,12 @@ From Katamaran Require Import
      Notations
      Bitvector
      Sep.Hoare
-     Shallow.Executor
-     Shallow.Soundness
      Specification
-     Symbolic.Executor
-     Symbolic.Soundness
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.RefineExecutor
+     MicroSail.Soundness
      RiscvPmp.PmpCheck
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
@@ -800,9 +801,9 @@ Module RiscvPmpIrisInstanceWithContracts.
     RiscvPmpProgram RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase
     RiscvPmpIrisAdeqParameters
     RiscvPmpIrisInstance.
-  Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature
+  Include MicroSail.ShallowSoundness.Soundness RiscvPmpBase RiscvPmpSignature
     RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
-  Include Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpSignature
+  Include MicroSail.RefineExecutor.RefineExecOn RiscvPmpBase RiscvPmpSignature
     RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor
     RiscvPmpBlockVerifExecutor.
 

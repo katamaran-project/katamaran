@@ -51,10 +51,10 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Specification
-     Shallow.Executor
-     Shallow.Soundness
-     Symbolic.Executor
-     Symbolic.Soundness
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.RefineExecutor
      MinimalCaps.Machine
      MinimalCaps.Sig
      MinimalCaps.Contracts.Definitions
@@ -821,10 +821,10 @@ Module MinCapsIrisInstanceWithContracts.
   End ForeignProofs.
 
   (* Import the soundness proofs for the shallow and symbolic executors. *)
-  Include Symbolic.Soundness.Soundness MinCapsBase MinCapsSignature
+  Include MicroSail.RefineExecutor.RefineExecOn MinCapsBase MinCapsSignature
     MinCapsProgram MinCapsSpecification MinCapsShallowExec MinCapsExecutor.
-  Include Shallow.Soundness.Soundness MinCapsBase MinCapsSignature MinCapsProgram
-    MinCapsSpecification MinCapsShallowExec.
+  Include MicroSail.ShallowSoundness.Soundness MinCapsBase MinCapsSignature
+    MinCapsProgram MinCapsSpecification MinCapsShallowExec.
 
   (* contracts_sound proves that all contracts in our contract environment
      are sound. *)

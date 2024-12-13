@@ -429,7 +429,7 @@ Module inv := invariants.
   Import RiscvPmpBlockVerifSpec.
   Import iris.program_logic.weakestpre.
   Import iris.proofmode.tactics.
-  Import Shallow.Executor.
+  Import MicroSail.ShallowExecutor.
   Import ctx.resolution.
   Import ctx.notations.
   Import env.notations.

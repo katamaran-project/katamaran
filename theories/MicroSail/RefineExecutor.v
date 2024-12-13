@@ -44,18 +44,19 @@ From Equations Require Import
 
 From Katamaran Require Import
      Signature
-     Shallow.Executor
      Specification
-     Symbolic.Executor
      Program
-     Tactics.
+     Tactics
+     MicroSail.ShallowExecutor
+     MicroSail.SymbolicExecutor.
+
 
 Set Implicit Arguments.
 
 Import ctx.notations.
 Import env.notations.
 
-Module Soundness
+Module RefineExecOn
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)
@@ -786,15 +787,4 @@ Module Soundness
 
   (* Print Assumptions symbolic_vcgen_soundness. *)
 
-End Soundness.
-
-Module MakeSymbolicSoundness
-  (Import B    : Base)
-  (Import SIG  : Signature B)
-  (Import PROG : Program B)
-  (Import SPEC : Specification B SIG PROG)
-  (Import SHAL : ShallowExecOn B SIG PROG SPEC)
-  (Import SYMB : SymbolicExecOn B SIG PROG SPEC).
-
-  Include Soundness B SIG PROG SPEC SHAL SYMB.
-End MakeSymbolicSoundness.
+End RefineExecOn.

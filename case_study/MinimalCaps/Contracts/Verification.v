@@ -42,8 +42,8 @@ From Katamaran Require Import
      MinimalCaps.Contracts.Definitions
      Notations
      Specification
-     Shallow.Executor
-     Symbolic.Executor
+     MicroSail.ShallowExecutor
+     MicroSail.SymbolicExecutor
      Symbolic.Solver.
 
 Set Implicit Arguments.
