@@ -99,7 +99,7 @@ Section BlockVerificationDerived.
   Section Symbolic.
 
     Import ModalNotations.
-    Import SStoreSpec (evalStoreSpec, exec).
+    Import SStoreSpec (evalStoreSpec).
     Import SHeapSpec SHeapSpec.notations.
     Import asn.notations.
 
@@ -122,7 +122,7 @@ Section BlockVerificationDerived.
         ⟨ θ1 ⟩ _  <- produce
                        (exec_instruction_prologue i)
                        [env].["a"∷_ ↦ a] ;;
-        ⟨ θ2 ⟩ _  <- evalStoreSpec (exec default_config inline_fuel (FunDef step)) [env] ;;
+        ⟨ θ2 ⟩ _  <- evalStoreSpec (sexec default_config inline_fuel (FunDef step) _) [env] ;;
         ⟨ θ3 ⟩ na <- angelic None _ ;;
         let a3 := persist__term a (θ1 ∘ θ2 ∘ θ3) in
         ⟨ θ4 ⟩ _  <- consume
@@ -184,7 +184,7 @@ Section BlockVerificationDerived.
 
   Section Shallow.
 
-    Import CStoreSpec (evalStoreSpec, exec).
+    Import CStoreSpec (evalStoreSpec).
     Import CHeapSpec CHeapSpec.notations.
 
     Definition cexec_instruction (i : AST) :
@@ -194,7 +194,7 @@ Section BlockVerificationDerived.
         _ <- produce
                (exec_instruction_prologue i)
                [env].["a"∷_ ↦ a] ;;
-        _ <- evalStoreSpec (exec inline_fuel (FunDef step)) [env] ;;
+        _ <- evalStoreSpec (cexec inline_fuel (FunDef step)) [env] ;;
         na <- angelic _ ;;
         _ <- consume
                (exec_instruction_epilogue i)
@@ -236,13 +236,7 @@ Section BlockVerificationDerived.
       (* CHeapSpec.run does not perform a leakcheck. We could include one here. *)
       CHeapSpec.run (cexec_triple_addr req b ens).
 
-    #[export] Instance mon_eval_exec {Γ τ} n (s : Stm Γ τ) δ :
-      Monotonic (MHeapSpec eq) (CStoreSpec.evalStoreSpec (CStoreSpec.exec n s) δ).
-    Proof.
-      intros P Q PQ h. unfold Basics.impl, CStoreSpec.evalStoreSpec.
-      apply CStoreSpec.mon_exec.
-      intros ? ? <- ? ?. now apply PQ.
-    Qed.
+    Import (hints) CStoreSpec.
 
     #[export] Instance mono_cexec_instruction {i a} :
       Monotonic (MHeapSpec eq) (cexec_instruction i a).
@@ -368,9 +362,9 @@ Section BlockVerificationDerived.
       cbv [cexec_instruction exec_instruction_prologue bind produce demonic
              produce_chunk lift_purespec CPureSpec.produce_chunk CPureSpec.pure
              CPureSpec.demonic CStoreSpec.evalStoreSpec].
-      cbn - [consume CStoreSpec.exec].
+      cbn - [consume].
       iIntros (Hverif) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
-      specialize (Hverif npc). apply exec_sound in Hverif.
+      specialize (Hverif npc). apply sound_cexec in Hverif.
       iApply (semWP_mono with "[-]").
       iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
       iApply contractsSound.

@@ -71,8 +71,25 @@ Module Type ShallowExecOn
     (MA ==> CStore Γ2 ::> SCHeap ::> impl) ==> CStore Γ1 ::> SCHeap ::> impl.
   #[global] Arguments MStoreSpec Γ1 Γ2 [A] MA.
 
+  (* The paper discusses the case that a function call is replaced by
+     interpreting the contract instead. However, this is not always
+     convenient. We therefore parameterize the executor by other functions
+     that interpret function calls and lemma applications. The following
+     types describe the executor and the parameters. *)
+  Definition ExecCall := forall Δ τ, 𝑭 Δ τ -> CStore Δ -> CHeapSpec (Val τ).
+  Definition ExecCallForeign := forall Δ τ, 𝑭𝑿 Δ τ -> CStore Δ -> CHeapSpec (Val τ).
+  Definition ExecLemma := forall Δ, 𝑳 Δ -> CStore Δ -> CHeapSpec unit.
   Definition Exec := forall Γ τ (s : Stm Γ τ), CStoreSpec Γ Γ (Val τ).
 
+  Notation MonotonicExecCall exec_call :=
+    (forall Δ τ (f : 𝑭 Δ τ) (δ : CStore Δ),
+       Monotonic (MHeapSpec eq) (exec_call Δ τ f δ)).
+  Notation MonotonicExecCallForeign exec_call_foreign :=
+    (forall Δ τ (f : 𝑭𝑿 Δ τ) (δ : CStore Δ),
+       Monotonic (MHeapSpec eq) (exec_call_foreign Δ τ f δ)).
+  Notation MonotonicExecLemma exec_lemma :=
+    (forall Δ (l : 𝑳 Δ) (δ : CStore Δ),
+       Monotonic (MHeapSpec eq) (exec_lemma Δ l δ)).
   Notation MonotonicExec exec :=
     (forall Γ τ (s : Stm Γ τ),
        Monotonic (MStoreSpec Γ Γ eq) (exec Γ τ s)).
@@ -349,118 +366,80 @@ Module Type ShallowExecOn
 
     End ProduceConsume.
 
-    Section Exec.
+    Section ExecAux.
 
-      Definition call_contract {Γ Δ τ} (contract : SepContract Δ τ) (args : CStore Δ) : CStoreSpec Γ Γ (Val τ) :=
-        lift_heapspec (CHeapSpec.call_contract contract args).
-      Arguments call_contract {Γ Δ τ} !contract args.
+      Variable exec_call_foreign : ExecCallForeign.
+      Variable exec_lemma : ExecLemma.
+      Variable exec_call : ExecCall.
 
-      Definition call_lemma {Γ Δ} (lem : Lemma Δ) (vs : CStore Δ) : CStoreSpec Γ Γ unit :=
-        lift_heapspec (CHeapSpec.call_lemma lem vs).
-      Arguments call_lemma {Γ Δ} !lem vs.
-
-      (* The paper discusses the case that a function call is replaced by
-         interpreting the contract instead. However, this is not always
-         convenient. We therefore make contracts for functions optional and if a
-         function does not have a contract, we continue executing the body of
-         the called function. A parameter [inline_fuel] bounds the number of
-         allowed levels before failing execution. Therefore, we write the
-         executor in an open-recusion style and [Exec] is the closed type of
-         such an executor. *)
-      Definition Exec := forall Γ τ (s : Stm Γ τ), CStoreSpec Γ Γ (Val τ).
-
-      Section ExecAux.
-
-        (* The executor for "inlining" a call. *)
-        Variable rec : Exec.
-
-        (* The openly-recursive executor. *)
-        Definition exec_aux : Exec :=
-          fix exec_aux {Γ τ} (s : Stm Γ τ) : CStoreSpec Γ Γ (Val τ) :=
-            match s with
-            | stm_val _ l => pure l
-            | stm_exp e => eval_exp e
-            | stm_let x σ s k =>
+      (* The openly-recursive executor. *)
+      Definition exec_aux : Exec :=
+        fix exec_aux {Γ τ} (s : Stm Γ τ) : CStoreSpec Γ Γ (Val τ) :=
+          match s with
+          | stm_val _ l => pure l
+          | stm_exp e => eval_exp e
+          | stm_let x σ s k =>
               v <- exec_aux s ;;
               pushpop v (exec_aux k)
-            | stm_block δ k =>
+          | stm_block δ k =>
               pushspops δ (exec_aux k)
-            | stm_assign x e =>
+          | stm_assign x e =>
               v <- exec_aux e ;;
               _ <- assign x v ;;
               pure v
-            | stm_call f es =>
+          | stm_call f es =>
               args <- eval_exps es ;;
-              match CEnv f with
-              | Some c => call_contract c args
-              | None   => fun POST δ => rec (FunDef f) (fun v _ => POST v δ) args
-              end
-            | stm_foreign f es =>
+              lift_heapspec (exec_call f args)
+          | stm_foreign f es =>
               ts <- eval_exps es ;;
-              call_contract (CEnvEx f) ts
-            | stm_lemmak l es k =>
+              lift_heapspec (exec_call_foreign f ts)
+          | stm_lemmak l es k =>
               ts <- eval_exps es ;;
-              _  <- call_lemma (LEnv l) ts ;;
+              _  <- lift_heapspec (exec_lemma l ts) ;;
               exec_aux k
-            | stm_call_frame δ' s =>
+          | stm_call_frame δ' s =>
               δ <- get_local ;;
               _ <- put_local δ' ;;
               v <- exec_aux s ;;
               _ <- put_local δ ;;
               pure v
-            | stm_seq e k => _ <- exec_aux e ;; exec_aux k
-            | stm_assertk e1 _ k =>
+          | stm_seq e k => _ <- exec_aux e ;; exec_aux k
+          | stm_assertk e1 _ k =>
               v <- eval_exp e1 ;;
               _ <- assume_formula (v = true) ;;
               exec_aux k
-            | stm_fail _ s =>
+          | stm_fail _ s =>
               block
-            | stm_pattern_match s pat rhs =>
+          | stm_pattern_match s pat rhs =>
               v  <- exec_aux s ;;
               '(existT pc δpc) <- demonic_pattern_match pat v ;;
               pushspops δpc (exec_aux (rhs pc))
-            | stm_read_register reg =>
-                read_register reg
-            | stm_write_register reg e =>
-                v__new <- eval_exp e ;;
-                write_register reg v__new
-            | stm_bind s k =>
+          | stm_read_register reg =>
+              read_register reg
+          | stm_write_register reg e =>
+              v__new <- eval_exp e ;;
+              write_register reg v__new
+          | stm_bind s k =>
               v <- exec_aux s ;;
               exec_aux (k v)
-            | stm_debugk k =>
+          | stm_debugk k =>
               exec_aux k
-            end.
+          end.
 
-        Context {mon_rec : MonotonicExec rec}.
+      Context
+        (mexec_call_foreign : MonotonicExecCallForeign exec_call_foreign)
+        (mexec_lemma : MonotonicExecLemma exec_lemma)
+        (mexec_call : MonotonicExecCall exec_call).
 
-        #[export] Instance mon_exec_aux : MonotonicExec exec_aux.
-        Proof.
-          intros Γ τ s. induction s; cbn - [Val]; try typeclasses eauto.
-          destruct CEnv.
-          - typeclasses eauto.
-          - intros P Q PQ ? ?. apply mon_rec.
-            intros ? ? ? ?. now apply PQ.
-        Qed.
+      #[export] Instance mon_exec_aux : MonotonicExec exec_aux.
+      Proof. induction s; typeclasses eauto. Qed.
 
-      End ExecAux.
-      Arguments exec_aux rec {Γ τ} !s.
+    End ExecAux.
+    #[global] Arguments exec_aux _ _ _ [Γ τ] !s.
 
-      (* The constructed closed executor. *)
-      Fixpoint exec (inline_fuel : nat) : Exec :=
-        match inline_fuel with
-        | O   => fun _ _ _ => error
-        | S n => @exec_aux (@exec n)
-        end.
+    Section WithExec.
 
-      #[export] Instance mon_exec fuel : MonotonicExec (exec fuel).
-      Proof. induction fuel; cbn; typeclasses eauto. Qed.
-
-    End Exec.
-    #[global] Arguments exec _ {_ _} s : simpl never.
-
-    Section WithFuel.
-
-      Variable inline_fuel : nat.
+      Context (exec : Exec) (mexec : MonotonicExec exec).
 
       Import CHeapSpec.notations.
 
@@ -469,7 +448,7 @@ Module Type ShallowExecOn
         | MkSepContract _ _ lvars pats req result ens =>
             lenv <- CHeapSpec.demonic_ctx lvars ;;
             _    <- CHeapSpec.produce req lenv ;;
-            v    <- evalStoreSpec (exec inline_fuel s) (inst pats lenv) ;;
+            v    <- evalStoreSpec (exec s) (inst pats lenv) ;;
             CHeapSpec.consume ens (env.snoc lenv (result∷τ) v)
         end.
 
@@ -480,14 +459,76 @@ Module Type ShallowExecOn
         Monotonic (MHeapSpec eq) (exec_contract c s).
       Proof. destruct c. typeclasses eauto. Qed.
 
-    End WithFuel.
+    End WithExec.
 
   End CStoreSpec.
+
+  Section WithSpec.
+
+    Definition exec_call_error : ExecCall :=
+      fun Δ τ f args => CHeapSpec.lift_purespec CPureSpec.error.
+
+    Definition cexec_call_foreign : ExecCallForeign :=
+      fun Δ τ f args =>
+        CHeapSpec.call_contract (CEnvEx f) args.
+
+    Definition cexec_lemma : ExecLemma :=
+      fun Δ l args =>
+        CHeapSpec.call_lemma (LEnv l) args.
+
+    Import CHeapSpec.notations.
+
+    Definition debug_call [Δ τ] (f : 𝑭 Δ τ) (args : CStore Δ) : CHeapSpec unit :=
+      CHeapSpec.pure tt.
+
+    (* If a function does not have a contract, we continue executing the body of
+       the called function. A parameter [inline_fuel] bounds the number of
+       allowed levels before failing execution. *)
+    Fixpoint cexec_call (inline_fuel : nat) : ExecCall :=
+      fun Δ τ f args =>
+        _ <- debug_call f args ;;
+        (* Let's first see if we have a contract defined for function [f]
+           and then if we have enough fuel for inlining. *)
+        match CEnv f , inline_fuel with
+        | Some c , _ =>
+            (* YES: Execute the call by interpreting the contract. *)
+            CHeapSpec.call_contract c args
+        | None   , 0 =>
+            (* Out of fuel *)
+            exec_call_error f args
+        | None   , S n =>
+            CStoreSpec.evalStoreSpec
+              (CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call n) (FunDef f))
+              args
+        end.
+
+    Definition cexec (inline_fuel : nat) : Exec :=
+      @CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call inline_fuel).
+    #[global] Arguments cexec _ [_ _] s _ _ _ : simpl never.
+
+    Import (hints) CStoreSpec.
+
+    Lemma mon_exec_call_error : MonotonicExecCall exec_call_error.
+    Proof. typeclasses eauto. Qed.
+
+    Lemma mon_cexec_call_foreign : MonotonicExecCallForeign cexec_call_foreign.
+    Proof. typeclasses eauto. Qed.
+
+    Lemma mon_cexec_lemma : MonotonicExecLemma cexec_lemma.
+    Proof. typeclasses eauto. Qed.
+
+    #[export] Instance mon_cexec_call (fuel : nat) : MonotonicExecCall (cexec_call fuel).
+    Proof. induction fuel; intros; cbn; destruct CEnv; typeclasses eauto. Qed.
+
+    Lemma mon_cexec (fuel : nat) : MonotonicExec (cexec fuel).
+    Proof. typeclasses eauto. Qed.
+
+  End WithSpec.
 
   Module Shallow.
 
     Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      CStoreSpec.vcgen fuel c body.
+      CStoreSpec.vcgen (cexec fuel) c body.
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)

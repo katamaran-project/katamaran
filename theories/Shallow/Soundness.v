@@ -111,6 +111,33 @@ Module Type Soundness
       apply CHeapSpec.produce_sound.
     Qed.
 
+    Definition SoundExecCall (exec_call : ExecCall) : Prop :=
+      forall Γ τ Δ (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+        (Φ : Val τ → SCHeap → Prop)
+        (δ1 : CStore Γ) (h1 : SCHeap),
+        exec_call _ _ f (evals es δ1) Φ h1 →
+        ⦃ interpret_scheap h1 ⦄
+          stm_call f es; δ1
+        ⦃ fun v δ' =>
+            ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ v h' ∧ δ' = δ1⌝ ⦄.
+
+    Definition SoundExecCallForeign (exec_call_foreign : ExecCallForeign) : Prop :=
+      forall Γ τ Δ (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+        (Φ : Val τ → SCHeap → Prop) (δ1 : CStore Γ) (h1 : SCHeap),
+      exec_call_foreign _ _ f (evals es δ1) Φ h1 →
+      ⦃ interpret_scheap h1 ⦄
+        stm_foreign f es; δ1
+      ⦃ fun v δ' =>
+          ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ v h' ∧ δ' = δ1⌝ ⦄.
+
+    Definition SoundExecLemma (exec_lemma : ExecLemma) : Prop :=
+      forall Γ Δ (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ)
+        (Φ : unit → SCHeap → Prop) (δ1 : CStore Γ) (h1 : SCHeap),
+      exec_lemma _ l (evals es δ1) Φ h1 →
+      LTriple (evals es δ1) (interpret_scheap h1)
+        (∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ tt h'⌝)
+        (LEnv l).
+
     Definition SoundExec (exec : Exec) :=
       forall
         Γ σ (s : Stm Γ σ) (Φ : Val σ → CStore Γ → SCHeap → Prop)
@@ -122,167 +149,275 @@ Module Type Soundness
             ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ v δ' h'⌝
         ⦄.
 
-    Lemma exec_aux_sound rec (rec_mono : MonotonicExec rec) (rec_sound : SoundExec rec) :
-      SoundExec (exec_aux rec).
-    Proof.
-      unfold SoundExec. intros ? ? s.
-      induction s; intros ? ? ?; cbn;
-        cbv [pure pushspops pushpop
-             eval_exp get_local put_local
-             bind];
-        cbn; intros HYP.
+    Section ExecAux.
 
-      - (* stm_val *)
-        apply rule_stm_val.
-        apply bi.exist_intro' with h1.
-        apply bi.and_intro.
-        reflexivity.
-        apply bi.pure_intro.
-        auto.
+      Variable exec_call_foreign : ExecCallForeign.
+      Variable exec_lemma : ExecLemma.
+      Variable exec_call : ExecCall.
 
-      - (* stm_exp *)
-        apply rule_stm_exp.
-        apply bi.exist_intro' with h1.
-        apply bi.and_intro.
-        reflexivity.
-        apply bi.pure_intro.
-        auto.
+      Variable mexec_call_foreign : MonotonicExecCallForeign exec_call_foreign.
+      Variable mexec_lemma : MonotonicExecLemma exec_lemma.
+      Variable mexec_call : MonotonicExecCall exec_call.
 
-      - (* stm_let *)
-        eapply rule_stm_let.
-        apply IHs1, HYP. clear IHs1 HYP.
-        intros v1 δ2.
-        apply rule_exist. intros h.
+      Variable sound_exec_call : SoundExecCall exec_call.
+      Variable sound_exec_call_foreign : SoundExecCallForeign exec_call_foreign.
+      Variable sound_exec_lemma : SoundExecLemma exec_lemma.
+
+      Lemma exec_aux_sound :
+        SoundExec (exec_aux exec_call_foreign exec_lemma exec_call).
+      Proof.
+        unfold SoundExec. intros ? ? s.
+        induction s; intros ? ? ?; cbn;
+          cbv [pure pushspops pushpop eval_exp get_local put_local bind];
+          cbn; intros HYP.
+
+        - (* stm_val *)
+          apply rule_stm_val.
+          apply bi.exist_intro' with h1.
+          apply bi.and_intro.
+          reflexivity.
+          apply bi.pure_intro.
+          auto.
+
+        - (* stm_exp *)
+          apply rule_stm_exp.
+          apply bi.exist_intro' with h1.
+          apply bi.and_intro.
+          reflexivity.
+          apply bi.pure_intro.
+          auto.
+
+        - (* stm_let *)
+          eapply rule_stm_let.
+          apply IHs1, HYP. clear IHs1 HYP.
+          intros v1 δ2.
+          apply rule_exist. intros h.
+          apply rule_pull. intros HYP.
+          now apply IHs2.
+
+        - (* stm_block *)
+          now apply rule_stm_block, IHs.
+
+        - (* stm_assign *)
+          now apply rule_stm_assign, IHs.
+
+        - (* stm_call *)
+          apply sound_exec_call in HYP.
+          apply (rule_consequence_right _ HYP).
+          intros.
+          apply bi.exist_mono'. intros h.
+          apply bi.and_mono'; auto.
+          apply bi.pure_mono; intros []; now subst.
+
+        - (* stm_call_frame *)
+          now apply rule_stm_call_frame, IHs.
+
+        - (* stm_foreign *)
+          apply sound_exec_call_foreign in HYP.
+          apply (rule_consequence_right _ HYP).
+          intros.
+          apply bi.exist_mono'. intros h.
+          apply bi.and_mono'; auto.
+          apply bi.pure_mono; intros []; now subst.
+
+        - (* stm_lemmak *)
+          eapply rule_stm_lemmak.
+          apply (sound_exec_lemma _ _ HYP). clear HYP.
+          apply rule_exist. intros h.
+          apply rule_pull. intros HYP.
+          now apply IHs.
+
+        - (* stm_seq *)
+          eapply rule_stm_seq.
+          apply IHs1, HYP. clear IHs1 HYP.
+          intros v1 δ2.
+          apply rule_exist. intros h.
+          apply rule_pull. intros HYP.
+          now apply IHs2.
+
+        - (* stm_assert *)
+          apply rule_stm_assert; intro Heval.
+          now apply IHs, HYP.
+
+        - (* stm_fail *)
+          eapply rule_consequence_left.
+          apply rule_stm_fail.
+          apply bi.True_intro.
+
+        - (* stm_match_newpattern *)
+          eapply rule_stm_pattern_match.
+          apply IHs, HYP. clear IHs HYP.
+          intros pc δpc δΓ'. cbn.
+          apply rule_exist. intros h.
+          apply rule_pull. intros HYP.
+          apply wp_demonic_pattern_match in HYP.
+          rewrite pattern_match_val_inverse_right in HYP.
+          now apply H.
+
+        - (* stm_read_register *)
+          destruct HYP as [v HYP].
+          eapply rule_consequence_left.
+          apply (rule_stm_read_register_backwards (v := v)).
+          apply CPureSpec.wp_consume_chunk in HYP.
+          rewrite HYP. clear HYP. cbn.
+          apply bi.sep_mono'. easy.
+          apply bi.exist_elim. intros h2.
+          apply bi.pure_elim_r.
+          now intros ->%CPureSpec.wp_produce_chunk.
+
+        - (* stm_write_register *)
+          destruct HYP as [v HYP].
+          eapply rule_consequence_left.
+          apply (rule_stm_write_register_backwards (v := v)).
+          apply CPureSpec.wp_consume_chunk in HYP.
+          rewrite HYP. clear HYP. cbn.
+          apply bi.sep_mono'. easy.
+          apply bi.exist_elim. intros h2.
+          apply bi.pure_elim_r.
+          now intros ->%CPureSpec.wp_produce_chunk.
+
+        - (* stm_bind *)
+          eapply rule_stm_bind.
+          apply IHs, HYP. clear IHs HYP.
+          intros v1 δ2. cbn.
+          apply rule_exist. intros h.
+          apply rule_pull. intros HYP.
+          now apply H.
+
+        - (* stm_debug *)
+          constructor. auto.
+      Qed.
+
+    End ExecAux.
+
+    Section WithExec.
+
+      Context (exec : Exec) (mexec : MonotonicExec exec) (sound_exec : SoundExec exec).
+
+      Lemma exec_contract_sound [Δ τ] (c : SepContract Δ τ) (body : Stm Δ τ) Φ h :
+        exec_contract exec c body Φ h →
+        ∀ ι : Valuation (sep_contract_logic_variables c),
+        ⦃ interpret_scheap h ∗
+          asn.interpret (sep_contract_precondition c) ι ⦄
+          body ; inst (sep_contract_localstore c) ι
+        ⦃ fun v _ =>
+            asn.interpret
+              (sep_contract_postcondition c)
+              ι.[sep_contract_result c∷τ ↦ v] ∗
+            ∃ h', ⌜ Φ tt h' ⌝ ⦄.
+      Proof.
+        destruct c as [Σ δΣ req result ens]; cbn.
+        cbv [CHeapSpec.bind CHeapSpec.demonic_ctx
+               CHeapSpec.lift_purespec evalStoreSpec].
+        intros HYP ι.
+        rewrite CPureSpec.wp_demonic_ctx in HYP.
+        specialize (HYP ι). remember (inst δΣ ι) as δ.
+        apply CHeapSpec.produce_sound, wand_sep_adjoint in HYP.
+        refine (rule_consequence_left _ _ HYP). clear HYP.
+        apply rule_exist. intros h'.
         apply rule_pull. intros HYP.
-        now apply IHs2.
-
-      - (* stm_block *)
-        now apply rule_stm_block, IHs.
-
-      - (* stm_assign *)
-        now apply rule_stm_assign, IHs.
-
-      - (* stm_call *)
-        destruct (CEnv f) as [c|] eqn:Heq; cbn in HYP.
-        + apply rule_stm_call with c.
-          assumption.
-          now apply call_contract_sound.
-        + now apply rule_stm_call_inline, rec_sound.
-
-      - (* stm_call_frame *)
-        now apply rule_stm_call_frame, IHs.
-
-      - (* stm_foreign *)
-        apply rule_stm_foreign.
-        now apply call_contract_sound.
-
-      - (* stm_lemmak *)
-        eapply rule_stm_lemmak.
-        apply (call_lemma_sound _ _ _ _ HYP). clear HYP.
-        apply rule_exist. intros h.
-        apply rule_pull. intros HYP.
-        now apply IHs.
-
-      - (* stm_seq *)
-        eapply rule_stm_seq.
-        apply IHs1, HYP. clear IHs1 HYP.
-        intros v1 δ2.
-        apply rule_exist. intros h.
-        apply rule_pull. intros HYP.
-        now apply IHs2.
-
-      - (* stm_assert *)
-        apply rule_stm_assert; intro Heval.
-        now apply IHs, HYP.
-
-      - (* stm_fail *)
-        eapply rule_consequence_left.
-        apply rule_stm_fail.
-        apply bi.True_intro.
-
-      - (* stm_match_newpattern *)
-        eapply rule_stm_pattern_match.
-        apply IHs, HYP. clear IHs HYP.
-        intros pc δpc δΓ'. cbn.
-        apply rule_exist. intros h.
-        apply rule_pull. intros HYP.
-        apply wp_demonic_pattern_match in HYP.
-        rewrite pattern_match_val_inverse_right in HYP.
-        now apply H.
-
-      - (* stm_read_register *)
-        destruct HYP as [v HYP].
-        eapply rule_consequence_left.
-        apply (rule_stm_read_register_backwards (v := v)).
-        apply CPureSpec.wp_consume_chunk in HYP.
-        rewrite HYP. clear HYP. cbn.
-        apply bi.sep_mono'. easy.
+        apply sound_exec in HYP.
+        apply (rule_consequence_right _ HYP).
+        intros v _.
         apply bi.exist_elim. intros h2.
         apply bi.pure_elim_r.
-        now intros ->%CPureSpec.wp_produce_chunk.
+        intros ->%CHeapSpec.consume_sound.
+        apply bi.sep_mono'; auto.
+        apply bi.exist_elim. intros h3.
+        apply bi.pure_elim_r. auto.
+      Qed.
 
-      - (* stm_write_register *)
-        destruct HYP as [v HYP].
-        eapply rule_consequence_left.
-        apply (rule_stm_write_register_backwards (v := v)).
-        apply CPureSpec.wp_consume_chunk in HYP.
-        rewrite HYP. clear HYP. cbn.
-        apply bi.sep_mono'. easy.
-        apply bi.exist_elim. intros h2.
-        apply bi.pure_elim_r.
-        now intros ->%CPureSpec.wp_produce_chunk.
+      Lemma vcgen_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+        CStoreSpec.vcgen exec c body ->
+        ProgramLogic.ValidContract c body.
+      Proof.
+        cbv [CStoreSpec.vcgen CHeapSpec.run ProgramLogic.ValidContract].
+        intros HYP ι. eapply exec_contract_sound in HYP. cbn in HYP.
+        rewrite bi.emp_sep in HYP.
+        apply (rule_consequence_right _ HYP). clear HYP.
+        intros ? _.
+        apply bi.sep_elim_l; auto with typeclass_instances.
+      Qed.
 
-      - (* stm_bind *)
-        eapply rule_stm_bind.
-        apply IHs, HYP. clear IHs HYP.
-        intros v1 δ2. cbn.
-        apply rule_exist. intros h.
-        apply rule_pull. intros HYP.
-        now apply H.
+    End WithExec.
 
-      - (* stm_debug *)
-        constructor. auto.
+    Lemma sound_cexec_call_foreign : SoundExecCallForeign cexec_call_foreign.
+    Proof.
+      unfold SoundExecCallForeign, cexec_call_foreign.
+      intros * HYP%call_contract_sound. constructor.
+      destruct (CEnvEx f) as [Σ δΣ req result ens]; cbn in *.
+      rewrite HYP. clear HYP.
+      apply bi.exist_mono'. intros ι.
+      apply bi.and_mono'; auto.
+      apply bi.sep_mono'; auto.
+      apply bi.forall_mono'; intros v.
+      apply bi.wand_mono'. easy.
+      apply bi.exist_mono'. intros h'.
+      apply bi.and_mono'; auto.
     Qed.
 
-    Lemma exec_sound n : SoundExec (@exec n).
+    Lemma sound_cexec_lemma : SoundExecLemma cexec_lemma.
     Proof.
-      induction n; cbn.
-      - unfold SoundExec; cbn; contradiction.
-      - apply exec_aux_sound; auto using mon_exec.
+      unfold SoundExecLemma, cexec_lemma. intros *.
+      now apply call_lemma_sound.
     Qed.
 
-    Lemma vcgen_sound n {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-      CStoreSpec.vcgen n c body ->
-      ProgramLogic.ValidContract c body.
+    Lemma sound_cexec_call (fuel : nat) : SoundExecCall (cexec_call fuel).
     Proof.
-      unfold CStoreSpec.vcgen, ProgramLogic.ValidContract.
-      unfold inst_contract_localstore.
-      unfold exec_contract, bind.
-      destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
-      hnf in HYP.
-      rewrite CPureSpec.wp_demonic_ctx in HYP.
-      specialize (HYP ι). remember (inst δΣ ι) as δ.
-      apply CHeapSpec.produce_sound, wand_sep_adjoint in HYP. cbn in HYP.
-      rewrite bi.emp_sep in HYP.
-      refine (rule_consequence_left _ _ HYP). clear HYP.
-      apply rule_exist. intros h1.
-      apply rule_pull. intros HΦ%exec_sound.
-      apply (rule_consequence_right _ HΦ). clear HΦ. intros.
-      apply bi.exist_elim. intros h2.
-      apply bi.pure_elim_r. intros Hheap%CHeapSpec.consume_sound.
-      rewrite Hheap.
-      apply bi.sep_elim_l; auto with typeclass_instances.
+      induction fuel; cbn; unfold SoundExecCall, evalStoreSpec; intros.
+      - destruct (CEnv f) as [c|] eqn:?.
+        + apply call_contract_sound in H.
+          apply rule_stm_call with c; auto. clear Heqo.
+          destruct c as [Σ δΣ req result ens]; cbn in *.
+          rewrite H. clear H.
+          apply bi.exist_mono'. intros ι.
+          apply bi.and_mono'; auto.
+          apply bi.sep_mono'; auto.
+          apply bi.forall_mono'; intros v.
+          apply bi.wand_mono'. easy.
+          apply bi.exist_mono'. intros h'.
+          apply bi.and_mono'; auto.
+        + contradiction H.
+      - destruct (CEnv f) as [c|] eqn:?.
+        + apply call_contract_sound in H.
+          apply rule_stm_call with c; auto. clear Heqo.
+          destruct c as [Σ δΣ req result ens]; cbn in *.
+          rewrite H. clear H.
+          apply bi.exist_mono'. intros ι.
+          apply bi.and_mono'; auto.
+          apply bi.sep_mono'; auto.
+          apply bi.forall_mono'; intros v.
+          apply bi.wand_mono'. easy.
+          apply bi.exist_mono'. intros h'.
+          apply bi.and_mono'; auto.
+        + apply rule_stm_call_inline.
+          apply exec_aux_sound in H.
+          * apply (rule_consequence_right _ H).
+            intros ? _.
+            apply bi.exist_mono'. intros h.
+            apply bi.and_mono'; auto.
+          * auto.
+          * apply sound_cexec_call_foreign.
+          * apply sound_cexec_lemma.
+    Qed.
+
+    Lemma sound_cexec (fuel : nat) : SoundExec (cexec fuel).
+    Proof.
+      apply exec_aux_sound.
+      - apply sound_cexec_call.
+      - apply sound_cexec_call_foreign.
+      - apply sound_cexec_lemma.
     Qed.
 
     Lemma shallow_vcgen_soundness {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       Shallow.ValidContract c body ->
       ProgramLogic.ValidContract c body.
-    Proof. apply vcgen_sound. Qed.
+    Proof. apply vcgen_sound, sound_cexec. Qed.
 
     Lemma shallow_vcgen_fuel_soundness {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
       Shallow.ValidContractWithFuel fuel c body ->
       ProgramLogic.ValidContract c body.
-    Proof. apply vcgen_sound. Qed.
+    Proof. apply vcgen_sound, sound_cexec. Qed.
 
     (* Print Assumptions shallow_vcgen_soundnes. *)
 
