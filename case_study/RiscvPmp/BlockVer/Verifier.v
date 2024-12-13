@@ -373,7 +373,7 @@ Section BlockVerificationDerived.
       iApply (semWP_mono with "[-]").
       iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
       iApply contractsSound.
-      iIntros (_ _) "(%h1 & Hh1 & %Htrip)". clear Hverif.
+      iIntros ([v|m] _); last done; iIntros "(%h1 & Hh1 & %Htrip)". clear Hverif.
       destruct Htrip as [an Htrip].
       iPoseProof (consume_sound _ _ Htrip with "Hh1")
         as "[(Hpc & $ & Han) (%h2 & Hh2 & %HΦ)]".
@@ -401,7 +401,8 @@ Section BlockVerificationDerived.
         iApply (semWP_mono with "[-Hinstrs Hk] [Hinstrs Hk]").
         iApply Hverif. iFrame. clear Hverif.
         cbn.
-        iIntros (_ _) "([%an (Hnpc & Hpc & Hk2)] & Hinstr)".
+        iIntros ([v|m] _); last (iIntros "_"; now rewrite semWP_fail);
+          iIntros "([%an (Hnpc & Hpc & Hk2)] & Hinstr)".
         iDestruct "Hk2" as "(%h' & Hh' & %Hexec)".
         specialize (IHinstrs _ _ _ _ Hexec). clear Hexec.
         iApply (semWP_call_inline loop).
@@ -713,7 +714,8 @@ Section AnnotatedBlockVerification.
           iApply (semWP_mono with "[Hh Hnpc Hpc Hinstr]").
           { iApply (sound_exec_instruction Hverif). iFrame. }
           clear Hverif.
-          iIntros (_ _) "([%an (Hnpc & Hpc & (%h2 & Hh2 & %Hverif))] & Hinstr)".
+          iIntros ([v|m] _); last (iIntros "_"; now rewrite semWP_fail);
+            iIntros "([%an (Hnpc & Hpc & (%h2 & Hh2 & %Hverif))] & Hinstr)".
           iApply (semWP_call_inline loop).
           specialize (IHinstrs _ _ _ _ Hverif).
           iApply (IHinstrs with "[$Hh2 $Hpc Hnpc $Hinstrs]").
