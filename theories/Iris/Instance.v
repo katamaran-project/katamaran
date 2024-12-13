@@ -225,7 +225,8 @@ Section Soundness.
     iSpecialize ("trips1" with "P").
     iApply semWP_seq.
     iApply (semWP_mono with "[$]"). iIntros ([v|m] ?) "H"; auto.
-    by iApply ("trips2" with "H").
+    - by iApply ("trips2" with "H").
+    - by rewrite semWP_fail.
   Qed.
 
   Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
