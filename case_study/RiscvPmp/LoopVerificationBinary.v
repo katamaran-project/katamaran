@@ -76,7 +76,7 @@ Section Loop.
   Context `{sg : sailGS2 Σ}.
 
   Definition WP2_loop : iProp Σ :=
-    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (fun _ _ _ _ => True%I).
+    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝)%I.
 
   Definition step_sem_contract :=
     Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
@@ -283,23 +283,20 @@ Section Loop.
     iApply valid_step_contract.
     Unshelve.
     3: exact [kv existT (_∷ty_privilege) m; existT (_∷ty_xlenbits) h; existT (_∷ty.list ty_pmpentry) entries; existT (_∷ty_privilege) mpp; existT (_∷ty_xlenbits) i]%env.
-    cbn.
-    iFrame.
-    cbn.
-    unfold step_post.
-    iIntros ([] δ1 [] δ2) "(_ & <- & [H | [H | [H | H]]])".
+    cbn; now iFrame.
+    unfold step_post; cbn.
+    iIntros (v1 δ1 v2 δ2) "(<- & <- & H)".
+    do 2 (iSplitR; first easy).
+    destruct v1 as [v'|m1] eqn:Ev1; auto.
+    iDestruct "H" as "[H | [H | [H | H]]]".
     - iDestruct "H" as "(Hpaa & Hgprs & Hmc & Hpe & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
-      do 2 (iSplitR; first easy).
       iLeft; unfold Execution; iFrame.
     - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
-      do 2 (iSplitR; first easy).
       iRight; iLeft; unfold CSRMod; now iFrame.
     - iDestruct "H" as "(Hpaa & Hgprs & Hentries & Hmc & Hpe & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
-      do 2 (iSplitR; first easy).
       iRight; iRight; iLeft; unfold Trap; iFrame.
       now iExists i.
     - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hcp & [% (Hmepc & Hnpc & Hpc)] & Hmtvec & Hmstatus)".
-      do 2 (iSplitR; first easy).
       iRight; iRight; iRight; unfold Recover; iFrame.
       iSplitR; auto.
       iExists v; iFrame.
@@ -317,8 +314,9 @@ Section Loop.
     iIntros "(Hcp & Hin)".
     iSplitL "Hcp"; iAssumption.
     cbn.
-    iIntros (? ?) "(_ & Hcp & Hin)".
-    iSplitL "Hcp"; iAssumption.
+    iIntros (v δ) "H".
+    iDestruct "H" as "([-> _] & Hcp & Hpmp)".
+    iFrame "Hcp Hpmp".
     constructor.
   Qed.
 
@@ -341,31 +339,38 @@ Section Loop.
     cbn.
     unfold fun_loop.
     iApply (semWP2_seq (call step) (call step) (call loop) (call loop)).
-    (* iApply semWP2_call_inline_later. *)
-    (* iApply (semWP2_mono with "[HStep]"). *)
-    (* iApply (valid_step_semTriple with "HStep"). *)
-    (* Unshelve. 2: auto. *)
-    (* iModIntro. *)
-    (* iIntros (v1 δ1 v2 δ2) "(<- & <- & [HRes | [HRes | [HRes | HRes]]])"; *)
-    (*   iApply (semWP2_call_inline loop _). *)
-    (* - iDestruct "HRes" as "(? & ? & ? & ? & ? & [%i' (? & ?)] & ? & ? & ?)". *)
-    (*   unfold semTriple_loop. *)
-    (*   iSpecialize ("H" $! m h i' mpp entries with "[-]"). *)
-    (*   {iFrame. *)
-    (*    now iExists i'. } *)
-    (*   iApply (semWP2_mono with "H"). *)
-    (*   now iIntros (v δ v' δ') "(<- & <- & _)". *)
-    (* - iSpecialize ("HMod" with "HRes"). *)
-    (*   iApply (semWP2_mono with "HMod"). *)
-    (*   iIntros (v δ v' δ') "_". *)
-    (*   now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ'). *)
-    (* - iSpecialize ("HTrap" with "HRes"). *)
-    (*   iApply (semWP2_mono with "HTrap"). *)
-    (*   iIntros (v δ v' δ') "_". *)
-    (*   now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ'). *)
-    (* - iSpecialize ("HRec" with "HRes"). *)
-    (*   iApply (semWP2_mono with "HRec"). *)
-    (*   iIntros (v δ v' δ') "_". *)
-    (*   now destruct v1, v, v', (env.view δ1), (env.view δ), (env.view δ'). *)
-  Admitted.
+    iApply semWP2_call_inline_later.
+    iApply (semWP2_mono with "[HStep]").
+    iApply (valid_step_semTriple with "HStep").
+    Unshelve. 2: auto.
+    iModIntro.
+
+    iIntros ([v1|m1] δ1 v2 δ2) "(<- & <- & HRes)";
+      last now iApply semWP2_fail.
+    iDestruct "HRes" as "[HRes | [HRes | [HRes | HRes]]]";
+      iApply (semWP2_call_inline loop _).
+    - iDestruct "HRes" as "(? & ? & ? & ? & ? & [%i' (? & ?)] & ? & ? & ?)".
+      unfold semTriple_loop.
+      iSpecialize ("H" $! m h i' mpp entries with "[-]").
+      {iFrame.
+       now iExists i'. }
+      iApply (semWP2_mono with "H").
+      iIntros (v δ v' δ') "(<- & <- & _)"; repeat iSplit; auto.
+      by case_match.
+    - iSpecialize ("HMod" with "HRes").
+      iApply (semWP2_mono with "HMod").
+      iIntros (v δ v' δ') "(<- & <-)".
+      repeat iSplit; auto.
+      by case_match.
+    - iSpecialize ("HTrap" with "HRes").
+      iApply (semWP2_mono with "HTrap").
+      iIntros (v δ v' δ') "(<- & <-)".
+      repeat iSplit; auto.
+      by case_match.
+    - iSpecialize ("HRec" with "HRes").
+      iApply (semWP2_mono with "HRec").
+      iIntros (v δ v' δ') "(<- & <-)".
+      repeat iSplit; auto.
+      by case_match.
+  Qed.
 End Loop.
