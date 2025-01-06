@@ -38,11 +38,12 @@ From Katamaran Require Import
      Notations
      Bitvector
      Sep.Hoare
-     Shallow.Executor
-     Shallow.Soundness
      Specification
-     Symbolic.Executor
-     Symbolic.Soundness
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.RefineExecutor
+     MicroSail.Soundness
      RiscvPmp.PmpCheck
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
@@ -776,20 +777,20 @@ Module RiscvPmpSpecVerif.
   Proof.
     intros.
     destruct f; try discriminate H; eexists.
-    - apply (valid_contract _ H valid_execute_rX).
-    - apply (valid_contract _ H valid_execute_wX).
-    - apply (valid_contract _ H valid_execute_tick_pc).
-    - apply (valid_contract_debug _ H valid_contract_within_phys_mem).
-    - apply (valid_contract _ H valid_mem_read).
-    - apply (valid_contract _ H valid_checked_mem_read).
-    - apply (valid_contract _ H valid_checked_mem_write).
-    - apply (valid_contract _ H valid_pmp_mem_read).
-    - apply (valid_contract _ H valid_pmp_mem_write).
-    - apply (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
-    - apply (valid_contract_debug _ H valid_pmpMatchAddr).
-    - apply (valid_contract _ H valid_mem_write_value).
-    - apply (valid_contract _ H valid_execute_fetch).
-    - apply (valid_contract_debug _ H valid_contract_execute_EBREAK).
+    - refine (valid_contract _ H valid_execute_rX).
+    - refine (valid_contract _ H valid_execute_wX).
+    - refine (valid_contract _ H valid_execute_tick_pc).
+    - refine (valid_contract_debug _ H valid_contract_within_phys_mem).
+    - refine (valid_contract _ H valid_mem_read).
+    - refine (valid_contract _ H valid_checked_mem_read).
+    - refine (valid_contract _ H valid_checked_mem_write).
+    - refine (valid_contract _ H valid_pmp_mem_read).
+    - refine (valid_contract _ H valid_pmp_mem_write).
+    - refine (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
+    - refine (valid_contract_debug _ H valid_pmpMatchAddr).
+    - refine (valid_contract _ H valid_mem_write_value).
+    - refine (valid_contract _ H valid_execute_fetch).
+    - refine (valid_contract_debug _ H valid_contract_execute_EBREAK).
   Qed.
 End RiscvPmpSpecVerif.
 
@@ -800,9 +801,9 @@ Module RiscvPmpIrisInstanceWithContracts.
     RiscvPmpProgram RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase
     RiscvPmpIrisAdeqParameters
     RiscvPmpIrisInstance.
-  Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature
+  Include MicroSail.ShallowSoundness.Soundness RiscvPmpBase RiscvPmpSignature
     RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
-  Include Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpSignature
+  Include MicroSail.RefineExecutor.RefineExecOn RiscvPmpBase RiscvPmpSignature
     RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor
     RiscvPmpBlockVerifExecutor.
 

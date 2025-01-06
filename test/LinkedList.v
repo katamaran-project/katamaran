@@ -57,14 +57,14 @@ From Katamaran Require Import
      Semantics
      Semantics.Registers
      Sep.Hoare
-     Sep.Logic
-     Shallow.Executor
-     Shallow.Soundness
      Signature
      Specification
-     Symbolic.Executor
      Symbolic.Solver
-     Symbolic.Soundness.
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.RefineExecutor
+     MicroSail.Soundness.
 
 From stdpp Require decidable finite list fin_maps infinite.
 From iris.proofmode Require string_ident tactics.
@@ -940,9 +940,9 @@ Module ExampleModel.
       ExampleIrisBase ExampleIrisAdeqParams ExampleIrisInstance.
 
     (* Import the soundness proofs for the shallow and symbolic executors. *)
-    Include Shallow.Soundness.Soundness ExampleBase ExampleSignature
+    Include MicroSail.ShallowSoundness.Soundness ExampleBase ExampleSignature
       ExampleProgram ExampleSpecification ExampleShalExec.
-    Include Symbolic.Soundness.Soundness ExampleBase ExampleSignature
+    Include MicroSail.RefineExecutor.RefineExecOn ExampleBase ExampleSignature
       ExampleProgram ExampleSpecification ExampleShalExec ExampleExecutor.
 
     (* In this section we verify the contracts of the foreign functions defined in

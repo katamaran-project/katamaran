@@ -40,8 +40,8 @@ From Equations Require Import
 From Katamaran Require Import
      Signature
      Semantics.Registers
-     Symbolic.Executor
-     Shallow.Executor
+     MicroSail.SymbolicExecutor
+     MicroSail.ShallowExecutor
      Symbolic.Solver
      Specification
      Program.
@@ -299,7 +299,7 @@ Qed.
 Lemma symbolic_no_replay_valid_contract_main :
   VerificationCondition
     (postprocess
-       (postprocess (SStoreSpec.vcgen default_config 1 sep_contract_main (FunDef main) wnil))).
+       (postprocess (SStoreSpec.vcgen (sexec default_config 1) sep_contract_main (FunDef main) wnil))).
 Proof.
   compute. (* Output: replay would solve more than what we see here! Once we now the shape of the list, the Q predicate can be simplified in a way that makes the goal trivial to solve. *)
   constructor.
@@ -310,7 +310,7 @@ Qed.
 Lemma symbolic_replay_valid_contract_main :
   VerificationCondition
     (postprocess
-       (SPureSpec.replay (postprocess (SStoreSpec.vcgen default_config 1 sep_contract_main (FunDef main) wnil)))).
+       (SPureSpec.replay (postprocess (SStoreSpec.vcgen (sexec default_config 1) sep_contract_main (FunDef main) wnil)))).
 Proof.
   compute. (* Output: with the replay functionality the residu VC is trivial. *)
   firstorder.

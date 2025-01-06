@@ -37,7 +37,6 @@ From Katamaran Require Import
      Program
      Semantics
      Sep.Hoare
-     Sep.Logic
      Specification
      RiscvPmp.PmpCheck
      RiscvPmp.Machine

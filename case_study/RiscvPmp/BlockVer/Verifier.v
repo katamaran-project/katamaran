@@ -42,14 +42,15 @@ From Katamaran Require Import
      Bitvector
      Refinement.Monads
      Sep.Hoare
-     Shallow.Executor
-     Shallow.Soundness
      Specification
-     Symbolic.Executor
      Symbolic.Propositions
      Symbolic.Solver
-     Symbolic.Soundness
      Symbolic.Worlds
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.RefineExecutor
+     MicroSail.Soundness
      RiscvPmp.BlockVer.Spec
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
@@ -99,7 +100,7 @@ Section BlockVerificationDerived.
   Section Symbolic.
 
     Import ModalNotations.
-    Import SStoreSpec (evalStoreSpec, exec).
+    Import SStoreSpec (evalStoreSpec).
     Import SHeapSpec SHeapSpec.notations.
     Import asn.notations.
 
@@ -122,7 +123,7 @@ Section BlockVerificationDerived.
         ⟨ θ1 ⟩ _  <- produce
                        (exec_instruction_prologue i)
                        [env].["a"∷_ ↦ a] ;;
-        ⟨ θ2 ⟩ _  <- evalStoreSpec (exec default_config inline_fuel (FunDef step)) [env] ;;
+        ⟨ θ2 ⟩ _  <- evalStoreSpec (sexec default_config inline_fuel (FunDef step) _) [env] ;;
         ⟨ θ3 ⟩ na <- angelic None _ ;;
         let a3 := persist__term a (θ1 ∘ θ2 ∘ θ3) in
         ⟨ θ4 ⟩ _  <- consume
@@ -184,7 +185,7 @@ Section BlockVerificationDerived.
 
   Section Shallow.
 
-    Import CStoreSpec (evalStoreSpec, exec).
+    Import CStoreSpec (evalStoreSpec).
     Import CHeapSpec CHeapSpec.notations.
 
     Definition cexec_instruction (i : AST) :
@@ -194,7 +195,7 @@ Section BlockVerificationDerived.
         _ <- produce
                (exec_instruction_prologue i)
                [env].["a"∷_ ↦ a] ;;
-        _ <- evalStoreSpec (exec inline_fuel (FunDef step)) [env] ;;
+        _ <- evalStoreSpec (cexec inline_fuel (FunDef step)) [env] ;;
         na <- angelic _ ;;
         _ <- consume
                (exec_instruction_epilogue i)
@@ -236,13 +237,7 @@ Section BlockVerificationDerived.
       (* CHeapSpec.run does not perform a leakcheck. We could include one here. *)
       CHeapSpec.run (cexec_triple_addr req b ens).
 
-    #[export] Instance mon_eval_exec {Γ τ} n (s : Stm Γ τ) δ :
-      Monotonic (MHeapSpec eq) (CStoreSpec.evalStoreSpec (CStoreSpec.exec n s) δ).
-    Proof.
-      intros P Q PQ h. unfold Basics.impl, CStoreSpec.evalStoreSpec.
-      apply RiscvPmpIrisInstanceWithContracts.exec_monotonic.
-      intros ? ? ?. now apply PQ.
-    Qed.
+    Import (hints) CStoreSpec.
 
     #[export] Instance mono_cexec_instruction {i a} :
       Monotonic (MHeapSpec eq) (cexec_instruction i a).
@@ -258,6 +253,7 @@ Section BlockVerificationDerived.
 
     Import iris.proofmode.tactics logicalrelation logicalrelation.notations.
     Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
+    Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpSignature.HeapSpec.
 
     Lemma rexec_instruction (i : AST) {w} :
@@ -369,7 +365,7 @@ Section BlockVerificationDerived.
              CPureSpec.demonic CStoreSpec.evalStoreSpec].
       cbn - [consume].
       iIntros (Hverif) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
-      specialize (Hverif npc). apply exec_sound_forwards in Hverif.
+      specialize (Hverif npc). apply sound_cexec in Hverif.
       iApply (semWP_mono with "[-]").
       iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
       iApply contractsSound.
@@ -622,6 +618,7 @@ Section AnnotatedBlockVerification.
 
   Section Relational.
 
+    Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
     Import logicalrelation logicalrelation.notations.
     Import proofmode.
@@ -726,28 +723,13 @@ Section AnnotatedBlockVerification.
           iIntros (->) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
           now iApply ("Hk" with "[$Hpc $Hnpc $Hinstrs Hh]").
         + iIntros (Hlemcall) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-          assert (call_lemma (LEnv lem) (evals es [env])
-                    (fun _ h2 =>
-                       interpret_scheap h2 ⊢
-                       lptsreg pc apc ∗ (∃ v : Val ty_xlenbits, lptsreg nextpc v) ∗
-                       ptsto_instrs ainstr (omap extract_AST instrs) -∗
-                       (∀ an : Val ty_xlenbits,
-                          lptsreg pc an ∗ (∃ v : Val ty_xlenbits, lptsreg nextpc v) ∗
-                          ptsto_instrs ainstr (omap extract_AST instrs) ∗ POST an -∗ WP_loop)
-                       -∗ WP_loop) h) as Hcalllemma.
-          { revert Hlemcall. apply mon_call_lemma. intros _ _ _.
-            iIntros (h2 Heb) "Hh2 (Hpc & Hnpc & Hinstrs) Hk".
-            iApply (IHinstrs _ _ _ _ Heb with "[$Hh2 $Hpc $Hnpc $Hinstrs]").
-            now iApply "Hk".
-          }
-          clear Hlemcall.
           pose proof (Hlem := lemSem _ lem).
-          apply call_lemma_sound in Hcalllemma.
-          destruct Hcalllemma.
-          cbn in *.
-          iPoseProof (H with "Hh") as "(%ι & _ & Hreq & Hk2)".
-          iApply ("Hk2" with "[Hreq] [$Hpc $Hnpc $Hinstrs] Hk").
-          now iApply Hlem.
+          apply call_lemma_sound in Hlemcall. destruct Hlemcall. cbn in *.
+          iPoseProof (H with "Hh") as "(%ι & %Heq & Hreq & Hk2)". clear H.
+          iPoseProof (Hlem with "Hreq") as "Hens".
+          iPoseProof ("Hk2" with "Hens") as "(%h' & Hh' & %Hk2)".
+          apply IHinstrs in Hk2.
+          iApply (Hk2 with "[$Hh' $Hpc $Hnpc $Hinstrs] Hk").
     Qed.
 
     Definition semTripleAnnotatedBlock (PRE : Val ty_word -> iProp Σ)

@@ -79,11 +79,11 @@ Module Type SymbolicExecOn
         { debug_call_function_parameters    : PCtx;
           debug_call_function_result_type   : Ty;
           debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
-          debug_call_function_contract      : SepContract debug_call_function_parameters debug_call_function_result_type;
+          debug_call_function_contract      : option (SepContract debug_call_function_parameters debug_call_function_result_type);
           debug_call_function_arguments     : SStore debug_call_function_parameters Σ;
-          debug_call_program_context        : PCtx;
+          (* debug_call_program_context        : PCtx; *)
           debug_call_pathcondition          : PathCondition Σ;
-          debug_call_localstore             : SStore debug_call_program_context Σ;
+          (* debug_call_localstore             : SStore debug_call_program_context Σ; *)
           debug_call_heap                   : SHeap Σ;
         }.
 
@@ -100,8 +100,8 @@ Module Type SymbolicExecOn
     #[export] Instance SubstDebugCall : Subst DebugCall :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
-        | MkDebugCall f c ts pc δ h =>
-          MkDebugCall f c (subst ts ζ01) (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
+        | MkDebugCall f c ts pc (* δ *) h =>
+          MkDebugCall f c (subst ts ζ01) (subst pc ζ01) (* (subst δ ζ01) *) (subst h ζ01)
         end.
 
     #[export] Instance SubstLawsDebugCall : SubstLaws DebugCall.
@@ -115,12 +115,12 @@ Module Type SymbolicExecOn
     #[export] Instance OccursCheckDebugCall : OccursCheck DebugCall :=
       fun Σ x xIn d =>
         match d with
-        | MkDebugCall f c ts pc δ h =>
+        | MkDebugCall f c ts pc (* δ *) h =>
             ts' <- occurs_check xIn ts ;;
             pc' <- occurs_check xIn pc ;;
-            δ'  <- occurs_check xIn δ ;;
+            (* δ'  <- occurs_check xIn δ ;; *)
             h'  <- occurs_check xIn h ;;
-            Some (MkDebugCall f c ts' pc' δ' h')
+            Some (MkDebugCall f c ts' pc' (* δ' *) h')
         end.
 
     #[export] Instance SubstDebugStm : Subst DebugStm :=
@@ -189,6 +189,16 @@ Module Type SymbolicExecOn
   Definition SStoreSpec (Γ1 Γ2 : PCtx) (A : TYPE) : TYPE :=
     □(A -> SStore Γ2 -> SHeap -> 𝕊) -> SStore Γ1 -> SHeap -> 𝕊.
 
+  (* The paper discusses the case that a function call is replaced by
+     interpreting the contract instead. However, this is not always
+     convenient. We therefore parameterize the executor by other functions
+     that interpret function calls and lemma applications. The following
+     types describe the executor and the parameters. *)
+  Definition ExecCall := forall Δ τ, 𝑭 Δ τ -> ⊢ SStore Δ -> SHeapSpec (WTerm τ).
+  Definition ExecCallForeign := forall Δ τ, 𝑭𝑿 Δ τ -> ⊢ SStore Δ -> SHeapSpec (WTerm τ).
+  Definition ExecLemma := forall Δ, 𝑳 Δ -> ⊢ SStore Δ -> SHeapSpec Unit.
+  Definition Exec := forall Γ τ (s : Stm Γ τ), ⊢ SStoreSpec Γ Γ (WTerm τ).
+
   Module SStoreSpec.
 
     Local Hint Extern 2 (Persistent (WTerm ?σ)) =>
@@ -200,7 +210,7 @@ Module Type SymbolicExecOn
         ⊢ SStoreSpec Γ1 Γ2 A -> SStore Γ1 -> SHeapSpec A :=
         fun w m δ Φ => m (fun w1 θ1 a1 _ => Φ w1 θ1 a1) δ.
 
-      Definition lift_purem {Γ} {A : TYPE} :
+      Definition lift_purespec {Γ} {A : TYPE} :
         ⊢ SPureSpec A -> SStoreSpec Γ Γ A :=
         fun w0 m POST δ0 h0 =>
           m (fun w1 ω01 a1 => POST w1 ω01 a1 (persist δ0 ω01) (persist h0 ω01)).
@@ -235,12 +245,12 @@ Module Type SymbolicExecOn
 
       Definition angelic {Γ} (x : option LVar) :
         ⊢ ∀ σ, SStoreSpec Γ Γ (STerm σ) :=
-        fun w σ => lift_purem (SPureSpec.angelic x σ).
+        fun w σ => lift_purespec (SPureSpec.angelic x σ).
       Global Arguments angelic {Γ} x [w] σ : rename.
 
       Definition demonic {Γ} (x : option LVar) :
         ⊢ ∀ σ, SStoreSpec Γ Γ (STerm σ) :=
-        fun w σ => lift_purem (SPureSpec.demonic x σ).
+        fun w σ => lift_purespec (SPureSpec.demonic x σ).
       Global Arguments demonic {Γ} x [w] σ : rename.
 
       Definition debug {AT} {Γ1 Γ2} :
@@ -249,12 +259,12 @@ Module Type SymbolicExecOn
 
       Definition angelic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SStoreSpec Γ Γ (fun w => NamedEnv (Term w) Δ) :=
-        fun w Δ => lift_purem (SPureSpec.angelic_ctx n Δ).
+        fun w Δ => lift_purespec (SPureSpec.angelic_ctx n Δ).
       Global Arguments angelic_ctx {N} n {Γ} [w] Δ : rename.
 
       Definition demonic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SStoreSpec Γ Γ (fun w => NamedEnv (Term w) Δ) :=
-        fun w Δ => lift_purem (SPureSpec.demonic_ctx n Δ).
+        fun w Δ => lift_purespec (SPureSpec.demonic_ctx n Δ).
       Global Arguments demonic_ctx {N} n {Γ} [w] Δ : rename.
 
     End Basic.
@@ -283,69 +293,6 @@ Module Type SymbolicExecOn
 
     End notations.
     Local Open Scope mut_scope.
-
-    Section AssumeAssert.
-
-      (* Add the provided formula to the path condition. *)
-      Definition assume_formula {Γ} :
-        ⊢ Formula -> SStoreSpec Γ Γ Unit :=
-        fun w0 fml => lift_purem (SPureSpec.assume_formula fml).
-
-      Definition assert_formula {Γ} :
-        ⊢ Formula -> SStoreSpec Γ Γ Unit :=
-        fun w0 fml POST δ0 h0 =>
-          lift_purem
-            (SPureSpec.assert_formula
-               (amsg.mk (MkDebugAssertFormula (wco w0) h0 fml)) fml)
-            POST δ0 h0.
-
-      Definition assert_pathcondition {Γ} :
-        ⊢ PathCondition -> SStoreSpec Γ Γ Unit :=
-        fun w0 fmls POST δ0 h0 =>
-          lift_purem
-            (SPureSpec.assert_pathcondition
-               (amsg.mk
-                  {| msg_function := "SStoreSpec._assert_pathcondition";
-                     msg_message := "Proof obligation";
-                     msg_program_context := Γ;
-                     msg_localstore := δ0;
-                     msg_heap := h0;
-                     msg_pathcondition := wco w0
-                  |}) fmls) POST δ0 h0.
-
-      Definition assert_eq_env {Γ} {Δ : Ctx Ty} :
-        let E := fun w : World => Env (Term w) Δ in
-        ⊢ E -> E -> SStoreSpec Γ Γ Unit :=
-        fun w0 E1 E2 POST δ0 h0 =>
-          lift_purem
-            (SPureSpec.assert_eq_env
-               (amsg.mk
-                  {| msg_function := "SStoreSpec.assert_eq_env";
-                     msg_message := "Proof obligation";
-                     msg_program_context := Γ;
-                     msg_localstore := δ0;
-                     msg_heap := h0;
-                     msg_pathcondition := wco w0
-                  |}) E1 E2)
-            POST δ0 h0.
-
-      Definition assert_eq_nenv {N Γ} {Δ : NCtx N Ty} :
-        let E := fun w : World => NamedEnv (Term w) Δ in
-        ⊢ E -> E -> SStoreSpec Γ Γ Unit :=
-        fun w0 E1 E2 POST δ0 h0 =>
-          lift_purem
-            (SPureSpec.assert_eq_nenv
-               (amsg.mk
-                  {| msg_function := "SStoreSpec.assert_eq_env";
-                     msg_message := "Proof obligation";
-                     msg_program_context := Γ;
-                     msg_localstore := δ0;
-                     msg_heap := h0;
-                     msg_pathcondition := wco w0
-                  |}) E1 E2)
-            POST δ0 h0.
-
-    End AssumeAssert.
 
     Section PatternMatching.
 
@@ -390,193 +337,94 @@ Module Type SymbolicExecOn
 
     End State.
 
-    Section ProduceConsume.
+    Section ExecAux.
 
-      Definition produce_chunk {Γ} :
-        ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c => lift_heapspec (SHeapSpec.produce_chunk c).
-      Arguments produce_chunk {Γ} w c Φ δ : simpl never.
+      Variable exec_call_foreign : ExecCallForeign.
+      Variable exec_lemma : ExecLemma.
+      Variable exec_call : ExecCall.
 
-      Definition consume_chunk {Γ} :
-        ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c => lift_heapspec (SHeapSpec.consume_chunk c).
-      Arguments consume_chunk {Γ} w c Φ δ : simpl never.
-
-      Definition consume_chunk_angelic {Γ} :
-        ⊢ Chunk -> SStoreSpec Γ Γ Unit :=
-        fun w0 c => lift_heapspec (SHeapSpec.consume_chunk_angelic c).
-
-      Definition produce {Σ Γ} (asn : Assertion Σ) :
-        ⊢ Sub Σ -> SStoreSpec Γ Γ Unit :=
-        fun w θ => lift_heapspec (SHeapSpec.produce asn θ).
-
-      Definition consume {Σ Γ} (asn : Assertion Σ) :
-        ⊢ Sub Σ -> SStoreSpec Γ Γ Unit :=
-        fun w θ => lift_heapspec (SHeapSpec.consume asn θ).
-
-      Definition read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) :
-        ⊢ SStoreSpec Γ Γ (WTerm τ) :=
-        fun w => lift_heapspec (SHeapSpec.read_register r).
-      #[global] Arguments read_register {Γ τ} r {w}.
-
-      Definition write_register {Γ τ} (r : 𝑹𝑬𝑮 τ) :
-        ⊢ WTerm τ -> SStoreSpec Γ Γ (WTerm τ) :=
-        fun w t => lift_heapspec (SHeapSpec.write_register r t).
-
-    End ProduceConsume.
-
-    Section Exec.
-
-      Variable cfg : Config.
-
-      Definition call_contract {Γ Δ τ} (c : SepContract Δ τ) :
-        ⊢ SStore Δ -> SStoreSpec Γ Γ (STerm τ) :=
-        fun w δΔ => lift_heapspec (SHeapSpec.call_contract c δΔ).
-
-      Definition call_lemma {Γ Δ} (lem : Lemma Δ) :
-        ⊢ SStore Δ -> SStoreSpec Γ Γ Unit :=
-        fun w δΔ => lift_heapspec (SHeapSpec.call_lemma lem δΔ).
-
-      Definition call_contract_debug {Γ Δ τ} (f : 𝑭 Δ τ) (c : SepContract Δ τ) :
-        ⊢ SStore Δ -> SStoreSpec Γ Γ (STerm τ) :=
-        fun w0 δΔ =>
-          let o := call_contract c δΔ in
-          if config_debug_function cfg f
-          then
+      (* The openly-recursive executor. *)
+      Definition exec_aux : forall {Γ τ} (s : Stm Γ τ), ⊢ SStoreSpec Γ Γ (STerm τ) :=
+      fix exec_aux {Γ τ} s {w0} :=
+        match s with
+        | stm_val _ v => pure (term_val τ v)
+        | stm_exp e => eval_exp e (w:=w0)
+        | stm_let x σ s__σ s__τ =>
+            ⟨ ω01 ⟩ t <- exec_aux s__σ;;
+            pushpop t (exec_aux s__τ)
+        | stm_block δ s =>
+            pushspops (lift δ) (exec_aux s)
+        | stm_assign x s =>
+            ⟨ ω01 ⟩ t <- exec_aux s;;
+            ⟨ ω12 ⟩ _ <- assign x t;;
+            pure (persist__term t ω12)
+        | stm_call f es =>
+            ⟨ ω01 ⟩ args <- eval_exps es (w:=w0) ;;
+            lift_heapspec (exec_call f args)
+        | stm_call_frame δ s =>
+            ⟨ ω01 ⟩ δ1 <- get_local (w:=w0);;
+            ⟨ ω12 ⟩ _  <- put_local (lift δ);;
+            ⟨ ω23 ⟩ t  <- exec_aux s;;
+            ⟨ ω34 ⟩ _  <- put_local (persist δ1 (ω12 ∘ ω23));;
+            pure (persist__term t ω34)
+        | stm_foreign f es =>
+            ⟨ ω01 ⟩ args <- eval_exps es (w:=w0) ;;
+            lift_heapspec (exec_call_foreign f args)
+        | stm_lemmak l es k =>
+            ⟨ ω01 ⟩ args <- eval_exps es (w:=w0) ;;
+            ⟨ ω12 ⟩ _  <- lift_heapspec (exec_lemma l args) ;;
+            exec_aux k
+        | stm_seq s1 s2 =>
+            ⟨ ω01 ⟩ _ <- exec_aux s1 ;;
+            exec_aux s2
+        | stm_assertk e _ k =>
+            ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
+            (* This uses assume_formula for a partial correctness
+               interpretation of the object language failure effect. *)
+            ⟨ ω12 ⟩ _ <- lift_heapspec (SHeapSpec.assume_formula (formula_bool t)) ;;
+            exec_aux k
+        | stm_fail _ _ =>
+            (* Same as stm_assert: partial correctness of failure. *)
+            block (w:=w0)
+        | stm_read_register reg =>
+            lift_heapspec (SHeapSpec.read_register reg)
+        | stm_write_register reg e =>
+            ⟨ _ ⟩ tnew <- eval_exp e (w:=_) ;;
+            lift_heapspec (SHeapSpec.write_register reg tnew)
+        | stm_pattern_match s pat rhs =>
+            ⟨ θ1 ⟩ v  <- exec_aux s ;;
+            ⟨ θ2 ⟩ '(existT pc vs) <- demonic_pattern_match PVartoLVar pat v ;;
+            pushspops vs (exec_aux (rhs pc))
+        | stm_bind _ _ =>
+            error
+              (fun δ h =>
+                 amsg.mk
+                   {| msg_function := "SStoreSpec.exec";
+                     msg_message := "stm_bind not supported";
+                     msg_program_context := _;
+                     msg_localstore := δ;
+                     msg_heap := h;
+                     msg_pathcondition := wco w0
+                   |})
+        | stm_debugk k =>
             debug
-              (fun δ h => amsg.mk
-                          {| debug_call_function_parameters := Δ;
-                             debug_call_function_result_type := τ;
-                             debug_call_function_name := f;
-                             debug_call_function_contract := c;
-                             debug_call_function_arguments := δΔ;
-                             debug_call_program_context := Γ;
-                             debug_call_pathcondition := wco w0;
-                             debug_call_localstore := δ;
-                             debug_call_heap := h|})
-              o
-          else o.
-
-      (* The paper discusses the case that a function call is replaced by
-         interpreting the contract instead. However, this is not always
-         convenient. We therefore make contracts for functions optional and
-         if a function does not have a contract, we continue executing
-         the body of the called function. A paramter [inline_fuel] controls the
-         number of levels this is allowed before failing execution. Therefore,
-         we write the executor in an open-recusion style and [Exec] is the
-         closed type of such an executor. *)
-      Definition Exec := forall Γ τ (s : Stm Γ τ), ⊢ SStoreSpec Γ Γ (STerm τ).
-
-      Section ExecAux.
-
-        (* The executor for "inlining" a call. *)
-        Variable rec : Exec.
-
-        (* The openly-recursive executor. *)
-        Definition exec_aux : forall {Γ τ} (s : Stm Γ τ), ⊢ SStoreSpec Γ Γ (STerm τ) :=
-          fix exec_aux {Γ τ} s {w0} :=
-            match s with
-            | stm_val _ v => pure (term_val τ v)
-            | stm_exp e => eval_exp e (w:=w0)
-            | stm_let x σ s__σ s__τ =>
-                ⟨ ω01 ⟩ t <- exec_aux s__σ;;
-                pushpop t (exec_aux s__τ)
-            | stm_block δ s =>
-                pushspops (lift δ) (exec_aux s)
-            | stm_assign x s =>
-                ⟨ ω01 ⟩ t <- exec_aux s;;
-                ⟨ ω12 ⟩ _ <- assign x t;;
-                pure (persist__term t ω12)
-            | stm_call f es =>
-                ⟨ ω01 ⟩ args <- eval_exps es (w:=w0) ;;
-                match CEnv f with
-                | Some a => call_contract_debug f a args
-                | None => fun POST δΓ =>
-                            rec (FunDef f)
-                              (fun w2 ω12 res _ => POST w2 ω12 res (persist δΓ ω12))
-                              args
-                end
-            | stm_call_frame δ s =>
-                ⟨ ω01 ⟩ δ1 <- get_local (w:=w0);;
-                ⟨ ω12 ⟩ _  <- put_local (lift δ);;
-                ⟨ ω23 ⟩ t  <- exec_aux s;;
-                ⟨ ω34 ⟩ _  <- put_local (persist δ1 (ω12 ∘ ω23));;
-                pure (persist__term t ω34)
-            | stm_foreign f es =>
-                ⟨ ω01 ⟩ args <- eval_exps es (w:=w0) ;;
-                call_contract (CEnvEx f) args
-            | stm_lemmak l es k =>
-                ⟨ ω01 ⟩ args <- eval_exps es (w:=w0) ;;
-                ⟨ ω12 ⟩ _  <- call_lemma (LEnv l) args;;
-                exec_aux k
-            | stm_seq s1 s2 =>
-                ⟨ ω01 ⟩ _ <- exec_aux s1 ;;
-                exec_aux s2
-            | stm_assertk e _ k =>
-                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                (* This uses assume_formula for a partial correctness
-                interpretation of the object language failure effect. *)
-                ⟨ ω12 ⟩ _ <- assume_formula (formula_bool t) ;;
-                exec_aux k
-            | stm_fail _ _ =>
-                (* Same as stm_assert: partial correctness of failure. *)
-                block (w:=w0)
-            | stm_read_register reg =>
-                read_register reg
-            | stm_write_register reg e =>
-                ⟨ _ ⟩ tnew <- eval_exp e (w:=_) ;;
-                write_register reg tnew
-            | stm_pattern_match s pat rhs =>
-                ⟨ θ1 ⟩ v  <- exec_aux s ;;
-                ⟨ θ2 ⟩ '(existT pc vs) <- demonic_pattern_match PVartoLVar pat v ;;
-                pushspops vs (exec_aux (rhs pc))
-            | stm_bind _ _ =>
-                error
-                  (fun δ h =>
-                     amsg.mk
-                     {| msg_function := "SStoreSpec.exec";
-                        msg_message := "stm_bind not supported";
-                        msg_program_context := _;
-                        msg_localstore := δ;
-                        msg_heap := h;
-                        msg_pathcondition := wco w0
-                  |})
-            | stm_debugk k =>
-                debug
-                  (fun (δ0 : SStore Γ w0) (h0 : SHeap w0) =>
-                     amsg.mk
-                     {| debug_stm_program_context := Γ;
-                        debug_stm_statement_type := τ;
-                        debug_stm_statement := k;
-                        debug_stm_pathcondition := wco w0;
-                        debug_stm_localstore := δ0;
-                        debug_stm_heap := h0
-                     |})
-                  (exec_aux k)
-            end.
-
-      End ExecAux.
-      Arguments exec_aux rec {Γ τ} !s.
-
-      (* The constructed closed executor. *)
-      Fixpoint exec (inline_fuel : nat) : Exec :=
-        match inline_fuel with
-        | O   => fun _ _ _ _ =>
-                  error
-                    (fun δ h =>
-                       amsg.mk
-                         {| msg_function := "SStoreSpec.exec";
-                           msg_message := "out of fuel for inlining";
-                           msg_program_context := _;
-                           msg_localstore := δ;
-                           msg_heap := h;
-                           msg_pathcondition := wco _
-                         |})
-        | S n => @exec_aux (@exec n)
+              (fun (δ0 : SStore Γ w0) (h0 : SHeap w0) =>
+                 amsg.mk
+                   {| debug_stm_program_context := Γ;
+                     debug_stm_statement_type := τ;
+                     debug_stm_statement := k;
+                     debug_stm_pathcondition := wco w0;
+                     debug_stm_localstore := δ0;
+                     debug_stm_heap := h0
+                   |})
+              (exec_aux k)
         end.
-      Global Arguments exec _ {_ _} s {w} : simpl never.
 
-      Variable inline_fuel : nat.
+    End ExecAux.
+
+    Section WithExec.
+
+      Context (exec : Exec).
 
       Import SHeapSpec.notations.
 
@@ -588,7 +436,7 @@ Module Type SymbolicExecOn
               ⟨ θ1 ⟩ lenv  <- SHeapSpec.demonic_ctx id lvars ;;
               ⟨ θ2 ⟩ _     <- SHeapSpec.produce req lenv ;;
               let lenv2 := persist (A := Sub _) lenv θ2 in
-              ⟨ θ3 ⟩ res   <- evalStoreSpec (exec inline_fuel s) (subst pats lenv2) ;;
+              ⟨ θ3 ⟩ res   <- evalStoreSpec (exec s (w := _)) (subst pats lenv2) ;;
               let lenv3 := persist (A := Sub _) lenv2 θ3 in
               SHeapSpec.consume ens (sub_snoc lenv3 (result∷τ) res)
           end.
@@ -596,16 +444,80 @@ Module Type SymbolicExecOn
       Definition vcgen {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
         fun w => SHeapSpec.run (exec_contract c s (w := w)).
 
-    End Exec.
+    End WithExec.
 
   End SStoreSpec.
+
+  Section WithSpec.
+
+    Definition exec_call_error : ExecCall :=
+      fun Δ τ f w args =>
+        SHeapSpec.lift_purespec (SPureSpec.error amsg.empty).
+
+    Definition sexec_call_foreign : ExecCallForeign :=
+      fun Δ τ f w args =>
+        SHeapSpec.call_contract (CEnvEx f) args.
+
+    Definition sexec_lemma : ExecLemma :=
+      fun Δ l w args =>
+        SHeapSpec.call_lemma (LEnv l) args.
+
+    Import SHeapSpec.notations.
+
+    Variable cfg : Config.
+
+    Definition debug_call [Δ τ] (f : 𝑭 Δ τ) :
+      ⊢ SStore Δ -> SHeapSpec Unit :=
+      fun w0 args0 =>
+        if config_debug_function cfg f
+        then SHeapSpec.debug
+               (fun h0 => amsg.mk {|
+                              debug_call_function_parameters := Δ;
+                              debug_call_function_result_type := τ;
+                              debug_call_function_name := f;
+                              debug_call_function_contract := CEnv f;
+                              debug_call_function_arguments := args0;
+                              (* debug_call_program_context := _; *)
+                              debug_call_pathcondition := wco w0;
+                              (* debug_call_localstore := _; *)
+                              debug_call_heap := h0
+                            |})
+               (SHeapSpec.pure tt)
+        else SHeapSpec.pure tt.
+
+    (* If a function does not have a contract, we continue executing the body of
+       the called function. A parameter [inline_fuel] bounds the number of
+       allowed levels before failing execution. *)
+    Fixpoint sexec_call (inline_fuel : nat) : ExecCall :=
+      fun Δ τ f w0 args0 =>
+        ⟨ θ1 ⟩ _ <- debug_call f args0 ;;
+        (* Let's first see if we have a contract defined for function [f]
+           and then if we have enough fuel for inlining. *)
+        match CEnv f , inline_fuel with
+        | Some c , _ =>
+            (* YES: Execute the call by interpreting the contract. *)
+            SHeapSpec.call_contract c (persist args0 θ1)
+        | None   , 0 =>
+            (* Out of fuel *)
+            exec_call_error f (persist args0 θ1)
+        | None   , S n =>
+            SStoreSpec.evalStoreSpec
+              (SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call n) (FunDef f) (w := _))
+              (persist args0 θ1)
+        end.
+
+    Definition sexec (inline_fuel : nat) : Exec :=
+      @SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call inline_fuel).
+    #[global] Arguments sexec _ [_ _] s _ _ _ : simpl never.
+
+  End WithSpec.
 
   Module Symbolic.
     Import SStoreSpec.
 
     Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition
-        (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil)))).
+        (postprocess (SPureSpec.replay (postprocess (vcgen (sexec default_config fuel) c body wnil)))).
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)
@@ -626,7 +538,7 @@ Module Type SymbolicExecOn
     Qed.
 
     Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil))))).
+      is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen (sexec default_config fuel) c body wnil))))).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       ValidContractReflectWithFuel 1 c body.
@@ -648,7 +560,7 @@ Module Type SymbolicExecOn
     Qed.
 
     Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
-      Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen default_config 1 c body wnil)))).
+      Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen (sexec default_config 1) c body wnil)))).
 
     Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasure c body).
@@ -687,7 +599,7 @@ Module Type SymbolicExecOn
         | Some contract =>
             let contract' := extend_postcond_with_debug contract in
             let body      := FunDef f in
-            let vc        := vcgen default_config 1 contract' body wnil in
+            let vc        := vcgen (sexec default_config 1) contract' body wnil in
             Some (count_to_stats (count_nodes vc empty))
         | None   => None
         end.

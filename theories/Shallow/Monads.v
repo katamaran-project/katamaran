@@ -45,7 +45,6 @@ From Katamaran Require Import
   Symbolic.Propositions
   Symbolic.Worlds.
 
-Import Katamaran.Sep.Logic (wand_sep_adjoint).
 Import SignatureNotations ctx.notations env.notations.
 
 #[local] Set Implicit Arguments.
@@ -758,10 +757,9 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         (interpret_scheap h ⊢
          interpret_scchunk c -∗ ∃ h', interpret_scheap h' ∧ ⌜Φ h'⌝).
       Proof.
-        cbn. intros HΦ. apply wand_sep_adjoint.
-        apply bi.exist_intro' with (c :: h), bi.and_intro.
-        - now rewrite bi.sep_comm.
-        - now apply bi.pure_intro.
+        cbn. intros HΦ. apply bi.wand_intro_l.
+        apply bi.exist_intro' with (c :: h).
+        apply bi.and_intro; auto.
       Qed.
       #[global] Arguments produce_chunk : simpl never.
 
@@ -1027,10 +1025,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       intros ? [] ->. now apply mΦ.
     Qed.
 
-    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) :
-      Monotonic (Val τ ::> MHeapSpec eq) (write_register reg).
+    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) :
+      Monotonic (MHeapSpec eq) (write_register reg v).
     Proof.
-      intros v Φ1 Φ2 mΦ h.
+      intros Φ1 Φ2 mΦ h.
       apply CPureSpec.mon_write_register.
       intros ? [] ->. now apply mΦ.
     Qed.
@@ -1060,7 +1058,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
     Section WithBI.
 
-      Import iris.bi.interface iris.bi.derived_laws iris.bi.extensions.
+      Import iris.proofmode.tactics.
 
       Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
 
@@ -1097,32 +1095,22 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           (interpret_scheap h ⊢
              asn.interpret asn ι -∗ ∃ h', interpret_scheap h' ∧ ⌜Φ tt h'⌝).
       Proof.
-        induction asn; cbn - [CPureSpec.assume_formula inst inst_term]; intros Φ h1.
-        - cbn. intros HΦ. rewrite bi.and_emp.
-          apply wand_sep_adjoint. rewrite bi.sep_comm. apply wand_sep_adjoint.
-          apply bi.pure_elim'. intros Hfml.
-          apply wand_sep_adjoint. rewrite bi.True_sep.
-          apply bi.exist_intro' with h1.
-          apply bi.and_intro; auto.
+        induction asn; cbn - [CPureSpec.assume_formula inst inst_term]; intros Φ h.
+        - iIntros (HΦ) "Hh [%Hfml _]". iExists h. auto.
         - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst.
         - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst.
         - rewrite CPureSpec.wp_demonic_pattern_match.
           destruct pattern_match_val; auto.
-        - intros ->%IHasn1. rewrite -bi.wand_curry. apply bi.wand_mono'; [easy|].
-          apply bi.exist_elim. intros h2.
-          apply bi.pure_elim_r. apply IHasn2.
-        - intros [HΦ1%IHasn1 HΦ2%IHasn2].
-          apply wand_sep_adjoint. rewrite bi.sep_or_l.
-          apply bi.or_elim; now apply wand_sep_adjoint.
-        - intros HΦ.
-          apply wand_sep_adjoint. rewrite bi.sep_comm. apply wand_sep_adjoint.
-          apply bi.exist_elim. intros v.
-          apply wand_sep_adjoint. rewrite bi.sep_comm. apply wand_sep_adjoint.
-          apply IHasn, HΦ.
-        - intros HΦ. rewrite bi.emp_wand.
-          apply bi.exist_intro' with h1.
-          apply bi.and_intro. reflexivity.
-          now apply bi.pure_intro.
+        - iIntros (Hprod1) "H [Hasn1 Hasn2]".
+          iPoseProof (IHasn1 _ _ _ Hprod1 with "H Hasn1") as "(%h2 & H & %Hprod2)".
+          iPoseProof (IHasn2 _ _ _ Hprod2 with "H Hasn2") as "(%h3 & H & %HΦ)".
+          iExists h3. auto.
+        - iIntros ([HΦ1 HΦ2]) "Hh [Hasn1|Hasn2]".
+          iApply (IHasn1 with "Hh Hasn1"); auto.
+          iApply (IHasn2 with "Hh Hasn2"); auto.
+        - iIntros (HΦ) "Hh [%v Hasn]".
+          now iApply (IHasn with "Hh Hasn").
+        - iIntros (HΦ) "Hh _". iExists h. auto.
       Qed.
 
     End WithBI.

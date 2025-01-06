@@ -29,11 +29,13 @@
 From Coq Require Import
   Classes.Morphisms.
 
+From iris Require Import
+  proofmode.tactics.
+
 From Katamaran Require Import
   Context
   Environment
   Notations
-  Sep.Logic
   Specification.
 
 Import ctx.notations.
@@ -47,11 +49,8 @@ Module Type ProgramLogicOn
 Module ProgramLogic.
 
   Section Triples.
-    Import iris.proofmode.tactics.
 
     Context {L : bi} {PI : PredicateDef L}.
-
-    Bind Scope bi_scope with L.
 
     (* Hoare triples for SepContract *)
 
@@ -113,9 +112,9 @@ Module ProgramLogic.
         ⦃ P ⦄ stm_block δΔ k ; δ ⦃ R ⦄
     | rule_stm_seq
         (σ : Ty) (s1 : Stm Γ σ) (s2 : Stm Γ τ)
-        (P : L) (Q : CStore Γ -> L) (R : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ s1 ; δ ⦃ fun _ => Q ⦄ ->
-        (forall δ', ⦃ Q δ' ⦄ s2 ; δ' ⦃ R ⦄) ->
+        (P : L) (Q : Val σ -> CStore Γ -> L) (R : Val τ -> CStore Γ -> L) :
+        ⦃ P ⦄ s1 ; δ ⦃ Q ⦄ ->
+        (forall v δ', ⦃ Q v δ' ⦄ s2 ; δ' ⦃ R ⦄) ->
         ⦃ P ⦄ s1 ;; s2 ; δ ⦃ R ⦄
     | rule_stm_assert
         (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
