@@ -112,7 +112,19 @@ Module IrisInstanceWithContracts2
     ⊢ ▷ ValidContractEnvSem CEnv -∗
        semTriple δ P (stm_call f es) Q.
   Proof.
-  Admitted.
+    iIntros (ceq ctrip) "cenv P".
+    iApply semWP2_call_inline_later.
+    iModIntro.
+    iSpecialize ("cenv" $! _ _ f).
+    rewrite ceq. clear ceq.
+    destruct c as [Σe δΔ req res ens]; cbn in *.
+    iPoseProof (ctrip with "P") as (ι Heq) "[req consr]". clear ctrip.
+    iPoseProof ("cenv" $! ι with "req") as "wpf0". rewrite Heq.
+    iApply (semWP2_mono with "wpf0").
+    iIntros ([] ? ? ?) "(<- & <- & H)"; auto.
+    repeat iSplitR; auto.
+    by iApply "consr".
+  Qed.
 
   Lemma iris_rule_stm_call_frame {Γ} (δ : CStore Γ)
         (Δ : PCtx) (δΔ : CStore Δ) (τ : Ty) (s : Stm Δ τ)
@@ -120,6 +132,10 @@ Module IrisInstanceWithContracts2
         ⊢ (semTriple δΔ P s (fun v _ => Q v δ) -∗
            semTriple δ P (stm_call_frame δΔ s) Q).
   Proof.
+    iIntros "trips P".
+    iSpecialize ("trips" with "P").
+    (* by iApply semWP2_call_frame. *)
+  (* Qed. *)
   Admitted.
 
   Lemma iris_rule_stm_foreign
@@ -129,7 +145,17 @@ Module IrisInstanceWithContracts2
     CTriple P (CEnvEx f) (evals es δ) (λ v : Val τ, Q v δ) ->
     ⊢ semTriple δ P (stm_foreign f es) Q.
   Proof.
-  Admitted.
+    iIntros (forSem ctrip) "P".
+    specialize (forSem Δ τ f Γ es δ).
+    destruct CEnvEx as [Σe δΔ req res ens]; cbn in *.
+    iPoseProof (ctrip with "P") as "[%ι [%Heq [req consr]]]". clear ctrip.
+    iPoseProof (forSem ι Heq with "req") as "WPf". clear forSem.
+    iApply (semWP2_mono with "WPf").
+    iIntros ([v|m] δΓ' ? ?) "(<- & <- & H)"; auto.
+    repeat iSplitR; auto.
+    iDestruct "H" as "(H & <-)".
+    by iApply "consr".
+  Qed.
 
   Lemma iris_rule_stm_lemmak
     {Γ} (δ : CStore Γ) {τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
@@ -139,7 +165,13 @@ Module IrisInstanceWithContracts2
     ⊢ semTriple δ Q k R -∗
       semTriple δ P (stm_lemmak l es k) R.
   Proof.
-  Admitted.
+    iIntros (lemSem ltrip) "tripk P". iApply semWP2_lemmak. iApply "tripk".
+    specialize (lemSem _ l). remember (LEnv l) as contractL.
+    clear - lemSem ltrip.
+    destruct ltrip as [Ψ' pats req ens ent]; cbn in lemSem.
+    iPoseProof (ent with "P") as (ι Heq) "[req consr]".
+    iApply "consr". by iApply lemSem.
+  Qed.
 
   Lemma sound_stm
     {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
@@ -152,31 +184,32 @@ Module IrisInstanceWithContracts2
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
     iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
-    (* - by iApply iris_rule_consequence. *)
-    (* - by iApply iris_rule_frame. *)
-    (* - by iApply iris_rule_pull. *)
-    (* - by iApply iris_rule_exist. *)
-    (* - iApply iris_rule_stm_val. *)
-    (*   by iApply H. *)
-    (* - iApply iris_rule_stm_exp. *)
-    (*   by iApply H. *)
-    (* - by iApply iris_rule_stm_let. *)
-    (* - by iApply iris_rule_stm_block. *)
-    (* - by iApply iris_rule_stm_seq. *)
-    (* - by iApply iris_rule_stm_assertk. *)
-    (* - by iApply iris_rule_stm_fail. *)
-    (* - by iApply iris_rule_stm_read_register. *)
-    (* - by iApply iris_rule_stm_write_register. *)
-    (* - by iApply iris_rule_stm_assign. *)
-    (* - by iApply iris_rule_stm_call. *)
-    (* - by iApply iris_rule_stm_call_inline. *)
-    (* - by iApply iris_rule_stm_call_frame. *)
-    (* - by iApply iris_rule_stm_foreign. *)
-    (* - by iApply iris_rule_stm_lemmak. *)
-    (* - by iApply iris_rule_stm_bind. *)
-    (* - by iApply iris_rule_stm_debugk. *)
-    (* - by iApply iris_rule_stm_pattern_match. *)
-  Admitted.
+    - by iApply iris_rule_consequence.
+    - by iApply iris_rule_frame.
+    - by iApply iris_rule_pull.
+    - by iApply iris_rule_exist.
+    - iApply iris_rule_stm_val.
+      by iApply H.
+    - iApply iris_rule_stm_exp.
+      by iApply H.
+    - by iApply iris_rule_stm_let.
+    - by iApply iris_rule_stm_block.
+    - by iApply iris_rule_stm_seq.
+    - iApply iris_rule_stm_assertk.
+      iIntros "H". by iApply "trips".
+    - by iApply iris_rule_stm_fail.
+    - by iApply iris_rule_stm_read_register.
+    - by iApply iris_rule_stm_write_register.
+    - by iApply iris_rule_stm_assign.
+    - by iApply iris_rule_stm_call.
+    - by iApply iris_rule_stm_call_inline.
+    - by iApply iris_rule_stm_call_frame.
+    - by iApply iris_rule_stm_foreign.
+    - by iApply iris_rule_stm_lemmak.
+    - by iApply iris_rule_stm_bind.
+    - by iApply iris_rule_stm_debugk.
+    - by iApply iris_rule_stm_pattern_match.
+  Qed.
 
   Lemma sound :
     ForeignSem -> LemmaSem -> ValidContractCEnv ->
