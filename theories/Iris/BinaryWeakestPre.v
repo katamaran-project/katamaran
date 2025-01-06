@@ -916,18 +916,16 @@ Section Soundness.
         (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
                       (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
     ⊢ (⌜eval e1 δ = true⌝ -∗ semTriple δ P k Q) -∗
-      (⌜eval e1 δ = false⌝ -∗ semTriple δ P (of_ival (inr (eval e2 δ))) Q) -∗
       semTriple δ P (stm_assertk e1 e2 k) Q.
   Proof.
-    iIntros "Ht Hf". destruct (eval e1 δ) eqn:Ee1.
-    - iIntros "P". iSpecialize ("Ht" with "[] P"); auto.
-      iApply (semWP2_assertk with "[Ht]"); iIntros (H1e H2e);
+    iIntros "Hk P". destruct (eval e1 δ) eqn:Ee1.
+    - iSpecialize ("Hk" with "[] P"); auto.
+      iApply (semWP2_assertk with "[Hk]"); iIntros (H1e H2e);
         try (rewrite H1e in H2e, Ee1; discriminate);
         auto.
-    - iIntros "P". iSpecialize ("Hf" with "[] P"); auto.
-      iApply (semWP2_assertk with "[] [] [] [Hf]"); iIntros (H1e H2e);
-        try (rewrite H1e in H2e, Ee1; discriminate);
-        auto.
+    - iApply semWP2_assertk;
+        iIntros (H1 H2); rewrite Ee1 in H1, H2; try discriminate.
+      now iApply semWP2_fail.
   Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
@@ -954,7 +952,7 @@ Section Soundness.
                               (v : Val σ) :
         ⊢ semTriple δ (lptsreg r v) (stm_write_register r w)
             (λ v' δ',
-              ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r (eval w δ)).
+              ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v').
   Proof.
     iIntros "H". iApply semWP2_write_register. iExists v, v.
     iFrame. iIntros "H". repeat iSplit; auto.
@@ -1054,8 +1052,7 @@ Section Soundness.
     (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
     (P : iProp Σ) (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
     ⊢ semTriple δΓ P s Q -∗
-      (∀ (v : Val σ) δΓ1,
-              ∀ pc δpc,
+      (∀ pc δpc δΓ1,
                 semTriple (δΓ1 ►► δpc) (Q (pattern_match_val_reverse pat pc δpc) δΓ1) (rhs pc)
                   (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))) -∗
       semTriple δΓ P (stm_pattern_match s pat rhs) R.
@@ -1064,7 +1061,7 @@ Section Soundness.
     iApply (semWP2_mono with "Hs"). iIntros (v1 δ1 v2 δ2) "(<- & <- & Q)".
     destruct v1 as [v1|m1].
     - destruct (pattern_match_val pat v1) as [pc δpc] eqn:Ev1.
-      iSpecialize ("Hk" $! v1 δ1 pc δpc with "[Q]").
+      iSpecialize ("Hk" $! pc δpc δ1 with "[Q]").
       { change (pattern_match_val_reverse pat pc δpc) with
           (pattern_match_val_reverse' pat (existT pc δpc)).
         rewrite <- Ev1. now rewrite pattern_match_val_inverse_left. }
