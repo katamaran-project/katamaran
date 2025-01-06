@@ -648,28 +648,29 @@ Module inv := invariants.
     iApply (femto_handler_verified with "[$Hmstatus $Hmtvec $Hmcause Hmepc $Hcurpriv $Hgprs $Hpmpentries $Hpc $Hnextpc $Hinstrs $Hmem] [HaccU]");
       first by now iExists mepcv.
     iIntros "(Hmstatus & Hmtvec & Hmcause & Hcurpriv & Hgprs & Hpmpentries & #Hmem' & [%epc (Hmepc & Hpc)] & Hnpc & Hhandler)".
-    iApply (LoopVerification.valid_semTriple_loop with "[Hmem $Hmstatus $Hmtvec $Hmcause Hmepc $Hpc $Hcurpriv $Hgprs $Hpmpentries $Hnpc $HaccU Hhandler]").
-    iSplitL "Hmepc"; first by now iExists epc.
-    iSplitL "".
-    { iModIntro.
-      unfold LoopVerification.CSRMod.
-      iIntros "(_ & _ & _ & %eq & _)".
-      inversion eq.
+    iPoseProof (LoopVerification.valid_semTriple_loop with "[Hmem $Hmstatus $Hmtvec $Hmcause Hmepc $Hpc $Hcurpriv $Hgprs $Hpmpentries $Hnpc $HaccU Hhandler]") as "H".
+    { iSplitL "Hmepc". iExists epc. iFrame "Hmepc".
+      iSplitL "".
+      { iModIntro.
+        unfold LoopVerification.CSRMod.
+        iIntros "(_ & _ & _ & %eq & _)".
+        inversion eq.
+      }
+      iSplitR "".
+      { iModIntro.
+        unfold LoopVerification.Trap.
+        iIntros "(HaccU & Hgprs & Hpmpentries & Hmcause & Hcurpriv & Hnextpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
+        iApply ("Hind" with "[$Hmstatus $Hmtvec $Hmcause $Hmepc $Hcurpriv $Hpmpentries $Hpc $HaccU Hnextpc Hmem $Hgprs $Hhandler $Hmem]").
+        now iExists _.
+      }
+      { iModIntro.
+        unfold LoopVerification.Recover.
+        iIntros "(_ & _ & _ & %eq & _)".
+        inversion eq.
+      }
     }
-
-    iSplitR "".
-    { iModIntro.
-      unfold LoopVerification.Trap.
-      iIntros "(HaccU & Hgprs & Hpmpentries & Hmcause & Hcurpriv & Hnextpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
-      iApply ("Hind" with "[$Hmstatus $Hmtvec $Hmcause $Hmepc $Hcurpriv $Hpmpentries $Hpc $HaccU Hnextpc Hmem $Hgprs $Hhandler $Hmem]").
-      now iExists _.
-    }
-
-    { iModIntro.
-      unfold LoopVerification.Recover.
-      iIntros "(_ & _ & _ & %eq & _)".
-      inversion eq.
-    }
+    unfold WP_loop.
+    iApply (semWP_mono with "H"). auto.
   Qed.
 
   (* TODO: this lemma feels very incremental wrt to the last one; merge? *)
@@ -815,7 +816,9 @@ Module inv := invariants.
       destruct mst as [mpp].
       now iExists mpp.
     }
-    now iApply LoopVerification.valid_semTriple_loop.
+    iPoseProof (LoopVerification.valid_semTriple_loop with "Hlooppre") as "H".
+    iModIntro. cbn. unfold semWP.
+    iApply (wp_mono with "H"). auto.
   Qed.
 
   Definition mem_has_word (μ : Memory) (a : Val ty_word) (w : Val ty_word) : Prop :=
@@ -1052,14 +1055,17 @@ Module inv := invariants.
     iModIntro.
     iSplitR "".
     - destruct (env.view δ).
-      iApply (femtokernel_init_safe is_mmio).
 
-      Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
-      repeat iDestruct "H'" as "(? & H')".  iFrame "∗ #".
-      rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
-      repeat (iRename select (_ ↦ _)%I into "Hp";
-              iPoseProof (bi.exist_intro with "Hp") as "?").
-      now iFrame.
+      iPoseProof (femtokernel_init_safe is_mmio with "[-]") as "H".
+      {
+        Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
+        repeat iDestruct "H'" as "(? & H')".  iFrame "∗ #".
+        rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
+        repeat (iRename select (_ ↦ _)%I into "Hp";
+                iPoseProof (bi.exist_intro with "Hp") as "?").
+        now iFrame.
+      }
+      iApply (semWP_mono with "H"). by iIntros ([] _) "_".
     - iIntros "Hmem".
       (* Prove that this predicate follows from the invariants in both cases *)
       destruct (negb is_mmio).
