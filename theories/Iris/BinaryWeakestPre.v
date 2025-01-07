@@ -416,7 +416,7 @@ Module IrisBinaryWP
           inversion Hv2; subst. eassumption. eapply step_trans.
           constructor. subst. simpl. apply step_refl.
       - pose proof (stm_to_val_Some_inr Hval) as Hs2'. simpl.
-        iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?semWP_fail ?fupd_idemp.
+        iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?semWP_fail.
         iMod "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         iModIntro. iExists γ23, μ23, δ2'', s2'', v2'. iFrame.
         iPureIntro. split; auto. eapply step_trans. constructor.
