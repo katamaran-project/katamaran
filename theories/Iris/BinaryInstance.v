@@ -134,9 +134,10 @@ Module IrisInstanceWithContracts2
   Proof.
     iIntros "trips P".
     iSpecialize ("trips" with "P").
-    (* by iApply semWP2_call_frame. *)
-  (* Qed. *)
-  Admitted.
+    iApply semWP2_call_frame.
+    iApply (semWP2_mono with "trips").
+    iIntros ([] ? ? ?) "(<- & <- & $)"; auto.
+  Qed.
 
   Lemma iris_rule_stm_foreign
     {Γ} (δ : CStore Γ) {τ} {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)

@@ -334,6 +334,23 @@ Module IrisBinaryWP
         simpl in *; (eapply step_trans; [constructor|auto]); constructor.
     Qed.
 
+    Lemma semWP2_call_frame {Γ1 Γ2 τ Δ} (δ1Δ δ2Δ : CStore Δ) (s1 s2 : Stm Δ τ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
+          semWP2 δ1Δ δ2Δ s1 s2 (λ v1 _ v2 _, Q v1 δ1 v2 δ2) -∗
+          semWP2 δ1 δ2 (stm_call_frame δ1Δ s1) (stm_call_frame δ2Δ s2) Q.
+    Proof.
+      iIntros (Q δ1 δ2) "Hk". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iSpecialize ("Hk" with "Hres"). iApply semWP_call_frame.
+      iApply (semWP_mono with "Hk"). iIntros (v1 _) "H".
+      iMod "H" as "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hsteps & %Hval & Hregs & Hmem & H)".
+      iExists γ22, μ22, δ2, (of_ival v2), v2.
+      iFrame "Hregs Hmem H". iPureIntro. split.
+      - rewrite (stm_to_val_eq Hval) in Hsteps.
+        eapply (Steps_trans (Steps_call_frame Hsteps)).
+        destruct v2; eapply step_trans; simpl; constructor.
+      - apply stm_to_val_of_ival.
+    Qed.
+
     Lemma semWP2_let {Γ1 Γ2 τ x σ} (s1 : Stm Γ1 σ) (s2 : Stm Γ2 σ)
       (k1 : Stm (Γ1 ▻ x∷σ) τ) (k2 : Stm (Γ2 ▻ x∷σ) τ)
       (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
