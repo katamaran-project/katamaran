@@ -213,6 +213,34 @@ Module Type IrisPrelims
       intros; eapply of_to_val; by cbn.
     Defined.
 
+    Lemma stm_to_val_not_Final {Γ τ} {s : Stm Γ τ} :
+      stm_to_val s = None ->
+      ~ Final s.
+    Proof.
+      intros H Hf; destruct s; cbn in Hf; try discriminate; try contradiction.
+    Qed.
+
+    Lemma reducible_no_obs_not_val {Γ τ} {s : Stm Γ τ} :
+      ∀ {δ : CStore Γ} {σ : state (microsail_lang Γ τ)},
+      stm_to_val s = None ->
+      reducible_no_obs {| conf_stm := s; conf_store := δ |} σ.
+    Proof.
+      intros δ [γ μ] H. pose proof (progress s) as [Hs|Hs].
+      - apply stm_to_val_not_Final in H. contradiction.
+      - destruct (Hs γ μ δ) as (γ' & μ' & δ' & s' & Hstep).
+        exists (MkConf s' δ'), (γ', μ'), nil.
+        constructor. simpl. auto.
+    Qed.
+
+    Lemma reducible_not_val {Γ τ} {s : Stm Γ τ} :
+      ∀ {δ : CStore Γ} {σ : state (microsail_lang Γ τ)},
+      stm_to_val s = None ->
+      reducible {| conf_stm := s; conf_store := δ |} σ.
+    Proof.
+      intros δ [γ μ] H. apply reducible_no_obs_reducible.
+      now apply reducible_no_obs_not_val.
+    Qed.
+
   End Language.
 
   Section Registers.

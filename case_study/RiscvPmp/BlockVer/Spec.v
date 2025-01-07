@@ -827,7 +827,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       iIntros "H". cbn in *.
       iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
       iIntros (? ? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
-      iSplitR; first auto.
+      iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_not_val; auto.
       destruct inv; cbn -[prim_step].
       - (* readonly case *)
         unfold interp_ptstomem_readonly.
@@ -856,7 +856,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       iIntros "[%w H]".
       iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
       iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-      iSplitR; first auto.
+      iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_not_val; auto.
       repeat iModIntro.
       iIntros.
       RiscvPmpModel2.eliminate_prim_step Heq.
@@ -874,7 +874,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros "([%Hmmio _] & #Hinv & [-> ->])".
     iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
     iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-    iSplitR; first auto.
+    iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_not_val; auto.
     iInv "Hinv" as (t) " [>Htrf >%Hpred]" "Hclose".
     iDestruct (trace.trace_full_frag_eq with "Htr Htrf") as "%Heqt". subst t.
     iMod (trace.trace_update _ _ (cons _ _) with "[$Htr $Htrf]") as "[Htr Htrf]".
@@ -899,7 +899,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros "%Hdecode".
     iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
     iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-    iSplitR; first auto.
+    iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_not_val; auto.
     repeat iModIntro.
     iIntros.
     RiscvPmpModel2.eliminate_prim_step Heq.
@@ -915,7 +915,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "Hpre".
     iApply (lifting.wp_lift_pure_step_no_fork _ _ ⊤).
-    - cbn; auto.
+    - cbn; auto. intros; apply RiscvPmpIrisBase.reducible_not_val; auto.
     - intros. RiscvPmpModel2.eliminate_prim_step Heq; auto.
     - repeat iModIntro. iIntros. RiscvPmpModel2.eliminate_prim_step Heq; auto.
       rewrite /fun_within_mmio bool_decide_and.

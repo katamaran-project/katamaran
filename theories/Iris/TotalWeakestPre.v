@@ -58,20 +58,20 @@ Module Type IrisTotalWeakestPre
 
   Definition semTWP {Σ} `{sG : sailGS Σ} [Γ τ] (s : Stm Γ τ)
     (Q : Post Γ τ) (δ : CStore Γ) : iProp Σ :=
-    WP (MkConf s δ) ?[{ v, Q (valconf_val v) (valconf_store v) }].
+    WP (MkConf s δ) [{ v, Q (valconf_val v) (valconf_store v) }].
   Global Arguments semTWP {Σ} {sG} [Γ] [τ] s%exp Q%I δ.
 
   Ltac fold_semTWP :=
     first
       [ progress
           change_no_check
-          (twp MaybeStuck top
+          (twp NotStuck top
               {| conf_stm := ?s; conf_store := ?δ |}
               (fun v => ?Q (valconf_val v) (valconf_store v)))
         with (semTWP s Q δ)
       | progress
           change_no_check
-          (twp MaybeStuck top
+          (twp NotStuck top
               {| conf_stm := ?s; conf_store := ?δ |}
               ?Q)
         with (semTWP s (fun v δ' => Q (MkValConf _ v δ')) δ);
@@ -95,7 +95,7 @@ Module Type IrisTotalWeakestPre
         end.
     Proof.
       unfold semTWP. rewrite twp_unfold. unfold twp_pre. cbn.
-      destruct stm_to_val; cbn; [easy|].
+      destruct (stm_to_val s) eqn:Es; cbn; [easy|].
       apply bi.entails_anti_sym; iIntros "HYP".
       - iIntros (γ μ) "state_inv".
         iSpecialize ("HYP" $! (γ,μ) O nil O with "state_inv").
@@ -106,7 +106,7 @@ Module Type IrisTotalWeakestPre
         iMod "HYP" as "HYP". iModIntro. iDestruct "HYP" as "(_ & $ & $ & _)".
       - iIntros (σ _ κ _) "state_inv".
         iSpecialize ("HYP" $! (fst σ) (snd σ) with "state_inv").
-        iMod "HYP". iModIntro. iSplitR; [easy|].
+        iMod "HYP". iModIntro. iSplitR. iPureIntro. apply reducible_no_obs_not_val; auto.
         iIntros (κ' c' σ' efs [γ γ' μ μ' δ' s']).
         iSpecialize ("HYP" $! s' δ' γ' μ' with "[]"); first eauto.
         iMod "HYP". iMod "HYP". iModIntro.
@@ -249,9 +249,9 @@ Module Type IrisTotalWeakestPre
     Proof.
       iIntros (Q δ) "H". rewrite /semTWP.
       iAssert (∃ Φ, ∀ v, Φ v ∗-∗ WP (MkConf (lift_cnt k (valconf_val v)) (valconf_store v))
-                                 ?[{ v', Q (valconf_val v') (valconf_store v') }])%I as "(%Φ & HΦ)".
+                                 [{ v', Q (valconf_val v') (valconf_store v') }])%I as "(%Φ & HΦ)".
       { iExists (λ v, WP (MkConf (lift_cnt k (valconf_val v)) (valconf_store v))
-                        ?[{ v', Q (valconf_val v') (valconf_store v') }])%I. auto. }
+                        [{ v', Q (valconf_val v') (valconf_store v') }])%I. auto. }
       iPoseProof (twp_wand _ _ _ _ _ with "H [HΦ]") as "H".
       { iIntros (v) "HQ". by iApply ("HΦ" with "HQ"). }
       remember (⊤ : coPset) as E eqn:HE.

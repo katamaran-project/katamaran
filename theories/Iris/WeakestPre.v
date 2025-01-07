@@ -58,20 +58,20 @@ Module Type IrisWeakestPre
 
   Definition semWP {Σ} `{sG : sailGS Σ} [Γ τ] (s : Stm Γ τ)
     (Q : Post Γ τ) (δ : CStore Γ) : iProp Σ :=
-    WP {| conf_stm := s; conf_store := δ |} ?{{ v, Q (valconf_val v) (valconf_store v) }}.
+    WP {| conf_stm := s; conf_store := δ |} {{ v, Q (valconf_val v) (valconf_store v) }}.
   Global Arguments semWP {Σ} {sG} [Γ] [τ] s%exp Q%I δ.
 
   Ltac fold_semWP :=
     first
       [ progress
           change_no_check
-          (wp MaybeStuck top
+          (wp NotStuck top
               {| conf_stm := ?s; conf_store := ?δ |}
               (fun v => ?Q (valconf_val v) (valconf_store v)))
         with (semWP s Q δ)
       | progress
           change_no_check
-          (wp MaybeStuck top
+          (wp NotStuck top
               {| conf_stm := ?s; conf_store := ?δ |}
               ?Q)
         with (semWP s (fun v δ' => Q (MkValConf _ v δ')) δ);
@@ -95,7 +95,7 @@ Module Type IrisWeakestPre
         end.
     Proof.
       unfold semWP. rewrite wp_unfold. unfold wp_pre. cbn.
-      destruct stm_to_val; cbn; [easy|].
+      destruct (stm_to_val s) eqn:Es; cbn; [easy|].
       apply bi.entails_anti_sym; iIntros "HYP".
       - iIntros (γ μ) "state_inv".
         iSpecialize ("HYP" $! (γ,μ) O nil nil O with "state_inv").
@@ -105,10 +105,11 @@ Module Type IrisWeakestPre
                        (mk_prim_step (MkConf _ _) step)).
         iMod ("HYP" with "lc") as "HYP". do 2 iModIntro. iMod "HYP". iModIntro.
         now iMod "HYP" as "[$ [$ _]]".
-      - iIntros (σ _ κ _ _) "state_inv".
-        iSpecialize ("HYP" $! (fst σ) (snd σ) with "state_inv").
-        iMod "HYP". iModIntro. iSplitR; [easy|].
-        iIntros (c' σ' efs [γ γ' μ μ' δ' s']) "lc".
+      - iIntros ([γ1 μ1] _ κ _ _) "state_inv".
+        iSpecialize ("HYP" $! γ1 μ1 with "state_inv").
+        iMod "HYP". iModIntro. iSplitR. iPureIntro. apply reducible_not_val; auto.
+        iIntros (c' σ' efs H) "lc". inversion H as [γ γ' μ μ' δ' s' Hs]; subst.
+        simpl in Hs.
         iSpecialize ("HYP" $! s' δ' γ' μ' with "[$lc]"); first now iPureIntro.
         iMod "HYP". do 2 iModIntro. iMod "HYP". iModIntro.
         iMod "HYP" as "($ & $)". now cbn.
@@ -167,7 +168,8 @@ Module Type IrisWeakestPre
       iIntros (Q δ1) "P". rewrite <-semWP_unfold_nolc. cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro. iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
+      iModIntro.
+      iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
       do 3 iModIntro. iMod "Hclose" as "_". iModIntro.
       iFrame "state_inv". by iApply semWP_val.
     Qed.
@@ -186,7 +188,7 @@ Module Type IrisWeakestPre
       - rewrite !semWP_fail. rewrite env.drop_cat. by iFrame.
       - rewrite (semWP_unfold k). rewrite (stm_val_stuck H).
         iSpecialize ("WPk" $! γ1 μ1 with "state_inv").
-        iMod "Hclose". iMod "WPk".
+        iMod "Hclose". iMod "WPk" as "WPk".
         iSpecialize ("WPk" $! _ _ _ _ with "[$Hcred]"); first easy.
         iMod "WPk". iModIntro. iModIntro. iModIntro.
         iMod "WPk". iMod "WPk" as "[$ wps]".

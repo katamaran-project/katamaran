@@ -185,7 +185,7 @@ Module RiscvPmpModel2.
       iIntros "H". cbn in *.
       iApply (wp_lift_atomic_step_no_fork); [auto | ].
       iIntros (? ? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
-      iSplitR; first auto.
+      iSplitR. iPureIntro. apply reducible_not_val; auto.
       repeat iModIntro.
       iIntros. iModIntro.
       eliminate_prim_step Heq.
@@ -222,7 +222,7 @@ Module RiscvPmpModel2.
       iIntros "[%w H]".
       iApply (wp_lift_atomic_step_no_fork); [auto | ].
       iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-      iSplitR; first auto.
+      iSplitR. iPureIntro. apply reducible_not_val; auto.
       repeat iModIntro.
       iIntros.
       eliminate_prim_step Heq.
@@ -264,7 +264,7 @@ Module RiscvPmpModel2.
       iApply (wp_lift_atomic_step_no_fork); [auto | ].
       iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
       iPoseProof (interp_pmp_fun_within_mmio_spec with "Hpmpa") as "%Hnotmmio"; first eauto.
-      iSplitR; first auto.
+      iSplitR. iPureIntro. apply reducible_not_val; auto.
       repeat iModIntro.
       iIntros. iModIntro.
       eliminate_prim_step Heq.
@@ -279,7 +279,7 @@ Module RiscvPmpModel2.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
       iIntros "_". cbn in *.
       iApply (lifting.wp_lift_pure_step_no_fork _ _ ⊤).
-      - cbn; auto.
+      - cbn; auto. intros. apply reducible_not_val; auto.
       - intros. eliminate_prim_step Heq; auto.
       - repeat iModIntro. iIntros. eliminate_prim_step Heq; auto.
         destruct (pure_decode _).
@@ -295,7 +295,7 @@ Module RiscvPmpModel2.
       destruct_syminstance ι.
       iIntros "_".
       iApply (lifting.wp_lift_pure_step_no_fork _ _ ⊤).
-      - cbn; auto.
+      - cbn; auto. intros. apply reducible_not_val; auto.
       - intros. eliminate_prim_step Heq; auto.
       - repeat iModIntro. iIntros. eliminate_prim_step Heq; auto.
       destruct (fun_vector_subrange bv0 e b) eqn:Ev.

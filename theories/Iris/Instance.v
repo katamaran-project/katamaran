@@ -494,6 +494,15 @@ Module Type IrisAdequacy
     [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮),
       match x with | existT _ r => reg_pointsTo r (read_register γ r) end.
 
+  Lemma not_stuck_ever {Γ τ} :
+    ∀ (e : expr (microsail_lang Γ τ)) σ,
+      not_stuck e σ.
+  Proof.
+    intros [s δ] [γ μ]. unfold not_stuck. cbn. destruct (stm_to_val s) eqn:Es.
+    - left. auto.
+    - right. apply reducible_not_val. auto.
+  Qed.
+
   Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : Val σ -> Prop} :
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
@@ -501,7 +510,7 @@ Module Type IrisAdequacy
     ResultOrFail s' Q.
   Proof.
     intros steps fins trips.
-    cut (adequate MaybeStuck (MkConf s δ) (γ,μ)
+    cut (adequate NotStuck (MkConf s δ) (γ,μ)
              (λ (v : val (microsail_lang Γ σ)) (_ : state (microsail_lang Γ σ)),
                 (λ v0 : val (microsail_lang Γ σ), match v0 with
                                                   | MkValConf v' _ => match v' with
@@ -511,29 +520,30 @@ Module Type IrisAdequacy
                                                   end) v)).
     - destruct s'; cbn in fins; destruct fins; last done.
       intros adeq.
-      apply (adequate_result MaybeStuck (MkConf s δ) (γ , μ) (fun v _ => match v with | MkValConf v' δ' => match v' with inl v' => Q v' | inr m => True end end) adeq nil (γ' , μ') (MkValConf (inl v) δ')).
+      apply (adequate_result NotStuck (MkConf s δ) (γ , μ) (fun v _ => match v with | MkValConf v' δ' => match v' with inl v' => Q v' | inr m => True end end) adeq nil (γ' , μ') (MkValConf (inl v) δ')).
       by apply steps_to_erased.
-    - constructor; last done.
-      intros t2 σ2 [v2 δ2] eval.
-      assert (regsmapv := RegStore_to_map_valid γ).
-      pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) MaybeStuck (MkConf s δ) (γ , μ) (fun v => match v with | MkValConf v' δ' => match v' with inl v' => Q v' | inr m => True end end)) as adeq.
-      refine (adequate_result _ _ _ _ (adeq _) _ _ _ eval); clear adeq.
-      iIntros (Hinv κs) "".
-      iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
-        first by apply auth_both_valid.
-      pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
-      iMod (mem_inv_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
-      iModIntro.
-      iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
-      iExists _.
-      iSplitR "Hs2 Rmem".
-      * iFrame "Hmem".
-        now iApply own_RegStore_to_regs_inv.
-      * iPoseProof (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]") as "H".
-        iApply (own_RegStore_to_map_reg_pointsTos (srGS := SailRegGS reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
-        eapply finite.NoDup_enum.
-        iApply (wp_mono with "H"). iIntros ([]) "H"; auto.
-        simpl. now case_match.
+    - constructor.
+      + intros t2 σ2 [v2 δ2] eval.
+        assert (regsmapv := RegStore_to_map_valid γ).
+        pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) NotStuck (MkConf s δ) (γ , μ) (fun v => match v with | MkValConf v' δ' => match v' with inl v' => Q v' | inr m => True end end)) as adeq.
+        refine (adequate_result _ _ _ _ (adeq _) _ _ _ eval); clear adeq.
+        iIntros (Hinv κs) "".
+        iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
+          first by apply auth_both_valid.
+        pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
+        iMod (mem_inv_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
+        iModIntro.
+        iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
+        iExists _.
+        iSplitR "Hs2 Rmem".
+        * iFrame "Hmem".
+          now iApply own_RegStore_to_regs_inv.
+        * iPoseProof (trips _ (SailGS Hinv (SailRegGS reg_pre_inG spec_name) memG) with "[$Rmem Hs2]") as "H".
+          iApply (own_RegStore_to_map_reg_pointsTos (srGS := SailRegGS reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
+          eapply finite.NoDup_enum.
+          iApply (wp_mono with "H"). iIntros ([]) "H"; auto.
+          simpl. now case_match.
+      + intros. apply not_stuck_ever.
   Qed.
 
   Lemma adequacy_gen {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}

@@ -296,7 +296,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
     (* interp_loop is the weakest precondition of the loop of our machine
        with as postcondition True. *)
     Definition interp_loop `{sg : sailGS Σ} : iProp Σ :=
-      (WP (MkConf (FunDef loop) env.nil) ?{{_, True}})%I.
+      (WP (MkConf (FunDef loop) env.nil) {{_, True}})%I.
 
     (* interp_expr is the expression relation, stating that if we give
        the pointsto chunks for the pc and GPRs, then we still satisfy the
