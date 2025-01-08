@@ -359,31 +359,29 @@ Module Type ShallowExecOn
     End ExecAux.
     #[global] Arguments exec_aux _ _ _ [Γ τ] !s.
 
-    Section WithExec.
-
-      Context (exec : Exec) (mexec : MonotonicExec exec).
-
-      Import CHeapSpec.notations.
-
-      Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : CHeapSpec unit :=
-        match c with
-        | MkSepContract _ _ lvars pats req result ens =>
-            lenv <- CHeapSpec.demonic_ctx lvars ;;
-            _    <- CHeapSpec.produce req lenv ;;
-            v    <- evalStoreSpec (exec s) (inst pats lenv) ;;
-            CHeapSpec.consume ens (env.snoc lenv (result∷τ) v)
-        end.
-
-      Definition vcgen {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-        CHeapSpec.run (exec_contract c body).
-
-      Lemma mon_exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
-        Monotonic (MHeapSpec eq) (exec_contract c s).
-      Proof. destruct c. typeclasses eauto. Qed.
-
-    End WithExec.
-
   End CStoreSpec.
+
+  Section WithExec.
+
+    Context (exec : Exec) (mexec : MonotonicExec exec).
+
+    Import (hints) CStoreSpec.
+    Import CHeapSpec.notations.
+
+    Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : CHeapSpec unit :=
+      match c with
+      | MkSepContract _ _ lvars pats req result ens =>
+          lenv <- CHeapSpec.demonic_ctx lvars ;;
+          _    <- CHeapSpec.produce req lenv ;;
+          v    <- CStoreSpec.evalStoreSpec (exec s) (inst pats lenv) ;;
+          CHeapSpec.consume ens (env.snoc lenv (result∷τ) v)
+      end.
+
+    Lemma mon_exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
+      Monotonic (MHeapSpec eq) (exec_contract c s).
+    Proof. destruct c. typeclasses eauto. Qed.
+
+  End WithExec.
 
   Section WithSpec.
 
@@ -428,6 +426,9 @@ Module Type ShallowExecOn
       @CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call inline_fuel).
     #[global] Arguments cexec _ [_ _] s _ _ _ : simpl never.
 
+    Definition vcgen (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      CHeapSpec.run (exec_contract (cexec inline_fuel) c body).
+
     Import (hints) CStoreSpec.
 
     Lemma mon_exec_call_error : MonotonicExecCall exec_call_error.
@@ -450,7 +451,7 @@ Module Type ShallowExecOn
   Module Shallow.
 
     Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      CStoreSpec.vcgen (cexec fuel) c body.
+      vcgen fuel c body.
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)

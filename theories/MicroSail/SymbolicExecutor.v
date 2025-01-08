@@ -422,31 +422,28 @@ Module Type SymbolicExecOn
 
     End ExecAux.
 
-    Section WithExec.
-
-      Context (exec : Exec).
-
-      Import SHeapSpec.notations.
-
-      Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
-        ⊢ SHeapSpec Unit :=
-        fun w =>
-          match c with
-          | MkSepContract _ _ lvars pats req result ens =>
-              ⟨ θ1 ⟩ lenv  <- SHeapSpec.demonic_ctx id lvars ;;
-              ⟨ θ2 ⟩ _     <- SHeapSpec.produce req lenv ;;
-              let lenv2 := persist (A := Sub _) lenv θ2 in
-              ⟨ θ3 ⟩ res   <- evalStoreSpec (exec s (w := _)) (subst pats lenv2) ;;
-              let lenv3 := persist (A := Sub _) lenv2 θ3 in
-              SHeapSpec.consume ens (sub_snoc lenv3 (result∷τ) res)
-          end.
-
-      Definition vcgen {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
-        fun w => SHeapSpec.run (exec_contract c s (w := w)).
-
-    End WithExec.
-
   End SStoreSpec.
+
+  Section WithExec.
+
+    Context (exec : Exec).
+
+    Import SHeapSpec.notations.
+
+    Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
+      ⊢ SHeapSpec Unit :=
+      fun w =>
+        match c with
+        | MkSepContract _ _ lvars pats req result ens =>
+            ⟨ θ1 ⟩ lenv  <- SHeapSpec.demonic_ctx id lvars ;;
+            ⟨ θ2 ⟩ _     <- SHeapSpec.produce req lenv ;;
+            let lenv2 := persist (A := Sub _) lenv θ2 in
+            ⟨ θ3 ⟩ res   <- SStoreSpec.evalStoreSpec (exec s (w := _)) (subst pats lenv2) ;;
+            let lenv3 := persist (A := Sub _) lenv2 θ3 in
+            SHeapSpec.consume ens (sub_snoc lenv3 (result∷τ) res)
+        end.
+
+  End WithExec.
 
   Section WithSpec.
 
@@ -510,14 +507,16 @@ Module Type SymbolicExecOn
       @SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call inline_fuel).
     #[global] Arguments sexec _ [_ _] s _ _ _ : simpl never.
 
+    Definition vcgen (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
+      fun w => SHeapSpec.run (exec_contract (sexec inline_fuel) c s (w := w)).
+
   End WithSpec.
 
   Module Symbolic.
-    Import SStoreSpec.
 
     Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition
-        (postprocess (SPureSpec.replay (postprocess (vcgen (sexec default_config fuel) c body wnil)))).
+        (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil)))).
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)
@@ -538,7 +537,7 @@ Module Type SymbolicExecOn
     Qed.
 
     Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen (sexec default_config fuel) c body wnil))))).
+      is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil))))).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       ValidContractReflectWithFuel 1 c body.
@@ -560,7 +559,7 @@ Module Type SymbolicExecOn
     Qed.
 
     Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
-      Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen (sexec default_config 1) c body wnil)))).
+      Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen default_config 1 c body wnil)))).
 
     Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasure c body).
@@ -599,7 +598,7 @@ Module Type SymbolicExecOn
         | Some contract =>
             let contract' := extend_postcond_with_debug contract in
             let body      := FunDef f in
-            let vc        := vcgen (sexec default_config 1) contract' body wnil in
+            let vc        := vcgen default_config 1 contract' body wnil in
             Some (count_to_stats (count_nodes vc empty))
         | None   => None
         end.

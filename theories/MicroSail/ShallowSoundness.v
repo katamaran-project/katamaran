@@ -326,18 +326,6 @@ Module Type Soundness
         apply bi.pure_elim_r. auto.
       Qed.
 
-      Lemma vcgen_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-        CStoreSpec.vcgen exec c body ->
-        ProgramLogic.ValidContract c body.
-      Proof.
-        cbv [CStoreSpec.vcgen CHeapSpec.run ProgramLogic.ValidContract].
-        intros HYP ι. eapply exec_contract_sound in HYP. cbn in HYP.
-        rewrite bi.emp_sep in HYP.
-        apply (rule_consequence_right _ HYP). clear HYP.
-        intros ? _.
-        apply bi.sep_elim_l; auto with typeclass_instances.
-      Qed.
-
     End WithExec.
 
     Lemma sound_cexec_call_foreign : SoundExecCallForeign cexec_call_foreign.
@@ -408,15 +396,27 @@ Module Type Soundness
       - apply sound_cexec_lemma.
     Qed.
 
+    Lemma vcgen_sound fuel {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+      vcgen fuel c body ->
+      ProgramLogic.ValidContract c body.
+    Proof.
+      cbv [vcgen CHeapSpec.run ProgramLogic.ValidContract]. intros HYP ι.
+      eapply exec_contract_sound in HYP; auto using sound_cexec. cbn in HYP.
+      rewrite bi.emp_sep in HYP.
+      apply (rule_consequence_right _ HYP). clear HYP.
+      intros ? _.
+      apply bi.sep_elim_l; auto with typeclass_instances.
+    Qed.
+
     Lemma shallow_vcgen_soundness {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       Shallow.ValidContract c body ->
       ProgramLogic.ValidContract c body.
-    Proof. apply vcgen_sound, sound_cexec. Qed.
+    Proof. apply vcgen_sound. Qed.
 
     Lemma shallow_vcgen_fuel_soundness {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
       Shallow.ValidContractWithFuel fuel c body ->
       ProgramLogic.ValidContract c body.
-    Proof. apply vcgen_sound, sound_cexec. Qed.
+    Proof. apply vcgen_sound. Qed.
 
     (* Print Assumptions shallow_vcgen_soundnes. *)
 

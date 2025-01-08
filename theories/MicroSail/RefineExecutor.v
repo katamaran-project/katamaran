@@ -647,30 +647,25 @@ Module RefineExecOn
 
     End ExecAux.
 
-    Section WithExec.
-
-      Context `(rexec : RefineExec c_exec s_exec).
-
-      Lemma refine_exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) w :
-        ⊢ ℛ⟦RHeapSpec RUnit⟧
-            (CStoreSpec.exec_contract c_exec c s)
-            (SStoreSpec.exec_contract s_exec c s (w := w)).
-      Proof.
-        destruct c as [lvars pats req result ens]; cbn. rsolve.
-        iApply rexec.
-        rewrite forgetting_trans. iModIntro. rsolve.
-      Qed.
-
-      Lemma refine_vcgen {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) w :
-        ⊢ ℛ⟦RProp⟧ (CStoreSpec.vcgen c_exec c body) (SStoreSpec.vcgen s_exec c body w).
-      Proof.
-        iApply HeapSpec.refine_run.
-        iApply refine_exec_contract.
-      Qed.
-
-    End WithExec.
-
   End StoreSpec.
+
+  Section WithExec.
+
+    Import StoreSpec.
+
+    Context `(rexec : RefineExec c_exec s_exec).
+
+    Lemma refine_exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) w :
+      ⊢ ℛ⟦RHeapSpec RUnit⟧
+          (SHAL.exec_contract c_exec c s)
+          (SYMB.exec_contract s_exec c s (w := w)).
+    Proof.
+      destruct c as [lvars pats req result ens]; cbn. rsolve.
+      iApply rexec.
+      rewrite forgetting_trans. iModIntro. rsolve.
+    Qed.
+
+  End WithExec.
 
   Section WithSpec.
 
@@ -750,6 +745,14 @@ Module RefineExecOn
         (cexec fuel s) w (sexec cfg fuel s w) _ :=
       MkRefineCompat (refine_exec fuel s w).
 
+    Lemma refine_vcgen (fuel : nat) {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) w :
+      ⊢ ℛ⟦RProp⟧ (SHAL.vcgen fuel c body) (SYMB.vcgen cfg fuel c body w).
+    Proof.
+      iApply HeapSpec.refine_run.
+      iApply refine_exec_contract.
+      apply refine_exec.
+    Qed.
+
   End WithSpec.
 
   Lemma replay_sound (s : 𝕊 wnil) :
@@ -773,8 +776,7 @@ Module RefineExecOn
     apply postprocess_sound in Hwp.
     apply (psafe_safe (w := wnil)) in Hwp; [|easy].
     revert Hwp.
-    apply StoreSpec.refine_vcgen; try done.
-    apply refine_exec.
+    apply refine_vcgen; try done.
   Qed.
 
   Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
