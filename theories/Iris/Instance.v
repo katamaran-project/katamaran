@@ -511,21 +511,17 @@ Module Type IrisAdequacy
   Proof.
     intros steps fins trips.
     cut (adequate NotStuck (MkConf s δ) (γ,μ)
-             (λ (v : val (microsail_lang Γ σ)) (_ : state (microsail_lang Γ σ)),
-                (λ v0 : val (microsail_lang Γ σ), match v0 with
-                                                  | MkValConf v' _ => match v' with
-                                                                      | inl v' => Q v'
-                                                                      | inr m  => True
-                                                                      end
-                                                  end) v)).
+                  (λ v _, @ResultOrFail Γ _ (of_ival (valconf_val v)) Q)).
     - destruct s'; cbn in fins; destruct fins; last done.
       intros adeq.
-      apply (adequate_result NotStuck (MkConf s δ) (γ , μ) (fun v _ => match v with | MkValConf v' δ' => match v' with inl v' => Q v' | inr m => True end end) adeq nil (γ' , μ') (MkValConf (inl v) δ')).
-      by apply steps_to_erased.
+      apply (adequate_result NotStuck (MkConf s δ) (γ , μ)
+               (λ v _, ResultOrFail (of_ival (valconf_val v)) Q)
+               adeq nil (γ' , μ') (MkValConf (inl v) δ')
+               (steps_to_erased steps)).
     - constructor.
       + intros t2 σ2 [v2 δ2] eval.
         assert (regsmapv := RegStore_to_map_valid γ).
-        pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) NotStuck (MkConf s δ) (γ , μ) (fun v => match v with | MkValConf v' δ' => match v' with inl v' => Q v' | inr m => True end end)) as adeq.
+        pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) NotStuck (MkConf s δ) (γ , μ) (λ v, @ResultOrFail Γ _ (of_ival (valconf_val v)) Q)) as adeq.
         refine (adequate_result _ _ _ _ (adeq _) _ _ _ eval); clear adeq.
         iIntros (Hinv κs) "".
         iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
