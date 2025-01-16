@@ -405,12 +405,21 @@ Module Export MinCapsBase <: Base.
 
     Section TransparentObligations.
       Local Set Transparent Obligations.
-      Derive Signature NoConfusion NoConfusionHom EqDec for Reg.
+      Derive Signature NoConfusion for Reg.
     End TransparentObligations.
 
     Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
-    #[export] Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg) :=
-      sigma_eqdec _ _.
+
+    #[export,refine] Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg) :=
+      fun '(existT σ x) '(existT τ y) =>
+        match x , y with
+        | pc            , pc            => left eq_refl
+        | reg1          , reg1          => left eq_refl
+        | reg2          , reg2          => left eq_refl
+        | reg3          , reg3          => left eq_refl
+        | _             , _             => right _
+        end.
+    Proof. all: transparent_abstract (intros H; depelim H). Defined.
 
     Local Obligation Tactic :=
       finite_from_eqdec.
