@@ -599,6 +599,20 @@ Section WithBinding.
 
   End Map.
 
+  Section ZipWith.
+    Context {D1 D2 D3 : B -> Set}.
+    Variable f : forall τ, D1 τ -> D2 τ -> D3 τ.
+
+    Fixpoint zipWith {Γ} (E1 : Env D1 Γ) : Env D2 Γ -> Env D3 Γ :=
+      match E1 with
+      | nil       => fun _ => nil
+      | snoc E1 db1 => fun E2 =>
+                         match view E2 with
+                         | isSnoc E2 db2 => snoc (zipWith E1 E2) (f db1 db2)
+                         end
+      end.
+  End ZipWith.
+
   Section WithD123.
 
     Context {D1 D2 D3 : B -> Set}.
