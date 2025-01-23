@@ -1434,14 +1434,14 @@ Module Type UnifLogicOn
     End WithNotations.
 
     Lemma refine_chunk_ptsreg {w τ} {pc a ta} : 
-      ℛ⟦RVal τ ⟧ a ta ⊢ ℛ⟦RChunk⟧ (scchunk_ptsreg pc a) (w := w)(chunk_ptsreg pc ta).
+      ℛ⟦RVal τ ⟧ a ta ⊢ ℛ⟦RChunk⟧ (chunk_ptsreg pc a) (w := w) (chunk_ptsreg pc ta).
     Proof.
       unfold RChunk, RVal, RInst; cbn.
       crushPredEntails3; now subst.
     Qed.
 
     Lemma refine_chunk_user {w : World} { c vs svs} :
-      ℛ⟦REnv (𝑯_Ty c)⟧ vs svs ⊢ ℛ⟦RChunk⟧ (scchunk_user c vs) (w := w) (chunk_user c svs).
+      ℛ⟦REnv (𝑯_Ty c)⟧ vs svs ⊢ ℛ⟦RChunk⟧ (chunk_user c vs) (w := w) (chunk_user c svs).
     Proof.
       unfold REnv, RChunk, RInst; crushPredEntails3.
       now subst.

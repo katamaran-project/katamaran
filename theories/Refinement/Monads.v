@@ -993,10 +993,10 @@ Module Type RefinementMonadsOn
     Qed.
     
     Lemma RChunk_ind (P : Rel Chunk SCChunk) {w : World} :
-      (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (scchunk_user p args) (chunk_user p sargs)) ∗
-        (∀ σ r v sv, ℛ⟦ RVal σ ⟧ v sv -∗ ℛ⟦ P ⟧ (scchunk_ptsreg r v) (chunk_ptsreg r sv)) ∗
-        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ c1 sc1 -∗ ℛ⟦ P ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_conj c1 c2) (chunk_conj sc1 sc2)) ∗
-        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ c1 sc1 -∗ ℛ⟦ P ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_wand c1 c2) (chunk_wand sc1 sc2))
+      (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (chunk_user p args) (chunk_user p sargs)) ∗
+        (∀ σ r v sv, ℛ⟦ RVal σ ⟧ v sv -∗ ℛ⟦ P ⟧ (chunk_ptsreg r v) (chunk_ptsreg r sv)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ c1 sc1 -∗ ℛ⟦ P ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (chunk_conj c1 c2) (chunk_conj sc1 sc2)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ c1 sc1 -∗ ℛ⟦ P ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (chunk_wand c1 c2) (chunk_wand sc1 sc2))
         ⊢
         ∀ c (sc : Chunk w), ℛ⟦ RChunk ⟧ c sc → ℛ⟦ P ⟧ c sc.
     Proof.
@@ -1013,10 +1013,10 @@ Module Type RefinementMonadsOn
     Qed.
 
     Lemma RChunk_case (P : Rel Chunk SCChunk) {w : World} :
-      (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (scchunk_user p args) (chunk_user p sargs)) ∗
-        (∀ σ r v sv, ℛ⟦ RVal σ ⟧ v sv -∗ ℛ⟦ P ⟧ (scchunk_ptsreg r v) (chunk_ptsreg r sv)) ∗
-        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_conj c1 c2) (chunk_conj sc1 sc2)) ∗
-        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (scchunk_wand c1 c2) (chunk_wand sc1 sc2))
+      (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (chunk_user p args) (chunk_user p sargs)) ∗
+        (∀ σ r v sv, ℛ⟦ RVal σ ⟧ v sv -∗ ℛ⟦ P ⟧ (chunk_ptsreg r v) (chunk_ptsreg r sv)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (chunk_conj c1 c2) (chunk_conj sc1 sc2)) ∗
+        (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (chunk_wand c1 c2) (chunk_wand sc1 sc2))
         ⊢
         ∀ c (sc : Chunk w), ℛ⟦ RChunk ⟧ c sc → ℛ⟦ P ⟧ c sc.
     Proof.
@@ -1040,7 +1040,7 @@ Module Type RefinementMonadsOn
       clear.
       repeat iSplit.
       - iIntros (p args sargs) "Hargs %msg %c2 %sc2 Hc2".
-        iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg p args sargs, ℛ⟦REnv (𝑯_Ty p)⟧ args sargs -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_user p args) c2) (SPureSpec.assert_eq_chunk msg (chunk_user p sargs) sc2))%I) with "[] Hc2 Hargs").
+        iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg p args sargs, ℛ⟦REnv (𝑯_Ty p)⟧ args sargs -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (chunk_user p args) c2) (SPureSpec.assert_eq_chunk msg (chunk_user p sargs) sc2))%I) with "[] Hc2 Hargs").
         clear.
         repeat iSplit.
         + iIntros (p args sargs) "Hargs %msg %p2 %args2 %sargs2 Hargs2 %w1 %ω1".
@@ -1060,7 +1060,7 @@ Module Type RefinementMonadsOn
           iModIntro.
           iApply (refine_error (RA := RUnit)).
       - iIntros (σ r v sv) "Hv %msg %c2 %sc2 Hc2".
-        iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg σ r v sv, ℛ⟦RVal σ⟧ v sv -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_ptsreg r v) c2) (SPureSpec.assert_eq_chunk msg (chunk_ptsreg r sv) sc2))%I) with "[] Hc2 Hv").
+        iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg σ r v sv, ℛ⟦RVal σ⟧ v sv -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (chunk_ptsreg r v) c2) (SPureSpec.assert_eq_chunk msg (chunk_ptsreg r sv) sc2))%I) with "[] Hc2 Hv").
         clear.
         repeat iSplit.
         + iIntros (p args sargs) "Hargs %msg %σ %r %v %sv Hv %w1 %ω1".
@@ -1090,7 +1090,7 @@ Module Type RefinementMonadsOn
                                                             ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c1) (SPureSpec.assert_eq_chunk msg sc1) -∗
                                                                                                                                                                     ℛ⟦RChunk⟧ c2 sc2 -∗
                                                                                                                                                                                         ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c2) (SPureSpec.assert_eq_chunk msg sc2) -∗
-                                                                                                                                                                                                                                                                                                ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_conj c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_conj sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
+                                                                                                                                                                                                                                                                                                ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (chunk_conj c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_conj sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
         clear. repeat iSplitL.
         + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
           iApply (refine_error (RA := RUnit)).
@@ -1111,7 +1111,7 @@ Module Type RefinementMonadsOn
                                                             ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c1) (SPureSpec.assert_eq_chunk msg sc1) -∗
                                                                                                                                                                     ℛ⟦RChunk⟧ c2 sc2 -∗
                                                                                                                                                                                         ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c2) (SPureSpec.assert_eq_chunk msg sc2) -∗
-                                                                                                                                                                                                                                                                                                ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (scchunk_wand c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_wand sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
+                                                                                                                                                                                                                                                                                                ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (chunk_wand c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_wand sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
         clear. repeat iSplitL.
         + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
           iApply (refine_error (RA := RUnit)).
@@ -1440,7 +1440,7 @@ Module Type RefinementMonadsOn
         iDestruct (eval_ex (AT := SHeap) sh') as "(%h' & Hh')".
         iExists v.
         rewrite CPureSpec.wp_angelic_list.
-        iExists (scchunk_ptsreg reg v, h').
+        iExists (chunk_ptsreg reg v, h').
         iSplitR.
         + rewrite RList_RInst.
           iStopProof.
@@ -1451,7 +1451,7 @@ Module Type RefinementMonadsOn
           iApply (refine_T with "HK [Hv Hh'] HSP").
           iSplitL "Hv"; first done.
           iApply (refine_cons (R := RChunk) with "[Hv] [Hh']").
-          iApply (repₚ_cong (T1 := STerm τ) (scchunk_ptsreg reg) (chunk_ptsreg reg) with "Hv").
+          iApply (repₚ_cong (T1 := STerm τ) (T2 := Chunk) (chunk_ptsreg reg) (chunk_ptsreg reg) with "Hv").
           { now intros. }
           now iApply (RList_RInst with "Hh'").
       - cbn. now iDestruct "HSP" as "%fls".
@@ -1470,7 +1470,7 @@ Module Type RefinementMonadsOn
         iDestruct (eval_ex (AT := SHeap) sh') as "(%h' & Hh')".
         iExists v'.
         rewrite CPureSpec.wp_angelic_list.
-        iExists (scchunk_ptsreg reg v', h').
+        iExists (chunk_ptsreg reg v', h').
         iSplitR.
         + rewrite RList_RInst.
           iStopProof. unfold RInst.
@@ -1480,7 +1480,7 @@ Module Type RefinementMonadsOn
           iApply (refine_T with "HK [Hv Hh'] HSP").
           iSplitL "Hv"; first done.
           iApply (refine_cons (R := RChunk) with "[Hv] [Hh']").
-          iApply (repₚ_cong (T1 := STerm τ) (scchunk_ptsreg reg) (chunk_ptsreg reg) with "Hv").
+          iApply (repₚ_cong (T1 := STerm τ) (T2 := Chunk) (chunk_ptsreg reg) (chunk_ptsreg reg) with "Hv").
           { now intros. }
           now iApply (RList_RInst with "Hh'").
       - cbn. now iDestruct "HSP" as "%fls".
@@ -1902,11 +1902,11 @@ Module Type RefinementMonadsOn
   #[export] Hint Extern 0 (RefineCompat RFormula _ _ (formula_relop ?relop _ _) _) => ( refine (refine_compat_formula_relop (relop := relop)) ) : typeclass_instances.
 
   #[export] Instance refine_compat_chunk_ptsreg {w σ} {pc a ta} :
-    RefineCompat RChunk (scchunk_ptsreg pc a) w(chunk_ptsreg (σ := σ) pc ta) _ :=
+    RefineCompat RChunk (chunk_ptsreg pc a) w(chunk_ptsreg (σ := σ) pc ta) _ :=
     MkRefineCompat refine_chunk_ptsreg.
 
   #[export] Instance refine_compat_chunk_user {w c vs svs} :
-    RefineCompat RChunk (scchunk_user c vs) w (chunk_user c svs) _ :=
+    RefineCompat RChunk (chunk_user c vs) w (chunk_user c svs) _ :=
     MkRefineCompat refine_chunk_user.
 
   #[export] Instance refine_compat_env_snoc {Δ : Ctx Ty} {τ} {w : World} {vs : Env Val Δ} {svs : Env (Term w) Δ} {v : Val τ} {sv : Term w τ} :

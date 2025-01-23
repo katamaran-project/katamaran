@@ -98,7 +98,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       destruct c; cbn; try discriminate; intros H.
       apply bi.entails_anti_sym.
       - now apply lduplicate.
-      - transitivity (luser p vs ∗ emp)%I.
+      - transitivity (luser p ts ∗ emp)%I.
         + apply bi.sep_mono'; auto.
         + now rewrite bi.sep_emp.
     Qed.
@@ -317,19 +317,19 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
     Fixpoint assert_eq_chunk (c1 c2 : SCChunk) : CPureSpec unit :=
       match c1 , c2 with
-      | scchunk_user p1 vs1 , scchunk_user p2 vs2 =>
+      | chunk_user p1 vs1 , chunk_user p2 vs2 =>
           match eq_dec p1 p2 with
           | left e => assert_eq_env (eq_rect p1 (fun p => Env Val (𝑯_Ty p)) vs1 p2 e) vs2
           | right _ => error
           end
-      | scchunk_ptsreg r1 v1 , scchunk_ptsreg r2 v2 =>
+      | chunk_ptsreg r1 v1 , chunk_ptsreg r2 v2 =>
           match eq_dec_het r1 r2 with
           | left e => assert_formula (eq_rect _ Val v1 _ (f_equal projT1 e) = v2)
           | right _ => error
           end
-      | scchunk_conj c11 c12 , scchunk_conj c21 c22 =>
+      | chunk_conj c11 c12 , chunk_conj c21 c22 =>
           assert_eq_chunk c11 c21 ;; assert_eq_chunk c12 c22
-      | scchunk_wand c11 c12 , scchunk_wand c21 c22 =>
+      | chunk_wand c11 c12 , chunk_wand c21 c22 =>
           assert_eq_chunk c11 c21 ;; assert_eq_chunk c12 c22
       | _ , _ => error
       end.
@@ -391,15 +391,15 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
     Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) (h0 : SCHeap) : CPureSpec (Val τ * SCHeap) :=
       v  <- angelic _ ;;
-      h1 <- consume_chunk (scchunk_ptsreg reg v) h0 ;;
-      h2 <- produce_chunk (scchunk_ptsreg reg v) h1 ;;
+      h1 <- consume_chunk (chunk_ptsreg reg v) h0 ;;
+      h2 <- produce_chunk (chunk_ptsreg reg v) h1 ;;
       pure (v , h2).
 
     Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : Val τ) (h0 : SCHeap) :
       CPureSpec (Val τ * SCHeap) :=
       vold <- angelic _ ;;
-      h1   <- consume_chunk (scchunk_ptsreg reg vold) h0 ;;
-      h2   <- produce_chunk (scchunk_ptsreg reg vnew) h1 ;;
+      h1   <- consume_chunk (chunk_ptsreg reg vold) h0 ;;
+      h2   <- produce_chunk (chunk_ptsreg reg vnew) h1 ;;
       pure (vnew, h2).
 
     #[export] Instance mon_run :

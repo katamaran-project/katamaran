@@ -81,38 +81,26 @@ Module Type ChunksOn
   (Import P : PredicateKit B)
   (Import F : FormulasOn B P).
 
+  Inductive GChunk (V : Ty -> Set) : Type :=
+  | chunk_user   (p : 𝑯) (ts : Env V (𝑯_Ty p))
+  | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : V σ)
+  | chunk_conj   (c1 c2 : GChunk V)
+  | chunk_wand   (c1 c2 : GChunk V).
+  Global Arguments chunk_user [_] _ _.
+  Global Arguments chunk_ptsreg [_] [_] _ _.
+
   (* Semi-concrete chunks *)
-  Inductive SCChunk : Type :=
-  | scchunk_user   (p : 𝑯) (vs : Env Val (𝑯_Ty p))
-  | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ)
-  | scchunk_conj   (c1 c2 : SCChunk)
-  | scchunk_wand   (c1 c2 : SCChunk).
-  Global Arguments scchunk_user _ _ : clear implicits.
+  Definition SCChunk := GChunk Val.
 
   (* Symbolic chunks *)
-  Inductive Chunk (Σ : LCtx) : Type :=
-  | chunk_user   (p : 𝑯) (ts : Env (Term Σ) (𝑯_Ty p))
-  | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ)
-  | chunk_conj   (c1 c2 : Chunk Σ)
-  | chunk_wand   (c1 c2 : Chunk Σ).
-  Global Arguments chunk_user [_] _ _.
+  Definition Chunk (Σ : LCtx) := GChunk (Term Σ).
 
   Section TransparentObligations.
     Local Set Transparent Obligations.
-    Derive NoConfusion for SCChunk.
-    Derive NoConfusion for Chunk.
+    Derive NoConfusion for GChunk.
   End TransparentObligations.
 
-  #[export] Instance scchunk_isdup : IsDuplicable SCChunk := {
-    is_duplicable := fun c => match c with
-                           | scchunk_user p _ => is_duplicable p
-                           | scchunk_ptsreg _ _ => false
-                           | scchunk_conj _ _ => false
-                           | scchunk_wand _ _ => false
-                           end
-    }.
-
-  #[export] Instance chunk_isdup {Σ} : IsDuplicable (Chunk Σ) := {
+  #[export] Instance chunk_isdup {V} : IsDuplicable (GChunk V) := {
     is_duplicable := fun c => match c with
                            | chunk_user p _ => is_duplicable p
                            | chunk_ptsreg _ _ => false
@@ -123,43 +111,43 @@ Module Type ChunksOn
 
   Open Scope lazy_bool_scope.
 
-  Fixpoint chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
+  Fixpoint chunk_eqb {V : Ty -> Set} (eqv : forall σ, V σ -> V σ -> bool) (c1 c2 : GChunk V) : bool :=
     match c1 , c2 with
     | chunk_user p1 ts1, chunk_user p2 ts2 =>
       match eq_dec p1 p2 with
       | left e => env.eqb_hom
-                    (@Term_eqb _)
+                    eqv
                     (eq_rect _ (fun p => Env _ (𝑯_Ty p)) ts1 _ e)
                     ts2
       | right _ => false
       end
     | chunk_ptsreg r1 t1 , chunk_ptsreg r2 t2 =>
       match eq_dec_het r1 r2 with
-      | left e  => Term_eqb
-                     (eq_rect _ (Term Σ) t1 _ (f_equal projT1 e))
+      | left e  => eqv _
+                     (eq_rect _ V t1 _ (f_equal projT1 e))
                      t2
       | right _ => false
       end
     | chunk_conj c11 c12 , chunk_conj c21 c22 =>
-      chunk_eqb c11 c21 &&& chunk_eqb c12 c22
+      chunk_eqb eqv c11 c21 &&& chunk_eqb eqv c12 c22
     | chunk_wand c11 c12 , chunk_wand c21 c22 =>
-      chunk_eqb c11 c21 &&& chunk_eqb c12 c22
+      chunk_eqb eqv c11 c21 &&& chunk_eqb eqv c12 c22
     | _ , _ => false
     end.
 
   Local Set Equations With UIP.
 
-  Lemma chunk_eqb_spec {Σ} :
-    forall (c1 c2 : Chunk Σ),
-      reflect (c1 = c2) (chunk_eqb c1 c2).
+  Lemma chunk_eqb_spec {V : Ty -> Set} eqv (eqv_spec : forall {σ} {v1 v2 : V σ}, reflect (v1 = v2) (eqv _ v1 v2)):
+    forall (c1 c2 : GChunk V),
+      reflect (c1 = c2) (chunk_eqb eqv c1 c2).
   Proof.
     induction c1; intros [];
       solve_eqb_spec with
       try match goal with
-          | |- reflect _ (env.eqb_hom (@Term_eqb ?Σ) ?x ?y) =>
-              destruct (env.eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) x y)
-          | |- reflect _ (Term_eqb ?x ?y) =>
-              destruct (Term_eqb_spec x y)
+          | |- reflect _ (env.eqb_hom eqv ?x ?y) =>
+              destruct (env.eqb_hom_spec eqv eqv_spec x y)
+          | |- reflect _ (eqv _ ?x ?y) =>
+              destruct (eqv_spec _ x y)
           end.
   Qed.
 
@@ -184,10 +172,10 @@ Module Type ChunksOn
   #[export] Instance inst_chunk : Inst Chunk SCChunk :=
     fix inst_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : SCChunk :=
     match c with
-    | chunk_user p ts => scchunk_user p (inst ts ι)
-    | chunk_ptsreg r t => scchunk_ptsreg r (inst t ι)
-    | chunk_conj c1 c2 => scchunk_conj (inst_chunk c1 ι) (inst_chunk c2 ι)
-    | chunk_wand c1 c2 => scchunk_wand (inst_chunk c1 ι) (inst_chunk c2 ι)
+    | chunk_user p ts => chunk_user p (inst ts ι)
+    | chunk_ptsreg r t => chunk_ptsreg r (inst t ι)
+    | chunk_conj c1 c2 => chunk_conj (inst_chunk c1 ι) (inst_chunk c2 ι)
+    | chunk_wand c1 c2 => chunk_wand (inst_chunk c1 ι) (inst_chunk c2 ι)
     end.
 
   #[export] Instance inst_subst_chunk : InstSubst Chunk SCChunk.
@@ -250,7 +238,7 @@ Module Type ChunksOn
       match h with
       | nil       => None
       | cons c' h =>
-          if chunk_eqb c c'
+          if chunk_eqb Term_eqb c c'
           then Some (if is_duplicable c then (cons c h) else h)
           else option_map (cons c') (try_consume_chunk_exact h c)
       end.
@@ -263,7 +251,7 @@ Module Type ChunksOn
       induction h as [|c' h].
       - now constructor.
       - cbn -[is_duplicable].
-        destruct (chunk_eqb_spec c c').
+        destruct (chunk_eqb_spec _ (@Term_eqb_spec _) c c').
         + constructor. left. subst.
           remember (is_duplicable c') as dup.
           destruct dup; reflexivity.
@@ -382,7 +370,8 @@ Module Type ChunksOn
           intros [t h'] HYP ι. specialize (HYP ι).
           change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
           cbn [fst heap_extractions]. right. apply List.in_map_iff.
-          eexists (inst (chunk_ptsreg r t) ι, inst h' ι). split; auto.
+          eexists (inst (T := Chunk) (chunk_ptsreg (V := Term Σ) r t) ι, inst h' ι).
+          split; auto.
       Qed.
 
       Context (h : SHeap Σ) (t : Term Σ σ).
@@ -464,10 +453,10 @@ Module Type ChunksOn
 
     Fixpoint interpret_scchunk (c : SCChunk) : HProp :=
       match c with
-      | scchunk_user p vs => luser p vs
-      | scchunk_ptsreg r v => lptsreg r v
-      | scchunk_conj c1 c2 => interpret_scchunk c1 ∗ interpret_scchunk c2
-      | scchunk_wand c1 c2 => interpret_scchunk c1 -∗ interpret_scchunk c2
+      | chunk_user p vs => luser p vs
+      | chunk_ptsreg r v => lptsreg r v
+      | chunk_conj c1 c2 => interpret_scchunk c1 ∗ interpret_scchunk c2
+      | chunk_wand c1 c2 => interpret_scchunk c1 -∗ interpret_scchunk c2
       end.
 
     Definition interpret_scheap : SCHeap -> HProp :=
