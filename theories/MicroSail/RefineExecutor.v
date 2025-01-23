@@ -663,20 +663,13 @@ Module RefineExecOn
     Lemma refine_exec_call (fuel : nat) :
       RefineExecCall (cexec_call fuel) (sexec_call cfg fuel).
     Proof.
-      induction fuel; cbn; iIntros (? ? ? ? cδ sδ) "#rδ".
-      - iApply HeapSpec.refine_bind.
-        iApply refine_debug_call; auto.
-        iIntros (w1 θ1) "!> %cu %su _". clear cu su.
-        destruct (CEnv f).
-        + iApply HeapSpec.refine_call_contract. rsolve.
-        + iApply refine_exec_call_error. rsolve.
-      - iApply HeapSpec.refine_bind.
-        iApply refine_debug_call; auto.
-        iIntros (w1 θ1) "!> %cu %su _". clear cu su.
-        destruct (CEnv f).
-        + iApply HeapSpec.refine_call_contract. rsolve.
-        + rsolve.
-          iApply StoreSpec.refine_exec_aux;
+      induction fuel; cbn; iIntros (? ? ? ? cδ sδ) "#rδ"; rsolve.
+      - iApply refine_debug_call; auto.
+      - destruct (CEnv f); rsolve.
+        iApply refine_exec_call_error. rsolve.
+      - now iApply refine_debug_call.
+      - destruct (CEnv f); rsolve.
+        iApply StoreSpec.refine_exec_aux;
             auto using refine_exec_call_foreign, refine_exec_lemma.
     Qed.
 
