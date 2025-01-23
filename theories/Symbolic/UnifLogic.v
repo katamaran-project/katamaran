@@ -1149,7 +1149,6 @@ Module Type UnifLogicOn
       MkRel (RList' R).
 
     Definition RHeap : Rel SHeap SCHeap := RList RChunk.
-    (* priority 1 so that RUnit is picked first (not sure why we have both) *)
     Definition RConst A : Rel (Const A) A := RInst (Const A) A.
 
     Definition RProd `(RA : Rel AT A, RB : Rel BT B) :
@@ -1369,6 +1368,7 @@ Module Type UnifLogicOn
     Lemma refine_unit {w} {u su} :
       ⊢ ℛ⟦ RUnit ⟧ u su : Pred w.
     Proof. destruct u, su. now crushPredEntails3. Qed.
+    Hint Resolve refine_unit : core.
     
     Lemma refine_nil {AT A} {R : Rel AT A} {w} :
       ⊢ ℛ⟦ RList R ⟧ nil (nil : list (AT w)).
@@ -1378,12 +1378,20 @@ Module Type UnifLogicOn
     Qed.
     Hint Resolve refine_nil : core.
 
+    Definition refine_compat_nil {AT A} {R : Rel AT A} {w} :
+      RefineCompat (RList R) nil w (nil : list (AT w)) emp :=
+      MkRefineCompat refine_nil.
+
     Lemma refine_cons {AT A} {R : Rel AT A} {w} :
       ⊢ ℛ⟦ R -> RList R -> RList R ⟧ cons (@cons (AT w)).
     Proof.
       crushPredEntails3.
       now constructor.
     Qed.
+
+    #[export] Instance refine_compat_cons {AT A} {R : Rel AT A} {w} :
+      RefineCompat (R -> RList R -> RList R) cons w (@cons (AT w)) emp :=
+      MkRefineCompat refine_cons.
 
     Lemma refine_if {AT A} {R : Rel AT A} {w} {v1 sv1 v2 sv2 c sc}:
       ⊢ ℛ⟦ RConst bool ⟧ c sc -∗ ℛ⟦ R ⟧ v1 sv1 -∗ ℛ⟦ R ⟧ v2 sv2 -∗
@@ -1519,13 +1527,17 @@ Module Type UnifLogicOn
     Section WithNotations.
       Import env.notations.
       Import ctx.notations.
-      Lemma refine_namedenv_snoc {N} {Δ : NCtx N Ty} {x : N} {σ : Ty} {w : World} {vs : NamedEnv Val Δ} {svs : NamedEnv (Term w) Δ} {v : Val σ} {sv : Term w σ} :
-        ℛ⟦RNEnv N Δ⟧ vs svs ∗ ℛ⟦RVal σ⟧ v sv ⊢ ℛ⟦RNEnv N (Δ ▻ x∷σ)⟧ (vs.[x∷σ ↦ v])%env (svs.[x∷σ ↦ sv])%env.
+      Lemma refine_namedenv_snoc {N} {Δ : NCtx N Ty} {b} {w : World} {vs : NamedEnv Val Δ} {svs : NamedEnv (Term w) Δ} {v : Val (type b)} {sv : Term w (type b)} :
+        ℛ⟦RNEnv N Δ⟧ vs svs ∗ ℛ⟦RVal (type b)⟧ v sv ⊢ ℛ⟦RNEnv N (Δ ▻ b)⟧ (vs.[b ↦ v])%env (svs.[b ↦ sv])%env.
       Proof.
         iIntros "[Hvs Hv]".
-        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Δ) (T2 := STerm σ) (T3 := fun w => NamedEnv (Term w) (Δ ▻ x∷σ)) (fun vs v => vs.[x∷σ ↦ v]) (fun vs (v : Term w σ) => vs.[x∷σ ↦ v]) with "[$Hvs $Hv]").
+        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Δ) (T2 := STerm (type b)) (T3 := fun w => NamedEnv (Term w) (Δ ▻ b)) (fun vs v => vs.[b ↦ v]) (fun vs (v : Term w (type b)) => vs.[b ↦ v]) with "[$Hvs $Hv]").
         now intros.
       Qed.
+
+      #[export] Instance refine_compat_namedenv_snoc {N} {Δ : NCtx N Ty} {b} {w : World} {vs : NamedEnv Val Δ} {svs : NamedEnv (Term w) Δ} {v : Val (type b)} {sv : Term w (type b)} :
+        RefineCompat (RNEnv N (Δ ▻ b)) (vs.[b ↦ v])%env w (svs.[b ↦ sv])%env _ :=
+        MkRefineCompat refine_namedenv_snoc.
 
       Lemma refine_sub_snoc {τ : Ty} {Γ : LCtx} {x : LVar}
         {w : World} {vs : NamedEnv Val Γ} {svs : NamedEnv (Term w) Γ}
@@ -1563,12 +1575,14 @@ Module Type UnifLogicOn
         now intros.
       Qed.
 
+      #[export] Instance refine_compat_namedenv_nil {N} {w : World} :
+        RefineCompat (RNEnv N [ctx]) env.nil w (env.nil : NamedEnv (Term w) [ctx]) _ :=
+        MkRefineCompat refine_namedenv_nil.
+
       Lemma refine_namedenv_singleton {N : Set} {x : N} {σ : Ty} {w : World} {v : Val σ} {sv : Term w σ} :
         ℛ⟦RVal σ⟧ v sv ⊢ ℛ⟦RNEnv N (ctx.nil ▻ x∷σ)⟧ ([env].[x∷σ ↦ v])%env ([env].[x∷σ ↦ sv])%env.
       Proof.
-        iIntros "Hv".
-        iApply (refine_namedenv_snoc with "[$Hv]").
-        iApply refine_namedenv_nil.
+        iIntros "Hv"; rsolve.
       Qed.
 
       Lemma refine_namedenv_sub_acc_trans {Σ : LCtx} {w1 w2 : World} {ι : Valuation Σ} { ω1 : wlctx Σ ⊒ w1} {ω2 : w1 ⊒ w2}:
@@ -1777,6 +1791,10 @@ Module Type UnifLogicOn
   Import ctx.notations.
   Import ModalNotations.
   
+  #[export] Hint Extern 0 (RefineCompat (RList ?R) nil _ _ _) => refine (refine_compat_nil (R := R)) : typeclass_instances.
+  #[export] Hint Extern 0 (RefineCompat RHeap nil _ _ _) => refine (refine_compat_nil (R := RChunk)) : typeclass_instances.
+
+
   (* Outside the LRCompat section because of Coq restriction *)
   #[export] Instance refine_compat_term_val {σ} {v w} : RefineCompat (RVal σ) v w (term_val σ v) _ :=
     MkRefineCompat refine_term_val.

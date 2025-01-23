@@ -263,7 +263,6 @@ Section BlockVerificationDerived.
           (sexec_instruction (w := w) i).
     Proof.
       unfold cexec_instruction, sexec_instruction. rsolve.
-      all: iApply refine_namedenv_nil.
     Qed.
 
     #[export] Instance refine_compat_exec_instruction {i : AST} {w} :
@@ -636,7 +635,6 @@ Section AnnotatedBlockVerification.
       { iInduction b as [|instr b] "IHb"; rsolve.
         destruct instr; cbn; rsolve.
         - iApply "IHb"; rsolve.
-        - iApply refine_namedenv_nil.
         - iApply "IHb"; rsolve.
       }
       now iApply (unconditionally_T with "H").
