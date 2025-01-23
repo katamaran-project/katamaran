@@ -71,60 +71,7 @@ Module RefineExecOn
   Import proofmode.
   Import iris.proofmode.environments.
   Import iris.proofmode.tactics.
-
-  Ltac rsolve_step :=
-    first [
-        (lazymatch goal with
-         | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
-         | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
-         end)
-      | lazymatch goal with
-        | |- envs_entails _ (ℛ⟦ ?R ⟧ ?v ?vs) =>
-            (iApply (refine_compat_lemma (R := R) (vs := vs));
-             lazymatch goal with | |- RefineCompat _ _ _ _ _ => fail | _ => idtac end
-            )
-        | |- envs_entails _ (_ ∗ _) => iSplit
-        | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
-        end
-      ].
-
-  Ltac rsolve :=
-    iStartProof;
-    repeat rsolve_step; try done;
-    (* After walking through the symbolic computation using the above lemmas,
-     * we try to apply induction hypotheses.
-     * To do this, we determine the right world to apply the IH in by looking at the current goal.
-     *)
-    repeat match goal with
-      | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
-      | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
-      | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
-      end.
-
-  Ltac rsolve2_step :=
-    first [
-        (lazymatch goal with
-         | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
-         | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
-         end)
-      | lazymatch goal with
-        | |- envs_entails _ ?P => iApply (refine_compat_gen_lemma P true)
-        | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
-        end
-      ].
-
-  Ltac rsolve2 :=
-    iStartProof;
-    progress rsolve2_step; try done;
-    (* After walking through the symbolic computation using the above lemmas,
-     * we try to apply induction hypotheses.
-     * To do this, we determine the right world to apply the IH in by looking at the current goal.
-     *)
-    repeat match goal with
-      | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
-      | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
-      | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
-      end.
+  Import RSolve.
 
   Definition RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
     RInst (SStore Γ) (CStore Γ).
@@ -342,6 +289,10 @@ Module RefineExecOn
       - now iApply "Hc2".
     Qed.
 
+    #[export] Instance refine_compat_angelic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
+      RefineCompat (RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R) CStoreSpec.angelic_binary w (SStoreSpec.angelic_binary (w := w)) _ :=
+      MkRefineCompat refine_angelic_binary.
+
     Lemma refine_demonic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
       ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R⟧
         CStoreSpec.demonic_binary (SStoreSpec.demonic_binary (w := w)).
@@ -352,6 +303,10 @@ Module RefineExecOn
       - now iApply "Hc1".
       - now iApply "Hc2".
     Qed.
+
+    #[export] Instance refine_compat_demonic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
+      RefineCompat (RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R) CStoreSpec.demonic_binary w (SStoreSpec.demonic_binary (w := w)) _ :=
+      MkRefineCompat refine_demonic_binary.
 
     Section BasicsCompatLemmas.
       Import logicalrelation.
@@ -411,14 +366,6 @@ Module RefineExecOn
       #[export] Instance refine_compat_debug `{R : Rel AT A} {Γ1 Γ2} {w0 : World} {f} {mc ms} :
         RefineCompat (RStoreSpec Γ1 Γ2 R) mc w0 (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms) _ :=
         MkRefineCompat refine_debug.
-
-      #[export] Instance refine_compat_angelic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
-        RefineCompat (RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R) CStoreSpec.angelic_binary w (SStoreSpec.angelic_binary (w := w)) _ :=
-        MkRefineCompat refine_angelic_binary.
-
-      #[export] Instance refine_compat_demonic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
-        RefineCompat (RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R) CStoreSpec.demonic_binary w (SStoreSpec.demonic_binary (w := w)) _ :=
-        MkRefineCompat refine_demonic_binary.
 
       Definition refine_compat_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
         RefineCompat (RInst (Sub Σ) (Valuation Σ) -> RInst T A) (inst vs) w (subst vs) _ :=
@@ -623,7 +570,7 @@ Module RefineExecOn
     (* Local Hint Unfold RInst : core. *)
 
     Section ExecAux.
-      Import logicalrelation.
+      Import logicalrelation RSolve.
 
       Context `(rexec_call_foreign : RefineExecCallForeign c_exec_call_foreign s_exec_call_foreign).
       Context `(rexec_lemma : RefineExecLemma c_exec_lemma s_exec_lemma).
@@ -651,7 +598,7 @@ Module RefineExecOn
 
   Section WithExec.
 
-    Import StoreSpec.
+    Import HeapSpec StoreSpec.
 
     Context `(rexec : RefineExec c_exec s_exec).
 

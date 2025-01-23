@@ -255,6 +255,7 @@ Section BlockVerificationDerived.
     Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpSignature.HeapSpec.
+    Import RSolve HeapSpec.
 
     Lemma rexec_instruction (i : AST) {w} :
       ⊢ ℛ⟦RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
@@ -280,8 +281,6 @@ Section BlockVerificationDerived.
                  (fun w' θ => sexec_block_addr b (w := w'))) as "H".
       {
         iInduction b as [|*] "IHb"; cbn; rsolve.
-        iApply HeapSpec.refine_assert_formula.
-        rsolve.
         iApply ("IHb" with "[] [$]").
         now rsolve.
       }
@@ -624,6 +623,7 @@ Section AnnotatedBlockVerification.
     Import proofmode.
     Import iris.proofmode.tactics.
     Import RiscvPmpSignature.HeapSpec.
+    Import RSolve.
 
     Lemma rexec_annotated_block_addr (b : list AnnotInstr) {w} :
       ⊢ ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
@@ -635,11 +635,8 @@ Section AnnotatedBlockVerification.
                  (fun w' θ => sexec_annotated_block_addr b (w := w'))) as "H".
       { iInduction b as [|instr b] "IHb"; rsolve.
         destruct instr; cbn; rsolve.
-        - iApply refine_assert_formula. rsolve.
         - iApply "IHb"; rsolve.
-        - iApply refine_debug. rsolve.
-        - iApply refine_call_lemma. rsolve.
-          iApply refine_namedenv_nil.
+        - iApply refine_namedenv_nil.
         - iApply "IHb"; rsolve.
       }
       now iApply (unconditionally_T with "H").
