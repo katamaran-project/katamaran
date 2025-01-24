@@ -1180,7 +1180,6 @@ Module Type UnifLogicOn
             format "'[  ' '[  ' ∀ᵣ  x  ..  y ']' ,  '/' R ']'")
           : rel_scope.
     End notations.
-
   End logicalrelation.
 
   Section ModalRel.
@@ -1352,6 +1351,15 @@ Module Type UnifLogicOn
     Import iris.proofmode.tactics.
     Import RSolve.
     
+    Lemma refine_RMatchResult_existT_eq {N σ} {p : @Pattern N σ} {w} {pc args1 args2}:
+      ℛ⟦RNEnv _ (PatternCaseCtx pc)⟧ args1 args2 ⊢
+        RSat (w := w) (RMatchResult p) (existT pc args1) (existT pc args2).
+    Proof. iIntros "Hargs". now iExists eq_refl. Qed.
+
+    #[export] Instance refine_compat_RMatchResult_existT_eq {N σ} {p : @Pattern N σ} {w} {pc args1 args2} :
+      RefineCompat (RMatchResult p) (existT pc args1) w (existT pc args2) _ :=
+      MkRefineCompat refine_RMatchResult_existT_eq.
+
     Lemma refine_term_val {w τ v} : ⊢ (ℛ⟦RVal τ⟧ v (term_val τ v) : Pred w).
     Proof. unfold RVal, RInst. crushPredEntails3. Qed.
 

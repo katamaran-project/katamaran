@@ -285,6 +285,7 @@ Module Type PatternsOn (Import TY : Types).
             let (pc, δpc) := pattern_match_val (p K) u in
             (existT (existT K pc) δpc)
       end.
+    #[global] Arguments pattern_match_val {σ} !p v.
 
     (* Reverse a pattern match. Given a [PatternCase] and an environment with
        values for all variables in the pattern, reconstruct a value. *)

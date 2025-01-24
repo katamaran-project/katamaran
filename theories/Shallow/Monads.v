@@ -156,6 +156,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
     Definition pure {A : Type} : A -> CPureSpec A :=
       fun a Φ => Φ a.
+    #[global] Arguments pure {A} a Φ /.
 
     Definition bind {A B} :
       CPureSpec A -> (A -> CPureSpec B) -> CPureSpec B :=
@@ -283,7 +284,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Definition new_pattern_match {σ} (pat : @Pattern N σ)
         (v : Val σ) : CPureSpec (MatchResult pat) :=
         pure (pattern_match_val pat v).
-      #[global] Arguments new_pattern_match {σ} pat v _.
+      #[global] Arguments new_pattern_match {σ} !pat v /.
 
     End PatternMatching.
 

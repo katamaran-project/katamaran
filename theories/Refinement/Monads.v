@@ -521,7 +521,6 @@ Module Type RefinementMonadsOn
       unfold RConst, RInst; cbn.
       rewrite repₚ_const.
       iDestruct "Hι1" as "<-"; rsolve.
-      iExists eq_refl; cbn; rsolve.
     Qed.
     #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
 
@@ -539,9 +538,7 @@ Module Type RefinementMonadsOn
       iIntros (w1 r01) "!> %ι1 %sι1 Hι1".
       unfold RConst, RInst; cbn.
       rewrite repₚ_const.
-      iDestruct "Hι1" as "<-".
-      iApply (refine_bind (RA := RNEnv _ (PatternCaseCtx _)) (RB := RMatchResult pat)); rsolve.
-      iExists eq_refl; cbn; rsolve.
+      iDestruct "Hι1" as "<-"; rsolve.
     Qed.
     #[global] Arguments refine_demonic_pattern_match' {N} n {σ} pat.
 
@@ -554,19 +551,14 @@ Module Type RefinementMonadsOn
       induction pat; cbn - [RSat].
       - iIntros (msg v sv) "Hv %Φ %sΦ rΦ HSP". 
         rewrite CPureSpec.wp_angelic_pattern_match.
-        iApply ("rΦ" with "[Hv] HSP").
-        iExists eq_refl.
-        iApply (repₚ_cong (T1 := STerm σ) (T2 := fun w => NamedEnv (Term w) _) with "Hv").
-        now intros.
+        iApply ("rΦ" with "[Hv] HSP"); rsolve.
       - iIntros (msg v sv) "Hv".
         destruct (term_get_val_spec sv); subst.
         + iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_angelic_pattern_match; cbn.
-          iApply ("rΦ" with "[Hv] HSP").
           iDestruct (repₚ_elim (a := a) with "Hv") as "<-".
           { now intros. }
-          iExists eq_refl; cbn.
-          now iApply (repₚ_triv (T := fun w => NamedEnv (Term w) _)).
+          iApply ("rΦ" with "[Hv] HSP"); rsolve.
         + now iApply (refine_angelic_pattern_match' n pat_bool).
       - iApply (refine_angelic_pattern_match' n (pat_list σ x y)).
       - iIntros (msg v sv) "Hv".
@@ -579,9 +571,7 @@ Module Type RefinementMonadsOn
           iPoseProof (eqₚ_triv (vt2 := term_binop bop.pair svl svr : STerm (ty.prod σ τ) w) Heq) as "Heq".
           iDestruct (repₚ_eqₚ (T := STerm (ty.prod σ τ)) with "[$Heq $Hv]") as "Hv12".
           iDestruct (repₚ_term_prod with "Hv12") as "(Hv1 & Hv2)".
-          iApply (repₚ_cong₂ (T1 := STerm σ) (T2 := STerm τ) (T3 := fun w => NamedEnv (Term w) [x∷σ; y ∷τ]) (fun v1 v2 => [env].[x∷σ↦ v1].[y∷τ ↦ v2]) (fun v1 v2 => [env].[x∷σ↦ v1].[y∷τ ↦ v2] : NamedEnv (Term w) _) with "[Hv1 Hv2]").
-          { now intros. }
-          now iFrame.
+          rsolve.
         + now iApply (refine_angelic_pattern_match' n (pat_pair _ _)).
       - iIntros (msg v sv) "Hv".
         destruct (term_get_sum_spec sv) as [[svl|svr] Heq|]; subst.
@@ -591,20 +581,19 @@ Module Type RefinementMonadsOn
           rewrite CPureSpec.wp_angelic_pattern_match.
           iApply ("rΦ" with "[Hv'] HSP").
           iDestruct (repₚ_inversion_term_inl with "Hv'") as "(%vl & -> & Hvl)".
-          iExists eq_refl; rsolve.
+          rsolve.
         + iPoseProof (eqₚ_triv (vt2 := term_inr svr : STerm (ty.sum σ τ) w) Heq) as "Heq".
           iDestruct (repₚ_eqₚ (T := STerm (ty.sum _ _)) with "[$Heq $Hv]") as "Hv'".
           iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_angelic_pattern_match.
           iApply ("rΦ" with "[Hv'] HSP").
           iDestruct (repₚ_inversion_term_inr with "Hv'") as "(%vr & -> & Hvr)".
-          iExists eq_refl; rsolve.
+          rsolve.
         + now iApply (refine_angelic_pattern_match' n (pat_sum _ _ _ _)).
       - iIntros (msg v sv) "Hv %Φ %sΦ rΦ HSP".
         rewrite CPureSpec.wp_angelic_pattern_match.
         iApply ("rΦ" with "[Hv] HSP").
-        destruct v.
-        iExists eq_refl; rsolve.
+        destruct v; rsolve.
       - iIntros (msg v sv) "Hv".
         destruct (term_get_val_spec sv); subst.
         + iIntros (Φ sΦ) "rΦ HSP".
@@ -612,7 +601,7 @@ Module Type RefinementMonadsOn
           iApply ("rΦ" with "[Hv] HSP").
           iDestruct (repₚ_elim (a := a) with "Hv") as "->".
           { now intros. }
-          iExists eq_refl; rsolve.
+          rsolve.
         + now iApply (refine_angelic_pattern_match' n (pat_enum E)).
       - iApply (refine_angelic_pattern_match' n (pat_bvec_split _ _ x y)).
       - iIntros (msg v sv) "Hv".
@@ -622,7 +611,7 @@ Module Type RefinementMonadsOn
           iApply ("rΦ" with "[Hv] HSP").
           iDestruct (repₚ_elim (a := a) with "Hv") as "->".
           { now intros. }
-          iExists eq_refl; rsolve.
+          rsolve.
         + now iApply (refine_angelic_pattern_match' n (pat_bvec_exhaustive m)).
       - iApply (refine_angelic_pattern_match' n (pat_tuple p)).
       - iIntros (msg v sv) "Hv".
@@ -657,8 +646,7 @@ Module Type RefinementMonadsOn
           iDestruct "Hmr" as "(%e & Hmr)".
           subst x0.
           rewrite forgetting_unconditionally.
-          iApply ("rΦ" with "[Hmr]").
-          now iExists eq_refl.
+          iApply ("rΦ" with "[Hmr]"); rsolve.
         + now iApply (refine_angelic_pattern_match' n (pat_union _ _)).
     Qed.
     #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
@@ -673,9 +661,7 @@ Module Type RefinementMonadsOn
       - iIntros (v sv) "Hv %Φ %sΦ rΦ HSP". 
         rewrite CPureSpec.wp_demonic_pattern_match.
         iApply ("rΦ" with "[Hv] HSP").
-        iExists eq_refl.
-        iApply (repₚ_cong (T1 := STerm σ) (T2 := fun w => NamedEnv (Term w) _) with "Hv").
-        now intros.
+        rsolve.
       - iIntros (v sv) "Hv".
         destruct (term_get_val_spec sv); subst.
         + iIntros (Φ sΦ) "rΦ HSP".
@@ -697,9 +683,7 @@ Module Type RefinementMonadsOn
           iPoseProof (eqₚ_triv (vt2 := term_binop bop.pair svl svr : STerm (ty.prod σ τ) w) Heq) as "Heq".
           iDestruct (repₚ_eqₚ (T := STerm (ty.prod σ τ)) with "[$Heq $Hv]") as "Hv12".
           iDestruct (repₚ_term_prod with "Hv12") as "(Hv1 & Hv2)".
-          iApply (repₚ_cong₂ (T1 := STerm σ) (T2 := STerm τ) (T3 := fun w => NamedEnv (Term w) [x∷σ; y ∷τ]) (fun v1 v2 => [env].[x∷σ↦ v1].[y∷τ ↦ v2]) (fun v1 v2 => [env].[x∷σ↦ v1].[y∷τ ↦ v2] : NamedEnv (Term w) _) with "[Hv1 Hv2]").
-          { now intros. }
-          now iFrame.
+          rsolve.
         + now iApply (refine_demonic_pattern_match' n (pat_pair _ _)).
       - iIntros (v sv) "Hv".
         destruct (term_get_sum_spec sv) as [[svl|svr] Heq|]; subst.
@@ -709,18 +693,14 @@ Module Type RefinementMonadsOn
           rewrite CPureSpec.wp_demonic_pattern_match.
           iApply ("rΦ" with "[Hv'] HSP").
           iDestruct (repₚ_inversion_term_inl with "Hv'") as "(%vl & -> & Hvl)".
-          iExists eq_refl.
-          iApply (repₚ_cong (T1 := STerm σ) (A2 := NamedEnv Val _) (T2 := fun w => NamedEnv (Term w) _) (fun vl => [env].[x∷σ ↦ vl]) (fun svl => [env].[x∷σ ↦ svl]) with "Hvl").
-          now intros.
+          rsolve.
         + iPoseProof (eqₚ_triv (vt2 := term_inr svr : STerm (ty.sum σ τ) w) Heq) as "Heq".
           iDestruct (repₚ_eqₚ (T := STerm (ty.sum _ _)) with "[$Heq $Hv]") as "Hv'".
           iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_demonic_pattern_match.
           iApply ("rΦ" with "[Hv'] HSP").
           iDestruct (repₚ_inversion_term_inr with "Hv'") as "(%vr & -> & Hvr)".
-          iExists eq_refl.
-          iApply (repₚ_cong (T1 := STerm _) (A2 := NamedEnv Val _) (T2 := fun w => NamedEnv (Term w) _) (fun vr => [env].[y∷τ ↦ vr]) (fun svr => [env].[y∷τ ↦ svr]) with "Hvr").
-          now intros.
+          rsolve.
         + now iApply (refine_demonic_pattern_match' n (pat_sum _ _ _ _)).
       - iIntros (v sv) "Hv %Φ %sΦ rΦ HSP".
         rewrite CPureSpec.wp_demonic_pattern_match.
@@ -736,9 +716,7 @@ Module Type RefinementMonadsOn
           iApply ("rΦ" with "[Hv] HSP").
           iDestruct (repₚ_elim (a := a) with "Hv") as "->".
           { now intros. }
-          iExists eq_refl.
-          iApply (repₚ_triv (T := fun w => NamedEnv (Term w) _)).
-          now intros.
+          rsolve.
         + now iApply (refine_demonic_pattern_match' n (pat_enum E)).
       - iApply (refine_demonic_pattern_match' n (pat_bvec_split _ _ x y)).
       - iIntros (v sv) "Hv".
@@ -748,9 +726,7 @@ Module Type RefinementMonadsOn
           iApply ("rΦ" with "[Hv] HSP").
           iDestruct (repₚ_elim (a := a) with "Hv") as "->".
           { now intros. }
-          iExists eq_refl.
-          iApply (repₚ_triv (T := fun w => NamedEnv (Term w) _)).
-          now intros.
+          rsolve.
         + now iApply (refine_demonic_pattern_match' n (pat_bvec_exhaustive m)).
       - iApply (refine_demonic_pattern_match' n (pat_tuple p)).
       - iIntros (v sv) "Hv".
@@ -853,75 +829,59 @@ Module Type RefinementMonadsOn
     Lemma refine_new_pattern_match {N : Set} n σ (pat : @Pattern N σ) {w} :
       ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧
         (CPureSpec.new_pattern_match pat)
-      (SPureSpec.new_pattern_match (w := w) n pat).
+        (SPureSpec.new_pattern_match (w := w) n pat).
     Proof.
-      induction pat; cbn [SPureSpec.new_pattern_match];
-        iIntros "%v %sv Hv".
-      - unfold CPureSpec.new_pattern_match.
-        iApply (refine_pure (RA := RMatchResult _) with "[Hv]").
-        iExists eq_refl; cbn.
-        now iApply (refine_namedenv_singleton with "[Hv]").
-      - destruct (term_get_val_spec sv) as [cv ?|].
-        + iApply (refine_pure (RA := RMatchResult _) with "[Hv]"); cbn.
-          subst. rewrite <-refine_term_val2.
-          iDestruct "Hv" as "->".
-          iExists eq_refl; cbn.
-          iApply refine_namedenv_nil.
-        + now iApply (refine_new_pattern_match' with "Hv").
+      induction pat; iIntros "%v %sv Hv";
+        cbn [SPureSpec.new_pattern_match];
+        rsolve.
+      - cbn; rsolve.
+      - destruct (term_get_val_spec sv) as [cv ?|]; cbn.
+        + subst. iDestruct (refine_term_val2  with "Hv") as "<-"; cbn.
+          rsolve.
+        + iApply (refine_new_pattern_match' with "Hv").
       - now iApply (refine_new_pattern_match' with "Hv").
       - destruct (term_get_pair_spec sv) as [[? ?] eq|].
         + iApply (refine_pure (RA := RMatchResult _) with "[Hv]").
           destruct v as [v1 v2].
-          iExists eq_refl; cbn.
           iPoseProof (eqₚ_triv (vt2 := term_binop bop.pair t t0) eq) as "Heq".
           iDestruct (RVal_eqₚ with "[$Hv $Heq]") as "Hv".
           iDestruct (RVal_pair with "Hv") as "[Hv1 Hv2]".
           rsolve.
         + now iApply (refine_new_pattern_match' with "Hv").
       - destruct (term_get_sum_spec sv) as [[] eq|].
-        + iApply (refine_pure (RA := RMatchResult _) with "[Hv]").
-          iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
+        + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
           { iApply (eqₚ_triv (vt2 := term_inl t) eq). }
           iDestruct (RVal_invert_inl with "Hv") as "[%vl [-> Hv]]".
-          iExists eq_refl; rsolve.
-        + iApply (refine_pure (RA := RMatchResult _) with "[Hv]").
-          iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
+          cbn; rsolve.
+        + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
           { iApply (eqₚ_triv (vt2 := term_inr t) eq). }
           iDestruct (RVal_invert_inr with "Hv") as "[%vl [-> Hv]]".
-          iExists eq_refl; rsolve.
+          cbn; rsolve.
         + now iApply (refine_new_pattern_match' with "Hv").
-      - iApply (refine_pure (RA := RMatchResult _) with "[Hv]").
-        iExists eq_refl; cbn.
-        now iApply refine_namedenv_nil.
+      - cbn; rsolve.
       - destruct (term_get_val_spec sv) as [? ->|].
-        + iApply (refine_pure (RA := RMatchResult _) with "[Hv]").
-          iDestruct (refine_term_val2 with "Hv") as "->".
-          iExists eq_refl; rsolve.
+        + iDestruct (refine_term_val2 with "Hv") as "->".
+          cbn; rsolve.
         + now iApply (refine_new_pattern_match' with "Hv").
-      - now iApply refine_new_pattern_match'.
+      - now iApply (refine_new_pattern_match').
       - destruct (term_get_val_spec sv) as [? ->|].
-        + iApply (refine_pure (RA := RMatchResult _) with "[Hv]").
-          iDestruct (refine_term_val2 with "Hv") as "->".
-          iExists eq_refl; rsolve.
+        + iDestruct (refine_term_val2 with "Hv") as "->".
+          cbn; rsolve.
         + now iApply (refine_new_pattern_match' with "Hv").
       - destruct (term_get_tuple_spec sv) as [? eq|].
-        + iApply (refine_pure (RA := RMatchResult _) with "[Hv]"). 
-          iExists eq_refl. cbn.
-          iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
+        + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
           { iApply (eqₚ_triv (vt2 := term_tuple a) eq).  }
-          unfold tuple_pattern_match_val.
-          iApply (refine_tuple_pattern_match_env with "[Hv]").
-          iApply (RVal_tuple with "Hv").
+          cbn; rsolve.
+          iApply refine_tuple_pattern_match_env.
+          now iApply RVal_tuple.
         + now iApply refine_new_pattern_match'.
       - destruct (term_get_record_spec sv) as [? eq|].
-        + iApply (refine_pure (RA := RMatchResult _) with "[Hv]").
-          iExists eq_refl. cbn.
-          unfold record_pattern_match_val.
-          iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
+        + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
           { iApply (eqₚ_triv (vt2 := term_record R a) eq).  }
+          cbn; rsolve.
+          unfold record_pattern_match_val.
           rewrite <-refine_record_pattern_match_env.
-          rewrite RVal_record.
-          now rewrite recordv_fold_unfold.
+          now rewrite RVal_record recordv_fold_unfold.
         + now iApply refine_new_pattern_match'.
       - destruct (term_get_union_spec sv) as [[K tf] Heq|].
         + iIntros (post spost) "rpost"; cbn.
@@ -942,7 +902,7 @@ Module Type RefinementMonadsOn
           destruct smr as [spc' sδargs].
           iDestruct "Hmr" as "[%eq H2]"; subst; cbn.
           rewrite forgetting_unconditionally.
-          iApply ("rpost" with "[H2]").
+          iApply "rpost".
           now iExists eq_refl.
         + now iApply refine_new_pattern_match'.
     Qed.
@@ -1436,9 +1396,7 @@ Module Type RefinementMonadsOn
           iSplit; first done.
           iApply (refine_T with "HK [Hv Hh'] HSP").
           iSplitL "Hv"; first done.
-          iApply (refine_cons (R := RChunk) with "[Hv] [Hh']").
-          iApply (repₚ_cong (T1 := STerm τ) (T2 := Chunk) (chunk_ptsreg reg) (chunk_ptsreg reg) with "Hv").
-          { now intros. }
+          iApply (refine_cons (R := RChunk) with "[Hv] [Hh']"); rsolve.
           now iApply (RList_RInst with "Hh'").
       - cbn. now iDestruct "HSP" as "%fls".
     Qed.
