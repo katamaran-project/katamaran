@@ -132,10 +132,7 @@ Module RefineExecOn
       iSpecialize ("Hk" $! _ ω).
       iModIntro.
       iIntros (k2 k2s) "Hk2".
-      iApply ("Hk" with "Hk2 [Hs]").
-      - now iApply (refine_inst_persist with "Hs").
-      - rewrite !RList_RInst.
-        now iApply (refine_inst_persist with "Hh").
+      iApply ("Hk" with "Hk2 [Hs]"); rsolve.
     Qed.
 
     Lemma refine_lift_heapspec {Γ} `(R : Rel AT A) {w : World}:
@@ -152,8 +149,7 @@ Module RefineExecOn
       iSpecialize ("Hk" $! _ θ1).
       iModIntro.
       iIntros (k2 k2s) "Hk2".
-      iApply ("Hk" with "Hk2 [Hs]").
-      now iApply (refine_inst_persist with "Hs").
+      iApply ("Hk" with "Hk2 [Hs]"); rsolve.
     Qed.
 
     Lemma refine_block {Γ1 Γ2} `{R : Rel AT A} {w : World} :
@@ -367,13 +363,7 @@ Module RefineExecOn
         RefineCompat (RStoreSpec Γ1 Γ2 R) mc w0 (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms) _ :=
         MkRefineCompat refine_debug.
 
-      Definition refine_compat_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
-        RefineCompat (RInst (Sub Σ) (Valuation Σ) -> RInst T A) (inst vs) w (subst vs) _ :=
-        MkRefineCompat (refine_inst_subst vs).
-      Opaque refine_compat_inst_subst.
-
     End BasicsCompatLemmas.
-    #[export] Hint Extern 0 (RefineCompat _ (inst ?vs) _ (subst ?vs) _) => refine (refine_compat_inst_subst vs) : typeclass_instances.
 
     Section PatternMatching.
       Import logicalrelation.
@@ -388,10 +378,7 @@ Module RefineExecOn
                  CStoreSpec.lift_purespec.
         iApply (PureSpec.refine_demonic_pattern_match with "rv").
         iIntros (w1 θ1) "!> %mr %smr rmr".
-        iApply ("rΦ" with "rmr [rδ] [rh]").
-        - iApply (refine_inst_persist with "rδ").
-        - rewrite !RList_RInst.
-          iApply (refine_inst_persist with "rh").
+        iApply ("rΦ" with "rmr [rδ] [rh]"); rsolve.
       Qed.
     End PatternMatching.
 

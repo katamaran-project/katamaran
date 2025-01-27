@@ -1148,7 +1148,7 @@ Module Type UnifLogicOn
     Definition RList {AT A} (R : Rel AT A) : Rel (WList AT) (list A) :=
       MkRel (RList' R).
 
-    Definition RHeap : Rel SHeap SCHeap := RList RChunk.
+    Definition RHeap : Rel SHeap SCHeap := RInst SHeap SCHeap.
     Definition RConst A : Rel (Const A) A := RInst (Const A) A.
 
     Definition RProd `(RA : Rel AT A, RB : Rel BT B) :
@@ -1378,6 +1378,30 @@ Module Type UnifLogicOn
     Proof. destruct u, su. now crushPredEntails3. Qed.
     Hint Resolve refine_unit : core.
     
+    Lemma refine_RHeap_nil {w} :
+      ⊢ ℛ⟦ RHeap ⟧ nil (nil : SHeap (wctx w)).
+    Proof.
+      iApply repₚ_triv.
+      now intros.
+    Qed.
+    Hint Resolve refine_RHeap_nil : core.
+
+    #[export] Instance refine_compat_RHeap_nil {w} :
+      RefineCompat RHeap nil w (nil : SHeap (wctx w)) emp :=
+      MkRefineCompat refine_RHeap_nil.
+
+    Lemma refine_RHeap_cons {w} :
+      ⊢ ℛ⟦ RChunk -> RHeap -> RHeap ⟧ cons (@cons (Chunk (wctx w))).
+    Proof.
+      iIntros (c1 c2) "Rc %h1 %h2 Rh".
+      iApply ((repₚ_cong₂ (T2 := fun Σ => list (Chunk Σ)) (T3 := fun Σ => list (Chunk Σ)) cons cons) with "[$Rc $Rh]").
+      now intros.
+    Qed.
+
+    #[export] Instance refine_compat_RHeap_cons {w} :
+      RefineCompat (RChunk -> RHeap -> RHeap) cons w (@cons (Chunk (wctx w))) emp :=
+      MkRefineCompat refine_RHeap_cons.
+
     Lemma refine_nil {AT A} {R : Rel AT A} {w} :
       ⊢ ℛ⟦ RList R ⟧ nil (nil : list (AT w)).
     Proof.
@@ -1505,6 +1529,10 @@ Module Type UnifLogicOn
       crushPredEntails3.
       now rewrite inst_subst H4.
     Qed.
+
+    Definition refine_compat_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
+      RefineCompat (RInst (Sub Σ) (Valuation Σ) -> RInst T A) (inst vs) w (subst vs) _ :=
+      MkRefineCompat (refine_inst_subst vs).
 
     Lemma refine_instprop_subst {Σ} {T : LCtx -> Type} `{InstPredSubst T}
       (vs : T Σ) {w : World} :
@@ -1799,6 +1827,7 @@ Module Type UnifLogicOn
   Import ctx.notations.
   Import ModalNotations.
   
+  #[export] Hint Extern 0 (RefineCompat _ (inst ?vs) ?w (subst ?vs) _) => refine (refine_compat_inst_subst vs (w := w)) : typeclass_instances.
   #[export] Hint Extern 0 (RefineCompat (RList ?R) nil _ _ _) => refine (refine_compat_nil (R := R)) : typeclass_instances.
   #[export] Hint Extern 0 (RefineCompat RHeap nil _ _ _) => refine (refine_compat_nil (R := RChunk)) : typeclass_instances.
 
