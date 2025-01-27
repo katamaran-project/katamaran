@@ -398,14 +398,11 @@ Module RefineExecOn
       Proof.
         iIntros (v sv) "Hv %m %sm Hm %K %sK HK %δ %sδ Hδ %h %sh Hh".
         unfold SStoreSpec.pushpop, CStoreSpec.pushpop.
-        iApply ("Hm" with "[HK] [Hδ Hv] Hh").
-        - clear.
-          iIntros (w2 ω2) "!> %v %sv Hv %δ %sδ Hδ".
-          iApply ("HK" with "Hv").
-          iApply (repₚ_cong (T1 := SStore (Γ2 ▻ x∷σ)) (T2 := SStore Γ2) env.tail env.tail with "Hδ").
-          intros. now env.destroy vs1.
-        - iApply (repₚ_cong₂ (T1 := SStore Γ1) (T2 := STerm σ) (T3 := SStore (Γ1 ▻ x∷σ)) (fun δ v => δ.[x∷σ ↦ v]) (w := w) (fun δ v => δ.[x∷σ ↦ v]) with "[$Hδ $Hv]").
-          now intros.
+        iApply ("Hm" with "[HK] [Hδ Hv] Hh"); rsolve.
+        iRename select (ℛ⟦R⟧ a ta) into "Ha".
+        iApply ("HK" with "Ha"); rsolve.
+        iApply (repₚ_cong (T1 := SStore (Γ2 ▻ x∷σ)) (T2 := SStore Γ2) env.tail env.tail); last done.
+        intros. now env.destroy vs1.
       Qed.
 
       Lemma refine_pushspops `{R : Rel AT A} {Γ1 Γ2 Δ} {w} :
@@ -638,13 +635,9 @@ Module RefineExecOn
           (SYMB.debug_call cfg f (w := w)).
     Proof.
       iIntros (cδ sδ) "#rδ". unfold SHAL.debug_call, SYMB.debug_call.
-      destruct config_debug_function.
-      - iApply ((HeapSpec.refine_debug (RA := RUnit) (w := w)) with "[]").
-        fold (CHeapSpec.pure tt).
-        iApply HeapSpec.refine_pure.
-        iApply refine_unit.
-      - iApply HeapSpec.refine_pure.
-        iApply refine_unit.
+      destruct config_debug_function; rsolve.
+      iApply ((HeapSpec.refine_debug (RA := RUnit) (w := w)) with "[]").
+      fold (CHeapSpec.pure tt); rsolve.
     Qed.
 
     Lemma refine_exec_call (fuel : nat) :

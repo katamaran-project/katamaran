@@ -1034,19 +1034,11 @@ Module Type RefinementMonadsOn
           iApply (refine_error (RA := RUnit)).
         + iIntros (σ2 r2 v2 sv2) "Hv2 %msg %σ %r %v %sv Hv %w1 %ω1 !>".
           cbn -[RSat].
-          destruct (eq_dec_het r r2).
-          * dependent elimination e; cbn -[RSat].
-            iApply refine_assert_formula.
-            unfold RVal, RInst; cbn.
-            rewrite <-!forgetting_repₚ.
-            iApply (proprepₚ_cong₂ (T1 := STerm σ) (T2 := STerm σ) (T3 := Formula) eq (formula_relop bop.eq) with "[Hv2 Hv]").
-            { intuition. }
-            now iSplitL "Hv".
-          * iApply (refine_error (RA := RUnit)).
-        + iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 %msg %σ %r %v %sv Hv %w1 %ω1 !>".
-          iApply (refine_error (RA := RUnit)).
-        + iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 %msg %σ %r %v %sv Hv %w1 %ω1 !>".
-          iApply (refine_error (RA := RUnit)).
+          destruct (eq_dec_het r r2); last rsolve.
+          dependent elimination e; cbn -[RSat].
+          iApply refine_assert_formula; rsolve.
+        + iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 %msg %σ %r %v %sv Hv %w1 %ω1 !>"; rsolve.
+        + iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 %msg %σ %r %v %sv Hv %w1 %ω1 !>"; rsolve.
       - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 IHc1 IHc2 %msg %c3 %sc3 Hc3".
         iApply (RChunk_case (MkRel (fun c3 w sc3 => ∀ msg c1 sc1 c2 sc2,
                                         ℛ⟦RChunk⟧ c1 sc1 -∗
@@ -1055,10 +1047,8 @@ Module Type RefinementMonadsOn
                                                                                                                                                                                         ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c2) (SPureSpec.assert_eq_chunk msg sc2) -∗
                                                                                                                                                                                                                                                                                                 ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (chunk_conj c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_conj sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
         clear. repeat iSplitL.
-        + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
-          iApply (refine_error (RA := RUnit)).
-        + iIntros (σ r v sv) "Hv %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
-          iApply (refine_error (RA := RUnit)).
+        + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>"; rsolve.
+        + iIntros (σ r v sv) "Hv %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>"; rsolve.
         + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
           iApply (refine_bind (RA := RUnit) (RB := RUnit) with "[Hc1 IHc1 Hc3] [Hc2 IHc2 Hc4]").
           * iSpecialize ("IHc1" with "Hc3").
@@ -1066,8 +1056,7 @@ Module Type RefinementMonadsOn
           * iIntros (w2 ω2) "!> %u %su _".
             iSpecialize ("IHc2" with "Hc4").
             now rewrite forgetting_unconditionally_drastic.
-        + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
-          iApply (refine_error (RA := RUnit)).
+        + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>"; rsolve.
       - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 IHc1 IHc2 %msg %c3 %sc3 Hc3".
         iApply (RChunk_case (MkRel (fun c3 w sc3 => ∀ msg c1 sc1 c2 sc2,
                                         ℛ⟦RChunk⟧ c1 sc1 -∗
@@ -1106,10 +1095,8 @@ Module Type RefinementMonadsOn
       - now iApply "IH1".
       - now iApply "IH".
       - now iApply "IH1".
-      - iApply "IH".
-        now iApply (refine_inst_persist with "Hι").
-      - iApply "IH".
-        now iApply (refine_inst_persist (AT := Sub _) with "Hι").
+      - iApply "IH"; rsolve.
+      - iApply "IH"; rsolve.
       - iApply "IH"; rsolve.
       - iApply "IH"; rsolve.
       - rewrite <-inst_sub_shift.
@@ -1308,8 +1295,7 @@ Module Type RefinementMonadsOn
         iApply (refine_consume_chunk_In HIn with "[$Hc1 $Hh']").
       }
       destruct (try_consume_chunk_precise_spec sh sc1) as [[sh' eqs] HIn|].
-      { cbv [SPureSpec.bind SPureSpec.pure].
-        assert (⊢ ∀ eq c h' h, proprepₚ eq eqs -∗ repₚ c sc1 -∗ repₚ h' sh' -∗ repₚ h sh -∗ ⌜ eq ⌝ -∗ ⌜In (c , h') (heap_extractions h)⌝)%I as HInLog.
+      { assert (⊢ ∀ eq c h' h, proprepₚ eq eqs -∗ repₚ c sc1 -∗ repₚ h' sh' -∗ repₚ h sh -∗ ⌜ eq ⌝ -∗ ⌜In (c , h') (heap_extractions h)⌝)%I as HInLog.
         { clear -HIn. crushPredEntails3. subst. apply HIn. now rewrite instpred_prop in H2. }
         iDestruct (eval_prop eqs) as "(%eq & Heq)".
         iAssert (∃ h', ℛ⟦RHeap⟧ h' sh')%I as "(%h' & Hh')".
@@ -1640,13 +1626,9 @@ Module Type RefinementMonadsOn
         destruct ta as [spc ssub].
         iRename select (ℛ⟦RMatchResult pat⟧ (existT pc sub) (existT spc ssub)) into "Hmr".
         iDestruct "Hmr" as "(%e & Hmr)"; subst; cbn -[RSat].
-        iApply H.
-        iDestruct (refine_inst_persist with "rδ") as "rδp".
-        iApply (repₚ_cong₂ (T1 := Sub _) (T2 := Sub _) (T3 := Sub (Σ ▻▻ PatternCaseCtx pc)) env.cat env.cat with "[$rδp $Hmr]").
-        intros. now rewrite inst_env_cat.
+        iApply H; rsolve.
       - now iApply IHasn1.
-      - iApply IHasn2.
-        iApply (refine_inst_persist with "rδ").
+      - iApply IHasn2; rsolve.
       - now iApply IHasn1.
       - now iApply IHasn2.
       - iApply IHasn; rsolve.
@@ -1666,19 +1648,12 @@ Module Type RefinementMonadsOn
         destruct ta as [spc ssub].
         iRename select (ℛ⟦RMatchResult pat⟧ (existT pc sub) (existT spc ssub)) into "Hmr".
         iDestruct "Hmr" as "(%e & Hmr)"; subst; cbn -[RSat].
-        iDestruct (refine_inst_persist with "rδ") as "rδp".
-        iApply H.
-        iApply (repₚ_cong₂ (T1 := Sub _) (T2 := Sub _) (T3 := Sub (Σ ▻▻ PatternCaseCtx pc)) env.cat env.cat with "[$rδp $Hmr]").
-        intros. now rewrite inst_env_cat.
+        iApply H; rsolve.
       - now iApply IHasn1.
-      - iApply IHasn2.
-        iApply (refine_inst_persist with "rδ").
+      - iApply IHasn2; rsolve.
       - now iApply IHasn1.
       - now iApply IHasn2.
-      - iApply IHasn.
-        iDestruct (refine_inst_persist with "rδ") as "rδp".
-        iApply (repₚ_cong₂ (T1 := Sub _) (T2 := STerm _) (T3 := Sub (Σ ▻ ς∷τ)) (fun δ => env.snoc δ (ς∷τ)) (fun δ => env.snoc δ (ς∷τ)) with "[$rδp]");
-          now intros.
+      - iApply IHasn; rsolve.
     Qed.
 
     #[export] Instance refine_compat_heapspec_consume {Σ} (asn : Assertion Σ) {w} :
@@ -1727,8 +1702,7 @@ Module Type RefinementMonadsOn
       iIntros (cδ sδ) "#rδ".
       destruct c as [lvars pats req res ens]; cbn; rsolve.
       rewrite !forgetting_trans.
-      iModIntro. iModIntro.
-      now iApply (refine_inst_persist (AT := Sub lvars)).
+      iModIntro. iModIntro. rsolve.
     Qed.
 
     #[export] Instance refine_compat_call_contract {Δ τ} (c : SepContract Δ τ) {w} :
