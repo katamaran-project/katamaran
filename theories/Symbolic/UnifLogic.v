@@ -1205,7 +1205,7 @@ Module Type UnifLogicOn
       MkRefineCompat {
           refine_compat_lemma : Ob ⊢ ℛ⟦ R ⟧ v vs
         }.
-    #[export] Hint Mode RefineCompat - - - + + + - : typeclass_instances.
+    #[export] Hint Mode RefineCompat - + - + + + - : typeclass_instances.
     #[global] Arguments refine_compat_lemma {AT A R v w vs Ob} rci : rename.
     #[global] Arguments RefineCompat {AT A} R v w vs Ob%I.
     #[global] Arguments MkRefineCompat {AT A R v w vs Ob%I} rci : rename.
