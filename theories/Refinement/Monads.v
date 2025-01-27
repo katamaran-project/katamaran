@@ -324,10 +324,11 @@ Module Type RefinementMonadsOn
         destruct fls.
     Qed.
 
-    #[export] Instance refine_compat_assert_pathcondition {w} :
-      RefineCompat (RMsg _ (RPathCondition -> RPureSpec RUnit))
-        CPureSpec.assert_pathcondition w (SPureSpec.assert_pathcondition (w := w)) emp :=
-      MkRefineCompat refine_assert_pathcondition.
+    #[export, refine] Instance refine_compat_assert_pathcondition {w msg} :
+      RefineCompat (RPathCondition -> RPureSpec RUnit)
+        CPureSpec.assert_pathcondition w (SPureSpec.assert_pathcondition (w := w) msg) emp :=
+      MkRefineCompat _.
+    Proof. iIntros "_". now iApply (refine_assert_pathcondition $! msg). Qed.
 
     Lemma refine_assume_pathcondition {w} :
       ⊢ ℛ⟦RPathCondition -> RPureSpec RUnit⟧
@@ -1274,6 +1275,21 @@ Module Type RefinementMonadsOn
       now iApply (refine_error (RA := RHeap)).
     Qed.
 
+    Lemma refine_consume_chunk_In {w : World} {c : SCChunk} {h : SCHeap} {sc : Chunk w} {sh : SHeap w}
+      {h' : SCHeap} :
+      In (c, h') (heap_extractions h) ->
+      ℛ⟦RChunk⟧ c sc ∗ ℛ⟦RHeap⟧ h' sh ⊢ ℛ⟦RPureSpec RHeap⟧ (CPureSpec.consume_chunk c h) (SPureSpec.pure sh).
+    Proof.
+      iIntros (HIn) "[Hc Hh'] %K %sK HK HSP".
+      unfold CPureSpec.consume_chunk, CPureSpec.bind.
+      rewrite CPureSpec.wp_angelic_list.
+      iExists (c, h').
+      iSplit; first done.
+      rewrite CPureSpec.wp_assert_eq_chunk.
+      iSplit; first done.
+      now iApply (refine_T with "HK Hh' HSP").
+    Qed.
+
     Lemma refine_consume_chunk_angelic {w} :
       ⊢ ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧
         CPureSpec.consume_chunk (SPureSpec.consume_chunk_angelic (w := w)).
@@ -1288,15 +1304,8 @@ Module Type RefinementMonadsOn
         iDestruct (refine_In with "Hexts [//]") as "(%v & %HIn & HH)".
         destruct v as (c1 & h').
         iDestruct "HH" as "(Hc1' & Hh')".
-        iIntros (K sK) "HK HSP".
-        unfold CPureSpec.consume_chunk, CPureSpec.bind.
-        rewrite CPureSpec.wp_angelic_list.
         iDestruct (repₚ_antisym_left with "Hc1 Hc1'") as "<-".
-        iExists (c, h').
-        iSplit; first done.
-        rewrite CPureSpec.wp_assert_eq_chunk.
-        iSplit; first done.
-        now iApply (refine_T with "HK Hh' HSP").
+        iApply (refine_consume_chunk_In HIn with "[$Hc1 $Hh']").
       }
       destruct (try_consume_chunk_precise_spec sh sc1) as [[sh' eqs] HIn|].
       { cbv [SPureSpec.bind SPureSpec.pure].
@@ -1345,27 +1354,26 @@ Module Type RefinementMonadsOn
         (CPureSpec.read_register reg) (SPureSpec.read_register (w := w) reg).
     Proof.
       unfold SPureSpec.read_register, SPureSpec.pure, T.
-      iIntros (h sh) "#Hh %K %sK HK HSP".
-      destruct (find_chunk_ptsreg_precise_spec reg sh) as [[st sh'] HIn|].
-      - cbv [CPureSpec.read_register CPureSpec.consume_chunk CPureSpec.pure
-               CPureSpec.produce_chunk CPureSpec.bind CPureSpec.angelic].
-        iDestruct (eval_ex (AT := STerm τ) st) as "(%v & Hv)".
-        iDestruct (eval_ex (AT := SHeap) sh') as "(%h' & Hh')".
-        iExists v.
-        rewrite CPureSpec.wp_angelic_list.
-        iExists (chunk_ptsreg reg v, h').
-        iSplitR.
-        + iStopProof.
-          unfold RHeap, RInst.
-          crushPredEntails3. now subst. 
-        + rewrite CPureSpec.wp_assert_eq_chunk.
-          iSplit; first done.
-          iApply (refine_T with "HK [Hv Hh'] HSP").
-          iSplitL "Hv"; first done.
-          iApply (refine_RHeap_cons with "[Hv] Hh'").
-          iApply (repₚ_cong (T1 := STerm τ) (T2 := Chunk) (chunk_ptsreg reg) (chunk_ptsreg reg) with "Hv").
-          now intros. 
-      - cbn. now iDestruct "HSP" as "%fls".
+      iIntros (h sh) "#Hh".
+      destruct (find_chunk_ptsreg_precise_spec reg sh) as [[st sh'] HIn|]; last rsolve.
+      cbv [CPureSpec.read_register CPureSpec.consume_chunk CPureSpec.pure
+             CPureSpec.produce_chunk CPureSpec.bind CPureSpec.angelic].
+      iDestruct (eval_ex (AT := STerm τ) st) as "(%v & Hv)".
+      iDestruct (eval_ex (AT := SHeap) sh') as "(%h' & Hh')".
+      iIntros "%K %sK HK HSP".
+      iExists v.
+      rewrite CPureSpec.wp_angelic_list.
+      iExists (chunk_ptsreg reg v, h').
+      iSplitR.
+      - iStopProof.
+        unfold RHeap, RInst.
+        crushPredEntails3. now subst. 
+      - rewrite CPureSpec.wp_assert_eq_chunk.
+        iSplit; first done.
+        iApply (refine_T with "HK [Hv Hh'] HSP").
+        iSplitL "Hv"; first done.
+        iApply (refine_RHeap_cons with "[Hv] Hh'").
+        rsolve.
     Qed.
 
     Lemma refine_write_register {τ} (reg : 𝑹𝑬𝑮 τ) {w} :
@@ -1373,24 +1381,24 @@ Module Type RefinementMonadsOn
         (CPureSpec.write_register reg) (SPureSpec.write_register (w := w) reg).
     Proof.
       unfold SPureSpec.write_register, SPureSpec.pure, T.
-      iIntros (v sv) "#Hv %h %sh #Hh %K %sK HK HSP".
-      destruct (find_chunk_ptsreg_precise_spec reg sh) as [[st sh'] HIn|].
-      - cbv [CPureSpec.write_register CPureSpec.consume_chunk CPureSpec.pure
-               CPureSpec.produce_chunk CPureSpec.bind CPureSpec.angelic].
-        iDestruct (eval_ex (AT := STerm τ) st) as "(%v' & Hv')".
-        iDestruct (eval_ex (AT := SHeap) sh') as "(%h' & Hh')".
-        iExists v'.
-        rewrite CPureSpec.wp_angelic_list.
-        iExists (chunk_ptsreg reg v', h').
-        iSplitR.
-        + iStopProof. unfold RHeap, RInst.
-          crushPredEntails3. now subst.
-        + rewrite CPureSpec.wp_assert_eq_chunk.
-          iSplit; first done.
-          iApply (refine_T with "HK [Hv Hh'] HSP").
-          iFrame "Hv".
-          iApply (refine_RHeap_cons with "[Hv] Hh'"); rsolve.
-      - cbn. now iDestruct "HSP" as "%fls".
+      iIntros (v sv) "#Hv %h %sh #Hh".
+      destruct (find_chunk_ptsreg_precise_spec reg sh) as [[st sh'] HIn|]; last rsolve.
+      cbv [CPureSpec.write_register CPureSpec.consume_chunk CPureSpec.pure
+             CPureSpec.produce_chunk CPureSpec.bind CPureSpec.angelic].
+      iDestruct (eval_ex (AT := STerm τ) st) as "(%v' & Hv')".
+      iDestruct (eval_ex (AT := SHeap) sh') as "(%h' & Hh')".
+      iIntros "%K %sK HK HS".
+      iExists v'.
+      rewrite CPureSpec.wp_angelic_list.
+      iExists (chunk_ptsreg reg v', h').
+      iSplitR.
+      - iStopProof. unfold RHeap, RInst.
+        crushPredEntails3. now subst.
+      - rewrite CPureSpec.wp_assert_eq_chunk.
+        iSplit; first done.
+        iApply (refine_T with "HK [Hv Hh'] HS").
+        iFrame "Hv".
+        iApply (refine_RHeap_cons with "[Hv] Hh'"); rsolve.
     Qed.
 
   End PureSpec.
