@@ -399,8 +399,7 @@ Module RefineExecOn
         iIntros (v sv) "Hv %m %sm Hm %K %sK HK %δ %sδ Hδ %h %sh Hh".
         unfold SStoreSpec.pushpop, CStoreSpec.pushpop.
         iApply ("Hm" with "[HK] [Hδ Hv] Hh"); rsolve.
-        iRename select (ℛ⟦R⟧ a ta) into "Ha".
-        iApply ("HK" with "Ha"); rsolve.
+        iApply ("HK" with "[$]"); rsolve.
         iApply (repₚ_cong (T1 := SStore (Γ2 ▻ x∷σ)) (T2 := SStore Γ2) env.tail env.tail); last done.
         intros. now env.destroy vs1.
       Qed.
@@ -411,14 +410,11 @@ Module RefineExecOn
       Proof.
         iIntros (c sc) "Hc %m %sm Hm %K %sK HK %δ %sδ Hδ %h %sh Hh".
         unfold SStoreSpec.pushspops, CStoreSpec.pushspops.
-        iApply ("Hm" with "[HK] [Hδ Hc] Hh").
-        - iIntros (w1 ω1) "!> %v %sv Hv %δ1 %sδ1 Hδ1 %h1 %sh1 Hh1".
-          iApply ("HK" with "Hv [Hδ1] Hh1").
-          iApply (repₚ_cong (T1 := SStore (Γ2 ▻▻ Δ)) (T2 := SStore Γ2) (env.drop Δ) (env.drop Δ) with "Hδ1").
-          intros. env.destroy vs1.
-          now rewrite inst_env_cat !env.drop_cat.
-        - iApply (repₚ_cong₂ (T1 := SStore Γ1) (T2 := SStore Δ) (T3 := SStore (Γ1 ▻▻ Δ)) env.cat env.cat with "[$Hδ $Hc]").
-          intros; now rewrite inst_env_cat.
+        iApply ("Hm" with "[HK] [Hδ Hc] Hh"); rsolve.
+        iApply ("HK" with "[$] [] [$]").
+        iApply (repₚ_cong (T1 := SStore (Γ2 ▻▻ Δ)) (T2 := SStore Γ2) (env.drop Δ) (env.drop Δ)); last done.
+        intros. env.destroy vs1.
+        now rewrite inst_env_cat !env.drop_cat.
       Qed.
 
       Lemma refine_get_local {Γ} {w} :
