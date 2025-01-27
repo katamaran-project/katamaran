@@ -931,6 +931,20 @@ Module Type UnifLogicOn
       constructor; crushPredEntails3.
     Qed.
 
+    Lemma knowing_acc_pathcondition_right {w pc} {P} :
+      knowing (acc_pathcondition_right w pc) P ⊣⊢ instpred pc ∗ P.
+    Proof.
+      unfold knowing, acc_pathcondition_right.
+      crushPredEntails3.
+      - rewrite instprop_cat in H1.
+        rewrite inst_sub_id in H0; subst.
+        now rewrite instpred_prop.
+      - now rewrite inst_sub_id in H0; subst.
+      - apply inst_sub_id.
+      - rewrite instprop_cat.
+        now rewrite instpred_prop in H0.
+    Qed.
+
     Lemma knowing_acc_snoc_right {w b P} :
       knowing (w1 := wsnoc w b) acc_snoc_right P ⊣⊢ ∃ v, forgetting (w1 := wsnoc w b) (acc_snoc_left acc_refl b (term_val _ v)) P.
     Proof.
