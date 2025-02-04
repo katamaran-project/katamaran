@@ -87,6 +87,23 @@ Module bop.
     Derive NoConfusionHom for RelOp.
     Derive EqDec for RelOp.
 
+    Section RelOp_int_case.
+
+      Context [P : RelOp ty.int -> Type].
+      Variable Peq : P eq.
+      Variable Pneq : P neq.
+      Variable Ple : P le.
+      Variable Plt : P lt.
+
+      Equations(noeqns) RelOp_int_case (t : RelOp ty.int) : P t :=
+      | eq => Peq
+      | neq => Pneq
+      | le => Ple
+      | lt => Plt
+      .
+
+    End RelOp_int_case.
+
     #[local] Notation "( x , .. , y , z )" :=
       (@sigmaI _ _ x .. (@sigmaI _ _ y z) ..).
 

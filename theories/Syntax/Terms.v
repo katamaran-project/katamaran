@@ -158,6 +158,33 @@ Module Type TermsOn (Import TY : Types).
 
   End Term_bool_case.
 
+  Section Term_int_case.
+
+    Context {Σ : LCtx} [P : Term Σ ty.int -> Type].
+
+    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.int ∈ Σ), P (term_var ς)).
+    Variable (pval : forall (v : Val ty.int), P (term_val ty.int v)).
+    Variable (pplus : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.plus e1 e2)).
+    Variable (pminus : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.minus e1 e2)).
+    Variable (ptimes : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.times e1 e2)).
+    Variable (pland : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.land e1 e2)).
+    Variable (pneg : forall t : Term Σ ty.int, P t -> P (term_unop uop.neg t)).
+    Variable (psigned : forall {n} (e : Term Σ (ty.bvec n)), P (term_unop uop.signed e)).
+    Variable (punsigned : forall {n} (e : Term Σ (ty.bvec n)), P (term_unop uop.unsigned e)).
+
+    Equations(noeqns) Term_int_ind (t : Term Σ ty.int) : P t :=
+    | term_var ς               => @pvar ς _
+    | term_val _ b             => @pval b
+    | term_binop bop.plus s t  => pplus (Term_int_ind s) (Term_int_ind t)
+    | term_binop bop.minus s t => pminus (Term_int_ind s) (Term_int_ind t)
+    | term_binop bop.times s t => ptimes (Term_int_ind s) (Term_int_ind t)
+    | term_binop bop.land s t  => pland (Term_int_ind s) (Term_int_ind t)
+    | term_unop uop.neg t      => pneg (Term_int_ind t)
+    | term_unop uop.signed t   => psigned t
+    | term_unop uop.unsigned t => punsigned t.
+
+  End Term_int_case.
+
   Section Term_bool_ind.
 
     Context {Σ : LCtx} [P : Term Σ ty.bool -> Type].
