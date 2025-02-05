@@ -832,22 +832,37 @@ Module Type WorldsOn
     Lemma instpred_singleton {w : World} `{InstPred A} (x : A w) : instpred (w := w) [x]%ctx ⊣⊢ instpred x.
     Proof. cbn. now rewrite derived_laws.bi.emp_sep. Qed.
 
-    #[export] Program Instance instpred_formula : InstPred Formula :=
-      MkInstPred (fix inst_formula {w : World} (fml : Formula w) :=
-        match fml with
-        | formula_user p ts      => fun ι => env.uncurry (𝑷_inst p) (inst ts ι)
-        | formula_bool t         => repₚ true (A := Val ty.bool) t 
-        | formula_prop ζ P       => fun ι => uncurry_named P (inst ζ ι)
-        | formula_relop op t1 t2 => fun ι => bop.eval_relop_prop op (inst t1 ι) (inst t2 ι)
-        | formula_true           => True%I
-        | formula_false          => False%I
-        | formula_and F1 F2      => (inst_formula F1 ∗ inst_formula F2)%I
-        | formula_or F1 F2       => (inst_formula F1 ∨ inst_formula F2)%I
-        end) _.
+    Definition instpred_formula_user {w : World} (p : 𝑷) (ts : Env (Term w) (𝑷_Ty p)) : Pred w :=
+      fun ι => env.uncurry (𝑷_inst p) (inst ts ι).
+    Arguments instpred_formula_user [w] p ts ι /.
+
+    Definition instpred_formula_prop {w : World} {Σ : LCtx} (ζ : Sub Σ w) (P : abstract_named Val Σ Prop) : Pred w :=
+      fun ι => uncurry_named P (inst ζ ι).
+    Arguments instpred_formula_prop [w] [Σ] ζ P ι /.
+
+    Definition instpred_formula_relop {w : World} {σ : Ty} (op : RelOp σ) (t1 t2 : Term w σ) : Pred w :=
+      fun ι => bop.eval_relop_prop op (inst t1 ι) (inst t2 ι).
+    Arguments instpred_formula_relop [w] {σ} op t1 t2 ι /.
+
+    Fixpoint instpred_formula {w : World} (fml : Formula w) : Pred w :=
+      match fml with
+      | formula_user p ts      => instpred_formula_user p ts
+      | formula_bool t         => repₚ true (A := Val ty.bool) t
+      | formula_prop ζ P       => instpred_formula_prop ζ P
+      | formula_relop op t1 t2 => instpred_formula_relop op t1 t2
+      | formula_true           => True%I
+      | formula_false          => False%I
+      | formula_and F1 F2      => (instpred_formula F1 ∗ instpred_formula F2)%I
+      | formula_or F1 F2       => (instpred_formula F1 ∨ instpred_formula F2)%I
+      end.
+    Arguments instpred_formula [w] !fml.
+
+    #[export] Program Instance instpred_inst_formula : InstPred Formula :=
+      MkInstPred instpred_formula _.
     Next Obligation.
       intros.
       induction t;
-        unfold repₚ, eqₚ;
+        unfold instpred_formula, repₚ, eqₚ;
         rewrite ?bi_sep_unfold ?bi_or_unfold;
         crushPredEntails2.
     Qed.
@@ -999,7 +1014,7 @@ Module Type WorldsOn
           change (instpred p0) with (instpred (T := PathCondition) p0).
           change (bientails p0 [formula_user p ts]%ctx) in user_spec.
           now rewrite user_spec instpred_singleton.
-        - change (fun ι' => env.uncurry (𝑷_inst p) (inst ts ι'))
+        - change (instpred_formula_user ts)
             with (instpred (formula_user p ts)).
           rewrite <-instpred_singleton.
           change (instpred (Some [formula_user p ts]%ctx) ⊢ False)%stdpp.
