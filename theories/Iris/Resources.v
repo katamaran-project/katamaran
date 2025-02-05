@@ -213,6 +213,12 @@ Module Type IrisPrelims
       intros; eapply of_to_val; by cbn.
     Defined.
 
+    Lemma stm_to_val_Final{Γ : PCtx} {τ : Ty} {s : Stm Γ τ} {v : IVal τ} :
+      stm_to_val s = Some v -> Final s.
+    Proof.
+      intros H. destruct v as [v|m], s; try discriminate; now cbn.
+    Qed.
+
     Lemma stm_to_val_not_Final {Γ τ} {s : Stm Γ τ} :
       stm_to_val s = None ->
       ~ Final s.
