@@ -676,12 +676,94 @@ Module Type GenericSolverOn
         + now constructor.
     Qed.
 
+    Definition smart_and {Σ} (F1 F2 : Formula Σ) : Formula Σ :=
+      match F1 , F2 with
+      | formula_true , _ => F2
+      | _ , formula_true => F1
+      | formula_false , _ => formula_false
+      | _ , formula_false => formula_false
+      | _ , _ => formula_and F1 F2
+      end.
+
+    Lemma smart_and_spec {w : World} (F1 F2 : Formula w) :
+      instpred (formula_and F1 F2) ⊣⊢ instpred (smart_and F1 F2).
+    Proof.
+      destruct F1, F2; cbn;
+        now rewrite ?bi.True_sep ?bi.sep_True ?bi.sep_False ?bi.False_sep.
+    Qed.
+
+    Definition smart_or {Σ} (F1 F2 : Formula Σ) : Formula Σ :=
+      match F1 , F2 with
+      | formula_false , _ => F2
+      | _ , formula_false => F1
+      | formula_true , _ => formula_true
+      | _ , formula_true => formula_true
+      | _ , _ => formula_or F1 F2
+      end.
+
+    Lemma smart_or_spec {w : World} (F1 F2 : Formula w) :
+      instpred (formula_or F1 F2) ⊣⊢ instpred (smart_or F1 F2).
+    Proof.
+      destruct F1, F2; cbn;
+        now rewrite ?bi.True_or ?bi.or_True ?bi.or_False ?bi.False_or.
+    Qed.
+
+    Fixpoint formula_simplifies {Σ} (hyp : Formula Σ) (fact : Formula Σ) : option (Formula Σ) :=
+      match hyp with
+        formula_and hyp1 hyp2 => match formula_simplifies hyp1 fact , formula_simplifies hyp2 fact with
+                                 | Some hyp1' , Some hyp2' => Some (smart_and hyp1' hyp2')
+                                 | Some hyp1' , None => Some (smart_and hyp1' hyp2)
+                                 | None , Some hyp2' => Some (smart_and hyp1 hyp2')
+                                 | None , None => None
+                                 end
+      | formula_or hyp1 hyp2 => match formula_simplifies hyp1 fact , formula_simplifies hyp2 fact with
+                                | Some hyp1' , Some hyp2' => Some (smart_or hyp1' hyp2')
+                                | Some hyp1' , None => Some (smart_or hyp1' hyp2)
+                                | None , Some hyp2' => Some (smart_or hyp1 hyp2')
+                                | None , None => None
+                                end
+      | _ => if formula_eqb hyp fact then Some formula_true else None
+      end.
+
+    Lemma bi_wand_iff_true {w} {P : Pred w} : P ⊢ P ∗-∗ True.
+    Proof. iIntros "HP"; iSplit; now iIntros. Qed.
+
+    Lemma bi_wand_iff_sep {w} {P1 P2 Q1 Q2 : Pred w} : (P1 ∗-∗ Q1) ∗ (P2 ∗-∗ Q2) ⊢ P1 ∗ P2 ∗-∗ Q1 ∗ Q2.
+    Proof.
+      iIntros "[H1 H2]". iSplit.
+      - iIntros "[HP1 HP2]". now iSplitL "H1 HP1"; [iApply "H1"|iApply "H2"].
+      - iIntros "[HQ1 HQ2]". now iSplitL "H1 HQ1"; [iApply "H1"|iApply "H2"].
+    Qed.
+
+    Lemma bi_wand_iff_or {w} {P1 P2 Q1 Q2 : Pred w} : (P1 ∗-∗ Q1) ∗ (P2 ∗-∗ Q2) ⊢ P1 ∨ P2 ∗-∗ Q1 ∨ Q2.
+    Proof.
+      iIntros "[H1 H2]"; iSplit.
+      - iIntros "[HP1|HP2]"; [iLeft|iRight]; [now iApply "H1"|now iApply "H2"].
+      - iIntros "[HQ1|HQ2]"; [iLeft|iRight]; [now iApply "H1"|now iApply "H2"].
+    Qed.
+
+    Lemma formula_simplifies_spec {w : World} (hyp fact : Formula w) :
+      option.wlp (fun hyp' => ⊢ instpred fact -∗ (instpred hyp ∗-∗ instpred hyp'))
+        (formula_simplifies hyp fact).
+    Proof.
+      induction hyp; cbn;
+        repeat match goal with
+          | |- context[ formula_eqb ?F1 ?F2] => destruct (formula_eqb_spec F1 F2); subst
+          | H : option.wlp _ (formula_simplifies ?hyp ?F)|- context[ formula_simplifies ?hyp ?F ] => destruct H
+        end; try (now eapply option.wlp_none); try eapply option.wlp_some; cbn;
+        try (now iApply bi_wand_iff_true);
+        rewrite -?smart_and_spec -?smart_or_spec; cbn; iIntros "#Hfact";
+        (iApply bi_wand_iff_or || iApply bi_wand_iff_sep); iSplit;
+        now (iApply H || iApply H0 || iApply bi.wand_iff_refl).
+    Qed.
+
     Fixpoint assumption_formula {Σ} (C : PathCondition Σ) (F : Formula Σ) (k : PathCondition Σ) {struct C} : PathCondition Σ :=
       match C with
       | [ctx]  => k ▻ F
-      | C ▻ F' => if formula_eqb F F'
-                     then k
-                     else assumption_formula C F k
+      | C ▻ F' => match formula_simplifies F F' with
+                  | Some F2 => assumption_formula C F2 k
+                  | None => assumption_formula C F k
+                  end
       end.
 
     Fixpoint assumption_pathcondition {Σ} (C : PathCondition Σ) (Fs : PathCondition Σ) (k : PathCondition Σ) {struct Fs} : PathCondition Σ :=
@@ -690,17 +772,24 @@ Module Type GenericSolverOn
       | Fs ▻ F => assumption_formula C F (assumption_pathcondition C Fs k)
       end.
 
+    Lemma bi_wand_iff_sep_l {w} {P Q R : Pred w} : P ∗-∗ Q ⊢ R ∗ P ∗-∗ R ∗ Q.
+    Proof.
+      iIntros "HPQ". iApply (bi_wand_iff_sep with "[HPQ]"). iFrame.
+      now iApply bi.wand_iff_refl.
+    Qed.
+
     Lemma assumption_formula_spec {w : World} (C : PathCondition w) (F : Formula w) (k : PathCondition w) :
       ⊢ instpred C -∗ instpred k ∗ instpred F ∗-∗ instpred (assumption_formula C F k).
     Proof.
-      induction C as [|C ? F']; cbn; auto.
+      revert F; induction C as [|C ? F']; intros F; cbn; auto.
       iIntros "[#HC #HF']".
-      destruct (formula_eqb_spec F F');
-        subst; intuition auto.
-      iSplitL.
-      + iIntros "[? ?]"; now iFrame.
-      + iIntros "?"; now iFrame.
-      + now iApply (IHC with "HC").
+      destruct (formula_simplifies_spec F F');
+        subst; [|now iApply IHC].
+      iPoseProof (IHC a with "HC") as "HC'".
+      iPoseProof (H with "HF'") as "HF".
+      iApply (bi.wand_iff_trans).
+      iFrame "HC'".
+      now iApply (bi_wand_iff_sep_l with "HF").
     Qed.
 
     Lemma assumption_pathcondition_spec {w : World} (C : PathCondition w) (FS : PathCondition w) (k : PathCondition w) :
