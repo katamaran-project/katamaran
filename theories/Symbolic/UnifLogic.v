@@ -578,6 +578,11 @@ Module Type UnifLogicOn
       now rewrite H2 H4 H5.
     Qed.
 
+    Lemma eqₚ_term_prod {σ1 σ2} {w : World} {sva1 svb1 : STerm σ1 w} {sva2 svb2 : STerm σ2 w} :
+      eqₚ (T := STerm (ty.prod σ1 σ2)) (term_binop bop.pair sva1 sva2) (term_binop bop.pair svb1 svb2) ⊣⊢ eqₚ sva1 svb1 ∗ eqₚ sva2 svb2.
+    Proof. crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed.
+
+
     Lemma repₚ_term_prod {σ1 σ2} {v1 : Val σ1} {v2 : Val σ2} {w : World} {sv1 : STerm σ1 w} {sv2 : STerm σ2 w} :
       repₚ (T := STerm (ty.prod σ1 σ2)) (v1,v2) (term_binop bop.pair sv1 sv2) ⊣⊢ repₚ v1 sv1 ∗ repₚ v2 sv2.
     Proof.
@@ -587,6 +592,14 @@ Module Type UnifLogicOn
       - now inversion H0.
       - now f_equal.
     Qed.
+
+    Lemma rep_term_cons {w : World} {σ : Ty} {t : STerm σ w} {ts : STerm (ty.list σ) w} {v vs} :
+      repₚ v t ∗ repₚ (T := STerm (ty.list σ)) vs ts ⊣⊢ repₚ (T := STerm (ty.list σ)) (v :: vs) (term_binop bop.cons t ts).
+    Proof. unfold repₚ. crushPredEntails3; try (now subst); now inversion H0. Qed.
+
+    Lemma eq_term_cons {w : World} {σ : Ty} {t1 t2 : STerm σ w} {ts1 ts2 : STerm (ty.list σ) w} :
+      eqₚ t1 t2 ∗ eqₚ (T := STerm (ty.list σ)) ts1 ts2 ⊣⊢ eqₚ (T := STerm (ty.list σ)) (term_binop bop.cons t1 ts1) (term_binop bop.cons t2 ts2).
+    Proof. crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed.
 
     Lemma proprepₚ_cong {T1 : LCtx -> Type} `{InstPred T1}
       {T2 : LCtx -> Type} `{InstPred T2}
@@ -611,15 +624,16 @@ Module Type UnifLogicOn
 
     Lemma repₚ_elim {T : LCtx -> Type} `{Inst T A} {a b : A} {w : World} {vt : T w}:
       (∀ ι : Valuation w, inst vt ι = a) ->
-      repₚ b vt ⊢ ⌜ b = a ⌝.
+      repₚ b vt ⊣⊢ ⌜ b = a ⌝.
     Proof.
-      crushPredEntails3.
-      now transitivity (inst vt ι).
+      crushPredEntails3; now subst.
     Qed.
 
     Lemma repₚ_const {A} {v sv} {w} : repₚ (w := w) (T := Const A) sv v ⊣⊢  ⌜ v = sv ⌝.
     Proof. crushPredEntails3. Qed.
-      
+
+    Lemma repₚ_val {σ} {v sv} {w} : repₚ (w := w) (T := STerm σ) v (term_val _ sv) ⊣⊢  ⌜ v = sv ⌝.
+    Proof. crushPredEntails3. Qed.
 
     Lemma repₚ_elim_repₚ {T : LCtx -> Type} `{Inst T A} {a1 : A} (a2 : A) {w : World} {vt1 : T w} (vt2 : T w):
       (∀ ι : Valuation w, inst vt1 ι = a1 -> inst vt2 ι = a2) ->
@@ -641,16 +655,16 @@ Module Type UnifLogicOn
     Qed.
 
 
-    Lemma repₚ_inversion_record {N R} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ)
-      {w : World} {v : recordt R} {svs : NamedEnv (λ τ : Ty, Term w τ) (recordf_ty R)} :
-      repₚ (T := STerm (ty.record R)) v (term_record R svs) ⊢
+    Lemma repₚ_inversion_record {R} {w : World} {v : recordt R} {svs : NamedEnv (λ τ : Ty, Term w τ) (recordf_ty R)} :
+      repₚ (T := STerm (ty.record R)) v (term_record R svs) ⊣⊢
         ∃ (vs : NamedEnv Val (recordf_ty R)), ⌜ v = recordv_fold R vs ⌝ ∗ repₚ vs svs.
     Proof.
       unfold repₚ. crushPredEntails3.
-      exists (recordv_unfold R v).
-      rewrite recordv_fold_unfold.
-      crushPredEntails3.
-      now rewrite <-H0, recordv_unfold_fold.
+      - exists (recordv_unfold R v).
+        rewrite recordv_fold_unfold.
+        crushPredEntails3.
+        now rewrite <-H0, recordv_unfold_fold.
+      - now subst.
     Qed.
 
     Lemma repₚ_inversion_union {U} (K : unionk U) {v : Val (ty.union U)}

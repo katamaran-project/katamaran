@@ -561,8 +561,7 @@ Module Type RefinementMonadsOn
         destruct (term_get_val_spec sv); subst.
         + iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_angelic_pattern_match; cbn.
-          iDestruct (repₚ_elim (a := a) with "Hv") as "<-".
-          { now intros. }
+          iDestruct (refine_term_val2 with "Hv") as "<-".
           iApply ("rΦ" with "[Hv] HSP"); rsolve.
         + now iApply (refine_angelic_pattern_match' n pat_bool).
       - iApply (refine_angelic_pattern_match' n (pat_list σ x y)).
@@ -603,20 +602,16 @@ Module Type RefinementMonadsOn
         destruct (term_get_val_spec sv); subst.
         + iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_angelic_pattern_match.
-          iApply ("rΦ" with "[Hv] HSP").
-          iDestruct (repₚ_elim (a := a) with "Hv") as "->".
-          { now intros. }
-          rsolve.
+          iDestruct (refine_term_val2 with "Hv") as "->".
+          iApply ("rΦ" with "[Hv] HSP"); rsolve.
         + now iApply (refine_angelic_pattern_match' n (pat_enum E)).
       - iApply (refine_angelic_pattern_match' n (pat_bvec_split _ _ x y)).
       - iIntros (msg v sv) "Hv".
         destruct (term_get_val_spec sv); subst.
         + iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_angelic_pattern_match.
-          iApply ("rΦ" with "[Hv] HSP").
-          iDestruct (repₚ_elim (a := a) with "Hv") as "->".
-          { now intros. }
-          rsolve.
+          iDestruct (refine_term_val2 with "Hv") as "->".
+          iApply ("rΦ" with "[Hv] HSP"); rsolve.
         + now iApply (refine_angelic_pattern_match' n (pat_bvec_exhaustive m)).
       - iApply (refine_angelic_pattern_match' n (pat_tuple p)).
       - iIntros (msg v sv) "Hv".
@@ -626,7 +621,7 @@ Module Type RefinementMonadsOn
           iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_angelic_pattern_match.
           iApply ("rΦ" with "[Hv] HSP").
-          iDestruct (repₚ_inversion_record p with "Hv") as "(%vs & -> & Hvs)".
+          iDestruct (repₚ_inversion_record with "Hv") as "(%vs & -> & Hvs)".
           iExists eq_refl.
           unfold record_pattern_match_val.
           rewrite recordv_unfold_fold.
@@ -672,10 +667,7 @@ Module Type RefinementMonadsOn
         + iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_demonic_pattern_match; cbn.
           iApply ("rΦ" with "[Hv] HSP").
-          iDestruct (repₚ_elim (a := a) with "Hv") as "<-".
-          { now intros. }
-          iExists eq_refl; cbn.
-          now iApply (repₚ_triv (T := fun w => NamedEnv (Term w) _)).
+          iDestruct (refine_term_val2 with "Hv") as "->"; rsolve.
         + now iApply (refine_demonic_pattern_match' n pat_bool).
       - iApply (refine_demonic_pattern_match' n (pat_list σ x y)).
       - iIntros (v sv) "Hv".
@@ -719,8 +711,7 @@ Module Type RefinementMonadsOn
         + iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_demonic_pattern_match.
           iApply ("rΦ" with "[Hv] HSP").
-          iDestruct (repₚ_elim (a := a) with "Hv") as "->".
-          { now intros. }
+          iDestruct (refine_term_val2 with "Hv") as "->".
           rsolve.
         + now iApply (refine_demonic_pattern_match' n (pat_enum E)).
       - iApply (refine_demonic_pattern_match' n (pat_bvec_split _ _ x y)).
@@ -729,8 +720,7 @@ Module Type RefinementMonadsOn
         + iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_demonic_pattern_match.
           iApply ("rΦ" with "[Hv] HSP").
-          iDestruct (repₚ_elim (a := a) with "Hv") as "->".
-          { now intros. }
+          iDestruct (refine_term_val2 with "Hv") as "->".
           rsolve.
         + now iApply (refine_demonic_pattern_match' n (pat_bvec_exhaustive m)).
       - iApply (refine_demonic_pattern_match' n (pat_tuple p)).
@@ -741,7 +731,7 @@ Module Type RefinementMonadsOn
           iIntros (Φ sΦ) "rΦ HSP".
           rewrite CPureSpec.wp_demonic_pattern_match.
           iApply ("rΦ" with "[Hv] HSP").
-          iDestruct (repₚ_inversion_record p with "Hv") as "(%vs & -> & Hvs)".
+          iDestruct (repₚ_inversion_record with "Hv") as "(%vs & -> & Hvs)".
           iExists eq_refl.
           unfold record_pattern_match_val.
           rewrite recordv_unfold_fold.

@@ -1333,8 +1333,7 @@ Module RiscvPmpValidContracts.
   (* TODO: proof with new PMP addressing mode (NA4) *)
   Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheck bytes H).
   Proof.
-    destruct H; apply Symbolic.validcontract_with_erasure_sound; vm_compute;
-      constructor; cbn; repeat (intros; split; bv_comp); auto 11.
+    destruct H; apply Symbolic.validcontract_with_erasure_sound; now vm_compute.
   Qed.
 
   Lemma valid_contract_step : ValidContract step.

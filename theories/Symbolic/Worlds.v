@@ -612,6 +612,10 @@ Module Type WorldsOn
       Proper (Basics.flip (entails (w := w)) ==> (entails (w := w)) ==> Basics.impl) entails.
     Proof. crushPredEntails1. Qed.
 
+    #[export] Instance proper_repₚ_term {σ} {v : Val σ} :
+      Proper (equiv (A := Term w σ) ==> bientails) (repₚ (w := w) (T := STerm σ) v).
+    Proof. crushPredEntails1; specialize (H ι); now subst. Qed.
+
   End RewriteRelations.
   #[global] Arguments bientails {w} (_ _)%P.
   #[global] Arguments entails {w} (_ _)%P.
@@ -834,7 +838,12 @@ Module Type WorldsOn
 
     Definition instpred_formula_user {w : World} (p : 𝑷) (ts : Env (Term w) (𝑷_Ty p)) : Pred w :=
       fun ι => env.uncurry (𝑷_inst p) (inst ts ι).
-    Arguments instpred_formula_user [w] p ts ι /.
+    #[global] Arguments instpred_formula_user [w] p ts ι /.
+
+    #[export] Instance proper_instpred_formula_user {w : World} {p : 𝑷} :
+      Proper (@equiv (Env (Term w) (𝑷_Ty p)) _ ==> bientails) (@instpred_formula_user w p).
+    Proof. crushPredEntails2; specialize (H ι); unfold instpred_formula_user in *. 
+           now rewrite -H. now rewrite H.  Qed.
 
     Definition instpred_formula_prop {w : World} {Σ : LCtx} (ζ : Sub Σ w) (P : abstract_named Val Σ Prop) : Pred w :=
       fun ι => uncurry_named P (inst ζ ι).
@@ -843,6 +852,12 @@ Module Type WorldsOn
     Definition instpred_formula_relop {w : World} {σ : Ty} (op : RelOp σ) (t1 t2 : Term w σ) : Pred w :=
       fun ι => bop.eval_relop_prop op (inst t1 ι) (inst t2 ι).
     Arguments instpred_formula_relop [w] {σ} op t1 t2 ι /.
+
+    #[export] Instance proper_instpred_formula_relop {w : World} {σ} :
+      Proper (eq ==> equiv ==> equiv ==> bientails) (@instpred_formula_relop w σ).
+    Proof. crushPredEntails2; subst; specialize (H0 ι); specialize (H1 ι);
+             unfold instpred_formula_relop in *.
+           now rewrite -H0 -H1. now rewrite H0 H1.  Qed.
 
     Fixpoint instpred_formula {w : World} (fml : Formula w) : Pred w :=
       match fml with
@@ -865,6 +880,102 @@ Module Type WorldsOn
         unfold instpred_formula, repₚ, eqₚ;
         rewrite ?bi_sep_unfold ?bi_or_unfold;
         crushPredEntails2.
+    Qed.
+
+    Import Bitvector.
+
+    Lemma instpred_formula_relop_eq {w : World} {σ} (t1 t2 : STerm σ w) :
+      instpred (w := w) (formula_relop bop.eq t1 t2) ⊣⊢ eqₚ t1 t2.
+    Proof. crushPredEntails2. Qed.
+
+    Lemma instpred_formula_relop_eq' {w : World} {σ} (t1 t2 : STerm σ w) :
+      instpred_formula_relop (w := w) bop.eq t1 t2 ⊣⊢ eqₚ t1 t2.
+    Proof. apply instpred_formula_relop_eq. Qed.
+
+    Lemma formula_relop_term {w : World} {σ} (t1 t2 : STerm σ w) op :
+      instpred (w := w) (formula_relop op t1 t2) ⊣⊢
+        repₚ (T := STerm ty.bool) true (term_binop (bop.relop op) t1 t2).
+    Proof. crushPredEntails2; unfold instpred_formula_relop in *;
+             now eapply bop.eval_relop_equiv. Qed.
+
+    Lemma formula_relop_term' {w : World} {σ} (t1 t2 : STerm σ w) op :
+      instpred_formula_relop op t1 t2 ⊣⊢
+        repₚ (T := STerm ty.bool) true (term_binop (bop.relop op) t1 t2).
+    Proof. apply formula_relop_term. Qed.
+
+    Lemma rep_binop_neq_eq [w : World] {σ : Ty} (t1 t2 : Term w σ) b :
+      repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.neq) t1 t2) ⊣⊢
+        repₚ (T := STerm ty.bool) (w := w) (negb b) (term_binop (bop.relop bop.eq) t1 t2).
+    Proof.
+      unfold repₚ; crushPredEntails2; destruct b; now destruct Classes.eq_dec.
+    Qed.
+
+    Lemma eq_val_rep_l [w : World] {σ} (t : Term w σ) v :
+      eqₚ (term_val σ v) t ⊣⊢ repₚ (T := STerm σ) v t.
+    Proof. unfold eqₚ, repₚ; crushPredEntails2. Qed.
+
+    Lemma eq_val_rep_r [w : World] {σ} (t : Term w σ) v :
+      eqₚ t (term_val σ v) ⊣⊢ repₚ (T := STerm σ) v t.
+    Proof. unfold eqₚ, repₚ; crushPredEntails2. Qed.
+
+    Lemma rep_eq_val_true [w : World] {σ} (t : Term w σ) v :
+      repₚ (T := STerm ty.bool) true (term_binop (bop.relop bop.eq) t (term_val σ v)) ⊣⊢
+        repₚ (T := STerm σ) (w := w) v t.
+    Proof. unfold repₚ; crushPredEntails2; now destruct Classes.eq_dec. Qed.
+
+    Lemma rep_eq_terms_true [w : World] {σ} (t1 t2 : Term w σ) :
+      repₚ (T := STerm ty.bool) true (term_binop (bop.relop bop.eq) t1 t2) ⊣⊢
+        eqₚ (T := STerm σ) (w := w) t1 t2.
+    Proof. unfold repₚ; crushPredEntails2; now destruct Classes.eq_dec. Qed.
+
+    Lemma rep_eq_true [w : World] (t : Term w ty.bool) b :
+        repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.eq) t (term_val ty.bool true)) ⊣⊢
+        repₚ (T := STerm ty.bool) (w := w) b t.
+    Proof. unfold repₚ; crushPredEntails2; now destruct (inst t ι). Qed.
+
+    Lemma rep_eq_false [w : World] (t : Term w ty.bool) b :
+      repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.eq) t (term_val ty.bool false)) ⊣⊢
+        repₚ (T := STerm ty.bool) (w := w) b (term_not t).
+    Proof. unfold repₚ; crushPredEntails2; now destruct (inst t ι). Qed.
+
+    Lemma rep_binop_lt_ge  [w : World] (t1 t2 : Term w ty.int) b :
+      repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.lt) t2 t1) ⊣⊢
+        repₚ (T := STerm ty.bool) (negb b) (term_binop (bop.relop bop.le) t1 t2).
+    Proof.
+      unfold repₚ; crushPredEntails2; revert H0; rewrite Z.leb_antisym; intros;
+        apply (f_equal negb) in H0; now rewrite ?negb_involutive in H0.
+    Qed.
+
+    Lemma rep_binop_slt_sge  [w : World] {n} (t1 t2 : Term w (ty.bvec n)) b :
+      repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.bvslt) t2 t1) ⊣⊢
+        repₚ (T := STerm ty.bool) (negb b) (term_binop (bop.relop bop.bvsle) t1 t2).
+    Proof.
+      unfold repₚ; crushPredEntails2; revert H0; unfold bv.sltb; rewrite Z.ltb_antisym; intros;
+        apply (f_equal negb) in H0; now rewrite ?negb_involutive in H0.
+    Qed.
+
+    Lemma rep_binop_ult_uge  [w : World] {n} (t1 t2 : Term w (ty.bvec n)) b :
+      repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.bvult) t2 t1) ⊣⊢
+        repₚ (T := STerm ty.bool) (negb b) (term_binop (bop.relop bop.bvule) t1 t2).
+    Proof.
+      unfold repₚ; crushPredEntails2; revert H0; rewrite bv.ultb_antisym; intros;
+        apply (f_equal negb) in H0; now rewrite ?negb_involutive in H0.
+    Qed.
+
+    Lemma instpred_formula_relop_neg {w : World} {σ} (op : RelOp σ) :
+      forall (t1 t2 : Term w σ),
+        instpred (formula_relop_neg op t1 t2) ⊣⊢
+          repₚ (T := STerm ty.bool) (w := w) false (term_binop (bop.relop op) t1 t2).
+    Proof.
+      intros t1 t2; destruct op; rewrite formula_relop_term; cbn.
+      - now rewrite rep_binop_neq_eq.
+      - now rewrite rep_binop_neq_eq.
+      - now rewrite rep_binop_lt_ge.
+      - now rewrite rep_binop_lt_ge.
+      - now rewrite rep_binop_slt_sge.
+      - now rewrite rep_binop_slt_sge.
+      - now rewrite rep_binop_ult_uge.
+      - now rewrite rep_binop_ult_uge.
     Qed.
 
     #[export] Instance instpred_subst_formula : InstPredSubst Formula.
@@ -975,7 +1086,6 @@ Module Type WorldsOn
       Qed.
     End SolverSpec.
 
-
     Section WithUserOnlySolver.
 
       Context (user : SolverUserOnly).
@@ -994,7 +1104,6 @@ Module Type WorldsOn
 
       Context (user_spec : SolverUserOnlySpec user).
 
-      Import Entailment.
       Import iris.bi.interface.
       Import iris.proofmode.tactics.
 
@@ -1014,8 +1123,7 @@ Module Type WorldsOn
           change (instpred p0) with (instpred (T := PathCondition) p0).
           change (bientails p0 [formula_user p ts]%ctx) in user_spec.
           now rewrite user_spec instpred_singleton.
-        - change (instpred_formula_user ts)
-            with (instpred (formula_user p ts)).
+        - change (instpred_formula_user p ts) with (instpred (formula_user p ts)).
           rewrite <-instpred_singleton.
           change (instpred (Some [formula_user p ts]%ctx) ⊢ False)%stdpp.
           now rewrite <-user_spec.
@@ -1066,6 +1174,89 @@ Module Type WorldsOn
          ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc,
          ?inst_lift, ?inst_sub_single_shift, ?instprop_snoc,
          ?sub_acc_trans, ?sub_acc_triangular, ?inst_triangular_right_inverse).
+
+    Module DList.
+      Record DList (Σ : LCtx) : Type :=
+        MkDList
+          { raw : PathCondition Σ -> Option PathCondition Σ;
+            wf : forall k ι, instprop (raw k) ι <-> instprop (raw ctx.nil) ι /\ instprop k ι;
+          }.
+
+      #[export] Instance instprop_dlist : InstProp DList :=
+        fun Σ x ι => instprop (raw x [ctx]) ι.
+
+      #[export] Program Instance instpred_dlist : InstPred DList :=
+        MkInstPred (fun w x => instpred (raw x [ctx])) _.
+      Next Obligation. intros. cbn. now rewrite instpred_prop wf. Qed.
+
+      Lemma instpred_dlist_raw {w : World} (x : DList w) (y : PathCondition w) :
+        instpred (w := w) (raw x y) ⊣⊢ instpred x ∗ instpred y.
+      Proof.
+        constructor. intros ι Hpc.
+        change ((instpred ?x ∗ instpred ?y)%I ι) with (instpred x ι /\ instpred y ι).
+        now rewrite !instpred_prop wf.
+      Qed.
+
+      Definition singleton {Σ} (F : Formula Σ) : DList Σ.
+        refine (MkDList (fun k => Some (k ▻ F)) _).
+        abstract (cbn; intuition).
+      Defined.
+
+      Definition run [Σ] (xs : DList Σ) : Option PathCondition Σ :=
+        raw xs ctx.nil.
+
+      Lemma instpred_run {w : World} (d : DList w) :
+        instpred (run d) ⊣⊢ instpred d.
+      Proof. by cbn. Qed.
+
+      Definition error {Σ} : DList Σ.
+      Proof.
+        refine (MkDList (fun k => None) _).
+        abstract (cbn; intuition).
+      Defined.
+      Definition empty {Σ} : DList Σ.
+        refine (MkDList Some _).
+        abstract (cbn; intuition).
+      Defined.
+      Definition cat {Σ} (xs ys : DList Σ) : DList Σ.
+        refine (MkDList (fun k => option.bind (raw xs k) (raw ys)) _).
+        abstract
+          (destruct xs as [rx wx], ys as [ry wy]; cbn; intros k ι;
+           specialize (wx k ι); destruct (rx k) as [k1|], (rx ctx.nil) as [k2|];
+           cbn in *; try rewrite (wy k1); try rewrite (wy k2); intuition).
+      Defined.
+      #[local] Arguments cat {Σ} !_ !_ /.
+
+      Import iris.bi.interface iris.bi.derived_laws.
+
+      Lemma instpred_dlist_singleton [w : World] (F : Formula w) :
+        (instpred (w := w) (DList.singleton F) ⊣⊢ instpred F)%I.
+      Proof. cbn. now rewrite bi.emp_sep. Qed.
+
+      Lemma instpred_dlist_empty {w : World} :
+        (instpred (w := w) DList.empty ⊣⊢ True)%I.
+      Proof. now cbn. Qed.
+
+      Lemma instpred_dlist_error {w : World} :
+        (instpred (w := w) DList.error ⊣⊢ False)%I.
+      Proof. now cbn. Qed.
+
+      Lemma instpred_dlist_cat [w : World] (x y : DList w) :
+        instpred (cat x y) ⊣⊢ instpred x ∗ instpred y.
+      Proof.
+        rewrite -instpred_run; unfold cat; cbn; fold (run x).
+        generalize (instpred_run x).
+        destruct run; cbn; intros Hx.
+        - now rewrite -Hx instpred_dlist_raw bi.sep_comm.
+        - now rewrite -Hx bi.sep_False.
+      Qed.
+
+      #[global] Arguments instpred_dlist : simpl never.
+      #[global] Arguments DList.singleton : simpl never.
+      #[global] Arguments cat : simpl never.
+
+    End DList.
+
 
 End WorldsOn.
 
