@@ -543,13 +543,10 @@ Module Type IrisAdequacy
   Qed.
 
   Lemma adequacy_gen {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
-        {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : forall `{sailGS Σ}, Val σ -> CStore Γ -> iProp Σ} (φ : Prop):
+        {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : forall `{sailGS Σ}, IVal σ -> CStore Γ -> iProp Σ} (φ : Prop):
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     (forall `{sailGS Σ'},
-        mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP s (λ v δ, match v with
-                                                             | inl v => Q v δ
-                                                             | inr m => True
-                                                             end) δ
+        mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP s Q δ
           ∗ (mem_inv μ' ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.
@@ -571,10 +568,7 @@ Module Type IrisAdequacy
     }
     iModIntro.
     iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
-    iExists [ fun v => match valconf_val v with
-                       | inl v' => Q _ sailG v' (valconf_store v)
-                       | inr m  => True%I
-                       end]%list.
+    iExists [ λ v, Q _ sailG (valconf_val v) (valconf_store v)]%list.
     iExists _.
     iExists _.
     iSplitR "trips Hφ".
