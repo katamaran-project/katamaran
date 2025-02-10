@@ -1612,19 +1612,15 @@ Module RiscvPmpValidContracts.
       CEnv f = Some c ->
       exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
   Proof.
-    intros.
-    destruct f.
+    intros Δ τ f c H.
+    destruct f; try solve [cbn in H; discriminate]. (* Only those f for which a contract is defined need to be proven valid *)
     - apply (valid_contract _ H valid_contract_rX).
     - apply (valid_contract _ H valid_contract_wX).
-    - cbn in H; inversion H.
-    - cbn in H; inversion H.
-    - cbn in H; inversion H.
     - apply (valid_contract _ H valid_contract_get_arch_pc).
     - apply (valid_contract _ H valid_contract_get_next_pc).
     - apply (valid_contract _ H valid_contract_set_next_pc).
     - apply (valid_contract _ H valid_contract_tick_pc).
     - apply (valid_contract _ H (valid_contract_to_bits l)).
-    (* - apply (valid_contract _ H valid_contract_abs). *)
     - apply (valid_contract_debug _ H valid_contract_within_phys_mem).
     - apply (valid_contract _ H (@valid_contract_mem_read bytes H0)).
     - apply (valid_contract_debug _ H (@valid_contract_checked_mem_read bytes H0)).
@@ -1643,9 +1639,7 @@ Module RiscvPmpValidContracts.
     - apply (valid_contract_debug _ H valid_contract_pmpMatchAddr).
     - apply (valid_contract_with_fuel _ _ H (@valid_contract_process_load bytes p)).
     - apply (valid_contract _ H (@valid_contract_mem_write_value bytes H0)).
-    - cbn in H; inversion H.
     - apply (valid_contract _ H valid_contract_init_model).
-    - cbn in H; inversion H.
     - apply (valid_contract _ H valid_contract_step).
     - apply (valid_contract _ H valid_contract_fetch).
     - apply (valid_contract _ H valid_contract_init_sys).
