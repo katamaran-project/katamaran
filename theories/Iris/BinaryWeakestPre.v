@@ -755,6 +755,19 @@ Module IrisBinaryWP
       iIntros (v1 δ1') "H". now iApply (semTWP_Steps with "[Hres] H").
     Qed.
 
+    Lemma semWP2_semWP_semTWP {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
+      ⊢ ∀ Q δ1 δ2,
+          @semWP _ sailGS2_sailGS_left _ _ s1 (λ v1 δ1,
+              @semTWP _ sailGS2_sailGS_right _ _ s2
+                      (λ v2 δ2, Q v1 δ1 v2 δ2) δ2) δ1 -∗
+          semWP2 δ1 δ2 s1 s2 Q.
+    Proof.
+      iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iApply semWP_fupd.
+      iApply (semWP_mono with "H"). iIntros (v1 δ1') "H".
+      now iApply (semTWP_Steps with "[Hres] H").
+    Qed.
+
   End WithSailGS2.
 End IrisBinaryWP.
 
