@@ -514,7 +514,6 @@ Module Type InstantiationOn
     Lemma term_negb_relop [σ] (op : RelOp σ) [Σ] (t1 t2 : Term Σ σ) :
       term_unop uop.not (term_binop (bop.relop op) t1 t2) ≡ term_relop_neg op t1 t2.
     Proof. intro ι. symmetry. apply inst_term_relop_neg. Qed.
-
   End SemanticEquivalence.
   #[export] Hint Rewrite term_orb_false_l term_orb_false_r term_orb_true_l term_orb_true_r : katamaran.
   #[export] Hint Rewrite term_negb_andb term_negb_orb term_negb_relop : katamaran.

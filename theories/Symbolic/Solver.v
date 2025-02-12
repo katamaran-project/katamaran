@@ -68,13 +68,11 @@ Module Type GenericSolverOn
     Import option.notations.
     Import DList.
 
-    (* #[local] Hint Rewrite @instprop_formula_relop_neg : katamaran. *)
-    (* #[local] Hint Rewrite @instprop_nil @instprop_snoc @instprop_cat : katamaran. *)
     #[local] Hint Rewrite @recordv_fold_inj @unionv_fold_inj : katamaran.
     #[local] Hint Rewrite @bop.eval_relop_equiv : katamaran.
     #[local] Hint Rewrite formula_bool_and formula_bool_relop formula_bool_relop_neg : katamaran.
-    #[local] Hint Rewrite @instpred_formula_relop_neg @formula_relop_term: katamaran.
-    #[local] Hint Rewrite @rep_eq_val_true @rep_eq_false @repₚ_term_prod @rep_term_cons rep_eq_terms_true eq_val_rep_l eq_val_rep_r @eq_term_cons @eqₚ_term_prod : katamaran.
+    #[local] Hint Rewrite @instpred_formula_relop_neg @formula_relop_term @instpred_formula_relop_eq_val @instpred_formula_relop_eq_val' : katamaran.
+    #[local] Hint Rewrite @rep_eq_val_true @rep_eq_false @repₚ_term_prod @rep_term_cons rep_eq_terms_true eq_val_rep_l eq_val_rep_r @eq_term_cons @eqₚ_term_prod @repₚ_unionv_fold @eqₚ_unionv_fold @rep_neq_nil_cons @repₚ_term_not_or @repₚ_term_or_false @repₚ_term_inr_inl @repₚ_term_inl_inr @eqₚ_term_inl_inr @eqₚ_term_inr_inl @repₚ_term_inr @eqₚ_term_inr @repₚ_term_inl @eqₚ_term_inl @repₚ_term_neg' @repₚ_term_not' @repₚ_term_not_and @repₚ_term_and repₚ_term_tuple_snoc eqₚ_term_tuple_snoc @repₚ_term_record @eqₚ_term_record @repₚ_namedenv_nil @repₚ_namedenv_snoc @eqₚ_namedenv_snoc : katamaran.
 
     #[local] Hint Rewrite instpred_dlist_cat instpred_dlist_singleton : katamaran.
     (* #[local] Hint Rewrite singleton_formula_and : katamaran. *)
@@ -140,100 +138,6 @@ Module Type GenericSolverOn
         (fun (*not*) t1         => simplify_bool t1)
         t.
 
-
-    Lemma repₚ_term_and {w : World} {t1 t2 : STerm ty.bool w} :
-      repₚ (w := w) (T := STerm ty.bool) true (term_binop bop.and t1 t2) ⊣⊢
-        repₚ (T := STerm ty.bool) (w := w) true t1 ∗ repₚ (T := STerm ty.bool) true t2.
-    Proof. unfold repₚ. crushPredEntails3; now destruct (inst t1 ι), (inst t2 ι). Qed.
-    #[export] Hint Rewrite @repₚ_term_and : katamaran.
-
-    Lemma repₚ_term_not_and {w : World} {t1 t2 : STerm ty.bool w} b :
-      repₚ (T := STerm ty.bool) b (term_not (term_binop bop.and t1 t2)) ⊣⊢
-        repₚ (T := STerm ty.bool) b (term_binop bop.or (term_not t1) (term_not t2)).
-    Proof. unfold repₚ. crushPredEntails3; now destruct (inst t1 ι), (inst t2 ι). Qed.
-    #[export] Hint Rewrite @repₚ_term_not_and : katamaran.
-
-    Lemma repₚ_term_not {w : World} {t : STerm ty.bool w} b :
-      repₚ (T := STerm ty.bool) (negb b) (term_not t) ⊣⊢
-        repₚ (T := STerm ty.bool) b t.
-    Proof. unfold repₚ. crushPredEntails3; now destruct b, (inst t ι). Qed.
-
-    Lemma repₚ_term_not' {w : World} {t : STerm ty.bool w} b :
-      repₚ (T := STerm ty.bool) b (term_not t) ⊣⊢
-        repₚ (T := STerm ty.bool) (negb b) t.
-    Proof. unfold repₚ. crushPredEntails3; now destruct b, (inst t ι). Qed.
-    #[export] Hint Rewrite @repₚ_term_not' : katamaran.
-
-    Lemma repₚ_term_neg {w : World} {t : STerm ty.int w} v :
-      repₚ (T := STerm ty.int) (- v)%Z (term_neg t) ⊣⊢
-        repₚ (T := STerm ty.int) v t.
-    Proof. unfold repₚ. crushPredEntails3; lia. Qed.
-
-    Lemma repₚ_term_neg' {w : World} {t : STerm ty.int w} v :
-      repₚ (T := STerm ty.int) v (term_neg t) ⊣⊢
-        repₚ (T := STerm ty.int) (- v)%Z t.
-    Proof. unfold repₚ. crushPredEntails3; lia. Qed.
-    #[export] Hint Rewrite @repₚ_term_neg' : katamaran.
-
-    Lemma eqₚ_term_inl {w : World} {σ1 σ2} {t1 t2 : STerm σ1 w} :
-      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t1) (term_inl t2) ⊣⊢
-        eqₚ (T := STerm σ1) t1 t2.
-    Proof. unfold eqₚ. crushPredEntails3; try (now subst); now inversion H0. Qed.
-    #[export] Hint Rewrite @eqₚ_term_inl : katamaran.
-
-    Lemma repₚ_term_inl {w : World} {σ1 σ2}{t : STerm σ1 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inl t) ⊣⊢
-        repₚ (T := STerm σ1) v t.
-    Proof. unfold repₚ. crushPredEntails3; try (now subst); now inversion H0. Qed.
-    #[export] Hint Rewrite @repₚ_term_inl : katamaran.
-
-    Lemma eqₚ_term_inr {w : World} {σ1 σ2} {t1 t2 : STerm σ2 w} :
-      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inr t1) (term_inr t2) ⊣⊢
-        eqₚ (T := STerm σ2) t1 t2.
-    Proof. unfold eqₚ. crushPredEntails3; try (now subst); now inversion H0. Qed.
-    #[export] Hint Rewrite @eqₚ_term_inr : katamaran.
-
-    Lemma repₚ_term_inr {w : World} {σ1 σ2}{t : STerm σ2 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inr v : Val (ty.sum _ _)) (term_inr t) ⊣⊢
-        repₚ (T := STerm σ2) v t.
-    Proof. unfold repₚ. crushPredEntails3; try (now subst); now inversion H0. Qed.
-    #[export] Hint Rewrite @repₚ_term_inr : katamaran.
-
-    Lemma eqₚ_term_inr_inl {w : World} {σ1 σ2}{t1 : STerm σ1 w} {t2 : STerm σ2 w} :
-      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inr t2) (term_inl t1) ⊣⊢ False.
-    Proof. crushPredEntails3; try (now subst); now inversion H0. Qed.
-    #[export] Hint Rewrite @eqₚ_term_inr_inl : katamaran.
-
-    Lemma eqₚ_term_inl_inr {w : World} {σ1 σ2}{t1 : STerm σ2 w} {t2 : STerm σ1 w} :
-      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t2) (term_inr t1) ⊣⊢ False.
-    Proof. crushPredEntails3; try (now subst); now inversion H0. Qed.
-    #[export] Hint Rewrite @eqₚ_term_inl_inr : katamaran.
-
-    Lemma repₚ_term_inl_inr {w : World} {σ1 σ2}{t : STerm σ1 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inr v : Val (ty.sum _ _)) (term_inl t) ⊣⊢ False.
-    Proof. unfold repₚ. crushPredEntails3; try (now subst); now inversion H0. Qed.
-    #[export] Hint Rewrite @repₚ_term_inl_inr : katamaran.
-
-    Lemma repₚ_term_inr_inl {w : World} {σ1 σ2}{t : STerm σ2 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inr t) ⊣⊢ False.
-    Proof. unfold repₚ. crushPredEntails3; try (now subst); now inversion H0. Qed.
-    #[export] Hint Rewrite @repₚ_term_inr_inl : katamaran.
-
-    Lemma repₚ_term_or_false {w : World} {t1 t2 : STerm ty.bool w} :
-      repₚ (T := STerm ty.bool) false (term_binop bop.or t1 t2) ⊣⊢
-        repₚ (T := STerm ty.bool) false t1 ∗ repₚ (T := STerm ty.bool) false t2.
-    Proof. unfold repₚ. crushPredEntails3; now destruct (inst t1 ι), (inst t2 ι). Qed.
-    #[export] Hint Rewrite @repₚ_term_or_false : katamaran.
-
-    Lemma repₚ_term_not_or {w : World} {t1 t2 : STerm ty.bool w} b :
-      repₚ (T := STerm ty.bool) b (term_not (term_binop bop.or t1 t2)) ⊣⊢
-        repₚ (T := STerm ty.bool) b (term_binop bop.and (term_not t1) (term_not t2)).
-    Proof. unfold repₚ. crushPredEntails3; now destruct (inst t1 ι), (inst t2 ι). Qed.
-    #[export] Hint Rewrite @repₚ_term_not_or : katamaran.
-
-    Lemma term_not_involutive {Σ} (t : Term Σ ty.bool) : term_not (term_not t) ≡ t.
-    Proof. intros ι; cbn; now destruct (inst t ι). Qed.
-
     Lemma simplify_bool_spec_combined {w : World} (t : Term w ty.bool) :
       (instpred (simplify_bool t) ⊣⊢ instpred (w := w) (formula_bool t)) /\
       (instpred (simplify_bool_neg t) ⊣⊢ instpred (formula_bool (term_unop uop.not t))).
@@ -243,7 +147,7 @@ Module Type GenericSolverOn
       - destruct IHt1 as [IHt11 IHt12], IHt2 as [IHt21 IHt22]; arw.
         rewrite IHt11 IHt21.
         (* need to find a confluent rewrite strategy... *)
-        now rewrite -(term_not_involutive (term_binop bop.and _ _)) repₚ_term_not' repₚ_term_not_and; arw.
+        now rewrite -(term_negb_involutive (term_binop bop.and _ _)) repₚ_term_not' repₚ_term_not_and; arw.
       - destruct IHt1 as [IHt11 IHt12], IHt2 as [IHt21 IHt22]; arw; arw_slow.
         now rewrite IHt12 IHt22.
       - now arw_slow.
@@ -280,16 +184,12 @@ Module Type GenericSolverOn
                                                else singleton (formula_relop_neg op t1 t2)
     | op             | t1 | t2 | v          => singleton (formula_relop bop.eq (term_binop op t1 t2) (term_val _ v)).
 
-    Lemma rep_neq_nil_cons {w : World} {σ : Ty} {t1 : Term w σ} {t2 : Term w (ty.list σ)} :
-      repₚ (T := STerm (ty.list σ)) ([] : list (Val σ)) (term_binop bop.cons t1 t2) ⊣⊢  False.
-    Proof. unfold repₚ. crushPredEntails3. now inversion H0. Qed.
-    #[local] Hint Rewrite @rep_neq_nil_cons : katamaran.
-
     Lemma simplify_eq_binop_val_spec [w : World] [σ σ1 σ2]
       (op : BinOp σ1 σ2 σ) (t1 : Term w σ1) (t2 : Term w σ2) (v : Val σ) :
       instpred (simplify_eq_binop_val op t1 t2 v) ⊣⊢
       repₚ v (term_binop op t1 t2).
-    Proof. destruct op; arw; destruct v; arw; arw_slow. Qed.
+    Proof. destruct op; arw; destruct v; arw; arw_slow.
+           now rewrite <-repₚ_term_not, repₚ_term_not_or, !term_negb_involutive. Qed.
     #[local] Opaque simplify_eq_binop_val.
     #[local] Hint Rewrite simplify_eq_binop_val_spec : katamaran.
 
@@ -378,68 +278,6 @@ Module Type GenericSolverOn
        | right _ => error
        end.
 
-    Lemma instpred_formula_relop_eq {w : World} {σ} {t1 t2 : STerm σ w} :
-      instpred (formula_relop bop.eq t1 t2) ⊣⊢ eqₚ t1 t2.
-    Proof. crushPredEntails3. Qed.
-
-    Lemma instpred_formula_relop_eq_val {w : World} {σ} {t1 : STerm σ w} v :
-      instpred (formula_relop bop.eq t1 (term_val _ v)) ⊣⊢ repₚ v t1.
-    Proof. crushPredEntails3. Qed.
-    #[export] Hint Rewrite @instpred_formula_relop_eq_val : katamaran.
-
-    Lemma instpred_formula_relop_eq_val' {w : World} {σ} {t1 : STerm σ w} v :
-      instpred_formula_relop bop.eq t1 (term_val _ v) ⊣⊢ repₚ v t1.
-    Proof. apply instpred_formula_relop_eq_val. Qed.
-    #[export] Hint Rewrite @instpred_formula_relop_eq_val' : katamaran.
-
-    Set Equations With UIP.
-    Lemma repₚ_unionv_fold {w : World} {U} {K : unionk U} {t : STerm (unionk_ty U K) w} {v : Val (unionk_ty U K)} :
-      repₚ (T := STerm _) (unionv_fold U (existT K v)) (term_union U K t) ⊣⊢ repₚ (T := STerm _) v t.
-    Proof.
-      unfold repₚ; crushPredEntails3; try (now subst).
-      apply (f_equal (unionv_unfold U)) in H0.
-      rewrite !unionv_unfold_fold in H0.
-      now dependent elimination H0.
-    Qed.
-    #[export] Hint Rewrite @repₚ_unionv_fold : katamaran.
-
-    Lemma eqₚ_unionv_fold {w : World} {U} {K : unionk U} {t1 t2 : STerm (unionk_ty U K) w} :
-      eqₚ (T := STerm _) (term_union U K t1) (term_union U K t2) ⊣⊢ eqₚ (T := STerm _) t1 t2.
-    Proof.
-      unfold eqₚ; crushPredEntails3.
-      - apply (f_equal (unionv_unfold U)) in H0.
-        rewrite !unionv_unfold_fold in H0.
-        (* avoid axiom K *)
-        refine (Eqdep_dec.inj_pair2_eq_dec _ _ _ _ _ _ H0).
-        apply unionk_eqdec.
-      - now do 2 f_equal.
-    Qed.
-    #[export] Hint Rewrite @eqₚ_unionv_fold : katamaran.
-
-    Lemma repₚ_unionv_neq {w : World} {U} {K1 K2 : unionk U} {t : STerm (unionk_ty U K1) w} {v : Val (unionk_ty U K2)} : 
-      K1 ≠ K2 ->
-      repₚ (T := STerm _) (unionv_fold U (existT K2 v)) (term_union U K1 t) ⊣⊢ False.
-    Proof.
-      intros HKneq.
-      unfold repₚ; crushPredEntails3; try (now subst).
-      apply (f_equal (unionv_unfold U)) in H0.
-      rewrite !unionv_unfold_fold in H0.
-      dependent elimination H0.
-      now apply HKneq.
-    Qed.
-
-    Lemma eqₚ_term_union_neq {w : World} {U} {K1 K2 : unionk U} {t1 : STerm (unionk_ty U K1) w} {t2 : STerm (unionk_ty U K2) w} : 
-      K1 ≠ K2 ->
-      eqₚ (T := STerm _) (term_union U K1 t1) (term_union U K2 t2) ⊣⊢ False.
-    Proof.
-      intros HKneq.
-      unfold repₚ; crushPredEntails3; try (now subst).
-      apply HKneq.
-      apply (f_equal (unionv_unfold U)) in H0.
-      rewrite !unionv_unfold_fold in H0.
-      apply (eq_sigT_fst H0).
-    Qed.
-
     Lemma simplify_eq_union_val_spec [w : World] [U] [K1 : unionk U]
       (t1 : STerm (unionk_ty U K1) w) (v : Val (ty.union U)) :
       instpred (simplify_eq_union_val t1 v) ⊣⊢
@@ -479,58 +317,6 @@ Module Type GenericSolverOn
                                    ts
                                    (recordv_unfold R vR)
       end.
-
-    Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) :
-      repₚ (T := STerm _) (vs, v) (term_tuple (E ► (σ ↦ d))) ⊣⊢
-        repₚ (T := STerm σ) v d ∗ repₚ (T := STerm _) vs (term_tuple E).
-    Proof. unfold repₚ; crushPredEntails3; [now inversion H0 | now inversion H0| now subst ]. Qed.
-    #[export] Hint Rewrite repₚ_term_tuple_snoc : katamaran.
-
-    Lemma eqₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [ts1 ts2 : Env (Term w) Γ] [σ : Ty] (t1 t2 : Term w σ) :
-      eqₚ (T := STerm _) (term_tuple (ts1 ► (σ ↦ t1))) (term_tuple (ts2 ► (σ ↦ t2))) ⊣⊢
-        eqₚ (T := STerm σ) t1 t2 ∗ eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2).
-    Proof. unfold eqₚ; crushPredEntails3; [now inversion H0 | now inversion H0 | now f_equal ]. Qed.
-    #[export] Hint Rewrite eqₚ_term_tuple_snoc : katamaran.
-
-    Lemma repₚ_term_record {w : World} {R : recordi} {vs : NamedEnv Val (recordf_ty R)} {svs : NamedEnv (Term w) (recordf_ty R)} :
-      repₚ (T := STerm _) (recordv_fold R vs) (term_record R svs) ⊣⊢ repₚ vs svs.
-    Proof. unfold repₚ; crushPredEntails3; [|now subst].
-           apply (f_equal (recordv_unfold R)) in H0.
-           now rewrite !recordv_unfold_fold in H0.
-    Qed.
-    #[export] Hint Rewrite @repₚ_term_record : katamaran.
-
-    Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} :
-      eqₚ (T := STerm _) (term_record R ts1) (term_record R ts2) ⊣⊢ eqₚ ts1 ts2.
-    Proof. unfold eqₚ; crushPredEntails3.
-           - apply (f_equal (recordv_unfold R)) in H0.
-             now rewrite !recordv_unfold_fold in H0.
-           - now rewrite H0.
-    Qed.
-    #[export] Hint Rewrite @eqₚ_term_record : katamaran.
-
-    Lemma repₚ_namedenv_nil {w : World} {N} :
-      repₚ (w := w) (T := fun w => NamedEnv (Term w) ([ctx] : NCtx N Ty)) [env] [env] ⊣⊢ emp.
-    Proof. unfold repₚ; crushPredEntails3. Qed.
-    #[export] Hint Rewrite @repₚ_namedenv_nil : katamaran.
-
-    Lemma repₚ_namedenv_snoc {w : World} {N} {Γ : NCtx N Ty} {b} {ts : Env (λ xt : N∷Ty, Term w (type xt)) Γ} {t : Term w (type b)} {vs : Env (λ xt : N∷Ty, Val (type xt)) Γ} {v : Val (type b)} :
-      repₚ vs.[b ↦ v] ts.[b ↦ t] ⊣⊢ repₚ vs ts ∗ repₚ v t.
-    Proof.
-      unfold repₚ; crushPredEntails3; destruct b;
-        cbn; try (now subst); now apply env.inversion_eq_snoc in H0.
-    Qed.
-    #[export] Hint Rewrite @repₚ_namedenv_snoc : katamaran.
-
-    Lemma eqₚ_namedenv_snoc {w : World} {N} {Γ : NCtx N Ty} {b} {ts1 ts2 : Env (λ xt : N∷Ty, Term w (type xt)) Γ} {t1 t2 : Term w (type b)} :
-      eqₚ ts1.[b ↦ t1] ts2.[b ↦ t2] ⊣⊢ eqₚ ts1 ts2 ∗ eqₚ t1 t2.
-    Proof.
-      unfold eqₚ; crushPredEntails3; destruct b; cbn.
-      - now apply env.inversion_eq_snoc in H0.
-      - now apply env.inversion_eq_snoc in H0.
-      - now f_equal.
-    Qed.
-    #[export] Hint Rewrite @eqₚ_namedenv_snoc : katamaran.
 
     Lemma simplify_eq_val_spec [w : World] [σ] (t : STerm σ w) (v : Val σ) :
       instpred (simplify_eq_val t v) ⊣⊢ repₚ v t.
@@ -693,16 +479,6 @@ Module Type GenericSolverOn
           now rewrite bi.False_or.
     Qed.
     #[export] Hint Rewrite @simplify_formula_spec : katamaran.
-
-    #[export] Instance instpredsubst_ctx `{InstPredSubst A, !SubstLaws A} : InstPredSubst (fun Σ => Ctx (A Σ)).
-    Proof. constructor; last by typeclasses eauto.
-           intros ? ? ζ x. induction x; cbn.
-           - now rewrite persist_subst forgetting_emp.
-           - rewrite forgetting_sep.
-             rewrite persist_subst; cbn; rewrite -!persist_subst.
-             change (instpred_ctx ?P) with (instpred P).
-             now rewrite IHx instpred_subst.
-    Qed.
 
     Lemma simplify_pathcondition_spec {w : World} (C : PathCondition w) :
       instpred (w := w) (run (simplify_pathcondition C)) ⊣⊢ instpred C.
@@ -970,6 +746,13 @@ Module Type GenericSolverOn
       - iIntros "[HQ1 HQ2]". now iSplitL "H1 HQ1"; [iApply "H1"|iApply "H2"].
     Qed.
 
+    Lemma bi_wand_iff_sep_l {w} {P Q R : Pred w} : P ∗-∗ Q ⊢ R ∗ P ∗-∗ R ∗ Q.
+    Proof.
+      iIntros "HPQ". iApply (bi_wand_iff_sep with "[HPQ]"). iFrame.
+      now iApply bi.wand_iff_refl.
+    Qed.
+
+
     Lemma bi_wand_iff_or {w} {P1 P2 Q1 Q2 : Pred w} : (P1 ∗-∗ Q1) ∗ (P2 ∗-∗ Q2) ⊢ P1 ∨ P2 ∗-∗ Q1 ∨ Q2.
     Proof.
       iIntros "[H1 H2]"; iSplit.
@@ -1006,12 +789,6 @@ Module Type GenericSolverOn
       | [ctx]  => k
       | Fs ▻ F => assumption_formula C F (assumption_pathcondition C Fs k)
       end.
-
-    Lemma bi_wand_iff_sep_l {w} {P Q R : Pred w} : P ∗-∗ Q ⊢ R ∗ P ∗-∗ R ∗ Q.
-    Proof.
-      iIntros "HPQ". iApply (bi_wand_iff_sep with "[HPQ]"). iFrame.
-      now iApply bi.wand_iff_refl.
-    Qed.
 
     Lemma assumption_formula_spec {w : World} (C : PathCondition w) (F : Formula w) (k : PathCondition w) :
       ⊢ instpred C -∗ instpred k ∗ instpred F ∗-∗ instpred (assumption_formula C F k).

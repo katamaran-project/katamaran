@@ -888,6 +888,14 @@ Module Type WorldsOn
       instpred (w := w) (formula_relop bop.eq t1 t2) ⊣⊢ eqₚ t1 t2.
     Proof. crushPredEntails2. Qed.
 
+    Lemma instpred_formula_relop_eq_val {w : World} {σ} {t1 : STerm σ w} v :
+      instpred (formula_relop bop.eq t1 (term_val _ v)) ⊣⊢ repₚ v t1.
+    Proof. crushPredEntails2. Qed.
+
+    Lemma instpred_formula_relop_eq_val' {w : World} {σ} {t1 : STerm σ w} v :
+      instpred_formula_relop bop.eq t1 (term_val _ v) ⊣⊢ repₚ v t1.
+    Proof. apply instpred_formula_relop_eq_val. Qed.
+
     Lemma instpred_formula_relop_eq' {w : World} {σ} (t1 t2 : STerm σ w) :
       instpred_formula_relop (w := w) bop.eq t1 t2 ⊣⊢ eqₚ t1 t2.
     Proof. apply instpred_formula_relop_eq. Qed.
@@ -937,6 +945,132 @@ Module Type WorldsOn
       repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.eq) t (term_val ty.bool false)) ⊣⊢
         repₚ (T := STerm ty.bool) (w := w) b (term_not t).
     Proof. unfold repₚ; crushPredEntails2; now destruct (inst t ι). Qed.
+
+    Lemma rep_neq_nil_cons {w : World} {σ : Ty} {t1 : Term w σ} {t2 : Term w (ty.list σ)} :
+      repₚ (T := STerm (ty.list σ)) ([] : list (Val σ)) (term_binop bop.cons t1 t2) ⊣⊢  False.
+    Proof. unfold repₚ. crushPredEntails2; now inversion H0. Qed.
+
+    Lemma repₚ_term_and {w : World} {t1 t2 : STerm ty.bool w} :
+      repₚ (w := w) (T := STerm ty.bool) true (term_binop bop.and t1 t2) ⊣⊢
+        repₚ (T := STerm ty.bool) (w := w) true t1 ∗ repₚ (T := STerm ty.bool) true t2.
+    Proof. unfold repₚ, bi_pred, bi_sep, sepₚ.
+           crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
+
+    Lemma repₚ_term_not_and {w : World} {t1 t2 : STerm ty.bool w} b :
+      repₚ (T := STerm ty.bool) b (term_not (term_binop bop.and t1 t2)) ⊣⊢
+        repₚ (T := STerm ty.bool) b (term_binop bop.or (term_not t1) (term_not t2)).
+    Proof. unfold repₚ. crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
+
+    Lemma repₚ_term_not {w : World} {t : STerm ty.bool w} b :
+      repₚ (T := STerm ty.bool) (negb b) (term_not t) ⊣⊢
+        repₚ (T := STerm ty.bool) b t.
+    Proof. unfold repₚ. crushPredEntails2; now destruct b, (inst t ι). Qed.
+
+    Lemma repₚ_term_not' {w : World} {t : STerm ty.bool w} b :
+      repₚ (T := STerm ty.bool) b (term_not t) ⊣⊢
+        repₚ (T := STerm ty.bool) (negb b) t.
+    Proof. unfold repₚ. crushPredEntails2; now destruct b, (inst t ι). Qed.
+
+    Lemma repₚ_term_neg {w : World} {t : STerm ty.int w} v :
+      repₚ (T := STerm ty.int) (- v)%Z (term_neg t) ⊣⊢
+        repₚ (T := STerm ty.int) v t.
+    Proof. unfold repₚ. crushPredEntails2; lia. Qed.
+
+    Lemma repₚ_term_neg' {w : World} {t : STerm ty.int w} v :
+      repₚ (T := STerm ty.int) v (term_neg t) ⊣⊢
+        repₚ (T := STerm ty.int) (- v)%Z t.
+    Proof. unfold repₚ. crushPredEntails2; lia. Qed.
+
+    Lemma eqₚ_term_inl {w : World} {σ1 σ2} {t1 t2 : STerm σ1 w} :
+      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t1) (term_inl t2) ⊣⊢
+        eqₚ (T := STerm σ1) t1 t2.
+    Proof. unfold eqₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+
+    Lemma repₚ_term_inl {w : World} {σ1 σ2}{t : STerm σ1 w} v :
+      repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inl t) ⊣⊢
+        repₚ (T := STerm σ1) v t.
+    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+
+    Lemma eqₚ_term_inr {w : World} {σ1 σ2} {t1 t2 : STerm σ2 w} :
+      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inr t1) (term_inr t2) ⊣⊢
+        eqₚ (T := STerm σ2) t1 t2.
+    Proof. unfold eqₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+
+    Lemma repₚ_term_inr {w : World} {σ1 σ2}{t : STerm σ2 w} v :
+      repₚ (T := STerm (ty.sum σ1 σ2)) (inr v : Val (ty.sum _ _)) (term_inr t) ⊣⊢
+        repₚ (T := STerm σ2) v t.
+    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+
+    Lemma eqₚ_term_inr_inl {w : World} {σ1 σ2}{t1 : STerm σ1 w} {t2 : STerm σ2 w} :
+      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inr t2) (term_inl t1) ⊣⊢ False.
+    Proof. crushPredEntails2; try (now subst); now inversion H0. Qed.
+
+    Lemma eqₚ_term_inl_inr {w : World} {σ1 σ2}{t1 : STerm σ2 w} {t2 : STerm σ1 w} :
+      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t2) (term_inr t1) ⊣⊢ False.
+    Proof. crushPredEntails2; try (now subst); now inversion H0. Qed.
+
+    Lemma repₚ_term_inl_inr {w : World} {σ1 σ2}{t : STerm σ1 w} v :
+      repₚ (T := STerm (ty.sum σ1 σ2)) (inr v : Val (ty.sum _ _)) (term_inl t) ⊣⊢ False.
+    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+
+    Lemma repₚ_term_inr_inl {w : World} {σ1 σ2}{t : STerm σ2 w} v :
+      repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inr t) ⊣⊢ False.
+    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+
+    Lemma repₚ_term_or_false {w : World} {t1 t2 : STerm ty.bool w} :
+      repₚ (T := STerm ty.bool) false (term_binop bop.or t1 t2) ⊣⊢
+        repₚ (T := STerm ty.bool) false t1 ∗ repₚ (T := STerm ty.bool) false t2.
+    Proof. unfold repₚ, bi_pred, bi_sep, sepₚ. crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
+
+    Lemma repₚ_term_not_or {w : World} {t1 t2 : STerm ty.bool w} b :
+      repₚ (T := STerm ty.bool) b (term_not (term_binop bop.or t1 t2)) ⊣⊢
+        repₚ (T := STerm ty.bool) b (term_binop bop.and (term_not t1) (term_not t2)).
+    Proof. unfold repₚ. crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
+
+    Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) :
+      repₚ (T := STerm _) (vs, v) (term_tuple (E ► (σ ↦ d))) ⊣⊢
+        repₚ (T := STerm σ) v d ∗ repₚ (T := STerm _) vs (term_tuple E).
+    Proof. unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0| now subst ]. Qed.
+
+    Lemma eqₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [ts1 ts2 : Env (Term w) Γ] [σ : Ty] (t1 t2 : Term w σ) :
+      eqₚ (T := STerm _) (term_tuple (ts1 ► (σ ↦ t1))) (term_tuple (ts2 ► (σ ↦ t2))) ⊣⊢
+        eqₚ (T := STerm σ) t1 t2 ∗ eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2).
+    Proof. unfold eqₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0 | now f_equal]. Qed.
+
+    Lemma repₚ_term_record {w : World} {R : recordi} {vs : NamedEnv Val (recordf_ty R)} {svs : NamedEnv (Term w) (recordf_ty R)} :
+      repₚ (T := STerm _) (recordv_fold R vs) (term_record R svs) ⊣⊢ repₚ vs svs.
+    Proof. unfold repₚ; crushPredEntails2; [|now subst].
+           apply (f_equal (recordv_unfold R)) in H0.
+           now rewrite !recordv_unfold_fold in H0.
+    Qed.
+
+    Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} :
+      eqₚ (T := STerm _) (term_record R ts1) (term_record R ts2) ⊣⊢ eqₚ ts1 ts2.
+    Proof. unfold eqₚ; crushPredEntails2.
+           - apply (f_equal (recordv_unfold R)) in H0.
+             now rewrite !recordv_unfold_fold in H0.
+           - now rewrite H0.
+    Qed.
+
+    Lemma repₚ_namedenv_nil {w : World} {N} :
+      repₚ (w := w) (T := fun w => NamedEnv (Term w) ([ctx] : NCtx N Ty)) [env] [env] ⊣⊢ emp.
+    Proof. unfold repₚ, bi_pred, bi_emp; crushPredEntails2. Qed.
+
+    Lemma repₚ_namedenv_snoc {w : World} {N} {Γ : NCtx N Ty} {b} {ts : Env (λ xt : N∷Ty, Term w (type xt)) Γ} {t : Term w (type b)} {vs : Env (λ xt : N∷Ty, Val (type xt)) Γ} {v : Val (type b)} :
+      repₚ vs.[b ↦ v] ts.[b ↦ t] ⊣⊢ repₚ vs ts ∗ repₚ v t.
+    Proof.
+      unfold repₚ, bi_pred, bi_sep; crushPredEntails2; destruct b;
+        cbn; try (now subst); now apply env.inversion_eq_snoc in H0.
+    Qed.
+
+    Lemma eqₚ_namedenv_snoc {w : World} {N} {Γ : NCtx N Ty} {b} {ts1 ts2 : Env (λ xt : N∷Ty, Term w (type xt)) Γ} {t1 t2 : Term w (type b)} :
+      eqₚ ts1.[b ↦ t1] ts2.[b ↦ t2] ⊣⊢ eqₚ ts1 ts2 ∗ eqₚ t1 t2.
+    Proof.
+      unfold eqₚ, bi_pred, bi_sep; crushPredEntails2; destruct b; cbn.
+      - now apply env.inversion_eq_snoc in H0.
+      - now apply env.inversion_eq_snoc in H0.
+      - now f_equal.
+    Qed.
 
     Lemma rep_binop_lt_ge  [w : World] (t1 t2 : Term w ty.int) b :
       repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.lt) t2 t1) ⊣⊢

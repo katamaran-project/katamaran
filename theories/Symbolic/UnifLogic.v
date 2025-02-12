@@ -601,6 +601,53 @@ Module Type UnifLogicOn
       eqₚ t1 t2 ∗ eqₚ (T := STerm (ty.list σ)) ts1 ts2 ⊣⊢ eqₚ (T := STerm (ty.list σ)) (term_binop bop.cons t1 ts1) (term_binop bop.cons t2 ts2).
     Proof. crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed.
 
+    Set Equations With UIP.
+    Lemma repₚ_unionv_fold {w : World} {U} {K : unionk U} {t : STerm (unionk_ty U K) w} {v : Val (unionk_ty U K)} :
+      repₚ (T := STerm _) (unionv_fold U (existT K v)) (term_union U K t) ⊣⊢ repₚ (T := STerm _) v t.
+    Proof.
+      unfold repₚ; crushPredEntails3; try (now subst).
+      apply (f_equal (unionv_unfold U)) in H0.
+      rewrite !unionv_unfold_fold in H0.
+      now dependent elimination H0.
+    Qed.
+
+    Lemma eqₚ_unionv_fold {w : World} {U} {K : unionk U} {t1 t2 : STerm (unionk_ty U K) w} :
+      eqₚ (T := STerm _) (term_union U K t1) (term_union U K t2) ⊣⊢ eqₚ (T := STerm _) t1 t2.
+    Proof.
+      unfold eqₚ; crushPredEntails3.
+      - apply (f_equal (unionv_unfold U)) in H0.
+        rewrite !unionv_unfold_fold in H0.
+        (* avoid axiom K *)
+        refine (Eqdep_dec.inj_pair2_eq_dec _ _ _ _ _ _ H0).
+        apply unionk_eqdec.
+      - now do 2 f_equal.
+    Qed.
+
+    Lemma repₚ_unionv_neq {w : World} {U} {K1 K2 : unionk U} {t : STerm (unionk_ty U K1) w} {v : Val (unionk_ty U K2)} : 
+      K1 ≠ K2 ->
+      repₚ (T := STerm _) (unionv_fold U (existT K2 v)) (term_union U K1 t) ⊣⊢ False.
+    Proof.
+      intros HKneq.
+      unfold repₚ; crushPredEntails3; try (now subst).
+      apply (f_equal (unionv_unfold U)) in H0.
+      rewrite !unionv_unfold_fold in H0.
+      dependent elimination H0.
+      now apply HKneq.
+    Qed.
+
+    Lemma eqₚ_term_union_neq {w : World} {U} {K1 K2 : unionk U} {t1 : STerm (unionk_ty U K1) w} {t2 : STerm (unionk_ty U K2) w} : 
+      K1 ≠ K2 ->
+      eqₚ (T := STerm _) (term_union U K1 t1) (term_union U K2 t2) ⊣⊢ False.
+    Proof.
+      intros HKneq.
+      unfold repₚ; crushPredEntails3; try (now subst).
+      apply HKneq.
+      apply (f_equal (unionv_unfold U)) in H0.
+      rewrite !unionv_unfold_fold in H0.
+      apply (eq_sigT_fst H0).
+    Qed.
+
+
     Lemma proprepₚ_cong {T1 : LCtx -> Type} `{InstPred T1}
       {T2 : LCtx -> Type} `{InstPred T2}
       {w : World} (fs : T1 w -> T2 w)
@@ -1936,4 +1983,14 @@ Module Type UnifLogicOn
 
   Import notations logicalrelation.notations logicalrelation iris.proofmode.tactics.
   Global Hint Extern 0 (environments.envs_entails _ (ℛ⟦ RUnit ⟧ _ _)) => iApply refine_unit : core.
+
+  #[export] Instance instpredsubst_ctx `{InstPredSubst A, !SubstLaws A} : InstPredSubst (fun Σ => Ctx (A Σ)).
+  Proof. constructor; last by typeclasses eauto.
+         intros ? ? ζ x. induction x; cbn.
+         - now rewrite persist_subst forgetting_emp.
+         - rewrite forgetting_sep.
+           rewrite persist_subst; cbn; rewrite -!persist_subst.
+           change (instpred_ctx ?P) with (instpred P).
+           now rewrite IHx instpred_subst.
+  Qed.
 End UnifLogicOn.
