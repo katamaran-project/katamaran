@@ -514,6 +514,29 @@ Module Type InstantiationOn
     Lemma term_negb_relop [σ] (op : RelOp σ) [Σ] (t1 t2 : Term Σ σ) :
       term_unop uop.not (term_binop (bop.relop op) t1 t2) ≡ term_relop_neg op t1 t2.
     Proof. intro ι. symmetry. apply inst_term_relop_neg. Qed.
+
+    Lemma term_eq_true_r [Σ] (t : Term Σ ty.bool) :
+      term_binop (bop.relop bop.eq) t (term_val ty.bool true) ≡ t.
+    Proof. intro ι. cbn. now destruct (inst t ι). Qed.
+
+    Lemma term_eq_true_l [Σ] (t : Term Σ ty.bool) :
+      term_binop (bop.relop bop.eq) (term_val ty.bool true) t ≡ t.
+    Proof. intro ι. cbn. now destruct (inst t ι). Qed.
+
+    Lemma term_eq_false_r [Σ] (t : Term Σ ty.bool) :
+      term_binop (bop.relop bop.eq) t (term_val ty.bool false) ≡ term_not t.
+    Proof. intro ι. cbn. now destruct (inst t ι). Qed.
+
+    Lemma term_eq_false_l [Σ] (t : Term Σ ty.bool) :
+      term_binop (bop.relop bop.eq) (term_val ty.bool false) t ≡ term_not t.
+    Proof. intro ι. cbn. now destruct (inst t ι). Qed.
+
+    Lemma term_not_or {Σ} {t1 t2 : Term Σ ty.bool} :
+      term_not (term_binop bop.or t1 t2) ≡
+        term_binop bop.and (term_not t1) (term_not t2).
+    Proof. intro ι. cbn. now destruct (inst t1 ι), (inst t2 ι). Qed.
+
+
   End SemanticEquivalence.
   #[export] Hint Rewrite term_orb_false_l term_orb_false_r term_orb_true_l term_orb_true_r : katamaran.
   #[export] Hint Rewrite term_negb_andb term_negb_orb term_negb_relop : katamaran.

@@ -936,16 +936,6 @@ Module Type WorldsOn
         eqₚ (T := STerm σ) (w := w) t1 t2.
     Proof. unfold repₚ; crushPredEntails2; now destruct Classes.eq_dec. Qed.
 
-    Lemma rep_eq_true [w : World] (t : Term w ty.bool) b :
-        repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.eq) t (term_val ty.bool true)) ⊣⊢
-        repₚ (T := STerm ty.bool) (w := w) b t.
-    Proof. unfold repₚ; crushPredEntails2; now destruct (inst t ι). Qed.
-
-    Lemma rep_eq_false [w : World] (t : Term w ty.bool) b :
-      repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.eq) t (term_val ty.bool false)) ⊣⊢
-        repₚ (T := STerm ty.bool) (w := w) b (term_not t).
-    Proof. unfold repₚ; crushPredEntails2; now destruct (inst t ι). Qed.
-
     Lemma rep_neq_nil_cons {w : World} {σ : Ty} {t1 : Term w σ} {t2 : Term w (ty.list σ)} :
       repₚ (T := STerm (ty.list σ)) ([] : list (Val σ)) (term_binop bop.cons t1 t2) ⊣⊢  False.
     Proof. unfold repₚ. crushPredEntails2; now inversion H0. Qed.
@@ -1021,11 +1011,6 @@ Module Type WorldsOn
       repₚ (T := STerm ty.bool) false (term_binop bop.or t1 t2) ⊣⊢
         repₚ (T := STerm ty.bool) false t1 ∗ repₚ (T := STerm ty.bool) false t2.
     Proof. unfold repₚ, bi_pred, bi_sep, sepₚ. crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
-
-    Lemma repₚ_term_not_or {w : World} {t1 t2 : STerm ty.bool w} b :
-      repₚ (T := STerm ty.bool) b (term_not (term_binop bop.or t1 t2)) ⊣⊢
-        repₚ (T := STerm ty.bool) b (term_binop bop.and (term_not t1) (term_not t2)).
-    Proof. unfold repₚ. crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
 
     Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) :
       repₚ (T := STerm _) (vs, v) (term_tuple (E ► (σ ↦ d))) ⊣⊢
