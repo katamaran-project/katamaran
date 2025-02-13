@@ -378,9 +378,39 @@ Module Type GenericSolverOn
     Qed.
     #[export] Hint Rewrite @simplify_relop_spec : uniflogic.
 
-    (* TODO: treat singleton case separately *)
+    Definition smart_and {Σ} (F1 F2 : Formula Σ) : Formula Σ :=
+      match F1 , F2 with
+      | formula_true , _ => F2
+      | _ , formula_true => F1
+      | formula_false , _ => formula_false
+      | _ , formula_false => formula_false
+      | _ , _ => formula_and F1 F2
+      end.
+
+    Lemma smart_and_spec {w : World} (F1 F2 : Formula w) :
+      instpred (smart_and F1 F2) ⊣⊢ instpred (formula_and F1 F2).
+    Proof.
+      destruct F1, F2; cbn;
+        now rewrite ?bi.True_sep ?bi.sep_True ?bi.sep_False ?bi.False_sep.
+    Qed.
+    #[export] Hint Rewrite @smart_and_spec : uniflogic.
+
+    Lemma smart_and_spec' {w : World} (F1 F2 : Formula w) :
+      instpred_formula (smart_and F1 F2) ⊣⊢ instpred (formula_and F1 F2).
+    Proof. apply smart_and_spec. Qed.
+    #[export] Hint Rewrite @smart_and_spec' : uniflogic.
+
     Definition PathCondition_to_Formula [Σ] : PathCondition Σ -> Formula Σ :=
-      ctx.Ctx_rect (fun _ => Formula Σ) formula_true (fun PC FPC F' => formula_and FPC F').
+      ctx.Ctx_rect (fun _ => Formula Σ) formula_true (fun PC FPC F' => smart_and FPC F').
+
+    Lemma PathCondition_to_Formula_sound [w : World] (P : PathCondition w) :
+      instpred (PathCondition_to_Formula P) ⊣⊢ instpred P.
+    Proof.
+      induction P; first done; cbn; arw; cbn.
+      unfold instpred_inst_formula, instpred in IHP; cbn in IHP.
+      now rewrite IHP.
+    Qed.
+    #[export] Hint Rewrite @PathCondition_to_Formula_sound : uniflogic.
 
     Program Definition PathCondition_to_DList [Σ] (pc : PathCondition Σ) : DList Σ :=
       MkDList (fun k => Some (pc ▻▻ k)) _.
@@ -405,15 +435,6 @@ Module Type GenericSolverOn
                                          end
                                   end
       end.
-
-    Lemma PathCondition_to_Formula_sound [w : World] (P : PathCondition w) :
-      instpred (PathCondition_to_Formula P) ⊣⊢ instpred P.
-    Proof.
-      induction P; first done; cbn.
-      unfold instpred_inst_formula, instpred in IHP; cbn in IHP.
-      now rewrite IHP.
-    Qed.
-    #[export] Hint Rewrite @PathCondition_to_Formula_sound : uniflogic.
 
     Lemma PathCondition_to_Formula_sound' [w : World] (P : PathCondition w) :
       instpred_formula (PathCondition_to_Formula P) ⊣⊢ instpred P.
@@ -668,22 +689,6 @@ Module Type GenericSolverOn
         + now constructor.
     Qed.
 
-    Definition smart_and {Σ} (F1 F2 : Formula Σ) : Formula Σ :=
-      match F1 , F2 with
-      | formula_true , _ => F2
-      | _ , formula_true => F1
-      | formula_false , _ => formula_false
-      | _ , formula_false => formula_false
-      | _ , _ => formula_and F1 F2
-      end.
-
-    Lemma smart_and_spec {w : World} (F1 F2 : Formula w) :
-      instpred (formula_and F1 F2) ⊣⊢ instpred (smart_and F1 F2).
-    Proof.
-      destruct F1, F2; cbn;
-        now rewrite ?bi.True_sep ?bi.sep_True ?bi.sep_False ?bi.False_sep.
-    Qed.
-
     Definition smart_or {Σ} (F1 F2 : Formula Σ) : Formula Σ :=
       match F1 , F2 with
       | formula_false , _ => F2
@@ -694,11 +699,12 @@ Module Type GenericSolverOn
       end.
 
     Lemma smart_or_spec {w : World} (F1 F2 : Formula w) :
-      instpred (formula_or F1 F2) ⊣⊢ instpred (smart_or F1 F2).
+      instpred (smart_or F1 F2) ⊣⊢ instpred (formula_or F1 F2).
     Proof.
       destruct F1, F2; cbn;
         now rewrite ?bi.True_or ?bi.or_True ?bi.or_False ?bi.False_or.
     Qed.
+    #[export] Hint Rewrite @smart_or_spec : uniflogic.
 
     Fixpoint formula_simplifies {Σ} (hyp : Formula Σ) (fact : Formula Σ) : option (Formula Σ) :=
       match hyp with
@@ -751,7 +757,7 @@ Module Type GenericSolverOn
           | H : option.wlp _ (formula_simplifies ?hyp ?F)|- context[ formula_simplifies ?hyp ?F ] => destruct H
         end; try (now eapply option.wlp_none); try eapply option.wlp_some; cbn;
         try (now iApply bi_wand_iff_true);
-        rewrite -?smart_and_spec -?smart_or_spec; cbn; iIntros "#Hfact";
+        arw; cbn; iIntros "#Hfact";
         (iApply bi_wand_iff_or || iApply bi_wand_iff_sep); iSplit;
         now (iApply H || iApply H0 || iApply bi.wand_iff_refl).
     Qed.
