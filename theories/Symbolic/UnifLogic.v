@@ -593,12 +593,21 @@ Module Type UnifLogicOn
       - now f_equal.
     Qed.
 
+    Lemma rep_term_val {w : World} {σ : Ty} {v : Val σ} :
+      repₚ (w := w) v (term_val σ v) ⊣⊢ True.
+    Proof. unfold repₚ. crushPredEntails3. Qed.
+
+    Lemma eq_term_val {w : World} {σ : Ty} {v : Val σ} :
+      eqₚ (w := w) (term_val σ v) (term_val σ v) ⊣⊢ True.
+    Proof. unfold eqₚ. crushPredEntails3. Qed.
+
     Lemma rep_term_cons {w : World} {σ : Ty} {t : STerm σ w} {ts : STerm (ty.list σ) w} {v vs} :
       repₚ v t ∗ repₚ (T := STerm (ty.list σ)) vs ts ⊣⊢ repₚ (T := STerm (ty.list σ)) (v :: vs) (term_binop bop.cons t ts).
     Proof. unfold repₚ. crushPredEntails3; try (now subst); now inversion H0. Qed.
 
     Lemma eq_term_cons {w : World} {σ : Ty} {t1 t2 : STerm σ w} {ts1 ts2 : STerm (ty.list σ) w} :
-      eqₚ t1 t2 ∗ eqₚ (T := STerm (ty.list σ)) ts1 ts2 ⊣⊢ eqₚ (T := STerm (ty.list σ)) (term_binop bop.cons t1 ts1) (term_binop bop.cons t2 ts2).
+      eqₚ (T := STerm (ty.list σ)) (term_binop bop.cons t1 ts1) (term_binop bop.cons t2 ts2) ⊣⊢
+        eqₚ t1 t2 ∗ eqₚ (T := STerm (ty.list σ)) ts1 ts2.
     Proof. crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed.
 
     Set Equations With UIP.
@@ -1993,4 +2002,37 @@ Module Type UnifLogicOn
            change (instpred_ctx ?P) with (instpred P).
            now rewrite IHx instpred_subst.
   Qed.
+
+  Module AutorewriteUnifLogic.
+    Import DList.
+
+    #[export] Hint Rewrite @recordv_fold_inj @unionv_fold_inj : uniflogic.
+    #[export] Hint Rewrite @term_eq_true_r @term_eq_true_l @term_eq_false_l @term_eq_false_r @term_not_or @term_not_and @term_unop_val @term_binop_val : uniflogic.
+    #[export] Hint Rewrite formula_bool_and formula_bool_relop formula_bool_relop_neg : uniflogic.
+    #[export] Hint Rewrite @repₚ_term_prod @rep_term_cons rep_eq_terms_true eq_val_rep_l eq_val_rep_r @eq_term_cons @eqₚ_term_prod @repₚ_unionv_fold @eqₚ_unionv_fold @rep_neq_nil_cons @repₚ_term_or_false @repₚ_term_inr_inl @repₚ_term_inl_inr @eqₚ_term_inl_inr @eqₚ_term_inr_inl @repₚ_term_inr @eqₚ_term_inr @repₚ_term_inl @eqₚ_term_inl @repₚ_term_neg' @repₚ_term_not' @repₚ_term_and repₚ_term_tuple_snoc eqₚ_term_tuple_snoc @repₚ_term_record @eqₚ_term_record @repₚ_namedenv_nil @repₚ_namedenv_snoc @eqₚ_namedenv_snoc @eq_term_val @rep_term_val : uniflogic.
+    #[export] Hint Rewrite @instpred_formula_relop_neg @formula_relop_term @instpred_formula_relop_eq_val @instpred_formula_relop_eq_val' @instpred_formula_relop_val @instpred_formula_relop_val' : uniflogic.
+    #[export] Hint Rewrite instpred_dlist_cat instpred_dlist_singleton : uniflogic.
+
+    #[global] Ltac arw :=
+      repeat
+        (try progress cbn in *;
+         repeat
+           match goal with
+           (* | |- _ /\ _ => split *)
+           | |- True => exact I (* cannot keep the match list empty apparently  *)
+           end; try easy;
+         (* use the more efficient rewrite_db... *)
+         rewrite_db uniflogic).
+    #[global] Ltac arw_slow :=
+      repeat
+        (try progress cbn in *;
+         repeat
+           match goal with
+           (* | |- _ /\ _ => split *)
+           | |- True => exact I (* cannot keep the match list empty apparently  *)
+           end; try easy;
+         (* use the slower autorewrite... *)
+         autorewrite with uniflogic in * ).
+  End AutorewriteUnifLogic.
+
 End UnifLogicOn.

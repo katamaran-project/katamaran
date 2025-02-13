@@ -946,11 +946,6 @@ Module Type WorldsOn
     Proof. unfold repₚ, bi_pred, bi_sep, sepₚ.
            crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
 
-    Lemma repₚ_term_not_and {w : World} {t1 t2 : STerm ty.bool w} b :
-      repₚ (T := STerm ty.bool) b (term_not (term_binop bop.and t1 t2)) ⊣⊢
-        repₚ (T := STerm ty.bool) b (term_binop bop.or (term_not t1) (term_not t2)).
-    Proof. unfold repₚ. crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
-
     Lemma repₚ_term_not {w : World} {t : STerm ty.bool w} b :
       repₚ (T := STerm ty.bool) (negb b) (term_not t) ⊣⊢
         repₚ (T := STerm ty.bool) b t.
@@ -1081,12 +1076,21 @@ Module Type WorldsOn
         apply (f_equal negb) in H0; now rewrite ?negb_involutive in H0.
     Qed.
 
-    Lemma instpred_formula_relop_neg {w : World} {σ} (op : RelOp σ) :
-      forall (t1 t2 : Term w σ),
-        instpred (formula_relop_neg op t1 t2) ⊣⊢
+    Lemma instpred_formula_relop_val {w : World} {σ} (op : RelOp σ) (v1 v2 : Val σ) :
+        instpred (w := w) (formula_relop op (term_val _ v1) (term_val _ v2)) ⊣⊢
+          ⌜ bop.eval_relop_prop op v1 v2 ⌝.
+    Proof. crushPredEntails2. Qed.
+
+    Lemma instpred_formula_relop_val' {w : World} {σ} (op : RelOp σ) (v1 v2 : Val σ) :
+        instpred_formula_relop (w := w) op (term_val _ v1) (term_val _ v2) ⊣⊢
+          ⌜ bop.eval_relop_prop op v1 v2 ⌝.
+    Proof. crushPredEntails2. Qed.
+
+    Lemma instpred_formula_relop_neg {w : World} {σ} (op : RelOp σ) (t1 t2 : Term w σ) :
+          instpred (formula_relop_neg op t1 t2) ⊣⊢
           repₚ (T := STerm ty.bool) (w := w) false (term_binop (bop.relop op) t1 t2).
     Proof.
-      intros t1 t2; destruct op; rewrite formula_relop_term; cbn.
+      destruct op; rewrite formula_relop_term; cbn.
       - now rewrite rep_binop_neq_eq.
       - now rewrite rep_binop_neq_eq.
       - now rewrite rep_binop_lt_ge.

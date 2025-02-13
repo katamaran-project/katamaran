@@ -63,60 +63,11 @@ Module Type GenericSolverOn
   (Import LSP : LogSymPropOn B P W SP UL).
 
   Import iris.bi.interface iris.proofmode.tactics proofmode LogicalSoundness.
+  Import AutorewriteUnifLogic.
 
   Module Import GenericSolver.
     Import option.notations.
     Import DList.
-
-    #[local] Hint Rewrite @recordv_fold_inj @unionv_fold_inj : katamaran.
-    #[local] Hint Rewrite @bop.eval_relop_equiv : katamaran.
-    #[local] Hint Rewrite formula_bool_and formula_bool_relop formula_bool_relop_neg : katamaran.
-    #[local] Hint Rewrite @instpred_formula_relop_neg @formula_relop_term @instpred_formula_relop_eq_val @instpred_formula_relop_eq_val' : katamaran.
-    #[local] Hint Rewrite @term_eq_true_r @term_eq_true_l @term_eq_false_l @term_eq_false_r @repₚ_term_prod @rep_term_cons rep_eq_terms_true eq_val_rep_l eq_val_rep_r @eq_term_cons @eqₚ_term_prod @repₚ_unionv_fold @eqₚ_unionv_fold @rep_neq_nil_cons @term_not_or @repₚ_term_or_false @repₚ_term_inr_inl @repₚ_term_inl_inr @eqₚ_term_inl_inr @eqₚ_term_inr_inl @repₚ_term_inr @eqₚ_term_inr @repₚ_term_inl @eqₚ_term_inl @repₚ_term_neg' @repₚ_term_not' @repₚ_term_not_and @repₚ_term_and repₚ_term_tuple_snoc eqₚ_term_tuple_snoc @repₚ_term_record @eqₚ_term_record @repₚ_namedenv_nil @repₚ_namedenv_snoc @eqₚ_namedenv_snoc : katamaran.
-
-    #[local] Hint Rewrite instpred_dlist_cat instpred_dlist_singleton : katamaran.
-    (* #[local] Hint Rewrite singleton_formula_and : katamaran. *)
-
-    (* Local Ltac arw := *)
-    (*   repeat *)
-    (*     (try progress cbn - [cat] in *; *)
-    (*      repeat *)
-    (*        match goal with *)
-    (*        | |- base.equiv ?x ?x => reflexivity *)
-    (*        | |- ?x ⊣⊢ ?x => reflexivity *)
-    (*        | |- singleton _ ⊣⊢ singleton _ => apply proper_singleton *)
-    (*        | |- formula_bool _ ⊣⊢ formula_bool _ => apply proper_formula_bool *)
-    (*        | |- formula_user ?p _ ⊣⊢ formula_user ?p _ => apply proper_formula_user *)
-    (*        | |- empty ⊣⊢ _ => apply empty_l_valid *)
-    (*        | |- Valid (singleton _) => apply valid_singleton *)
-    (*        | |- Valid (formula_bool _) => apply valid_formula_bool *)
-    (*        | |- error ⊣⊢ _ => apply error_l_unsatisfiable *)
-    (*        | |- Unsatisfiable (singleton _) => apply unsatisfiable_singleton *)
-    (*        | |- Unsatisfiable (formula_bool _) => apply unsatisfiable_formula_bool *)
-    (*        | |- context[env.snoc _ _ _ = env.snoc _ _ _] => *)
-    (*            unfold NamedEnv; rewrite env.inversion_eq_snoc *)
-    (*        end; try easy; *)
-    (*      autorewrite with katamaran in * ). *)
-    Local Ltac arw :=
-      repeat
-        (try progress cbn in *; 
-         repeat
-           match goal with
-           (* | |- _ /\ _ => split *)
-           | |- True => exact I (* cannot keep the match list empty apparently  *)
-           end; try easy;
-         (* use the more efficient rewrite_db... *)
-         rewrite_db katamaran).
-    Local Ltac arw_slow :=
-      repeat
-        (try progress cbn in *; 
-         repeat
-           match goal with
-           (* | |- _ /\ _ => split *)
-           | |- True => exact I (* cannot keep the match list empty apparently  *)
-           end; try easy;
-         (* use the slower autorewrite... *)
-         autorewrite with katamaran in * ).
 
     Fixpoint simplify_bool [Σ] (t : Term Σ ty.bool) : DList Σ :=
       Term_bool_case
@@ -147,7 +98,7 @@ Module Type GenericSolverOn
       - destruct IHt1 as [IHt11 IHt12], IHt2 as [IHt21 IHt22]; arw.
         rewrite IHt11 IHt21.
         (* need to find a confluent rewrite strategy... *)
-        now rewrite -(term_negb_involutive (term_binop bop.and _ _)) repₚ_term_not' repₚ_term_not_and; arw.
+        now rewrite -(term_negb_involutive (term_binop bop.and _ _)) repₚ_term_not' term_not_and; arw.
       - destruct IHt1 as [IHt11 IHt12], IHt2 as [IHt21 IHt22]; arw; arw_slow.
         now rewrite IHt12 IHt22.
       - now arw_slow.
@@ -161,7 +112,7 @@ Module Type GenericSolverOn
       instpred (simplify_bool_neg t) ⊣⊢ instpred (formula_bool (term_unop uop.not t)).
     Proof. apply simplify_bool_spec_combined. Qed.
     #[local] Opaque simplify_bool simplify_bool_neg.
-    #[local] Hint Rewrite simplify_bool_spec simplify_bool_neg_spec : katamaran.
+    #[local] Hint Rewrite simplify_bool_spec simplify_bool_neg_spec : uniflogic.
 
     (* Simplifies equations of the form (term_binop op t1 t2 = v). *)
     Equations(noeqns) simplify_eq_binop_val [Σ σ σ1 σ2]
@@ -188,10 +139,9 @@ Module Type GenericSolverOn
       (op : BinOp σ1 σ2 σ) (t1 : Term w σ1) (t2 : Term w σ2) (v : Val σ) :
       instpred (simplify_eq_binop_val op t1 t2 v) ⊣⊢
       repₚ v (term_binop op t1 t2).
-    Proof. destruct op; arw; destruct v; arw; arw_slow.
-           now rewrite <-repₚ_term_not, repₚ_term_not_or, !term_negb_involutive. Qed.
+    Proof. destruct op; arw; destruct v; arw; arw_slow. Qed.
     #[local] Opaque simplify_eq_binop_val.
-    #[local] Hint Rewrite simplify_eq_binop_val_spec : katamaran.
+    #[local] Hint Rewrite simplify_eq_binop_val_spec : uniflogic.
 
     Equations(noeqns) simplify_eq_unop_val [Σ σ1 σ2]
       (op : UnOp σ1 σ2) (t : Term Σ σ1) (v : Val σ2) : DList Σ :=
@@ -208,7 +158,7 @@ Module Type GenericSolverOn
       instpred (simplify_eq_unop_val op t v) ⊣⊢ repₚ v (term_unop op t).
     Proof. destruct op; arw; destruct v; arw; arw_slow. Qed.
     #[local] Opaque simplify_eq_unop_val.
-    #[local] Hint Rewrite simplify_eq_unop_val_spec : katamaran.
+    #[local] Hint Rewrite simplify_eq_unop_val_spec : uniflogic.
 
     Definition simplify_eqb {Σ σ} (t1 t2 : Term Σ σ) : DList Σ :=
       if Term_eqb t1 t2 then empty else singleton (formula_relop bop.eq t1 t2).
@@ -216,7 +166,7 @@ Module Type GenericSolverOn
     Lemma simplify_eqb_spec [w : World] [σ] (t1 t2 : STerm σ w) :
       instpred (simplify_eqb t1 t2) ⊣⊢ instpred (formula_relop bop.eq t1 t2).
     Proof. unfold simplify_eqb. destruct (Term_eqb_spec t1 t2); subst; arw. Qed.
-    #[local] Hint Rewrite simplify_eqb_spec : katamaran.
+    #[local] Hint Rewrite simplify_eqb_spec : uniflogic.
     #[local] Opaque simplify_eqb.
 
     Equations(noeqns) simplify_eq_binop {Σ σ σ11 σ12 σ21 σ22}
@@ -243,7 +193,7 @@ Module Type GenericSolverOn
       destruct op1; arw; dependent elimination op2; arw;
         rewrite ?formula_relop_term'; arw.
     Qed.
-    #[local] Hint Rewrite simplify_eq_binop_spec : katamaran.
+    #[local] Hint Rewrite simplify_eq_binop_spec : uniflogic.
     #[local] Opaque simplify_eq_binop.
 
     Equations(noeqns) simplify_eq_unop {Σ σ σ1 σ2}
@@ -265,7 +215,7 @@ Module Type GenericSolverOn
     Proof.
       destruct op1; arw; dependent elimination op2; arw; rewrite formula_relop_term'; arw.
     Qed.
-    #[local] Hint Rewrite simplify_eq_unop_spec : katamaran.
+    #[local] Hint Rewrite simplify_eq_unop_spec : uniflogic.
     #[local] Opaque simplify_eq_unop.
 
     Definition simplify_eq_union_val [Σ U] [K1 : unionk U]
@@ -291,7 +241,7 @@ Module Type GenericSolverOn
       now rewrite (repₚ_unionv_neq e).
     Qed.
     #[local] Opaque simplify_eq_union_val.
-    #[export] Hint Rewrite @simplify_eq_union_val_spec : katamaran.
+    #[export] Hint Rewrite @simplify_eq_union_val_spec : uniflogic.
 
     Fixpoint simplify_eq_val {Σ} [σ] (t : Term Σ σ) : forall (v : Val σ), DList Σ :=
       match t with
@@ -337,7 +287,7 @@ Module Type GenericSolverOn
         now rewrite IHIH q.
     Qed.
     #[local] Opaque simplify_eq_val.
-    #[local] Hint Rewrite simplify_eq_val_spec : katamaran.
+    #[local] Hint Rewrite simplify_eq_val_spec : uniflogic.
 
     Section SimplifyEqCtx.
       Variable simplify_eq : forall {Σ σ} (t1 t2 : Term Σ σ), DList Σ.
@@ -392,7 +342,7 @@ Module Type GenericSolverOn
         rewrite IHIH (q v) formula_relop_term'. arw.
         arw_slow.
     Qed.
-    #[export] Hint Rewrite @simplify_eq_spec : katamaran.
+    #[export] Hint Rewrite @simplify_eq_spec : uniflogic.
 
     Definition simplify_relopb {Σ σ} (op : RelOp σ)
       (t1 t2 : STerm σ Σ) : DList Σ :=
@@ -418,7 +368,7 @@ Module Type GenericSolverOn
       destruct (bop.eval_relop_val_spec op v1 v2); arw.
     Qed.
     #[local] Opaque simplify_relopb.
-    #[export] Hint Rewrite @simplify_relopb_spec : katamaran.
+    #[export] Hint Rewrite @simplify_relopb_spec : uniflogic.
 
     Lemma simplify_relop_spec {w : World} {σ} (op : RelOp σ) (t1 t2 : STerm σ w) :
       instpred (simplify_relop op t1 t2) ⊣⊢ instpred (formula_relop op t1 t2).
@@ -426,7 +376,7 @@ Module Type GenericSolverOn
       unfold simplify_relop.
       destruct op; arw; rewrite ?formula_relop_term'; arw.
     Qed.
-    #[export] Hint Rewrite @simplify_relop_spec : katamaran.
+    #[export] Hint Rewrite @simplify_relop_spec : uniflogic.
 
     Fixpoint simplify_formula {Σ} (fml : Formula Σ) : DList Σ :=
       match fml with
@@ -478,7 +428,7 @@ Module Type GenericSolverOn
           rewrite -IHF1 -HrF1; cbn.
           now rewrite bi.False_or.
     Qed.
-    #[export] Hint Rewrite @simplify_formula_spec : katamaran.
+    #[export] Hint Rewrite @simplify_formula_spec : uniflogic.
 
     Lemma simplify_pathcondition_spec {w : World} (C : PathCondition w) :
       instpred (w := w) (run (simplify_pathcondition C)) ⊣⊢ instpred C.
@@ -487,7 +437,7 @@ Module Type GenericSolverOn
       induction C as [|C IHC F]; arw.
       now rewrite IHC.
     Qed.
-    #[export] Hint Rewrite @simplify_pathcondition_spec : katamaran.
+    #[export] Hint Rewrite @simplify_pathcondition_spec : uniflogic.
 
     Definition occurs_check_lt {Σ x} (xIn : (x ∈ Σ)%katamaran) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
       match t with

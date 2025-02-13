@@ -536,6 +536,17 @@ Module Type InstantiationOn
         term_binop bop.and (term_not t1) (term_not t2).
     Proof. intro ι. cbn. now destruct (inst t1 ι), (inst t2 ι). Qed.
 
+    Lemma term_not_and {Σ} {t1 t2 : Term Σ ty.bool} :
+      term_not (term_binop bop.and t1 t2) ≡ term_binop bop.or (term_not t1) (term_not t2).
+    Proof. intro ι; cbn. now destruct (inst t1 ι), (inst t2 ι). Qed.
+
+    Lemma term_unop_val {Σ σ1 σ2} {op : UnOp σ1 σ2} {v1 : Val σ1} :
+      term_unop (Σ := Σ) op (term_val _ v1) ≡ term_val _ (uop.eval op v1).
+    Proof. now intro ι. Qed.
+
+    Lemma term_binop_val {Σ σ1 σ2 σ3} {op : BinOp σ1 σ2 σ3} {v1 : Val σ1} {v2 : Val σ2} :
+      term_binop (Σ := Σ) op (term_val _ v1) (term_val _ v2) ≡ term_val _ (bop.eval op v1 v2).
+    Proof. now intro ι. Qed.
 
   End SemanticEquivalence.
   #[export] Hint Rewrite term_orb_false_l term_orb_false_r term_orb_true_l term_orb_true_r : katamaran.
