@@ -378,6 +378,14 @@ Module Type GenericSolverOn
     Qed.
     #[export] Hint Rewrite @simplify_relop_spec : uniflogic.
 
+    (* TODO: treat singleton case separately *)
+    Definition PathCondition_to_Formula [Σ] : PathCondition Σ -> Formula Σ :=
+      ctx.Ctx_rect (fun _ => Formula Σ) formula_true (fun PC FPC F' => formula_and FPC F').
+
+    Program Definition PathCondition_to_DList [Σ] (pc : PathCondition Σ) : DList Σ :=
+      MkDList (fun k => Some (pc ▻▻ k)) _.
+    Next Obligation. intros; cbn. now rewrite instprop_cat. Qed.
+
     Fixpoint simplify_formula {Σ} (fml : Formula Σ) : DList Σ :=
       match fml with
       | formula_user p ts      => singleton (formula_user p (pevals ts))
@@ -390,13 +398,32 @@ Module Type GenericSolverOn
       | formula_or F1 F2       => match DList.run (simplify_formula F1) with
                                   | Some []%ctx => empty
                                   | None => simplify_formula F2
-                                  | _ => match DList.run (simplify_formula F2) with
-                                         | Some []%ctx => empty
-                                         | None => simplify_formula F1
-                                         | _ => singleton fml
+                                  | Some F1' => match DList.run (simplify_formula F2) with
+                                                | Some []%ctx => empty
+                                                | None => PathCondition_to_DList F1'
+                                                | Some F2' => singleton (formula_or (PathCondition_to_Formula F1') (PathCondition_to_Formula F2'))
                                          end
                                   end
       end.
+
+    Lemma PathCondition_to_Formula_sound [w : World] (P : PathCondition w) :
+      instpred (PathCondition_to_Formula P) ⊣⊢ instpred P.
+    Proof.
+      induction P; first done; cbn.
+      unfold instpred_inst_formula, instpred in IHP; cbn in IHP.
+      now rewrite IHP.
+    Qed.
+    #[export] Hint Rewrite @PathCondition_to_Formula_sound : uniflogic.
+
+    Lemma PathCondition_to_Formula_sound' [w : World] (P : PathCondition w) :
+      instpred_formula (PathCondition_to_Formula P) ⊣⊢ instpred P.
+    Proof. now apply PathCondition_to_Formula_sound. Qed.
+    #[export] Hint Rewrite @PathCondition_to_Formula_sound' : uniflogic.
+
+    Lemma PathCondition_to_DList_sound [w : World] (P : PathCondition w) :
+      instpred (PathCondition_to_DList P) ⊣⊢ instpred P.
+    Proof. reflexivity. Qed.
+    #[export] Hint Rewrite @PathCondition_to_DList_sound : uniflogic.
 
     Fixpoint simplify_pathcondition {Σ} (C : PathCondition Σ) : DList Σ :=
       match C with
@@ -419,11 +446,15 @@ Module Type GenericSolverOn
           destruct PC as [|PCrest2 F22]; cbn in *.
           { iSplit; iIntros "_"; [|now cbn].
             now iRight; iApply IHF2; iApply HrF2. }
-          now rewrite instpred_dlist_singleton.
-          { change (instpred_formula F2) with (instpred F2).
-            rewrite -IHF2 -HrF2; cbn.
-            now rewrite bi.or_False.
+          rewrite instpred_dlist_singleton.
+          { change (instpred_formula ?F) with (instpred F).
+            rewrite -IHF2 -HrF2.
+            rewrite -IHF1 -HrF1.
+            now arw.
           }
+          change (instpred_formula ?F) with (instpred F).
+          rewrite -IHF2 -HrF2 bi.or_False.
+          now rewrite -IHF1 -HrF1.
         + change (instpred_formula F1) with (instpred F1).
           rewrite -IHF1 -HrF1; cbn.
           now rewrite bi.False_or.
