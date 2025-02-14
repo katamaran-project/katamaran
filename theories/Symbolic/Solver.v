@@ -351,13 +351,6 @@ Module Type GenericSolverOn
       | _       , _       => singleton (formula_relop op t1 t2)
       end.
 
-    Definition simplify_relop {Σ σ} (op : RelOp σ) :
-      forall (t1 t2 : STerm σ Σ), DList Σ :=
-      match op with
-      | bop.eq => fun t1 t2 => simplify_eq t1 t2
-      | _      => simplify_relopb op
-      end.
-
     Definition simplify_relopb_spec {w : World} {σ} (op : RelOp σ)
       (t1 t2 : STerm σ w) :
       instpred (simplify_relopb op t1 t2) ⊣⊢ instpred (formula_relop op t1 t2).
@@ -369,6 +362,33 @@ Module Type GenericSolverOn
     Qed.
     #[local] Opaque simplify_relopb.
     #[export] Hint Rewrite @simplify_relopb_spec : uniflogic.
+
+    Equations(noeqns) simplify_le {Σ} (t1 t2 : Term Σ ty.int) : DList Σ :=
+    simplify_le (term_val _ 0%Z)         (term_unop uop.unsigned t) := empty;
+    simplify_le t1                       t2                         := simplify_relopb bop.le t1 t2.
+
+    Lemma simplify_le_spec [w : World] (s t : Term w ty.int) :
+      instpred (simplify_le s t) ⊣⊢ instpred (formula_relop bop.le s t).
+    Proof.
+      dependent elimination s; try (now apply simplify_relopb_spec).
+      destruct v; try (now apply simplify_relopb_spec).
+      dependent elimination t; try (now apply simplify_relopb_spec).
+      dependent elimination op1; try (now apply simplify_relopb_spec).
+      cbn -[empty].
+      arw_slow.
+      iSplit; iIntros; [|done].
+      iStopProof. crushPredEntails3; cbn.
+      now apply N2Z.is_nonneg.
+    Qed.
+    #[export] Hint Rewrite @simplify_le_spec : uniflogic.
+
+    Definition simplify_relop {Σ σ} (op : RelOp σ) :
+      forall (t1 t2 : STerm σ Σ), DList Σ :=
+      match op in RelOp σ return forall (t1 t2 : STerm σ Σ), DList Σ with
+      | bop.eq => simplify_eq
+      | bop.le => simplify_le
+      | op     => simplify_relopb op
+      end.
 
     Lemma simplify_relop_spec {w : World} {σ} (op : RelOp σ) (t1 t2 : STerm σ w) :
       instpred (simplify_relop op t1 t2) ⊣⊢ instpred (formula_relop op t1 t2).
