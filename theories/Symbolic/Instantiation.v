@@ -37,6 +37,7 @@ From Coq Require Import
      Program.Basics
      Relations.Relation_Definitions
      Strings.String
+     Ring
      ZArith.BinInt.
 
 From Equations Require Import
@@ -547,6 +548,76 @@ Module Type InstantiationOn
     Lemma term_binop_val {Σ σ1 σ2 σ3} {op : BinOp σ1 σ2 σ3} {v1 : Val σ1} {v2 : Val σ2} :
       term_binop (Σ := Σ) op (term_val _ v1) (term_val _ v2) ≡ term_val _ (bop.eval op v1 v2).
     Proof. now intro ι. Qed.
+
+    Lemma term_plus_comm {Σ} {t1 t2} : term_binop (Σ := Σ) bop.plus t1 t2 ≡ term_binop (Σ := Σ) bop.plus t2 t1.
+    Proof. intro ι; cbn; now Lia.lia. Qed.
+
+    Lemma term_plus_zero_l {Σ} {t1} : term_binop (Σ := Σ) bop.plus (term_val ty.int 0%Z) t1 ≡ t1.
+    Proof. intro ι; cbn; now Lia.lia. Qed.
+
+    Lemma term_minus_plus_neg {Σ} {t1 t2} : term_binop (Σ := Σ) bop.minus t1 t2 ≡ term_binop bop.plus t1 (term_unop uop.neg t2).
+    Proof. intro ι; cbn; now Lia.lia. Qed.
+
+    Lemma term_plus_neg_inv {Σ} {t} : term_binop (Σ := Σ) bop.plus t (term_unop uop.neg t) ≡ term_val ty.int 0%Z.
+    Proof. intro ι; cbn; now Lia.lia. Qed.
+
+    Lemma term_plus_assoc {Σ} {t1 t2 t3} : term_binop (Σ := Σ) bop.plus t1 (term_binop bop.plus t2 t3) ≡ term_binop bop.plus (term_binop bop.plus t1 t2) t3.
+    Proof. intro ι; cbn; now Lia.lia. Qed.
+
+    Lemma term_times_comm {Σ} {t1 t2} : term_binop (Σ := Σ) bop.times t1 t2 ≡ term_binop (Σ := Σ) bop.times t2 t1.
+    Proof. intro ι; cbn; now Lia.lia. Qed.
+
+    Lemma term_times_one_l {Σ} {t1} : term_binop (Σ := Σ) bop.times (term_val ty.int 1%Z) t1 ≡ t1.
+    Proof. intro ι; cbn; now Lia.lia. Qed.
+
+    Lemma term_times_assoc {Σ} {t1 t2 t3} : term_binop (Σ := Σ) bop.times t1 (term_binop bop.times t2 t3) ≡ term_binop bop.times (term_binop bop.times t1 t2) t3.
+    Proof. intro ι; cbn; now Lia.lia. Qed.
+
+    Lemma term_times_plus_distrib_r {Σ} {t1 t2 t3} : term_binop (Σ := Σ) bop.times (term_binop bop.plus t2 t3) t1 ≡ term_binop bop.plus (term_binop bop.times t2 t1) (term_binop bop.times t3 t1).
+    Proof. intro ι; cbn; now Lia.lia. Qed.
+
+    Lemma Term_int_ring_theory {Σ} : ring_theory (term_val (Σ := Σ) ty.int 0%Z) (term_val ty.int 1%Z) (term_binop bop.plus) (term_binop bop.times) (term_binop bop.minus) (term_unop uop.neg) equiv.
+    Proof.
+      constructor; eauto using term_plus_zero_l, term_plus_assoc, term_plus_comm, term_times_one_l, term_times_assoc, term_times_comm, term_times_plus_distrib_r, term_minus_plus_neg, term_plus_neg_inv.
+    Qed.
+
+    Section Term_bv_ring.
+      Variable Σ : LCtx.
+      Variable n : nat.
+      Add Ring BitVector : (bv.ring_theory n).
+
+      Lemma term_bvadd_comm {t1 t2} : term_binop (Σ := Σ) (bop.bvadd (n := n)) t1 t2 ≡ term_binop (Σ := Σ) bop.bvadd t2 t1.
+      Proof. intro ι; cbn; now ring. Qed.
+
+      Lemma term_bvadd_zero_l {t1} : term_binop (Σ := Σ) bop.bvadd (term_val (ty.bvec n) bv.zero) t1 ≡ t1.
+      Proof. intro ι; cbn; now ring. Qed.
+
+      Lemma term_bvsub_bvadd_neg {t1 t2} : term_binop (Σ := Σ) bop.bvsub t1 t2 ≡ term_binop bop.bvadd t1 (term_unop (uop.negate (n := n)) t2).
+      Proof. intro ι; cbn; now ring. Qed.
+
+      Lemma term_bvadd_neg_inv {t} : term_binop (Σ := Σ) bop.bvadd t (term_unop uop.negate t) ≡ term_val (ty.bvec n) bv.zero.
+      Proof. intro ι; cbn; now ring. Qed.
+
+      Lemma term_bvadd_assoc {t1 t2 t3} : term_binop (Σ := Σ) bop.bvadd t1 (term_binop bop.bvadd t2 t3) ≡ term_binop (bop.bvadd (n := n)) (term_binop bop.bvadd t1 t2) t3.
+      Proof. intro ι; cbn; now ring. Qed.
+
+      Lemma term_bvmul_comm {t1 t2} : term_binop (Σ := Σ) bop.bvmul t1 t2 ≡ term_binop (Σ := Σ) (bop.bvmul (n := n)) t2 t1.
+      Proof. intro ι; cbn; now ring. Qed.
+
+      Lemma term_bvmul_one_l {t1} : term_binop (Σ := Σ) bop.bvmul (term_val (ty.bvec n) (bv.of_N 1)) t1 ≡ t1.
+      Proof. intro ι; cbn; now ring. Qed.
+
+      Lemma term_bvmul_assoc {t1 t2 t3} : term_binop (Σ := Σ) bop.bvmul t1 (term_binop bop.bvmul t2 t3) ≡ term_binop (bop.bvmul (n := n)) (term_binop bop.bvmul t1 t2) t3.
+      Proof. intro ι; cbn; now ring. Qed.
+
+      Lemma term_bvmul_bvadd_distrib_r {t1 t2 t3} : term_binop (Σ := Σ) bop.bvmul (term_binop bop.bvadd t2 t3) t1 ≡ term_binop bop.bvadd (term_binop bop.bvmul t2 t1) (term_binop (bop.bvmul (n := n)) t3 t1).
+      Proof. intro ι; cbn; now ring. Qed.
+
+      Lemma Term_bv_ring_theory : ring_theory (term_val (Σ := Σ) (ty.bvec n) bv.zero) (term_val (ty.bvec n) (bv.of_N 1)) (term_binop bop.bvadd) (term_binop bop.bvmul) (term_binop bop.bvsub) (term_unop uop.negate) equiv.
+      Proof.
+        constructor; eauto using term_bvadd_zero_l, term_bvadd_assoc, term_bvadd_comm, term_bvmul_one_l, term_bvmul_assoc, term_bvmul_comm, term_bvmul_bvadd_distrib_r, term_bvsub_bvadd_neg, term_bvadd_neg_inv.
+      Qed.
+    End Term_bv_ring. 
 
   End SemanticEquivalence.
   #[export] Hint Rewrite term_orb_false_l term_orb_false_r term_orb_true_l term_orb_true_r : katamaran.
