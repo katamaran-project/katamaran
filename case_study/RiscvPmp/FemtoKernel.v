@@ -264,7 +264,6 @@ Module inv := invariants.
     Let W__femtoinit : World := MkWorld Σ__femtoinit []%ctx.
 
     Example femtokernel_init_pre : Assertion {| wctx := [] ▻ ("a"::ty_xlenbits) ; wco := []%ctx |} :=
-      (term_var "a" = term_val ty_word bv.zero) ∗
       (∃ "v", mstatus ↦ term_var "v") ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
       (∃ "v", mcause ↦ term_var "v") ∗
@@ -286,27 +285,36 @@ Module inv := invariants.
           asn_pmp_entries (term_list (asn_femto_pmpentries))
       )%exp.
 
-    (* (* note that this computation takes longer than directly proving sat__femtoinit below *) *)
-    (* Time Example t_vc__femtoinit : 𝕊 Σ__femtoinit := *)
-    (*   Eval vm_compute in *)
-    (*   simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post). *)
-
     Definition vc__femtoinit : 𝕊 Σ__femtoinit :=
       postprocess (sannotated_block_verification_condition femtokernel_init_pre femtokernel_init_gen femtokernel_init_post wnil).
-    (*   let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in *)
-    (*   let vc2 := Postprocessing.prune vc1 in *)
-    (*   let vc3 := Postprocessing.solve_evars vc1 in *)
-    (*   let vc4 := Postprocessing.solve_uvars vc3 in *)
-    (*   let vc5 := Postprocessing.prune vc4 in *)
-    (*   vc5. *)
-    (* Import SymProp.notations. *)
-    (* Set Printing Depth 200. *)
-    (* Eval vm_compute in vc__femtoinit. *)
+      (* let vc1 := sannotated_block_verification_condition femtokernel_init_pre femtokernel_init_gen femtokernel_init_post wnil in *)
+      (* let vc2 := Postprocessing.prune vc1 in *)
+      (* let vc3 := Postprocessing.solve_evars vc1 in *)
+      (* let vc4 := Postprocessing.solve_uvars vc3 in *)
+      (* let vc5 := Postprocessing.prune vc4 in *)
+      (* vc5. *)
+    Import SymProp.notations.
+    Import asn.notations.
+    Import Erasure.notations.
+    Set Printing Depth 2000.
+    Eval vm_compute in Erasure.erase_symprop vc__femtoinit.
+
+
+    Time Eval compute in List.map (fun x => match EqDecInstances.nat_eqdec 32 x with left _ => true | right _ => false end) (List.repeat (32%nat : nat) 1000).
 
     (* NOTE: For now we only get one case here, since the start of the adversary region is the same in both cases. If this were not the case, we would take a naive approach to verifying both versions of the initialization code here; we would require that `adv_start` takes one of the two values present in the two versions of the initialization code. A more general approach would verify the contract under a logical value for `adv_start`. This would require the block verifier to support taking a list of instructions that can depend on symbolic values as input (i.e. proper terms). *)
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
-      now vm_compute.
+      unfold safeE.
+      vm_compute.
+      constructor.
+      cbv [Erasure.inst_symprop Erasure.inst_eformula'  Erasure.inst_eformula option_rect option.bind Erasure.inst_eterm Erasure.inst_eq Erasure.inst_env Erasure.inst_namedenv' Erasure.list_remove option.map uop.eval nth_error Classes.eq_dec bop.eval bop.eval_relop_prop bop.eval_relop_val type record_eqdec enum_eqdec].
+      cbv [ty.Ty_eq_dec Classes.dec_eq type f_equal_dec Classes.eq_dec EqDecInstances.nat_EqDec].
+      cbn.
+      Set Printing Parentheses.
+      intuition.
+      Lia.lia. 
+      (* EqDecInstances.nat_EqDec EqDecInstances.nat_eqdec nat_rec nat_rect *)
     Qed.
 
     Let Σ__femtohandler : LCtx := [].

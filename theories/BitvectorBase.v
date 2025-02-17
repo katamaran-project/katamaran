@@ -33,6 +33,7 @@ From Coq Require Import
      PArith.BinPos
      ZArith.BinInt
      RelationClasses
+     Ring
      Morphisms.
 From Equations Require Import
      Equations.
@@ -1048,6 +1049,16 @@ Module bv.
       apply eq2R.
       Lia.lia.
     Qed.
+
+    Lemma mul_add_distrib_r {n} {x y z} : @mul n (add x y) z = add (mul x z) (mul y z).
+    Proof. solve_eq2n. Qed.
+
+    Lemma ring_theory n : ring_theory (R := bv n) zero (of_N 1) add mul sub negate eq.
+    Proof.
+      constructor;
+        eauto using add_zero_l, add_comm, add_assoc, mul_one_l, mul_comm, mul_assoc, mul_add_distrib_r, add_negate2.
+    Qed.
+    (* Once you have a fixed n, you can Add Ring BitVector : (bv.ring_theory n).  and then use the ring tactic. *)
 
     (* Definition succ {n} : bv n -> bv n := add (one n). *)
 
