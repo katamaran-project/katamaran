@@ -688,11 +688,11 @@ Module IrisInstanceWithContracts
     forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ),
       ForeignSem ->
       LemmaSem ->
-      ⦃ PRE ⦄ s ; δ ⦃ POST ⦄ ->
+      (∃ fuel, # fuel ⦃ PRE ⦄ s ; δ ⦃ POST ⦄) ->
       ⊢ (□ ▷ ValidContractEnvSem CEnv -∗
           semTriple δ PRE s POST)%I.
   Proof.
-    iIntros (PRE POST extSem lemSem triple) "#vcenv".
+    iIntros (PRE POST extSem lemSem [fuel triple]) "#vcenv".
     iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
@@ -729,10 +729,11 @@ Module IrisInstanceWithContracts
     iIntros (σs σ f).
     specialize (vcenv σs σ f).
     destruct (CEnv f) as [[]|];[|trivial].
-    specialize (vcenv _ eq_refl).
     iIntros (ι).
+    specialize (vcenv _ eq_refl ι) as [fuel vcenv].
     iApply (sound_stm extSem lemSem); [|trivial].
-    apply (vcenv ι).
+    exists fuel.
+    apply vcenv.
   Qed.
 
   End WithSailGS.

@@ -346,9 +346,9 @@ Section BlockVerificationDerived.
     #[global] Arguments semTripleBlock PRE%I instrs POST%I.
 
     Lemma sound_stm_aux {τ} {PRE} {s : Stm [ctx] τ} {POST} :
-      ⦃ PRE ⦄ s; [env] ⦃ POST ⦄ → ⊢ semTriple [env] PRE s POST.
+      (∃ fuel, # fuel ⦃ PRE ⦄ s; [env] ⦃ POST ⦄) → ⊢ semTriple [env] PRE s POST.
     Proof.
-      iIntros (Htrip) "PRE".
+      iIntros ([fuel Htrip]) "PRE".
       iApply sound_stm; eauto using foreignSemBlockVerif, lemSemBlockVerif.
       iApply contractsSound.
     Qed.
@@ -365,7 +365,7 @@ Section BlockVerificationDerived.
       iIntros (Hverif) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
       specialize (Hverif npc). apply sound_cexec in Hverif.
       iApply (semWP_mono with "[-]").
-      iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
+      iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif (ex_intro _ _ Hverif) with "[] [$]").
       iApply contractsSound.
       iIntros ([v|m] _); last done; iIntros "(%h1 & Hh1 & %Htrip)". clear Hverif.
       destruct Htrip as [an Htrip].

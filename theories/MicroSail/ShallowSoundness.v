@@ -110,21 +110,21 @@ Module Type Soundness
       apply CHeapSpec.produce_sound.
     Qed.
 
-    Definition SoundExecCall (exec_call : ExecCall) : Prop :=
+    Definition SoundExecCall (inline_fuel : nat) : Prop :=
       forall Γ τ Δ (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
         (Φ : Val τ → SCHeap → Prop)
         (δ1 : CStore Γ) (h1 : SCHeap),
-        exec_call _ _ f (evals es δ1) Φ h1 →
-        ⦃ interpret_scheap h1 ⦄
+        @cexec_call inline_fuel _ _ f (evals es δ1) Φ h1 →
+        # inline_fuel ⦃ interpret_scheap h1 ⦄
           stm_call f es; δ1
         ⦃ fun v δ' =>
             ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ v h' ∧ δ' = δ1⌝ ⦄.
 
     Definition SoundExecCallForeign (exec_call_foreign : ExecCallForeign) : Prop :=
-      forall Γ τ Δ (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+      forall Γ τ Δ {fuel : nat} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
         (Φ : Val τ → SCHeap → Prop) (δ1 : CStore Γ) (h1 : SCHeap),
       exec_call_foreign _ _ f (evals es δ1) Φ h1 →
-      ⦃ interpret_scheap h1 ⦄
+      # fuel ⦃ interpret_scheap h1 ⦄
         stm_foreign f es; δ1
       ⦃ fun v δ' =>
           ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ v h' ∧ δ' = δ1⌝ ⦄.
@@ -137,12 +137,12 @@ Module Type Soundness
         (∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ tt h'⌝)
         (LEnv l).
 
-    Definition SoundExec (exec : Exec) :=
+    Definition SoundExec (inline_fuel : nat) (exec : Exec) :=
       forall
         Γ σ (s : Stm Γ σ) (Φ : Val σ → CStore Γ → SCHeap → Prop)
         (δ1 : CStore Γ) (h1 : SCHeap),
         exec _ _ s Φ δ1 h1 ->
-        ⦃ interpret_scheap h1 ⦄
+        # inline_fuel ⦃ interpret_scheap h1 ⦄
           s ; δ1
         ⦃ fun v δ' =>
             ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ v δ' h'⌝
@@ -152,20 +152,18 @@ Module Type Soundness
 
       Variable exec_call_foreign : ExecCallForeign.
       Variable exec_lemma : ExecLemma.
-      Variable exec_call : ExecCall.
 
       Variable mexec_call_foreign : MonotonicExecCallForeign exec_call_foreign.
       Variable mexec_lemma : MonotonicExecLemma exec_lemma.
-      Variable mexec_call : MonotonicExecCall exec_call.
 
-      Variable sound_exec_call : SoundExecCall exec_call.
       Variable sound_exec_call_foreign : SoundExecCallForeign exec_call_foreign.
       Variable sound_exec_lemma : SoundExecLemma exec_lemma.
 
-      Lemma exec_aux_sound :
-        SoundExec (exec_aux exec_call_foreign exec_lemma exec_call).
+      Lemma exec_aux_sound (inline_fuel : nat) :
+        SoundExecCall inline_fuel →
+        SoundExec inline_fuel (exec_aux exec_call_foreign exec_lemma (cexec_call inline_fuel)).
       Proof.
-        unfold SoundExec. intros ? ? s.
+        unfold SoundExec. intros sound_exec_call ? ? s.
         induction s; intros ? ? ?; cbn;
           cbv [pure pushspops pushpop eval_exp get_local put_local bind];
           cbn; intros HYP.
@@ -201,7 +199,7 @@ Module Type Soundness
           now apply rule_stm_assign, IHs.
 
         - (* stm_call *)
-          apply sound_exec_call in HYP.
+          eapply sound_exec_call in HYP.
           apply (rule_consequence_right _ HYP).
           intros.
           apply bi.exist_mono'. intros h.
@@ -212,7 +210,7 @@ Module Type Soundness
           now apply rule_stm_call_frame, IHs.
 
         - (* stm_foreign *)
-          apply sound_exec_call_foreign in HYP.
+          eapply sound_exec_call_foreign in HYP.
           apply (rule_consequence_right _ HYP).
           intros.
           apply bi.exist_mono'. intros h.
@@ -291,12 +289,12 @@ Module Type Soundness
 
     Section WithExec.
 
-      Context (exec : Exec) (mexec : MonotonicExec exec) (sound_exec : SoundExec exec).
+      Context (inline_fuel : nat) (exec : Exec) (mexec : MonotonicExec exec) (sound_exec : SoundExec inline_fuel exec).
 
       Lemma exec_contract_sound [Δ τ] (c : SepContract Δ τ) (body : Stm Δ τ) Φ h :
         exec_contract exec c body Φ h →
         ∀ ι : Valuation (sep_contract_logic_variables c),
-        ⦃ interpret_scheap h ∗
+        # inline_fuel ⦃ interpret_scheap h ∗
           asn.interpret (sep_contract_precondition c) ι ⦄
           body ; inst (sep_contract_localstore c) ι
         ⦃ fun v _ =>
@@ -315,7 +313,7 @@ Module Type Soundness
         refine (rule_consequence_left _ _ HYP). clear HYP.
         apply rule_exist. intros h'.
         apply rule_pull. intros HYP.
-        apply sound_exec in HYP.
+        eapply sound_exec in HYP.
         apply (rule_consequence_right _ HYP).
         intros v _.
         apply bi.exist_elim. intros h2.
@@ -349,9 +347,9 @@ Module Type Soundness
       now apply call_lemma_sound.
     Qed.
 
-    Lemma sound_cexec_call (fuel : nat) : SoundExecCall (cexec_call fuel).
+    Lemma sound_cexec_call (fuel : nat) : SoundExecCall fuel.
     Proof.
-      induction fuel; cbn; unfold SoundExecCall, evalStoreSpec; intros.
+      induction fuel; unfold SoundExecCall, evalStoreSpec; cbn; intros.
       - destruct (CEnv f) as [c|] eqn:?.
         + apply call_contract_sound in H.
           apply rule_stm_call with c; auto. clear Heqo.
@@ -378,22 +376,22 @@ Module Type Soundness
           apply bi.exist_mono'. intros h'.
           apply bi.and_mono'; auto.
         + apply rule_stm_call_inline.
-          apply exec_aux_sound in H.
+          eapply exec_aux_sound in H.
           * apply (rule_consequence_right _ H).
             intros ? _.
             apply bi.exist_mono'. intros h.
             apply bi.and_mono'; auto.
-          * auto.
           * apply sound_cexec_call_foreign.
           * apply sound_cexec_lemma.
+          * auto.
     Qed.
 
-    Lemma sound_cexec (fuel : nat) : SoundExec (cexec fuel).
+    Lemma sound_cexec (fuel : nat) : SoundExec fuel (cexec fuel).
     Proof.
       apply exec_aux_sound.
-      - apply sound_cexec_call.
       - apply sound_cexec_call_foreign.
       - apply sound_cexec_lemma.
+      - apply sound_cexec_call.
     Qed.
 
     Lemma vcgen_sound fuel {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
@@ -401,6 +399,7 @@ Module Type Soundness
       ProgramLogic.ValidContract c body.
     Proof.
       cbv [vcgen CHeapSpec.run ProgramLogic.ValidContract]. intros HYP ι.
+      exists fuel.
       eapply exec_contract_sound in HYP; auto using sound_cexec. cbn in HYP.
       rewrite bi.emp_sep in HYP.
       apply (rule_consequence_right _ HYP). clear HYP.

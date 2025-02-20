@@ -249,9 +249,8 @@ Section Loop.
     exact foreignSem.
     exact lemSem.
     unfold ProgramLogic.ValidContractCEnv.
-    intros.
-    pose (ValidContracts f H) as Hc.
-    destruct Hc as [fuel Hc].
+    intros Δ τ f c H.
+    destruct (ValidContracts f H) as [fuel Hc].
     apply shallow_vcgen_fuel_soundness with (fuel := fuel).
     now apply symbolic_vcgen_fuel_soundness.
   Qed.
@@ -262,9 +261,8 @@ Section Loop.
     exact foreignSem.
     exact lemSem.
     unfold ProgramLogic.ValidContractCEnv.
-    intros.
-    pose (ValidContracts f H) as Hc.
-    destruct Hc as [fuel Hc].
+    intros Δ τ f c H.
+    destruct (ValidContracts f H) as [fuel Hc].
     apply shallow_vcgen_fuel_soundness with (fuel := fuel).
     now apply symbolic_vcgen_fuel_soundness.
   Qed.
