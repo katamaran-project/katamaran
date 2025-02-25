@@ -35,6 +35,7 @@ From Coq Require Import
      NArith.NArith
      Relations.Relation_Definitions
      Strings.String
+     Unicode.Utf8
      ZArith.BinInt.
 From Katamaran Require Export
      Notations.
@@ -671,8 +672,6 @@ Module SignatureNotations.
       : signature_scope.
   Notation "'∀' x .. y , R " :=
     (forall_relation (fun x => .. (forall_relation (fun y => R%signature)) ..))
-      (at level 200, x binder, y binder, right associativity,
-        format "'[  ' '[  ' ∀  x  ..  y ']' ,  '/' R ']'")
       : signature_scope.
   Notation "R * R'" :=
     (base.prod_relation R%signature R'%signature)
