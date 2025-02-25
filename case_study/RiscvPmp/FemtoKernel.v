@@ -124,7 +124,7 @@ Module inv := invariants.
     (* See e.g.: https://stackoverflow.com/questions/50742420/risc-v-build-32-bit-constants-with-lui-and-addi *)
     Definition imm_split_bv (imm : bv 32) : (bv 12 * bv 20) :=
       let (lo , hi) := bv.appView 12 _ imm in
-        if (base.decide (hi = (bv.ones 20))) then (lo , hi) (* Small negative numbers *)
+        if bv.eqb hi (bv.ones 20) then (lo , hi) (* Small negative numbers *)
         else if (bv.msb lo) (* Avoid incorrect sign-extension *)
              then (bv.of_Z (Z.of_N (bv.bin lo) - 4096), hi + bv.one)
              else (lo , hi).
@@ -695,7 +695,7 @@ Module inv := invariants.
     iIntros "([%mpp Hmst] & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & #Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
     iExists mpp.
     unfold LoopVerification.loop_pre, LoopVerification.Step_pre, LoopVerification.Execution.
-    iFrame.
+    iFrame "Hmst Hmtvec Hcurpriv Hgprs Hpmpcfg Hpc Hnpc".
     iModIntro.
 
     iSplitL "Hmcause Hmepc Hmemadv".

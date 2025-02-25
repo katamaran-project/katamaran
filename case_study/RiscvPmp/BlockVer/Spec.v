@@ -839,7 +839,7 @@ Module RiscvPmpIrisInstanceWithContracts.
         iIntros. iModIntro.
         RiscvPmpModel2.eliminate_prim_step Heq.
         iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
-        now iFrame "% # ∗".
+        now iFrame "H Hregs Hmem".
       - (* old case *)
         repeat iModIntro.
         iIntros. iModIntro.
@@ -885,7 +885,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       constructor. }
     repeat iModIntro. iIntros.
     RiscvPmpModel2.eliminate_prim_step Heq.
-    iModIntro. iFrame.
+    iModIntro. iFrame "Hregs".
     repeat iSplit; auto.
     destruct bytes; first contradiction.
     unfold mem_inv, fun_write_mmio; cbn.

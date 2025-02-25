@@ -119,7 +119,7 @@ Section Loop.
     iIntros "IH (Hregs & [%c (Hpc & Hsafe & Hcorrect)])".
     iApply (valid_step_contract $! [env]).
     cbn - [interp_gprs interp].
-    iFrame.
+    iFrame "Hregs IH".
     iExists c; iFrame.
   Qed.
 

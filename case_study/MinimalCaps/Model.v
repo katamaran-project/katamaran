@@ -771,7 +771,7 @@ Module MinCapsIrisInstanceWithContracts.
       iPoseProof (later_exists_ptsto with "Hav Hrec") as "Hinv".
       iMod ("Hclose" with "Hinv") as "_".
       iModIntro.
-      iFrame.
+      iFrame "Hregs".
       iSplitL "Hmem'".
       iApply (mem_inv_not_modified $! H with "Hmem'").
       iApply wp_value; cbn.
@@ -805,8 +805,8 @@ Module MinCapsIrisInstanceWithContracts.
       iPoseProof (later_exists_ptsto with "Hav Hwsafe") as "Hinv".
       iMod ("Hclose" with "Hinv") as "_".
       iModIntro.
-      iSplitL; trivial.
-      iFrame.
+      iFrame "Hregs".
+      iSplitL.
       iApply (mem_inv_update $! H with "Hmem'").
       now iApply wp_value.
     Qed.
