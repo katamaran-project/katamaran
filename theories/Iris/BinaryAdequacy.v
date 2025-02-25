@@ -110,7 +110,7 @@ Module Type IrisAdequacy2
                        sailPreG_gen_memGpreS2 : memGpreS2 Σ
                      }.
 
-  Existing Instance sailGpresS_invGpreS2.
+  #[local] Existing Instance sailGpresS_invGpreS2.
 
   Definition sailΣ2 : gFunctors := #[ memΣ2 ; invΣ ; GFunctor regUR; GFunctor regUR].
 

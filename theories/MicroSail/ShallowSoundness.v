@@ -121,7 +121,7 @@ Module Type Soundness
             ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ v h' ∧ δ' = δ1⌝ ⦄.
 
     Definition SoundExecCallForeign (exec_call_foreign : ExecCallForeign) : Prop :=
-      forall Γ τ Δ {fuel : nat} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+      forall Γ τ Δ (fuel : nat) (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
         (Φ : Val τ → SCHeap → Prop) (δ1 : CStore Γ) (h1 : SCHeap),
       exec_call_foreign _ _ f (evals es δ1) Φ h1 →
       # fuel ⦃ interpret_scheap h1 ⦄
