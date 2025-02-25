@@ -65,7 +65,7 @@ Module seqBv.
       f_equal. now rewrite of_Z_unsigned. Qed.
 
     Lemma seqBv_len n base width : length (@seqBv n base width) = width.
-    Proof. unfold seqBv. rewrite map_length, list_numbers.seqZ_length. Lia.lia. Qed.
+    Proof. unfold seqBv. rewrite map_length, list_numbers.length_seqZ. Lia.lia. Qed.
 
     Lemma seqBv_width_at_least {n width} base k y :
       base.lookup k (@seqBv n base width) = Some y -> exists p , width = (k + S p)%nat.

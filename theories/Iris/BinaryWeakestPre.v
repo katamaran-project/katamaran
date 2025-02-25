@@ -838,7 +838,7 @@ Section Soundness.
 
   Lemma iris_rule_pull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ)
         (P : iProp Σ) (Q : Prop) (R : Val σ -> CStore Γ -> iProp Σ) :
-        (⊢ (⌜ Q ⌝ → semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R).
+        (⊢ (⌜ Q ⌝ -∗ semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R).
   Proof.
     iIntros "QP [P %]".
     by iApply "QP".

@@ -26,25 +26,25 @@
               versions
         );
 
-      iris42 = {
-        iris = "4.2.0";
-        stdpp = "1.10.0";
+      iris43 = {
+        iris = "4.3.0";
+        stdpp = "1.11.0";
       };
 
-      coqPackages818 = with (patchCoqPackages pkgs.coqPackages_8_18 iris42); [ coq equations stdpp iris ];
-      coqPackages819 = with (patchCoqPackages pkgs.coqPackages_8_19 iris42); [ coq equations stdpp iris ];
+      coqPackages819 = with (patchCoqPackages pkgs.coqPackages_8_19 iris43); [ coq equations stdpp iris ];
+      coqPackages820 = with (patchCoqPackages pkgs.coqPackages_8_20 iris43); [ coq equations stdpp iris ];
 
       emacsPackage = (pkgs.emacsPackagesFor pkgs.emacs).emacsWithPackages (ep:
         with ep; [ company-coq magit proof-general ]);
     in
     {
       devShells = rec {
-        default = coq818;
-        coq818 = pkgs.mkShell { buildInputs = coqPackages818; };
+        default = coq819;
         coq819 = pkgs.mkShell { buildInputs = coqPackages819; };
+        coq820 = pkgs.mkShell { buildInputs = coqPackages820; };
 
-        emacs818 = pkgs.mkShell { buildInputs = coqPackages818 ++ [ emacsPackage ]; };
         emacs819 = pkgs.mkShell { buildInputs = coqPackages819 ++ [ emacsPackage ]; };
+        emacs820 = pkgs.mkShell { buildInputs = coqPackages820 ++ [ emacsPackage ]; };
       };
     }
   );

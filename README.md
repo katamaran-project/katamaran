@@ -18,12 +18,12 @@ Dependencies
 
 The development version of Katamaran has the following lower bounds:
 ```
-coq            >= 8.18
+coq            >= 8.19
 coq-equations  >= 1.3
-coq-iris       >= 4.2
-coq-stdpp      >= 1.10
+coq-iris       >= 4.3
+coq-stdpp      >= 1.11
 ```
-and has also been tested with coq 8.19.
+and has also been tested with coq 8.20.
 
 ### Using opam
 
@@ -31,8 +31,8 @@ An easy way to setup your system is to create a fresh opam switch, pin the Coq a
 ```
 opam switch create katamaran ocaml-base-compiler.4.14.2
 opam repo add coq-released https://coq.inria.fr/opam/released
-opam pin add coq 8.18.0
-opam pin add coq-iris 4.2.0
+opam pin add coq 8.19.0
+opam pin add coq-iris 4.3.0
 opam install coq-equations
 ```
 
