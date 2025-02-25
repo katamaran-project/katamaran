@@ -857,7 +857,7 @@ Module ExampleModel.
       fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := (Z * (Z + unit))).
 
     Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-      fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
+      fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, pointsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
 
     Lemma mem_inv_init `{! gen_heapGpreS Z (Z * (Z + unit)) Σ} (μ : Memory) :
       ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
@@ -889,7 +889,7 @@ Module ExampleModel.
 
     (* This is the interpretation of the points to pair predicate in Iris. *)
     Definition ptstocons_interp `{mG : mcMemGS Σ} (p : Z) (v : Z) (n : Z + unit) : iProp Σ :=
-      (mapsto p (DfracOwn 1) (pair v n))%I.
+      (pointsto p (DfracOwn 1) (pair v n))%I.
 
     (* This is the recursive definition of the points to list predicate in Iris. *)
     Fixpoint ptstolist_interp `{mG : mcMemGS Σ} (p : Z + unit) (vs : list Z) : iProp Σ :=

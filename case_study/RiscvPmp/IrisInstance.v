@@ -73,7 +73,7 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Proof. intros. solve_inG. Defined.
 
   Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
-    fun μ => (([∗ list] a' ∈ liveAddrs, mapsto a' (DfracOwn 1) (memory_ram μ a')) ∗ tr_frag1 (memory_trace μ))%I.
+    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ tr_frag1 (memory_trace μ))%I.
 
   Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
   Proof.
@@ -122,7 +122,7 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
       iPureIntro.
       apply initMemMap_works.
     - unfold mem_res, initMemMap in *. iFrame.
-      iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => mapsto a (DfracOwn 1) v) with "[$]").
+      iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => pointsto a (DfracOwn 1) v) with "[$]").
       eapply NoDup_liveAddrs.
   Qed.
 End RiscvPmpIrisAdeqParameters.
@@ -178,7 +178,7 @@ Module RiscvPmpIrisInstance <:
     (* TODO: change back to words instead of bytes... might be an easier first version
              and most likely still convenient in the future *)
     Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
-      mapsto addr (DfracOwn 1) b ∗ ⌜¬ withinMMIO addr 1⌝.
+      pointsto addr (DfracOwn 1) b ∗ ⌜¬ withinMMIO addr 1⌝.
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
     Definition ptstoSthL : list Addr -> iProp Σ :=
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.

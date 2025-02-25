@@ -269,8 +269,7 @@ Module RiscvPmpModel2.
       iIntros. iModIntro.
       eliminate_prim_step Heq.
       iSplit; first auto. iFrame.
-      iSplit; [iExists _; auto | ].
-      repeat iSplit; auto.
+      iSplit; auto.
     Qed.
 
     Lemma decode_sound :

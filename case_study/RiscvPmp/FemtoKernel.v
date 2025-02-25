@@ -614,8 +614,6 @@ Module inv := invariants.
       rewrite Model.RiscvPmpModel2.gprs_equiv.
       iFrame "Hmstatus Hmtvec Hmcause Hcurpriv Hregs Hpmp Hnpc Hhandler".
       destruct is_mmio; cbn; iFrame.
-      iSplit; auto.
-      all: iExists an; iFrame.
   Qed.
 
   Transparent femtokernel_handler_pre.
@@ -935,7 +933,7 @@ Module inv := invariants.
 
   Lemma sub_heap_mapsto_interp_ptsto {Σ : gFunctors} {H : sailGS Σ} {s e} (μ : Memory):
     (minAddr <= N.to_nat (bv.bin s)) → N.to_nat (bv.bin s) + e <= minAddr + lenAddr →
-    ([∗ list] y ∈ bv.seqBv s e, gen_heap.mapsto y (dfrac.DfracOwn 1) (memory_ram μ y)) ⊢ [∗ list] a' ∈ bv.seqBv s e, interp_ptsto a' (memory_ram μ a').
+    ([∗ list] y ∈ bv.seqBv s e, gen_heap.pointsto y (dfrac.DfracOwn 1) (memory_ram μ y)) ⊢ [∗ list] a' ∈ bv.seqBv s e, interp_ptsto a' (memory_ram μ a').
   Proof.
     iIntros (Hlow Hhi) "Hlist".
     iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.

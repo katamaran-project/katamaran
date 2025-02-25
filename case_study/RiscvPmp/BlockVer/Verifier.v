@@ -371,8 +371,7 @@ Section BlockVerificationDerived.
       destruct Htrip as [an Htrip].
       iPoseProof (consume_sound _ _ Htrip with "Hh1")
         as "[(Hpc & $ & Han) (%h2 & Hh2 & %HΦ)]".
-      iExists an. cbn. iFrame.
-      iExists h2. by iFrame.
+      iExists an. cbn. by iFrame.
     Qed.
 
     Lemma sound_exec_block_addr {instrs ainstr apc} Φ (h : SCHeap) :

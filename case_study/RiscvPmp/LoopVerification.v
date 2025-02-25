@@ -289,11 +289,8 @@ Section Loop.
       iRight; iLeft; unfold CSRMod; now iFrame.
     - iDestruct "H" as "(Hpaa & Hgprs & Hentries & Hmc & Hpe & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
       iRight; iRight; iLeft; unfold Trap; iFrame.
-      now iExists i.
     - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hcp & [% (Hmepc & Hnpc & Hpc)] & Hmtvec & Hmstatus)".
-      iRight; iRight; iRight; unfold Recover; iFrame.
-      iSplitR; auto.
-      iExists v0; iFrame.
+      iRight; iRight; iRight; unfold Recover; by iFrame.
   Qed.
 
   Lemma init_model_iprop : ⊢ semTriple_init_model.
@@ -345,7 +342,6 @@ Section Loop.
       iApply ("H" $! m h i' mpp entries).
       unfold loop_pre.
       iFrame.
-      now iExists i'.
     - iSpecialize ("HMod" with "HRes").
       iApply (semWP_mono with "HMod").
       iIntros ([] ?); auto.

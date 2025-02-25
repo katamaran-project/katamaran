@@ -187,7 +187,7 @@ Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBa
     fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := MemVal).
 
   Definition mem_res `{mG : mcMemGS Σ} (μ : Memory) : iProp Σ :=
-      ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v) %I.
+      ([∗ map] l↦v ∈ initMemMap μ, pointsto l (DfracOwn 1) v) %I.
 
   Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
                                               ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
@@ -200,8 +200,6 @@ Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBa
     rewrite (right_id empty union memmap).
 
     iExists (McMemGS gH (nroot .@ "addr_inv")).
-    iFrame.
-    iExists memmap.
     iFrame.
     iPureIntro.
     apply initMemMap_works.
@@ -308,7 +306,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
     (* interp_ref_inv states that we have ownership of addr a and that predicate
        P holds for the contents at addr a. *)
     Program Definition interp_ref_inv (a : Addr) : IMemValne -n> iProp Σ :=
-      λne P, (∃ w, mapsto a (DfracOwn 1) w ∗ P w)%I.
+      λne P, (∃ w, pointsto a (DfracOwn 1) w ∗ P w)%I.
     Solve Obligations with solve_proper.
 
     (* interp_cap_inv expresses the safe relation on capabilities. A capability
@@ -408,8 +406,8 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
 
     Lemma region_addrs_submseteq  (b' e' b e : Addr) :
       ⊢ ⌜ (b <= b')%Z /\ (e' <= e)%Z ⌝ -∗
-        ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs .@ a) (∃ w, mapsto a (DfracOwn 1) w ∗ fixpoint interp1 w))%I -∗
-        ([∗ list] a ∈ (region_addrs b' e'), inv (mc_invNs .@ a) (∃ w, mapsto a (DfracOwn 1) w ∗ fixpoint interp1 w))%I.
+        ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs .@ a) (∃ w, pointsto a (DfracOwn 1) w ∗ fixpoint interp1 w))%I -∗
+        ([∗ list] a ∈ (region_addrs b' e'), inv (mc_invNs .@ a) (∃ w, pointsto a (DfracOwn 1) w ∗ fixpoint interp1 w))%I.
     Proof.
       iIntros "[% %] Hregion".
       iApply (big_sepL_submseteq _ (region_addrs b' e') (region_addrs b e)).
@@ -429,8 +427,8 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
     Lemma specialize_range (b e addr : Addr) :
       ⊢ ⌜ (b <= addr)%Z /\ (addr <= e)%Z ⌝ -∗
         (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
-         [∗ list] a ∈ (region_addrs b e), inv (mc_invNs .@ a) (∃ w, mapsto a (DfracOwn 1) w ∗ fixpoint interp1 w))%I -∗
-        (inv (mc_invNs .@ addr) (∃ w, mapsto addr (DfracOwn 1) w ∗ fixpoint interp1 w))%I.
+         [∗ list] a ∈ (region_addrs b e), inv (mc_invNs .@ a) (∃ w, pointsto a (DfracOwn 1) w ∗ fixpoint interp1 w))%I -∗
+        (inv (mc_invNs .@ addr) (∃ w, pointsto addr (DfracOwn 1) w ∗ fixpoint interp1 w))%I.
     Proof.
       iIntros "[% %] [[% %] Hrange]".
       iApply (big_sepL_elem_of with "Hrange").
@@ -529,7 +527,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
        case study. *)
     Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
              (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
-    | ptsto   | [a; v] => mapsto a (DfracOwn 1) v
+    | ptsto   | [a; v] => pointsto a (DfracOwn 1) v
     | safe    | [c]    => interp c
     | expr    | [c]    => interp_expression interp c
     | gprs    | []     => interp_gprs interp
@@ -694,7 +692,7 @@ Module MinCapsIrisInstanceWithContracts.
           ⌜a ≤ e⌝%Z -∗
           ⌜Subperm R p ∨ Subperm RW p⌝ -∗
           interp (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) -∗
-          inv (mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ interp w).
+          inv (mc_invNs.@a) (∃ w, gen_heap.pointsto a (dfrac.DfracOwn 1) w ∗ interp w).
     Proof.
       iIntros (b e a p) "%Hba %Hae %Hsubp #H".
       simpl; rewrite ?fixpoint_interp_eq.
@@ -706,9 +704,9 @@ Module MinCapsIrisInstanceWithContracts.
     Qed.
 
     Lemma later_exists_ptsto : ∀ (a : Addr) (w : MemVal),
-        ⊢ gen_heap.mapsto a (dfrac.DfracOwn 1) w -∗
+        ⊢ gen_heap.pointsto a (dfrac.DfracOwn 1) w -∗
           interp w -∗
-          ▷ (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ interp w).
+          ▷ (∃ w, gen_heap.pointsto a (dfrac.DfracOwn 1) w ∗ interp w).
     Proof. iIntros (a w) "? ?"; iModIntro; iExists _; iAccu. Qed.
 
     Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),

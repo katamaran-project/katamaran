@@ -60,23 +60,25 @@ From stdpp Require namespaces.
 From Katamaran Require Import RiscvPmp.LoopVerification.
 
 Module Examples.
-    Import RiscvPmpBlockVerifExecutor.
-    Import Assembly.
-    Import asn.notations.
-    Import RiscvPmp.Sig.
-    Import iris.proofmode.tactics.
-    Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
-    Local Notation "x - y" := (term_binop bop.bvsub x y) : exp_scope.
-    Local Notation "a <=ᵘ b" := (term_binop (bop.relop bop.bvule) a b) : exp_scope.
-    Local Notation "a = b" := (term_binop (bop.relop bop.eq) a b) : exp_scope.
-    Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
-    Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+  Import RiscvPmpBlockVerifExecutor.
+  Import Assembly.
+  Import RiscvPmp.Sig.
+  Import iris.proofmode.tactics.
+  Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
+  Local Notation "x - y" := (term_binop bop.bvsub x y) : exp_scope.
+  Local Notation "a <=ᵘ b" := (term_binop (bop.relop bop.bvule) a b) : exp_scope.
+  Local Notation "a = b" := (term_binop (bop.relop bop.eq) a b) : exp_scope.
+  Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
+  Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
-    Definition X0 : RegIdx := bv.zero.
-    Definition X1 : RegIdx := bv.one.
-    Definition X2 : RegIdx := bv.of_nat 2.
-    Definition X3 : RegIdx := bv.of_nat 3.
-    Definition X4 : RegIdx := bv.of_nat 4.
+  Definition X0 : RegIdx := bv.zero.
+  Definition X1 : RegIdx := bv.one.
+  Definition X2 : RegIdx := bv.of_nat 2.
+  Definition X3 : RegIdx := bv.of_nat 3.
+  Definition X4 : RegIdx := bv.of_nat 4.
+
+  Section WithAsnNotations.
+    Import asn.notations.
 
     (* minimal_pre asserts that we start executing at address 0 in Machine mode.
        We choose an arbitrary list for the pmp entries (pmp is not used in these
@@ -243,23 +245,25 @@ Module Examples.
     Lemma valid_set_X2_to_42 : ValidBlockVerifierContract set_X2_to_42.
     Proof. solve_vc. Qed.
 
-    Section WithSailResources.
+  End WithAsnNotations.
+
+  Definition extract_pre_from_contract {Σ} (c : BlockVerifierContract)
+    : Assertion (Σ ▻ "a" ∷ ty_xlenbits) :=
+    map c (fun P _ _ => extend_to_minimal_pre P).
+
+  Definition extract_post_from_contract {Σ} (c : BlockVerifierContract)
+    : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) :=
+    map c (fun _ _ Q => extend_to_minimal_post Q).
+
+  Definition extract_instrs_from_contract {Σ} (c : @BlockVerifierContract Σ) : list AST :=
+    map c (fun _ i _ => i).
+
+  Section WithSailResources.
       Import IrisModel.RiscvPmpIrisBase.
       Import IrisInstance.RiscvPmpIrisInstance.
       Import RiscvPmpIrisInstanceWithContracts.
 
       Context `{sailGS Σ} `{sailGS2 Σ}.
-
-      Definition extract_pre_from_contract {Σ} (c : BlockVerifierContract)
-        : Assertion (Σ ▻ "a" ∷ ty_xlenbits) :=
-        map c (fun P _ _ => extend_to_minimal_pre P).
-
-      Definition extract_post_from_contract {Σ} (c : BlockVerifierContract)
-        : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) :=
-        map c (fun _ _ Q => extend_to_minimal_post Q).
-
-      Definition extract_instrs_from_contract {Σ} (c : @BlockVerifierContract Σ) : list AST :=
-        map c (fun _ i _ => i).
 
       Definition ptsto_instrs_from_contract {Γ} (c : @BlockVerifierContract Γ) (a : Val ty_xlenbits) : iProp Σ :=
         ptsto_instrs a (extract_instrs_from_contract c).
@@ -320,5 +324,5 @@ Module Examples.
         iApply "Hk".
         by iExists an.
       Qed.
-    End WithSailResources.
+  End WithSailResources.
 End Examples.
