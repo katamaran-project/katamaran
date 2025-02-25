@@ -104,7 +104,7 @@ Module Type ShallowExecRelOn
         end
     end.
 
-  Definition SCChunkRel := Chunk RelVal.
+  Definition SCChunkRel := GChunk RelVal.
   Notation CStoreRel := (NamedEnv RelVal).
   Definition SCHeapRel := list SCChunkRel.
 
@@ -167,19 +167,19 @@ Module Type ShallowExecRelOn
 
     Fixpoint assert_eq_chunk (c1 c2 : SCChunkRel) : CPureSpec unit :=
       match c1 , c2 with
-      | scchunkrel_user p1 vs1 , scchunkrel_user p2 vs2 =>
+      | chunk_user p1 vs1 , chunk_user p2 vs2 =>
           match eq_dec p1 p2 with
-          | left e => assert_eq_env (eq_rect p1 (fun p => Env Val (𝑯_Ty p)) vs1 p2 e) vs2
+          | left e => assert_eq_env (eq_rect p1 (fun p => Env RelVal (𝑯_Ty p)) vs1 p2 e) vs2
           | right _ => error
           end
-      | scchunkrel_ptsreg r1 v1 , scchunkrel_ptsreg r2 v2 =>
+      | chunk_ptsreg r1 v1 , chunk_ptsreg r2 v2 =>
           match eq_dec_het r1 r2 with
           | left e => assert_formula (eq_rect _ Val v1 _ (f_equal projT1 e) = v2)
           | right _ => error
           end
-      | scchunkrel_conj c11 c12 , scchunkrel_conj c21 c22 =>
+      | chunk_conj c11 c12 , chunk_conj c21 c22 =>
           assert_eq_chunk c11 c21 ;; assert_eq_chunk c12 c22
-      | scchunkrel_wand c11 c12 , scchunkrel_wand c21 c22 =>
+      | chunk_wand c11 c12 , chunk_wand c21 c22 =>
           assert_eq_chunk c11 c21 ;; assert_eq_chunk c12 c22
       | _ , _ => error
       end.
@@ -245,7 +245,7 @@ Module Type ShallowExecRelOn
     Definition consume_chunk (c : SCChunk) : CHeapSpecRel unit :=
       fun Φ h => CPureSpec.consume_chunk c h (Φ tt).
 
-    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) : CHeapSpecRel (Val τ) :=
+    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) : CHeapSpecRel (RelVal τ) :=
       fun Φ h => CPureSpec.read_register reg h (fun '(t,h') => Φ t h').
     Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) : CHeapSpecRel (Val τ) :=
       fun Φ h => CPureSpec.write_register reg v h (fun '(v',h') => Φ v' h').
