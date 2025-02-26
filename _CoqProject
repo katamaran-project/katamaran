@@ -3,6 +3,7 @@
 -arg "-w -notation-overridden"
 -arg "-w -redundant-canonical-projection"
 -arg "-w -warn-transitive-library-file-stdlib-vector"
+-arg "-w -deprecated-transitive-library-file"
 -Q case_study/MinimalCaps Katamaran.MinimalCaps
 case_study/MinimalCaps/Base.v
 case_study/MinimalCaps/Machine.v
