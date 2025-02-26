@@ -28,7 +28,6 @@
 
 From Coq Require Import
      Lists.List
-     Logic.FinFun
      Program.Tactics
      Strings.String
      ZArith.ZArith

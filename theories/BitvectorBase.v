@@ -34,6 +34,7 @@ From Coq Require Import
      ZArith.BinInt
      RelationClasses
      Ring
+     micromega.Ztac
      Morphisms.
 From Equations Require Import
      Equations.
