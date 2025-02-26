@@ -209,7 +209,7 @@ Module Import MinCapsSignature <: Signature MinCapsBase.
      predicates and prove that these simplifiers are sound. *)
   Section MinCapsSolverKit.
     Open Scope string.
-    #[local] Arguments Some {_} _%ctx.
+    #[local] Arguments Some {_} _%_ctx.
 
     Definition simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (PathCondition Σ) :=
       match term_get_val p, term_get_val q with

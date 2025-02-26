@@ -616,8 +616,8 @@ Module Type WorldsOn
     Proof. crushPredEntails1; specialize (H ι); now subst. Qed.
 
   End RewriteRelations.
-  #[global] Arguments bientails {w} (_ _)%P.
-  #[global] Arguments entails {w} (_ _)%P.
+  #[global] Arguments bientails {w} (_ _)%_P.
+  #[global] Arguments entails {w} (_ _)%_P.
 
   Import iris.bi.interface.
 (* Note domi: This tactic is defined specifically to prove bi_pred below because firstorder enters a rabbit hole somewhere.
@@ -771,7 +771,7 @@ Module Type WorldsOn
 
     #[global] Arguments instpred {T _ w} !_.
     #[global] Arguments instpred_instprop {T} !_.
-    #[global] Arguments MkInstPred [T] {_} instpred%I _.
+    #[global] Arguments MkInstPred [T] {_} instpred%_I _.
     #[global] Arguments InstPredSubst T {_ _}.
 
     #[export] Instance instpred_proper_bientails {w : World} `{InstPred A} : Proper (Entailment.bientails ==> equiv) (instpred (w := w)).

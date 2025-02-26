@@ -59,7 +59,7 @@ Module Type IrisTotalWeakestPre
   Definition semTWP {Σ} `{sG : sailGS Σ} [Γ τ] (s : Stm Γ τ)
     (Q : Post Γ τ) (δ : CStore Γ) : iProp Σ :=
     WP (MkConf s δ) [{ v, Q (valconf_val v) (valconf_store v) }].
-  Global Arguments semTWP {Σ} {sG} [Γ] [τ] s%exp Q%I δ.
+  Global Arguments semTWP {Σ} {sG} [Γ] [τ] s%_exp Q%_I δ.
 
   Ltac fold_semTWP :=
     first

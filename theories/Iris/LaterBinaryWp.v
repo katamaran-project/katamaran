@@ -231,7 +231,7 @@ Module IrisBinaryWP
                    ⌜⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩⌝ -∗ (* ={∅}▷=∗ *)
                     ▷ ((@regs_inv _ sG γ' ∗ @mem_inv _ mG μ') ∗ wp δ' s' γ' μ' POST))
       end)%I.
-  Global Arguments semWp_fix {_}%ctx_scope {_ _ _} wp /.
+  Global Arguments semWp_fix {_}%_ctx_scope {_ _ _} wp /.
 
   Global Instance semWp_fix_Contractive {Γ τ sR mG} :
     Contractive (@semWp_fix Γ τ sR mG).
@@ -271,7 +271,7 @@ Module IrisBinaryWP
               ⌜⟨ γ2, μ2, δ2, s2 ⟩ ---> ⟨ γ2', μ2', δ2', s2' ⟩⌝ -∗
               ▷ max_steps δ1' δ2' s1' s2' γ1' γ2' μ1' μ2' POST)
       end)%I.
-  Global Arguments max_steps_fix {_ _}%ctx_scope {_} _ /.
+  Global Arguments max_steps_fix {_ _}%_ctx_scope {_} _ /.
 
   Global Instance max_steps_fix_Contractive {Γ1 Γ2 τ} :
     Contractive (@max_steps_fix Γ1 Γ2 τ).
@@ -859,7 +859,7 @@ Section Soundness.
     PRE -∗
            semWp2 δ δ s s (fun v1 δ1 v2 δ2 => ⌜ v1 = v2 ⌝ ∗ ⌜ δ1 = δ2 ⌝ ∗ POST v1 δ1)%I.
   (* always modality needed? perhaps not because sail not higher-order? *)
-  Global Arguments semTriple {Γ} {τ} δ PRE%I s%exp POST%I.
+  Global Arguments semTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
 
   Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
     match lem with

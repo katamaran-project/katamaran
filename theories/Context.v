@@ -82,7 +82,7 @@ Module Import ctx.
   End TransparentObligations.
 
   Arguments nil {_}.
-  Arguments snoc {_} _%ctx _%ctx.
+  Arguments snoc {_} _%_ctx _%_ctx.
 
   Section WithBinding.
     Context {B : Type}.

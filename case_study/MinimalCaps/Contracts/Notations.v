@@ -161,7 +161,7 @@ Module Notations.
       fn { fnsig : Fun Δ τ;
            args  : DCtx;
            ret   : Ty }.
-    Arguments fn {Δ τ} fnsig args%dctx ret.
+    Arguments fn {Δ τ} fnsig args%_dctx ret.
 
     Definition fnsig_args {Δ τ} (f : @Fn Δ τ) := Δ.
 
@@ -169,13 +169,13 @@ Module Notations.
       (MkSepContract (DCtx_to_Args (args fn) (fnsig_args fn)) (ret fn) (DCtx_logvars (args fn) logvars%ctx)
          (DCtx_to_SStore (args fn) (fnsig_args fn) logvars%ctx)
          P%term
-         res 
+         res
          Q%term) (at level 200, P at level 100, Q at level 100, res at level 100, fn at level 100, logvars at level 100).
     Notation "'{{' P '}}' fn '{{' res ',' Q '}}'" :=
       (MkSepContract (DCtx_to_Args (args fn) (fnsig_args fn)) (ret fn) (DCtx_logvars (args fn) []%ctx)
          (DCtx_to_SStore (args fn) (fnsig_args fn) []%ctx)
          P%term
-         res 
+         res
          Q%term) (at level 200, P at level 100, Q at level 100, res at level 100, fn at level 100).
   End ContractNotations.
 
@@ -183,7 +183,7 @@ Module Notations.
     Record Lm {Δ} : Set :=
       lem { lemsig  : Lem Δ;
             lemargs : DCtx }.
-    Arguments lem {Δ} lemsig lemargs%dctx.
+    Arguments lem {Δ} lemsig lemargs%_dctx.
 
     Definition lemsig_args {Δ} (l : @Lm Δ) := Δ.
 
@@ -204,7 +204,7 @@ Module Notations.
       fn { fnsig : FunX Δ τ; (* Funx <> Fun (see Fn record) *)
            args  : DCtx;
            ret   : Ty }.
-    Arguments fn {Δ τ} fnsig args%dctx ret.
+    Arguments fn {Δ τ} fnsig args%_dctx ret.
 
     Definition fnsig_args {Δ τ} (f : @FnX Δ τ) := Δ.
 
@@ -212,13 +212,13 @@ Module Notations.
       (MkSepContract (DCtx_to_Args (args fn) (fnsig_args fn)) (ret fn) (DCtx_logvars (args fn) logvars%ctx)
          (DCtx_to_SStore (args fn) (fnsig_args fn) logvars%ctx)
          P%term
-         res 
+         res
          Q%term) (at level 200, P at level 100, Q at level 100, res at level 100, fn at level 100, logvars at level 100).
     Notation "'{{' P '}}' fn '{{' res ',' Q '}}'" :=
       (MkSepContract (DCtx_to_Args (args fn) (fnsig_args fn)) (ret fn) (DCtx_logvars (args fn) []%ctx)
          (DCtx_to_SStore (args fn) (fnsig_args fn) []%ctx)
          P%term
-         res 
+         res
          Q%term) (at level 200, P at level 100, Q at level 100, res at level 100, fn at level 100).
   End ForeignNotations.
 End Notations.

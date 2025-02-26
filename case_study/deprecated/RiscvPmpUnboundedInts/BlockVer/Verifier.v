@@ -368,7 +368,7 @@ Module BlockVerificationDerivedSem.
 
   Definition semTripleOneInstr `{sailGS Σ} (PRE : iProp Σ) (a : AST) (POST : iProp Σ) : iProp Σ :=
     semTriple [a : Val (type ("ast" :: ty_ast))]%env PRE (FunDef execute) (fun ret _ => ⌜ret = RETIRE_SUCCESS⌝ ∗ POST)%I.
-  Global Arguments semTripleOneInstr {Σ} {_} PRE%I a POST%I.
+  Global Arguments semTripleOneInstr {Σ} {_} PRE%_I a POST%_I.
 
   Module ValidContractsBlockVerif.
     Import RiscvPmpBlockVerifExecutor.
@@ -679,7 +679,7 @@ Module BlockVerificationDerived2Sem.
     | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (a + 4) insts)%I
     | nil => True%I
     end.
-  (* Arguments ptsto_instrs {Σ H} a%Z_scope instrs%list_scope : simpl never. *)
+  (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
 
   Lemma mono_exec_block_addr {instrs ainstr apc} : Monotonic' (exec_block_addr__c instrs ainstr apc).
   Proof.
@@ -752,7 +752,7 @@ Module BlockVerificationDerived2Sem.
     (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs) -∗
       (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ WP_loop) -∗
       WP_loop)%I.
-  Global Arguments semTripleBlock {Σ} {_} PRE%I instrs POST%I.
+  Global Arguments semTripleBlock {Σ} {_} PRE%_I instrs POST%_I.
 
   Lemma sound_exec_triple_addr__c `{sailGS Σ} {W : World} {pre post instrs} {ι : Valuation W} :
       (exec_triple_addr__c ι pre instrs post (λ _ _ _ , True) [env] []%list) ->

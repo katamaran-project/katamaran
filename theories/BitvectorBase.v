@@ -1381,8 +1381,8 @@ Module bv.
   Definition of_bitstring : forall n, bitstring n -> bv n :=
     fold_bitstring_left (A := bv) (fun _ x b => cons b x) nil.
 
-  Arguments to_bitstring [n] & _%bv.
-  Arguments of_bitstring [n] & _%bits.
+  Arguments to_bitstring [n] & _%_bv.
+  Arguments of_bitstring [n] & _%_bits.
 
   Module Import notations.
     Open Scope bv_scope.

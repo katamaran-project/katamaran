@@ -23,11 +23,11 @@ Global Instance: Params (@envs_entails_cocontexts) 1 := {}.
 
 
 Declare Scope cocontexts_scope.
-Global Arguments envs_entails_cocontexts {PROP} Δ Q%cocontexts_scope.
+Global Arguments envs_entails_cocontexts {PROP} Δ Q%_cocontexts_scope.
 (* Delimit Scope cocontexts_scope with env. *)
-Global Arguments Envs _ _%cocontexts_scope _%cocontexts_scope _.
+Global Arguments Envs _ _%_cocontexts_scope _%_cocontexts_scope _.
 Global Arguments Enil {_}.
-Global Arguments Esnoc {_} _%cocontexts_scope _%string _%I.
+Global Arguments Esnoc {_} _%_cocontexts_scope _%_string _%_I.
 
 Notation "" := Enil (only printing) : cocontexts_scope.
 Notation "Γ H : P" := (Esnoc Γ (INamed H) P%I)
@@ -264,8 +264,8 @@ Qed.
 
 Class LookupEnv (Γ : env PROP) (P : PROP) i :=
   lookup_env_result : env_lookup i Γ = Some P.
-Global Arguments LookupEnv _ _%I : simpl never.
-Global Arguments lookup_env_result _ _%I.
+Global Arguments LookupEnv _ _%_I : simpl never.
+Global Arguments lookup_env_result _ _%_I.
 Global Hint Mode LookupEnv + + - : typeclass_instances.
 
 Global Program Instance lookup_env_here {i Γ P}: LookupEnv (Esnoc Γ i P) P i.
@@ -356,8 +356,8 @@ Qed.
 
 Class FromPureEnv {PROP : bi} (a : bool) (P : env PROP) (φ : Prop) :=
   from_pure_env : <affine>?a ⌜φ⌝ ⊢ [∗] P.
-Global Arguments FromPureEnv {_} _ _%I _%type_scope : simpl never.
-Global Arguments from_pure_env {_} _ _%I _%type_scope {_}.
+Global Arguments FromPureEnv {_} _ _%_I _%_type_scope : simpl never.
+Global Arguments from_pure_env {_} _ _%_I _%_type_scope {_}.
 Global Hint Mode FromPureEnv + - ! - : typeclass_instances.
 
 Global Instance from_pure_env_nil :
@@ -913,8 +913,8 @@ Fixpoint bi_wands {PROP : bi} (q : bool) (Ps : list PROP) (Q : PROP) : PROP :=
 
 Class IntoWands {PROP : bi} {p q : bool} {R : PROP} {Ps : list PROP} {Q : PROP} :=
   into_wands : □?p R ⊢ bi_wands q Ps Q.
-Global Arguments IntoWands {_} _ _ _%I _%I _%I : simpl never.
-Global Arguments into_wands {_} _ _ _%I _%I _%I {_}.
+Global Arguments IntoWands {_} _ _ _%_I _%_I _%_I : simpl never.
+Global Arguments into_wands {_} _ _ _%_I _%_I _%_I {_}.
 Global Hint Mode IntoWands + + + ! - - : typeclass_instances.
 
 Global Program Instance intoWandsNil {PROP : bi} {q} {R : PROP} : IntoWands false q R nil R.

@@ -1220,7 +1220,7 @@ Module Type UnifLogicOn
     (* Give the [RMsg] instance a lower priority (3) than [RImpl]. *)
     Definition RMsg M {AT A} (RA : Rel AT A) : Rel (M -> AT) A :=
       MkRel (fun v w t => ∀ₚ m, RSat RA v (t m))%P.
-    #[global] Arguments RMsg M%modal {AT A} RA%R.
+    #[global] Arguments RMsg M%_modal {AT A} RA%_R.
 
     Inductive RList' {AT A} (R : Rel AT A) :
       list A -> ∀ [w : World], WList AT w -> Pred w :=
@@ -1291,8 +1291,8 @@ Module Type UnifLogicOn
         }.
     #[export] Hint Mode RefineCompat - + - + + + - : typeclass_instances.
     #[global] Arguments refine_compat_lemma {AT A R v w vs Ob} rci : rename.
-    #[global] Arguments RefineCompat {AT A} R v w vs Ob%I.
-    #[global] Arguments MkRefineCompat {AT A R v w vs Ob%I} rci : rename.
+    #[global] Arguments RefineCompat {AT A} R v w vs Ob%_I.
+    #[global] Arguments MkRefineCompat {AT A R v w vs Ob%_I} rci : rename.
 
     Program Definition refine_compat_impl `{RA : Rel AT A} `{RB : Rel BT B} {f v w fs vs} {Pf}
       (compatf : RefineCompat (RA -> RB) f w fs Pf) : RefineCompat RB (f v) w (fs vs) (Pf ∗ RSat RA v vs) :=
@@ -1347,9 +1347,9 @@ Module Type UnifLogicOn
       MkRefineCompatGen {
           refine_compat_gen_lemma : Ob ⊢ P
         }.
-    #[global] Arguments RefineCompatGen [w] P%I Ob%I withbase.
-    #[global] Arguments MkRefineCompatGen {w} {P} _%I _ {_}.
-    #[global] Arguments refine_compat_gen_lemma {w} P%I {Ob} withbase rcg : rename.
+    #[global] Arguments RefineCompatGen [w] P%_I Ob%_I withbase.
+    #[global] Arguments MkRefineCompatGen {w} {P} _%_I _ {_}.
+    #[global] Arguments refine_compat_gen_lemma {w} P%_I {Ob} withbase rcg : rename.
 
     #[export] Program Instance refine_compat_gen_step `(R : Rel AT A) (v : A) (w : World) (vs : AT w) Ob1 Ob2 b
       (rc : RefineCompat R v w vs Ob1)

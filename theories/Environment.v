@@ -260,7 +260,7 @@ Section WithBinding.
         | ctx.isSucc bIn => snoc (remove E bIn) v
         end
       end.
-    Global Arguments remove {_} b%ctx E.
+    Global Arguments remove {_} b%_ctx E.
 
     Fixpoint insert b {Γ : Ctx B} (bIn : b ∈ Γ) {struct Γ} :
       forall (E : Env (Γ - b)) (v : D b), Env Γ :=
@@ -646,9 +646,9 @@ End WithBinding.
 
 Arguments Env {B} D Γ.
 Arguments nil {B D}.
-Arguments snoc {B%type D%function Γ%ctx} E%env b%ctx & db.
-Arguments lookup {B D Γ} E%env [_] x%ctx.
-Arguments update {B}%type {D}%function {Γ}%ctx E%env {b}%ctx.
+Arguments snoc {B%_type D%_function Γ%_ctx} E%_env b%_ctx & db.
+Arguments lookup {B D Γ} E%_env [_] x%_ctx.
+Arguments update {B}%_type {D}%_function {Γ}%_ctx E%_env {b}%_ctx.
 (* Arguments tabulate {_ _} _. *)
 (* Arguments tail {_ _ _} / _. *)
 Arguments abstract {B} D.

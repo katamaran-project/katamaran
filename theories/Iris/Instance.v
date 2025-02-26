@@ -113,7 +113,7 @@ Section Soundness.
                            | inr m => True%I
                            end) δ.
   (* always modality needed? perhaps not because sail not higher-order? *)
-  Global Arguments semTriple {Γ} {τ} δ PRE%I s%exp POST%I.
+  Global Arguments semTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
 
   Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
     match lem with

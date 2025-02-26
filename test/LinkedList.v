@@ -425,7 +425,7 @@ Module Import ExampleSignature <: Signature ExampleBase.
      residual formulas (that are hopefully simpler) that are equivalent to the
      input. *)
   Section ExampleSolverKit.
-    #[local] Arguments Some {_} _%ctx.
+    #[local] Arguments Some {_} _%_ctx.
     #[local] Unset Implicit Arguments.
     #[local] Set Equations Transparent.
 

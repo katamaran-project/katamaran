@@ -331,7 +331,7 @@ Section BlockVerificationDerived.
       | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
       | nil => True%I
       end.
-    (* Arguments ptsto_instrs {Σ H} a%Z_scope instrs%list_scope : simpl never. *)
+    (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
 
     Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : Val ty_word -> iProp Σ) (a : Val ty_word) : iProp Σ :=
       semTriple [env] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
@@ -343,7 +343,7 @@ Section BlockVerificationDerived.
          (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs) -∗
          (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ WP_loop) -∗
          WP_loop)%I.
-    #[global] Arguments semTripleBlock PRE%I instrs POST%I.
+    #[global] Arguments semTripleBlock PRE%_I instrs POST%_I.
 
     Lemma sound_stm_aux {τ} {PRE} {s : Stm [ctx] τ} {POST} :
       (∃ fuel, # fuel ⦃ PRE ⦄ s; [env] ⦃ POST ⦄) → ⊢ semTriple [env] PRE s POST.
@@ -732,7 +732,7 @@ Section AnnotatedBlockVerification.
          (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
          (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ POST a an -∗ WP_loop) -∗
          WP_loop)%I.
-    Global Arguments semTripleAnnotatedBlock PRE%I instrs POST%I.
+    Global Arguments semTripleAnnotatedBlock PRE%_I instrs POST%_I.
 
     Lemma sound_cexec_annotated_block_triple_addr {Γ pre post instrs} :
       LemmaSem ->

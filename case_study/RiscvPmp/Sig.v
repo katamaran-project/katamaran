@@ -362,7 +362,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           destruct u; try progress cbn
       end; try easy; auto.
 
-  #[local] Arguments Some {_} _%ctx.
+  #[local] Arguments Some {_} _%_ctx.
   Local Notation "P ∨ Q" := (formula_or P Q). 
   Local Notation "P ∧ Q" := (formula_and P Q). 
 

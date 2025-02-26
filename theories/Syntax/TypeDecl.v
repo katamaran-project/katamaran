@@ -300,8 +300,8 @@ Module ty.
   #[global] Arguments sum {TK} σ τ.
   #[global] Arguments unit {TK}.
   #[global] Arguments enum {TK} E.
-  #[global] Arguments bvec {TK} n%nat_scope.
-  #[global] Arguments tuple {TK} σs%ctx_scope.
+  #[global] Arguments bvec {TK} n%_nat_scope.
+  #[global] Arguments tuple {TK} σs%_ctx_scope.
   #[global] Arguments union {TK} U.
   #[global] Arguments record {TK} R.
 

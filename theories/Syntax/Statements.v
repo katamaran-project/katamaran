@@ -71,20 +71,20 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Derive NoConfusionHom Signature for Stm.
 
   Arguments stm_val {Γ} τ v.
-  Arguments stm_exp {Γ τ} e%exp.
-  Arguments stm_let {Γ τ} x σ s__σ%exp s__τ%exp.
-  Arguments stm_block {Γ τ Δ} δ s%exp.
-  Arguments stm_assign {Γ τ} x {xInΓ} s%exp.
-  Arguments stm_call {Γ τ Δ} f & _%env.
-  Arguments stm_call_frame {Γ τ Δ} δ s%exp.
-  Arguments stm_foreign {Γ τ Δ} f & _%env.
-  Arguments stm_lemmak {Γ τ Δ} l & _%env k.
-  Arguments stm_seq {Γ τ σ} s%exp k%exp.
-  Arguments stm_assertk {Γ τ} e1%exp e2%exp k%exp.
-  Arguments stm_fail {Γ} τ s%string.
+  Arguments stm_exp {Γ τ} e%_exp.
+  Arguments stm_let {Γ τ} x σ s__σ%_exp s__τ%_exp.
+  Arguments stm_block {Γ τ Δ} δ s%_exp.
+  Arguments stm_assign {Γ τ} x {xInΓ} s%_exp.
+  Arguments stm_call {Γ τ Δ} f & _%_env.
+  Arguments stm_call_frame {Γ τ Δ} δ s%_exp.
+  Arguments stm_foreign {Γ τ Δ} f & _%_env.
+  Arguments stm_lemmak {Γ τ Δ} l & _%_env k.
+  Arguments stm_seq {Γ τ σ} s%_exp k%_exp.
+  Arguments stm_assertk {Γ τ} e1%_exp e2%_exp k%_exp.
+  Arguments stm_fail {Γ} τ s%_string.
   Arguments stm_pattern_match {Γ τ σ} s pat rhs.
   Arguments stm_read_register {Γ τ} reg.
-  Arguments stm_write_register {Γ τ} reg e%exp.
+  Arguments stm_write_register {Γ τ} reg e%_exp.
   Bind Scope exp_scope with Stm.
 
   Definition stm_assert {Γ} (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) : Stm Γ ty.unit :=
@@ -124,17 +124,17 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
     (rhs : bv n -> Stm Γ τ) : Stm Γ τ :=
     stm_pattern_match s (pat_bvec_exhaustive n) rhs.
 
-  Arguments stm_assert {Γ} e1%exp e2%exp.
-  Arguments stm_lemma {Γ Δ} l es%env.
-  Arguments stm_if {Γ τ} s%exp s1%exp s2%exp.
+  Arguments stm_assert {Γ} e1%_exp e2%_exp.
+  Arguments stm_lemma {Γ Δ} l es%_env.
+  Arguments stm_if {Γ τ} s%_exp s1%_exp s2%_exp.
   Arguments stm_match_prod {Γ τ _ _} _ _ _ _.
-  Arguments stm_match_tuple {Γ τ σs Δ} s%exp p%pat rhs%exp.
-  Arguments stm_match_record {Γ%ctx τ} R {Δ%ctx} s%exp p%pat rhs%exp.
-  Arguments stm_match_bvec_split {Γ τ} (m n)%nat_scope s%exp xl xr rhs%exp.
+  Arguments stm_match_tuple {Γ τ σs Δ} s%_exp p%_pat rhs%_exp.
+  Arguments stm_match_record {Γ%_ctx τ} R {Δ%_ctx} s%_exp p%_pat rhs%_exp.
+  Arguments stm_match_bvec_split {Γ τ} (m n)%_nat_scope s%_exp xl xr rhs%_exp.
   Arguments stm_match_list {Γ τ _} _ _ _ _ _.
   Arguments stm_match_sum {Γ τ _ _} _ _ _ _ _.
-  Arguments stm_match_enum {Γ τ} E s%exp alts%exp.
-  Arguments stm_match_bvec {Γ τ} n%nat_scope s%exp rhs%exp.
+  Arguments stm_match_enum {Γ τ} E s%_exp alts%_exp.
+  Arguments stm_match_bvec {Γ τ} n%_nat_scope s%_exp rhs%_exp.
 
   Definition stm_match_union_alt {Γ τ} U (s : Stm Γ (ty.union U))
     (alts : forall (K : unionk U), Alternative (fun Γ => Stm Γ τ) Γ (unionk_ty U K)) : Stm Γ τ :=

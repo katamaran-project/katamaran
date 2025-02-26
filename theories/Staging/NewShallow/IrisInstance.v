@@ -108,7 +108,7 @@ Section Soundness.
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
     PRE -∗ semWP s POST δ.
   (* always modality needed? perhaps not because sail not higher-order? *)
-  Global Arguments semTriple {Γ} {τ} δ PRE%I s%exp POST%I.
+  Global Arguments semTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
 
   Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
     match lem with
