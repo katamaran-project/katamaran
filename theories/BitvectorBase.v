@@ -1677,62 +1677,62 @@ Module bv.
   End Comparison.
 
   Section Tests.
-    Goal lsb [bv[2] 0] = false. reflexivity. Qed.
-    Goal lsb [bv[2] 1] = true.  reflexivity. Qed.
-    Goal lsb [bv[2] 2] = false. reflexivity. Qed.
-    Goal lsb [bv[2] 3] = true.  reflexivity. Qed.
+    Goal lsb [bv[2] 0] = false. reflexivity. Abort.
+    Goal lsb [bv[2] 1] = true.  reflexivity. Abort.
+    Goal lsb [bv[2] 2] = false. reflexivity. Abort.
+    Goal lsb [bv[2] 3] = true.  reflexivity. Abort.
 
-    Goal msb [bv[2] 0] = false. reflexivity. Qed.
-    Goal msb [bv[2] 1] = false. reflexivity. Qed.
-    Goal msb [bv[2] 2] = true.  reflexivity. Qed.
-    Goal msb [bv[2] 3] = true.  reflexivity. Qed.
+    Goal msb [bv[2] 0] = false. reflexivity. Abort.
+    Goal msb [bv[2] 1] = false. reflexivity. Abort.
+    Goal msb [bv[2] 2] = true.  reflexivity. Abort.
+    Goal msb [bv[2] 3] = true.  reflexivity. Abort.
 
-    Goal sext' [bv[2] 0] 2 = [bv[4] 0].  reflexivity. Qed.
-    Goal sext' [bv[2] 1] 2 = [bv[4] 1].  reflexivity. Qed.
-    Goal sext' [bv[2] 2] 2 = [bv[4] 14]. reflexivity. Qed.
-    Goal sext' [bv[2] 3] 2 = [bv[4] 15]. reflexivity. Qed.
+    Goal sext' [bv[2] 0] 2 = [bv[4] 0].  reflexivity. Abort.
+    Goal sext' [bv[2] 1] 2 = [bv[4] 1].  reflexivity. Abort.
+    Goal sext' [bv[2] 2] 2 = [bv[4] 14]. reflexivity. Abort.
+    Goal sext' [bv[2] 3] 2 = [bv[4] 15]. reflexivity. Abort.
 
-    Goal zext' [bv[2] 0] 2 = [bv[4] 0]. reflexivity. Qed.
-    Goal zext' [bv[2] 1] 2 = [bv[4] 1]. reflexivity. Qed.
-    Goal zext' [bv[2] 2] 2 = [bv[4] 2]. reflexivity. Qed.
-    Goal zext' [bv[2] 3] 2 = [bv[4] 3]. reflexivity. Qed.
+    Goal zext' [bv[2] 0] 2 = [bv[4] 0]. reflexivity. Abort.
+    Goal zext' [bv[2] 1] 2 = [bv[4] 1]. reflexivity. Abort.
+    Goal zext' [bv[2] 2] 2 = [bv[4] 2]. reflexivity. Abort.
+    Goal zext' [bv[2] 3] 2 = [bv[4] 3]. reflexivity. Abort.
 
-    Goal sext [bv[2] 0] = [bv[4] 0].  reflexivity. Qed.
-    Goal sext [bv[2] 1] = [bv[4] 1].  reflexivity. Qed.
-    Goal sext [bv[2] 2] = [bv[4] 14]. reflexivity. Qed.
-    Goal sext [bv[2] 3] = [bv[4] 15]. reflexivity. Qed.
+    Goal sext [bv[2] 0] = [bv[4] 0].  reflexivity. Abort.
+    Goal sext [bv[2] 1] = [bv[4] 1].  reflexivity. Abort.
+    Goal sext [bv[2] 2] = [bv[4] 14]. reflexivity. Abort.
+    Goal sext [bv[2] 3] = [bv[4] 15]. reflexivity. Abort.
 
-    Goal zext [bv[2] 0] = [bv[4] 0]. reflexivity. Qed.
-    Goal zext [bv[2] 1] = [bv[4] 1]. reflexivity. Qed.
-    Goal zext [bv[2] 2] = [bv[4] 2]. reflexivity. Qed.
-    Goal zext [bv[2] 3] = [bv[4] 3]. reflexivity. Qed.
+    Goal zext [bv[2] 0] = [bv[4] 0]. reflexivity. Abort.
+    Goal zext [bv[2] 1] = [bv[4] 1]. reflexivity. Abort.
+    Goal zext [bv[2] 2] = [bv[4] 2]. reflexivity. Abort.
+    Goal zext [bv[2] 3] = [bv[4] 3]. reflexivity. Abort.
 
-    Goal signed [bv[0] 0] = 0%Z.    reflexivity. Qed.
-    Goal signed [bv[1] 0] = 0%Z.    reflexivity. Qed.
-    Goal signed [bv[1] 1] = (-1)%Z. reflexivity. Qed.
-    Goal signed [bv[3] 0] = 0%Z.    reflexivity. Qed.
-    Goal signed [bv[3] 1] = 1%Z.    reflexivity. Qed.
-    Goal signed [bv[3] 2] = 2%Z.    reflexivity. Qed.
-    Goal signed [bv[3] 3] = 3%Z.    reflexivity. Qed.
-    Goal signed [bv[3] 4] = (-4)%Z. reflexivity. Qed.
-    Goal signed [bv[3] 5] = (-3)%Z. reflexivity. Qed.
-    Goal signed [bv[3] 6] = (-2)%Z. reflexivity. Qed.
-    Goal signed [bv[3] 7] = (-1)%Z. reflexivity. Qed.
+    Goal signed [bv[0] 0] = 0%Z.    reflexivity. Abort.
+    Goal signed [bv[1] 0] = 0%Z.    reflexivity. Abort.
+    Goal signed [bv[1] 1] = (-1)%Z. reflexivity. Abort.
+    Goal signed [bv[3] 0] = 0%Z.    reflexivity. Abort.
+    Goal signed [bv[3] 1] = 1%Z.    reflexivity. Abort.
+    Goal signed [bv[3] 2] = 2%Z.    reflexivity. Abort.
+    Goal signed [bv[3] 3] = 3%Z.    reflexivity. Abort.
+    Goal signed [bv[3] 4] = (-4)%Z. reflexivity. Abort.
+    Goal signed [bv[3] 5] = (-3)%Z. reflexivity. Abort.
+    Goal signed [bv[3] 6] = (-2)%Z. reflexivity. Abort.
+    Goal signed [bv[3] 7] = (-1)%Z. reflexivity. Abort.
 
-    Goal of_Z 0%Z    = [bv[0] 0]. reflexivity. Qed.
-    Goal of_Z 0%Z    = [bv[1] 0]. reflexivity. Qed.
-    Goal of_Z (-1)%Z = [bv[1] 1]. reflexivity. Qed.
-    Goal of_Z 0%Z    = [bv[3] 0]. reflexivity. Qed.
-    Goal of_Z 1%Z    = [bv[3] 1]. reflexivity. Qed.
-    Goal of_Z 2%Z    = [bv[3] 2]. reflexivity. Qed.
-    Goal of_Z 3%Z    = [bv[3] 3]. reflexivity. Qed.
-    Goal of_Z (-4)%Z = [bv[3] 4]. reflexivity. Qed.
-    Goal of_Z (-3)%Z = [bv[3] 5]. reflexivity. Qed.
-    Goal of_Z (-2)%Z = [bv[3] 6]. reflexivity. Qed.
-    Goal of_Z (-1)%Z = [bv[3] 7]. reflexivity. Qed.
+    Goal of_Z 0%Z    = [bv[0] 0]. reflexivity. Abort.
+    Goal of_Z 0%Z    = [bv[1] 0]. reflexivity. Abort.
+    Goal of_Z (-1)%Z = [bv[1] 1]. reflexivity. Abort.
+    Goal of_Z 0%Z    = [bv[3] 0]. reflexivity. Abort.
+    Goal of_Z 1%Z    = [bv[3] 1]. reflexivity. Abort.
+    Goal of_Z 2%Z    = [bv[3] 2]. reflexivity. Abort.
+    Goal of_Z 3%Z    = [bv[3] 3]. reflexivity. Abort.
+    Goal of_Z (-4)%Z = [bv[3] 4]. reflexivity. Abort.
+    Goal of_Z (-3)%Z = [bv[3] 5]. reflexivity. Abort.
+    Goal of_Z (-2)%Z = [bv[3] 6]. reflexivity. Abort.
+    Goal of_Z (-1)%Z = [bv[3] 7]. reflexivity. Abort.
 
-    Goal shiftr [bv[8] 16] [bv[5] 4] = [bv[8] 1]. reflexivity. Qed.
-    Goal shiftl [bv[8] 1] [bv[5] 4] = [bv[8] 16]. reflexivity. Qed.
+    Goal shiftr [bv[8] 16] [bv[5] 4] = [bv[8] 1]. reflexivity. Abort.
+    Goal shiftl [bv[8] 1] [bv[5] 4] = [bv[8] 16]. reflexivity. Abort.
   End Tests.
 
 End bv.
