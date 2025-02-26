@@ -39,7 +39,7 @@
     in
     {
       devShells = rec {
-        default = coq820;
+        default = coq819;
         coq819 = pkgs.mkShell { buildInputs = coqPackages819; };
         coq820 = pkgs.mkShell { buildInputs = coqPackages820; };
 
