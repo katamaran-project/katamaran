@@ -604,7 +604,7 @@ Module Type InstantiationOn
       Lemma term_bvmul_comm {t1 t2} : term_binop (Σ := Σ) bop.bvmul t1 t2 ≡ term_binop (Σ := Σ) (bop.bvmul (n := n)) t2 t1.
       Proof. intro ι; cbn; now ring. Qed.
 
-      Lemma term_bvmul_one_l {t1} : term_binop (Σ := Σ) bop.bvmul (term_val (ty.bvec n) (bv.of_N 1)) t1 ≡ t1.
+      Lemma term_bvmul_one_l {t1} : term_binop (Σ := Σ) bop.bvmul (term_val (ty.bvec n) bv.one) t1 ≡ t1.
       Proof. intro ι; cbn; now ring. Qed.
 
       Lemma term_bvmul_assoc {t1 t2 t3} : term_binop (Σ := Σ) bop.bvmul t1 (term_binop bop.bvmul t2 t3) ≡ term_binop (bop.bvmul (n := n)) (term_binop bop.bvmul t1 t2) t3.
@@ -613,10 +613,14 @@ Module Type InstantiationOn
       Lemma term_bvmul_bvadd_distrib_r {t1 t2 t3} : term_binop (Σ := Σ) bop.bvmul (term_binop bop.bvadd t2 t3) t1 ≡ term_binop bop.bvadd (term_binop bop.bvmul t2 t1) (term_binop (bop.bvmul (n := n)) t3 t1).
       Proof. intro ι; cbn; now ring. Qed.
 
-      Lemma Term_bv_ring_theory : ring_theory (term_val (Σ := Σ) (ty.bvec n) bv.zero) (term_val (ty.bvec n) (bv.of_N 1)) (term_binop bop.bvadd) (term_binop bop.bvmul) (term_binop bop.bvsub) (term_unop uop.negate) equiv.
+      Lemma Term_bv_ring_theory : ring_theory (term_val (Σ := Σ) (ty.bvec n) bv.zero) (term_val (ty.bvec n) bv.one) (term_binop bop.bvadd) (term_binop bop.bvmul) (term_binop bop.bvsub) (term_unop uop.negate) equiv.
       Proof.
         constructor; eauto using term_bvadd_zero_l, term_bvadd_assoc, term_bvadd_comm, term_bvmul_one_l, term_bvmul_assoc, term_bvmul_comm, term_bvmul_bvadd_distrib_r, term_bvsub_bvadd_neg, term_bvadd_neg_inv.
       Qed.
+
+      Lemma Term_bv_ring_eq_ext : ring_eq_ext (term_binop (Σ := Σ) (bop.bvadd (n := n))) (term_binop bop.bvmul) (term_unop uop.negate) base.equiv.
+      Proof. constructor; typeclasses eauto. Qed.
+
     End Term_bv_ring. 
 
   End SemanticEquivalence.

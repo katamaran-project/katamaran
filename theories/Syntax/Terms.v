@@ -185,6 +185,63 @@ Module Type TermsOn (Import TY : Types).
 
   End Term_int_case.
 
+  Section Term_bv_case.
+
+    Context {Σ : LCtx} .
+
+
+    (* I need to include the cases as arguments here because their type depends on n,
+       which is unified if I pattern match on binary operators in the term_binop case.
+       Otherwise, Equations fails to construct a covering.
+     *)
+    Equations(noeqns) Term_bv_ind {n : nat} [P : Term Σ (ty.bvec n) -> Type]
+      (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.bvec n ∈ Σ), P (term_var ς))
+      (pval : forall (v : Val (ty.bvec n)), P (term_val (ty.bvec n) v))
+      (pbvadd : forall (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvadd e1 e2))
+      (pbvsub : forall (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvsub e1 e2))
+      (pbvmul : forall (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvmul e1 e2))
+      (pbvand : forall (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvand e1 e2))
+      (pbvor : forall (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvor e1 e2))
+      (pbvxor : forall (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvxor e1 e2))
+      (pshiftr : forall m (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec m)), P e1 -> P (term_binop bop.shiftr e1 e2))
+      (pshiftl : forall m (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec m)), P e1 -> P (term_binop bop.shiftl e1 e2))
+      (pbvcons : forall m (eqm : S m = n) (e1 : Term Σ ty.bool) (e2 : Term Σ (ty.bvec m)), P (eq_rect (S m) (fun n => Term Σ (ty.bvec n)) (term_binop bop.bvcons e1 e2) n eqm))
+      (pbvapp : forall m1 m2 (eqm : m1 + m2 = n) (e1 : Term Σ (ty.bvec m1)) (e2 : Term Σ (ty.bvec m2)), P (eq_rect (m1 + m2) (fun n => Term Σ (ty.bvec n)) (term_binop bop.bvapp e1 e2) n eqm))
+      (pnegate : forall (e : Term Σ (ty.bvec n)), P e -> P (term_unop uop.negate e))
+      (psext : forall m (pf : IsTrue (m <=? n)) (e : Term Σ (ty.bvec m)), P (term_unop (uop.sext (p := pf)) e))
+      (pzext : forall m (pf : IsTrue (m <=? n)) (e : Term Σ (ty.bvec m)), P (term_unop (uop.zext (p := pf)) e))
+      (pgetslice : forall (e : Term Σ ty.int), P (term_unop uop.get_slice_int e))
+      (ptruncate : forall m (pf : IsTrue (n <=? m)) (e : Term Σ (ty.bvec m)), P (term_unop (@uop.truncate _ m n pf) e))
+      (psubrange : forall m s (pf : IsTrue (s + n <=? m)) (e : Term Σ (ty.bvec m)), P (term_unop (@uop.vector_subrange _ _ s n pf) e))
+      (t : Term Σ (ty.bvec n)) : P t :=
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_var ς                            =>
+                                                                                                @pvar ς _
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_val _ b                          =>
+                                                                                                @pval b
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_binop bop.bvadd s t           =>
+                                                                                                 pbvadd s t (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange s) (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange t)
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_binop bop.bvsub s t           =>
+                                                                                                 pbvsub s t (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange s) (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange t)
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_binop bop.bvmul s t           =>
+                                                                                                 pbvmul s t (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange s) (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange t)
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_binop bop.bvand s t           =>
+                                                                                                 pbvand s t (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange s) (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange t)
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_binop bop.bvor s t           => pbvor s t (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange s) (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange t)
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_binop bop.bvxor s t           => pbvxor s t (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange s) (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange t)
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_binop bop.shiftr s t           => pshiftr _ s t (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange s)
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_binop bop.shiftl s t           => pshiftl _ s t (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange s)
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_binop bop.bvapp s t           => pbvapp _ _ eq_refl s t
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_binop bop.bvcons s t           => pbvcons _ eq_refl s t
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_unop uop.negate t                => pnegate t (Term_bv_ind pvar pval pbvadd pbvsub pbvmul pbvand pbvor pbvxor pshiftr pshiftl pbvcons pbvapp pnegate psext pzext pgetslice ptruncate psubrange t)
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_unop (@uop.sext m _ pf) t                => psext _ pf t
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_unop (@uop.zext m _ pf) t                => pzext _ pf t
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_unop uop.get_slice_int t                => pgetslice t
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_unop (@uop.truncate _ m _ pf) t                => ptruncate m pf t
+    | pvar | pval | pbvadd | pbvsub | pbvmul | pbvand | pbvor | pbvxor | pshiftr | pshiftl | pbvcons | pbvapp | pnegate | psext | pzext | pgetslice | ptruncate | psubrange | term_unop (@uop.vector_subrange _ m s _ pf) t                => psubrange m s pf t
+    .
+
+  End Term_bv_case.
+
   Section Term_bool_ind.
 
     Context {Σ : LCtx} [P : Term Σ ty.bool -> Type].

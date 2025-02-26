@@ -680,6 +680,13 @@ Module bv.
       now apply bin_inj, Znat.N2Z.inj.
     Qed.
 
+    Lemma truncz_pos n x : (0 <= truncz n x)%Z.
+    Proof.
+      apply numbers.Z.mod_pos.
+      rewrite Zpower.two_power_nat_equiv.
+      now Lia.lia.
+    Qed.
+
     Definition truncz_idemp (n : nat) (x : Z) :
       truncz n (truncz n x) = truncz n x.
     Proof.
@@ -693,6 +700,13 @@ Module bv.
       now apply Z.add_mod.
     Qed.
 
+    Lemma of_N_truncz {n x} : Z.of_N (truncn n x) = truncz n (Z.of_N x).
+    Proof.
+      unfold truncz.
+      rewrite truncn_spec, exp2_spec, Zpower.two_power_nat_equiv.
+      now rewrite Znat.N2Z.inj_mod, Znat.N2Z.inj_pow, Znat.nat_N_Z.
+    Qed.
+
     Lemma to_N_truncz {n x} : Z.to_N (truncz n (Z.of_N x)) = truncn n x.
     Proof.
       unfold truncz.
@@ -704,6 +718,14 @@ Module bv.
       now Lia.lia.
     Qed.
 
+    Lemma to_N_truncz2 {n x} : (0 <= x)%Z -> Z.to_N (truncz n x) = truncn n (Z.to_N x).
+    Proof.
+      intros Hx.
+      unfold truncz.
+      rewrite truncn_spec, exp2_spec, Znat.Z2N.inj_mod, Zpower.two_power_nat_equiv; try assumption.
+      f_equal; Lia.lia.
+      rewrite Zpower.two_power_nat_equiv; Lia.lia.
+    Qed.
   End Integers.
 
   Section Extract.
@@ -926,6 +948,49 @@ Module bv.
       now rewrite <-(@truncn_add n x' y').
     Qed.
 
+    #[export] Instance Zadd_Proper {n} : Proper (eq2nz n ==> eq2nz n ==> eq2nz n) Z.add.
+    Proof.
+      intros x x' eqx y y' eqy.
+      unfold eq2nz.
+      rewrite (@truncz_add n x y).
+      rewrite eqx, eqy.
+      now rewrite <-(@truncz_add n x' y').
+    Qed.
+
+    Lemma truncz_sub : forall {n x y}, eq2nz n (x - y) (truncz n x - truncz n y).
+    Proof.
+      intros n x y. unfold eq2nz, truncz.
+      now rewrite <-Zdiv.Zminus_mod.
+    Qed.
+
+    Lemma truncz_mul : forall {n x y}, eq2nz n (x * y) (truncz n x * truncz n y).
+    Proof.
+      intros n x y. unfold eq2nz, truncz.
+      now rewrite <-Zdiv.Zmult_mod.
+    Qed.
+
+    #[export] Instance Zsub_Proper_eq2nz {n} : Proper (eq2nz n ==> eq2nz n ==> eq2nz n) Z.sub.
+    Proof.
+      unfold eq2nz.
+      intros x1 x2 Hx y1 y2 Hy.
+      now rewrite truncz_sub, Hx, Hy, <-truncz_sub.
+    Qed.
+
+    #[export] Instance Zopp_Proper_eq2nz {n} : Proper (eq2nz n ==> eq2nz n) Z.opp.
+    Proof.
+      intros x1 x2 Hx.
+      replace (- x1)%Z with (0 - x1)%Z by Lia.lia.
+      replace (- x2)%Z with (0 - x2)%Z by Lia.lia.
+      now rewrite Hx.
+    Qed.
+
+    #[export] Instance Zmul_Proper_eq2nz {n} : Proper (eq2nz n ==> eq2nz n ==> eq2nz n) Z.mul.
+    Proof.
+      unfold eq2nz.
+      intros x1 x2 Hx y1 y2 Hy.
+      now rewrite truncz_mul, Hx, Hy, <-truncz_mul.
+    Qed.
+
     #[export] Instance bin_Proper {n} : Proper (eq ==> eq2n n) (@bin n).
     Proof.
       now intros x y <-.
@@ -935,6 +1000,27 @@ Module bv.
     Proof.
       intros Hbxy.
       now rewrite <-(of_N_bin x), <-(of_N_bin y), Hbxy.
+    Qed.
+
+    Definition to_Z {n} (x : bv n) := Z.of_N (bin x).
+
+    Lemma of_Z_to_Z {n} (x : bv n) : of_Z (to_Z x) = x.
+    Proof.
+      unfold of_Z, to_Z.
+      now rewrite to_N_truncz, truncn_eq2n, of_N_bin.
+    Qed.
+
+    Lemma to_Z_of_Z {n} (x : Z) : @to_Z n (of_Z x) = truncz n x.
+    Proof.
+      unfold of_Z, to_Z; cbn.
+      pose proof (truncz_pos n x).
+      now rewrite <-to_N_truncz2, truncz_idemp, Znat.Z2N.id.
+    Qed.
+
+    Lemma to_Z_inj_eq2nz {n x y} : eq2nz n (@to_Z n x) (to_Z y) -> x = y.
+    Proof.
+      intros Hbxy.
+      now rewrite <-(of_Z_to_Z x), <-(of_Z_to_Z y), Hbxy.
     Qed.
 
     #[export] Instance unsigned_Proper {n} : Proper (eq ==> eq2nz n) (@unsigned n).
@@ -994,14 +1080,6 @@ Module bv.
       now rewrite <-?add_assoc, ?add_negate2, ?add_zero_r in eq.
     Qed.
 
-    Lemma truncz_ge_0 {n x} : (0 <= truncz n x)%Z.
-    Proof.
-      unfold truncz.
-      apply Z.mod_pos_bound.
-      rewrite Zpower.two_power_nat_equiv.
-      Lia.lia.
-    Qed.
-
     Lemma of_N_add {n} x y : @add n (of_N x) (of_N y) = of_N (x + y).
     Proof.
       apply bin_inj. cbn. now rewrite <-truncn_add. Qed.
@@ -1010,9 +1088,49 @@ Module bv.
     Proof.
       unfold of_Z. rewrite of_N_add.
       apply bin_inj. cbn.
-      rewrite <-Znat.Z2N.inj_add; try apply truncz_ge_0.
-      repeat rewrite <-to_N_truncz, Znat.Z2N.id; [ | apply truncz_ge_0 | apply Ztac.add_le; apply truncz_ge_0].
+      pose proof (truncz_pos n x).
+      pose proof (truncz_pos n y).
+      rewrite <-Znat.Z2N.inj_add; try easy.
+      repeat (rewrite <-to_N_truncz, Znat.Z2N.id); try easy; try apply truncz_pos; try Lia.lia.
       now rewrite <-truncz_add, truncz_idemp.
+    Qed.
+
+    Lemma to_Z_add {n} x y : @to_Z n (add x y) = truncz n (to_Z x + to_Z y).
+    Proof.
+      unfold to_Z; cbn.
+      rewrite truncn_add, truncz_add, truncn_add.
+      now rewrite <-?of_N_truncz, <-Znat.N2Z.inj_add, <-?of_N_truncz, ?truncn_idemp.
+    Qed.
+
+    Lemma to_Z_negate {n} x : @to_Z n (negate x) = truncz n (- (to_Z x)).
+    Proof.
+      unfold negate, to_Z, truncz; cbn.
+      generalize (bv_is_wf x).
+      rewrite ?truncn_spec, ?exp2_spec, Zpower.two_power_nat_equiv.
+      intros Hx.
+      assert (2 ^ Z.of_nat n ≠ 0)%Z by Lia.lia.
+      rewrite ?Znat.N2Z.inj_mod, ?Znat.N2Z.inj_pow.
+      rewrite Znat.N2Z.inj_sub; [|Lia.lia].
+      rewrite ?Znat.N2Z.inj_pow, ?Znat.nat_N_Z.
+      cbn.
+      rewrite Zdiv.Zminus_mod, Zdiv.Z_mod_same_full.
+      change (0)%Z with (0 mod 2 ^ Z.of_nat n)%Z.
+      now rewrite <-Zdiv.Zminus_mod.
+    Qed.
+
+    Lemma to_Z_sub {n} x y : @to_Z n (sub x y) = truncz n (to_Z x - to_Z y).
+    Proof.
+      unfold sub.
+      rewrite to_Z_add, to_Z_negate.
+      now rewrite (truncz_eq2nz (x := - to_Z y)).
+    Qed.
+
+    Lemma of_Z_sub {n} x y : @sub n (of_Z x) (of_Z y) = of_Z (x - y).
+    Proof.
+      apply to_Z_inj_eq2nz.
+      rewrite to_Z_of_Z, truncz_eq2nz.
+      rewrite to_Z_sub, ?to_Z_of_Z.
+      now rewrite <-truncz_sub, truncz_eq2nz.
     Qed.
 
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
@@ -1020,6 +1138,29 @@ Module bv.
       intros n x y. unfold eq2n.
       now rewrite ?truncn_spec, <-N.Div0.mul_mod.
     Qed.
+
+    Lemma of_Z_mul {n} x y : @mul n (of_Z x) (of_Z y) = of_Z (x * y).
+    Proof.
+      apply to_Z_inj_eq2nz.
+      rewrite to_Z_of_Z, truncz_eq2nz.
+      unfold to_Z, mul; cbn.
+      pose proof (truncz_pos n y).
+      pose proof (truncz_pos n x).
+      rewrite <-?to_N_truncz2, ?truncz_eq2nz; try easy.
+      rewrite <-Znat.Z2N.inj_mul; try easy.
+      rewrite <-to_N_truncz2; try Lia.lia.
+      rewrite Znat.Z2N.id; [|apply truncz_pos].
+      now rewrite ?truncz_eq2nz.
+    Qed.
+
+    Lemma of_Z_negate {n} x : @negate n (of_Z x) = of_Z (- x).
+    Proof.
+      apply to_Z_inj_eq2nz.
+      rewrite to_Z_of_Z.
+      rewrite to_Z_negate.
+      now rewrite to_Z_of_Z, ?truncz_eq2nz.
+    Qed.
+
 
     #[export] Instance Nmul_Proper {n} : Proper (eq2n n ==> eq2n n ==> eq2n n) N.mul.
     Proof.
@@ -1035,26 +1176,26 @@ Module bv.
     Lemma mul_assoc {n} {x y z}: @mul n x (mul y z) = @mul n (mul x y) z.
     Proof. solve_eq2n. Qed.
 
-    Lemma mul_one_r {n} {x}: @mul n x (of_N 1) = x.
+    Lemma mul_one_r {n} {x}: @mul n x one = x.
     Proof.
       apply bin_inj_eq2n; cbn.
-      rewrite truncn_eq2n, (@truncn_eq2n n 1).
-      apply eq2R.
-      Lia.lia.
+      rewrite truncn_mul, !truncn_eq2n.
+      destruct n; cbn; [apply eq2n_zero|].
+      apply eq2R. Lia.lia.
     Qed.
 
-    Lemma mul_one_l {n} {x}: @mul n (of_N 1) x = x.
+    Lemma mul_one_l {n} {x}: @mul n one x = x.
     Proof.
       apply bin_inj_eq2n; cbn.
-      rewrite truncn_eq2n, (@truncn_eq2n n 1).
-      apply eq2R.
-      Lia.lia.
+      rewrite truncn_mul, !truncn_eq2n.
+      destruct n; cbn; [apply eq2n_zero|].
+      apply eq2R. Lia.lia.
     Qed.
 
     Lemma mul_add_distrib_r {n} {x y z} : @mul n (add x y) z = add (mul x z) (mul y z).
     Proof. solve_eq2n. Qed.
 
-    Lemma ring_theory n : ring_theory (R := bv n) zero (of_N 1) add mul sub negate eq.
+    Lemma ring_theory n : ring_theory (R := bv n) zero one add mul sub negate eq.
     Proof.
       constructor;
         eauto using add_zero_l, add_comm, add_assoc, mul_one_l, mul_comm, mul_assoc, mul_add_distrib_r, add_negate2.
@@ -1492,6 +1633,16 @@ Module bv.
     Lemma bin_of_N_small {n x} : (x < exp2 n)%N -> @bin n (of_N x) = x.
     Proof.
       now apply truncn_small.
+    Qed.
+
+    Lemma of_N_one {n} : of_N 1 = @one n.
+    Proof. apply bin_inj_eq2n. now destruct n; easy. Qed.
+
+    Lemma of_Z_one {n} : of_Z 1 = @one n.
+    Proof. apply bin_inj_eq2n.
+           destruct n; [apply eq2n_zero|]; cbn.
+           unfold of_Z, truncz.
+           now rewrite Zdiv.Zmod_1_l.
     Qed.
 
     Lemma bin_of_nat_small {n x} : (N.of_nat x < exp2 n)%N ->

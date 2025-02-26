@@ -230,6 +230,7 @@ Module Import ExampleProgram <: Program ExampleBase.
     | fpthree16 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
     | fpthree32 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
     | fpthree64 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
+    | bvtest    :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
     .
 
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -291,6 +292,18 @@ Module Import ExampleProgram <: Program ExampleBase.
        let f := (n - (e + 1)) in
        fun_fpthree' e f)%nat.
 
+    Definition fun_bvtest : Stm [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42) :=
+      let: "one" ∷ ty.bvec 42 := stm_val (ty.bvec 42) bv.one in
+      let: "zero" ∷ ty.bvec 42 := stm_val (ty.bvec 42) bv.zero in
+      exp_binop
+        bop.bvadd
+        (exp_binop bop.bvsub (exp_var "sign") (exp_var "one"))
+        (exp_binop
+           bop.bvadd
+           (exp_var "one")
+           (exp_var "zero"))
+    .
+
     Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       Eval compute in
       match f in Fun Δ τ return Stm Δ τ with
@@ -317,6 +330,7 @@ Module Import ExampleProgram <: Program ExampleBase.
       | fpthree16 => fun_fpthree16
       | fpthree32 => fun_fpthree32
       | fpthree64 => fun_fpthree64
+      | bvtest => fun_bvtest
       end.
   End FunDefKit.
 
@@ -412,6 +426,14 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
          sep_contract_postcondition   := asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post
       |}.
 
+    Definition sep_contract_bvtest : SepContract [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42) :=
+      {| sep_contract_logic_variables := ["sign" ∷ ty.bvec 42 ];
+         sep_contract_localstore      := [term_var "sign"];
+         sep_contract_precondition    := ⊤;
+         sep_contract_result          := "result";
+         sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_var "sign"))
+      |}.
+
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
@@ -424,6 +446,7 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
         | fpthree16 => None
         | fpthree32 => None
         | fpthree64 => None
+        | bvtest    => Some sep_contract_bvtest
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
@@ -478,3 +501,7 @@ Goal True. idtac "Timing before: example/cmp". Abort.
 Lemma valid_contract_cmp : Symbolic.ValidContractReflect sep_contract_cmp (FunDef cmp).
 Proof. reflexivity. Qed.
 Goal True. idtac "Timing after: example/cmp". Abort.
+Lemma valid_contract_bvtest : Symbolic.ValidContractWithErasure sep_contract_bvtest (FunDef bvtest).
+Proof.
+  now cbv.
+Qed.
