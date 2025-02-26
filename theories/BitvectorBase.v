@@ -726,6 +726,7 @@ Module bv.
       f_equal; Lia.lia.
       rewrite Zpower.two_power_nat_equiv; Lia.lia.
     Qed.
+
   End Integers.
 
   Section Extract.
@@ -846,6 +847,13 @@ Module bv.
       now rewrite bv.of_N_bin.
     Qed.
 
+    Lemma unsigned_of_Z {n} (x : Z) : @unsigned n (of_Z x) = truncz n x.
+    Proof.
+      unfold of_Z, unsigned; cbn.
+      pose proof (truncz_pos n x).
+      now rewrite <-to_N_truncz2, truncz_idemp, Znat.Z2N.id.
+    Qed.
+
     Lemma of_Z_nat {n} i : @of_Z n (Z.of_nat i) = of_nat i.
     Proof.
       unfold of_nat, of_Z.
@@ -912,6 +920,17 @@ Module bv.
       rewrite xmeqy.
       do 2 f_equal.
       now rewrite ?Z.div_small.
+    Qed.
+    
+    Lemma unsigned_inj_eq2nz {n x y} : eq2nz n (@unsigned n x) (unsigned y) -> x = y.
+    Proof.
+      intros Hbxy.
+      now rewrite <-(of_Z_unsigned x), <-(of_Z_unsigned y), Hbxy.
+    Qed.
+
+    #[export] Instance unsigned_Proper {n} : Proper (eq ==> eq2nz n) (@unsigned n).
+    Proof.
+      now intros x y <-.
     Qed.
   End EqMod2N.
   Section Arithmetic.
@@ -1002,37 +1021,6 @@ Module bv.
       now rewrite <-(of_N_bin x), <-(of_N_bin y), Hbxy.
     Qed.
 
-    Definition to_Z {n} (x : bv n) := Z.of_N (bin x).
-
-    Lemma of_Z_to_Z {n} (x : bv n) : of_Z (to_Z x) = x.
-    Proof.
-      unfold of_Z, to_Z.
-      now rewrite to_N_truncz, truncn_eq2n, of_N_bin.
-    Qed.
-
-    Lemma to_Z_of_Z {n} (x : Z) : @to_Z n (of_Z x) = truncz n x.
-    Proof.
-      unfold of_Z, to_Z; cbn.
-      pose proof (truncz_pos n x).
-      now rewrite <-to_N_truncz2, truncz_idemp, Znat.Z2N.id.
-    Qed.
-
-    Lemma to_Z_inj_eq2nz {n x y} : eq2nz n (@to_Z n x) (to_Z y) -> x = y.
-    Proof.
-      intros Hbxy.
-      now rewrite <-(of_Z_to_Z x), <-(of_Z_to_Z y), Hbxy.
-    Qed.
-
-    #[export] Instance unsigned_Proper {n} : Proper (eq ==> eq2nz n) (@unsigned n).
-    Proof.
-      now intros x y <-.
-    Qed.
-
-    #[export] Instance signed_Proper {n} : Proper (eq ==> eq2nz n) (@unsigned n).
-    Proof.
-      now intros x y <-.
-    Qed.
-
     Lemma eq2R `{Reflexive A R} {x y} : x = y -> R x y.
     Proof. now induction 1. Qed.
 
@@ -1095,44 +1083,6 @@ Module bv.
       now rewrite <-truncz_add, truncz_idemp.
     Qed.
 
-    Lemma to_Z_add {n} x y : @to_Z n (add x y) = truncz n (to_Z x + to_Z y).
-    Proof.
-      unfold to_Z; cbn.
-      rewrite truncn_add, truncz_add, truncn_add.
-      now rewrite <-?of_N_truncz, <-Znat.N2Z.inj_add, <-?of_N_truncz, ?truncn_idemp.
-    Qed.
-
-    Lemma to_Z_negate {n} x : @to_Z n (negate x) = truncz n (- (to_Z x)).
-    Proof.
-      unfold negate, to_Z, truncz; cbn.
-      generalize (bv_is_wf x).
-      rewrite ?truncn_spec, ?exp2_spec, Zpower.two_power_nat_equiv.
-      intros Hx.
-      assert (2 ^ Z.of_nat n ≠ 0)%Z by Lia.lia.
-      rewrite ?Znat.N2Z.inj_mod, ?Znat.N2Z.inj_pow.
-      rewrite Znat.N2Z.inj_sub; [|Lia.lia].
-      rewrite ?Znat.N2Z.inj_pow, ?Znat.nat_N_Z.
-      cbn.
-      rewrite Zdiv.Zminus_mod, Zdiv.Z_mod_same_full.
-      change (0)%Z with (0 mod 2 ^ Z.of_nat n)%Z.
-      now rewrite <-Zdiv.Zminus_mod.
-    Qed.
-
-    Lemma to_Z_sub {n} x y : @to_Z n (sub x y) = truncz n (to_Z x - to_Z y).
-    Proof.
-      unfold sub.
-      rewrite to_Z_add, to_Z_negate.
-      now rewrite (truncz_eq2nz (x := - to_Z y)).
-    Qed.
-
-    Lemma of_Z_sub {n} x y : @sub n (of_Z x) (of_Z y) = of_Z (x - y).
-    Proof.
-      apply to_Z_inj_eq2nz.
-      rewrite to_Z_of_Z, truncz_eq2nz.
-      rewrite to_Z_sub, ?to_Z_of_Z.
-      now rewrite <-truncz_sub, truncz_eq2nz.
-    Qed.
-
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
     Proof.
       intros n x y. unfold eq2n.
@@ -1141,9 +1091,9 @@ Module bv.
 
     Lemma of_Z_mul {n} x y : @mul n (of_Z x) (of_Z y) = of_Z (x * y).
     Proof.
-      apply to_Z_inj_eq2nz.
-      rewrite to_Z_of_Z, truncz_eq2nz.
-      unfold to_Z, mul; cbn.
+      apply unsigned_inj_eq2nz.
+      rewrite unsigned_of_Z, truncz_eq2nz.
+      unfold unsigned, mul; cbn.
       pose proof (truncz_pos n y).
       pose proof (truncz_pos n x).
       rewrite <-?to_N_truncz2, ?truncz_eq2nz; try easy.
@@ -1151,14 +1101,6 @@ Module bv.
       rewrite <-to_N_truncz2; try Lia.lia.
       rewrite Znat.Z2N.id; [|apply truncz_pos].
       now rewrite ?truncz_eq2nz.
-    Qed.
-
-    Lemma of_Z_negate {n} x : @negate n (of_Z x) = of_Z (- x).
-    Proof.
-      apply to_Z_inj_eq2nz.
-      rewrite to_Z_of_Z.
-      rewrite to_Z_negate.
-      now rewrite to_Z_of_Z, ?truncz_eq2nz.
     Qed.
 
 
@@ -1228,6 +1170,53 @@ Module bv.
     Lemma add_of_nat_0_r :
       forall {n} (v : bv n), v = add v (bv.of_nat 0).
     Proof. intros; rewrite add_comm; apply add_of_nat_0_l. Qed.
+
+    Lemma unsigned_add {n} x y : @unsigned n (add x y) = truncz n (unsigned x + unsigned y).
+    Proof.
+      unfold unsigned; cbn.
+      rewrite truncn_add, truncz_add, truncn_add.
+      now rewrite <-?of_N_truncz, <-Znat.N2Z.inj_add, <-?of_N_truncz, ?truncn_idemp.
+    Qed.
+
+    Lemma unsigned_negate {n} x : @unsigned n (negate x) = truncz n (- (unsigned x)).
+    Proof.
+      unfold negate, unsigned, truncz; cbn.
+      generalize (bv_is_wf x).
+      rewrite ?truncn_spec, ?exp2_spec, Zpower.two_power_nat_equiv.
+      intros Hx.
+      assert (2 ^ Z.of_nat n ≠ 0)%Z by Lia.lia.
+      rewrite ?Znat.N2Z.inj_mod, ?Znat.N2Z.inj_pow.
+      rewrite Znat.N2Z.inj_sub; [|Lia.lia].
+      rewrite ?Znat.N2Z.inj_pow, ?Znat.nat_N_Z.
+      cbn.
+      rewrite Zdiv.Zminus_mod, Zdiv.Z_mod_same_full.
+      change (0)%Z with (0 mod 2 ^ Z.of_nat n)%Z.
+      now rewrite <-Zdiv.Zminus_mod.
+    Qed.
+
+    Lemma of_Z_negate {n} x : @negate n (of_Z x) = of_Z (- x).
+    Proof.
+      apply unsigned_inj_eq2nz.
+      rewrite unsigned_of_Z.
+      rewrite unsigned_negate.
+      now rewrite unsigned_of_Z, ?truncz_eq2nz.
+    Qed.
+
+    Lemma unsigned_sub {n} x y : @unsigned n (sub x y) = truncz n (unsigned x - unsigned y).
+    Proof.
+      unfold sub.
+      rewrite unsigned_add, unsigned_negate.
+      now rewrite (truncz_eq2nz (x := - unsigned y)).
+    Qed.
+
+    Lemma of_Z_sub {n} x y : @sub n (of_Z x) (of_Z y) = of_Z (x - y).
+    Proof.
+      apply unsigned_inj_eq2nz.
+      rewrite unsigned_of_Z, truncz_eq2nz.
+      rewrite unsigned_sub, ?unsigned_of_Z.
+      now rewrite <-truncz_sub, truncz_eq2nz.
+    Qed.
+
 
     (* For the relational operators we default to the < and <= version and
        only allow the others for parsing. *)
