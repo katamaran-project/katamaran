@@ -452,6 +452,12 @@ Module bv.
       bv_case (fun m _ => A m) n
         (fun k b xs => fold_left (fun m => c (S m)) (c 0 n b) xs) xs.
 
+    Lemma fold_left_cons {A : forall n : nat, Type}
+      (c : forall n, A n -> bool -> A (S n)) (n : A O) [m] (b : bool) (xs : bv m) :
+      fold_left c n (cons b xs) =
+      fold_left (fun n => c (S n)) (c 0 n b) xs.
+    Proof. destruct b, xs as [[] ?]; reflexivity. Qed.
+
     Variant NilView : bv 0 -> Set :=
       nvnil : NilView nil.
     Variant ConsView {n} : bv (S n) -> Set :=
@@ -753,6 +759,46 @@ Module bv.
       rewrite truncn_spec, exp2_spec, Znat.Z2N.inj_mod, Zpower.two_power_nat_equiv; try assumption.
       f_equal; Lia.lia.
       rewrite Zpower.two_power_nat_equiv; Lia.lia.
+    Qed.
+
+    Lemma unsigned_cons n b (x : bv n) :
+      unsigned (cons b x) =
+      if b
+      then Z.succ (Z.double (unsigned x))
+      else Z.double (unsigned x).
+    Proof. destruct b, x; unfold unsigned; cbn; Lia.lia. Qed.
+
+    Lemma unsigned_ones n :
+      unsigned (ones n) = Z.ones (Z.of_nat n).
+    Proof.
+      induction n; cbn - [ones].
+      - reflexivity.
+      - rewrite ones_S, unsigned_cons, IHn, Znat.Nat2Z.inj_succ.
+        rewrite !Z.ones_equiv, Z.pow_succ_r; Lia.lia.
+    Qed.
+
+    Lemma msb_cons (n : nat) (b : bool) (x : bv n) (H : 0 < n) :
+      msb (cons b x) = msb x.
+    Proof.
+      induction x using bv_rect; [Lia.lia|].
+      unfold msb at 1. now rewrite fold_left_cons.
+    Qed.
+
+    Lemma msb_ones n :
+      msb (ones (S n)) = true.
+    Proof.
+      induction n.
+      - reflexivity.
+      - now rewrite ones_S, msb_cons; [|Lia.lia].
+    Qed.
+
+    Lemma signed_ones n :
+      signed (ones (S n)) = (-1)%Z.
+    Proof.
+      unfold signed. rewrite msb_ones.
+      rewrite unsigned_ones, Z.ones_equiv.
+      rewrite Zpower.two_power_nat_equiv.
+      Lia.lia.
     Qed.
 
   End Integers.
@@ -1351,6 +1397,28 @@ Module bv.
 
     Definition not {n} (x : bv n) : bv n :=
       let x := bin x in mk (notn n x) (wf_notn n x).
+
+    Lemma not_nil :
+      not nil = nil.
+    Proof. reflexivity. Qed.
+
+    Lemma not_cons {n} (b : bool) (x : bv n) :
+      not (cons b x) = cons (negb b) (not x).
+    Proof. destruct x as [[] wfx], b; cbn; try easy. now destruct n. Qed.
+
+    Lemma not_app {m n} (xs : bv m) (ys : bv n) :
+      not (app xs ys) = app (not xs) (not ys).
+    Proof.
+      induction xs using bv_rect; cbn;
+        repeat rewrite ?not_nil, ?app_nil, ?not_cons, ?app_cons; congruence.
+    Qed.
+
+    Lemma not_ones {n} :
+      not (ones n) = zero.
+    Proof.
+      induction n; cbn; [easy|].
+      now rewrite ones_S, not_cons, IHn.
+    Qed.
 
   End Logical.
 
