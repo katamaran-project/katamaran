@@ -596,11 +596,39 @@ Module bv.
       | 0   => mk 0 I
       | S u => mk 1 I
       end.
-    Fixpoint ones (n : nat) : bv n :=
+
+    Fixpoint onesp (n : nat) : positive :=
       match n with
-      | O   => nil
-      | S m => cons true (ones m)
+      | O   => 1
+      | S n => (onesp n)~1
+      end%positive.
+
+    Fixpoint wf_onesp (n : nat) : at_most (S n) (onesp n) :=
+      match n with
+      | 0    => I
+      | S n' => wf_onesp n'
       end.
+
+    Definition onesn (n : nat) : N :=
+      match n with
+      | O   => N0
+      | S m => Npos (onesp m)
+      end.
+
+    Definition wf_onesn (n : nat) : is_wf n (onesn n) :=
+      match n with
+      | 0    => I
+      | S n' => wf_onesp n'
+      end.
+
+    Definition ones (n : nat) : bv n :=
+      mk (onesn n) (wf_onesn n).
+
+    Lemma ones_O : ones 0 = nil.
+    Proof. reflexivity. Qed.
+
+    Lemma ones_S n : ones (S n) = cons true (ones n).
+    Proof. destruct n; reflexivity. Qed.
 
     Lemma bin_one {n} : n > 0 -> bin (@one n) = 1%N.
     Proof.
