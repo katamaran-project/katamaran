@@ -228,6 +228,7 @@ Module Type PartialEvaluationOn
         (fun m e1 e2 IHe1 => Term_bv_Quote_def (term_binop bop.shiftl e1 e2))
         (fun m eqm e1 e2 => Term_bv_Quote_def (eq_rect (S m) (fun n => Term Σ (ty.bvec n)) (term_binop bop.bvcons e1 e2) n eqm))
         (fun m1 m2 eqm e1 e2 => Term_bv_Quote_def (eq_rect (m1 + m2) (fun n => Term Σ (ty.bvec n)) (term_binop bop.bvapp e1 e2) n eqm))
+        (fun e IHe => Term_bv_Quote_def (term_unop uop.bvnot e))
         (fun e IHe => Term_bv_Quote_def (term_unop uop.negate e))
         (fun m pf e => Term_bv_Quote_def (term_unop uop.sext e))
         (fun m pf e => Term_bv_Quote_def (term_unop uop.zext e))

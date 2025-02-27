@@ -61,6 +61,7 @@ Module uop.
     | unsigned {n}      : UnOp (bvec n) int
     | truncate {n} (m : nat) {p : IsTrue (m <=? n)} : UnOp (bvec n) (bvec m)
     | vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} : UnOp (bvec n) (bvec l)
+    | bvnot {n}         : UnOp (bvec n) (bvec n)
     | negate {n}        : UnOp (bvec n) (bvec n).
     Set Transparent Obligations.
     Derive Signature for UnOp.
@@ -72,6 +73,8 @@ Module uop.
     Context {TDC : TypeDeclKit}.
     Context {TDN : TypeDenoteKit TDC}.
     Context {TDF : TypeDefKit TDN}.
+
+    #[local] Set Equations With UIP.
 
     Definition Tel (τ : Ty) : Set :=
       sigma (fun σ : Ty => UnOp σ τ).
@@ -116,6 +119,7 @@ Module uop.
       | left _  | right _ => right _
       | right _ | _       => right _
       }
+    | bvnot                            | bvnot => left eq_refl
     | negate                           | negate => left eq_refl
     | _                                | _ => right _.
 
@@ -141,6 +145,7 @@ Module uop.
       | unsigned            => fun v => bv.unsigned v
       | truncate m          => fun v => bv.truncate m v
       | vector_subrange s l => bv.vector_subrange s l
+      | bvnot               => bv.not
       | negate              => bv.negate
       end.
 
