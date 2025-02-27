@@ -741,9 +741,9 @@ Module bv.
       end.
     #[global] Arguments vector_subrange {n} _ _ {_} _.
 
-    Goal vector_subrange 0 1 (@of_nat 1 1)    = of_nat 1. reflexivity. Qed.
-    Goal vector_subrange 0 8 (@of_nat 16 256) = zero.     reflexivity. Qed.
-    Goal vector_subrange 8 8 (@of_nat 16 256) = one.      reflexivity. Qed.
+    Goal vector_subrange 0 1 (@of_nat 1 1)    = of_nat 1. reflexivity. Abort.
+    Goal vector_subrange 0 8 (@of_nat 16 256) = zero.     reflexivity. Abort.
+    Goal vector_subrange 8 8 (@of_nat 16 256) = one.      reflexivity. Abort.
   End Extract.
 
   Section Shift.
