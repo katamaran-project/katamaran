@@ -1315,6 +1315,43 @@ Module bv.
     Definition lxor {n} (x y : bv n) : bv n :=
       of_N (N.lxor (bin x) (bin y)).
 
+    Fixpoint notp (n : nat) (p : positive) : N :=
+      match n with
+      | O   => N0
+      | S n => match p with
+               | 1   => N.double (onesn n)
+               | p~0 => N.succ_double (notp n p)
+               | p~1 => N.double (notp n p)
+               end%positive
+      end.
+
+    Fixpoint wf_notp (n : nat) p0 : is_wf n (notp n p0) :=
+      match n with
+      | O => I
+      | S n =>
+          match p0
+          with
+          | 1   => wf_double n (onesn n) (wf_onesn n)
+          | p~0 => wf_succ_double n (notp n p) (wf_notp n p)
+          | p~1 => wf_double n (notp n p) (wf_notp n p)
+          end%positive
+      end.
+
+    Definition notn (n : nat) (x : N) : N :=
+      match x with
+      | N0 => onesn n
+      | Npos p => notp n p
+      end.
+
+    Definition wf_notn n x : is_wf n (notn n x) :=
+      match x with
+      | N0     => wf_onesn n
+      | Npos p => wf_notp n p
+      end.
+
+    Definition not {n} (x : bv n) : bv n :=
+      let x := bin x in mk (notn n x) (wf_notn n x).
+
   End Logical.
 
   Module finite.
@@ -1810,7 +1847,7 @@ Module bv.
       Lia.lia.
     Qed.
 
-    Lemma ult_antirefl : forall {n} (x : bv n), not (x <ᵘ x).
+    Lemma ult_antirefl : forall {n} (x : bv n), ~ (x <ᵘ x).
     Proof. unfold ult. Lia.lia. Qed.
 
     Lemma add_nonzero_neq : forall {n} (x y : bv n),
