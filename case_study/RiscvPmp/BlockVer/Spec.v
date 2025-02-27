@@ -602,14 +602,14 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
    Definition LEnv : LemmaEnv :=
      fun Δ l =>
        match l with
-       | open_gprs      => lemma_open_gprs
-       | close_gprs     => lemma_close_gprs
-       | open_ptsto_instr      => lemma_open_ptsto_instr
-       | close_ptsto_instr     => lemma_close_ptsto_instr
-       | open_pmp_entries                   => lemma_open_pmp_entries
-       | close_pmp_entries                  => lemma_close_pmp_entries
-       | extract_pmp_ptsto bytes => lemma_extract_pmp_ptsto bytes
-       | return_pmp_ptsto bytes => lemma_return_pmp_ptsto bytes
+       | open_gprs                    => lemma_open_gprs
+       | close_gprs                   => lemma_close_gprs
+       | open_ptsto_instr             => lemma_open_ptsto_instr
+       | close_ptsto_instr            => lemma_close_ptsto_instr
+       | open_pmp_entries             => lemma_open_pmp_entries
+       | close_pmp_entries            => lemma_close_pmp_entries
+       | extract_pmp_ptsto bytes      => lemma_extract_pmp_ptsto bytes
+       | return_pmp_ptsto bytes       => lemma_return_pmp_ptsto bytes
        | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
       end.
 End RiscvPmpBlockVerifSpec.
