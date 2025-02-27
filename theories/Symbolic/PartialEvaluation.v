@@ -213,40 +213,35 @@ Module Type PartialEvaluationOn
         now rewrite plusNatPos_of_succ_nat, app_length, Nat.add_comm.
     Qed.
 
+    Fixpoint Term_bv_Quote {n} (t : Term Σ (ty.bvec n)) {struct t} : RQuote n :=
+      Term_bv_case (P := fun n _ => RQuote n)
+        (fun n ζ ζin => Term_bv_Quote_def (term_var ζ))
+        (fun n v => fun l p => (PEc (bv.unsigned v) , nil))
+        (fun n e1 e2 => Term_bv_Quote_bin (@PEadd _) (Term_bv_Quote e1) (Term_bv_Quote e2))
+        (fun n e1 e2 => Term_bv_Quote_bin (@PEsub _) (Term_bv_Quote e1) (Term_bv_Quote e2))
+        (fun n e1 e2 => Term_bv_Quote_bin (@PEmul _) (Term_bv_Quote e1) (Term_bv_Quote e2))
+        (fun n e1 e2 => Term_bv_Quote_def (term_binop bop.bvand e1 e2))
+        (fun n e1 e2 => Term_bv_Quote_def (term_binop bop.bvor e1 e2))
+        (fun n e1 e2 => Term_bv_Quote_def (term_binop bop.bvxor e1 e2))
+        (fun n m e1 e2 => Term_bv_Quote_def (term_binop bop.shiftr e1 e2))
+        (fun n m e1 e2 => Term_bv_Quote_def (term_binop bop.shiftl e1 e2))
+        (fun n1 n2 e1 e2 => Term_bv_Quote_def (term_binop bop.bvapp e1 e2))
+        (fun n e1 e2 => Term_bv_Quote_def (term_binop bop.bvcons e1 e2))
+        (fun n e => Term_bv_Quote_def (term_unop uop.bvnot e))
+        (fun n e => Term_bv_Quote_def (term_unop uop.negate e))
+        (fun n m pf e => Term_bv_Quote_def (term_unop uop.sext e))
+        (fun n m pf e => Term_bv_Quote_def (term_unop uop.zext e))
+        (fun n e => Term_bv_Quote_def (term_unop uop.get_slice_int e))
+        (fun n m pf e => Term_bv_Quote_def (term_unop (uop.truncate _) e))
+        (fun n m s pf e => Term_bv_Quote_def (term_unop (uop.vector_subrange s n) e))
+        t.
 
-    Definition Term_bv_Quote {n} (t : Term Σ (ty.bvec n)) : RQuote n :=
-      Term_bv_ind (n := n) (Σ := Σ) (P := fun _ => RQuote n)%type
-        (fun ζ ζin => Term_bv_Quote_def (term_var ζ))
-        (fun v => fun l p => (PEc (bv.unsigned v) , nil))
-        (fun e1 e2 IHe1 IHe2 => Term_bv_Quote_bin (@PEadd _) IHe1 IHe2)
-        (fun e1 e2 IHe1 IHe2 => Term_bv_Quote_bin (@PEsub _) IHe1 IHe2)
-        (fun e1 e2 IHe1 IHe2 => Term_bv_Quote_bin (@PEmul _) IHe1 IHe2)
-        (fun e1 e2 IHe1 IHe2 => Term_bv_Quote_def (term_binop bop.bvand e1 e2))
-        (fun e1 e2 IHe1 IHe2 => Term_bv_Quote_def (term_binop bop.bvor e1 e2))
-        (fun e1 e2 IHe1 IHe2 => Term_bv_Quote_def (term_binop bop.bvxor e1 e2))
-        (fun m e1 e2 IHe1 => Term_bv_Quote_def (term_binop bop.shiftr e1 e2))
-        (fun m e1 e2 IHe1 => Term_bv_Quote_def (term_binop bop.shiftl e1 e2))
-        (fun m eqm e1 e2 => Term_bv_Quote_def (eq_rect (S m) (fun n => Term Σ (ty.bvec n)) (term_binop bop.bvcons e1 e2) n eqm))
-        (fun m1 m2 eqm e1 e2 => Term_bv_Quote_def (eq_rect (m1 + m2) (fun n => Term Σ (ty.bvec n)) (term_binop bop.bvapp e1 e2) n eqm))
-        (fun e IHe => Term_bv_Quote_def (term_unop uop.bvnot e))
-        (fun e IHe => Term_bv_Quote_def (term_unop uop.negate e))
-        (fun m pf e => Term_bv_Quote_def (term_unop uop.sext e))
-        (fun m pf e => Term_bv_Quote_def (term_unop uop.zext e))
-        (fun e => Term_bv_Quote_def (term_unop uop.get_slice_int e))
-        (fun m pf e => Term_bv_Quote_def (term_unop (uop.truncate _) e))
-        (fun m s pf e => Term_bv_Quote_def (term_unop (uop.vector_subrange s n) e))
-        t
-    .
-
-    Lemma Term_bv_Quote_Valid {n} : forall (t : Term Σ (ty.bvec n)), RQuoteValid t (Term_bv_Quote t).
+    Lemma Term_bv_Quote_Valid {n} (t : Term Σ (ty.bvec n)) : RQuoteValid t (Term_bv_Quote t).
     Proof.
-      eapply Term_bv_ind; cbn; eauto using Term_bv_Quote_def_Valid, Term_bv_Quote_bin_Valid.
-      - intros v l o Heqo la; cbn.
+      induction n, t using Term_bv_rect; cbn;
+        eauto using Term_bv_Quote_def_Valid, Term_bv_Quote_bin_Valid.
+      - intros l o Heqo la; cbn.
         now rewrite bv.of_Z_unsigned.
-      - intros m <- e1 e2; cbn.
-        now apply Term_bv_Quote_def_Valid.
-      - intros m s <- e1 e2; cbn.
-        now apply Term_bv_Quote_def_Valid.
     Qed.
 
     Definition Term_to_CanonTerm {σ} : Term Σ σ -> CanonTerm σ :=
@@ -258,19 +253,19 @@ Module Type PartialEvaluationOn
       | _ => fun t => t
       end.
 
-      Lemma Term_to_CanonTerm_to_Term {σ t} : CanonTerm_to_Term (σ := σ) (Term_to_CanonTerm t) ≡ t.
-      Proof. 
-        destruct σ; try reflexivity.
-        cbn.
-        generalize (Term_bv_Quote_Valid t nil 1%positive).
-        destruct (Term_bv_Quote t []%list 1%positive).
-        intros H.
-        specialize (H eq_refl nil).
-        cbn in H.
-        rewrite app_nil_r in H.
-        now rewrite evalPol_norm_aux, H.
-      Qed.
-        
+    Lemma Term_to_CanonTerm_to_Term {σ t} : CanonTerm_to_Term (σ := σ) (Term_to_CanonTerm t) ≡ t.
+    Proof.
+      destruct σ; try reflexivity.
+      cbn.
+      generalize (Term_bv_Quote_Valid t nil 1%positive).
+      destruct (Term_bv_Quote t []%list 1%positive).
+      intros H.
+      specialize (H eq_refl nil).
+      cbn in H.
+      rewrite app_nil_r in H.
+      now rewrite evalPol_norm_aux, H.
+    Qed.
+
     (* Definition peval_plus (t1 t2 : CanonTerm Σ ty.int) : CanonTerm Σ ty.int := *)
     (*   match t1 , t2 with *)
     (*   | (t1 , v1)  , (t2 , v2)    => (match t1 , t2 with *)
