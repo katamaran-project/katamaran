@@ -31,7 +31,7 @@ An easy way to setup your system is to create a fresh opam switch, pin the Coq a
 ```
 opam switch create katamaran ocaml-base-compiler.4.14.2
 opam repo add coq-released https://coq.inria.fr/opam/released
-opam pin add coq 8.19.0
+opam pin add coq 8.19.2
 opam pin add coq-iris 4.3.0
 opam install coq-equations
 ```
