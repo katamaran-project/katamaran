@@ -201,6 +201,7 @@ Module Type TermsOn (Import TY : Types).
     Variable (pshiftl : forall n m (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec m)), P (term_binop bop.shiftl e1 e2)).
     Variable (pbvapp : forall n1 n2 (e1 : Term Σ (ty.bvec n1)) (e2 : Term Σ (ty.bvec n2)), P (term_binop bop.bvapp e1 e2)).
     Variable (pbvcons : forall n (e1 : Term Σ ty.bool) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvcons e1 e2)).
+    Variable (pupdate_subrange : forall {n s l : nat} (pf : IsTrue (s + l <=? n)) (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec l)), P (term_binop (@bop.update_vector_subrange _ _ s l pf) e1 e2)).
     Variable (pbvnot : forall n (e : Term Σ (ty.bvec n)), P (term_unop uop.bvnot e)).
     Variable (pnegate : forall n (e : Term Σ (ty.bvec n)), P (term_unop uop.negate e)).
     Variable (psext : forall n m (pf : IsTrue (m <=? n)) (e : Term Σ (ty.bvec m)), P (term_unop (uop.sext (p := pf)) e)).
@@ -222,6 +223,7 @@ Module Type TermsOn (Import TY : Types).
     | term_binop bop.shiftl s t             => pshiftl s t
     | term_binop bop.bvapp s t              => pbvapp s t
     | term_binop bop.bvcons s t             => pbvcons s t
+    | term_binop (bop.update_vector_subrange _ _) e t => pupdate_subrange _ e t
     | term_unop uop.bvnot t                 => pbvnot t
     | term_unop uop.negate t                => pnegate t
     | term_unop uop.sext t                  => psext _ _ t
@@ -249,6 +251,7 @@ Module Type TermsOn (Import TY : Types).
     Variable (pshiftl : forall n m (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec m)), P e1 -> P e2 -> P (term_binop bop.shiftl e1 e2)).
     Variable (pbvapp : forall n1 n2 (e1 : Term Σ (ty.bvec n1)) (e2 : Term Σ (ty.bvec n2)), P e1 -> P e2 -> P (term_binop bop.bvapp e1 e2)).
     Variable (pbvcons : forall n (e1 : Term Σ ty.bool) (e2 : Term Σ (ty.bvec n)), P e2 -> P (term_binop bop.bvcons e1 e2)).
+    Variable (pupdate_subrange : forall {n s l : nat} (pf : IsTrue (s + l <=? n)) (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec l)), P e1 -> P e2 -> P (term_binop (@bop.update_vector_subrange _ _ s l pf) e1 e2)).
     Variable (pbvnot : forall n (e : Term Σ (ty.bvec n)), P e -> P (term_unop uop.bvnot e)).
     Variable (pnegate : forall n (e : Term Σ (ty.bvec n)), P e -> P (term_unop uop.negate e)).
     Variable (psext : forall n m (pf : IsTrue (m <=? n)) (e : Term Σ (ty.bvec m)), P e -> P (term_unop (uop.sext (p := pf)) e)).
@@ -271,6 +274,7 @@ Module Type TermsOn (Import TY : Types).
         ltac:(intros; apply pshiftl; auto)
         ltac:(intros; apply pbvapp; auto)
         ltac:(intros; apply pbvcons; auto)
+        ltac:(intros; apply pupdate_subrange; auto)
         ltac:(intros; apply pbvnot; auto)
         ltac:(intros; apply pnegate; auto)
         ltac:(intros; apply psext; auto)

@@ -820,6 +820,25 @@ Module bv.
     Goal vector_subrange 8 8 (@of_nat 16 256) = one.      reflexivity. Abort.
   End Extract.
 
+  Section Update.
+    Definition update_vector_subrange {n} (start len : nat)
+      (p : IsTrue (start + len <=? n)) : bv n -> bv len -> bv n :=
+      match leview (start + len) n in LeView _ sl return bv sl -> bv len -> bv sl with
+      | is_le k =>
+          fun bits upd =>
+            let (xs, rest1) := appView (start + len) k bits in
+            let (rest2, _) := appView start len xs in
+            app (app rest2 upd) rest1
+      end.
+    #[global] Arguments update_vector_subrange {n} _ _ {_} _ _.
+
+    Goal update_vector_subrange 0 1 (@of_nat 2 0) (of_nat 1) = of_nat 1. reflexivity. Abort.
+    Goal update_vector_subrange 0 4 (@of_nat 4 0) (of_nat 15) = of_nat 15. reflexivity. Abort.
+    Goal update_vector_subrange 0 4 (@of_nat 8 15) (of_nat 0) = of_nat 0. reflexivity. Abort.
+    Goal update_vector_subrange 0 4 (@of_nat 8 255) (of_nat 0) = of_nat 240. reflexivity. Abort.
+    Goal update_vector_subrange 4 4 (@of_nat 8 255) (of_nat 0) = of_nat 15. reflexivity. Abort.
+  End Update.
+
   Section Shift.
     Definition shiftr {m n} (x : bv m) (y : bv n) : bv m :=
       of_Z (Z.shiftr (unsigned x) (unsigned y)).

@@ -227,6 +227,7 @@ Module Type PartialEvaluationOn
         (fun n m e1 e2 => Term_bv_Quote_def (term_binop bop.shiftl e1 e2))
         (fun n1 n2 e1 e2 => Term_bv_Quote_def (term_binop bop.bvapp e1 e2))
         (fun n e1 e2 => Term_bv_Quote_def (term_binop bop.bvcons e1 e2))
+        (fun n s l pf e1 e2 => Term_bv_Quote_def (term_binop (bop.update_vector_subrange s l) e1 e2))
         (fun n e => Term_bv_Quote_def (term_unop uop.bvnot e))
         (fun n e => Term_bv_Quote_def (term_unop uop.negate e))
         (fun n m pf e => Term_bv_Quote_def (term_unop uop.sext e))

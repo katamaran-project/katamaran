@@ -82,6 +82,22 @@ Section Equality.
       right (fun e => p (f_equal (@pr1 _ (fun _ => _)) (inj e)))
     end.
 
+  Definition f_equal3_dec {A1 A2 A3 B : Type} (f : A1 -> A2 -> A3 -> B) {x1 y1 : A1} {x2 y2 : A2} {x3 y3 : A3}
+             (inj : f x1 x2 x3 = f y1 y2 y3 -> @sigmaI _ _ (@sigmaI _ _ x1 x2) x3 = @sigmaI _ _ (@sigmaI _ _ y1 y2) y3)
+             (hyp1 : dec_eq x1 y1) (hyp2 : dec_eq x2 y2) (hyp3 : dec_eq x3 y3) :
+    dec_eq (f x1 x2 x3) (f y1 y2 y3) :=
+    match hyp1 , hyp2 , hyp3 with
+    | left  p , left q , left r => left (eq_trans
+                                           (f_equal2 (f x1) q r)
+                                           (f_equal (fun x => f x y2 y3) p))
+    | _       , right q , _ =>
+      right (fun e => q (f_equal (fun s => @pr2 _ (fun _ => _) (@pr1 _ (fun _ => _) s)) (inj e)))
+    | right p , _       , _ =>
+      right (fun e => p (f_equal (fun s => @pr1 _ (fun _ => _) (@pr1 _ (fun _ => _) s)) (inj e)))
+    | _       , _       , right r =>
+      right (fun e => r (f_equal (@pr2 _ (fun _ => _)) (inj e)))
+    end.
+
   Local Set Transparent Obligations.
 
   #[export] Instance Z_eqdec : EqDec Z := Z.eq_dec.

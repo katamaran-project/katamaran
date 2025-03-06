@@ -29,6 +29,7 @@
 From Coq Require Import
      Bool.Bool
      Strings.String
+     Arith.PeanoNat
      ZArith.BinInt.
 From Equations Require Import
      Equations.
@@ -80,6 +81,7 @@ Module bop.
     | bvxor {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvapp {m n}       : BinOp (bvec m) (bvec n) (bvec (m + n))
     | bvcons {m}        : BinOp (bool) (bvec m) (bvec (S m))
+    | update_vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} : BinOp (bvec n) (bvec l) (bvec n)
     | relop {σ} (r : RelOp σ) : BinOp σ σ bool
     .
     Set Transparent Obligations.
@@ -153,6 +155,22 @@ Module bop.
                    n (noConfusion_inv e))
       end.
 
+    Obligation Tactic := cbn; intros;
+      try solve
+        [let e := fresh in intro e; depelim e; try easy;
+         try progress cbn in * |-; congruence
+        |subst; repeat f_equal; apply IsTrue.proof_irrelevance
+        ].
+
+    #[derive(equations=no)] Equations update_vector_subrange_eq_dec (n1 n2 s1 s2 l1 l2 : nat) (p1 : IsTrue (s1 + l1 <=? n1)) (p2 : IsTrue (s2 + l2 <=? n2))  :
+      dec_eq (A := BinOpTel) ((bvec n1, bvec l1, bvec n1),update_vector_subrange s1 l1) ((bvec n2, bvec l2, bvec n2),update_vector_subrange s2 l2) :=
+    | n1 | n2 | s1 | s2 | l1 | l2 | p1 | p2 with eq_dec n1 n2, eq_dec s1 s2, eq_dec l1 l2 => {
+      | left _  | left _  | left _  => left _
+      | right _ | _       | _       => right _
+      | _       | right _ | _       => right _
+      | _       | _       | right _ => right _
+      }.
+
     Definition binoptel_eq_dec {σ1 σ2 σ3 τ1 τ2 τ3 : Ty}
       (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
       dec_eq (A := BinOpTel) ((σ1,σ2,σ3),op1) ((τ1,τ2,τ3),op2) :=
@@ -206,6 +224,13 @@ Module bop.
         f_equal_dec
           (fun n => ((bool, bvec n, bvec (S n)), bvcons))
           (ninv _ _) (eq_dec m n)
+      | @update_vector_subrange n1 s1 l1 p1, @update_vector_subrange n2 s2 l2 p2 =>
+          update_vector_subrange_eq_dec n1 n2 s1 s2 l1 l2 p1 p2
+        (* f_equal3_dec
+          (fun n s l =>
+             ((bvec n, bvec l, bvec n), @update_vector_subrange n s l _))
+          (ninv ((bvec n1, bvec l1, bvec n1), @update_vector_subrange n1 s1 l1 p1) ((bvec n2, bvec l2, bvec n2), @update_vector_subrange n2 s2 l2 p2))
+          (eq_dec n1 n2) (eq_dec s1 s2) (eq_dec l1 l2) *)
       | @relop σ op1 , @relop τ op2 =>
         binoptel_eq_dec_relop op1 op2
       | _           , _            => right (ninv _ _)
@@ -280,26 +305,27 @@ Module bop.
 
     Definition eval {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Val σ1 -> Val σ2 -> Val σ3 :=
       match op in BinOp σ1 σ2 σ3 return Val σ1 -> Val σ2 -> Val σ3 with
-      | plus       => Z.add
-      | times      => Z.mul
-      | minus      => Z.sub
-      | land       => Z.land
-      | and        => andb
-      | or         => fun v1 v2 => orb v1 v2
-      | pair       => Datatypes.pair
-      | cons       => List.cons
-      | shiftr     => fun v1 v2 => bv.shiftr v1 v2
-      | shiftl     => fun v1 v2 => bv.shiftl v1 v2
-      | append     => app
-      | bvadd      => fun v1 v2 => bv.add v1 v2
-      | bvsub      => fun v1 v2 => bv.sub v1 v2
-      | bvmul      => fun v1 v2 => bv.mul v1 v2
-      | bvand      => fun v1 v2 => bv.land v1 v2
-      | bvor       => fun v1 v2 => bv.lor v1 v2
-      | bvxor      => fun v1 v2 => bv.lxor v1 v2
-      | bvapp      => fun v1 v2 => bv.app v1 v2
-      | bvcons     => fun b bs => bv.cons b bs
-      | relop op   => eval_relop_val op
+      | plus                       => Z.add
+      | times                      => Z.mul
+      | minus                      => Z.sub
+      | land                       => Z.land
+      | and                        => andb
+      | or                         => fun v1 v2 => orb v1 v2
+      | pair                       => Datatypes.pair
+      | cons                       => List.cons
+      | shiftr                     => fun v1 v2 => bv.shiftr v1 v2
+      | shiftl                     => fun v1 v2 => bv.shiftl v1 v2
+      | append                     => app
+      | bvadd                      => fun v1 v2 => bv.add v1 v2
+      | bvsub                      => fun v1 v2 => bv.sub v1 v2
+      | bvmul                      => fun v1 v2 => bv.mul v1 v2
+      | bvand                      => fun v1 v2 => bv.land v1 v2
+      | bvor                       => fun v1 v2 => bv.lor v1 v2
+      | bvxor                      => fun v1 v2 => bv.lxor v1 v2
+      | bvapp                      => fun v1 v2 => bv.app v1 v2
+      | bvcons                     => fun b bs => bv.cons b bs
+      | update_vector_subrange s l => fun v1 v2 => bv.update_vector_subrange s l v1 v2
+      | relop op                   => eval_relop_val op
       end.
 
   End WithTypes.
