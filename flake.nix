@@ -33,12 +33,18 @@
 
       coqPackages819 = patchCoqPackages pkgs.coqPackages_8_19 iris43;
       coqPackages820 = patchCoqPackages pkgs.coqPackages_8_20 iris43;
+
+      mkDeps = pkg: pkgs.linkFarmFromDrvs "deps"
+        (pkg.buildInputs ++ pkg.nativeBuildInputs ++ pkg.propagatedBuildInputs);
     in
-    {
+    rec {
       packages = rec {
         default = coq819;
         coq819 = coqPackages819.katamaran;
         coq820 = coqPackages820.katamaran;
+
+        coq819-deps = mkDeps coq819;
+        coq820-deps = mkDeps coq820;
       };
     }
   );
