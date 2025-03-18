@@ -598,13 +598,12 @@ Module RefineExecOn
 
     Import PureSpec HeapSpec StoreSpec.
 
-    Lemma refine_exec_call_error :
-      RefineExecCall SHAL.exec_call_error SYMB.exec_call_error.
+    Lemma refine_exec_call_error_no_fuel :
+      RefineExecCall SHAL.exec_call_error_no_fuel SYMB.exec_call_error_no_fuel.
     Proof.
       iIntros (? ? ? ? cδ sδ) "#rδ".
-      unfold SHAL.exec_call_error, SYMB.exec_call_error.
-      iApply HeapSpec.refine_lift_purespec.
-      iApply PureSpec.refine_error.
+      unfold SHAL.exec_call_error_no_fuel, SYMB.exec_call_error_no_fuel.
+      iApply HeapSpec.refine_error.
     Qed.
 
     Lemma refine_exec_call_foreign :
@@ -642,7 +641,6 @@ Module RefineExecOn
       induction fuel; cbn; iIntros (? ? ? ? cδ sδ) "#rδ"; rsolve.
       - iApply refine_debug_call; auto.
       - destruct (CEnv f); rsolve.
-        iApply refine_exec_call_error. rsolve.
       - now iApply refine_debug_call.
       - destruct (CEnv f); rsolve.
         iApply StoreSpec.refine_exec_aux;

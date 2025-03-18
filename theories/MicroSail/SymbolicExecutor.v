@@ -147,6 +147,43 @@ Module Type SymbolicExecOn
             Some (MkDebugStm s pc' δ' h')
         end.
 
+    Record ErrorNoFuel (Σ : LCtx) : Type :=
+      MkErrorNoFuel
+        { error_no_fuel_call_parameter_types : PCtx;
+          error_no_fuel_call_return_type     : Ty;
+          error_no_fuel_call_function        :
+            𝑭 error_no_fuel_call_parameter_types
+              error_no_fuel_call_return_type;
+          error_no_fuel_call_arguments :
+            SStore error_no_fuel_call_parameter_types Σ;
+          error_no_fuel_pathcondition : PathCondition Σ;
+          error_no_fuel_heap           : SHeap Σ;
+        }.
+
+    #[export] Instance SubstErrorNoFuel : Subst ErrorNoFuel :=
+      fun Σ0 e Σ1 ζ01 =>
+        match e with
+        | MkErrorNoFuel f args pc h =>
+          MkErrorNoFuel f (subst args ζ01) (subst pc ζ01) (subst h ζ01)
+        end.
+
+    #[export] Instance SubstLawsErrorNoFuel : SubstLaws ErrorNoFuel.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance OccursCheckErrorNoFuel : OccursCheck ErrorNoFuel :=
+      fun Σ x xIn d =>
+        match d with
+        | MkErrorNoFuel f args pc h =>
+            args' <- occurs_check xIn args ;;
+            pc'   <- occurs_check xIn pc ;;
+            h'    <- occurs_check xIn h ;;
+            Some (MkErrorNoFuel f args' pc' h')
+        end.
+
   End DebugInfo.
 
   Definition PROP : TYPE :=
@@ -447,9 +484,14 @@ Module Type SymbolicExecOn
 
   Section WithSpec.
 
-    Definition exec_call_error : ExecCall :=
-      fun Δ τ f w args =>
-        SHeapSpec.lift_purespec (SPureSpec.error amsg.empty).
+    Definition exec_call_error_no_fuel : ExecCall :=
+      fun Δ τ f w args _ h =>
+        error (amsg.mk {|
+                   error_no_fuel_call_function := f;
+                   error_no_fuel_call_arguments := args;
+                   error_no_fuel_pathcondition := wco w;
+                   error_no_fuel_heap := h
+                 |}).
 
     Definition sexec_call_foreign : ExecCallForeign :=
       fun Δ τ f w args =>
@@ -496,7 +538,7 @@ Module Type SymbolicExecOn
             SHeapSpec.call_contract c (persist args0 θ1)
         | None   , 0 =>
             (* Out of fuel *)
-            exec_call_error f (persist args0 θ1)
+            exec_call_error_no_fuel f (persist args0 θ1)
         | None   , S n =>
             SStoreSpec.evalStoreSpec
               (SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call n) (FunDef f) (w := _))

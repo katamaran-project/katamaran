@@ -385,8 +385,8 @@ Module Type ShallowExecOn
 
   Section WithSpec.
 
-    Definition exec_call_error : ExecCall :=
-      fun Δ τ f args => CHeapSpec.lift_purespec CPureSpec.error.
+    Definition exec_call_error_no_fuel : ExecCall :=
+      fun Δ τ f args => CHeapSpec.error.
 
     Definition cexec_call_foreign : ExecCallForeign :=
       fun Δ τ f args =>
@@ -415,7 +415,7 @@ Module Type ShallowExecOn
             CHeapSpec.call_contract c args
         | None   , 0 =>
             (* Out of fuel *)
-            exec_call_error f args
+            exec_call_error_no_fuel f args
         | None   , S n =>
             CStoreSpec.evalStoreSpec
               (CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call n) (FunDef f))
@@ -431,7 +431,7 @@ Module Type ShallowExecOn
 
     Import (hints) CStoreSpec.
 
-    Lemma mon_exec_call_error : MonotonicExecCall exec_call_error.
+    Lemma mon_exec_call_error_no_fuel : MonotonicExecCall exec_call_error_no_fuel.
     Proof. typeclasses eauto. Qed.
 
     Lemma mon_cexec_call_foreign : MonotonicExecCallForeign cexec_call_foreign.
