@@ -1436,6 +1436,21 @@ Module Type RefinementMonadsOn
         CHeapSpec.bind w (SHeapSpec.bind (w := w)) _ | (RefineCompat _ _ _ SHeapSpec.bind _) :=
       MkRefineCompat HeapSpec.refine_bind.
 
+    Lemma refine_error `{RA : Rel SA CA} cm {w} :
+      ⊢ ℛ⟦RMsg _ (RHeapSpec RA)⟧ cm (SHeapSpec.error (w := w)).
+    Proof.
+      iIntros (msg cΦ sΦ) "_ %ch %sh rh".
+      unfold RProp; now cbn.
+    Qed.
+
+    #[export] Program Instance refine_compat_error `{RA : Rel AT A} {w : World} {cm : CHeapSpec A} {msg} :
+      RefineCompat (RHeapSpec RA) cm w (SHeapSpec.error (w := w) msg) emp :=
+      MkRefineCompat _.
+    Next Obligation.
+      iIntros (AT A RA w cm msg) "_".
+      iApply refine_error.
+    Qed.
+
     Lemma refine_angelic x σ {w} :
       ⊢ ℛ⟦RHeapSpec (RVal σ)⟧
         (CHeapSpec.angelic σ) (SHeapSpec.angelic (w := w) x σ).

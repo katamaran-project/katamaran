@@ -834,6 +834,9 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Notation "ma ;; mb" := (bind ma (fun _ => mb)).
     End notations.
 
+    Definition error {A} : CHeapSpec A :=
+      fun _ _ => FALSE.
+
     Definition debug {A} : CHeapSpec A -> CHeapSpec A :=
       fun m => m.
 
@@ -972,6 +975,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MA ==> MHeapSpec RB) f ->
       Monotonic (MHeapSpec RB) (bind m f).
     Proof. intros rm rf. eapply mon_bind'; eauto. Qed.
+
+    #[export] Instance mon_error `{MA : relation A} :
+      Monotonic (MHeapSpec MA) error.
+    Proof. now unfold error. Qed.
 
     #[export] Instance mon_debug `{MA : relation A} m :
       Monotonic (MHeapSpec MA) m -> Monotonic (MHeapSpec MA) (debug m).

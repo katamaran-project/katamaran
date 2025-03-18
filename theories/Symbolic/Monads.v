@@ -963,6 +963,9 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Notation "x ⟨ ω ⟩" := (persist x ω).
     End notations.
 
+    Definition error {A} : ⊢ (SHeap -> AMessage) -> SHeapSpec A :=
+      fun w msg Φ h => SymProp.error (msg h).
+
     Definition angelic (x : option LVar) : ⊢ ∀ σ, SHeapSpec (STerm σ) :=
       fun w σ => lift_purespec (SPureSpec.angelic x σ).
     #[global] Arguments angelic x [w] σ Φ : rename.
