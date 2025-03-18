@@ -755,7 +755,7 @@ Module IrisBinaryWP
       iIntros (v1 δ1') "H". now iApply (semTWP_Steps with "[Hres] H").
     Qed.
 
-    Lemma semWP2_semWP_semTWP {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
+    Lemma semWP2_anaglyph {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q δ1 δ2,
           @semWP _ sailGS2_sailGS_left _ _ s1 (λ v1 δ1,
               @semTWP _ sailGS2_sailGS_right _ _ s2
