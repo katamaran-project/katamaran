@@ -17,6 +17,6 @@ jobs:
           name: katamaran
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - name: Build dependencies
-        run: nix build .#${{ matrix.coq }}-deps
+        run: nix build --print-out-paths .#${{ matrix.coq }}-deps | cachix push katamaran
       - name: Build package
         run: nix build -L .#${{ matrix.coq }}
