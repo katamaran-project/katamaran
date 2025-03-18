@@ -1057,11 +1057,8 @@ Module inv := invariants.
       iPoseProof (femtokernel_init_safe is_mmio with "[-]") as "H".
       {
         Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
-        repeat iDestruct "H'" as "(? & H')".  iFrame "∗ #".
-        rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
-        repeat (iRename select (_ ↦ _)%I into "Hp";
-                iPoseProof (bi.exist_intro with "Hp") as "?").
-        now iFrame.
+        iFrame "∗ #". rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
+        repeat iDestruct "H'" as "($ & H')".
       }
       iApply (semWP_mono with "H"). by iIntros ([] _) "_".
     - iIntros "Hmem".
