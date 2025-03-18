@@ -2027,18 +2027,25 @@ Module Type SymPropOn
       Notation "x" := (eterm_var x%string) (at level 1, only printing).
       Notation "s = t" := (eformula_relop bop.eq s t) (only printing).
       Notation "s <> t" := (eformula_relop bop.neq s t) (only printing).
+      Notation "s <= t" := (eformula_relop bop.le s t) (only printing).
+      Notation "s < t" := (eformula_relop bop.lt s t) (only printing).
+
       Notation "x" := (eterm_val _ x) (at level 1, only printing).
-      Notation "F ∧ P" := (eassertk F P) (only printing).
-      Notation "F → P" := (eassumek F P) (only printing).
-      Notation "'∃' x '∷' σ , P" := (eangelicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'∃'  x '∷' σ ,  '/' P").
-      Notation "'∀' x '∷' σ , P" := (edemonicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'∀'  x '∷' σ ,  '/' P").
+      Notation "F ∧ P" := (eassertk F P) (only printing, format "'[v' F  ∧ '/ ' P ']'").
+      Notation "F → P" := (eassumek F P) (only printing, format "'[v' F  → '/ ' P ']'").
+      Notation "'∃' x '∷' σ , P" := (eangelicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'[v' '∃'  x '∷' σ ,  '/' P ']'").
+      Notation "'∀' x '∷' σ , P" := (edemonicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'[v' '∀'  x '∷' σ ,  '/' P ']'").
       Notation "x ↦ t ∧ k" := (eassert_vareq x _ t k) (at level 99, right associativity, only printing).
       Notation "x ↦ t → k" := (eassume_vareq x _ t k) (at level 99, right associativity, only printing).
       Notation "P ∧ Q" := (edemonic_binary P Q) (at level 80, right associativity, only printing).
       Notation "P ∧ Q" := (eformula_and P Q) (at level 80, right associativity, only printing).
       Notation "P ∨ Q" := (eangelic_binary P Q) (at level 85, right associativity, only printing).
       Notation "P ∨ Q" := (eformula_or P Q) (at level 85, right associativity, only printing).
+      Notation "⊤" := (eblock) (only printing).
+      Notation "⊥" := (eerror) (only printing).
 
+      Notation "e1 + e2"  := (eterm_binop bop.plus e1 e2) (only printing).
+      Notation "e1 * e2"  := (eterm_binop bop.times e1 e2) (only printing).
       Notation "e1 +ᵇ e2" := (eterm_binop bop.bvadd e1 e2) (only printing).
       Notation "e1 -ᵇ e2" := (eterm_binop bop.bvsub e1 e2) (only printing).
       Notation "e1 *ᵇ e2" := (eterm_binop bop.bvmul e1 e2) (only printing).
