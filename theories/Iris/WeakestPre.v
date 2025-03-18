@@ -56,10 +56,10 @@ Module Type IrisWeakestPre
   (Import IP   : IrisParameters B)
   (Import IR   : IrisResources B PROG SEM IPre IP).
 
-  Definition semWP {Σ} `{sG : sailGS Σ} [Γ τ] (s : Stm Γ τ)
-    (Q : Post Γ τ) (δ : CStore Γ) : iProp Σ :=
+  Definition semWP {Σ} `{sG : sailGS Σ} [Γ τ] (δ : CStore Γ) (s : Stm Γ τ)
+    (Q : Post Γ τ) : iProp Σ :=
     WP {| conf_stm := s; conf_store := δ |} {{ v, Q (valconf_val v) (valconf_store v) }}.
-  Global Arguments semWP {Σ} {sG} [Γ] [τ] s%_exp Q%_I δ.
+  Global Arguments semWP {Σ} {sG} [Γ] [τ] δ s%_exp Q%_I.
 
   Ltac fold_semWP :=
     first
@@ -68,13 +68,13 @@ Module Type IrisWeakestPre
           (wp NotStuck top
               {| conf_stm := ?s; conf_store := ?δ |}
               (fun v => ?Q (valconf_val v) (valconf_store v)))
-        with (semWP s Q δ)
+        with (semWP δ s Q)
       | progress
           change_no_check
           (wp NotStuck top
               {| conf_stm := ?s; conf_store := ?δ |}
               ?Q)
-        with (semWP s (fun v δ' => Q (MkValConf _ v δ')) δ);
+        with (semWP δ s (fun v δ' => Q (MkValConf _ v δ')));
         try (progress (cbn [valconf_val valconf_store]))
       ].
 
@@ -82,16 +82,16 @@ Module Type IrisWeakestPre
 
     Context `{sG : sailGS Σ}.
 
-    Lemma semWP_unfold [Γ τ] (s : Stm Γ τ)
-      (Q : Post Γ τ) (δ : CStore Γ) :
-      semWP s Q δ ⊣⊢
+    Lemma semWP_unfold [Γ τ] (δ : CStore Γ) (s : Stm Γ τ)
+      (Q : Post Γ τ) :
+      semWP δ s Q ⊣⊢
         match stm_to_val s with
         | Some v => |={⊤}=> Q v δ
         | None   => ∀ (γ1 : RegStore) (μ1 : Memory),
                        regs_inv γ1 ∗ mem_inv μ1 ={⊤,∅}=∗
                        (∀ (s2 : Stm Γ τ) (δ2 : CStore Γ) (γ2 : RegStore) (μ2 : Memory),
                           ⌜⟨ γ1, μ1, δ , s ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩⌝ ∗ £ 1 ={∅}▷=∗
-                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semWP s2 Q δ2)
+                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semWP δ2 s2 Q)
         end.
     Proof.
       unfold semWP. rewrite wp_unfold. unfold wp_pre. cbn.
@@ -123,8 +123,8 @@ Module Type IrisWeakestPre
                        regs_inv γ1 ∗ mem_inv μ1 ={⊤,∅}=∗
                        (∀ (s2 : Stm Γ τ) (δ2 : CStore Γ) (γ2 : RegStore) (μ2 : Memory),
                           ⌜⟨ γ1, μ1, δ , s ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩⌝ ={∅}▷=∗
-                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semWP s2 Q δ2)
-        end ⊢ semWP s Q δ.
+                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semWP δ2 s2 Q)
+        end ⊢ semWP δ s Q.
     Proof.
       rewrite semWP_unfold.
       destruct (stm_to_val s); first easy.
@@ -137,7 +137,7 @@ Module Type IrisWeakestPre
     Qed.
 
     Lemma semWP_mono [Γ τ] (s : Stm Γ τ) (P Q : Post Γ τ) (δ : CStore Γ) :
-      ⊢ (semWP s P δ -∗ (∀ v δ, P v δ -∗ Q v δ) -∗ semWP s Q δ).
+      ⊢ (semWP δ s P -∗ (∀ v δ, P v δ -∗ Q v δ) -∗ semWP δ s Q).
     Proof.
       unfold semWP. iIntros "WP PQ".
       iApply (wp_strong_mono with "WP"); auto.
@@ -146,7 +146,7 @@ Module Type IrisWeakestPre
     Qed.
 
     Lemma fupd_semWP {Γ τ} E (δ : CStore Γ) (s : Stm Γ τ) Φ :
-      (|={E}=> semWP s Φ δ) ⊢ semWP s Φ δ.
+      (|={E}=> semWP δ s Φ) ⊢ semWP δ s Φ.
     Proof.
       unfold semWP. iIntros "WP".
       iApply fupd_wp. iMod (fupd_mask_subseteq E) as "Hclose"; first auto.
@@ -154,23 +154,23 @@ Module Type IrisWeakestPre
     Qed.
 
     Lemma semWP_fupd {Γ τ} (δ : CStore Γ) (s : Stm Γ τ) Φ :
-      semWP s (λ v δ, |={⊤}=> Φ v δ) δ ⊢ semWP s Φ δ.
+      semWP δ s (λ v δ, |={⊤}=> Φ v δ) ⊢ semWP δ s Φ.
     Proof.
       unfold semWP. iIntros "WP".
       now iApply wp_fupd.
     Qed.
 
     Lemma semWP_val {Γ τ} (v : Val τ) (Q : Post Γ τ) (δ : CStore Γ) :
-      semWP (stm_val τ v) Q δ ⊣⊢ |={⊤}=> Q (inl v) δ.
+      semWP δ (stm_val τ v) Q ⊣⊢ |={⊤}=> Q (inl v) δ.
     Proof. rewrite semWP_unfold. reflexivity. Qed.
 
     Lemma semWP_fail {Γ τ s} (Q : Post Γ τ) (δ : CStore Γ) :
-      semWP (stm_fail _ s) Q δ ⊣⊢ |={⊤}=> Q (inr s) δ.
+      semWP δ (stm_fail _ s) Q ⊣⊢ |={⊤}=> Q (inr s) δ.
     Proof. rewrite semWP_unfold. reflexivity. Qed.
 
     Lemma semWP_exp {Γ τ} (e : Exp Γ τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
-          Q (inl (eval e δ)) δ -∗ semWP (stm_exp e) Q δ.
+          Q (inl (eval e δ)) δ -∗ semWP δ (stm_exp e) Q.
     Proof.
       iIntros (Q δ1) "P". rewrite <-semWP_unfold_nolc. cbn.
       iIntros (γ1 μ1) "state_inv".
@@ -183,17 +183,17 @@ Module Type IrisWeakestPre
 
     Lemma semWP_block {Γ τ Δ} (δΔ : CStore Δ) (s : Stm (Γ ▻▻ Δ) τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
-          semWP s (fun v δ1 => Q v (env.drop Δ δ1)) (δ ►► δΔ) -∗
-          semWP (stm_block δΔ s) Q δ.
+          semWP (δ ►► δΔ) s (fun v δ1 => Q v (env.drop Δ δ1)) -∗
+          semWP δ (stm_block δΔ s) Q.
     Proof.
       iIntros (Q). iRevert (δΔ s). iLöb as "IH". iIntros (δΔ k δΓ) "WPk".
-      rewrite (semWP_unfold (stm_block δΔ k)). cbn.
+      rewrite (semWP_unfold _ (stm_block δΔ k)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2) "(%step & Hcred)". destruct (smallinvstep step); cbn.
       - rewrite !semWP_val. rewrite env.drop_cat. by iFrame.
       - rewrite !semWP_fail. rewrite env.drop_cat. by iFrame.
-      - rewrite (semWP_unfold k). rewrite (stm_val_stuck H).
+      - rewrite (semWP_unfold _ k). rewrite (stm_val_stuck H).
         iSpecialize ("WPk" $! γ1 μ1 with "state_inv").
         iMod "Hclose". iMod "WPk" as "WPk".
         iSpecialize ("WPk" $! _ _ _ _ with "[$Hcred]"); first easy.
@@ -204,17 +204,17 @@ Module Type IrisWeakestPre
 
     Lemma semWP_call_frame {Γ τ Δ} (δΔ : CStore Δ) (s : Stm Δ τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
-          semWP s (fun v _ => Q v δ) δΔ -∗
-          semWP (stm_call_frame δΔ s) Q δ.
+          semWP δΔ s (fun v _ => Q v δ) -∗
+          semWP δ (stm_call_frame δΔ s) Q.
     Proof.
       iIntros (Q δΓ). iRevert (δΔ s). iLöb as "IH". iIntros (δΔ s) "WPs".
-      rewrite (semWP_unfold (stm_call_frame δΔ s)). cbn.
+      rewrite (semWP_unfold _ (stm_call_frame δΔ s)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2) "(%step & Hcred)". destruct (smallinvstep step); cbn.
       - rewrite !semWP_val. by iFrame.
       - rewrite !semWP_fail. by iFrame.
-      - rewrite (semWP_unfold s). rewrite (stm_val_stuck H).
+      - rewrite (semWP_unfold _ s). rewrite (stm_val_stuck H).
         iSpecialize ("WPs" $! γ1 μ1 with "state_inv").
         iMod "Hclose". iMod "WPs".
         iSpecialize ("WPs" $! _ _ _ _ with "[$Hcred]"); first easy.
@@ -225,8 +225,8 @@ Module Type IrisWeakestPre
 
     Lemma semWP_call_inline_later {Γ τ Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ) :
       ⊢ ∀ (Q : Post Γ τ) (δΓ : CStore Γ),
-          ▷ semWP (FunDef f) (fun vτ _ => Q vτ δΓ) (evals es δΓ) -∗
-          semWP (stm_call f es) Q δΓ.
+          ▷ semWP (evals es δΓ) (FunDef f) (fun vτ _ => Q vτ δΓ) -∗
+          semWP δΓ (stm_call f es) Q.
     Proof.
       iIntros (Q δΓ) "wpbody". rewrite <-(semWP_unfold_nolc (stm_call f es)). cbn.
       iIntros (γ1 μ1) "state_inv".
@@ -238,22 +238,22 @@ Module Type IrisWeakestPre
 
     Lemma semWP_call_inline {Γ τ Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ) :
       ⊢ ∀ (Q : Post Γ τ) (δΓ : CStore Γ),
-          semWP (FunDef f) (fun vτ _ => Q vτ δΓ) (evals es δΓ) -∗
-          semWP (stm_call f es) Q δΓ.
+          semWP (evals es δΓ) (FunDef f) (fun vτ _ => Q vτ δΓ) -∗
+          semWP δΓ (stm_call f es) Q.
     Proof. iIntros (Q δΓ) "wpbody". by iApply semWP_call_inline_later. Qed.
 
     Lemma semWP_bind {Γ τ σ} (s : Stm Γ σ) (k : Val σ → Stm Γ τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
-          semWP s (fun v => semWP (lift_cnt k v) Q) δ -∗ semWP (stm_bind s k) Q δ.
+          semWP δ s (fun v δ => semWP δ (lift_cnt k v) Q) -∗ semWP δ (stm_bind s k) Q.
     Proof.
       iIntros (Q). iRevert (s). iLöb as "IH". iIntros (s δ) "WPs".
-      rewrite (semWP_unfold (stm_bind s k)). cbn.
+      rewrite (semWP_unfold _ (stm_bind s k)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2) "(%step & Hcred)". destruct (smallinvstep step); cbn.
       - rewrite !semWP_val. do 3 iModIntro. iMod "Hclose". iMod "WPs". by iFrame.
       - rewrite !semWP_fail. do 3 iModIntro. iMod "Hclose". iMod "WPs". by iFrame.
-      - rewrite (semWP_unfold s). rewrite (stm_val_stuck H).
+      - rewrite (semWP_unfold _ s). rewrite (stm_val_stuck H).
         iSpecialize ("WPs" $! γ1 μ1 with "state_inv").
         iMod "Hclose". iMod "WPs".
         iSpecialize ("WPs" $! _ _ _ _ with "[$Hcred]"); first easy.
@@ -264,11 +264,11 @@ Module Type IrisWeakestPre
 
     Lemma semWP_let {Γ τ x σ} (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
-          semWP s (fun v1 δ1 => match v1 with
-                                | inl v1 => semWP k (fun v2 δ2 => Q v2 (env.tail δ2)) δ1.[x∷σ ↦ v1]
-                                | inr m1 => semWP (of_ival (inr m1)) Q δ1
-                                end) δ -∗
-          semWP (let: x ∷ σ := s in k) Q δ.
+          semWP δ s (fun v1 δ1 => match v1 with
+                                | inl v1 => semWP δ1.[x∷σ ↦ v1] k (fun v2 δ2 => Q v2 (env.tail δ2))
+                                | inr m1 => semWP δ1 (of_ival (inr m1)) Q
+                                end) -∗
+          semWP δ (let: x ∷ σ := s in k) Q.
     Proof.
       iIntros (Q δΓ) "WPs". rewrite <-(semWP_unfold_nolc (stm_let x σ s k)). cbn.
       iIntros (γ1 μ1) "state_inv".
@@ -283,10 +283,10 @@ Module Type IrisWeakestPre
 
     Lemma semWP_seq {Γ τ σ} (s : Stm Γ σ) (k : Stm Γ τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
-          semWP s (λ v δ, match v with
-                          | inl _ => semWP k Q δ
-                          | inr m => semWP (of_ival (inr m)) Q δ
-                          end) δ -∗ semWP (s;;k) Q δ.
+          semWP δ s (λ v δ, match v with
+                          | inl _ => semWP δ k Q
+                          | inr m => semWP δ (of_ival (inr m)) Q
+                          end) -∗ semWP δ (s;;k) Q.
     Proof.
       iIntros (Q δ) "WPs". rewrite <-(semWP_unfold_nolc (stm_seq s k)). cbn.
       iIntros (γ1 μ1) "state_inv".
@@ -300,9 +300,9 @@ Module Type IrisWeakestPre
 
     Lemma semWP_assertk {Γ τ} (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
-          (⌜eval e1 δ = true⌝ → semWP k Q δ) -∗
-          (⌜eval e1 δ = false⌝ → semWP (fail (eval e2 δ)) Q δ) -∗
-          semWP (stm_assertk e1 e2 k) Q δ.
+          (⌜eval e1 δ = true⌝ → semWP δ k Q) -∗
+          (⌜eval e1 δ = false⌝ → semWP δ (fail (eval e2 δ)) Q) -∗
+          semWP δ (stm_assertk e1 e2 k) Q.
     Proof.
       iIntros (Q δ) "WPtrue WPfalse". rewrite <-(semWP_unfold_nolc (stm_assertk e1 e2 k)). cbn.
       iIntros (γ1 μ1) "state_inv".
@@ -315,7 +315,7 @@ Module Type IrisWeakestPre
     Lemma semWP_read_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
           (∃ v : Val τ, reg_pointsTo reg v ∗ (reg_pointsTo reg v -∗ Q (inl v) δ)) -∗
-          semWP (stm_read_register reg) Q δ.
+          semWP δ (stm_read_register reg) Q.
     Proof.
       iIntros (Q δ) "[% [Hreg HP]]". rewrite <-semWP_unfold_nolc. cbn.
       iIntros (γ1 μ1) "[Hregs Hmem]".
@@ -329,7 +329,7 @@ Module Type IrisWeakestPre
     Lemma semWP_write_register {Γ τ} (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
           (∃ v : Val τ, reg_pointsTo reg v ∗ (reg_pointsTo reg (eval e δ) -∗ Q (inl (eval e δ)) δ)) -∗
-          semWP (stm_write_register reg e) Q δ.
+          semWP δ (stm_write_register reg e) Q.
     Proof.
       iIntros (Q δ) "[% [Hreg HP]]". rewrite <-semWP_unfold_nolc. cbn.
       iIntros (γ1 μ1) "[Hregs Hmem]".
@@ -342,20 +342,20 @@ Module Type IrisWeakestPre
 
     Lemma semWP_assign {Γ τ x} (xInΓ : x∷τ ∈ Γ) (s : Stm Γ τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
-          semWP s (λ (a : IVal τ) (δ0 : CStore Γ), match a with
+          semWP δ s (λ (a : IVal τ) (δ0 : CStore Γ), match a with
                                                    | inl a => Q (inl a) (δ0 ⟪ x ↦ a ⟫)
                                                    | inr m => Q (inr m) δ0
-                                                   end) δ -∗
-          semWP (stm_assign x s) Q δ.
+                                                   end) -∗
+          semWP δ (stm_assign x s) Q.
     Proof.
       iIntros (Q). iRevert (s). iLöb as "IH". iIntros (s δ) "WPs".
-      rewrite (semWP_unfold (stm_assign x s)). cbn.
+      rewrite (semWP_unfold _ (stm_assign x s)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2) "(%step & Hcred)". destruct (smallinvstep step); cbn.
       - rewrite !semWP_val. by iFrame.
       - rewrite !semWP_fail. by iFrame.
-      - rewrite (semWP_unfold s). rewrite (stm_val_stuck H).
+      - rewrite (semWP_unfold _ s). rewrite (stm_val_stuck H).
         iSpecialize ("WPs" $! γ1 μ1 with "state_inv").
         iMod "Hclose". iMod "WPs".
         iSpecialize ("WPs" $! _ _ _ _ with "[$Hcred]"); first easy.
@@ -367,17 +367,16 @@ Module Type IrisWeakestPre
     Lemma semWP_pattern_match {Γ τ σ} (s : Stm Γ σ) (pat : Pattern σ)
       (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
-      semWP s
+      semWP δ s
         (fun vσ δ1 =>
            match vσ with
            | inl vσ =>
                let (pc,δpc) := pattern_match_val pat vσ in
-               semWP (rhs pc)
+               semWP (δ1 ►► δpc) (rhs pc)
                  (fun vτ δ2 => Q vτ (env.drop (PatternCaseCtx pc) δ2))
-                 (δ1 ►► δpc)
            | inr m => |={⊤}=> Q (inr m) δ1
-           end) δ -∗
-      semWP (stm_pattern_match s pat rhs) Q δ.
+           end) -∗
+      semWP δ (stm_pattern_match s pat rhs) Q.
     Proof.
       iIntros (Q δΓ) "WPs". rewrite <-(semWP_unfold_nolc (stm_pattern_match s pat rhs)). cbn.
       iIntros (γ1 μ1) "state_inv".
@@ -398,10 +397,10 @@ Module Type IrisWeakestPre
           ⌜ ForeignCall f (evals es δ) res γ γ' μ μ' ⌝
            ={∅}▷=∗
            |={∅,⊤}=> (regs_inv γ' ∗ mem_inv μ') ∗
-                      semWP (match res with inr v => stm_val _ v
+                      semWP δ (match res with inr v => stm_val _ v
                                        | inl s => stm_fail _ s
-                             end) Q δ)) -∗
-        semWP (stm_foreign f es) Q δ.
+                             end) Q)) -∗
+        semWP δ (stm_foreign f es) Q.
     Proof.
       iIntros "H". rewrite <-semWP_unfold_nolc. cbn. iIntros (γ1 μ1) "state_inv".
       iMod ("H" $! γ1 μ1 with "[$]") as "H". iModIntro.
@@ -409,7 +408,7 @@ Module Type IrisWeakestPre
     Qed.
 
     Lemma semWP_debugk {Γ τ} (s : Stm Γ τ) :
-      ⊢ ∀ Q δ, semWP s Q δ -∗ semWP (stm_debugk s) Q δ.
+      ⊢ ∀ Q δ, semWP δ s Q -∗ semWP δ (stm_debugk s) Q.
     Proof.
       iIntros (Q δ) "WPs". rewrite <-(semWP_unfold_nolc (stm_debugk s)). cbn.
       iIntros (γ1 μ1) "state_inv".
@@ -419,7 +418,7 @@ Module Type IrisWeakestPre
     Qed.
 
     Lemma semWP_lemmak {Γ τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (s : Stm Γ τ) :
-      ⊢ ∀ Q δ, semWP s Q δ -∗ semWP (stm_lemmak l es s) Q δ.
+      ⊢ ∀ Q δ, semWP δ s Q -∗ semWP δ (stm_lemmak l es s) Q.
     Proof.
       iIntros (Q δ) "WPs". rewrite <-(semWP_unfold_nolc (stm_lemmak l es s)). cbn.
       iIntros (γ1 μ1) "state_inv".
@@ -433,15 +432,15 @@ Module Type IrisWeakestPre
   Module wptactics.
     Ltac kEval :=
       match goal with
-      | |- environments.envs_entails ?ctx (semWP ?s ?post ?store) =>
+      | |- environments.envs_entails ?ctx (semWP ?store ?s ?post) =>
           let s' := eval compute - [Val] in s in
           let store' := eval compute - [Val] in store in
-          change_no_check (environments.envs_entails ctx (semWP s' post store'))
+          change_no_check (environments.envs_entails ctx (semWP store' s' post))
       end.
 
     Ltac kStep :=
       match goal with
-      | |- environments.envs_entails ?ctx (semWP ?stm ?post ?store) =>
+      | |- environments.envs_entails ?ctx (semWP ?store ?stm ?post) =>
           match stm with
           | stm_val ?τ ?v => iApply semWP_val
           | stm_exp ?e => iApply (semWP_exp e)

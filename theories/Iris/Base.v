@@ -56,7 +56,7 @@ Module Type IrisTotalPartialWeakestPre
     Context `{sG : sailGS Σ}.
 
     Lemma semTWP_semWP {Γ τ} {s : Stm Γ τ} {δ Q} : 
-      semTWP s Q δ ⊢ semWP s Q δ.
+      semTWP δ s Q ⊢ semWP δ s Q.
     Proof. iApply twp_wp. Qed.
   End WithSailGS.
 End IrisTotalPartialWeakestPre.

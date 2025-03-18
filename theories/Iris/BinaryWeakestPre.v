@@ -155,13 +155,13 @@ Module IrisBinaryWP
       (λ δ1 δ2 s1 s2 Q,
         ∀ γ21 μ21,
           regs_inv (srGS := srGS_right) γ21 ∗ mem_inv (mG := mG_right) μ21 -∗
-            semWP (sG := sG_left) s1 (λ v1 δ1',
+            semWP (sG := sG_left) δ1 s1 (λ v1 δ1',
               ∃ γ22 μ22 δ2' s2' v2,
                 ⌜⟨ γ21, μ21, δ2, s2 ⟩ --->* ⟨ γ22, μ22, δ2', s2' ⟩⌝
                 ∗ ⌜stm_to_val s2' = Some v2⌝
                 ∗ regs_inv (srGS := srGS_right) γ22 ∗ mem_inv (mG := mG_right) μ22
                 ∗ Q v1 δ1' v2 δ2'
-          ) δ1)%I.
+          ))%I.
 
     Lemma semWP2_mono [Γ1 Γ2 τ] (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
       (Q1 Q2 : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
@@ -724,8 +724,8 @@ Module IrisBinaryWP
 
     Lemma semWP2_focus {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q1 Q2 Q δ1 δ2,
-          @semTWP _ sailGS2_sailGS_left _ _ s1 Q1 δ1 -∗
-          @semTWP _ sailGS2_sailGS_right _ _ s2 Q2 δ2 -∗
+          @semTWP _ sailGS2_sailGS_left _ _ δ1 s1 Q1 -∗
+          @semTWP _ sailGS2_sailGS_right _ _ δ2 s2 Q2 -∗
           (∀ v1 δ1 v2 δ2, Q1 v1 δ1 ∗ Q2 v2 δ2 -∗ Q v1 δ1 v2 δ2) -∗
           semWP2 δ1 δ2 s1 s2 Q.
     Proof.
@@ -744,9 +744,9 @@ Module IrisBinaryWP
 
     Lemma semWP2_focus_seq {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q δ1 δ2,
-          @semTWP _ sailGS2_sailGS_left _ _ s1 (λ v1 δ1,
-              @semTWP _ sailGS2_sailGS_right _ _ s2
-                (λ v2 δ2, Q v1 δ1 v2 δ2) δ2) δ1 -∗
+          @semTWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1,
+              @semTWP _ sailGS2_sailGS_right _ _ δ2 s2
+                (λ v2 δ2, Q v1 δ1 v2 δ2)) -∗
           semWP2 δ1 δ2 s1 s2 Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
@@ -757,9 +757,9 @@ Module IrisBinaryWP
 
     Lemma semWP2_anaglyph {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q δ1 δ2,
-          @semWP _ sailGS2_sailGS_left _ _ s1 (λ v1 δ1,
-              @semTWP _ sailGS2_sailGS_right _ _ s2
-                      (λ v2 δ2, Q v1 δ1 v2 δ2) δ2) δ1 -∗
+          @semWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1,
+              @semTWP _ sailGS2_sailGS_right _ _ δ2 s2
+                      (λ v2 δ2, Q v1 δ1 v2 δ2)) -∗
           semWP2 δ1 δ2 s1 s2 Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".

@@ -108,10 +108,10 @@ Section Soundness.
      True, otherwise we do POST v δ. *)
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
-    PRE -∗ semWP s (λ v δ, match v with
+    PRE -∗ semWP δ s (λ v δ, match v with
                            | inl v => POST v δ
                            | inr m => True%I
-                           end) δ.
+                           end).
   (* always modality needed? perhaps not because sail not higher-order? *)
   Global Arguments semTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
 
@@ -546,7 +546,7 @@ Module Type IrisAdequacy
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : forall `{sailGS Σ}, IVal σ -> CStore Γ -> iProp Σ} (φ : Prop):
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     (forall `{sailGS Σ'},
-        mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP s Q δ
+        mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP δ s Q
           ∗ (mem_inv μ' ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.

@@ -76,20 +76,20 @@ Section Loop.
   Context `{sg : sailGS Σ}.
   Import env.notations.
 
-  Definition semWP' {Γ τ} (s : Stm Γ τ) (Q : Val τ -> CStore Γ -> iProp Σ)
-    (δ : CStore Γ) : iProp Σ :=
-    semWP s (λ v δ, match v with
+  Definition semWP' {Γ τ} (δ : CStore Γ) (s : Stm Γ τ)
+    (Q : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
+    semWP δ s (λ v δ, match v with
                     | inl v => Q v δ
                     | inr m => True%I
-                    end) δ.
+                    end).
 
   Lemma semWP'_semWP {Γ τ} {s : Stm Γ τ} {Q POST} {δ} :
     (∀ v δ, match v with
             | inl v => Q v δ
             | inr m => True
             end -∗ POST v δ) -∗
-    semWP' s Q δ -∗
-    semWP s POST δ.
+    semWP' δ s Q -∗
+    semWP δ s POST.
   Proof.
     iIntros "H Hwp". unfold semWP'. iApply (semWP_mono with "Hwp"). auto.
   Qed.
@@ -158,7 +158,7 @@ Section Loop.
   Lemma semWP_is_perm {Γ} (e1 e2 : Exp Γ ty.perm) Q δ :
     ⊢ ((⌜eval e1 δ = eval e2 δ⌝ -∗ Q true δ) ∧
       (⌜Base.is_perm (eval e1 δ) (eval e2 δ) = false⌝ -∗ Q false δ)) -∗
-      semWP' (call MinCapsProgram.is_perm e1 e2) Q δ.
+      semWP' δ (call MinCapsProgram.is_perm e1 e2) Q.
   Proof.
     iIntros "HYP".
     iApply (semWP_call_inline MinCapsProgram.is_perm).
@@ -174,7 +174,7 @@ Section Loop.
   Qed.
 
   Lemma is_correct_pc_false {c cpc} : decide_correct_pc c = cpc ->
-    ⊢ semWP' (FunDef is_correct_pc) (fun x y => ⌜ x = cpc ⌝ ) [env].[ "c" ∷ ty.cap ↦ c ].
+    ⊢ semWP' [env].[ "c" ∷ ty.cap ↦ c ] (FunDef is_correct_pc) (fun x y => ⌜ x = cpc ⌝ ).
   Proof.
     destruct c as [p b e a]. cbn.
     intros Heq. iIntros. rewrite /semWP'.
