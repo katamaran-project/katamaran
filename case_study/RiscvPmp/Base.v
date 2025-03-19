@@ -1186,28 +1186,6 @@ Module Export RiscvPmpBase <: Base.
                 μ'
       end.
 
-    Lemma convert_foreign_vector_subrange_conditions {n e b : nat} :
-      IsTrue (0 <=? b)%nat -> IsTrue (b <=? e)%nat -> IsTrue (e <? n)%nat ->
-      IsTrue (b + (e - b + 1) <=? n)%nat.
-    Proof.
-      intros;
-        repeat match goal with
-          | |- IsTrue (?x <=? ?y)%nat =>
-              destruct (Nat.leb_spec x y)
-          | H: IsTrue (?x <=? ?y)%nat |- _ =>
-              destruct (Nat.leb_spec x y)
-          | H: IsTrue (?x <? ?y)%nat |- _ =>
-              destruct (Nat.ltb_spec x y)
-          end;
-        auto;
-        lia.
-    Qed.
-
-    #[program] Definition fun_vector_subrange {n} (data : Val (ty.bvec n)) (e b : nat) {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} : Val (ty.bvec (e - b + 1)) :=
-      @bv.vector_subrange _ b (e - b + 1) _ data.
-    Next Obligation. intros; by apply convert_foreign_vector_subrange_conditions. Defined.
-    #[global] Arguments fun_vector_subrange {n} _ _ _ {_ _ _}.
-
   End MemoryModel.
 
   Include BaseMixin.

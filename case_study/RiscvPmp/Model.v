@@ -286,26 +286,10 @@ Module RiscvPmpModel2.
         * iApply wp_value; auto.
     Qed.
 
-    Lemma vector_subrange_sound {n} (e b : nat)
-                                {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} :
-      ValidContractForeign (@sep_contract_vector_subrange n e b p q r) (vector_subrange e b).
-    Proof.
-      intros Γ es δ ι Heq.
-      destruct_syminstance ι.
-      iIntros "_".
-      iApply (lifting.wp_lift_pure_step_no_fork _ _ ⊤).
-      - cbn; auto. intros. apply reducible_not_val; auto.
-      - intros. eliminate_prim_step Heq; auto.
-      - repeat iModIntro. iIntros. eliminate_prim_step Heq; auto.
-      destruct (fun_vector_subrange bv0 e b) eqn:Ev.
-      iApply wp_value.
-      iSplitL; first iPureIntro; auto.
-    Qed.
-
     Lemma foreignSem : ForeignSem.
     Proof.
       intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, vector_subrange_sound.
+        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound.
     Qed.
   End ForeignProofs.
 

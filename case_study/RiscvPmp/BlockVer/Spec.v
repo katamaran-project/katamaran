@@ -504,27 +504,15 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        sep_contract_postcondition   := term_var "result_decode" = term_var "instr";
     |}.
 
-  #[program] Definition sep_contract_vector_subrange {n} (e b : nat) {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} : SepContractFunX (@vector_subrange n e b p q r) :=
-    {| sep_contract_logic_variables := ["v" :: ty.bvec n];
-       sep_contract_localstore      := [term_var "v"];
-       sep_contract_precondition    := ⊤;
-       sep_contract_result          := "result_vector_subrange";
-       sep_contract_postcondition   :=
-         term_var "result_vector_subrange" = term_unop (@uop.vector_subrange _ _ b (e - b + 1) _) (term_var "v");
-    |}.
-  Next Obligation. intros; now apply convert_foreign_vector_subrange_conditions. Defined.
-  #[global] Arguments sep_contract_vector_subrange {_} _ _ {_ _ _}.
-
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
       | read_ram bytes  => sep_contract_read_ram
       | write_ram bytes => sep_contract_write_ram
       | within_mmio res => sep_contract_within_mmio res
-      | mmio_read bytes  => sep_contract_mmio_read bytes
-      | mmio_write res => @sep_contract_mmio_write _ res
-      | decode    => sep_contract_decode
-      | vector_subrange e b => sep_contract_vector_subrange e b
+      | mmio_read bytes => sep_contract_mmio_read bytes
+      | mmio_write res  => @sep_contract_mmio_write _ res
+      | decode          => sep_contract_decode
       end.
 
   Lemma linted_cenvex :
@@ -938,36 +926,10 @@ Module RiscvPmpIrisInstanceWithContracts.
         iApply wp_value. cbn. easy.
   Qed.
 
-  Lemma vector_subrange_sound `{sailGS Σ} {n} (e b : nat)
-    {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} :
-    ValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_vector_subrange n e b p q r)
-      (vector_subrange e b).
-  Proof.
-    intros Γ es δ ι Heq.
-    destruct (env.view ι) as [ι v].
-    iIntros "_".
-    rewrite <-semWP_unfold_nolc.
-    cbn in *.
-    iIntros (? ?) "[Hregs Hmem]".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    repeat iModIntro.
-    iIntros (e2 δ2 γ2 μ2 Hstep).
-    dependent elimination Hstep.
-    rewrite Heq in f1.
-    dependent elimination f1.
-    repeat iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iApply wp_value.
-    iSplitL; first iPureIntro; auto.
-  Qed.
-
   Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
   Proof.
     intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, RiscvPmpModel2.mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, vector_subrange_sound.
+        eauto using read_ram_sound, write_ram_sound, RiscvPmpModel2.mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound.
   Qed.
 
   Ltac destruct_syminstance ι :=

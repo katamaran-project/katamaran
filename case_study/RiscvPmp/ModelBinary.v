@@ -218,16 +218,10 @@ Module RiscvPmpModel2.
     Proof.
     Admitted.
 
-    Lemma vector_subrange_sound {n} (e b : nat)
-                                {p : IsTrue (0 <=? b)%nat} {q : IsTrue (b <=? e)%nat} {r : IsTrue (e <? n)%nat} :
-      ValidContractForeign (@sep_contract_vector_subrange n e b p q r) (vector_subrange e b).
-    Proof.
-    Admitted.
-
     Lemma foreignSem : ForeignSem.
     Proof.
       intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, decode_sound, vector_subrange_sound.
+        eauto using read_ram_sound, write_ram_sound, decode_sound.
     Admitted.
   End ForeignProofs.
 
