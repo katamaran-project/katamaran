@@ -52,8 +52,9 @@ From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
-From iris.program_logic Require Import weakestpre adequacy.
+From iris.program_logic Require Import weakestpre total_weakestpre adequacy.
 From iris.program_logic Require lifting.
+From iris.program_logic Require total_lifting.
 From iris.proofmode Require Import string_ident tactics.
 
 Set Implicit Arguments.
@@ -179,13 +180,13 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma read_ram_sound (bytes : nat) :
-      ValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
+      TValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
     Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
       iIntros "H". cbn in *.
-      iApply (wp_lift_atomic_step_no_fork); [auto | ].
-      iIntros (? ? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
-      iSplitR. iPureIntro. apply reducible_not_val; auto.
+      iApply (total_lifting.twp_lift_atomic_step); [auto | ].
+      iIntros (? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
+      iSplitR. iPureIntro. apply reducible_no_obs_not_val; auto.
       repeat iModIntro.
       iIntros. iModIntro.
       eliminate_prim_step Heq.
@@ -216,13 +217,13 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma write_ram_sound (bytes : nat) :
-      ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
+      TValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
       iIntros "[%w H]".
-      iApply (wp_lift_atomic_step_no_fork); [auto | ].
-      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-      iSplitR. iPureIntro. apply reducible_not_val; auto.
+      iApply (total_lifting.twp_lift_atomic_step); [auto | ].
+      iIntros (? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+      iSplitR. iPureIntro. apply reducible_no_obs_not_val; auto.
       repeat iModIntro.
       iIntros.
       eliminate_prim_step Heq.
@@ -230,14 +231,14 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma mmio_read_sound (bytes : nat) :
-     ValidContractForeign (sep_contract_mmio_read bytes) (mmio_read bytes).
+     TValidContractForeign (sep_contract_mmio_read bytes) (mmio_read bytes).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
       now iIntros "[%HFalse _]".
     Qed.
 
     Lemma mmio_write_sound `(H: restrict_bytes bytes) :
-     ValidContractForeign (sep_contract_mmio_write H) (mmio_write H).
+     TValidContractForeign (sep_contract_mmio_write H) (mmio_write H).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
       now iIntros "[%HFalse _]".
@@ -257,14 +258,14 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma within_mmio_sound `(H: restrict_bytes bytes) :
-     ValidContractForeign (@sep_contract_within_mmio bytes H) (within_mmio H).
+     TValidContractForeign (@sep_contract_within_mmio bytes H) (within_mmio H).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
       iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])".
-      iApply (wp_lift_atomic_step_no_fork); [auto | ].
-      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+      iApply (total_lifting.twp_lift_atomic_step); [auto | ].
+      iIntros (? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
       iPoseProof (interp_pmp_fun_within_mmio_spec with "Hpmpa") as "%Hnotmmio"; first eauto.
-      iSplitR. iPureIntro. apply reducible_not_val; auto.
+      iSplitR. iPureIntro. apply reducible_no_obs_not_val; auto.
       repeat iModIntro.
       iIntros. iModIntro.
       eliminate_prim_step Heq.
@@ -273,24 +274,27 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma decode_sound :
-      ValidContractForeign sep_contract_decode decode.
+      TValidContractForeign sep_contract_decode decode.
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
       iIntros "_". cbn in *.
-      iApply (lifting.wp_lift_pure_step_no_fork _ _ ⊤).
-      - cbn; auto. intros. apply reducible_not_val; auto.
+      iApply (total_lifting.twp_lift_pure_step_no_fork _ _ ⊤).
+      - cbn; auto. intros. apply reducible_no_obs_not_val; auto.
       - intros. eliminate_prim_step Heq; auto.
       - repeat iModIntro. iIntros. eliminate_prim_step Heq; auto.
         destruct (pure_decode _).
-        * iApply wp_value. now cbn.
-        * iApply wp_value; auto.
+        * iApply twp_value. now cbn.
+        * iApply twp_value; auto.
     Qed.
 
-    Lemma foreignSem : ForeignSem.
+    Lemma TforeignSem : TForeignSem.
     Proof.
       intros Δ τ f; destruct f;
         eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound.
     Qed.
+
+    Lemma foreignSem : ForeignSem.
+    Proof. apply (TForeignSem_ForeignSem TforeignSem). Qed.
   End ForeignProofs.
 
   Section LemProofs.

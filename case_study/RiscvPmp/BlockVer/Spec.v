@@ -52,6 +52,8 @@ From Katamaran Require Import
      RiscvPmp.Contracts.
 From Katamaran Require RiscvPmp.Model.
 
+From iris.program_logic Require Import total_lifting.
+
 Import RiscvPmpProgram.
 Import ListNotations.
 
@@ -804,18 +806,19 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import iris.bi.big_op.
   Import iris.base_logic.lib.iprop.
   Import iris.program_logic.weakestpre.
+  Import iris.program_logic.total_weakestpre.
   Import iris.base_logic.lib.gen_heap.
   Import iris.proofmode.string_ident.
   Import iris.proofmode.tactics.
 
   Lemma read_ram_sound `{sailGS Σ} {bytes} :
-    ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram (read_ram bytes).
+    TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram (read_ram bytes).
   Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι.
       iIntros "H". cbn in *.
-      iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
-      iIntros (? ? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
-      iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_not_val; auto.
+      iApply (total_lifting.twp_lift_atomic_step); [auto | ].
+      iIntros (? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
+      iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_no_obs_not_val; auto.
       destruct inv; cbn -[prim_step].
       - (* readonly case *)
         unfold interp_ptstomem_readonly.
@@ -838,17 +841,17 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   Lemma write_ram_sound `{sailGS Σ} {bytes} :
-    ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_write_ram (write_ram bytes).
+    TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_write_ram (write_ram bytes).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-      iIntros "[%w H]".
-      iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
-      iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-      iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_not_val; auto.
-      repeat iModIntro.
-      iIntros.
-      RiscvPmpModel2.eliminate_prim_step Heq.
-      iMod (RiscvPmpModel2.fun_write_ram_works with "[$H $Hmem $Htr]") as "[$ H]"; [auto | now iFrame].
+    iIntros "[%w H]".
+    iApply (total_lifting.twp_lift_atomic_step); [auto | ].
+    iIntros (? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+    iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_no_obs_not_val; auto.
+    repeat iModIntro.
+    iIntros.
+    RiscvPmpModel2.eliminate_prim_step Heq.
+    iMod (RiscvPmpModel2.fun_write_ram_works with "[$H $Hmem $Htr]") as "[$ H]"; [auto | now iFrame].
  Qed.
 
   (* Important sanity condition on mmio predicates - NOTE: could be in typeclass, together with the condition that reads are either all accepted, or none of them are *)
@@ -856,13 +859,13 @@ Module RiscvPmpIrisInstanceWithContracts.
   Proof. now apply List.Forall_cons. Qed.
 
   Lemma mmio_write_sound `{!sailGS Σ} `(H: restrict_bytes bytes) :
-    ValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
+    TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "([%Hmmio _] & #Hinv & [-> ->])".
-    iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
-    iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-    iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_not_val; auto.
+    iApply (total_lifting.twp_lift_atomic_step); [auto | ].
+    iIntros (? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+    iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_no_obs_not_val; auto.
     iInv "Hinv" as (t) " [>Htrf >%Hpred]" "Hclose".
     iDestruct (trace.trace_full_frag_eq with "Htr Htrf") as "%Heqt". subst t.
     iMod (trace.trace_update _ _ (cons _ _) with "[$Htr $Htrf]") as "[Htr Htrf]".
@@ -881,13 +884,13 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   Lemma decode_sound `{sailGS Σ} :
-    ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
+    TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "%Hdecode".
-    iApply (RiscvPmpModel2.wp_lift_atomic_step_no_fork); [auto | ].
-    iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-    iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_not_val; auto.
+    iApply (total_lifting.twp_lift_atomic_step); [auto | ].
+    iIntros (? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+    iSplitR. iPureIntro. apply RiscvPmpIrisBase.reducible_no_obs_not_val; auto.
     repeat iModIntro.
     iIntros.
     RiscvPmpModel2.eliminate_prim_step Heq.
@@ -898,17 +901,17 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   Lemma within_mmio_sound `{!sailGS Σ} `(H: restrict_bytes bytes):
-    ValidContractForeign (RiscvPmpBlockVerifSpec.sep_contract_within_mmio H) (RiscvPmpProgram.within_mmio H).
+    TValidContractForeign (RiscvPmpBlockVerifSpec.sep_contract_within_mmio H) (RiscvPmpProgram.within_mmio H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "Hpre".
-    iApply (lifting.wp_lift_pure_step_no_fork _ _ ⊤).
-    - cbn; auto. intros; apply RiscvPmpIrisBase.reducible_not_val; auto.
+    iApply (total_lifting.twp_lift_pure_step_no_fork _ _ ⊤).
+    - cbn; auto. intros; apply RiscvPmpIrisBase.reducible_no_obs_not_val; auto.
     - intros. RiscvPmpModel2.eliminate_prim_step Heq; auto.
     - repeat iModIntro. iIntros. RiscvPmpModel2.eliminate_prim_step Heq; auto.
       rewrite /fun_within_mmio bool_decide_and.
       destruct inv; cbn; iDestruct "Hpre" as "([%Hlft _] & [%Hrght _])".
-      + iApply wp_value; cbn.
+      + iApply twp_value; cbn.
         repeat iSplit; auto.
         iPureIntro. rewrite -bool_decide_and bool_decide_true //.
         split; [auto| solve_bv].
@@ -923,14 +926,16 @@ Module RiscvPmpIrisInstanceWithContracts.
           intros HFalse; cbn in HFalse. assert (paddr ∈ mmioAddrs)%stdpp by now destruct bytes.
           eapply mmio_ram_False; eauto.
         }
-        iApply wp_value. cbn. easy.
+        iApply twp_value. cbn. easy.
   Qed.
 
-  Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
-  Proof.
+  Lemma TforeignSemBlockVerif `{sailGS Σ} : TForeignSem.
     intros Δ τ f; destruct f;
         eauto using read_ram_sound, write_ram_sound, RiscvPmpModel2.mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound.
   Qed.
+
+  Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
+  Proof. apply (TForeignSem_ForeignSem TforeignSemBlockVerif). Qed.
 
   Ltac destruct_syminstance ι :=
     repeat
