@@ -104,17 +104,6 @@ Section Soundness.
        lduplicate p ts Hdup := lduplicate_inst sailGS_memGS ts Hdup
     |}.
 
-  (* semTriple currently wraps the given POST, if we end up with fail, we get
-     True, otherwise we do POST v δ. *)
-  Definition semTriple {Γ τ} (δ : CStore Γ)
-             (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
-    PRE -∗ semWP δ s (λ v δ, match v with
-                           | inl v => POST v δ
-                           | inr m => True%I
-                           end).
-  (* always modality needed? perhaps not because sail not higher-order? *)
-  Global Arguments semTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
-
   Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
     match lem with
       {| lemma_logic_variables := Σ;
@@ -127,290 +116,603 @@ Section Soundness.
           asn.interpret ens ι
     end.
 
-  Lemma iris_rule_consequence {Γ σ} {δ : CStore Γ}
-        {P P'} {Q Q' : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
-        (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') ->
-        semTriple δ P' s Q' -∗ semTriple δ P s Q.
-  Proof.
-    iIntros (PP QQ) "trips P".
-    iApply (semWP_mono with "[trips P]").
-    + iApply "trips".
-      now iApply PP.
-    + iIntros ([v|m] δ') "Qp"; last auto.
-      now iApply QQ.
-  Qed.
+  Section PartialTriple.
+    (* semTriple currently wraps the given POST, if we end up with fail, we get
+        True, otherwise we do POST v δ. *)
+    Definition semTriple {Γ τ} (δ : CStore Γ)
+                (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
+        PRE -∗ semWP δ s (λ v δ, match v with
+                            | inl v => POST v δ
+                            | inr m => True%I
+                            end).
+    (* always modality needed? perhaps not because sail not higher-order? *)
+    Global Arguments semTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
 
-  Lemma iris_rule_frame {Γ σ} {δ : CStore Γ}
-        (R P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) (s : Stm Γ σ) :
-        (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
-  Proof.
-    iIntros "trips [HR HP]".
-    iSpecialize ("trips" with "HP"). iApply (semWP_mono with "trips").
-    iIntros ([v|m] ?) "HQ"; auto. iFrame "HR HQ".
-  Qed.
+    Lemma iris_rule_consequence {Γ σ} {δ : CStore Γ}
+            {P P'} {Q Q' : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
+            (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') ->
+            semTriple δ P' s Q' -∗ semTriple δ P s Q.
+    Proof.
+        iIntros (PP QQ) "trips P".
+        iApply (semWP_mono with "[trips P]").
+        + iApply "trips".
+        now iApply PP.
+        + iIntros ([v|m] δ') "Qp"; last auto.
+        now iApply QQ.
+    Qed.
 
-  Lemma iris_rule_pull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ)
-        (P : iProp Σ) (Q : Prop) (R : Val σ -> CStore Γ -> iProp Σ) :
-        (⊢ (⌜ Q ⌝ -∗ semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R).
-  Proof.
-    iIntros "QP [P %]".
-    by iApply "QP".
-  Qed.
+    Lemma iris_rule_frame {Γ σ} {δ : CStore Γ}
+            (R P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) (s : Stm Γ σ) :
+            (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
+    Proof.
+        iIntros "trips [HR HP]".
+        iSpecialize ("trips" with "HP"). iApply (semWP_mono with "trips").
+        iIntros ([v|m] ?) "HQ"; auto. iFrame "HR HQ".
+    Qed.
 
-  Lemma iris_rule_exist {σ Γ} (δ : CStore Γ)
-        (s : Stm Γ σ) {A : Type} {P : A -> iProp Σ}
-        {Q :  Val σ -> CStore Γ -> iProp Σ} :
-        ⊢ ((∀ x, semTriple δ (P x) s Q) -∗ semTriple δ (∃ x, P x) s Q).
-  Proof.
-    iIntros "trips [%x Px]".
-    by iApply "trips".
-  Qed.
+    Lemma iris_rule_pull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ)
+            (P : iProp Σ) (Q : Prop) (R : Val σ -> CStore Γ -> iProp Σ) :
+            (⊢ (⌜ Q ⌝ -∗ semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R).
+    Proof.
+        iIntros "QP [P %]".
+        by iApply "QP".
+    Qed.
 
-  Lemma iris_rule_stm_val {Γ} (δ : CStore Γ)
-        {τ : Ty} {v : Val τ}
-        {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
-        ⊢ ((P -∗ Q v δ)%I -∗ semTriple δ P (stm_val τ v) Q).
-  Proof.
-    iIntros "PQ P".
-    iApply semWP_val.
-    by iApply "PQ".
-  Qed.
+    Lemma iris_rule_exist {σ Γ} (δ : CStore Γ)
+            (s : Stm Γ σ) {A : Type} {P : A -> iProp Σ}
+            {Q :  Val σ -> CStore Γ -> iProp Σ} :
+            ⊢ ((∀ x, semTriple δ (P x) s Q) -∗ semTriple δ (∃ x, P x) s Q).
+    Proof.
+        iIntros "trips [%x Px]".
+        by iApply "trips".
+    Qed.
 
-  Lemma iris_rule_stm_exp {Γ} (δ : CStore Γ)
-        {τ : Ty} {e : Exp Γ τ}
-        {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
-        ⊢ ((P -∗ Q (eval e δ) δ) -∗ semTriple δ P (stm_exp e) Q).
-  Proof.
-    iIntros "PQ P".
-    iApply semWP_exp.
-    now iApply "PQ".
-  Qed.
+    Lemma iris_rule_stm_val {Γ} (δ : CStore Γ)
+            {τ : Ty} {v : Val τ}
+            {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
+            ⊢ ((P -∗ Q v δ)%I -∗ semTriple δ P (stm_val τ v) Q).
+    Proof.
+        iIntros "PQ P".
+        iApply semWP_val.
+        by iApply "PQ".
+    Qed.
 
-  Lemma iris_rule_stm_let {Γ} (δ : CStore Γ)
-        (x : PVar) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
-        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
-        (R : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ (semTriple δ P s Q -∗
-                     (∀ (v : Val σ) (δ' : CStore Γ),
-                         semTriple (env.snoc δ' (x∷σ) v) (Q v δ') k (fun v δ'' => R v (env.tail δ'')) ) -∗
-                     semTriple δ P (let: x := s in k) R).
-  Proof.
-    iIntros "trips tripk P".
-    iApply semWP_let.
-    iSpecialize ("trips" with "P").
-    iApply (semWP_mono with "trips"). iIntros ([v|m] ?) "H".
-    - now iSpecialize ("tripk" with "H").
-    - simpl. now iApply semWP_fail.
-  Qed.
+    Lemma iris_rule_stm_exp {Γ} (δ : CStore Γ)
+            {τ : Ty} {e : Exp Γ τ}
+            {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
+            ⊢ ((P -∗ Q (eval e δ) δ) -∗ semTriple δ P (stm_exp e) Q).
+    Proof.
+        iIntros "PQ P".
+        iApply semWP_exp.
+        now iApply "PQ".
+    Qed.
 
-  Lemma iris_rule_stm_block {Γ} (δ : CStore Γ)
-        (Δ : PCtx) (δΔ : CStore Δ)
-        (τ : Ty) (k : Stm (Γ ▻▻ Δ) τ)
-        (P : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env.drop Δ δ'')) -∗
-                   semTriple δ P (stm_block δΔ k) R).
-  Proof.
-    iIntros "tripk P". iPoseProof ("tripk" with "P") as "wpk".
-    by iApply semWP_block.
-  Qed.
+    Lemma iris_rule_stm_let {Γ} (δ : CStore Γ)
+            (x : PVar) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
+            (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
+            (R : Val τ -> CStore Γ -> iProp Σ) :
+            ⊢ (semTriple δ P s Q -∗
+                        (∀ (v : Val σ) (δ' : CStore Γ),
+                            semTriple (env.snoc δ' (x∷σ) v) (Q v δ') k (fun v δ'' => R v (env.tail δ'')) ) -∗
+                        semTriple δ P (let: x := s in k) R).
+    Proof.
+        iIntros "trips tripk P".
+        iApply semWP_let.
+        iSpecialize ("trips" with "P").
+        iApply (semWP_mono with "trips"). iIntros ([v|m] ?) "H".
+        - now iSpecialize ("tripk" with "H").
+        - simpl. now iApply semWP_fail.
+    Qed.
 
-  Lemma iris_rule_stm_seq {Γ} (δ : CStore Γ)
-        (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
-    ⊢ (semTriple δ P s1 Q -∗
-                 (∀ v δ', semTriple δ' (Q v δ') s2 R) -∗
-                 semTriple δ P (s1 ;; s2) R).
-  Proof.
-    iIntros "trips1 trips2 P".
-    iSpecialize ("trips1" with "P").
-    iApply semWP_seq.
-    iApply (semWP_mono with "[$]"). iIntros ([v|m] ?) "H"; auto.
-    - by iApply ("trips2" with "H").
-    - by rewrite semWP_fail.
-  Qed.
+    Lemma iris_rule_stm_block {Γ} (δ : CStore Γ)
+            (Δ : PCtx) (δΔ : CStore Δ)
+            (τ : Ty) (k : Stm (Γ ▻▻ Δ) τ)
+            (P : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
+            ⊢ (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env.drop Δ δ'')) -∗
+                    semTriple δ P (stm_block δΔ k) R).
+    Proof.
+        iIntros "tripk P". iPoseProof ("tripk" with "P") as "wpk".
+        by iApply semWP_block.
+    Qed.
 
-  Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
-        (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
-                      (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-    ⊢ (⌜ eval e1 δ = true ⌝ -∗ semTriple δ P k Q) -∗
-      semTriple δ P (stm_assertk e1 e2 k) Q.
-  Proof.
-    iIntros "tripk P".
-    iApply (semWP_assertk with "[tripk P] []").
-    - iIntros (->).
-      by iApply "tripk".
-    - iIntros (?).
-      now rewrite semWP_fail.
-  Qed.
+    Lemma iris_rule_stm_seq {Γ} (δ : CStore Γ)
+            (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
+            (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
+        ⊢ (semTriple δ P s1 Q -∗
+                    (∀ v δ', semTriple δ' (Q v δ') s2 R) -∗
+                    semTriple δ P (s1 ;; s2) R).
+    Proof.
+        iIntros "trips1 trips2 P".
+        iSpecialize ("trips1" with "P").
+        iApply semWP_seq.
+        iApply (semWP_mono with "[$]"). iIntros ([v|m] ?) "H"; auto.
+        - by iApply ("trips2" with "H").
+        - by rewrite semWP_fail.
+    Qed.
 
-  Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
-        (τ : Ty) (s : Val ty.string) :
-        forall (Q : Val τ -> CStore Γ -> iProp Σ),
-          ⊢ semTriple δ True (stm_fail τ s) Q.
-  Proof.
-    iIntros (Q) "_".
-    by iApply semWP_fail.
-  Qed.
+    Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
+            (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
+                        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+        ⊢ (⌜ eval e1 δ = true ⌝ -∗ semTriple δ P k Q) -∗
+        semTriple δ P (stm_assertk e1 e2 k) Q.
+    Proof.
+        iIntros "tripk P".
+        iApply (semWP_assertk with "[tripk P] []").
+        - iIntros (->).
+        by iApply "tripk".
+        - iIntros (?).
+        now rewrite semWP_fail.
+    Qed.
 
-  Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
-        {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
-        ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v)).
-  Proof.
-    iIntros "Hreg".
-    iApply semWP_read_register.
-    iExists v.
-    iFrame.
-    repeat iSplit; auto.
-  Qed.
+    Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
+            (τ : Ty) (s : Val ty.string) :
+            forall (Q : Val τ -> CStore Γ -> iProp Σ),
+            ⊢ semTriple δ True (stm_fail τ s) Q.
+    Proof.
+        iIntros (Q) "_".
+        by iApply semWP_fail.
+    Qed.
 
-  Lemma iris_rule_stm_write_register {Γ} (δ : CStore Γ)
-        {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
-                              (Q : Val σ -> CStore Γ -> iProp Σ)
-                              (v : Val σ) :
-        ⊢ semTriple δ (lptsreg r v) (stm_write_register r w)
-                  (fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v').
-  Proof.
-    iIntros "Hreg".
-    iApply semWP_write_register.
-    iExists v.
-    iFrame.
-    repeat iSplit; auto.
-  Qed.
+    Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
+            {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
+            ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v)).
+    Proof.
+        iIntros "Hreg".
+        iApply semWP_read_register.
+        iExists v.
+        iFrame.
+        repeat iSplit; auto.
+    Qed.
 
-  Lemma iris_rule_stm_assign {Γ} (δ : CStore Γ)
-        (x : PVar) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
-        (P : iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
-        ⊢ (semTriple δ P s (fun v δ' => R v (@env.update _ _ _ δ' (x∷_) _ v)) -∗
-           semTriple δ P (stm_assign x s) R).
-  Proof.
-    iIntros "trips P".
-    iSpecialize ("trips" with "P").
-    by iApply semWP_assign.
-  Qed.
+    Lemma iris_rule_stm_write_register {Γ} (δ : CStore Γ)
+            {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
+                                (Q : Val σ -> CStore Γ -> iProp Σ)
+                                (v : Val σ) :
+            ⊢ semTriple δ (lptsreg r v) (stm_write_register r w)
+                    (fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v').
+    Proof.
+        iIntros "Hreg".
+        iApply semWP_write_register.
+        iExists v.
+        iFrame.
+        repeat iSplit; auto.
+    Qed.
 
-  Lemma iris_rule_stm_bind {Γ} (δ : CStore Γ)
-        {σ τ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
-        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
-        (R : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ (semTriple δ P s Q -∗
-           (∀ (v__σ : Val σ) (δ' : CStore Γ),
-               semTriple δ' (Q v__σ δ') (k v__σ) R) -∗
-           semTriple δ P (stm_bind s k) R).
-  Proof.
-    iIntros "trips tripk P".
-    iSpecialize ("trips" with "P").
-    iApply semWP_bind. iApply (semWP_mono with "trips"). iIntros ([v|m] ?) "H".
-    - simpl. by iApply "tripk".
-    - simpl. by iApply semWP_fail.
-  Qed.
+    Lemma iris_rule_stm_assign {Γ} (δ : CStore Γ)
+            (x : PVar) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
+            (P : iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
+            ⊢ (semTriple δ P s (fun v δ' => R v (@env.update _ _ _ δ' (x∷_) _ v)) -∗
+            semTriple δ P (stm_assign x s) R).
+    Proof.
+        iIntros "trips P".
+        iSpecialize ("trips" with "P").
+        by iApply semWP_assign.
+    Qed.
 
-  Lemma iris_rule_stm_call_inline_later
-    {Γ} (δΓ : CStore Γ)
-    {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
-    (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) :
-    ⊢ ▷ semTriple (evals es δΓ) P (FunDef f) (fun v _ => Q v δΓ) -∗
-      semTriple δΓ P (stm_call f es) Q.
-  Proof.
-    iIntros "tripbody P".
-    iApply semWP_call_inline_later.
-    by iApply "tripbody".
-  Qed.
+    Lemma iris_rule_stm_bind {Γ} (δ : CStore Γ)
+            {σ τ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
+            (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
+            (R : Val τ -> CStore Γ -> iProp Σ) :
+            ⊢ (semTriple δ P s Q -∗
+            (∀ (v__σ : Val σ) (δ' : CStore Γ),
+                semTriple δ' (Q v__σ δ') (k v__σ) R) -∗
+            semTriple δ P (stm_bind s k) R).
+    Proof.
+        iIntros "trips tripk P".
+        iSpecialize ("trips" with "P").
+        iApply semWP_bind. iApply (semWP_mono with "trips"). iIntros ([v|m] ?) "H".
+        - simpl. by iApply "tripk".
+        - simpl. by iApply semWP_fail.
+    Qed.
 
-  Lemma iris_rule_stm_call_inline
-    {Γ} (δΓ : CStore Γ)
-    {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
-    (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) :
-    ⊢ semTriple (evals es δΓ) P (FunDef f) (fun v _ => Q v δΓ) -∗
-      semTriple δΓ P (stm_call f es) Q.
-  Proof.
-    iIntros "Hdef".
-    iApply (iris_rule_stm_call_inline_later with "Hdef").
-  Qed.
+    Lemma iris_rule_stm_call_inline_later
+        {Γ} (δΓ : CStore Γ)
+        {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
+        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) :
+        ⊢ ▷ semTriple (evals es δΓ) P (FunDef f) (fun v _ => Q v δΓ) -∗
+        semTriple δΓ P (stm_call f es) Q.
+    Proof.
+        iIntros "tripbody P".
+        iApply semWP_call_inline_later.
+        by iApply "tripbody".
+    Qed.
 
-  Lemma iris_rule_stm_debugk
-    {Γ τ} (δ : CStore Γ) (k : Stm Γ τ)
-    (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-    ⊢ (semTriple δ P k Q -∗
-       semTriple δ P (stm_debugk k) Q).
-  Proof. iIntros "tripk P". iApply semWP_debugk. now iApply "tripk". Qed.
+    Lemma iris_rule_stm_call_inline
+        {Γ} (δΓ : CStore Γ)
+        {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
+        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) :
+        ⊢ semTriple (evals es δΓ) P (FunDef f) (fun v _ => Q v δΓ) -∗
+        semTriple δΓ P (stm_call f es) Q.
+    Proof.
+        iIntros "Hdef".
+        iApply (iris_rule_stm_call_inline_later with "Hdef").
+    Qed.
 
-  Lemma iris_rule_noop {Γ σ} {δ : CStore Γ}
-        {P} {Q : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
-    stm_to_val s = None ->
-    (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
-                            (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
-                            ((exists v, s' = stm_val _ v) \/ (exists msg, s' = stm_fail _ msg))) ->
-    (∀ v, P ={⊤}=∗ Q v δ) -∗
-                 semTriple δ P s Q.
-  Proof.
-    iIntros (Hnv Hnoop) "HPQ HP".
-    rewrite <-semWP_unfold_nolc. rewrite Hnv.
-    iIntros (γ1 μ1) "state_inv".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
-    iIntros (s2 δ2 γ2 μ2) "%".
-    destruct (Hnoop _ _ _ _ _ _ H) as (-> & -> & -> & [[v ->]|[msg ->]]).
-    - do 3 iModIntro. iMod "Hclose" as "_".
-      iFrame. iApply semWP_val. now iApply "HPQ".
-    - do 3 iModIntro. iMod "Hclose" as "_".
-      iFrame. now iApply semWP_fail.
-  Qed.
+    Lemma iris_rule_stm_debugk
+        {Γ τ} (δ : CStore Γ) (k : Stm Γ τ)
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+        ⊢ (semTriple δ P k Q -∗
+        semTriple δ P (stm_debugk k) Q).
+    Proof. iIntros "tripk P". iApply semWP_debugk. now iApply "tripk". Qed.
 
-  Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
-    (s : Stm Γ σ) (pat : Pattern σ)
-    (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
-    (P : iProp Σ) (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
-    ⊢ semTriple δΓ P s Q -∗
-      (∀ pc δpc δΓ1,
-         semTriple (δΓ1 ►► δpc) (Q (pattern_match_val_reverse pat pc δpc) δΓ1) (rhs pc)
-           (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))) -∗
-      semTriple δΓ P (stm_pattern_match s pat rhs) R.
-  Proof.
-    iIntros "WPs WPrhs P".
-    iSpecialize ("WPs" with "P").
-    iApply semWP_pattern_match.
-    iApply (semWP_mono with "WPs").
-    iIntros ([vσ|m] δΓ') "Q"; auto.
-    destruct pattern_match_val as [pc δpc] eqn:Heq.
-    iApply "WPrhs".
-    change (pattern_match_val_reverse pat pc δpc) with
-      (pattern_match_val_reverse' pat (existT pc δpc)).
-    rewrite <- Heq.
-    now rewrite pattern_match_val_inverse_left.
-  Qed.
+    Lemma iris_rule_noop {Γ σ} {δ : CStore Γ}
+            {P} {Q : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
+        stm_to_val s = None ->
+        (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
+                                (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
+                                ((exists v, s' = stm_val _ v) \/ (exists msg, s' = stm_fail _ msg))) ->
+        (∀ v, P ={⊤}=∗ Q v δ) -∗
+                    semTriple δ P s Q.
+    Proof.
+        iIntros (Hnv Hnoop) "HPQ HP".
+        rewrite <-semWP_unfold_nolc. rewrite Hnv.
+        iIntros (γ1 μ1) "state_inv".
+        iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+        iIntros (s2 δ2 γ2 μ2) "%".
+        destruct (Hnoop _ _ _ _ _ _ H) as (-> & -> & -> & [[v ->]|[msg ->]]).
+        - do 3 iModIntro. iMod "Hclose" as "_".
+        iFrame. iApply semWP_val. now iApply "HPQ".
+        - do 3 iModIntro. iMod "Hclose" as "_".
+        iFrame. now iApply semWP_fail.
+    Qed.
 
-  Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
-    match contract with
-    | MkSepContract _ _ ctxΣ θΔ pre result post =>
-      Sep.Logic.Forall (fun (ι : Valuation ctxΣ) =>
-        semTriple (inst θΔ ι) (asn.interpret pre ι) body
-                  (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
-    end.
+    Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
+        (s : Stm Γ σ) (pat : Pattern σ)
+        (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
+        (P : iProp Σ) (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
+        ⊢ semTriple δΓ P s Q -∗
+        (∀ pc δpc δΓ1,
+            semTriple (δΓ1 ►► δpc) (Q (pattern_match_val_reverse pat pc δpc) δΓ1) (rhs pc)
+            (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))) -∗
+        semTriple δΓ P (stm_pattern_match s pat rhs) R.
+    Proof.
+        iIntros "WPs WPrhs P".
+        iSpecialize ("WPs" with "P").
+        iApply semWP_pattern_match.
+        iApply (semWP_mono with "WPs").
+        iIntros ([vσ|m] δΓ') "Q"; auto.
+        destruct pattern_match_val as [pc δpc] eqn:Heq.
+        iApply "WPrhs".
+        change (pattern_match_val_reverse pat pc δpc) with
+        (pattern_match_val_reverse' pat (existT pc δpc)).
+        rewrite <- Heq.
+        now rewrite pattern_match_val_inverse_left.
+    Qed.
 
-  Definition ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
-    match contract with
-    | MkSepContract _ _ ctxΣ θΔ pre result post =>
-      ∀ (ι : Valuation ctxΣ),
-        semTriple (inst θΔ ι) (asn.interpret pre ι) body
-                  (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v))
-    end.
+    Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
+        match contract with
+        | MkSepContract _ _ ctxΣ θΔ pre result post =>
+        Sep.Logic.Forall (fun (ι : Valuation ctxΣ) =>
+            semTriple (inst θΔ ι) (asn.interpret pre ι) body
+                    (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
+        end.
 
-  Definition ValidContractForeign {Δ τ} (contract : SepContract Δ τ) (f : 𝑭𝑿 Δ τ) : Prop :=
-    forall Γ (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
-      match contract with
-      | MkSepContract _ _ Σ' θΔ req result ens =>
-        forall (ι : Valuation Σ'),
-        evals es δ = inst θΔ ι ->
-        ⊢ semTriple δ (asn.interpret req ι) (stm_foreign f es)
-          (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
-      end.
+    Definition ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
+        match contract with
+        | MkSepContract _ _ ctxΣ θΔ pre result post =>
+        ∀ (ι : Valuation ctxΣ),
+            semTriple (inst θΔ ι) (asn.interpret pre ι) body
+                    (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v))
+        end.
 
-  Definition valid_contract_curry {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) :
-    ValidContractSem body contract ⊣⊢ ValidContractSemCurried body contract.
-  Proof.
-    destruct contract as [lvars δ req res ens]; cbn.
-    now rewrite Forall_forall.
-  Qed.
+    Definition ValidContractForeign {Δ τ} (contract : SepContract Δ τ) (f : 𝑭𝑿 Δ τ) : Prop :=
+        forall Γ (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
+        match contract with
+        | MkSepContract _ _ Σ' θΔ req result ens =>
+            forall (ι : Valuation Σ'),
+            evals es δ = inst θΔ ι ->
+            ⊢ semTriple δ (asn.interpret req ι) (stm_foreign f es)
+            (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
+        end.
 
+    Definition valid_contract_curry {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) :
+        ValidContractSem body contract ⊣⊢ ValidContractSemCurried body contract.
+    Proof.
+        destruct contract as [lvars δ req res ens]; cbn.
+        now rewrite Forall_forall.
+    Qed.
+  End PartialTriple.
+
+  Section TotalTriple.
+    (* semTriple currently wraps the given POST, if we end up with fail, we get
+        True, otherwise we do POST v δ. *)
+    Definition semTTriple {Γ τ} (δ : CStore Γ)
+                (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
+        PRE -∗ semTWP δ s (λ v δ, match v with
+                            | inl v => POST v δ
+                            | inr m => True%I
+                            end).
+    (* always modality needed? perhaps not because sail not higher-order? *)
+    Global Arguments semTTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
+
+    Lemma semTTriple_semTriple {Γ τ} {δ : CStore Γ} {PRE : iProp Σ}
+                               {s : Stm Γ τ} {POST : Val τ -> CStore Γ -> iProp Σ} :
+      semTTriple δ PRE s POST ⊢ semTriple δ PRE s POST.
+    Proof.
+      iIntros "Ht PRE". iSpecialize ("Ht" with "PRE"). by iApply semTWP_semWP.
+    Qed.
+
+    Lemma iris_rule_tconsequence {Γ σ} {δ : CStore Γ}
+            {P P'} {Q Q' : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
+            (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') ->
+            semTTriple δ P' s Q' -∗ semTTriple δ P s Q.
+    Proof.
+        iIntros (PP QQ) "trips P".
+        iApply (semTWP_mono with "[trips P]").
+        + iApply "trips".
+        now iApply PP.
+        + iIntros ([v|m] δ') "Qp"; last auto.
+        now iApply QQ.
+    Qed.
+
+    Lemma iris_rule_tframe {Γ σ} {δ : CStore Γ}
+            (R P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) (s : Stm Γ σ) :
+            (⊢ semTTriple δ P s Q -∗ semTTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
+    Proof.
+        iIntros "trips [HR HP]".
+        iSpecialize ("trips" with "HP"). iApply (semTWP_mono with "trips").
+        iIntros ([v|m] ?) "HQ"; auto. iFrame "HR HQ".
+    Qed.
+
+    Lemma iris_rule_tpull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ)
+            (P : iProp Σ) (Q : Prop) (R : Val σ -> CStore Γ -> iProp Σ) :
+            (⊢ (⌜ Q ⌝ -∗ semTTriple δ P s R) -∗ semTTriple δ (P ∧ bi_pure Q) s R).
+    Proof.
+        iIntros "QP [P %]".
+        by iApply "QP".
+    Qed.
+
+    Lemma iris_rule_texist {σ Γ} (δ : CStore Γ)
+            (s : Stm Γ σ) {A : Type} {P : A -> iProp Σ}
+            {Q :  Val σ -> CStore Γ -> iProp Σ} :
+            ⊢ ((∀ x, semTTriple δ (P x) s Q) -∗ semTTriple δ (∃ x, P x) s Q).
+    Proof.
+        iIntros "trips [%x Px]".
+        by iApply "trips".
+    Qed.
+
+    Lemma iris_rule_tstm_val {Γ} (δ : CStore Γ)
+            {τ : Ty} {v : Val τ}
+            {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
+            ⊢ ((P -∗ Q v δ)%I -∗ semTTriple δ P (stm_val τ v) Q).
+    Proof.
+        iIntros "PQ P".
+        iApply semTWP_val.
+        by iApply "PQ".
+    Qed.
+
+    Lemma iris_rule_tstm_exp {Γ} (δ : CStore Γ)
+            {τ : Ty} {e : Exp Γ τ}
+            {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
+            ⊢ ((P -∗ Q (eval e δ) δ) -∗ semTTriple δ P (stm_exp e) Q).
+    Proof.
+        iIntros "PQ P".
+        iApply semTWP_exp.
+        now iApply "PQ".
+    Qed.
+
+    Lemma iris_rule_tstm_let {Γ} (δ : CStore Γ)
+            (x : PVar) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
+            (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
+            (R : Val τ -> CStore Γ -> iProp Σ) :
+            ⊢ (semTTriple δ P s Q -∗
+                        (∀ (v : Val σ) (δ' : CStore Γ),
+                            semTTriple (env.snoc δ' (x∷σ) v) (Q v δ') k (fun v δ'' => R v (env.tail δ'')) ) -∗
+                        semTTriple δ P (let: x := s in k) R).
+    Proof.
+        iIntros "trips tripk P".
+        iApply semTWP_let.
+        iSpecialize ("trips" with "P").
+        iApply (semTWP_mono with "trips"). iIntros ([v|m] ?) "H".
+        - now iSpecialize ("tripk" with "H").
+        - simpl. now iApply semTWP_fail.
+    Qed.
+
+    Lemma iris_rule_tstm_block {Γ} (δ : CStore Γ)
+            (Δ : PCtx) (δΔ : CStore Δ)
+            (τ : Ty) (k : Stm (Γ ▻▻ Δ) τ)
+            (P : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
+            ⊢ (semTTriple (δ ►► δΔ) P k (fun v δ'' => R v (env.drop Δ δ'')) -∗
+                    semTTriple δ P (stm_block δΔ k) R).
+    Proof.
+        iIntros "tripk P". iPoseProof ("tripk" with "P") as "wpk".
+        by iApply semTWP_block.
+    Qed.
+
+    Lemma iris_rule_tstm_seq {Γ} (δ : CStore Γ)
+            (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
+            (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
+        ⊢ (semTTriple δ P s1 Q -∗
+                    (∀ v δ', semTTriple δ' (Q v δ') s2 R) -∗
+                    semTTriple δ P (s1 ;; s2) R).
+    Proof.
+        iIntros "trips1 trips2 P".
+        iSpecialize ("trips1" with "P").
+        iApply semTWP_seq.
+        iApply (semTWP_mono with "[$]"). iIntros ([v|m] ?) "H"; auto.
+        - by iApply ("trips2" with "H").
+        - by rewrite semTWP_fail.
+    Qed.
+
+    Lemma iris_rule_tstm_assertk {Γ τ} (δ : CStore Γ)
+            (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
+                        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+        ⊢ (⌜ eval e1 δ = true ⌝ -∗ semTTriple δ P k Q) -∗
+        semTTriple δ P (stm_assertk e1 e2 k) Q.
+    Proof.
+        iIntros "tripk P".
+        iApply (semTWP_assertk with "[tripk P] []").
+        - iIntros (->).
+        by iApply "tripk".
+        - iIntros (?).
+        now rewrite semTWP_fail.
+    Qed.
+
+    Lemma iris_rule_tstm_fail {Γ} (δ : CStore Γ)
+            (τ : Ty) (s : Val ty.string) :
+            forall (Q : Val τ -> CStore Γ -> iProp Σ),
+            ⊢ semTTriple δ True (stm_fail τ s) Q.
+    Proof.
+        iIntros (Q) "_".
+        by iApply semTWP_fail.
+    Qed.
+
+    Lemma iris_rule_tstm_read_register {Γ} (δ : CStore Γ)
+            {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
+            ⊢ (semTTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v)).
+    Proof.
+        iIntros "Hreg".
+        iApply semTWP_read_register.
+        iExists v.
+        iFrame.
+        repeat iSplit; auto.
+    Qed.
+
+    Lemma iris_rule_tstm_write_register {Γ} (δ : CStore Γ)
+            {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
+                                (Q : Val σ -> CStore Γ -> iProp Σ)
+                                (v : Val σ) :
+            ⊢ semTTriple δ (lptsreg r v) (stm_write_register r w)
+                    (fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v').
+    Proof.
+        iIntros "Hreg".
+        iApply semTWP_write_register.
+        iExists v.
+        iFrame.
+        repeat iSplit; auto.
+    Qed.
+
+    Lemma iris_rule_tstm_assign {Γ} (δ : CStore Γ)
+            (x : PVar) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
+            (P : iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
+            ⊢ (semTTriple δ P s (fun v δ' => R v (@env.update _ _ _ δ' (x∷_) _ v)) -∗
+            semTTriple δ P (stm_assign x s) R).
+    Proof.
+        iIntros "trips P".
+        iSpecialize ("trips" with "P").
+        by iApply semTWP_assign.
+    Qed.
+
+    Lemma iris_rule_tstm_bind {Γ} (δ : CStore Γ)
+            {σ τ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
+            (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
+            (R : Val τ -> CStore Γ -> iProp Σ) :
+            ⊢ (semTTriple δ P s Q -∗
+            (∀ (v__σ : Val σ) (δ' : CStore Γ),
+                semTTriple δ' (Q v__σ δ') (k v__σ) R) -∗
+            semTTriple δ P (stm_bind s k) R).
+    Proof.
+        iIntros "trips tripk P".
+        iSpecialize ("trips" with "P").
+        iApply semTWP_bind. iApply (semTWP_mono with "trips"). iIntros ([v|m] ?) "H".
+        - simpl. by iApply "tripk".
+        - simpl. by iApply semTWP_fail.
+    Qed.
+
+    Lemma iris_rule_tstm_call_inline
+        {Γ} (δΓ : CStore Γ)
+        {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
+        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) :
+        ⊢ semTTriple (evals es δΓ) P (FunDef f) (fun v _ => Q v δΓ) -∗
+        semTTriple δΓ P (stm_call f es) Q.
+    Proof.
+        iIntros "trips P". iSpecialize ("trips" with "P").
+        now iApply semTWP_call_inline.
+    Qed.
+
+    Lemma iris_rule_tstm_debugk
+        {Γ τ} (δ : CStore Γ) (k : Stm Γ τ)
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+        ⊢ (semTTriple δ P k Q -∗
+        semTTriple δ P (stm_debugk k) Q).
+    Proof. iIntros "tripk P". iApply semTWP_debugk. now iApply "tripk". Qed.
+
+    Lemma iris_rule_tnoop {Γ σ} {δ : CStore Γ}
+            {P} {Q : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
+        stm_to_val s = None ->
+        (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
+                                (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
+                                ((exists v, s' = stm_val _ v) \/ (exists msg, s' = stm_fail _ msg))) ->
+        (∀ v, P ={⊤}=∗ Q v δ) -∗
+                    semTTriple δ P s Q.
+    Proof.
+        iIntros (Hnv Hnoop) "HPQ HP".
+        rewrite <-semTWP_unfold_nolc. rewrite Hnv.
+        iIntros (γ1 μ1) "state_inv".
+        iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+        iIntros (s2 δ2 γ2 μ2) "%".
+        destruct (Hnoop _ _ _ _ _ _ H) as (-> & -> & -> & [[v ->]|[msg ->]]).
+        - iModIntro. iMod "Hclose" as "_".
+        iFrame. iApply semTWP_val. now iApply "HPQ".
+        - iModIntro. iMod "Hclose" as "_".
+        iFrame. now iApply semTWP_fail.
+    Qed.
+
+    Lemma iris_rule_tstm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
+        (s : Stm Γ σ) (pat : Pattern σ)
+        (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
+        (P : iProp Σ) (Q : Val σ → CStore Γ → iProp Σ) (R : Val τ → CStore Γ → iProp Σ) :
+        ⊢ semTTriple δΓ P s Q -∗
+        (∀ pc δpc δΓ1,
+            semTTriple (δΓ1 ►► δpc) (Q (pattern_match_val_reverse pat pc δpc) δΓ1) (rhs pc)
+            (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))) -∗
+        semTTriple δΓ P (stm_pattern_match s pat rhs) R.
+    Proof.
+        iIntros "WPs WPrhs P".
+        iSpecialize ("WPs" with "P").
+        iApply semTWP_pattern_match.
+        iApply (semTWP_mono with "WPs").
+        iIntros ([vσ|m] δΓ') "Q"; auto.
+        destruct pattern_match_val as [pc δpc] eqn:Heq.
+        iApply "WPrhs".
+        change (pattern_match_val_reverse pat pc δpc) with
+        (pattern_match_val_reverse' pat (existT pc δpc)).
+        rewrite <- Heq.
+        now rewrite pattern_match_val_inverse_left.
+    Qed.
+
+    Definition TValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
+        match contract with
+        | MkSepContract _ _ ctxΣ θΔ pre result post =>
+        Sep.Logic.Forall (fun (ι : Valuation ctxΣ) =>
+            semTTriple (inst θΔ ι) (asn.interpret pre ι) body
+                    (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
+        end.
+
+    Definition TValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
+        match contract with
+        | MkSepContract _ _ ctxΣ θΔ pre result post =>
+        ∀ (ι : Valuation ctxΣ),
+            semTTriple (inst θΔ ι) (asn.interpret pre ι) body
+                    (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v))
+        end.
+
+    Definition TValidContractForeign {Δ τ} (contract : SepContract Δ τ) (f : 𝑭𝑿 Δ τ) : Prop :=
+        forall Γ (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
+        match contract with
+        | MkSepContract _ _ Σ' θΔ req result ens =>
+            forall (ι : Valuation Σ'),
+            evals es δ = inst θΔ ι ->
+            ⊢ semTTriple δ (asn.interpret req ι) (stm_foreign f es)
+            (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
+        end.
+
+    Lemma TValidContractForeign_ValidContractForeign {Δ τ}
+      {contract : SepContract Δ τ} {f : 𝑭𝑿 Δ τ} :
+      TValidContractForeign contract f -> ValidContractForeign contract f.
+    Proof.
+      rewrite /TValidContractForeign /ValidContractForeign. destruct contract.
+      intros H ? ? ? ? Hevals. specialize (H _ _ _ _ Hevals).
+      now iApply semTTriple_semTriple.
+    Qed.
+
+    Definition tvalid_contract_curry {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) :
+        TValidContractSem body contract ⊣⊢ TValidContractSemCurried body contract.
+    Proof.
+        destruct contract as [lvars δ req res ens]; cbn.
+        now rewrite Forall_forall.
+    Qed.
+  End TotalTriple.
 End Soundness.
 End IrisSignatureRules.
 
@@ -600,141 +902,273 @@ Module IrisInstanceWithContracts
   (Import PLOG  : ProgramLogicOn B SIG PROG SPEC).
 
   Section WithSailGS.
-  Import ProgramLogic.
-  Context {Σ} {sG : sailGS Σ}.
+    Import ProgramLogic.
+    Context {Σ} {sG : sailGS Σ}.
 
-  Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
-    (∀ σs σ (f : 𝑭 σs σ),
-      match cenv σs σ f with
-      | Some c => ValidContractSem (FunDef f) c
-      | None => True
-      end)%I.
+    Section PartialTriple.
+        Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
+            (∀ σs σ (f : 𝑭 σs σ),
+            match cenv σs σ f with
+            | Some c => ValidContractSem (FunDef f) c
+            | None => True
+            end)%I.
 
-  Definition ForeignSem :=
-    ∀ (Δ : PCtx) (τ : Ty) (f : 𝑭𝑿 Δ τ),
-      ValidContractForeign (CEnvEx f) f.
+        Definition ForeignSem :=
+            ∀ (Δ : PCtx) (τ : Ty) (f : 𝑭𝑿 Δ τ),
+            ValidContractForeign (CEnvEx f) f.
 
-  Definition LemmaSem : Prop :=
-    forall (Δ : PCtx) (l : 𝑳 Δ),
-      ValidLemma (LEnv l).
+        Definition LemmaSem : Prop :=
+            forall (Δ : PCtx) (l : 𝑳 Δ),
+            ValidLemma (LEnv l).
 
-  Lemma iris_rule_stm_call {Γ} (δ : CStore Γ)
-    {Δ σ} (f : 𝑭 Δ σ) (c : SepContract Δ σ) (es : NamedEnv (Exp Γ) Δ)
-    (P : iProp Σ)
-    (Q : Val σ -> CStore Γ -> iProp Σ) :
-    CEnv f = Some c ->
-    CTriple P c (evals es δ) (fun v => Q v δ) ->
-    ⊢ ▷ ValidContractEnvSem CEnv -∗
-       semTriple δ P (stm_call f es) Q.
-  Proof.
-    iIntros (ceq ctrip) "cenv P".
-    iApply semWP_call_inline_later.
-    iModIntro.
-    iSpecialize ("cenv" $! _ _ f).
-    rewrite ceq. clear ceq.
-    destruct c as [Σe δΔ req res ens]; cbn in *.
-    iPoseProof (ctrip with "P") as (ι Heq) "[req consr]". clear ctrip.
-    iPoseProof ("cenv" $! ι with "req") as "wpf0". rewrite Heq.
-    iApply (semWP_mono with "wpf0").
-    iIntros ([] _) "H"; auto. by iApply "consr".
-  Qed.
+        Lemma iris_rule_stm_call {Γ} (δ : CStore Γ)
+            {Δ σ} (f : 𝑭 Δ σ) (c : SepContract Δ σ) (es : NamedEnv (Exp Γ) Δ)
+            (P : iProp Σ)
+            (Q : Val σ -> CStore Γ -> iProp Σ) :
+            CEnv f = Some c ->
+            CTriple P c (evals es δ) (fun v => Q v δ) ->
+            ⊢ ▷ ValidContractEnvSem CEnv -∗
+            semTriple δ P (stm_call f es) Q.
+        Proof.
+            iIntros (ceq ctrip) "cenv P".
+            iApply semWP_call_inline_later.
+            iModIntro.
+            iSpecialize ("cenv" $! _ _ f).
+            rewrite ceq. clear ceq.
+            destruct c as [Σe δΔ req res ens]; cbn in *.
+            iPoseProof (ctrip with "P") as (ι Heq) "[req consr]". clear ctrip.
+            iPoseProof ("cenv" $! ι with "req") as "wpf0". rewrite Heq.
+            iApply (semWP_mono with "wpf0").
+            iIntros ([] _) "H"; auto. by iApply "consr".
+        Qed.
 
-  Lemma iris_rule_stm_call_frame {Γ} (δ : CStore Γ)
-        (Δ : PCtx) (δΔ : CStore Δ) (τ : Ty) (s : Stm Δ τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ (semTriple δΔ P s (fun v _ => Q v δ) -∗
-           semTriple δ P (stm_call_frame δΔ s) Q).
-  Proof.
-    iIntros "trips P".
-    iSpecialize ("trips" with "P").
-    by iApply semWP_call_frame.
-  Qed.
+        Lemma iris_rule_stm_call_frame {Γ} (δ : CStore Γ)
+                (Δ : PCtx) (δΔ : CStore Δ) (τ : Ty) (s : Stm Δ τ)
+                (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+                ⊢ (semTriple δΔ P s (fun v _ => Q v δ) -∗
+                semTriple δ P (stm_call_frame δΔ s) Q).
+        Proof.
+            iIntros "trips P".
+            iSpecialize ("trips" with "P").
+            by iApply semWP_call_frame.
+        Qed.
 
-  Lemma iris_rule_stm_foreign
-    {Γ} (δ : CStore Γ) {τ} {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
-    (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-    ForeignSem ->
-    CTriple P (CEnvEx f) (evals es δ) (λ v : Val τ, Q v δ) ->
-    ⊢ semTriple δ P (stm_foreign f es) Q.
-  Proof.
-    iIntros (forSem ctrip) "P".
-    specialize (forSem Δ τ f Γ es δ).
-    destruct CEnvEx as [Σe δΔ req res ens]; cbn in *.
-    iPoseProof (ctrip with "P") as "[%ι [%Heq [req consr]]]". clear ctrip.
-    iPoseProof (forSem ι Heq with "req") as "WPf". clear forSem.
-    iApply (semWP_mono with "WPf").
-    iIntros ([v|m] δΓ'); auto; iIntros "[ens ->]".
-    by iApply "consr".
-  Qed.
+        Lemma iris_rule_stm_foreign
+            {Γ} (δ : CStore Γ) {τ} {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+            (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+            ForeignSem ->
+            CTriple P (CEnvEx f) (evals es δ) (λ v : Val τ, Q v δ) ->
+            ⊢ semTriple δ P (stm_foreign f es) Q.
+        Proof.
+            iIntros (forSem ctrip) "P".
+            specialize (forSem Δ τ f Γ es δ).
+            destruct CEnvEx as [Σe δΔ req res ens]; cbn in *.
+            iPoseProof (ctrip with "P") as "[%ι [%Heq [req consr]]]". clear ctrip.
+            iPoseProof (forSem ι Heq with "req") as "WPf". clear forSem.
+            iApply (semWP_mono with "WPf").
+            iIntros ([v|m] δΓ'); auto; iIntros "[ens ->]".
+            by iApply "consr".
+        Qed.
 
-  Lemma iris_rule_stm_lemmak
-    {Γ} (δ : CStore Γ) {τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
-    (P Q : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
-    LemmaSem ->
-    LTriple (evals es δ) P Q (LEnv l) ->
-    ⊢ semTriple δ Q k R -∗
-      semTriple δ P (stm_lemmak l es k) R.
-  Proof.
-    iIntros (lemSem ltrip) "tripk P". iApply semWP_lemmak. iApply "tripk".
-    specialize (lemSem _ l). remember (LEnv l) as contractL.
-    clear - lemSem ltrip.
-    destruct ltrip as [Ψ' pats req ens ent]; cbn in lemSem.
-    iPoseProof (ent with "P") as (ι Heq) "[req consr]".
-    iApply "consr". by iApply lemSem.
-  Qed.
+        Lemma iris_rule_stm_lemmak
+            {Γ} (δ : CStore Γ) {τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
+            (P Q : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
+            LemmaSem ->
+            LTriple (evals es δ) P Q (LEnv l) ->
+            ⊢ semTriple δ Q k R -∗
+            semTriple δ P (stm_lemmak l es k) R.
+        Proof.
+            iIntros (lemSem ltrip) "tripk P". iApply semWP_lemmak. iApply "tripk".
+            specialize (lemSem _ l). remember (LEnv l) as contractL.
+            clear - lemSem ltrip.
+            destruct ltrip as [Ψ' pats req ens ent]; cbn in lemSem.
+            iPoseProof (ent with "P") as (ι Heq) "[req consr]".
+            iApply "consr". by iApply lemSem.
+        Qed.
 
-  Lemma sound_stm
-    {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
-    forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ),
-      ForeignSem ->
-      LemmaSem ->
-      (∃ fuel, # fuel ⦃ PRE ⦄ s ; δ ⦃ POST ⦄) ->
-      ⊢ (□ ▷ ValidContractEnvSem CEnv -∗
-          semTriple δ PRE s POST)%I.
-  Proof.
-    iIntros (PRE POST extSem lemSem [fuel triple]) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
-    - by iApply iris_rule_consequence.
-    - by iApply iris_rule_frame.
-    - by iApply iris_rule_pull.
-    - by iApply iris_rule_exist.
-    - iApply iris_rule_stm_val.
-      by iApply H.
-    - iApply iris_rule_stm_exp.
-      by iApply H.
-    - by iApply iris_rule_stm_let.
-    - by iApply iris_rule_stm_block.
-    - by iApply iris_rule_stm_seq.
-    - by iApply iris_rule_stm_assertk.
-    - by iApply iris_rule_stm_fail.
-    - by iApply iris_rule_stm_read_register.
-    - by iApply iris_rule_stm_write_register.
-    - by iApply iris_rule_stm_assign.
-    - by iApply iris_rule_stm_call.
-    - by iApply iris_rule_stm_call_inline.
-    - by iApply iris_rule_stm_call_frame.
-    - by iApply iris_rule_stm_foreign.
-    - by iApply iris_rule_stm_lemmak.
-    - by iApply iris_rule_stm_bind.
-    - by iApply iris_rule_stm_debugk.
-    - by iApply iris_rule_stm_pattern_match.
-  Qed.
+        Lemma sound_stm
+            {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
+            forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ),
+            ForeignSem ->
+            LemmaSem ->
+            (∃ fuel, # fuel ⦃ PRE ⦄ s ; δ ⦃ POST ⦄) ->
+            ⊢ (□ ▷ ValidContractEnvSem CEnv -∗
+                semTriple δ PRE s POST)%I.
+        Proof.
+            iIntros (PRE POST extSem lemSem [fuel triple]) "#vcenv".
+            iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+            - by iApply iris_rule_consequence.
+            - by iApply iris_rule_frame.
+            - by iApply iris_rule_pull.
+            - by iApply iris_rule_exist.
+            - iApply iris_rule_stm_val.
+            by iApply H.
+            - iApply iris_rule_stm_exp.
+            by iApply H.
+            - by iApply iris_rule_stm_let.
+            - by iApply iris_rule_stm_block.
+            - by iApply iris_rule_stm_seq.
+            - by iApply iris_rule_stm_assertk.
+            - by iApply iris_rule_stm_fail.
+            - by iApply iris_rule_stm_read_register.
+            - by iApply iris_rule_stm_write_register.
+            - by iApply iris_rule_stm_assign.
+            - by iApply iris_rule_stm_call.
+            - by iApply iris_rule_stm_call_inline.
+            - by iApply iris_rule_stm_call_frame.
+            - by iApply iris_rule_stm_foreign.
+            - by iApply iris_rule_stm_lemmak.
+            - by iApply iris_rule_stm_bind.
+            - by iApply iris_rule_stm_debugk.
+            - by iApply iris_rule_stm_pattern_match.
+        Qed.
 
-  Lemma sound :
-    ForeignSem -> LemmaSem -> ValidContractCEnv ->
-    ⊢ ValidContractEnvSem CEnv.
-  Proof.
-    intros extSem lemSem vcenv.
-    iLöb as "IH".
-    iIntros (σs σ f).
-    specialize (vcenv σs σ f).
-    destruct (CEnv f) as [[]|];[|trivial].
-    iIntros (ι).
-    specialize (vcenv _ eq_refl ι) as [fuel vcenv].
-    iApply (sound_stm extSem lemSem); [|trivial].
-    exists fuel.
-    apply vcenv.
-  Qed.
+        Lemma sound :
+            ForeignSem -> LemmaSem -> ValidContractCEnv ->
+            ⊢ ValidContractEnvSem CEnv.
+        Proof.
+            intros extSem lemSem vcenv.
+            iLöb as "IH".
+            iIntros (σs σ f).
+            specialize (vcenv σs σ f).
+            destruct (CEnv f) as [[]|];[|trivial].
+            iIntros (ι).
+            specialize (vcenv _ eq_refl ι).
+            now iApply (sound_stm extSem lemSem vcenv).
+        Qed.
+    End PartialTriple.
 
+    Section TotalTriple.
+        Definition TValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
+          (∀ σs σ (f : 𝑭 σs σ),
+          match cenv σs σ f with
+          | Some c => TValidContractSem (FunDef f) c
+          | None => True
+          end)%I.
+
+        Definition TForeignSem :=
+          ∀ (Δ : PCtx) (τ : Ty) (f : 𝑭𝑿 Δ τ),
+          TValidContractForeign (CEnvEx f) f.
+
+        Lemma TForeignSem_ForeignSem :
+          TForeignSem -> ForeignSem.
+        Proof.
+          rewrite /TForeignSem /ForeignSem. intros H ? ? f. specialize (H _ _ f).
+          now apply TValidContractForeign_ValidContractForeign.
+        Qed.
+
+        Lemma iris_rule_tstm_call {Γ} (δ : CStore Γ)
+          {Δ σ} (f : 𝑭 Δ σ) (c : SepContract Δ σ) (es : NamedEnv (Exp Γ) Δ)
+          (P : iProp Σ)
+          (Q : Val σ -> CStore Γ -> iProp Σ) :
+          CEnv f = Some c ->
+          CTriple P c (evals es δ) (fun v => Q v δ) ->
+          ⊢ TValidContractEnvSem CEnv -∗
+          semTTriple δ P (stm_call f es) Q.
+        Proof.
+          iIntros (ceq ctrip) "cenv P".
+          iApply semTWP_call_inline.
+          iSpecialize ("cenv" $! _ _ f).
+          rewrite ceq. clear ceq.
+          destruct c as [Σe δΔ req res ens]; cbn in *.
+          iPoseProof (ctrip with "P") as (ι Heq) "[req consr]". clear ctrip.
+          iPoseProof ("cenv" $! ι with "req") as "wpf0". rewrite Heq.
+          iApply (semTWP_mono with "wpf0").
+          iIntros ([] _) "H"; auto. by iApply "consr".
+        Qed.
+
+        Lemma iris_rule_tstm_call_frame {Γ} (δ : CStore Γ)
+          (Δ : PCtx) (δΔ : CStore Δ) (τ : Ty) (s : Stm Δ τ)
+          (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+          ⊢ (semTTriple δΔ P s (fun v _ => Q v δ) -∗
+          semTTriple δ P (stm_call_frame δΔ s) Q).
+        Proof.
+          iIntros "trips P".
+          iSpecialize ("trips" with "P").
+          by iApply semTWP_call_frame.
+        Qed.
+
+        Lemma iris_rule_tstm_foreign
+          {Γ} (δ : CStore Γ) {τ} {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+          (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+          TForeignSem ->
+          CTriple P (CEnvEx f) (evals es δ) (λ v : Val τ, Q v δ) ->
+          ⊢ semTTriple δ P (stm_foreign f es) Q.
+        Proof.
+          iIntros (forSem ctrip) "P".
+          specialize (forSem Δ τ f Γ es δ).
+          destruct CEnvEx as [Σe δΔ req res ens]; cbn in *.
+          iPoseProof (ctrip with "P") as "[%ι [%Heq [req consr]]]". clear ctrip.
+          iPoseProof (forSem ι Heq with "req") as "WPf". clear forSem.
+          iApply (semTWP_mono with "WPf").
+          iIntros ([v|m] δΓ'); auto; iIntros "[ens ->]".
+          by iApply "consr".
+        Qed.
+
+        Lemma iris_rule_tstm_lemmak
+          {Γ} (δ : CStore Γ) {τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
+          (P Q : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
+          LemmaSem ->
+          LTriple (evals es δ) P Q (LEnv l) ->
+          ⊢ semTTriple δ Q k R -∗
+          semTTriple δ P (stm_lemmak l es k) R.
+        Proof.
+          iIntros (lemSem ltrip) "tripk P". iApply semTWP_lemmak. iApply "tripk".
+          specialize (lemSem _ l). remember (LEnv l) as contractL.
+          clear - lemSem ltrip.
+          destruct ltrip as [Ψ' pats req ens ent]; cbn in lemSem.
+          iPoseProof (ent with "P") as (ι Heq) "[req consr]".
+          iApply "consr". by iApply lemSem.
+        Qed.
+
+        Lemma sound_tstm
+          {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
+          forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ),
+          TForeignSem ->
+          LemmaSem ->
+          (∃ fuel, # fuel ⦃ PRE ⦄ s ; δ ⦃ POST ⦄) ->
+          ⊢ (□ TValidContractEnvSem CEnv -∗
+             semTTriple δ PRE s POST)%I.
+        Proof.
+          iIntros (PRE POST extSem lemSem [fuel triple]) "#vcenv".
+          iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+          - by iApply iris_rule_tconsequence.
+          - by iApply iris_rule_tframe.
+          - by iApply iris_rule_tpull.
+          - by iApply iris_rule_texist.
+          - iApply iris_rule_tstm_val.
+            by iApply H.
+          - iApply iris_rule_tstm_exp.
+            by iApply H.
+          - by iApply iris_rule_tstm_let.
+          - by iApply iris_rule_tstm_block.
+          - by iApply iris_rule_tstm_seq.
+          - by iApply iris_rule_tstm_assertk.
+          - by iApply iris_rule_tstm_fail.
+          - by iApply iris_rule_tstm_read_register.
+          - by iApply iris_rule_tstm_write_register.
+          - by iApply iris_rule_tstm_assign.
+          - by iApply iris_rule_tstm_call.
+          - by iApply iris_rule_tstm_call_inline.
+          - by iApply iris_rule_tstm_call_frame.
+          - by iApply iris_rule_tstm_foreign.
+          - by iApply iris_rule_tstm_lemmak.
+          - by iApply iris_rule_tstm_bind.
+          - by iApply iris_rule_tstm_debugk.
+          - by iApply iris_rule_tstm_pattern_match.
+        Qed.
+
+        Lemma tsound :
+            TForeignSem -> LemmaSem -> ValidContractCEnv ->
+            ⊢ TValidContractEnvSem CEnv.
+        Proof.
+          iIntros (extSem lemSem cenv σs τ f).
+          destruct (CEnv f) eqn:Ef; last trivial.
+          rewrite /TValidContractSem. destruct s.
+          iIntros (ι). rewrite /ValidContractCEnv in cenv.
+          specialize (cenv _ _ f _ Ef ι). cbn in cenv.
+          iApply (sound_tstm extSem lemSem cenv).
+        Admitted.
+    End TotalTriple.
   End WithSailGS.
 End IrisInstanceWithContracts.
