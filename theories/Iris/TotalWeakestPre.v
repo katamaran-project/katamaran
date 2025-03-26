@@ -97,17 +97,9 @@ Module Type IrisTotalWeakestPre
 
     Lemma semTWP_unfold [Γ τ] (s : Stm Γ τ)
       (Q : Post Γ τ) (δ : CStore Γ) :
-      semTWP δ s Q ⊣⊢
-        match stm_to_val s with
-        | Some v => |={⊤}=> Q v δ
-        | None   => ∀ (γ1 : RegStore) (μ1 : Memory),
-                       regs_inv γ1 ∗ mem_inv μ1 ={⊤,∅}=∗
-                       (∀ (s2 : Stm Γ τ) (δ2 : CStore Γ) (γ2 : RegStore) (μ2 : Memory),
-                          ⌜⟨ γ1, μ1, δ , s ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩⌝ ={∅}=∗
-                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semTWP δ2 s2 Q)
-        end.
+      semTWP δ s Q ⊣⊢ semTWP_pre (@semTWP _ _ Γ τ) δ s Q.
     Proof.
-      unfold semTWP. rewrite twp_unfold. unfold twp_pre. cbn.
+      rewrite /semTWP /semTWP_pre twp_unfold /twp_pre. cbn.
       destruct (stm_to_val s) eqn:Es; cbn; [easy|].
       apply bi.entails_anti_sym; iIntros "HYP".
       - iIntros (γ μ) "state_inv".
@@ -183,7 +175,7 @@ Module Type IrisTotalWeakestPre
       ⊢ ∀ (Q : Post Γ τ) (δ : CStore Γ),
           Q (inl (eval e δ)) δ -∗ semTWP δ (stm_exp e) Q.
     Proof.
-      iIntros (Q δ1) "P". rewrite <-semTWP_unfold_nolc. cbn.
+      iIntros (Q δ1) "P". rewrite semTWP_unfold. cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro. iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -250,7 +242,7 @@ Module Type IrisTotalWeakestPre
           semTWP (evals es δΓ) (FunDef f) (fun vτ _ => Q vτ δΓ) -∗
           semTWP δΓ (stm_call f es) Q.
     Proof.
-      iIntros (Q δΓ) "wpbody". rewrite <-(semTWP_unfold_nolc (stm_call f es)). cbn.
+      iIntros (Q δΓ) "wpbody". rewrite (semTWP_unfold (stm_call f es)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -292,7 +284,7 @@ Module Type IrisTotalWeakestPre
                                 end) -∗
           semTWP δ (let: x ∷ σ := s in k) Q.
     Proof.
-      iIntros (Q δΓ) "WPs". rewrite <-(semTWP_unfold_nolc (stm_let x σ s k)). cbn.
+      iIntros (Q δΓ) "WPs". rewrite (semTWP_unfold (stm_let x σ s k)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -310,7 +302,7 @@ Module Type IrisTotalWeakestPre
                           | inr m => semTWP δ (of_ival (inr m)) Q
                           end) -∗ semTWP δ (s;;k) Q.
     Proof.
-      iIntros (Q δ) "WPs". rewrite <-(semTWP_unfold_nolc (stm_seq s k)). cbn.
+      iIntros (Q δ) "WPs". rewrite (semTWP_unfold (stm_seq s k)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -326,7 +318,7 @@ Module Type IrisTotalWeakestPre
           (⌜eval e1 δ = false⌝ → semTWP δ (fail (eval e2 δ)) Q) -∗
           semTWP δ (stm_assertk e1 e2 k) Q.
     Proof.
-      iIntros (Q δ) "WPtrue WPfalse". rewrite <-(semTWP_unfold_nolc (stm_assertk e1 e2 k)). cbn.
+      iIntros (Q δ) "WPtrue WPfalse". rewrite (semTWP_unfold (stm_assertk e1 e2 k)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -339,7 +331,7 @@ Module Type IrisTotalWeakestPre
           (∃ v : Val τ, reg_pointsTo reg v ∗ (reg_pointsTo reg v -∗ Q (inl v) δ)) -∗
           semTWP δ (stm_read_register reg) Q.
     Proof.
-      iIntros (Q δ) "[% [Hreg HP]]". rewrite <-semTWP_unfold_nolc. cbn.
+      iIntros (Q δ) "[% [Hreg HP]]". rewrite semTWP_unfold. cbn.
       iIntros (γ1 μ1) "[Hregs Hmem]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro. iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -353,7 +345,7 @@ Module Type IrisTotalWeakestPre
           (∃ v : Val τ, reg_pointsTo reg v ∗ (reg_pointsTo reg (eval e δ) -∗ Q (inl (eval e δ)) δ)) -∗
           semTWP δ (stm_write_register reg e) Q.
     Proof.
-      iIntros (Q δ) "[% [Hreg HP]]". rewrite <-semTWP_unfold_nolc. cbn.
+      iIntros (Q δ) "[% [Hreg HP]]". rewrite semTWP_unfold. cbn.
       iIntros (γ1 μ1) "[Hregs Hmem]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iMod (reg_update γ1 reg v (eval e δ) with "Hregs Hreg") as "[Hregs Hreg]".
@@ -412,7 +404,7 @@ Module Type IrisTotalWeakestPre
            end) -∗
       semTWP δ (stm_pattern_match s pat rhs) Q.
     Proof.
-      iIntros (Q δΓ) "WPs". rewrite <-(semTWP_unfold_nolc (stm_pattern_match s pat rhs)). cbn.
+      iIntros (Q δΓ) "WPs". rewrite (semTWP_unfold (stm_pattern_match s pat rhs)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -436,7 +428,7 @@ Module Type IrisTotalWeakestPre
                              end) Q)) -∗
         semTWP δ (stm_foreign f es) Q.
     Proof.
-      iIntros "H". rewrite <-semTWP_unfold_nolc. cbn. iIntros (γ1 μ1) "state_inv".
+      iIntros "H". rewrite semTWP_unfold. cbn. iIntros (γ1 μ1) "state_inv".
       iMod ("H" $! γ1 μ1 with "[$]") as "H". iModIntro.
       iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn. by iApply "H".
     Qed.
@@ -444,7 +436,7 @@ Module Type IrisTotalWeakestPre
     Lemma semTWP_debugk {Γ τ} (s : Stm Γ τ) :
       ⊢ ∀ Q δ, semTWP δ s Q -∗ semTWP δ (stm_debugk s) Q.
     Proof.
-      iIntros (Q δ) "WPs". rewrite <-(semTWP_unfold_nolc (stm_debugk s)). cbn.
+      iIntros (Q δ) "WPs". rewrite (semTWP_unfold (stm_debugk s)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.
@@ -454,7 +446,7 @@ Module Type IrisTotalWeakestPre
     Lemma semTWP_lemmak {Γ τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (s : Stm Γ τ) :
       ⊢ ∀ Q δ, semTWP δ s Q -∗ semTWP δ (stm_lemmak l es s) Q.
     Proof.
-      iIntros (Q δ) "WPs". rewrite <-(semTWP_unfold_nolc (stm_lemmak l es s)). cbn.
+      iIntros (Q δ) "WPs". rewrite (semTWP_unfold (stm_lemmak l es s)). cbn.
       iIntros (γ1 μ1) "state_inv".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
       iIntros (s2 δ2 γ2 μ2 step). destruct (smallinvstep step); cbn.

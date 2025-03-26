@@ -637,7 +637,7 @@ Section Soundness.
                     semTTriple δ P s Q.
     Proof.
         iIntros (Hnv Hnoop) "HPQ HP".
-        rewrite <-semTWP_unfold_nolc. rewrite Hnv.
+        rewrite semTWP_unfold /semTWP_pre. rewrite Hnv.
         iIntros (γ1 μ1) "state_inv".
         iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
         iIntros (s2 δ2 γ2 μ2) "%".
@@ -1167,6 +1167,7 @@ Module IrisInstanceWithContracts
           rewrite /TValidContractSem. destruct s.
           iIntros (ι). rewrite /ValidContractCEnv in cenv.
           specialize (cenv _ _ f _ Ef ι). cbn in cenv.
+          rewrite /semTTriple /semTWP. iIntros "PRE".
           iApply (sound_tstm extSem lemSem cenv).
         Admitted.
     End TotalTriple.
