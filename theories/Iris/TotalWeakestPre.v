@@ -126,27 +126,6 @@ Module Type IrisTotalWeakestPre
         iDestruct "HYP" as "($ & $)". now cbn.
     Qed.
 
-    Lemma semTWP_unfold_nolc [Γ τ] (s : Stm Γ τ)
-      (Q : Post Γ τ) (δ : CStore Γ) :
-        match stm_to_val s with
-        | Some v => |={⊤}=> Q v δ
-        | None   => ∀ (γ1 : RegStore) (μ1 : Memory),
-                       regs_inv γ1 ∗ mem_inv μ1 ={⊤,∅}=∗
-                       (∀ (s2 : Stm Γ τ) (δ2 : CStore Γ) (γ2 : RegStore) (μ2 : Memory),
-                          ⌜⟨ γ1, μ1, δ , s ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩⌝ ={∅}=∗
-                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semTWP δ2 s2 Q)
-        end ⊢ semTWP δ s Q.
-    Proof.
-      rewrite semTWP_unfold.
-      destruct (stm_to_val s); first easy.
-      iIntros "HYP" (γ1 μ1) "Hres".
-      iMod ("HYP" with "Hres") as "HYP".
-      iIntros "!>" (s2 δ2 γ2 μ2 Hstep).
-      iMod ("HYP" $! _ _ _ _ Hstep) as "HYP".
-      repeat iModIntro. iMod "HYP".
-      now iModIntro.
-    Qed.
-
     Lemma semTWP_ind {Γ τ} (Ψ : CStore Γ -> Stm Γ τ -> Post Γ τ -> iProp Σ) :
       □ (∀ δ s Φ, semTWP_pre (λ δ s Φ, Ψ δ s Φ ∧ semTWP δ s Φ) δ s Φ -∗ Ψ δ s Φ) -∗
       ∀ δ s Φ, semTWP δ s Φ -∗ Ψ δ s Φ.
