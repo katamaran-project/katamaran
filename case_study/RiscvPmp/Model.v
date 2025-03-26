@@ -154,31 +154,6 @@ Module RiscvPmpModel2.
         f_equal; auto.
     Qed.
 
-    (* Iris does not seem to have a no-fork variant for `language`s, so we prove it here, analogously to `wp_lift_atomic_head_step_no_fork` *)
-    Lemma wp_lift_atomic_step_no_fork:
-      ∀ {Λ : language} {Σ : gFunctors} {irisGS0 : irisGS Λ Σ}
-        {s : stuckness} {E : coPset} {Φ : val Λ → iProp Σ}
-        (e1 : language.expr Λ),
-        language.to_val e1 = None
-        → (∀ (σ1 : state Λ) (ns : nat) (κ κs : list (language.observation Λ)) (nt : nat),
-            state_interp σ1 ns (κ ++ κs) nt ={E}=∗
-            ⌜match s with
-              | NotStuck => reducible e1 σ1
-              | MaybeStuck => True
-              end⌝ ∗
-            ▷ (∀ (e2 : language.expr Λ) (σ2 : language.state Λ) (efs : list (language.expr Λ)),
-                  ⌜language.prim_step e1 σ1 κ e2 σ2 efs⌝ ={E}=∗
-                  ⌜efs = []⌝ ∗ state_interp σ2 (S ns) κs (length efs + nt) ∗
-                  from_option Φ False (language.to_val e2) )) -∗
-          WP e1 @ s; E {{ v, Φ v }}.
-    Proof. intros * Hval. iIntros "H".
-      iApply lifting.wp_lift_atomic_step; [auto | ].
-      iIntros (σ1 ns κ κs nt) "Hσ1".
-      iMod ("H" $! σ1 with "Hσ1") as "[$ H]"; iModIntro.
-      iNext; iIntros (v2 σ2 efs Hstep) "_".
-      iMod ("H" $! v2 σ2 efs with "[//]") as "(-> & ? & ?) /=". by iFrame.
-    Qed.
-
     Lemma read_ram_sound (bytes : nat) :
       TValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
     Proof.
