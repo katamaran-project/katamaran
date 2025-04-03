@@ -36,8 +36,17 @@ From Katamaran Require Export
 Module Type FunDeclMixin (B : Base) :=
   StatementsOn B.
 
-Module Type ProgramMixin (B : Base) :=
-  Equalities.Nop.
+Module Type ProgramMixin (B : Base)
+  (Import FDecl : FunDecl B)
+  (Import FDK : FunDefKit B FDecl).
+
+  Definition InvokedByFun {Δ1 τ1} {Δ2 τ2} (f1 : 𝑭 Δ1 τ1) (f2 : 𝑭 Δ2 τ2) :=
+    InvokedByStm f1 (FunDef f2).
+  Definition InvokedByFunPackage (f1 f2 : {Δ & {τ & 𝑭 Δ τ}}) :=
+    match f1, f2 with
+    | existT Δ1 (existT τ1 f1) ,  existT Δ2 (existT τ2 f2) => InvokedByFun f1 f2
+    end.
+End ProgramMixin.
 
 Module Type Program (B : Base) :=
   FunDeclKit B <+ FunDeclMixin B <+ FunDefKit B <+ ProgramMixin B.

@@ -1039,12 +1039,17 @@ Module IrisInstanceWithContracts
     End PartialTriple.
 
     Section TotalTriple.
-        Definition TValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
-          (∀ σs σ (f : 𝑭 σs σ),
-          match cenv σs σ f with
-          | Some c => TValidContractSem (FunDef f) c
-          | None => True
-          end)%I.
+      Definition TValidContractEnvF { σs σ } (cenv : SepContractEnv) (f : 𝑭 σs σ) : iProp Σ :=
+        (⌜Wf.Acc InvokedByFunPackage (existT _ (existT _ f))⌝ -∗
+        match cenv σs σ f with
+        | Some c => TValidContractSem (FunDef f) c
+        | None => True
+        end)%I.
+      Arguments TValidContractEnvF {σs σ} cenv f : simpl nomatch.
+
+
+      Definition TValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
+        ∀ σs σ (f : 𝑭 σs σ), TValidContractEnvF cenv f.
 
         Definition TForeignSem :=
           ∀ (Δ : PCtx) (τ : Ty) (f : 𝑭𝑿 Δ τ),
@@ -1057,24 +1062,38 @@ Module IrisInstanceWithContracts
           now apply TValidContractForeign_ValidContractForeign.
         Qed.
 
+        Lemma iris_rule_tstm_call_one {Γ} (δ : CStore Γ)
+          {Δ σ} (f : 𝑭 Δ σ) (c : SepContract Δ σ) (es : NamedEnv (Exp Γ) Δ)
+          (P : iProp Σ)
+          (Q : Val σ -> CStore Γ -> iProp Σ) :
+          CEnv f = Some c ->
+          CTriple P c (evals es δ) (fun v => Q v δ) ->
+          ⊢ TValidContractSem (FunDef f) c -∗
+          semTTriple δ P (stm_call f es) Q.
+        Proof.
+          iIntros (ceq ctrip) "cenv P".
+          iApply semTWP_call_inline.
+          destruct c as [Σe δΔ req res ens]; cbn in *.
+          iPoseProof (ctrip with "P") as (ι Heq) "[req consr]". clear ctrip.
+          iPoseProof ("cenv" $! ι with "req") as "wpf0". rewrite Heq.
+          iApply (semTWP_mono with "wpf0").
+          iIntros ([] _) "H"; auto. by iApply "consr".
+        Qed.
+        
         Lemma iris_rule_tstm_call {Γ} (δ : CStore Γ)
           {Δ σ} (f : 𝑭 Δ σ) (c : SepContract Δ σ) (es : NamedEnv (Exp Γ) Δ)
           (P : iProp Σ)
           (Q : Val σ -> CStore Γ -> iProp Σ) :
           CEnv f = Some c ->
           CTriple P c (evals es δ) (fun v => Q v δ) ->
+          Wf.Acc InvokedByFunPackage (existT _ (existT _ f)) ->
           ⊢ TValidContractEnvSem CEnv -∗
-          semTTriple δ P (stm_call f es) Q.
+                                         semTTriple δ P (stm_call f es) Q.
         Proof.
-          iIntros (ceq ctrip) "cenv P".
-          iApply semTWP_call_inline.
-          iSpecialize ("cenv" $! _ _ f).
-          rewrite ceq. clear ceq.
-          destruct c as [Σe δΔ req res ens]; cbn in *.
-          iPoseProof (ctrip with "P") as (ι Heq) "[req consr]". clear ctrip.
-          iPoseProof ("cenv" $! ι with "req") as "wpf0". rewrite Heq.
-          iApply (semTWP_mono with "wpf0").
-          iIntros ([] _) "H"; auto. by iApply "consr".
+          iIntros (ceq ctrip Hwff) "cenv".
+          iApply iris_rule_tstm_call_one; eauto.
+          iSpecialize ("cenv" $! _ _ f Hwff).
+          now rewrite ceq.
         Qed.
 
         Lemma iris_rule_tstm_call_frame {Γ} (δ : CStore Γ)
@@ -1127,48 +1146,87 @@ Module IrisInstanceWithContracts
           TForeignSem ->
           LemmaSem ->
           (∃ fuel, # fuel ⦃ PRE ⦄ s ; δ ⦃ POST ⦄) ->
-          ⊢ (□ TValidContractEnvSem CEnv -∗
+          (forall Δ σ (f : 𝑭 Δ σ), InvokedByStm f s -> Wf.Acc (InvokedByFunPackage) (existT _ (existT _ f))) ->
+          ⊢ (□ (∀ σs σ (f : 𝑭 σs σ), TValidContractEnvF CEnv f) -∗
              semTTriple δ PRE s POST)%I.
         Proof.
-          iIntros (PRE POST extSem lemSem [fuel triple]) "#vcenv".
-          iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
-          - by iApply iris_rule_tconsequence.
-          - by iApply iris_rule_tframe.
-          - by iApply iris_rule_tpull.
-          - by iApply iris_rule_texist.
+          iIntros (PRE POST extSem lemSem [fuel triple] Haccf) "#vcenv".
+          iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips" forall "".
+          - iApply iris_rule_tconsequence; eauto.
+            now iApply "trips".
+          - iApply iris_rule_tframe.
+            now iApply "trips".
+          - iApply iris_rule_tpull.
+            iIntros (HQ).
+            now iApply "trips".
+          - iApply iris_rule_texist.
+            iIntros (HQ).
+            now iApply "trips".
           - iApply iris_rule_tstm_val.
             by iApply H.
           - iApply iris_rule_tstm_exp.
             by iApply H.
-          - by iApply iris_rule_tstm_let.
-          - by iApply iris_rule_tstm_block.
-          - by iApply iris_rule_tstm_seq.
-          - by iApply iris_rule_tstm_assertk.
-          - by iApply iris_rule_tstm_fail.
-          - by iApply iris_rule_tstm_read_register.
-          - by iApply iris_rule_tstm_write_register.
-          - by iApply iris_rule_tstm_assign.
-          - by iApply iris_rule_tstm_call.
-          - by iApply iris_rule_tstm_call_inline.
-          - by iApply iris_rule_tstm_call_frame.
-          - by iApply iris_rule_tstm_foreign.
-          - by iApply iris_rule_tstm_lemmak.
-          - by iApply iris_rule_tstm_bind.
-          - by iApply iris_rule_tstm_debugk.
-          - by iApply iris_rule_tstm_pattern_match.
-        Qed.
-
+          - iApply iris_rule_tstm_let.
+            + iApply "trips1".
+              iPureIntro.
+              intros σs σ0 f Hfs.
+              eapply Haccf; now left.
+            + iIntros (v δ'). iApply "trips".
+              iPureIntro.
+              intros σs σ0 f Hfs.
+              eapply Haccf; now right.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - iApply iris_rule_tstm_call_one; eauto.
+            iSpecialize ("vcenv" $! _ _ f (Haccf _ _ _ eq_refl)).
+            now rewrite H.
+          - iApply iris_rule_tstm_call_inline.
+            iApply "trips".
+            iPureIntro.
+            iIntros (σs σ f2 Hff2) "".
+            destruct (Haccf _ _ f eq_refl) as [Hwf].
+            now apply Hwf.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          (* - by iApply iris_rule_tstm_call_inline. *)
+          (* - by iApply iris_rule_tstm_call_frame. *)
+          (* - by iApply iris_rule_tstm_foreign. *)
+          (* - by iApply iris_rule_tstm_lemmak. *)
+          (* - by iApply iris_rule_tstm_bind. *)
+          (* - by iApply iris_rule_tstm_debugk. *)
+          (* - by iApply iris_rule_tstm_pattern_match. *)
+        Admitted.
+        
         Lemma tsound :
             TForeignSem -> LemmaSem -> ValidContractCEnv ->
             ⊢ TValidContractEnvSem CEnv.
         Proof.
           iIntros (extSem lemSem cenv σs τ f).
-          destruct (CEnv f) eqn:Ef; last trivial.
+          unfold TValidContractEnvF.
+          destruct (CEnv f) eqn:Hcf; last trivial.
+          iIntros "%Hwf".
+          iStopProof.
+          remember (existT σs (existT τ f)) as x.
+          induction Hwf as [? Hacc IH]; subst.
           rewrite /TValidContractSem. destruct s.
-          iIntros (ι). rewrite /ValidContractCEnv in cenv.
-          specialize (cenv _ _ f _ Ef ι). cbn in cenv.
+          iIntros "_ %ι".
+          rewrite /ValidContractCEnv in cenv.
+          specialize (cenv _ _ f _ Hcf ι). cbn in cenv.
           rewrite /semTTriple /semTWP. iIntros "PRE".
-          iApply (sound_tstm extSem lemSem cenv).
+          iApply (sound_tstm extSem lemSem cenv); last trivial.
+          - intros.
+            now apply Hacc.
+          - iModIntro.
+            iIntros (Δ2 σ2 f2) "%Haccf2".
         Admitted.
     End TotalTriple.
   End WithSailGS.

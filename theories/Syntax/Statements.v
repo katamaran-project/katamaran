@@ -586,6 +586,30 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Notation "'fail' s" := (stm_fail _ s)
     (at level 10, no associativity) : exp_scope.
 
+  Section CallGraph.
+    Fixpoint InvokedByStm {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : Prop :=
+     match s with
+     | stm_val _ v => False
+     | stm_exp e => False
+     | stm_let x σ s1 s2 => InvokedByStm f s1 \/ InvokedByStm f s2
+     | stm_block δ s => InvokedByStm f s
+     | stm_assign xInΓ s => InvokedByStm f s
+     | stm_call f2 es => existT _ (existT _ f) = existT _ (existT _ f2)
+     | stm_call_frame δ s => InvokedByStm f s
+     | stm_foreign f es => False
+     | stm_lemmak l es k => False
+     | stm_seq s k => InvokedByStm f s \/ InvokedByStm f k
+     | stm_assertk e1 e2 k => InvokedByStm f k
+     | stm_fail _ s => False
+     | stm_pattern_match s pat rhs => (exists pc, InvokedByStm f (rhs pc))
+     | stm_read_register reg => False
+     | stm_write_register reg e => False
+     | stm_bind s k => InvokedByStm f s \/ (exists v, InvokedByStm f (k v))
+     | stm_debugk k => InvokedByStm f k
+     end.
+  End CallGraph.
+
+
 End StatementsOn.
 
 Module Type FunDecl (B : Base) := FunDeclKit B <+ StatementsOn B.
