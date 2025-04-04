@@ -1175,13 +1175,22 @@ Module IrisInstanceWithContracts
               iPureIntro.
               intros σs σ0 f Hfs.
               eapply Haccf; now right.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
+          - iApply iris_rule_tstm_block.
+            now iApply "trips".
+          - iApply iris_rule_tstm_seq.
+            + iApply "trips1".
+              iPureIntro. intros Δ σ0 f Hf.
+              eapply Haccf; now left.
+            + iIntros (v δ').
+              iApply "trips".
+              iPureIntro. intros Δ σ0 f Hf.
+              eapply Haccf; now right.
+          - iApply iris_rule_tstm_assertk.
+            iIntros (He1). now iApply "trips".
+          - iApply iris_rule_tstm_fail.
+          - iApply iris_rule_tstm_read_register.
+          - now iApply iris_rule_tstm_write_register.
+          - iApply iris_rule_tstm_assign. now iApply "trips".
           - iApply iris_rule_tstm_call_one; eauto.
             iSpecialize ("vcenv" $! _ _ f (Haccf _ _ _ eq_refl)).
             now rewrite H.
@@ -1191,20 +1200,22 @@ Module IrisInstanceWithContracts
             iIntros (σs σ f2 Hff2) "".
             destruct (Haccf _ _ f eq_refl) as [Hwf].
             now apply Hwf.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          (* - by iApply iris_rule_tstm_call_inline. *)
-          (* - by iApply iris_rule_tstm_call_frame. *)
-          (* - by iApply iris_rule_tstm_foreign. *)
-          (* - by iApply iris_rule_tstm_lemmak. *)
-          (* - by iApply iris_rule_tstm_bind. *)
-          (* - by iApply iris_rule_tstm_debugk. *)
-          (* - by iApply iris_rule_tstm_pattern_match. *)
-        Admitted.
+          - iApply iris_rule_tstm_call_frame. now iApply "trips".
+          - now iApply iris_rule_tstm_foreign.
+          - iApply iris_rule_tstm_lemmak; eauto.
+            iApply "trips". iPureIntro.  intros Δ0 σ f Hf.
+            now apply Haccf.
+          - iApply iris_rule_tstm_bind.
+            + iApply "trips1". iPureIntro.
+              intros. apply Haccf. now left.
+            + iIntros (v ?). iApply "trips".
+              iPureIntro. intros. apply Haccf. right. now exists v.
+          - iApply iris_rule_tstm_debugk. now iApply "trips".
+          - iApply iris_rule_tstm_pattern_match.
+            + iApply "trips1". iPureIntro. intros. apply Haccf. now left.
+            + iIntros (pc δpc δΓ1). iApply "trips". iPureIntro.
+              intros. apply Haccf. right. now exists pc.
+        Qed.
         
         Lemma tsound :
             TForeignSem -> LemmaSem -> ValidContractCEnv ->
@@ -1217,16 +1228,14 @@ Module IrisInstanceWithContracts
           iStopProof.
           remember (existT σs (existT τ f)) as x.
           induction Hwf as [? Hacc IH]; subst.
-          rewrite /TValidContractSem. destruct s.
+          rewrite /TValidContractSem. destruct s as [lvars store PRE res POST].
           iIntros "_ %ι".
           rewrite /ValidContractCEnv in cenv.
           specialize (cenv _ _ f _ Hcf ι). cbn in cenv.
-          rewrite /semTTriple /semTWP. iIntros "PRE".
-          iApply (sound_tstm extSem lemSem cenv); last trivial.
-          - intros.
-            now apply Hacc.
-          - iModIntro.
-            iIntros (Δ2 σ2 f2) "%Haccf2".
+          iApply (sound_tstm extSem lemSem cenv).
+          - intros. now apply Hacc.
+          - iIntros "!>" (Δ2 σ2 f2) "%Haccf2".
+            unshelve iPoseProof (IH _ _ eq_refl) as "IH".
         Admitted.
     End TotalTriple.
   End WithSailGS.

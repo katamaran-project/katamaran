@@ -597,11 +597,11 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
      | stm_call f2 es => existT _ (existT _ f) = existT _ (existT _ f2)
      | stm_call_frame δ s => InvokedByStm f s
      | stm_foreign f es => False
-     | stm_lemmak l es k => False
+     | stm_lemmak l es k => InvokedByStm f k
      | stm_seq s k => InvokedByStm f s \/ InvokedByStm f k
      | stm_assertk e1 e2 k => InvokedByStm f k
      | stm_fail _ s => False
-     | stm_pattern_match s pat rhs => (exists pc, InvokedByStm f (rhs pc))
+     | stm_pattern_match s pat rhs => InvokedByStm f s \/ (exists pc, InvokedByStm f (rhs pc))
      | stm_read_register reg => False
      | stm_write_register reg e => False
      | stm_bind s k => InvokedByStm f s \/ (exists v, InvokedByStm f (k v))
