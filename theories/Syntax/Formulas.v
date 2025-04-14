@@ -61,7 +61,7 @@ Module Type FormulasOn
   Inductive Formula (Σ : LCtx) : Type :=
   | formula_user (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | formula_bool (t : Term Σ ty.bool)
-  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Val Σ' Prop)
+  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named RelVal Σ' Prop)
   | formula_relop {σ} (rop : bop.RelOp σ) (t1 t2 : Term Σ σ)
   | formula_true
   | formula_false
@@ -72,6 +72,8 @@ Module Type FormulasOn
   #[global] Arguments formula_true {_}.
   #[global] Arguments formula_false {_}.
 
+
+  (* TODO: I don't know what we use this one for, so I don't know whether I need a change it so the whole conjuction is negated or each of the two sides is negated, but still a conjunction. *)
   Definition formula_relop_neg {Σ σ} (op : RelOp σ) :
     forall (t1 t2 : Term Σ σ), Formula Σ :=
     match op with
@@ -113,9 +115,9 @@ Module Type FormulasOn
     fix inst_formula {Σ} (fml : Formula Σ) (ι : Valuation Σ) :=
       match fml with
       | formula_user p ts      => env.uncurry (𝑷_inst p) (inst ts ι)
-      | formula_bool t         => inst (A := Val ty.bool) t ι = true
+      | formula_bool t         => inst (A := RelVal ty.bool) t ι = ty.SyncVal ty.bool true
       | formula_prop ζ P       => uncurry_named P (inst ζ ι)
-      | formula_relop op t1 t2 => bop.eval_relop_prop op (inst t1 ι) (inst t2 ι)
+      | formula_relop op t1 t2 => bop.eval_relop_propRel op (inst t1 ι) (inst t2 ι)
       | formula_true           => True
       | formula_false          => False
       | formula_and F1 F2      => inst_formula F1 ι /\ inst_formula F2 ι
@@ -128,17 +130,19 @@ Module Type FormulasOn
     now apply and_iff_morphism. now apply or_iff_morphism.
   Qed.
 
-  Lemma instprop_formula_relop_neg {Σ σ} (ι : Valuation Σ) (op : RelOp σ) :
-    forall (t1 t2 : Term Σ σ),
-      instprop (formula_relop_neg op t1 t2) ι <->
-      bop.eval_relop_val op (inst t1 ι) (inst t2 ι) = false.
-  Proof.
-    destruct op; cbn; intros t1 t2;
-      unfold bv.sle, bv.sleb, bv.slt, bv.sltb;
-      unfold bv.ule, bv.uleb, bv.ult, bv.ultb;
-      rewrite ?N.ltb_antisym, ?negb_true_iff, ?negb_false_iff, ?N.leb_gt, ?N.leb_le;
-      auto; try Lia.lia; now destruct eq_dec.
-  Qed.
+
+  (* TODO: This is currently not true, either we leave it out if we don't need it, we change the definition of formula_relop_neg (see comment there) or the content of this lemma *)
+  (* Lemma instprop_formula_relop_neg {Σ σ} (ι : Valuation Σ) (op : RelOp σ) : *)
+  (*   forall (t1 t2 : Term Σ σ), *)
+  (*     instprop (formula_relop_neg op t1 t2) ι <-> *)
+  (*     bop.eval_relop_valRel op (inst t1 ι) (inst t2 ι) = false. *)
+  (* Proof. *)
+  (*   destruct op; cbn; intros t1 t2; *)
+  (*     unfold bv.sle, bv.sleb, bv.slt, bv.sltb; *)
+  (*     unfold bv.ule, bv.uleb, bv.ult, bv.ultb; *)
+  (*     rewrite ?N.ltb_antisym, ?negb_true_iff, ?negb_false_iff, ?N.leb_gt, ?N.leb_le; *)
+  (*     auto; try Lia.lia. now destruct eq_dec. *)
+  (* Qed. *)
 
   Section Reasoning.
     Import Entailment.
@@ -155,22 +159,44 @@ Module Type FormulasOn
       Proper (base.equiv ==> base.equiv ==> (⊣⊢)) (@formula_relop Σ σ rop).
     Proof. intros s1 t1 e1 s2 t2 e2 ι; cbn; now rewrite e1, e2. Qed.
 
+    Lemma syncValEqIffEq {σ a b} : ty.SyncVal σ a = ty.SyncVal σ b <-> a = b.
+    Proof.
+      constructor.
+      -  intro H. congruence.
+      - apply f_equal.
+    Qed.
+
     Lemma formula_bool_and [Σ] (t1 t2 : Term Σ ty.bool):
       formula_bool (term_binop bop.and t1 t2) ⊣⊢ formula_and (formula_bool t1) (formula_bool t2).
-    Proof. intro ι. cbn. rewrite andb_true_iff. intuition. Qed.
+    Proof.
+      intro ι. cbn. destruct (inst t1 ι); destruct (inst t2 ι).
+      all: repeat rewrite syncValEqIffEq; cbn.
+      - rewrite andb_true_iff; intuition.
+      - split; intros. congruence. destruct H. congruence.
+      - split; intros. congruence. destruct H. congruence.
+      - split; intros. congruence. destruct H. congruence.  
+    Qed.
     #[local] Hint Rewrite formula_bool_and : katamaran.
 
-    Lemma formula_bool_relop [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
-      formula_bool (term_binop (bop.relop op) s t) ⊣⊢ formula_relop op s t.
-    Proof. intro; cbn; symmetry; apply bop.eval_relop_equiv. Qed.
 
-    Lemma formula_bool_relop_neg [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
-      formula_bool (term_relop_neg op s t) ⊣⊢ formula_relop_neg op s t.
-    Proof.
-      intro; cbn.
-      rewrite inst_term_relop_neg, negb_true_iff.
-      now rewrite instprop_formula_relop_neg.
-    Qed.
+    (* TODO: This one relies on NonSyncVal true true = SyncVal true, which is not true *)
+    (* Lemma formula_bool_relop [Σ σ] (op : RelOp σ) (s t : Term Σ σ) : *)
+    (*   formula_bool (term_binop (bop.relop op) s t) ⊣⊢ formula_relop op s t. *)
+    (* Proof. intro; cbn; symmetry; destruct (inst s ι); destruct (inst t ι). *)
+    (*        all: repeat rewrite syncValEqIffEq; cbn. *)
+    (*        apply bop.eval_relop_equiv. *)
+    (*        - split. *)
+    (*          + intros [H1 H2]. *)
+
+    (* Qed. *)
+
+    (* Lemma formula_bool_relop_neg [Σ σ] (op : RelOp σ) (s t : Term Σ σ) : *)
+    (*   formula_bool (term_relop_neg op s t) ⊣⊢ formula_relop_neg op s t. *)
+    (* Proof. *)
+    (*   intro; cbn. *)
+    (*   rewrite inst_term_relop_neg, negb_true_iff. *)
+    (*   now rewrite instprop_formula_relop_neg. *)
+    (* Qed. *)
 
     Lemma formula_relop_val [Σ σ] (op : RelOp σ) (v1 v2 : Val σ) :
       formula_relop (Σ:=Σ) op (term_val σ v1) (term_val σ v2) ⊣⊢
@@ -248,15 +274,17 @@ Module Type FormulasOn
       instprop (formula_eqs_ctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs; env.destroy ys; cbn; [easy|].
-      now rewrite IHxs, env.inversion_eq_snoc.
-    Qed.
+      (* now rewrite IHxs, env.inversion_eq_snoc. *)
+    (* Qed. *)
+    Admitted.
 
     Lemma instprop_formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ} (xs ys : NamedEnv (Term Σ) Δ) ι :
       instprop (formula_eqs_nctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs; env.destroy ys; cbn; [easy|].
-      now rewrite IHxs, env.inversion_eq_snoc.
-    Qed.
+     (*  now rewrite IHxs, env.inversion_eq_snoc. *)
+    (* Qed. *)
+    Admitted.
 
   End PathCondition.
   Bind Scope ctx_scope with PathCondition.

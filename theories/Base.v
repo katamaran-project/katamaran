@@ -43,7 +43,7 @@ From Katamaran Require Export
 From Katamaran Require Import
      Syntax.Expressions
      Syntax.Messages
-     Syntax.Patterns
+     (* Syntax.Patterns *)
      Syntax.Terms
      Symbolic.Instantiation
      Symbolic.OccursCheck
@@ -52,165 +52,168 @@ From Katamaran Require Import
 Module Type BaseMixin (Import TY : Types).
   Include
     ExpressionsOn TY <+
-    TermsOn TY <+ PatternsOn TY <+
+    TermsOn TY <+ (* PatternsOn TY <+ *)
     OccursCheckOn TY <+ InstantiationOn TY <+
     MessagesOn TY <+ PartialEvaluationOn TY.
+
+
 
   Notation Ty := (@ty.Ty typedeclkit).
   Notation LVar := (@Variables.LVar varkit).
   Notation PVar := (@Variables.PVar varkit).
   Notation PCtx := (NCtx PVar Ty).
   Notation LCtx := (NCtx LVar Ty).
-  Notation Val := (@ty.Val typedeclkit typedenotekit).
+  Notation RelVal := (@ty.RelVal typedeclkit typedenotekit).
 
   Notation Valuation Σ :=
     (@Env (Binding LVar Ty)
        (fun xt : Binding LVar Ty =>
-          Val (@type _ _ xt)) Σ).
+          RelVal (@type _ _ xt)) Σ).
 
+  Notation CStoreRel := (@NamedEnv PVar Ty RelVal).
   Notation CStore := (@NamedEnv PVar Ty Val).
 
-  Definition SMatchResult {N σ} (pat : @Pattern N σ) (Σ : LCtx) : Type :=
-    { pc : PatternCase pat & NamedEnv (Term Σ) (PatternCaseCtx pc) }.
+  (* Definition SMatchResult {N σ} (pat : @Pattern N σ) (Σ : LCtx) : Type := *)
+  (*   { pc : PatternCase pat & NamedEnv (Term Σ) (PatternCaseCtx pc) }. *)
 
-  Section PatternMatching.
-    Context {N : Set}.
+  (* Section PatternMatching. *)
+  (*   Context {N : Set}. *)
 
-    Lemma inst_tuple_pattern_match {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty}
-      (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : Env (Term Σ) σs) :
-      inst (tuple_pattern_match_env p ts) ι =
-      tuple_pattern_match_env p (inst (T := fun Σ => Env (Term Σ) σs) ts ι).
-    Proof.
-      unfold inst at 1; cbn.
-      induction p; cbn.
-      - reflexivity.
-      - destruct (env.view ts); cbn.
-        f_equal. apply IHp.
-    Qed.
+  (*   (* Lemma inst_tuple_pattern_match {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty} *) *)
+  (*   (*   (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : Env (Term Σ) σs) : *) *)
+  (*   (*   inst (tuple_pattern_match_env p ts) ι = *) *)
+  (*   (*   tuple_pattern_match_env p (inst (T := fun Σ => Env (Term Σ) σs) ts ι). *) *)
+  (*   (* Proof. *) *)
+  (*   (*   unfold inst at 1; cbn. *) *)
+  (*   (*   induction p; cbn. *) *)
+  (*   (*   - reflexivity. *) *)
+  (*   (*   - destruct (env.view ts); cbn. *) *)
+  (*   (*     f_equal. apply IHp. *) *)
+  (*   (* Qed. *) *)
 
-    Lemma inst_tuple_pattern_match_reverse {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty}
-      (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : NamedEnv (Term Σ) Δ) :
-      inst (tuple_pattern_match_env_reverse p ts) ι =
-      tuple_pattern_match_env_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
-    Proof.
-      unfold inst at 1; cbn.
-      induction p; cbn.
-      - reflexivity.
-      - destruct (env.view ts); cbn.
-        f_equal. apply IHp.
-    Qed.
+  (*   (* Lemma inst_tuple_pattern_match_reverse {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty} *) *)
+  (*   (*   (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : NamedEnv (Term Σ) Δ) : *) *)
+  (*   (*   inst (tuple_pattern_match_env_reverse p ts) ι = *) *)
+  (*   (*   tuple_pattern_match_env_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι). *) *)
+  (*   (* Proof. *) *)
+  (*   (*   unfold inst at 1; cbn. *) *)
+  (*   (*   induction p; cbn. *) *)
+  (*   (*   - reflexivity. *) *)
+  (*   (*   - destruct (env.view ts); cbn. *) *)
+  (*   (*     f_equal. apply IHp. *) *)
+  (*   (* Qed. *) *)
 
-    Lemma inst_record_pattern_match {Δ__R : NCtx recordf Ty} {Σ : LCtx} {Δ : NCtx N Ty}
-      (ι : Valuation Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ__R) :
-      inst (T := fun Σ => NamedEnv (Term Σ) Δ) (record_pattern_match_env p ts) ι =
-      record_pattern_match_env p (inst ts ι).
-    Proof.
-      unfold inst at 1; cbn.
-      induction p; cbn.
-      - reflexivity.
-      - destruct (env.view ts); cbn.
-        f_equal. apply IHp.
-    Qed.
+  (*   (* Lemma inst_record_pattern_match {Δ__R : NCtx recordf Ty} {Σ : LCtx} {Δ : NCtx N Ty} *) *)
+  (*   (*   (ι : Valuation Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ__R) : *) *)
+  (*   (*   inst (T := fun Σ => NamedEnv (Term Σ) Δ) (record_pattern_match_env p ts) ι = *) *)
+  (*   (*   record_pattern_match_env p (inst ts ι). *) *)
+  (*   (* Proof. *) *)
+  (*   (*   unfold inst at 1; cbn. *) *)
+  (*   (*   induction p; cbn. *) *)
+  (*   (*   - reflexivity. *) *)
+  (*   (*   - destruct (env.view ts); cbn. *) *)
+  (*   (*     f_equal. apply IHp. *) *)
+  (*   (* Qed. *) *)
 
-    Lemma inst_record_pattern_match_reverse {Δ__R : NCtx recordf Ty} {Σ : LCtx} {Δ : NCtx N Ty}
-      (ι : Valuation Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ) :
-      inst (record_pattern_match_env_reverse p ts) ι =
-      record_pattern_match_env_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
-    Proof.
-      unfold inst at 1; cbn.
-      induction p; cbn.
-      - reflexivity.
-      - destruct (env.view ts); cbn.
-        f_equal. apply IHp.
-    Qed.
+  (*   (* Lemma inst_record_pattern_match_reverse {Δ__R : NCtx recordf Ty} {Σ : LCtx} {Δ : NCtx N Ty} *) *)
+  (*   (*   (ι : Valuation Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ) : *) *)
+  (*   (*   inst (record_pattern_match_env_reverse p ts) ι = *) *)
+  (*   (*   record_pattern_match_env_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι). *) *)
+  (*   (* Proof. *) *)
+  (*   (*   unfold inst at 1; cbn. *) *)
+  (*   (*   induction p; cbn. *) *)
+  (*   (*   - reflexivity. *) *)
+  (*   (*   - destruct (env.view ts); cbn. *) *)
+  (*   (*     f_equal. apply IHp. *) *)
+  (*   (* Qed. *) *)
 
-    Fixpoint pattern_match_term_reverse {Σ σ} (pat : @Pattern N σ) :
-      forall (pc : PatternCase pat), NamedEnv (Term Σ) (PatternCaseCtx pc) -> Term Σ σ :=
-      match pat with
-      | pat_var x =>
-          fun _ ts => env.head ts
-      | pat_bool =>
-          fun b _ => term_val ty.bool b
-      | pat_list σ x y =>
-          fun b =>
-            match b with
-            | true => fun _ => term_val (ty.list σ) nil
-            | false => fun Eht =>
-                         let (Eh,t) := env.view Eht in
-                         let (E,h)  := env.view Eh in
-                         term_binop bop.cons h t
-            end
-      | pat_pair x y =>
-          fun _ Exy =>
-            let (Ex,vτ) := env.view Exy in
-            let (E,vσ)  := env.view Ex in
-            term_binop bop.pair vσ vτ
-      | pat_sum σ0 τ x y =>
-          fun b =>
-            match b with
-            | true => fun ts => term_unop uop.inl (env.head ts)
-            | false => fun ts => term_unop uop.inr (env.head ts)
-            end
-      | pat_unit =>
-          fun pc _ => term_val ty.unit pc
-      | pat_enum E =>
-          fun v _ => term_val (ty.enum E) v
-      | pat_bvec_split m n x y =>
-          fun _ Exy =>
-            let (Ex,vr) := env.view Exy in
-            let (E,vl)  := env.view Ex in
-            term_binop bop.bvapp vl vr
-      | pat_bvec_exhaustive m =>
-          fun v _ => term_val (ty.bvec m) v
-      | pat_tuple p =>
-          fun _ ts => term_tuple (tuple_pattern_match_env_reverse p ts)
-      | pat_record R Δ p =>
-          fun _ ts => term_record R (record_pattern_match_env_reverse p ts)
-      | pat_union U x =>
-          fun '(existT K pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts)
-      end.
+  (*   Definition pattern_match_term_reverse {Σ σ} (pat : @Pattern N σ) : *)
+  (*     forall (pc : PatternCase pat), NamedEnv (Term Σ) (PatternCaseCtx pc) -> Term Σ σ := *)
+  (*     match pat with *)
+  (*     | pat_var x => *)
+  (*         fun _ ts => env.head ts *)
+  (*     | pat_bool => *)
+  (*         fun b _ => term_val ty.bool b *)
+  (*     | pat_list σ x y => *)
+  (*         fun b => *)
+  (*           match b with *)
+  (*           | true => fun _ => term_val (ty.list σ) nil *)
+  (*           | false => fun Eht => *)
+  (*                        let (Eh,t) := env.view Eht in *)
+  (*                        let (E,h)  := env.view Eh in *)
+  (*                        term_binop bop.cons h t *)
+  (*           end *)
+  (*     | pat_pair x y => *)
+  (*         fun _ Exy => *)
+  (*           let (Ex,vτ) := env.view Exy in *)
+  (*           let (E,vσ)  := env.view Ex in *)
+  (*           term_binop bop.pair vσ vτ *)
+  (*     | pat_sum σ0 τ x y => *)
+  (*         fun b => *)
+  (*           match b with *)
+  (*           | true => fun ts => term_unop uop.inl (env.head ts) *)
+  (*           | false => fun ts => term_unop uop.inr (env.head ts) *)
+  (*           end *)
+  (*     | pat_unit => *)
+  (*         fun pc _ => term_val ty.unit pc *)
+  (*     (* | pat_enum E => *) *)
+  (*     (*     fun v _ => term_val (ty.enum E) v *) *)
+  (*     | pat_bvec_split m n x y => *)
+  (*         fun _ Exy => *)
+  (*           let (Ex,vr) := env.view Exy in *)
+  (*           let (E,vl)  := env.view Ex in *)
+  (*           term_binop bop.bvapp vl vr *)
+  (*     | pat_bvec_exhaustive m => *)
+  (*         fun v _ => term_val (ty.bvec m) v *)
+  (*     (* | pat_tuple p => *) *)
+  (*     (*     fun _ ts => term_tuple (tuple_pattern_match_env_reverse p ts) *) *)
+  (*     (* | pat_record R Δ p => *) *)
+  (*     (*     fun _ ts => term_record R (record_pattern_match_env_reverse p ts) *) *)
+  (*     (* | pat_union U x => *) *)
+  (*     (*     fun '(existT K pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts) *) *)
+  (*     end. *)
 
-    Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : @Pattern N σ) :
-      forall (pc : PatternCase pat) (ts : NamedEnv (Term Σ) (PatternCaseCtx pc)),
-        inst (pattern_match_term_reverse pat pc ts) ι =
-        pattern_match_val_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι).
-    Proof.
-      induction pat; cbn.
-      - intros _ ts. now env.destroy ts.
-      - reflexivity.
-      - intros [] ts.
-        + reflexivity.
-        + now env.destroy ts.
-      - intros _ ts. now env.destroy ts.
-      - intros [] ts; now env.destroy ts.
-      - intros [] ts. reflexivity.
-      - reflexivity.
-      - intros _ ts. now env.destroy ts.
-      - reflexivity.
-      - intros _ ts.
-        now rewrite <- inst_tuple_pattern_match_reverse.
-      - intros _ ts. f_equal.
-        apply inst_record_pattern_match_reverse.
-      - intros [] ts. cbn. f_equal. f_equal. apply H.
-    Qed.
+  (*   Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : @Pattern N σ) : *)
+  (*     forall (pc : PatternCase pat) (ts : NamedEnv (Term Σ) (PatternCaseCtx pc)), *)
+  (*       inst (pattern_match_term_reverse pat pc ts) ι = *)
+  (*       pattern_match_val_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι). *)
+  (*   Proof. *)
+  (*     induction pat; cbn. *)
+  (*     - intros _ ts. now env.destroy ts. *)
+  (*     - reflexivity. *)
+  (*     - intros [] ts. *)
+  (*       + reflexivity. *)
+  (*       + now env.destroy ts. *)
+  (*     - intros _ ts. now env.destroy ts. *)
+  (*     - intros [] ts; now env.destroy ts. *)
+  (*     - intros [] ts. reflexivity. *)
+  (*     - reflexivity. *)
+  (*     - intros _ ts. now env.destroy ts. *)
+  (*     - reflexivity. *)
+  (*     - intros _ ts. *)
+  (*       now rewrite <- inst_tuple_pattern_match_reverse. *)
+  (*     - intros _ ts. f_equal. *)
+  (*       apply inst_record_pattern_match_reverse. *)
+  (*     - intros [] ts. cbn. f_equal. f_equal. apply H. *)
+  (*   Qed. *)
 
-    Lemma inst_unfreshen_namedenv (n : N -> LVar) {Σ Σ' Δ}
-      (ζ : Sub (freshen_ctx n Σ Δ) Σ') (ι : Valuation Σ') :
-      inst (unfreshen_namedenv n ζ) ι = unfreshen_namedenv n (inst ζ ι).
-    Proof. induction Δ; cbn in ζ; env.destroy ζ; cbn; f_equal; apply IHΔ. Qed.
+  (*   Lemma inst_unfreshen_namedenv (n : N -> LVar) {Σ Σ' Δ} *)
+  (*     (ζ : Sub (freshen_ctx n Σ Δ) Σ') (ι : Valuation Σ') : *)
+  (*     inst (unfreshen_namedenv n ζ) ι = unfreshen_namedenv n (inst ζ ι). *)
+  (*   Proof. induction Δ; cbn in ζ; env.destroy ζ; cbn; f_equal; apply IHΔ. Qed. *)
 
-    Lemma inst_unfreshen_patterncaseenv (n : N -> LVar) {Σ Σ' σ} (pat : @Pattern N σ)
-      (pc : PatternCase (freshen_pattern n Σ pat))
-      (ζ : Sub (PatternCaseCtx pc) Σ')
-      (ι : Valuation Σ') :
-      inst (unfreshen_patterncaseenv n pat pc ζ) ι =
-      unfreshen_patterncaseenv n pat pc (inst ζ ι).
-    Proof.
-      induction pat; cbn in pc; try destruct pc; cbn in ζ, ι; env.destroy ζ;
-        env.destroy ι; cbn; auto using inst_unfreshen_namedenv.
-    Qed.
+  (*   Lemma inst_unfreshen_patterncaseenv (n : N -> LVar) {Σ Σ' σ} (pat : @Pattern N σ) *)
+  (*     (pc : PatternCase (freshen_pattern n Σ pat)) *)
+  (*     (ζ : Sub (PatternCaseCtx pc) Σ') *)
+  (*     (ι : Valuation Σ') : *)
+  (*     inst (unfreshen_patterncaseenv n pat pc ζ) ι = *)
+  (*     unfreshen_patterncaseenv n pat pc (inst ζ ι). *)
+  (*   Proof. *)
+  (*     induction pat; cbn in pc; try destruct pc; cbn in ζ, ι; env.destroy ζ; *)
+  (*       env.destroy ι; cbn; auto using inst_unfreshen_namedenv. *)
+  (*   Qed. *)
 
-  End PatternMatching.
+  (* End PatternMatching. *)
 
   Import env.notations.
 
@@ -224,17 +227,19 @@ Module Type BaseMixin (Import TY : Types).
       | exp_unop op e      => term_unop op (seval_exp e)
       | exp_list es        => term_list (List.map seval_exp es)
       | exp_bvec es        => term_bvec (Vector.map seval_exp es)
-      | exp_tuple es       => term_tuple (env.map (@seval_exp) es)
-      | exp_union E K e    => term_union E K (seval_exp e)
-      | exp_record R es    => term_record R (env.map (fun _ => seval_exp) es)
+      (* | exp_tuple es       => term_tuple (env.map (@seval_exp) es) *)
+      (* | exp_union E K e    => term_union E K (seval_exp e) *)
+      (* | exp_record R es    => term_record R (env.map (fun _ => seval_exp) es) *)
       end%exp.
 
   Definition seval_exps {Γ Σ N} (δ : SStore Γ Σ) {Δ} :
     NamedEnv (X := N) (Exp Γ) Δ -> NamedEnv (Term Σ) Δ
       := env.map (fun b (e : Exp Γ (type b)) => peval (seval_exp δ e)).
 
-  Lemma eval_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
-    eval e (inst δΓΣ ι) = inst (seval_exp δΓΣ e) ι.
+  Print Instances Inst.
+
+  Lemma evalRel_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
+    evalRel e (inst δΓΣ ι) = inst (seval_exp δΓΣ e) ι.
   Proof.
     induction e; cbn; repeat f_equal; auto.
     { unfold inst, inst_store, inst_env at 1; cbn.
@@ -247,10 +252,11 @@ Module Type BaseMixin (Import TY : Types).
         change (inst_term ?ι ?t) with (inst ι t).
         destruct (inst (seval_exp δΓΣ eb) ι);
           cbn; f_equal; auto.
+        all: admit.
       }
     }
-    all: induction es; cbn in *; destruct_conjs; f_equal; auto.
-  Qed.
+    (* all: induction es; cbn in *; destruct_conjs; f_equal; auto. *)
+  Admitted.
 
   Lemma subst_seval {Γ τ Σ Σ'} (e : Exp Γ τ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :
     subst (T := fun Σ => Term Σ _) (seval_exp δ e) ζ = seval_exp (subst δ ζ) e.

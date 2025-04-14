@@ -61,12 +61,10 @@ Module ty.
 
   Section WithTypeDecl.
 
-    Context {TK : TypeDeclKit}.
-
     Local Unset Elimination Schemes.
     Local Set Transparent Obligations.
 
-    Inductive Ty : Set :=
+    Inductive Ty {TK : TypeDeclKit} : Set :=
     | int
     | bool
     | string
@@ -74,13 +72,15 @@ Module ty.
     | prod (σ τ : Ty)
     | sum  (σ τ : Ty)
     | unit
-    | enum (E : enumi)
+(*    | enum (E : enumi) *)
     | bvec (n : nat)
-    | tuple (σs : Ctx Ty)
+(*    | tuple (σs : Ctx Ty)
     | union (U : unioni)
-    | record (R : recordi)
+    | record (R : recordi) *)
     .
     Derive NoConfusion for Ty.
+    Context {TK : TypeDeclKit}.
+
 
     (* convenience definition. *)
     Definition option : Ty -> Ty := fun T => sum T unit.
@@ -95,11 +95,11 @@ Module ty.
       Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (prod σ τ)).
       Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (sum σ τ)).
       Hypothesis (P_unit   : P unit).
-      Hypothesis (P_enum   : forall E, P (enum E)).
+(*      Hypothesis (P_enum   : forall E, P (enum E)). *)
       Hypothesis (P_bvec   : forall n, P (bvec n)).
-      Hypothesis (P_tuple  : forall σs (IH : ctx.All P σs), P (tuple σs)).
+(*      Hypothesis (P_tuple  : forall σs (IH : ctx.All P σs), P (tuple σs)).
       Hypothesis (P_union  : forall U, P (union U)).
-      Hypothesis (P_record : forall R, P (record R)).
+      Hypothesis (P_record : forall R, P (record R)). *)
 
       Fixpoint Ty_rect (σ : Ty) : P σ :=
         match σ with
@@ -110,11 +110,11 @@ Module ty.
         | prod σ τ => ltac:(apply P_prod; auto)
         | sum σ τ  => ltac:(apply P_sum; auto)
         | unit     => ltac:(apply P_unit; auto)
-        | enum E   => ltac:(apply P_enum; auto)
+(*        | enum E   => ltac:(apply P_enum; auto) *)
         | bvec n   => ltac:(apply P_bvec; auto)
-        | tuple σs => ltac:(apply P_tuple, ctx.all_intro, Ty_rect)
+(*        | tuple σs => ltac:(apply P_tuple, ctx.all_intro, Ty_rect)
         | union U  => ltac:(apply P_union; auto)
-        | record R => ltac:(apply P_record; auto)
+        | record R => ltac:(apply P_record; auto) *)
         end.
 
     End Ty_rect.
@@ -126,19 +126,16 @@ Module ty.
 
   Class TypeDenoteKit (TDC : TypeDeclKit) : Type :=
     { (* Mapping enum type constructor names to enum types *)
-      enumt   : enumi -> Set;
+(*      enumt   : enumi -> Set;
       (* Mapping union type constructor names to union types *)
       uniont  : unioni -> Set;
       (* Mapping record type constructor names to record types *)
-      recordt : recordi -> Set;
+      recordt : recordi -> Set; *)
     }.
 
   Section WithTypeDenote.
 
-    Context {TDC : TypeDeclKit}.
-    Context {TDN : TypeDenoteKit TDC}.
-
-    Fixpoint Val (σ : Ty) : Set :=
+    Fixpoint Val {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} (σ : Ty) : Set :=
       match σ with
       | int => Z
       | bool => Datatypes.bool
@@ -147,17 +144,91 @@ Module ty.
       | prod σ1 σ2 => Val σ1 * Val σ2
       | sum σ1 σ2 => Val σ1 + Val σ2
       | unit => Datatypes.unit
-      | enum E => enumt E
+(*      | enum E => enumt E *)
       | bvec n => bv n
-      | tuple σs => EnvRec Val σs
+(*      | tuple σs => EnvRec Val σs
       | union U => uniont U
-      | record R => recordt R
+      | record R => recordt R *)
       end%type.
+
+      Inductive RelVal {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} (τ : Ty) : Set :=
+      | SyncVal : Val τ -> RelVal τ
+      | NonSyncVal : Val τ -> Val τ -> RelVal τ
+      .
+
+      Context {TDC : TypeDeclKit}.
+      Context {TDN : TypeDenoteKit TDC}.
+
+      Definition projLeft {σ} (rv : RelVal σ) : Val σ :=
+        match rv with
+        | SyncVal _ v => v
+        | NonSyncVal _ vl _ => vl
+        end.
+
+      Definition projRight {σ} (rv : RelVal σ) : Val σ :=
+        match rv with
+        | SyncVal _ v => v
+        | NonSyncVal _ _ vr => vr
+        end.
+
+      Definition liftBinOp {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) : RelVal σ3 :=
+        match (rv1 , rv2) with
+        | (SyncVal _ v1 , SyncVal _ v2) => SyncVal _ (f v1 v2)
+        | (_ , _) => NonSyncVal _ (f (projLeft rv1) (projLeft rv2)) (f (projRight rv1) (projRight rv2))
+        end.
+
+      Definition liftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) : RelVal σ2 :=
+        match rv with
+        | (SyncVal _ v) => SyncVal _ (f v)
+        | (NonSyncVal _ vl vr) => NonSyncVal _ (f vl) (f vr)
+        end.
+
+      Definition relValPairIsPairRelVal {σ1 σ2} (rv : RelVal (prod σ1 σ2)) : RelVal σ1 * RelVal σ2 :=
+        match rv with
+        | SyncVal _ (a , b) => (SyncVal _ a, SyncVal _ b)
+        | NonSyncVal _ (a1, b1) (a2, b2) => (NonSyncVal _ a1 a2, NonSyncVal _ b1 b2)
+        end.
+
+      Definition pairRelValIsRelValPair {σ1 σ2} (rv_pair : RelVal σ1 * RelVal σ2) : RelVal (prod σ1 σ2) :=
+        match rv_pair with
+        | (SyncVal _ v1 , SyncVal _ v2) => SyncVal (prod σ1 σ2) (v1, v2)
+        | (rv1, rv2) => NonSyncVal (prod σ1 σ2) (projLeft rv1, projLeft rv2) (projRight rv1, projRight rv2)
+        end.
+
+      Fixpoint listRelValIsRelValList {σ} (rv_list : (Datatypes.list (RelVal σ))) : RelVal (list σ) :=
+        match rv_list with
+        | nil => SyncVal (list _) nil
+        | (x :: l)%list => liftBinOp (σ2 := list _) (σ3 := list _) cons x (listRelValIsRelValList l)
+        end.
+
+      Fixpoint vecRelValIsRelValVec {n} (rv_vec : (Vector.t (RelVal bool) n)) : RelVal (ty.bvec n) :=
+        match rv_vec with
+        | Vector.nil => SyncVal (bvec _) bv.nil
+        | Vector.cons x l => liftBinOp (σ1 := bool) (σ2 := bvec _) (σ3 := bvec _) (bv.cons (n := _)) x (vecRelValIsRelValVec l)
+        end.
+
+      Fixpoint sumRelValIsRelValSum {σ1 σ2} (rv_sum : RelVal σ1 + RelVal σ2) : RelVal (sum σ1 σ2) :=
+        match rv_sum with
+        | inl rv => match rv with
+                    | SyncVal _ v => SyncVal (sum _ _) (inl v)
+                    | NonSyncVal _ v1 v2 => NonSyncVal (sum _ _) (inl v1) (inl v2)
+                    end
+        | inr rv => match rv with
+                    | SyncVal _ v => SyncVal (sum _ _) (inr v)
+                    | NonSyncVal _ v1 v2 => NonSyncVal (sum _ _) (inr v1) (inr v2)
+                    end
+        end.
+ Fixpoint liftNamedEnv {varkit b} (a : @NamedEnv (@Variables.PVar varkit) Ty Val b) : @NamedEnv (@Variables.PVar varkit) Ty RelVal b :=
+        match a with
+        | env.nil => env.nil
+        | env.snoc e x db => env.snoc (liftNamedEnv e) x (SyncVal _ db)
+        end.
 
   End WithTypeDenote.
 
   Class TypeDefKit {TDC : TypeDeclKit} (TDN : TypeDenoteKit TDC) : Type :=
-    { enum_eqdec   : EqDec enumi;
+    {
+      (* enum_eqdec   : EqDec enumi;
       union_eqdec  : EqDec unioni;
       record_eqdec : EqDec recordi;
 
@@ -190,13 +261,13 @@ Module ty.
       unionv_unfold_fold U K : unionv_unfold U (unionv_fold U K) = K;
 
       recordv_fold_unfold R v : recordv_fold R (recordv_unfold R v) = v;
-      recordv_unfold_fold R v : recordv_unfold R (recordv_fold R v) = v;
+      recordv_unfold_fold R v : recordv_unfold R (recordv_fold R v) = v; *)
     }.
 
   (* Coq 8.16 will start generating coercions for [:>] in Class definitions. Not
      sure what the implications are and if we want that. For now, manually
      declare the necessary fields as superclass instances. *)
-  #[export] Existing Instance enum_eqdec.
+ (* #[export] Existing Instance enum_eqdec.
   #[export] Existing Instance union_eqdec.
   #[export] Existing Instance record_eqdec.
   #[export] Existing Instance enumt_eqdec.
@@ -204,7 +275,7 @@ Module ty.
   #[export] Existing Instance uniont_eqdec.
   #[export] Existing Instance unionk_eqdec.
   #[export] Existing Instance unionk_finite.
-  #[export] Existing Instance recordt_eqdec.
+  #[export] Existing Instance recordt_eqdec. *)
 
   Section WithTypeDef.
 
@@ -222,13 +293,13 @@ Module ty.
         | prod σ1 σ2 , prod τ1 τ2 => f_equal2_dec prod noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
         | sum σ1 σ2  , sum τ1 τ2  => f_equal2_dec sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
         | unit       , unit       => left eq_refl
-        | enum E1    , enum E2    => f_equal_dec enum noConfusion_inv (eq_dec E1 E2)
+(*        | enum E1    , enum E2    => f_equal_dec enum noConfusion_inv (eq_dec E1 E2) *)
         | bvec n1    , bvec n2    => f_equal_dec bvec noConfusion_inv (eq_dec n1 n2)
-        | tuple σs   , tuple τs   => f_equal_dec
+(*        | tuple σs   , tuple τs   => f_equal_dec
                                        tuple noConfusion_inv
                                        (eq_dec (EqDec := ctx.eq_dec_ctx ty_eqdec) σs τs)
         | union U1   , union U2   => f_equal_dec union noConfusion_inv (eq_dec U1 U2)
-        | record R1  , record R2  => f_equal_dec record noConfusion_inv (eq_dec R1 R2)
+        | record R1  , record R2  => f_equal_dec record noConfusion_inv (eq_dec R1 R2) *)
         | _          , _          => right noConfusion_inv
         end.
 
@@ -242,9 +313,9 @@ Module ty.
         | prod σ τ => eq_dec (A := Datatypes.prod (Val σ) (Val τ))
         | sum σ τ  => eq_dec (A := Datatypes.sum (Val σ) (Val τ))
         | unit     => eq_dec (A := Datatypes.unit)
-        | enum E   => eq_dec (A := enumt E)
+ (*       | enum E   => eq_dec (A := enumt E) *)
         | bvec n   => eq_dec (A := bv n)
-        | tuple σs => ctx.Ctx_rect
+(*        | tuple σs => ctx.Ctx_rect
                         (fun τs => EqDec (EnvRec Val τs))
                         (eq_dec (A := Datatypes.unit))
                         (fun τs IHτs τ =>
@@ -253,10 +324,22 @@ Module ty.
                              (prod_eqdec IHτs (eqd τ)))
                         σs
         | union U  => eq_dec (A := uniont U)
-        | record R => eq_dec (A := recordt R)
+        | record R => eq_dec (A := recordt R) *)
         end.
 
-    Lemma unionv_fold_inj {U} (v1 v2 : {K : unionk U & Val (unionk_ty U K)}) :
+    #[export] Instance RelVal_eq_dec : forall σ, EqDec (RelVal σ).
+    Admitted.
+      (* fun σ x y => match x , y with *)
+      (*              | SyncVal _ x , SyncVal _ y => match eq_dec x y with *)
+      (*                                             | left eq => left (f_equal (SyncVal _) eq) *)
+      (*                                             | right neq => right (fun p : SyncVal _ _ = SyncVal _ _ => neq (f_equal projLeft p)) *)
+      (*                                             end *)
+      (*              | NonSyncVal _ x1 x2 , NonSyncVal _ y1 y2 => *)
+      (*                  match eq_dec x1 x2 , eq_dec y1 y2 with *)
+      (*                  | *)
+      (*              end. *)
+
+ (*   Lemma unionv_fold_inj {U} (v1 v2 : {K : unionk U & Val (unionk_ty U K)}) :
       unionv_fold U v1 = unionv_fold U v2 <-> v1 = v2.
     Proof.
       split; intro H; [|now f_equal].
@@ -288,6 +371,8 @@ Module ty.
       now rewrite ?recordv_fold_unfold in H.
     Qed.
 
+*)
+
     Lemma K (σ : Ty) (p : σ = σ) : p = eq_refl.
     Proof. apply uip. Qed.
 
@@ -299,31 +384,31 @@ Module ty.
   #[global] Arguments prod {TK} σ τ.
   #[global] Arguments sum {TK} σ τ.
   #[global] Arguments unit {TK}.
-  #[global] Arguments enum {TK} E.
+  (*  #[global] Arguments enum {TK} E. *)
   #[global] Arguments bvec {TK} n%_nat_scope.
-  #[global] Arguments tuple {TK} σs%_ctx_scope.
-  #[global] Arguments union {TK} U.
-  #[global] Arguments record {TK} R.
+(*  #[global] Arguments tuple σs%_ctx_scope.
+  #[global] Arguments union U.
+  #[global] Arguments record R. *)
 
 End ty.
 Export ty
-  ( TypeDeclKit, enumt, uniont, recordt,
+  ( TypeDeclKit, (* enumt, uniont, recordt, *)
 
     TypeDenoteKit,
-    Ty, Val,
+    Ty, Val, RelVal,
 
-    TypeDefKit, enum_eqdec, enumt_eqdec, enumt_finite,
+    TypeDefKit, (* enum_eqdec, enumt_eqdec, enumt_finite, *)
     enumi,
     unioni,
-    recordi,
-    union_eqdec, uniont_eqdec, unionk, unionk_eqdec, unionk_finite, unionk_ty,
+    recordi
+    (* union_eqdec, uniont_eqdec, unionk, unionk_eqdec, unionk_finite, unionk_ty,
     unionv_fold, unionv_unfold, record_eqdec, recordt_eqdec, recordf,
     recordf_ty, recordv_fold, recordv_unfold,
 
     unionv_fold_unfold, unionv_unfold_fold,
     unionv_fold_inj, unionv_unfold_inj,
     recordv_fold_unfold, recordv_unfold_fold,
-    recordv_fold_inj, recordv_unfold_inj
+    recordv_fold_inj, recordv_unfold_inj *)
   ).
 Export (hints) ty.
 
@@ -342,20 +427,22 @@ End Types.
      recordi := Empty_set;
   |}.
 
-#[local] Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit :=
-  {| enumt _ := Empty_set;
-     uniont _ := Empty_set;
-     recordt _ := Empty_set;
-  |}.
+#[local] Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit := ty.Build_TypeDenoteKit _.
+  (* {| (* enumt _ := Empty_set; *)
+  (*    uniont _ := Empty_set; *)
+  (*    recordt _ := Empty_set; *) *)
+  (* |}. *)
 
-#[local,refine] Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit :=
-  {| unionk _            := Empty_set;
-     unionk_ty _ _       := ty.unit;
-     unionv_fold         := Empty_set_rec _;
-     unionv_unfold       := Empty_set_rec _;
-     recordf             := Empty_set;
-     recordf_ty          := Empty_set_rec _;
-     recordv_fold        := Empty_set_rec _;
-     recordv_unfold      := Empty_set_rec _;
-  |}.
+#[local,refine] Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit := ty.Build_TypeDefKit _ _.
+(*   {| (* *)
+(*     unionk _            := Empty_set; *)
+(*      unionk_ty _ _       := ty.unit; *)
+(*      unionv_fold         := Empty_set_rec _; *)
+(*      unionv_unfold       := Empty_set_rec _; *)
+(*      recordf             := Empty_set; *)
+(*      recordf_ty          := Empty_set_rec _; *)
+(*      recordv_fold        := Empty_set_rec _; *)
+(*      recordv_unfold      := Empty_set_rec _; *)
+(* *) *)
+(*   |}. *)
 Proof. all: abstract (intros []). Defined.

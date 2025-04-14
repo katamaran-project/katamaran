@@ -198,29 +198,29 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       CPureSpec A -> CPureSpec A -> CPureSpec A :=
       fun m1 m2 Φ => m1 Φ /\ m2 Φ.
 
-    Definition angelic (σ : Ty) : CPureSpec (Val σ) :=
-      fun Φ => exists (v : Val σ), Φ v.
-    Definition demonic (σ : Ty) : CPureSpec (Val σ) :=
-      fun Φ => forall (v : Val σ), Φ v.
+    Definition angelic (σ : Ty) : CPureSpec (RelVal σ) :=
+      fun Φ => exists (v : RelVal σ), Φ v.
+    Definition demonic (σ : Ty) : CPureSpec (RelVal σ) :=
+      fun Φ => forall (v : RelVal σ), Φ v.
 
     Definition angelic_ctx {N : Set} :
-      forall Δ : NCtx N Ty, CPureSpec (NamedEnv Val Δ) :=
+      forall Δ : NCtx N Ty, CPureSpec (NamedEnv RelVal Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | [ctx]   => pure [env]
         | Δ ▻ x∷σ => vs <- rec Δ;;
-                     v  <- angelic σ;;
+                     v  <- @angelic σ;;
                      pure (vs ► (x∷σ ↦ v))
         end.
     #[global] Arguments angelic_ctx {N} Δ.
 
     Definition demonic_ctx {N : Set} :
-      forall Δ : NCtx N Ty, CPureSpec (NamedEnv Val Δ) :=
+      forall Δ : NCtx N Ty, CPureSpec (NamedEnv RelVal Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | []      => pure env.nil
         | Δ ▻ x∷σ => vs <- rec Δ;;
-                     v  <- demonic σ;;
+                     v  <- @demonic σ;;
                      pure (vs ► (x∷σ ↦ v))
         end%ctx.
     #[global] Arguments demonic_ctx {N} Δ.
@@ -261,57 +261,57 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       demonic_list (finite.enum F).
     #[global] Arguments demonic_finite F {_ _}.
 
-    Section PatternMatching.
+    (* Section PatternMatching. *)
 
-      Context {N : Set}.
+    (*   Context {N : Set}. *)
 
-      Definition angelic_pattern_match {σ} (pat : @Pattern N σ)
-        (v : Val σ) : CPureSpec (MatchResult pat) :=
-        pc <- angelic_finite (PatternCase pat);;
-        vs <- angelic_ctx (PatternCaseCtx pc) ;;
-        _  <- assert_formula (pattern_match_val_reverse pat pc vs = v);;
-        pure (existT pc vs).
-      #[global] Arguments angelic_pattern_match {σ} pat v.
+    (*   Definition angelic_pattern_match {σ} (pat : @Pattern N σ) *)
+    (*     (v : Val σ) : CPureSpec (MatchResult pat) := *)
+    (*     pc <- angelic_finite (PatternCase pat);; *)
+    (*     vs <- angelic_ctx (PatternCaseCtx pc) ;; *)
+    (*     _  <- assert_formula (pattern_match_val_reverse pat pc vs = v);; *)
+    (*     pure (existT pc vs). *)
+    (*   #[global] Arguments angelic_pattern_match {σ} pat v. *)
 
-      Definition demonic_pattern_match {σ} (pat : @Pattern N σ)
-        (v : Val σ) : CPureSpec (MatchResult pat) :=
-        pc <- demonic_finite (PatternCase pat);;
-        vs <- demonic_ctx (PatternCaseCtx pc) ;;
-        _  <- assume_formula (pattern_match_val_reverse pat pc vs = v);;
-        pure (existT pc vs).
-      #[global] Arguments demonic_pattern_match {σ} pat v.
+    (*   Definition demonic_pattern_match {σ} (pat : @Pattern N σ) *)
+    (*     (v : Val σ) : CPureSpec (MatchResult pat) := *)
+    (*     pc <- demonic_finite (PatternCase pat);; *)
+    (*     vs <- demonic_ctx (PatternCaseCtx pc) ;; *)
+    (*     _  <- assume_formula (pattern_match_val_reverse pat pc vs = v);; *)
+    (*     pure (existT pc vs). *)
+    (*   #[global] Arguments demonic_pattern_match {σ} pat v. *)
 
-      Definition new_pattern_match {σ} (pat : @Pattern N σ)
-        (v : Val σ) : CPureSpec (MatchResult pat) :=
-        pure (pattern_match_val pat v).
-      #[global] Arguments new_pattern_match {σ} !pat v /.
+    (*   Definition new_pattern_match {σ} (pat : @Pattern N σ) *)
+    (*     (v : Val σ) : CPureSpec (MatchResult pat) := *)
+    (*     pure (pattern_match_val pat v). *)
+    (*   #[global] Arguments new_pattern_match {σ} !pat v /. *)
 
-    End PatternMatching.
+    (* End PatternMatching. *)
 
     (* The paper uses asserted equalities between multiple types, but the
        symbolic executor can in fact only assert equalities between symbolic
        terms. We mirror the structure of the symbolic execution and also
        traverse (the statically known parts) of other data structures. *)
     Equations(noeqns) assert_eq_env [Δ : Ctx Ty]
-      (δ δ' : Env Val Δ) : CPureSpec unit :=
+      (δ δ' : Env RelVal Δ) : CPureSpec unit :=
       assert_eq_env env.nil          env.nil            := pure tt;
       assert_eq_env (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assert_eq_env δ δ') (fun _ => assert_formula (t = t')).
 
     Equations(noeqns) assert_eq_nenv {N : Set} [Δ : NCtx N Ty]
-      (δ δ' : NamedEnv Val Δ) : CPureSpec unit :=
+      (δ δ' : NamedEnv RelVal Δ) : CPureSpec unit :=
       assert_eq_nenv env.nil          env.nil            := pure tt;
       assert_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assert_eq_nenv δ δ') (fun _ => assert_formula (t = t')).
 
     Equations(noeqns) assume_eq_env [Δ : Ctx Ty]
-      (δ δ' : Env Val Δ) : CPureSpec unit :=
+      (δ δ' : Env RelVal Δ) : CPureSpec unit :=
       assume_eq_env env.nil          env.nil            := pure tt;
       assume_eq_env (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assume_eq_env δ δ') (fun _ => assume_formula (t = t')).
 
     Equations(noeqns) assume_eq_nenv {N : Set} [Δ : NCtx N Ty]
-      (δ δ' : NamedEnv Val Δ) : CPureSpec unit :=
+      (δ δ' : NamedEnv RelVal Δ) : CPureSpec unit :=
       assume_eq_nenv env.nil          env.nil            := pure tt;
       assume_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assume_eq_nenv δ δ') (fun _ => assume_formula (t = t')).
@@ -320,12 +320,12 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       match c1 , c2 with
       | chunk_user p1 vs1 , chunk_user p2 vs2 =>
           match eq_dec p1 p2 with
-          | left e => assert_eq_env (eq_rect p1 (fun p => Env Val (𝑯_Ty p)) vs1 p2 e) vs2
+          | left e => assert_eq_env (eq_rect p1 (fun p => Env RelVal (𝑯_Ty p)) vs1 p2 e) vs2
           | right _ => error
           end
       | chunk_ptsreg r1 v1 , chunk_ptsreg r2 v2 =>
           match eq_dec_het r1 r2 with
-          | left e => assert_formula (eq_rect _ Val v1 _ (f_equal projT1 e) = v2)
+          | left e => assert_formula (eq_rect _ RelVal v1 _ (f_equal projT1 e) = v2)
           | right _ => error
           end
       | chunk_conj c11 c12 , chunk_conj c21 c22 =>
@@ -354,10 +354,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
             assume_formula (instprop fml ι) ;;
             replay k ι
         | SymProp.angelicv b k =>
-            v <- angelic _ ;;
+            v <- @angelic _ ;;
             replay k (env.snoc ι b v)
         | SymProp.demonicv b k =>
-            v <- demonic _ ;;
+            v <- @demonic _ ;;
             replay k (env.snoc ι b v )
         | @SymProp.assert_vareq _ x σ xIn t msg k =>
             let ι' := env.remove (x ∷ σ) ι xIn in
@@ -371,10 +371,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
             let t' := inst t ι' in
             assume_formula (t' = x') ;;
             replay k ι'
-        | SymProp.pattern_match s pat rhs =>
-            error
-        | SymProp.pattern_match_var x pat rhs =>
-            error
+        (* | SymProp.pattern_match s pat rhs => *)
+        (*     error *)
+        (* | SymProp.pattern_match_var x pat rhs => *)
+        (*     error *)
         | SymProp.debug b k =>
             debug (replay k ι)
         end.
@@ -390,15 +390,15 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       assert_eq_chunk c c' ;;
       pure h'.
 
-    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) (h0 : SCHeap) : CPureSpec (Val τ * SCHeap) :=
-      v  <- angelic _ ;;
+    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) (h0 : SCHeap) : CPureSpec (RelVal τ * SCHeap) :=
+      v  <- @angelic _ ;;
       h1 <- consume_chunk (chunk_ptsreg reg v) h0 ;;
       h2 <- produce_chunk (chunk_ptsreg reg v) h1 ;;
       pure (v , h2).
 
-    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : Val τ) (h0 : SCHeap) :
-      CPureSpec (Val τ * SCHeap) :=
-      vold <- angelic _ ;;
+    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : RelVal τ) (h0 : SCHeap) :
+      CPureSpec (RelVal τ * SCHeap) :=
+      vold <- @angelic _ ;;
       h1   <- consume_chunk (chunk_ptsreg reg vold) h0 ;;
       h2   <- produce_chunk (chunk_ptsreg reg vnew) h1 ;;
       pure (vnew, h2).
@@ -440,10 +440,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Proof. easy. Qed.
 
     #[export] Instance mon_angelic {σ} :
-      Monotonic (MPureSpec eq) (angelic σ).
+      Monotonic (MPureSpec eq) (@angelic σ).
     Proof. intros ? ? Φ. apply ex_impl_morphism; firstorder. Qed.
     #[export] Instance mon_demonic {σ} :
-      Monotonic (MPureSpec eq) (demonic σ).
+      Monotonic (MPureSpec eq) (@demonic σ).
     Proof. intros ? ? Φ. apply all_impl_morphism; firstorder. Qed.
 
     #[export] Instance mon_assert_pathcondition fml :
@@ -500,16 +500,16 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MPureSpec eq) (demonic_finite F).
     Proof. typeclasses eauto. Qed.
 
-    #[export] Instance mon_angelic_pattern_match {N σ} (pat : @Pattern N σ) v :
-      Monotonic (MPureSpec eq) (@angelic_pattern_match _ _ pat v).
-    Proof. typeclasses eauto. Qed.
-    #[export] Instance mon_demonic_pattern_match {N σ} (pat : @Pattern N σ) v :
-      Monotonic (MPureSpec eq) (@demonic_pattern_match _ _ pat v).
-    Proof. typeclasses eauto. Qed.
+    (* #[export] Instance mon_angelic_pattern_match {N σ} (pat : @Pattern N σ) v : *)
+    (*   Monotonic (MPureSpec eq) (@angelic_pattern_match _ _ pat v). *)
+    (* Proof. typeclasses eauto. Qed. *)
+    (* #[export] Instance mon_demonic_pattern_match {N σ} (pat : @Pattern N σ) v : *)
+    (*   Monotonic (MPureSpec eq) (@demonic_pattern_match _ _ pat v). *)
+    (* Proof. typeclasses eauto. Qed. *)
 
-    #[export] Instance mon_new_pattern_match {N σ} (pat : @Pattern N σ) v :
-      Monotonic (MPureSpec eq) (@new_pattern_match _ _ pat v).
-    Proof. typeclasses eauto. Qed.
+    (* #[export] Instance mon_new_pattern_match {N σ} (pat : @Pattern N σ) v : *)
+    (*   Monotonic (MPureSpec eq) (@new_pattern_match _ _ pat v). *)
+    (* Proof. typeclasses eauto. Qed. *)
 
     #[export] Instance mon_assert_eq_env {Δ E1 E2} :
       Monotonic (MPureSpec eq) (@assert_eq_env Δ E1 E2).
@@ -554,12 +554,12 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Proof. unfold read_register. typeclasses eauto. Qed.
 
     #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) :
-      Monotonic (Val τ ::> SCHeap ::> MPureSpec eq) (write_register reg).
+      Monotonic (RelVal τ ::> SCHeap ::> MPureSpec eq) (write_register reg).
     Proof. unfold write_register. typeclasses eauto. Qed.
 
     #[global] Typeclasses Opaque angelic_ctx demonic_ctx angelic_list'
       demonic_list' angelic_list demonic_list angelic_finite demonic_finite
-      angelic_pattern_match demonic_pattern_match new_pattern_match
+      (* angelic_pattern_match demonic_pattern_match new_pattern_match *)
       assert_eq_env assert_eq_nenv assume_eq_env assume_eq_nenv assert_eq_chunk
       replay_aux replay produce_chunk consume_chunk read_register write_register.
 
@@ -567,8 +567,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       bind m f Φ <-> m (fun a => f a Φ).
     Proof. easy. Qed.
 
-    Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
-      angelic_ctx Δ POST <-> exists vs : NamedEnv Val Δ, POST vs.
+    Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv RelVal Δ -> Prop) :
+      angelic_ctx Δ POST <-> exists vs : NamedEnv RelVal Δ, POST vs.
     Proof.
       induction Δ; cbn.
       - split.
@@ -581,8 +581,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           apply IHΔ. now exists vs, v.
     Qed.
 
-    Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
-      demonic_ctx Δ POST <-> forall vs : NamedEnv Val Δ, POST vs.
+    Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv RelVal Δ -> Prop) :
+      demonic_ctx Δ POST <-> forall vs : NamedEnv RelVal Δ, POST vs.
     Proof.
       induction Δ; cbn.
       - split.
@@ -626,41 +626,41 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       forall x : A, List.In x xs -> POST x.
     Proof. destruct xs; cbn; [firstorder|apply wp_demonic_list']. Qed.
 
-    Lemma wp_angelic_pattern_match {N σ} (pat : @Pattern N σ) v
-      (Φ : MatchResult pat -> Prop) :
-      angelic_pattern_match pat v Φ <-> Φ (pattern_match_val pat v).
-    Proof.
-      unfold angelic_pattern_match, angelic_finite. cbn.
-      rewrite wp_angelic_list. setoid_rewrite wp_angelic_ctx.
-      split.
-      - intros (pc & Hin & δpc & <- & Hwp).
-        now rewrite pattern_match_val_inverse_right.
-      - set (mr := pattern_match_val pat v). intros HΦ.
-        exists (projT1 mr). split.
-        { rewrite <- base.elem_of_list_In. apply finite.elem_of_enum. }
-        exists (projT2 mr). split.
-        { subst mr. apply pattern_match_val_inverse_left. }
-        destruct mr. apply HΦ.
-    Qed.
+    (* Lemma wp_angelic_pattern_match {N σ} (pat : @Pattern N σ) v *)
+    (*   (Φ : MatchResult pat -> Prop) : *)
+    (*   angelic_pattern_match pat v Φ <-> Φ (pattern_match_val pat v). *)
+    (* Proof. *)
+    (*   unfold angelic_pattern_match, angelic_finite. cbn. *)
+    (*   rewrite wp_angelic_list. setoid_rewrite wp_angelic_ctx. *)
+    (*   split. *)
+    (*   - intros (pc & Hin & δpc & <- & Hwp). *)
+    (*     now rewrite pattern_match_val_inverse_right. *)
+    (*   - set (mr := pattern_match_val pat v). intros HΦ. *)
+    (*     exists (projT1 mr). split. *)
+    (*     { rewrite <- base.elem_of_list_In. apply finite.elem_of_enum. } *)
+    (*     exists (projT2 mr). split. *)
+    (*     { subst mr. apply pattern_match_val_inverse_left. } *)
+    (*     destruct mr. apply HΦ. *)
+    (* Qed. *)
 
-    Lemma wp_demonic_pattern_match {N σ} (pat : @Pattern N σ) v
-      (Φ : MatchResult pat -> Prop) :
-      demonic_pattern_match pat v Φ <-> Φ (pattern_match_val pat v).
-    Proof.
-      unfold demonic_pattern_match, demonic_finite. cbn.
-      rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx.
-      split.
-      - set (mr := pattern_match_val pat v). intros HΦ.
-        specialize (HΦ (projT1 mr)).
-        rewrite <- base.elem_of_list_In in HΦ.
-        specialize (HΦ (finite.elem_of_enum _) (projT2 mr)).
-        specialize (HΦ (pattern_match_val_inverse_left pat v)).
-        now destruct mr.
-      - intros HΦ pc Hin δpc <-. revert HΦ.
-        now rewrite pattern_match_val_inverse_right.
-    Qed.
+    (* Lemma wp_demonic_pattern_match {N σ} (pat : @Pattern N σ) v *)
+    (*   (Φ : MatchResult pat -> Prop) : *)
+    (*   demonic_pattern_match pat v Φ <-> Φ (pattern_match_val pat v). *)
+    (* Proof. *)
+    (*   unfold demonic_pattern_match, demonic_finite. cbn. *)
+    (*   rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx. *)
+    (*   split. *)
+    (*   - set (mr := pattern_match_val pat v). intros HΦ. *)
+    (*     specialize (HΦ (projT1 mr)). *)
+    (*     rewrite <- base.elem_of_list_In in HΦ. *)
+    (*     specialize (HΦ (finite.elem_of_enum _) (projT2 mr)). *)
+    (*     specialize (HΦ (pattern_match_val_inverse_left pat v)). *)
+    (*     now destruct mr. *)
+    (*   - intros HΦ pc Hin δpc <-. revert HΦ. *)
+    (*     now rewrite pattern_match_val_inverse_right. *)
+    (* Qed. *)
 
-    Lemma wp_assert_eq_env {Δ : Ctx Ty} (δ δ' : Env Val Δ) :
+    Lemma wp_assert_eq_env {Δ : Ctx Ty} (δ δ' : Env RelVal Δ) :
       forall Φ,
         assert_eq_env δ δ' Φ <-> δ = δ' /\ Φ tt.
     Proof.
@@ -671,7 +671,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         intuition auto.
     Qed.
 
-    Lemma wp_assert_eq_nenv {N} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) :
+    Lemma wp_assert_eq_nenv {N} {Δ : NCtx N Ty} (δ δ' : NamedEnv RelVal Δ) :
       forall Φ,
         assert_eq_nenv δ δ' Φ <-> δ = δ' /\ Φ tt.
     Proof.
@@ -725,8 +725,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       - apply all_impl_morphism. intros v; red; apply IHs.
       - intros []. intuition auto.
       - intuition auto.
-      - inversion 1.
-      - inversion 1.
+      (* - inversion 1. *)
+      (* - inversion 1. *)
       - unfold debug. apply IHs.
     Qed.
 
@@ -780,7 +780,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         now apply bi.wand_mono'.
       Qed.
 
-      Lemma wp_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : Val τ) (h0 : SCHeap) Φ :
+      Lemma wp_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : RelVal τ) (h0 : SCHeap) Φ :
         write_register reg vnew h0 Φ ->
         interpret_scheap h0 ⊢
         ∃ vold, lptsreg reg vold ∗
@@ -845,17 +845,17 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Definition demonic_binary {A} : CHeapSpec A -> CHeapSpec A -> CHeapSpec A :=
       fun m1 m2 Φ h => m1 Φ h /\ m2 Φ h.
 
-    Definition angelic (σ : Ty) : CHeapSpec (Val σ) :=
-      lift_purespec (CPureSpec.angelic σ).
+    Definition angelic (σ : Ty) : CHeapSpec (RelVal σ) :=
+      lift_purespec (@CPureSpec.angelic σ).
     #[global] Arguments angelic σ Φ : rename.
-    Definition demonic (σ : Ty) : CHeapSpec (Val σ) :=
-      lift_purespec (CPureSpec.demonic σ).
+    Definition demonic (σ : Ty) : CHeapSpec (RelVal σ) :=
+      lift_purespec (@CPureSpec.demonic σ).
     #[global] Arguments demonic σ Φ : rename.
 
-    Definition angelic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv Val Δ) :=
+    Definition angelic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv RelVal Δ) :=
       lift_purespec (CPureSpec.angelic_ctx Δ).
     #[global] Arguments angelic_ctx {N} Δ.
-    Definition demonic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv Val Δ) :=
+    Definition demonic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv RelVal Δ) :=
       lift_purespec (CPureSpec.demonic_ctx Δ).
     #[global] Arguments demonic_ctx {N} Δ.
 
@@ -869,9 +869,9 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Definition consume_chunk (c : SCChunk) : CHeapSpec unit :=
       fun Φ h => CPureSpec.consume_chunk c h (Φ tt).
 
-    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) : CHeapSpec (Val τ) :=
+    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) : CHeapSpec (RelVal τ) :=
       fun Φ h => CPureSpec.read_register reg h (fun '(t,h') => Φ t h').
-    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) : CHeapSpec (Val τ) :=
+    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : RelVal τ) : CHeapSpec (RelVal τ) :=
       fun Φ h => CPureSpec.write_register reg v h (fun '(v',h') => Φ v' h').
 
     Fixpoint produce {Σ} (asn : Assertion Σ) (ι : Valuation Σ) : CHeapSpec unit :=
@@ -882,17 +882,17 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           produce_chunk (inst c ι)
       | asn.chunk_angelic c =>
           produce_chunk (inst c ι)
-      | asn.pattern_match s pat rhs =>
-          '(existT pc δpc) <-
-            lift_purespec (CPureSpec.demonic_pattern_match pat (inst s ι)) ;;
-          produce (rhs pc) (ι ►► δpc)
+      (* | asn.pattern_match s pat rhs => *)
+      (*     '(existT pc δpc) <- *)
+      (*       lift_purespec (CPureSpec.demonic_pattern_match pat (inst s ι)) ;; *)
+      (*     produce (rhs pc) (ι ►► δpc) *)
       | asn.sep a1 a2 =>
           _ <- produce a1 ι ;;
           produce a2 ι
       | asn.or a1 a2 =>
           demonic_binary (produce a1 ι) (produce a2 ι)
       | asn.exist ς τ a =>
-          t <- demonic τ ;;
+          t <- @demonic τ ;;
           produce a (env.snoc ι (ς∷τ) t)
       | asn.debug =>
           debug (pure tt)
@@ -906,34 +906,34 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           consume_chunk (inst c ι)
       | asn.chunk_angelic c =>
           consume_chunk (inst c ι)
-      | asn.pattern_match s pat rhs =>
-          '(existT pc δpc) <-
-            lift_purespec (CPureSpec.angelic_pattern_match pat (inst s ι)) ;;
-          consume (rhs pc) (ι ►► δpc)
+      (* | asn.pattern_match s pat rhs => *)
+      (*     '(existT pc δpc) <- *)
+      (*       lift_purespec (CPureSpec.angelic_pattern_match pat (inst s ι)) ;; *)
+      (*     consume (rhs pc) (ι ►► δpc) *)
       | asn.sep a1 a2 =>
           _ <- consume a1 ι ;;
           consume a2 ι
       | asn.or a1 a2 =>
           angelic_binary (consume a1 ι) (consume a2 ι)
       | asn.exist ς τ a =>
-          t <- angelic τ ;;
+          t <- @angelic τ ;;
           consume a (env.snoc ι (ς∷τ) t)
       | asn.debug =>
           debug (pure tt)
       end.
 
-    Definition call_contract [Δ τ] (c : SepContract Δ τ) (args : CStore Δ) : CHeapSpec (Val τ) :=
+    Definition call_contract [Δ τ] (c : SepContract Δ τ) (args : CStoreRel Δ) : CHeapSpec (RelVal τ) :=
       match c with
       | MkSepContract _ _ Σe δ req result ens =>
           ι <- lift_purespec (CPureSpec.angelic_ctx Σe) ;;
           lift_purespec (CPureSpec.assert_eq_nenv (inst δ ι) args) ;;
           consume req ι ;;
-          v <- demonic τ ;;
+          v <- @demonic τ ;;
           produce ens (env.snoc ι (result∷τ) v) ;;
           pure v
       end.
 
-    Definition call_lemma [Δ] (lem : Lemma Δ) (vs : CStore Δ) : CHeapSpec unit :=
+    Definition call_lemma [Δ] (lem : Lemma Δ) (vs : CStoreRel Δ) : CHeapSpec unit :=
       match lem with
       | MkLemma _ Σe δ req ens =>
           ι <- lift_purespec (CPureSpec.angelic_ctx Σe) ;;
@@ -998,10 +998,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       demonic_binary.
 
     #[export] Instance mon_angelic σ :
-      Monotonic (MHeapSpec eq) (angelic σ).
+      Monotonic (MHeapSpec eq) (@angelic σ).
     Proof. typeclasses eauto. Qed.
     #[export] Instance mon_demonic σ :
-      Monotonic (MHeapSpec eq) (demonic σ).
+      Monotonic (MHeapSpec eq) (@demonic σ).
     Proof. typeclasses eauto. Qed.
 
     #[export] Instance mon_assert_formula fml :
@@ -1033,7 +1033,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       intros ? [] ->. now apply mΦ.
     Qed.
 
-    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) :
+    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : RelVal τ) :
       Monotonic (MHeapSpec eq) (write_register reg v).
     Proof.
       intros Φ1 Φ2 mΦ h.
@@ -1053,12 +1053,12 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Proof. induction asn; cbn; typeclasses eauto. Qed.
 
     #[export] Instance mon_call_contract
-      [Δ τ] (c : SepContract Δ τ) (args : CStore Δ) :
+      [Δ τ] (c : SepContract Δ τ) (args : CStoreRel Δ) :
       Monotonic (MHeapSpec eq) (call_contract c args).
     Proof. destruct c; typeclasses eauto. Qed.
 
     #[export] Instance mon_call_lemma
-      [Δ] (lem : Lemma Δ) (vs : CStore Δ) :
+      [Δ] (lem : Lemma Δ) (vs : CStoreRel Δ) :
       Monotonic (MHeapSpec eq) (call_lemma lem vs).
     Proof. destruct lem; typeclasses eauto. Qed.
 
@@ -1086,8 +1086,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           + apply bi.exist_intro' with h1. apply bi.and_intro; auto.
         - intros ->%CPureSpec.wp_consume_chunk. now rewrite interpret_scchunk_inst.
         - intros ->%CPureSpec.wp_consume_chunk. now rewrite interpret_scchunk_inst.
-        - rewrite CPureSpec.wp_angelic_pattern_match.
-          destruct pattern_match_val; auto.
+        (* - rewrite CPureSpec.wp_angelic_pattern_match. *)
+        (*   destruct pattern_match_val; auto. *)
         - intros ->%IHasn1. rewrite -bi.sep_assoc. apply bi.sep_mono'; [easy|].
           apply bi.exist_elim. intros h2. apply bi.pure_elim_r. apply IHasn2.
         - intros [->%IHasn1 | ->%IHasn2]; apply bi.sep_mono'; auto.
@@ -1107,8 +1107,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         - iIntros (HΦ) "Hh [%Hfml _]". iExists h. auto.
         - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst.
         - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst.
-        - rewrite CPureSpec.wp_demonic_pattern_match.
-          destruct pattern_match_val; auto.
+        (* - rewrite CPureSpec.wp_demonic_pattern_match. *)
+        (*   destruct pattern_match_val; auto. *)
         - iIntros (Hprod1) "H [Hasn1 Hasn2]".
           iPoseProof (IHasn1 _ _ _ Hprod1 with "H Hasn1") as "(%h2 & H & %Hprod2)".
           iPoseProof (IHasn2 _ _ _ Hprod2 with "H Hasn2") as "(%h3 & H & %HΦ)".

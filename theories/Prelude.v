@@ -244,6 +244,11 @@ Section Finite.
     @Finite bool EqDecision_from_EqDec :=
     {| enum := [true;false] |}.
 
+  (* I (Emiel) do the same for products *)
+(*
+  #[export,program] Instance Finite_prod {A B : Type} (eqa : EqDec A) (eqb : EqDec B) :
+    @Finite (A * B) (EqDecision_from_EqDec (EqDecInstances.prod_eqdec eqa eqb)).
+*)
 End Finite.
 
 Definition proof_irrelevance_True (p q : True) : p = q :=

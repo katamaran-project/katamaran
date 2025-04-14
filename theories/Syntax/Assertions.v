@@ -56,53 +56,53 @@ Module Import asn.
   | formula (fml : Formula Σ)
   | chunk (c : Chunk Σ)
   | chunk_angelic (c : Chunk Σ)
-  | pattern_match {σ} (s : Term Σ σ) (pat : Pattern σ)
-      (rhs : forall (pc : PatternCase pat), Assertion (Σ ▻▻ PatternCaseCtx pc))
+  (* | pattern_match {σ} (s : Term Σ σ) (pat : Pattern σ) *)
+  (*     (rhs : forall (pc : PatternCase pat), Assertion (Σ ▻▻ PatternCaseCtx pc)) *)
   | sep  (A1 A2 : Assertion Σ)
   | or   (A1 A2 : Assertion Σ)
   | exist (ς : LVar) (τ : Ty) (a : Assertion (Σ ▻ ς∷τ))
   | debug.
 
-  Definition match_bool {Σ} (b : Term Σ ty.bool) (A1 A2 : Assertion Σ) : Assertion Σ :=
-    pattern_match b pat_bool (fun v => if v then A1 else A2).
-  Definition match_enum {Σ} (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ) : Assertion Σ :=
-    pattern_match k (pat_enum E) alts.
-  Definition match_sum {Σ} (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : LVar)
-    (al : Assertion (Σ ▻ xl∷σ)) (xr : LVar) (ar : Assertion (Σ ▻ xr∷τ)) :
-    Assertion Σ :=
-    pattern_match s (pat_sum _ _ xl xr)
-      (fun b => match b with true => al | false => ar end).
-  Definition match_list {Σ σ} (s : Term Σ (ty.list σ)) (anil : Assertion Σ)
-    (xh xt : LVar) (acons : Assertion (Σ ▻ xh∷σ ▻ xt∷ty.list σ)) : Assertion Σ :=
-    pattern_match s (pat_list σ xh xt)
-      (fun b => match b with true => anil | false => acons end).
-  Definition match_prod {Σ σ1 σ2} (s : Term Σ (ty.prod σ1 σ2)) (xl xr : LVar)
-    (rhs : Assertion (Σ ▻ xl∷σ1 ▻ xr∷σ2)) : Assertion Σ :=
-    pattern_match s (pat_pair xl xr) (fun _ => rhs).
-  Definition match_tuple {Σ σs Δ} (s : Term Σ (ty.tuple σs))
-    (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ :=
-    pattern_match s (pat_tuple p) (fun _ => rhs).
-  Definition match_record {Σ R Δ} (s : Term Σ (ty.record R))
-    (p : RecordPat (recordf_ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ :=
-    pattern_match s (pat_record R Δ p) (fun _ => rhs).
+  (* Definition match_bool {Σ} (b : Term Σ ty.bool) (A1 A2 : Assertion Σ) : Assertion Σ := *)
+  (*   pattern_match b pat_bool (fun v => if v then A1 else A2). *)
+  (* Definition match_enum {Σ} (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ) : Assertion Σ := *)
+  (*   pattern_match k (pat_enum E) alts. *)
+  (* Definition match_sum {Σ} (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : LVar) *)
+  (*   (al : Assertion (Σ ▻ xl∷σ)) (xr : LVar) (ar : Assertion (Σ ▻ xr∷τ)) : *)
+  (*   Assertion Σ := *)
+  (*   pattern_match s (pat_sum _ _ xl xr) *)
+  (*     (fun b => match b with true => al | false => ar end). *)
+  (* Definition match_list {Σ σ} (s : Term Σ (ty.list σ)) (anil : Assertion Σ) *)
+  (*   (xh xt : LVar) (acons : Assertion (Σ ▻ xh∷σ ▻ xt∷ty.list σ)) : Assertion Σ := *)
+  (*   pattern_match s (pat_list σ xh xt) *)
+  (*     (fun b => match b with true => anil | false => acons end). *)
+  (* Definition match_prod {Σ σ1 σ2} (s : Term Σ (ty.prod σ1 σ2)) (xl xr : LVar) *)
+  (*   (rhs : Assertion (Σ ▻ xl∷σ1 ▻ xr∷σ2)) : Assertion Σ := *)
+  (*   pattern_match s (pat_pair xl xr) (fun _ => rhs). *)
+  (* Definition match_tuple {Σ σs Δ} (s : Term Σ (ty.tuple σs)) *)
+  (*   (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ := *)
+  (*   pattern_match s (pat_tuple p) (fun _ => rhs). *)
+  (* Definition match_record {Σ R Δ} (s : Term Σ (ty.record R)) *)
+  (*   (p : RecordPat (recordf_ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ := *)
+  (*   pattern_match s (pat_record R Δ p) (fun _ => rhs). *)
 
-  #[global] Arguments match_enum [_] E _ _.
-  #[global] Arguments match_sum [_] σ τ _ _ _.
-  #[global] Arguments match_list [_] {σ} s anil xh xt acons.
-  #[global] Arguments match_prod [_] {σ1 σ2} s xl xr rhs.
-  #[global] Arguments match_tuple [_] {σs Δ} s p rhs.
-  #[global] Arguments match_record [_] R {Δ} s p rhs.
+  (* #[global] Arguments match_enum [_] E _ _. *)
+  (* #[global] Arguments match_sum [_] σ τ _ _ _. *)
+  (* #[global] Arguments match_list [_] {σ} s anil xh xt acons. *)
+  (* #[global] Arguments match_prod [_] {σ1 σ2} s xl xr rhs. *)
+  (* #[global] Arguments match_tuple [_] {σs Δ} s p rhs. *)
+  (* #[global] Arguments match_record [_] R {Δ} s p rhs. *)
   #[global] Arguments exist [_] _ _ _.
   #[global] Arguments debug {_}.
 
-  Definition match_union_alt {Σ} U (t : Term Σ (ty.union U))
-    (alts : forall (K : unionk U), Alternative Assertion Σ (unionk_ty U K)) : Assertion Σ :=
-    pattern_match t (pat_union U (fun K => alt_pat (alts K)))
-      (fun '(existT K pc) =>
-         of_pattern_case_curried
-           (alt_pat (alts K))
-           (alt_rhs (alts K)) pc).
-  #[global] Arguments asn.match_union_alt {Σ} _ _ _.
+  (* Definition match_union_alt {Σ} U (t : Term Σ (ty.union U)) *)
+  (*   (alts : forall (K : unionk U), Alternative Assertion Σ (unionk_ty U K)) : Assertion Σ := *)
+  (*   pattern_match t (pat_union U (fun K => alt_pat (alts K))) *)
+  (*     (fun '(existT K pc) => *)
+  (*        of_pattern_case_curried *)
+  (*          (alt_pat (alts K)) *)
+  (*          (alt_rhs (alts K)) pc). *)
+  (* #[global] Arguments asn.match_union_alt {Σ} _ _ _. *)
 
   Fixpoint exs {Σ} Δ : Assertion (Σ ▻▻ Δ) -> Assertion Σ :=
     match Δ return Assertion (Σ ▻▻ Δ) -> Assertion Σ with
@@ -118,8 +118,8 @@ Module Import asn.
       | formula fml => formula (subst fml ζ)
       | chunk c => chunk (subst c ζ)
       | chunk_angelic c => chunk_angelic (subst c ζ)
-      | pattern_match s pat rhs =>
-        pattern_match (subst s ζ) pat (fun pc => sub_assertion (rhs pc) (sub_up ζ _))
+      (* | pattern_match s pat rhs => *)
+      (*   pattern_match (subst s ζ) pat (fun pc => sub_assertion (rhs pc) (sub_up ζ _)) *)
       | sep A1 A2 => sep (sub_assertion A1 ζ) (sub_assertion A2 ζ)
       | or A1 A2  => sep (sub_assertion A1 ζ) (sub_assertion A2 ζ)
       | exist ς τ A => exist ς τ (sub_assertion A (sub_up1 ζ))
@@ -135,9 +135,9 @@ Module Import asn.
       | formula fml => option.map (@formula _) (occurs_check bIn fml)
       | chunk c     => option.map (@chunk _) (occurs_check bIn c)
       | chunk_angelic c => option.map (@chunk_angelic _) (occurs_check bIn c)
-      | pattern_match s pat rhs =>
-          s' <- occurs_check bIn s;;
-          None (* TODO *)
+      (* | pattern_match s pat rhs => *)
+      (*     s' <- occurs_check bIn s;; *)
+      (*     None (* TODO *) *)
       | sep A1 A2 =>
           A1' <- occurs _ _ bIn A1 ;;
           A2' <- occurs _ _ bIn A2 ;;
@@ -155,8 +155,8 @@ Module Import asn.
     | formula fml => true
     | chunk c => false
     | chunk_angelic c => false
-    | pattern_match s pat rhs =>
-        List.forallb (fun pc => is_pure (rhs pc)) (finite.enum (PatternCase pat))
+    (* | pattern_match s pat rhs => *)
+    (*     List.forallb (fun pc => is_pure (rhs pc)) (finite.enum (PatternCase pat)) *)
     | sep A1 A2 => is_pure A1 && is_pure A2
     | or A1 A2  => is_pure A1 && is_pure A2
     | exist ς τ A => is_pure A
@@ -174,13 +174,13 @@ Module Import asn.
       | formula F => instprop F ι
       | chunk c => False
       | chunk_angelic c => False
-      | pattern_match s pat rhs =>
-        let v := inst (T := fun Σ => Term Σ _) s ι in
-        let (pc,δpc) := pattern_match_val pat v in
-        interpret_pure (rhs pc) (ι ►► δpc)
+      (* | pattern_match s pat rhs => *)
+      (*   let v := inst (T := fun Σ => Term Σ _) s ι in *)
+      (*   let (pc,δpc) := pattern_match_val pat v in *)
+      (*   interpret_pure (rhs pc) (ι ►► δpc) *)
       | sep A1 A2 => interpret_pure A1 ι /\ interpret_pure A2 ι
       | or A1 A2  => interpret_pure A1 ι \/ interpret_pure A2 ι
-      | exist ς τ A => exists (v : Val τ), interpret_pure A (ι ► (ς∷τ ↦ v))
+      | exist ς τ A => exists (v : RelVal τ), interpret_pure A (ι ► (ς∷τ ↦ v))
       | debug => True
     end.
 
@@ -191,13 +191,13 @@ Module Import asn.
       | formula F => ⌜instprop F ι⌝ ∧ emp
       | chunk c => interpret_chunk c ι
       | chunk_angelic c => interpret_chunk c ι
-      | pattern_match s pat rhs =>
-        let v := inst (T := fun Σ => Term Σ _) s ι in
-        let (pc,δpc) := pattern_match_val pat v in
-        interpret (rhs pc) (ι ►► δpc)
+      (* | pattern_match s pat rhs => *)
+      (*   let v := inst (T := fun Σ => Term Σ _) s ι in *)
+      (*   let (pc,δpc) := pattern_match_val pat v in *)
+      (*   interpret (rhs pc) (ι ►► δpc) *)
       | sep A1 A2 => interpret A1 ι ∗ interpret A2 ι
       | or A1 A2  => interpret A1 ι ∨ interpret A2 ι
-      | exist ς τ A => ∃ (v : Val τ), interpret A (ι ► (ς∷τ ↦ v))
+      | exist ς τ A => ∃ (v : RelVal τ), interpret A (ι ► (ς∷τ ↦ v))
       | debug => emp
     end%I.
 
@@ -207,9 +207,9 @@ Module Import asn.
     Proof.
       induction a; cbn in *; intros ι; try discriminate a_pure.
       - now rewrite bi.and_emp.
-      - destruct pattern_match_val.
-        apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
-        apply base.elem_of_list_In. apply finite.elem_of_enum.
+      (* - destruct pattern_match_val. *)
+      (*   apply H. rewrite List.forallb_forall in a_pure. apply a_pure. *)
+      (*   apply base.elem_of_list_In. apply finite.elem_of_enum. *)
       - apply andb_true_iff in a_pure. destruct a_pure as [H1 H2].
         rewrite (IHa1 H1) (IHa2 H2). clear. iSplit.
         + iIntros ([H1 H2]). now iPureIntro.
@@ -233,10 +233,10 @@ Module Import asn.
     Notation "P ∨ Q" := (or P Q) : asn_scope.
     Notation "⊤" := (formula (formula_bool (term_val ty.bool true))) : asn_scope.
     Notation "⊥" := (formula (formula_bool (term_val ty.bool false))) : asn_scope.
-    Notation "'if:' c 'then' A1 'else' A2" := (match_bool c A1 A2)
-      (at level 200, format
-       "'[hv' 'if:'  c  '/' '[' 'then'  A1  ']' '/' '[' 'else'  A2 ']' ']'"
-      ) : asn_scope.
+    (* Notation "'if:' c 'then' A1 'else' A2" := (match_bool c A1 A2) *)
+    (*   (at level 200, format *)
+    (*    "'[hv' 'if:'  c  '/' '[' 'then'  A1  ']' '/' '[' 'else'  A2 ']' ']'" *)
+    (*   ) : asn_scope. *)
     Notation "x = y" := (formula (formula_relop bop.eq x y)) : asn_scope.
     Notation "x >= y" := (formula (formula_relop bop.le y x)) : asn_scope.
     Notation "x > y" := (formula (formula_relop bop.lt y x)) : asn_scope.
@@ -252,11 +252,11 @@ Module Import asn.
     Notation "x <=ᵘ y" := (formula (formula_relop bop.bvule x y)) : asn_scope.
     Notation "x <ᵘ y" := (formula (formula_relop bop.bvult x y)) : asn_scope.
 
-    Notation "'match:' e 'in' R 'with' [ x ; y ; .. ; z ] => rhs 'end'" :=
-      (match_record R e%exp
-        (recordpat_snoc .. (recordpat_snoc (recordpat_snoc recordpat_nil _ x) _ y) .. _ z)
-        rhs%asn)
-      (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : asn_scope.
+    (* Notation "'match:' e 'in' R 'with' [ x ; y ; .. ; z ] => rhs 'end'" := *)
+    (*   (match_record R e%exp *)
+    (*     (recordpat_snoc .. (recordpat_snoc (recordpat_snoc recordpat_nil _ x) _ y) .. _ z) *)
+    (*     rhs%asn) *)
+    (*   (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : asn_scope. *)
 
   End notations.
 
@@ -300,13 +300,13 @@ Section Contracts.
     | formula fml => option.isNone (occurs_check bIn fml)
     | chunk c     => option.isNone (option.map (@chunk _) (occurs_check bIn c))
     | chunk_angelic c => option.isNone (option.map (@chunk_angelic _) (occurs_check bIn c))
-    | pattern_match s pat rhs =>
-        option.isNone (occurs_check bIn s) |||
-        List.existsb
-          (fun pc => lint_assertion
-                       (ctx.in_cat_left (PatternCaseCtx pc) bIn)
-                       (rhs pc))
-          (finite.enum (PatternCase pat))
+    (* | pattern_match s pat rhs => *)
+    (*     option.isNone (occurs_check bIn s) ||| *)
+    (*     List.existsb *)
+    (*       (fun pc => lint_assertion *)
+    (*                    (ctx.in_cat_left (PatternCaseCtx pc) bIn) *)
+    (*                    (rhs pc)) *)
+    (*       (finite.enum (PatternCase pat)) *)
     | sep A1 A2 =>
         lint_assertion bIn A1 |||
         lint_assertion bIn A2
@@ -400,7 +400,7 @@ Section Contracts.
     Context {PROP : bi} {PI : PredicateDef PROP}.
 
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
-      (ι : Valuation (sep_contract_logic_variables c)) : CStore Δ :=
+      (ι : Valuation (sep_contract_logic_variables c)) : CStoreRel Δ :=
       inst (sep_contract_localstore c) ι.
 
     Definition interpret_contract_precondition {Δ τ} (c : SepContract Δ τ)
@@ -408,7 +408,7 @@ Section Contracts.
       interpret (sep_contract_precondition c) ι.
 
     Definition interpret_contract_postcondition {Δ τ} (c : SepContract Δ τ)
-      (ι : Valuation (sep_contract_logic_variables c)) (result : Val τ) : PROP :=
+      (ι : Valuation (sep_contract_logic_variables c)) (result : RelVal τ) : PROP :=
         interpret (sep_contract_postcondition c) (env.snoc ι (sep_contract_result c ∷ τ) result).
 
   End ContractInt.

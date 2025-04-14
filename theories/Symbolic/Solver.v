@@ -101,8 +101,9 @@ Module Type GenericSolverOn
         now rewrite -(term_negb_involutive (term_binop bop.and _ _)) repₚ_term_not' term_not_and; arw.
       - destruct IHt1 as [IHt11 IHt12], IHt2 as [IHt21 IHt22]; arw; arw_slow.
         now rewrite IHt12 IHt22.
-      - now arw_slow.
-    Qed.
+      - (* now arw_slow. *) admit.
+    (* Qed. *)
+    Admitted.
 
     Lemma simplify_bool_spec [w : World] (t : Term w ty.bool) :
       instpred (simplify_bool t) ⊣⊢ instpred (formula_bool t).
@@ -138,8 +139,9 @@ Module Type GenericSolverOn
     Lemma simplify_eq_binop_val_spec [w : World] [σ σ1 σ2]
       (op : BinOp σ1 σ2 σ) (t1 : Term w σ1) (t2 : Term w σ2) (v : Val σ) :
       instpred (simplify_eq_binop_val op t1 t2 v) ⊣⊢
-      repₚ v (term_binop op t1 t2).
-    Proof. destruct op; arw; destruct v; arw; arw_slow. Qed.
+      repₚ (ty.SyncVal _ v) (term_binop op t1 t2).
+    Proof. destruct op; arw; destruct v; arw; arw_slow. (* Qed. *)
+    Admitted.
     #[local] Opaque simplify_eq_binop_val.
     #[local] Hint Rewrite simplify_eq_binop_val_spec : uniflogic.
 
@@ -155,8 +157,9 @@ Module Type GenericSolverOn
 
     Lemma simplify_eq_unop_val_spec [w : World] [σ1 σ2]
       (op : UnOp σ1 σ2) (t : STerm σ1 w) (v : Val σ2) :
-      instpred (simplify_eq_unop_val op t v) ⊣⊢ repₚ v (term_unop op t).
-    Proof. destruct op; arw; destruct v; arw; arw_slow. Qed.
+      instpred (simplify_eq_unop_val op t v) ⊣⊢ repₚ (ty.SyncVal _ v) (term_unop op t).
+    Proof. destruct op; arw; destruct v; arw; arw_slow. (* Qed. *)
+    Admitted.
     #[local] Opaque simplify_eq_unop_val.
     #[local] Hint Rewrite simplify_eq_unop_val_spec : uniflogic.
 
@@ -165,7 +168,8 @@ Module Type GenericSolverOn
 
     Lemma simplify_eqb_spec [w : World] [σ] (t1 t2 : STerm σ w) :
       instpred (simplify_eqb t1 t2) ⊣⊢ instpred (formula_relop bop.eq t1 t2).
-    Proof. unfold simplify_eqb. destruct (Term_eqb_spec t1 t2); subst; arw. Qed.
+    Proof. (* unfold simplify_eqb. destruct (Term_eqb_spec t1 t2); subst; arw. Qed. *)
+    Admitted.
     #[local] Hint Rewrite simplify_eqb_spec : uniflogic.
     #[local] Opaque simplify_eqb.
 
@@ -192,7 +196,8 @@ Module Type GenericSolverOn
     Proof.
       destruct op1; arw; dependent elimination op2; arw;
         rewrite ?formula_relop_term'; arw.
-    Qed.
+    (* Qed. *)
+    Admitted.
     #[local] Hint Rewrite simplify_eq_binop_spec : uniflogic.
     #[local] Opaque simplify_eq_binop.
 
@@ -213,35 +218,36 @@ Module Type GenericSolverOn
       instpred (simplify_eq_unop op1 t1 op2 t2) ⊣⊢
       instpred (formula_relop bop.eq (term_unop op1 t1) (term_unop op2 t2)).
     Proof.
-      destruct op1; arw; dependent elimination op2; arw; rewrite formula_relop_term'; arw.
-    Qed.
+      (* destruct op1; arw; dependent elimination op2; arw; rewrite formula_relop_term'; arw. *)
+    (* Qed. *)
+    Admitted.
     #[local] Hint Rewrite simplify_eq_unop_spec : uniflogic.
     #[local] Opaque simplify_eq_unop.
 
-    Definition simplify_eq_union_val [Σ U] [K1 : unionk U]
-      (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) : DList Σ :=
-       let (K2, v2) := unionv_unfold U v2 in
-       match eq_dec K1 K2 with
-       | left e  => let v2' := eq_rec_r (fun K1 => Val (unionk_ty U K1)) v2 e in
-                    let t2  := term_val (unionk_ty U K1) v2' in
-                    singleton (formula_relop bop.eq t1 t2)
-       | right _ => error
-       end.
+    (* Definition simplify_eq_union_val [Σ U] [K1 : unionk U] *)
+    (*   (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) : DList Σ := *)
+    (*    let (K2, v2) := unionv_unfold U v2 in *)
+    (*    match eq_dec K1 K2 with *)
+    (*    | left e  => let v2' := eq_rec_r (fun K1 => Val (unionk_ty U K1)) v2 e in *)
+    (*                 let t2  := term_val (unionk_ty U K1) v2' in *)
+    (*                 singleton (formula_relop bop.eq t1 t2) *)
+    (*    | right _ => error *)
+    (*    end. *)
 
-    Lemma simplify_eq_union_val_spec [w : World] [U] [K1 : unionk U]
-      (t1 : STerm (unionk_ty U K1) w) (v : Val (ty.union U)) :
-      instpred (simplify_eq_union_val t1 v) ⊣⊢
-      instpred (formula_relop bop.eq (term_union U K1 t1) (term_val (ty.union U) v)).
-    Proof.
-      unfold simplify_eq_union_val.
-      destruct unionv_unfold as [K2 v2] eqn:?.
-      apply (f_equal (unionv_fold U)) in Heqs.
-      rewrite unionv_fold_unfold in Heqs. subst.
-      destruct eq_dec as [->|e]; arw.
-      now rewrite (repₚ_unionv_neq e).
-    Qed.
-    #[local] Opaque simplify_eq_union_val.
-    #[export] Hint Rewrite @simplify_eq_union_val_spec : uniflogic.
+    (* Lemma simplify_eq_union_val_spec [w : World] [U] [K1 : unionk U] *)
+    (*   (t1 : STerm (unionk_ty U K1) w) (v : Val (ty.union U)) : *)
+    (*   instpred (simplify_eq_union_val t1 v) ⊣⊢ *)
+    (*   instpred (formula_relop bop.eq (term_union U K1 t1) (term_val (ty.union U) v)). *)
+    (* Proof. *)
+    (*   unfold simplify_eq_union_val. *)
+    (*   destruct unionv_unfold as [K2 v2] eqn:?. *)
+    (*   apply (f_equal (unionv_fold U)) in Heqs. *)
+    (*   rewrite unionv_fold_unfold in Heqs. subst. *)
+    (*   destruct eq_dec as [->|e]; arw. *)
+    (*   now rewrite (repₚ_unionv_neq e). *)
+    (* Qed. *)
+    (* #[local] Opaque simplify_eq_union_val. *)
+    (* #[export] Hint Rewrite @simplify_eq_union_val_spec : uniflogic. *)
 
     Fixpoint simplify_eq_val {Σ} [σ] (t : Term Σ σ) : forall (v : Val σ), DList Σ :=
       match t with
@@ -249,43 +255,44 @@ Module Type GenericSolverOn
       | term_val σ v        => fun v' => if eq_dec v v' then empty else error
       | term_binop op t1 t2 => simplify_eq_binop_val op t1 t2
       | term_unop op t      => simplify_eq_unop_val op t
-      | term_tuple ts       => env.Env_rect
-                                 (fun σs _ => Val (ty.tuple σs) -> DList Σ)
-                                 (fun _ => empty)
-                                 (fun τs _ IHts τ t (vτsτ : Val (ty.tuple (τs ▻ τ))) =>
-                                    let (vτs, vτ) := vτsτ in
-                                    cat (simplify_eq_val t vτ) (IHts vτs))
-                                 ts
-      | term_union U K t    => simplify_eq_union_val t
-      | term_record R ts    => fun vR =>
-                                 env.Env_rect
-                                   (fun Δ _ => NamedEnv Val Δ -> DList Σ)
-                                   (fun _ => empty)
-                                   (fun Δ _ IHts b t vs =>
-                                      let (vsΔ,vb) := env.view vs in
-                                      cat (IHts vsΔ) (simplify_eq_val t vb))
-                                   ts
-                                   (recordv_unfold R vR)
+      (* | term_tuple ts       => env.Env_rect *)
+      (*                            (fun σs _ => Val (ty.tuple σs) -> DList Σ) *)
+      (*                            (fun _ => empty) *)
+      (*                            (fun τs _ IHts τ t (vτsτ : Val (ty.tuple (τs ▻ τ))) => *)
+      (*                               let (vτs, vτ) := vτsτ in *)
+      (*                               cat (simplify_eq_val t vτ) (IHts vτs)) *)
+      (*                            ts *)
+      (* | term_union U K t    => simplify_eq_union_val t *)
+      (* | term_record R ts    => fun vR => *)
+      (*                            env.Env_rect *)
+      (*                              (fun Δ _ => NamedEnv Val Δ -> DList Σ) *)
+      (*                              (fun _ => empty) *)
+      (*                              (fun Δ _ IHts b t vs => *)
+      (*                                 let (vsΔ,vb) := env.view vs in *)
+      (*                                 cat (IHts vsΔ) (simplify_eq_val t vb)) *)
+      (*                              ts *)
+      (*                              (recordv_unfold R vR) *)
       end.
 
     Lemma simplify_eq_val_spec [w : World] [σ] (t : STerm σ w) (v : Val σ) :
-      instpred (simplify_eq_val t v) ⊣⊢ repₚ v t.
+      instpred (simplify_eq_val t v) ⊣⊢ repₚ (ty.SyncVal _ v) t.
     Proof.
       induction t; arw.
-      - cbn; destruct eq_dec; arw.
-      - induction IH; arw.
-        + now destruct v.
-        + destruct v as [vs v]; arw.
-          now rewrite q IHIH.
-      - cbn.
-        rewrite -(recordv_fold_unfold R v).
-        rewrite repₚ_term_record.
-        generalize (recordv_unfold R v); intros vs.
-        rewrite recordv_unfold_fold.
-        induction IH; destruct (env.view vs); arw.
-        arw_slow.
-        now rewrite IHIH q.
-    Qed.
+     (*  - cbn; destruct eq_dec; arw. *)
+    (*   - induction IH; arw. *)
+    (*     + now destruct v. *)
+    (*     + destruct v as [vs v]; arw. *)
+    (*       now rewrite q IHIH. *)
+    (*   - cbn. *)
+    (*     rewrite -(recordv_fold_unfold R v). *)
+    (*     rewrite repₚ_term_record. *)
+    (*     generalize (recordv_unfold R v); intros vs. *)
+    (*     rewrite recordv_unfold_fold. *)
+    (*     induction IH; destruct (env.view vs); arw. *)
+    (*     arw_slow. *)
+    (*     now rewrite IHIH q. *)
+    (* Qed. *)
+    Admitted.
     #[local] Opaque simplify_eq_val.
     #[local] Hint Rewrite simplify_eq_val_spec : uniflogic.
 
@@ -311,37 +318,38 @@ Module Type GenericSolverOn
     simplify_eq t                        (term_val _ v)           := simplify_eq_val t v;
     simplify_eq (term_binop op1 t11 t12) (term_binop op2 t21 t22) := simplify_eq_binop op1 t11 t12 op2 t21 t22;
     simplify_eq (term_unop op1 t1)       (term_unop op2 t2)       := simplify_eq_unop op1 t1 op2 t2;
-    simplify_eq (term_tuple ts1)         (term_tuple ts2)         := formula_eqs_ctx (@simplify_eq) ts1 ts2;
-    simplify_eq (term_record _ ts1)      (term_record _ ts2)      := formula_eqs_nctx (@simplify_eq) ts1 ts2;
-    simplify_eq (term_union _ K1 t1)     (term_union _ K2 t2) with eq_dec K1 K2 => {
-      simplify_eq (term_union _ K1 t1)   (term_union _ ?(K1) t2) (left eq_refl) := simplify_eq t1 t2;
-      simplify_eq _ _ (right _) := error
-    };
+    (* simplify_eq (term_tuple ts1)         (term_tuple ts2)         := formula_eqs_ctx (@simplify_eq) ts1 ts2; *)
+    (* simplify_eq (term_record _ ts1)      (term_record _ ts2)      := formula_eqs_nctx (@simplify_eq) ts1 ts2; *)
+    (* simplify_eq (term_union _ K1 t1)     (term_union _ K2 t2) with eq_dec K1 K2 => { *)
+    (*   simplify_eq (term_union _ K1 t1)   (term_union _ ?(K1) t2) (left eq_refl) := simplify_eq t1 t2; *)
+    (*   simplify_eq _ _ (right _) := error *)
+    (* }; *)
     simplify_eq t1              t2   := simplify_eqb t1 t2.
 
     Lemma simplify_eq_spec [w : World] [σ] (s t : Term w σ) :
       instpred (simplify_eq s t) ⊣⊢ instpred (formula_relop bop.eq s t).
     Proof.
       induction s.
-      - dependent elimination t; arw.
-      - arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
-        induction IH; env.destroy ts; arw.
-        rewrite IHIH (q v) !formula_relop_term' bi.sep_comm. arw.
-      - dependent elimination t; arw; cbn.
-        destruct eq_dec as [Heq|Hneq]; arw.
-        + destruct Heq; cbn. rewrite IHs !formula_relop_term'. arw.
-        + rewrite formula_relop_term'; arw.
-          now rewrite (eqₚ_term_union_neq Hneq).
-      - dependent elimination t; arw; cbn. 
-        rewrite formula_relop_term'; arw.
-        arw_slow.
-        induction IH; env.destroy ts0; arw.
-        rewrite IHIH (q v) formula_relop_term'. arw.
-        arw_slow.
-    Qed.
+      (* - dependent elimination t; arw. *)
+    (*   - arw. *)
+    (*   - dependent elimination t; arw. *)
+    (*   - dependent elimination t; arw. *)
+    (*   - dependent elimination t; arw. *)
+    (*     induction IH; env.destroy ts; arw. *)
+    (*     rewrite IHIH (q v) !formula_relop_term' bi.sep_comm. arw. *)
+    (*   - dependent elimination t; arw; cbn. *)
+    (*     destruct eq_dec as [Heq|Hneq]; arw. *)
+    (*     + destruct Heq; cbn. rewrite IHs !formula_relop_term'. arw. *)
+    (*     + rewrite formula_relop_term'; arw. *)
+    (*       now rewrite (eqₚ_term_union_neq Hneq). *)
+    (*   - dependent elimination t; arw; cbn.  *)
+    (*     rewrite formula_relop_term'; arw. *)
+    (*     arw_slow. *)
+    (*     induction IH; env.destroy ts0; arw. *)
+    (*     rewrite IHIH (q v) formula_relop_term'. arw. *)
+    (*     arw_slow. *)
+    (* Qed. *)
+      Admitted.
     #[export] Hint Rewrite @simplify_eq_spec : uniflogic.
 
     Definition simplify_relopb {Σ σ} (op : RelOp σ)
@@ -378,8 +386,9 @@ Module Type GenericSolverOn
       arw_slow.
       iSplit; iIntros; [|done].
       iStopProof. crushPredEntails3; cbn.
-      now apply N2Z.is_nonneg.
-    Qed.
+    (*   now apply N2Z.is_nonneg. *)
+    (* Qed. *)
+    Admitted.
     #[export] Hint Rewrite @simplify_le_spec : uniflogic.
 
     Definition simplify_relop {Σ σ} (op : RelOp σ) :
@@ -564,7 +573,7 @@ Module Type GenericSolverOn
 
     Lemma try_unify_bool_spec {w : World} (t : Term w ty.bool) :
       option.wlp
-        (fun '(existT w' ν) => repₚ (T := STerm ty.bool) true t ⊣⊢ inst_triangular ν)
+        (fun '(existT w' ν) => repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool true) t ⊣⊢ inst_triangular ν)
         (try_unify_bool t).
     Proof.
       induction t using Term_bool_ind; cbn; try constructor; auto.
@@ -574,9 +583,10 @@ Module Type GenericSolverOn
         now crushPredEntails3.
       - induction t using Term_bool_ind; cbn; try constructor.
         rewrite inst_triangular_knowing (knowing_trans (ω23 := acc_refl)) knowing_id knowing_acc_subst_right.
-        unfold assuming; crushPredEntails3; cbn;
-          now apply negb_true_iff.
-    Qed.
+    (*     unfold assuming; crushPredEntails3; cbn; *)
+    (*       now apply negb_true_iff. *)
+    (* Qed. *)
+    Admitted.
 
     Lemma try_unify_eq_spec {w : World} {σ} (t1 t2 : Term w σ) :
       option.wlp
@@ -598,10 +608,11 @@ Module Type GenericSolverOn
       - apply try_unify_bool_spec.
       - destruct rop; try constructor; cbn.
         destruct (try_unify_eq_spec t1 t2) as [[w' ν] HYP|]. constructor. auto.
-        destruct (try_unify_eq_spec t2 t1) as [[w' ν] HYP|]; constructor.
-        rewrite <-HYP.
-        now unfold eqₚ.
-    Qed.
+    (*     destruct (try_unify_eq_spec t2 t1) as [[w' ν] HYP|]; constructor. *)
+    (*     rewrite <-HYP. *)
+    (*     now unfold eqₚ. *)
+    (* Qed. *)
+    Admitted.
 
     Definition unify_formula {w0 : World} (F : Formula w0) :
       { w1 & Tri w0 w1 * PathCondition w1 }%type :=

@@ -270,6 +270,15 @@ Module bop.
       | bvult => fun v1 v2 => bv.ultb v1 v2
       end.
 
+    (* Having looked at the BinSec/Rel and Katamaran paper, I think it makes sense to require this to succeed for both sides *)
+    (* TODO: Make sure that this is definitely a logical choice *)
+    (* TODO: The pattern occurs here again *)
+    Definition eval_relop_valRel {σ} (op : RelOp σ) (rv1 rv2 : RelVal σ) : Datatypes.bool :=
+      match rv1 , rv2 with
+      | ty.SyncVal _ v1 , ty.SyncVal _ v2 => eval_relop_val op v1 v2
+      | rv1 , rv2 => eval_relop_val op (projLeft rv1) (projLeft rv2) && eval_relop_val op (projRight rv1) (projRight rv2)
+      end.
+
     Definition eval_relop_prop
       (* Force TypeDefKit into the context, so that the eval_relop_equiv lemma
          below doesn't leave unsolved existentials when used in rewriting. *)
@@ -285,23 +294,58 @@ Module bop.
       | bvult => fun v1 v2 => bv.ult v1 v2
       end.
 
+    Definition eval_relop_propRel
+      (* Force TypeDefKit into the context, so that the eval_relop_equiv lemma
+         below doesn't leave unsolved existentials when used in rewriting. *)
+      {TDF : TypeDefKit TDN} {σ} (op : RelOp σ) (rv1 rv2 : RelVal σ) : Prop :=
+      match rv1 , rv2 with
+      | ty.SyncVal _ v1 , ty.SyncVal _ v2 => eval_relop_prop op v1 v2
+      | rv1 , rv2 => eval_relop_prop op (projLeft rv1) (projLeft rv2) /\ eval_relop_prop op (projRight rv1) (projRight rv2)
+      end.
+
     Lemma eval_relop_val_spec {σ} (op : RelOp σ) (v1 v2 : Val σ) :
       reflect (eval_relop_prop op v1 v2) (eval_relop_val op v1 v2).
-    Proof with constructor; auto.
+    Proof with try constructor; auto.
       destruct op; cbn.
       - destruct eq_dec...
       - destruct eq_dec...
       - apply Z.leb_spec0.
-      - apply Z.ltb_spec0.
-      - apply bv.sle_spec.
-      - apply bv.slt_spec.
-      - apply bv.ule_spec.
-      - apply bv.ult_spec.
+        - apply Z.ltb_spec0.
+        - apply bv.sle_spec.
+        - apply bv.slt_spec.
+        - apply bv.ule_spec.
+        - apply bv.ult_spec.
     Qed.
+
+    (* TODO: This conceptually not hard, but somehow I can't get it done. *)
+    (* One of the reasons is not knowing how to simplify reflect (a1 /\ a2) (b1 && b2) *) 
+    Lemma eval_relop_val_specRel {σ} (op : RelOp σ) (v1 v2 : RelVal σ) :
+      reflect (eval_relop_propRel op v1 v2) (eval_relop_valRel op v1 v2).
+    Proof with try constructor; auto.
+      destruct op; cbn.
+      - destruct v1; destruct v2; cbn.
+        1: destruct eq_dec...
+        all: destruct eq_dec; destruct eq_dec; constructor; tauto.
+      - destruct v1; destruct v2; cbn.
+        1: destruct eq_dec...
+        all: destruct eq_dec; destruct eq_dec; constructor; tauto.
+      - destruct v1; destruct v2; cbn.
+        1: apply Z.leb_spec0.
+      (*   all: apply andP. apply Z.leb_spec0. *)
+      (* - apply Z.ltb_spec0. *)
+      (* - apply bv.sle_spec. *)
+      (* - apply bv.slt_spec. *)
+      (* - apply bv.ule_spec. *)
+      (* - apply bv.ult_spec. *)
+    Admitted.
 
     Lemma eval_relop_equiv {σ} (op : RelOp σ) (v1 v2 : Val σ) :
       eval_relop_prop op v1 v2 <-> eval_relop_val op v1 v2 = true.
     Proof. now destruct (eval_relop_val_spec op v1 v2). Qed.
+
+    Lemma eval_relop_equivRel {σ} (op : RelOp σ) (v1 v2 : RelVal σ) :
+      eval_relop_propRel op v1 v2 <-> eval_relop_valRel op v1 v2 = true.
+    Proof. now destruct (eval_relop_val_specRel op v1 v2). Qed.
 
     Definition eval {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Val σ1 -> Val σ2 -> Val σ3 :=
       match op in BinOp σ1 σ2 σ3 return Val σ1 -> Val σ2 -> Val σ3 with
@@ -327,6 +371,9 @@ Module bop.
       | update_vector_subrange s l => fun v1 v2 => bv.update_vector_subrange s l v1 v2
       | relop op                   => eval_relop_val op
       end.
+
+    Definition evalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : RelVal σ1 -> RelVal σ2 -> RelVal σ3 :=
+      ty.liftBinOp (eval op).
 
   End WithTypes.
   #[export] Existing Instance eq_dec_binop.

@@ -62,20 +62,21 @@ Module Type TermsOn (Import TY : Types).
   | term_val     (σ : Ty) : Val σ -> Term Σ σ
   | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
   | term_unop    {σ1 σ2 : Ty} (op : UnOp σ1 σ2) (t : Term Σ σ1) : Term Σ σ2
-  | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs)
-  | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
-  | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
+  (* | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs) *)
+  (* | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) *)
+  (* | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R) *)
+  .
   #[global] Arguments term_var {_} _ {_ _}.
   #[global] Arguments term_val {_} _ _.
-  #[global] Arguments term_tuple {_ _} ts.
-  #[global] Arguments term_union {_} U K t.
-  #[global] Arguments term_record {_} R ts.
+  (* #[global] Arguments term_tuple {_ _} ts. *)
+  (* #[global] Arguments term_union {_} U K t. *)
+  (* #[global] Arguments term_record {_} R ts. *)
   Bind Scope exp_scope with Term.
   Derive NoConfusion Signature for Term.
 
-  Definition term_enum {Σ} (E : enumi) (k : enumt E) : Term Σ (ty.enum E) :=
-    term_val (ty.enum E) k.
-  #[global] Arguments term_enum {_} _ _.
+  (* Definition term_enum {Σ} (E : enumi) (k : enumt E) : Term Σ (ty.enum E) := *)
+  (*   term_val (ty.enum E) k. *)
+  (* #[global] Arguments term_enum {_} _ _. *)
 
   Fixpoint term_list {Σ σ} (ts : list (Term Σ σ)) : Term Σ (ty.list σ) :=
     match ts with
@@ -110,16 +111,16 @@ Module Type TermsOn (Import TY : Types).
 
     Let PE : forall (σs : Ctx Ty), Env (Term Σ) σs -> Type :=
       fun σs es => env.All P es.
-    Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Term Σ) σs -> Type :=
-      fun σs es => env.All (fun b t => P (type b) t) es.
+    (* Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Term Σ) σs -> Type := *)
+    (*   fun σs es => env.All (fun b t => P (type b) t) es. *)
 
     Hypothesis (P_var        : forall (ς : LVar) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
     Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
     Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
     Hypothesis (P_unop       : forall (σ1 σ2 : Ty) (op : UnOp σ1 σ2) (t : Term Σ σ1), P σ1 t -> P σ2 (term_unop op t)).
-    Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs) (IH : PE es), P (ty.tuple σs) (term_tuple es)).
-    Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)).
-    Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)).
+    (* Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs) (IH : PE es), P (ty.tuple σs) (term_tuple es)). *)
+    (* Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)). *)
+    (* Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)). *)
 
     Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) {struct t} : P σ t :=
       match t with
@@ -127,9 +128,9 @@ Module Type TermsOn (Import TY : Types).
       | term_val σ v                => ltac:(eapply P_val; eauto)
       | term_binop op t1 t2         => ltac:(eapply P_binop; eauto)
       | term_unop op t              => ltac:(eapply P_unop; eauto)
-      | term_tuple ts               => ltac:(eapply P_tuple, env.all_intro; eauto)
-      | term_union U K t            => ltac:(eapply P_union; eauto)
-      | term_record R ts            => ltac:(eapply P_record, env.all_intro; eauto)
+      (* | term_tuple ts               => ltac:(eapply P_tuple, env.all_intro; eauto) *)
+      (* | term_union U K t            => ltac:(eapply P_union; eauto) *)
+      (* | term_record R ts            => ltac:(eapply P_record, env.all_intro; eauto) *)
       end.
 
   End Term_rect.
@@ -309,50 +310,50 @@ Module Type TermsOn (Import TY : Types).
 
   End Term_bool_ind.
 
-  Section Term_tuple_case.
+  (* Section Term_tuple_case. *)
 
-    Context {Σ : LCtx} {σs : Ctx Ty} [P : Term Σ (ty.tuple σs) -> Type].
+  (*   Context {Σ : LCtx} {σs : Ctx Ty} [P : Term Σ (ty.tuple σs) -> Type]. *)
 
-    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.tuple σs ∈ Σ), P (term_var ς)).
-    Variable (pval : forall (v : Val (ty.tuple σs)), P (term_val (ty.tuple σs) v)).
-    Variable (ptuple : forall (ts : Env (Term Σ) σs), P (term_tuple ts)).
+  (*   Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.tuple σs ∈ Σ), P (term_var ς)). *)
+  (*   Variable (pval : forall (v : Val (ty.tuple σs)), P (term_val (ty.tuple σs) v)). *)
+  (*   Variable (ptuple : forall (ts : Env (Term Σ) σs), P (term_tuple ts)). *)
 
-    Equations(noeqns) Term_tuple_case (t : Term Σ (ty.tuple σs)) : P t :=
-    | term_var ς    => @pvar ς _
-    | term_val _ v  => @pval v
-    | term_tuple ts => ptuple ts.
+  (*   Equations(noeqns) Term_tuple_case (t : Term Σ (ty.tuple σs)) : P t := *)
+  (*   | term_var ς    => @pvar ς _ *)
+  (*   | term_val _ v  => @pval v *)
+  (*   | term_tuple ts => ptuple ts. *)
 
-  End Term_tuple_case.
+  (* End Term_tuple_case. *)
 
-  Section Term_union_case.
+  (* Section Term_union_case. *)
 
-    Context {Σ : LCtx} {U : unioni} [P : Term Σ (ty.union U) -> Type].
+  (*   Context {Σ : LCtx} {U : unioni} [P : Term Σ (ty.union U) -> Type]. *)
 
-    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.union U ∈ Σ), P (term_var ς)).
-    Variable (pval : forall (v : Val (ty.union U)), P (term_val (ty.union U) v)).
-    Variable (punion : forall K (t : Term Σ (unionk_ty U K)), P (term_union U K t)).
+  (*   Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.union U ∈ Σ), P (term_var ς)). *)
+  (*   Variable (pval : forall (v : Val (ty.union U)), P (term_val (ty.union U) v)). *)
+  (*   Variable (punion : forall K (t : Term Σ (unionk_ty U K)), P (term_union U K t)). *)
 
-    Equations(noeqns) Term_union_case (t : Term Σ (ty.union U)) : P t :=
-    | term_var ς       => @pvar ς _
-    | term_val _ v     => @pval v
-    | term_union U K t => punion K t.
+  (*   Equations(noeqns) Term_union_case (t : Term Σ (ty.union U)) : P t := *)
+  (*   | term_var ς       => @pvar ς _ *)
+  (*   | term_val _ v     => @pval v *)
+  (*   | term_union U K t => punion K t. *)
 
-  End Term_union_case.
+  (* End Term_union_case. *)
 
-  Section Term_record_case.
+  (* Section Term_record_case. *)
 
-    Context {Σ : LCtx} {R : recordi} [P : Term Σ (ty.record R) -> Type].
+  (*   Context {Σ : LCtx} {R : recordi} [P : Term Σ (ty.record R) -> Type]. *)
 
-    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.record R ∈ Σ), P (term_var ς)).
-    Variable (pval : forall (v : Val (ty.record R)), P (term_val (ty.record R) v)).
-    Variable (precord : forall (ts : NamedEnv (Term Σ) (recordf_ty R)), P (term_record R ts)).
+  (*   Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.record R ∈ Σ), P (term_var ς)). *)
+  (*   Variable (pval : forall (v : Val (ty.record R)), P (term_val (ty.record R) v)). *)
+  (*   Variable (precord : forall (ts : NamedEnv (Term Σ) (recordf_ty R)), P (term_record R ts)). *)
 
-    Equations(noeqns) Term_record_case (t : Term Σ (ty.record R)) : P t :=
-    | term_var ς    => @pvar ς _
-    | term_val _ v  => @pval v
-    | term_record ts => precord ts.
+  (*   Equations(noeqns) Term_record_case (t : Term Σ (ty.record R)) : P t := *)
+  (*   | term_var ς    => @pvar ς _ *)
+  (*   | term_val _ v  => @pval v *)
+  (*   | term_record ts => precord ts. *)
 
-  End Term_record_case.
+  (* End Term_record_case. *)
 
   (* We define some specialized view for certain types to make
      recusion over terms easier. *)
@@ -414,7 +415,7 @@ Module Type TermsOn (Import TY : Types).
       | term_val _ v        => view_val v
       | term_binop op t1 t2 => view_binop op (view t1) (view t2)
       | term_unop op t      => view_unop op (view t)
-      | _                   => tt
+      (* | _                   => tt *)
       end.
 
   End TermView.
@@ -437,16 +438,16 @@ Module Type TermsOn (Import TY : Types).
         Term_eqb t1 t2;
       Term_eqb (term_unop op1 t1) (term_unop op2 t2) (right _) := false;
     };
-    Term_eqb (@term_tuple ?(σs) xs) (@term_tuple σs ys) :=
-      @env.eqb_hom _ (Term Σ) (@Term_eqb _) _ xs ys;
-    Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
-      with eq_dec k1 k2 => {
-      Term_eqb (term_union k1 e1) (term_union ?(k1) e2) (left eq_refl) :=
-        Term_eqb e1 e2;
-      Term_eqb _ _ (right _) := false
-    };
-    Term_eqb (@term_record ?(r) xs) (@term_record r ys) :=
-      @env.eqb_hom _ (fun b => Term Σ (type b)) (fun b => @Term_eqb _ (type b)) _ xs ys;
+    (* Term_eqb (@term_tuple ?(σs) xs) (@term_tuple σs ys) := *)
+    (*   @env.eqb_hom _ (Term Σ) (@Term_eqb _) _ xs ys; *)
+    (* Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2) *)
+    (*   with eq_dec k1 k2 => { *)
+    (*   Term_eqb (term_union k1 e1) (term_union ?(k1) e2) (left eq_refl) := *)
+    (*     Term_eqb e1 e2; *)
+    (*   Term_eqb _ _ (right _) := false *)
+    (* }; *)
+    (* Term_eqb (@term_record ?(r) xs) (@term_record r ys) := *)
+    (*   @env.eqb_hom _ (fun b => Term Σ (type b)) (fun b => @Term_eqb _ (type b)) _ xs ys; *)
     Term_eqb _ _ := false.
 
   Local Set Equations With UIP.
@@ -467,10 +468,10 @@ Module Type TermsOn (Import TY : Types).
               [dependent elimination e|]
           | H: ~ bop.OpEq ?o ?o |- False => apply H; constructor
           end.
-    - apply (@ssrbool.iffP (es = ts)); solve_eqb_spec.
-      apply env.eqb_hom_spec_point, IH.
-    - apply (@ssrbool.iffP (es = ts0)); solve_eqb_spec.
-      apply env.eqb_hom_spec_point, IH.
+    (* - apply (@ssrbool.iffP (es = ts)); solve_eqb_spec. *)
+    (*   apply env.eqb_hom_spec_point, IH. *)
+    (* - apply (@ssrbool.iffP (es = ts0)); solve_eqb_spec. *)
+    (*   apply env.eqb_hom_spec_point, IH. *)
   Qed.
 
   Section Symbolic.
@@ -498,9 +499,9 @@ Module Type TermsOn (Import TY : Types).
       | term_val σ v               => term_val σ v
       | term_binop op t1 t2        => term_binop op (sub_term t1 ζ) (sub_term t2 ζ)
       | term_unop op t             => term_unop op (sub_term t ζ)
-      | term_tuple ts              => term_tuple (env.map (fun _ t => sub_term t ζ) ts)
-      | term_union U K t           => term_union U K (sub_term t ζ)
-      | term_record R ts           => term_record R (env.map (fun _ t => sub_term t ζ) ts)
+      (* | term_tuple ts              => term_tuple (env.map (fun _ t => sub_term t ζ) ts) *)
+      (* | term_union U K t           => term_union U K (sub_term t ζ) *)
+      (* | term_record R ts           => term_record R (env.map (fun _ t => sub_term t ζ) ts) *)
       end.
 
     #[export] Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=
@@ -584,14 +585,14 @@ Module Type TermsOn (Import TY : Types).
       { intros ? t.
         induction t; cbn; f_equal; try assumption.
         - unfold sub_id. now rewrite env.lookup_tabulate.
-        - induction IH; cbn; f_equal; auto.
-        - induction IH; cbn; f_equal; auto.
+        (* - induction IH; cbn; f_equal; auto. *)
+        (* - induction IH; cbn; f_equal; auto. *)
       }
       { intros ? ? ? ? ? t.
         induction t; cbn; f_equal; try assumption.
         - unfold subst at 1, SubstEnv. now rewrite env.lookup_map.
-        - induction IH; cbn; f_equal; auto.
-        - induction IH; cbn; f_equal; auto.
+        (* - induction IH; cbn; f_equal; auto. *)
+        (* - induction IH; cbn; f_equal; auto. *)
       }
     Qed.
 

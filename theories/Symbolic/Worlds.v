@@ -95,30 +95,30 @@ Module Type WorldsOn
       {| wctx := (wctx w - x∷σ); wco := subst (wco w) (sub_single xIn t) |}.
     Global Arguments wsubst w x {σ xIn} t.
 
-    Definition wmatch (w : World) {σ} (s : Term w σ) (p : @Pattern LVar σ)
-      (pc : PatternCase p) : World :=
-      let Δ   : LCtx           := PatternCaseCtx pc in
-      let w1  : World          := wcat w Δ in
-      let ts  : Sub Δ (w ▻▻ Δ) := sub_cat_right Δ in
-      let F1  : Formula w1     := formula_relop bop.eq
-                                    (subst s (sub_cat_left Δ))
-                                    (pattern_match_term_reverse _ pc ts) in
-      wformula (wcat w Δ) F1.
+    (* Definition wmatch (w : World) {σ} (s : Term w σ) (p : @Pattern LVar σ) *)
+    (*   (pc : PatternCase p) : World := *)
+    (*   let Δ   : LCtx           := PatternCaseCtx pc in *)
+    (*   let w1  : World          := wcat w Δ in *)
+    (*   let ts  : Sub Δ (w ▻▻ Δ) := sub_cat_right Δ in *)
+    (*   let F1  : Formula w1     := formula_relop bop.eq *)
+    (*                                 (subst s (sub_cat_left Δ)) *)
+    (*                                 (pattern_match_term_reverse _ pc ts) in *)
+    (*   wformula (wcat w Δ) F1. *)
 
-    Definition wmatchvar_patternvars {Σ : LCtx} {x σ} {xIn : (x∷σ ∈ Σ)%katamaran}
-      {p : @Pattern LVar σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) ((Σ ▻▻ PatternCaseCtx pc) - x∷σ) :=
-      let Δ   : LCtx           := PatternCaseCtx pc in
-      let Σ1  : LCtx              := Σ ▻▻ Δ in
-      let eq : ((Σ ▻▻ Δ) - x∷σ) = (Σ - x∷σ ▻▻ Δ) := ctx.remove_in_cat_left xIn in
-      let ts  : Sub Δ (Σ - x∷σ ▻▻ Δ) := sub_cat_right Δ in
-      eq_rect (Σ - x∷σ ▻▻ Δ) (fun Σ => Sub Δ Σ) ts ((Σ ▻▻ Δ) - x∷σ) (eq_sym eq).
+    (* Definition wmatchvar_patternvars {Σ : LCtx} {x σ} {xIn : (x∷σ ∈ Σ)%katamaran} *)
+    (*   {p : @Pattern LVar σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) ((Σ ▻▻ PatternCaseCtx pc) - x∷σ) := *)
+    (*   let Δ   : LCtx           := PatternCaseCtx pc in *)
+    (*   let Σ1  : LCtx              := Σ ▻▻ Δ in *)
+    (*   let eq : ((Σ ▻▻ Δ) - x∷σ) = (Σ - x∷σ ▻▻ Δ) := ctx.remove_in_cat_left xIn in *)
+    (*   let ts  : Sub Δ (Σ - x∷σ ▻▻ Δ) := sub_cat_right Δ in *)
+    (*   eq_rect (Σ - x∷σ ▻▻ Δ) (fun Σ => Sub Δ Σ) ts ((Σ ▻▻ Δ) - x∷σ) (eq_sym eq). *)
 
-    Definition wmatchvar (w : World) {x σ} (xIn : (x∷σ ∈ w)%katamaran) (p : @Pattern LVar σ)
-      (pc : PatternCase p) : World :=
-      let Δ   : LCtx           := PatternCaseCtx pc in
-      let w1  : World          := wcat w Δ in
-      let t'   : Term ((w ▻▻ Δ) - x∷σ) σ := pattern_match_term_reverse _ pc (wmatchvar_patternvars pc) in
-      wsubst w1 x t'.
+    (* Definition wmatchvar (w : World) {x σ} (xIn : (x∷σ ∈ w)%katamaran) (p : @Pattern LVar σ) *)
+    (*   (pc : PatternCase p) : World := *)
+    (*   let Δ   : LCtx           := PatternCaseCtx pc in *)
+    (*   let w1  : World          := wcat w Δ in *)
+    (*   let t'   : Term ((w ▻▻ Δ) - x∷σ) σ := pattern_match_term_reverse _ pc (wmatchvar_patternvars pc) in *)
+    (*   wsubst w1 x t'. *)
 
     (* Define a shorthand [TYPE] for the category of world indexed types. *)
     Definition TYPE : Type := World -> Type.
@@ -159,8 +159,8 @@ Module Type WorldsOn
       | tri_cons x t ν12 => fun ν => tri_cons x t (tri_comp ν12 ν)
       end.
 
-    Definition sub_wmatch_patctx {w : World} {σ} {s : Term w σ} {p : @Pattern LVar σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) (wmatch w s p pc) :=
-      sub_cat_right (PatternCaseCtx pc).
+    (* Definition sub_wmatch_patctx {w : World} {σ} {s : Term w σ} {p : @Pattern LVar σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) (wmatch w s p pc) := *)
+    (*   sub_cat_right (PatternCaseCtx pc). *)
 
     Fixpoint sub_triangular {w1 w2} (ζ : Tri w1 w2) : Sub w1 w2 :=
       match ζ with
@@ -302,8 +302,8 @@ Module Type WorldsOn
     Definition acc_wnil_init {w} : Acc wnil w :=
       @acc_sub wnil w [env] entails_nil.
 
-    Definition acc_wlctx_valuation {Σ} : Valuation Σ -> Acc (wlctx Σ) wnil :=
-      fun ι => @acc_sub (wlctx Σ) wnil (lift ι) entails_nil.
+    (* Definition acc_wlctx_valuation {Σ} : Valuation Σ -> Acc (wlctx Σ) wnil := *)
+    (*   fun ι => @acc_sub (wlctx Σ) wnil (lift ι) entails_nil. *)
 
     Definition acc_snoc_right {w} {b : LVar ∷ Ty} : w ⊒ wsnoc w b :=
       @acc_sub w (wsnoc w b) sub_wk1 (entails_refl (subst (wco w) sub_wk1)).
@@ -367,35 +367,35 @@ Module Type WorldsOn
       @acc_sub w w' ζ (entails_refl (wco w')).
     Arguments acc_subst_right {w} x {σ xIn} t.
 
-    Definition acc_match_right {w : World} {σ} {s : Term w σ}
-      {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatch w s p pc :=
-      @acc_sub w (wmatch w s p pc) (sub_cat_left (PatternCaseCtx pc))
-        (fun ι HCι => proj1 HCι).
+    (* Definition acc_match_right {w : World} {σ} {s : Term w σ} *)
+    (*   {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatch w s p pc := *)
+    (*   @acc_sub w (wmatch w s p pc) (sub_cat_left (PatternCaseCtx pc)) *)
+    (*     (fun ι HCι => proj1 HCι). *)
 
-    Definition sub_matchvar_right {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
-        {p : @Pattern LVar σ} (pc : PatternCase p) : Sub w (wmatchvar w xIn p pc) :=
-        let Δ   : LCtx           := PatternCaseCtx pc in
-        let w1  : World          := wcat w Δ in
-        let t   : Term ((w ▻▻ Δ) - x∷σ) σ := pattern_match_term_reverse _ pc (wmatchvar_patternvars pc) in
-        let wmv : World          := wsubst w1 x t in
-        let sub₁ : Sub w (w ▻▻ Δ) := sub_cat_left Δ in
-        let sub₂ : Sub (w ▻▻ Δ) ((w ▻▻ Δ) - x∷σ) := sub_single _ t in
-        subst sub₁ sub₂.
-    Arguments sub_matchvar_right {w} {x σ xIn p} pc : simpl never.
+    (* Definition sub_matchvar_right {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran} *)
+    (*     {p : @Pattern LVar σ} (pc : PatternCase p) : Sub w (wmatchvar w xIn p pc) := *)
+    (*     let Δ   : LCtx           := PatternCaseCtx pc in *)
+    (*     let w1  : World          := wcat w Δ in *)
+    (*     let t   : Term ((w ▻▻ Δ) - x∷σ) σ := pattern_match_term_reverse _ pc (wmatchvar_patternvars pc) in *)
+    (*     let wmv : World          := wsubst w1 x t in *)
+    (*     let sub₁ : Sub w (w ▻▻ Δ) := sub_cat_left Δ in *)
+    (*     let sub₂ : Sub (w ▻▻ Δ) ((w ▻▻ Δ) - x∷σ) := sub_single _ t in *)
+    (*     subst sub₁ sub₂. *)
+    (* Arguments sub_matchvar_right {w} {x σ xIn p} pc : simpl never. *)
 
-    Program Definition acc_matchvar_right {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
-      {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatchvar w xIn p pc :=
-      let Δ   : LCtx           := PatternCaseCtx pc in
-      let w1  : World          := wcat w Δ in
-      let t   : Term ((w ▻▻ Δ) - x∷σ) σ := pattern_match_term_reverse _ pc (wmatchvar_patternvars pc) in
-      let wmv : World          := wsubst w1 x t in
-      let sub : Sub w wmv := sub_matchvar_right pc in
-      @acc_sub w wmv sub _.
-    Next Obligation.
-      intros. cbn -[sub_single].
-      now rewrite <-subst_sub_comp.
-    Qed.
-    Arguments acc_matchvar_right {w} {x σ xIn p} pc : simpl never.
+    (* Program Definition acc_matchvar_right {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran} *)
+    (*   {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatchvar w xIn p pc := *)
+    (*   let Δ   : LCtx           := PatternCaseCtx pc in *)
+    (*   let w1  : World          := wcat w Δ in *)
+    (*   let t   : Term ((w ▻▻ Δ) - x∷σ) σ := pattern_match_term_reverse _ pc (wmatchvar_patternvars pc) in *)
+    (*   let wmv : World          := wsubst w1 x t in *)
+    (*   let sub : Sub w wmv := sub_matchvar_right pc in *)
+    (*   @acc_sub w wmv sub _. *)
+    (* Next Obligation. *)
+    (*   intros. cbn -[sub_single]. *)
+    (*   now rewrite <-subst_sub_comp. *)
+    (* Qed. *)
+    (* Arguments acc_matchvar_right {w} {x σ xIn p} pc : simpl never. *)
 
     Fixpoint acc_triangular {w1 w2} (ν : Tri w1 w2) : w1 ⊒ w2 :=
       match ν with
@@ -611,7 +611,7 @@ Module Type WorldsOn
       Proper (Basics.flip (entails (w := w)) ==> (entails (w := w)) ==> Basics.impl) entails.
     Proof. crushPredEntails1. Qed.
 
-    #[export] Instance proper_repₚ_term {σ} {v : Val σ} :
+    #[export] Instance proper_repₚ_term {σ} {v : RelVal σ} :
       Proper (equiv (A := Term w σ) ==> bientails) (repₚ (w := w) (T := STerm σ) v).
     Proof. crushPredEntails1; specialize (H ι); now subst. Qed.
 
@@ -844,12 +844,12 @@ Module Type WorldsOn
     Proof. crushPredEntails2; specialize (H ι); unfold instpred_formula_user in *. 
            now rewrite -H. now rewrite H.  Qed.
 
-    Definition instpred_formula_prop {w : World} {Σ : LCtx} (ζ : Sub Σ w) (P : abstract_named Val Σ Prop) : Pred w :=
+    Definition instpred_formula_prop {w : World} {Σ : LCtx} (ζ : Sub Σ w) (P : abstract_named RelVal Σ Prop) : Pred w :=
       fun ι => uncurry_named P (inst ζ ι).
     Arguments instpred_formula_prop [w] [Σ] ζ P ι /.
 
     Definition instpred_formula_relop {w : World} {σ : Ty} (op : RelOp σ) (t1 t2 : Term w σ) : Pred w :=
-      fun ι => bop.eval_relop_prop op (inst t1 ι) (inst t2 ι).
+      fun ι => bop.eval_relop_propRel op (inst t1 ι) (inst t2 ι).
     Arguments instpred_formula_relop [w] {σ} op t1 t2 ι /.
 
     #[export] Instance proper_instpred_formula_relop {w : World} {σ} :
@@ -861,7 +861,7 @@ Module Type WorldsOn
     Fixpoint instpred_formula {w : World} (fml : Formula w) : Pred w :=
       match fml with
       | formula_user p ts      => instpred_formula_user p ts
-      | formula_bool t         => repₚ true (A := Val ty.bool) t
+      | formula_bool t         => repₚ (ty.SyncVal (ty.bool) true) (A := RelVal ty.bool) t
       | formula_prop ζ P       => instpred_formula_prop ζ P
       | formula_relop op t1 t2 => instpred_formula_relop op t1 t2
       | formula_true           => True%I
@@ -883,159 +883,187 @@ Module Type WorldsOn
 
     Import Bitvector.
 
-    Lemma instpred_formula_relop_eq {w : World} {σ} (t1 t2 : STerm σ w) :
-      instpred (w := w) (formula_relop bop.eq t1 t2) ⊣⊢ eqₚ t1 t2.
-    Proof. crushPredEntails2. Qed.
+    (* TODO: This fails because SyncVal v != NonSyncVal v v *)
+    (* Lemma instpred_formula_relop_eq {w : World} {σ} (t1 t2 : STerm σ w) : *)
+    (*   instpred (w := w) (formula_relop bop.eq t1 t2) ⊣⊢ eqₚ t1 t2. *)
+    (* Proof. crushPredEntails2. Qed. *)
 
-    Lemma instpred_formula_relop_eq_val {w : World} {σ} {t1 : STerm σ w} v :
-      instpred (formula_relop bop.eq t1 (term_val _ v)) ⊣⊢ repₚ v t1.
-    Proof. crushPredEntails2. Qed.
+    (* TODO: This fails because SyncVal v != NonSyncVal v v *)
+    (* Lemma instpred_formula_relop_eq_val {w : World} {σ} {t1 : STerm σ w} v : *)
+    (*   instpred (formula_relop bop.eq t1 (term_val _ v)) ⊣⊢ repₚ (ty.SyncVal _ v) t1. *)
+    (* Proof. *)
+    (*   crushPredEntails2. *)
+    (* Qed. *)
 
-    Lemma instpred_formula_relop_eq_val' {w : World} {σ} {t1 : STerm σ w} v :
-      instpred_formula_relop bop.eq t1 (term_val _ v) ⊣⊢ repₚ v t1.
-    Proof. apply instpred_formula_relop_eq_val. Qed.
+    (* Lemma instpred_formula_relop_eq_val' {w : World} {σ} {t1 : STerm σ w} v : *)
+    (*   instpred_formula_relop bop.eq t1 (term_val _ v) ⊣⊢ repₚ v t1. *)
+    (* Proof. apply instpred_formula_relop_eq_val. Qed. *)
 
-    Lemma instpred_formula_relop_eq' {w : World} {σ} (t1 t2 : STerm σ w) :
-      instpred_formula_relop (w := w) bop.eq t1 t2 ⊣⊢ eqₚ t1 t2.
-    Proof. apply instpred_formula_relop_eq. Qed.
+    (* Lemma instpred_formula_relop_eq' {w : World} {σ} (t1 t2 : STerm σ w) : *)
+    (*   instpred_formula_relop (w := w) bop.eq t1 t2 ⊣⊢ eqₚ t1 t2. *)
+    (* Proof. apply instpred_formula_relop_eq. Qed. *)
 
-    Lemma formula_relop_term {w : World} {σ} (t1 t2 : STerm σ w) op :
-      instpred (w := w) (formula_relop op t1 t2) ⊣⊢
-        repₚ (T := STerm ty.bool) true (term_binop (bop.relop op) t1 t2).
-    Proof. crushPredEntails2; unfold instpred_formula_relop in *;
-             now eapply bop.eval_relop_equiv. Qed.
+    (* TODO: This fails because SyncVal v != NonSyncVal v v *)
+    (* Lemma formula_relop_term {w : World} {σ} (t1 t2 : STerm σ w) op : *)
+    (*   instpred (w := w) (formula_relop op t1 t2) ⊣⊢ *)
+    (*     repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool true) (term_binop (bop.relop op) t1 t2). *)
+    (* Proof. crushPredEntails2. Qed. *)
 
-    Lemma formula_relop_term' {w : World} {σ} (t1 t2 : STerm σ w) op :
-      instpred_formula_relop op t1 t2 ⊣⊢
-        repₚ (T := STerm ty.bool) true (term_binop (bop.relop op) t1 t2).
-    Proof. apply formula_relop_term. Qed.
+    (* Lemma formula_relop_term' {w : World} {σ} (t1 t2 : STerm σ w) op : *)
+    (*   instpred_formula_relop op t1 t2 ⊣⊢ *)
+    (*     repₚ (T := STerm ty.bool) true (term_binop (bop.relop op) t1 t2). *)
+    (* Proof. apply formula_relop_term. Qed. *)
 
-    Lemma rep_binop_neq_eq [w : World] {σ : Ty} (t1 t2 : Term w σ) b :
-      repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.neq) t1 t2) ⊣⊢
-        repₚ (T := STerm ty.bool) (w := w) (negb b) (term_binop (bop.relop bop.eq) t1 t2).
-    Proof.
-      unfold repₚ; crushPredEntails2; destruct b; now destruct Classes.eq_dec.
-    Qed.
+    (* Lemma rep_binop_neq_eq [w : World] {σ : Ty} (t1 t2 : Term w σ) b : *)
+    (*   repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool b) (term_binop (bop.relop bop.neq) t1 t2) ⊣⊢ *)
+    (*     repₚ (T := STerm ty.bool) (w := w) (ty.SyncVal ty.bool (negb b)) (term_binop (bop.relop bop.eq) t1 t2). *)
+    (* Proof. *)
+    (*   unfold repₚ; crushPredEntails2; destruct b; now destruct Classes.eq_dec. *)
+    (* Qed. *)
 
     Lemma eq_val_rep_l [w : World] {σ} (t : Term w σ) v :
-      eqₚ (term_val σ v) t ⊣⊢ repₚ (T := STerm σ) v t.
+      eqₚ (term_val σ v) t ⊣⊢ repₚ (T := STerm σ) (ty.SyncVal _ v) t.
     Proof. unfold eqₚ, repₚ; crushPredEntails2. Qed.
 
     Lemma eq_val_rep_r [w : World] {σ} (t : Term w σ) v :
-      eqₚ t (term_val σ v) ⊣⊢ repₚ (T := STerm σ) v t.
+      eqₚ t (term_val σ v) ⊣⊢ repₚ (T := STerm σ) (ty.SyncVal _ v) t.
     Proof. unfold eqₚ, repₚ; crushPredEntails2. Qed.
 
     Lemma rep_eq_val_true [w : World] {σ} (t : Term w σ) v :
-      repₚ (T := STerm ty.bool) true (term_binop (bop.relop bop.eq) t (term_val σ v)) ⊣⊢
-        repₚ (T := STerm σ) (w := w) v t.
-    Proof. unfold repₚ; crushPredEntails2; now destruct Classes.eq_dec. Qed.
+      repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool true) (term_binop (bop.relop bop.eq) t (term_val σ v)) ⊣⊢
+        repₚ (T := STerm σ) (w := w) (ty.SyncVal _ v) t.
+    Proof. unfold repₚ; crushPredEntails2.
+           destruct (inst t ι).
+           Focus 2. congruence.
+           admit.
+           destruct (inst t ι).
+           admit.
+           congruence. 
+           (* now destruct Classes.eq_dec. *)
+    Admitted.
 
     Lemma rep_eq_terms_true [w : World] {σ} (t1 t2 : Term w σ) :
-      repₚ (T := STerm ty.bool) true (term_binop (bop.relop bop.eq) t1 t2) ⊣⊢
+      repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool true) (term_binop (bop.relop bop.eq) t1 t2) ⊣⊢
         eqₚ (T := STerm σ) (w := w) t1 t2.
-    Proof. unfold repₚ; crushPredEntails2; now destruct Classes.eq_dec. Qed.
+    Proof. (* unfold repₚ; crushPredEntails2; now destruct Classes.eq_dec. Qed. *)
+      Admitted.
 
     Lemma rep_neq_nil_cons {w : World} {σ : Ty} {t1 : Term w σ} {t2 : Term w (ty.list σ)} :
-      repₚ (T := STerm (ty.list σ)) ([] : list (Val σ)) (term_binop bop.cons t1 t2) ⊣⊢  False.
-    Proof. unfold repₚ. crushPredEntails2; now inversion H0. Qed.
+      repₚ (T := STerm (ty.list σ)) (ty.SyncVal (ty.list _) [] : RelVal (ty.list σ)) (term_binop bop.cons t1 t2) ⊣⊢  False.
+    Proof. (* unfold repₚ. crushPredEntails2; now inversion H0. Qed. *)
+    Admitted.
 
     Lemma repₚ_term_and {w : World} {t1 t2 : STerm ty.bool w} :
-      repₚ (w := w) (T := STerm ty.bool) true (term_binop bop.and t1 t2) ⊣⊢
-        repₚ (T := STerm ty.bool) (w := w) true t1 ∗ repₚ (T := STerm ty.bool) true t2.
-    Proof. unfold repₚ, bi_pred, bi_sep, sepₚ.
-           crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
+      repₚ (w := w) (T := STerm ty.bool) (ty.SyncVal ty.bool true) (term_binop bop.and t1 t2) ⊣⊢
+        repₚ (T := STerm ty.bool) (w := w) (ty.SyncVal ty.bool true) t1 ∗ repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool true) t2.
+    Proof. (* unfold repₚ, bi_pred, bi_sep, sepₚ. *)
+           (* crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed. *)
+    Admitted.
 
     Lemma repₚ_term_not {w : World} {t : STerm ty.bool w} b :
-      repₚ (T := STerm ty.bool) (negb b) (term_not t) ⊣⊢
-        repₚ (T := STerm ty.bool) b t.
-    Proof. unfold repₚ. crushPredEntails2; now destruct b, (inst t ι). Qed.
+      repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool (negb b)) (term_not t) ⊣⊢
+        repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool b) t.
+    Proof. (* unfold repₚ. crushPredEntails2; now destruct b, (inst t ι). Qed. *)
+    Admitted.
 
     Lemma repₚ_term_not' {w : World} {t : STerm ty.bool w} b :
-      repₚ (T := STerm ty.bool) b (term_not t) ⊣⊢
-        repₚ (T := STerm ty.bool) (negb b) t.
-    Proof. unfold repₚ. crushPredEntails2; now destruct b, (inst t ι). Qed.
+      repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool b) (term_not t) ⊣⊢
+        repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool (negb b)) t.
+    Proof. (* unfold repₚ. crushPredEntails2; now destruct b, (inst t ι). Qed. *)
+    Admitted.
 
     Lemma repₚ_term_neg {w : World} {t : STerm ty.int w} v :
-      repₚ (T := STerm ty.int) (- v)%Z (term_neg t) ⊣⊢
-        repₚ (T := STerm ty.int) v t.
-    Proof. unfold repₚ. crushPredEntails2; lia. Qed.
+      repₚ (T := STerm ty.int) (ty.SyncVal ty.int (- v)%Z) (term_neg t) ⊣⊢
+        repₚ (T := STerm ty.int) (ty.SyncVal ty.int v) t.
+    Proof. (* unfold repₚ. crushPredEntails2; lia. Qed. *)
+    Admitted.
 
     Lemma repₚ_term_neg' {w : World} {t : STerm ty.int w} v :
-      repₚ (T := STerm ty.int) v (term_neg t) ⊣⊢
-        repₚ (T := STerm ty.int) (- v)%Z t.
-    Proof. unfold repₚ. crushPredEntails2; lia. Qed.
+      repₚ (T := STerm ty.int) (ty.SyncVal ty.int v) (term_neg t) ⊣⊢
+        repₚ (T := STerm ty.int) (ty.SyncVal ty.int (- v)%Z) t.
+    Proof. (* unfold repₚ. crushPredEntails2; lia. Qed. *)
+    Admitted.
 
     Lemma eqₚ_term_inl {w : World} {σ1 σ2} {t1 t2 : STerm σ1 w} :
       eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t1) (term_inl t2) ⊣⊢
         eqₚ (T := STerm σ1) t1 t2.
-    Proof. unfold eqₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    Proof. (* unfold eqₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
+    Admitted.
 
     Lemma repₚ_term_inl {w : World} {σ1 σ2}{t : STerm σ1 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inl t) ⊣⊢
-        repₚ (T := STerm σ1) v t.
-    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+      repₚ (T := STerm (ty.sum σ1 σ2)) (ty.SyncVal (ty.sum _ _) (inl v) : RelVal (ty.sum _ _)) (term_inl t) ⊣⊢
+        repₚ (T := STerm σ1) (ty.SyncVal _ v) t.
+    Proof. (* unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
+    Admitted.
 
     Lemma eqₚ_term_inr {w : World} {σ1 σ2} {t1 t2 : STerm σ2 w} :
       eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inr t1) (term_inr t2) ⊣⊢
         eqₚ (T := STerm σ2) t1 t2.
-    Proof. unfold eqₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    Proof. (* unfold eqₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
+    Admitted.
 
     Lemma repₚ_term_inr {w : World} {σ1 σ2}{t : STerm σ2 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inr v : Val (ty.sum _ _)) (term_inr t) ⊣⊢
-        repₚ (T := STerm σ2) v t.
-    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+      repₚ (T := STerm (ty.sum σ1 σ2)) (ty.SyncVal (ty.sum _ _) (inr v)) (term_inr t) ⊣⊢
+        repₚ (T := STerm σ2) (ty.SyncVal _ v) t.
+    Proof. (* unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
+    Admitted.
 
     Lemma eqₚ_term_inr_inl {w : World} {σ1 σ2}{t1 : STerm σ1 w} {t2 : STerm σ2 w} :
       eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inr t2) (term_inl t1) ⊣⊢ False.
-    Proof. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    Proof. (* crushPredEntails2; try (now subst); now inversion H0. Qed. *)
+    Admitted.
 
     Lemma eqₚ_term_inl_inr {w : World} {σ1 σ2}{t1 : STerm σ2 w} {t2 : STerm σ1 w} :
       eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t2) (term_inr t1) ⊣⊢ False.
-    Proof. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    Proof. (* crushPredEntails2; try (now subst); now inversion H0. Qed. *)
+    Admitted.
 
     Lemma repₚ_term_inl_inr {w : World} {σ1 σ2}{t : STerm σ1 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inr v : Val (ty.sum _ _)) (term_inl t) ⊣⊢ False.
-    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+      repₚ (T := STerm (ty.sum σ1 σ2)) (ty.SyncVal (ty.sum _ _) (inr v)) (term_inl t) ⊣⊢ False.
+    Proof. (* unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
+    Admitted.
 
     Lemma repₚ_term_inr_inl {w : World} {σ1 σ2}{t : STerm σ2 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inr t) ⊣⊢ False.
-    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+      repₚ (T := STerm (ty.sum σ1 σ2)) (ty.SyncVal (ty.sum _ _) (inl v)) (term_inr t) ⊣⊢ False.
+    Proof. (* unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
+    Admitted.
 
     Lemma repₚ_term_or_false {w : World} {t1 t2 : STerm ty.bool w} :
-      repₚ (T := STerm ty.bool) false (term_binop bop.or t1 t2) ⊣⊢
-        repₚ (T := STerm ty.bool) false t1 ∗ repₚ (T := STerm ty.bool) false t2.
-    Proof. unfold repₚ, bi_pred, bi_sep, sepₚ. crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
+      repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool false) (term_binop bop.or t1 t2) ⊣⊢
+        repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool false) t1 ∗ repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool false) t2.
+    Proof. (* unfold repₚ, bi_pred, bi_sep, sepₚ. crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed. *)
+      Admitted.
 
-    Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) :
-      repₚ (T := STerm _) (vs, v) (term_tuple (E ► (σ ↦ d))) ⊣⊢
-        repₚ (T := STerm σ) v d ∗ repₚ (T := STerm _) vs (term_tuple E).
-    Proof. unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0| now subst ]. Qed.
+    (* Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) : *)
+    (*   repₚ (T := STerm _) (vs, v) (term_tuple (E ► (σ ↦ d))) ⊣⊢ *)
+    (*     repₚ (T := STerm σ) v d ∗ repₚ (T := STerm _) vs (term_tuple E). *)
+    (* Proof. unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0| now subst ]. Qed. *)
 
-    Lemma eqₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [ts1 ts2 : Env (Term w) Γ] [σ : Ty] (t1 t2 : Term w σ) :
-      eqₚ (T := STerm _) (term_tuple (ts1 ► (σ ↦ t1))) (term_tuple (ts2 ► (σ ↦ t2))) ⊣⊢
-        eqₚ (T := STerm σ) t1 t2 ∗ eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2).
-    Proof. unfold eqₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0 | now f_equal]. Qed.
+    (* Lemma eqₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [ts1 ts2 : Env (Term w) Γ] [σ : Ty] (t1 t2 : Term w σ) : *)
+    (*   eqₚ (T := STerm _) (term_tuple (ts1 ► (σ ↦ t1))) (term_tuple (ts2 ► (σ ↦ t2))) ⊣⊢ *)
+    (*     eqₚ (T := STerm σ) t1 t2 ∗ eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2). *)
+    (* Proof. unfold eqₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0 | now f_equal]. Qed. *)
 
-    Lemma repₚ_term_record {w : World} {R : recordi} {vs : NamedEnv Val (recordf_ty R)} {svs : NamedEnv (Term w) (recordf_ty R)} :
-      repₚ (T := STerm _) (recordv_fold R vs) (term_record R svs) ⊣⊢ repₚ vs svs.
-    Proof. unfold repₚ; crushPredEntails2; [|now subst].
-           apply (f_equal (recordv_unfold R)) in H0.
-           now rewrite !recordv_unfold_fold in H0.
-    Qed.
+    (* Lemma repₚ_term_record {w : World} {R : recordi} {vs : NamedEnv Val (recordf_ty R)} {svs : NamedEnv (Term w) (recordf_ty R)} : *)
+    (*   repₚ (T := STerm _) (recordv_fold R vs) (term_record R svs) ⊣⊢ repₚ vs svs. *)
+    (* Proof. unfold repₚ; crushPredEntails2; [|now subst]. *)
+    (*        apply (f_equal (recordv_unfold R)) in H0. *)
+    (*        now rewrite !recordv_unfold_fold in H0. *)
+    (* Qed. *)
 
-    Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} :
-      eqₚ (T := STerm _) (term_record R ts1) (term_record R ts2) ⊣⊢ eqₚ ts1 ts2.
-    Proof. unfold eqₚ; crushPredEntails2.
-           - apply (f_equal (recordv_unfold R)) in H0.
-             now rewrite !recordv_unfold_fold in H0.
-           - now rewrite H0.
-    Qed.
+    (* Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} : *)
+    (*   eqₚ (T := STerm _) (term_record R ts1) (term_record R ts2) ⊣⊢ eqₚ ts1 ts2. *)
+    (* Proof. unfold eqₚ; crushPredEntails2. *)
+    (*        - apply (f_equal (recordv_unfold R)) in H0. *)
+    (*          now rewrite !recordv_unfold_fold in H0. *)
+    (*        - now rewrite H0. *)
+    (* Qed. *)
 
     Lemma repₚ_namedenv_nil {w : World} {N} :
       repₚ (w := w) (T := fun w => NamedEnv (Term w) ([ctx] : NCtx N Ty)) [env] [env] ⊣⊢ emp.
     Proof. unfold repₚ, bi_pred, bi_emp; crushPredEntails2. Qed.
 
-    Lemma repₚ_namedenv_snoc {w : World} {N} {Γ : NCtx N Ty} {b} {ts : Env (λ xt : N∷Ty, Term w (type xt)) Γ} {t : Term w (type b)} {vs : Env (λ xt : N∷Ty, Val (type xt)) Γ} {v : Val (type b)} :
+    Lemma repₚ_namedenv_snoc {w : World} {N} {Γ : NCtx N Ty} {b} {ts : Env (λ xt : N∷Ty, Term w (type xt)) Γ} {t : Term w (type b)} {vs : Env (λ xt : N∷Ty, RelVal (type xt)) Γ} {v : RelVal (type b)} :
       repₚ vs.[b ↦ v] ts.[b ↦ t] ⊣⊢ repₚ vs ts ∗ repₚ v t.
     Proof.
       unfold repₚ, bi_pred, bi_sep; crushPredEntails2; destruct b;
@@ -1052,28 +1080,31 @@ Module Type WorldsOn
     Qed.
 
     Lemma rep_binop_lt_ge  [w : World] (t1 t2 : Term w ty.int) b :
-      repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.lt) t2 t1) ⊣⊢
-        repₚ (T := STerm ty.bool) (negb b) (term_binop (bop.relop bop.le) t1 t2).
+      repₚ (T := STerm ty.bool) (ty.SyncVal _ b) (term_binop (bop.relop bop.lt) t2 t1) ⊣⊢
+        repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool (negb b)) (term_binop (bop.relop bop.le) t1 t2).
     Proof.
-      unfold repₚ; crushPredEntails2; revert H0; rewrite Z.leb_antisym; intros;
-        apply (f_equal negb) in H0; now rewrite ?negb_involutive in H0.
-    Qed.
+    (*   unfold repₚ; crushPredEntails2; revert H0; rewrite Z.leb_antisym; intros; *)
+    (*     apply (f_equal negb) in H0; now rewrite ?negb_involutive in H0. *)
+    (* Qed. *)
+    Admitted.
 
     Lemma rep_binop_slt_sge  [w : World] {n} (t1 t2 : Term w (ty.bvec n)) b :
-      repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.bvslt) t2 t1) ⊣⊢
-        repₚ (T := STerm ty.bool) (negb b) (term_binop (bop.relop bop.bvsle) t1 t2).
+      repₚ (T := STerm ty.bool) (ty.SyncVal _ b) (term_binop (bop.relop bop.bvslt) t2 t1) ⊣⊢
+        repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool (negb b)) (term_binop (bop.relop bop.bvsle) t1 t2).
     Proof.
-      unfold repₚ; crushPredEntails2; revert H0; unfold bv.sltb; rewrite Z.ltb_antisym; intros;
-        apply (f_equal negb) in H0; now rewrite ?negb_involutive in H0.
-    Qed.
+    (*   unfold repₚ; crushPredEntails2; revert H0; unfold bv.sltb; rewrite Z.ltb_antisym; intros; *)
+    (*     apply (f_equal negb) in H0; now rewrite ?negb_involutive in H0. *)
+    (* Qed. *)
+    Admitted.
 
     Lemma rep_binop_ult_uge  [w : World] {n} (t1 t2 : Term w (ty.bvec n)) b :
-      repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.bvult) t2 t1) ⊣⊢
-        repₚ (T := STerm ty.bool) (negb b) (term_binop (bop.relop bop.bvule) t1 t2).
+      repₚ (T := STerm ty.bool) (ty.SyncVal _ b) (term_binop (bop.relop bop.bvult) t2 t1) ⊣⊢
+        repₚ (T := STerm ty.bool) (ty.SyncVal ty.bool (negb b)) (term_binop (bop.relop bop.bvule) t1 t2).
     Proof.
-      unfold repₚ; crushPredEntails2; revert H0; rewrite bv.ultb_antisym; intros;
-        apply (f_equal negb) in H0; now rewrite ?negb_involutive in H0.
-    Qed.
+    (*   unfold repₚ; crushPredEntails2; revert H0; rewrite bv.ultb_antisym; intros; *)
+    (*     apply (f_equal negb) in H0; now rewrite ?negb_involutive in H0. *)
+    (* Qed. *)
+    Admitted.
 
     Lemma instpred_formula_relop_val {w : World} {σ} (op : RelOp σ) (v1 v2 : Val σ) :
         instpred (w := w) (formula_relop op (term_val _ v1) (term_val _ v2)) ⊣⊢
@@ -1085,20 +1116,20 @@ Module Type WorldsOn
           ⌜ bop.eval_relop_prop op v1 v2 ⌝.
     Proof. crushPredEntails2. Qed.
 
-    Lemma instpred_formula_relop_neg {w : World} {σ} (op : RelOp σ) (t1 t2 : Term w σ) :
-          instpred (formula_relop_neg op t1 t2) ⊣⊢
-          repₚ (T := STerm ty.bool) (w := w) false (term_binop (bop.relop op) t1 t2).
-    Proof.
-      destruct op; rewrite formula_relop_term; cbn.
-      - now rewrite rep_binop_neq_eq.
-      - now rewrite rep_binop_neq_eq.
-      - now rewrite rep_binop_lt_ge.
-      - now rewrite rep_binop_lt_ge.
-      - now rewrite rep_binop_slt_sge.
-      - now rewrite rep_binop_slt_sge.
-      - now rewrite rep_binop_ult_uge.
-      - now rewrite rep_binop_ult_uge.
-    Qed.
+    (* Lemma instpred_formula_relop_neg {w : World} {σ} (op : RelOp σ) (t1 t2 : Term w σ) : *)
+    (*       instpred (formula_relop_neg op t1 t2) ⊣⊢ *)
+    (*       repₚ (T := STerm ty.bool) (w := w) (ty.SyncVal ty.bool false) (term_binop (bop.relop op) t1 t2). *)
+    (* Proof. *)
+    (*   destruct op; rewrite formula_relop_term; cbn. *)
+    (*   - now rewrite rep_binop_neq_eq. *)
+    (*   - now rewrite rep_binop_neq_eq. *)
+    (*   - now rewrite rep_binop_lt_ge. *)
+    (*   - now rewrite rep_binop_lt_ge. *)
+    (*   - now rewrite rep_binop_slt_sge. *)
+    (*   - now rewrite rep_binop_slt_sge. *)
+    (*   - now rewrite rep_binop_ult_uge. *)
+    (*   - now rewrite rep_binop_ult_uge. *)
+    (* Qed. *)
 
     #[export] Instance instpred_subst_formula : InstPredSubst Formula.
     Proof.
@@ -1294,7 +1325,7 @@ Module Type WorldsOn
        try change (sub_acc (@acc_subst_right ?w _ _ ?xIn ?t)) with (sub_single xIn t);
        rewrite <- ?sub_comp_wk1_tail, ?inst_subst, ?subst_sub_id,
          ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc,
-         ?inst_lift, ?inst_sub_single_shift, ?instprop_snoc,
+         (* ?inst_lift, *) ?inst_sub_single_shift, ?instprop_snoc,
          ?sub_acc_trans, ?sub_acc_triangular, ?inst_triangular_right_inverse).
 
     Module DList.
