@@ -78,10 +78,10 @@ Module Type ShallowExecOn
      convenient. We therefore parameterize the executor by other functions
      that interpret function calls and lemma applications. The following
      types describe the executor and the parameters. *)
-  Definition ExecCall := forall Δ τ, 𝑭 Δ τ -> CStoreRel Δ -> CHeapSpec (Val τ).
-  Definition ExecCallForeign := forall Δ τ, 𝑭𝑿 Δ τ -> CStoreRel Δ -> CHeapSpec (Val τ).
+  Definition ExecCall := forall Δ τ, 𝑭 Δ τ -> CStoreRel Δ -> CHeapSpec (RelVal τ).
+  Definition ExecCallForeign := forall Δ τ, 𝑭𝑿 Δ τ -> CStoreRel Δ -> CHeapSpec (RelVal τ).
   Definition ExecLemma := forall Δ, 𝑳 Δ -> CStoreRel Δ -> CHeapSpec unit.
-  Definition Exec := forall Γ τ (s : Stm Γ τ), CStoreSpec Γ Γ (Val τ).
+  Definition Exec := forall Γ τ (s : Stm Γ τ), CStoreSpec Γ Γ (RelVal τ).
 
   Notation MonotonicExecCall exec_call :=
     (forall Δ τ (f : 𝑭 Δ τ) (δ : CStoreRel Δ),
@@ -306,7 +306,7 @@ Module Type ShallowExecOn
               v <- exec_aux s ;;
               pushpop v (exec_aux k)
           | stm_block δ k =>
-              pushspops δ (exec_aux k)
+              pushspops (ty.liftNamedEnv δ) (exec_aux k)
           | stm_assign x e =>
               v <- exec_aux e ;;
               _ <- assign x v ;;
@@ -323,14 +323,14 @@ Module Type ShallowExecOn
               exec_aux k
           | stm_call_frame δ' s =>
               δ <- get_local ;;
-              _ <- put_local δ' ;;
+              _ <- put_local (ty.liftNamedEnv δ') ;;
               v <- exec_aux s ;;
               _ <- put_local δ ;;
               pure v
           | stm_seq e k => _ <- exec_aux e ;; exec_aux k
           | stm_assertk e1 _ k =>
               v <- eval_exp e1 ;;
-              _ <- lift_heapspec (CHeapSpec.assume_formula (v = true)) ;;
+              _ <- lift_heapspec (CHeapSpec.assume_formula (v = ty.SyncVal ty.bool true)) ;;
               exec_aux k
           | stm_fail _ s =>
               block
@@ -345,7 +345,8 @@ Module Type ShallowExecOn
               lift_heapspec (CHeapSpec.write_register reg v__new)
           | stm_bind s k =>
               v <- exec_aux s ;;
-              exec_aux (k v)
+              _ <- lift_heapspec (CHeapSpec.assume_formula (v = ty.SyncVal _ (ty.projLeft v))) ;;
+              exec_aux (k (ty.projLeft v))
           | stm_debugk k =>
               exec_aux k
           end.
