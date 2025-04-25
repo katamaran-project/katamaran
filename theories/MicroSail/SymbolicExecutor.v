@@ -87,6 +87,43 @@ Module Type SymbolicExecOn
           debug_call_heap                   : SHeap Σ;
         }.
 
+    Record DebugCallLemma (Σ : LCtx) : Type :=
+      MkDebugCallLemma
+        { debug_call_lemma_parameters    : PCtx;
+          debug_call_lemma_name          : 𝑳 debug_call_lemma_parameters;
+          debug_call_lemma_contract      : Lemma debug_call_lemma_parameters;
+          debug_call_lemma_arguments     : SStore debug_call_lemma_parameters Σ;
+          debug_call_lemma_pathcondition : PathCondition Σ;
+          (* debug_call_localstore       : SStore debug_call_program_context Σ; *)
+          debug_call_lemma_heap          : SHeap Σ;
+        }.
+
+    #[export] Instance SubstDebugCallLemma : Subst DebugCallLemma :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkDebugCallLemma l c ts pc (* δ *) h =>
+          MkDebugCallLemma l c (subst ts ζ01) (subst pc ζ01) (subst h ζ01)
+        end.
+
+    #[export] Instance SubstLawsDebugCallLemma : SubstLaws DebugCallLemma.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    Import option.notations.
+    #[export] Instance OccursCheckDebugCallLemma : OccursCheck DebugCallLemma :=
+      fun Σ x xIn d =>
+        match d with
+        | MkDebugCallLemma l c ts pc (* δ *) h =>
+            ts' <- occurs_check xIn ts ;;
+            pc' <- occurs_check xIn pc ;;
+            (* δ'  <- occurs_check xIn δ ;; *)
+            h'  <- occurs_check xIn h ;;
+            Some (MkDebugCallLemma l c ts' pc' (* δ' *) h')
+        end.
+
     Record DebugStm (Σ : LCtx) : Type :=
       MkDebugStm
         { debug_stm_program_context        : PCtx;
@@ -215,10 +252,12 @@ Module Type SymbolicExecOn
     Record Config : Type :=
       MkConfig
         { config_debug_function : forall Δ τ, 𝑭 Δ τ -> bool;
+          config_debug_lemma : forall Δ, 𝑳 Δ -> bool;
         }.
 
     Definition default_config : Config :=
       {| config_debug_function _ _ f := false;
+         config_debug_lemma _ l := false;
       |}.
 
   End Configuration.
@@ -497,13 +536,30 @@ Module Type SymbolicExecOn
       fun Δ τ f w args =>
         SHeapSpec.call_contract (CEnvEx f) args.
 
-    Definition sexec_lemma : ExecLemma :=
-      fun Δ l w args =>
-        SHeapSpec.call_lemma (LEnv l) args.
-
     Import SHeapSpec.notations.
 
     Variable cfg : Config.
+
+
+    Definition debug_lemma [Δ] (l : 𝑳 Δ) :
+      ⊢ SStore Δ -> SHeapSpec Unit :=
+      fun w0 args0 =>
+        if config_debug_lemma cfg l
+        then
+          SHeapSpec.debug
+            (fun h0 => amsg.mk {|
+                           debug_call_lemma_parameters := Δ;
+                           debug_call_lemma_name := l;
+                           debug_call_lemma_contract := LEnv l;
+                           debug_call_lemma_arguments := args0;
+                           debug_call_lemma_pathcondition := wco w0;
+                           debug_call_lemma_heap := h0
+                         |}) (SHeapSpec.pure tt)
+        else SHeapSpec.pure tt.
+    Definition sexec_lemma : ExecLemma :=
+      fun Δ l w args =>
+        ⟨ θ ⟩ _ <- debug_lemma l args ;;
+        SHeapSpec.call_lemma (LEnv l) (persist args θ).
 
     Definition debug_call [Δ τ] (f : 𝑭 Δ τ) :
       ⊢ SStore Δ -> SHeapSpec Unit :=
@@ -600,8 +656,14 @@ Module Type SymbolicExecOn
       now apply validcontract_reflect_fuel_sound.
     Qed.
 
+    Definition VcGenErasureFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
+      Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil)))).
+
+    Definition ValidContractWithErasureAndFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      VerificationConditionWithErasure (VcGenErasureFuel fuel c body).
+
     Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
-      Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen default_config 1 c body wnil)))).
+      VcGenErasureFuel 1 c body.
 
     Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasure c body).
@@ -614,6 +676,11 @@ Module Type SymbolicExecOn
     Lemma validcontract_with_erasure_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractWithErasure c body ->
       ValidContract c body.
+    Proof. apply verification_condition_with_erasure_sound. Qed.
+
+    Lemma validcontract_with_erasure_and_fuel_sound {Δ τ} {fuel} (c : SepContract Δ τ) (body : Stm Δ τ) :
+      ValidContractWithErasureAndFuel fuel c body ->
+      ValidContractWithFuel fuel c body.
     Proof. apply verification_condition_with_erasure_sound. Qed.
 
     Module Statistics.
