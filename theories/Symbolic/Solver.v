@@ -738,6 +738,7 @@ Module Type GenericSolverOn
     #[export] Hint Rewrite @smart_or_spec : uniflogic.
 
     Fixpoint formula_simplifies {Σ} (hyp : Formula Σ) (fact : Formula Σ) : option (Formula Σ) :=
+      if formula_eqb hyp fact then Some formula_true else
       match hyp with
         formula_and hyp1 hyp2 => match formula_simplifies hyp1 fact , formula_simplifies hyp2 fact with
                                  | Some hyp1' , Some hyp2' => Some (smart_and hyp1' hyp2')
@@ -751,7 +752,7 @@ Module Type GenericSolverOn
                                 | None , Some hyp2' => Some (smart_or hyp1 hyp2')
                                 | None , None => None
                                 end
-      | _ => if formula_eqb hyp fact then Some formula_true else None
+      | _ => None
       end.
 
     Lemma bi_wand_iff_true {w} {P : Pred w} : P ⊢ P ∗-∗ True.
@@ -790,7 +791,7 @@ Module Type GenericSolverOn
         try (now iApply bi_wand_iff_true);
         arw; cbn; iIntros "#Hfact";
         (iApply bi_wand_iff_or || iApply bi_wand_iff_sep); iSplit;
-        now (iApply H || iApply H0 || iApply bi.wand_iff_refl).
+        now (iApply H || iApply H0 || iApply H1 || iApply bi.wand_iff_refl).
     Qed.
 
     Fixpoint assumption_formula {Σ} (C : PathCondition Σ) (F : Formula Σ) (k : PathCondition Σ) {struct C} : PathCondition Σ :=
