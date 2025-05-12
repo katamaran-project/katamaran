@@ -911,8 +911,8 @@ Module Type SymPropOn
       Notation "' t" := (@formula_bool _ t) (at level 10, only printing, format "' t").
       Notation "F ∧ P" := (@SymProp.assertk _ F _ P) (only printing).
       Notation "F → P" := (@SymProp.assumek _ F P) (only printing).
-      Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'∃'  x '∷' σ ,  '/' P").
-      Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'∀'  x '∷' σ ,  '/' P").
+      Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃'  x '∷' σ ']' ,  '/' P ']'").
+      Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀'  x '∷' σ ']' ,  '/' P ']'").
       Notation "⊤" := (@SymProp.block _).
       Notation "x - y" := (term_binop bop.minus x y) : exp_scope.
       Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
@@ -2034,8 +2034,8 @@ Module Type SymPropOn
       Notation "x" := (eterm_val _ x) (at level 1, only printing).
       Notation "F ∧ P" := (eassertk F P) (only printing, format "'[v' F  ∧ '/ ' P ']'").
       Notation "F → P" := (eassumek F P) (only printing, format "'[v' F  → '/ ' P ']'").
-      Notation "'∃' x '∷' σ , P" := (eangelicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'[v' '∃'  x '∷' σ ,  '/' P ']'").
-      Notation "'∀' x '∷' σ , P" := (edemonicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'[v' '∀'  x '∷' σ ,  '/' P ']'").
+      Notation "'∃' x '∷' σ , P" := (eangelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃'  x '∷' σ ']' ,  '/' P ']'").
+      Notation "'∀' x '∷' σ , P" := (edemonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀'  x '∷' σ ']' ,  '/' P ']'").
       Notation "x ↦ t ∧ k" := (eassert_vareq x _ t k) (at level 99, right associativity, only printing).
       Notation "x ↦ t → k" := (eassume_vareq x _ t k) (at level 99, right associativity, only printing).
       Notation "P ∧ Q" := (edemonic_binary P Q) (at level 80, right associativity, only printing).
