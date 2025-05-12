@@ -1871,6 +1871,7 @@ Module Type SymPropOn
 
     Definition inst_eformula' (ι : list { σ : Ty & Val σ}) (f : EFormula) : Prop :=
       option_rect (fun _ => Prop) (fun p => p) False (inst_eformula ι f).
+    #[global] Arguments inst_eformula' !_ !_ /.
 
     Fixpoint list_remove {A} (xs : list A) (n : nat) : list A :=
       match xs with
