@@ -813,7 +813,7 @@ Module bv.
             let (_,ys) := appView start len xs in
             ys
       end.
-    #[global] Arguments vector_subrange {n} _ _ {_} _.
+    #[global] Arguments vector_subrange {n} _ _ {_} _  : simpl never.
 
     Goal vector_subrange 0 1 (@of_nat 1 1)    = of_nat 1. reflexivity. Abort.
     Goal vector_subrange 0 8 (@of_nat 16 256) = zero.     reflexivity. Abort.
@@ -830,7 +830,7 @@ Module bv.
             let (rest2, _) := appView start len xs in
             app (app rest2 upd) rest1
       end.
-    #[global] Arguments update_vector_subrange {n} _ _ {_} _ _.
+    #[global] Arguments update_vector_subrange {n} _ _ {_} _ _ : simpl never.
 
     Goal update_vector_subrange 0 1 (@of_nat 2 0) (of_nat 1) = of_nat 1. reflexivity. Abort.
     Goal update_vector_subrange 0 4 (@of_nat 4 0) (of_nat 15) = of_nat 15. reflexivity. Abort.
