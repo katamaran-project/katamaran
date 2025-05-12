@@ -688,19 +688,30 @@ Module Type GenericSolverOn
           env.eqb_hom (@Term_eqb _) ts1 ts2;
         formula_eqb (@formula_user _ p ts1) (@formula_user _ q ts2) (right _) := false
       };
+      formula_eqb formula_true formula_true := true;
+      formula_eqb formula_false formula_false := true;
+      formula_eqb (formula_or f1 f2) (formula_or f3 f4) :=
+        formula_eqb f1 f3 &&& formula_eqb f2 f4;
+      formula_eqb (formula_and f1 f2) (formula_and f3 f4) :=
+        formula_eqb f1 f3 &&& formula_eqb f2 f4;
       formula_eqb _ _ := false.
 
     Lemma formula_eqb_spec {Σ} (f1 f2 : Formula Σ) :
       BoolSpec (f1 = f2) True (formula_eqb f1 f2).
     Proof.
-      induction f1; dependent elimination f2; simp formula_eqb;
+      revert f2. induction f1; intros f2;
+        dependent elimination f2; simp formula_eqb;
         repeat
           match goal with
           | |- BoolSpec _ _ false   => constructor; auto
+          | |- BoolSpec _ _ true   => try (constructor; congruence; fail)
           | |- context[eq_dec _ _ ] => destruct eq_dec; subst; cbn
           | |- context[Term_eqb ?t1 ?t2] =>
               destruct (Term_eqb_spec t1 t2); cbn;
               try (constructor; congruence; fail)
+          | IH: forall f2 : Formula _, BoolSpec _ _ (formula_eqb ?f f2)
+            |- context[formula_eqb ?f ?f2] =>
+              specialize (IH f2); destruct IH
           end.
       - destruct 𝑷_eq_dec.
         + destruct e; cbn.
