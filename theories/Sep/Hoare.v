@@ -354,6 +354,17 @@ Module ProgramLogic.
         CEnv f = Some c ->
         ValidContract c (FunDef f).
 
+    Definition TValidContract {Γ τ} (fuel : nat) (c : SepContract Γ τ) (body : Stm Γ τ) : Prop :=
+      forall (ι : Valuation (sep_contract_logic_variables c)),
+          # fuel ⦃ interpret_contract_precondition c ι ⦄
+            body ; inst_contract_localstore c ι
+          ⦃ fun v _ => interpret_contract_postcondition c ι v ⦄.
+
+    Definition TValidContractCEnv (fuel : nat) : Prop :=
+      forall (Δ : PCtx) (τ : Ty) (f : 𝑭 Δ τ) (c : SepContract Δ τ),
+        CEnv f = Some c ->
+        TValidContract fuel c (FunDef f).
+
   End Triples.
 
   Notation "# f ⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ _ _ δ _ f P%I s Q%I) (at level 50).
