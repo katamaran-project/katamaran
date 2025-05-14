@@ -70,7 +70,7 @@ Module Type TermsOn (Import TY : Types).
   #[global] Arguments term_tuple {_ _} ts.
   #[global] Arguments term_union {_} U K t.
   #[global] Arguments term_record {_} R ts.
-  Bind Scope exp_scope with Term.
+  Bind Scope term_scope with Term.
   Derive NoConfusion Signature for Term.
 
   Definition term_enum {Σ} (E : enumi) (k : enumt E) : Term Σ (ty.enum E) :=
@@ -863,18 +863,51 @@ Module Type TermsOn (Import TY : Types).
   End SymbolicStore.
   Bind Scope env_scope with SStore.
 
+  Module TermNotations.
+    Open Scope term_scope.
+    Notation "e1 && e2" := (term_binop bop.and e1 e2) : term_scope.
+    Notation "e1 || e2" := (term_binop bop.or e1 e2) : term_scope.
+    Notation "e1 + e2" := (term_binop bop.plus e1 e2) : term_scope.
+    Notation "e1 * e2" := (term_binop bop.times e1 e2) : term_scope.
+    Notation "e1 - e2" := (term_binop bop.minus e1 e2) : term_scope.
+    Notation "e1 +ᵇ e2" := (term_binop bop.bvadd e1 e2) : term_scope.
+    Notation "e1 -ᵇ e2" := (term_binop bop.bvsub e1 e2) : term_scope.
+    Notation "e1 *ᵇ e2" := (term_binop bop.bvmul e1 e2) : term_scope.
+
+    Notation "e1 >= e2" := (term_binop (bop.relop bop.le) e2 e1) : term_scope.
+    Notation "e1 > e2" := (term_binop (bop.relop bop.lt) e2 e1) : term_scope.
+    Notation "e1 <= e2" := (term_binop (bop.relop bop.le) e1 e2) : term_scope.
+    Notation "e1 < e2" := (term_binop (bop.relop bop.lt) e1 e2) : term_scope.
+
+    Notation "e1 >=ˢ e2" := (term_binop (bop.relop bop.bvule) e2 e1) : term_scope.
+    Notation "e1 >ˢ e2" := (term_binop (bop.relop bop.bvult) e2 e1) : term_scope.
+    Notation "e1 <ˢ e2" := (term_binop (bop.relop bop.bvult) e1 e2) : term_scope.
+    Notation "e1 <=ˢ e2" := (term_binop (bop.relop bop.bvule) e1 e2) : term_scope.
+
+    Notation "e1 >=ᵘ e2" := (term_binop (bop.relop bop.bvule) e2 e1) : term_scope.
+    Notation "e1 >ᵘ e2" := (term_binop (bop.relop bop.bvult) e2 e1) : term_scope.
+    Notation "e1 <=ᵘ e2" := (term_binop (bop.relop bop.bvule) e1 e2) : term_scope.
+    Notation "e1 <ᵘ e2" := (term_binop (bop.relop bop.bvult) e1 e2) : term_scope.
+
+    (* Note: this uses ?= rather than = to avoid overlap with the notation for an equality assertion... *)
+    Notation "e1 ?= e2" := (term_binop (bop.relop bop.eq) e1 e2) : term_scope.
+    Notation "e1 != e2" := (term_binop (bop.relop bop.neq) e1 e2) : term_scope.
+    Notation "- e" := (term_unop uop.neg e) : term_scope.
+
+  End TermNotations.
+
   Notation term_var_in ςIn := (term_var _ (ςInΣ := ςIn)) (only parsing).
-  Notation term_inl t := (term_unop uop.inl t%exp).
-  Notation term_inr t := (term_unop uop.inr t%exp).
-  Notation term_neg t := (term_unop uop.neg t%exp).
-  Notation term_not t := (term_unop uop.not t%exp).
-  Notation term_sext t := (term_unop uop.sext t%exp).
-  Notation term_zext t := (term_unop uop.zext t%exp).
-  Notation term_get_slice_int t := (term_unop uop.get_slice_int t%exp).
-  Notation term_unsigned t := (term_unop uop.unsigned t%exp).
-  Notation term_truncate m t := (term_unop (uop.truncate m) t%exp).
-  Notation term_vector_subrange s l t := (term_unop (uop.vector_subrange s l) t%exp).
-  Notation term_bvnot t := (term_unop uop.bvnot t%exp).
-  Notation term_negate t := (term_unop uop.negate t%exp).
+  Notation term_inl t := (term_unop uop.inl t%term).
+  Notation term_inr t := (term_unop uop.inr t%term).
+  Notation term_neg t := (term_unop uop.neg t%term).
+  Notation term_not t := (term_unop uop.not t%term).
+  Notation term_sext t := (term_unop uop.sext t%term).
+  Notation term_zext t := (term_unop uop.zext t%term).
+  Notation term_get_slice_int t := (term_unop uop.get_slice_int t%term).
+  Notation term_unsigned t := (term_unop uop.unsigned t%term).
+  Notation term_truncate m t := (term_unop (uop.truncate m) t%term).
+  Notation term_vector_subrange s l t := (term_unop (uop.vector_subrange s l) t%term).
+  Notation term_bvnot t := (term_unop uop.bvnot t%term).
+  Notation term_negate t := (term_unop uop.negate t%term).
 
 End TermsOn.

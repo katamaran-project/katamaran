@@ -237,25 +237,28 @@ Module Import asn.
       (at level 200, format
        "'[hv' 'if:'  c  '/' '[' 'then'  A1  ']' '/' '[' 'else'  A2 ']' ']'"
       ) : asn_scope.
-    Notation "x = y" := (formula (formula_relop bop.eq x y)) : asn_scope.
-    Notation "x >= y" := (formula (formula_relop bop.le y x)) : asn_scope.
-    Notation "x > y" := (formula (formula_relop bop.lt y x)) : asn_scope.
-    Notation "x <= y" := (formula (formula_relop bop.le x y)) : asn_scope.
-    Notation "x < y" := (formula (formula_relop bop.lt x y)) : asn_scope.
-    Notation "x = y" := (formula (formula_relop bop.eq x y)) : asn_scope.
-    Notation "x >=ˢ y" := (formula (formula_relop bop.bvsle y x)) : asn_scope.
-    Notation "x >ˢ y" := (formula (formula_relop bop.bvslt y x)) : asn_scope.
-    Notation "x <=ˢ y" := (formula (formula_relop bop.bvsle x y)) : asn_scope.
-    Notation "x <ˢ y" := (formula (formula_relop bop.bvslt x y)) : asn_scope.
-    Notation "x >=ᵘ y" := (formula (formula_relop bop.bvule y x)) : asn_scope.
-    Notation "x >ᵘ y" := (formula (formula_relop bop.bvult y x)) : asn_scope.
-    Notation "x <=ᵘ y" := (formula (formula_relop bop.bvule x y)) : asn_scope.
-    Notation "x <ᵘ y" := (formula (formula_relop bop.bvult x y)) : asn_scope.
+    Notation "x = y" := (formula (formula_relop bop.eq x y)) (x in scope term_scope, y in scope term_scope) : asn_scope .
+    Notation "x >= y" := (formula (formula_relop bop.le y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x > y" := (formula (formula_relop bop.lt y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x <= y" := (formula (formula_relop bop.le x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x < y" := (formula (formula_relop bop.lt x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x = y" := (formula (formula_relop bop.eq x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x >=ˢ y" := (formula (formula_relop bop.bvsle y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x >ˢ y" := (formula (formula_relop bop.bvslt y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x <=ˢ y" := (formula (formula_relop bop.bvsle x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x <ˢ y" := (formula (formula_relop bop.bvslt x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x >=ᵘ y" := (formula (formula_relop bop.bvule y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x >ᵘ y" := (formula (formula_relop bop.bvult y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x <=ᵘ y" := (formula (formula_relop bop.bvule x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x <ᵘ y" := (formula (formula_relop bop.bvult x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x - y" := (term_binop bop.minus x y) (x in scope term_scope, y in scope term_scope) : term_scope.
+    Notation "x + y" := (term_binop bop.plus x y) (x in scope term_scope, y in scope term_scope) : term_scope.
+    Notation "x * y" := (term_binop bop.times x y) (x in scope term_scope, y in scope term_scope) : term_scope.
 
     Notation "'match:' e 'in' R 'with' [ x ; y ; .. ; z ] => rhs 'end'" :=
-      (match_record R e%exp
-        (recordpat_snoc .. (recordpat_snoc (recordpat_snoc recordpat_nil _ x) _ y) .. _ z)
-        rhs%asn)
+      (match_record R e%term
+         (recordpat_snoc .. (recordpat_snoc (recordpat_snoc recordpat_nil _ x) _ y) .. _ z)
+         rhs%asn)
       (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : asn_scope.
 
   End notations.

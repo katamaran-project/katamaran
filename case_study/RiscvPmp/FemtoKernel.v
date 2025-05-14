@@ -256,7 +256,6 @@ Module inv := invariants.
     Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
     Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
     Local Notation asn_inv_mmio := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [env])). (* Fix word length at 4 for this example, as we do not perform any other writes*)
-    Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
@@ -274,11 +273,13 @@ Module inv := invariants.
       (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
                                       (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])).
 
+    Import TermNotations.
+
     Example femtokernel_init_post: Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
       (
-        asn.formula (formula_relop bop.eq (term_var "an") (term_var "a" + term_val ty_xlenbits (bv.of_N adv_addr))) ∗
+        (term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N adv_addr))%asn ∗
           (∃ "v", mstatus ↦ term_var "v") ∗
-          (mtvec ↦ (term_var "a" + term_val ty_xlenbits (bv.of_N handler_addr))) ∗
+          (mtvec ↦ (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_addr))%term) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
@@ -323,7 +324,7 @@ Module inv := invariants.
       asn_regs_ptsto ∗
       asn_pmp_entries (term_list asn_femto_pmpentries) ∗ (* Different handler sizes cause different entries *)
       if negb is_mmio then
-        (term_val ty_xlenbits (bv.of_N data_addr) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
+        (term_val ty_xlenbits (bv.of_N data_addr) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
       else asn_inv_mmio.
 
     Example femtokernel_handler_post (is_mmio : bool) :
@@ -339,7 +340,7 @@ Module inv := invariants.
           asn_regs_ptsto ∗
           asn_pmp_entries (term_list asn_femto_pmpentries) ∗ (* Different handler sizes cause different entries *)
           if negb is_mmio then
-            (term_val ty_xlenbits (bv.of_N data_addr) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))%exp
+            (term_val ty_xlenbits (bv.of_N data_addr) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
           else ⊤ (* Inv is persistent; don't repeat *).
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)

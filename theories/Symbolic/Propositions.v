@@ -907,24 +907,21 @@ Module Type SymPropOn
       #[local] Set Warnings "-notation-incompatible-prefix".
 
       Notation "x" := (@term_var _ x%string _ (@ctx.MkIn _ (x%string :: _) _ _ _)) (at level 1, only printing).
-      Notation "s = t" := (formula_relop bop.eq s t) (only printing).
+      Notation "s = t" := (formula_relop bop.eq s t) (only printing, s in scope term, t in scope term).
       Notation "' t" := (@formula_bool _ t) (at level 10, only printing, format "' t").
       Notation "F ∧ P" := (@SymProp.assertk _ F _ P) (only printing).
       Notation "F → P" := (@SymProp.assumek _ F P) (only printing).
       Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃'  x '∷' σ ']' ,  '/' P ']'").
       Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀'  x '∷' σ ']' ,  '/' P ']'").
       Notation "⊤" := (@SymProp.block _).
-      Notation "x - y" := (term_binop bop.minus x y) : exp_scope.
-      Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
-      Notation "x * y" := (term_binop bop.times x y) : exp_scope.
       Notation "x ↦ t ∧ k" := (@SymProp.assert_vareq _ x _ _ t _ k) (at level 99, right associativity, only printing).
       Notation "x ↦ t → k" := (@SymProp.assume_vareq _ x _ _ t k) (at level 99, right associativity, only printing).
       Notation "P ∧ Q" := (@SymProp.demonic_binary _ P Q) (at level 80, right associativity, only printing).
       Notation "P ∨ Q" := (@SymProp.angelic_binary _ P Q) (at level 85, right associativity, only printing).
-      Notation "x >= y" := (formula_relop bop.le y x) (only printing).
-      Notation "x > y" := (formula_relop bop.lt y x) (only printing).
-      Notation "x <= y" := (formula_relop bop.le x y) (only printing).
-      Notation "x < y" := (formula_relop bop.lt x y) (only printing).
+      Notation "x >= y" := (formula_relop bop.le y x) (only printing, x in scope term, y in scope term).
+      Notation "x > y" := (formula_relop bop.lt y x) (only printing, x in scope term, y in scope term).
+      Notation "x <= y" := (formula_relop bop.le x y) (only printing, x in scope term, y in scope term).
+      Notation "x < y" := (formula_relop bop.lt x y) (only printing, x in scope term, y in scope term).
       Notation "t" := (term_val _ t) (at level 1, only printing).
     End notations.
 

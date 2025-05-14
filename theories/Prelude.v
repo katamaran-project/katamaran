@@ -623,12 +623,14 @@ Proof. firstorder. Qed.
 Declare Scope alt_scope.
 Declare Scope asn_scope.
 Declare Scope exp_scope.
+Declare Scope term_scope.
 Declare Scope modal_scope.
 Declare Scope mut_scope.
 Declare Scope pat_scope.
 Delimit Scope alt_scope with alt.
 Delimit Scope asn_scope with asn.
 Delimit Scope exp_scope with exp.
+Delimit Scope term_scope with term.
 Delimit Scope modal_scope with modal.
 Delimit Scope mut_scope with mut.
 Delimit Scope pat_scope with pat.
