@@ -124,12 +124,11 @@ Module Type PartialEvaluationOn
       evalPolTmBv l (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool p) ≡ evalPExprTmBv l p.
     Proof.
       unfold evalPolTmBv, evalPExprTmBv.
-      rewrite Pphi_dev_ok; 
+      rewrite Pphi_dev_ok;
         rewrite ?bv.of_N_one;
         try eauto using Term_bv_ring_eq_ext, Rth_ARth, Term_bv_ring_theory, ring_morph_val_of_Z, get_signZ_th with typeclass_instances.
-      rewrite norm_aux_spec; 
-        rewrite ?bv.of_N_one;
-        try eauto using Term_bv_ring_eq_ext, Rth_ARth, Term_bv_ring_theory, ring_morph_val_of_Z, get_signZ_th, pow_N_th with typeclass_instances.
+      rewrite norm_aux_spec;
+        rewrite ?bv.of_N_one; try eauto using Term_bv_ring_eq_ext, Rth_ARth, Term_bv_ring_theory, ring_morph_val_of_Z, get_signZ_th, pow_N_th with typeclass_instances.
     Qed.
 
     Definition CanonTerm_to_Term {σ} : CanonTerm σ -> Term Σ σ :=
@@ -153,7 +152,11 @@ Module Type PartialEvaluationOn
                   end.
 
     Definition Term_bv_Quote_def {n} (t : Term Σ (ty.bvec n)) : RQuote n :=
-      fun ts o => (PEX Z o , [ t ]%list).
+      fun ts o =>
+        match find_index (fun t' => Term_eqb t t') ts with
+        | None => (PEX Z o , [ t ]%list)
+        | Some i => (PEX Z (Pos.of_succ_nat i) , []%list)
+        end.
 
     Lemma jump_of_succ_nat_length {A : Type} {def : A} {lo l : list A} :
       BinList.jump (Pos.of_succ_nat (length lo)) (def :: lo ++ l) = l.
@@ -174,10 +177,38 @@ Module Type PartialEvaluationOn
       now apply jump_of_succ_nat_length.
     Qed.
 
+    Lemma nth_succ {i} {A} {def t} {ts : list A} :
+      BinList.nth def (Pos.succ i) (t :: ts) = BinList.nth def i ts.
+    Proof.
+      change (t :: ts)%list with (tl (def :: t :: ts)).
+      rewrite BinList.nth_jump.
+      replace ((Pos.succ i)) with (i + 1)%positive by lia.
+      rewrite BinList.jump_add.
+      cbn.
+      now rewrite <-BinList.nth_jump.
+    Qed.
+
+    Lemma nth_lookup {i} {A} {def} {ts la : list A} {t} :
+        ts !! i = Some t ->
+        BinList.nth def (Pos.of_succ_nat i) (ts ++ la) = t.
+    Proof.
+      revert i.
+      induction ts; intros i; first inversion 1.
+      destruct i; inversion 1; first easy; cbn.
+      rewrite nth_succ.
+      now eapply IHts.
+    Qed.
+
     Lemma Term_bv_Quote_def_Valid {n} {t : Term Σ (ty.bvec n)} : RQuoteValid t (Term_bv_Quote_def t).
     Proof.
-      intros lo o Ho la; cbn.
-      now rewrite nth_length_prefix.
+      intros ts o.
+      unfold Term_bv_Quote_def.
+      destruct (find_index_spec (fun t' => Term_eqb t t') ts) as [i Hlkpi|];
+        intros Ho la; cbn.
+      - apply nth_lookup.
+        destruct Hlkpi as [a Ha].
+        destruct (Term_eqb_spec t a); inversion Ha; now subst.
+      - now rewrite nth_length_prefix.
     Qed.
 
     Fixpoint plusNatPos (n : nat) (p : positive) : positive :=

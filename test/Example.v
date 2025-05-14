@@ -231,6 +231,7 @@ Module Import ExampleProgram <: Program ExampleBase.
     | fpthree32 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
     | fpthree64 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
     | bvtest    :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
+    | bvtest2   :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
     .
 
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -304,6 +305,21 @@ Module Import ExampleProgram <: Program ExampleBase.
            (exp_var "zero"))
     .
 
+    (* This is a test for the ring solver quoter in the partial evaluator, to see if it
+       properly identifies different occurrences of the same opaque term
+     *)
+    Definition fun_bvtest2 : Stm [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42) :=
+      let: "one" ∷ ty.bvec 42 := stm_val (ty.bvec 42) bv.one in
+      let: "zero" ∷ ty.bvec 42 := stm_val (ty.bvec 42) bv.zero in
+      exp_binop
+        bop.bvadd
+        (exp_binop bop.bvsub (exp_var "sign") (exp_var "one"))
+        (exp_binop
+           bop.bvadd
+           (exp_var "sign")
+           (exp_binop bop.bvsub (exp_var "one") (exp_var "sign")))
+    .
+
     Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       Eval compute in
       match f in Fun Δ τ return Stm Δ τ with
@@ -331,6 +347,7 @@ Module Import ExampleProgram <: Program ExampleBase.
       | fpthree32 => fun_fpthree32
       | fpthree64 => fun_fpthree64
       | bvtest => fun_bvtest
+      | bvtest2 => fun_bvtest2
       end.
   End FunDefKit.
 
@@ -434,6 +451,14 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
          sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_var "sign"))
       |}.
 
+    Definition sep_contract_bvtest2 : SepContract [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42) :=
+      {| sep_contract_logic_variables := ["sign" ∷ ty.bvec 42 ];
+        sep_contract_localstore      := [term_var "sign"];
+        sep_contract_precondition    := ⊤;
+        sep_contract_result          := "result";
+        sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_var "sign"))
+      |}.
+
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
@@ -447,6 +472,7 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
         | fpthree32 => None
         | fpthree64 => None
         | bvtest    => Some sep_contract_bvtest
+        | bvtest2   => Some sep_contract_bvtest2
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
@@ -502,6 +528,12 @@ Lemma valid_contract_cmp : Symbolic.ValidContractReflect sep_contract_cmp (FunDe
 Proof. reflexivity. Qed.
 Goal True. idtac "Timing after: example/cmp". Abort.
 Lemma valid_contract_bvtest : Symbolic.ValidContractWithErasure sep_contract_bvtest (FunDef bvtest).
+Proof.
+  now cbv.
+Qed.
+
+
+Lemma valid_contract_bvtest2 : Symbolic.ValidContractWithErasure sep_contract_bvtest2 (FunDef bvtest2).
 Proof.
   now cbv.
 Qed.

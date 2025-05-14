@@ -645,6 +645,45 @@ Definition findAD {A} {B : A -> Type} {eqA: EqDec A} (a : A) :
         end
     end.
 
+Fixpoint find_index_aux {A} (P : A -> bool) (xs : list A) (acc : nat) : option nat :=
+  match xs with
+  | nil       => None
+  | cons x xs => if P x then Some acc else find_index_aux P xs (S acc)
+  end.
+
+Lemma find_index_aux_spec {A} (P : A -> bool) (xs : list A) (acc : nat) :
+  option.wlp (fun i => forall prefix, List.length prefix = acc ->
+                                      option.wp (fun x => Is_true (P x)) (base.lookup i (prefix ++ xs)))
+    (find_index_aux P xs acc).
+Proof.
+  revert acc.
+  induction xs; intros; cbn; [constructor|].
+  destruct (P a) eqn:HPa.
+  - constructor; intros.
+    rewrite list.list_lookup_middle; last easy.
+    constructor. now rewrite HPa.
+  - generalize (IHxs (S acc)).
+    eapply option.wlp_monotonic.
+    intros i IHi prefix Hlenpref.
+    specialize (IHi (prefix ++ cons a nil)).
+    rewrite <-app_assoc in IHi.
+    apply IHi.
+    rewrite list.length_app, Hlenpref; cbn.
+    now rewrite <-plus_n_Sm, plus_n_O.
+Qed.
+
+Definition find_index {A} (P : A -> bool) (xs : list A) : option nat :=
+  find_index_aux P xs 0.
+
+Lemma find_index_spec {A} (P : A -> bool) (xs : list A) :
+  option.wlp (fun i => option.wp (fun x => Is_true (P x)) (base.lookup i xs)) (find_index P xs).
+Proof.
+  generalize (find_index_aux_spec P xs 0).
+  eapply option.wlp_monotonic.
+  intros i Hgen.
+  now apply (Hgen nil).
+Qed.
+
 Record Stats : Set :=
   { branches : N
   ; pruned   : N
