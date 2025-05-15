@@ -27,6 +27,8 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Equations Require Import
+     Equations.
 From Katamaran Require Import
      Context
      Syntax.TypeDecl
@@ -38,6 +40,7 @@ Module Type FunDeclKit (Import T : Types).
 
   (* Names of functions. *)
   Parameter Inline 𝑭 : PCtx -> Ty -> Set.
+  #[export] Declare Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
   Parameter Inline 𝑭𝑿 : PCtx -> Ty -> Set.
   (* Names of lemmas. *)
   Parameter Inline 𝑳 : PCtx -> Set.
