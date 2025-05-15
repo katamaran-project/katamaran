@@ -1070,7 +1070,7 @@ Module Type SymPropOn
     Definition assert_vareq_prune {Σ} {x σ} {xIn : x∷σ ∈ Σ}
       (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
       match k with
-      | error emsg => error (subst msg (sub_shift xIn))
+      | error emsg => error (subst emsg (sub_shift xIn))
       | _          => assert_vareq x t msg k
       end.
     Global Arguments assert_vareq_prune {Σ} x {σ xIn} t msg k.
