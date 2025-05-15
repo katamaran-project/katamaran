@@ -154,5 +154,11 @@ Module Type ProgramMixin (B : Base)
   Qed.
 End ProgramMixin.
 
+Module Type WellFoundedKit (B : Base) (FDecl : FunDecl B) (FDK : FunDefKit B FDecl)
+  (Import PM : ProgramMixin B FDecl FDK).
+
+  Parameter Inline 𝑭_well_founded : exists (fuel : nat), well_founded (InvokedByFunPackage fuel).
+End WellFoundedKit.
+
 Module Type Program (B : Base) :=
-  FunDeclKit B <+ FunDeclMixin B <+ FunDefKit B <+ ProgramMixin B.
+  FunDeclKit B <+ FunDeclMixin B <+ FunDefKit B <+ ProgramMixin B <+ WellFoundedKit B.
