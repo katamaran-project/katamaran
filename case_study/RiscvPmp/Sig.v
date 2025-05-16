@@ -140,6 +140,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
       decide_pmp_check_perms cfg acc p = true.
+    #[global] Arguments Pmp_check_perms !cfg !acc !p /.
 
     Definition Access_pmp_perm (a : Val ty_access_type) (p : Val ty_pmpcfgperm) : Prop :=
       decide_access_pmp_perm a p = true.
