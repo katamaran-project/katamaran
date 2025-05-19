@@ -40,8 +40,6 @@ test/LinkedList.v
 test/SumMaxLen.v
 test/Replay.v
 theories/Base.v
-theories/BitvectorBase.v
-theories/BitvectorSolve.v
 theories/Bitvector.v
 theories/Context.v
 theories/Environment.v

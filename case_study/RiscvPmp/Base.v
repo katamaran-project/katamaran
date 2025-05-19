@@ -37,7 +37,7 @@ From Equations Require Import
 From stdpp Require Import
      base.
 From stdpp Require
-     finite.
+     finite strings.
 From Katamaran Require Import
      Base
      Bitvector

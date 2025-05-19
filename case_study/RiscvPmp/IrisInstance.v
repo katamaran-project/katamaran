@@ -29,7 +29,6 @@
 From Katamaran Require Import
      Base
      Bitvector
-     BitvectorSolve
      trace
      Iris.Instance
      Iris.Base

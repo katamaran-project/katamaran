@@ -35,6 +35,7 @@ From Katamaran Require Import
      Syntax.Predicates
      Base.
 From stdpp Require Import base.
+From iris Require proofmode.tactics.
 
 Import ctx.notations.
 Import env.notations.

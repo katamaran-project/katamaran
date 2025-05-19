@@ -31,23 +31,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Katamaran Require Import
-     Prelude
-     BitvectorBase.
-From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
-From Coq Require Import
-     Arith.PeanoNat.
-
-Import bv (bv).
-Import stdpp.tactics.
-Import bv.notations.
-
-(* TODO: replace explicit argument by typeclass instance? *)
-Local Lemma bv_bin_one {n}: Nat.lt 0 n → bv.bin (@bv.one n) = 1%N.
-Proof. unfold bv.bin, bv.one. destruct n; lia. Qed.
-Local Lemma bv_bin_zero {n}: bv.bin (@bv.zero n) = 0%N.
-Proof. by simpl. Qed.
-
 (* Faster alternative to [set (H := v) in *] *)
 (* https://github.com/coq/coq/issues/13788#issuecomment-767217670 *)
 Ltac fast_set H v :=
@@ -91,13 +74,13 @@ Ltac bv_zify_op_nonbranching_step :=
       discriminate H
     (* Non-branching specs *)
     | |- context [ bv.bin (bv.one) ] =>
-      rewrite bv_bin_one ; [ | cbn; lia] (* TODO create spec Ltac for these? Currently assumes n > 0 *)
+      rewrite bin_one ; [ | cbn; lia] (* TODO create spec Ltac for these? Currently assumes n > 0 *)
     | H : context [ bv.bin (bv.one) ] |- _ =>
-      rewrite bv_bin_one in H ; [ | cbn; lia]
+      rewrite bin_one in H ; [ | cbn; lia]
     | |- context [ bv.bin (bv.zero) ] =>
-      rewrite bv_bin_zero
+      change_no_check (bv.bin (bv.zero)) with 0%N
     | H : context [ bv.bin (bv.zero) ] |- _ =>
-      rewrite bv_bin_zero in H
+      change_no_check (bv.bin (bv.zero)) with 0%N in H
     end.
 
 Ltac bv_zify_nonbranching_step :=
@@ -209,6 +192,3 @@ Ltac bv_zify :=
   );
   bv_zify_close_proof.
 
-Tactic Notation "solve_bv" := bv_zify.
-Tactic Notation "solve_bv" "-" hyp_list(Hs) := clear Hs; bv_zify.
-Tactic Notation "solve_bv" "+" hyp_list(Hs) := clear -Hs; bv_zify.

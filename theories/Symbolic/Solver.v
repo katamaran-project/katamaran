@@ -373,7 +373,7 @@ Module Type GenericSolverOn
       dependent elimination s; try (now apply simplify_relopb_spec).
       destruct v; try (now apply simplify_relopb_spec).
       dependent elimination t; try (now apply simplify_relopb_spec).
-      dependent elimination op1; try (now apply simplify_relopb_spec).
+      dependent elimination op0; try (now apply simplify_relopb_spec).
       cbn -[empty].
       arw_slow.
       iSplit; iIntros; [|done].

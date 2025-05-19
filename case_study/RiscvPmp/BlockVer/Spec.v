@@ -802,7 +802,6 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstance.
   Import RiscvPmp.Model.
-  Import BitvectorSolve.
 
   Import iris.bi.interface.
   Import iris.bi.big_op.

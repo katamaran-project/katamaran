@@ -140,10 +140,10 @@ Module Examples.
 
     Local Ltac solve_bv :=
       repeat match goal with
-        | |- context[bv.add ?x (@BitvectorBase.bv.mk ?n 0 I)] =>
+        | |- context[bv.add ?x (@bv.mk ?n 0 I)] =>
             fold (@bv.zero n)
         | |- context[bv.add ?x bv.zero] =>
-            rewrite BitvectorBase.bv.add_zero_r
+            rewrite bv.add_zero_r
         end.
 
     Local Ltac solve_vc :=

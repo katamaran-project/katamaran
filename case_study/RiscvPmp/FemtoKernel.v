@@ -32,7 +32,6 @@ From Coq Require Import
      Strings.String.
 From Katamaran Require Import
      Bitvector
-     BitvectorSolve
      Notations
      Specification
      SmallStep.Step
