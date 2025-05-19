@@ -32,6 +32,7 @@ From Coq Require Import
      NArith.BinNat
      PArith.BinPos
      ZArith.BinInt
+     ZArith.Zdiv
      RelationClasses
      Ring
      micromega.Lia
@@ -1269,6 +1270,42 @@ Module bv.
       unfold unsigned; cbn.
       rewrite truncn_add, truncz_add, truncn_add.
       now rewrite <-?of_N_truncz, <-Znat.N2Z.inj_add, <-?of_N_truncz, ?truncn_idemp.
+    Qed.
+
+    (* A view on the possible outcomes of an unsigned integer addition. *)
+    Variant UnsignedAddView {n} (u v : bv n) : Z -> Prop :=
+    | UnsignedAddNoOverflow (p : (unsigned u + unsigned v < 2 ^ Z.of_nat n)%Z) :
+      UnsignedAddView u v (unsigned u + unsigned v)%Z
+    | UnsignedAddOverflow (p : (2 ^ Z.of_nat n <= unsigned u + unsigned v)%Z) :
+      UnsignedAddView u v (unsigned u + unsigned v - 2 ^ Z.of_nat n)%Z.
+
+    Definition unsigned_add_view {n} (u v : bv n) :
+      UnsignedAddView u v (unsigned (add u v)).
+    Proof.
+      destruct (Z.ltb_spec (unsigned u + unsigned v) (2 ^ Z.of_nat n)).
+      - enough (unsigned (add u v) = unsigned u + unsigned v)%Z as ->.
+        + now constructor.
+        + destruct u as [u wf_u], v as [v wf_v].
+          unfold unsigned, add, of_N in *; cbn in *.
+          rewrite of_N_truncz. unfold truncz.
+          rewrite Zpower.two_power_nat_equiv.
+          rewrite Zmod_small; lia.
+      - enough (unsigned (add u v) = unsigned u + unsigned v - 2 ^ Z.of_nat n)%Z as ->.
+        + now constructor.
+        + destruct u as [u wf_u], v as [v wf_v].
+          unfold unsigned, add, of_N in *; cbn in *.
+          rewrite of_N_truncz. unfold truncz.
+          rewrite Zpower.two_power_nat_equiv.
+          rewrite Znat.N2Z.inj_add.
+          apply is_wf_spec in wf_u. apply is_wf_spec in wf_v.
+          rewrite exp2_spec in wf_u, wf_v.
+          Zify.zify.
+          remember (Z.of_nat n) as e.
+          remember (Z.of_N u) as x.
+          remember (Z.of_N v) as y.
+          clear n u v Heqe Heqx Heqy.
+          assert (0 <= x + y - 2 ^ e < 2 ^ e)%Z as <-%Zmod_small by lia.
+          now rewrite Zminus_mod, Z_mod_same_full, Z.sub_0_r, Zmod_mod.
     Qed.
 
     Lemma unsigned_negate {n} x : @unsigned n (negate x) = truncz n (- (unsigned x)).
