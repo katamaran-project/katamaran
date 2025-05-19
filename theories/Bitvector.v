@@ -1347,6 +1347,13 @@ Module bv.
       now rewrite <-truncz_sub, truncz_eq2nz.
     Qed.
 
+    Lemma unsigned_bounds {n} (v : bv n) :
+      (0 <= unsigned v < 2 ^ Z.of_nat n)%Z.
+    Proof.
+      destruct v as [v wf_v]. unfold unsigned. cbn.
+      apply is_wf_spec in wf_v. rewrite exp2_spec in wf_v.
+      lia.
+    Qed.
 
     (* For the relational operators we default to the < and <= version and
        only allow the others for parsing. *)
