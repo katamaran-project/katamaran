@@ -700,12 +700,14 @@ Module bv.
 
   Section Integers.
 
+    Open Scope Z_scope.
+
     Definition unsigned {n} (x : bv n) : Z :=
       Z.of_N (bin x).
     Definition signed {n} (x : bv n) : Z :=
       let u := unsigned x in
-      if msb x then u - Zpower.two_power_nat n else u.
-    Definition truncz (n : nat) := fun y => Z.modulo y (Zpower.two_power_nat n).
+      if msb x then u - 2 ^ Z.of_nat n else u.
+    Definition truncz (n : nat) := fun y => Z.modulo y (2 ^ Z.of_nat n).
     Definition of_Z {n} (x : Z) : bv n :=
       of_N (Z.to_N (truncz n x)).
 
@@ -715,37 +717,26 @@ Module bv.
       now apply bin_inj, Znat.N2Z.inj.
     Qed.
 
-    Lemma truncz_pos n x : (0 <= truncz n x)%Z.
-    Proof.
-      apply numbers.Z.mod_pos.
-      rewrite Zpower.two_power_nat_equiv.
-      now Lia.lia.
-    Qed.
+    Lemma truncz_pos n x : 0 <= truncz n x.
+    Proof. apply numbers.Z.mod_pos. lia. Qed.
 
     Definition truncz_idemp (n : nat) (x : Z) :
       truncz n (truncz n x) = truncz n x.
-    Proof.
-      unfold truncz.
-      now rewrite Z.mod_mod.
-    Qed.
+    Proof. unfold truncz. apply Zmod_mod. Qed.
 
     Lemma truncz_add {n x y} : truncz n (x + y) = truncz n (truncz n x + truncz n y).
-    Proof.
-      unfold truncz.
-      now apply Z.add_mod.
-    Qed.
+    Proof. apply Zplus_mod. Qed.
 
     Lemma of_N_truncz {n x} : Z.of_N (truncn n x) = truncz n (Z.of_N x).
     Proof.
-      unfold truncz.
-      rewrite truncn_spec, exp2_spec, Zpower.two_power_nat_equiv.
+      unfold truncz. rewrite truncn_spec, exp2_spec.
       now rewrite Znat.N2Z.inj_mod, Znat.N2Z.inj_pow, Znat.nat_N_Z.
     Qed.
 
     Lemma to_N_truncz {n x} : Z.to_N (truncz n (Z.of_N x)) = truncn n x.
     Proof.
       unfold truncz.
-      rewrite truncn_spec, exp2_spec, Zpower.two_power_nat_equiv.
+      rewrite truncn_spec, exp2_spec.
       rewrite Znat.Z2N.inj_mod; try Lia.lia.
       rewrite Znat.N2Z.id.
       rewrite Znat.Z2N.inj_pow; try Lia.lia.
@@ -753,13 +744,10 @@ Module bv.
       now Lia.lia.
     Qed.
 
-    Lemma to_N_truncz2 {n x} : (0 <= x)%Z -> Z.to_N (truncz n x) = truncn n (Z.to_N x).
+    Lemma to_N_truncz2 {n x} (Hx : 0 <= x) : Z.to_N (truncz n x) = truncn n (Z.to_N x).
     Proof.
-      intros Hx.
       unfold truncz.
-      rewrite truncn_spec, exp2_spec, Znat.Z2N.inj_mod, Zpower.two_power_nat_equiv; try assumption.
-      f_equal; Lia.lia.
-      rewrite Zpower.two_power_nat_equiv; Lia.lia.
+      rewrite truncn_spec, exp2_spec, Znat.Z2N.inj_mod; f_equal; lia.
     Qed.
 
     Lemma unsigned_cons n b (x : bv n) :
@@ -778,7 +766,7 @@ Module bv.
         rewrite !Z.ones_equiv, Z.pow_succ_r; Lia.lia.
     Qed.
 
-    Lemma msb_cons (n : nat) (b : bool) (x : bv n) (H : 0 < n) :
+    Lemma msb_cons (n : nat) (b : bool) (x : bv n) (H : (0 < n)%nat) :
       msb (cons b x) = msb x.
     Proof.
       induction x using bv_rect; [Lia.lia|].
@@ -798,7 +786,6 @@ Module bv.
     Proof.
       unfold signed. rewrite msb_ones.
       rewrite unsigned_ones, Z.ones_equiv.
-      rewrite Zpower.two_power_nat_equiv.
       Lia.lia.
     Qed.
 
@@ -959,7 +946,6 @@ Module bv.
       unfold eq2nz, eq2n.
       intros x y Hxy.
       unfold truncz.
-      rewrite Zpower.two_power_nat_equiv.
       rewrite ?truncn_spec, ?exp2_spec in Hxy.
       rewrite <- Znat.nat_N_Z.
       change 2%Z with (Z.of_N 2%N).
@@ -1007,7 +993,6 @@ Module bv.
       eq2nz n x y -> eq x y.
     Proof.
       unfold eq2nz, truncz.
-      rewrite Zpower.two_power_nat_equiv.
       intros xle yle xmeqy.
       rewrite (Z.div_mod x (2 ^ Z.of_nat n)); try Lia.lia.
       rewrite (Z.div_mod y (2 ^ Z.of_nat n)); try Lia.lia.
@@ -1288,14 +1273,12 @@ Module bv.
         + destruct u as [u wf_u], v as [v wf_v].
           unfold unsigned, add, of_N in *; cbn in *.
           rewrite of_N_truncz. unfold truncz.
-          rewrite Zpower.two_power_nat_equiv.
           rewrite Zmod_small; lia.
       - enough (unsigned (add u v) = unsigned u + unsigned v - 2 ^ Z.of_nat n)%Z as ->.
         + now constructor.
         + destruct u as [u wf_u], v as [v wf_v].
           unfold unsigned, add, of_N in *; cbn in *.
           rewrite of_N_truncz. unfold truncz.
-          rewrite Zpower.two_power_nat_equiv.
           rewrite Znat.N2Z.inj_add.
           apply is_wf_spec in wf_u. apply is_wf_spec in wf_v.
           rewrite exp2_spec in wf_u, wf_v.
@@ -1312,7 +1295,7 @@ Module bv.
     Proof.
       unfold negate, unsigned, truncz; cbn.
       generalize (bv_is_wf x).
-      rewrite ?truncn_spec, ?exp2_spec, Zpower.two_power_nat_equiv.
+      rewrite ?truncn_spec, ?exp2_spec.
       intros Hx.
       assert (2 ^ Z.of_nat n ≠ 0)%Z by Lia.lia.
       rewrite ?Znat.N2Z.inj_mod, ?Znat.N2Z.inj_pow.
@@ -1824,10 +1807,9 @@ Module bv.
     Proof. apply bin_inj_eq2n. now destruct n; easy. Qed.
 
     Lemma of_Z_one {n} : of_Z 1 = @one n.
-    Proof. apply bin_inj_eq2n.
-           destruct n; [apply eq2n_zero|]; cbn.
-           unfold of_Z, truncz.
-           now rewrite Zdiv.Zmod_1_l.
+    Proof.
+      apply unsigned_inj. rewrite unsigned_of_Z. destruct n; [easy|].
+      apply Z.mod_1_l. rewrite Nat2Z.inj_succ, Z.pow_succ_r; lia.
     Qed.
 
     Lemma bin_of_nat_small {n x} : (N.of_nat x < exp2 n)%N ->
