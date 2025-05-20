@@ -131,6 +131,55 @@ Section FunDeclKit.
   Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
   Definition 𝑳  : PCtx -> Set := Lem.
 
+  #[local] Ltac solve_idprop :=
+    match goal with
+    | |- IDProp => intros ? H; exact H
+    | _ => idtac
+    end.
+
+  Equations(noeqns) Fun_eqb {Γ1 Γ2 τ1 τ2} (f1 : Fun Γ1 τ1) (f2 : Fun Γ2 τ2) : bool :=
+  | f1 | f2 with eq_dec Γ1 Γ2, eq_dec τ1 τ2 => {
+    | left _ | left _ => match f1, f2 with
+                         | read_reg, read_reg => true
+                         | _, _ => false
+                         end
+    | _    | _    => false
+    }.
+
+  Instance Fun_eq_dec' : EqDec (sigT (fun Γ => sigT (Fun Γ))).
+  Proof.
+    intros [Γ1 [τ1 f1]] [Γ2 [τ2 f2]].
+    destruct (eq_dec Γ1 Γ2), (eq_dec τ1 τ2).
+    destruct f1, f2; auto.
+    - right. intros Heq.
+      pose proof (eq_sigT_fst Heq).
+      subst. 
+      apply Eqdep.EqdepTheory.inj_pair2 in Heq.
+      apply eq_sigT_fst in Heq. auto.
+    - right. intros Heq.
+      apply eq_sigT_fst in Heq. auto.
+    - right. intros Heq.
+      apply eq_sigT_fst in Heq. auto.
+  Defined.
+
+  (* Print Fun_eq_dec'. *)
+  Print Assumptions Fun_eq_dec'.
+
+  Instance Fun_eq_dec {Γ τ} : EqDec (Fun Γ τ).
+  Proof.
+    intros f1 f2.
+    destruct f1;
+    refine (match f2 with
+            | read_reg => _
+            | _ => _
+            end);
+        cbn; solve_idprop; auto.
+  Defined.
+  Print Fun_eq_dec.
+  Print Assumptions Fun_eq_dec.
+
+  #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))) :=
+    sigma_eqdec _ (fun Γ => sigma_eqdec _ (fun τ => _)).
 End FunDeclKit.
 
 Include FunDeclMixin MinCapsBase.
@@ -872,5 +921,170 @@ Section ForeignKit.
 End ForeignKit.
 
 Include ProgramMixin MinCapsBase.
+
+Section WellFoundedKit.
+  (* TODO: look more at other works, that might've run into something similar *)
+  Lemma 𝑭_well_founded : ∃ fuel, well_founded (InvokedByFunPackage fuel).
+  Proof.
+    (* TODO: need proof by reflection. Define a decidable impl of InvokedBy, so we can compute that well_founded holds. *)
+    exists 3.
+    intros [Δ1 [τ1 f1]]. constructor. intros [Δ2 [τ2 f2]] Hinvok.
+    assert (InvokedByFunPackageBool 3 (existT _ (existT _ f2)) (existT _ (existT _ f1)) = true) as H.
+    { destruct (InvokedByFunPackage_spec 3 (existT _ (existT _ f2)) (existT _ (existT _ f1))); auto. }
+    unfold InvokedByFunPackageBool in H.
+    unfold InvokedByFunBool in H.
+    rewrite InvokedByStmWithFuelInListBool_eq in H.
+    assert (InvokedByStmWithFuelInList 3 f2 (FunDef f1)) as H'.
+    { destruct (InvokedByStmWithFuelInList_spec 3 f2 (FunDef f1)); auto.
+      discriminate. }
+    unfold InvokedByStmWithFuelInListBool in H.
+    Time destruct f1, f2; cbv in H.
+    all: try discriminate.
+
+    (* TODO: handle existsb better? *)
+    destruct f1;
+    match goal with
+    | H: context[InvokedByStmWithFuelList ?fuel ?f] |- _ =>
+        let l := (eval cbv in (InvokedByStmWithFuelList fuel f)) in
+        change (InvokedByStmWithFuelList fuel f) with l in H
+    end.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - destruct f2; cbv in H; try discriminate.
+
+      
+    Time destruct f1; cbv in H. (* ~250s *)
+    Time destruct f1; cbn in H. (* ~250s *)
+    all: try discriminate.
+    - destruct f2; try discriminate.
+      constructor. intros f1 H''.
+      assert (InvokedByFunPackageBool 3 f1 (existT _ (existT _ read_reg)) = true) as H'''.
+      { destruct (InvokedByFunPackage_spec 3 f1 (existT _ (existT _ read_reg))); auto. }
+      unfold InvokedByFunPackageBool in H'''.
+      unfold InvokedByFunBool in H'''.
+      destruct f1 as [Δ [τ f1]].
+      rewrite InvokedByStmWithFuelInListBool_eq in H'''.
+      assert (InvokedByStmWithFuelInList 3 f1 (FunDef read_reg)) as H''''.
+      { destruct (InvokedByStmWithFuelInList_spec 3 f1 (FunDef read_reg)); auto.
+        discriminate. }
+      destruct f1; cbn in H''''; try discriminate.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - destruct f2; cbn in H; try discriminate.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+  Admitted.
+
+End WellFoundedKit.
 
 End MinCapsProgram.
