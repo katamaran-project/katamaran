@@ -306,44 +306,6 @@ Module bv.
     Definition of_N_bin {n} (x : bv n) : of_N (bin x) = x :=
       match x with mk bs w => of_N_wf bs w end.
 
-    Definition maybe_succ_double (b : bool) (n : N) : N :=
-      if b then N.succ_double n else N.double n.
-
-    Lemma maybe_succ_double_spec b x : maybe_succ_double b x = (N.b2n b + x * 2)%N.
-    Proof.
-      destruct b; cbn -[N.mul];
-      rewrite ?N.succ_double_spec, ?N.double_spec;
-      Lia.lia.
-    Qed.
-
-    Lemma div2_mod2 : forall x, x = maybe_succ_double (N.odd x) (N.div2 x).
-    Proof.
-      eapply N.binary_ind; cbn; try Lia.lia.
-      - intros n _. now destruct n.
-      - intros n _. now destruct n.
-    Qed.
-
-    Lemma maybe_succ_double_truncn {n b x} : truncn (S n) (maybe_succ_double b x) = maybe_succ_double b (truncn n x).
-    Proof.
-      destruct b;
-      now rewrite ?truncn_double, ?truncn_succ_double.
-    Qed.
-
-    Lemma maybe_succ_double_mod_double b x y :
-      y <> 0%N ->
-      (maybe_succ_double b x mod (N.double y))%N = maybe_succ_double b (x mod y)%N.
-    Proof.
-      intros ynz.
-      rewrite ?maybe_succ_double_spec, ?N.double_spec.
-      apply eq_sym.
-      apply (N.mod_unique _ _ (x / y)).
-      - assert (N.b2n b < 2)%N by (destruct b; now cbn).
-        assert (x mod y < y)%N by (now apply N.mod_lt).
-        now Lia.lia.
-      - rewrite (N.div_mod' x y) at 1.
-        now Lia.lia.
-    Qed.
-
     Lemma exp2_nzero n : exp2 n <> 0%N.
     Proof.
       induction n; cbn.
@@ -355,47 +317,45 @@ Module bv.
     Lemma exp2_spec {n} : exp2 n = N.pow 2 (N.of_nat n).
     Proof.
       induction n; cbn -[N.pow N.of_nat]; try easy.
-      rewrite Nnat.Nat2N.inj_succ.
-      rewrite N.pow_succ_r'.
-      rewrite N.double_spec.
-      Lia.lia.
+      rewrite Nnat.Nat2N.inj_succ, N.pow_succ_r'. lia.
     Qed.
 
-    Lemma truncn_spec {n x} : truncn n x = (x mod (exp2 n))%N.
+    Lemma trunc_spec {n} : forall p, trunc n p = (Npos p mod exp2 n)%N.
     Proof.
-      revert x.
-      induction n.
-      - intros. cbn. rewrite N.mod_1_r.
-        now destruct x.
-      - intros x; cbn.
-        rewrite (div2_mod2 x).
-        rewrite maybe_succ_double_mod_double.
-        rewrite maybe_succ_double_truncn.
-        now rewrite (IHn (N.div2 x)).
-        now apply exp2_nzero.
+      induction n; cbn.
+      - symmetry. apply N.mod_1_r.
+      - destruct p; cbn; try rewrite IHn; clear IHn;
+          change (N.pos ?p~1)%N with (N.succ_double (Npos p));
+          change (N.pos ?p~0)%N with (N.double (Npos p));
+          try (remember (Npos p) as q; clear p Heqq);
+          rewrite ?N.succ_double_spec, ?N.double_spec, ?exp2_spec.
+        + rewrite N.Div0.add_mod, N.Div0.mul_mod_distr_l, N.mod_1_l; [|lia].
+          symmetry. apply N.mod_small.
+          assert ((q mod 2 ^ N.of_nat n) < 2 ^ N.of_nat n)%N.
+          apply N.mod_lt; lia. lia.
+        + rewrite (N.double_spec q).
+          now rewrite N.Div0.mul_mod_distr_l.
+        + rewrite N.mod_1_l; lia.
+    Qed.
+
+    Lemma truncn_spec {n x} : truncn n x = (x mod exp2 n)%N.
+    Proof.
+      destruct x; cbn.
+      - now rewrite N.Div0.mod_0_l.
+      - apply trunc_spec.
     Qed.
 
     Lemma at_most_spec {n x} : Is_true (at_most n x) <-> (N.pos x < exp2 n)%N.
     Proof.
-      revert x.
-      induction n; cbn.
-      - intuition Lia.lia.
-      - destruct x.
-        + rewrite IHn.
-          Lia.lia.
-        + rewrite IHn.
-          Lia.lia.
-        + intuition auto.
-          generalize (exp2_nzero n).
-          destruct (exp2 n); Lia.lia.
+      revert x. induction n; cbn.
+      - intuition. lia.
+      - destruct x; rewrite ?IHn, exp2_spec; intuition; try lia.
     Qed.
 
     Lemma is_wf_spec {n x} : Is_true (is_wf n x) <-> (x < exp2 n)%N.
     Proof.
       destruct x; cbn.
-      - intuition auto.
-        generalize (exp2_nzero n).
-        now destruct (exp2 n).
+      - rewrite exp2_spec; intuition; lia.
       - eapply at_most_spec.
     Qed.
 
