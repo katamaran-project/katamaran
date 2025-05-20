@@ -112,10 +112,10 @@ Module Type ProgramMixin (B : Base)
       end.
   End InvokedByStmBool.
 
+  #[local] Notation List_of_𝑭 := (list ({Δ & {τ & 𝑭 Δ τ}})).
+
   Section InvokedByStmList.
     Import List.ListNotations.
-
-    Notation List_of_𝑭 := (list ({Δ & {τ & 𝑭 Δ τ}})).
 
     Section WithInvokeCall.
       Variable invoke_call : forall {Γ τ}, Stm Γ τ -> List_of_𝑭.
@@ -127,7 +127,8 @@ Module Type ProgramMixin (B : Base)
         | stm_let x σ s1 s2 => InvokedByStmList_aux s1 ++ InvokedByStmList_aux s2
         | stm_block δ s => InvokedByStmList_aux s
         | stm_assign xInΓ s => InvokedByStmList_aux s
-        | stm_call f2 es => [existT _ (existT _ f2)] ++ invoke_call (FunDef f2)
+        | stm_call f2 es =>
+            [existT _ (existT _ f2)] ++ invoke_call (FunDef f2)
         | stm_call_frame δ s => InvokedByStmList_aux s
         | stm_foreign f es => []
         | stm_lemmak l es k => InvokedByStmList_aux k
@@ -135,9 +136,10 @@ Module Type ProgramMixin (B : Base)
         | stm_assertk e1 e2 k => InvokedByStmList_aux k
         | stm_fail _ s => []
         | stm_pattern_match s pat rhs =>
-            InvokedByStmList_aux s
-            ++ List.flat_map (fun pc => InvokedByStmList_aux (rhs pc))
-                             (@finite.enum _ _ (B.Finite_PatternCase pat))
+            InvokedByStmList_aux s ++
+            List.flat_map
+              (fun pc => InvokedByStmList_aux (rhs pc))
+              (@finite.enum _ _ (B.Finite_PatternCase pat))
         | stm_read_register reg => []
         | stm_write_register reg e => []
         | stm_bind s k => []
@@ -148,7 +150,7 @@ Module Type ProgramMixin (B : Base)
     Fixpoint InvokedByStmWithFuelList (fuel : nat) {Γ τ} (s : Stm Γ τ) : List_of_𝑭 :=
       match fuel with
       | 0 => InvokedByStmList_aux (fun _ _ _ => []%list) s
-      | S fuel => InvokedByStmList_aux (@InvokedByStmWithFuelList fuel)s
+      | S fuel => InvokedByStmList_aux (@InvokedByStmWithFuelList fuel) s
       end.
   End InvokedByStmList.
 
@@ -169,13 +171,7 @@ Module Type ProgramMixin (B : Base)
     | existT _ (existT _ f2) => 𝑭_eqb f2 f1
     end.
 
-  Definition InvokedByStmWithFuelInList (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : Prop :=
-    List.In (existT _ (existT _ f)) (InvokedByStmWithFuelList fuel s).
-
-  Definition InvokedByStmWithFuelInListBool (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : bool :=
-    List.existsb (𝑭_eqb_packaged_2 f) (InvokedByStmWithFuelList fuel s).
-
-  Local Ltac solve_invokedby :=
+  #[local] Ltac solve_invokedby :=
     repeat match goal with
     | |- List.In ?e (?l1 ++ ?l2) =>
         apply List.in_or_app
@@ -192,6 +188,12 @@ Module Type ProgramMixin (B : Base)
     | |- context[List.existsb ?p (?l1 ++ ?l2)] =>
         rewrite List.existsb_app
     end.
+
+  Definition InvokedByStmWithFuelInList (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : Prop :=
+    List.In (existT _ (existT _ f)) (InvokedByStmWithFuelList fuel s).
+
+  Definition InvokedByStmWithFuelInListBool (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : bool :=
+    List.existsb (𝑭_eqb_packaged_2 f) (InvokedByStmWithFuelList fuel s).
 
   Lemma InvokedByStmWithFuelInList_eq : forall (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2),
     InvokedByStmWithFuel fuel f s <-> InvokedByStmWithFuelInList fuel f s.
