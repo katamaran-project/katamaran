@@ -1010,8 +1010,36 @@ Module Type SymPropOn
   End SymProp.
   Notation SymProp := SymProp.SymProp.
   Notation 𝕊 := SymProp.SymProp.
+  Import option.notations.
 
   Module Postprocessing.
+
+    Record AngelicBinaryFailMsg (M1 M2 : LCtx -> Type) Σ : Type := MkAngelicBinaryFailMsg {
+                                         angelic_binary_failmsg_left : M1 Σ;
+                                         angelic_binary_failmsg_right : M2 Σ;
+                                       }.
+
+    #[export] Instance SubstAngelicBinaryFailMsg `{Subst M1, Subst M2}: Subst (AngelicBinaryFailMsg M1 M2) :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkAngelicBinaryFailMsg _ _ _ msg1 msg2 => MkAngelicBinaryFailMsg _ _ _ (subst msg1 ζ01) (subst msg2 ζ01)
+        end.
+
+    #[export] Instance SubstLawsAngelicBinaryFailMsg `{SubstLaws M1, SubstLaws M2} : SubstLaws (AngelicBinaryFailMsg M1 M2).
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance OccursCheckAngelicBinaryFailMsg `{OccursCheck M1, OccursCheck M2} : OccursCheck (AngelicBinaryFailMsg M1 M2) :=
+      fun Σ x xIn d =>
+        match d with
+        | MkAngelicBinaryFailMsg _ _ _ msg1 msg2 =>
+            msg1' <- occurs_check xIn msg1 ;;
+            msg2'  <- occurs_check xIn msg2 ;;
+            Some (MkAngelicBinaryFailMsg _ _ _ msg1' msg2')
+        end.
 
     Import SymProp.
 
@@ -1019,6 +1047,7 @@ Module Type SymPropOn
       match p1 , p2 with
       | block   , _       => block
       | _       , block   => block
+      | error (amsg.mk msg1) , error (amsg.mk msg2) => error (amsg.mk (MkAngelicBinaryFailMsg _ _ _ msg1 msg2))
       | error _ , _       => p2
       | _       , error _ => p1
       | _       , _       => angelic_binary p1 p2
@@ -1049,7 +1078,7 @@ Module Type SymPropOn
 
     Definition angelicv_prune {Σ} b (p : 𝕊 (Σ ▻ b)) : 𝕊 Σ :=
       match p with
-      | error msg => error (amsg.there msg)
+      | error (amsg.mk msg) => error (amsg.mk (amsg.there msg))
       | _         => angelicv b p
       end.
 
@@ -1109,7 +1138,8 @@ Module Type SymPropOn
       destruct p1; cbn; auto.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition auto.
+      - destruct msg, p2; cbn; auto; intuition auto.
+        destruct msg0; now cbn in H.
       - intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
@@ -1155,7 +1185,9 @@ Module Type SymPropOn
 
     Lemma prune_angelicv_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
       safe (angelicv_prune p) ι <-> safe (angelicv b p) ι.
-    Proof. destruct p; cbn; auto; firstorder. Qed.
+    Proof. destruct p; cbn; auto.
+           destruct msg; cbn. firstorder.
+    Qed.
 
     Lemma prune_demonicv_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
       safe (demonicv_prune p) ι <-> safe (demonicv b p) ι.
