@@ -163,7 +163,12 @@ Module bv.
   End NoConfusion.
   Local Existing Instance NoConfusionPackage_bv.
 
+  #[global] Notation exp2 n := (N.pow 2%N (N.of_nat n)).
+
   Section Conversion.
+
+    Lemma exp2_S n : exp2 (S n) = (2 * exp2 n)%N.
+    Proof. now rewrite Nnat.Nat2N.inj_succ, N.pow_succ_r'. Qed.
 
     Fixpoint trunc (n : nat) (p : positive) : N :=
       match n with
@@ -200,11 +205,6 @@ Module bv.
                   end
       end.
 
-    Fixpoint exp2 (n : nat) : N :=
-      match n with
-      | 0 => 1%N
-      | S n => N.double (exp2 n)
-      end.
 
     Definition truncn (n : nat) (x : N) : N :=
       match x with
@@ -306,19 +306,10 @@ Module bv.
     Definition of_N_bin {n} (x : bv n) : of_N (bin x) = x :=
       match x with mk bs w => of_N_wf bs w end.
 
-    Lemma exp2_nzero n : exp2 n <> 0%N.
-    Proof.
-      induction n; cbn.
-      - auto.
-      - change 0%N with (N.double 0).
-        now intros ?%N.double_inj.
-    Qed.
+    Ltac Zify.zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
 
-    Lemma exp2_spec {n} : exp2 n = N.pow 2 (N.of_nat n).
-    Proof.
-      induction n; cbn -[N.pow N.of_nat]; try easy.
-      rewrite Nnat.Nat2N.inj_succ, N.pow_succ_r'. lia.
-    Qed.
+    Lemma exp2_nzero n : exp2 n <> 0%N.
+    Proof. cbn; lia. Qed.
 
     Lemma trunc_spec {n} : forall p, trunc n p = (Npos p mod exp2 n)%N.
     Proof.
@@ -328,11 +319,10 @@ Module bv.
           change (N.pos ?p~1)%N with (N.succ_double (Npos p));
           change (N.pos ?p~0)%N with (N.double (Npos p));
           try (remember (Npos p) as q; clear p Heqq);
-          rewrite ?N.succ_double_spec, ?N.double_spec, ?exp2_spec.
+          rewrite ?N.succ_double_spec, ?N.double_spec, ?exp2_S.
         + rewrite N.Div0.add_mod, N.Div0.mul_mod_distr_l, N.mod_1_l; [|lia].
-          symmetry. apply N.mod_small.
-          assert ((q mod 2 ^ N.of_nat n) < 2 ^ N.of_nat n)%N.
-          apply N.mod_lt; lia. lia.
+          symmetry. apply N.mod_small. cbn.
+          lia.
         + rewrite (N.double_spec q).
           now rewrite N.Div0.mul_mod_distr_l.
         + rewrite N.mod_1_l; lia.
@@ -340,22 +330,23 @@ Module bv.
 
     Lemma truncn_spec {n x} : truncn n x = (x mod exp2 n)%N.
     Proof.
-      destruct x; cbn.
+      destruct x.
       - now rewrite N.Div0.mod_0_l.
       - apply trunc_spec.
     Qed.
 
     Lemma at_most_spec {n x} : Is_true (at_most n x) <-> (N.pos x < exp2 n)%N.
     Proof.
-      revert x. induction n; cbn.
-      - intuition. lia.
-      - destruct x; rewrite ?IHn, exp2_spec; intuition; try lia.
+      revert x.
+      induction n; rewrite ?exp2_S; cbn.
+      - lia.
+      - destruct x; rewrite ?IHn; intuition; lia.
     Qed.
 
     Lemma is_wf_spec {n x} : Is_true (is_wf n x) <-> (x < exp2 n)%N.
     Proof.
       destruct x; cbn.
-      - rewrite exp2_spec; intuition; lia.
+      - lia.
       - eapply at_most_spec.
     Qed.
 
@@ -689,17 +680,16 @@ Module bv.
 
     Lemma of_N_truncz {n x} : Z.of_N (truncn n x) = truncz n (Z.of_N x).
     Proof.
-      unfold truncz. rewrite truncn_spec, exp2_spec.
-      now rewrite Znat.N2Z.inj_mod, Znat.N2Z.inj_pow, Znat.nat_N_Z.
+      unfold truncz. now rewrite truncn_spec, Znat.N2Z.inj_mod, Znat.N2Z.inj_pow, Znat.nat_N_Z.
     Qed.
 
     Lemma to_N_truncz {n x} : Z.to_N (truncz n (Z.of_N x)) = truncn n x.
     Proof.
       unfold truncz.
-      rewrite truncn_spec, exp2_spec.
-      rewrite Znat.Z2N.inj_mod; try Lia.lia.
+      rewrite truncn_spec.
+      rewrite Znat.Z2N.inj_mod; try lia.
       rewrite Znat.N2Z.id.
-      rewrite Znat.Z2N.inj_pow; try Lia.lia.
+      rewrite Znat.Z2N.inj_pow; try lia.
       repeat f_equal.
       now Lia.lia.
     Qed.
@@ -707,7 +697,7 @@ Module bv.
     Lemma to_N_truncz2 {n x} (Hx : 0 <= x) : Z.to_N (truncz n x) = truncn n (Z.to_N x).
     Proof.
       unfold truncz.
-      rewrite truncn_spec, exp2_spec, Znat.Z2N.inj_mod; f_equal; lia.
+      rewrite truncn_spec, Znat.Z2N.inj_mod; f_equal; cbn; lia.
     Qed.
 
     Lemma unsigned_cons n b (x : bv n) :
@@ -906,7 +896,7 @@ Module bv.
       unfold eq2nz, eq2n.
       intros x y Hxy.
       unfold truncz.
-      rewrite ?truncn_spec, ?exp2_spec in Hxy.
+      rewrite ?truncn_spec in Hxy.
       rewrite <- Znat.nat_N_Z.
       change 2%Z with (Z.of_N 2%N).
       rewrite <- Znat.N2Z.inj_pow.
@@ -925,7 +915,7 @@ Module bv.
     Proof.
       induction n; cbn.
       - apply eq2n_zero.
-      - now rewrite IHn.
+      - now rewrite ?exp2_S, IHn.
     Qed.
 
     #[export] Instance succ_double_proper {n} : Proper (eq2n n ==> eq2n (S n)) N.succ_double.
@@ -1241,7 +1231,6 @@ Module bv.
           rewrite of_N_truncz. unfold truncz.
           rewrite Znat.N2Z.inj_add.
           apply is_wf_spec in wf_u. apply is_wf_spec in wf_v.
-          rewrite exp2_spec in wf_u, wf_v.
           Zify.zify.
           remember (Z.of_nat n) as e.
           remember (Z.of_N u) as x.
@@ -1294,7 +1283,7 @@ Module bv.
       (0 <= unsigned v < 2 ^ Z.of_nat n)%Z.
     Proof.
       destruct v as [v wf_v]. unfold unsigned. cbn.
-      apply is_wf_spec in wf_v. rewrite exp2_spec in wf_v.
+      apply is_wf_spec in wf_v.
       lia.
     Qed.
 
@@ -1346,11 +1335,7 @@ Module bv.
     Definition bv_modulus (n : nat) : Z := 2 ^ (Z.of_nat n).
 
     Lemma exp2_bv_modulus {n} : bv_modulus n = Z.of_N (exp2 n).
-    Proof.
-      rewrite exp2_spec.
-      unfold bv_modulus.
-      now lia.
-    Qed.
+    Proof. unfold bv_modulus. now lia. Qed.
 
     Definition bv_seq {n : nat} (start : bv n) (len : Z) : list (bv n) :=
       (fun i : Z => add start (bv.of_Z i)) <$> (seqZ 0 len).
