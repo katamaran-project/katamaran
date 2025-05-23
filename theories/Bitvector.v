@@ -1244,7 +1244,7 @@ Module bv.
     Proof.
       unfold negate, unsigned, truncz; cbn.
       generalize (bv_is_wf x).
-      rewrite ?truncn_spec, ?exp2_spec.
+      rewrite ?truncn_spec.
       intros Hx.
       assert (2 ^ Z.of_nat n ≠ 0)%Z by Lia.lia.
       rewrite ?Znat.N2Z.inj_mod, ?Znat.N2Z.inj_pow.
