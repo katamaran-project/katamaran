@@ -502,7 +502,7 @@ Module inv := invariants.
   Proof. rewrite (list_filter_iff _ (fun x => x ∈ advAddrs)); last split; auto using adv_in_pmp, pmp_in_adv.
     apply NoDup_Permutation.
     - apply NoDup_filter. rewrite all_addrs_eq. refine (bv.NoDup_seqbv _).
-      rewrite bv.exp2_spec Nat2N.inj_pow. now cbn -[xlenbits].
+      rewrite Nat2N.inj_pow. now cbn -[xlenbits].
     - apply bv.NoDup_seqbv. now compute.
     - intros x. rewrite elem_of_list_filter.
       split.
