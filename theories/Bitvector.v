@@ -567,6 +567,22 @@ Module bv.
       | S n => f_equal S (nat_add_succ_r n m)
       end.
 
+    Import SignatureNotations.
+
+    #[export] Instance proper_fold_left A (RA : ∀ n, relation (A n))
+      : Proper
+          ((∀ n, RA n ==> bool ::> RA (S n)) ==> RA 0 ==> ∀ n, bv n ::> RA n)
+          fold_left.
+    Proof.
+      intros c1 c2 cr n1 n2 nr m x. revert A RA c1 c2 cr n1 n2 nr.
+      induction x using bv_rect; intros A RA c1 c2 cr n1 n2 nr; cbn - [plus].
+      - apply nr.
+      - rewrite !bv_case_cons.
+        apply (IHx (fun m => A (S m)) (fun m => RA (S m))).
+        + intros m a1 a2 ar ?b. now apply cr.
+        + now apply cr.
+    Qed.
+
     Lemma fold_left_app_dep {A : forall n : nat, Type}
       (c : forall n, A n -> bool -> A (S n)) (n : A O)
       [k l] (xs : bv k) (ys : bv l) :
@@ -579,12 +595,12 @@ Module bv.
       induction xs using bv_rect; cbn [plus]; intros;
         rewrite ?app_nil, ?app_cons, ?fold_left_cons.
       - reflexivity.
-      - rewrite IHxs. cbn. f_equal.
-        + clear. extensionality n'. extensionality a.
-          now destruct (nat_add_succ_r n n'); cbn.
-        + generalize (fold_left (λ n1 : nat, c (S n1)) (c 0 n0 b) xs). clear.
+      - rewrite IHxs. cbn.
+        simple apply (proper_fold_left (fun k => A (S (n + k))) (fun k => @eq _)).
+        + clear. intros n' a a' <- b. now destruct (nat_add_succ_r n n'); cbn.
+        + generalize (fold_left (fun m => c (S m)) (c 0 n0 b) xs). clear.
           intros a. unfold eq_rect_r. now rewrite eq_sym_map_distr, rew_map.
-    Abort. (* TODO: get rid of extensionality *)
+    Qed.
 
   End ListLike.
 
