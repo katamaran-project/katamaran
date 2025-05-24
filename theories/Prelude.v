@@ -290,6 +290,9 @@ Module IsTrue.
   #[export] Hint Extern 10 (IsTrue ?b) =>
     refine (@mk true I) : typeclass_instances.
 
+  (* Test the behaviour of the Hint Mode. *)
+  Goal exists b, IsTrue b. Proof. eexists. Fail typeclasses eauto. Abort.
+
   (* The following two definition should never be added as instances themselves
      because they will easily lead to exponential blowup in proof search. Only
      use them locally in the definition of other instances. *)

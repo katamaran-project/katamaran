@@ -388,6 +388,11 @@ Module bv.
             end wf
         end.
 
+    Lemma bv_case_cons (P : forall n : nat, bv n -> Type) (PO : P O nil)
+      (PS : forall n (b : bool) (x : bv n), P (S n) (cons b x)) n b (xs : bv n) :
+      bv_case P PO PS (cons b xs) = PS n b xs.
+    Proof. now destruct b, xs as [[] wf_xs]. Qed.
+
     Definition bv_rect (P : forall n : nat, bv n -> Type) (PO : P O nil)
       (PS : forall n (b : bool) (x : bv n), P n x -> P (S n) (cons b x)) :
       forall [n] (xs : bv n), P n xs :=
@@ -408,7 +413,7 @@ Module bv.
       (c : forall n, A n -> bool -> A (S n)) (n : A O) [m] (b : bool) (xs : bv m) :
       fold_left c n (cons b xs) =
       fold_left (fun n => c (S n)) (c 0 n b) xs.
-    Proof. destruct b, xs as [[] ?]; reflexivity. Qed.
+    Proof. now cbn; rewrite bv_case_cons. Qed.
 
     Variant NilView : bv 0 -> Set :=
       nvnil : NilView nil.
@@ -544,6 +549,43 @@ Module bv.
       induction v using bv_rect; cbn; [easy|].
       now rewrite app_cons, IHv, cons_eq_rect, eq_sym_map_distr.
     Qed.
+
+    Lemma fold_left_app {A : Type} (c : nat -> A -> bool -> A) (n : A)
+      [k l] (xs : bv k) (ys : bv l) :
+      fold_left c n (app xs ys) =
+      fold_left (fun n' a b => c (k + n') a b) (fold_left c n xs) ys.
+    Proof.
+      revert c n.
+      induction xs using bv_rect; cbn [plus]; intros;
+        now rewrite ?app_nil, ?app_cons, ?fold_left_cons.
+    Qed.
+
+    (* This is a transparent version of Nat.add_succ_r from the stdlib. *)
+    Fixpoint nat_add_succ_r (n m : nat) : n + S m = S (n + m) :=
+      match n with
+      | O   => eq_refl
+      | S n => f_equal S (nat_add_succ_r n m)
+      end.
+
+    Lemma fold_left_app_dep {A : forall n : nat, Type}
+      (c : forall n, A n -> bool -> A (S n)) (n : A O)
+      [k l] (xs : bv k) (ys : bv l) :
+      fold_left c n (app xs ys) =
+      (fold_left
+         (fun n' a b => rew <- [A] nat_add_succ_r k n' in c (k + n') a b)
+         (rew <- [A] plus_n_O k in fold_left c n xs) ys).
+    Proof.
+      revert A c n.
+      induction xs using bv_rect; cbn [plus]; intros;
+        rewrite ?app_nil, ?app_cons, ?fold_left_cons.
+      - reflexivity.
+      - rewrite IHxs. cbn. f_equal.
+        + clear. extensionality n'. extensionality a.
+          now destruct (nat_add_succ_r n n'); cbn.
+        + generalize (fold_left (λ n1 : nat, c (S n1)) (c 0 n0 b) xs). clear.
+          intros a. unfold eq_rect_r. now rewrite eq_sym_map_distr, rew_map.
+    Abort. (* TODO: get rid of extensionality *)
+
   End ListLike.
 
   Section Constants.
@@ -582,6 +624,13 @@ Module bv.
     Definition ones (n : nat) : bv n :=
       mk (onesn n) (wf_onesn n).
 
+    Lemma zero_S n : @zero (S n) = cons false (@zero n).
+    Proof. reflexivity. Qed.
+
+    Lemma app_zero_zero {m n} :
+      app (@zero m) (@zero n) = @zero (m + n).
+    Proof. induction m; [easy|now rewrite zero_S, app_cons, IHm]. Qed.
+
     Lemma ones_O : ones 0 = nil.
     Proof. reflexivity. Qed.
 
@@ -608,8 +657,43 @@ Module bv.
       | mk (N.pos 1)   _ => true
       end.
 
+    Definition msbwithcarry {n} (c : bool) (v : bv n) : bool :=
+      fold_left (fun _ l m => m) c v.
+
+    Lemma msbwithcarry_cons {n} (c b : bool) (x : bv n)  :
+      msbwithcarry c (cons b x) = msbwithcarry b x.
+    Proof. unfold msbwithcarry. now rewrite fold_left_cons. Qed.
+
+    Lemma msbwithcarry_app {m n} (c : bool) (xs : bv m) (ys : bv n) :
+      msbwithcarry c (app xs ys) = msbwithcarry (msbwithcarry c xs) ys.
+    Proof. unfold msbwithcarry. apply fold_left_app. Qed.
+
+    Lemma msbwithcarry_ones {k} :
+      msbwithcarry true (ones k) = true.
+    Proof. induction k; now rewrite ?ones_S, ?msbwithcarry_cons. Qed.
+
+    Lemma msbwithcarry_zero {k} :
+      msbwithcarry false (@zero k) = false.
+    Proof. now induction k. Qed.
+
     Definition msb {n} (v : bv n) : bool :=
-      fold_left (fun _ l m => m) false v.
+      msbwithcarry false v.
+
+    Lemma msb_cons (n : nat) (b : bool) (x : bv n) :
+      msb (cons b x) = msbwithcarry b x.
+    Proof. apply msbwithcarry_cons. Qed.
+
+    Lemma msb_ones n :
+      msb (ones (S n)) = true.
+    Proof.
+      rewrite ones_S, msb_cons.
+      apply msbwithcarry_ones.
+    Qed.
+
+    Lemma msb_zero n :
+      msb (n := n) zero = false.
+    Proof. apply msbwithcarry_zero. Qed.
+
   End Access.
 
   Section Extend.
@@ -707,6 +791,10 @@ Module bv.
       else Z.double (unsigned x).
     Proof. destruct b, x; unfold unsigned; cbn; Lia.lia. Qed.
 
+    Lemma unsigned_zero {m} :
+      unsigned (@zero m) = 0.
+    Proof. reflexivity. Qed.
+
     Lemma unsigned_ones n :
       unsigned (ones n) = Z.ones (Z.of_nat n).
     Proof.
@@ -716,20 +804,9 @@ Module bv.
         rewrite !Z.ones_equiv, Z.pow_succ_r; Lia.lia.
     Qed.
 
-    Lemma msb_cons (n : nat) (b : bool) (x : bv n) (H : (0 < n)%nat) :
-      msb (cons b x) = msb x.
-    Proof.
-      induction x using bv_rect; [Lia.lia|].
-      unfold msb at 1. now rewrite fold_left_cons.
-    Qed.
-
-    Lemma msb_ones n :
-      msb (ones (S n)) = true.
-    Proof.
-      induction n.
-      - reflexivity.
-      - now rewrite ones_S, msb_cons; [|Lia.lia].
-    Qed.
+    Lemma signed_zero {m} :
+      signed (@zero m) = 0.
+    Proof. unfold signed. now rewrite msb_zero. Qed.
 
     Lemma signed_ones n :
       signed (ones (S n)) = (-1)%Z.
