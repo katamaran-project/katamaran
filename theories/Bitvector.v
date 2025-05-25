@@ -1148,6 +1148,9 @@ Module bv.
 
     Local Ltac solve_eq2n := (apply bin_inj_eq2n; cbn; rewrite ?truncn_eq2n; apply eq2R; try Lia.lia).
 
+    Lemma bin_add : forall {n} {x y : bv n}, bin (add x y) = ((bin x + bin y) mod exp2 n)%N.
+    Proof. intros. now apply truncn_spec. Qed.
+
     Lemma add_comm {n} {x y}: @add n x y = @add n y x.
     Proof. solve_eq2n. Qed.
 
@@ -1378,6 +1381,11 @@ Module bv.
       destruct v as [v wf_v]. unfold unsigned. cbn.
       apply is_wf_spec in wf_v.
       lia.
+    Qed.
+
+    Lemma unsigned_mul {n} x y : @unsigned n (mul x y) = truncz n (unsigned x * unsigned y).
+    Proof.
+      now rewrite <-unsigned_of_Z, <-of_Z_mul, ?of_Z_unsigned.
     Qed.
 
     (* For the relational operators we default to the < and <= version and
