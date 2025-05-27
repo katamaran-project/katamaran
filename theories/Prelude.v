@@ -148,15 +148,11 @@ Section Equality.
 
     Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
       eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
-    Proof.
-      now subst.
-    Qed.
+    Proof. apply rew_opp_l. Qed.
 
     Lemma eq_rect_sym2 {A : Type} {P : A -> Type} {a a' : A} (eq : a' = a) (v : P a) :
       eq_rect a' P (eq_rect a P v a' (eq_sym eq)) a eq = v.
-    Proof.
-      now subst.
-    Qed.
+    Proof. apply rew_opp_r. Qed.
 
 End Equality.
 
@@ -312,6 +308,32 @@ Module IsTrue.
 End IsTrue.
 Export (hints) IsTrue.
 Export IsTrue (IsTrue).
+
+(* This module contains transparent copies of lemmas from the stdlib. *)
+Module transparent.
+
+  (* Coq.Arith.PeanoNat.Nat.add_0_r *)
+  Fixpoint nat_add_0_r (n : nat) : n + O = n :=
+    match n with
+    | O   => eq_refl
+    | S n => f_equal S (nat_add_0_r n)
+    end.
+
+  (* Coq.Arith.PeanoNat.Nat.add_assoc *)
+  Fixpoint nat_add_assoc (n m p : nat) : n + (m + p) = n + m + p :=
+    match n with
+    | O   => eq_refl
+    | S n => f_equal S (nat_add_assoc n m p)
+    end.
+
+  (* Coq.Arith.PeanoNat.Nat.add_succ_r *)
+  Fixpoint nat_add_succ_r (n m : nat) : n + S m = S (n + m) :=
+    match n with
+    | O   => eq_refl
+    | S n => f_equal S (nat_add_succ_r n m)
+    end.
+
+End transparent.
 
 Definition IsSome {A : Type} (m : option A) : Type :=
   match m with

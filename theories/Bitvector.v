@@ -67,6 +67,8 @@ Delimit Scope bv_bitstring_scope with bits.
 
 Module bv.
 
+  Import transparent.
+
   (* The given [positive] consist of fewer than n bits. *)
   Fixpoint at_most (n : nat) {struct n} : positive -> bool :=
     match n with
@@ -535,16 +537,9 @@ Module bv.
       eq_rect (S m) bv (cons b v) (S n) (f_equal S e).
     Proof. now destruct e. Qed.
 
-    (* This is a transparent copy of a lemma with the same name from the
-       stdlib. *)
-    Fixpoint plus_n_O (n : nat) : n + O = n :=
-      match n with
-      | O   => eq_refl
-      | S n => f_equal S (plus_n_O n)
-      end.
 
     Lemma app_nil_r {n} (v : bv n) :
-      app v nil = eq_rect n bv v (n + O) (eq_sym (plus_n_O n)).
+      app v nil = eq_rect n bv v (n + O) (eq_sym (nat_add_0_r n)).
     Proof.
       induction v using bv_rect; cbn; [easy|].
       now rewrite app_cons, IHv, cons_eq_rect, eq_sym_map_distr.
@@ -559,13 +554,6 @@ Module bv.
       induction xs using bv_rect; cbn [plus]; intros;
         now rewrite ?app_nil, ?app_cons, ?fold_left_cons.
     Qed.
-
-    (* This is a transparent version of Nat.add_succ_r from the stdlib. *)
-    Fixpoint nat_add_succ_r (n m : nat) : n + S m = S (n + m) :=
-      match n with
-      | O   => eq_refl
-      | S n => f_equal S (nat_add_succ_r n m)
-      end.
 
     Import SignatureNotations.
 
@@ -589,7 +577,7 @@ Module bv.
       fold_left c n (app xs ys) =
       (fold_left
          (fun n' a b => rew <- [A] nat_add_succ_r k n' in c (k + n') a b)
-         (rew <- [A] plus_n_O k in fold_left c n xs) ys).
+         (rew <- [A] nat_add_0_r k in fold_left c n xs) ys).
     Proof.
       revert A c n.
       induction xs using bv_rect; cbn [plus]; intros;
