@@ -426,6 +426,38 @@ Module Type PartialEvaluationOn
     | term_binop (bop.relop op) t1 t2 => term_relop_neg op t1 t2
     | t                               => term_unop uop.not t.
 
+    Definition peval_vector_subrange_update_vector_subrange {n}
+      start len {p : IsTrue (start + len <=? n)}
+      start_u len_u {p_u : IsTrue (start_u + len_u <=? n)}
+      (xs : Term Σ (ty.bvec n)) (ys : Term Σ (ty.bvec len_u)) :
+      Term Σ (ty.bvec len) :=
+      match
+        match eq_dec start start_u , eq_dec len len_u with
+        | left e1 , left e2 => Some (e1 , e2)
+        | _       , _      => None
+        end
+      with
+      | Some (_,e) =>
+          (* SAME *)
+          eq_rect_r (fun l => Term Σ (ty.bvec l)) ys e
+      | None =>
+          if (* BEFORE *) (start + len <=? start_u) |||
+             (* AFTER *) (start_u + len_u <=? start)
+          then term_vector_subrange start len xs
+          else term_vector_subrange start len
+                  (term_binop (bop.update_vector_subrange start_u len_u) xs ys)
+      end.
+    #[global] Arguments peval_vector_subrange_update_vector_subrange {n}
+      start len {p} start_u len_u {p_u} xs ys.
+
+    Equations peval_vector_subrange {n} start len {p : IsTrue (start + len <=? n)}
+      (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec len) :=
+    | start , len , term_val _ v                    =>
+        term_val (ty.bvec len) (bv.vector_subrange start len v)
+    | start , len , term_binop (bop.update_vector_subrange start_u len_u) t1 t2 =>
+        peval_vector_subrange_update_vector_subrange start len start_u len_u t1 t2
+    | start , len , t => term_vector_subrange start len t.
+
     Definition peval_unop' {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) : Term Σ σ2 :=
       match term_get_val t with
       | Some v => term_val σ2 (uop.eval op v)
@@ -434,8 +466,9 @@ Module Type PartialEvaluationOn
 
     Definition peval_unop {σ1 σ2} (op : UnOp σ1 σ2) : Term Σ σ1 -> Term Σ σ2 :=
       match op with
-      | uop.not => peval_not
-      | op      => peval_unop' op
+      | uop.not                       => peval_not
+      | uop.vector_subrange start len => peval_vector_subrange start len
+      | op                            => peval_unop' op
       end.
 
     Lemma peval_not_sound (t : Term Σ ty.bool) :
@@ -446,11 +479,46 @@ Module Type PartialEvaluationOn
       peval_unop' op t ≡ term_unop op t.
     Proof. unfold peval_unop'; destruct (term_get_val_spec t); subst; easy. Qed.
 
+    Lemma peval_vector_subrange_update_vector_subrange_sound
+      {n} start len len_u start_u {p : IsTrue (start + len <=? n)}
+      {p_u : IsTrue (start_u + len_u <=? n)} (t1 : Term Σ (ty.bvec n))
+      (t2 : Term Σ (ty.bvec len_u)) :
+        peval_vector_subrange_update_vector_subrange start len start_u len_u t1 t2 ≡
+        term_vector_subrange start len
+          (term_binop (bop.update_vector_subrange start_u len_u) t1 t2).
+    Proof.
+      unfold peval_vector_subrange_update_vector_subrange.
+      destruct (if eq_dec start start_u then _ else _) as [[e1 e2]|].
+      { (* SAME *)
+        intros ι; subst; cbn. destruct (IsTrue.proof_irrelevance p p_u).
+        now rewrite bv.subrange_same_update_vector_subrange. }
+      destruct (start + len <=? start_u) eqn:e.
+      { (* BEFORE *)
+        intros ι; cbn.
+        rewrite bv.subrange_before_update_vector_subrange.
+        easy. now rewrite e. }
+      clear e. destruct (start_u + len_u <=? start) eqn:e.
+      { (* AFTER *)
+        intros ι; cbn.
+        rewrite bv.subrange_after_update_vector_subrange.
+        easy. now rewrite e. }
+      reflexivity.
+    Qed.
+
+    Lemma peval_vector_subrange_sound {n} start len {p : IsTrue (start + len <=? n)}
+      (t : Term Σ (ty.bvec n)) :
+      peval_vector_subrange start len t ≡ term_vector_subrange start len t.
+    Proof.
+      funelim (peval_vector_subrange start len t); lsolve.
+      apply peval_vector_subrange_update_vector_subrange_sound.
+    Qed.
+
     Lemma peval_unop_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
       peval_unop op t ≡ term_unop op t.
     Proof.
       destruct op; cbn [peval_unop];
-        auto using peval_unop'_sound, peval_not_sound.
+        auto using peval_unop'_sound, peval_not_sound,
+                 peval_vector_subrange_sound.
     Qed.
 
     Definition peval_union {U K} (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) :=
