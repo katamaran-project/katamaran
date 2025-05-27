@@ -545,6 +545,14 @@ Module bv.
       now rewrite app_cons, IHv, cons_eq_rect, eq_sym_map_distr.
     Qed.
 
+    Lemma app_app {m n o} (vm : bv m) (vn : bv n) (vo : bv o) :
+      app (app vm vn) vo =
+      eq_rect _ bv (app vm (app vn vo)) _ (nat_add_assoc m n o).
+    Proof.
+      induction vm using bv_rect; [easy|]; cbn.
+      now rewrite !app_cons, IHvm, cons_eq_rect.
+    Qed.
+
     Lemma fold_left_app {A : Type} (c : nat -> A -> bool -> A) (n : A)
       [k l] (xs : bv k) (ys : bv l) :
       fold_left c n (app xs ys) =
@@ -640,6 +648,13 @@ Module bv.
 
     Lemma ones_S n : ones (S n) = cons true (ones n).
     Proof. destruct n; reflexivity. Qed.
+
+    Lemma app_ones_ones {m n} :
+      app (ones m) (ones n) = ones (m + n).
+    Proof.
+      induction m; cbn [plus]; [easy|].
+      now rewrite !ones_S, app_cons, IHm.
+    Qed.
 
     Lemma bin_one {n} : n > 0 -> bin (@one n) = 1%N.
     Proof.
@@ -823,20 +838,50 @@ Module bv.
   End Integers.
 
   Section Extract.
-    Definition vector_subrange {n} (start len : nat)
-      (p : IsTrue (start + len <=? n)) : bv n -> bv len :=
-      match leview (start + len) n in LeView _ sl return bv sl -> bv len with
+
+    Definition take m [n] {p : IsTrue (m <=? n)} : bv n → bv m :=
+      match leview m n in LeView _ sl return bv sl -> bv m with
       | is_le k =>
           fun bits =>
-            let (xs,_) := appView (start + len) k bits in
-            let (_,ys) := appView start len xs in
-            ys
+            let (xs,_) := appView m k bits in
+            xs
       end.
+
+    Lemma take_cons {m n} (p : IsTrue (m <=? n)) b (xs : bv n) :
+      take (S m) (cons b xs) = cons b (take m xs).
+    Proof.
+      unfold take. cbn. destruct leview; cbn.
+      unfold view. rewrite bv_case_cons.
+      destruct appView; cbn.
+      now destruct app_cons.
+    Qed.
+
+    Definition vector_subrange {n} (start len : nat)
+      (p : IsTrue (start + len <=? n)) (bits : bv n) : bv len :=
+      let xs := take (start + len) bits in
+      let (_,ys) := appView start len xs in
+      ys.
     #[global] Arguments vector_subrange {n} _ _ {_} _  : simpl never.
 
     Goal vector_subrange 0 1 (@of_nat 1 1)    = of_nat 1. reflexivity. Abort.
     Goal vector_subrange 0 8 (@of_nat 16 256) = zero.     reflexivity. Abort.
     Goal vector_subrange 8 8 (@of_nat 16 256) = one.      reflexivity. Abort.
+
+    Lemma vector_subrange_O {m n} (p : IsTrue (m <=? n)) (xs : bv n) :
+      vector_subrange 0 m xs = take m xs.
+    Proof. reflexivity. Qed.
+
+    Lemma vector_subrange_S_cons {start len n} (p : IsTrue (start + len <=? n))
+                                  (b : bool) (xs : bv n) :
+      @vector_subrange (S n) (S start) len p (cons b xs) =
+      @vector_subrange n start len p xs.
+    Proof.
+      unfold vector_subrange; cbn. rewrite take_cons.
+      unfold view at 1. rewrite bv_case_cons.
+      destruct appView. cbn.
+      now destruct app_cons; cbn.
+    Qed.
+
   End Extract.
 
   Section Update.
@@ -856,6 +901,74 @@ Module bv.
     Goal update_vector_subrange 0 4 (@of_nat 8 15) (of_nat 0) = of_nat 0. reflexivity. Abort.
     Goal update_vector_subrange 0 4 (@of_nat 8 255) (of_nat 0) = of_nat 240. reflexivity. Abort.
     Goal update_vector_subrange 4 4 (@of_nat 8 255) (of_nat 0) = of_nat 15. reflexivity. Abort.
+
+    Lemma subrange_same_update_vector_subrange
+      {n start len} (p : IsTrue (start + len <=? n)) (xs : bv n) (ys : bv len) :
+      vector_subrange start len (update_vector_subrange start len xs ys) = ys.
+    Proof.
+      unfold vector_subrange, take, update_vector_subrange.
+      destruct leview as [k].
+      destruct (appView (start + len) k xs).
+      destruct (appView start len xs).
+      now rewrite !appView_app.
+    Qed.
+
+    Lemma subrange_before_update_vector_subrange {n start len} (xs : bv n)
+      (p : IsTrue (start + len <=? n))
+      start_u len_u (p_u : IsTrue (start_u + len_u <=? n)) (ys : bv len_u)
+      (q : IsTrue (start + len <=? start_u)) :
+      vector_subrange start len (update_vector_subrange start_u len_u xs ys) =
+      vector_subrange start len xs.
+    Proof.
+      destruct (leview (start + len) start_u) as [kpq]. clear q.
+      unfold update_vector_subrange.
+      destruct leview as [k_u]. clear p_u.
+      repeat
+        match goal with
+        | |- context[appView ?m ?n ?v] =>
+            is_var n; is_var v; destruct (appView m n v)
+        end.
+      rewrite !app_app. destruct nat_add_assoc; cbn.
+      generalize (app ys ys0) (app ys1 ys0).
+      generalize dependent (len_u + k_u).
+      clear. intros k p zs1 zs2.
+      destruct (appView _ _ xs).
+      rewrite !app_app. destruct nat_add_assoc; cbn.
+      generalize (app ys zs1) (app ys zs2).
+      generalize dependent (kpq + k).
+      clear. intros k p zs1 zs2.
+      destruct (appView _ _ xs).
+      rewrite !app_app. destruct nat_add_assoc; cbn.
+      induction xs using bv_rect; cbn in *.
+      - rewrite !app_nil, !vector_subrange_O.
+        induction ys using bv_rect; cbn; [easy|].
+        rewrite !app_cons, !take_cons. now f_equal.
+      - now rewrite !app_cons, !vector_subrange_S_cons, IHxs.
+    Qed.
+
+    Lemma subrange_after_update_vector_subrange {n start len} (xs : bv n)
+      (p : IsTrue (start + len <=? n))
+      start_u len_u (p_u : IsTrue (start_u + len_u <=? n)) (ys : bv len_u)
+      (q : IsTrue (start_u + len_u <=? start)) :
+      vector_subrange start len (update_vector_subrange start_u len_u xs ys) =
+      vector_subrange start len xs.
+    Proof.
+      destruct (@leview _ _ q). clear q.
+      unfold update_vector_subrange.
+      destruct leview as [k_u]. clear p_u.
+      repeat
+        match goal with
+        | |- context[appView ?m ?n ?v] =>
+            is_var n; is_var v; destruct (appView m n v)
+        end.
+      induction xs using bv_rect; cbn in *.
+      - rewrite !app_nil.
+        induction len_u; cbn in *; destruct (view ys), (view ys1).
+        + reflexivity.
+        + rewrite !app_cons, !vector_subrange_S_cons. auto.
+      - now rewrite !app_cons, !vector_subrange_S_cons, IHxs.
+    Qed.
+
   End Update.
 
   Section Shift.
