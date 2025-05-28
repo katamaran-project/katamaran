@@ -356,6 +356,13 @@ Module Type PartialEvaluationOn
     | t1             , term_val _ v2    => term_binop bop.plus (term_val ty.int v2) t1
     | t1             , t2               => term_binop bop.plus t1 t2.
 
+    Equations peval_bvadd {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+    | term_val _ v1          , term_val _ v2          => term_val (ty.bvec n) (bv.add v1 v2)
+    | term_val _ (bv.mk 0 _) , t2                     => t2
+    | t1                     , term_val _ (bv.mk 0 _) => t1
+    | t1                     , term_val _ v2          => term_binop bop.bvadd (term_val (ty.bvec n) v2) t1
+    | t1                     , t2                     => term_binop bop.bvadd t1 t2.
+
     Equations(noeqns) peval_binop' {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
     | op | term_val _ v1 | term_val _ v2 := term_val σ (bop.eval op v1 v2);
     | op | t1            | t2            := term_binop op t1 t2.
@@ -364,6 +371,7 @@ Module Type PartialEvaluationOn
     | bop.append , t1 , t2 => peval_append t1 t2
     | bop.or     , t1 , t2 => peval_or t1 t2
     | bop.plus   , t1 , t2 => peval_plus t1 t2
+    | bop.bvadd  , t1 , t2 => peval_bvadd t1 t2
     | op         , t1 , t2 => peval_binop' op t1 t2.
 
     Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
@@ -401,6 +409,17 @@ Module Type PartialEvaluationOn
     (*     ring. *)
     (* Qed. *)
 
+    Lemma peval_bvadd_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvadd t1 t2 ≡ term_binop bop.bvadd t1 t2.
+    Proof.
+      funelim (peval_bvadd t1 t2); lsolve; intros ι; cbn; auto;
+        first
+          [ symmetry; apply bv.add_zero_l
+          | symmetry; apply bv.add_zero_r
+          | now apply bv.add_comm
+          ].
+    Qed.
+
     Lemma peval_binop'_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
       peval_binop' op t1 t2 ≡ term_binop op t1 t2.
     Proof.
@@ -415,7 +434,8 @@ Module Type PartialEvaluationOn
       peval_binop op t1 t2 ≡ term_binop op t1 t2.
     Proof.
       destruct op; cbn [peval_binop];
-        auto using peval_binop'_sound, peval_append_sound, peval_or_sound, peval_plus_sound.
+        auto using peval_binop'_sound, peval_append_sound, peval_or_sound,
+                 peval_plus_sound, peval_bvadd_sound.
     Qed.
 
 
