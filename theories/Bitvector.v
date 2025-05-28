@@ -804,11 +804,17 @@ Module bv.
     Qed.
 
     Lemma unsigned_cons n b (x : bv n) :
-      unsigned (cons b x) =
-      if b
-      then Z.succ (Z.double (unsigned x))
-      else Z.double (unsigned x).
+      unsigned (cons b x) = Z.b2z b + 2 * unsigned x.
     Proof. destruct b, x; unfold unsigned; cbn; Lia.lia. Qed.
+
+    Lemma unsigned_app m n (x : bv m) (y : bv n) :
+      unsigned (app x y) = unsigned x + unsigned y * 2 ^ Z.of_nat m.
+    Proof.
+      induction x using bv_rect; cbn [plus].
+      - rewrite app_nil. cbn. lia.
+      - rewrite app_cons, !unsigned_cons, IHx,
+                  Znat.Nat2Z.inj_succ, Z.pow_succ_r; lia.
+    Qed.
 
     Lemma unsigned_zero {m} :
       unsigned (@zero m) = 0.
@@ -820,7 +826,42 @@ Module bv.
       induction n; cbn - [ones].
       - reflexivity.
       - rewrite ones_S, unsigned_cons, IHn, Znat.Nat2Z.inj_succ.
-        rewrite !Z.ones_equiv, Z.pow_succ_r; Lia.lia.
+        cbn. rewrite !Z.ones_equiv, Z.pow_succ_r; Lia.lia.
+    Qed.
+
+    Lemma unsigned_bounds {n} (v : bv n) :
+      (0 <= unsigned v < 2 ^ Z.of_nat n)%Z.
+    Proof.
+      destruct v as [v wf_v]. unfold unsigned. cbn.
+      apply is_wf_spec in wf_v.
+      lia.
+    Qed.
+
+    Lemma msbwithcarry_spec {n} c (x : bv n) :
+      msbwithcarry c x =
+      match n with
+      | O => c
+      | S _ => (2 ^ Z.of_nat n <=? 2 * unsigned x)%Z
+      end.
+    Proof.
+      revert c. induction x using bv_rect.
+      - reflexivity.
+      - intros c. rewrite msbwithcarry_cons.
+        rewrite Znat.Nat2Z.inj_succ, Z.pow_succ_r; [|lia].
+        rewrite unsigned_cons, IHx. clear IHx.
+        destruct n; cbn.
+        + rewrite Nat2Z.inj_0, Z.pow_0_r.
+          destruct (view x). destruct b; cbn; lia.
+        + rewrite Znat.Nat2Z.inj_succ, Z.pow_succ_r; [|lia].
+          destruct (view x). rewrite unsigned_cons.
+          destruct b; cbn; lia.
+    Qed.
+
+    Corollary msb_spec {n} (x : bv n) :
+      msb x = (2 ^ Z.of_nat n <=? 2 * unsigned x)%Z.
+    Proof.
+      unfold msb. rewrite msbwithcarry_spec.
+      now induction x using bv_case.
     Qed.
 
     Lemma signed_zero {m} :
@@ -833,6 +874,34 @@ Module bv.
       unfold signed. rewrite msb_ones.
       rewrite unsigned_ones, Z.ones_equiv.
       Lia.lia.
+    Qed.
+
+    Corollary signed_spec {n} (x : bv n) :
+      signed x =
+      (let u := unsigned x in
+       if (2 ^ Z.of_nat n <=? 2 * u)
+       then u - 2 ^ Z.of_nat n
+       else u)%Z.
+    Proof. unfold signed. now rewrite msb_spec. Qed.
+
+    Lemma signed_inj {n} (x y : bv n) : signed x = signed y -> x = y.
+    Proof.
+      pose proof (unsigned_bounds x).
+      pose proof (unsigned_bounds y).
+      pose proof (unsigned_inj x y).
+      rewrite !signed_spec. cbn.
+      repeat
+        match goal with
+          |- context[Z.leb ?x ?y] => destruct (Z.leb_spec x y)
+        end; intros; auto; try lia;
+        try assert (unsigned x = unsigned y) by lia; auto.
+    Qed.
+
+    Lemma signed_bounds {n} (x : bv n) :
+      (- 2 ^ (Z.of_nat n) <= 2 * signed x < 2 ^ (Z.of_nat n))%Z.
+    Proof.
+      pose proof (unsigned_bounds x). rewrite signed_spec. cbn.
+      destruct (Z.leb_spec (2 ^ Z.of_nat n) (2 * unsigned x)); lia.
     Qed.
 
   End Integers.
@@ -1077,6 +1146,34 @@ Module bv.
       unfold of_Z, unsigned; cbn.
       pose proof (truncz_pos n x).
       now rewrite <-to_N_truncz2, truncz_idemp, Znat.Z2N.id.
+    Qed.
+
+    Lemma of_Z_signed n (v : bv n) :
+      of_Z (signed v) = v.
+    Proof.
+      rewrite signed_spec. cbn.
+      destruct (Z.leb_spec (2 ^ Z.of_nat n) (2 * unsigned v)).
+      - unfold of_Z, truncz.
+        rewrite Zdiv.Zminus_mod, Zdiv.Z_mod_same_full.
+        rewrite Z.sub_0_r, Zmod_mod. apply of_Z_unsigned.
+      - apply of_Z_unsigned.
+    Qed.
+
+    Lemma signed_eq_z {n} (x : bv n) z :
+      signed x = z <-> ((- 2 ^ (Z.of_nat n) <= 2 * z < 2 ^ (Z.of_nat n))%Z
+                        /\ x = of_Z z).
+    Proof.
+      split.
+      - intros <-. split. apply signed_bounds. now rewrite of_Z_signed.
+      - intros [[Hl Hu] ->]. rewrite signed_spec, unsigned_of_Z.
+        unfold truncz.
+        destruct (Z.ltb_spec z 0).
+        + assert (z mod 2 ^ Z.of_nat n = (z + 2 ^ Z.of_nat n) mod 2 ^ Z.of_nat n)%Z as ->.
+          rewrite Z.add_mod, Z_mod_same_full, Z.add_0_r, Zmod_mod; try lia.
+          rewrite Zmod_small; try lia.
+          destruct (Z.leb_spec (2 ^ Z.of_nat n) (2 * (z + 2 ^ Z.of_nat n))); lia.
+        + rewrite Zmod_small; try lia.
+          destruct (Z.leb_spec (2 ^ Z.of_nat n) (2 * z)); lia.
     Qed.
 
     Lemma of_Z_nat {n} i : @of_Z n (Z.of_nat i) = of_nat i.
@@ -1474,14 +1571,6 @@ Module bv.
       rewrite unsigned_of_Z, truncz_eq2nz.
       rewrite unsigned_sub, ?unsigned_of_Z.
       now rewrite <-truncz_sub, truncz_eq2nz.
-    Qed.
-
-    Lemma unsigned_bounds {n} (v : bv n) :
-      (0 <= unsigned v < 2 ^ Z.of_nat n)%Z.
-    Proof.
-      destruct v as [v wf_v]. unfold unsigned. cbn.
-      apply is_wf_spec in wf_v.
-      lia.
     Qed.
 
     Lemma unsigned_mul {n} x y : @unsigned n (mul x y) = truncz n (unsigned x * unsigned y).
