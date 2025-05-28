@@ -1002,6 +1002,26 @@ Module Type WorldsOn
       repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inr t) ⊣⊢ False.
     Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
 
+    Lemma eqₚ_term_unsigned {w : World} {n} {t1 t2 : STerm (ty.bvec n) w} :
+      eqₚ (T := STerm ty.int) (term_unsigned t1) (term_unsigned t2) ⊣⊢
+      eqₚ (T := STerm (ty.bvec n)) t1 t2.
+    Proof. unfold eqₚ. crushPredEntails2; [apply bv.unsigned_inj|f_equal]; easy. Qed.
+
+    Lemma repₚ_term_unsigned {w : World} {n} {t : STerm (ty.bvec n) w} (v : Val (ty.bvec n)) :
+      repₚ (T := STerm (ty.int)) (bv.unsigned v : Val ty.int) (term_unsigned t) ⊣⊢
+      repₚ (T := STerm (ty.bvec n)) v t.
+    Proof. unfold repₚ. crushPredEntails2; [apply bv.unsigned_inj|subst]; easy. Qed.
+
+    Lemma eqₚ_term_signed {w : World} {n} {t1 t2 : STerm (ty.bvec n) w} :
+      eqₚ (T := STerm ty.int) (term_signed t1) (term_signed t2) ⊣⊢
+      eqₚ (T := STerm (ty.bvec n)) t1 t2.
+    Proof. unfold eqₚ. crushPredEntails2; [apply bv.signed_inj|f_equal]; easy. Qed.
+
+    Lemma repₚ_term_signed {w : World} {n} {t : STerm (ty.bvec n) w} (v : Val (ty.bvec n)) :
+      repₚ (T := STerm (ty.int)) (bv.signed v : Val ty.int) (term_signed t) ⊣⊢
+      repₚ (T := STerm (ty.bvec n)) v t.
+    Proof. unfold repₚ. crushPredEntails2; [apply bv.signed_inj|subst]; easy. Qed.
+
     Lemma repₚ_term_or_false {w : World} {t1 t2 : STerm ty.bool w} :
       repₚ (T := STerm ty.bool) false (term_binop bop.or t1 t2) ⊣⊢
         repₚ (T := STerm ty.bool) false t1 ∗ repₚ (T := STerm ty.bool) false t2.

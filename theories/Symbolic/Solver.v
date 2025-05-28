@@ -38,6 +38,7 @@ From Coq Require Import
 
 From Katamaran Require Import
      Base
+     Bitvector
      Prelude
      Syntax.Predicates
      Symbolic.Propositions
@@ -143,6 +144,29 @@ Module Type GenericSolverOn
     #[local] Opaque simplify_eq_binop_val.
     #[local] Hint Rewrite simplify_eq_binop_val_spec : uniflogic.
 
+    Definition simplify_eq_signed_val [Σ] {n} (t : Term Σ (ty.bvec n)) (v : Val ty.int) : DList Σ :=
+      if ((- 2 ^ (Z.of_nat n) <=? 2 * v) &&& (2 * v <? 2 ^ Z.of_nat n))%Z
+      then singleton (formula_relop bop.eq t (term_val (ty.bvec n) (bv.of_Z v)))
+      else error.
+
+    Lemma simplify_eq_signed_val_spec [w : World] {n}
+      (t : STerm (ty.bvec n) w) (v : Val ty.int) :
+      instpred (simplify_eq_signed_val t v) ⊣⊢ repₚ v (term_unop uop.signed t).
+    Proof.
+      unfold simplify_eq_signed_val. rewrite <- andb_lazy_alt.
+      destruct ((- 2 ^ n <=? 2 * v)%Z && (2 * v <? 2 ^ n)%Z) eqn:H; arw.
+      - constructor. intros ι Hpc. cbn.
+        rewrite bv.signed_eq_z.
+        intuition; lia.
+      - rewrite instpred_dlist_error.
+        iSplit; [iIntros ([])|].
+        iIntros "Hsimpl".
+        iDestruct (repₚ_inversion_term_signed with "Hsimpl") as "(%bv & %Heq & Hrep)".
+        pose proof (bv.signed_bounds bv). lia.
+    Qed.
+    #[local] Opaque simplify_eq_signed_val.
+    #[local] Hint Rewrite simplify_eq_signed_val_spec : uniflogic.
+
     Equations(noeqns) simplify_eq_unop_val [Σ σ1 σ2]
       (op : UnOp σ1 σ2) (t : Term Σ σ1) (v : Val σ2) : DList Σ :=
     | uop.neg        | t | v      => singleton (formula_relop bop.eq t (term_val ty.int (Z.opp v)))
@@ -151,6 +175,7 @@ Module Type GenericSolverOn
     | uop.inl        | t | inr _ => error
     | uop.inr        | t | inl _ => error
     | uop.inr        | t | inr v => singleton (formula_relop bop.eq t (term_val _ v))
+    | uop.signed     | t | z     => simplify_eq_signed_val t z
     | op             | t | v     => singleton (formula_relop bop.eq (term_unop op t) (term_val _ v)).
 
     Lemma simplify_eq_unop_val_spec [w : World] [σ1 σ2]

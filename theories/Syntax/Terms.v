@@ -905,6 +905,7 @@ Module Type TermsOn (Import TY : Types).
   Notation term_zext t := (term_unop uop.zext t%term).
   Notation term_get_slice_int t := (term_unop uop.get_slice_int t%term).
   Notation term_unsigned t := (term_unop uop.unsigned t%term).
+  Notation term_signed t := (term_unop uop.signed t%term).
   Notation term_truncate m t := (term_unop (uop.truncate m) t%term).
   Notation term_vector_subrange s l t := (term_unop (uop.vector_subrange s l) t%term).
   Notation term_bvnot t := (term_unop uop.bvnot t%term).
