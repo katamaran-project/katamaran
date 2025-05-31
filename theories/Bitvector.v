@@ -2229,6 +2229,27 @@ Module bv.
       intros.
       rewrite bv.bin_of_nat_small; Lia.lia.
     Qed.
+
+    Lemma ult_iff_unsigned_lt {n} {x y : bv n} :
+      x <ᵘ y <-> (bv.unsigned x < bv.unsigned y)%Z.
+    Proof. apply N2Z.inj_lt. Qed.
+
+    Lemma ugt_iff_unsigned_gt {n} {x y : bv n} :
+      x >ᵘ y <-> (bv.unsigned x > bv.unsigned y)%Z.
+    Proof. unfold ugt.
+           now rewrite ult_iff_unsigned_lt, Z.gt_lt_iff.
+    Qed.
+
+    Lemma ule_iff_unsigned_le {n} {x y : bv n} :
+      x <=ᵘ y <-> (bv.unsigned x <= bv.unsigned y)%Z.
+    Proof. apply N2Z.inj_le. Qed.
+
+    Lemma uge_iff_unsigned_ge {n} {x y : bv n} :
+      x >=ᵘ y <-> (bv.unsigned x >= bv.unsigned y)%Z.
+    Proof. unfold uge.
+           now rewrite ule_iff_unsigned_le, Z.ge_le_iff.
+    Qed.
+
   End Comparison.
 
   Load BitvectorSolve.
@@ -2476,3 +2497,29 @@ Export (hints) bv.countable.
 Tactic Notation "solve_bv" := bv.bv_zify.
 Tactic Notation "solve_bv" "-" hyp_list(Hs) := clear Hs; bv.bv_zify.
 Tactic Notation "solve_bv" "+" hyp_list(Hs) := clear -Hs; bv.bv_zify.
+
+Import bv.notations.
+
+Module bv_solve_Ltac.
+  Ltac solveBvManual :=
+    intros;
+    cbn;
+    repeat
+      (match goal with
+       | |- context[ bv.ule ?x ?y ] => rewrite bv.ule_iff_unsigned_le
+       | |- context[ bv.ult ?x ?y ] => rewrite bv.ult_iff_unsigned_lt
+       | |- context[ bv.uge ?x ?y ] => rewrite bv.uge_iff_unsigned_ge
+       | |- context[ bv.ugt ?x ?y ] => rewrite bv.ugt_iff_unsigned_gt
+       | |- context[ bv.unsigned (?x + ?y) ] => destruct (bv.unsigned_add_view x y)
+       | _ : context[ bv.unsigned (?x + ?y) ] |- _ => destruct (bv.unsigned_add_view x y)
+       end; cbn);
+    repeat
+      match goal with
+      | x : bv ?n |- _ => pose proof (bv.unsigned_bounds x); generalize dependent (bv.unsigned x); clear x
+      end;
+    cbn; intros; try lia.
+
+  Goal forall v : bv 32, (76 + bv.unsigned v < 200)%Z -> (4 + bv.unsigned (v + [bv 0x4]) <= 200)%Z.
+    solveBvManual.
+  Qed.
+End bv_solve_Ltac.

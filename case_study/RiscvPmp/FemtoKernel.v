@@ -67,6 +67,7 @@ Module inv := invariants.
   Section FemtoKernel.
     Import bv.notations.
     Import ListNotations.
+    Import TermNotations.
 
     Open Scope hex_Z_scope.
 
@@ -125,7 +126,7 @@ Module inv := invariants.
       let (lo , hi) := bv.appView 12 _ imm in
         if bv.eqb hi (bv.ones 20) then (lo , hi) (* Small negative numbers *)
         else if (bv.msb lo) (* Avoid incorrect sign-extension *)
-             then (bv.of_Z (Z.of_N (bv.bin lo) - 4096), hi + bv.one)
+             then (bv.of_Z (Z.of_N (bv.bin lo) - 4096), (hi + bv.one)%bv)
              else (lo , hi).
 
     (* TODO: prove this spec for `imm_split_bv`*)
@@ -188,7 +189,7 @@ Module inv := invariants.
       ; CSR MTvec ra zero false CSRRW
       ; ITYPE (bv.of_N (adv_start - handler_start)) ra ra RISCV_ADDI
       ; CSR MEpc ra zero false CSRRW
-      ; CSR MStatus zero zero false CSRRW
+      ; CSR MStatus zero zero true CSRRW
       ; MRET
       ].
 
@@ -207,9 +208,9 @@ Module inv := invariants.
     Example femtokernel_mmio_handler_asm : list ASM :=
       [
         ITYPE (bv.of_N 42) zero t0 RISCV_ADDI
-      ; UTYPE bv.zero ra RISCV_AUIPC
-      ; Λ x, AnnotLemmaInvocation (close_mmio_write (bv.of_N (mmio_write_addr - (x - 4))) WORD) [nenv exp_val ty_xlenbits (bv.of_N (x - 4)); exp_val ty_xlenbits (bv.of_N 42)]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
-      ; Λ x, STORE (bv.of_N (mmio_write_addr - (x - 4))) t0 ra WORD
+      ; ITYPE bv.zero zero ra RISCV_ADDI
+      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N 42)]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
+      ; Λ x, STORE (bv.of_N mmio_write_addr) t0 ra WORD (* works because mmio_write_addr fits into 12 bits. *)
       ; MRET
       ].
     Example femtokernel_mmio_handler' (handler_start : N) : list AnnotInstr :=
@@ -237,10 +238,12 @@ Module inv := invariants.
     (* CODE AND CONFIG SHORTANDS*)
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     (* Shorthand for the pmp entries in both Katamaran and Iris *)
-    Local Notation asn_femto_pmpentries := ([(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ (term_val ty_xlenbits (bv.of_N adv_addr)));
-                                       (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ term_val ty_xlenbits (bv.of_N adv_addr_end))])%list. (* NOTE: `first_addr` is usually equal to the logical variable `a` + `adv_start` *)
+    Local Notation asn_femto_pmpentries a :=
+      ([(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ (a +ᵇ term_val ty_xlenbits (bv.of_N adv_addr)));
+        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ (term_val ty_xlenbits (bv.of_N adv_addr_end)))])%list.
     Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_addr); (femto_pmpcfg_ent1, bv.of_N adv_addr_end)]%list.
     (* Definition of the femtokernel initialization procedure that works both for the legacy and the MMIO case, since the address of the adversary is equal in both cases *)
+    (* note that the addresses we supply assume base address 0 but the code actually only uses relative addresses, so it's okay if it's placed elsewhere in memory.    *)
     Definition femtokernel_init_gen := femtokernel_init' init_addr handler_addr adv_addr.
 
     (* The code is different in both cases for the handler, so we cannot derive the concrete cases from the more general one. *)
@@ -262,7 +265,7 @@ Module inv := invariants.
     Let W__femtoinit : World := MkWorld Σ__femtoinit []%ctx.
 
     Example femtokernel_init_pre : Assertion {| wctx := [] ▻ ("a"::ty_xlenbits) ; wco := []%ctx |} :=
-      (term_var "a" = term_val ty_word bv.zero) ∗
+      (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N adv_addr) < term_val ty.int (Z.of_nat maxAddr))%asn ∗
       (∃ "v", mstatus ↦ term_var "v") ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
       (∃ "v", mcause ↦ term_var "v") ∗
@@ -276,15 +279,15 @@ Module inv := invariants.
 
     Example femtokernel_init_post: Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
       (
-        (term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N adv_addr))%asn ∗
+        (term_var "an" = term_var "a" +ᵇ (term_val ty_xlenbits (bv.of_N adv_addr)))%asn ∗
           (∃ "v", mstatus ↦ term_var "v") ∗
-          (mtvec ↦ (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_addr))%term) ∗
+          (mtvec ↦ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_addr)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
-          asn_pmp_entries (term_list (asn_femto_pmpentries))
-      )%exp.
+          asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a")))
+      ).
 
     (* (* note that this computation takes longer than directly proving sat__femtoinit below *) *)
     (* Time Example t_vc__femtoinit : 𝕊 Σ__femtoinit := *)
@@ -293,20 +296,17 @@ Module inv := invariants.
 
     Definition vc__femtoinit : 𝕊 Σ__femtoinit :=
       postprocess (sannotated_block_verification_condition femtokernel_init_pre femtokernel_init_gen femtokernel_init_post wnil).
-    (*   let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in *)
-    (*   let vc2 := Postprocessing.prune vc1 in *)
-    (*   let vc3 := Postprocessing.solve_evars vc1 in *)
-    (*   let vc4 := Postprocessing.solve_uvars vc3 in *)
-    (*   let vc5 := Postprocessing.prune vc4 in *)
-    (*   vc5. *)
-    (* Import SymProp.notations. *)
-    (* Set Printing Depth 200. *)
-    (* Eval vm_compute in vc__femtoinit. *)
 
-    (* NOTE: For now we only get one case here, since the start of the adversary region is the same in both cases. If this were not the case, we would take a naive approach to verifying both versions of the initialization code here; we would require that `adv_start` takes one of the two values present in the two versions of the initialization code. A more general approach would verify the contract under a logical value for `adv_start`. This would require the block verifier to support taking a list of instructions that can depend on symbolic values as input (i.e. proper terms). *)
+    (* NOTE: For now this proof covers both the MMIO and non-MMIO Femtokernel variants, since the start of the adversary region is the same in both cases.
+       If this were not the case, we would take a naive approach to verifying both versions of the initialization code here; we would require that `adv_start` takes one of the two values present in the two versions of the initialization code.
+       A more general approach would verify the contract under a logical value for `adv_start`.
+       This would require the block verifier to support taking a list of instructions that can depend on symbolic values as input (i.e. proper terms).
+     *)
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
-      now vm_compute.
+      vm_compute.
+      constructor; cbn.
+      intuition; bv_solve_Ltac.solveBvManual.
     Qed.
 
     Let Σ__femtohandler : LCtx := [].
@@ -314,16 +314,17 @@ Module inv := invariants.
 
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
     Example femtokernel_handler_pre (is_mmio : bool) : Assertion {| wctx := ["a" :: ty_xlenbits]; wco := []%ctx |} :=
-      (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗
+      (* (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗ *)
+      (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_nat maxAddr))%asn ∗
       (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
       (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_regs_ptsto ∗
-      asn_pmp_entries (term_list asn_femto_pmpentries) ∗ (* Different handler sizes cause different entries *)
+      asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
       if negb is_mmio then
-        (term_val ty_xlenbits (bv.of_N data_addr) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
+        (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42)
       else asn_inv_mmio.
 
     Example femtokernel_handler_post (is_mmio : bool) :
@@ -331,15 +332,12 @@ Module inv := invariants.
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
-          (∃ "epc", (mepc ↦ term_var "epc" ∗
-                     asn.formula
-                         (formula_relop bop.eq (term_var "an")
-                                     (term_var "epc")))) ∗
+          (mepc ↦ term_var "an") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
-          asn_pmp_entries (term_list asn_femto_pmpentries) ∗ (* Different handler sizes cause different entries *)
+          asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
           if negb is_mmio then
-            (term_val ty_xlenbits (bv.of_N data_addr) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
+            (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_size) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
           else ⊤ (* Inv is persistent; don't repeat *).
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
@@ -362,13 +360,20 @@ Module inv := invariants.
     (* Set Printing Depth 200. *)
     (* Eval vm_compute in vc__femtohandler. *)
 
+    Import Erasure.notations.
     Lemma sat__femtohandler (is_mmio : bool) : safeE (vc__femtohandler is_mmio).
     Proof.
       destruct is_mmio.
       - (* For the mmio case, we still need to prove that our word falls within mmio *)
-      vm_compute; constructor; cbn.
-      split; [apply write_word_is_MMIO | auto].
-      - now vm_compute.
+        vm_compute.
+        constructor; cbn.
+        intuition;
+          bv_solve_Ltac.solveBvManual.
+        1-4: eapply bv.in_seqBv'; now vm_compute.
+      - vm_compute.
+        constructor; cbn.
+        intuition;
+          bv_solve_Ltac.solveBvManual.
     Qed.
 
     Definition femtoinit_stats :=
@@ -607,10 +612,9 @@ Module inv := invariants.
            ctx.in_valid inst_env env.map femto_handler_post
            femtokernel_handler_post].
       cbn.
-      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & [% (Hmepc & [%eq _])] & Hcurpriv & Hregs & Hpmp & Hfortytwo)".
+      iIntros (an) "(Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hregs & Hpmp & Hfortytwo)".
       cbn.
       iApply "Hk".
-      cbn in eq; destruct eq.
       rewrite Model.RiscvPmpModel2.gprs_equiv.
       iFrame "Hmstatus Hmtvec Hmcause Hcurpriv Hregs Hpmp Hnpc Hhandler".
       destruct is_mmio; cbn; iFrame.
