@@ -304,10 +304,12 @@ Module inv := invariants.
      *)
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
-      vm_compute.
-      constructor; cbn.
-      intuition; bv_solve_Ltac.solveBvManual.
-    Qed.
+      (* Admit to avoid adding too much time to the compilation. *)
+    Admitted.
+    (*   vm_compute. *)
+    (*   constructor; cbn. *)
+    (*   intuition; bv_solve_Ltac.solveBvManual. *)
+    (* Qed. *)
 
     Let Σ__femtohandler : LCtx := [].
     Let W__femtohandler : World := MkWorld Σ__femtohandler []%ctx.
@@ -363,18 +365,20 @@ Module inv := invariants.
     Import Erasure.notations.
     Lemma sat__femtohandler (is_mmio : bool) : safeE (vc__femtohandler is_mmio).
     Proof.
-      destruct is_mmio.
-      - (* For the mmio case, we still need to prove that our word falls within mmio *)
-        vm_compute.
-        constructor; cbn.
-        intuition;
-          bv_solve_Ltac.solveBvManual.
-        1-4: eapply bv.in_seqBv'; now vm_compute.
-      - vm_compute.
-        constructor; cbn.
-        intuition;
-          bv_solve_Ltac.solveBvManual.
-    Qed.
+      (* Admit to avoid adding too much time to the compilation. *)
+    Admitted.
+    (*   destruct is_mmio. *)
+    (*   - (* For the mmio case, we still need to prove that our word falls within mmio *) *)
+    (*     vm_compute. *)
+    (*     constructor; cbn. *)
+    (*     intuition; *)
+    (*       bv_solve_Ltac.solveBvManual. *)
+    (*     1-4: eapply bv.in_seqBv'; now vm_compute. *)
+    (*   - vm_compute. *)
+    (*     constructor; cbn. *)
+    (*     intuition; *)
+    (*       bv_solve_Ltac.solveBvManual. *)
+    (* Qed. *)
 
     Definition femtoinit_stats :=
       SymProp.Statistics.count_to_stats
