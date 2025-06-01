@@ -1730,10 +1730,14 @@ Module Type SymPropOn
     | eformula_or (F1 F2 : EFormula).
     Arguments eformula_user : clear implicits.
 
+    Inductive EError : Type :=
+    | MkEError : forall {Σ}, AMessage Σ -> EError
+    .
+
     Inductive ESymProp : Type :=
     | eangelic_binary (o1 o2 : ESymProp)
     | edemonic_binary (o1 o2 : ESymProp)
-    | eerror
+    | eerror (msg : EError)
     | eblock
     | eassertk (fml : EFormula) (k : ESymProp)
     | eassumek (fml : EFormula) (k : ESymProp)
@@ -1787,7 +1791,7 @@ Module Type SymPropOn
       match p with
       | angelic_binary o1 o2 => eangelic_binary (erase_symprop o1) (erase_symprop o2)
       | demonic_binary o1 o2 => edemonic_binary (erase_symprop o1) (erase_symprop o2)
-      | error _ => eerror
+      | error msg => eerror (MkEError msg)
       | block => eblock
       | assertk fml _ k => eassertk (erase_formula fml) (erase_symprop k)
       | assumek fml k => eassumek (erase_formula fml) (erase_symprop k)
@@ -1921,7 +1925,7 @@ Module Type SymPropOn
       match f with
       | eangelic_binary p1 p2 => inst_symprop ι p1 \/ inst_symprop ι p2
       | edemonic_binary p1 p2 => inst_symprop ι p1 /\ inst_symprop ι p2
-      | eerror => False
+      | eerror _ => False
       | eblock => True
       | eassertk fml k => inst_eformula' ι fml /\ inst_symprop ι k
       | eassumek fml k => inst_eformula' ι fml -> inst_symprop ι k
