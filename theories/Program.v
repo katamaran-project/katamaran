@@ -79,7 +79,7 @@ Module Type ProgramMixin (B : Base)
       | stm_pattern_match s pat rhs => InvokedByStm_aux f s \/ (exists pc, InvokedByStm_aux f (rhs pc))
       | stm_read_register reg => False
       | stm_write_register reg e => False
-      | stm_bind s k => False (* stm_bind should not be used in source code directly, hence we don't include it in the search of fn invocations *)
+      | stm_bind s k => InvokedByStm_aux f s \/ exists v, InvokedByStm_aux f (k v) (* Bind should not be used in the source code, we still need to handle the recursive call of InvokedBy over s, but ignore the continuation k *)
       | stm_debugk k => InvokedByStm_aux f k
       end.
   End InvokedByStm.
@@ -107,7 +107,7 @@ Module Type ProgramMixin (B : Base)
                           (@finite.enum _ _ (B.Finite_PatternCase pat))
       | stm_read_register reg => false
       | stm_write_register reg e => false
-      | stm_bind s k => false
+      | stm_bind s k => InvokedByStmB_aux f s
       | stm_debugk k => InvokedByStmB_aux f k
       end.
   End InvokedByStmBool.
@@ -142,7 +142,7 @@ Module Type ProgramMixin (B : Base)
               (@finite.enum _ _ (B.Finite_PatternCase pat))
         | stm_read_register reg => []
         | stm_write_register reg e => []
-        | stm_bind s k => []
+        | stm_bind s k => InvokedByStmList_aux s
         | stm_debugk k => InvokedByStmList_aux k
         end%list.
     End WithInvokeCall.
@@ -179,8 +179,13 @@ Module Type ProgramMixin (B : Base)
         apply List.in_app_or in H
     | H : List.In ?e (List.flat_map ?f ?l) |- _ =>
         apply List.in_flat_map in H
+    | H: ?P /\ ?Q |- _ =>
+        destruct H as [? ?]; auto
     | H: ?P \/ ?Q |- _ =>
         destruct H; auto
+    | H: (?P && ?Q = true)%bool |- _ =>
+        apply Bool.andb_true_iff in H;
+        destruct H as [? ?]; auto
     | H: context[(?b || false)%bool] |- _ =>
         rewrite Bool.orb_false_r in H
     | |- context[(?b || false)%bool] =>
@@ -195,12 +200,78 @@ Module Type ProgramMixin (B : Base)
   Definition InvokedByStmWithFuelInListBool (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : bool :=
     List.existsb (𝑭_eqb_packaged_2 f) (InvokedByStmWithFuelList fuel s).
 
+  Section BindFree.
+    Variable bindfree_call : forall {Γ τ}, Stm Γ τ -> Prop.
+
+    Fixpoint BindFree_aux {Γ τ} (s : Stm Γ τ) : Prop :=
+      match s with
+      | stm_val _ v => True
+      | stm_exp e => True
+      | stm_let x σ s__σ s__τ => BindFree_aux s__σ /\ BindFree_aux s__τ
+      | stm_block δ s => BindFree_aux s
+      | stm_assign x s => BindFree_aux s
+      | stm_call f es => bindfree_call (FunDef f)
+      | stm_call_frame δ s => BindFree_aux s
+      | stm_foreign f es => True
+      | stm_lemmak l es k => BindFree_aux k
+      | stm_seq s k => BindFree_aux s /\ BindFree_aux k
+      | stm_assertk e1 e2 k => BindFree_aux k
+      | stm_fail _ s => True
+      | stm_pattern_match s pat rhs => BindFree_aux s /\ forall pc, BindFree_aux (rhs pc)
+      | stm_read_register reg => True
+      | stm_write_register reg e => True
+      | stm_bind s k => False
+      | stm_debugk k => BindFree_aux k
+      end. 
+  End BindFree.
+
+  Fixpoint BindFree (fuel : nat) {Γ τ} (s : Stm Γ τ) : Prop :=
+    match fuel with
+    | 0      => BindFree_aux (fun _ _ _ => False) s
+    | S fuel => BindFree_aux (@BindFree fuel) s
+    end.
+
+  Section BindFreeBool.
+    Variable bindfree_call : forall {Γ τ}, Stm Γ τ -> bool.
+
+    Fixpoint BindFreeBool_aux {Γ τ} (s : Stm Γ τ) : bool :=
+      match s with
+      | stm_val _ v => true
+      | stm_exp e => true
+      | stm_let x σ s__σ s__τ => BindFreeBool_aux s__σ && BindFreeBool_aux s__τ
+      | stm_block δ s => BindFreeBool_aux s
+      | stm_assign x s => BindFreeBool_aux s
+      | stm_call f es => bindfree_call (FunDef f)
+      | stm_call_frame δ s => BindFreeBool_aux s
+      | stm_foreign f es => true
+      | stm_lemmak l es k => BindFreeBool_aux k
+      | stm_seq s k => BindFreeBool_aux s && BindFreeBool_aux k
+      | stm_assertk e1 e2 k => BindFreeBool_aux k
+      | stm_fail _ s => true
+      | stm_pattern_match s pat rhs =>
+          BindFreeBool_aux s
+          && List.forallb (fun pc => BindFreeBool_aux (rhs pc))
+                          (@finite.enum _ _ (B.Finite_PatternCase pat))
+      | stm_read_register reg => true
+      | stm_write_register reg e => true
+      | stm_bind s k => false
+      | stm_debugk k => BindFreeBool_aux k
+      end. 
+  End BindFreeBool.
+
+  Fixpoint BindFreeBool (fuel : nat) {Γ τ} (s : Stm Γ τ) : bool :=
+    match fuel with
+    | 0      => BindFreeBool_aux (fun _ _ _ => false) s
+    | S fuel => BindFreeBool_aux (@BindFreeBool fuel) s
+    end.
+
   Lemma InvokedByStmWithFuelInList_eq : forall (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2),
+    BindFree fuel s ->
     InvokedByStmWithFuel fuel f s <-> InvokedByStmWithFuelInList fuel f s.
   Proof.
     intros fuel; induction fuel as [|fuel IHfuel];
-      intros Δ τ1 τ2 Γ f s; split; intros H; induction s;
-      cbn in *; auto; solve_invokedby.
+      intros Δ τ1 τ2 Γ f s Hb; split; intros H; induction s;
+      cbn in *; auto; solve_invokedby; auto; try contradiction.
     - right. apply List.in_flat_map. destruct H as [pc H]. exists pc. split; auto.
       apply base.elem_of_list_In. apply finite.elem_of_enum.
     - right. destruct H as [pc [? ?]]. exists pc. auto.
@@ -250,6 +321,9 @@ Module Type ProgramMixin (B : Base)
         * left. now apply IHs.
         * right. destruct Hinvok as [pc Hinvok].
           exists pc. now apply H.
+      + destruct Hinvok as [Hinvok|[v Hinvok]].
+        * left. now apply IHs.
+        * right. exists v. now apply H.
     - induction s; cbn in *; auto.
       + destruct Hinvok.
         * left. now apply IHs1.
@@ -262,6 +336,9 @@ Module Type ProgramMixin (B : Base)
         * left. now apply IHs.
         * right. destruct Hinvok as [pc Hinvok].
           exists pc. now apply H.
+      + destruct Hinvok as [Hinvok|[v Hinvok]].
+        * left. now apply IHs.
+        * right. exists v. now apply H.
   Qed.
 
   Definition InvokedByStm {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : Prop :=
@@ -319,9 +396,10 @@ Module Type ProgramMixin (B : Base)
 
   Section InvokedByReflect.
     Lemma InvokedByStmWithFuel_spec : forall {Δ τ1 τ2 Γ} (fuel : nat) (f : 𝑭 Δ τ1) (s : Stm Γ τ2),
+      BindFree fuel s ->
       Bool.reflect (InvokedByStmWithFuel fuel f s) (InvokedByStmWithFuelBool fuel f s).
     Proof.
-      intros Δ τ1 τ2 Γ fuel f s.
+      intros Δ τ1 τ2 Γ fuel f s Hb.
       apply Bool.iff_reflect. split; intros H.
       - generalize dependent s.
         generalize dependent f.
@@ -329,26 +407,19 @@ Module Type ProgramMixin (B : Base)
         generalize dependent τ2.
         generalize dependent τ1.
         generalize dependent Δ.
-        induction fuel; intros Δ τ1 τ2 Γ f s H.
-        + induction s; cbn in *; auto.
-          * apply Bool.orb_true_iff; destruct H as [H|H]; auto.
-          * destruct H as [H|?]; auto.
-            apply Bool.orb_true_iff. left.
-            unfold 𝑭_eq in H. unfold 𝑭_eqb.
+        induction fuel; intros Δ τ1 τ2 Γ f s Hb H.
+        + induction s; cbn in *; auto; solve_invokedby; auto;
+            apply Bool.orb_true_iff; auto.
+          destruct H as [pc H]; auto.
+          right. clear IHs.
+          apply List.existsb_exists. exists pc. split; auto.
+          apply base.elem_of_list_In.
+          apply finite.elem_of_enum.
+        + induction s; cbn in *; auto; solve_invokedby;
+            apply Bool.orb_true_iff; auto.
+          * left. unfold 𝑭_eq in H. unfold 𝑭_eqb.
             destruct (Classes.eq_dec _ _) eqn:E; auto.
-          * apply Bool.orb_true_iff; destruct H as [H|H]; auto.
-          * apply Bool.orb_true_iff; destruct H as [H|[pc H]]; auto.
-            right. clear IHs.
-            apply List.existsb_exists. exists pc. split; auto.
-            apply base.elem_of_list_In.
-            apply finite.elem_of_enum.
-        + induction s; cbn in *; auto.
-          * apply Bool.orb_true_iff; destruct H as [H|H]; auto.
-          * apply Bool.orb_true_iff; destruct H as [H|H]; auto.
-            left. unfold 𝑭_eq in H. unfold 𝑭_eqb.
-            destruct (Classes.eq_dec _ _) eqn:E; auto.
-          * apply Bool.orb_true_iff; destruct H as [H|H]; auto.
-          * apply Bool.orb_true_iff; destruct H as [H|[pc H]]; auto.
+          * destruct H as [pc H]; auto.
             right. clear IHs.
             apply List.existsb_exists. exists pc. split; auto.
             apply base.elem_of_list_In.
@@ -359,8 +430,13 @@ Module Type ProgramMixin (B : Base)
         generalize dependent τ2.
         generalize dependent τ1.
         generalize dependent Δ.
-        induction fuel; intros Δ τ1 τ2 Γ f s H.
-        + induction s; cbn in *; auto.
+        induction fuel; intros Δ τ1 τ2 Γ f s Hb H.
+        + induction s; cbn in *; auto; solve_invokedby; auto; try contradiction.
+          * apply Bool.orb_true_iff in H; destruct H; auto.
+          * apply Bool.orb_true_iff in H; destruct H; auto.
+          * apply Bool.orb_true_iff in H; destruct H as [?|[pc [HIn H]]%List.existsb_exists]; auto.
+            clear IHs. right. exists pc. auto.
+        + induction s; cbn in *; auto; solve_invokedby; auto; try contradiction.
           * apply Bool.orb_true_iff in H; destruct H; auto.
           * apply Bool.orb_true_iff in H; destruct H; auto.
             left. unfold 𝑭_eqb in H. unfold 𝑭_eq.
@@ -368,33 +444,111 @@ Module Type ProgramMixin (B : Base)
           * apply Bool.orb_true_iff in H; destruct H; auto.
           * apply Bool.orb_true_iff in H; destruct H as [?|[pc [HIn H]]%List.existsb_exists]; auto.
             clear IHs. right. exists pc. auto.
-        + induction s; cbn in *; auto.
-          * apply Bool.orb_true_iff in H; destruct H; auto.
-          * apply Bool.orb_true_iff in H; destruct H; auto.
-            left. unfold 𝑭_eqb in H. unfold 𝑭_eq.
-            destruct (Classes.eq_dec _ _) eqn:E; auto; try discriminate.
-          * apply Bool.orb_true_iff in H; destruct H; auto.
-          * apply Bool.orb_true_iff in H; destruct H as [?|[pc [HIn H]]%List.existsb_exists]; auto.
-            clear IHs. right. exists pc. auto.
+    Qed.
+
+    Lemma BindFree_spec : forall {Γ τ} (fuel : nat) (s : Stm Γ τ),
+        Bool.reflect (BindFree fuel s) (BindFreeBool fuel s).
+    Proof.
+      intros Γ τ fuel s. apply Bool.iff_reflect. split; intros H.
+      - generalize dependent s.
+        generalize dependent τ.
+        generalize dependent Γ.
+        induction fuel; intros Γ τ s H.
+        + induction s; cbn in *; auto; solve_invokedby; auto;
+            apply Bool.andb_true_iff; auto.
+          split; auto.
+          apply List.forallb_forall. intros pc HIn.
+          auto.
+        + induction s; cbn in *; auto; solve_invokedby;
+            try (apply Bool.andb_true_iff; split); auto.
+          apply List.forallb_forall. intros pc HIn.
+          auto.
+      - generalize dependent s.
+        generalize dependent τ.
+        generalize dependent Γ.
+        induction fuel; intros Γ τ s H.
+        + induction s; cbn in *; auto; solve_invokedby; auto;
+            try split; auto.
+          intros pc.
+          assert (HIn: List.In pc (@finite.enum _ _ (B.Finite_PatternCase pat))).
+          { apply base.elem_of_list_In. apply finite.elem_of_enum. }
+          match goal with
+          | H : List.forallb ?P ?l = true |- _ =>
+              rewrite List.forallb_forall in H;
+              specialize (H pc HIn)
+          end.
+          auto.
+        + induction s; cbn in *; auto; solve_invokedby; auto; split.
+          * now apply IHs.
+          * intros pc.
+            assert (HIn: List.In pc (@finite.enum _ _ (B.Finite_PatternCase pat))).
+            { apply base.elem_of_list_In. apply finite.elem_of_enum. }
+            match goal with
+            | H : List.forallb ?P ?l = true |- _ =>
+                rewrite List.forallb_forall in H;
+                specialize (H pc HIn)
+            end.
+            auto.
     Qed.
 
     Lemma InvokedByStmWithFuelInList_spec : forall {Δ τ1 τ2 Γ} (fuel : nat) (f : 𝑭 Δ τ1) (s : Stm Γ τ2),
       Bool.reflect (InvokedByStmWithFuelInList fuel f s) (InvokedByStmWithFuelInListBool fuel f s).
     Proof.
       intros Δ τ1 τ2 Γ fuel f s.
+      unfold InvokedByStmWithFuelInList, InvokedByStmWithFuelInListBool.
       apply Bool.iff_reflect.
-      rewrite <- InvokedByStmWithFuelInList_eq.
-      rewrite <- InvokedByStmWithFuelInListBool_eq.
-      apply Bool.reflect_iff.
-      apply InvokedByStmWithFuel_spec.
+      rewrite List.existsb_exists.
+      split; intros H.
+      - exists (existT Δ (existT τ1 f)). split; auto.
+        cbn. auto. unfold 𝑭_eqb.
+        destruct (Classes.eq_dec _ _) eqn:E; auto; try discriminate.
+      - destruct H as ((Δ' & τ' & f') & H & Heq). cbn in Heq.
+        unfold 𝑭_eqb in Heq.
+        destruct (Classes.eq_dec _ _) eqn:E; auto; try discriminate.
+        now setoid_rewrite <- e. 
+    Qed.
+
+    Definition BindFreeFun {Δ τ} (fuel : nat) (f : 𝑭 Δ τ) : Prop :=
+      BindFree fuel (FunDef f).
+
+    Definition BindFreeFunPackage (fuel : nat) (f : {Δ & {τ & 𝑭 Δ τ}}) : Prop :=
+      match f with
+      | existT Δ (existT τ f) => BindFreeFun fuel f
+      end.
+
+    Definition BindFreeFunBool {Δ τ} (fuel : nat) (f : 𝑭 Δ τ) : bool :=
+      BindFreeBool fuel (FunDef f).
+
+    Definition BindFreeFunPackageBool (fuel : nat) (f : {Δ & {τ & 𝑭 Δ τ}}) : bool :=
+      match f with
+      | existT Δ (existT τ f) => BindFreeFunBool fuel f
+      end.
+
+    Lemma BindFreeFunPackage_spec : forall (fuel : nat) (f : {Δ & {τ & 𝑭 Δ τ}}),
+        Bool.reflect (BindFreeFunPackage fuel f) (BindFreeFunPackageBool fuel f).
+    Proof.
+      intros fuel [Δ [τ f]].
+      unfold BindFreeFunPackage, BindFreeFunPackageBool,
+        BindFreeFun, BindFreeFunBool.
+      apply BindFree_spec.
+    Qed.
+
+    Lemma BindFreeBool_eq : forall (fuel : nat) {Γ τ} (s : Stm Γ τ),
+        BindFree fuel s <-> BindFreeBool fuel s = true.
+    Proof.
+      intros fuel Γ τ s.
+      destruct (BindFree_spec fuel s);
+        split; auto.
+      intros H. discriminate H.
     Qed.
 
     Lemma InvokedByFunPackage_spec : forall (fuel : nat) (f1 f2 : {Δ & {τ & 𝑭 Δ τ}}),
+      BindFreeFunPackage fuel f2 ->
       Bool.reflect (InvokedByFunPackage fuel f1 f2) (InvokedByFunPackageBool fuel f1 f2).
     Proof.
-      unfold InvokedByFunPackage, InvokedByFun.
-      intros fuel [Δ1 [τ1 f1]] [Δ2 [τ2 f2]].
-      apply InvokedByStmWithFuel_spec.
+      unfold InvokedByFunPackage, InvokedByFun, BindFreeFunPackage, BindFreeFun.
+      intros fuel [Δ1 [τ1 f1]] [Δ2 [τ2 f2]] Hb.
+      now apply InvokedByStmWithFuel_spec.
     Qed.
   End InvokedByReflect.
 End ProgramMixin.

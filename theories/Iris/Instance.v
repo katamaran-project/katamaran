@@ -1185,7 +1185,8 @@ Module IrisInstanceWithContracts
             + iApply "trips1".
               iPureIntro.
               intros σs σ0 f Hfs.
-              eapply Haccf. solve_fuel fuel.
+              eapply Haccf.
+              solve_fuel fuel.
               iIntros "!>" (σs σ0 f Hinvok).
               iApply "vcenv". iPureIntro. solve_fuel fuel.
             + iIntros (v δ'). iApply "trips".
@@ -1257,7 +1258,8 @@ Module IrisInstanceWithContracts
               iIntros "!>" (σs σ0 f Hinvok).
               iApply "vcenv". iPureIntro. solve_fuel fuel.
             + iIntros (v ?). iApply "trips".
-              iPureIntro. intros. apply Haccf. solve_fuel fuel. right. now exists v.
+              iPureIntro. intros. apply Haccf. solve_fuel fuel.
+              right. now exists v.
               right. now exists v.
               iIntros "!>" (σs σ0 f Hinvok).
               iApply "vcenv". iPureIntro. solve_fuel fuel; right; eexists; eassumption.
