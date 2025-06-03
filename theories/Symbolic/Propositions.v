@@ -1787,26 +1787,49 @@ Module Type SymPropOn
         | formula_or F1 F2       => eformula_or (erase F1) (erase F2)
         end.
 
-    Fixpoint erase_symprop {Σ} (p : SymProp Σ) : ESymProp :=
+    Fixpoint erase_EErrors (p : ESymProp) : ESymProp :=
       match p with
-      | angelic_binary o1 o2 => eangelic_binary (erase_symprop o1) (erase_symprop o2)
-      | demonic_binary o1 o2 => edemonic_binary (erase_symprop o1) (erase_symprop o2)
+      | eangelic_binary o1 o2 => eangelic_binary (erase_EErrors o1) (erase_EErrors o2)
+      | edemonic_binary o1 o2 => edemonic_binary (erase_EErrors o1) (erase_EErrors o2)
+      | eerror msg => eerror (MkEError (Σ := wnil) (amsg.mk (M := Unit) tt))
+      | eblock => eblock
+      | eassertk fml k => eassertk fml (erase_EErrors k)
+      | eassumek fml k => eassumek fml (erase_EErrors k)
+      | eangelicv b k => eangelicv b (erase_EErrors k)
+      | edemonicv b k => edemonicv b (erase_EErrors k)
+      | eassert_vareq x xIn t k => eassert_vareq x xIn t (erase_EErrors k)
+      | eassume_vareq x xIn t k => eassume_vareq x xIn t (erase_EErrors k)
+      | epattern_match s pat rhs =>
+          epattern_match s pat
+            (fun pc => erase_EErrors (rhs pc))
+      | epattern_match_var x xIn pat rhs =>
+          epattern_match_var x xIn pat
+            (fun pc => erase_EErrors (rhs pc))
+      | edebug b k => edebug b (erase_EErrors k)
+      end.
+
+    Fixpoint erase_symprop' {Σ} (p : SymProp Σ) : ESymProp :=
+      match p with
+      | angelic_binary o1 o2 => eangelic_binary (erase_symprop' o1) (erase_symprop' o2)
+      | demonic_binary o1 o2 => edemonic_binary (erase_symprop' o1) (erase_symprop' o2)
       | error msg => eerror (MkEError msg)
       | block => eblock
-      | assertk fml _ k => eassertk (erase_formula fml) (erase_symprop k)
-      | assumek fml k => eassumek (erase_formula fml) (erase_symprop k)
-      | angelicv b k => eangelicv b (erase_symprop k)
-      | demonicv b k => edemonicv b (erase_symprop k)
-      | @assert_vareq _ x σ xIn t msg k => eassert_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop k)
-      | @assume_vareq _ x σ xIn t k => eassume_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop k)
+      | assertk fml _ k => eassertk (erase_formula fml) (erase_symprop' k)
+      | assumek fml k => eassumek (erase_formula fml) (erase_symprop' k)
+      | angelicv b k => eangelicv b (erase_symprop' k)
+      | demonicv b k => edemonicv b (erase_symprop' k)
+      | @assert_vareq _ x σ xIn t msg k => eassert_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop' k)
+      | @assume_vareq _ x σ xIn t k => eassume_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop' k)
       | pattern_match s pat rhs =>
           epattern_match (erase_term s) pat
-            (fun pc => erase_symprop (rhs pc))
+            (fun pc => erase_symprop' (rhs pc))
       | @pattern_match_var _ x σ xIn pat rhs =>
           epattern_match_var x (ctx.in_at xIn) pat
-            (fun pc => erase_symprop (rhs pc))
-      | debug b k => edebug b (erase_symprop k)
+            (fun pc => erase_symprop' (rhs pc))
+      | debug b k => edebug b (erase_symprop' k)
       end.
+
+    Definition erase_symprop {Σ} (p : SymProp Σ) : ESymProp := erase_EErrors (erase_symprop' p).
 
     Fixpoint erase_valuation {Σ} (ι : Valuation Σ) : list { σ : Ty & Val σ} :=
       match ι with
@@ -2021,7 +2044,7 @@ Module Type SymPropOn
       inst_symprop (erase_valuation ι) (erase_symprop p) <->
       safe p ι.
     Proof.
-      induction p; cbn [inst_symprop erase_symprop safe]; unfold inst_eformula'.
+      induction p; cbn [inst_symprop erase_symprop erase_symprop' erase_EErrors safe]; unfold inst_eformula'.
       - apply Morphisms_Prop.or_iff_morphism. auto. auto.
       - apply Morphisms_Prop.and_iff_morphism. auto. auto.
       - reflexivity.
