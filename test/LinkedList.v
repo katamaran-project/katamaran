@@ -142,6 +142,9 @@ Module Import ExampleProgram <: Program ExampleBase.
 
     Definition 𝑳 : PCtx -> Set := Lem.
 
+
+    #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
+    Admitted. (* TODO: solve *)
   End FunDeclKit.
 
   (* A mixin provided by the library pulling in definitions of statements etc.
@@ -331,6 +334,11 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   Include ProgramMixin ExampleBase.
 
+  Section WellFoundedKit.
+    (* TODO: solve *)
+    Lemma 𝑭_well_founded : exists fuel, well_founded (InvokedByFunPackage fuel).
+    Admitted.
+  End WellFoundedKit.
 End ExampleProgram.
 
 (* These are user-defined pure predicates that we use to encode the functional

@@ -89,6 +89,8 @@ Module Import ExampleProgram <: Program DefaultBase.
     (* We do not make use of explicit ghost lemmas in the program. *)
     Definition 𝑳 : PCtx -> Set := fun _ => Empty_set.
 
+    #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
+    Admitted. (* TODO: solve *)
   End FunDeclKit.
 
   (* Include the definition of statements etc to define the body of [summaxlen]. *)
@@ -159,6 +161,11 @@ Module Import ExampleProgram <: Program DefaultBase.
 
   Include ProgramMixin DefaultBase.
 
+  Section WellFoundedKit.
+    (* TODO: solve *)
+    Lemma 𝑭_well_founded : exists fuel, well_founded (InvokedByFunPackage fuel).
+    Admitted.
+  End WellFoundedKit.
 End ExampleProgram.
 
 (* The program logic signature contains all the necessary definitions

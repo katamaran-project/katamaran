@@ -72,6 +72,8 @@ Module Import ReplayProgram <: Program DefaultBase.
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := fun _ _ => Empty_set.
     Definition 𝑳 : PCtx -> Set := Lem.
 
+    #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
+    Admitted. (* TODO: solve *)
   End FunDeclKit.
 
   Include FunDeclMixin DefaultBase.
@@ -104,6 +106,11 @@ Module Import ReplayProgram <: Program DefaultBase.
 
   Include ProgramMixin DefaultBase.
 
+  Section WellFoundedKit.
+    (* TODO: solve *)
+    Lemma 𝑭_well_founded : exists fuel, well_founded (InvokedByFunPackage fuel).
+    Admitted.
+  End WellFoundedKit.
 End ReplayProgram.
 
 Module Import ReplayPredicates.

@@ -237,6 +237,8 @@ Module Import ExampleProgram <: Program ExampleBase.
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := fun _ _ => Empty_set.
     Definition 𝑳 : PCtx -> Set := fun _ => Empty_set.
 
+    #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
+    Admitted. (* TODO: solve *)
   End FunDeclKit.
 
   Include FunDeclMixin ExampleBase.
@@ -346,6 +348,11 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   Include ProgramMixin ExampleBase.
 
+  Section WellFoundedKit.
+    (* TODO: solve *)
+    Lemma 𝑭_well_founded : exists fuel, well_founded (InvokedByFunPackage fuel).
+    Admitted.
+  End WellFoundedKit.
 End ExampleProgram.
 
 Module Import ExampleSig <: Signature ExampleBase.
