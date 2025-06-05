@@ -1198,6 +1198,16 @@ Module bv.
       - apply of_Z_unsigned.
     Qed.
 
+    Lemma unsigned_eq_z {n} (x : bv n) z :
+      unsigned x = z <-> ((0 <= z < 2 ^ (Z.of_nat n))%Z
+                          /\ x = of_Z z).
+    Proof.
+      split.
+      - intros <-. split. apply unsigned_bounds. now rewrite of_Z_unsigned.
+      - intros [[Hl Hu] ->]. rewrite unsigned_of_Z.
+        unfold truncz. rewrite Zmod_small; lia.
+    Qed.
+
     Lemma signed_eq_z {n} (x : bv n) z :
       signed x = z <-> ((- 2 ^ (Z.of_nat n) <= 2 * z < 2 ^ (Z.of_nat n))%Z
                         /\ x = of_Z z).
