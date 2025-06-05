@@ -908,47 +908,84 @@ Module bv.
 
   Section Extract.
 
-    Definition take m [n] {p : IsTrue (m <=? n)} : bv n → bv m :=
-      match leview m n in LeView _ sl return bv sl -> bv m with
-      | is_le k =>
-          fun bits =>
-            let (xs,_) := appView m k bits in
-            xs
-      end.
+    Definition drop m {n} (x : bv (m + n)) : bv n :=
+      let (_,ys) := appView m n x in ys.
 
-    Lemma take_cons {m n} (p : IsTrue (m <=? n)) b (xs : bv n) :
-      take (S m) (cons b xs) = cons b (take m xs).
+    Definition take m {n} (x : bv (m + n)) : bv m :=
+      let (xs,_) := appView m n x in xs.
+
+    Lemma drop_cons {m n} b (xs : bv (m + n)) :
+      drop (S m) (cons b xs) = drop m xs.
     Proof.
-      unfold take. cbn. destruct leview; cbn.
+      unfold drop. cbn.
       unfold view. rewrite bv_case_cons.
       destruct appView; cbn.
       now destruct app_cons.
     Qed.
 
+    Lemma drop_app {m n} (x : bv m) (y : bv n) :
+      drop m (app x y) = y.
+    Proof.
+      induction x using bv_rect.
+      - now rewrite app_nil.
+      - now rewrite app_cons, drop_cons.
+    Qed.
+
+    Lemma take_cons {m n} b (xs : bv (m + n)) :
+      take (S m) (cons b xs) = cons b (take m xs).
+    Proof.
+      unfold take. cbn.
+      unfold view. rewrite bv_case_cons.
+      destruct appView; cbn.
+      now destruct app_cons.
+    Qed.
+
+    Lemma take_app {m n} (x : bv m) (y : bv n) :
+      take m (app x y) = x.
+    Proof.
+      induction x using bv_rect.
+      - now rewrite app_nil.
+      - now rewrite app_cons, take_cons; f_equal.
+    Qed.
+
+    Lemma take_full {m} (b : bv (m + 0)) :
+      take m b = eq_rect (m + 0) bv b m (transparent.nat_add_0_r m).
+    Proof.
+      induction m; cbn in *.
+      * now destruct (view b).
+      * rewrite <- rew_map. destruct (view b). rewrite take_cons.
+        rewrite IHm. generalize (transparent.nat_add_0_r m). clear.
+        generalize dependent (m + 0). intros; now subst.
+    Qed.
+
     Definition vector_subrange {n} (start len : nat)
-      (p : IsTrue (start + len <=? n)) (bits : bv n) : bv len :=
-      let xs := take (start + len) bits in
-      let (_,ys) := appView start len xs in
-      ys.
+      {p : IsTrue (start + len <=? n)} : bv n -> bv len :=
+      match leview (start + len) n with
+      | is_le k => fun bits : bv (start + len + k) =>
+                    drop start (take (start + len) bits)
+      end.
     #[global] Arguments vector_subrange {n} _ _ {_} _  : simpl never.
 
     Goal vector_subrange 0 1 (@of_nat 1 1)    = of_nat 1. reflexivity. Abort.
     Goal vector_subrange 0 8 (@of_nat 16 256) = zero.     reflexivity. Abort.
     Goal vector_subrange 8 8 (@of_nat 16 256) = one.      reflexivity. Abort.
 
-    Lemma vector_subrange_O {m n} (p : IsTrue (m <=? n)) (xs : bv n) :
-      vector_subrange 0 m xs = take m xs.
-    Proof. reflexivity. Qed.
-
     Lemma vector_subrange_S_cons {start len n} (p : IsTrue (start + len <=? n))
                                   (b : bool) (xs : bv n) :
       @vector_subrange (S n) (S start) len p (cons b xs) =
       @vector_subrange n start len p xs.
     Proof.
-      unfold vector_subrange; cbn. rewrite take_cons.
-      unfold view at 1. rewrite bv_case_cons.
-      destruct appView. cbn.
-      now destruct app_cons; cbn.
+      unfold vector_subrange; cbn. destruct leview.
+      now rewrite take_cons, drop_cons.
+    Qed.
+
+    Lemma vector_subrange_0_S_cons {len n} (p : IsTrue (len <=? n))
+      (b : bool) (xs : bv n) :
+      @vector_subrange (S n) 0 (S len) p (cons b xs) =
+      cons b (@vector_subrange _ 0 len p xs).
+    Proof.
+      unfold vector_subrange; cbn. destruct leview.
+      now rewrite take_cons.
     Qed.
 
   End Extract.
@@ -975,10 +1012,11 @@ Module bv.
       {n start len} (p : IsTrue (start + len <=? n)) (xs : bv n) (ys : bv len) :
       vector_subrange start len (update_vector_subrange start len xs ys) = ys.
     Proof.
-      unfold vector_subrange, take, update_vector_subrange.
+      unfold vector_subrange, update_vector_subrange.
       destruct leview as [k].
       destruct (appView (start + len) k xs).
       destruct (appView start len xs).
+      unfold drop, take.
       now rewrite !appView_app.
     Qed.
 
@@ -1009,9 +1047,10 @@ Module bv.
       destruct (appView _ _ xs).
       rewrite !app_app. destruct nat_add_assoc; cbn.
       induction xs using bv_rect; cbn in *.
-      - rewrite !app_nil, !vector_subrange_O.
+      - rewrite !app_nil.
         induction ys using bv_rect; cbn; [easy|].
-        rewrite !app_cons, !take_cons. now f_equal.
+        rewrite !app_cons, !vector_subrange_0_S_cons.
+        now f_equal.
       - now rewrite !app_cons, !vector_subrange_S_cons, IHxs.
     Qed.
 
