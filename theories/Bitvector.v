@@ -1741,6 +1741,120 @@ Module bv.
       now rewrite ones_S, not_cons, IHn.
     Qed.
 
+    Lemma land_cons {m} (x1 x2 : bool) (y1 y2 : bv m) :
+      land (cons x1 y1) (cons x2 y2) =
+      cons (x1 && x2) (land y1 y2).
+    Proof.
+      destruct y1 as [y1 wf_y1], y2 as [y2 wf_y2].
+      apply bin_inj. destruct x1, x2; cbn.
+      - now rewrite N_land_succ_double, truncn_succ_double.
+      - now rewrite N_land_succ_double_double, truncn_double.
+      - now rewrite N_land_double_succ_double, truncn_double.
+      - now rewrite N_land_double_double, truncn_double.
+    Qed.
+
+    Lemma land_app {m n} (x1 x2 : bv m) (y1 y2 : bv n) :
+      land (app x1 y1) (app x2 y2) =
+      app (land x1 x2) (land y1 y2).
+    Proof.
+      induction m.
+      - destruct (view x1), (view x2). now rewrite !app_nil.
+      - destruct (view x1) as [b1 x1], (view x2) as [b2 x2].
+        now rewrite land_cons, !app_cons, <- IHm, <- land_cons.
+    Qed.
+
+    Lemma land_zero_l {m} (x : bv m) :
+      land zero x = zero.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite zero_S, land_cons. now f_equal.
+    Qed.
+
+    Lemma land_zero_r {m} (x : bv m) :
+      land x zero = zero.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite zero_S, land_cons, andb_false_r. now f_equal.
+    Qed.
+
+    Lemma land_ones_l {m} (x : bv m) :
+      land (ones m) x = x.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite ones_S, land_cons. now f_equal.
+    Qed.
+
+    Lemma land_ones_r {m} (x : bv m) :
+      land x (ones m) = x.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite ones_S, land_cons, andb_true_r. now f_equal.
+    Qed.
+
+    Lemma land_comm {m} (x y : bv m) :
+      land x y = land y x.
+    Proof.
+      induction x using bv_rect; destruct (view y); [easy|].
+      rewrite !land_cons, andb_comm. now f_equal.
+    Qed.
+
+    Lemma lor_cons {m} (x1 x2 : bool) (y1 y2 : bv m) :
+      lor (cons x1 y1) (cons x2 y2) =
+      cons (x1 || x2) (lor y1 y2).
+    Proof.
+      destruct y1 as [y1 wf_y1], y2 as [y2 wf_y2].
+      apply bin_inj. destruct x1, x2; cbn.
+      - now rewrite N_lor_succ_double, truncn_succ_double.
+      - now rewrite N_lor_succ_double_double, truncn_succ_double.
+      - now rewrite N_lor_double_succ_double, truncn_succ_double.
+      - now rewrite N_lor_double_double, truncn_double.
+    Qed.
+
+    Lemma lor_app {m n} (x1 x2 : bv m) (y1 y2 : bv n) :
+      lor (app x1 y1) (app x2 y2) =
+      app (lor x1 x2) (lor y1 y2).
+    Proof.
+      induction m.
+      - destruct (view x1), (view x2). now rewrite !app_nil.
+      - destruct (view x1) as [b1 x1], (view x2) as [b2 x2].
+        now rewrite lor_cons, !app_cons, <- IHm, <- lor_cons.
+    Qed.
+
+    Lemma lor_zero_l {m} (x : bv m) :
+      lor zero x = x.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite zero_S, lor_cons. now f_equal.
+    Qed.
+
+    Lemma lor_zero_r {m} (x : bv m) :
+      lor x zero = x.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite zero_S, lor_cons, orb_false_r. now f_equal.
+    Qed.
+
+    Lemma lor_ones_l {m} (x : bv m) :
+      lor (ones m) x = ones m.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite ones_S, lor_cons. now f_equal.
+    Qed.
+
+    Lemma lor_ones_r {m} (x : bv m) :
+      lor x (ones m) = ones m.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite ones_S, lor_cons, orb_true_r. now f_equal.
+    Qed.
+
+    Lemma lor_comm {m} (x y : bv m) :
+      lor x y = lor y x.
+    Proof.
+      induction x using bv_rect; destruct (view y); [easy|].
+      rewrite !lor_cons, orb_comm. now f_equal.
+    Qed.
+
   End Logical.
 
   Module finite.
