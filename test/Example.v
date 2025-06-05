@@ -528,8 +528,6 @@ End ExampleSpecification.
 Module Import ExampleExecutor :=
   MakeExecutor ExampleBase ExampleSig ExampleProgram ExampleSpecification.
 
-(* We need things like (0 + 1)%Z to reduce...  Domi: I suspect they come from the evaluation of ring solver expressions in PartialEvaluation, which uses integers as constants... *)
-Local Arguments Z.add !x%_Z_scope !y%_Z_scope.
 Local Ltac solve :=
   repeat
     (compute
@@ -559,10 +557,15 @@ Local Ltac solve :=
      auto
     ).
 
+Arguments inst {_ _ _ _} !_ _ /.
+Arguments inst_term {_} [_] !_ _ /.
+Arguments instprop {_ _ _} !_ _ /.
+Arguments instprop_formula [_] !_ _ /.
+
 Goal True. idtac "Timing before: example/length". Abort.
 Lemma valid_contract_length {σ} : Symbolic.ValidContract (@sep_contract_length σ) (FunDef length).
 Proof. destruct σ;
-       constructor; compute - [length_post Val Z.add Z.of_nat]; solve; lia.
+         compute - [length_post Val]; constructor; simpl; solve; lia.
 Qed.
 Goal True. idtac "Timing after: example/length". Abort.
 
