@@ -431,6 +431,7 @@ Module Import ExampleSignature <: Signature ExampleBase.
     (* Simplification of the [plength] predicate with arguments [xs] and [n]. *)
     Equations simplify_plength {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) : Option PathCondition Σ :=
     | term_binop bop.cons x xs       | term_binop bop.plus (term_val ?(ty.int) 1%Z) n => Some [formula_user plength [xs;n]]
+    | term_binop bop.cons x xs       | term_binop bop.plus n (term_val ?(ty.int) 1%Z) => Some [formula_user plength [xs;n]]
     | term_val ?(ty.list ty.int) nil | term_val ?(ty.int) 0%Z                         => Some []
     | xs                             | n                                              => Some [formula_user plength [xs;n]].
 

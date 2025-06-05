@@ -221,17 +221,19 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
-    | abs :        Fun [ "x" ∷ ty.int               ] ty.int
-    | cmp :        Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] (ty.enum ordering)
-    | gcd :        Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
-    | gcdloop :    Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
-    | msum :       Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either)
+    | abs        :        Fun [ "x" ∷ ty.int               ] ty.int
+    | cmp        :        Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] (ty.enum ordering)
+    | gcd        :        Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
+    | gcdloop    :    Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
+    | msum       :       Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either)
     | length {σ} : Fun [ "xs" ∷ ty.list σ           ] ty.int
-    | fpthree16 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
-    | fpthree32 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
-    | fpthree64 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
-    | bvtest    :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
-    | bvtest2   :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
+    | fpthree16  :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
+    | fpthree32  :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
+    | fpthree64  :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
+    | bvtest     :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
+    | bvtest2    :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
+    | bvtest3    :  Fun [ "sign" ∷ ty.bvec 42 ] ty.int
+    | pevaltest1 :  Fun [ "sign" ∷ ty.bvec 42 ; "y" ∷ ty.int ] ty.int
     .
 
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -320,6 +322,22 @@ Module Import ExampleProgram <: Program ExampleBase.
            (exp_binop bop.bvsub (exp_var "one") (exp_var "sign")))
     .
 
+    Definition fun_bvtest3 : Stm [ "sign" ∷ ty.bvec 42 ] ty.int :=
+      let: "one" ∷ ty.bvec 42 := stm_val (ty.bvec 42) bv.one in
+      let: "zero" ∷ ty.bvec 42 := stm_val (ty.bvec 42) bv.zero in
+      exp_unop uop.unsigned
+        (exp_binop bop.bvadd
+           (exp_binop bop.bvsub (exp_var "sign") (exp_var "one"))
+           (exp_binop
+              bop.bvadd
+              (exp_val (ty.bvec _) bv.zero)
+              (exp_binop bop.bvsub (exp_var "one") (exp_var "sign"))))
+    .
+
+    Definition fun_pevaltest1 : Stm [ "sign" ∷ ty.bvec 42; "y" ∷ ty.int ] ty.int :=
+      exp_var "y" + exp_unop uop.unsigned (exp_var "sign" -ᵇ exp_var "sign") - exp_var "y"
+    .
+
     Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       Eval compute in
       match f in Fun Δ τ return Stm Δ τ with
@@ -348,6 +366,8 @@ Module Import ExampleProgram <: Program ExampleBase.
       | fpthree64 => fun_fpthree64
       | bvtest => fun_bvtest
       | bvtest2 => fun_bvtest2
+      | bvtest3 => fun_bvtest3
+      | pevaltest1 => fun_pevaltest1
       end.
   End FunDefKit.
 
@@ -459,20 +479,38 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
         sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_var "sign"))
       |}.
 
+    Definition sep_contract_bvtest3 : SepContract [ "sign" ∷ ty.bvec 42 ] ty.int :=
+      {| sep_contract_logic_variables := ["sign" ∷ ty.bvec 42 ];
+        sep_contract_localstore      := [term_var "sign"];
+        sep_contract_precondition    := ⊤;
+        sep_contract_result          := "result";
+        sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_val ty.int 0%Z))
+      |}.
+
+    Definition sep_contract_pevaltest1 : SepContract [ "sign" ∷ ty.bvec 42 ; "y" ∷ ty.int ] ty.int :=
+      {| sep_contract_logic_variables := ["sign" ∷ ty.bvec 42 ; "y" ∷ ty.int ];
+        sep_contract_localstore      := [term_var "sign"; term_var "y" ];
+        sep_contract_precondition    := ⊤;
+        sep_contract_result          := "result";
+        sep_contract_postcondition   := term_var "result" = term_val ty.int 0%Z
+      |}.
+
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
-        | abs       => Some sep_contract_abs
-        | cmp       => Some sep_contract_cmp
-        | gcd       => Some sep_contract_gcd
-        | gcdloop   => Some sep_contract_gcdloop
-        | msum      => None
-        | length    => Some sep_contract_length
-        | fpthree16 => None
-        | fpthree32 => None
-        | fpthree64 => None
-        | bvtest    => Some sep_contract_bvtest
-        | bvtest2   => Some sep_contract_bvtest2
+        | abs        => Some sep_contract_abs
+        | cmp        => Some sep_contract_cmp
+        | gcd        => Some sep_contract_gcd
+        | gcdloop    => Some sep_contract_gcdloop
+        | msum       => None
+        | length     => Some sep_contract_length
+        | fpthree16  => None
+        | fpthree32  => None
+        | fpthree64  => None
+        | bvtest     => Some sep_contract_bvtest
+        | bvtest2    => Some sep_contract_bvtest2
+        | bvtest3    => Some sep_contract_bvtest3
+        | pevaltest1 => Some sep_contract_pevaltest1
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
@@ -490,11 +528,14 @@ End ExampleSpecification.
 Module Import ExampleExecutor :=
   MakeExecutor ExampleBase ExampleSig ExampleProgram ExampleSpecification.
 
+(* We need things like (0 + 1)%Z to reduce...  Domi: I suspect they come from the evaluation of ring solver expressions in PartialEvaluation, which uses integers as constants... *)
+Local Arguments Z.add !x%_Z_scope !y%_Z_scope.
 Local Ltac solve :=
   repeat
     (compute
-     - [Pos.of_succ_nat List.length Pos.succ Val
-        Z.add Z.compare Z.eqb Z.ge Z.geb Z.gt Z.gtb Z.le Z.leb Z.lt
+     - [Z.of_nat Pos.of_succ_nat List.length Pos.succ Val Z.add
+                 Z.succ
+        Z.compare Z.eqb Z.ge Z.geb Z.gt Z.gtb Z.le Z.leb Z.lt
         Z.ltb Z.mul Z.of_nat Z.opp Z.pos_sub Z.succ is_true negb
        ] in *;
       repeat
@@ -513,14 +554,16 @@ Local Ltac solve :=
        | |- _ \/ False => left
        | |- False \/ _ => right
        end;
-     cbn [List.length];
+     cbn [List.length Z.add];
      subst; try congruence;
      auto
     ).
 
 Goal True. idtac "Timing before: example/length". Abort.
 Lemma valid_contract_length {σ} : Symbolic.ValidContract (@sep_contract_length σ) (FunDef length).
-Proof. constructor. compute - [length_post Val Z.add]. solve; lia. Qed.
+Proof. destruct σ;
+       constructor; compute - [length_post Val Z.add Z.of_nat]; solve; lia.
+Qed.
 Goal True. idtac "Timing after: example/length". Abort.
 
 Goal True. idtac "Timing before: example/cmp". Abort.
@@ -532,8 +575,17 @@ Proof.
   now cbv.
 Qed.
 
-
 Lemma valid_contract_bvtest2 : Symbolic.ValidContractWithErasure sep_contract_bvtest2 (FunDef bvtest2).
+Proof.
+  now cbv.
+Qed.
+
+Lemma valid_contract_bvtest3 : Symbolic.ValidContractWithErasure sep_contract_bvtest3 (FunDef bvtest3).
+Proof.
+  now cbv.
+Qed.
+
+Lemma valid_contract_pevaltest1 : Symbolic.ValidContractWithErasure sep_contract_pevaltest1 (FunDef pevaltest1).
 Proof.
   now cbv.
 Qed.

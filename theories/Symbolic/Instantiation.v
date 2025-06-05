@@ -581,6 +581,9 @@ Module Type InstantiationOn
       constructor; eauto using term_plus_zero_l, term_plus_assoc, term_plus_comm, term_times_one_l, term_times_assoc, term_times_comm, term_times_plus_distrib_r, term_minus_plus_neg, term_plus_neg_inv.
     Qed.
 
+    Lemma Term_int_ring_eq_ext {Σ} : ring_eq_ext (term_binop (Σ := Σ) bop.plus) (term_binop bop.times) (term_unop uop.neg) base.equiv.
+    Proof. constructor; typeclasses eauto. Qed.
+
     Section Term_bv_ring.
       Variable Σ : LCtx.
       Variable n : nat.
