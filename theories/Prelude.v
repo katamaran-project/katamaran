@@ -333,6 +333,14 @@ Module transparent.
     | S n => f_equal S (nat_add_succ_r n m)
     end.
 
+  (* Coq.Arith.PeanoNat.Nat.add_cancel_l *)
+  Fixpoint nat_add_cancel_l n m p {struct p} : p + n = p + m -> n = m :=
+    match p with
+    | O   => fun e : n = m => e
+    | S p => fun e : S (p + n) = S (p + m) =>
+              nat_add_cancel_l n m p (eq_add_S (p + n) (p + m) e)
+    end.
+
 End transparent.
 
 Definition IsSome {A : Type} (m : option A) : Type :=
@@ -644,6 +652,46 @@ Proof. firstorder. Qed.
 Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
   (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
 Proof. firstorder. Qed.
+
+Lemma N_land_succ_double x y :
+  N.land (N.succ_double x) (N.succ_double y) =
+  N.succ_double (N.land x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_land_succ_double_double x y :
+  N.land (N.succ_double x) (N.double y) =
+  N.double (N.land x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_land_double_succ_double x y :
+  N.land (N.double x) (N.succ_double y) =
+  N.double (N.land x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_land_double_double x y :
+  N.land (N.double x) (N.double y) =
+  N.double (N.land x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lor_succ_double x y :
+  N.lor (N.succ_double x) (N.succ_double y) =
+  N.succ_double (N.lor x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lor_succ_double_double x y :
+  N.lor (N.succ_double x) (N.double y) =
+  N.succ_double (N.lor x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lor_double_succ_double x y :
+  N.lor (N.double x) (N.succ_double y) =
+  N.succ_double (N.lor x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lor_double_double x y :
+  N.lor (N.double x) (N.double y) =
+  N.double (N.lor x y).
+Proof. now destruct x, y. Qed.
 
 Declare Scope alt_scope.
 Declare Scope asn_scope.
