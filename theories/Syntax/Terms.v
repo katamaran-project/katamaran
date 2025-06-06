@@ -119,8 +119,6 @@ Module Type TermsOn (Import TY : Types).
   Notation term_get_slice_int := (term_unop uop.get_slice_int).
   Notation term_signed := (term_unop uop.signed).
   Notation term_unsigned := (term_unop uop.unsigned).
-  Notation term_truncate m := (term_unop (uop.truncate m)).
-  Notation term_vector_subrange s l := (term_unop (uop.vector_subrange s l)).
   Notation term_bvnot := (term_unop uop.bvnot).
   Notation term_bvdrop m := (term_unop (uop.bvdrop m)).
   Notation term_bvtake m := (term_unop (uop.bvtake m)).
@@ -155,6 +153,28 @@ Module Type TermsOn (Import TY : Types).
       | bop.bvslt  => Basics.flip term_bvsle
       | bop.bvule  => Basics.flip term_bvult
       | bop.bvult  => Basics.flip term_bvule
+      end.
+
+    Definition term_truncate {Σ n} (m : nat) {p : IsTrue (m <=? n)} :
+      Term Σ (ty.bvec n) -> Term Σ (ty.bvec m) :=
+      match bv.leview m n with
+      | bv.is_le k => term_bvtake m
+      end.
+
+    Definition term_vector_subrange {Σ n} s l {p : IsTrue (s+l <=? n)} :
+      Term Σ (ty.bvec n) -> Term Σ (ty.bvec l) :=
+      match bv.leview (s+l) n with
+      | bv.is_le k => fun t => term_bvdrop s (term_bvtake (s+l) t)
+      end.
+
+    Definition term_update_vector_subrange {Σ n} s l {p : IsTrue (s+l <=? n)} :
+      Term Σ (ty.bvec n) -> Term Σ (ty.bvec l) -> Term Σ (ty.bvec n) :=
+      match bv.leview (s+l) n with
+      | bv.is_le k =>
+          fun t u =>
+            term_bvapp
+              (term_bvapp (term_bvtake s (term_bvtake (s+l) t)) u)
+              (term_bvdrop (s+l) t)
       end.
 
   End DerivedConstructions.
