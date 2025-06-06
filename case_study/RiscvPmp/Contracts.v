@@ -1288,6 +1288,12 @@ Module RiscvPmpValidContracts.
     | None   => False
     end.
 
+  Definition ValidContractWithErasure {Δ τ} (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => Symbolic.ValidContractWithErasure c (FunDef f)
+    | None   => False
+    end.
+
   Definition ValidContractWithFuel {Δ τ} (fuel : Fuel) (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContractReflectWithFuel (fuel_to_nat fuel) c (FunDef f)

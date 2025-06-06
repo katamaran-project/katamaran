@@ -103,6 +103,12 @@ Module MinCapsValidContracts.
     | None => False
     end.
 
+  Definition ValidContractWithErasure {Δ τ} (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => Symbolic.ValidContractWithErasure c (FunDef f)
+    | None => False
+    end.
+
   Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContract c (FunDef f)
