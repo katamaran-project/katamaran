@@ -63,8 +63,8 @@ Module bop.
 
     Variant BinOp : Ty -> Ty -> Ty -> Set :=
     | plus              : BinOp int int int
-    | times             : BinOp int int int
     | minus             : BinOp int int int
+    | times             : BinOp int int int
     | land              : BinOp int int int
     | and               : BinOp bool bool bool
     | or                : BinOp bool bool bool
@@ -306,8 +306,8 @@ Module bop.
     Definition eval {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Val σ1 -> Val σ2 -> Val σ3 :=
       match op in BinOp σ1 σ2 σ3 return Val σ1 -> Val σ2 -> Val σ3 with
       | plus                       => Z.add
-      | times                      => Z.mul
       | minus                      => Z.sub
+      | times                      => Z.mul
       | land                       => Z.land
       | and                        => andb
       | or                         => fun v1 v2 => orb v1 v2
