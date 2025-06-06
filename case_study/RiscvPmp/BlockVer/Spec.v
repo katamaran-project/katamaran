@@ -645,27 +645,27 @@ Module RiscvPmpSpecVerif.
     end.
 
   Lemma valid_execute_rX : ValidContract rX.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_execute_wX : ValidContract wX.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   (* Import SymProp.notations. *)
   (* Set Printing Depth 200. *)
   (* Eval vm_compute in (postprocess (RiscvPmpBlockVerifExecutor.SHeapSpecM.vcgen RiscvPmpBlockVerifExecutor.default_config 1 *)
   (*            sep_contract_fetch_instr (FunDef fetch))). *)
   Lemma valid_execute_fetch : ValidContract fetch.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   (* Lemma valid_execute_fetch_instr : SMut.ValidContract sep_contract_fetch_instr (FunDef fetch). *)
   (* Proof. compute. Admitted. *)
 
   Lemma valid_execute_tick_pc : ValidContract tick_pc.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Ltac symbolic_simpl :=
     apply validcontract_with_erasure_sound;
-    compute;
+    vm_compute;
     constructor;
     cbn.
 
