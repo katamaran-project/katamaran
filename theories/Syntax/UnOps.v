@@ -62,6 +62,8 @@ Module uop.
     | truncate {n} (m : nat) {p : IsTrue (m <=? n)} : UnOp (bvec n) (bvec m)
     | vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} : UnOp (bvec n) (bvec l)
     | bvnot {n}         : UnOp (bvec n) (bvec n)
+    | bvdrop m {n}      : UnOp (bvec (m + n)) (bvec n)
+    | bvtake m {n}      : UnOp (bvec (m + n)) (bvec m)
     | negate {n}        : UnOp (bvec n) (bvec n).
     Set Transparent Obligations.
     Derive Signature for UnOp.
@@ -79,9 +81,20 @@ Module uop.
     Definition Tel (τ : Ty) : Set :=
       sigma (fun σ : Ty => UnOp σ τ).
 
+    Lemma eq_tel_bvdrop_inv {m1 m2 n} (H : m1 <> m2) :
+      sigmaI (fun σ => UnOp σ (bvec n)) (bvec (m1 + n)) (bvdrop m1) <>
+      sigmaI (fun σ => UnOp σ (bvec n)) (bvec (m2 + n)) (bvdrop m2).
+    Proof. intros e%(f_equal pr1). cbn in e. depelim e. Lia.lia. Qed.
+
+    Lemma eq_tel_bvtake_inv {m n1 n2} (H : n1 <> n2) :
+      sigmaI (fun σ => UnOp σ (bvec m)) (bvec (m + n1)) (bvtake m) <>
+      sigmaI (fun σ => UnOp σ (bvec m)) (bvec (m + n2)) (bvtake m).
+    Proof. intros e%(f_equal pr1). cbn in e. depelim e. Lia.lia. Qed.
+
     Obligation Tactic := cbn; intros;
       try solve
-        [let e := fresh in intro e; depelim e; try easy;
+        [eauto using eq_tel_bvdrop_inv, eq_tel_bvtake_inv
+        |let e := fresh in intro e; depelim e; try easy;
          try progress cbn in * |-; congruence
         |subst; repeat f_equal; apply IsTrue.proof_irrelevance
         ].
@@ -120,6 +133,14 @@ Module uop.
       | right _ | _       => right _
       }
     | bvnot                            | bvnot => left eq_refl
+    | bvdrop m1                        | bvdrop m2 with eq_dec m1 m2 => {
+      | left _ => left _
+      | right _ => right _
+      }
+    | @bvtake _ ?(m) n1                | @bvtake _ m n2 with eq_dec n1 n2 => {
+      | left _ => left _
+      | right _ => right _
+      }
     | negate                           | negate => left eq_refl
     | _                                | _ => right _.
 
@@ -146,6 +167,8 @@ Module uop.
       | truncate m          => fun v => bv.truncate m v
       | vector_subrange s l => bv.vector_subrange s l
       | bvnot               => bv.not
+      | bvdrop m            => bv.drop m
+      | bvtake m            => bv.take m
       | negate              => bv.negate
       end.
 

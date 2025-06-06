@@ -121,6 +121,8 @@ Module Type TermsOn (Import TY : Types).
   Notation term_truncate m := (term_unop (uop.truncate m)).
   Notation term_vector_subrange s l := (term_unop (uop.vector_subrange s l)).
   Notation term_bvnot := (term_unop uop.bvnot).
+  Notation term_bvdrop m := (term_unop (uop.bvdrop m)).
+  Notation term_bvtake m := (term_unop (uop.bvtake m)).
   Notation term_negate := (term_unop uop.negate).
 
   Section DerivedConstructions.
@@ -373,6 +375,8 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (pgetslice : ∀ n (t : Term Σ ty.int), P (term_unop (uop.get_slice_int (n := n)) t)).
     Hypothesis (ptruncate : ∀ n m (pf : IsTrue (n <=? m)) (t : Term Σ (ty.bvec m)), P (term_unop (uop.truncate n) t)).
     Hypothesis (psubrange : ∀ s l m (pf : IsTrue (s + l <=? m)) (t : Term Σ (ty.bvec m)), P (term_unop (uop.vector_subrange s l) t)).
+    Hypothesis (pbvdrop : ∀ m n (t : Term Σ (ty.bvec (m + n))), P (term_unop (uop.bvdrop m) t)).
+    Hypothesis (pbvtake : ∀ m n (t : Term Σ (ty.bvec (m + n))), P (term_unop (uop.bvtake m) t)).
 
     Equations(noeqns) Term_bvec_case [n] (t : Term Σ (ty.bvec n)) : P t :=
     | term_var_in lIn                                   => pvar lIn
@@ -395,6 +399,8 @@ Module Type TermsOn (Import TY : Types).
     | term_unop uop.get_slice_int t                     => pgetslice _ _
     | term_unop (uop.truncate _) t                      => ptruncate _ _ t
     | term_unop (uop.vector_subrange _ _) t             => psubrange _ _ _ t
+    | term_unop (uop.bvdrop _) t                        => pbvdrop _ _ t
+    | term_unop (uop.bvtake _) t                        => pbvtake _ _ t
     .
 
   End Term_bvec_case.
@@ -426,6 +432,8 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (pgetslice : ∀ n (t : Term Σ ty.int), P (term_unop (uop.get_slice_int (n := n)) t)).
     Hypothesis (ptruncate : ∀ n m (pf : IsTrue (n <=? m)) (t : Term Σ (ty.bvec m)), P t → P (term_unop (uop.truncate n) t)).
     Hypothesis (psubrange : ∀ s l m (pf : IsTrue (s + l <=? m)) (t : Term Σ (ty.bvec m)), P t → P (term_unop (uop.vector_subrange s l) t)).
+    Hypothesis (pbvdrop : ∀ m n (t : Term Σ (ty.bvec (m + n))), P t → P (term_unop (uop.bvdrop m) t)).
+    Hypothesis (pbvtake : ∀ m n (t : Term Σ (ty.bvec (m + n))), P t → P (term_unop (uop.bvtake m) t)).
 
     Fixpoint Term_bvec_rect [n : nat] (t : Term Σ (ty.bvec n)) {struct t} : P t :=
       Term_bvec_case P
@@ -449,6 +457,8 @@ Module Type TermsOn (Import TY : Types).
         (ltac:(intros; apply pgetslice; auto))
         (ltac:(intros; apply ptruncate; auto))
         (ltac:(intros; apply psubrange; auto))
+        (ltac:(intros; apply pbvdrop; auto))
+        (ltac:(intros; apply pbvtake; auto))
         t.
 
   End Term_bvec_rect.

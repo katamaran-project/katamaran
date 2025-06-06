@@ -784,6 +784,8 @@ Module Type PartialEvaluationOn
       | uop.truncate m => fun t1 => CanonTerm_def (peval_unop (uop.truncate m) (CanonTerm_to_Term t1))
       | uop.vector_subrange s l => fun t1 => CanonTerm_def (peval_unop (uop.vector_subrange s l) (CanonTerm_to_Term t1))
       | uop.bvnot => fun t1 => CanonTerm_def (peval_unop uop.bvnot (CanonTerm_to_Term t1))
+      | uop.bvdrop m => fun t1 => CanonTerm_def (peval_unop (uop.bvdrop m) (CanonTerm_to_Term t1))
+      | uop.bvtake m => fun t1 => CanonTerm_def (peval_unop (uop.bvtake m) (CanonTerm_to_Term t1))
       | uop.negate => Term_Quote_unop (@PEopp _)
       end.
 
@@ -797,6 +799,10 @@ Module Type PartialEvaluationOn
       - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1).
       - now eapply Term_Quote_unop_Valid.
       - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1).
+      - rewrite <-(CanonTermRep_adeq H1), <-peval_unop_sound.
+        eapply Term_Quote_def_Valid.
+      - rewrite <-(CanonTermRep_adeq H1), <-peval_unop_sound.
+        eapply Term_Quote_def_Valid.
       - rewrite <-(CanonTermRep_adeq H1), <-peval_unop_sound.
         eapply Term_Quote_def_Valid.
       - rewrite <-(CanonTermRep_adeq H1), <-peval_unop_sound.
@@ -871,3 +877,7 @@ Module Type PartialEvaluationOn
 
   End WithLCtx.
 End PartialEvaluationOn.
+
+(* Local Variables: *)
+(* proof-omit-proofs-option: t *)
+(* End: *)

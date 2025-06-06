@@ -166,6 +166,9 @@ Module Type ExpressionsOn (Import TY : Types).
   Notation exp_unsigned e := (exp_unop uop.unsigned e%exp).
   Notation exp_truncate m e := (exp_unop (uop.truncate m) e%exp).
   Notation exp_vector_subrange s l e := (exp_unop (uop.vector_subrange s l) e%exp).
+  Notation exp_bvapp := (exp_binop bop.bvapp).
+  Notation exp_bvdrop m := (exp_unop (uop.bvdrop m)).
+  Notation exp_bvtake m := (exp_unop (uop.bvtake m)).
   Notation exp_negate e := (exp_unop uop.negate e%exp).
 
   Notation "e1 && e2" := (exp_binop bop.and e1 e2) : exp_scope.
