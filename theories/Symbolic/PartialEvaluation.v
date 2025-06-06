@@ -536,6 +536,8 @@ Module Type PartialEvaluationOn
     | term_binop (bop.relop op) t1 t2 => term_relop_neg op t1 t2
     | t                               => term_unop uop.not t.
 
+    #[local] Open Scope lazy_bool_scope.
+
     Definition peval_vector_subrange_update_vector_subrange {n}
       start len {p : IsTrue (start + len <=? n)}
       start_u len_u {p_u : IsTrue (start_u + len_u <=? n)}

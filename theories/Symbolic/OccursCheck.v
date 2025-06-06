@@ -189,20 +189,20 @@ Module Type OccursCheckOn
     - generalize (occurs_check_env_shift_point IH).
       apply wp_monotonic. intros ? <-. reflexivity.
     - change
-        (@wlp (Term (Σ - x) (type (ς∷σ)))
-           (fun t' : Term (Σ - x) (type (ς∷σ)) =>
-              term_var (name (ς∷σ)) (σ := type (ς∷σ)) =
-                subst (T := fun Σ => Term Σ (type (ς∷σ)))
-                  (Subst := SubstTerm (σ := type (ς∷σ)))
+        (@wlp (Term (Σ - x) (type (l∷σ)))
+           (fun t' : Term (Σ - x) (type (l∷σ)) =>
+              term_var (name (l∷σ)) (σ := type (l∷σ)) =
+                subst (T := fun Σ => Term Σ (type (l∷σ)))
+                  (Subst := SubstTerm (σ := type (l∷σ)))
                   t' (sub_shift xIn))
-           match ctx.occurs_check_view xIn ςInΣ
+           match ctx.occurs_check_view xIn lIn
            in ctx.OccursCheckView _ i
            return option (Term (Σ - x) _)
            with
            | ctx.Same _      => None
            | ctx.Diff _ yIn' => Some (term_var_in yIn')
            end).
-      revert ςInΣ. generalize (ς∷σ). intros y yIn.
+      revert lIn. generalize (l∷σ). intros y yIn.
       destruct ctx.occurs_check_view; constructor; cbn.
       unfold sub_shift. now rewrite env.lookup_tabulate.
     - generalize (occurs_check_env_sound_point IH).

@@ -58,11 +58,11 @@ Module Type TermsOn (Import TY : Types).
   Local Notation PCtx := (NCtx PVar Ty).
   Local Notation LCtx := (NCtx LVar Ty).
 
-  Inductive Term (Σ : LCtx) : Ty -> Set :=
-  | term_var     (ς : LVar) (σ : Ty) {ςInΣ : ς∷σ ∈ Σ} : Term Σ σ
-  | term_val     (σ : Ty) : Val σ -> Term Σ σ
-  | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
-  | term_unop    {σ1 σ2 : Ty} (op : UnOp σ1 σ2) (t : Term Σ σ1) : Term Σ σ2
+  Inductive Term (Σ : LCtx) : Ty → Set :=
+  | term_var     (l : LVar) (σ : Ty) {lIn : l∷σ ∈ Σ} : Term Σ σ
+  | term_val     (σ : Ty) : Val σ → Term Σ σ
+  | term_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ3
+  | term_unop    {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) : Term Σ σ2
   | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs)
   | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
   | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
@@ -158,203 +158,137 @@ Module Type TermsOn (Import TY : Types).
 
   Section Term_rect.
 
-    Variable (Σ : LCtx).
-    Variable (P  : forall t : Ty, Term Σ t -> Type).
-    Arguments P _ _ : clear implicits.
+    Context [Σ] (P : ∀ [σ : Ty], Term Σ σ → Type).
 
-    Let PE : forall (σs : Ctx Ty), Env (Term Σ) σs -> Type :=
+    Let PE : ∀ (σs : Ctx Ty), Env (Term Σ) σs → Type :=
       fun σs es => env.All P es.
-    Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Term Σ) σs -> Type :=
-      fun σs es => env.All (fun b t => P (type b) t) es.
+    Let PNE : ∀ (σs : NCtx recordf Ty), NamedEnv (Term Σ) σs → Type :=
+      fun σs es => env.All (fun b t => P t) es.
 
-    Hypothesis (P_var        : forall (ς : LVar) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
-    Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
-    Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
-    Hypothesis (P_unop       : forall (σ1 σ2 : Ty) (op : UnOp σ1 σ2) (t : Term Σ σ1), P σ1 t -> P σ2 (term_unop op t)).
-    Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs) (IH : PE es), P (ty.tuple σs) (term_tuple es)).
-    Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)).
-    Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)).
+    Hypothesis (pvar : ∀ (l : LVar) (σ : Ty) (lIn : l∷σ ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ [σ] (v : Val σ), P (term_val σ v)).
+    Hypothesis (pbinop : (∀ [σ1 σ2 σ3 ] (op : BinOp σ1 σ2 σ3)
+                            (t1 : Term Σ σ1) (t2 : Term Σ σ2),
+                            P t1 → P t2 → P (term_binop op t1 t2))).
+    Hypothesis (punop : (∀ [σ1 σ2] (op : UnOp σ1 σ2) (t : Term Σ σ1),
+                           P t → P (term_unop op t))).
+    Hypothesis (ptuple : (∀ [σs] (ts : Env (Term Σ) σs) (IH : PE ts),
+                            P (term_tuple ts))).
+    Hypothesis (punion : (∀ [U] (K : unionk U) (t : Term Σ (unionk_ty U K)),
+                            P t → P (term_union U K t))).
+    Hypothesis (precord : (∀ [R] (ts : NamedEnv (Term Σ) (recordf_ty R))
+                             (IH : PNE ts), P (term_record R ts))).
 
-    Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) {struct t} : P σ t :=
+    Fixpoint Term_rect [σ] (t : Term Σ σ) {struct t} : P t :=
       match t with
-      | term_var ς                  => ltac:(eapply P_var; eauto)
-      | term_val σ v                => ltac:(eapply P_val; eauto)
-      | term_binop op t1 t2         => ltac:(eapply P_binop; eauto)
-      | term_unop op t              => ltac:(eapply P_unop; eauto)
-      | term_tuple ts               => ltac:(eapply P_tuple, env.all_intro; eauto)
-      | term_union U K t            => ltac:(eapply P_union; eauto)
-      | term_record R ts            => ltac:(eapply P_record, env.all_intro; eauto)
+      | term_var_in lIn     => pvar lIn
+      | term_val σ v        => pval v
+      | term_binop op t1 t2 => pbinop op (Term_rect t1) (Term_rect t2)
+      | term_unop op t      => punop op (Term_rect t)
+      | term_tuple ts       => ptuple (env.all_intro Term_rect ts)
+      | term_union U K t    => punion K (Term_rect t)
+      | term_record R ts    =>
+          precord (env.all_intro (fun b => Term_rect (σ := type b)) ts)
       end.
 
   End Term_rect.
 
-  Definition Term_rec Σ (P : forall σ, Term Σ σ -> Set) := @Term_rect _ P.
-  Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := @Term_rect _ P.
-
-  Section Term_bool_case.
-
-    Context {Σ : LCtx} [P : Term Σ ty.bool -> Type].
-
-    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.bool ∈ Σ), P (term_var ς)).
-    Variable (pval : forall (v : Val ty.bool), P (term_val ty.bool v)).
-    Variable (pand : forall (e1 : Term Σ ty.bool) (e2 : Term Σ ty.bool), P (term_binop bop.and e1 e2)).
-    Variable (por : forall (e1 : Term Σ ty.bool) (e2 : Term Σ ty.bool), P (term_binop bop.or e1 e2)).
-    Variable (prel : forall σ (op : RelOp σ) (e1 e2 : Term Σ σ), P (term_binop (bop.relop op) e1 e2)).
-    Variable (pnot : forall t : Term Σ ty.bool, P (term_unop uop.not t)).
-
-    Equations(noeqns) Term_bool_case (t : Term Σ ty.bool) : P t :=
-    | term_var ς                    => @pvar ς _
-    | term_val _ b                  => @pval b
-    | term_binop bop.and s t        => pand s t
-    | term_binop (bop.relop op) s t => prel op s t
-    | term_binop bop.or s t         => por s t
-    | term_unop uop.not t           => pnot t.
-
-  End Term_bool_case.
+  Definition Term_rec Σ (P : ∀ σ, Term Σ σ → Set) := @Term_rect _ P.
+  Definition Term_ind Σ (P : ∀ σ, Term Σ σ → Prop) := @Term_rect _ P.
 
   Section Term_int_case.
 
-    Context {Σ : LCtx} [P : Term Σ ty.int -> Type].
+    Context {Σ : LCtx} (P : Term Σ ty.int → Type).
 
-    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.int ∈ Σ), P (term_var ς)).
-    Variable (pval : forall (v : Val ty.int), P (term_val ty.int v)).
-    Variable (pplus : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.plus e1 e2)).
-    Variable (pminus : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.minus e1 e2)).
-    Variable (ptimes : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.times e1 e2)).
-    Variable (pland : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.land e1 e2)).
-    Variable (pneg : forall t : Term Σ ty.int, P t -> P (term_unop uop.neg t)).
-    Variable (psigned : forall {n} (e : Term Σ (ty.bvec n)), P (term_unop uop.signed e)).
-    Variable (punsigned : forall {n} (e : Term Σ (ty.bvec n)), P (term_unop uop.unsigned e)).
+    Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.int ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ (i : Val ty.int), P (term_val ty.int i)).
+    Hypothesis (pplus : ∀ (t1 t2 : Term Σ ty.int), P (term_binop bop.plus t1 t2)).
+    Hypothesis (pminus : ∀ (t1 t2 : Term Σ ty.int), P (term_binop bop.minus t1 t2)).
+    Hypothesis (ptimes : ∀ (t1 t2 : Term Σ ty.int), P (term_binop bop.times t1 t2)).
+    Hypothesis (pland : ∀ (t1 t2 : Term Σ ty.int), P (term_binop bop.land t1 t2)).
+    Hypothesis (pneg : ∀ (t : Term Σ ty.int), P (term_unop uop.neg t)).
+    Hypothesis (psigned : ∀ [n] (t : Term Σ (ty.bvec n)), P (term_unop uop.signed t)).
+    Hypothesis (punsigned : ∀ [n] (t : Term Σ (ty.bvec n)), P (term_unop uop.unsigned t)).
 
-    Equations(noeqns) Term_int_ind (t : Term Σ ty.int) : P t :=
-    | term_var ς               => @pvar ς _
-    | term_val _ b             => @pval b
-    | term_binop bop.plus s t  => pplus (Term_int_ind s) (Term_int_ind t)
-    | term_binop bop.minus s t => pminus (Term_int_ind s) (Term_int_ind t)
-    | term_binop bop.times s t => ptimes (Term_int_ind s) (Term_int_ind t)
-    | term_binop bop.land s t  => pland (Term_int_ind s) (Term_int_ind t)
-    | term_unop uop.neg t      => pneg (Term_int_ind t)
-    | term_unop uop.signed t   => psigned t
-    | term_unop uop.unsigned t => punsigned t.
+    Equations(noeqns) Term_int_case (t : Term Σ ty.int) : P t :=
+    | term_var_in lIn            => pvar lIn
+    | term_val _ i               => pval i
+    | term_binop bop.plus t1 t2  => pplus t1 t2
+    | term_binop bop.minus t1 t2 => pminus t1 t2
+    | term_binop bop.times t1 t2 => ptimes t1 t2
+    | term_binop bop.land t1 t2  => pland t1 t2
+    | term_unop uop.neg t        => pneg t
+    | term_unop uop.signed t     => psigned t
+    | term_unop uop.unsigned t   => punsigned t.
 
   End Term_int_case.
 
-  Section Term_bv_case.
+  Section Term_int_rect.
 
-    Context {Σ : LCtx} [P : forall n, Term Σ (ty.bvec n) -> Type].
+    Context {Σ : LCtx} (P : Term Σ ty.int → Type).
 
-    Variable (pvar : forall n (ς : LVar) (ςInΣ : ς∷ty.bvec n ∈ Σ), P (term_var ς)).
-    Variable (pval : forall n (v : Val (ty.bvec n)), P (term_val (ty.bvec n) v)).
-    Variable (pbvadd : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvadd e1 e2)).
-    Variable (pbvsub : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvsub e1 e2)).
-    Variable (pbvmul : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvmul e1 e2)).
-    Variable (pbvand : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvand e1 e2)).
-    Variable (pbvor : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvor e1 e2)).
-    Variable (pbvxor : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvxor e1 e2)).
-    Variable (pshiftr : forall n m (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec m)), P (term_binop bop.shiftr e1 e2)).
-    Variable (pshiftl : forall n m (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec m)), P (term_binop bop.shiftl e1 e2)).
-    Variable (pbvapp : forall n1 n2 (e1 : Term Σ (ty.bvec n1)) (e2 : Term Σ (ty.bvec n2)), P (term_binop bop.bvapp e1 e2)).
-    Variable (pbvcons : forall n (e1 : Term Σ ty.bool) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvcons e1 e2)).
-    Variable (pupdate_subrange : forall {n s l : nat} (pf : IsTrue (s + l <=? n)) (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec l)), P (term_binop (@bop.update_vector_subrange _ _ s l pf) e1 e2)).
-    Variable (pbvnot : forall n (e : Term Σ (ty.bvec n)), P (term_unop uop.bvnot e)).
-    Variable (pnegate : forall n (e : Term Σ (ty.bvec n)), P (term_unop uop.negate e)).
-    Variable (psext : forall n m (pf : IsTrue (m <=? n)) (e : Term Σ (ty.bvec m)), P (term_unop (uop.sext (p := pf)) e)).
-    Variable (pzext : forall n m (pf : IsTrue (m <=? n)) (e : Term Σ (ty.bvec m)), P (term_unop (uop.zext (p := pf)) e)).
-    Variable (pgetslice : forall n (e : Term Σ ty.int), P (term_unop (uop.get_slice_int (n := n)) e)).
-    Variable (ptruncate : forall n m (pf : IsTrue (n <=? m)) (e : Term Σ (ty.bvec m)), P (term_unop (@uop.truncate _ m n pf) e)).
-    Variable (psubrange : forall n m s (pf : IsTrue (s + n <=? m)) (e : Term Σ (ty.bvec m)), P (term_unop (@uop.vector_subrange _ _ s n pf) e)).
+    Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.int ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ (i : Val ty.int), P (term_val ty.int i)).
+    Hypothesis (pplus : (∀ (t1 t2 : Term Σ ty.int),
+                           P t1 → P t2 → P (term_binop bop.plus t1 t2))).
+    Hypothesis (pminus : (∀ (t1 t2 : Term Σ ty.int),
+                            P t1 → P t2 → P (term_binop bop.minus t1 t2))).
+    Hypothesis (ptimes : (∀ (t1 t2 : Term Σ ty.int),
+                            P t1 → P t2 → P (term_binop bop.times t1 t2))).
+    Hypothesis (pland : (∀ (t1 t2 : Term Σ ty.int),
+                           P t1 → P t2 → P (term_binop bop.land t1 t2))).
+    Hypothesis (pneg : ∀ (t : Term Σ ty.int), P t → P (term_unop uop.neg t)).
+    Hypothesis (psigned : (∀ [n] (t : Term Σ (ty.bvec n)),
+                             P (term_unop uop.signed t))).
+    Hypothesis (punsigned : (∀ [n] (t : Term Σ (ty.bvec n)),
+                               P (term_unop uop.unsigned t))).
 
-    Equations(noeqns) Term_bv_case [n : nat] (t : Term Σ (ty.bvec n)) : P t :=
-    | term_var ς                            => @pvar _ ς _
-    | term_val _ b                          => @pval _ b
-    | term_binop bop.bvadd s t              => pbvadd s t
-    | term_binop bop.bvsub s t              => pbvsub s t
-    | term_binop bop.bvmul s t              => pbvmul s t
-    | term_binop bop.bvand s t              => pbvand s t
-    | term_binop bop.bvor s t               => pbvor s t
-    | term_binop bop.bvxor s t              => pbvxor s t
-    | term_binop bop.shiftr s t             => pshiftr s t
-    | term_binop bop.shiftl s t             => pshiftl s t
-    | term_binop bop.bvapp s t              => pbvapp s t
-    | term_binop bop.bvcons s t             => pbvcons s t
-    | term_binop (bop.update_vector_subrange _ _) e t => pupdate_subrange _ e t
-    | term_unop uop.bvnot t                 => pbvnot t
-    | term_unop uop.negate t                => pnegate t
-    | term_unop uop.sext t                  => psext _ _ t
-    | term_unop uop.zext t                  => pzext _ _ t
-    | term_unop uop.get_slice_int t         => pgetslice _ _
-    | term_unop (uop.truncate _) t          => ptruncate _ _ t
-    | term_unop (uop.vector_subrange _ _) t => psubrange _ _ _ t
-    .
+    Fixpoint Term_int_rect (t : Term Σ ty.int) {struct t} : P t :=
+      Term_int_case P pvar pval
+        (fun t1 t2 => pplus (Term_int_rect t1) (Term_int_rect t2))
+        (fun t1 t2 => pminus (Term_int_rect t1) (Term_int_rect t2))
+        (fun t1 t2 => ptimes (Term_int_rect t1) (Term_int_rect t2))
+        (fun t1 t2 => pland (Term_int_rect t1) (Term_int_rect t2))
+        (fun t1 => pneg (Term_int_rect t1))
+        psigned punsigned t.
 
-  End Term_bv_case.
+  End Term_int_rect.
 
-  Section Term_bv_rect.
+  Section Term_bool_case.
 
-    Context {Σ : LCtx} [P : forall n, Term Σ (ty.bvec n) -> Type].
+    Context {Σ : LCtx} (P : Term Σ ty.bool → Type).
 
-    Variable (pvar : forall n (ς : LVar) (ςInΣ : ς∷ty.bvec n ∈ Σ), P (term_var ς)).
-    Variable (pval : forall n (v : Val (ty.bvec n)), P (term_val (ty.bvec n) v)).
-    Variable (pbvadd : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvadd e1 e2)).
-    Variable (pbvsub : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvsub e1 e2)).
-    Variable (pbvmul : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvmul e1 e2)).
-    Variable (pbvand : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvand e1 e2)).
-    Variable (pbvor : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvor e1 e2)).
-    Variable (pbvxor : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvxor e1 e2)).
-    Variable (pshiftr : forall n m (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec m)), P e1 -> P e2 -> P (term_binop bop.shiftr e1 e2)).
-    Variable (pshiftl : forall n m (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec m)), P e1 -> P e2 -> P (term_binop bop.shiftl e1 e2)).
-    Variable (pbvapp : forall n1 n2 (e1 : Term Σ (ty.bvec n1)) (e2 : Term Σ (ty.bvec n2)), P e1 -> P e2 -> P (term_binop bop.bvapp e1 e2)).
-    Variable (pbvcons : forall n (e1 : Term Σ ty.bool) (e2 : Term Σ (ty.bvec n)), P e2 -> P (term_binop bop.bvcons e1 e2)).
-    Variable (pupdate_subrange : forall {n s l : nat} (pf : IsTrue (s + l <=? n)) (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec l)), P e1 -> P e2 -> P (term_binop (@bop.update_vector_subrange _ _ s l pf) e1 e2)).
-    Variable (pbvnot : forall n (e : Term Σ (ty.bvec n)), P e -> P (term_unop uop.bvnot e)).
-    Variable (pnegate : forall n (e : Term Σ (ty.bvec n)), P e -> P (term_unop uop.negate e)).
-    Variable (psext : forall n m (pf : IsTrue (m <=? n)) (e : Term Σ (ty.bvec m)), P e -> P (term_unop (uop.sext (p := pf)) e)).
-    Variable (pzext : forall n m (pf : IsTrue (m <=? n)) (e : Term Σ (ty.bvec m)), P e -> P (term_unop (uop.zext (p := pf)) e)).
-    Variable (pgetslice : forall n (e : Term Σ ty.int), P (term_unop (uop.get_slice_int (n := n)) e)).
-    Variable (ptruncate : forall n m (pf : IsTrue (n <=? m)) (e : Term Σ (ty.bvec m)), P e -> P (term_unop (@uop.truncate _ m n pf) e)).
-    Variable (psubrange : forall n m s (pf : IsTrue (s + n <=? m)) (e : Term Σ (ty.bvec m)), P e -> P (term_unop (@uop.vector_subrange _ _ s n pf) e)).
+    Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.bool ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ (v : Val ty.bool), P (term_val ty.bool v)).
+    Hypothesis (pand : ∀ (t1 t2 : Term Σ ty.bool), P (term_binop bop.and t1 t2)).
+    Hypothesis (por : ∀ (t1 t2 : Term Σ ty.bool), P (term_binop bop.or t1 t2)).
+    Hypothesis (prel : (∀ [σ] (op : RelOp σ) (t1 t2 : Term Σ σ),
+                          P (term_binop (bop.relop op) t1 t2))).
+    Hypothesis (pnot : ∀ t : Term Σ ty.bool, P (term_unop uop.not t)).
 
-    Fixpoint Term_bv_rect [n : nat] (t : Term Σ (ty.bvec n)) {struct t} : P t :=
-      Term_bv_case (P := P)
-        ltac:(intros; apply pvar)
-        ltac:(intros; apply pval)
-        ltac:(intros; apply pbvadd; auto)
-        ltac:(intros; apply pbvsub; auto)
-        ltac:(intros; apply pbvmul; auto)
-        ltac:(intros; apply pbvand; auto)
-        ltac:(intros; apply pbvor; auto)
-        ltac:(intros; apply pbvxor; auto)
-        ltac:(intros; apply pshiftr; auto)
-        ltac:(intros; apply pshiftl; auto)
-        ltac:(intros; apply pbvapp; auto)
-        ltac:(intros; apply pbvcons; auto)
-        ltac:(intros; apply pupdate_subrange; auto)
-        ltac:(intros; apply pbvnot; auto)
-        ltac:(intros; apply pnegate; auto)
-        ltac:(intros; apply psext; auto)
-        ltac:(intros; apply pzext; auto)
-        ltac:(intros; apply pgetslice; auto)
-        ltac:(intros; apply ptruncate; auto)
-        ltac:(intros; apply psubrange; auto)
-        t.
+    Equations(noeqns) Term_bool_case (t : Term Σ ty.bool) : P t :=
+    | term_var_in lIn                 => pvar lIn
+    | term_val _ b                    => pval b
+    | term_binop bop.and t1 t2        => pand t1 t2
+    | term_binop (bop.relop op) t1 t2 => prel op t1 t2
+    | term_binop bop.or t1 t2         => por t1 t2
+    | term_unop uop.not t             => pnot t.
 
-  End Term_bv_rect.
+  End Term_bool_case.
 
   Section Term_bool_ind.
 
-    Context {Σ : LCtx} [P : Term Σ ty.bool -> Type].
+    Context {Σ : LCtx} (P : Term Σ ty.bool → Type).
 
-    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.bool ∈ Σ), P (term_var ς)).
-    Variable (pval : forall (v : Val ty.bool), P (term_val ty.bool v)).
-    Variable (pand : forall e1 e2, P e1 -> P e2 -> P (term_binop bop.and e1 e2)).
-    Variable (por : forall e1 e2, P e1 -> P e2 -> P (term_binop bop.or e1 e2)).
-    Variable (prel : forall σ (op : RelOp σ) e1 e2, P (term_binop (bop.relop op) e1 e2)).
-    Variable (pnot : forall e, P e -> P (term_unop uop.not e)).
+    Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.bool ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ (b : Val ty.bool), P (term_val ty.bool b)).
+    Hypothesis (pand : ∀ (t1 t2 : Term Σ ty.bool), P t1 → P t2 → P (term_binop bop.and t1 t2)).
+    Hypothesis (por : ∀ e1 e2, P e1 → P e2 → P (term_binop bop.or e1 e2)).
+    Hypothesis (prel : ∀ σ (op : RelOp σ) e1 e2, P (term_binop (bop.relop op) e1 e2)).
+    Hypothesis (pnot : ∀ e, P e → P (term_unop uop.not e)).
 
     Fixpoint Term_bool_ind (t : Term Σ ty.bool) : P t :=
-      Term_bool_case
-        pvar
-        pval
+      Term_bool_case P pvar pval
         (fun t1 t2 => pand (Term_bool_ind t1) (Term_bool_ind t2))
         (fun t1 t2 => por (Term_bool_ind t1) (Term_bool_ind t2))
         prel
@@ -363,48 +297,204 @@ Module Type TermsOn (Import TY : Types).
 
   End Term_bool_ind.
 
+  Section Term_list_case.
+
+    Context {Σ σ} (P : Term Σ (ty.list σ) → Type).
+
+    Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.list σ ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ (v : Val (ty.list σ)), P (term_val (ty.list σ) v)).
+    Hypothesis (pcons : ∀ (t1 : Term Σ σ) (t2 : Term Σ (ty.list σ)), P (term_binop bop.cons t1 t2)).
+    Hypothesis (pappend : ∀ (t1 : Term Σ (ty.list σ)) (t2 : Term Σ (ty.list σ)), P (term_binop bop.append t1 t2)).
+
+    Equations(noeqns) Term_list_case (t : Term Σ (ty.list σ)) : P t :=
+    | term_var_in lIn             => pvar lIn
+    | term_val _ v                => pval v
+    | term_binop bop.cons t1 t2   => pcons t1 t2
+    | term_binop bop.append t1 t2 => pappend t1 t2.
+
+  End Term_list_case.
+
+  Section Term_prod_case.
+
+    Context {Σ σ1 σ2} (P : Term Σ (ty.prod σ1 σ2) → Type).
+
+    Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.prod σ1 σ2 ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ (v : Val (ty.prod σ1 σ2)), P (term_val (ty.prod σ1 σ2) v)).
+    Hypothesis (ppair : ∀ (t1 : Term Σ σ1) (t2 : Term Σ σ2), P (term_binop bop.pair t1 t2)).
+
+    Equations(noeqns) Term_prod_case (t : Term Σ (ty.prod σ1 σ2)) : P t :=
+    | term_var_in lIn         => pvar lIn
+    | term_val _ p            => pval p
+    | term_binop bop.pair s t => ppair s t.
+
+  End Term_prod_case.
+
+  Section Term_sum_case.
+
+    Context {Σ σ1 σ2} (P : Term Σ (ty.sum σ1 σ2) → Type).
+
+    Hypothesis (pvar : ∀ (ς : LVar) (ςInΣ : ς∷ty.sum σ1 σ2 ∈ Σ), P (term_var ς)).
+    Hypothesis (pval : ∀ (v : Val (ty.sum σ1 σ2)), P (term_val (ty.sum σ1 σ2) v)).
+    Hypothesis (pinl : ∀ (t1 : Term Σ σ1), P (term_unop uop.inl t1)).
+    Hypothesis (pinr : ∀ (t2 : Term Σ σ2), P (term_unop uop.inr t2)).
+
+    Equations(noeqns) Term_sum_case (t : Term Σ (ty.sum σ1 σ2)) : P t :=
+    | term_var_in lIn     => pvar lIn
+    | term_val _ v        => pval v
+    | term_unop uop.inl t => pinl t
+    | term_unop uop.inr t => pinr t.
+
+  End Term_sum_case.
+
+  Section Term_bvec_case.
+
+    Context {Σ : LCtx} (P : ∀ n, Term Σ (ty.bvec n) → Type).
+
+    Hypothesis (pvar : ∀ n (l : LVar) (lIn : l∷ty.bvec n ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ n (v : Val (ty.bvec n)), P (term_val (ty.bvec n) v)).
+    Hypothesis (pbvadd : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.bvadd t1 t2)).
+    Hypothesis (pbvsub : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.bvsub t1 t2)).
+    Hypothesis (pbvmul : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.bvmul t1 t2)).
+    Hypothesis (pbvand : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.bvand t1 t2)).
+    Hypothesis (pbvor : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.bvor t1 t2)).
+    Hypothesis (pbvxor : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.bvxor t1 t2)).
+    Hypothesis (pshiftr : ∀ n m (t1 : Term Σ (ty.bvec n)) (t2 : Term Σ (ty.bvec m)), P (term_binop bop.shiftr t1 t2)).
+    Hypothesis (pshiftl : ∀ n m (t1 : Term Σ (ty.bvec n)) (t2 : Term Σ (ty.bvec m)), P (term_binop bop.shiftl t1 t2)).
+    Hypothesis (pbvapp : ∀ n1 n2 (t1 : Term Σ (ty.bvec n1)) (t2 : Term Σ (ty.bvec n2)), P (term_binop bop.bvapp t1 t2)).
+    Hypothesis (pbvcons : ∀ n (t1 : Term Σ ty.bool) (t2 : Term Σ (ty.bvec n)), P (term_binop bop.bvcons t1 t2)).
+    Hypothesis (pupdate_subrange :
+                 ∀ {n s l : nat} {pf : IsTrue (s + l <=? n)}
+                   (t1 : Term Σ (ty.bvec n)) (t2 : Term Σ (ty.bvec l)),
+                  P (term_binop (bop.update_vector_subrange s l) t1 t2)).
+    Hypothesis (pbvnot : ∀ n (t : Term Σ (ty.bvec n)), P (term_unop uop.bvnot t)).
+    Hypothesis (pnegate : ∀ n (t : Term Σ (ty.bvec n)), P (term_unop uop.negate t)).
+    Hypothesis (psext : ∀ n m (pf : IsTrue (m <=? n)) (t : Term Σ (ty.bvec m)), P (term_unop (uop.sext (p := pf)) t)).
+    Hypothesis (pzext : ∀ n m (pf : IsTrue (m <=? n)) (t : Term Σ (ty.bvec m)), P (term_unop (uop.zext (p := pf)) t)).
+    Hypothesis (pgetslice : ∀ n (t : Term Σ ty.int), P (term_unop (uop.get_slice_int (n := n)) t)).
+    Hypothesis (ptruncate : ∀ n m (pf : IsTrue (n <=? m)) (t : Term Σ (ty.bvec m)), P (term_unop (uop.truncate n) t)).
+    Hypothesis (psubrange : ∀ s l m (pf : IsTrue (s + l <=? m)) (t : Term Σ (ty.bvec m)), P (term_unop (uop.vector_subrange s l) t)).
+
+    Equations(noeqns) Term_bvec_case [n] (t : Term Σ (ty.bvec n)) : P t :=
+    | term_var_in lIn                                   => pvar lIn
+    | term_val _ v                                      => pval v
+    | term_binop bop.bvadd t1 t2                        => pbvadd t1 t2
+    | term_binop bop.bvsub t1 t2                        => pbvsub t1 t2
+    | term_binop bop.bvmul t1 t2                        => pbvmul t1 t2
+    | term_binop bop.bvand t1 t2                        => pbvand t1 t2
+    | term_binop bop.bvor t1 t2                         => pbvor t1 t2
+    | term_binop bop.bvxor t1 t2                        => pbvxor t1 t2
+    | term_binop bop.shiftr t1 t2                       => pshiftr t1 t2
+    | term_binop bop.shiftl t1 t2                       => pshiftl t1 t2
+    | term_binop bop.bvapp t1 t2                        => pbvapp t1 t2
+    | term_binop bop.bvcons t1 t2                       => pbvcons t1 t2
+    | term_binop (bop.update_vector_subrange _ _) t1 t2 => pupdate_subrange t1 t2
+    | term_unop uop.bvnot t                             => pbvnot t
+    | term_unop uop.negate t                            => pnegate t
+    | term_unop uop.sext t                              => psext _ _ t
+    | term_unop uop.zext t                              => pzext _ _ t
+    | term_unop uop.get_slice_int t                     => pgetslice _ _
+    | term_unop (uop.truncate _) t                      => ptruncate _ _ t
+    | term_unop (uop.vector_subrange _ _) t             => psubrange _ _ _ t
+    .
+
+  End Term_bvec_case.
+
+  Section Term_bvec_rect.
+
+    Context {Σ : LCtx} (P : ∀ n, Term Σ (ty.bvec n) → Type).
+
+    Hypothesis (pvar : ∀ n (ς : LVar) (ςInΣ : ς∷ty.bvec n ∈ Σ), P (term_var ς)).
+    Hypothesis (pval : ∀ n (v : Val (ty.bvec n)), P (term_val (ty.bvec n) v)).
+    Hypothesis (pbvadd : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.bvadd t1 t2)).
+    Hypothesis (pbvsub : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.bvsub t1 t2)).
+    Hypothesis (pbvmul : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.bvmul t1 t2)).
+    Hypothesis (pbvand : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.bvand t1 t2)).
+    Hypothesis (pbvor : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.bvor t1 t2)).
+    Hypothesis (pbvxor : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.bvxor t1 t2)).
+    Hypothesis (pshiftr : ∀ n m (t1 : Term Σ (ty.bvec n)) (t2 : Term Σ (ty.bvec m)), P t1 → P t2 → P (term_binop bop.shiftr t1 t2)).
+    Hypothesis (pshiftl : ∀ n m (t1 : Term Σ (ty.bvec n)) (t2 : Term Σ (ty.bvec m)), P t1 → P t2 → P (term_binop bop.shiftl t1 t2)).
+    Hypothesis (pbvapp : ∀ m n (t1 : Term Σ (ty.bvec m)) (t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.bvapp t1 t2)).
+    Hypothesis (pbvcons : ∀ n (t1 : Term Σ ty.bool) (t2 : Term Σ (ty.bvec n)), P t2 → P (term_binop bop.bvcons t1 t2)).
+    Hypothesis (pupdate_subrange :
+                 ∀ {s l m} (p : IsTrue (s + l <=? m))
+                   (t1 : Term Σ (ty.bvec m)) (t2 : Term Σ (ty.bvec l)),
+                  P t1 → P t2 → P (term_binop (bop.update_vector_subrange s l) t1 t2)).
+    Hypothesis (pbvnot : ∀ n (t : Term Σ (ty.bvec n)), P t → P (term_unop uop.bvnot t)).
+    Hypothesis (pnegate : ∀ n (t : Term Σ (ty.bvec n)), P t → P (term_unop uop.negate t)).
+    Hypothesis (psext : ∀ n m (pf : IsTrue (m <=? n)) (t : Term Σ (ty.bvec m)), P t → P (term_unop (uop.sext (p := pf)) t)).
+    Hypothesis (pzext : ∀ n m (pf : IsTrue (m <=? n)) (t : Term Σ (ty.bvec m)), P t → P (term_unop (uop.zext (p := pf)) t)).
+    Hypothesis (pgetslice : ∀ n (t : Term Σ ty.int), P (term_unop (uop.get_slice_int (n := n)) t)).
+    Hypothesis (ptruncate : ∀ n m (pf : IsTrue (n <=? m)) (t : Term Σ (ty.bvec m)), P t → P (term_unop (uop.truncate n) t)).
+    Hypothesis (psubrange : ∀ s l m (pf : IsTrue (s + l <=? m)) (t : Term Σ (ty.bvec m)), P t → P (term_unop (uop.vector_subrange s l) t)).
+
+    Fixpoint Term_bvec_rect [n : nat] (t : Term Σ (ty.bvec n)) {struct t} : P t :=
+      Term_bvec_case P
+        (ltac:(intros; apply pvar))
+        (ltac:(intros; apply pval))
+        (ltac:(intros; apply pbvadd; auto))
+        (ltac:(intros; apply pbvsub; auto))
+        (ltac:(intros; apply pbvmul; auto))
+        (ltac:(intros; apply pbvand; auto))
+        (ltac:(intros; apply pbvor; auto))
+        (ltac:(intros; apply pbvxor; auto))
+        (ltac:(intros; apply pshiftr; auto))
+        (ltac:(intros; apply pshiftl; auto))
+        (ltac:(intros; apply pbvapp; auto))
+        (ltac:(intros; apply pbvcons; auto))
+        (ltac:(intros; apply pupdate_subrange; auto))
+        (ltac:(intros; apply pbvnot; auto))
+        (ltac:(intros; apply pnegate; auto))
+        (ltac:(intros; apply psext; auto))
+        (ltac:(intros; apply pzext; auto))
+        (ltac:(intros; apply pgetslice; auto))
+        (ltac:(intros; apply ptruncate; auto))
+        (ltac:(intros; apply psubrange; auto))
+        t.
+
+  End Term_bvec_rect.
+
   Section Term_tuple_case.
 
-    Context {Σ : LCtx} {σs : Ctx Ty} [P : Term Σ (ty.tuple σs) -> Type].
+    Context {Σ σs} (P : Term Σ (ty.tuple σs) → Type).
 
-    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.tuple σs ∈ Σ), P (term_var ς)).
-    Variable (pval : forall (v : Val (ty.tuple σs)), P (term_val (ty.tuple σs) v)).
-    Variable (ptuple : forall (ts : Env (Term Σ) σs), P (term_tuple ts)).
+    Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.tuple σs ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ (v : Val (ty.tuple σs)), P (term_val (ty.tuple σs) v)).
+    Hypothesis (ptuple : ∀ (ts : Env (Term Σ) σs), P (term_tuple ts)).
 
     Equations(noeqns) Term_tuple_case (t : Term Σ (ty.tuple σs)) : P t :=
-    | term_var ς    => @pvar ς _
-    | term_val _ v  => @pval v
-    | term_tuple ts => ptuple ts.
+    | term_var_in lIn => pvar lIn
+    | term_val _ v    => pval v
+    | term_tuple ts   => ptuple ts.
 
   End Term_tuple_case.
 
   Section Term_union_case.
 
-    Context {Σ : LCtx} {U : unioni} [P : Term Σ (ty.union U) -> Type].
+    Context {Σ U} (P : Term Σ (ty.union U) → Type).
 
-    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.union U ∈ Σ), P (term_var ς)).
-    Variable (pval : forall (v : Val (ty.union U)), P (term_val (ty.union U) v)).
-    Variable (punion : forall K (t : Term Σ (unionk_ty U K)), P (term_union U K t)).
+    Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.union U ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ (v : Val (ty.union U)), P (term_val (ty.union U) v)).
+    Hypothesis (punion : ∀ K (t : Term Σ (unionk_ty U K)), P (term_union U K t)).
 
     Equations(noeqns) Term_union_case (t : Term Σ (ty.union U)) : P t :=
-    | term_var ς       => @pvar ς _
-    | term_val _ v     => @pval v
+    | term_var_in lIn  => pvar lIn
+    | term_val _ v     => pval v
     | term_union U K t => punion K t.
 
   End Term_union_case.
 
   Section Term_record_case.
 
-    Context {Σ : LCtx} {R : recordi} [P : Term Σ (ty.record R) -> Type].
+    Context {Σ R} (P : Term Σ (ty.record R) → Type).
 
-    Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.record R ∈ Σ), P (term_var ς)).
-    Variable (pval : forall (v : Val (ty.record R)), P (term_val (ty.record R) v)).
-    Variable (precord : forall (ts : NamedEnv (Term Σ) (recordf_ty R)), P (term_record R ts)).
+    Variable (pvar : ∀ (l : LVar) (lIn : l∷ty.record R ∈ Σ), P (term_var l)).
+    Variable (pval : ∀ (v : Val (ty.record R)), P (term_val (ty.record R) v)).
+    Variable (precord : ∀ (ts : NamedEnv (Term Σ) (recordf_ty R)), P (term_record R ts)).
 
     Equations(noeqns) Term_record_case (t : Term Σ (ty.record R)) : P t :=
-    | term_var ς    => @pvar ς _
-    | term_val _ v  => @pval v
-    | term_record ts => precord ts.
+    | term_var_in lIn => pvar lIn
+    | term_val _ v    => pval v
+    | term_record ts  => precord ts.
 
   End Term_record_case.
 
@@ -414,7 +504,7 @@ Module Type TermsOn (Import TY : Types).
     Local Set Elimination Schemes.
 
     (* A view on list terms. *)
-    Inductive ListView {Σ σ} : Term Σ (ty.list σ) -> Type :=
+    Inductive ListView {Σ σ} : Term Σ (ty.list σ) → Type :=
     | term_list_var {ς} {ςInΣ : (ς∷ty.list σ) ∈ Σ} :
       ListView (term_var ς)
     | term_list_val v :
@@ -427,27 +517,27 @@ Module Type TermsOn (Import TY : Types).
     #[global] Arguments term_list_append {Σ σ} [t1 t2] lv1 lv2.
 
     (* We map each type to a specialized view for that type. *)
-    Definition View {Σ} (σ : Ty) : Term Σ σ -> Type :=
+    Definition View {Σ} (σ : Ty) : Term Σ σ → Type :=
       match σ with
       | ty.list τ => ListView
       | _         => fun _ => unit
       end.
 
-    Definition view_var {Σ ς σ} : forall ςInΣ, View (@term_var Σ ς σ ςInΣ) :=
+    Definition view_var {Σ l σ} : ∀ lIn, View (@term_var Σ l σ lIn) :=
       match σ with
-       | ty.list σ => @term_list_var _ _ ς
+       | ty.list σ => @term_list_var _ _ l
        | _         => fun _ => tt
        end.
 
-    Definition view_val {Σ σ} : forall v, View (@term_val Σ σ v) :=
+    Definition view_val {Σ σ} : ∀ v, View (@term_val Σ σ v) :=
       match σ with
       | ty.list σ0 => term_list_val
       | _          => fun _ => tt
       end.
 
     Definition view_binop {Σ σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) :
-      forall {t1 : Term Σ σ1} {t2 : Term Σ σ2},
-        View t1 -> View t2 -> View (term_binop op t1 t2) :=
+      ∀ {t1 : Term Σ σ1} {t2 : Term Σ σ2},
+        View t1 → View t2 → View (term_binop op t1 t2) :=
        match op with
        | bop.cons   => fun t1 t2 _  v2 => term_list_cons t1 v2
        | bop.append => term_list_append
@@ -455,9 +545,8 @@ Module Type TermsOn (Import TY : Types).
        end.
 
     Definition view_unop {Σ σ1 σ2} (op : UnOp σ1 σ2) :
-      forall {t : Term Σ σ1},
-        View t -> View (term_unop op t) :=
-      match op with
+      ∀ {t : Term Σ σ1}, View t → View (term_unop op t) :=
+    match op with
       | uop.inl | _ => fun _ _ => tt
       end.
 
@@ -473,63 +562,72 @@ Module Type TermsOn (Import TY : Types).
 
   End TermView.
 
-  Open Scope lazy_bool_scope.
+  Section Equality.
 
-  Equations(noeqns) Term_eqb {Σ} [σ : Ty] (t1 t2 : Term Σ σ) : bool :=
-    Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
-      ctx.In_eqb ς1inΣ ς2inΣ;
-    Term_eqb (term_val _ v1) (term_val _ v2) :=
-      if eq_dec v1 v2 then true else false;
-    Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
-      with bop.eqdep_dec op1 op2 => {
-      Term_eqb (term_binop op1 x1 y1) (term_binop ?(op1) x2 y2) (left bop.opeq_refl) :=
-        Term_eqb x1 x2 &&& Term_eqb y1 y2;
-      Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (right _) := false
-    };
-    Term_eqb (term_unop op1 t1) (term_unop op2 t2) with uop.tel_eq_dec op1 op2 => {
-      Term_eqb (term_unop op1 t1) (term_unop ?(op1) t2) (left eq_refl) :=
-        Term_eqb t1 t2;
-      Term_eqb (term_unop op1 t1) (term_unop op2 t2) (right _) := false;
-    };
-    Term_eqb (@term_tuple ?(σs) xs) (@term_tuple σs ys) :=
-      @env.eqb_hom _ (Term Σ) (@Term_eqb _) _ xs ys;
-    Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
-      with eq_dec k1 k2 => {
-      Term_eqb (term_union k1 e1) (term_union ?(k1) e2) (left eq_refl) :=
-        Term_eqb e1 e2;
-      Term_eqb _ _ (right _) := false
-    };
-    Term_eqb (@term_record ?(r) xs) (@term_record r ys) :=
-      @env.eqb_hom _ (fun b => Term Σ (type b)) (fun b => @Term_eqb _ (type b)) _ xs ys;
-    Term_eqb _ _ := false.
+    Open Scope lazy_bool_scope.
 
-  Local Set Equations With UIP.
-  Lemma Term_eqb_spec Σ (σ : Ty) (t1 t2 : Term Σ σ) :
-    reflect (t1 = t2) (Term_eqb t1 t2).
-  Proof.
-    induction t1 using Term_rect; cbn [Term_eqb]; dependent elimination t2;
-      solve_eqb_spec with
-      repeat match goal with
-          | |- context[eq_dec ?l1 ?l2] => destruct (eq_dec l1 l2)
-          | |- context[bop.eqdep_dec ?x ?y] =>
-              let e := fresh in
-              destruct (bop.eqdep_dec x y) as [e|];
-              [dependent elimination e|]
-          | |- context[uop.tel_eq_dec ?x ?y] =>
-              let e := fresh in
-              destruct (uop.tel_eq_dec x y) as [e|];
-              [dependent elimination e|]
-          | H: ~ bop.OpEq ?o ?o |- False => apply H; constructor
-          end.
-    - apply (@ssrbool.iffP (es = ts)); solve_eqb_spec.
-      apply env.eqb_hom_spec_point, IH.
-    - apply (@ssrbool.iffP (es = ts0)); solve_eqb_spec.
-      apply env.eqb_hom_spec_point, IH.
-  Qed.
+    Context {Σ : LCtx}.
+
+    Equations(noeqns) Term_eqb [σ] (t1 t2 : Term Σ σ) : bool :=
+      Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
+        ctx.In_eqb ς1inΣ ς2inΣ;
+      Term_eqb (term_val _ v1) (term_val _ v2) :=
+        if eq_dec v1 v2 then true else false;
+      Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
+        with bop.eqdep_dec op1 op2 => {
+        Term_eqb (term_binop op1 x1 y1) (term_binop ?(op1) x2 y2) (left bop.opeq_refl) :=
+          Term_eqb x1 x2 &&& Term_eqb y1 y2;
+        Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (right _) := false
+      };
+      Term_eqb (term_unop op1 t1) (term_unop op2 t2) with uop.tel_eq_dec op1 op2 => {
+        Term_eqb (term_unop op1 t1) (term_unop ?(op1) t2) (left eq_refl) :=
+          Term_eqb t1 t2;
+        Term_eqb (term_unop op1 t1) (term_unop op2 t2) (right _) := false;
+      };
+      Term_eqb (@term_tuple ?(σs) xs) (@term_tuple σs ys) :=
+        @env.eqb_hom _ (Term Σ) Term_eqb _ xs ys;
+      Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
+        with eq_dec k1 k2 => {
+        Term_eqb (term_union k1 e1) (term_union ?(k1) e2) (left eq_refl) :=
+          Term_eqb e1 e2;
+        Term_eqb _ _ (right _) := false
+      };
+      Term_eqb (@term_record ?(r) xs) (@term_record r ys) :=
+        @env.eqb_hom _ (fun b => Term Σ (type b)) (fun b => @Term_eqb (type b)) _ xs ys;
+      Term_eqb _ _ := false.
+
+    #[local] Set Equations With UIP.
+
+    Lemma Term_eqb_spec (σ : Ty) (t1 t2 : Term Σ σ) :
+      reflect (t1 = t2) (Term_eqb t1 t2).
+    Proof.
+      induction t1 using Term_rect; cbn [Term_eqb]; dependent elimination t2;
+        solve_eqb_spec with
+        repeat match goal with
+            | |- context[eq_dec ?l1 ?l2] => destruct (eq_dec l1 l2)
+            | |- context[bop.eqdep_dec ?x ?y] =>
+                let e := fresh in
+                destruct (bop.eqdep_dec x y) as [e|];
+                [dependent elimination e|]
+            | |- context[uop.tel_eq_dec ?x ?y] =>
+                let e := fresh in
+                destruct (uop.tel_eq_dec x y) as [e|];
+                [dependent elimination e|]
+            | H: ~ bop.OpEq ?o ?o |- False => apply H; constructor
+            | |- reflect (term_tuple ?ts1 = term_tuple ?ts2) _ =>
+                apply (@ssrbool.iffP (ts1 = ts2))
+            | |- reflect (term_record ?R ?ts1 = term_record ?R ?ts2) _ =>
+                apply (@ssrbool.iffP (ts1 = ts2))
+            | |- reflect (?ts1 = ?ts2) (env.eqb_hom _ ?ts1 ?ts2) =>
+                apply env.eqb_hom_spec_point
+            end; auto.
+    Qed.
+
+  End Equality.
 
   Section Symbolic.
 
-    Polymorphic Definition List (A : LCtx -> Type) (Σ : LCtx) : Type :=
+    Polymorphic Definition List (A : LCtx → Type) (Σ : LCtx) : Type :=
       list (A Σ).
     Definition Const (A : Type) (Σ : LCtx) : Type :=
       A.
@@ -542,8 +640,8 @@ Module Type TermsOn (Import TY : Types).
       Env (fun b => Term Σ2 (type b)) Σ1.
     (* Hint Unfold Sub. *)
 
-    Class Subst (T : LCtx -> Type) : Type :=
-      subst : forall {Σ1 : LCtx}, T Σ1 -> forall {Σ2 : LCtx}, Sub Σ1 Σ2 -> T Σ2.
+    Class Subst (T : LCtx → Type) : Type :=
+      subst : ∀ {Σ1 : LCtx}, T Σ1 → ∀ {Σ2 : LCtx}, Sub Σ1 Σ2 → T Σ2.
     #[global] Arguments subst {T _ Σ1} t {Σ2} ζ.
 
     Fixpoint sub_term {σ Σ1} (t : Term Σ1 σ) {Σ2} (ζ : Sub Σ1 Σ2) {struct t} : Term Σ2 σ :=
@@ -572,7 +670,7 @@ Module Type TermsOn (Import TY : Types).
 
     #[export] Instance SubstConst {A} : Subst (Const A) | 10 :=
        fun _ x _ _ => x.
-    #[export] Instance SubstEnv {B : Set} {A : Ctx _ -> B -> Set} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
+    #[export] Instance SubstEnv {B : Set} {A : Ctx _ → B → Set} `{∀ b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
       Subst (fun Σ => Env (A Σ) Δ) :=
       fun Σ1 xs Σ2 ζ => env.map (fun b a => subst (T := fun Σ => A Σ b) a ζ) xs.
 
@@ -623,7 +721,7 @@ Module Type TermsOn (Import TY : Types).
             | ctx.Diff _ yIn => @term_var _ _ _ yIn
             end).
 
-    Class SubstLaws (T : LCtx -> Type) `{Subst T} : Type :=
+    Class SubstLaws (T : LCtx → Type) `{Subst T} : Type :=
       { subst_sub_id Σ (t : T Σ) :
           subst t (sub_id _) = t;
         subst_sub_comp Σ0 Σ1 Σ2 (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) t :
@@ -663,8 +761,8 @@ Module Type TermsOn (Import TY : Types).
     #[export] Instance SubstLawsConst {A} : SubstLaws (Const A).
     Proof. constructor; reflexivity. Qed.
 
-    #[export] Instance SubstLawsEnv {B : Set} {A : Ctx _ -> B -> Set}
-      `{forall b, Subst (fun Σ => A Σ b), forall b, SubstLaws (fun Σ => A Σ b)}
+    #[export] Instance SubstLawsEnv {B : Set} {A : Ctx _ → B → Set}
+      `{∀ b, Subst (fun Σ => A Σ b), ∀ b, SubstLaws (fun Σ => A Σ b)}
       {Δ : Ctx B} :
       SubstLaws (fun Σ => Env (A Σ) Δ).
     Proof.
@@ -846,7 +944,7 @@ Module Type TermsOn (Import TY : Types).
 
   Section SymbolicPair.
 
-    Definition Pair (A B : LCtx -> Type) (Σ : LCtx) : Type :=
+    Definition Pair (A B : LCtx → Type) (Σ : LCtx) : Type :=
       A Σ * B Σ.
     #[export] Instance SubstPair {A B} `{Subst A, Subst B} : Subst (Pair A B) :=
       fun _ '(a,b) _ ζ => (subst a ζ, subst b ζ).
@@ -866,7 +964,7 @@ Module Type TermsOn (Import TY : Types).
 
   Section SymbolicOption.
 
-    Definition Option (A : LCtx -> Type) (Σ : LCtx) : Type :=
+    Definition Option (A : LCtx → Type) (Σ : LCtx) : Type :=
       option (A Σ).
     #[export] Instance SubstOption {A} `{Subst A} : Subst (Option A) :=
       fun _ ma _ ζ => option_map (fun a => subst a ζ) ma.
@@ -889,7 +987,7 @@ Module Type TermsOn (Import TY : Types).
 
   Section SymbolicUnit.
 
-    Definition Unit : LCtx -> Type := fun _ => unit.
+    Definition Unit : LCtx → Type := fun _ => unit.
     #[export] Instance SubstUnit : Subst Unit :=
       fun _ t _ _ => t.
     #[export] Instance SubstLawsUnit : SubstLaws Unit.

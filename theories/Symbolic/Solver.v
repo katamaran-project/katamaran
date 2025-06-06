@@ -71,7 +71,7 @@ Module Type GenericSolverOn
     Import DList.
 
     Fixpoint simplify_bool [Σ] (t : Term Σ ty.bool) : DList Σ :=
-      Term_bool_case
+      Term_bool_case (fun _ => DList Σ)
         (fun (*var*) ς _        => singleton (formula_bool (term_var ς)))
         (fun (*val*) b          => if b then empty else error)
         (fun (*and*) t1 t2      => cat (simplify_bool t1) (simplify_bool t2))
@@ -81,7 +81,7 @@ Module Type GenericSolverOn
         t
     with
     simplify_bool_neg [Σ] (t : Term Σ ty.bool) : DList Σ :=
-      Term_bool_case
+      Term_bool_case (fun _ => DList Σ)
         (fun (*var*) ς _        => singleton (formula_bool (term_unop uop.not (term_var ς))))
         (fun (*val*) b          => if b then error else empty)
         (fun (*and*) t1 t2      => singleton (formula_bool (term_binop bop.or (term_unop uop.not t1) (term_unop uop.not t2))))
@@ -95,7 +95,7 @@ Module Type GenericSolverOn
       (instpred (simplify_bool_neg t) ⊣⊢ instpred (formula_bool (term_unop uop.not t))).
     Proof.
       induction t using Term_bool_ind; cbn; arw.
-      - destruct v; arw. 
+      - destruct b; arw.
       - destruct IHt1 as [IHt11 IHt12], IHt2 as [IHt21 IHt22]; arw.
         rewrite IHt11 IHt21.
         (* need to find a confluent rewrite strategy... *)
@@ -353,21 +353,21 @@ Module Type GenericSolverOn
       - dependent elimination t; arw.
       - dependent elimination t; arw.
       - dependent elimination t; arw.
-        induction IH; env.destroy ts; arw.
+        induction IH; env.destroy ts0; arw.
         rewrite IHIH (q v) !formula_relop_term' bi.sep_comm. arw.
       - dependent elimination t; arw; cbn.
         destruct eq_dec as [Heq|Hneq]; arw.
         + destruct Heq; cbn. rewrite IHs !formula_relop_term'. arw.
         + rewrite formula_relop_term'; arw.
           now rewrite (eqₚ_term_union_neq Hneq).
-      - dependent elimination t; arw; cbn. 
+      - dependent elimination t; arw; cbn.
         rewrite formula_relop_term'; arw.
         arw_slow.
-        induction IH; env.destroy ts0; arw.
+        induction IH; env.destroy ts1; arw.
         rewrite IHIH (q v) formula_relop_term'. arw.
         arw_slow.
     Qed.
-    #[export] Hint Rewrite @simplify_eq_spec : uniflogic.
+    #[export] Hint Rewrite simplify_eq_spec : uniflogic.
 
     Definition simplify_relopb {Σ σ} (op : RelOp σ)
       (t1 t2 : STerm σ Σ) : DList Σ :=
@@ -609,14 +609,14 @@ Module Type GenericSolverOn
         (try_unify_eq t1 t2).
     Proof.
       unfold try_unify_eq. destruct t1; cbn; try (constructor; auto; fail).
-      destruct (occurs_check_lt ςInΣ t2) eqn:Heq; constructor; auto.
+      destruct occurs_check_lt eqn:Heq; constructor; auto.
       apply occurs_check_lt_sound in Heq.
       rewrite inst_triangular_knowing (knowing_trans (ω23 := acc_refl)) knowing_id knowing_acc_subst_right assuming_True bi.sep_True.
       now subst.
     Qed.
 
     Lemma try_unify_formula_spec {w : World} (fml : Formula w) :
-      option.wlp 
+      option.wlp
         (fun '(existT w' ν) => instpred fml ⊣⊢ inst_triangular ν) (try_unify_formula fml).
     Proof.
       unfold try_unify_formula; destruct fml; cbn; try (constructor; auto; fail).
