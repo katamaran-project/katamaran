@@ -261,4 +261,7 @@ Module Type FormulasOn
   End PathCondition.
   Bind Scope ctx_scope with PathCondition.
 
+  Notation formula_eq := (formula_relop bop.eq).
+  Notation formula_neq := (formula_relop bop.neq).
+
 End FormulasOn.

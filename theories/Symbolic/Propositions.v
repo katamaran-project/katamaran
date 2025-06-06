@@ -2103,6 +2103,7 @@ Module Type SymPropOn
 
       Notation "e1 + e2"  := (eterm_binop bop.plus e1 e2) (only printing).
       Notation "e1 * e2"  := (eterm_binop bop.times e1 e2) (only printing).
+      Notation "e1 - e2"  := (eterm_binop bop.minus e1 e2) (only printing).
       Notation "e1 +ᵇ e2" := (eterm_binop bop.bvadd e1 e2) (only printing).
       Notation "e1 -ᵇ e2" := (eterm_binop bop.bvsub e1 e2) (only printing).
       Notation "e1 *ᵇ e2" := (eterm_binop bop.bvmul e1 e2) (only printing).

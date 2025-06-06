@@ -1417,6 +1417,8 @@ Module Type WorldsOn
       Defined.
       #[local] Arguments cat {Σ} !_ !_ /.
 
+      Notation dlist_eq t1 t2 := (singleton (formula_eq t1 t2)).
+
       Import iris.bi.interface iris.bi.derived_laws.
 
       Lemma instpred_dlist_singleton [w : World] (F : Formula w) :
