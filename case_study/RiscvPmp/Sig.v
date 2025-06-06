@@ -427,6 +427,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
               ∨ fml_pmp_match a width lo addr cfg p acc)
     | term_list_append es1 es2 =>
         None (* TODO: we can do better here *)
+    | term_list_rev es => None
     end%list.
 
   Definition simplify_pmpcheck_term_list {Σ} (a width lo : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (Formula Σ) :=

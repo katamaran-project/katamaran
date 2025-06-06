@@ -467,10 +467,7 @@ Module Import ExampleSignature <: Signature ExampleBase.
     Proof.
       pattern (simplify_preverseappend xs ys zs).
       apply_funelim (simplify_preverseappend xs ys zs); intros *; lsolve;
-        intro ι; cbn.
-      - now rewrite rev_alt.
-      - now rewrite rev_append_rev.
-      - now rewrite rev_alt.
+        intro ι; cbn; first [now rewrite rev_alt|now rewrite rev_append_rev ].
     Qed.
     Goal True. idtac "Timing after: llist/simplify_preverseappend_spec". Abort.
 

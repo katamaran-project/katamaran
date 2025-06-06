@@ -113,6 +113,7 @@ Module Type TermsOn (Import TY : Types).
   Notation term_inr := (term_unop uop.inr).
   Notation term_neg := (term_unop uop.neg).
   Notation term_not := (term_unop uop.not).
+  Notation term_rev := (term_unop uop.rev).
   Notation term_sext := (term_unop uop.sext).
   Notation term_zext := (term_unop uop.zext).
   Notation term_get_slice_int := (term_unop uop.get_slice_int).
@@ -307,12 +308,14 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (pval : ∀ (v : Val (ty.list σ)), P (term_val (ty.list σ) v)).
     Hypothesis (pcons : ∀ (t1 : Term Σ σ) (t2 : Term Σ (ty.list σ)), P (term_binop bop.cons t1 t2)).
     Hypothesis (pappend : ∀ (t1 : Term Σ (ty.list σ)) (t2 : Term Σ (ty.list σ)), P (term_binop bop.append t1 t2)).
+    Hypothesis (prev : ∀ (t : Term Σ (ty.list σ)), P (term_unop uop.rev t)).
 
     Equations(noeqns) Term_list_case (t : Term Σ (ty.list σ)) : P t :=
     | term_var_in lIn             => pvar lIn
     | term_val _ v                => pval v
     | term_binop bop.cons t1 t2   => pcons t1 t2
-    | term_binop bop.append t1 t2 => pappend t1 t2.
+    | term_binop bop.append t1 t2 => pappend t1 t2
+    | term_unop uop.rev t         => prev t.
 
   End Term_list_case.
 
@@ -522,7 +525,9 @@ Module Type TermsOn (Import TY : Types).
     | term_list_cons h {t} (lv : ListView t) :
       ListView (term_binop bop.cons h t)
     | term_list_append {t1 t2} (lv1 : ListView t1) (lv2 : ListView t2) :
-      ListView (term_binop bop.append t1 t2).
+      ListView (term_binop bop.append t1 t2)
+    | term_list_rev t (lv : ListView t) :
+      ListView (term_unop uop.rev t).
     #[global] Arguments term_list_var {Σ σ} ς {ςInΣ}.
     #[global] Arguments term_list_append {Σ σ} [t1 t2] lv1 lv2.
 
@@ -557,7 +562,8 @@ Module Type TermsOn (Import TY : Types).
     Definition view_unop {Σ σ1 σ2} (op : UnOp σ1 σ2) :
       ∀ {t : Term Σ σ1}, View t → View (term_unop op t) :=
     match op with
-      | uop.inl | _ => fun _ _ => tt
+      | uop.rev => term_list_rev
+      | _ => fun _ _ => tt
       end.
 
     (* Construct a view for each term. *)

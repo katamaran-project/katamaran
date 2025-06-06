@@ -474,15 +474,9 @@ Module Type PartialEvaluationOn
     Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
       peval_append t1 t2 ≡ term_binop bop.append t1 t2.
     Proof.
-      depelim t1.
-      - reflexivity.
-      - depelim t2; cbn.
-        + now destruct v.
-        + now constructor.
-        + now destruct v.
-        + depelim op.
-      - now depelim op.
-      - now depelim op.
+      destruct t1 using Term_list_case; try constructor.
+      destruct t2 using Term_list_case;
+        first [constructor | destruct v; constructor].
     Qed.
 
     Lemma peval_or_sound (t1 t2 : Term Σ ty.bool) :
@@ -776,6 +770,7 @@ Module Type PartialEvaluationOn
       | uop.inr => fun t1 => peval_unop uop.inr (CanonTerm_to_Term t1)
       | uop.neg => Term_Quote_unop (@PEopp _)
       | uop.not => peval_unop uop.not
+      | uop.rev => fun t1 => peval_unop uop.rev (CanonTerm_to_Term t1)
       | uop.sext => fun t1 => CanonTerm_def (peval_unop uop.sext (CanonTerm_to_Term t1))
       | uop.zext => fun t1 => CanonTerm_def (peval_unop uop.zext (CanonTerm_to_Term t1))
       | uop.get_slice_int => fun t1 => CanonTerm_def (peval_unop uop.get_slice_int (CanonTerm_to_Term t1))
@@ -798,6 +793,7 @@ Module Type PartialEvaluationOn
       - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1).
       - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1).
       - now eapply Term_Quote_unop_Valid.
+      - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1).
       - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1).
       - rewrite <-(CanonTermRep_adeq H1), <-peval_unop_sound.
         eapply Term_Quote_def_Valid.
