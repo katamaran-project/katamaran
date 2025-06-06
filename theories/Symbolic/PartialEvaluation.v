@@ -754,6 +754,17 @@ Module Type PartialEvaluationOn
     | term_binop (bop.relop op) t1 t2 => term_relop_neg op t1 t2
     | t                               => term_unop uop.not t.
 
+    Definition peval_unsigned_bvapp {m1 m2} (t1 : Term Σ (ty.bvec m1))
+      (t2 : Term Σ (ty.bvec m2)) : Term Σ ty.int :=
+      term_binop bop.plus (term_unsigned t1)
+        (term_binop bop.times (term_unsigned t2)
+           (term_val ty.int (2 ^ Z.of_nat m1)%Z)).
+
+    Equations peval_unsigned {m} (t : Term Σ (ty.bvec m)) : Term Σ ty.int :=
+    | term_val _ v                => term_val ty.int (bv.unsigned v)
+    | term_binop bop.bvapp t1 t2  => peval_unsigned_bvapp t1 t2
+    | t                           => term_unop uop.unsigned t.
+
     Definition peval_bvdrop_app {m n k l} (t1 : Term Σ (ty.bvec k))
       (t2 : Term Σ (ty.bvec l)) (e : m + n = k + l) : Term Σ (ty.bvec n) :=
       match eq_dec m k with
@@ -857,6 +868,7 @@ Module Type PartialEvaluationOn
     Definition peval_unop {σ1 σ2} (op : UnOp σ1 σ2) : Term Σ σ1 -> Term Σ σ2 :=
       match op with
       | uop.not                       => peval_not
+      | uop.unsigned                  => peval_unsigned
       | uop.vector_subrange start len => peval_vector_subrange start len
       | uop.bvdrop m                  => peval_bvdrop m
       | uop.bvtake m                  => peval_bvtake m
@@ -866,6 +878,16 @@ Module Type PartialEvaluationOn
     Lemma peval_not_sound (t : Term Σ ty.bool) :
       peval_not t ≡ term_unop uop.not t.
     Proof. funelim (peval_not t); lsolve; now apply proper_term_binop. Qed.
+
+    Lemma peval_unsigned_bvapp_sound [m1 m2] (t1 : Term Σ (ty.bvec m1))
+      (t2 : Term Σ (ty.bvec m2)) :
+      peval_unsigned_bvapp t1 t2 ≡ term_unsigned (term_bvapp t1 t2).
+    Proof. intros ι; cbn. now rewrite bv.unsigned_app. Qed.
+    #[local] Hint Resolve peval_unsigned_bvapp_sound : core.
+
+    Lemma peval_unsigned_sound {m} (t : Term Σ (ty.bvec m)) :
+      peval_unsigned t ≡ term_unop uop.unsigned t.
+    Proof. funelim (peval_unsigned t); lsolve. Qed.
 
     Lemma peval_bvdrop_app_sound {m n k l} (t1 : Term Σ (ty.bvec k))
       (t2 : Term Σ (ty.bvec l)) (e : m + n = k + l) :
@@ -1035,8 +1057,9 @@ Module Type PartialEvaluationOn
       peval_unop op t ≡ term_unop op t.
     Proof.
       destruct op; cbn [peval_unop];
-        auto using peval_unop'_sound, peval_not_sound, peval_bvdrop_sound,
-                 peval_bvtake_sound, peval_vector_subrange_sound.
+        auto using peval_unop'_sound, peval_not_sound, peval_unsigned_sound,
+                 peval_bvdrop_sound, peval_bvtake_sound,
+                   peval_vector_subrange_sound.
     Qed.
 
     Definition peval_union {U K} (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) :=
