@@ -439,12 +439,38 @@ Module Type PartialEvaluationOn
     | term_binop bop.cons t11 t12 | t2 := term_binop bop.cons t11 (term_binop bop.append t12 t2);
     | t1                            | t2 := term_binop bop.append t1 t2.
 
+    Definition peval_and_val (t : Term Σ ty.bool) (v : Val ty.bool) :
+      Term Σ ty.bool := if v then t else term_val ty.bool false.
+    Definition peval_or_val (t : Term Σ ty.bool) (v : Val ty.bool) :
+      Term Σ ty.bool := if v then term_val ty.bool true else t.
+
+    Lemma peval_and_val_sound (t : Term Σ ty.bool)
+      (v : Val ty.bool) :
+      peval_and_val t v ≡ term_binop bop.and t (term_val ty.bool v).
+    Proof.
+      destruct v; cbn; intros ι; cbn.
+      - now rewrite andb_true_r.
+      - now rewrite andb_false_r.
+    Qed.
+
+    Lemma peval_or_val_sound (t : Term Σ ty.bool)
+      (v : Val ty.bool) :
+      peval_or_val t v ≡ term_binop bop.or t (term_val ty.bool v).
+    Proof.
+      destruct v; cbn; intros ι; cbn.
+      - now rewrite orb_true_r.
+      - now rewrite orb_false_r.
+    Qed.
+
+    Equations(noeqns) peval_and (t1 t2 : Term Σ ty.bool) : Term Σ ty.bool :=
+    | term_val _ b  , t2            => peval_and_val t2 b
+    | t1            , term_val _ b  => peval_and_val t1 b
+    | t1            , t2            => term_binop bop.and t1 t2.
+
     Equations(noeqns) peval_or (t1 t2 : Term Σ ty.bool) : Term Σ ty.bool :=
-    | term_val _ true  , t2               => term_val ty.bool true
-    | term_val _ false , t2               => t2
-    | t1               , term_val _ true  => term_val ty.bool true
-    | t1               , term_val _ false => t1
-    | t1               , t2               => term_binop bop.or t1 t2.
+    | term_val _ b  , t2            => peval_or_val t2 b
+    | t1            , term_val _ b  => peval_or_val t1 b
+    | t1            , t2            => term_binop bop.or t1 t2.
 
     Equations peval_plus (t1 t2 : Term Σ ty.int) : Term Σ ty.int :=
     | term_val _ v1  , term_val _ v2    => term_val ty.int (v1 + v2)%Z
@@ -460,15 +486,106 @@ Module Type PartialEvaluationOn
     | t1                     , term_val _ v2          => term_binop bop.bvadd (term_val (ty.bvec n) v2) t1
     | t1                     , t2                     => term_binop bop.bvadd t1 t2.
 
+    Definition peval_bvand_val_default {m} (t : Term Σ (ty.bvec m))
+      (v : Val (ty.bvec m)) : Term Σ (ty.bvec m) :=
+      let z := bv.zero in
+      if eq_dec z v
+      then term_val (ty.bvec m) z
+      else
+        if eq_dec (bv.ones m) v
+        then t
+        else term_binop bop.bvand t (term_val (ty.bvec m) v).
+
+    Section WithPevalBvandVal.
+
+      Variable peval_bvand_val :
+        (forall [m],  Term Σ (ty.bvec m) → Val (ty.bvec m) → Term Σ (ty.bvec m)).
+
+      Definition peval_bvand_bvapp_val {m1 m2} (t1 : Term Σ (ty.bvec m1))
+        (t2 : Term Σ (ty.bvec m2)) (v : Val (ty.bvec (m1+m2))) :
+        Term Σ (ty.bvec (m1+m2)) :=
+        let (v1,v2) := bv.appView m1 m2 v in
+        term_bvapp (peval_bvand_val t1 v1) (peval_bvand_val t2 v2).
+
+      Definition peval_bvand_bvcons_val {m} (t1 : Term Σ ty.bool)
+        (t2 : Term Σ (ty.bvec m)) (v : Val (ty.bvec (S m))) :
+        Term Σ (ty.bvec (S m)) :=
+        let (v1,v2) := bv.view v in
+        term_binop bop.bvcons (peval_and_val t1 v1) (peval_bvand_val t2 v2).
+
+    End WithPevalBvandVal.
+
+    Equations peval_bvand_val [m] (t : Term Σ (ty.bvec m)) (v : Val (ty.bvec m)) :
+      Term Σ (ty.bvec m) :=
+    | term_val _ v1               , v2 => term_val (ty.bvec _) (bv.land v1 v2)
+    | term_binop bop.bvapp t1 t2  , v  => peval_bvand_bvapp_val peval_bvand_val t1 t2 v
+    | term_binop bop.bvcons t1 t2 , v  => peval_bvand_bvcons_val peval_bvand_val t1 t2 v
+    | t , v  => peval_bvand_val_default t v.
+
+    Equations peval_bvand {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+    | term_val _ v1               , term_val _ v2 => term_val (ty.bvec _) (bv.land v1 v2)
+    | term_binop bop.bvapp t1 t2  , term_val _ v  => peval_bvand_bvapp_val peval_bvand_val t1 t2 v
+    | term_binop bop.bvcons t1 t2 , term_val _ v  => peval_bvand_bvcons_val peval_bvand_val t1 t2 v
+    | term_val _ v                , term_binop bop.bvapp t1 t2 => peval_bvand_bvapp_val peval_bvand_val t1 t2 v
+    | term_val _ v                , term_binop bop.bvcons t1 t2 => peval_bvand_bvcons_val peval_bvand_val t1 t2 v
+    | t1 , t2  => term_binop bop.bvand t1 t2.
+
+    Definition peval_bvor_val_default {m} (t : Term Σ (ty.bvec m))
+      (v : Val (ty.bvec m)) : Term Σ (ty.bvec m) :=
+      let o := bv.ones m in
+      if eq_dec o v
+      then term_val (ty.bvec m) o
+      else
+        if eq_dec bv.zero v
+        then t
+        else term_binop bop.bvor t (term_val (ty.bvec m) v).
+
+    Section WithPevalBvorVal.
+
+      Variable peval_bvor_val :
+        (forall [m],  Term Σ (ty.bvec m) → Val (ty.bvec m) → Term Σ (ty.bvec m)).
+
+      Definition peval_bvor_bvapp_val {m1 m2} (t1 : Term Σ (ty.bvec m1))
+        (t2 : Term Σ (ty.bvec m2)) (v : Val (ty.bvec (m1+m2))) :
+        Term Σ (ty.bvec (m1+m2)) :=
+        let (v1,v2) := bv.appView m1 m2 v in
+        term_bvapp (peval_bvor_val t1 v1) (peval_bvor_val t2 v2).
+
+      Definition peval_bvor_bvcons_val {m} (t1 : Term Σ ty.bool)
+        (t2 : Term Σ (ty.bvec m)) (v : Val (ty.bvec (S m))) :
+        Term Σ (ty.bvec (S m)) :=
+        let (v1,v2) := bv.view v in
+        term_binop bop.bvcons (peval_or_val t1 v1) (peval_bvor_val t2 v2).
+
+    End WithPevalBvorVal.
+
+    Equations peval_bvor_val [m] (t : Term Σ (ty.bvec m)) (v : Val (ty.bvec m)) :
+      Term Σ (ty.bvec m) :=
+    | term_val _ v1               , v2 => term_val (ty.bvec _) (bv.lor v1 v2)
+    | term_binop bop.bvapp t1 t2  , v  => peval_bvor_bvapp_val peval_bvor_val t1 t2 v
+    | term_binop bop.bvcons t1 t2 , v  => peval_bvor_bvcons_val peval_bvor_val t1 t2 v
+    | t , v  => peval_bvor_val_default t v.
+
+    Equations peval_bvor {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+    | term_val _ v1               , term_val _ v2 => term_val (ty.bvec _) (bv.lor v1 v2)
+    | term_binop bop.bvapp t1 t2  , term_val _ v  => peval_bvor_bvapp_val peval_bvor_val t1 t2 v
+    | term_binop bop.bvcons t1 t2 , term_val _ v  => peval_bvor_bvcons_val peval_bvor_val t1 t2 v
+    | term_val _ v                , term_binop bop.bvapp t1 t2 => peval_bvor_bvapp_val peval_bvor_val t1 t2 v
+    | term_val _ v                , term_binop bop.bvcons t1 t2 => peval_bvor_bvcons_val peval_bvor_val t1 t2 v
+    | t1 , t2  => term_binop bop.bvor t1 t2.
+
     Equations(noeqns) peval_binop' {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
     | op | term_val _ v1 | term_val _ v2 := term_val σ (bop.eval op v1 v2);
     | op | t1            | t2            := term_binop op t1 t2.
 
     Equations(noeqns) peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
     | bop.append , t1 , t2 => peval_append t1 t2
+    | bop.and    , t1 , t2 => peval_and t1 t2
     | bop.or     , t1 , t2 => peval_or t1 t2
     | bop.plus   , t1 , t2 => peval_plus t1 t2
     | bop.bvadd  , t1 , t2 => peval_bvadd t1 t2
+    | bop.bvand  , t1 , t2 => peval_bvand t1 t2
+    | bop.bvor   , t1 , t2 => peval_bvor t1 t2
     | op         , t1 , t2 => peval_binop' op t1 t2.
 
     Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
@@ -479,14 +596,24 @@ Module Type PartialEvaluationOn
         first [constructor | destruct v; constructor].
     Qed.
 
+    Lemma peval_and_sound (t1 t2 : Term Σ ty.bool) :
+      peval_and t1 t2 ≡ term_binop bop.and t1 t2.
+    Proof with lsolve.
+      depelim t1.
+      - depelim t2... apply peval_and_val_sound.
+      - now destruct v.
+      - depelim t2... apply peval_and_val_sound.
+      - depelim t2... apply peval_and_val_sound.
+    Qed.
+
     Lemma peval_or_sound (t1 t2 : Term Σ ty.bool) :
       peval_or t1 t2 ≡ term_binop bop.or t1 t2.
     Proof with lsolve.
       depelim t1.
-      - depelim t2... destruct v...
+      - depelim t2... apply peval_or_val_sound.
       - now destruct v.
-      - depelim t2... destruct v...
-      - depelim t2... destruct v...
+      - depelim t2... apply peval_or_val_sound.
+      - depelim t2... apply peval_or_val_sound.
     Qed.
 
     Lemma peval_plus_sound (t1 t2 : Term Σ ty.int) :
@@ -504,6 +631,104 @@ Module Type PartialEvaluationOn
           ].
     Qed.
 
+    Lemma peval_bvand_val_default_sound {n} (t : Term Σ (ty.bvec n))
+      (v : Val (ty.bvec n)) :
+      peval_bvand_val_default t v ≡
+      term_binop bop.bvand t (term_val (ty.bvec n) v).
+    Proof.
+      unfold peval_bvand_val_default.
+      destruct (eq_dec bv.zero v).
+      { subst. intros ι; cbn. now rewrite bv.land_zero_r. }
+      destruct (eq_dec (bv.ones n) v).
+      { subst. intros ι; cbn. now rewrite bv.land_ones_r. }
+      { reflexivity. }
+    Qed.
+
+    Hint Resolve peval_bvand_val_default_sound : core.
+
+    Fixpoint peval_bvand_val_sound {n} (t : Term Σ (ty.bvec n))
+      (v : Val (ty.bvec n)) {struct t} :
+      peval_bvand_val t v ≡ term_binop bop.bvand t (term_val (ty.bvec n) v).
+    Proof.
+      destruct n, t using Term_bvec_case; cbn - [bv.cons]; lsolve.
+      - unfold peval_bvand_bvapp_val. destruct bv.appView.
+        rewrite !peval_bvand_val_sound.
+        intros ι. cbn. now rewrite bv.land_app.
+      - unfold peval_bvand_bvcons_val. destruct bv.view.
+        rewrite peval_and_val_sound, peval_bvand_val_sound.
+        intros ι. cbn - [bv.cons]. now rewrite bv.land_cons.
+    Qed.
+
+    Lemma peval_bvand_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvand t1 t2 ≡ term_binop bop.bvand t1 t2.
+    Proof.
+      funelim (peval_bvand t1 t2); lsolve.
+      - unfold peval_bvand_bvapp_val. destruct bv.appView.
+        rewrite !peval_bvand_val_sound.
+        intros ι. cbn. rewrite bv.land_app.
+        f_equal; now rewrite bv.land_comm.
+      - unfold peval_bvand_bvcons_val. destruct bv.view.
+        rewrite peval_and_val_sound, peval_bvand_val_sound.
+        intros ι. cbn - [bv.cons]. rewrite bv.land_cons.
+        f_equal. now rewrite andb_comm.
+        now rewrite bv.land_comm.
+      - unfold peval_bvand_bvapp_val. destruct bv.appView.
+        rewrite !peval_bvand_val_sound.
+        intros ι. cbn. now rewrite bv.land_app.
+      - unfold peval_bvand_bvcons_val. destruct bv.view.
+        rewrite peval_and_val_sound, peval_bvand_val_sound.
+        intros ι. cbn - [bv.cons]. now rewrite bv.land_cons.
+    Qed.
+
+    Lemma peval_bvor_val_default_sound {n} (t : Term Σ (ty.bvec n))
+      (v : Val (ty.bvec n)) :
+      peval_bvor_val_default t v ≡
+      term_binop bop.bvor t (term_val (ty.bvec n) v).
+    Proof.
+      unfold peval_bvor_val_default.
+      destruct (eq_dec (bv.ones n) v).
+      { subst. intros ι; cbn. now rewrite bv.lor_ones_r. }
+      destruct (eq_dec bv.zero v).
+      { subst. intros ι; cbn. now rewrite bv.lor_zero_r. }
+      { reflexivity. }
+    Qed.
+
+    Hint Resolve peval_bvor_val_default_sound : core.
+
+    Fixpoint peval_bvor_val_sound {n} (t : Term Σ (ty.bvec n))
+      (v : Val (ty.bvec n)) {struct t} :
+      peval_bvor_val t v ≡ term_binop bop.bvor t (term_val (ty.bvec n) v).
+    Proof.
+      destruct n, t using Term_bvec_case; cbn - [bv.cons]; lsolve.
+      - unfold peval_bvor_bvapp_val. destruct bv.appView.
+        rewrite !peval_bvor_val_sound.
+        intros ι. cbn. now rewrite bv.lor_app.
+      - unfold peval_bvor_bvcons_val. destruct bv.view.
+        rewrite peval_or_val_sound, peval_bvor_val_sound.
+        intros ι. cbn - [bv.cons]. now rewrite bv.lor_cons.
+    Qed.
+
+    Lemma peval_bvor_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvor t1 t2 ≡ term_binop bop.bvor t1 t2.
+    Proof.
+      funelim (peval_bvor t1 t2); lsolve.
+      - unfold peval_bvor_bvapp_val. destruct bv.appView.
+        rewrite !peval_bvor_val_sound.
+        intros ι. cbn. rewrite bv.lor_app.
+        f_equal; now rewrite bv.lor_comm.
+      - unfold peval_bvor_bvcons_val. destruct bv.view.
+        rewrite peval_or_val_sound, peval_bvor_val_sound.
+        intros ι. cbn - [bv.cons]. rewrite bv.lor_cons.
+        f_equal. now rewrite orb_comm.
+        now rewrite bv.lor_comm.
+      - unfold peval_bvor_bvapp_val. destruct bv.appView.
+        rewrite !peval_bvor_val_sound.
+        intros ι. cbn. now rewrite bv.lor_app.
+      - unfold peval_bvor_bvcons_val. destruct bv.view.
+        rewrite peval_or_val_sound, peval_bvor_val_sound.
+        intros ι. cbn - [bv.cons]. now rewrite bv.lor_cons.
+    Qed.
+
     Lemma peval_binop'_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
       peval_binop' op t1 t2 ≡ term_binop op t1 t2.
     Proof.
@@ -514,14 +739,13 @@ Module Type PartialEvaluationOn
         end.
     Qed.
 
+    Hint Resolve peval_binop'_sound peval_append_sound peval_and_sound
+      peval_or_sound peval_plus_sound peval_bvadd_sound peval_bvand_sound
+      peval_bvor_sound : core.
+
     Lemma peval_binop_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
       peval_binop op t1 t2 ≡ term_binop op t1 t2.
-    Proof.
-      destruct op; cbn [peval_binop];
-        auto using peval_binop'_sound, peval_append_sound, peval_or_sound,
-                 peval_plus_sound, peval_bvadd_sound.
-    Qed.
-
+    Proof. destruct op; cbn [peval_binop]; auto. Qed.
 
     Equations peval_not (t : Term Σ ty.bool) : Term Σ ty.bool :=
     | term_val _ v                    => term_val ty.bool (negb v)
