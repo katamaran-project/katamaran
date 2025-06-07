@@ -54,6 +54,7 @@ Module uop.
     | inr {σ1 σ2 : Ty}  : UnOp σ2 (sum σ1 σ2)
     | neg               : UnOp int int
     | not               : UnOp bool bool
+    | rev {σ}           : UnOp (ty.list σ) (ty.list σ)
     | sext {m n} {p : IsTrue (m <=? n)} : UnOp (bvec m) (bvec n)
     | zext {m n} {p : IsTrue (m <=? n)} : UnOp (bvec m) (bvec n)
     | get_slice_int {n} : UnOp int (bvec n)
@@ -62,6 +63,8 @@ Module uop.
     | truncate {n} (m : nat) {p : IsTrue (m <=? n)} : UnOp (bvec n) (bvec m)
     | vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} : UnOp (bvec n) (bvec l)
     | bvnot {n}         : UnOp (bvec n) (bvec n)
+    | bvdrop m {n}      : UnOp (bvec (m + n)) (bvec n)
+    | bvtake m {n}      : UnOp (bvec (m + n)) (bvec m)
     | negate {n}        : UnOp (bvec n) (bvec n).
     Set Transparent Obligations.
     Derive Signature for UnOp.
@@ -79,9 +82,20 @@ Module uop.
     Definition Tel (τ : Ty) : Set :=
       sigma (fun σ : Ty => UnOp σ τ).
 
+    Lemma eq_tel_bvdrop_inv {m1 m2 n} (H : m1 <> m2) :
+      sigmaI (fun σ => UnOp σ (bvec n)) (bvec (m1 + n)) (bvdrop m1) <>
+      sigmaI (fun σ => UnOp σ (bvec n)) (bvec (m2 + n)) (bvdrop m2).
+    Proof. intros e%(f_equal pr1). cbn in e. depelim e. Lia.lia. Qed.
+
+    Lemma eq_tel_bvtake_inv {m n1 n2} (H : n1 <> n2) :
+      sigmaI (fun σ => UnOp σ (bvec m)) (bvec (m + n1)) (bvtake m) <>
+      sigmaI (fun σ => UnOp σ (bvec m)) (bvec (m + n2)) (bvtake m).
+    Proof. intros e%(f_equal pr1). cbn in e. depelim e. Lia.lia. Qed.
+
     Obligation Tactic := cbn; intros;
       try solve
-        [let e := fresh in intro e; depelim e; try easy;
+        [eauto using eq_tel_bvdrop_inv, eq_tel_bvtake_inv
+        |let e := fresh in intro e; depelim e; try easy;
          try progress cbn in * |-; congruence
         |subst; repeat f_equal; apply IsTrue.proof_irrelevance
         ].
@@ -93,6 +107,7 @@ Module uop.
     | inr                              | inr => left eq_refl
     | neg                              | neg => left eq_refl
     | not                              | not => left eq_refl
+    | rev                              | rev => left eq_refl
     | @sext _ m1 ?(n) p1               | @sext _ m2 n p2 with eq_dec m1 m2 => {
       | left _ => left _
       | right _ => right _
@@ -120,6 +135,14 @@ Module uop.
       | right _ | _       => right _
       }
     | bvnot                            | bvnot => left eq_refl
+    | bvdrop m1                        | bvdrop m2 with eq_dec m1 m2 => {
+      | left _ => left _
+      | right _ => right _
+      }
+    | @bvtake _ ?(m) n1                | @bvtake _ m n2 with eq_dec n1 n2 => {
+      | left _ => left _
+      | right _ => right _
+      }
     | negate                           | negate => left eq_refl
     | _                                | _ => right _.
 
@@ -136,6 +159,7 @@ Module uop.
       match op in UnOp σ1 σ2 return Val σ1 -> Val σ2 with
       | inl                 => Datatypes.inl
       | inr                 => Datatypes.inr
+      | rev                 => @List.rev (Val _)
       | neg                 => Z.opp
       | not                 => negb
       | sext                => fun v => bv.sext v
@@ -146,6 +170,8 @@ Module uop.
       | truncate m          => fun v => bv.truncate m v
       | vector_subrange s l => bv.vector_subrange s l
       | bvnot               => bv.not
+      | bvdrop m            => bv.drop m
+      | bvtake m            => bv.take m
       | negate              => bv.negate
       end.
 

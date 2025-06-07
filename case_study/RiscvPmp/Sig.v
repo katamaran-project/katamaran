@@ -140,6 +140,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
       decide_pmp_check_perms cfg acc p = true.
+    #[global] Arguments Pmp_check_perms !cfg !acc !p /.
 
     Definition Access_pmp_perm (a : Val ty_access_type) (p : Val ty_pmpcfgperm) : Prop :=
       decide_access_pmp_perm a p = true.
@@ -426,6 +427,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
               ∨ fml_pmp_match a width lo addr cfg p acc)
     | term_list_append es1 es2 =>
         None (* TODO: we can do better here *)
+    | term_list_rev es => None
     end%list.
 
   Definition simplify_pmpcheck_term_list {Σ} (a width lo : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (Formula Σ) :=

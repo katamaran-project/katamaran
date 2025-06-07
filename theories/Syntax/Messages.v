@@ -47,25 +47,53 @@ Module Type MessagesOn
   #[local] Notation LCtx := (NCtx LVar Ty).
 
   Module amsg.
+    Inductive CloseMessage (M : LCtx -> Type) (Σ : LCtx) : Type :=
+    | there {b} (msg : M (Σ ▻ b)).
+    #[global] Arguments there {_ _ _} msg.
+
+    (* Without the precedence, typeclass resolution sometimes mysteriously enters a loop... *)
+    #[export] Instance subst_closemessage `{Subst M} : Subst (CloseMessage M) | 2 :=
+      fun {Σ} m {Σ2} ζ =>
+        match m with
+        | there msg => there (subst msg (sub_up1 ζ))
+        end.
+
+    #[export] Instance substlaws_closemessage `{SubstLaws M} : SubstLaws (CloseMessage M) | 2.
+    Proof.
+      constructor.
+      - intros ? m. destruct m; cbn; f_equal;
+          rewrite ?sub_up1_id; auto using subst_sub_id.
+      - intros ? ? ? ? ? m. revert Σ1 ζ1 Σ2 ζ2.
+        destruct m; cbn; intros; f_equal;
+          rewrite ?sub_up1_comp; auto using subst_sub_comp.
+    Qed.
+
+    (* Without the precedence, typeclass resolution sometimes mysteriously enters a loop... *)
+    #[export] Instance occurscheck_closemessage `{OccursCheck M} : OccursCheck (CloseMessage M) | 2 :=
+      fun {Σ x} xIn m =>
+        match m with
+        | there msg => there <$> occurs_check (ctx.in_succ xIn) msg
+        end.
+
     Inductive AMessage (Σ : LCtx) : Type :=
-    | mk {M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M} (msg : M Σ)
-    | there {b} (msg : AMessage (Σ ▻ b)).
+    | mk {M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M} (msg : M Σ).
     #[global] Arguments mk {_ _ _ _ _} msg.
-    #[global] Arguments there {_ _} msg.
 
     Definition empty {Σ} : AMessage Σ := mk (M := Unit) tt.
 
-    Fixpoint close {Σ ΣΔ} {struct ΣΔ} : AMessage (Σ ▻▻ ΣΔ) -> AMessage Σ :=
+    Fixpoint closeAux {Σ ΣΔ} {struct ΣΔ} : forall {M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M}, M (Σ ▻▻ ΣΔ) -> AMessage Σ :=
       match ΣΔ with
-      | []      => fun msg => msg
-      | ΣΔ  ▻ b => fun msg => close (there msg)
+      | []      => fun _ _ _ _ msg => mk msg
+      | ΣΔ  ▻ b => fun _ _ _ _ msg => closeAux (there msg)
       end%ctx.
+
+    Definition close {Σ ΣΔ} (msg : AMessage (Σ ▻▻ ΣΔ)) : AMessage Σ :=
+      match msg with mk msg => closeAux msg end.
 
     #[export] Instance subst_amessage : Subst AMessage :=
       fix sub {Σ} m {Σ2} ζ {struct m} :=
         match m with
         | mk msg    => mk (subst msg ζ)
-        | there msg => there (sub msg (sub_up1 ζ))
         end.
 
     #[export] Instance substlaws_amessage : SubstLaws AMessage.
@@ -82,7 +110,6 @@ Module Type MessagesOn
       fix oc {Σ x} xIn m {struct m} :=
         match m with
         | mk msg    => mk <$> occurs_check xIn msg
-        | there msg => there <$> oc (ctx.in_succ xIn) msg
         end.
 
     #[export] Instance instprop_amessage : InstProp AMessage :=

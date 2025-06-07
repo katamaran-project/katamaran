@@ -145,12 +145,8 @@ Module Notations.
     | _       => fun _ => ⊥
     end.
 
-  Declare Scope term_scope.
-  Delimit Scope term_scope with term.
   Notation "'(' tp ',' tb ',' te ',' ta ')'" :=
     (term_record capability [tp; tb; te; ta]) : term_scope.
-  Notation "t1 '+' t2" :=
-    (term_binop bop.plus t1 t2) : term_scope.
   Notation "'𝒱' '(' tp ',' tb ',' te ',' ta ')'" :=
     (𝒱 (term_record capability [tp; tb; te; ta])) : term_scope.
   Notation "'𝒱' '(' t ')'" :=

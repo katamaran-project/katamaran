@@ -35,6 +35,7 @@ From Katamaran Require Import
      Syntax.Predicates
      Base.
 From stdpp Require Import base.
+From iris Require proofmode.tactics.
 
 Import ctx.notations.
 Import env.notations.
@@ -945,6 +946,11 @@ Module Type WorldsOn
     Proof. unfold repₚ, bi_pred, bi_sep, sepₚ.
            crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
 
+    Lemma eqₚ_term_not {w : World} {s t : STerm ty.bool w} :
+      eqₚ (T := STerm ty.bool) s (term_not t) ⊣⊢
+      eqₚ (T := STerm ty.bool) (term_not s) t.
+    Proof. unfold eqₚ. crushPredEntails2; now destruct inst, inst. Qed.
+
     Lemma repₚ_term_not {w : World} {t : STerm ty.bool w} b :
       repₚ (T := STerm ty.bool) (negb b) (term_not t) ⊣⊢
         repₚ (T := STerm ty.bool) b t.
@@ -1001,6 +1007,26 @@ Module Type WorldsOn
       repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inr t) ⊣⊢ False.
     Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
 
+    Lemma eqₚ_term_unsigned {w : World} {n} {t1 t2 : STerm (ty.bvec n) w} :
+      eqₚ (T := STerm ty.int) (term_unsigned t1) (term_unsigned t2) ⊣⊢
+      eqₚ (T := STerm (ty.bvec n)) t1 t2.
+    Proof. unfold eqₚ. crushPredEntails2; [apply bv.unsigned_inj|f_equal]; easy. Qed.
+
+    Lemma repₚ_term_unsigned {w : World} {n} {t : STerm (ty.bvec n) w} (v : Val (ty.bvec n)) :
+      repₚ (T := STerm (ty.int)) (bv.unsigned v : Val ty.int) (term_unsigned t) ⊣⊢
+      repₚ (T := STerm (ty.bvec n)) v t.
+    Proof. unfold repₚ. crushPredEntails2; [apply bv.unsigned_inj|subst]; easy. Qed.
+
+    Lemma eqₚ_term_signed {w : World} {n} {t1 t2 : STerm (ty.bvec n) w} :
+      eqₚ (T := STerm ty.int) (term_signed t1) (term_signed t2) ⊣⊢
+      eqₚ (T := STerm (ty.bvec n)) t1 t2.
+    Proof. unfold eqₚ. crushPredEntails2; [apply bv.signed_inj|f_equal]; easy. Qed.
+
+    Lemma repₚ_term_signed {w : World} {n} {t : STerm (ty.bvec n) w} (v : Val (ty.bvec n)) :
+      repₚ (T := STerm (ty.int)) (bv.signed v : Val ty.int) (term_signed t) ⊣⊢
+      repₚ (T := STerm (ty.bvec n)) v t.
+    Proof. unfold repₚ. crushPredEntails2; [apply bv.signed_inj|subst]; easy. Qed.
+
     Lemma repₚ_term_or_false {w : World} {t1 t2 : STerm ty.bool w} :
       repₚ (T := STerm ty.bool) false (term_binop bop.or t1 t2) ⊣⊢
         repₚ (T := STerm ty.bool) false t1 ∗ repₚ (T := STerm ty.bool) false t2.
@@ -1008,13 +1034,55 @@ Module Type WorldsOn
 
     Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) :
       repₚ (T := STerm _) (vs, v) (term_tuple (E ► (σ ↦ d))) ⊣⊢
-        repₚ (T := STerm σ) v d ∗ repₚ (T := STerm _) vs (term_tuple E).
+      repₚ (T := STerm _) vs (term_tuple E) ∗ repₚ (T := STerm σ) v d.
     Proof. unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0| now subst ]. Qed.
 
     Lemma eqₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [ts1 ts2 : Env (Term w) Γ] [σ : Ty] (t1 t2 : Term w σ) :
       eqₚ (T := STerm _) (term_tuple (ts1 ► (σ ↦ t1))) (term_tuple (ts2 ► (σ ↦ t2))) ⊣⊢
-        eqₚ (T := STerm σ) t1 t2 ∗ eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2).
+      eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2) ∗ eqₚ (T := STerm σ) t1 t2.
     Proof. unfold eqₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0 | now f_equal]. Qed.
+
+    Lemma repₚ_term_bvapp {w : World} {m n : nat} {t1 : STerm (ty.bvec m) w} {t2 : STerm (ty.bvec n) w}
+      {v1 : Val (ty.bvec m)} {v2 : Val (ty.bvec n)} :
+      repₚ (T := STerm (ty.bvec (m + n))) (bv.app v1 v2) (term_binop bop.bvapp t1 t2) ⊣⊢
+      repₚ (T := STerm (ty.bvec m)) v1 t1 ∗ repₚ (T := STerm (ty.bvec n)) v2 t2.
+    Proof.
+      unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2.
+      - now apply bv.app_inj in H0.
+      - now apply bv.app_inj in H0.
+      - now f_equal.
+    Qed.
+
+    Lemma eqₚ_term_bvapp {w : World} {m n : nat} {tl1 tl2 : STerm (ty.bvec m) w} {tr1 tr2 : STerm (ty.bvec n) w} :
+      eqₚ (T := STerm (ty.bvec (m + n))) (term_binop bop.bvapp tl1 tr1) (term_binop bop.bvapp tl2 tr2) ⊣⊢
+      eqₚ (T := STerm (ty.bvec m)) tl1 tl2 ∗ eqₚ (T := STerm (ty.bvec n)) tr1 tr2.
+    Proof.
+      unfold eqₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2.
+      - now apply bv.app_inj in H0.
+      - now apply bv.app_inj in H0.
+      - now f_equal.
+    Qed.
+
+    Lemma repₚ_term_bvcons {w : World} {m : nat} {t1 : STerm ty.bool w} {t2 : STerm (ty.bvec m) w}
+      {v1 : Val ty.bool} {v2 : Val (ty.bvec m)} :
+      repₚ (T := STerm (ty.bvec (S m))) (bv.cons v1 v2) (term_binop bop.bvcons t1 t2) ⊣⊢
+      repₚ (T := STerm ty.bool) v1 t1 ∗ repₚ (T := STerm (ty.bvec m)) v2 t2.
+    Proof.
+      unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2.
+      - now apply bv.cons_inj in H0.
+      - now apply bv.cons_inj in H0.
+      - now f_equal.
+    Qed.
+
+    Lemma eqₚ_term_bvcons {w : World} {m : nat} {tl1 tl2 : STerm ty.bool w} {tr1 tr2 : STerm (ty.bvec m) w} :
+      eqₚ (T := STerm (ty.bvec (S m))) (term_binop bop.bvcons tl1 tr1) (term_binop bop.bvcons tl2 tr2) ⊣⊢
+      eqₚ (T := STerm ty.bool) tl1 tl2 ∗ eqₚ (T := STerm (ty.bvec m)) tr1 tr2.
+    Proof.
+      unfold eqₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2.
+      - now apply bv.cons_inj in H0.
+      - now apply bv.cons_inj in H0.
+      - now f_equal.
+    Qed.
 
     Lemma repₚ_term_record {w : World} {R : recordi} {vs : NamedEnv Val (recordf_ty R)} {svs : NamedEnv (Term w) (recordf_ty R)} :
       repₚ (T := STerm _) (recordv_fold R vs) (term_record R svs) ⊣⊢ repₚ vs svs.
@@ -1348,6 +1416,8 @@ Module Type WorldsOn
            cbn in *; try rewrite (wy k1); try rewrite (wy k2); intuition).
       Defined.
       #[local] Arguments cat {Σ} !_ !_ /.
+
+      Notation dlist_eq t1 t2 := (singleton (formula_eq t1 t2)).
 
       Import iris.bi.interface iris.bi.derived_laws.
 

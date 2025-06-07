@@ -29,7 +29,6 @@
 From Katamaran Require Import
      Base
      Bitvector
-     BitvectorSolve
      trace
      Iris.Instance
      Iris.Base
@@ -509,7 +508,7 @@ Module RiscvPmpIrisInstance <:
       - cbn. lia.
       - pose proof (bv.bv_is_wf a) as Hwf.
         eapply N.lt_le_trans; [exact|].
-        rewrite Nat2N.inj_pow bv.exp2_spec .
+        rewrite Nat2N.inj_pow.
         lia.
     Qed.
 
@@ -521,7 +520,7 @@ Module RiscvPmpIrisInstance <:
     Proof. intros Hrep. rewrite all_addrs_eq.
            refine (bv.seqBv_sub_list _ _); first solve_bv.
            apply to_nat_mono in Hrep.
-           rewrite bv.exp2_spec N2Nat.inj_add N2Nat.inj_pow !Nat2N.id in Hrep.
+           rewrite N2Nat.inj_add N2Nat.inj_pow !Nat2N.id in Hrep.
            apply Nat.lt_le_incl, (Nat.lt_le_trans _ _ _ Hrep).
            now compute -[Nat.pow].
     Qed.

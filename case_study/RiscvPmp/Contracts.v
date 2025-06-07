@@ -961,9 +961,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           |}.
 
 
-        Definition sep_contract_pmpWriteCfgReg (n : nat) {H: (n < 1)%nat} : SepContractFun (@pmpWriteCfgReg n H) :=
-          {| sep_contract_logic_variables := [value :: ty_xlenbits];
-             sep_contract_localstore      := [term_var value];
+        Definition sep_contract_pmpWriteCfgReg : SepContractFun pmpWriteCfgReg :=
+          {| sep_contract_logic_variables := ["n" :: ty.int; value :: ty_xlenbits];
+             sep_contract_localstore      := [term_var "n"; term_var value];
              sep_contract_precondition    :=
                   ∃ "cfg0", (pmp0cfg ↦ term_var "cfg0" ∗ asn_expand_pmpcfg_ent (term_var "cfg0"))
                   ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"));
@@ -1039,7 +1039,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | pmpMatchAddr            => Some sep_contract_pmpMatchAddr
             | pmpMatchEntry           => Some sep_contract_pmpMatchEntry
             | pmpLocked               => Some sep_contract_pmpLocked
-            | @pmpWriteCfgReg n H     => Some (@sep_contract_pmpWriteCfgReg n H)
+            | @pmpWriteCfgReg         => Some sep_contract_pmpWriteCfgReg
             | pmpWriteCfg             => Some sep_contract_pmpWriteCfg
             | pmpWriteAddr            => Some sep_contract_pmpWriteAddr
             | @mem_write_value bytes H => Some (@sep_contract_mem_write_value bytes H)
@@ -1288,6 +1288,12 @@ Module RiscvPmpValidContracts.
     | None   => False
     end.
 
+  Definition ValidContractWithErasure {Δ τ} (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => Symbolic.ValidContractWithErasure c (FunDef f)
+    | None   => False
+    end.
+
   Definition ValidContractWithFuel {Δ τ} (fuel : Fuel) (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContractReflectWithFuel (fuel_to_nat fuel) c (FunDef f)
@@ -1303,7 +1309,7 @@ Module RiscvPmpValidContracts.
 
   Ltac symbolic_simpl :=
     apply Symbolic.validcontract_with_erasure_sound;
-    compute;
+    vm_compute;
     constructor;
     cbn.
 
@@ -1321,47 +1327,47 @@ Module RiscvPmpValidContracts.
   (* TODO: proof with new PMP addressing mode (NA4) *)
   Lemma valid_contract_pmpCheck (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmpCheck bytes H).
   Proof.
-    destruct H; apply Symbolic.validcontract_with_erasure_sound; now vm_compute.
+    destruct H; now vm_compute.
   Qed.
 
   Lemma valid_contract_step : ValidContract step.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
-  Lemma valid_contract_pmpWriteCfgReg (n : nat) {H : (n < 1)%nat} : ValidContract (@pmpWriteCfgReg n H).
-  Proof. destruct n; reflexivity. Qed.
+  Lemma valid_contract_pmpWriteCfgReg : ValidContract pmpWriteCfgReg.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_pmpWriteCfg : ValidContract pmpWriteCfg.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_pmpWriteAddr : ValidContract pmpWriteAddr.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_init_model : ValidContract init_model.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_fetch : ValidContract fetch.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute : ValidContract execute.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_init_sys : ValidContract init_sys.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_init_pmp : ValidContract init_pmp.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_handle_mem_exception : ValidContract handle_mem_exception.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_mem_write_value (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@mem_write_value bytes H).
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : ValidContractWithFuel InlineOneLevel (process_load bytes).
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
   Proof. destruct H; symbolic_simpl; eauto. Qed.
@@ -1398,7 +1404,7 @@ Module RiscvPmpValidContracts.
   Proof. destruct H; symbolic_simpl; eauto. Qed.
 
   Lemma valid_contract_pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_read bytes H).
-  Proof. destruct H; now symbolic_simpl. Qed.
+  Proof. destruct H; now vm_compute. Qed.
 
   Lemma valid_contract_pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_write bytes H).
   Proof.
@@ -1407,13 +1413,13 @@ Module RiscvPmpValidContracts.
   Qed.
 
   Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_pmpCheckPerms : ValidContract pmpCheckPerms.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_pmpAddrRange : ValidContract pmpAddrRange.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
   Proof.
@@ -1423,79 +1429,79 @@ Module RiscvPmpValidContracts.
   Qed.
 
   Lemma valid_contract_pmpMatchEntry : ValidContract pmpMatchEntry.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_pmpLocked : ValidContract pmpLocked.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_readCSR : ValidContract readCSR.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_writeCSR : ValidContract writeCSR.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_check_CSR : ValidContract check_CSR.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_is_CSR_defined : ValidContract is_CSR_defined.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_check_CSR_access : ValidContract check_CSR_access.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_csrAccess : ValidContract csrAccess.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_csrPriv : ValidContract csrPriv.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_privLevel_to_bits : ValidContract privLevel_to_bits.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exception_handler : ValidContract exception_handler.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_handle_illegal : ValidContract handle_illegal.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_trap_handler : ValidContract trap_handler.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_prepare_trap_vector : ValidContract prepare_trap_vector.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_tvec_addr : ValidContract tvec_addr.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exceptionType_to_bits : ValidContract exceptionType_to_bits.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exception_delegatee : ValidContract exception_delegatee.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_get_arch_pc : ValidContract get_arch_pc.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_get_next_pc : ValidContract get_next_pc.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_set_next_pc : ValidContract set_next_pc.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_tick_pc : ValidContract tick_pc.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_to_bits (l : nat) : ValidContract (to_bits l).
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_rX : ValidContract rX.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_wX : ValidContract wX.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   (* Lemma valid_contract_abs : ValidContract abs. *)
-  (* Proof. reflexivity. Qed. *)
+  (* Proof. now vm_compute. Qed. *)
 
   Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
   Proof.
@@ -1505,46 +1511,46 @@ Module RiscvPmpValidContracts.
   Qed.
 
   Lemma valid_contract_execute_RTYPE : ValidContractWithFuel InlineOneLevel execute_RTYPE.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_ITYPE : ValidContractWithFuel InlineOneLevel execute_ITYPE.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_SHIFTIOP : ValidContractWithFuel InlineOneLevel execute_SHIFTIOP.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_UTYPE : ValidContract execute_UTYPE.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_BTYPE : ValidContract execute_BTYPE.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_RISCV_JAL : ValidContract execute_RISCV_JAL.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_RISCV_JALR : ValidContract execute_RISCV_JALR.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_ECALL : ValidContract execute_ECALL.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_EBREAK : ValidContractDebug execute_EBREAK.
   Proof. now symbolic_simpl. Qed.
 
   Lemma valid_contract_execute_MRET : ValidContract execute_MRET.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_STORE : ValidContract execute_STORE.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_LOAD : ValidContract execute_LOAD.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_CSR : ValidContract execute_CSR.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_MUL : ValidContract execute_MUL.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
 
   Lemma pmp_check_perms_gives_access :
@@ -1602,66 +1608,66 @@ Module RiscvPmpValidContracts.
   Proof.
     intros Δ τ f c H.
     destruct f; try solve [cbn in H; discriminate]. (* Only those f for which a contract is defined need to be proven valid *)
-    - apply (valid_contract _ H valid_contract_rX).
-    - apply (valid_contract _ H valid_contract_wX).
-    - apply (valid_contract _ H valid_contract_get_arch_pc).
-    - apply (valid_contract _ H valid_contract_get_next_pc).
-    - apply (valid_contract _ H valid_contract_set_next_pc).
-    - apply (valid_contract _ H valid_contract_tick_pc).
-    - apply (valid_contract _ H (valid_contract_to_bits l)).
-    - apply (valid_contract_debug _ H valid_contract_within_phys_mem).
-    - apply (valid_contract _ H (@valid_contract_mem_read bytes H0)).
-    - apply (valid_contract_debug _ H (@valid_contract_checked_mem_read bytes H0)).
-    - apply (valid_contract_debug _ H (@valid_contract_checked_mem_write bytes H0)).
-    - apply (valid_contract_debug _ H (@valid_contract_pmp_mem_read bytes H0)).
-    - apply (valid_contract_debug _ H (@valid_contract_pmp_mem_write bytes H0)).
-    - apply (valid_contract _ H valid_contract_pmpLocked).
-    - apply (valid_contract _ H valid_contract_pmpWriteCfgReg).
-    - apply (valid_contract _ H valid_contract_pmpWriteCfg).
-    - apply (valid_contract _ H valid_contract_pmpWriteAddr).
-    - apply (valid_contract_debug _ H valid_contract_pmpCheck).
-    - apply (valid_contract _ H valid_contract_pmpCheckPerms).
-    - apply (valid_contract _ H valid_contract_pmpCheckRWX).
-    - apply (valid_contract _ H valid_contract_pmpMatchEntry).
-    - apply (valid_contract _ H valid_contract_pmpAddrRange).
-    - apply (valid_contract_debug _ H valid_contract_pmpMatchAddr).
-    - apply (valid_contract_with_fuel _ _ H (@valid_contract_process_load bytes p)).
-    - apply (valid_contract _ H (@valid_contract_mem_write_value bytes H0)).
-    - apply (valid_contract _ H valid_contract_init_model).
-    - apply (valid_contract _ H valid_contract_step).
-    - apply (valid_contract _ H valid_contract_fetch).
-    - apply (valid_contract _ H valid_contract_init_sys).
-    - apply (valid_contract _ H valid_contract_init_pmp).
-    - apply (valid_contract _ H valid_contract_exceptionType_to_bits).
-    - apply (valid_contract _ H valid_contract_privLevel_to_bits).
-    - apply (valid_contract _ H valid_contract_handle_mem_exception).
-    - apply (valid_contract _ H valid_contract_exception_handler).
-    - apply (valid_contract _ H valid_contract_exception_delegatee).
-    - apply (valid_contract _ H valid_contract_trap_handler).
-    - apply (valid_contract _ H valid_contract_prepare_trap_vector).
-    - apply (valid_contract _ H valid_contract_tvec_addr).
-    - apply (valid_contract _ H valid_contract_handle_illegal).
-    - apply (valid_contract _ H valid_contract_check_CSR).
-    - apply (valid_contract _ H valid_contract_is_CSR_defined).
-    - apply (valid_contract _ H valid_contract_csrAccess).
-    - apply (valid_contract _ H valid_contract_csrPriv).
-    - apply (valid_contract _ H valid_contract_check_CSR_access).
-    - apply (valid_contract _ H valid_contract_readCSR).
-    - apply (valid_contract _ H valid_contract_writeCSR).
-    - apply (valid_contract _ H valid_contract_execute).
-    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_RTYPE).
-    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_ITYPE).
-    - apply (valid_contract_with_fuel _ _ H valid_contract_execute_SHIFTIOP).
-    - apply (valid_contract _ H valid_contract_execute_UTYPE).
-    - apply (valid_contract _ H valid_contract_execute_BTYPE).
-    - apply (valid_contract _ H valid_contract_execute_RISCV_JAL).
-    - apply (valid_contract _ H valid_contract_execute_RISCV_JALR).
-    - apply (valid_contract _ H valid_contract_execute_LOAD).
-    - apply (valid_contract _ H valid_contract_execute_STORE).
-    - apply (valid_contract _ H valid_contract_execute_ECALL).
-    - apply (valid_contract_debug _ H valid_contract_execute_EBREAK).
-    - apply (valid_contract _ H valid_contract_execute_MRET).
-    - apply (valid_contract _ H valid_contract_execute_CSR).
-    - apply (valid_contract _ H valid_contract_execute_MUL).
+    - refine (valid_contract _ H valid_contract_rX).
+    - refine (valid_contract _ H valid_contract_wX).
+    - refine (valid_contract _ H valid_contract_get_arch_pc).
+    - refine (valid_contract _ H valid_contract_get_next_pc).
+    - refine (valid_contract _ H valid_contract_set_next_pc).
+    - refine (valid_contract _ H valid_contract_tick_pc).
+    - refine (valid_contract _ H (valid_contract_to_bits l)).
+    - refine (valid_contract_debug _ H valid_contract_within_phys_mem).
+    - refine (valid_contract _ H (@valid_contract_mem_read bytes H0)).
+    - refine (valid_contract_debug _ H (@valid_contract_checked_mem_read bytes H0)).
+    - refine (valid_contract_debug _ H (@valid_contract_checked_mem_write bytes H0)).
+    - refine (valid_contract_debug _ H (@valid_contract_pmp_mem_read bytes H0)).
+    - refine (valid_contract_debug _ H (@valid_contract_pmp_mem_write bytes H0)).
+    - refine (valid_contract _ H valid_contract_pmpLocked).
+    - refine (valid_contract _ H valid_contract_pmpWriteCfgReg).
+    - refine (valid_contract _ H valid_contract_pmpWriteCfg).
+    - refine (valid_contract _ H valid_contract_pmpWriteAddr).
+    - refine (valid_contract_debug _ H valid_contract_pmpCheck).
+    - refine (valid_contract _ H valid_contract_pmpCheckPerms).
+    - refine (valid_contract _ H valid_contract_pmpCheckRWX).
+    - refine (valid_contract _ H valid_contract_pmpMatchEntry).
+    - refine (valid_contract _ H valid_contract_pmpAddrRange).
+    - refine (valid_contract_debug _ H valid_contract_pmpMatchAddr).
+    - refine (valid_contract_with_fuel _ _ H (@valid_contract_process_load bytes p)).
+    - refine (valid_contract _ H (@valid_contract_mem_write_value bytes H0)).
+    - refine (valid_contract _ H valid_contract_init_model).
+    - refine (valid_contract _ H valid_contract_step).
+    - refine (valid_contract _ H valid_contract_fetch).
+    - refine (valid_contract _ H valid_contract_init_sys).
+    - refine (valid_contract _ H valid_contract_init_pmp).
+    - refine (valid_contract _ H valid_contract_exceptionType_to_bits).
+    - refine (valid_contract _ H valid_contract_privLevel_to_bits).
+    - refine (valid_contract _ H valid_contract_handle_mem_exception).
+    - refine (valid_contract _ H valid_contract_exception_handler).
+    - refine (valid_contract _ H valid_contract_exception_delegatee).
+    - refine (valid_contract _ H valid_contract_trap_handler).
+    - refine (valid_contract _ H valid_contract_prepare_trap_vector).
+    - refine (valid_contract _ H valid_contract_tvec_addr).
+    - refine (valid_contract _ H valid_contract_handle_illegal).
+    - refine (valid_contract _ H valid_contract_check_CSR).
+    - refine (valid_contract _ H valid_contract_is_CSR_defined).
+    - refine (valid_contract _ H valid_contract_csrAccess).
+    - refine (valid_contract _ H valid_contract_csrPriv).
+    - refine (valid_contract _ H valid_contract_check_CSR_access).
+    - refine (valid_contract _ H valid_contract_readCSR).
+    - refine (valid_contract _ H valid_contract_writeCSR).
+    - refine (valid_contract _ H valid_contract_execute).
+    - refine (valid_contract_with_fuel _ _ H valid_contract_execute_RTYPE).
+    - refine (valid_contract_with_fuel _ _ H valid_contract_execute_ITYPE).
+    - refine (valid_contract_with_fuel _ _ H valid_contract_execute_SHIFTIOP).
+    - refine (valid_contract _ H valid_contract_execute_UTYPE).
+    - refine (valid_contract _ H valid_contract_execute_BTYPE).
+    - refine (valid_contract _ H valid_contract_execute_RISCV_JAL).
+    - refine (valid_contract _ H valid_contract_execute_RISCV_JALR).
+    - refine (valid_contract _ H valid_contract_execute_LOAD).
+    - refine (valid_contract _ H valid_contract_execute_STORE).
+    - refine (valid_contract _ H valid_contract_execute_ECALL).
+    - refine (valid_contract_debug _ H valid_contract_execute_EBREAK).
+    - refine (valid_contract _ H valid_contract_execute_MRET).
+    - refine (valid_contract _ H valid_contract_execute_CSR).
+    - refine (valid_contract _ H valid_contract_execute_MUL).
   Qed.
 End RiscvPmpValidContracts.

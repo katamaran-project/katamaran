@@ -907,24 +907,21 @@ Module Type SymPropOn
       #[local] Set Warnings "-notation-incompatible-prefix".
 
       Notation "x" := (@term_var _ x%string _ (@ctx.MkIn _ (x%string :: _) _ _ _)) (at level 1, only printing).
-      Notation "s = t" := (formula_relop bop.eq s t) (only printing).
+      Notation "s = t" := (formula_relop bop.eq s t) (only printing, s in scope term, t in scope term).
       Notation "' t" := (@formula_bool _ t) (at level 10, only printing, format "' t").
       Notation "F ∧ P" := (@SymProp.assertk _ F _ P) (only printing).
       Notation "F → P" := (@SymProp.assumek _ F P) (only printing).
-      Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'∃'  x '∷' σ ,  '/' P").
-      Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'∀'  x '∷' σ ,  '/' P").
+      Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃'  x '∷' σ ']' ,  '/' P ']'").
+      Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀'  x '∷' σ ']' ,  '/' P ']'").
       Notation "⊤" := (@SymProp.block _).
-      Notation "x - y" := (term_binop bop.minus x y) : exp_scope.
-      Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
-      Notation "x * y" := (term_binop bop.times x y) : exp_scope.
       Notation "x ↦ t ∧ k" := (@SymProp.assert_vareq _ x _ _ t _ k) (at level 99, right associativity, only printing).
       Notation "x ↦ t → k" := (@SymProp.assume_vareq _ x _ _ t k) (at level 99, right associativity, only printing).
       Notation "P ∧ Q" := (@SymProp.demonic_binary _ P Q) (at level 80, right associativity, only printing).
       Notation "P ∨ Q" := (@SymProp.angelic_binary _ P Q) (at level 85, right associativity, only printing).
-      Notation "x >= y" := (formula_relop bop.le y x) (only printing).
-      Notation "x > y" := (formula_relop bop.lt y x) (only printing).
-      Notation "x <= y" := (formula_relop bop.le x y) (only printing).
-      Notation "x < y" := (formula_relop bop.lt x y) (only printing).
+      Notation "x >= y" := (formula_relop bop.le y x) (only printing, x in scope term, y in scope term).
+      Notation "x > y" := (formula_relop bop.lt y x) (only printing, x in scope term, y in scope term).
+      Notation "x <= y" := (formula_relop bop.le x y) (only printing, x in scope term, y in scope term).
+      Notation "x < y" := (formula_relop bop.lt x y) (only printing, x in scope term, y in scope term).
       Notation "t" := (term_val _ t) (at level 1, only printing).
     End notations.
 
@@ -1013,8 +1010,36 @@ Module Type SymPropOn
   End SymProp.
   Notation SymProp := SymProp.SymProp.
   Notation 𝕊 := SymProp.SymProp.
+  Import option.notations.
 
   Module Postprocessing.
+
+    Record AngelicBinaryFailMsg (M1 M2 : LCtx -> Type) Σ : Type := MkAngelicBinaryFailMsg {
+                                         angelic_binary_failmsg_left : M1 Σ;
+                                         angelic_binary_failmsg_right : M2 Σ;
+                                       }.
+
+    #[export] Instance SubstAngelicBinaryFailMsg `{Subst M1, Subst M2}: Subst (AngelicBinaryFailMsg M1 M2) :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkAngelicBinaryFailMsg _ _ _ msg1 msg2 => MkAngelicBinaryFailMsg _ _ _ (subst msg1 ζ01) (subst msg2 ζ01)
+        end.
+
+    #[export] Instance SubstLawsAngelicBinaryFailMsg `{SubstLaws M1, SubstLaws M2} : SubstLaws (AngelicBinaryFailMsg M1 M2).
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance OccursCheckAngelicBinaryFailMsg `{OccursCheck M1, OccursCheck M2} : OccursCheck (AngelicBinaryFailMsg M1 M2) :=
+      fun Σ x xIn d =>
+        match d with
+        | MkAngelicBinaryFailMsg _ _ _ msg1 msg2 =>
+            msg1' <- occurs_check xIn msg1 ;;
+            msg2'  <- occurs_check xIn msg2 ;;
+            Some (MkAngelicBinaryFailMsg _ _ _ msg1' msg2')
+        end.
 
     Import SymProp.
 
@@ -1022,6 +1047,7 @@ Module Type SymPropOn
       match p1 , p2 with
       | block   , _       => block
       | _       , block   => block
+      | error (amsg.mk msg1) , error (amsg.mk msg2) => error (amsg.mk (MkAngelicBinaryFailMsg _ _ _ msg1 msg2))
       | error _ , _       => p2
       | _       , error _ => p1
       | _       , _       => angelic_binary p1 p2
@@ -1052,7 +1078,7 @@ Module Type SymPropOn
 
     Definition angelicv_prune {Σ} b (p : 𝕊 (Σ ▻ b)) : 𝕊 Σ :=
       match p with
-      | error msg => error (amsg.there msg)
+      | error (amsg.mk msg) => error (amsg.mk (amsg.there msg))
       | _         => angelicv b p
       end.
 
@@ -1073,7 +1099,7 @@ Module Type SymPropOn
     Definition assert_vareq_prune {Σ} {x σ} {xIn : x∷σ ∈ Σ}
       (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
       match k with
-      | error emsg => error (subst msg (sub_shift xIn))
+      | error emsg => error (subst emsg (sub_shift xIn))
       | _          => assert_vareq x t msg k
       end.
     Global Arguments assert_vareq_prune {Σ} x {σ xIn} t msg k.
@@ -1112,7 +1138,8 @@ Module Type SymPropOn
       destruct p1; cbn; auto.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition auto.
+      - destruct msg, p2; cbn; auto; intuition auto.
+        destruct msg0; now cbn in H.
       - intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
@@ -1158,7 +1185,9 @@ Module Type SymPropOn
 
     Lemma prune_angelicv_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
       safe (angelicv_prune p) ι <-> safe (angelicv b p) ι.
-    Proof. destruct p; cbn; auto; firstorder. Qed.
+    Proof. destruct p; cbn; auto.
+           destruct msg; cbn. firstorder.
+    Qed.
 
     Lemma prune_demonicv_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
       safe (demonicv_prune p) ι <-> safe (demonicv b p) ι.
@@ -1701,10 +1730,14 @@ Module Type SymPropOn
     | eformula_or (F1 F2 : EFormula).
     Arguments eformula_user : clear implicits.
 
+    Inductive EError : Type :=
+    | MkEError : forall {Σ}, AMessage Σ -> EError
+    .
+
     Inductive ESymProp : Type :=
     | eangelic_binary (o1 o2 : ESymProp)
     | edemonic_binary (o1 o2 : ESymProp)
-    | eerror
+    | eerror (msg : EError)
     | eblock
     | eassertk (fml : EFormula) (k : ESymProp)
     | eassumek (fml : EFormula) (k : ESymProp)
@@ -1754,26 +1787,49 @@ Module Type SymPropOn
         | formula_or F1 F2       => eformula_or (erase F1) (erase F2)
         end.
 
-    Fixpoint erase_symprop {Σ} (p : SymProp Σ) : ESymProp :=
+    Fixpoint erase_EErrors (p : ESymProp) : ESymProp :=
       match p with
-      | angelic_binary o1 o2 => eangelic_binary (erase_symprop o1) (erase_symprop o2)
-      | demonic_binary o1 o2 => edemonic_binary (erase_symprop o1) (erase_symprop o2)
-      | error _ => eerror
+      | eangelic_binary o1 o2 => eangelic_binary (erase_EErrors o1) (erase_EErrors o2)
+      | edemonic_binary o1 o2 => edemonic_binary (erase_EErrors o1) (erase_EErrors o2)
+      | eerror msg => eerror (MkEError (Σ := wnil) (amsg.mk (M := Unit) tt))
+      | eblock => eblock
+      | eassertk fml k => eassertk fml (erase_EErrors k)
+      | eassumek fml k => eassumek fml (erase_EErrors k)
+      | eangelicv b k => eangelicv b (erase_EErrors k)
+      | edemonicv b k => edemonicv b (erase_EErrors k)
+      | eassert_vareq x xIn t k => eassert_vareq x xIn t (erase_EErrors k)
+      | eassume_vareq x xIn t k => eassume_vareq x xIn t (erase_EErrors k)
+      | epattern_match s pat rhs =>
+          epattern_match s pat
+            (fun pc => erase_EErrors (rhs pc))
+      | epattern_match_var x xIn pat rhs =>
+          epattern_match_var x xIn pat
+            (fun pc => erase_EErrors (rhs pc))
+      | edebug b k => edebug b (erase_EErrors k)
+      end.
+
+    Fixpoint erase_symprop' {Σ} (p : SymProp Σ) : ESymProp :=
+      match p with
+      | angelic_binary o1 o2 => eangelic_binary (erase_symprop' o1) (erase_symprop' o2)
+      | demonic_binary o1 o2 => edemonic_binary (erase_symprop' o1) (erase_symprop' o2)
+      | error msg => eerror (MkEError msg)
       | block => eblock
-      | assertk fml _ k => eassertk (erase_formula fml) (erase_symprop k)
-      | assumek fml k => eassumek (erase_formula fml) (erase_symprop k)
-      | angelicv b k => eangelicv b (erase_symprop k)
-      | demonicv b k => edemonicv b (erase_symprop k)
-      | @assert_vareq _ x σ xIn t msg k => eassert_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop k)
-      | @assume_vareq _ x σ xIn t k => eassume_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop k)
+      | assertk fml _ k => eassertk (erase_formula fml) (erase_symprop' k)
+      | assumek fml k => eassumek (erase_formula fml) (erase_symprop' k)
+      | angelicv b k => eangelicv b (erase_symprop' k)
+      | demonicv b k => edemonicv b (erase_symprop' k)
+      | @assert_vareq _ x σ xIn t msg k => eassert_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop' k)
+      | @assume_vareq _ x σ xIn t k => eassume_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop' k)
       | pattern_match s pat rhs =>
           epattern_match (erase_term s) pat
-            (fun pc => erase_symprop (rhs pc))
+            (fun pc => erase_symprop' (rhs pc))
       | @pattern_match_var _ x σ xIn pat rhs =>
           epattern_match_var x (ctx.in_at xIn) pat
-            (fun pc => erase_symprop (rhs pc))
-      | debug b k => edebug b (erase_symprop k)
+            (fun pc => erase_symprop' (rhs pc))
+      | debug b k => edebug b (erase_symprop' k)
       end.
+
+    Definition erase_symprop {Σ} (p : SymProp Σ) : ESymProp := erase_EErrors (erase_symprop' p).
 
     Fixpoint erase_valuation {Σ} (ι : Valuation Σ) : list { σ : Ty & Val σ} :=
       match ι with
@@ -1871,6 +1927,7 @@ Module Type SymPropOn
 
     Definition inst_eformula' (ι : list { σ : Ty & Val σ}) (f : EFormula) : Prop :=
       option_rect (fun _ => Prop) (fun p => p) False (inst_eformula ι f).
+    #[global] Arguments inst_eformula' !_ !_ /.
 
     Fixpoint list_remove {A} (xs : list A) (n : nat) : list A :=
       match xs with
@@ -1891,7 +1948,7 @@ Module Type SymPropOn
       match f with
       | eangelic_binary p1 p2 => inst_symprop ι p1 \/ inst_symprop ι p2
       | edemonic_binary p1 p2 => inst_symprop ι p1 /\ inst_symprop ι p2
-      | eerror => False
+      | eerror _ => False
       | eblock => True
       | eassertk fml k => inst_eformula' ι fml /\ inst_symprop ι k
       | eassumek fml k => inst_eformula' ι fml -> inst_symprop ι k
@@ -1987,7 +2044,7 @@ Module Type SymPropOn
       inst_symprop (erase_valuation ι) (erase_symprop p) <->
       safe p ι.
     Proof.
-      induction p; cbn [inst_symprop erase_symprop safe]; unfold inst_eformula'.
+      induction p; cbn [inst_symprop erase_symprop erase_symprop' erase_EErrors safe]; unfold inst_eformula'.
       - apply Morphisms_Prop.or_iff_morphism. auto. auto.
       - apply Morphisms_Prop.and_iff_morphism. auto. auto.
       - reflexivity.
@@ -2033,8 +2090,8 @@ Module Type SymPropOn
       Notation "x" := (eterm_val _ x) (at level 1, only printing).
       Notation "F ∧ P" := (eassertk F P) (only printing, format "'[v' F  ∧ '/ ' P ']'").
       Notation "F → P" := (eassumek F P) (only printing, format "'[v' F  → '/ ' P ']'").
-      Notation "'∃' x '∷' σ , P" := (eangelicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'[v' '∃'  x '∷' σ ,  '/' P ']'").
-      Notation "'∀' x '∷' σ , P" := (edemonicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'[v' '∀'  x '∷' σ ,  '/' P ']'").
+      Notation "'∃' x '∷' σ , P" := (eangelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃'  x '∷' σ ']' ,  '/' P ']'").
+      Notation "'∀' x '∷' σ , P" := (edemonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀'  x '∷' σ ']' ,  '/' P ']'").
       Notation "x ↦ t ∧ k" := (eassert_vareq x _ t k) (at level 99, right associativity, only printing).
       Notation "x ↦ t → k" := (eassume_vareq x _ t k) (at level 99, right associativity, only printing).
       Notation "P ∧ Q" := (edemonic_binary P Q) (at level 80, right associativity, only printing).
@@ -2046,6 +2103,7 @@ Module Type SymPropOn
 
       Notation "e1 + e2"  := (eterm_binop bop.plus e1 e2) (only printing).
       Notation "e1 * e2"  := (eterm_binop bop.times e1 e2) (only printing).
+      Notation "e1 - e2"  := (eterm_binop bop.minus e1 e2) (only printing).
       Notation "e1 +ᵇ e2" := (eterm_binop bop.bvadd e1 e2) (only printing).
       Notation "e1 -ᵇ e2" := (eterm_binop bop.bvsub e1 e2) (only printing).
       Notation "e1 *ᵇ e2" := (eterm_binop bop.bvmul e1 e2) (only printing).

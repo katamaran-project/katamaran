@@ -440,6 +440,7 @@ Module Import ExampleSignature <: Signature ExampleBase.
     (* Simplification of the [plength] predicate with arguments [xs] and [n]. *)
     Equations simplify_plength {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) : Option PathCondition Σ :=
     | term_binop bop.cons x xs       | term_binop bop.plus (term_val ?(ty.int) 1%Z) n => Some [formula_user plength [xs;n]]
+    | term_binop bop.cons x xs       | term_binop bop.plus n (term_val ?(ty.int) 1%Z) => Some [formula_user plength [xs;n]]
     | term_val ?(ty.list ty.int) nil | term_val ?(ty.int) 0%Z                         => Some []
     | xs                             | n                                              => Some [formula_user plength [xs;n]].
 
@@ -475,10 +476,7 @@ Module Import ExampleSignature <: Signature ExampleBase.
     Proof.
       pattern (simplify_preverseappend xs ys zs).
       apply_funelim (simplify_preverseappend xs ys zs); intros *; lsolve;
-        intro ι; cbn.
-      - now rewrite rev_alt.
-      - now rewrite rev_append_rev.
-      - now rewrite rev_alt.
+        intro ι; cbn; first [now rewrite rev_alt|now rewrite rev_append_rev ].
     Qed.
     Goal True. idtac "Timing after: llist/simplify_preverseappend_spec". Abort.
 

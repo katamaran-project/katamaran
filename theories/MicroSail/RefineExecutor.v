@@ -614,15 +614,26 @@ Module RefineExecOn
       now iApply refine_call_contract.
     Qed.
 
-    Lemma refine_exec_lemma :
-      RefineExecLemma cexec_lemma sexec_lemma.
+    Variable cfg : Config.
+
+    Lemma refine_debug_lemma [Δ] (l : 𝑳 Δ) w :
+      ⊢ ℛ⟦RStore Δ -> RHeapSpec RUnit⟧
+        (SHAL.debug_lemma l)
+        (SYMB.debug_lemma cfg l (w := w)).
     Proof.
-      iIntros (? ? ? cδ sδ) "#rδ".
-      unfold cexec_lemma, sexec_lemma.
-      now iApply refine_call_lemma.
+      iIntros (cδ sδ) "#rδ". unfold SHAL.debug_lemma, SYMB.debug_lemma.
+      destruct config_debug_lemma; rsolve.
+      iApply ((HeapSpec.refine_debug (RA := RUnit) (w := w)) with "[]").
+      fold (CHeapSpec.pure tt); rsolve.
     Qed.
 
-    Variable cfg : Config.
+    Lemma refine_exec_lemma :
+      RefineExecLemma cexec_lemma (sexec_lemma cfg).
+    Proof.
+      iIntros (? ? ? cδ sδ) "#rδ".
+      unfold cexec_lemma, sexec_lemma; rsolve.
+      now iApply refine_debug_lemma.
+    Qed.
 
     Lemma refine_debug_call [Δ τ] (f : 𝑭 Δ τ) w :
       ⊢ ℛ⟦RStore Δ -> RHeapSpec RUnit⟧

@@ -579,14 +579,16 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Proof. destruct widthh; now compute. Qed.
   Local Hint Resolve wordwidth_upper_bound : typeclass_instances.
 
+  Import TermNotations.
+
   Definition lemma_close_mmio_write (immm : bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) :=
     {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
        lemma_patterns        := [term_var "paddr"; term_var "w"];
        lemma_precondition    :=
-        (term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" + term_sext (term_val (ty.bvec 12) immm)) ∗
+        (term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
         (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42));
        lemma_postcondition   :=
-        asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" + term_sext (term_val (ty.bvec 12) immm))%exp (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
+        asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
     |}.
 
    Definition LEnv : LemmaEnv :=
@@ -642,27 +644,27 @@ Module RiscvPmpSpecVerif.
     end.
 
   Lemma valid_execute_rX : ValidContract rX.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_execute_wX : ValidContract wX.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   (* Import SymProp.notations. *)
   (* Set Printing Depth 200. *)
   (* Eval vm_compute in (postprocess (RiscvPmpBlockVerifExecutor.SHeapSpecM.vcgen RiscvPmpBlockVerifExecutor.default_config 1 *)
   (*            sep_contract_fetch_instr (FunDef fetch))). *)
   Lemma valid_execute_fetch : ValidContract fetch.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   (* Lemma valid_execute_fetch_instr : SMut.ValidContract sep_contract_fetch_instr (FunDef fetch). *)
   (* Proof. compute. Admitted. *)
 
   Lemma valid_execute_tick_pc : ValidContract tick_pc.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Ltac symbolic_simpl :=
     apply validcontract_with_erasure_sound;
-    compute;
+    vm_compute;
     constructor;
     cbn.
 
@@ -797,7 +799,6 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstance.
   Import RiscvPmp.Model.
-  Import BitvectorSolve.
 
   Import iris.bi.interface.
   Import iris.bi.big_op.

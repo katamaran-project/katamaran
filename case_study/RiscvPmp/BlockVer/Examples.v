@@ -140,10 +140,10 @@ Module Examples.
 
     Local Ltac solve_bv :=
       repeat match goal with
-        | |- context[bv.add ?x (@BitvectorBase.bv.mk ?n 0 I)] =>
+        | |- context[bv.add ?x (@bv.mk ?n 0 I)] =>
             fold (@bv.zero n)
         | |- context[bv.add ?x bv.zero] =>
-            rewrite BitvectorBase.bv.add_zero_r
+            rewrite bv.add_zero_r
         end.
 
     Local Ltac solve_vc :=
@@ -216,6 +216,8 @@ Module Examples.
 
     Definition true_offset : bv 13 := bv.of_N 8.
 
+    Import TermNotations.
+
     (* TODO: would rather write jump_if_zero (true_offset : bv 13) ... *)
     (* Jumps to `true_offset` when the value of X1 is equal to zero. The
          default offset allows one instruction between this block and the true
@@ -223,12 +225,12 @@ Module Examples.
     Definition jump_if_zero : BlockVerifierContract :=
       {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x1" }}
         [ BEQ X1 X0 true_offset ]
-      {{ if: term_var "x1" = term_val ty_xlenbits bv.zero
-         then asn_next_pc_eq (term_pc_val + term_val ty_xlenbits (bv.zext true_offset))
-         else asn_next_pc_eq (term_pc_val + term_val ty_xlenbits (bv.of_N 4)) }}
+        {{ if: term_var "x1" ?= term_val ty_xlenbits bv.zero
+           then asn_next_pc_eq (term_pc_val +ᵇ term_val ty_xlenbits (bv.zext true_offset))
+           else asn_next_pc_eq (term_pc_val +ᵇ term_val ty_xlenbits (bv.of_N 4)) }}
       with ["x1" :: ty_xlenbits].
 
-    (* TODO: would rather write ∀ true_offset, ... but verification than explodes *)
+    (* TODO: would rather write ∀ true_offset, ... but verification then explodes *)
     Lemma valid_jump_if_zero : ValidBlockVerifierContract jump_if_zero.
     Proof. solve_vc. Qed.
 
@@ -239,7 +241,7 @@ Module Examples.
     Definition set_X2_to_42 : BlockVerifierContract :=
       {{ asn_init_pc ∗ ∃ "_", X2 ↦ᵣ term_var "_" }}
         [ ADDI X2 X0 (bv.of_N 42) ]
-      {{ asn_next_pc_eq (term_pc_val + term_val ty_xlenbits (bv.of_N 4))
+      {{ asn_next_pc_eq (term_pc_val +ᵇ term_val ty_xlenbits (bv.of_N 4))
          ∗ X2 ↦ᵣ term_val ty_xlenbits (bv.of_N 42) }}.
 
     Lemma valid_set_X2_to_42 : ValidBlockVerifierContract set_X2_to_42.

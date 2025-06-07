@@ -392,11 +392,15 @@ Module Type ShallowExecOn
       fun Δ τ f args =>
         CHeapSpec.call_contract (CEnvEx f) args.
 
-    Definition cexec_lemma : ExecLemma :=
-      fun Δ l args =>
-        CHeapSpec.call_lemma (LEnv l) args.
+    Definition debug_lemma [Δ] (f : 𝑳 Δ) (args : CStore Δ) : CHeapSpec unit :=
+      CHeapSpec.pure tt.
 
     Import CHeapSpec.notations.
+
+    Definition cexec_lemma : ExecLemma :=
+      fun Δ l args =>
+        _ <- debug_lemma l args ;;
+        CHeapSpec.call_lemma (LEnv l) args.
 
     Definition debug_call [Δ τ] (f : 𝑭 Δ τ) (args : CStore Δ) : CHeapSpec unit :=
       CHeapSpec.pure tt.

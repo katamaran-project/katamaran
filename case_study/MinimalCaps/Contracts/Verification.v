@@ -103,6 +103,12 @@ Module MinCapsValidContracts.
     | None => False
     end.
 
+  Definition ValidContractWithErasure {Δ τ} (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => Symbolic.ValidContractWithErasure c (FunDef f)
+    | None => False
+    end.
+
   Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContract c (FunDef f)
@@ -116,157 +122,157 @@ Module MinCapsValidContracts.
     cbn.
 
   Lemma valid_contract_read_reg : ValidContractReflect read_reg.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_read_reg_cap : ValidContractReflect read_reg_cap.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_read_reg_num : ValidContractReflect read_reg_num.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_write_reg : ValidContractReflect write_reg.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_next_pc : ValidContractReflect next_pc.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_update_pc : ValidContractReflect update_pc.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_update_pc_perm : ValidContractReflect update_pc_perm.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_is_correct_pc : ValidContractReflect is_correct_pc.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_is_perm : ValidContractReflect MinCapsProgram.is_perm.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_add_pc : ValidContractReflect add_pc.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_read_mem : ValidContractReflect read_mem.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_write_mem : ValidContractReflect write_mem.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_read_allowed : ValidContractReflect read_allowed.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_write_allowed : ValidContractReflect write_allowed.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_within_bounds : ValidContractReflect within_bounds.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_perm_to_bits : ValidContractReflect perm_to_bits.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_perm_from_bits : ValidContractReflect perm_from_bits.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_and_perm : ValidContractReflect and_perm.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_is_sub_perm : ValidContractReflect is_sub_perm.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_is_within_range : ValidContractReflect is_within_range.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_abs : ValidContractReflect abs.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_is_not_zero : ValidContractReflect is_not_zero.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_can_incr_cursor : ValidContractReflect can_incr_cursor.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_jalr_cap : ValidContractReflect exec_jalr_cap.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_cjalr : ValidContractReflect exec_cjalr.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_cjal : ValidContractReflect exec_cjal.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_bne : ValidContractReflect exec_bne.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_cmove : ValidContractReflect exec_cmove.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_ld : ValidContractReflect exec_ld.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_sd : ValidContractReflect exec_sd.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_cincoffset : ValidContractReflect exec_cincoffset.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_candperm : ValidContractReflect exec_candperm.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_csetbounds : ValidContractReflect exec_csetbounds.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_csetboundsimm : ValidContractReflect exec_csetboundsimm.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_cgettag : ValidContractReflect exec_cgettag.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_addi : ValidContractReflect exec_addi.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_add : ValidContractReflect exec_add.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_sub : ValidContractReflect exec_sub.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_slt : ValidContractReflect exec_slt.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_slti : ValidContractReflect exec_slti.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_sltu : ValidContractReflect exec_sltu.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_sltiu : ValidContractReflect exec_sltiu.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_cgetperm : ValidContractReflect exec_cgetperm.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_cgetbase : ValidContractReflect exec_cgetbase.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_cgetlen : ValidContractReflect exec_cgetlen.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_cgetaddr : ValidContractReflect exec_cgetaddr.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_fail : ValidContractReflect exec_fail.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_ret : ValidContractReflect exec_ret.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec_instr : ValidContractReflect exec_instr.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_exec : ValidContractReflect exec.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_step : ValidContractReflect step.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_reflect : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
@@ -296,57 +302,57 @@ Module MinCapsValidContracts.
       Symbolic.ValidContract c (FunDef f).
   Proof.
     intros; destruct f.
-    - apply (valid_contract_reflect _ H valid_contract_read_reg).
-    - apply (valid_contract_reflect _ H valid_contract_read_reg_cap).
-    - apply (valid_contract_reflect _ H valid_contract_read_reg_num).
-    - apply (valid_contract_reflect _ H valid_contract_write_reg).
-    - apply (valid_contract_reflect _ H valid_contract_next_pc).
-    - apply (valid_contract_reflect _ H valid_contract_update_pc).
-    - apply (valid_contract_reflect _ H valid_contract_update_pc_perm).
-    - apply (valid_contract_reflect _ H valid_contract_is_correct_pc).
-    - apply (valid_contract_reflect _ H valid_contract_is_perm).
-    - apply (valid_contract_reflect _ H valid_contract_add_pc).
-    - apply (valid_contract_reflect _ H valid_contract_read_mem).
-    - apply (valid_contract_reflect _ H valid_contract_write_mem).
-    - apply (valid_contract_reflect _ H valid_contract_read_allowed).
-    - apply (valid_contract_reflect _ H valid_contract_write_allowed).
-    - apply (valid_contract_reflect _ H valid_contract_within_bounds).
-    - apply (valid_contract_reflect _ H valid_contract_perm_to_bits).
-    - apply (valid_contract_reflect _ H valid_contract_perm_from_bits).
-    - apply (valid_contract_reflect _ H valid_contract_and_perm).
-    - apply (valid_contract_reflect _ H valid_contract_is_sub_perm).
-    - apply (valid_contract_reflect _ H valid_contract_is_within_range).
-    - apply (valid_contract_reflect _ H valid_contract_abs).
-    - apply (valid_contract_reflect _ H valid_contract_is_not_zero).
-    - apply (valid_contract_reflect _ H valid_contract_can_incr_cursor).
-    - apply (valid_contract_reflect _ H valid_contract_exec_jalr_cap).
-    - apply (valid_contract_reflect _ H valid_contract_exec_cjalr).
-    - apply (valid_contract_reflect _ H valid_contract_exec_cjal).
-    - apply (valid_contract_reflect _ H valid_contract_exec_bne).
-    - apply (valid_contract_reflect _ H valid_contract_exec_ld).
-    - apply (valid_contract_reflect _ H valid_contract_exec_sd).
-    - apply (valid_contract_reflect _ H valid_contract_exec_addi).
-    - apply (valid_contract_reflect _ H valid_contract_exec_add).
-    - apply (valid_contract_reflect _ H valid_contract_exec_sub).
-    - apply (valid_contract_reflect _ H valid_contract_exec_slt).
-    - apply (valid_contract_reflect _ H valid_contract_exec_slti).
-    - apply (valid_contract_reflect _ H valid_contract_exec_sltu).
-    - apply (valid_contract_reflect _ H valid_contract_exec_sltiu).
-    - apply (valid_contract_reflect _ H valid_contract_exec_cmove).
-    - apply (valid_contract_reflect _ H valid_contract_exec_cincoffset).
-    - apply (valid_contract_reflect _ H valid_contract_exec_candperm).
-    - apply (valid_contract_reflect _ H valid_contract_exec_csetbounds).
-    - apply (valid_contract_reflect _ H valid_contract_exec_csetboundsimm).
-    - apply (valid_contract_reflect _ H valid_contract_exec_cgettag).
-    - apply (valid_contract_reflect _ H valid_contract_exec_cgetperm).
-    - apply (valid_contract_reflect _ H valid_contract_exec_cgetbase).
-    - apply (valid_contract_reflect _ H valid_contract_exec_cgetlen).
-    - apply (valid_contract_reflect _ H valid_contract_exec_cgetaddr).
-    - apply (valid_contract_reflect _ H valid_contract_exec_fail).
-    - apply (valid_contract_reflect _ H valid_contract_exec_ret).
-    - apply (valid_contract_reflect _ H valid_contract_exec_instr).
-    - apply (valid_contract_reflect _ H valid_contract_exec).
-    - apply (valid_contract_reflect _ H valid_contract_step).
+    - refine (valid_contract_reflect _ H valid_contract_read_reg).
+    - refine (valid_contract_reflect _ H valid_contract_read_reg_cap).
+    - refine (valid_contract_reflect _ H valid_contract_read_reg_num).
+    - refine (valid_contract_reflect _ H valid_contract_write_reg).
+    - refine (valid_contract_reflect _ H valid_contract_next_pc).
+    - refine (valid_contract_reflect _ H valid_contract_update_pc).
+    - refine (valid_contract_reflect _ H valid_contract_update_pc_perm).
+    - refine (valid_contract_reflect _ H valid_contract_is_correct_pc).
+    - refine (valid_contract_reflect _ H valid_contract_is_perm).
+    - refine (valid_contract_reflect _ H valid_contract_add_pc).
+    - refine (valid_contract_reflect _ H valid_contract_read_mem).
+    - refine (valid_contract_reflect _ H valid_contract_write_mem).
+    - refine (valid_contract_reflect _ H valid_contract_read_allowed).
+    - refine (valid_contract_reflect _ H valid_contract_write_allowed).
+    - refine (valid_contract_reflect _ H valid_contract_within_bounds).
+    - refine (valid_contract_reflect _ H valid_contract_perm_to_bits).
+    - refine (valid_contract_reflect _ H valid_contract_perm_from_bits).
+    - refine (valid_contract_reflect _ H valid_contract_and_perm).
+    - refine (valid_contract_reflect _ H valid_contract_is_sub_perm).
+    - refine (valid_contract_reflect _ H valid_contract_is_within_range).
+    - refine (valid_contract_reflect _ H valid_contract_abs).
+    - refine (valid_contract_reflect _ H valid_contract_is_not_zero).
+    - refine (valid_contract_reflect _ H valid_contract_can_incr_cursor).
+    - refine (valid_contract_reflect _ H valid_contract_exec_jalr_cap).
+    - refine (valid_contract_reflect _ H valid_contract_exec_cjalr).
+    - refine (valid_contract_reflect _ H valid_contract_exec_cjal).
+    - refine (valid_contract_reflect _ H valid_contract_exec_bne).
+    - refine (valid_contract_reflect _ H valid_contract_exec_ld).
+    - refine (valid_contract_reflect _ H valid_contract_exec_sd).
+    - refine (valid_contract_reflect _ H valid_contract_exec_addi).
+    - refine (valid_contract_reflect _ H valid_contract_exec_add).
+    - refine (valid_contract_reflect _ H valid_contract_exec_sub).
+    - refine (valid_contract_reflect _ H valid_contract_exec_slt).
+    - refine (valid_contract_reflect _ H valid_contract_exec_slti).
+    - refine (valid_contract_reflect _ H valid_contract_exec_sltu).
+    - refine (valid_contract_reflect _ H valid_contract_exec_sltiu).
+    - refine (valid_contract_reflect _ H valid_contract_exec_cmove).
+    - refine (valid_contract_reflect _ H valid_contract_exec_cincoffset).
+    - refine (valid_contract_reflect _ H valid_contract_exec_candperm).
+    - refine (valid_contract_reflect _ H valid_contract_exec_csetbounds).
+    - refine (valid_contract_reflect _ H valid_contract_exec_csetboundsimm).
+    - refine (valid_contract_reflect _ H valid_contract_exec_cgettag).
+    - refine (valid_contract_reflect _ H valid_contract_exec_cgetperm).
+    - refine (valid_contract_reflect _ H valid_contract_exec_cgetbase).
+    - refine (valid_contract_reflect _ H valid_contract_exec_cgetlen).
+    - refine (valid_contract_reflect _ H valid_contract_exec_cgetaddr).
+    - refine (valid_contract_reflect _ H valid_contract_exec_fail).
+    - refine (valid_contract_reflect _ H valid_contract_exec_ret).
+    - refine (valid_contract_reflect _ H valid_contract_exec_instr).
+    - refine (valid_contract_reflect _ H valid_contract_exec).
+    - refine (valid_contract_reflect _ H valid_contract_step).
     - cbn in H; inversion H.
   Qed.
 

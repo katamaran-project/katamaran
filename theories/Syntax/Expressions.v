@@ -164,8 +164,9 @@ Module Type ExpressionsOn (Import TY : Types).
   Notation exp_get_slice_int e := (exp_unop uop.get_slice_int e%exp).
   Notation exp_signed e := (exp_unop uop.signed e%exp).
   Notation exp_unsigned e := (exp_unop uop.unsigned e%exp).
-  Notation exp_truncate m e := (exp_unop (uop.truncate m) e%exp).
-  Notation exp_vector_subrange s l e := (exp_unop (uop.vector_subrange s l) e%exp).
+  Notation exp_bvapp := (exp_binop bop.bvapp).
+  Notation exp_bvdrop m := (exp_unop (uop.bvdrop m)).
+  Notation exp_bvtake m := (exp_unop (uop.bvtake m)).
   Notation exp_negate e := (exp_unop uop.negate e%exp).
 
   Notation "e1 && e2" := (exp_binop bop.and e1 e2) : exp_scope.
@@ -195,5 +196,27 @@ Module Type ExpressionsOn (Import TY : Types).
   Notation "e1 = e2" := (exp_binop (bop.relop bop.eq) e1 e2) : exp_scope.
   Notation "e1 != e2" := (exp_binop (bop.relop bop.neq) e1 e2) : exp_scope.
   Notation "- e" := (exp_unop uop.neg e) : exp_scope.
+
+  Definition exp_truncate {Γ n} (m : nat) {p : IsTrue (m <=? n)} :
+    Exp Γ (ty.bvec n) -> Exp Γ (ty.bvec m) :=
+    match bv.leview m n with
+    | bv.is_le k => exp_bvtake m
+    end.
+
+  Definition exp_vector_subrange {Γ n} s l {p : IsTrue (s + l <=? n)} :
+    Exp Γ (ty.bvec n) -> Exp Γ (ty.bvec l) :=
+    match bv.leview (s + l) n with
+    | bv.is_le k => fun t => exp_bvdrop s (exp_bvtake (s + l) t)
+    end.
+
+  Definition exp_update_vector_subrange {Γ n} (s l : nat) {p : IsTrue (s + l <=? n)} :
+    Exp Γ (ty.bvec n) -> Exp Γ (ty.bvec l) -> Exp Γ (ty.bvec n) :=
+    match bv.leview (s + l) n with
+    | bv.is_le k =>
+        fun t u =>
+          exp_bvapp
+            (exp_bvapp (exp_bvtake s (exp_bvtake (s + l) t)) u)
+            (exp_bvdrop (s + l) t)
+    end.
 
 End ExpressionsOn.

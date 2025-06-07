@@ -172,7 +172,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
   | pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1)
   | pmpLocked             : Fun [cfg ∷ ty_pmpcfg_ent] ty.bool
-  | pmpWriteCfgReg(n : nat) {H : n < 1} : Fun [value :: ty_xlenbits] ty.unit
+  | pmpWriteCfgReg        : Fun ["n" :: ty.int; value :: ty_xlenbits] ty.unit
   | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent
   | pmpWriteAddr          : Fun [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
   | pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
@@ -622,8 +622,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_pmpLocked : Stm [cfg ∷ ty_pmpcfg_ent] ty.bool :=
     match: cfg in rpmpcfg_ent with [L; A; X; W; R] => L end.
 
-  Definition fun_pmpWriteCfgReg (n : nat) {H : n < 1} : Stm [value :: ty_xlenbits] ty.unit :=
-    if: exp_int (Z.of_nat n) = exp_int 0%Z
+  Definition fun_pmpWriteCfgReg : Stm ["n" :: ty.int; value :: ty_xlenbits] ty.unit :=
+    if: exp_var "n" = exp_int 0%Z
     then
       let: tmp  := stm_read_register pmp0cfg in
       let: tmp1 := exp_vector_subrange 0 8 value in
@@ -996,7 +996,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                 stm_val ty.unit tt
     | MEpc => stm_write_register mepc value ;;
               stm_val ty.unit tt
-    | MPMP0CFG => stm_call (@pmpWriteCfgReg 0%nat Nat.lt_0_1) [value]
+    | MPMP0CFG => stm_call pmpWriteCfgReg ([exp_int 0%Z : Exp _ (type (_∷ _)); value])
     | MPMPADDR0 => let: tmp1 := stm_read_register pmp0cfg in
                    let: tmp1 := call pmpLocked tmp1 in
                    let: tmp2 := stm_read_register pmpaddr0 in
@@ -1311,7 +1311,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | @pmp_mem_read width H   => @fun_pmp_mem_read width H
     | @pmp_mem_write width H  => @fun_pmp_mem_write width H
     | pmpLocked               => fun_pmpLocked
-    | @pmpWriteCfgReg n p     => @fun_pmpWriteCfgReg n p
+    | pmpWriteCfgReg          => fun_pmpWriteCfgReg
     | pmpWriteCfg             => fun_pmpWriteCfg
     | pmpWriteAddr            => fun_pmpWriteAddr
     | @pmpCheck bytes H       => @fun_pmpCheck bytes H

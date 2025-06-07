@@ -148,15 +148,11 @@ Section Equality.
 
     Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
       eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
-    Proof.
-      now subst.
-    Qed.
+    Proof. apply rew_opp_l. Qed.
 
     Lemma eq_rect_sym2 {A : Type} {P : A -> Type} {a a' : A} (eq : a' = a) (v : P a) :
       eq_rect a' P (eq_rect a P v a' (eq_sym eq)) a eq = v.
-    Proof.
-      now subst.
-    Qed.
+    Proof. apply rew_opp_r. Qed.
 
 End Equality.
 
@@ -290,6 +286,9 @@ Module IsTrue.
   #[export] Hint Extern 10 (IsTrue ?b) =>
     refine (@mk true I) : typeclass_instances.
 
+  (* Test the behaviour of the Hint Mode. *)
+  Goal exists b, IsTrue b. Proof. eexists. Fail typeclasses eauto. Abort.
+
   (* The following two definition should never be added as instances themselves
      because they will easily lead to exponential blowup in proof search. Only
      use them locally in the definition of other instances. *)
@@ -309,6 +308,40 @@ Module IsTrue.
 End IsTrue.
 Export (hints) IsTrue.
 Export IsTrue (IsTrue).
+
+(* This module contains transparent copies of lemmas from the stdlib. *)
+Module transparent.
+
+  (* Coq.Arith.PeanoNat.Nat.add_0_r *)
+  Fixpoint nat_add_0_r (n : nat) : n + O = n :=
+    match n with
+    | O   => eq_refl
+    | S n => f_equal S (nat_add_0_r n)
+    end.
+
+  (* Coq.Arith.PeanoNat.Nat.add_assoc *)
+  Fixpoint nat_add_assoc (n m p : nat) : n + (m + p) = n + m + p :=
+    match n with
+    | O   => eq_refl
+    | S n => f_equal S (nat_add_assoc n m p)
+    end.
+
+  (* Coq.Arith.PeanoNat.Nat.add_succ_r *)
+  Fixpoint nat_add_succ_r (n m : nat) : n + S m = S (n + m) :=
+    match n with
+    | O   => eq_refl
+    | S n => f_equal S (nat_add_succ_r n m)
+    end.
+
+  (* Coq.Arith.PeanoNat.Nat.add_cancel_l *)
+  Fixpoint nat_add_cancel_l n m p {struct p} : p + n = p + m -> n = m :=
+    match p with
+    | O   => fun e : n = m => e
+    | S p => fun e : S (p + n) = S (p + m) =>
+              nat_add_cancel_l n m p (eq_add_S (p + n) (p + m) e)
+    end.
+
+End transparent.
 
 Definition IsSome {A : Type} (m : option A) : Type :=
   match m with
@@ -620,15 +653,57 @@ Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
   (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
 Proof. firstorder. Qed.
 
+Lemma N_land_succ_double x y :
+  N.land (N.succ_double x) (N.succ_double y) =
+  N.succ_double (N.land x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_land_succ_double_double x y :
+  N.land (N.succ_double x) (N.double y) =
+  N.double (N.land x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_land_double_succ_double x y :
+  N.land (N.double x) (N.succ_double y) =
+  N.double (N.land x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_land_double_double x y :
+  N.land (N.double x) (N.double y) =
+  N.double (N.land x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lor_succ_double x y :
+  N.lor (N.succ_double x) (N.succ_double y) =
+  N.succ_double (N.lor x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lor_succ_double_double x y :
+  N.lor (N.succ_double x) (N.double y) =
+  N.succ_double (N.lor x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lor_double_succ_double x y :
+  N.lor (N.double x) (N.succ_double y) =
+  N.succ_double (N.lor x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lor_double_double x y :
+  N.lor (N.double x) (N.double y) =
+  N.double (N.lor x y).
+Proof. now destruct x, y. Qed.
+
 Declare Scope alt_scope.
 Declare Scope asn_scope.
 Declare Scope exp_scope.
+Declare Scope term_scope.
 Declare Scope modal_scope.
 Declare Scope mut_scope.
 Declare Scope pat_scope.
 Delimit Scope alt_scope with alt.
 Delimit Scope asn_scope with asn.
 Delimit Scope exp_scope with exp.
+Delimit Scope term_scope with term.
 Delimit Scope modal_scope with modal.
 Delimit Scope mut_scope with mut.
 Delimit Scope pat_scope with pat.
@@ -644,6 +719,45 @@ Definition findAD {A} {B : A -> Type} {eqA: EqDec A} (a : A) :
         | right _ => find xs
         end
     end.
+
+Fixpoint find_index_aux {A} (P : A -> bool) (xs : list A) (acc : nat) : option nat :=
+  match xs with
+  | nil       => None
+  | cons x xs => if P x then Some acc else find_index_aux P xs (S acc)
+  end.
+
+Lemma find_index_aux_spec {A} (P : A -> bool) (xs : list A) (acc : nat) :
+  option.wlp (fun i => forall prefix, List.length prefix = acc ->
+                                      option.wp (fun x => Is_true (P x)) (base.lookup i (prefix ++ xs)))
+    (find_index_aux P xs acc).
+Proof.
+  revert acc.
+  induction xs; intros; cbn; [constructor|].
+  destruct (P a) eqn:HPa.
+  - constructor; intros.
+    rewrite list.list_lookup_middle; last easy.
+    constructor. now rewrite HPa.
+  - generalize (IHxs (S acc)).
+    eapply option.wlp_monotonic.
+    intros i IHi prefix Hlenpref.
+    specialize (IHi (prefix ++ cons a nil)).
+    rewrite <-app_assoc in IHi.
+    apply IHi.
+    rewrite list.length_app, Hlenpref; cbn.
+    now rewrite <-plus_n_Sm, plus_n_O.
+Qed.
+
+Definition find_index {A} (P : A -> bool) (xs : list A) : option nat :=
+  find_index_aux P xs 0.
+
+Lemma find_index_spec {A} (P : A -> bool) (xs : list A) :
+  option.wlp (fun i => option.wp (fun x => Is_true (P x)) (base.lookup i xs)) (find_index P xs).
+Proof.
+  generalize (find_index_aux_spec P xs 0).
+  eapply option.wlp_monotonic.
+  intros i Hgen.
+  now apply (Hgen nil).
+Qed.
 
 Record Stats : Set :=
   { branches : N
