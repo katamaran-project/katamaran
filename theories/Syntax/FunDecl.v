@@ -45,4 +45,7 @@ Module Type FunDeclKit (Import T : Types).
   (* Names of lemmas. *)
   Parameter Inline 𝑳 : PCtx -> Set.
 
+  (* Required fuel to reason about the functions (needed for termination reasoning).
+     The fuel represents the depth of the call stack of functions. *)
+  Parameter Inline inline_fuel : nat.
 End FunDeclKit.
