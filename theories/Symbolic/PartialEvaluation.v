@@ -186,15 +186,10 @@ Module Type PartialEvaluationOn
     Qed.
 
     Definition evalPolTm `{TermRing σ} : list (Term Σ σ) -> Pol Z -> Term Σ σ :=
-      Pphi_dev (term_val σ tmr_zero)
-        (term_val σ tmr_one)
+      Pphi (term_val σ tmr_zero)
         (term_binop tmr_plus)
         (term_binop tmr_times)
-        (term_binop tmr_minus)
-        (term_unop tmr_negate)
-        0%Z 1%Z Zbool.Zeq_bool
-        (fun c => term_val σ (tmr_of_Z c))
-        get_signZ.
+        (fun c => term_val σ (tmr_of_Z c)).
 
     Definition evalPExprTm `{TermRing σ} : list (Term Σ σ) -> PExpr Z -> Term Σ σ :=
       PEeval (term_val σ tmr_zero)
@@ -210,8 +205,7 @@ Module Type PartialEvaluationOn
       evalPolTm l (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool p) ≡ evalPExprTm l p.
     Proof.
       unfold evalPolTm, evalPExprTm.
-      rewrite Pphi_dev_ok;
-        rewrite ?bv.of_N_one;
+      rewrite ?bv.of_N_one;
         try eauto using tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th with typeclass_instances.
       rewrite norm_aux_spec;
         rewrite ?bv.of_N_one; try eauto using tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th, pow_N_th with typeclass_instances.
