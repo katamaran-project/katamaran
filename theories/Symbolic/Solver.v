@@ -91,18 +91,17 @@ Module Type GenericSolverOn
         t.
 
     Lemma simplify_bool_spec_combined {w : World} (t : Term w ty.bool) :
-      (instpred (simplify_bool t) ⊣⊢ instpred (w := w) (formula_bool t)) /\
-      (instpred (simplify_bool_neg t) ⊣⊢ instpred (formula_bool (term_unop uop.not t))).
+      (instpred (simplify_bool t) ⊣⊢ repₚ (T := fun Σ => Term Σ ty.bool) true t) ∧
+      (instpred (simplify_bool_neg t) ⊣⊢ repₚ (T := fun Σ => Term Σ ty.bool) false t).
     Proof.
       induction t using Term_bool_ind; cbn; arw.
       - destruct b; arw.
-      - destruct IHt1 as [IHt11 IHt12], IHt2 as [IHt21 IHt22]; arw.
-        rewrite IHt11 IHt21.
-        (* need to find a confluent rewrite strategy... *)
-        now rewrite -(term_negb_involutive (term_binop bop.and _ _)) repₚ_term_not' term_not_and; arw.
-      - destruct IHt1 as [IHt11 IHt12], IHt2 as [IHt21 IHt22]; arw; arw_slow.
-        now rewrite IHt12 IHt22.
-      - now arw_slow.
+      - split.
+        + now destruct IHt1 as [-> _], IHt2 as [-> _].
+        + (* need to find a confluent rewrite strategy... *)
+          now rewrite -(term_negb_involutive (term_binop bop.and _ _))
+                         repₚ_term_not' term_not_and.
+      - destruct IHt1 as [_ ->], IHt2 as [_ ->]; arw.
     Qed.
 
     Lemma simplify_bool_spec [w : World] (t : Term w ty.bool) :
@@ -110,89 +109,307 @@ Module Type GenericSolverOn
     Proof. apply simplify_bool_spec_combined. Qed.
 
     Lemma simplify_bool_neg_spec [w : World] (t : Term w ty.bool) :
-      instpred (simplify_bool_neg t) ⊣⊢ instpred (formula_bool (term_unop uop.not t)).
+      instpred (simplify_bool_neg t) ⊣⊢ repₚ (T := fun Σ => Term Σ ty.bool) false t.
     Proof. apply simplify_bool_spec_combined. Qed.
     #[local] Opaque simplify_bool simplify_bool_neg.
     #[local] Hint Rewrite simplify_bool_spec simplify_bool_neg_spec : uniflogic.
 
-    (* Simplifies equations of the form (term_binop op t1 t2 = v). *)
-    Equations(noeqns) simplify_eq_binop_val [Σ σ σ1 σ2]
-      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ) : DList Σ :=
-    | bop.pair       | t1 | t2 | (v1 , v2)  => cat
-                                                (singleton (formula_relop bop.eq t1 (term_val _ v1)))
-                                                (singleton (formula_relop bop.eq t2 (term_val _ v2)))
-    | bop.cons       | t1 | t2 | nil        => error
-    | bop.cons       | t1 | t2 | cons v1 v2 => cat
-                                                 (singleton (formula_relop bop.eq t1 (term_val _ v1)))
-                                                 (singleton (formula_relop bop.eq t2 (term_val (ty.list _) v2)))
-    | bop.and        | t1 | t2 | v          => if v
-                                               then simplify_bool (term_binop bop.and t1 t2)
-                                               else simplify_bool_neg (term_binop bop.and t1 t2)
-    | bop.or         | t1 | t2 | v          => if v
-                                               then simplify_bool (term_binop bop.or t1 t2)
-                                               else simplify_bool_neg (term_binop bop.or t1 t2)
-    | bop.relop op   | t1 | t2 | v          => if v
-                                               then singleton (formula_relop op t1 t2)
-                                               else singleton (formula_relop_neg op t1 t2)
-    | op             | t1 | t2 | v          => singleton (formula_relop bop.eq (term_binop op t1 t2) (term_val _ v)).
-
-    Lemma simplify_eq_binop_val_spec [w : World] [σ σ1 σ2]
-      (op : BinOp σ1 σ2 σ) (t1 : Term w σ1) (t2 : Term w σ2) (v : Val σ) :
-      instpred (simplify_eq_binop_val op t1 t2 v) ⊣⊢
-      repₚ v (term_binop op t1 t2).
-    Proof. destruct op; arw; destruct v; arw; arw_slow. Qed.
-    #[local] Opaque simplify_eq_binop_val.
-    #[local] Hint Rewrite simplify_eq_binop_val_spec : uniflogic.
-
-    Definition simplify_eq_signed_val [Σ] {n} (t : Term Σ (ty.bvec n)) (v : Val ty.int) : DList Σ :=
-      if ((- 2 ^ (Z.of_nat n) <=? 2 * v) &&& (2 * v <? 2 ^ Z.of_nat n))%Z
-      then singleton (formula_relop bop.eq t (term_val (ty.bvec n) (bv.of_Z v)))
-      else error.
-
-    Lemma simplify_eq_signed_val_spec [w : World] {n}
-      (t : STerm (ty.bvec n) w) (v : Val ty.int) :
-      instpred (simplify_eq_signed_val t v) ⊣⊢ repₚ v (term_unop uop.signed t).
-    Proof.
-      unfold simplify_eq_signed_val. rewrite <- andb_lazy_alt.
-      destruct ((- 2 ^ n <=? 2 * v)%Z && (2 * v <? 2 ^ n)%Z) eqn:H; arw.
-      - constructor. intros ι Hpc. cbn.
-        rewrite bv.signed_eq_z.
-        intuition; lia.
-      - rewrite instpred_dlist_error.
-        iSplit; [iIntros ([])|].
-        iIntros "Hsimpl".
-        iDestruct (repₚ_inversion_term_signed with "Hsimpl") as "(%bv & %Heq & Hrep)".
-        pose proof (bv.signed_bounds bv). lia.
-    Qed.
-    #[local] Opaque simplify_eq_signed_val.
-    #[local] Hint Rewrite simplify_eq_signed_val_spec : uniflogic.
-
-    Equations(noeqns) simplify_eq_unop_val [Σ σ1 σ2]
-      (op : UnOp σ1 σ2) (t : Term Σ σ1) (v : Val σ2) : DList Σ :=
-    | uop.neg        | t | v      => singleton (formula_relop bop.eq t (term_val ty.int (Z.opp v)))
-    | uop.not        | t | v     => if v then simplify_bool_neg t else simplify_bool t
-    | uop.inl        | t | inl v => singleton (formula_relop bop.eq t (term_val _ v))
-    | uop.inl        | t | inr _ => error
-    | uop.inr        | t | inl _ => error
-    | uop.inr        | t | inr v => singleton (formula_relop bop.eq t (term_val _ v))
-    | uop.signed     | t | z     => simplify_eq_signed_val t z
-    | op             | t | v     => singleton (formula_relop bop.eq (term_unop op t) (term_val _ v)).
-
-    Lemma simplify_eq_unop_val_spec [w : World] [σ1 σ2]
-      (op : UnOp σ1 σ2) (t : STerm σ1 w) (v : Val σ2) :
-      instpred (simplify_eq_unop_val op t v) ⊣⊢ repₚ v (term_unop op t).
-    Proof. destruct op; arw; destruct v; arw; arw_slow. Qed.
-    #[local] Opaque simplify_eq_unop_val.
-    #[local] Hint Rewrite simplify_eq_unop_val_spec : uniflogic.
-
     Definition simplify_eqb {Σ σ} (t1 t2 : Term Σ σ) : DList Σ :=
-      if Term_eqb t1 t2 then empty else singleton (formula_relop bop.eq t1 t2).
+      let num t :=
+        match t with
+        | term_var _       => 1
+        | term_val _ _     => 2
+        | term_binop _ _ _ => 3
+        | term_unop _ _    => 4
+        | term_tuple _     => 5
+        | term_union _ _ _ => 6
+        | term_record _ _  => 7
+        end%positive in
+      if Term_eqb t1 t2
+      then empty
+      else
+        if (num t1 <=? num t2)%positive
+        then dlist_eq t1 t2
+        else dlist_eq t2 t1.
 
     Lemma simplify_eqb_spec [w : World] [σ] (t1 t2 : STerm σ w) :
-      instpred (simplify_eqb t1 t2) ⊣⊢ instpred (formula_relop bop.eq t1 t2).
-    Proof. unfold simplify_eqb. destruct (Term_eqb_spec t1 t2); subst; arw. Qed.
+      instpred (simplify_eqb t1 t2) ⊣⊢ instpred (formula_eq t1 t2).
+    Proof.
+      unfold simplify_eqb.
+      destruct (Term_eqb_spec t1 t2); subst; arw.
+      destruct Pos.leb; arw.
+    Qed.
     #[local] Hint Rewrite simplify_eqb_spec : uniflogic.
     #[local] Opaque simplify_eqb.
+
+    Section SimplifyEqVal.
+
+      Context {Σ : LCtx}.
+
+      Definition simplify_eq_binop_default_val {σ1 σ2 σ} (op : BinOp σ1 σ2 σ)
+        (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ) : DList Σ :=
+        dlist_eq (term_val σ v) (term_binop op t1 t2).
+
+      Definition simplify_eq_unop_default_val {σ1 σ2} (op : UnOp σ1 σ2)
+        (t : Term Σ σ1) (v : Val σ2) : DList Σ :=
+        dlist_eq (term_val _ v) (term_unop op t).
+
+      Definition simplify_eq_binop_and_val (t1 t2 : Term Σ ty.bool)
+        (v : Val ty.bool) : DList Σ :=
+        if v
+        then simplify_bool (term_binop bop.and t1 t2)
+        else simplify_bool_neg (term_binop bop.and t1 t2).
+
+      Definition simplify_eq_binop_or_val (t1 t2 : Term Σ ty.bool)
+        (v : Val ty.bool) : DList Σ :=
+        if v
+        then simplify_bool (term_binop bop.or t1 t2)
+        else simplify_bool_neg (term_binop bop.or t1 t2).
+
+      Definition simplify_eq_unop_not_val (t : Term Σ ty.bool) (v : Val ty.bool) :
+        DList Σ :=
+        if v then simplify_bool_neg t else simplify_bool t.
+
+      Definition simplify_eq_binop_relop_val {σ} (op : RelOp σ)
+        (t1 t2 : Term Σ σ) (v : Val ty.bool) : DList Σ :=
+        if v
+        then singleton (formula_relop op t1 t2)
+        else singleton (formula_relop_neg op t1 t2).
+
+      Section WithSimplifyEqVal.
+
+        Variable simplify_eq_val : ∀ [σ] (t : Term Σ σ) (v : Val σ), DList Σ.
+
+        Definition simplify_eq_binop_pair_val {σ1 σ2} (t1 : Term Σ σ1)
+          (t2 : Term Σ σ2) (v : Val (ty.prod σ1 σ2)) : DList Σ :=
+          let (v1, v2) := v in
+          cat (simplify_eq_val t1 v1) (simplify_eq_val t2 v2).
+
+        Definition simplify_eq_binop_cons_val {σ} (t1 : Term Σ σ)
+          (t2 : Term Σ (ty.list σ)) (v : Val (ty.list σ)) : DList Σ :=
+          match v with
+          | nil        => error
+          | cons vh vl => cat (simplify_eq_val t1 vh) (simplify_eq_val t2 vl)
+          end.
+
+        Definition simplify_eq_binop_bvapp_val {m n} (t1 : Term Σ (ty.bvec m))
+          (t2 : Term Σ (ty.bvec n)) (v : Val (ty.bvec (m + n))) : DList Σ :=
+          let (v1,v2) := bv.appView _ _ v in
+          cat (simplify_eq_val t1 v1) (simplify_eq_val t2 v2).
+
+        Definition simplify_eq_binop_bvcons_val {m} (t1 : Term Σ ty.bool)
+          (t2 : Term Σ (ty.bvec m)) (v : Val (ty.bvec (S m))) : DList Σ :=
+          let (v1,v2) := bv.view v in
+          cat (simplify_eq_val t1 v1) (simplify_eq_val t2 v2).
+
+        (* Simplifies equations of the form (term_binop op t1 t2 = v). *)
+        Definition simplify_eq_binop_val [σ σ1 σ2] (op : BinOp σ1 σ2 σ) :
+          Term Σ σ1 → Term Σ σ2 → Val σ → DList Σ :=
+          match op with
+          | bop.plus => simplify_eq_binop_default_val bop.plus
+          | bop.minus => simplify_eq_binop_default_val bop.minus
+          | bop.times => simplify_eq_binop_default_val bop.times
+          | bop.land => simplify_eq_binop_default_val bop.land
+          | bop.and => simplify_eq_binop_and_val
+          | bop.or => simplify_eq_binop_or_val
+          | bop.pair => simplify_eq_binop_pair_val
+          | bop.cons => simplify_eq_binop_cons_val
+          | bop.append => simplify_eq_binop_default_val bop.append
+          | bop.shiftr => simplify_eq_binop_default_val bop.shiftr
+          | bop.shiftl => simplify_eq_binop_default_val bop.shiftl
+          | bop.bvadd => simplify_eq_binop_default_val bop.bvadd
+          | bop.bvsub => simplify_eq_binop_default_val bop.bvsub
+          | bop.bvmul => simplify_eq_binop_default_val bop.bvmul
+          | bop.bvand => simplify_eq_binop_default_val bop.bvand
+          | bop.bvor => simplify_eq_binop_default_val bop.bvor
+          | bop.bvxor => simplify_eq_binop_default_val bop.bvxor
+          | bop.bvapp => simplify_eq_binop_bvapp_val
+          | bop.bvcons => simplify_eq_binop_bvcons_val
+          | bop.update_vector_subrange s l =>
+              simplify_eq_binop_default_val (bop.update_vector_subrange s l)
+          | bop.relop op => simplify_eq_binop_relop_val op
+          end.
+
+        Definition simplify_eq_unop_inl_val {σ1 σ2} (t : Term Σ σ1)
+          (v : Val (ty.sum σ1 σ2)) : DList Σ :=
+          match v with
+          | inl vl => simplify_eq_val t vl
+          | inr _  => error
+          end.
+
+        Definition simplify_eq_unop_inr_val {σ1 σ2} (t : Term Σ σ2)
+          (v : Val (ty.sum σ1 σ2)) : DList Σ :=
+          match v with
+          | inl _  => error
+          | inr vr => simplify_eq_val t vr
+          end.
+
+        Definition simplify_eq_unop_neg_val (t : Term Σ ty.int) (v : Val ty.int) :
+          DList Σ := simplify_eq_val t (Z.opp v).
+
+        Definition simplify_eq_unop_signed_val {n} (t : Term Σ (ty.bvec n))
+          (v : Val ty.int) : DList Σ :=
+          if ((- 2 ^ (Z.of_nat n) <=? 2 * v) &&& (2 * v <? 2 ^ Z.of_nat n))%Z
+          then simplify_eq_val t (bv.of_Z v)
+          else error.
+
+        Definition simplify_eq_unop_unsigned_val {n} (t : Term Σ (ty.bvec n))
+          (v : Val ty.int) : DList Σ :=
+          if ((0 <=? v) &&& (v <? 2 ^ Z.of_nat n))%Z
+          then simplify_eq_val t (bv.of_Z v)
+          else error.
+
+        Definition simplify_eq_unop_val {σ1 σ2} (op : UnOp σ1 σ2) :
+          Term Σ σ1 → Val σ2 → DList Σ :=
+          match op with
+          | uop.inl => simplify_eq_unop_inl_val
+          | uop.inr => simplify_eq_unop_inr_val
+          | uop.neg => simplify_eq_unop_neg_val
+          | uop.not => simplify_eq_unop_not_val
+          | uop.rev => simplify_eq_unop_default_val uop.rev
+          | uop.sext => simplify_eq_unop_default_val uop.sext
+          | uop.zext => simplify_eq_unop_default_val uop.zext
+          | uop.get_slice_int => simplify_eq_unop_default_val uop.get_slice_int
+          | uop.signed => simplify_eq_unop_signed_val
+          | uop.unsigned => simplify_eq_unop_unsigned_val
+          | uop.truncate m => simplify_eq_unop_default_val (uop.truncate m)
+          | uop.vector_subrange s l => simplify_eq_unop_default_val (uop.vector_subrange s l)
+          | uop.bvnot => simplify_eq_unop_default_val uop.bvnot
+          | uop.bvdrop m => simplify_eq_unop_default_val (uop.bvdrop m)
+          | uop.bvtake m => simplify_eq_unop_default_val (uop.bvtake m)
+          | uop.negate => simplify_eq_unop_default_val uop.negate
+          end.
+
+        Definition simplify_eq_tuple_val {σs} (ts : Env (Term Σ) σs)
+          (vs : Val (ty.tuple σs)) : DList Σ :=
+          env.Env_rect
+            (fun σs _ => Val (ty.tuple σs) → DList Σ)
+            (fun _ => empty)
+            (fun τs _ IHts τ t (vτsτ : Val (ty.tuple (τs ▻ τ))) =>
+               let (vτs, vτ) := vτsτ in
+               cat (IHts vτs) (simplify_eq_val t vτ))
+            ts vs.
+
+        Definition simplify_eq_union_val [U] [K1 : unionk U]
+          (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) : DList Σ :=
+          let (K2, v2) := unionv_unfold U v2 in
+          match eq_dec K1 K2 with
+          | left e  => let v2' := eq_rect_r (fun K1 => Val (unionk_ty U K1)) v2 e in
+                       simplify_eq_val t1 v2'
+          | right _ => error
+          end.
+
+        Definition simplify_eq_record_val (R : recordi)
+          (ts : NamedEnv (Term Σ) (recordf_ty R)) (v : Val (ty.record R)) :
+          DList Σ :=
+          env.Env_rect
+            (fun Δ _ => NamedEnv Val Δ → DList Σ)
+            (fun _ => empty)
+            (fun Δ _ IHts b t vs =>
+               let (vsΔ,vb) := env.view vs in
+               cat (IHts vsΔ) (simplify_eq_val t vb))
+            ts
+            (recordv_unfold R v).
+
+      End WithSimplifyEqVal.
+
+      Fixpoint simplify_eq_val [σ] (t : Term Σ σ) (v : Val σ) : DList Σ :=
+        match t with
+        | term_var x          => fun _ => dlist_eq t (term_val _ v)
+        | term_val σ v        => fun v' => if eq_dec v v' then empty else error
+        | term_binop op t1 t2 => simplify_eq_binop_val simplify_eq_val op t1 t2
+        | term_unop op t      => simplify_eq_unop_val simplify_eq_val op t
+        | term_tuple ts       => simplify_eq_tuple_val simplify_eq_val ts
+        | term_union U K t    => simplify_eq_union_val simplify_eq_val t
+        | term_record R ts    => simplify_eq_record_val simplify_eq_val R ts
+        end v.
+
+    End SimplifyEqVal.
+
+    Section SimplifyEqValSpec.
+
+      Context [w : World].
+
+      Lemma simplify_eq_binop_default_val_spec [σ σ1 σ2] (op : BinOp σ1 σ2 σ)
+        (t1 : Term w σ1) (t2 : Term w σ2) (v : Val σ) :
+          instpred (simplify_eq_binop_default_val op t1 t2 v) ⊣⊢
+          repₚ v (term_binop op t1 t2).
+      Proof. unfold simplify_eq_binop_default_val; arw. Qed.
+
+      Lemma simplify_eq_unop_default_val_spec [σ1 σ2] (op : UnOp σ1 σ2)
+        (t : Term w σ1) (v : Val σ2) :
+        instpred (simplify_eq_unop_default_val op t v) ⊣⊢
+        repₚ v (term_unop op t).
+      Proof. unfold simplify_eq_unop_default_val; arw. Qed.
+
+      #[local] Hint Resolve simplify_eq_binop_default_val_spec
+        simplify_eq_unop_default_val_spec : core.
+
+      Lemma simplify_eq_val_spec [σ] (t : STerm σ w) (v : Val σ) :
+        instpred (simplify_eq_val t v) ⊣⊢ repₚ v t.
+      Proof.
+        induction t; cbn [simplify_eq_val]; auto.
+        - arw.
+        - destruct eq_dec; arw.
+        - destruct op; cbn; auto.
+          + (*and*) destruct v; cbn; arw; arw_slow.
+          + (*or*) destruct v; cbn; arw; arw_slow.
+          + (*pair*) destruct v; cbn; arw. now rewrite IHt1 IHt2.
+          + (*cons*) destruct v; cbn; arw. now rewrite IHt1 IHt2; arw.
+          + (*bvapp*) unfold simplify_eq_binop_bvapp_val.
+            destruct bv.appView; arw. now rewrite IHt1 IHt2.
+          + (*bvcons*) unfold simplify_eq_binop_bvcons_val.
+            destruct bv.view; arw. now rewrite IHt1 IHt2.
+          + (*relop*) destruct v; cbn; arw.
+        - destruct op; cbn; auto.
+          + (*inl*) destruct v; cbn; arw; arw_slow.
+          + (*inr*) destruct v; cbn; arw; arw_slow.
+          + (*neg*) unfold simplify_eq_unop_neg_val; arw.
+          + (*not*) destruct v; cbn; arw.
+          + (*signed*)
+            rewrite /simplify_eq_unop_signed_val -andb_lazy_alt.
+            destruct andb eqn:H; arw.
+            * rewrite IHt. constructor. intros ι Hpc. cbn.
+              rewrite bv.signed_eq_z. intuition; lia.
+            * rewrite instpred_dlist_error.
+              iSplit; [iIntros ([])|].
+              iIntros "Hsimpl".
+              iDestruct (repₚ_inversion_term_signed with "Hsimpl")
+                as "(%bv & %Heq & Hrep)".
+              pose proof (bv.signed_bounds bv). lia.
+          + (*unsigned*)
+            rewrite /simplify_eq_unop_unsigned_val -andb_lazy_alt.
+            destruct andb eqn:H; arw.
+            * rewrite IHt. constructor. intros ι Hpc. cbn.
+              rewrite bv.unsigned_eq_z. intuition; lia.
+            * rewrite instpred_dlist_error.
+              iSplit; [iIntros ([])|].
+              iIntros "Hsimpl".
+              iDestruct (repₚ_inversion_term_unsigned with "Hsimpl")
+                as "(%bv & %Heq & Hrep)".
+              pose proof (bv.unsigned_bounds bv). lia.
+        - induction IH.
+          + now destruct v.
+          + destruct v as [vs v]; arw.
+            apply bi.sep_proper; eauto.
+        - unfold simplify_eq_union_val.
+          destruct unionv_unfold as [K2 v2] eqn:?.
+          apply (f_equal (unionv_fold U)) in Heqs.
+          rewrite unionv_fold_unfold in Heqs. subst.
+          destruct eq_dec as [->|e]; arw.
+          now rewrite (repₚ_unionv_neq e).
+        - rewrite -(recordv_fold_unfold R v).
+          rewrite repₚ_term_record.
+          generalize (recordv_unfold R v); intros vs.
+          unfold simplify_eq_record_val.
+          rewrite recordv_unfold_fold.
+          induction IH; destruct (env.view vs); arw.
+          arw_slow. apply bi.sep_proper; auto.
+      Qed.
+
+    End SimplifyEqValSpec.
+    #[local] Opaque simplify_eq_val.
+    #[local] Hint Rewrite simplify_eq_val_spec : uniflogic.
 
     Equations(noeqns) simplify_eq_binop {Σ σ σ11 σ12 σ21 σ22}
       (op1 : BinOp σ11 σ12 σ) (t11 : Term Σ σ11) (t12 : Term Σ σ12)
@@ -243,77 +460,6 @@ Module Type GenericSolverOn
     #[local] Hint Rewrite simplify_eq_unop_spec : uniflogic.
     #[local] Opaque simplify_eq_unop.
 
-    Definition simplify_eq_union_val [Σ U] [K1 : unionk U]
-      (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) : DList Σ :=
-       let (K2, v2) := unionv_unfold U v2 in
-       match eq_dec K1 K2 with
-       | left e  => let v2' := eq_rec_r (fun K1 => Val (unionk_ty U K1)) v2 e in
-                    let t2  := term_val (unionk_ty U K1) v2' in
-                    singleton (formula_relop bop.eq t1 t2)
-       | right _ => error
-       end.
-
-    Lemma simplify_eq_union_val_spec [w : World] [U] [K1 : unionk U]
-      (t1 : STerm (unionk_ty U K1) w) (v : Val (ty.union U)) :
-      instpred (simplify_eq_union_val t1 v) ⊣⊢
-      instpred (formula_relop bop.eq (term_union U K1 t1) (term_val (ty.union U) v)).
-    Proof.
-      unfold simplify_eq_union_val.
-      destruct unionv_unfold as [K2 v2] eqn:?.
-      apply (f_equal (unionv_fold U)) in Heqs.
-      rewrite unionv_fold_unfold in Heqs. subst.
-      destruct eq_dec as [->|e]; arw.
-      now rewrite (repₚ_unionv_neq e).
-    Qed.
-    #[local] Opaque simplify_eq_union_val.
-    #[export] Hint Rewrite @simplify_eq_union_val_spec : uniflogic.
-
-    Fixpoint simplify_eq_val {Σ} [σ] (t : Term Σ σ) : forall (v : Val σ), DList Σ :=
-      match t with
-      | term_var x          => fun v => singleton (formula_relop bop.eq (term_var x) (term_val _ v))
-      | term_val σ v        => fun v' => if eq_dec v v' then empty else error
-      | term_binop op t1 t2 => simplify_eq_binop_val op t1 t2
-      | term_unop op t      => simplify_eq_unop_val op t
-      | term_tuple ts       => env.Env_rect
-                                 (fun σs _ => Val (ty.tuple σs) -> DList Σ)
-                                 (fun _ => empty)
-                                 (fun τs _ IHts τ t (vτsτ : Val (ty.tuple (τs ▻ τ))) =>
-                                    let (vτs, vτ) := vτsτ in
-                                    cat (simplify_eq_val t vτ) (IHts vτs))
-                                 ts
-      | term_union U K t    => simplify_eq_union_val t
-      | term_record R ts    => fun vR =>
-                                 env.Env_rect
-                                   (fun Δ _ => NamedEnv Val Δ -> DList Σ)
-                                   (fun _ => empty)
-                                   (fun Δ _ IHts b t vs =>
-                                      let (vsΔ,vb) := env.view vs in
-                                      cat (IHts vsΔ) (simplify_eq_val t vb))
-                                   ts
-                                   (recordv_unfold R vR)
-      end.
-
-    Lemma simplify_eq_val_spec [w : World] [σ] (t : STerm σ w) (v : Val σ) :
-      instpred (simplify_eq_val t v) ⊣⊢ repₚ v t.
-    Proof.
-      induction t; arw.
-      - cbn; destruct eq_dec; arw.
-      - induction IH; arw.
-        + now destruct v.
-        + destruct v as [vs v]; arw.
-          now rewrite q IHIH.
-      - cbn.
-        rewrite -(recordv_fold_unfold R v).
-        rewrite repₚ_term_record.
-        generalize (recordv_unfold R v); intros vs.
-        rewrite recordv_unfold_fold.
-        induction IH; destruct (env.view vs); arw.
-        arw_slow.
-        now rewrite IHIH q.
-    Qed.
-    #[local] Opaque simplify_eq_val.
-    #[local] Hint Rewrite simplify_eq_val_spec : uniflogic.
-
     Section SimplifyEqCtx.
       Variable simplify_eq : forall {Σ σ} (t1 t2 : Term Σ σ), DList Σ.
 
@@ -354,7 +500,7 @@ Module Type GenericSolverOn
       - dependent elimination t; arw.
       - dependent elimination t; arw.
         induction IH; env.destroy ts0; arw.
-        rewrite IHIH (q v) !formula_relop_term' bi.sep_comm. arw.
+        rewrite IHIH (q v) !formula_relop_term'. arw.
       - dependent elimination t; arw; cbn.
         destruct eq_dec as [Heq|Hneq]; arw.
         + destruct Heq; cbn. rewrite IHs !formula_relop_term'. arw.

@@ -1034,12 +1034,12 @@ Module Type WorldsOn
 
     Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) :
       repₚ (T := STerm _) (vs, v) (term_tuple (E ► (σ ↦ d))) ⊣⊢
-        repₚ (T := STerm σ) v d ∗ repₚ (T := STerm _) vs (term_tuple E).
+      repₚ (T := STerm _) vs (term_tuple E) ∗ repₚ (T := STerm σ) v d.
     Proof. unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0| now subst ]. Qed.
 
     Lemma eqₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [ts1 ts2 : Env (Term w) Γ] [σ : Ty] (t1 t2 : Term w σ) :
       eqₚ (T := STerm _) (term_tuple (ts1 ► (σ ↦ t1))) (term_tuple (ts2 ► (σ ↦ t2))) ⊣⊢
-        eqₚ (T := STerm σ) t1 t2 ∗ eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2).
+      eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2) ∗ eqₚ (T := STerm σ) t1 t2.
     Proof. unfold eqₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0 | now f_equal]. Qed.
 
     Lemma repₚ_term_bvapp {w : World} {m n : nat} {t1 : STerm (ty.bvec m) w} {t2 : STerm (ty.bvec n) w}
