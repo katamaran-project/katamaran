@@ -142,7 +142,7 @@ Module Type GenericSolverOn
     #[local] Hint Rewrite simplify_eqb_spec : uniflogic.
     #[local] Opaque simplify_eqb.
 
-    Section SimplifyEqVal.
+    Section SimplifyEq.
 
       Context {Σ : LCtx}.
 
@@ -324,9 +324,384 @@ Module Type GenericSolverOn
         | term_record R ts    => simplify_eq_record_val simplify_eq_val R ts
         end v.
 
-    End SimplifyEqVal.
 
-    Section SimplifyEqValSpec.
+      Definition simplify_eq_binop_default {σ1 σ2 σ} (op : BinOp σ1 σ2 σ)
+        (t1 : Term Σ σ1) (t2 : Term Σ σ2) (t : Term Σ σ) : DList Σ :=
+        dlist_eq (term_binop op t1 t2) t.
+
+      Definition simplify_eq_binop_minus (tl1 : Term Σ ty.int)
+        (tl2 : Term Σ ty.int) (tr : Term Σ ty.int) : DList Σ :=
+        dlist_eq (term_val ty.int 0) (term_minus tr (term_minus tl1 tl2)).
+
+      Definition simplify_eq_binop_times (tl1 : Term Σ ty.int)
+        (tl2 : Term Σ ty.int) (tr : Term Σ ty.int) : DList Σ :=
+        dlist_eq (term_val ty.int 0) (term_minus tr (term_times tl1 tl2)).
+
+      Definition simplify_eq_unop_default {σ1 σ2} (op : UnOp σ1 σ2)
+        (t1 : Term Σ σ1) (t : Term Σ σ2) : DList Σ :=
+        dlist_eq (term_unop op t1) t.
+
+      Section WithSimplifyEq.
+
+        Variable simplify_eq : forall [σ] (t1 t2 : Term Σ σ), DList Σ.
+
+        Definition simplify_eq_binop_plus (tl1 : Term Σ ty.int)
+          (tl2 : Term Σ ty.int) (tr : Term Σ ty.int) : DList Σ :=
+          let default := dlist_eq (term_val ty.int 0)
+                           (term_minus tr (term_plus tl1 tl2)) in
+          Term_int_case (fun _ => DList Σ)
+            (fun (*var*) _ _ => default)
+            (fun (*val*) v => simplify_eq_val (term_plus tl1 tl2) v)
+            (fun (*plus*) tr1 tr2 =>
+               if Term_eqb tl1 tr1 then simplify_eq tl2 tr2 else
+                 if Term_eqb tl2 tr2 then simplify_eq tl1 tr1 else
+                   if Term_eqb tl1 tr2 then simplify_eq tl2 tr1 else
+                     if Term_eqb tl2 tr1 then simplify_eq tl1 tr2 else
+                       default)
+            (fun (*minus*) tr1 tr2 =>
+               if Term_eqb tl1 tr1 then simplify_eq tl2 (term_neg tr2) else
+                 if Term_eqb tl2 tr1 then simplify_eq tl1 (term_neg tr2) else
+                   default)
+            (fun (*times*) tr1 tr2 => default)
+            (fun (*land*) tr1 tr2 => default)
+            (fun (*neg*) tr' => default)
+            (fun (*signed*) n _ => default)
+            (fun (*unsigned*) n _ => default)
+            tr.
+
+        Definition simplify_eq_binop_and (tl1 : Term Σ ty.bool)
+          (tl2 : Term Σ ty.bool) (tr : Term Σ ty.bool) : DList Σ :=
+          let tl := term_and tl1 tl2 in
+          let default := dlist_eq tl tr in
+          Term_bool_case (fun _ => DList Σ)
+            (fun (*var*) _ _ => dlist_eq tr tl)
+            (fun (*val*) v => simplify_eq_val tl v)
+            (fun (*and*) tr1 tr2 =>
+               if Term_eqb tl1 tr1 && Term_eqb tl2 tr2
+               then empty else default)
+            (fun (*or*) _ _ => default)
+            (fun (*relop*) _ _ _ _ => default)
+            (fun (*not*) _ => default)
+            tr.
+
+        Definition simplify_eq_binop_or (tl1 : Term Σ ty.bool)
+          (tl2 : Term Σ ty.bool) (tr : Term Σ ty.bool) : DList Σ :=
+          let tl := term_or tl1 tl2 in
+          let default := dlist_eq tl tr in
+          Term_bool_case (fun _ => DList Σ)
+            (fun (*var*) _ _ => dlist_eq tr tl)
+            (fun (*val*) v => simplify_eq_val tl v)
+            (fun (*and*) _ _ => default)
+            (fun (*or*) tr1 tr2 =>
+               if Term_eqb tl1 tr1 && Term_eqb tl2 tr2
+               then empty else default)
+            (fun (*relop*) _ _ _ _ => default)
+            (fun (*not*) _ => default)
+            tr.
+
+        Definition simplify_eq_binop_pair {σ1 σ2} (t1 : Term Σ σ1)
+          (t2 : Term Σ σ2) (t : Term Σ (ty.prod σ1 σ2)) : DList Σ :=
+          Term_prod_case (fun _ => DList Σ)
+            (fun (*var*) _ _      => dlist_eq t (term_pair t1 t2))
+            (fun (*val*) v        => simplify_eq_val (term_pair t1 t2) v)
+            (fun (*pair*) t1' t2' => cat (simplify_eq t1 t1') (simplify_eq t2 t2'))
+            t.
+
+        Definition simplify_eq_binop_cons {σ} (t1 : Term Σ σ)
+          (t2 : Term Σ (ty.list σ)) (t : Term Σ (ty.list σ)) : DList Σ :=
+          Term_list_case (fun _ => DList Σ)
+            (fun (*var*) _ _ => dlist_eq t (term_cons t1 t2))
+            (fun (*val*) v => simplify_eq_val (term_cons t1 t2) v)
+            (fun (*cons*) t1' t2' => cat (simplify_eq t1 t1') (simplify_eq t2 t2'))
+            (fun (*append*) _ _ => dlist_eq (term_cons t1 t2) t)
+            (fun (*rev*) _ => dlist_eq (term_cons t1 t2) t)
+            t.
+
+        Definition simplify_eq_binop_append {σ} (tl1 : Term Σ (ty.list σ))
+          (tl2 : Term Σ (ty.list σ)) (tr : Term Σ (ty.list σ)) : DList Σ :=
+          Term_list_case (fun _ => DList Σ)
+            (fun (*var*) _ _ => dlist_eq tr (term_append tl1 tl2))
+            (fun (*val*) v => simplify_eq_val (term_append tl1 tl2) v)
+            (fun (*cons*) t1' t2' => dlist_eq tr (term_append tl1 tl2))
+            (fun (*append*) tr1 tr2 =>
+               if Term_eqb tl1 tr1 then simplify_eq tl2 tr2 else
+                 if Term_eqb tl2 tr2 then simplify_eq tl1 tr1 else
+                   dlist_eq (term_append tl1 tl2) tr)
+            (fun (*rev*) _ => dlist_eq (term_append tl1 tl2) tr)
+            tr.
+
+        Definition simplify_eq_binop_bvapp' {m n} (t1 : Term Σ (ty.bvec m))
+          (t2 : Term Σ (ty.bvec n)) mn (t : Term Σ (ty.bvec mn))
+          (e : m + n = mn) : DList Σ :=
+          let default {mn} (_ : m + n = mn) : DList Σ :=
+            dlist_eq (term_bvapp t1 t2)
+              (eq_rect_r (fun l => Term Σ (ty.bvec l)) t e) in
+          Term_bvec_case (fun mn t => m + n = mn -> DList Σ)
+            (fun (*var*) _ _ _ _ =>
+               dlist_eq
+                 (eq_rect_r (fun l => Term Σ (ty.bvec l)) t e)
+                 (term_bvapp t1 t2))
+            (fun (*val*) n v e =>
+               simplify_eq_val (term_bvapp t1 t2)
+                 (eq_rect_r (fun l => Val (ty.bvec l)) v e))
+            (fun (*bvadd*) _ _ _ => default)
+            (fun (*bvsub*) _ _ _ => default)
+            (fun (*bvmul*) _ _ _ => default)
+            (fun (*bvand*) _ _ _ => default)
+            (fun (*bvor*) _ _ _ => default)
+            (fun (*bvxor*) _ _ _ => default)
+            (fun (*shiftr*) _ _ _ _ => default)
+            (fun (*shiftl*) _ _ _ _ => default)
+            (fun (*bvapp*) m' n' =>
+               match eq_dec m m' with
+               | left em =>
+                   match em with
+                   | eq_refl =>
+                       fun t1' t2' e' =>
+                         let en  : n = n' :=
+                           transparent.nat_add_cancel_l n n' m e' in
+                         let t2' : Term Σ (ty.bvec n) :=
+                           eq_rect_r (fun l => Term Σ (ty.bvec l)) t2' en in
+                         cat
+                           (simplify_eq t1 t1')
+                           (simplify_eq t2 t2')
+                   end
+               | right _ => fun _ _ => default
+               end)
+            (fun (*bvcons*) _ _ _ => default)
+            (fun (*update_vector_subrange*) _ _ _ _ _ _ => default)
+            (fun (*bvnote*) _ _ => default)
+            (fun (*negate*) _ _ => default)
+            (fun (*sext*) _ _ _ _ => default)
+            (fun (*zext*) _ _ _ _ => default)
+            (fun (*get_slice_int*) _ _ => default)
+            (fun (*truncate*) _ _ _ _ => default)
+            (fun (*vector_subrange*) _ _ _ _ _ => default)
+            (fun (*bvdrop*) _ _ _ => default)
+            (fun (*bvtake*) _ _ _ => default)
+            t e.
+
+        Definition simplify_eq_binop_bvapp {m n} (t1 : Term Σ (ty.bvec m))
+          (t2 : Term Σ (ty.bvec n)) (t : Term Σ (ty.bvec (m + n))) : DList Σ :=
+          simplify_eq_binop_bvapp' t1 t2 t eq_refl.
+
+        Definition simplify_eq_binop_bvcons' {m} (t1 : Term Σ ty.bool)
+          (t2 : Term Σ (ty.bvec m)) sm (t : Term Σ (ty.bvec sm))
+          (e : S m = sm) : DList Σ :=
+          let default {sm} (_ : S m = sm) : DList Σ :=
+            dlist_eq (term_bvcons t1 t2)
+              (eq_rect_r (fun l => Term Σ (ty.bvec l)) t e) in
+          Term_bvec_case (fun sm t => S m = sm -> DList Σ)
+            (fun (*var*) _ _ _ _ =>
+               dlist_eq
+                 (eq_rect_r (fun l => Term Σ (ty.bvec l)) t e)
+                 (term_bvcons t1 t2))
+            (fun (*val*) n v e =>
+               simplify_eq_val (term_bvcons t1 t2)
+                 (eq_rect_r (fun l => Val (ty.bvec l)) v e))
+            (fun (*bvadd*) _ _ _ => default)
+            (fun (*bvsub*) _ _ _ => default)
+            (fun (*bvmul*) _ _ _ => default)
+            (fun (*bvand*) _ _ _ => default)
+            (fun (*bvor*) _ _ _ => default)
+            (fun (*bvxor*) _ _ _ => default)
+            (fun (*shiftr*) _ _ _ _ => default)
+            (fun (*shiftl*) _ _ _ _ => default)
+            (fun (*bvapp*) _ _ _ _ => default)
+            (fun (*bvcons*) m' t1' t2' e2 =>
+               let e' : m = m' := eq_add_S m m' e2 in
+               let t2' := eq_rect_r (fun l => Term Σ (ty.bvec l)) t2' e' in
+               cat (simplify_eq t1 t1') (simplify_eq t2 t2'))
+            (fun (*update_vector_subrange*) _ _ _ _ _ _ => default)
+            (fun (*bvnote*) _ _ => default)
+            (fun (*negate*) _ _ => default)
+            (fun (*sext*) _ _ _ _ => default)
+            (fun (*zext*) _ _ _ _ => default)
+            (fun (*get_slice_int*) _ _ => default)
+            (fun (*truncate*) _ _ _ _ => default)
+            (fun (*vector_subrange*) _ _ _ _ _ => default)
+            (fun (*bvdrop*) _ _ _ => default)
+            (fun (*bvtake*) _ _ _ => default)
+            t e.
+
+        Definition simplify_eq_binop_bvcons {m} (t1 : Term Σ ty.bool)
+          (t2 : Term Σ (ty.bvec m)) (t : Term Σ (ty.bvec (S m))) : DList Σ :=
+          simplify_eq_binop_bvcons' t1 t2 t eq_refl.
+
+        Fixpoint simplify_eq_relop {σ} (op : RelOp σ) (tl1 tl2 : Term Σ σ)
+          (tr : Term Σ ty.bool) {struct tr} : DList Σ :=
+          let tl := term_binop (bop.relop op) tl1 tl2 in
+          Term_bool_case (fun _ => DList Σ)
+            (fun (*var*) _ _ => dlist_eq tr tl)
+            (fun (*val*) v => simplify_eq_val tl v)
+            (fun (*and*) tr1 tr2 => dlist_eq tl tr)
+            (fun (*or*) tr1 tr2 => dlist_eq tl tr)
+            (fun (*relop*) _ op tr1 tr2 => dlist_eq tl tr)
+            (fun (*not*) tr' =>
+               match op with
+               | bop.eq     => fun tl1 tl2 => simplify_eq_relop bop.neq tl1 tl2 tr'
+               | bop.neq    => fun tl1 tl2 => simplify_eq_relop bop.eq tl1 tl2 tr'
+               | bop.le     => fun tl1 tl2 => simplify_eq_relop bop.lt tl2 tl1 tr'
+               | bop.lt     => fun tl1 tl2 => simplify_eq_relop bop.le tl2 tl1 tr'
+               | bop.bvsle  => fun tl1 tl2 => simplify_eq_relop bop.bvslt tl2 tl1 tr'
+               | bop.bvslt  => fun tl1 tl2 => simplify_eq_relop bop.bvsle tl2 tl1 tr'
+               | bop.bvule  => fun tl1 tl2 => simplify_eq_relop bop.bvult tl2 tl1 tr'
+               | bop.bvult  => fun tl1 tl2 => simplify_eq_relop bop.bvule tl2 tl1 tr'
+               end tl1 tl2)
+            tr.
+
+        Definition simplify_eq_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
+          Term Σ σ1 -> Term Σ σ2 -> Term Σ σ -> DList Σ :=
+          match op in BinOp σ1 σ2 σ
+                return Term Σ σ1 -> Term Σ σ2 -> Term Σ σ -> DList Σ
+          with
+          | bop.plus => simplify_eq_binop_plus
+          | bop.minus => simplify_eq_binop_minus
+          | bop.times => simplify_eq_binop_times
+          | bop.land => simplify_eq_binop_default bop.land
+          | bop.and => simplify_eq_binop_and
+          | bop.or => simplify_eq_binop_or
+          | bop.pair => simplify_eq_binop_pair
+          | bop.cons => simplify_eq_binop_cons
+          | bop.append => simplify_eq_binop_append
+          | bop.shiftr => simplify_eq_binop_default bop.shiftr
+          | bop.shiftl => simplify_eq_binop_default bop.shiftl
+          | bop.bvadd => simplify_eq_binop_default bop.bvadd
+          | bop.bvsub => simplify_eq_binop_default bop.bvsub
+          | bop.bvmul => simplify_eq_binop_default bop.bvmul
+          | bop.bvand => simplify_eq_binop_default bop.bvand
+          | bop.bvor => simplify_eq_binop_default bop.bvor
+          | bop.bvxor => simplify_eq_binop_default bop.bvxor
+          | bop.bvapp => simplify_eq_binop_bvapp
+          | bop.bvcons => simplify_eq_binop_bvcons
+          | bop.update_vector_subrange s l =>
+              simplify_eq_binop_default (bop.update_vector_subrange s l)
+          | bop.relop rop => simplify_eq_relop rop
+          end.
+
+        Definition simplify_eq_unop_inl {σ1 σ2} (t1 : Term Σ σ1)
+          (t : Term Σ (ty.sum σ1 σ2)) : DList Σ :=
+          Term_sum_case (fun _ => DList Σ)
+            (fun (*var*) x _ => simplify_eq_unop_default uop.inl t1 t)
+            (fun (*val*) v   => simplify_eq_val (term_inl t1) v)
+            (fun (*inl*) t1' => simplify_eq t1 t1')
+            (fun (*inr*) t2  => error)
+            t.
+
+        Definition simplify_eq_unop_inr {σ1 σ2} (t2 : Term Σ σ2)
+          (t : Term Σ (ty.sum σ1 σ2)) : DList Σ :=
+          Term_sum_case (fun _ => DList Σ)
+            (fun (*var*) x _ => simplify_eq_unop_default uop.inr t2 t)
+            (fun (*val*) v   => simplify_eq_val (term_inr t2) v)
+            (fun (*inl*) t1  => error)
+            (fun (*inr*) t2' => simplify_eq t2 t2')
+            t.
+
+        Definition simplify_eq_unop_get_slice_int {m} (tl : Term Σ ty.int)
+          (tr : Term Σ (ty.bvec m)) : DList Σ :=
+          let tl := term_get_slice_int tl in
+          if Term_eqb tl tr then empty else dlist_eq tl tr.
+
+        Definition simplify_eq_unop_signed {m} (tl : Term Σ (ty.bvec m))
+          (tr : Term Σ ty.int) : DList Σ :=
+          let default := dlist_eq (term_val ty.int 0)
+                           (term_minus tr (term_signed tl)) in
+          Term_int_case (fun _ => DList Σ)
+            (fun (*var*) _ _ => default)
+            (fun (*val*) v => simplify_eq_val (term_signed tl) v)
+            (fun (*plus*) tr1 tr2 => default)
+            (fun (*minus*) tr1 tr2 => default)
+            (fun (*times*) tr1 tr2 => default)
+            (fun (*land*) tr1 tr2 => default)
+            (fun (*neg*) tr' => default)
+            (fun (*signed*) n =>
+               match eq_dec m n with
+               | left e => match e with eq_refl => simplify_eq tl end
+               | right _ => fun _ => default
+               end)
+            (fun (*unsigned*) n tr' => default)
+            tr.
+
+        Definition simplify_eq_unop {σ1 σ2} (op : UnOp σ1 σ2) :
+          Term Σ σ1 -> Term Σ σ2 -> DList Σ :=
+          match op with
+          | uop.inl => simplify_eq_unop_inl
+          | uop.inr => simplify_eq_unop_inr
+          | uop.neg => simplify_eq_unop_default uop.neg
+          | uop.not => simplify_eq_unop_default uop.not
+          | uop.rev => simplify_eq_unop_default uop.rev
+          | uop.sext => simplify_eq_unop_default uop.sext
+          | uop.zext => simplify_eq_unop_default uop.zext
+          | uop.get_slice_int => simplify_eq_unop_get_slice_int
+          | uop.signed => simplify_eq_unop_signed
+          | uop.unsigned => simplify_eq_unop_default uop.unsigned
+          | uop.truncate n => simplify_eq_unop_default (uop.truncate n)
+          | uop.vector_subrange s l => simplify_eq_unop_default (uop.vector_subrange s l)
+          | uop.bvnot => simplify_eq_unop_default uop.bvnot
+          | uop.bvdrop m => simplify_eq_unop_default (uop.bvdrop m)
+          | uop.bvtake m => simplify_eq_unop_default (uop.bvtake m)
+          | uop.negate => simplify_eq_unop_default uop.negate
+          end.
+
+        Equations(noeqns) formula_eqs_ctx {Δ}
+          (δ δ' : Env (Term Σ) Δ) : DList Σ :=
+        | env.nil,        env.nil          => empty
+        | env.snoc δ _ t, env.snoc δ' _ t' =>
+            cat (formula_eqs_ctx δ δ') (simplify_eq t t').
+
+        Equations(noeqns) formula_eqs_nctx {N} {Δ : NCtx N Ty}
+          (δ δ' : NamedEnv (Term Σ) Δ) : DList Σ :=
+        | env.nil,        env.nil          => empty
+        | env.snoc δ _ t, env.snoc δ' _ t' =>
+            cat (formula_eqs_nctx δ δ') (simplify_eq t t').
+
+        Definition simplify_eq_tuple {σs} (tls : Env (Term Σ) σs)
+          (tr : Term Σ (ty.tuple σs)) : DList Σ :=
+          Term_tuple_case (fun _ => DList Σ)
+            ((*var*)  fun x xIn => dlist_eq (term_tuple tls) tr)
+            ((*val*)  fun v     => simplify_eq_val (term_tuple tls) v)
+            ((*tuple*)fun trs   => formula_eqs_ctx tls trs)
+            tr.
+
+        Definition simplify_eq_record {R}
+          (tls : NamedEnv (Term Σ) (recordf_ty R)) (tr : Term Σ (ty.record R)) :
+          DList Σ :=
+          Term_record_case (fun _ => DList Σ)
+            (fun (*var*) _ _    => dlist_eq tr (term_record R tls))
+            (fun (*val*) v      => simplify_eq_record_val simplify_eq_val R tls v)
+            (fun (*record*) trs => formula_eqs_nctx tls trs)
+            tr.
+
+        Definition simplify_eq_union [U] [K1 : unionk U]
+          (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (ty.union U)) : DList Σ :=
+          Term_union_case (fun _ => DList Σ)
+            ((*var*) fun x In    => dlist_eq t2 (term_union U K1 t1))
+            ((*val*) fun v       => simplify_eq_val (term_union U K1 t1) v)
+            ((*union*)
+              fun K2 t3 =>
+                match eq_dec K1 K2 with
+                | left e  => simplify_eq t1
+                               (eq_rect_r (fun K => Term Σ (unionk_ty U K)) t3 e)
+                | right _ => error
+                end)
+            t2.
+
+      End WithSimplifyEq.
+
+      Fixpoint simplify_eq [σ] (tl : Term Σ σ) (tr : Term Σ σ) : DList Σ :=
+        match tl in Term _ σ return Term Σ σ → DList Σ with
+        | term_var _          => fun _ => simplify_eqb tl tr
+        | term_val _ v        => fun tr => simplify_eq_val tr v
+        | term_binop op t1 t2 => simplify_eq_binop simplify_eq op t1 t2
+        | term_unop op t1     => simplify_eq_unop simplify_eq op t1
+        | term_tuple tls      => simplify_eq_tuple simplify_eq tls
+        | term_union U K tl   => simplify_eq_union simplify_eq tl
+        | term_record R tls   => simplify_eq_record simplify_eq tls
+        end tr.
+
+    End SimplifyEq.
+
+    Section SimplifyEqSpec.
 
       Context [w : World].
 
@@ -406,113 +781,137 @@ Module Type GenericSolverOn
           induction IH; destruct (env.view vs); arw.
           arw_slow. apply bi.sep_proper; auto.
       Qed.
+      #[local] Opaque simplify_eq_val.
+      #[local] Hint Resolve simplify_eq_val_spec : core.
 
-    End SimplifyEqValSpec.
-    #[local] Opaque simplify_eq_val.
-    #[local] Hint Rewrite simplify_eq_val_spec : uniflogic.
+      Lemma simplify_eq_binop_default_spec [σ1 σ2 σ] (op : BinOp σ1 σ2 σ)
+        (t1 : Term w σ1) (t2 : Term w σ2) (t : Term w σ) :
+        instpred (simplify_eq_binop_default op t1 t2 t) ⊣⊢
+        eqₚ (term_binop op t1 t2) t.
+      Proof. unfold simplify_eq_binop_default; arw. Qed.
 
-    Equations(noeqns) simplify_eq_binop {Σ σ σ11 σ12 σ21 σ22}
-      (op1 : BinOp σ11 σ12 σ) (t11 : Term Σ σ11) (t12 : Term Σ σ12)
-      (op2 : BinOp σ21 σ22 σ) (t21 : Term Σ σ21) (t22 : Term Σ σ22)
-      : DList Σ :=
-    | bop.pair | t11 | t12 | bop.pair | t21 | t22 =>
-      cat
-        (singleton (formula_relop bop.eq t11 t21))
-        (singleton (formula_relop bop.eq t12 t22))
-    | bop.cons | t11 | t12 | bop.cons | t21 | t22 =>
-      cat
-        (singleton (formula_relop bop.eq t11 t21))
-        (singleton (formula_relop bop.eq t12 t22))
-    | op1      | t11 | t12 | op2      | t21 | t22 =>
-      simplify_eqb (term_binop op1 t11 t12) (term_binop op2 t21 t22).
+      Lemma simplify_eq_unop_default_spec [σ1 σ] (op : UnOp σ1 σ)
+        (t1 : Term w σ1) (t : Term w σ) :
+        instpred (simplify_eq_unop_default op t1 t) ⊣⊢
+        eqₚ (term_unop op t1) t.
+      Proof. unfold simplify_eq_unop_default; arw. Qed.
 
-    Lemma simplify_eq_binop_spec [w : World] [σ σ11 σ12 σ21 σ22]
-      (op1 : BinOp σ11 σ12 σ) (t11 : STerm σ11 w) (t12 : STerm σ12 w)
-      (op2 : BinOp σ21 σ22 σ) (t21 : STerm σ21 w) (t22 : STerm σ22 w) :
-      instpred (simplify_eq_binop op1 t11 t12 op2 t21 t22) ⊣⊢
-      instpred (formula_relop bop.eq (term_binop op1 t11 t12) (term_binop op2 t21 t22)).
-    Proof.
-      destruct op1; arw; dependent elimination op2; arw;
-        rewrite ?formula_relop_term'; arw.
-    Qed.
-    #[local] Hint Rewrite simplify_eq_binop_spec : uniflogic.
-    #[local] Opaque simplify_eq_binop.
+      #[local] Hint Resolve simplify_eq_unop_default_spec
+        simplify_eq_binop_default_spec : core.
 
-    Equations(noeqns) simplify_eq_unop {Σ σ σ1 σ2}
-      (op1 : UnOp σ1 σ) (t1 : Term Σ σ1)
-      (op2 : UnOp σ2 σ) (t2 : Term Σ σ2)
-      : DList Σ :=
-    | uop.inl | t1 | uop.inl | t2 => singleton (formula_relop bop.eq t1 t2)
-    | uop.inl | t1 | uop.inr | t2 => error
-    | uop.inr | t1 | uop.inl | t2 => error
-    | uop.inr | t1 | uop.inr | t2 => singleton (formula_relop bop.eq t1 t2)
-    | op1     | t1 | op2     | t2 =>
-      simplify_eqb (term_unop op1 t1) (term_unop op2 t2).
+      Lemma eqₚ_term_not_relop {σ} (op : RelOp σ) (t1 t2 : STerm σ w) tr :
+        eqₚ (term_not (term_binop (bop.relop op) t1 t2)) tr ⊣⊢
+        eqₚ (term_relop_neg op t1 t2) tr.
+      Proof.
+        unfold eqₚ. constructor. intros ι _.
+        now rewrite term_negb_relop.
+      Qed.
 
-    Lemma simplify_eq_unop_spec [w : World] [σ σ1 σ2]
-      (op1 : UnOp σ1 σ) (t1 : STerm σ1 w)
-      (op2 : UnOp σ2 σ) (t2 : STerm σ2 w) :
-      instpred (simplify_eq_unop op1 t1 op2 t2) ⊣⊢
-      instpred (formula_relop bop.eq (term_unop op1 t1) (term_unop op2 t2)).
-    Proof.
-      destruct op1; arw; dependent elimination op2; arw; rewrite formula_relop_term'; arw.
-    Qed.
-    #[local] Hint Rewrite simplify_eq_unop_spec : uniflogic.
-    #[local] Opaque simplify_eq_unop.
+      Lemma simplify_eq_spec [σ] (tl tr : Term w σ) :
+        instpred (simplify_eq tl tr) ⊣⊢ eqₚ tl tr.
+      Proof.
+        induction tl; cbn; arw.
+        - destruct op; cbn; auto.
+          + (*plus*)
+            destruct tr using Term_int_case; cbn; arw;
+              try (constructor; intros ι _; cbn; lia).
+            * destruct (Term_eqb_spec tl1 tr1); subst.
+              { rewrite IHtl2. constructor; intros ι _; cbn. lia. }
+              destruct (Term_eqb_spec tl2 tr2); subst.
+              { rewrite IHtl1. constructor; intros ι _; cbn. lia. }
+              destruct (Term_eqb_spec tl1 tr2); subst.
+              { rewrite IHtl2. constructor; intros ι _; cbn. lia. }
+              destruct (Term_eqb_spec tl2 tr1); subst.
+              { rewrite IHtl1. constructor; intros ι _; cbn. lia. }
+              arw. constructor; intros ι _; cbn; lia.
+            * destruct (Term_eqb_spec tl1 tr1); subst.
+              { rewrite IHtl2. constructor; intros ι _; cbn. lia. }
+              destruct (Term_eqb_spec tl2 tr1); subst.
+              { rewrite IHtl1. constructor; intros ι _; cbn. lia. }
+              arw. constructor; intros ι _; cbn; lia.
+          + (*minus*) unfold simplify_eq_binop_minus. arw.
+            constructor; intros ι _; cbn. lia.
+          + (*times*) unfold simplify_eq_binop_times. arw.
+            constructor; intros ι _; cbn. lia.
+          + (*and*)
+            destruct tr using Term_bool_case; cbn; arw.
+            destruct (Term_eqb_spec tl1 tr1); cbn; subst; arw.
+            destruct (Term_eqb_spec tl2 tr2); subst; arw.
+          + (*or*)
+            destruct tr using Term_bool_case; cbn; arw.
+            destruct (Term_eqb_spec tl1 tr1); cbn; subst; arw.
+            destruct (Term_eqb_spec tl2 tr2); subst; arw.
+          + (*pair*) destruct tr using Term_prod_case; cbn; auto; arw.
+            now rewrite IHtl1 IHtl2 -eqₚ_term_prod.
+          + (*cons*) destruct tr using Term_list_case; cbn; auto; arw.
+            rewrite IHtl1 IHtl2. arw_slow.
+          + (*append*)
+            destruct tr using Term_list_case; cbn; auto; arw.
+            destruct (Term_eqb_spec tl1 tr1). subst; cbn; arw.
+            { rewrite IHtl2. constructor; intros ι _; cbn.
+              now rewrite app_inv_head_iff. }
+            destruct (Term_eqb_spec tl2 tr2). subst; cbn; arw.
+            { rewrite IHtl1. constructor; intros ι _; cbn.
+              now rewrite app_inv_tail_iff. }
+            arw.
+          + (*bvapp*)
+            assert (∀ mn (t : Term w (ty.bvec mn)) (e : m + n = mn),
+                     instpred (simplify_eq_binop_bvapp' simplify_eq
+                                 tl1 tl2 t e) ⊣⊢
+                     eqₚ (term_binop bop.bvapp tl1 tl2)
+                       (eq_rect_r (fun l => Term w (ty.bvec l)) t e)); eauto.
+            intros mn t e. destruct mn, t using Term_bvec_case; subst; cbn; arw.
+            destruct eq_dec; arw; subst.
+            destruct transparent.nat_add_cancel_l, (uip eq_refl e); cbn.
+            arw. rewrite IHtl1 IHtl2. arw_slow.
+          + (*bvcons*)
+            assert (∀ sm (t : Term w (ty.bvec sm)) (e : S m = sm),
+                      instpred (simplify_eq_binop_bvcons' simplify_eq
+                                  tl1 tl2 t e) ⊣⊢
+                      eqₚ (term_binop bop.bvcons tl1 tl2)
+                        (eq_rect_r (fun l => Term w (ty.bvec l)) t e)); eauto.
+            intros sm t e. destruct sm, t using Term_bvec_case; subst; cbn; arw.
+            rewrite IHtl1 IHtl2. dependent elimination e; arw; arw_slow.
+          + (*relop*)
+            clear IHtl1 IHtl2. revert r tl1 tl2.
+            induction tr using Term_bool_ind; cbn; intros rop tl1 tl2; arw.
+            rewrite eqₚ_term_not eqₚ_term_not_relop.
+            destruct rop; cbn; auto.
+        - destruct op; cbn; auto.
+          + (*inl*) destruct tr using Term_sum_case; cbn; auto; arw; arw_slow.
+          + (*inr*) destruct tr using Term_sum_case; cbn; auto; arw; arw_slow.
+          + (*get_slice_int*)
+            unfold simplify_eq_unop_get_slice_int.
+            destruct (Term_eqb_spec (term_get_slice_int tl) tr); subst; arw.
+          + (*signed*)
+            destruct tr using Term_int_case; cbn; arw;
+              try (constructor; intros ι _; cbn; lia).
+            destruct eq_dec; subst; arw;
+              try (constructor; intros ι _; cbn; lia).
+            rewrite IHtl. arw.
+            constructor; intros ι _; cbn.
+            split. congruence. apply bv.signed_inj.
+        - destruct tr using Term_tuple_case; cbn; arw.
+          induction IH; cbn; destruct (env.view ts0); cbn; arw.
+          rewrite eqₚ_term_tuple_snoc. now apply bi.sep_proper.
+        - destruct tr using Term_union_case; cbn; arw.
+          destruct eq_dec; subst; arw.
+          + now rewrite eqₚ_unionv_fold.
+          + now rewrite eqₚ_term_union_neq.
+        - destruct tr using Term_record_case; cbn; arw; arw_slow.
+          + rewrite -(recordv_fold_unfold R v).
+            rewrite repₚ_term_record.
+            generalize (recordv_unfold R v); intros vs.
+            unfold simplify_eq_record_val.
+            rewrite recordv_unfold_fold.
+            induction IH; destruct (env.view vs); arw.
+            arw_slow. apply bi.sep_proper; auto.
+          + induction IH; destruct (env.view ts0); arw.
+            arw_slow. apply bi.sep_proper; auto.
+      Qed.
 
-    Section SimplifyEqCtx.
-      Variable simplify_eq : forall {Σ σ} (t1 t2 : Term Σ σ), DList Σ.
-
-      Equations(noeqns) formula_eqs_ctx {Σ Δ}
-        (δ δ' : Env (Term Σ) Δ) : DList Σ :=
-      | env.nil,        env.nil          => empty
-      | env.snoc δ _ t, env.snoc δ' _ t' =>
-        cat (formula_eqs_ctx δ δ') (simplify_eq t t').
-
-      Equations(noeqns) formula_eqs_nctx {N Σ} {Δ : NCtx N Ty}
-        (δ δ' : NamedEnv (Term Σ) Δ) : DList Σ :=
-      | env.nil,        env.nil          => empty
-      | env.snoc δ _ t, env.snoc δ' _ t' =>
-        cat (formula_eqs_nctx δ δ') (simplify_eq t t').
-
-    End SimplifyEqCtx.
-
-    Equations(noeqns) simplify_eq {Σ σ} (t1 t2 : Term Σ σ) : DList Σ :=
-    simplify_eq (term_val _ v)           t                        := simplify_eq_val t v;
-    simplify_eq t                        (term_val _ v)           := simplify_eq_val t v;
-    simplify_eq (term_binop op1 t11 t12) (term_binop op2 t21 t22) := simplify_eq_binop op1 t11 t12 op2 t21 t22;
-    simplify_eq (term_unop op1 t1)       (term_unop op2 t2)       := simplify_eq_unop op1 t1 op2 t2;
-    simplify_eq (term_tuple ts1)         (term_tuple ts2)         := formula_eqs_ctx (@simplify_eq) ts1 ts2;
-    simplify_eq (term_record _ ts1)      (term_record _ ts2)      := formula_eqs_nctx (@simplify_eq) ts1 ts2;
-    simplify_eq (term_union _ K1 t1)     (term_union _ K2 t2) with eq_dec K1 K2 => {
-      simplify_eq (term_union _ K1 t1)   (term_union _ ?(K1) t2) (left eq_refl) := simplify_eq t1 t2;
-      simplify_eq _ _ (right _) := error
-    };
-    simplify_eq t1              t2   := simplify_eqb t1 t2.
-
-    Lemma simplify_eq_spec [w : World] [σ] (s t : Term w σ) :
-      instpred (simplify_eq s t) ⊣⊢ instpred (formula_relop bop.eq s t).
-    Proof.
-      induction s.
-      - dependent elimination t; arw.
-      - arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
-      - dependent elimination t; arw.
-        induction IH; env.destroy ts0; arw.
-        rewrite IHIH (q v) !formula_relop_term'. arw.
-      - dependent elimination t; arw; cbn.
-        destruct eq_dec as [Heq|Hneq]; arw.
-        + destruct Heq; cbn. rewrite IHs !formula_relop_term'. arw.
-        + rewrite formula_relop_term'; arw.
-          now rewrite (eqₚ_term_union_neq Hneq).
-      - dependent elimination t; arw; cbn.
-        rewrite formula_relop_term'; arw.
-        arw_slow.
-        induction IH; env.destroy ts1; arw.
-        rewrite IHIH (q v) formula_relop_term'. arw.
-        arw_slow.
-    Qed.
+    End SimplifyEqSpec.
+    #[global] Arguments simplify_eq {Σ σ} tl tr.
     #[export] Hint Rewrite simplify_eq_spec : uniflogic.
 
     Definition simplify_relopb {Σ σ} (op : RelOp σ)
