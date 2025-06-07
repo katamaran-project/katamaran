@@ -1392,6 +1392,9 @@ Module Type GenericSolverOn
                                 | None , Some hyp2' => Some (smart_or hyp1 hyp2')
                                 | None , None => None
                                 end
+      | formula_relop op t1 t2 =>
+          let hyp' := peval_formula_relop_neg op t1 t2 in
+          if formula_eqb hyp' fact then Some formula_false else None
       | _ => None
       end.
 
@@ -1411,6 +1414,7 @@ Module Type GenericSolverOn
       now iApply bi.wand_iff_refl.
     Qed.
 
+    #[local] Hint Rewrite @formula_relop_term' : uniflogic.
 
     Lemma bi_wand_iff_or {w} {P1 P2 Q1 Q2 : Pred w} : (P1 ∗-∗ Q1) ∗ (P2 ∗-∗ Q2) ⊢ P1 ∨ P2 ∗-∗ Q1 ∨ Q2.
     Proof.
@@ -1418,6 +1422,8 @@ Module Type GenericSolverOn
       - iIntros "[HP1|HP2]"; [iLeft|iRight]; [now iApply "H1"|now iApply "H2"].
       - iIntros "[HQ1|HQ2]"; [iLeft|iRight]; [now iApply "H1"|now iApply "H2"].
     Qed.
+
+    #[local] Hint Rewrite instpred_peval_formula_relop_neg : uniflogic.
 
     Lemma formula_simplifies_spec {w : World} (hyp fact : Formula w) :
       option.wlp (fun hyp' => ⊢ instpred fact -∗ (instpred hyp ∗-∗ instpred hyp'))
@@ -1431,7 +1437,11 @@ Module Type GenericSolverOn
         try (now iApply bi_wand_iff_true);
         arw; cbn; iIntros "#Hfact";
         (iApply bi_wand_iff_or || iApply bi_wand_iff_sep); iSplit;
-        now (iApply H || iApply H0 || iApply H1 || iApply bi.wand_iff_refl).
+        try now (iApply H || iApply H0 || iApply H1 || iApply bi.wand_iff_refl).
+      - iIntros "#Hfact'".
+        iDestruct (repₚ_antisym_left with "Hfact Hfact'") as "%Heq".
+        discriminate.
+      - iIntros ([]).
     Qed.
 
     Fixpoint assumption_formula {Σ} (C : PathCondition Σ) (F : Formula Σ) (k : PathCondition Σ) {struct C} : PathCondition Σ :=
