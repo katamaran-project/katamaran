@@ -239,6 +239,8 @@ Module Import ExampleProgram <: Program ExampleBase.
 
     #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
     Admitted. (* TODO: solve *)
+
+    Definition inline_fuel : nat := 10.
   End FunDeclKit.
 
   Include FunDeclMixin ExampleBase.
@@ -350,7 +352,7 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   Section WellFoundedKit.
     (* TODO: solve *)
-    Lemma 𝑭_well_founded : exists fuel, well_founded (InvokedByFunPackage fuel).
+    Lemma 𝑭_well_founded : well_founded (InvokedByFunPackage inline_fuel).
     Admitted.
   End WellFoundedKit.
 End ExampleProgram.

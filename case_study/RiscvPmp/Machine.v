@@ -248,6 +248,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
   Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
   Definition 𝑳  : PCtx -> Set := Lem.
+
+  #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
+  Admitted.
+
+  Definition inline_fuel : nat := 10.
   End FunDeclKit.
 
   Include FunDeclMixin RiscvPmpBase.
@@ -1357,6 +1362,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end.
 
   Include ProgramMixin RiscvPmpBase.
+
+  Section WellFoundedKit.
+    Axiom 𝑭_well_founded : well_founded (InvokedByFunPackage inline_fuel).
+  End WellFoundedKit.
 
 End RiscvPmpProgram.
 
