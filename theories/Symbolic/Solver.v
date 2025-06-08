@@ -933,38 +933,108 @@ Module Type GenericSolverOn
     #[local] Opaque simplify_relopb.
     #[export] Hint Rewrite @simplify_relopb_spec : uniflogic.
 
-    Equations(noeqns) simplify_le {Σ} (t1 t2 : Term Σ ty.int) : DList Σ :=
-    simplify_le (term_val _ 0%Z)         (term_unop uop.unsigned t) := empty;
-    simplify_le t1                       t2                         := simplify_relopb bop.le t1 t2.
+    Definition peval_formula_le' {Σ} (t : Term Σ ty.int) : Formula Σ :=
+      let default := formula_le (term_val ty.int 0%Z) t in
+      Term_int_case (fun _ => Formula Σ)
+        (fun (*var*) l lIn => default)
+        (fun (*val*) v => if (0 <=? v)%Z then formula_true else formula_false)
+        (fun (*plus*) _ _ => default)
+        (fun (*minus*) _ _ => default)
+        (fun (*times*) _ _ => default)
+        (fun (*land*) _ _ => default)
+        (fun (*neg*) _ => default)
+        (fun (*signed*) _ _ => default)
+        (fun (*unsigned*) _ _ => formula_true)
+        t.
+
+    Definition peval_formula_le {Σ} (t1 t2 : Term Σ ty.int) : Formula Σ :=
+      peval_formula_le' (peval (term_minus t2 t1)).
+
+    Definition peval_formula_lt {Σ} (t1 t2 : Term Σ ty.int) : Formula Σ :=
+      peval_formula_le (term_plus t1 (term_val ty.int 1%Z)) t2.
+
+    Definition peval_formula_relop_neg {Σ σ} (op : RelOp σ) :
+      Term Σ σ → Term Σ σ → Formula Σ :=
+      match op in (RelOp t) return (Term Σ t → Term Σ t → Formula Σ) with
+      | @bop.eq _ σ0 => formula_neq
+      | @bop.neq _ σ0 => formula_eq
+      | bop.le => flip peval_formula_lt
+      | bop.lt => flip peval_formula_le
+      | @bop.bvsle _ n => flip formula_bvslt
+      | @bop.bvslt _ n => flip formula_bvsle
+      | @bop.bvule _ n => flip formula_bvult
+      | @bop.bvult _ n => flip formula_bvule
+      end.
+
+    Lemma peval_formula_le'_spec [w : World] (t : Term w ty.int) :
+      instpred (peval_formula_le' t) ⊣⊢
+      instpred (formula_le (term_val ty.int 0%Z) t).
+    Proof.
+      destruct t using Term_int_case; cbn; try reflexivity.
+      - constructor; intros ι _; cbn.
+        destruct (Z.leb_spec 0 i);
+          intuition; try easy; lia.
+      - constructor; intros ι _; cbn.
+        intuition. apply bv.unsigned_bounds. constructor.
+    Qed.
+
+    Lemma peval_formula_le_spec [w : World] (t1 t2 : Term w ty.int) :
+      instpred (peval_formula_le t1 t2) ⊣⊢ instpred (formula_le t1 t2).
+    Proof.
+      unfold peval_formula_le. rewrite peval_formula_le'_spec.
+      constructor; intros ι _. cbn. rewrite peval_sound. cbn. lia.
+    Qed.
+
+    Lemma peval_formula_lt_spec [w : World] (t1 t2 : Term w ty.int) :
+      instpred (peval_formula_lt t1 t2) ⊣⊢ instpred (formula_lt t1 t2).
+    Proof.
+      unfold peval_formula_lt. rewrite peval_formula_le_spec.
+      constructor; intros ι _; cbn. lia.
+    Qed.
+
+    #[local] Hint Rewrite peval_formula_le_spec peval_formula_lt_spec : uniflogic.
+
+    Lemma instpred_peval_formula_relop_neg [w : World] {σ} (op : RelOp σ)
+      (t1 t2 : Term w σ) :
+      instpred (peval_formula_relop_neg op t1 t2) ⊣⊢
+      repₚ (T := STerm ty.bool) false (term_binop (bop.relop op) t1 t2).
+    Proof.
+      destruct op; cbn; arw;
+        rewrite ?formula_relop_term' ?rep_binop_neq_eq ?rep_binop_lt_ge
+          ?rep_binop_slt_sge ?rep_binop_slt_sge ?rep_binop_ult_uge; easy.
+    Qed.
+
+    Definition simplify_le {Σ} (t1 t2 : Term Σ ty.int) : DList Σ :=
+      singleton (peval_formula_le t1 t2).
+
+    Definition simplify_lt {Σ} (t1 t2 : Term Σ ty.int) : DList Σ :=
+      singleton (peval_formula_lt t1 t2).
 
     Lemma simplify_le_spec [w : World] (s t : Term w ty.int) :
       instpred (simplify_le s t) ⊣⊢ instpred (formula_relop bop.le s t).
-    Proof.
-      dependent elimination s; try (now apply simplify_relopb_spec).
-      destruct v; try (now apply simplify_relopb_spec).
-      dependent elimination t; try (now apply simplify_relopb_spec).
-      dependent elimination op0; try (now apply simplify_relopb_spec).
-      cbn -[empty].
-      arw_slow.
-      iSplit; iIntros; [|done].
-      iStopProof. crushPredEntails3; cbn.
-      now apply N2Z.is_nonneg.
-    Qed.
-    #[export] Hint Rewrite @simplify_le_spec : uniflogic.
+    Proof. unfold simplify_le. arw. now rewrite formula_relop_term'. Qed.
+
+    Lemma simplify_lt_spec [w : World] (s t : Term w ty.int) :
+      instpred (simplify_lt s t) ⊣⊢ instpred (formula_relop bop.lt s t).
+    Proof. unfold simplify_lt. arw. now rewrite formula_relop_term'. Qed.
+
+    #[export] Hint Resolve simplify_le_spec simplify_lt_spec : core.
 
     Definition simplify_relop {Σ σ} (op : RelOp σ) :
       forall (t1 t2 : STerm σ Σ), DList Σ :=
       match op in RelOp σ return forall (t1 t2 : STerm σ Σ), DList Σ with
-      | bop.eq => simplify_eq
+      | bop.eq => fun t1 t2 => simplify_eq (peval t1) (peval t2)
       | bop.le => simplify_le
-      | op     => simplify_relopb op
+      | bop.lt => simplify_lt
+      | op     => fun t1 t2 => simplify_relopb op (peval t1) (peval t2)
       end.
 
     Lemma simplify_relop_spec {w : World} {σ} (op : RelOp σ) (t1 t2 : STerm σ w) :
       instpred (simplify_relop op t1 t2) ⊣⊢ instpred (formula_relop op t1 t2).
     Proof.
       unfold simplify_relop.
-      destruct op; arw; rewrite ?formula_relop_term'; arw.
+      destruct op; arw; rewrite ?formula_relop_term' ?peval_sound; arw; arw_slow.
+      constructor; intros ι _; cbn. now rewrite ?peval_sound.
     Qed.
     #[export] Hint Rewrite @simplify_relop_spec : uniflogic.
 
@@ -1011,7 +1081,7 @@ Module Type GenericSolverOn
       | formula_user p ts      => singleton (formula_user p (pevals ts))
       | formula_bool t         => simplify_bool (peval t)
       | formula_prop ζ P       => singleton fml
-      | formula_relop op t1 t2 => simplify_relop op (peval t1) (peval t2)
+      | formula_relop op t1 t2 => simplify_relop op t1 t2
       | formula_true           => empty
       | formula_false          => error
       | formula_and F1 F2      => cat (simplify_formula F1) (simplify_formula F2)
