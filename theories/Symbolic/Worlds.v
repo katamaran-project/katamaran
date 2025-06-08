@@ -1418,6 +1418,13 @@ Module Type WorldsOn
       #[local] Arguments cat {Σ} !_ !_ /.
 
       Notation dlist_eq t1 t2 := (singleton (formula_eq t1 t2)).
+      Notation dlist_neq t1 t2 := (singleton (formula_neq t1 t2)).
+      Notation dlist_le t1 t2 := (singleton (formula_le t1 t2)).
+      Notation dlist_lt t1 t2 := (singleton (formula_lt t1 t2)).
+      Notation dlist_bvsle t1 t2 := (singleton (formula_bvsle t1 t2)).
+      Notation dlist_bvslt t1 t2 := (singleton (formula_bvslt t1 t2)).
+      Notation dlist_bvule t1 t2 := (singleton (formula_bvule t1 t2)).
+      Notation dlist_bvult t1 t2 := (singleton (formula_bvult t1 t2)).
 
       Import iris.bi.interface iris.bi.derived_laws.
 
