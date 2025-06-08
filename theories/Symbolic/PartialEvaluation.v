@@ -517,11 +517,20 @@ Module Type PartialEvaluationOn
     | term_val _ v                , term_binop bop.bvcons t1 t2 => peval_bvor_bvcons_val peval_bvor_val t1 t2 v
     | t1 , t2  => term_binop bop.bvor t1 t2.
 
+    Definition peval_bvapp_val_r {m n} (t1 : Term Σ (ty.bvec m)) (v : Val (ty.bvec n)) : Term Σ (ty.bvec (m+n)) :=
+      match eq_dec n 0 with
+      | left e =>
+          eq_rect_r (fun l => Term Σ (ty.bvec l)) t1
+            (eq_trans (f_equal (Nat.add m) e) (transparent.nat_add_0_r m))
+      | right _ => term_bvapp t1 (term_val (ty.bvec n) v)
+      end.
+
     Equations peval_bvapp {m n} (t1 : Term Σ (ty.bvec m)) (t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec (m+n)) :=
     | term_val _ v1 | term_val _ v2 => term_val (ty.bvec _) (bv.app v1 v2)
     | term_bvapp t11 t12 , t2 => eq_rect _ (fun l => Term Σ (ty.bvec l))
                                    (term_bvapp t11 (term_bvapp t12 t2)) _
                                    (transparent.nat_add_assoc _ _ _)
+    | t1 , term_val _ v2 => peval_bvapp_val_r t1 v2
     | t1 , t2 => term_bvapp t1 t2.
 
     Section WithPevalBvdrop.
@@ -864,10 +873,25 @@ Module Type PartialEvaluationOn
         intros ι. cbn - [bv.cons]. now rewrite bv.lor_cons.
     Qed.
 
+    Lemma peval_bvapp_val_r_sound [m n] (t1 : Term Σ (ty.bvec m))
+      (v : Val (ty.bvec n)) :
+      peval_bvapp_val_r t1 v ≡ term_bvapp t1 (term_val (ty.bvec n) v).
+    Proof.
+      unfold peval_bvapp_val_r. destruct eq_dec.
+      - intros ι. cbn. subst. rewrite eq_trans_refl_l.
+        rewrite (inst_eq_rect_indexed_r
+                   (instTA := fun l => @inst_term (ty.bvec l))).
+        destruct (bv.view v). now rewrite bv.app_nil_r.
+      - reflexivity.
+    Qed.
+
+    #[local] Hint Resolve peval_bvapp_val_r_sound : core.
+
     Lemma peval_bvapp_sound {m n} (t1 : Term Σ (ty.bvec m)) (t2 : Term Σ (ty.bvec n)) :
       peval_bvapp t1 t2 ≡ term_bvapp t1 t2.
     Proof.
-      funelim (peval_bvapp t1 t2); lsolve.
+      funelim (peval_bvapp t1 t2); lsolve;
+        try now rewrite peval_bvapp_val_r_sound.
       - try clear Heqcall. (* equations >= 1.3.1 *)
         intros ι. cbn. rewrite bv.app_app.
         now destruct transparent.nat_add_assoc.
