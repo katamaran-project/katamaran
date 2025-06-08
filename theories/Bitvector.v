@@ -931,6 +931,16 @@ Module bv.
       - now rewrite app_cons, drop_cons.
     Qed.
 
+    Lemma drop_drop {m n o} (x : bv (m + (n + o))) :
+      drop n (drop m x) =
+      drop (m + n) (eq_rect (m + (n + o)) bv x (m + n + o)
+                      (transparent.nat_add_assoc m n o)).
+    Proof.
+      destruct (appView m (n+o) x) as [x y].
+      destruct (appView n o y) as [y z].
+      now rewrite <- bv.app_app, !drop_app.
+    Qed.
+
     Lemma take_cons {m n} b (xs : bv (m + n)) :
       take (S m) (cons b xs) = cons b (take m xs).
     Proof.
@@ -946,6 +956,15 @@ Module bv.
       induction x using bv_rect.
       - now rewrite app_nil.
       - now rewrite app_cons, take_cons; f_equal.
+    Qed.
+
+    Lemma take_take {m n o} (x : bv ((m+n)+o)) :
+      take m (take (m + n) x) =
+      take m (eq_rect_r bv x (nat_add_assoc m n o)).
+    Proof.
+      destruct (appView (m+n) o x) as [y z].
+      destruct (appView m n y) as [x y].
+      now repeat rewrite ?take_app, ?app_app, ?rew_opp_l.
     Qed.
 
     Lemma take_full {m} (b : bv (m + 0)) :
