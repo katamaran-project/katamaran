@@ -1361,13 +1361,33 @@ Module Type PartialEvaluationOn
     Qed.
 
 
-    Definition peval [σ] (t : Term Σ σ) : Term Σ σ := CanonTerm_to_Term (peval2 t).
+    Fixpoint peval [σ] (t : Term Σ σ) : Term Σ σ :=
+      let res_poly :=
+        match t in Term _ σ return option (Term Σ σ) with
+          term_var x => Some (term_var x)
+        | term_val σ v => Some (term_val _ v)
+        | @term_binop _ σ1 σ2 _ op t1 t2 =>
+            (match op in BinOp σ1 σ2 σ3 return Term Σ σ1 -> Term Σ σ2 -> option (Term Σ σ3) with
+             | bop.cons => fun t1 t2 => Some (peval_binop' bop.cons (peval t1) (peval t2))
+             | _ => fun _ _ => None
+             end) t1 t2
+        | _ => None
+        end in
+          match res_poly with
+            Some t => t
+          | None => CanonTerm_to_Term (peval2 t)
+          end.
 
     Lemma peval_sound [σ] (t : Term Σ σ) :
       peval t ≡ t.
     Proof.
-      eapply CanonTermRep_adeq.
-      eapply peval2_sound.
+      induction t; try reflexivity.
+      - destruct op; try (eapply CanonTermRep_adeq; eapply peval2_sound).
+        cbn. now rewrite peval_binop'_sound, IHt1, IHt2.
+      - eapply CanonTermRep_adeq; eapply peval2_sound.
+      - eapply CanonTermRep_adeq; eapply peval2_sound.
+      - eapply CanonTermRep_adeq; eapply peval2_sound.
+      - eapply CanonTermRep_adeq; eapply peval2_sound.
     Qed.
     #[global] Arguments peval [σ] t : simpl never.
 
