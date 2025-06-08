@@ -185,17 +185,6 @@ Module Type PartialEvaluationOn
       - apply Zbool.Zeq_bool_eq in H; now subst.
     Qed.
 
-    Definition evalPolTm `{TermRing σ} : list (Term Σ σ) -> Pol Z -> Term Σ σ :=
-      Pphi_dev (term_val σ tmr_zero)
-        (term_val σ tmr_one)
-        (term_binop tmr_plus)
-        (term_binop tmr_times)
-        (term_binop tmr_minus)
-        (term_unop tmr_negate)
-        0%Z 1%Z Zbool.Zeq_bool
-        (fun c => term_val σ (tmr_of_Z c))
-        get_signZ.
-
     Definition evalPExprTm `{TermRing σ} : list (Term Σ σ) -> PExpr Z -> Term Σ σ :=
       PEeval (term_val σ tmr_zero)
         (term_val σ tmr_one)
@@ -205,17 +194,6 @@ Module Type PartialEvaluationOn
         (term_unop tmr_negate)
         (fun c => term_val σ (tmr_of_Z c))
         id_phi_N (pow_N (term_val (Σ := Σ) σ tmr_one) (term_binop tmr_times)).
-
-    Lemma evalPol_norm_aux `{tmr : TermRing σ} {p : PExpr Z} (l : list (Term Σ σ)) :
-      evalPolTm l (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool p) ≡ evalPExprTm l p.
-    Proof.
-      unfold evalPolTm, evalPExprTm.
-      rewrite Pphi_dev_ok;
-        rewrite ?bv.of_N_one;
-        try eauto using tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th with typeclass_instances.
-      rewrite norm_aux_spec;
-        rewrite ?bv.of_N_one; try eauto using tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th, pow_N_th with typeclass_instances.
-    Qed.
 
     Definition RQuote (σ : Ty) : Type := list (Term Σ σ) -> positive -> PExpr Z * list (Term Σ σ).
 
@@ -289,21 +267,6 @@ Module Type PartialEvaluationOn
       | ty.bvec n => RQuote σ
       | ty.int => RQuote σ
       | _ => Term Σ σ
-      end.
-
-    Definition CanonTerm_to_Term {σ} : CanonTerm σ -> Term Σ σ :=
-      match σ return CanonTerm σ -> Term Σ σ with
-      | ty.bvec n => fun ct =>
-                       match ct nil 1%positive with
-                       | (pexpr , env) =>
-                           evalPolTm (H := TermRing_bv) env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool pexpr)
-                       end
-      | ty.int => fun ct =>
-                    match ct nil 1%positive with
-                    | (pexpr , env) =>
-                        evalPolTm env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool pexpr)
-                    end
-      | _σ => fun t => t
       end.
 
     #[export] Instance equiv_CanonTerm {σ} : base.Equiv (CanonTerm σ)
@@ -409,26 +372,6 @@ Module Type PartialEvaluationOn
         + intros -> la.
           rewrite Hy, H1.
           now apply Hrqv.
-    Qed.
-
-    Lemma CanonTermRep_adeq {σ : Ty} {ct : CanonTerm σ} {t} : CanonTermRep ct t -> CanonTerm_to_Term ct ≡ t.
-    Proof.
-      destruct σ; intros; cbn; try trivial;
-        specialize (H []%list 1%positive);
-        destruct (ct []%list 1%positive);
-        rewrite evalPol_norm_aux;
-        now rewrite <-(H eq_refl nil), app_nil_r.
-    Qed.
-
-    Lemma Term_Quote_bin_sound {n} {op : BinOp (ty.bvec n) (ty.bvec n) (ty.bvec n)}
-      {comb} {ct1 t1 ct2 t2} :
-      (forall env pol1 pol2, evalPExprTm env (comb pol1 pol2) = term_binop op (evalPExprTm env pol1) (evalPExprTm env pol2)) ->
-      CanonTermRep (σ := ty.bvec n) ct1 t1 ->
-      CanonTermRep (σ := ty.bvec n) ct2 t2 ->
-      CanonTermRep (σ := ty.bvec n) (Term_Quote_bin comb ct1 ct2) (term_binop op t1 t2).
-    Proof.
-      intros Hcomb.
-      now eapply Term_Quote_bin_Valid.
     Qed.
 
     Equations(noeqns) peval_append {σ} (t1 t2 : Term Σ (ty.list σ)) : Term Σ (ty.list σ) :=
@@ -875,6 +818,36 @@ Module Type PartialEvaluationOn
       | op                            => peval_unop' op
       end.
 
+    (* Note that we evaluate polynomials using the peval_binop' functions.
+     * This gets rid of some remaining redexes left by the ring solver, particularly it tends to produce
+     * `term_unop uop.negate (term_val ty.int 1%Z)` rather than `(term_val ty.int (-1)%Z)`.
+     *)
+    Definition evalPolTm `{TermRing σ} : list (Term Σ σ) -> Pol Z -> Term Σ σ :=
+      Pphi_dev (term_val σ tmr_zero)
+        (term_val σ tmr_one)
+        (peval_binop' tmr_plus)
+        (peval_binop' tmr_times)
+        (peval_binop' tmr_minus)
+        (peval_unop' tmr_negate)
+        0%Z 1%Z Zbool.Zeq_bool
+        (fun c => term_val σ (tmr_of_Z c))
+        get_signZ.
+
+    Definition CanonTerm_to_Term {σ} : CanonTerm σ -> Term Σ σ :=
+      match σ return CanonTerm σ -> Term Σ σ with
+      | ty.bvec n => fun ct =>
+                       match ct nil 1%positive with
+                       | (pexpr , env) =>
+                           evalPolTm (H := TermRing_bv) env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool pexpr)
+                       end
+      | ty.int => fun ct =>
+                    match ct nil 1%positive with
+                    | (pexpr , env) =>
+                        evalPolTm env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool pexpr)
+                    end
+      | _σ => fun t => t
+      end.
+
     Lemma peval_not_sound (t : Term Σ ty.bool) :
       peval_not t ≡ term_unop uop.not t.
     Proof. funelim (peval_not t); lsolve; now apply proper_term_binop. Qed.
@@ -1104,6 +1077,108 @@ Module Type PartialEvaluationOn
     Proof.
       unfold peval_record. destruct (peval_record'_sound ts); [|reflexivity].
       intros ι; cbn. now f_equal.
+    Qed.
+
+    Lemma tmr_ring_morph_peval' `{TermRing σ}
+      {rm : ring_morph (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one)
+         (term_binop tmr_plus) (term_binop tmr_times) (term_binop tmr_minus)
+         (term_unop tmr_negate) base.equiv 0%Z 1%Z
+         Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool (λ c : Z, term_val σ (tmr_of_Z c))} :
+      ring_morph (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one)
+        (peval_binop' tmr_plus) (peval_binop' tmr_times) (peval_binop' tmr_minus)
+        (peval_unop' tmr_negate) base.equiv 0%Z 1%Z
+        Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool (λ c : Z, term_val σ (tmr_of_Z c)).
+    Proof.
+      constructor; intros; rewrite ?peval_binop'_sound, ?peval_unop'_sound.
+      - apply (morph0 rm).
+      - apply (morph1 rm).
+      - apply (morph_add rm).
+      - apply (morph_sub rm).
+      - apply (morph_mul rm).
+      - apply (morph_opp rm).
+      - now apply (morph_eq rm).
+    Qed.
+
+    Lemma tmr_ring_theory_peval' `{TermRing σ}
+      {rt : ring_theory (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one) (term_binop tmr_plus) (term_binop tmr_times) (term_binop tmr_minus) (term_unop tmr_negate) base.equiv} :
+      ring_theory (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one) (peval_binop' tmr_plus) (peval_binop' tmr_times) (peval_binop' tmr_minus) (peval_unop' tmr_negate) base.equiv.
+    Proof.
+      constructor; intros; rewrite ?peval_binop'_sound, ?peval_unop'_sound.
+      - apply (Radd_0_l rt).
+      - apply (Radd_comm rt).
+      - apply (Radd_assoc rt).
+      - apply (Rmul_1_l rt).
+      - apply (Rmul_comm rt).
+      - apply (Rmul_assoc rt).
+      - apply (Rdistr_l rt).
+      - apply (Rsub_def rt).
+      - apply (Ropp_def rt).
+    Qed.
+
+    Lemma tmr_ring_eq_ext_peval' `{TermRing σ}
+      {ree : ring_eq_ext (term_binop (Σ := Σ) tmr_plus) (term_binop tmr_times) (term_unop tmr_negate) base.equiv} :
+      ring_eq_ext (peval_binop' tmr_plus) (peval_binop' tmr_times) (peval_unop' tmr_negate) base.equiv.
+    Proof.
+      constructor; repeat intros ? ? ?; rewrite ?peval_binop'_sound, ?peval_unop'_sound.
+      - now apply (Radd_ext ree).
+      - now apply (Rmul_ext ree).
+      - now apply (Ropp_ext ree).
+    Qed.
+
+    Lemma Pphi_more_proper `{equivR : base.Equiv R, !Reflexive (≡@{R})} :
+      Proper (eq ==> (base.equiv ==> base.equiv ==> base.equiv) ==> (base.equiv ==> base.equiv ==> base.equiv) ==> forall_relation (fun C => eq ==> base.equiv ==> eq ==> base.equiv)) (@Pphi R).
+    Proof.
+      intros r0 ? <- radd1 radd2 Hradd rmul1 rmul2 Hrmul C phi1 ? <- env1 env2 Henv pol ? <-.
+      revert r0 radd1 radd2 Hradd rmul1 rmul2 Hrmul phi1 env1 env2 Henv.
+      induction pol;
+        intros r0 radd1 radd2 Hradd rmul1 rmul2 Hrmul phi1 env1 env2 Henv;
+        cbn.
+      - reflexivity.
+      - apply IHpol; eauto; now apply proper_jump_equiv.
+      - apply Hradd.
+        apply Hrmul.
+        now apply IHpol1.
+        apply proper_pow_pos; try easy.
+        now apply proper_hd_equiv.
+        apply IHpol2; try easy.
+        now apply proper_tl_equiv.
+    Qed.
+
+    Lemma evalPol_norm_aux `{tmr : TermRing σ} {p : PExpr Z} (l : list (Term Σ σ)) :
+      evalPolTm l (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool p) ≡ evalPExprTm l p.
+    Proof.
+      unfold evalPolTm, evalPExprTm.
+      rewrite Pphi_dev_ok;
+        try eauto using tmr_ring_morph_peval', tmr_ring_theory_peval', tmr_ring_eq_ext_peval', tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th with typeclass_instances.
+      rewrite norm_aux_spec;
+        try eauto using tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th, pow_N_th with typeclass_instances.
+      apply Pphi_more_proper; try easy.
+      - repeat intros ? ? ?.
+        rewrite peval_binop'_sound.
+        now apply proper_term_binop.
+      - repeat intros ? ? ?.
+        rewrite peval_binop'_sound.
+        now apply proper_term_binop.
+    Qed.
+
+    Lemma CanonTermRep_adeq {σ : Ty} {ct : CanonTerm σ} {t} : CanonTermRep ct t -> CanonTerm_to_Term ct ≡ t.
+    Proof.
+      destruct σ; intros; cbn; try trivial;
+        specialize (H []%list 1%positive);
+        destruct (ct []%list 1%positive);
+        rewrite evalPol_norm_aux;
+        now rewrite <-(H eq_refl nil), app_nil_r.
+    Qed.
+
+    Lemma Term_Quote_bin_sound {n} {op : BinOp (ty.bvec n) (ty.bvec n) (ty.bvec n)}
+      {comb} {ct1 t1 ct2 t2} :
+      (forall env pol1 pol2, evalPExprTm env (comb pol1 pol2) = term_binop op (evalPExprTm env pol1) (evalPExprTm env pol2)) ->
+      CanonTermRep (σ := ty.bvec n) ct1 t1 ->
+      CanonTermRep (σ := ty.bvec n) ct2 t2 ->
+      CanonTermRep (σ := ty.bvec n) (Term_Quote_bin comb ct1 ct2) (term_binop op t1 t2).
+    Proof.
+      intros Hcomb.
+      now eapply Term_Quote_bin_Valid.
     Qed.
 
     Definition CanonTerm_def {σ : Ty} : Term Σ σ -> CanonTerm σ :=
