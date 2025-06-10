@@ -1501,6 +1501,18 @@ Module Type PartialEvaluationOn
       - now eapply Term_Quote_unop_Valid.
     Qed.
 
+    (*
+     * peval2 runs the ring solver normalizer on ring expressions of type `bvec n` and `int` and
+     * runs custom partial evaluation functions on other terms.
+     *
+     * In order to maximize sharing identical unknown subterms in quoted ring expressions, we keep
+     * them in quoting monad form (`RQuote σ`, where we have access to already-quoted unknown subterms)
+     * until they are destructed using a non-ring operator.
+     * To this end, `CanonTerm σ` is `RQuote σ` for `σ = ty.int` or `σ = ty.bvec n` but it is `Term Σ σ`
+     * for other types.
+     * Once quoted terms are destructed using a non-ring expression, the quoting monad and ring solver normalizer are
+     * run by CanonTerm_to_Term.
+     *)
     Fixpoint peval2 [σ] (t : Term Σ σ) : CanonTerm σ :=
       match t with
       | term_var ς                 => CanonTerm_def (term_var ς)
@@ -1534,6 +1546,21 @@ Module Type PartialEvaluationOn
     Qed.
 
 
+    (* This is the top-level partial evaluation function.
+     * It delegates to peval2 to do the real work, but only does so when it
+     * reaches a term whose type cannot be meta-level polymorphic.
+     *
+     * Specifically, it does not run peval2 on variables, values and (recursively) list elements.
+     * These terms cannot be reduced further anyway, but also their type may be polymorphically
+     * quantified in Gallina.
+     * Passing such terms to peval2 would make peval2 pattern match on their type, which would produce
+     * a neutral Gallina term that Rocq cannot evaluate further, which in turn quickly leads to huge VCs.
+     * An example verification that depends on this is
+     * `valid_contract_length` in test/Example.v
+     *
+     * The types of other terms is fixed anyway (for example the type of term_binop is fixed for all binops
+     * except bop.cons) and pattern matching on the type will reduce fine.
+     *)
     Fixpoint peval [σ] (t : Term Σ σ) : Term Σ σ :=
       let res_poly :=
         match t in Term _ σ return option (Term Σ σ) with
