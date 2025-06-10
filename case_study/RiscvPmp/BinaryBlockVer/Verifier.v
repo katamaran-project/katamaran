@@ -59,7 +59,7 @@ From Katamaran Require Import
 From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
-From iris.program_logic Require total_weakestpre adequacy.
+From iris.program_logic Require weakestpre adequacy.
 From iris.proofmode Require string_ident tactics.
 From stdpp Require namespaces.
 
@@ -334,7 +334,7 @@ Section BlockVerificationDerived.
     (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
 
     Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : Val ty_word -> iProp Σ) (a : Val ty_word) : iProp Σ :=
-      semTTriple [env] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
+      semTriple [env] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
         (FunDef RiscvPmpProgram.step)
         (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a instr)%I.
 
@@ -346,13 +346,11 @@ Section BlockVerificationDerived.
     #[global] Arguments semTripleBlock PRE%_I instrs POST%_I.
 
     Lemma sound_stm_aux {τ} {PRE} {s : Stm [ctx] τ} {POST} :
-      # inline_fuel ⦃ PRE ⦄ s; [env] ⦃ POST ⦄ → ⊢ semTTriple [env] PRE s POST.
+      (∃ fuel, # fuel ⦃ PRE ⦄ s; [env] ⦃ POST ⦄) → ⊢ semTriple [env] PRE s POST.
     Proof.
-      iIntros (Htrip) "PRE".
-      iApply sound_tstm; eauto using TforeignSemBlockVerif, lemSemBlockVerif.
-      - intros Δ σ f H. apply 𝑭_well_founded.
-      - iIntros "!>" (σs σ f H).
-        iApply TcontractsSound.
+      iIntros ([fuel Htrip]) "PRE".
+      iApply sound_stm; eauto using foreignSemBlockVerif, lemSemBlockVerif.
+      iApply contractsSound.
     Qed.
 
     Lemma sound_exec_instruction {instr} a Φ (h : SCHeap) :
@@ -366,16 +364,15 @@ Section BlockVerificationDerived.
       cbn - [consume].
       iIntros (Hverif) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
       specialize (Hverif npc). apply sound_cexec in Hverif.
-      iApply (semTWP_mono with "[-]").
-    (*   iApply (sound_tstm TforeignSemBlockVerif lemSemBlockVerif (ex_intro _ _ Hverif) with "[] [$]"). *)
-    (*   iApply TcontractsSound. *)
-    (*   iIntros ([v|m] _); last done; iIntros "(%h1 & Hh1 & %Htrip)". clear Hverif. *)
-    (*   destruct Htrip as [an Htrip]. *)
-    (*   iPoseProof (consume_sound _ _ Htrip with "Hh1") *)
-    (*     as "[(Hpc & $ & Han) (%h2 & Hh2 & %HΦ)]". *)
-    (*   iExists an. cbn. by iFrame. *)
-    (* Qed. *)
-    Admitted.
+      iApply (semWP_mono with "[-]").
+      iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif (ex_intro _ _ Hverif) with "[] [$]").
+      iApply contractsSound.
+      iIntros ([v|m] _); last done; iIntros "(%h1 & Hh1 & %Htrip)". clear Hverif.
+      destruct Htrip as [an Htrip].
+      iPoseProof (consume_sound _ _ Htrip with "Hh1")
+        as "[(Hpc & $ & Han) (%h2 & Hh2 & %HΦ)]".
+      iExists an. cbn. by iFrame.
+    Qed.
 
     Lemma sound_exec_block_addr {instrs ainstr apc} Φ (h : SCHeap) :
       cexec_block_addr instrs ainstr apc Φ h ->
@@ -390,12 +387,12 @@ Section BlockVerificationDerived.
       - intros HΦ. iIntros "(Hpre & Hpc & Hnpc & _) Hk".
         iApply "Hk"; iFrame; auto.
       - intros [-> Hverif%sound_exec_instruction].
-        unfold semTripleOneInstrStep, semTTriple in Hverif.
+        unfold semTripleOneInstrStep, semTriple in Hverif.
         iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs) Hk".
         iApply semWP_seq.
         iApply semWP_call_inline.
         iApply (semWP_mono with "[-Hinstrs Hk] [Hinstrs Hk]").
-        iApply semTWP_semWP. iApply Hverif. iFrame. clear Hverif.
+        iApply Hverif. iFrame. clear Hverif.
         cbn.
         iIntros ([v|m] _); last (iIntros "_"; now rewrite semWP_fail);
           iIntros "([%an (Hnpc & Hpc & Hk2)] & Hinstr)".
@@ -706,7 +703,7 @@ Section AnnotatedBlockVerification.
           iApply semWP_seq.
           iApply semWP_call_inline.
           iApply (semWP_mono with "[Hh Hnpc Hpc Hinstr]").
-          { iApply semTWP_semWP. iApply (sound_exec_instruction Hverif). iFrame. }
+          { iApply (sound_exec_instruction Hverif). iFrame. }
           clear Hverif.
           iIntros ([v|m] _); last (iIntros "_"; now rewrite semWP_fail);
             iIntros "([%an (Hnpc & Hpc & (%h2 & Hh2 & %Hverif))] & Hinstr)".
