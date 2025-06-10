@@ -1140,14 +1140,6 @@ Module IrisInstanceWithContracts
           iApply "consr". by iApply lemSem.
         Qed.
 
-        (* TODO: the user would have to provide this, we can only prove this
-                 lemma when we know the concrete functions/callgraph. *)
-        Lemma wf_InvokedByFunPackage : well_founded (InvokedByFunPackage 0).
-        Proof.
-          unfold well_founded.
-          intros caller. constructor. intros callee Hinvok.
-        Admitted. (* Admit, see note above. Leave it here to continue with the proofs below *)
-
         Ltac solve_fuel fuel :=
           destruct fuel;
           cbn in *;
