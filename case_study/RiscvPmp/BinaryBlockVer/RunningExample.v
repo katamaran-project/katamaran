@@ -92,7 +92,7 @@ Section Code.
   Definition adv_addr : N := addr_after_block code.
 End Code.
 
-Section UnaryCheck.
+Module UnaryCheck.
   (* UnaryCheck contains a unary version of the contracts. This is used as a
      sanity check to be confident that, when we split the binary verification
      into two unary ones, it should hold. *)
@@ -134,7 +134,7 @@ Section UnaryCheck.
      is only a valid statement if the binary assertions are correctly defined. *)
 End UnaryCheck.
 
-Section RunningExample.
+Module RunningExample.
   (* First version of the running example is the bare minimum, just making sure
      that all the building blocks fit together. The example is a MRET instr,
      with the entire memory and all registers public (i.e., there are no secrets). *)
