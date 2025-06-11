@@ -168,7 +168,7 @@ Module RiscvPmpModel2.
       rewrite <-IHwidth.
       iSplit.
       now iIntros "[([$ %] & $) [$ $]]".
-      iIntros "[($ & $ & _) [$ $]]".
+      iIntros "[([$ _] & [$ _]) [$ $]]".
     Qed.
 
     Definition sailGS2_sailGS_left `{sailGS2 Σ} : sailGS Σ :=

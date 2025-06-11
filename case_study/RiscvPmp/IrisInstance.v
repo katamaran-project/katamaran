@@ -247,6 +247,7 @@ Module RiscvPmpIrisInstance <:
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
+    | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
     | inv_mmio bytes           | _                    => interp_inv_mmio bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w

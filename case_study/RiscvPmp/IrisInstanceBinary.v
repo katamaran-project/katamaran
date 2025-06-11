@@ -129,11 +129,15 @@ Module RiscvPmpIrisInstance2 <:
             end
       end.
 
+    Definition interp_ptsto_one (k : Exec) (addr : Addr) (b : Byte) : iProp Σ :=
+      match k with
+      | Left  => RiscvPmpIrisInstance.interp_ptsto (mG := mc_ghGS2_left) addr b
+      | Right => RiscvPmpIrisInstance.interp_ptsto (mG := mc_ghGS2_right) addr b
+      end ∗ ⌜¬ withinMMIO addr 1⌝.
+
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
     Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
-      RiscvPmpIrisInstance.interp_ptsto (mG := mc_ghGS2_left) addr b ∗
-      RiscvPmpIrisInstance.interp_ptsto (mG := mc_ghGS2_right) addr b ∗
-      ⌜¬ withinMMIO addr 1⌝.
+      interp_ptsto_one Left addr b ∗ interp_ptsto_one Right addr b.
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
     Definition ptstoSthL : list Addr -> iProp Σ :=
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
@@ -207,6 +211,7 @@ Module RiscvPmpIrisInstance2 <:
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
+    | ptsto_one k              | [ addr; w ]          => interp_ptsto_one k addr w
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
     | inv_mmio bytes           | _                    => interp_inv_mmio bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
