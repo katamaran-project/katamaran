@@ -684,9 +684,10 @@ Module RiscvPmpSpecVerif.
 
   Import Bitvector.bv.notations.
 
-  Lemma valid_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
+  Lemma valid_pmpMatchAddr : ValidContractWithFuelDebug pmpMatchAddr.
   Proof.
-    symbolic_simpl.
+    apply verification_condition_with_erasure_sound; vm_compute.
+    constructor. cbn.
     intros; split; intros; bv_comp; auto.
     destruct (v + v0 <=ᵘ? v1)%bv eqn:?; bv_comp; auto.
   Qed.
@@ -776,11 +777,11 @@ Module RiscvPmpSpecVerif.
     - refine (valid_contract _ H valid_pmp_mem_read).
     - refine (valid_contract _ H valid_pmp_mem_write).
     - refine (valid_contract_with_fuel_debug _ H valid_pmpCheck).
-    - admit (* refine (valid_contract_debug _ H valid_pmpMatchAddr) *).
+    - refine (valid_contract_with_fuel_debug _ H valid_pmpMatchAddr).
     - refine (valid_contract _ H valid_mem_write_value).
     - refine (valid_contract _ H valid_execute_fetch).
     - refine (valid_contract_debug _ H valid_contract_execute_EBREAK).
-  Admitted. (* TODO: solve | don't get why the above refine fails for valid_pmpMatchAddr? *)
+  Qed.
 End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
