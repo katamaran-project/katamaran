@@ -72,8 +72,14 @@ Module Import ReplayProgram <: Program DefaultBase.
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := fun _ _ => Empty_set.
     Definition 𝑳 : PCtx -> Set := Lem.
 
-    #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
-    Admitted. (* TODO: solve *)
+    Instance Fun_eq_dec : forall {Γ τ}, EqDec (Fun Γ τ) :=
+      fun Γ τ f1 =>
+        match f1 with
+        | main => fun f2 => match f2 with main => left eq_refl end
+        end.
+
+    #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))) :=
+      sigma_eqdec _ (fun Γ => sigma_eqdec _ (fun τ => _)).
 
     Definition inline_fuel : nat := 10.
   End FunDeclKit.
@@ -109,9 +115,23 @@ Module Import ReplayProgram <: Program DefaultBase.
   Include ProgramMixin DefaultBase.
 
   Section WellFoundedKit.
-    (* TODO: solve *)
+    Lemma 𝑭_bind_free : forall {Δ τ} (f : 𝑭 Δ τ), BindFree inline_fuel (FunDef f).
+    Proof.
+      intros Δ τ f.
+      apply BindFreeBool_eq.
+      destruct f; auto.
+    Qed.
+
     Lemma 𝑭_well_founded : well_founded (InvokedByFunPackage inline_fuel).
-    Admitted.
+    Proof.
+      intros [Γ [τ f]]. constructor. intros [Γ' [τ' f']] Hinvok.
+      assert (InvokedByFunPackageBool inline_fuel (existT _ (existT _ f')) (existT _ (existT _ f)) = true) as H.
+      {
+        destruct (InvokedByFunPackage_spec inline_fuel (existT _ (existT _ f')) (existT _ (existT _ f))); auto.
+        unfold BindFreeFunPackage, BindFreeFun. apply 𝑭_bind_free.
+      }
+      destruct f, f'; cbv in H; discriminate.
+    Qed.
   End WellFoundedKit.
 End ReplayProgram.
 
