@@ -90,7 +90,15 @@ Module Import ExampleProgram <: Program DefaultBase.
     Definition 𝑳 : PCtx -> Set := fun _ => Empty_set.
 
     #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
-    Admitted. (* TODO: solve *)
+    Proof.
+      refine (sigma_eqdec _ (fun Γ => sigma_eqdec _ (fun τ => _))).
+      intros f1 f2.
+      destruct f1 eqn:Ef1;
+        refine (match f2 with
+                | summaxlen => _
+                end);
+        cbn; try intros ?; auto.
+    Defined.
 
     Definition inline_fuel : nat := 10.
   End FunDeclKit.

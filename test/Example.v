@@ -221,19 +221,19 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
-    | abs        :        Fun [ "x" ∷ ty.int               ] ty.int
-    | cmp        :        Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] (ty.enum ordering)
-    | gcd        :        Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
-    | gcdloop    :    Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
-    | msum       :       Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either)
-    | length {σ} : Fun [ "xs" ∷ ty.list σ           ] ty.int
-    | fpthree16  :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
-    | fpthree32  :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
-    | fpthree64  :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
-    | bvtest     :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
-    | bvtest2    :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
-    | bvtest3    :  Fun [ "sign" ∷ ty.bvec 42 ] ty.int
-    | pevaltest1 :  Fun [ "sign" ∷ ty.bvec 42 ; "y" ∷ ty.int ] ty.int
+    | abs        : Fun [ "x" ∷ ty.int ] ty.int
+    | cmp        : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] (ty.enum ordering)
+    | gcd        : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
+    | gcdloop    : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
+    | msum       : Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either)
+    | length {σ} : Fun [ "xs" ∷ ty.list σ ] ty.int
+    | fpthree16  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
+    | fpthree32  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
+    | fpthree64  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
+    | bvtest     : Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
+    | bvtest2    : Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
+    | bvtest3    : Fun [ "sign" ∷ ty.bvec 42 ] ty.int
+    | pevaltest1 : Fun [ "sign" ∷ ty.bvec 42; "y" ∷ ty.int ] ty.int
     .
 
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -241,7 +241,16 @@ Module Import ExampleProgram <: Program ExampleBase.
     Definition 𝑳 : PCtx -> Set := fun _ => Empty_set.
 
     #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
-    Admitted. (* TODO: solve *)
+    Proof.
+      refine (sigma_eqdec _ (fun Γ => sigma_eqdec _ (fun τ => _))).
+      intros f1 f2.
+      destruct f1 eqn:Ef1;
+        refine (match f2 with
+                | abs => _
+                | _ => _
+                end);
+        cbn; try intros ?; auto.
+    Defined.
 
     Definition inline_fuel : nat := 10.
   End FunDeclKit.

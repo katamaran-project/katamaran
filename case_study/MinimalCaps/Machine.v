@@ -131,55 +131,17 @@ Section FunDeclKit.
   Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
   Definition 𝑳  : PCtx -> Set := Lem.
 
-  #[local] Ltac solve_idprop :=
-    match goal with
-    | |- IDProp => intros ? H; exact H
-    | _ => idtac
-    end.
-
-  Equations(noeqns) Fun_eqb {Γ1 Γ2 τ1 τ2} (f1 : Fun Γ1 τ1) (f2 : Fun Γ2 τ2) : bool :=
-  | f1 | f2 with eq_dec Γ1 Γ2, eq_dec τ1 τ2 => {
-    | left _ | left _ => match f1, f2 with
-                         | read_reg, read_reg => true
-                         | _, _ => false
-                         end
-    | _    | _    => false
-    }.
-
-  Instance Fun_eq_dec' : EqDec (sigT (fun Γ => sigT (Fun Γ))).
-  Proof.
-    intros [Γ1 [τ1 f1]] [Γ2 [τ2 f2]].
-    destruct (eq_dec Γ1 Γ2), (eq_dec τ1 τ2).
-    destruct f1, f2; auto.
-    - right. intros Heq.
-      pose proof (eq_sigT_fst Heq).
-      subst. 
-      apply Eqdep.EqdepTheory.inj_pair2 in Heq.
-      apply eq_sigT_fst in Heq. auto.
-    - right. intros Heq.
-      apply eq_sigT_fst in Heq. auto.
-    - right. intros Heq.
-      apply eq_sigT_fst in Heq. auto.
-  Defined.
-
-  (* Print Fun_eq_dec'. *)
-  Print Assumptions Fun_eq_dec'.
-
-  Instance Fun_eq_dec {Γ τ} : EqDec (Fun Γ τ).
-  Proof.
-    intros f1 f2.
-    destruct f1;
-    refine (match f2 with
-            | read_reg => _
-            | _ => _
-            end);
-        cbn; solve_idprop; auto.
-  Defined.
-  Print Fun_eq_dec.
-  Print Assumptions Fun_eq_dec.
-
-  #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))) :=
-    sigma_eqdec _ (fun Γ => sigma_eqdec _ (fun τ => _)).
+  #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
+    Proof.
+      refine (sigma_eqdec _ (fun Γ => sigma_eqdec _ (fun τ => _))).
+      intros f1 f2.
+      destruct f1 eqn:Ef1;
+        refine (match f2 with
+                | read_reg => _
+                | _ => _
+                end);
+        cbn; try intros ?; auto.
+    Defined.
 
   Definition inline_fuel : nat := 10.
 End FunDeclKit.
