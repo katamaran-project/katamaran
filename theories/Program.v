@@ -111,19 +111,23 @@ Module Type ProgramMixin (Import B : Base)
       end%list.
 
     Lemma InvokedByStmList_WellFormed_aux {Γ τ} (s : Stm Γ τ) :
+      stm_bindfree s ->
       forall (fs : Nodes),
         InvokedByStmList s ⊆ fs ->
         StmWellFormed fs s.
     Proof.
-      induction s; cbn; intros fs sub_fs;
-        try
-          match type of sub_fs with
-          | ?fs1 ++ ?fs2 ⊆ ?fs =>
-              apply list_subseteq_app_iff_l in sub_fs;
-              destruct sub_fs as [sub_fs1 sub_fs2]
-          end;
+      rewrite Is_true_true.
+      induction s; cbn; rewrite <- ?andb_lazy_alt; intros Hbindfree fs Hsub;
         repeat
           match goal with
+          | H : ?a && ?b = true |- _ =>
+              let H1 := fresh "Hbindfree" in
+              let H2 := fresh "Hbindfree" in
+              apply andb_true_iff in H; destruct H as [H1 H2]
+          | H : ?fs1 ++ ?fs2 ⊆ ?fs |- _ =>
+              let H1 := fresh "Hsub" in
+              let H2 := fresh "Hsub" in
+              apply list_subseteq_app_iff_l in H; destruct H as [H1 H2]
           | |- ?f ∈ cons ?f _ => constructor 1
           | H: ?ls ⊆ ?fs |- ?f ∈ ?fs =>
               match ls with
@@ -131,17 +135,19 @@ Module Type ProgramMixin (Import B : Base)
               end
           | |- _ ∧ _ => split
           end;
-        auto.
-      - intros pc. apply H. intros h hIn. apply sub_fs2.
-        apply elem_of_list_In, in_flat_map. exists pc.
-        split; apply elem_of_list_In; auto.
-        apply elem_of_enum.
-      - admit.
-    Admitted.
+        eauto.
+      - intros pc. apply H.
+        + rewrite forallb_forall in Hbindfree1. apply Hbindfree1.
+          apply elem_of_list_In, elem_of_enum.
+        + intros h hIn. apply Hsub1, elem_of_list_In, in_flat_map.
+          exists pc. split; apply elem_of_list_In; auto.
+          apply elem_of_enum.
+      - discriminate.
+    Qed.
 
     Lemma InvokedByStmList_WellFormed {Γ τ} (s : Stm Γ τ) :
-      StmWellFormed (InvokedByStmList s) s.
-    Proof. now apply InvokedByStmList_WellFormed_aux. Qed.
+      stm_bindfree s -> StmWellFormed (InvokedByStmList s) s.
+    Proof. intros; now apply InvokedByStmList_WellFormed_aux. Qed.
 
     Definition CallGraphWellFormed (g : CallGraph) : Prop :=
       forall Δ τ (f : 𝑭 Δ τ),
@@ -150,13 +156,13 @@ Module Type ProgramMixin (Import B : Base)
   End callgraph.
 
   (* TODO: remove duplicates from calculated list *)
-  Definition 𝑭_call_graph : CallGraph :=
+  Definition generic_call_graph : CallGraph :=
     fun '(existT _ (existT _ f)) => InvokedByStmList (FunDef f).
 
-  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
-  Proof. intros Δ τ f. apply InvokedByStmList_WellFormed. Qed.
-
-  Notation AccessibleFun f := (Accessible 𝑭_call_graph (existT _ (existT _ f))).
+  Lemma generic_call_graph_wellformed
+    (H: forall Δ τ (f : 𝑭 Δ τ), stm_bindfree (FunDef f)) :
+    CallGraphWellFormed generic_call_graph.
+  Proof. intros Δ τ f. now apply InvokedByStmList_WellFormed. Qed.
 
 End ProgramMixin.
 
@@ -164,8 +170,13 @@ Module Type WellFoundedKit (B : Base) (Import FDecl : FunDecl B)
   (Import FDK : FunDefKit B FDecl)
   (Import PM : ProgramMixin B FDecl FDK).
 
+  Import callgraph.
+
+  Parameter 𝑭_call_graph : CallGraph.
+  Parameter 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
   Parameter 𝑭_accessible :
-    forall Δ τ (f : 𝑭 Δ τ), option (AccessibleFun f).
+    forall Δ τ (f : 𝑭 Δ τ),
+      option (Accessible 𝑭_call_graph (existT _ (existT _ f))).
 
 End WellFoundedKit.
 

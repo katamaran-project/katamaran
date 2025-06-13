@@ -1356,7 +1356,17 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | execute_MUL             => fun_execute_MUL
     end.
 
+  Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
+    stm_bindfree (FunDef f).
+  Proof. destruct f; now vm_compute. Qed.
+
   Include ProgramMixin RiscvPmpBase.
+
+  Import callgraph.
+
+  Definition 𝑭_call_graph := generic_call_graph.
+  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
 
   Ltac accessible_proof :=
     apply callgraph.accessible_intro;
@@ -1372,6 +1382,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
        (* | |- AccessibleFun _ => *)
        (*     apply accessible_intro *)
        end).
+
+  Notation AccessibleFun f := (Accessible 𝑭_call_graph (existT _ (existT _ f))).
 
   Instance accessible_rX : AccessibleFun rX.
   Proof. accessible_proof. Qed.
