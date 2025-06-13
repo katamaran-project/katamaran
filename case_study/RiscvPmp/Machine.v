@@ -1358,6 +1358,167 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Include ProgramMixin RiscvPmpBase.
 
+  Ltac accessible_proof :=
+    apply callgraph.accessible_intro;
+    repeat
+      (try typeclasses eauto;
+       match goal with
+       | |- Forall ?P [] => constructor
+       | |- Forall ?P (_ :: _) => constructor
+       | |- Forall ?P ?xs =>
+           (* Do not expand typelevel computations like Nat.mul in execute_STORE *)
+           let xs' := eval compute - [Nat.mul] in xs in
+             change (Forall P xs')
+       (* | |- AccessibleFun _ => *)
+       (*     apply accessible_intro *)
+       end).
+
+  Instance accessible_rX : AccessibleFun rX.
+  Proof. accessible_proof. Qed.
+  Instance accessible_wX : AccessibleFun wX.
+  Proof. accessible_proof. Qed.
+  Instance accessible_within_phys_mem : AccessibleFun within_phys_mem.
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmpAddrRange : AccessibleFun pmpAddrRange.
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmpMatchAddr : AccessibleFun pmpMatchAddr.
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmpCheckRWX : AccessibleFun pmpCheckRWX.
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmpLocked : AccessibleFun pmpLocked.
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmpCheckPerms : AccessibleFun pmpCheckPerms.
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmpMatchEntry : AccessibleFun pmpMatchEntry.
+  Proof. accessible_proof. Qed.
+  Instance accessible_to_bits (l : nat) : AccessibleFun (to_bits l).
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmpCheck (bytes : nat) (rest : restrict_bytes bytes) :
+    AccessibleFun (@pmpCheck bytes rest).
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmpWriteCfg : AccessibleFun pmpWriteCfg.
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmpWriteAddr : AccessibleFun pmpWriteAddr.
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmpWriteCfgReg (n : nat) (H : n < 1) :
+    AccessibleFun (@pmpWriteCfgReg n H).
+  Proof. accessible_proof. Qed.
+  Instance accessible_get_next_pc : AccessibleFun get_next_pc.
+  Proof. accessible_proof. Qed.
+  Instance accessible_set_next_pc : AccessibleFun set_next_pc.
+  Proof. accessible_proof. Qed.
+  Instance accessible_exception_delegatee : AccessibleFun exception_delegatee.
+  Proof. accessible_proof. Qed.
+  Instance accessible_exceptionType_to_bits : AccessibleFun exceptionType_to_bits.
+  Proof. accessible_proof. Qed.
+  Instance accessible_tvec_addr : AccessibleFun tvec_addr.
+  Proof. accessible_proof. Qed.
+  Instance accessible_prepare_trap_vector : AccessibleFun prepare_trap_vector.
+  Proof. accessible_proof. Qed.
+  Instance accessible_trap_handler : AccessibleFun trap_handler.
+  Proof. accessible_proof. Qed.
+  Instance accessible_exception_handler : AccessibleFun exception_handler.
+  Proof. accessible_proof. Qed.
+  Instance accessible_handle_illegal : AccessibleFun handle_illegal.
+  Proof. accessible_proof. Qed.
+  Instance accessible_handle_mem_exception : AccessibleFun handle_mem_exception.
+  Proof. accessible_proof. Qed.
+  Instance accessible_checked_mem_read (bytes : nat) (rest : restrict_bytes bytes) :
+    AccessibleFun (@checked_mem_read bytes rest).
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmp_mem_read (bytes : nat) (rest : restrict_bytes bytes) :
+    AccessibleFun (@pmp_mem_read bytes rest).
+  Proof. accessible_proof. Qed.
+  Instance accessible_mem_read (bytes : nat) (rest : restrict_bytes bytes) :
+    AccessibleFun (@mem_read bytes rest).
+  Proof. accessible_proof. Qed.
+  Instance accessible_checked_mem_write (bytes : nat) (rest : restrict_bytes bytes) :
+    AccessibleFun (@checked_mem_write bytes rest).
+  Proof. accessible_proof. Qed.
+  Instance accessible_pmp_mem_write (bytes : nat) (rest : restrict_bytes bytes) :
+    AccessibleFun (@pmp_mem_write bytes rest).
+  Proof. accessible_proof. Qed.
+  Instance accessible_mem_write_value (bytes : nat) (rest : restrict_bytes bytes) :
+    AccessibleFun (@mem_write_value bytes rest).
+  Proof. accessible_proof. Qed.
+  Instance accessible_bool_to_bits : AccessibleFun bool_to_bits.
+  Proof. accessible_proof. Qed.
+  Instance accessuble_shift_right_arith32 : AccessibleFun shift_right_arith32.
+  Proof. accessible_proof. Qed.
+  Instance accessuble_privLevel_to_bits : AccessibleFun privLevel_to_bits.
+  Proof. accessible_proof. Qed.
+  Instance accessible_extend_value (bytes : nat)
+    {p : IsTrue (width_constraint bytes)} : AccessibleFun (extend_value bytes).
+  Proof. accessible_proof. Qed.
+  Instance accessible_process_load (bytes : nat)
+    {p : IsTrue (width_constraint bytes)} : AccessibleFun (process_load bytes).
+  Proof. accessible_proof. Qed.
+  Instance accessible_init_pmp : AccessibleFun init_pmp.
+  Proof. accessible_proof. Qed.
+  Instance accessible_init_sys : AccessibleFun init_sys.
+  Proof. accessible_proof. Qed.
+  Instance accessible_fetch : AccessibleFun fetch.
+  Proof. accessible_proof. Qed.
+  Instance accessible_is_CSR_defined : AccessibleFun is_CSR_defined.
+  Proof. accessible_proof. Qed.
+  Instance accessible_csrAccess : AccessibleFun csrAccess.
+  Proof. accessible_proof. Qed.
+  Instance accessible_csrPriv : AccessibleFun csrPriv.
+  Proof. accessible_proof. Qed.
+  Instance accessible_check_CSR_access : AccessibleFun check_CSR_access.
+  Proof. accessible_proof. Qed.
+  Instance accessible_check_CSR : AccessibleFun check_CSR.
+  Proof. accessible_proof. Qed.
+  Instance accessible_readCSR : AccessibleFun readCSR.
+  Proof. accessible_proof. Qed.
+  Instance accessible_writeCSR : AccessibleFun writeCSR.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_RTYPE : AccessibleFun execute_RTYPE.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_ITYPE : AccessibleFun execute_ITYPE.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_SHIFTIOP : AccessibleFun execute_SHIFTIOP.
+  Proof. accessible_proof. Qed.
+  Instance accessible_get_arch_pc : AccessibleFun get_arch_pc.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_UTYPE : AccessibleFun execute_UTYPE.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_BTYPE : AccessibleFun execute_BTYPE.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_RISCV_JAL : AccessibleFun execute_RISCV_JAL.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_RISCV_JALR : AccessibleFun execute_RISCV_JALR.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_LOAD : AccessibleFun execute_LOAD.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_STORE : AccessibleFun execute_STORE.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_ECALL : AccessibleFun execute_ECALL.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_EBREAK : AccessibleFun execute_EBREAK.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_MRET : AccessibleFun execute_MRET.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_CSR : AccessibleFun execute_CSR.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute_MUL : AccessibleFun execute_MUL.
+  Proof. accessible_proof. Qed.
+  Instance accessible_execute : AccessibleFun execute.
+  Proof. accessible_proof. Qed.
+  Instance accessible_tick_pc : AccessibleFun tick_pc.
+  Proof. accessible_proof. Qed.
+  Instance accessible_init_model : AccessibleFun init_model.
+  Proof. accessible_proof. Qed.
+  Instance accessible_step : AccessibleFun step.
+  Proof. accessible_proof. Qed.
+
+  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
+    match f with
+    | main => None
+    | loop => None
+    | _ => Some _
+    end.
+
 End RiscvPmpProgram.
 
 Module RiscvPmpSemantics <: Semantics RiscvPmpBase RiscvPmpProgram :=
