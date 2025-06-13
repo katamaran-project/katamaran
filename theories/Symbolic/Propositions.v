@@ -224,7 +224,7 @@ Module Type SymPropOn
       (P : F -> 𝕊 Σ) : 𝕊 Σ := demonic_list P (finite.enum F).
     #[global] Arguments demonic_finite F {_ _} [Σ] P.
 
-    Definition angelic_pattern_match {σ} (pat : @Pattern LVar σ) {Σ} (s : Term Σ σ)
+    Definition angelic_pattern_match {σ} (pat : Pattern (N:=LVar) σ) {Σ} (s : Term Σ σ)
       (k : forall pc : PatternCase pat, 𝕊 (Σ ▻▻ PatternCaseCtx pc)) : 𝕊 Σ :=
       angelic_finite (PatternCase pat) amsg.empty
         (fun pc => angelic_close0 (PatternCaseCtx pc)
@@ -234,7 +234,7 @@ Module Type SymPropOn
                  (subst s (sub_cat_left (PatternCaseCtx pc))))
               amsg.empty (k pc))).
 
-    Definition angelic_pattern_match_var {σ} (pat : @Pattern LVar σ) {Σ} x {xIn : x∷σ ∈ Σ}
+    Definition angelic_pattern_match_var {σ} (pat : Pattern (N:=LVar) σ) {Σ} x {xIn : x∷σ ∈ Σ}
       (k : forall pc : PatternCase pat, 𝕊 (ctx.remove (ctx.in_cat_left (PatternCaseCtx pc) xIn))) : 𝕊 Σ :=
       angelic_finite (PatternCase pat) amsg.empty
         (fun pc => angelic_close0 (PatternCaseCtx pc)
@@ -243,7 +243,7 @@ Module Type SymPropOn
               amsg.empty
               (k pc))).
 
-    Definition demonic_pattern_match {σ} (pat : @Pattern LVar σ) {Σ} (s : Term Σ σ)
+    Definition demonic_pattern_match {σ} (pat : Pattern (N:=LVar) σ) {Σ} (s : Term Σ σ)
       (k : forall pc : PatternCase pat, 𝕊 (Σ ▻▻ PatternCaseCtx pc)) : 𝕊 Σ :=
       demonic_finite (PatternCase pat)
         (fun pc => demonic_close0 (PatternCaseCtx pc)
@@ -253,7 +253,7 @@ Module Type SymPropOn
                  (subst s (sub_cat_left (PatternCaseCtx pc))))
               (k pc))).
 
-    Definition demonic_pattern_match_var {σ} (pat : @Pattern LVar σ) {Σ} x {xIn : x∷σ ∈ Σ}
+    Definition demonic_pattern_match_var {σ} (pat : Pattern (N:=LVar) σ) {Σ} x {xIn : x∷σ ∈ Σ}
       (k : forall pc : PatternCase pat, 𝕊 (ctx.remove (ctx.in_cat_left (PatternCaseCtx pc) xIn))) : 𝕊 Σ :=
       demonic_finite (PatternCase pat)
         (fun pc => demonic_close0 (PatternCaseCtx pc)
@@ -1755,9 +1755,9 @@ Module Type SymPropOn
         (n : nat)
         (t : ETerm σ)
         (k : ESymProp)
-    | epattern_match {σ} (s : ETerm σ) (pat : @Pattern LVar σ)
+    | epattern_match {σ} (s : ETerm σ) (pat : Pattern (N:=LVar) σ)
         (rhs : PatternCase pat -> ESymProp)
-    | epattern_match_var (x : LVar) σ (n : nat) (pat : @Pattern LVar σ)
+    | epattern_match_var (x : LVar) σ (n : nat) (pat : Pattern (N:=LVar) σ)
         (rhs : PatternCase pat -> ESymProp)
     | edebug {Σ}
         (b : AMessage Σ) (k : ESymProp).

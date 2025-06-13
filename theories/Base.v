@@ -70,7 +70,7 @@ Module Type BaseMixin (Import TY : Types).
 
   Notation CStore := (@NamedEnv PVar Ty Val).
 
-  Definition SMatchResult {N σ} (pat : @Pattern N σ) (Σ : LCtx) : Type :=
+  Definition SMatchResult {N σ} (pat : Pattern (N:=N) σ) (Σ : LCtx) : Type :=
     { pc : PatternCase pat & NamedEnv (Term Σ) (PatternCaseCtx pc) }.
 
   Section PatternMatching.
@@ -124,7 +124,7 @@ Module Type BaseMixin (Import TY : Types).
         f_equal. apply IHp.
     Qed.
 
-    Fixpoint pattern_match_term_reverse {Σ σ} (pat : @Pattern N σ) :
+    Fixpoint pattern_match_term_reverse {Σ σ} (pat : Pattern (N:=N) σ) :
       forall (pc : PatternCase pat), NamedEnv (Term Σ) (PatternCaseCtx pc) -> Term Σ σ :=
       match pat with
       | pat_var x =>
@@ -170,7 +170,7 @@ Module Type BaseMixin (Import TY : Types).
           fun '(existT K pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts)
       end.
 
-    Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : @Pattern N σ) :
+    Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : Pattern (N:=N) σ) :
       forall (pc : PatternCase pat) (ts : NamedEnv (Term Σ) (PatternCaseCtx pc)),
         inst (pattern_match_term_reverse pat pc ts) ι =
         pattern_match_val_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι).
@@ -199,7 +199,7 @@ Module Type BaseMixin (Import TY : Types).
       inst (unfreshen_namedenv n ζ) ι = unfreshen_namedenv n (inst ζ ι).
     Proof. induction Δ; cbn in ζ; env.destroy ζ; cbn; f_equal; apply IHΔ. Qed.
 
-    Lemma inst_unfreshen_patterncaseenv (n : N -> LVar) {Σ Σ' σ} (pat : @Pattern N σ)
+    Lemma inst_unfreshen_patterncaseenv (n : N -> LVar) {Σ Σ' σ} (pat : Pattern (N:=N) σ)
       (pc : PatternCase (freshen_pattern n Σ pat))
       (ζ : Sub (PatternCaseCtx pc) Σ')
       (ι : Valuation Σ') :

@@ -437,7 +437,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
       Context {N : Set} (n : N -> LVar).
 
-      Definition angelic_pattern_match' {σ} (pat : @Pattern N σ) :
+      Definition angelic_pattern_match' {σ} (pat : Pattern (N:=N) σ) :
         ⊢ AMessage -> WTerm σ -> SPureSpec (SMatchResult pat) :=
         fun w0 msg t =>
           ⟨ θ1 ⟩ pc <- angelic_finite (PatternCase pat) msg ;;
@@ -451,7 +451,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       #[global] Arguments angelic_pattern_match' {σ} pat [w].
 
       Definition angelic_pattern_match :
-        forall {σ} (pat : @Pattern N σ),
+        forall {σ} (pat : Pattern (N:=N) σ),
           ⊢ AMessage -> WTerm σ -> SPureSpec (SMatchResult pat) :=
         fix angelic (σ : Ty) (pat : Pattern σ) {w0} msg {struct pat} :
           WTerm σ w0 -> SPureSpec (SMatchResult pat) w0 :=
@@ -537,7 +537,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           end.
       #[global] Arguments angelic_pattern_match {σ} pat [w].
 
-      Definition demonic_pattern_match' {σ} (pat : @Pattern N σ) :
+      Definition demonic_pattern_match' {σ} (pat : Pattern (N:=N) σ) :
         ⊢ WTerm σ -> SPureSpec (SMatchResult pat) :=
         fun w0 t =>
           ⟨ θ1 ⟩ pc <- demonic_finite (PatternCase pat) ;;
@@ -551,7 +551,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       #[global] Arguments demonic_pattern_match' {σ} pat [w].
 
       Definition demonic_pattern_match :
-        forall {σ} (pat : @Pattern N σ),
+        forall {σ} (pat : Pattern (N:=N) σ),
           ⊢ WTerm σ -> SPureSpec (SMatchResult pat) :=
         fix demonic (σ : Ty) (pat : Pattern σ) {w0} {struct pat} :
           WTerm σ w0 -> SPureSpec (SMatchResult pat) w0 :=
@@ -637,7 +637,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           end.
       #[global] Arguments demonic_pattern_match {σ} pat [w].
 
-      Definition new_pattern_match_regular {σ} (pat : @Pattern N σ) :
+      Definition new_pattern_match_regular {σ} (pat : Pattern (N:=N) σ) :
         ⊢ STerm σ -> SPureSpec (SMatchResult pat) :=
         fun w0 scr POST =>
           SymProp.pattern_match scr (freshen_pattern n w0 pat)
@@ -650,7 +650,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                     (unfreshen_patterncaseenv n pat pc (sub_cat_right _)))).
       #[global] Arguments new_pattern_match_regular {σ} pat [w] t.
 
-      Definition new_pattern_match_var {σ} (x : LVar) (pat : @Pattern N σ) :
+      Definition new_pattern_match_var {σ} (x : LVar) (pat : Pattern (N:=N) σ) :
         ⊢ ctx.In (x∷σ) -> SPureSpec (SMatchResult pat) :=
         fun w0 xIn POST =>
           let pat' := freshen_pattern n w0 pat in
@@ -662,7 +662,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                     (unfreshen_patterncaseenv (D := Term (wmatchvar w0 xIn pat' pc)) n pat pc (wmatchvar_patternvars pc)))).
       #[global] Arguments new_pattern_match_var [σ x] pat [w] xIn : rename.
 
-      Definition new_pattern_match' {σ} (pat : @Pattern N σ) :
+      Definition new_pattern_match' {σ} (pat : Pattern (N:=N) σ) :
         ⊢ STerm σ -> SPureSpec (SMatchResult pat) :=
         fun w0 scr =>
           match scr with
@@ -671,7 +671,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           end pat.
       #[global] Arguments new_pattern_match' {σ} pat [w] t.
 
-      Fixpoint new_pattern_match {σ} (pat : @Pattern N σ) :
+      Fixpoint new_pattern_match {σ} (pat : Pattern (N:=N) σ) :
         ⊢ WTerm σ -> SPureSpec (SMatchResult pat) :=
         fun w0 : World =>
           match pat as p in (Pattern t)

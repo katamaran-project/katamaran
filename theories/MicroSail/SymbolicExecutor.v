@@ -372,7 +372,7 @@ Module Type SymbolicExecOn
 
     Section PatternMatching.
 
-      Definition demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) :
+      Definition demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : Pattern (N:=N) σ) :
         ⊢ STerm σ -> SStoreSpec Γ Γ (SMatchResult pat) :=
         fun w0 t Φ δ h =>
           SPureSpec.demonic_pattern_match n pat t

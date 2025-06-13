@@ -96,7 +96,7 @@ Module Type WorldsOn
       {| wctx := (wctx w - x∷σ); wco := subst (wco w) (sub_single xIn t) |}.
     Global Arguments wsubst w x {σ xIn} t.
 
-    Definition wmatch (w : World) {σ} (s : Term w σ) (p : @Pattern LVar σ)
+    Definition wmatch (w : World) {σ} (s : Term w σ) (p : Pattern (N:=LVar) σ)
       (pc : PatternCase p) : World :=
       let Δ   : LCtx           := PatternCaseCtx pc in
       let w1  : World          := wcat w Δ in
@@ -107,14 +107,14 @@ Module Type WorldsOn
       wformula (wcat w Δ) F1.
 
     Definition wmatchvar_patternvars {Σ : LCtx} {x σ} {xIn : (x∷σ ∈ Σ)%katamaran}
-      {p : @Pattern LVar σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) ((Σ ▻▻ PatternCaseCtx pc) - x∷σ) :=
+      {p : Pattern (N:=LVar) σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) ((Σ ▻▻ PatternCaseCtx pc) - x∷σ) :=
       let Δ   : LCtx           := PatternCaseCtx pc in
       let Σ1  : LCtx              := Σ ▻▻ Δ in
       let eq : ((Σ ▻▻ Δ) - x∷σ) = (Σ - x∷σ ▻▻ Δ) := ctx.remove_in_cat_left xIn in
       let ts  : Sub Δ (Σ - x∷σ ▻▻ Δ) := sub_cat_right Δ in
       eq_rect (Σ - x∷σ ▻▻ Δ) (fun Σ => Sub Δ Σ) ts ((Σ ▻▻ Δ) - x∷σ) (eq_sym eq).
 
-    Definition wmatchvar (w : World) {x σ} (xIn : (x∷σ ∈ w)%katamaran) (p : @Pattern LVar σ)
+    Definition wmatchvar (w : World) {x σ} (xIn : (x∷σ ∈ w)%katamaran) (p : Pattern (N:=LVar) σ)
       (pc : PatternCase p) : World :=
       let Δ   : LCtx           := PatternCaseCtx pc in
       let w1  : World          := wcat w Δ in
@@ -160,7 +160,7 @@ Module Type WorldsOn
       | tri_cons x t ν12 => fun ν => tri_cons x t (tri_comp ν12 ν)
       end.
 
-    Definition sub_wmatch_patctx {w : World} {σ} {s : Term w σ} {p : @Pattern LVar σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) (wmatch w s p pc) :=
+    Definition sub_wmatch_patctx {w : World} {σ} {s : Term w σ} {p : Pattern (N:=LVar) σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) (wmatch w s p pc) :=
       sub_cat_right (PatternCaseCtx pc).
 
     Fixpoint sub_triangular {w1 w2} (ζ : Tri w1 w2) : Sub w1 w2 :=
@@ -369,12 +369,12 @@ Module Type WorldsOn
     Arguments acc_subst_right {w} x {σ xIn} t.
 
     Definition acc_match_right {w : World} {σ} {s : Term w σ}
-      {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatch w s p pc :=
+      {p : Pattern (N:=LVar) σ} (pc : PatternCase p) : w ⊒ wmatch w s p pc :=
       @acc_sub w (wmatch w s p pc) (sub_cat_left (PatternCaseCtx pc))
         (fun ι HCι => proj1 HCι).
 
     Definition sub_matchvar_right {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
-        {p : @Pattern LVar σ} (pc : PatternCase p) : Sub w (wmatchvar w xIn p pc) :=
+        {p : Pattern (N:=LVar) σ} (pc : PatternCase p) : Sub w (wmatchvar w xIn p pc) :=
         let Δ   : LCtx           := PatternCaseCtx pc in
         let w1  : World          := wcat w Δ in
         let t   : Term ((w ▻▻ Δ) - x∷σ) σ := pattern_match_term_reverse _ pc (wmatchvar_patternvars pc) in
@@ -385,7 +385,7 @@ Module Type WorldsOn
     Arguments sub_matchvar_right {w} {x σ xIn p} pc : simpl never.
 
     Program Definition acc_matchvar_right {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
-      {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatchvar w xIn p pc :=
+      {p : Pattern (N:=LVar) σ} (pc : PatternCase p) : w ⊒ wmatchvar w xIn p pc :=
       let Δ   : LCtx           := PatternCaseCtx pc in
       let w1  : World          := wcat w Δ in
       let t   : Term ((w ▻▻ Δ) - x∷σ) σ := pattern_match_term_reverse _ pc (wmatchvar_patternvars pc) in

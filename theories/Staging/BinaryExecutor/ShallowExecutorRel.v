@@ -148,7 +148,7 @@ Module Type ShallowExecRelOn
     
     Definition MatchResultRel (N : Set) (σ : Ty) (pat : Pattern σ) : Type := {c : PatternCase pat & @NamedEnv N Ty RelVal (PatternCaseCtx c)}.
 
-    Definition demonic_pattern_match_rel_pure {N σ} (pat : @Pattern N σ)
+    Definition demonic_pattern_match_rel_pure {N σ} (pat : Pattern (N:=N) σ)
       (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
       match v with
       | SyncVal _ v => '(existT pc vals) <- CPureSpec.demonic_pattern_match pat v ;;
@@ -161,7 +161,7 @@ Module Type ShallowExecRelOn
       end.
       #[global] Arguments demonic_pattern_match_rel_pure {N σ} pat v.
 
-      #[export] Instance mon_demonic_pattern_match_rel_pure {N σ} (pat : @Pattern N σ) v :
+      #[export] Instance mon_demonic_pattern_match_rel_pure {N σ} (pat : Pattern (N:=N) σ) v :
         Monotonic (MPureSpec eq) (@demonic_pattern_match_rel_pure _ _ pat v).
       Proof. destruct v; typeclasses eauto. Qed.
 
@@ -622,12 +622,12 @@ Module Type ShallowExecRelOn
 
       Import CPureSpecAdditions.
       
-      Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : RelVal σ) :
+      Definition demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ) :
         CStoreSpecRel Γ Γ (MatchResultRel pat) :=
         lift_purespecrel (CPureSpecAdditions.demonic_pattern_match_rel_pure pat v).
       #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
 
-      (* Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : RelVal σ) *)
+      (* Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ) *)
       (*   (Φ : MatchResultRel pat -> CStoreRel Γ -> SCHeapRel -> Prop) (δ : CStoreRel Γ) (h : SCHeapRel) : *)
       (*   demonic_pattern_match pat v Φ δ h <-> Φ (pattern_match_val pat v) δ h. *)
       (* Proof. *)

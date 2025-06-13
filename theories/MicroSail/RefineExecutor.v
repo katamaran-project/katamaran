@@ -368,7 +368,7 @@ Module RefineExecOn
     Section PatternMatching.
       Import logicalrelation.
 
-      Lemma refine_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) {w} :
+      Lemma refine_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : Pattern (N:=N) σ) {w} :
         ⊢ ℛ⟦RVal σ -> RStoreSpec Γ Γ (RMatchResult pat)⟧
             (CStoreSpec.demonic_pattern_match pat)
             (SStoreSpec.demonic_pattern_match (w := w) n pat).
@@ -385,7 +385,7 @@ Module RefineExecOn
     Section PatternMatchingCompatLemmas.
       Import logicalrelation.
 
-      #[export] Instance refine_compat_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : @Pattern N σ) {w} :
+      #[export] Instance refine_compat_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : Pattern (N:=N) σ) {w} :
         RefineCompat (RVal σ -> RStoreSpec Γ Γ (RMatchResult pat)) (CStoreSpec.demonic_pattern_match pat) w (SStoreSpec.demonic_pattern_match (w := w) n pat) _ :=
         MkRefineCompat (refine_demonic_pattern_match n pat).
     End PatternMatchingCompatLemmas.
