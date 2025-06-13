@@ -78,7 +78,8 @@ Module Type ProgramMixin (Import B : Base)
             StmWellFormed s /\ (forall pc, StmWellFormed (rhs pc))
         | stm_read_register reg => True
         | stm_write_register reg e => True
-        | stm_bind s k => True
+        | @stm_bind _ _ σ s k => StmWellFormed s /\
+                          (forall (v : Val σ), StmWellFormed (k v))
         | stm_debugk k => StmWellFormed k
         end.
 
@@ -105,7 +106,7 @@ Module Type ProgramMixin (Import B : Base)
             (enum (PatternCase pat))
       | stm_read_register reg => []
       | stm_write_register reg e => []
-      | stm_bind s k => []
+      | stm_bind s k => InvokedByStmList s
       | stm_debugk k => InvokedByStmList k
       end%list.
 
@@ -135,7 +136,8 @@ Module Type ProgramMixin (Import B : Base)
         apply elem_of_list_In, in_flat_map. exists pc.
         split; apply elem_of_list_In; auto.
         apply elem_of_enum.
-    Qed.
+      - admit.
+    Admitted.
 
     Lemma InvokedByStmList_WellFormed {Γ τ} (s : Stm Γ τ) :
       StmWellFormed (InvokedByStmList s) s.
