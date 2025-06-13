@@ -41,18 +41,47 @@ Module Type ProgramMixin (Import B : Base)
   (Import FDecl : FunDecl B)
   (Import FDK : FunDefKit B FDecl).
 
+  (* We use callgraphs of Sail programs to define a very coarse termination
+     metric on functions, e.g. all non-recursive functions or said differently
+     all functions not on a loop in the call graph are terminating. This is used
+     for reasoning about programs with the total weakest preconditions.
+
+     The call graph however represents terminating and non-terminating
+     functions. Terminating functions are then singled out using an
+     accessibility predicate. *)
   Module Import callgraph.
 
+    (* Each function is a node in the call graph. Note that functions
+       parameterized at the meta-level are different nodes, i.e. one node
+       for each possible instantiation of the meta-parameters. Call graphs
+       are representation using an association lists per node.
+
+       To instantiate the [Program] module the user has to provide a standalone
+       definition of a call graph, i.e. that is a priori not linked to the
+       function definitions. We then also ask the user to provide a proof
+       that the two are consistent (well-formed). This setup ensures that we
+       can support all of the source language features, including [stm_bind], in
+       case we ever need it.
+
+       The user provided call graph is not enforced to be precise, i.e. the
+       adjacency list for a node may contain more functions than are called in
+       reality. This is a sound overapproximation. Or in other words, the
+       adjacency list defines an upper bound of functions that may be called. *)
     Notation Node := {Δ & {τ & 𝑭 Δ τ}}.
     Notation Nodes := (list Node).
     Definition CallGraph : Set := Node -> Nodes.
 
+    (* We turn the edges in the callgraph into a relation. This says [f1] may
+       be called by [f2]. *)
     Definition InvokedBy (g : CallGraph) (f1 f2 : Node) : Prop :=
       f1 ∈ g f2.
 
+    (* Starting from node [f] the [InvokedBy] relation is Noetherian. *)
     Class Accessible (g : CallGraph) (f : Node) : Prop :=
       accessible : Acc (InvokedBy g) f.
 
+    (* We can prove accessibility of a function from the accessibility of all
+       of its adacent functions. *)
     Lemma accessible_intro (g : CallGraph) (f : Node) :
       List.Forall (Accessible g) (g f) -> Accessible g f.
     Proof. rewrite Forall_forall. now constructor. Qed.
@@ -60,6 +89,8 @@ Module Type ProgramMixin (Import B : Base)
     Section WithNodes.
       Context (fs : Nodes).
 
+      (* This predicate denotes that a statement respects the upper bound [fs]
+         for all of the function calls it contains. *)
       Fixpoint StmWellFormed {Δ τ} (s : Stm Δ τ) : Prop :=
         match s with
         | stm_val _ v => True
@@ -85,6 +116,15 @@ Module Type ProgramMixin (Import B : Base)
 
     End WithNodes.
 
+    (* This function calculates the list of functions called from a statement.
+       This cannot look into [stm_bind], hence we use a dummy value. Duplicates
+       are currently not removed, since that would require decidable equality
+       of function names [𝑭], which would probably block on some meta-variable
+       for polymorphic functions. Instead we allow duplicates, of which there
+       are probably very few in practice.
+
+       This function is used to generically calculate a (precise) call graph for
+       a bindfree program below. *)
     Fixpoint InvokedByStmList {Γ τ} (s : Stm Γ τ) : Nodes :=
       match s with
       | stm_val _ v => []
@@ -106,7 +146,7 @@ Module Type ProgramMixin (Import B : Base)
             (enum (PatternCase pat))
       | stm_read_register reg => []
       | stm_write_register reg e => []
-      | stm_bind s k => InvokedByStmList s
+      | stm_bind s k => [] (* dummy *)
       | stm_debugk k => InvokedByStmList k
       end%list.
 
@@ -118,6 +158,7 @@ Module Type ProgramMixin (Import B : Base)
     Proof.
       rewrite Is_true_true.
       induction s; cbn; rewrite <- ?andb_lazy_alt; intros Hbindfree fs Hsub;
+        try discriminate; (* bindfree *)
         repeat
           match goal with
           | H : ?a && ?b = true |- _ =>
@@ -142,23 +183,29 @@ Module Type ProgramMixin (Import B : Base)
         + intros h hIn. apply Hsub1, elem_of_list_In, in_flat_map.
           exists pc. split; apply elem_of_list_In; auto.
           apply elem_of_enum.
-      - discriminate.
     Qed.
 
+    (* For bindfree statements, the [InvokedByStmList] function correctly
+       calculates an upper bound of the calls appearing in a statement. *)
     Lemma InvokedByStmList_WellFormed {Γ τ} (s : Stm Γ τ) :
       stm_bindfree s -> StmWellFormed (InvokedByStmList s) s.
     Proof. intros; now apply InvokedByStmList_WellFormed_aux. Qed.
 
+    (* Finally, this predicate enforces compatibility of the call graph with
+       the function definitions in [funDef], i.e. the call graph correctly
+       stipulates upper bounds for each defined function. *)
     Definition CallGraphWellFormed (g : CallGraph) : Prop :=
       forall Δ τ (f : 𝑭 Δ τ),
         StmWellFormed (g (existT _ (existT _ f))) (FunDef f).
 
   End callgraph.
 
-  (* TODO: remove duplicates from calculated list *)
+  (* A generic definition of a call graph calculation that can be used for
+     bind-free programs. *)
   Definition generic_call_graph : CallGraph :=
     fun '(existT _ (existT _ f)) => InvokedByStmList (FunDef f).
 
+  (* For bind-free programs the generic computation is correct. *)
   Lemma generic_call_graph_wellformed
     (H: forall Δ τ (f : 𝑭 Δ τ), stm_bindfree (FunDef f)) :
     CallGraphWellFormed generic_call_graph.
@@ -172,8 +219,15 @@ Module Type WellFoundedKit (B : Base) (Import FDecl : FunDecl B)
 
   Import callgraph.
 
+  (* The user-provided call graph and the proof of well-formedness w.r.t the
+     function definitions. *)
   Parameter 𝑭_call_graph : CallGraph.
   Parameter 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+
+  (* The user can single out a subset of the functions to be available for
+     total weakest pre reasoning, in which case the user also has to provide
+     evidence for termination in form of a coarse accessibility witness
+     of the funcition in the call graph. *)
   Parameter 𝑭_accessible :
     forall Δ τ (f : 𝑭 Δ τ),
       option (Accessible 𝑭_call_graph (existT _ (existT _ f))).
