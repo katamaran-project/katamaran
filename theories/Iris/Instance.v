@@ -1098,16 +1098,17 @@ Module IrisInstanceWithContracts
           (Q : Val σ -> CStore Γ -> iProp Σ) :
           CEnv f = Some c ->
           CTriple P c (evals es δ) (fun v => Q v δ) ->
-          AccessibleFun f ->
+          Accessible 𝑭_call_graph (existT _ (existT _ f)) ->
           ⊢ TValidContractEnvSem fuel CEnv -∗
             semTTriple δ P (stm_call f es) Q.
         Proof.
           iIntros (ceq ctrip Hwff) "cenv".
           iApply iris_rule_tstm_call_one; eauto.
-          (* iSpecialize ("cenv" $! _ _ f Hwff).
+          iSpecialize ("cenv" $! _ Hwff).
+          unfold Foo.
+          simpl.
           now rewrite ceq.
-        Qed. *) 
-          Admitted.
+        Qed.
 
         Lemma iris_rule_tstm_call_frame {Γ} (δ : CStore Γ)
           (Δ : PCtx) (δΔ : CStore Δ) (τ : Ty) (s : Stm Δ τ)
