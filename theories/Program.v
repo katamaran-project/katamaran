@@ -67,9 +67,19 @@ Module Type ProgramMixin (Import B : Base)
        adjacency list for a node may contain more functions than are called in
        reality. This is a sound overapproximation. Or in other words, the
        adjacency list defines an upper bound of functions that may be called. *)
-    Notation Node := {Δ & {τ & 𝑭 Δ τ}}.
+    Record Node : Set := mkNode
+      { Δ : PCtx
+      ; τ : Ty
+      ; f : 𝑭 Δ τ }.
+    Arguments mkNode {Δ τ} f.
+
+    #[global] Coercion mkNode : 𝑭 >-> Node.
+
     Notation Nodes := (list Node).
     Definition CallGraph : Set := Node -> Nodes.
+
+    Instance 𝑭_elem_of : forall {Δ τ}, ElemOf (𝑭 Δ τ) Nodes :=
+      fun _ _ => @elem_of_list Node.
 
     (* We turn the edges in the callgraph into a relation. This says [f1] may
        be called by [f2]. *)
@@ -98,7 +108,7 @@ Module Type ProgramMixin (Import B : Base)
         | stm_let x σ s1 s2 => StmWellFormed s1 /\ StmWellFormed s2
         | stm_block δ s => StmWellFormed s
         | stm_assign xInΓ s => StmWellFormed s
-        | stm_call f2 es => (existT _ (existT _ f2)) ∈ fs
+        | stm_call f2 es => f2 ∈ fs
         | stm_call_frame δ s => StmWellFormed s
         | stm_foreign f es => True
         | stm_lemmak l es k => StmWellFormed k
@@ -132,7 +142,7 @@ Module Type ProgramMixin (Import B : Base)
       | stm_let x σ s1 s2 => InvokedByStmList s1 ++ InvokedByStmList s2
       | stm_block δ s => InvokedByStmList s
       | stm_assign xInΓ s => InvokedByStmList s
-      | stm_call f2 es => [existT _ (existT _ f2)]
+      | stm_call f2 es => [mkNode f2]
       | stm_call_frame δ s => InvokedByStmList s
       | stm_foreign f es => []
       | stm_lemmak l es k => InvokedByStmList k
@@ -196,14 +206,14 @@ Module Type ProgramMixin (Import B : Base)
        stipulates upper bounds for each defined function. *)
     Definition CallGraphWellFormed (g : CallGraph) : Prop :=
       forall Δ τ (f : 𝑭 Δ τ),
-        StmWellFormed (g (existT _ (existT _ f))) (FunDef f).
+        StmWellFormed (g f) (FunDef f).
 
   End callgraph.
 
   (* A generic definition of a call graph calculation that can be used for
      bind-free programs. *)
   Definition generic_call_graph : CallGraph :=
-    fun '(existT _ (existT _ f)) => InvokedByStmList (FunDef f).
+    fun '(mkNode f) => InvokedByStmList (FunDef f).
 
   (* For bind-free programs the generic computation is correct. *)
   Lemma generic_call_graph_wellformed
@@ -230,7 +240,7 @@ Module Type WellFoundedKit (B : Base) (Import FDecl : FunDecl B)
      of the funcition in the call graph. *)
   Parameter 𝑭_accessible :
     forall Δ τ (f : 𝑭 Δ τ),
-      option (Accessible 𝑭_call_graph (existT _ (existT _ f))).
+      option (Accessible 𝑭_call_graph f).
 
 End WellFoundedKit.
 

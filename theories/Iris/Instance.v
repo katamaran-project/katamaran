@@ -1043,22 +1043,13 @@ Module IrisInstanceWithContracts
 
     Section TotalTriple.
         Definition Foo (n : Node) : iProp Σ :=
-          match CEnv (projT2 (projT2 n)) with
-          | Some c => TValidContractSem (FunDef (projT2 (projT2 n))) c
+          match CEnv (f n) with
+          | Some c => TValidContractSem (FunDef (f n)) c
           | None => True
           end.
 
       Definition TValidContractEnvN (fuel : nat) (cenv : SepContractEnv) (n : Node) : iProp Σ :=
-        let f := projT2 (projT2 n) in
-        (⌜ Accessible 𝑭_call_graph n ⌝ -∗ Foo n).
-
-      Definition TValidContractEnvF (fuel : nat) { σs σ } (cenv : SepContractEnv) (f : 𝑭 σs σ) : iProp Σ :=
-        (⌜AccessibleFun f⌝ -∗
-        match cenv σs σ f with
-        | Some c => TValidContractSem (FunDef f) c
-        | None => True
-        end)%I.
-      Arguments TValidContractEnvF fuel {σs σ} cenv f : simpl nomatch.
+        ⌜ Accessible 𝑭_call_graph n ⌝ -∗ Foo n.
 
       Definition TValidContractEnvSem (fuel : nat) (cenv : SepContractEnv) : iProp Σ :=
         ∀ (n : Node), TValidContractEnvN fuel cenv n.
@@ -1098,7 +1089,7 @@ Module IrisInstanceWithContracts
           (Q : Val σ -> CStore Γ -> iProp Σ) :
           CEnv f = Some c ->
           CTriple P c (evals es δ) (fun v => Q v δ) ->
-          Accessible 𝑭_call_graph (existT _ (existT _ f)) ->
+          Accessible 𝑭_call_graph f ->
           ⊢ TValidContractEnvSem fuel CEnv -∗
             semTTriple δ P (stm_call f es) Q.
         Proof.
@@ -1211,8 +1202,7 @@ Module IrisInstanceWithContracts
           - iApply iris_rule_tstm_call_one; eauto.
             cbn in Hwf.
             unfold Foo.
-            iSpecialize ("IH" $! (@existT _ (fun Δ => {τ & 𝑭 Δ τ}) _ (existT _ f))).
-            (* TODO: record for nodes *)
+            iSpecialize ("IH" $! f0).
             cbn. rewrite H.
             iApply "IH". iPureIntro. constructor. apply Hwf.
           - iApply iris_rule_tstm_call_inline.
@@ -1253,20 +1243,20 @@ Module IrisInstanceWithContracts
         Proof.
           iIntros (fuel extSem lemSem cenv n Hwf).
           apply Coq.Wellfounded.Transitive_Closure.Acc_clos_trans in Hwf.
-          iInduction Hwf as [[Δ [τ f]] _ IH].
+          iInduction Hwf as [n _ IH].
           unfold Foo at 2.
           destruct (CEnv _) as [c|] eqn:Ec; last trivial.
           specialize (cenv _ _ _ _ Ec).
           unfold TValidContract in cenv.
-          generalize (𝑭_call_graph_wellformed _ _ f).
+          generalize (𝑭_call_graph_wellformed _ _ (f n)).
           cbn in c, cenv. cbn.
-          generalize (@existT _ (fun Δ => {τ & 𝑭 Δ τ}) Δ (existT τ f)).
           generalize cenv.
-          generalize (FunDef f).
+          generalize (FunDef (f n)).
           intros s cenv'.
-          iIntros (n Hwf).
+          iIntros (Hwf).
           destruct c. iIntros (ι).
           specialize (cenv' ι). cbn in cenv'.
+          destruct n. cbn.
           iApply sound_tstm; eauto.
         Qed.
     End TotalTriple.
