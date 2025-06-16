@@ -1038,18 +1038,30 @@ Module IrisInstanceWithContracts
         Qed.
     End PartialTriple.
 
+    Import callgraph.
+    Notation AccessibleFun f := (Accessible 𝑭_call_graph (existT _ (existT _ f))).
+
     Section TotalTriple.
+        Definition Foo (n : Node) : iProp Σ :=
+          match CEnv (projT2 (projT2 n)) with
+          | Some c => TValidContractSem (FunDef (projT2 (projT2 n))) c
+          | None => True
+          end.
+
+      Definition TValidContractEnvN (fuel : nat) (cenv : SepContractEnv) (n : Node) : iProp Σ :=
+        let f := projT2 (projT2 n) in
+        (⌜ Accessible 𝑭_call_graph n ⌝ -∗ Foo n).
+
       Definition TValidContractEnvF (fuel : nat) { σs σ } (cenv : SepContractEnv) (f : 𝑭 σs σ) : iProp Σ :=
-        (⌜Wf.Acc (InvokedByFunPackage fuel) (existT _ (existT _ f))⌝ -∗
+        (⌜AccessibleFun f⌝ -∗
         match cenv σs σ f with
         | Some c => TValidContractSem (FunDef f) c
         | None => True
         end)%I.
       Arguments TValidContractEnvF fuel {σs σ} cenv f : simpl nomatch.
 
-
       Definition TValidContractEnvSem (fuel : nat) (cenv : SepContractEnv) : iProp Σ :=
-        ∀ σs σ (f : 𝑭 σs σ), TValidContractEnvF fuel cenv f.
+        ∀ (n : Node), TValidContractEnvN fuel cenv n.
 
         Definition TForeignSem :=
           ∀ (Δ : PCtx) (τ : Ty) (f : 𝑭𝑿 Δ τ),
@@ -1086,15 +1098,16 @@ Module IrisInstanceWithContracts
           (Q : Val σ -> CStore Γ -> iProp Σ) :
           CEnv f = Some c ->
           CTriple P c (evals es δ) (fun v => Q v δ) ->
-          Wf.Acc (InvokedByFunPackage fuel) (existT _ (existT _ f)) ->
+          AccessibleFun f ->
           ⊢ TValidContractEnvSem fuel CEnv -∗
             semTTriple δ P (stm_call f es) Q.
         Proof.
           iIntros (ceq ctrip Hwff) "cenv".
           iApply iris_rule_tstm_call_one; eauto.
-          iSpecialize ("cenv" $! _ _ f Hwff).
+          (* iSpecialize ("cenv" $! _ _ f Hwff).
           now rewrite ceq.
-        Qed.
+        Qed. *) 
+          Admitted.
 
         Lemma iris_rule_tstm_call_frame {Γ} (δ : CStore Γ)
           (Δ : PCtx) (δΔ : CStore Δ) (τ : Ty) (s : Stm Δ τ)
@@ -1140,33 +1153,24 @@ Module IrisInstanceWithContracts
           iApply "consr". by iApply lemSem.
         Qed.
 
-        (* TODO: the user would have to provide this, we can only prove this
-                 lemma when we know the concrete functions/callgraph. *)
-        Lemma wf_InvokedByFunPackage : well_founded (InvokedByFunPackage 0).
-        Proof.
-          unfold well_founded.
-          intros caller. constructor. intros callee Hinvok.
-        Admitted. (* Admit, see note above. Leave it here to continue with the proofs below *)
-
         Ltac solve_fuel fuel :=
           destruct fuel;
           cbn in *;
           try contradiction;
           auto.
 
-        Lemma sound_tstm
-          {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
+        Lemma sound_tstm {Γ} {τ} (s : Stm Γ τ) (n : Node) {δ : CStore Γ} :
           forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ) (fuel : nat),
-          TForeignSem ->
-          LemmaSem ->
-          # fuel ⦃ PRE ⦄ s ; δ ⦃ POST ⦄ ->
-          (forall Δ σ (f : 𝑭 Δ σ), InvokedByStmWithFuel fuel f s -> Wf.Acc (InvokedByFunPackage fuel) (existT _ (existT _ f))) ->
-          (* DIFF: only need to know the contract is valid for functions called by s (not for all functions such as in sound_tstm_original) *)
-          ⊢ (□ (∀ σs σ (f : 𝑭 σs σ), ⌜InvokedByStmWithFuel fuel f s⌝ -∗ TValidContractEnvF fuel CEnv f) -∗
-             semTTriple δ PRE s POST)%I.
+            TForeignSem ->
+            LemmaSem ->
+            # fuel ⦃ PRE ⦄ s ; δ ⦃ POST ⦄ ->
+            StmWellFormed (𝑭_call_graph n) s ->
+            ⊢ □ (∀ x : Node, ⌜Relation_Operators.clos_trans Node (InvokedBy 𝑭_call_graph) x n⌝ -∗
+                                Foo x) -∗
+              semTTriple δ PRE s POST.
         Proof.
-          iIntros (PRE POST fuel extSem lemSem triple Haccf) "#vcenv".
-          iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips" forall "vcenv".
+          iIntros (PRE POST fuel extSem lemSem triple Hwf) "#IH".
+          iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips" forall (n Hwf) "IH".
           - iApply iris_rule_tconsequence; eauto.
             now iApply "trips".
           - iApply iris_rule_tframe.
@@ -1182,97 +1186,63 @@ Module IrisInstanceWithContracts
           - iApply iris_rule_tstm_exp.
             by iApply H.
           - iApply iris_rule_tstm_let.
-            + iApply "trips1".
-              iPureIntro.
-              intros σs σ0 f Hfs.
-              eapply Haccf. solve_fuel fuel.
-              iIntros "!>" (σs σ0 f Hinvok).
-              iApply "vcenv". iPureIntro. solve_fuel fuel.
-            + iIntros (v δ'). iApply "trips".
-              iPureIntro.
-              intros σs σ0 f Hfs.
-              eapply Haccf; solve_fuel fuel; now right.
-              iIntros "!>" (σs σ0 f Hinvok).
-              iApply "vcenv". iPureIntro. solve_fuel fuel.
+            + iApply ("trips1" with "[%] IH").
+              apply Hwf.
+            + iIntros (v δ'). iApply ("trips" with "[%] IH").
+              apply Hwf.
           - iApply iris_rule_tstm_block.
-            iApply "trips". iPureIntro. intros. apply Haccf. solve_fuel fuel.
-            iIntros "!>" (σs σ0 f Hinvok).
-            iApply "vcenv". iPureIntro. solve_fuel fuel.
+            iApply ("trips" with "[%] IH").
+            apply Hwf.
           - iApply iris_rule_tstm_seq.
-            + iApply "trips1".
-              iPureIntro. intros Δ σ0 f Hf.
-              eapply Haccf; solve_fuel fuel; now left.
-              iIntros "!>" (σs σ0 f Hinvok).
-              iApply "vcenv". iPureIntro. solve_fuel fuel.
-            + iIntros (v δ').
-              iApply "trips".
-              iPureIntro. intros Δ σ0 f Hf.
-              eapply Haccf; solve_fuel fuel.
-              iIntros "!>" (σs σ0 f Hinvok).
-              iApply "vcenv". iPureIntro. solve_fuel fuel.
-          - iApply iris_rule_tstm_assertk.
-            iIntros (He1). iApply "trips".
-            done. iPureIntro. intros. solve_fuel fuel.
-            iIntros "!>" (σs σ0 f Hinvok).
-            iApply "vcenv". iPureIntro. solve_fuel fuel.
+            + iApply ("trips1" with "[%] IH").
+              apply Hwf.
+            + iIntros (v δ'). iApply ("trips" with "[%] IH").
+              apply Hwf.
+          - iApply iris_rule_tstm_assertk. iIntros (Heval).
+            iApply ("trips" $! Heval with "[%] IH").
+            apply Hwf.
           - iApply iris_rule_tstm_fail.
           - iApply iris_rule_tstm_read_register.
           - now iApply iris_rule_tstm_write_register.
-          - iApply iris_rule_tstm_assign. iApply "trips".
-            iPureIntro. intros. solve_fuel fuel.
-            iIntros "!>" (σs σ0 f Hinvok).
-            iApply "vcenv". iPureIntro. solve_fuel fuel.
+          - iApply iris_rule_tstm_assign.
+            iApply ("trips" with "[%] IH").
+            apply Hwf.
           - iApply iris_rule_tstm_call_one; eauto.
-            iSpecialize ("vcenv" $! _ _ f).
-            unfold TValidContractEnvF. rewrite H.
-            iApply "vcenv".
-            + iPureIntro. destruct fuel; cbn; now left.
-            + iPureIntro. apply Haccf. destruct fuel; cbn; now left.
+            cbn in Hwf.
+            unfold Foo.
+            iSpecialize ("IH" $! (@existT _ (fun Δ => {τ & 𝑭 Δ τ}) _ (existT _ f))).
+            (* TODO: record for nodes *)
+            cbn. rewrite H.
+            iApply "IH". iPureIntro. constructor. apply Hwf.
           - iApply iris_rule_tstm_call_inline.
             iApply "trips".
-            iPureIntro.
-            iIntros (σs σ f2 Hff2).
-            apply wf_InvokedByFunPackage_S_fuel.
-            apply Haccf. now right.
-            iIntros "!>" (σs σ f' Hinvok).
-            (* iApply "vcenv". iPureIntro. solve_fuel fuel'. *)
-            iSpecialize ("vcenv" $! _ _ f' with "[]").
-            { iPureIntro. cbn. auto. }
-            unfold TValidContractEnvF. iIntros (Haccf').
-            destruct (CEnv f') eqn:Ef'; auto.
-            iApply "vcenv". iPureIntro.
-            apply Haccf. cbn. now right.
-          - iApply iris_rule_tstm_call_frame. iApply "trips".
-            iPureIntro. intros. apply Haccf. solve_fuel fuel.
-            iIntros "!>" (σs σ f Hinvok). iApply "vcenv". iPureIntro. solve_fuel fuel.
+            + iPureIntro.
+              apply 𝑭_call_graph_wellformed.
+            + iClear "trips".
+              iIntros "!>" (n' Hrel).
+              iApply "IH". iPureIntro.
+              cbn [StmWellFormed] in Hwf.
+              eapply clos_trans_stepr; eauto.
+          - iApply iris_rule_tstm_call_frame.
+            iApply ("trips" with "[%] IH").
+            apply Hwf.
           - now iApply iris_rule_tstm_foreign.
           - iApply iris_rule_tstm_lemmak; eauto.
-            iApply "trips". iPureIntro.  intros Δ0 σ f Hf.
-            apply Haccf. solve_fuel fuel.
-            iIntros "!>" (σs σ f' Hinvok).
-            iApply "vcenv". iPureIntro. solve_fuel fuel.
+            iApply ("trips" with "[%] IH").
+            apply Hwf.
           - iApply iris_rule_tstm_bind.
-            + iApply "trips1". iPureIntro.
-              intros. apply Haccf. solve_fuel fuel.
-              iIntros "!>" (σs σ0 f Hinvok).
-              iApply "vcenv". iPureIntro. solve_fuel fuel.
-            + iIntros (v ?). iApply "trips".
-              iPureIntro. intros. apply Haccf. solve_fuel fuel. right. now exists v.
-              right. now exists v.
-              iIntros "!>" (σs σ0 f Hinvok).
-              iApply "vcenv". iPureIntro. solve_fuel fuel; right; eexists; eassumption.
-          - iApply iris_rule_tstm_debugk. iApply "trips".
-            iPureIntro. intros. apply Haccf. solve_fuel fuel.
-            iIntros "!>" (σs σ0 f Hinvok).
-            iApply "vcenv". iPureIntro. solve_fuel fuel.
+            + iApply ("trips1" with "[%] IH").
+              apply Hwf.
+            + iIntros (v__σ δ'). iApply ("trips" with "[%] IH").
+              apply Hwf.
+          - iApply iris_rule_tstm_debugk.
+            iApply ("trips" with "[%] IH").
+            apply Hwf.
           - iApply iris_rule_tstm_pattern_match.
-            + iApply "trips1". iPureIntro. intros. apply Haccf. solve_fuel fuel.
-              iIntros "!>" (σs σ0 f Hinvok). iApply "vcenv".
-              iPureIntro. solve_fuel fuel.
-            + iIntros (pc δpc δΓ1). iApply "trips". iPureIntro.
-              intros. apply Haccf. solve_fuel fuel; right; now exists pc.
-              iIntros "!>" (σs σ0 f Hinvok). iApply "vcenv".
-              iPureIntro. solve_fuel fuel; right; eexists; eassumption.
+            + iApply ("trips1" with "[%] IH").
+              apply Hwf.
+            + iIntros (pc δpc δΓ1). iApply ("trips" with "[%] IH").
+              apply Hwf.
         Qed.
 
         Lemma tsound :
@@ -1280,25 +1250,23 @@ Module IrisInstanceWithContracts
             TForeignSem -> LemmaSem -> TValidContractCEnv fuel ->
             ⊢ TValidContractEnvSem fuel CEnv.
         Proof.
-          iIntros (fuel extSem lemSem cenv σs τ f).
-          unfold TValidContractEnvF.
-          destruct (CEnv f) eqn:Hcf; last trivial.
-          iIntros "%Hwf".
-          iStopProof.
-          remember (existT σs (existT τ f)) as x.
-          generalize dependent τ.
-          generalize dependent σs.
-          induction Hwf as [? Hacc IH].
-          intros σs τ f s Hcf ?; subst.
-          rewrite /TValidContractSem. destruct s as [lvars store PRE res POST].
-          iIntros "_ %ι".
-          rewrite /ValidContractCEnv in cenv.
-          specialize (cenv _ _ f _ Hcf ι). cbn in cenv.
-          iApply (sound_tstm extSem lemSem cenv); auto.
-          iIntros "!>" (Δ2 σ2 f2 Hinvok) "%Haccf2".
-          destruct (CEnv f2) eqn:Ef2; auto.
-          iApply IH; eauto.
-          apply Hinvok.
+          iIntros (fuel extSem lemSem cenv n Hwf).
+          apply Coq.Wellfounded.Transitive_Closure.Acc_clos_trans in Hwf.
+          iInduction Hwf as [[Δ [τ f]] _ IH].
+          unfold Foo at 2.
+          destruct (CEnv _) as [c|] eqn:Ec; last trivial.
+          specialize (cenv _ _ _ _ Ec).
+          unfold TValidContract in cenv.
+          generalize (𝑭_call_graph_wellformed _ _ f).
+          cbn in c, cenv. cbn.
+          generalize (@existT _ (fun Δ => {τ & 𝑭 Δ τ}) Δ (existT τ f)).
+          generalize cenv.
+          generalize (FunDef f).
+          intros s cenv'.
+          iIntros (n Hwf).
+          destruct c. iIntros (ι).
+          specialize (cenv' ι). cbn in cenv'.
+          iApply sound_tstm; eauto.
         Qed.
     End TotalTriple.
   End WithSailGS.
