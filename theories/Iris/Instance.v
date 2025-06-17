@@ -1041,14 +1041,14 @@ Module IrisInstanceWithContracts
     Import callgraph.
 
     Section TotalTriple.
-        Definition Foo (n : Node) : iProp Σ :=
+        Definition HasValidContract (n : Node) : iProp Σ :=
           match CEnv (f n) with
           | Some c => TValidContractSem (FunDef (f n)) c
           | None => True
           end.
 
-      Definition TValidContractEnvN (fuel : nat) (cenv : SepContractEnv) (n : Node) : iProp Σ :=
-        ⌜ Accessible 𝑭_call_graph n ⌝ -∗ Foo n.
+      Definition TValidContractEnvN (cenv : SepContractEnv) (n : Node) : iProp Σ :=
+        ⌜ Accessible 𝑭_call_graph n ⌝ -∗ HasValidContract n.
 
       Definition TValidContractEnvSem (fuel : nat) (cenv : SepContractEnv) : iProp Σ :=
         ∀ (n : Node), TValidContractEnvN fuel cenv n.
@@ -1095,7 +1095,7 @@ Module IrisInstanceWithContracts
           iIntros (ceq ctrip Hwff) "cenv".
           iApply iris_rule_tstm_call_one; eauto.
           iSpecialize ("cenv" $! _ Hwff).
-          unfold Foo.
+          unfold HasValidContract.
           simpl.
           now rewrite ceq.
         Qed.
@@ -1157,7 +1157,7 @@ Module IrisInstanceWithContracts
             # fuel ⦃ PRE ⦄ s ; δ ⦃ POST ⦄ ->
             StmWellFormed (𝑭_call_graph n) s ->
             ⊢ □ (∀ x : Node, ⌜Relation_Operators.clos_trans Node (InvokedBy 𝑭_call_graph) x n⌝ -∗
-                                Foo x) -∗
+                                HasValidContract x) -∗
               semTTriple δ PRE s POST.
         Proof.
           iIntros (PRE POST fuel extSem lemSem triple Hwf) "#IH".
@@ -1200,7 +1200,7 @@ Module IrisInstanceWithContracts
             apply Hwf.
           - iApply iris_rule_tstm_call_one; eauto.
             cbn in Hwf.
-            unfold Foo.
+            unfold HasValidContract.
             iSpecialize ("IH" $! f0).
             cbn. rewrite H.
             iApply "IH". iPureIntro. constructor. apply Hwf.
@@ -1243,7 +1243,7 @@ Module IrisInstanceWithContracts
           iIntros (fuel extSem lemSem cenv n Hwf).
           apply Coq.Wellfounded.Transitive_Closure.Acc_clos_trans in Hwf.
           iInduction Hwf as [n _ IH].
-          unfold Foo at 2.
+          unfold HasValidContract at 2.
           destruct (CEnv _) as [c|] eqn:Ec; last trivial.
           specialize (cenv _ _ _ _ Ec).
           unfold TValidContract in cenv.
