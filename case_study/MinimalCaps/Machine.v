@@ -131,23 +131,6 @@ Section FunDeclKit.
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
   Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
   Definition 𝑳  : PCtx -> Set := Lem.
-<<<<<<< HEAD
-
-  #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
-    Proof.
-      refine (sigma_eqdec _ (fun Γ => sigma_eqdec _ (fun τ => _))).
-      intros f1 f2.
-      destruct f1 eqn:Ef1;
-        refine (match f2 with
-                | read_reg => _
-                | _ => _
-                end);
-        cbn; try intros ?; auto.
-    Defined.
-
-  Definition inline_fuel : nat := 10.
-=======
->>>>>>> termination_soundness_total_callgraph
 End FunDeclKit.
 
 Include FunDeclMixin MinCapsBase.
