@@ -221,6 +221,20 @@ Module Type ProgramMixin (Import B : Base)
     CallGraphWellFormed generic_call_graph.
   Proof. intros Δ τ f. now apply InvokedByStmList_WellFormed. Qed.
 
+  Module AccessibleTactics.
+    Ltac accessible_proof :=
+      apply callgraph.accessible_intro;
+      repeat
+        (try typeclasses eauto;
+         match goal with
+         | |- Forall ?P [] => constructor
+         | |- Forall ?P (_ :: _) => constructor
+         | |- Forall ?P ?xs =>
+             (* Do not expand typelevel computations like Nat.mul *)
+             let xs' := eval compute - [Nat.mul] in xs in
+               change (Forall P xs')
+         end).
+  End AccessibleTactics.
 End ProgramMixin.
 
 Module Type WellFoundedKit (B : Base) (Import FDecl : FunDecl B)
