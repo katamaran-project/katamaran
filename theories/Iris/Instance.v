@@ -1039,7 +1039,6 @@ Module IrisInstanceWithContracts
     End PartialTriple.
 
     Import callgraph.
-    Notation AccessibleFun f := (Accessible 𝑭_call_graph (existT _ (existT _ f))).
 
     Section TotalTriple.
         Definition Foo (n : Node) : iProp Σ :=
