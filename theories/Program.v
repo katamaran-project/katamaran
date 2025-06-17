@@ -27,6 +27,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From stdpp Require Import base finite list.
 From Katamaran Require Export
      Syntax.FunDecl
      Syntax.FunDef
@@ -36,527 +37,225 @@ From Katamaran Require Export
 Module Type FunDeclMixin (B : Base) :=
   StatementsOn B.
 
-Module Type ProgramMixin (B : Base)
+Module Type ProgramMixin (Import B : Base)
   (Import FDecl : FunDecl B)
   (Import FDK : FunDefKit B FDecl).
 
-  Definition 𝑭_eqb {Δ1 Δ2 τ1 τ2} (f1 : 𝑭 Δ1 τ1) (f2 : 𝑭 Δ2 τ2) : bool :=
-    if @Classes.eq_dec _ 𝑭_eq_dec (existT _ (existT _ f1)) (existT _ (existT _ f2))
-    then true
-    else false.
+  (* We use callgraphs of Sail programs to define a very coarse termination
+     metric on functions, e.g. all non-recursive functions or said differently
+     all functions not on a loop in the call graph are terminating. This is used
+     for reasoning about programs with the total weakest preconditions.
 
-  (* TODO: very annoying definition, but otherwise the wrong eq with existT pops up,
-           see commented out definition below
-           (we get `existT (𝑭 Δ) ...` instead of `existT Δ ...`) *)
-  (* Definition wrong {Δ1 Δ2 τ1 τ2} (f1 : 𝑭 Δ1 τ1) (f2 : 𝑭 Δ2 τ2) : Prop :=
-    existT _ (existT _ f1) = existT _ (existT _ f2).
-  Print wrong. *)
-  Definition 𝑭_eq {Δ1 Δ2 τ1 τ2} (f1 : 𝑭 Δ1 τ1) (f2 : 𝑭 Δ2 τ2) : Prop :=
-   (@existT (NCtx (@PVar B.varkit) (@Ty B.typedeclkit))
-      (fun Γ : NCtx (@PVar B.varkit) (@Ty B.typedeclkit) => {x : @Ty B.typedeclkit & 𝑭 Γ x}) Δ1
-      (@existT (@Ty B.typedeclkit) (𝑭 Δ1) τ1 f1)) =
-   (@existT (NCtx (@PVar B.varkit) (@Ty B.typedeclkit))
-      (fun Γ : NCtx (@PVar B.varkit) (@Ty B.typedeclkit) => {x : @Ty B.typedeclkit & 𝑭 Γ x}) Δ2
-      (@existT (@Ty B.typedeclkit) (𝑭 Δ2) τ2 f2)).
+     The call graph however represents terminating and non-terminating
+     functions. Terminating functions are then singled out using an
+     accessibility predicate. *)
+  Module Import callgraph.
 
-  Section InvokedByStm.
-    Variable invoke_call : forall {Δ τ1 τ2 Γ}, 𝑭 Δ τ1 -> Stm Γ τ2 -> Prop.
+    (* Each function is a node in the call graph. Note that functions
+       parameterized at the meta-level are different nodes, i.e. one node
+       for each possible instantiation of the meta-parameters. Call graphs
+       are representation using an association lists per node.
 
-    Fixpoint InvokedByStm_aux {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : Prop :=
-      match s with
-      | stm_val _ v => False
-      | stm_exp e => False
-      | stm_let x σ s1 s2 => InvokedByStm_aux f s1 \/ InvokedByStm_aux f s2
-      | stm_block δ s => InvokedByStm_aux f s
-      | stm_assign xInΓ s => InvokedByStm_aux f s
-      | stm_call f2 es => 𝑭_eq f2 f \/ invoke_call f (FunDef f2)
-      | stm_call_frame δ s => InvokedByStm_aux f s
-      | stm_foreign f es => False
-      | stm_lemmak l es k => InvokedByStm_aux f k
-      | stm_seq s k => InvokedByStm_aux f s \/ InvokedByStm_aux f k
-      | stm_assertk e1 e2 k => InvokedByStm_aux f k
-      | stm_fail _ s => False
-      | stm_pattern_match s pat rhs => InvokedByStm_aux f s \/ (exists pc, InvokedByStm_aux f (rhs pc))
-      | stm_read_register reg => False
-      | stm_write_register reg e => False
-      | stm_bind s k => InvokedByStm_aux f s \/ exists v, InvokedByStm_aux f (k v) (* Bind should not be used in the source code, we still need to handle the recursive call of InvokedBy over s, but ignore the continuation k *)
-      | stm_debugk k => InvokedByStm_aux f k
-      end.
-  End InvokedByStm.
+       To instantiate the [Program] module the user has to provide a standalone
+       definition of a call graph, i.e. that is a priori not linked to the
+       function definitions. We then also ask the user to provide a proof
+       that the two are consistent (well-formed). This setup ensures that we
+       can support all of the source language features, including [stm_bind], in
+       case we ever need it.
 
-  Section InvokedByStmBool.
-    Variable invoke_call : forall {Δ τ1 τ2 Γ}, 𝑭 Δ τ1 -> Stm Γ τ2 -> bool.
+       The user provided call graph is not enforced to be precise, i.e. the
+       adjacency list for a node may contain more functions than are called in
+       reality. This is a sound overapproximation. Or in other words, the
+       adjacency list defines an upper bound of functions that may be called. *)
+    Record Node : Set := mkNode
+      { Δ : PCtx
+      ; τ : Ty
+      ; f : 𝑭 Δ τ }.
+    Arguments mkNode {Δ τ} f.
 
-    Fixpoint InvokedByStmB_aux {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : bool :=
-      match s with
-      | stm_val _ v => false
-      | stm_exp e => false
-      | stm_let x σ s1 s2 => InvokedByStmB_aux f s1 || InvokedByStmB_aux f s2
-      | stm_block δ s => InvokedByStmB_aux f s
-      | stm_assign xInΓ s => InvokedByStmB_aux f s
-      | stm_call f2 es => 𝑭_eqb f2 f || invoke_call f (FunDef f2)
-      | stm_call_frame δ s => InvokedByStmB_aux f s
-      | stm_foreign f es => false
-      | stm_lemmak l es k => InvokedByStmB_aux f k
-      | stm_seq s k => InvokedByStmB_aux f s || InvokedByStmB_aux f k
-      | stm_assertk e1 e2 k => InvokedByStmB_aux f k
-      | stm_fail _ s => false
-      | stm_pattern_match s pat rhs =>
-          InvokedByStmB_aux f s
-          || List.existsb (fun pc => InvokedByStmB_aux f (rhs pc))
-                          (@finite.enum _ _ (B.Finite_PatternCase pat))
-      | stm_read_register reg => false
-      | stm_write_register reg e => false
-      | stm_bind s k => InvokedByStmB_aux f s
-      | stm_debugk k => InvokedByStmB_aux f k
-      end.
-  End InvokedByStmBool.
+    #[global] Coercion mkNode : 𝑭 >-> Node.
 
-  #[local] Notation List_of_𝑭 := (list ({Δ & {τ & 𝑭 Δ τ}})).
+    Notation Nodes := (list Node).
+    Definition CallGraph : Set := Node -> Nodes.
 
-  Section InvokedByStmList.
-    Import List.ListNotations.
+    Instance 𝑭_elem_of : forall {Δ τ}, ElemOf (𝑭 Δ τ) Nodes :=
+      fun _ _ => @elem_of_list Node.
 
-    Section WithInvokeCall.
-      Variable invoke_call : forall {Γ τ}, Stm Γ τ -> List_of_𝑭.
+    (* We turn the edges in the callgraph into a relation. This says [f1] may
+       be called by [f2]. *)
+    Definition InvokedBy (g : CallGraph) (f1 f2 : Node) : Prop :=
+      f1 ∈ g f2.
 
-      Fixpoint InvokedByStmList_aux {Γ τ} (s : Stm Γ τ) : List_of_𝑭 :=
+    (* Starting from node [f] the [InvokedBy] relation is Noetherian. *)
+    Class Accessible (g : CallGraph) (f : Node) : Prop :=
+      accessible : Acc (InvokedBy g) f.
+
+    (* We can prove accessibility of a function from the accessibility of all
+       of its adacent functions. *)
+    Lemma accessible_intro (g : CallGraph) (f : Node) :
+      List.Forall (Accessible g) (g f) -> Accessible g f.
+    Proof. rewrite Forall_forall. now constructor. Qed.
+
+    Section WithNodes.
+      Context (fs : Nodes).
+
+      (* This predicate denotes that a statement respects the upper bound [fs]
+         for all of the function calls it contains. *)
+      Fixpoint StmWellFormed {Δ τ} (s : Stm Δ τ) : Prop :=
         match s with
-        | stm_val _ v => []
-        | stm_exp e => []
-        | stm_let x σ s1 s2 => InvokedByStmList_aux s1 ++ InvokedByStmList_aux s2
-        | stm_block δ s => InvokedByStmList_aux s
-        | stm_assign xInΓ s => InvokedByStmList_aux s
-        | stm_call f2 es =>
-            [existT _ (existT _ f2)] ++ invoke_call (FunDef f2)
-        | stm_call_frame δ s => InvokedByStmList_aux s
-        | stm_foreign f es => []
-        | stm_lemmak l es k => InvokedByStmList_aux k
-        | stm_seq s k => InvokedByStmList_aux s ++ InvokedByStmList_aux k
-        | stm_assertk e1 e2 k => InvokedByStmList_aux k
-        | stm_fail _ s => []
+        | stm_val _ v => True
+        | stm_exp e => True
+        | stm_let x σ s1 s2 => StmWellFormed s1 /\ StmWellFormed s2
+        | stm_block δ s => StmWellFormed s
+        | stm_assign xInΓ s => StmWellFormed s
+        | stm_call f2 es => f2 ∈ fs
+        | stm_call_frame δ s => StmWellFormed s
+        | stm_foreign f es => True
+        | stm_lemmak l es k => StmWellFormed k
+        | stm_seq s k => StmWellFormed s /\ StmWellFormed k
+        | stm_assertk e1 e2 k => StmWellFormed k
+        | stm_fail _ s => True
         | stm_pattern_match s pat rhs =>
-            InvokedByStmList_aux s ++
-            List.flat_map
-              (fun pc => InvokedByStmList_aux (rhs pc))
-              (@finite.enum _ _ (B.Finite_PatternCase pat))
-        | stm_read_register reg => []
-        | stm_write_register reg e => []
-        | stm_bind s k => InvokedByStmList_aux s
-        | stm_debugk k => InvokedByStmList_aux k
-        end%list.
-    End WithInvokeCall.
+            StmWellFormed s /\ (forall pc, StmWellFormed (rhs pc))
+        | stm_read_register reg => True
+        | stm_write_register reg e => True
+        | @stm_bind _ _ σ s k => StmWellFormed s /\
+                          (forall (v : Val σ), StmWellFormed (k v))
+        | stm_debugk k => StmWellFormed k
+        end.
 
-    Fixpoint InvokedByStmWithFuelList (fuel : nat) {Γ τ} (s : Stm Γ τ) : List_of_𝑭 :=
-      match fuel with
-      | 0 => InvokedByStmList_aux (fun _ _ _ => []%list) s
-      | S fuel => InvokedByStmList_aux (@InvokedByStmWithFuelList fuel) s
-      end.
-  End InvokedByStmList.
+    End WithNodes.
 
-  Fixpoint InvokedByStmWithFuel (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : Prop :=
-    match fuel with
-    | 0 => InvokedByStm_aux (fun _ _ _ _ _ _ => False) f s
-    | S fuel => InvokedByStm_aux (@InvokedByStmWithFuel fuel) f s
-    end.
+    (* This function calculates the list of functions called from a statement.
+       This cannot look into [stm_bind], hence we use a dummy value. Duplicates
+       are currently not removed, since that would require decidable equality
+       of function names [𝑭], which would probably block on some meta-variable
+       for polymorphic functions. Instead we allow duplicates, of which there
+       are probably very few in practice.
 
-  Fixpoint InvokedByStmWithFuelBool (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : bool :=
-    match fuel with
-    | 0 => InvokedByStmB_aux (fun _ _ _ _ _ _ => false) f s
-    | S fuel => InvokedByStmB_aux (@InvokedByStmWithFuelBool fuel) f s
-    end.
-
-  Definition 𝑭_eqb_packaged_2 {Δ τ} (f1 : 𝑭 Δ τ) (f2 : {Δ & {τ & 𝑭 Δ τ}}) :=
-    match f2 with
-    | existT _ (existT _ f2) => 𝑭_eqb f2 f1
-    end.
-
-  #[local] Ltac solve_invokedby :=
-    repeat match goal with
-    | |- List.In ?e (?l1 ++ ?l2) =>
-        apply List.in_or_app
-    | H: List.In ?e (?l1 ++ ?l2) |- _ =>
-        apply List.in_app_or in H
-    | H : List.In ?e (List.flat_map ?f ?l) |- _ =>
-        apply List.in_flat_map in H
-    | H: ?P /\ ?Q |- _ =>
-        destruct H as [? ?]; auto
-    | H: ?P \/ ?Q |- _ =>
-        destruct H; auto
-    | H: (?P && ?Q = true)%bool |- _ =>
-        apply Bool.andb_true_iff in H;
-        destruct H as [? ?]; auto
-    | H: context[(?b || false)%bool] |- _ =>
-        rewrite Bool.orb_false_r in H
-    | |- context[(?b || false)%bool] =>
-        rewrite Bool.orb_false_r
-    | |- context[List.existsb ?p (?l1 ++ ?l2)] =>
-        rewrite List.existsb_app
-    end.
-
-  Definition InvokedByStmWithFuelInList (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : Prop :=
-    List.In (existT _ (existT _ f)) (InvokedByStmWithFuelList fuel s).
-
-  Definition InvokedByStmWithFuelInListBool (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : bool :=
-    List.existsb (𝑭_eqb_packaged_2 f) (InvokedByStmWithFuelList fuel s).
-
-  Section BindFree.
-    Variable bindfree_call : forall {Γ τ}, Stm Γ τ -> Prop.
-
-    Fixpoint BindFree_aux {Γ τ} (s : Stm Γ τ) : Prop :=
+       This function is used to generically calculate a (precise) call graph for
+       a bindfree program below. *)
+    Fixpoint InvokedByStmList {Γ τ} (s : Stm Γ τ) : Nodes :=
       match s with
-      | stm_val _ v => True
-      | stm_exp e => True
-      | stm_let x σ s__σ s__τ => BindFree_aux s__σ /\ BindFree_aux s__τ
-      | stm_block δ s => BindFree_aux s
-      | stm_assign x s => BindFree_aux s
-      | stm_call f es => bindfree_call (FunDef f)
-      | stm_call_frame δ s => BindFree_aux s
-      | stm_foreign f es => True
-      | stm_lemmak l es k => BindFree_aux k
-      | stm_seq s k => BindFree_aux s /\ BindFree_aux k
-      | stm_assertk e1 e2 k => BindFree_aux k
-      | stm_fail _ s => True
-      | stm_pattern_match s pat rhs => BindFree_aux s /\ forall pc, BindFree_aux (rhs pc)
-      | stm_read_register reg => True
-      | stm_write_register reg e => True
-      | stm_bind s k => False
-      | stm_debugk k => BindFree_aux k
-      end. 
-  End BindFree.
-
-  Fixpoint BindFree (fuel : nat) {Γ τ} (s : Stm Γ τ) : Prop :=
-    match fuel with
-    | 0      => BindFree_aux (fun _ _ _ => False) s
-    | S fuel => BindFree_aux (@BindFree fuel) s
-    end.
-
-  Section BindFreeBool.
-    Variable bindfree_call : forall {Γ τ}, Stm Γ τ -> bool.
-
-    Fixpoint BindFreeBool_aux {Γ τ} (s : Stm Γ τ) : bool :=
-      match s with
-      | stm_val _ v => true
-      | stm_exp e => true
-      | stm_let x σ s__σ s__τ => BindFreeBool_aux s__σ && BindFreeBool_aux s__τ
-      | stm_block δ s => BindFreeBool_aux s
-      | stm_assign x s => BindFreeBool_aux s
-      | stm_call f es => bindfree_call (FunDef f)
-      | stm_call_frame δ s => BindFreeBool_aux s
-      | stm_foreign f es => true
-      | stm_lemmak l es k => BindFreeBool_aux k
-      | stm_seq s k => BindFreeBool_aux s && BindFreeBool_aux k
-      | stm_assertk e1 e2 k => BindFreeBool_aux k
-      | stm_fail _ s => true
+      | stm_val _ v => []
+      | stm_exp e => []
+      | stm_let x σ s1 s2 => InvokedByStmList s1 ++ InvokedByStmList s2
+      | stm_block δ s => InvokedByStmList s
+      | stm_assign xInΓ s => InvokedByStmList s
+      | stm_call f2 es => [mkNode f2]
+      | stm_call_frame δ s => InvokedByStmList s
+      | stm_foreign f es => []
+      | stm_lemmak l es k => InvokedByStmList k
+      | stm_seq s k => InvokedByStmList s ++ InvokedByStmList k
+      | stm_assertk e1 e2 k => InvokedByStmList k
+      | stm_fail _ s => []
       | stm_pattern_match s pat rhs =>
-          BindFreeBool_aux s
-          && List.forallb (fun pc => BindFreeBool_aux (rhs pc))
-                          (@finite.enum _ _ (B.Finite_PatternCase pat))
-      | stm_read_register reg => true
-      | stm_write_register reg e => true
-      | stm_bind s k => false
-      | stm_debugk k => BindFreeBool_aux k
-      end. 
-  End BindFreeBool.
+          InvokedByStmList s ++
+            List.flat_map
+            (fun pc => InvokedByStmList (rhs pc))
+            (enum (PatternCase pat))
+      | stm_read_register reg => []
+      | stm_write_register reg e => []
+      | stm_bind s k => [] (* dummy *)
+      | stm_debugk k => InvokedByStmList k
+      end%list.
 
-  Fixpoint BindFreeBool (fuel : nat) {Γ τ} (s : Stm Γ τ) : bool :=
-    match fuel with
-    | 0      => BindFreeBool_aux (fun _ _ _ => false) s
-    | S fuel => BindFreeBool_aux (@BindFreeBool fuel) s
-    end.
-
-  Lemma InvokedByStmWithFuelInList_eq : forall (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2),
-    BindFree fuel s ->
-    InvokedByStmWithFuel fuel f s <-> InvokedByStmWithFuelInList fuel f s.
-  Proof.
-    intros fuel; induction fuel as [|fuel IHfuel];
-      intros Δ τ1 τ2 Γ f s Hb; split; intros H; induction s;
-      cbn in *; auto; solve_invokedby; auto; try contradiction.
-    - right. apply List.in_flat_map. destruct H as [pc H]. exists pc. split; auto.
-      apply base.elem_of_list_In. apply finite.elem_of_enum.
-    - right. destruct H as [pc [? ?]]. exists pc. auto.
-    - right. now apply IHfuel.
-    - destruct H as [pc H]. right. apply List.in_flat_map. exists pc. split; auto.
-      apply base.elem_of_list_In. apply finite.elem_of_enum.
-    - right. now apply IHfuel.
-    - destruct H as [pc [? ?]]. right. exists pc. auto.
-  Qed.
-
-  Lemma InvokedByStmWithFuelInListBool_eq : forall (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2),
-    InvokedByStmWithFuelBool fuel f s = InvokedByStmWithFuelInListBool fuel f s.
-  Proof.
-    intros fuel; induction fuel as [|fuel IHfuel];
-      intros Δ τ1 τ2 Γ f s; induction s;
-      cbn in *; auto; solve_invokedby.
-    - now rewrite <- IHs1, IHs2.
-    - now rewrite <- IHs1, IHs2.
-    - rewrite IHs. apply ssrbool.orb_id2l. intros Ht.
-      induction (finite.enum (B.PatternCase pat)); auto.
-      cbn. solve_invokedby.
-      rewrite H. now apply ssrbool.orb_id2l. 
-    - now rewrite <- IHs1, IHs2.
-    - now rewrite IHfuel.
-    - now rewrite <- IHs1, IHs2.
-    - rewrite IHs. apply ssrbool.orb_id2l. intros Ht.
-      induction (finite.enum (B.PatternCase pat)); auto.
-      cbn. solve_invokedby.
-      rewrite H. now apply ssrbool.orb_id2l. 
-  Qed.
-
-  Lemma InvokedByStmWithFuel_S_fuel : forall (fuel : nat) {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2),
-    InvokedByStmWithFuel fuel f s ->
-    InvokedByStmWithFuel (S fuel) f s.
-  Proof.
-    intros fuel. induction fuel;
-      intros Δ τ1 τ2 Γ f s Hinvok.
-    - induction s; cbn in *; auto.
-      + destruct Hinvok.
-        * left. now apply IHs1.
-        * right. now apply IHs2.
-      + destruct Hinvok; auto. contradiction.
-      + destruct Hinvok.
-        * left. now apply IHs1.
-        * right. now apply IHs2.
-      + destruct Hinvok as [Hinvok|Hinvok].
-        * left. now apply IHs.
-        * right. destruct Hinvok as [pc Hinvok].
-          exists pc. now apply H.
-      + destruct Hinvok as [Hinvok|[v Hinvok]].
-        * left. now apply IHs.
-        * right. exists v. now apply H.
-    - induction s; cbn in *; auto.
-      + destruct Hinvok.
-        * left. now apply IHs1.
-        * right. now apply IHs2.
-      + destruct Hinvok; auto.
-      + destruct Hinvok.
-        * left. now apply IHs1.
-        * right. now apply IHs2.
-      + destruct Hinvok as [Hinvok|Hinvok].
-        * left. now apply IHs.
-        * right. destruct Hinvok as [pc Hinvok].
-          exists pc. now apply H.
-      + destruct Hinvok as [Hinvok|[v Hinvok]].
-        * left. now apply IHs.
-        * right. exists v. now apply H.
-  Qed.
-
-  Definition InvokedByStm {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : Prop :=
-    InvokedByStmWithFuel 2 f s.
-
-  Definition InvokedByStmBool {Δ τ1 τ2 Γ} (f : 𝑭 Δ τ1) (s : Stm Γ τ2) : bool :=
-    InvokedByStmWithFuelBool 2 f s.
-
-  Definition InvokedByFun (fuel : nat) {Δ1 τ1} {Δ2 τ2} (f1 : 𝑭 Δ1 τ1) (f2 : 𝑭 Δ2 τ2) : Prop :=
-    InvokedByStmWithFuel fuel f1 (FunDef f2).
-
-  Definition InvokedByFunBool (fuel : nat) {Δ1 τ1} {Δ2 τ2} (f1 : 𝑭 Δ1 τ1) (f2 : 𝑭 Δ2 τ2) : bool :=
-    InvokedByStmWithFuelBool fuel f1 (FunDef f2).
-
-  Definition InvokedByFunInListBool (fuel : nat) {Δ1 τ1} {Δ2 τ2} (f1 : 𝑭 Δ1 τ1) (f2 : 𝑭 Δ2 τ2) : bool :=
-    InvokedByStmWithFuelInListBool fuel f1 (FunDef f2).
-
-  Lemma InvokedByFun_S_fuel : forall (fuel : nat) {Δ1 τ1} {Δ2 τ2} (f1 : 𝑭 Δ1 τ1) (f2 : 𝑭 Δ2 τ2),
-    InvokedByFun fuel f1 f2 ->
-    InvokedByFun (S fuel) f1 f2.
-  Proof.
-    intros fuel Δ1 τ1 Δ2 τ2 f1 f2.
-    unfold InvokedByFun.
-    apply InvokedByStmWithFuel_S_fuel.
-  Qed.
-
-  Definition InvokedByFunPackage (fuel : nat) (f1 f2 : {Δ & {τ & 𝑭 Δ τ}}) : Prop :=
-    match f1, f2 with
-    | existT Δ1 (existT τ1 f1) ,  existT Δ2 (existT τ2 f2) => InvokedByFun fuel f1 f2
-    end.
-
-  Definition InvokedByFunPackageBool (fuel : nat) (f1 f2 : {Δ & {τ & 𝑭 Δ τ}}) : bool :=
-    match f1, f2 with
-    | existT Δ1 (existT τ1 f1) ,  existT Δ2 (existT τ2 f2) => InvokedByFunBool fuel f1 f2
-    end.
-
-  Lemma InvokedByFunPackage_S_fuel : forall (fuel : nat) (f1 f2 : {Δ & {τ & 𝑭 Δ τ}}),
-    InvokedByFunPackage fuel f1 f2 ->
-    InvokedByFunPackage (S fuel) f1 f2.
-  Proof.
-    intros fuel [Δ1 [τ1 f1]] [Δ2 [τ2 f2]].
-    unfold InvokedByFunPackage.
-    apply InvokedByFun_S_fuel.
-  Qed.
-
-  Lemma wf_InvokedByFunPackage_S_fuel : forall (fuel : nat) (f : {Δ & {τ & 𝑭 Δ τ}}),
-      Wf.Acc (InvokedByFunPackage (S fuel)) f ->
-      Wf.Acc (InvokedByFunPackage fuel) f.
-  Proof.
-    intros fuel f Hacc.
-    apply (well_founded.Acc_impl _ _ _ Hacc).
-    intros [Δ1 [τ1 f1]] [Δ2 [τ2 f2]] Hinvok.
-    now apply InvokedByFunPackage_S_fuel.
-  Qed.
-
-  Section InvokedByReflect.
-    Lemma InvokedByStmWithFuel_spec : forall {Δ τ1 τ2 Γ} (fuel : nat) (f : 𝑭 Δ τ1) (s : Stm Γ τ2),
-      BindFree fuel s ->
-      Bool.reflect (InvokedByStmWithFuel fuel f s) (InvokedByStmWithFuelBool fuel f s).
+    Lemma InvokedByStmList_WellFormed_aux {Γ τ} (s : Stm Γ τ) :
+      stm_bindfree s ->
+      forall (fs : Nodes),
+        InvokedByStmList s ⊆ fs ->
+        StmWellFormed fs s.
     Proof.
-      intros Δ τ1 τ2 Γ fuel f s Hb.
-      apply Bool.iff_reflect. split; intros H.
-      - generalize dependent s.
-        generalize dependent f.
-        generalize dependent Γ.
-        generalize dependent τ2.
-        generalize dependent τ1.
-        generalize dependent Δ.
-        induction fuel; intros Δ τ1 τ2 Γ f s Hb H.
-        + induction s; cbn in *; auto; solve_invokedby; auto;
-            apply Bool.orb_true_iff; auto.
-          destruct H as [pc H]; auto.
-          right. clear IHs.
-          apply List.existsb_exists. exists pc. split; auto.
-          apply base.elem_of_list_In.
-          apply finite.elem_of_enum.
-        + induction s; cbn in *; auto; solve_invokedby;
-            apply Bool.orb_true_iff; auto.
-          * left. unfold 𝑭_eq in H. unfold 𝑭_eqb.
-            destruct (Classes.eq_dec _ _) eqn:E; auto.
-          * destruct H as [pc H]; auto.
-            right. clear IHs.
-            apply List.existsb_exists. exists pc. split; auto.
-            apply base.elem_of_list_In.
-            apply finite.elem_of_enum.
-      - generalize dependent s.
-        generalize dependent f.
-        generalize dependent Γ.
-        generalize dependent τ2.
-        generalize dependent τ1.
-        generalize dependent Δ.
-        induction fuel; intros Δ τ1 τ2 Γ f s Hb H.
-        + induction s; cbn in *; auto; solve_invokedby; auto; try contradiction.
-          * apply Bool.orb_true_iff in H; destruct H; auto.
-          * apply Bool.orb_true_iff in H; destruct H; auto.
-          * apply Bool.orb_true_iff in H; destruct H as [?|[pc [HIn H]]%List.existsb_exists]; auto.
-            clear IHs. right. exists pc. auto.
-        + induction s; cbn in *; auto; solve_invokedby; auto; try contradiction.
-          * apply Bool.orb_true_iff in H; destruct H; auto.
-          * apply Bool.orb_true_iff in H; destruct H; auto.
-            left. unfold 𝑭_eqb in H. unfold 𝑭_eq.
-            destruct (Classes.eq_dec _ _) eqn:E; auto; try discriminate.
-          * apply Bool.orb_true_iff in H; destruct H; auto.
-          * apply Bool.orb_true_iff in H; destruct H as [?|[pc [HIn H]]%List.existsb_exists]; auto.
-            clear IHs. right. exists pc. auto.
-    Qed.
-
-    Lemma BindFree_spec : forall {Γ τ} (fuel : nat) (s : Stm Γ τ),
-        Bool.reflect (BindFree fuel s) (BindFreeBool fuel s).
-    Proof.
-      intros Γ τ fuel s. apply Bool.iff_reflect. split; intros H.
-      - generalize dependent s.
-        generalize dependent τ.
-        generalize dependent Γ.
-        induction fuel; intros Γ τ s H.
-        + induction s; cbn in *; auto; solve_invokedby; auto;
-            apply Bool.andb_true_iff; auto.
-          split; auto.
-          apply List.forallb_forall. intros pc HIn.
-          auto.
-        + induction s; cbn in *; auto; solve_invokedby;
-            try (apply Bool.andb_true_iff; split); auto.
-          apply List.forallb_forall. intros pc HIn.
-          auto.
-      - generalize dependent s.
-        generalize dependent τ.
-        generalize dependent Γ.
-        induction fuel; intros Γ τ s H.
-        + induction s; cbn in *; auto; solve_invokedby; auto;
-            try split; auto.
-          intros pc.
-          assert (HIn: List.In pc (@finite.enum _ _ (B.Finite_PatternCase pat))).
-          { apply base.elem_of_list_In. apply finite.elem_of_enum. }
+      rewrite Is_true_true.
+      induction s; cbn; rewrite <- ?andb_lazy_alt; intros Hbindfree fs Hsub;
+        try discriminate; (* bindfree *)
+        repeat
           match goal with
-          | H : List.forallb ?P ?l = true |- _ =>
-              rewrite List.forallb_forall in H;
-              specialize (H pc HIn)
-          end.
-          auto.
-        + induction s; cbn in *; auto; solve_invokedby; auto; split.
-          * now apply IHs.
-          * intros pc.
-            assert (HIn: List.In pc (@finite.enum _ _ (B.Finite_PatternCase pat))).
-            { apply base.elem_of_list_In. apply finite.elem_of_enum. }
-            match goal with
-            | H : List.forallb ?P ?l = true |- _ =>
-                rewrite List.forallb_forall in H;
-                specialize (H pc HIn)
-            end.
-            auto.
+          | H : ?a && ?b = true |- _ =>
+              let H1 := fresh "Hbindfree" in
+              let H2 := fresh "Hbindfree" in
+              apply andb_true_iff in H; destruct H as [H1 H2]
+          | H : ?fs1 ++ ?fs2 ⊆ ?fs |- _ =>
+              let H1 := fresh "Hsub" in
+              let H2 := fresh "Hsub" in
+              apply list_subseteq_app_iff_l in H; destruct H as [H1 H2]
+          | |- ?f ∈ cons ?f _ => constructor 1
+          | H: ?ls ⊆ ?fs |- ?f ∈ ?fs =>
+              match ls with
+                context[f] => apply H; clear fs H
+              end
+          | |- _ ∧ _ => split
+          end;
+        eauto.
+      - intros pc. apply H.
+        + rewrite forallb_forall in Hbindfree1. apply Hbindfree1.
+          apply elem_of_list_In, elem_of_enum.
+        + intros h hIn. apply Hsub1, elem_of_list_In, in_flat_map.
+          exists pc. split; apply elem_of_list_In; auto.
+          apply elem_of_enum.
     Qed.
 
-    Lemma InvokedByStmWithFuelInList_spec : forall {Δ τ1 τ2 Γ} (fuel : nat) (f : 𝑭 Δ τ1) (s : Stm Γ τ2),
-      Bool.reflect (InvokedByStmWithFuelInList fuel f s) (InvokedByStmWithFuelInListBool fuel f s).
-    Proof.
-      intros Δ τ1 τ2 Γ fuel f s.
-      unfold InvokedByStmWithFuelInList, InvokedByStmWithFuelInListBool.
-      apply Bool.iff_reflect.
-      rewrite List.existsb_exists.
-      split; intros H.
-      - exists (existT Δ (existT τ1 f)). split; auto.
-        cbn. auto. unfold 𝑭_eqb.
-        destruct (Classes.eq_dec _ _) eqn:E; auto; try discriminate.
-      - destruct H as ((Δ' & τ' & f') & H & Heq). cbn in Heq.
-        unfold 𝑭_eqb in Heq.
-        destruct (Classes.eq_dec _ _) eqn:E; auto; try discriminate.
-        now setoid_rewrite <- e. 
-    Qed.
+    (* For bindfree statements, the [InvokedByStmList] function correctly
+       calculates an upper bound of the calls appearing in a statement. *)
+    Lemma InvokedByStmList_WellFormed {Γ τ} (s : Stm Γ τ) :
+      stm_bindfree s -> StmWellFormed (InvokedByStmList s) s.
+    Proof. intros; now apply InvokedByStmList_WellFormed_aux. Qed.
 
-    Definition BindFreeFun {Δ τ} (fuel : nat) (f : 𝑭 Δ τ) : Prop :=
-      BindFree fuel (FunDef f).
+    (* Finally, this predicate enforces compatibility of the call graph with
+       the function definitions in [funDef], i.e. the call graph correctly
+       stipulates upper bounds for each defined function. *)
+    Definition CallGraphWellFormed (g : CallGraph) : Prop :=
+      forall Δ τ (f : 𝑭 Δ τ),
+        StmWellFormed (g f) (FunDef f).
 
-    Definition BindFreeFunPackage (fuel : nat) (f : {Δ & {τ & 𝑭 Δ τ}}) : Prop :=
-      match f with
-      | existT Δ (existT τ f) => BindFreeFun fuel f
-      end.
+  End callgraph.
 
-    Definition BindFreeFunBool {Δ τ} (fuel : nat) (f : 𝑭 Δ τ) : bool :=
-      BindFreeBool fuel (FunDef f).
+  (* A generic definition of a call graph calculation that can be used for
+     bind-free programs. *)
+  Definition generic_call_graph : CallGraph :=
+    fun '(mkNode f) => InvokedByStmList (FunDef f).
 
-    Definition BindFreeFunPackageBool (fuel : nat) (f : {Δ & {τ & 𝑭 Δ τ}}) : bool :=
-      match f with
-      | existT Δ (existT τ f) => BindFreeFunBool fuel f
-      end.
+  (* For bind-free programs the generic computation is correct. *)
+  Lemma generic_call_graph_wellformed
+    (H: forall Δ τ (f : 𝑭 Δ τ), stm_bindfree (FunDef f)) :
+    CallGraphWellFormed generic_call_graph.
+  Proof. intros Δ τ f. now apply InvokedByStmList_WellFormed. Qed.
 
-    Lemma BindFreeFunPackage_spec : forall (fuel : nat) (f : {Δ & {τ & 𝑭 Δ τ}}),
-        Bool.reflect (BindFreeFunPackage fuel f) (BindFreeFunPackageBool fuel f).
-    Proof.
-      intros fuel [Δ [τ f]].
-      unfold BindFreeFunPackage, BindFreeFunPackageBool,
-        BindFreeFun, BindFreeFunBool.
-      apply BindFree_spec.
-    Qed.
-
-    Lemma BindFreeBool_eq : forall (fuel : nat) {Γ τ} (s : Stm Γ τ),
-        BindFree fuel s <-> BindFreeBool fuel s = true.
-    Proof.
-      intros fuel Γ τ s.
-      destruct (BindFree_spec fuel s);
-        split; auto.
-      intros H. discriminate H.
-    Qed.
-
-    Lemma InvokedByFunPackage_spec : forall (fuel : nat) (f1 f2 : {Δ & {τ & 𝑭 Δ τ}}),
-      BindFreeFunPackage fuel f2 ->
-      Bool.reflect (InvokedByFunPackage fuel f1 f2) (InvokedByFunPackageBool fuel f1 f2).
-    Proof.
-      unfold InvokedByFunPackage, InvokedByFun, BindFreeFunPackage, BindFreeFun.
-      intros fuel [Δ1 [τ1 f1]] [Δ2 [τ2 f2]] Hb.
-      now apply InvokedByStmWithFuel_spec.
-    Qed.
-  End InvokedByReflect.
+  Module AccessibleTactics.
+    Ltac accessible_proof :=
+      apply callgraph.accessible_intro;
+      repeat
+        (try typeclasses eauto;
+         match goal with
+         | |- Forall ?P [] => constructor
+         | |- Forall ?P (_ :: _) => constructor
+         | |- Forall ?P ?xs =>
+             (* Do not expand typelevel computations like Nat.mul *)
+             let xs' := eval compute - [Nat.mul] in xs in
+               change (Forall P xs')
+         end).
+  End AccessibleTactics.
 End ProgramMixin.
 
-Module Type WellFoundedKit (B : Base) (FDecl : FunDecl B) (FDK : FunDefKit B FDecl)
+Module Type WellFoundedKit (B : Base) (Import FDecl : FunDecl B)
+  (Import FDK : FunDefKit B FDecl)
   (Import PM : ProgramMixin B FDecl FDK).
 
-  Parameter Inline 𝑭_well_founded : well_founded (InvokedByFunPackage FDecl.inline_fuel).
+  Import callgraph.
+
+  (* The user-provided call graph and the proof of well-formedness w.r.t the
+     function definitions. *)
+  Parameter 𝑭_call_graph : CallGraph.
+  Parameter 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+
+  (* The user can single out a subset of the functions to be available for
+     total weakest pre reasoning, in which case the user also has to provide
+     evidence for termination in form of a coarse accessibility witness
+     of the funcition in the call graph. *)
+  Parameter 𝑭_accessible :
+    forall Δ τ (f : 𝑭 Δ τ),
+      option (Accessible 𝑭_call_graph f).
+
 End WellFoundedKit.
 
 Module Type Program (B : Base) :=

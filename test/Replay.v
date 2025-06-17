@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Lists.List
      Program.Tactics
      Strings.String
@@ -114,25 +115,30 @@ Module Import ReplayProgram <: Program DefaultBase.
 
   Include ProgramMixin DefaultBase.
 
-  Section WellFoundedKit.
-    Lemma 𝑭_bind_free : forall {Δ τ} (f : 𝑭 Δ τ), BindFree inline_fuel (FunDef f).
-    Proof.
-      intros Δ τ f.
-      apply BindFreeBool_eq.
-      destruct f; auto.
-    Qed.
+  Import callgraph.
 
-    Lemma 𝑭_well_founded : well_founded (InvokedByFunPackage inline_fuel).
-    Proof.
-      intros [Γ [τ f]]. constructor. intros [Γ' [τ' f']] Hinvok.
-      assert (InvokedByFunPackageBool inline_fuel (existT _ (existT _ f')) (existT _ (existT _ f)) = true) as H.
-      {
-        destruct (InvokedByFunPackage_spec inline_fuel (existT _ (existT _ f')) (existT _ (existT _ f))); auto.
-        unfold BindFreeFunPackage, BindFreeFun. apply 𝑭_bind_free.
-      }
-      destruct f, f'; cbv in H; discriminate.
-    Qed.
-  End WellFoundedKit.
+  Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
+    Is_true (stm_bindfree (FunDef f)).
+  Proof. destruct f; now vm_compute. Qed.
+
+  Definition 𝑭_call_graph := generic_call_graph.
+  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
+
+  Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
+
+  Module Import WithAccessibleTactics.
+    Import AccessibleTactics.
+
+    Instance accessible_main : AccessibleFun main.
+    Proof. accessible_proof. Qed.
+
+  End WithAccessibleTactics.
+
+  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
+    match f with
+    | main => Some _
+    end.
 End ReplayProgram.
 
 Module Import ReplayPredicates.

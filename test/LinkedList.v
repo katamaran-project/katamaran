@@ -39,6 +39,7 @@
   *)
 
 From Coq Require Import
+     Bool.Bool
      Lists.List
      Program.Tactics
      Strings.String
@@ -344,11 +345,19 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   Include ProgramMixin ExampleBase.
 
-  Section WellFoundedKit.
-    (* TODO: solve *)
-    Lemma 𝑭_well_founded : well_founded (InvokedByFunPackage inline_fuel).
-    Admitted.
-  End WellFoundedKit.
+  Import callgraph.
+
+  Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
+    Is_true (stm_bindfree (FunDef f)).
+  Proof. destruct f; now vm_compute. Qed.
+
+  Definition 𝑭_call_graph := generic_call_graph.
+  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
+
+  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (Accessible 𝑭_call_graph f) :=
+    None.
+
 End ExampleProgram.
 
 (* These are user-defined pure predicates that we use to encode the functional

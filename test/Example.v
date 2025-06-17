@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Lists.List
      Program.Tactics
      Strings.String
@@ -396,11 +397,46 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   Include ProgramMixin ExampleBase.
 
-  Section WellFoundedKit.
-    (* TODO: solve *)
-    Lemma 𝑭_well_founded : well_founded (InvokedByFunPackage inline_fuel).
-    Admitted.
-  End WellFoundedKit.
+  Import callgraph.
+
+  Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
+    Is_true (stm_bindfree (FunDef f)).
+  Proof. destruct f; now vm_compute. Qed.
+
+  Definition 𝑭_call_graph := generic_call_graph.
+  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
+
+  Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
+
+  Module Import WithAccessibleTactics.
+    Import AccessibleTactics.
+
+    Instance accessible_abs : AccessibleFun abs.
+    Proof. accessible_proof. Qed.
+    Instance accessible_cmp : AccessibleFun cmp.
+    Proof. accessible_proof. Qed.
+    Instance accessible_msum : AccessibleFun msum.
+    Proof. accessible_proof. Qed.
+    Instance accessible_fpthree16 : AccessibleFun fpthree16.
+    Proof. accessible_proof. Qed.
+    Instance accessible_fpthree32 : AccessibleFun fpthree32.
+    Proof. accessible_proof. Qed.
+    Instance accessible_fpthree64 : AccessibleFun fpthree64.
+    Proof. accessible_proof. Qed.
+    Instance accessible_bvtest : AccessibleFun bvtest.
+    Proof. accessible_proof. Qed.
+
+  End WithAccessibleTactics.
+
+  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
+    match f with
+    | gcd     => None
+    | gcdloop => None
+    | length  => None
+    | _       => Some _
+    end.
+
 End ExampleProgram.
 
 Module Import ExampleSig <: Signature ExampleBase.

@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Strings.String
      ZArith.ZArith.
 From Equations Require Import
@@ -130,6 +131,7 @@ Section FunDeclKit.
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
   Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
   Definition 𝑳  : PCtx -> Set := Lem.
+<<<<<<< HEAD
 
   #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
     Proof.
@@ -144,6 +146,8 @@ Section FunDeclKit.
     Defined.
 
   Definition inline_fuel : nat := 10.
+=======
+>>>>>>> termination_soundness_total_callgraph
 End FunDeclKit.
 
 Include FunDeclMixin MinCapsBase.
@@ -886,285 +890,129 @@ End ForeignKit.
 
 Include ProgramMixin MinCapsBase.
 
-Section WellFoundedKit.
-  Create HintDb acc_lemmas.
+  Import callgraph.
 
-  Lemma 𝑭_bind_free : ∀ {Δ τ} (f : 𝑭 Δ τ), BindFree inline_fuel (FunDef f).
-  Proof.
-    intros Δ τ f.
-    apply BindFreeBool_eq.
-    destruct f; auto.
-  Admitted.
-  Hint Resolve 𝑭_bind_free : acc_lemmas.
+  Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
+    Is_true (stm_bindfree (FunDef f)).
+  Proof. destruct f; now vm_compute. Qed.
 
-  Notation AccInvokedByFunPackage f :=
-    (Acc (InvokedByFunPackage inline_fuel) (existT _ (existT _ f)))
-    (only parsing).
+  Definition 𝑭_call_graph := generic_call_graph.
+  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
 
-  #[local] Ltac solve_invokedby_list_spec fuel caller callee :=
-    let H := fresh "H" in
-    destruct (InvokedByStmWithFuelInList_spec fuel callee (FunDef caller)) as [H|H];
-    auto;
-    cbv in H; cbv; destruct callee;
-    repeat
-      lazymatch goal with
-      | |- existT _ (existT _ ?f) = existT _ (existT _ ?f) \/ ?P =>
-          left; reflexivity
-      | |- ?P \/ existT _ (existT _ ?f) = existT _ (existT _ ?f) =>
-          right; reflexivity
-      | |- existT _ (existT _ _) = existT _ (existT _ _) \/ ?P =>
-          right
-      end;
-    auto; try discriminate.
+  Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
 
-  #[local] Ltac add_invokedby_list_spec fuel caller callee :=
-    assert (InvokedByStmWithFuelInList fuel callee (FunDef caller));
-      first try solve_invokedby_list_spec fuel caller callee.
+  Module Import WithAccessibleTactics.
+    Import AccessibleTactics.
 
-  #[local] Ltac solve_invokedby_bool_spec fuel caller callee :=
-    destruct (InvokedByFunPackage_spec fuel (existT _ (existT _ callee)) (existT _ (existT _ caller))); auto;
-    unfold BindFreeFunPackage, BindFreeFun; auto with acc_lemmas.
+    Instance accessible_read_reg : AccessibleFun read_reg.
+    Proof. accessible_proof. Qed.
+    Instance accessible_read_reg_cap : AccessibleFun read_reg_cap.
+    Proof. accessible_proof. Qed.
+    Instance accessible_read_reg_num : AccessibleFun read_reg_num.
+    Proof. accessible_proof. Qed.
+    Instance accessible_write_reg : AccessibleFun write_reg.
+    Proof. accessible_proof. Qed.
+    Instance accessible_next_pc : AccessibleFun next_pc.
+    Proof. accessible_proof. Qed.
+    Instance accessible_update_pc : AccessibleFun update_pc.
+    Proof. accessible_proof. Qed.
+    Instance accessible_update_pc_perm : AccessibleFun update_pc_perm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_is_perm : AccessibleFun is_perm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_is_correct_pc : AccessibleFun is_correct_pc.
+    Proof. accessible_proof. Qed.
+    Instance accessible_add_pc : AccessibleFun add_pc.
+    Proof. accessible_proof. Qed.
+    Instance accessible_within_bounds : AccessibleFun within_bounds.
+    Proof. accessible_proof. Qed.
+    Instance accessible_is_sub_perm : AccessibleFun is_sub_perm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_write_allowed : AccessibleFun write_allowed.
+    Proof. accessible_proof. Qed.
+    Instance accessible_perm_to_bits : AccessibleFun perm_to_bits.
+    Proof. accessible_proof. Qed.
+    Instance accessible_perm_from_bits : AccessibleFun perm_from_bits.
+    Proof. accessible_proof. Qed.
+    Instance accessible_and_perm : AccessibleFun and_perm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_is_within_range : AccessibleFun is_within_range.
+    Proof. accessible_proof. Qed.
+    Instance accessible_abs : AccessibleFun abs.
+    Proof. accessible_proof. Qed.
+    Instance accessible_read_mem : AccessibleFun read_mem.
+    Proof. accessible_proof. Qed.
+    Instance accessible_write_mem : AccessibleFun write_mem.
+    Proof. accessible_proof. Qed.
+    Instance accessible_read_allowed : AccessibleFun read_allowed.
+    Proof. accessible_proof. Qed.
+    Instance accessible_is_not_zero : AccessibleFun is_not_zero.
+    Proof. accessible_proof. Qed.
+    Instance accessible_can_incr_cursor : AccessibleFun can_incr_cursor.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cjalr : AccessibleFun exec_cjalr.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_jalr_cap : AccessibleFun exec_jalr_cap.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cjal : AccessibleFun exec_cjal.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_bne : AccessibleFun exec_bne.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_ld : AccessibleFun exec_ld.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_sd : AccessibleFun exec_sd.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_addi : AccessibleFun exec_addi.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_add : AccessibleFun exec_add.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_sub : AccessibleFun exec_sub.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_slt : AccessibleFun exec_slt.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_slti : AccessibleFun exec_slti.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_sltu : AccessibleFun exec_sltu.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_sltiu : AccessibleFun exec_sltiu.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cmove : AccessibleFun exec_cmove.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cincoffset : AccessibleFun exec_cincoffset.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_candperm : AccessibleFun exec_candperm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_csetbounds : AccessibleFun exec_csetbounds.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_csetboundsimm : AccessibleFun exec_csetboundsimm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cgettag : AccessibleFun exec_cgettag.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cgetperm : AccessibleFun exec_cgetperm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cgetbase : AccessibleFun exec_cgetbase.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cgetlen : AccessibleFun exec_cgetlen.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cgetaddr : AccessibleFun exec_cgetaddr.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_fail : AccessibleFun exec_fail.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_ret : AccessibleFun exec_ret.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_instr : AccessibleFun exec_instr.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec : AccessibleFun exec.
+    Proof. accessible_proof. Qed.
+    Instance accessible_step : AccessibleFun step.
+    Proof. accessible_proof. Qed.
+  End WithAccessibleTactics.
 
-  #[local] Ltac add_invokedby_bool_spec fuel caller callee :=
-    assert (InvokedByFunPackageBool fuel
-              (existT _ (existT _ callee)) (existT _ (existT _ caller)) = true);
-      first try solve_invokedby_bool_spec fuel caller callee.
-
-  #[local] Ltac progress_acc fuel caller callee :=
-    repeat
-      match goal with
-      | H: InvokedByStmWithFuelInList fuel callee (FunDef caller) |- _ =>
-        cbv in H
-      | H: False |- _ => destruct H
-      | H: ?P \/ ?Q |- _ =>
-          destruct H
-      | H: existT _ (existT _ ?f1) = existT _ (existT _ ?f2) |- _ =>
-          try setoid_rewrite <- H; clear H
-      end;
-    auto with acc_lemmas.
-
-  Ltac solve_acc :=
-    lazymatch goal with
-    | |- Acc (InvokedByFunPackage ?fuel) (existT _ (existT _ ?caller)) =>
-        let callee := fresh "callee" in
-        constructor; intros [? [? callee]] ?;
-          add_invokedby_bool_spec fuel caller callee;
-          add_invokedby_list_spec fuel caller callee;
-          progress_acc fuel caller callee
-    | |- _ =>
-        fail "Goal does not match: Acc (InvokedByFunpackage _) (existT _ (existT _ f))" 
+  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
+    match f with
+    | loop => None
+    | _    => Some _
     end.
-
-  Lemma acc_read_reg : AccInvokedByFunPackage read_reg.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_read_reg : acc_lemmas.
-
-  Lemma acc_read_reg_cap : AccInvokedByFunPackage read_reg_cap.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_read_reg_cap : acc_lemmas.
-
-  Lemma acc_read_reg_num : AccInvokedByFunPackage read_reg_num.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_read_reg_num : acc_lemmas.
-
-  Lemma acc_write_reg : AccInvokedByFunPackage write_reg.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_write_reg : acc_lemmas.
-
-  Lemma acc_next_pc : AccInvokedByFunPackage next_pc.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_next_pc : acc_lemmas.
-
-  Lemma acc_update_pc : AccInvokedByFunPackage update_pc.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_update_pc : acc_lemmas.
-
-  Lemma acc_update_pc_perm : AccInvokedByFunPackage update_pc_perm.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_update_pc_perm : acc_lemmas.
-
-  Lemma acc_is_perm : AccInvokedByFunPackage is_perm.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_is_perm : acc_lemmas.
-
-  Lemma acc_is_correct_pc : AccInvokedByFunPackage is_correct_pc.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_is_correct_pc : acc_lemmas.
-
-  Lemma acc_add_pc : AccInvokedByFunPackage add_pc.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_add_pc : acc_lemmas.
-
-  Lemma acc_within_bounds : AccInvokedByFunPackage within_bounds.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_within_bounds : acc_lemmas.
-
-  Lemma acc_read_mem : AccInvokedByFunPackage read_mem.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_read_mem : acc_lemmas.
-
-  Lemma acc_write_mem : AccInvokedByFunPackage write_mem.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_write_mem : acc_lemmas.
-
-  Lemma acc_is_sub_perm : AccInvokedByFunPackage is_sub_perm.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_is_sub_perm : acc_lemmas.
-
-  Lemma acc_read_allowed : AccInvokedByFunPackage read_allowed.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_read_allowed : acc_lemmas.
-
-  Lemma acc_write_allowed : AccInvokedByFunPackage write_allowed.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_write_allowed : acc_lemmas.
-
-  Lemma acc_perm_to_bits : AccInvokedByFunPackage perm_to_bits.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_perm_to_bits : acc_lemmas.
-
-  Lemma acc_perm_from_bits : AccInvokedByFunPackage perm_from_bits.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_perm_from_bits : acc_lemmas.
-
-  Lemma acc_and_perm : AccInvokedByFunPackage and_perm.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_and_perm : acc_lemmas.
-
-  Lemma acc_is_within_range : AccInvokedByFunPackage is_within_range.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_is_within_range : acc_lemmas.
-
-  Lemma acc_abs : AccInvokedByFunPackage abs.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_abs : acc_lemmas.
-
-  Lemma acc_is_not_zero : AccInvokedByFunPackage is_not_zero.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_is_not_zero : acc_lemmas.
-
-  Lemma acc_can_incr_cursor : AccInvokedByFunPackage can_incr_cursor.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_can_incr_cursor : acc_lemmas.
-
-  Lemma acc_exec_cjalr : AccInvokedByFunPackage exec_cjalr.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_cjalr : acc_lemmas.
-
-  Lemma acc_exec_jalr_cap : AccInvokedByFunPackage exec_jalr_cap.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_jalr_cap : acc_lemmas.
-
-  Lemma acc_exec_cjal : AccInvokedByFunPackage exec_cjal.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_cjal : acc_lemmas.
-
-  Lemma acc_exec_bne : AccInvokedByFunPackage exec_bne.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_bne : acc_lemmas.
-
-  Lemma acc_exec_ld : AccInvokedByFunPackage exec_ld.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_ld : acc_lemmas.
-
-  Lemma acc_exec_sd : AccInvokedByFunPackage exec_sd.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_sd : acc_lemmas.
-
-  Lemma acc_exec_addi : AccInvokedByFunPackage exec_addi.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_addi : acc_lemmas.
-
-  Lemma acc_exec_add : AccInvokedByFunPackage exec_add.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_add : acc_lemmas.
-
-  Lemma acc_exec_sub : AccInvokedByFunPackage exec_sub.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_sub : acc_lemmas.
-
-  Lemma acc_exec_slt : AccInvokedByFunPackage exec_slt.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_slt : acc_lemmas.
-
-  Lemma acc_exec_slti : AccInvokedByFunPackage exec_slti.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_slti : acc_lemmas.
-
-  Lemma acc_exec_sltu : AccInvokedByFunPackage exec_sltu.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_sltu : acc_lemmas.
-
-  Lemma acc_exec_sltiu : AccInvokedByFunPackage exec_sltiu.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_sltiu : acc_lemmas.
-
-  Lemma acc_exec_cmove : AccInvokedByFunPackage exec_cmove.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_cmove : acc_lemmas.
-
-  Lemma acc_exec_cincoffset : AccInvokedByFunPackage exec_cincoffset.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_cincoffset : acc_lemmas.
-
-  Lemma acc_exec_candperm : AccInvokedByFunPackage exec_candperm.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_candperm : acc_lemmas.
-
-  Lemma acc_exec_csetbounds : AccInvokedByFunPackage exec_csetbounds.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_csetbounds : acc_lemmas.
-
-  Lemma acc_exec_csetboundsimm : AccInvokedByFunPackage exec_csetboundsimm.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_csetboundsimm : acc_lemmas.
-
-  Lemma acc_exec_cgettag : AccInvokedByFunPackage exec_cgettag.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_cgettag : acc_lemmas.
-
-  Lemma acc_exec_cgetperm : AccInvokedByFunPackage exec_cgetperm.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_cgetperm : acc_lemmas.
-
-  Lemma acc_exec_cgetbase : AccInvokedByFunPackage exec_cgetbase.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_cgetbase : acc_lemmas.
-
-  Lemma acc_exec_cgetlen : AccInvokedByFunPackage exec_cgetlen.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_cgetlen : acc_lemmas.
-
-  Lemma acc_exec_cgetaddr : AccInvokedByFunPackage exec_cgetaddr.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_cgetaddr : acc_lemmas.
-
-  Lemma acc_exec_fail : AccInvokedByFunPackage exec_fail.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_fail : acc_lemmas.
-
-  Lemma acc_exec_ret : AccInvokedByFunPackage exec_ret.
-  Proof. solve_acc. Qed.
-  Hint Resolve acc_exec_ret : acc_lemmas.
-
-  (* TODO: following proofs are too slow, culprit is duplicate entries in
-           "InvokedBy" list (from InvokedBy*InList computations),
-           this gives a very large assumptions and goal. *)
-  Lemma acc_exec_instr : AccInvokedByFunPackage exec_instr.
-  Proof. Admitted.
-  Hint Resolve acc_exec_instr : acc_lemmas.
-
-  Lemma acc_exec : AccInvokedByFunPackage exec.
-  Proof. Admitted.
-  Hint Resolve acc_exec : acc_lemmas.
-
-  Lemma acc_step : AccInvokedByFunPackage step.
-  Proof. Admitted.
-  Hint Resolve acc_step : acc_lemmas.
-
-  Lemma 𝑭_well_founded : well_founded (InvokedByFunPackage inline_fuel).
-  Proof. intros [? [? []]]; auto with acc_lemmas. Admitted.
-
-End WellFoundedKit.
 
 End MinCapsProgram.
