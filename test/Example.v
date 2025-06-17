@@ -426,6 +426,12 @@ Module Import ExampleProgram <: Program ExampleBase.
     Proof. accessible_proof. Qed.
     Instance accessible_bvtest : AccessibleFun bvtest.
     Proof. accessible_proof. Qed.
+    Instance accessible_bvtest2 : AccessibleFun bvtest2.
+    Proof. accessible_proof. Qed.
+    Instance accessible_bvtest3 : AccessibleFun bvtest3.
+    Proof. accessible_proof. Qed.
+    Instance accessible_pevaltest1 : AccessibleFun pevaltest1.
+    Proof. accessible_proof. Qed.
 
   End WithAccessibleTactics.
 

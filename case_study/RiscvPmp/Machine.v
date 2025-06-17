@@ -1405,8 +1405,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Proof. accessible_proof. Qed.
     Instance accessible_pmpWriteAddr : AccessibleFun pmpWriteAddr.
     Proof. accessible_proof. Qed.
-    Instance accessible_pmpWriteCfgReg (n : nat) (H : n < 1) :
-      AccessibleFun (@pmpWriteCfgReg n H).
+    Instance accessible_pmpWriteCfgReg : AccessibleFun pmpWriteCfgReg.
     Proof. accessible_proof. Qed.
     Instance accessible_get_next_pc : AccessibleFun get_next_pc.
     Proof. accessible_proof. Qed.
