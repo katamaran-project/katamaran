@@ -1601,12 +1601,12 @@ Module Type UnifLogicOn
       ℛ⟦RVal ty.bool⟧ v sv ⊢ ℛ⟦RFormula⟧ (v = ty.SyncVal ty.bool true) (formula_bool sv).
     Proof. unfold RVal, RInst. crushPredEntails3; cbn in *; now subst. Qed.
 
-    Lemma refine_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ}:
-      ℛ⟦ RVal σ ⟧ v1 sv1 ∗ ℛ⟦ RVal σ ⟧ v2 sv2 ⊢
-        ℛ⟦RFormula⟧ (bop.eval_relop_propRel relop v1 v2) (formula_relop relop sv1 sv2).
-    Proof.
-      unfold RFormula, RVal, RInst. crushPredEntails3; now subst.
-    Qed.
+    (* Lemma refine_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ}: *)
+    (*   ℛ⟦ RVal σ ⟧ v1 sv1 ∗ ℛ⟦ RVal σ ⟧ v2 sv2 ⊢ *)
+    (*     ℛ⟦RFormula⟧ (bop.eval_relop_propRel relop v1 v2) (formula_relop relop sv1 sv2). *)
+    (* Proof. *)
+    (*   unfold RFormula, RVal, RInst. crushPredEntails3; now subst. *)
+    (* Qed. *)
 
     Lemma refine_formula_persist :
       forall (w1 w2 : World) {ω : Acc w1 w2} (f : Formula w1) (p : Prop),
@@ -1966,11 +1966,11 @@ Module Type UnifLogicOn
     RefineCompat RFormula (v = ty.SyncVal ty.bool true) w (formula_bool sv) _ :=
     MkRefineCompat refine_formula_bool.
 
-  Definition refine_compat_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ} :
-    RefineCompat RFormula (bop.eval_relop_propRel relop v1 v2) w (formula_relop relop sv1 sv2) _ :=
-    MkRefineCompat refine_formula_relop.
-  #[global] Opaque refine_compat_formula_relop.
-  #[export] Hint Extern 0 (RefineCompat RFormula _ _ (formula_relop ?relop _ _) _) => ( refine (refine_compat_formula_relop (relop := relop)) ) : typeclass_instances.
+  (* Definition refine_compat_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ} : *)
+  (*   RefineCompat RFormula (bop.eval_relop_propRel relop v1 v2) w (formula_relop relop sv1 sv2) _ := *)
+  (*   MkRefineCompat refine_formula_relop. *)
+  (* #[global] Opaque refine_compat_formula_relop. *)
+  (* #[export] Hint Extern 0 (RefineCompat RFormula _ _ (formula_relop ?relop _ _) _) => ( refine (refine_compat_formula_relop (relop := relop)) ) : typeclass_instances. *)
 
   #[export] Instance refine_compat_chunk_ptsreg {w σ} {pc a ta} :
     RefineCompat RChunk (chunk_ptsreg pc a) w(chunk_ptsreg (σ := σ) pc ta) _ :=

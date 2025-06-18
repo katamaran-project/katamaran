@@ -471,7 +471,7 @@ Module Type ShallowExecOn
                     | Some c => Shallow.ValidContract c (FunDef fnc)
                     | None => False
                     end) in
-        let s := eval compute in (CStatistics.stats P) inq s.
+        let s := eval compute in (CStatistics.stats P) in s.
 
     End Statistics.
 
