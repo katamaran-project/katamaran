@@ -322,19 +322,19 @@ Module Type ChunksOn
           apply noConfusion_inv in Heqo. cbn in Heqo. subst.
           apply instprop_formula_eqs_ctx in Heqs.
           (* TODO: I have no idea why this failed but it started failing after my changes in Formula.v *)
-      (*     rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)). *)
-      (*     rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat. *)
-      (*     change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'. *)
-      (*     rewrite (@inst_eq_rect_indexed (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)). *)
-      (*     rewrite rew_opp_l. now destruct is_duplicable. *)
-      (*   - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto. *)
-      (*     intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs). *)
-      (*     remember (inst (chunk_user p (eq_rect_r (fun c0 : Ctx Ty => Env (Term Σ) c0) (tsI ►► tsO) prec)) ι) as c'. *)
-      (*     change (inst (cons c h) ι) with (cons (inst c ι) (inst h ι)). *)
-      (*     cbn [fst heap_extractions]. right. apply List.in_map_iff. *)
-      (*     eexists (c', inst h' ι); auto. *)
-      (* Qed. *)
-      Admitted.
+          Set Printing Implicit.
+          rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env RelVal)).
+          rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat.
+          change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.
+          rewrite (@inst_eq_rect_indexed (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env RelVal)).
+          rewrite rew_opp_l. now destruct is_duplicable.
+        - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
+          intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
+          remember (inst (chunk_user p (eq_rect_r (fun c0 : Ctx Ty => Env (Term Σ) c0) (tsI ►► tsO) prec)) ι) as c'.
+          change (inst (cons c h) ι) with (cons (inst c ι) (inst h ι)).
+          cbn [fst heap_extractions]. right. apply List.in_map_iff.
+          eexists (c', inst h' ι); auto.
+      Qed.
 
     End PreciseUser.
 

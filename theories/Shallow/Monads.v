@@ -200,8 +200,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
     Definition angelic (σ : Ty) : CPureSpec (RelVal σ) :=
       fun Φ => exists (v : RelVal σ), Φ v.
+    #[global] Arguments angelic σ : clear implicits.
     Definition demonic (σ : Ty) : CPureSpec (RelVal σ) :=
       fun Φ => forall (v : RelVal σ), Φ v.
+    #[global] Arguments demonic σ : clear implicits.
 
     Definition angelic_ctx {N : Set} :
       forall Δ : NCtx N Ty, CPureSpec (NamedEnv RelVal Δ) :=

@@ -217,6 +217,7 @@ Module Type PartialEvaluationOn
       Term_bv_case (P := fun n _ => RQuote n)
         (fun n ζ ζin => Term_bv_Quote_def (term_var ζ))
         (fun n v => fun l p => (PEc (bv.unsigned v) , nil))
+        (fun n v => Term_bv_Quote_def (term_relval _ v))
         (fun n e1 e2 => Term_bv_Quote_bin (@PEadd _) (Term_bv_Quote e1) (Term_bv_Quote e2))
         (fun n e1 e2 => Term_bv_Quote_bin (@PEsub _) (Term_bv_Quote e1) (Term_bv_Quote e2))
         (fun n e1 e2 => Term_bv_Quote_bin (@PEmul _) (Term_bv_Quote e1) (Term_bv_Quote e2))
@@ -450,6 +451,7 @@ Module Type PartialEvaluationOn
       match t with
       | term_var ς                 => term_var ς
       | term_val _ v               => term_val _ v
+      | term_relval _ v               => term_relval _ v
       | term_binop op t1 t2        => peval_binop op (peval' t1) (peval' t2)
       | term_unop op t             => peval_unop op (peval' t)
       (* | term_tuple ts              => term_tuple (env.map (fun b => @peval' b) ts) *)
@@ -490,6 +492,7 @@ Module Type PartialEvaluationOn
       peval' t ≡ t.
     Proof.
       induction t; cbn.
+      - reflexivity.
       - reflexivity.
       - reflexivity.
       - etransitivity; [apply peval_binop_sound|now apply proper_term_binop].

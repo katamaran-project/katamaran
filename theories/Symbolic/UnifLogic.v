@@ -578,9 +578,11 @@ Module Type UnifLogicOn
       now rewrite H2 H4 H5.
     Qed.
 
+    (* Does not work because NonSyncVal v v != SyncVal v *)
     Lemma eqₚ_term_prod {σ1 σ2} {w : World} {sva1 svb1 : STerm σ1 w} {sva2 svb2 : STerm σ2 w} :
       eqₚ (T := STerm (ty.prod σ1 σ2)) (term_binop bop.pair sva1 sva2) (term_binop bop.pair svb1 svb2) ⊣⊢ eqₚ sva1 svb1 ∗ eqₚ sva2 svb2.
-    Proof. (* crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed. *)
+    Proof. 
+      (* crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed. *)
     Admitted.
 
 
@@ -1023,21 +1025,20 @@ Module Type UnifLogicOn
     Qed.
 
     Lemma knowing_acc_snoc_right {w b P} :
-      knowing (w1 := wsnoc w b) acc_snoc_right P ⊣⊢ ∃ v, forgetting (w1 := wsnoc w b) (acc_snoc_left acc_refl b (term_val _ v)) P.
+      knowing (w1 := wsnoc w b) acc_snoc_right P ⊣⊢ ∃ v, forgetting (w1 := wsnoc w b) (acc_snoc_left acc_refl b (term_relval _ v)) P.
     Proof.
       unfold knowing, forgetting.
       crushPredEntails3.
-    (*   - destruct (env.view x) as [ιp v]. *)
-    (*     exists v. *)
-    (*     change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b v). *)
-    (*     now rewrite inst_sub_id -H0 inst_sub_wk1. *)
-    (*   - exists (env.snoc ι b x). *)
-    (*     change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b x) in H0. *)
-    (*     rewrite inst_sub_id in H0. *)
-    (*     repeat split; eauto using inst_sub_wk1. *)
-    (*     now rewrite instprop_subst inst_sub_wk1. *)
-    (* Qed. *)
-    Admitted.
+      - destruct (env.view x) as [ιp v].
+        exists v.
+        change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b v).
+        now rewrite inst_sub_id -H0 inst_sub_wk1.
+      - exists (env.snoc ι b x).
+        change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b x) in H0.
+        rewrite inst_sub_id in H0.
+        repeat split; eauto using inst_sub_wk1.
+        now rewrite instprop_subst inst_sub_wk1.
+    Qed.
 
     Lemma knowing_acc_subst_right {w : World} {x σ} `{xIn : (x∷σ ∈ w)%katamaran}
       {t : Term (w - x∷σ) σ} {P} :
@@ -1072,30 +1073,29 @@ Module Type UnifLogicOn
       
 
     Lemma forgetting_acc_snoc_left_repₚ {w1 w2 : World} {b} {ω : w1 ⊒ w2} {v} :
-      ⊢ forgetting (w1 := wsnoc w1 b) (acc_snoc_left ω b (term_val _ v)) (repₚ (ty.SyncVal _ v) term_var_zero).
+      ⊢ forgetting (w1 := wsnoc w1 b) (acc_snoc_left ω b (term_relval _ v)) (repₚ v term_var_zero).
     Proof.
       unfold forgetting.
       now crushPredEntails3.
     Qed.
 
     Lemma assuming_acc_snoc_right {w b P} :
-      assuming (w1 := wsnoc w b) (acc_snoc_right) P ⊣⊢ ∀ v, forgetting (w1 := wsnoc w b) (acc_snoc_left acc_refl b (term_val _ v)) P.
+      assuming (w1 := wsnoc w b) (acc_snoc_right) P ⊣⊢ ∀ v, forgetting (w1 := wsnoc w b) (acc_snoc_left acc_refl b (term_relval _ v)) P.
     Proof.
       unfold assuming, forgetting.
       crushPredEntails3.
-      - change (P (env.snoc (inst (sub_id w) ι) b (ty.SyncVal (type b) a))).
+      - change (P (env.snoc (inst (sub_id w) ι) b a)).
         rewrite inst_sub_id.
         apply H0.
         + eapply inst_sub_wk1.
         + now rewrite instprop_subst inst_sub_wk1.
       - destruct (env.view ιpast) as [ι' v].
         rewrite inst_sub_wk1 in H1; subst.
-    (*     specialize (H0 v). *)
-    (*     change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b v) in H0. *)
-    (*     rewrite inst_sub_id in H0. *)
-    (*     now apply H0. *)
-    (* Qed. *)
-    Admitted.
+        specialize (H0 v).
+        change (env.snoc _ _ _) with (env.snoc (inst (sub_id w) ι) b v) in H0.
+        rewrite inst_sub_id in H0.
+        now apply H0.
+    Qed.
 
     Lemma forgetting_acc_pathcondition_right {w : World}
       {C : PathCondition w}

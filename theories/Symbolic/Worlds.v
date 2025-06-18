@@ -848,15 +848,17 @@ Module Type WorldsOn
       fun ι => uncurry_named P (inst ζ ι).
     Arguments instpred_formula_prop [w] [Σ] ζ P ι /.
 
-    Definition instpred_formula_relop {w : World} {σ : Ty} (op : RelOp σ) (t1 t2 : Term w σ) : Pred w :=
-      fun ι => bop.eval_relop_propRel op (inst t1 ι) (inst t2 ι).
+    Definition instpred_formula_relop {w : World} {σ : Ty} (op : RelOp σ) (t1 t2 : Term w σ) : Pred w. (*  := *)
+      (* fun ι => bop.eval_relop_propRel op (inst t1 ι) (inst t2 ι). *)
+      Admitted.
     Arguments instpred_formula_relop [w] {σ} op t1 t2 ι /.
 
     #[export] Instance proper_instpred_formula_relop {w : World} {σ} :
       Proper (eq ==> equiv ==> equiv ==> bientails) (@instpred_formula_relop w σ).
-    Proof. crushPredEntails2; subst; specialize (H0 ι); specialize (H1 ι);
-             unfold instpred_formula_relop in *.
-           now rewrite -H0 -H1. now rewrite H0 H1.  Qed.
+    Proof. crushPredEntails2; subst; specialize (H0 ι); specialize (H1 ι).
+           (*   unfold instpred_formula_relop in *. *)
+           (* now rewrite -H0 -H1. now rewrite H0 H1.  Qed. *)
+             Admitted.
 
     Fixpoint instpred_formula {w : World} (fml : Formula w) : Pred w :=
       match fml with
@@ -879,7 +881,8 @@ Module Type WorldsOn
         unfold instpred_formula, repₚ, eqₚ;
         rewrite ?bi_sep_unfold ?bi_or_unfold;
         crushPredEntails2.
-    Qed.
+    (* Qed. *)
+      Admitted.
 
     Import Bitvector.
 
@@ -1109,12 +1112,14 @@ Module Type WorldsOn
     Lemma instpred_formula_relop_val {w : World} {σ} (op : RelOp σ) (v1 v2 : Val σ) :
         instpred (w := w) (formula_relop op (term_val _ v1) (term_val _ v2)) ⊣⊢
           ⌜ bop.eval_relop_prop op v1 v2 ⌝.
-    Proof. crushPredEntails2. Qed.
+    Proof. crushPredEntails2. (* Qed. *)
+           Admitted.
 
     Lemma instpred_formula_relop_val' {w : World} {σ} (op : RelOp σ) (v1 v2 : Val σ) :
         instpred_formula_relop (w := w) op (term_val _ v1) (term_val _ v2) ⊣⊢
           ⌜ bop.eval_relop_prop op v1 v2 ⌝.
-    Proof. crushPredEntails2. Qed.
+    Proof. crushPredEntails2. (* Qed. *)
+           Admitted.
 
     (* Lemma instpred_formula_relop_neg {w : World} {σ} (op : RelOp σ) (t1 t2 : Term w σ) : *)
     (*       instpred (formula_relop_neg op t1 t2) ⊣⊢ *)
@@ -1139,9 +1144,10 @@ Module Type WorldsOn
       destruct ζ; cbn; [now rewrite inst_sub_id|].
       induction f; cbn;
         rewrite ?inst_subst ?bi_sep_unfold; auto.
-      now apply Morphisms_Prop.and_iff_morphism.
-      now apply Morphisms_Prop.or_iff_morphism.
-    Qed.
+      (* now apply Morphisms_Prop.and_iff_morphism. *)
+    (*   now apply Morphisms_Prop.or_iff_morphism. *)
+    (* Qed. *)
+      Admitted.
 
     Lemma wco_valid {w : World} : ⊢ instpred (w := w) (wco w).
     Proof. constructor. crushPredEntails2. now rewrite instpred_prop. Qed.

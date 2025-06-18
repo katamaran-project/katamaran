@@ -156,33 +156,32 @@ Module Type RefinementMonadsOn
       iSpecialize ("HK" $! _ acc_snoc_right).
       rewrite assuming_acc_snoc_right.
       iSpecialize ("HK" $! v).
-      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v))).
+      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_relval _ v))).
       iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep".
       iModIntro.
       iDestruct ("HK" with "Hrep HSP") as "%Hkv".
-      now iExists (ty.SyncVal _ v).
+      now iExists v.
     Qed.
 
     #[export] Program Instance refine_compat_angelic (x : option LVar) {w : World} {σ}:
-        RefineCompat (RPureSpec (RVal σ)) (@CPureSpec.angelic σ) w (SPureSpec.angelic (w := w) x σ) emp :=
+        RefineCompat (RPureSpec (RVal σ)) (CPureSpec.angelic σ) w (SPureSpec.angelic (w := w) x σ) emp :=
         MkRefineCompat (refine_angelic _ _).
 
     Lemma refine_demonic (x : option LVar) σ {w} :
-      ⊢ ℛ⟦RPureSpec (RVal σ)⟧ (@CPureSpec.demonic σ) (SPureSpec.demonic (w := w) x σ).
+      ⊢ ℛ⟦RPureSpec (RVal σ)⟧ (CPureSpec.demonic σ) (SPureSpec.demonic (w := w) x σ).
     Proof.
       unfold CPureSpec.demonic, SPureSpec.angelic; simpl.
       iIntros (k K) "HK HSP".
       iIntros (v).
       iSpecialize ("HK" $! _ (acc_snoc_right (b := fresh_lvar w x∷σ))).
-    (*   rewrite !assuming_acc_snoc_right. *)
-    (*   iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep". *)
-    (*   iSpecialize ("HK" $! v). *)
-    (*   iSpecialize ("HSP" $! v). *)
-    (*   rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v))). *)
-    (*   iModIntro. *)
-    (*   now iApply ("HK" with "Hrep HSP"). *)
-    (* Qed. *)
-    Admitted.
+      rewrite !assuming_acc_snoc_right.
+      iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep".
+      iSpecialize ("HK" $! v).
+      iSpecialize ("HSP" $! v).
+      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_relval _ v))).
+      iModIntro.
+      now iApply ("HK" with "Hrep HSP").
+    Qed.
 
     #[export] Program Instance refine_compat_demonic (x : option LVar) {w : World} {σ}:
         RefineCompat (RPureSpec (RVal σ)) (@CPureSpec.demonic σ) w (SPureSpec.demonic (w := w) x σ) emp :=
@@ -264,6 +263,7 @@ Module Type RefinementMonadsOn
     Qed.
 
     (* TODO: more logical inst_triangular *)
+    (* TODO: This is not true for now, because SyncVal v does not equal NonSyncVal v v *)
     Lemma safe_assert_triangular {w0 w1} msg (ζ : Tri w0 w1)
       (o : AMessage w1 -> 𝕊 w1) :
       (psafe (assert_triangular msg ζ o) ⊣⊢
@@ -278,7 +278,7 @@ Module Type RefinementMonadsOn
         rewrite subst_sub_comp.
         rewrite (IHζ (subst msg (sub_single xIn t)) o).
         (* now rewrite knowing_acc_subst_right. *)
-    (* Qed. *)
+        (* Qed. *)
     Admitted.
 
     Lemma safe_assert_pathcondition_without_solver {w0 : World}

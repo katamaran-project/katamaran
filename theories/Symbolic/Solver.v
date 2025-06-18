@@ -73,6 +73,7 @@ Module Type GenericSolverOn
       Term_bool_case
         (fun (*var*) ς _        => singleton (formula_bool (term_var ς)))
         (fun (*val*) b          => if b then empty else error)
+        (fun (*relval*) b          => if b then empty else error)
         (fun (*and*) t1 t2      => cat (simplify_bool t1) (simplify_bool t2))
         (fun (*or*)  t1 t2      => singleton (formula_bool (term_binop bop.or t1 t2)))
         (fun (*rel*) σ op t1 t2 => singleton (formula_relop op t1 t2))
@@ -83,6 +84,7 @@ Module Type GenericSolverOn
       Term_bool_case
         (fun (*var*) ς _        => singleton (formula_bool (term_unop uop.not (term_var ς))))
         (fun (*val*) b          => if b then error else empty)
+        (fun (*relval*) b          => if b then error else empty)
         (fun (*and*) t1 t2      => singleton (formula_bool (term_binop bop.or (term_unop uop.not t1) (term_unop uop.not t2))))
         (fun (*or*)  t1 t2      => cat (simplify_bool_neg t1) (simplify_bool_neg t2))
         (fun (*rel*) σ op t1 t2 => singleton (formula_relop_neg op t1 t2))
@@ -94,7 +96,8 @@ Module Type GenericSolverOn
       (instpred (simplify_bool_neg t) ⊣⊢ instpred (formula_bool (term_unop uop.not t))).
     Proof.
       induction t using Term_bool_ind; cbn; arw.
-      - destruct v; arw. 
+      - destruct v; arw.
+      - admit. 
       - destruct IHt1 as [IHt11 IHt12], IHt2 as [IHt21 IHt22]; arw.
         rewrite IHt11 IHt21.
         (* need to find a confluent rewrite strategy... *)
@@ -253,6 +256,7 @@ Module Type GenericSolverOn
       match t with
       | term_var x          => fun v => singleton (formula_relop bop.eq (term_var x) (term_val _ v))
       | term_val σ v        => fun v' => if eq_dec v v' then empty else error
+      | term_relval σ v        => fun v' => if eq_dec v (ty.SyncVal _ v') then empty else error
       | term_binop op t1 t2 => simplify_eq_binop_val op t1 t2
       | term_unop op t      => simplify_eq_unop_val op t
       (* | term_tuple ts       => env.Env_rect *)

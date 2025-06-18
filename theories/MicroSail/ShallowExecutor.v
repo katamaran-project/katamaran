@@ -55,7 +55,6 @@ Import SignatureNotations.
 Set Implicit Arguments.
 
 Module Type ShallowExecOn
-  (Import TY : Types)
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
@@ -472,7 +471,7 @@ Module Type ShallowExecOn
                     | Some c => Shallow.ValidContract c (FunDef fnc)
                     | None => False
                     end) in
-        let s := eval compute in (CStatistics.stats P) in s.
+        let s := eval compute in (CStatistics.stats P) inq s.
 
     End Statistics.
 
@@ -480,7 +479,7 @@ Module Type ShallowExecOn
 
 End ShallowExecOn.
 
-Module MakeShallowExecutor
+Module MakeShallowExecutor 
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)

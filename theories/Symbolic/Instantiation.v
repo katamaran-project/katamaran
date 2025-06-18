@@ -127,6 +127,7 @@ Module Type InstantiationOn
     match t in Term _ σ return RelVal σ with
     | term_var_in bIn            => env.lookup ι bIn
     | term_val _ v               => ty.SyncVal _ v
+    | term_relval _ v               => v
     | term_binop op t1 t2        => ty.liftBinOp (bop.eval op)
                                       (inst (Inst := @inst_term _) t1 ι)
                                       (inst (Inst := @inst_term _) t2 ι)

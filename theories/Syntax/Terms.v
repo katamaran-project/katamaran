@@ -60,6 +60,7 @@ Module Type TermsOn (Import TY : Types).
   Inductive Term (Σ : LCtx) : Ty -> Set :=
   | term_var     (ς : LVar) (σ : Ty) {ςInΣ : ς∷σ ∈ Σ} : Term Σ σ
   | term_val     (σ : Ty) : Val σ -> Term Σ σ
+  | term_relval  (σ : Ty) : RelVal σ -> Term Σ σ
   | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
   | term_unop    {σ1 σ2 : Ty} (op : UnOp σ1 σ2) (t : Term Σ σ1) : Term Σ σ2
   (* | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs) *)
@@ -68,6 +69,7 @@ Module Type TermsOn (Import TY : Types).
   .
   #[global] Arguments term_var {_} _ {_ _}.
   #[global] Arguments term_val {_} _ _.
+  #[global] Arguments term_relval {_} _ _.
   (* #[global] Arguments term_tuple {_ _} ts. *)
   (* #[global] Arguments term_union {_} U K t. *)
   (* #[global] Arguments term_record {_} R ts. *)
@@ -116,6 +118,7 @@ Module Type TermsOn (Import TY : Types).
 
     Hypothesis (P_var        : forall (ς : LVar) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
     Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
+    Hypothesis (P_relval     : forall (σ : Ty) (v : RelVal σ), P σ (term_relval σ v)).
     Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
     Hypothesis (P_unop       : forall (σ1 σ2 : Ty) (op : UnOp σ1 σ2) (t : Term Σ σ1), P σ1 t -> P σ2 (term_unop op t)).
     (* Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs) (IH : PE es), P (ty.tuple σs) (term_tuple es)). *)
@@ -126,6 +129,7 @@ Module Type TermsOn (Import TY : Types).
       match t with
       | term_var ς                  => ltac:(eapply P_var; eauto)
       | term_val σ v                => ltac:(eapply P_val; eauto)
+      | term_relval σ v             => ltac:(eapply P_relval; eauto)
       | term_binop op t1 t2         => ltac:(eapply P_binop; eauto)
       | term_unop op t              => ltac:(eapply P_unop; eauto)
       (* | term_tuple ts               => ltac:(eapply P_tuple, env.all_intro; eauto) *)
@@ -144,6 +148,7 @@ Module Type TermsOn (Import TY : Types).
 
     Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.bool ∈ Σ), P (term_var ς)).
     Variable (pval : forall (v : Val ty.bool), P (term_val ty.bool v)).
+    Variable (prelval : forall (v : RelVal ty.bool), P (term_relval ty.bool v)).
     Variable (pand : forall (e1 : Term Σ ty.bool) (e2 : Term Σ ty.bool), P (term_binop bop.and e1 e2)).
     Variable (por : forall (e1 : Term Σ ty.bool) (e2 : Term Σ ty.bool), P (term_binop bop.or e1 e2)).
     Variable (prel : forall σ (op : RelOp σ) (e1 e2 : Term Σ σ), P (term_binop (bop.relop op) e1 e2)).
@@ -152,6 +157,7 @@ Module Type TermsOn (Import TY : Types).
     Equations(noeqns) Term_bool_case (t : Term Σ ty.bool) : P t :=
     | term_var ς                    => @pvar ς _
     | term_val _ b                  => @pval b
+    | term_relval _ b               => @prelval b
     | term_binop bop.and s t        => pand s t
     | term_binop (bop.relop op) s t => prel op s t
     | term_binop bop.or s t         => por s t
@@ -165,6 +171,7 @@ Module Type TermsOn (Import TY : Types).
 
     Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.int ∈ Σ), P (term_var ς)).
     Variable (pval : forall (v : Val ty.int), P (term_val ty.int v)).
+    Variable (prelval : forall (v : RelVal ty.int), P (term_relval ty.int v)).
     Variable (pplus : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.plus e1 e2)).
     Variable (pminus : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.minus e1 e2)).
     Variable (ptimes : forall (e1 : Term Σ ty.int) (e2 : Term Σ ty.int), P e1 -> P e2 -> P (term_binop bop.times e1 e2)).
@@ -176,6 +183,7 @@ Module Type TermsOn (Import TY : Types).
     Equations(noeqns) Term_int_ind (t : Term Σ ty.int) : P t :=
     | term_var ς               => @pvar ς _
     | term_val _ b             => @pval b
+    | term_relval _ b          => @prelval b
     | term_binop bop.plus s t  => pplus (Term_int_ind s) (Term_int_ind t)
     | term_binop bop.minus s t => pminus (Term_int_ind s) (Term_int_ind t)
     | term_binop bop.times s t => ptimes (Term_int_ind s) (Term_int_ind t)
@@ -192,6 +200,7 @@ Module Type TermsOn (Import TY : Types).
 
     Variable (pvar : forall n (ς : LVar) (ςInΣ : ς∷ty.bvec n ∈ Σ), P (term_var ς)).
     Variable (pval : forall n (v : Val (ty.bvec n)), P (term_val (ty.bvec n) v)).
+    Variable (prelval : forall n (v : RelVal (ty.bvec n)), P (term_relval (ty.bvec n) v)).
     Variable (pbvadd : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvadd e1 e2)).
     Variable (pbvsub : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvsub e1 e2)).
     Variable (pbvmul : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P (term_binop bop.bvmul e1 e2)).
@@ -214,6 +223,7 @@ Module Type TermsOn (Import TY : Types).
     Equations(noeqns) Term_bv_case [n : nat] (t : Term Σ (ty.bvec n)) : P t :=
     | term_var ς                            => @pvar _ ς _
     | term_val _ b                          => @pval _ b
+    | term_relval _ b                       => @prelval _ b
     | term_binop bop.bvadd s t              => pbvadd s t
     | term_binop bop.bvsub s t              => pbvsub s t
     | term_binop bop.bvmul s t              => pbvmul s t
@@ -242,6 +252,7 @@ Module Type TermsOn (Import TY : Types).
 
     Variable (pvar : forall n (ς : LVar) (ςInΣ : ς∷ty.bvec n ∈ Σ), P (term_var ς)).
     Variable (pval : forall n (v : Val (ty.bvec n)), P (term_val (ty.bvec n) v)).
+    Variable (prelval : forall n (v : RelVal (ty.bvec n)), P (term_relval (ty.bvec n) v)).
     Variable (pbvadd : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvadd e1 e2)).
     Variable (pbvsub : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvsub e1 e2)).
     Variable (pbvmul : forall n (e1 : Term Σ (ty.bvec n)) (e2 : Term Σ (ty.bvec n)), P e1 -> P e2 -> P (term_binop bop.bvmul e1 e2)).
@@ -265,6 +276,7 @@ Module Type TermsOn (Import TY : Types).
       Term_bv_case (P := P)
         ltac:(intros; apply pvar)
         ltac:(intros; apply pval)
+        ltac:(intros; apply prelval)
         ltac:(intros; apply pbvadd; auto)
         ltac:(intros; apply pbvsub; auto)
         ltac:(intros; apply pbvmul; auto)
@@ -293,6 +305,7 @@ Module Type TermsOn (Import TY : Types).
 
     Variable (pvar : forall (ς : LVar) (ςInΣ : ς∷ty.bool ∈ Σ), P (term_var ς)).
     Variable (pval : forall (v : Val ty.bool), P (term_val ty.bool v)).
+    Variable (prelval : forall (v : RelVal ty.bool), P (term_relval ty.bool v)).
     Variable (pand : forall e1 e2, P e1 -> P e2 -> P (term_binop bop.and e1 e2)).
     Variable (por : forall e1 e2, P e1 -> P e2 -> P (term_binop bop.or e1 e2)).
     Variable (prel : forall σ (op : RelOp σ) e1 e2, P (term_binop (bop.relop op) e1 e2)).
@@ -302,6 +315,7 @@ Module Type TermsOn (Import TY : Types).
       Term_bool_case
         pvar
         pval
+        prelval
         (fun t1 t2 => pand (Term_bool_ind t1) (Term_bool_ind t2))
         (fun t1 t2 => por (Term_bool_ind t1) (Term_bool_ind t2))
         prel
@@ -366,6 +380,8 @@ Module Type TermsOn (Import TY : Types).
       ListView (term_var ς)
     | term_list_val v :
       ListView (term_val _ v)
+    | term_list_relval v :
+      ListView (term_relval _ v)
     | term_list_cons h {t} (lv : ListView t) :
       ListView (term_binop bop.cons h t)
     | term_list_append {t1 t2} (lv1 : ListView t1) (lv2 : ListView t2) :
@@ -392,6 +408,12 @@ Module Type TermsOn (Import TY : Types).
       | _          => fun _ => tt
       end.
 
+    Definition view_relval {Σ σ} : forall v, View (@term_relval Σ σ v) :=
+      match σ with
+      | ty.list σ0 => term_list_relval
+      | _          => fun _ => tt
+      end.
+
     Definition view_binop {Σ σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) :
       forall {t1 : Term Σ σ1} {t2 : Term Σ σ2},
         View t1 -> View t2 -> View (term_binop op t1 t2) :=
@@ -413,6 +435,7 @@ Module Type TermsOn (Import TY : Types).
       match t as t1 in (Term _ t0) return (View t1) with
       | term_var ς          => view_var _
       | term_val _ v        => view_val v
+      | term_relval _ v        => view_relval v
       | term_binop op t1 t2 => view_binop op (view t1) (view t2)
       | term_unop op t      => view_unop op (view t)
       (* | _                   => tt *)
@@ -426,6 +449,8 @@ Module Type TermsOn (Import TY : Types).
     Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
       ctx.In_eqb ς1inΣ ς2inΣ;
     Term_eqb (term_val _ v1) (term_val _ v2) :=
+      if eq_dec v1 v2 then true else false;
+    Term_eqb (term_relval _ v1) (term_relval _ v2) :=
       if eq_dec v1 v2 then true else false;
     Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
       with bop.eqdep_dec op1 op2 => {
@@ -497,6 +522,7 @@ Module Type TermsOn (Import TY : Types).
       match t with
       | term_var ς                 => ζ.[??ς]
       | term_val σ v               => term_val σ v
+      | term_relval σ v               => term_relval σ v
       | term_binop op t1 t2        => term_binop op (sub_term t1 ζ) (sub_term t2 ζ)
       | term_unop op t             => term_unop op (sub_term t ζ)
       (* | term_tuple ts              => term_tuple (env.map (fun _ t => sub_term t ζ) ts) *)

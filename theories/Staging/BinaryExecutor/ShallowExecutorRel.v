@@ -70,37 +70,37 @@ Module Type ShallowExecRelOn
   (* The following definitions are relational variants of the ones in ShallowExecutor.v.
    *)
 
-  Inductive RelVal (τ : Ty) : Set :=
-  | SyncVal : Val τ -> RelVal τ
-  | NonSyncVal : Val τ -> Val τ -> RelVal τ
-  .
+  (* Inductive RelVal (τ : Ty) : Set := *)
+  (* | SyncVal : Val τ -> RelVal τ *)
+  (* | NonSyncVal : Val τ -> Val τ -> RelVal τ *)
+  (* . *)
 
-  Definition projLeft {σ} (rv : RelVal σ) : Val σ :=
-    match rv with
-    | SyncVal _ v => v
-    | NonSyncVal _ vl _ => vl
-    end.
+  (* Definition projLeft {σ} (rv : RelVal σ) : Val σ := *)
+  (*   match rv with *)
+  (*   | SyncVal _ v => v *)
+  (*   | NonSyncVal _ vl _ => vl *)
+  (*   end. *)
 
-  Definition projRight {σ} (rv : RelVal σ) : Val σ :=
-    match rv with
-    | SyncVal _ v => v
-    | NonSyncVal _ _ vr => vr
-    end.
+  (* Definition projRight {σ} (rv : RelVal σ) : Val σ := *)
+  (*   match rv with *)
+  (*   | SyncVal _ v => v *)
+  (*   | NonSyncVal _ _ vr => vr *)
+  (*   end. *)
 
   Definition syncNamedEnv {N} {Γ : NCtx N Ty} : NamedEnv Val Γ -> NamedEnv RelVal Γ :=
-    env.map (fun b => SyncVal _).
+    env.map (fun b => ty.SyncVal _).
 
   Definition nonsyncNamedEnv {N} {Γ : NCtx N Ty} : NamedEnv Val Γ -> NamedEnv Val Γ -> NamedEnv RelVal Γ :=
-    env.zipWith (fun b => NonSyncVal _).
+    env.zipWith (fun b => ty.NonSyncVal _).
 
   Fixpoint unliftNamedEnv {N} {Γ : NCtx N Ty} (vs : NamedEnv RelVal Γ) : NamedEnv Val Γ + (NamedEnv Val Γ * NamedEnv Val Γ) :=
     match vs with
     | []%env => inl []%env
     | env.snoc vs k v =>
         match (v , unliftNamedEnv vs) with
-        | (SyncVal _ v' , inl vs') => inl (vs' .[ k ↦ v'])
-        | (_ , inl vs') => inr (vs' .[ k ↦ projLeft v ] , (vs' .[ k ↦ projRight v ]))
-        | (_ , inr (vs1' , vs2')) => inr (vs1' .[ k ↦ projLeft v ] , (vs2' .[ k ↦ projRight v ]))
+        | (ty.SyncVal _ v' , inl vs') => inl (vs' .[ k ↦ v'])
+        | (_ , inl vs') => inr (vs' .[ k ↦ ty.projLeft v ] , (vs' .[ k ↦ ty.projRight v ]))
+        | (_ , inr (vs1' , vs2')) => inr (vs1' .[ k ↦ ty.projLeft v ] , (vs2' .[ k ↦ ty.projRight v ]))
         end
     end.
 
@@ -146,24 +146,24 @@ Module Type ShallowExecRelOn
     Import CPureSpec.
     Import CPureSpec.notations.
     
-    Definition MatchResultRel (N : Set) (σ : Ty) (pat : Pattern σ) : Type := {c : PatternCase pat & @NamedEnv N Ty RelVal (PatternCaseCtx c)}.
+    (* Definition MatchResultRel (N : Set) (σ : Ty) (pat : Pattern σ) : Type := {c : PatternCase pat & @NamedEnv N Ty RelVal (PatternCaseCtx c)}. *)
 
-    Definition demonic_pattern_match_rel_pure {N σ} (pat : @Pattern N σ)
-      (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
-      match v with
-      | SyncVal _ v => '(existT pc vals) <- CPureSpec.demonic_pattern_match pat v ;;
-                       pure (existT pc (syncNamedEnv vals))
-      | NonSyncVal _ vl vr =>
-          '(existT pc valsl) <- CPureSpec.demonic_pattern_match pat vl ;;
-          valsr <- angelic_ctx (PatternCaseCtx pc) ;;
-          _  <- assert_formula (pattern_match_val_reverse pat pc valsr = vr);;
-          pure (existT pc (nonsyncNamedEnv valsl valsr))
-      end.
-      #[global] Arguments demonic_pattern_match_rel_pure {N σ} pat v.
+    (* Definition demonic_pattern_match_rel_pure {N σ} (pat : @Pattern N σ) *)
+    (*   (v : RelVal σ) : CPureSpec (MatchResultRel pat) := *)
+    (*   match v with *)
+    (*   | SyncVal _ v => '(existT pc vals) <- CPureSpec.demonic_pattern_match pat v ;; *)
+    (*                    pure (existT pc (syncNamedEnv vals)) *)
+    (*   | NonSyncVal _ vl vr => *)
+    (*       '(existT pc valsl) <- CPureSpec.demonic_pattern_match pat vl ;; *)
+    (*       valsr <- angelic_ctx (PatternCaseCtx pc) ;; *)
+    (*       _  <- assert_formula (pattern_match_val_reverse pat pc valsr = vr);; *)
+    (*       pure (existT pc (nonsyncNamedEnv valsl valsr)) *)
+    (*   end. *)
+    (*   #[global] Arguments demonic_pattern_match_rel_pure {N σ} pat v. *)
 
-      #[export] Instance mon_demonic_pattern_match_rel_pure {N σ} (pat : @Pattern N σ) v :
-        Monotonic (MPureSpec eq) (@demonic_pattern_match_rel_pure _ _ pat v).
-      Proof. destruct v; typeclasses eauto. Qed.
+    (*   #[export] Instance mon_demonic_pattern_match_rel_pure {N σ} (pat : @Pattern N σ) v : *)
+    (*     Monotonic (MPureSpec eq) (@demonic_pattern_match_rel_pure _ _ pat v). *)
+    (*   Proof. destruct v; typeclasses eauto. Qed. *)
 
     Fixpoint assert_eq_chunk (c1 c2 : SCChunkRel) : CPureSpec unit :=
       match c1 , c2 with
@@ -174,7 +174,7 @@ Module Type ShallowExecRelOn
           end
       | chunk_ptsreg r1 v1 , chunk_ptsreg r2 v2 =>
           match eq_dec_het r1 r2 with
-          | left e => assert_formula (eq_rect _ Val v1 _ (f_equal projT1 e) = v2)
+          | left e => assert_formula (eq_rect _ RelVal v1 _ (f_equal projT1 e) = v2)
           | right _ => error
           end
       | chunk_conj c11 c12 , chunk_conj c21 c22 =>
@@ -221,17 +221,17 @@ Module Type ShallowExecRelOn
     Definition demonic_binary {A} : CHeapSpecRel A -> CHeapSpecRel A -> CHeapSpecRel A :=
       fun m1 m2 Φ h => m1 Φ h /\ m2 Φ h.
 
-    Definition angelic (σ : Ty) : CHeapSpecRel (Val σ) :=
+    Definition angelic (σ : Ty) : CHeapSpecRel (RelVal σ) :=
       lift_purespec (CPureSpec.angelic σ).
-    #[global] Arguments angelic σ Φ : rename.
-    Definition demonic (σ : Ty) : CHeapSpecRel (Val σ) :=
+    #[global] Arguments angelic σ Φ : clear implicits.
+    Definition demonic (σ : Ty) : CHeapSpecRel (RelVal σ) :=
       lift_purespec (CPureSpec.demonic σ).
-    #[global] Arguments demonic σ Φ : rename.
+    #[global] Arguments demonic σ Φ : clear implicits.
 
-    Definition angelic_ctx {N} (Δ : NCtx N Ty) : CHeapSpecRel (NamedEnv Val Δ) :=
+    Definition angelic_ctx {N} (Δ : NCtx N Ty) : CHeapSpecRel (NamedEnv RelVal Δ) :=
       lift_purespec (CPureSpec.angelic_ctx Δ).
     #[global] Arguments angelic_ctx {N} Δ.
-    Definition demonic_ctx {N} (Δ : NCtx N Ty) : CHeapSpecRel (NamedEnv Val Δ) :=
+    Definition demonic_ctx {N} (Δ : NCtx N Ty) : CHeapSpecRel (NamedEnv RelVal Δ) :=
       lift_purespec (CPureSpec.demonic_ctx Δ).
     #[global] Arguments demonic_ctx {N} Δ.
 
@@ -247,7 +247,7 @@ Module Type ShallowExecRelOn
 
     Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) : CHeapSpecRel (RelVal τ) :=
       fun Φ h => CPureSpec.read_register reg h (fun '(t,h') => Φ t h').
-    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) : CHeapSpecRel (Val τ) :=
+    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : RelVal τ) : CHeapSpecRel (RelVal τ) :=
       fun Φ h => CPureSpec.write_register reg v h (fun '(v',h') => Φ v' h').
 
     Fixpoint produce {Σ} (asn : Assertion Σ) (ι : Valuation Σ) : CHeapSpecRel unit :=
@@ -258,10 +258,10 @@ Module Type ShallowExecRelOn
           produce_chunk (inst c ι)
       | asn.chunk_angelic c =>
           produce_chunk (inst c ι)
-      | asn.pattern_match s pat rhs =>
-          '(existT pc δpc) <-
-            lift_purespec (CPureSpec.demonic_pattern_match pat (inst s ι)) ;;
-          produce (rhs pc) (ι ►► δpc)
+      (* | asn.pattern_match s pat rhs => *)
+      (*     '(existT pc δpc) <- *)
+      (*       lift_purespec (CPureSpec.demonic_pattern_match pat (inst s ι)) ;; *)
+      (*     produce (rhs pc) (ι ►► δpc) *)
       | asn.sep a1 a2 =>
           _ <- produce a1 ι ;;
           produce a2 ι
@@ -282,10 +282,10 @@ Module Type ShallowExecRelOn
           consume_chunk (inst c ι)
       | asn.chunk_angelic c =>
           consume_chunk (inst c ι)
-      | asn.pattern_match s pat rhs =>
-          '(existT pc δpc) <-
-            lift_purespec (CPureSpec.angelic_pattern_match pat (inst s ι)) ;;
-          consume (rhs pc) (ι ►► δpc)
+      (* | asn.pattern_match s pat rhs => *)
+      (*     '(existT pc δpc) <- *)
+      (*       lift_purespec (CPureSpec.angelic_pattern_match pat (inst s ι)) ;; *)
+      (*     consume (rhs pc) (ι ►► δpc) *)
       | asn.sep a1 a2 =>
           _ <- consume a1 ι ;;
           consume a2 ι
@@ -298,7 +298,7 @@ Module Type ShallowExecRelOn
           debug (pure tt)
       end.
 
-    Definition call_contract [Δ τ] (c : SepContract Δ τ) (args : CStore Δ) : CHeapSpecRel (Val τ) :=
+    Definition call_contract [Δ τ] (c : SepContract Δ τ) (args : CStoreRel Δ) : CHeapSpecRel (RelVal τ) :=
       match c with
       | MkSepContract _ _ Σe δ req result ens =>
           ι <- lift_purespec (CPureSpec.angelic_ctx Σe) ;;
@@ -309,7 +309,7 @@ Module Type ShallowExecRelOn
           pure v
       end.
 
-    Definition call_lemma [Δ] (lem : Lemma Δ) (vs : CStore Δ) : CHeapSpecRel unit :=
+    Definition call_lemma [Δ] (lem : Lemma Δ) (vs : CStoreRel Δ) : CHeapSpecRel unit :=
       match lem with
       | MkLemma _ Σe δ req ens =>
           ι <- lift_purespec (CPureSpec.angelic_ctx Σe) ;;
@@ -405,7 +405,7 @@ Module Type ShallowExecRelOn
       intros ? [] ->. now apply mΦ.
     Qed.
 
-    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) :
+    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : RelVal τ) :
       Monotonic (MHeapSpec eq) (write_register reg v).
     Proof.
       intros Φ1 Φ2 mΦ h.
@@ -425,12 +425,12 @@ Module Type ShallowExecRelOn
     Proof. induction asn; cbn; typeclasses eauto. Qed.
 
     #[export] Instance mon_call_contract
-      [Δ τ] (c : SepContract Δ τ) (args : CStore Δ) :
+      [Δ τ] (c : SepContract Δ τ) (args : CStoreRel Δ) :
       Monotonic (MHeapSpec eq) (call_contract c args).
     Proof. destruct c; typeclasses eauto. Qed.
 
     #[export] Instance mon_call_lemma
-      [Δ] (lem : Lemma Δ) (vs : CStore Δ) :
+      [Δ] (lem : Lemma Δ) (vs : CStoreRel Δ) :
       Monotonic (MHeapSpec eq) (call_lemma lem vs).
     Proof. destruct lem; typeclasses eauto. Qed.
 
@@ -447,51 +447,54 @@ Module Type ShallowExecRelOn
       #[local] Arguments CHeapSpecRel.demonic_binary {_} _ _ /.
       #[local] Arguments CHeapSpecRel.lift_purespec {_} _ _ /.
 
-      Lemma consume_sound {Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
-        forall (Φ : unit -> SCHeap -> Prop) h,
-          consume asn ι Φ h ->
-          (interpret_scheap h ⊢ asn.interpret asn ι ∗ ∃ h', interpret_scheap h' ∧ ⌜ Φ tt h' ⌝)%I.
-      Proof.
-        induction asn; cbn - [inst inst_term]; intros Φ h1.
-        - intros [Hfmle HΦ]. rewrite <-bi.emp_sep at 1. apply bi.sep_mono'.
-          + rewrite bi.and_emp; auto.
-          + apply bi.exist_intro' with h1. apply bi.and_intro; auto.
-        - intros ->%CPureSpec.wp_consume_chunk. now rewrite interpret_scchunk_inst.
-        - intros ->%CPureSpec.wp_consume_chunk. now rewrite interpret_scchunk_inst.
-        - rewrite CPureSpec.wp_angelic_pattern_match.
-          destruct pattern_match_val; auto.
-        - intros ->%IHasn1. rewrite -bi.sep_assoc. apply bi.sep_mono'; [easy|].
-          apply bi.exist_elim. intros h2. apply bi.pure_elim_r. apply IHasn2.
-        - intros [->%IHasn1 | ->%IHasn2]; apply bi.sep_mono'; auto.
-        - intros (v & ->%IHasn). apply bi.sep_mono'; [|easy].
-          now apply bi.exist_intro' with v.
-        - intros HΦ. rewrite bi.emp_sep. apply bi.exist_intro' with h1.
-          apply bi.and_intro; auto.
-      Qed.
 
-      Lemma produce_sound {Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
-        forall (Φ : unit -> SCHeap -> Prop) h,
-          produce asn ι Φ h ->
-          (interpret_scheap h ⊢
-             asn.interpret asn ι -∗ ∃ h', interpret_scheap h' ∧ ⌜Φ tt h'⌝).
-      Proof.
-        induction asn; cbn - [CPureSpec.assume_formula inst inst_term]; intros Φ h.
-        - iIntros (HΦ) "Hh [%Hfml _]". iExists h. auto.
-        - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst.
-        - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst.
-        - rewrite CPureSpec.wp_demonic_pattern_match.
-          destruct pattern_match_val; auto.
-        - iIntros (Hprod1) "H [Hasn1 Hasn2]".
-          iPoseProof (IHasn1 _ _ _ Hprod1 with "H Hasn1") as "(%h2 & H & %Hprod2)".
-          iPoseProof (IHasn2 _ _ _ Hprod2 with "H Hasn2") as "(%h3 & H & %HΦ)".
-          iExists h3. auto.
-        - iIntros ([HΦ1 HΦ2]) "Hh [Hasn1|Hasn2]".
-          iApply (IHasn1 with "Hh Hasn1"); auto.
-          iApply (IHasn2 with "Hh Hasn2"); auto.
-        - iIntros (HΦ) "Hh [%v Hasn]".
-          now iApply (IHasn with "Hh Hasn").
-        - iIntros (HΦ) "Hh _". iExists h. auto.
-      Qed.
+      (* This uses pattern matching *)
+      (* Lemma consume_sound {Σ} {ι : Valuation Σ} {asn : Assertion Σ} : *)
+      (*   forall (Φ : unit -> SCHeap -> Prop) h, *)
+      (*     consume asn ι Φ h -> *)
+      (*     (interpret_scheap h ⊢ asn.interpret asn ι ∗ ∃ h', interpret_scheap h' ∧ ⌜ Φ tt h' ⌝)%I. *)
+      (* Proof. *)
+      (*   induction asn; cbn - [inst inst_term]; intros Φ h1. *)
+      (*   - intros [Hfmle HΦ]. rewrite <-bi.emp_sep at 1. apply bi.sep_mono'. *)
+      (*     + rewrite bi.and_emp; auto. *)
+      (*     + apply bi.exist_intro' with h1. apply bi.and_intro; auto. *)
+      (*   - intros ->%CPureSpec.wp_consume_chunk. now rewrite interpret_scchunk_inst. *)
+      (*   - intros ->%CPureSpec.wp_consume_chunk. now rewrite interpret_scchunk_inst. *)
+      (*   - rewrite CPureSpec.wp_angelic_pattern_match. *)
+      (*     destruct pattern_match_val; auto. *)
+      (*   - intros ->%IHasn1. rewrite -bi.sep_assoc. apply bi.sep_mono'; [easy|]. *)
+      (*     apply bi.exist_elim. intros h2. apply bi.pure_elim_r. apply IHasn2. *)
+      (*   - intros [->%IHasn1 | ->%IHasn2]; apply bi.sep_mono'; auto. *)
+      (*   - intros (v & ->%IHasn). apply bi.sep_mono'; [|easy]. *)
+      (*     now apply bi.exist_intro' with v. *)
+      (*   - intros HΦ. rewrite bi.emp_sep. apply bi.exist_intro' with h1. *)
+      (*     apply bi.and_intro; auto. *)
+      (* Qed. *)
+
+      (* This uses pattern matching *)
+      (* Lemma produce_sound {Σ} {ι : Valuation Σ} {asn : Assertion Σ} : *)
+      (*   forall (Φ : unit -> SCHeap -> Prop) h, *)
+      (*     produce asn ι Φ h -> *)
+      (*     (interpret_scheap h ⊢ *)
+      (*        asn.interpret asn ι -∗ ∃ h', interpret_scheap h' ∧ ⌜Φ tt h'⌝). *)
+      (* Proof. *)
+      (*   induction asn; cbn - [CPureSpec.assume_formula inst inst_term]; intros Φ h. *)
+      (*   - iIntros (HΦ) "Hh [%Hfml _]". iExists h. auto. *)
+      (*   - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst. *)
+      (*   - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst. *)
+      (*   - rewrite CPureSpec.wp_demonic_pattern_match. *)
+      (*     destruct pattern_match_val; auto. *)
+      (*   - iIntros (Hprod1) "H [Hasn1 Hasn2]". *)
+      (*     iPoseProof (IHasn1 _ _ _ Hprod1 with "H Hasn1") as "(%h2 & H & %Hprod2)". *)
+      (*     iPoseProof (IHasn2 _ _ _ Hprod2 with "H Hasn2") as "(%h3 & H & %HΦ)". *)
+      (*     iExists h3. auto. *)
+      (*   - iIntros ([HΦ1 HΦ2]) "Hh [Hasn1|Hasn2]". *)
+      (*     iApply (IHasn1 with "Hh Hasn1"); auto. *)
+      (*     iApply (IHasn2 with "Hh Hasn2"); auto. *)
+      (*   - iIntros (HΦ) "Hh [%v Hasn]". *)
+      (*     now iApply (IHasn with "Hh Hasn"). *)
+      (*   - iIntros (HΦ) "Hh _". iExists h. auto. *)
+      (* Qed. *)
 
     End WithBI.
 
@@ -528,18 +531,18 @@ Module Type ShallowExecRelOn
       Definition angelic_binary {Γ1 Γ2 A} (m1 m2 : CStoreSpecRel Γ1 Γ2 A) : CStoreSpecRel Γ1 Γ2 A :=
         fun POST δ h => m1 POST δ h \/ m2 POST δ h.
 
-      Definition demonic {Γ} (σ : Ty) : CStoreSpecRel Γ Γ (Val σ) :=
+      Definition demonic {Γ} (σ : Ty) : CStoreSpecRel Γ Γ (RelVal σ) :=
         lift_purespecrel (CPureSpec.demonic σ).
-      Definition angelic {Γ} (σ : Ty) : CStoreSpecRel Γ Γ (Val σ) :=
+      Definition angelic {Γ} (σ : Ty) : CStoreSpecRel Γ Γ (RelVal σ) :=
         lift_purespecrel (CPureSpec.angelic σ).
 
       Definition angelic_ctx {N : Set} {Γ} :
-        forall Δ : NCtx N Ty, CStoreSpecRel Γ Γ (NamedEnv Val Δ) :=
+        forall Δ : NCtx N Ty, CStoreSpecRel Γ Γ (NamedEnv RelVal Δ) :=
         fun Δ => lift_purespecrel (CPureSpec.angelic_ctx Δ).
       #[global] Arguments angelic_ctx {N Γ} Δ.
 
       Definition demonic_ctx {N : Set} {Γ} :
-        forall Δ : NCtx N Ty, CStoreSpecRel Γ Γ (NamedEnv Val Δ) :=
+        forall Δ : NCtx N Ty, CStoreSpecRel Γ Γ (NamedEnv RelVal Δ) :=
         fun Δ => lift_purespecrel (CPureSpec.demonic_ctx Δ).
       #[global] Arguments demonic_ctx {N Γ} Δ.
 
@@ -622,10 +625,10 @@ Module Type ShallowExecRelOn
 
       Import CPureSpecAdditions.
       
-      Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : RelVal σ) :
-        CStoreSpecRel Γ Γ (MatchResultRel pat) :=
-        lift_purespecrel (CPureSpecAdditions.demonic_pattern_match_rel_pure pat v).
-      #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
+      (* Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : RelVal σ) : *)
+      (*   CStoreSpecRel Γ Γ (MatchResultRel pat) := *)
+      (*   lift_purespecrel (CPureSpecAdditions.demonic_pattern_match_rel_pure pat v). *)
+      (* #[global] Arguments demonic_pattern_match {N Γ σ} pat v. *)
 
       (* Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : RelVal σ) *)
       (*   (Φ : MatchResultRel pat -> CStoreRel Γ -> SCHeapRel -> Prop) (δ : CStoreRel Γ) (h : SCHeapRel) : *)
@@ -652,21 +655,21 @@ Module Type ShallowExecRelOn
 
       Definition liftBinOp {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) : RelVal σ3 :=
         match (rv1 , rv2) with
-        | (SyncVal _ v1 , SyncVal _ v2) => SyncVal _ (f v1 v2)
-        | (_ , _) => NonSyncVal _ (f (projLeft rv1) (projLeft rv2)) (f (projRight rv1) (projRight rv2))
+        | (ty.SyncVal _ v1 , ty.SyncVal _ v2) => ty.SyncVal _ (f v1 v2)
+        | (_ , _) => ty.NonSyncVal _ (f (ty.projLeft rv1) (ty.projLeft rv2)) (f (ty.projRight rv1) (ty.projRight rv2))
         end.
 
       Definition liftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) : RelVal σ2 :=
         match rv with
-        | (SyncVal _ v) => SyncVal _ (f v)
-        | (NonSyncVal _ vl vr) => NonSyncVal _ (f vl) (f vr)
+        | (ty.SyncVal _ v) => ty.SyncVal _ (f v)
+        | (ty.NonSyncVal _ vl vr) => ty.NonSyncVal _ (f vl) (f vr)
         end.
       Print Scope env_scope.
 
       Definition liftNAryOp {N} {σ} {Γ : NCtx N Ty} (f : NamedEnv Val Γ -> Val σ) (args : NamedEnv RelVal Γ) : RelVal σ :=
         match unliftNamedEnv args with
-        | inl args' => SyncVal _ (f args')
-        | inr (args1' , args2') => NonSyncVal _ (f args1') (f args2')
+        | inl args' => ty.SyncVal _ (f args')
+        | inr (args1' , args2') => ty.NonSyncVal _ (f args1') (f args2')
         end.
 
       Definition bopEvalRel {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) := liftBinOp (bop.eval op).
@@ -676,27 +679,27 @@ Module Type ShallowExecRelOn
       Fixpoint evalRel {Γ σ} (e : Exp Γ σ) (δ : CStoreRel Γ) {struct e} : RelVal σ :=
         match e in (Exp _ t) return (RelVal t) with
         | exp_var x           => δ.[??x]
-        | exp_val _ l         => SyncVal _ l
+        | exp_val _ l         => ty.SyncVal _ l
         | exp_binop op e1 e2  => bopEvalRel op (evalRel e1 δ) (evalRel e2 δ)
         | exp_unop op e       => uopEvalRel op (evalRel e δ)
         | exp_list es         => list.foldr
                                    (fun e => @liftBinOp _ (ty.list _) (ty.list _) cons (evalRel e δ))
-                                   (SyncVal _ ([]%list : Val (ty.list _)))
+                                   (ty.SyncVal _ ([]%list : Val (ty.list _)))
                                    es
         | exp_bvec es         => Vector.t_rect
                                    _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => RelVal (ty.bvec m))
-                                   (SyncVal (ty.bvec 0) bv.nil)
+                                   (ty.SyncVal (ty.bvec 0) bv.nil)
                                    (fun eb m _ => liftBinOp (@bv.cons m : Val ty.bool -> Val (ty.bvec m) -> Val (ty.bvec (S m))) (evalRel eb δ))
                                    _ es
-        | exp_tuple es        => env.Env_rect
-                                   (fun σs _ => RelVal (ty.tuple σs))
-                                   (SyncVal _ (tt : Val (ty.tuple [])))
-                                   (fun σs _ (vs : RelVal (ty.tuple σs)) σ e => @liftBinOp σ (ty.tuple σs) (ty.tuple _) (fun x y => (y , x) : Val (ty.tuple (ctx.snoc σs σ))) (evalRel e δ) vs)
-                                   es
-        | exp_union U K e     => @liftUnOp (unionk_ty U K) (ty.union U)
-                                   (fun v => unionv_fold U (existT K v)) (evalRel e δ)
-        | exp_record R es     => @liftNAryOp _ (ty.record R) _ (recordv_fold R)
-                                   (env.map (fun xτ e => evalRel e δ) es)
+        (* | exp_tuple es        => env.Env_rect *)
+        (*                            (fun σs _ => RelVal (ty.tuple σs)) *)
+        (*                            (SyncVal _ (tt : Val (ty.tuple []))) *)
+        (*                            (fun σs _ (vs : RelVal (ty.tuple σs)) σ e => @liftBinOp σ (ty.tuple σs) (ty.tuple _) (fun x y => (y , x) : Val (ty.tuple (ctx.snoc σs σ))) (evalRel e δ) vs) *)
+        (*                            es *)
+        (* | exp_union U K e     => @liftUnOp (unionk_ty U K) (ty.union U) *)
+        (*                            (fun v => unionv_fold U (existT K v)) (evalRel e δ) *)
+        (* | exp_record R es     => @liftNAryOp _ (ty.record R) _ (recordv_fold R) *)
+        (*                            (env.map (fun xτ e => evalRel e δ) es) *)
         end.
 
       Definition evalsRel {Γ Δ : PCtx} (es : NamedEnv (Exp Γ) Δ) (δ : CStoreRel Γ) : CStoreRel Δ :=
@@ -754,7 +757,7 @@ Module Type ShallowExecRelOn
       Definition exec_aux : ExecRel :=
         fix exec_aux {Γ τ} (s : Stm Γ τ) : CStoreSpecRel Γ Γ (RelVal τ) :=
           match s with
-          | stm_val _ l => pure (SyncVal _ l)
+          | stm_val _ l => pure (ty.SyncVal _ l)
           | stm_exp e => eval_exp e
           | stm_let x σ s k =>
               v <- exec_aux s ;;
@@ -782,16 +785,16 @@ Module Type ShallowExecRelOn
           | stm_seq e k => _ <- exec_aux e ;; exec_aux k
           | stm_assertk e1 _ k =>
               v <- eval_exp e1 ;;
-              _ <- lift_purespecrel (CPureSpec.assume_formula (v = SyncVal ty.bool true)) ;;
+              _ <- lift_purespecrel (CPureSpec.assume_formula (v = ty.SyncVal ty.bool true)) ;;
               exec_aux k
           | stm_fail _ s =>
               block
-          | stm_pattern_match s pat rhs =>
-              (* v  <- exec_aux s ;; *)
-              (* TODO  *)
-              v  <- exec_aux s ;;
-              '(existT pc δpc) <- demonic_pattern_match pat v ;;
-              pushspops δpc (exec_aux (rhs pc))
+          (* | stm_pattern_match s pat rhs => *)
+          (*     (* v  <- exec_aux s ;; *) *)
+          (*     (* TODO  *) *)
+          (*     v  <- exec_aux s ;; *)
+          (*     '(existT pc δpc) <- demonic_pattern_match pat v ;; *)
+          (*     pushspops δpc (exec_aux (rhs pc)) *)
           | stm_read_register reg =>
               (* TODO  *)
               error
@@ -847,14 +850,14 @@ Module Type ShallowExecRelOn
 
   Section WithSpec.
 
-    Definition exec_call_error : ExecCall :=
-      fun Δ τ f args => CHeapSpec.lift_purespecrel CPureSpec.error.
+    Definition exec_call_error_no_fuel : ExecCallRel :=
+      fun Δ τ f args => CHeapSpecRel.lift_purespec CPureSpec.error.
 
-    Definition cexec_call_foreign : ExecCallForeign :=
+    Definition cexec_call_foreign : ExecCallForeignRel :=
       fun Δ τ f args =>
         CHeapSpec.call_contract (CEnvEx f) args.
 
-    Definition cexec_lemma : ExecLemma :=
+    Definition cexec_lemma : ExecLemmaRel :=
       fun Δ l args =>
         CHeapSpec.call_lemma (LEnv l) args.
 
@@ -866,7 +869,7 @@ Module Type ShallowExecRelOn
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
        allowed levels before failing execution. *)
-    Fixpoint cexec_call (inline_fuel : nat) : ExecCall :=
+    Fixpoint cexec_call (inline_fuel : nat) : ExecCallRel :=
       fun Δ τ f args =>
         _ <- debug_call f args ;;
         (* Let's first see if we have a contract defined for function [f]
@@ -877,14 +880,14 @@ Module Type ShallowExecRelOn
             CHeapSpec.call_contract c args
         | None   , 0 =>
             (* Out of fuel *)
-            exec_call_error f args
+            exec_call_error_no_fuel f args
         | None   , S n =>
             CStoreSpecRel.evalStoreSpecRel
               (CStoreSpecRel.exec_aux cexec_call_foreign cexec_lemma (cexec_call n) (FunDef f))
               args
         end.
 
-    Definition cexec (inline_fuel : nat) : Exec :=
+    Definition cexec (inline_fuel : nat) : ExecRel :=
       @CStoreSpecRel.exec_aux cexec_call_foreign cexec_lemma (cexec_call inline_fuel).
     #[global] Arguments cexec _ [_ _] s _ _ _ : simpl never.
 
@@ -893,19 +896,19 @@ Module Type ShallowExecRelOn
 
     Import (hints) CStoreSpecRel.
 
-    Lemma mon_exec_call_error : MonotonicExecCall exec_call_error.
+    Lemma mon_exec_call_error : MonotonicExecCallRel exec_call_error_no_fuel.
     Proof. typeclasses eauto. Qed.
 
-    Lemma mon_cexec_call_foreign : MonotonicExecCallForeign cexec_call_foreign.
+    Lemma mon_cexec_call_foreign : MonotonicExecCallForeignRel cexec_call_foreign.
     Proof. typeclasses eauto. Qed.
 
-    Lemma mon_cexec_lemma : MonotonicExecLemma cexec_lemma.
+    Lemma mon_cexec_lemma : MonotonicExecLemmaRel cexec_lemma.
     Proof. typeclasses eauto. Qed.
 
-    #[export] Instance mon_cexec_call (fuel : nat) : MonotonicExecCall (cexec_call fuel).
+    #[export] Instance mon_cexec_call (fuel : nat) : MonotonicExecCallRel (cexec_call fuel).
     Proof. induction fuel; intros; cbn; destruct CEnv; typeclasses eauto. Qed.
 
-    Lemma mon_cexec (fuel : nat) : MonotonicExec (cexec fuel).
+    Lemma mon_cexec (fuel : nat) : MonotonicExecRel (cexec fuel).
     Proof. typeclasses eauto. Qed.
 
   End WithSpec.
@@ -937,7 +940,7 @@ Module Type ShallowExecRelOn
 
   End Shallow.
 
-End ShallowExecOn.
+End ShallowExecRelOn.
 
 Module MakeShallowExecutor
   (Import B    : Base)
@@ -945,6 +948,6 @@ Module MakeShallowExecutor
   (Import PROG : Program B)
   (Import SPEC : Specification B SIG PROG).
 
-  Include ShallowExecOn B SIG PROG SPEC.
+  Include ShallowExecRelOn B SIG PROG SPEC.
 
 End MakeShallowExecutor.

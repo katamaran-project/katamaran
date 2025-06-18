@@ -1685,12 +1685,14 @@ Module Type SymPropOn
     Inductive ETerm : Ty -> Set :=
     | eterm_var     (ℓ : LVar) (σ : Ty) (n : nat) : ETerm σ
     | eterm_val     (σ : Ty) (v : Val σ) : ETerm σ
+    | eterm_relval  (σ : Ty) (v : RelVal σ) : ETerm σ
     | eterm_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (t1 : ETerm σ1) (t2 : ETerm σ2) : ETerm σ3
     | eterm_unop    {σ1 σ2} (op : UnOp σ1 σ2) (t : ETerm σ1) : ETerm σ2
     (* | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs) *)
     (* | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U) *)
     (* | eterm_record  (R : recordi) (ts : NamedEnv ETerm (recordf_ty R)) : ETerm (ty.record R) *)
     .
+    #[global] Arguments eterm_relval σ : clear implicits.
 
     Inductive EFormula : Type :=
     | eformula_user (p : 𝑷) (ts : Env ETerm (𝑷_Ty p))
@@ -1734,8 +1736,9 @@ Module Type SymPropOn
     Definition erase_term {Σ} : forall {σ} (t : Term Σ σ), ETerm σ :=
       fix erase {σ} t :=
         match t with
-        | @term_var _ ℓ σ ℓIn         => eterm_var ℓ σ (ctx.in_at ℓIn)
+        | @term_var _ ℓ σ ℓIn        => eterm_var ℓ σ (ctx.in_at ℓIn)
         | term_val σ v               => eterm_val σ v
+        | term_relval σ v            => eterm_relval σ v
         | term_binop op t1 t2        => eterm_binop op (erase t1) (erase t2)
         | term_unop op t             => eterm_unop op (erase t)
         (* | term_tuple ts              => eterm_tuple (env.map (fun _ => erase) ts) *)
@@ -1821,6 +1824,7 @@ Module Type SymPropOn
             | right _ => None
             end
         | eterm_val σ v => Some (ty.SyncVal _ v)
+        | eterm_relval σ v => Some v
         | @eterm_binop σ1 σ2 σ3 op t1 t2 =>
             v1 <- inst_eterm t1;;
             v2 <- inst_eterm t2;;
@@ -1944,6 +1948,7 @@ Module Type SymPropOn
       induction t; cbn [inst_eterm erase_term].
       - rewrite nth_error_erase; cbn.
         now rewrite EqDec.eq_dec_refl.
+      - reflexivity.
       - reflexivity.
       - now rewrite IHt1, IHt2.
       - now rewrite IHt.

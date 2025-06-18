@@ -76,6 +76,7 @@ Module Type OccursCheckOn
                            | ctx.Diff _ yIn' => Some (term_var_in yIn')
                            end
       | term_val σ v => Some (term_val σ v)
+      | term_relval σ v => Some (term_relval σ v)
       | term_binop op t1 t2 =>
           t1' <- occurs_check_term xIn t1;;
           t2' <- occurs_check_term xIn t2;;

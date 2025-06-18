@@ -201,7 +201,7 @@ Module ty.
         | (x :: l)%list => liftBinOp (σ2 := list _) (σ3 := list _) cons x (listRelValIsRelValList l)
         end.
 
-      Fixpoint vecRelValIsRelValVec {n} (rv_vec : (Vector.t (RelVal bool) n)) : RelVal (ty.bvec n) :=
+      Fixpoint vecRelValIsRelValVec {n} (rv_vec : Vector.t (RelVal bool) n) : RelVal (ty.bvec n) :=
         match rv_vec with
         | Vector.nil => SyncVal (bvec _) bv.nil
         | Vector.cons x l => liftBinOp (σ1 := bool) (σ2 := bvec _) (σ3 := bvec _) (bv.cons (n := _)) x (vecRelValIsRelValVec l)
@@ -327,17 +327,45 @@ Module ty.
         | record R => eq_dec (A := recordt R) *)
         end.
 
-    #[export] Instance RelVal_eq_dec : forall σ, EqDec (RelVal σ).
-    Admitted.
-      (* fun σ x y => match x , y with *)
-      (*              | SyncVal _ x , SyncVal _ y => match eq_dec x y with *)
-      (*                                             | left eq => left (f_equal (SyncVal _) eq) *)
-      (*                                             | right neq => right (fun p : SyncVal _ _ = SyncVal _ _ => neq (f_equal projLeft p)) *)
-      (*                                             end *)
-      (*              | NonSyncVal _ x1 x2 , NonSyncVal _ y1 y2 => *)
-      (*                  match eq_dec x1 x2 , eq_dec y1 y2 with *)
-      (*                  | *)
-      (*              end. *)
+    Lemma helper {τ} {x y1 y2 : Val τ} : NonSyncVal τ y1 y2 = SyncVal τ x -> False.
+    Proof.
+      congruence.
+      Show Proof.
+    Qed.      
+
+
+    #[export] Instance RelVal_eq_dec : forall σ, EqDec (RelVal σ) :=
+      fun σ x y => match x , y with
+                   | SyncVal _ x , SyncVal _ y => match eq_dec x y with
+                                                  | left eq => left (f_equal (SyncVal _) eq)
+                                                  | right neq => right (fun p : SyncVal _ _ = SyncVal _ _ => neq (f_equal projLeft p))
+                                                  end
+                   | NonSyncVal _ x1 x2 , NonSyncVal _ y1 y2 =>
+                       match eq_dec x1 y1 , eq_dec x2 y2 with
+                       | left eq1 , left eq2 => left (f_equal2 (NonSyncVal _) eq1 eq2)
+                       | right neq1, _ => right (fun p : NonSyncVal _ _ _ = NonSyncVal _ _ _ => neq1 (f_equal projLeft p))
+                       | _, right neq2 => right (fun p : NonSyncVal _ _ _ = NonSyncVal _ _ _ => neq2 (f_equal projRight p))
+                       end
+                   | SyncVal _ x , NonSyncVal _ y1 y2 =>
+                       right (fun Heq =>
+                       let H0 : False :=
+                         eq_ind (SyncVal _ x)
+                           (fun e : RelVal _ => match e with
+                                                | SyncVal _ _ => True
+                                                | NonSyncVal _ _ _ => False
+                                                end) I (NonSyncVal _ y1 y2) Heq in
+                       False_ind False H0)
+                   | NonSyncVal _ x1 x2 , SyncVal _ y =>
+                       right (fun Heq =>
+                       let H0 : False :=
+                         eq_ind (NonSyncVal _ x1 x2)
+                           (fun e : RelVal _ =>
+                              match e with
+                              | SyncVal _ _ => False
+                              | NonSyncVal _ _ _ => True
+                              end) I (SyncVal _ y) Heq in
+                       False_ind False H0)
+                   end.
 
  (*   Lemma unionv_fold_inj {U} (v1 v2 : {K : unionk U & Val (unionk_ty U K)}) :
       unionv_fold U v1 = unionv_fold U v2 <-> v1 = v2.
