@@ -990,24 +990,23 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifExecutor.Symbolic.
 
-  Lemma TcontractsSound `{sailGS Σ} : ⊢ TValidContractEnvSem inline_fuel RiscvPmpBlockVerifSpec.CEnv.
+  Lemma TcontractsSound `{sailGS Σ} : ⊢ TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
   Proof.
     apply (tsound TforeignSemBlockVerif lemSemBlockVerif).
     intros Γ τ f c Heq.
-    destruct (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc].
-  (*   eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness. *)
-  (*   eexact Hvc. *)
-  (* Qed. *)
-  Admitted.
+    pose proof (RiscvPmpSpecVerif.ValidContracts f Heq).
+    eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness.
+    eauto.
+  Qed.
 
   (* TODO: prove this lemma as: apply (TValidContractEnvSem_ValidContractEnvSem TcontractsSound). *)
   Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
   Proof.
     apply (sound foreignSemBlockVerif lemSemBlockVerif).
     intros Γ τ f c Heq.
-    destruct (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc].
+    pose proof (RiscvPmpSpecVerif.ValidContracts f Heq).
     eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness.
-    (* eexact Hvc. *)
-  Admitted.
+    eauto.
+  Qed.
 
 End RiscvPmpIrisInstanceWithContracts.

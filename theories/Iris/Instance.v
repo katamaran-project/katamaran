@@ -991,11 +991,11 @@ Module IrisInstanceWithContracts
             forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ),
             ForeignSem ->
             LemmaSem ->
-            (∃ fuel, # fuel ⦃ PRE ⦄ s ; δ ⦃ POST ⦄) ->
+            ⦃ PRE ⦄ s ; δ ⦃ POST ⦄ ->
             ⊢ (□ ▷ ValidContractEnvSem CEnv -∗
                 semTriple δ PRE s POST)%I.
         Proof.
-            iIntros (PRE POST extSem lemSem [fuel triple]) "#vcenv".
+            iIntros (PRE POST extSem lemSem triple) "#vcenv".
             iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
             - by iApply iris_rule_consequence.
             - by iApply iris_rule_frame.
@@ -1050,8 +1050,8 @@ Module IrisInstanceWithContracts
       Definition TValidContractEnvN (cenv : SepContractEnv) (n : Node) : iProp Σ :=
         ⌜ Accessible 𝑭_call_graph n ⌝ -∗ HasValidContract n.
 
-      Definition TValidContractEnvSem (fuel : nat) (cenv : SepContractEnv) : iProp Σ :=
-        ∀ (n : Node), TValidContractEnvN fuel cenv n.
+      Definition TValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
+        ∀ (n : Node), TValidContractEnvN cenv n.
 
         Definition TForeignSem :=
           ∀ (Δ : PCtx) (τ : Ty) (f : 𝑭𝑿 Δ τ),
@@ -1082,14 +1082,14 @@ Module IrisInstanceWithContracts
           iIntros ([] _) "H"; auto. by iApply "consr".
         Qed.
         
-        Lemma iris_rule_tstm_call {fuel : nat} {Γ} (δ : CStore Γ)
+        Lemma iris_rule_tstm_call {Γ} (δ : CStore Γ)
           {Δ σ} (f : 𝑭 Δ σ) (c : SepContract Δ σ) (es : NamedEnv (Exp Γ) Δ)
           (P : iProp Σ)
           (Q : Val σ -> CStore Γ -> iProp Σ) :
           CEnv f = Some c ->
           CTriple P c (evals es δ) (fun v => Q v δ) ->
           Accessible 𝑭_call_graph f ->
-          ⊢ TValidContractEnvSem fuel CEnv -∗
+          ⊢ TValidContractEnvSem CEnv -∗
             semTTriple δ P (stm_call f es) Q.
         Proof.
           iIntros (ceq ctrip Hwff) "cenv".
@@ -1144,23 +1144,17 @@ Module IrisInstanceWithContracts
           iApply "consr". by iApply lemSem.
         Qed.
 
-        Ltac solve_fuel fuel :=
-          destruct fuel;
-          cbn in *;
-          try contradiction;
-          auto.
-
         Lemma sound_tstm {Γ} {τ} (s : Stm Γ τ) (n : Node) {δ : CStore Γ} :
-          forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ) (fuel : nat),
+          forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ),
             TForeignSem ->
             LemmaSem ->
-            # fuel ⦃ PRE ⦄ s ; δ ⦃ POST ⦄ ->
+            ⦃ PRE ⦄ s ; δ ⦃ POST ⦄ ->
             StmWellFormed (𝑭_call_graph n) s ->
             ⊢ □ (∀ x : Node, ⌜Relation_Operators.clos_trans Node (InvokedBy 𝑭_call_graph) x n⌝ -∗
                                 HasValidContract x) -∗
               semTTriple δ PRE s POST.
         Proof.
-          iIntros (PRE POST fuel extSem lemSem triple Hwf) "#IH".
+          iIntros (PRE POST extSem lemSem triple Hwf) "#IH".
           iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips" forall (n Hwf) "IH".
           - iApply iris_rule_tconsequence; eauto.
             now iApply "trips".
@@ -1236,11 +1230,10 @@ Module IrisInstanceWithContracts
         Qed.
 
         Lemma tsound :
-          ∀ fuel,
-            TForeignSem -> LemmaSem -> TValidContractCEnv fuel ->
-            ⊢ TValidContractEnvSem fuel CEnv.
+          TForeignSem -> LemmaSem -> TValidContractCEnv ->
+          ⊢ TValidContractEnvSem CEnv.
         Proof.
-          iIntros (fuel extSem lemSem cenv n Hwf).
+          iIntros (extSem lemSem cenv n Hwf).
           apply Coq.Wellfounded.Transitive_Closure.Acc_clos_trans in Hwf.
           iInduction Hwf as [n _ IH].
           unfold HasValidContract at 2.
