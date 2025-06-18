@@ -69,8 +69,6 @@ Module ProgramLogic.
                  (asn.interpret ens ι -∗ post)) ->
         LTriple δΔ pre post (MkLemma _ _ θΔ req ens).
 
-    Reserved Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄".
-
     Inductive Triple {Γ : PCtx} (δ : CStore Γ) {τ : Ty} :
       forall  (pre : L) (s : Stm Γ τ) (post :  Val τ -> CStore Γ -> L), Prop :=
     | rule_consequence
@@ -193,8 +191,6 @@ Module ProgramLogic.
         ⦃ P ⦄ stm_pattern_match s pat rhs ; δ ⦃ R ⦄
 
     where "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P%I s Q%I).
-
-    Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P%I s Q%I).
 
     Lemma rule_consequence_left {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
       (P1 : L) {P2 : L} {Q : Val σ -> CStore Γ -> L} :
