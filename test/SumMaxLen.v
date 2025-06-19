@@ -62,6 +62,8 @@ From Katamaran Require Import
      MicroSail.RefineExecutor
      MicroSail.Soundness.
 
+From stdpp Require Import base.
+
 Set Implicit Arguments.
 Import ctx.notations.
 Import env.notations.
@@ -175,7 +177,7 @@ Module Import ExampleProgram <: Program DefaultBase.
   Import callgraph.
 
   Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
-    Is_true (stm_bindfree (FunDef f)).
+    stm_bindfree (FunDef f).
   Proof. destruct f; now vm_compute. Qed.
 
   Definition 𝑭_call_graph := generic_call_graph.

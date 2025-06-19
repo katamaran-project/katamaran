@@ -46,7 +46,7 @@ From Katamaran Require Import
      Specification
      Program.
 
-From stdpp Require decidable finite.
+From stdpp Require Import decidable finite.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -118,7 +118,7 @@ Module Import ReplayProgram <: Program DefaultBase.
   Import callgraph.
 
   Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
-    Is_true (stm_bindfree (FunDef f)).
+    stm_bindfree (FunDef f).
   Proof. destruct f; now vm_compute. Qed.
 
   Definition 𝑭_call_graph := generic_call_graph.

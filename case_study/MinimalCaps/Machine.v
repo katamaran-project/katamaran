@@ -876,7 +876,7 @@ Include ProgramMixin MinCapsBase.
   Import callgraph.
 
   Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
-    Is_true (stm_bindfree (FunDef f)).
+    stm_bindfree (FunDef f).
   Proof. destruct f; now vm_compute. Qed.
 
   Definition 𝑭_call_graph := generic_call_graph.

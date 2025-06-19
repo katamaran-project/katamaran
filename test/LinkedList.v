@@ -66,7 +66,7 @@ From Katamaran Require Import
      MicroSail.RefineExecutor
      MicroSail.Soundness.
 
-From stdpp Require decidable finite list fin_maps infinite.
+From stdpp Require Import decidable finite list fin_maps infinite.
 From iris.proofmode Require string_ident tactics.
 
 Set Implicit Arguments.
@@ -348,7 +348,7 @@ Module Import ExampleProgram <: Program ExampleBase.
   Import callgraph.
 
   Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
-    Is_true (stm_bindfree (FunDef f)).
+    stm_bindfree (FunDef f).
   Proof. destruct f; now vm_compute. Qed.
 
   Definition 𝑭_call_graph := generic_call_graph.
