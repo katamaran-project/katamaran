@@ -625,21 +625,21 @@ Module RiscvPmpSpecVerif.
     | None => False
     end.
 
-  Definition ValidContractWithFuelDebug {Δ τ} (f : Fun Δ τ) : Prop :=
+  Definition ValidContractWithFuelDebug {Δ τ} (fuel : nat) (f : Fun Δ τ) : Prop :=
     match CEnv f with
-    | Some c => ValidContractWithFuel inline_fuel c (FunDef f)
+    | Some c => ValidContractWithFuel fuel c (FunDef f)
     | None => False
     end.
 
   Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
-    | Some c => ValidContractReflectWithFuel inline_fuel c (FunDef f)
+    | Some c => ValidContractReflect c (FunDef f)
     | None => False
     end.
 
-  Definition ValidContractWithFuel {Δ τ} (f : Fun Δ τ) : Prop :=
+  Definition ValidContractWithFuel {Δ τ} (fuel : nat) (f : Fun Δ τ) : Prop :=
     match CEnv f with
-    | Some c => ValidContractReflectWithFuel inline_fuel c (FunDef f)
+    | Some c => ValidContractReflectWithFuel fuel c (FunDef f)
     | None => False
     end.
 
@@ -691,7 +691,7 @@ Module RiscvPmpSpecVerif.
     destruct (v + v0 <=ᵘ? v1)%bv eqn:?; bv_comp; auto.
   Qed.
 
-  Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug (@pmpCheck bytes H).
+  Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
     destruct H; apply verification_condition_with_erasure_sound; vm_compute;
       constructor; cbn;
@@ -731,21 +731,21 @@ Module RiscvPmpSpecVerif.
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       RiscvPmpBlockVerifSpec.CEnv f = Some c ->
       ValidContract f ->
-      Symbolic.ValidContractWithFuel inline_fuel c (FunDef f).
+      Symbolic.ValidContract c (FunDef f).
   Proof.
     intros ? ? f c Hcenv Hvc.
     unfold ValidContract in Hvc.
     rewrite Hcenv in Hvc.
-    apply Symbolic.validcontract_reflect_fuel_sound.
+    apply Symbolic.validcontract_reflect_sound.
     apply Hvc.
   Qed.
 
-  Lemma valid_contract_with_fuel_debug : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
+  Lemma valid_contract_with_fuel_debug : forall {Δ τ} (fuel : nat) (f : Fun Δ τ) (c : SepContract Δ τ),
       RiscvPmpBlockVerifSpec.CEnv f = Some c ->
-      ValidContractWithFuelDebug f ->
-      Symbolic.ValidContractWithFuel inline_fuel c (FunDef f).
+      ValidContractWithFuelDebug fuel f ->
+      Symbolic.ValidContractWithFuel fuel c (FunDef f).
   Proof.
-    intros ? ? f c Hcenv Hvc.
+    intros ? ? fuel f c Hcenv Hvc.
     unfold ValidContractWithFuelDebug in Hvc.
     now rewrite Hcenv in Hvc.
   Qed.
@@ -762,10 +762,10 @@ Module RiscvPmpSpecVerif.
 
   Lemma ValidContracts : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
-      Symbolic.ValidContractWithFuel inline_fuel c (FunDef f).
+      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
   Proof.
     intros.
-    destruct f; try discriminate H.
+    destruct f; try discriminate H; eexists.
     - refine (valid_contract _ H valid_execute_rX).
     - refine (valid_contract _ H valid_execute_wX).
     - refine (valid_contract _ H valid_execute_tick_pc).
@@ -775,12 +775,12 @@ Module RiscvPmpSpecVerif.
     - refine (valid_contract _ H valid_checked_mem_write).
     - refine (valid_contract _ H valid_pmp_mem_read).
     - refine (valid_contract _ H valid_pmp_mem_write).
-    - refine (valid_contract_with_fuel_debug _ H valid_pmpCheck).
-    - admit (* refine (valid_contract_debug _ H valid_pmpMatchAddr) *).
+    - refine (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
+    - refine (valid_contract_debug _ H valid_pmpMatchAddr).
     - refine (valid_contract _ H valid_mem_write_value).
     - refine (valid_contract _ H valid_execute_fetch).
     - refine (valid_contract_debug _ H valid_contract_execute_EBREAK).
-  Admitted. (* TODO: solve | don't get why the above refine fails for valid_pmpMatchAddr? *)
+  Qed.
 End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
@@ -994,7 +994,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Proof.
     apply (tsound TforeignSemBlockVerif lemSemBlockVerif).
     intros Γ τ f c Heq.
-    pose proof (RiscvPmpSpecVerif.ValidContracts f Heq).
+    pose proof (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc].
     eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness.
     eauto.
   Qed.
@@ -1004,7 +1004,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Proof.
     apply (sound foreignSemBlockVerif lemSemBlockVerif).
     intros Γ τ f c Heq.
-    pose proof (RiscvPmpSpecVerif.ValidContracts f Heq).
+    pose proof (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc].
     eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness.
     eauto.
   Qed.
