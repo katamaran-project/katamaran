@@ -72,17 +72,6 @@ Module Import ReplayProgram <: Program DefaultBase.
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := fun _ _ => Empty_set.
     Definition 𝑳 : PCtx -> Set := Lem.
-
-    Instance Fun_eq_dec : forall {Γ τ}, EqDec (Fun Γ τ) :=
-      fun Γ τ f1 =>
-        match f1 with
-        | main => fun f2 => match f2 with main => left eq_refl end
-        end.
-
-    #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))) :=
-      sigma_eqdec _ (fun Γ => sigma_eqdec _ (fun τ => _)).
-
-    Definition inline_fuel : nat := 10.
   End FunDeclKit.
 
   Include FunDeclMixin DefaultBase.

@@ -91,19 +91,6 @@ Module Import ExampleProgram <: Program DefaultBase.
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := fun _ _ => Empty_set.
     (* We do not make use of explicit ghost lemmas in the program. *)
     Definition 𝑳 : PCtx -> Set := fun _ => Empty_set.
-
-    #[export] Instance 𝑭_eq_dec : EqDec (sigT (fun Γ => sigT (𝑭 Γ))).
-    Proof.
-      refine (sigma_eqdec _ (fun Γ => sigma_eqdec _ (fun τ => _))).
-      intros f1 f2.
-      destruct f1 eqn:Ef1;
-        refine (match f2 with
-                | summaxlen => _
-                end);
-        cbn; try intros ?; auto.
-    Defined.
-
-    Definition inline_fuel : nat := 10.
   End FunDeclKit.
 
   (* Include the definition of statements etc to define the body of [summaxlen]. *)
