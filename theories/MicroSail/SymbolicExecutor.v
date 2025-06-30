@@ -428,10 +428,10 @@ Module Type SymbolicExecOn
         | stm_write_register reg e =>
             ⟨ _ ⟩ tnew <- eval_exp e (w:=_) ;;
             lift_heapspec (SHeapSpec.write_register reg tnew)
-        | stm_pattern_match s pat rhs =>
-            ⟨ θ1 ⟩ v  <- exec_aux s ;;
-            ⟨ θ2 ⟩ '(existT pc vs) <- demonic_pattern_match PVartoLVar pat v ;;
-            pushspops vs (exec_aux (rhs pc))
+        (* | stm_pattern_match s pat rhs => *)
+        (*     ⟨ θ1 ⟩ v  <- exec_aux s ;; *)
+        (*     ⟨ θ2 ⟩ '(existT pc vs) <- demonic_pattern_match PVartoLVar pat v ;; *)
+        (*     pushspops vs (exec_aux (rhs pc)) *)
         | stm_bind _ _ =>
             error
               (fun δ h =>

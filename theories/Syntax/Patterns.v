@@ -124,10 +124,6 @@ Module Type PatternsOn (Import TY : Types).
     (*   tuple_pattern_match_env_reverse p (tuple_pattern_match_env p ts) = ts. *)
     (* Proof. induction p; env.destroy ts; cbn; now f_equal. Qed. *)
 
-    (* Definition record_pattern_match_val {R} {Δ : NCtx N Ty} *)
-    (*   (p : RecordPat (recordf_ty R) Δ) : Val (ty.record R) -> NamedEnv Val Δ := *)
-    (*   fun v => record_pattern_match_env p (recordv_unfold R v). *)
-
     (* A [Pattern] describes the different pattern matching possibilities.
        Not every type can be matched on, and some types can be matched on in
        different ways, e.g. bitvectors. The [Pattern], as opposed to the
@@ -138,7 +134,7 @@ Module Type PatternsOn (Import TY : Types).
        cases. *)
     Inductive Pattern : Ty -> Set :=
     | pat_var (x : N) {σ}                             : Pattern σ
-    (* | pat_bool                                        : Pattern ty.bool *)
+    | pat_bool                                        : Pattern ty.bool
     (* | pat_list σ (x y : N)                            : Pattern (ty.list σ) *)
     | pat_pair (x y : N) {σ τ}                        : Pattern (ty.prod σ τ)
     (* | pat_sum σ τ (x y : N)                           : Pattern (ty.sum σ τ) *)
@@ -158,7 +154,7 @@ Module Type PatternsOn (Import TY : Types).
     Definition PatternCase {σ} (pat : Pattern σ) : Set :=
       match pat with
       | pat_var x              => unit
-      (* | pat_bool               => bool *)
+      | pat_bool               => bool
       (* | pat_list σ x y         => bool *)
       | pat_pair x y           => unit
       (* | pat_sum σ τ x y        => bool *)
@@ -176,7 +172,7 @@ Module Type PatternsOn (Import TY : Types).
       fun {σ} pat =>
         match pat return Classes.EqDec (PatternCase pat) with
         | pat_var _              => EqDecInstances.unit_EqDec
-        (* | pat_bool               => EqDecInstances.bool_EqDec *)
+        | pat_bool               => EqDecInstances.bool_EqDec
         (* | pat_list _ _ _         => EqDecInstances.bool_EqDec *)
         | pat_pair _ _           => EqDecInstances.unit_EqDec
         (* | pat_sum _ _ _ _        => EqDecInstances.bool_EqDec *)
@@ -194,10 +190,10 @@ Module Type PatternsOn (Import TY : Types).
     #[export] Instance Finite_PatternCase :
       forall {σ} (pat : Pattern σ),
         finite.Finite (PatternCase pat) :=
-      fix fin {σ} pat :=
+      fun {σ} pat =>
         match pat with
         | pat_var _              => finite.unit_finite
-        (* | pat_bool               => Finite_bool *)
+        | pat_bool               => Finite_bool
         (* | pat_list _ _ _         => Finite_bool *)
         | pat_pair _ _           => finite.unit_finite
         (* | pat_sum _ _ _ _        => Finite_bool *)
@@ -219,7 +215,7 @@ Module Type PatternsOn (Import TY : Types).
     Definition PatternCaseCtx {σ} {p : Pattern σ} : PatternCase p -> NCtx N Ty :=
       match p with
       | @pat_var x σ           => fun _ => [x∷σ]
-      (* | pat_bool               => fun _ => [ctx] *)
+      | pat_bool               => fun _ => [ctx]
       (* | pat_list σ x y         => fun b => if b then [ctx] else [x∷σ; y∷ty.list σ] *)
       | @pat_pair x y σ τ      => fun _ => [x∷σ; y∷τ]
       (* | pat_sum σ τ x y        => fun b => if b then [x∷σ] else [y∷τ] *)
@@ -229,25 +225,22 @@ Module Type PatternsOn (Import TY : Types).
       (* | pat_bvec_exhaustive m  => fun _ => [ctx] *)
       (* | @pat_tuple _ Δ _       => fun _ => Δ *)
       (* | pat_record _ Δ _       => fun _ => Δ *)
-      (* | pat_union U p          => fun '(existT K pc) => *)
-      (*                               @PatternCaseCtx (unionk_ty U K) (p K) pc *)
+      (* | pat_union U p          => fun '(existT K pc) => PatternCaseCtx pc *)
       end%ctx.
 
     Definition MatchResult {σ} (pat : Pattern σ) : Type :=
-      { c : PatternCase pat & NamedEnv RelVal (PatternCaseCtx c) }.
+      { c : PatternCase pat & NamedEnv Val (PatternCaseCtx c) }.
     #[global] Arguments MatchResult {σ} !pat /.
 
     (* Pattern match on a value. The result is a [PatternCase] that represents
        the alternative corresponding to the value, together with an environment
        that maps the variables of the pattern to values. *)
-    (* TODO: This method uses a lot of RelVal specific things, think about how to transfer these into general requirements for logical values *)
-    (* TODO: I think we can make a general method that transfers things from RelVal of function to function of RelVals *)
-    Definition pattern_match_val {σ} (p : Pattern σ) : RelVal σ -> MatchResult p :=
+   Definition pattern_match_val {σ} (p : Pattern σ) : Val σ -> MatchResult p :=
       match p with
       | pat_var x =>
-          fun v => existT (P := fun tt => NamedEnv RelVal (PatternCaseCtx (p := pat_var x) _)) tt [env].[x∷_ ↦ v]
-      (* | pat_bool       => *)
-      (*     fun b => existT b [env] *)
+          fun v => existT tt [env].[x∷_ ↦ v]
+      | pat_bool       =>
+          fun b => existT b [env]
       (* | pat_list σ x y => *)
       (*     fun v : Val (ty.list σ) => *)
       (*       match v with *)
@@ -255,10 +248,7 @@ Module Type PatternsOn (Import TY : Types).
       (*       | cons v vs => existT false [env].[x∷σ ↦ v].[y∷ty.list σ ↦ vs] *)
       (*       end *)
       | pat_pair x y =>
-          fun pair_rv => match (ty.relValPairIsPairRelVal pair_rv) with
-                         | (rv1 , rv2) => existT tt [env].[x∷_ ↦ rv1].[y∷_ ↦ rv2]
-                         end
-          (* fun '(a, b) => existT tt [env].[x∷_ ↦ a].[y∷_ ↦ b] *)
+          fun '(a, b) => existT tt [env].[x∷_ ↦ a].[y∷_ ↦ b]
       (* | pat_sum σ τ x y => *)
       (*     fun v => *)
       (*       match v with *)
@@ -271,17 +261,9 @@ Module Type PatternsOn (Import TY : Types).
       (*     fun v : enumt E => existT v [env] *)
       | pat_bvec_split m n x y =>
           fun v =>
-            match v with
-            | ty.SyncVal _ v' =>
-                match bv.appView m n v' with
-                | bv.isapp xs ys =>
-                    existT tt ([env].[x∷ty.bvec m ↦ ty.SyncVal (ty.bvec m) xs].[y∷ty.bvec n ↦ ty.SyncVal (ty.bvec n) ys])
-                end
-            | ty.NonSyncVal _ v1 v2 =>
-                match bv.appView m n v1 , bv.appView m n v2 with
-                | bv.isapp xs1 ys1 , bv.isapp xs2 ys2 =>
-                    existT tt ([env].[x∷ty.bvec m ↦ ty.NonSyncVal (ty.bvec m) xs1 xs2].[y∷ty.bvec n ↦ ty.NonSyncVal (ty.bvec n) ys1 ys2])
-                end
+            match bv.appView m n v with
+            | bv.isapp xs ys =>
+                existT tt ([env].[x∷ty.bvec m ↦ xs].[y∷ty.bvec n ↦ ys])
             end
       (* | pat_bvec_exhaustive m => *)
       (*     fun v => existT v [env] *)
@@ -299,11 +281,13 @@ Module Type PatternsOn (Import TY : Types).
 
     (* Reverse a pattern match. Given a [PatternCase] and an environment with
        values for all variables in the pattern, reconstruct a value. *)
+    (* Reverse a pattern match. Given a [PatternCase] and an environment with
+       values for all variables in the pattern, reconstruct a value. *)
     Definition pattern_match_val_reverse {σ} (p : Pattern σ) :
-      forall (c : PatternCase p), NamedEnv RelVal (PatternCaseCtx c) -> RelVal σ :=
+      forall (c : PatternCase p), NamedEnv Val (PatternCaseCtx c) -> Val σ :=
       match p with
       | pat_var x      => fun _ vs => env.head vs
-      (* | pat_bool       => fun b _ => b *)
+      | pat_bool       => fun b _ => b
       (* | pat_list σ x y => *)
       (*     fun b => *)
       (*       match b with *)
@@ -317,7 +301,7 @@ Module Type PatternsOn (Import TY : Types).
           fun _ Exy =>
             let (Ex,vy) := env.view Exy in
             let (E,vx)  := env.view Ex in
-            ty.pairRelValIsRelValPair (vx,vy)
+            (vx,vy)
       (* | pat_sum σ τ x y => *)
       (*     fun b => *)
       (*       match b with *)
@@ -325,17 +309,14 @@ Module Type PatternsOn (Import TY : Types).
       (*       | false => fun vs => inr (env.head vs) *)
       (*       end *)
       | pat_unit =>
-          fun _ _ => ty.SyncVal ty.unit tt
+          fun _ _ => tt
       (* | pat_enum E => *)
       (*     fun v _ => v *)
       | pat_bvec_split m n x y =>
           fun _ Exy =>
             let (Ex,vy) := env.view Exy in
             let (E,vx)  := env.view Ex in
-            match vx , vy with
-            | ty.SyncVal _ vx, ty.SyncVal _ vy => ty.SyncVal (ty.bvec (m + n)) (bv.app vx vy)
-            | vx , vy => ty.NonSyncVal (ty.bvec (m + n)) (bv.app (ty.projLeft vx) (ty.projLeft vy)) (bv.app (ty.projRight vx) (ty.projRight vy))
-            end
+            bv.app vx vy
       (* | pat_bvec_exhaustive m => *)
       (*     fun v _ => v *)
       (* | pat_tuple p => *)
@@ -349,78 +330,75 @@ Module Type PatternsOn (Import TY : Types).
 
     (* A curried version of the above. *)
     Definition pattern_match_val_reverse' {σ} (p : Pattern σ) :
-      MatchResult p -> RelVal σ :=
+      MatchResult p -> Val σ :=
       fun c => pattern_match_val_reverse p (projT1 c) (projT2 c).
 
-    (* TODO: This lemma doesn't hold anymore, because a pair of SyncVal and NonSyncVal becomes NonSyncVal and going back realising that both are the same seems to brittle to me *)
-    (* Lemma pattern_match_val_inverse_right' {σ} (p : Pattern σ) : *)
-    (*   forall (r : MatchResult p), *)
-    (*     pattern_match_val p (pattern_match_val_reverse' p r) = r. *)
-    (* Proof. *)
-    (*   induction p; cbn; intros [pc vs]; try progress cbn. *)
-    (*   - destruct pc; now env.destroy vs. *)
-    (*   (* - env.destroy vs. reflexivity. *) *)
-    (*   (* - destruct pc; now env.destroy vs. *) *)
-    (*   - destruct pc; env.destroy vs. *)
-    (*     destruct v0; destruct v; try now cbn. *)
-    (*     all: cbn. *)
-    (*   - destruct pc; now env.destroy vs. *)
-    (*   - destruct pc; now env.destroy vs. *)
-    (*   (* - now env.destroy vs. *) *)
-    (*   - destruct pc; env.destroy vs. *)
-    (*     now rewrite bv.appView_app. *)
-    (*   - now env.destroy vs. *)
-    (*   (* - destruct pc. *) *)
-    (*   (*   unfold tuple_pattern_match_val. *) *)
-    (*   (*   rewrite envrec.to_of_env. *) *)
-    (*   (*   now rewrite tuple_pattern_match_env_inverse_right. *) *)
-    (*   (* - destruct pc. *) *)
-    (*   (*   unfold record_pattern_match_val. *) *)
-    (*   (*   rewrite recordv_unfold_fold. *) *)
-    (*   (*   now rewrite record_pattern_match_env_inverse_right. *) *)
-    (*   (* - destruct pc as [K pc]. *) *)
-    (*   (*   rewrite unionv_unfold_fold. *) *)
-    (*   (*   change (pattern_match_val_reverse _ ?pc ?vs) with *) *)
-    (*   (*     (pattern_match_val_reverse' _ (existT pc vs)). *) *)
-    (*   (*   now rewrite H. *) *)
-    (* Qed. *)
+  Lemma pattern_match_val_inverse_right' {σ} (p : Pattern σ) :
+      forall (r : MatchResult p),
+        pattern_match_val p (pattern_match_val_reverse' p r) = r.
+    Proof.
+      induction p; cbn; intros [pc vs]; try progress cbn.
+      - destruct pc; now env.destroy vs.
+      - env.destroy vs. reflexivity.
+      - destruct pc; now env.destroy vs.
+      - destruct pc; now env.destroy vs.
+      (* - destruct pc; now env.destroy vs. *)
+      (* - destruct pc; now env.destroy vs. *)
+      (* - now env.destroy vs. *)
+      - destruct pc; env.destroy vs.
+        now rewrite bv.appView_app.
+      (* - now env.destroy vs. *)
+      (* - destruct pc. *)
+      (*   unfold tuple_pattern_match_val. *)
+      (*   rewrite envrec.to_of_env. *)
+      (*   now rewrite tuple_pattern_match_env_inverse_right. *)
+      (* - destruct pc. *)
+      (*   unfold record_pattern_match_val. *)
+      (*   rewrite recordv_unfold_fold. *)
+      (*   now rewrite record_pattern_match_env_inverse_right. *)
+      (* - destruct pc as [K pc]. *)
+      (*   rewrite unionv_unfold_fold. *)
+      (*   change (pattern_match_val_reverse _ ?pc ?vs) with *)
+      (*     (pattern_match_val_reverse' _ (existT pc vs)). *)
+      (*   now rewrite H. *)
+    Qed.
 
-    (* Lemma pattern_match_val_inverse_right {σ} (pat : Pattern σ) *)
-    (*   (pc : PatternCase pat) (δpc : NamedEnv Val (PatternCaseCtx pc)) : *)
-    (*   pattern_match_val pat (pattern_match_val_reverse pat pc δpc) = (existT pc δpc). *)
-    (* Proof. apply (pattern_match_val_inverse_right' pat (existT pc δpc)). Qed. *)
+    Lemma pattern_match_val_inverse_right {σ} (pat : Pattern σ)
+      (pc : PatternCase pat) (δpc : NamedEnv Val (PatternCaseCtx pc)) :
+      pattern_match_val pat (pattern_match_val_reverse pat pc δpc) = (existT pc δpc).
+    Proof. apply (pattern_match_val_inverse_right' pat (existT pc δpc)). Qed.
 
 
     (* TODO: This lemma is wrong, because currently NonSyncVal for ty.unit is possible, but when reversing a unit, we know it's no NonSyncVal. *)
-    (* Lemma pattern_match_val_inverse_left {σ} (pat : Pattern σ) : *)
-    (*   forall v : RelVal σ, *)
-    (*     pattern_match_val_reverse' pat (pattern_match_val pat v) = v. *)
-    (* Proof. *)
-    (*   induction pat; cbn; intros v; try progress cbn. *)
-    (*   - reflexivity. *)
-    (*   (* - reflexivity. *) *)
-    (*   (* - destruct v; reflexivity. *) *)
-    (*   - destruct v; destruct v; cbn; try reflexivity. *)
-    (*     destruct v0; cbn; reflexivity. *)
-    (*   (* - destruct v; reflexivity. *) *)
-    (*   - destruct v. reflexivity. *)
-    (*   (* - reflexivity. *) *)
-    (*   - destruct bv.appView; reflexivity. *)
-    (*   - reflexivity. *)
-    (*   (* - unfold tuple_pattern_match_val. *) *)
-    (*   (*   rewrite tuple_pattern_match_env_inverse_left. *) *)
-    (*   (*   now rewrite envrec.of_to_env. *) *)
-    (*   (* - unfold record_pattern_match_val. *) *)
-    (*   (*   rewrite record_pattern_match_env_inverse_left. *) *)
-    (*   (*   now rewrite recordv_fold_unfold. *) *)
-    (*   (* - destruct unionv_unfold as [K v'] eqn:Heq. *) *)
-    (*   (*   apply (f_equal (unionv_fold U)) in Heq. *) *)
-    (*   (*   rewrite unionv_fold_unfold in Heq. subst. *) *)
-    (*   (*   destruct pattern_match_val eqn:Heq; cbn. *) *)
-    (*   (*   change (pattern_match_val_reverse _ ?pc ?vs) with *) *)
-    (*   (*     (pattern_match_val_reverse' _ (existT pc vs)). *) *)
-    (*   (*   now rewrite <- Heq, H. *) *)
-    (* Qed. *)
+    Lemma pattern_match_val_inverse_left {σ} (pat : Pattern σ) :
+      forall v : Val σ,
+        pattern_match_val_reverse' pat (pattern_match_val pat v) = v.
+    Proof.
+      induction pat; cbn; intros v; try progress cbn.
+      - reflexivity.
+      - reflexivity.
+      - destruct v; reflexivity.
+      (* - destruct v; destruct v; cbn; try reflexivity. *)
+      (*   destruct v0; cbn; reflexivity. *)
+      - destruct v; reflexivity.
+      (* - destruct v. reflexivity. *)
+      (* - reflexivity. *)
+      - destruct bv.appView; reflexivity.
+      (* - reflexivity. *)
+      (* - unfold tuple_pattern_match_val. *)
+      (*   rewrite tuple_pattern_match_env_inverse_left. *)
+      (*   now rewrite envrec.of_to_env. *)
+      (* - unfold record_pattern_match_val. *)
+      (*   rewrite record_pattern_match_env_inverse_left. *)
+      (*   now rewrite recordv_fold_unfold. *)
+      (* - destruct unionv_unfold as [K v'] eqn:Heq. *)
+      (*   apply (f_equal (unionv_fold U)) in Heq. *)
+      (*   rewrite unionv_fold_unfold in Heq. subst. *)
+      (*   destruct pattern_match_val eqn:Heq; cbn. *)
+      (*   change (pattern_match_val_reverse _ ?pc ?vs) with *)
+      (*     (pattern_match_val_reverse' _ (existT pc vs)). *)
+      (*   now rewrite <- Heq, H. *)
+    Qed.
 
     (* The intendend use case of the above definitions is in the declaration of
        inductive types for AST that represent pattern matches. This will
@@ -453,7 +431,7 @@ Module Type PatternsOn (Import TY : Types).
       Definition PatternCaseCurried {σ} (pat : Pattern σ) : Type :=
         match pat with
         | @pat_var x σ => R (Γ ▻ x∷σ)
-        (* | pat_bool => bool -> R Γ *)
+        | pat_bool => bool -> R Γ
         (* | pat_list σ0 x y => (R Γ * R (Γ ▻ x∷σ0 ▻ y∷ty.list σ0))%type *)
         | @pat_pair x y σl σr => R (Γ ▻ x∷σl ▻ y∷σr)
         (* | pat_sum σ0 τ0 x y => (R (Γ ▻ x∷σ0) * R (Γ ▻ y∷τ0))%type *)
@@ -473,7 +451,7 @@ Module Type PatternsOn (Import TY : Types).
         PatternCaseCurried pat -> forall pc : PatternCase pat, R (Γ ▻▻ PatternCaseCtx pc) :=
         match pat with
         | pat_var x => fun rhs _ => rhs
-        (* | pat_bool => fun rhs => rhs *)
+        | pat_bool => fun rhs => rhs
         (* | pat_list σ0 x y => fun '(a,b) pc => *)
         (*                              match pc with true => a | false => b end *)
         | pat_pair x y => fun rhs _ => rhs
@@ -583,7 +561,7 @@ Module Type PatternsOn (Import TY : Types).
     Definition freshen_pattern (Σ : LCtx) {σ} (p : @Pattern N σ) : @Pattern LVar σ :=
       match p in (Pattern t) return (Pattern t) with
       | pat_var x              => pat_var (fresh_lvar Σ (Some (n x)))
-      (* | pat_bool               => pat_bool *)
+      | pat_bool               => pat_bool
       (* | pat_list σ x y         => let x' := fresh_lvar Σ (Some (n x)) in *)
       (*                             let y' := fresh_lvar (Σ▻x'∷σ) (Some (n y)) in *)
       (*                             pat_list σ x' y' *)
@@ -622,7 +600,7 @@ Module Type PatternsOn (Import TY : Types).
       PatternCase (freshen_pattern Σ p) -> PatternCase p :=
       match p with
       | pat_var _              => fun pc => pc
-      (* | pat_bool               => fun pc => pc *)
+      | pat_bool               => fun pc => pc
       (* | pat_list _ _ _         => fun pc => pc *)
       | pat_pair _ _           => fun pc => pc
       (* | pat_sum _ _ _ _        => fun pc => pc *)
@@ -642,7 +620,7 @@ Module Type PatternsOn (Import TY : Types).
       PatternCase p -> PatternCase (freshen_pattern Σ p) :=
       match p with
       | pat_var _              => fun pc => pc
-      (* | pat_bool               => fun pc => pc *)
+      | pat_bool               => fun pc => pc
       (* | pat_list _ _ _         => fun pc => pc *)
       | pat_pair _ _           => fun pc => pc
       (* | pat_sum _ _ _ _        => fun pc => pc *)
@@ -667,7 +645,7 @@ Module Type PatternsOn (Import TY : Types).
         freshen_ctx Σ (PatternCaseCtx (unfreshen_patterncase Σ p pc)) :=
       match p with
       | pat_var _              => fun _ => eq_refl
-      (* | pat_bool               => fun _ => eq_refl *)
+      | pat_bool               => fun _ => eq_refl
       (* | pat_list _ _ _         => fun pc => match pc with *)
       (*                                       | true => eq_refl *)
       (*                                       | false => eq_refl *)
@@ -703,7 +681,7 @@ Module Type PatternsOn (Import TY : Types).
         NamedEnv D (PatternCaseCtx (freshen_patterncase Σ p pc)) :=
       match p with
       | pat_var _ => fun ps ts => let (_,t) := env.view ts in [nenv t]
-      (* | pat_bool => fun _ _   => [env] *)
+      | pat_bool => fun _ _   => [env]
       (* | pat_list σ x y => *)
       (*     fun pc => match pc with *)
       (*               | true  => fun _  => [env] *)
@@ -741,7 +719,7 @@ Module Type PatternsOn (Import TY : Types).
         NamedEnv D (PatternCaseCtx (unfreshen_patterncase Σ p pc)) :=
       match p with
       | pat_var _ => fun ps ts => let (_,t) := env.view ts in [nenv t]
-      (* | pat_bool => fun _ _   => [env] *)
+      | pat_bool => fun _ _   => [env]
       (* | pat_list σ x y => *)
       (*     fun pc => match pc with *)
       (*               | true  => fun _  => [env] *)

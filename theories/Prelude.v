@@ -369,6 +369,8 @@ Module option.
     match a with Some x => f x | None => None end.
   Definition comp {A B C : Type} (f : A -> option B) (g : B -> option C) :=
     fun a => bind (f a) g.
+  Definition liftOption2 {A B C} (f : A ->  B -> C) (ma : option A) (mb : option B) : option C :=
+    (bind ma (fun a => bind mb (fun b => Some (f a b)))).
 
   Arguments map {A B} f !o.
   Arguments bind {A B} !a f.
@@ -384,6 +386,8 @@ Module option.
         (at level 80, ma at next level, mb at level 200, right associativity).
     Notation "f <$> a" := (map f a).
     Notation "f <*> a" := (match f with Some g => map g a | None => None end).
+    Notation "f <$2> ma mb" := (liftOption2 f ma mb)
+        (at level 80, ma at next level, mb at level 200, right associativity).
 
   End notations.
 

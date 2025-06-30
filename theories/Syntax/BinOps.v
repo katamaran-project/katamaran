@@ -273,10 +273,10 @@ Module bop.
     (* Having looked at the BinSec/Rel and Katamaran paper, I think it makes sense to require this to succeed for both sides *)
     (* TODO: Make sure that this is definitely a logical choice *)
     (* TODO: The pattern occurs here again *)
-    Definition eval_relop_valRel {σ} (op : RelOp σ) (rv1 rv2 : RelVal σ) : RelVal ty.bool :=
+    Definition eval_relop_valRel {σ} (op : RelOp σ) (rv1 rv2 : RelVal σ) : Coq.Init.Datatypes.option Datatypes.bool :=
       match rv1 , rv2 with
-      | ty.SyncVal _ v1 , ty.SyncVal _ v2 => SyncVal ty.bool (eval_relop_val op v1 v2)
-      | rv1 , rv2 => NonSyncVal ty.bool (eval_relop_val op (projLeft rv1) (projLeft rv2)) (eval_relop_val op (projRight rv1) (projRight rv2))
+      | ty.SyncVal _ v1 , ty.SyncVal _ v2 => Some (eval_relop_val op v1 v2)
+      | _ , _ => None
       end.
 
     Definition eval_relop_prop
@@ -294,14 +294,13 @@ Module bop.
       | bvult => fun v1 v2 => bv.ult v1 v2
       end.
 
-    (* Changed it to a product of Prop to correspond to the RelVal bool *)
     Definition eval_relop_propRel
       (* Force TypeDefKit into the context, so that the eval_relop_equiv lemma
          below doesn't leave unsolved existentials when used in rewriting. *)
-      {TDF : TypeDefKit TDN} {σ} (op : RelOp σ) (rv1 rv2 : RelVal σ) : Prop * Prop :=
+      {TDF : TypeDefKit TDN} {σ} (op : RelOp σ) (rv1 rv2 : RelVal σ) : Coq.Init.Datatypes.option Prop :=
       match rv1 , rv2 with
-      | ty.SyncVal _ v1 , ty.SyncVal _ v2 => Coq.Init.Datatypes.pair (eval_relop_prop op v1 v2) (eval_relop_prop op v1 v2)
-      | rv1 , rv2 => Coq.Init.Datatypes.pair (eval_relop_prop op (projLeft rv1) (projLeft rv2)) (eval_relop_prop op (projRight rv1) (projRight rv2))
+      | ty.SyncVal _ v1 , ty.SyncVal _ v2 => Some (eval_relop_prop op v1 v2)
+      | _ , _ => None
       end.
 
     Lemma eval_relop_val_spec {σ} (op : RelOp σ) (v1 v2 : Val σ) :
@@ -320,23 +319,57 @@ Module bop.
 
     (* TODO: This conceptually not hard, but somehow I can't get it done. *)
     (* One of the reasons is not knowing how to simplify reflect (a1 /\ a2) (b1 && b2) *) 
-    Lemma eval_relop_val_specRel {σ} (op : RelOp σ) (v1 v2 : RelVal σ) :
-      reflect (fst (eval_relop_propRel op v1 v2)) (projLeft (eval_relop_valRel op v1 v2)) *
-        reflect (snd (eval_relop_propRel op v1 v2)) (projRight (eval_relop_valRel op v1 v2)).
-    Proof with try constructor; auto.
-      destruct v1; destruct v2; cbn; split; apply eval_relop_val_spec.
+    Definition eval_relop_val_specRel {σ} (op : RelOp σ) (v1 v2 : RelVal σ) :=
+      option.liftOption2 reflect (eval_relop_propRel op v1 v2) (eval_relop_valRel op v1 v2).
+
+    (* TODO: Bunch of stuff from Gemini that seems like a very plausible solution to state the spec when using options *)
+    (* Lemma 1: If eval_relop_val_specRel gives Some (reflect P true), then P is true. *)
+    Lemma eval_relop_val_specRel_gives_true_prop : forall {σ} (op : RelOp σ) (v1 v2 : RelVal σ),
+      forall (P_prime : Prop),
+        eval_relop_val_specRel op v1 v2 = Some (reflect P_prime true) ->
+        P_prime.
+    Proof.
+      intros σ op v1 v2 P_prime H_eq.
+      destruct v1; destruct v2; cbn in H_eq; try congruence.
+      inversion H_eq as [H0].
+      assert (reflect P_prime true).
+      { rewrite <- H0.
+        apply eval_relop_val_spec. }
+      inversion H.
+      assumption.
+    Qed.
+
+    (* Lemma 2: If eval_relop_val_specRel gives Some (reflect P false), then P is false. *)
+    Lemma eval_relop_val_specRel_gives_false_prop : forall {σ} (op : RelOp σ) (v1 v2 : RelVal σ),
+      forall (P_prime : Prop),
+        eval_relop_val_specRel op v1 v2 = Some (reflect P_prime false) ->
+        ~ P_prime.
+    Proof.
+      intros σ op v1 v2 P_prime H_eq.
+      destruct v1; destruct v2; cbn in H_eq; try congruence.
+      inversion H_eq as [H0].
+      assert (reflect P_prime false).
+      { rewrite <- H0. apply eval_relop_val_spec. }
+      inversion H.
+      assumption.
+    Qed.
+
+    (* Lemma 3: If eval_relop_val_specRel is None, it's because one of the inputs was None. *)
+    Lemma eval_relop_val_specRel_is_None : forall {σ} (op : RelOp σ) (v1 v2 : RelVal σ),
+        eval_relop_val_specRel op v1 v2 = None ->
+        eval_relop_propRel op v1 v2 = None \/ eval_relop_valRel op v1 v2 = None.
+    Proof.
+      intros σ op v1 v2 H_eq_None.
+      destruct v1; destruct v2; cbn in H_eq_None; try congruence; cbn; auto.
     Qed.
 
     Lemma eval_relop_equiv {σ} (op : RelOp σ) (v1 v2 : Val σ) :
       eval_relop_prop op v1 v2 <-> eval_relop_val op v1 v2 = true.
     Proof. now destruct (eval_relop_val_spec op v1 v2). Qed.
 
-    Lemma eval_relop_equivRel {σ} (op : RelOp σ) (v1 v2 : RelVal σ) :
-      ((fst (eval_relop_propRel op v1 v2)) <-> (projLeft (eval_relop_valRel op v1 v2) = true)) /\ ((snd (eval_relop_propRel op v1 v2)) <-> (projRight (eval_relop_valRel op v1 v2) = true)).
-    Proof. split.
-           - now destruct (fst (eval_relop_val_specRel op v1 v2)).
-           - now destruct (snd (eval_relop_val_specRel op v1 v2)).
-    Qed.
+    (* Lemma eval_relop_equivRel {σ} (op : RelOp σ) (v1 v2 : RelVal σ) : *)
+    (*   eval_relop_propRel op v1 v2 <-> eval_relop_valRel op v1 v2 = Some true. *)
+    (* Proof. now destruct (eval_relop_val_specRel op v1 v2). Qed. *)
 
     Definition eval {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Val σ1 -> Val σ2 -> Val σ3 :=
       match op in BinOp σ1 σ2 σ3 return Val σ1 -> Val σ2 -> Val σ3 with

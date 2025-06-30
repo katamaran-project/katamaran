@@ -467,6 +467,7 @@ Module Type GenericSolverOn
                                                 | Some F2' => singleton (formula_or (PathCondition_to_Formula F1') (PathCondition_to_Formula F2'))
                                          end
                                   end
+      | formula_public t       => singleton (formula_public t)
       end.
 
     Lemma PathCondition_to_Formula_sound' [w : World] (P : PathCondition w) :

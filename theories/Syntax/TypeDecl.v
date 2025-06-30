@@ -54,9 +54,9 @@ Module ty.
 
   Class TypeDeclKit : Type :=
     { (* Type constructor names. *)
-      enumi    : Set;           (* Names of enum type constructors. *)
-      unioni   : Set;           (* Names of union type constructors. *)
-      recordi  : Set;           (* Names of record type constructors. *)
+      (* enumi    : Set;           (* Names of enum type constructors. *) *)
+      (* unioni   : Set;           (* Names of union type constructors. *) *)
+      (* recordi  : Set;           (* Names of record type constructors. *) *)
     }.
 
   Section WithTypeDecl.
@@ -182,6 +182,13 @@ Module ty.
         | (SyncVal _ v) => SyncVal _ (f v)
         | (NonSyncVal _ vl vr) => NonSyncVal _ (f vl) (f vr)
         end.
+
+      Definition isSyncValProp {σ} (v : RelVal σ) : Prop :=
+        match v with
+        | SyncVal _ _ => True
+        | NonSyncVal _ _ _ => False
+        end.
+      
 
       Definition relValPairIsPairRelVal {σ1 σ2} (rv : RelVal (prod σ1 σ2)) : RelVal σ1 * RelVal σ2 :=
         match rv with
@@ -425,10 +432,10 @@ Export ty
     TypeDenoteKit,
     Ty, Val, RelVal,
 
-    TypeDefKit, (* enum_eqdec, enumt_eqdec, enumt_finite, *)
-    enumi,
-    unioni,
-    recordi
+    TypeDefKit(* , enum_eqdec, enumt_eqdec, enumt_finite, *)
+    (* enumi, *)
+    (* unioni, *)
+    (* recordi *)
     (* union_eqdec, uniont_eqdec, unionk, unionk_eqdec, unionk_finite, unionk_ty,
     unionv_fold, unionv_unfold, record_eqdec, recordt_eqdec, recordf,
     recordf_ty, recordv_fold, recordv_unfold,
@@ -449,11 +456,11 @@ Module Type Types.
 
 End Types.
 
-#[local] Instance DefaultTypeDeclKit : TypeDeclKit :=
-  {| enumi := Empty_set;
-     unioni := Empty_set;
-     recordi := Empty_set;
-  |}.
+#[local] Instance DefaultTypeDeclKit : TypeDeclKit := ty.Build_TypeDeclKit.
+  (* {| enumi := Empty_set; *)
+  (*    unioni := Empty_set; *)
+  (*    recordi := Empty_set; *)
+  (* |}. *)
 
 #[local] Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit := ty.Build_TypeDenoteKit _.
   (* {| (* enumt _ := Empty_set; *)

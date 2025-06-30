@@ -43,7 +43,7 @@ From Katamaran Require Export
 From Katamaran Require Import
      Syntax.Expressions
      Syntax.Messages
-     (* Syntax.Patterns *)
+     Syntax.Patterns
      Syntax.Terms
      Symbolic.Instantiation
      Symbolic.OccursCheck
@@ -52,7 +52,7 @@ From Katamaran Require Import
 Module Type BaseMixin (Import TY : Types).
   Include
     ExpressionsOn TY <+
-    TermsOn TY <+ (* PatternsOn TY <+ *)
+    TermsOn TY <+ PatternsOn TY <+
     OccursCheckOn TY <+ InstantiationOn TY <+
     MessagesOn TY <+ PartialEvaluationOn TY.
 

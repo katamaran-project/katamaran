@@ -821,6 +821,7 @@ Module Type TermsOn (Import TY : Types).
 
     Definition Pair (A B : LCtx -> Type) (Σ : LCtx) : Type :=
       A Σ * B Σ.
+
     #[export] Instance SubstPair {A B} `{Subst A, Subst B} : Subst (Pair A B) :=
       fun _ '(a,b) _ ζ => (subst a ζ, subst b ζ).
 
@@ -836,6 +837,28 @@ Module Type TermsOn (Import TY : Types).
     Qed.
 
   End SymbolicPair.
+
+  Section SymbolicTriple.
+
+    Definition Triple (A B C : LCtx -> Type) (Σ : LCtx) : Type :=
+      A Σ * B Σ * C Σ.
+
+    #[export] Instance SubstTriple {A B C} `{Subst A, Subst B, Subst C} : Subst (Triple A B C) :=
+      fun _ '(a,b,c) _ ζ => (subst a ζ, subst b ζ, subst c ζ).
+
+    #[export] Instance SubstLawsTriple {A B C} `{SubstLaws A, SubstLaws B, SubstLaws C} : SubstLaws (Triple A B C).
+    Proof.
+      constructor.
+      { intros ? [t1 t2]; cbn.
+        f_equal; apply subst_sub_id.
+      }
+      { intros ? ? ? ? ? [t1 t2]; cbn.
+        f_equal; apply subst_sub_comp.
+      }
+    Qed.
+
+  End SymbolicTriple.
+
 
   Section SymbolicOption.
 

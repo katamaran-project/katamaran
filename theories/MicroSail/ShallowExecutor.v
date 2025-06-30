@@ -217,22 +217,22 @@ Module Type ShallowExecOn
     Import CStoreSpecNotations.
     Local Open Scope mut_scope.
 
-    (* Section PatternMatching. *)
+    Section PatternMatching.
 
-    (*   Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ) : *)
-    (*     CStoreSpec Γ Γ (MatchResult pat) := *)
-    (*     lift_purespec (CPureSpec.demonic_pattern_match pat v). *)
-    (*   #[global] Arguments demonic_pattern_match {N Γ σ} pat v. *)
+      Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ) :
+        CStoreSpec Γ Γ (MatchResult pat) :=
+        lift_purespec (CPureSpec.demonic_pattern_match pat v).
+      #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
 
-    (*   Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ) *)
-    (*     (Φ : MatchResult pat -> CStoreRel Γ -> SCHeap -> Prop) (δ : CStoreRel Γ) (h : SCHeap) : *)
-    (*     demonic_pattern_match pat v Φ δ h <-> Φ (pattern_match_val pat v) δ h. *)
-    (*   Proof. *)
-    (*     unfold demonic_pattern_match, lift_purespec. *)
-    (*     now rewrite CPureSpec.wp_demonic_pattern_match. *)
-    (*   Qed. *)
+      Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ)
+        (Φ : MatchResult pat -> CStoreRel Γ -> SCHeap -> Prop) (δ : CStoreRel Γ) (h : SCHeap) :
+        demonic_pattern_match pat v Φ δ h <-> Φ (pattern_match_val pat v) δ h.
+      Proof.
+        unfold demonic_pattern_match, lift_purespec.
+        now rewrite CPureSpec.wp_demonic_pattern_match.
+      Qed.
 
-    (* End PatternMatching. *)
+    End PatternMatching.
 
     Section State.
 

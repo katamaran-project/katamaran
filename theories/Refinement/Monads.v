@@ -189,7 +189,7 @@ Module Type RefinementMonadsOn
 
     Lemma refine_angelic_ctx {N : Set} {n : N -> LVar} {w} :
       ⊢ ℛ⟦∀ᵣ Δ, RPureSpec (RNEnv N Δ)⟧
-        CPureSpec.angelic_ctx (SPureSpec.angelic_ctx (w := w) n).
+        (fun δ => CPureSpec.map CHeapSpec.mapSyncValNamedEnv (CPureSpec.angelic_ctx δ)) (SPureSpec.angelic_ctx (w := w) n).
     Proof.
       iIntros (Δ).
       iInduction Δ as [|Δ IHΔ b] "Hind";
@@ -936,6 +936,14 @@ Module Type RefinementMonadsOn
         iApply (refine_bind (RA := RUnit) (RB := RUnit) with "IHEs1"); rsolve.
         iApply refine_formula_persist.
         iModIntro; rsolve.
+        unfold RSat.
+        unfold RFormula.
+        unfold RInstPropIff.
+        unfold proprepₚ.
+        unfold instpred.
+        unfold instpred_inst_formula.
+        unfold instpred_formula.
+        unfold instpred_formula_relop.
     (* Qed. *)
     Admitted.
 

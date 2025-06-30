@@ -127,6 +127,8 @@ Module Type SymPropOn
     | block
     | assertk (fml : Formula Σ) (msg : AMessage Σ) (k : SymProp Σ)
     | assumek (fml : Formula Σ) (k : SymProp Σ)
+    | assertPublic {σ} (t : Term Σ σ) (k : SymProp Σ)
+    | assumePublic {σ} (t : Term Σ σ) (k : SymProp Σ)
     (* Don't use these two directly. Instead, use the HOAS versions 'angelic' *)
     (* and 'demonic' that will freshen names. *)
     | angelicv b (k : SymProp (Σ ▻ b))
@@ -315,6 +317,8 @@ Module Type SymPropOn
         | assertk fml msg o =>
           instprop fml ι /\ safe o ι
         | assumek fml o => instprop fml ι -> safe o ι
+        | assertPublic t k => ty.isSyncValProp (inst t ι) /\ safe k ι
+        | assumePublic t k => ty.isSyncValProp (inst t ι) -> safe k ι
         | angelicv b k => exists v, safe k (env.snoc ι b v)
         | demonicv b k => forall v, safe k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
@@ -348,6 +352,9 @@ Module Type SymPropOn
         | assertk fml msg o =>
           Obligation msg fml ι /\ safe_debug o ι
         | assumek fml o => instprop fml ι -> safe_debug o ι
+        (* TODO: I used the same as in non-debug, but a debug message might be nice. *)
+        | assertPublic t k => ty.isSyncValProp (inst t ι) /\ safe k ι
+        | assumePublic t k => ty.isSyncValProp (inst t ι) -> safe k ι
         | angelicv b k => exists v, safe_debug k (env.snoc ι b v)
         | demonicv b k => forall v, safe_debug k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
@@ -382,6 +389,8 @@ Module Type SymPropOn
         | assertk fml msg o =>
           Obligation msg fml ι /\ @wsafe (wformula w fml) o ι
         | assumek fml o => instprop fml ι -> @wsafe (wformula w fml) o ι
+        | assertPublic t k => ty.isSyncValProp (inst t ι) /\ safe k ι
+        | assumePublic t k => ty.isSyncValProp (inst t ι) -> safe k ι
         | angelicv b k => exists v, @wsafe (wsnoc w b) k (env.snoc ι b v)
         | demonicv b k => forall v, @wsafe (wsnoc w b) k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
@@ -438,6 +447,8 @@ Module Type SymPropOn
       - reflexivity.
       - apply and_iff_morphism; eauto.
       - apply imp_iff_compat_l; eauto.
+      - eauto.
+      - eauto.
       - apply ex_iff_morphism; intros v; eauto.
       - apply all_iff_morphism; intros v; eauto.
       - apply and_iff_morphism; eauto.
@@ -457,6 +468,8 @@ Module Type SymPropOn
       - reflexivity.
       - apply and_iff_morphism; eauto.
       - apply imp_iff_compat_l; eauto.
+      - eauto.
+      - eauto.
       - apply ex_iff_morphism; intros v; eauto.
       - apply all_iff_morphism; intros v; eauto.
       (* - rewrite inst_subst, inst_sub_shift. *)
@@ -711,7 +724,16 @@ Module Type SymPropOn
     #[export] Instance proper_assertk {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertk fml msg).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply and_iff_morphism. Qed.
 
+    #[export] Instance proper_assumePublic {Σ σ} (t : Term Σ σ) : Proper (sequiv Σ ==> sequiv Σ) (assumePublic t).
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply imp_iff_compat_l. Qed.
+
+    #[export] Instance proper_assertPublic {Σ σ} (t : Term Σ σ) : Proper (sequiv Σ ==> sequiv Σ) (assertPublic t).
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply and_iff_morphism. Qed.
+
     #[export] Instance proper_assertk_impl {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (simpl Σ ==> simpl Σ) (assertk fml msg).
+    Proof. unfold simpl. intros p q pq ι. cbn. intuition auto. Qed.
+
+    #[export] Instance proper_assertPublic_impl {Σ σ} (t : Term Σ σ) : Proper (simpl Σ ==> simpl Σ) (assertPublic t).
     Proof. unfold simpl. intros p q pq ι. cbn. intuition auto. Qed.
 
     #[export] Instance proper_assume_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
@@ -939,6 +961,8 @@ Module Type SymPropOn
         | SymProp.block => 0
         | SymProp.assertk fml msg k => 1 + size k
         | SymProp.assumek fml k => 1 + size k
+        | SymProp.assertPublic t k => 1 + size k
+        | SymProp.assumePublic t k => 1 + size k
         | SymProp.angelicv b k => 1 + size k
         | SymProp.demonicv b k => 1 + size k
         | @SymProp.assert_vareq _ x σ xIn t msg k => 1 + size k
@@ -985,10 +1009,12 @@ Module Type SymPropOn
         | SymProp.error _              => inc_error c
         | SymProp.block                => inc_block c
         | SymProp.debug _ s            => count_nodes s (inc_debug c)
-        | SymProp.demonicv _ s         => count_nodes s c
-        | SymProp.angelicv _ s         => count_nodes s c
         | SymProp.assertk _ _ s        => count_nodes s c
         | SymProp.assumek _ s          => count_nodes s c
+        | SymProp.assertPublic _ s     => count_nodes s c
+        | SymProp.assumePublic _ s     => count_nodes s c
+        | SymProp.demonicv _ s         => count_nodes s c
+        | SymProp.angelicv _ s         => count_nodes s c
         | SymProp.assert_vareq _ _ _ s => count_nodes s c
         | SymProp.assume_vareq _ _ s   => count_nodes s c
         | SymProp.angelic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
@@ -1051,6 +1077,20 @@ Module Type SymPropOn
       end.
     Global Arguments assumek_prune {Σ} fml p.
 
+    Definition assertPublic_prune {Σ σ} (t : Term Σ σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      match p with
+      | error s => @error Σ s
+      | _       => assertPublic t p
+      end.
+    Global Arguments assertPublic_prune {Σ σ} t p.
+
+    Definition assumePublic_prune {Σ σ} (t : Term Σ σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      match p with
+      | block => block
+      | _     => assumePublic t p
+      end.
+    Global Arguments assumePublic_prune {Σ σ} t p.
+
     Definition angelicv_prune {Σ} b (p : 𝕊 (Σ ▻ b)) : 𝕊 Σ :=
       match p with
       | error msg => error (amsg.there msg)
@@ -1091,6 +1131,8 @@ Module Type SymPropOn
         assertk_prune fml msg (prune o)
       | assumek fml o =>
         assumek_prune fml (prune o)
+      | assertPublic t o => assertPublic_prune t (prune o)
+      | assumePublic t o => assumePublic_prune t (prune o)
       | angelicv b o =>
         angelicv_prune (prune o)
       | demonicv b o =>
@@ -1120,6 +1162,8 @@ Module Type SymPropOn
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
       - destruct p2; cbn; auto; intuition.
@@ -1141,6 +1185,8 @@ Module Type SymPropOn
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
       - destruct p2; cbn; auto; intuition.
@@ -1155,6 +1201,14 @@ Module Type SymPropOn
 
     Lemma prune_assumek_sound {Σ} fml (p : 𝕊 Σ) (ι : Valuation Σ) :
       safe (assumek_prune fml p) ι <-> safe (assumek fml p) ι.
+    Proof. destruct p; cbn; auto; intuition. Qed.
+
+    Lemma prune_assertPublic_sound {Σ σ} (t : Term Σ σ) (p : 𝕊 Σ) (ι : Valuation Σ) :
+      safe (assertPublic_prune t p) ι <-> safe (assertPublic t p) ι.
+    Proof. destruct p; cbn; rewrite ?obligation_equiv; auto; intuition. Qed.
+
+    Lemma prune_assumePublic_sound {Σ σ} (t : Term Σ σ) (p : 𝕊 Σ) (ι : Valuation Σ) :
+      safe (assumePublic_prune t p) ι <-> safe (assumePublic t p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
     Lemma prune_angelicv_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
@@ -1189,6 +1243,10 @@ Module Type SymPropOn
         now rewrite IHp.
       - rewrite prune_assumek_sound; cbn.
         now rewrite IHp.
+      - rewrite prune_assertPublic_sound; cbn.
+        now rewrite IHp.
+      - rewrite prune_assumePublic_sound; cbn.
+        now rewrite IHp.
       - rewrite prune_angelicv_sound; cbn.
         apply ex_iff_morphism; intros v.
         now rewrite IHp.
@@ -1222,6 +1280,7 @@ Module Type SymPropOn
         - destruct b. rewrite IHmfs. now cbn.
       Qed.
 
+      (* TODO: Steven suggested to add a list of terms that are known to be SyncVal, but for now I am hoping this can be done with the formulas *)
       Inductive ECtx (Σ : LCtx) : LCtx -> Type :=
       | ectx Σe (mfs : Ctx (Pair AMessage Formula (Σ ▻▻ Σe))) : ECtx Σ (Σ ▻▻ Σe).
       Arguments ectx {Σ} Σe mfs.
@@ -1263,6 +1322,8 @@ Module Type SymPropOn
         | block                  => plug ec block
         | assertk fml msg p      => push (ectx_formula ec msg fml) p
         | assumek fml p          => plug ec (assumek fml (push ectx_refl p))
+        | assertPublic t p       => plug ec (assertPublic t (push ectx_refl p))
+        | assumePublic t p       => plug ec (assumePublic t (push ectx_refl p))
         | angelicv b p           => push (ectx_snoc ec b) p
         | demonicv b p           => plug ec (demonicv b (push ectx_refl p))
         | assert_vareq x t msg p =>
@@ -1376,6 +1437,8 @@ Module Type SymPropOn
         - rewrite IHp. clear IHp.
           destruct ec; cbn. reflexivity.
         - apply proper_plug, proper_assumek, IHp.
+        - apply proper_plug, proper_assertPublic, IHp.
+        - apply proper_plug, proper_assumePublic, IHp.
         - rewrite IHp. clear IHp.
           destruct ec; cbn.
           apply proper_angelic_close0.
@@ -1468,6 +1531,8 @@ Module Type SymPropOn
         | block                  => block
         | assertk fml msg p      => plug ec (assertk fml msg (push uctx_refl p))
         | assumek fml p          => push (uctx_formula ec fml) p
+        | assertPublic t p       => plug ec (assertPublic t (push uctx_refl p))
+        | assumePublic t p       => plug ec (assumePublic t (push uctx_refl p))
         | angelicv b p           => plug ec (angelicv b (push uctx_refl p))
         | demonicv b p           => push (uctx_snoc ec b) p
         | assert_vareq x t msg p => plug ec (assert_vareq x t msg (push uctx_refl p))
@@ -1587,6 +1652,9 @@ Module Type SymPropOn
         - apply proper_plug_impl, proper_assertk_impl, IHp.
         - rewrite IHp. clear IHp.
           destruct ec; cbn. reflexivity.
+        - apply proper_plug_impl, proper_assertPublic_impl, IHp.
+        - rewrite IHp. clear IHp.
+          destruct ec; cbn. reflexivity.
         - apply proper_plug_impl, proper_angelicv_impl, IHp.
         - rewrite IHp. clear IHp. destruct ec; cbn.
           apply proper_demonic_close0_impl. intros ι. cbn.
@@ -1702,7 +1770,9 @@ Module Type SymPropOn
     | eformula_true
     | eformula_false
     | eformula_and (F1 F2 : EFormula)
-    | eformula_or (F1 F2 : EFormula).
+    | eformula_or (F1 F2 : EFormula)
+    | eformula_public {σ : Ty} (t : ETerm σ)
+    .
     Arguments eformula_user : clear implicits.
 
     Inductive ESymProp : Type :=
@@ -1757,6 +1827,7 @@ Module Type SymPropOn
         | formula_false          => eformula_false
         | formula_and F1 F2      => eformula_and (erase F1) (erase F2)
         | formula_or F1 F2       => eformula_or (erase F1) (erase F2)
+        | formula_public t       => eformula_public (erase_term t)
         end.
 
     Fixpoint erase_symprop {Σ} (p : SymProp Σ) : ESymProp :=
@@ -1855,28 +1926,36 @@ Module Type SymPropOn
             Some (vs ► (σ ↦ v))
         end.
 
-    (* Fixpoint inst_eformula (ι : list { σ : Ty & RelVal σ}) (f : EFormula) : option Prop := *)
-    (*   match f with *)
-    (*   | @eformula_user p ts     => vs <- inst_env ι ts ;; Some (env.uncurry (𝑷_inst p) vs) *)
-    (*   | eformula_bool t         => b  <- inst_eterm ι t ;; *)
-    (*                                Some (b = ty.SyncVal ty.bool true) *)
-    (*   | @eformula_prop Σ' ζ P   => vs <- inst_namedenv ι ζ ;; *)
-    (*                                Some (uncurry_named P vs) *)
-    (*   | eformula_relop op t1 t2 => v1 <- inst_eterm ι t1 ;; *)
-    (*                                v2 <- inst_eterm ι t2 ;; *)
-    (*                                Some (bop.eval_relop_propRel op v1 v2) *)
-    (*   | eformula_true           => Some True *)
-    (*   | eformula_false          => Some False *)
-    (*   | eformula_and F1 F2      => p1 <- inst_eformula ι F1;; *)
-    (*                                p2 <- inst_eformula ι F2;; *)
-    (*                                Some (p1 /\ p2) *)
-    (*   | eformula_or F1 F2       => p1 <- inst_eformula ι F1;; *)
-    (*                                p2 <- inst_eformula ι F2;; *)
-    (*                                Some (p1 \/ p2) *)
-    (*   end. *)
+    Fixpoint inst_eformula (ι : list { σ : Ty & RelVal σ}) (f : EFormula) : option Prop :=
+      match f with
+      | @eformula_user p ts     => vs <- inst_env ι ts ;; Some (env.uncurry (𝑷_inst p) vs)
+      | eformula_bool t         => b  <- inst_eterm ι t ;;
+                                   Some (b = ty.SyncVal ty.bool true)
+      | @eformula_prop Σ' ζ P   => vs <- inst_namedenv ι ζ ;;
+                                   Some (uncurry_named P vs)
+      | eformula_relop op t1 t2 => v1 <- inst_eterm ι t1 ;;
+                                   v2 <- inst_eterm ι t2 ;;
+                                   match bop.eval_relop_propRel op v1 v2 with
+                                   | Some p => Some p
+                                   | None => Some False
+                                   end
+      | eformula_true           => Some True
+      | eformula_false          => Some False
+      | eformula_and F1 F2      => p1 <- inst_eformula ι F1;;
+                                   p2 <- inst_eformula ι F2;;
+                                   Some (p1 /\ p2)
+      | eformula_or F1 F2       => p1 <- inst_eformula ι F1;;
+                                   p2 <- inst_eformula ι F2;;
+                                   Some (p1 \/ p2)
+      | eformula_public t       => b <- inst_eterm ι t ;;
+                                   match b with
+                                   | ty.SyncVal _ _ => Some True
+                                   | ty.NonSyncVal _ _ _ => Some False
+                                   end
+      end.
 
-    (* Definition inst_eformula' (ι : list { σ : Ty & RelVal σ}) (f : EFormula) : Prop := *)
-    (*   option_rect (fun _ => Prop) (fun p => p) False (inst_eformula ι f). *)
+    Definition inst_eformula' (ι : list { σ : Ty & RelVal σ}) (f : EFormula) : Prop :=
+      option_rect (fun _ => Prop) (fun p => p) False (inst_eformula ι f).
 
     Fixpoint list_remove {A} (xs : list A) (n : nat) : list A :=
       match xs with
@@ -1893,39 +1972,39 @@ Module Type SymPropOn
       | _       , _       => False
       end.
 
-    (* Fixpoint inst_symprop (ι : list { σ : Ty & RelVal σ}) (f : ESymProp) : Prop := *)
-    (*   match f with *)
-    (*   | eangelic_binary p1 p2 => inst_symprop ι p1 \/ inst_symprop ι p2 *)
-    (*   | edemonic_binary p1 p2 => inst_symprop ι p1 /\ inst_symprop ι p2 *)
-    (*   | eerror => False *)
-    (*   | eblock => True *)
-    (*   | eassertk fml k => inst_eformula' ι fml /\ inst_symprop ι k *)
-    (*   | eassumek fml k => inst_eformula' ι fml -> inst_symprop ι k *)
-    (*   | eangelicv b k => exists v : RelVal (type b), inst_symprop (cons (existT (type b) v) ι) k *)
-    (*   | edemonicv b k => forall v : RelVal (type b), inst_symprop (cons (existT (type b) v) ι) k *)
-    (*   | eassert_vareq x n t k => *)
-    (*       let ι' := list_remove ι n in *)
-    (*       inst_eq (inst_eterm ι (eterm_var x _ n)) (inst_eterm ι' t) /\ *)
-    (*       inst_symprop ι' k *)
-    (*   | eassume_vareq x n t k => *)
-    (*       let ι' := list_remove ι n in *)
-    (*       inst_eq (inst_eterm ι (eterm_var x _ n)) (inst_eterm ι' t) -> *)
-    (*       inst_symprop ι' k *)
-    (*   (* | epattern_match s pat rhs => *) *)
-    (*   (*     match inst_eterm ι s with *) *)
-    (*   (*     | Some v => let (c,ι__pat) := pattern_match_val pat v in *) *)
-    (*   (*                 inst_symprop (app (erase_valuation ι__pat) ι) (rhs c) *) *)
-    (*   (*     | None   => False *) *)
-    (*   (*     end *) *)
-    (*   (* | epattern_match_var x n pat rhs => *) *)
-    (*   (*     match inst_eterm ι (eterm_var x _ n) with *) *)
-    (*   (*     | Some v => let ι'       := list_remove ι n in *) *)
-    (*   (*                 let (c,ι__pat) := pattern_match_val pat v in *) *)
-    (*   (*                 inst_symprop (app (erase_valuation ι__pat) ι') (rhs c) *) *)
-    (*   (*     | None   => False *) *)
-    (*   (*     end *) *)
-    (*   | edebug _ k => inst_symprop ι k *)
-    (*   end. *)
+    Fixpoint inst_symprop (ι : list { σ : Ty & RelVal σ}) (f : ESymProp) : Prop :=
+      match f with
+      | eangelic_binary p1 p2 => inst_symprop ι p1 \/ inst_symprop ι p2
+      | edemonic_binary p1 p2 => inst_symprop ι p1 /\ inst_symprop ι p2
+      | eerror => False
+      | eblock => True
+      | eassertk fml k => inst_eformula' ι fml /\ inst_symprop ι k
+      | eassumek fml k => inst_eformula' ι fml -> inst_symprop ι k
+      | eangelicv b k => exists v : RelVal (type b), inst_symprop (cons (existT (type b) v) ι) k
+      | edemonicv b k => forall v : RelVal (type b), inst_symprop (cons (existT (type b) v) ι) k
+      | eassert_vareq x n t k =>
+          let ι' := list_remove ι n in
+          inst_eq (inst_eterm ι (eterm_var x _ n)) (inst_eterm ι' t) /\
+          inst_symprop ι' k
+      | eassume_vareq x n t k =>
+          let ι' := list_remove ι n in
+          inst_eq (inst_eterm ι (eterm_var x _ n)) (inst_eterm ι' t) ->
+          inst_symprop ι' k
+      (* | epattern_match s pat rhs => *)
+      (*     match inst_eterm ι s with *)
+      (*     | Some v => let (c,ι__pat) := pattern_match_val pat v in *)
+      (*                 inst_symprop (app (erase_valuation ι__pat) ι) (rhs c) *)
+      (*     | None   => False *)
+      (*     end *)
+      (* | epattern_match_var x n pat rhs => *)
+      (*     match inst_eterm ι (eterm_var x _ n) with *)
+      (*     | Some v => let ι'       := list_remove ι n in *)
+      (*                 let (c,ι__pat) := pattern_match_val pat v in *)
+      (*                 inst_symprop (app (erase_valuation ι__pat) ι') (rhs c) *)
+      (*     | None   => False *)
+      (*     end *)
+      | edebug _ k => inst_symprop ι k
+      end.
 
     Lemma erase_valuation_remove {Σ b} (bIn : b ∈ Σ) (ι : Valuation Σ) :
       list_remove (erase_valuation ι) (ctx.in_at bIn) =
@@ -1980,52 +2059,54 @@ Module Type SymPropOn
       - now rewrite inst_eterm_erase, IHts.
     Qed.
 
-    (* Lemma inst_eformula_erase {Σ} (fml : Formula Σ) (ι : Valuation Σ) : *)
-    (*   inst_eformula (erase_valuation ι) (erase_formula fml) = Some (instprop fml ι). *)
-    (* Proof. *)
-    (*   induction fml; *)
-    (*     repeat *)
-    (*       (try progress cbn; *)
-    (*        try rewrite ?inst_eterm_erase, ?inst_env_erase, ?inst_namedenv_erase; *)
-    (*        try match goal with H: ?x = Some _ |- context[?x] => rewrite H end); auto. *)
-    (* Qed. *)
+    Lemma inst_eformula_erase {Σ} (fml : Formula Σ) (ι : Valuation Σ) :
+      inst_eformula (erase_valuation ι) (erase_formula fml) = Some (instprop fml ι).
+    Proof.
+      induction fml;
+        repeat
+          (try progress cbn;
+           try rewrite ?inst_eterm_erase, ?inst_env_erase, ?inst_namedenv_erase;
+           try match goal with H: ?x = Some _ |- context[?x] => rewrite H end); auto.
+      destruct (bop.eval_relop_propRel rop (inst t1 ι) (inst t2 ι)); cbn; reflexivity.
+      destruct (inst t ι); reflexivity.
+    Qed.
 
-    (* Lemma erase_safe {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) : *)
-    (*   inst_symprop (erase_valuation ι) (erase_symprop p) <-> *)
-    (*   safe p ι. *)
-    (* Proof. *)
-    (*   induction p; cbn [inst_symprop erase_symprop safe]; unfold inst_eformula'. *)
-    (*   - apply Morphisms_Prop.or_iff_morphism. auto. auto. *)
-    (*   - apply Morphisms_Prop.and_iff_morphism. auto. auto. *)
-    (*   - reflexivity. *)
-    (*   - reflexivity. *)
-    (*   - apply Morphisms_Prop.and_iff_morphism. *)
-    (*     + now rewrite inst_eformula_erase. *)
-    (*     + auto. *)
-    (*   - apply Morphisms_Prop.iff_iff_iff_impl_morphism. *)
-    (*     + now rewrite inst_eformula_erase. *)
-    (*     + auto. *)
-    (*   - apply ex_iff_morphism. intros v. apply (IHp (env.snoc ι b v)). *)
-    (*   - apply all_iff_morphism. intros v. apply (IHp (env.snoc ι b v)). *)
-    (*   - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)). *)
-    (*     rewrite erase_valuation_remove, !inst_eterm_erase. *)
-    (*     now apply Morphisms_Prop.and_iff_morphism. *)
-    (*   - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)). *)
-    (*     rewrite erase_valuation_remove, !inst_eterm_erase. *)
-    (*     now apply Morphisms_Prop.iff_iff_iff_impl_morphism. *)
-    (*   (* - rewrite inst_eterm_erase. destruct pattern_match_val as [pc ι__pat]. *) *)
-    (*   (*   now rewrite erase_valuation_cat. *) *)
-    (*   (* - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)). *) *)
-    (*   (*   rewrite inst_eterm_erase. cbn. destruct pattern_match_val as [pc ι__pat]. *) *)
-    (*   (*   rewrite erase_valuation_remove, erase_valuation_cat. *) *)
-    (*   (*   now rewrite env.cat_remove_left, erase_valuation_eq_rect. *) *)
-    (*   - apply IHp. *)
-    (* Qed. *)
+    Lemma erase_safe {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
+      inst_symprop (erase_valuation ι) (erase_symprop p) <->
+      safe p ι.
+    Proof.
+      induction p; cbn [inst_symprop erase_symprop safe]; unfold inst_eformula'.
+      - apply Morphisms_Prop.or_iff_morphism. auto. auto.
+      - apply Morphisms_Prop.and_iff_morphism. auto. auto.
+      - reflexivity.
+      - reflexivity.
+      - apply Morphisms_Prop.and_iff_morphism.
+        + now rewrite inst_eformula_erase.
+        + auto.
+      - apply Morphisms_Prop.iff_iff_iff_impl_morphism.
+        + now rewrite inst_eformula_erase.
+        + auto.
+      - apply ex_iff_morphism. intros v. apply (IHp (env.snoc ι b v)).
+      - apply all_iff_morphism. intros v. apply (IHp (env.snoc ι b v)).
+      - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)).
+        rewrite erase_valuation_remove, !inst_eterm_erase.
+        now apply Morphisms_Prop.and_iff_morphism.
+      - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)).
+        rewrite erase_valuation_remove, !inst_eterm_erase.
+        now apply Morphisms_Prop.iff_iff_iff_impl_morphism.
+      (* - rewrite inst_eterm_erase. destruct pattern_match_val as [pc ι__pat]. *)
+      (*   now rewrite erase_valuation_cat. *)
+      (* - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)). *)
+      (*   rewrite inst_eterm_erase. cbn. destruct pattern_match_val as [pc ι__pat]. *)
+      (*   rewrite erase_valuation_remove, erase_valuation_cat. *)
+      (*   now rewrite env.cat_remove_left, erase_valuation_eq_rect. *)
+      - apply IHp.
+    Qed.
 
-    (* Lemma erase_safe' {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) : *)
-    (*   inst_symprop (erase_valuation ι) (erase_symprop p) -> *)
-    (*   safe p ι. *)
-    (* Proof. apply erase_safe. Qed. *)
+    Lemma erase_safe' {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
+      inst_symprop (erase_valuation ι) (erase_symprop p) ->
+      safe p ι.
+    Proof. apply erase_safe. Qed.
 
     #[global] Arguments eterm_var _ {_ _}.
 
