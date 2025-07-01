@@ -127,8 +127,6 @@ Module Type SymPropOn
     | block
     | assertk (fml : Formula Σ) (msg : AMessage Σ) (k : SymProp Σ)
     | assumek (fml : Formula Σ) (k : SymProp Σ)
-    | assertPublic {σ} (t : Term Σ σ) (k : SymProp Σ)
-    | assumePublic {σ} (t : Term Σ σ) (k : SymProp Σ)
     (* Don't use these two directly. Instead, use the HOAS versions 'angelic' *)
     (* and 'demonic' that will freshen names. *)
     | angelicv b (k : SymProp (Σ ▻ b))
@@ -162,6 +160,13 @@ Module Type SymPropOn
     Global Arguments assert_vareq {_} x {_ _} t msg k.
     Global Arguments assume_vareq {_} x {_ _} t k.
     (* Global Arguments pattern_match_var {_} x {σ xIn} _ _. *)
+
+
+    Definition assertPublic {Σ σ} (t : Term Σ σ) (msg : AMessage Σ) (k : SymProp Σ) : SymProp Σ :=
+      assertk (formula_public t) msg k.
+
+    Definition assumePublic {Σ σ} (t : Term Σ σ) (k : SymProp Σ) : SymProp Σ :=
+      assumek (formula_public t) k.
 
     Definition angelic_close0 {Σ0 : LCtx} :
       forall Σ, 𝕊 (Σ0 ▻▻ Σ) -> 𝕊 Σ0 :=
@@ -317,8 +322,6 @@ Module Type SymPropOn
         | assertk fml msg o =>
           instprop fml ι /\ safe o ι
         | assumek fml o => instprop fml ι -> safe o ι
-        | assertPublic t k => ty.isSyncValProp (inst t ι) /\ safe k ι
-        | assumePublic t k => ty.isSyncValProp (inst t ι) -> safe k ι
         | angelicv b k => exists v, safe k (env.snoc ι b v)
         | demonicv b k => forall v, safe k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
@@ -353,8 +356,6 @@ Module Type SymPropOn
           Obligation msg fml ι /\ safe_debug o ι
         | assumek fml o => instprop fml ι -> safe_debug o ι
         (* TODO: I used the same as in non-debug, but a debug message might be nice. *)
-        | assertPublic t k => ty.isSyncValProp (inst t ι) /\ safe k ι
-        | assumePublic t k => ty.isSyncValProp (inst t ι) -> safe k ι
         | angelicv b k => exists v, safe_debug k (env.snoc ι b v)
         | demonicv b k => forall v, safe_debug k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
@@ -389,8 +390,6 @@ Module Type SymPropOn
         | assertk fml msg o =>
           Obligation msg fml ι /\ @wsafe (wformula w fml) o ι
         | assumek fml o => instprop fml ι -> @wsafe (wformula w fml) o ι
-        | assertPublic t k => ty.isSyncValProp (inst t ι) /\ safe k ι
-        | assumePublic t k => ty.isSyncValProp (inst t ι) -> safe k ι
         | angelicv b k => exists v, @wsafe (wsnoc w b) k (env.snoc ι b v)
         | demonicv b k => forall v, @wsafe (wsnoc w b) k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
@@ -447,8 +446,6 @@ Module Type SymPropOn
       - reflexivity.
       - apply and_iff_morphism; eauto.
       - apply imp_iff_compat_l; eauto.
-      - eauto.
-      - eauto.
       - apply ex_iff_morphism; intros v; eauto.
       - apply all_iff_morphism; intros v; eauto.
       - apply and_iff_morphism; eauto.
@@ -468,8 +465,6 @@ Module Type SymPropOn
       - reflexivity.
       - apply and_iff_morphism; eauto.
       - apply imp_iff_compat_l; eauto.
-      - eauto.
-      - eauto.
       - apply ex_iff_morphism; intros v; eauto.
       - apply all_iff_morphism; intros v; eauto.
       (* - rewrite inst_subst, inst_sub_shift. *)
@@ -727,13 +722,13 @@ Module Type SymPropOn
     #[export] Instance proper_assumePublic {Σ σ} (t : Term Σ σ) : Proper (sequiv Σ ==> sequiv Σ) (assumePublic t).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply imp_iff_compat_l. Qed.
 
-    #[export] Instance proper_assertPublic {Σ σ} (t : Term Σ σ) : Proper (sequiv Σ ==> sequiv Σ) (assertPublic t).
+    #[export] Instance proper_assertPublic {Σ σ} (t : Term Σ σ) (msg : AMessage Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertPublic t msg).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply and_iff_morphism. Qed.
 
     #[export] Instance proper_assertk_impl {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (simpl Σ ==> simpl Σ) (assertk fml msg).
     Proof. unfold simpl. intros p q pq ι. cbn. intuition auto. Qed.
 
-    #[export] Instance proper_assertPublic_impl {Σ σ} (t : Term Σ σ) : Proper (simpl Σ ==> simpl Σ) (assertPublic t).
+    #[export] Instance proper_assertPublic_impl {Σ σ} (t : Term Σ σ) (msg : AMessage Σ) : Proper (simpl Σ ==> simpl Σ) (assertPublic t msg).
     Proof. unfold simpl. intros p q pq ι. cbn. intuition auto. Qed.
 
     #[export] Instance proper_assume_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
@@ -961,8 +956,6 @@ Module Type SymPropOn
         | SymProp.block => 0
         | SymProp.assertk fml msg k => 1 + size k
         | SymProp.assumek fml k => 1 + size k
-        | SymProp.assertPublic t k => 1 + size k
-        | SymProp.assumePublic t k => 1 + size k
         | SymProp.angelicv b k => 1 + size k
         | SymProp.demonicv b k => 1 + size k
         | @SymProp.assert_vareq _ x σ xIn t msg k => 1 + size k
@@ -1011,8 +1004,6 @@ Module Type SymPropOn
         | SymProp.debug _ s            => count_nodes s (inc_debug c)
         | SymProp.assertk _ _ s        => count_nodes s c
         | SymProp.assumek _ s          => count_nodes s c
-        | SymProp.assertPublic _ s     => count_nodes s c
-        | SymProp.assumePublic _ s     => count_nodes s c
         | SymProp.demonicv _ s         => count_nodes s c
         | SymProp.angelicv _ s         => count_nodes s c
         | SymProp.assert_vareq _ _ _ s => count_nodes s c
@@ -1077,12 +1068,12 @@ Module Type SymPropOn
       end.
     Global Arguments assumek_prune {Σ} fml p.
 
-    Definition assertPublic_prune {Σ σ} (t : Term Σ σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+    Definition assertPublic_prune {Σ σ} (t : Term Σ σ) (msg : AMessage Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
       match p with
       | error s => @error Σ s
-      | _       => assertPublic t p
+      | _       => assertPublic t msg p
       end.
-    Global Arguments assertPublic_prune {Σ σ} t p.
+    Global Arguments assertPublic_prune {Σ σ} t msg p.
 
     Definition assumePublic_prune {Σ σ} (t : Term Σ σ) (p : 𝕊 Σ) : 𝕊 Σ :=
       match p with
@@ -1131,8 +1122,6 @@ Module Type SymPropOn
         assertk_prune fml msg (prune o)
       | assumek fml o =>
         assumek_prune fml (prune o)
-      | assertPublic t o => assertPublic_prune t (prune o)
-      | assumePublic t o => assumePublic_prune t (prune o)
       | angelicv b o =>
         angelicv_prune (prune o)
       | demonicv b o =>
@@ -1162,8 +1151,6 @@ Module Type SymPropOn
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
       - destruct p2; cbn; auto; intuition.
@@ -1185,8 +1172,6 @@ Module Type SymPropOn
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
       - destruct p2; cbn; auto; intuition.
@@ -1203,8 +1188,8 @@ Module Type SymPropOn
       safe (assumek_prune fml p) ι <-> safe (assumek fml p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
-    Lemma prune_assertPublic_sound {Σ σ} (t : Term Σ σ) (p : 𝕊 Σ) (ι : Valuation Σ) :
-      safe (assertPublic_prune t p) ι <-> safe (assertPublic t p) ι.
+    Lemma prune_assertPublic_sound {Σ σ} (t : Term Σ σ) (msg : AMessage Σ) (p : 𝕊 Σ) (ι : Valuation Σ) :
+      safe (assertPublic_prune t msg p) ι <-> safe (assertPublic t msg p) ι.
     Proof. destruct p; cbn; rewrite ?obligation_equiv; auto; intuition. Qed.
 
     Lemma prune_assumePublic_sound {Σ σ} (t : Term Σ σ) (p : 𝕊 Σ) (ι : Valuation Σ) :
@@ -1242,10 +1227,6 @@ Module Type SymPropOn
       - rewrite prune_assertk_sound; cbn.
         now rewrite IHp.
       - rewrite prune_assumek_sound; cbn.
-        now rewrite IHp.
-      - rewrite prune_assertPublic_sound; cbn.
-        now rewrite IHp.
-      - rewrite prune_assumePublic_sound; cbn.
         now rewrite IHp.
       - rewrite prune_angelicv_sound; cbn.
         apply ex_iff_morphism; intros v.
@@ -1322,8 +1303,6 @@ Module Type SymPropOn
         | block                  => plug ec block
         | assertk fml msg p      => push (ectx_formula ec msg fml) p
         | assumek fml p          => plug ec (assumek fml (push ectx_refl p))
-        | assertPublic t p       => plug ec (assertPublic t (push ectx_refl p))
-        | assumePublic t p       => plug ec (assumePublic t (push ectx_refl p))
         | angelicv b p           => push (ectx_snoc ec b) p
         | demonicv b p           => plug ec (demonicv b (push ectx_refl p))
         | assert_vareq x t msg p =>
@@ -1437,8 +1416,6 @@ Module Type SymPropOn
         - rewrite IHp. clear IHp.
           destruct ec; cbn. reflexivity.
         - apply proper_plug, proper_assumek, IHp.
-        - apply proper_plug, proper_assertPublic, IHp.
-        - apply proper_plug, proper_assumePublic, IHp.
         - rewrite IHp. clear IHp.
           destruct ec; cbn.
           apply proper_angelic_close0.
@@ -1531,8 +1508,6 @@ Module Type SymPropOn
         | block                  => block
         | assertk fml msg p      => plug ec (assertk fml msg (push uctx_refl p))
         | assumek fml p          => push (uctx_formula ec fml) p
-        | assertPublic t p       => plug ec (assertPublic t (push uctx_refl p))
-        | assumePublic t p       => plug ec (assumePublic t (push uctx_refl p))
         | angelicv b p           => plug ec (angelicv b (push uctx_refl p))
         | demonicv b p           => push (uctx_snoc ec b) p
         | assert_vareq x t msg p => plug ec (assert_vareq x t msg (push uctx_refl p))
@@ -1650,9 +1625,6 @@ Module Type SymPropOn
           rewrite safe_demonic_close0; intros ιu.
           rewrite safe_assume_pathcondition; cbn; auto.
         - apply proper_plug_impl, proper_assertk_impl, IHp.
-        - rewrite IHp. clear IHp.
-          destruct ec; cbn. reflexivity.
-        - apply proper_plug_impl, proper_assertPublic_impl, IHp.
         - rewrite IHp. clear IHp.
           destruct ec; cbn. reflexivity.
         - apply proper_plug_impl, proper_angelicv_impl, IHp.

@@ -309,13 +309,30 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           (y∷σ) (Φ (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
     #[global] Arguments demonic x [w] σ Φ : rename.
 
+    Definition angelicVal (x : option LVar) : ⊢ ∀ σ, SPureSpec (STerm σ) :=
+      fun w σ Φ =>
+        let y := fresh_lvar w x in
+        SymProp.angelicv
+          (y∷σ)
+          (SymProp.assumePublic (@term_var _ y σ ctx.in_zero) (Φ (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero))).
+    #[global] Arguments angelicVal x [w] σ Φ : rename.
+
+    Definition demonicVal (x : option LVar) : ⊢ ∀ σ, SPureSpec (STerm σ) :=
+      fun w σ Φ =>
+        let y := fresh_lvar w x in
+        SymProp.demonicv
+          (y∷σ)
+          (SymProp.assumePublic (@term_var _ y σ ctx.in_zero) (Φ (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero))).
+    #[global] Arguments demonicVal x [w] σ Φ : rename.
+
+
     Definition angelic_ctx {N : Set} (n : N -> LVar) :
       ⊢ ∀ Δ : NCtx N Ty, SPureSpec (fun w => NamedEnv (Term w) Δ) :=
       fix rec {w} Δ {struct Δ} :=
         match Δ with
         | []%ctx => pure []%env
         | Γ ▻ x∷σ => ⟨ ω1 ⟩ tΔ <- rec Γ;;
-                     ⟨ ω2 ⟩ tσ <- angelic (Some (n x)) σ ;;
+                     ⟨ ω2 ⟩ tσ <- angelicVal (Some (n x)) σ ;;
                      pure (tΔ⟨ω2⟩ ► (x∷σ ↦ tσ))
         end.
     #[global] Arguments angelic_ctx {N} n [w] Δ : rename.
@@ -326,7 +343,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         match Δ with
         | []%ctx  => pure []%env
         | Δ ▻ x∷σ => ⟨ ω1 ⟩ tΔ <- rec Δ;;
-                     ⟨ ω2 ⟩ tσ <- demonic (Some (n x)) σ;;
+                     ⟨ ω2 ⟩ tσ <- demonicVal (Some (n x)) σ;;
                      pure (tΔ⟨ω2⟩ ► (x∷σ ↦ tσ))
         end%ctx.
     #[global] Arguments demonic_ctx {_} n [w] Δ : rename.

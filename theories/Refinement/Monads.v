@@ -193,7 +193,6 @@ Module Type RefinementMonadsOn
     Proof.
       iIntros (Δ).
       iInduction Δ as [|Δ IHΔ b] "Hind";
-        unfold SPureSpec.angelic_ctx, CPureSpec.angelic_ctx;
         rsolve.
     Qed.
 
