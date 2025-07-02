@@ -281,8 +281,6 @@ Module Type PatternsOn (Import TY : Types).
 
     (* Reverse a pattern match. Given a [PatternCase] and an environment with
        values for all variables in the pattern, reconstruct a value. *)
-    (* Reverse a pattern match. Given a [PatternCase] and an environment with
-       values for all variables in the pattern, reconstruct a value. *)
     Definition pattern_match_val_reverse {σ} (p : Pattern σ) :
       forall (c : PatternCase p), NamedEnv Val (PatternCaseCtx c) -> Val σ :=
       match p with

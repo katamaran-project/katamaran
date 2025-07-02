@@ -227,13 +227,13 @@ Module Type ChunksOn
     | chunk_wand c1 c2 => chunk_wand (peval_chunk c1) (peval_chunk c2)
     end.
 
-  Lemma peval_chunk_sound {Σ} (c : Chunk Σ) :
-    forall (ι : Valuation Σ),
-      inst (peval_chunk c) ι = inst c ι.
-  Proof.
-    induction c; cbn; intros ι; f_equal; auto using peval_sound.
-    apply pevals_sound. apply peval_sound.
-  Qed.
+  (* Lemma peval_chunk_sound {Σ} (c : Chunk Σ) : *)
+  (*   forall (ι : Valuation Σ), *)
+  (*     inst (peval_chunk c) ι = inst c ι. *)
+  (* Proof. *)
+  (*   induction c; cbn; intros ι; f_equal; auto using peval_sound. *)
+  (*   apply pevals_sound. apply peval_sound. *)
+  (* Qed. *)
 
   Lemma inst_is_duplicable {Σ} (c : Chunk Σ) (ι : Valuation Σ) :
     is_duplicable (inst c ι) = is_duplicable c.

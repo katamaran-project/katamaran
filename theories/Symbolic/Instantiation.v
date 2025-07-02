@@ -717,17 +717,26 @@ Module Type InstantiationOn
 
   Section Utils.
 
-    Definition term_get_val {Σ σ} (t : Term Σ σ) : option (Val σ) :=
+    Definition term_get_relval {Σ σ} (t : Term Σ σ) : option (RelVal σ) :=
       match t with
-      | term_val _ v => Some v
+      | term_val _ v => Some (ty.SyncVal _ v)
+      | term_relval _ rv => Some rv
       | _            => None
       end.
 
-    Lemma term_get_val_spec {Σ σ} (s : Term Σ σ) :
+    Lemma term_get_relval_spec {Σ σ} (s : Term Σ σ) :
       option.wlp
-        (fun v => s = term_val _ v)
-        (term_get_val s).
-    Proof. destruct s; constructor; auto. Qed.
+        (fun v => match v with
+                  | ty.SyncVal _ v' => s = term_relval _ v \/ s = term_val _ v'
+                  | ty.NonSyncVal _ _ _ => s = term_relval _ v
+                  end
+        )
+
+        (term_get_relval s).
+    Proof.
+      destruct s; constructor; auto.
+      destruct r; auto.           
+    Qed.
 
     Equations(noeqns) term_get_pair {Σ σ1 σ2} (t : Term Σ (ty.prod σ1 σ2)) :
       option (Term Σ σ1 * Term Σ σ2) :=
@@ -1013,8 +1022,8 @@ Module Type InstantiationOn
           | |- None               ⊣⊢ Some _             => apply @unsatisfiable_none_some
           | |- [ctx]              ⊣⊢ _                  => apply nil_l_valid
           | |- Unsatisfiable (ctx.snoc ctx.nil _)       => apply unsatisfiable_snoc_r
-          | |- match @term_get_val ?Σ ?σ ?v with _ => _ end ⊣⊢ _ =>
-              destruct (@term_get_val_spec Σ σ v); subst; try progress cbn
+          | |- match @term_get_relval ?Σ ?σ ?v with _ => _ end ⊣⊢ _ =>
+              destruct (@term_get_relval_spec Σ σ v); subst; try progress cbn
           end.
 
     End tactics.

@@ -196,6 +196,12 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Definition assume_formula : Prop -> CPureSpec unit :=
       fun fml => assume_pathcondition fml.
 
+    Definition assert_public {σ} : RelVal σ -> CPureSpec unit :=
+      fun v => assert_pathcondition (ty.isSyncValProp v).
+    Definition assume_public {σ} : RelVal σ -> CPureSpec unit :=
+      fun v => assume_pathcondition (ty.isSyncValProp v).
+    
+
     Definition angelic_binary {A} :
       CPureSpec A -> CPureSpec A -> CPureSpec A :=
       fun m1 m2 Φ => m1 Φ \/ m2 Φ.
@@ -210,32 +216,32 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun Φ => forall (v : RelVal σ), Φ v.
     #[global] Arguments demonic σ : clear implicits.
 
-    Definition angelicVal (σ : Ty) : CPureSpec (Val σ) :=
-      fun Φ => exists (v : Val σ), Φ v.
-    #[global] Arguments angelicVal σ : clear implicits.
+    (* Definition angelicVal (σ : Ty) : CPureSpec (Val σ) := *)
+    (*   fun Φ => exists (v : Val σ), Φ v. *)
+    (* #[global] Arguments angelicVal σ : clear implicits. *)
 
     Definition angelic_ctx {N : Set} :
-      forall Δ : NCtx N Ty, CPureSpec (NamedEnv Val Δ) :=
+      forall Δ : NCtx N Ty, CPureSpec (NamedEnv RelVal Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | [ctx]   => pure [env]
         | Δ ▻ x∷σ => vs <- rec Δ;;
-                     v  <- @angelicVal σ;;
+                     v  <- @angelic σ;;
                      pure (vs ► (x∷σ ↦ v))
         end.
     #[global] Arguments angelic_ctx {N} Δ.
 
-    Definition demonicVal (σ : Ty) : CPureSpec (Val σ) :=
-      fun Φ => forall (v : Val σ), Φ v.
-    #[global] Arguments demonicVal σ : clear implicits.
+    (* Definition demonicVal (σ : Ty) : CPureSpec (Val σ) := *)
+    (*   fun Φ => forall (v : Val σ), Φ v. *)
+    (* #[global] Arguments demonicVal σ : clear implicits. *)
 
     Definition demonic_ctx {N : Set} :
-      forall Δ : NCtx N Ty, CPureSpec (NamedEnv Val Δ) :=
+      forall Δ : NCtx N Ty, CPureSpec (NamedEnv RelVal Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | []      => pure env.nil
         | Δ ▻ x∷σ => vs <- rec Δ;;
-                     v  <- @demonicVal σ;;
+                     v  <- @demonic σ;;
                      pure (vs ► (x∷σ ↦ v))
         end%ctx.
     #[global] Arguments demonic_ctx {N} Δ.
@@ -293,10 +299,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
        *)
       Definition angelic_pattern_match {σ} (pat : @Pattern N σ)
         (v : RelVal σ) : CPureSpec (MatchResult pat) :=
-        v' <- requireSyncVal v;;
+        assert_public v;;
         pc <- angelic_finite (PatternCase pat);;
         vs <- angelic_ctx (PatternCaseCtx pc) ;;
-        _  <- assert_formula (pattern_match_val_reverse pat pc vs = v');;
+        _  <- assert_formula (pattern_match_val_reverse pat pc vs = v);;
         pure (existT pc vs).
       #[global] Arguments angelic_pattern_match {σ} pat v.
 
@@ -979,13 +985,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       | asn.debug =>
           debug (pure tt)
       end.
-
-    Unset Printing Implicit.
-    Fixpoint mapSyncValNamedEnv {X Σ} (ı : NamedEnv (X := X) Val Σ) : NamedEnv (X := X) RelVal Σ :=
-      match ı with
-      | env.nil => env.nil
-      | env.snoc E db v => env.snoc (mapSyncValNamedEnv E) db (ty.SyncVal (type db) v)
-      end.
+    
 
     Definition call_contract [Δ τ] (c : SepContract Δ τ) (args : CStoreRel Δ) : CHeapSpec (RelVal τ) :=
       match c with

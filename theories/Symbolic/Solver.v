@@ -358,19 +358,21 @@ Module Type GenericSolverOn
 
     Definition simplify_relopb {Σ σ} (op : RelOp σ)
       (t1 t2 : STerm σ Σ) : DList Σ :=
-      match term_get_val t1 , term_get_val t2 with
-      | Some v1 , Some v2 => if bop.eval_relop_val op v1 v2 then empty else error
-      | _       , _       => singleton (formula_relop op t1 t2)
-      end.
+      singleton (formula_relop op t1 t2).
+      (* match term_get_relval t1 , term_get_relval t2 with *)
+      (* | Some v1 , Some v2 => if bop.eval_relop_val op v1 v2 then empty else error *)
+      (* | _       , _       => singleton (formula_relop op t1 t2) *)
+      (* end. *)
 
     Definition simplify_relopb_spec {w : World} {σ} (op : RelOp σ)
       (t1 t2 : STerm σ w) :
       instpred (simplify_relopb op t1 t2) ⊣⊢ instpred (formula_relop op t1 t2).
     Proof.
       unfold simplify_relopb.
-      destruct (term_get_val_spec t1) as [v1|]; arw; try now rewrite formula_relop_term'. subst.
-      destruct (term_get_val_spec t2) as [v2|]; arw; try now rewrite formula_relop_term'. subst.
-      destruct (bop.eval_relop_val_spec op v1 v2); arw.
+      arw.
+      (* destruct (term_get_relval_spec t1) as [v1|]; arw; try now rewrite formula_relop_term'. subst. *)
+      (* destruct (term_get_relval_spec t2) as [v2|]; arw; try now rewrite formula_relop_term'. subst. *)
+      (* destruct (bop.eval_relop_val_spec op v1 v2); arw. *)
     Qed.
     #[local] Opaque simplify_relopb.
     #[export] Hint Rewrite @simplify_relopb_spec : uniflogic.
