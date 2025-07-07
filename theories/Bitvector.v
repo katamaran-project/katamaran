@@ -33,6 +33,7 @@ From Coq Require Import
      PArith.BinPos
      ZArith.BinInt
      ZArith.Zdiv
+     ZArith.Znat
      RelationClasses
      Ring
      micromega.Lia

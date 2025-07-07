@@ -28,6 +28,7 @@ mkCoqDerivation {
     "pretty-timed"
   ];
   propagatedBuildInputs = [
+    coq.ocamlPackages.findlib
     equations
     iris
     stdlib

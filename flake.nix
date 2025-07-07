@@ -1,15 +1,15 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   outputs = inputs: inputs.flake-utils.lib.eachDefaultSystem (system:
     let
       pkgs = import inputs.nixpkgs { inherit system; };
-      # Function to override versions of coq packages. This function takes two arguments:
-      # - coqPackages: The set of all Coq packages.
+      # Function to override versions of rocq packages. This function takes two arguments:
+      # - rocqPackages: The set of all Rocq packages.
       # - versions: An attribute set of packages with their versions we want to override.
-      patchCoqPackages = coqPackages: versions:
-        coqPackages.overrideScope (
+      patchRocqPackages = rocqPackages: versions:
+        rocqPackages.overrideScope (
           self: super:
             pkgs.lib.foldlAttrs
               # foldAttrs is used to iterate over the versions set and apply a function
@@ -31,20 +31,23 @@
         stdpp = "1.11.0";
       };
 
-      coqPackages819 = patchCoqPackages pkgs.coqPackages_8_19 iris43;
-      coqPackages820 = patchCoqPackages pkgs.coqPackages_8_20 iris43;
+      rocqPackages819 = patchRocqPackages pkgs.coqPackages_8_19 iris43;
+      rocqPackages820 = patchRocqPackages pkgs.coqPackages_8_20 iris43;
+      rocqPackages900 = patchRocqPackages pkgs.coqPackages_9_0 iris43;
 
       mkDeps = pkg: pkgs.linkFarmFromDrvs "deps"
         (pkg.buildInputs ++ pkg.nativeBuildInputs ++ pkg.propagatedBuildInputs);
     in
     rec {
       packages = rec {
-        default = coq819;
-        coq819 = coqPackages819.katamaran;
-        coq820 = coqPackages820.katamaran;
+        default = rocq819;
+        rocq819 = rocqPackages819.katamaran;
+        rocq820 = rocqPackages820.katamaran;
+        rocq900 = rocqPackages900.katamaran;
 
-        coq819-deps = mkDeps coq819;
-        coq820-deps = mkDeps coq820;
+        rocq819-deps = mkDeps rocq819;
+        rocq820-deps = mkDeps rocq820;
+        rocq900-deps = mkDeps rocq900;
       };
     }
   );
