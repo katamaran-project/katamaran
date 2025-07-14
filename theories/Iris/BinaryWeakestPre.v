@@ -672,31 +672,73 @@ Module IrisBinaryWP
         rewrite <- (stm_to_val_eq Hval'). auto.
     Qed.
 
-    (* TODO: we need a different lemma here, the current definition won't work? *)
     Lemma semWP2_foreign {Γ1 Γ2 Δ τ} {f1 f2 : 𝑭𝑿 Δ τ}
       {es1 : NamedEnv (Exp Γ1) Δ} {es2 : NamedEnv (Exp Γ2) Δ} {Q δ1 δ2} :
-      let srGS_left := sailRegGS2_sailRegGS_left in
-      let mG_left   := memGS2_memGS_left in
+      let srGS_left  := sailRegGS2_sailRegGS_left in
+      let mG_left    := memGS2_memGS_left in
+      let srGS_right := sailRegGS2_sailRegGS_right in
+      let mG_right   := memGS2_memGS_right in
       ⊢ (∀ γ1 μ1,
-            (regs_inv γ1 ∗ mem_inv μ1)
+            (@regs_inv _ srGS_left γ1 ∗ @mem_inv _ mG_left μ1)
             ={⊤,∅}=∗
               (∀ res1 γ1' μ1',
                    ⌜ForeignCall f1 (evals es1 δ1) res1 γ1 γ1' μ1 μ1'⌝
                    ={∅}▷=∗
                      |={∅,⊤}=>
-                       (regs_inv γ1' ∗ mem_inv μ1') ∗
-                       semWP2 δ1 δ2 (match res1 with inr v => stm_val _ v
-                                                   | inl s => stm_fail _ s
-                                     end)
-                                     (stm_foreign f2 es2) Q)) -∗
+                       (@regs_inv _ srGS_left γ1' ∗ @mem_inv _ mG_left μ1')
+                       ∗  (∀ γ2 μ2,
+                             (@regs_inv _ srGS_right γ2 ∗ @mem_inv _ mG_right μ2) ={⊤,∅}=∗
+                               (∀ res2 γ2' μ2',
+                                 ⌜ForeignCall f2 (evals es2 δ2) res2 γ2 γ2' μ2 μ2'⌝ ={∅,⊤}=∗
+                                   (@regs_inv _ srGS_right γ2' ∗ @mem_inv _ mG_right μ2')
+                                   ∗ semWP2 δ1 δ2 (match res1 with inr v => stm_val _ v
+                                                                 | inl s => stm_fail _ s
+                                                   end)
+                                                  (match res2 with inr v => stm_val _ v
+                                                                 | inl s => stm_fail _ s
+                                                   end) Q)))) -∗
         semWP2 δ1 δ2 (stm_foreign f1 es1) (stm_foreign f2 es2) Q.
     Proof.
-      simpl. iIntros "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres2".
-      iApply semWP_foreign. iIntros (γ11 μ11) "Hres1".
-      iMod ("H" with "Hres1") as "H". iIntros "!>" (res1 γ12 μ12 Hf1).
+      simpl. iIntros "H". rewrite /semWP2. iIntros (γ2 μ2) "Hres2".
+      iApply semWP_foreign. iIntros (γ1 μ1) "Hres1".
+      iMod ("H" with "Hres1") as "H". iIntros "!>" (res1 γ1' μ1' Hf1).
       iMod ("H" $! _ _ _ Hf1) as "H". iModIntro. iModIntro. iMod "H".
       iModIntro. iMod "H". iModIntro. iDestruct "H" as "($ & H)".
-      now iApply "H".
+      destruct res1 as [v1|msg1].
+      - rewrite semWP_fail. iApply (@semTWP_Steps _ sailGS2_sailGS_right with "Hres2").
+        iApply semTWP_foreign. iIntros (γ2' μ2') "Hres2".
+        iMod ("H" with "Hres2") as "H". iIntros "!>" (res2 γ2'' μ2'' Hf2).
+        iMod ("H" $! _ _ _ Hf2) as "H". iDestruct "H" as "(Hres2 & H)".
+        iSpecialize ("H" with "Hres2"). rewrite semWP_fail. iMod "H". iModIntro.
+        iDestruct "H" as "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hstep & %Hval & Hreg & Hmem & HQ)".
+        destruct res2 as [v2'|msg2];
+          inversion Hstep; subst;
+          try match goal with
+            | H: context[⟨ _, _, _, stm_val _ _ ⟩ ---> ⟨ _, _, _, _ ⟩] |- _ =>
+                inversion H
+            | H: context[⟨ _, _, _, stm_fail _ _ ⟩ ---> ⟨ _, _, _, _ ⟩] |- _ =>
+                inversion H
+            end;
+          simpl in Hval; inversion Hval; subst.
+        + rewrite semTWP_fail. now iFrame.
+        + rewrite semTWP_val. now iFrame.
+      - rewrite semWP_val. iApply (@semTWP_Steps _ sailGS2_sailGS_right with "Hres2").
+        iApply semTWP_foreign. iIntros (γ2' μ2') "Hres2".
+        iMod ("H" with "Hres2") as "H". iIntros "!>" (res2 γ2'' μ2'' Hf2).
+        iMod ("H" $! _ _ _ Hf2) as "H". iDestruct "H" as "(Hres2 & H)".
+        iSpecialize ("H" with "Hres2"). rewrite semWP_val. iMod "H". iModIntro.
+        iDestruct "H" as "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hstep & %Hval & Hreg & Hmem & HQ)".
+        destruct res2 as [v2'|msg2];
+          inversion Hstep; subst;
+          try match goal with
+            | H: context[⟨ _, _, _, stm_val _ _ ⟩ ---> ⟨ _, _, _, _ ⟩] |- _ =>
+                inversion H
+            | H: context[⟨ _, _, _, stm_fail _ _ ⟩ ---> ⟨ _, _, _, _ ⟩] |- _ =>
+                inversion H
+            end;
+          simpl in Hval; inversion Hval; subst.
+        + rewrite semTWP_fail. now iFrame.
+        + rewrite semTWP_val. now iFrame.
     Qed.
 
     Lemma semWP2_debugk {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) :
