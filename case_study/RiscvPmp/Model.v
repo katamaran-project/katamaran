@@ -94,20 +94,6 @@ Module RiscvPmpModel2.
     RiscvPmpProgram RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase
     RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance.
 
-  Ltac eliminate_prim_step Heq :=
-    let s := fresh "s" in
-    let f := fresh "f" in
-    match goal with
-    | H: language.prim_step _ _ _ _ _ _ |- _ =>
-        rewrite /language.prim_step in H; cbn in H; (* unfold the Iris `prim_step`*)
-        dependent elimination H as [RiscvPmpIrisBase.mk_prim_step _ s];
-        destruct (RiscvPmpSemantics.smallinvstep s) as [? ? ? f];
-        rewrite Heq in f;
-        cbn in f;
-        dependent elimination f;
-        cbn
-    end.
-
   Section ForeignProofs.
     Context `{sg : sailGS Σ}.
 
