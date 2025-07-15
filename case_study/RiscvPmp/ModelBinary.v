@@ -148,23 +148,153 @@ Module RiscvPmpModel2.
     Lemma read_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
     Proof.
-    Admitted.
+      intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
+      iIntros "(HmemL & HmemR)". cbn in *. iApply semWP2_foreign.
+      iIntros (? ?) "(Hreg & %memmapL & Hmem & %HmapL & Htr)".
+      iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_left _ _ _ _ _ HmapL with "[$HmemL $Hmem $Htr]") as "%eq_fun_read_ram_l".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res1 ? ? Hf1). rewrite Heq in Hf1. cbn in Hf1.
+      inversion Hf1; subst. iIntros "!> !> !>". iMod "Hclose" as "_". iModIntro.
+      iFrame "Hreg Hmem Htr". iSplitR; first by iPureIntro.
+      iIntros (? ?) "(Hreg & %memmapR & Hmem & %HmapR & Htr)".
+      iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_right _ _ _ _ _ HmapR with "[$HmemR $Hmem $Htr]") as "%eq_fun_read_ram_r".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2.
+      inversion Hf2; subst. iMod "Hclose" as "_". iModIntro.
+      iFrame "Hreg Hmem Htr". iSplitR; first by iPureIntro.
+      iApply semWP2_val_1. rewrite eq_fun_read_ram_r. now iFrame "HmemL HmemR".
+    Qed.
 
     Lemma write_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
     Proof.
-    Admitted.
+      intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
+      iIntros "(%v & HmemL & HmemR)". cbn in *. iApply semWP2_foreign.
+      iIntros (? ?) "(Hreg & %memmapL & Hmem & %HmapL & Htr)".
+      iMod (@RiscvPmpModel2.fun_write_ram_works _ sailGS2_sailGS_left _ _ _ data _ v HmapL with "[$HmemL $Hmem $Htr]") as "(Hmem & HmemL)".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res1 ? ? Hf1). rewrite Heq in Hf1. cbn in Hf1.
+      inversion Hf1; subst. iIntros "!> !> !>". iMod "Hclose" as "_". iModIntro.
+      iFrame "Hreg Hmem".
+      iIntros (? ?) "(Hreg & %memmapR & Hmem & %HmapR & Htr)".
+      iMod (@RiscvPmpModel2.fun_write_ram_works _ sailGS2_sailGS_right _ _ _ data _ v HmapR with "[$HmemR $Hmem $Htr]") as "(Hmem & HmemR)".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2.
+      inversion Hf2; subst. iMod "Hclose" as "_". iModIntro. iFrame "Hreg Hmem".
+      iApply semWP2_val_1. now iFrame "HmemL HmemR".
+    Qed.
 
     Lemma decode_sound :
       ValidContractForeign sep_contract_decode decode.
     Proof.
-    Admitted.
+      intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
+      iIntros "_". cbn in *. iApply semWP2_foreign. iIntros (? ?) "Hres1".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res1 ? ? Hf1). rewrite Heq in Hf1. cbn in Hf1.
+      inversion Hf1; subst. iFrame "Hres1". iIntros "!> !> !>".
+      iMod "Hclose" as "_". iModIntro.
+      iIntros (? ?) "Hres2". iMod (fupd_mask_subseteq empty) as "Hclose"; auto.
+      iModIntro. iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2.
+      inversion Hf2; subst. iFrame "Hres2". iMod "Hclose" as "_". iModIntro.
+      destruct (pure_decode _).
+      - now iApply semWP2_fail.
+      - now iApply semWP2_val_1.
+    Qed.
+
+    Lemma mmio_read_sound (bytes : nat) :
+     ValidContractForeign (sep_contract_mmio_read bytes) (mmio_read bytes).
+    Proof.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+      now iIntros "[%HFalse _]".
+    Qed.
+
+    Lemma mmio_write_sound `(H: restrict_bytes bytes) :
+     ValidContractForeign (sep_contract_mmio_write H) (mmio_write H).
+    Proof.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+      now iIntros "[%HFalse _]".
+    Qed.
+
+    (* NOTE: duplicate of the same lemma in the unary iris instance (IrisInstance.v). *)
+    Lemma interp_addr_access_app base width width':
+      interp_addr_access liveAddrs mmioAddrs base (width + width') ⊣⊢
+      interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat width) width'.
+    Proof.
+      unfold interp_addr_access.
+      by rewrite bv.seqBv_app big_sepL_app.
+    Qed.
+
+    (* NOTE: duplicate of the same lemma in the unary iris instance (IrisInstance.v). *)
+    Lemma interp_addr_access_cons base width:
+      interp_addr_access liveAddrs mmioAddrs base (S width) ⊣⊢
+      interp_addr_access_byte liveAddrs mmioAddrs base ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat 1) width.
+    Proof. rewrite <-Nat.add_1_l.
+           rewrite interp_addr_access_app.
+           unfold interp_addr_access, interp_addr_access_byte.
+           by rewrite bv.seqBv_one big_sepL_singleton.
+    Qed.
+
+    (* NOTE: duplicate of the same lemma in the unary iris instance (IrisInstance.v). *)
+    Lemma interp_pmp_within_mmio_spec {entries m p} (paddr : Addr) bytes :
+      (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
+      Pmp_access paddr (bv.of_nat bytes) entries m p →
+      interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
+      ⌜bool_decide (withinMMIO paddr bytes) = false%nat⌝.
+    Proof.
+      iIntros (Hrep Hpmp) "Hint".
+      destruct bytes as [|bytes]. (* No induction needed: disproving one location suffices. *)
+      - cbn - [xlenbits] in *. rewrite bool_decide_eq_false. iPureIntro. by intro HFalse.
+      - rewrite interp_pmp_addr_inj_extr; eauto.
+        iDestruct "Hint" as "[Hint _]".
+        iDestruct (interp_addr_access_cons with "Hint") as "[Hfirst _]".
+        unfold interp_addr_access_byte.
+        case_decide; auto.
+        iPureIntro.
+        rewrite bool_decide_eq_false /withinMMIO.
+        destruct bytes; first congruence.
+        rewrite !not_and_l. left; congruence.
+    Qed.
+
+    (* NOTE: duplicate of the same lemma in the unary model (Model.v). *)
+    Lemma interp_pmp_fun_within_mmio_spec {entries m p} (paddr : Addr) bytes:
+      Pmp_access paddr (bv.of_nat bytes) entries m p →
+      interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
+      ⌜fun_within_mmio bytes paddr = false%nat⌝.
+    Proof.
+      iIntros (Hpmp) "Hint". rewrite /fun_within_mmio.
+      rewrite bool_decide_and andb_false_iff.
+      destruct (decide (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N) as [Hlt | Hnlt].
+      - iDestruct (interp_pmp_within_mmio_spec with "Hint") as "->"; eauto.
+      - iPureIntro. right.
+        by rewrite bool_decide_false.
+    Qed.
+
+    Lemma within_mmio_sound `(H: restrict_bytes bytes) :
+     ValidContractForeign (@sep_contract_within_mmio bytes H) (within_mmio H).
+    Proof.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
+      iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])".
+      iApply semWP2_foreign. iIntros (? ?) "(Hregs & % & Hmem & %HmapL & Htr)".
+      iPoseProof (interp_pmp_fun_within_mmio_spec with "Hpmpa") as "%HnotmmioL"; first eauto.
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res1 ? ? Hf1). rewrite Heq in Hf1. cbn in Hf1.
+      inversion Hf1; subst. iFrame "Hregs Hmem Htr". iIntros "!> !> !>".
+      iMod "Hclose" as "_". iModIntro.
+      iSplitR; first auto. iIntros (? ?) "(Hregs & % & Hmem & %HmapR & Htr)".
+      iPoseProof (interp_pmp_fun_within_mmio_spec with "Hpmpa") as "%HnotmmioR"; first eauto.
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2.
+      inversion Hf2; subst. iFrame "Hregs Hmem Htr". iMod "Hclose" as "_".
+      iModIntro. iSplitR; auto. iApply semWP2_val_1.
+      iFrame "Hpmp Hpmpa Hcurp". now iPureIntro.
+    Qed.
 
     Lemma foreignSem : ForeignSem.
     Proof.
       intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, decode_sound.
-    Admitted.
+        eauto using read_ram_sound, write_ram_sound, decode_sound,
+                    mmio_read_sound, mmio_write_sound, within_mmio_sound.
+    Qed.
   End ForeignProofs.
 
   Section LemProofs.
