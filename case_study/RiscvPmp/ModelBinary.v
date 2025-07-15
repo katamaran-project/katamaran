@@ -107,69 +107,11 @@ Module RiscvPmpModel2.
     Lemma bv_bin_one : bv.bin (@bv.one xlenbits) = 1%N.
     Proof. apply bv.bin_one, xlenbits_pos. Qed.
 
-    Lemma ptstomem_bv_app :
-      forall {n} (a : Addr) (b : bv byte) (bs : bv (n * byte)),
-        @interp_ptstomem _ _ (S n)%nat a (bv.app b bs)
-        ⊣⊢
-        (interp_ptsto a b ∗ interp_ptstomem (bv.one + a) bs).
-    Proof. intros; cbn [interp_ptstomem]; now rewrite bv.appView_app. Qed.
-
     Lemma interp_ptstomem_exists_intro (bytes : nat) :
       ⊢ ∀ (paddr : Addr) (w : bv (bytes * byte)),
           interp_ptstomem paddr w -∗
           ∃ (w : bv (bytes * byte)), interp_ptstomem paddr w.
     Proof. auto. Qed.
-
-    Lemma interp_ptstomem_big_sepS (bytes : nat) :
-      ⊢ ∀ (paddr : Addr),
-          ⌜(bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N⌝ -∗
-      (∃ (w : bv (bytes * byte)), interp_ptstomem paddr w) ∗-∗
-        [∗ list] offset ∈ bv.seqBv paddr bytes,
-            ∃ w, interp_ptsto offset w.
-    Proof.
-      iInduction bytes as [|bytes] "IHbytes";
-        iIntros (paddr) "%Hrep"; iSplit.
-      - auto.
-      - iIntros "H". now iExists bv.zero.
-      - iIntros "[%w H]".
-        rewrite bv.seqBv_succ.
-        rewrite big_sepL_cons.
-        destruct (bv.appView byte (bytes * byte) w) as [b bs].
-        rewrite ptstomem_bv_app.
-        iDestruct "H" as "[Hb Hbs]".
-        iSplitL "Hb".
-        + by iExists b.
-        + iApply ("IHbytes" with "[%]").
-          rewrite bv.bin_add_small;
-            rewrite bv_bin_one; lia.
-          now iExists bs.
-      - iIntros "H".
-        rewrite bv.seqBv_succ; try apply xlenbits_pos.
-        rewrite big_sepL_cons.
-        iDestruct "H" as "([%b Hb] & Hbs)".
-        iAssert (∃ (w : bv (bytes * byte)), interp_ptstomem (bv.one + paddr) w)%I with "[Hbs]" as "[%w H]".
-        iApply ("IHbytes" $! (bv.one + paddr) with "[%]").
-        rewrite bv.bin_add_small bv_bin_one; lia.
-        iApply "Hbs".
-        iExists (bv.app b w).
-        rewrite ptstomem_bv_app; iFrame.
-    Qed.
-
-    Lemma interp_ptstomem_dedup {paddr width} {w : bv (width * byte)}:
-      IrisInstance.RiscvPmpIrisInstance.interp_ptstomem (mG := mc_ghGS2_left) paddr w ∗
-        IrisInstance.RiscvPmpIrisInstance.interp_ptstomem (mG := mc_ghGS2_right) paddr w ⊣⊢
-        interp_ptstomem paddr w.
-    Proof.
-      revert paddr w. induction width; intros paddr w.
-      { iSplit. now iIntros "[? ?]". iIntros "#H". now iSplit. }
-      change (S width * byte)%nat with (byte + width * byte)%nat in w.
-      unfold interp_ptstomem, IrisInstance.RiscvPmpIrisInstance.interp_ptstomem.
-      destruct (bv.appView byte (width * byte) w).
-      rewrite <-IHwidth.
-      iSplit.
-      now iIntros "[([$ %] & $) [$ $]]".
-      iIntros "[([$ _] & [$ _]) [$ $]]".
-    Qed.
 
     Definition sailGS2_sailGS_left `{sailGS2 Σ} : sailGS Σ :=
       SailGS sailGS2_invGS sailRegGS2_sailRegGS_left mc_ghGS2_left.

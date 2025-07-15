@@ -151,6 +151,14 @@ Module Type IrisResources2
       num_laters_per_step2 := fun _ => 0
     |}.
 
+  Lemma sailGS2_sailGS_left_memGS_eq `{sG2 : sailGS2 Σ} :
+    @sailGS_memGS _ (@sailGS2_sailGS_left _ sG2) = @memGS2_memGS_left _ (@sailGS2_memGS _ sG2).
+  Proof. auto. Qed.
+
+  Lemma sailGS2_sailGS_right_memGS_eq `{sG2 : sailGS2 Σ} :
+    @sailGS_memGS _ (@sailGS2_sailGS_right _ sG2) = @memGS2_memGS_right _ (@sailGS2_memGS _ sG2).
+  Proof. auto. Qed.
+
 End IrisResources2.
 
 Module Type IrisBase2 (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
