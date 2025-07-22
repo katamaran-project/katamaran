@@ -60,8 +60,6 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
           (* two copies of the unary ghost variables *)
           mc_ghGS2_left : RiscvPmpIrisBase.mcMemGS Σ
         ; mc_ghGS2_right : RiscvPmpIrisBase.mcMemGS Σ
-        ; mc_gtGS2_left : traceG Trace Σ
-        ; mc_gtGS2_right : traceG Trace Σ
         }.
 
     Definition memGS2 : gFunctors -> Set := mcMemGS2.
@@ -74,6 +72,11 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
       forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
         mem_inv2 mG μ1 μ2 ⊣⊢ mem_inv (memGS2_memGS_left mG) μ1 ∗ mem_inv (memGS2_memGS_right mG) μ2.
     Proof. by unfold mem_inv2. Qed.
+
+    Definition mc_gtGS2_left `{mG : mcMemGS2 Σ} : traceG Trace Σ :=
+      @mc_gtGS _ (@memGS2_memGS_left _ mG).
+    Definition mc_gtGS2_right `{mG : mcMemGS2 Σ} : traceG Trace Σ :=
+      @mc_gtGS _ (@memGS2_memGS_right _ mG).
   End RiscvPmpIrisParams2.
 
   Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
