@@ -1370,7 +1370,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
 
-  Module Import WithAccessibleTactics.
+  Module Export WithAccessibleTactics.
     Import AccessibleTactics.
 
     Instance accessible_rX : AccessibleFun rX.
