@@ -989,14 +989,20 @@ Module RiscvPmpIrisInstanceWithContracts.
     eauto.
   Qed.
 
-  (* TODO: prove this lemma as: apply (TValidContractEnvSem_ValidContractEnvSem TcontractsSound). *)
-  Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+  Lemma TValidContractEnvSem_ValidContractEnvSem `{sailGS Σ} :
+    TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv ⊢
+    ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
   Proof.
-    apply (sound foreignSemBlockVerif lemSemBlockVerif).
-    intros Γ τ f c Heq.
-    pose proof (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc].
-    eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness.
-    eauto.
+    unfold TValidContractEnvSem, TValidContractEnvN, HasValidContract, ValidContractEnvSem.
+    iIntros "H" (σs σ f). iSpecialize ("H" $! (callgraph.mkNode f)). simpl.
+    destruct (CEnv f) eqn:Ef; auto.
+    iApply TValidContractSem_ValidContractSem.
+    iApply "H". iPureIntro.
+    destruct f; try discriminate Ef; typeclasses eauto.
   Qed.
 
+  Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+  Proof.
+    iApply (TValidContractEnvSem_ValidContractEnvSem $! TcontractsSound).
+  Qed.
 End RiscvPmpIrisInstanceWithContracts.
