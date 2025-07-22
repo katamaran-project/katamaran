@@ -73,7 +73,7 @@ Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgr
     iMod (trace_alloc (memory_trace μ1)) as (gT1) "[Hauth1 Hfrag1]".
     iMod (trace_alloc (memory_trace μ2)) as (gT2) "[Hauth2 Hfrag2]".
     iModIntro.
-    iExists (McMemGS2 mG1 mG2 gT1 gT2).
+    iExists (McMemGS2 mG1 mG2).
     iSplitL "inv1 inv2"; iFrame.
   Qed.
 
