@@ -687,6 +687,14 @@ Section Soundness.
                     (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v))
         end.
 
+    Lemma TValidContractSem_ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) :
+      TValidContractSem body contract ⊢
+      ValidContractSem body contract.
+    Proof.
+      rewrite /TValidContractSem /ValidContractSem. destruct contract.
+      iIntros "H" (?). now iApply semTTriple_semTriple.
+    Qed.
+
     Definition TValidContractForeign {Δ τ} (contract : SepContract Δ τ) (f : 𝑭𝑿 Δ τ) : Prop :=
         forall Γ (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
         match contract with
