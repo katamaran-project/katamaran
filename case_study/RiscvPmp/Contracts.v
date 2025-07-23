@@ -721,10 +721,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_postcondition   :=
               let paddr_int : Term _ ty.int := term_unsigned (term_var paddr) in
                if: term_var "result_within_phys_mem"
-               then term_val ty.int (Z.of_nat minAddr) <= paddr_int
-                    ∗ (term_binop bop.plus paddr_int (term_var width)) <= term_val ty.int (Z.of_nat maxAddr)
-               else (paddr_int < term_val ty.int (Z.of_nat minAddr)
-                     ∨ term_val ty.int (Z.of_nat maxAddr) < (term_binop bop.plus paddr_int (term_var width)));
+               then term_val ty.int (Z.of_N minAddr) <= paddr_int
+                    ∗ (term_binop bop.plus paddr_int (term_var width)) <= term_val ty.int (Z.of_N maxAddr)
+               else (paddr_int < term_val ty.int (Z.of_N minAddr)
+                     ∨ term_val ty.int (Z.of_N maxAddr) < (term_binop bop.plus paddr_int (term_var width)));
           |}.
 
         Definition sep_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : SepContractFun (@checked_mem_read bytes H) :=
@@ -1213,8 +1213,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              lemma_precondition    :=
               let paddr_int : Term _ ty.int := term_unsigned (term_var paddr) in
                 asn_pmp_addr_access (term_var "entries") (term_var p)
-                ∗ term_val ty.int (Z.of_nat minAddr) <= paddr_int
-                ∗ (term_binop bop.plus paddr_int (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr)
+                ∗ term_val ty.int (Z.of_N minAddr) <= paddr_int
+                ∗ (term_binop bop.plus paddr_int (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)
                 ∗ asn_pmp_access (term_var paddr) bv_bytes (term_var "entries") (term_var p) (term_var acc);
              lemma_postcondition   :=
                 asn_pmp_addr_access_without (term_var paddr) bytes (term_var "entries") (term_var p)
