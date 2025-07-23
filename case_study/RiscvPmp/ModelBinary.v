@@ -114,10 +114,10 @@ Module RiscvPmpModel2.
     Proof. auto. Qed.
 
     Definition sailGS2_sailGS_left `{sailGS2 Σ} : sailGS Σ :=
-      SailGS sailGS2_invGS sailRegGS2_sailRegGS_left mc_ghGS2_left.
+      SailGS sailGS2_invGS sailRegGS2_sailRegGS_left memGS2_memGS_left.
 
     Definition sailGS2_sailGS_right `{sailGS2 Σ} : sailGS Σ :=
-      SailGS sailGS2_invGS sailRegGS2_sailRegGS_right mc_ghGS2_right.
+      SailGS sailGS2_invGS sailRegGS2_sailRegGS_right memGS2_memGS_right.
 
     Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
         ⊢ interp_pmp_entries entries -∗

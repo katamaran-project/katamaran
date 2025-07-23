@@ -61,12 +61,12 @@ Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgr
     fun {Σ} HsG => (memΣ_GpreS (Σ := Σ) (fst (subG_inv _ _ _ HsG)),
                   memΣ_GpreS (Σ := Σ) (snd (subG_inv _ _ _ HsG))).
 
-  Definition mem_res2 `{hG : mcMemGS2 Σ} : Memory -> Memory -> iProp Σ :=
-    fun μ1 μ2 => (mem_res (hG := mc_ghGS2_left) μ1 ∗
-                 mem_res (hG := mc_ghGS2_right) μ2)%I.
+  Definition mem_res2 `{hG : memGS2 Σ} : Memory -> Memory -> iProp Σ :=
+    fun μ1 μ2 => (mem_res (hG := memGS2_memGS_left) μ1 ∗
+                 mem_res (hG := memGS2_memGS_right) μ2)%I.
 
   Lemma mem_inv_init2 `{gHP : prod (memGpreS Σ) (memGpreS Σ)} (μ1 μ2 : Memory) :
-    ⊢ |==> ∃ mG : mcMemGS2 Σ, (mem_inv2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
+    ⊢ |==> ∃ mG : memGS2 Σ, (mem_inv2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
   Proof.
     iMod (mem_inv_init (gHP := fst gHP) μ1) as (mG1) "[inv1 res1]".
     iMod (mem_inv_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
@@ -95,12 +95,12 @@ Module RiscvPmpIrisInstance2 <:
   Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
 
   Section WithMemory.
-    Context {Σ : gFunctors} {mG : mcMemGS2 Σ}.
+    Context {Σ : gFunctors} {mG : memGS2 Σ}.
 
     Definition interp_ptsto_one (k : Exec) (addr : Addr) (b : Byte) : iProp Σ :=
       match k with
-      | Left  => RiscvPmpIrisInstance.interp_ptsto (mG := memGS2_memGS_left mG) addr b
-      | Right => RiscvPmpIrisInstance.interp_ptsto (mG := memGS2_memGS_right mG) addr b
+      | Left  => RiscvPmpIrisInstance.interp_ptsto (mG := memGS2_memGS_left) addr b
+      | Right => RiscvPmpIrisInstance.interp_ptsto (mG := memGS2_memGS_right) addr b
       end.
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
@@ -113,8 +113,8 @@ Module RiscvPmpIrisInstance2 <:
     Proof. eapply big_sepL_app. Qed.
 
     Definition interp_ptstomem {width : nat} (addr : Addr) (v : bv (width * byte)) : iProp Σ :=
-      @RiscvPmpIrisInstance.interp_ptstomem _ (memGS2_memGS_left mG) _ addr v ∗
-      @RiscvPmpIrisInstance.interp_ptstomem _ (memGS2_memGS_right mG) _ addr v.
+      @RiscvPmpIrisInstance.interp_ptstomem _ memGS2_memGS_left _ addr v ∗
+      @RiscvPmpIrisInstance.interp_ptstomem _ memGS2_memGS_right _ addr v.
 
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
       inv femto_inv_ro_ns (interp_ptstomem addr b).
@@ -122,8 +122,8 @@ Module RiscvPmpIrisInstance2 <:
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
     Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
       inv femto_inv_mmio_ns (∃ t,
-            (@tr_frag _ _ (@traceG_preG _ _ mc_gtGS2_left) (@trace_name _ _ mc_gtGS2_left) t)
-            ∗ (@tr_frag _ _ (@traceG_preG _ _ mc_gtGS2_right) (@trace_name _ _ mc_gtGS2_right) t)
+            (@tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_left) (@trace_name _ _ memGS2_gtGS2_left) t)
+            ∗ (@tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_right) (@trace_name _ _ memGS2_gtGS2_right) t)
             ∗ ⌜mmio_pred width t⌝).
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
@@ -186,7 +186,7 @@ Module RiscvPmpIrisInstance2 <:
 
     Import env.notations.
 
-    Equations(noeqns) luser_inst2 `{sailRegGS2 Σ, invGS Σ, mcMemGS2 Σ}
+    Equations(noeqns) luser_inst2 `{sailRegGS2 Σ, invGS Σ, memGS2 Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
@@ -211,7 +211,7 @@ Module RiscvPmpIrisInstance2 <:
           destruct x; auto
       end.
 
-    Definition lduplicate_inst2 `{sailRegGS2 Σ, invGS Σ, mcMemGS2 Σ} :
+    Definition lduplicate_inst2 `{sailRegGS2 Σ, invGS Σ, memGS2 Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
         (luser_inst2 p ts) ⊢ (luser_inst2 p ts ∗ luser_inst2 p ts).
@@ -223,7 +223,7 @@ Module RiscvPmpIrisInstance2 <:
   End RiscvPmpIrisPredicates.
 
   Section RiscVPmpIrisInstanceProofs.
-    Context `{sr : sailRegGS2 Σ} `{igs : invGS Σ} `{mG : mcMemGS2 Σ}.
+    Context `{sr : sailRegGS2 Σ} `{igs : invGS Σ} `{mG : memGS2 Σ}.
 
     (* Induction does not work here due to shape of `interp_pmp_addr_access_without`*)
     Lemma interp_pmp_addr_inj_extr {entries m p} base width :

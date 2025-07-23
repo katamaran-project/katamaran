@@ -92,7 +92,7 @@ Module Type IrisParameters2
   (Import B    : Base)
   (Import IB   : IrisParameters B).
 
-  Parameter Inline memGS2 : gFunctors -> Set.
+  Parameter memGS2 : gFunctors -> Set.
   Existing Class memGS2.
   Parameter memGS2_memGS_left : forall `{memGS2 Σ}, memGS Σ.
   Parameter memGS2_memGS_right : forall `{memGS2 Σ}, memGS Σ.
