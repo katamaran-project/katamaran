@@ -221,7 +221,7 @@ Module RiscvPmpModel2.
       interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat width) width'.
     Proof.
       unfold interp_addr_access.
-      by rewrite bv.seqBv_app big_sepL_app.
+      by rewrite Nat2N.inj_add bv.seqBv_app big_sepL_app.
     Qed.
 
     (* NOTE: duplicate of the same lemma in the unary iris instance (IrisInstance.v). *)

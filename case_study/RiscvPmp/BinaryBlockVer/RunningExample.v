@@ -100,7 +100,7 @@ Module UnaryCheck.
     Import AsnNotations.
 
     Definition PRE : AssertionWith [ "a" :: ty_xlenbits ] :=
-      (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N adv_addr) < term_val ty.int (Z.of_nat maxAddr))%asn ∗
+      (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N adv_addr) < term_val ty.int (Z.of_N maxAddr))%asn ∗
       mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |} ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
       (∃ "v", mcause ↦ term_var "v") ∗
