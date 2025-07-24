@@ -451,7 +451,7 @@ Module Type UnifLogicOn
           auto using acc_pathcond.
     Qed.
 
-    Lemma forgetting_knowing_adjoint {w1 w2 : World} {ω : Acc w1 w2} {P Q} :
+    Lemma knowing_forgetting_adjoint {w1 w2 : World} {ω : Acc w1 w2} {P Q} :
       (knowing ω P ⊢ Q) <-> (P ⊢ forgetting ω Q).
     Proof.
       rewrite /forgetting /assuming /knowing.
@@ -864,31 +864,25 @@ Module Type UnifLogicOn
     Lemma forgetting_assuming {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w2} :
       forgetting ω (assuming ω P) ⊢ P.
     Proof.
-      rewrite /forgetting /assuming.
-      now crushPredEntails3.
-    Qed.
-
-    Lemma knowing_forgetting {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w1} :
-      knowing ω (forgetting ω P) ⊢ P.
-    Proof.
-      rewrite /forgetting /knowing.
-      crushPredEntails3.
-      now rewrite <-H0.
-    Qed.
-
-    Lemma forgetting_knowing {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w2} :
-      P ⊢ forgetting ω (knowing ω P).
-    Proof.
-      rewrite /forgetting /knowing.
-      now crushPredEntails3.
+      now apply forgetting_assuming_adjoint.
     Qed.
 
     Lemma assuming_forgetting {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w1} :
       P ⊢ assuming ω (forgetting ω P).
     Proof.
-      rewrite /forgetting /assuming.
-      crushPredEntails3.
-      now rewrite H1.
+      now apply (proj1 forgetting_assuming_adjoint).
+    Qed.
+
+    Lemma knowing_forgetting {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w1} :
+      knowing ω (forgetting ω P) ⊢ P.
+    Proof.
+      now apply knowing_forgetting_adjoint.
+    Qed.
+
+    Lemma forgetting_knowing {w1 w2 : World} {ω : w1 ⊒ w2} {P : Pred w2} :
+      P ⊢ forgetting ω (knowing ω P).
+    Proof.
+      now apply (proj1 knowing_forgetting_adjoint).
     Qed.
 
     Import iris.proofmode.modalities.
