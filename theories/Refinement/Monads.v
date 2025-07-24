@@ -150,37 +150,34 @@ Module Type RefinementMonadsOn
       ⊢ ℛ⟦RPureSpec (RVal σ)⟧ (CPureSpec.angelic σ) (SPureSpec.angelic (w := w) x σ).
     Proof.
       unfold CPureSpec.angelic, SPureSpec.angelic; simpl.
-      iIntros (k K) "HK".
-      rewrite knowing_acc_snoc_right.
-      iIntros "[%v HSP]".
-      iSpecialize ("HK" $! _ acc_snoc_right).
-      rewrite assuming_acc_snoc_right.
-      iSpecialize ("HK" $! v).
-      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v))).
-      iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep".
-      iModIntro.
-      iDestruct ("HK" with "Hrep HSP") as "%Hkv".
-      now iExists v.
+      iIntros (k K) "HKk HK".
+      rewrite knowing_acc_snoc_right2.
+      iDestruct "HK" as "[%v HSP]".
+      iSpecialize ("HKk" $! _ (acc_snoc_right (b := fresh_lvar w x∷σ)) v term_var_zero).
+      iDestruct (knowing_assuming with "[$HKk $HSP]") as "H".
+      iApply (knowing_pure2 _ with "H").
+      iIntros "((Hv & HK) & HKk)".
+      iExists v.
+      now iApply ("HKk" with "Hv").
     Qed.
 
     #[export] Program Instance refine_compat_angelic (x : option LVar) {w : World} {σ}:
-        RefineCompat (RPureSpec (RVal σ)) (CPureSpec.angelic σ) w (SPureSpec.angelic (w := w) x σ) emp :=
-        MkRefineCompat (refine_angelic _ _).
+      RefineCompat (RPureSpec (RVal σ)) (CPureSpec.angelic σ) w (SPureSpec.angelic (w := w) x σ) emp :=
+      MkRefineCompat (refine_angelic _ _).
 
     Lemma refine_demonic (x : option LVar) σ {w} :
       ⊢ ℛ⟦RPureSpec (RVal σ)⟧ (CPureSpec.demonic σ) (SPureSpec.demonic (w := w) x σ).
     Proof.
-      unfold CPureSpec.demonic, SPureSpec.angelic; simpl.
+      unfold CPureSpec.demonic, SPureSpec.demonic.
       iIntros (k K) "HK HSP".
       iIntros (v).
-      iSpecialize ("HK" $! _ (acc_snoc_right (b := fresh_lvar w x∷σ))).
-      rewrite !assuming_acc_snoc_right.
-      iPoseProof forgetting_acc_snoc_left_repₚ as "Hrep".
-      iSpecialize ("HK" $! v).
-      iSpecialize ("HSP" $! v).
-      rewrite <-(forgetting_pure (acc_snoc_left' (fresh_lvar w x∷σ) (term_val _ v))).
-      iModIntro.
-      now iApply ("HK" with "Hrep HSP").
+      iSpecialize ("HK" $! _ (acc_snoc_right (b := fresh_lvar w x∷σ)) v term_var_zero).
+      cbn.
+      rewrite assuming_acc_snoc_right2.
+      iDestruct (knowing_assuming with "[$HK $HSP]") as "H".
+      iApply (knowing_pure2 _ with "H").
+      iIntros "[HKk HSP]".
+      now iApply "HKk".
     Qed.
 
     #[export] Program Instance refine_compat_demonic (x : option LVar) {w : World} {σ}:
