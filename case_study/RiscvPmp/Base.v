@@ -75,27 +75,27 @@ Definition Word : Set     := bv word.
 Definition Byte : Set     := bv byte.
 
 (* 1. Definition of RAM memory *)
-Definition minAddr : nat := 0.
-Definition lenAddr : nat := 200.
-Definition maxAddr : nat := minAddr + lenAddr.
-Lemma minAddr_rep : (N.of_nat minAddr < bv.exp2 xlenbits)%N.
+Definition minAddr : N := 0.
+Definition lenAddr : N := 2^10.
+Definition maxAddr : N := minAddr + lenAddr.
+Lemma minAddr_rep : (minAddr < bv.exp2 xlenbits)%N.
 Proof. now compute. Qed.
-Lemma maxAddr_rep : (N.of_nat maxAddr < bv.exp2 xlenbits)%N.
+Lemma maxAddr_rep : (maxAddr < bv.exp2 xlenbits)%N.
 Proof. now compute. Qed.
-Lemma lenAddr_rep : (N.of_nat lenAddr < bv.exp2 xlenbits)%N.
+Lemma lenAddr_rep : (lenAddr < bv.exp2 xlenbits)%N.
 Proof. now compute. Qed.
 (* xlenbits is made opaque further on and it really must be non-zero. *)
 Lemma xlenbits_pos : (xlenbits > 0).
 Proof. cbv. lia. Qed.
 (* All addresses present in RAM memory *)
-Definition liveAddrs := bv.seqBv (@bv.of_nat xlenbits minAddr) lenAddr.
+Definition liveAddrs := bv.seqBv (@bv.of_N xlenbits minAddr) lenAddr.
 
 (* 2. Definition of MMIO memory *)
 (* For now, we only consider the one femtokernel address to be part of the MMIO-mapped memory. *)
 (* We place the MMIO memory after the RAM memory, and have the PMP entry for the adversary in the FemtoKernel provide access up to but not including the MMIO memory. The lack of an entry for the MMIO memory will ensure that this memory is addressable by the kernel. *)
 Definition mmioStartAddr := maxAddr.
-Definition mmioLenAddr := maxAddr + lenAddr.
-Definition mmioAddrs : list Addr := bv.seqBv (@bv.of_nat xlenbits mmioStartAddr) mmioLenAddr.
+Definition mmioLenAddr := (maxAddr + lenAddr)%N.
+Definition mmioAddrs : list Addr := bv.seqBv (@bv.of_N xlenbits mmioStartAddr) mmioLenAddr.
 Definition isMMIO a : Prop := a ∈ mmioAddrs.
 Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
   match size with

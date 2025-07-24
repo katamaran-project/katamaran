@@ -88,7 +88,7 @@ Module RiscvPmpIrisInstance2 <:
   Notation all_addrs := RiscvPmpIrisInstance.all_addrs (only parsing).
 
   (* The address we will perform all writes to is the first legal MMIO address *)
-  Definition write_addr : Addr := bv.of_nat maxAddr.
+  Definition write_addr : Addr := bv.of_N maxAddr.
   Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
   Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
 
@@ -139,7 +139,7 @@ Module RiscvPmpIrisInstance2 <:
         else if decide (a ∈ live_addrs) then ptstoSth a
              else True%I. (* Could be `False` as well *)
       Definition interp_addr_access (base : Addr) (width : nat): iProp Σ :=
-        [∗ list] a ∈ bv.seqBv base width, interp_addr_access_byte a.
+        [∗ list] a ∈ bv.seqBv base (N.of_nat width), interp_addr_access_byte a.
 
       Definition interp_pmp_addr_access (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
         [∗ list] a ∈ all_addrs,
@@ -265,12 +265,12 @@ Module RiscvPmpIrisInstance2 <:
 
     Lemma interp_ptstomem_big_sepS (bytes : nat) (paddr : Addr):
       (∃ (w : bv (bytes * byte)), interp_ptstomem paddr w) ⊣⊢
-        ptstoSthL (bv.seqBv paddr bytes).
+        ptstoSthL (bv.seqBv paddr (N.of_nat bytes)).
     Proof.
       generalize dependent paddr.
       iInduction bytes as [|bytes] "IHbytes"; iIntros (paddr).
       - unfold ptstoSthL. unshelve auto. exact bv.zero.
-      - rewrite bv.seqBv_succ (app_comm_cons []) ptstoSthL_app.
+      - rewrite Nat2N.inj_succ bv.seqBv_succ (app_comm_cons []) ptstoSthL_app.
         iDestruct ("IHbytes" $! (bv.one + paddr)) as "[IHL IHR]".
         iSplit.
         *  iIntros "[%w H]".
@@ -299,8 +299,8 @@ Module RiscvPmpIrisInstance2 <:
 
     (* Use knowledge of RAM to extract range *)
     Lemma interp_addr_access_extr base width :
-      (minAddr ≤ N.to_nat (bv.bin base)) →
-      (N.to_nat (bv.bin base) + width ≤ maxAddr) →
+      (minAddr ≤ bv.bin base)%N →
+      (bv.bin base + N.of_nat width ≤ maxAddr)%N →
       (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
       interp_addr_access liveAddrs mmioAddrs base width ⊢
       (∃ (w : bv (width * byte)), interp_ptstomem base w).
@@ -319,7 +319,7 @@ Module RiscvPmpIrisInstance2 <:
       rewrite elem_of_seqZ.
       subst y.
       unfold maxAddr in HmaxOK.
-      rewrite /bv.unsigned bv.bin_add_small !bv.bin_of_nat_small; lia. (* TODO: use representability of min/maxAddr here, once they are made properly opaque *)
+      rewrite /bv.unsigned bv.bin_add_small !bv.bin_of_N_small; lia. (* TODO: use representability of min/maxAddr here, once they are made properly opaque *)
     Qed.
 
     (* Inserting a byte is always possible *)

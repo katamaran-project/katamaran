@@ -218,12 +218,12 @@ Module Type ShallowExecOn
 
     Section PatternMatching.
 
-      Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ) :
+      Definition demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ) :
         CStoreSpec Γ Γ (MatchResult pat) :=
         lift_purespec (CPureSpec.demonic_pattern_match pat v).
       #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
 
-      Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ)
+      Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ)
         (Φ : MatchResult pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
         demonic_pattern_match pat v Φ δ h <-> Φ (pattern_match_val pat v) δ h.
       Proof.

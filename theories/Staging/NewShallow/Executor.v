@@ -380,7 +380,7 @@ Module Type NewShallowExecOn
 
     Section PatternMatching.
 
-      Definition pattern_match {N : Set} {A σ} (v : Val σ) (pat : @Pattern N σ)
+      Definition pattern_match {N : Set} {A σ} (v : Val σ) (pat : Pattern (N:=N) σ)
         (k : forall (pc : PatternCase pat), NamedEnv Val (PatternCaseCtx pc) -> CPureSpecM A) :
         CPureSpecM A :=
         fun POST => let (pc,δpc) := pattern_match_val pat v in k pc δpc POST.
@@ -625,7 +625,7 @@ Module Type NewShallowExecOn
 
     Section PatternMatching.
 
-      Definition pattern_match {N : Set} {A σ Γ1 Γ2} (v : Val σ) (pat : @Pattern N σ)
+      Definition pattern_match {N : Set} {A σ Γ1 Γ2} (v : Val σ) (pat : Pattern (N:=N) σ)
         (k : forall (c : PatternCase pat), NamedEnv Val (PatternCaseCtx c) -> CHeapSpecM Γ1 Γ2 A) :
         CHeapSpecM Γ1 Γ2 A :=
         fun POST δ1 => let (x,p) := pattern_match_val pat v in k x p POST δ1.

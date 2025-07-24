@@ -512,7 +512,7 @@ Module Type RefinementMonadsOn
     Qed.
 
     Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar)
-      {σ} (pat : @Pattern N σ) {w} :
+      {σ} (pat : Pattern (N:=N) σ) {w} :
       ⊢ ℛ⟦RMsg _ (RVal σ -> RPureSpec (RMatchResult pat))⟧
         (CPureSpec.angelic_pattern_match pat)
         (SPureSpec.angelic_pattern_match' (w := w) n pat).
@@ -530,7 +530,7 @@ Module Type RefinementMonadsOn
     #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
 
     Lemma refine_demonic_pattern_match' {N : Set} (n : N -> LVar)
-      {σ} (pat : @Pattern N σ) {w} :
+      {σ} (pat : Pattern (N:=N) σ) {w} :
       ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧
         (CPureSpec.demonic_pattern_match pat)
         (SPureSpec.demonic_pattern_match' (w := w) n pat).
@@ -548,7 +548,7 @@ Module Type RefinementMonadsOn
     #[global] Arguments refine_demonic_pattern_match' {N} n {σ} pat.
 
     Lemma refine_angelic_pattern_match {N : Set} (n : N -> LVar)
-      {σ} (pat : @Pattern N σ) {w} :
+      {σ} (pat : Pattern (N:=N) σ) {w} :
       ⊢ ℛ⟦RMsg _ (RVal σ -> RPureSpec (RMatchResult pat))⟧
         (CPureSpec.angelic_pattern_match pat)
         (SPureSpec.angelic_pattern_match (w := w) n pat).
@@ -652,7 +652,7 @@ Module Type RefinementMonadsOn
     #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
 
     Lemma refine_demonic_pattern_match {N : Set} (n : N -> LVar)
-      {σ} (pat : @Pattern N σ) {w} :
+      {σ} (pat : Pattern (N:=N) σ) {w} :
       ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧
         (CPureSpec.demonic_pattern_match pat)
         (SPureSpec.demonic_pattern_match n pat (w := w)).
@@ -763,11 +763,11 @@ Module Type RefinementMonadsOn
     #[global] Arguments refine_demonic_pattern_match' {N} n {σ} pat.
 
     #[export] Instance refine_compat_demonic_pattern_match {N : Set} (n : N -> LVar)
-      {σ} (pat : @Pattern N σ) {w} :
+      {σ} (pat : Pattern (N:=N) σ) {w} :
       RefineCompat (RVal σ -> RPureSpec (RMatchResult pat)) (CPureSpec.demonic_pattern_match pat) w (SPureSpec.demonic_pattern_match n pat (w := w)) emp :=
       MkRefineCompat (refine_demonic_pattern_match _ _).
 
-    Lemma refine_new_pattern_match_regular {N : Set} n σ (pat : @Pattern N σ) {w} :
+    Lemma refine_new_pattern_match_regular {N : Set} n σ (pat : Pattern (N:=N) σ) {w} :
       ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧
         (CPureSpec.new_pattern_match pat)
         (SPureSpec.new_pattern_match_regular (w := w) n pat).
@@ -791,7 +791,7 @@ Module Type RefinementMonadsOn
       now iApply (refine_unfreshen_patterncaseenv with "Hargs").
     Qed.
 
-    Lemma refine_pattern_match_var {N : Set} n {x σ} (pat : @Pattern N σ) {w} :
+    Lemma refine_pattern_match_var {N : Set} n {x σ} (pat : Pattern (N:=N) σ) {w} :
       ⊢ ℛ⟦RIn (x∷σ) -> RPureSpec (RMatchResult pat)⟧
         (CPureSpec.new_pattern_match pat)
         (SPureSpec.new_pattern_match_var (w := w) n pat).
@@ -814,7 +814,7 @@ Module Type RefinementMonadsOn
       now iApply (refine_unfreshen_patterncaseenv with "Hargs").
     Qed.
 
-    Lemma refine_new_pattern_match' {N : Set} n σ (pat : @Pattern N σ) {w} :
+    Lemma refine_new_pattern_match' {N : Set} n σ (pat : Pattern (N:=N) σ) {w} :
       ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧
         (CPureSpec.new_pattern_match pat)
         (SPureSpec.new_pattern_match' (w := w) n pat).
@@ -826,7 +826,7 @@ Module Type RefinementMonadsOn
       all: now iApply refine_new_pattern_match_regular.
     Qed.
 
-    Lemma refine_new_pattern_match {N : Set} n σ (pat : @Pattern N σ) {w} :
+    Lemma refine_new_pattern_match {N : Set} n σ (pat : Pattern (N:=N) σ) {w} :
       ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧
         (CPureSpec.new_pattern_match pat)
         (SPureSpec.new_pattern_match (w := w) n pat).

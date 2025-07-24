@@ -355,31 +355,24 @@ Module RiscvPmpModel2.
     Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed.
 
     Lemma minAddr_le_ule : forall (addr : Addr),
-      (minAddr <= bv.unsigned addr)%Z <-> bv.of_nat minAddr <=ᵘ addr.
+      (minAddr <= bv.bin addr)%N <-> bv.of_N minAddr <=ᵘ addr.
     Proof.
       unfold bv.ule, bv.unsigned.
       intros.
       split.
-      - rewrite <- nat_N_Z.
-        intros H.
-        rewrite bv.bin_of_nat_small.
-        now apply N2Z.inj_le.
-        apply minAddr_rep.
-      - rewrite <- nat_N_Z.
-        intros H.
-        rewrite bv.bin_of_nat_small in H.
-        now apply N2Z.inj_le.
-        apply minAddr_rep.
+      - intros H.
+        now rewrite bv.bin_of_N_small.
+      - intros H.
+        now rewrite bv.bin_of_N_small in H.
     Qed.
 
     Lemma maxAddr_le_ule : forall (addr : Addr) (bytes : nat),
         (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
-         (bv.unsigned addr + bytes <= maxAddr)%Z -> addr + bv.of_nat bytes <=ᵘ bv.of_nat maxAddr.
+         (bv.bin addr + N.of_nat bytes <= maxAddr)%N -> addr + bv.of_nat bytes <=ᵘ bv.of_N maxAddr.
     Proof.
       unfold bv.ule, bv.unsigned.
-      rewrite <- nat_N_Z.
       intros addr bytes Hrep H.
-      rewrite bv.bin_of_nat_small; last apply maxAddr_rep.
+      rewrite bv.bin_of_N_small; last apply maxAddr_rep.
       rewrite bv.bin_add_small.
       rewrite bv.bin_of_nat_small.
       pose maxAddr_rep.
@@ -389,8 +382,8 @@ Module RiscvPmpModel2.
     Qed.
 
     Lemma in_liveAddrs : forall (addr : Addr),
-        (bv.of_nat minAddr <=ᵘ addr) ->
-        (addr <ᵘ bv.of_nat maxAddr) ->
+        (bv.of_N minAddr <=ᵘ addr) ->
+        (addr <ᵘ bv.of_N maxAddr) ->
         addr ∈ liveAddrs.
     Proof.
       unfold liveAddrs, maxAddr.
@@ -406,32 +399,30 @@ Module RiscvPmpModel2.
     Lemma in_liveAddrs_split : forall (addr : Addr) (bytes : nat),
         (N.of_nat bytes < bv.exp2 xlenbits)%N ->
         (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
-        (bv.bin addr - @bv.bin xlenbits (bv.of_nat minAddr) < bv.exp2 xlenbits)%N ->
-        (bv.of_nat minAddr <=ᵘ addr) ->
-        (addr + (bv.of_nat bytes) <=ᵘ bv.of_nat maxAddr) ->
-        exists l1 l2, liveAddrs = l1 ++ (bv.seqBv addr bytes  ++ l2).
+        (bv.bin addr - @bv.bin xlenbits (bv.of_N minAddr) < bv.exp2 xlenbits)%N ->
+        (bv.of_N minAddr <=ᵘ addr) ->
+        (addr + (bv.of_nat bytes) <=ᵘ bv.of_N maxAddr) ->
+        exists l1 l2, liveAddrs = l1 ++ (bv.seqBv addr (N.of_nat bytes)  ++ l2).
     Proof.
     (* TODO: more efficient proof? *)
       unfold maxAddr.
       intros addr bytes bytesfit addrbytesFits addrDiffFits Hmin Hmax.
       unfold bv.ule, bv.ule in *.
       unfold liveAddrs.
-      exists (bv.seqBv (bv.of_nat minAddr) (N.to_nat (bv.bin addr - @bv.bin xlenbits (bv.of_nat minAddr)))%N).
-      exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (N.to_nat (@bv.bin xlenbits (bv.of_nat minAddr + bv.of_nat lenAddr) - bv.bin (addr + bv.of_nat bytes)))).
+      exists (bv.seqBv (bv.of_N minAddr) (bv.bin addr - @bv.bin xlenbits (bv.of_N minAddr))%N).
+      exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (@bv.bin xlenbits (bv.of_N minAddr + bv.of_N lenAddr) - bv.bin (addr + bv.of_nat bytes))).
       rewrite <-(bv.seqBv_app addr).
-      replace addr with (@bv.of_nat xlenbits minAddr + bv.of_nat (N.to_nat (bv.bin addr - @bv.bin xlenbits (bv.of_nat minAddr)))) at 2.
+      replace addr with (@bv.of_N xlenbits minAddr + bv.of_N (bv.bin addr - @bv.bin xlenbits (bv.of_N minAddr))) at 2.
       rewrite <-bv.seqBv_app; try lia.
       f_equal.
       - unfold bv.ule, bv.ult in *.
-        apply N_of_nat_inj.
         apply N2Z.inj.
-        rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small;
+        rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small ?bv.bin_of_N_small;
         auto using lenAddr_rep.
         + rewrite (N2Z.inj_add (bv.bin addr)).
           now Lia.lia.
         + now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax.
       - unfold bv.of_nat.
-        rewrite N2Nat.id.
         apply bv.unsigned_inj.
         unfold bv.unsigned.
         rewrite bv.bin_add_small.
@@ -440,18 +431,16 @@ Module RiscvPmpModel2.
           rewrite bv.bin_of_N_small.
           rewrite N2Z.inj_sub.
           lia.
-          now rewrite bv.bin_of_nat_small in Hmin.
-          now rewrite bv.bin_of_nat_small in addrDiffFits.
+          now rewrite bv.bin_of_N_small in Hmin.
+          now rewrite bv.bin_of_N_small in addrDiffFits.
           now simpl.
-        + replace (@bv.bin xlenbits (bv.of_nat minAddr) + _)%N with (bv.bin addr); try Lia.lia.
+        + replace (@bv.bin xlenbits (bv.of_N minAddr) + _)%N with (bv.bin addr); try Lia.lia.
           apply N2Z.inj.
           rewrite N2Z.inj_add.
-          rewrite bv.bin_of_N_small; try assumption.
-          rewrite bv.bin_of_N_small.
-          rewrite N2Z.inj_sub.
+          rewrite bv.bin_of_N_small; last done.
+          rewrite bv.bin_of_N_small; last done.
+          rewrite N2Z.inj_sub; last done.
           lia.
-          now rewrite bv.bin_of_nat_small in Hmin.
-          now rewrite bv.bin_of_nat_small in addrDiffFits.
     Qed.
 
     Lemma N_of_nat_lt_S : forall w n,
@@ -478,13 +467,13 @@ Module RiscvPmpModel2.
             (Pmp_access paddr (bv.of_nat bytes) entries p p0) ->
             (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
             (N.of_nat bytes < bv.exp2 xlenbits)%N ->
-            ⊢ (([∗ list] offset ∈ bv.seqBv paddr bytes,
+            ⊢ (([∗ list] offset ∈ bv.seqBv paddr (N.of_nat bytes),
                ⌜∃ p0, Pmp_access offset%bv
                         (bv.of_nat 1) entries p p0⌝ -∗
                         ∃ w : Byte, interp_ptsto offset w)
               ∗-∗
               (⌜∃ p0, Pmp_access paddr (bv.of_nat bytes) entries p p0⌝ -∗
-                        [∗ list] offset ∈ bv.seqBv paddr bytes,
+                        [∗ list] offset ∈ bv.seqBv paddr (N.of_nat bytes),
                           ∃ w : Byte, interp_ptsto offset w))%I.
     Proof.
       pose proof xlenbits_pos.
@@ -493,7 +482,7 @@ Module RiscvPmpModel2.
       iSplit; iIntros "H".
       - iIntros "[%acc %Haccess]".
         simpl.
-        rewrite bv.seqBv_succ; try lia.
+        rewrite Nat2N.inj_succ bv.seqBv_succ; try lia.
         rewrite big_sepL_cons.
         iDestruct "H" as "[Hb Hbs]".
         iSplitL "Hb".
@@ -511,7 +500,7 @@ Module RiscvPmpModel2.
         now iExists acc.
         rewrite bv.bin_of_nat_small; lia.
       - iSpecialize ("H" $! (ex_intro _ _ Hpmp)).
-        rewrite bv.seqBv_succ; try lia.
+        rewrite Nat2N.inj_succ bv.seqBv_succ; try lia.
         iDestruct "H" as "[Hw H]"; fold seq.
         simpl.
         iSplitL "Hw"; auto.

@@ -232,8 +232,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_bvec_exhaustive m  => fun _ => [ctx]
       | @pat_tuple _ Δ _       => fun _ => Δ
       | pat_record _ Δ _       => fun _ => Δ
-      | pat_union U p          => fun '(existT K pc) =>
-                                    @PatternCaseCtx (unionk_ty U K) (p K) pc
+      | pat_union U p          => fun '(existT K pc) => PatternCaseCtx pc
       end%ctx.
 
     Definition MatchResult {σ} (pat : Pattern σ) : Type :=
@@ -560,7 +559,8 @@ Module Type PatternsOn (Import TY : Types).
        indexed by their context of bound variables, since that is dependent
        on the case. However, the pattern contains the variables names for all
        cases, which are freshened. *)
-    Fixpoint freshen_pattern (Σ : LCtx) {σ} (p : @Pattern N σ) : @Pattern LVar σ :=
+    Fixpoint freshen_pattern (Σ : LCtx) {σ} (p : Pattern (N:=N) σ) :
+      Pattern (N:=LVar) σ :=
       match p in (Pattern t) return (Pattern t) with
       | pat_var x              => pat_var (fresh_lvar Σ (Some (n x)))
       | pat_bool               => pat_bool
@@ -598,7 +598,7 @@ Module Type PatternsOn (Import TY : Types).
 
        To use the user function, the following definition translates cases for a
        freshened pattern back and forth to cases on an unfreshened pattern. *)
-    Fixpoint unfreshen_patterncase (Σ : LCtx) {σ} (p : @Pattern N σ) :
+    Fixpoint unfreshen_patterncase (Σ : LCtx) {σ} (p : Pattern (N:=N) σ) :
       PatternCase (freshen_pattern Σ p) -> PatternCase p :=
       match p with
       | pat_var _              => fun pc => pc
@@ -618,7 +618,7 @@ Module Type PatternsOn (Import TY : Types).
                                       (unfreshen_patterncase Σ (p K) pc)
       end.
 
-    Fixpoint freshen_patterncase (Σ : LCtx) {σ} (p : @Pattern N σ) :
+    Fixpoint freshen_patterncase (Σ : LCtx) {σ} (p : Pattern (N:=N) σ) :
       PatternCase p -> PatternCase (freshen_pattern Σ p) :=
       match p with
       | pat_var _              => fun pc => pc
@@ -641,7 +641,7 @@ Module Type PatternsOn (Import TY : Types).
     (* The context of bound variables of a variable is the same as calculating
        the variables of the unfreshened pattern case and "refreshen" the
        result. *)
-    Fixpoint freshen_patterncasectx (Σ : LCtx) {σ} (p : @Pattern N σ) :
+    Fixpoint freshen_patterncasectx (Σ : LCtx) {σ} (p : Pattern (N:=N) σ) :
       forall pc : PatternCase (freshen_pattern Σ p),
         PatternCaseCtx pc =
         freshen_ctx Σ (PatternCaseCtx (unfreshen_patterncase Σ p pc)) :=
@@ -669,7 +669,7 @@ Module Type PatternsOn (Import TY : Types).
 
     (* Transports an environment for a freshened pattern case back. Use the
        equivalent function below which avoids the rewrite. *)
-    Definition unfreshen_patterncaseenv' {D : Ty -> Set} {Σ σ} (p : @Pattern N σ) :
+    Definition unfreshen_patterncaseenv' {D : Ty -> Set} {Σ σ} (p : Pattern (N:=N) σ) :
       forall (pc : PatternCase (freshen_pattern Σ p)),
         NamedEnv D (PatternCaseCtx pc) ->
         NamedEnv D (PatternCaseCtx (unfreshen_patterncase Σ p pc)) :=
@@ -677,7 +677,7 @@ Module Type PatternsOn (Import TY : Types).
         unfreshen_namedenv
           (eq_rect _ (NamedEnv D) E _ (freshen_patterncasectx Σ p pc)).
 
-    Fixpoint freshen_patterncaseenv {D : Ty -> Set} {Σ σ} (p : @Pattern N σ) :
+    Fixpoint freshen_patterncaseenv {D : Ty -> Set} {Σ σ} (p : Pattern (N:=N) σ) :
       forall (pc : PatternCase p),
         NamedEnv D (PatternCaseCtx pc) ->
         NamedEnv D (PatternCaseCtx (freshen_patterncase Σ p pc)) :=
@@ -715,7 +715,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_union U p => fun '(existT K pc) => freshen_patterncaseenv (p K) pc
       end.
 
-    Fixpoint unfreshen_patterncaseenv {D : Ty -> Set} {Σ σ} (p : @Pattern N σ) :
+    Fixpoint unfreshen_patterncaseenv {D : Ty -> Set} {Σ σ} (p : Pattern (N:=N) σ) :
       forall (pc : PatternCase (freshen_pattern Σ p)),
         NamedEnv D (PatternCaseCtx pc) ->
         NamedEnv D (PatternCaseCtx (unfreshen_patterncase Σ p pc)) :=
@@ -753,17 +753,17 @@ Module Type PatternsOn (Import TY : Types).
       | pat_union U p => fun '(existT K pc) => unfreshen_patterncaseenv (p K) pc
       end.
 
-    Definition freshen_matchresult {Σ σ} (p : @Pattern N σ) (r : MatchResult p) :
+    Definition freshen_matchresult {Σ σ} (p : Pattern (N:=N) σ) (r : MatchResult p) :
       MatchResult (freshen_pattern Σ p) :=
       let (pc, vs) := r in
       existT (freshen_patterncase Σ p pc) (freshen_patterncaseenv p pc vs).
 
-    Definition unfreshen_matchresult {Σ σ} (p : @Pattern N σ)
+    Definition unfreshen_matchresult {Σ σ} (p : Pattern (N:=N) σ)
       (r : MatchResult (freshen_pattern Σ p)) : MatchResult p :=
       let (pc, vs) := r in
       existT (unfreshen_patterncase Σ p pc) (unfreshen_patterncaseenv p pc vs).
 
-    Lemma pattern_match_val_freshen {Σ : LCtx} {σ} (p : @Pattern N σ) (v : Val σ) :
+    Lemma pattern_match_val_freshen {Σ : LCtx} {σ} (p : Pattern (N:=N) σ) (v : Val σ) :
       unfreshen_matchresult p (pattern_match_val (freshen_pattern Σ p) v) =
       pattern_match_val p v.
     Proof.

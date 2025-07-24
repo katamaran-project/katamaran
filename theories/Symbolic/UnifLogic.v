@@ -1146,7 +1146,7 @@ Module Type UnifLogicOn
     (*     forgetting (acc_subst_left x) P. *)
 
     Definition assuming_acc_match_right {w : World} {σ} {s : Term w σ}
-      {p : @Pattern LVar σ} (pc : PatternCase p) : 
+      {p : Pattern (N:=LVar) σ} (pc : PatternCase p) :
       ⊢ assuming (w1 := wmatch w s p pc) (acc_match_right pc)
         (eqₚ (persist s (acc_match_right pc)) (pattern_match_term_reverse p pc (sub_wmatch_patctx pc))).
     Proof.
@@ -1255,7 +1255,7 @@ Module Type UnifLogicOn
       Rel (WProd AT BT) (A * B)%type :=
       MkRel (fun '(va,vb) w '(ta,tb) => ℛ⟦RA⟧ va ta ∗ ℛ⟦RB⟧ vb tb)%I.
 
-    Definition RMatchResult {N σ} (p : @Pattern N σ) :
+    Definition RMatchResult {N σ} (p : Pattern (N:=N) σ) :
       Rel (SMatchResult p) (MatchResult p) :=
       MkRel
         (fun '(existT pc2 vs) w '(existT pc1 ts) =>
@@ -1451,12 +1451,12 @@ Module Type UnifLogicOn
     Import iris.proofmode.tactics.
     Import RSolve.
     
-    Lemma refine_RMatchResult_existT_eq {N σ} {p : @Pattern N σ} {w} {pc args1 args2}:
+    Lemma refine_RMatchResult_existT_eq {N σ} {p : Pattern (N:=N) σ} {w} {pc args1 args2}:
       ℛ⟦RNEnv _ (PatternCaseCtx pc)⟧ args1 args2 ⊢
         RSat (w := w) (RMatchResult p) (existT pc args1) (existT pc args2).
     Proof. iIntros "Hargs". now iExists eq_refl. Qed.
 
-    #[export] Instance refine_compat_RMatchResult_existT_eq {N σ} {p : @Pattern N σ} {w} {pc args1 args2} :
+    #[export] Instance refine_compat_RMatchResult_existT_eq {N σ} {p : Pattern (N:=N) σ} {w} {pc args1 args2} :
       RefineCompat (RMatchResult p) (existT pc args1) w (existT pc args2) _ :=
       MkRefineCompat refine_RMatchResult_existT_eq.
 
@@ -1767,7 +1767,7 @@ Module Type UnifLogicOn
     Qed.
 
     Lemma refine_pattern_match {w : World} {σ} {v : Val σ} {sv : Term w σ}
-      {p : @Pattern LVar σ} : 
+      {p : Pattern (N:=LVar) σ} :
       ℛ⟦ RVal σ ⟧ v sv ⊢
         let (pc, δpc) := pattern_match_val p v in
         knowing (w1 := wmatch w sv p pc) (acc_match_right pc)
@@ -1785,7 +1785,7 @@ Module Type UnifLogicOn
     Qed.
 
     Lemma refine_pattern_match_val_term_reverse {N} {w : World} {σ}
-      {pat : @Pattern N σ} {ι} :
+      {pat : Pattern (N:=N) σ} {ι} :
       ⊢ ℛ⟦RNEnv N (PatternCaseCtx ι) -> RVal σ⟧ (pattern_match_val_reverse pat ι) (pattern_match_term_reverse pat ι : _ -> STerm σ w).
     Proof.
       unfold RSat, RNEnv, RVal, RInst, RImpl, repₚ.
@@ -1795,13 +1795,13 @@ Module Type UnifLogicOn
     Qed.
 
     #[export] Instance refine_compat_pattern_match_val_term_reverse {N} {w : World} {σ}
-      {pat : @Pattern N σ} {ι} :
+      {pat : Pattern (N:=N) σ} {ι} :
         RefineCompat (RNEnv N (PatternCaseCtx ι) -> RVal σ) (pattern_match_val_reverse pat ι) w (pattern_match_term_reverse pat ι) _ :=
       MkRefineCompat refine_pattern_match_val_term_reverse.
 
     Import ctx.notations.
     Lemma refine_pattern_match_var {w : World} {σ} {v : Val σ} {x : LVar} {xIn : ctx.In (x∷σ) w}
-      {p : @Pattern LVar σ} : 
+      {p : Pattern (N:=LVar) σ} :
       ℛ⟦ RIn (x∷σ) ⟧ v xIn ⊢
         let (pc, δpc) := pattern_match_val p v in
         knowing (w1 := wmatchvar w xIn p pc) (acc_matchvar_right (x := x) pc)
@@ -1829,7 +1829,7 @@ Module Type UnifLogicOn
     Qed.
 
     Lemma refine_unfreshen_patterncaseenv {N : Set} {w : World} {Σ} {n : N -> LVar} {σ}
-      {p : @Pattern N σ} {pc : PatternCase (freshen_pattern n Σ p)}
+      {p : Pattern (N:=N) σ} {pc : PatternCase (freshen_pattern n Σ p)}
       {vs : NamedEnv Val (PatternCaseCtx pc)}
       {svs : NamedEnv (Term w) (PatternCaseCtx pc)} :
       ℛ⟦RNEnv LVar (PatternCaseCtx pc)⟧ vs svs

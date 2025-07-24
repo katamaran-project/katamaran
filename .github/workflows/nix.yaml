@@ -9,15 +9,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        coq: [coq819,coq820]
+        rocq: [rocq819,rocq820,rocq900]
     steps:
       - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v25
-      - uses: cachix/cachix-action@v14
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v16
         with:
           name: katamaran
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - name: Build dependencies
-        run: nix build --print-out-paths .#${{ matrix.coq }}-deps | cachix push katamaran
+        run: nix build --print-out-paths .#${{ matrix.rocq }}-deps | cachix push katamaran
       - name: Build package
-        run: nix build -L .#${{ matrix.coq }}
+        run: nix build -L .#${{ matrix.rocq }}

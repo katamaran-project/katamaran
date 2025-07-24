@@ -610,8 +610,9 @@ Arguments instprop_formula [_] !_ _ /.
 
 Goal True. idtac "Timing before: example/length". Abort.
 Lemma valid_contract_length {σ} : Symbolic.ValidContract (@sep_contract_length σ) (FunDef length).
-Proof. destruct σ;
-         compute - [length_post Val]; constructor; simpl; solve; lia.
+Proof.
+  compute - [length_post Val].
+  constructor; simpl; solve; lia.
 Qed.
 Goal True. idtac "Timing after: example/length". Abort.
 

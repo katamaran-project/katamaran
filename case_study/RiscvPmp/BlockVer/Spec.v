@@ -250,8 +250,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        sep_contract_localstore      := [];
        sep_contract_precondition    := asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
                                                  term_var "a" ↦ᵢ term_var "i" ∗
-                                                 (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "a"))%asn ∗
-                                                 (term_binop bop.plus (term_unsigned (term_var "a")) (term_val ty.int (Z.of_nat bytes_per_instr))) <= term_val ty.int (Z.of_nat maxAddr) ∗
+                                                 (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "a"))%asn ∗
+                                                 (term_binop bop.plus (term_unsigned (term_var "a")) (term_val ty.int (Z.of_nat bytes_per_instr))) <= term_val ty.int (Z.of_N maxAddr) ∗
                                                  asn_cur_privilege (term_val ty_privilege Machine) ∗
                                                  asn_pmp_entries (term_var "entries") ∗
                                                  asn_pmp_access (term_var "a") (term_val ty_word bv_instrsize) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Execute);
@@ -272,8 +272,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
         asn.match_bool (term_var "inv")
           (term_var "paddr" ↦ᵣ[ bytes ] term_var "w")
           (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
-          (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr);
+          (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr);
       sep_contract_result          := "result_mem_read";
       sep_contract_postcondition   :=
         term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
@@ -291,8 +291,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
-           (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr));
+           (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr));
       sep_contract_result          := "result_checked_mem_write";
       sep_contract_postcondition   :=
         term_var "result_checked_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
@@ -318,8 +318,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
           term_var "m" = term_val ty_privilege Machine ∗
-          (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr) ∗
+          (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr) ∗
           asn_cur_privilege (term_var "m") ∗
           asn_pmp_entries (term_var "entries") ∗
           asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "m") (term_var "typ");
@@ -342,8 +342,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
-           (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr)) ∗
+           (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
         asn_cur_privilege (term_var "m") ∗
         term_var "m" = term_val ty_privilege Machine ∗
         asn_pmp_entries (term_var "entries") ∗
@@ -361,8 +361,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
-          (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr) ∗
+          (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr) ∗
           asn_cur_privilege (term_val ty_privilege Machine) ∗
           asn_pmp_entries (term_var "entries") ∗
           asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_var "typ");
@@ -385,8 +385,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
-           (term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr)) ∗
+           (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries") ∗
         asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Write);
@@ -415,8 +415,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        sep_contract_localstore      := [term_var "paddr"; term_var "width"];
        sep_contract_precondition    :=
         let paddr_int : Term _ ty.int := term_unsigned (term_var "paddr") in
-        (term_val ty.int (Z.of_nat minAddr) <= paddr_int) ∗
-          (term_binop bop.plus paddr_int (term_var "width")) <= term_val ty.int (Z.of_nat maxAddr);
+        (term_val ty.int (Z.of_N minAddr) <= paddr_int) ∗
+          (term_binop bop.plus paddr_int (term_var "width")) <= term_val ty.int (Z.of_N maxAddr);
        sep_contract_result          := "result_within_phys_mem";
        sep_contract_postcondition   :=
          term_var "result_within_phys_mem" = term_val ty.bool true;
@@ -479,7 +479,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
         asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))))
-          ((term_val ty.int (Z.of_nat minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_nat maxAddr));
+          ((term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr));
         sep_contract_result          := "result_is_within";
         sep_contract_postcondition   := term_var "result_is_within" = term_var "inv"
     |}.
@@ -907,8 +907,10 @@ Module RiscvPmpIrisInstanceWithContracts.
         destruct bytes; first easy.
         assert (paddr ∈ liveAddrs)%stdpp.
         { apply bv.in_seqBv.
-          - cbn (* TODO: add simplifying `xlenbits` to solve_bv *). solve_bv.
-          - assert (Z.of_N (bv.bin paddr) < lenAddr)%Z by solve_bv. cbn.
+          - change (bv.of_N minAddr) with (@bv.zero xlenbits); cbn. (* TODO: add simplifying `xlenbits` to solve_bv *) solve_bv.
+          - rewrite N2Z.inj_add in Hrght.
+            change minAddr with 0%N in *; cbn in *.
+            assert (bv.unsigned paddr < Z.of_N lenAddr)%Z by Lia.lia. cbn.
             cbv [bv.ult]. now zify. (* `solve_bv` fails because knowledge of concrete `minAddr`, `lenAddr` needed *)}
         intros HFalse; cbn in HFalse.
         assert (paddr ∈ mmioAddrs)%stdpp by (destruct bytes; intuition).

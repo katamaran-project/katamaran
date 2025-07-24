@@ -185,17 +185,6 @@ Module Type PartialEvaluationOn
       - apply Zbool.Zeq_bool_eq in H; now subst.
     Qed.
 
-    Definition evalPolTm `{TermRing σ} : list (Term Σ σ) -> Pol Z -> Term Σ σ :=
-      Pphi_dev (term_val σ tmr_zero)
-        (term_val σ tmr_one)
-        (term_binop tmr_plus)
-        (term_binop tmr_times)
-        (term_binop tmr_minus)
-        (term_unop tmr_negate)
-        0%Z 1%Z Zbool.Zeq_bool
-        (fun c => term_val σ (tmr_of_Z c))
-        get_signZ.
-
     Definition evalPExprTm `{TermRing σ} : list (Term Σ σ) -> PExpr Z -> Term Σ σ :=
       PEeval (term_val σ tmr_zero)
         (term_val σ tmr_one)
@@ -205,17 +194,6 @@ Module Type PartialEvaluationOn
         (term_unop tmr_negate)
         (fun c => term_val σ (tmr_of_Z c))
         id_phi_N (pow_N (term_val (Σ := Σ) σ tmr_one) (term_binop tmr_times)).
-
-    Lemma evalPol_norm_aux `{tmr : TermRing σ} {p : PExpr Z} (l : list (Term Σ σ)) :
-      evalPolTm l (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool p) ≡ evalPExprTm l p.
-    Proof.
-      unfold evalPolTm, evalPExprTm.
-      rewrite Pphi_dev_ok;
-        rewrite ?bv.of_N_one;
-        try eauto using tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th with typeclass_instances.
-      rewrite norm_aux_spec;
-        rewrite ?bv.of_N_one; try eauto using tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th, pow_N_th with typeclass_instances.
-    Qed.
 
     Definition RQuote (σ : Ty) : Type := list (Term Σ σ) -> positive -> PExpr Z * list (Term Σ σ).
 
@@ -289,21 +267,6 @@ Module Type PartialEvaluationOn
       | ty.bvec n => RQuote σ
       | ty.int => RQuote σ
       | _ => Term Σ σ
-      end.
-
-    Definition CanonTerm_to_Term {σ} : CanonTerm σ -> Term Σ σ :=
-      match σ return CanonTerm σ -> Term Σ σ with
-      | ty.bvec n => fun ct =>
-                       match ct nil 1%positive with
-                       | (pexpr , env) =>
-                           evalPolTm (H := TermRing_bv) env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool pexpr)
-                       end
-      | ty.int => fun ct =>
-                    match ct nil 1%positive with
-                    | (pexpr , env) =>
-                        evalPolTm env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool pexpr)
-                    end
-      | _σ => fun t => t
       end.
 
     #[export] Instance equiv_CanonTerm {σ} : base.Equiv (CanonTerm σ)
@@ -409,26 +372,6 @@ Module Type PartialEvaluationOn
         + intros -> la.
           rewrite Hy, H1.
           now apply Hrqv.
-    Qed.
-
-    Lemma CanonTermRep_adeq {σ : Ty} {ct : CanonTerm σ} {t} : CanonTermRep ct t -> CanonTerm_to_Term ct ≡ t.
-    Proof.
-      destruct σ; intros; cbn; try trivial;
-        specialize (H []%list 1%positive);
-        destruct (ct []%list 1%positive);
-        rewrite evalPol_norm_aux;
-        now rewrite <-(H eq_refl nil), app_nil_r.
-    Qed.
-
-    Lemma Term_Quote_bin_sound {n} {op : BinOp (ty.bvec n) (ty.bvec n) (ty.bvec n)}
-      {comb} {ct1 t1 ct2 t2} :
-      (forall env pol1 pol2, evalPExprTm env (comb pol1 pol2) = term_binop op (evalPExprTm env pol1) (evalPExprTm env pol2)) ->
-      CanonTermRep (σ := ty.bvec n) ct1 t1 ->
-      CanonTermRep (σ := ty.bvec n) ct2 t2 ->
-      CanonTermRep (σ := ty.bvec n) (Term_Quote_bin comb ct1 ct2) (term_binop op t1 t2).
-    Proof.
-      intros Hcomb.
-      now eapply Term_Quote_bin_Valid.
     Qed.
 
     Equations(noeqns) peval_append {σ} (t1 t2 : Term Σ (ty.list σ)) : Term Σ (ty.list σ) :=
@@ -574,19 +517,220 @@ Module Type PartialEvaluationOn
     | term_val _ v                , term_binop bop.bvcons t1 t2 => peval_bvor_bvcons_val peval_bvor_val t1 t2 v
     | t1 , t2  => term_binop bop.bvor t1 t2.
 
+    Definition peval_bvapp_val_r {m n} (t1 : Term Σ (ty.bvec m)) (v : Val (ty.bvec n)) : Term Σ (ty.bvec (m+n)) :=
+      match eq_dec n 0 with
+      | left e =>
+          eq_rect_r (fun l => Term Σ (ty.bvec l)) t1
+            (eq_trans (f_equal (Nat.add m) e) (transparent.nat_add_0_r m))
+      | right _ => term_bvapp t1 (term_val (ty.bvec n) v)
+      end.
+
+    Equations peval_bvapp {m n} (t1 : Term Σ (ty.bvec m)) (t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec (m+n)) :=
+    | term_val _ v1 | term_val _ v2 => term_val (ty.bvec _) (bv.app v1 v2)
+    | term_bvapp t11 t12 , t2 => eq_rect _ (fun l => Term Σ (ty.bvec l))
+                                   (term_bvapp t11 (term_bvapp t12 t2)) _
+                                   (transparent.nat_add_assoc _ _ _)
+    | t1 , term_val _ v2 => peval_bvapp_val_r t1 v2
+    | t1 , t2 => term_bvapp t1 t2.
+
+    Section WithPevalBvdrop.
+
+      Variable peval_bvdrop_eq :
+        ∀ m n mn : nat, Term Σ (ty.bvec mn) → m + n = mn → Term Σ (ty.bvec n).
+
+      Definition peval_bvdrop_bvapp {m n} [k l] :
+        Term Σ (ty.bvec k) → Term Σ (ty.bvec l) → m + n = k + l → Term Σ (ty.bvec n) :=
+        match nat_compare m k with
+        | EQ mk   => fun _ t2 e =>
+                       eq_rect_r (fun l => Term Σ (ty.bvec l)) t2
+                         (transparent.nat_add_cancel_l n l mk e)
+        | LT m' d => fun t1 t2 e =>
+                       eq_rect_r (fun l => Term Σ (ty.bvec l))
+                         (term_bvapp (peval_bvdrop_eq m' (S d) t1 eq_refl) t2)
+                         (transparent.nat_add_cancel_l n (S d + l) m'
+                            (eq_trans e (eq_sym (transparent.nat_add_assoc m' (S d) l))))
+        | GT k' d => fun t1 t2 e =>
+                       eq_rect (S d + n) (fun l => Term Σ (ty.bvec l) → Term Σ (ty.bvec n))
+                         (fun t3 => peval_bvdrop_eq (S d) n t3 eq_refl)
+                         l
+                         (transparent.nat_add_cancel_l (S d + n) l k'
+                            (eq_trans (transparent.nat_add_assoc k' (S d) n) e)) t2
+        end.
+
+      Definition peval_bvdrop_bvcons {m n} [k] (t1 : Term Σ ty.bool)
+        (t2 : Term Σ (ty.bvec k)) : m + n = S k → Term Σ (ty.bvec n) :=
+        match m with
+        | 0   => fun e => eq_rect_r (fun l => Term Σ (ty.bvec l)) (term_bvcons t1 t2) e
+        | S m => fun e => peval_bvdrop_eq m n t2 (eq_add_S (m + n) k e)
+        end.
+
+      Definition peval_bvdrop_bvdrop {m n} [k l] (t1 : Term Σ (ty.bvec (k + l)))
+        (e : m + n = l) : Term Σ (ty.bvec n) :=
+        peval_bvdrop_eq (k + m) n t1
+          (eq_trans
+             (eq_sym (transparent.nat_add_assoc k m n))
+             (f_equal (Init.Nat.add k) e)).
+
+    End WithPevalBvdrop.
+
+    Definition peval_bvdrop_val {m n} [k] (v : Val (ty.bvec k))
+      (e : m + n = k) : Term Σ (ty.bvec n) :=
+      term_val (ty.bvec _) (bv.drop m (eq_rect_r bv v e)).
+
+    Definition peval_bvdrop_default m {n} mn (t : Term Σ (ty.bvec mn)) (e : m + n = mn) :
+      Term Σ (ty.bvec n) :=
+      match eq_dec 0 m with
+      | left em0 => eq_rect_r (fun l => Term Σ (ty.bvec l)) t
+                      (eq_trans (f_equal (fun m => m + n) em0) e)
+      | right _ =>
+          match eq_dec n 0 with
+          | left e0n => term_val (ty.bvec n) (eq_rect_r bv bv.nil e0n)
+          | right _ => term_bvdrop m (eq_rect_r (fun l => Term Σ (ty.bvec l)) t e)
+          end
+      end.
+
+    Fixpoint peval_bvdrop_eq m {n} mn (t : Term Σ (ty.bvec mn)) (e : m + n = mn) {struct t} :
+      Term Σ (ty.bvec n) :=
+      Term_bvec_case (fun mn _ => m + n = mn → Term Σ (ty.bvec n))
+        (fun (*var*) _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*val*) k v e => peval_bvdrop_val v e)
+        (fun (*bvadd*) _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*bvsub*) _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*bvmul*) _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*bvand*) _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*bvor*) _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*bvxor*) _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*shiftr*) _ _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*shift*) _ _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*bvapp*) k l t1 t2 e => peval_bvdrop_bvapp peval_bvdrop_eq t1 t2 e)
+        (fun (*bvcons*) k t1 t2 e => peval_bvdrop_bvcons peval_bvdrop_eq t1 t2 e)
+        (fun (*u_v_s*) _ _ _ _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*bvnot*) _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*negate*) _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*sext*) _ _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*zext*) _ _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*g_s_i*) _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*truncate*) _ _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*v_s*) _ _ _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*bvdrop*) k l t1 e => peval_bvdrop_bvdrop peval_bvdrop_eq t1 e)
+        (fun (*bvtake*) _ _ _ _ => peval_bvdrop_default _ t e)
+        t e.
+
+    Definition peval_bvdrop m {n} (t : Term Σ (ty.bvec (m + n))) :
+      Term Σ (ty.bvec n) := peval_bvdrop_eq m t eq_refl.
+
+    Section WithPevalBvtake.
+
+      Variable peval_bvtake_eq :
+        ∀ m n mn : nat, Term Σ (ty.bvec mn) → m + n = mn → Term Σ (ty.bvec m).
+
+      Definition peval_bvtake_bvapp {m n} [k l] :
+        Term Σ (ty.bvec k) → Term Σ (ty.bvec l) → m + n = k + l → Term Σ (ty.bvec m) :=
+        match nat_compare m k with
+        | EQ mk   => fun t1 _ _ => t1
+        | LT m' d => fun t1 _ _ => peval_bvtake_eq m' (S d) t1 eq_refl
+        | GT k' d => fun t1 t2 e =>
+                       term_bvapp t1
+                         (peval_bvtake_eq (S d) n t2
+                            (transparent.nat_add_cancel_l (S d + n) l k'
+                               (eq_trans (transparent.nat_add_assoc k' (S d) n) e)))
+        end.
+
+      Definition peval_bvtake_bvcons {m n} [k] (t1 : Term Σ ty.bool)
+        (t2 : Term Σ (ty.bvec k)) : m + n = S k → Term Σ (ty.bvec m) :=
+        match m with
+        | 0   => fun _ => term_val (ty.bvec 0) bv.nil
+        | S m => fun e => term_bvcons t1
+                            (peval_bvtake_eq m n t2 (eq_add_S (m + n) k e))
+        end.
+
+      Definition peval_bvtake_bvtake {m n} [k l]
+        (t1 : Term Σ (ty.bvec (k + l))) (e : m + n = k) : Term Σ (ty.bvec m) :=
+        let e1 : (m+n)+l = k+l := f_equal (fun j => j + l) e in
+        let e2 : m+(n+l) = k+l := eq_trans (transparent.nat_add_assoc m n l) e1 in
+        peval_bvtake_eq m (n + l) t1 e2.
+
+    End WithPevalBvtake.
+
+    Definition peval_bvtake_val {m n} [k] (v : Val (ty.bvec k))
+      (e : m + n = k) : Term Σ (ty.bvec m) :=
+      term_val (ty.bvec _) (bv.take m (eq_rect_r bv v e)).
+
+    Definition peval_bvtake_default m {n} mn (t : Term Σ (ty.bvec mn))
+      (e : m + n = mn) : Term Σ (ty.bvec m) :=
+      match eq_dec m 0 with
+      | left em0 => eq_rect_r (fun l => Term Σ (ty.bvec l))
+                      (term_val (ty.bvec 0) bv.nil) em0
+      | right _ =>
+          match eq_dec 0 n with
+          | left e0n =>
+              eq_rect_r (fun l => Term Σ (ty.bvec l)) t
+                (eq_trans
+                   (eq_trans (eq_sym (transparent.nat_add_0_r m))
+                      (f_equal (Nat.add m) e0n)) e)
+          | right _ => term_bvtake m (eq_rect_r (fun l => Term Σ (ty.bvec l)) t e)
+          end
+      end.
+
+    Fixpoint peval_bvtake_eq m {n} mn (t : Term Σ (ty.bvec mn)) (e : m + n = mn) {struct t} :
+      Term Σ (ty.bvec m) :=
+      Term_bvec_case (fun (**) n0 _ => m + n = n0 → Term Σ (ty.bvec m))
+        (fun (*var*) _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*val*) k v e => peval_bvtake_val v e)
+        (fun (*bvadd*) _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*bvsub*) _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*bvmul*) _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*bvand*) _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*bvor*) _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*bvxor*) _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*shiftr*) _ _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*shift*) _ _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*bvapp*) k l t1 t2 e => peval_bvtake_bvapp peval_bvtake_eq t1 t2 e)
+        (fun (*bvcons*) k t1 t2 e => peval_bvtake_bvcons peval_bvtake_eq t1 t2 e)
+        (fun (*u_v_s*) _ _ _ _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*bvnot*) _ _ _ => peval_bvtake_default _ t e)
+        (fun (*negate*) _ _ _ => peval_bvtake_default _ t e)
+        (fun (*sext*) _ _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*zext*) _ _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*g_s_i*) _ _ _ => peval_bvtake_default _ t e)
+        (fun (*truncate*) _ _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*v_s*) _ _ _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*bvdrop*) _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*bvtake*) k l t1 e1 => peval_bvtake_bvtake peval_bvtake_eq t1 e1)
+        t e.
+
+    Definition peval_bvtake m {n} (t : Term Σ (ty.bvec (m + n))) :
+      Term Σ (ty.bvec m) := peval_bvtake_eq m t eq_refl.
+
+    Definition peval_update_vector_subrange {n} s l {p : IsTrue (s + l <=? n)%nat} :
+      Term Σ (ty.bvec n) -> Term Σ (ty.bvec l) -> Term Σ (ty.bvec n) :=
+      match bv.leview (s + l) n with
+      | bv.is_le k =>
+          fun tslk tl =>
+            peval_bvapp
+              (peval_bvapp (peval_bvtake s (peval_bvtake (s+l) tslk)) tl)
+              (peval_bvdrop (s+l) tslk)
+      end.
+    #[global] Arguments peval_update_vector_subrange {n} s l {p}.
+
     Equations(noeqns) peval_binop' {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
     | op | term_val _ v1 | term_val _ v2 := term_val σ (bop.eval op v1 v2);
     | op | t1            | t2            := term_binop op t1 t2.
 
-    Equations(noeqns) peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
-    | bop.append , t1 , t2 => peval_append t1 t2
-    | bop.and    , t1 , t2 => peval_and t1 t2
-    | bop.or     , t1 , t2 => peval_or t1 t2
-    | bop.plus   , t1 , t2 => peval_plus t1 t2
-    | bop.bvadd  , t1 , t2 => peval_bvadd t1 t2
-    | bop.bvand  , t1 , t2 => peval_bvand t1 t2
-    | bop.bvor   , t1 , t2 => peval_bvor t1 t2
-    | op         , t1 , t2 => peval_binop' op t1 t2.
+    Definition peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
+      Term Σ σ1 → Term Σ σ2 → Term Σ σ :=
+      match op with
+      | bop.append => peval_append
+      | bop.and    => peval_and
+      | bop.or     => peval_or
+      | bop.plus   => peval_plus
+      | bop.bvadd  => peval_bvadd
+      | bop.bvand  => peval_bvand
+      | bop.bvor   => peval_bvor
+      | bop.bvapp  => peval_bvapp
+      | bop.update_vector_subrange s l => peval_update_vector_subrange s l
+      | op         => peval_binop' op
+      end.
 
     Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
       peval_append t1 t2 ≡ term_binop bop.append t1 t2.
@@ -729,6 +873,204 @@ Module Type PartialEvaluationOn
         intros ι. cbn - [bv.cons]. now rewrite bv.lor_cons.
     Qed.
 
+    Lemma peval_bvapp_val_r_sound [m n] (t1 : Term Σ (ty.bvec m))
+      (v : Val (ty.bvec n)) :
+      peval_bvapp_val_r t1 v ≡ term_bvapp t1 (term_val (ty.bvec n) v).
+    Proof.
+      unfold peval_bvapp_val_r. destruct eq_dec.
+      - intros ι. cbn. subst. rewrite eq_trans_refl_l.
+        rewrite (inst_eq_rect_indexed_r
+                   (instTA := fun l => @inst_term (ty.bvec l))).
+        destruct (bv.view v). now rewrite bv.app_nil_r.
+      - reflexivity.
+    Qed.
+
+    #[local] Hint Resolve peval_bvapp_val_r_sound : core.
+
+    Lemma peval_bvapp_sound {m n} (t1 : Term Σ (ty.bvec m)) (t2 : Term Σ (ty.bvec n)) :
+      peval_bvapp t1 t2 ≡ term_bvapp t1 t2.
+    Proof.
+      funelim (peval_bvapp t1 t2); lsolve;
+        try now rewrite peval_bvapp_val_r_sound.
+      - try clear Heqcall. (* equations >= 1.3.1 *)
+        intros ι. cbn. rewrite bv.app_app.
+        now destruct transparent.nat_add_assoc.
+    Qed.
+
+    Lemma peval_bvdrop_default_sound {m n mn} (t : Term Σ (ty.bvec mn))
+      (e : m + n = mn) :
+      peval_bvdrop_default m t e ≡
+      term_bvdrop m (eq_rect_r (fun l => Term Σ (ty.bvec l)) t e).
+    Proof.
+      unfold peval_bvdrop_default.
+      destruct eq_dec.
+       { now subst. }
+      destruct eq_dec.
+      { subst; intros ι; cbn - [Val].
+        now destruct (bv.view (bv.drop m (inst (Inst := inst_term) t ι))). }
+      reflexivity.
+    Qed.
+
+    #[local] Hint Resolve peval_bvdrop_default_sound : core.
+
+    Lemma peval_bvdrop_eq_sound [mn : nat] (t : Term Σ (ty.bvec mn)) :
+      ∀ m n (e : m + n = mn),
+        peval_bvdrop_eq m t e ≡
+        term_bvdrop m (eq_rect_r (fun l => Term Σ (ty.bvec l)) t e).
+    Proof.
+      induction mn , t using Term_bvec_rect; cbn - [Val]; intros m0 n0 e; auto.
+      - (*val*)
+        now subst.
+      - (*bvapp*)
+        unfold peval_bvdrop_bvapp. destruct nat_compare.
+        + pose proof (transparent.nat_add_cancel_l _ _ _ e). subst.
+          destruct (uip eq_refl (transparent.nat_add_cancel_l n n n1 e)).
+          destruct (uip eq_refl e); cbn.
+          intros ι. cbn - [Val]. now rewrite bv.drop_app.
+        + revert t1 IHt1 e. generalize (S m). clear m. intros m t1 IHt1 e.
+          assert (n0 = m + n) as ->.
+          { rewrite <- transparent.nat_add_assoc in e.
+            now apply transparent.nat_add_cancel_l in e. }
+          destruct (uip (transparent.nat_add_assoc n1 m n) e).
+          rewrite eq_trans_sym_inv_r.
+          destruct (uip eq_refl (transparent.nat_add_cancel_l (m + n) (m + n) n1 eq_refl)).
+          cbn. rewrite IHt1. intros ι; cbn - [Val]. clear.
+          rewrite (inst_eq_rect_indexed_r
+                     (instTA := fun l => @inst_term (ty.bvec l))).
+          cbn - [Val]. generalize (inst t2 ι). generalize (inst t1 ι).
+          intros y z. clear. destruct (bv.appView n1 m y) as [x y].
+          rewrite bv.app_app. rewrite rew_opp_l. now rewrite !bv.drop_app.
+        + revert e. generalize (S m). clear m. intros m e.
+          assert (m + n0 = n) as <-.
+          { rewrite <- transparent.nat_add_assoc in e.
+            now apply transparent.nat_add_cancel_l in e. }
+          destruct (uip (eq_sym (transparent.nat_add_assoc n1 m n0)) e).
+          rewrite eq_trans_sym_inv_r.
+          destruct (uip eq_refl (transparent.nat_add_cancel_l (m + n0) (m + n0) n1 eq_refl)).
+          cbn. rewrite IHt2. cbn. intros ι. cbn - [Val].
+          rewrite !(inst_eq_rect_indexed_r
+                      (instTA := fun l => @inst_term (ty.bvec l))).
+          cbn - [Val]. generalize (inst t2 ι). generalize (inst t1 ι). clear.
+          intros x y.
+          destruct (bv.appView m n0 y) as [y z].
+          rewrite !bv.drop_app.
+          rewrite <- (bv.drop_app (bv.app x y) z) at 1. f_equal.
+          rewrite bv.app_app.
+          unfold eq_rect_r. now rewrite eq_sym_involutive.
+      - (*bvcons*)
+        destruct m0; cbn.
+        + easy.
+        + rewrite IHt1. clear IHt1.
+          assert (f_equal S (eq_add_S (m0 + n0) n e) = e) by apply uip.
+          rewrite <- H at 2.
+          destruct (eq_add_S (m0 + n0) n e). cbn.
+          intros ι; cbn. now rewrite bv.drop_cons.
+      - (*bvdrop*)
+        unfold peval_bvdrop_bvdrop. rewrite IHt. clear IHt. subst. cbn.
+        intros ι; cbn - [Val].
+        rewrite !(inst_eq_rect_indexed_r
+                    (instTA := fun l => @inst_term (ty.bvec l))).
+        rewrite bv.drop_drop. f_equal.
+        unfold eq_rect_r. now rewrite eq_sym_involutive.
+    Qed.
+
+    Lemma peval_bvdrop_sound {m n} (t : Term Σ (ty.bvec (m + n))) :
+      peval_bvdrop m t ≡ term_bvdrop m t.
+    Proof. unfold peval_bvdrop. apply peval_bvdrop_eq_sound. Qed.
+
+    Lemma peval_bvtake_default_sound {m n mn} (t : Term Σ (ty.bvec mn)) :
+      forall (e : m + n = mn),
+        peval_bvtake_default m t e ≡
+        term_bvtake m (eq_rect_r (fun l => Term Σ (ty.bvec l)) t e).
+    Proof.
+      unfold peval_bvtake_default. intros e.
+      destruct eq_dec.
+      { now subst. }
+      destruct eq_dec.
+      { subst; intros ι; cbn. rewrite bv.take_full.
+        generalize (transparent.nat_add_0_r m). revert t.
+        generalize (m+0). now intros; subst. }
+      reflexivity.
+    Qed.
+
+    #[local] Hint Resolve peval_bvtake_default_sound : core.
+    Lemma peval_bvtake_eq_sound {mn} (t : Term Σ (ty.bvec mn)) :
+      forall m n (e : m + n = mn),
+        peval_bvtake_eq m t e ≡
+        term_bvtake m (eq_rect_r (fun l => Term Σ (ty.bvec l)) t e).
+    Proof.
+      induction mn ,t using Term_bvec_rect; cbn - [Val]; intros m0 n0 e; auto.
+      - (*val*)
+        now subst.
+      - (*bvapp*)
+        unfold peval_bvtake_bvapp. destruct nat_compare.
+        + pose proof (transparent.nat_add_cancel_l _ _ _ e). subst.
+          destruct (uip eq_refl e); cbn.
+          intros ι. cbn - [Val]. now rewrite bv.take_app.
+        + rewrite IHt1. clear IHt1 IHt2.
+          assert (n0 = S m + n) as ->.
+          { rewrite <- transparent.nat_add_assoc in e.
+            now apply transparent.nat_add_cancel_l in e. }
+          destruct (uip (transparent.nat_add_assoc n1 (S m) n) e).
+          intros ι. cbn - [Val].
+          rewrite (inst_eq_rect_indexed_r
+                     (instTA := fun l => @inst_term (ty.bvec l))).
+          cbn - [Val]. generalize (inst t2 ι). generalize (inst t1 ι).
+          intros v1 v2.
+          rewrite <- (bv.take_app v1 v2) at 1. now rewrite bv.take_take.
+        + rewrite IHt2. clear IHt1 IHt2.
+          revert e. generalize (S m). clear m. intros m e.
+          assert (m + n0 = n) as <-.
+          { rewrite <- transparent.nat_add_assoc in e.
+            now apply transparent.nat_add_cancel_l in e. }
+          destruct (uip (eq_sym (transparent.nat_add_assoc n1 m n0)) e).
+          rewrite eq_trans_sym_inv_r.
+          destruct (uip eq_refl (transparent.nat_add_cancel_l (m + n0) (m + n0) n1 eq_refl)).
+          intros ι. cbn - [Val].
+          rewrite !(inst_eq_rect_indexed_r
+                      (instTA := fun l => @inst_term (ty.bvec l))).
+          cbn - [Val]. generalize (inst t2 ι). generalize (inst t1 ι). clear.
+          intros x y.
+          destruct (bv.appView m n0 y) as [y z].
+          rewrite bv.take_app.
+          rewrite <- (bv.take_app (bv.app x y) z). f_equal.
+          rewrite bv.app_app.
+          unfold eq_rect_r. now rewrite eq_sym_involutive.
+      - (*bvcons*)
+        destruct m0; cbn.
+        + easy.
+        + rewrite IHt1. clear IHt1.
+          assert (f_equal S (eq_add_S (m0 + n0) n e) = e) by apply uip.
+          rewrite <- H at 2.
+          destruct (eq_add_S (m0 + n0) n e). cbn.
+          intros ι; cbn. now rewrite bv.take_cons.
+      - (*bvtake*)
+        unfold peval_bvtake_bvtake. rewrite IHt. clear IHt. subst. cbn.
+        intros ι; cbn - [Val]. rewrite bv.take_take. f_equal.
+        now rewrite !(inst_eq_rect_indexed_r
+                    (instTA := fun l => @inst_term (ty.bvec l))).
+    Qed.
+
+    Lemma peval_bvtake_sound {m n} (t : Term Σ (ty.bvec (m + n))) :
+      peval_bvtake m t ≡ term_bvtake m t.
+    Proof. unfold peval_bvtake. apply peval_bvtake_eq_sound. Qed.
+
+    Lemma peval_update_vector_subrange_sound {n s l} (p : IsTrue (s + l <=? n))
+      (t1 : Term Σ (ty.bvec n)) (t2 : Term Σ (ty.bvec l)) :
+      peval_update_vector_subrange s l t1 t2 ≡
+      term_binop (bop.update_vector_subrange s l) t1 t2.
+    Proof.
+      intros ι. cbn - [Val].
+      unfold peval_update_vector_subrange, bv.update_vector_subrange.
+      destruct bv.leview; cbn - [Val].
+      repeat
+        (rewrite ?peval_bvapp_sound, ?peval_bvtake_sound,
+           ?peval_bvdrop_sound; cbn - [Val]).
+      destruct bv.appView.
+      destruct bv.appView.
+      now rewrite ?bv.take_app, ?bv.drop_app.
+    Qed.
+
     Lemma peval_binop'_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
       peval_binop' op t1 t2 ≡ term_binop op t1 t2.
     Proof.
@@ -741,7 +1083,8 @@ Module Type PartialEvaluationOn
 
     Hint Resolve peval_binop'_sound peval_append_sound peval_and_sound
       peval_or_sound peval_plus_sound peval_bvadd_sound peval_bvand_sound
-      peval_bvor_sound : core.
+      peval_bvor_sound peval_bvapp_sound peval_update_vector_subrange_sound
+      : core.
 
     Lemma peval_binop_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
       peval_binop op t1 t2 ≡ term_binop op t1 t2.
@@ -765,92 +1108,6 @@ Module Type PartialEvaluationOn
     | term_binop bop.bvapp t1 t2  => peval_unsigned_bvapp t1 t2
     | t                           => term_unop uop.unsigned t.
 
-    Definition peval_bvdrop_app {m n k l} (t1 : Term Σ (ty.bvec k))
-      (t2 : Term Σ (ty.bvec l)) (e : m + n = k + l) : Term Σ (ty.bvec n) :=
-      match eq_dec m k with
-      | left emk =>
-          let eknl : k + n = k + l := eq_rect m (fun m => m + n = k + l) e k emk in
-          let enl  : n = l := transparent.nat_add_cancel_l n l k eknl in
-          eq_rect_r (fun o => Term Σ (ty.bvec o)) t2 enl
-      | right _ => term_bvdrop m (eq_rect_r (fun o => Term Σ (ty.bvec o)) (term_bvapp t1 t2) e)
-      end.
-
-    Definition peval_bvdrop_cons {m n k}
-      (t1 : Term Σ ty.bool) (t2 : Term Σ (ty.bvec k)) : m + n = S k ->
-      Term Σ (ty.bvec n) :=
-      match m with
-      | O   => fun e => eq_rect_r (fun o => Term Σ (ty.bvec o)) (term_binop bop.bvcons t1 t2) e
-      | S m => fun e => term_bvdrop m (eq_rect_r (fun o => Term Σ (ty.bvec o)) t2 (eq_add_S (plus m n) k e))
-      end.
-
-    Definition peval_bvdrop_binop {m n σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3)
-      (t1 : Term Σ σ1) (t2 : Term Σ σ2) (e : ty.bvec (m + n) = σ3) :
-      Term Σ (ty.bvec n) :=
-      let t := term_bvdrop m (eq_rect_r (Term Σ) (term_binop op t1 t2) e) in
-      match op in BinOp σ1 σ2 σ3 return Term Σ σ1 → Term Σ σ2 → ty.bvec (m + n) = σ3 → Term Σ (ty.bvec n) with
-      | bop.bvapp  => fun t1 t2 e => peval_bvdrop_app t1 t2 (noConfusion_inv e)
-      | bop.bvcons => fun t1 t2 e => peval_bvdrop_cons t1 t2 (noConfusion_inv e)
-      | _ => fun _ _ _ => t
-      end t1 t2 e.
-
-    Definition peval_bvdrop' [m n σ] (t : Term Σ σ) : ty.bvec (m + n) = σ -> Term Σ (ty.bvec n) :=
-      match t in Term _ σ return (ty.bvec (m + n) = σ → Term Σ (ty.bvec n)) with
-      | term_val _ v        => fun e => term_val (ty.bvec n) (bv.drop m (eq_rect_r Val v e))
-      | term_binop op t1 t2 => peval_bvdrop_binop op t1 t2
-      | t                   => fun e => term_bvdrop _ (eq_rect_r (Term Σ) t e)
-      end.
-
-    Definition peval_bvdrop m {n} : Term Σ (ty.bvec (m + n)) -> Term Σ (ty.bvec n) :=
-      match m with
-      | O   => fun t => t
-      | S m => fun t => peval_bvdrop' t eq_refl
-      end.
-
-    Definition peval_bvtake_app {m n k l} (t1 : Term Σ (ty.bvec k))
-      (t2 : Term Σ (ty.bvec l)) (e : m + n = k + l) : Term Σ (ty.bvec m) :=
-      match eq_dec m k with
-      | left emk => eq_rect_r (fun o => Term Σ (ty.bvec o)) t1 emk
-      | right _ => term_bvtake m (eq_rect_r (fun o => Term Σ (ty.bvec o)) (term_bvapp t1 t2) e)
-      end.
-
-    Definition peval_bvtake_cons {m n k}
-      (t1 : Term Σ ty.bool) (t2 : Term Σ (ty.bvec k)) :
-      m + n = S k -> Term Σ (ty.bvec m) :=
-      match m with
-      | O   => fun e => term_val (ty.bvec 0) bv.zero
-      | S m => fun e => term_binop bop.bvcons t1
-                          (term_bvtake m (eq_rect_r (fun o => Term Σ (ty.bvec o)) t2 (eq_add_S (plus m n) k e)))
-      end.
-
-    Definition peval_bvtake_binop {m n σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3)
-      (t1 : Term Σ σ1) (t2 : Term Σ σ2) (e : ty.bvec (m + n) = σ3) :
-      Term Σ (ty.bvec m) :=
-      let t := term_bvtake m (eq_rect_r (Term Σ) (term_binop op t1 t2) e) in
-      match op in BinOp σ1 σ2 σ3 return Term Σ σ1 → Term Σ σ2 → ty.bvec (m + n) = σ3 → Term Σ (ty.bvec m) with
-      | bop.bvapp  => fun t1 t2 e => peval_bvtake_app t1 t2 (noConfusion_inv e)
-      | bop.bvcons => fun t1 t2 e => peval_bvtake_cons t1 t2 (noConfusion_inv e)
-      | _ => fun _ _ _ => t
-      end t1 t2 e.
-
-    Definition peval_bvtake' [m n σ] (t : Term Σ σ) : ty.bvec (m + n) = σ -> Term Σ (ty.bvec m) :=
-      match t in Term _ σ return ty.bvec (m + n) = σ → Term Σ (ty.bvec m) with
-      | term_val _ v        => fun e => term_val (ty.bvec m) (bv.take m (eq_rect_r Val v e))
-      | term_binop op t1 t2 => peval_bvtake_binop op t1 t2
-      | t                   => fun e => term_bvtake _ (eq_rect_r (Term Σ) t e)
-      end.
-
-    Definition term_bvec_plus_r_0 m (t : Term Σ (ty.bvec (m + 0))) :
-      Term Σ (ty.bvec m) :=
-      eq_rect (m + 0) (fun l => Term Σ (ty.bvec l)) t
-        m (transparent.nat_add_0_r m).
-
-    Definition peval_bvtake m {n} :
-      Term Σ (ty.bvec (m + n)) -> Term Σ (ty.bvec m) :=
-      match m , n with
-      | O  , _  => fun _ => term_val (ty.bvec 0) bv.zero
-      | m' , O  => term_bvec_plus_r_0 m'
-      | _  , _  => fun t => peval_bvtake' t eq_refl
-      end.
 
     Definition peval_vector_subrange {n} start len {p : IsTrue (start + len <=? n)} :
       Term Σ (ty.bvec n) -> Term Σ (ty.bvec len) :=
@@ -875,6 +1132,36 @@ Module Type PartialEvaluationOn
       | op                            => peval_unop' op
       end.
 
+    (* Note that we evaluate polynomials using the peval_binop' functions.
+     * This gets rid of some remaining redexes left by the ring solver, particularly it tends to produce
+     * `term_unop uop.negate (term_val ty.int 1%Z)` rather than `(term_val ty.int (-1)%Z)`.
+     *)
+    Definition evalPolTm `{TermRing σ} : list (Term Σ σ) -> Pol Z -> Term Σ σ :=
+      Pphi_dev (term_val σ tmr_zero)
+        (term_val σ tmr_one)
+        (peval_binop' tmr_plus)
+        (peval_binop' tmr_times)
+        (peval_binop' tmr_minus)
+        (peval_unop' tmr_negate)
+        0%Z 1%Z Zbool.Zeq_bool
+        (fun c => term_val σ (tmr_of_Z c))
+        get_signZ.
+
+    Definition CanonTerm_to_Term {σ} : CanonTerm σ -> Term Σ σ :=
+      match σ return CanonTerm σ -> Term Σ σ with
+      | ty.bvec n => fun ct =>
+                       match ct nil 1%positive with
+                       | (pexpr , env) =>
+                           evalPolTm (H := TermRing_bv) env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool pexpr)
+                       end
+      | ty.int => fun ct =>
+                    match ct nil 1%positive with
+                    | (pexpr , env) =>
+                        evalPolTm env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool pexpr)
+                    end
+      | _σ => fun t => t
+      end.
+
     Lemma peval_not_sound (t : Term Σ ty.bool) :
       peval_not t ≡ term_unop uop.not t.
     Proof. funelim (peval_not t); lsolve; now apply proper_term_binop. Qed.
@@ -888,147 +1175,6 @@ Module Type PartialEvaluationOn
     Lemma peval_unsigned_sound {m} (t : Term Σ (ty.bvec m)) :
       peval_unsigned t ≡ term_unop uop.unsigned t.
     Proof. funelim (peval_unsigned t); lsolve. Qed.
-
-    Lemma peval_bvdrop_app_sound {m n k l} (t1 : Term Σ (ty.bvec k))
-      (t2 : Term Σ (ty.bvec l)) (e : m + n = k + l) :
-      peval_bvdrop_app t1 t2 e ≡
-      term_bvdrop m (eq_rect_r (fun o => Term Σ (ty.bvec o)) (term_bvapp t1 t2) e).
-    Proof.
-      unfold peval_bvdrop_app. destruct eq_dec.
-      - destruct e0. cbn.
-        destruct transparent.nat_add_cancel_l.
-        destruct (uip eq_refl e). cbn.
-        intros ι. cbn. now rewrite bv.drop_app.
-      - reflexivity.
-    Qed.
-
-    Lemma peval_bvdrop_cons_sound {m n k} (t1 : Term Σ ty.bool)
-      (t2 : Term Σ (ty.bvec k)) (e : m + n = S k) :
-      peval_bvdrop_cons t1 t2 e ≡
-      term_bvdrop m (eq_rect_r (fun o => Term Σ (ty.bvec o)) (term_binop bop.bvcons t1 t2) e).
-    Proof.
-      unfold peval_bvdrop_cons. cbn.
-      destruct m; cbn in *.
-      - lsolve.
-      - dependent elimination e; cbn.
-        intros ι; cbn. now rewrite bv.drop_cons.
-    Qed.
-
-    Lemma peval_bvdrop_binop_sound {m n σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3)
-      (t1 : Term Σ σ1) (t2 : Term Σ σ2) (e : ty.bvec (m + n) = σ3) :
-      peval_bvdrop_binop op t1 t2 e ≡
-      term_bvdrop m (eq_rect_r (Term Σ) (term_binop op t1 t2) e).
-    Proof.
-      destruct op; try reflexivity; cbn.
-      - rewrite peval_bvdrop_app_sound.
-        intros ι. cbn.
-        f_equal. f_equal. clear.
-        revert e.
-        generalize (term_bvapp t1 t2). clear.
-        generalize (m0 + n0).
-        generalize (m + n). clear.
-        intros. now dependent elimination e.
-      - rewrite peval_bvdrop_cons_sound. intros ι. cbn.
-        f_equal. f_equal. clear. revert e.
-        generalize (term_binop bop.bvcons t1 t2). clear.
-        generalize (S m0).
-        generalize (m + n). clear.
-        intros. now dependent elimination e.
-    Qed.
-
-    Lemma peval_bvdrop'_sound {m n σ} (e : ty.bvec (m + n) = σ) (t : Term Σ σ) :
-      peval_bvdrop' t e ≡ term_bvdrop m (eq_rect_r (Term Σ) t e).
-    Proof.
-      destruct t; cbn;
-        first
-          [ reflexivity
-          | destruct e; now lsolve
-          | auto using peval_bvdrop_binop_sound
-          ].
-    Qed.
-
-    Lemma peval_bvdrop_sound {m n} (t : Term Σ (ty.bvec (m + n))) :
-      peval_bvdrop m t ≡ term_bvdrop m t.
-    Proof.
-      destruct m; cbn.
-      - lsolve.
-      - now rewrite peval_bvdrop'_sound.
-    Qed.
-
-    Lemma peval_bvtake_app_sound {m n k l} (t1 : Term Σ (ty.bvec k))
-      (t2 : Term Σ (ty.bvec l)) (e : m + n = k + l) :
-      peval_bvtake_app t1 t2 e ≡
-      term_bvtake m (eq_rect_r (fun o => Term Σ (ty.bvec o)) (term_bvapp t1 t2) e).
-    Proof.
-      unfold peval_bvtake_app.
-      destruct eq_dec.
-      - subst.
-        destruct (transparent.nat_add_cancel_l _ _ _ e).
-        destruct (uip eq_refl e). cbn.
-        intros ι; cbn. now rewrite bv.take_app.
-      - reflexivity.
-    Qed.
-
-    Lemma peval_bvtake_cons_sound {m n k} (t1 : Term Σ ty.bool)
-      (t2 : Term Σ (ty.bvec k)) (e : m + n = S k) :
-      peval_bvtake_cons t1 t2 e ≡
-      term_bvtake m (eq_rect_r (fun o => Term Σ (ty.bvec o)) (term_binop bop.bvcons t1 t2) e).
-    Proof.
-      unfold peval_bvtake_cons.
-      destruct m; cbn in *.
-      - lsolve.
-      - dependent elimination e. cbn.
-        intros ι; cbn. now rewrite bv.take_cons.
-    Qed.
-
-    Lemma peval_bvtake_binop_sound {m n σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3)
-      (t1 : Term Σ σ1) (t2 : Term Σ σ2) (e : ty.bvec (m + n) = σ3) :
-      peval_bvtake_binop op t1 t2 e ≡
-      term_bvtake m (eq_rect_r (Term Σ) (term_binop op t1 t2) e).
-    Proof.
-      destruct op; try reflexivity; cbn.
-      - rewrite peval_bvtake_app_sound. intros ι. cbn.
-        f_equal. f_equal. clear. revert e.
-        generalize (term_bvapp t1 t2). clear.
-        generalize (m0 + n0).
-        generalize (m + n). clear.
-        intros. now dependent elimination e.
-      - rewrite peval_bvtake_cons_sound. intros ι. cbn.
-        f_equal. f_equal. clear. revert e.
-        generalize (term_binop bop.bvcons t1 t2). clear.
-        generalize (S m0).
-        generalize (m + n). clear.
-        intros. now dependent elimination e.
-    Qed.
-
-    Lemma peval_bvtake'_sound {m n σ} (e : ty.bvec (m + n) = σ) (t : Term Σ σ) :
-      peval_bvtake' t e ≡ term_bvtake m (eq_rect_r (Term Σ) t e).
-    Proof.
-      destruct t; cbn;
-        first
-          [ reflexivity
-          | destruct e; now lsolve
-          | auto using peval_bvtake_binop_sound
-          ].
-    Qed.
-
-    Lemma term_bvec_plus_r_0_spec m (t : Term Σ (ty.bvec (m + 0))) :
-      term_bvec_plus_r_0 m t ≡ term_bvtake m t.
-    Proof.
-      intros ι. cbn. rewrite bv.take_full.
-      exact (@inst_eq_rect_indexed nat
-               (fun l Σ => Term Σ (ty.bvec l)) bv _ _ _ _ Σ t ι).
-    Qed.
-
-    Lemma peval_bvtake_sound {m n} (t : Term Σ (ty.bvec (m + n))) :
-      peval_bvtake m t ≡ term_bvtake m t.
-    Proof.
-      destruct m; cbn - [plus].
-      - lsolve.
-      - destruct n.
-        + apply term_bvec_plus_r_0_spec.
-        + apply peval_bvtake'_sound.
-    Qed.
 
     Lemma peval_unop'_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
       peval_unop' op t ≡ term_unop op t.
@@ -1104,6 +1250,108 @@ Module Type PartialEvaluationOn
     Proof.
       unfold peval_record. destruct (peval_record'_sound ts); [|reflexivity].
       intros ι; cbn. now f_equal.
+    Qed.
+
+    Lemma tmr_ring_morph_peval' `{TermRing σ}
+      {rm : ring_morph (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one)
+         (term_binop tmr_plus) (term_binop tmr_times) (term_binop tmr_minus)
+         (term_unop tmr_negate) base.equiv 0%Z 1%Z
+         Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool (λ c : Z, term_val σ (tmr_of_Z c))} :
+      ring_morph (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one)
+        (peval_binop' tmr_plus) (peval_binop' tmr_times) (peval_binop' tmr_minus)
+        (peval_unop' tmr_negate) base.equiv 0%Z 1%Z
+        Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool (λ c : Z, term_val σ (tmr_of_Z c)).
+    Proof.
+      constructor; intros; rewrite ?peval_binop'_sound, ?peval_unop'_sound.
+      - apply (morph0 rm).
+      - apply (morph1 rm).
+      - apply (morph_add rm).
+      - apply (morph_sub rm).
+      - apply (morph_mul rm).
+      - apply (morph_opp rm).
+      - now apply (morph_eq rm).
+    Qed.
+
+    Lemma tmr_ring_theory_peval' `{TermRing σ}
+      {rt : ring_theory (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one) (term_binop tmr_plus) (term_binop tmr_times) (term_binop tmr_minus) (term_unop tmr_negate) base.equiv} :
+      ring_theory (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one) (peval_binop' tmr_plus) (peval_binop' tmr_times) (peval_binop' tmr_minus) (peval_unop' tmr_negate) base.equiv.
+    Proof.
+      constructor; intros; rewrite ?peval_binop'_sound, ?peval_unop'_sound.
+      - apply (Radd_0_l rt).
+      - apply (Radd_comm rt).
+      - apply (Radd_assoc rt).
+      - apply (Rmul_1_l rt).
+      - apply (Rmul_comm rt).
+      - apply (Rmul_assoc rt).
+      - apply (Rdistr_l rt).
+      - apply (Rsub_def rt).
+      - apply (Ropp_def rt).
+    Qed.
+
+    Lemma tmr_ring_eq_ext_peval' `{TermRing σ}
+      {ree : ring_eq_ext (term_binop (Σ := Σ) tmr_plus) (term_binop tmr_times) (term_unop tmr_negate) base.equiv} :
+      ring_eq_ext (peval_binop' tmr_plus) (peval_binop' tmr_times) (peval_unop' tmr_negate) base.equiv.
+    Proof.
+      constructor; repeat intros ? ? ?; rewrite ?peval_binop'_sound, ?peval_unop'_sound.
+      - now apply (Radd_ext ree).
+      - now apply (Rmul_ext ree).
+      - now apply (Ropp_ext ree).
+    Qed.
+
+    Lemma Pphi_more_proper `{equivR : base.Equiv R, !Reflexive (≡@{R})} :
+      Proper (eq ==> (base.equiv ==> base.equiv ==> base.equiv) ==> (base.equiv ==> base.equiv ==> base.equiv) ==> forall_relation (fun C => eq ==> base.equiv ==> eq ==> base.equiv)) (@Pphi R).
+    Proof.
+      intros r0 ? <- radd1 radd2 Hradd rmul1 rmul2 Hrmul C phi1 ? <- env1 env2 Henv pol ? <-.
+      revert r0 radd1 radd2 Hradd rmul1 rmul2 Hrmul phi1 env1 env2 Henv.
+      induction pol;
+        intros r0 radd1 radd2 Hradd rmul1 rmul2 Hrmul phi1 env1 env2 Henv;
+        cbn.
+      - reflexivity.
+      - apply IHpol; eauto; now apply proper_jump_equiv.
+      - apply Hradd.
+        apply Hrmul.
+        now apply IHpol1.
+        apply proper_pow_pos; try easy.
+        now apply proper_hd_equiv.
+        apply IHpol2; try easy.
+        now apply proper_tl_equiv.
+    Qed.
+
+    Lemma evalPol_norm_aux `{tmr : TermRing σ} {p : PExpr Z} (l : list (Term Σ σ)) :
+      evalPolTm l (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool p) ≡ evalPExprTm l p.
+    Proof.
+      unfold evalPolTm, evalPExprTm.
+      rewrite Pphi_dev_ok;
+        try eauto using tmr_ring_morph_peval', tmr_ring_theory_peval', tmr_ring_eq_ext_peval', tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th with typeclass_instances.
+      rewrite norm_aux_spec;
+        try eauto using tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th, pow_N_th with typeclass_instances.
+      apply Pphi_more_proper; try easy.
+      - repeat intros ? ? ?.
+        rewrite peval_binop'_sound.
+        now apply proper_term_binop.
+      - repeat intros ? ? ?.
+        rewrite peval_binop'_sound.
+        now apply proper_term_binop.
+    Qed.
+
+    Lemma CanonTermRep_adeq {σ : Ty} {ct : CanonTerm σ} {t} : CanonTermRep ct t -> CanonTerm_to_Term ct ≡ t.
+    Proof.
+      destruct σ; intros; cbn; try trivial;
+        specialize (H []%list 1%positive);
+        destruct (ct []%list 1%positive);
+        rewrite evalPol_norm_aux;
+        now rewrite <-(H eq_refl nil), app_nil_r.
+    Qed.
+
+    Lemma Term_Quote_bin_sound {n} {op : BinOp (ty.bvec n) (ty.bvec n) (ty.bvec n)}
+      {comb} {ct1 t1 ct2 t2} :
+      (forall env pol1 pol2, evalPExprTm env (comb pol1 pol2) = term_binop op (evalPExprTm env pol1) (evalPExprTm env pol2)) ->
+      CanonTermRep (σ := ty.bvec n) ct1 t1 ->
+      CanonTermRep (σ := ty.bvec n) ct2 t2 ->
+      CanonTermRep (σ := ty.bvec n) (Term_Quote_bin comb ct1 ct2) (term_binop op t1 t2).
+    Proof.
+      intros Hcomb.
+      now eapply Term_Quote_bin_Valid.
     Qed.
 
     Definition CanonTerm_def {σ : Ty} : Term Σ σ -> CanonTerm σ :=
@@ -1253,6 +1501,18 @@ Module Type PartialEvaluationOn
       - now eapply Term_Quote_unop_Valid.
     Qed.
 
+    (*
+     * peval2 runs the ring solver normalizer on ring expressions of type `bvec n` and `int` and
+     * runs custom partial evaluation functions on other terms.
+     *
+     * In order to maximize sharing identical unknown subterms in quoted ring expressions, we keep
+     * them in quoting monad form (`RQuote σ`, where we have access to already-quoted unknown subterms)
+     * until they are destructed using a non-ring operator.
+     * To this end, `CanonTerm σ` is `RQuote σ` for `σ = ty.int` or `σ = ty.bvec n` but it is `Term Σ σ`
+     * for other types.
+     * Once quoted terms are destructed using a non-ring expression, the quoting monad and ring solver normalizer are
+     * run by CanonTerm_to_Term.
+     *)
     Fixpoint peval2 [σ] (t : Term Σ σ) : CanonTerm σ :=
       match t with
       | term_var ς                 => CanonTerm_def (term_var ς)
@@ -1286,13 +1546,48 @@ Module Type PartialEvaluationOn
     Qed.
 
 
-    Definition peval [σ] (t : Term Σ σ) : Term Σ σ := CanonTerm_to_Term (peval2 t).
+    (* This is the top-level partial evaluation function.
+     * It delegates to peval2 to do the real work, but only does so when it
+     * reaches a term whose type cannot be meta-level polymorphic.
+     *
+     * Specifically, it does not run peval2 on variables, values and (recursively) list elements.
+     * These terms cannot be reduced further anyway, but also their type may be polymorphically
+     * quantified in Gallina.
+     * Passing such terms to peval2 would make peval2 pattern match on their type, which would produce
+     * a neutral Gallina term that Rocq cannot evaluate further, which in turn quickly leads to huge VCs.
+     * An example verification that depends on this is
+     * `valid_contract_length` in test/Example.v
+     *
+     * The types of other terms is fixed anyway (for example the type of term_binop is fixed for all binops
+     * except bop.cons) and pattern matching on the type will reduce fine.
+     *)
+    Fixpoint peval [σ] (t : Term Σ σ) : Term Σ σ :=
+      let res_poly :=
+        match t in Term _ σ return option (Term Σ σ) with
+          term_var x => Some (term_var x)
+        | term_val σ v => Some (term_val _ v)
+        | @term_binop _ σ1 σ2 _ op t1 t2 =>
+            (match op in BinOp σ1 σ2 σ3 return Term Σ σ1 -> Term Σ σ2 -> option (Term Σ σ3) with
+             | bop.cons => fun t1 t2 => Some (peval_binop' bop.cons (peval t1) (peval t2))
+             | _ => fun _ _ => None
+             end) t1 t2
+        | _ => None
+        end in
+          match res_poly with
+            Some t => t
+          | None => CanonTerm_to_Term (peval2 t)
+          end.
 
     Lemma peval_sound [σ] (t : Term Σ σ) :
       peval t ≡ t.
     Proof.
-      eapply CanonTermRep_adeq.
-      eapply peval2_sound.
+      induction t; try reflexivity.
+      - destruct op; try (eapply CanonTermRep_adeq; eapply peval2_sound).
+        cbn. now rewrite peval_binop'_sound, IHt1, IHt2.
+      - eapply CanonTermRep_adeq; eapply peval2_sound.
+      - eapply CanonTermRep_adeq; eapply peval2_sound.
+      - eapply CanonTermRep_adeq; eapply peval2_sound.
+      - eapply CanonTermRep_adeq; eapply peval2_sound.
     Qed.
     #[global] Arguments peval [σ] t : simpl never.
 

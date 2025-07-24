@@ -282,8 +282,7 @@ Proof.
      transforming the symbolic propositions to shallow ones, we simply
      re-typecheck the variable case. *)
   apply Symbolic.validcontract_with_erasure_sound.
-  compute. constructor.
-  compute - [Z.mul Z.add Z.le Z.ge Z.lt].
+  vm_compute. constructor. simpl.
   (* We solve the remaining obligations using nia. *)
   solve; nia.
 Qed.

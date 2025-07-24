@@ -265,7 +265,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
       Context {N : Set}.
 
-      Definition angelic_pattern_match {σ} (pat : @Pattern N σ)
+      Definition angelic_pattern_match {σ} (pat : Pattern (N:=N) σ)
         (v : Val σ) : CPureSpec (MatchResult pat) :=
         pc <- angelic_finite (PatternCase pat);;
         vs <- angelic_ctx (PatternCaseCtx pc) ;;
@@ -273,7 +273,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         pure (existT pc vs).
       #[global] Arguments angelic_pattern_match {σ} pat v.
 
-      Definition demonic_pattern_match {σ} (pat : @Pattern N σ)
+      Definition demonic_pattern_match {σ} (pat : Pattern (N:=N) σ)
         (v : Val σ) : CPureSpec (MatchResult pat) :=
         pc <- demonic_finite (PatternCase pat);;
         vs <- demonic_ctx (PatternCaseCtx pc) ;;
@@ -281,7 +281,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         pure (existT pc vs).
       #[global] Arguments demonic_pattern_match {σ} pat v.
 
-      Definition new_pattern_match {σ} (pat : @Pattern N σ)
+      Definition new_pattern_match {σ} (pat : Pattern (N:=N) σ)
         (v : Val σ) : CPureSpec (MatchResult pat) :=
         pure (pattern_match_val pat v).
       #[global] Arguments new_pattern_match {σ} !pat v /.
@@ -500,14 +500,14 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MPureSpec eq) (demonic_finite F).
     Proof. typeclasses eauto. Qed.
 
-    #[export] Instance mon_angelic_pattern_match {N σ} (pat : @Pattern N σ) v :
+    #[export] Instance mon_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
       Monotonic (MPureSpec eq) (@angelic_pattern_match _ _ pat v).
     Proof. typeclasses eauto. Qed.
-    #[export] Instance mon_demonic_pattern_match {N σ} (pat : @Pattern N σ) v :
+    #[export] Instance mon_demonic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
       Monotonic (MPureSpec eq) (@demonic_pattern_match _ _ pat v).
     Proof. typeclasses eauto. Qed.
 
-    #[export] Instance mon_new_pattern_match {N σ} (pat : @Pattern N σ) v :
+    #[export] Instance mon_new_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
       Monotonic (MPureSpec eq) (@new_pattern_match _ _ pat v).
     Proof. typeclasses eauto. Qed.
 
@@ -626,7 +626,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       forall x : A, List.In x xs -> POST x.
     Proof. destruct xs; cbn; [firstorder|apply wp_demonic_list']. Qed.
 
-    Lemma wp_angelic_pattern_match {N σ} (pat : @Pattern N σ) v
+    Lemma wp_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
       (Φ : MatchResult pat -> Prop) :
       angelic_pattern_match pat v Φ <-> Φ (pattern_match_val pat v).
     Proof.
@@ -643,7 +643,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         destruct mr. apply HΦ.
     Qed.
 
-    Lemma wp_demonic_pattern_match {N σ} (pat : @Pattern N σ) v
+    Lemma wp_demonic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
       (Φ : MatchResult pat -> Prop) :
       demonic_pattern_match pat v Φ <-> Φ (pattern_match_val pat v).
     Proof.

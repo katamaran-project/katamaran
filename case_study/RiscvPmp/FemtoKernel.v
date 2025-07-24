@@ -73,15 +73,15 @@ Module inv := invariants.
 
     (* FIXED ADDRESSES *)
     (* The first address that is no longer used by the adversary, and hence the address at which the PMP entries should stop granting permission. Note that this address is currently also the first MMIO address. *)
-    Definition adv_addr_end : N := N.of_nat maxAddr. (* Change once adversary gets access to MMIO*)
+    Definition adv_addr_end : N := maxAddr. (* Change once adversary gets access to MMIO*)
     (* Address where we will write in MMIO memory, and proof that our writes will indeed be within the MMIO region*)
-    Definition mmio_write_addr : N := N.of_nat mmioStartAddr.
+    Definition mmio_write_addr : N := mmioStartAddr.
     Lemma write_word_is_MMIO: withinMMIO (bv.of_N mmio_write_addr) bytes_per_word.
     Proof.
       (* Avoid compute in case the list of MMIO addresses ever becomes longer *)
       repeat split; cbn; unfold mmioAddrs;
       eassert (mmioLenAddr = _) as -> by now compute. (* Get actual length so we can use successors *)
-      all: rewrite 4!bv.seqBv_succ; repeat constructor.
+      all: apply bv.in_seqBv; now compute.
     Qed.
 
     (* Aliases for registers *)
@@ -261,11 +261,8 @@ Module inv := invariants.
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
-    Let Σ__femtoinit : LCtx := [].
-    Let W__femtoinit : World := MkWorld Σ__femtoinit []%ctx.
-
-    Example femtokernel_init_pre : Assertion {| wctx := [] ▻ ("a"::ty_xlenbits) ; wco := []%ctx |} :=
-      (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N adv_addr) < term_val ty.int (Z.of_nat maxAddr))%asn ∗
+    Example femtokernel_init_pre : Assertion ["a"::ty_xlenbits] :=
+      (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N adv_addr) < term_val ty.int (Z.of_N maxAddr))%asn ∗
       (∃ "v", mstatus ↦ term_var "v") ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
       (∃ "v", mcause ↦ term_var "v") ∗
@@ -277,7 +274,7 @@ Module inv := invariants.
 
     Import TermNotations.
 
-    Example femtokernel_init_post: Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := []%ctx |} :=
+    Example femtokernel_init_post: Assertion  [("a"::ty_xlenbits); ("an"::ty_xlenbits)] :=
       (
         (term_var "an" = term_var "a" +ᵇ (term_val ty_xlenbits (bv.of_N adv_addr)))%asn ∗
           (∃ "v", mstatus ↦ term_var "v") ∗
@@ -294,7 +291,7 @@ Module inv := invariants.
     (*   Eval vm_compute in *)
     (*   simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post). *)
 
-    Definition vc__femtoinit : 𝕊 Σ__femtoinit :=
+    Definition vc__femtoinit : 𝕊 [] :=
       postprocess (sannotated_block_verification_condition femtokernel_init_pre femtokernel_init_gen femtokernel_init_post wnil).
 
     (* NOTE: For now this proof covers both the MMIO and non-MMIO Femtokernel variants, since the start of the adversary region is the same in both cases.
@@ -311,13 +308,10 @@ Module inv := invariants.
     (*   intuition; bv_solve_Ltac.solveBvManual. *)
     (* Qed. *)
 
-    Let Σ__femtohandler : LCtx := [].
-    Let W__femtohandler : World := MkWorld Σ__femtohandler []%ctx.
-
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
-    Example femtokernel_handler_pre (is_mmio : bool) : Assertion {| wctx := ["a" :: ty_xlenbits]; wco := []%ctx |} :=
+    Example femtokernel_handler_pre (is_mmio : bool) : Assertion ["a" :: ty_xlenbits] :=
       (* (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗ *)
-      (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_nat maxAddr))%asn ∗
+      (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
       (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
       (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
@@ -330,7 +324,7 @@ Module inv := invariants.
       else asn_inv_mmio.
 
     Example femtokernel_handler_post (is_mmio : bool) :
-      Assertion {| wctx := ["a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := []%ctx |} :=
+      Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
@@ -447,7 +441,7 @@ Module inv := invariants.
   Import RiscvPmpIrisInstanceWithContracts.
   Import RiscvPmpBlockVerifShalExecutor.
 
-  Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N adv_addr) (N.to_nat adv_addr_end - N.to_nat adv_addr).
+  Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N adv_addr) (adv_addr_end - adv_addr).
 
   Global Instance dec_has_some_access {ents p1} : forall x, Decision (exists p2, Pmp_access x (bv.of_nat 1) ents p1 p2).
   Proof.
@@ -511,7 +505,7 @@ Module inv := invariants.
   Proof. rewrite (list_filter_iff _ (fun x => x ∈ advAddrs)); last split; auto using adv_in_pmp, pmp_in_adv.
     apply NoDup_Permutation.
     - apply NoDup_filter. rewrite all_addrs_eq. refine (bv.NoDup_seqbv _).
-      rewrite Nat2N.inj_pow. now cbn -[xlenbits].
+      now cbn -[xlenbits].
     - apply bv.NoDup_seqbv. now compute.
     - intros x. rewrite elem_of_list_filter.
       split.
@@ -848,7 +842,7 @@ Module inv := invariants.
   Import iris.algebra.big_op.
 
   (* Note that the split differs depending on whether or not we have an MMIO region! *)
-  Lemma liveAddrs_split (is_mmio : bool): liveAddrs = bv.seqBv (bv.of_N init_addr) (N.to_nat init_size) ++ bv.seqBv (bv.of_N handler_addr) (if negb is_mmio then N.to_nat handler_size else N.to_nat mmio_handler_size) ++ (if negb is_mmio then bv.seqBv (bv.of_N data_addr) (N.to_nat data_size) else [](* There is no data; conjunct is just here for conformity *)) ++ advAddrs.
+  Lemma liveAddrs_split (is_mmio : bool): liveAddrs = bv.seqBv (bv.of_N init_addr) init_size ++ bv.seqBv (bv.of_N handler_addr) (if negb is_mmio then handler_size else mmio_handler_size) ++ (if negb is_mmio then bv.seqBv (bv.of_N data_addr) data_size else [](* There is no data; conjunct is just here for conformity *)) ++ advAddrs.
   Proof.
     (* TODO: scalable proof *)
     destruct is_mmio; by compute.
@@ -904,7 +898,7 @@ Module inv := invariants.
   Lemma intro_ptsto_instrs `{sailGS Σ} {μ : Memory} {a : Val ty_word} {instrs : list AST} :
     (4 * N.of_nat (length instrs) + bv.bin a < bv.exp2 xlenbits)%N ->
     mem_has_instrs μ a instrs ->
-    ([∗ list] a' ∈ bv.seqBv a (4 * length instrs), interp_ptsto a' ((memory_ram μ) a'))
+    ([∗ list] a' ∈ bv.seqBv a (4 * N.of_nat (length instrs)), interp_ptsto a' ((memory_ram μ) a'))
       ⊢ ptsto_instrs a instrs.
   Proof.
     assert (word > 0) by now compute; Lia.lia.
@@ -913,7 +907,7 @@ Module inv := invariants.
     - done.
     - rewrite Nat2N.inj_succ in Hrep.
       fold (length instrs) in Hrep.
-      replace (4 * length (instr :: instrs)) with (4 + 4 * length instrs) by (cbn; lia).
+      replace (4 * N.of_nat (length (instr :: instrs)))%N with (4 + 4 * N.of_nat (length instrs))%N by (cbn; lia).
       rewrite bv.seqBv_app; try (cbn -[N.of_nat N.mul] in *; Lia.lia).
       rewrite big_opL_app.
       destruct Hmeminstrs as [Hinstr Hmeminstrs].
@@ -940,7 +934,7 @@ Module inv := invariants.
   Qed.
 
   Lemma sub_heap_mapsto_interp_ptsto {Σ : gFunctors} {H : sailGS Σ} {s e} (μ : Memory):
-    (minAddr <= N.to_nat (bv.bin s)) → N.to_nat (bv.bin s) + e <= minAddr + lenAddr →
+    (minAddr <= bv.bin s)%N → (bv.bin s + e <= minAddr + lenAddr)%N →
     ([∗ list] y ∈ bv.seqBv s e, gen_heap.pointsto y (dfrac.DfracOwn 1) (memory_ram μ y)) ⊢ [∗ list] a' ∈ bv.seqBv s e, interp_ptsto a' (memory_ram μ a').
   Proof.
     iIntros (Hlow Hhi) "Hlist".
@@ -950,7 +944,7 @@ Module inv := invariants.
     apply elem_of_list_lookup_2 in Hsom.
     refine (bv.seqBv_sub_elem_of _ _ Hsom).
     - solve_bv.
-    - rewrite bv.bin_of_nat_small; last apply minAddr_rep. lia.
+    - rewrite bv.bin_of_N_small; last apply minAddr_rep. lia.
   Qed.
 
   Lemma femtokernel_splitMemory `{sailGS Σ} {μ : Memory} (is_mmio : bool):
@@ -972,21 +966,21 @@ Module inv := invariants.
     iDestruct "Hmem" as "[(Hinit & Hhandler & Hfortytwo & Hadv) Htr]".
     iSplitL "Hinit".
     { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
-      iApply (sub_heap_mapsto_interp_ptsto with "Hinit"); compute; lia. }
+      iApply (sub_heap_mapsto_interp_ptsto with "Hinit"); now compute. }
     iSplitL "Hhandler". (* Need to solve the goal for both handlers *)
     { iApply (intro_ptsto_instrs (μ := μ)); [destruct is_mmio; easy..|].
-      destruct is_mmio; iApply (sub_heap_mapsto_interp_ptsto with "Hhandler"); compute; lia. }
+      destruct is_mmio; iApply (sub_heap_mapsto_interp_ptsto with "Hhandler"); now compute. }
     iSplitL "Hfortytwo Htr".
     - (* Two cases; either we set up the trace invariant o memory invariant or the trace invariant. *)
       destruct (negb is_mmio).
       + iAssert (interp_ptstomem (bv.of_N data_addr) (bv.of_N 42)) with "[Hfortytwo]" as "Hfortytwo".
       { iApply (intro_ptstomem_word2 Hft).
-        iApply (sub_heap_mapsto_interp_ptsto with "Hfortytwo"); compute; lia. }
+        iApply (sub_heap_mapsto_interp_ptsto with "Hfortytwo"); now compute. }
       iMod (inv.inv_alloc femto_inv_ro_ns ⊤ (interp_ptstomem (bv.of_N data_addr) (bv.of_N 42)) with "Hfortytwo") as "Hinv".
       now iModIntro.
       + iApply (inv.inv_alloc). iExists _; now iFrame.
     - iApply (intro_ptstoSthL μ).
-      iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); compute; lia.
+      iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); now compute.
   Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
@@ -1030,6 +1024,7 @@ Module inv := invariants.
 
     iPureIntro.
     rewrite (bv0_is_nil v) bv.app_nil_r.
+    change 4%N with (N.succ (N.succ (N.succ (N.succ N.zero)))).
     rewrite !bv.seqBv_succ !map_cons.
     repeat f_equal; auto.
   Qed.
@@ -1052,7 +1047,6 @@ Module inv := invariants.
     intros μinit μhandler μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps.
     refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _).
     iIntros (Σ' H).
-    unfold own_regstore.
     cbn.
     iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
     rewrite γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc.
@@ -1062,13 +1056,11 @@ Module inv := invariants.
     iSplitR "".
     - destruct (env.view δ).
 
-      iPoseProof (femtokernel_init_safe is_mmio with "[-]") as "H".
-      {
-        Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
-        iFrame "∗ #". rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
-        repeat iDestruct "H'" as "($ & H')".
-      }
-      iApply (semWP_mono with "H"). by iIntros ([] _) "_".
+      iApply (femtokernel_init_safe is_mmio with "[-]").
+
+      Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
+      iFrame "∗ #". rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
+      now repeat iDestruct "H'" as "($ & H')".
     - iIntros "Hmem".
       (* Prove that this predicate follows from the invariants in both cases *)
       destruct (negb is_mmio).

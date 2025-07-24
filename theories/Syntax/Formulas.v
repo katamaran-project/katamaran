@@ -263,5 +263,11 @@ Module Type FormulasOn
 
   Notation formula_eq := (formula_relop bop.eq).
   Notation formula_neq := (formula_relop bop.neq).
+  Notation formula_le := (formula_relop bop.le).
+  Notation formula_lt := (formula_relop bop.lt).
+  Notation formula_bvsle := (formula_relop bop.bvsle).
+  Notation formula_bvslt := (formula_relop bop.bvslt).
+  Notation formula_bvule := (formula_relop bop.bvule).
+  Notation formula_bvult := (formula_relop bop.bvult).
 
 End FormulasOn.

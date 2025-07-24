@@ -548,7 +548,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_within_phys_mem : Stm [paddr :: ty_xlenbits; width :: ty.int] ty.bool :=
     let: addr_int := exp_unsigned paddr in
-    ((exp_int (Z.of_nat minAddr) <= addr_int)%exp && (addr_int + width <= exp_int (Z.of_nat maxAddr)))%exp.
+    ((exp_int (Z.of_N minAddr) <= addr_int)%exp && (addr_int + width <= exp_int (Z.of_N maxAddr)))%exp.
 
   (* TODO: it is currently possible to read/write from/to a mix of MMIO and non-MMIO memory! We can ignore this for now, since we avoid this situation in our examples.
      Concretely, trusted code reads/writes are aligned manually, and untrusted read/writes will never gain access to MMIO regions.

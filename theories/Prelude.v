@@ -343,6 +343,35 @@ Module transparent.
 
 End transparent.
 
+Section NatComparison.
+
+  Inductive NatComparison : nat -> nat -> Set :=
+  | EQ {n}   : NatComparison n n
+  | LT {n m} : NatComparison n (n + S m)
+  | GT {n m} : NatComparison (n + S m) n.
+
+  #[global] Arguments EQ : clear implicits.
+  #[global] Arguments LT : clear implicits.
+  #[global] Arguments GT : clear implicits.
+
+  Definition succ_nat_comparison {n m} (c : NatComparison n m) :
+    NatComparison (S n) (S m) :=
+    match c with
+    | EQ n   => EQ (S n)
+    | LT n m => LT (S n) m
+    | GT n m => GT (S n) m
+    end.
+
+  Fixpoint nat_compare (n m : nat) {struct n} : NatComparison n m :=
+    match n , m with
+    | 0   , 0   => EQ 0
+    | 0   , S m => LT 0 m
+    | S n , 0   => GT 0 n
+    | S n , S m => succ_nat_comparison (nat_compare n m)
+    end.
+
+End NatComparison.
+
 Definition IsSome {A : Type} (m : option A) : Type :=
   match m with
   | Some _ => unit
