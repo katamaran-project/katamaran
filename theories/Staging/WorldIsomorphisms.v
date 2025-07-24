@@ -177,26 +177,6 @@ Module Type WorldIsomorphisms
     now rewrite H.
   Qed.
 
-  Lemma forgetting_assuming_adjoint {w1 w2 : World} {ω : Acc w1 w2} {P Q} :
-    (forgetting (sub_acc ω) P ⊢ Q) <-> (P ⊢ assuming (sub_acc ω) Q).
-  Proof.
-    rewrite /forgetting /assuming.
-    split; crushPredEntails3.
-    - subst; now apply H4.
-    - apply (fromEntails H) with (inst (sub_acc ω) ι);
-        auto using acc_pathcond.
-  Qed.
-
-  Lemma forgetting_knowing_adjoint {w1 w2 : World} {ω : Acc w1 w2} {P Q} :
-    (knowing (sub_acc ω) P ⊢ Q) <-> (P ⊢ forgetting (sub_acc ω) Q).
-  Proof.
-    rewrite /forgetting /assuming /knowing.
-    split; crushPredEntails3.
-    - apply (fromEntails H); auto using acc_pathcond.
-      now exists ι.
-            - now subst.
-  Qed.
-
   Lemma forgetting_knowing_adjoint_bientails_iso {w1 w2 : World} {ω : Acc w1 w2} {ω'} {P Q}
     (iso : IsIsomorphism (sub_acc ω) (sub_acc ω')) :
     (knowing (sub_acc ω) P ⊣⊢ Q) <-> (P ⊣⊢ forgetting (sub_acc ω) Q).
