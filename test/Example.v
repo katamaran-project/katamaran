@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Lists.List
      Program.Tactics
      Strings.String
@@ -45,7 +46,7 @@ From Katamaran Require Import
      Specification
      Program.
 
-From stdpp Require decidable finite.
+From stdpp Require Import decidable finite.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -221,25 +222,24 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
-    | abs        :        Fun [ "x" ∷ ty.int               ] ty.int
-    | cmp        :        Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] (ty.enum ordering)
-    | gcd        :        Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
-    | gcdloop    :    Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
-    | msum       :       Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either)
-    | length {σ} : Fun [ "xs" ∷ ty.list σ           ] ty.int
-    | fpthree16  :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
-    | fpthree32  :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
-    | fpthree64  :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
-    | bvtest     :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
-    | bvtest2    :  Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
-    | bvtest3    :  Fun [ "sign" ∷ ty.bvec 42 ] ty.int
-    | pevaltest1 :  Fun [ "sign" ∷ ty.bvec 42 ; "y" ∷ ty.int ] ty.int
+    | abs        : Fun [ "x" ∷ ty.int ] ty.int
+    | cmp        : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] (ty.enum ordering)
+    | gcd        : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
+    | gcdloop    : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
+    | msum       : Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either)
+    | length {σ} : Fun [ "xs" ∷ ty.list σ ] ty.int
+    | fpthree16  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
+    | fpthree32  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
+    | fpthree64  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
+    | bvtest     : Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
+    | bvtest2    : Fun [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42)
+    | bvtest3    : Fun [ "sign" ∷ ty.bvec 42 ] ty.int
+    | pevaltest1 : Fun [ "sign" ∷ ty.bvec 42; "y" ∷ ty.int ] ty.int
     .
 
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := fun _ _ => Empty_set.
     Definition 𝑳 : PCtx -> Set := fun _ => Empty_set.
-
   End FunDeclKit.
 
   Include FunDeclMixin ExampleBase.
@@ -382,6 +382,52 @@ Module Import ExampleProgram <: Program ExampleBase.
   End ForeignKit.
 
   Include ProgramMixin ExampleBase.
+
+  Import callgraph.
+
+  Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
+    stm_bindfree (FunDef f).
+  Proof. destruct f; now vm_compute. Qed.
+
+  Definition 𝑭_call_graph := generic_call_graph.
+  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
+
+  Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
+
+  Module Import WithAccessibleTactics.
+    Import AccessibleTactics.
+
+    Instance accessible_abs : AccessibleFun abs.
+    Proof. accessible_proof. Qed.
+    Instance accessible_cmp : AccessibleFun cmp.
+    Proof. accessible_proof. Qed.
+    Instance accessible_msum : AccessibleFun msum.
+    Proof. accessible_proof. Qed.
+    Instance accessible_fpthree16 : AccessibleFun fpthree16.
+    Proof. accessible_proof. Qed.
+    Instance accessible_fpthree32 : AccessibleFun fpthree32.
+    Proof. accessible_proof. Qed.
+    Instance accessible_fpthree64 : AccessibleFun fpthree64.
+    Proof. accessible_proof. Qed.
+    Instance accessible_bvtest : AccessibleFun bvtest.
+    Proof. accessible_proof. Qed.
+    Instance accessible_bvtest2 : AccessibleFun bvtest2.
+    Proof. accessible_proof. Qed.
+    Instance accessible_bvtest3 : AccessibleFun bvtest3.
+    Proof. accessible_proof. Qed.
+    Instance accessible_pevaltest1 : AccessibleFun pevaltest1.
+    Proof. accessible_proof. Qed.
+
+  End WithAccessibleTactics.
+
+  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
+    match f with
+    | gcd     => None
+    | gcdloop => None
+    | length  => None
+    | _       => Some _
+    end.
 
 End ExampleProgram.
 

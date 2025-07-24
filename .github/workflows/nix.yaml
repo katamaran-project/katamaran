@@ -7,6 +7,7 @@ jobs:
   build:
     runs-on: [ubuntu-latest]
     strategy:
+      fail-fast: false
       matrix:
         rocq: [rocq819,rocq820,rocq900]
     steps:

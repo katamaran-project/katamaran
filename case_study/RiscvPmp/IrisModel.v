@@ -49,8 +49,6 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
 
   (* Defines the memory ghost state. *)
   Section RiscvPmpIrisParams.
-    Import bv.
-    Definition Byte : Set := bv 8.
     Definition MemVal : Set := Byte.
 
     (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)

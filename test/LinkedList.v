@@ -39,6 +39,7 @@
   *)
 
 From Coq Require Import
+     Bool.Bool
      Lists.List
      Program.Tactics
      Strings.String
@@ -65,7 +66,7 @@ From Katamaran Require Import
      MicroSail.RefineExecutor
      MicroSail.Soundness.
 
-From stdpp Require decidable finite list fin_maps infinite.
+From stdpp Require Import decidable finite list fin_maps infinite.
 From iris.proofmode Require string_ident tactics.
 
 Set Implicit Arguments.
@@ -141,7 +142,6 @@ Module Import ExampleProgram <: Program ExampleBase.
     | close_cons    : Lem [ "p" ∷ ptr ].
 
     Definition 𝑳 : PCtx -> Set := Lem.
-
   End FunDeclKit.
 
   (* A mixin provided by the library pulling in definitions of statements etc.
@@ -330,6 +330,19 @@ Module Import ExampleProgram <: Program ExampleBase.
   End ForeignKit.
 
   Include ProgramMixin ExampleBase.
+
+  Import callgraph.
+
+  Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
+    stm_bindfree (FunDef f).
+  Proof. destruct f; now vm_compute. Qed.
+
+  Definition 𝑭_call_graph := generic_call_graph.
+  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
+
+  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (Accessible 𝑭_call_graph f) :=
+    None.
 
 End ExampleProgram.
 

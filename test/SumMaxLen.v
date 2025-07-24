@@ -32,6 +32,7 @@
    the Iris model for a function that does not use separation logic. *)
 
 From Coq Require Import
+     Bool.Bool
      Lists.List
      Program.Tactics
      Strings.String
@@ -61,6 +62,8 @@ From Katamaran Require Import
      MicroSail.RefineExecutor
      MicroSail.Soundness.
 
+From stdpp Require Import base.
+
 Set Implicit Arguments.
 Import ctx.notations.
 Import env.notations.
@@ -88,7 +91,6 @@ Module Import ExampleProgram <: Program DefaultBase.
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := fun _ _ => Empty_set.
     (* We do not make use of explicit ghost lemmas in the program. *)
     Definition 𝑳 : PCtx -> Set := fun _ => Empty_set.
-
   End FunDeclKit.
 
   (* Include the definition of statements etc to define the body of [summaxlen]. *)
@@ -158,6 +160,21 @@ Module Import ExampleProgram <: Program DefaultBase.
   End ForeignKit.
 
   Include ProgramMixin DefaultBase.
+
+  Import callgraph.
+
+  Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
+    stm_bindfree (FunDef f).
+  Proof. destruct f; now vm_compute. Qed.
+
+  Definition 𝑭_call_graph := generic_call_graph.
+  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
+
+  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (Accessible 𝑭_call_graph f) :=
+    match f with
+    | summaxlen => None
+    end.
 
 End ExampleProgram.
 

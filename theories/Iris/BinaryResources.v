@@ -92,7 +92,7 @@ Module Type IrisParameters2
   (Import B    : Base)
   (Import IB   : IrisParameters B).
 
-  Parameter Inline memGS2 : gFunctors -> Set.
+  Parameter memGS2 : gFunctors -> Set.
   Existing Class memGS2.
   Parameter memGS2_memGS_left : forall `{memGS2 Σ}, memGS Σ.
   Parameter memGS2_memGS_right : forall `{memGS2 Σ}, memGS Σ.
@@ -150,6 +150,14 @@ Module Type IrisResources2
       state_interp2 σ1 σ2 κ := (regs_inv2 σ1.1 σ2.1 ∗ mem_inv2_sail σ1.2 σ2.2)%I;
       num_laters_per_step2 := fun _ => 0
     |}.
+
+  Lemma sailGS2_sailGS_left_memGS_eq `{sG2 : sailGS2 Σ} :
+    @sailGS_memGS _ (@sailGS2_sailGS_left _ sG2) = @memGS2_memGS_left _ (@sailGS2_memGS _ sG2).
+  Proof. auto. Qed.
+
+  Lemma sailGS2_sailGS_right_memGS_eq `{sG2 : sailGS2 Σ} :
+    @sailGS_memGS _ (@sailGS2_sailGS_right _ sG2) = @memGS2_memGS_right _ (@sailGS2_memGS _ sG2).
+  Proof. auto. Qed.
 
 End IrisResources2.
 

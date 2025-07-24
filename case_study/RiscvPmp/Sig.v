@@ -65,12 +65,17 @@ Inductive PurePredicate : Set :=
 | in_mmio (bytes : nat)
 .
 
+Inductive Exec : Set :=
+| Left
+| Right.
+
 Inductive Predicate : Set :=
 | pmp_entries
 | pmp_addr_access
 | pmp_addr_access_without (bytes : nat)
 | gprs
 | ptsto
+| ptsto_one (k : Exec)
 | ptstomem_readonly (bytes : nat)
 | inv_mmio (bytes : nat) (* `bytes` needed because size of trace events needs to match size of MMIO writes *)
 | mmio_checked_write (bytes : nat)
@@ -83,11 +88,13 @@ Section TransparentObligations.
   Local Set Transparent Obligations.
 
   Derive NoConfusion for PurePredicate.
+  Derive NoConfusion for Exec.
   Derive NoConfusion for Predicate.
 
 End TransparentObligations.
 
 Derive EqDec for PurePredicate.
+Derive EqDec for Exec.
 Derive EqDec for Predicate.
 
 Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
@@ -290,6 +297,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_addr_access_without bytes => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege]
       | gprs                          => ctx.nil
       | ptsto                         => [ty_xlenbits; ty_byte]
+      | ptsto_one _                   => [ty_xlenbits; ty_byte]
       | ptstomem_readonly width       => [ty_xlenbits; ty.bvec (width * byte)]
       | inv_mmio bytes                => ctx.nil
       | mmio_checked_write width      => [ty_xlenbits; ty.bvec (width * byte)]
@@ -306,6 +314,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | pmp_addr_access_without _  => false
         | gprs                       => false
         | ptsto                      => false
+        | ptsto_one _                => false
         | ptstomem_readonly width    => true
         | inv_mmio bytes             => true
         | mmio_checked_write _       => false
@@ -326,6 +335,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_addr_access_without _ => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
       | gprs                      => Some (MkPrecise ε ε eq_refl)
       | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
+      | ptsto_one _               => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
       | ptstomem_readonly width   => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | inv_mmio bytes            => Some (MkPrecise ε ε eq_refl)
       | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte)] eq_refl) (* There will only be one of these simultaneously; always precise! *)
@@ -1011,6 +1021,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     (* TODO: better notation needed *)
     Notation "a '↦mem' b bs" := (asn.chunk (chunk_user (ptstomem b) [a; bs])) (at level 70).
     Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
+    Notation "a '↦₁' t" := (asn.chunk (chunk_user (ptsto_one Left) [a; t])) (at level 70).
+    Notation "a '↦₂' t" := (asn.chunk (chunk_user (ptsto_one Right) [a; t])) (at level 70).
     Notation "p '⊑' q" := (asn.formula (formula_user sub_perm [p;q])) (at level 70).
 
     Notation asn_bool t := (asn.formula (formula_bool t)).

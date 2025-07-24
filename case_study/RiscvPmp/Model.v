@@ -94,20 +94,6 @@ Module RiscvPmpModel2.
     RiscvPmpProgram RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase
     RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance.
 
-  Ltac eliminate_prim_step Heq :=
-    let s := fresh "s" in
-    let f := fresh "f" in
-    match goal with
-    | H: language.prim_step _ _ _ _ _ _ |- _ =>
-        rewrite /language.prim_step in H; cbn in H; (* unfold the Iris `prim_step`*)
-        dependent elimination H as [RiscvPmpIrisBase.mk_prim_step _ s];
-        destruct (RiscvPmpSemantics.smallinvstep s) as [? ? ? f];
-        rewrite Heq in f;
-        cbn in f;
-        dependent elimination f;
-        cbn
-    end.
-
   Section ForeignProofs.
     Context `{sg : sailGS Σ}.
 
@@ -158,16 +144,15 @@ Module RiscvPmpModel2.
       TValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
     Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
-      iIntros "H". cbn in *.
-      iApply (total_lifting.twp_lift_atomic_step); [auto | ].
-      iIntros (? ? ? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
-      iSplitR. iPureIntro. apply reducible_no_obs_not_val; auto.
-      repeat iModIntro.
-      iIntros. iModIntro.
-      eliminate_prim_step Heq.
+      iIntros "H". cbn in *. iApply semTWP_foreign.
+      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res ? ? Hf).
       iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
       iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
-      now iFrame.
+      iMod "Hclose" as "_". iModIntro.
+      rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
+      iFrame "Hregs Hmem". iApply semTWP_val. auto.
     Qed.
 
     Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
@@ -195,14 +180,13 @@ Module RiscvPmpModel2.
       TValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-      iIntros "[%w H]".
-      iApply (total_lifting.twp_lift_atomic_step); [auto | ].
-      iIntros (? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-      iSplitR. iPureIntro. apply reducible_no_obs_not_val; auto.
-      repeat iModIntro.
-      iIntros.
-      eliminate_prim_step Heq.
-      iMod (fun_write_ram_works with "[$H $Hmem $Htr]") as "[$ H]"; [auto | now iFrame].
+      iIntros "[%w H]". iApply semTWP_foreign.
+      iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res ? ? Hf). iMod "Hclose" as "_".
+      iMod (fun_write_ram_works _ _ data Hmap  with "[$H $Hmem $Htr]") as "[Hmem H]".
+      iModIntro. rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
+      iFrame "Hregs Hmem". iApply semTWP_val. auto.
     Qed.
 
     Lemma mmio_read_sound (bytes : nat) :
@@ -237,29 +221,27 @@ Module RiscvPmpModel2.
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
       iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])".
-      iApply (total_lifting.twp_lift_atomic_step); [auto | ].
-      iIntros (? ? ? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+      iApply semTWP_foreign. iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
       iPoseProof (interp_pmp_fun_within_mmio_spec with "Hpmpa") as "%Hnotmmio"; first eauto.
-      iSplitR. iPureIntro. apply reducible_no_obs_not_val; auto.
-      repeat iModIntro.
-      iIntros. iModIntro.
-      eliminate_prim_step Heq.
-      iSplit; first auto. iFrame.
-      iSplit; auto.
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res ? ? Hf). iMod "Hclose" as "_". iModIntro.
+      rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
+      iFrame "Hregs Hmem Htr". iSplitR; auto. iApply semTWP_val.
+      now iFrame "Hcurp Hpmp Hpmpa".
     Qed.
 
     Lemma decode_sound :
       TValidContractForeign sep_contract_decode decode.
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
-      iIntros "_". cbn in *.
-      iApply (total_lifting.twp_lift_pure_step_no_fork _ _ ⊤).
-      - cbn; auto. intros. apply reducible_no_obs_not_val; auto.
-      - intros. eliminate_prim_step Heq; auto.
-      - repeat iModIntro. iIntros. eliminate_prim_step Heq; auto.
-        destruct (pure_decode _).
-        * iApply twp_value. now cbn.
-        * iApply twp_value; auto.
+      iIntros "_". cbn in *. iApply semTWP_foreign.
+      iIntros (? ?) "(Hregs & Hmem)".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
+      iMod "Hclose" as "_". iModIntro. iFrame "Hregs Hmem".
+      destruct (pure_decode _).
+      - now iApply semTWP_fail.
+      - now iApply semTWP_val.
     Qed.
 
     Lemma TforeignSem : TForeignSem.

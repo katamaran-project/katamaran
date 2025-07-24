@@ -107,27 +107,6 @@ Import MinCapsSpecification.
 Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSemantics.
   Include IrisPrelims MinCapsBase MinCapsProgram MinCapsSemantics.
 
-  (* eliminate_prim_step eliminate a Step in the assumptions to enable further
-     progress in the proof. *)
-  Ltac eliminate_prim_step Heq :=
-    let f := fresh "f" in
-    match goal with
-    | H: MinCapsSemantics.Step _ _ _ _ _ _ _ _ |- _ =>
-        dependent elimination H as [MinCapsSemantics.st_foreign _ _ f];
-        rewrite Heq in f;
-        cbn in f;
-        dependent elimination f;
-        cbn
-    | H: prim_step _ _ _ _ _ _ |- _ =>
-          let s := fresh "s" in
-          dependent elimination H as [mk_prim_step s];
-          dependent elimination s as [MinCapsSemantics.st_foreign _ _ f];
-          rewrite Heq in f;
-          cbn in f;
-          dependent elimination f;
-          cbn
-    end.
-
   Parameter maxAddr : nat.
 
   Section WithIrisNotations.

@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Lists.List
      Program.Tactics
      Strings.String
@@ -45,7 +46,7 @@ From Katamaran Require Import
      Specification
      Program.
 
-From stdpp Require decidable finite.
+From stdpp Require Import decidable finite.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -71,7 +72,6 @@ Module Import ReplayProgram <: Program DefaultBase.
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := fun _ _ => Empty_set.
     Definition 𝑳 : PCtx -> Set := Lem.
-
   End FunDeclKit.
 
   Include FunDeclMixin DefaultBase.
@@ -104,6 +104,30 @@ Module Import ReplayProgram <: Program DefaultBase.
 
   Include ProgramMixin DefaultBase.
 
+  Import callgraph.
+
+  Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
+    stm_bindfree (FunDef f).
+  Proof. destruct f; now vm_compute. Qed.
+
+  Definition 𝑭_call_graph := generic_call_graph.
+  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
+
+  Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
+
+  Module Import WithAccessibleTactics.
+    Import AccessibleTactics.
+
+    Instance accessible_main : AccessibleFun main.
+    Proof. accessible_proof. Qed.
+
+  End WithAccessibleTactics.
+
+  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
+    match f with
+    | main => Some _
+    end.
 End ReplayProgram.
 
 Module Import ReplayPredicates.

@@ -28,6 +28,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Logic.Decidable
      Strings.String.
 From Equations Require Import
@@ -187,6 +188,36 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
          | None     => fun Heq => False_rect _ (union_alts_wf' alts alts_wf Heq)
          end eq_refl).
   Arguments stm_match_union_alt_list {_ _} U s alts _.
+
+  Section LazyBool.
+
+    Open Scope lazy_bool_scope.
+
+    Fixpoint stm_bindfree {Δ τ} (s : Stm Δ τ) : bool :=
+      match s with
+      | stm_val _ v => true
+      | stm_exp e => true
+      | stm_let x σ s1 s2 => stm_bindfree s1 &&& stm_bindfree s2
+      | stm_block δ s => stm_bindfree s
+      | stm_assign xInΓ s => stm_bindfree s
+      | stm_call f2 es => true
+      | stm_call_frame δ s => stm_bindfree s
+      | stm_foreign f es => true
+      | stm_lemmak l es k => stm_bindfree k
+      | stm_seq s k => stm_bindfree s &&& stm_bindfree k
+      | stm_assertk e1 e2 k => stm_bindfree k
+      | stm_fail _ s => true
+      | stm_pattern_match s pat rhs =>
+          stm_bindfree s &&&
+            List.forallb (fun pc => stm_bindfree (rhs pc))
+            (finite.enum (PatternCase pat))
+      | stm_read_register reg => true
+      | stm_write_register reg e => true
+      | stm_bind s k => false
+      | stm_debugk k => stm_bindfree k
+      end.
+
+  End LazyBool.
 
   Section NameResolution.
 
@@ -585,7 +616,6 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
     (at level 80, s at next level) : exp_scope.
   Notation "'fail' s" := (stm_fail _ s)
     (at level 10, no associativity) : exp_scope.
-
 End StatementsOn.
 
 Module Type FunDecl (B : Base) := FunDeclKit B <+ StatementsOn B.

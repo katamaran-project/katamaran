@@ -27,6 +27,8 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Equations Require Import
+     Equations.
 From Katamaran Require Import
      Context
      Syntax.TypeDecl
@@ -41,5 +43,4 @@ Module Type FunDeclKit (Import T : Types).
   Parameter Inline 𝑭𝑿 : PCtx -> Ty -> Set.
   (* Names of lemmas. *)
   Parameter Inline 𝑳 : PCtx -> Set.
-
 End FunDeclKit.

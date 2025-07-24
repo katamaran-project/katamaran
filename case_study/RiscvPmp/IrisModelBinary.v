@@ -60,23 +60,26 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
           (* two copies of the unary ghost variables *)
           mc_ghGS2_left : RiscvPmpIrisBase.mcMemGS Σ
         ; mc_ghGS2_right : RiscvPmpIrisBase.mcMemGS Σ
-        ; mc_gtGS2_left : traceG Trace Σ
-        ; mc_gtGS2_right : traceG Trace Σ
         }.
 
     Definition memGS2 : gFunctors -> Set := mcMemGS2.
-    Definition memGS2_memGS_left := @mc_ghGS2_left.
-    Definition memGS2_memGS_right := @mc_ghGS2_right.
-    Definition mem_inv2 : forall {Σ}, mcMemGS2 Σ -> Memory -> Memory -> iProp Σ :=
+    Existing Class memGS2.
+    Definition memGS2_memGS_left : forall `{mG : memGS2 Σ}, memGS Σ := @mc_ghGS2_left.
+    Definition memGS2_memGS_right : forall `{mG : memGS2 Σ}, memGS Σ := @mc_ghGS2_right.
+    Definition mem_inv2 : forall {Σ}, memGS2 Σ -> Memory -> Memory -> iProp Σ :=
       fun {Σ} hG μ1 μ2 =>
-        (RiscvPmpIrisBase.mem_inv mc_ghGS2_left μ1 ∗ RiscvPmpIrisBase.mem_inv mc_ghGS2_right μ2)%I.
+        (RiscvPmpIrisBase.mem_inv memGS2_memGS_left μ1 ∗ RiscvPmpIrisBase.mem_inv memGS2_memGS_right μ2)%I.
     Lemma mem_inv2_mem_inv :
       forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
-        mem_inv2 mG μ1 μ2 ⊣⊢ mem_inv (memGS2_memGS_left mG) μ1 ∗ mem_inv (memGS2_memGS_right mG) μ2.
+        mem_inv2 mG μ1 μ2 ⊣⊢ mem_inv memGS2_memGS_left μ1 ∗ mem_inv memGS2_memGS_right μ2.
     Proof. by unfold mem_inv2. Qed.
+
+    Definition memGS2_gtGS2_left `{mG : memGS2 Σ} : traceG Trace Σ :=
+      @mc_gtGS _ memGS2_memGS_left.
+    Definition memGS2_gtGS2_right `{mG : memGS2 Σ} : traceG Trace Σ :=
+      @mc_gtGS _ memGS2_memGS_right.
   End RiscvPmpIrisParams2.
 
   Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
-
 End RiscvPmpIrisBase2.
 

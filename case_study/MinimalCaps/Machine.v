@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Strings.String
      ZArith.ZArith.
 From Equations Require Import
@@ -60,24 +61,24 @@ Section FunDeclKit.
   | next_pc            : Fun [] ty.cap
   | update_pc          : Fun [] ty.unit
   | update_pc_perm     : Fun ["c" :: ty.cap] ty.cap
-  | is_correct_pc      : Fun ["c" :: ty.cap] ty.bool
   | is_perm            : Fun ["p" :: ty.perm; "p'" :: ty.perm] ty.bool
+  | is_correct_pc      : Fun ["c" :: ty.cap] ty.bool
   | add_pc             : Fun ["offset" :: ty.int] ty.unit
+  | within_bounds      : Fun ["c" :: ty.cap] ty.bool
   | read_mem           : Fun ["c" :: ty.cap] ty.memval
   | write_mem          : Fun ["c" :: ty.cap; "v" :: ty.memval] ty.unit
+  | is_sub_perm        : Fun ["p" :: ty.perm; "p'" :: ty.perm] ty.bool
   | read_allowed       : Fun ["p" :: ty.perm] ty.bool
   | write_allowed      : Fun ["p" :: ty.perm] ty.bool
-  | within_bounds      : Fun ["c" :: ty.cap] ty.bool
   | perm_to_bits       : Fun ["p" :: ty.perm] ty.int
   | perm_from_bits     : Fun ["i" :: ty.int] ty.perm
   | and_perm           : Fun ["p1" :: ty.perm; "p2" :: ty.perm] ty.perm
-  | is_sub_perm        : Fun ["p" :: ty.perm; "p'" :: ty.perm] ty.bool
   | is_within_range    : Fun ["b'" :: ty.addr; "e'" :: ty.addr; "b" :: ty.addr; "e" :: ty.addr] ty.bool
   | abs                : Fun ["i" :: ty.int] ty.int
   | is_not_zero        : Fun ["i" :: ty.int] ty.bool
   | can_incr_cursor    : Fun ["c" :: ty.cap; "imm" :: ty.int] ty.bool
-  | exec_jalr_cap      : Fun ["cd"  :: ty.dst; "cs"  :: ty.src] ty.bool
   | exec_cjalr         : Fun ["cd"  :: ty.dst; "cs"  :: ty.src; "imm" :: ty.int] ty.bool
+  | exec_jalr_cap      : Fun ["cd"  :: ty.dst; "cs"  :: ty.src] ty.bool
   | exec_cjal          : Fun ["cd"  :: ty.dst; "imm" :: ty.int] ty.bool
   | exec_bne           : Fun ["rs1" :: ty.src; "rs2" :: ty.src; "imm" :: ty.int] ty.bool
   | exec_ld            : Fun ["cd"  :: ty.dst; "cs"  :: ty.src; "imm" :: ty.int] ty.bool
@@ -130,7 +131,6 @@ Section FunDeclKit.
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
   Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
   Definition 𝑳  : PCtx -> Set := Lem.
-
 End FunDeclKit.
 
 Include FunDeclMixin MinCapsBase.
@@ -872,5 +872,130 @@ Section ForeignKit.
 End ForeignKit.
 
 Include ProgramMixin MinCapsBase.
+
+  Import callgraph.
+
+  Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
+    stm_bindfree (FunDef f).
+  Proof. destruct f; now vm_compute. Qed.
+
+  Definition 𝑭_call_graph := generic_call_graph.
+  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
+
+  Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
+
+  Module Import WithAccessibleTactics.
+    Import AccessibleTactics.
+
+    Instance accessible_read_reg : AccessibleFun read_reg.
+    Proof. accessible_proof. Qed.
+    Instance accessible_read_reg_cap : AccessibleFun read_reg_cap.
+    Proof. accessible_proof. Qed.
+    Instance accessible_read_reg_num : AccessibleFun read_reg_num.
+    Proof. accessible_proof. Qed.
+    Instance accessible_write_reg : AccessibleFun write_reg.
+    Proof. accessible_proof. Qed.
+    Instance accessible_next_pc : AccessibleFun next_pc.
+    Proof. accessible_proof. Qed.
+    Instance accessible_update_pc : AccessibleFun update_pc.
+    Proof. accessible_proof. Qed.
+    Instance accessible_update_pc_perm : AccessibleFun update_pc_perm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_is_perm : AccessibleFun is_perm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_is_correct_pc : AccessibleFun is_correct_pc.
+    Proof. accessible_proof. Qed.
+    Instance accessible_add_pc : AccessibleFun add_pc.
+    Proof. accessible_proof. Qed.
+    Instance accessible_within_bounds : AccessibleFun within_bounds.
+    Proof. accessible_proof. Qed.
+    Instance accessible_is_sub_perm : AccessibleFun is_sub_perm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_write_allowed : AccessibleFun write_allowed.
+    Proof. accessible_proof. Qed.
+    Instance accessible_perm_to_bits : AccessibleFun perm_to_bits.
+    Proof. accessible_proof. Qed.
+    Instance accessible_perm_from_bits : AccessibleFun perm_from_bits.
+    Proof. accessible_proof. Qed.
+    Instance accessible_and_perm : AccessibleFun and_perm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_is_within_range : AccessibleFun is_within_range.
+    Proof. accessible_proof. Qed.
+    Instance accessible_abs : AccessibleFun abs.
+    Proof. accessible_proof. Qed.
+    Instance accessible_read_mem : AccessibleFun read_mem.
+    Proof. accessible_proof. Qed.
+    Instance accessible_write_mem : AccessibleFun write_mem.
+    Proof. accessible_proof. Qed.
+    Instance accessible_read_allowed : AccessibleFun read_allowed.
+    Proof. accessible_proof. Qed.
+    Instance accessible_is_not_zero : AccessibleFun is_not_zero.
+    Proof. accessible_proof. Qed.
+    Instance accessible_can_incr_cursor : AccessibleFun can_incr_cursor.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cjalr : AccessibleFun exec_cjalr.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_jalr_cap : AccessibleFun exec_jalr_cap.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cjal : AccessibleFun exec_cjal.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_bne : AccessibleFun exec_bne.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_ld : AccessibleFun exec_ld.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_sd : AccessibleFun exec_sd.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_addi : AccessibleFun exec_addi.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_add : AccessibleFun exec_add.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_sub : AccessibleFun exec_sub.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_slt : AccessibleFun exec_slt.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_slti : AccessibleFun exec_slti.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_sltu : AccessibleFun exec_sltu.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_sltiu : AccessibleFun exec_sltiu.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cmove : AccessibleFun exec_cmove.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cincoffset : AccessibleFun exec_cincoffset.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_candperm : AccessibleFun exec_candperm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_csetbounds : AccessibleFun exec_csetbounds.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_csetboundsimm : AccessibleFun exec_csetboundsimm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cgettag : AccessibleFun exec_cgettag.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cgetperm : AccessibleFun exec_cgetperm.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cgetbase : AccessibleFun exec_cgetbase.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cgetlen : AccessibleFun exec_cgetlen.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_cgetaddr : AccessibleFun exec_cgetaddr.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_fail : AccessibleFun exec_fail.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_ret : AccessibleFun exec_ret.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec_instr : AccessibleFun exec_instr.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exec : AccessibleFun exec.
+    Proof. accessible_proof. Qed.
+    Instance accessible_step : AccessibleFun step.
+    Proof. accessible_proof. Qed.
+  End WithAccessibleTactics.
+
+  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
+    match f with
+    | loop => None
+    | _    => Some _
+    end.
 
 End MinCapsProgram.

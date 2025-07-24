@@ -132,9 +132,92 @@ Module RiscvPmpIrisInstance <:
   Import RiscvPmpIrisBase.
   Import RiscvPmpProgram.
 
+  Definition addr_inc (x : bv 32) (n : nat) : bv 32 :=
+    bv.add x (bv.of_nat n).
+
+  Fixpoint get_byte {width : nat} (offset : nat) : bv (width * byte) -> Byte :=
+    match width with
+    | O   => fun _ => bv.zero
+    | S w =>
+        fun bytes =>
+          let (byte, bytes) := bv.appView byte (w * byte) bytes in
+          match offset with
+          | O        => byte
+          | S offset => get_byte offset bytes
+          end
+    end.
+
+  Definition all_addrs_def : list Addr := bv.seqBv bv.zero (N.pow 2 (N.of_nat xlenbits)).
+  Definition all_addrs_aux : seal (@all_addrs_def). Proof. by eexists. Qed.
+  Definition all_addrs : list Addr := all_addrs_aux.(unseal).
+  Lemma all_addrs_eq : all_addrs = all_addrs_def. Proof. rewrite -all_addrs_aux.(seal_eq) //. Qed.
+
+  (* The address we will perform all writes to is the first legal MMIO address *)
+  Definition write_addr : Addr := bv.of_N maxAddr.
+  Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
+  Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
+
+  Section WithMemory.
+    Context {Σ : gFunctors} {mG : mcMemGS Σ}.
+
+    (* TODO: change back to words instead of bytes... might be an easier first version
+             and most likely still convenient in the future *)
+    Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
+      pointsto addr (DfracOwn 1) b ∗ ⌜¬ withinMMIO addr 1⌝.
+    Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
+    Definition ptstoSthL : list Addr -> iProp Σ :=
+      fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
+
+    Definition interp_ptstomem' {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
+      [∗ list] offset ∈ seq 0 width,
+        interp_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
+    Fixpoint interp_ptstomem {width : nat} (addr : Addr) : bv (width * byte) -> iProp Σ :=
+      match width with
+      | O   => fun _ => True
+      | S w =>
+          fun bytes =>
+            let (byte, bytes) := bv.appView byte (w * byte) bytes in
+            interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
+      end%I.
+
+    Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
+    Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
+      inv femto_inv_mmio_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝).
+
+    Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
+    Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
+      inv femto_inv_ro_ns (interp_ptstomem addr b).
+
+    (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
+    (* NOTE: no local state yet, but this should be an iProp for the general case *)
+    Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
+
+    Section WithAddrs.
+      Variable (live_addrs mmio_addrs : list Addr).
+
+      (* Universal contract for single byte/`width` bytes after PMP checks *)
+      Definition interp_addr_access_byte (a : Addr) : iProp Σ :=
+        if decide (a ∈ mmio_addrs) then False%I (* Creates a proof obligation that the adversary cannot access MMIO. TODO: Change this to a trace filter to grant the adversary access to MMIO *)
+        else if decide (a ∈ live_addrs) then ptstoSth a
+             else True%I. (* Could be `False` as well *)
+      Definition interp_addr_access (base : Addr) (width : nat): iProp Σ :=
+        [∗ list] a ∈ bv.seqBv base (N.of_nat width), interp_addr_access_byte a.
+
+      Definition interp_pmp_addr_access (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+        [∗ list] a ∈ all_addrs,
+          (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ interp_addr_access_byte a)%I.
+
+      Definition interp_pmp_addr_access_without (addr : Addr) (width : nat)  (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+        (@interp_addr_access addr width -∗ interp_pmp_addr_access entries m)%I.
+    End WithAddrs.
+
+    (* TODO: introduce constant for nr of word bytes (replace 4) *)
+    Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
+      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
+  End WithMemory.
+
   Section WithSailGS.
-    Context `{sailRegGS Σ} `{invGS Σ} `{mG : mcMemGS Σ}.
-    Variable (live_addrs : list Addr) (mmio_addrs : list Addr).
+    Context `{sailRegGS Σ} `{invGS Σ}.
 
     Definition reg_file : gset (bv 5) := list_to_set (bv.finite.enum 5).
 
@@ -159,81 +242,6 @@ Module RiscvPmpIrisInstance <:
       | _ => False
       end.
 
-    Definition addr_inc (x : bv 32) (n : nat) : bv 32 :=
-      bv.add x (bv.of_nat n).
-
-    Fixpoint get_byte {width : nat} (offset : nat) : bv (width * byte) -> Byte :=
-      match width with
-      | O   => fun _ => bv.zero
-      | S w =>
-          fun bytes =>
-            let (byte, bytes) := bv.appView byte (w * byte) bytes in
-            match offset with
-            | O        => byte
-            | S offset => get_byte offset bytes
-            end
-      end.
-
-    (* TODO: change back to words instead of bytes... might be an easier first version
-             and most likely still convenient in the future *)
-    Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
-      pointsto addr (DfracOwn 1) b ∗ ⌜¬ withinMMIO addr 1⌝.
-    Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
-    Definition ptstoSthL : list Addr -> iProp Σ :=
-      fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
-
-    Definition interp_ptstomem' {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
-      [∗ list] offset ∈ seq 0 width,
-        interp_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
-    Fixpoint interp_ptstomem {width : nat} (addr : Addr) : bv (width * byte) -> iProp Σ :=
-      match width with
-      | O   => fun _ => True
-      | S w =>
-          fun bytes =>
-            let (byte, bytes) := bv.appView byte (w * byte) bytes in
-            interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
-      end%I.
-
-    Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
-    Definition interp_ptstomem_readonly {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
-      inv femto_inv_ro_ns (interp_ptstomem addr b).
-
-    (* The address we will perform all writes to is the first legal MMIO address *)
-    Definition write_addr : Addr := bv.of_N maxAddr.
-    Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
-    Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
-    Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
-    Definition interp_inv_mmio (width : nat) : iProp Σ :=
-      inv femto_inv_mmio_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝).
-
-    (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
-    (* NOTE: no local state yet, but this should be an iProp for the general case *)
-    Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
-
-    (* Universal contract for single byte/`width` bytes after PMP checks *)
-    Definition interp_addr_access_byte (a : Addr) : iProp Σ :=
-      if decide (a ∈ mmio_addrs) then False%I (* Creates a proof obligation that the adversary cannot access MMIO. TODO: Change this to a trace filter to grant the adversary access to MMIO *)
-      else if decide (a ∈ live_addrs) then ptstoSth a
-      else True%I. (* Could be `False` as well *)
-    Definition interp_addr_access (base : Addr) (width : nat): iProp Σ :=
-      [∗ list] a ∈ bv.seqBv base (N.of_nat width), interp_addr_access_byte a.
-
-    Definition all_addrs_def : list Addr := bv.seqBv bv.zero (N.pow 2 (N.of_nat xlenbits)).
-    Definition all_addrs_aux : seal (@all_addrs_def). Proof. by eexists. Qed.
-    Definition all_addrs : list Addr := all_addrs_aux.(unseal).
-    Lemma all_addrs_eq : all_addrs = all_addrs_def. Proof. rewrite -all_addrs_aux.(seal_eq) //. Qed.
-
-    Definition interp_pmp_addr_access (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-      [∗ list] a ∈ all_addrs,
-        (⌜∃ p, Pmp_access a bv.one entries m p⌝ -∗ interp_addr_access_byte a)%I.
-
-    Definition interp_pmp_addr_access_without (addr : Addr) (width : nat)  (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-      (@interp_addr_access addr width -∗ interp_pmp_addr_access entries m)%I.
-
-    (* TODO: introduce constant for nr of word bytes (replace 4) *)
-    Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
-      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
-
   End WithSailGS.
 
   Section RiscvPmpIrisPredicates.
@@ -247,6 +255,7 @@ Module RiscvPmpIrisInstance <:
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
+    | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
     | inv_mmio bytes           | _                    => interp_inv_mmio bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
