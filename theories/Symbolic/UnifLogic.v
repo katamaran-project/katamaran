@@ -930,43 +930,6 @@ Module Type UnifLogicOn
       now rewrite unconditionally_T.
     Qed.
 
-    #[export] Instance fromExist_knowing {w1 w2 : World} {A} {ω : w1 ⊒ w2} {P} {Φ : A -> Pred _}:
-      FromExist P Φ -> FromExist (knowing ω P) (fun v => knowing ω (Φ v)).
-    Proof.
-      unfold FromExist.
-      iIntros (H) "[%v H]".
-      (* doesn't work for some reason *)
-      (* rewrite <-H. *)
-      iApply (knowing_proper _ _ H).
-      iApply (knowing_proper with "H").
-      iIntros "H".
-      now iExists v.
-    Qed.
-
-    #[export] Instance fromExist_assuming {w1 w2 : World} {A} {ω : w1 ⊒ w2} {P} {Φ : A -> Pred _}:
-      FromExist P Φ -> FromExist (assuming ω P) (fun v => assuming ω (Φ v)).
-    Proof.
-      unfold FromExist.
-      iIntros (H) "[%v H]".
-      (* doesn't work for some reason *)
-      (* rewrite <-H. *)
-      iApply (assuming_proper _ _ H).
-      iApply (assuming_proper with "H").
-      iIntros "H".
-      now iExists v.
-    Qed.
-
-
-
-    Global Instance elim_modal_unconditionally {w} {P : Box Pred w} {Q : Pred w} :
-      ElimModal True false false (unconditionally P) (P w acc_refl) Q Q.
-    Proof.
-      iIntros (_) "[#HP Hk]".
-      iApply "Hk".
-      iSpecialize ("HP" $! w acc_refl).
-      now rewrite /ElimModal /unconditionally assuming_id.
-    Qed.
-
     Class IntoAssuming {w1 w2 : World} (ω : w1 ⊒ w2) (P : Pred w1) (Q : Pred w2) :=
       into_assuming : P ⊢ assuming ω Q.
 
@@ -1031,6 +994,42 @@ Module Type UnifLogicOn
       constructor; crushPredEntails3.
     Qed.
 
+
+    #[export] Instance fromExist_knowing {w1 w2 : World} {A} {ω : w1 ⊒ w2} {P} {Φ : A -> Pred _}:
+      FromExist P Φ -> FromExist (knowing ω P) (fun v => knowing ω (Φ v)).
+    Proof.
+      unfold FromExist.
+      iIntros (H) "[%v H]".
+      (* doesn't work for some reason *)
+      (* rewrite <-H. *)
+      iApply (knowing_proper _ _ H).
+      iApply (knowing_proper with "H").
+      iIntros "H".
+      now iExists v.
+    Qed.
+
+    #[export] Instance fromExist_assuming {w1 w2 : World} {A} {ω : w1 ⊒ w2} {P} {Φ : A -> Pred _}:
+      FromExist P Φ -> FromExist (assuming ω P) (fun v => assuming ω (Φ v)).
+    Proof.
+      unfold FromExist.
+      iIntros (H) "[%v H]".
+      (* doesn't work for some reason *)
+      (* rewrite <-H. *)
+      iModIntro.
+      iApply H.
+      now iExists v.
+    Qed.
+
+
+
+    Global Instance elim_modal_unconditionally {w} {P : Box Pred w} {Q : Pred w} :
+      ElimModal True false false (unconditionally P) (P w acc_refl) Q Q.
+    Proof.
+      iIntros (_) "[#HP Hk]".
+      iApply "Hk".
+      iSpecialize ("HP" $! w acc_refl).
+      now rewrite /ElimModal /unconditionally assuming_id.
+    Qed.
     Lemma knowing_acc_pathcondition_right {w pc} {P} :
       knowing (acc_pathcondition_right w pc) P ⊣⊢ instpred pc ∗ P.
     Proof.
