@@ -441,6 +441,26 @@ Module Type UnifLogicOn
       crushPredEntails3.
     Qed.
 
+    Lemma forgetting_assuming_adjoint {w1 w2 : World} {ω : Acc w1 w2} {P Q} :
+      (forgetting ω P ⊢ Q) <-> (P ⊢ assuming ω Q).
+    Proof.
+      rewrite /forgetting /assuming.
+      split; crushPredEntails3.
+      - subst; now apply H4.
+      - apply (fromEntails H) with (inst (sub_acc ω) ι);
+          auto using acc_pathcond.
+    Qed.
+
+    Lemma forgetting_knowing_adjoint {w1 w2 : World} {ω : Acc w1 w2} {P Q} :
+      (knowing ω P ⊢ Q) <-> (P ⊢ forgetting ω Q).
+    Proof.
+      rewrite /forgetting /assuming /knowing.
+      split; crushPredEntails3.
+      - apply (fromEntails H); auto using acc_pathcond.
+        now exists ι.
+      - now subst.
+    Qed.
+
     Lemma forgetting_pure {w1 w2 : World} (ω : w2 ⊒ w1) {P} :
       forgetting ω (bi_pure P) ⊣⊢ bi_pure P.
     Proof.
