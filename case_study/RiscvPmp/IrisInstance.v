@@ -241,8 +241,9 @@ Module RiscvPmpIrisInstance <:
                        reg_pointsTo pmpaddr1 addr1
       | _ => False
       end.
-
   End WithSailGS.
+
+  #[global] Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
 
   Section RiscvPmpIrisPredicates.
 

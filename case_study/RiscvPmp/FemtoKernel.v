@@ -64,6 +64,22 @@ Open Scope ctx_scope.
 
 Module inv := invariants.
 
+  Import ctx.resolution.
+  Import ctx.notations.
+  Import env.notations.
+  Import iris.program_logic.weakestpre.
+  Import iris.proofmode.tactics.
+
+  Import MicroSail.ShallowExecutor.
+
+  Import Contracts.
+  Import RiscvPmpIrisBase.
+  Import RiscvPmpIrisInstance.
+  Import RiscvPmpBlockVerifSpec.
+  Import RiscvPmpIrisInstanceWithContracts.
+  Import RiscvPmpBlockVerifShalExecutor.
+
+
   Section FemtoKernel.
     Import bv.notations.
     Import ListNotations.
@@ -254,9 +270,6 @@ Module inv := invariants.
 
     Import asn.notations.
     Import RiscvPmp.Sig.
-    (* Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79). *)
-    Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
-    Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
     Local Notation asn_inv_mmio := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [env])). (* Fix word length at 4 for this example, as we do not perform any other writes*)
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
@@ -320,7 +333,7 @@ Module inv := invariants.
       asn_regs_ptsto ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
       if negb is_mmio then
-        (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵣ term_val ty_xlenbits (bv.of_N 42)
+        (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵢ term_val ty_xlenbits (bv.of_N 42)
       else asn_inv_mmio.
 
     Example femtokernel_handler_post (is_mmio : bool) :
@@ -333,7 +346,7 @@ Module inv := invariants.
           asn_regs_ptsto ∗
           asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
           if negb is_mmio then
-            (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_size) ↦ᵣ term_val ty_xlenbits (bv.of_N 42))
+            (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_size) ↦ᵢ term_val ty_xlenbits (bv.of_N 42))
           else ⊤ (* Inv is persistent; don't repeat *).
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
@@ -412,34 +425,6 @@ Module inv := invariants.
     (* Eval vm_compute in femtohandler_mmio_stats. *)
 
   End FemtoKernel.
-
-  Import Contracts.
-  Import RiscvPmpIrisBase.
-  Import RiscvPmpIrisInstance.
-  Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpIrisInstanceWithContracts.
-
-  Import ctx.resolution.
-  Import ctx.notations.
-  Import env.notations.
-
-  Import Contracts.
-  Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpBlockVerifShalExecutor.
-  Import RiscvPmpIrisInstanceWithContracts.
-
-  Import Contracts.
-  Import RiscvPmpBlockVerifSpec.
-  Import iris.program_logic.weakestpre.
-  Import iris.proofmode.tactics.
-  Import MicroSail.ShallowExecutor.
-  Import ctx.resolution.
-  Import ctx.notations.
-  Import env.notations.
-  Import RiscvPmpIrisBase.
-  Import RiscvPmpIrisInstance.
-  Import RiscvPmpIrisInstanceWithContracts.
-  Import RiscvPmpBlockVerifShalExecutor.
 
   Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N adv_addr) (adv_addr_end - adv_addr).
 
@@ -550,37 +535,34 @@ Module inv := invariants.
   Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := @interp_ptstomem_readonly _ _ _ xlenbytes (bv.of_N data_addr) (bv.of_N 42).
   Definition femto_inv_mmio `{sailGS Σ} := interp_inv_mmio bytes_per_word.
 
-  Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 70).
-  (* Local Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 79). *)
-
   Definition femto_handler_pre `{sailGS Σ} (is_mmio : bool): iProp Σ :=
-      (mstatus ↦ {| MPP := User |}) ∗
-      (mtvec ↦ (bv.of_N handler_addr)) ∗
-      (∃ v, mcause ↦ v) ∗
-      (∃ epc, mepc ↦ epc) ∗
-      cur_privilege ↦ Machine ∗
+      (mstatus ↦ᵣ {| MPP := User |}) ∗
+      (mtvec ↦ᵣ (bv.of_N handler_addr)) ∗
+      (∃ v, mcause ↦ᵣ v) ∗
+      (∃ epc, mepc ↦ᵣ epc) ∗
+      cur_privilege ↦ᵣ Machine ∗
       interp_gprs ∗
       interp_pmp_entries femto_pmpentries ∗
       (if negb is_mmio
         then femto_inv_fortytwo
         else femto_inv_mmio) ∗
-      pc ↦ (bv.of_N handler_addr) ∗
-      (∃ v, nextpc ↦ v) ∗
+      pc ↦ᵣ (bv.of_N handler_addr) ∗
+      (∃ v, nextpc ↦ᵣ v) ∗
       ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen is_mmio)).
 
     Example femto_handler_post `{sailGS Σ} (is_mmio : bool): iProp Σ :=
-      (mstatus ↦ {| MPP := User |}) ∗
-      (mtvec ↦ (bv.of_N handler_addr)) ∗
-      (∃ v, mcause ↦ v) ∗
-      cur_privilege ↦ User ∗
+      (mstatus ↦ᵣ {| MPP := User |}) ∗
+      (mtvec ↦ᵣ (bv.of_N handler_addr)) ∗
+      (∃ v, mcause ↦ᵣ v) ∗
+      cur_privilege ↦ᵣ User ∗
       interp_gprs ∗
       interp_pmp_entries femto_pmpentries ∗
       (if negb is_mmio
         then femto_inv_fortytwo
         else True%I) ∗
-      (∃ epc, mepc ↦ epc ∗
-              pc ↦ epc) ∗
-      (∃ v, nextpc ↦ v) ∗
+      (∃ epc, mepc ↦ᵣ epc ∗
+              pc ↦ᵣ epc) ∗
+      (∃ v, nextpc ↦ᵣ v) ∗
       ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen is_mmio)).
 
   Definition femto_handler_contract `{sailGS Σ} (is_mmio : bool): iProp Σ :=
@@ -603,7 +585,7 @@ Module inv := invariants.
            env.map].
       cbn.
       iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp & Hfortytwo & Hpc & Hnpc & Hhandler)".
-      rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
+      rewrite Model.RiscvPmpModel2.gprs_equiv.
       iFrame. destruct is_mmio; now iFrame.
     - cbv [femtokernel_handler_pre interpret_chunk lptsreg PredicateDefIProp
            inst instprop_formula inst_term env.lookup ctx.view ctx.in_at
@@ -626,19 +608,19 @@ Module inv := invariants.
   Proof. destruct b; apply _. Qed.
 
   Lemma femtokernel_handler_safe `{sailGS Σ} (is_mmio : bool) :
-    ⊢ mstatus ↦ {| MPP := User |} ∗
-       (mtvec ↦ (bv.of_N handler_addr)) ∗
-        (∃ v, mcause ↦ v) ∗
-        (∃ mepcv, mepc ↦ mepcv) ∗
-        cur_privilege ↦ Machine ∗
+    ⊢ mstatus ↦ᵣ {| MPP := User |} ∗
+       (mtvec ↦ᵣ (bv.of_N handler_addr)) ∗
+        (∃ v, mcause ↦ᵣ v) ∗
+        (∃ mepcv, mepc ↦ᵣ mepcv) ∗
+        cur_privilege ↦ᵣ Machine ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
         (if negb is_mmio
          then femto_inv_fortytwo
          else femto_inv_mmio) ∗
-        (pc ↦ (bv.of_N handler_addr)) ∗
+        (pc ↦ᵣ (bv.of_N handler_addr)) ∗
         interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User ∗ (* Not needed for handler, but required for the rest of execution *)
-        (∃ v, nextpc ↦ v) ∗
+        (∃ v, nextpc ↦ᵣ v) ∗
         ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen is_mmio))
         -∗
         WP_loop.
@@ -675,18 +657,18 @@ Module inv := invariants.
 
   (* TODO: this lemma feels very incremental wrt to the last one; merge? *)
   Lemma femtokernel_manualStep2 `{sailGS Σ} (is_mmio : bool):
-    ⊢ (∃ mpp, mstatus ↦ {| MPP := mpp |}) ∗
-       (mtvec ↦ (bv.of_N handler_addr)) ∗
-        (∃ v, mcause ↦ v) ∗
-        (∃ v, mepc ↦ v) ∗
-        cur_privilege ↦ User ∗
+    ⊢ (∃ mpp, mstatus ↦ᵣ {| MPP := mpp |}) ∗
+       (mtvec ↦ᵣ (bv.of_N handler_addr)) ∗
+        (∃ v, mcause ↦ᵣ v) ∗
+        (∃ v, mepc ↦ᵣ v) ∗
+        cur_privilege ↦ᵣ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
         (if negb is_mmio
          then femto_inv_fortytwo
          else femto_inv_mmio) ∗
-        (pc ↦ (bv.of_N adv_addr)) ∗
-        (∃ v, nextpc ↦ v) ∗
+        (pc ↦ᵣ (bv.of_N adv_addr)) ∗
+        (∃ v, nextpc ↦ᵣ v) ∗
         ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen is_mmio)) ∗
         ptstoSthL advAddrs
         ={⊤}=∗
@@ -725,33 +707,33 @@ Module inv := invariants.
   Qed.
 
   Definition femto_init_pre `{sailGS Σ} : iProp Σ :=
-      ((∃ v, mstatus ↦ v) ∗
-      (∃ v, mtvec ↦ v) ∗
-      (∃ v, mcause ↦ v) ∗
-      (∃ v, mepc ↦ v) ∗
-      cur_privilege ↦ Machine ∗
+      ((∃ v, mstatus ↦ᵣ v) ∗
+      (∃ v, mtvec ↦ᵣ v) ∗
+      (∃ v, mcause ↦ᵣ v) ∗
+      (∃ v, mepc ↦ᵣ v) ∗
+      cur_privilege ↦ᵣ Machine ∗
       interp_gprs ∗
-      pmp0cfg ↦ default_pmpcfg_ent ∗
-      pmp1cfg ↦ default_pmpcfg_ent ∗
-      (pmpaddr0 ↦ bv.zero) ∗
-      (pmpaddr1 ↦ bv.zero)) ∗
-      pc ↦ bv.zero ∗
-      (∃ v, nextpc ↦ v) ∗
+      pmp0cfg ↦ᵣ default_pmpcfg_ent ∗
+      pmp1cfg ↦ᵣ default_pmpcfg_ent ∗
+      (pmpaddr0 ↦ᵣ bv.zero) ∗
+      (pmpaddr1 ↦ᵣ bv.zero)) ∗
+      pc ↦ᵣ bv.zero ∗
+      (∃ v, nextpc ↦ᵣ v) ∗
       ptsto_instrs (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen).
 
     Example femto_init_post `{sailGS Σ} : iProp Σ :=
-      ((∃ v, mstatus ↦ v) ∗
-        (mtvec ↦ (bv.of_N handler_addr)) ∗
-        (∃ v, mcause ↦ v) ∗
-        (∃ v, mepc ↦ v) ∗
-        cur_privilege ↦ User ∗
+      ((∃ v, mstatus ↦ᵣ v) ∗
+        (mtvec ↦ᵣ (bv.of_N handler_addr)) ∗
+        (∃ v, mcause ↦ᵣ v) ∗
+        (∃ v, mepc ↦ᵣ v) ∗
+        cur_privilege ↦ᵣ User ∗
         interp_gprs ∗
-        pmp0cfg ↦ femto_pmpcfg_ent0 ∗
-        pmp1cfg ↦ femto_pmpcfg_ent1 ∗
-        (pmpaddr0 ↦ (bv.of_N adv_addr)) ∗
-        (pmpaddr1 ↦ (bv.of_N adv_addr_end))) ∗
-        pc ↦ (bv.of_N adv_addr) ∗
-        (∃ v, nextpc ↦ v) ∗
+        pmp0cfg ↦ᵣ femto_pmpcfg_ent0 ∗
+        pmp1cfg ↦ᵣ femto_pmpcfg_ent1 ∗
+        (pmpaddr0 ↦ᵣ (bv.of_N adv_addr)) ∗
+        (pmpaddr1 ↦ᵣ (bv.of_N adv_addr_end))) ∗
+        pc ↦ᵣ (bv.of_N adv_addr) ∗
+        (∃ v, nextpc ↦ᵣ v) ∗
         ptsto_instrs (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen).
 
   Definition femto_init_contract `{sailGS Σ} : iProp Σ :=
@@ -784,22 +766,22 @@ Module inv := invariants.
   Transparent femtokernel_init_pre.
 
   Lemma femtokernel_init_safe `{sailGS Σ} (is_mmio : bool):
-    ⊢ (∃ v, mstatus ↦ v) ∗
-      (∃ v, mtvec ↦ v) ∗
-      (∃ v, mcause ↦ v) ∗
-      (∃ v, mepc ↦ v) ∗
-      cur_privilege ↦ Machine ∗
+    ⊢ (∃ v, mstatus ↦ᵣ v) ∗
+      (∃ v, mtvec ↦ᵣ v) ∗
+      (∃ v, mcause ↦ᵣ v) ∗
+      (∃ v, mepc ↦ᵣ v) ∗
+      cur_privilege ↦ᵣ Machine ∗
       interp_gprs ∗
       reg_pointsTo pmp0cfg default_pmpcfg_ent ∗
       (reg_pointsTo pmpaddr0 bv.zero) ∗
       reg_pointsTo pmp1cfg default_pmpcfg_ent ∗
       (reg_pointsTo pmpaddr1 bv.zero) ∗
-      (pc ↦ bv.zero) ∗
+      (pc ↦ᵣ bv.zero) ∗
       (if negb is_mmio
         then femto_inv_fortytwo
         else femto_inv_mmio) ∗ (* This is not needed for the `init` code, but it is needed later on *)
       ptstoSthL advAddrs ∗
-      (∃ v, nextpc ↦ v) ∗
+      (∃ v, nextpc ↦ᵣ v) ∗
       ptsto_instrs (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ∗
       ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen is_mmio))
       -∗

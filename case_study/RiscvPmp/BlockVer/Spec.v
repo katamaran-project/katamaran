@@ -203,9 +203,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   (* Notation "a '*↦ₘ[' n ']' xs" := (asn.chunk (chunk_user (@ptstomem n) [a; xs])) (at level 79). *)
   Local Notation "a '↦ₘ[' bytes ']' t" := (asn.chunk (chunk_user (@ptstomem bytes) [a; t])) (at level 70).
   Local Notation "a '↦ᵣ[' bytes ']' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes) [a; t])) (at level 70).
-  Local Notation "r '↦' val" := (asn_reg_ptsto r val) : asn_scope.
-  Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
-  Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
+  #[global] Notation "r '↦ᵣ' val" := (asn_reg_ptsto r val) (at level 70) : asn_scope.
+  #[global] Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70) : asn_scope.
+  #[global] Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70) : asn_scope.
   Local Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
@@ -228,21 +228,21 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "w" :: ty_word];
        sep_contract_localstore      := [term_var "rs"];
-       sep_contract_precondition    := term_var "rs" ↦ term_var "w";
+       sep_contract_precondition    := term_var "rs" ↦ᵣ term_var "w";
        sep_contract_result          := "result_rX";
        sep_contract_postcondition   := term_var "result_rX" = term_var "w" ∗
-                                       term_var "rs" ↦ term_var "w";
+                                       term_var "rs" ↦ᵣ term_var "w";
     |}.
 
   Definition sep_contract_wX : SepContractFun wX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "v" :: ty_xlenbits; "w" :: ty_xlenbits];
        sep_contract_localstore      := [term_var "rs"; term_var "v"];
-       sep_contract_precondition    := term_var "rs" ↦ term_var "w";
+       sep_contract_precondition    := term_var "rs" ↦ᵣ term_var "w";
        sep_contract_result          := "result_wX";
        sep_contract_postcondition   := term_var "result_wX" = term_val ty.unit tt ∗
                                        if: term_eqb (term_var "rs") (term_val ty_regno [bv 0])
-                                       then term_var "rs" ↦ term_val ty_word bv.zero
-                                       else term_var "rs" ↦ term_var "v"
+                                       then term_var "rs" ↦ᵣ term_val ty_word bv.zero
+                                       else term_var "rs" ↦ᵣ term_var "v"
     |}.
 
   Definition sep_contract_fetch_instr : SepContractFun fetch :=

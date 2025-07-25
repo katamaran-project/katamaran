@@ -147,17 +147,6 @@ Section BlockVerificationDerived.
               apc'
         end.
 
-    Definition sexec_double_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ ("a":: ty_xlenbits))) (b : list AST) :
-      ⊢ SHeapSpec (STerm ty_xlenbits) :=
-      fun _ =>
-        ⟨ θ1 ⟩ lenv1 <- demonic_ctx id Σ ;;
-        ⟨ θ2 ⟩ a2    <- demonic (Some "a") _ ;;
-        let lenv2 := env.snoc (persist (A := Sub Σ) lenv1 θ2) _ a2 in
-        ⟨ θ3 ⟩ _     <- produce req lenv2 ;;
-        let a3 := persist__term a2 θ3 in
-        sexec_block_addr b a3 a3.
-
     Definition sexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
       (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
@@ -212,14 +201,6 @@ Section BlockVerificationDerived.
             apc' <- cexec_instruction i apc ;;
             cexec_block_addr b' (bv.add ainstr bv_instrsize) apc'
         end.
-
-    Definition cexec_double_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) :
-      CHeapSpec (Val ty_xlenbits) :=
-      δ <- demonic_ctx Σ ;;
-      an <- demonic _ ;;
-      _ <- produce req δ.["a"∷ty_xlenbits ↦ an] ;;
-      cexec_block_addr b an an.
 
     Definition cexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST)

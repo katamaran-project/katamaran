@@ -75,12 +75,6 @@ Open Scope ctx_scope.
 Open Scope Z_scope.
 
 Import RiscvPmpIrisBase RiscvPmpIrisInstance.
-#[local] Notation "a '↦' t" := (reg_pointsTo a t) (at level 70).
-#[local] Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
-
-Module ns := stdpp.namespaces.
-
-(*   Definition pmp_entry_cfg := ty_prod ty_pmpcfg_ent ty_xlenbits. *)
 
 Section BlockVerificationDerived.
 
@@ -116,6 +110,11 @@ Section BlockVerificationDerived.
       asn.chunk (chunk_user ptstoinstr [term_var "a"; term_val ty_ast i]) ∗
       nextpc ↦ term_var "an".
 
+    (* inputs:
+     * - i: instruction to be executed
+     * - a: term representing current pc value.
+     * output: term representing nextpc value after executing the instruction.
+     *)
     Definition sexec_instruction (i : AST) :
       ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       let inline_fuel := 10%nat in
@@ -131,6 +130,17 @@ Section BlockVerificationDerived.
                        [env].["a"∷_ ↦ a3].["an"∷_ ↦ na] ;;
         pure (persist__term na θ4).
 
+    (* inputs:
+     * - b : list of instructions to be executed
+     * - ainstr: term representing pc value at which the next instruction can be found in memory
+     * - apc: term representing pc value after executing previous instruction
+     * output: term representing nextpc value after executing the sequence of instructions.
+     *
+     * This definition passes around code addresses in a clever way to simplify the recursive definition.
+     * While symbolically executing the list of instructions, ainstr will be incremented by 4 at every step, while ainstr is obtained from the execution of the instruction.
+     * As long as the list of instructions is non-empty (i.e. we don't reach the end of the block), we require that ainstr and apc are the same (i.e. the previous instruction did not jump).
+     * If b is empty, then we simply return apc.
+     *)
     Fixpoint sexec_block_addr (b : list AST) :
       ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun _ ainstr apc =>
@@ -147,17 +157,10 @@ Section BlockVerificationDerived.
               apc'
         end.
 
-    Definition sexec_double_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ ("a":: ty_xlenbits))) (b : list AST) :
-      ⊢ SHeapSpec (STerm ty_xlenbits) :=
-      fun _ =>
-        ⟨ θ1 ⟩ lenv1 <- demonic_ctx id Σ ;;
-        ⟨ θ2 ⟩ a2    <- demonic (Some "a") _ ;;
-        let lenv2 := env.snoc (persist (A := Sub Σ) lenv1 θ2) _ a2 in
-        ⟨ θ3 ⟩ _     <- produce req lenv2 ;;
-        let a3 := persist__term a2 θ3 in
-        sexec_block_addr b a3 a3.
-
+    (* Apply symbolic execution to verify a Hoare triple for a block of instructions.
+     * The precondition can mention the address a where the block is loaded.
+     * The postcondition can additionally mention the address an where the pc points after execution.
+     *)
     Definition sexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
       (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
@@ -172,8 +175,6 @@ Section BlockVerificationDerived.
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
-    (* This is a VC for triples, for doubles we probably need to talk
-       about the continuation of a block. *)
     Definition sblock_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
@@ -212,14 +213,6 @@ Section BlockVerificationDerived.
             apc' <- cexec_instruction i apc ;;
             cexec_block_addr b' (bv.add ainstr bv_instrsize) apc'
         end.
-
-    Definition cexec_double_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) :
-      CHeapSpec (Val ty_xlenbits) :=
-      δ <- demonic_ctx Σ ;;
-      an <- demonic _ ;;
-      _ <- produce req δ.["a"∷ty_xlenbits ↦ an] ;;
-      cexec_block_addr b an an.
 
     Definition cexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST)
@@ -340,8 +333,8 @@ Section BlockVerificationDerived.
 
     Definition semTripleBlock (PRE : Val ty_word -> iProp Σ) (instrs : list AST) (POST : Val ty_word -> Val ty_word -> iProp Σ) : iProp Σ :=
       (∀ a,
-         (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs) -∗
-         (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ WP_loop) -∗
+         (PRE a ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs a instrs) -∗
+         (∀ an, pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ WP_loop) -∗
          WP_loop)%I.
     #[global] Arguments semTripleBlock PRE%_I instrs POST%_I.
 
@@ -729,8 +722,8 @@ Section AnnotatedBlockVerification.
     Definition semTripleAnnotatedBlock (PRE : Val ty_word -> iProp Σ)
       (instrs : list AnnotInstr) (POST : Val ty_word -> Val ty_word -> iProp Σ) : iProp Σ :=
       (∀ a,
-         (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
-         (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ POST a an -∗ WP_loop) -∗
+         (PRE a ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
+         (∀ an, pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ POST a an -∗ WP_loop) -∗
          WP_loop)%I.
     Global Arguments semTripleAnnotatedBlock PRE%_I instrs POST%_I.
 
