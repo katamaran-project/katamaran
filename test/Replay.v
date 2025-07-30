@@ -64,7 +64,9 @@ Module Import ReplayProgram <: Program DefaultBase.
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
-    | main : Fun ["xs" :: ty_X] ty.unit.
+    | main : Fun ["xs" :: ty_X] ty.unit
+    | arith_example : Fun ["x" :: ty.int] ty.int
+    | unit_example : Fun ε ty.unit.
 
     Inductive Lem : PCtx -> Set :=
     | open_list : Lem ε.
@@ -85,9 +87,27 @@ Module Import ReplayProgram <: Program DefaultBase.
       stm_lemma open_list [] ;;
       stm_val ty.unit tt.
 
+    Definition fun_arith_example : Stm ["x" :: ty.int] ty.int :=
+      (* Initialize local variables *)
+      let: "y" := exp_val ty.int 0 in
+      let: "z" := exp_val ty.int 0 in
+      (if: exp_var "x" < exp_val ty.int 7
+       then "y" <- (stm_val ty.int 1)
+       else stm_fail _ "Error") ;;
+       (* else "y" <- (stm_val ty.int 2)) ;; *)
+      (if: exp_var "x" = exp_val ty.int 5
+       then "z" <- (stm_val ty.int 3)
+       else stm_fail _ "Error") ;;
+      exp_var "x" + exp_var "y" + exp_var "z".
+
+    Definition fun_unit_example : Stm ε ty.unit :=
+      stm_val ty.unit tt.
+
     Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       match f in Fun Δ τ return Stm Δ τ with
       | main => fun_main
+      | arith_example => fun_arith_example
+      | unit_example => fun_unit_example
       end.
   End FunDefKit.
 
@@ -122,11 +142,17 @@ Module Import ReplayProgram <: Program DefaultBase.
     Instance accessible_main : AccessibleFun main.
     Proof. accessible_proof. Qed.
 
+    Instance accessible_arith_example : AccessibleFun arith_example.
+    Proof. accessible_proof. Qed.
+
+    Instance accessible_unit_example : AccessibleFun unit_example.
+    Proof. accessible_proof. Qed.
   End WithAccessibleTactics.
 
   Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
     match f with
     | main => Some _
+    | _ => Some _
     end.
 End ReplayProgram.
 
@@ -134,7 +160,33 @@ Module Import ReplayPredicates.
   Import ListNotations.
 
   Inductive PurePredicate : Set :=
+  (* PurePredicates for the arith example *)
+  | Aₐ
+  | Bₐ
+  | Pₐ
+  | Qₐ
+  (* PurePredicates for the unit example *)
+  | Aᵤ
+  | Bᵤ
+  | Cᵤ
+  (* PurePredicates for the main example *)
   | Q.
+
+  Definition interp_Qₐ (x : Val ty.int) : Prop :=
+    False.
+
+  Definition interp_Pₐ (x : Val ty.int) : Prop :=
+    if x =? 5
+    then interp_Qₐ 9
+    else True.
+
+  Definition interp_Aₐ (b : Val ty.bool) : Prop :=
+    if b
+    then interp_Qₐ 9
+    else True.
+
+  Definition interp_Bₐ (x : Val ty.int) (b : Val ty.bool) : Prop :=
+    b = (x =? 5).
 
   Definition Q_aux (xs : Val ty_X) : bool :=
     match xs with
@@ -144,6 +196,17 @@ Module Import ReplayPredicates.
 
   Definition interp_Q (xs : Val ty_X) : Prop :=
     Q_aux xs = true.
+
+  Axiom interp_Cᵤ : Prop.
+
+  (* interp_Aᵤ only provided information for Cᵤ when b = true *)
+  Definition interp_Aᵤ (b : Val ty.bool) : Prop :=
+    if b
+    then interp_Cᵤ
+    else True.
+
+  Definition interp_Bᵤ (b : Val ty.bool) : Prop :=
+    b = true.
 
   Inductive Predicate : Set :=
   | P.
@@ -165,10 +228,24 @@ Module Import ReplaySig <: Signature DefaultBase.
     Definition 𝑷 := PurePredicate.
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
       match p with
+      | Aₐ => [ty.bool]
+      | Bₐ => [ty.int;ty.bool]
+      | Aᵤ => [ty.bool]
+      | Bᵤ => [ty.bool]
+      | Cᵤ => []
+      | Pₐ => [ty.int]
+      | Qₐ => [ty.int]
       | Q => [ty_X]
       end.
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
+      | Aₐ => interp_Aₐ
+      | Bₐ => interp_Bₐ
+      | Aᵤ => interp_Aᵤ
+      | Bᵤ => interp_Bᵤ
+      | Cᵤ => interp_Cᵤ
+      | Pₐ => interp_Pₐ
+      | Qₐ => interp_Qₐ
       | Q => interp_Q
       end.
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -197,6 +274,16 @@ Module Import ReplaySig <: Signature DefaultBase.
     Import List.ListNotations.
     Import Entailment.
 
+    Definition simplify_Pₐ {Σ} (x : Term Σ ty.int) : option (PathCondition Σ) :=
+      let no_simplification := Some [formula_user Pₐ [x]] in
+      match term_get_val x with
+      | Some v =>
+          if v =? 5
+          then Some [formula_user Qₐ [term_val ty.int 9]]
+          else no_simplification
+      | _ => no_simplification
+      end.
+
     Definition simplify_Q {Σ} (xs : Term Σ ty_X) : option (PathCondition Σ) :=
       let no_simplification := Some [formula_user Q [xs]] in
       match term_get_val xs with
@@ -207,7 +294,47 @@ Module Import ReplaySig <: Signature DefaultBase.
       | _       => no_simplification
       end.
 
+    Definition simplify_Aₐ {Σ} (b : Term Σ ty.bool) : option (PathCondition Σ) :=
+      let no_simplification := Some [formula_user Aₐ [b]] in
+      match term_get_val b with
+      | Some b =>
+          if b
+          then Some [formula_user Qₐ [term_val ty.int 9]]
+          else no_simplification
+      | None => no_simplification
+      end.
+
+    Definition simplify_Bₐ {Σ} (x : Term Σ ty.int) (b : Term Σ ty.bool) : option (PathCondition Σ) :=
+      let no_simplification := Some [formula_user Bₐ [x;b]] in
+      match term_get_val x with
+      | Some x =>
+          if x =? 5
+          then Some [formula_relop bop.eq b (term_val ty.bool true)]
+          else Some [formula_relop bop.eq b (term_val ty.bool false)]
+      | None => no_simplification
+      end.
+
+    Definition simplify_Aᵤ {Σ} (b : Term Σ ty.bool) : option (PathCondition Σ) :=
+      let no_simplification := Some [formula_user Aᵤ [b]] in
+      match term_get_val b with
+      | Some b =>
+          if b
+          then Some [formula_user Cᵤ []]
+          else no_simplification
+      | None => no_simplification
+      end.
+
+    Definition simplify_Bᵤ {Σ} (b : Term Σ ty.bool) : option (PathCondition Σ) :=
+      Some [formula_eq b (term_val ty.bool true)].
+
     Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (PathCondition Σ) :=
+    | Aₐ | [env b]  => simplify_Aₐ b
+    | Bₐ | [env x; b]  => simplify_Bₐ x b
+    | Aᵤ | [env b] => simplify_Aᵤ b
+    | Bᵤ | [env b] => simplify_Bᵤ b
+    | Cᵤ | [env]   => Some [formula_user Cᵤ []]
+    | Pₐ | [env x]  => simplify_Pₐ x
+    | Qₐ | [env x]  => Some [formula_user Qₐ [x]]
     | Q | [env xs ] => simplify_Q xs.
 
     Local Ltac lsolve :=
@@ -233,11 +360,23 @@ Module Import ReplaySig <: Signature DefaultBase.
     Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.
     Proof.
       intros Σ p ts.
-      destruct p; cbv in ts; env.destroy ts.
-      cbn.
-      unfold simplify_Q; lsolve.
-      destruct a; lsolve.
-      destruct v; lsolve.
+      destruct p; cbv in ts; env.destroy ts; cbn; lsolve.
+      - unfold simplify_Aₐ; lsolve.
+        destruct a; lsolve.
+      - unfold simplify_Bₐ; lsolve.
+        destruct (a =? 5) eqn:Ea; lsolve.
+        apply Z.eqb_eq in Ea. subst.
+        intros ι. now cbn.
+        intros ι. cbn. unfold interp_Bₐ. rewrite Ea. auto.
+      - unfold simplify_Pₐ; lsolve.
+        destruct (a =? 5) eqn:Ea; lsolve.
+        apply Z.eqb_eq in Ea. subst.
+        intros ι. now cbn.
+      - unfold simplify_Aᵤ; lsolve.
+        destruct a; lsolve.
+      - unfold simplify_Q; lsolve.
+        destruct a; lsolve.
+        destruct v; lsolve.
     Qed.
 
     Definition solver : Solver :=
@@ -250,6 +389,7 @@ Module Import ReplaySig <: Signature DefaultBase.
   End ReplaySolverKit.
 
   Include SignatureMixin DefaultBase.
+
 End ReplaySig.
 
 Module Import ReplaySpecification <: Specification DefaultBase ReplaySig ReplayProgram.
@@ -276,6 +416,7 @@ Module Import ReplaySpecification <: Specification DefaultBase ReplaySig ReplayP
       fun Δ τ f =>
         match f with
         | main => Some sep_contract_main
+        | _    => None
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
@@ -338,3 +479,204 @@ Proof.
   compute. (* Output: with the replay functionality the residu VC is trivial. *)
   firstorder.
 Qed.
+
+(* IMPORTANT: Abort is being used in these lemmas to indicate that it could be
+              solve easier with Replay. It doesn't mean the lemma doesn't hold
+              and should only be considered to be indicative (doc for how/what
+              Replay does). *)
+Section ReplayExamples.
+  Import Symbolic.
+  Import ctx.resolution.
+  Import asn.notations.
+
+  #[local] Notation P := (interp_Pₐ).
+  #[local] Notation Q := (interp_Qₐ).
+  #[local] Notation "a <= b" := ((term_binop (bop.relop bop.le) a b = term_val ty.bool true)).
+
+  Print ValidContractWithFuel.
+
+  Definition ValidContractWithoutReplay {Δ τ} (c : SepContract Δ τ)
+    (s : Stm Δ τ) : Prop :=
+    VerificationCondition
+      (postprocess
+         (postprocess (ReplayExecutor.vcgen default_config 1 c s wnil))).
+
+  Section ArithExample.
+
+    Definition arith_contract1 : SepContract ["x" :: ty.int] ty.int :=
+      {|
+        sep_contract_logic_variables := ["x"∷ty.int];
+        sep_contract_localstore := [term_var "x"];
+        sep_contract_precondition :=
+          asn.formula (formula_user Pₐ [term_var "x"]);
+        sep_contract_result := "r";
+        sep_contract_postcondition :=
+          asn.formula (formula_user Qₐ [term_var "r"])
+      |}.
+
+    Definition arith_contract2 : SepContract ["x" :: ty.int] ty.int :=
+      {|
+        sep_contract_logic_variables := ["x"∷ty.int;"b"∷ty.bool];
+        sep_contract_localstore := [term_var "x"];
+        sep_contract_precondition :=
+          asn.formula (formula_user Aₐ [term_var "b"])
+            ∗ asn.formula (formula_user Bₐ [term_var "x"; term_var "b"]);
+        sep_contract_result := "r";
+        sep_contract_postcondition :=
+          asn.formula (formula_user Qₐ [term_var "r"])
+      |}.
+
+    Definition arith_contract_debug : SepContract ["x" :: ty.int] ty.int :=
+      {|
+        sep_contract_logic_variables := ["x"∷ty.int;"b"∷ty.bool];
+        sep_contract_localstore := [term_var "x"];
+        sep_contract_precondition :=
+          asn.formula (formula_user Aₐ [term_var "b"])
+            ∗ asn.formula (formula_user Bₐ [term_val ty.int 5; term_var "b"]);
+        sep_contract_result := "r";
+        sep_contract_postcondition :=
+          asn.formula (formula_user Qₐ [term_var "r"])
+      |}.
+
+    Lemma valid_arith_contract1_no_replay : ValidContractWithoutReplay arith_contract1 (FunDef arith_example).
+    Proof.
+      compute.
+      constructor.
+      cbn.
+    Abort.
+
+    Definition test1 := Eval compute in ReplayExecutor.vcgen default_config 1 arith_contract1 (FunDef arith_example)wnil.
+    Definition test2 := Eval compute in postprocess test1.
+    Definition test3 := Eval compute in SPureSpec.replay (w := wnil) test2.
+    Definition test4 := Eval compute in postprocess test3.
+    
+    Lemma valid_arith_contract1_with_replay : ValidContract arith_contract1 (FunDef arith_example).
+    Proof.
+      now compute.
+    Qed.
+
+    Lemma valid_arith_contract2_no_replay : ValidContractWithoutReplay arith_contract2 (FunDef arith_example).
+    Proof.
+      compute.
+      constructor.
+      cbn.
+    Abort.
+
+    Lemma valid_arith_contract2_with_replay : ValidContract arith_contract2 (FunDef arith_example).
+    Proof.
+      now compute.
+    Qed.
+
+    Lemma valid_arith_contract_debug_no_replay : ValidContractWithoutReplay arith_contract_debug (FunDef arith_example).
+    Proof.
+      compute. (* Here we see (Aₐ true) but not simplified (even though it *is* possible!) *)
+      constructor.
+      cbn - [interp_Aₐ].
+      cbn [interp_Aₐ].
+    Abort.
+
+    Lemma valid_arith_contract_debug_with_replay : ValidContract arith_contract_debug (FunDef arith_example).
+    Proof.
+      compute. (* Here Aₐ is simplified to (Qₐ 9) (first assume node), thanks to Replay *)
+      constructor.
+      cbn.
+      (* Replay should go over formula_user Aₐ again? *)
+    Admitted.
+  End ArithExample.
+
+  Section UnitExample.
+
+    Definition unit_contract1 : SepContract ε ty.unit :=
+      {|
+        sep_contract_logic_variables := ["b" :: ty.bool];
+        sep_contract_localstore := []%env;
+        sep_contract_precondition :=
+          asn.formula (formula_user Aᵤ [term_var "b"])
+          ∗ asn.formula (formula_user Bᵤ [term_var "b"]);
+        sep_contract_result := "r";
+        sep_contract_postcondition :=
+          asn.formula (formula_user Cᵤ [])
+      |}.
+
+    Definition unit_contract2 : SepContract ε ty.unit :=
+      {|
+        sep_contract_logic_variables := ["b" :: ty.bool];
+        sep_contract_localstore := []%env;
+        sep_contract_precondition :=
+          asn.formula (formula_user Bᵤ [term_var "b"])
+          ∗ asn.formula (formula_user Aᵤ [term_var "b"]);
+        sep_contract_result := "r";
+        sep_contract_postcondition :=
+          asn.formula (formula_user Cᵤ [])
+      |}.
+
+    (* This contract remove B and just assumes that b = true directly *)
+    Definition unit_contract3 : SepContract ε ty.unit :=
+      {|
+        sep_contract_logic_variables := ["b" :: ty.bool];
+        sep_contract_localstore := []%env;
+        sep_contract_precondition :=
+          asn.formula (formula_user Aᵤ [term_var "b"])
+          ∗ term_var "b" = term_val ty.bool true;
+        sep_contract_result := "r";
+        sep_contract_postcondition :=
+          asn.formula (formula_user Cᵤ [])
+      |}.
+
+    Definition unit_contract_int : SepContract ε ty.unit :=
+      {|
+        sep_contract_logic_variables := ["a" :: ty.int; "b" :: ty.int];
+        sep_contract_localstore := []%env;
+        sep_contract_precondition :=
+          term_var "a" + term_var "b" = term_val ty.int 5
+          ∗ term_var "b" = term_val ty.int 0;
+        sep_contract_result := "_";
+        sep_contract_postcondition :=
+          (term_var "a") <= (term_val ty.int 5);
+      |}.
+
+    Lemma valid_unit_contract1_no_replay : ValidContractWithoutReplay unit_contract1 (FunDef unit_example).
+    Proof.
+      compute.
+      constructor. (* No Replay, so we get "assume (Aᵤ true)", which is not simplified, as b = true happened "later". *)
+    Abort.
+
+    Lemma valid_unit_contract1_with_replay : ValidContract unit_contract1 (FunDef unit_example).
+    Proof.
+      now compute. (* Replay, we get a trivial VC *)
+    Qed.
+
+    Lemma valid_unit_contract2_no_replay : ValidContractWithoutReplay unit_contract2 (FunDef unit_example).
+    Proof.
+      compute.
+      constructor. (* No replay, but the ordering of the conjuncts in the precondition ensures A will get simplified too (by putting B first!) *)
+      now cbn.
+    Qed.
+
+    Lemma valid_unit_contract3_no_replay : ValidContractWithoutReplay unit_contract3 (FunDef unit_example).
+    Proof.
+      compute.
+      constructor. (* Same issue as in valid_unit_contract1_no_replay *)
+    Abort.
+
+    Lemma valid_unit_contract3_with_replay : ValidContract unit_contract3 (FunDef unit_example).
+    Proof.
+      now compute. (* Replay, gives us a trivial VC *)
+    Qed.
+
+    Lemma valid_unit_contract_int_no_replay : ValidContractWithoutReplay unit_contract_int (FunDef unit_example).
+    Proof.
+      compute.
+      (* No replay, we see that we have an assume: 5 = a + 0, which didn't get
+         simplified, and we need to prove that: a = 5 *)
+      constructor.
+      cbn.
+    Abort.
+
+    Lemma valid_unit_contract_int_with_replay : ValidContract unit_contract_int (FunDef unit_example).
+    Proof.
+      now compute. (* Replay, gives us a trivial VC *)
+    Qed.
+  End UnitExample.
+End ReplayExamples.
+
