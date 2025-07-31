@@ -62,7 +62,7 @@ Makefile2.coq: _CoqProject Makefile $(SRCS) case_study/MinimalCaps/Shallow.v
 	$(Q)coq_makefile -f _CoqProject -o Makefile2.coq case_study/MinimalCaps/Shallow.v
 
 minimalcaps: Makefile2.coq
-	$(Q)rm -f case_study/MinimalCaps/Contracts.vo*
-	$(Q)$(MAKE) -f Makefile.coq case_study/MinimalCaps/Contracts.vo
+	$(Q)rm -f case_study/MinimalCaps/Contracts/Statistics.vo*
+	$(Q)$(MAKE) -f Makefile.coq case_study/MinimalCaps/Contracts/Statistics.vo
 	$(Q)rm -f case_study/MinimalCaps/Shallow.vo*
 	$(Q)$(MAKE) -f Makefile2.coq case_study/MinimalCaps/Shallow.vo | tr -s '[:space:]' '[\n*]' | scripts/shallow.sh

@@ -29,12 +29,16 @@
 From Coq Require Import
      ZArith.ZArith.
 From Katamaran.MinimalCaps Require Import
-     Contracts
-     Machine.
+     Contracts.Definitions
+     Contracts.Statistics
+     Contracts.Verification
+     Machine
+     Sig.
 
 Import MinCapsProgram.
 Import MinCapsSpecification.
 Import MinCapsShallowExec.
+Import MinCapsSignature.
 
 Definition all_shallow_vcs : Prop :=
   List.fold_right
@@ -49,7 +53,7 @@ Definition all_shallow_vcs : Prop :=
 Set Printing Depth 500.
 Goal True.
   idtac "Shallow VC:".
-  let P := eval compute - [CPureSpecM.FALSE CPureSpecM.TRUE CPureSpecM.FINISH
+  let P := eval compute - [FALSE TRUE FINISH
                            negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb
                            Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge]
       in all_shallow_vcs

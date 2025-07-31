@@ -6,13 +6,13 @@ PRUNED=0
 
 while read line
 do
-    if [[ "$line" =~ CPureSpecM.FALSE ]]; then
+    if [[ "$line" =~ FALSE ]]; then
         ((++PRUNED))
     fi
-    if [[ "$line" =~ CPureSpecM.TRUE ]]; then
+    if [[ "$line" =~ TRUE ]]; then
         ((++PRUNED))
     fi
-    if [[ "$line" =~ CPureSpecM.FINISH ]]; then
+    if [[ "$line" =~ FINISH ]]; then
         ((++FINISH))
     fi
 done
