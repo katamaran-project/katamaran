@@ -314,12 +314,10 @@ Module inv := invariants.
      *)
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
-      (* Admit to avoid adding too much time to the compilation. *)
-    Admitted.
-    (*   vm_compute. *)
-    (*   constructor; cbn. *)
-    (*   intuition; bv_solve_Ltac.solveBvManual. *)
-    (* Qed. *)
+      vm_compute.
+      constructor; cbn.
+      intuition; bv_solve_Ltac.solveBvManual.
+    Qed.
 
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
     Example femtokernel_handler_pre (is_mmio : bool) : Assertion ["a" :: ty_xlenbits] :=
@@ -372,20 +370,18 @@ Module inv := invariants.
     Import Erasure.notations.
     Lemma sat__femtohandler (is_mmio : bool) : safeE (vc__femtohandler is_mmio).
     Proof.
-      (* Admit to avoid adding too much time to the compilation. *)
-    Admitted.
-    (*   destruct is_mmio. *)
-    (*   - (* For the mmio case, we still need to prove that our word falls within mmio *) *)
-    (*     vm_compute. *)
-    (*     constructor; cbn. *)
-    (*     intuition; *)
-    (*       bv_solve_Ltac.solveBvManual. *)
-    (*     1-4: eapply bv.in_seqBv'; now vm_compute. *)
-    (*   - vm_compute. *)
-    (*     constructor; cbn. *)
-    (*     intuition; *)
-    (*       bv_solve_Ltac.solveBvManual. *)
-    (* Qed. *)
+      destruct is_mmio.
+      - (* For the mmio case, we still need to prove that our word falls within mmio *)
+        vm_compute.
+        constructor; cbn.
+        intuition;
+          bv_solve_Ltac.solveBvManual.
+        1-4: eapply bv.in_seqBv'; now vm_compute.
+      - vm_compute.
+        constructor; cbn.
+        intuition;
+          bv_solve_Ltac.solveBvManual.
+    Qed.
 
     Definition femtoinit_stats :=
       SymProp.Statistics.count_to_stats
