@@ -52,10 +52,10 @@ linkedlist: Makefile.coq
 	$(Q)$(MAKE) -f Makefile.coq test/LinkedList.vo
 
 timings: Makefile.coq
-	$(Q)rm -f case_study/MinimalCaps/Contracts.vo*
+	$(Q)rm -f case_study/MinimalCaps/Contracts/Verification.vo*
 	$(Q)rm -f test/SumMaxLen.vo*
 	$(Q)rm -f test/LinkedList.vo*
-	$(Q)$(MAKE) -f Makefile.coq test/LinkedList.vo test/SumMaxLen.vo case_study/MinimalCaps/Contracts.vo | ts '%.s' | scripts/timing.sh
+	$(Q)$(MAKE) -f Makefile.coq test/LinkedList.vo test/SumMaxLen.vo case_study/MinimalCaps/Contracts/Verification.vo | ts '%.s' | scripts/timing.sh
 
 Makefile2.coq: _CoqProject Makefile $(SRCS) case_study/MinimalCaps/Shallow.v
 	$(E) "COQ_MAKEFILE Makefile2.coq"
@@ -65,4 +65,5 @@ minimalcaps: Makefile2.coq
 	$(Q)rm -f case_study/MinimalCaps/Contracts/Statistics.vo*
 	$(Q)$(MAKE) -f Makefile.coq case_study/MinimalCaps/Contracts/Statistics.vo
 	$(Q)rm -f case_study/MinimalCaps/Shallow.vo*
+	$(Q)echo "Getting the statistics for the shallow executor. This takes 5-10min on a modern desktop and uses ~12GB of RAM."
 	$(Q)$(MAKE) -f Makefile2.coq case_study/MinimalCaps/Shallow.vo | tr -s '[:space:]' '[\n*]' | scripts/shallow.sh

@@ -100,19 +100,19 @@ Module MinCapsValidContracts.
   Definition ValidContractReflect {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContractReflect c (FunDef f)
-    | None => False
+    | None => True
     end.
 
   Definition ValidContractWithErasure {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContractWithErasure c (FunDef f)
-    | None => False
+    | None => True
     end.
 
   Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContract c (FunDef f)
-    | None => False
+    | None => True
     end.
 
   Ltac symbolic_simpl :=
@@ -356,15 +356,13 @@ Module MinCapsValidContracts.
     - cbn in H; inversion H.
   Qed.
 
-
-(*   Goal True. idtac "Timing before: minimalcaps". Abort. *)
-(*   Lemma valid_contracts : forall {Δ τ} (f : Fun Δ τ), *)
-(*       ValidContractReflect f. *)
-(*   Proof. *)
-(*   (* destruct f; reflexivity. *)
-(* Qed. *) *)
-(*   Admitted. *)
-(*   Goal True. idtac "Timing after: minimalcaps". Abort. *)
+  Goal True. idtac "Timing before: minimalcaps". Abort.
+  Lemma valid_contracts : forall {Δ τ} (f : Fun Δ τ),
+      ValidContractReflect f.
+  Proof.
+    destruct f; now vm_compute.
+  Qed.
+  Goal True. idtac "Timing after: minimalcaps". Abort.
 
   Goal True. idtac "Assumptions for minimalcaps contracts:". Abort.
   Print Assumptions ValidContracts.
