@@ -23,9 +23,6 @@ Some of the bigger differences include:
 - The complete codebase uses an intrinsically-typed representation for all
   pieces of data such as input programs, variable stores, heaps, substitutions,
   valuations etc.
-- The pre- and postconditions in contracts are written in a deeply-embedded
-  assertion language represented (`Inductive Assertion`) that was omitted in the
-  paper for space reasons.
 
 Nevertheless, our implementation provides evidence for the main claims of the
 paper and we tried to make the presentation in the code and in the paper
