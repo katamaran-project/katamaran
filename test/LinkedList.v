@@ -124,7 +124,7 @@ Module Import ExampleProgram <: Program ExampleBase.
     | mkcons : FunX [ "x" ∷ ty.int; "xs" ∷ llist ] ptr
     | fst    : FunX [ "p" ∷ ptr ] ty.int
     | snd    : FunX [ "p" ∷ ptr ] llist
-    (* | setfst : FunX [ "p" ∷ ptr; "x" ∷ ty.int ] ty.unit *)
+    | setfst : FunX [ "p" ∷ ptr; "x" ∷ ty.int ] ty.unit
     | setsnd : FunX [ "p" ∷ ptr; "xs" ∷ llist ] ty.unit
     .
 
@@ -300,6 +300,11 @@ Module Import ExampleProgram <: Program ExampleBase.
         match μ !! z with
         | None          => res = inl "Invalid pointer"
         | Some (_,next) => γ' = γ /\ μ' = μ /\ res = inr next
+        end;
+      ForeignCall setfst (env.snoc (env.snoc env.nil _ z) _ x) res γ γ' μ μ' :=
+        match (μ !! z) with
+        | None => res = inl "Invalid pointer"
+        | Some (_, xs) => γ' = γ /\  μ' = <[z := (x, xs)]> μ /\ res = inr tt
         end;
       ForeignCall setsnd (env.snoc (env.snoc env.nil _ z) _ xs) res γ γ' μ μ' :=
         match (μ !! z) with
@@ -635,6 +640,16 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSignature
            term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
 
+    Definition sep_contract_setfst : SepContract [ "p" ∷ ptr; "x" ∷ ty.int ] ty.unit :=
+      {| sep_contract_logic_variables := ["p" ∷ ty.int; "x" ∷ ty.int; "xs" ∷ llist];
+         sep_contract_localstore      := [term_var "p"; term_var "x"];
+         sep_contract_precondition    := asn.exist "y" ty.int (term_var "p" ↦p ( term_var "y" , term_var "xs"));
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+         term_var "result" = term_val ty.unit tt ∗
+         term_var "p" ↦p ( term_var "x" , term_var "xs");
+      |}.
+
     Definition sep_contract_setsnd : SepContract [ "p" ∷ ptr; "xs" ∷ llist ] ty.unit :=
       {| sep_contract_logic_variables := ["p" ∷ ty.int; "x" ∷ ty.int; "xs" ∷ llist];
          sep_contract_localstore      := [term_var "p"; term_var "xs"];
@@ -703,6 +718,7 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSignature
         | mkcons => sep_contract_mkcons
         | fst => sep_contract_fst
         | snd => sep_contract_snd
+        | setfst => sep_contract_setfst
         | setsnd => sep_contract_setsnd
         end.
 
@@ -987,13 +1003,11 @@ Module ExampleModel.
         destruct (env.view ι) as [ι x].
         destruct (env.view ι). cbn.
         iIntros "_".
-        rewrite <-semWP_unfold_nolc. cbn.
+        iApply semWP_foreign.
         iIntros (γ1 μ1) "[Hregs Hmem]".
         unfold mem_inv.
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
-        iModIntro.
-        iIntros (e2 δ2 γ2 μ2 step).
-        dependent elimination step. cbn.
+        iModIntro. iIntros (? ? ? f1).
         rewrite Heq in f1. cbn in f1.
         destruct_conjs; subst.
         do 3 iModIntro.
@@ -1017,12 +1031,10 @@ Module ExampleModel.
         destruct (env.view ι) as [ι vp].
         destruct (env.view ι). cbn.
         iIntros "Hres".
-        rewrite <-semWP_unfold_nolc.
+        iApply semWP_foreign.
         iIntros (γ1 μ1) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
-        iModIntro.
-        iIntros (e2 δ2 γ2 μ2 step).
-        dependent elimination step. cbn.
+        iModIntro. iIntros (? ? ? f1).
         rewrite Heq in f1. cbn in f1.
         unfold mem_inv.
         do 3 iModIntro.
@@ -1045,12 +1057,10 @@ Module ExampleModel.
         destruct (env.view ι) as [ι vp].
         destruct (env.view ι). cbn.
         iIntros "Hres".
-        rewrite <-semWP_unfold_nolc.
+        iApply semWP_foreign.
         iIntros (γ1 μ1) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
-        iModIntro.
-        iIntros (e2 δ2 γ2 μ2) "%step".
-        dependent elimination step. cbn.
+        iModIntro. iIntros (? ? ? f1).
         rewrite Heq in f1. cbn in f1.
         unfold mem_inv.
         do 3 iModIntro.
@@ -1064,6 +1074,33 @@ Module ExampleModel.
         now iFrame.
       Qed.
 
+      Lemma setfst_sound `{sailGS Σ} :
+        ValidContractForeign sep_contract_setfst setfst.
+      Proof.
+        intros Γ es δ ι Heq.
+        destruct (env.view ι) as [ι vxs].
+        destruct (env.view ι) as [ι vx].
+        destruct (env.view ι) as [ι vp].
+        destruct (env.view ι). cbn.
+        iIntros "Hres".
+        iDestruct "Hres" as (vx__old) "Hres".
+        iApply semWP_foreign.
+        iIntros (γ1 μ1) "[Hregs Hmem]".
+        iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+        iModIntro.
+        iIntros (res ? ? Hf).
+        iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx__old,vxs) with "Hmem Hres") as "%".
+        iIntros "!> !> !>". iMod "Hclose2" as "_".
+        iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx__old,vxs) with "Hmem Hres") as "%".
+        rewrite Heq in Hf. cbn in Hf. rewrite H0 in Hf.
+        destruct_conjs; subst.
+        iMod (gen_heap_update μ1 vp (vx__old,vxs) (vx,vxs) with "Hmem Hres") as "[Hmem Hres]".
+        iModIntro.
+        iFrame.
+        iApply semWP_val.
+        now iFrame.
+      Qed.
+
       Lemma setsnd_sound `{sailGS Σ} :
         ValidContractForeign sep_contract_setsnd setsnd.
       Proof.
@@ -1074,18 +1111,16 @@ Module ExampleModel.
         destruct (env.view ι). cbn.
         iIntros "Hres".
         iDestruct "Hres" as (vxs__old) "Hres".
-        rewrite <-semWP_unfold_nolc.
+        iApply semWP_foreign.
         iIntros (γ1 μ1) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
-        iModIntro.
-        iIntros (e2 δ2 γ2 μ2 step).
-        dependent elimination step. cbn.
-        rewrite Heq in f1. cbn in f1.
+        iModIntro. iIntros (res ? ? Hf).
+        rewrite Heq in Hf. cbn in Hf.
         unfold mem_inv.
         do 3 iModIntro.
         iMod "Hclose2" as "_".
         iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs__old) with "Hmem Hres") as "%".
-        rewrite H0 in f1.
+        rewrite H0 in Hf.
         destruct_conjs; subst.
         iMod (gen_heap_update μ1 vp (vx,vxs__old) (vx,vxs) with "Hmem Hres") as "[Hmem Hres]".
         iModIntro.
@@ -1097,7 +1132,7 @@ Module ExampleModel.
       Lemma foreignSem `{sailGS Σ} : ForeignSem.
       Proof.
         intros τ Δ f; destruct f;
-          eauto using mkcons_sound, fst_sound, snd_sound, setsnd_sound.
+          eauto using mkcons_sound, fst_sound, snd_sound, setfst_sound, setsnd_sound.
       Qed.
 
       Goal True. idtac "Timing before: llist/lemmas". Abort.
