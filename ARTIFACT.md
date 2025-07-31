@@ -54,7 +54,7 @@ should be run from the main `katamaran` folder, which is
 
 ### Claimed badges
 For our artifact we claim the available, functional and reusable badges. We lay
-our how we support the claim of each badge in its own section.
+out how we support the claim of each badge in its own section.
 
 ## Available badge
 We will make the artifact available in a long-term, publicly accessible archive
@@ -92,27 +92,31 @@ that you can browse later, e.g. via `less summaxlen.txt`.
 ### Functional Claim 1: Shallow verification condition generation
 As demonstrated in Section 2, shallow VCGs can be defined by implementing
 monadic interpreters in shallow specification monads. Most of the definition can
-be found in the `theories/Shallow/Executor.v` file. Of interest are the
+be found in the `theories/Shallow/Monads.v` file. Of interest are the
 following definitions:
 
-- The pure predicate transformer monad `CPureSpecM` corresponds to the
+- The pure predicate transformer monad `CPureSpec` corresponds to the
   definition 𝑊pure from Section 2.
-- The symbolic heap and store predicate transformer monad `CHeapSpecM`
+- The symbolic heap and store predicate transformer monad `CHeapSpec`
   corresponds to 𝑊heap from Section 4.
-- The names of the definitions in `Executor.v` for the primitives from Fig 2.
+- The names of the definitions in `Monads.v` for the primitives from Fig 2.
   are `angelic`, `demonic`, `angelic_binary`, `demonic_binary`, `assert_formula`
-  and `assume_formula` which are defined for both `CPureSpecM` and `CHeapSpecM`.
+  and `assume_formula` which are defined for both `CPureSpec` and `CHeapSpec`.
 - The propositional implementation of control flow from Fig 3. are the
-  `angelic_match_*` and `demonic_match_*` functions.
+  `angelic_pattern_match` and `demonic_pattern_match` functions.
+
+The shallow executor, which uses the shallow specification monads, can be
+found in the `theories/MicroSail/Executor.v` file:
+
 - The main interpreter function that recurses over program statements is
-  implemented in `exec` and `exec_aux`.
+  implemented in `cexec` and `exec_aux`.
 - The main verification condition generation is implemented `exec_contract`,
   `vcgen` and `ValidContract`.
 
 ### Functional Claim 2: Shallow VCG soundness
 The proof of the soundness of the shallow VCG can be found in the file
-`theories/Shallow/Soundness.v`. Lemma 2.1 of the paper is verified by `Lemma
-exec_aux_sound` and `Lemma exec_sound` in the code, with the statement given by
+`theories/MicroSail/ShallowSoundness.v`. Lemma 2.1 of the paper is verified by `Lemma
+exec_aux_sound` and `Lemma sound_cexec` in the code, with the statement given by
 `Definition SoundExec`. Corollary 2.2 of the paper corresponds to `Lemma
 vcgen_sound` and `Lemma shallow_vcgen_soundness`.
 
@@ -121,7 +125,7 @@ corresponds to in terms of the program logic, can be found in
 `theories/Sep/Hoare.v`.
 
 Printing the assumptions of `shallow_vcgen_soundness` in
-`theories/Shallow/Soundness.v` would print all the module parameters as
+`theories/MicroSail/ShallowSoundness.v` would print all the module parameters as
 assumptions, which are considered user inputs by the code. Instead we added a
 `Print Assumptions shallow_vcgen_soundness` command to `test/SumMaxLen.v` where
 the modules are instantiated for one of the toy examples. Search for
@@ -137,17 +141,19 @@ Kripke-indexed types and basic constructions like the box operator `Definition
 Box`, the S4 axioms, and a type class for persistent types `Class Persistent`
 and some of its instances.
 
-The symbolic specification monads come again in two flavours: `SPureSpecM` for
-𝑆pure from Section 3 and `SHeapSpecM` for 𝑆ℎ𝑒𝑎𝑝 from Section 4 of the paper. You
-will find the symbolic definition of a demonic pattern match on sum types in
-`Definition demonic_match_sum'`. The executor function `exec` and `exec_aux` are
+The symbolic specification monads, found in `theories/Symbolic/Monads.v`,
+come again in two flavours: `SPureSpec` for
+𝑆pure from Section 3 and `SHeapSpec` for 𝑆ℎ𝑒𝑎𝑝 from Section 4 of the paper. You
+will find the symbolic definition of a demonic pattern match in
+`Definition demonic_pattern_match`. The `theories/MicroSail/SymbolicExecutor.v`
+file contains the executor function `sexec` and `exec_aux`, which are
 the symbolic equivalents to the shallow one you already encountered, and the
 overall VCG is defined by `Definition vcgen` which is wrapped and combined with
 the postprocessing phase in `Definition ValidContract`.
 
 ### Functional Claim 4: Symbolic VCG soundness
 The reduction of the soundness of the symbolic VCG to soundness of the shallow
-VCG is implemented in file `theories/Symbolic/Soundness.v`. The definition of
+VCG is implemented in file `theories/MicroSail/RefineExecutor.v`. The definition of
 the logical relation from Fig. 18 of the paper is implemented as `Class Refine`
 and its instances. The file contains an explanation why it's implemented using
 typeclasses. The example relatedness proof of the paper is implemented in `Lemma
@@ -193,14 +199,14 @@ verification failure for which the `linkedlist.txt` files contains the generated
 output.
 
 For the MinimalCaps case study, all verification conditions are solved
-simultaneously in `Lemma valid_contracts` in
-`case_study/MinimalCaps/Contracts.v`, which also became trivial after
+simultaneously in `Lemma ValidContracts` in
+`case_study/MinimalCaps/Contracts/Verification.v`, which also became trivial after
 simplification.
 
 The branching statistics of Table. 1 can be found in the `summaxlen.txt` and
 `linkedlist.txt` files. The details of counting the nodes can be found in the
-`Module Statistics` in both `theories/Shallow/Executor.v` and
-`theories/Symbolic/Executor.v`. For MinimalCaps, computing the nodes of the
+`Module Statistics` in both `theories/MicroSail/ShallowExecutor.v` and
+`theories/MicroSail/SymbolicExecutor.v`. For MinimalCaps, computing the nodes of the
 large combined shallow VC (~96k lines) is intractable in Ltac, therefore an
 alternative command line-based solution is provided. It prints the entire VC to
 standard out and counts the number of textual occurrences of the leaf
