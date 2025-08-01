@@ -337,14 +337,14 @@ Module Type SymPropOn
             | ty.NonSyncVal _ _ _ => False
             | ty.SyncVal _ v =>
                 let (c,ι__pat) := pattern_match_val pat v in
-                safe (rhs c) (ι ►► mapSyncValNamedEnv ι__pat)
+                safe (rhs c) (ι ►► ty.mapSyncValNamedEnv ι__pat)
             end
         | pattern_match_var x pat rhs =>
             match ι.[?? x] with
             | ty.NonSyncVal _ _ _ => False
             | ty.SyncVal _ v =>
                 let (c,ι__pat) := pattern_match_val pat v in
-                let ι' := env.remove (x∷_) (ι ►► mapSyncValNamedEnv ι__pat) _ in
+                let ι' := env.remove (x∷_) (ι ►► ty.mapSyncValNamedEnv ι__pat) _ in
                 safe (rhs c) ι'
             end
         | debug d k => safe k ι
@@ -380,14 +380,14 @@ Module Type SymPropOn
             | ty.NonSyncVal _ _ _ => False
             | ty.SyncVal _ v =>
                 let (c,ι__pat) := pattern_match_val pat v in
-                safe_debug (rhs c) (ι ►► mapSyncValNamedEnv ι__pat)
+                safe_debug (rhs c) (ι ►► ty.mapSyncValNamedEnv ι__pat)
             end
         | pattern_match_var x pat rhs =>
             match ι.[?? x] with
             | ty.NonSyncVal _ _ _ => False
             | ty.SyncVal _ v =>
                 let (c,ι__pat) := pattern_match_val pat v in
-                let ι' := env.remove (x∷_) (ι ►► mapSyncValNamedEnv ι__pat) _ in
+                let ι' := env.remove (x∷_) (ι ►► ty.mapSyncValNamedEnv ι__pat) _ in
                 safe_debug (rhs c) ι'
             end
         | debug d k => Debug d (safe_debug k ι)
@@ -424,7 +424,7 @@ Module Type SymPropOn
                 let (c,ι__pat) := pattern_match_val pat v in
                 let w1   : World        := wmatch w s pat c in
                 let r1   : w ⊒ w1       := acc_match_right c in
-                let ι1   : Valuation w1 := ι ►► mapSyncValNamedEnv ι__pat in
+                let ι1   : Valuation w1 := ι ►► ty.mapSyncValNamedEnv ι__pat in
                 @wsafe w1 (rhs c) ι1
             end
         | pattern_match_var x pat rhs =>
@@ -435,7 +435,7 @@ Module Type SymPropOn
                 let Δ    : LCtx         := PatternCaseCtx c in
                 let w1   : World        := wcat w Δ in
                 let xIn1 : x∷_ ∈ w1     := ctx.in_cat_left Δ _ in
-                let ι1   : Valuation w1 := ι ►► mapSyncValNamedEnv ι__pat in
+                let ι1   : Valuation w1 := ι ►► ty.mapSyncValNamedEnv ι__pat in
                 let w2   : World        := wsubst w1 x (lift v) in
                 let ι2   : Valuation w2 := env.remove (x∷_) ι1 xIn1 in
                 @wsafe w2 (rhs c) ι2
@@ -1992,7 +1992,7 @@ Module Type SymPropOn
               | ty.NonSyncVal _ _ _ => False
               | ty.SyncVal _ v =>
                 let (c,ι__pat) := pattern_match_val pat v in
-                inst_symprop (app (erase_valuation (mapSyncValNamedEnv ι__pat)) ι) (rhs c)
+                inst_symprop (app (erase_valuation (ty.mapSyncValNamedEnv ι__pat)) ι) (rhs c)
               end
           | None   => False
           end
@@ -2004,7 +2004,7 @@ Module Type SymPropOn
               | ty.SyncVal _ v =>
                   let ι'       := list_remove ι n in
                   let (c,ι__pat) := pattern_match_val pat v in
-                  inst_symprop (app (erase_valuation (mapSyncValNamedEnv ι__pat)) ι') (rhs c)
+                  inst_symprop (app (erase_valuation (ty.mapSyncValNamedEnv ι__pat)) ι') (rhs c)
               end
           | None   => False
           end

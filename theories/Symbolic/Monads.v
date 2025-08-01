@@ -309,23 +309,6 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           (y∷σ) (Φ (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
     #[global] Arguments demonic x [w] σ Φ : rename.
 
-    Definition angelicVal (x : option LVar) : ⊢ ∀ σ, SPureSpec (STerm σ) :=
-      fun w σ Φ =>
-        let y := fresh_lvar w x in
-        SymProp.angelicv
-          (y∷σ)
-          (SymProp.assumePublic (@term_var _ y σ ctx.in_zero) (Φ (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero))).
-    #[global] Arguments angelicVal x [w] σ Φ : rename.
-
-    Definition demonicVal (x : option LVar) : ⊢ ∀ σ, SPureSpec (STerm σ) :=
-      fun w σ Φ =>
-        let y := fresh_lvar w x in
-        SymProp.demonicv
-          (y∷σ)
-          (SymProp.assumePublic (@term_var _ y σ ctx.in_zero) (Φ (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero))).
-    #[global] Arguments demonicVal x [w] σ Φ : rename.
-
-
     Definition angelic_ctx {N : Set} (n : N -> LVar) :
       ⊢ ∀ Δ : NCtx N Ty, SPureSpec (fun w => NamedEnv (Term w) Δ) :=
       fix rec {w} Δ {struct Δ} :=
@@ -337,17 +320,6 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         end.
     #[global] Arguments angelic_ctx {N} n [w] Δ : rename.
 
-    Definition angelicVal_ctx {N : Set} (n : N -> LVar) :
-      ⊢ ∀ Δ : NCtx N Ty, SPureSpec (fun w => NamedEnv (Term w) Δ) :=
-      fix rec {w} Δ {struct Δ} :=
-        match Δ with
-        | []%ctx => pure []%env
-        | Γ ▻ x∷σ => ⟨ ω1 ⟩ tΔ <- rec Γ;;
-                     ⟨ ω2 ⟩ tσ <- angelicVal (Some (n x)) σ ;;
-                     pure (tΔ⟨ω2⟩ ► (x∷σ ↦ tσ))
-        end.
-    #[global] Arguments angelicVal_ctx {N} n [w] Δ : rename.
-
     Definition demonic_ctx {N : Set} (n : N -> LVar) :
       ⊢ ∀ Δ : NCtx N Ty, SPureSpec (fun w => NamedEnv (Term w) Δ) :=
       fix rec {w} Δ {struct Δ} :=
@@ -358,17 +330,6 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                      pure (tΔ⟨ω2⟩ ► (x∷σ ↦ tσ))
         end%ctx.
     #[global] Arguments demonic_ctx {_} n [w] Δ : rename.
-
-    Definition demonicVal_ctx {N : Set} (n : N -> LVar) :
-      ⊢ ∀ Δ : NCtx N Ty, SPureSpec (fun w => NamedEnv (Term w) Δ) :=
-      fix rec {w} Δ {struct Δ} :=
-        match Δ with
-        | []%ctx  => pure []%env
-        | Δ ▻ x∷σ => ⟨ ω1 ⟩ tΔ <- rec Δ;;
-                     ⟨ ω2 ⟩ tσ <- demonicVal (Some (n x)) σ;;
-                     pure (tΔ⟨ω2⟩ ► (x∷σ ↦ tσ))
-        end%ctx.
-    #[global] Arguments demonicVal_ctx {_} n [w] Δ : rename.
 
     Definition assert_pathcondition :
       ⊢ AMessage -> PathCondition -> SPureSpec Unit :=
@@ -417,6 +378,14 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Definition assume_formula :
       ⊢ Formula -> SPureSpec Unit :=
       fun w F => assume_pathcondition ([ctx] ▻ F).
+
+    Definition assert_public {σ} :
+      ⊢ AMessage -> WTerm σ -> SPureSpec Unit :=
+      fun w msg t => assert_formula msg (formula_public t).
+
+    Definition assume_public {σ} :
+      ⊢ WTerm σ -> SPureSpec Unit :=
+      fun w t => assume_formula (formula_public t).
 
     Definition angelic_binary {A} :
       ⊢ SPureSpec A -> SPureSpec A -> SPureSpec A :=
@@ -476,17 +445,26 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
       Context {N : Set} (n : N -> LVar).
 
+      Definition assertPublicIfNotSinglePattern {N σ} (pat : @Pattern N σ) :
+        ⊢ AMessage -> WTerm σ -> SPureSpec Unit :=
+        fun w msg t =>
+          if isSinglePattern pat then pure tt else
+            assert_public msg t.
+
       Definition angelic_pattern_match' {σ} (pat : @Pattern N σ) :
         ⊢ AMessage -> WTerm σ -> SPureSpec (SMatchResult pat) :=
         fun w0 msg t =>
           ⟨ θ1 ⟩ pc <- angelic_finite (PatternCase pat) msg ;;
-          ⟨ θ2 ⟩ ts <- angelicVal_ctx n (PatternCaseCtx pc) ;;
+          ⟨ θ2 ⟩ ts <- angelic_ctx n (PatternCaseCtx pc) ;;
           let θ12 := θ1 ∘ θ2 in
-          ⟨ θ3 ⟩ _  <- assert_formula (persist msg θ12)
+          ⟨ θ3 ⟩ _  <- assertPublicIfNotSinglePattern pat msg⟨θ12⟩ t⟨θ12⟩;;
+          let θ123 := θ12 ∘ θ3 in
+          ⟨ θ4 ⟩ _  <- assert_formula (persist msg θ123)
                          (formula_relop bop.eq
-                            (pattern_match_term_reverse pat pc ts)
-                            t⟨θ12⟩);;
-          pure (A := SMatchResult pat) (existT pc ts⟨θ3⟩).
+                            (pattern_match_term_reverse pat pc ts⟨θ3⟩)
+                            t⟨θ123⟩);;
+          let θ34 := θ3 ∘ θ4 in
+          pure (A := SMatchResult pat) (existT pc ts⟨θ34⟩).
       #[global] Arguments angelic_pattern_match' {σ} pat [w].
 
       Definition angelic_pattern_match :
@@ -589,13 +567,16 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         ⊢ WTerm σ -> SPureSpec (SMatchResult pat) :=
         fun w0 t =>
           ⟨ θ1 ⟩ pc <- demonic_finite (PatternCase pat) ;;
-          ⟨ θ2 ⟩ ts <- demonicVal_ctx n (PatternCaseCtx pc) ;;
+          ⟨ θ2 ⟩ ts <- demonic_ctx n (PatternCaseCtx pc) ;;
           let θ12 := θ1 ∘ θ2 in
-          ⟨ θ3 ⟩ _  <- assume_formula
+          ⟨ θ3 ⟩ _ <- assume_public t⟨θ12⟩ ;;
+          let θ123 := θ12 ∘ θ3 in
+          ⟨ θ4 ⟩ _  <- assume_formula
                          (formula_relop bop.eq
-                            (pattern_match_term_reverse pat pc ts)
-                            t⟨θ12⟩);;
-          pure (A := SMatchResult pat) (existT pc ts⟨θ3⟩).
+                            (pattern_match_term_reverse pat pc ts⟨θ3⟩)
+                            t⟨θ123⟩);;
+          let θ34 := θ3 ∘ θ4 in
+          pure (A := SMatchResult pat) (existT pc ts⟨θ34⟩).
       #[global] Arguments demonic_pattern_match' {σ} pat [w].
 
       Definition demonic_pattern_match :
@@ -695,113 +676,113 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           end.
       #[global] Arguments demonic_pattern_match {σ} pat [w].
 
-      Definition new_pattern_match_regular {σ} (pat : @Pattern N σ) :
-        ⊢ STerm σ -> SPureSpec (SMatchResult pat) :=
-        fun w0 scr POST =>
-          SymProp.pattern_match scr (freshen_pattern n w0 pat)
-            (fun pc : PatternCase _ =>
-               let w1 : World   := wmatch w0 scr _ pc in
-               let r1 : w0 ⊒ w1 := acc_match_right pc in
-               POST w1 r1
-                 (existT
-                    (unfreshen_patterncase n w0 pat pc)
-                    (unfreshen_patterncaseenv n pat pc (sub_cat_right _)))).
-      #[global] Arguments new_pattern_match_regular {σ} pat [w] t.
+      (* Definition new_pattern_match_regular {σ} (pat : @Pattern N σ) : *)
+      (*   ⊢ STerm σ -> SPureSpec (SMatchResult pat) := *)
+      (*   fun w0 scr POST => *)
+      (*     SymProp.pattern_match scr (freshen_pattern n w0 pat) *)
+      (*       (fun pc : PatternCase _ => *)
+      (*          let w1 : World   := wmatch w0 scr _ pc in *)
+      (*          let r1 : w0 ⊒ w1 := acc_match_right pc in *)
+      (*          POST w1 r1 *)
+      (*            (existT *)
+      (*               (unfreshen_patterncase n w0 pat pc) *)
+      (*               (unfreshen_patterncaseenv n pat pc (sub_cat_right _)))). *)
+      (* #[global] Arguments new_pattern_match_regular {σ} pat [w] t. *)
 
-      Definition new_pattern_match_var {σ} (x : LVar) (pat : @Pattern N σ) :
-        ⊢ ctx.In (x∷σ) -> SPureSpec (SMatchResult pat) :=
-        fun w0 xIn POST =>
-          let pat' := freshen_pattern n w0 pat in
-          SymProp.pattern_match_var x pat'
-            (fun pc : PatternCase _ =>
-               POST (wmatchvar w0 xIn pat' pc) (acc_matchvar_right pc)
-                 (existT
-                    (unfreshen_patterncase n w0 pat pc)
-                    (unfreshen_patterncaseenv (D := Term (wmatchvar w0 xIn pat' pc)) n pat pc (wmatchvar_patternvars pc)))).
-      #[global] Arguments new_pattern_match_var [σ x] pat [w] xIn : rename.
+      (* Definition new_pattern_match_var {σ} (x : LVar) (pat : @Pattern N σ) : *)
+      (*   ⊢ ctx.In (x∷σ) -> SPureSpec (SMatchResult pat) := *)
+      (*   fun w0 xIn POST => *)
+      (*     let pat' := freshen_pattern n w0 pat in *)
+      (*     SymProp.pattern_match_var x pat' *)
+      (*       (fun pc : PatternCase _ => *)
+      (*          POST (wmatchvar w0 xIn pat' pc) (acc_matchvar_right pc) *)
+      (*            (existT *)
+      (*               (unfreshen_patterncase n w0 pat pc) *)
+      (*               (unfreshen_patterncaseenv (D := Term (wmatchvar w0 xIn pat' pc)) n pat pc (wmatchvar_patternvars pc)))). *)
+      (* #[global] Arguments new_pattern_match_var [σ x] pat [w] xIn : rename. *)
 
-      Definition new_pattern_match' {σ} (pat : @Pattern N σ) :
-        ⊢ STerm σ -> SPureSpec (SMatchResult pat) :=
-        fun w0 scr =>
-          match scr with
-          | @term_var _ x σ xIn => fun pat => new_pattern_match_var pat xIn
-          | t => fun pat => new_pattern_match_regular pat t
-          end pat.
-      #[global] Arguments new_pattern_match' {σ} pat [w] t.
+      (* Definition new_pattern_match' {σ} (pat : @Pattern N σ) : *)
+      (*   ⊢ STerm σ -> SPureSpec (SMatchResult pat) := *)
+      (*   fun w0 scr => *)
+      (*     match scr with *)
+      (*     | @term_var _ x σ xIn => fun pat => new_pattern_match_var pat xIn *)
+      (*     | t => fun pat => new_pattern_match_regular pat t *)
+      (*     end pat. *)
+      (* #[global] Arguments new_pattern_match' {σ} pat [w] t. *)
 
-      Fixpoint new_pattern_match {σ} (pat : @Pattern N σ) :
-        ⊢ WTerm σ -> SPureSpec (SMatchResult pat) :=
-        fun w0 : World =>
-          match pat as p in (Pattern t)
-                return (forall _ : Term (wctx w0) t,
-                           SPureSpec (@SMatchResult N t p) w0) with
-          | pat_var x       => fun scr => pure (existT tt [env].[x∷_ ↦ scr])
-          | pat_bool        =>
-              fun scr => match term_get_relval scr with
-                         | Some a =>
-                             match a with
-                             | ty.NonSyncVal _ _ _ => error (amsg.mk
-                                                               {| debug_string_pathcondition := wco _;
-                                                                 debug_string_message       :=
-                                                                   "Pattern match on NonSyncVal bool";
-                                                               |})
-                             | ty.SyncVal _ v =>
-                                 pure (existT v [env])
-                             end
-                         | None => new_pattern_match' pat_bool scr
-                         end
-          (* | pat_list σ x y  => *)
-          (*     fun scr => new_pattern_match' (pat_list σ x y) scr *)
-          | pat_pair x y    =>
-              fun scr =>
-                match term_get_pair scr with
-                | Some (a, b) => pure (existT tt [env].[x∷_ ↦ a].[y∷_ ↦ b])
-                | None        => new_pattern_match' (pat_pair x y) scr
-                end
-          (* | pat_sum σ τ x y => *)
-          (*     fun scr => match term_get_sum scr with *)
-          (*                | Some (inl a) => pure (existT true [env].[x∷σ ↦ a]) *)
-          (*                | Some (inr b) => pure (existT false [env].[y∷τ ↦ b]) *)
-          (*                | None => new_pattern_match' (pat_sum σ τ x y) scr *)
-          (*                end *)
-          | pat_unit        => fun _ => pure (existT tt [env])
-          (* | pat_enum E      => *)
-          (*     fun scr => match term_get_val scr with *)
-          (*                | Some a => pure (existT a [env]) *)
-          (*                | None => new_pattern_match' (pat_enum E) scr *)
-          (*                end *)
-          | pat_bvec_split m k x y =>
-              fun scr => new_pattern_match' (pat_bvec_split m k x y) scr
-          (* | pat_bvec_exhaustive m => *)
-          (*     fun scr => *)
-          (*       match term_get_val scr with *)
-          (*       | Some a => pure (existT a [env]) *)
-          (*       | None => new_pattern_match' (pat_bvec_exhaustive m) scr *)
-          (*       end *)
-          (* | @pat_tuple _ σs Δ p => *)
-          (*     fun scr => *)
-          (*       match term_get_tuple scr with *)
-          (*       | Some a => pure (existT tt (tuple_pattern_match_env p a)) *)
-          (*       | None => new_pattern_match' (pat_tuple p) scr *)
-          (*       end *)
-          (* | pat_record R Δ p => *)
-          (*     fun scr => *)
-          (*       match term_get_record scr with *)
-          (*       | Some a => pure (existT tt (record_pattern_match_env p a)) *)
-          (*       | None => new_pattern_match' (pat_record R Δ p) scr *)
-          (*       end *)
-          (* | pat_union U p => *)
-          (*     fun scr => *)
-          (*       match term_get_union scr with *)
-          (*       | Some (existT K scr') => *)
-          (*           ⟨ θ1 ⟩ '(existT pc ts) <- @new_pattern_match _ (p K) _ scr' ;; *)
-          (*           pure (@existT (PatternCase (pat_union U p)) *)
-          (*                   (fun pc => NamedEnv (Term _) (PatternCaseCtx pc)) *)
-          (*                   (existT (P := fun K => PatternCase (p K)) K pc) ts) *)
-          (*       | None => new_pattern_match' (pat_union U p) scr *)
-          (*       end *)
-          end.
-      #[global] Arguments new_pattern_match {σ} pat [w].
+      (* Fixpoint new_pattern_match {σ} (pat : @Pattern N σ) : *)
+      (*   ⊢ WTerm σ -> SPureSpec (SMatchResult pat) := *)
+      (*   fun w0 : World => *)
+      (*     match pat as p in (Pattern t) *)
+      (*           return (forall _ : Term (wctx w0) t, *)
+      (*                      SPureSpec (@SMatchResult N t p) w0) with *)
+      (*     | pat_var x       => fun scr => pure (existT tt [env].[x∷_ ↦ scr]) *)
+      (*     | pat_bool        => *)
+      (*         fun scr => match term_get_relval scr with *)
+      (*                    | Some a => *)
+      (*                        match a with *)
+      (*                        | ty.NonSyncVal _ _ _ => error (amsg.mk *)
+      (*                                                          {| debug_string_pathcondition := wco _; *)
+      (*                                                            debug_string_message       := *)
+      (*                                                              "Pattern match on NonSyncVal bool"; *)
+      (*                                                          |}) *)
+      (*                        | ty.SyncVal _ v => *)
+      (*                            pure (existT v [env]) *)
+      (*                        end *)
+      (*                    | None => new_pattern_match' pat_bool scr *)
+      (*                    end *)
+      (*     (* | pat_list σ x y  => *) *)
+      (*     (*     fun scr => new_pattern_match' (pat_list σ x y) scr *) *)
+      (*     | pat_pair x y    => *)
+      (*         fun scr => *)
+      (*           match term_get_pair scr with *)
+      (*           | Some (a, b) => pure (existT tt [env].[x∷_ ↦ a].[y∷_ ↦ b]) *)
+      (*           | None        => new_pattern_match' (pat_pair x y) scr *)
+      (*           end *)
+      (*     (* | pat_sum σ τ x y => *) *)
+      (*     (*     fun scr => match term_get_sum scr with *) *)
+      (*     (*                | Some (inl a) => pure (existT true [env].[x∷σ ↦ a]) *) *)
+      (*     (*                | Some (inr b) => pure (existT false [env].[y∷τ ↦ b]) *) *)
+      (*     (*                | None => new_pattern_match' (pat_sum σ τ x y) scr *) *)
+      (*     (*                end *) *)
+      (*     | pat_unit        => fun _ => pure (existT tt [env]) *)
+      (*     (* | pat_enum E      => *) *)
+      (*     (*     fun scr => match term_get_val scr with *) *)
+      (*     (*                | Some a => pure (existT a [env]) *) *)
+      (*     (*                | None => new_pattern_match' (pat_enum E) scr *) *)
+      (*     (*                end *) *)
+      (*     | pat_bvec_split m k x y => *)
+      (*         fun scr => new_pattern_match' (pat_bvec_split m k x y) scr *)
+      (*     (* | pat_bvec_exhaustive m => *) *)
+      (*     (*     fun scr => *) *)
+      (*     (*       match term_get_val scr with *) *)
+      (*     (*       | Some a => pure (existT a [env]) *) *)
+      (*     (*       | None => new_pattern_match' (pat_bvec_exhaustive m) scr *) *)
+      (*     (*       end *) *)
+      (*     (* | @pat_tuple _ σs Δ p => *) *)
+      (*     (*     fun scr => *) *)
+      (*     (*       match term_get_tuple scr with *) *)
+      (*     (*       | Some a => pure (existT tt (tuple_pattern_match_env p a)) *) *)
+      (*     (*       | None => new_pattern_match' (pat_tuple p) scr *) *)
+      (*     (*       end *) *)
+      (*     (* | pat_record R Δ p => *) *)
+      (*     (*     fun scr => *) *)
+      (*     (*       match term_get_record scr with *) *)
+      (*     (*       | Some a => pure (existT tt (record_pattern_match_env p a)) *) *)
+      (*     (*       | None => new_pattern_match' (pat_record R Δ p) scr *) *)
+      (*     (*       end *) *)
+      (*     (* | pat_union U p => *) *)
+      (*     (*     fun scr => *) *)
+      (*     (*       match term_get_union scr with *) *)
+      (*     (*       | Some (existT K scr') => *) *)
+      (*     (*           ⟨ θ1 ⟩ '(existT pc ts) <- @new_pattern_match _ (p K) _ scr' ;; *) *)
+      (*     (*           pure (@existT (PatternCase (pat_union U p)) *) *)
+      (*     (*                   (fun pc => NamedEnv (Term _) (PatternCaseCtx pc)) *) *)
+      (*     (*                   (existT (P := fun K => PatternCase (p K)) K pc) ts) *) *)
+      (*     (*       | None => new_pattern_match' (pat_union U p) scr *) *)
+      (*     (*       end *) *)
+      (*     end. *)
+      (* #[global] Arguments new_pattern_match {σ} pat [w]. *)
 
     End PatternMatching.
 

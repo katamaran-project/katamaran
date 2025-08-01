@@ -189,11 +189,11 @@ Module Type RefinementMonadsOn
 
     Lemma refine_angelic_ctx {N : Set} {n : N -> LVar} {w} :
       ⊢ ℛ⟦∀ᵣ Δ, RPureSpec (RNEnv N Δ)⟧
-        (fun δ => CPureSpec.map CHeapSpec.mapSyncValNamedEnv (CPureSpec.angelic_ctx δ)) (SPureSpec.angelic_ctx (w := w) n).
+        (fun δ => CPureSpec.angelic_ctx δ) (SPureSpec.angelic_ctx (w := w) n).
     Proof.
       iIntros (Δ).
       iInduction Δ as [|Δ IHΔ b] "Hind";
-        rsolve.
+      cbn; rsolve.
     Qed.
 
     #[export] Instance refine_compat_angelic_ctx {N : Set} {n : N -> LVar} {w} {Δ} :
@@ -512,23 +512,80 @@ Module Type RefinementMonadsOn
       induction (finite.enum F); now constructor.
     Qed.
 
-    (* Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar) *)
-    (*   {σ} (pat : @Pattern N σ) {w} : *)
-    (*   ⊢ ℛ⟦RMsg _ (RVal σ -> RPureSpec (RMatchResult pat))⟧ *)
-    (*     (CPureSpec.angelic_pattern_match pat) *)
-    (*     (SPureSpec.angelic_pattern_match' (w := w) n pat). *)
-    (* Proof. *)
-    (*   iIntros (msg v t) "Hv". *)
-    (*   unfold SPureSpec.angelic_pattern_match'. *)
-    (*   unfold CPureSpec.angelic_pattern_match. *)
-    (*   iApply (refine_bind (RA := RConst _) (RB := RMatchResult _)). *)
-    (*   { now iApply refine_angelic_finite. } *)
-    (*   iIntros (w1 r01) "!> %ι1 %sι1 Hι1". *)
-    (*   unfold RConst, RInst; cbn. *)
-    (*   rewrite repₚ_const. *)
-    (*   iDestruct "Hι1" as "<-"; rsolve. *)
-    (* Qed. *)
-    (* #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat. *)
+    Lemma refine_syncval_is_refine_formula_public {σ w} (v : Val σ) (t : Term (wctx w) σ) :
+      ℛ⟦RVal σ⟧ (ty.SyncVal σ v) t -∗ ℛ⟦RFormula⟧ (ty.isSyncValProp (ty.SyncVal σ v)) (formula_public t).
+    Proof.
+      constructor.
+      intros.
+      crushPredEntails3.
+      constructor.
+      - constructor.
+      - intros T. inversion H1. cbn. rewrite H3. tauto.
+    Qed.
+
+    Lemma refine_nonsyncval_is_refine_formula_public {σ w} (v1 v2 : Val σ) (t : Term (wctx w) σ) :
+      ℛ⟦RVal σ⟧ (ty.NonSyncVal σ v1 v2) t -∗ ℛ⟦RFormula⟧ (ty.isSyncValProp (ty.NonSyncVal σ v1 v2)) (formula_public t).
+    Proof.
+      constructor. intros. constructor; inversion H1.
+      + intros T. cbn in *. rewrite H3 in T. exfalso. assumption.
+      + intros T. cbn. rewrite H3 in T. cbn in *. exfalso. assumption.
+      Qed.
+    
+    Lemma refine_assert_public {σ} {w} :
+      ⊢ ℛ⟦RMsg _ (RVal σ -> RPureSpec RUnit)⟧
+        (CPureSpec.assert_public)
+        (SPureSpec.assert_public (w := w)).
+    Proof.
+      iIntros (msg v t) "Hv".
+      unfold CPureSpec.assert_public. unfold SPureSpec.assert_public.
+      iApply refine_assert_formula.
+      destruct v.
+      - iApply refine_syncval_is_refine_formula_public. iIntros. iAssumption.
+      - iApply refine_nonsyncval_is_refine_formula_public. iIntros. iAssumption.
+    Qed.
+
+    #[export] Instance refine_compat_assert_public {σ} {w} :
+      RefineCompat (RMsg _ (RVal σ -> RPureSpec RUnit)) CPureSpec.assert_public w (SPureSpec.assert_public (w := w)) _ :=
+      MkRefineCompat refine_assert_public.
+    
+    Lemma refine_assertPublicIfNotSinglePattern {N : Set} {n : N -> LVar}
+      {σ} (pat : @Pattern N σ) {w} :
+      ⊢ ℛ⟦RMsg _ (RVal σ -> RPureSpec RUnit)⟧
+        (CPureSpec.assertPublicIfNotSinglePattern pat)
+        (SPureSpec.assertPublicIfNotSinglePattern pat (w := w)).
+    Proof.
+      unfold CPureSpec.assertPublicIfNotSinglePattern.
+      unfold SPureSpec.assertPublicIfNotSinglePattern.
+      destruct (isSinglePattern pat) as [|].
+      - iIntros (msg rv t) "Hrvt". rsolve.
+      - rsolve.
+    Qed.
+
+    #[export] Instance refine_compat_assertPublicIfNotSinglePattern {N : Set} {n : N -> LVar}
+      {σ} (pat : @Pattern N σ) {w} :
+      RefineCompat (RMsg _ (RVal σ -> RPureSpec RUnit)) (CPureSpec.assertPublicIfNotSinglePattern pat) w (SPureSpec.assertPublicIfNotSinglePattern pat (w := w)) _ :=
+      MkRefineCompat (refine_assertPublicIfNotSinglePattern (n := n) pat).
+
+    Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar)
+      {σ} (pat : @Pattern N σ) {w} :
+      ⊢ ℛ⟦RMsg _ (RVal σ -> RPureSpec (RMatchResult pat))⟧
+        (CPureSpec.angelic_pattern_match pat)
+        (SPureSpec.angelic_pattern_match' (w := w) n pat).
+    Proof.
+      iIntros (msg v t) "Hv".
+      unfold SPureSpec.angelic_pattern_match'.
+      unfold CPureSpec.angelic_pattern_match.
+      iApply (refine_bind (RA := RConst _) (RB := RMatchResult _)).
+      { now iApply refine_angelic_finite. }
+      iIntros (w1 r01) "!> %ι1 %sι1 Hι1".
+      unfold RConst, RInst; cbn.
+      rewrite repₚ_const.
+      iDestruct "Hι1" as "<-". rsolve.
+      - iApply refine_assertPublicIfNotSinglePattern. rsolve.
+      - admit.
+      - unfold RMatchResult. cbn. iExists eq_refl. admit.
+     Admitted.
+    #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
 
     (* Lemma refine_demonic_pattern_match' {N : Set} (n : N -> LVar) *)
     (*   {σ} (pat : @Pattern N σ) {w} : *)
@@ -935,14 +992,6 @@ Module Type RefinementMonadsOn
         iApply (refine_bind (RA := RUnit) (RB := RUnit) with "IHEs1"); rsolve.
         iApply refine_formula_persist.
         iModIntro; rsolve.
-        unfold RSat.
-        unfold RFormula.
-        unfold RInstPropIff.
-        unfold proprepₚ.
-        unfold instpred.
-        unfold instpred_inst_formula.
-        unfold instpred_formula.
-        unfold instpred_formula_relop.
     (* Qed. *)
     Admitted.
 

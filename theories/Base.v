@@ -73,12 +73,6 @@ Module Type BaseMixin (Import TY : Types).
   Notation CStoreRel := (@NamedEnv PVar Ty RelVal).
   Notation CStore := (@NamedEnv PVar Ty Val).
 
-  Fixpoint mapSyncValNamedEnv {X Σ} (ı : NamedEnv (X := X) Val Σ) : NamedEnv (X := X) RelVal Σ :=
-    match ı with
-    | env.nil => env.nil
-    | env.snoc E db v => env.snoc (mapSyncValNamedEnv E) db (ty.SyncVal (type db) v)
-    end.
-
   Definition SMatchResult {N σ} (pat : @Pattern N σ) (Σ : LCtx) : Type :=
     { pc : PatternCase pat & NamedEnv (Term Σ) (PatternCaseCtx pc) }.
 
@@ -179,29 +173,29 @@ Module Type BaseMixin (Import TY : Types).
       (*     fun '(existT K pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts) *)
       end.
 
-    (* Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : @Pattern N σ) : *)
-    (*   forall (pc : PatternCase pat) (ts : NamedEnv (Term Σ) (PatternCaseCtx pc)), *)
-    (*     inst (pattern_match_term_reverse pat pc ts) ι = *)
-    (*     pattern_match_val_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι). *)
-    (* Proof. *)
-    (*   induction pat; cbn. *)
-    (*   - intros _ ts. now env.destroy ts. *)
-    (*   - reflexivity. *)
-    (*   - intros [] ts. *)
-    (*     + reflexivity. *)
-    (*     + now env.destroy ts. *)
-    (*   - intros _ ts. now env.destroy ts. *)
-    (*   - intros [] ts; now env.destroy ts. *)
-    (*   - intros [] ts. reflexivity. *)
-    (*   - reflexivity. *)
-    (*   - intros _ ts. now env.destroy ts. *)
-    (*   - reflexivity. *)
-    (*   - intros _ ts. *)
-    (*     now rewrite <- inst_tuple_pattern_match_reverse. *)
-    (*   - intros _ ts. f_equal. *)
-    (*     apply inst_record_pattern_match_reverse. *)
-    (*   - intros [] ts. cbn. f_equal. f_equal. apply H. *)
-    (* Qed. *)
+    Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : @Pattern N σ) :
+      forall (pc : PatternCase pat) (ts : NamedEnv (Term Σ) (PatternCaseCtx pc)),
+        inst (pattern_match_term_reverse pat pc ts) ι =
+        pattern_match_relval_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι).
+    Proof.
+      induction pat; cbn.
+      - intros _ ts. now env.destroy ts.
+      - reflexivity.
+      (* - intros [] ts. *)
+      (*   + reflexivity. *)
+      (*   + now env.destroy ts. *)
+      - intros _ ts. now env.destroy ts.
+      - intros [] ts; now env.destroy ts.
+      (* - intros [] ts. reflexivity. *)
+      (* - reflexivity. *)
+      - intros _ ts. now env.destroy ts.
+      (* - reflexivity. *)
+      (* - intros _ ts. *)
+      (*   now rewrite <- inst_tuple_pattern_match_reverse. *)
+      (* - intros _ ts. f_equal. *)
+      (*   apply inst_record_pattern_match_reverse. *)
+      (* - intros [] ts. cbn. f_equal. f_equal. apply H. *)
+    Qed.
 
     Lemma inst_unfreshen_namedenv (n : N -> LVar) {Σ Σ' Δ}
       (ζ : Sub (freshen_ctx n Σ Δ) Σ') (ι : Valuation Σ') :

@@ -1248,16 +1248,16 @@ Module Type UnifLogicOn
       Rel (WProd AT BT) (A * B)%type :=
       MkRel (fun '(va,vb) w '(ta,tb) => ℛ⟦RA⟧ va ta ∗ ℛ⟦RB⟧ vb tb)%I.
 
-    (* Definition RMatchResult {N σ} (p : @Pattern N σ) : *)
-    (*   Rel (SMatchResult p) (MatchResult p) := *)
-    (*   MkRel *)
-    (*     (fun '(existT pc2 vs) w '(existT pc1 ts) => *)
-    (*        ∃ₚ e : pc1 = pc2, *)
-    (*          ℛ⟦RNEnv _ (PatternCaseCtx pc2)⟧ *)
-    (*            vs *)
-    (*            (eq_rect pc1 (fun pc => NamedEnv (Term w) (PatternCaseCtx pc)) *)
-    (*               ts pc2 e) *)
-    (*            )%P. *)
+    Definition RMatchResult {N σ} (p : @Pattern N σ) :
+      Rel (SMatchResult p) (MatchResultRel p) :=
+      MkRel
+        (fun '(existT pc2 vs) w '(existT pc1 ts) =>
+           ∃ₚ e : pc1 = pc2,
+             ℛ⟦RNEnv _ (PatternCaseCtx pc2)⟧
+               vs
+               (eq_rect pc1 (fun pc => NamedEnv (Term w) (PatternCaseCtx pc))
+                  ts pc2 e)
+               )%P.
 
     Definition RIn b : Rel (ctx.In b) (RelVal (type b)) :=
       MkRel (fun v w bIn ι => env.lookup ι bIn = v).
@@ -1444,14 +1444,14 @@ Module Type UnifLogicOn
     Import iris.proofmode.tactics.
     Import RSolve.
     
-    (* Lemma refine_RMatchResult_existT_eq {N σ} {p : @Pattern N σ} {w} {pc args1 args2}: *)
-    (*   ℛ⟦RNEnv _ (PatternCaseCtx pc)⟧ args1 args2 ⊢ *)
-    (*     RSat (w := w) (RMatchResult p) (existT pc args1) (existT pc args2). *)
-    (* Proof. iIntros "Hargs". now iExists eq_refl. Qed. *)
+    Lemma refine_RMatchResult_existT_eq {N σ} {p : @Pattern N σ} {w} {pc args1 args2}:
+      ℛ⟦RNEnv _ (PatternCaseCtx pc)⟧ args1 args2 ⊢
+        RSat (w := w) (RMatchResult p) (existT pc args1) (existT pc args2).
+    Proof. iIntros "Hargs". now iExists eq_refl. Qed.
 
-    (* #[export] Instance refine_compat_RMatchResult_existT_eq {N σ} {p : @Pattern N σ} {w} {pc args1 args2} : *)
-    (*   RefineCompat (RMatchResult p) (existT pc args1) w (existT pc args2) _ := *)
-    (*   MkRefineCompat refine_RMatchResult_existT_eq. *)
+    #[export] Instance refine_compat_RMatchResult_existT_eq {N σ} {p : @Pattern N σ} {w} {pc args1 args2} :
+      RefineCompat (RMatchResult p) (existT pc args1) w (existT pc args2) _ :=
+      MkRefineCompat refine_RMatchResult_existT_eq.
 
     Lemma refine_term_val {w τ v} : ⊢ (ℛ⟦RVal τ⟧ (ty.SyncVal _ v) (term_val τ v) : Pred w).
     Proof. unfold RVal, RInst. crushPredEntails3. Qed.
@@ -1601,12 +1601,18 @@ Module Type UnifLogicOn
       ℛ⟦RVal ty.bool⟧ v sv ⊢ ℛ⟦RFormula⟧ (v = ty.SyncVal ty.bool true) (formula_bool sv).
     Proof. unfold RVal, RInst. crushPredEntails3; cbn in *; now subst. Qed.
 
-    (* Lemma refine_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ}: *)
-    (*   ℛ⟦ RVal σ ⟧ v1 sv1 ∗ ℛ⟦ RVal σ ⟧ v2 sv2 ⊢ *)
-    (*     ℛ⟦RFormula⟧ (bop.eval_relop_propRel relop v1 v2) (formula_relop relop sv1 sv2). *)
-    (* Proof. *)
-    (*   unfold RFormula, RVal, RInst. crushPredEntails3; now subst. *)
-    (* Qed. *)
+    Lemma refine_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ} (isS : IsSome (bop.eval_relop_propRel relop v1 v2)) :
+      ℛ⟦ RVal σ ⟧ v1 sv1 ∗ ℛ⟦ RVal σ ⟧ v2 sv2 ⊢
+        ℛ⟦RFormula⟧ (fromSome (bop.eval_relop_propRel relop v1 v2) isS) (formula_relop relop sv1 sv2).
+    Proof.
+      unfold RFormula, RVal, RInst. crushPredEntails3; subst.
+      - unfold instpred in H1. cbn in H1. unfold instpred_formula_relop in H1.
+        destruct (inst sv1 ι); destruct (inst sv2 ι); try inversion isS.
+        cbn in *. auto.
+      - unfold instpred. cbn. unfold instpred_formula_relop.
+        destruct (inst sv1 ι); destruct (inst sv2 ι); try inversion isS.
+        cbn in *. auto.
+    Qed.
 
     Lemma refine_formula_persist :
       forall (w1 w2 : World) {ω : Acc w1 w2} (f : Formula w1) (p : Prop),
@@ -1760,16 +1766,32 @@ Module Type UnifLogicOn
       now subst.
     Qed.
 
-    (* Lemma refine_pattern_match {w : World} {σ} {v : Val σ} {sv : Term w σ} *)
-    (*   {p : @Pattern LVar σ} :  *)
+    (* Lemma refine_pattern_match {w : World} {σ} {v : RelVal σ} {sv : Term w σ} *)
+    (*   {p : @Pattern LVar σ} : *)
     (*   ℛ⟦ RVal σ ⟧ v sv ⊢ *)
-    (*     let (pc, δpc) := pattern_match_val p v in *)
+    (*     let (pc, δpc) := pattern_match_relval p v in *)
     (*     knowing (w1 := wmatch w sv p pc) (acc_match_right pc) *)
     (*       (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc *)
     (*          (sub_cat_right (PatternCaseCtx pc) : NamedEnv _ _)). *)
     (* Proof. *)
-    (*   pose proof (pattern_match_val_inverse_left p v) as eq. *)
-    (*   destruct (pattern_match_val p v) as [pc args]. *)
+    (*   destruct v. *)
+    (*   - pose proof (pattern_match_syncval_inverse_left p v) as eq. *)
+    (*     destruct (pattern_match_relval p (ty.SyncVal _ v)) as [pc args]. *)
+    (*     unfold pattern_match_relval_reverse' in eq; cbn in eq. *)
+    (*     unfold knowing, RVal, RNEnv, RInst. *)
+    (*     crushPredEntails3. *)
+    (*     exists (env.cat ι args). *)
+    (*     rewrite instprop_subst inst_subst !inst_sub_cat_left *)
+    (*       inst_pattern_match_term_reverse inst_sub_cat_right eq. *)
+    (*     crushPredEntails3. *)
+    (*     rewrite H0. cbn. reflexivity. *)
+    (*   - destruct (isSinglePattern p) as [|] eqn:H. *)
+    (*     + admit. *)
+    (*     + destruct p; inversion H. cbn. *)
+    (*       apply knowing_pure. *)
+    (*       rewrite instprop_subst inst_subst !inst_sub_cat_left *)
+    (*         inst_pattern_match_term_reverse inst_sub_cat_right eq. *)
+    (*       destruct (pattern_match_val p v) as [pc args]. *)
     (*   unfold pattern_match_val_reverse' in eq; cbn in eq. *)
     (*   unfold knowing, RVal, RNEnv, RInst. *)
     (*   crushPredEntails3. *)

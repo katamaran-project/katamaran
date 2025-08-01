@@ -225,10 +225,47 @@ Module ty.
                     | NonSyncVal _ v1 v2 => NonSyncVal (sum _ _) (inr v1) (inr v2)
                     end
         end.
- Fixpoint liftNamedEnv {varkit b} (a : @NamedEnv (@Variables.PVar varkit) Ty Val b) : @NamedEnv (@Variables.PVar varkit) Ty RelVal b :=
+
+      Fixpoint liftNamedEnv {varkit b} (a : @NamedEnv (@Variables.PVar varkit) Ty Val b) : @NamedEnv (@Variables.PVar varkit) Ty RelVal b :=
         match a with
         | env.nil => env.nil
         | env.snoc e x db => env.snoc (liftNamedEnv e) x (SyncVal _ db)
+        end.
+
+      Fixpoint NamedEnvValToRelVal {N Γ} (nenv1 : @NamedEnv N Ty Val Γ) : NamedEnv Val Γ -> NamedEnv RelVal Γ :=
+        match nenv1 with
+          | env.nil => fun nenv2 => env.nil
+          | env.snoc nenv1' b1 db1 =>
+              fun nenv2 =>
+                match env.view nenv2 with
+                  env.isSnoc nenv2' db2 => env.snoc (NamedEnvValToRelVal nenv1' nenv2') b1 (NonSyncVal (type b1) db1 db2)
+                end
+          end.
+      
+
+      Fixpoint mapSyncValNamedEnv {X Σ} (ı : NamedEnv (X := X) Val Σ) : NamedEnv (X := X) RelVal Σ :=
+        match ı with
+        | env.nil => env.nil
+        | env.snoc E db v => env.snoc (mapSyncValNamedEnv E) db (SyncVal (type db) v)
+        end.
+
+      Fixpoint allNonSync {X Σ} (ı : NamedEnv (X := X) RelVal Σ) : Prop :=
+        match ı with
+        | env.nil => True
+        | env.snoc E db v => match v with
+                             | NonSyncVal _ _ _ => allNonSync E
+                             | _ => False
+                             end
+        end.
+
+      Fixpoint namedEnvRel_to_nonsyncval {X Σ} (nenv : NamedEnv (X := X) RelVal Σ) : NamedEnv (X := X) RelVal Σ :=
+        match nenv with
+        | env.nil => env.nil
+        | env.snoc E db rv =>
+            match rv with
+            | NonSyncVal _ _ _ => env.snoc (namedEnvRel_to_nonsyncval E) db rv
+            | SyncVal _ v => env.snoc (namedEnvRel_to_nonsyncval E) db (NonSyncVal _ v v)
+            end
         end.
 
   End WithTypeDenote.
