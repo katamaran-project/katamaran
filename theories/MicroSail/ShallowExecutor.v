@@ -219,18 +219,20 @@ Module Type ShallowExecOn
 
     Section PatternMatching.
 
-      Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ) :
-        CStoreSpec Γ Γ (MatchResult pat) :=
+      Definition demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : RelVal σ) :
+        CStoreSpec Γ Γ (MatchResultRel pat) :=
         lift_purespec (CPureSpec.demonic_pattern_match pat v).
       #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
 
-      Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : Val σ)
-        (Φ : MatchResult pat -> CStoreRel Γ -> SCHeap -> Prop) (δ : CStoreRel Γ) (h : SCHeap) :
-        demonic_pattern_match pat v Φ δ h <-> Φ (pattern_match_val pat v) δ h.
+      Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : @Pattern N σ) (v : RelVal σ)
+        (Φ : MatchResultRel pat -> CStoreRel Γ -> SCHeap -> Prop) (δ : CStoreRel Γ) (h : SCHeap) :
+        demonic_pattern_match pat v Φ δ h <-> Φ (pattern_match_relval pat v) δ h.
       Proof.
         unfold demonic_pattern_match, lift_purespec.
-        now rewrite CPureSpec.wp_demonic_pattern_match.
-      Qed.
+        destruct v.
+        - now rewrite CPureSpec.wp_demonic_pattern_match.
+        - admit.
+      Admitted.
 
     End PatternMatching.
 
@@ -329,14 +331,15 @@ Module Type ShallowExecOn
           | stm_seq e k => _ <- exec_aux e ;; exec_aux k
           | stm_assertk e1 _ k =>
               v <- eval_exp e1 ;;
-              _ <- lift_heapspec (CHeapSpec.assume_formula (v = ty.SyncVal ty.bool true)) ;;
+              _ <- lift_heapspec (CHeapSpec.assume_formula (Some (v = ty.SyncVal ty.bool true))) ;;
               exec_aux k
           | stm_fail _ s =>
               block
-          (* | stm_pattern_match s pat rhs => *)
-          (*     v  <- exec_aux s ;; *)
-          (*     '(existT pc δpc) <- demonic_pattern_match pat v ;; *)
-          (*     pushspops δpc (exec_aux (rhs pc)) *)
+          | stm_pattern_match s pat rhs =>
+              v  <- exec_aux s ;;
+              lift_purespec (CPureSpec.assertPublicIfNotSinglePattern pat v);;
+              '(existT pc δpc) <- demonic_pattern_match pat v ;;
+              pushspops δpc (exec_aux (rhs pc))
           | stm_read_register reg =>
               lift_heapspec (CHeapSpec.read_register reg)
           | stm_write_register reg e =>
@@ -344,7 +347,7 @@ Module Type ShallowExecOn
               lift_heapspec (CHeapSpec.write_register reg v__new)
           | stm_bind s k =>
               v <- exec_aux s ;;
-              _ <- lift_heapspec (CHeapSpec.assume_formula (v = ty.SyncVal _ (ty.projLeft v))) ;;
+              _ <- lift_heapspec (CHeapSpec.assume_formula (Some (v = ty.SyncVal _ (ty.projLeft v)))) ;;
               exec_aux (k (ty.projLeft v))
           | stm_debugk k =>
               exec_aux k

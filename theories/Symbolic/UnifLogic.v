@@ -782,6 +782,13 @@ Module Type UnifLogicOn
       now rewrite instpred_persist -forgetting_wand_iff forgetting_pure.
     Qed.
 
+    Lemma forgetting_optionproprepₚ `{InstPredSubst AT, @SubstLaws AT _} {v w1 w2} {ω : w1 ⊒ w2}  (t : AT w1) :
+      (optionproprepₚ v (persist t ω) ⊣⊢ forgetting ω (optionproprepₚ v t))%I.
+    Proof.
+      unfold optionproprepₚ.
+      destruct v; now rewrite instpred_persist -forgetting_wand_iff forgetting_pure.
+    Qed.
+
     Lemma assuming_id {w} {P : Pred w} : assuming acc_refl P ⊣⊢ P.
     Proof.
       rewrite /assuming.
@@ -1176,6 +1183,10 @@ Module Type UnifLogicOn
       MkRel proprepₚ.
     Arguments RInstPropIff _ {_}.
 
+    Definition RInstOptionPropIff AT {instA : InstPred AT} : Rel AT (option Prop) :=
+      MkRel optionproprepₚ.
+    Arguments RInstOptionPropIff _ {_}.
+
     Definition RBox {AT A} (RA : Rel AT A) : Rel (Box AT) A :=
       MkRel 
         (fun v w t => unconditionally (fun w2 ω => ℛ⟦ RA ⟧ v (t w2 ω))).
@@ -1221,7 +1232,7 @@ Module Type UnifLogicOn
 
     Definition RPathCondition : Rel PathCondition Prop := RInstPropIff PathCondition.
     Arguments RPathCondition : simpl never.
-    Definition RFormula : Rel Formula Prop := RInstPropIff Formula.
+    Definition RFormula : Rel Formula (option Prop) := RInstOptionPropIff Formula.
     Arguments RFormula : simpl never.
 
     Definition RChunk : Rel Chunk SCChunk := RInst Chunk SCChunk.
@@ -1598,28 +1609,56 @@ Module Type UnifLogicOn
     Qed.
 
     Lemma refine_formula_bool {w : World} {v} {sv : Term w ty.bool} :
-      ℛ⟦RVal ty.bool⟧ v sv ⊢ ℛ⟦RFormula⟧ (v = ty.SyncVal ty.bool true) (formula_bool sv).
+      ℛ⟦RVal ty.bool⟧ v sv ⊢ ℛ⟦RFormula⟧ (Some (v = ty.SyncVal ty.bool true)) (formula_bool sv).
     Proof. unfold RVal, RInst. crushPredEntails3; cbn in *; now subst. Qed.
 
-    Lemma refine_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ} (isS : IsSome (bop.eval_relop_propRel relop v1 v2)) :
+    Lemma refine_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ} :
       ℛ⟦ RVal σ ⟧ v1 sv1 ∗ ℛ⟦ RVal σ ⟧ v2 sv2 ⊢
-        ℛ⟦RFormula⟧ (fromSome (bop.eval_relop_propRel relop v1 v2) isS) (formula_relop relop sv1 sv2).
+        ℛ⟦RFormula⟧ (bop.eval_relop_propRel relop v1 v2) (formula_relop relop sv1 sv2).
     Proof.
-      unfold RFormula, RVal, RInst. crushPredEntails3; subst.
-      - unfold instpred in H1. cbn in H1. unfold instpred_formula_relop in H1.
-        destruct (inst sv1 ι); destruct (inst sv2 ι); try inversion isS.
-        cbn in *. auto.
-      - unfold instpred. cbn. unfold instpred_formula_relop.
-        destruct (inst sv1 ι); destruct (inst sv2 ι); try inversion isS.
-        cbn in *. auto.
+      unfold RFormula, RVal, RInst. crushPredEntails3.
+      unfold optionproprepₚ.
+      destruct v1; destruct v2; cbn;
+        crushPredEntails3; unfold instpred_formula_relop in *;
+        try rewrite H1 in H2; try rewrite H0 in H2;
+        try rewrite H1; try rewrite H0;
+        cbn in *;
+        try (exfalso; assumption);
+      assumption.
+    Qed.
+
+    Lemma refine_formula_eq_nonsync {w : World} {σ rv1 rv2} {sv1 sv2 : Term w σ} :
+      ℛ⟦ RVal σ ⟧ rv1 sv1 ∗ ℛ⟦ RVal σ ⟧ rv2 sv2 ⊢
+        ℛ⟦RFormula⟧ (Some (rv1 = rv2)) (formula_eq_nonsync sv1 sv2).
+    Proof.
+      unfold RFormula, RVal, RInst. crushPredEntails3.
+      unfold optionproprepₚ.
+      destruct rv1; destruct rv2; cbn;
+        crushPredEntails3; unfold instpred_formula_relop in *;
+        try rewrite H1 in H2; try rewrite H0 in H2;
+        try rewrite H1; try rewrite H0;
+        cbn in *;
+        try (exfalso; assumption);
+        assumption.
+    Qed.
+
+    Lemma refine_pathcondition_eq {w : World} {σ v1 v2} {sv1 sv2 : Term w σ} (sync_v1 : ty.isSyncValProp v1) (sync_v2 : ty.isSyncValProp v2) :
+      ℛ⟦ RVal σ ⟧ v1 sv1 ∗ ℛ⟦ RVal σ ⟧ v2 sv2 ⊢
+        ℛ⟦RPathCondition⟧ (v1 = v2) (ctx.snoc ctx.nil (formula_relop bop.eq sv1 sv2)).
+    Proof.
+      destruct v1; destruct v2; cbn in *; try (exfalso; assumption).
+      unfold RPathCondition, RVal, RInst. crushPredEntails3.
+      - unfold instpred in H1. cbn in H1. destruct H1 as [_ H3]. unfold instpred_formula_relop in H3. rewrite H0 in H3. rewrite H2 in H3. cbn in *. subst. reflexivity.
+      - unfold instpred. cbn. split. { auto. }
+        unfold instpred_formula_relop. rewrite H0. rewrite H2. cbn in *. inversion H1. reflexivity.
     Qed.
 
     Lemma refine_formula_persist :
-      forall (w1 w2 : World) {ω : Acc w1 w2} (f : Formula w1) (p : Prop),
+      forall (w1 w2 : World) {ω : Acc w1 w2} (f : Formula w1) (p : option Prop),
         ⊢ forgetting ω (ℛ⟦RFormula⟧ p f) -∗ ℛ⟦RFormula⟧ p (persist f ω).
     Proof.
       iIntros (w1 w2 ω f p) "Hvt".
-      now iApply forgetting_proprepₚ.
+      now iApply forgetting_optionproprepₚ.
     Qed.
 
     Lemma refine_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
@@ -1766,39 +1805,51 @@ Module Type UnifLogicOn
       now subst.
     Qed.
 
-    (* Lemma refine_pattern_match {w : World} {σ} {v : RelVal σ} {sv : Term w σ} *)
-    (*   {p : @Pattern LVar σ} : *)
-    (*   ℛ⟦ RVal σ ⟧ v sv ⊢ *)
-    (*     let (pc, δpc) := pattern_match_relval p v in *)
-    (*     knowing (w1 := wmatch w sv p pc) (acc_match_right pc) *)
-    (*       (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc *)
-    (*          (sub_cat_right (PatternCaseCtx pc) : NamedEnv _ _)). *)
-    (* Proof. *)
-    (*   destruct v. *)
-    (*   - pose proof (pattern_match_syncval_inverse_left p v) as eq. *)
-    (*     destruct (pattern_match_relval p (ty.SyncVal _ v)) as [pc args]. *)
-    (*     unfold pattern_match_relval_reverse' in eq; cbn in eq. *)
-    (*     unfold knowing, RVal, RNEnv, RInst. *)
-    (*     crushPredEntails3. *)
-    (*     exists (env.cat ι args). *)
-    (*     rewrite instprop_subst inst_subst !inst_sub_cat_left *)
-    (*       inst_pattern_match_term_reverse inst_sub_cat_right eq. *)
-    (*     crushPredEntails3. *)
-    (*     rewrite H0. cbn. reflexivity. *)
-    (*   - destruct (isSinglePattern p) as [|] eqn:H. *)
-    (*     + admit. *)
-    (*     + destruct p; inversion H. cbn. *)
-    (*       apply knowing_pure. *)
-    (*       rewrite instprop_subst inst_subst !inst_sub_cat_left *)
-    (*         inst_pattern_match_term_reverse inst_sub_cat_right eq. *)
-    (*       destruct (pattern_match_val p v) as [pc args]. *)
-    (*   unfold pattern_match_val_reverse' in eq; cbn in eq. *)
-    (*   unfold knowing, RVal, RNEnv, RInst. *)
-    (*   crushPredEntails3. *)
-    (*   exists (env.cat ι args). *)
-    (*   now rewrite instprop_subst inst_subst !inst_sub_cat_left *)
-    (*     inst_pattern_match_term_reverse inst_sub_cat_right eq. *)
-    (* Qed. *)
+    Lemma refine_pattern_match {w : World} {σ} {v : RelVal σ} {sv : Term w σ}
+      {p : @Pattern LVar σ} :
+      ℛ⟦ RVal σ ⟧ v sv ⊢
+        let (pc, δpc) := pattern_match_relval p v in
+        knowing (w1 := wmatch w sv p pc) (acc_match_right pc)
+          (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc
+             (sub_cat_right (PatternCaseCtx pc) : NamedEnv _ _)).
+    Proof.
+      destruct v.
+      - pose proof (pattern_match_syncval_inverse_left p v) as eq.
+        destruct (pattern_match_relval p (ty.SyncVal _ v)) as [pc args].
+        unfold pattern_match_relval_reverse' in eq; cbn in eq.
+        unfold knowing, RVal, RNEnv, RInst.
+        crushPredEntails3.
+        exists (env.cat ι args).
+        rewrite instprop_subst inst_subst !inst_sub_cat_left
+          inst_pattern_match_term_reverse inst_sub_cat_right eq.
+        crushPredEntails3.
+      - pose proof (pattern_match_nonsyncval_inverse_left p v v0) as eq.
+        destruct (pat_relval_reverse_is_always_syncval p) as [|] eqn:alwaysSync.
+        + destruct (pattern_match_relval p (ty.NonSyncVal _ v v0)) as [pc args].
+          specialize (pat_relval_reverse_is_always_syncval_sound pc args alwaysSync) as (v' & H).
+          unfold knowing, RVal, RNEnv, RInst.
+          crushPredEntails3.
+          exists (env.cat ι args).
+          rewrite instprop_subst inst_subst !inst_sub_cat_left
+            inst_pattern_match_term_reverse inst_sub_cat_right.
+          crushPredEntails3.
+          destruct p; inversion alwaysSync.
+          -- cbn in H. iIntros "Hv". 
+          -- destruct p; inversion H1; inversion H.
+        +  destruct p; inversion H; cbn.
+          -- 
+        + destruct p; inversion H. cbn.
+          apply knowing_pure.
+          rewrite instprop_subst inst_subst !inst_sub_cat_left
+            inst_pattern_match_term_reverse inst_sub_cat_right eq.
+          destruct (pattern_match_val p v) as [pc args].
+      unfold pattern_match_val_reverse' in eq; cbn in eq.
+      unfold knowing, RVal, RNEnv, RInst.
+      crushPredEntails3.
+      exists (env.cat ι args).
+      now rewrite instprop_subst inst_subst !inst_sub_cat_left
+        inst_pattern_match_term_reverse inst_sub_cat_right eq.
+    Qed.
 
     (* Lemma refine_pattern_match_val_term_reverse {N} {w : World} {σ} *)
     (*   {pat : @Pattern N σ} {ι} : *)
@@ -1985,14 +2036,26 @@ Module Type UnifLogicOn
   #[export] Hint Extern 0 (RefineCompat (RVal _) _ _ (term_binop ?binop _ _) _) => ( refine (refine_compat_term_binop (op := binop)) ) : typeclass_instances.
 
   #[export] Instance refine_compat_formula_bool {w : World} {v} {sv : Term w ty.bool} :
-    RefineCompat RFormula (v = ty.SyncVal ty.bool true) w (formula_bool sv) _ :=
+    RefineCompat RFormula (Some (v = ty.SyncVal ty.bool true)) w (formula_bool sv) _ :=
     MkRefineCompat refine_formula_bool.
 
-  (* Definition refine_compat_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ} : *)
-  (*   RefineCompat RFormula (bop.eval_relop_propRel relop v1 v2) w (formula_relop relop sv1 sv2) _ := *)
-  (*   MkRefineCompat refine_formula_relop. *)
-  (* #[global] Opaque refine_compat_formula_relop. *)
-  (* #[export] Hint Extern 0 (RefineCompat RFormula _ _ (formula_relop ?relop _ _) _) => ( refine (refine_compat_formula_relop (relop := relop)) ) : typeclass_instances. *)
+  Definition refine_compat_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ} :
+    RefineCompat RFormula (bop.eval_relop_propRel relop v1 v2) w (formula_relop relop sv1 sv2) _ :=
+    MkRefineCompat refine_formula_relop.
+  #[global] Opaque refine_compat_formula_relop.
+  #[export] Hint Extern 0 (RefineCompat RFormula _ _ (formula_relop ?relop _ _) _) => ( refine (refine_compat_formula_relop (relop := relop)) ) : typeclass_instances.
+
+  Definition refine_compat_formula_eq_nonsync {w : World} {σ rv1 rv2} {sv1 sv2 : Term w σ} :
+    RefineCompat RFormula (Some (rv1 = rv2)) w (formula_eq_nonsync sv1 sv2) _ :=
+    MkRefineCompat refine_formula_eq_nonsync.
+  #[global] Opaque refine_compat_formula_eq_nonsync.
+  #[export] Hint Extern 0 (RefineCompat RFormula _ _ (formula_eq_nonsync _ _) _) => ( refine (refine_compat_formula_eq_nonsync) ) : typeclass_instances.
+
+  Definition refine_compat_pathcondition_eq {w : World} {σ} {v1 v2 : RelVal σ} {sv1 sv2 : Term w σ} (sync_v1 : ty.isSyncValProp v1) (sync_v2 : ty.isSyncValProp v2) :
+    RefineCompat RPathCondition (v1 = v2) w [formula_relop bop.eq sv1 sv2]%ctx _ :=
+    MkRefineCompat (refine_pathcondition_eq sync_v1 sync_v2).
+  #[global] Opaque refine_compat_pathcondition_eq.
+  #[export] Hint Extern 0 (RefineCompat RPathCondition (?v1 = ?v2) _ (formula_relop bop.eq _ _) _) => ( refine (refine_compat_pathcondition_eq (v1 := v1) (v2 := v2)) ) : typeclass_instances.
 
   #[export] Instance refine_compat_chunk_ptsreg {w σ} {pc a ta} :
     RefineCompat RChunk (chunk_ptsreg pc a) w(chunk_ptsreg (σ := σ) pc ta) _ :=

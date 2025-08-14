@@ -95,15 +95,28 @@ Module Type WorldsOn
       {| wctx := (wctx w - x∷σ); wco := subst (wco w) (sub_single xIn t) |}.
     Global Arguments wsubst w x {σ xIn} t.
 
-    Definition wmatch (w : World) {σ} (s : Term w σ) (p : @Pattern LVar σ)
+    Program Definition wmatch (w : World) {σ} (s : Term w σ) (p : @Pattern LVar σ)
       (pc : PatternCase p) : World :=
-      let Δ   : LCtx           := PatternCaseCtx pc in
-      let w1  : World          := wcat w Δ in
-      let ts  : Sub Δ (w ▻▻ Δ) := sub_cat_right Δ in
-      let F1  : Formula w1     := formula_relop bop.eq
-                                    (subst s (sub_cat_left Δ))
+          let w1  : World      := if isSinglePattern p
+                                           then w
+                                           else wformula w (formula_public s) in
+          let Δ   : LCtx       := PatternCaseCtx pc in
+          let w2  : World      := wcat w1 Δ in
+          let ts                        := sub_cat_right Δ in
+          let F1  : Formula w2 := formula_eq_nonsync
+                                    (subst (T := (λ Σ : LCtx, Term Σ σ)) _
+                                       (sub_cat_left Δ))
                                     (pattern_match_term_reverse _ pc ts) in
-      wformula (wcat w Δ) F1.
+          wformula w2 F1.
+    Next Obligation.
+    Proof.
+      cbn. intros.
+      destruct (isSinglePattern p).
+      - auto.
+      - apply (sub_term (Σ1 := wctx w) s (Σ2 := wctx w)).
+        apply sub_id.
+    Qed.
+
 
     Definition wmatchvar_patternvars {Σ : LCtx} {x σ} {xIn : (x∷σ ∈ Σ)%katamaran}
       {p : @Pattern LVar σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) ((Σ ▻▻ PatternCaseCtx pc) - x∷σ) :=
@@ -159,8 +172,8 @@ Module Type WorldsOn
       | tri_cons x t ν12 => fun ν => tri_cons x t (tri_comp ν12 ν)
       end.
 
-    (* Definition sub_wmatch_patctx {w : World} {σ} {s : Term w σ} {p : @Pattern LVar σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) (wmatch w s p pc) := *)
-    (*   sub_cat_right (PatternCaseCtx pc). *)
+    Definition sub_wmatch_patctx {w : World} {σ} {s : Term w σ} {p : @Pattern LVar σ} (pc : PatternCase p) : Sub (PatternCaseCtx pc) (wmatch w s p pc) :=
+      sub_cat_right (PatternCaseCtx pc).
 
     Fixpoint sub_triangular {w1 w2} (ζ : Tri w1 w2) : Sub w1 w2 :=
       match ζ with
@@ -366,7 +379,7 @@ Module Type WorldsOn
       @acc_sub w w' ζ (entails_refl (wco w')).
     Arguments acc_subst_right {w} x {σ xIn} t.
 
-    Definition acc_match_right {w : World} {σ} {s : Term w σ}
+    Program Definition acc_match_right {w : World} {σ} {s : Term w σ}
       {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatch w s p pc :=
       @acc_sub w (wmatch w s p pc) (sub_cat_left (PatternCaseCtx pc))
         (fun ι HCι => proj1 HCι).
@@ -381,7 +394,7 @@ Module Type WorldsOn
         let sub₂ : Sub (w ▻▻ Δ) ((w ▻▻ Δ) - x∷σ) := sub_single _ t in
         subst sub₁ sub₂.
     Arguments sub_matchvar_right {w} {x σ xIn p} pc : simpl never.
-
+    
     Program Definition acc_matchvar_right {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
       {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatchvar w xIn p pc :=
       let Δ   : LCtx           := PatternCaseCtx pc in
@@ -540,6 +553,8 @@ Module Type WorldsOn
 
   Definition empₚ {w} : Pred w := fun _ => True.
   Arguments empₚ {w} ι /.
+  Definition falseₚ {w} : Pred w := fun _ => False.
+  Arguments falseₚ {w} ι /.
   Definition sepₚ {w} (P Q : Pred w) : Pred w := fun ι => P ι /\ Q ι.
   Arguments sepₚ {w} P Q ι /.
   Definition wandₚ {w} (P Q : Pred w) : Pred w := fun ι => (P ι -> Q ι)%type.
@@ -874,6 +889,7 @@ Module Type WorldsOn
                                            | ty.SyncVal _ _ => True
                                            | ty.NonSyncVal _ _ _ => False
                                            end
+      | formula_eq_nonsync t1 t2 => fun ι => inst t1 ι = inst t2 ι
       end.
     Arguments instpred_formula [w] !fml.
 
@@ -892,7 +908,20 @@ Module Type WorldsOn
     (* TODO: This fails because SyncVal v != NonSyncVal v v *)
     (* Lemma instpred_formula_relop_eq {w : World} {σ} (t1 t2 : STerm σ w) : *)
     (*   instpred (w := w) (formula_relop bop.eq t1 t2) ⊣⊢ eqₚ t1 t2. *)
-    (* Proof. crushPredEntails2. Qed. *)
+    (* Proof. *)
+    (*   crushPredEntails2. *)
+    (*   - unfold instpred_formula_relop in H0. *)
+    (*     destruct (bop.eval_relop_propRel bop.eq (inst t1 ι) (inst t2 ι)) as [|] eqn:H1. *)
+    (*     + unfold bop.eval_relop_propRel in H1. *)
+    (*       unfold eqₚ. *)
+    (*       destruct (inst t1 ι); destruct (inst t2 ι); try congruence. *)
+    (*       ++ inversion H1. assert (v = v0). { rewrite H3. assumption. } *)
+    (*          subst. reflexivity. *)
+    (*     + contradiction. *)
+    (*   - unfold instpred_formula_relop. unfold eqₚ in H0. *)
+    (*     destruct (inst t1 ι); destruct (inst t2 ι); try congruence. *)
+    (*     cbn. *)
+    (* Qed. *)
 
     (* TODO: This fails because SyncVal v != NonSyncVal v v *)
     (* Lemma instpred_formula_relop_eq_val {w : World} {σ} {t1 : STerm σ w} v : *)
@@ -1156,6 +1185,14 @@ Module Type WorldsOn
     Definition proprepₚ {T : LCtx -> Type} {instTA : InstPred T} : Prop -> forall w, Tm T w -> Pred w :=
       fun t2 w t1 => (instpred t1 ∗-∗ bi_pure t2)%I.
     #[global] Arguments proprepₚ {T _} _ [w] _ _/.
+
+    Definition optionproprepₚ {T : LCtx -> Type} {instTA : InstPred T} : (option Prop) -> forall w, Tm T w -> Pred w :=
+      fun t2 w t1 =>
+        match t2 with
+          | Some t2 => (instpred t1 ∗-∗ bi_pure t2)%I
+          | None => (instpred t1 ∗-∗ falseₚ)%I
+        end.
+    #[global] Arguments optionproprepₚ {T _} _ [w] _ _/.
 
   End InstPred.
 

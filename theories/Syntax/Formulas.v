@@ -68,12 +68,14 @@ Module Type FormulasOn
   | formula_and (F1 F2 : Formula Σ)
   | formula_or (F1 F2 : Formula Σ)
   | formula_public {σ} (t : Term Σ σ)
+  | formula_eq_nonsync {σ} (t1 t2 : Term Σ σ)
   .
   #[global] Arguments formula_user {_} p ts.
   #[global] Arguments formula_bool {_} t.
   #[global] Arguments formula_true {_}.
   #[global] Arguments formula_false {_}.
   #[global] Arguments formula_public {_ _} t.
+  #[global] Arguments formula_eq_nonsync {_ _} t1 t2.
 
 
   (* TODO: I don't know what we use this one for, so I don't know whether I need a change it so the whole conjuction is negated or each of the two sides is negated, but still a conjunction. *)
@@ -102,6 +104,7 @@ Module Type FormulasOn
       | formula_and F1 F2      => formula_and (sub_formula F1 ζ) (sub_formula F2 ζ)
       | formula_or F1 F2       => formula_or (sub_formula F1 ζ) (sub_formula F2 ζ)
       | formula_public t       => formula_public (subst t ζ)
+      | formula_eq_nonsync t1 t2 => formula_eq_nonsync (subst t1 ζ) (subst t2 ζ)
       end.
 
   #[export] Instance substlaws_formula : SubstLaws Formula.
@@ -136,6 +139,7 @@ Module Type FormulasOn
       | formula_and F1 F2      => inst_formula F1 ι /\ inst_formula F2 ι
       | formula_or F1 F2       => inst_formula F1 ι \/ inst_formula F2 ι
       | formula_public t       => isSync (inst t ι)
+      | formula_eq_nonsync t1 t2 => inst t1 ι = inst t2 ι
       end.
 
   #[export] Instance instprop_subst_formula : InstPropSubst Formula.
@@ -255,6 +259,9 @@ Module Type FormulasOn
                                   F2' <- oc xIn F2 ;;
                                   Some (formula_or F1' F2')
       | formula_public t       => option.map formula_public (occurs_check xIn t)
+      | formula_eq_nonsync t1 t2 => t1' <- occurs_check xIn t1 ;;
+                                    t2' <- occurs_check xIn t2 ;;
+                                    Some (formula_eq_nonsync t1' t2')
       end.
 
   #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.

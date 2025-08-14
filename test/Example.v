@@ -230,7 +230,7 @@ Module Import ExampleProgram <: Program ExampleBase.
     (* | gcdloop :    Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int *)
     (* | msum :       Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either) *)
     (* | length {σ} : Fun [ "xs" ∷ ty.list σ           ] ty.int *)
-    | fpthree16 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
+    | fpthree16 :  Fun [ "x" ∷ ty.bool ] (ty.int)
     | fpthree32 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
     | fpthree64 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
     | bvtest    :  Fun [ "x" :: ty.int ] ty.int
@@ -277,11 +277,8 @@ Module Import ExampleProgram <: Program ExampleBase.
            (exp_var "exp")
            (exp_var "frac")).
 
-    Definition fun_fpthree16 : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16) :=
-      (let n := 16 in
-       let e := 5 in
-       let f := (n - (e + 1)) in
-       fun_fpthree' e f)%nat.
+    Definition fun_fpthree16 : Stm [ "x" ∷ ty.bool ] (ty.int) :=
+      stm_if (stm_exp (exp_var "x")) (stm_val ty.int 0) (stm_val ty.int 0).
 
     Definition fun_fpthree32 : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32) :=
       (let n := 32 in
@@ -423,6 +420,24 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
     (*      sep_contract_postcondition   := asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post *)
     (*   |}. *)
 
+    Definition sep_contract_fpthree16 : SepContract [ "x" ∷ ty.bool ] ty.int :=
+      {|
+        sep_contract_logic_variables := ["x" ∷ ty.bool];
+        sep_contract_localstore      := [term_var "x"];
+        sep_contract_precondition    := asn.formula (formula_relop bop.eq (term_var "x") (term_var "x"));
+        sep_contract_result          := "result";
+        sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_val ty.int 0))
+      |}.
+
+    Definition sep_contract_nonsyncval : SepContract [ "x" ∷ ty.bool ] ty.int :=
+      {|
+        sep_contract_logic_variables := ["x" ∷ ty.bool];
+        sep_contract_localstore      := [term_var "x"];
+        sep_contract_precondition    := ⊤;
+        sep_contract_result          := "result";
+        sep_contract_postcondition   := ⊤
+      |}.
+
     Definition sep_contract_bvtest : SepContract [ "x" ∷ ty.int ] ty.int :=
       {|
         sep_contract_logic_variables := ["x" ∷ ty.int];
@@ -441,7 +456,7 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
         (* | gcdloop   => Some sep_contract_gcdloop *)
         (* | msum      => None *)
         (* | length    => Some sep_contract_length *)
-        | fpthree16 => None
+        | fpthree16 => Some sep_contract_fpthree16
         | fpthree32 => None
         | fpthree64 => None
         | bvtest    => Some sep_contract_bvtest
@@ -462,7 +477,7 @@ End ExampleSpecification.
 Module Import ExampleExecutor :=
   MakeExecutor ExampleBase ExampleSig ExampleProgram ExampleSpecification.
 
-Compute SStoreSpec.exec_aux _ _ _ (FunDef bvtest).
+(* Compute SStoreSpec.exec_aux _ _ _ (FunDef bvtest). *)
 
 Local Ltac solve :=
   repeat
@@ -515,3 +530,24 @@ Lemma zerotest : vcgen 0 sep_contract_bvtest (FunDef bvtest).
 Proof.
   now cbv.
 Qed.
+
+Lemma one_text : vcgen 0 sep_contract_fpthree16 (FunDef fpthree16).
+Proof.
+  cbv. intros v.
+  destruct v.
+ - intros. subst.
+    split. { tauto. }
+    split; split; try tauto.
+
+  - contradiction.
+Qed.
+
+Lemma two_test : vcgen 0 sep_contract_nonsyncval (FunDef fpthree16) -> False.
+Proof.
+  cbv.
+  intros.
+  specialize (H (ty.NonSyncVal ty.bool true true) eq_refl) as (H1 & _ & _).
+  assumption.
+Qed.
+
+(* Compute SStoreSpec.exec_aux _ _ _ (FunDef fpthree16). *)

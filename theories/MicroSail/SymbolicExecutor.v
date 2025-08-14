@@ -340,6 +340,22 @@ Module Type SymbolicExecOn
             (fun w1 θ1 mr => Φ w1 θ1 mr δ⟨θ1⟩ h⟨θ1⟩).
       #[global] Arguments demonic_pattern_match {N} n {Γ σ} pat [w].
 
+      Definition assertPublicIfNotSinglePattern {N Γ σ} (pat : @Pattern N σ) :
+        ⊢ STerm σ -> SStoreSpec Γ Γ Unit :=
+        fun w0 t Φ δ h =>
+          SPureSpec.assertPublicIfNotSinglePattern pat
+            (amsg.mk
+               {| msg_function := "SStoreSpec.exec";
+                 msg_message := "stm_pattern_match assertPublicIfNotSinglePattern";
+                 msg_program_context := _;
+                 msg_localstore := δ;
+                 msg_heap := h;
+                 msg_pathcondition := wco w0
+               |})
+            t
+            (fun w1 θ1 mr => Φ w1 θ1 mr δ⟨θ1⟩ h⟨θ1⟩).
+      #[global] Arguments assertPublicIfNotSinglePattern {N Γ σ} pat [w].
+
     End PatternMatching.
 
     Section State.
@@ -428,10 +444,11 @@ Module Type SymbolicExecOn
         | stm_write_register reg e =>
             ⟨ _ ⟩ tnew <- eval_exp e (w:=_) ;;
             lift_heapspec (SHeapSpec.write_register reg tnew)
-        (* | stm_pattern_match s pat rhs => *)
-        (*     ⟨ θ1 ⟩ v  <- exec_aux s ;; *)
-        (*     ⟨ θ2 ⟩ '(existT pc vs) <- demonic_pattern_match PVartoLVar pat v ;; *)
-        (*     pushspops vs (exec_aux (rhs pc)) *)
+        | stm_pattern_match s pat rhs =>
+            ⟨ θ1 ⟩ v  <- exec_aux s ;;
+            ⟨ θ2 ⟩ _ <- assertPublicIfNotSinglePattern pat v;;
+            ⟨ θ3 ⟩ '(existT pc vs) <- demonic_pattern_match PVartoLVar pat v⟨ θ2 ⟩ ;;
+            pushspops vs (exec_aux (rhs pc))
         | stm_bind _ _ =>
             error
               (fun δ h =>

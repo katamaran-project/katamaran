@@ -371,9 +371,10 @@ Module Type RefinementMonadsOn
     Proof.
       unfold RPureSpec, SPureSpec.assert_formula, CPureSpec.assert_formula.
       iIntros "%msg %fml %fmls Hfml".
-      iApply refine_assert_pathcondition.
-      iApply (proprepₚ_cong (T2 := PathCondition) with "Hfml").
-      intros. cbn. now apply bi.emp_sep.
+      destruct fml;
+      iApply refine_assert_pathcondition;
+      iApply (proprepₚ_cong (T2 := PathCondition) with "Hfml");
+      intros; cbn; now apply bi.emp_sep.
     Qed.
 
     Lemma refine_assert_formula' {w msg} :
@@ -393,9 +394,10 @@ Module Type RefinementMonadsOn
     Proof.
       unfold RPureSpec, SPureSpec.assume_formula, CPureSpec.assume_formula.
       iIntros "%fml %fmls Hfml".
-      iApply refine_assume_pathcondition.
-      iApply (proprepₚ_cong (T2 := PathCondition) with "Hfml").
-      intros. cbn. now apply bi.emp_sep.
+      destruct fml;
+        iApply refine_assume_pathcondition;
+        iApply (proprepₚ_cong (T2 := PathCondition) with "Hfml");
+        intros; cbn; now apply bi.emp_sep.
     Qed.
 
     #[export] Instance refine_compat_purespec_assume_formula {w} :
@@ -513,7 +515,7 @@ Module Type RefinementMonadsOn
     Qed.
 
     Lemma refine_syncval_is_refine_formula_public {σ w} (v : Val σ) (t : Term (wctx w) σ) :
-      ℛ⟦RVal σ⟧ (ty.SyncVal σ v) t -∗ ℛ⟦RFormula⟧ (ty.isSyncValProp (ty.SyncVal σ v)) (formula_public t).
+      ℛ⟦RVal σ⟧ (ty.SyncVal σ v) t -∗ ℛ⟦RFormula⟧ (Some (ty.isSyncValProp (ty.SyncVal σ v))) (formula_public t).
     Proof.
       constructor.
       intros.
@@ -524,7 +526,7 @@ Module Type RefinementMonadsOn
     Qed.
 
     Lemma refine_nonsyncval_is_refine_formula_public {σ w} (v1 v2 : Val σ) (t : Term (wctx w) σ) :
-      ℛ⟦RVal σ⟧ (ty.NonSyncVal σ v1 v2) t -∗ ℛ⟦RFormula⟧ (ty.isSyncValProp (ty.NonSyncVal σ v1 v2)) (formula_public t).
+      ℛ⟦RVal σ⟧ (ty.NonSyncVal σ v1 v2) t -∗ ℛ⟦RFormula⟧ (Some (ty.isSyncValProp (ty.NonSyncVal σ v1 v2))) (formula_public t).
     Proof.
       constructor. intros. constructor; inversion H1.
       + intros T. cbn in *. rewrite H3 in T. exfalso. assumption.
@@ -547,8 +549,10 @@ Module Type RefinementMonadsOn
     #[export] Instance refine_compat_assert_public {σ} {w} :
       RefineCompat (RMsg _ (RVal σ -> RPureSpec RUnit)) CPureSpec.assert_public w (SPureSpec.assert_public (w := w)) _ :=
       MkRefineCompat refine_assert_public.
+    #[global] Opaque refine_compat_assert_public.
+    #[export] Hint Extern 0 (RefineCompat (RPureSpec RUnit) CPureSpec.assert_public _ (SPureSpec.assert_public) _) => ( refine (refine_compat_assert_public) ) : typeclass_instances.
     
-    Lemma refine_assertPublicIfNotSinglePattern {N : Set} {n : N -> LVar}
+    Lemma refine_assertPublicIfNotSinglePattern {N : Set}
       {σ} (pat : @Pattern N σ) {w} :
       ⊢ ℛ⟦RMsg _ (RVal σ -> RPureSpec RUnit)⟧
         (CPureSpec.assertPublicIfNotSinglePattern pat)
@@ -561,10 +565,15 @@ Module Type RefinementMonadsOn
       - rsolve.
     Qed.
 
-    #[export] Instance refine_compat_assertPublicIfNotSinglePattern {N : Set} {n : N -> LVar}
-      {σ} (pat : @Pattern N σ) {w} :
-      RefineCompat (RMsg _ (RVal σ -> RPureSpec RUnit)) (CPureSpec.assertPublicIfNotSinglePattern pat) w (SPureSpec.assertPublicIfNotSinglePattern pat (w := w)) _ :=
-      MkRefineCompat (refine_assertPublicIfNotSinglePattern (n := n) pat).
+    #[export, refine] Instance refine_compat_assertPublicIfNotSinglePattern {N : Set} 
+      {σ} (pat : @Pattern N σ) {w} (msg : AMessage (wctx w)) :
+      RefineCompat (RVal σ -> RPureSpec RUnit)
+        (CPureSpec.assertPublicIfNotSinglePattern pat) w (SPureSpec.assertPublicIfNotSinglePattern pat (w := w) msg) emp :=
+      MkRefineCompat _.
+    Proof.
+      iIntros "_".
+      now iApply refine_assertPublicIfNotSinglePattern.
+    Qed.
 
     Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar)
       {σ} (pat : @Pattern N σ) {w} :
@@ -575,15 +584,20 @@ Module Type RefinementMonadsOn
       iIntros (msg v t) "Hv".
       unfold SPureSpec.angelic_pattern_match'.
       unfold CPureSpec.angelic_pattern_match.
+      (* I use refine_compat_lemma instead of refine_bind because refine_bind doesn't duplicate the RVal hypothesis to both branches *)
+      iApply refine_compat_lemma.
+      iSplit.
+      { rsolve. }
+      iIntros (? ?) "!>".
+      iIntros (? ?) "#?".
       iApply (refine_bind (RA := RConst _) (RB := RMatchResult _)).
       { now iApply refine_angelic_finite. }
       iIntros (w1 r01) "!> %ι1 %sι1 Hι1".
-      unfold RConst, RInst; cbn.
+      unfold RConst, RInst. cbn -[CPureSpec.assert_formula].
       rewrite repₚ_const.
-      iDestruct "Hι1" as "<-". rsolve.
-      - iApply refine_assertPublicIfNotSinglePattern. rsolve.
-      - admit.
-      - unfold RMatchResult. cbn. iExists eq_refl. admit.
+      iDestruct "Hι1" as "<-"; rsolve.
+      (* Only the pattern_match_relval_reverse part still needs to be handled *)
+      
      Admitted.
     #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
 
@@ -990,8 +1004,8 @@ Module Type RefinementMonadsOn
         iDestruct (repₚ_invert_snoc with "HE2") as "(HE2 & Hv1v)".
         iSpecialize ("IHEs1" with "HE1 HE2").
         iApply (refine_bind (RA := RUnit) (RB := RUnit) with "IHEs1"); rsolve.
-        iApply refine_formula_persist.
-        iModIntro; rsolve.
+        (* iApply refine_formula_persist. *)
+        (* iModIntro; rsolve. *)
     (* Qed. *)
     Admitted.
 
@@ -1010,9 +1024,9 @@ Module Type RefinementMonadsOn
         iDestruct (repₚ_invert_snoc with "HE2") as "(HE2 & Hv0v1)".
         iSpecialize ("IHE" with "HE1 HE2").
         iApply (refine_bind (RA := RUnit) (RB := RUnit) with "IHE"); rsolve.
-        iApply refine_formula_persist.
-        iModIntro.
-        rsolve.
+        (* iApply refine_formula_persist. *)
+        (* iModIntro. *)
+        (* rsolve. *)
     (* Qed. *)
     Admitted.
     
@@ -1086,7 +1100,7 @@ Module Type RefinementMonadsOn
           cbn -[RSat].
           destruct (eq_dec_het r r2); last rsolve.
           dependent elimination e; cbn -[RSat].
-          iApply refine_assert_formula; rsolve.
+          (* iApply refine_assert_formula; rsolve. *)
           admit.
         + iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 %msg %σ %r %v %sv Hv %w1 %ω1 !>"; rsolve.
         + iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 %msg %σ %r %v %sv Hv %w1 %ω1 !>"; rsolve.
@@ -1147,12 +1161,12 @@ Module Type RefinementMonadsOn
       - now iApply "IH1".
       - now iApply "IH".
       - now iApply "IH1".
+      - (* iApply "IH"; rsolve. *) admit.
       - iApply "IH"; rsolve.
+      - (* iApply "IH"; rsolve. *) admit.
       - iApply "IH"; rsolve.
-      - iApply "IH"; rsolve.
-      - iApply "IH"; rsolve.
-      - rewrite <-inst_sub_shift.
-        rewrite <-inst_subst.
+      - (* rewrite <-inst_sub_shift. *)
+        (* rewrite <-inst_subst. *)
         (* iApply (refine_inst_subst (T := STerm σ) with "Hι"). *)
     (*   - iApply (repₚ_cong (T1 := Sub Σ) (T2 := STerm σ) (fun ι => env.lookup ι xIn) (fun ιs => env.lookup ιs xIn) with "Hι"). *)
     (*     intros. now rewrite inst_lookup. *)

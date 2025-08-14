@@ -454,17 +454,15 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Definition angelic_pattern_match' {σ} (pat : @Pattern N σ) :
         ⊢ AMessage -> WTerm σ -> SPureSpec (SMatchResult pat) :=
         fun w0 msg t =>
-          ⟨ θ1 ⟩ pc <- angelic_finite (PatternCase pat) msg ;;
-          ⟨ θ2 ⟩ ts <- angelic_ctx n (PatternCaseCtx pc) ;;
-          let θ12 := θ1 ∘ θ2 in
-          ⟨ θ3 ⟩ _  <- assertPublicIfNotSinglePattern pat msg⟨θ12⟩ t⟨θ12⟩;;
-          let θ123 := θ12 ∘ θ3 in
+          ⟨ θ1 ⟩ _  <- assertPublicIfNotSinglePattern pat msg t;;
+          ⟨ θ2 ⟩ pc <- angelic_finite (PatternCase pat) msg⟨θ1⟩;;
+          ⟨ θ3 ⟩ ts <- angelic_ctx n (PatternCaseCtx pc) ;;
+          let θ123 := θ1 ∘ θ2 ∘ θ3 in
           ⟨ θ4 ⟩ _  <- assert_formula (persist msg θ123)
-                         (formula_relop bop.eq
-                            (pattern_match_term_reverse pat pc ts⟨θ3⟩)
+                         (formula_eq_nonsync
+                            (pattern_match_term_reverse pat pc ts)
                             t⟨θ123⟩);;
-          let θ34 := θ3 ∘ θ4 in
-          pure (A := SMatchResult pat) (existT pc ts⟨θ34⟩).
+          pure (A := SMatchResult pat) (existT pc ts⟨θ4⟩).
       #[global] Arguments angelic_pattern_match' {σ} pat [w].
 
       Definition angelic_pattern_match :
@@ -569,14 +567,14 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           ⟨ θ1 ⟩ pc <- demonic_finite (PatternCase pat) ;;
           ⟨ θ2 ⟩ ts <- demonic_ctx n (PatternCaseCtx pc) ;;
           let θ12 := θ1 ∘ θ2 in
-          ⟨ θ3 ⟩ _ <- assume_public t⟨θ12⟩ ;;
-          let θ123 := θ12 ∘ θ3 in
+          (* ⟨ θ3 ⟩ _ <- assume_public t⟨θ12⟩ ;; *)
+          (* let θ123 := θ12 ∘ θ3 in *)
           ⟨ θ4 ⟩ _  <- assume_formula
                          (formula_relop bop.eq
-                            (pattern_match_term_reverse pat pc ts⟨θ3⟩)
-                            t⟨θ123⟩);;
-          let θ34 := θ3 ∘ θ4 in
-          pure (A := SMatchResult pat) (existT pc ts⟨θ34⟩).
+                            (pattern_match_term_reverse pat pc ts)
+                            t⟨θ12⟩);;
+          (* let θ34 := θ3 ∘ θ4 in *)
+          pure (A := SMatchResult pat) (existT pc ts⟨θ4⟩).
       #[global] Arguments demonic_pattern_match' {σ} pat [w].
 
       Definition demonic_pattern_match :

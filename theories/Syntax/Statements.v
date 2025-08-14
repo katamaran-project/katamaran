@@ -61,8 +61,8 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   | stm_seq           {σ : Ty} (s : Stm Γ σ) (k : Stm Γ τ)
   | stm_assertk       (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
   | stm_fail          (s : Val ty.string)
-  (* | stm_pattern_match {σ : Ty} (s : Stm Γ σ) (pat : Pattern σ) *)
-  (*     (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ) *)
+  | stm_pattern_match {σ : Ty} (s : Stm Γ σ) (pat : Pattern σ)
+      (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ)
   | stm_read_register (reg : 𝑹𝑬𝑮 τ)
   | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
   | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
@@ -82,7 +82,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_seq {Γ τ σ} s%_exp k%_exp.
   Arguments stm_assertk {Γ τ} e1%_exp e2%_exp k%_exp.
   Arguments stm_fail {Γ} τ s%_string.
-  (* Arguments stm_pattern_match {Γ τ σ} s pat rhs. *)
+  Arguments stm_pattern_match {Γ τ σ} s pat rhs.
   Arguments stm_read_register {Γ τ} reg.
   Arguments stm_write_register {Γ τ} reg e%_exp.
   Bind Scope exp_scope with Stm.
@@ -92,8 +92,8 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Definition stm_lemma {Γ Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ ty.unit :=
     stm_lemmak l es (stm_val ty.unit tt).
 
-  (* Definition stm_if {Γ τ} (s : Stm Γ ty.bool) (s1 s2 : Stm Γ τ) : Stm Γ τ := *)
-  (*   stm_pattern_match s pat_bool (fun b => if b then s1 else s2). *)
+  Definition stm_if {Γ τ} (s : Stm Γ ty.bool) (s1 s2 : Stm Γ τ) : Stm Γ τ :=
+    stm_pattern_match s pat_bool (fun b => if b then s1 else s2).
   (* Definition stm_match_prod {Γ τ σ1 σ2} (s : Stm Γ (ty.prod σ1 σ2)) *)
   (*   (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) : Stm Γ τ := *)
   (*   stm_pattern_match s (pat_pair xl xr) (fun _ => rhs). *)
@@ -126,7 +126,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
 
   Arguments stm_assert {Γ} e1%_exp e2%_exp.
   Arguments stm_lemma {Γ Δ} l es%_env.
-  (* Arguments stm_if {Γ τ} s%_exp s1%_exp s2%_exp. *)
+  Arguments stm_if {Γ τ} s%_exp s1%_exp s2%_exp.
   (* Arguments stm_match_prod {Γ τ _ _} _ _ _ _. *)
   (* Arguments stm_match_tuple {Γ τ σs Δ} s%_exp p%_pat rhs%_exp. *)
   (* Arguments stm_match_record {Γ%_ctx τ} R {Δ%_ctx} s%_exp p%_pat rhs%_exp. *)
@@ -223,10 +223,10 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   (* Notation "( x , y , .. , z )" := *)
   (*   (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z) (at level 0) : pat_scope. *)
 
-  (* Notation "'if:' e 'then' s1 'else' s2" := (stm_if e%exp s1%exp s2%exp) *)
-  (*   (at level 200, format *)
-  (*    "'[hv' 'if:'  e  '/' '[' 'then'  s1  ']' '/' '[' 'else'  s2 ']' ']'" *)
-  (*   ) : exp_scope. *)
+  Notation "'if:' e 'then' s1 'else' s2" := (stm_if e%exp s1%exp s2%exp)
+    (at level 200, format
+     "'[hv' 'if:'  e  '/' '[' 'then'  s1  ']' '/' '[' 'else'  s2 ']' ']'"
+    ) : exp_scope.
 
   (* The infix operators ∷ is at level 49, so all of the notations have to bind tighter. *)
   Notation "'let:' x := s1 'in' s2" := (stm_let x%string _ s1%exp s2%exp)

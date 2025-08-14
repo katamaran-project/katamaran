@@ -1767,6 +1767,7 @@ Module Type SymPropOn
     | eformula_and (F1 F2 : EFormula)
     | eformula_or (F1 F2 : EFormula)
     | eformula_public {σ : Ty} (t : ETerm σ)
+    | eformula_eq_nonsync {σ : Ty} (t1 t1 : ETerm σ)
     .
     Arguments eformula_user : clear implicits.
 
@@ -1823,6 +1824,7 @@ Module Type SymPropOn
         | formula_and F1 F2      => eformula_and (erase F1) (erase F2)
         | formula_or F1 F2       => eformula_or (erase F1) (erase F2)
         | formula_public t       => eformula_public (erase_term t)
+        | formula_eq_nonsync t1 t2 => eformula_eq_nonsync (erase_term t1) (erase_term t2)
         end.
 
     Fixpoint erase_symprop {Σ} (p : SymProp Σ) : ESymProp :=
@@ -1947,6 +1949,9 @@ Module Type SymPropOn
                                    | ty.SyncVal _ _ => Some True
                                    | ty.NonSyncVal _ _ _ => Some False
                                    end
+      | eformula_eq_nonsync t1 t2 => v1 <- inst_eterm ι t1 ;;
+                                     v2 <- inst_eterm ι t2 ;;
+                                     Some (v1 = v2)
       end.
 
     Definition inst_eformula' (ι : list { σ : Ty & RelVal σ}) (f : EFormula) : Prop :=

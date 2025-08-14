@@ -527,6 +527,13 @@ Module Type PatternsOn (Import TY : Types).
       | _ => false
       end.
 
+    Lemma pat_relval_reverse_is_always_syncval_sound {σ} {p : Pattern σ} (c : PatternCase p) (δpc : NamedEnv RelVal (PatternCaseCtx c)) :
+      pat_relval_reverse_is_always_syncval p = true -> exists v, pattern_match_relval_reverse p c δpc = ty.SyncVal σ v.
+    Proof.
+      intros H.
+      destruct p; inversion H; cbn; eauto.
+    Qed.
+
     (* A curried version of the above. *)
     Definition pattern_match_relval_reverse' {σ} (p : Pattern σ) :
       MatchResultRel p -> RelVal σ :=
@@ -681,8 +688,7 @@ Module Type PatternsOn (Import TY : Types).
       (*   now rewrite <- Heq, H. *)
     Qed.
 
-
-            Lemma pattern_match_nonsyncval_inverse_left {σ} (pat : Pattern σ) :
+    Lemma pattern_match_nonsyncval_inverse_left {σ} (pat : Pattern σ) :
       forall v1 v2 : Val σ,
         isSinglePattern pat = true ->
         pat_relval_reverse_is_always_syncval pat = false ->

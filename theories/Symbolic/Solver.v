@@ -199,8 +199,23 @@ Module Type GenericSolverOn
     Proof.
       destruct op1; arw; dependent elimination op2; arw;
         rewrite ?formula_relop_term'; arw.
-    (* Qed. *)
-    Admitted.
+      - split; intros; split; intros.
+        + unfold instpred in H0. destruct H0. cbn in *. unfold instpred_formula_relop in *. cbn in *.
+          destruct (inst t11 ι); destruct (inst t21 ι); destruct (inst t12 ι); destruct (inst t22 ι); cbn in *; try contradiction.
+          subst. reflexivity.
+        + unfold instpred. cbn in *. unfold instpred_formula_relop in *. cbn in *.
+          split;
+          destruct (inst t11 ι); destruct (inst t21 ι); destruct (inst t12 ι); destruct (inst t22 ι); cbn in *; try contradiction;
+          inversion H0; reflexivity.
+      - split; intros; split; intros.
+        + unfold instpred in H0. destruct H0. cbn in *. unfold instpred_formula_relop in *. cbn in *.
+          destruct (inst t11 ι); destruct (inst t21 ι); destruct (inst t12 ι); destruct (inst t22 ι); cbn in *; try contradiction.
+          subst. reflexivity.
+        + unfold instpred. cbn in *. unfold instpred_formula_relop in *. cbn in *.
+          split;
+            destruct (inst t11 ι); destruct (inst t21 ι); destruct (inst t12 ι); destruct (inst t22 ι); cbn in *; try contradiction;
+            inversion H0; reflexivity.
+    Qed.
     #[local] Hint Rewrite simplify_eq_binop_spec : uniflogic.
     #[local] Opaque simplify_eq_binop.
 
@@ -470,6 +485,7 @@ Module Type GenericSolverOn
                                          end
                                   end
       | formula_public t       => singleton (formula_public t)
+      | formula_eq_nonsync t1 t2 => singleton (formula_eq_nonsync t1 t2) (* No simplifications for now, but machinery should be reusable *)
       end.
 
     Lemma PathCondition_to_Formula_sound' [w : World] (P : PathCondition w) :
