@@ -95,27 +95,32 @@ Module Type WorldsOn
       {| wctx := (wctx w - x∷σ); wco := subst (wco w) (sub_single xIn t) |}.
     Global Arguments wsubst w x {σ xIn} t.
 
-    Program Definition wmatch (w : World) {σ} (s : Term w σ) (p : @Pattern LVar σ)
-      (pc : PatternCase p) : World :=
-          let w1  : World      := if isSinglePattern p
-                                           then w
-                                           else wformula w (formula_public s) in
-          let Δ   : LCtx       := PatternCaseCtx pc in
-          let w2  : World      := wcat w1 Δ in
-          let ts                        := sub_cat_right Δ in
-          let F1  : Formula w2 := formula_eq_nonsync
-                                    (subst (T := (λ Σ : LCtx, Term Σ σ)) _
-                                       (sub_cat_left Δ))
-                                    (pattern_match_term_reverse _ pc ts) in
-          wformula w2 F1.
-    Next Obligation.
+    Definition wassertPublicIfNotSinglePattern {N} (w : World) {σ} (s : Term w σ) (p : @Pattern N σ) : World :=
+      if isSinglePattern p
+      then w
+      else wformula w (formula_public s).
+
+    Definition sub_assertPublicIfNotSinglePattern {w : World} {σ} (s : Term w σ) (p : @Pattern LVar σ)
+      : Sub (wctx w) (wctx (wassertPublicIfNotSinglePattern w s p)).
     Proof.
-      cbn. intros.
-      destruct (isSinglePattern p).
-      - auto.
-      - apply (sub_term (Σ1 := wctx w) s (Σ2 := wctx w)).
-        apply sub_id.
+      unfold wassertPublicIfNotSinglePattern.
+      destruct isSinglePattern.
+      - apply sub_id.
+      - apply sub_id.
     Qed.
+
+    Definition wmatch (w : World) {σ} (s : Term w σ) (p : @Pattern LVar σ)
+      (pc : PatternCase p) : World :=
+      let w1  : World      := wassertPublicIfNotSinglePattern w s p in
+      let Δ   : LCtx       := PatternCaseCtx pc in
+      let w2  : World      := wcat w1 Δ in
+      let ts                        := sub_cat_right Δ in
+      let F1  : Formula w2 := formula_eq_nonsync
+                                (subst (T := (λ Σ : LCtx, Term Σ σ)) (subst s (sub_assertPublicIfNotSinglePattern s p))
+                                   (sub_cat_left Δ))
+                                (pattern_match_term_reverse _ pc ts) in
+      wformula w2 F1.
+
 
 
     Definition wmatchvar_patternvars {Σ : LCtx} {x σ} {xIn : (x∷σ ∈ Σ)%katamaran}
@@ -379,10 +384,23 @@ Module Type WorldsOn
       @acc_sub w w' ζ (entails_refl (wco w')).
     Arguments acc_subst_right {w} x {σ xIn} t.
 
-    Program Definition acc_match_right {w : World} {σ} {s : Term w σ}
-      {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatch w s p pc :=
-      @acc_sub w (wmatch w s p pc) (sub_cat_left (PatternCaseCtx pc))
+    Definition acc_match_right_assertPublicIfNotSinglePattern {w : World} {σ} {s : Term w σ}
+      {p : @Pattern LVar σ} : w  ⊒ wassertPublicIfNotSinglePattern w s p.
+    Proof.
+      unfold wassertPublicIfNotSinglePattern.
+      destruct (isSinglePattern p).
+      - constructor.
+      - apply acc_formula_right.
+    Defined.
+
+    Definition acc_match_right' {w : World} {σ} {s : Term w σ}
+      {p : @Pattern LVar σ} (pc : PatternCase p) : (if isSinglePattern p then w else wformula w (formula_public s)) ⊒ wmatch w s p pc :=
+      @acc_sub ((if isSinglePattern p then w else wformula w (formula_public s))) (wmatch w s p pc) (sub_cat_left (PatternCaseCtx pc))
         (fun ι HCι => proj1 HCι).
+
+    Definition acc_match_right {w : World} {σ} {s : Term w σ}
+      {p : @Pattern LVar σ} (pc : PatternCase p) : w ⊒ wmatch w s p pc :=
+      acc_trans acc_match_right_assertPublicIfNotSinglePattern (acc_match_right' pc).
 
     Definition sub_matchvar_right {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
         {p : @Pattern LVar σ} (pc : PatternCase p) : Sub w (wmatchvar w xIn p pc) :=

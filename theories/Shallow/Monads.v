@@ -300,6 +300,13 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Definition assumePublicIfNotSinglePattern {N σ} (pat : @Pattern N σ) (rv : RelVal σ) :=
         if isSinglePattern pat then pure tt else assume_public rv.
 
+      Definition assertAllNonSyncIfNonSync {X Σ σ} (rv : RelVal σ) (vs : NamedEnv (X := X) RelVal Σ) :=
+        if ty.isSyncVal rv then assert_formula (Some True) else assert_formula (Some (ty.allNonSync vs)).
+
+      Definition assumeAllNonSyncIfNonSync {X Σ σ} (rv : RelVal σ) (vs : NamedEnv (X := X) RelVal Σ) :=
+        if ty.isSyncVal rv then assume_formula (Some True) else assume_formula (Some (ty.allNonSync vs)).
+
+
       (* TODO: Currently, pattern matching on NonSyncVal is not supported.
                However, if PatternCase pat is unit, then control flow is not affected,
                so it's not a  problem.
@@ -310,15 +317,17 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         assertPublicIfNotSinglePattern pat v;;
         pc <- angelic_finite (PatternCase pat);;
         vs <- angelic_ctx (PatternCaseCtx pc) ;;
+        assertAllNonSyncIfNonSync v vs;;
         _  <- assert_formula (Some (pattern_match_relval_reverse pat pc vs = v));;
         pure (existT pc vs).
       #[global] Arguments angelic_pattern_match {σ} pat v.
 
       Definition demonic_pattern_match {σ} (pat : Pattern (N:=N) σ)
         (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
+        assertPublicIfNotSinglePattern pat v;;
         pc <- demonic_finite (PatternCase pat);;
         vs <- demonic_ctx (PatternCaseCtx pc) ;;
-        (* assumePublicIfNotSinglePattern pat v;; *)
+        assumeAllNonSyncIfNonSync v vs;;
         _  <- assume_formula (Some (pattern_match_relval_reverse pat pc vs = v));;
         pure (existT pc vs).
       #[global] Arguments demonic_pattern_match {σ} pat v.
@@ -413,10 +422,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
             let t' := inst t ι' in
             assume_formula (Some (t' = x')) ;;
             replay k ι'
-        | SymProp.pattern_match s pat rhs =>
-            error
-        | SymProp.pattern_match_var x pat rhs =>
-            error
+        (* | SymProp.pattern_match s pat rhs => *)
+        (*     error *)
+        (* | SymProp.pattern_match_var x pat rhs => *)
+        (*     error *)
         | SymProp.debug b k =>
             debug (replay k ι)
         end.
@@ -580,6 +589,18 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MPureSpec eq) (@assumePublicIfNotSinglePattern _ _ pat v).
     Proof.
       destruct pat; typeclasses eauto.
+    Qed.
+
+    #[export] Instance mon_assertAllNonSyncIfNonSync {X Σ σ} v vs :
+      Monotonic (MPureSpec eq) (@assertAllNonSyncIfNonSync X Σ σ v vs).
+    Proof.
+      destruct v; typeclasses eauto.
+    Qed.
+
+    #[export] Instance mon_assumeAllNonSyncIfNonSync {X Σ σ} v vs :
+      Monotonic (MPureSpec eq) (@assumeAllNonSyncIfNonSync X Σ σ v vs).
+    Proof.
+      destruct v; typeclasses eauto.
     Qed.
 
     #[export] Instance mon_angelic_pattern_match {N σ} (pat : @Pattern N σ) v :
@@ -783,35 +804,38 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           rewrite wp_assertPublicIfNotSinglePattern.
           cbn. rewrite wp_angelic_list. setoid_rewrite wp_angelic_ctx.
           split.
-          +  intros (cond & pc & Hin & δpc & eq & Hwp).
+          +  intros (cond & pc & Hin & δpc & δpcNonSync & eq & Hwp).
              rewrite <- eq. apply helper in eq. destruct eq as (vs & ->). now rewrite pattern_match_syncval_inverse_right.
           + set (mr := pattern_match_relval pat (ty.SyncVal σ v)). intros HΦ.
             split. { right. eauto. }
             exists (projT1 mr). split.
             { rewrite <- base.elem_of_list_In. apply finite.elem_of_enum. }
-            exists (projT2 mr). split.
+            exists (projT2 mr). split. { tauto. }
+            split.
             { subst mr. apply pattern_match_syncval_inverse_left. }
             destruct mr. apply HΦ.
-Qed.
+        Qed.
 
         Lemma wp_angelic_pattern_match_nonsyncval {N σ} (pat : @Pattern N σ) v1 v2
           (Φ : MatchResultRel pat -> Prop) :
           isSinglePattern pat = true ->
           pat_relval_reverse_is_always_syncval pat = false ->
-          map match_result_rel_to_nonsyncval (angelic_pattern_match pat (ty.NonSyncVal σ v1 v2)) Φ <-> Φ (match_result_rel_to_nonsyncval (pattern_match_relval pat (ty.NonSyncVal σ v1 v2))).
+          angelic_pattern_match pat (ty.NonSyncVal σ v1 v2) Φ <-> Φ (pattern_match_relval pat (ty.NonSyncVal σ v1 v2)).
         Proof.
           intros isSinglePat reverse_is_non_syncval.
           unfold angelic_pattern_match, angelic_finite. cbn.
           rewrite wp_assertPublicIfNotSinglePattern.
           rewrite wp_angelic_list. setoid_rewrite wp_angelic_ctx.
           split.
-          - intros (cond & pc & Hin & δpc & <- & Hwp).
-              now rewrite pattern_match_nonsyncval_inverse_right.
+          - intros (cond & pc & Hin & δpc & δpcNonSync & <- & Hwp).
+            now rewrite pattern_match_nonsyncval_inverse_right.
           - set (mr := pattern_match_relval pat (ty.NonSyncVal σ v1 v2)). intros HΦ.
             split. { auto. }
             exists (projT1 mr). split.
             { rewrite <- base.elem_of_list_In. apply finite.elem_of_enum. }
             exists (projT2 mr). split.
+            { apply pattern_match_relval_NonSyncImpliesAllNonSync. }
+            split.
             { 
               subst mr. cbn. apply pattern_match_nonsyncval_inverse_left;
               assumption.
@@ -819,65 +843,132 @@ Qed.
             destruct mr. apply HΦ.
         Qed.
 
-    Lemma wp_demonic_pattern_match {N σ} (pat : @Pattern N σ) v
+        Lemma wp_angelic_pattern_match_nonsyncval_unit {N}
+          (Φ : MatchResultRel pat_unit -> Prop) :
+          angelic_pattern_match (N := N) pat_unit (ty.SyncVal ty.unit tt) Φ <-> Φ (pattern_match_relval pat_unit (ty.NonSyncVal ty.unit tt tt)).
+        Proof.
+          unfold angelic_pattern_match, angelic_finite. cbn.
+          split.
+          - intros (_ & pc & Hin).
+            auto.
+          - set (mr := pattern_match_relval (N := N) pat_unit (ty.NonSyncVal ty.unit tt tt)). intros HΦ.
+            split. { tauto. }
+            split.
+            { reflexivity. }
+            assumption.
+        Qed.
+
+        (* Definition NonSyncUnitToSyncUnit_or_id {σ} : RelVal σ -> RelVal σ. *)
+        (*   intros rv. *)
+        (*   revert rv. *)
+        (*   destruct σ. *)
+        (*   intros rv. *)
+        (*   Show Proof. *)
+        (*   match σ with *)
+        (*   | ty.unit => fun _ => ty.SyncVal ty.unit tt *)
+        (*   | _ => fun rv => rv *)
+        (*   end. *)
+
+            Lemma wp_angelic_pattern_match {N σ} (pat : @Pattern N σ) v
       (Φ : MatchResultRel pat -> Prop) :
-      demonic_pattern_match pat (ty.SyncVal σ v) Φ <-> Φ (pattern_match_relval pat (ty.SyncVal σ v)).
-    Proof.
-      unfold demonic_pattern_match, demonic_finite. cbn.
-      rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx.
-      split.
-      - set (mr := pattern_match_relval pat (ty.SyncVal σ v)). intros HΦ.
-        specialize (HΦ (projT1 mr)).
-        rewrite <- base.elem_of_list_In in HΦ.
-        specialize (HΦ (finite.elem_of_enum _) (projT2 mr)).
-        (* unfold assumePublicIfNotSinglePattern in HΦ. destruct (isSinglePattern pat). *)
-        + cbn in *. specialize (HΦ (pattern_match_syncval_inverse_left pat v)).
-          now destruct mr.
-        (* + specialize (HΦ I). cbn in *. specialize (HΦ (pattern_match_syncval_inverse_left pat v)). *)
-        (*   now destruct mr. *)
-      - intros HΦ pc Hin δpc.
-        (* unfold assumePublicIfNotSinglePattern. destruct (isSinglePattern pat). *)
-        + intros x. revert HΦ. rewrite <- x. apply helper in x. destruct x as (vs & x). rewrite x.
-          now rewrite pattern_match_syncval_inverse_right.
-        (* + intros t x. revert HΦ. rewrite <- x. apply helper in x. destruct x as (vs & x). rewrite x. *)
-        (*   now rewrite pattern_match_syncval_inverse_right. *)
-    Qed.
+          angelic_pattern_match pat v Φ <-> Φ (pattern_match_relval pat v).
+        Proof.
+          destruct v.
+          - apply wp_angelic_pattern_match_syncval.
+          - destruct (isSinglePattern pat) as [|] eqn:isSinglePat.
+            destruct (pat_relval_reverse_is_always_syncval pat) as [|] eqn:reverse_is_nonsyncval.
+            + destruct pat; inversion isSinglePat; inversion reverse_is_nonsyncval.
+              cbn. admit.
+            + now apply wp_angelic_pattern_match_nonsyncval.
+            + admit.
+        Admitted.
+
+    (* Lemma wp_demonic_pattern_match {N σ} (pat : @Pattern N σ) v *)
+    (*   (Φ : MatchResultRel pat -> Prop) : *)
+    (*   demonic_pattern_match pat (ty.SyncVal σ v) Φ <-> Φ (pattern_match_relval pat (ty.SyncVal σ v)). *)
+    (* Proof. *)
+    (*   unfold demonic_pattern_match, demonic_finite. cbn. *)
+    (*   rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx. *)
+    (*   split. *)
+    (*   - set (mr := pattern_match_relval pat (ty.SyncVal σ v)). intros HΦ. *)
+    (*     specialize (HΦ (projT1 mr)). *)
+    (*     rewrite <- base.elem_of_list_In in HΦ. *)
+    (*     specialize (HΦ (finite.elem_of_enum _) (projT2 mr)). *)
+    (*     (* unfold assumePublicIfNotSinglePattern in HΦ. destruct (isSinglePattern pat). *) *)
+    (*     + cbn in *. specialize (HΦ (pattern_match_syncval_inverse_left pat v)). *)
+    (*       now destruct mr. *)
+    (*     (* + specialize (HΦ I). cbn in *. specialize (HΦ (pattern_match_syncval_inverse_left pat v)). *) *)
+    (*     (*   now destruct mr. *) *)
+    (*   - intros HΦ pc Hin δpc. *)
+    (*     (* unfold assumePublicIfNotSinglePattern. destruct (isSinglePattern pat). *) *)
+    (*     + intros x. revert HΦ. rewrite <- x. apply helper in x. destruct x as (vs & x). rewrite x. *)
+    (*       now rewrite pattern_match_syncval_inverse_right. *)
+    (*     (* + intros t x. revert HΦ. rewrite <- x. apply helper in x. destruct x as (vs & x). rewrite x. *) *)
+    (*     (*   now rewrite pattern_match_syncval_inverse_right. *) *)
+    (* Qed. *)
+
+          Lemma wp_demonic_pattern_match_syncval {N σ} (pat : @Pattern N σ) v
+      (Φ : MatchResultRel pat -> Prop) :
+          demonic_pattern_match pat (ty.SyncVal σ v) Φ <-> Φ (pattern_match_relval pat (ty.SyncVal σ v)).
+        Proof.
+          unfold demonic_pattern_match, demonic_finite. cbn.
+          rewrite wp_assertPublicIfNotSinglePattern.
+          cbn. rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx.
+          split.
+          - set (mr := pattern_match_relval pat (ty.SyncVal σ v)). intros (isSinglePatOrSyncVal & HΦ).
+            specialize (HΦ (projT1 mr)).
+            rewrite <- base.elem_of_list_In in HΦ.
+            specialize (HΦ (finite.elem_of_enum _) (projT2 mr)).
+            specialize (HΦ I (pattern_match_syncval_inverse_left pat v)).
+            now destruct mr.
+          - intros HΦ.
+            split.
+            + right. eauto.
+            + intros pc Hin δpc _ eq.
+              revert HΦ.
+              rewrite <- eq. apply helper in eq. destruct eq as (vs & ->).
+              now rewrite pattern_match_syncval_inverse_right.
+        Qed.
 
         Lemma wp_demonic_pattern_match_nonsyncval {N σ} (pat : @Pattern N σ) v1 v2
-      (Φ : MatchResultRel pat -> Prop) :
+          (Φ : MatchResultRel pat -> Prop) :
           isSinglePattern pat = true ->
           pat_relval_reverse_is_always_syncval pat = false ->
-          map match_result_rel_to_nonsyncval (demonic_pattern_match pat (ty.NonSyncVal σ v1 v2)) Φ <-> Φ (match_result_rel_to_nonsyncval (pattern_match_relval pat (ty.NonSyncVal σ v1 v2))).
-    Proof.
-      intros isSinglePat reverse_is_non_syncval.
-      unfold demonic_pattern_match, demonic_finite. cbn.
-      rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx.
-      split.
-      - set (mr := pattern_match_relval pat (ty.NonSyncVal σ v1 v2)). intros HΦ.
-        specialize (HΦ (projT1 mr)).
-        rewrite <- base.elem_of_list_In in HΦ.
-        specialize (HΦ (finite.elem_of_enum _) (projT2 mr)).
-        (* unfold assumePublicIfNotSinglePattern in HΦ. rewrite isSinglePat in HΦ. *)
-        cbn in *.
-        + specialize (HΦ (pattern_match_nonsyncval_inverse_left pat v1 v2 isSinglePat reverse_is_non_syncval)).
-          now destruct mr.
-      - intros HΦ pc Hin δpc.
-        unfold assumePublicIfNotSinglePattern. destruct (isSinglePattern pat).
-        + intros x. revert HΦ. rewrite <- x.
-          now rewrite pattern_match_nonsyncval_inverse_right.
-        + intros x. congruence.
-    Qed.
+          demonic_pattern_match pat (ty.NonSyncVal σ v1 v2) Φ <->
+            Φ (pattern_match_relval pat (ty.NonSyncVal σ v1 v2)).
+        Proof.
+          unfold demonic_pattern_match, demonic_finite. cbn.
+          rewrite wp_assertPublicIfNotSinglePattern.
+          cbn. rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx.
+          intros isSinglePat reverseNotAlwaysSyncVal.
+          split.
+          - set (mr := pattern_match_relval pat (ty.NonSyncVal σ v1 v2)). intros (isSinglePatOrSyncVal & HΦ).
+            specialize (HΦ (projT1 mr)).
+            rewrite <- base.elem_of_list_In in HΦ.
+            specialize (HΦ (finite.elem_of_enum _) (projT2 mr)).
+            assert (ty.allNonSync (projT2 mr)) as mrNonSync.
+            { apply pattern_match_relval_NonSyncImpliesAllNonSync. }
+            specialize (HΦ mrNonSync (pattern_match_nonsyncval_inverse_left pat v1 v2 isSinglePat reverseNotAlwaysSyncVal)).
+            now destruct mr.
+          - intros HΦ.
+            split.
+            + left. eauto.
+            + intros pc Hin δpc δpcNonSync eq.
+              revert HΦ.
+              rewrite <- eq.
+              rewrite pattern_match_nonsyncval_inverse_right; auto.
+        Qed.
 
-    Lemma wp_assert_eq_env {Δ : Ctx Ty} (δ δ' : Env RelVal Δ) :
-      forall Φ,
-        assert_eq_env δ δ' Φ <-> δ = δ' /\ Φ tt.
-    Proof.
-      induction δ; intros Φ; destruct (env.view δ'); cbn.
-      - intuition auto.
-      - rewrite IHδ, env.inversion_eq_snoc.
-        unfold assert_formula, assert_pathcondition.
-        intuition auto.
-    Qed.
+        Lemma wp_assert_eq_env {Δ : Ctx Ty} (δ δ' : Env RelVal Δ) :
+          forall Φ,
+            assert_eq_env δ δ' Φ <-> δ = δ' /\ Φ tt.
+        Proof.
+          induction δ; intros Φ; destruct (env.view δ'); cbn.
+          - intuition auto.
+          - rewrite IHδ, env.inversion_eq_snoc.
+            unfold assert_formula, assert_pathcondition.
+            intuition auto.
+        Qed.
 
     Lemma wp_assert_eq_nenv {N} {Δ : NCtx N Ty} (δ δ' : NamedEnv RelVal Δ) :
       forall Φ,
@@ -933,8 +1024,8 @@ Qed.
       - apply all_impl_morphism. intros v; red; apply IHs.
       - intros []. intuition auto.
       - intuition auto.
-      - inversion 1.
-      - inversion 1.
+      (* - inversion 1. *)
+      (* - inversion 1. *)
       - unfold debug. apply IHs.
     Qed.
 

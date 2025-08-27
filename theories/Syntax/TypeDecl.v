@@ -183,6 +183,12 @@ Module ty.
         | (NonSyncVal _ vl vr) => NonSyncVal _ (f vl) (f vr)
         end.
 
+      Definition isSyncVal {σ} (v : RelVal σ) : Datatypes.bool :=
+        match v with
+        | SyncVal _ _ => true
+        | NonSyncVal _ _ _ => false
+        end.
+
       Definition isSyncValProp {σ} (v : RelVal σ) : Prop :=
         match v with
         | SyncVal _ _ => True
@@ -247,6 +253,15 @@ Module ty.
         match ı with
         | env.nil => env.nil
         | env.snoc E db v => env.snoc (mapSyncValNamedEnv E) db (SyncVal (type db) v)
+        end.
+
+      Fixpoint allSync {X Σ} (ı : NamedEnv (X := X) RelVal Σ) : Prop :=
+        match ı with
+        | env.nil => True
+        | env.snoc E db v => match v with
+                             | SyncVal _ _ => allSync E
+                             | _ => False
+                             end
         end.
 
       Fixpoint allNonSync {X Σ} (ı : NamedEnv (X := X) RelVal Σ) : Prop :=

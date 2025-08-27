@@ -534,6 +534,19 @@ Module Type PatternsOn (Import TY : Types).
       destruct p; inversion H; cbn; eauto.
     Qed.
 
+    (* Lemma pat_relval_reverse_nonsyncval_implies_δpc_allNonSync {σ v1 v2} {pat : Pattern σ} (pc : PatternCase pat) (δpc : NamedEnv RelVal (PatternCaseCtx pc)) : *)
+    (*   pat_relval_reverse_is_always_syncval pat = false -> *)
+    (*   pattern_match_relval_reverse pat pc δpc = ty.NonSyncVal σ v1 v2 -> *)
+    (*   ty.allNonSync δpc. *)
+    (* Proof. *)
+    (*   intros notAlwaysSync pat_relval_reverse_nonsyncval. *)
+    (*   destruct pat; inversion notAlwaysSync; cbn; eauto; destruct pc; cbn in *; env.destroy δpc; cbn in *. *)
+    (*   -  subst. tauto. *)
+    (*   - destruct v0 as [|] eqn:H1; destruct v as [|] eqn:H2. *)
+    (*     + congruence. *)
+    (*     +  *)
+    (*  Qed. *)
+
     (* A curried version of the above. *)
     Definition pattern_match_relval_reverse' {σ} (p : Pattern σ) :
       MatchResultRel p -> RelVal σ :=
@@ -604,29 +617,35 @@ Module Type PatternsOn (Import TY : Types).
 
 
     (* TODO: This is currently not correct. *)
-    Lemma pmrevNonSyncImpliesAllNonSync {σ pat v1 v2} : ty.allNonSync (projT2 (pattern_match_relval pat (ty.NonSyncVal σ v1 v2))).
+    Lemma pattern_match_relval_NonSyncImpliesAllNonSync {σ pat v1 v2} : ty.allNonSync (projT2 (pattern_match_relval pat (ty.NonSyncVal σ v1 v2))).
     Proof.
       destruct pat; cbn; try tauto.
       - destruct v1. destruct v2. cbn. tauto.
       - destruct (bv.appView m n v1). destruct (bv.appView m n v2). cbn. tauto.
     Qed.
 
-        Lemma pattern_match_nonsyncval_inverse_right {σ} (pat : Pattern σ)
+
+    Lemma pattern_match_nonsyncval_inverse_right {σ} (pat : Pattern σ)
       (pc : PatternCase pat) (δpc : NamedEnv RelVal (PatternCaseCtx pc)) :
-          match_result_rel_to_nonsyncval (pattern_match_relval pat (pattern_match_relval_reverse pat pc δpc)) = match_result_rel_to_nonsyncval (existT pc δpc).
+      isSinglePattern pat = true ->
+      pat_relval_reverse_is_always_syncval pat = false ->
+      ty.allNonSync δpc ->
+      pattern_match_relval pat (pattern_match_relval_reverse pat pc δpc) = existT pc δpc.
     Proof.
+      intros isSinglePat isAlwaysSyncValPat δpcAllNonSync.
       induction pat; cbn; try progress cbn.
       - destruct pc. cbn in δpc. now env.destroy δpc.
       - env.destroy δpc. cbn in δpc. env.destroy δpc. reflexivity.
-      - destruct pc. cbn in δpc. env.destroy δpc. destruct v0; destruct v; cbn; reflexivity.
+      - destruct pc. cbn in δpc. env.destroy δpc. destruct v0; destruct v; cbn; try reflexivity; destruct δpcAllNonSync.
       - destruct pc; cbn in δpc; now env.destroy δpc.
       (* - destruct pc; now env.destroy vs. *)
       (* - destruct pc; now env.destroy vs. *)
       (* - now env.destroy vs. *)
       - destruct pc; env.destroy δpc. destruct (env.view δpc). destruct (env.view E). env.destroy E. cbn.
         destruct v0; destruct v; cbn; rewrite bv.appView_app; cbn; try reflexivity;
-          rewrite bv.appView_app; reflexivity.
+          rewrite bv.appView_app; try reflexivity; destruct δpcAllNonSync.
     Qed.
+
 
     (* Lemma pattern_match_relval_inverse_left {σ} (pat : Pattern σ) : *)
     (*   forall v : RelVal σ, *)

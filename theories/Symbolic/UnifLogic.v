@@ -1805,51 +1805,38 @@ Module Type UnifLogicOn
       now subst.
     Qed.
 
-    Lemma refine_pattern_match {w : World} {σ} {v : RelVal σ} {sv : Term w σ}
-      {p : @Pattern LVar σ} :
+    (* TODO: Make a separate method for assertPublicIfNotSinglePattern to solve the problem below *)
+    Lemma refine_assertPublicIfNotSinglePattern {w : World} {σ} {v : RelVal σ} {sv : Term w σ} {p : @Pattern LVar σ} :
       ℛ⟦ RVal σ ⟧ v sv ⊢
-        let (pc, δpc) := pattern_match_relval p v in
-        knowing (w1 := wmatch w sv p pc) (acc_match_right pc)
-          (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc
-             (sub_cat_right (PatternCaseCtx pc) : NamedEnv _ _)).
+        knowing (w1 := wassertPublicIfNotSinglePattern w sv p) acc_match_right_assertPublicIfNotSinglePattern
+        (ℛ⟦ RNEnv LVar ctx.nil ⟧  env.nil env.nil).
     Proof.
-      destruct v.
-      - pose proof (pattern_match_syncval_inverse_left p v) as eq.
-        destruct (pattern_match_relval p (ty.SyncVal _ v)) as [pc args].
-        unfold pattern_match_relval_reverse' in eq; cbn in eq.
-        unfold knowing, RVal, RNEnv, RInst.
+      - unfold knowing, RVal, RInst.
         crushPredEntails3.
-        exists (env.cat ι args).
-        rewrite instprop_subst inst_subst !inst_sub_cat_left
-          inst_pattern_match_term_reverse inst_sub_cat_right eq.
-        crushPredEntails3.
-      - pose proof (pattern_match_nonsyncval_inverse_left p v v0) as eq.
-        destruct (pat_relval_reverse_is_always_syncval p) as [|] eqn:alwaysSync.
-        + destruct (pattern_match_relval p (ty.NonSyncVal _ v v0)) as [pc args].
-          specialize (pat_relval_reverse_is_always_syncval_sound pc args alwaysSync) as (v' & H).
-          unfold knowing, RVal, RNEnv, RInst.
+        destruct (isSinglePattern p) as [|] eqn:Heq.
+        + unfold wassertPublicIfNotSinglePattern.
+          unfold acc_match_right_assertPublicIfNotSinglePattern.
+          rewrite Heq.
+          exists ι.
           crushPredEntails3.
-          exists (env.cat ι args).
-          rewrite instprop_subst inst_subst !inst_sub_cat_left
-            inst_pattern_match_term_reverse inst_sub_cat_right.
-          crushPredEntails3.
-          destruct p; inversion alwaysSync.
-          -- cbn in H. iIntros "Hv". 
-          -- destruct p; inversion H1; inversion H.
-        +  destruct p; inversion H; cbn.
-          -- 
-        + destruct p; inversion H. cbn.
-          apply knowing_pure.
-          rewrite instprop_subst inst_subst !inst_sub_cat_left
-            inst_pattern_match_term_reverse inst_sub_cat_right eq.
-          destruct (pattern_match_val p v) as [pc args].
-      unfold pattern_match_val_reverse' in eq; cbn in eq.
-      unfold knowing, RVal, RNEnv, RInst.
-      crushPredEntails3.
-      exists (env.cat ι args).
-      now rewrite instprop_subst inst_subst !inst_sub_cat_left
-        inst_pattern_match_term_reverse inst_sub_cat_right eq.
-    Qed.
+          -- apply inst_sub_id.
+          -- apply repₚ_triv.
+             ++ intros. auto.
+             ++ auto.
+             ++ constructor.
+        + admit.
+    Admitted.
+
+    (* (* Opaque wmatch. *) *)
+    (* Lemma refine_pattern_match {w : World} {σ} {v : RelVal σ} {sv : Term w σ} *)
+    (*   {p : @Pattern LVar σ} : *)
+    (*   ℛ⟦ RVal σ ⟧ v sv ⊢ *)
+    (*     let (pc, δpc) := pattern_match_relval p v in *)
+    (*     knowing (w1 := wmatch w sv p pc) (acc_match_right pc) *)
+    (*       (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc *)
+    (*          (sub_cat_right (PatternCaseCtx pc) : NamedEnv (Term (wmatch w sv p pc)) _)). *)
+    (* Proof. *)
+    (* Qed. *)
 
     (* Lemma refine_pattern_match_val_term_reverse {N} {w : World} {σ} *)
     (*   {pat : @Pattern N σ} {ι} : *)

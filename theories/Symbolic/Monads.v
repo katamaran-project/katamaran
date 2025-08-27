@@ -562,25 +562,23 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       #[global] Arguments angelic_pattern_match {σ} pat [w].
 
       Definition demonic_pattern_match' {σ} (pat : @Pattern N σ) :
-        ⊢ WTerm σ -> SPureSpec (SMatchResult pat) :=
-        fun w0 t =>
-          ⟨ θ1 ⟩ pc <- demonic_finite (PatternCase pat) ;;
-          ⟨ θ2 ⟩ ts <- demonic_ctx n (PatternCaseCtx pc) ;;
-          let θ12 := θ1 ∘ θ2 in
-          (* ⟨ θ3 ⟩ _ <- assume_public t⟨θ12⟩ ;; *)
-          (* let θ123 := θ12 ∘ θ3 in *)
+        ⊢ AMessage -> WTerm σ -> SPureSpec (SMatchResult pat) :=
+        fun w0 msg t =>
+          ⟨ θ1 ⟩ _  <- assertPublicIfNotSinglePattern pat msg t;;
+          ⟨ θ2 ⟩ pc <- demonic_finite (PatternCase pat) ;;
+          ⟨ θ3 ⟩ ts <- demonic_ctx n (PatternCaseCtx pc) ;;
+          let θ123 := θ1 ∘ θ2 ∘ θ3 in
           ⟨ θ4 ⟩ _  <- assume_formula
-                         (formula_relop bop.eq
+                         (formula_eq_nonsync
                             (pattern_match_term_reverse pat pc ts)
-                            t⟨θ12⟩);;
-          (* let θ34 := θ3 ∘ θ4 in *)
+                            t⟨θ123⟩);;
           pure (A := SMatchResult pat) (existT pc ts⟨θ4⟩).
       #[global] Arguments demonic_pattern_match' {σ} pat [w].
 
       Definition demonic_pattern_match :
         forall {σ} (pat : @Pattern N σ),
-          ⊢ WTerm σ -> SPureSpec (SMatchResult pat) :=
-        fix demonic (σ : Ty) (pat : Pattern σ) {w0} {struct pat} :
+          ⊢ AMessage -> WTerm σ -> SPureSpec (SMatchResult pat) :=
+        fix demonic (σ : Ty) (pat : Pattern σ) {w0} msg {struct pat} :
           WTerm σ w0 -> SPureSpec (SMatchResult pat) w0 :=
           match pat with
           | pat_var x =>
@@ -590,7 +588,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                   (existT tt [env].[x∷_ ↦ scr])
           | pat_bool =>
               fun scr =>
-                match term_get_relval scr with
+                match term_get_relval (σ := ty.bool) scr with
                 | Some v =>
                     match v with
                     | ty.SyncVal _ v' =>
@@ -603,7 +601,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                                      "Pattern match on NonSyncVal bool";
                                  |})
                     end
-                | None => demonic_pattern_match' _ scr
+                | None => demonic_pattern_match' _ msg scr
                 end
           (* | pat_list _ _ _ => *)
           (*     fun scr => *)
@@ -614,7 +612,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                 | Some (tl, tr) =>
                     pure (A := SMatchResult (pat_pair x y))
                       (existT tt [env].[x∷_ ↦ tl].[y∷_ ↦ tr])
-                | None => demonic_pattern_match' _ scr
+                | None => demonic_pattern_match' _ msg scr
                 end
           (* | pat_sum _ _ _ _ => *)
           (*     fun scr => *)
@@ -637,7 +635,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           (*       end *)
           | pat_bvec_split _ _ _ _ =>
               fun scr =>
-                demonic_pattern_match' _ scr
+                demonic_pattern_match' _ msg scr
           (* | pat_bvec_exhaustive m => *)
           (*     fun scr => *)
           (*       match term_get_val scr with *)
@@ -862,24 +860,24 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             let fml  := formula_relop bop.eq (subst t ζ) (term_var x) in
             ⟨ θ ⟩ _ <- assume_formula (subst fml δ) ;;
             replay k (env.remove (x∷_) δ⟨θ⟩ _)
-        | SymProp.pattern_match s pat rhs =>
-            (* FIXME *)
-            (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst s δ) ;; *)
-            (* replay (rhs pc) (persist δ θ ►► δpc) *)
-            error (amsg.mk
-                     {| debug_string_pathcondition := wco _;
-                        debug_string_message       :=
-                          "NOT IMPLEMENTED: replay_aux.pattern_match";
-                     |})
-        | SymProp.pattern_match_var x pat rhs =>
-            (* FIXME *)
-            (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst (term_var x) δ) ;; *)
-            (* replay (rhs pc) (env.remove _ (δ⟨θ⟩ ►► δpc) _) *)
-            error (amsg.mk
-                     {| debug_string_pathcondition := wco _;
-                        debug_string_message       :=
-                          "NOT IMPLEMENTED: replay_aux.pattern_match_var";
-                     |})
+        (* | SymProp.pattern_match s pat rhs => *)
+        (*     (* FIXME *) *)
+        (*     (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst s δ) ;; *) *)
+        (*     (* replay (rhs pc) (persist δ θ ►► δpc) *) *)
+        (*     error (amsg.mk *)
+        (*              {| debug_string_pathcondition := wco _; *)
+        (*                 debug_string_message       := *)
+        (*                   "NOT IMPLEMENTED: replay_aux.pattern_match"; *)
+        (*              |}) *)
+        (* | SymProp.pattern_match_var x pat rhs => *)
+        (*     (* FIXME *) *)
+        (*     (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst (term_var x) δ) ;; *) *)
+        (*     (* replay (rhs pc) (env.remove _ (δ⟨θ⟩ ►► δpc) _) *) *)
+        (*     error (amsg.mk *)
+        (*              {| debug_string_pathcondition := wco _; *)
+        (*                 debug_string_message       := *)
+        (*                   "NOT IMPLEMENTED: replay_aux.pattern_match_var"; *)
+        (*              |}) *)
         | SymProp.debug msg k =>
             debug (subst msg δ) (replay k δ)
         end.

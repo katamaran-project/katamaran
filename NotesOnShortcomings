@@ -1,0 +1,4 @@
+Notes on Katamaran/Rel:
+- NonSyncVal v v != SyncVal v: This makes sense from a BinSec/Rel perspective which safrices precision for performance through taint-tracking. Basically, it is saying a tainted value is not the same as a non-tainted value even if their value is the same.
+- There is no canonical representation of ty.unit, because technically NonSyncVal tt doesn't really make sense. It is tracking the taint, but the taint cannot have messed anything up.
+
