@@ -86,7 +86,7 @@ Module Type MessagesOn
         end.
 
     #[export] Instance instprop_amessage : InstProp AMessage :=
-      fun _ _ _ => True.
+      fun _ _ _ => ty.SyncVal True.
 
     #[export] Instance instpropsubst_amessage : InstPropSubst AMessage.
     Proof. easy. Qed.

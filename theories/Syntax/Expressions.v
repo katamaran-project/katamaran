@@ -152,18 +152,11 @@ Module Type ExpressionsOn (Import TY : Types).
   Fixpoint evalRel {Γ σ} (e : Exp Γ σ) (δ : CStoreRel Γ) {struct e} : RelVal σ :=
     match e in (Exp _ t) return (RelVal t) with
     | exp_var x           => δ.[??x]
-    | exp_val _ l         => ty.SyncVal _ l
-    | exp_binop op e1 e2  => ty.liftBinOp (bop.eval op) (evalRel e1 δ) (evalRel e2 δ)
-    | exp_unop op e       => ty.liftUnOp (uop.eval op) (evalRel e δ)
-    | exp_list es         => ty.listRelValIsRelValList (List.map (fun e => evalRel e δ) es)
-    | @exp_bvec _ n es         => ty.vecRelValIsRelValVec (VectorDef.map (fun e => evalRel e δ) es)
-    (* | exp_tuple es        => env.Env_rect *)
-    (*                            (fun σs _ => Val (ty.tuple σs)) *)
-    (*                            tt *)
-    (*                            (fun σs _ (vs : Val (ty.tuple σs)) σ e => (vs, evalRel e δ)) *)
-    (*                            es *)
-    (* | exp_union U K e     => unionv_fold U (existT K (evalRel e δ)) *)
-    (* | exp_record R es     => recordv_fold R (env.map (fun xτ e => evalRel e δ) es) *)
+    | exp_val _ l         => ty.valToRelVal l
+    | exp_binop op e1 e2  => bop.evalRel op (evalRel e1 δ) (evalRel e2 δ)
+    | exp_unop op e       => uop.evalRel op (evalRel e δ)
+    | exp_list es         => List.map (fun e => evalRel e δ) es
+    | @exp_bvec _ n es         => ty.vecOfRVToRVOfVec (VectorDef.map (fun e => evalRel e δ) es)
     end.
 
   Definition evals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ) : CStore Δ :=
@@ -177,8 +170,8 @@ Module Type ExpressionsOn (Import TY : Types).
   Notation exp_true   := (@exp_val _ ty.bool true).
   Notation exp_false  := (@exp_val _ ty.bool false).
   Notation exp_string s := (@exp_val _ ty.string s%string).
-  Notation exp_inl e := (exp_unop uop.inl e%exp).
-  Notation exp_inr e := (exp_unop uop.inr e%exp).
+  (* Notation exp_inl e := (exp_unop uop.inl e%exp). *)
+  (* Notation exp_inr e := (exp_unop uop.inr e%exp). *)
   Notation exp_neg e := (exp_unop uop.neg e%exp).
   Notation exp_not e := (exp_unop uop.not e%exp).
   Notation exp_sext e := (exp_unop uop.sext e%exp).

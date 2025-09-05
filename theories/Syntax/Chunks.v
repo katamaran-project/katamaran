@@ -305,10 +305,10 @@ Module Type ChunksOn
         option.wlp
           (fun '(h', eqs) =>
              forall ι : Valuation Σ,
-             instprop eqs ι ->
-             List.In
-               (inst (chunk_user p (eq_rect_r (fun c : Ctx Ty => Env (Term Σ) c) (tsI ►► tsO) prec)) ι, inst h' ι)
-               (heap_extractions (inst h ι)))
+               ty.rv_bientails (instprop eqs ι) (ty.SyncVal True) ->
+               List.In
+                 (inst (chunk_user p (eq_rect_r (fun c : Ctx Ty => Env (Term Σ) c) (tsI ►► tsO) prec)) ι, inst h' ι)
+                 (heap_extractions (inst h ι)))
           (try_consume_chunk_user_precise h).
       Proof.
         induction h as [|c h]; [now constructor|]. cbn [try_consume_chunk_user_precise].
@@ -321,8 +321,6 @@ Module Type ChunksOn
           destruct (env.eqb_hom_spec Term_eqb (@Term_eqb_spec Σ) tsI tsI'); try discriminate.
           apply noConfusion_inv in Heqo. cbn in Heqo. subst.
           apply instprop_formula_eqs_ctx in Heqs.
-          (* TODO: I have no idea why this failed but it started failing after my changes in Formula.v *)
-          Set Printing Implicit.
           rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env RelVal)).
           rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat.
           change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.

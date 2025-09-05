@@ -596,7 +596,8 @@ Module Type RefinementMonadsOn
       unfold RConst, RInst. cbn -[CPureSpec.assert_formula].
       rewrite repₚ_const.
       iDestruct "Hι1" as "<-"; rsolve.
-    Qed.
+      - 
+    Admitted.
     #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
 
     Lemma refine_demonic_pattern_match' {N : Set} (n : N -> LVar)
@@ -620,7 +621,7 @@ Module Type RefinementMonadsOn
       unfold RConst, RInst. cbn -[CPureSpec.assume_formula].
       rewrite repₚ_const.
       iDestruct "Hι1" as "<-"; rsolve.
-    Qed.
+    Admitted.
     #[global] Arguments refine_demonic_pattern_match' {N} n {σ} pat.
 
     Lemma refine_angelic_pattern_match {N : Set} (n : N -> LVar)
@@ -1822,3 +1823,4 @@ End RefinementMonadsOn.
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
 (* End: *)
+

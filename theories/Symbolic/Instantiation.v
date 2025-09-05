@@ -126,12 +126,12 @@ Module Type InstantiationOn
     fix inst_term {σ : Ty} [Σ : LCtx] (t : Term Σ σ) (ι : Valuation Σ) {struct t} : RelVal σ :=
     match t in Term _ σ return RelVal σ with
     | term_var_in bIn            => env.lookup ι bIn
-    | term_val _ v               => ty.SyncVal _ v
+    | term_val _ v               => ty.valToRelVal v
     | term_relval _ v               => v
-    | term_binop op t1 t2        => ty.liftBinOp (bop.eval op)
+    | term_binop op t1 t2        => bop.evalRel op
                                       (inst (Inst := @inst_term _) t1 ι)
                                       (inst (Inst := @inst_term _) t2 ι)
-    | term_unop op t             => ty.liftUnOp (uop.eval op)
+    | term_unop op t             => uop.evalRel op
                                       (inst (Inst := @inst_term _) t ι)
 (*    | term_tuple ts              =>
         aenvrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι)
@@ -141,8 +141,8 @@ Module Type InstantiationOn
         recordv_fold R (inst (Inst := inst_env (InstSA := InstTerm)) ts ι) *)
     end.
 
-  #[export] Instance lift_term {σ} : Lift (fun Σ => Term Σ σ) (Val σ) :=
-    fun Σ v => term_val σ v.
+  #[export] Instance lift_term {σ} : Lift (fun Σ => Term Σ σ) (RelVal σ) :=
+    fun Σ v => term_relval σ v.
 
   #[export] Instance inst_sub {Σ} : Inst (Sub Σ) (Valuation Σ) :=
     inst_env.
@@ -150,12 +150,12 @@ Module Type InstantiationOn
   Class InstSubst (T : LCtx -> Type) (A : Type) `{Inst T A, Subst T} : Prop :=
     inst_subst : forall {Σ Σ'} (ζ : Sub Σ Σ') (ι : Valuation Σ') (t : T Σ),
         inst (subst t ζ) ι = inst t (inst ζ ι).
-  (* Class InstLift (T : LCtx -> Type) (A : Type) `{Inst T A, Lift T A} : Prop := *)
-  (*   inst_lift : forall {Σ} (ι : Valuation Σ) (a : A), *)
-  (*       inst (lift a) ι = a. *)
+  Class InstLift (T : LCtx -> Type) (A : Type) `{Inst T A, Lift T A} : Prop :=
+    inst_lift : forall {Σ} (ι : Valuation Σ) (a : A),
+        inst (lift a) ι = a.
 
   Arguments InstSubst T A {_ _}.
-  (* Arguments InstLift T A {_ _}. *)
+  Arguments InstLift T A {_ _}.
 
   #[export] Instance inst_subst_list {T : LCtx -> Set} {A : Set} `{InstSubst T A} :
     InstSubst (List T) (list A).
@@ -167,13 +167,13 @@ Module Type InstantiationOn
     apply List.map_ext, inst_subst.
   Qed.
 
-  (* #[export] Instance inst_lift_list {T : LCtx -> Set} {A : Set} `{InstLift T A} : *)
-  (*   InstLift (List T) (list A). *)
-  (* Proof. *)
-  (*   intros Σ ι a. unfold inst, inst_list, lift, lift_list. *)
-  (*   rewrite List.map_map, <- List.map_id. *)
-  (*   apply List.map_ext, inst_lift. *)
-  (* Qed. *)
+  #[export] Instance inst_lift_list {T : LCtx -> Set} {A : Set} `{InstLift T A} :
+    InstLift (List T) (list A).
+  Proof.
+    intros Σ ι a. unfold inst, inst_list, lift, lift_list.
+    rewrite List.map_map, <- List.map_id.
+    apply List.map_ext, inst_lift.
+  Qed.
 
   #[export] Instance inst_subst_const {A} `{finite.Finite A} :
     InstSubst (Const A) A.
@@ -196,23 +196,23 @@ Module Type InstantiationOn
     intros b s; apply inst_subst.
   Qed.
 
-  (* #[export] Instance inst_lift_env {T : Set} {S : LCtx -> T -> Set} {A : T -> Set} *)
-  (*        {_ : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)} *)
-  (*        {_ : forall τ : T, Lift (fun Σ => S Σ τ) (A τ)} *)
-  (*        {_ : forall τ : T, InstLift (fun Σ => S Σ τ) (A τ)} *)
-  (*        {Γ : Ctx T} : *)
-  (*   InstLift (fun Σ => Env (S Σ) Γ) (Env A Γ). *)
-  (* Proof. *)
-  (*   intros ? ι E. *)
-  (*   unfold inst, inst_env, lift, lift_env. *)
-  (*   rewrite env.map_map. apply env.map_id_eq. *)
-  (*   intros; apply inst_lift. *)
-  (* Qed. *)
+  #[export] Instance inst_lift_env {T : Set} {S : LCtx -> T -> Set} {A : T -> Set}
+         {_ : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)}
+         {_ : forall τ : T, Lift (fun Σ => S Σ τ) (A τ)}
+         {_ : forall τ : T, InstLift (fun Σ => S Σ τ) (A τ)}
+         {Γ : Ctx T} :
+    InstLift (fun Σ => Env (S Σ) Γ) (Env A Γ).
+  Proof.
+    intros ? ι E.
+    unfold inst, inst_env, lift, lift_env.
+    rewrite env.map_map. apply env.map_id_eq.
+    intros; apply inst_lift.
+  Qed.
 
   #[export] Instance inst_subst_term {σ} : InstSubst (fun Σ => Term Σ σ) (RelVal σ).
   Proof.
     unfold InstSubst.
-    induction t; cbn -[ty.liftBinOp]; try (repeat f_equal; auto; fail).
+    induction t; cbn (* -[ty.liftBinOp] *); try (repeat f_equal; auto; fail).
     - unfold inst, inst_sub, inst_env.
       now rewrite env.lookup_map.
     (* - f_equal. induction IH; cbn; now f_equal. *)
@@ -221,24 +221,24 @@ Module Type InstantiationOn
 
   Print Instances Lift.
 
-  (* #[export] Instance inst_lift_term {σ} : InstLift (fun Σ => Term Σ σ) (Val σ). *)
-  (* Proof. red. reflexivity. Qed. *)
+  #[export] Instance inst_lift_term {σ} : InstLift (fun Σ => Term Σ σ) (RelVal σ).
+  Proof. red. reflexivity. Qed.
 
-  (* Lemma inst_term_relop_neg [Σ σ] (op : RelOp σ) (t1 t2 : Term Σ σ) : *)
-  (*   forall (ι : Valuation Σ), *)
-  (*     inst (T := fun Σ => Term Σ ty.bool) (term_relop_neg op t1 t2) ι = *)
-  (*       ty.liftUnOp (σ1 := ty.bool) (σ2 := ty.bool) negb (ty.liftBinOp (σ3 := ty.bool) (bop.eval_relop_val op) (inst t1 ι) (inst t2 ι)). *)
-  (* Proof. *)
-  (*   destruct op; cbn -[ty.liftUnOp ty.liftBinOp]; intros; unfold bv.sltb, bv.sleb, bv.ultb, bv.uleb; *)
-  (*     rewrite ?negb_involutive, <- ?Z.leb_antisym, <- ?Z.ltb_antisym, *)
-  (*     <- ?N.leb_antisym, <- ?N.ltb_antisym; try easy; try now destruct eq_dec. *)
-  (* Qed. *)
+  Lemma inst_term_relop_neg [Σ σ] (op : RelOp σ) (t1 t2 : Term Σ σ) :
+    forall (ι : Valuation Σ),
+      inst (T := fun Σ => Term Σ ty.bool) (term_relop_neg op t1 t2) ι =
+        ty.liftUnOpRV negb (bop.eval_relop_valRel op (inst t1 ι) (inst t2 ι)).
+  Proof.
+    destruct op; cbn -[ty.liftUnOpRV]; intros; destruct (ty.relValToRV (inst t1 ι)); destruct (ty.relValToRV (inst t2 ι)); try destruct (inst t1 ι); try destruct (inst t2 ι); cbn; unfold bv.sltb, bv.sleb, bv.ultb, bv.uleb;
+      rewrite ?negb_involutive, <- ?Z.leb_antisym, <- ?Z.ltb_antisym,
+      <- ?N.leb_antisym, <- ?N.ltb_antisym; try easy; try repeat (destruct eq_dec); cbn; auto.
+  Qed.
 
   #[export] Instance inst_subst_sub {Σ} : InstSubst (Sub Σ) (Valuation Σ).
   Proof. apply inst_subst_env. Qed.
 
-  (* #[export] Instance inst_lift_sub {Σ} : InstLift (Sub Σ) (Valuation Σ). *)
-  (* Proof. apply inst_lift_env. Qed. *)
+  #[export] Instance inst_lift_sub {Σ} : InstLift (Sub Σ) (Valuation Σ).
+  Proof. apply inst_lift_env. Qed.
 
   Lemma inst_sub_wk1 {Σ b v} (ι : Valuation Σ) :
     inst sub_wk1 (ι ► (b ↦ v)) = ι.
@@ -404,8 +404,8 @@ Module Type InstantiationOn
 
   #[export] Instance inst_subst_unit : InstSubst Unit unit.
   Proof. red. reflexivity. Qed.
-  (* #[export] Instance inst_lift_unit : InstLift Unit unit. *)
-  (* Proof. red. reflexivity. Qed. *)
+  #[export] Instance inst_lift_unit : InstLift Unit unit.
+  Proof. red. reflexivity. Qed.
 
   #[export] Instance inst_pair {AT BT A B} `{Inst AT A, Inst BT B} :
     Inst (Pair AT BT) (A * B) :=
@@ -418,9 +418,9 @@ Module Type InstantiationOn
     InstSubst (Pair AT BT) (A * B).
   Proof. intros ? ? ? ? []; cbn; f_equal; apply inst_subst. Qed.
 
-  (* #[export] Instance inst_lift_pair {AT BT A B} `{InstLift AT A, InstLift BT B} : *)
-  (*   InstLift (Pair AT BT) (A * B). *)
-  (* Proof. intros ? ? []; cbn; f_equal; apply inst_lift. Qed. *)
+  #[export] Instance inst_lift_pair {AT BT A B} `{InstLift AT A, InstLift BT B} :
+    InstLift (Pair AT BT) (A * B).
+  Proof. intros ? ? []; cbn; f_equal; apply inst_lift. Qed.
 
   #[export] Instance inst_option {AT A} `{Inst AT A} : Inst (Option AT) (option A) :=
     fun Σ ma ι => option_map (fun a => inst a ι) ma.
@@ -430,16 +430,16 @@ Module Type InstantiationOn
   #[export] Instance inst_subst_option {AT A} `{InstSubst AT A} :
     InstSubst (Option AT) (option A).
   Proof. intros ? ? ? ? []; cbn; f_equal; apply inst_subst. Qed.
-  (* #[export] Instance inst_lift_option {AT A} `{InstLift AT A} : *)
-  (*   InstLift (Option AT) (option A). *)
-  (* Proof. intros ? ? []; cbn; f_equal; apply inst_lift. Qed. *)
+  #[export] Instance inst_lift_option {AT A} `{InstLift AT A} :
+    InstLift (Option AT) (option A).
+  Proof. intros ? ? []; cbn; f_equal; apply inst_lift. Qed.
 
   #[export] Instance inst_store {Γ} : Inst (SStore Γ) (CStore Γ) :=
     inst_env.
   #[export] Instance inst_subst_store {Γ} : InstSubst (SStore Γ) (CStore Γ).
   Proof. apply inst_subst_env. Qed.
-  (* #[export] Instance inst_lift_store {Γ} : InstLift (SStore Γ) (CStore Γ). *)
-  (* Proof. apply inst_lift_env. Qed. *)
+  #[export] Instance inst_lift_store {Γ} : InstLift (SStore Γ) (CStore Γ).
+  Proof. apply inst_lift_env. Qed.
 
   Section SemanticEquivalence.
 
@@ -474,10 +474,15 @@ Module Type InstantiationOn
       seequiv_equivalence.
 
 
-    #[export,program] Instance proper_term_binop {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) [Σ] :
+    #[export] Instance proper_term_binop {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) [Σ] :
       Proper ((≡) ==> (≡) ==> (≡)) (term_binop (Σ:=Σ) op).
-    Next Obligation.
-    Admitted.
+    Proof.
+      cbn.
+      intros x y eqxy g h eqgh ι.
+      cbn.
+      rewrite eqxy. rewrite eqgh.
+      reflexivity.
+    Qed.
 
     #[local] Obligation Tactic :=
       repeat intro; cbn; f_equal; constructor_congruence; solve [ eauto ].
@@ -670,10 +675,10 @@ Module Type InstantiationOn
   Section InstProp.
 
     Class InstProp (T : LCtx -> Type) : Type :=
-      instprop : forall {Σ}, T Σ -> Valuation Σ -> Prop.
+      instprop : forall {Σ}, T Σ -> Valuation Σ -> ty.RV Prop.
     Class InstPropSubst (T : LCtx -> Type) `{InstProp T, Subst T} : Prop :=
       instprop_subst : forall {Σ Σ'} (ζ : Sub Σ Σ') (ι : Valuation Σ') (t : T Σ),
-          instprop (subst t ζ) ι <-> instprop t (inst ζ ι).
+          ty.rv_bientails (instprop (subst t ζ) ι) (instprop t (inst ζ ι)).
     #[global] Arguments instprop {T _ Σ} !_ ι.
     #[global] Arguments InstPropSubst T {_ _}.
 
@@ -681,37 +686,57 @@ Module Type InstantiationOn
       fun Σ o =>
         match o with
         | Some C => fun ι => instprop C ι
-        | None   => fun _ => False
+        | None   => fun _ => ty.SyncVal False
         end.
 
     #[export] Instance instprop_pair `{InstProp A, InstProp B} : InstProp (Pair A B) :=
-      fun Σ '(a,b) ι => instprop a ι /\ instprop b ι.
+      fun Σ '(a,b) ι => ty.liftBinOpRV and (instprop a ι) (instprop b ι).
+
+    #[export] Instance and_bientails_morphismRV :
+      Proper (ty.rv_bientails ==> ty.rv_bientails ==> ty.rv_bientails) (ty.liftBinOpRV and).
+    Proof.
+      intros x y Rxy g h Rgh.
+      destruct x, y, g, h; cbn; intros; try apply and_iff_morphism; cbn in *; tauto.
+    Qed.
+
+    #[export] Instance and_entails_morphismRV :
+      Proper (ty.rv_entails ==> ty.rv_entails ==> ty.rv_entails) (ty.liftBinOpRV and).
+    Proof.
+      intros x y Rxy g h Rgh.
+      destruct x, y, g, h; cbn; intros; try apply and_imp_morphism; cbn in *; tauto.
+    Qed.
 
     #[export] Instance instpropsubst_pair `{InstPropSubst A, InstPropSubst B} : InstPropSubst (Pair A B).
-    Proof. hnf. intros ? ? ζ ι [a b]. apply and_iff_morphism; apply instprop_subst. Qed.
+    Proof. hnf. intros ? ? ζ ι [a b].
+           apply and_bientails_morphismRV; apply instprop_subst.
+    Qed.
 
     #[export] Instance instprop_ctx `{InstProp A} : InstProp (fun Σ => Ctx (A Σ)) :=
-      fix instprop_ctx {Σ} (xs : Ctx (A Σ)) (ι : Valuation Σ) : Prop :=
+      fix instprop_ctx {Σ} (xs : Ctx (A Σ)) (ι : Valuation Σ) : ty.RV Prop :=
         match xs with
-        | ctx.nil       => True
-        | ctx.snoc xs x => instprop_ctx xs ι /\ instprop x ι
+        | ctx.nil       => ty.SyncVal True
+        | ctx.snoc xs x => ty.liftBinOpRV and (instprop_ctx xs ι) (instprop x ι)
         end.
 
     #[export] Instance instpropsubst_ctx `{InstPropSubst A} : InstPropSubst (fun Σ => Ctx (A Σ)).
-    Proof. intros ? ? ζ ι x. now induction x; cbn; [|apply and_iff_morphism]. Qed.
+    Proof. intros ? ? ζ ι x. now induction x; cbn; [|apply and_bientails_morphismRV]. Qed.
 
     Lemma instprop_nil `{InstProp A} {Σ} (ι : Valuation Σ) :
-      instprop (@ctx.nil (A Σ)) ι <-> True.
-    Proof. reflexivity. Qed.
+      ty.rv_bientails (instprop (@ctx.nil (A Σ)) ι) (ty.SyncVal True).
+    Proof. cbn. reflexivity. Qed.
 
     Lemma instprop_snoc `{InstProp A} {Σ} (ι : Valuation Σ) (xs : Ctx (A Σ)) (x : A Σ) :
-      instprop (xs ▻ x) ι <-> instprop xs ι /\ instprop x ι.
-    Proof. reflexivity. Qed.
+      ty.rv_bientails (instprop (xs ▻ x) ι) (ty.liftBinOpRV and (instprop xs ι) (instprop x ι)).
+    Proof. cbn. destruct (instprop xs ι); destruct (instprop x ι); cbn; tauto.
+    Qed.
 
     Lemma instprop_cat `{InstProp A} {Σ} (x y : Ctx (A Σ)) (ι : Valuation Σ) :
-      instprop (x ▻▻ y) ι <->
-        instprop x ι /\ instprop y ι.
-    Proof. induction y; cbn; rewrite ?IHy; intuition. Qed.
+      ty.rv_bientails (instprop (x ▻▻ y) ι)
+        (ty.liftBinOpRV and (instprop x ι) (instprop y ι)).
+    Proof. induction y; cbn; rewrite ?IHy; intuition;
+           destruct (instprop x ι); cbn; try tauto.
+           all: destruct (instprop (x ▻▻ y) ι); destruct (instprop b ι); destruct (instprop y ι); cbn; cbn in IHy; tauto.
+    Qed.
 
   End InstProp.
 
@@ -719,23 +744,24 @@ Module Type InstantiationOn
 
     Definition term_get_relval {Σ σ} (t : Term Σ σ) : option (RelVal σ) :=
       match t with
-      | term_val _ v => Some (ty.SyncVal _ v)
+      | term_val _ v => Some (ty.valToRelVal v)
       | term_relval _ rv => Some rv
       | _            => None
       end.
 
     Lemma term_get_relval_spec {Σ σ} (s : Term Σ σ) :
       option.wlp
-        (fun v => match v with
-                  | ty.SyncVal _ v' => s = term_relval _ v \/ s = term_val _ v'
-                  | ty.NonSyncVal _ _ _ => s = term_relval _ v
+        (fun v => match (ty.relValToRV v) with
+                  | ty.SyncVal v' => s = term_relval _ v \/ s = term_val _ v'
+                  | ty.NonSyncVal _ _ => s = term_relval _ v
                   end
         )
 
         (term_get_relval s).
     Proof.
-      destruct s; constructor; auto.
-      destruct r; auto.           
+      destruct s; constructor.
+      - rewrite ty.valToRelValToRVIsSyncVal. right. auto.
+      - destruct (ty.relValToRV r); auto.           
     Qed.
 
     Equations(noeqns) term_get_pair {Σ σ1 σ2} (t : Term Σ (ty.prod σ1 σ2)) :
@@ -749,7 +775,7 @@ Module Type InstantiationOn
         (fun '(t1,t2) =>
            forall ι : Valuation Σ,
              inst (T := fun Σ => Term Σ (ty.prod σ1 σ2)) (A := RelVal (ty.prod σ1 σ2)) s ι =
-             (ty.liftBinOp (σ3 := ty.prod σ1 σ2) pair (inst (A := RelVal σ1) t1 ι) (inst (A := RelVal σ2) t2 ι)))
+               pair (inst (A := RelVal σ1) t1 ι) (inst (A := RelVal σ2) t2 ι))
         (term_get_pair s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.
@@ -757,30 +783,30 @@ Module Type InstantiationOn
       - dependent elimination op. constructor. reflexivity.
     Qed.
 
-    Equations(noeqns) term_get_sum {Σ σ1 σ2} (t : Term Σ (ty.sum σ1 σ2)) :
-      option (Term Σ σ1 + Term Σ σ2) :=
-      term_get_sum (term_val _ (inl v))  := Some (inl (term_val _ v));
-      term_get_sum (term_val _ (inr v))  := Some (inr (term_val _ v));
-      term_get_sum (term_unop uop.inl t) := Some (inl t);
-      term_get_sum (term_unop uop.inr t) := Some (inr t);
-      term_get_sum _ := None.
+    (* Equations(noeqns) term_get_sum {Σ σ1 σ2} (t : Term Σ (ty.sum σ1 σ2)) : *)
+    (*   option (Term Σ σ1 + Term Σ σ2) := *)
+    (*   term_get_sum (term_val _ (inl v))  := Some (inl (term_val _ v)); *)
+    (*   term_get_sum (term_val _ (inr v))  := Some (inr (term_val _ v)); *)
+    (*   term_get_sum (term_unop uop.inl t) := Some (inl t); *)
+    (*   term_get_sum (term_unop uop.inr t) := Some (inr t); *)
+    (*   term_get_sum _ := None. *)
 
-    Lemma term_get_sum_spec {Σ σ1 σ2} (s : Term Σ (ty.sum σ1 σ2)) :
-      option.wlp
-        (fun s' => match s' with
-                   | inl t => forall ι : Valuation Σ,
-                       inst (T := fun Σ => Term Σ (ty.sum σ1 σ2)) (A := RelVal (ty.sum σ1 σ2)) s ι =
-                       ty.liftUnOp (σ2 := ty.sum σ1 σ2) (@inl (Val σ1) (Val σ2)) (inst t ι)
-                   | inr t => forall ι : Valuation Σ,
-                       inst (T := fun Σ => Term Σ (ty.sum σ1 σ2)) (A := RelVal (ty.sum σ1 σ2)) s ι =
-                         ty.liftUnOp (σ2 := ty.sum σ1 σ2) (@inr (Val σ1) (Val σ2)) (inst t ι)
-                   end)
-        (term_get_sum s).
-    Proof.
-      dependent elimination s; cbn; try constructor; auto.
-      - destruct v; constructor; auto.
-      - dependent elimination op0; cbn; constructor; auto.
-    Qed.
+    (* Lemma term_get_sum_spec {Σ σ1 σ2} (s : Term Σ (ty.sum σ1 σ2)) : *)
+    (*   option.wlp *)
+    (*     (fun s' => match s' with *)
+    (*                | inl t => forall ι : Valuation Σ, *)
+    (*                    inst (T := fun Σ => Term Σ (ty.sum σ1 σ2)) (A := RelVal (ty.sum σ1 σ2)) s ι = *)
+    (*                    ty.liftUnOp (σ2 := ty.sum σ1 σ2) (@inl (Val σ1) (Val σ2)) (inst t ι) *)
+    (*                | inr t => forall ι : Valuation Σ, *)
+    (*                    inst (T := fun Σ => Term Σ (ty.sum σ1 σ2)) (A := RelVal (ty.sum σ1 σ2)) s ι = *)
+    (*                      ty.liftUnOp (σ2 := ty.sum σ1 σ2) (@inr (Val σ1) (Val σ2)) (inst t ι) *)
+    (*                end) *)
+    (*     (term_get_sum s). *)
+    (* Proof. *)
+    (*   dependent elimination s; cbn; try constructor; auto. *)
+    (*   - destruct v; constructor; auto. *)
+    (*   - dependent elimination op0; cbn; constructor; auto. *)
+    (* Qed. *)
 
     Equations(noeqns) term_get_list {Σ σ} (t : Term Σ (ty.list σ)) :
       option ((Term Σ σ * Term Σ (ty.list σ)) + unit) :=
@@ -794,9 +820,9 @@ Module Type InstantiationOn
         (fun s' => match s' with
                    | inl (x , xs) => forall ι : Valuation Σ,
                        inst (T := fun Σ => Term Σ (ty.list σ)) (A := (RelVal (ty.list σ))) s ι =
-                         ty.liftBinOp (σ2 := ty.list σ) (σ3 := ty.list σ) (@cons (Val σ)) (inst x ι) (inst (T := fun Σ => Term Σ (ty.list σ)) xs ι)
+                         @cons (RelVal σ) (inst x ι) (inst (T := fun Σ => Term Σ (ty.list σ)) xs ι)
                    | inr _ => forall ι : Valuation Σ,
-                       inst (T := fun Σ => Term Σ (ty.list σ)) (A := (RelVal (ty.list σ))) s ι = ty.SyncVal (ty.list _) nil
+                       inst (T := fun Σ => Term Σ (ty.list σ)) (A := (RelVal (ty.list σ))) s ι = nil
                    end)
         (term_get_list s).
     Proof.
@@ -876,66 +902,113 @@ Module Type InstantiationOn
        potentially some constraints substituted away). *)
     Definition entails {A B} {IA : InstProp A} {IB : InstProp B}
       {Σ} (x : A Σ) (y : B Σ) : Prop :=
-      forall (ι : Valuation Σ), instprop x ι -> instprop y ι.
+      forall (ι : Valuation Σ), ty.rv_entails (instprop x ι) (instprop y ι).
     Definition bientails {A} {IA : InstProp A} {Σ} : relation (A Σ) :=
-      fun x y => forall ι, instprop x ι <-> instprop y ι.
+      fun x y => forall ι, ty.rv_bientails (instprop x ι) (instprop y ι).
 
     Section WithA.
       Context `{IA : InstProp A} {Σ : LCtx}.
       Notation "(⊢)" := (@entails A A _ _ Σ).
       Notation "(⊣⊢)" := (@bientails A _ Σ).
 
+      
+
       Definition entails_refl : Reflexive (⊢).
-      Proof. now unfold Reflexive, entails. Qed.
+      Proof. unfold Reflexive, entails. intros. reflexivity.
+      Qed.
 
       Definition entails_trans : Transitive (⊢).
-      Proof. unfold Transitive, entails; eauto. Qed.
+      Proof. unfold Transitive, entails. intros.
+             rewrite H. rewrite H0. reflexivity.
+      Qed.
 
       #[export] Instance preorder_entails : PreOrder (⊢).
       Proof. split; auto using entails_refl, entails_trans. Qed.
 
       #[export] Instance equivalence_bientails : Equivalence (⊣⊢).
       Proof.
-        unfold bientails. constructor; try easy.
-        intros x y z xy yz ι. now transitivity (instprop y ι).
+        unfold bientails. constructor.
+        - unfold Reflexive. intros. reflexivity.
+        - unfold Symmetric. intros. rewrite H. reflexivity.
+        - unfold Transitive. intros. rewrite H. rewrite H0. reflexivity.
       Qed.
 
       #[export] Instance subrelation_bientails_entails :
         subrelation (⊣⊢) (⊢).
-      Proof. intros x y xy ι. apply xy. Qed.
+      Proof. intros x y xy ι.
+             unfold bientails in xy.
+             rewrite xy.
+             reflexivity.
+      Qed.
 
       #[export] Instance subrelation_bientails_flip_entails :
         subrelation (⊣⊢) (flip (⊢)).
-      Proof. intros x y xy ι. apply xy. Qed.
+      Proof. intros x y xy ι.
+             unfold bientails in xy.
+             rewrite <- xy.
+             reflexivity.
+      Qed.
 
       Definition Unsatisfiable (x : A Σ) : Prop :=
-        forall ι : Valuation Σ, ~ instprop x ι.
+        forall ι : Valuation Σ, ~ ty.projLeftRV (instprop x ι) /\ ~ ty.projRightRV (instprop x ι).
+
+      #[export] Instance proper_projLeftRV : Proper (ty.rv_bientails ==> iff) ty.projLeftRV.
+      Proof.
+        intros p1 p2 Rp. split; intro H; destruct p1; destruct p2; cbn in *; tauto.
+      Qed.
+
+      #[export] Instance proper_impl_projLeftRV : Proper (ty.rv_entails ==> impl) ty.projLeftRV.
+      Proof.
+        intros p1 p2 Rp H. destruct p1; destruct p2; cbn in *; tauto.
+      Qed.
+
+      #[export] Instance proper_projRigthRV : Proper (ty.rv_bientails ==> iff) ty.projRightRV.
+      Proof.
+        intros p1 p2 Rp. split; intro H; destruct p1; destruct p2; cbn in *; tauto.
+      Qed.
+
+      #[export] Instance proper_impl_projRigthRV : Proper (ty.rv_entails ==> impl) ty.projRightRV.
+      Proof.
+        intros p1 p2 Rp H. destruct p1; destruct p2; cbn in *; tauto.
+      Qed.
 
       #[export] Instance proper_unsatisfiable_entails :
         Proper ((⊢) --> impl) Unsatisfiable.
-      Proof. intros xs ys xys uxs ι H. apply (uxs ι), xys, H. Qed.
+      Proof.
+        intros xs ys xys uxs ι.
+        cbn in xys.
+        specialize (xys ι).
+        split;
+        rewrite xys;
+        specialize (uxs ι) as (uxsLeft, uxsRight);
+        auto.
+      Qed.
 
       #[export] Instance proper_unsatisfiable_bientails :
         Proper ((⊣⊢) ==> iff) Unsatisfiable.
       Proof.
         intros x y xy.
-        split; apply proper_unsatisfiable_entails;
-          intros ι; apply xy.
+        split; apply proper_unsatisfiable_entails; rewrite xy; reflexivity.
       Qed.
 
       Definition Valid (x : A Σ) : Prop :=
-        forall ι : Valuation Σ, instprop x ι.
+        forall ι : Valuation Σ, ty.projLeftRV (instprop x ι) /\ ty.projRightRV (instprop x ι).
 
       #[export] Instance proper_valid_entails :
         Proper ((⊢) ==> impl) Valid.
-      Proof. intros xs ys xys uxs ι. apply xys, (uxs ι). Qed.
+      Proof.
+        intros xs ys xys uxs ι.
+        specialize (xys ι).
+        specialize (uxs ι) as (uxsLeft, uxsRight).
+        rewrite xys in uxsLeft. rewrite xys in uxsRight.
+        auto.
+      Qed.
 
       #[export] Instance proper_valid_bientails :
         Proper ((⊣⊢) ==> iff) Valid.
       Proof.
         intros x y xy.
-        split; apply proper_valid_entails;
-          intros ι; apply xy.
+        split; apply proper_valid_entails; rewrite xy; reflexivity.
       Qed.
 
       #[export] Instance bientails_rewriterelation : RewriteRelation (@bientails A IA Σ). Qed.
@@ -958,26 +1031,46 @@ Module Type InstantiationOn
     Notation "(⊣⊢@{ A } )" := (bientails (A:=A)) (only parsing).
 
     Lemma entails_nil `{InstProp A, InstProp B} {Σ} {x : A Σ} : x ⊢ @ctx.nil (B Σ).
-    Proof. constructor. Qed.
+    Proof.
+      intro ι.
+      destruct (instprop x ι); cbn; tauto.
+    Qed.
 
     Lemma entails_cons `{InstProp A, InstProp B} {Σ} (x : A Σ) (ys : Ctx (B Σ)) (y : B Σ) :
       (x ⊢ ys) /\ (x ⊢ y) <-> (x ⊢ ys ▻ y).
-    Proof. firstorder. Qed.
+    Proof.
+      split; intros H1; try split; intro ι;
+      firstorder; specialize (H1 ι); try specialize (H2 ι);
+      cbn in *; destruct (instprop y ι); destruct (instprop x ι); cbn; destruct (instprop ys ι); cbn in *; try tauto.
+    Qed.
+
+    #[export] Instance proper_entails_flip_mono : Proper (ty.rv_bientails ==> ty.rv_bientails ==> flip impl) ty.rv_entails.
+    Proof.
+      intros x y Rxy g h Rgh. cbn.
+      rewrite Rxy. rewrite <- Rgh. reflexivity.
+    Qed.
+
 
     Lemma proper_subst_entails `{InstPropSubst A, InstPropSubst B}
       {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (x : A Σ1) (y : B Σ1) :
       (x ⊢ y) -> (subst x ζ12 ⊢ subst y ζ12).
-    Proof. intros E ι. rewrite ?instprop_subst; eauto. Qed.
+    Proof.
+      intros E ι.
+      unfold entails in E.
+      specialize (E (inst ζ12 ι)).
+      do 2 (rewrite instprop_subst).
+      auto.
+    Qed.
 
     #[export] Instance proper_snoc `{InstProp A} [Σ] :
       Proper ((⊣⊢) ==> (⊣⊢) ==> (⊣⊢)) (@ctx.snoc (A Σ)).
-    Proof. intros C1 C2 HC F1 F2 HF ι. now apply and_iff_morphism. Qed.
+    Proof. intros C1 C2 HC F1 F2 HF ι. now apply and_bientails_morphismRV. Qed.
 
     #[local] Instance proper_snoc_entails `{InstProp A} [Σ] :
       Proper ((⊢) ==> (⊢) ==> (⊢)) (@ctx.snoc (A Σ)).
     Proof.
       intros C1 C2 HC F1 F2 HF ι; cbn.
-      apply and_impl_morphism; red; [apply HC|apply HF].
+      apply and_entails_morphismRV; red; [apply HC|apply HF].
     Qed.
 
     #[local] Instance proper_some `[InstProp A] [Σ] :
@@ -986,31 +1079,62 @@ Module Type InstantiationOn
 
     Lemma snoc_cancel `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
       Valid x -> xs ⊣⊢ xs ▻ x.
-    Proof. intros vx ι; specialize (vx ι). cbn in *. intuition. Qed.
+    Proof. intros vx ι; specialize (vx ι). cbn in *.
+           destruct (instprop xs ι); destruct (instprop x ι); cbn; intuition.
+    Qed.
 
     Lemma unsatisfiable_snoc_l `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
       Unsatisfiable xs -> Unsatisfiable (xs ▻ x).
-    Proof. firstorder. Qed.
+    Proof. intros Unsat ι.
+           specialize (Unsat ι).
+           firstorder; cbn;
+             destruct (instprop xs ι); destruct (instprop x ι); cbn in *; tauto.
+    Qed.
 
     Lemma unsatisfiable_snoc_r `{InstProp A} [Σ] (xs : Ctx (A Σ)) (x : A Σ) :
       Unsatisfiable x -> Unsatisfiable (xs ▻ x).
-    Proof. firstorder. Qed.
+    Proof.
+      intros Unsat ι.
+      specialize (Unsat ι).
+      firstorder; cbn;
+        destruct (instprop xs ι); destruct (instprop x ι); cbn in *; tauto.
+    Qed.
 
     Lemma unsatisfiable_none_some `{InstProp A} [Σ] (x : A Σ) :
       Unsatisfiable x -> None ⊣⊢ Some x.
-    Proof. firstorder. Qed.
+    Proof.
+      intros Unsat ι.
+      specialize (Unsat ι).
+      firstorder; cbn;
+         destruct (instprop x ι); cbn in *; tauto.
+    Qed.
 
     Lemma unsatisfiable_some_none `{InstProp A} [Σ] (x : A Σ) :
       Unsatisfiable x -> Some x ⊣⊢ None.
-    Proof. firstorder. Qed.
+    Proof.
+      intros Unsat ι.
+      specialize (Unsat ι).
+      firstorder; cbn;
+        destruct (instprop x ι); cbn in *; tauto.
+    Qed.
 
     Lemma nil_l_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
       Valid xs -> [ctx] ⊣⊢ xs.
-    Proof. firstorder. Qed.
+    Proof.
+      intros Valid ι.
+      specialize (Valid ι).
+      firstorder; cbn;
+        destruct (instprop xs ι); cbn in *; tauto.
+    Qed.
 
     Lemma nil_r_valid `{InstProp A} [Σ] (xs : Ctx (A Σ)) :
       Valid xs -> xs ⊣⊢ [ctx].
-    Proof. firstorder. Qed.
+    Proof.
+      intros Valid ι.
+      specialize (Valid ι).
+      firstorder; cbn;
+        destruct (instprop xs ι); cbn in *; tauto.
+    Qed.
 
     Module tactics.
 

@@ -415,9 +415,9 @@ Module Type PatternsOn (Import TY : Types).
       { c : PatternCase pat & NamedEnv RelVal (PatternCaseCtx c) }.
     #[global] Arguments MatchResultRel {σ} !pat /.
 
-    Definition match_result_rel_to_nonsyncval {σ} {pat : Pattern σ} (mr : @MatchResultRel σ pat) :=
-      @existT (PatternCase pat) (fun (ctx : PatternCase pat) => NamedEnv RelVal (PatternCaseCtx ctx))
-        (projT1 mr) (ty.namedEnvRel_to_nonsyncval (projT2 mr)).
+    (* Definition match_result_rel_to_nonsyncval {σ} {pat : Pattern σ} (mr : @MatchResultRel σ pat) := *)
+    (*   @existT (PatternCase pat) (fun (ctx : PatternCase pat) => NamedEnv RelVal (PatternCaseCtx ctx)) *)
+    (*     (projT1 mr) (ty.namedEnvRel_to_nonsyncval (projT2 mr)). *)
 
 
     Definition pattern_match_relval {σ} (p : Pattern σ) : RelVal σ -> MatchResultRel p :=
@@ -433,7 +433,7 @@ Module Type PatternsOn (Import TY : Types).
       (*       | cons v vs => existT false [env].[x∷σ ↦ v].[y∷ty.list σ ↦ vs] *)
       (*       end *)
       | pat_pair x y =>
-          fun v => match ty.relValPairIsPairRelVal v with
+          fun v => match v with
                    | (a , b) => existT tt [env].[x∷_ ↦ a].[y∷_ ↦ b]
                    end
       (* | pat_sum σ τ x y => *)
@@ -449,15 +449,15 @@ Module Type PatternsOn (Import TY : Types).
       | pat_bvec_split m n x y =>
           fun v =>
             match v with
-            | ty.SyncVal _ v' =>
+            | ty.SyncVal v' =>
                 match bv.appView m n v' with
                 | bv.isapp xs ys =>
-                    existT tt [env].[x∷ty.bvec m ↦ ty.SyncVal (ty.bvec _) xs].[y∷ty.bvec n ↦ ty.SyncVal (ty.bvec _) ys]
+                    existT tt [env].[x∷ty.bvec m ↦ ty.SyncVal xs].[y∷ty.bvec n ↦ ty.SyncVal ys]
                 end
-            | ty.NonSyncVal _ v1 v2 =>
+            | ty.NonSyncVal v1 v2 =>
                 match bv.appView m n v1 , bv.appView m n v2 with
                 | bv.isapp xs1 ys1 , bv.isapp xs2 ys2 =>
-                    existT tt [env].[x∷ty.bvec m ↦ ty.NonSyncVal (ty.bvec _) xs1 xs2].[y∷ty.bvec n ↦ ty.NonSyncVal (ty.bvec _) ys1 ys2]
+                    existT tt [env].[x∷ty.bvec m ↦ ty.NonSyncVal xs1 xs2].[y∷ty.bvec n ↦ ty.NonSyncVal ys1 ys2]
                 end
             end
               (* | pat_bvec_exhaustive m => *)
@@ -479,7 +479,7 @@ Module Type PatternsOn (Import TY : Types).
       forall (c : PatternCase p), NamedEnv RelVal (PatternCaseCtx c) -> RelVal σ :=
       match p with
       | pat_var x      => fun _ vs => env.head vs
-      | pat_bool       => fun b _ => ty.SyncVal ty.bool b
+      | pat_bool       => fun b _ => ty.SyncVal b
       (* | pat_list σ x y => *)
       (*     fun b => *)
       (*       match b with *)
@@ -493,7 +493,7 @@ Module Type PatternsOn (Import TY : Types).
           fun _ Exy =>
             let (Ex,vy) := env.view Exy in
             let (E,vx)  := env.view Ex in
-            ty.pairRelValIsRelValPair (vx,vy)
+            (vx,vy)
       (* | pat_sum σ τ x y => *)
       (*     fun b => *)
       (*       match b with *)
@@ -501,14 +501,14 @@ Module Type PatternsOn (Import TY : Types).
       (*       | false => fun vs => inr (env.head vs) *)
       (*       end *)
       | pat_unit =>
-          fun _ _ => ty.SyncVal ty.unit tt
+          fun _ _ => tt
       (* | pat_enum E => *)
       (*     fun v _ => v *)
       | pat_bvec_split m n x y =>
           fun _ Exy =>
             let (Ex,vy) := env.view Exy in
             let (E,vx)  := env.view Ex in
-            @ty.liftBinOp _ _ (ty.bvec m) (ty.bvec n) (ty.bvec (m + n)) bv.app vx vy
+            ty.liftBinOpRV bv.app vx vy
       (* | pat_bvec_exhaustive m => *)
       (*     fun v _ => v *)
       (* | pat_tuple p => *)
@@ -527,12 +527,12 @@ Module Type PatternsOn (Import TY : Types).
       | _ => false
       end.
 
-    Lemma pat_relval_reverse_is_always_syncval_sound {σ} {p : Pattern σ} (c : PatternCase p) (δpc : NamedEnv RelVal (PatternCaseCtx c)) :
-      pat_relval_reverse_is_always_syncval p = true -> exists v, pattern_match_relval_reverse p c δpc = ty.SyncVal σ v.
-    Proof.
-      intros H.
-      destruct p; inversion H; cbn; eauto.
-    Qed.
+    (* Lemma pat_relval_reverse_is_always_syncval_sound {σ} {p : Pattern σ} (c : PatternCase p) (δpc : NamedEnv RelVal (PatternCaseCtx c)) : *)
+    (*   pat_relval_reverse_is_always_syncval p = true -> exists v, pattern_match_relval_reverse p c δpc = ty.SyncVal σ v. *)
+    (* Proof. *)
+    (*   intros H. *)
+    (*   destruct p; inversion H; cbn; eauto. *)
+    (* Qed. *)
 
     (* Lemma pat_relval_reverse_nonsyncval_implies_δpc_allNonSync {σ v1 v2} {pat : Pattern σ} (pc : PatternCase pat) (δpc : NamedEnv RelVal (PatternCaseCtx pc)) : *)
     (*   pat_relval_reverse_is_always_syncval pat = false -> *)
@@ -584,67 +584,67 @@ Module Type PatternsOn (Import TY : Types).
     (*   (*   now rewrite H. *) *)
     (* Qed. *)
 
-    Lemma pattern_match_syncval_inverse_right {σ} (pat : Pattern σ)
-      (pc : PatternCase pat) (δpc : NamedEnv Val (PatternCaseCtx pc)) :
-      pattern_match_relval pat (pattern_match_relval_reverse pat pc (ty.mapSyncValNamedEnv δpc)) = (existT pc (ty.mapSyncValNamedEnv δpc)).
-    Proof.
-      induction pat; cbn; try progress cbn.
-      - destruct pc. cbn in δpc. now env.destroy δpc.
-      - env.destroy δpc. cbn in δpc. env.destroy δpc. reflexivity.
-      - destruct pc. cbn in δpc. env.destroy δpc. cbn. reflexivity.
-      - destruct pc; cbn in δpc; now env.destroy δpc.
-      (* - destruct pc; now env.destroy vs. *)
-      (* - destruct pc; now env.destroy vs. *)
-      (* - now env.destroy vs. *)
-      - destruct pc; env.destroy δpc. destruct (ty.mapSyncValNamedEnv δpc); env.destroy δpc;
-        cbn;
-        now rewrite bv.appView_app.
-      (* - now env.destroy vs. *)
-      (* - destruct pc. *)
-      (*   unfold tuple_pattern_match_val. *)
-      (*   rewrite envrec.to_of_env. *)
-      (*   now rewrite tuple_pattern_match_env_inverse_right. *)
-      (* - destruct pc. *)
-      (*   unfold record_pattern_match_val. *)
-      (*   rewrite recordv_unfold_fold. *)
-      (*   now rewrite record_pattern_match_env_inverse_right. *)
-      (* - destruct pc as [K pc]. *)
-      (*   rewrite unionv_unfold_fold. *)
-      (*   change (pattern_match_val_reverse _ ?pc ?vs) with *)
-      (*     (pattern_match_val_reverse' _ (existT pc vs)). *)
-      (*   now rewrite H. *)
-    Qed.
+    (* Lemma pattern_match_syncval_inverse_right {σ} (pat : Pattern σ) *)
+    (*   (pc : PatternCase pat) (δpc : NamedEnv Val (PatternCaseCtx pc)) : *)
+    (*   pattern_match_relval pat (pattern_match_relval_reverse pat pc (ty.mapSyncValNamedEnv δpc)) = (existT pc (ty.mapSyncValNamedEnv δpc)). *)
+    (* Proof. *)
+    (*   induction pat; cbn; try progress cbn. *)
+    (*   - destruct pc. cbn in δpc. now env.destroy δpc. *)
+    (*   - env.destroy δpc. cbn in δpc. env.destroy δpc. reflexivity. *)
+    (*   - destruct pc. cbn in δpc. env.destroy δpc. cbn. reflexivity. *)
+    (*   - destruct pc; cbn in δpc; now env.destroy δpc. *)
+    (*   (* - destruct pc; now env.destroy vs. *) *)
+    (*   (* - destruct pc; now env.destroy vs. *) *)
+    (*   (* - now env.destroy vs. *) *)
+    (*   - destruct pc; env.destroy δpc. destruct (ty.mapSyncValNamedEnv δpc); env.destroy δpc; *)
+    (*     cbn; *)
+    (*     now rewrite bv.appView_app. *)
+    (*   (* - now env.destroy vs. *) *)
+    (*   (* - destruct pc. *) *)
+    (*   (*   unfold tuple_pattern_match_val. *) *)
+    (*   (*   rewrite envrec.to_of_env. *) *)
+    (*   (*   now rewrite tuple_pattern_match_env_inverse_right. *) *)
+    (*   (* - destruct pc. *) *)
+    (*   (*   unfold record_pattern_match_val. *) *)
+    (*   (*   rewrite recordv_unfold_fold. *) *)
+    (*   (*   now rewrite record_pattern_match_env_inverse_right. *) *)
+    (*   (* - destruct pc as [K pc]. *) *)
+    (*   (*   rewrite unionv_unfold_fold. *) *)
+    (*   (*   change (pattern_match_val_reverse _ ?pc ?vs) with *) *)
+    (*   (*     (pattern_match_val_reverse' _ (existT pc vs)). *) *)
+    (*   (*   now rewrite H. *) *)
+    (* Qed. *)
 
 
-    (* TODO: This is currently not correct. *)
-    Lemma pattern_match_relval_NonSyncImpliesAllNonSync {σ pat v1 v2} : ty.allNonSync (projT2 (pattern_match_relval pat (ty.NonSyncVal σ v1 v2))).
-    Proof.
-      destruct pat; cbn; try tauto.
-      - destruct v1. destruct v2. cbn. tauto.
-      - destruct (bv.appView m n v1). destruct (bv.appView m n v2). cbn. tauto.
-    Qed.
+    (* (* TODO: This is currently not correct. *) *)
+    (* Lemma pattern_match_relval_NonSyncImpliesAllNonSync {σ pat v1 v2} : ty.allNonSync (projT2 (pattern_match_relval pat (ty.NonSyncVal σ v1 v2))). *)
+    (* Proof. *)
+    (*   destruct pat; cbn; try tauto. *)
+    (*   - destruct v1. destruct v2. cbn. tauto. *)
+    (*   - destruct (bv.appView m n v1). destruct (bv.appView m n v2). cbn. tauto. *)
+    (* Qed. *)
 
 
-    Lemma pattern_match_nonsyncval_inverse_right {σ} (pat : Pattern σ)
-      (pc : PatternCase pat) (δpc : NamedEnv RelVal (PatternCaseCtx pc)) :
-      isSinglePattern pat = true ->
-      pat_relval_reverse_is_always_syncval pat = false ->
-      ty.allNonSync δpc ->
-      pattern_match_relval pat (pattern_match_relval_reverse pat pc δpc) = existT pc δpc.
-    Proof.
-      intros isSinglePat isAlwaysSyncValPat δpcAllNonSync.
-      induction pat; cbn; try progress cbn.
-      - destruct pc. cbn in δpc. now env.destroy δpc.
-      - env.destroy δpc. cbn in δpc. env.destroy δpc. reflexivity.
-      - destruct pc. cbn in δpc. env.destroy δpc. destruct v0; destruct v; cbn; try reflexivity; destruct δpcAllNonSync.
-      - destruct pc; cbn in δpc; now env.destroy δpc.
-      (* - destruct pc; now env.destroy vs. *)
-      (* - destruct pc; now env.destroy vs. *)
-      (* - now env.destroy vs. *)
-      - destruct pc; env.destroy δpc. destruct (env.view δpc). destruct (env.view E). env.destroy E. cbn.
-        destruct v0; destruct v; cbn; rewrite bv.appView_app; cbn; try reflexivity;
-          rewrite bv.appView_app; try reflexivity; destruct δpcAllNonSync.
-    Qed.
+    (* Lemma pattern_match_nonsyncval_inverse_right {σ} (pat : Pattern σ) *)
+    (*   (pc : PatternCase pat) (δpc : NamedEnv RelVal (PatternCaseCtx pc)) : *)
+    (*   isSinglePattern pat = true -> *)
+    (*   pat_relval_reverse_is_always_syncval pat = false -> *)
+    (*   ty.allNonSync δpc -> *)
+    (*   pattern_match_relval pat (pattern_match_relval_reverse pat pc δpc) = existT pc δpc. *)
+    (* Proof. *)
+    (*   intros isSinglePat isAlwaysSyncValPat δpcAllNonSync. *)
+    (*   induction pat; cbn; try progress cbn. *)
+    (*   - destruct pc. cbn in δpc. now env.destroy δpc. *)
+    (*   - env.destroy δpc. cbn in δpc. env.destroy δpc. reflexivity. *)
+    (*   - destruct pc. cbn in δpc. env.destroy δpc. destruct v0; destruct v; cbn; try reflexivity; destruct δpcAllNonSync. *)
+    (*   - destruct pc; cbn in δpc; now env.destroy δpc. *)
+    (*   (* - destruct pc; now env.destroy vs. *) *)
+    (*   (* - destruct pc; now env.destroy vs. *) *)
+    (*   (* - now env.destroy vs. *) *)
+    (*   - destruct pc; env.destroy δpc. destruct (env.view δpc). destruct (env.view E). env.destroy E. cbn. *)
+    (*     destruct v0; destruct v; cbn; rewrite bv.appView_app; cbn; try reflexivity; *)
+    (*       rewrite bv.appView_app; try reflexivity; destruct δpcAllNonSync. *)
+    (* Qed. *)
 
 
     (* Lemma pattern_match_relval_inverse_left {σ} (pat : Pattern σ) : *)
@@ -677,49 +677,49 @@ Module Type PatternsOn (Import TY : Types).
     (*   (*   now rewrite <- Heq, H. *) *)
     (* Qed. *)
 
-        Lemma pattern_match_syncval_inverse_left {σ} (pat : Pattern σ) :
-      forall v : Val σ,
-        pattern_match_relval_reverse' pat (pattern_match_relval pat (ty.SyncVal σ v)) = (ty.SyncVal σ v).
-    Proof.
-      induction pat; cbn; intros v; try progress cbn.
-      - reflexivity.
-      - reflexivity.
-      - destruct v; reflexivity.
-      (* - destruct v; destruct v; cbn; try reflexivity. *)
-      (*   destruct v0; cbn; reflexivity. *)
-      - destruct v; reflexivity.
-      (* - destruct v. reflexivity. *)
-      (* - reflexivity. *)
-      - destruct bv.appView; reflexivity.
-      (* - reflexivity. *)
-      (* - unfold tuple_pattern_match_val. *)
-      (*   rewrite tuple_pattern_match_env_inverse_left. *)
-      (*   now rewrite envrec.of_to_env. *)
-      (* - unfold record_pattern_match_val. *)
-      (*   rewrite record_pattern_match_env_inverse_left. *)
-      (*   now rewrite recordv_fold_unfold. *)
-      (* - destruct unionv_unfold as [K v'] eqn:Heq. *)
-      (*   apply (f_equal (unionv_fold U)) in Heq. *)
-      (*   rewrite unionv_fold_unfold in Heq. subst. *)
-      (*   destruct pattern_match_val eqn:Heq; cbn. *)
-      (*   change (pattern_match_val_reverse _ ?pc ?vs) with *)
-      (*     (pattern_match_val_reverse' _ (existT pc vs)). *)
-      (*   now rewrite <- Heq, H. *)
-    Qed.
+    (*     Lemma pattern_match_syncval_inverse_left {σ} (pat : Pattern σ) : *)
+    (*   forall v : Val σ, *)
+    (*     pattern_match_relval_reverse' pat (pattern_match_relval pat (ty.SyncVal σ v)) = (ty.SyncVal σ v). *)
+    (* Proof. *)
+    (*   induction pat; cbn; intros v; try progress cbn. *)
+    (*   - reflexivity. *)
+    (*   - reflexivity. *)
+    (*   - destruct v; reflexivity. *)
+    (*   (* - destruct v; destruct v; cbn; try reflexivity. *) *)
+    (*   (*   destruct v0; cbn; reflexivity. *) *)
+    (*   - destruct v; reflexivity. *)
+    (*   (* - destruct v. reflexivity. *) *)
+    (*   (* - reflexivity. *) *)
+    (*   - destruct bv.appView; reflexivity. *)
+    (*   (* - reflexivity. *) *)
+    (*   (* - unfold tuple_pattern_match_val. *) *)
+    (*   (*   rewrite tuple_pattern_match_env_inverse_left. *) *)
+    (*   (*   now rewrite envrec.of_to_env. *) *)
+    (*   (* - unfold record_pattern_match_val. *) *)
+    (*   (*   rewrite record_pattern_match_env_inverse_left. *) *)
+    (*   (*   now rewrite recordv_fold_unfold. *) *)
+    (*   (* - destruct unionv_unfold as [K v'] eqn:Heq. *) *)
+    (*   (*   apply (f_equal (unionv_fold U)) in Heq. *) *)
+    (*   (*   rewrite unionv_fold_unfold in Heq. subst. *) *)
+    (*   (*   destruct pattern_match_val eqn:Heq; cbn. *) *)
+    (*   (*   change (pattern_match_val_reverse _ ?pc ?vs) with *) *)
+    (*   (*     (pattern_match_val_reverse' _ (existT pc vs)). *) *)
+    (*   (*   now rewrite <- Heq, H. *) *)
+    (* Qed. *)
 
-    Lemma pattern_match_nonsyncval_inverse_left {σ} (pat : Pattern σ) :
-      forall v1 v2 : Val σ,
-        isSinglePattern pat = true ->
-        pat_relval_reverse_is_always_syncval pat = false ->
-        (pattern_match_relval_reverse' pat (pattern_match_relval pat (ty.NonSyncVal σ v1 v2)) = ty.NonSyncVal σ v1 v2).
-    Proof.
-      induction pat; cbn; intros v1 v2 eq1 eq2; try progress cbn.
-      - reflexivity.
-      - congruence.
-      - destruct v1; destruct v2; reflexivity.
-      - congruence.
-      - destruct bv.appView. destruct bv.appView. reflexivity.
-    Qed.
+    (* Lemma pattern_match_nonsyncval_inverse_left {σ} (pat : Pattern σ) : *)
+    (*   forall v1 v2 : Val σ, *)
+    (*     isSinglePattern pat = true -> *)
+    (*     pat_relval_reverse_is_always_syncval pat = false -> *)
+    (*     (pattern_match_relval_reverse' pat (pattern_match_relval pat (ty.NonSyncVal σ v1 v2)) = ty.NonSyncVal σ v1 v2). *)
+    (* Proof. *)
+    (*   induction pat; cbn; intros v1 v2 eq1 eq2; try progress cbn. *)
+    (*   - reflexivity. *)
+    (*   - congruence. *)
+    (*   - destruct v1; destruct v2; reflexivity. *)
+    (*   - congruence. *)
+    (*   - destruct bv.appView. destruct bv.appView. reflexivity. *)
+    (* Qed. *)
 
 
     (* The intendend use case of the above definitions is in the declaration of

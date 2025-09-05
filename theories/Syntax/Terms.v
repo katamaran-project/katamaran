@@ -427,7 +427,8 @@ Module Type TermsOn (Import TY : Types).
       forall {t : Term Σ σ1},
         View t -> View (term_unop op t) :=
       match op with
-      | uop.inl | _ => fun _ _ => tt
+      (* | uop.inl | _ => fun _ _ => tt *)
+      | uop.neg | _ => fun _ _ => tt
       end.
 
     (* Construct a view for each term. *)
@@ -914,8 +915,8 @@ Module Type TermsOn (Import TY : Types).
   Bind Scope env_scope with SStore.
 
   Notation term_var_in ςIn := (term_var _ (ςInΣ := ςIn)) (only parsing).
-  Notation term_inl t := (term_unop uop.inl t%exp).
-  Notation term_inr t := (term_unop uop.inr t%exp).
+  (* Notation term_inl t := (term_unop uop.inl t%exp). *)
+  (* Notation term_inr t := (term_unop uop.inr t%exp). *)
   Notation term_neg t := (term_unop uop.neg t%exp).
   Notation term_not t := (term_unop uop.not t%exp).
   Notation term_sext t := (term_unop uop.sext t%exp).

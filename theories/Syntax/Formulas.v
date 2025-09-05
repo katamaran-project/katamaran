@@ -61,24 +61,19 @@ Module Type FormulasOn
   Inductive Formula (Σ : LCtx) : Type :=
   | formula_user (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | formula_bool (t : Term Σ ty.bool)
-  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named RelVal Σ' Prop)
+  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named RelVal Σ' (ty.RV Prop))
   | formula_relop {σ} (rop : bop.RelOp σ) (t1 t2 : Term Σ σ)
   | formula_true
   | formula_false
   | formula_and (F1 F2 : Formula Σ)
   | formula_or (F1 F2 : Formula Σ)
-  | formula_public {σ} (t : Term Σ σ)
-  | formula_eq_nonsync {σ} (t1 t2 : Term Σ σ)
   .
   #[global] Arguments formula_user {_} p ts.
   #[global] Arguments formula_bool {_} t.
   #[global] Arguments formula_true {_}.
   #[global] Arguments formula_false {_}.
-  #[global] Arguments formula_public {_ _} t.
-  #[global] Arguments formula_eq_nonsync {_ _} t1 t2.
 
 
-  (* TODO: I don't know what we use this one for, so I don't know whether I need a change it so the whole conjuction is negated or each of the two sides is negated, but still a conjunction. *)
   Definition formula_relop_neg {Σ σ} (op : RelOp σ) :
     forall (t1 t2 : Term Σ σ), Formula Σ :=
     match op with
@@ -103,8 +98,6 @@ Module Type FormulasOn
       | formula_false          => formula_false
       | formula_and F1 F2      => formula_and (sub_formula F1 ζ) (sub_formula F2 ζ)
       | formula_or F1 F2       => formula_or (sub_formula F1 ζ) (sub_formula F2 ζ)
-      | formula_public t       => formula_public (subst t ζ)
-      | formula_eq_nonsync t1 t2 => formula_eq_nonsync (subst t1 ζ) (subst t2 ζ)
       end.
 
   #[export] Instance substlaws_formula : SubstLaws Formula.
@@ -118,49 +111,57 @@ Module Type FormulasOn
       }
   Qed.
 
-  Definition isSync {σ} (rv : ty.RelVal σ) : Prop :=
-    match rv with
-    | ty.SyncVal _ _ => True
-    | ty.NonSyncVal _ _ _ => False
-    end.
-
   #[export] Instance instprop_formula : InstProp Formula :=
     fix inst_formula {Σ} (fml : Formula Σ) (ι : Valuation Σ) :=
       match fml with
       | formula_user p ts      => env.uncurry (𝑷_inst p) (inst ts ι)
-      | formula_bool t         => inst (A := RelVal ty.bool) t ι = ty.SyncVal ty.bool true
+      | formula_bool t         => ty.liftBinOpRV (fun x y => x = y) (inst (A := ty.RelVal ty.bool) t ι) (ty.SyncVal true)
       | formula_prop ζ P       => uncurry_named P (inst ζ ι)
-      | formula_relop op t1 t2 => match bop.eval_relop_propRel op (inst t1 ι) (inst t2 ι) with
-                                  | Some p => p
-                                  | None => False
-                                  end
-      | formula_true           => True
-      | formula_false          => False
-      | formula_and F1 F2      => inst_formula F1 ι /\ inst_formula F2 ι
-      | formula_or F1 F2       => inst_formula F1 ι \/ inst_formula F2 ι
-      | formula_public t       => isSync (inst t ι)
-      | formula_eq_nonsync t1 t2 => inst t1 ι = inst t2 ι
+      | formula_relop op t1 t2 => bop.eval_relop_propRel op (inst t1 ι) (inst t2 ι)
+      | formula_true           => ty.SyncVal True
+      | formula_false          => ty.SyncVal False
+      | formula_and F1 F2      => ty.liftBinOpRV and (inst_formula F1 ι) (inst_formula F2 ι)
+      | formula_or F1 F2       => ty.liftBinOpRV or (inst_formula F1 ι) (inst_formula F2 ι)
       end.
+
+  #[export] Instance or_bientails_morphismRV :
+    Proper (ty.rv_bientails ==> ty.rv_bientails ==> ty.rv_bientails) (ty.liftBinOpRV or).
+  Proof.
+    intros x y Rxy g h Rgh.
+    destruct x, y, g, h; cbn; intros; try apply or_iff_morphism; cbn in *; tauto.
+  Qed.
+
+  #[export] Instance or_entails_morphismRV :
+    Proper (ty.rv_entails ==> ty.rv_entails ==> ty.rv_entails) (ty.liftBinOpRV or).
+  Proof.
+    intros x y Rxy g h Rgh.
+    destruct x, y, g, h; cbn; intros; try apply or_imp_morphism; cbn in *; tauto.
+  Qed.
 
   #[export] Instance instprop_subst_formula : InstPropSubst Formula.
   Proof.
-    intros ? ? ? ? f. induction f; cbn; rewrite ?inst_subst; auto.
-    now apply and_iff_morphism. now apply or_iff_morphism.
+    intros ? ? ? ? f. induction f; cbn; rewrite ?inst_subst; auto; try reflexivity.
+    now apply and_bientails_morphismRV. now apply or_bientails_morphismRV.
   Qed.
 
 
   (* TODO: This is currently not true, either we leave it out if we don't need it, we change the definition of formula_relop_neg (see comment there) or the content of this lemma *)
-  (* Lemma instprop_formula_relop_neg {Σ σ} (ι : Valuation Σ) (op : RelOp σ) : *)
-  (*   forall (t1 t2 : Term Σ σ), *)
-  (*     instprop (formula_relop_neg op t1 t2) ι <-> *)
-  (*     bop.eval_relop_valRel op (inst t1 ι) (inst t2 ι) = false. *)
-  (* Proof. *)
-  (*   destruct op; cbn; intros t1 t2; *)
-  (*     unfold bv.sle, bv.sleb, bv.slt, bv.sltb; *)
-  (*     unfold bv.ule, bv.uleb, bv.ult, bv.ultb; *)
-  (*     rewrite ?N.ltb_antisym, ?negb_true_iff, ?negb_false_iff, ?N.leb_gt, ?N.leb_le; *)
-  (*     auto; try Lia.lia. now destruct eq_dec. *)
-  (* Qed. *)
+  Lemma instprop_formula_relop_neg {Σ σ} (ι : Valuation Σ) (op : RelOp σ) :
+    forall (t1 t2 : Term Σ σ),
+      ty.rv_bientails
+        (instprop (formula_relop_neg op t1 t2) ι)
+        (ty.liftBinOpRV (fun x y => x = y)
+           (bop.eval_relop_valRel op (inst t1 ι) (inst t2 ι))
+           (ty.SyncVal false)
+        ).
+  Proof.
+    destruct op; cbn; intros t1 t2; destruct (ty.relValToRV (inst t1 ι)); destruct (ty.relValToRV (inst t2 ι)); try destruct (inst t2 ι); try destruct (inst t1 ι);
+      unfold bv.sle, bv.sleb, bv.slt, bv.sltb;
+      unfold bv.ule, bv.uleb, bv.ult, bv.ultb; try repeat (destruct eq_dec); cbn;
+      rewrite ?N.ltb_antisym, ?negb_true_iff, ?negb_false_iff, ?N.leb_gt, ?N.leb_le;
+      auto; try Lia.lia; firstorder.
+    all: congruence.
+  Qed.
 
   Section Reasoning.
     Import Entailment.
@@ -177,7 +178,7 @@ Module Type FormulasOn
       Proper (base.equiv ==> base.equiv ==> (⊣⊢)) (@formula_relop Σ σ rop).
     Proof. intros s1 t1 e1 s2 t2 e2 ι; cbn; now rewrite e1, e2. Qed.
 
-    Lemma syncValEqIffEq {σ a b} : ty.SyncVal σ a = ty.SyncVal σ b <-> a = b.
+    Lemma syncValEqIffEq {A} {a b : A} : ty.SyncVal a = ty.SyncVal b <-> a = b.
     Proof.
       constructor.
       -  intro H. congruence.
@@ -190,49 +191,73 @@ Module Type FormulasOn
       intro ι. cbn. destruct (inst t1 ι); destruct (inst t2 ι).
       all: repeat rewrite syncValEqIffEq; cbn.
       - rewrite andb_true_iff; intuition.
-      - split; intros. congruence. destruct H. congruence.
-      - split; intros. congruence. destruct H. congruence.
-      - split; intros. congruence. destruct H. congruence.  
+      - split; intros; firstorder; destruct b; try tauto;
+        cbn in *; try congruence.
+      - split; intros; firstorder; destruct b; try tauto;
+          cbn in *; try congruence; destruct b0; try tauto; cbn in *; try congruence.
+      - split; intros; firstorder; destruct b; try tauto;
+          cbn in *; try congruence; destruct b0; try tauto; cbn in *; try congruence.
     Qed.
     #[local] Hint Rewrite formula_bool_and : katamaran.
 
+    Lemma formula_bool_relop [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
+      formula_bool (term_binop (bop.relop op) s t) ⊣⊢ formula_relop op s t.
+    Proof. intro; cbn; symmetry; destruct (ty.relValToRV (inst s ι)); destruct (ty.relValToRV (inst t ι)).
+           all: repeat rewrite syncValEqIffEq; cbn; split;
+           apply bop.eval_relop_equiv.
+    Qed.
 
-    (* TODO: This one relies on NonSyncVal true true = SyncVal true, which is not true *)
-    (* Lemma formula_bool_relop [Σ σ] (op : RelOp σ) (s t : Term Σ σ) : *)
-    (*   formula_bool (term_binop (bop.relop op) s t) ⊣⊢ formula_relop op s t. *)
-    (* Proof. intro; cbn; symmetry; destruct (inst s ι); destruct (inst t ι). *)
-    (*        all: repeat rewrite syncValEqIffEq; cbn. *)
-    (*        apply bop.eval_relop_equiv. *)
-    (*        - split. *)
-    (*          + intros [H1 H2]. *)
+    
 
-    (* Qed. *)
-
-    (* Lemma formula_bool_relop_neg [Σ σ] (op : RelOp σ) (s t : Term Σ σ) : *)
-    (*   formula_bool (term_relop_neg op s t) ⊣⊢ formula_relop_neg op s t. *)
-    (* Proof. *)
-    (*   intro; cbn. *)
-    (*   rewrite inst_term_relop_neg, negb_true_iff. *)
-    (*   now rewrite instprop_formula_relop_neg. *)
-    (* Qed. *)
+    Lemma formula_bool_relop_neg [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
+      formula_bool (term_relop_neg op s t) ⊣⊢ formula_relop_neg op s t.
+    Proof.
+      intro; cbn.
+      rewrite inst_term_relop_neg. rewrite instprop_formula_relop_neg.
+      cbn.
+      destruct (ty.relValToRV (inst s ι)); destruct (ty.relValToRV (inst t ι)); cbn;
+      repeat (rewrite negb_true_iff);
+      auto.
+    Qed.
 
     Lemma formula_relop_val [Σ σ] (op : RelOp σ) (v1 v2 : Val σ) :
       formula_relop (Σ:=Σ) op (term_val σ v1) (term_val σ v2) ⊣⊢
-      if bop.eval_relop_val op v1 v2 then formula_true else formula_false.
+        if bop.eval_relop_val op v1 v2 then formula_true else formula_false.
     Proof.
-      intro. cbn. rewrite bop.eval_relop_equiv.
-      now destruct bop.eval_relop_val.
+      intro. cbn. do 2 rewrite ty.valToRelValToRVIsSyncVal.
+      cbn.
+      destruct (instprop (if bop.eval_relop_val op v1 v2 then formula_true else formula_false) ι) as [|] eqn:H;
+      rewrite bop.eval_relop_equiv;
+        destruct bop.eval_relop_val; cbn in *; try injection H as <-.
+      - tauto.
+      - split; intros.
+        + congruence.
+        + contradiction.
+      - congruence.
+      - congruence.
     Qed.
 
     Lemma formula_and_l [Σ] (F1 F2 : Formula Σ) : formula_and F1 F2 ⊢ F1.
-    Proof. intros ι H. apply H. Qed.
+    Proof.
+      intros ι.
+      cbn.
+      destruct (instprop F1 ι); destruct (instprop F2 ι); cbn; tauto.
+    Qed.
 
     Lemma formula_and_r [Σ] (F1 F2 : Formula Σ) : formula_and F1 F2 ⊢ F2.
-    Proof. intros ι H. apply H. Qed.
+    Proof.
+      intros ι.
+      cbn.
+      destruct (instprop F1 ι); destruct (instprop F2 ι); cbn; tauto.
+    Qed.
 
     Lemma unsatisfiable_formula_bool [Σ] (t : Term Σ ty.bool) :
       base.equiv t (term_val ty.bool false) -> Unsatisfiable (formula_bool t).
-    Proof. intros e ι. specialize (e ι). cbn in *. congruence. Qed.
+    Proof. intros e ι. specialize (e ι). cbn in *. destruct (inst t ι).
+           cbn.
+           - injection e as ->. auto.
+           - congruence. 
+    Qed.
 
     Lemma unsatisfiable_formula_false [Σ] :
       Unsatisfiable (@formula_false Σ).
@@ -258,10 +283,6 @@ Module Type FormulasOn
       | formula_or F1 F2       => F1' <- oc xIn F1 ;;
                                   F2' <- oc xIn F2 ;;
                                   Some (formula_or F1' F2')
-      | formula_public t       => option.map formula_public (occurs_check xIn t)
-      | formula_eq_nonsync t1 t2 => t1' <- occurs_check xIn t1 ;;
-                                    t2' <- occurs_check xIn t2 ;;
-                                    Some (formula_eq_nonsync t1' t2')
       end.
 
   #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.
@@ -278,7 +299,12 @@ Module Type FormulasOn
 
     Lemma formula_snoc_and [Σ] (k : PathCondition Σ) (F1 F2 : Formula Σ) :
       k ▻ formula_and F1 F2 ⊣⊢ k ▻ F1 ▻ F2.
-    Proof. intro ι. cbn. intuition. Qed.
+    Proof.
+      intro ι; cbn.
+      - destruct (instprop F1 ι); destruct (instprop F2 ι); cbn;
+        destruct (@instprop _ (@instprop_ctx Formula instprop_formula)
+                   _ k ι); cbn; tauto.
+    Qed.
 
     Equations(noeqns) formula_eqs_ctx {Δ : Ctx Ty} {Σ : LCtx}
       (δ δ' : Env (Term Σ) Δ) : PathCondition Σ :=
@@ -292,21 +318,29 @@ Module Type FormulasOn
     | env.snoc δ _ t, env.snoc δ' _ t' =>
       ctx.snoc (formula_eqs_nctx δ δ') (formula_relop bop.eq t t').
 
-    Lemma instprop_formula_eqs_ctx {Δ Σ} (xs ys : Env (Term Σ) Δ) ι :
-      instprop (formula_eqs_ctx xs ys) ι <-> inst xs ι = inst ys ι.
+    (* ty.rv_bientails (instprop (formula_eqs_ctx tsO tsO') ι) (ty.SyncVal True) *)
+    (* instprop (formula_eqs_ctx xs ys) ι <-> inst xs ι = inst ys ι. *)
+
+    Lemma instprop_formula_eqs_ctx {Δ Σ} (xs ys : Env (Term Σ) Δ) (ι : Valuation Σ) :
+      (ty.rv_bientails (instprop (formula_eqs_ctx xs ys) ι) (ty.SyncVal True)
+       <->
+         inst (T := fun Σ => Env (Term Σ) _) xs ι = inst (T := fun Σ => Env (Term Σ) _) ys ι)
+    .
     Proof.
       induction xs; env.destroy ys; cbn; [easy|].
-      (* now rewrite IHxs, env.inversion_eq_snoc. *)
+      specialize (IHxs ys).
+      destruct (instprop (formula_eqs_ctx xs ys) ι); destruct (ty.relValToRV (inst db ι)); destruct (ty.relValToRV (inst v ι)); cbn in *.
+      now rewrite IHxs, env.inversion_eq_snoc.
     (* Qed. *)
     Admitted.
 
-    Lemma instprop_formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ} (xs ys : NamedEnv (Term Σ) Δ) ι :
-      instprop (formula_eqs_nctx xs ys) ι <-> inst xs ι = inst ys ι.
-    Proof.
-      induction xs; env.destroy ys; cbn; [easy|].
-     (*  now rewrite IHxs, env.inversion_eq_snoc. *)
-    (* Qed. *)
-    Admitted.
+    (* Lemma instprop_formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ} (xs ys : NamedEnv (Term Σ) Δ) ι : *)
+    (*   instprop (formula_eqs_nctx xs ys) ι <-> inst xs ι = inst ys ι. *)
+    (* Proof. *)
+    (*   induction xs; env.destroy ys; cbn; [easy|]. *)
+    (*  (*  now rewrite IHxs, env.inversion_eq_snoc. *) *)
+    (* (* Qed. *) *)
+    (* Admitted. *)
 
   End PathCondition.
   Bind Scope ctx_scope with PathCondition.
