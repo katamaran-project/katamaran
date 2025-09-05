@@ -1209,6 +1209,34 @@ Module Type UnifLogicOn
       crushPredEntails3.
     Qed.
 
+    Definition knowing_acc_match_right {w : World} {σ} {s : Term w σ}
+      {p : Pattern (N:=LVar) σ} (pc : PatternCase p) (Q : Pred (wmatch w s p pc)) :
+      (∃ (ts : NamedEnv (Term _) (PatternCaseCtx pc)),
+          eqₚ s (pattern_match_term_reverse p pc ts) ∧
+          assuming (acc_match_right pc) Q)
+      ⊢ knowing (w1 := wmatch w s p pc) (acc_match_right pc) Q.
+    Proof.
+      unfold knowing. crushPredEntails3.
+      rewrite inst_pattern_match_term_reverse in H0.
+      exists (env.cat ι (inst (T := fun Σ => NamedEnv (Term Σ) _) x ι)).
+      rewrite inst_subst.
+      rewrite instprop_subst.
+      rewrite inst_sub_cat_left.
+      rewrite inst_pattern_match_term_reverse.
+      rewrite inst_sub_cat_right.
+      intuition.
+      apply H1.
+      - unfold acc_match_right. cbn.
+        now rewrite inst_sub_cat_left.
+      - unfold wmatch. cbn.
+        rewrite inst_subst.
+        rewrite instprop_subst.
+        rewrite inst_sub_cat_left.
+        rewrite inst_pattern_match_term_reverse.
+        rewrite inst_sub_cat_right.
+        intuition.
+    Qed.
+
   End SubstMod.
 
   Module logicalrelation.
@@ -1849,39 +1877,74 @@ Module Type UnifLogicOn
       now subst.
     Qed.
 
+    (* Lemma refine_pattern_match {w : World} {σ} {v : Val σ} {sv : Term w σ} *)
+    (*   {p : Pattern (N:=LVar) σ} : *)
+    (*   ℛ⟦ RVal σ ⟧ v sv ⊢ *)
+    (*     let (pc, δpc) := pattern_match_val p v in *)
+    (*     knowing (w1 := wmatch w sv p pc) (acc_match_right pc) *)
+    (*       (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc *)
+    (*          (sub_cat_right (PatternCaseCtx pc) : *)
+    (*            NamedEnv (Term (wmatch w sv p pc)) _)). *)
+    (* Proof. *)
+    (*   pose proof (pattern_match_val_inverse_left p v) as eq. *)
+    (*   destruct (pattern_match_val p v) as [pc args]. *)
+    (*   unfold pattern_match_val_reverse' in eq; cbn in eq. *)
+    (*   iIntros "rv". *)
+    (*   iApply knowing_acc_match_right. *)
+    (*   iExists (lift (T:= fun Σ => NamedEnv (Term Σ) (PatternCaseCtx pc)) args). *)
+    (*   iSplit. *)
+    (*   - subst. iStopProof. crushPredEntails3. *)
+    (*     now rewrite inst_pattern_match_term_reverse inst_lift. *)
+    (*   - Search assuming acc_match_right. *)
+    (*     iModIntro. *)
+    (*     iStopProof. unfold forgetting, RVal, RNEnv, RInst. *)
+    (*     constructor. intros ι. cbn. intros ? ? ?. *)
+    (*     destruct (env.catView ιpast). *)
+    (*     rewrite instprop_subst. *)
+    (*     rewrite inst_subst. *)
+    (*     rewrite inst_pattern_match_term_reverse. *)
+    (*     rewrite inst_sub_cat_left. *)
+    (*     rewrite inst_sub_cat_right. *)
+    (*     intuition. subst. rewrite H4 in H0. *)
+    (*     apply (f_equal (pattern_match_val p)) in H0. *)
+    (*     rewrite !pattern_match_val_inverse_right in H0. *)
+    (*     now depelim H0. *)
+    (* Qed. *)
+
+
     #[export] Instance refine_compat_pattern_match_val_term_reverse {N} {w : World} {σ}
       {pat : Pattern (N:=N) σ} {ι} :
         RefineCompat (RNEnv N (PatternCaseCtx ι) -> RVal σ) (pattern_match_val_reverse pat ι) w (pattern_match_term_reverse pat ι) _ :=
       MkRefineCompat refine_pattern_match_val_term_reverse.
 
     Import ctx.notations.
-    Lemma refine_pattern_match_var {w : World} {σ} {v : Val σ} {x : LVar} {xIn : ctx.In (x∷σ) w}
-      {p : Pattern (N:=LVar) σ} :
-      ℛ⟦ RIn (x∷σ) ⟧ v xIn ⊢
-        let (pc, δpc) := pattern_match_val p v in
-        knowing (w1 := wmatchvar w xIn p pc) (acc_matchvar_right (x := x) pc)
-        (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc
-           (wmatchvar_patternvars pc : NamedEnv (Term (wmatchvar w xIn p pc)) _)).
-    Proof.
-      pose proof (pattern_match_val_inverse_left p v) as eq.
-      destruct (pattern_match_val p v) as [pc args].
-      unfold pattern_match_val_reverse' in eq; cbn in eq.
-      unfold knowing, RVal, RNEnv, RInst.
-      crushPredEntails3.
-      exists (env.remove (x∷σ) (env.cat ι args) (ctx.in_cat_left (PatternCaseCtx pc) xIn)).
-      rewrite !instprop_subst !inst_subst.
-      rewrite inst_sub_single2 inst_pattern_match_term_reverse.
-      unfold wmatchvar_patternvars.
-      rewrite inst_eq_rect.
-      rewrite env.remove_cat_left.
-      rewrite eq_rect_sym1.
-      rewrite inst_sub_cat_right.
-      rewrite eq.
-      rewrite <-env.insert_cat_left.
-      rewrite <-H0.
-      rewrite env.insert_remove.
-      now rewrite inst_sub_cat_left.
-    Qed.
+    (* Lemma refine_pattern_match_var {w : World} {σ} {v : Val σ} {x : LVar} {xIn : ctx.In (x∷σ) w} *)
+    (*   {p : Pattern (N:=LVar) σ} : *)
+    (*   ℛ⟦ RIn (x∷σ) ⟧ v xIn ⊢ *)
+    (*     let (pc, δpc) := pattern_match_val p v in *)
+    (*     knowing (w1 := wmatchvar w xIn p pc) (acc_matchvar_right (x := x) pc) *)
+    (*     (ℛ⟦ RNEnv LVar (PatternCaseCtx pc) ⟧  δpc *)
+    (*        (wmatchvar_patternvars pc : NamedEnv (Term (wmatchvar w xIn p pc)) _)). *)
+    (* Proof. *)
+    (*   pose proof (pattern_match_val_inverse_left p v) as eq. *)
+    (*   destruct (pattern_match_val p v) as [pc args]. *)
+    (*   unfold pattern_match_val_reverse' in eq; cbn in eq. *)
+    (*   unfold knowing, RVal, RNEnv, RInst. *)
+    (*   crushPredEntails3. *)
+    (*   exists (env.remove (x∷σ) (env.cat ι args) (ctx.in_cat_left (PatternCaseCtx pc) xIn)). *)
+    (*   rewrite !instprop_subst !inst_subst. *)
+    (*   rewrite inst_sub_single2 inst_pattern_match_term_reverse. *)
+    (*   unfold wmatchvar_patternvars. *)
+    (*   rewrite inst_eq_rect. *)
+    (*   rewrite env.remove_cat_left. *)
+    (*   rewrite eq_rect_sym1. *)
+    (*   rewrite inst_sub_cat_right. *)
+    (*   rewrite eq. *)
+    (*   rewrite <-env.insert_cat_left. *)
+    (*   rewrite <-H0. *)
+    (*   rewrite env.insert_remove. *)
+    (*   now rewrite inst_sub_cat_left. *)
+    (* Qed. *)
 
     Lemma refine_unfreshen_patterncaseenv {N : Set} {w : World} {Σ} {n : N -> LVar} {σ}
       {p : Pattern (N:=N) σ} {pc : PatternCase (freshen_pattern n Σ p)}

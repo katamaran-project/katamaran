@@ -218,18 +218,35 @@ Module Type ShallowExecOn
 
     Section PatternMatching.
 
-      Definition demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ) :
-        CStoreSpec Γ Γ (MatchResult pat) :=
-        lift_purespec (CPureSpec.demonic_pattern_match pat v).
-      #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
+      Definition demonic_if {Γ} (v : Val ty.bool) : CStoreSpec Γ Γ bool :=
+        lift_purespec
+          (CPureSpec.demonic_binary
+             (CPureSpec.bind (CPureSpec.assume_formula (true = v))
+                (fun _ : unit => CPureSpec.pure true))
+             (CPureSpec.bind (CPureSpec.assume_formula (false = v))
+                (fun _ : unit => CPureSpec.pure false))).
+      #[global] Arguments demonic_if {Γ} v.
 
-      Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ)
-        (Φ : MatchResult pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
-        demonic_pattern_match pat v Φ δ h <-> Φ (pattern_match_val pat v) δ h.
+      Lemma wp_demonic_if {Γ} (v : Val ty.bool)
+        (Φ : bool -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
+        demonic_if v Φ δ h <-> Φ v δ h.
       Proof.
-        unfold demonic_pattern_match, lift_purespec.
-        now rewrite CPureSpec.wp_demonic_pattern_match.
-      Qed.
+        unfold demonic_if, lift_purespec.
+
+      Admitted.
+
+      (* Definition demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ) : *)
+      (*   CStoreSpec Γ Γ (MatchResult pat) := *)
+      (*   lift_purespec (CPureSpec.demonic_pattern_match pat v). *)
+      (* #[global] Arguments demonic_pattern_match {N Γ σ} pat v. *)
+
+      (* Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ) *)
+      (*   (Φ : MatchResult pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) : *)
+      (*   demonic_pattern_match pat v Φ δ h <-> Φ (pattern_match_val pat v) δ h. *)
+      (* Proof. *)
+      (*   unfold demonic_pattern_match, lift_purespec. *)
+      (*   now rewrite CPureSpec.wp_demonic_pattern_match. *)
+      (* Qed. *)
 
     End PatternMatching.
 
@@ -332,6 +349,10 @@ Module Type ShallowExecOn
               exec_aux k
           | stm_fail _ s =>
               block
+          | stm_if c s1 s2 =>
+              v <- exec_aux c ;;
+              v <- demonic_if ;;
+
           | stm_pattern_match s pat rhs =>
               v  <- exec_aux s ;;
               '(existT pc δpc) <- demonic_pattern_match pat v ;;

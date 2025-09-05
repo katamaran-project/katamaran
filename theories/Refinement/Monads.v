@@ -788,121 +788,121 @@ Module Type RefinementMonadsOn
       now iApply (refine_unfreshen_patterncaseenv with "Hargs").
     Qed.
 
-    Lemma refine_pattern_match_var {N : Set} n {x σ} (pat : Pattern (N:=N) σ) {w} :
-      ⊢ ℛ⟦RIn (x∷σ) -> RPureSpec (RMatchResult pat)⟧
-        (CPureSpec.new_pattern_match pat)
-        (SPureSpec.new_pattern_match_var (w := w) n pat).
-    Proof.
-      iIntros "%v %sv Hv %post %spost Hpost".
-      unfold SPureSpec.new_pattern_match_var, CPureSpec.new_pattern_match, CPureSpec.pure.
-      iIntros "Hsp".
-      iPoseProof (refine_pattern_match_var (p := freshen_pattern n w pat) with "Hv") as "Hpm".
-      rewrite <- (pattern_match_val_freshen n pat (Σ := w)).
-      destruct pattern_match_val as [pc vs]. cbn - [acc_trans RSat].
-      iSpecialize ("Hsp" $! pc).
-      iSpecialize ("Hpost" $! _ (acc_matchvar_right pc)).
-      iDestruct (knowing_assuming with "[$Hpm $Hsp]") as "H".
-      iDestruct (knowing_assuming with "[$H $Hpost]") as "H".
-      iApply (knowing_pure (acc_matchvar_right pc)).
-      iApply (knowing_proper (ω := acc_matchvar_right pc) _ _ with "H").
-      iIntros "[[Hargs Hsp] Hpost]".
-      iApply ("Hpost" with "[Hargs] Hsp").
-      iExists eq_refl; cbn.
-      now iApply (refine_unfreshen_patterncaseenv with "Hargs").
-    Qed.
+    (* Lemma refine_pattern_match_var {N : Set} n {x σ} (pat : Pattern (N:=N) σ) {w} : *)
+    (*   ⊢ ℛ⟦RIn (x∷σ) -> RPureSpec (RMatchResult pat)⟧ *)
+    (*     (CPureSpec.new_pattern_match pat) *)
+    (*     (SPureSpec.new_pattern_match_var (w := w) n pat). *)
+    (* Proof. *)
+    (*   iIntros "%v %sv Hv %post %spost Hpost". *)
+    (*   unfold SPureSpec.new_pattern_match_var, CPureSpec.new_pattern_match, CPureSpec.pure. *)
+    (*   iIntros "Hsp". *)
+    (*   iPoseProof (refine_pattern_match_var (p := freshen_pattern n w pat) with "Hv") as "Hpm". *)
+    (*   rewrite <- (pattern_match_val_freshen n pat (Σ := w)). *)
+    (*   destruct pattern_match_val as [pc vs]. cbn - [acc_trans RSat]. *)
+    (*   iSpecialize ("Hsp" $! pc). *)
+    (*   iSpecialize ("Hpost" $! _ (acc_matchvar_right pc)). *)
+    (*   iDestruct (knowing_assuming with "[$Hpm $Hsp]") as "H". *)
+    (*   iDestruct (knowing_assuming with "[$H $Hpost]") as "H". *)
+    (*   iApply (knowing_pure (acc_matchvar_right pc)). *)
+    (*   iApply (knowing_proper (ω := acc_matchvar_right pc) _ _ with "H"). *)
+    (*   iIntros "[[Hargs Hsp] Hpost]". *)
+    (*   iApply ("Hpost" with "[Hargs] Hsp"). *)
+    (*   iExists eq_refl; cbn. *)
+    (*   now iApply (refine_unfreshen_patterncaseenv with "Hargs"). *)
+    (* Qed. *)
 
-    Lemma refine_new_pattern_match' {N : Set} n σ (pat : Pattern (N:=N) σ) {w} :
-      ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧
-        (CPureSpec.new_pattern_match pat)
-        (SPureSpec.new_pattern_match' (w := w) n pat).
-    Proof.
-      unfold SPureSpec.new_pattern_match'.
-      iIntros "%v %sv rv".
-      destruct sv.
-      now iApply refine_pattern_match_var.
-      all: now iApply refine_new_pattern_match_regular.
-    Qed.
+    (* Lemma refine_new_pattern_match' {N : Set} n σ (pat : Pattern (N:=N) σ) {w} : *)
+    (*   ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧ *)
+    (*     (CPureSpec.new_pattern_match pat) *)
+    (*     (SPureSpec.new_pattern_match' (w := w) n pat). *)
+    (* Proof. *)
+    (*   unfold SPureSpec.new_pattern_match'. *)
+    (*   iIntros "%v %sv rv". *)
+    (*   destruct sv. *)
+    (*   now iApply refine_pattern_match_var. *)
+    (*   all: now iApply refine_new_pattern_match_regular. *)
+    (* Qed. *)
 
-    Lemma refine_new_pattern_match {N : Set} n σ (pat : Pattern (N:=N) σ) {w} :
-      ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧
-        (CPureSpec.new_pattern_match pat)
-        (SPureSpec.new_pattern_match (w := w) n pat).
-    Proof.
-      induction pat; iIntros "%v %sv Hv";
-        cbn [SPureSpec.new_pattern_match];
-        rsolve.
-      - cbn; rsolve.
-      - destruct (term_get_val_spec sv) as [cv ?|]; cbn.
-        + subst. iDestruct (refine_term_val2  with "Hv") as "<-"; cbn.
-          rsolve.
-        + iApply (refine_new_pattern_match' with "Hv").
-      - now iApply (refine_new_pattern_match' with "Hv").
-      - destruct (term_get_pair_spec sv) as [[? ?] eq|].
-        + iApply (refine_pure (RA := RMatchResult _) with "[Hv]").
-          destruct v as [v1 v2].
-          iPoseProof (eqₚ_triv (vt2 := term_binop bop.pair t t0) eq) as "Heq".
-          iDestruct (RVal_eqₚ with "[$Hv $Heq]") as "Hv".
-          iDestruct (RVal_pair with "Hv") as "[Hv1 Hv2]".
-          rsolve.
-        + now iApply (refine_new_pattern_match' with "Hv").
-      - destruct (term_get_sum_spec sv) as [[] eq|].
-        + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
-          { iApply (eqₚ_triv (vt2 := term_inl t) eq). }
-          iDestruct (RVal_invert_inl with "Hv") as "[%vl [-> Hv]]".
-          cbn; rsolve.
-        + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
-          { iApply (eqₚ_triv (vt2 := term_inr t) eq). }
-          iDestruct (RVal_invert_inr with "Hv") as "[%vl [-> Hv]]".
-          cbn; rsolve.
-        + now iApply (refine_new_pattern_match' with "Hv").
-      - cbn; rsolve.
-      - destruct (term_get_val_spec sv) as [? ->|].
-        + iDestruct (refine_term_val2 with "Hv") as "->".
-          cbn; rsolve.
-        + now iApply (refine_new_pattern_match' with "Hv").
-      - now iApply (refine_new_pattern_match').
-      - destruct (term_get_val_spec sv) as [? ->|].
-        + iDestruct (refine_term_val2 with "Hv") as "->".
-          cbn; rsolve.
-        + now iApply (refine_new_pattern_match' with "Hv").
-      - destruct (term_get_tuple_spec sv) as [? eq|].
-        + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
-          { iApply (eqₚ_triv (vt2 := term_tuple a) eq).  }
-          cbn; rsolve.
-          iApply refine_tuple_pattern_match_env.
-          now iApply RVal_tuple.
-        + now iApply refine_new_pattern_match'.
-      - destruct (term_get_record_spec sv) as [? eq|].
-        + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
-          { iApply (eqₚ_triv (vt2 := term_record R a) eq).  }
-          cbn; rsolve.
-          unfold record_pattern_match_val.
-          rewrite <-refine_record_pattern_match_env.
-          now rewrite RVal_record recordv_fold_unfold.
-        + now iApply refine_new_pattern_match'.
-      - destruct (term_get_union_spec sv) as [[K tf] Heq|].
-        + iIntros (post spost) "rpost"; cbn.
-          iPoseProof (RVal_eqₚ with "[$Hv]") as "Hv".
-          { iApply (eqₚ_triv (vt2 := term_union U K tf) Heq). }
-          rewrite <-(unionv_fold_unfold U v).
-          destruct (unionv_unfold U v) as [K' vf].
-          iDestruct (RVal_union_invertK with "Hv") as "->".
-          rewrite RVal_union.
-          iPoseProof (H K with "Hv") as "H".
-          unfold CPureSpec.new_pattern_match; cbn.
-          rewrite unionv_unfold_fold; cbn.
-          destruct (pattern_match_val (p K) vf) as [pc δpc] eqn:?.
-          iApply ("H" $! (fun '(existT pc δpc) => post (existT (existT K pc) δpc)) with "[rpost]").
-          clear.
-          iIntros (w2 ω2) "!> %mr %smr Hmr".
-          destruct mr as [pc' δargs].
-          destruct smr as [spc' sδargs].
-          iDestruct "Hmr" as "[%eq H2]"; subst; cbn.
-          rewrite forgetting_unconditionally.
-          iApply "rpost".
-          now iExists eq_refl.
-        + now iApply refine_new_pattern_match'.
-    Qed.
+    (* Lemma refine_new_pattern_match {N : Set} n σ (pat : Pattern (N:=N) σ) {w} : *)
+    (*   ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧ *)
+    (*     (CPureSpec.new_pattern_match pat) *)
+    (*     (SPureSpec.new_pattern_match (w := w) n pat). *)
+    (* Proof. *)
+    (*   induction pat; iIntros "%v %sv Hv"; *)
+    (*     cbn [SPureSpec.new_pattern_match]; *)
+    (*     rsolve. *)
+    (*   - cbn; rsolve. *)
+    (*   - destruct (term_get_val_spec sv) as [cv ?|]; cbn. *)
+    (*     + subst. iDestruct (refine_term_val2  with "Hv") as "<-"; cbn. *)
+    (*       rsolve. *)
+    (*     + iApply (refine_new_pattern_match' with "Hv"). *)
+    (*   - now iApply (refine_new_pattern_match' with "Hv"). *)
+    (*   - destruct (term_get_pair_spec sv) as [[? ?] eq|]. *)
+    (*     + iApply (refine_pure (RA := RMatchResult _) with "[Hv]"). *)
+    (*       destruct v as [v1 v2]. *)
+    (*       iPoseProof (eqₚ_triv (vt2 := term_binop bop.pair t t0) eq) as "Heq". *)
+    (*       iDestruct (RVal_eqₚ with "[$Hv $Heq]") as "Hv". *)
+    (*       iDestruct (RVal_pair with "Hv") as "[Hv1 Hv2]". *)
+    (*       rsolve. *)
+    (*     + now iApply (refine_new_pattern_match' with "Hv"). *)
+    (*   - destruct (term_get_sum_spec sv) as [[] eq|]. *)
+    (*     + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv". *)
+    (*       { iApply (eqₚ_triv (vt2 := term_inl t) eq). } *)
+    (*       iDestruct (RVal_invert_inl with "Hv") as "[%vl [-> Hv]]". *)
+    (*       cbn; rsolve. *)
+    (*     + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv". *)
+    (*       { iApply (eqₚ_triv (vt2 := term_inr t) eq). } *)
+    (*       iDestruct (RVal_invert_inr with "Hv") as "[%vl [-> Hv]]". *)
+    (*       cbn; rsolve. *)
+    (*     + now iApply (refine_new_pattern_match' with "Hv"). *)
+    (*   - cbn; rsolve. *)
+    (*   - destruct (term_get_val_spec sv) as [? ->|]. *)
+    (*     + iDestruct (refine_term_val2 with "Hv") as "->". *)
+    (*       cbn; rsolve. *)
+    (*     + now iApply (refine_new_pattern_match' with "Hv"). *)
+    (*   - now iApply (refine_new_pattern_match'). *)
+    (*   - destruct (term_get_val_spec sv) as [? ->|]. *)
+    (*     + iDestruct (refine_term_val2 with "Hv") as "->". *)
+    (*       cbn; rsolve. *)
+    (*     + now iApply (refine_new_pattern_match' with "Hv"). *)
+    (*   - destruct (term_get_tuple_spec sv) as [? eq|]. *)
+    (*     + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv". *)
+    (*       { iApply (eqₚ_triv (vt2 := term_tuple a) eq).  } *)
+    (*       cbn; rsolve. *)
+    (*       iApply refine_tuple_pattern_match_env. *)
+    (*       now iApply RVal_tuple. *)
+    (*     + now iApply refine_new_pattern_match'. *)
+    (*   - destruct (term_get_record_spec sv) as [? eq|]. *)
+    (*     + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv". *)
+    (*       { iApply (eqₚ_triv (vt2 := term_record R a) eq).  } *)
+    (*       cbn; rsolve. *)
+    (*       unfold record_pattern_match_val. *)
+    (*       rewrite <-refine_record_pattern_match_env. *)
+    (*       now rewrite RVal_record recordv_fold_unfold. *)
+    (*     + now iApply refine_new_pattern_match'. *)
+    (*   - destruct (term_get_union_spec sv) as [[K tf] Heq|]. *)
+    (*     + iIntros (post spost) "rpost"; cbn. *)
+    (*       iPoseProof (RVal_eqₚ with "[$Hv]") as "Hv". *)
+    (*       { iApply (eqₚ_triv (vt2 := term_union U K tf) Heq). } *)
+    (*       rewrite <-(unionv_fold_unfold U v). *)
+    (*       destruct (unionv_unfold U v) as [K' vf]. *)
+    (*       iDestruct (RVal_union_invertK with "Hv") as "->". *)
+    (*       rewrite RVal_union. *)
+    (*       iPoseProof (H K with "Hv") as "H". *)
+    (*       unfold CPureSpec.new_pattern_match; cbn. *)
+    (*       rewrite unionv_unfold_fold; cbn. *)
+    (*       destruct (pattern_match_val (p K) vf) as [pc δpc] eqn:?. *)
+    (*       iApply ("H" $! (fun '(existT pc δpc) => post (existT (existT K pc) δpc)) with "[rpost]"). *)
+    (*       clear. *)
+    (*       iIntros (w2 ω2) "!> %mr %smr Hmr". *)
+    (*       destruct mr as [pc' δargs]. *)
+    (*       destruct smr as [spc' sδargs]. *)
+    (*       iDestruct "Hmr" as "[%eq H2]"; subst; cbn. *)
+    (*       rewrite forgetting_unconditionally. *)
+    (*       iApply "rpost". *)
+    (*       now iExists eq_refl. *)
+    (*     + now iApply refine_new_pattern_match'. *)
+    (* Qed. *)
 
     Lemma refine_debug `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RMsg _ (RPureSpec RA -> RPureSpec RA)⟧

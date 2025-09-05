@@ -142,12 +142,9 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       (k : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_debugk k ⟩ ---> ⟨ γ , μ , δ , k ⟩
 
-  | st_pattern_match
-      {σ} (s : Stm Γ σ) (pat : Pattern σ)
-      (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
-      ⟨ γ , μ , δ , stm_pattern_match s pat rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_bind s (fun v => let (pc,δpc) := pattern_match_val pat v
-                                         in stm_block δpc (rhs pc))
+  | st_if (c : Stm Γ ty.bool) (s1 s2 : Stm Γ τ) :
+      ⟨ γ , μ , δ , stm_if c s1 s2 ⟩ --->
+      ⟨ γ , μ , δ , stm_bind c (fun v => if v then s1 else s2)
       ⟩
 
   where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" :=
@@ -251,11 +248,15 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         forall [γ2 μ2 δ2 s2],
           ⟨ γ, μ, δ, stm_debugk k ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
         stc_debugk : StDebugk (st_debugk γ μ δ k).
-      Variant StPatternMatch {σ} {s : Stm Γ σ} {pat : Pattern σ}
-        {rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ} :
-        forall [γ2 μ2 δ2 s2],
-          ⟨ γ, μ, δ, stm_pattern_match s pat rhs ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
-        stc_match : StPatternMatch (st_pattern_match γ μ δ s pat rhs).
+      Variant StIf {c : Stm Γ ty.bool} {s1 s2 : Stm Γ τ} :
+        forall [γ2 μ2 δ2 s],
+          ⟨ γ, μ, δ, stm_if c s1 s2 ⟩ ---> ⟨ γ2, μ2, δ2, s ⟩ -> Prop :=
+        stc_if : StIf (st_if γ μ δ c s1 s2).
+      (* Variant StPatternMatch {σ} {s : Stm Γ σ} {pat : Pattern σ} *)
+      (*   {rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ} : *)
+      (*   forall [γ2 μ2 δ2 s2], *)
+      (*     ⟨ γ, μ, δ, stm_pattern_match s pat rhs ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop := *)
+      (*   stc_match : StPatternMatch (st_pattern_match γ μ δ s pat rhs). *)
     End WithParamaters.
 
     Definition smallinvdispatch {Γ τ γ μ δ} (s1 : Stm Γ τ) :
@@ -273,7 +274,8 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
        | stm_seq _ _             => StSeq
        | stm_assertk _ _ _       => StAssertk
        | stm_fail _ _            => fun _ _ _ _ _ => False
-       | stm_pattern_match _ _ _ => StPatternMatch
+       | stm_if _ _ _            => StIf
+       (* | stm_pattern_match _ _ _ => StPatternMatch *)
        | stm_read_register _     => StReadRegister
        | stm_write_register _ _  => StWriteRegister
        | stm_bind s k            => StBind
@@ -388,7 +390,8 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         | @stm_lemmak           => idtac
         | @stm_assertk          => idtac
         | @stm_fail             => idtac
-        | @stm_pattern_match    => idtac
+        | @stm_if               => idtac
+        (* | @stm_pattern_match    => idtac *)
         | @stm_read_register    => idtac
         | @stm_write_register   => idtac
         | @stm_debugk           => idtac

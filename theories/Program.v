@@ -115,8 +115,9 @@ Module Type ProgramMixin (Import B : Base)
         | stm_seq s k => StmWellFormed s /\ StmWellFormed k
         | stm_assertk e1 e2 k => StmWellFormed k
         | stm_fail _ s => True
-        | stm_pattern_match s pat rhs =>
-            StmWellFormed s /\ (forall pc, StmWellFormed (rhs pc))
+        | stm_if c s1 s2 => StmWellFormed c /\ StmWellFormed s1 /\ StmWellFormed s2
+        (* | stm_pattern_match s pat rhs => *)
+        (*     StmWellFormed s /\ (forall pc, StmWellFormed (rhs pc)) *)
         | stm_read_register reg => True
         | stm_write_register reg e => True
         | @stm_bind _ _ σ s k => StmWellFormed s /\
@@ -149,11 +150,12 @@ Module Type ProgramMixin (Import B : Base)
       | stm_seq s k => InvokedByStmList s ++ InvokedByStmList k
       | stm_assertk e1 e2 k => InvokedByStmList k
       | stm_fail _ s => []
-      | stm_pattern_match s pat rhs =>
-          InvokedByStmList s ++
-            List.flat_map
-            (fun pc => InvokedByStmList (rhs pc))
-            (enum (PatternCase pat))
+      | stm_if c s1 s2 => InvokedByStmList c ++ InvokedByStmList s1 ++ InvokedByStmList s2
+      (* | stm_pattern_match s pat rhs => *)
+      (*     InvokedByStmList s ++ *)
+      (*       List.flat_map *)
+      (*       (fun pc => InvokedByStmList (rhs pc)) *)
+      (*       (enum (PatternCase pat)) *)
       | stm_read_register reg => []
       | stm_write_register reg e => []
       | stm_bind s k => [] (* dummy *)
@@ -187,12 +189,12 @@ Module Type ProgramMixin (Import B : Base)
           | |- _ ∧ _ => split
           end;
         eauto.
-      - intros pc. apply H.
-        + rewrite forallb_forall in Hbindfree1. apply Hbindfree1.
-          apply elem_of_list_In, elem_of_enum.
-        + intros h hIn. apply Hsub1, elem_of_list_In, in_flat_map.
-          exists pc. split; apply elem_of_list_In; auto.
-          apply elem_of_enum.
+      (* - intros pc. apply H. *)
+      (*   + rewrite forallb_forall in Hbindfree1. apply Hbindfree1. *)
+      (*     apply elem_of_list_In, elem_of_enum. *)
+      (*   + intros h hIn. apply Hsub1, elem_of_list_In, in_flat_map. *)
+      (*     exists pc. split; apply elem_of_list_In; auto. *)
+      (*     apply elem_of_enum. *)
     Qed.
 
     (* For bindfree statements, the [InvokedByStmList] function correctly
