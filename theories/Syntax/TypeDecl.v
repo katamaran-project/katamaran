@@ -364,53 +364,21 @@ Module ty.
         (* | record R => eq_dec (A := recordt R) *)
         end.
 
-    #[export] Instance RV_eq_dec : forall σ, EqDec (Val σ) :=
-      fix eqd σ :=
-        match σ with
-        | int      => eq_dec (A := Z)
-        | bool     => eq_dec (A := Datatypes.bool)
-        | string   => eq_dec (A := String.string)
-        | list σ   => eq_dec (A := Datatypes.list (Val σ))
-        | prod σ τ => eq_dec (A := Datatypes.prod (Val σ) (Val τ))
-        | sum σ τ  => eq_dec (A := Datatypes.sum (Val σ) (Val τ))
-        | unit     => eq_dec (A := Datatypes.unit)
-        (* | enum E   => eq_dec (A := enumt E) *)
-        | bvec n   => eq_dec (A := bv n)
-        (* | tuple σs => ctx.Ctx_rect *)
-        (*                 (fun τs => EqDec (EnvRec Val τs)) *)
-        (*                 (eq_dec (A := Datatypes.unit)) *)
-        (*                 (fun τs IHτs τ => *)
-        (*                    @eq_dec *)
-        (*                      (Datatypes.prod (EnvRec Val τs) (Val τ)) *)
-        (*                      (prod_eqdec IHτs (eqd τ))) *)
-        (*                 σs *)
-        (* | union U  => eq_dec (A := uniont U) *)
-        (* | record R => eq_dec (A := recordt R) *)
-        end.
+    #[export] Instance RV_eq_dec : forall A, EqDec A -> EqDec (RV A).
+    Proof.
+      intros.
+      intros x y.
+      destruct x; destruct y.
+      - destruct (X a a0). left. subst. auto.
+        right. intros F. inversion F. subst. contradiction.
+      - right. intros. congruence.
+      - right. intros. congruence.
+      - destruct (X a a1); destruct (X a0 a2); try (now subst; left; auto);
+        right; intros F; inversion F; subst; contradiction.
+    Qed.
 
-        #[export] Instance RelVal_eq_dec : forall σ, EqDec (RelVal σ) :=
-      fix eqd σ :=
-        match σ with
-        | int      => eq_dec (A := Z)
-        | bool     => eq_dec (A := Datatypes.bool)
-        | string   => eq_dec (A := String.string)
-        | list σ   => eq_dec (A := Datatypes.list (Val σ))
-        | prod σ τ => eq_dec (A := Datatypes.prod (Val σ) (Val τ))
-        | sum σ τ  => eq_dec (A := Datatypes.sum (Val σ) (Val τ))
-        | unit     => eq_dec (A := Datatypes.unit)
-        (* | enum E   => eq_dec (A := enumt E) *)
-        | bvec n   => eq_dec (A := bv n)
-        (* | tuple σs => ctx.Ctx_rect *)
-        (*                 (fun τs => EqDec (EnvRec Val τs)) *)
-        (*                 (eq_dec (A := Datatypes.unit)) *)
-        (*                 (fun τs IHτs τ => *)
-        (*                    @eq_dec *)
-        (*                      (Datatypes.prod (EnvRec Val τs) (Val τ)) *)
-        (*                      (prod_eqdec IHτs (eqd τ))) *)
-        (*                 σs *)
-        (* | union U  => eq_dec (A := uniont U) *)
-        (* | record R => eq_dec (A := recordt R) *)
-        end.
+      #[export] Instance RelVal_eq_dec : forall σ, EqDec (RelVal σ) :=
+      fun σ => RV_eq_dec _ (Val_eq_dec _).
 
     (* Lemma unionv_fold_inj {U} (v1 v2 : {K : unionk U & Val (unionk_ty U K)}) : *)
     (*   unionv_fold U v1 = unionv_fold U v2 <-> v1 = v2. *)
@@ -448,38 +416,38 @@ Module ty.
     Proof. apply uip. Qed.
 
   End WithTypeDef.
-  #[global] Arguments int {TK}.
-  #[global] Arguments bool {TK}.
-  #[global] Arguments string {TK}.
-  #[global] Arguments list {TK} σ.
-  #[global] Arguments prod {TK} σ τ.
-  #[global] Arguments sum {TK} σ τ.
-  #[global] Arguments unit {TK}.
-  #[global] Arguments enum {TK} E.
-  #[global] Arguments bvec {TK} n%_nat_scope.
-  #[global] Arguments tuple {TK} σs%_ctx_scope.
-  #[global] Arguments union {TK} U.
-  #[global] Arguments record {TK} R.
+  (* #[global] Arguments int {TK}. *)
+  (* #[global] Arguments bool {TK}. *)
+  (* #[global] Arguments string {TK}. *)
+  #[global] Arguments list (* {TK} *) σ.
+  #[global] Arguments prod (* {TK} *) σ τ.
+  #[global] Arguments sum (* {TK} *) σ τ.
+  #[global] Arguments unit (* {TK} *).
+  (* #[global] Arguments enum {TK} E. *)
+  #[global] Arguments bvec (* {TK} *) n%_nat_scope.
+  (* #[global] Arguments tuple {TK} σs%_ctx_scope. *)
+  (* #[global] Arguments union {TK} U. *)
+  (* #[global] Arguments record {TK} R. *)
 
 End ty.
 Export ty
-  ( TypeDeclKit, enumt, uniont, recordt,
+  ( TypeDeclKit, (* enumt, uniont, recordt, *)
 
     TypeDenoteKit,
     Ty, Val,
 
-    TypeDefKit, enum_eqdec, enumt_eqdec, enumt_finite,
-    enumi,
-    unioni,
-    recordi,
-    union_eqdec, uniont_eqdec, unionk, unionk_eqdec, unionk_finite, unionk_ty,
-    unionv_fold, unionv_unfold, record_eqdec, recordt_eqdec, recordf,
-    recordf_ty, recordv_fold, recordv_unfold,
+    TypeDefKit(* , enum_eqdec, enumt_eqdec, enumt_finite, *)
+    (* enumi, *)
+    (* unioni, *)
+    (* recordi, *)
+    (* union_eqdec, uniont_eqdec, unionk, unionk_eqdec, unionk_finite, unionk_ty, *)
+    (* unionv_fold, unionv_unfold, record_eqdec, recordt_eqdec, recordf, *)
+    (* recordf_ty, recordv_fold, recordv_unfold, *)
 
-    unionv_fold_unfold, unionv_unfold_fold,
-    unionv_fold_inj, unionv_unfold_inj,
-    recordv_fold_unfold, recordv_unfold_fold,
-    recordv_fold_inj, recordv_unfold_inj
+    (* unionv_fold_unfold, unionv_unfold_fold, *)
+    (* unionv_fold_inj, unionv_unfold_inj, *)
+    (* recordv_fold_unfold, recordv_unfold_fold, *)
+    (* recordv_fold_inj, recordv_unfold_inj *)
   ).
 Export (hints) ty.
 
@@ -492,26 +460,26 @@ Module Type Types.
 
 End Types.
 
-#[local] Instance DefaultTypeDeclKit : TypeDeclKit :=
-  {| enumi := Empty_set;
-     unioni := Empty_set;
-     recordi := Empty_set;
-  |}.
+#[local] Instance DefaultTypeDeclKit : TypeDeclKit := ty.Build_TypeDeclKit.
+  (* {| enumi := Empty_set; *)
+  (*    unioni := Empty_set; *)
+  (*    recordi := Empty_set; *)
+  (* |}. *)
 
-#[local] Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit :=
-  {| enumt _ := Empty_set;
-     uniont _ := Empty_set;
-     recordt _ := Empty_set;
-  |}.
+#[local] Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit := ty.Build_TypeDenoteKit _.
+  (* {| enumt _ := Empty_set; *)
+  (*    uniont _ := Empty_set; *)
+  (*    recordt _ := Empty_set; *)
+  (* |}. *)
 
-#[local,refine] Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit :=
-  {| unionk _            := Empty_set;
-     unionk_ty _ _       := ty.unit;
-     unionv_fold         := Empty_set_rec _;
-     unionv_unfold       := Empty_set_rec _;
-     recordf             := Empty_set;
-     recordf_ty          := Empty_set_rec _;
-     recordv_fold        := Empty_set_rec _;
-     recordv_unfold      := Empty_set_rec _;
-  |}.
+#[local,refine] Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit := ty.Build_TypeDefKit _ _.
+  (* {| unionk _            := Empty_set; *)
+  (*    unionk_ty _ _       := ty.unit; *)
+  (*    unionv_fold         := Empty_set_rec _; *)
+  (*    unionv_unfold       := Empty_set_rec _; *)
+  (*    recordf             := Empty_set; *)
+  (*    recordf_ty          := Empty_set_rec _; *)
+  (*    recordv_fold        := Empty_set_rec _; *)
+  (*    recordv_unfold      := Empty_set_rec _; *)
+  (* |}. *)
 Proof. all: abstract (intros []). Defined.
