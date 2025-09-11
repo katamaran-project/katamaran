@@ -108,28 +108,28 @@ Module uop.
     | neg                              | neg => left eq_refl
     | not                              | not => left eq_refl
     | rev                              | rev => left eq_refl
-    | @sext (* _ *) m1 ?(n) p1               | @sext (* _ *) m2 n p2 with eq_dec m1 m2 => {
+    | @sext _ m1 ?(n) p1               | @sext _ m2 n p2 with eq_dec m1 m2 => {
       | left _ => left _
       | right _ => right _
       }
-    | @zext (* _ *) m1 ?(n) p1               | @zext (* _ *) m2 n p2 with eq_dec m1 m2 => {
+    | @zext _ m1 ?(n) p1               | @zext _ m2 n p2 with eq_dec m1 m2 => {
       | left _ => left _
       | right _ => right _
       }
     | get_slice_int                    | get_slice_int => left eq_refl
-    | @unsigned (* _ *) m                    | @unsigned (* _ *) n with eq_dec m n => {
+    | @unsigned _ m                    | @unsigned _ n with eq_dec m n => {
       | left _ => left _
       | right _ => right _
       }
-    | @signed (* _ *) m                      | @signed (* _ *) n with eq_dec m n => {
+    | @signed _ m                      | @signed _ n with eq_dec m n => {
       | left _ => left _
       | right _ => right _
       }
-    | @truncate (* _ *) m1 ?(n) p1           | @truncate (* _ *) m2 n p2 with eq_dec m1 m2 => {
+    | @truncate _ m1 ?(n) p1           | @truncate _ m2 n p2 with eq_dec m1 m2 => {
       | left _ => left _
       | right _ => right _
       }
-    | @vector_subrange (* _ *) n1 s1 ?(l) p1 | @vector_subrange (* _ *) n2 s2 l p2 with eq_dec n1 n2, eq_dec s1 s2 => {
+    | @vector_subrange _ n1 s1 ?(l) p1 | @vector_subrange _ n2 s2 l p2 with eq_dec n1 n2, eq_dec s1 s2 => {
       | left _  | left _  => left _
       | left _  | right _ => right _
       | right _ | _       => right _
@@ -139,7 +139,7 @@ Module uop.
       | left _ => left _
       | right _ => right _
       }
-    | @bvtake (* _ *) ?(m) n1                | @bvtake (* _ *) m n2 with eq_dec n1 n2 => {
+    | @bvtake _ ?(m) n1                | @bvtake _ m n2 with eq_dec n1 n2 => {
       | left _ => left _
       | right _ => right _
       }

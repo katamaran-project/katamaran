@@ -1032,15 +1032,15 @@ Module Type WorldsOn
         repₚ (T := STerm ty.bool) false t1 ∗ repₚ (T := STerm ty.bool) false t2.
     Proof. unfold repₚ, bi_pred, bi_sep, sepₚ. crushPredEntails2; now destruct (inst t1 ι), (inst t2 ι). Qed.
 
-    Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) :
-      repₚ (T := STerm _) (vs, v) (term_tuple (E ► (σ ↦ d))) ⊣⊢
-      repₚ (T := STerm _) vs (term_tuple E) ∗ repₚ (T := STerm σ) v d.
-    Proof. unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0| now subst ]. Qed.
+    (* Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) : *)
+    (*   repₚ (T := STerm _) (vs, v) (term_tuple (E ► (σ ↦ d))) ⊣⊢ *)
+    (*   repₚ (T := STerm _) vs (term_tuple E) ∗ repₚ (T := STerm σ) v d. *)
+    (* Proof. unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0| now subst ]. Qed. *)
 
-    Lemma eqₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [ts1 ts2 : Env (Term w) Γ] [σ : Ty] (t1 t2 : Term w σ) :
-      eqₚ (T := STerm _) (term_tuple (ts1 ► (σ ↦ t1))) (term_tuple (ts2 ► (σ ↦ t2))) ⊣⊢
-      eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2) ∗ eqₚ (T := STerm σ) t1 t2.
-    Proof. unfold eqₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0 | now f_equal]. Qed.
+    (* Lemma eqₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [ts1 ts2 : Env (Term w) Γ] [σ : Ty] (t1 t2 : Term w σ) : *)
+    (*   eqₚ (T := STerm _) (term_tuple (ts1 ► (σ ↦ t1))) (term_tuple (ts2 ► (σ ↦ t2))) ⊣⊢ *)
+    (*   eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2) ∗ eqₚ (T := STerm σ) t1 t2. *)
+    (* Proof. unfold eqₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0 | now f_equal]. Qed. *)
 
     Lemma repₚ_term_bvapp {w : World} {m n : nat} {t1 : STerm (ty.bvec m) w} {t2 : STerm (ty.bvec n) w}
       {v1 : Val (ty.bvec m)} {v2 : Val (ty.bvec n)} :
@@ -1084,20 +1084,20 @@ Module Type WorldsOn
       - now f_equal.
     Qed.
 
-    Lemma repₚ_term_record {w : World} {R : recordi} {vs : NamedEnv Val (recordf_ty R)} {svs : NamedEnv (Term w) (recordf_ty R)} :
-      repₚ (T := STerm _) (recordv_fold R vs) (term_record R svs) ⊣⊢ repₚ vs svs.
-    Proof. unfold repₚ; crushPredEntails2; [|now subst].
-           apply (f_equal (recordv_unfold R)) in H0.
-           now rewrite !recordv_unfold_fold in H0.
-    Qed.
+    (* Lemma repₚ_term_record {w : World} {R : recordi} {vs : NamedEnv Val (recordf_ty R)} {svs : NamedEnv (Term w) (recordf_ty R)} : *)
+    (*   repₚ (T := STerm _) (recordv_fold R vs) (term_record R svs) ⊣⊢ repₚ vs svs. *)
+    (* Proof. unfold repₚ; crushPredEntails2; [|now subst]. *)
+    (*        apply (f_equal (recordv_unfold R)) in H0. *)
+    (*        now rewrite !recordv_unfold_fold in H0. *)
+    (* Qed. *)
 
-    Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} :
-      eqₚ (T := STerm _) (term_record R ts1) (term_record R ts2) ⊣⊢ eqₚ ts1 ts2.
-    Proof. unfold eqₚ; crushPredEntails2.
-           - apply (f_equal (recordv_unfold R)) in H0.
-             now rewrite !recordv_unfold_fold in H0.
-           - now rewrite H0.
-    Qed.
+    (* Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} : *)
+    (*   eqₚ (T := STerm _) (term_record R ts1) (term_record R ts2) ⊣⊢ eqₚ ts1 ts2. *)
+    (* Proof. unfold eqₚ; crushPredEntails2. *)
+    (*        - apply (f_equal (recordv_unfold R)) in H0. *)
+    (*          now rewrite !recordv_unfold_fold in H0. *)
+    (*        - now rewrite H0. *)
+    (* Qed. *)
 
     Lemma repₚ_namedenv_nil {w : World} {N} :
       repₚ (w := w) (T := fun w => NamedEnv (Term w) ([ctx] : NCtx N Ty)) [env] [env] ⊣⊢ emp.

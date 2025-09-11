@@ -61,12 +61,10 @@ Module ty.
 
   Section WithTypeDecl.
 
-    Context {TK : TypeDeclKit}.
-
     Local Unset Elimination Schemes.
     Local Set Transparent Obligations.
 
-    Inductive Ty : Set :=
+    Inductive Ty {TK : TypeDeclKit} : Set :=
     | int
     | bool
     | string
@@ -81,6 +79,8 @@ Module ty.
     (* | record (R : recordi) *)
     .
     Derive NoConfusion for Ty.
+    Context {TK : TypeDeclKit}.
+
 
     (* convenience definition. *)
     Definition option : Ty -> Ty := fun T => sum T unit.
@@ -135,10 +135,7 @@ Module ty.
 
   Section WithTypeDenote.
 
-    Context {TDC : TypeDeclKit}.
-    Context {TDN : TypeDenoteKit TDC}.
-
-    Fixpoint Val (σ : Ty) : Set :=
+    Fixpoint Val {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} (σ : Ty) : Set :=
       match σ with
       | int => Z
       | bool => Datatypes.bool
@@ -178,6 +175,9 @@ Module ty.
     Definition RelVal {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} (τ : Ty) : Set :=
       RV (Val τ)
     .
+
+    Context {TDC : TypeDeclKit}.
+    Context {TDN : TypeDenoteKit TDC}.
 
     Definition projLeft {A} (rv : RelVal A) : Val A :=
       projLeftRV rv.
@@ -416,15 +416,15 @@ Module ty.
     Proof. apply uip. Qed.
 
   End WithTypeDef.
-  (* #[global] Arguments int {TK}. *)
-  (* #[global] Arguments bool {TK}. *)
-  (* #[global] Arguments string {TK}. *)
-  #[global] Arguments list (* {TK} *) σ.
-  #[global] Arguments prod (* {TK} *) σ τ.
-  #[global] Arguments sum (* {TK} *) σ τ.
-  #[global] Arguments unit (* {TK} *).
+  #[global] Arguments int {TK}.
+  #[global] Arguments bool {TK}.
+  #[global] Arguments string {TK}.
+  #[global] Arguments list {TK} σ.
+  #[global] Arguments prod {TK} σ τ.
+  #[global] Arguments sum {TK} σ τ.
+  #[global] Arguments unit {TK}.
   (* #[global] Arguments enum {TK} E. *)
-  #[global] Arguments bvec (* {TK} *) n%_nat_scope.
+  #[global] Arguments bvec {TK} n%_nat_scope.
   (* #[global] Arguments tuple {TK} σs%_ctx_scope. *)
   (* #[global] Arguments union {TK} U. *)
   (* #[global] Arguments record {TK} R. *)

@@ -1715,9 +1715,10 @@ Module Type SymPropOn
     | eterm_val     (σ : Ty) (v : Val σ) : ETerm σ
     | eterm_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (t1 : ETerm σ1) (t2 : ETerm σ2) : ETerm σ3
     | eterm_unop    {σ1 σ2} (op : UnOp σ1 σ2) (t : ETerm σ1) : ETerm σ2
-    | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs)
-    | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U)
-    | eterm_record  (R : recordi) (ts : NamedEnv ETerm (recordf_ty R)) : ETerm (ty.record R).
+    (* | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs) *)
+    (* | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U) *)
+    (* | eterm_record  (R : recordi) (ts : NamedEnv ETerm (recordf_ty R)) : ETerm (ty.record R) *)
+    .
 
     Inductive EFormula : Type :=
     | eformula_user (p : 𝑷) (ts : Env ETerm (𝑷_Ty p))
@@ -1769,9 +1770,9 @@ Module Type SymPropOn
         | term_val σ v               => eterm_val σ v
         | term_binop op t1 t2        => eterm_binop op (erase t1) (erase t2)
         | term_unop op t             => eterm_unop op (erase t)
-        | term_tuple ts              => eterm_tuple (env.map (fun _ => erase) ts)
-        | term_union U K t           => eterm_union K (erase t)
-        | term_record R ts           => eterm_record R (env.map (fun _ => erase) ts)
+        (* | term_tuple ts              => eterm_tuple (env.map (fun _ => erase) ts) *)
+        (* | term_union U K t           => eterm_union K (erase t) *)
+        (* | term_record R ts           => eterm_record R (env.map (fun _ => erase) ts) *)
         end.
 
     Definition erase_formula {Σ} : Formula Σ -> EFormula :=
@@ -1881,13 +1882,13 @@ Module Type SymPropOn
             Some (bop.eval op v1 v2)
         | @eterm_unop σ1 σ2 op t0  =>
             uop.eval op <$> inst_eterm t0
-        | @eterm_tuple σs ts =>
-            envrec.of_env (σs := σs) <$> inst_env' ι inst_eterm ts
-        | @eterm_union U K t0 =>
-            v <- inst_eterm t0 ;;
-            Some (unionv_fold U (existT K v))
-        | @eterm_record R ts =>
-            recordv_fold R <$> inst_namedenv' ι inst_eterm ts
+        (* | @eterm_tuple σs ts => *)
+        (*     envrec.of_env (σs := σs) <$> inst_env' ι inst_eterm ts *)
+        (* | @eterm_union U K t0 => *)
+        (*     v <- inst_eterm t0 ;; *)
+        (*     Some (unionv_fold U (existT K v)) *)
+        (* | @eterm_record R ts => *)
+        (*     recordv_fold R <$> inst_namedenv' ι inst_eterm ts *)
         end.
 
     Definition inst_namedenv (ι : list { σ : Ty & Val σ}) {N} {Δ : NCtx N Ty} :
@@ -2002,15 +2003,15 @@ Module Type SymPropOn
       - reflexivity.
       - now rewrite IHt1, IHt2.
       - now rewrite IHt.
-      - cbn. apply option.map_eq_some.
-        induction IH as [|Δ E σ t _ IHE IHt]; cbn in *.
-        + reflexivity.
-        + now rewrite IHt, IHE.
-      - now rewrite IHt.
-      - cbn. apply option.map_eq_some.
-        induction IH as [|Δ E [x σ] t _ IHE IHt]; cbn in *.
-        + reflexivity.
-        + now rewrite IHt, IHE.
+      (* - cbn. apply option.map_eq_some. *)
+      (*   induction IH as [|Δ E σ t _ IHE IHt]; cbn in *. *)
+      (*   + reflexivity. *)
+      (*   + now rewrite IHt, IHE. *)
+      (* - now rewrite IHt. *)
+      (* - cbn. apply option.map_eq_some. *)
+      (*   induction IH as [|Δ E [x σ] t _ IHE IHt]; cbn in *. *)
+      (*   + reflexivity. *)
+      (*   + now rewrite IHt, IHE. *)
     Qed.
 
     Lemma inst_env_erase {Σ Δ} (ts : Env (Term Σ) Δ) (ι : Valuation Σ) :

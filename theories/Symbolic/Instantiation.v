@@ -132,12 +132,12 @@ Module Type InstantiationOn
                                       (inst (Inst := @inst_term _) t2 ι)
     | term_unop op t             => uop.eval op
                                       (inst (Inst := @inst_term _) t ι)
-    | term_tuple ts              =>
-        envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι)
-    | @term_union _ U K t        => unionv_fold U (existT K (inst (Inst := inst_term) t ι))
-    | @term_record _ R ts        =>
-        let InstTerm xt := @inst_term (@type recordf Ty xt) in
-        recordv_fold R (inst (Inst := inst_env (InstSA := InstTerm)) ts ι)
+    (* | term_tuple ts              => *)
+    (*     envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι) *)
+    (* | @term_union _ U K t        => unionv_fold U (existT K (inst (Inst := inst_term) t ι)) *)
+    (* | @term_record _ R ts        => *)
+    (*     let InstTerm xt := @inst_term (@type recordf Ty xt) in *)
+    (*     recordv_fold R (inst (Inst := inst_env (InstSA := InstTerm)) ts ι) *)
     end.
   #[export] Instance lift_term {σ} : Lift (fun Σ => Term Σ σ) (Val σ) :=
     fun Σ v => term_val σ v.
@@ -213,8 +213,8 @@ Module Type InstantiationOn
     induction t; cbn; try (repeat f_equal; auto; fail).
     - unfold inst, inst_sub, inst_env.
       now rewrite env.lookup_map.
-    - f_equal. induction IH; cbn; now f_equal.
-    - f_equal. induction IH; cbn; now f_equal.
+    (* - f_equal. induction IH; cbn; now f_equal. *)
+    (* - f_equal. induction IH; cbn; now f_equal. *)
   Qed.
 
   #[export] Instance inst_lift_term {σ} : InstLift (fun Σ => Term Σ σ) (Val σ).
@@ -476,9 +476,9 @@ Module Type InstantiationOn
       Proper ((≡) ==> (≡) ==> (≡)) (term_binop (Σ:=Σ) op).
     #[export,program] Instance proper_term_unop {σ1 σ2} (op : UnOp σ1 σ2) [Σ] :
       Proper ((≡) ==> (≡)) (term_unop (Σ:=Σ) op).
-    #[export,program] Instance proper_term_tuple {Σ σs} : Proper ((≡) ==> (≡)) (@term_tuple Σ σs).
-    #[export,program] Instance proper_term_union {Σ U K} : Proper ((≡) ==> (≡)) (@term_union Σ U K).
-    #[export,program] Instance proper_term_record {Σ R} : Proper ((≡) ==> (≡)) (@term_record Σ R).
+    (* #[export,program] Instance proper_term_tuple {Σ σs} : Proper ((≡) ==> (≡)) (@term_tuple Σ σs). *)
+    (* #[export,program] Instance proper_term_union {Σ U K} : Proper ((≡) ==> (≡)) (@term_union Σ U K). *)
+    (* #[export,program] Instance proper_term_record {Σ R} : Proper ((≡) ==> (≡)) (@term_record Σ R). *)
     #[export,program] Instance proper_env_snoc {Σ σs} :
       Proper ((≡) ==> forall_relation (fun σ => (≡) ==> (≡)))
         (@env.snoc _ (Term Σ) σs).
@@ -762,67 +762,67 @@ Module Type InstantiationOn
       - dependent elimination op; cbn; try constructor; auto.
     Qed.
 
-    Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty.union U)) :
-      option { K : unionk U & Term Σ (unionk_ty U K) } :=
-      term_get_union (term_val _ v)   :=
-        Some (let (K, p) := unionv_unfold U v in existT K (term_val _ p));
-      term_get_union (term_union K t) := Some (existT K t);
-      term_get_union _ := None.
+    (* Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty.union U)) : *)
+    (*   option { K : unionk U & Term Σ (unionk_ty U K) } := *)
+    (*   term_get_union (term_val _ v)   := *)
+    (*     Some (let (K, p) := unionv_unfold U v in existT K (term_val _ p)); *)
+    (*   term_get_union (term_union K t) := Some (existT K t); *)
+    (*   term_get_union _ := None. *)
 
-    Lemma term_get_union_spec {Σ U} (s : Term Σ (ty.union U)) :
-      option.wlp
-        (fun x : {K : unionk U & Term Σ (unionk_ty U K)} =>
-           match x with
-           | existT K t =>
-             forall ι : Valuation Σ,
-               inst (T := fun Σ => Term Σ (ty.union U)) (A := uniont U) s ι =
-               unionv_fold U (@existT (unionk U) (fun K => Val (unionk_ty U K)) K (inst t ι)) :> Val (ty.union U)
-           end)
-        (term_get_union s).
-    Proof.
-      dependent elimination s; cbn; try constructor; auto.
-      destruct (unionv_unfold U v) eqn:?. intros. cbn.
-      now rewrite <- Heqs, unionv_fold_unfold.
-    Qed.
+    (* Lemma term_get_union_spec {Σ U} (s : Term Σ (ty.union U)) : *)
+    (*   option.wlp *)
+    (*     (fun x : {K : unionk U & Term Σ (unionk_ty U K)} => *)
+    (*        match x with *)
+    (*        | existT K t => *)
+    (*          forall ι : Valuation Σ, *)
+    (*            inst (T := fun Σ => Term Σ (ty.union U)) (A := uniont U) s ι = *)
+    (*            unionv_fold U (@existT (unionk U) (fun K => Val (unionk_ty U K)) K (inst t ι)) :> Val (ty.union U) *)
+    (*        end) *)
+    (*     (term_get_union s). *)
+    (* Proof. *)
+    (*   dependent elimination s; cbn; try constructor; auto. *)
+    (*   destruct (unionv_unfold U v) eqn:?. intros. cbn. *)
+    (*   now rewrite <- Heqs, unionv_fold_unfold. *)
+    (* Qed. *)
 
-    Equations(noeqns) term_get_record {R Σ} (t : Term Σ (ty.record R)) :
-      option (NamedEnv (Term Σ) (recordf_ty R)) :=
-    | term_val _ v     => (* We inlined lift here, so that user solvers that use
-                             this operation are spared with a inst_lift rewrite
-                             when pattern matching on symbolic records. *)
-                          Some (env.map (fun _ v => term_val _ v) (recordv_unfold R v))
-    | term_record R ts => Some ts
-    | _                => None.
+    (* Equations(noeqns) term_get_record {R Σ} (t : Term Σ (ty.record R)) : *)
+    (*   option (NamedEnv (Term Σ) (recordf_ty R)) := *)
+    (* | term_val _ v     => (* We inlined lift here, so that user solvers that use *)
+    (*                          this operation are spared with a inst_lift rewrite *)
+    (*                          when pattern matching on symbolic records. *) *)
+    (*                       Some (env.map (fun _ v => term_val _ v) (recordv_unfold R v)) *)
+    (* | term_record R ts => Some ts *)
+    (* | _                => None. *)
 
-    Lemma term_get_record_spec {Σ R} (s : Term Σ (ty.record R)) :
-      option.wlp
-        (fun ts =>
-           forall ι : Valuation Σ,
-             inst (T := fun Σ => Term Σ (ty.record R)) (A := recordt R) s ι =
-             recordv_fold R (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (recordf_ty R)) (A := NamedEnv Val (recordf_ty R)) ts ι))
-        (term_get_record s).
-    Proof.
-      dependent elimination s; try constructor; auto. intros ι. cbn.
-      change (v = recordv_fold R (inst (lift (recordv_unfold R v)) ι)).
-      now rewrite inst_lift, recordv_fold_unfold.
-    Qed.
+    (* Lemma term_get_record_spec {Σ R} (s : Term Σ (ty.record R)) : *)
+    (*   option.wlp *)
+    (*     (fun ts => *)
+    (*        forall ι : Valuation Σ, *)
+    (*          inst (T := fun Σ => Term Σ (ty.record R)) (A := recordt R) s ι = *)
+    (*          recordv_fold R (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (recordf_ty R)) (A := NamedEnv Val (recordf_ty R)) ts ι)) *)
+    (*     (term_get_record s). *)
+    (* Proof. *)
+    (*   dependent elimination s; try constructor; auto. intros ι. cbn. *)
+    (*   change (v = recordv_fold R (inst (lift (recordv_unfold R v)) ι)). *)
+    (*   now rewrite inst_lift, recordv_fold_unfold. *)
+    (* Qed. *)
 
-    Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty.tuple σs)) :
-      option (Env (Term Σ) σs) :=
-      (* term_get_tuple (term_val _ v)       := Some _; *)
-      (* term_get_tuple (@term_tuple _ _ ts) := Some ts; *)
-      term_get_tuple _ := None.
+    (* Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty.tuple σs)) : *)
+    (*   option (Env (Term Σ) σs) := *)
+    (*   (* term_get_tuple (term_val _ v)       := Some _; *) *)
+    (*   (* term_get_tuple (@term_tuple _ _ ts) := Some ts; *) *)
+    (*   term_get_tuple _ := None. *)
 
-    Lemma term_get_tuple_spec {Σ σs} (s : Term Σ (ty.tuple σs)) :
-      option.wlp
-        (fun ts =>
-           forall ι : Valuation Σ,
-             inst (T := fun Σ => Term Σ (ty.tuple σs)) (A := Val (ty.tuple σs)) s ι =
-             inst (term_tuple ts) ι)
-        (term_get_tuple s).
-    Proof.
-      now constructor.
-    Qed.
+    (* Lemma term_get_tuple_spec {Σ σs} (s : Term Σ (ty.tuple σs)) : *)
+    (*   option.wlp *)
+    (*     (fun ts => *)
+    (*        forall ι : Valuation Σ, *)
+    (*          inst (T := fun Σ => Term Σ (ty.tuple σs)) (A := Val (ty.tuple σs)) s ι = *)
+    (*          inst (term_tuple ts) ι) *)
+    (*     (term_get_tuple s). *)
+    (* Proof. *)
+    (*   now constructor. *)
+    (* Qed. *)
 
   End Utils.
 

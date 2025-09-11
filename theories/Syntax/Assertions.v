@@ -65,8 +65,8 @@ Module Import asn.
 
   Definition match_bool {Σ} (b : Term Σ ty.bool) (A1 A2 : Assertion Σ) : Assertion Σ :=
     pattern_match b pat_bool (fun v => if v then A1 else A2).
-  Definition match_enum {Σ} (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ) : Assertion Σ :=
-    pattern_match k (pat_enum E) alts.
+  (* Definition match_enum {Σ} (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ) : Assertion Σ := *)
+  (*   pattern_match k (pat_enum E) alts. *)
   Definition match_sum {Σ} (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : LVar)
     (al : Assertion (Σ ▻ xl∷σ)) (xr : LVar) (ar : Assertion (Σ ▻ xr∷τ)) :
     Assertion Σ :=
@@ -79,30 +79,30 @@ Module Import asn.
   Definition match_prod {Σ σ1 σ2} (s : Term Σ (ty.prod σ1 σ2)) (xl xr : LVar)
     (rhs : Assertion (Σ ▻ xl∷σ1 ▻ xr∷σ2)) : Assertion Σ :=
     pattern_match s (pat_pair xl xr) (fun _ => rhs).
-  Definition match_tuple {Σ σs Δ} (s : Term Σ (ty.tuple σs))
-    (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ :=
-    pattern_match s (pat_tuple p) (fun _ => rhs).
-  Definition match_record {Σ R Δ} (s : Term Σ (ty.record R))
-    (p : RecordPat (recordf_ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ :=
-    pattern_match s (pat_record R Δ p) (fun _ => rhs).
+  (* Definition match_tuple {Σ σs Δ} (s : Term Σ (ty.tuple σs)) *)
+  (*   (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ := *)
+  (*   pattern_match s (pat_tuple p) (fun _ => rhs). *)
+  (* Definition match_record {Σ R Δ} (s : Term Σ (ty.record R)) *)
+  (*   (p : RecordPat (recordf_ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ := *)
+  (*   pattern_match s (pat_record R Δ p) (fun _ => rhs). *)
 
-  #[global] Arguments match_enum [_] E _ _.
+  (* #[global] Arguments match_enum [_] E _ _. *)
   #[global] Arguments match_sum [_] σ τ _ _ _.
   #[global] Arguments match_list [_] {σ} s anil xh xt acons.
   #[global] Arguments match_prod [_] {σ1 σ2} s xl xr rhs.
-  #[global] Arguments match_tuple [_] {σs Δ} s p rhs.
-  #[global] Arguments match_record [_] R {Δ} s p rhs.
+  (* #[global] Arguments match_tuple [_] {σs Δ} s p rhs. *)
+  (* #[global] Arguments match_record [_] R {Δ} s p rhs. *)
   #[global] Arguments exist [_] _ _ _.
   #[global] Arguments debug {_}.
 
-  Definition match_union_alt {Σ} U (t : Term Σ (ty.union U))
-    (alts : forall (K : unionk U), Alternative Assertion Σ (unionk_ty U K)) : Assertion Σ :=
-    pattern_match t (pat_union U (fun K => alt_pat (alts K)))
-      (fun '(existT K pc) =>
-         of_pattern_case_curried
-           (alt_pat (alts K))
-           (alt_rhs (alts K)) pc).
-  #[global] Arguments asn.match_union_alt {Σ} _ _ _.
+  (* Definition match_union_alt {Σ} U (t : Term Σ (ty.union U)) *)
+  (*   (alts : forall (K : unionk U), Alternative Assertion Σ (unionk_ty U K)) : Assertion Σ := *)
+  (*   pattern_match t (pat_union U (fun K => alt_pat (alts K))) *)
+  (*     (fun '(existT K pc) => *)
+  (*        of_pattern_case_curried *)
+  (*          (alt_pat (alts K)) *)
+  (*          (alt_rhs (alts K)) pc). *)
+  (* #[global] Arguments asn.match_union_alt {Σ} _ _ _. *)
 
   Fixpoint exs {Σ} Δ : Assertion (Σ ▻▻ Δ) -> Assertion Σ :=
     match Δ return Assertion (Σ ▻▻ Δ) -> Assertion Σ with
@@ -255,11 +255,11 @@ Module Import asn.
     Notation "x + y" := (term_binop bop.plus x y) (x in scope term_scope, y in scope term_scope) : term_scope.
     Notation "x * y" := (term_binop bop.times x y) (x in scope term_scope, y in scope term_scope) : term_scope.
 
-    Notation "'match:' e 'in' R 'with' [ x ; y ; .. ; z ] => rhs 'end'" :=
-      (match_record R e%term
-         (recordpat_snoc .. (recordpat_snoc (recordpat_snoc recordpat_nil _ x) _ y) .. _ z)
-         rhs%asn)
-      (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : asn_scope.
+    (* Notation "'match:' e 'in' R 'with' [ x ; y ; .. ; z ] => rhs 'end'" := *)
+    (*   (match_record R e%term *)
+    (*      (recordpat_snoc .. (recordpat_snoc (recordpat_snoc recordpat_nil _ x) _ y) .. _ z) *)
+    (*      rhs%asn) *)
+    (*   (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : asn_scope. *)
 
   End notations.
 

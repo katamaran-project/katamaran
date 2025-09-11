@@ -121,9 +121,9 @@ Module Type GenericSolverOn
         | term_val _ _     => 2
         | term_binop _ _ _ => 3
         | term_unop _ _    => 4
-        | term_tuple _     => 5
-        | term_union _ _ _ => 6
-        | term_record _ _  => 7
+        (* | term_tuple _     => 5 *)
+        (* | term_union _ _ _ => 6 *)
+        (* | term_record _ _  => 7 *)
         end%positive in
       if Term_eqb t1 t2
       then empty
@@ -280,36 +280,36 @@ Module Type GenericSolverOn
           | uop.negate => simplify_eq_unop_default_val uop.negate
           end.
 
-        Definition simplify_eq_tuple_val {σs} (ts : Env (Term Σ) σs)
-          (vs : Val (ty.tuple σs)) : DList Σ :=
-          env.Env_rect
-            (fun σs _ => Val (ty.tuple σs) → DList Σ)
-            (fun _ => empty)
-            (fun τs _ IHts τ t (vτsτ : Val (ty.tuple (τs ▻ τ))) =>
-               let (vτs, vτ) := vτsτ in
-               cat (IHts vτs) (simplify_eq_val t vτ))
-            ts vs.
+        (* Definition simplify_eq_tuple_val {σs} (ts : Env (Term Σ) σs) *)
+        (*   (vs : Val (ty.tuple σs)) : DList Σ := *)
+        (*   env.Env_rect *)
+        (*     (fun σs _ => Val (ty.tuple σs) → DList Σ) *)
+        (*     (fun _ => empty) *)
+        (*     (fun τs _ IHts τ t (vτsτ : Val (ty.tuple (τs ▻ τ))) => *)
+        (*        let (vτs, vτ) := vτsτ in *)
+        (*        cat (IHts vτs) (simplify_eq_val t vτ)) *)
+        (*     ts vs. *)
 
-        Definition simplify_eq_union_val [U] [K1 : unionk U]
-          (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) : DList Σ :=
-          let (K2, v2) := unionv_unfold U v2 in
-          match eq_dec K1 K2 with
-          | left e  => let v2' := eq_rect_r (fun K1 => Val (unionk_ty U K1)) v2 e in
-                       simplify_eq_val t1 v2'
-          | right _ => error
-          end.
+        (* Definition simplify_eq_union_val [U] [K1 : unionk U] *)
+        (*   (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) : DList Σ := *)
+        (*   let (K2, v2) := unionv_unfold U v2 in *)
+        (*   match eq_dec K1 K2 with *)
+        (*   | left e  => let v2' := eq_rect_r (fun K1 => Val (unionk_ty U K1)) v2 e in *)
+        (*                simplify_eq_val t1 v2' *)
+        (*   | right _ => error *)
+        (*   end. *)
 
-        Definition simplify_eq_record_val (R : recordi)
-          (ts : NamedEnv (Term Σ) (recordf_ty R)) (v : Val (ty.record R)) :
-          DList Σ :=
-          env.Env_rect
-            (fun Δ _ => NamedEnv Val Δ → DList Σ)
-            (fun _ => empty)
-            (fun Δ _ IHts b t vs =>
-               let (vsΔ,vb) := env.view vs in
-               cat (IHts vsΔ) (simplify_eq_val t vb))
-            ts
-            (recordv_unfold R v).
+        (* Definition simplify_eq_record_val (R : recordi) *)
+        (*   (ts : NamedEnv (Term Σ) (recordf_ty R)) (v : Val (ty.record R)) : *)
+        (*   DList Σ := *)
+        (*   env.Env_rect *)
+        (*     (fun Δ _ => NamedEnv Val Δ → DList Σ) *)
+        (*     (fun _ => empty) *)
+        (*     (fun Δ _ IHts b t vs => *)
+        (*        let (vsΔ,vb) := env.view vs in *)
+        (*        cat (IHts vsΔ) (simplify_eq_val t vb)) *)
+        (*     ts *)
+        (*     (recordv_unfold R v). *)
 
       End WithSimplifyEqVal.
 
@@ -319,9 +319,9 @@ Module Type GenericSolverOn
         | term_val σ v        => fun v' => if eq_dec v v' then empty else error
         | term_binop op t1 t2 => simplify_eq_binop_val simplify_eq_val op t1 t2
         | term_unop op t      => simplify_eq_unop_val simplify_eq_val op t
-        | term_tuple ts       => simplify_eq_tuple_val simplify_eq_val ts
-        | term_union U K t    => simplify_eq_union_val simplify_eq_val t
-        | term_record R ts    => simplify_eq_record_val simplify_eq_val R ts
+        (* | term_tuple ts       => simplify_eq_tuple_val simplify_eq_val ts *)
+        (* | term_union U K t    => simplify_eq_union_val simplify_eq_val t *)
+        (* | term_record R ts    => simplify_eq_record_val simplify_eq_val R ts *)
         end v.
 
 
@@ -655,36 +655,36 @@ Module Type GenericSolverOn
         | env.snoc δ _ t, env.snoc δ' _ t' =>
             cat (formula_eqs_nctx δ δ') (simplify_eq t t').
 
-        Definition simplify_eq_tuple {σs} (tls : Env (Term Σ) σs)
-          (tr : Term Σ (ty.tuple σs)) : DList Σ :=
-          Term_tuple_case (fun _ => DList Σ)
-            ((*var*)  fun x xIn => dlist_eq (term_tuple tls) tr)
-            ((*val*)  fun v     => simplify_eq_val (term_tuple tls) v)
-            ((*tuple*)fun trs   => formula_eqs_ctx tls trs)
-            tr.
+        (* Definition simplify_eq_tuple {σs} (tls : Env (Term Σ) σs) *)
+        (*   (tr : Term Σ (ty.tuple σs)) : DList Σ := *)
+        (*   Term_tuple_case (fun _ => DList Σ) *)
+        (*     ((*var*)  fun x xIn => dlist_eq (term_tuple tls) tr) *)
+        (*     ((*val*)  fun v     => simplify_eq_val (term_tuple tls) v) *)
+        (*     ((*tuple*)fun trs   => formula_eqs_ctx tls trs) *)
+        (*     tr. *)
 
-        Definition simplify_eq_record {R}
-          (tls : NamedEnv (Term Σ) (recordf_ty R)) (tr : Term Σ (ty.record R)) :
-          DList Σ :=
-          Term_record_case (fun _ => DList Σ)
-            (fun (*var*) _ _    => dlist_eq tr (term_record R tls))
-            (fun (*val*) v      => simplify_eq_record_val simplify_eq_val R tls v)
-            (fun (*record*) trs => formula_eqs_nctx tls trs)
-            tr.
+        (* Definition simplify_eq_record {R} *)
+        (*   (tls : NamedEnv (Term Σ) (recordf_ty R)) (tr : Term Σ (ty.record R)) : *)
+        (*   DList Σ := *)
+        (*   Term_record_case (fun _ => DList Σ) *)
+        (*     (fun (*var*) _ _    => dlist_eq tr (term_record R tls)) *)
+        (*     (fun (*val*) v      => simplify_eq_record_val simplify_eq_val R tls v) *)
+        (*     (fun (*record*) trs => formula_eqs_nctx tls trs) *)
+        (*     tr. *)
 
-        Definition simplify_eq_union [U] [K1 : unionk U]
-          (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (ty.union U)) : DList Σ :=
-          Term_union_case (fun _ => DList Σ)
-            ((*var*) fun x In    => dlist_eq t2 (term_union U K1 t1))
-            ((*val*) fun v       => simplify_eq_val (term_union U K1 t1) v)
-            ((*union*)
-              fun K2 t3 =>
-                match eq_dec K1 K2 with
-                | left e  => simplify_eq t1
-                               (eq_rect_r (fun K => Term Σ (unionk_ty U K)) t3 e)
-                | right _ => error
-                end)
-            t2.
+        (* Definition simplify_eq_union [U] [K1 : unionk U] *)
+        (*   (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (ty.union U)) : DList Σ := *)
+        (*   Term_union_case (fun _ => DList Σ) *)
+        (*     ((*var*) fun x In    => dlist_eq t2 (term_union U K1 t1)) *)
+        (*     ((*val*) fun v       => simplify_eq_val (term_union U K1 t1) v) *)
+        (*     ((*union*) *)
+        (*       fun K2 t3 => *)
+        (*         match eq_dec K1 K2 with *)
+        (*         | left e  => simplify_eq t1 *)
+        (*                        (eq_rect_r (fun K => Term Σ (unionk_ty U K)) t3 e) *)
+        (*         | right _ => error *)
+        (*         end) *)
+        (*     t2. *)
 
       End WithSimplifyEq.
 
@@ -694,9 +694,9 @@ Module Type GenericSolverOn
         | term_val _ v        => fun tr => simplify_eq_val tr v
         | term_binop op t1 t2 => simplify_eq_binop simplify_eq op t1 t2
         | term_unop op t1     => simplify_eq_unop simplify_eq op t1
-        | term_tuple tls      => simplify_eq_tuple simplify_eq tls
-        | term_union U K tl   => simplify_eq_union simplify_eq tl
-        | term_record R tls   => simplify_eq_record simplify_eq tls
+        (* | term_tuple tls      => simplify_eq_tuple simplify_eq tls *)
+        (* | term_union U K tl   => simplify_eq_union simplify_eq tl *)
+        (* | term_record R tls   => simplify_eq_record simplify_eq tls *)
         end tr.
 
     End SimplifyEq.
@@ -763,23 +763,23 @@ Module Type GenericSolverOn
               iDestruct (repₚ_inversion_term_unsigned with "Hsimpl")
                 as "(%bv & %Heq & Hrep)".
               pose proof (bv.unsigned_bounds bv). lia.
-        - induction IH.
-          + now destruct v.
-          + destruct v as [vs v]; arw.
-            apply bi.sep_proper; eauto.
-        - unfold simplify_eq_union_val.
-          destruct unionv_unfold as [K2 v2] eqn:?.
-          apply (f_equal (unionv_fold U)) in Heqs.
-          rewrite unionv_fold_unfold in Heqs. subst.
-          destruct eq_dec as [->|e]; arw.
-          now rewrite (repₚ_unionv_neq e).
-        - rewrite -(recordv_fold_unfold R v).
-          rewrite repₚ_term_record.
-          generalize (recordv_unfold R v); intros vs.
-          unfold simplify_eq_record_val.
-          rewrite recordv_unfold_fold.
-          induction IH; destruct (env.view vs); arw.
-          arw_slow. apply bi.sep_proper; auto.
+        (* - induction IH. *)
+        (*   + now destruct v. *)
+        (*   + destruct v as [vs v]; arw. *)
+        (*     apply bi.sep_proper; eauto. *)
+        (* - unfold simplify_eq_union_val. *)
+        (*   destruct unionv_unfold as [K2 v2] eqn:?. *)
+        (*   apply (f_equal (unionv_fold U)) in Heqs. *)
+        (*   rewrite unionv_fold_unfold in Heqs. subst. *)
+        (*   destruct eq_dec as [->|e]; arw. *)
+        (*   now rewrite (repₚ_unionv_neq e). *)
+        (* - rewrite -(recordv_fold_unfold R v). *)
+        (*   rewrite repₚ_term_record. *)
+        (*   generalize (recordv_unfold R v); intros vs. *)
+        (*   unfold simplify_eq_record_val. *)
+        (*   rewrite recordv_unfold_fold. *)
+        (*   induction IH; destruct (env.view vs); arw. *)
+        (*   arw_slow. apply bi.sep_proper; auto. *)
       Qed.
       #[local] Opaque simplify_eq_val.
       #[local] Hint Resolve simplify_eq_val_spec : core.
@@ -891,23 +891,23 @@ Module Type GenericSolverOn
             rewrite IHtl. arw.
             constructor; intros ι _; cbn.
             split. congruence. apply bv.signed_inj.
-        - destruct tr using Term_tuple_case; cbn; arw.
-          induction IH; cbn; destruct (env.view ts0); cbn; arw.
-          rewrite eqₚ_term_tuple_snoc. now apply bi.sep_proper.
-        - destruct tr using Term_union_case; cbn; arw.
-          destruct eq_dec; subst; arw.
-          + now rewrite eqₚ_unionv_fold.
-          + now rewrite eqₚ_term_union_neq.
-        - destruct tr using Term_record_case; cbn; arw; arw_slow.
-          + rewrite -(recordv_fold_unfold R v).
-            rewrite repₚ_term_record.
-            generalize (recordv_unfold R v); intros vs.
-            unfold simplify_eq_record_val.
-            rewrite recordv_unfold_fold.
-            induction IH; destruct (env.view vs); arw.
-            arw_slow. apply bi.sep_proper; auto.
-          + induction IH; destruct (env.view ts0); arw.
-            arw_slow. apply bi.sep_proper; auto.
+        (* - destruct tr using Term_tuple_case; cbn; arw. *)
+        (*   induction IH; cbn; destruct (env.view ts0); cbn; arw. *)
+        (*   rewrite eqₚ_term_tuple_snoc. now apply bi.sep_proper. *)
+        (* - destruct tr using Term_union_case; cbn; arw. *)
+        (*   destruct eq_dec; subst; arw. *)
+        (*   + now rewrite eqₚ_unionv_fold. *)
+        (*   + now rewrite eqₚ_term_union_neq. *)
+        (* - destruct tr using Term_record_case; cbn; arw; arw_slow. *)
+        (*   + rewrite -(recordv_fold_unfold R v). *)
+        (*     rewrite repₚ_term_record. *)
+        (*     generalize (recordv_unfold R v); intros vs. *)
+        (*     unfold simplify_eq_record_val. *)
+        (*     rewrite recordv_unfold_fold. *)
+        (*     induction IH; destruct (env.view vs); arw. *)
+        (*     arw_slow. apply bi.sep_proper; auto. *)
+        (*   + induction IH; destruct (env.view ts0); arw. *)
+        (*     arw_slow. apply bi.sep_proper; auto. *)
       Qed.
 
     End SimplifyEqSpec.

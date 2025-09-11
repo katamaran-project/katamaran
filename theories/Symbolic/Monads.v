@@ -491,13 +491,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           | pat_unit =>
               fun scr =>
                 pure (A := SMatchResult pat_unit) (existT tt [env])
-          | pat_enum E =>
-              fun scr =>
-                match term_get_val scr with
-                | Some v => pure (A := SMatchResult (pat_enum E))
-                              (existT v [env])
-                | None => angelic_pattern_match' _ msg scr
-                end
+          (* | pat_enum E => *)
+          (*     fun scr => *)
+          (*       match term_get_val scr with *)
+          (*       | Some v => pure (A := SMatchResult (pat_enum E)) *)
+          (*                     (existT v [env]) *)
+          (*       | None => angelic_pattern_match' _ msg scr *)
+          (*       end *)
           | pat_bvec_split _ _ _ _ =>
               fun scr =>
                 angelic_pattern_match' _ msg scr
@@ -508,32 +508,32 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                               (existT v [env])
                 | None => angelic_pattern_match' _ msg scr
                 end
-          | pat_tuple p =>
-              fun scr =>
-                match term_get_tuple scr with
-                | Some a => pure (A := SMatchResult (pat_tuple p))
-                              (existT tt (tuple_pattern_match_env p a))
-                | None => angelic_pattern_match' (pat_tuple p) msg scr
-                end
-          | pat_record R Δ p =>
-              fun scr =>
-                match term_get_record scr with
-                | Some a => pure (A := SMatchResult (pat_record R Δ p))
-                              (existT tt (record_pattern_match_env p a))
-                | None => angelic_pattern_match' (pat_record R Δ p) msg scr
-                end
-          | pat_union U p =>
-              fun scr =>
-                match term_get_union scr with
-                | Some (existT K scr') =>
-                    ⟨ θ1 ⟩ res <- angelic (unionk_ty U K) (p K) msg scr' ;;
-                    match res with
-                    | existT pc δpc =>
-                        pure (A := SMatchResult (pat_union U p))
-                          (existT (existT K pc) δpc)
-                    end
-                | None => angelic_pattern_match' (pat_union U p) msg scr
-                end
+          (* | pat_tuple p => *)
+          (*     fun scr => *)
+          (*       match term_get_tuple scr with *)
+          (*       | Some a => pure (A := SMatchResult (pat_tuple p)) *)
+          (*                     (existT tt (tuple_pattern_match_env p a)) *)
+          (*       | None => angelic_pattern_match' (pat_tuple p) msg scr *)
+          (*       end *)
+          (* | pat_record R Δ p => *)
+          (*     fun scr => *)
+          (*       match term_get_record scr with *)
+          (*       | Some a => pure (A := SMatchResult (pat_record R Δ p)) *)
+          (*                     (existT tt (record_pattern_match_env p a)) *)
+          (*       | None => angelic_pattern_match' (pat_record R Δ p) msg scr *)
+          (*       end *)
+          (* | pat_union U p => *)
+          (*     fun scr => *)
+          (*       match term_get_union scr with *)
+          (*       | Some (existT K scr') => *)
+          (*           ⟨ θ1 ⟩ res <- angelic (unionk_ty U K) (p K) msg scr' ;; *)
+          (*           match res with *)
+          (*           | existT pc δpc => *)
+          (*               pure (A := SMatchResult (pat_union U p)) *)
+          (*                 (existT (existT K pc) δpc) *)
+          (*           end *)
+          (*       | None => angelic_pattern_match' (pat_union U p) msg scr *)
+          (*       end *)
           end.
       #[global] Arguments angelic_pattern_match {σ} pat [w].
 
@@ -591,13 +591,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           | pat_unit =>
               fun scr =>
                 pure (A := SMatchResult pat_unit) (existT tt [env])
-          | pat_enum E =>
-              fun scr =>
-                match term_get_val scr with
-                | Some v => pure (A := SMatchResult (pat_enum E))
-                              (existT v [env])
-                | None => demonic_pattern_match' _ scr
-                end
+          (* | pat_enum E => *)
+          (*     fun scr => *)
+          (*       match term_get_val scr with *)
+          (*       | Some v => pure (A := SMatchResult (pat_enum E)) *)
+          (*                     (existT v [env]) *)
+          (*       | None => demonic_pattern_match' _ scr *)
+          (*       end *)
           | pat_bvec_split _ _ _ _ =>
               fun scr =>
                 demonic_pattern_match' _ scr
@@ -608,32 +608,32 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                               (existT v [env])
                 | None => demonic_pattern_match' _ scr
                 end
-          | pat_tuple p =>
-              fun scr =>
-                match term_get_tuple scr with
-                | Some a => pure (A := SMatchResult (pat_tuple p))
-                              (existT tt (tuple_pattern_match_env p a))
-                | None => demonic_pattern_match' (pat_tuple p) scr
-                end
-          | pat_record R Δ p =>
-              fun scr =>
-                match term_get_record scr with
-                | Some a => pure (A := SMatchResult (pat_record R Δ p))
-                              (existT tt (record_pattern_match_env p a))
-                | None => demonic_pattern_match' (pat_record R Δ p) scr
-                end
-          | pat_union U p =>
-              fun scr =>
-                match term_get_union scr with
-                | Some (existT K scr') =>
-                    ⟨ θ1 ⟩ res <- demonic (unionk_ty U K) (p K) scr' ;;
-                    match res with
-                    | existT pc δpc =>
-                        pure (A := SMatchResult (pat_union U p))
-                          (existT (existT K pc) δpc)
-                    end
-                | None => demonic_pattern_match' (pat_union U p) scr
-                end
+          (* | pat_tuple p => *)
+          (*     fun scr => *)
+          (*       match term_get_tuple scr with *)
+          (*       | Some a => pure (A := SMatchResult (pat_tuple p)) *)
+          (*                     (existT tt (tuple_pattern_match_env p a)) *)
+          (*       | None => demonic_pattern_match' (pat_tuple p) scr *)
+          (*       end *)
+          (* | pat_record R Δ p => *)
+          (*     fun scr => *)
+          (*       match term_get_record scr with *)
+          (*       | Some a => pure (A := SMatchResult (pat_record R Δ p)) *)
+          (*                     (existT tt (record_pattern_match_env p a)) *)
+          (*       | None => demonic_pattern_match' (pat_record R Δ p) scr *)
+          (*       end *)
+          (* | pat_union U p => *)
+          (*     fun scr => *)
+          (*       match term_get_union scr with *)
+          (*       | Some (existT K scr') => *)
+          (*           ⟨ θ1 ⟩ res <- demonic (unionk_ty U K) (p K) scr' ;; *)
+          (*           match res with *)
+          (*           | existT pc δpc => *)
+          (*               pure (A := SMatchResult (pat_union U p)) *)
+          (*                 (existT (existT K pc) δpc) *)
+          (*           end *)
+          (*       | None => demonic_pattern_match' (pat_union U p) scr *)
+                (* end *)
           end.
       #[global] Arguments demonic_pattern_match {σ} pat [w].
 
@@ -671,7 +671,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           end pat.
       #[global] Arguments new_pattern_match' {σ} pat [w] t.
 
-      Fixpoint new_pattern_match {σ} (pat : Pattern (N:=N) σ) :
+      Definition new_pattern_match {σ} (pat : Pattern (N:=N) σ) :
         ⊢ WTerm σ -> SPureSpec (SMatchResult pat) :=
         fun w0 : World =>
           match pat as p in (Pattern t)
@@ -698,11 +698,11 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                          | None => new_pattern_match' (pat_sum σ τ x y) scr
                          end
           | pat_unit        => fun _ => pure (existT tt [env])
-          | pat_enum E      =>
-              fun scr => match term_get_val scr with
-                         | Some a => pure (existT a [env])
-                         | None => new_pattern_match' (pat_enum E) scr
-                         end
+          (* | pat_enum E      => *)
+          (*     fun scr => match term_get_val scr with *)
+          (*                | Some a => pure (existT a [env]) *)
+          (*                | None => new_pattern_match' (pat_enum E) scr *)
+          (*                end *)
           | pat_bvec_split m k x y =>
               fun scr => new_pattern_match' (pat_bvec_split m k x y) scr
           | pat_bvec_exhaustive m =>
@@ -711,28 +711,28 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                 | Some a => pure (existT a [env])
                 | None => new_pattern_match' (pat_bvec_exhaustive m) scr
                 end
-          | @pat_tuple _ σs Δ p =>
-              fun scr =>
-                match term_get_tuple scr with
-                | Some a => pure (existT tt (tuple_pattern_match_env p a))
-                | None => new_pattern_match' (pat_tuple p) scr
-                end
-          | pat_record R Δ p =>
-              fun scr =>
-                match term_get_record scr with
-                | Some a => pure (existT tt (record_pattern_match_env p a))
-                | None => new_pattern_match' (pat_record R Δ p) scr
-                end
-          | pat_union U p =>
-              fun scr =>
-                match term_get_union scr with
-                | Some (existT K scr') =>
-                    ⟨ θ1 ⟩ '(existT pc ts) <- @new_pattern_match _ (p K) _ scr' ;;
-                    pure (@existT (PatternCase (pat_union U p))
-                            (fun pc => NamedEnv (Term _) (PatternCaseCtx pc))
-                            (existT (P := fun K => PatternCase (p K)) K pc) ts)
-                | None => new_pattern_match' (pat_union U p) scr
-                end
+          (* | @pat_tuple _ σs Δ p => *)
+          (*     fun scr => *)
+          (*       match term_get_tuple scr with *)
+          (*       | Some a => pure (existT tt (tuple_pattern_match_env p a)) *)
+          (*       | None => new_pattern_match' (pat_tuple p) scr *)
+          (*       end *)
+          (* | pat_record R Δ p => *)
+          (*     fun scr => *)
+          (*       match term_get_record scr with *)
+          (*       | Some a => pure (existT tt (record_pattern_match_env p a)) *)
+          (*       | None => new_pattern_match' (pat_record R Δ p) scr *)
+          (*       end *)
+          (* | pat_union U p => *)
+          (*     fun scr => *)
+          (*       match term_get_union scr with *)
+          (*       | Some (existT K scr') => *)
+          (*           ⟨ θ1 ⟩ '(existT pc ts) <- @new_pattern_match _ (p K) _ scr' ;; *)
+          (*           pure (@existT (PatternCase (pat_union U p)) *)
+          (*                   (fun pc => NamedEnv (Term _) (PatternCaseCtx pc)) *)
+          (*                   (existT (P := fun K => PatternCase (p K)) K pc) ts) *)
+          (*       | None => new_pattern_match' (pat_union U p) scr *)
+          (*       end *)
           end.
       #[global] Arguments new_pattern_match {σ} pat [w].
 

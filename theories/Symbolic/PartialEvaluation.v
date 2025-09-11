@@ -1208,49 +1208,49 @@ Module Type PartialEvaluationOn
                    peval_vector_subrange_sound.
     Qed.
 
-    Definition peval_union {U K} (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) :=
-      match term_get_val t with
-      | Some v => term_val (ty.union U) (unionv_fold U (existT K v))
-      | None   => term_union U K t
-      end.
+    (* Definition peval_union {U K} (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) := *)
+    (*   match term_get_val t with *)
+    (*   | Some v => term_val (ty.union U) (unionv_fold U (existT K v)) *)
+    (*   | None   => term_union U K t *)
+    (*   end. *)
 
-    Lemma peval_union_sound {U K} (t : Term Σ (unionk_ty U K)) :
-      peval_union t ≡ term_union U K t.
-    Proof. unfold peval_union. destruct (term_get_val_spec t); now subst. Qed.
+    (* Lemma peval_union_sound {U K} (t : Term Σ (unionk_ty U K)) : *)
+    (*   peval_union t ≡ term_union U K t. *)
+    (* Proof. unfold peval_union. destruct (term_get_val_spec t); now subst. Qed. *)
 
-    Import option.notations.
-    Fixpoint peval_record' {rfs : NCtx recordf Ty} (ts : NamedEnv (Term Σ) rfs) {struct ts} : option (NamedEnv Val rfs) :=
-      match ts with
-      | env.nil         => Some [env]
-      | env.snoc ts _ t => vs <- peval_record' ts ;;
-                           v  <- term_get_val t ;;
-                           Some (env.snoc vs _ v)
-      end.
+    (* Import option.notations. *)
+    (* Fixpoint peval_record' {rfs : NCtx recordf Ty} (ts : NamedEnv (Term Σ) rfs) {struct ts} : option (NamedEnv Val rfs) := *)
+    (*   match ts with *)
+    (*   | env.nil         => Some [env] *)
+    (*   | env.snoc ts _ t => vs <- peval_record' ts ;; *)
+    (*                        v  <- term_get_val t ;; *)
+    (*                        Some (env.snoc vs _ v) *)
+    (*   end. *)
 
-    Definition peval_record R (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R) :=
-      match peval_record' ts with
-      | Some a => term_val (ty.record R) (recordv_fold R a)
-      | None => term_record R ts
-      end.
+    (* Definition peval_record R (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R) := *)
+    (*   match peval_record' ts with *)
+    (*   | Some a => term_val (ty.record R) (recordv_fold R a) *)
+    (*   | None => term_record R ts *)
+    (*   end. *)
 
-    Lemma peval_record'_sound {rfs : NCtx recordf Ty} (ts : NamedEnv (Term Σ) rfs) :
-      option.wlp (fun vs => forall ι, inst ts ι = vs) (peval_record' ts).
-    Proof.
-      induction ts; cbn.
-      - now constructor.
-      - rewrite option.wlp_bind. revert IHts.
-        apply option.wlp_monotonic. intros vs IHvs.
-        rewrite option.wlp_bind. generalize (term_get_val_spec db).
-        apply option.wlp_monotonic. intros v IHv. constructor.
-        intros ι. specialize (IHvs ι). subst. reflexivity.
-    Qed.
+    (* Lemma peval_record'_sound {rfs : NCtx recordf Ty} (ts : NamedEnv (Term Σ) rfs) : *)
+    (*   option.wlp (fun vs => forall ι, inst ts ι = vs) (peval_record' ts). *)
+    (* Proof. *)
+    (*   induction ts; cbn. *)
+    (*   - now constructor. *)
+    (*   - rewrite option.wlp_bind. revert IHts. *)
+    (*     apply option.wlp_monotonic. intros vs IHvs. *)
+    (*     rewrite option.wlp_bind. generalize (term_get_val_spec db). *)
+    (*     apply option.wlp_monotonic. intros v IHv. constructor. *)
+    (*     intros ι. specialize (IHvs ι). subst. reflexivity. *)
+    (* Qed. *)
 
-    Lemma peval_record_sound {R} ts :
-      peval_record R ts ≡ term_record R ts.
-    Proof.
-      unfold peval_record. destruct (peval_record'_sound ts); [|reflexivity].
-      intros ι; cbn. now f_equal.
-    Qed.
+    (* Lemma peval_record_sound {R} ts : *)
+    (*   peval_record R ts ≡ term_record R ts. *)
+    (* Proof. *)
+    (*   unfold peval_record. destruct (peval_record'_sound ts); [|reflexivity]. *)
+    (*   intros ι; cbn. now f_equal. *)
+    (* Qed. *)
 
     Lemma tmr_ring_morph_peval' `{TermRing σ}
       {rm : ring_morph (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one)
@@ -1519,9 +1519,9 @@ Module Type PartialEvaluationOn
       | term_val _ v               => peval2_val v
       | term_binop op t1 t2        => peval2_binop op (peval2 t1) (peval2 t2)
       | term_unop op t             => peval2_unop op (peval2 t)
-      | term_tuple ts              => term_tuple (env.map (fun b t => CanonTerm_to_Term (peval2 t)) ts)
-      | term_union U K t           => peval_union (CanonTerm_to_Term (peval2 t))
-      | term_record R ts           => peval_record R (env.map (fun b t => CanonTerm_to_Term (peval2 t)) ts)
+      (* | term_tuple ts              => term_tuple (env.map (fun b t => CanonTerm_to_Term (peval2 t)) ts) *)
+      (* | term_union U K t           => peval_union (CanonTerm_to_Term (peval2 t)) *)
+      (* | term_record R ts           => peval_record R (env.map (fun b t => CanonTerm_to_Term (peval2 t)) ts) *)
       end.
 
     Lemma peval2_sound [σ] (t : Term Σ σ) :
@@ -1532,17 +1532,17 @@ Module Type PartialEvaluationOn
       - eapply peval2_val_sound.
       - now eapply peval2_binop_sound.
       - now eapply peval2_unop_sound.
-      - apply proper_term_tuple.
-        induction IH; [reflexivity|]; cbn.
-        apply proper_env_snoc; first trivial.
-        now apply CanonTermRep_adeq.
-      - etransitivity; [apply peval_union_sound|apply proper_term_union].
-        now apply CanonTermRep_adeq.
-      - rewrite peval_record_sound.
-        apply proper_term_record.
-        induction IH; cbn; [reflexivity|].
-        apply proper_namedenv_snoc; first trivial.
-        now apply CanonTermRep_adeq.
+      (* - apply proper_term_tuple. *)
+      (*   induction IH; [reflexivity|]; cbn. *)
+      (*   apply proper_env_snoc; first trivial. *)
+      (*   now apply CanonTermRep_adeq. *)
+      (* - etransitivity; [apply peval_union_sound|apply proper_term_union]. *)
+      (*   now apply CanonTermRep_adeq. *)
+      (* - rewrite peval_record_sound. *)
+      (*   apply proper_term_record. *)
+      (*   induction IH; cbn; [reflexivity|]. *)
+      (*   apply proper_namedenv_snoc; first trivial. *)
+      (*   now apply CanonTermRep_adeq. *)
     Qed.
 
 
@@ -1585,9 +1585,9 @@ Module Type PartialEvaluationOn
       - destruct op; try (eapply CanonTermRep_adeq; eapply peval2_sound).
         cbn. now rewrite peval_binop'_sound, IHt1, IHt2.
       - eapply CanonTermRep_adeq; eapply peval2_sound.
-      - eapply CanonTermRep_adeq; eapply peval2_sound.
-      - eapply CanonTermRep_adeq; eapply peval2_sound.
-      - eapply CanonTermRep_adeq; eapply peval2_sound.
+    (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *)
+    (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *)
+    (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *)
     Qed.
     #[global] Arguments peval [σ] t : simpl never.
 

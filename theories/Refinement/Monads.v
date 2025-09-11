@@ -595,13 +595,13 @@ Module Type RefinementMonadsOn
         rewrite CPureSpec.wp_angelic_pattern_match.
         iApply ("rΦ" with "[Hv] HSP").
         destruct v; rsolve.
-      - iIntros (msg v sv) "Hv".
-        destruct (term_get_val_spec sv); subst.
-        + iIntros (Φ sΦ) "rΦ HSP".
-          rewrite CPureSpec.wp_angelic_pattern_match.
-          iDestruct (refine_term_val2 with "Hv") as "->".
-          iApply ("rΦ" with "[Hv] HSP"); rsolve.
-        + now iApply (refine_angelic_pattern_match' n (pat_enum E)).
+      (* - iIntros (msg v sv) "Hv". *)
+      (*   destruct (term_get_val_spec sv); subst. *)
+      (*   + iIntros (Φ sΦ) "rΦ HSP". *)
+      (*     rewrite CPureSpec.wp_angelic_pattern_match. *)
+      (*     iDestruct (refine_term_val2 with "Hv") as "->". *)
+      (*     iApply ("rΦ" with "[Hv] HSP"); rsolve. *)
+      (*   + now iApply (refine_angelic_pattern_match' n (pat_enum E)). *)
       - iApply (refine_angelic_pattern_match' n (pat_bvec_split _ _ x y)).
       - iIntros (msg v sv) "Hv".
         destruct (term_get_val_spec sv); subst.
@@ -610,41 +610,41 @@ Module Type RefinementMonadsOn
           iDestruct (refine_term_val2 with "Hv") as "->".
           iApply ("rΦ" with "[Hv] HSP"); rsolve.
         + now iApply (refine_angelic_pattern_match' n (pat_bvec_exhaustive m)).
-      - iApply (refine_angelic_pattern_match' n (pat_tuple p)).
-      - iIntros (msg v sv) "Hv".
-        destruct (term_get_record_spec sv) as [svs Heq|]; subst.
-        + iPoseProof (eqₚ_triv (vt2 := term_record R svs : STerm (ty.record R) w) Heq) as "Heq".
-          iDestruct (repₚ_eqₚ (T := STerm (ty.record _)) with "[$Heq $Hv]") as "Hv".
-          iIntros (Φ sΦ) "rΦ HSP".
-          rewrite CPureSpec.wp_angelic_pattern_match.
-          iApply ("rΦ" with "[Hv] HSP").
-          iDestruct (repₚ_inversion_record with "Hv") as "(%vs & -> & Hvs)".
-          iExists eq_refl.
-          unfold record_pattern_match_val.
-          rewrite recordv_unfold_fold.
-          iApply (repₚ_cong (T1 := fun w => NamedEnv (Term w) _) (T2 := fun w => NamedEnv (Term w) _) with "Hvs").
-          intros.
-          now rewrite inst_record_pattern_match.
-        + now iApply (refine_angelic_pattern_match' n (pat_record _ _ _)).
-      - iIntros (msg v sv) "Hv".
-        destruct (term_get_union_spec sv) as [[K scr'] Heq|]; subst.
-        + iIntros (Φ sΦ) "rΦ".
-          iPoseProof (eqₚ_triv (vt2 := term_union U K scr' : STerm (ty.union U) w) Heq) as "Heq".
-          iDestruct (repₚ_eqₚ (T := STerm (ty.union _)) with "[$Heq $Hv]") as "Hv".
-          iDestruct (repₚ_inversion_union with "Hv") as "(%t & -> & Hv)".
-          iIntros "HSP".
-          rewrite CPureSpec.wp_angelic_pattern_match.
-          cbn -[RSat].
-          rewrite unionv_unfold_fold.
-          rewrite -(CPureSpec.wp_angelic_pattern_match _ (fun v => Φ (let (pc, δpc) := v in _))).
-          iApply (H with "Hv [rΦ] HSP").
-          iIntros (w2 ω2) "!> %mr %smr Hmr".
-          destruct mr, smr.
-          iDestruct "Hmr" as "(%e & Hmr)".
-          subst x0.
-          rewrite forgetting_unconditionally.
-          iApply ("rΦ" with "[Hmr]"); rsolve.
-        + now iApply (refine_angelic_pattern_match' n (pat_union _ _)).
+      (* - iApply (refine_angelic_pattern_match' n (pat_tuple p)). *)
+      (* - iIntros (msg v sv) "Hv". *)
+      (*   destruct (term_get_record_spec sv) as [svs Heq|]; subst. *)
+      (*   + iPoseProof (eqₚ_triv (vt2 := term_record R svs : STerm (ty.record R) w) Heq) as "Heq". *)
+      (*     iDestruct (repₚ_eqₚ (T := STerm (ty.record _)) with "[$Heq $Hv]") as "Hv". *)
+      (*     iIntros (Φ sΦ) "rΦ HSP". *)
+      (*     rewrite CPureSpec.wp_angelic_pattern_match. *)
+      (*     iApply ("rΦ" with "[Hv] HSP"). *)
+      (*     iDestruct (repₚ_inversion_record with "Hv") as "(%vs & -> & Hvs)". *)
+      (*     iExists eq_refl. *)
+      (*     unfold record_pattern_match_val. *)
+      (*     rewrite recordv_unfold_fold. *)
+      (*     iApply (repₚ_cong (T1 := fun w => NamedEnv (Term w) _) (T2 := fun w => NamedEnv (Term w) _) with "Hvs"). *)
+      (*     intros. *)
+      (*     now rewrite inst_record_pattern_match. *)
+      (*   + now iApply (refine_angelic_pattern_match' n (pat_record _ _ _)). *)
+      (* - iIntros (msg v sv) "Hv". *)
+      (*   destruct (term_get_union_spec sv) as [[K scr'] Heq|]; subst. *)
+      (*   + iIntros (Φ sΦ) "rΦ". *)
+      (*     iPoseProof (eqₚ_triv (vt2 := term_union U K scr' : STerm (ty.union U) w) Heq) as "Heq". *)
+      (*     iDestruct (repₚ_eqₚ (T := STerm (ty.union _)) with "[$Heq $Hv]") as "Hv". *)
+      (*     iDestruct (repₚ_inversion_union with "Hv") as "(%t & -> & Hv)". *)
+      (*     iIntros "HSP". *)
+      (*     rewrite CPureSpec.wp_angelic_pattern_match. *)
+      (*     cbn -[RSat]. *)
+      (*     rewrite unionv_unfold_fold. *)
+      (*     rewrite -(CPureSpec.wp_angelic_pattern_match _ (fun v => Φ (let (pc, δpc) := v in _))). *)
+      (*     iApply (H with "Hv [rΦ] HSP"). *)
+      (*     iIntros (w2 ω2) "!> %mr %smr Hmr". *)
+      (*     destruct mr, smr. *)
+      (*     iDestruct "Hmr" as "(%e & Hmr)". *)
+      (*     subst x0. *)
+      (*     rewrite forgetting_unconditionally. *)
+      (*     iApply ("rΦ" with "[Hmr]"); rsolve. *)
+      (*   + now iApply (refine_angelic_pattern_match' n (pat_union _ _)). *)
     Qed.
     #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
 
@@ -703,14 +703,14 @@ Module Type RefinementMonadsOn
         iExists eq_refl.
         iApply (repₚ_triv (T := fun w => NamedEnv (Term w) _)).
         now intros.
-      - iIntros (v sv) "Hv".
-        destruct (term_get_val_spec sv); subst.
-        + iIntros (Φ sΦ) "rΦ HSP".
-          rewrite CPureSpec.wp_demonic_pattern_match.
-          iApply ("rΦ" with "[Hv] HSP").
-          iDestruct (refine_term_val2 with "Hv") as "->".
-          rsolve.
-        + now iApply (refine_demonic_pattern_match' n (pat_enum E)).
+      (* - iIntros (v sv) "Hv". *)
+      (*   destruct (term_get_val_spec sv); subst. *)
+      (*   + iIntros (Φ sΦ) "rΦ HSP". *)
+      (*     rewrite CPureSpec.wp_demonic_pattern_match. *)
+      (*     iApply ("rΦ" with "[Hv] HSP"). *)
+      (*     iDestruct (refine_term_val2 with "Hv") as "->". *)
+      (*     rsolve. *)
+      (*   + now iApply (refine_demonic_pattern_match' n (pat_enum E)). *)
       - iApply (refine_demonic_pattern_match' n (pat_bvec_split _ _ x y)).
       - iIntros (v sv) "Hv".
         destruct (term_get_val_spec sv); subst.
@@ -720,42 +720,42 @@ Module Type RefinementMonadsOn
           iDestruct (refine_term_val2 with "Hv") as "->".
           rsolve.
         + now iApply (refine_demonic_pattern_match' n (pat_bvec_exhaustive m)).
-      - iApply (refine_demonic_pattern_match' n (pat_tuple p)).
-      - iIntros (v sv) "Hv".
-        destruct (term_get_record_spec sv) as [svs Heq|]; subst.
-        + iPoseProof (eqₚ_triv (vt2 := term_record R svs : STerm (ty.record R) w) Heq) as "Heq".
-          iDestruct (repₚ_eqₚ (T := STerm (ty.record _)) with "[$Heq $Hv]") as "Hv".
-          iIntros (Φ sΦ) "rΦ HSP".
-          rewrite CPureSpec.wp_demonic_pattern_match.
-          iApply ("rΦ" with "[Hv] HSP").
-          iDestruct (repₚ_inversion_record with "Hv") as "(%vs & -> & Hvs)".
-          iExists eq_refl.
-          unfold record_pattern_match_val.
-          rewrite recordv_unfold_fold.
-          iApply (repₚ_cong (T1 := fun w => NamedEnv (Term w) _) (T2 := fun w => NamedEnv (Term w) _) with "Hvs").
-          intros.
-          now rewrite inst_record_pattern_match.
-        + now iApply (refine_demonic_pattern_match' n (pat_record _ _ _)).
-      - iIntros (v sv) "Hv".
-        destruct (term_get_union_spec sv) as [[K scr'] Heq|]; subst.
-        + iIntros (Φ sΦ) "rΦ".
-          iPoseProof (eqₚ_triv (vt2 := term_union U K scr' : STerm (ty.union U) w) Heq) as "Heq".
-          iDestruct (repₚ_eqₚ (T := STerm (ty.union _)) with "[$Heq $Hv]") as "Hv".
-          iDestruct (repₚ_inversion_union with "Hv") as "(%t & -> & Hv)".
-          iIntros "HSP".
-          rewrite CPureSpec.wp_demonic_pattern_match.
-          cbn -[RSat].
-          rewrite unionv_unfold_fold.
-          rewrite -(CPureSpec.wp_demonic_pattern_match _ (fun v => Φ (let (pc, δpc) := v in _))).
-          iApply (H with "Hv [rΦ] HSP").
-          iIntros (w2 ω2) "!> %mr %smr Hmr".
-          destruct mr, smr.
-          iDestruct "Hmr" as "(%e & Hmr)".
-          subst x0.
-          rewrite forgetting_unconditionally.
-          iApply ("rΦ" with "[Hmr]").
-          now iExists eq_refl.
-        + now iApply (refine_demonic_pattern_match' n (pat_union _ _)).
+      (* - iApply (refine_demonic_pattern_match' n (pat_tuple p)). *)
+      (* - iIntros (v sv) "Hv". *)
+      (*   destruct (term_get_record_spec sv) as [svs Heq|]; subst. *)
+      (*   + iPoseProof (eqₚ_triv (vt2 := term_record R svs : STerm (ty.record R) w) Heq) as "Heq". *)
+      (*     iDestruct (repₚ_eqₚ (T := STerm (ty.record _)) with "[$Heq $Hv]") as "Hv". *)
+      (*     iIntros (Φ sΦ) "rΦ HSP". *)
+      (*     rewrite CPureSpec.wp_demonic_pattern_match. *)
+      (*     iApply ("rΦ" with "[Hv] HSP"). *)
+      (*     iDestruct (repₚ_inversion_record with "Hv") as "(%vs & -> & Hvs)". *)
+      (*     iExists eq_refl. *)
+      (*     unfold record_pattern_match_val. *)
+      (*     rewrite recordv_unfold_fold. *)
+      (*     iApply (repₚ_cong (T1 := fun w => NamedEnv (Term w) _) (T2 := fun w => NamedEnv (Term w) _) with "Hvs"). *)
+      (*     intros. *)
+      (*     now rewrite inst_record_pattern_match. *)
+      (*   + now iApply (refine_demonic_pattern_match' n (pat_record _ _ _)). *)
+      (* - iIntros (v sv) "Hv". *)
+      (*   destruct (term_get_union_spec sv) as [[K scr'] Heq|]; subst. *)
+      (*   + iIntros (Φ sΦ) "rΦ". *)
+      (*     iPoseProof (eqₚ_triv (vt2 := term_union U K scr' : STerm (ty.union U) w) Heq) as "Heq". *)
+      (*     iDestruct (repₚ_eqₚ (T := STerm (ty.union _)) with "[$Heq $Hv]") as "Hv". *)
+      (*     iDestruct (repₚ_inversion_union with "Hv") as "(%t & -> & Hv)". *)
+      (*     iIntros "HSP". *)
+      (*     rewrite CPureSpec.wp_demonic_pattern_match. *)
+      (*     cbn -[RSat]. *)
+      (*     rewrite unionv_unfold_fold. *)
+      (*     rewrite -(CPureSpec.wp_demonic_pattern_match _ (fun v => Φ (let (pc, δpc) := v in _))). *)
+      (*     iApply (H with "Hv [rΦ] HSP"). *)
+      (*     iIntros (w2 ω2) "!> %mr %smr Hmr". *)
+      (*     destruct mr, smr. *)
+      (*     iDestruct "Hmr" as "(%e & Hmr)". *)
+      (*     subst x0. *)
+      (*     rewrite forgetting_unconditionally. *)
+      (*     iApply ("rΦ" with "[Hmr]"). *)
+      (*     now iExists eq_refl. *)
+      (*   + now iApply (refine_demonic_pattern_match' n (pat_union _ _)). *)
     Qed.
     #[global] Arguments refine_demonic_pattern_match' {N} n {σ} pat.
 
@@ -856,52 +856,52 @@ Module Type RefinementMonadsOn
           cbn; rsolve.
         + now iApply (refine_new_pattern_match' with "Hv").
       - cbn; rsolve.
-      - destruct (term_get_val_spec sv) as [? ->|].
-        + iDestruct (refine_term_val2 with "Hv") as "->".
-          cbn; rsolve.
-        + now iApply (refine_new_pattern_match' with "Hv").
+      (* - destruct (term_get_val_spec sv) as [? ->|]. *)
+      (*   + iDestruct (refine_term_val2 with "Hv") as "->". *)
+      (*     cbn; rsolve. *)
+      (*   + now iApply (refine_new_pattern_match' with "Hv"). *)
       - now iApply (refine_new_pattern_match').
       - destruct (term_get_val_spec sv) as [? ->|].
         + iDestruct (refine_term_val2 with "Hv") as "->".
           cbn; rsolve.
         + now iApply (refine_new_pattern_match' with "Hv").
-      - destruct (term_get_tuple_spec sv) as [? eq|].
-        + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
-          { iApply (eqₚ_triv (vt2 := term_tuple a) eq).  }
-          cbn; rsolve.
-          iApply refine_tuple_pattern_match_env.
-          now iApply RVal_tuple.
-        + now iApply refine_new_pattern_match'.
-      - destruct (term_get_record_spec sv) as [? eq|].
-        + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv".
-          { iApply (eqₚ_triv (vt2 := term_record R a) eq).  }
-          cbn; rsolve.
-          unfold record_pattern_match_val.
-          rewrite <-refine_record_pattern_match_env.
-          now rewrite RVal_record recordv_fold_unfold.
-        + now iApply refine_new_pattern_match'.
-      - destruct (term_get_union_spec sv) as [[K tf] Heq|].
-        + iIntros (post spost) "rpost"; cbn.
-          iPoseProof (RVal_eqₚ with "[$Hv]") as "Hv".
-          { iApply (eqₚ_triv (vt2 := term_union U K tf) Heq). }
-          rewrite <-(unionv_fold_unfold U v).
-          destruct (unionv_unfold U v) as [K' vf].
-          iDestruct (RVal_union_invertK with "Hv") as "->".
-          rewrite RVal_union.
-          iPoseProof (H K with "Hv") as "H".
-          unfold CPureSpec.new_pattern_match; cbn.
-          rewrite unionv_unfold_fold; cbn.
-          destruct (pattern_match_val (p K) vf) as [pc δpc] eqn:?.
-          iApply ("H" $! (fun '(existT pc δpc) => post (existT (existT K pc) δpc)) with "[rpost]").
-          clear.
-          iIntros (w2 ω2) "!> %mr %smr Hmr".
-          destruct mr as [pc' δargs].
-          destruct smr as [spc' sδargs].
-          iDestruct "Hmr" as "[%eq H2]"; subst; cbn.
-          rewrite forgetting_unconditionally.
-          iApply "rpost".
-          now iExists eq_refl.
-        + now iApply refine_new_pattern_match'.
+      (* - destruct (term_get_tuple_spec sv) as [? eq|]. *)
+      (*   + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv". *)
+      (*     { iApply (eqₚ_triv (vt2 := term_tuple a) eq).  } *)
+      (*     cbn; rsolve. *)
+      (*     iApply refine_tuple_pattern_match_env. *)
+      (*     now iApply RVal_tuple. *)
+      (*   + now iApply refine_new_pattern_match'. *)
+      (* - destruct (term_get_record_spec sv) as [? eq|]. *)
+      (*   + iDestruct (RVal_eqₚ with "[$Hv]") as "Hv". *)
+      (*     { iApply (eqₚ_triv (vt2 := term_record R a) eq).  } *)
+      (*     cbn; rsolve. *)
+      (*     unfold record_pattern_match_val. *)
+      (*     rewrite <-refine_record_pattern_match_env. *)
+      (*     now rewrite RVal_record recordv_fold_unfold. *)
+      (*   + now iApply refine_new_pattern_match'. *)
+      (* - destruct (term_get_union_spec sv) as [[K tf] Heq|]. *)
+      (*   + iIntros (post spost) "rpost"; cbn. *)
+      (*     iPoseProof (RVal_eqₚ with "[$Hv]") as "Hv". *)
+      (*     { iApply (eqₚ_triv (vt2 := term_union U K tf) Heq). } *)
+      (*     rewrite <-(unionv_fold_unfold U v). *)
+      (*     destruct (unionv_unfold U v) as [K' vf]. *)
+      (*     iDestruct (RVal_union_invertK with "Hv") as "->". *)
+      (*     rewrite RVal_union. *)
+      (*     iPoseProof (H K with "Hv") as "H". *)
+      (*     unfold CPureSpec.new_pattern_match; cbn. *)
+      (*     rewrite unionv_unfold_fold; cbn. *)
+      (*     destruct (pattern_match_val (p K) vf) as [pc δpc] eqn:?. *)
+      (*     iApply ("H" $! (fun '(existT pc δpc) => post (existT (existT K pc) δpc)) with "[rpost]"). *)
+      (*     clear. *)
+      (*     iIntros (w2 ω2) "!> %mr %smr Hmr". *)
+      (*     destruct mr as [pc' δargs]. *)
+      (*     destruct smr as [spc' sδargs]. *)
+      (*     iDestruct "Hmr" as "[%eq H2]"; subst; cbn. *)
+      (*     rewrite forgetting_unconditionally. *)
+      (*     iApply "rpost". *)
+      (*     now iExists eq_refl. *)
+      (*   + now iApply refine_new_pattern_match'. *)
     Qed.
 
     Lemma refine_debug `{RA : Rel SA CA} {w} :

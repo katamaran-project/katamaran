@@ -83,12 +83,12 @@ Module Type OccursCheckOn
       | term_unop op t =>
           t' <- occurs_check_term xIn t;;
           Some (term_unop op t')
-      | term_tuple ts =>
-        term_tuple <$> occurs_check (OccursCheck := occurs_check_env (OCT := @occurs_check_term)) xIn ts
-      | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0
-      | term_record R ts =>
-        let OCTerm xt := @occurs_check_term (@type recordf Ty xt) in
-        term_record R <$> occurs_check (OccursCheck := occurs_check_env (OCT := OCTerm)) xIn ts
+      (* | term_tuple ts => *)
+      (*   term_tuple <$> occurs_check (OccursCheck := occurs_check_env (OCT := @occurs_check_term)) xIn ts *)
+      (* | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0 *)
+      (* | term_record R ts => *)
+      (*   let OCTerm xt := @occurs_check_term (@type recordf Ty xt) in *)
+      (*   term_record R <$> occurs_check (OccursCheck := occurs_check_env (OCT := OCTerm)) xIn ts *)
       end.
 
   #[export] Instance occurs_check_list {T : LCtx -> Type} `{OccursCheck T} :
@@ -184,10 +184,10 @@ Module Type OccursCheckOn
     derive.
     - unfold sub_shift. rewrite env.lookup_tabulate. cbn.
       now rewrite ctx.occurs_check_view_shift.
-    - generalize (occurs_check_env_shift_point IH).
-      apply wp_monotonic. intros ? <-. reflexivity.
-    - generalize (occurs_check_env_shift_point IH).
-      apply wp_monotonic. intros ? <-. reflexivity.
+    (* - generalize (occurs_check_env_shift_point IH). *)
+    (*   apply wp_monotonic. intros ? <-. reflexivity. *)
+    (* - generalize (occurs_check_env_shift_point IH). *)
+    (*   apply wp_monotonic. intros ? <-. reflexivity. *)
     - change
         (@wlp (Term (Σ - x) (type (l∷σ)))
            (fun t' : Term (Σ - x) (type (l∷σ)) =>
@@ -205,10 +205,10 @@ Module Type OccursCheckOn
       revert lIn. generalize (l∷σ). intros y yIn.
       destruct ctx.occurs_check_view; constructor; cbn.
       unfold sub_shift. now rewrite env.lookup_tabulate.
-    - generalize (occurs_check_env_sound_point IH).
-      apply wlp_monotonic. now intros ts' ->.
-    - generalize (occurs_check_env_sound_point IH).
-      apply wlp_monotonic. now intros ts' ->.
+    (* - generalize (occurs_check_env_sound_point IH). *)
+    (*   apply wlp_monotonic. now intros ts' ->. *)
+    (* - generalize (occurs_check_env_sound_point IH). *)
+    (*   apply wlp_monotonic. now intros ts' ->. *)
   Qed.
 
   #[export] Instance occurs_check_laws_list {T : LCtx -> Type} `{OccursCheckLaws T} :
