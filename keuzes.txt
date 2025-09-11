@@ -1,0 +1,8 @@
+Mogelijke keuzes:
+- SyncVal in leaves of niet
+- 
+
+Mogelijke simplificaties:
+- if-statements (tijdelijk, niet in eindresultaat)
+- Geen pattern-matching op NonSyncVals
+- Enkel eq als relop (tijdelijk)
