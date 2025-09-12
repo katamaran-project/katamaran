@@ -6,3 +6,23 @@ Mogelijke simplificaties:
 - if-statements (tijdelijk, niet in eindresultaat)
 - Geen pattern-matching op NonSyncVals
 - Enkel eq als relop (tijdelijk)
+
+Gemaakte keuzes:
+- Disabled:
+	+ Type constructors: 
+		* Enum
+		* Union
+		* Record
+		* Tuple
+	+ BinOp: didn't turn off, everything except eq, because it seemed more work than it simplified
+	+ Use if instead of pattern match: didn't do this for now, because of problems encountered in Assertions.v, it didn't seem worth it.	
+	
+- Voorstelling RelVal: Uniform in het type
+	Ondersteuning voor projectie en Val omzetten naar RelVal (dus gebruik hier niet SyncVal voor).
+	We behouden RV om eventueel te gebruiken voor RV Prop in eval_relop_propRel.
+	Encountered problems: 
+
+
+Inadequacies:
+- 
+
