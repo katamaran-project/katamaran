@@ -143,9 +143,9 @@ Module Type PatternsOn (Import TY : Types).
     Inductive Pattern : Ty -> Set :=
     | pat_var (x : N) {σ}                             : Pattern σ
     | pat_bool                                        : Pattern ty.bool
-    | pat_list σ (x y : N)                            : Pattern (ty.list σ)
+    (* | pat_list σ (x y : N)                            : Pattern (ty.list σ) *)
     | pat_pair (x y : N) {σ τ}                        : Pattern (ty.prod σ τ)
-    | pat_sum σ τ (x y : N)                           : Pattern (ty.sum σ τ)
+    (* | pat_sum σ τ (x y : N)                           : Pattern (ty.sum σ τ) *)
     | pat_unit                                        : Pattern ty.unit
     (* | pat_enum E                                      : Pattern (ty.enum E) *)
     | pat_bvec_split m n (x y : N)                    : Pattern (ty.bvec (m+n))
@@ -163,9 +163,9 @@ Module Type PatternsOn (Import TY : Types).
       match pat with
       | pat_var x              => unit
       | pat_bool               => bool
-      | pat_list σ x y         => bool
+      (* | pat_list σ x y         => bool *)
       | pat_pair x y           => unit
-      | pat_sum σ τ x y        => bool
+      (* | pat_sum σ τ x y        => bool *)
       | pat_unit               => unit
       (* | pat_enum E             => enumt E *)
       | pat_bvec_split m n x y => unit
@@ -181,9 +181,9 @@ Module Type PatternsOn (Import TY : Types).
         match pat return Classes.EqDec (PatternCase pat) with
         | pat_var _              => EqDecInstances.unit_EqDec
         | pat_bool               => EqDecInstances.bool_EqDec
-        | pat_list _ _ _         => EqDecInstances.bool_EqDec
+        (* | pat_list _ _ _         => EqDecInstances.bool_EqDec *)
         | pat_pair _ _           => EqDecInstances.unit_EqDec
-        | pat_sum _ _ _ _        => EqDecInstances.bool_EqDec
+        (* | pat_sum _ _ _ _        => EqDecInstances.bool_EqDec *)
         | pat_unit               => EqDecInstances.unit_EqDec
         (* | pat_enum E             => enumt_eqdec E *)
         | pat_bvec_split _ _ _ _ => EqDecInstances.unit_EqDec
@@ -202,9 +202,9 @@ Module Type PatternsOn (Import TY : Types).
         match pat with
         | pat_var _              => finite.unit_finite
         | pat_bool               => Finite_bool
-        | pat_list _ _ _         => Finite_bool
+        (* | pat_list _ _ _         => Finite_bool *)
         | pat_pair _ _           => finite.unit_finite
-        | pat_sum _ _ _ _        => Finite_bool
+        (* | pat_sum _ _ _ _        => Finite_bool *)
         | pat_unit               => finite.unit_finite
         (* | pat_enum E             => enumt_finite E *)
         | pat_bvec_split _ _ _ _ => finite.unit_finite
@@ -224,9 +224,9 @@ Module Type PatternsOn (Import TY : Types).
       match p with
       | @pat_var x σ           => fun _ => [x∷σ]
       | pat_bool               => fun _ => [ctx]
-      | pat_list σ x y         => fun b => if b then [ctx] else [x∷σ; y∷ty.list σ]
+      (* | pat_list σ x y         => fun b => if b then [ctx] else [x∷σ; y∷ty.list σ] *)
       | @pat_pair x y σ τ      => fun _ => [x∷σ; y∷τ]
-      | pat_sum σ τ x y        => fun b => if b then [x∷σ] else [y∷τ]
+      (* | pat_sum σ τ x y        => fun b => if b then [x∷σ] else [y∷τ] *)
       | pat_unit               => fun _ => [ctx]
       (* | pat_enum _             => fun _ => [ctx] *)
       | pat_bvec_split m n x y => fun _ => [x∷ty.bvec m; y∷ty.bvec n]
@@ -249,20 +249,20 @@ Module Type PatternsOn (Import TY : Types).
           fun v => existT tt [env].[x∷_ ↦ v]
       | pat_bool       =>
           fun b => existT b [env]
-      | pat_list σ x y =>
-          fun v : Val (ty.list σ) =>
-            match v with
-            | nil       => existT true [env]
-            | cons v vs => existT false [env].[x∷σ ↦ v].[y∷ty.list σ ↦ vs]
-            end
+      (* | pat_list σ x y => *)
+      (*     fun v : Val (ty.list σ) => *)
+      (*       match v with *)
+      (*       | nil       => existT true [env] *)
+      (*       | cons v vs => existT false [env].[x∷σ ↦ v].[y∷ty.list σ ↦ vs] *)
+      (*       end *)
       | pat_pair x y =>
           fun '(a, b) => existT tt [env].[x∷_ ↦ a].[y∷_ ↦ b]
-      | pat_sum σ τ x y =>
-          fun v =>
-            match v with
-            | inl a => existT true [env].[x∷σ ↦ a]
-            | inr b => existT false [env].[y∷τ ↦ b]
-            end
+      (* | pat_sum σ τ x y => *)
+      (*     fun v => *)
+      (*       match v with *)
+      (*       | inl a => existT true [env].[x∷σ ↦ a] *)
+      (*       | inr b => existT false [env].[y∷τ ↦ b] *)
+      (*       end *)
       | pat_unit =>
           fun _ => existT tt [env]
       (* | pat_enum E => *)
@@ -294,26 +294,26 @@ Module Type PatternsOn (Import TY : Types).
       match p with
       | pat_var x      => fun _ vs => env.head vs
       | pat_bool       => fun b _ => b
-      | pat_list σ x y =>
-          fun b =>
-            match b with
-            | true  => fun _ => nil
-            | false => fun Eht =>
-                         let (Eh,t) := env.view Eht in
-                         let (E,h)  := env.view Eh in
-                         cons h t
-            end
+      (* | pat_list σ x y => *)
+      (*     fun b => *)
+      (*       match b with *)
+      (*       | true  => fun _ => nil *)
+      (*       | false => fun Eht => *)
+      (*                    let (Eh,t) := env.view Eht in *)
+      (*                    let (E,h)  := env.view Eh in *)
+      (*                    cons h t *)
+      (*       end *)
       | pat_pair x y =>
           fun _ Exy =>
             let (Ex,vy) := env.view Exy in
             let (E,vx)  := env.view Ex in
             (vx,vy)
-      | pat_sum σ τ x y =>
-          fun b =>
-            match b with
-            | true  => fun vs => inl (env.head vs)
-            | false => fun vs => inr (env.head vs)
-            end
+      (* | pat_sum σ τ x y => *)
+      (*     fun b => *)
+      (*       match b with *)
+      (*       | true  => fun vs => inl (env.head vs) *)
+      (*       | false => fun vs => inr (env.head vs) *)
+      (*       end *)
       | pat_unit =>
           fun _ _ => tt
       (* | pat_enum E => *)
@@ -348,8 +348,8 @@ Module Type PatternsOn (Import TY : Types).
       - env.destroy vs. reflexivity.
       - destruct pc; now env.destroy vs.
       - destruct pc; now env.destroy vs.
-      - destruct pc; now env.destroy vs.
-      - destruct pc; now env.destroy vs.
+      (* - destruct pc; now env.destroy vs. *)
+      (* - destruct pc; now env.destroy vs. *)
       (* - now env.destroy vs. *)
       - destruct pc; env.destroy vs.
         now rewrite bv.appView_app.
@@ -383,8 +383,8 @@ Module Type PatternsOn (Import TY : Types).
       - reflexivity.
       - destruct v; reflexivity.
       - destruct v; reflexivity.
-      - destruct v; reflexivity.
-      - destruct v; reflexivity.
+      (* - destruct v; reflexivity. *)
+      (* - destruct v; reflexivity. *)
       (* - reflexivity. *)
       - destruct bv.appView; reflexivity.
       - reflexivity.
@@ -402,6 +402,7 @@ Module Type PatternsOn (Import TY : Types).
       (*     (pattern_match_val_reverse' _ (existT pc vs)). *)
       (*   now rewrite <- Heq, H. *)
     Qed.
+
 
     (* The intendend use case of the above definitions is in the declaration of
        inductive types for AST that represent pattern matches. This will
@@ -566,15 +567,15 @@ Module Type PatternsOn (Import TY : Types).
       match p in (Pattern t) return (Pattern t) with
       | pat_var x              => pat_var (fresh_lvar Σ (Some (n x)))
       | pat_bool               => pat_bool
-      | pat_list σ x y         => let x' := fresh_lvar Σ (Some (n x)) in
-                                  let y' := fresh_lvar (Σ▻x'∷σ) (Some (n y)) in
-                                  pat_list σ x' y'
+      (* | pat_list σ x y         => let x' := fresh_lvar Σ (Some (n x)) in *)
+      (*                             let y' := fresh_lvar (Σ▻x'∷σ) (Some (n y)) in *)
+      (*                             pat_list σ x' y' *)
       | @pat_pair _ x y σ τ    => let x' := fresh_lvar Σ (Some (n x)) in
                                   let y' := fresh_lvar (Σ▻x'∷σ) (Some (n y)) in
                                   pat_pair x' y'
-      | pat_sum σ τ x y        => pat_sum σ τ
-                                    (fresh_lvar Σ (Some (n x)))
-                                    (fresh_lvar Σ (Some (n y)))
+      (* | pat_sum σ τ x y        => pat_sum σ τ *)
+      (*                               (fresh_lvar Σ (Some (n x))) *)
+      (*                               (fresh_lvar Σ (Some (n y))) *)
       | pat_unit               => pat_unit
       (* | pat_enum E             => pat_enum E *)
       | pat_bvec_split m _ x y =>
@@ -605,9 +606,9 @@ Module Type PatternsOn (Import TY : Types).
       match p with
       | pat_var _              => fun pc => pc
       | pat_bool               => fun pc => pc
-      | pat_list _ _ _         => fun pc => pc
+      (* | pat_list _ _ _         => fun pc => pc *)
       | pat_pair _ _           => fun pc => pc
-      | pat_sum _ _ _ _        => fun pc => pc
+      (* | pat_sum _ _ _ _        => fun pc => pc *)
       | pat_unit               => fun pc => pc
       (* | pat_enum E             => fun pc => pc *)
       | pat_bvec_split _ _ _ _ => fun pc => pc
@@ -625,9 +626,9 @@ Module Type PatternsOn (Import TY : Types).
       match p with
       | pat_var _              => fun pc => pc
       | pat_bool               => fun pc => pc
-      | pat_list _ _ _         => fun pc => pc
+      (* | pat_list _ _ _         => fun pc => pc *)
       | pat_pair _ _           => fun pc => pc
-      | pat_sum _ _ _ _        => fun pc => pc
+      (* | pat_sum _ _ _ _        => fun pc => pc *)
       | pat_unit               => fun pc => pc
       (* | pat_enum E             => fun pc => pc *)
       | pat_bvec_split _ _ _ _ => fun pc => pc
@@ -650,15 +651,15 @@ Module Type PatternsOn (Import TY : Types).
       match p with
       | pat_var _              => fun _ => eq_refl
       | pat_bool               => fun _ => eq_refl
-      | pat_list _ _ _         => fun pc => match pc with
-                                            | true => eq_refl
-                                            | false => eq_refl
-                                            end
+      (* | pat_list _ _ _         => fun pc => match pc with *)
+      (*                                       | true => eq_refl *)
+      (*                                       | false => eq_refl *)
+      (*                                       end *)
       | pat_pair _ _           => fun _ => eq_refl
-      | pat_sum _ _ _ _        => fun pc => match pc with
-                                            | true => eq_refl
-                                            | false => eq_refl
-                                            end
+      (* | pat_sum _ _ _ _        => fun pc => match pc with *)
+      (*                                       | true => eq_refl *)
+      (*                                       | false => eq_refl *)
+      (*                                       end *)
       | pat_unit               => fun _ => eq_refl
       (* | pat_enum _             => fun _ => eq_refl *)
       | pat_bvec_split _ _ _ _ => fun _ => eq_refl
@@ -686,24 +687,24 @@ Module Type PatternsOn (Import TY : Types).
       match p with
       | pat_var _ => fun ps ts => let (_,t) := env.view ts in [nenv t]
       | pat_bool => fun _ _   => [env]
-      | pat_list σ x y =>
-          fun pc => match pc with
-                    | true  => fun _  => [env]
-                    | false => fun ts => let (ts1,t) := env.view ts in
-                                         let (_,h)   := env.view ts1 in
-                                         [nenv h; t]
-                    end
+      (* | pat_list σ x y => *)
+      (*     fun pc => match pc with *)
+      (*               | true  => fun _  => [env] *)
+      (*               | false => fun ts => let (ts1,t) := env.view ts in *)
+      (*                                    let (_,h)   := env.view ts1 in *)
+      (*                                    [nenv h; t] *)
+      (*               end *)
       | pat_pair x y =>
           fun _ ts =>
             let (ts1,v) := env.view ts in
             let (_,v0) := env.view ts1 in
             [nenv v0; v]
-      | pat_sum σ τ x y =>
-          fun pc =>
-            match pc with
-            | true  => fun ts => let (_,v) := env.view ts in [nenv v]
-            | false => fun ts => let (_,v) := env.view ts in [nenv v]
-            end
+      (* | pat_sum σ τ x y => *)
+      (*     fun pc => *)
+      (*       match pc with *)
+      (*       | true  => fun ts => let (_,v) := env.view ts in [nenv v] *)
+      (*       | false => fun ts => let (_,v) := env.view ts in [nenv v] *)
+      (*       end *)
       | pat_unit   => fun _ _ => [env]
       (* | pat_enum E => fun _ _ => [env] *)
       | pat_bvec_split m n x y =>
@@ -724,24 +725,24 @@ Module Type PatternsOn (Import TY : Types).
       match p with
       | pat_var _ => fun ps ts => let (_,t) := env.view ts in [nenv t]
       | pat_bool => fun _ _   => [env]
-      | pat_list σ x y =>
-          fun pc => match pc with
-                    | true  => fun _  => [env]
-                    | false => fun ts => let (ts1,t) := env.view ts in
-                                         let (_,h)   := env.view ts1 in
-                                         [nenv h; t]
-                    end
+      (* | pat_list σ x y => *)
+      (*     fun pc => match pc with *)
+      (*               | true  => fun _  => [env] *)
+      (*               | false => fun ts => let (ts1,t) := env.view ts in *)
+      (*                                    let (_,h)   := env.view ts1 in *)
+      (*                                    [nenv h; t] *)
+      (*               end *)
       | pat_pair x y =>
           fun _ ts =>
             let (ts1,v) := env.view ts in
             let (_,v0) := env.view ts1 in
             [nenv v0; v]
-      | pat_sum σ τ x y =>
-          fun pc =>
-            match pc with
-            | true  => fun ts => let (_,v) := env.view ts in [nenv v]
-            | false => fun ts => let (_,v) := env.view ts in [nenv v]
-            end
+      (* | pat_sum σ τ x y => *)
+      (*     fun pc => *)
+      (*       match pc with *)
+      (*       | true  => fun ts => let (_,v) := env.view ts in [nenv v] *)
+      (*       | false => fun ts => let (_,v) := env.view ts in [nenv v] *)
+      (*       end *)
       | pat_unit   => fun _ _ => [env]
       (* | pat_enum E => fun _ _ => [env] *)
       | pat_bvec_split m n x y =>

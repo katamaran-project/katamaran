@@ -185,12 +185,12 @@ Module Type GenericSolverOn
           let (v1, v2) := v in
           cat (simplify_eq_val t1 v1) (simplify_eq_val t2 v2).
 
-        Definition simplify_eq_binop_cons_val {σ} (t1 : Term Σ σ)
-          (t2 : Term Σ (ty.list σ)) (v : Val (ty.list σ)) : DList Σ :=
-          match v with
-          | nil        => error
-          | cons vh vl => cat (simplify_eq_val t1 vh) (simplify_eq_val t2 vl)
-          end.
+        (* Definition simplify_eq_binop_cons_val {σ} (t1 : Term Σ σ) *)
+        (*   (t2 : Term Σ (ty.list σ)) (v : Val (ty.list σ)) : DList Σ := *)
+        (*   match v with *)
+        (*   | nil        => error *)
+        (*   | cons vh vl => cat (simplify_eq_val t1 vh) (simplify_eq_val t2 vl) *)
+        (*   end. *)
 
         Definition simplify_eq_binop_bvapp_val {m n} (t1 : Term Σ (ty.bvec m))
           (t2 : Term Σ (ty.bvec n)) (v : Val (ty.bvec (m + n))) : DList Σ :=
@@ -213,8 +213,8 @@ Module Type GenericSolverOn
           | bop.and => simplify_eq_binop_and_val
           | bop.or => simplify_eq_binop_or_val
           | bop.pair => simplify_eq_binop_pair_val
-          | bop.cons => simplify_eq_binop_cons_val
-          | bop.append => simplify_eq_binop_default_val bop.append
+          (* | bop.cons => simplify_eq_binop_cons_val *)
+          (* | bop.append => simplify_eq_binop_default_val bop.append *)
           | bop.shiftr => simplify_eq_binop_default_val bop.shiftr
           | bop.shiftl => simplify_eq_binop_default_val bop.shiftl
           | bop.bvadd => simplify_eq_binop_default_val bop.bvadd
@@ -230,19 +230,19 @@ Module Type GenericSolverOn
           | bop.relop op => simplify_eq_binop_relop_val op
           end.
 
-        Definition simplify_eq_unop_inl_val {σ1 σ2} (t : Term Σ σ1)
-          (v : Val (ty.sum σ1 σ2)) : DList Σ :=
-          match v with
-          | inl vl => simplify_eq_val t vl
-          | inr _  => error
-          end.
+        (* Definition simplify_eq_unop_inl_val {σ1 σ2} (t : Term Σ σ1) *)
+        (*   (v : Val (ty.sum σ1 σ2)) : DList Σ := *)
+        (*   match v with *)
+        (*   | inl vl => simplify_eq_val t vl *)
+        (*   | inr _  => error *)
+        (*   end. *)
 
-        Definition simplify_eq_unop_inr_val {σ1 σ2} (t : Term Σ σ2)
-          (v : Val (ty.sum σ1 σ2)) : DList Σ :=
-          match v with
-          | inl _  => error
-          | inr vr => simplify_eq_val t vr
-          end.
+        (* Definition simplify_eq_unop_inr_val {σ1 σ2} (t : Term Σ σ2) *)
+        (*   (v : Val (ty.sum σ1 σ2)) : DList Σ := *)
+        (*   match v with *)
+        (*   | inl _  => error *)
+        (*   | inr vr => simplify_eq_val t vr *)
+        (*   end. *)
 
         Definition simplify_eq_unop_neg_val (t : Term Σ ty.int) (v : Val ty.int) :
           DList Σ := simplify_eq_val t (Z.opp v).
@@ -262,11 +262,11 @@ Module Type GenericSolverOn
         Definition simplify_eq_unop_val {σ1 σ2} (op : UnOp σ1 σ2) :
           Term Σ σ1 → Val σ2 → DList Σ :=
           match op with
-          | uop.inl => simplify_eq_unop_inl_val
-          | uop.inr => simplify_eq_unop_inr_val
+          (* | uop.inl => simplify_eq_unop_inl_val *)
+          (* | uop.inr => simplify_eq_unop_inr_val *)
           | uop.neg => simplify_eq_unop_neg_val
           | uop.not => simplify_eq_unop_not_val
-          | uop.rev => simplify_eq_unop_default_val uop.rev
+          (* | uop.rev => simplify_eq_unop_default_val uop.rev *)
           | uop.sext => simplify_eq_unop_default_val uop.sext
           | uop.zext => simplify_eq_unop_default_val uop.zext
           | uop.get_slice_int => simplify_eq_unop_default_val uop.get_slice_int
@@ -407,28 +407,28 @@ Module Type GenericSolverOn
             (fun (*pair*) t1' t2' => cat (simplify_eq t1 t1') (simplify_eq t2 t2'))
             t.
 
-        Definition simplify_eq_binop_cons {σ} (t1 : Term Σ σ)
-          (t2 : Term Σ (ty.list σ)) (t : Term Σ (ty.list σ)) : DList Σ :=
-          Term_list_case (fun _ => DList Σ)
-            (fun (*var*) _ _ => dlist_eq t (term_cons t1 t2))
-            (fun (*val*) v => simplify_eq_val (term_cons t1 t2) v)
-            (fun (*cons*) t1' t2' => cat (simplify_eq t1 t1') (simplify_eq t2 t2'))
-            (fun (*append*) _ _ => dlist_eq (term_cons t1 t2) t)
-            (fun (*rev*) _ => dlist_eq (term_cons t1 t2) t)
-            t.
+        (* Definition simplify_eq_binop_cons {σ} (t1 : Term Σ σ) *)
+        (*   (t2 : Term Σ (ty.list σ)) (t : Term Σ (ty.list σ)) : DList Σ := *)
+        (*   Term_list_case (fun _ => DList Σ) *)
+        (*     (fun (*var*) _ _ => dlist_eq t (term_cons t1 t2)) *)
+        (*     (fun (*val*) v => simplify_eq_val (term_cons t1 t2) v) *)
+        (*     (fun (*cons*) t1' t2' => cat (simplify_eq t1 t1') (simplify_eq t2 t2')) *)
+        (*     (fun (*append*) _ _ => dlist_eq (term_cons t1 t2) t) *)
+        (*     (fun (*rev*) _ => dlist_eq (term_cons t1 t2) t) *)
+        (*     t. *)
 
-        Definition simplify_eq_binop_append {σ} (tl1 : Term Σ (ty.list σ))
-          (tl2 : Term Σ (ty.list σ)) (tr : Term Σ (ty.list σ)) : DList Σ :=
-          Term_list_case (fun _ => DList Σ)
-            (fun (*var*) _ _ => dlist_eq tr (term_append tl1 tl2))
-            (fun (*val*) v => simplify_eq_val (term_append tl1 tl2) v)
-            (fun (*cons*) t1' t2' => dlist_eq tr (term_append tl1 tl2))
-            (fun (*append*) tr1 tr2 =>
-               if Term_eqb tl1 tr1 then simplify_eq tl2 tr2 else
-                 if Term_eqb tl2 tr2 then simplify_eq tl1 tr1 else
-                   dlist_eq (term_append tl1 tl2) tr)
-            (fun (*rev*) _ => dlist_eq (term_append tl1 tl2) tr)
-            tr.
+        (* Definition simplify_eq_binop_append {σ} (tl1 : Term Σ (ty.list σ)) *)
+        (*   (tl2 : Term Σ (ty.list σ)) (tr : Term Σ (ty.list σ)) : DList Σ := *)
+        (*   Term_list_case (fun _ => DList Σ) *)
+        (*     (fun (*var*) _ _ => dlist_eq tr (term_append tl1 tl2)) *)
+        (*     (fun (*val*) v => simplify_eq_val (term_append tl1 tl2) v) *)
+        (*     (fun (*cons*) t1' t2' => dlist_eq tr (term_append tl1 tl2)) *)
+        (*     (fun (*append*) tr1 tr2 => *)
+        (*        if Term_eqb tl1 tr1 then simplify_eq tl2 tr2 else *)
+        (*          if Term_eqb tl2 tr2 then simplify_eq tl1 tr1 else *)
+        (*            dlist_eq (term_append tl1 tl2) tr) *)
+        (*     (fun (*rev*) _ => dlist_eq (term_append tl1 tl2) tr) *)
+        (*     tr. *)
 
         Definition simplify_eq_binop_bvapp' {m n} (t1 : Term Σ (ty.bvec m))
           (t2 : Term Σ (ty.bvec n)) mn (t : Term Σ (ty.bvec mn))
@@ -562,8 +562,8 @@ Module Type GenericSolverOn
           | bop.and => simplify_eq_binop_and
           | bop.or => simplify_eq_binop_or
           | bop.pair => simplify_eq_binop_pair
-          | bop.cons => simplify_eq_binop_cons
-          | bop.append => simplify_eq_binop_append
+          (* | bop.cons => simplify_eq_binop_cons *)
+          (* | bop.append => simplify_eq_binop_append *)
           | bop.shiftr => simplify_eq_binop_default bop.shiftr
           | bop.shiftl => simplify_eq_binop_default bop.shiftl
           | bop.bvadd => simplify_eq_binop_default bop.bvadd
@@ -579,23 +579,23 @@ Module Type GenericSolverOn
           | bop.relop rop => simplify_eq_relop rop
           end.
 
-        Definition simplify_eq_unop_inl {σ1 σ2} (t1 : Term Σ σ1)
-          (t : Term Σ (ty.sum σ1 σ2)) : DList Σ :=
-          Term_sum_case (fun _ => DList Σ)
-            (fun (*var*) x _ => simplify_eq_unop_default uop.inl t1 t)
-            (fun (*val*) v   => simplify_eq_val (term_inl t1) v)
-            (fun (*inl*) t1' => simplify_eq t1 t1')
-            (fun (*inr*) t2  => error)
-            t.
+        (* Definition simplify_eq_unop_inl {σ1 σ2} (t1 : Term Σ σ1) *)
+        (*   (t : Term Σ (ty.sum σ1 σ2)) : DList Σ := *)
+        (*   Term_sum_case (fun _ => DList Σ) *)
+        (*     (fun (*var*) x _ => simplify_eq_unop_default uop.inl t1 t) *)
+        (*     (fun (*val*) v   => simplify_eq_val (term_inl t1) v) *)
+        (*     (fun (*inl*) t1' => simplify_eq t1 t1') *)
+        (*     (fun (*inr*) t2  => error) *)
+        (*     t. *)
 
-        Definition simplify_eq_unop_inr {σ1 σ2} (t2 : Term Σ σ2)
-          (t : Term Σ (ty.sum σ1 σ2)) : DList Σ :=
-          Term_sum_case (fun _ => DList Σ)
-            (fun (*var*) x _ => simplify_eq_unop_default uop.inr t2 t)
-            (fun (*val*) v   => simplify_eq_val (term_inr t2) v)
-            (fun (*inl*) t1  => error)
-            (fun (*inr*) t2' => simplify_eq t2 t2')
-            t.
+        (* Definition simplify_eq_unop_inr {σ1 σ2} (t2 : Term Σ σ2) *)
+        (*   (t : Term Σ (ty.sum σ1 σ2)) : DList Σ := *)
+        (*   Term_sum_case (fun _ => DList Σ) *)
+        (*     (fun (*var*) x _ => simplify_eq_unop_default uop.inr t2 t) *)
+        (*     (fun (*val*) v   => simplify_eq_val (term_inr t2) v) *)
+        (*     (fun (*inl*) t1  => error) *)
+        (*     (fun (*inr*) t2' => simplify_eq t2 t2') *)
+        (*     t. *)
 
         Definition simplify_eq_unop_get_slice_int {m} (tl : Term Σ ty.int)
           (tr : Term Σ (ty.bvec m)) : DList Σ :=
@@ -625,11 +625,11 @@ Module Type GenericSolverOn
         Definition simplify_eq_unop {σ1 σ2} (op : UnOp σ1 σ2) :
           Term Σ σ1 -> Term Σ σ2 -> DList Σ :=
           match op with
-          | uop.inl => simplify_eq_unop_inl
-          | uop.inr => simplify_eq_unop_inr
+          (* | uop.inl => simplify_eq_unop_inl *)
+          (* | uop.inr => simplify_eq_unop_inr *)
           | uop.neg => simplify_eq_unop_default uop.neg
           | uop.not => simplify_eq_unop_default uop.not
-          | uop.rev => simplify_eq_unop_default uop.rev
+          (* | uop.rev => simplify_eq_unop_default uop.rev *)
           | uop.sext => simplify_eq_unop_default uop.sext
           | uop.zext => simplify_eq_unop_default uop.zext
           | uop.get_slice_int => simplify_eq_unop_get_slice_int
@@ -730,15 +730,15 @@ Module Type GenericSolverOn
           + (*and*) destruct v; cbn; arw; arw_slow.
           + (*or*) destruct v; cbn; arw; arw_slow.
           + (*pair*) destruct v; cbn; arw. now rewrite IHt1 IHt2.
-          + (*cons*) destruct v; cbn; arw. now rewrite IHt1 IHt2; arw.
+          (* + (*cons*) destruct v; cbn; arw. now rewrite IHt1 IHt2; arw. *)
           + (*bvapp*) unfold simplify_eq_binop_bvapp_val.
             destruct bv.appView; arw. now rewrite IHt1 IHt2.
           + (*bvcons*) unfold simplify_eq_binop_bvcons_val.
             destruct bv.view; arw. now rewrite IHt1 IHt2.
           + (*relop*) destruct v; cbn; arw.
         - destruct op; cbn; auto.
-          + (*inl*) destruct v; cbn; arw; arw_slow.
-          + (*inr*) destruct v; cbn; arw; arw_slow.
+          (* + (*inl*) destruct v; cbn; arw; arw_slow. *)
+          (* + (*inr*) destruct v; cbn; arw; arw_slow. *)
           + (*neg*) unfold simplify_eq_unop_neg_val; arw.
           + (*not*) destruct v; cbn; arw.
           + (*signed*)
@@ -843,17 +843,17 @@ Module Type GenericSolverOn
             destruct (Term_eqb_spec tl2 tr2); subst; arw.
           + (*pair*) destruct tr using Term_prod_case; cbn; auto; arw.
             now rewrite IHtl1 IHtl2 -eqₚ_term_prod.
-          + (*cons*) destruct tr using Term_list_case; cbn; auto; arw.
-            rewrite IHtl1 IHtl2. arw_slow.
-          + (*append*)
-            destruct tr using Term_list_case; cbn; auto; arw.
-            destruct (Term_eqb_spec tl1 tr1). subst; cbn; arw.
-            { rewrite IHtl2. constructor; intros ι _; cbn.
-              now rewrite app_inv_head_iff. }
-            destruct (Term_eqb_spec tl2 tr2). subst; cbn; arw.
-            { rewrite IHtl1. constructor; intros ι _; cbn.
-              now rewrite app_inv_tail_iff. }
-            arw.
+          (* + (*cons*) destruct tr using Term_list_case; cbn; auto; arw. *)
+          (*   rewrite IHtl1 IHtl2. arw_slow. *)
+          (* + (*append*) *)
+          (*   destruct tr using Term_list_case; cbn; auto; arw. *)
+          (*   destruct (Term_eqb_spec tl1 tr1). subst; cbn; arw. *)
+          (*   { rewrite IHtl2. constructor; intros ι _; cbn. *)
+          (*     now rewrite app_inv_head_iff. } *)
+          (*   destruct (Term_eqb_spec tl2 tr2). subst; cbn; arw. *)
+          (*   { rewrite IHtl1. constructor; intros ι _; cbn. *)
+          (*     now rewrite app_inv_tail_iff. } *)
+          (*   arw. *)
           + (*bvapp*)
             assert (∀ mn (t : Term w (ty.bvec mn)) (e : m + n = mn),
                      instpred (simplify_eq_binop_bvapp' simplify_eq
@@ -878,8 +878,8 @@ Module Type GenericSolverOn
             rewrite eqₚ_term_not eqₚ_term_not_relop.
             destruct rop; cbn; auto.
         - destruct op; cbn; auto.
-          + (*inl*) destruct tr using Term_sum_case; cbn; auto; arw; arw_slow.
-          + (*inr*) destruct tr using Term_sum_case; cbn; auto; arw; arw_slow.
+          (* + (*inl*) destruct tr using Term_sum_case; cbn; auto; arw; arw_slow. *)
+          (* + (*inr*) destruct tr using Term_sum_case; cbn; auto; arw; arw_slow. *)
           + (*get_slice_int*)
             unfold simplify_eq_unop_get_slice_int.
             destruct (Term_eqb_spec (term_get_slice_int tl) tr); subst; arw.

@@ -108,16 +108,16 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Definition stm_match_bvec_split {Γ τ m n} (s : Stm Γ (ty.bvec (m + n))) (xl xr : PVar)
     (rhs : Stm (Γ ▻ xl ∷ ty.bvec m ▻ xr ∷ ty.bvec n) τ) : Stm Γ τ :=
     stm_pattern_match s (pat_bvec_split m n xl xr) (fun _ => rhs).
-  Definition stm_match_list {Γ τ σ} (s : Stm Γ (ty.list σ))
-    (alt_nil : Stm Γ τ) (xh xt : PVar)
-    (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ) : Stm Γ τ :=
-    stm_pattern_match s (pat_list σ xh xt)
-      (fun b => match b with true => alt_nil | false => alt_cons end).
-  Definition stm_match_sum {Γ τ σl σr} (s : Stm Γ (ty.sum σl σr))
-    (xl : PVar) (sl : Stm (Γ ▻ xl∷σl) τ)
-    (xr : PVar) (sr : Stm (Γ ▻ xr∷σr) τ) : Stm Γ τ :=
-    stm_pattern_match s (pat_sum σl σr xl xr)
-      (fun b => match b with true => sl | false => sr end).
+  (* Definition stm_match_list {Γ τ σ} (s : Stm Γ (ty.list σ)) *)
+  (*   (alt_nil : Stm Γ τ) (xh xt : PVar) *)
+  (*   (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ) : Stm Γ τ := *)
+  (*   stm_pattern_match s (pat_list σ xh xt) *)
+  (*     (fun b => match b with true => alt_nil | false => alt_cons end). *)
+  (* Definition stm_match_sum {Γ τ σl σr} (s : Stm Γ (ty.sum σl σr)) *)
+  (*   (xl : PVar) (sl : Stm (Γ ▻ xl∷σl) τ) *)
+  (*   (xr : PVar) (sr : Stm (Γ ▻ xr∷σr) τ) : Stm Γ τ := *)
+  (*   stm_pattern_match s (pat_sum σl σr xl xr) *)
+  (*     (fun b => match b with true => sl | false => sr end). *)
   (* Definition stm_match_enum {Γ τ E} (s : Stm Γ (ty.enum E)) *)
   (*   (alts : forall (K : enumt E), Stm Γ τ) : Stm Γ τ := *)
   (*   stm_pattern_match s (pat_enum E) alts. *)
@@ -132,8 +132,8 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   (* Arguments stm_match_tuple {Γ τ σs Δ} s%_exp p%_pat rhs%_exp. *)
   (* Arguments stm_match_record {Γ%_ctx τ} R {Δ%_ctx} s%_exp p%_pat rhs%_exp. *)
   Arguments stm_match_bvec_split {Γ τ} (m n)%_nat_scope s%_exp xl xr rhs%_exp.
-  Arguments stm_match_list {Γ τ _} _ _ _ _ _.
-  Arguments stm_match_sum {Γ τ _ _} _ _ _ _ _.
+  (* Arguments stm_match_list {Γ τ _} _ _ _ _ _. *)
+  (* Arguments stm_match_sum {Γ τ _ _} _ _ _ _ _. *)
   (* Arguments stm_match_enum {Γ τ} E s%_exp alts%_exp. *)
   Arguments stm_match_bvec {Γ τ} n%_nat_scope s%_exp rhs%_exp.
 
@@ -466,8 +466,8 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   (*    "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' | alt7 => rhs7 '/' | alt8 => rhs8 '/' | alt9 => rhs9 '/' | alt10 => rhs10 '/' | alt11 => rhs11 '/' | alt12 => rhs12 '/' | alt13 => rhs13 '/' | alt14 => rhs14 '/' 'end' ']'" *)
   (*   ) : exp_scope. *)
 
-  Notation "'match:' e 'with' | 'inl' p1 => rhs1 | 'inr' p2 => rhs2 'end'" :=
-    (stm_match_sum e p1%string rhs1 p2%string rhs2) (at level 0, only parsing) : exp_scope.
+  (* Notation "'match:' e 'with' | 'inl' p1 => rhs1 | 'inr' p2 => rhs2 'end'" := *)
+  (*   (stm_match_sum e p1%string rhs1 p2%string rhs2) (at level 0, only parsing) : exp_scope. *)
 
   Notation "'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' | '(' fst ',' snd ')' => rhs 'end'" :=
     (@stm_match_prod _ _ σ1 σ2 e fst%string snd%string rhs)

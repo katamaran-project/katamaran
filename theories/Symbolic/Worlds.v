@@ -936,9 +936,9 @@ Module Type WorldsOn
         eqₚ (T := STerm σ) (w := w) t1 t2.
     Proof. unfold repₚ; crushPredEntails2; now destruct Classes.eq_dec. Qed.
 
-    Lemma rep_neq_nil_cons {w : World} {σ : Ty} {t1 : Term w σ} {t2 : Term w (ty.list σ)} :
-      repₚ (T := STerm (ty.list σ)) ([] : list (Val σ)) (term_binop bop.cons t1 t2) ⊣⊢  False.
-    Proof. unfold repₚ. crushPredEntails2; now inversion H0. Qed.
+    (* Lemma rep_neq_nil_cons {w : World} {σ : Ty} {t1 : Term w σ} {t2 : Term w (ty.list σ)} : *)
+    (*   repₚ (T := STerm (ty.list σ)) ([] : list (Val σ)) (term_binop bop.cons t1 t2) ⊣⊢  False. *)
+    (* Proof. unfold repₚ. crushPredEntails2; now inversion H0. Qed. *)
 
     Lemma repₚ_term_and {w : World} {t1 t2 : STerm ty.bool w} :
       repₚ (w := w) (T := STerm ty.bool) true (term_binop bop.and t1 t2) ⊣⊢
@@ -971,41 +971,41 @@ Module Type WorldsOn
         repₚ (T := STerm ty.int) (- v)%Z t.
     Proof. unfold repₚ. crushPredEntails2; lia. Qed.
 
-    Lemma eqₚ_term_inl {w : World} {σ1 σ2} {t1 t2 : STerm σ1 w} :
-      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t1) (term_inl t2) ⊣⊢
-        eqₚ (T := STerm σ1) t1 t2.
-    Proof. unfold eqₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    (* Lemma eqₚ_term_inl {w : World} {σ1 σ2} {t1 t2 : STerm σ1 w} : *)
+    (*   eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t1) (term_inl t2) ⊣⊢ *)
+    (*     eqₚ (T := STerm σ1) t1 t2. *)
+    (* Proof. unfold eqₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
 
-    Lemma repₚ_term_inl {w : World} {σ1 σ2}{t : STerm σ1 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inl t) ⊣⊢
-        repₚ (T := STerm σ1) v t.
-    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    (* Lemma repₚ_term_inl {w : World} {σ1 σ2}{t : STerm σ1 w} v : *)
+    (*   repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inl t) ⊣⊢ *)
+    (*     repₚ (T := STerm σ1) v t. *)
+    (* Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
 
-    Lemma eqₚ_term_inr {w : World} {σ1 σ2} {t1 t2 : STerm σ2 w} :
-      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inr t1) (term_inr t2) ⊣⊢
-        eqₚ (T := STerm σ2) t1 t2.
-    Proof. unfold eqₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    (* Lemma eqₚ_term_inr {w : World} {σ1 σ2} {t1 t2 : STerm σ2 w} : *)
+    (*   eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inr t1) (term_inr t2) ⊣⊢ *)
+    (*     eqₚ (T := STerm σ2) t1 t2. *)
+    (* Proof. unfold eqₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
 
-    Lemma repₚ_term_inr {w : World} {σ1 σ2}{t : STerm σ2 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inr v : Val (ty.sum _ _)) (term_inr t) ⊣⊢
-        repₚ (T := STerm σ2) v t.
-    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    (* Lemma repₚ_term_inr {w : World} {σ1 σ2}{t : STerm σ2 w} v : *)
+    (*   repₚ (T := STerm (ty.sum σ1 σ2)) (inr v : Val (ty.sum _ _)) (term_inr t) ⊣⊢ *)
+    (*     repₚ (T := STerm σ2) v t. *)
+    (* Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
 
-    Lemma eqₚ_term_inr_inl {w : World} {σ1 σ2}{t1 : STerm σ1 w} {t2 : STerm σ2 w} :
-      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inr t2) (term_inl t1) ⊣⊢ False.
-    Proof. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    (* Lemma eqₚ_term_inr_inl {w : World} {σ1 σ2}{t1 : STerm σ1 w} {t2 : STerm σ2 w} : *)
+    (*   eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inr t2) (term_inl t1) ⊣⊢ False. *)
+    (* Proof. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
 
-    Lemma eqₚ_term_inl_inr {w : World} {σ1 σ2}{t1 : STerm σ2 w} {t2 : STerm σ1 w} :
-      eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t2) (term_inr t1) ⊣⊢ False.
-    Proof. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    (* Lemma eqₚ_term_inl_inr {w : World} {σ1 σ2}{t1 : STerm σ2 w} {t2 : STerm σ1 w} : *)
+    (*   eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t2) (term_inr t1) ⊣⊢ False. *)
+    (* Proof. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
 
-    Lemma repₚ_term_inl_inr {w : World} {σ1 σ2}{t : STerm σ1 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inr v : Val (ty.sum _ _)) (term_inl t) ⊣⊢ False.
-    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    (* Lemma repₚ_term_inl_inr {w : World} {σ1 σ2}{t : STerm σ1 w} v : *)
+    (*   repₚ (T := STerm (ty.sum σ1 σ2)) (inr v : Val (ty.sum _ _)) (term_inl t) ⊣⊢ False. *)
+    (* Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
 
-    Lemma repₚ_term_inr_inl {w : World} {σ1 σ2}{t : STerm σ2 w} v :
-      repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inr t) ⊣⊢ False.
-    Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed.
+    (* Lemma repₚ_term_inr_inl {w : World} {σ1 σ2}{t : STerm σ2 w} v : *)
+    (*   repₚ (T := STerm (ty.sum σ1 σ2)) (inl v : Val (ty.sum _ _)) (term_inr t) ⊣⊢ False. *)
+    (* Proof. unfold repₚ. crushPredEntails2; try (now subst); now inversion H0. Qed. *)
 
     Lemma eqₚ_term_unsigned {w : World} {n} {t1 t2 : STerm (ty.bvec n) w} :
       eqₚ (T := STerm ty.int) (term_unsigned t1) (term_unsigned t2) ⊣⊢

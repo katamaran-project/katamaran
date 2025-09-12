@@ -641,14 +641,14 @@ Module Type UnifLogicOn
       eqₚ (w := w) (term_val σ v) (term_val σ v) ⊣⊢ True.
     Proof. unfold eqₚ. crushPredEntails3. Qed.
 
-    Lemma rep_term_cons {w : World} {σ : Ty} {t : STerm σ w} {ts : STerm (ty.list σ) w} {v vs} :
-      repₚ v t ∗ repₚ (T := STerm (ty.list σ)) vs ts ⊣⊢ repₚ (T := STerm (ty.list σ)) (v :: vs) (term_binop bop.cons t ts).
-    Proof. unfold repₚ. crushPredEntails3; try (now subst); now inversion H0. Qed.
+    (* Lemma rep_term_cons {w : World} {σ : Ty} {t : STerm σ w} {ts : STerm (ty.list σ) w} {v vs} : *)
+    (*   repₚ v t ∗ repₚ (T := STerm (ty.list σ)) vs ts ⊣⊢ repₚ (T := STerm (ty.list σ)) (v :: vs) (term_binop bop.cons t ts). *)
+    (* Proof. unfold repₚ. crushPredEntails3; try (now subst); now inversion H0. Qed. *)
 
-    Lemma eq_term_cons {w : World} {σ : Ty} {t1 t2 : STerm σ w} {ts1 ts2 : STerm (ty.list σ) w} :
-      eqₚ (T := STerm (ty.list σ)) (term_binop bop.cons t1 ts1) (term_binop bop.cons t2 ts2) ⊣⊢
-        eqₚ t1 t2 ∗ eqₚ (T := STerm (ty.list σ)) ts1 ts2.
-    Proof. crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed.
+    (* Lemma eq_term_cons {w : World} {σ : Ty} {t1 t2 : STerm σ w} {ts1 ts2 : STerm (ty.list σ) w} : *)
+    (*   eqₚ (T := STerm (ty.list σ)) (term_binop bop.cons t1 ts1) (term_binop bop.cons t2 ts2) ⊣⊢ *)
+    (*     eqₚ t1 t2 ∗ eqₚ (T := STerm (ty.list σ)) ts1 ts2. *)
+    (* Proof. crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed. *)
 
     Set Equations With UIP.
     (* Lemma repₚ_unionv_fold {w : World} {U} {K : unionk U} {t : STerm (unionk_ty U K) w} {v : Val (unionk_ty U K)} : *)
@@ -736,19 +736,19 @@ Module Type UnifLogicOn
       repₚ a1 vt1 ⊢ repₚ a2 vt2.
     Proof. now crushPredEntails3. Qed.
 
-    Lemma repₚ_inversion_term_inl {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svl : STerm σ w) :
-      (repₚ v (term_inl svl) : Pred w) ⊢ ∃ (vl : Val σ), ⌜ v = inl vl ⌝ ∗ repₚ vl svl.
-    Proof.
-      unfold repₚ.
-      destruct v; crushPredEntails3; now inversion H0.
-    Qed.
+    (* Lemma repₚ_inversion_term_inl {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svl : STerm σ w) : *)
+    (*   (repₚ v (term_inl svl) : Pred w) ⊢ ∃ (vl : Val σ), ⌜ v = inl vl ⌝ ∗ repₚ vl svl. *)
+    (* Proof. *)
+    (*   unfold repₚ. *)
+    (*   destruct v; crushPredEntails3; now inversion H0. *)
+    (* Qed. *)
 
-    Lemma repₚ_inversion_term_inr {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svr : STerm τ w) :
-      (repₚ v (term_inr svr) : Pred w) ⊢ ∃ vr, ⌜ v = inr vr ⌝ ∗ repₚ vr svr.
-    Proof.
-      unfold repₚ.
-      destruct v; crushPredEntails3; now inversion H0.
-    Qed.
+    (* Lemma repₚ_inversion_term_inr {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svr : STerm τ w) : *)
+    (*   (repₚ v (term_inr svr) : Pred w) ⊢ ∃ vr, ⌜ v = inr vr ⌝ ∗ repₚ vr svr. *)
+    (* Proof. *)
+    (*   unfold repₚ. *)
+    (*   destruct v; crushPredEntails3; now inversion H0. *)
+    (* Qed. *)
 
     Lemma repₚ_inversion_term_unsigned {n} (v : Val ty.int) {w : World} (sbv : STerm (ty.bvec n) w) :
       (repₚ v (term_unsigned sbv) : Pred w)
@@ -1972,21 +1972,21 @@ Module Type UnifLogicOn
     (*   now rewrite !recordv_unfold_fold in H0. *)
     (* Qed. *)
 
-    Lemma RVal_invert_inl {σ τ} {v} {w : World} {sl : Term w σ} : 
-      ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inl sl) ⊢ ∃ (vl : Val σ), bi_pure (v = inl vl) ∗ ℛ⟦RVal σ⟧ vl sl.
-    Proof.
-      unfold RVal, RInst, repₚ, bi_pure; simpl.
-      crushPredEntails3; subst.
-      eexists. split; reflexivity.
-    Qed.
+    (* Lemma RVal_invert_inl {σ τ} {v} {w : World} {sl : Term w σ} :  *)
+    (*   ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inl sl) ⊢ ∃ (vl : Val σ), bi_pure (v = inl vl) ∗ ℛ⟦RVal σ⟧ vl sl. *)
+    (* Proof. *)
+    (*   unfold RVal, RInst, repₚ, bi_pure; simpl. *)
+    (*   crushPredEntails3; subst. *)
+    (*   eexists. split; reflexivity. *)
+    (* Qed. *)
 
-    Lemma RVal_invert_inr {σ τ} {v} {w : World} {sl : Term w τ} : 
-      ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inr sl) ⊢ ∃ (vl : Val τ), bi_pure (v = inr vl) ∗ ℛ⟦RVal τ⟧ vl sl.
-    Proof.
-      unfold RVal, RInst, repₚ, bi_pure; simpl.
-      crushPredEntails3; subst.
-      eexists. split; reflexivity.
-    Qed.
+    (* Lemma RVal_invert_inr {σ τ} {v} {w : World} {sl : Term w τ} :  *)
+    (*   ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inr sl) ⊢ ∃ (vl : Val τ), bi_pure (v = inr vl) ∗ ℛ⟦RVal τ⟧ vl sl. *)
+    (* Proof. *)
+    (*   unfold RVal, RInst, repₚ, bi_pure; simpl. *)
+    (*   crushPredEntails3; subst. *)
+    (*   eexists. split; reflexivity. *)
+    (* Qed. *)
 
   End LRCompat.
 
@@ -2080,7 +2080,7 @@ Module Type UnifLogicOn
     (* #[export] Hint Rewrite @recordv_fold_inj @unionv_fold_inj : uniflogic. *)
     #[export] Hint Rewrite @term_eq_true_r @term_eq_true_l @term_eq_false_l @term_eq_false_r @term_not_or @term_not_and @term_unop_val @term_binop_val : uniflogic.
     #[export] Hint Rewrite formula_bool_and formula_bool_relop formula_bool_relop_neg : uniflogic.
-    #[export] Hint Rewrite @repₚ_term_prod @rep_term_cons rep_eq_terms_true eq_val_rep_l eq_val_rep_r @eq_term_cons @eqₚ_term_prod (* @repₚ_unionv_fold @eqₚ_unionv_fold *) @rep_neq_nil_cons @repₚ_term_or_false @repₚ_term_inr_inl @repₚ_term_inl_inr @eqₚ_term_inl_inr @eqₚ_term_inr_inl @repₚ_term_inr @eqₚ_term_inr @repₚ_term_inl @eqₚ_term_inl @repₚ_term_unsigned @eqₚ_term_unsigned @repₚ_term_signed @eqₚ_term_signed @repₚ_term_neg' @repₚ_term_not' @repₚ_term_and (* repₚ_term_tuple_snoc eqₚ_term_tuple_snoc *) @repₚ_term_bvapp @eqₚ_term_bvapp @repₚ_term_bvcons @eqₚ_term_bvcons (* @repₚ_term_record @eqₚ_term_record *) @repₚ_namedenv_nil @repₚ_namedenv_snoc @eqₚ_namedenv_snoc @eq_term_val @rep_term_val : uniflogic.
+    #[export] Hint Rewrite @repₚ_term_prod (* @rep_term_cons *) rep_eq_terms_true eq_val_rep_l eq_val_rep_r (* @eq_term_cons *) @eqₚ_term_prod (* @repₚ_unionv_fold @eqₚ_unionv_fold *) (* @rep_neq_nil_cons *) @repₚ_term_or_false (* @repₚ_term_inr_inl @repₚ_term_inl_inr @eqₚ_term_inl_inr @eqₚ_term_inr_inl @repₚ_term_inr @eqₚ_term_inr @repₚ_term_inl @eqₚ_term_inl *) @repₚ_term_unsigned @eqₚ_term_unsigned @repₚ_term_signed @eqₚ_term_signed @repₚ_term_neg' @repₚ_term_not' @repₚ_term_and (* repₚ_term_tuple_snoc eqₚ_term_tuple_snoc *) @repₚ_term_bvapp @eqₚ_term_bvapp @repₚ_term_bvcons @eqₚ_term_bvcons (* @repₚ_term_record @eqₚ_term_record *) @repₚ_namedenv_nil @repₚ_namedenv_snoc @eqₚ_namedenv_snoc @eq_term_val @rep_term_val : uniflogic.
     #[export] Hint Rewrite @instpred_formula_relop_neg @formula_relop_term @instpred_formula_relop_eq_val @instpred_formula_relop_eq_val' @instpred_formula_relop_val @instpred_formula_relop_val' : uniflogic.
     #[export] Hint Rewrite @instpred_dlist_empty instpred_dlist_cat instpred_dlist_singleton : uniflogic.
 

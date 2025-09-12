@@ -50,11 +50,11 @@ Module uop.
     Context {TDC : TypeDeclKit}.
 
     Variant UnOp : Ty -> Ty -> Set :=
-    | inl {σ1 σ2 : Ty}  : UnOp σ1 (sum σ1 σ2)
-    | inr {σ1 σ2 : Ty}  : UnOp σ2 (sum σ1 σ2)
+    (* | inl {σ1 σ2 : Ty}  : UnOp σ1 (sum σ1 σ2) *)
+    (* | inr {σ1 σ2 : Ty}  : UnOp σ2 (sum σ1 σ2) *)
     | neg               : UnOp int int
     | not               : UnOp bool bool
-    | rev {σ}           : UnOp (ty.list σ) (ty.list σ)
+    (* | rev {σ}           : UnOp (ty.list σ) (ty.list σ) *)
     | sext {m n} {p : IsTrue (m <=? n)} : UnOp (bvec m) (bvec n)
     | zext {m n} {p : IsTrue (m <=? n)} : UnOp (bvec m) (bvec n)
     | get_slice_int {n} : UnOp int (bvec n)
@@ -103,11 +103,11 @@ Module uop.
     #[derive(equations=no)] Equations tel_eq_dec {σ1 σ2 τ : Ty}
       (op1 : UnOp σ1 τ) (op2 : UnOp σ2 τ) :
       dec_eq (A := Tel τ) (sigmaI _ σ1 op1) (sigmaI _ σ2 op2) :=
-    | inl                              | inl => left eq_refl
-    | inr                              | inr => left eq_refl
+    (* | inl                              | inl => left eq_refl *)
+    (* | inr                              | inr => left eq_refl *)
     | neg                              | neg => left eq_refl
     | not                              | not => left eq_refl
-    | rev                              | rev => left eq_refl
+    (* | rev                              | rev => left eq_refl *)
     | @sext _ m1 ?(n) p1               | @sext _ m2 n p2 with eq_dec m1 m2 => {
       | left _ => left _
       | right _ => right _
@@ -157,9 +157,9 @@ Module uop.
 
     Definition eval {σ1 σ2 : Ty} (op : UnOp σ1 σ2) : Val σ1 -> Val σ2 :=
       match op in UnOp σ1 σ2 return Val σ1 -> Val σ2 with
-      | inl                 => Datatypes.inl
-      | inr                 => Datatypes.inr
-      | rev                 => @List.rev (Val _)
+      (* | inl                 => Datatypes.inl *)
+      (* | inr                 => Datatypes.inr *)
+      (* | rev                 => @List.rev (Val _) *)
       | neg                 => Z.opp
       | not                 => negb
       | sext                => fun v => bv.sext v

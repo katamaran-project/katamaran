@@ -374,13 +374,13 @@ Module Type PartialEvaluationOn
           now apply Hrqv.
     Qed.
 
-    Equations(noeqns) peval_append {σ} (t1 t2 : Term Σ (ty.list σ)) : Term Σ (ty.list σ) :=
-    | term_val _ v1                 | term_val _ v2 := term_val (ty.list σ) (app v1 v2);
-    (* TODO: recurse over the value instead *)
-    | term_val _ nil                | t2 := t2;
-    | term_val _ (cons v vs)        | t2 := term_binop bop.cons (term_val σ v) (term_binop bop.append (term_val (ty.list σ) vs) t2);
-    | term_binop bop.cons t11 t12 | t2 := term_binop bop.cons t11 (term_binop bop.append t12 t2);
-    | t1                            | t2 := term_binop bop.append t1 t2.
+    (* Equations(noeqns) peval_append {σ} (t1 t2 : Term Σ (ty.list σ)) : Term Σ (ty.list σ) := *)
+    (* | term_val _ v1                 | term_val _ v2 := term_val (ty.list σ) (app v1 v2); *)
+    (* (* TODO: recurse over the value instead *) *)
+    (* | term_val _ nil                | t2 := t2; *)
+    (* | term_val _ (cons v vs)        | t2 := term_binop bop.cons (term_val σ v) (term_binop bop.append (term_val (ty.list σ) vs) t2); *)
+    (* | term_binop bop.cons t11 t12 | t2 := term_binop bop.cons t11 (term_binop bop.append t12 t2); *)
+    (* | t1                            | t2 := term_binop bop.append t1 t2. *)
 
     Definition peval_and_val (t : Term Σ ty.bool) (v : Val ty.bool) :
       Term Σ ty.bool := if v then t else term_val ty.bool false.
@@ -720,7 +720,7 @@ Module Type PartialEvaluationOn
     Definition peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
       Term Σ σ1 → Term Σ σ2 → Term Σ σ :=
       match op with
-      | bop.append => peval_append
+      (* | bop.append => peval_append *)
       | bop.and    => peval_and
       | bop.or     => peval_or
       | bop.plus   => peval_plus
@@ -732,13 +732,13 @@ Module Type PartialEvaluationOn
       | op         => peval_binop' op
       end.
 
-    Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
-      peval_append t1 t2 ≡ term_binop bop.append t1 t2.
-    Proof.
-      destruct t1 using Term_list_case; try constructor.
-      destruct t2 using Term_list_case;
-        first [constructor | destruct v; constructor].
-    Qed.
+    (* Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) : *)
+    (*   peval_append t1 t2 ≡ term_binop bop.append t1 t2. *)
+    (* Proof. *)
+    (*   destruct t1 using Term_list_case; try constructor. *)
+    (*   destruct t2 using Term_list_case; *)
+    (*     first [constructor | destruct v; constructor]. *)
+    (* Qed. *)
 
     Lemma peval_and_sound (t1 t2 : Term Σ ty.bool) :
       peval_and t1 t2 ≡ term_binop bop.and t1 t2.
@@ -1081,7 +1081,7 @@ Module Type PartialEvaluationOn
         end.
     Qed.
 
-    Hint Resolve peval_binop'_sound peval_append_sound peval_and_sound
+    Hint Resolve peval_binop'_sound (* peval_append_sound *) peval_and_sound
       peval_or_sound peval_plus_sound peval_bvadd_sound peval_bvand_sound
       peval_bvor_sound peval_bvapp_sound peval_update_vector_subrange_sound
       : core.
@@ -1391,8 +1391,8 @@ Module Type PartialEvaluationOn
       | bop.and => peval_binop bop.and
       | bop.or => peval_binop bop.or
       | bop.pair => fun t1 t2 => peval_binop bop.pair (CanonTerm_to_Term t1) (CanonTerm_to_Term t2)
-      | bop.cons => fun t1 t2 => peval_binop bop.cons (CanonTerm_to_Term t1) t2
-      | bop.append => fun t1 t2 => peval_binop bop.append t1 t2
+      (* | bop.cons => fun t1 t2 => peval_binop bop.cons (CanonTerm_to_Term t1) t2 *)
+      (* | bop.append => fun t1 t2 => peval_binop bop.append t1 t2 *)
       | bop.shiftr => fun t1 t2 => CanonTerm_def (peval_binop bop.shiftr (CanonTerm_to_Term t1) (CanonTerm_to_Term t2))
       | bop.shiftl => fun t1 t2 => CanonTerm_def (peval_binop bop.shiftl (CanonTerm_to_Term t1) (CanonTerm_to_Term t2))
       | bop.bvadd => Term_Quote_bin (@PEadd _)
@@ -1422,8 +1422,8 @@ Module Type PartialEvaluationOn
       - now rewrite peval_binop_sound, H1, H2.
       - now rewrite peval_binop_sound, <-(CanonTermRep_adeq H1), <-(CanonTermRep_adeq H2).
       - now rewrite peval_binop_sound, <-(CanonTermRep_adeq H1), <-(CanonTermRep_adeq H2).
-      - now rewrite peval_binop_sound, <-(CanonTermRep_adeq H1), <-(CanonTermRep_adeq H2).
-      - now rewrite peval_binop_sound, <-(CanonTermRep_adeq H1), <-(CanonTermRep_adeq H2).
+      (* - now rewrite peval_binop_sound, <-(CanonTermRep_adeq H1), <-(CanonTermRep_adeq H2). *)
+      (* - now rewrite peval_binop_sound, <-(CanonTermRep_adeq H1), <-(CanonTermRep_adeq H2). *)
       - rewrite <-(CanonTermRep_adeq H1), <-(CanonTermRep_adeq H2), <-peval_binop_sound.
         now eapply Term_Quote_def_Valid.
       - rewrite <-(CanonTermRep_adeq H1), <-(CanonTermRep_adeq H2), <-peval_binop_sound.
@@ -1449,11 +1449,11 @@ Module Type PartialEvaluationOn
     Definition peval2_unop {σ1 σ2 : Ty} (op : UnOp σ1 σ2) :
       CanonTerm σ1 -> CanonTerm σ2 :=
       match op in UnOp σ1 σ2 return CanonTerm σ1 -> CanonTerm σ2 with
-      | uop.inl => fun t1 => peval_unop uop.inl (CanonTerm_to_Term t1)
-      | uop.inr => fun t1 => peval_unop uop.inr (CanonTerm_to_Term t1)
+      (* | uop.inl => fun t1 => peval_unop uop.inl (CanonTerm_to_Term t1) *)
+      (* | uop.inr => fun t1 => peval_unop uop.inr (CanonTerm_to_Term t1) *)
       | uop.neg => Term_Quote_unop (@PEopp _)
       | uop.not => peval_unop uop.not
-      | uop.rev => fun t1 => peval_unop uop.rev (CanonTerm_to_Term t1)
+      (* | uop.rev => fun t1 => peval_unop uop.rev (CanonTerm_to_Term t1) *)
       | uop.sext => fun t1 => CanonTerm_def (peval_unop uop.sext (CanonTerm_to_Term t1))
       | uop.zext => fun t1 => CanonTerm_def (peval_unop uop.zext (CanonTerm_to_Term t1))
       | uop.get_slice_int => fun t1 => CanonTerm_def (peval_unop uop.get_slice_int (CanonTerm_to_Term t1))
@@ -1473,11 +1473,11 @@ Module Type PartialEvaluationOn
       CanonTermRep (peval2_unop op ct1) (term_unop op t1).
     Proof.
       destruct op; intros H1; cbn [peval2_unop].
-      - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1).
-      - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1).
+      (* - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1). *)
+      (* - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1). *)
       - now eapply Term_Quote_unop_Valid.
       - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1).
-      - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1).
+      (* - now rewrite peval_unop_sound, <-(CanonTermRep_adeq H1). *)
       - rewrite <-(CanonTermRep_adeq H1), <-peval_unop_sound.
         eapply Term_Quote_def_Valid.
       - rewrite <-(CanonTermRep_adeq H1), <-peval_unop_sound.
@@ -1561,14 +1561,14 @@ Module Type PartialEvaluationOn
      * The types of other terms is fixed anyway (for example the type of term_binop is fixed for all binops
      * except bop.cons) and pattern matching on the type will reduce fine.
      *)
-    Fixpoint peval [σ] (t : Term Σ σ) : Term Σ σ :=
+    Definition peval [σ] (t : Term Σ σ) : Term Σ σ :=
       let res_poly :=
         match t in Term _ σ return option (Term Σ σ) with
-          term_var x => Some (term_var x)
+        | term_var x => Some (term_var x)
         | term_val σ v => Some (term_val _ v)
         | @term_binop _ σ1 σ2 _ op t1 t2 =>
             (match op in BinOp σ1 σ2 σ3 return Term Σ σ1 -> Term Σ σ2 -> option (Term Σ σ3) with
-             | bop.cons => fun t1 t2 => Some (peval_binop' bop.cons (peval t1) (peval t2))
+             (* | bop.cons => fun t1 t2 => Some (peval_binop' bop.cons (peval t1) (peval t2)) *)
              | _ => fun _ _ => None
              end) t1 t2
         | _ => None
@@ -1583,7 +1583,7 @@ Module Type PartialEvaluationOn
     Proof.
       induction t; try reflexivity.
       - destruct op; try (eapply CanonTermRep_adeq; eapply peval2_sound).
-        cbn. now rewrite peval_binop'_sound, IHt1, IHt2.
+        (* cbn. now rewrite peval_binop'_sound, IHt1, IHt2. *)
       - eapply CanonTermRep_adeq; eapply peval2_sound.
     (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *)
     (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *)

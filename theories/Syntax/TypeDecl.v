@@ -68,9 +68,9 @@ Module ty.
     | int
     | bool
     | string
-    | list (σ : Ty)
+    (* | list (σ : Ty) *)
     | prod (σ τ : Ty)
-    | sum  (σ τ : Ty)
+    (* | sum  (σ τ : Ty) *)
     | unit
     (* | enum (E : enumi) *)
     | bvec (n : nat)
@@ -83,7 +83,7 @@ Module ty.
 
 
     (* convenience definition. *)
-    Definition option : Ty -> Ty := fun T => sum T unit.
+    (* Definition option : Ty -> Ty := fun T => sum T unit. *)
 
     Section Ty_rect.
       Variable P : Ty -> Type.
@@ -91,9 +91,9 @@ Module ty.
       Hypothesis (P_int    : P int).
       Hypothesis (P_bool   : P bool).
       Hypothesis (P_string : P string).
-      Hypothesis (P_list   : forall σ, P σ -> P (list σ)).
+      (* Hypothesis (P_list   : forall σ, P σ -> P (list σ)). *)
       Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (prod σ τ)).
-      Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (sum σ τ)).
+      (* Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (sum σ τ)). *)
       Hypothesis (P_unit   : P unit).
       (* Hypothesis (P_enum   : forall E, P (enum E)). *)
       Hypothesis (P_bvec   : forall n, P (bvec n)).
@@ -106,9 +106,9 @@ Module ty.
         | int      => ltac:(apply P_int)
         | bool     => ltac:(apply P_bool)
         | string   => ltac:(apply P_string)
-        | list σ   => ltac:(apply P_list; auto)
+        (* | list σ   => ltac:(apply P_list; auto) *)
         | prod σ τ => ltac:(apply P_prod; auto)
-        | sum σ τ  => ltac:(apply P_sum; auto)
+        (* | sum σ τ  => ltac:(apply P_sum; auto) *)
         | unit     => ltac:(apply P_unit; auto)
         (* | enum E   => ltac:(apply P_enum; auto) *)
         | bvec n   => ltac:(apply P_bvec; auto)
@@ -140,9 +140,9 @@ Module ty.
       | int => Z
       | bool => Datatypes.bool
       | string => String.string
-      | list σ' => Datatypes.list (Val σ')
+      (* | list σ' => Datatypes.list (Val σ') *)
       | prod σ1 σ2 => Val σ1 * Val σ2
-      | sum σ1 σ2 => Val σ1 + Val σ2
+      (* | sum σ1 σ2 => Val σ1 + Val σ2 *)
       | unit => Datatypes.unit
       (* | enum E => enumt E *)
       | bvec n => bv n
@@ -212,8 +212,8 @@ Module ty.
       | (x :: l)%list => liftBinOpRV cons x (listOfRVToRVOfList l)
       end.
 
-    Definition listOfRelValToRelValOfList {A} (rv_list : (Datatypes.list (RelVal A))) : RelVal (list A) :=
-      listOfRVToRVOfList rv_list.
+    (* Definition listOfRelValToRelValOfList {A} (rv_list : (Datatypes.list (RelVal A))) : RelVal (list A) := *)
+    (*   listOfRVToRVOfList rv_list. *)
 
     Definition RVOfPairToPairOfRV {σ1 σ2} (rv : RV (σ1 * σ2)) : RV σ1 * RV σ2 :=
       match rv with
@@ -326,9 +326,9 @@ Module ty.
         | int        , int        => left eq_refl
         | bool       , bool       => left eq_refl
         | string     , string     => left eq_refl
-        | list σ     , list τ     => f_equal_dec list noConfusion_inv (ty_eqdec σ τ)
+        (* | list σ     , list τ     => f_equal_dec list noConfusion_inv (ty_eqdec σ τ) *)
         | prod σ1 σ2 , prod τ1 τ2 => f_equal2_dec prod noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
-        | sum σ1 σ2  , sum τ1 τ2  => f_equal2_dec sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
+        (* | sum σ1 σ2  , sum τ1 τ2  => f_equal2_dec sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2) *)
         | unit       , unit       => left eq_refl
         (* | enum E1    , enum E2    => f_equal_dec enum noConfusion_inv (eq_dec E1 E2) *)
         | bvec n1    , bvec n2    => f_equal_dec bvec noConfusion_inv (eq_dec n1 n2)
@@ -346,9 +346,9 @@ Module ty.
         | int      => eq_dec (A := Z)
         | bool     => eq_dec (A := Datatypes.bool)
         | string   => eq_dec (A := String.string)
-        | list σ   => eq_dec (A := Datatypes.list (Val σ))
+        (* | list σ   => eq_dec (A := Datatypes.list (Val σ)) *)
         | prod σ τ => eq_dec (A := Datatypes.prod (Val σ) (Val τ))
-        | sum σ τ  => eq_dec (A := Datatypes.sum (Val σ) (Val τ))
+        (* | sum σ τ  => eq_dec (A := Datatypes.sum (Val σ) (Val τ)) *)
         | unit     => eq_dec (A := Datatypes.unit)
         (* | enum E   => eq_dec (A := enumt E) *)
         | bvec n   => eq_dec (A := bv n)
@@ -419,9 +419,9 @@ Module ty.
   #[global] Arguments int {TK}.
   #[global] Arguments bool {TK}.
   #[global] Arguments string {TK}.
-  #[global] Arguments list {TK} σ.
+  (* #[global] Arguments list {TK} σ. *)
   #[global] Arguments prod {TK} σ τ.
-  #[global] Arguments sum {TK} σ τ.
+  (* #[global] Arguments sum {TK} σ τ. *)
   #[global] Arguments unit {TK}.
   (* #[global] Arguments enum {TK} E. *)
   #[global] Arguments bvec {TK} n%_nat_scope.
@@ -434,7 +434,9 @@ Export ty
   ( TypeDeclKit, (* enumt, uniont, recordt, *)
 
     TypeDenoteKit,
-    Ty, Val,
+    Ty, Val, RelVal,
+
+    RV, SyncVal, NonSyncVal,
 
     TypeDefKit(* , enum_eqdec, enumt_eqdec, enumt_finite, *)
     (* enumi, *)

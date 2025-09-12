@@ -468,9 +468,9 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                               (existT v [env])
                 | None => angelic_pattern_match' _ msg scr
                 end
-          | pat_list _ _ _ =>
-              fun scr =>
-                angelic_pattern_match' _ msg scr
+          (* | pat_list _ _ _ => *)
+          (*     fun scr => *)
+          (*       angelic_pattern_match' _ msg scr *)
           | pat_pair x y =>
               fun scr =>
                 match term_get_pair scr with
@@ -479,15 +479,15 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                       (existT tt [env].[x∷_ ↦ tl].[y∷_ ↦ tr])
                 | None => angelic_pattern_match' _ msg scr
                 end
-          | pat_sum _ _ _ _ =>
-              fun scr =>
-                match term_get_sum scr with
-                | Some (inl tl) => pure (A := SMatchResult (pat_sum _ _ _ _))
-                                     (existT true [env].[_∷_ ↦ tl])
-                | Some (inr tr) => pure (A := SMatchResult (pat_sum _ _ _ _))
-                                     (existT false [env].[_∷_ ↦ tr])
-                | None => angelic_pattern_match' _ msg scr
-                end
+          (* | pat_sum _ _ _ _ => *)
+          (*     fun scr => *)
+          (*       match term_get_sum scr with *)
+          (*       | Some (inl tl) => pure (A := SMatchResult (pat_sum _ _ _ _)) *)
+          (*                            (existT true [env].[_∷_ ↦ tl]) *)
+          (*       | Some (inr tr) => pure (A := SMatchResult (pat_sum _ _ _ _)) *)
+          (*                            (existT false [env].[_∷_ ↦ tr]) *)
+          (*       | None => angelic_pattern_match' _ msg scr *)
+          (*       end *)
           | pat_unit =>
               fun scr =>
                 pure (A := SMatchResult pat_unit) (existT tt [env])
@@ -568,9 +568,9 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                               (existT v [env])
                 | None => demonic_pattern_match' _ scr
                 end
-          | pat_list _ _ _ =>
-              fun scr =>
-                demonic_pattern_match' _ scr
+          (* | pat_list _ _ _ => *)
+          (*     fun scr => *)
+          (*       demonic_pattern_match' _ scr *)
           | pat_pair x y =>
               fun scr =>
                 match term_get_pair scr with
@@ -579,15 +579,15 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                       (existT tt [env].[x∷_ ↦ tl].[y∷_ ↦ tr])
                 | None => demonic_pattern_match' _ scr
                 end
-          | pat_sum _ _ _ _ =>
-              fun scr =>
-                match term_get_sum scr with
-                | Some (inl tl) => pure (A := SMatchResult (pat_sum _ _ _ _))
-                                     (existT true [env].[_∷_ ↦ tl])
-                | Some (inr tr) => pure (A := SMatchResult (pat_sum _ _ _ _))
-                                     (existT false [env].[_∷_ ↦ tr])
-                | None => demonic_pattern_match' _ scr
-                end
+          (* | pat_sum _ _ _ _ => *)
+          (*     fun scr => *)
+          (*       match term_get_sum scr with *)
+          (*       | Some (inl tl) => pure (A := SMatchResult (pat_sum _ _ _ _)) *)
+          (*                            (existT true [env].[_∷_ ↦ tl]) *)
+          (*       | Some (inr tr) => pure (A := SMatchResult (pat_sum _ _ _ _)) *)
+          (*                            (existT false [env].[_∷_ ↦ tr]) *)
+          (*       | None => demonic_pattern_match' _ scr *)
+          (*       end *)
           | pat_unit =>
               fun scr =>
                 pure (A := SMatchResult pat_unit) (existT tt [env])
@@ -683,20 +683,20 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
                          | Some a => pure (existT a [env])
                          | None => new_pattern_match' pat_bool scr
                          end
-          | pat_list σ x y  =>
-              fun scr => new_pattern_match' (pat_list σ x y) scr
+          (* | pat_list σ x y  => *)
+          (*     fun scr => new_pattern_match' (pat_list σ x y) scr *)
           | pat_pair x y    =>
               fun scr =>
                 match term_get_pair scr with
                 | Some (a, b) => pure (existT tt [env].[x∷_ ↦ a].[y∷_ ↦ b])
                 | None        => new_pattern_match' (pat_pair x y) scr
                 end
-          | pat_sum σ τ x y =>
-              fun scr => match term_get_sum scr with
-                         | Some (inl a) => pure (existT true [env].[x∷σ ↦ a])
-                         | Some (inr b) => pure (existT false [env].[y∷τ ↦ b])
-                         | None => new_pattern_match' (pat_sum σ τ x y) scr
-                         end
+          (* | pat_sum σ τ x y => *)
+          (*     fun scr => match term_get_sum scr with *)
+          (*                | Some (inl a) => pure (existT true [env].[x∷σ ↦ a]) *)
+          (*                | Some (inr b) => pure (existT false [env].[y∷τ ↦ b]) *)
+          (*                | None => new_pattern_match' (pat_sum σ τ x y) scr *)
+          (*                end *)
           | pat_unit        => fun _ => pure (existT tt [env])
           (* | pat_enum E      => *)
           (*     fun scr => match term_get_val scr with *)

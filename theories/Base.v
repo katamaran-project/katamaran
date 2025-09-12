@@ -131,26 +131,26 @@ Module Type BaseMixin (Import TY : Types).
           fun _ ts => env.head ts
       | pat_bool =>
           fun b _ => term_val ty.bool b
-      | pat_list σ x y =>
-          fun b =>
-            match b with
-            | true => fun _ => term_val (ty.list σ) nil
-            | false => fun Eht =>
-                         let (Eh,t) := env.view Eht in
-                         let (E,h)  := env.view Eh in
-                         term_binop bop.cons h t
-            end
+      (* | pat_list σ x y => *)
+      (*     fun b => *)
+      (*       match b with *)
+      (*       | true => fun _ => term_val (ty.list σ) nil *)
+      (*       | false => fun Eht => *)
+      (*                    let (Eh,t) := env.view Eht in *)
+      (*                    let (E,h)  := env.view Eh in *)
+      (*                    term_binop bop.cons h t *)
+      (*       end *)
       | pat_pair x y =>
           fun _ Exy =>
             let (Ex,vτ) := env.view Exy in
             let (E,vσ)  := env.view Ex in
             term_binop bop.pair vσ vτ
-      | pat_sum σ0 τ x y =>
-          fun b =>
-            match b with
-            | true => fun ts => term_unop uop.inl (env.head ts)
-            | false => fun ts => term_unop uop.inr (env.head ts)
-            end
+      (* | pat_sum σ0 τ x y => *)
+      (*     fun b => *)
+      (*       match b with *)
+      (*       | true => fun ts => term_unop uop.inl (env.head ts) *)
+      (*       | false => fun ts => term_unop uop.inr (env.head ts) *)
+      (*       end *)
       | pat_unit =>
           fun pc _ => term_val ty.unit pc
       (* | pat_enum E => *)
@@ -178,12 +178,12 @@ Module Type BaseMixin (Import TY : Types).
       induction pat; cbn.
       - intros _y ts. now env.destroy ts.
       - reflexivity.
-      - intros [] ts.
-        + reflexivity.
-        + now env.destroy ts.
+      (* - intros [] ts. *)
+      (*   + reflexivity. *)
+      (*   + now env.destroy ts. *)
       - intros _ ts. now env.destroy ts.
       - intros [] ts; now env.destroy ts.
-      - intros [] ts. reflexivity.
+      (* - intros [] ts. reflexivity. *)
       (* - reflexivity. *)
       - intros _ ts. now env.destroy ts.
       - reflexivity.
@@ -222,7 +222,7 @@ Module Type BaseMixin (Import TY : Types).
       | exp_val σ v        => term_val σ v
       | exp_binop op e1 e2 => term_binop op (seval_exp e1) (seval_exp e2)
       | exp_unop op e      => term_unop op (seval_exp e)
-      | exp_list es        => term_list (List.map seval_exp es)
+      (* | exp_list es        => term_list (List.map seval_exp es) *)
       | exp_bvec es        => term_bvec (Vector.map seval_exp es)
       (* | exp_tuple es       => term_tuple (env.map (@seval_exp) es) *)
       (* | exp_union E K e    => term_union E K (seval_exp e) *)
@@ -240,15 +240,15 @@ Module Type BaseMixin (Import TY : Types).
     { unfold inst, inst_store, inst_env at 1; cbn.
       now rewrite env.lookup_map.
     }
-    2: {
-      induction es as [|eb n es IHes]; cbn in *.
-      { reflexivity. }
-      { destruct X as [-> Heqs].
-        change (inst_term ?ι ?t) with (inst ι t).
-        destruct (inst (seval_exp δΓΣ eb) ι);
-          cbn; f_equal; auto.
-      }
-    }
+    (* 2: { *)
+    (*   induction es as [|eb n es IHes]; cbn in *. *)
+    (*   { reflexivity. } *)
+    (*   { destruct X as [-> Heqs]. *)
+    (*     change (inst_term ?ι ?t) with (inst ι t). *)
+    (*     destruct (inst (seval_exp δΓΣ eb) ι); *)
+    (*       cbn; f_equal; auto. *)
+    (*   } *)
+    (* } *)
     all: induction es; cbn in *; destruct_conjs; f_equal; auto.
   Qed.
 

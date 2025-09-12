@@ -86,8 +86,8 @@ Module Type TermsOn (Import TY : Types).
   Notation term_and := (term_binop bop.and).
   Notation term_or := (term_binop bop.or).
   Notation term_pair := (term_binop bop.pair).
-  Notation term_cons := (term_binop bop.cons).
-  Notation term_append := (term_binop bop.append).
+  (* Notation term_cons := (term_binop bop.cons). *)
+  (* Notation term_append := (term_binop bop.append). *)
   Notation term_shiftr := (term_binop bop.shiftr).
   Notation term_shiftl := (term_binop bop.shiftl).
   Notation term_bvadd := (term_binop bop.bvadd).
@@ -110,11 +110,11 @@ Module Type TermsOn (Import TY : Types).
   Notation term_bvult := (term_binop (bop.relop bop.bvult)).
 
   (* UnOp *)
-  Notation term_inl := (term_unop uop.inl).
-  Notation term_inr := (term_unop uop.inr).
+  (* Notation term_inl := (term_unop uop.inl). *)
+  (* Notation term_inr := (term_unop uop.inr). *)
   Notation term_neg := (term_unop uop.neg).
   Notation term_not := (term_unop uop.not).
-  Notation term_rev := (term_unop uop.rev).
+  (* Notation term_rev := (term_unop uop.rev). *)
   Notation term_sext := (term_unop uop.sext).
   Notation term_zext := (term_unop uop.zext).
   Notation term_get_slice_int := (term_unop uop.get_slice_int).
@@ -131,11 +131,11 @@ Module Type TermsOn (Import TY : Types).
     (*   term_val (ty.enum E) k. *)
     (* #[global] Arguments term_enum {_} _ _. *)
 
-    Fixpoint term_list {Σ σ} (ts : list (Term Σ σ)) : Term Σ (ty.list σ) :=
-      match ts with
-      | nil       => term_val (ty.list σ) nil
-      | cons t ts => term_cons t (term_list ts)
-      end.
+    (* Fixpoint term_list {Σ σ} (ts : list (Term Σ σ)) : Term Σ (ty.list σ) := *)
+    (*   match ts with *)
+    (*   | nil       => term_val (ty.list σ) nil *)
+    (*   | cons t ts => term_cons t (term_list ts) *)
+    (*   end. *)
 
     Fixpoint term_bvec {Σ n} (ts : Vector.t (Term Σ ty.bool) n) : Term Σ (ty.bvec n) :=
       match ts with
@@ -323,20 +323,20 @@ Module Type TermsOn (Import TY : Types).
 
   Section Term_list_case.
 
-    Context {Σ σ} (P : Term Σ (ty.list σ) → Type).
+    (* Context {Σ σ} (P : Term Σ (ty.list σ) → Type). *)
 
-    Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.list σ ∈ Σ), P (term_var l)).
-    Hypothesis (pval : ∀ (v : Val (ty.list σ)), P (term_val (ty.list σ) v)).
-    Hypothesis (pcons : ∀ (t1 : Term Σ σ) (t2 : Term Σ (ty.list σ)), P (term_binop bop.cons t1 t2)).
-    Hypothesis (pappend : ∀ (t1 : Term Σ (ty.list σ)) (t2 : Term Σ (ty.list σ)), P (term_binop bop.append t1 t2)).
-    Hypothesis (prev : ∀ (t : Term Σ (ty.list σ)), P (term_unop uop.rev t)).
+    (* Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.list σ ∈ Σ), P (term_var l)). *)
+    (* Hypothesis (pval : ∀ (v : Val (ty.list σ)), P (term_val (ty.list σ) v)). *)
+    (* Hypothesis (pcons : ∀ (t1 : Term Σ σ) (t2 : Term Σ (ty.list σ)), P (term_binop bop.cons t1 t2)). *)
+    (* Hypothesis (pappend : ∀ (t1 : Term Σ (ty.list σ)) (t2 : Term Σ (ty.list σ)), P (term_binop bop.append t1 t2)). *)
+    (* Hypothesis (prev : ∀ (t : Term Σ (ty.list σ)), P (term_unop uop.rev t)). *)
 
-    Equations(noeqns) Term_list_case (t : Term Σ (ty.list σ)) : P t :=
-    | term_var_in lIn             => pvar lIn
-    | term_val _ v                => pval v
-    | term_binop bop.cons t1 t2   => pcons t1 t2
-    | term_binop bop.append t1 t2 => pappend t1 t2
-    | term_unop uop.rev t         => prev t.
+    (* Equations(noeqns) Term_list_case (t : Term Σ (ty.list σ)) : P t := *)
+    (* | term_var_in lIn             => pvar lIn *)
+    (* | term_val _ v                => pval v *)
+    (* | term_binop bop.cons t1 t2   => pcons t1 t2 *)
+    (* | term_binop bop.append t1 t2 => pappend t1 t2 *)
+    (* | term_unop uop.rev t         => prev t. *)
 
   End Term_list_case.
 
@@ -357,18 +357,18 @@ Module Type TermsOn (Import TY : Types).
 
   Section Term_sum_case.
 
-    Context {Σ σ1 σ2} (P : Term Σ (ty.sum σ1 σ2) → Type).
+    (* Context {Σ σ1 σ2} (P : Term Σ (ty.sum σ1 σ2) → Type). *)
 
-    Hypothesis (pvar : ∀ (ς : LVar) (ςInΣ : ς∷ty.sum σ1 σ2 ∈ Σ), P (term_var ς)).
-    Hypothesis (pval : ∀ (v : Val (ty.sum σ1 σ2)), P (term_val (ty.sum σ1 σ2) v)).
-    Hypothesis (pinl : ∀ (t1 : Term Σ σ1), P (term_unop uop.inl t1)).
-    Hypothesis (pinr : ∀ (t2 : Term Σ σ2), P (term_unop uop.inr t2)).
+    (* Hypothesis (pvar : ∀ (ς : LVar) (ςInΣ : ς∷ty.sum σ1 σ2 ∈ Σ), P (term_var ς)). *)
+    (* Hypothesis (pval : ∀ (v : Val (ty.sum σ1 σ2)), P (term_val (ty.sum σ1 σ2) v)). *)
+    (* Hypothesis (pinl : ∀ (t1 : Term Σ σ1), P (term_unop uop.inl t1)). *)
+    (* Hypothesis (pinr : ∀ (t2 : Term Σ σ2), P (term_unop uop.inr t2)). *)
 
-    Equations(noeqns) Term_sum_case (t : Term Σ (ty.sum σ1 σ2)) : P t :=
-    | term_var_in lIn     => pvar lIn
-    | term_val _ v        => pval v
-    | term_unop uop.inl t => pinl t
-    | term_unop uop.inr t => pinr t.
+    (* Equations(noeqns) Term_sum_case (t : Term Σ (ty.sum σ1 σ2)) : P t := *)
+    (* | term_var_in lIn     => pvar lIn *)
+    (* | term_val _ v        => pval v *)
+    (* | term_unop uop.inl t => pinl t *)
+    (* | term_unop uop.inr t => pinr t. *)
 
   End Term_sum_case.
 
@@ -538,36 +538,36 @@ Module Type TermsOn (Import TY : Types).
     Local Set Elimination Schemes.
 
     (* A view on list terms. *)
-    Inductive ListView {Σ σ} : Term Σ (ty.list σ) → Type :=
-    | term_list_var {ς} {ςInΣ : (ς∷ty.list σ) ∈ Σ} :
-      ListView (term_var ς)
-    | term_list_val v :
-      ListView (term_val _ v)
-    | term_list_cons h {t} (lv : ListView t) :
-      ListView (term_binop bop.cons h t)
-    | term_list_append {t1 t2} (lv1 : ListView t1) (lv2 : ListView t2) :
-      ListView (term_binop bop.append t1 t2)
-    | term_list_rev t (lv : ListView t) :
-      ListView (term_unop uop.rev t).
-    #[global] Arguments term_list_var {Σ σ} ς {ςInΣ}.
-    #[global] Arguments term_list_append {Σ σ} [t1 t2] lv1 lv2.
+    (* Inductive ListView {Σ σ} : Term Σ (ty.list σ) → Type := *)
+    (* | term_list_var {ς} {ςInΣ : (ς∷ty.list σ) ∈ Σ} : *)
+    (*   ListView (term_var ς) *)
+    (* | term_list_val v : *)
+    (*   ListView (term_val _ v) *)
+    (* | term_list_cons h {t} (lv : ListView t) : *)
+    (*   ListView (term_binop bop.cons h t) *)
+    (* | term_list_append {t1 t2} (lv1 : ListView t1) (lv2 : ListView t2) : *)
+    (*   ListView (term_binop bop.append t1 t2) *)
+    (* | term_list_rev t (lv : ListView t) : *)
+    (*   ListView (term_unop uop.rev t). *)
+    (* #[global] Arguments term_list_var {Σ σ} ς {ςInΣ}. *)
+    (* #[global] Arguments term_list_append {Σ σ} [t1 t2] lv1 lv2. *)
 
     (* We map each type to a specialized view for that type. *)
     Definition View {Σ} (σ : Ty) : Term Σ σ → Type :=
       match σ with
-      | ty.list τ => ListView
+      (* | ty.list τ => ListView *)
       | _         => fun _ => unit
       end.
 
     Definition view_var {Σ l σ} : ∀ lIn, View (@term_var Σ l σ lIn) :=
       match σ with
-       | ty.list σ => @term_list_var _ _ l
+       (* | ty.list σ => @term_list_var _ _ l *)
        | _         => fun _ => tt
        end.
 
     Definition view_val {Σ σ} : ∀ v, View (@term_val Σ σ v) :=
       match σ with
-      | ty.list σ0 => term_list_val
+      (* | ty.list σ0 => term_list_val *)
       | _          => fun _ => tt
       end.
 
@@ -575,15 +575,15 @@ Module Type TermsOn (Import TY : Types).
       ∀ {t1 : Term Σ σ1} {t2 : Term Σ σ2},
         View t1 → View t2 → View (term_binop op t1 t2) :=
        match op with
-       | bop.cons   => fun t1 t2 _  v2 => term_list_cons t1 v2
-       | bop.append => term_list_append
+       (* | bop.cons   => fun t1 t2 _  v2 => term_list_cons t1 v2 *)
+       (* | bop.append => term_list_append *)
        | _ => fun _ _ _ _ => tt
        end.
 
     Definition view_unop {Σ σ1 σ2} (op : UnOp σ1 σ2) :
       ∀ {t : Term Σ σ1}, View t → View (term_unop op t) :=
     match op with
-      | uop.rev => term_list_rev
+      (* | uop.rev => term_list_rev *)
       | _ => fun _ _ => tt
       end.
 
@@ -1062,8 +1062,8 @@ Module Type TermsOn (Import TY : Types).
     Notation "e1 - e2" := (term_minus e1 e2) : term_scope.
     Notation "e1 && e2" := (term_and e1 e2) : term_scope.
     Notation "e1 || e2" := (term_or e1 e2) : term_scope.
-    Notation "e1 :: e2" := (term_cons e1 e2) : term_scope.
-    Notation "e1 ++ e2" := (term_append e1 e2) : term_scope.
+    (* Notation "e1 :: e2" := (term_cons e1 e2) : term_scope. *)
+    (* Notation "e1 ++ e2" := (term_append e1 e2) : term_scope. *)
     Notation "e1 +ᵇ e2" := (term_bvadd e1 e2) : term_scope.
     Notation "e1 -ᵇ e2" := (term_bvsub e1 e2) : term_scope.
     Notation "e1 *ᵇ e2" := (term_bvmul e1 e2) : term_scope.
