@@ -62,16 +62,19 @@ Module Type BaseMixin (Import TY : Types).
   Notation PCtx := (NCtx PVar Ty).
   Notation LCtx := (NCtx LVar Ty).
   Notation Val := (@ty.Val typedeclkit typedenotekit).
+  Notation RelVal := (@ty.RelVal typedeclkit typedenotekit).
 
   Notation Valuation Σ :=
     (@Env (Binding LVar Ty)
        (fun xt : Binding LVar Ty =>
-          Val (@type _ _ xt)) Σ).
+          RelVal (@type _ _ xt)) Σ).
 
   Notation CStore := (@NamedEnv PVar Ty Val).
+  Notation CStoreRel := (@NamedEnv PVar Ty RelVal).
 
   Definition SMatchResult {N σ} (pat : Pattern (N:=N) σ) (Σ : LCtx) : Type :=
     { pc : PatternCase pat & NamedEnv (Term Σ) (PatternCaseCtx pc) }.
+  
 
   Section PatternMatching.
     Context {N : Set}.

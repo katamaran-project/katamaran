@@ -26,6 +26,8 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+Require Import stdpp.base.
+
 From Katamaran Require Import
      Prelude
      Context
@@ -149,7 +151,7 @@ Module Type PatternsOn (Import TY : Types).
     | pat_unit                                        : Pattern ty.unit
     (* | pat_enum E                                      : Pattern (ty.enum E) *)
     | pat_bvec_split m n (x y : N)                    : Pattern (ty.bvec (m+n))
-    | pat_bvec_exhaustive m                           : Pattern (ty.bvec m)
+    (* | pat_bvec_exhaustive m                           : Pattern (ty.bvec m) *)
     (* | pat_tuple {σs Δ} (p : TuplePat σs Δ)            : Pattern (ty.tuple σs) *)
     (* | pat_record R Δ (p : RecordPat (recordf_ty R) Δ) : Pattern (ty.record R) *)
     (* | pat_union U *)
@@ -169,7 +171,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_unit               => unit
       (* | pat_enum E             => enumt E *)
       | pat_bvec_split m n x y => unit
-      | pat_bvec_exhaustive m  => bv m
+      (* | pat_bvec_exhaustive m  => bv m *)
       (* | pat_tuple p            => unit *)
       (* | pat_record R Δ p       => unit *)
       (* | pat_union U p          => { K : unionk U & PatternCase (p K) } *)
@@ -187,7 +189,7 @@ Module Type PatternsOn (Import TY : Types).
         | pat_unit               => EqDecInstances.unit_EqDec
         (* | pat_enum E             => enumt_eqdec E *)
         | pat_bvec_split _ _ _ _ => EqDecInstances.unit_EqDec
-        | pat_bvec_exhaustive m  => bv.eqdec_bv
+        (* | pat_bvec_exhaustive m  => bv.eqdec_bv *)
         (* | pat_tuple _            => EqDecInstances.unit_EqDec *)
         (* | pat_record _ _ _       => EqDecInstances.unit_EqDec *)
         (* | pat_union U p          => EqDecInstances.sigma_eqdec *)
@@ -208,7 +210,7 @@ Module Type PatternsOn (Import TY : Types).
         | pat_unit               => finite.unit_finite
         (* | pat_enum E             => enumt_finite E *)
         | pat_bvec_split _ _ _ _ => finite.unit_finite
-        | pat_bvec_exhaustive m  => bv.finite.finite_bv
+        (* | pat_bvec_exhaustive m  => bv.finite.finite_bv *)
         (* | pat_tuple _            => finite.unit_finite *)
         (* | pat_record _ _ _       => finite.unit_finite *)
         (* | pat_union U p          => *)
@@ -230,7 +232,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_unit               => fun _ => [ctx]
       (* | pat_enum _             => fun _ => [ctx] *)
       | pat_bvec_split m n x y => fun _ => [x∷ty.bvec m; y∷ty.bvec n]
-      | pat_bvec_exhaustive m  => fun _ => [ctx]
+      (* | pat_bvec_exhaustive m  => fun _ => [ctx] *)
       (* | @pat_tuple _ Δ _       => fun _ => Δ *)
       (* | pat_record _ Δ _       => fun _ => Δ *)
       (* | pat_union U p          => fun '(existT K pc) => PatternCaseCtx pc *)
@@ -273,8 +275,8 @@ Module Type PatternsOn (Import TY : Types).
             | bv.isapp xs ys =>
                 existT tt ([env].[x∷ty.bvec m ↦ xs].[y∷ty.bvec n ↦ ys])
             end
-      | pat_bvec_exhaustive m =>
-          fun v => existT v [env]
+      (* | pat_bvec_exhaustive m => *)
+      (*     fun v => existT v [env] *)
       (* | pat_tuple p => *)
       (*     fun v => existT tt (tuple_pattern_match_val p v) *)
       (* | pat_record R Δ p => *)
@@ -323,8 +325,8 @@ Module Type PatternsOn (Import TY : Types).
             let (Ex,vy) := env.view Exy in
             let (E,vx)  := env.view Ex in
             bv.app vx vy
-      | pat_bvec_exhaustive m =>
-          fun v _ => v
+      (* | pat_bvec_exhaustive m => *)
+      (*     fun v _ => v *)
       (* | pat_tuple p => *)
       (*     fun _ vs => envrec.of_env (tuple_pattern_match_env_reverse p vs) *)
       (* | pat_record R Δ p => *)
@@ -353,7 +355,7 @@ Module Type PatternsOn (Import TY : Types).
       (* - now env.destroy vs. *)
       - destruct pc; env.destroy vs.
         now rewrite bv.appView_app.
-      - now env.destroy vs.
+      (* - now env.destroy vs. *)
       (* - destruct pc. *)
       (*   unfold tuple_pattern_match_val. *)
       (*   rewrite envrec.to_of_env. *)
@@ -387,7 +389,7 @@ Module Type PatternsOn (Import TY : Types).
       (* - destruct v; reflexivity. *)
       (* - reflexivity. *)
       - destruct bv.appView; reflexivity.
-      - reflexivity.
+      (* - reflexivity. *)
       (* - unfold tuple_pattern_match_val. *)
       (*   rewrite tuple_pattern_match_env_inverse_left. *)
       (*   now rewrite envrec.of_to_env. *)
@@ -402,6 +404,78 @@ Module Type PatternsOn (Import TY : Types).
       (*     (pattern_match_val_reverse' _ (existT pc vs)). *)
       (*   now rewrite <- Heq, H. *)
     Qed.
+
+
+    Definition RVToOption {A} (rv : RV A) : option A :=
+      match rv with
+      | SyncVal v => Some v
+      | NonSyncVal _ _ => None
+      end.
+
+    (* Pattern match on a value. The result is a [PatternCase] that represents
+       the alternative corresponding to the value, together with an environment
+       that maps the variables of the pattern to values. *)
+    Definition pattern_match_relval {σ} (p : Pattern σ) (rv : RelVal σ) : option (MatchResult p) :=
+      fmap (pattern_match_val p) (RVToOption rv).
+    #[global] Arguments pattern_match_relval {σ} !p rv.
+
+    (* Reverse a pattern match. Given a [PatternCase] and an environment with
+       values for all variables in the pattern, reconstruct a value. *)
+    Definition pattern_match_relval_reverse {σ} (p : Pattern σ) :
+      forall (pc : PatternCase p), option (NamedEnv Val (PatternCaseCtx pc)) -> option (Val σ) :=
+     fun pc onenv =>
+       fmap (pattern_match_val_reverse p pc) onenv.
+
+    (* A curried version of the above. *)
+    Definition pattern_match_relval_reverse' {σ} (p : Pattern σ) :
+      option (MatchResult p) -> option (Val σ) :=
+      fmap (pattern_match_val_reverse' p).
+
+    Lemma pattern_match_relval_inverse_right' {σ} (p : Pattern σ) :
+      forall (r : option (MatchResult p)),
+        fmap (pattern_match_val p) (pattern_match_relval_reverse' p r) = r.
+    Proof.
+      intros r.
+      destruct r.
+      - cbn. rewrite pattern_match_val_inverse_right'. reflexivity.
+      - reflexivity.
+    Qed.
+
+    Lemma pattern_match_relval_inverse_right {σ} (pat : Pattern σ)
+      (pc : PatternCase pat) (δpc : option (NamedEnv Val (PatternCaseCtx pc))) : Prop.
+      refine (
+      fmap (pattern_match_val pat) (pattern_match_relval_reverse pat pc δpc) = Some (existT pc δpc)).
+    Proof. apply (pattern_match_val_inverse_right' pat (existT pc δpc)). Qed.
+
+    Lemma pattern_match_val_inverse_left {σ} (pat : Pattern σ) :
+      forall v : Val σ,
+        pattern_match_val_reverse' pat (pattern_match_val pat v) = v.
+    Proof.
+      induction pat; cbn; intros v; try progress cbn.
+      - reflexivity.
+      - reflexivity.
+      - destruct v; reflexivity.
+      - destruct v; reflexivity.
+      (* - destruct v; reflexivity. *)
+      (* - destruct v; reflexivity. *)
+      (* - reflexivity. *)
+      - destruct bv.appView; reflexivity.
+      (* - reflexivity. *)
+      (* - unfold tuple_pattern_match_val. *)
+      (*   rewrite tuple_pattern_match_env_inverse_left. *)
+      (*   now rewrite envrec.of_to_env. *)
+      (* - unfold record_pattern_match_val. *)
+      (*   rewrite record_pattern_match_env_inverse_left. *)
+      (*   now rewrite recordv_fold_unfold. *)
+      (* - destruct unionv_unfold as [K v'] eqn:Heq. *)
+      (*   apply (f_equal (unionv_fold U)) in Heq. *)
+      (*   rewrite unionv_fold_unfold in Heq. subst. *)
+      (*   destruct pattern_match_val eqn:Heq; cbn. *)
+      (*   change (pattern_match_val_reverse _ ?pc ?vs) with *)
+      (*     (pattern_match_val_reverse' _ (existT pc vs)). *)
+      (*   now rewrite <- Heq, H. *)
+    Qed.
+  
 
 
     (* The intendend use case of the above definitions is in the declaration of

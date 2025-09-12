@@ -14,6 +14,13 @@ Gemaakte keuzes:
 		* Union
 		* Record
 		* Tuple
+		* List
+		* Sum
+	+ Patterns:
+		* Anything to do with the turned of types
+		* Pattern_bvec_exhaustive
+	+ Pattern_match_relval_reverse returned een option (RelVal sigma), dit is logisch, want niet alle environments zijn mogelijk voor pattern matching (pattern_match_relval is niet surjectief):
+		Een andere gesophisticeerdere oplossing zou een relatie zijn, maar dat kunnen we later nog doen (option is eigenlijk al een stap richting een relatie)
 	+ BinOp: didn't turn off, everything except eq, because it seemed more work than it simplified
 	+ Use if instead of pattern match: didn't do this for now, because of problems encountered in Assertions.v, it didn't seem worth it.	
 	
@@ -21,6 +28,10 @@ Gemaakte keuzes:
 	Ondersteuning voor projectie en Val omzetten naar RelVal (dus gebruik hier niet SyncVal voor).
 	We behouden RV om eventueel te gebruiken voor RV Prop in eval_relop_propRel.
 	Encountered problems: 
+	
+- Pattern_match_relval gebruikt projLeft voor Boolean (hierbij maakt het gebruik van het feit dat SyncVal geëist wordt)
+	Dit zal door bepaalde lemma gecheckt worden dat de uitkomst dezelfde is als effectief pattern matchen.
+
 
 
 Inadequacies:

@@ -197,10 +197,10 @@ Module ty.
       | (_ , _) => NonSyncVal (f (projLeftRV rv1) (projLeftRV rv2)) (f (projRightRV rv1) (projRightRV rv2))
       end.
 
-    Definition liftUnOp {A B} (f : Val A -> Val B) (rv : RelVal A) : RelVal B :=
+    Definition liftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) : RelVal σ2 :=
       liftUnOpRV f rv.
 
-    Definition liftBinOp {A B C} (f : Val A -> Val B -> Val C) (rv1 : RelVal A) (rv2 : RelVal B) : RelVal C :=
+    Definition liftBinOp {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) : RelVal σ3 :=
       liftBinOpRV f rv1 rv2.
 
     Definition valToRelVal {σ} : Val σ -> RelVal σ :=
