@@ -61,6 +61,7 @@ Module Type TermsOn (Import TY : Types).
   Inductive Term (Σ : LCtx) : Ty → Set :=
   | term_var     (l : LVar) (σ : Ty) {lIn : l∷σ ∈ Σ} : Term Σ σ
   | term_val     (σ : Ty) : Val σ → Term Σ σ
+  | term_relval  (σ : Ty) : RelVal σ → Term Σ σ
   | term_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ3
   | term_unop    {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) : Term Σ σ2
   (* | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs) *)
@@ -69,6 +70,7 @@ Module Type TermsOn (Import TY : Types).
   .
   #[global] Arguments term_var {_} _ {_ _}.
   #[global] Arguments term_val {_} _ _.
+  #[global] Arguments term_relval {_} _ _.
   (* #[global] Arguments term_tuple {_ _} ts. *)
   (* #[global] Arguments term_union {_} U K t. *)
   (* #[global] Arguments term_record {_} R ts. *)
@@ -191,6 +193,7 @@ Module Type TermsOn (Import TY : Types).
 
     Hypothesis (pvar : ∀ (l : LVar) (σ : Ty) (lIn : l∷σ ∈ Σ), P (term_var l)).
     Hypothesis (pval : ∀ [σ] (v : Val σ), P (term_val σ v)).
+    Hypothesis (prelval : ∀ [σ] (v : RelVal σ), P (term_relval σ v)).
     Hypothesis (pbinop : (∀ [σ1 σ2 σ3 ] (op : BinOp σ1 σ2 σ3)
                             (t1 : Term Σ σ1) (t2 : Term Σ σ2),
                             P t1 → P t2 → P (term_binop op t1 t2))).
@@ -207,6 +210,7 @@ Module Type TermsOn (Import TY : Types).
       match t with
       | term_var_in lIn     => pvar lIn
       | term_val σ v        => pval v
+      | term_relval σ v     => prelval v
       | term_binop op t1 t2 => pbinop op (Term_rect t1) (Term_rect t2)
       | term_unop op t      => punop op (Term_rect t)
       (* | term_tuple ts       => ptuple (env.all_intro Term_rect ts) *)
@@ -226,6 +230,7 @@ Module Type TermsOn (Import TY : Types).
 
     Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.int ∈ Σ), P (term_var l)).
     Hypothesis (pval : ∀ (i : Val ty.int), P (term_val ty.int i)).
+    Hypothesis (prelval : ∀ (i : RelVal ty.int), P (term_relval ty.int i)).
     Hypothesis (pplus : ∀ (t1 t2 : Term Σ ty.int), P (term_binop bop.plus t1 t2)).
     Hypothesis (pminus : ∀ (t1 t2 : Term Σ ty.int), P (term_binop bop.minus t1 t2)).
     Hypothesis (ptimes : ∀ (t1 t2 : Term Σ ty.int), P (term_binop bop.times t1 t2)).
@@ -237,6 +242,7 @@ Module Type TermsOn (Import TY : Types).
     Equations(noeqns) Term_int_case (t : Term Σ ty.int) : P t :=
     | term_var_in lIn            => pvar lIn
     | term_val _ i               => pval i
+    | term_relval _ i            => prelval i
     | term_binop bop.plus t1 t2  => pplus t1 t2
     | term_binop bop.minus t1 t2 => pminus t1 t2
     | term_binop bop.times t1 t2 => ptimes t1 t2
@@ -253,6 +259,7 @@ Module Type TermsOn (Import TY : Types).
 
     Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.int ∈ Σ), P (term_var l)).
     Hypothesis (pval : ∀ (i : Val ty.int), P (term_val ty.int i)).
+    Hypothesis (prelval : ∀ (i : RelVal ty.int), P (term_relval ty.int i)).
     Hypothesis (pplus : (∀ (t1 t2 : Term Σ ty.int),
                            P t1 → P t2 → P (term_binop bop.plus t1 t2))).
     Hypothesis (pminus : (∀ (t1 t2 : Term Σ ty.int),
@@ -268,7 +275,7 @@ Module Type TermsOn (Import TY : Types).
                                P (term_unop uop.unsigned t))).
 
     Fixpoint Term_int_rect (t : Term Σ ty.int) {struct t} : P t :=
-      Term_int_case P pvar pval
+      Term_int_case P pvar pval prelval
         (fun t1 t2 => pplus (Term_int_rect t1) (Term_int_rect t2))
         (fun t1 t2 => pminus (Term_int_rect t1) (Term_int_rect t2))
         (fun t1 t2 => ptimes (Term_int_rect t1) (Term_int_rect t2))
@@ -284,6 +291,7 @@ Module Type TermsOn (Import TY : Types).
 
     Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.bool ∈ Σ), P (term_var l)).
     Hypothesis (pval : ∀ (v : Val ty.bool), P (term_val ty.bool v)).
+    Hypothesis (prelval : ∀ (v : RelVal ty.bool), P (term_relval ty.bool v)).
     Hypothesis (pand : ∀ (t1 t2 : Term Σ ty.bool), P (term_binop bop.and t1 t2)).
     Hypothesis (por : ∀ (t1 t2 : Term Σ ty.bool), P (term_binop bop.or t1 t2)).
     Hypothesis (prel : (∀ [σ] (op : RelOp σ) (t1 t2 : Term Σ σ),
@@ -293,6 +301,7 @@ Module Type TermsOn (Import TY : Types).
     Equations(noeqns) Term_bool_case (t : Term Σ ty.bool) : P t :=
     | term_var_in lIn                 => pvar lIn
     | term_val _ b                    => pval b
+    | term_relval _ b                 => prelval b
     | term_binop bop.and t1 t2        => pand t1 t2
     | term_binop (bop.relop op) t1 t2 => prel op t1 t2
     | term_binop bop.or t1 t2         => por t1 t2
@@ -306,13 +315,14 @@ Module Type TermsOn (Import TY : Types).
 
     Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.bool ∈ Σ), P (term_var l)).
     Hypothesis (pval : ∀ (b : Val ty.bool), P (term_val ty.bool b)).
+    Hypothesis (prelval : ∀ (b : RelVal ty.bool), P (term_relval ty.bool b)).
     Hypothesis (pand : ∀ (t1 t2 : Term Σ ty.bool), P t1 → P t2 → P (term_binop bop.and t1 t2)).
     Hypothesis (por : ∀ e1 e2, P e1 → P e2 → P (term_binop bop.or e1 e2)).
     Hypothesis (prel : ∀ σ (op : RelOp σ) e1 e2, P (term_binop (bop.relop op) e1 e2)).
     Hypothesis (pnot : ∀ e, P e → P (term_unop uop.not e)).
 
     Fixpoint Term_bool_ind (t : Term Σ ty.bool) : P t :=
-      Term_bool_case P pvar pval
+      Term_bool_case P pvar pval prelval
         (fun t1 t2 => pand (Term_bool_ind t1) (Term_bool_ind t2))
         (fun t1 t2 => por (Term_bool_ind t1) (Term_bool_ind t2))
         prel
@@ -346,11 +356,13 @@ Module Type TermsOn (Import TY : Types).
 
     Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.prod σ1 σ2 ∈ Σ), P (term_var l)).
     Hypothesis (pval : ∀ (v : Val (ty.prod σ1 σ2)), P (term_val (ty.prod σ1 σ2) v)).
+    Hypothesis (prelval : ∀ (v : RelVal (ty.prod σ1 σ2)), P (term_relval (ty.prod σ1 σ2) v)).
     Hypothesis (ppair : ∀ (t1 : Term Σ σ1) (t2 : Term Σ σ2), P (term_binop bop.pair t1 t2)).
 
     Equations(noeqns) Term_prod_case (t : Term Σ (ty.prod σ1 σ2)) : P t :=
     | term_var_in lIn         => pvar lIn
     | term_val _ p            => pval p
+    | term_relval _ p            => prelval p
     | term_binop bop.pair s t => ppair s t.
 
   End Term_prod_case.
@@ -378,6 +390,7 @@ Module Type TermsOn (Import TY : Types).
 
     Hypothesis (pvar : ∀ n (l : LVar) (lIn : l∷ty.bvec n ∈ Σ), P (term_var l)).
     Hypothesis (pval : ∀ n (v : Val (ty.bvec n)), P (term_val (ty.bvec n) v)).
+    Hypothesis (prelval : ∀ n (v : RelVal (ty.bvec n)), P (term_relval (ty.bvec n) v)).
     Hypothesis (pbvadd : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.bvadd t1 t2)).
     Hypothesis (pbvsub : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.bvsub t1 t2)).
     Hypothesis (pbvmul : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.bvmul t1 t2)).
@@ -405,6 +418,7 @@ Module Type TermsOn (Import TY : Types).
     Equations(noeqns) Term_bvec_case [n] (t : Term Σ (ty.bvec n)) : P t :=
     | term_var_in lIn                                   => pvar lIn
     | term_val _ v                                      => pval v
+    | term_relval _ v                                   => prelval v
     | term_binop bop.bvadd t1 t2                        => pbvadd t1 t2
     | term_binop bop.bvsub t1 t2                        => pbvsub t1 t2
     | term_binop bop.bvmul t1 t2                        => pbvmul t1 t2
@@ -435,6 +449,7 @@ Module Type TermsOn (Import TY : Types).
 
     Hypothesis (pvar : ∀ n (ς : LVar) (ςInΣ : ς∷ty.bvec n ∈ Σ), P (term_var ς)).
     Hypothesis (pval : ∀ n (v : Val (ty.bvec n)), P (term_val (ty.bvec n) v)).
+    Hypothesis (prelval : ∀ n (v : RelVal (ty.bvec n)), P (term_relval (ty.bvec n) v)).
     Hypothesis (pbvadd : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.bvadd t1 t2)).
     Hypothesis (pbvsub : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.bvsub t1 t2)).
     Hypothesis (pbvmul : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.bvmul t1 t2)).
@@ -463,6 +478,7 @@ Module Type TermsOn (Import TY : Types).
       Term_bvec_case P
         (ltac:(intros; apply pvar))
         (ltac:(intros; apply pval))
+        (ltac:(intros; apply prelval))
         (ltac:(intros; apply pbvadd; auto))
         (ltac:(intros; apply pbvsub; auto))
         (ltac:(intros; apply pbvmul; auto))
@@ -571,6 +587,12 @@ Module Type TermsOn (Import TY : Types).
       | _          => fun _ => tt
       end.
 
+    Definition view_relval {Σ σ} : ∀ v, View (@term_relval Σ σ v) :=
+      match σ with
+      (* | ty.list σ0 => term_list_val *)
+      | _          => fun _ => tt
+      end.
+
     Definition view_binop {Σ σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) :
       ∀ {t1 : Term Σ σ1} {t2 : Term Σ σ2},
         View t1 → View t2 → View (term_binop op t1 t2) :=
@@ -592,6 +614,7 @@ Module Type TermsOn (Import TY : Types).
       match t as t1 in (Term _ t0) return (View t1) with
       | term_var ς          => view_var _
       | term_val _ v        => view_val v
+      | term_relval _ v     => view_relval v
       | term_binop op t1 t2 => view_binop op (view t1) (view t2)
       | term_unop op t      => view_unop op (view t)
       (* | _                   => tt *)
@@ -609,6 +632,8 @@ Module Type TermsOn (Import TY : Types).
       Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
         ctx.In_eqb ς1inΣ ς2inΣ;
       Term_eqb (term_val _ v1) (term_val _ v2) :=
+        if eq_dec v1 v2 then true else false;
+      Term_eqb (term_relval _ v1) (term_relval _ v2) :=
         if eq_dec v1 v2 then true else false;
       Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
         with bop.eqdep_dec op1 op2 => {
@@ -686,6 +711,7 @@ Module Type TermsOn (Import TY : Types).
       match t with
       | term_var ς                 => ζ.[??ς]
       | term_val σ v               => term_val σ v
+      | term_relval σ v               => term_relval σ v
       | term_binop op t1 t2        => term_binop op (sub_term t1 ζ) (sub_term t2 ζ)
       | term_unop op t             => term_unop op (sub_term t ζ)
       (* | term_tuple ts              => term_tuple (env.map (fun _ t => sub_term t ζ) ts) *)
