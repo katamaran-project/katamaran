@@ -270,6 +270,9 @@ Module bop.
       | bvult => fun v1 v2 => bv.ultb v1 v2
       end.
 
+    Definition eval_relop_relval {σ} (op : RelOp σ) : RelVal σ -> RelVal σ -> ty.RV Datatypes.bool :=
+      liftBinOp (σ3 := ty.bool) (eval_relop_val op).
+
     Definition eval_relop_prop
       (* Force TypeDefKit into the context, so that the eval_relop_equiv lemma
          below doesn't leave unsolved existentials when used in rewriting. *)
@@ -285,6 +288,12 @@ Module bop.
       | bvult => fun v1 v2 => bv.ult v1 v2
       end.
 
+    Definition eval_relop_relprop
+      (* Force TypeDefKit into the context, so that the eval_relop_equiv lemma
+         below doesn't leave unsolved existentials when used in rewriting. *)
+      {TDF : TypeDefKit TDN} {σ} (op : RelOp σ) : RelVal σ -> RelVal σ -> ty.RV Prop :=
+      liftBinOpRV (eval_relop_prop op).
+
     Lemma eval_relop_val_spec {σ} (op : RelOp σ) (v1 v2 : Val σ) :
       reflect (eval_relop_prop op v1 v2) (eval_relop_val op v1 v2).
     Proof with constructor; auto.
@@ -297,6 +306,52 @@ Module bop.
       - apply bv.slt_spec.
       - apply bv.ule_spec.
       - apply bv.ult_spec.
+    Qed.
+
+    Definition eval_relop_relval_spec {σ} (op : RelOp σ) (v1 v2 : RelVal σ) :
+      match liftBinOpRV reflect (eval_relop_relprop op v1 v2) (eval_relop_relval op v1 v2) with
+      | SyncVal p => p
+      | NonSyncVal p1 p2 => p1 * p2
+      end.
+    Proof with constructor; auto.
+      unfold eval_relop_relprop; unfold eval_relop_relval.
+      destruct v1; destruct v2; cbn.
+      { destruct op; cbn; auto.
+      - destruct eq_dec...
+      - destruct eq_dec...
+      - apply Z.leb_spec0.
+      - apply Z.ltb_spec0.
+      - apply bv.sle_spec.
+      - apply bv.slt_spec.
+      - apply bv.ule_spec.
+      - apply bv.ult_spec. }
+      { destruct op; cbn; auto.
+        - split; destruct eq_dec...
+        - split; destruct eq_dec...
+        - split; apply Z.leb_spec0.
+        - split; apply Z.ltb_spec0.
+        - split; apply bv.sle_spec.
+        - split; apply bv.slt_spec.
+        - split; apply bv.ule_spec.
+        - split; apply bv.ult_spec. }
+      { destruct op; cbn; auto.
+        - split; destruct eq_dec...
+        - split; destruct eq_dec...
+        - split; apply Z.leb_spec0.
+        - split; apply Z.ltb_spec0.
+        - split; apply bv.sle_spec.
+        - split; apply bv.slt_spec.
+        - split; apply bv.ule_spec.
+        - split; apply bv.ult_spec. }
+      { destruct op; cbn; auto.
+        - split; destruct eq_dec...
+        - split; destruct eq_dec...
+        - split; apply Z.leb_spec0.
+        - split; apply Z.ltb_spec0.
+        - split; apply bv.sle_spec.
+        - split; apply bv.slt_spec.
+        - split; apply bv.ule_spec.
+        - split; apply bv.ult_spec. }
     Qed.
 
     Lemma eval_relop_equiv {σ} (op : RelOp σ) (v1 v2 : Val σ) :
@@ -327,6 +382,9 @@ Module bop.
       | update_vector_subrange s l => fun v1 v2 => bv.update_vector_subrange s l v1 v2
       | relop op                   => eval_relop_val op
       end.
+
+    Definition evalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : RelVal σ1 -> RelVal σ2 -> RelVal σ3 :=
+    liftBinOp (eval op).
 
   End WithTypes.
   #[export] Existing Instance eq_dec_binop.

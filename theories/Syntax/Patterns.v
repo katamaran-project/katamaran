@@ -442,38 +442,21 @@ Module Type PatternsOn (Import TY : Types).
     Qed.
 
     Lemma pattern_match_relval_inverse_right {σ} (pat : Pattern σ)
-      (pc : PatternCase pat) (δpc : option (NamedEnv Val (PatternCaseCtx pc))) : Prop.
-      refine (
-      fmap (pattern_match_val pat) (pattern_match_relval_reverse pat pc δpc) = Some (existT pc δpc)).
-    Proof. apply (pattern_match_val_inverse_right' pat (existT pc δpc)). Qed.
-
-    Lemma pattern_match_val_inverse_left {σ} (pat : Pattern σ) :
-      forall v : Val σ,
-        pattern_match_val_reverse' pat (pattern_match_val pat v) = v.
+      (pc : PatternCase pat) (δpc : option (NamedEnv Val (PatternCaseCtx pc))) :
+      fmap (pattern_match_val pat) (pattern_match_relval_reverse pat pc δpc) = fmap (existT pc) δpc.
     Proof.
-      induction pat; cbn; intros v; try progress cbn.
+      destruct δpc.
+      - cbn. rewrite pattern_match_val_inverse_right. reflexivity.
       - reflexivity.
+    Qed.
+
+    Lemma pattern_match_relval_inverse_left {σ} (pat : Pattern σ) :
+      forall rv : RelVal σ,
+        pattern_match_relval_reverse' pat (pattern_match_relval pat rv) = RVToOption rv.
+    Proof.
+      destruct rv.
+      - unfold pattern_match_relval. cbn. rewrite pattern_match_val_inverse_left. reflexivity.
       - reflexivity.
-      - destruct v; reflexivity.
-      - destruct v; reflexivity.
-      (* - destruct v; reflexivity. *)
-      (* - destruct v; reflexivity. *)
-      (* - reflexivity. *)
-      - destruct bv.appView; reflexivity.
-      (* - reflexivity. *)
-      (* - unfold tuple_pattern_match_val. *)
-      (*   rewrite tuple_pattern_match_env_inverse_left. *)
-      (*   now rewrite envrec.of_to_env. *)
-      (* - unfold record_pattern_match_val. *)
-      (*   rewrite record_pattern_match_env_inverse_left. *)
-      (*   now rewrite recordv_fold_unfold. *)
-      (* - destruct unionv_unfold as [K v'] eqn:Heq. *)
-      (*   apply (f_equal (unionv_fold U)) in Heq. *)
-      (*   rewrite unionv_fold_unfold in Heq. subst. *)
-      (*   destruct pattern_match_val eqn:Heq; cbn. *)
-      (*   change (pattern_match_val_reverse _ ?pc ?vs) with *)
-      (*     (pattern_match_val_reverse' _ (existT pc vs)). *)
-      (*   now rewrite <- Heq, H. *)
     Qed.
   
 
@@ -656,7 +639,7 @@ Module Type PatternsOn (Import TY : Types).
           let x' := fresh_lvar Σ (Some (n x)) in
           let y' := fresh_lvar (Σ▻x'∷ty.bvec m) (Some (n y)) in
           pat_bvec_split m _ x' y'
-      | pat_bvec_exhaustive m  => pat_bvec_exhaustive m
+      (* | pat_bvec_exhaustive m  => pat_bvec_exhaustive m *)
       (* | pat_tuple p            => pat_tuple (freshen_tuplepat Σ p) *)
       (* | pat_record R Δ p       => pat_record R *)
       (*                               (freshen_ctx Σ Δ) *)
@@ -686,7 +669,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_unit               => fun pc => pc
       (* | pat_enum E             => fun pc => pc *)
       | pat_bvec_split _ _ _ _ => fun pc => pc
-      | pat_bvec_exhaustive m  => fun pc => pc
+      (* | pat_bvec_exhaustive m  => fun pc => pc *)
       (* | pat_tuple _            => fun pc => pc *)
       (* | pat_record _ _ _       => fun pc => pc *)
       (* | pat_union U p          => fun '(existT K pc) => *)
@@ -706,7 +689,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_unit               => fun pc => pc
       (* | pat_enum E             => fun pc => pc *)
       | pat_bvec_split _ _ _ _ => fun pc => pc
-      | pat_bvec_exhaustive m  => fun pc => pc
+      (* | pat_bvec_exhaustive m  => fun pc => pc *)
       (* | pat_tuple _            => fun pc => pc *)
       (* | pat_record _ _ _       => fun pc => pc *)
       (* | pat_union U p          => *)
@@ -737,7 +720,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_unit               => fun _ => eq_refl
       (* | pat_enum _             => fun _ => eq_refl *)
       | pat_bvec_split _ _ _ _ => fun _ => eq_refl
-      | pat_bvec_exhaustive m  => fun _ => eq_refl
+      (* | pat_bvec_exhaustive m  => fun _ => eq_refl *)
       (* | pat_tuple _            => fun _ => eq_refl *)
       (* | pat_record _ _ _       => fun _ => eq_refl *)
       (* | pat_union _ p          => fun '(existT K pc) => *)
@@ -786,7 +769,7 @@ Module Type PatternsOn (Import TY : Types).
             let (ts1,vy) := env.view ts in
             let (_,vx)   := env.view ts1 in
             [env].[_∷ty.bvec m ↦ vx].[_∷ty.bvec n ↦ vy]
-      | pat_bvec_exhaustive _ => fun _ _ => [env]
+      (* | pat_bvec_exhaustive _ => fun _ _ => [env] *)
       (* | pat_tuple _ => fun _ => freshen_namedenv *)
       (* | pat_record _ Δ _ => fun _ => freshen_namedenv *)
       (* | pat_union U p => fun '(existT K pc) => freshen_patterncaseenv (p K) pc *)
@@ -824,7 +807,7 @@ Module Type PatternsOn (Import TY : Types).
             let (ts1,vy) := env.view ts in
             let (_,vx)   := env.view ts1 in
             [env].[x∷ty.bvec m ↦ vx].[y∷ty.bvec n ↦ vy]
-      | pat_bvec_exhaustive _ => fun _ _ => [env]
+      (* | pat_bvec_exhaustive _ => fun _ _ => [env] *)
       (* | pat_tuple _ => fun _ => unfreshen_namedenv *)
       (* | pat_record _ Δ _ => fun _ => unfreshen_namedenv *)
       (* | pat_union U p => fun '(existT K pc) => unfreshen_patterncaseenv (p K) pc *)

@@ -66,8 +66,8 @@ Module Type InstantiationOn
   (Import TM : TermsOn TY).
 
   Local Notation LCtx := (NCtx LVar Ty).
-  Local Notation Valuation Σ := (Env (fun xt : Binding LVar Ty => Val (type xt)) Σ).
-  Local Notation CStore := (@NamedEnv PVar Ty Val).
+  Local Notation Valuation Σ := (Env (fun xt : Binding LVar Ty => RelVal (type xt)) Σ).
+  Local Notation CStore := (@NamedEnv PVar Ty RelVal).
 
   (* This type class connects a symbolic representation of a type with its
      concrete / semi-concrete counterpart. The method 'inst' will instantiate
@@ -79,6 +79,11 @@ Module Type InstantiationOn
     lift : forall {Σ}, A -> T Σ.
   #[global] Arguments inst {T A _ Σ} !_ ι.
   #[global] Arguments lift {T A _ Σ} !_.
+
+  Ltac destructInsts :=
+    repeat match goal with
+      | |- context[inst ?t ?i] => generalize (inst t i); clear t; intro t; destruct t
+      end.
 
   Lemma inst_eq_rect `{Inst AT A}
     {Σ Σ'} (t : AT Σ) (e : Σ = Σ') (ι : Valuation Σ'):
@@ -122,15 +127,16 @@ Module Type InstantiationOn
     inst (env.snoc E b a) ι = env.snoc (inst E ι) b (inst a ι).
   Proof. reflexivity. Qed.
 
-  #[export] Instance inst_term : forall {σ}, Inst (fun Σ => Term Σ σ) (Val σ) :=
-    fix inst_term {σ : Ty} [Σ : LCtx] (t : Term Σ σ) (ι : Valuation Σ) {struct t} : Val σ :=
-    match t in Term _ σ return Val σ with
+  #[export] Instance inst_term : forall {σ}, Inst (fun Σ => Term Σ σ) (RelVal σ) :=
+    fix inst_term {σ : Ty} [Σ : LCtx] (t : Term Σ σ) (ι : Valuation Σ) {struct t} : RelVal σ :=
+    match t in Term _ σ return RelVal σ with
     | term_var_in bIn            => env.lookup ι bIn
-    | term_val _ v               => v
-    | term_binop op t1 t2        => bop.eval op
+    | term_val _ v               => ty.valToRelVal v
+    | term_relval _ v            => v
+    | term_binop op t1 t2        => bop.evalRel op
                                       (inst (Inst := @inst_term _) t1 ι)
                                       (inst (Inst := @inst_term _) t2 ι)
-    | term_unop op t             => uop.eval op
+    | term_unop op t             => uop.evalRel op
                                       (inst (Inst := @inst_term _) t ι)
     (* | term_tuple ts              => *)
     (*     envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι) *)
@@ -139,8 +145,11 @@ Module Type InstantiationOn
     (*     let InstTerm xt := @inst_term (@type recordf Ty xt) in *)
     (*     recordv_fold R (inst (Inst := inst_env (InstSA := InstTerm)) ts ι) *)
     end.
-  #[export] Instance lift_term {σ} : Lift (fun Σ => Term Σ σ) (Val σ) :=
+  #[export] Instance lift_term_val {σ} : Lift (fun Σ => Term Σ σ) (Val σ) :=
     fun Σ v => term_val σ v.
+
+  #[export] Instance lift_term_relval {σ} : Lift (fun Σ => Term Σ σ) (RelVal σ) :=
+    fun Σ v => term_relval σ v.
 
   #[export] Instance inst_sub {Σ} : Inst (Sub Σ) (Valuation Σ) :=
     inst_env.
@@ -207,27 +216,27 @@ Module Type InstantiationOn
     intros; apply inst_lift.
   Qed.
 
-  #[export] Instance inst_subst_term {σ} : InstSubst (fun Σ => Term Σ σ) (Val σ).
+  #[export] Instance inst_subst_term {σ} : InstSubst (fun Σ => Term Σ σ) (RelVal σ).
   Proof.
     unfold InstSubst.
-    induction t; cbn; try (repeat f_equal; auto; fail).
+    induction t; cbn -[ty.liftBinOp]; try (repeat f_equal; auto; fail).
     - unfold inst, inst_sub, inst_env.
       now rewrite env.lookup_map.
     (* - f_equal. induction IH; cbn; now f_equal. *)
     (* - f_equal. induction IH; cbn; now f_equal. *)
   Qed.
 
-  #[export] Instance inst_lift_term {σ} : InstLift (fun Σ => Term Σ σ) (Val σ).
+  #[export] Instance inst_lift_term {σ} : InstLift (fun Σ => Term Σ σ) (RelVal σ).
   Proof. red. reflexivity. Qed.
 
   Lemma inst_term_relop_neg [Σ σ] (op : RelOp σ) (t1 t2 : Term Σ σ) :
     forall (ι : Valuation Σ),
       inst (T := fun Σ => Term Σ ty.bool) (term_relop_neg op t1 t2) ι =
-        negb (bop.eval_relop_val op (inst t1 ι) (inst t2 ι)).
+        ty.liftUnOpRV negb (bop.eval_relop_relval op (inst t1 ι) (inst t2 ι)).
   Proof.
-    destruct op; cbn; intros; unfold bv.sltb, bv.sleb, bv.ultb, bv.uleb;
+    destruct op; cbn -[ty.liftUnOpRV]; intros; destructInsts; cbn; intros; unfold bv.sltb, bv.sleb, bv.ultb, bv.uleb;
       rewrite ?negb_involutive, <- ?Z.leb_antisym, <- ?Z.ltb_antisym,
-      <- ?N.leb_antisym, <- ?N.ltb_antisym; try easy; try now destruct eq_dec.
+      <- ?N.leb_antisym, <- ?N.ltb_antisym; try easy; try now repeat destruct eq_dec.
   Qed.
 
   #[export] Instance inst_subst_sub {Σ} : InstSubst (Sub Σ) (Valuation Σ).
@@ -312,7 +321,7 @@ Module Type InstantiationOn
     now rewrite env.lookup_take.
   Qed.
 
-  Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : Valuation Σ2) (v : Val (type b)) :
+  Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : Valuation Σ2) (v : RelVal (type b)) :
     inst (sub_up1 ζ12) (ι2 ► (b ↦ v)) = inst ζ12 ι2 ► (b ↦ v).
   Proof.
     destruct b; unfold sub_up1.
@@ -452,19 +461,19 @@ Module Type InstantiationOn
     Qed.
 
     #[export] Instance term_equiv {Σ σ} : base.Equiv (Term Σ σ) :=
-      SEquiv (fun Σ => Term Σ σ) (Val σ) Σ.
+      SEquiv (fun Σ => Term Σ σ) (RelVal σ) Σ.
     #[export] Instance term_equivalence {Σ σ} : Equivalence (≡@{Term Σ σ}) :=
       seequiv_equivalence.
     #[export] Typeclasses Opaque term_equiv.
 
     #[export] Instance env_equiv {Σ σs} : base.Equiv (Env (Term Σ) σs) :=
-      SEquiv (fun Σ => Env (Term Σ) σs) (Env Val σs) Σ.
+      SEquiv (fun Σ => Env (Term Σ) σs) (Env RelVal σs) Σ.
     #[export] Instance seenv_equivalence {Σ σs} : Equivalence (≡@{Env (Term Σ) σs}) :=
       seequiv_equivalence.
 
     #[export] Instance nenv_equiv {N Σ} {Δ : NCtx N Ty} :
       base.Equiv (NamedEnv (Term Σ) Δ) :=
-      SEquiv (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv Val Δ) Σ.
+      SEquiv (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv RelVal Δ) Σ.
     #[export] Instance senamedenv_equivalence {N Σ} {Δ : NCtx N Ty} :
       Equivalence (≡@{NamedEnv (Term Σ) Δ}) :=
       seequiv_equivalence.
@@ -472,8 +481,13 @@ Module Type InstantiationOn
     #[local] Obligation Tactic :=
       repeat intro; cbn; f_equal; constructor_congruence; solve [ eauto ].
 
-    #[export,program] Instance proper_term_binop {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) [Σ] :
+    #[export] Instance proper_term_binop {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) [Σ] :
       Proper ((≡) ==> (≡) ==> (≡)) (term_binop (Σ:=Σ) op).
+    Proof.
+      intros x y Rxy g h Rgh ι.
+      cbn.
+      rewrite Rxy. rewrite Rgh. reflexivity.
+    Qed.
     #[export,program] Instance proper_term_unop {σ1 σ2} (op : UnOp σ1 σ2) [Σ] :
       Proper ((≡) ==> (≡)) (term_unop (Σ:=Σ) op).
     (* #[export,program] Instance proper_term_tuple {Σ σs} : Proper ((≡) ==> (≡)) (@term_tuple Σ σs). *)
@@ -488,27 +502,49 @@ Module Type InstantiationOn
 
     Lemma term_orb_false_l [Σ] (b : Term Σ ty.bool) :
       term_binop bop.or (term_val ty.bool false) b ≡ b.
-    Proof. intro ι; reflexivity. Qed.
+    Proof. intro ι. cbn. destructInsts; reflexivity. Qed.
     Lemma term_orb_false_r [Σ] (b : Term Σ ty.bool) :
       term_binop bop.or b (term_val ty.bool false) ≡ b.
-    Proof. intro ι; apply orb_false_r. Qed.
-    Lemma term_orb_true_l [Σ] (b : Term Σ ty.bool) :
-      term_binop bop.or (term_val ty.bool true) b ≡ term_val ty.bool true.
-    Proof. intro ι; reflexivity. Qed.
-    Lemma term_orb_true_r [Σ] (b : Term Σ ty.bool) :
-      term_binop bop.or b (term_val ty.bool true) ≡ term_val ty.bool true.
-    Proof. intro ι; apply orb_true_r. Qed.
+    Proof.
+      intro ι. cbn. destructInsts; cbn;
+        repeat rewrite orb_false_r; reflexivity.
+    Qed.
+    (* TODO: These two lemmas aren't true, but maybe in due time, we will need an adaptation that is true or make it true somehow *)
+    (* Lemma term_orb_true_l [Σ] (b : Term Σ ty.bool) : *)
+    (*   term_binop bop.or (term_val ty.bool true) b ≡ term_val ty.bool true. *)
+    (* Proof. intro ι. cbn. destructInsts. reflexivity. Qed. *)
+
+
+    (* Lemma term_orb_true_r [Σ] (b : Term Σ ty.bool) : *)
+    (*   term_binop bop.or b (term_val ty.bool true) ≡ term_val ty.bool true. *)
+    (* Proof. *)
+    (*   intro ι. cbn. destructInsts (inst b ι); repeat rewrite orb_true_r. *)
+    (*   - reflexivity. *)
+    (*   - admit. *)
+    (* Qed. *)
     Lemma term_negb_andb [Σ] (b1 b2 : Term Σ ty.bool) :
       term_unop uop.not (term_binop bop.and b1 b2) ≡
       term_binop bop.or (term_unop uop.not b1) (term_unop uop.not b2).
-    Proof. intro ι; apply negb_andb. Qed.
+    Proof.
+      intro ι. cbn.
+      destructInsts; cbn;
+        repeat rewrite negb_andb; reflexivity.           
+    Qed.
     Lemma term_negb_orb [Σ] (b1 b2 : Term Σ ty.bool) :
       term_unop uop.not (term_binop bop.or b1 b2) ≡
       term_binop bop.and (term_unop uop.not b1) (term_unop uop.not b2).
-    Proof. intro ι; apply negb_orb. Qed.
+    Proof.
+      intro ι. cbn.
+      destructInsts; cbn;
+        repeat rewrite negb_orb; reflexivity. 
+    Qed.
     Lemma term_negb_involutive [Σ] (t : Term Σ ty.bool) :
       term_unop uop.not (term_unop uop.not t) ≡ t.
-    Proof. intro ι; apply negb_involutive. Qed.
+    Proof.
+      intro ι. cbn.
+      destructInsts; cbn;
+        repeat rewrite negb_involutive; reflexivity. 
+    Qed.
     Lemma term_negb_val [Σ b] :
       term_unop uop.not (term_val (Σ:=Σ) ty.bool b) ≡ term_val ty.bool (negb b).
     Proof. easy. Qed.
@@ -518,28 +554,46 @@ Module Type InstantiationOn
 
     Lemma term_eq_true_r [Σ] (t : Term Σ ty.bool) :
       term_binop (bop.relop bop.eq) t (term_val ty.bool true) ≡ t.
-    Proof. intro ι. cbn. now destruct (inst t ι). Qed.
+    Proof.
+      intro ι. cbn. destructInsts; destruct v; try destruct v0; cbn;
+      reflexivity.
+    Qed.
 
     Lemma term_eq_true_l [Σ] (t : Term Σ ty.bool) :
       term_binop (bop.relop bop.eq) (term_val ty.bool true) t ≡ t.
-    Proof. intro ι. cbn. now destruct (inst t ι). Qed.
+    Proof.
+      intro ι. cbn. destructInsts; destruct v; try destruct v0; cbn;
+        reflexivity.
+    Qed.
 
     Lemma term_eq_false_r [Σ] (t : Term Σ ty.bool) :
       term_binop (bop.relop bop.eq) t (term_val ty.bool false) ≡ term_not t.
-    Proof. intro ι. cbn. now destruct (inst t ι). Qed.
+    Proof.
+      intro ι. cbn. destructInsts; destruct v; try destruct v0; cbn;
+        reflexivity.
+    Qed.
 
     Lemma term_eq_false_l [Σ] (t : Term Σ ty.bool) :
       term_binop (bop.relop bop.eq) (term_val ty.bool false) t ≡ term_not t.
-    Proof. intro ι. cbn. now destruct (inst t ι). Qed.
+    Proof.
+      intro ι. cbn. destructInsts; destruct v; try destruct v0; cbn;
+        reflexivity.
+    Qed.
 
     Lemma term_not_or {Σ} {t1 t2 : Term Σ ty.bool} :
       term_not (term_binop bop.or t1 t2) ≡
         term_binop bop.and (term_not t1) (term_not t2).
-    Proof. intro ι. cbn. now destruct (inst t1 ι), (inst t2 ι). Qed.
+    Proof.
+      intro ι. cbn. destructInsts; cbn;
+        now repeat rewrite negb_orb.     
+    Qed.
 
     Lemma term_not_and {Σ} {t1 t2 : Term Σ ty.bool} :
       term_not (term_binop bop.and t1 t2) ≡ term_binop bop.or (term_not t1) (term_not t2).
-    Proof. intro ι; cbn. now destruct (inst t1 ι), (inst t2 ι). Qed.
+    Proof.
+      intro ι. cbn. destructInsts; cbn;
+        now repeat rewrite negb_andb.
+    Qed.
 
     Lemma term_unop_val {Σ σ1 σ2} {op : UnOp σ1 σ2} {v1 : Val σ1} :
       term_unop (Σ := Σ) op (term_val _ v1) ≡ term_val _ (uop.eval op v1).
@@ -550,84 +604,131 @@ Module Type InstantiationOn
     Proof. now intro ι. Qed.
 
     Lemma term_plus_comm {Σ} {t1 t2} : term_binop (Σ := Σ) bop.plus t1 t2 ≡ term_binop (Σ := Σ) bop.plus t2 t1.
-    Proof. intro ι; cbn; now Lia.lia. Qed.
-
-    Lemma term_plus_zero_l {Σ} {t1} : term_binop (Σ := Σ) bop.plus (term_val ty.int 0%Z) t1 ≡ t1.
-    Proof. intro ι; cbn; now Lia.lia. Qed.
-
-    Lemma term_minus_plus_neg {Σ} {t1 t2} : term_binop (Σ := Σ) bop.minus t1 t2 ≡ term_binop bop.plus t1 (term_unop uop.neg t2).
-    Proof. intro ι; cbn; now Lia.lia. Qed.
-
-    Lemma term_plus_neg_inv {Σ} {t} : term_binop (Σ := Σ) bop.plus t (term_unop uop.neg t) ≡ term_val ty.int 0%Z.
-    Proof. intro ι; cbn; now Lia.lia. Qed.
-
-    Lemma term_plus_assoc {Σ} {t1 t2 t3} : term_binop (Σ := Σ) bop.plus t1 (term_binop bop.plus t2 t3) ≡ term_binop bop.plus (term_binop bop.plus t1 t2) t3.
-    Proof. intro ι; cbn; now Lia.lia. Qed.
-
-    Lemma term_times_comm {Σ} {t1 t2} : term_binop (Σ := Σ) bop.times t1 t2 ≡ term_binop (Σ := Σ) bop.times t2 t1.
-    Proof. intro ι; cbn; now Lia.lia. Qed.
-
-    Lemma term_times_one_l {Σ} {t1} : term_binop (Σ := Σ) bop.times (term_val ty.int 1%Z) t1 ≡ t1.
-    Proof. intro ι; cbn; now Lia.lia. Qed.
-
-    Lemma term_times_assoc {Σ} {t1 t2 t3} : term_binop (Σ := Σ) bop.times t1 (term_binop bop.times t2 t3) ≡ term_binop bop.times (term_binop bop.times t1 t2) t3.
-    Proof. intro ι; cbn; now Lia.lia. Qed.
-
-    Lemma term_times_plus_distrib_r {Σ} {t1 t2 t3} : term_binop (Σ := Σ) bop.times (term_binop bop.plus t2 t3) t1 ≡ term_binop bop.plus (term_binop bop.times t2 t1) (term_binop bop.times t3 t1).
-    Proof. intro ι; cbn; now Lia.lia. Qed.
-
-    Lemma Term_int_ring_theory {Σ} : ring_theory (term_val (Σ := Σ) ty.int 0%Z) (term_val ty.int 1%Z) (term_binop bop.plus) (term_binop bop.times) (term_binop bop.minus) (term_unop uop.neg) equiv.
     Proof.
-      constructor; eauto using term_plus_zero_l, term_plus_assoc, term_plus_comm, term_times_one_l, term_times_assoc, term_times_comm, term_times_plus_distrib_r, term_minus_plus_neg, term_plus_neg_inv.
+      intro ι; cbn.
+      destructInsts; cbn.
+      { (* SyncVal *) apply f_equal. now Lia.lia. }
+      all: (* NonSyncVals *) apply f_equal2; now Lia.lia.      
     Qed.
 
-    Lemma Term_int_ring_eq_ext {Σ} : ring_eq_ext (term_binop (Σ := Σ) bop.plus) (term_binop bop.times) (term_unop uop.neg) base.equiv.
-    Proof. constructor; typeclasses eauto. Qed.
+    Lemma term_plus_zero_l {Σ} {t1} : term_binop (Σ := Σ) bop.plus (term_val ty.int 0%Z) t1 ≡ t1.
+    Proof.
+      intro ι; cbn. destructInsts; cbn.
+      - apply f_equal. now Lia.lia.
+      - apply f_equal2; now Lia.lia.
+    Qed.
 
-    Section Term_bv_ring.
-      Variable Σ : LCtx.
-      Variable n : nat.
-      Add Ring BitVector : (bv.ring_theory n).
+    Lemma term_minus_plus_neg {Σ} {t1 t2} : term_binop (Σ := Σ) bop.minus t1 t2 ≡ term_binop bop.plus t1 (term_unop uop.neg t2).
+    Proof.
+      intro ι; cbn.
+      destructInsts; cbn.
+      { apply f_equal. now Lia.lia. }
+      all: apply f_equal2; now Lia.lia.
+    Qed.
 
-      Lemma term_bvadd_comm {t1 t2} : term_binop (Σ := Σ) (bop.bvadd (n := n)) t1 t2 ≡ term_binop (Σ := Σ) bop.bvadd t2 t1.
-      Proof. intro ι; cbn; now ring. Qed.
+    (* TODO: This lemma doesn't hold, maybe we should change such that it holds or change the constructions such that it holds *)
+    (* Lemma term_plus_neg_inv {Σ} {t} : term_binop (Σ := Σ) bop.plus t (term_unop uop.neg t) ≡ term_val ty.int 0%Z. *)
+    (* Proof. *)
+    (*   intro ι; cbn. *)
+    (*   destructInsts; cbn. *)
+    (*   { apply f_equal. now Lia.lia. } *)
+    (*   all: apply f_equal2; now Lia.lia. *)
+    (* Qed. *)
 
-      Lemma term_bvadd_zero_l {t1} : term_binop (Σ := Σ) bop.bvadd (term_val (ty.bvec n) bv.zero) t1 ≡ t1.
-      Proof. intro ι; cbn; now ring. Qed.
+    Lemma term_plus_assoc {Σ} {t1 t2 t3} : term_binop (Σ := Σ) bop.plus t1 (term_binop bop.plus t2 t3) ≡ term_binop bop.plus (term_binop bop.plus t1 t2) t3.
+    Proof.
+      intro ι; cbn.
+      destructInsts.
+      { apply f_equal. now Lia.lia. }
+      all: apply f_equal2; cbn; now Lia.lia.
+    Qed.
 
-      Lemma term_bvsub_bvadd_neg {t1 t2} : term_binop (Σ := Σ) bop.bvsub t1 t2 ≡ term_binop bop.bvadd t1 (term_unop (uop.negate (n := n)) t2).
-      Proof. intro ι; cbn; now ring. Qed.
+    Lemma term_times_comm {Σ} {t1 t2} : term_binop (Σ := Σ) bop.times t1 t2 ≡ term_binop (Σ := Σ) bop.times t2 t1.
+    Proof.
+      intro ι; cbn.
+      destructInsts; cbn.
+      { apply f_equal. now Lia.lia. }
+      all: apply f_equal2; cbn; now Lia.lia.
+    Qed.
 
-      Lemma term_bvadd_neg_inv {t} : term_binop (Σ := Σ) bop.bvadd t (term_unop uop.negate t) ≡ term_val (ty.bvec n) bv.zero.
-      Proof. intro ι; cbn; now ring. Qed.
-
-      Lemma term_bvadd_assoc {t1 t2 t3} : term_binop (Σ := Σ) bop.bvadd t1 (term_binop bop.bvadd t2 t3) ≡ term_binop (bop.bvadd (n := n)) (term_binop bop.bvadd t1 t2) t3.
-      Proof. intro ι; cbn; now ring. Qed.
-
-      Lemma term_bvmul_comm {t1 t2} : term_binop (Σ := Σ) bop.bvmul t1 t2 ≡ term_binop (Σ := Σ) (bop.bvmul (n := n)) t2 t1.
-      Proof. intro ι; cbn; now ring. Qed.
-
-      Lemma term_bvmul_one_l {t1} : term_binop (Σ := Σ) bop.bvmul (term_val (ty.bvec n) bv.one) t1 ≡ t1.
-      Proof. intro ι; cbn; now ring. Qed.
-
-      Lemma term_bvmul_assoc {t1 t2 t3} : term_binop (Σ := Σ) bop.bvmul t1 (term_binop bop.bvmul t2 t3) ≡ term_binop (bop.bvmul (n := n)) (term_binop bop.bvmul t1 t2) t3.
-      Proof. intro ι; cbn; now ring. Qed.
-
-      Lemma term_bvmul_bvadd_distrib_r {t1 t2 t3} : term_binop (Σ := Σ) bop.bvmul (term_binop bop.bvadd t2 t3) t1 ≡ term_binop bop.bvadd (term_binop bop.bvmul t2 t1) (term_binop (bop.bvmul (n := n)) t3 t1).
-      Proof. intro ι; cbn; now ring. Qed.
-
-      Lemma Term_bv_ring_theory : ring_theory (term_val (Σ := Σ) (ty.bvec n) bv.zero) (term_val (ty.bvec n) bv.one) (term_binop bop.bvadd) (term_binop bop.bvmul) (term_binop bop.bvsub) (term_unop uop.negate) equiv.
-      Proof.
-        constructor; eauto using term_bvadd_zero_l, term_bvadd_assoc, term_bvadd_comm, term_bvmul_one_l, term_bvmul_assoc, term_bvmul_comm, term_bvmul_bvadd_distrib_r, term_bvsub_bvadd_neg, term_bvadd_neg_inv.
+    Lemma term_times_one_l {Σ} {t1} : term_binop (Σ := Σ) bop.times (term_val ty.int 1%Z) t1 ≡ t1.
+    Proof.
+      intro ι; cbn.
+      destructInsts; cbn.
+      { apply f_equal. now Lia.lia. }
+      all: apply f_equal2; cbn; now Lia.lia.
       Qed.
 
-      Lemma Term_bv_ring_eq_ext : ring_eq_ext (term_binop (Σ := Σ) (bop.bvadd (n := n))) (term_binop bop.bvmul) (term_unop uop.negate) base.equiv.
-      Proof. constructor; typeclasses eauto. Qed.
+    Lemma term_times_assoc {Σ} {t1 t2 t3} : term_binop (Σ := Σ) bop.times t1 (term_binop bop.times t2 t3) ≡ term_binop bop.times (term_binop bop.times t1 t2) t3.
+    Proof.
+      intro ι; cbn.
+      destructInsts; cbn.
+      { apply f_equal. now Lia.lia. }
+      all: apply f_equal2; cbn; now Lia.lia.
+    Qed.
 
-    End Term_bv_ring. 
+    Lemma term_times_plus_distrib_r {Σ} {t1 t2 t3} : term_binop (Σ := Σ) bop.times (term_binop bop.plus t2 t3) t1 ≡ term_binop bop.plus (term_binop bop.times t2 t1) (term_binop bop.times t3 t1).
+    Proof.
+      intro ι; cbn.
+      destructInsts; cbn.
+      { apply f_equal. now Lia.lia. }
+      all: apply f_equal2; cbn; now Lia.lia.
+    Qed.
+
+    (* TODO: Because of the few lemma that don't work anymore, terms are not rings anymore *)
+    (* Lemma Term_int_ring_theory {Σ} : ring_theory (term_val (Σ := Σ) ty.int 0%Z) (term_val ty.int 1%Z) (term_binop bop.plus) (term_binop bop.times) (term_binop bop.minus) (term_unop uop.neg) equiv. *)
+    (* Proof. *)
+    (*   constructor; eauto using term_plus_zero_l, term_plus_assoc, term_plus_comm, term_times_one_l, term_times_assoc, term_times_comm, term_times_plus_distrib_r, term_minus_plus_neg(* , term_plus_neg_inv *). *)
+    (*   admit. *)
+    (* Qed. *)
+
+    (* Lemma Term_int_ring_eq_ext {Σ} : ring_eq_ext (term_binop (Σ := Σ) bop.plus) (term_binop bop.times) (term_unop uop.neg) base.equiv. *)
+    (* Proof. constructor; typeclasses eauto. Qed. *)
+
+    (* Section Term_bv_ring. *)
+    (*   Variable Σ : LCtx. *)
+    (*   Variable n : nat. *)
+    (*   Add Ring BitVector : (bv.ring_theory n). *)
+
+    (*   Lemma term_bvadd_comm {t1 t2} : term_binop (Σ := Σ) (bop.bvadd (n := n)) t1 t2 ≡ term_binop (Σ := Σ) bop.bvadd t2 t1. *)
+    (*   Proof. intro ι; cbn; now ring. Qed. *)
+
+    (*   Lemma term_bvadd_zero_l {t1} : term_binop (Σ := Σ) bop.bvadd (term_val (ty.bvec n) bv.zero) t1 ≡ t1. *)
+    (*   Proof. intro ι; cbn; now ring. Qed. *)
+
+    (*   Lemma term_bvsub_bvadd_neg {t1 t2} : term_binop (Σ := Σ) bop.bvsub t1 t2 ≡ term_binop bop.bvadd t1 (term_unop (uop.negate (n := n)) t2). *)
+    (*   Proof. intro ι; cbn; now ring. Qed. *)
+
+    (*   Lemma term_bvadd_neg_inv {t} : term_binop (Σ := Σ) bop.bvadd t (term_unop uop.negate t) ≡ term_val (ty.bvec n) bv.zero. *)
+    (*   Proof. intro ι; cbn; now ring. Qed. *)
+
+    (*   Lemma term_bvadd_assoc {t1 t2 t3} : term_binop (Σ := Σ) bop.bvadd t1 (term_binop bop.bvadd t2 t3) ≡ term_binop (bop.bvadd (n := n)) (term_binop bop.bvadd t1 t2) t3. *)
+    (*   Proof. intro ι; cbn; now ring. Qed. *)
+
+    (*   Lemma term_bvmul_comm {t1 t2} : term_binop (Σ := Σ) bop.bvmul t1 t2 ≡ term_binop (Σ := Σ) (bop.bvmul (n := n)) t2 t1. *)
+    (*   Proof. intro ι; cbn; now ring. Qed. *)
+
+    (*   Lemma term_bvmul_one_l {t1} : term_binop (Σ := Σ) bop.bvmul (term_val (ty.bvec n) bv.one) t1 ≡ t1. *)
+    (*   Proof. intro ι; cbn; now ring. Qed. *)
+
+    (*   Lemma term_bvmul_assoc {t1 t2 t3} : term_binop (Σ := Σ) bop.bvmul t1 (term_binop bop.bvmul t2 t3) ≡ term_binop (bop.bvmul (n := n)) (term_binop bop.bvmul t1 t2) t3. *)
+    (*   Proof. intro ι; cbn; now ring. Qed. *)
+
+    (*   Lemma term_bvmul_bvadd_distrib_r {t1 t2 t3} : term_binop (Σ := Σ) bop.bvmul (term_binop bop.bvadd t2 t3) t1 ≡ term_binop bop.bvadd (term_binop bop.bvmul t2 t1) (term_binop (bop.bvmul (n := n)) t3 t1). *)
+    (*   Proof. intro ι; cbn; now ring. Qed. *)
+
+    (*   Lemma Term_bv_ring_theory : ring_theory (term_val (Σ := Σ) (ty.bvec n) bv.zero) (term_val (ty.bvec n) bv.one) (term_binop bop.bvadd) (term_binop bop.bvmul) (term_binop bop.bvsub) (term_unop uop.negate) equiv. *)
+    (*   Proof. *)
+    (*     constructor; eauto using term_bvadd_zero_l, term_bvadd_assoc, term_bvadd_comm, term_bvmul_one_l, term_bvmul_assoc, term_bvmul_comm, term_bvmul_bvadd_distrib_r, term_bvsub_bvadd_neg, term_bvadd_neg_inv. *)
+    (*   Qed. *)
+
+    (*   Lemma Term_bv_ring_eq_ext : ring_eq_ext (term_binop (Σ := Σ) (bop.bvadd (n := n))) (term_binop bop.bvmul) (term_unop uop.negate) base.equiv. *)
+    (*   Proof. constructor; typeclasses eauto. Qed. *)
+
+    (* End Term_bv_ring.  *)
 
   End SemanticEquivalence.
-  #[export] Hint Rewrite term_orb_false_l term_orb_false_r term_orb_true_l term_orb_true_r : katamaran.
+  #[export] Hint Rewrite term_orb_false_l term_orb_false_r (* term_orb_true_l *) (* term_orb_true_r *) : katamaran.
   #[export] Hint Rewrite term_negb_andb term_negb_orb term_negb_relop : katamaran.
   #[export] Hint Rewrite term_negb_involutive term_negb_val : katamaran.
   #[export] Hint Extern 0 (term_binop ?op _ _ ≡ term_binop ?op _ _) =>
@@ -701,12 +802,14 @@ Module Type InstantiationOn
       term_get_pair (term_binop bop.pair t1 t2) := Some (t1, t2);
       term_get_pair _ := None.
 
+    Search Inst "pair".
+
     Lemma term_get_pair_spec {Σ σ1 σ2} (s : Term Σ (ty.prod σ1 σ2)) :
       option.wlp
         (fun '(t1,t2) =>
            forall ι : Valuation Σ,
-             inst (T := fun Σ => Term Σ (ty.prod σ1 σ2)) (A := Val (ty.prod σ1 σ2)) s ι =
-             (inst (A := Val σ1) t1 ι, inst (A := Val σ2) t2 ι))
+             inst (T := fun Σ => Term Σ (ty.prod σ1 σ2)) (A := RelVal (ty.prod σ1 σ2)) s ι =
+             ty.pairOfRelValToRelValOfPair (inst (A := RelVal σ1) t1 ι, inst (A := RelVal σ2) t2 ι))
         (term_get_pair s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.

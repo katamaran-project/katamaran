@@ -163,8 +163,8 @@ Module Type BaseMixin (Import TY : Types).
             let (Ex,vr) := env.view Exy in
             let (E,vl)  := env.view Ex in
             term_binop bop.bvapp vl vr
-      | pat_bvec_exhaustive m =>
-          fun v _ => term_val (ty.bvec m) v
+      (* | pat_bvec_exhaustive m => *)
+      (*     fun v _ => term_val (ty.bvec m) v *)
       (* | pat_tuple p => *)
       (*     fun _ ts => term_tuple (tuple_pattern_match_env_reverse p ts) *)
       (* | pat_record R Δ p => *)

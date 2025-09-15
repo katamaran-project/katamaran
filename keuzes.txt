@@ -31,9 +31,13 @@ Gemaakte keuzes:
 	
 - Pattern_match_relval gebruikt projLeft voor Boolean (hierbij maakt het gebruik van het feit dat SyncVal geëist wordt)
 	Dit zal door bepaalde lemma gecheckt worden dat de uitkomst dezelfde is als effectief pattern matchen.
+	
+- Eval_relop_relval en eval_relop_relprop geven gewoon een gelifte versie terug, het samenvoegen gebeurt later (zo kan het resultaat van een vergelijking een NonSyncVal zijn die dan een falende pattern_match impliceert)
+
+- Added a term_relval to terms: originally prompted by problems to make inst_lift_term in instantation work.
 
 
 
 Inadequacies:
-- 
+- Terms are not rings anymore (NonSyncVal 1 1 - NonSyncVal 1 1 = NonSyncVal 0 0 != SyncVal 0).
 
