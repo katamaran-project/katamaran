@@ -223,12 +223,13 @@ Module inv := invariants.
 
     Example femtokernel_mmio_handler_asm : list ASM :=
       [
-        ITYPE (bv.of_N 42) zero t0 RISCV_ADDI
+        ITYPE (bv.of_N 43) zero t0 RISCV_ADDI
       ; ITYPE bv.zero zero ra RISCV_ADDI
-      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N 42)]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
+      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N 43)]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
       ; Λ x, STORE (bv.of_N mmio_write_addr) t0 ra WORD (* works because mmio_write_addr fits into 12 bits. *)
       ; MRET
       ].
+
     Example femtokernel_mmio_handler' (handler_start : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_mmio_handler_asm) handler_start.
 
@@ -1006,7 +1007,6 @@ Module inv := invariants.
     rewrite !bv.seqBv_succ !map_cons.
     repeat f_equal; auto.
   Qed.
-
 
   Lemma femtokernel_endToEnd {γ γ' : RegStore} {μ μ' : Memory}
         {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} (is_mmio : bool) :

@@ -580,13 +580,11 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Local Hint Resolve wordwidth_upper_bound : typeclass_instances.
 
   Import TermNotations.
-
   Definition lemma_close_mmio_write (immm : bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) :=
     {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
        lemma_patterns        := [term_var "paddr"; term_var "w"];
        lemma_precondition    :=
-        (term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
-        (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42));
+        ((term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)));
        lemma_postcondition   :=
         asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
     |}.
@@ -854,7 +852,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & #Hinv & [-> ->])". iApply semTWP_foreign.
+    iIntros "([%Hmmio _] & #Hinv & [-> [%v ->]])". iApply semTWP_foreign.
     iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
     iInv "Hinv" as (t) " [>Htrf >%Hpred]" "Hclose".
     iDestruct (trace.trace_full_frag_eq with "Htr Htrf") as "%Heqt". subst t.
@@ -863,6 +861,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     {(* Instantiate evars *)
       iExists _; iFrame. iPureIntro.
       apply mmio_pred_cons; [|eauto].
+      exists v.
       constructor. }
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
@@ -962,11 +961,11 @@ Module RiscvPmpIrisInstanceWithContracts.
     ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width).
   Proof.
     intros ι; destruct_syminstance ι; cbn.
-    iIntros "([<- _] & [-> _])".
+    iIntros "[<- _]".
     unfold interp_mmio_checked_write.
     iPureIntro.
     split; auto.
-    destruct width; now compute.
+    eexists. destruct width; reflexivity.
   Qed.
 
   Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.
