@@ -148,7 +148,7 @@ Module RiscvPmpIrisInstancePredicates.
 
   (* The address we will perform all writes to is the first legal MMIO address *)
   Definition write_addr : Addr := bv.of_N maxAddr.
-  Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
+  Definition event_pred (width : nat) (e : Event) := ∃ v, e = mkEvent IOWrite write_addr width v.
   Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
 
   Lemma difference_commute_gset {A} `{Countable A} (X Y Z : gset A) :
@@ -313,7 +313,7 @@ Module RiscvPmpIrisInstancePredicates.
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
-    Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
+    Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ ∃ v, bytes = v⌝.
 
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).
