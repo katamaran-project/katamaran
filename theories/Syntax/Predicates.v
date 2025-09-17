@@ -48,7 +48,7 @@ Module Type PurePredicateKit (Import B : Base).
   Parameter Inline 𝑷  : Set.
   (* Predicate field types. *)
   Parameter Inline 𝑷_Ty : 𝑷 -> Ctx Ty.
-  Parameter Inline 𝑷_inst : forall p : 𝑷, env.abstract Val (𝑷_Ty p) Prop.
+  Parameter Inline 𝑷_inst : forall p : 𝑷, env.abstract RelVal (𝑷_Ty p) Prop.
 
   #[export] Declare Instance 𝑷_eq_dec : EqDec 𝑷.
 
@@ -71,9 +71,9 @@ End HeapPredicateKit.
 
 Module Type PredicateMixin (Import B : Base) (Import PP : PurePredicateKit B) (Import HP : HeapPredicateKit B).
   Class PredicateDef (HProp : bi) : Type :=
-  { lptsreg    : forall {σ : Ty}, 𝑹𝑬𝑮 σ -> Val σ -> HProp;
-    luser      : forall (p : 𝑯), Env Val (𝑯_Ty p) -> HProp;
-    lduplicate : forall (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+  { lptsreg    : forall {σ : Ty}, 𝑹𝑬𝑮 σ -> RelVal σ -> HProp;
+    luser      : forall (p : 𝑯), Env RelVal (𝑯_Ty p) -> HProp;
+    lduplicate : forall (p : 𝑯) (ts : Env RelVal (𝑯_Ty p)),
       is_duplicable p = true ->
       @luser p ts ⊢ @luser p ts ∗ @luser p ts;
   }.
@@ -87,7 +87,7 @@ Module DefaultPurePredicateKit (Import B : Base) <: PurePredicateKit B.
 
   Definition 𝑷 := Empty_set.
   Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
-  Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop := match p with end.
+  Definition 𝑷_inst (p : 𝑷) : env.abstract RelVal (𝑷_Ty p) Prop := match p with end.
   #[export] Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
 
 End DefaultPurePredicateKit.

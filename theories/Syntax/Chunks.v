@@ -82,15 +82,16 @@ Module Type ChunksOn
   (Import F : FormulasOn B P).
 
   Inductive GChunk (V : Ty -> Set) : Type :=
-  | chunk_user   (p : 𝑯) (ts : Env V (𝑯_Ty p))
+  (* | chunk_user   (p : 𝑯) (ts : Env V (𝑯_Ty p)) *)
   | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : V σ)
   | chunk_conj   (c1 c2 : GChunk V)
-  | chunk_wand   (c1 c2 : GChunk V).
-  Global Arguments chunk_user [_] _ _.
+  | chunk_wand   (c1 c2 : GChunk V)
+  .
+  (* Global Arguments chunk_user [_] _ _. *)
   Global Arguments chunk_ptsreg [_] [_] _ _.
 
   (* Semi-concrete chunks *)
-  Definition SCChunk := GChunk Val.
+  Definition SCChunk := GChunk RelVal.
 
   (* Symbolic chunks *)
   Definition Chunk (Σ : LCtx) := GChunk (Term Σ).
@@ -102,7 +103,7 @@ Module Type ChunksOn
 
   #[export] Instance chunk_isdup {V} : IsDuplicable (GChunk V) := {
     is_duplicable := fun c => match c with
-                           | chunk_user p _ => is_duplicable p
+                           (* | chunk_user p _ => is_duplicable p *)
                            | chunk_ptsreg _ _ => false
                            | chunk_conj _ _ => false
                            | chunk_wand _ _ => false
@@ -113,14 +114,14 @@ Module Type ChunksOn
 
   Fixpoint chunk_eqb {V : Ty -> Set} (eqv : forall σ, V σ -> V σ -> bool) (c1 c2 : GChunk V) : bool :=
     match c1 , c2 with
-    | chunk_user p1 ts1, chunk_user p2 ts2 =>
-      match eq_dec p1 p2 with
-      | left e => env.eqb_hom
-                    eqv
-                    (eq_rect _ (fun p => Env _ (𝑯_Ty p)) ts1 _ e)
-                    ts2
-      | right _ => false
-      end
+    (* | chunk_user p1 ts1, chunk_user p2 ts2 => *)
+    (*   match eq_dec p1 p2 with *)
+    (*   | left e => env.eqb_hom *)
+    (*                 eqv *)
+    (*                 (eq_rect _ (fun p => Env _ (𝑯_Ty p)) ts1 _ e) *)
+    (*                 ts2 *)
+    (*   | right _ => false *)
+    (*   end *)
     | chunk_ptsreg r1 t1 , chunk_ptsreg r2 t2 =>
       match eq_dec_het r1 r2 with
       | left e  => eqv _
@@ -154,7 +155,7 @@ Module Type ChunksOn
   #[export] Instance SubstChunk : Subst Chunk :=
     fix sub_chunk {Σ1} (c : Chunk Σ1) {Σ2} (ζ : Sub Σ1 Σ2) {struct c} : Chunk Σ2 :=
       match c with
-      | chunk_user p ts => chunk_user p (subst ts ζ)
+      (* | chunk_user p ts => chunk_user p (subst ts ζ) *)
       | chunk_ptsreg r t => chunk_ptsreg r (subst t ζ)
       | chunk_conj c1 c2 =>
         chunk_conj (sub_chunk c1 ζ) (sub_chunk c2 ζ)
@@ -172,7 +173,7 @@ Module Type ChunksOn
   #[export] Instance inst_chunk : Inst Chunk SCChunk :=
     fix inst_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : SCChunk :=
     match c with
-    | chunk_user p ts => chunk_user p (inst ts ι)
+    (* | chunk_user p ts => chunk_user p (inst ts ι) *)
     | chunk_ptsreg r t => chunk_ptsreg r (inst t ι)
     | chunk_conj c1 c2 => chunk_conj (inst_chunk c1 ι) (inst_chunk c2 ι)
     | chunk_wand c1 c2 => chunk_wand (inst_chunk c1 ι) (inst_chunk c2 ι)
@@ -189,7 +190,7 @@ Module Type ChunksOn
     fun Σ b bIn =>
       fix occurs_check_chunk (c : Chunk Σ) : option (Chunk (Σ - b)) :=
       match c with
-      | chunk_user p ts => option.map (chunk_user p) (occurs_check bIn ts)
+      (* | chunk_user p ts => option.map (chunk_user p) (occurs_check bIn ts) *)
       | chunk_ptsreg r t => option.map (chunk_ptsreg r) (occurs_check bIn t)
       | chunk_conj c1 c2 =>
           c1' <- occurs_check_chunk c1 ;;
@@ -211,7 +212,7 @@ Module Type ChunksOn
 
   Fixpoint peval_chunk {Σ} (c : Chunk Σ) : Chunk Σ :=
     match c with
-    | chunk_user p ts => chunk_user p (env.map peval ts)
+    (* | chunk_user p ts => chunk_user p (env.map peval ts) *)
     | chunk_ptsreg r t => chunk_ptsreg r (peval t)
     | chunk_conj c1 c2 => chunk_conj (peval_chunk c1) (peval_chunk c2)
     | chunk_wand c1 c2 => chunk_wand (peval_chunk c1) (peval_chunk c2)
@@ -222,7 +223,7 @@ Module Type ChunksOn
       inst (peval_chunk c) ι = inst c ι.
   Proof.
     induction c; cbn; intros ι; f_equal; auto using peval_sound.
-    apply pevals_sound. apply peval_sound.
+    (* apply pevals_sound. *) apply peval_sound.
   Qed.
 
   Lemma inst_is_duplicable {Σ} (c : Chunk Σ) (ι : Valuation Σ) :
@@ -267,62 +268,62 @@ Module Type ChunksOn
       Context {Σ} (p : 𝑯) {ΔI ΔO : Ctx Ty} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO)
         (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO).
 
-      Equations(noeqns) match_chunk_user_precise (c : Chunk Σ) : option (PathCondition Σ) :=
-        match_chunk_user_precise (chunk_user p' ts')
-          with eq_dec p p' => {
-            match_chunk_user_precise (chunk_user ?(p) ts') (left eq_refl) :=
-              match env.catView (rew prec in ts') with
-              | env.isCat tsI' tsO' =>
-                  if env.eqb_hom Term_eqb tsI tsI'
-                  then Some (formula_eqs_ctx tsO tsO')
-                  else None
-              end;
-            match_chunk_user_precise (chunk_user p' ts') (right _) := None
-          };
-        match_chunk_user_precise _ := None.
+      (* Equations(noeqns) match_chunk_user_precise (c : Chunk Σ) : option (PathCondition Σ) := *)
+      (*   match_chunk_user_precise (chunk_user p' ts') *)
+      (*     with eq_dec p p' => { *)
+      (*       match_chunk_user_precise (chunk_user ?(p) ts') (left eq_refl) := *)
+      (*         match env.catView (rew prec in ts') with *)
+      (*         | env.isCat tsI' tsO' => *)
+      (*             if env.eqb_hom Term_eqb tsI tsI' *)
+      (*             then Some (formula_eqs_ctx tsO tsO') *)
+      (*             else None *)
+      (*         end; *)
+      (*       match_chunk_user_precise (chunk_user p' ts') (right _) := None *)
+      (*     }; *)
+      (*   match_chunk_user_precise _ := None. *)
 
-      Fixpoint try_consume_chunk_user_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) :=
-        match h with
-        | nil => None
-        | cons c h' =>
-            match match_chunk_user_precise c with
-            | Some eqs => Some (if is_duplicable p then cons c h' else h', eqs)
-            | None => option_map (base.prod_map (cons c) id) (try_consume_chunk_user_precise h')
-            end
-        end.
+      (* Fixpoint try_consume_chunk_user_precise (h : SHeap Σ) : option (SHeap Σ * PathCondition Σ) := *)
+      (*   match h with *)
+      (*   | nil => None *)
+      (*   | cons c h' => *)
+      (*       match match_chunk_user_precise c with *)
+      (*       | Some eqs => Some (if is_duplicable p then cons c h' else h', eqs) *)
+      (*       | None => option_map (base.prod_map (cons c) id) (try_consume_chunk_user_precise h') *)
+      (*       end *)
+      (*   end. *)
 
-      Lemma try_consume_chunk_user_precise_spec (h : SHeap Σ) :
-        option.wlp
-          (fun '(h', eqs) =>
-             forall ι : Valuation Σ,
-             instprop eqs ι ->
-             List.In
-               (inst (chunk_user p (eq_rect_r (fun c : Ctx Ty => Env (Term Σ) c) (tsI ►► tsO) prec)) ι, inst h' ι)
-               (heap_extractions (inst h ι)))
-          (try_consume_chunk_user_precise h).
-      Proof.
-        induction h as [|c h]; [now constructor|]. cbn [try_consume_chunk_user_precise].
-        destruct match_chunk_user_precise as [eqs|] eqn:?.
-        - clear IHh. constructor. intros ι Heqs. left.
-          destruct c; try discriminate Heqo. cbn in *.
-          destruct (eq_dec p p0); cbn in Heqo; try discriminate Heqo. destruct e.
-          remember (eq_rect (𝑯_Ty p) (Env (Term Σ)) ts (ΔI ▻▻ ΔO) prec) as ts'.
-          destruct (env.catView ts') as [tsI' tsO'].
-          destruct (env.eqb_hom_spec Term_eqb (@Term_eqb_spec Σ) tsI tsI'); try discriminate.
-          apply noConfusion_inv in Heqo. cbn in Heqo. subst.
-          apply instprop_formula_eqs_ctx in Heqs.
-          rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
-          rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat.
-          change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.
-          rewrite (@inst_eq_rect_indexed (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
-          rewrite rew_opp_l. now destruct is_duplicable.
-        - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
-          intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
-          remember (inst (chunk_user p (eq_rect_r (fun c0 : Ctx Ty => Env (Term Σ) c0) (tsI ►► tsO) prec)) ι) as c'.
-          change (inst (cons c h) ι) with (cons (inst c ι) (inst h ι)).
-          cbn [fst heap_extractions]. right. apply List.in_map_iff.
-          eexists (c', inst h' ι); auto.
-      Qed.
+      (* Lemma try_consume_chunk_user_precise_spec (h : SHeap Σ) : *)
+      (*   option.wlp *)
+      (*     (fun '(h', eqs) => *)
+      (*        forall ι : Valuation Σ, *)
+      (*        instprop eqs ι -> *)
+      (*        List.In *)
+      (*          (inst (chunk_user p (eq_rect_r (fun c : Ctx Ty => Env (Term Σ) c) (tsI ►► tsO) prec)) ι, inst h' ι) *)
+      (*          (heap_extractions (inst h ι))) *)
+      (*     (try_consume_chunk_user_precise h). *)
+      (* Proof. *)
+      (*   induction h as [|c h]; [now constructor|]. cbn [try_consume_chunk_user_precise]. *)
+      (*   destruct match_chunk_user_precise as [eqs|] eqn:?. *)
+      (*   - clear IHh. constructor. intros ι Heqs. left. *)
+      (*     destruct c; try discriminate Heqo. cbn in *. *)
+      (*     destruct (eq_dec p p0); cbn in Heqo; try discriminate Heqo. destruct e. *)
+      (*     remember (eq_rect (𝑯_Ty p) (Env (Term Σ)) ts (ΔI ▻▻ ΔO) prec) as ts'. *)
+      (*     destruct (env.catView ts') as [tsI' tsO']. *)
+      (*     destruct (env.eqb_hom_spec Term_eqb (@Term_eqb_spec Σ) tsI tsI'); try discriminate. *)
+      (*     apply noConfusion_inv in Heqo. cbn in Heqo. subst. *)
+      (*     apply instprop_formula_eqs_ctx in Heqs. *)
+      (*     rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)). *)
+      (*     rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat. *)
+      (*     change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'. *)
+      (*     rewrite (@inst_eq_rect_indexed (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)). *)
+      (*     rewrite rew_opp_l. now destruct is_duplicable. *)
+      (*   - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto. *)
+      (*     intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs). *)
+      (*     remember (inst (chunk_user p (eq_rect_r (fun c0 : Ctx Ty => Env (Term Σ) c0) (tsI ►► tsO) prec)) ι) as c'. *)
+      (*     change (inst (cons c h) ι) with (cons (inst c ι) (inst h ι)). *)
+      (*     cbn [fst heap_extractions]. right. apply List.in_map_iff. *)
+      (*     eexists (c', inst h' ι); auto. *)
+      (* Qed. *)
 
     End PreciseUser.
 
@@ -379,7 +380,7 @@ Module Type ChunksOn
       Definition try_consume_chunk_ptsreg_precise :
         option (SHeap Σ * PathCondition Σ) :=
         option.map
-          (fun '(t', h') => (h', ctx.nil ▻ formula_relop bop.eq t t'))
+          (fun '(t', h') => (h', ctx.nil ▻ formula_propeq t t'))
           (find_chunk_ptsreg_precise h).
 
       Lemma try_consume_chunk_ptsreg_precise_spec :
@@ -395,22 +396,23 @@ Module Type ChunksOn
         unfold try_consume_chunk_ptsreg_precise. apply option.wlp_map.
         generalize (find_chunk_ptsreg_precise_spec h).
         apply option.wlp_monotonic. intros [h' t'] HIn ι [_ Heq].
-        specialize (HIn ι). cbn in Heq |- *. now rewrite Heq.
+        specialize (HIn ι).
+        cbn in Heq |- *.
+        now rewrite Heq.
       Qed.
-
     End PrecisePtsreg.
 
     Definition try_consume_chunk_precise {Σ} (h : SHeap Σ) (c : Chunk Σ) :
       option (SHeap Σ * PathCondition Σ) :=
       match c with
-      | chunk_user p ts =>
-          match 𝑯_precise p with
-          | Some (MkPrecise ΔI ΔO Δeq) =>
-              match env.catView (rew Δeq in ts) with
-              | env.isCat tsI tsO => try_consume_chunk_user_precise Δeq tsI tsO h
-              end
-          | None => None
-          end
+      (* | chunk_user p ts => *)
+      (*     match 𝑯_precise p with *)
+      (*     | Some (MkPrecise ΔI ΔO Δeq) => *)
+      (*         match env.catView (rew Δeq in ts) with *)
+      (*         | env.isCat tsI tsO => try_consume_chunk_user_precise Δeq tsI tsO h *)
+      (*         end *)
+      (*     | None => None *)
+      (*     end *)
       | chunk_ptsreg r t => try_consume_chunk_ptsreg_precise r h t
       | _ => None
       end.
@@ -424,15 +426,15 @@ Module Type ChunksOn
              (heap_extractions (inst h ι)))
         (try_consume_chunk_precise h c).
     Proof.
-      destruct c; [| |constructor|constructor];
+      destruct c; [(* | *) |constructor|constructor];
         cbn [try_consume_chunk_precise].
-      - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; [|constructor].
-        remember (eq_rect (𝑯_Ty p) (Env (Term Σ)) ts (ΔI ▻▻ ΔO) prec) as ts'.
-        destruct (env.catView ts') as [tsI tsO].
-        generalize (try_consume_chunk_user_precise_spec prec tsI tsO h).
-        apply option.wlp_monotonic. intros [h' eqs].
-        intros HIn ι Heqs. specialize (HIn ι Heqs).
-        now rewrite Heqts', rew_opp_l in HIn.
+      (* - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; [|constructor]. *)
+      (*   remember (eq_rect (𝑯_Ty p) (Env (Term Σ)) ts (ΔI ▻▻ ΔO) prec) as ts'. *)
+      (*   destruct (env.catView ts') as [tsI tsO]. *)
+      (*   generalize (try_consume_chunk_user_precise_spec prec tsI tsO h). *)
+      (*   apply option.wlp_monotonic. intros [h' eqs]. *)
+      (*   intros HIn ι Heqs. specialize (HIn ι Heqs). *)
+      (*   now rewrite Heqts', rew_opp_l in HIn. *)
       - apply try_consume_chunk_ptsreg_precise_spec.
     Qed.
 
@@ -445,7 +447,7 @@ Module Type ChunksOn
 
     Fixpoint interpret_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : HProp :=
       match c with
-      | chunk_user p ts => luser p (inst ts ι)
+      (* | chunk_user p ts => luser p (inst ts ι) *)
       | chunk_ptsreg r t => lptsreg r (inst t ι)
       | chunk_conj c1 c2 => interpret_chunk c1 ι ∗ interpret_chunk c2 ι
       | chunk_wand c1 c2 => interpret_chunk c1 ι -∗ interpret_chunk c2 ι
@@ -453,7 +455,7 @@ Module Type ChunksOn
 
     Fixpoint interpret_scchunk (c : SCChunk) : HProp :=
       match c with
-      | chunk_user p vs => luser p vs
+      (* | chunk_user p vs => luser p vs *)
       | chunk_ptsreg r v => lptsreg r v
       | chunk_conj c1 c2 => interpret_scchunk c1 ∗ interpret_scchunk c2
       | chunk_wand c1 c2 => interpret_scchunk c1 -∗ interpret_scchunk c2

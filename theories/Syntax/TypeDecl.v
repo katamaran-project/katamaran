@@ -160,6 +160,12 @@ Module ty.
     Global Arguments SyncVal {A}.
     Global Arguments NonSyncVal {A}.
 
+    Definition RVToOption {A} (rv : RV A) : option A :=
+      match rv with
+      | SyncVal v => Some v
+      | NonSyncVal _ _ => None
+      end.
+    
     Definition projLeftRV {A} (rv : RV A) : A :=
       match rv with
       | SyncVal v => v
@@ -175,6 +181,14 @@ Module ty.
     Definition RelVal {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} (τ : Ty) : Set :=
       RV (Val τ)
     .
+
+    Ltac destructRVs :=
+      repeat match goal with
+          |- context[match ?b with
+                     | SyncVal _ => _
+                     | _ => _
+                     end] => destruct b; cbn
+        end.
 
     Context {TDC : TypeDeclKit}.
     Context {TDN : TypeDenoteKit TDC}.

@@ -612,7 +612,7 @@ Module Type WorldsOn
       Proper (Basics.flip (entails (w := w)) ==> (entails (w := w)) ==> Basics.impl) entails.
     Proof. crushPredEntails1. Qed.
 
-    #[export] Instance proper_repₚ_term {σ} {v : Val σ} :
+    #[export] Instance proper_repₚ_term {σ} {v : RelVal σ} :
       Proper (equiv (A := Term w σ) ==> bientails) (repₚ (w := w) (T := STerm σ) v).
     Proof. crushPredEntails1; specialize (H ι); now subst. Qed.
 
@@ -845,12 +845,13 @@ Module Type WorldsOn
     Proof. crushPredEntails2; specialize (H ι); unfold instpred_formula_user in *. 
            now rewrite -H. now rewrite H.  Qed.
 
-    Definition instpred_formula_prop {w : World} {Σ : LCtx} (ζ : Sub Σ w) (P : abstract_named Val Σ Prop) : Pred w :=
+    Definition instpred_formula_prop {w : World} {Σ : LCtx} (ζ : Sub Σ w) (P : abstract_named RelVal Σ Prop) : Pred w :=
       fun ι => uncurry_named P (inst ζ ι).
     Arguments instpred_formula_prop [w] [Σ] ζ P ι /.
 
     Definition instpred_formula_relop {w : World} {σ : Ty} (op : RelOp σ) (t1 t2 : Term w σ) : Pred w :=
-      fun ι => bop.eval_relop_prop op (inst t1 ι) (inst t2 ι).
+      fun ι => let rvp := bop.eval_relop_relprop op (inst t1 ι) (inst t2 ι) in
+               ty.projLeftRV rvp /\ ty.projRightRV rvp.
     Arguments instpred_formula_relop [w] {σ} op t1 t2 ι /.
 
     #[export] Instance proper_instpred_formula_relop {w : World} {σ} :

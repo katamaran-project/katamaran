@@ -53,7 +53,7 @@ Local Unset Elimination Schemes.
 Module Type ExpressionsOn (Import TY : Types).
 
   Local Notation PCtx := (NCtx PVar Ty).
-  Local Notation CStore := (@NamedEnv PVar Ty Val).
+  Local Notation CStore := (@NamedEnv PVar Ty RelVal).
 
   (* Intrinsically well-typed expressions. The context Γ of mutable variables
      contains names PVar and types Ty, but the names are not computationally
@@ -128,16 +128,36 @@ Module Type ExpressionsOn (Import TY : Types).
   Definition Exp_rec {Γ} (P : forall σ, Exp Γ σ -> Set) := Exp_rect P.
   Definition Exp_ind {Γ} (P : forall σ, Exp Γ σ -> Prop) := Exp_rect P.
 
-  Fixpoint eval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) {struct e} : Val σ :=
-    match e in (Exp _ t) return (Val t) with
+  (* Fixpoint eval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) {struct e} : Val σ := *)
+  (*   match e in (Exp _ t) return (Val t) with *)
+  (*   | exp_var x           => δ.[??x] *)
+  (*   | exp_val _ l         => l *)
+  (*   | exp_binop op e1 e2  => bop.eval op (eval e1 δ) (eval e2 δ) *)
+  (*   | exp_unop op e       => uop.eval op (eval e δ) *)
+  (*   (* | exp_list es         => List.map (fun e => eval e δ) es *) *)
+  (*   | exp_bvec es         => Vector.t_rect *)
+  (*                              _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => bv m) *)
+  (*                              bv.nil (fun eb m _ => bv.cons (eval eb δ)) *)
+  (*                              _ es *)
+  (*   (* | exp_tuple es        => env.Env_rect *) *)
+  (*   (*                            (fun σs _ => Val (ty.tuple σs)) *) *)
+  (*   (*                            tt *) *)
+  (*   (*                            (fun σs _ (vs : Val (ty.tuple σs)) σ e => (vs, eval e δ)) *) *)
+  (*   (*                            es *) *)
+  (*   (* | exp_union U K e     => unionv_fold U (existT K (eval e δ)) *) *)
+  (*   (* | exp_record R es     => recordv_fold R (env.map (fun xτ e => eval e δ) es) *) *)
+  (*   end. *)
+
+    Fixpoint eval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) {struct e} : RelVal σ :=
+    match e in (Exp _ t) return RelVal t with
     | exp_var x           => δ.[??x]
-    | exp_val _ l         => l
-    | exp_binop op e1 e2  => bop.eval op (eval e1 δ) (eval e2 δ)
-    | exp_unop op e       => uop.eval op (eval e δ)
+    | exp_val _ l         => ty.valToRelVal l
+    | exp_binop op e1 e2  => bop.evalRel op (eval e1 δ) (eval e2 δ)
+    | exp_unop op e       => uop.evalRel op (eval e δ)
     (* | exp_list es         => List.map (fun e => eval e δ) es *)
     | exp_bvec es         => Vector.t_rect
-                               _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => bv m)
-                               bv.nil (fun eb m _ => bv.cons (eval eb δ))
+                               _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => RelVal (ty.bvec m))
+                               (ty.valToRelVal (σ := ty.bvec 0) bv.nil) (fun eb m _ => ty.liftBinOpRV (A := bool) (B := bv m) (C := bv (S m)) (@bv.cons m) (eval eb δ))
                                _ es
     (* | exp_tuple es        => env.Env_rect *)
     (*                            (fun σs _ => Val (ty.tuple σs)) *)

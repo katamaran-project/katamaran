@@ -121,9 +121,9 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   (* Definition stm_match_enum {Γ τ E} (s : Stm Γ (ty.enum E)) *)
   (*   (alts : forall (K : enumt E), Stm Γ τ) : Stm Γ τ := *)
   (*   stm_pattern_match s (pat_enum E) alts. *)
-  Definition stm_match_bvec {Γ τ n} (s : Stm Γ (ty.bvec n))
-    (rhs : bv n -> Stm Γ τ) : Stm Γ τ :=
-    stm_pattern_match s (pat_bvec_exhaustive n) rhs.
+  (* Definition stm_match_bvec {Γ τ n} (s : Stm Γ (ty.bvec n)) *)
+  (*   (rhs : bv n -> Stm Γ τ) : Stm Γ τ := *)
+  (*   stm_pattern_match s (pat_bvec_exhaustive n) rhs. *)
 
   Arguments stm_assert {Γ} e1%_exp e2%_exp.
   Arguments stm_lemma {Γ Δ} l es%_env.
@@ -135,7 +135,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   (* Arguments stm_match_list {Γ τ _} _ _ _ _ _. *)
   (* Arguments stm_match_sum {Γ τ _ _} _ _ _ _ _. *)
   (* Arguments stm_match_enum {Γ τ} E s%_exp alts%_exp. *)
-  Arguments stm_match_bvec {Γ τ} n%_nat_scope s%_exp rhs%_exp.
+  (* Arguments stm_match_bvec {Γ τ} n%_nat_scope s%_exp rhs%_exp. *)
 
   (* Definition stm_match_union_alt {Γ τ} U (s : Stm Γ (ty.union U)) *)
   (*   (alts : forall (K : unionk U), Alternative (fun Γ => Stm Γ τ) Γ (unionk_ty U K)) : Stm Γ τ := *)
@@ -475,108 +475,108 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
      "'[hv' 'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' '/' | '(' fst ',' snd ')' => rhs '/' 'end' ']'"
     ) : exp_scope.
 
-  Notation "'match:' e 'in' 'bvec' 1 'with' | alt1 => rhs1 | alt2 => rhs2 'end'" :=
-    (@stm_match_bvec _ _ 1 e
-       (fun (x : bv 1) =>
-          match bv.to_bitstring x with
-          | alt1 => rhs1%exp
-          | alt2 => rhs2%exp
-          end))
-    (at level 0, alt1 pattern, alt2 pattern, format
-     "'[hv' 'match:'  e  'in'  'bvec'  1  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' 'end' ']'"
-    ) : exp_scope.
-  Notation "'match:' e 'in' 'bvec' 2 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 'end'" :=
-    (@stm_match_bvec _ _ 2 e
-       (fun (x : bv 2) =>
-          match bv.to_bitstring x with
-          | alt1 => rhs1%exp
-          | alt2 => rhs2%exp
-          | alt3 => rhs3%exp
-          | alt4 => rhs4%exp
-          end))
-    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, format
-     "'[hv' 'match:'  e  'in'  'bvec'  2  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' 'end' ']'"
-    ) : exp_scope.
-  Notation "'match:' e 'in' 'bvec' 3 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 | alt6 => rhs6 | alt7 => rhs7 | alt8 => rhs8 'end'" :=
-    (@stm_match_bvec _ _ 3 e
-       (fun (x : bv 3) =>
-          match bv.to_bitstring x with
-          | alt1 => rhs1%exp
-          | alt2 => rhs2%exp
-          | alt3 => rhs3%exp
-          | alt4 => rhs4%exp
-          | alt5 => rhs5%exp
-          | alt6 => rhs6%exp
-          | alt7 => rhs7%exp
-          | alt8 => rhs8%exp
-          end))
-    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, format
-     "'[hv' 'match:'  e  'in'  'bvec'  3  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' |  alt7  =>  rhs7  '/' |  alt8  =>  rhs8  '/' 'end' ']'"
-    ) : exp_scope.
-  Notation "'match:' e 'in' 'bvec' 4 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 | alt6 => rhs6 | alt7 => rhs7 | alt8 => rhs8 | alt9 => rhs9 | alt10 => rhs10 | alt11 => rhs11 | alt12 => rhs12 | alt13 => rhs13 | alt14 => rhs14 | alt15 => rhs15 | alt16 => rhs16 'end'" :=
-    (@stm_match_bvec _ _ 4 e
-       (fun (x : bv 4) =>
-          match bv.to_bitstring x with
-          | alt1  => rhs1%exp
-          | alt2  => rhs2%exp
-          | alt3  => rhs3%exp
-          | alt4  => rhs4%exp
-          | alt5  => rhs5%exp
-          | alt6  => rhs6%exp
-          | alt7  => rhs7%exp
-          | alt8  => rhs8%exp
-          | alt9  => rhs9%exp
-          | alt10 => rhs10%exp
-          | alt11 => rhs11%exp
-          | alt12 => rhs12%exp
-          | alt13 => rhs13%exp
-          | alt14 => rhs14%exp
-          | alt15 => rhs15%exp
-          | alt16 => rhs16%exp
-          end))
-    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, alt9 pattern, alt10 pattern, alt11 pattern, alt12 pattern, alt13 pattern, alt14 pattern, alt15 pattern, alt16 pattern, format
-     "'[hv' 'match:'  e  'in'  'bvec'  4  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' |  alt7  =>  rhs7  '/' |  alt8  =>  rhs8  '/' | alt9 => rhs9 '/' | alt10 => rhs10 '/' | alt11 => rhs11 '/' | alt12 => rhs12 '/' | alt13 => rhs13 '/' | alt14 => rhs14 '/' | alt15 => rhs15 '/' | alt16 => rhs16 '/' 'end' ']'"
-    ) : exp_scope.
-  Notation "'match:' e 'in' 'bvec' 5 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 | alt6 => rhs6 | alt7 => rhs7 | alt8 => rhs8 | alt9 => rhs9 | alt10 => rhs10 | alt11 => rhs11 | alt12 => rhs12 | alt13 => rhs13 | alt14 => rhs14 | alt15 => rhs15 | alt16 => rhs16 | alt17 => rhs17 | alt18 => rhs18 | alt19 => rhs19 | alt20 => rhs20 | alt21 => rhs21 | alt22 => rhs22 | alt23 => rhs23 | alt24 => rhs24 | alt25 => rhs25 | alt26 => rhs26 | alt27 => rhs27 | alt28 => rhs28 | alt29 => rhs29 | alt30 => rhs30 | alt31 => rhs31 | alt32 => rhs32 'end'" :=
-    (@stm_match_bvec _ _ 5 e
-       (fun (x : bv 5) =>
-          match bv.to_bitstring x with
-          | alt1  => rhs1%exp
-          | alt2  => rhs2%exp
-          | alt3  => rhs3%exp
-          | alt4  => rhs4%exp
-          | alt5  => rhs5%exp
-          | alt6  => rhs6%exp
-          | alt7  => rhs7%exp
-          | alt8  => rhs8%exp
-          | alt9  => rhs9%exp
-          | alt10 => rhs10%exp
-          | alt11 => rhs11%exp
-          | alt12 => rhs12%exp
-          | alt13 => rhs13%exp
-          | alt14 => rhs14%exp
-          | alt15 => rhs15%exp
-          | alt16 => rhs16%exp
-          | alt17 => rhs17%exp
-          | alt18 => rhs18%exp
-          | alt19 => rhs19%exp
-          | alt20 => rhs20%exp
-          | alt21 => rhs21%exp
-          | alt22 => rhs22%exp
-          | alt23 => rhs23%exp
-          | alt24 => rhs24%exp
-          | alt25 => rhs25%exp
-          | alt26 => rhs26%exp
-          | alt27 => rhs27%exp
-          | alt28 => rhs28%exp
-          | alt29 => rhs29%exp
-          | alt30 => rhs30%exp
-          | alt31 => rhs31%exp
-          | alt32 => rhs32%exp
-          end))
-    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, alt9 pattern, alt10 pattern, alt11 pattern, alt12 pattern, alt13 pattern, alt14 pattern, alt15 pattern, alt16 pattern, alt17 pattern, alt18 pattern, alt19 pattern, alt20 pattern, alt21 pattern, alt22 pattern, alt23 pattern, alt24 pattern, alt25 pattern, alt26 pattern, alt27 pattern, alt28 pattern, alt29 pattern, alt30 pattern, alt31 pattern, alt32 pattern, format
-     "'[hv' 'match:'  e  'in'  'bvec'  5  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' |  alt7  =>  rhs7  '/' |  alt8  =>  rhs8  '/' | alt9 => rhs9 '/' | alt10 => rhs10 '/' | alt11 => rhs11 '/' | alt12 => rhs12 '/' | alt13 => rhs13 '/' | alt14 => rhs14 '/' | alt15 => rhs15 '/' | alt16 => rhs16 '/' | alt17 => rhs17 '/' | alt18 => rhs18 '/' | alt19 => rhs19 '/' | alt20 => rhs20 '/' | alt21 => rhs21 '/' | alt22 => rhs22 '/' | alt23 => rhs23 '/' | alt24 => rhs24 '/' | alt25 => rhs25 '/' | alt26 => rhs26 '/' | alt27 => rhs27 '/' | alt28 => rhs28 '/' | alt29 => rhs29 '/' | alt30 => rhs30 '/' | alt31 => rhs31 '/' | alt32 => rhs32 '/' 'end' ']'"
-    ) : exp_scope.
+  (* Notation "'match:' e 'in' 'bvec' 1 'with' | alt1 => rhs1 | alt2 => rhs2 'end'" := *)
+  (*   (@stm_match_bvec _ _ 1 e *)
+  (*      (fun (x : bv 1) => *)
+  (*         match bv.to_bitstring x with *)
+  (*         | alt1 => rhs1%exp *)
+  (*         | alt2 => rhs2%exp *)
+  (*         end)) *)
+  (*   (at level 0, alt1 pattern, alt2 pattern, format *)
+  (*    "'[hv' 'match:'  e  'in'  'bvec'  1  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' 'end' ']'" *)
+  (*   ) : exp_scope. *)
+  (* Notation "'match:' e 'in' 'bvec' 2 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 'end'" := *)
+  (*   (@stm_match_bvec _ _ 2 e *)
+  (*      (fun (x : bv 2) => *)
+  (*         match bv.to_bitstring x with *)
+  (*         | alt1 => rhs1%exp *)
+  (*         | alt2 => rhs2%exp *)
+  (*         | alt3 => rhs3%exp *)
+  (*         | alt4 => rhs4%exp *)
+  (*         end)) *)
+  (*   (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, format *)
+  (*    "'[hv' 'match:'  e  'in'  'bvec'  2  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' 'end' ']'" *)
+  (*   ) : exp_scope. *)
+  (* Notation "'match:' e 'in' 'bvec' 3 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 | alt6 => rhs6 | alt7 => rhs7 | alt8 => rhs8 'end'" := *)
+  (*   (@stm_match_bvec _ _ 3 e *)
+  (*      (fun (x : bv 3) => *)
+  (*         match bv.to_bitstring x with *)
+  (*         | alt1 => rhs1%exp *)
+  (*         | alt2 => rhs2%exp *)
+  (*         | alt3 => rhs3%exp *)
+  (*         | alt4 => rhs4%exp *)
+  (*         | alt5 => rhs5%exp *)
+  (*         | alt6 => rhs6%exp *)
+  (*         | alt7 => rhs7%exp *)
+  (*         | alt8 => rhs8%exp *)
+  (*         end)) *)
+  (*   (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, format *)
+  (*    "'[hv' 'match:'  e  'in'  'bvec'  3  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' |  alt7  =>  rhs7  '/' |  alt8  =>  rhs8  '/' 'end' ']'" *)
+  (*   ) : exp_scope. *)
+  (* Notation "'match:' e 'in' 'bvec' 4 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 | alt6 => rhs6 | alt7 => rhs7 | alt8 => rhs8 | alt9 => rhs9 | alt10 => rhs10 | alt11 => rhs11 | alt12 => rhs12 | alt13 => rhs13 | alt14 => rhs14 | alt15 => rhs15 | alt16 => rhs16 'end'" := *)
+  (*   (@stm_match_bvec _ _ 4 e *)
+  (*      (fun (x : bv 4) => *)
+  (*         match bv.to_bitstring x with *)
+  (*         | alt1  => rhs1%exp *)
+  (*         | alt2  => rhs2%exp *)
+  (*         | alt3  => rhs3%exp *)
+  (*         | alt4  => rhs4%exp *)
+  (*         | alt5  => rhs5%exp *)
+  (*         | alt6  => rhs6%exp *)
+  (*         | alt7  => rhs7%exp *)
+  (*         | alt8  => rhs8%exp *)
+  (*         | alt9  => rhs9%exp *)
+  (*         | alt10 => rhs10%exp *)
+  (*         | alt11 => rhs11%exp *)
+  (*         | alt12 => rhs12%exp *)
+  (*         | alt13 => rhs13%exp *)
+  (*         | alt14 => rhs14%exp *)
+  (*         | alt15 => rhs15%exp *)
+  (*         | alt16 => rhs16%exp *)
+  (*         end)) *)
+  (*   (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, alt9 pattern, alt10 pattern, alt11 pattern, alt12 pattern, alt13 pattern, alt14 pattern, alt15 pattern, alt16 pattern, format *)
+  (*    "'[hv' 'match:'  e  'in'  'bvec'  4  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' |  alt7  =>  rhs7  '/' |  alt8  =>  rhs8  '/' | alt9 => rhs9 '/' | alt10 => rhs10 '/' | alt11 => rhs11 '/' | alt12 => rhs12 '/' | alt13 => rhs13 '/' | alt14 => rhs14 '/' | alt15 => rhs15 '/' | alt16 => rhs16 '/' 'end' ']'" *)
+  (*   ) : exp_scope. *)
+  (* Notation "'match:' e 'in' 'bvec' 5 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 | alt6 => rhs6 | alt7 => rhs7 | alt8 => rhs8 | alt9 => rhs9 | alt10 => rhs10 | alt11 => rhs11 | alt12 => rhs12 | alt13 => rhs13 | alt14 => rhs14 | alt15 => rhs15 | alt16 => rhs16 | alt17 => rhs17 | alt18 => rhs18 | alt19 => rhs19 | alt20 => rhs20 | alt21 => rhs21 | alt22 => rhs22 | alt23 => rhs23 | alt24 => rhs24 | alt25 => rhs25 | alt26 => rhs26 | alt27 => rhs27 | alt28 => rhs28 | alt29 => rhs29 | alt30 => rhs30 | alt31 => rhs31 | alt32 => rhs32 'end'" := *)
+  (*   (@stm_match_bvec _ _ 5 e *)
+  (*      (fun (x : bv 5) => *)
+  (*         match bv.to_bitstring x with *)
+  (*         | alt1  => rhs1%exp *)
+  (*         | alt2  => rhs2%exp *)
+  (*         | alt3  => rhs3%exp *)
+  (*         | alt4  => rhs4%exp *)
+  (*         | alt5  => rhs5%exp *)
+  (*         | alt6  => rhs6%exp *)
+  (*         | alt7  => rhs7%exp *)
+  (*         | alt8  => rhs8%exp *)
+  (*         | alt9  => rhs9%exp *)
+  (*         | alt10 => rhs10%exp *)
+  (*         | alt11 => rhs11%exp *)
+  (*         | alt12 => rhs12%exp *)
+  (*         | alt13 => rhs13%exp *)
+  (*         | alt14 => rhs14%exp *)
+  (*         | alt15 => rhs15%exp *)
+  (*         | alt16 => rhs16%exp *)
+  (*         | alt17 => rhs17%exp *)
+  (*         | alt18 => rhs18%exp *)
+  (*         | alt19 => rhs19%exp *)
+  (*         | alt20 => rhs20%exp *)
+  (*         | alt21 => rhs21%exp *)
+  (*         | alt22 => rhs22%exp *)
+  (*         | alt23 => rhs23%exp *)
+  (*         | alt24 => rhs24%exp *)
+  (*         | alt25 => rhs25%exp *)
+  (*         | alt26 => rhs26%exp *)
+  (*         | alt27 => rhs27%exp *)
+  (*         | alt28 => rhs28%exp *)
+  (*         | alt29 => rhs29%exp *)
+  (*         | alt30 => rhs30%exp *)
+  (*         | alt31 => rhs31%exp *)
+  (*         | alt32 => rhs32%exp *)
+  (*         end)) *)
+  (*   (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, alt9 pattern, alt10 pattern, alt11 pattern, alt12 pattern, alt13 pattern, alt14 pattern, alt15 pattern, alt16 pattern, alt17 pattern, alt18 pattern, alt19 pattern, alt20 pattern, alt21 pattern, alt22 pattern, alt23 pattern, alt24 pattern, alt25 pattern, alt26 pattern, alt27 pattern, alt28 pattern, alt29 pattern, alt30 pattern, alt31 pattern, alt32 pattern, format *)
+  (*    "'[hv' 'match:'  e  'in'  'bvec'  5  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' |  alt7  =>  rhs7  '/' |  alt8  =>  rhs8  '/' | alt9 => rhs9 '/' | alt10 => rhs10 '/' | alt11 => rhs11 '/' | alt12 => rhs12 '/' | alt13 => rhs13 '/' | alt14 => rhs14 '/' | alt15 => rhs15 '/' | alt16 => rhs16 '/' | alt17 => rhs17 '/' | alt18 => rhs18 '/' | alt19 => rhs19 '/' | alt20 => rhs20 '/' | alt21 => rhs21 '/' | alt22 => rhs22 '/' | alt23 => rhs23 '/' | alt24 => rhs24 '/' | alt25 => rhs25 '/' | alt26 => rhs26 '/' | alt27 => rhs27 '/' | alt28 => rhs28 '/' | alt29 => rhs29 '/' | alt30 => rhs30 '/' | alt31 => rhs31 '/' | alt32 => rhs32 '/' 'end' ']'" *)
+  (*   ) : exp_scope. *)
 
   (* Notation "'match:' e 'in' R 'with' [ x ] => rhs 'end'" := *)
   (*   (stm_match_record R e%exp *)

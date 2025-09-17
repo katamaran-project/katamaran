@@ -61,12 +61,14 @@ Module Type FormulasOn
   Inductive Formula (Σ : LCtx) : Type :=
   | formula_user (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | formula_bool (t : Term Σ ty.bool)
-  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Val Σ' Prop)
+  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named RelVal Σ' Prop)
   | formula_relop {σ} (rop : bop.RelOp σ) (t1 t2 : Term Σ σ)
   | formula_true
   | formula_false
   | formula_and (F1 F2 : Formula Σ)
-  | formula_or (F1 F2 : Formula Σ).
+  | formula_or (F1 F2 : Formula Σ)
+  | formula_propeq {σ} (t1 t2 : Term Σ σ)
+  .
   #[global] Arguments formula_user {_} p ts.
   #[global] Arguments formula_bool {_} t.
   #[global] Arguments formula_true {_}.
@@ -96,6 +98,7 @@ Module Type FormulasOn
       | formula_false          => formula_false
       | formula_and F1 F2      => formula_and (sub_formula F1 ζ) (sub_formula F2 ζ)
       | formula_or F1 F2       => formula_or (sub_formula F1 ζ) (sub_formula F2 ζ)
+      | formula_propeq t1 t2 => formula_propeq (subst t1 ζ) (subst t2 ζ)
       end.
 
   #[export] Instance substlaws_formula : SubstLaws Formula.
@@ -113,13 +116,16 @@ Module Type FormulasOn
     fix inst_formula {Σ} (fml : Formula Σ) (ι : Valuation Σ) :=
       match fml with
       | formula_user p ts      => env.uncurry (𝑷_inst p) (inst ts ι)
-      | formula_bool t         => inst (A := Val ty.bool) t ι = true
+      | formula_bool t         => let rvb := inst (A := RelVal ty.bool) t ι in
+                                  ty.projLeftRV rvb = true /\ ty.projRightRV rvb = true
       | formula_prop ζ P       => uncurry_named P (inst ζ ι)
-      | formula_relop op t1 t2 => bop.eval_relop_prop op (inst t1 ι) (inst t2 ι)
+      | formula_relop op t1 t2 => let rvp := bop.eval_relop_relprop op (inst t1 ι) (inst t2 ι) in
+                                    ty.projLeftRV rvp /\ ty.projRightRV rvp
       | formula_true           => True
       | formula_false          => False
       | formula_and F1 F2      => inst_formula F1 ι /\ inst_formula F2 ι
       | formula_or F1 F2       => inst_formula F1 ι \/ inst_formula F2 ι
+      | formula_propeq t1 t2 => inst t1 ι = inst t2 ι       
       end.
 
   #[export] Instance instprop_subst_formula : InstPropSubst Formula.
@@ -131,13 +137,14 @@ Module Type FormulasOn
   Lemma instprop_formula_relop_neg {Σ σ} (ι : Valuation Σ) (op : RelOp σ) :
     forall (t1 t2 : Term Σ σ),
       instprop (formula_relop_neg op t1 t2) ι <->
-      bop.eval_relop_val op (inst t1 ι) (inst t2 ι) = false.
+      let rvb := bop.eval_relop_relval op (inst t1 ι) (inst t2 ι) in
+      ty.projLeftRV rvb = false /\ ty.projRightRV rvb = false.
   Proof.
-    destruct op; cbn; intros t1 t2;
+    destruct op; cbn; intros t1 t2; destructInsts; cbn;
       unfold bv.sle, bv.sleb, bv.slt, bv.sltb;
       unfold bv.ule, bv.uleb, bv.ult, bv.ultb;
       rewrite ?N.ltb_antisym, ?negb_true_iff, ?negb_false_iff, ?N.leb_gt, ?N.leb_le;
-      auto; try Lia.lia; now destruct eq_dec.
+      auto; try Lia.lia; try now repeat destruct eq_dec.
   Qed.
 
   Section Reasoning.
@@ -157,19 +164,28 @@ Module Type FormulasOn
 
     Lemma formula_bool_and [Σ] (t1 t2 : Term Σ ty.bool):
       formula_bool (term_binop bop.and t1 t2) ⊣⊢ formula_and (formula_bool t1) (formula_bool t2).
-    Proof. intro ι. cbn. rewrite andb_true_iff. intuition. Qed.
+    Proof. intro ι. cbn. destructInsts; cbn.
+           { rewrite andb_true_iff; intuition. }
+           all: rewrite andb_true_iff.
+           all: intuition; rewrite andb_true_iff in *; tauto.
+    Qed.
     #[local] Hint Rewrite formula_bool_and : katamaran.
 
     Lemma formula_bool_relop [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
       formula_bool (term_binop (bop.relop op) s t) ⊣⊢ formula_relop op s t.
-    Proof. intro; cbn; symmetry; apply bop.eval_relop_equiv. Qed.
+    Proof.
+      intro; cbn; symmetry; destructInsts; cbn;
+        now repeat rewrite bop.eval_relop_equiv.
+    Qed.
 
     Lemma formula_bool_relop_neg [Σ σ] (op : RelOp σ) (s t : Term Σ σ) :
       formula_bool (term_relop_neg op s t) ⊣⊢ formula_relop_neg op s t.
     Proof.
       intro; cbn.
-      rewrite inst_term_relop_neg, negb_true_iff.
-      now rewrite instprop_formula_relop_neg.
+      rewrite inst_term_relop_neg.
+      rewrite instprop_formula_relop_neg.
+      destructInsts; cbn;
+        now repeat rewrite negb_true_iff.
     Qed.
 
     Lemma formula_relop_val [Σ σ] (op : RelOp σ) (v1 v2 : Val σ) :
@@ -188,7 +204,11 @@ Module Type FormulasOn
 
     Lemma unsatisfiable_formula_bool [Σ] (t : Term Σ ty.bool) :
       base.equiv t (term_val ty.bool false) -> Unsatisfiable (formula_bool t).
-    Proof. intros e ι. specialize (e ι). cbn in *. congruence. Qed.
+    Proof. intros e ι. specialize (e ι). cbn in *. revert e.
+           destructInsts; cbn; intro e.
+           - inversion e. intros [A B]. congruence.
+           - inversion e.
+    Qed.
 
     Lemma unsatisfiable_formula_false [Σ] :
       Unsatisfiable (@formula_false Σ).
@@ -214,6 +234,9 @@ Module Type FormulasOn
       | formula_or F1 F2       => F1' <- oc xIn F1 ;;
                                   F2' <- oc xIn F2 ;;
                                   Some (formula_or F1' F2')
+      | formula_propeq t1 t2 => t1' <- occurs_check xIn t1 ;;
+                                t2' <- occurs_check xIn t2 ;;
+                                Some (formula_propeq t1' t2')
       end.
 
   #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.
@@ -236,19 +259,31 @@ Module Type FormulasOn
       (δ δ' : Env (Term Σ) Δ) : PathCondition Σ :=
     | env.nil,        env.nil          => ctx.nil
     | env.snoc δ _ t, env.snoc δ' _ t' =>
-      ctx.snoc (formula_eqs_ctx δ δ') (formula_relop bop.eq t t').
+        ctx.snoc (formula_eqs_ctx δ δ') (formula_propeq t t').
 
     Equations(noeqns) formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ : LCtx}
       (δ δ' : NamedEnv (Term Σ) Δ) : PathCondition Σ :=
     | env.nil,        env.nil          => ctx.nil
     | env.snoc δ _ t, env.snoc δ' _ t' =>
-      ctx.snoc (formula_eqs_nctx δ δ') (formula_relop bop.eq t t').
+      ctx.snoc (formula_eqs_nctx δ δ') (formula_propeq t t').
 
+    Search Inst Env.
+    Locate inst_store.
+    Print CStore.
+    Print SStore.
+
+    Fixpoint envRelValToRVEnv {nctx} (nenv : Env RelVal nctx) : RV (Env Val nctx) :=
+      match nenv with
+      | env.nil => SyncVal env.nil
+      | env.snoc nenv' db b => ty.liftBinOpRV (fun nenv b => env.snoc nenv db b) (envRelValToRVEnv nenv') b
+      end.
+    
     Lemma instprop_formula_eqs_ctx {Δ Σ} (xs ys : Env (Term Σ) Δ) ι :
       instprop (formula_eqs_ctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs; env.destroy ys; cbn; [easy|].
-      now rewrite IHxs, env.inversion_eq_snoc.
+      rewrite env.inversion_eq_snoc.
+      now rewrite IHxs.
     Qed.
 
     Lemma instprop_formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ} (xs ys : NamedEnv (Term Σ) Δ) ι :

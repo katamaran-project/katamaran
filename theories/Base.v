@@ -69,8 +69,7 @@ Module Type BaseMixin (Import TY : Types).
        (fun xt : Binding LVar Ty =>
           RelVal (@type _ _ xt)) Σ).
 
-  Notation CStore := (@NamedEnv PVar Ty Val).
-  Notation CStoreRel := (@NamedEnv PVar Ty RelVal).
+  Notation CStore := (@NamedEnv PVar Ty RelVal).
 
   Definition SMatchResult {N σ} (pat : Pattern (N:=N) σ) (Σ : LCtx) : Type :=
     { pc : PatternCase pat & NamedEnv (Term Σ) (PatternCaseCtx pc) }.
@@ -173,23 +172,30 @@ Module Type BaseMixin (Import TY : Types).
       (*     fun '(existT K pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts) *)
       end.
 
+    Fixpoint namedEnvRelValToRVNamedEnv {X nctx} (nenv : NamedEnv RelVal nctx) : RV (NamedEnv (X := X) Val nctx) :=
+      match nenv with
+      | env.nil => SyncVal env.nil
+      | env.snoc nenv' db b => ty.liftBinOpRV (fun nenv b => env.snoc nenv db b) (namedEnvRelValToRVNamedEnv nenv') b
+      end.
+
     Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : Pattern (N:=N) σ) :
       forall (pc : PatternCase pat) (ts : NamedEnv (Term Σ) (PatternCaseCtx pc)),
-        inst (pattern_match_term_reverse pat pc ts) ι =
-        pattern_match_val_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι).
+        ty.RVToOption (inst (A := RelVal _) (pattern_match_term_reverse pat pc ts) ι) =
+          pattern_match_relval_reverse pat pc (ty.RVToOption (namedEnvRelValToRVNamedEnv (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι))).
     Proof.
       induction pat; cbn.
-      - intros _y ts. now env.destroy ts.
-      - reflexivity.
+      - intros _y ts. env.destroy ts. cbn in *.
+        now destructInsts.
+      - intros __y ts. env.destroy ts. auto.
       (* - intros [] ts. *)
       (*   + reflexivity. *)
       (*   + now env.destroy ts. *)
-      - intros _ ts. now env.destroy ts.
+      - intros __y ts. env.destroy ts. cbn in *. now destructInsts.
       - intros [] ts; now env.destroy ts.
       (* - intros [] ts. reflexivity. *)
       (* - reflexivity. *)
-      - intros _ ts. now env.destroy ts.
-      - reflexivity.
+      - intros __y ts. env.destroy ts. cbn in *. now destructInsts.
+      (* - reflexivity. *)
       (* - intros _ ts. *)
       (*   now rewrite <- inst_tuple_pattern_match_reverse. *)
       (* - intros _ ts. f_equal. *)
@@ -236,24 +242,34 @@ Module Type BaseMixin (Import TY : Types).
     NamedEnv (X := N) (Exp Γ) Δ -> NamedEnv (Term Σ) Δ
       := env.map (fun b (e : Exp Γ (type b)) => peval (seval_exp δ e)).
 
-  Lemma eval_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
-    eval e (inst δΓΣ ι) = inst (seval_exp δΓΣ e) ι.
-  Proof.
-    induction e; cbn; repeat f_equal; auto.
-    { unfold inst, inst_store, inst_env at 1; cbn.
-      now rewrite env.lookup_map.
-    }
-    (* 2: { *)
-    (*   induction es as [|eb n es IHes]; cbn in *. *)
-    (*   { reflexivity. } *)
-    (*   { destruct X as [-> Heqs]. *)
-    (*     change (inst_term ?ι ?t) with (inst ι t). *)
-    (*     destruct (inst (seval_exp δΓΣ eb) ι); *)
-    (*       cbn; f_equal; auto. *)
-    (*   } *)
-    (* } *)
-    all: induction es; cbn in *; destruct_conjs; f_equal; auto.
-  Qed.
+  Ltac destructRVs :=
+    repeat match goal with
+        |- context[match ?b with
+                   | SyncVal _ => _
+                   | _ => _
+                   end] => destruct b; cbn
+      end.
+
+  (* Lemma eval_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) : *)
+  (*   eval e (inst δΓΣ ι) = inst (seval_exp δΓΣ e) ι. *)
+  (* Proof. *)
+  (*   induction e; cbn; repeat f_equal; auto. *)
+  (*   { unfold inst, inst_store, inst_env at 1; cbn. *)
+  (*     now rewrite env.lookup_map. *)
+  (*   } *)
+  (*   (* 2: { *) *)
+  (*   (*   induction es as [|eb n es IHes]; cbn in *. *) *)
+  (*   (*   { reflexivity. } *) *)
+  (*   (*   { destruct X as [-> Heqs]. *) *)
+  (*   (*     change (inst_term ?ι ?t) with (inst ι t). *) *)
+  (*   (*     destruct (inst (seval_exp δΓΣ eb) ι); *) *)
+  (*   (*       cbn; f_equal; auto. *) *)
+  (*   (*   } *) *)
+  (*   (* } *) *)
+  (*   { rewrite IHe1. rewrite IHe2. *)
+  (*   now destructInsts. } *)
+  (*   { admit. } *)
+  (* Qed. *)
 
   Lemma subst_seval {Γ τ Σ Σ'} (e : Exp Γ τ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :
     subst (T := fun Σ => Term Σ _) (seval_exp δ e) ζ = seval_exp (subst δ ζ) e.

@@ -405,18 +405,11 @@ Module Type PatternsOn (Import TY : Types).
       (*   now rewrite <- Heq, H. *)
     Qed.
 
-
-    Definition RVToOption {A} (rv : RV A) : option A :=
-      match rv with
-      | SyncVal v => Some v
-      | NonSyncVal _ _ => None
-      end.
-
     (* Pattern match on a value. The result is a [PatternCase] that represents
        the alternative corresponding to the value, together with an environment
        that maps the variables of the pattern to values. *)
     Definition pattern_match_relval {σ} (p : Pattern σ) (rv : RelVal σ) : option (MatchResult p) :=
-      fmap (pattern_match_val p) (RVToOption rv).
+      fmap (pattern_match_val p) (ty.RVToOption rv).
     #[global] Arguments pattern_match_relval {σ} !p rv.
 
     (* Reverse a pattern match. Given a [PatternCase] and an environment with
@@ -452,7 +445,7 @@ Module Type PatternsOn (Import TY : Types).
 
     Lemma pattern_match_relval_inverse_left {σ} (pat : Pattern σ) :
       forall rv : RelVal σ,
-        pattern_match_relval_reverse' pat (pattern_match_relval pat rv) = RVToOption rv.
+        pattern_match_relval_reverse' pat (pattern_match_relval pat rv) = ty.RVToOption rv.
     Proof.
       destruct rv.
       - unfold pattern_match_relval. cbn. rewrite pattern_match_val_inverse_left. reflexivity.

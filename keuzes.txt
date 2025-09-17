@@ -36,8 +36,13 @@ Gemaakte keuzes:
 
 - Added a term_relval to terms: originally prompted by problems to make inst_lift_term in instantation work.
 
+- Disabled most of peval
+
+- Formula bool requires both left and right to be true. Formula_relop requires the result of the comparison to be a SyncVal, this might be too restrictive later on.
+
 
 
 Inadequacies:
 - Terms are not rings anymore (NonSyncVal 1 1 - NonSyncVal 1 1 = NonSyncVal 0 0 != SyncVal 0).
+- I currently stated this as an axiom to make peval work, but this is obviously not a good long term solution.
 

@@ -82,7 +82,9 @@ Module Type InstantiationOn
 
   Ltac destructInsts :=
     repeat match goal with
-      | |- context[inst ?t ?i] => generalize (inst t i); clear t; intro t; destruct t
+      | |- context[inst ?t ?i] => generalize (inst t i);
+                                  (tryif is_var t then clear t else idtac);
+                                  intros []
       end.
 
   Lemma inst_eq_rect `{Inst AT A}
