@@ -260,7 +260,6 @@ Module inv := invariants.
     Definition mmio_handler_addr_block0  : N := handler_addr.
     Definition mmio_handler_addr_block1 : N := mmio_handler_addr_block0 + mmio_handler_size_block0.
     Definition mmio_handler_addr_block2 : N := mmio_handler_addr_block1 + mmio_handler_size_block1.
-
     Definition data_addr     : N := handler_addr + mmio_handler_size.
     Definition adv_addr      : N := data_addr + data_size.
 
