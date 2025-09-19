@@ -223,9 +223,9 @@ Module inv := invariants.
 
     Example femtokernel_mmio_handler_asm : list ASM :=
       [
-        ITYPE (bv.of_N 43) zero t0 RISCV_ADDI
+        ITYPE bv.zero zero zero RISCV_ADDI (* padding instruction to pass lemma adv_mmio_eq *)
       ; ITYPE bv.zero zero ra RISCV_ADDI
-      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N 43)]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
+      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
       ; Λ x, STORE (bv.of_N mmio_write_addr) t0 ra WORD (* works because mmio_write_addr fits into 12 bits. *)
       ; MRET
       ].
@@ -249,7 +249,8 @@ Module inv := invariants.
     Definition adv_addr      : N := data_addr + data_size.
     Definition mmio_adv_addr : N := handler_addr + mmio_handler_size.
     (* NOTE: We have set things up so that the `adv_addr` and the `mmio_adv_addr` are equal in both cases, such that we can reuse the proofs. Prove that this is the case here, to make sure that we gets stuck if we ever make changes that break this hypothesis. *)
-    Lemma adv_mmio_eq : adv_addr = mmio_adv_addr. Proof. now compute. Qed.
+    Lemma adv_mmio_eq : adv_addr = mmio_adv_addr.
+  Proof. now compute. Qed.
     (* Since both are equal, we continue with just the `adv_addr` from now on *)
 
     (* CODE AND CONFIG SHORTANDS*)

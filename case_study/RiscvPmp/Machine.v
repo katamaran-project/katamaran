@@ -119,6 +119,7 @@ Module RiscvNotations.
   Notation "'hi'"           := "hi" : string_scope.
   Notation "'f'"            := "f" : string_scope.
   Notation "'w'"            := "w" : string_scope.
+  Notation "'r'"            := "r" : string_scope.
   Notation "'tvec'"         := "tvec" : string_scope.
   Notation "'epc'"          := "epc" : string_scope.
   Notation "'prev_priv'"    := "prev_priv" : string_scope.
@@ -242,7 +243,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | return_pmp_ptsto  (bytes : nat) : Lem [paddr :: ty_xlenbits]
   | open_ptsto_instr                : Lem [paddr :: ty_xlenbits]
   | close_ptsto_instr               : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits]
-  | close_mmio_write (imm : Bitvector.bv.bv 12) (width : WordWidth) : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits] (* Statically known quantities; lemma is called in between instructions! *)
+  | close_mmio_write (imm : Bitvector.bv.bv 12) (width : WordWidth) : Lem [paddr :: ty_xlenbits; r :: ty_regno] (* Statically known quantities; lemma is called in between instructions! *)
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.

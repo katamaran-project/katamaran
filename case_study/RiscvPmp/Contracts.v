@@ -1234,8 +1234,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           |}.
 
         Definition lemma_close_mmio_write (immm : Bitvector.bv.bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) :=
-          {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
-             lemma_patterns        := [term_var "paddr"; term_var "w"];
+          {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "r" :: ty_regno; "w" :: ty_xlenbits];
+             lemma_patterns        := [term_var "paddr"; term_var "r"];
              lemma_precondition    := ⊤;
              lemma_postcondition   := ⊤;
           |}.

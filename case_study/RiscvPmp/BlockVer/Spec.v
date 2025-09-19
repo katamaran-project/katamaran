@@ -581,12 +581,14 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
 
   Import TermNotations.
   Definition lemma_close_mmio_write (immm : bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) :=
-    {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
-       lemma_patterns        := [term_var "paddr"; term_var "w"];
+    {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "r" :: ty_regno; "w" :: ty_word ];
+       lemma_patterns        := [term_var "paddr"; term_var "r"];
        lemma_precondition    :=
-        ((term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)));
-       lemma_postcondition   :=
-        asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
+        ((term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm))) ∗
+        ( term_var "r") ↦ᵣ (term_var "w");
+      lemma_postcondition   :=
+        asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w")) ∗
+      ( term_var "r") ↦ᵣ (term_var "w");
     |}.
 
    Definition LEnv : LemmaEnv :=
@@ -961,8 +963,9 @@ Module RiscvPmpIrisInstanceWithContracts.
     ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width).
   Proof.
     intros ι; destruct_syminstance ι; cbn.
-    iIntros "[<- _]".
+    iIntros "([<- _] & Hmmio)".
     unfold interp_mmio_checked_write.
+    iFrame.
     iPureIntro.
     split; auto.
     eexists. destruct width; reflexivity.
