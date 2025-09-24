@@ -121,13 +121,14 @@ Module RiscvPmpModel2.
 
     Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
         ⊢ interp_pmp_entries entries -∗
-          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr),
-            ⌜entries = [(cfg0, addr0); (cfg1, addr1)]⌝ ∗
+          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr) (cfg2 : Pmpcfg_ent) (addr2 : Addr),
+            ⌜entries = [(cfg0, addr0); (cfg1, addr1); (cfg2, addr2)]⌝ ∗
             reg_pointsTo21 pmp0cfg cfg0 ∗ reg_pointsTo21 pmpaddr0 addr0 ∗
-            reg_pointsTo21 pmp1cfg cfg1 ∗ reg_pointsTo21 pmpaddr1 addr1.
+            reg_pointsTo21 pmp1cfg cfg1 ∗ reg_pointsTo21 pmpaddr1 addr1 ∗
+            reg_pointsTo21 pmp2cfg cfg2 ∗ reg_pointsTo21 pmpaddr2 addr2.
     Proof.
       iIntros (entries) "H".
-      destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|]]] eqn:?; try done.
+      destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|[cfg2 addr2] [|]]]] eqn:?; try done.
       repeat iExists _.
       now iFrame.
     Qed.
@@ -138,11 +139,11 @@ Module RiscvPmpModel2.
           IrisInstance.RiscvPmpIrisInstance.interp_pmp_entries (H := sailRegGS2_sailRegGS_right) entries.
     Proof.
       iIntros (entries).
-      destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|]]] eqn:?; cbn;
+      destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|[cfg2 addr2] [|]]]] eqn:?; cbn;
       try (iSplit; iIntros; now destruct H).
       iSplit.
-      - iIntros "([$ $] & [$ $] & [$ $] & [$ $])".
-      - iIntros "(($ & $ & $ & $) & ($ & $ & $ & $))".
+      - iIntros "([$ $] & [$ $] & [$ $] & [$ $] & [$ $] & [$ $])".
+      - iIntros "(($ & $ & $ & $ & $ & $) & ($ & $ & $ & $ & $ & $))".
     Qed.
 
     Lemma read_ram_sound (bytes : nat) :
@@ -345,9 +346,9 @@ Module RiscvPmpModel2.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       iIntros "H".
-      iPoseProof (pmp_entries_ptsto with "H") as "(% & % & % & % & -> & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1)".
+      iPoseProof (pmp_entries_ptsto with "H") as "(% & % & % & % & % & % & -> & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpmp2cfg & Hpmpaddr2)".
       repeat iExists _.
-      now iFrame "Hpmp0cfg Hpmp1cfg Hpmpaddr0 Hpmpaddr1".
+      now iFrame "Hpmp0cfg Hpmp1cfg Hpmpaddr0 Hpmpaddr1 Hpmp2cfg Hpmpaddr2".
     Qed.
 
     Lemma close_pmp_entries_sound :

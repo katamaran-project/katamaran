@@ -172,11 +172,13 @@ Module RiscvPmpIrisInstance2 <:
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
       match entries with
-      | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
+      | (cfg0, addr0) :: (cfg1, addr1) :: (cfg2, addr2) :: [] =>
           reg_pointsTo21 pmp0cfg cfg0 ∗
-                       reg_pointsTo21 pmpaddr0 addr0 ∗
-                       reg_pointsTo21 pmp1cfg cfg1 ∗
-                       reg_pointsTo21 pmpaddr1 addr1
+          reg_pointsTo21 pmpaddr0 addr0 ∗
+          reg_pointsTo21 pmp1cfg cfg1 ∗
+          reg_pointsTo21 pmpaddr1 addr1 ∗
+          reg_pointsTo21 pmp2cfg cfg2 ∗
+          reg_pointsTo21 pmpaddr2 addr2
       | _ => False
       end.
 

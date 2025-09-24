@@ -629,6 +629,18 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       let: tmp2 := call pmpWriteCfg tmp tmp1 in
       stm_write_register pmp1cfg tmp2 ;;
       stm_val ty.unit tt
+    else if: exp_var "n" = exp_int 1%Z
+         then
+           let: tmp  := stm_read_register pmp2cfg in
+           let: tmp1 := exp_vector_subrange 0 8 value in
+           let: tmp2 := call pmpWriteCfg tmp tmp1 in
+           stm_write_register pmp2cfg tmp2 ;;
+           (* NOTE: no support for pmp3cfg, so don't do anything here (i.e., keep its "cfg" zero) *)
+           (* let: tmp  := stm_read_register pmp3cfg in *)
+           (* let: tmp1 := exp_vector_subrange 8 8 value in *)
+           (* let: tmp2 := call pmpWriteCfg tmp tmp1 in *)
+           (* stm_write_register pmp3cfg tmp2 ;; *)
+           stm_val ty.unit tt
     else fail "writing to non-existent cfg".
 
   Definition fun_pmpWriteCfg : Stm [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent :=
@@ -658,10 +670,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       | PMP_Success  => stm_val ty.bool true
       | PMP_Fail     => stm_val ty.bool false
       | PMP_Continue =>
+      let: tmp1 := stm_read_register pmp2cfg in
+      let: tmp2 := stm_read_register pmpaddr2 in
+      let: tmp3 := stm_read_register pmpaddr1 in
+      let: tmp := call pmpMatchEntry addr width acc priv tmp1 tmp2 tmp3 in
+      match: tmp in pmpmatch with
+      | PMP_Success  => stm_val ty.bool true
+      | PMP_Fail     => stm_val ty.bool false
+      | PMP_Continue =>
           match: priv in privilege with
           | Machine => stm_val ty.bool true
           | User    => stm_val ty.bool false
           end
+      end
       end
       end in
       use lemma close_pmp_entries ;;
@@ -936,11 +957,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                   | Machine => stm_val ty.bool true
                   | _ => stm_val ty.bool false
                   end
+    | MPMP1CFG => match: p in privilege with
+                  | Machine => stm_val ty.bool true
+                  | _ => stm_val ty.bool false
+                  end
     | MPMPADDR0 => match: p in privilege with
                    | Machine => stm_val ty.bool true
                    | _ => stm_val ty.bool false
                    end
     | MPMPADDR1 => match: p in privilege with
+                   | Machine => stm_val ty.bool true
+                   | _ => stm_val ty.bool false
+                   end
+    | MPMPADDR2 => match: p in privilege with
                    | Machine => stm_val ty.bool true
                    | _ => stm_val ty.bool false
                    end
@@ -976,8 +1005,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         let: tmp1 := stm_pmpcfg_ent_to_bits (stm_read_register pmp0cfg) in
         let: tmp2 := stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg) in
         exp_zext (exp_binop bop.bvapp tmp1 tmp2)
+    | MPMP1CFG  =>
+        let: tmp1 := stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg) in
+        let: tmp2 := stm_val (ty.bvec 8) Bitvector.bv.zero in (* NOTE: no support for fourth cfg (pmp3cfg) *)
+        exp_zext (exp_binop bop.bvapp tmp1 tmp2)
     | MPMPADDR0 => stm_read_register pmpaddr0
     | MPMPADDR1 => stm_read_register pmpaddr1
+    | MPMPADDR2 => stm_read_register pmpaddr2
     end.
 
   Definition fun_writeCSR : Stm [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit :=
@@ -992,6 +1026,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | MEpc => stm_write_register mepc value ;;
               stm_val ty.unit tt
     | MPMP0CFG => stm_call pmpWriteCfgReg ([exp_int 0%Z : Exp _ (type (_∷ _)); value])
+    | MPMP1CFG => stm_call pmpWriteCfgReg ([exp_int 1%Z : Exp _ (type (_∷ _)); value])
     | MPMPADDR0 => let: tmp1 := stm_read_register pmp0cfg in
                    let: tmp1 := call pmpLocked tmp1 in
                    let: tmp2 := stm_read_register pmpaddr0 in
@@ -1003,6 +1038,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                    let: tmp2 := stm_read_register pmpaddr1 in
                    let: tmp  := call pmpWriteAddr tmp1 tmp2 value in
                    stm_write_register pmpaddr1 value ;;
+                   stm_val ty.unit tt
+    | MPMPADDR2 => let: tmp1 := stm_read_register pmp2cfg in
+                   let: tmp1 := call pmpLocked tmp1 in
+                   let: tmp2 := stm_read_register pmpaddr2 in
+                   let: tmp  := call pmpWriteAddr tmp1 tmp2 value in
+                   stm_write_register pmpaddr2 value ;;
                    stm_val ty.unit tt
     end.
 

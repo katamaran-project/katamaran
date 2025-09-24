@@ -245,7 +245,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
         Definition sep_contract_readCSR : SepContractFun readCSR :=
           {| sep_contract_logic_variables := [csr :: ty_csridx; "mpp" :: ty_privilege;
                                               "mtvec" :: ty_xlenbits; "mcause" :: ty_mcause;
-                                              "mepc" :: ty_xlenbits; "cfg0" :: ty_pmpcfg_ent; "cfg1" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "addr1" :: ty_xlenbits];
+                                              "mepc" :: ty_xlenbits; "cfg0" :: ty_pmpcfg_ent; "cfg1" :: ty_pmpcfg_ent; "cfg2" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "addr1" :: ty_xlenbits; "addr2" :: ty_xlenbits];
              sep_contract_localstore      := [term_var csr];
              sep_contract_precondition    :=
                mstatus ↦ term_record rmstatus [term_var "mpp"]
@@ -254,8 +254,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                ∗ mepc ↦ term_var "mepc"
                ∗ pmp0cfg ↦ term_var "cfg0"
                ∗ pmp1cfg ↦ term_var "cfg1"
+               ∗ pmp2cfg ↦ term_var "cfg2"
                ∗ pmpaddr0 ↦ term_var "addr0"
-               ∗ pmpaddr1 ↦ term_var "addr1";
+               ∗ pmpaddr1 ↦ term_var "addr1"
+               ∗ pmpaddr2 ↦ term_var "addr2";
              sep_contract_result          := "result_readCSR";
              sep_contract_postcondition   :=
                ∃ "result", term_var "result_readCSR" = term_var "result"
@@ -265,8 +267,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                ∗ mepc ↦ term_var "mepc"
                ∗ pmp0cfg ↦ term_var "cfg0"
                ∗ pmp1cfg ↦ term_var "cfg1"
+               ∗ pmp2cfg ↦ term_var "cfg2"
                ∗ pmpaddr0 ↦ term_var "addr0"
-               ∗ pmpaddr1 ↦ term_var "addr1";
+               ∗ pmpaddr1 ↦ term_var "addr1"
+               ∗ pmpaddr2 ↦ term_var "addr2";
           |}.
 
         Definition sep_contract_writeCSR : SepContractFun writeCSR :=
@@ -279,8 +283,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                ∗ ∃ "mepc", mepc ↦ term_var "mepc"
                ∗ ∃ "cfg0", (pmp0cfg ↦ term_var "cfg0" ∗ asn_expand_pmpcfg_ent (term_var "cfg0"))
                ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"))
+               ∗ ∃ "cfg2", (pmp2cfg ↦ term_var "cfg2" ∗ asn_expand_pmpcfg_ent (term_var "cfg2"))
                ∗ ∃ "addr0", pmpaddr0 ↦ term_var "addr0"
-               ∗ ∃ "addr1", pmpaddr1 ↦ term_var "addr1";
+               ∗ ∃ "addr1", pmpaddr1 ↦ term_var "addr1"
+               ∗ ∃ "addr2", pmpaddr2 ↦ term_var "addr2";
              sep_contract_result          := "result_writeCSR";
              sep_contract_postcondition   :=
                term_var "result_writeCSR" = term_val ty.unit tt
@@ -290,8 +296,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                ∗ ∃ "mepc", mepc ↦ term_var "mepc"
                ∗ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
                ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1"
+               ∗ ∃ "cfg2", pmp2cfg ↦ term_var "cfg2"
                ∗ ∃ "addr0", pmpaddr0 ↦ term_var "addr0"
-               ∗ ∃ "addr1", pmpaddr1 ↦ term_var "addr1";
+               ∗ ∃ "addr1", pmpaddr1 ↦ term_var "addr1"
+               ∗ ∃ "addr2", pmpaddr2 ↦ term_var "addr2";
           |}.
 
         Definition sep_contract_check_CSR : SepContractFun check_CSR :=
@@ -706,10 +714,12 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           {| sep_contract_logic_variables := ctx.nil;
              sep_contract_localstore      := env.nil;
              sep_contract_precondition    :=
-               ∃ "cfg0", pmp0cfg ↦ term_var "cfg0" ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1";
+               ∃ "cfg0", pmp0cfg ↦ term_var "cfg0" ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1"
+               ∗ ∃ "cfg2", pmp2cfg ↦ term_var "cfg2";
              sep_contract_result          := "result_init_pmp";
              sep_contract_postcondition   :=
                ∃ "cfg0", pmp0cfg ↦ term_var "cfg0" ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1"
+               ∗ ∃ "cfg2", pmp2cfg ↦ term_var "cfg2"
                ∗ term_var "result_init_pmp" = term_val ty.unit tt;
           |}.
 
@@ -966,12 +976,14 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_localstore      := [term_var "n"; term_var value];
              sep_contract_precondition    :=
                   ∃ "cfg0", (pmp0cfg ↦ term_var "cfg0" ∗ asn_expand_pmpcfg_ent (term_var "cfg0"))
-                  ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"));
+                  ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"))
+                  ∗ ∃ "cfg2", (pmp2cfg ↦ term_var "cfg2" ∗ asn_expand_pmpcfg_ent (term_var "cfg2"));
              sep_contract_result          := "result_pmpWriteCfgReg";
              sep_contract_postcondition   :=
                term_var "result_pmpWriteCfgReg" = term_val ty.unit tt
                ∗ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
-               ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1";
+               ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1"
+               ∗ ∃ "cfg2", pmp2cfg ↦ term_var "cfg2";
           |}.
 
         Definition sep_contract_pmpWriteAddr : SepContractFun pmpWriteAddr :=
@@ -1184,25 +1196,31 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           {| lemma_logic_variables := ["entries" :: ty.list ty_pmpentry];
              lemma_patterns        := env.nil;
              lemma_precondition    := asn_pmp_entries (term_var "entries");
-             lemma_postcondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
+             lemma_postcondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1", ∃ "cfg2", ∃ "addr2",
                 (pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
                  pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+                 pmp2cfg ↦ term_var "cfg2" ∗ pmpaddr2 ↦ term_var "addr2" ∗
                  asn_expand_pmpcfg_ent (term_var "cfg0") ∗
                  asn_expand_pmpcfg_ent (term_var "cfg1") ∗
+                 asn_expand_pmpcfg_ent (term_var "cfg2") ∗
                  term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
-                                                 (term_var "cfg1" ,ₜ term_var "addr1")]);
+                                                 (term_var "cfg1" ,ₜ term_var "addr1");
+                                                 (term_var "cfg2" ,ₜ term_var "addr2")]);
           |}.
 
         Definition lemma_close_pmp_entries : SepLemma close_pmp_entries :=
           {| lemma_logic_variables := ["cfg0" :: ty_pmpcfg_ent; "addr0" :: _;
-                                       "cfg1" :: ty_pmpcfg_ent; "addr1" :: _];
+                                       "cfg1" :: ty_pmpcfg_ent; "addr1" :: _;
+                                       "cfg2" :: ty_pmpcfg_ent; "addr2" :: _];
              lemma_patterns        := env.nil;
              lemma_precondition    :=
                pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
-               pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1";
+               pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+               pmp2cfg ↦ term_var "cfg2" ∗ pmpaddr2 ↦ term_var "addr2";
              lemma_postcondition   :=
                asn_pmp_entries (term_list [(term_var "cfg0" ,ₜ term_var "addr0");
-                                           (term_var "cfg1" ,ₜ term_var "addr1")]);
+                                           (term_var "cfg1" ,ₜ term_var "addr1");
+                                           (term_var "cfg2" ,ₜ term_var "addr2")]);
           |}.
 
         Definition lemma_extract_pmp_ptsto (bytes : nat) : SepLemma (extract_pmp_ptsto bytes) :=

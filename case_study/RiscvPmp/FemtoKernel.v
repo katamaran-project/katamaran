@@ -256,8 +256,9 @@ Module inv := invariants.
     (* Shorthand for the pmp entries in both Katamaran and Iris *)
     Local Notation asn_femto_pmpentries a :=
       ([(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ (a +ᵇ term_val ty_xlenbits (bv.of_N adv_addr)));
-        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ (term_val ty_xlenbits (bv.of_N adv_addr_end)))])%list.
-    Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_addr); (femto_pmpcfg_ent1, bv.of_N adv_addr_end)]%list.
+        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ (term_val ty_xlenbits (bv.of_N adv_addr_end)));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero))])%list.
+    Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_addr); (femto_pmpcfg_ent1, bv.of_N adv_addr_end); (default_pmpcfg_ent, bv.zero)]%list.
     (* Definition of the femtokernel initialization procedure that works both for the legacy and the MMIO case, since the address of the adversary is equal in both cases *)
     (* note that the addresses we supply assume base address 0 but the code actually only uses relative addresses, so it's okay if it's placed elsewhere in memory.    *)
     Definition femtokernel_init_gen := femtokernel_init' init_addr handler_addr adv_addr.
@@ -283,6 +284,7 @@ Module inv := invariants.
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_regs_ptsto ∗
       (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                      (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
                                       (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])).
 
     Import TermNotations.
@@ -711,8 +713,10 @@ Module inv := invariants.
       interp_gprs ∗
       pmp0cfg ↦ᵣ default_pmpcfg_ent ∗
       pmp1cfg ↦ᵣ default_pmpcfg_ent ∗
+      pmp2cfg ↦ᵣ default_pmpcfg_ent ∗
       (pmpaddr0 ↦ᵣ bv.zero) ∗
-      (pmpaddr1 ↦ᵣ bv.zero)) ∗
+      (pmpaddr1 ↦ᵣ bv.zero) ∗
+      (pmpaddr2 ↦ᵣ bv.zero)) ∗
       pc ↦ᵣ bv.zero ∗
       (∃ v, nextpc ↦ᵣ v) ∗
       ptsto_instrs (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen).
@@ -726,8 +730,10 @@ Module inv := invariants.
         interp_gprs ∗
         pmp0cfg ↦ᵣ femto_pmpcfg_ent0 ∗
         pmp1cfg ↦ᵣ femto_pmpcfg_ent1 ∗
+        pmp2cfg ↦ᵣ default_pmpcfg_ent ∗
         (pmpaddr0 ↦ᵣ (bv.of_N adv_addr)) ∗
-        (pmpaddr1 ↦ᵣ (bv.of_N adv_addr_end))) ∗
+        (pmpaddr1 ↦ᵣ (bv.of_N adv_addr_end)) ∗
+        (pmpaddr2 ↦ᵣ bv.zero)) ∗
         pc ↦ᵣ (bv.of_N adv_addr) ∗
         (∃ v, nextpc ↦ᵣ v) ∗
         ptsto_instrs (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen).
@@ -748,11 +754,11 @@ Module inv := invariants.
     iIntros (Σ sG) "Hpre Hk".
     iApply (sound_sannotated_block_verification_condition lemSemBlockVerif sat__femtoinit [env] $! bv.zero with "[Hpre] [Hk]").
     - unfold femto_init_pre. cbn -[ptsto_instrs].
-      iDestruct "Hpre" as "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1) & Hpc & Hnpc & Hinit)".
+      iDestruct "Hpre" as "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmp1cfg & Hpmp2cfg & Hpmpaddr0 & Hpmpaddr1 & Hpmpaddr2) & Hpc & Hnpc & Hinit)".
       rewrite Model.RiscvPmpModel2.gprs_equiv.
-      now iFrame "Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmp0cfg Hpmp1cfg Hpc Hnpc Hinit Hpmpaddr0 Hpmpaddr1".
-    - iIntros (an) "(Hpc & Hnpc & Hhandler & [%eq _] & (Hmstatus & Hmtvec & Hmcause & Hmepc & Hcp & (Hgprs & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1))))".
-      iApply ("Hk" with "[Hpc $Hnpc $Hhandler $Hmstatus $Hmtvec $Hmcause $Hmepc $Hcp Hgprs $Hpmp0cfg $Hpmpaddr0 $Hpmp1cfg $Hpmpaddr1]").
+      now iFrame "Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmp0cfg Hpmp1cfg Hpmp2cfg Hpc Hnpc Hinit Hpmpaddr0 Hpmpaddr1 Hpmpaddr2".
+    - iIntros (an) "(Hpc & Hnpc & Hhandler & [%eq _] & (Hmstatus & Hmtvec & Hmcause & Hmepc & Hcp & (Hgprs & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpmp2cfg & Hpmpaddr2))))".
+      iApply ("Hk" with "[Hpc $Hnpc $Hhandler $Hmstatus $Hmtvec $Hmcause $Hmepc $Hcp Hgprs $Hpmp0cfg $Hpmpaddr0 $Hpmp1cfg $Hpmpaddr1 $Hpmp2cfg $Hpmpaddr2]").
       cbn in eq. subst.
       rewrite Model.RiscvPmpModel2.gprs_equiv.
       now iFrame.
@@ -772,6 +778,8 @@ Module inv := invariants.
       (reg_pointsTo pmpaddr0 bv.zero) ∗
       reg_pointsTo pmp1cfg default_pmpcfg_ent ∗
       (reg_pointsTo pmpaddr1 bv.zero) ∗
+      reg_pointsTo pmp2cfg default_pmpcfg_ent ∗
+      (reg_pointsTo pmpaddr2 bv.zero) ∗
       (pc ↦ᵣ bv.zero) ∗
       (if negb is_mmio
         then femto_inv_fortytwo
@@ -783,10 +791,10 @@ Module inv := invariants.
       -∗
       WP_loop.
   Proof.
-    iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpc & Hfortytwo & Hadv & Hnextpc & Hinit & Hhandler)".
-    iApply (femto_init_verified with "[$Hmstatus $Hmtvec $Hmcause $Hmepc $Hcurpriv $Hgprs $Hpmp0cfg $Hpmpaddr0 $Hpmp1cfg $Hpmpaddr1 $Hpc $Hinit $Hnextpc]").
-    iIntros "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hpc & Hnextpc & Hinit)".
-    iAssert (interp_pmp_entries femto_pmpentries) with "[Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1]" as "Hpmpents".
+    iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpmp2cfg & Hpmpaddr2 & Hpc & Hfortytwo & Hadv & Hnextpc & Hinit & Hhandler)".
+    iApply (femto_init_verified with "[$Hmstatus $Hmtvec $Hmcause $Hmepc $Hcurpriv $Hgprs $Hpmp0cfg $Hpmpaddr0 $Hpmp1cfg $Hpmpaddr1 $Hpmp2cfg $Hpmpaddr2 $Hpc $Hinit $Hnextpc]").
+    iIntros "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpmp2cfg & Hpmpaddr2) & Hpc & Hnextpc & Hinit)".
+    iAssert (interp_pmp_entries femto_pmpentries) with "[Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1 Hpmp2cfg Hpmpaddr2]" as "Hpmpents".
     { unfold interp_pmp_entries; cbn; iFrame. }
     iApply fupd_wp.
     iMod (femtokernel_manualStep2 with "[Hmstatus $Hmtvec $Hmcause $Hgprs $Hcurpriv $Hpmpents $Hfortytwo $Hpc $Hnextpc $Hhandler $Hadv $Hmepc ]") as "[%mpp Hlooppre]".
@@ -1018,16 +1026,18 @@ Module inv := invariants.
     read_register γ pmpaddr0 = bv.zero ->
     read_register γ pmp1cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr1 = bv.zero ->
+    read_register γ pmp2cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr2 = bv.zero ->
     read_register γ pc = (bv.of_N init_addr) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     (if negb is_mmio then mem_has_word μ' (bv.of_N data_addr) (bv.of_N 42) else mmio_pred bytes_per_word (memory_trace μ')) (* The initial demands hold over the final state *).
   Proof.
-    intros μinit μhandler μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps.
+    intros μinit μhandler μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpmp2cfg γpmpaddr2 γpc steps.
     refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _).
     iIntros (Σ' H).
     cbn.
     iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
-    rewrite γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc.
+    rewrite γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpmp2cfg γpmpaddr2 γpc.
     iMod (femtokernel_splitMemory is_mmio with "Hmem") as "(Hinit & Hhandler & #Hfortytwo & Hadv)";
       try assumption.
     iModIntro.
@@ -1066,6 +1076,8 @@ Module inv := invariants.
     read_register γ pmpaddr0 = bv.zero ->
     read_register γ pmp1cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr1 = bv.zero ->
+    read_register γ pmp2cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr2 = bv.zero ->
     read_register γ pc = (bv.of_N init_addr) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     mmio_pred bytes_per_word (memory_trace μ').

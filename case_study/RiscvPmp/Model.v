@@ -302,9 +302,9 @@ Module RiscvPmpModel2.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       rewrite pmp_entries_ptsto.
-      iIntros "(% & % & % & % & -> & e1 & e2 & e3 & e4)".
+      iIntros "(% & % & % & % & % & % & -> & e1 & e2 & e3 & e4 & e5 & e6)".
       repeat iExists _.
-      now iFrame "e1 e2 e3 e4".
+      now iFrame "e1 e2 e3 e4 e5 e6".
     Qed.
 
     Lemma close_pmp_entries_sound :

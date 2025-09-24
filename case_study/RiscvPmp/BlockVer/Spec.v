@@ -693,7 +693,7 @@ Module RiscvPmpSpecVerif.
 
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
-    destruct H; apply verification_condition_with_erasure_sound; vm_compute;
+    Time destruct H; apply verification_condition_with_erasure_sound; vm_compute;
       constructor; cbn;
       repeat (intros; split; intros);
       repeat match goal with
@@ -706,14 +706,15 @@ Module RiscvPmpSpecVerif.
         | H: negb ?b = true |- _ =>
             apply Bool.negb_true_iff in H;
             subst
-        | H1: ?a <=ᵘ ?b, H2: ?b <ᵘ ?a |- False =>
-            unfold bv.ult, bv.ule in *; apply N.le_ngt in H1; apply (H1 H2)
+        (* | H1: ?a <=ᵘ ?b, H2: ?b <ᵘ ?a |- False =>
+            unfold bv.ult, bv.ule in *; apply N.le_ngt in H1; apply (H1 H2) *)
         end;
       subst;
       unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *;
       simpl in *;
       try discriminate;
-      try Lia.lia.
+      try Lia.lia;
+      try bv.bv_zify.
   Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
