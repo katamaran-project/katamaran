@@ -1006,7 +1006,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         let: tmp2 := stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg) in
         exp_zext (exp_binop bop.bvapp tmp1 tmp2)
     | MPMP1CFG  =>
-        let: tmp1 := stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg) in
+        let: tmp1 := stm_pmpcfg_ent_to_bits (stm_read_register pmp2cfg) in
         let: tmp2 := stm_val (ty.bvec 8) Bitvector.bv.zero in (* NOTE: no support for fourth cfg (pmp3cfg) *)
         exp_zext (exp_binop bop.bvapp tmp1 tmp2)
     | MPMPADDR0 => stm_read_register pmpaddr0
