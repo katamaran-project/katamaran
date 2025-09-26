@@ -585,7 +585,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        lemma_patterns        := [term_var "paddr"; term_var "r"];
        lemma_precondition    :=
         ((term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm))) ∗
-        ( term_var "r") ↦ᵣ (term_var "w");
+        (term_var "r") ↦ᵣ (term_var "w") ∗
+        (term_binop bop.bvand (term_var "w") (term_val ty_word (bv.of_N 1)) =  (term_val ty_word (bv.of_N 0)));
       lemma_postcondition   :=
         asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w")) ∗
       ( term_var "r") ↦ᵣ (term_var "w");
@@ -963,7 +964,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width).
   Proof.
     intros ι; destruct_syminstance ι; cbn.
-    iIntros "([<- _] & Hmmio)".
+    iIntros "([<- _] & Hmmio & _)".
     unfold interp_mmio_checked_write.
     iFrame.
     iPureIntro.
