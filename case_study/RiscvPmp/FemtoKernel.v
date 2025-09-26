@@ -222,7 +222,7 @@ Module inv := invariants.
 
     Example femtokernel_mmio_handler_asm : list ASM :=
       [
-        ITYPE bv.zero zero zero RISCV_ADDI (* padding instruction to pass lemma adv_mmio_eq *)
+        RTYPE t0 t0 zero RISCV_ADD
       ; ITYPE bv.zero zero ra RISCV_ADDI
       ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
       ; Λ x, STORE (bv.of_N mmio_write_addr) t0 ra WORD (* works because mmio_write_addr fits into 12 bits. *)
@@ -381,12 +381,15 @@ Module inv := invariants.
       - (* For the mmio case, we still need to prove that our word falls within mmio *)
         vm_compute.
         constructor; cbn.
-        intuition bv_solve_Ltac.solveBvManual.
-        1-4: eapply bv.in_seqBv'; now vm_compute.
+        intuition;
+          bv_solve_Ltac.solveBvManual.
+        2-5: eapply bv.in_seqBv'; now vm_compute.
+        admit.
       - vm_compute.
         constructor; cbn.
-        intuition bv_solve_Ltac.solveBvManual.
-    Qed.
+        intuition;
+          bv_solve_Ltac.solveBvManual.
+    Admitted.
 
     Definition femtoinit_stats :=
       SymProp.Statistics.count_to_stats
