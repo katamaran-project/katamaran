@@ -223,7 +223,7 @@ Module inv := invariants.
 
     Example femtokernel_mmio_handler_asm : list ASM :=
       [
-        RTYPE t0 t0 zero RISCV_ADD
+        RTYPE t0 t0 t0 RISCV_ADD
       ; ITYPE bv.zero zero ra RISCV_ADDI
       ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
       ; Λ x, STORE (bv.of_N mmio_write_addr) t0 ra WORD (* works because mmio_write_addr fits into 12 bits. *)
@@ -323,7 +323,7 @@ Module inv := invariants.
 
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
     Example femtokernel_handler_pre (is_mmio : bool) : Assertion ["a" :: ty_xlenbits] :=
-      (* (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗ *)
+      (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
       (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
       (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
