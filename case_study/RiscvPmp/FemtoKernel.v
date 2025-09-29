@@ -366,6 +366,21 @@ Module inv := invariants.
     (* Set Printing Depth 200. *)
     (* Eval vm_compute in vc__femtohandler. *)
 
+
+    Lemma even_iff_land1: forall n, N.even n <-> N.land n 1 = 0%N.
+    Proof.
+      split;
+        destruct n; auto; destruct p; auto;
+        intros H; inversion H.
+    Qed.
+
+    Lemma even_trunc: forall (m : nat) (n : N), N.even n -> N.even (bv.truncn m n).
+    Proof.
+      intros m n Heven. destruct n; destruct m; auto; destruct p; auto.
+      - inversion Heven.
+      - simpl. destruct (bv.trunc m p); auto.
+    Qed.
+
     Import Erasure.notations.
     Lemma sat__femtohandler : safeE vc__femtohandler.
     Proof.
