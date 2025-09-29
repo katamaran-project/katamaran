@@ -369,6 +369,21 @@ Module inv := invariants.
     (* Set Printing Depth 200. *)
     (* Eval vm_compute in vc__femtohandler. *)
 
+
+    Lemma even_iff_land1: forall n, N.even n <-> N.land n 1 = 0%N.
+    Proof.
+      split;
+        destruct n; auto; destruct p; auto;
+        intros H; inversion H.
+    Qed.
+
+    Lemma even_trunc: forall (m : nat) (n : N), N.even n -> N.even (bv.truncn m n).
+    Proof.
+      intros m n Heven. destruct n; destruct m; auto; destruct p; auto.
+      - inversion Heven.
+      - simpl. destruct (bv.trunc m p); auto.
+    Qed.
+
     Import Erasure.notations.
     Lemma sat__femtohandler (is_mmio : bool) : safeE (vc__femtohandler is_mmio).
     Proof.
@@ -379,12 +394,15 @@ Module inv := invariants.
         intuition;
           bv_solve_Ltac.solveBvManual.
         2-5: eapply bv.in_seqBv'; now vm_compute.
-        admit.
+        unfold bv.land.
+        assert (Heventrunc: N.even (bv.truncn 32 (2 * bv.bin (n := 32) v5))).
+        { apply even_trunc. rewrite N.even_mul. done. }
+        apply even_iff_land1 in Heventrunc.  rewrite Heventrunc. done.
       - vm_compute.
         constructor; cbn.
         intuition;
           bv_solve_Ltac.solveBvManual.
-    Admitted.
+    Qed.
 
     Definition femtoinit_stats :=
       SymProp.Statistics.count_to_stats
