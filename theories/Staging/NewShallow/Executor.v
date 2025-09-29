@@ -741,15 +741,15 @@ Module Type NewShallowExecOn
                 (fun pc δpc => pushspops δpc (exec (rhs pc)))
             | stm_read_register reg =>
               v <- angelic τ ;;
-              let c := scchunk_ptsreg reg v in
+              let c := chunk_ptsreg reg v in
               _ <- lift_purem (CPureSpecM.consume_chunk c) ;;
               _ <- lift_purem (CPureSpecM.produce_chunk c) ;;
               pure v
             | stm_write_register reg e =>
               v__old <- angelic τ ;;
-              _    <- lift_purem (CPureSpecM.consume_chunk (scchunk_ptsreg reg v__old)) ;;
+              _    <- lift_purem (CPureSpecM.consume_chunk (chunk_ptsreg reg v__old)) ;;
               v__new <- eval_exp e ;;
-              _    <- lift_purem (CPureSpecM.produce_chunk (scchunk_ptsreg reg v__new)) ;;
+              _    <- lift_purem (CPureSpecM.produce_chunk (chunk_ptsreg reg v__new)) ;;
               pure v__new
             | stm_bind s k =>
               v <- exec s ;;
