@@ -35,8 +35,10 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BinaryBlockVer.Spec
-     RiscvPmp.BinaryBlockVer.Verifier
+     RiscvPmp.TotalBlockVer.Spec
+     RiscvPmp.TotalBlockVer.Verifier
+     RiscvPmp.BlockVer.Spec
+     RiscvPmp.BlockVer.Verifier
      RiscvPmp.Machine
      RiscvPmp.Sig.
 
@@ -96,6 +98,7 @@ Module UnaryCheck.
   (* UnaryCheck contains a unary version of the contracts. This is used as a
      sanity check to be confident that, when we split the binary verification
      into two unary ones, it should hold. *)
+
   Section WithAsnNotations.
     Import AsnNotations.
 
@@ -121,7 +124,7 @@ Module UnaryCheck.
   End WithAsnNotations.
 
   Definition vc_code : 𝕊 ε :=
-    postprocess (sblock_verification_condition PRE code POST wnil).
+    postprocess (BlockVer.Verifier.sblock_verification_condition PRE code POST wnil).
 
   Lemma sat_code : safeE vc_code.
   Proof.
