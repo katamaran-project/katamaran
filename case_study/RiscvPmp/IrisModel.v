@@ -82,6 +82,8 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
 
   Definition WP_loop `{sg : sailGS Σ} : iProp Σ :=
     semWP env.nil (FunDef loop) (fun _ _ => True%I).
+  Definition TWP_loop `{sg : sailGS Σ} : iProp Σ :=
+    semTWP env.nil (FunDef loop) (fun _ _ => True%I).
 
   (* Useful instance for some of the Iris proofs *)
   #[export] Instance state_inhabited : Inhabited State.

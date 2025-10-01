@@ -315,24 +315,16 @@ Section BlockVerificationDerived.
     (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
 
     Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : Val ty_word -> iProp Σ) (a : Val ty_word) : iProp Σ :=
-      semTriple [env] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
+      semTTriple [env] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
         (FunDef RiscvPmpProgram.step)
         (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a instr)%I.
 
     Definition semTripleBlock (PRE : Val ty_word -> iProp Σ) (instrs : list AST) (POST : Val ty_word -> Val ty_word -> iProp Σ) : iProp Σ :=
       (∀ a,
          (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs) -∗
-         (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ WP_loop) -∗
-         WP_loop)%I.
+         (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ TWP_loop) -∗
+         TWP_loop)%I.
     #[global] Arguments semTripleBlock PRE%_I instrs POST%_I.
-
-    Lemma sound_stm_aux {τ} {PRE} {s : Stm [ctx] τ} {POST} :
-      ⦃ PRE ⦄ s; [env] ⦃ POST ⦄ → ⊢ semTriple [env] PRE s POST.
-    Proof.
-      iIntros (Htrip) "PRE".
-      iApply sound_stm; eauto using foreignSemBlockVerif, lemSemBlockVerif.
-      iApply contractsSound.
-    Qed.
 
     Lemma sound_exec_instruction {instr} a Φ (h : SCHeap) :
       cexec_instruction instr a Φ h ->
@@ -345,21 +337,24 @@ Section BlockVerificationDerived.
       cbn - [consume].
       iIntros (Hverif) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
       specialize (Hverif npc). apply sound_cexec in Hverif.
-      iApply (semWP_mono with "[-]").
-      iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
-      iApply contractsSound.
-      iIntros ([v|m] _); last done; iIntros "(%h1 & Hh1 & %Htrip)". clear Hverif.
-      destruct Htrip as [an Htrip].
-      iPoseProof (consume_sound _ _ Htrip with "Hh1")
-        as "[(Hpc & $ & Han) (%h2 & Hh2 & %HΦ)]".
-      iExists an. cbn. by iFrame.
+      iApply (semTWP_mono with "[-]").
+      iApply (sound_tstm (callgraph.mkNode step) TforeignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
+      - apply callgraph.InvokedByStmList_WellFormed_aux; auto.
+      - iIntros (n R) "!>". iApply TcontractsSound. iPureIntro.
+        apply (Transitive_Closure.Acc_inv_trans _ _ _ _ R).
+        apply accessible_step.
+      - iIntros ([v|m] _); last done; iIntros "(%h1 & Hh1 & %Htrip)". clear Hverif.
+        destruct Htrip as [an Htrip].
+        iPoseProof (consume_sound _ _ Htrip with "Hh1")
+          as "[(Hpc & $ & Han) (%h2 & Hh2 & %HΦ)]".
+        iExists an. cbn. by iFrame.
     Qed.
 
     Lemma sound_exec_block_addr {instrs ainstr apc} Φ (h : SCHeap) :
       cexec_block_addr instrs ainstr apc Φ h ->
       interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs ⊢
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs ∗
-             (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ WP_loop) -∗ WP_loop.
+             (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ TWP_loop) -∗ TWP_loop.
     Proof.
       revert ainstr apc Φ h.
       induction instrs as [|instr instrs]; cbn; intros ainstr apc Φ h;
@@ -368,18 +363,18 @@ Section BlockVerificationDerived.
       - intros HΦ. iIntros "(Hpre & Hpc & Hnpc & _) Hk".
         iApply "Hk"; iFrame; auto.
       - intros [-> Hverif%sound_exec_instruction].
-        unfold semTripleOneInstrStep, semTriple in Hverif.
+        unfold semTripleOneInstrStep, semTTriple in Hverif.
         iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs) Hk".
-        iApply semWP_seq.
-        iApply semWP_call_inline.
-        iApply (semWP_mono with "[-Hinstrs Hk] [Hinstrs Hk]").
+        iApply semTWP_seq.
+        iApply semTWP_call_inline.
+        iApply (semTWP_mono with "[-Hinstrs Hk] [Hinstrs Hk]").
         iApply Hverif. iFrame. clear Hverif.
         cbn.
-        iIntros ([v|m] _); last (iIntros "_"; now rewrite semWP_fail);
+        iIntros ([v|m] _); last (iIntros "_"; now rewrite semTWP_fail);
           iIntros "([%an (Hnpc & Hpc & Hk2)] & Hinstr)".
         iDestruct "Hk2" as "(%h' & Hh' & %Hexec)".
         specialize (IHinstrs _ _ _ _ Hexec). clear Hexec.
-        iApply (semWP_call_inline loop).
+        iApply (semTWP_call_inline loop).
         iApply (IHinstrs with "[$Hh' $Hpc Hnpc $Hinstrs]").
         { now iExists an. }
         iIntros (an2) "(Hpc & Hnpc & Hinstrs & HPOST)".
@@ -668,8 +663,8 @@ Section AnnotatedBlockVerification.
       LemmaSem ->
       cexec_annotated_block_addr instrs ainstr apc (fun res h' => interpret_scheap h' ⊢ POST res) h ->
       ⊢ ((interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs)) -∗
-         (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) ∗ POST an -∗ WP_loop) -∗
-         WP_loop)%I.
+         (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) ∗ POST an -∗ TWP_loop) -∗
+         TWP_loop)%I.
     Proof.
       intros lemSem.
       revert ainstr apc h POST.
@@ -681,14 +676,14 @@ Section AnnotatedBlockVerification.
         destruct instr as [instr| |Δ lem es].
         + intros [-> Hverif]. cbn [extract_AST ptsto_instrs].
           iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs) Hk".
-          iApply semWP_seq.
-          iApply semWP_call_inline.
-          iApply (semWP_mono with "[Hh Hnpc Hpc Hinstr]").
+          iApply semTWP_seq.
+          iApply semTWP_call_inline.
+          iApply (semTWP_mono with "[Hh Hnpc Hpc Hinstr]").
           { iApply (sound_exec_instruction Hverif). iFrame. }
           clear Hverif.
-          iIntros ([v|m] _); last (iIntros "_"; now rewrite semWP_fail);
+          iIntros ([v|m] _); last (iIntros "_"; now rewrite semTWP_fail);
             iIntros "([%an (Hnpc & Hpc & (%h2 & Hh2 & %Hverif))] & Hinstr)".
-          iApply (semWP_call_inline loop).
+          iApply (semTWP_call_inline loop).
           specialize (IHinstrs _ _ _ _ Hverif).
           iApply (IHinstrs with "[$Hh2 $Hpc Hnpc $Hinstrs]").
           by iExists _.
@@ -711,8 +706,8 @@ Section AnnotatedBlockVerification.
       (instrs : list AnnotInstr) (POST : Val ty_word -> Val ty_word -> iProp Σ) : iProp Σ :=
       (∀ a,
          (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
-         (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ POST a an -∗ WP_loop) -∗
-         WP_loop)%I.
+         (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ POST a an -∗ TWP_loop) -∗
+         TWP_loop)%I.
     Global Arguments semTripleAnnotatedBlock PRE%_I instrs POST%_I.
 
     Lemma sound_cexec_annotated_block_triple_addr {Γ pre post instrs} :
