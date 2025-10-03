@@ -33,7 +33,8 @@ From Katamaran Require Import
      Base
      Semantics.Registers
      Syntax.FunDecl
-     Syntax.Statements.
+     Syntax.Statements
+.
 
 Module Type FunDefKit (Import B : Base) (Import F : FunDecl B).
   Include RegStoreKit B.
@@ -47,7 +48,7 @@ Module Type FunDefKit (Import B : Base) (Import F : FunDecl B).
     forall
       {Δ σ} (f : 𝑭𝑿 Δ σ)
       (args : CStore Δ)
-      (res  : string + Val σ)
+      (res  : RelVal ty.string + RelVal σ)
       (γ γ' : RegStore)
       (μ μ' : Memory), Prop.
   Parameter ForeignProgress :

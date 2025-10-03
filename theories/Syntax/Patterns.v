@@ -28,6 +28,9 @@
 
 Require Import stdpp.base.
 
+From Equations Require Import
+  Equations.
+
 From Katamaran Require Import
      Prelude
      Context
@@ -405,51 +408,120 @@ Module Type PatternsOn (Import TY : Types).
       (*   now rewrite <- Heq, H. *)
     Qed.
 
+    Definition MatchResultRel {σ} (pat : Pattern σ) : Type :=
+      { c : PatternCase pat & NamedEnv RelVal (PatternCaseCtx c) }.
+    #[global] Arguments MatchResult {σ} !pat /.
+
+    Definition matchResultToMatchResultRel {σ} {pat : Pattern σ} :
+      MatchResult pat -> MatchResultRel pat :=
+      fun mr =>
+        existT (projT1 mr) (env.map (fun b => ty.valToRelVal) (projT2 mr)).
+
+
+
     (* Pattern match on a value. The result is a [PatternCase] that represents
        the alternative corresponding to the value, together with an environment
        that maps the variables of the pattern to values. *)
-    Definition pattern_match_relval {σ} (p : Pattern σ) (rv : RelVal σ) : option (MatchResult p) :=
-      fmap (pattern_match_val p) (ty.RVToOption rv).
-    #[global] Arguments pattern_match_relval {σ} !p rv.
+    Definition pattern_match_relval {σ} (p : Pattern σ) (rv : RelVal σ) : option (MatchResultRel p) :=
+      option_map matchResultToMatchResultRel (option_map (pattern_match_val p) (ty.RVToOption rv)).
+    #[global] Arguments pattern_match_relval {σ} p !rv.
 
     (* Reverse a pattern match. Given a [PatternCase] and an environment with
        values for all variables in the pattern, reconstruct a value. *)
     Definition pattern_match_relval_reverse {σ} (p : Pattern σ) :
-      forall (pc : PatternCase p), option (NamedEnv Val (PatternCaseCtx pc)) -> option (Val σ) :=
+      forall (pc : PatternCase p), NamedEnv RelVal (PatternCaseCtx pc) -> RelVal σ :=
      fun pc onenv =>
-       fmap (pattern_match_val_reverse p pc) onenv.
+       ty.liftUnOpRV (pattern_match_val_reverse p pc) (ty.unliftNamedEnv onenv).
 
     (* A curried version of the above. *)
     Definition pattern_match_relval_reverse' {σ} (p : Pattern σ) :
-      option (MatchResult p) -> option (Val σ) :=
-      fmap (pattern_match_val_reverse' p).
+      MatchResultRel p -> RelVal σ :=
+      fun c => pattern_match_relval_reverse p (projT1 c) (projT2 c).
 
+    Lemma unliftIsSyncValImpliesAllSync {c} {n : NamedEnv RelVal c} {n0 : NamedEnv Val c}
+      (H : ty.unliftNamedEnv n = SyncVal n0) :
+      env.map (λ b : N∷Ty, SyncVal) n0 = n.
+    Proof.
+      induction n0.
+      + destruct (env.view n).
+        auto.
+      + destruct (env.view n). cbn. specialize (IHn0 E).
+        destruct v; cbn in H.
+        * destruct ty.unliftNamedEnv; try discriminate H;
+            dependent elimination H. f_equal. auto.
+        * destruct (ty.unliftNamedEnv E); discriminate H.
+    Qed.
+      
     Lemma pattern_match_relval_inverse_right' {σ} (p : Pattern σ) :
-      forall (r : option (MatchResult p)),
-        fmap (pattern_match_val p) (pattern_match_relval_reverse' p r) = r.
+      forall (r : MatchResultRel p),
+        pattern_match_relval p (pattern_match_relval_reverse' p r) =
+          match ty.unliftNamedEnv (projT2 r) with
+          | SyncVal _ => Some r
+          | _ => None
+          end
+    .
     Proof.
       intros r.
       destruct r.
-      - cbn. rewrite pattern_match_val_inverse_right'. reflexivity.
-      - reflexivity.
+      unfold pattern_match_relval_reverse'.
+      unfold pattern_match_relval_reverse.
+      unfold pattern_match_relval.
+      cbn.
+      destruct (ty.unliftNamedEnv n) as [|] eqn:H.
+      - cbn in *.
+        change (pattern_match_val_reverse p x n0) with
+          (pattern_match_val_reverse' p (existT x n0)).
+        rewrite pattern_match_val_inverse_right'.
+        apply f_equal.
+        unfold matchResultToMatchResultRel.
+        apply f_equal. cbn.
+        generalize dependent (PatternCaseCtx x).
+        intros.
+        now apply unliftIsSyncValImpliesAllSync.
+      - auto.
     Qed.
 
     Lemma pattern_match_relval_inverse_right {σ} (pat : Pattern σ)
-      (pc : PatternCase pat) (δpc : option (NamedEnv Val (PatternCaseCtx pc))) :
-      fmap (pattern_match_val pat) (pattern_match_relval_reverse pat pc δpc) = fmap (existT pc) δpc.
+      (pc : PatternCase pat) (δpc : NamedEnv RelVal (PatternCaseCtx pc)) :
+      pattern_match_relval pat (pattern_match_relval_reverse pat pc δpc) =
+        match ty.unliftNamedEnv δpc with
+        | SyncVal _ => Some (existT pc δpc)
+        | _ => None
+        end
+    .
     Proof.
-      destruct δpc.
-      - cbn. rewrite pattern_match_val_inverse_right. reflexivity.
-      - reflexivity.
+      unfold pattern_match_relval_reverse.
+      destruct (ty.unliftNamedEnv δpc) as [|] eqn:H.
+      - cbn. repeat rewrite pattern_match_val_inverse_right.
+        unfold matchResultToMatchResultRel. cbn. f_equal. f_equal.
+        now apply unliftIsSyncValImpliesAllSync.
+      - auto.
     Qed.
 
+    Lemma unliftNamedEnvOfEnvMapValToRelValIsSyncVal {Γ} {nenv : NamedEnv Val Γ} :
+      ty.unliftNamedEnv (env.map (λ b : N∷Ty, ty.valToRelVal) nenv) = SyncVal nenv.
+    Proof.
+      induction nenv.
+      - auto.
+      - cbn. destruct (ty.unliftNamedEnv (env.map (λ b0 : N∷Ty, ty.valToRelVal) nenv)).
+        + inversion IHnenv. auto.
+        + inversion IHnenv.
+    Qed.
+        
     Lemma pattern_match_relval_inverse_left {σ} (pat : Pattern σ) :
       forall rv : RelVal σ,
-        pattern_match_relval_reverse' pat (pattern_match_relval pat rv) = ty.RVToOption rv.
+        option.map (pattern_match_relval_reverse' pat) (pattern_match_relval pat rv) = option.map SyncVal (ty.RVToOption rv).
     Proof.
       destruct rv.
-      - unfold pattern_match_relval. cbn. rewrite pattern_match_val_inverse_left. reflexivity.
-      - reflexivity.
+      - cbn. f_equal. unfold pattern_match_relval_reverse'. unfold pattern_match_relval_reverse. unfold matchResultToMatchResultRel. cbn.
+        rewrite unliftNamedEnvOfEnvMapValToRelValIsSyncVal.
+        cbn.
+        change (pattern_match_val_reverse pat (projT1 ?x)
+                  (projT2 ?x)) with
+          (pattern_match_val_reverse' pat (pattern_match_val pat v)).
+        rewrite pattern_match_val_inverse_left.
+        auto.
+      - auto.
     Qed.
   
 

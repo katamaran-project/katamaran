@@ -46,154 +46,158 @@ Module Type ProgramLogicOn
   (Import SIG : Signature B)
   (Import PROG : Program B)
   (Import SPEC : Specification B SIG PROG).
-Module ProgramLogic.
+  Module ProgramLogic.
 
-  Section Triples.
+    Section Triples.
 
-    Context {L : bi} {PI : PredicateDef L}.
+      Context {L : bi} {PI : PredicateDef L}.
 
-    (* Hoare triples for SepContract *)
+      (* Hoare triples for SepContract *)
 
-    Definition CTriple {Δ σ} (pre : L) (c : SepContract Δ σ) (δΔ : CStore Δ) (post : Val σ -> L) : Prop :=
-      match c with
-      | MkSepContract _ _ Σe θΔ req result ens =>
-          pre ⊢ ∃ ι : Valuation Σe, ⌜δΔ = inst θΔ ι⌝ ∧ asn.interpret req ι ∗
-                ∀ v : Val σ, asn.interpret ens (env.snoc ι (result∷σ) v) -∗ post v
-      end.
+      Definition CTriple {Δ σ} (pre : L) (c : SepContract Δ σ) (δΔ : CStore Δ) (post : RelVal σ -> L) : Prop :=
+        match c with
+        | MkSepContract _ _ Σe θΔ req result ens =>
+            pre ⊢ ∃ ι : Valuation Σe, ⌜δΔ = inst θΔ ι⌝ ∧ asn.interpret req ι ∗
+                                                           ∀ v : RelVal σ, asn.interpret ens (env.snoc ι (result∷σ) v) -∗ post v
+        end.
 
-    Inductive LTriple {Δ} (δΔ : CStore Δ) (pre post : L) :
-      Lemma Δ -> Prop :=
-    | rule_ltriple
-        (Σ  : LCtx) (θΔ : SStore Δ Σ) (req ens : Assertion Σ) :
+      Inductive LTriple {Δ} (δΔ : CStore Δ) (pre post : L) :
+        Lemma Δ -> Prop :=
+      | rule_ltriple
+          (Σ  : LCtx) (θΔ : SStore Δ Σ) (req ens : Assertion Σ) :
         (pre ⊢ ∃ ι : Valuation Σ, ⌜δΔ = inst θΔ ι⌝ ∧ asn.interpret req ι ∗
-                 (asn.interpret ens ι -∗ post)) ->
+                                                       (asn.interpret ens ι -∗ post)) ->
         LTriple δΔ pre post (MkLemma _ _ θΔ req ens).
 
-    Inductive Triple {Γ : PCtx} (δ : CStore Γ) {τ : Ty} :
-      forall  (pre : L) (s : Stm Γ τ) (post :  Val τ -> CStore Γ -> L), Prop :=
-    | rule_consequence
-        {s : Stm Γ τ} {P P' : L} {Q Q' : Val τ -> CStore Γ -> L}
-        (Hleft : P ⊢ P') (Hright : forall v δ', Q' v δ' ⊢ Q v δ') :
+      Inductive Triple {Γ : PCtx} (δ : CStore Γ) {τ : Ty} :
+        forall  (pre : L) (s : Stm Γ τ) (post :  RelVal τ -> CStore Γ -> L), Prop :=
+      | rule_consequence
+          {s : Stm Γ τ} {P P' : L} {Q Q' : RelVal τ -> CStore Γ -> L}
+          (Hleft : P ⊢ P') (Hright : forall v δ', Q' v δ' ⊢ Q v δ') :
         ⦃ P' ⦄ s ; δ ⦃ Q' ⦄ ->
-        ⦃ P ⦄ s ; δ ⦃ Q ⦄
+                   ⦃ P ⦄ s ; δ ⦃ Q ⦄
     | rule_frame
-        (s : Stm Γ τ) (R P : L) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
-        ⦃ R ∗ P ⦄ s ; δ ⦃ fun v δ' => R ∗ Q v δ' ⦄
+        (s : Stm Γ τ) (R P : L) (Q : RelVal τ -> CStore Γ -> L) :
+      ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
+                ⦃ R ∗ P ⦄ s ; δ ⦃ fun v δ' => R ∗ Q v δ' ⦄
     | rule_pull
-        (s : Stm Γ τ) (P : L) (Q : Prop) (R : Val τ -> CStore Γ -> L) :
-        (Q -> ⦃ P ⦄ s ; δ ⦃ R ⦄) ->
-        ⦃ P ∧ ⌜Q⌝ ⦄ s ; δ ⦃ R ⦄
+        (s : Stm Γ τ) (P : L) (Q : Prop) (R : RelVal τ -> CStore Γ -> L) :
+      (Q -> ⦃ P ⦄ s ; δ ⦃ R ⦄) ->
+      ⦃ P ∧ ⌜Q⌝ ⦄ s ; δ ⦃ R ⦄
     | rule_exist
-        (s : Stm Γ τ) {A : Type} {P : A -> L} {Q : Val τ -> CStore Γ -> L} :
-        (forall x, ⦃ P x ⦄ s ; δ ⦃ Q ⦄) ->
-        ⦃ ∃ x, P x ⦄ s ; δ ⦃ Q ⦄
+        (s : Stm Γ τ) {A : Type} {P : A -> L} {Q : RelVal τ -> CStore Γ -> L} :
+      (forall x, ⦃ P x ⦄ s ; δ ⦃ Q ⦄) ->
+      ⦃ ∃ x, P x ⦄ s ; δ ⦃ Q ⦄
     | rule_stm_val
-        {l : Val τ} {P : L} {Q : Val τ -> CStore Γ -> L} :
-        (P ⊢ Q l δ) ->
-        ⦃ P ⦄ stm_val τ l ; δ ⦃ Q ⦄
+        {l : Val τ} {P : L} {Q : RelVal τ -> CStore Γ -> L} :
+      (P ⊢ Q (ty.valToRelVal l) δ) ->
+      ⦃ P ⦄ stm_val τ l ; δ ⦃ Q ⦄
+    | rule_stm_relval
+        {l : RelVal τ} {P : L} {Q : RelVal τ -> CStore Γ -> L} :
+      (P ⊢ Q l δ) ->
+      ⦃ P ⦄ stm_relval τ l ; δ ⦃ Q ⦄
     | rule_stm_exp
-        {e : Exp Γ τ} {P : L} {Q : Val τ -> CStore Γ -> L} :
-        (P ⊢ Q (eval e δ) δ) ->
-        ⦃ P ⦄ stm_exp e ; δ ⦃ Q ⦄
+        {e : Exp Γ τ} {P : L} {Q : RelVal τ -> CStore Γ -> L} :
+      (P ⊢ Q (eval e δ) δ) ->
+      ⦃ P ⦄ stm_exp e ; δ ⦃ Q ⦄
     | rule_stm_let
         (x : PVar) (σ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
-        (P : L) (Q : Val σ -> CStore Γ -> L)
-        (R : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
-        (forall (v : Val σ) (δ' : CStore Γ),
-            ⦃ Q v δ' ⦄ k ; env.snoc δ' (x∷σ) v ⦃ fun v δ'' => R v (env.tail δ'') ⦄ ) ->
-        ⦃ P ⦄ let: x := s in k ; δ ⦃ R ⦄
+        (P : L) (Q : RelVal σ -> CStore Γ -> L)
+        (R : RelVal τ -> CStore Γ -> L) :
+      ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
+                (forall (v : RelVal σ) (δ' : CStore Γ),
+                    ⦃ Q v δ' ⦄ k ; env.snoc δ' (x∷σ) v ⦃ fun v δ'' => R v (env.tail δ'') ⦄ ) ->
+                ⦃ P ⦄ let: x := s in k ; δ ⦃ R ⦄
     | rule_stm_block
         (Δ : PCtx) (δΔ : CStore Δ)
         (k : Stm (Γ ▻▻ Δ) τ)
-        (P : L) (R : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ k ; δ ►► δΔ ⦃ fun v δ'' => R v (env.drop Δ δ'') ⦄ ->
-        ⦃ P ⦄ stm_block δΔ k ; δ ⦃ R ⦄
+        (P : L) (R : RelVal τ -> CStore Γ -> L) :
+      ⦃ P ⦄ k ; δ ►► δΔ ⦃ fun v δ'' => R v (env.drop Δ δ'') ⦄ ->
+                ⦃ P ⦄ stm_block δΔ k ; δ ⦃ R ⦄
     | rule_stm_seq
         (σ : Ty) (s1 : Stm Γ σ) (s2 : Stm Γ τ)
-        (P : L) (Q : Val σ -> CStore Γ -> L) (R : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ s1 ; δ ⦃ Q ⦄ ->
-        (forall v δ', ⦃ Q v δ' ⦄ s2 ; δ' ⦃ R ⦄) ->
-        ⦃ P ⦄ s1 ;; s2 ; δ ⦃ R ⦄
+        (P : L) (Q : RelVal σ -> CStore Γ -> L) (R : RelVal τ -> CStore Γ -> L) :
+      ⦃ P ⦄ s1 ; δ ⦃ Q ⦄ ->
+                 (forall v δ', ⦃ Q v δ' ⦄ s2 ; δ' ⦃ R ⦄) ->
+                 ⦃ P ⦄ s1 ;; s2 ; δ ⦃ R ⦄
     | rule_stm_assert
         (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        (eval e1 δ = true -> ⦃ P ⦄ k ; δ ⦃ Q ⦄) ->
-        ⦃ P ⦄ stm_assertk e1 e2 k ; δ ⦃ Q ⦄
+        (P : L) (Q : RelVal τ -> CStore Γ -> L) :
+      (match eval e1 δ with SyncVal v => v = true | _ => False end -> ⦃ P ⦄ k ; δ ⦃ Q ⦄) ->
+      ⦃ P ⦄ stm_assertk e1 e2 k ; δ ⦃ Q ⦄
     | rule_stm_fail
-        (s : Val ty.string) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ True ⦄ stm_fail τ s ; δ ⦃ Q ⦄
+        (s : RelVal ty.string) (Q : RelVal τ -> CStore Γ -> L) :
+      ⦃ True ⦄ stm_fail τ s ; δ ⦃ Q ⦄
     | rule_stm_read_register
-        (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
-        ⦃ lptsreg r v ⦄
-          stm_read_register r ; δ
-        ⦃ fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = v⌝ ∧ lptsreg r v ⦄
+        (r : 𝑹𝑬𝑮 τ) (v : RelVal τ) :
+      ⦃ lptsreg r v ⦄
+        stm_read_register r ; δ
+                                ⦃ fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = v⌝ ∧ lptsreg r v ⦄
     | rule_stm_write_register
-        (r : 𝑹𝑬𝑮 τ) (w : Exp Γ τ) (v : Val τ)
-        (Q : Val τ -> CStore Γ -> L) :
-        ⦃ lptsreg r v ⦄
-          stm_write_register r w ; δ
-        ⦃ fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v' ⦄
+        (r : 𝑹𝑬𝑮 τ) (w : Exp Γ τ) (v : RelVal τ)
+        (Q : RelVal τ -> CStore Γ -> L) :
+      ⦃ lptsreg r v ⦄
+        stm_write_register r w ; δ
+                                   ⦃ fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v' ⦄
     | rule_stm_assign
         (x : PVar) (xIn : (x∷τ ∈ Γ)%katamaran) (s : Stm Γ τ)
-        (P : L) (R : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ s ; δ ⦃ fun v δ' => R v (δ' ⟪ x ↦ v ⟫)%env ⦄ ->
-        ⦃ P ⦄ stm_assign x s ; δ ⦃ R ⦄
+        (P : L) (R : RelVal τ -> CStore Γ -> L) :
+      ⦃ P ⦄ s ; δ ⦃ fun v δ' => R v (δ' ⟪ x ↦ v ⟫)%env ⦄ ->
+                ⦃ P ⦄ stm_assign x s ; δ ⦃ R ⦄
     | rule_stm_call
         {Δ} {f : 𝑭 Δ τ} {es : NamedEnv (Exp Γ) Δ} {c : SepContract Δ τ}
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        CEnv f = Some c ->
-        CTriple P c (evals es δ) (fun v => Q v δ) ->
-        ⦃ P ⦄ stm_call f es ; δ ⦃ Q ⦄
+        (P : L) (Q : RelVal τ -> CStore Γ -> L) :
+      CEnv f = Some c ->
+      CTriple P c (evals es δ) (fun v => Q v δ) ->
+      ⦃ P ⦄ stm_call f es ; δ ⦃ Q ⦄
     | rule_stm_call_inline
         {Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ FunDef f ; evals es δ ⦃ fun v _ => Q v δ ⦄ ->
-        ⦃ P ⦄ stm_call f es ; δ ⦃ Q ⦄
+        (P : L) (Q : RelVal τ -> CStore Γ -> L) :
+      ⦃ P ⦄ FunDef f ; evals es δ ⦃ fun v _ => Q v δ ⦄ ->
+                       ⦃ P ⦄ stm_call f es ; δ ⦃ Q ⦄
     | rule_stm_call_frame (* TODO: remove stm_call_frame (similar for bind and block then) *)
         (Δ : PCtx) (δΔ : CStore Δ) (s : Stm Δ τ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ s ; δΔ ⦃ fun v _ => Q v δ ⦄ ->
-        ⦃ P ⦄ stm_call_frame δΔ s ; δ ⦃ Q ⦄ (* TODO: to S or not to S for the fuel *)
+        (P : L) (Q : RelVal τ -> CStore Γ -> L) :
+      ⦃ P ⦄ s ; δΔ ⦃ fun v _ => Q v δ ⦄ ->
+                ⦃ P ⦄ stm_call_frame δΔ s ; δ ⦃ Q ⦄ (* TODO: to S or not to S for the fuel *)
     | rule_stm_foreign
         {Δ} {f : 𝑭𝑿 Δ τ} (es : NamedEnv (Exp Γ) Δ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        CTriple P (CEnvEx f) (evals es δ) (fun v => Q v δ) ->
-        ⦃ P ⦄ stm_foreign f es ; δ ⦃ Q ⦄
+        (P : L) (Q : RelVal τ -> CStore Γ -> L) :
+      CTriple P (CEnvEx f) (evals es δ) (fun v => Q v δ) ->
+      ⦃ P ⦄ stm_foreign f es ; δ ⦃ Q ⦄
     | rule_stm_lemmak
         {Δ} {l : 𝑳 Δ} (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
-        (P Q : L) (R : Val τ -> CStore Γ -> L) :
-        LTriple (evals es δ) P Q (LEnv l) ->
-        ⦃ Q ⦄ k ; δ ⦃ R ⦄ ->
-        ⦃ P ⦄ stm_lemmak l es k ; δ ⦃ R ⦄
+        (P Q : L) (R : RelVal τ -> CStore Γ -> L) :
+      LTriple (evals es δ) P Q (LEnv l) ->
+      ⦃ Q ⦄ k ; δ ⦃ R ⦄ ->
+                ⦃ P ⦄ stm_lemmak l es k ; δ ⦃ R ⦄
     | rule_stm_bind
-        {σ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
-        (P : L) (Q : Val σ -> CStore Γ -> L)
-        (R : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
-        (forall (v__σ : Val σ) (δ' : CStore Γ),
-           ⦃ Q v__σ δ' ⦄ k v__σ ; δ' ⦃ R ⦄) ->
-        ⦃ P ⦄ stm_bind s k ; δ ⦃ R ⦄
+        {σ : Ty} (s : Stm Γ σ) (k : RelVal σ -> Stm Γ τ)
+        (P : L) (Q : RelVal σ -> CStore Γ -> L)
+        (R : RelVal τ -> CStore Γ -> L) :
+      ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
+                (forall (v__σ : RelVal σ) (δ' : CStore Γ),
+                    ⦃ Q v__σ δ' ⦄ k v__σ ; δ' ⦃ R ⦄) ->
+                ⦃ P ⦄ stm_bind s k ; δ ⦃ R ⦄
     | rule_stm_debugk
         (k : Stm Γ τ)
-        (P : L) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ k ; δ ⦃ Q ⦄ ->
-        ⦃ P ⦄ stm_debugk k ; δ ⦃ Q ⦄
+        (P : L) (Q : RelVal τ -> CStore Γ -> L) :
+      ⦃ P ⦄ k ; δ ⦃ Q ⦄ ->
+                ⦃ P ⦄ stm_debugk k ; δ ⦃ Q ⦄
     | rule_stm_pattern_match
         {σ} (s : Stm Γ σ) (pat : Pattern σ)
         (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ)
-        (P : L) (Q : Val σ -> CStore Γ -> L) (R : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
-        (forall pc δpc δ',
-           ⦃ Q (pattern_match_val_reverse pat pc δpc) δ' ⦄ rhs pc ; δ' ►► δpc
-           ⦃ fun v2 δ' => R v2 (env.drop (PatternCaseCtx pc) δ') ⦄) ->
-        ⦃ P ⦄ stm_pattern_match s pat rhs ; δ ⦃ R ⦄
+        (P : L) (Q : RelVal σ -> CStore Γ -> L) (R : RelVal τ -> CStore Γ -> L) :
+      ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
+                (forall pc δpc δ',
+                    ⦃ Q (pattern_match_relval_reverse pat pc δpc) δ' ⦄ rhs pc ; δ' ►► δpc
+                                                                               ⦃ fun v2 δ' => R v2 (env.drop (PatternCaseCtx pc) δ') ⦄) ->
+                ⦃ P ⦄ stm_pattern_match s pat rhs ; δ ⦃ R ⦄
 
-    where "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P%I s Q%I).
+      where "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P%I s Q%I).
 
     Lemma rule_consequence_left {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
-      (P1 : L) {P2 : L} {Q : Val σ -> CStore Γ -> L} :
+      (P1 : L) {P2 : L} {Q : RelVal σ -> CStore Γ -> L} :
       ⦃ P1 ⦄ s ; δ ⦃ Q ⦄ -> (P2 ⊢ P1) -> ⦃ P2 ⦄ s ; δ ⦃ Q ⦄.
     Proof.
       intros H hyp. exact (rule_consequence δ hyp (fun _ _ => reflexivity _) H).
@@ -207,7 +211,7 @@ Module ProgramLogic.
     Qed.
 
     Lemma rule_exist' {Γ : PCtx} {δ : CStore Γ} {A : Type} {σ : Ty} (s : Stm Γ σ)
-      {P : A -> L} (Q :  A -> Val σ -> CStore Γ -> L) :
+      {P : A -> L} (Q :  A -> RelVal σ -> CStore Γ -> L) :
       (forall x, ⦃ P x ⦄ s ; δ ⦃ Q x ⦄) ->
       ⦃ ∃ x, P x ⦄ s ; δ ⦃ fun v δ' => ∃ x, Q x v δ' ⦄.
     Proof.
@@ -217,7 +221,7 @@ Module ProgramLogic.
     Qed.
 
     Lemma rule_disj {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
-      {P Q : L} {R : Val σ -> CStore Γ -> L} :
+      {P Q : L} {R : RelVal σ -> CStore Γ -> L} :
       ⦃ P ⦄ s ; δ ⦃ R ⦄ -> ⦃ Q ⦄ s ; δ ⦃ R ⦄ ->
       ⦃ P ∨ Q ⦄ s ; δ ⦃ R ⦄.
     Proof.
@@ -230,7 +234,7 @@ Module ProgramLogic.
     Qed.
 
     Lemma rule_disj' {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
-      {P1 P2 : L} {Q1 Q2 : Val σ -> CStore Γ -> L} :
+      {P1 P2 : L} {Q1 Q2 : RelVal σ -> CStore Γ -> L} :
       ⦃ P1 ⦄ s ; δ ⦃ Q1 ⦄ -> ⦃ P2 ⦄ s ; δ ⦃ Q2 ⦄ ->
       ⦃ P1 ∨ P2 ⦄ s ; δ ⦃ fun v δ' => Q1 v δ' ∨ Q2 v δ' ⦄.
     Proof.
@@ -243,7 +247,7 @@ Module ProgramLogic.
     Qed.
 
     Lemma rule_false {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
-      {Q : Val σ -> CStore Γ -> L} :
+      {Q : RelVal σ -> CStore Γ -> L} :
       ⦃ False ⦄ s ; δ ⦃ Q ⦄.
     Proof.
       apply (rule_consequence_left (∃ (x : Empty_set), True)).
@@ -251,10 +255,10 @@ Module ProgramLogic.
       - auto.
     Qed.
 
-    Definition WP {Γ τ} (s : Stm Γ τ) (POST :  Val τ -> CStore Γ -> L) : CStore Γ -> L :=
+    Definition WP {Γ τ} (s : Stm Γ τ) (POST :  RelVal τ -> CStore Γ -> L) : CStore Γ -> L :=
       fun δ => (∃ (P : L), P ∧ ⌜⦃ P ⦄ s; δ ⦃ POST ⦄⌝)%I.
 
-    Lemma rule_wp {Γ σ} (s : Stm Γ σ) (POST :  Val σ -> CStore Γ -> L) (δ : CStore Γ) :
+    Lemma rule_wp {Γ σ} (s : Stm Γ σ) (POST :  RelVal σ -> CStore Γ -> L) (δ : CStore Γ) :
       ⦃ WP s POST δ ⦄ s ; δ ⦃ POST ⦄.
     Proof. apply rule_exist; intros P; now apply rule_pull. Qed.
 
@@ -280,7 +284,7 @@ Module ProgramLogic.
         + exact H.
     Qed.
 
-    Lemma rule_stm_read_register_backwards {Γ δ σ r v} (Q : Val σ -> CStore Γ -> L) :
+    Lemma rule_stm_read_register_backwards {Γ δ σ r v} (Q : RelVal σ -> CStore Γ -> L) :
       ⦃ lptsreg r v ∗ (lptsreg r v -∗ Q v δ) ⦄
         stm_read_register r ; δ
       ⦃ Q ⦄.
@@ -293,7 +297,7 @@ Module ProgramLogic.
     Qed.
 
     Lemma rule_stm_write_register_backwards {Γ δ σ r v} {e : Exp Γ σ}
-      (Q : Val σ -> CStore Γ -> L) :
+      (Q : RelVal σ -> CStore Γ -> L) :
       ⦃ lptsreg r v ∗ (lptsreg r (eval e δ) -∗ Q (eval e δ) δ) ⦄
         stm_write_register r e ; δ
       ⦃ Q ⦄.

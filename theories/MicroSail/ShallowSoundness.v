@@ -67,7 +67,7 @@ Module Type Soundness
       fun δ h => interpret_scheap h ⊢ POST δ.
 
     Lemma call_contract_sound {Δ τ} (c : SepContract Δ τ) (args : CStore Δ)
-      (Φ : Val τ → SCHeap → Prop) (h1 : SCHeap) :
+      (Φ : RelVal τ → SCHeap → Prop) (h1 : SCHeap) :
       CHeapSpec.call_contract c args Φ h1 →
       CTriple (interpret_scheap h1) c args
         (fun v => ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ v h'⌝)%I.
@@ -112,7 +112,7 @@ Module Type Soundness
 
     Definition SoundExecCall (exec_call : ExecCall) : Prop :=
       forall Γ τ Δ (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
-        (Φ : Val τ → SCHeap → Prop)
+        (Φ : RelVal τ → SCHeap → Prop)
         (δ1 : CStore Γ) (h1 : SCHeap),
         exec_call _ _ f (evals es δ1) Φ h1 →
         ⦃ interpret_scheap h1 ⦄
@@ -122,7 +122,7 @@ Module Type Soundness
 
     Definition SoundExecCallForeign (exec_call_foreign : ExecCallForeign) : Prop :=
       forall Γ τ Δ (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
-        (Φ : Val τ → SCHeap → Prop) (δ1 : CStore Γ) (h1 : SCHeap),
+        (Φ : RelVal τ → SCHeap → Prop) (δ1 : CStore Γ) (h1 : SCHeap),
       exec_call_foreign _ _ f (evals es δ1) Φ h1 →
       ⦃ interpret_scheap h1 ⦄
         stm_foreign f es; δ1
@@ -139,7 +139,7 @@ Module Type Soundness
 
     Definition SoundExec (exec : Exec) :=
       forall
-        Γ σ (s : Stm Γ σ) (Φ : Val σ → CStore Γ → SCHeap → Prop)
+        Γ σ (s : Stm Γ σ) (Φ : RelVal σ → CStore Γ → SCHeap → Prop)
         (δ1 : CStore Γ) (h1 : SCHeap),
         exec _ _ s Φ δ1 h1 ->
         ⦃ interpret_scheap h1 ⦄
@@ -172,11 +172,20 @@ Module Type Soundness
 
         - (* stm_val *)
           apply rule_stm_val.
+          apply rule_stm_relval.
           apply bi.exist_intro' with h1.
           apply bi.and_intro.
           reflexivity.
           apply bi.pure_intro.
           auto.
+
+        - (* stm_relval *)
+          apply rule_stm_relval.
+          apply bi.exist_intro' with h1.
+          apply bi.and_intro.
+          reflexivity.
+          apply bi.pure_intro.
+          auto.  
 
         - (* stm_exp *)
           apply rule_stm_exp.
@@ -236,22 +245,27 @@ Module Type Soundness
 
         - (* stm_assert *)
           apply rule_stm_assert; intro Heval.
-          now apply IHs, HYP.
+          apply IHs, HYP.
+          destruct (eval e1 δ1).
+          + now subst.
+          + contradiction.
 
         - (* stm_fail *)
           eapply rule_consequence_left.
           apply rule_stm_fail.
           apply bi.True_intro.
 
-        - (* stm_match_newpattern *)
+        - (* stm_match_pattern *)
           eapply rule_stm_pattern_match.
           apply IHs, HYP. clear IHs HYP.
           intros pc δpc δΓ'. cbn.
           apply rule_exist. intros h.
           apply rule_pull. intros HYP.
           apply wp_demonic_pattern_match in HYP.
-          rewrite pattern_match_val_inverse_right in HYP.
-          now apply H.
+          rewrite pattern_match_relval_inverse_right in HYP.
+          destruct (ty.unliftNamedEnv δpc).
+          + inversion HYP. now apply H.
+          + inversion HYP.
 
         - (* stm_read_register *)
           destruct HYP as [v HYP].

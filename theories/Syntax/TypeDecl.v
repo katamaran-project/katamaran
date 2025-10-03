@@ -30,6 +30,7 @@ From Coq Require Import
      Bool.Bool
      Strings.String
      ZArith.BinInt.
+Require Import stdpp.base.
 From Equations Require Import
      Equations.
 From Katamaran Require Import
@@ -160,6 +161,11 @@ Module ty.
     Global Arguments SyncVal {A}.
     Global Arguments NonSyncVal {A}.
 
+    Section NoConfRV.
+      Set Transparent Obligations.
+      Derive NoConfusion for RV.
+    End NoConfRV.
+
     Definition RVToOption {A} (rv : RV A) : option A :=
       match rv with
       | SyncVal v => Some v
@@ -171,12 +177,14 @@ Module ty.
       | SyncVal v => v
       | NonSyncVal vl _ => vl
       end.
+    Arguments projLeftRV {A} !rv.
 
     Definition projRightRV {A} (rv : RV A) : A :=
       match rv with
       | SyncVal v => v
       | NonSyncVal _ vr => vr
       end.
+    Arguments projRightRV {A} !rv.
 
     Definition RelVal {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} (τ : Ty) : Set :=
       RV (Val τ)
@@ -195,30 +203,217 @@ Module ty.
 
     Definition projLeft {A} (rv : RelVal A) : Val A :=
       projLeftRV rv.
+    Arguments projLeft {A} !rv.
 
     Definition projRight {A} (rv : RelVal A) : Val A :=
       projRightRV rv.
+    Arguments projRight {A} !rv.
 
     Definition liftUnOpRV {A B} (f : A -> B) (rv : RV A) : RV B :=
       match rv with
       | (SyncVal v) => SyncVal (f v)
       | (NonSyncVal vl vr) => NonSyncVal (f vl) (f vr)
       end.
+    Arguments liftUnOpRV {A B} f !rv.
 
+    Instance proper_liftUnOpRV {A B : Type} : Proper ((pointwise_relation _ eq) ==> eq ==> eq) (@liftUnOpRV A B).
+    Proof.
+      intros f g Rfg rv rv' eq.
+      destruct rv, rv'; cbn; inversion eq;
+        rewrite Rfg; auto.
+    Qed.
+
+    Lemma comProjLeftRVLiftUnOpRV {A B} (f : A -> B) (rv : RV A) :
+      projLeftRV (liftUnOpRV f rv) = f (projLeftRV rv).
+    Proof.
+      destruct rv; auto.
+    Qed.
+
+    Lemma comProjRightRVLiftUnOpRV {A B} (f : A -> B) (rv : RV A) :
+      projRightRV (liftUnOpRV f rv) = f (projRightRV rv).
+    Proof.
+      destruct rv; auto.
+    Qed.
+
+    
     Definition liftBinOpRV {A B C} (f : A -> B -> C) (rv1 : RV A) (rv2 : RV B) : RV C :=
       match (rv1 , rv2) with
       | (SyncVal v1 , SyncVal v2) => SyncVal (f v1 v2)
       | (_ , _) => NonSyncVal (f (projLeftRV rv1) (projLeftRV rv2)) (f (projRightRV rv1) (projRightRV rv2))
       end.
+    Arguments liftBinOpRV {A B C} f !rv1 !rv2.
+
+    Instance proper_liftBinOpRV {A B C : Type} : Proper (pointwise_relation _ (pointwise_relation _ eq) ==> eq ==> eq ==> eq) (@liftBinOpRV A B C).
+    Proof.
+      intros f g Rfg rv1 rv1' eq1 rv2 rv2' eq2.
+      destruct rv1, rv2, rv1', rv2'; cbn; inversion eq1; inversion eq2;
+        rewrite Rfg; auto.
+    Qed.
+
+    Lemma comProjLeftRVLiftBinOpRV {A B C} (f : A -> B -> C) (rv1 : RV A) (rv2 : RV B) :
+      projLeftRV (liftBinOpRV f rv1 rv2) = f (projLeftRV rv1) (projLeftRV rv2).
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Lemma comProjRightRVLiftBinOpRV {A B C} (f : A -> B -> C) (rv1 : RV A) (rv2 : RV B) :
+      projRightRV (liftBinOpRV f rv1 rv2) = f (projRightRV rv1) (projRightRV rv2).
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Definition rv_eq {A} (rv1 rv2 : RV A) : Prop :=
+      let rvp := liftBinOpRV (fun x y => x = y) rv1 rv2 in
+      projLeftRV rvp /\ projRightRV rvp.
+    Arguments rv_eq {A} !rv1 !rv2.
+
+    Lemma rv_eq_to_eq {A} (rv1 rv2 : RV A) :
+      rv_eq rv1 rv2 <-> (projLeftRV rv1 = projLeftRV rv2 /\ projRightRV rv1 = projRightRV rv2).
+    Proof.
+      unfold rv_eq.
+      now rewrite comProjLeftRVLiftBinOpRV, comProjRightRVLiftBinOpRV.
+    Qed.
+
+    Ltac remove_rv_eq :=
+      repeat match goal with
+        | |- context[rv_eq] => try rewrite rv_eq_to_eq
+        | H : context[rv_eq] |- _ => try rewrite rv_eq_to_eq
+        end.
+
+    Tactic Notation "ty.remove_rv_eq" := remove_rv_eq.
 
     Definition liftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) : RelVal σ2 :=
       liftUnOpRV f rv.
+    Arguments liftUnOp {σ1 σ2} f !rv.
+
+    Instance proper_liftUnOp {σ1 σ2 : Ty} : Proper ((pointwise_relation _ eq) ==> eq ==> eq) (@liftUnOp σ1 σ2).
+    Proof.
+      intros f g Rfg rv rv' eq.
+      destruct rv, rv'; cbn; inversion eq;
+        rewrite Rfg; auto.
+    Qed.
+
+    Lemma comProjLeftLiftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) :
+      projLeft (liftUnOp f rv) = f (projLeft rv).
+    Proof.
+      destruct rv; auto.
+    Qed.
+
+    Lemma comProjRightLiftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) :
+      projRight (liftUnOp f rv) = f (projRight rv).
+    Proof.
+      destruct rv; auto.
+    Qed.
 
     Definition liftBinOp {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) : RelVal σ3 :=
       liftBinOpRV f rv1 rv2.
+    Arguments liftBinOp {σ1 σ2 σ3} f !rv1 !rv2.
+
+    Instance proper_liftBinOp {σ1 σ2 σ3 : Ty} : Proper (pointwise_relation _ (pointwise_relation _ eq) ==> eq ==> eq ==> eq) (@liftBinOp σ1 σ2 σ3).
+    Proof.
+      intros f g Rfg rv1 rv1' eq1 rv2 rv2' eq2.
+      destruct rv1, rv2, rv1', rv2'; cbn; inversion eq1; inversion eq2;
+      rewrite Rfg; auto.
+    Qed.
+
+    Lemma comProjLeftLiftBinOp {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) :
+      projLeft (liftBinOp f rv1 rv2) = f (projLeft rv1) (projLeft rv2).
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Lemma comProjRightLiftBinOp {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) :
+      projRight (liftBinOp f rv1 rv2) = f (projRight rv1) (projRight rv2).
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Lemma liftUnOpRVBinOpRVToBinOpRV {A B C D} (fUn : C -> D) (fBin : A -> B -> C) (rv1 : RV A) (rv2 : RV B) :
+      liftUnOpRV fUn (liftBinOpRV fBin rv1 rv2) = liftBinOpRV (fun a b => fUn (fBin a b)) rv1 rv2.
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Lemma liftUnOpBinOpToBinOp {σ1 σ2 σ3 σ4} (fUn : Val σ3 -> Val σ4) (fBin : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) :
+    liftUnOp fUn (liftBinOp fBin rv1 rv2) = liftBinOp (fun a b => fUn (fBin a b)) rv1 rv2.
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Ltac removeLiftBinOp :=
+    repeat match goal with
+           | |- context[liftBinOp] =>
+               repeat rewrite comProjLeftLiftBinOp, comProjRightLiftBinOp
+           | H : context[liftBinOp] |- _ =>
+               repeat rewrite comProjLeftLiftBinOp, comProjRightLiftBinOp in H
+           | |- context[liftBinOpRV] =>
+               repeat rewrite comProjLeftRVLiftBinOpRV, comProjRightRVLiftBinOpRV
+           | H : context[liftBinOpRV] |- _ =>
+               repeat rewrite comProjLeftRVLiftBinOpRV, comProjRightRVLiftBinOpRV in H
+           | _ => idtac
+           end.
+
+    Tactic Notation "ty.removeLiftBinOp" := removeLiftBinOp.
 
     Definition valToRelVal {σ} : Val σ -> RelVal σ :=
       SyncVal.
+
+    Lemma rv_eq_valToRelVal1 {σ} (v : Val σ) (rv : RelVal σ) :
+      rv_eq (valToRelVal v) rv <-> v = projLeft rv /\ v = projRight rv.
+    Proof.
+      unfold rv_eq. unfold valToRelVal.
+      removeLiftBinOp.
+      auto.
+    Qed.
+
+    Lemma rv_eq_valToRelVal2 {σ} (rv : RelVal σ) (v : Val σ) :
+      rv_eq rv (valToRelVal v) <-> projLeft rv = v /\ projRight rv = v.
+    Proof.
+      unfold rv_eq. unfold valToRelVal.
+      removeLiftBinOp.
+      auto.
+    Qed.
+
+    Lemma liftUnOpValToRelVal {σ1 σ2} (f : Val σ1 -> Val σ2) (v : Val σ1) :
+      liftUnOp f (valToRelVal v) = valToRelVal (f v).
+    Proof.
+      cbn. auto.
+    Qed.
+
+    Lemma liftBinOpValToRelVal1 {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (v : Val σ1) (rv : RelVal σ2) :
+      liftBinOp f (valToRelVal v) rv = liftUnOp (f v) rv.
+    Proof.
+      destruct rv; auto.
+    Qed.
+
+    Lemma liftBinOpValToRelVal2 {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv : RelVal σ1) (v : Val σ2) :
+      liftBinOp f rv (valToRelVal v) = liftUnOp (fun v' => f v' v) rv.
+    Proof.
+      destruct rv; auto.
+    Qed.
+
+    Ltac removeValToRelVal :=
+      repeat match goal with
+        | |- context[valToRelVal] => try rewrite rv_eq_valToRelVal1, rv_eq_valToRelVal2, liftUnOpValToRelVal, liftBinOpValToRelVal1, liftBinOpValToRelVal2
+        | H : context[valToRelVal] |- _ => try rewrite rv_eq_valToRelVal1, rv_eq_valToRelVal2, liftUnOpValToRelVal, liftBinOpValToRelVal1, liftBinOpValToRelVal2 in H
+        end.
+
+    Definition syncNamedEnv {N} {Γ : NCtx N Ty} : NamedEnv Val Γ -> NamedEnv RelVal Γ :=
+      env.map (fun b => valToRelVal).
+
+    Definition nonsyncNamedEnv {N} {Γ : NCtx N Ty} : NamedEnv Val Γ -> NamedEnv Val Γ -> NamedEnv RelVal Γ :=
+      env.zipWith (fun b => NonSyncVal).
+
+    Fixpoint unliftNamedEnv {N} {Γ : NCtx N Ty} (vs : NamedEnv RelVal Γ) : RV (NamedEnv Val Γ) :=
+      match vs with
+      | []%env => SyncVal []%env
+      | env.snoc vs k v =>
+          match (v , unliftNamedEnv vs) with
+          | (SyncVal v' , SyncVal vs') => SyncVal (vs' .[ k ↦ v'])
+          | (_ , SyncVal vs') => NonSyncVal (vs' .[ k ↦ projLeft v ]) (vs' .[ k ↦ projRight v ])
+          | (_ , NonSyncVal vs1' vs2') => NonSyncVal (vs1' .[ k ↦ projLeft v ]) (vs2' .[ k ↦ projRight v ])
+          end
+      end.
 
     Fixpoint listOfRVToRVOfList {A} (rv_list : (Datatypes.list (RV A))) : RV (Datatypes.list A) :=
       match rv_list with
@@ -333,25 +528,27 @@ Module ty.
     Context {TDC : TypeDeclKit}.
     Context {TDN : TypeDenoteKit TDC}.
     Context {TDF : TypeDefKit TDN}.
-
+    Search Ty NoConfusionPackage.
+    
     #[export] Instance Ty_eq_dec : EqDec Ty :=
+      let nCinv := @noConfusion_inv _ (NoConfusionPackage_Ty _) in
       fix ty_eqdec (σ τ : Ty) {struct σ} : dec_eq σ τ :=
         match σ , τ with
         | int        , int        => left eq_refl
         | bool       , bool       => left eq_refl
         | string     , string     => left eq_refl
         (* | list σ     , list τ     => f_equal_dec list noConfusion_inv (ty_eqdec σ τ) *)
-        | prod σ1 σ2 , prod τ1 τ2 => f_equal2_dec prod noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
+        | prod σ1 σ2 , prod τ1 τ2 => f_equal2_dec prod (nCinv _ _) (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
         (* | sum σ1 σ2  , sum τ1 τ2  => f_equal2_dec sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2) *)
         | unit       , unit       => left eq_refl
         (* | enum E1    , enum E2    => f_equal_dec enum noConfusion_inv (eq_dec E1 E2) *)
-        | bvec n1    , bvec n2    => f_equal_dec bvec noConfusion_inv (eq_dec n1 n2)
+        | bvec n1    , bvec n2    => f_equal_dec bvec (nCinv _ _) (eq_dec n1 n2)
         (* | tuple σs   , tuple τs   => f_equal_dec *)
         (*                                tuple noConfusion_inv *)
         (*                                (eq_dec (EqDec := ctx.eq_dec_ctx ty_eqdec) σs τs) *)
         (* | union U1   , union U2   => f_equal_dec union noConfusion_inv (eq_dec U1 U2) *)
         (* | record R1  , record R2  => f_equal_dec record noConfusion_inv (eq_dec R1 R2) *)
-        | _          , _          => right noConfusion_inv
+        | _          , _          => right (nCinv _ _)
         end.
 
     #[export] Instance Val_eq_dec : forall σ, EqDec (Val σ) :=

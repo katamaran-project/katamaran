@@ -172,16 +172,10 @@ Module Type BaseMixin (Import TY : Types).
       (*     fun '(existT K pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts) *)
       end.
 
-    Fixpoint namedEnvRelValToRVNamedEnv {X nctx} (nenv : NamedEnv RelVal nctx) : RV (NamedEnv (X := X) Val nctx) :=
-      match nenv with
-      | env.nil => SyncVal env.nil
-      | env.snoc nenv' db b => ty.liftBinOpRV (fun nenv b => env.snoc nenv db b) (namedEnvRelValToRVNamedEnv nenv') b
-      end.
-
     Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : Pattern (N:=N) σ) :
       forall (pc : PatternCase pat) (ts : NamedEnv (Term Σ) (PatternCaseCtx pc)),
-        ty.RVToOption (inst (A := RelVal _) (pattern_match_term_reverse pat pc ts) ι) =
-          pattern_match_relval_reverse pat pc (ty.RVToOption (namedEnvRelValToRVNamedEnv (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι))).
+        inst (A := RelVal _) (pattern_match_term_reverse pat pc ts) ι =
+          pattern_match_relval_reverse pat pc (inst (T := fun Σ => NamedEnv (Term Σ) _) ts ι).
     Proof.
       induction pat; cbn.
       - intros _y ts. env.destroy ts. cbn in *.

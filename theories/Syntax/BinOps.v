@@ -270,8 +270,20 @@ Module bop.
       | bvult => fun v1 v2 => bv.ultb v1 v2
       end.
 
-    Definition eval_relop_relval {σ} (op : RelOp σ) : RelVal σ -> RelVal σ -> ty.RV Datatypes.bool :=
+    Definition eval_relop_relval {σ} (op : RelOp σ) : RelVal σ -> RelVal σ -> RelVal ty.bool :=
       liftBinOp (σ3 := ty.bool) (eval_relop_val op).
+
+    Lemma comProjLeftEval_relop_relval {σ} (op : RelOp σ) (rv1 rv2 : RelVal σ) :
+      projLeft (eval_relop_relval op rv1 rv2) = eval_relop_val op (projLeft rv1) (projLeft rv2).
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Lemma comProjRightEval_relop_relval {σ} (op : RelOp σ) (rv1 rv2 : RelVal σ) :
+      projRight (eval_relop_relval op rv1 rv2) = eval_relop_val op (projRight rv1) (projRight rv2).
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
 
     Definition eval_relop_prop
       (* Force TypeDefKit into the context, so that the eval_relop_equiv lemma
@@ -293,6 +305,18 @@ Module bop.
          below doesn't leave unsolved existentials when used in rewriting. *)
       {TDF : TypeDefKit TDN} {σ} (op : RelOp σ) : RelVal σ -> RelVal σ -> ty.RV Prop :=
       liftBinOpRV (eval_relop_prop op).
+
+    Lemma comProjLeftRVEval_relop_relprop {σ} (op : RelOp σ) (rv1 rv2 : RelVal σ) :
+      projLeftRV (eval_relop_relprop op rv1 rv2) = eval_relop_prop op (projLeft rv1) (projLeft rv2).
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Lemma comProjRightRVEval_relop_relprop {σ} (op : RelOp σ) (rv1 rv2 : RelVal σ) :
+      projRightRV (eval_relop_relprop op rv1 rv2) = eval_relop_prop op (projRight rv1) (projRight rv2).
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
 
     Lemma eval_relop_val_spec {σ} (op : RelOp σ) (v1 v2 : Val σ) :
       reflect (eval_relop_prop op v1 v2) (eval_relop_val op v1 v2).
@@ -385,6 +409,34 @@ Module bop.
 
     Definition evalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : RelVal σ1 -> RelVal σ2 -> RelVal σ3 :=
     liftBinOp (eval op).
+
+    Lemma comProjLeftRVEvalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) :
+      projLeftRV (evalRel op rv1 rv2) = eval op (projLeftRV rv1) (projLeftRV rv2).
+    Proof.
+      unfold evalRel.
+      apply comProjLeftRVLiftBinOpRV.
+    Qed.
+
+    Lemma comProjRightRVEvalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) :
+      projRightRV (evalRel op rv1 rv2) = eval op (projRightRV rv1) (projRightRV rv2).
+    Proof.
+      unfold evalRel.
+      apply comProjRightRVLiftBinOpRV.
+    Qed.
+
+    Lemma comProjLeftEvalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) :
+      projLeft (evalRel op rv1 rv2) = eval op (projLeft rv1) (projLeft rv2).
+    Proof.
+      unfold evalRel.
+      apply comProjLeftLiftBinOp.
+    Qed.
+
+    Lemma comProjRightEvalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) :
+      projRight (evalRel op rv1 rv2) = eval op (projRight rv1) (projRight rv2).
+    Proof.
+      unfold evalRel.
+      apply comProjRightLiftBinOp.
+    Qed.
 
   End WithTypes.
   #[export] Existing Instance eq_dec_binop.

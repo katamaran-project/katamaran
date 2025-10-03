@@ -231,14 +231,21 @@ Module Type InstantiationOn
   #[export] Instance inst_lift_term {σ} : InstLift (fun Σ => Term Σ σ) (RelVal σ).
   Proof. red. reflexivity. Qed.
 
+ 
   Lemma inst_term_relop_neg [Σ σ] (op : RelOp σ) (t1 t2 : Term Σ σ) :
     forall (ι : Valuation Σ),
       inst (T := fun Σ => Term Σ ty.bool) (term_relop_neg op t1 t2) ι =
-        ty.liftUnOpRV negb (bop.eval_relop_relval op (inst t1 ι) (inst t2 ι)).
+        ty.liftUnOp (σ1 := ty.bool) (σ2 := ty.bool) negb (bop.eval_relop_relval op (inst t1 ι) (inst t2 ι)).
   Proof.
-    destruct op; cbn -[ty.liftUnOpRV]; intros; destructInsts; cbn; intros; unfold bv.sltb, bv.sleb, bv.ultb, bv.uleb;
+    intros ι.
+    destruct op;
+    cbn -[ty.liftUnOp ty.liftBinOp]; unfold bop.eval_relop_relval; unfold bop.evalRel;
+      rewrite ty.liftUnOpBinOpToBinOp;
+      cbn;
+      destructInsts;
+      unfold bv.sltb, bv.sleb, bv.ultb, bv.uleb;
       rewrite ?negb_involutive, <- ?Z.leb_antisym, <- ?Z.ltb_antisym,
-      <- ?N.leb_antisym, <- ?N.ltb_antisym; try easy; try now repeat destruct eq_dec.
+      <- ?N.leb_antisym, <- ?N.ltb_antisym; try easy; try repeat destruct eq_dec; auto.
   Qed.
 
   #[export] Instance inst_subst_sub {Σ} : InstSubst (Sub Σ) (Valuation Σ).

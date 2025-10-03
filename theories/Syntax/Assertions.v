@@ -164,9 +164,9 @@ Module Import asn.
   end.
 
   Section Interpretation.
-    (* Import iris.bi.interface. *)
-    (* Import iris.bi.derived_laws. *)
-    (* Import iris.bi.extensions. *)
+    Import iris.bi.interface.
+    Import iris.bi.derived_laws.
+    Import iris.bi.extensions.
     Import iris.proofmode.tactics.
 
     Fixpoint interpret_pure {Σ} (a : Assertion Σ) (ι : Valuation Σ) : Prop :=
@@ -175,12 +175,15 @@ Module Import asn.
       | chunk c => False
       | chunk_angelic c => False
       | pattern_match s pat rhs =>
-        let v := inst (T := fun Σ => Term Σ _) s ι in
-        let (pc,δpc) := pattern_match_val pat v in
-        interpret_pure (rhs pc) (ι ►► δpc)
+        let rv := inst (T := fun Σ => Term Σ _) s ι in
+        match pattern_match_relval pat rv with
+        | None => False
+        | Some (existT pc δpc) =>
+            interpret_pure (rhs pc) (ι ►► δpc)
+        end
       | sep A1 A2 => interpret_pure A1 ι /\ interpret_pure A2 ι
       | or A1 A2  => interpret_pure A1 ι \/ interpret_pure A2 ι
-      | exist ς τ A => exists (v : Val τ), interpret_pure A (ι ► (ς∷τ ↦ v))
+      | exist ς τ A => exists (v : RelVal τ), interpret_pure A (ι ► (ς∷τ ↦ v))
       | debug => True
     end.
 
@@ -192,12 +195,15 @@ Module Import asn.
       | chunk c => interpret_chunk c ι
       | chunk_angelic c => interpret_chunk c ι
       | pattern_match s pat rhs =>
-        let v := inst (T := fun Σ => Term Σ _) s ι in
-        let (pc,δpc) := pattern_match_val pat v in
-        interpret (rhs pc) (ι ►► δpc)
+          let rv := inst (T := fun Σ => Term Σ _) s ι in
+          match pattern_match_relval pat rv with
+          | None => False
+          | Some (existT pc δpc) =>
+              interpret (rhs pc) (ι ►► δpc)
+          end
       | sep A1 A2 => interpret A1 ι ∗ interpret A2 ι
       | or A1 A2  => interpret A1 ι ∨ interpret A2 ι
-      | exist ς τ A => ∃ (v : Val τ), interpret A (ι ► (ς∷τ ↦ v))
+      | exist ς τ A => ∃ (v : RelVal τ), interpret A (ι ► (ς∷τ ↦ v))
       | debug => emp
     end%I.
 
@@ -207,9 +213,11 @@ Module Import asn.
     Proof.
       induction a; cbn in *; intros ι; try discriminate a_pure.
       - now rewrite bi.and_emp.
-      - destruct pattern_match_val.
-        apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
-        apply base.elem_of_list_In. apply finite.elem_of_enum.
+      - destruct pattern_match_relval as [mr|].
+          * destruct mr as [pc δpc].
+            apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
+            apply base.elem_of_list_In. apply finite.elem_of_enum.
+          * auto.
       - apply andb_true_iff in a_pure. destruct a_pure as [H1 H2].
         rewrite (IHa1 H1) (IHa2 H2). clear. iSplit.
         + iIntros ([H1 H2]). now iPureIntro.
@@ -242,7 +250,7 @@ Module Import asn.
     Notation "x > y" := (formula (formula_relop bop.lt y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x <= y" := (formula (formula_relop bop.le x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x < y" := (formula (formula_relop bop.lt x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
-    Notation "x = y" := (formula (formula_relop bop.eq x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
+    Notation "x = y" := (formula (formula_relop bop.eq x y)) (x in scope term_scope, y in scope term_sxcope) : asn_scope.
     Notation "x >=ˢ y" := (formula (formula_relop bop.bvsle y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x >ˢ y" := (formula (formula_relop bop.bvslt y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x <=ˢ y" := (formula (formula_relop bop.bvsle x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
@@ -348,13 +356,13 @@ Section Contracts.
   Definition Linted {Δ σ} (c : SepContract Δ σ) : Prop :=
     lint_contract c = true.
 
-  (* Notation "'CONTRACT' 'VARS' Σ 'PATS' δ 'REQ' pre 'RES' res 'ENS' post" := (@MkSepContract _ _ Σ δ pre res post) *)
-  (*   (at level 200, *)
-  (*    format "'[v  ' 'CONTRACT' '/' '[' 'VARS'  Σ ']' '/' '[' 'PATS'  δ ']' '/' '[' 'REQ'   pre ']' '/' '[' 'RES'   res ']' '/' '[' 'ENS'   post ']' ']'"). *)
+  Notation "'CONTRACT' 'VARS' Σ 'PATS' δ 'REQ' pre 'RES' res 'ENS' post" := (@MkSepContract _ _ Σ δ pre res post)
+    (at level 200,
+     format "'[v  ' 'CONTRACT' '/' '[' 'VARS'  Σ ']' '/' '[' 'PATS'  δ ']' '/' '[' 'REQ'   pre ']' '/' '[' 'RES'   res ']' '/' '[' 'ENS'   post ']' ']'").
 
-  (* Notation "'LEMMA' 'VARS' Σ 'PATS' δ 'REQ' pre 'ENS' post" := (@MkLemma _ Σ δ pre post) *)
-  (*   (at level 200, *)
-  (*    format "'[v  ' 'LEMMA' '/' '[' 'VARS'  Σ ']' '/' '[' 'PATS'  δ ']' '/' '[' 'REQ'   pre ']' '/' '[' 'ENS'   post ']' ']'"). *)
+  Notation "'LEMMA' 'VARS' Σ 'PATS' δ 'REQ' pre 'ENS' post" := (@MkLemma _ Σ δ pre post)
+    (at level 200,
+     format "'[v  ' 'LEMMA' '/' '[' 'VARS'  Σ ']' '/' '[' 'PATS'  δ ']' '/' '[' 'REQ'   pre ']' '/' '[' 'ENS'   post ']' ']'").
 
   Section Experimental.
 
@@ -411,7 +419,7 @@ Section Contracts.
       interpret (sep_contract_precondition c) ι.
 
     Definition interpret_contract_postcondition {Δ τ} (c : SepContract Δ τ)
-      (ι : Valuation (sep_contract_logic_variables c)) (result : Val τ) : PROP :=
+      (ι : Valuation (sep_contract_logic_variables c)) (result : RelVal τ) : PROP :=
         interpret (sep_contract_postcondition c) (env.snoc ι (sep_contract_result c ∷ τ) result).
 
   End ContractInt.

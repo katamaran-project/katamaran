@@ -42,8 +42,14 @@ From Katamaran Require Import
   Syntax.Assertions
   Syntax.Chunks
   Syntax.Predicates
-  Symbolic.Propositions
-  Symbolic.Worlds.
+  (* Symbolic.Propositions *)
+  Symbolic.Worlds
+.
+
+From iris.bi Require Import
+  extensions
+  derived_laws
+.
 
 Import SignatureNotations ctx.notations env.notations.
 
@@ -80,8 +86,9 @@ Proof. intros pf a. apply pf. Qed.
 Proof. easy. Qed.
 
 Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
-  (Import W : WorldsMixin B P) (Import SP : SymPropOn B P W)
-  (Import AS : AssertionsOn B P W).
+  (Import W : WorldsMixin B P) (* (Import SP : SymPropOn B P W) *)
+  (Import AS : AssertionsOn B P W)
+.
 
   (* This is used by potentially multiple instances, but ultimately should be
      moved somewhere else. *)
@@ -96,11 +103,12 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       interpret_scchunk c ⊣⊢@{L} interpret_scchunk c ∗ interpret_scchunk c.
     Proof.
       destruct c; cbn; try discriminate; intros H.
-      apply bi.entails_anti_sym.
-      - now apply lduplicate.
-      - transitivity (luser p ts ∗ emp)%I.
-        + apply bi.sep_mono'; auto.
-        + now rewrite bi.sep_emp.
+      (* Stuff needed for chunk_user *)
+      (* apply bi.entails_anti_sym. *)
+      (* - now apply lduplicate. *)
+      (* - transitivity (luser p ts ∗ emp)%I. *)
+      (*   + apply bi.sep_mono'; auto. *)
+      (*   + now rewrite bi.sep_emp. *)
     Qed.
 
     Lemma in_heap_extractions {h : SCHeap} {c1 h1}
@@ -198,13 +206,49 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       CPureSpec A -> CPureSpec A -> CPureSpec A :=
       fun m1 m2 Φ => m1 Φ /\ m2 Φ.
 
-    Definition angelic (σ : Ty) : CPureSpec (Val σ) :=
-      fun Φ => exists (v : Val σ), Φ v.
-    Definition demonic (σ : Ty) : CPureSpec (Val σ) :=
-      fun Φ => forall (v : Val σ), Φ v.
+    Definition angelic (σ : Ty) : CPureSpec (RelVal σ) :=
+      fun Φ => exists (v : RelVal σ), Φ v.
+    #[global] Arguments angelic σ _ : clear implicits.
+    Definition demonic (σ : Ty) : CPureSpec (RelVal σ) :=
+      fun Φ => forall (v : RelVal σ), Φ v.
+    #[global] Arguments demonic σ _ : clear implicits.
+
+    Definition angelicSecLeak (σ : Ty) : CPureSpec (RelVal σ) :=
+      v <- angelic σ ;;
+      _ <- assert_formula (secLeak v) ;;
+      pure v.
+    #[global] Arguments angelicSecLeak σ _ : clear implicits.
+
+    Definition demonicSecLeak (σ : Ty) : CPureSpec (RelVal σ) :=
+      v <- demonic σ ;;
+      _ <- assume_formula (secLeak v) ;;
+      pure v.
+    #[global] Arguments demonicSecLeak σ _ : clear implicits.
+
+    Definition angelicSecLeak_ctx {N : Set} :
+      forall Δ : NCtx N Ty, CPureSpec (NamedEnv RelVal Δ) :=
+      fix rec Δ {struct Δ} :=
+        match Δ with
+        | [ctx]   => pure [env]
+        | Δ ▻ x∷σ => vs <- rec Δ;;
+                     v  <- angelicSecLeak σ;;
+                     pure (vs ► (x∷σ ↦ v))
+        end.
+    #[global] Arguments angelicSecLeak_ctx {N} Δ.
+
+    Definition demonicSecLeak_ctx {N : Set} :
+      forall Δ : NCtx N Ty, CPureSpec (NamedEnv RelVal Δ) :=
+      fix rec Δ {struct Δ} :=
+        match Δ with
+        | []      => pure env.nil
+        | Δ ▻ x∷σ => vs <- rec Δ;;
+                     v  <- demonicSecLeak σ;;
+                     pure (vs ► (x∷σ ↦ v))
+        end%ctx.
+    #[global] Arguments demonicSecLeak_ctx {N} Δ.
 
     Definition angelic_ctx {N : Set} :
-      forall Δ : NCtx N Ty, CPureSpec (NamedEnv Val Δ) :=
+      forall Δ : NCtx N Ty, CPureSpec (NamedEnv RelVal Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | [ctx]   => pure [env]
@@ -215,7 +259,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     #[global] Arguments angelic_ctx {N} Δ.
 
     Definition demonic_ctx {N : Set} :
-      forall Δ : NCtx N Ty, CPureSpec (NamedEnv Val Δ) :=
+      forall Δ : NCtx N Ty, CPureSpec (NamedEnv RelVal Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | []      => pure env.nil
@@ -261,30 +305,36 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       demonic_list (finite.enum F).
     #[global] Arguments demonic_finite F {_ _}.
 
+    Definition assertSecLeak {σ} (rv : RelVal σ) : CPureSpec unit :=
+      assert_formula (secLeak rv).
+    #[global] Arguments assertSecLeak {σ} rv.
+
     Section PatternMatching.
 
       Context {N : Set}.
 
       Definition angelic_pattern_match {σ} (pat : Pattern (N:=N) σ)
-        (v : Val σ) : CPureSpec (MatchResult pat) :=
+        (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
+        _ <- assertSecLeak v;;
         pc <- angelic_finite (PatternCase pat);;
         vs <- angelic_ctx (PatternCaseCtx pc) ;;
-        _  <- assert_formula (pattern_match_val_reverse pat pc vs = v);;
+        _  <- assert_formula (pattern_match_relval_reverse pat pc vs = v);;
         pure (existT pc vs).
       #[global] Arguments angelic_pattern_match {σ} pat v.
 
       Definition demonic_pattern_match {σ} (pat : Pattern (N:=N) σ)
-        (v : Val σ) : CPureSpec (MatchResult pat) :=
+        (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
+        _ <- assertSecLeak v;;
         pc <- demonic_finite (PatternCase pat);;
         vs <- demonic_ctx (PatternCaseCtx pc) ;;
-        _  <- assume_formula (pattern_match_val_reverse pat pc vs = v);;
+        _  <- assume_formula (pattern_match_relval_reverse pat pc vs = v);;
         pure (existT pc vs).
       #[global] Arguments demonic_pattern_match {σ} pat v.
 
-      Definition new_pattern_match {σ} (pat : Pattern (N:=N) σ)
-        (v : Val σ) : CPureSpec (MatchResult pat) :=
-        pure (pattern_match_val pat v).
-      #[global] Arguments new_pattern_match {σ} !pat v /.
+      (* Definition new_pattern_match {σ} (pat : Pattern (N:=N) σ) *)
+      (*   (v : Val σ) : CPureSpec (MatchResult pat) := *)
+      (*   pure (pattern_match_val pat v). *)
+      (* #[global] Arguments new_pattern_match {σ} !pat v /. *)
 
     End PatternMatching.
 
@@ -299,7 +349,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         bind (assert_eq_env δ δ') (fun _ => assert_formula (t = t')).
 
     Equations(noeqns) assert_eq_nenv {N : Set} [Δ : NCtx N Ty]
-      (δ δ' : NamedEnv Val Δ) : CPureSpec unit :=
+      (δ δ' : NamedEnv RelVal Δ) : CPureSpec unit :=
       assert_eq_nenv env.nil          env.nil            := pure tt;
       assert_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assert_eq_nenv δ δ') (fun _ => assert_formula (t = t')).
@@ -318,14 +368,14 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
     Fixpoint assert_eq_chunk (c1 c2 : SCChunk) : CPureSpec unit :=
       match c1 , c2 with
-      | chunk_user p1 vs1 , chunk_user p2 vs2 =>
-          match eq_dec p1 p2 with
-          | left e => assert_eq_env (eq_rect p1 (fun p => Env Val (𝑯_Ty p)) vs1 p2 e) vs2
-          | right _ => error
-          end
+      (* | chunk_user p1 vs1 , chunk_user p2 vs2 => *)
+      (*     match eq_dec p1 p2 with *)
+      (*     | left e => assert_eq_env (eq_rect p1 (fun p => Env Val (𝑯_Ty p)) vs1 p2 e) vs2 *)
+      (*     | right _ => error *)
+      (*     end *)
       | chunk_ptsreg r1 v1 , chunk_ptsreg r2 v2 =>
           match eq_dec_het r1 r2 with
-          | left e => assert_formula (eq_rect _ Val v1 _ (f_equal projT1 e) = v2)
+          | left e => assert_formula (eq_rect _ RelVal v1 _ (f_equal projT1 e) = v2)
           | right _ => error
           end
       | chunk_conj c11 c12 , chunk_conj c21 c22 =>
@@ -335,52 +385,52 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       | _ , _ => error
       end.
 
-    Definition replay_aux :
-      forall {Σ} (s : 𝕊 Σ) (ι : Valuation Σ), CPureSpec unit :=
-      fix replay {Σ} s ι :=
-        match s with
-        | SymProp.angelic_binary o1 o2 =>
-            angelic_binary (replay o1 ι) (replay o2 ι)
-        | SymProp.demonic_binary o1 o2 =>
-            demonic_binary (replay o1 ι) (replay o2 ι)
-        | SymProp.block =>
-            block
-        | SymProp.error msg =>
-            error
-        | SymProp.assertk fml msg k =>
-            assert_formula (instprop fml ι) ;;
-            replay k ι
-        | SymProp.assumek fml k =>
-            assume_formula (instprop fml ι) ;;
-            replay k ι
-        | SymProp.angelicv b k =>
-            v <- angelic _ ;;
-            replay k (env.snoc ι b v)
-        | SymProp.demonicv b k =>
-            v <- demonic _ ;;
-            replay k (env.snoc ι b v )
-        | @SymProp.assert_vareq _ x σ xIn t msg k =>
-            let ι' := env.remove (x ∷ σ) ι xIn in
-            let x' := ι.[? x∷σ] in
-            let t' := inst t ι' in
-            assert_formula (t' = x') ;;
-            replay k ι'
-        | @SymProp.assume_vareq _ x σ xIn t k =>
-            let ι' := env.remove (x ∷ σ) ι xIn in
-            let x' := ι.[? x∷σ] in
-            let t' := inst t ι' in
-            assume_formula (t' = x') ;;
-            replay k ι'
-        | SymProp.pattern_match s pat rhs =>
-            error
-        | SymProp.pattern_match_var x pat rhs =>
-            error
-        | SymProp.debug b k =>
-            debug (replay k ι)
-        end.
+    (* Definition replay_aux : *)
+    (*   forall {Σ} (s : 𝕊 Σ) (ι : Valuation Σ), CPureSpec unit := *)
+    (*   fix replay {Σ} s ι := *)
+    (*     match s with *)
+    (*     | SymProp.angelic_binary o1 o2 => *)
+    (*         angelic_binary (replay o1 ι) (replay o2 ι) *)
+    (*     | SymProp.demonic_binary o1 o2 => *)
+    (*         demonic_binary (replay o1 ι) (replay o2 ι) *)
+    (*     | SymProp.block => *)
+    (*         block *)
+    (*     | SymProp.error msg => *)
+    (*         error *)
+    (*     | SymProp.assertk fml msg k => *)
+    (*         assert_formula (instprop fml ι) ;; *)
+    (*         replay k ι *)
+    (*     | SymProp.assumek fml k => *)
+    (*         assume_formula (instprop fml ι) ;; *)
+    (*         replay k ι *)
+    (*     | SymProp.angelicv b k => *)
+    (*         v <- angelic _ ;; *)
+    (*         replay k (env.snoc ι b v) *)
+    (*     | SymProp.demonicv b k => *)
+    (*         v <- demonic _ ;; *)
+    (*         replay k (env.snoc ι b v ) *)
+    (*     | @SymProp.assert_vareq _ x σ xIn t msg k => *)
+    (*         let ι' := env.remove (x ∷ σ) ι xIn in *)
+    (*         let x' := ι.[? x∷σ] in *)
+    (*         let t' := inst t ι' in *)
+    (*         assert_formula (t' = x') ;; *)
+    (*         replay k ι' *)
+    (*     | @SymProp.assume_vareq _ x σ xIn t k => *)
+    (*         let ι' := env.remove (x ∷ σ) ι xIn in *)
+    (*         let x' := ι.[? x∷σ] in *)
+    (*         let t' := inst t ι' in *)
+    (*         assume_formula (t' = x') ;; *)
+    (*         replay k ι' *)
+    (*     | SymProp.pattern_match s pat rhs => *)
+    (*         error *)
+    (*     | SymProp.pattern_match_var x pat rhs => *)
+    (*         error *)
+    (*     | SymProp.debug b k => *)
+    (*         debug (replay k ι) *)
+    (*     end. *)
 
-    Definition replay [Σ] (P : 𝕊 Σ) (ι : Valuation Σ) :Prop :=
-      run (replay_aux P ι).
+    (* Definition replay [Σ] (P : 𝕊 Σ) (ι : Valuation Σ) :Prop := *)
+    (*   run (replay_aux P ι). *)
 
     Definition produce_chunk (c : SCChunk) (h : SCHeap) : CPureSpec SCHeap :=
       pure (cons c h).
@@ -390,14 +440,14 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       assert_eq_chunk c c' ;;
       pure h'.
 
-    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) (h0 : SCHeap) : CPureSpec (Val τ * SCHeap) :=
+    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) (h0 : SCHeap) : CPureSpec (RelVal τ * SCHeap) :=
       v  <- angelic _ ;;
       h1 <- consume_chunk (chunk_ptsreg reg v) h0 ;;
       h2 <- produce_chunk (chunk_ptsreg reg v) h1 ;;
       pure (v , h2).
 
-    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : Val τ) (h0 : SCHeap) :
-      CPureSpec (Val τ * SCHeap) :=
+    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : RelVal τ) (h0 : SCHeap) :
+      CPureSpec (RelVal τ * SCHeap) :=
       vold <- angelic _ ;;
       h1   <- consume_chunk (chunk_ptsreg reg vold) h0 ;;
       h2   <- produce_chunk (chunk_ptsreg reg vnew) h1 ;;
@@ -439,6 +489,13 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MPureSpec MA) error.
     Proof. easy. Qed.
 
+    #[export] Instance mon_angelicSecLeak {σ} :
+      Monotonic (MPureSpec eq) (angelicSecLeak σ).
+    Proof. intros ? ? Φ. apply ex_impl_morphism; firstorder. Qed.
+    #[export] Instance mon_demonicSecLeak {σ} :
+      Monotonic (MPureSpec eq) (demonicSecLeak σ).
+    Proof. intros ? ? Φ. apply all_impl_morphism; firstorder. Qed.
+
     #[export] Instance mon_angelic {σ} :
       Monotonic (MPureSpec eq) (angelic σ).
     Proof. intros ? ? Φ. apply ex_impl_morphism; firstorder. Qed.
@@ -473,6 +530,14 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       assert_pathcondition assume_pathcondition assert_formula assume_formula
       angelic_binary demonic_binary.
 
+
+    #[export] Instance mon_angelicSecLeak_ctx {N : Set} {Δ} :
+      Monotonic (MPureSpec eq) (@angelicSecLeak_ctx N Δ).
+    Proof. induction Δ; cbn [angelicSecLeak_ctx]; typeclasses eauto. Qed.
+    #[export] Instance mon_demonicSecLeak_ctx {N : Set} {Δ} :
+      Monotonic (MPureSpec eq) (@demonicSecLeak_ctx N Δ).
+    Proof. induction Δ; cbn [demonicSecLeak_ctx]; typeclasses eauto. Qed.
+
     #[export] Instance mon_angelic_ctx {N : Set} {Δ} :
       Monotonic (MPureSpec eq) (@angelic_ctx N Δ).
     Proof. induction Δ; cbn [angelic_ctx]; typeclasses eauto. Qed.
@@ -500,6 +565,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MPureSpec eq) (demonic_finite F).
     Proof. typeclasses eauto. Qed.
 
+    #[export] Instance mon_assertSecLeak {σ} (rv : RelVal σ) :
+      Monotonic (MPureSpec eq) (assertSecLeak rv).
+    Proof. typeclasses eauto. Qed.
+
     #[export] Instance mon_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
       Monotonic (MPureSpec eq) (@angelic_pattern_match _ _ pat v).
     Proof. typeclasses eauto. Qed.
@@ -507,9 +576,9 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MPureSpec eq) (@demonic_pattern_match _ _ pat v).
     Proof. typeclasses eauto. Qed.
 
-    #[export] Instance mon_new_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
-      Monotonic (MPureSpec eq) (@new_pattern_match _ _ pat v).
-    Proof. typeclasses eauto. Qed.
+    (* #[export] Instance mon_new_pattern_match {N σ} (pat : Pattern (N:=N) σ) v : *)
+    (*   Monotonic (MPureSpec eq) (@new_pattern_match _ _ pat v). *)
+    (* Proof. typeclasses eauto. Qed. *)
 
     #[export] Instance mon_assert_eq_env {Δ E1 E2} :
       Monotonic (MPureSpec eq) (@assert_eq_env Δ E1 E2).
@@ -531,16 +600,16 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MPureSpec eq) (@assert_eq_chunk c1 c2).
     Proof. revert c2; induction c1; intros []; cbn; typeclasses eauto. Qed.
 
-    #[export] Instance mon_replay_aux {Σ} (P : 𝕊 Σ) (ι : Valuation Σ) :
-      Monotonic (MPureSpec eq) (replay_aux P ι).
-    Proof. induction P; typeclasses eauto. Qed.
+    (* #[export] Instance mon_replay_aux {Σ} (P : 𝕊 Σ) (ι : Valuation Σ) : *)
+    (*   Monotonic (MPureSpec eq) (replay_aux P ι). *)
+    (* Proof. induction P; typeclasses eauto. Qed. *)
 
-    #[export] Instance mon_replay {Σ} (P : 𝕊 Σ) :
-      Monotonic (Valuation Σ ::> impl) (replay P).
-    Proof.
-      apply monotonic_pointwise. intros ι.
-      apply mon_run, mon_replay_aux.
-    Qed.
+    (* #[export] Instance mon_replay {Σ} (P : 𝕊 Σ) : *)
+    (*   Monotonic (Valuation Σ ::> impl) (replay P). *)
+    (* Proof. *)
+    (*   apply monotonic_pointwise. intros ι. *)
+    (*   apply mon_run, mon_replay_aux. *)
+    (* Qed. *)
 
     #[export] Instance mon_produce_chunk c h :
       Monotonic (MPureSpec eq) (produce_chunk c h).
@@ -554,21 +623,21 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Proof. unfold read_register. typeclasses eauto. Qed.
 
     #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) :
-      Monotonic (Val τ ::> SCHeap ::> MPureSpec eq) (write_register reg).
+      Monotonic (RelVal τ ::> SCHeap ::> MPureSpec eq) (write_register reg).
     Proof. unfold write_register. typeclasses eauto. Qed.
 
     #[global] Typeclasses Opaque angelic_ctx demonic_ctx angelic_list'
       demonic_list' angelic_list demonic_list angelic_finite demonic_finite
-      angelic_pattern_match demonic_pattern_match new_pattern_match
+      angelic_pattern_match demonic_pattern_match (* new_pattern_match *)
       assert_eq_env assert_eq_nenv assume_eq_env assume_eq_nenv assert_eq_chunk
-      replay_aux replay produce_chunk consume_chunk read_register write_register.
+      (* replay_aux replay *) produce_chunk consume_chunk read_register write_register.
 
     Lemma wp_bind {A B} (m : CPureSpec A) (f : A -> CPureSpec B) (Φ : B -> Prop) :
       bind m f Φ <-> m (fun a => f a Φ).
     Proof. easy. Qed.
 
-    Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
-      angelic_ctx Δ POST <-> exists vs : NamedEnv Val Δ, POST vs.
+    Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv RelVal Δ -> Prop) :
+      angelic_ctx Δ POST <-> exists vs : NamedEnv RelVal Δ, POST vs.
     Proof.
       induction Δ; cbn.
       - split.
@@ -581,8 +650,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           apply IHΔ. now exists vs, v.
     Qed.
 
-    Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
-      demonic_ctx Δ POST <-> forall vs : NamedEnv Val Δ, POST vs.
+    Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv RelVal Δ -> Prop) :
+      demonic_ctx Δ POST <-> forall vs : NamedEnv RelVal Δ, POST vs.
     Proof.
       induction Δ; cbn.
       - split.
@@ -594,6 +663,40 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           destruct (env.view vs) as [vs v].
           now apply (IHΔ (fun vs => forall v, POST (env.snoc vs _ v))).
         + intros HPost. apply IHΔ. intros. apply HPost.
+    Qed.
+
+    Lemma wp_angelicSecLeak_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv RelVal Δ -> Prop) :
+      angelicSecLeak_ctx Δ POST <-> exists vs : NamedEnv Val Δ, POST (ty.syncNamedEnv vs).
+    Proof.
+      induction Δ; cbn.
+      - split.
+        + now exists env.nil.
+        + intros [vs ?]. now destruct (env.view vs).
+      - destruct b as [x σ]. cbv [angelicSecLeak angelic bind pure]. split.
+        + intros (vs & v & (sL & Hwp))%IHΔ.
+          destruct v; cbn in sL; try contradiction.
+          now exists (env.snoc vs (x∷σ) v).
+        + intros [vs Hwp]. destruct (env.view vs) as [vs v].
+          apply IHΔ. now exists vs, (ty.valToRelVal v).
+    Qed.
+
+    Lemma wp_demonicSecLeak_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv RelVal Δ -> Prop) :
+      demonicSecLeak_ctx Δ POST <-> forall vs : NamedEnv Val Δ, POST (ty.syncNamedEnv vs).
+    Proof.
+      induction Δ; cbn.
+      - split.
+        + intros ? vs.
+          now destruct (env.view vs).
+        + intros Hpost. specialize (Hpost [env]). auto.
+      - destruct b as [x σ]. cbv [demonicSecLeak demonic bind pure]. split.
+        + intros Hwp vs.
+          rewrite IHΔ in Hwp.
+          destruct (env.view vs) as [vs v].
+          specialize (Hwp vs (ty.valToRelVal v)). cbn in Hwp. auto.
+        + intros HPost. apply IHΔ. intros vs v sLv.
+          destruct v; cbn; try contradiction.
+          specialize (HPost (vs.[x::σ ↦ v])).
+          apply HPost.
     Qed.
 
     Lemma wp_angelic_list' {A} (xs : list A) (POST : A -> Prop) :
@@ -626,38 +729,146 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       forall x : A, List.In x xs -> POST x.
     Proof. destruct xs; cbn; [firstorder|apply wp_demonic_list']. Qed.
 
-    Lemma wp_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
-      (Φ : MatchResult pat -> Prop) :
-      angelic_pattern_match pat v Φ <-> Φ (pattern_match_val pat v).
+    Lemma wp_assertSecLeak {σ} (v : RelVal σ)
+      (POST : () -> Prop) :
+      assertSecLeak v POST <-> secLeak v /\ POST tt.
     Proof.
-      unfold angelic_pattern_match, angelic_finite. cbn.
-      rewrite wp_angelic_list. setoid_rewrite wp_angelic_ctx.
-      split.
-      - intros (pc & Hin & δpc & <- & Hwp).
-        now rewrite pattern_match_val_inverse_right.
-      - set (mr := pattern_match_val pat v). intros HΦ.
-        exists (projT1 mr). split.
-        { rewrite <- base.elem_of_list_In. apply finite.elem_of_enum. }
-        exists (projT2 mr). split.
-        { subst mr. apply pattern_match_val_inverse_left. }
-        destruct mr. apply HΦ.
+      unfold assertSecLeak.
+      destruct v; cbn.
+      all: firstorder.
     Qed.
 
+    Lemma test (A : Type) (a : option A) (f : A -> Prop) : ssrfun.Option.default False (option_map f a) <-> option.wp f a.
+    Proof.
+      split.
+      - intros.
+        destruct a; cbn in *.
+        + constructor. auto.
+        + contradiction.
+      - intros. destruct a; cbn in *.
+        + inversion H. auto.
+        + inversion H.
+    Qed.
+
+    Lemma pattern_match_syncval_inverse_left {N σ} (pat : Pattern (N:=N) σ) v :
+      pattern_match_relval_reverse' pat (matchResultToMatchResultRel (pattern_match_val pat v)) =
+        SyncVal v.
+    Proof.
+      unfold pattern_match_relval_reverse', pattern_match_relval_reverse, matchResultToMatchResultRel.
+      cbn.
+      rewrite unliftNamedEnvOfEnvMapValToRelValIsSyncVal.
+      cbn.
+      change (pattern_match_val_reverse pat (projT1 ?x)
+                (projT2 ?x)) with
+        (pattern_match_val_reverse' pat (pattern_match_val pat v)).
+      rewrite pattern_match_val_inverse_left.
+      auto.
+    Qed.
+    
+    Lemma wp_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
+      (Φ : MatchResultRel pat -> Prop) :
+      angelic_pattern_match pat v Φ <->
+        option.wp Φ (pattern_match_relval pat v)
+    .
+    Proof.
+      unfold angelic_pattern_match, angelic_finite. cbn.
+      rewrite wp_assertSecLeak.
+      rewrite wp_angelic_list. setoid_rewrite wp_angelic_ctx.
+      split.
+      - intros (H & (pc & Hin & δpc & <- & Hwp)).
+        rewrite pattern_match_relval_inverse_right.
+        unfold pattern_match_relval_reverse in H.
+        destruct ty.unliftNamedEnv.
+        easy.
+        cbn in H.
+        contradiction.
+      - set (mr := pattern_match_relval pat v). intros HΦ.
+        destruct mr as [mr' | _] eqn:eq.
+        + split.
+          -- destruct v.
+             ++ cbn. auto.
+             ++ unfold mr in eq. cbn in *. unfold pattern_match_relval in eq. cbn in eq. congruence.
+          -- destruct v.
+             ++ unfold mr in eq. (* inversion eq. *)
+                exists (projT1 mr'). split.
+                { rewrite <- base.elem_of_list_In. apply finite.elem_of_enum. }
+                exists (projT2 mr'). split.
+                { change (pattern_match_relval_reverse pat (projT1 ?x)
+                            (projT2 ?x)) with
+                    (pattern_match_relval_reverse' pat mr').
+                  inversion eq.
+                  subst mr'.
+                  rewrite pattern_match_syncval_inverse_left.
+                  auto. }
+                destruct mr'.
+                cbn.
+                inversion HΦ.
+                auto.
+             ++ unfold mr in eq. cbn in *. congruence.
+        + cbn in HΦ. inversion HΦ.
+    Qed.
+
+    Lemma unliftIsSyncImpliesAllSync {N Γ} (vs : NamedEnv RelVal Γ) (n : NamedEnv Val Γ) (Hvs : ty.unliftNamedEnv vs = SyncVal n) :
+      env.map (λ b : N∷Ty, SyncVal) n = vs.
+    Proof.
+      induction vs.
+      - inversion Hvs. auto.
+      - env.destroy n.
+        cbn in Hvs.
+        destruct db; destruct (ty.unliftNamedEnv vs); try congruence.
+        depelim Hvs.
+        cbn.
+        rewrite IHvs. auto. auto.
+    Qed.
+      
     Lemma wp_demonic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
-      (Φ : MatchResult pat -> Prop) :
-      demonic_pattern_match pat v Φ <-> Φ (pattern_match_val pat v).
+      (Φ : MatchResultRel pat -> Prop) :
+      demonic_pattern_match pat v Φ <-> option.wp Φ (pattern_match_relval pat v).
     Proof.
       unfold demonic_pattern_match, demonic_finite. cbn.
+      rewrite wp_assertSecLeak.
       rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx.
       split.
-      - set (mr := pattern_match_val pat v). intros HΦ.
-        specialize (HΦ (projT1 mr)).
-        rewrite <- base.elem_of_list_In in HΦ.
-        specialize (HΦ (finite.elem_of_enum _) (projT2 mr)).
-        specialize (HΦ (pattern_match_val_inverse_left pat v)).
-        now destruct mr.
-      - intros HΦ pc Hin δpc <-. revert HΦ.
-        now rewrite pattern_match_val_inverse_right.
+      - set (mr := pattern_match_relval pat v). intros (sL & HΦ).
+        destruct mr as [mr' | _] eqn:eq.
+        + split.
+          specialize (HΦ (projT1 mr')).
+          rewrite <- base.elem_of_list_In in HΦ.
+          specialize (HΦ (finite.elem_of_enum _) (projT2 mr')).
+          destruct v; cbn in *.
+          -- change (pattern_match_relval_reverse pat (projT1 ?x)
+                       (projT2 ?x)) with
+               (pattern_match_relval_reverse' pat mr') in HΦ.
+            inversion eq.
+             subst mr'.
+             rewrite pattern_match_syncval_inverse_left in HΦ.
+             destruct (pattern_match_val pat v). cbn in *. auto.
+          -- contradiction.   
+        + unfold mr in eq. destruct v.
+          -- cbn in *. congruence.
+          -- contradiction.
+      - intros mr.
+        split.
+        { destruct v; cbn in *.
+          + auto.
+          + inversion mr.
+        }
+        destruct v; cbn in *.
+        + intros x HIn vs eq.
+          inversion mr.
+          unfold pattern_match_relval_reverse in eq.
+          destruct (ty.unliftNamedEnv vs) as [|] eqn:Hvs.
+          -- cbn in eq. inversion eq. rewrite <- H2 in H0.
+             rewrite pattern_match_val_inverse_right in H0.
+             unfold matchResultToMatchResultRel in H0.
+             cbn in H0.
+             inversion eq.
+             unfold ty.valToRelVal in H0.
+             apply unliftIsSyncImpliesAllSync in Hvs.
+             rewrite <- Hvs.
+             auto.
+          -- inversion eq.  
+        + inversion mr.
     Qed.
 
     Lemma wp_assert_eq_env {Δ : Ctx Ty} (δ δ' : Env Val Δ) :
@@ -666,18 +877,18 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Proof.
       induction δ; intros Φ; destruct (env.view δ'); cbn.
       - intuition auto.
-      - rewrite IHδ, env.inversion_eq_snoc.
+      - rewrite IHδ env.inversion_eq_snoc.
         unfold assert_formula, assert_pathcondition.
         intuition auto.
     Qed.
 
-    Lemma wp_assert_eq_nenv {N} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) :
+    Lemma wp_assert_eq_nenv {N} {Δ : NCtx N Ty} (δ δ' : NamedEnv RelVal Δ) :
       forall Φ,
         assert_eq_nenv δ δ' Φ <-> δ = δ' /\ Φ tt.
     Proof.
       induction δ; intros Φ; destruct (env.view δ'); cbn; unfold NamedEnv.
       - intuition auto.
-      - rewrite IHδ, env.inversion_eq_snoc.
+      - rewrite IHδ env.inversion_eq_snoc.
         unfold assert_formula, assert_pathcondition.
         intuition auto.
     Qed.
@@ -691,13 +902,13 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Proof.
       revert c'. induction c; intros c' Φ; destruct c'; cbn in *;
         unfold error, FALSE; try (intuition discriminate).
-      - destruct eq_dec as [e|n]; cbn.
-        + rewrite wp_assert_eq_env. apply and_iff_compat_r'.
-          intros ?. destruct e; cbn. split; intros Heq.
-          * now f_equal.
-          * now dependent elimination Heq.
-        + split; try contradiction. intros [Heq Hwp]. apply n.
-          now dependent elimination Heq.
+      (* - destruct eq_dec as [e|n]; cbn. *)
+      (*   + rewrite wp_assert_eq_env. apply and_iff_compat_r'. *)
+      (*     intros ?. destruct e; cbn. split; intros Heq. *)
+      (*     * now f_equal. *)
+      (*     * now dependent elimination Heq. *)
+      (*   + split; try contradiction. intros [Heq Hwp]. apply n. *)
+      (*     now dependent elimination Heq. *)
       - destruct eq_dec_het as [e|n]; cbn.
         + apply and_iff_compat_r'. intros ?.
           dependent elimination e; cbn.
@@ -706,29 +917,29 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           * now dependent elimination Heq.
         + split; try contradiction. intros [Heq Hwp]. apply n.
           now dependent elimination Heq.
-      - rewrite IHc1, IHc2. intuition congruence.
-      - rewrite IHc1, IHc2. intuition congruence.
+      - rewrite IHc1 IHc2. intuition congruence.
+      - rewrite IHc1 IHc2. intuition congruence.
     Qed.
 
-    Lemma replay_sound {Σ} (s : 𝕊 Σ) (ι : Valuation Σ) :
-      replay s ι -> SymProp.safe s ι.
-    Proof.
-      unfold replay, run.
-      induction s; cbn.
-      - intros [|]; intuition auto.
-      - intros []; intuition auto.
-      - inversion 1.
-      - auto.
-      - intros []. intuition auto.
-      - intuition auto.
-      - apply ex_impl_morphism. intros v; red; apply IHs.
-      - apply all_impl_morphism. intros v; red; apply IHs.
-      - intros []. intuition auto.
-      - intuition auto.
-      - inversion 1.
-      - inversion 1.
-      - unfold debug. apply IHs.
-    Qed.
+    (* Lemma replay_sound {Σ} (s : 𝕊 Σ) (ι : Valuation Σ) : *)
+    (*   replay s ι -> SymProp.safe s ι. *)
+    (* Proof. *)
+    (*   unfold replay, run. *)
+    (*   induction s; cbn. *)
+    (*   - intros [|]; intuition auto. *)
+    (*   - intros []; intuition auto. *)
+    (*   - inversion 1. *)
+    (*   - auto. *)
+    (*   - intros []. intuition auto. *)
+    (*   - intuition auto. *)
+    (*   - apply ex_impl_morphism. intros v; red; apply IHs. *)
+    (*   - apply all_impl_morphism. intros v; red; apply IHs. *)
+    (*   - intros []. intuition auto. *)
+    (*   - intuition auto. *)
+    (*   - inversion 1. *)
+    (*   - inversion 1. *)
+    (*   - unfold debug. apply IHs. *)
+    (* Qed. *)
 
     Section WithBI.
 
@@ -780,7 +991,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         now apply bi.wand_mono'.
       Qed.
 
-      Lemma wp_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : Val τ) (h0 : SCHeap) Φ :
+      Lemma wp_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (vnew : RelVal τ) (h0 : SCHeap) Φ :
         write_register reg vnew h0 Φ ->
         interpret_scheap h0 ⊢
         ∃ vold, lptsreg reg vold ∗
@@ -845,17 +1056,31 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Definition demonic_binary {A} : CHeapSpec A -> CHeapSpec A -> CHeapSpec A :=
       fun m1 m2 Φ h => m1 Φ h /\ m2 Φ h.
 
-    Definition angelic (σ : Ty) : CHeapSpec (Val σ) :=
+    Definition angelicSecLeak (σ : Ty) : CHeapSpec (RelVal σ) :=
+      lift_purespec (CPureSpec.angelicSecLeak σ).
+    #[global] Arguments angelicSecLeak σ Φ : rename, clear implicits.
+    Definition demonicSecLeak (σ : Ty) : CHeapSpec (RelVal σ) :=
+      lift_purespec (CPureSpec.demonicSecLeak σ).
+    #[global] Arguments demonicSecLeak σ Φ : rename, clear implicits.
+    
+    Definition angelic (σ : Ty) : CHeapSpec (RelVal σ) :=
       lift_purespec (CPureSpec.angelic σ).
-    #[global] Arguments angelic σ Φ : rename.
-    Definition demonic (σ : Ty) : CHeapSpec (Val σ) :=
+    #[global] Arguments angelic σ Φ : rename, clear implicits.
+    Definition demonic (σ : Ty) : CHeapSpec (RelVal σ) :=
       lift_purespec (CPureSpec.demonic σ).
-    #[global] Arguments demonic σ Φ : rename.
+    #[global] Arguments demonic σ Φ : rename, clear implicits.
 
-    Definition angelic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv Val Δ) :=
+    Definition angelicSecLeak_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv RelVal Δ) :=
+      lift_purespec (CPureSpec.angelicSecLeak_ctx Δ).
+    #[global] Arguments angelicSecLeak_ctx {N} Δ.
+    Definition demonicSecLeak_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv RelVal Δ) :=
+      lift_purespec (CPureSpec.demonicSecLeak_ctx Δ).
+    #[global] Arguments demonicSecLeak_ctx {N} Δ.
+    
+    Definition angelic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv RelVal Δ) :=
       lift_purespec (CPureSpec.angelic_ctx Δ).
     #[global] Arguments angelic_ctx {N} Δ.
-    Definition demonic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv Val Δ) :=
+    Definition demonic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv RelVal Δ) :=
       lift_purespec (CPureSpec.demonic_ctx Δ).
     #[global] Arguments demonic_ctx {N} Δ.
 
@@ -869,9 +1094,9 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Definition consume_chunk (c : SCChunk) : CHeapSpec unit :=
       fun Φ h => CPureSpec.consume_chunk c h (Φ tt).
 
-    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) : CHeapSpec (Val τ) :=
+    Definition read_register {τ} (reg : 𝑹𝑬𝑮 τ) : CHeapSpec (RelVal τ) :=
       fun Φ h => CPureSpec.read_register reg h (fun '(t,h') => Φ t h').
-    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) : CHeapSpec (Val τ) :=
+    Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : RelVal τ) : CHeapSpec (RelVal τ) :=
       fun Φ h => CPureSpec.write_register reg v h (fun '(v',h') => Φ v' h').
 
     Fixpoint produce {Σ} (asn : Assertion Σ) (ι : Valuation Σ) : CHeapSpec unit :=
@@ -922,7 +1147,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           debug (pure tt)
       end.
 
-    Definition call_contract [Δ τ] (c : SepContract Δ τ) (args : CStore Δ) : CHeapSpec (Val τ) :=
+    Definition call_contract [Δ τ] (c : SepContract Δ τ) (args : CStore Δ) : CHeapSpec (RelVal τ) :=
       match c with
       | MkSepContract _ _ Σe δ req result ens =>
           ι <- lift_purespec (CPureSpec.angelic_ctx Σe) ;;
@@ -997,6 +1222,13 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     #[global] Typeclasses Opaque run lift_purespec pure bind debug angelic_binary
       demonic_binary.
 
+    #[export] Instance mon_angelicSecLeak σ :
+      Monotonic (MHeapSpec eq) (angelicSecLeak σ).
+    Proof. typeclasses eauto. Qed.
+    #[export] Instance mon_demonicSecLeak σ :
+      Monotonic (MHeapSpec eq) (demonicSecLeak σ).
+    Proof. typeclasses eauto. Qed.
+
     #[export] Instance mon_angelic σ :
       Monotonic (MHeapSpec eq) (angelic σ).
     Proof. typeclasses eauto. Qed.
@@ -1033,7 +1265,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       intros ? [] ->. now apply mΦ.
     Qed.
 
-    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) :
+    #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : RelVal τ) :
       Monotonic (MHeapSpec eq) (write_register reg v).
     Proof.
       intros Φ1 Φ2 mΦ h.
@@ -1087,7 +1319,9 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         - intros ->%CPureSpec.wp_consume_chunk. now rewrite interpret_scchunk_inst.
         - intros ->%CPureSpec.wp_consume_chunk. now rewrite interpret_scchunk_inst.
         - rewrite CPureSpec.wp_angelic_pattern_match.
-          destruct pattern_match_val; auto.
+          destruct pattern_match_relval as [mr|].
+          + destruct mr as [pc δpc]. intro wpSome. inversion wpSome. auto.
+          + intro wpNone. inversion wpNone.
         - intros ->%IHasn1. rewrite -bi.sep_assoc. apply bi.sep_mono'; [easy|].
           apply bi.exist_elim. intros h2. apply bi.pure_elim_r. apply IHasn2.
         - intros [->%IHasn1 | ->%IHasn2]; apply bi.sep_mono'; auto.
@@ -1108,7 +1342,9 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst.
         - intros ->%CPureSpec.wp_produce_chunk; now rewrite interpret_scchunk_inst.
         - rewrite CPureSpec.wp_demonic_pattern_match.
-          destruct pattern_match_val; auto.
+          destruct pattern_match_relval as [mr|].
+          + destruct mr as [pc δpc]. intro wpSome. inversion wpSome. auto.
+          + intro wpNone. inversion wpNone.
         - iIntros (Hprod1) "H [Hasn1 Hasn2]".
           iPoseProof (IHasn1 _ _ _ Hprod1 with "H Hasn1") as "(%h2 & H & %Hprod2)".
           iPoseProof (IHasn2 _ _ _ Hprod2 with "H Hasn2") as "(%h3 & H & %HΦ)".

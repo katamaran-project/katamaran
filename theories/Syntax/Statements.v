@@ -51,6 +51,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
 
   Inductive Stm (Γ : PCtx) (τ : Ty) : Type :=
   | stm_val           (v : Val τ)
+  | stm_relval        (v : RelVal τ)
   | stm_exp           (e : Exp Γ τ)
   | stm_let           (x : PVar) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (Γ ▻ x∷σ) τ)
   | stm_block         (Δ : PCtx) (δ : CStore Δ) (s : Stm (Γ ▻▻ Δ) τ)
@@ -61,17 +62,18 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   | stm_lemmak        {Δ : PCtx} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
   | stm_seq           {σ : Ty} (s : Stm Γ σ) (k : Stm Γ τ)
   | stm_assertk       (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
-  | stm_fail          (s : Val ty.string)
+  | stm_fail          (s : RelVal ty.string)
   | stm_pattern_match {σ : Ty} (s : Stm Γ σ) (pat : Pattern σ)
       (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ)
   | stm_read_register (reg : 𝑹𝑬𝑮 τ)
   | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
-  | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
+  | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : RelVal σ -> Stm Γ τ)
   | stm_debugk (k : Stm Γ τ).
 
   Derive NoConfusionHom Signature for Stm.
 
   Arguments stm_val {Γ} τ v.
+  Arguments stm_relval {Γ} τ v.
   Arguments stm_exp {Γ τ} e%_exp.
   Arguments stm_let {Γ τ} x σ s__σ%_exp s__τ%_exp.
   Arguments stm_block {Γ τ Δ} δ s%_exp.
@@ -196,6 +198,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
     Fixpoint stm_bindfree {Δ τ} (s : Stm Δ τ) : bool :=
       match s with
       | stm_val _ v => true
+      | stm_relval _ rv => true
       | stm_exp e => true
       | stm_let x σ s1 s2 => stm_bindfree s1 &&& stm_bindfree s2
       | stm_block δ s => stm_bindfree s

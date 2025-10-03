@@ -90,7 +90,8 @@ Module Type UnifLogicOn
   (*   | [ H : interface.bi_wand _ _ _ |- _ ] => destruct H; cbn in H *)
   (*   | [ |- interface.bi_emp _ ] => constructor *)
   (*   end. *)
-  Ltac crushPredEntails3 := cbn; intros;
+  Ltac crushPredEntails3 := cbn -[ty.liftBinOp ty.liftUnOp ty.liftBinOpRV ty.liftUnOpRV]; intros;
+                            removeLiftBinOp;
                             repeat punfold_connectives;
                             repeat (repeat punfold_connectives; crushPredEntailsMatch1 || crushPredEntailsMatch2);
                             repeat punfold_connectives;
@@ -279,22 +280,50 @@ Module Type UnifLogicOn
 
     Section Eq.
 
-      Context {T A} {instTA : Inst T A}.
+      Context {T σ} {instTA : Inst T (RelVal σ)}.
+
+      About inst_term.
 
       Lemma eqₚ_intro {w : World} (t : T w) : ⊢ (t =ₚ t)%P.
-      Proof. crushPredEntails3. Qed.
+      Proof.
+        unfold eqₚ. constructor. intros.
+        rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+        auto.
+      Qed.
 
       Lemma eqₚ_refl {w : World} (t : T w) : t =ₚ t ⊣⊢ₚ ⊤ₚ.
-      Proof. crushPredEntails3. Qed.
+      Proof. crushPredEntails3. apply eqₚ_intro; auto. Qed.
 
       Lemma eqₚ_sym {w : World} (s t : T w) : s =ₚ t ⊣⊢ₚ t =ₚ s.
-      Proof. crushPredEntails3. Qed.
+      Proof.
+        unfold eqₚ. constructor. intros.
+        repeat rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+        split; intros [A B]; auto.
+      Qed.
 
       Lemma eqₚ_trans {w : World} (s t u : T w) : s =ₚ t /\ₚ t =ₚ u ⊢ₚ s =ₚ u.
-      Proof. crushPredEntails3. now transitivity (inst t ι). Qed.
+      Proof.
+        crushPredEntails3.
+        unfold eqₚ in *.
+        crushPredEntails3;
+        intuition; congruence.
+      Qed.
+
+      cbn -[ty.liftBinOp ty.liftUnOp ty.liftBinOpRV ty.liftUnOpRV]; intros;
+        match goal with
+        | |- context[ty.liftBinOp] =>
+            repeat rewrite ty.comProjLeftRVLiftBinOpRV, ty.comProjRightRVLiftBinOpRV
+        | H : context[ty.liftBinOp] |- _ =>
+            repeat rewrite ty.comProjLeftRVLiftBinOpRV, ty.comProjRightRVLiftBinOpRV in H
+        | _ => idtac
+        end;
+        repeat punfold_connectives;
+        repeat (repeat punfold_connectives; crushPredEntailsMatch1 || crushPredEntailsMatch2);
+        repeat punfold_connectives;
+        intuition.
 
     End Eq.
-    #[global] Arguments eqₚ_trans {T A _ w} s t u.
+    #[global] Arguments eqₚ_trans {T σ _ w} s t u.
 
   End Lemmas.
 
@@ -535,54 +564,84 @@ Module Type UnifLogicOn
       eapply inst_sub_id.
     Qed.
 
-    Lemma eval_ex `{Inst AT A} {w : World} (t : AT w) :
+    Lemma eval_ex `{Inst AT (RV A)} {w : World} (t : AT w) :
       ⊢ ∃ v, repₚ v (w := w) t.
-    Proof. crushPredEntails3. now eexists. Qed.
+    Proof.
+      crushPredEntails3.
+      unfold repₚ.
+      exists (inst t ι).
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+      auto.
+    Qed.
 
     Lemma eval_prop `{InstPred AT} {w : World} (t : AT w) :
       ⊢ ∃ P, proprepₚ P (w := w) t.
     Proof. crushPredEntails3. now exists (instpred t ι). Qed.
 
-    Lemma forgetting_valuation_repₚ {w : World} (ι : Valuation w) {T : LCtx -> Type} `{Inst T A} ( t : T w) :
+    Lemma forgetting_valuation_repₚ {w : World} (ι : Valuation w) {T : LCtx -> Type} `{Inst T (RV A)} ( t : T w) :
       ⊢ forgetting (acc_wlctx_valuation ι) (repₚ (inst t ι) t).
     Proof.
-      unfold forgetting.
-      crushPredEntails3.
-      now rewrite inst_lift.
+      unfold forgetting. constructor. intros.
+      cbn -[ty.liftBinOp].
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+      rewrite inst_lift.
+      auto.
     Qed.
 
-    Lemma lift_repₚ `{InstLift AT A} (v : A) {w : World} :
+    Lemma lift_repₚ `{InstLift AT (RV A)} (v : RV A) {w : World} :
       ⊢ repₚ v (lift v : AT w).
     Proof.
       crushPredEntails3.
+      unfold repₚ. rewrite inst_lift.
+      cbn -[ty.liftBinOp].
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+      auto.
     Qed.
 
-    Lemma repₚ_triv {T : LCtx -> Type} `{Inst T A} {a : A} {w : World} {vt : T w}:
+    Lemma repₚ_triv {T : LCtx -> Type} `{Inst T (RV A)} {a : RV A} {w : World} {vt : T w}:
       (∀ ι : Valuation w, inst vt ι = a) ->
       ⊢ repₚ a vt.
     Proof.
       crushPredEntails3.
+      unfold repₚ.
+      rewrite H0.
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+      auto.
     Qed.
 
-    Lemma repₚ_eqₚ {T : LCtx -> Type} `{Inst T A} {a : A} {w : World} {vt1 vt2 : T w}:
+    Lemma repₚ_eqₚ {T : LCtx -> Type} `{Inst T (RV A)} {a : RV A} {w : World} {vt1 vt2 : T w}:
       repₚ a vt1 ∗ eqₚ vt1 vt2 ⊢ repₚ a vt2.
     Proof.
-      crushPredEntails3. now rewrite <-H1.
+      crushPredEntails3.
+      unfold repₚ in *.
+      unfold eqₚ in *.
+      cbn -[ty.liftBinOp] in *.
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H2.
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H1.
+      intuition; congruence.
     Qed.
 
 
-    Lemma eqₚ_triv {T : LCtx -> Type} `{Inst T A} {w : World} {vt1 vt2 : T w}:
+    Lemma eqₚ_triv {T : LCtx -> Type} `{Inst T (RV A)} {w : World} {vt1 vt2 : T w}:
       (∀ ι : Valuation w, inst vt1 ι = inst vt2 ι) ->
       ⊢ eqₚ vt1 vt2.
     Proof.
       crushPredEntails3.
+      cbn -[ty.liftBinOp].
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+      rewrite H0. auto.
     Qed.
 
 
-    Lemma repₚ_antisym_left {T : LCtx -> Type} `{Inst T A} {a1 a2 : A} {w : World} {sa : T w} :
-      ⊢ repₚ a1 sa -∗ repₚ a2 sa -∗ ⌜ a1 = a2 ⌝.
+    Lemma repₚ_antisym_left {T : LCtx -> Type} `{Inst T (RV A)} {a1 a2 : RV A} {w : World} {sa : T w} :
+      ⊢ repₚ a1 sa -∗ repₚ a2 sa -∗ ⌜ ty.projLeftRV a1 = ty.projLeftRV a2 /\ ty.projRightRV a1 = ty.projRightRV a2 ⌝.
     Proof.
-      crushPredEntails3. now subst.
+      crushPredEntails3;
+        cbn -[ty.liftBinOp] in *;
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H2;
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H3;
+      intuition; congruence.
     Qed.
 
     Lemma proprepₚ_triv {T : LCtx -> Type} `{InstPred T} {a : Prop} {w : World} {vt : T w}:
@@ -595,47 +654,70 @@ Module Type UnifLogicOn
       - now rewrite instpred_prop.
     Qed.
 
-    Lemma repₚ_cong {T1 : LCtx -> Type} `{Inst T1 A1}
-      {T2 : LCtx -> Type} `{Inst T2 A2}
+    Lemma repₚ_cong {T1 : LCtx -> Type}  `{Inst T1 (RV A1)}
+      {T2 : LCtx -> Type} `{Inst T2 (RV A2)}
       (f : A1 -> A2) {w : World} (fs : T1 w -> T2 w)
-      {v1 : A1} {vs1 : T1 w} :
-      (∀ (ι : Valuation w) vs1, inst (fs vs1) ι = f (inst vs1 ι)) ->
-      repₚ v1 vs1 ⊢ repₚ (f v1) (fs vs1).
+      {v1 : RV A1} {vs1 : T1 w} :
+      (∀ (ι : Valuation w) vs1, inst (fs vs1) ι = ty.liftUnOpRV f (inst vs1 ι)) ->
+      repₚ v1 vs1 ⊢ repₚ (ty.liftUnOpRV f v1) (fs vs1).
     Proof.
       crushPredEntails3.
-      now rewrite H1 H3.
+      cbn -[ty.liftBinOp] in *.
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H3.
+      rewrite H1.
+      repeat rewrite ty.comProjLeftRVLiftUnOpRV ty.comProjRightRVLiftUnOpRV.
+        intuition; congruence.
     Qed.
 
-    Lemma repₚ_cong₂ {T1 : LCtx -> Type} `{Inst T1 A1}
-      {T2 : LCtx -> Type} `{Inst T2 A2}
-      {T3 : LCtx -> Type} `{Inst T3 A3}
+    Lemma repₚ_cong₂ {T1 : LCtx -> Type} `{Inst T1 (RV A1)}
+      {T2 : LCtx -> Type} `{Inst T2 (RV A2)}
+      {T3 : LCtx -> Type} `{Inst T3 (RV A3)}
       (f : A1 -> A2 -> A3) {w : World} (fs : T1 w -> T2 w -> T3 w)
-      {v1 : A1} {vs1 : T1 w} {v2 : A2} {vs2 : T2 w} :
-      (∀ (ι : Valuation w) vs1 vs2, inst (fs vs1 vs2) ι = f (inst vs1 ι) (inst vs2 ι)) ->
-      repₚ v1 vs1 ∗ repₚ v2 vs2 ⊢ repₚ (f v1 v2) (fs vs1 vs2).
+      {v1 : RV A1} {vs1 : T1 w} {v2 : RV A2} {vs2 : T2 w} :
+      (∀ (ι : Valuation w) vs1 vs2, inst (fs vs1 vs2) ι = ty.liftBinOpRV f (inst vs1 ι) (inst vs2 ι)) ->
+      repₚ v1 vs1 ∗ repₚ v2 vs2 ⊢ repₚ (ty.liftBinOpRV f v1 v2) (fs vs1 vs2).
     Proof.
       crushPredEntails3.
-      now rewrite H2 H4 H5.
+      unfold repₚ in *.
+      repeat rewrite H2.
+      repeat rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H4.
+      rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H5.
+      intuition; congruence.
     Qed.
 
     Lemma eqₚ_term_prod {σ1 σ2} {w : World} {sva1 svb1 : STerm σ1 w} {sva2 svb2 : STerm σ2 w} :
       eqₚ (T := STerm (ty.prod σ1 σ2)) (term_binop bop.pair sva1 sva2) (term_binop bop.pair svb1 svb2) ⊣⊢ eqₚ sva1 svb1 ∗ eqₚ sva2 svb2.
-    Proof. crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed.
-
-
-    Lemma repₚ_term_prod {σ1 σ2} {v1 : Val σ1} {v2 : Val σ2} {w : World} {sv1 : STerm σ1 w} {sv2 : STerm σ2 w} :
-      repₚ (T := STerm (ty.prod σ1 σ2)) (v1,v2) (term_binop bop.pair sv1 sv2) ⊣⊢ repₚ v1 sv1 ∗ repₚ v2 sv2.
-    Proof.
-      unfold repₚ.
-      crushPredEntails3.
-      - now inversion H0.
-      - now inversion H0.
-      - now f_equal.
+    Proof. crushPredEntails3; unfold eqₚ in *.
+           all: repeat rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV.
+           all: repeat rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H0.
+           all: repeat rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H1.
+             all: repeat rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H2.
+             all: repeat rewrite ty.comProjLeftRVLiftBinOpRV ty.comProjRightRVLiftBinOpRV in H3.
+             cbn in *; intuition; inversion H1; try inversion H2; auto.
+             cbn in *; intuition; inversion H1; try inversion H2; auto.
+             cbn in *; intuition.
+             - rewrite H2. rewrite H0. auto.
+             - rewrite H3. rewrite H4. auto.
     Qed.
 
-    Lemma rep_term_val {w : World} {σ : Ty} {v : Val σ} :
-      repₚ (w := w) v (term_val σ v) ⊣⊢ True.
-    Proof. unfold repₚ. crushPredEntails3. Qed.
+
+    Lemma repₚ_term_prod {σ1 σ2} {v1 : RelVal σ1} {v2 : RelVal σ2} {w : World} {sv1 : STerm σ1 w} {sv2 : STerm σ2 w} :
+      repₚ (T := STerm (ty.prod σ1 σ2)) (ty.pairOfRelValToRelValOfPair (v1,v2)) (term_binop bop.pair sv1 sv2) ⊣⊢ repₚ v1 sv1 ∗ repₚ v2 sv2.
+    Proof.
+      unfold repₚ.
+      crushPredEntails3;
+        destruct (inst sv1 ι); destruct (inst sv2 ι); destruct v1; destruct v2; cbn in *.
+      all: inversion H0; inversion H1; subst; auto.
+    Qed.
+
+    Lemma rep_term_val {w : World} {σ : Ty} {v : RelVal σ} :
+      repₚ (w := w) v (term_relval σ v) ⊣⊢ True.
+    Proof.
+      unfold repₚ. crushPredEntails3;
+        now destruct v.
+    Qed.
 
     Lemma eq_term_val {w : World} {σ : Ty} {v : Val σ} :
       eqₚ (w := w) (term_val σ v) (term_val σ v) ⊣⊢ True.
@@ -707,34 +789,50 @@ Module Type UnifLogicOn
       crushPredEntails3.
     Qed.
 
-    Lemma proprepₚ_cong₂ {T1 : LCtx -> Type} `{Inst T1 A1}
-      {T2 : LCtx -> Type} `{Inst T2 A2}
+    Lemma proprepₚ_cong₂ {T1 : LCtx -> Type} `{Inst T1 (RV A1)}
+      {T2 : LCtx -> Type} `{Inst T2 (RV A2)}
       {T3 : LCtx -> Type} `{InstPred T3}
       (f : A1 -> A2 -> Prop) {w : World} (fs : T1 w -> T2 w -> T3 w)
-      {v1 : A1} {vs1 : T1 w} {v2 : A2} {vs2 : T2 w} :
-      (∀ (ι : Valuation w) vs1 vs2, instpred (fs vs1 vs2) ι <-> f (inst vs1 ι) (inst vs2 ι)) ->
-      repₚ v1 vs1 ∗ repₚ v2 vs2 ⊢ proprepₚ (f v1 v2) (fs vs1 vs2).
+      {v1 : RV A1} {vs1 : T1 w} {v2 : RV A2} {vs2 : T2 w} :
+      (∀ (ι : Valuation w) vs1 vs2, instpred (fs vs1 vs2) ι <-> let rvp := ty.liftBinOpRV f (inst vs1 ι) (inst vs2 ι) in ty.projLeftRV rvp /\ ty.projRightRV rvp) ->
+      repₚ v1 vs1 ∗ repₚ v2 vs2 ⊢ proprepₚ (let rvp := ty.liftBinOpRV f v1 v2 in ty.projLeftRV rvp /\ ty.projRightRV rvp) (fs vs1 vs2).
     Proof.
-      crushPredEntails3; now subst.
+      crushPredEntails3; cbn in *;
+      destruct (inst vs1 ι), (inst vs2 ι), v1, v2. all: cbn in *.
+      all: try destruct H4, H6; subst; auto.
+      all: try destruct H2, H4; subst; auto.
     Qed.
 
-    Lemma repₚ_elim {T : LCtx -> Type} `{Inst T A} {a b : A} {w : World} {vt : T w}:
+    Lemma repₚ_elim {T : LCtx -> Type} `{Inst T (RV A)} {a b : RV A} {w : World} {vt : T w}:
       (∀ ι : Valuation w, inst vt ι = a) ->
-      repₚ b vt ⊣⊢ ⌜ b = a ⌝.
+      repₚ b vt ⊣⊢ ⌜ ty.projLeftRV b = ty.projLeftRV a /\ ty.projRightRV b = ty.projRightRV a ⌝.
     Proof.
-      crushPredEntails3; now subst.
+      crushPredEntails3; cbn in *; destruct (inst vt ι), b, a; cbn in *.
+      all: inversion H0; subst; try destruct H2; auto.
     Qed.
 
-    Lemma repₚ_const {A} {v sv} {w} : repₚ (w := w) (T := Const A) sv v ⊣⊢  ⌜ v = sv ⌝.
-    Proof. crushPredEntails3. Qed.
+    (* TODO: This one doesn't work, I think. *)
+    (* Lemma repₚ_const {A} {v sv} {w} : repₚ (w := w) (T := Const A) sv v ⊣⊢  ⌜ v = sv ⌝. *)
+    (* Proof. crushPredEntails3. Qed. *)
 
-    Lemma repₚ_val {σ} {v sv} {w} : repₚ (w := w) (T := STerm σ) v (term_val _ sv) ⊣⊢  ⌜ v = sv ⌝.
-    Proof. crushPredEntails3. Qed.
+    Lemma repₚ_val {σ} {v sv} {w} : repₚ (w := w) (T := STerm σ) v (term_relval _ sv) ⊣⊢  ⌜ ty.projLeft v = ty.projLeft sv /\ ty.projRight v = ty.projRight sv ⌝.
+    Proof.
+      crushPredEntails3; cbn in *.
+      all: destruct sv, v; cbn in *.
+      all: destruct H0; auto.
+    Qed.
 
-    Lemma repₚ_elim_repₚ {T : LCtx -> Type} `{Inst T A} {a1 : A} (a2 : A) {w : World} {vt1 : T w} (vt2 : T w):
-      (∀ ι : Valuation w, inst vt1 ι = a1 -> inst vt2 ι = a2) ->
-      repₚ a1 vt1 ⊢ repₚ a2 vt2.
-    Proof. now crushPredEntails3. Qed.
+    (* TODO: I got frustrated *)
+    (* Lemma repₚ_elim_repₚ {T : LCtx -> Type} `{Inst T (RV A)} {a1 : RV A} (a2 : RV A) {w : World} {vt1 : T w} (vt2 : T w): *)
+    (*   (∀ ι : Valuation w, inst vt1 ι = a1 -> inst vt2 ι = a2) -> *)
+    (*   repₚ a1 vt1 ⊢ repₚ a2 vt2. *)
+    (* Proof. *)
+    (*   crushPredEntails3; cbn in *; *)
+    (*   destruct (inst vt2 ι), a2, (inst vt1 ι), a1; cbn in *. *)
+    (*   all: destruct H2; subst. *)
+    (*   - admit. *)
+    (*   -  *)
+    (* Qed. *)
 
     (* Lemma repₚ_inversion_term_inl {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svl : STerm σ w) : *)
     (*   (repₚ v (term_inl svl) : Pred w) ⊢ ∃ (vl : Val σ), ⌜ v = inl vl ⌝ ∗ repₚ vl svl. *)
@@ -750,21 +848,22 @@ Module Type UnifLogicOn
     (*   destruct v; crushPredEntails3; now inversion H0. *)
     (* Qed. *)
 
-    Lemma repₚ_inversion_term_unsigned {n} (v : Val ty.int) {w : World} (sbv : STerm (ty.bvec n) w) :
-      (repₚ v (term_unsigned sbv) : Pred w)
-      ⊢ ∃ bv : Val (ty.bvec n), ⌜ v = bv.unsigned bv ⌝ ∗ repₚ bv sbv.
-    Proof.
-      unfold repₚ. crushPredEntails3.
-      now exists (inst_term sbv ι).
-    Qed.
+    (* TODO: I also got frustrated for the next two *)
+    (* Lemma repₚ_inversion_term_unsigned {n} (v : Val ty.int) {w : World} (sbv : STerm (ty.bvec n) w) : *)
+    (*   (repₚ v (term_unsigned sbv) : Pred w) *)
+    (*   ⊢ ∃ bv : Val (ty.bvec n), ⌜ v = bv.unsigned bv ⌝ ∗ repₚ bv sbv. *)
+    (* Proof. *)
+    (*   unfold repₚ. crushPredEntails3. *)
+    (*   now exists (inst_term sbv ι). *)
+    (* Qed. *)
 
-    Lemma repₚ_inversion_term_signed {n} (v : Val ty.int) {w : World} (sbv : STerm (ty.bvec n) w) :
-      (repₚ v (term_signed sbv) : Pred w)
-      ⊢ ∃ bv : Val (ty.bvec n), ⌜ v = bv.signed bv ⌝ ∗ repₚ bv sbv.
-    Proof.
-      unfold repₚ. crushPredEntails3.
-      now exists (inst_term sbv ι).
-    Qed.
+    (* Lemma repₚ_inversion_term_signed {n} (v : Val ty.int) {w : World} (sbv : STerm (ty.bvec n) w) : *)
+    (*   (repₚ v (term_signed sbv) : Pred w) *)
+    (*   ⊢ ∃ bv : Val (ty.bvec n), ⌜ v = bv.signed bv ⌝ ∗ repₚ bv sbv. *)
+    (* Proof. *)
+    (*   unfold repₚ. crushPredEntails3. *)
+    (*   now exists (inst_term sbv ι). *)
+    (* Qed. *)
 
     (* Lemma repₚ_inversion_record {R} {w : World} {v : recordt R} {svs : NamedEnv (λ τ : Ty, Term w τ) (recordf_ty R)} : *)
     (*   repₚ (T := STerm (ty.record R)) v (term_record R svs) ⊣⊢ *)
@@ -795,25 +894,26 @@ Module Type UnifLogicOn
     Section WithEnvironments.
       Import ctx.notations.
       Import env.notations.
-      
-      Lemma repₚ_invert_snoc
-        (T : Set) {S : LCtx → T → Set} {A : T → Set} {Σ : Ctx T}
-        {w : World} {b : T} {E1 : Env A Σ} {Es1 : Env (S w) Σ} {v : A b} {db : S w b} 
-        (instSA : ∀ τ : T, Inst (λ Σ : LCtx, S Σ τ) (A τ)) :
-        @repₚ _ _ inst_env (env.snoc E1 b v) w (env.snoc Es1 b db) ⊢  repₚ E1 Es1 ∗ repₚ v db.
-      Proof.
-        crushPredEntails3;
-        now apply env.inversion_eq_snoc in H0.
-      Qed.
+
+      (* TODO: Still frustrated for the next two *)
+      (* Lemma repₚ_invert_snoc *)
+      (*   (T : Set) {S : LCtx → T → Set} {A : T → Set} {Σ : Ctx T} *)
+      (*   {w : World} {b : T} {E1 : Env A Σ} {Es1 : Env (S w) Σ} {v : A b} {db : S w b}  *)
+      (*   (instSA : ∀ τ : T, Inst (λ Σ : LCtx, S Σ τ) (A τ)) : *)
+      (*   @repₚ _ _ inst_env (env.snoc E1 b v) w (env.snoc Es1 b db) ⊢  repₚ E1 Es1 ∗ repₚ v db. *)
+      (* Proof. *)
+      (*   crushPredEntails3; *)
+      (*   now apply env.inversion_eq_snoc in H0. *)
+      (* Qed. *)
     End WithEnvironments.
         
-    Lemma forgetting_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2}  {ω : w1 ⊒ w2} (t : AT w1) :
-      (repₚ v (persist t ω) ⊣⊢ forgetting ω (repₚ v t))%I.
-    Proof.
-      rewrite persist_subst.
-      unfold forgetting, repₚ.
-      constructor. split; rewrite inst_subst; auto using acc_pathcond.
-    Qed.
+    (* Lemma forgetting_repₚ `{InstSubst AT, @SubstLaws AT _} {v w1 w2}  {ω : w1 ⊒ w2} (t : AT w1) : *)
+    (*   (repₚ v (persist t ω) ⊣⊢ forgetting ω (repₚ v t))%I. *)
+    (* Proof. *)
+    (*   rewrite persist_subst. *)
+    (*   unfold forgetting, repₚ. *)
+    (*   constructor. split; rewrite inst_subst; auto using acc_pathcond. *)
+    (* Qed. *)
 
     Lemma instpred_persist {T : LCtx -> Type} `{InstPredSubst T} {_ : SubstLaws T} {w1 w2} {ω : w1 ⊒ w2} (t : T w1) :
       instpred (persist t ω) ⊣⊢ forgetting ω (instpred t).
@@ -1067,7 +1167,7 @@ Module Type UnifLogicOn
     Qed.
 
     Lemma knowing_acc_snoc_right {w b P} :
-      knowing (w1 := wsnoc w b) acc_snoc_right P ⊣⊢ ∃ v, forgetting (w1 := wsnoc w b) (acc_snoc_left acc_refl b (term_val _ v)) P.
+      knowing (w1 := wsnoc w b) acc_snoc_right P ⊣⊢ ∃ v, forgetting (w1 := wsnoc w b) (acc_snoc_left acc_refl b (term_relval _ v)) P.
     Proof.
       unfold knowing, forgetting.
       crushPredEntails3.
@@ -1083,10 +1183,11 @@ Module Type UnifLogicOn
     Qed.
 
     Lemma forgetting_acc_snoc_left_repₚ {w1 w2 : World} {b} {ω : w1 ⊒ w2} {v} :
-      ⊢ forgetting (w1 := wsnoc w1 b) (acc_snoc_left ω b (term_val _ v)) (repₚ v term_var_zero).
+      ⊢ forgetting (w1 := wsnoc w1 b) (acc_snoc_left ω b (term_relval _ v)) (repₚ v term_var_zero).
     Proof.
       unfold forgetting.
-      now crushPredEntails3.
+      crushPredEntails3; cbn in *.
+      all: destruct v; cbn; auto.
     Qed.
 
     Lemma knowing_acc_snoc_right2 {w b P} :
@@ -1095,7 +1196,9 @@ Module Type UnifLogicOn
       unfold knowing.
       crushPredEntails3.
       destruct (env.view x) as [ι' v].
-      now exists v, (env.snoc ι' b v).
+      exists v, (env.snoc ι' b v).
+      cbn.
+      destruct v; cbn; auto.
     Qed.
 
 
@@ -1109,7 +1212,8 @@ Module Type UnifLogicOn
       crushPredEntails3.
       - subst; cbn.
         rewrite <-inst_lookup, <-inst_subst.
-        now rewrite lookup_sub_single_eq subst_shift_single.
+        rewrite lookup_sub_single_eq subst_shift_single.
+        cbn in *. destruct (inst t x0); cbn; auto.
       - rewrite !inst_sub_single2 in H3 H0.
         apply (f_equal (fun ι => env.remove (x∷σ) ι xIn)) in H0, H3.
         rewrite !env.remove_insert in H3, H0.
@@ -1118,7 +1222,11 @@ Module Type UnifLogicOn
       - exists (inst (sub_shift xIn) ι).
         assert (instprop (wco w) (inst (sub_single xIn t) (inst (sub_shift xIn) ι))) as Hpc2.
         { rewrite inst_sub_single_shift; first done.
-          now rewrite <-inst_subst.
+          rewrite <-inst_subst.
+          cbn in *.
+          destruct (env.lookup ι xIn), (inst (subst t (sub_shift xIn)) ι); cbn in *.
+          - admit.
+          - 
         }
         assert (inst t (inst (sub_shift xIn) ι) = env.lookup ι xIn) as Hinst.
         { now rewrite <-inst_subst. }

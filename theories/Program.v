@@ -104,6 +104,7 @@ Module Type ProgramMixin (Import B : Base)
       Fixpoint StmWellFormed {Δ τ} (s : Stm Δ τ) : Prop :=
         match s with
         | stm_val _ v => True
+        | stm_relval _ rv => True
         | stm_exp e => True
         | stm_let x σ s1 s2 => StmWellFormed s1 /\ StmWellFormed s2
         | stm_block δ s => StmWellFormed s
@@ -120,7 +121,7 @@ Module Type ProgramMixin (Import B : Base)
         | stm_read_register reg => True
         | stm_write_register reg e => True
         | @stm_bind _ _ σ s k => StmWellFormed s /\
-                          (forall (v : Val σ), StmWellFormed (k v))
+                          (forall (v : RelVal σ), StmWellFormed (k v))
         | stm_debugk k => StmWellFormed k
         end.
 
@@ -138,6 +139,7 @@ Module Type ProgramMixin (Import B : Base)
     Fixpoint InvokedByStmList {Γ τ} (s : Stm Γ τ) : Nodes :=
       match s with
       | stm_val _ v => []
+      | stm_relval _ rv => []
       | stm_exp e => []
       | stm_let x σ s1 s2 => InvokedByStmList s1 ++ InvokedByStmList s2
       | stm_block δ s => InvokedByStmList s

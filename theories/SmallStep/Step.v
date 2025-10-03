@@ -47,9 +47,13 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   Inductive Step {Γ : PCtx} {τ : Ty} (γ : RegStore) (μ : Memory) (δ : CStore Γ) :
     forall (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s1 s2 : Stm Γ τ), Prop :=
 
+  | st_val
+      (v : Val τ) :
+    ⟨ γ , μ , δ , stm_val τ v ⟩ ---> ⟨ γ , μ , δ , stm_relval τ (ty.valToRelVal v) ⟩
+
   | st_exp
       (e : Exp Γ τ) :
-      ⟨ γ , μ , δ , (stm_exp e) ⟩ ---> ⟨ γ , μ , δ , stm_val τ (eval e δ) ⟩
+      ⟨ γ , μ , δ , (stm_exp e) ⟩ ---> ⟨ γ , μ , δ , stm_relval τ (eval e δ) ⟩
 
   | st_let
       (x : PVar) (σ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ) :
@@ -57,10 +61,10 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ, μ , δ , stm_bind s (fun v => stm_block (env.snoc env.nil (x∷σ) v) k) ⟩
 
   | st_block_value
-      (Δ : PCtx) (δΔ : CStore Δ) (v : Val τ) :
-      ⟨ γ , μ , δ , stm_block δΔ (stm_val τ v) ⟩ ---> ⟨ γ , μ , δ , stm_val τ v ⟩
+      (Δ : PCtx) (δΔ : CStore Δ) (v : RelVal τ) :
+      ⟨ γ , μ , δ , stm_block δΔ (stm_relval τ v) ⟩ ---> ⟨ γ , μ , δ , stm_relval τ v ⟩
   | st_block_fail
-      (Δ : PCtx) (δΔ : CStore Δ) (s : string) :
+      (Δ : PCtx) (δΔ : CStore Δ) (s : RelVal ty.string) :
       ⟨ γ , μ , δ , stm_block δΔ (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | st_block_step
       (Δ : PCtx) (δΔ δΔ' : CStore Δ) (k k' : Stm (Γ ▻▻ Δ) τ)
@@ -77,10 +81,10 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , stm_call f es ⟩ --->
       ⟨ γ , μ , δ , stm_call_frame (evals es δ) (FunDef f) ⟩
   | st_call_frame_value
-      (Δ : PCtx) {δΔ : CStore Δ} (v : Val τ) :
-      ⟨ γ , μ , δ , stm_call_frame δΔ (stm_val τ v) ⟩ ---> ⟨ γ , μ , δ , stm_val τ v ⟩
+      (Δ : PCtx) {δΔ : CStore Δ} (v : RelVal τ) :
+      ⟨ γ , μ , δ , stm_call_frame δΔ (stm_relval τ v) ⟩ ---> ⟨ γ , μ , δ , stm_relval τ v ⟩
   | st_call_frame_fail
-      (Δ : PCtx) {δΔ : CStore Δ} (s : string) :
+      (Δ : PCtx) {δΔ : CStore Δ} (s : RelVal ty.string) :
       ⟨ γ , μ , δ , stm_call_frame δΔ (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | st_call_frame_step
       (Δ : PCtx) {δΔ δΔ' : CStore Δ} (s s' : Stm Δ τ)
@@ -88,13 +92,13 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δΔ , s ⟩ ---> ⟨ γ' , μ' , δΔ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_call_frame δΔ s ⟩ ---> ⟨ γ' , μ' , δ , stm_call_frame δΔ' s' ⟩
   | st_foreign
-      {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ) (res : string + Val τ)
+      {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ) (res : RelVal ty.string + RelVal τ)
       (γ' : RegStore) (μ' : Memory) :
       ForeignCall f (evals es δ) res γ γ' μ μ' ->
       ⟨ γ  , μ  , δ , stm_foreign f es ⟩ --->
       ⟨ γ' , μ' , δ , match res with
                       | inl msg => stm_fail τ msg
-                      | inr v__σ  => stm_val τ v__σ
+                      | inr v__σ  => stm_relval τ v__σ
                       end ⟩
   | st_lemmak
       {Δ} {l : 𝑳 Δ} (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ) :
@@ -102,10 +106,10 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , k ⟩
 
   | st_assign_value
-      (x : PVar) {xInΓ : x∷τ ∈ Γ} (v : Val τ) :
-      ⟨ γ , μ , δ , stm_assign x (stm_val τ v) ⟩ ---> ⟨ γ , μ , δ ⟪ x ↦ v ⟫ , stm_val τ v ⟩
+      (x : PVar) {xInΓ : x∷τ ∈ Γ} (v : RelVal τ) :
+      ⟨ γ , μ , δ , stm_assign x (stm_relval τ v) ⟩ ---> ⟨ γ , μ , δ ⟪ x ↦ v ⟫ , stm_relval τ v ⟩
   | st_assign_fail
-      (x : PVar) {xInΓ : x∷τ ∈ Γ} (s : string) :
+      (x : PVar) {xInΓ : x∷τ ∈ Γ} (s : RelVal ty.string) :
       ⟨ γ , μ , δ , stm_assign x (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | st_assign_step
       (x : PVar) {xInΓ : x∷τ ∈ Γ} (s s' : Stm Γ τ)
@@ -116,24 +120,28 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   | st_assertk
       (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_assertk e1 e2 k ⟩ --->
-      ⟨ γ , μ , δ , if eval e1 δ then k else stm_fail τ (eval e2 δ) ⟩
+      ⟨ γ , μ , δ , match (eval e1 δ) with
+                    | NonSyncVal _ _ => stm_fail τ (eval e2 δ)
+                    | SyncVal v =>
+                        if v then k else stm_fail τ (eval e2 δ)
+                    end ⟩
 
   | st_read_register
       (r : 𝑹𝑬𝑮 τ) :
-      ⟨ γ, μ , δ, stm_read_register r ⟩ ---> ⟨ γ, μ , δ, stm_val τ (read_register γ r) ⟩
+      ⟨ γ, μ , δ, stm_read_register r ⟩ ---> ⟨ γ, μ , δ, stm_relval τ (read_register γ r) ⟩
   | st_write_register
       (r : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) :
       let v := eval e δ in
-      ⟨ γ , μ , δ, stm_write_register r e ⟩ ---> ⟨ write_register γ r v , μ , δ , stm_val τ v ⟩
+      ⟨ γ , μ , δ, stm_write_register r e ⟩ ---> ⟨ write_register γ r v , μ , δ , stm_relval τ v ⟩
 
   | st_bind_value
-      (σ : Ty) (v : Val σ) (k : Val σ -> Stm Γ τ) :
-      ⟨ γ , μ , δ , stm_bind (stm_val σ v) k ⟩ ---> ⟨ γ , μ , δ , k v ⟩
+      (σ : Ty) (v : RelVal σ) (k : RelVal σ -> Stm Γ τ) :
+      ⟨ γ , μ , δ , stm_bind (stm_relval σ v) k ⟩ ---> ⟨ γ , μ , δ , k v ⟩
   | st_bind_fail
-      (σ : Ty) (s : string) (k : Val σ -> Stm Γ τ) :
+      (σ : Ty) (s : RelVal ty.string) (k : RelVal σ -> Stm Γ τ) :
       ⟨ γ , μ , δ , stm_bind (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | st_bind_step
-      (σ : Ty) (s s' : Stm Γ σ) (k : Val σ -> Stm Γ τ)
+      (σ : Ty) (s s' : Stm Γ σ) (k : RelVal σ -> Stm Γ τ)
       (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) :
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ', μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_bind s k ⟩ ---> ⟨ γ', μ' , δ' , stm_bind s' k ⟩
@@ -146,8 +154,10 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       {σ} (s : Stm Γ σ) (pat : Pattern σ)
       (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ) :
       ⟨ γ , μ , δ , stm_pattern_match s pat rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_bind s (fun v => let (pc,δpc) := pattern_match_val pat v
-                                         in stm_block δpc (rhs pc))
+      ⟨ γ , μ , δ , stm_bind s (fun v => match pattern_match_relval pat v with
+                                         | None => stm_fail τ (ty.valToRelVal (σ := ty.string) "pattern matching failed"%string) 
+                                         | Some (existT pc δpc) => stm_block δpc (rhs pc)
+                                         end)
       ⟩
 
   where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" :=
@@ -177,7 +187,11 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
 
       Variant StVal {v : Val τ} :
         forall [γ2 μ2 δ2 s2],
-          ⟨ γ, μ, δ, stm_val τ v ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=.
+          ⟨ γ, μ, δ, stm_val τ v ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
+        stc_val : StVal (st_val γ μ δ v).
+      Variant StRelVal {v : RelVal τ} :
+        forall [γ2 μ2 δ2 s2],
+          ⟨ γ, μ, δ, stm_relval τ v ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=.
       Variant StExp {e : Exp Γ τ} :
         forall [γ2 μ2 δ2 s2],
           ⟨ γ, μ, δ, stm_exp e ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
@@ -239,11 +253,11 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         forall [γ2 μ2 δ2 s2],
           ⟨ γ, μ, δ, stm_write_register r e ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
         stc_write_register : StWriteRegister (st_write_register γ μ δ r e).
-      Variant StBind {σ} {k : Val σ -> Stm Γ τ} :
+      Variant StBind {σ} {k : RelVal σ -> Stm Γ τ} :
         forall {s} [γ2 μ2 δ2 s2],
           ⟨ γ, μ, δ, stm_bind s k ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
-        | stc_bind_value v : StBind (st_bind_value γ μ δ σ v k)
-        | stc_bind_fail s : StBind (st_bind_fail γ μ δ σ s k)
+        | stc_bind_value v : StBind (st_bind_value γ μ δ (* σ *) v k)
+        | stc_bind_fail s : StBind (st_bind_fail γ μ δ (* σ *) s k)
         | stc_bind_step s γ' μ' δ' s'
             (H : ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ', μ' , δ' , s' ⟩) :
           StBind (st_bind_step k H).
@@ -262,6 +276,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       forall γ2 μ2 δ2 s2, ⟨ γ, μ, δ, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> Prop :=
        match s1 with
        | stm_val _ _             => StVal
+       | stm_relval _ _          => StRelVal
        | stm_exp _               => StExp
        | stm_let _ _ _ _         => StLet
        | stm_block _ s           => StBlock
@@ -282,7 +297,9 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
 
     Definition smallinvstep {Γ τ γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ τ}
       (st : ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩) : smallinvdispatch st.
-    Proof. destruct st; now constructor. Qed.
+    Proof.
+      destruct st; try now constructor.
+    Qed.
 
   End SmallInversions.
 
@@ -311,7 +328,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   Qed.
 
   Lemma Steps_bind {Γ σ τ} :
-    forall {γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ σ} {k : Val σ -> Stm Γ τ},
+    forall {γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ σ} {k : RelVal σ -> Stm Γ τ},
       ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s2 ⟩ ->
       ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ --->* ⟨ γ2, μ2, δ2, stm_bind s2 k ⟩.
   Proof.
@@ -364,7 +381,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   (* Tests if a statement is a final one, i.e. a finished computation. *)
   Ltac microsail_stm_is_final s :=
     lazymatch s with
-    | stm_val _ _  => idtac
+    | stm_relval _ _  => idtac
     | stm_fail _ _ => idtac
     end.
 
@@ -380,6 +397,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         end
       | lazymatch head s with
         | @stm_val              => idtac
+        | @stm_relval           => idtac
         | @stm_exp              => idtac
         | @stm_seq              => idtac
         | @stm_let              => idtac
@@ -401,7 +419,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     ⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩ -> True.
     intro step. remember s1 as s1'.
     dependent elimination step;
-      match goal with
+      try match goal with
       | [ H: ⟨ _,_,_,_ ⟩ ---> ⟨ _,_,_,_ ⟩ |- _ ] =>
         (* If there is a step hypothesis then this case represents a congruence
            rule, not an axiom rule. *)
@@ -410,30 +428,31 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         (* Otherwise, it's an axiom rule and the microsail_stm_primitive_step
            tactic should recognize it. *)
         microsail_stm_primitive_step s1'; constructor
-      end; fail.
+      end.
+    
     Abort.
 
   Definition Final {Γ σ} (s : Stm Γ σ) : Prop :=
     match s with
-    | stm_val _ _   => True
+    | stm_relval _ _   => True
     | stm_fail _ _ => True
     | _ => False
     end.
 
   Definition ResultOrFail {Γ σ} (s : Stm Γ σ) :
-    forall (POST : Val σ -> Prop), Prop :=
+    forall (POST : RelVal σ -> Prop), Prop :=
     match s with
-    | stm_val _ v => fun POST => POST v
+    | stm_relval _ v => fun POST => POST v
     | stm_fail _ _ => fun _ => True
     | _ => fun _ => False
     end.
 
-  Lemma result_or_fail_inversion {Γ σ} (s : Stm Γ σ) (POST : Val σ -> Prop) :
+  Lemma result_or_fail_inversion {Γ σ} (s : Stm Γ σ) (POST : RelVal σ -> Prop) :
     ResultOrFail s POST -> (exists msg, s = stm_fail _ msg)
-                        \/ (exists v, s = stm_val _ v /\ POST v).
+                        \/ (exists v, s = stm_relval _ v /\ POST v).
   Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
 
-  Lemma result_or_fail_mono {Γ σ} {s : Stm Γ σ} {P Q : Val σ -> Prop}:
+  Lemma result_or_fail_mono {Γ σ} {s : Stm Γ σ} {P Q : RelVal σ -> Prop}:
     (forall v, P v -> Q v) ->
     ResultOrFail s P -> ResultOrFail s Q.
   Proof.

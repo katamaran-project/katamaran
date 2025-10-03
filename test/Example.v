@@ -41,8 +41,8 @@ From Katamaran Require Import
      Signature
      Bitvector
      Semantics.Registers
-     MicroSail.SymbolicExecutor
-     Symbolic.Solver
+     MicroSail.ShallowExecutor (* MicroSail.SymbolicExecutor *)
+     (* Symbolic.Solver *)
      Specification
      Program.
 
@@ -112,11 +112,13 @@ End Finite.
 Module Import ExampleBase <: Base.
   Import stdpp.finite.
 
-  #[export] Instance typedeclkit : TypeDeclKit :=
-    {| enumi := Enums;
-       unioni := Unions;
-       recordi := Records;
-    |}.
+  #[export] Instance typedeclkit : TypeDeclKit := DefaultTypeDeclKit
+    (* {| *)
+    (*   enumi := Enums; *)
+    (*   unioni := Unions; *)
+    (*   recordi := Records; *)
+    (* |} *)
+  .
 
   Definition enum_denote (E : Enums) : Set :=
     match E with
@@ -131,11 +133,12 @@ Module Import ExampleBase <: Base.
   Definition record_denote (R : Records) : Set :=
     match R with end.
 
-  #[export] Instance typedenotekit : TypeDenoteKit typedeclkit :=
-    {| enumt := enum_denote;
-       uniont := union_denote;
-       recordt := record_denote;
-    |}.
+  #[export] Instance typedenotekit : TypeDenoteKit typedeclkit := DefaultTypeDenoteKit
+    (* {| enumt := enum_denote; *)
+    (*    uniont := union_denote; *)
+    (*    recordt := record_denote; *)
+    (* |} *)
+  .
 
   Definition union_constructors (U : Unions) : Set :=
     match U with
@@ -150,31 +153,31 @@ Module Import ExampleBase <: Base.
                          end
     end.
 
-  Definition union_unfold (U : unioni) : uniont U -> { K & Val (union_constructor_type U K) } :=
-    match U with
-    | either => fun Kv =>
-                  match Kv with
-                  | inl v => existT Left v
-                  | inr v => existT Right v
-                  end
-    end.
+  (* Definition union_unfold (U : unioni) : uniont U -> { K & Val (union_constructor_type U K) } := *)
+  (*   match U with *)
+  (*   | either => fun Kv => *)
+  (*                 match Kv with *)
+  (*                 | inl v => existT Left v *)
+  (*                 | inr v => existT Right v *)
+  (*                 end *)
+  (*   end. *)
 
-  Definition union_fold (U : unioni) : { K & Val (union_constructor_type U K) } -> uniont U :=
-    match U with
-    | either => fun Kv =>
-                  match Kv with
-                  | existT Left v  => inl v
-                  | existT Right v => inr v
-                  end
-    end.
+  (* Definition union_fold (U : unioni) : { K & Val (union_constructor_type U K) } -> uniont U := *)
+  (*   match U with *)
+  (*   | either => fun Kv => *)
+  (*                 match Kv with *)
+  (*                 | existT Left v  => inl v *)
+  (*                 | existT Right v => inr v *)
+  (*                 end *)
+  (*   end. *)
 
-  Definition record_field_type (R : recordi) : NCtx Empty_set Ty :=
-    match R with end.
+  (* Definition record_field_type (R : recordi) : NCtx Empty_set Ty := *)
+  (*   match R with end. *)
 
-  Definition record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R :=
-    match R with end.
-  Definition record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) :=
-    match R with end.
+  (* Definition record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R := *)
+  (*   match R with end. *)
+  (* Definition record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) := *)
+  (*   match R with end. *)
 
   #[export] Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
     ltac:(destruct E; auto with typeclass_instances).
@@ -189,21 +192,22 @@ Module Import ExampleBase <: Base.
   #[export] Instance eqdec_record_denote R : EqDec (record_denote R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
-  #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
-    {| unionk         := union_constructors;
-       unionk_ty      := union_constructor_type;
-       unionv_fold    := union_fold;
-       unionv_unfold  := union_unfold;
-       recordf        := Empty_set;
-       recordf_ty     := record_field_type;
-       recordv_fold   := record_fold;
-       recordv_unfold := record_unfold;
-    |}.
+  #[export,refine] Instance typedefkit : TypeDefKit typedenotekit := DefaultTypeDefKit
+    (* {| unionk         := union_constructors; *)
+    (*    unionk_ty      := union_constructor_type; *)
+    (*    unionv_fold    := union_fold; *)
+    (*    unionv_unfold  := union_unfold; *)
+    (*    recordf        := Empty_set; *)
+    (*    recordf_ty     := record_field_type; *)
+    (*    recordv_fold   := record_fold; *)
+    (*    recordv_unfold := record_unfold; *)
+    (* |} *)
+  .
   Proof.
-    - abstract (now intros [] []).
-    - abstract (now intros [] [[]]).
-    - abstract (intros []).
-    - abstract (intros []).
+  (*   - abstract (now intros [] []). *)
+  (*   - abstract (now intros [] [[]]). *)
+  (*   - abstract (intros []). *)
+  (*   - abstract (intros []). *)
   Defined.
 
   #[export] Instance varkit : VarKit := DefaultVarKit.
@@ -222,12 +226,13 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
-    | abs        : Fun [ "x" ∷ ty.int ] ty.int
-    | cmp        : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] (ty.enum ordering)
-    | gcd        : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
-    | gcdloop    : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
-    | msum       : Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either)
-    | length {σ} : Fun [ "xs" ∷ ty.list σ ] ty.int
+    (* | abs        : Fun [ "x" ∷ ty.int ] ty.int *)
+    (* | cmp        : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] (ty.enum ordering) *)
+    (* | gcd        : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int *)
+    (* | gcdloop    : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int *)
+    (* | msum       : Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either) *)
+    (* | length {σ} : Fun [ "xs" ∷ ty.list σ ] ty.int *)
+    | example1   : Fun [ "x" ∷ ty.bool ] (ty.int)
     | fpthree16  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
     | fpthree32  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
     | fpthree64  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
@@ -249,22 +254,25 @@ Module Import ExampleProgram <: Program ExampleBase.
 
     Local Coercion stm_exp : Exp >-> Stm.
 
-    Local Notation "'`LT'" := (@exp_val _ (ty.enum ordering) LT).
-    Local Notation "'`GT'" := (@exp_val _ (ty.enum ordering) GT).
-    Local Notation "'`EQ'" := (@exp_val _ (ty.enum ordering) EQ).
-    Local Notation "'`Left' e" := (exp_union either Left e) (at level 10, e at level 9).
-    Local Notation "'`Right' e" := (exp_union either Right e) (at level 10, e at level 9).
+    (* Local Notation "'`LT'" := (@exp_val _ (ty.enum ordering) LT). *)
+    (* Local Notation "'`GT'" := (@exp_val _ (ty.enum ordering) GT). *)
+    (* Local Notation "'`EQ'" := (@exp_val _ (ty.enum ordering) EQ). *)
+    (* Local Notation "'`Left' e" := (exp_union either Left e) (at level 10, e at level 9). *)
+    (* Local Notation "'`Right' e" := (exp_union either Right e) (at level 10, e at level 9). *)
     Local Notation "'x'"   := (@exp_var _ "x" _ _) : exp_scope.
     Local Notation "'y'"   := (@exp_var _ "y" _ _) : exp_scope.
     Local Notation "'z'"   := (@exp_var _ "z" _ _) : exp_scope.
 
-    Definition fun_msum : Stm ["x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either) :=
-      stm_match_union_alt either x
-       (fun K =>
-          match K with
-          | Left  => MkAlt (pat_var "z") (`Left z)
-          | Right => MkAlt (pat_var "z") (y)%exp
-          end).
+    (* Definition fun_msum : Stm ["x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either) := *)
+    (*   stm_match_union_alt either x *)
+    (*    (fun K => *)
+    (*       match K with *)
+    (*       | Left  => MkAlt (pat_var "z") (`Left z) *)
+    (*       | Right => MkAlt (pat_var "z") (y)%exp *)
+    (*       end). *)
+
+    Definition fun_example1 : Stm [ "x" ∷ ty.bool ] (ty.int) :=
+      stm_if (stm_exp (exp_var "x")) (stm_val ty.int 0) (stm_val ty.int 0).
 
     Definition fun_fpthree' (e f : nat) : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec (1 + e + f)) :=
       let: "exp" ∷ ty.bvec e := stm_val (ty.bvec e) bv.one in
@@ -307,9 +315,9 @@ Module Import ExampleProgram <: Program ExampleBase.
            (exp_var "zero"))
     .
 
-    (* This is a test for the ring solver quoter in the partial evaluator, to see if it
-       properly identifies different occurrences of the same opaque term
-     *)
+    (* This is a test for the ring solver quoter in the partial evaluator, to see if it *)
+    (*    properly identifies different occurrences of the same opaque term *)
+    (*  *)
     Definition fun_bvtest2 : Stm [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42) :=
       let: "one" ∷ ty.bvec 42 := stm_val (ty.bvec 42) bv.one in
       let: "zero" ∷ ty.bvec 42 := stm_val (ty.bvec 42) bv.zero in
@@ -341,26 +349,27 @@ Module Import ExampleProgram <: Program ExampleBase.
     Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       Eval compute in
       match f in Fun Δ τ return Stm Δ τ with
-      | abs => if: exp_int 0 <= x then x else - x
-      | cmp => if: x < y then `LT else
-               if: x = y then `EQ else
-               if: x > y then `GT else
-               fail "cmp failed"
-      | gcd => "x" <- call abs x ;;
-               "y" <- call abs y ;;
-               call gcdloop x y
-      | gcdloop =>
-               let: "z" := call cmp x y in
-               match: z in ordering with
-               | LT => call gcdloop x (y - x)
-               | EQ => x
-               | GT => call gcdloop (x - y) y
-               end
-      | msum => fun_msum
-      | length => stm_match_list
-                    (exp_var "xs")
-                    (stm_val ty.int 0)
-                    "y" "ys" (let: "n" := call length (exp_var "ys") in exp_int 1 + exp_var "n")
+      (* | abs => if: exp_int 0 <= x then x else - x *)
+      (* | cmp => if: x < y then `LT else *)
+      (*          if: x = y then `EQ else *)
+      (*          if: x > y then `GT else *)
+      (*          fail "cmp failed" *)
+      (* | gcd => "x" <- call abs x ;; *)
+      (*          "y" <- call abs y ;; *)
+      (*          call gcdloop x y *)
+      (* | gcdloop => *)
+      (*          let: "z" := call cmp x y in *)
+      (*          match: z in ordering with *)
+      (*          | LT => call gcdloop x (y - x) *)
+      (*          | EQ => x *)
+      (*          | GT => call gcdloop (x - y) y *)
+      (*          end *)
+      (* | msum => fun_msum *)
+      (* | length => stm_match_list *)
+      (*               (exp_var "xs") *)
+      (*               (stm_val ty.int 0) *)
+      (*               "y" "ys" (let: "n" := call length (exp_var "ys") in exp_int 1 + exp_var "n") *)
+      | example1 => fun_example1
       | fpthree16 => fun_fpthree16
       | fpthree32 => fun_fpthree32
       | fpthree64 => fun_fpthree64
@@ -374,9 +383,9 @@ Module Import ExampleProgram <: Program ExampleBase.
   Include DefaultRegStoreKit ExampleBase.
 
   Section ForeignKit.
-    Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
+    Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv RelVal σs)
       (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop := False.
-    Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
+    Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv RelVal σs) γ μ :
       exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
     Proof. destruct f. Qed.
   End ForeignKit.
@@ -398,12 +407,12 @@ Module Import ExampleProgram <: Program ExampleBase.
   Module Import WithAccessibleTactics.
     Import AccessibleTactics.
 
-    Instance accessible_abs : AccessibleFun abs.
-    Proof. accessible_proof. Qed.
-    Instance accessible_cmp : AccessibleFun cmp.
-    Proof. accessible_proof. Qed.
-    Instance accessible_msum : AccessibleFun msum.
-    Proof. accessible_proof. Qed.
+    (* Instance accessible_abs : AccessibleFun abs. *)
+    (* Proof. accessible_proof. Qed. *)
+    (* Instance accessible_cmp : AccessibleFun cmp. *)
+    (* Proof. accessible_proof. Qed. *)
+    (* Instance accessible_msum : AccessibleFun msum. *)
+    (* Proof. accessible_proof. Qed. *)
     Instance accessible_fpthree16 : AccessibleFun fpthree16.
     Proof. accessible_proof. Qed.
     Instance accessible_fpthree32 : AccessibleFun fpthree32.
@@ -424,9 +433,9 @@ Module Import ExampleProgram <: Program ExampleBase.
   Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
     match f with
     | gcd     => None
-    | gcdloop => None
-    | length  => None
-    | _       => Some _
+    (* | gcdloop => None *)
+    (* | length  => None *)
+    (* | _       => Some _ *)
     end.
 
 End ExampleProgram.
@@ -448,65 +457,74 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
     Import asn.notations.
     Notation asn_prop Σ P := (asn.formula (@formula_prop Σ Σ (sub_id Σ) P)).
 
-    Definition sep_contract_abs : SepContract [ "x" ∷ ty.int ] ty.int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty.int];
-         sep_contract_localstore      := [term_var "x"];
-         sep_contract_precondition    := ⊤;
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           asn_prop
-             ["x" ∷ ty.int; "result" ∷ ty.int]
-             (fun x result => result = Z.abs x)%type
-      |}.
+    (* Definition sep_contract_abs : SepContract [ "x" ∷ ty.int ] ty.int := *)
+    (*   {| sep_contract_logic_variables := ["x" ∷ ty.int]; *)
+    (*      sep_contract_localstore      := [term_var "x"]; *)
+    (*      sep_contract_precondition    := ⊤; *)
+    (*      sep_contract_result          := "result"; *)
+    (*      sep_contract_postcondition   := *)
+    (*        asn_prop *)
+    (*          ["x" ∷ ty.int; "result" ∷ ty.int] *)
+    (*          (fun x result => result = Z.abs x)%type *)
+    (*   |}. *)
 
-    Definition sep_contract_cmp : SepContract ["x" ∷ ty.int; "y" ∷ ty.int] (ty.enum ordering)  :=
-       {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
-          sep_contract_localstore      := [term_var "x"; term_var "y"];
-          sep_contract_precondition    := ⊤;
-          sep_contract_result          := "result";
-          sep_contract_postcondition   :=
-            asn.match_enum
-              ordering (term_var "result")
-              (fun result =>
-                 match result with
-                 | LT => term_var "x" < term_var "y"
-                 | EQ => term_var "x" = term_var "y"
-                 | GT => term_var "x" > term_var "y"
-                 end)
-       |}.
+    (* Definition sep_contract_cmp : SepContract ["x" ∷ ty.int; "y" ∷ ty.int] (ty.enum ordering)  := *)
+    (*    {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int]; *)
+    (*       sep_contract_localstore      := [term_var "x"; term_var "y"]; *)
+    (*       sep_contract_precondition    := ⊤; *)
+    (*       sep_contract_result          := "result"; *)
+    (*       sep_contract_postcondition   := *)
+    (*         asn.match_enum *)
+    (*           ordering (term_var "result") *)
+    (*           (fun result => *)
+    (*              match result with *)
+    (*              | LT => term_var "x" < term_var "y" *)
+    (*              | EQ => term_var "x" = term_var "y" *)
+    (*              | GT => term_var "x" > term_var "y" *)
+    (*              end) *)
+    (*    |}. *)
 
-    Definition sep_contract_gcd : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
-         sep_contract_localstore      := [term_var "x"; term_var "y"];
-         sep_contract_precondition    := ⊤;
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           asn_prop
-             ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
-             (fun x y result => result = Z.gcd x y)%type
-      |}.
+    (* Definition sep_contract_gcd : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int := *)
+    (*   {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int]; *)
+    (*      sep_contract_localstore      := [term_var "x"; term_var "y"]; *)
+    (*      sep_contract_precondition    := ⊤; *)
+    (*      sep_contract_result          := "result"; *)
+    (*      sep_contract_postcondition   := *)
+    (*        asn_prop *)
+    (*          ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int] *)
+    (*          (fun x y result => result = Z.gcd x y)%type *)
+    (*   |}. *)
 
-    Definition sep_contract_gcdloop : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
-         sep_contract_localstore      := [term_var "x"; term_var "y"];
-         sep_contract_precondition    :=
-           term_val ty.int 0 <= term_var "x" ∗
-           term_val ty.int 0 <= term_var "y";
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           asn_prop
-             ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
-             (fun x y result => result = Z.gcd x y)%type
-      |}.
+    (* Definition sep_contract_gcdloop : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int := *)
+    (*   {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int]; *)
+    (*      sep_contract_localstore      := [term_var "x"; term_var "y"]; *)
+    (*      sep_contract_precondition    := *)
+    (*        term_val ty.int 0 <= term_var "x" ∗ *)
+    (*        term_val ty.int 0 <= term_var "y"; *)
+    (*      sep_contract_result          := "result"; *)
+    (*      sep_contract_postcondition   := *)
+    (*        asn_prop *)
+    (*          ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int] *)
+    (*          (fun x y result => result = Z.gcd x y)%type *)
+    (*   |}. *)
 
     Definition length_post {σ} (xs : list (Val σ)) (result : Val ty.int) :=
       (result = Z.of_nat (@Datatypes.length (Val σ) xs))%type.
-    Definition sep_contract_length {σ} : SepContract [ "xs" ∷ ty.list σ ] ty.int :=
-      {| sep_contract_logic_variables := ["xs" ∷ ty.list σ ];
-         sep_contract_localstore      := [term_var "xs"];
-         sep_contract_precondition    := ⊤;
-         sep_contract_result          := "result";
-         sep_contract_postcondition   := asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post
+    (* Definition sep_contract_length {σ} : SepContract [ "xs" ∷ ty.list σ ] ty.int := *)
+    (*   {| sep_contract_logic_variables := ["xs" ∷ ty.list σ ]; *)
+    (*      sep_contract_localstore      := [term_var "xs"]; *)
+    (*      sep_contract_precondition    := ⊤; *)
+    (*      sep_contract_result          := "result"; *)
+    (*      sep_contract_postcondition   := asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post *)
+    (*   |}. *)
+
+    Definition sep_contract_example1 : SepContract [ "x" ∷ ty.bool ] ty.int :=
+      {|
+        sep_contract_logic_variables := ["x" ∷ ty.bool];
+        sep_contract_localstore      := [term_var "x"];
+        sep_contract_precondition    := asn.formula (formula_secLeak (term_var "x"));
+        sep_contract_result          := "result";
+        sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_val ty.int 0))
       |}.
 
     Definition sep_contract_bvtest : SepContract [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42) :=
@@ -544,12 +562,13 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
-        | abs        => Some sep_contract_abs
-        | cmp        => Some sep_contract_cmp
-        | gcd        => Some sep_contract_gcd
-        | gcdloop    => Some sep_contract_gcdloop
-        | msum       => None
-        | length     => Some sep_contract_length
+        (* | abs        => Some sep_contract_abs *)
+        (* | cmp        => Some sep_contract_cmp *)
+        (* | gcd        => Some sep_contract_gcd *)
+        (* | gcdloop    => Some sep_contract_gcdloop *)
+        (* | msum       => None *)
+        (* | length     => Some sep_contract_length *)
+        | example1   => Some sep_contract_example1
         | fpthree16  => None
         | fpthree32  => None
         | fpthree64  => None
@@ -572,70 +591,80 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
 End ExampleSpecification.
 
 Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleSig ExampleProgram ExampleSpecification.
+  MakeShallowExecutor ExampleBase ExampleSig ExampleProgram ExampleSpecification.
 
-Local Ltac solve :=
-  repeat
-    (compute
-     - [Z.of_nat Pos.of_succ_nat List.length Pos.succ Val Z.add
-                 Z.succ
-        Z.compare Z.eqb Z.ge Z.geb Z.gt Z.gtb Z.le Z.leb Z.lt
-        Z.ltb Z.mul Z.of_nat Z.opp Z.pos_sub Z.succ is_true negb
-       ] in *;
-      repeat
-       match goal with
-       | H: NamedEnv _ _ |- _ => unfold NamedEnv in H
-       | H: _ /\ _ |- _ => destruct H
-       | H: Z.ltb _ _ = true |- _ => apply Z.ltb_lt in H
-       | H: Z.ltb _ _ = false |- _ => apply Z.ltb_ge in H
-       | H : pair _ _ = pair _ _ |- _ => inversion H; subst; clear H
-       | |- forall _, _ => intro
-       | |- exists _, _ => eexists
-       | |- Debug _ _ => constructor
-       | |- _ /\ _ => constructor
-       | |- VerificationCondition _ => constructor; cbn
-       | |- Obligation _ _ _ => constructor; cbn
-       | |- _ \/ False => left
-       | |- False \/ _ => right
-       end;
-     cbn [List.length Z.add];
-     subst; try congruence;
-     auto
-    ).
+(* Local Ltac solve := *)
+(*   repeat *)
+(*     (compute *)
+(*      - [Z.of_nat Pos.of_succ_nat List.length Pos.succ Val Z.add *)
+(*                  Z.succ *)
+(*         Z.compare Z.eqb Z.ge Z.geb Z.gt Z.gtb Z.le Z.leb Z.lt *)
+(*         Z.ltb Z.mul Z.of_nat Z.opp Z.pos_sub Z.succ is_true negb *)
+(*        ] in *; *)
+(*       repeat *)
+(*        match goal with *)
+(*        | H: NamedEnv _ _ |- _ => unfold NamedEnv in H *)
+(*        | H: _ /\ _ |- _ => destruct H *)
+(*        | H: Z.ltb _ _ = true |- _ => apply Z.ltb_lt in H *)
+(*        | H: Z.ltb _ _ = false |- _ => apply Z.ltb_ge in H *)
+(*        | H : pair _ _ = pair _ _ |- _ => inversion H; subst; clear H *)
+(*        | |- forall _, _ => intro *)
+(*        | |- exists _, _ => eexists *)
+(*        | |- Debug _ _ => constructor *)
+(*        | |- _ /\ _ => constructor *)
+(*        | |- VerificationCondition _ => constructor; cbn *)
+(*        | |- Obligation _ _ _ => constructor; cbn *)
+(*        | |- _ \/ False => left *)
+(*        | |- False \/ _ => right *)
+(*        end; *)
+(*      cbn [List.length Z.add]; *)
+(*      subst; try congruence; *)
+(*      auto *)
+(*     ). *)
 
-Arguments inst {_ _ _ _} !_ _ /.
-Arguments inst_term {_} [_] !_ _ /.
-Arguments instprop {_ _ _} !_ _ /.
-Arguments instprop_formula [_] !_ _ /.
+(* Arguments inst {_ _ _ _} !_ _ /. *)
+(* Arguments inst_term {_} [_] !_ _ /. *)
+(* Arguments instprop {_ _ _} !_ _ /. *)
+(* Arguments instprop_formula [_] !_ _ /. *)
 
-Goal True. idtac "Timing before: example/length". Abort.
-Lemma valid_contract_length {σ} : Symbolic.ValidContract (@sep_contract_length σ) (FunDef length).
+(* Goal True. idtac "Timing before: example/length". Abort. *)
+(* Lemma valid_contract_length {σ} : Symbolic.ValidContract (@sep_contract_length σ) (FunDef length). *)
+(* Proof. *)
+(*   compute - [length_post Val]. *)
+(*   constructor; simpl; solve; lia. *)
+(* Qed. *)
+(* Goal True. idtac "Timing after: example/length". Abort. *)
+
+(* Goal True. idtac "Timing before: example/cmp". Abort. *)
+(* Lemma valid_contract_cmp : Symbolic.ValidContractReflect sep_contract_cmp (FunDef cmp). *)
+(* Proof. reflexivity. Qed. *)
+(* Goal True. idtac "Timing after: example/cmp". Abort. *)
+(* Lemma valid_contract_bvtest : Symbolic.ValidContractWithErasure sep_contract_bvtest (FunDef bvtest). *)
+(* Proof. *)
+(*   now cbv. *)
+(* Qed. *)
+
+(* Lemma valid_contract_bvtest2 : Symbolic.ValidContractWithErasure sep_contract_bvtest2 (FunDef bvtest2). *)
+(* Proof. *)
+(*   now cbv. *)
+(* Qed. *)
+
+(* Lemma valid_contract_bvtest3 : Symbolic.ValidContractWithErasure sep_contract_bvtest3 (FunDef bvtest3). *)
+(* Proof. *)
+(*   now cbv. *)
+(* Qed. *)
+
+(* Lemma valid_contract_pevaltest1 : Symbolic.ValidContractWithErasure sep_contract_pevaltest1 (FunDef pevaltest1). *)
+(* Proof. *)
+(*   now cbv. *)
+(* Qed. *)
+
+
+Lemma valid_contract_pevaltest1 : Shallow.ValidContract sep_contract_example1 (FunDef example1).
 Proof.
-  compute - [length_post Val].
-  constructor; simpl; solve; lia.
-Qed.
-Goal True. idtac "Timing after: example/length". Abort.
-
-Goal True. idtac "Timing before: example/cmp". Abort.
-Lemma valid_contract_cmp : Symbolic.ValidContractReflect sep_contract_cmp (FunDef cmp).
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: example/cmp". Abort.
-Lemma valid_contract_bvtest : Symbolic.ValidContractWithErasure sep_contract_bvtest (FunDef bvtest).
-Proof.
-  now cbv.
+  cbv.
+  destruct v.
+  - tauto.
+  - tauto.
 Qed.
 
-Lemma valid_contract_bvtest2 : Symbolic.ValidContractWithErasure sep_contract_bvtest2 (FunDef bvtest2).
-Proof.
-  now cbv.
-Qed.
-
-Lemma valid_contract_bvtest3 : Symbolic.ValidContractWithErasure sep_contract_bvtest3 (FunDef bvtest3).
-Proof.
-  now cbv.
-Qed.
-
-Lemma valid_contract_pevaltest1 : Symbolic.ValidContractWithErasure sep_contract_pevaltest1 (FunDef pevaltest1).
-Proof.
-  now cbv.
-Qed.
