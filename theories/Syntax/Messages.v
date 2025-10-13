@@ -31,6 +31,7 @@ From Katamaran Require Import
      Prelude
      Symbolic.Instantiation
      Symbolic.OccursCheck
+     Symbolic.GenOccursCheck
      Syntax.Terms
      Syntax.TypeDecl
      Syntax.Variables.
@@ -42,7 +43,8 @@ Module Type MessagesOn
   (Import TY : Types)
   (Import TM : TermsOn TY)
   (Import IN : InstantiationOn TY TM)
-  (Import OC : OccursCheckOn TY TM).
+  (Import OC : OccursCheckOn TY TM)
+  (Import GOC : GenOccursCheckOn TY TM).
 
   #[local] Notation LCtx := (NCtx LVar Ty).
 
@@ -75,16 +77,25 @@ Module Type MessagesOn
         | there msg => there <$> occurs_check (ctx.in_succ xIn) msg
         end.
 
+    #[export] Instance genoccurscheck_closemessage {M} {ocM : GenOccursCheck M} : GenOccursCheck (CloseMessage M) | 2.
+    Admitted.
+      (* fun {Σ} m => *)
+      (*   match m with *)
+      (*   | there msg => let '(existT Σ' (σ , msg')) := occurs_check msg in *)
+
+      (*   end. *)
+
+
     Inductive AMessage (Σ : LCtx) : Type :=
-    | mk {M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M} (msg : M Σ).
-    #[global] Arguments mk {_ _ _ _ _} msg.
+    | mk {M} {subM : Subst M} {wkM : SubstSU WeakensTo M} {subLM : SubstLaws M} {occM: OccursCheck M} {goccM : GenOccursCheck (Sb := WeakensTo) M} (msg : M Σ).
+    #[global] Arguments mk {_ _ _ _ _ _ _} msg.
 
     Definition empty {Σ} : AMessage Σ := mk (M := Unit) tt.
 
-    Fixpoint closeAux {Σ ΣΔ} {struct ΣΔ} : forall {M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M}, M (Σ ▻▻ ΣΔ) -> AMessage Σ :=
+    Fixpoint closeAux {Σ ΣΔ} {struct ΣΔ} : forall {M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M} {goccM : GenOccursCheck (Sb := WeakensTo) M}, M (Σ ▻▻ ΣΔ) -> AMessage Σ :=
       match ΣΔ with
-      | []      => fun _ _ _ _ msg => mk msg
-      | ΣΔ  ▻ b => fun _ _ _ _ msg => closeAux (there msg)
+      | []      => fun _ _ _ _ _ msg => mk msg
+      | ΣΔ  ▻ b => fun _ _ _ _ g msg => closeAux (there msg)
       end%ctx.
 
     Definition close {Σ ΣΔ} (msg : AMessage (Σ ▻▻ ΣΔ)) : AMessage Σ :=
@@ -111,6 +122,14 @@ Module Type MessagesOn
         match m with
         | mk msg    => mk <$> occurs_check xIn msg
         end.
+
+    #[export] Instance genoccurscheck_amessage : GenOccursCheck AMessage :=
+      fix oc {Σ} m {struct m} :=
+        match m with
+        | mk msg    => let '(existT Σ' (σ' , msg')) := gen_occurs_check msg in
+                       existT Σ' (σ' , mk msg')
+        end.
+
 
     #[export] Instance instprop_amessage : InstProp AMessage :=
       fun _ _ _ => True.

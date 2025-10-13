@@ -219,6 +219,31 @@ Module Type FormulasOn
   #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.
   Proof. occurs_check_derive. Qed.
 
+  #[export] Instance GenOccursCheckFormula `{SubstUnivVar Sb}: GenOccursCheck (Sb := Sb) Formula :=
+    fix oc {Σ} fml {struct fml} :=
+      match fml with
+      | formula_user p ts      => let '(existT Σ' (σ' , ts')) := gen_occurs_check ts in
+                                  existT Σ' (σ' , formula_user p ts')
+      | formula_bool t         => let '(existT Σ' (σ' , t')) := gen_occurs_check t in
+                                  existT Σ' (σ' , formula_bool t')
+      | formula_prop ζ P       => let '(existT Σ' (σ' , ζ')) := gen_occurs_check ζ in
+                                  existT Σ' (σ' , formula_prop ζ' P)
+      | formula_relop op t1 t2 => let '(existT Σ1 (σ1 , t1')) := gen_occurs_check t1 in
+                                  let '(existT Σ2 (σ2 , t2')) := gen_occurs_check  t2 in
+                                  let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ') := meetSU σ1 σ2 in
+                                  existT Σ12 (σ' , formula_relop op (substSU t1' σ1') (substSU t2' σ2'))
+      | formula_true           => existT [ctx] (initSU , formula_true)
+      | formula_false          => existT [ctx] (initSU , formula_false)
+      | formula_and F1 F2      => let '(existT Σ1 (σ1 , F1')) := oc F1 in
+                                  let '(existT Σ2 (σ2 , F2')) := oc F2 in
+                                  let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ') := meetSU σ1 σ2 in
+                                  existT Σ12 (σ' , formula_and (substSU F1' σ1') (substSU F2' σ2'))
+      | formula_or F1 F2       => let '(existT Σ1 (σ1 , F1')) := oc F1 in
+                                  let '(existT Σ2 (σ2 , F2')) := oc F2 in
+                                  let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ') := meetSU σ1 σ2 in
+                                  existT Σ12 (σ' , formula_or (substSU F1' σ1') (substSU F2' σ2'))
+      end.
+
   Section PathCondition.
     Import Entailment.
 

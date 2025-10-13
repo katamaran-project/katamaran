@@ -201,6 +201,26 @@ Module Type ChunksOn
           Some (chunk_wand c1' c2')
       end.
 
+  #[export] Instance GenOccursCheckChunk : GenOccursCheck (Sb := WeakensTo) Chunk :=
+    fun Σ =>
+      fix gen_occurs_check_chunk (c : Chunk Σ) : { Σ' & WeakensTo Σ' Σ * Chunk Σ'}%type :=
+      match c with
+      | chunk_user p ts => let '(existT _ (σ1 , ts')) := gen_occurs_check ts in
+                           existT _ (σ1 , chunk_user p ts')
+      | chunk_ptsreg r t => let '(existT _ (σ1 , t')) := gen_occurs_check t in
+                            existT _ (σ1 , chunk_ptsreg r t')
+      | chunk_conj c1 c2 =>
+          let '(existT _ (σ1 , c1')) := gen_occurs_check_chunk c1 in
+          let '(existT _ (σ2 , c2')) := gen_occurs_check_chunk c2 in
+          let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU (Sb := WeakensTo) (SubstUnivMeet := substUnivMeet_weaken) σ1 σ2 in
+          existT Σ12 (σ12 , chunk_conj (subst c1' (interpSU σ1')) (subst c2' (interpSU σ2')))
+      | chunk_wand c1 c2 =>
+          let '(existT _ (σ1 , c1')) := gen_occurs_check_chunk c1 in
+          let '(existT _ (σ2 , c2')) := gen_occurs_check_chunk c2 in
+          let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU (Sb := WeakensTo) (SubstUnivMeet := substUnivMeet_weaken) σ1 σ2 in
+          existT Σ12 (σ12 , chunk_wand (subst c1' (interpSU σ1')) (subst c2' (interpSU σ2')))
+      end.
+
   Definition SCHeap : Type := list SCChunk.
   Definition SHeap : LCtx -> Type := fun Σ => list (Chunk Σ).
 
