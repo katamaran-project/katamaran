@@ -472,6 +472,16 @@ Section AnnotatedBlockVerification.
             Some (MkDebugBlockver pc' h')
         end.
 
+    #[export] Instance GenOccursCheckDebugBlockver : GenOccursCheck DebugBlockver :=
+      fun Σ d =>
+        match d with
+        | MkDebugBlockver pc1 h =>
+            let '(existT _ (σ1 , pc')) := gen_occurs_check pc1 in
+            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            existT _ (σ12 , MkDebugBlockver (substSU pc' σ1') (substSU h' σ2'))
+        end.
+
   End Debug.
 
   Import RiscvPmpBlockVerifSpec.

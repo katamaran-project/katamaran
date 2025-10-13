@@ -100,6 +100,16 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             Some (MkDebugAsn pc' (* δ' *) h')
         end.
 
+    #[export] Instance GenOccursCheckDebugAsn : GenOccursCheck DebugAsn :=
+      fun Σ d =>
+        match d with
+        | MkDebugAsn pc h =>
+            let '(existT _ (σ1 , pc')) := gen_occurs_check pc  in
+            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            existT _ (σ12 , MkDebugAsn (substSU pc' σ1') (substSU h' σ2'))
+        end.
+
     Record DebugConsumeChunk (Σ : LCtx) : Type :=
       MkDebugConsumeChunk
         { (* debug_consume_chunk_program_context        : PCtx; *)
@@ -134,6 +144,20 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             Some (MkDebugConsumeChunk pc' (* δ' *) h'  c')
         end.
 
+    #[export] Instance GenOccursCheckDebugConsumeChunk : GenOccursCheck (Sb := WeakensTo) DebugConsumeChunk :=
+      fun Σ d =>
+        match d with
+        | MkDebugConsumeChunk pc (* δ *) h c =>
+            let '(existT _ (σ1 , pc')) := gen_occurs_check pc  in
+            (* δ'  := gen_occurs_check xIn δ  in *)
+            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
+            let '(existT _ (σ3 , c'))  := gen_occurs_check c  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
+            existT _ (σ123 , MkDebugConsumeChunk (substSU pc' (transSU σ1' σ12')) (* δ' *) (substSU h' (transSU σ2' σ12')) (substSU c' σ3'))
+        end.
+
+
     Record DebugReadRegister (Σ : LCtx) : Type :=
       MkDebugReadRegister
         { debug_read_register_pathcondition : PathCondition Σ;
@@ -163,6 +187,16 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             pc' <- occurs_check xIn pc ;;
             h'  <- occurs_check xIn h ;;
             Some (MkDebugReadRegister pc' h' r)
+        end.
+
+    #[export] Instance GenOccursCheckDebugReadRegister : GenOccursCheck DebugReadRegister :=
+      fun Σ d =>
+        match d with
+        | MkDebugReadRegister pc h r =>
+            let '(existT _ (σ1 , pc')) := gen_occurs_check pc  in
+            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            existT _ (σ12 , MkDebugReadRegister (substSU pc' σ1') (substSU h' σ2') r)
         end.
 
     Record DebugWriteRegister (Σ : LCtx) : Type :=
@@ -198,6 +232,18 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             Some (MkDebugWriteRegister pc' h' r t')
         end.
 
+    #[export] Instance GenOccursCheckDebugWriteRegister : GenOccursCheck DebugWriteRegister :=
+      fun Σ d =>
+        match d with
+        | MkDebugWriteRegister pc h r t =>
+            let '(existT _ (σ1 , pc')) := gen_occurs_check pc  in
+            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
+            let '(existT _ (σ3 , t'))  := gen_occurs_check t  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
+            existT _ (σ123 , MkDebugWriteRegister (substSU pc' (transSU σ1' σ12')) (substSU h' (transSU σ2' σ12')) r (substSU t' σ3'))
+        end.
+
     Record DebugString (Σ : LCtx) : Type :=
       MkDebugString
         { debug_string_pathcondition : PathCondition Σ;
@@ -224,6 +270,14 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         | MkDebugString pc s =>
             pc' <- occurs_check xIn pc ;;
             Some (MkDebugString pc' s)
+        end.
+
+    #[export] Instance GenOccursCheckDebugString : GenOccursCheck DebugString :=
+      fun Σ d =>
+        match d with
+        | MkDebugString pc s =>
+            let '(existT _ (σ' , pc')) := gen_occurs_check pc in
+            existT _ (σ' , MkDebugString pc' s)
         end.
 
     Record DebugAssertFormula (Σ : LCtx) : Type :=
@@ -255,6 +309,21 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             h'  <- occurs_check xIn h ;;
             fml'  <- occurs_check xIn fml ;;
             Some (MkDebugAssertFormula pc' h' fml')
+        end.
+
+    #[export] Instance GenOccursCheckDebugAssertFormula : GenOccursCheck (Sb := WeakensTo) DebugAssertFormula :=
+      fun Σ d =>
+        match d with
+        | MkDebugAssertFormula pc h fml =>
+            let '(existT _ (σ1 , pc')) := gen_occurs_check (T := PathCondition) pc in
+            let '(existT _ (σ2 , h'))  := gen_occurs_check (T := SHeap) h in
+            let '(existT _ (σ3 , fml'))  := gen_occurs_check (T := Formula) fml in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU (Sb := WeakensTo) (SubstUnivMeet := substUnivMeet_weaken) σ1 σ2 in
+            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU (Sb := WeakensTo) (SubstUnivMeet := substUnivMeet_weaken) σ12 σ3 in
+            let pc'' : PathCondition Σ123 := (substSU (T := PathCondition) pc' (transSU σ1' σ12')) in
+            let h'' : SHeap Σ123 := (substSU (T := SHeap) h' (transSU σ2' σ12')) in
+            let fml'' : Formula Σ123 := (substSU (T := Formula) fml' σ3') in
+            existT Σ123 (σ123 , MkDebugAssertFormula (Σ := Σ123) pc'' h'' fml'')
         end.
 
   End DebugInfo.

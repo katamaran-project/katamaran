@@ -103,6 +103,18 @@ Module Type SymPropOn
             Some (MkMessage f m Γ δ' h' pc')
         end.
 
+    #[export] Instance GenOccursCheckMessage : GenOccursCheck (Sb := WeakensTo) Message :=
+      fun Σ d =>
+        match d with
+        | MkMessage f m Γ δ h pc =>
+            let '(existT _ (σ1 , δ')) := gen_occurs_check δ  in
+            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
+            let '(existT _ (σ3 , pc'))  := gen_occurs_check pc  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
+            existT _ (σ123 , MkMessage f m Γ (substSU δ' (transSU σ1' σ12')) (substSU h' (transSU σ2' σ12')) (substSU pc' σ3'))
+        end.
+
     Inductive Error (Σ : LCtx) (msg : Message Σ) : Prop :=.
 
   End Messages.
@@ -160,6 +172,27 @@ Module Type SymPropOn
     Global Arguments assert_vareq {_} x {_ _} t msg k.
     Global Arguments assume_vareq {_} x {_ _} t k.
     Global Arguments pattern_match_var {_} x {σ xIn} _ _.
+
+    (* may be useful for debugging *)
+    Fixpoint trunc (n : nat) {Σ} (P : SymProp Σ) : SymProp Σ :=
+      match n with
+      | 0 => block
+      | S n => match P with
+               | angelic_binary P1 P2 => angelic_binary (trunc n P1) (trunc n P2)
+               | demonic_binary P1 P2 => demonic_binary (trunc n P1) (trunc n P2)
+               | error msg => error msg
+               | block => block
+               | assertk fml msg P => assertk fml msg (trunc n P)
+               | assumek fml P => assumek fml (trunc n P)
+               | angelicv x P => angelicv x (trunc n P)
+               | demonicv x P => demonicv x (trunc n P)
+               | assert_vareq xIn t msg P => assert_vareq xIn t msg (trunc n P)
+               | assume_vareq x t P => assume_vareq x t (trunc n P)
+               | pattern_match t pat P => pattern_match t pat (fun pc => trunc n (P pc))
+               | pattern_match_var x pat P => pattern_match_var x pat (fun pc => trunc n (P pc))
+               | debug msg P => debug msg (trunc n P)
+               end
+      end.
 
     Definition angelic_close0 {Σ0 : LCtx} :
       forall Σ, 𝕊 (Σ0 ▻▻ Σ) -> 𝕊 Σ0 :=
@@ -1041,6 +1074,18 @@ Module Type SymPropOn
             Some (MkAngelicBinaryFailMsg _ _ _ msg1' msg2')
         end.
 
+    #[export] Instance GenOccursCheckAngelicBinaryFailMsg
+      `{Subst M1, Subst M2} {ocM1: GenOccursCheck (Sb := WeakensTo) M1} {ocM2: GenOccursCheck (Sb := WeakensTo) M2} :
+      GenOccursCheck (Sb := WeakensTo) (AngelicBinaryFailMsg M1 M2) :=
+      fun Σ d =>
+        match d with
+        | MkAngelicBinaryFailMsg _ _ _ msg1 msg2 =>
+            let '(existT _ (σ1 , msg1')) := gen_occurs_check msg1  in
+            let '(existT _ (σ2 , msg2'))  := gen_occurs_check msg2  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            existT _ (σ12 , MkAngelicBinaryFailMsg _ _ _ (substSU msg1' σ1') (substSU msg2' σ2'))
+        end.
+
     Import SymProp.
 
     Definition angelic_binary_prune {Σ} (p1 p2 : 𝕊 Σ) : 𝕊 Σ :=
@@ -1682,6 +1727,177 @@ Module Type SymPropOn
 
     End Experimental.
 
+    Section Unquantify.
+      Import iris.bi.interface iris.proofmode.tactics.
+
+      (* during unquantify, we want to stop treating debug messages as substitutable,
+         because messages often mention many variables that play no other role
+         and they should be unquantified away.
+
+         This has the downside that boxed messages will no longer be subject to
+         substitution, but as long as unquantify is executed after other
+         simplification passes have run, no information should get lost.
+       *)
+      Definition BoxMessage (M : LCtx -> Type) : LCtx -> Type := Const {Σ' : LCtx & M Σ'}.
+      Definition boxMsg' {M Σ Σ'}  : M Σ -> BoxMessage M Σ' := existT _.
+      Definition boxMsg {Σ Σ'}  (msg : AMessage Σ) : AMessage Σ' :=
+        match msg with
+          amsg.mk msg => amsg.mk (boxMsg' msg)
+        end.
+
+      Fixpoint weaken_symprop {Σ1} (P : SymProp Σ1) {Σ2} (ζ : WeakensTo Σ1 Σ2) {struct P} : SymProp Σ2 :=
+        match P with
+        | angelic_binary P1 P2 =>
+            angelic_binary (weaken_symprop P1 ζ) (weaken_symprop P2 ζ)
+        | demonic_binary P1 P2 =>
+            demonic_binary (weaken_symprop P1 ζ) (weaken_symprop P2 ζ)
+        | error msg => error (substSU msg ζ)
+        | SymProp.block => SymProp.block
+        | assertk fml msg P => assertk (substSU fml ζ) (substSU msg ζ) (weaken_symprop P ζ)
+        | assumek fml P => assumek (substSU fml ζ) (weaken_symprop P ζ)
+        | angelicv b P => angelicv b (weaken_symprop P (upSU ζ))
+        | demonicv b P => demonicv b (weaken_symprop P (upSU ζ))
+        | @assert_vareq _ x σ xIn t msg P =>
+            let xIn' := wkVarSU xIn ζ in
+            let ζ' : WeakensTo (Σ1 - (x∷σ)%ctx) (Σ2 - (x∷σ)) := downSU xIn ζ in
+            @assert_vareq Σ2 x σ xIn' (substSU t ζ') (substSU msg (downSU xIn ζ)) (weaken_symprop P ζ')
+        | @assume_vareq _ x σ xIn t P =>
+            let xIn' := wkVarSU xIn ζ in
+            let ζ' : WeakensTo (Σ1 - (x∷σ)%ctx) (Σ2 - (x::σ)%ctx) := downSU xIn ζ in
+            assume_vareq x (substSU t ζ') (weaken_symprop P ζ')
+        | pattern_match _ _ _ => SymProp.block
+        | pattern_match_var _ _ _ => SymProp.block
+        | debug msg P => debug (substSU (T := AMessage) msg ζ)(weaken_symprop P ζ)
+        end.
+      #[export] Instance SubstSU_SymProp : SubstSU WeakensTo SymProp :=
+          (fun _ _ P σ => weaken_symprop P σ).
+
+      Definition UQSymProp Σ : Type := { Σ' & WeakensTo Σ' Σ * SymProp Σ'}%type.
+
+      Definition from_uqSymProp {Σ} (P : UQSymProp Σ) : SymProp Σ :=
+        match P with (existT Σ' (wk , P)) => substSU P wk end.
+
+      Definition uq_angelic_binary {Σ} (P1 P2 : UQSymProp Σ) : UQSymProp Σ :=
+        match P1 , P2 with
+        | existT Σ1 (wk1 , P1') , existT Σ2 (wk2 , P2') =>
+            match meetWk wk1 wk2 with
+            | MkMeetResult _ _ _ _ Σ12 σ1' σ2' wk' =>
+                existT Σ12 (wk' , angelic_binary (substSU P1' σ1') (substSU P2' σ2'))
+            end
+        end.
+
+      Definition uq_demonic_binary {Σ} (P1 P2 : UQSymProp Σ) : UQSymProp Σ :=
+        match P1 , P2 with
+        | existT Σ1 (wk1 , P1') , existT Σ2 (wk2 , P2') =>
+            match meetWk wk1 wk2 with
+            | MkMeetResult _ _ _ _ Σ12 σ1' σ2' wk' =>
+                existT Σ12 (wk' , demonic_binary (substSU P1' σ1') (substSU P2' σ2'))
+            end
+        end.
+
+      Definition uq_error {Σ} : AMessage Σ -> UQSymProp Σ.
+      Admitted.
+
+      Definition uq_block {Σ} : UQSymProp Σ :=
+        existT _ (wkNilInit  , SymProp.block).
+
+      Definition uq_assertk {Σ} (fml : Formula Σ) (msg : AMessage Σ)
+        (kP : UQSymProp Σ) : UQSymProp Σ :=
+        match kP with
+          existT Σ1 (σ1 , kP') =>
+            let '(existT Σ2 (σ2 , fml')) := gen_occurs_check fml in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            existT Σ12 (σ12 , assertk (substSU fml' σ2') (boxMsg msg) (substSU kP' σ1'))
+        end.
+
+      Definition uq_assumek {Σ} (fml : Formula Σ)
+        (kP : UQSymProp Σ) : UQSymProp Σ :=
+        match kP with
+          existT Σ1 (σ1 , kP') =>
+            let '(existT Σ2 (σ2 , fml')) := gen_occurs_check fml in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            existT Σ12 (σ12 , assumek (substSU fml' σ2') (substSU kP' σ1'))
+        end.
+
+      Definition uq_angelicv {Σ} b
+        (kP : UQSymProp (Σ ▻ b)) : UQSymProp Σ :=
+        match kP with
+          existT Σ1 (σ1 , kP') =>
+            match weakenZeroView σ1 in @WeakenZeroView _ _ Σ1 σ1 return (SymProp Σ1 -> UQSymProp Σ) with
+            | VarUnused _ σ1' => fun kP'' => existT _ (σ1' , kP'')
+            | VarUsed _ σ1' => fun kP'' => existT _ (σ1' , angelicv b kP'')
+            end kP'
+        end.
+
+      Definition uq_demonicv {Σ} b
+        (kP : UQSymProp (Σ ▻ b)) : UQSymProp Σ :=
+        match kP with
+          existT Σ1 (σ1 , kP') =>
+            match weakenZeroView σ1 in @WeakenZeroView _ _ Σ1 σ1 return (SymProp Σ1 -> UQSymProp Σ) with
+            | VarUnused _ σ1' => fun kP'' => existT _ (σ1' , kP'')
+            | VarUsed _ σ1' => fun kP'' => existT _ (σ1' , demonicv b kP'')
+            end kP'
+        end.
+
+      Definition uq_assert_vareq x {σ Σ} {xIn : ((x::σ)%ctx ∈ Σ)%katamaran} (t : Term (Σ - (x::σ)%ctx) σ)
+        (msg : AMessage (Σ - (x::σ)%ctx)) (P : UQSymProp (Σ - (x::σ)%ctx)) : UQSymProp Σ :=
+        match P with
+          existT Σ1 (σ1 , kP') =>
+            let '(existT Σ2 (σ2 , t')) := gen_occurs_check (T := fun Σ => Term Σ σ) t in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            match weakenRemoveView xIn σ12 in @WeakenRemoveView _ _ Σ12 xIn σ12
+                  return Term Σ12 σ -> SymProp Σ12 -> UQSymProp Σ with
+            | (MkWeakenRemoveView bIn' σ12') =>
+                fun t'' kP'' =>
+                existT _ (σ12', assert_vareq x t'' (boxMsg msg) kP'')
+            end (substSU t' σ2') (substSU kP' σ1')
+        end.
+      Arguments uq_assert_vareq x {σ Σ xIn} t msg P.
+
+      Definition uq_assume_vareq x {σ Σ} {xIn : ((x::σ)%ctx ∈ Σ)%katamaran} (t : Term (Σ - (x::σ)%ctx) σ)
+        (P : UQSymProp (Σ - (x::σ)%ctx)) : UQSymProp Σ :=
+        match P with
+          existT Σ1 (σ1 , kP') =>
+            let '(existT Σ2 (σ2 , t')) := gen_occurs_check (T := fun Σ => Term Σ σ) t in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            match weakenRemoveView xIn σ12 in @WeakenRemoveView _ _ Σ12 xIn σ12
+                  return Term Σ12 σ -> SymProp Σ12 -> UQSymProp Σ with
+            | (MkWeakenRemoveView bIn' σ12') =>
+                fun t'' kP'' =>
+                existT _ (σ12', assume_vareq x t'' kP'')
+            end (substSU t' σ2') (substSU kP' σ1')
+        end.
+      Arguments uq_assume_vareq x {σ Σ xIn} t P.
+
+      Definition uq_debug {Σ : LCtx} (msg : AMessage Σ) (P : UQSymProp Σ) : UQSymProp Σ :=
+        match P with
+          existT Σ1 (σ1 , kP') =>
+            let '(existT Σ2 (σ2 , msg')) := gen_occurs_check (H := substUniv_weaken) (T := AMessage) msg in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU (SubstUnivMeet := substUnivMeet_weaken) σ1 σ2 in
+            existT _ (σ12 , debug (substSU msg' σ2') (substSU kP' σ1'))
+        end.
+
+      Fixpoint to_uqSymProp {Σ} (P : SymProp Σ) : UQSymProp Σ :=
+        match P with
+        | angelic_binary P1 P2 => uq_angelic_binary (to_uqSymProp P1) (to_uqSymProp P2)
+        | demonic_binary P1 P2 => uq_demonic_binary (to_uqSymProp P1) (to_uqSymProp P2)
+        | error msg => uq_error msg
+        | SymProp.block => uq_block
+        | assertk fml msg kP => uq_assertk fml msg (to_uqSymProp kP)
+        | assumek fml kP => uq_assumek fml (to_uqSymProp kP)
+        | angelicv b P => uq_angelicv (to_uqSymProp P)
+        | demonicv b P => uq_demonicv (to_uqSymProp P)
+        | assert_vareq x t msg P => uq_assert_vareq x t msg (to_uqSymProp P)
+        | assume_vareq x t P => uq_assume_vareq x t (to_uqSymProp P)
+        | pattern_match t pat P => uq_block
+        | pattern_match_var xIn pat P => uq_block
+        | debug msg P => uq_debug msg (to_uqSymProp P)
+        end.
+
+      Definition unquantify {Σ} (P : SymProp Σ) : SymProp Σ :=
+        from_uqSymProp (to_uqSymProp P).
+
+    End Unquantify.
   End Postprocessing.
 
   Section PostProcess.

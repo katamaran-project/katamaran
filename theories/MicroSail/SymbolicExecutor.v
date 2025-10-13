@@ -124,6 +124,19 @@ Module Type SymbolicExecOn
             Some (MkDebugCallLemma l c ts' pc' (* δ' *) h')
         end.
 
+    #[export] Instance GenOccursCheckDebugCallLemma : GenOccursCheck (Sb := WeakensTo) DebugCallLemma :=
+      fun Σ d =>
+        match d with
+        | MkDebugCallLemma l c ts pc (* δ *) h =>
+            let '(existT _ (σ1 , ts')) := gen_occurs_check ts  in
+            (* δ'  := gen_occurs_check xIn δ  in *)
+            let '(existT _ (σ2 , pc'))  := gen_occurs_check pc  in
+            let '(existT _ (σ3 , h'))  := gen_occurs_check h  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
+            existT _ (σ123 , MkDebugCallLemma l c (substSU ts' (transSU σ1' σ12')) (* δ' *) (substSU pc' (transSU σ2' σ12')) (substSU h' σ3'))
+        end.
+
     Record DebugStm (Σ : LCtx) : Type :=
       MkDebugStm
         { debug_stm_program_context        : PCtx;
@@ -160,6 +173,19 @@ Module Type SymbolicExecOn
             Some (MkDebugCall f c ts' pc' (* δ' *) h')
         end.
 
+    #[export] Instance GenOccursCheckDebugCall : GenOccursCheck (Sb := WeakensTo) DebugCall :=
+      fun Σ d =>
+        match d with
+        | MkDebugCall f c ts pc (* δ *) h =>
+            let '(existT _ (σ1 , ts')) := gen_occurs_check ts  in
+            (* δ'  := gen_occurs_check xIn δ  in *)
+            let '(existT _ (σ2 , pc'))  := gen_occurs_check pc  in
+            let '(existT _ (σ3 , h'))  := gen_occurs_check h  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
+            existT _ (σ123 , MkDebugCall f c (substSU ts' (transSU σ1' σ12')) (* δ' *) (substSU pc' (transSU σ2' σ12')) (substSU h' σ3'))
+        end.
+
     #[export] Instance SubstDebugStm : Subst DebugStm :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
@@ -182,6 +208,19 @@ Module Type SymbolicExecOn
             δ'  <- occurs_check xIn δ ;;
             h'  <- occurs_check xIn h ;;
             Some (MkDebugStm s pc' δ' h')
+        end.
+
+    #[export] Instance GenOccursCheckDebugStm : GenOccursCheck (Sb := WeakensTo) DebugStm :=
+      fun Σ d =>
+        match d with
+        | MkDebugStm s pc δ h =>
+            let '(existT _ (σ1 , pc')) := gen_occurs_check pc in
+            (* δ'  := gen_occurs_check xIn δ  in *)
+            let '(existT _ (σ2 , δ'))  := gen_occurs_check δ in
+            let '(existT _ (σ3 , h'))  := gen_occurs_check h  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
+            existT _ (σ123 , MkDebugStm s (substSU pc' (transSU σ1' σ12')) (substSU δ' (transSU σ2' σ12')) (substSU h' σ3'))
         end.
 
     Record ErrorNoFuel (Σ : LCtx) : Type :=
@@ -219,6 +258,19 @@ Module Type SymbolicExecOn
             pc'   <- occurs_check xIn pc ;;
             h'    <- occurs_check xIn h ;;
             Some (MkErrorNoFuel f args' pc' h')
+        end.
+
+    #[export] Instance GenOccursCheckErrorNoFuel : GenOccursCheck (Sb := WeakensTo) ErrorNoFuel :=
+      fun Σ d =>
+        match d with
+        | MkErrorNoFuel f args pc h=>
+            let '(existT _ (σ1 , args')) := gen_occurs_check args  in
+            (* δ'  := gen_occurs_check xIn δ  in *)
+            let '(existT _ (σ2 , pc'))  := gen_occurs_check pc  in
+            let '(existT _ (σ3 , h'))  := gen_occurs_check h  in
+            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
+            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
+            existT _ (σ123 , MkErrorNoFuel f (substSU args' (transSU σ1' σ12')) (* δ' *) (substSU pc' (transSU σ2' σ12')) (substSU h' σ3'))
         end.
 
   End DebugInfo.
