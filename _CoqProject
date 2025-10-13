@@ -78,6 +78,7 @@ theories/Specification.v
 theories/Symbolic/Instantiation.v
 theories/Symbolic/Monads.v
 theories/Symbolic/OccursCheck.v
+theories/Symbolic/GenOccursCheck.v
 theories/Symbolic/PartialEvaluation.v
 theories/Symbolic/Propositions.v
 theories/Symbolic/Solver.v
