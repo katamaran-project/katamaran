@@ -306,6 +306,8 @@ Module inv := invariants.
 
     Definition vc__femtoinit : 𝕊 [] :=
       postprocess (sannotated_block_verification_condition femtokernel_init_pre femtokernel_init_gen femtokernel_init_post wnil).
+    Definition vc__femtoinit_unq : 𝕊 [] :=
+      Postprocessing.unquantify vc__femtoinit.
 
     (* NOTE: For now this proof covers both the MMIO and non-MMIO Femtokernel variants, since the start of the adversary region is the same in both cases.
        If this were not the case, we would take a naive approach to verifying both versions of the initialization code here; we would require that `adv_start` takes one of the two values present in the two versions of the initialization code.

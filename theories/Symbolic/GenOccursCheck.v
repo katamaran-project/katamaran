@@ -68,7 +68,7 @@ Module Type GenOccursCheckOn
 
   Class SubstUnivLaws Sb `{SubstUniv Sb} :=
     interpTransSU : forall {Σ1 Σ2 Σ3} (σ1 : Sb Σ1 Σ2) (σ2 : Sb Σ2 Σ3),
-        interpSU (transSU σ1 σ2) = subst (interpSU σ1) (interpSU σ2).
+        subst (interpSU σ1) (interpSU σ2) = interpSU (transSU σ1 σ2).
   Arguments SubstUnivLaws Sb {H}.
 
   Class SubstSULaws Sb `{SubstSU Sb T} {su : SubstUniv Sb} {sul : SubstUnivLaws Sb} :=
@@ -81,7 +81,8 @@ Module Type GenOccursCheckOn
   Proof.
     intros Σ1 Σ2 Σ3 σ1 σ2 t.
     unfold substSU, substSubstSU.
-    now rewrite interpTransSU, subst_sub_comp.
+    destruct (interpTransSU σ1 σ2).
+    now rewrite subst_sub_comp.
   Qed.
 
   Record MeetResult `{SubstUniv Sb} Σ Σ1 Σ2 :=
@@ -96,12 +97,14 @@ Module Type GenOccursCheckOn
     meetSU : forall {Σ Σ1 Σ2} (σ1 : Sb Σ1 Σ) (σ2 : Sb Σ2 Σ), MeetResult Σ Σ1 Σ2
   .
   Arguments SubstUnivMeet Sb {H}.
+
   Class SubstUnivMeetLaws Sb `{SubstUnivMeet Sb} :=
     MkSubstUnivMeetLaws {
-        meetLeftCorrect : forall {Σ Σ1 Σ2} (σ1 : Sb Σ1 Σ) (σ2 : Sb Σ2 Σ),
-          transSU (meetLeft (meetSU σ1 σ2)) (meetUp (meetSU σ1 σ2)) = σ1
-      ; meetRightCorrect : forall {Σ Σ1 Σ2} (σ1 : Sb Σ1 Σ) (σ2 : Sb Σ2 Σ),
-          transSU (meetRight (meetSU σ1 σ2)) (meetUp (meetSU σ1 σ2)) = σ2
+        meetSUCorrect : forall {Σ Σ1 Σ2} (σ1 : Sb Σ1 Σ) (σ2 : Sb Σ2 Σ),
+          exists Σ12 meetLeft meetRight meetUp,
+            MkMeetResult _ _ _ _ Σ12 meetLeft meetRight meetUp = meetSU σ1 σ2 /\
+              σ1 = transSU meetLeft meetUp /\
+              σ2 = transSU meetRight meetUp
       }.
   Arguments SubstUnivMeetLaws Sb {H} {H0}.
 
@@ -114,6 +117,11 @@ Module Type GenOccursCheckOn
   .
   Arguments SubstUnivVarUp Sb {H H0 H1}.
 
+  Class SubstUnivVarUpLaws `{SubstUnivVarUp Sb} :=
+    upSU_sound : forall {Σ1 Σ2 x} (ζ : Sb Σ1 Σ2),
+        interpSU (upSU (x := x) ζ) = sub_up1 (interpSU ζ)
+  .
+  Arguments SubstUnivVarUpLaws Sb {H H0 H1 H2}.
   Class SubstUnivVarDown `{SubstUnivVar Sb} :=
     MkSubstUnivVarDown {
         wkVarSU : forall {Σ1 Σ2 x}, x ∈ Σ1 -> Sb Σ1 Σ2 -> x ∈ Σ2
@@ -131,7 +139,7 @@ Module Type GenOccursCheckOn
 
   #[export] Instance GenOccursCheck_Const {Sb} {sSb : SubstUniv Sb} {A} : GenOccursCheck (Const A) :=
     fun Σ v => existT _ (initSU (SubstUniv := sSb), v).
-  
+
   #[export] Instance gen_occurs_check_env `{SubstUnivMeet Sb}
     {I : Set} {T : LCtx -> I -> Set}
     {sT : forall i : I, Subst (fun Σ : LCtx => T Σ i)}
@@ -219,8 +227,8 @@ Module Type GenOccursCheckOn
     (T : LCtx -> Type)  {ocT : GenOccursCheck T} {sT : Subst T} : Type :=
     MkGenOccursCheckLaws {
        oc_sound : forall {Σ} (t : T Σ),
-          let '(existT Σ' (σ , t')) := gen_occurs_check t in
-          substSU t' σ = t
+          exists Σ' σ t', existT Σ' (σ , t') = gen_occurs_check t /\
+                            t = substSU t' σ
       }.
   Arguments GenOccursCheckLaws {Sb} {sSb} T {ocT} {sT}.
 
@@ -278,19 +286,15 @@ Module Type GenOccursCheckOn
     forall {Γ : Ctx I}, GenOccursCheckLaws (Sb := Sb) (fun Σ => Env (T Σ) Γ) :=
     fun {Γ} => MkGenOccursCheckLaws _ _ _.
   Proof.
-    induction t; first easy.
+    induction t; first now do 3 eexists.
     cbn.
     change (gen_occurs_check_env t) with (gen_occurs_check (T := fun Σ => Env (T Σ) Γ) t).
-    destruct (gen_occurs_check t) as (Σ1 & σ1 & t').
-    generalize (oc_sound db).
-    destruct (gen_occurs_check db) as (Σ2 & σ2 & db').
-    intros Hdb.
-    generalize (meetLeftCorrect σ1 σ2).
-    generalize (meetRightCorrect σ1 σ2).
-    destruct (meetSU σ1 σ2) as [Σ12 σ1' σ2' σ']; cbn -[subst].
-    intros corrσ1 corrσ2.
+    destruct IHt as (Σ1 & σ1 & t' & [] & ->).
+    destruct (oc_sound db) as (Σ2 & σ2 & db' & [] & Hdb).
+    destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2).
+    repeat eexists.
     change (substSU (?x ► (?b ↦ ?xs))%env ?σ) with (substSU x σ ► (b ↦ substSU xs σ)).
-    now rewrite <-?substSU_trans, corrσ1, corrσ2 , IHt, Hdb.
+    now rewrite <-?substSU_trans, <-corrσ1, <-corrσ2, Hdb.
   Qed.
 
   #[export,refine] Instance gen_occurs_check_laws_term `{SubstUnivVarLaws Sb} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} {τ} :
@@ -298,58 +302,54 @@ Module Type GenOccursCheckOn
     MkGenOccursCheckLaws _ _ _.
   Proof.
     induction t; cbn.
-    - now rewrite (suVarSound lIn).
-    - easy.
-    - revert IHt1 IHt2.
-      change (gen_occurs_check_term ?t) with (gen_occurs_check (T := fun Σ => Term Σ _) t).
-      destruct (gen_occurs_check t1) as (Σ1 & ς1 & t1').
-      destruct (gen_occurs_check t2) as (Σ2 & ς2 & t2').
-      generalize (meetLeftCorrect ς1 ς2).
-      generalize (meetRightCorrect ς1 ς2).
-      destruct (meetSU ς1 ς2) as [Σ12 ς1' ς2' ς]; cbn -[subst].
-      intros  corrς1' corrς2'.
-      intros Ht1 Ht2.
+    - do 3 eexists; split; first reflexivity; cbn.
+      now rewrite (suVarSound lIn).
+    - now repeat eexists.
+    - change (gen_occurs_check_term ?t) with (gen_occurs_check (T := fun Σ => Term Σ _) t).
+      destruct IHt1 as (Σ1 & ς1 & t1' & [] & Ht1).
+      destruct IHt2 as (Σ2 & ς2 & t2' & [] & Ht2).
+      destruct (meetSUCorrect ς1 ς2) as (Σ12 & ς1' & ς2' & ς & [] & corrς1' & corrς2'); cbn -[subst].
+      do 4 eexists; first reflexivity.
       change (substSU (term_binop ?op ?t1 ?t2) ?σ) with (term_binop op (substSU t1 σ) (substSU t2 σ)).
-      now rewrite <-?substSU_trans, corrς1', corrς2', Ht1, Ht2.
-    - revert IHt.
-      change (gen_occurs_check_term ?t) with (gen_occurs_check (T := fun Σ => Term Σ _) t).
-      destruct (gen_occurs_check t) as (Σ' & ς & t').
-      now intros <-.
+      now rewrite <-?substSU_trans, <-corrς1', <-corrς2', <-Ht1, <-Ht2.
+    - change (gen_occurs_check_term ?t) with (gen_occurs_check (T := fun Σ => Term Σ _) t).
+      destruct IHt as (Σ' & ς & t' & [] & ->).
+      now repeat eexists.
     - change (gen_occurs_check_env ?t) with (gen_occurs_check (T := fun Σ => Env (Term Σ) _) t).
-      cut (let '(existT Σ' (σ, ts')) := gen_occurs_check ts in substSU (T := fun Σ => Env (Term Σ) _) ts' σ = ts).
-      + destruct (gen_occurs_check ts) as (Σ1 & σ1 & t').
-        now intros <-.
-      + induction IH; first easy.
+      cut (exists Σ' σ ts', existT Σ' (σ , ts') = gen_occurs_check ts /\
+                              ts = substSU (T := fun Σ => Env (Term Σ) _) ts' σ).
+      + intros (? & ? & ? & [] & Hts).
+        do 3 eexists.
+        now rewrite Hts.
+      + induction IH; first now do 3 eexists.
         cbn.
         change (gen_occurs_check_env ?t) with (gen_occurs_check (T := fun Σ => Env (Term Σ) _)t).
-        destruct (gen_occurs_check E) as (Σ1 & σ1 & env').
-        destruct (gen_occurs_check d) as (Σ2 & σ2 & d').
-        generalize (meetLeftCorrect σ1 σ2).
-        generalize (meetRightCorrect σ1 σ2).
-        destruct (meetSU σ1 σ2) as [Σ12 σ1' σ2' σ']; cbn -[subst].
-        intros  corrσ1 corrσ2.
+        destruct IHIH as (Σ1 & σ1 & env' & [] & HE).
+        destruct q as (Σ2 & σ2 & d' & [] & Hd).
+        destruct (meetSUCorrect σ1 σ2) as (Σ12 & σ1' & σ2' & σ' & [] & corrσ1 & corrσ2).
+        do 4 eexists; first easy.
         change (substSU ((?x ► (?b ↦ ?xs))%env) ?σ) with (substSU x σ ► (b ↦ substSU xs σ)).
-        now rewrite <-?substSU_trans, corrσ1, corrσ2, IHIH, q.
+        now rewrite <-?substSU_trans, <-corrσ1, <-corrσ2, <-HE, <-Hd.
     - change (gen_occurs_check_term ?t) with (gen_occurs_check (T := fun Σ => Term Σ _) t).
-      destruct (gen_occurs_check t) as (Σ' & ς & t').
+      destruct IHt as (Σ' & ς & t' & [] & Ht).
       change (substSU (term_union ?U ?K ?t) ?σ) with (term_union U K (substSU t σ)).
-      now rewrite IHt.
+      do 4 eexists;
+      now rewrite Ht.
     - change (gen_occurs_check_env ?t) with (gen_occurs_check (T := fun Σ => NamedEnv (Term Σ) _) t).
-      cut (let '(existT Σ' (σ, ts')) := gen_occurs_check ts in substSU (T := fun Σ => NamedEnv (Term Σ) _) ts' σ = ts).
-      + destruct (gen_occurs_check ts) as (Σ1 & σ1 & t').
-        now intros <-.
-      + induction IH; first easy.
+      cut (exists Σ' σ ts', existT Σ' (σ, ts') = gen_occurs_check ts /\
+                              ts = substSU (T := fun Σ => NamedEnv (Term Σ) _) ts' σ).
+      + intros (Σ1 & σ1 & t' & [] & Hts).
+        do 4 eexists; now rewrite Hts.
+      + induction IH; first now do 4 eexists.
         cbn.
         change (gen_occurs_check_env ?t) with (gen_occurs_check (T := fun Σ => Env (fun b => Term Σ _) _) t).
-        destruct (gen_occurs_check E) as (Σ1 & σ1 & env').
-        destruct (gen_occurs_check d) as (Σ2 & σ2 & d').
-        generalize (meetLeftCorrect σ1 σ2).
-        generalize (meetRightCorrect σ1 σ2).
-        destruct (meetSU σ1 σ2) as [Σ12 σ1' σ2' σ']; cbn -[subst NamedEnv].
-        intros  corrσ1 corrσ2.
+        cbn; unfold NamedEnv in *.
+        destruct IHIH as (Σ1 & σ1 & env' & [] & HE).
+        destruct q as (Σ2 & σ2 & d' & [] & Hd).
+        destruct (meetSUCorrect σ1 σ2) as (Σ12 & σ1' & σ2' & σ' & [] & corrσ1 & corrσ2).
+        do 4 eexists; first reflexivity.
         change (substSU ((?x ► (?b ↦ ?xs))%env) ?σ) with (substSU x σ ► (b ↦ substSU xs σ)).
-        change (substSU env' σ1 = E) in IHIH.
-        now rewrite <-?substSU_trans, corrσ1, corrσ2, q, IHIH.
+        now rewrite <-?substSU_trans, <-corrσ1, <-corrσ2, Hd, HE.
   Qed.
 
   #[export,refine] Instance gen_occurs_check_laws_list `{SubstUnivMeet Sb} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb}
@@ -357,18 +357,14 @@ Module Type GenOccursCheckOn
     GenOccursCheckLaws (List T) :=
     MkGenOccursCheckLaws _ _ _.
   Proof.
-    induction t; first easy.
+    induction t; first now repeat eexists.
     cbn.
-    generalize (oc_sound a).
-    destruct (gen_occurs_check a) as (Σ1 & σ1 & a').
-    intros <-.
-    destruct (gen_occurs_check t) as (Σ2 & σ2 & t').
-    generalize (meetLeftCorrect σ1 σ2).
-    generalize (meetRightCorrect σ1 σ2).
-    destruct (meetSU σ1 σ2) as [Σ12 σ1' σ2' σ']; cbn -[subst].
-    intros  corrσ1 corrσ2.
+    destruct (oc_sound a)as (Σ1 & σ1 & a' & [] & Ha).
+    destruct IHt as (Σ2 & σ2 & t' & [] & Ht).
+    destruct (meetSUCorrect σ1 σ2) as (Σ12 & σ1' & σ2' & σ' & [] & corrσ1 & corrσ2).
+    do 4 eexists; first easy.
     change (substSU (?x :: ?xs)%list ?σ) with (substSU x σ :: substSU xs σ)%list.
-    now rewrite <-?substSU_trans, corrσ1, corrσ2, IHt.
+    now rewrite <-?substSU_trans, <-corrσ1, <-corrσ2, Ht, Ha.
   Qed.
 
   #[export] Instance gen_occurs_check_laws_sub `{SubstUnivVarLaws Sb} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} {Σ} :
@@ -383,29 +379,24 @@ Module Type GenOccursCheckOn
   Proof.
     destruct t.
     cbn.
-    generalize (oc_sound a).
-    destruct (gen_occurs_check a) as (Σ1 & σ1 & a').
-    generalize (oc_sound b).
-    destruct (gen_occurs_check b) as (Σ2 & σ2 & b').
-    generalize (meetLeftCorrect σ1 σ2).
-    generalize (meetRightCorrect σ1 σ2).
-    destruct (meetSU σ1 σ2) as [Σ12 σ1' σ2' σ']; cbn -[subst].
-    intros corrσ1 corrσ2.
+    destruct (oc_sound a) as (Σ1 & σ1 & a' & [] & Ha).
+    destruct (oc_sound b) as (Σ2 & σ2 & b' & [] & Hb).
+    destruct (meetSUCorrect σ1 σ2) as (Σ12 & σ1' & σ2' & σ' & [] & corrσ1 & corrσ2).
+    do 4 eexists; first easy.
     change (substSU (?x , ?xs) ?σ) with (substSU x σ , substSU xs σ).
-    rewrite <-?substSU_trans, corrσ1, corrσ2.
-    now intros -> ->.
+    now rewrite <-?substSU_trans, <-corrσ1, <-corrσ2, <-Ha, <-Hb.
   Qed.
 
   #[export,refine] Instance gen_occurs_check_laws_option `{SubstUnivMeet Sb, SubstLaws AT} {_ : GenOccursCheck AT} {_ : GenOccursCheckLaws AT} :
     GenOccursCheckLaws (Option AT) :=
     MkGenOccursCheckLaws _ _ _.
   Proof.
-    induction t; last easy.
+    induction t; last now repeat eexists.
     cbn.
-    generalize (oc_sound a).
-    destruct (gen_occurs_check a) as (Σ1 & σ1 & a').
+    destruct (oc_sound a) as (Σ1 & σ1 & a' & [] & Ha).
+    do 4 eexists; first easy.
     change (substSU (Some ?x) ?σ) with (Some (substSU x σ))%list.
-    now intros ->.
+    now f_equal.
   Qed.
 
   #[export] Instance gen_occurs_check_unit `{SubstUniv Sb} : GenOccursCheck Unit :=
@@ -415,7 +406,7 @@ Module Type GenOccursCheckOn
     GenOccursCheckLaws Unit :=
     MkGenOccursCheckLaws _ _ _.
   Proof.
-    now destruct t.
+    destruct t; now repeat eexists.
   Qed.
 
   #[export,refine] Instance gen_occurscheck_laws_ctx `{SubstUnivMeet Sb} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb}
@@ -423,19 +414,15 @@ Module Type GenOccursCheckOn
     GenOccursCheckLaws (fun Σ => Ctx (A Σ)) :=
     MkGenOccursCheckLaws _ _ _.
   Proof.
-    induction t; first easy.
+    induction t; first now repeat eexists.
     cbn.
-    destruct (gen_occurs_check t) as (Σ1 & σ1 & a').
-    generalize (oc_sound b).
+    destruct IHt as (Σ1 & σ1 & a' & [] & Ht).
     change (g _ ?t) with (gen_occurs_check t).
-    destruct (gen_occurs_check b) as (Σ2 & σ2 & b').
-    generalize (meetLeftCorrect σ1 σ2).
-    generalize (meetRightCorrect σ1 σ2).
-    destruct (meetSU σ1 σ2) as [Σ12 σ1' σ2' σ']; cbn -[subst].
-    intros corrσ1 corrσ2.
+    destruct (oc_sound b) as (Σ2 & σ2 & b' & [] & Hb).
+    destruct (meetSUCorrect σ1 σ2) as (Σ12 & σ1' & σ2' & σ' & [] & corrσ1 & corrσ2).
+    do 4 eexists; first easy.
     change (substSU (?x ▻ ?xs) ?σ) with (substSU x σ ▻ substSU xs σ).
-    rewrite <-?substSU_trans, corrσ1, corrσ2, IHt.
-    now intros ->.
+    now rewrite <-?substSU_trans, <-corrσ1, <-corrσ2, <-Ht, <-Hb.
   Qed.
 
   Section Weakenings.
@@ -486,6 +473,34 @@ Module Type GenOccursCheckOn
       | Σ ▻ x => WkKeepVar x wkRefl
       end.
 
+    Fixpoint wkKeepCtx {Σ1 Σ2} (ζ : WeakensTo Σ1 Σ2) Δ :
+      WeakensTo (Σ1 ▻▻ Δ) (Σ2 ▻▻ Δ) :=
+      match Δ with
+      | [ctx] => ζ
+      | Δ' ▻ x => WkKeepVar x (wkKeepCtx ζ Δ')
+      end.
+
+    Lemma transWk_refl_2 `{σ : WeakensTo Σ1 Σ2}: transWk σ wkRefl = σ.
+    Proof.
+      induction σ; first easy; cbn;
+        rewrite ?transWk_equation_3, ?transWk_equation_4;
+        now f_equal.
+    Qed.
+
+    Lemma transWk_refl_1 `{σ : WeakensTo Σ1 Σ2}: transWk wkRefl σ = σ.
+    Proof.
+      induction σ; first easy; cbn;
+        rewrite ?transWk_equation_2, ?transWk_equation_4;
+        now f_equal.
+    Qed.
+
+    Lemma interpWk_wkRefl {Σ} : interpWk (wkRefl (Σ := Σ)) = sub_id _.
+    Proof.
+      induction Σ; first easy.
+      cbn. rewrite IHΣ.
+      now rewrite sub_up1_id.
+    Qed.
+
     Inductive WeakenZeroView Σ2 b : forall Σ1, WeakensTo Σ1 (Σ2 ▻ b) -> Type :=
     | VarUnused : forall Σ1 (wk : WeakensTo Σ1 Σ2), WeakenZeroView (WkSkipVar b wk)
     | VarUsed : forall Σ1 (wk : WeakensTo Σ1 Σ2), WeakenZeroView (WkKeepVar b wk)
@@ -501,6 +516,20 @@ Module Type GenOccursCheckOn
                   (fun b Σ => WkSkipVar _ wkRefl)
                   (fun b' Σ b bIn => WkKeepVar _ (wkRemove bIn))
                   bIn.
+    Lemma interpWk_wkRemove : forall b (Σ : LCtx) (bIn : b ∈ Σ),
+      interpWk (wkRemove bIn) = sub_shift bIn.
+    Proof.
+      eapply ctx.In_ind; intros.
+      - cbn -[subst sub_wk1 sub_shift].
+        now rewrite interpWk_wkRefl, sub_comp_id_left.
+      - cbn -[subst sub_wk1 sub_shift].
+        change ({| ctx.in_at := @ctx.in_at _ _ _ bIn;
+                   ctx.in_valid := @ctx.in_valid _ _ _ bIn
+                 |}) with bIn.
+        rewrite H.
+        now apply sub_shift_succ.
+    Qed.
+
 
     Fixpoint wkSingleton {Σ : LCtx} {b} (bIn : b ∈ Σ) : WeakensTo [ b ]%ctx Σ :=
       ctx.In_case (fun b Σ bIn => WeakensTo [ b ]%ctx Σ)
@@ -535,11 +564,12 @@ Module Type GenOccursCheckOn
     Defined.
 
     Inductive WeakenRemoveView {Σ b} : forall {Σ1} (bIn : b ∈ Σ), WeakensTo Σ1 (Σ - b) -> Set :=
-    | MkWeakenRemoveView : forall Σ1' (bIn' : b ∈ Σ1') (σ1' : WeakensTo Σ1' Σ), WeakenRemoveView (weakenIn σ1' bIn') (weakenRemovePres σ1' bIn').
+    | MkWeakenRemoveView : forall Σ1' (bIn' : b ∈ Σ1') (σ1' : WeakensTo Σ1' Σ),
+        WeakenRemoveView (weakenIn σ1' bIn') (weakenRemovePres σ1' bIn').
 
     Definition weakenRemoveView : forall {b Σ} (bIn : b ∈ Σ) Σ1 (σ : WeakensTo Σ1 (Σ - b)), WeakenRemoveView bIn σ :=
-        ctx.In_rect (fun b Σ bIn => forall Σ1 σ, WeakenRemoveView bIn σ)
-                  (fun b Σ Σ1 σ => MkWeakenRemoveView ctx.in_zero (WkKeepVar _ σ))
+      ctx.In_rect (fun b Σ bIn => forall Σ1 σ, WeakenRemoveView bIn σ)
+        (fun b Σ Σ' σ => MkWeakenRemoveView ctx.in_zero (WkKeepVar _ σ))
                   (fun b Σ b' bIn IHbIn Σ1 σ =>
                      match weakenZeroView σ with
                      | VarUsed _ σ' =>
@@ -601,16 +631,13 @@ Module Type GenOccursCheckOn
     #[export] Instance substUnivMeetLaws_weaken : SubstUnivMeetLaws WeakensTo.
     Proof.
       constructor; intros.
-      - apply (meetWk_elim (fun _ _ _ wk1 wk2 res => transSU (meetLeft res) (meetUp res) = wk1));
-        cbn; first reflexivity; intros;
-        destruct (meetWk wk1 wk2) as [Σ12 σ1' σ2' σ']; cbn in *;
-          rewrite ?transWk_equation_2, ?transWk_equation_3, ?transWk_equation_4;
-          now f_equal.
-      - apply (meetWk_elim (fun _ _ _ wk1 wk2 res => transSU (meetRight res) (meetUp res) = wk2));
-        cbn; first reflexivity; intros;
-        destruct (meetWk wk1 wk2) as [Σ12 σ1' σ2' σ']; cbn in *;
-          rewrite ?transWk_equation_2, ?transWk_equation_3, ?transWk_equation_4;
-          now f_equal.
+      apply (meetWk_elim (fun _ _ _ wk1 wk2 res => exists Σ13 meetLeft meetRight meetUp, MkMeetResult _ _ _ _ Σ13 meetLeft meetRight meetUp = meetWk wk1 wk2 /\ wk1 = transWk meetLeft meetUp /\ wk2 = transWk meetRight meetUp));
+        try intros * (? & ? & ? & ? & H & corrσ1 & corrσ2);
+        rewrite ?meetWk_equation_1, ?meetWk_equation_2, ?meetWk_equation_3, ?meetWk_equation_4, ?meetWk_equation_5;
+        try destruct H;
+        (do 5 eexists; first easy);
+        rewrite ?transWk_equation_1, ?transWk_equation_2, ?transWk_equation_3, ?transWk_equation_4;
+        now split; f_equal.
     Qed.
 
     Definition wkVar : forall {x Σ}, x ∈ Σ -> WeakensTo [ x ]%ctx Σ :=
@@ -633,12 +660,31 @@ Module Type GenOccursCheckOn
         now rewrite lookup_sub_wk1.
     Qed.
 
+  #[export] Instance substUnivLaws_wk : SubstUnivLaws WeakensTo.
+  Proof.
+    intros.
+    refine (transWk_elim (fun Σ1 Σ2 Σ3 σ12 σ23 σ13 => subst (interpSU σ12) (interpSU σ23) = interpSU (transWk σ12 σ23)) _ _ _ _); intros;
+      rewrite ?transWk_equation_1, ?transWk_equation_2, ?transWk_equation_3, ?transWk_equation_4;
+      cbn -[subst];
+    change (interpWk ?ζ) with (interpSU ζ).
+    - easy.
+    - now rewrite <-H, sub_comp_assoc.
+    - now rewrite <-H, ?sub_comp_assoc, <-sub_comp_wk1_comm.
+    - now rewrite <-H, sub_up1_comp.
+  Qed.
+
+  Arguments SubstUnivLaws Sb {H}.
     #[export] Instance substUnivVar_weaken : SubstUnivVar WeakensTo :=
       (fun x Σ xIn => wkVar xIn).
     #[export] Instance substUnivVarUp_weaken : SubstUnivVarUp WeakensTo.
     Proof.
       intros Σ1 Σ2 x σ; now eapply WkKeepVar.
     Defined.
+    #[export] Instance substUnivVarUpLaws_weaken : SubstUnivVarUpLaws WeakensTo.
+    Proof.
+      intros Σ1 Σ2 x ζ. now cbn.
+    Qed.
+
     #[export] Instance substUnivVarDown_weaken : SubstUnivVarDown WeakensTo.
     Proof.
       refine (MkSubstUnivVarDown _ (fun _ _ _ xIn σ => weakenIn σ xIn) _).
@@ -658,6 +704,33 @@ Module Type GenOccursCheckOn
       now eapply IHwk.
     Qed.
 
+    Lemma weakenRemovePres_wkRemove {Σ1 Σ2 b} (bIn : b ∈ Σ1) (σ : WeakensTo Σ1 Σ2) :
+      transWk (weakenRemovePres σ bIn) (wkRemove (weakenIn σ bIn)) =
+        transWk (wkRemove bIn) σ.
+    Proof.
+      revert b bIn.
+      induction σ; intros b bIn.
+      - destruct (ctx.view bIn).
+      - simpl.
+        rewrite transWk_equation_3.
+        change (ctx.MkIn (ctx.in_at (weakenIn σ bIn)) _) with (weakenIn σ bIn).
+        rewrite (IHσ b bIn).
+        now rewrite transWk_equation_2.
+      - destruct (ctx.view bIn).
+        + simpl.
+          now rewrite transWk_equation_2, transWk_equation_3, transWk_refl_1, transWk_refl_2.
+        + simpl.
+          rewrite ?transWk_equation_4.
+          f_equal.
+          now apply IHσ.
+    Qed.
+
+    Lemma subst_weakenRemovePres_wkRemove {Σ1 Σ2 b} (bIn : b ∈ Σ1) (σ : WeakensTo Σ1 Σ2) :
+      subst (interpWk (weakenRemovePres σ bIn)) (interpWk (wkRemove (weakenIn σ bIn))) =
+        subst (interpWk (wkRemove bIn)) (interpWk σ).
+    Proof.
+      now rewrite <-?interpTransWk, weakenRemovePres_wkRemove.
+    Qed.
   End Weakenings.
 
 End GenOccursCheckOn.

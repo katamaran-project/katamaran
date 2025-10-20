@@ -1765,8 +1765,13 @@ Module Type SymPropOn
             let xIn' := wkVarSU xIn ζ in
             let ζ' : WeakensTo (Σ1 - (x∷σ)%ctx) (Σ2 - (x::σ)%ctx) := downSU xIn ζ in
             assume_vareq x (substSU t ζ') (weaken_symprop P ζ')
-        | pattern_match _ _ _ => SymProp.block
-        | pattern_match_var _ _ _ => SymProp.block
+        | pattern_match t pat k =>
+            pattern_match (substSU t ζ) pat
+              (fun pc => weaken_symprop (k pc) (wkKeepCtx ζ (PatternCaseCtx pc)))
+        | @pattern_match_var _ x _ xIn pat k =>
+            error (amsg.mk (tt : Unit _))
+            (* pattern_match_var x (xIn := weakenIn ζ xIn) pat *)
+            (*   (fun pc => weaken_symprop (k pc) (weakenRemovePres (wkKeepCtx ζ (PatternCaseCtx pc)) (ctx.in_cat_left _ xIn))) *)
         | debug msg P => debug (substSU (T := AMessage) msg ζ)(weaken_symprop P ζ)
         end.
       #[export] Instance SubstSU_SymProp : SubstSU WeakensTo SymProp :=
@@ -1795,8 +1800,8 @@ Module Type SymPropOn
             end
         end.
 
-      Definition uq_error {Σ} : AMessage Σ -> UQSymProp Σ.
-      Admitted.
+      Definition uq_error {Σ} (msg : AMessage Σ) : UQSymProp Σ :=
+        existT [ctx] (initSU , error (boxMsg msg)).
 
       Definition uq_block {Σ} : UQSymProp Σ :=
         existT _ (wkNilInit  , SymProp.block).
@@ -1824,7 +1829,13 @@ Module Type SymPropOn
         match kP with
           existT Σ1 (σ1 , kP') =>
             match weakenZeroView σ1 in @WeakenZeroView _ _ Σ1 σ1 return (SymProp Σ1 -> UQSymProp Σ) with
-            | VarUnused _ σ1' => fun kP'' => existT _ (σ1' , kP'')
+            | VarUnused _ σ1' => fun kP'' =>
+                                   match ty.inhabit (type b) with
+                                     Some _ => existT _ (σ1' , kP'')
+                                   | None =>
+                                       (* for now, inhabit doesn't guarantee that the type is empty in this case.. otherwise, we could return false here *)
+                                       existT _ (σ1' , angelicv b (weaken_symprop kP'' (wkRemove ctx.in_zero)))
+                                   end
             | VarUsed _ σ1' => fun kP'' => existT _ (σ1' , angelicv b kP'')
             end kP'
         end.
@@ -1834,7 +1845,13 @@ Module Type SymPropOn
         match kP with
           existT Σ1 (σ1 , kP') =>
             match weakenZeroView σ1 in @WeakenZeroView _ _ Σ1 σ1 return (SymProp Σ1 -> UQSymProp Σ) with
-            | VarUnused _ σ1' => fun kP'' => existT _ (σ1' , kP'')
+            | VarUnused _ σ1' => fun kP'' =>
+                                   match ty.inhabit (type b) with
+                                   | Some _ => existT _ (σ1' , kP'')
+                                   | None =>
+                                       (* for now, inhabit doesn't guarantee that the type is empty in this case.. otherwise, we could return true here *)
+                                       existT _ (σ1' , demonicv b (weaken_symprop kP'' (wkRemove ctx.in_zero)))
+                                   end
             | VarUsed _ σ1' => fun kP'' => existT _ (σ1' , demonicv b kP'')
             end kP'
         end.
@@ -1897,6 +1914,304 @@ Module Type SymPropOn
       Definition unquantify {Σ} (P : SymProp Σ) : SymProp Σ :=
         from_uqSymProp (to_uqSymProp P).
 
+      Definition weakenWorld (w : World) {Σ'} (ζ : WeakensTo w Σ') : World :=
+        MkWorld Σ' (substSU (wco w) ζ).
+      Definition weakenWorld_acc {w : World} {Σ'} {ζ : WeakensTo w Σ'} :
+        Acc w (weakenWorld w ζ) := acc_sub (w2 := weakenWorld w ζ) (interpWk ζ)
+                                     (Entailment.entails_refl _).
+
+      Lemma interpWk_lookup {Σ1 Σ2 : LCtx} {ζ : WeakensTo Σ1 Σ2}
+        {b : (LVar∷Ty)%type} (xIn : (b ∈ Σ1)%katamaran) :
+        env.lookup (interpWk ζ) xIn = term_var_in (weakenIn ζ xIn).
+      Proof.
+        induction ζ.
+        - destruct (ctx.view xIn).
+        - rewrite env.lookup_map.
+          rewrite (IHζ xIn).
+          cbn.
+          now rewrite lookup_sub_wk1.
+        - cbn -[sub_up1].
+          destruct (ctx.view xIn) as [|b xIn]; first done.
+          cbn.
+          rewrite env.lookup_map.
+          rewrite (IHζ xIn).
+          cbn.
+          now rewrite lookup_sub_wk1.
+      Qed.
+
+      Lemma inst_weakenRemovePres_wkRemove {Σ1 Σ2 b} (bIn : (b ∈ Σ1)%katamaran) (σ : WeakensTo Σ1 Σ2) ι :
+        inst (interpWk (weakenRemovePres σ bIn)) (inst (interpWk (wkRemove (weakenIn σ bIn))) ι) =
+          inst (interpWk (wkRemove bIn)) (inst (interpWk σ) ι).
+      Proof.
+        now rewrite -?inst_subst -?subst_weakenRemovePres_wkRemove.
+      Qed.
+
+      Lemma safe_substSU {Σ1 : LCtx} {P : SymProp Σ1} :
+        forall {Σ2} {ζ : WeakensTo Σ1 Σ2} ι,
+          safe (weaken_symprop P ζ) ι <->
+            safe P (inst (interpSU ζ) ι).
+      Proof.
+        induction P; cbn; split;
+          rewrite  /substSU /substSubstSU ?instprop_subst
+            ?IHP1 ?IHP2 ?IHP; try done.
+        - intros [v H]. exists v.
+          now rewrite IHP upSU_sound inst_sub_up1 in H.
+        - intros [v H]. exists v.
+          now rewrite IHP upSU_sound inst_sub_up1.
+        - intros H v. specialize (H v).
+          now rewrite IHP upSU_sound inst_sub_up1 in H.
+        - intros H v. specialize (H v).
+          now rewrite IHP upSU_sound inst_sub_up1.
+        - intros [Hι HP].
+          split.
+          + rewrite -inst_lookup interpWk_lookup. cbn.
+            rewrite Hι inst_subst.
+            f_equal.
+            now rewrite -?inst_sub_shift -?interpWk_wkRemove inst_weakenRemovePres_wkRemove.
+          + apply (eq_ind _ (safe P) HP).
+            now rewrite -?inst_sub_shift -?interpWk_wkRemove inst_weakenRemovePres_wkRemove.
+        - intros [Hι HP].
+          rewrite -inst_lookup interpWk_lookup in Hι.
+          rewrite -?inst_sub_shift -?interpWk_wkRemove in Hι HP *.
+          cbn in Hι.
+          split.
+          + rewrite Hι inst_subst.
+            f_equal.
+            now rewrite inst_weakenRemovePres_wkRemove.
+          + apply (eq_ind _ (safe P) HP).
+            now rewrite inst_weakenRemovePres_wkRemove.
+        - intros HP Heq.
+          rewrite -inst_lookup interpWk_lookup in Heq.
+          cbn in Heq.
+          rewrite inst_subst in HP.
+          rewrite -?inst_sub_shift -?interpWk_wkRemove in Heq HP *.
+          rewrite inst_weakenRemovePres_wkRemove in HP.
+          now apply HP.
+        - intros HP Heq.
+          rewrite -inst_lookup interpWk_lookup in HP.
+          cbn in HP.
+          rewrite -?inst_sub_shift -?interpWk_wkRemove in HP Heq *.
+          rewrite inst_weakenRemovePres_wkRemove.
+          apply HP.
+          now rewrite inst_subst inst_weakenRemovePres_wkRemove in Heq.
+        - (* pattern_match_val *)
+          admit.
+        - (* pattern_match_var *)
+          admit.
+      Admitted.
+
+      Lemma from_uqSymProp_sound {Σ} (uqSP : UQSymProp Σ) ι :
+        let '(existT Σ' (σ , P)) := uqSP in
+        safe P (inst (interpSU σ) ι) <-> safe (from_uqSymProp uqSP) ι.
+      Proof.
+        destruct uqSP as (Σ' & σ & P).
+        cbn.
+        now rewrite safe_substSU.
+      Qed.
+
+      Lemma to_uqSymProp_sound {Σ} (P : SymProp Σ) ι :
+          let '(existT Σ' (σ , P')) := to_uqSymProp P in
+          safe P' (inst (interpSU σ) ι) <-> safe P ι.
+      Proof.
+        induction P; cbn.
+        - destruct (to_uqSymProp P1) as [Σ1 (σ1 & P1')].
+          destruct (to_uqSymProp P2) as [Σ2 (σ2 & P2')].
+          cbn.
+          change (meetWk ?σ1 ?σ2) with (meetSU σ1 σ2).
+          destruct (meetSUCorrect σ1 σ2) as (Σ12 & σ1' & σ2' & σ12 & [] & corrσ1 & corrσ2).
+          cbn.
+          rewrite ?safe_substSU -?inst_subst.
+          change (interpWk σ12) with (interpSU σ12).
+          now rewrite ?interpTransSU -corrσ1 -corrσ2 IHP1 IHP2.
+        - destruct (to_uqSymProp P1) as [Σ1 (σ1 & P1')].
+          destruct (to_uqSymProp P2) as [Σ2 (σ2 & P2')].
+          cbn.
+          change (meetWk ?σ1 ?σ2) with (meetSU σ1 σ2).
+          destruct (meetSUCorrect σ1 σ2) as (Σ12 & σ1' & σ2' & σ12 & [] & corrσ1 & corrσ2).
+          cbn.
+          rewrite ?safe_substSU -?inst_subst.
+          change (interpWk σ12) with (interpSU σ12).
+          now rewrite ?interpTransSU -corrσ1 -corrσ2 IHP1 IHP2.
+        - now unfold uq_error.
+        - easy.
+        - destruct (to_uqSymProp P) as [Σ' [σ' P']].
+          cbn.
+          destruct (oc_sound fml) as (? & σ2 & ? & H & Hfml).
+          rewrite -H.
+          destruct (meetSUCorrect σ' σ2) as (Σ12 & σ1' & σ2' & σ12 & [] & corrσ1 & corrσ2).
+          cbn.
+          rewrite ?safe_substSU -?inst_subst.
+          rewrite -instprop_subst.
+          change (subst ?fml (interpWk ?ζ)) with (substSU fml ζ) at 1.
+          change (interpWk σ12) with (interpSU σ12).
+          now rewrite -?substSU_trans ?interpTransSU -corrσ1 -IHP -corrσ2 -Hfml.
+        - destruct (to_uqSymProp P) as [Σ' [σ' P']].
+          cbn.
+          destruct (oc_sound fml) as (? & σ2 & ? & H & Hfml).
+          rewrite -H.
+          destruct (meetSUCorrect σ' σ2) as (Σ12 & σ1' & σ2' & σ12 & [] & corrσ1 & corrσ2).
+          cbn.
+          rewrite ?safe_substSU -?inst_subst.
+          rewrite -instprop_subst.
+          change (subst ?fml (interpWk ?ζ)) with (substSU fml ζ) at 1.
+          change (interpWk σ12) with (interpSU σ12).
+          now rewrite -?substSU_trans ?interpTransSU -corrσ1 -IHP -corrσ2 -Hfml.
+        - destruct (to_uqSymProp P) as [Σ' [σ' P']].
+          cbn.
+          destruct (weakenZeroView σ').
+          + cbn in IHP.
+            destruct (ty.inhabit (type b)).
+            * split; intros H.
+              exists v.
+              specialize (IHP (ι.[b ↦ v])).
+              rewrite inst_subst inst_sub_wk1 in IHP.
+              now rewrite -IHP.
+              destruct H as [v' H].
+              specialize (IHP (ι.[b ↦ v'])).
+              rewrite inst_subst inst_sub_wk1 in IHP.
+              now rewrite IHP.
+            * cbn.
+              split; intros [v' H]; exists v'.
+              specialize (IHP (ι.[b ↦ v'])).
+              rewrite inst_subst inst_sub_wk1 in IHP.
+              rewrite safe_substSU in H.
+              rewrite -IHP.
+              apply (eq_ind _ (safe P') H).
+              simpl.
+              now rewrite inst_subst inst_sub_wk1 interpWk_wkRefl inst_sub_id.
+              rewrite safe_substSU.
+              rewrite -IHP in H.
+              apply (eq_ind _ (safe P') H).
+              simpl.
+              now rewrite ?inst_subst ?inst_sub_wk1 interpWk_wkRefl inst_sub_id.
+          + split; intros [v Hsafe]; exists v.
+            * apply IHP.
+              now rewrite inst_sub_up1.
+            * apply IHP in Hsafe.
+              now rewrite inst_sub_up1 in Hsafe.
+        - destruct (to_uqSymProp P) as [Σ' [σ' P']].
+          cbn.
+          destruct (weakenZeroView σ').
+          + destruct (ty.inhabit (type b)).
+            * split.
+              intros HSP v'.
+              specialize (IHP (ι.[b ↦ v'])).
+              cbn in IHP.
+              rewrite inst_subst inst_sub_wk1 in IHP.
+              now rewrite -IHP.
+              intros HSP.
+              specialize (IHP (ι.[b ↦ v])).
+              cbn in IHP.
+              rewrite inst_subst inst_sub_wk1 in IHP.
+              rewrite IHP.
+              now apply HSP.
+            * cbn.
+              split; intros H v;
+                specialize (H v).
+              rewrite safe_substSU in H.
+              rewrite -IHP.
+              apply (eq_ind _ (safe P') H).
+              simpl.
+              now rewrite interpWk_wkRefl sub_comp_id_left inst_subst ?inst_sub_wk1.
+              specialize (IHP (ι.[b ↦ v])).
+              rewrite safe_substSU.
+              rewrite -IHP in H.
+              apply (eq_ind _ (safe P') H).
+              simpl.
+              now rewrite interpWk_wkRefl sub_comp_id_left inst_subst ?inst_sub_wk1.
+          + split; intros Hsafe v.
+            * apply IHP.
+              rewrite inst_sub_up1.
+              apply Hsafe.
+            * specialize (Hsafe v).
+              apply IHP in Hsafe.
+              now rewrite inst_sub_up1 in Hsafe.
+        - destruct (to_uqSymProp P) as [Σ' [σ' P']].
+          cbn.
+          destruct (oc_sound (T := fun Σ => Term Σ _) t) as (? & σ2 & ? & [] & Ht).
+          destruct (meetSUCorrect σ' σ2) as (Σ12 & σ1' & σ2' & σ12 & [] & corrσ1 & corrσ2).
+          destruct (weakenRemoveView xIn σ12).
+          cbn.
+          rewrite -inst_lookup interpWk_lookup; cbn.
+          apply and_iff_morphism.
+          + replace (inst (substSU x1 σ2') (env.remove (x∷σ) (inst (interpWk σ1'0) ι) bIn') )
+              with (inst t (env.remove (x∷σ) ι (weakenIn σ1'0 bIn')));
+              first done.
+            rewrite Ht corrσ2 substSU_trans.
+            unfold substSU at 1, substSubstSU at 1.
+            rewrite inst_subst.
+            f_equal.
+            rewrite -?inst_sub_shift.
+            rewrite -?inst_subst.
+            f_equal.
+            rewrite -?interpWk_wkRemove.
+            change (interpSU ?σ) with (interpWk σ).
+            rewrite -?interpTransWk.
+            f_equal.
+            apply weakenRemovePres_wkRemove.
+          + rewrite safe_substSU.
+            rewrite -?inst_sub_shift -(inst_subst (interpWk _)) -interpWk_wkRemove -interpTransWk.
+            rewrite -weakenRemovePres_wkRemove.
+            rewrite interpTransWk inst_subst -inst_subst -interpTransWk.
+            change (transSU ?σ ?σ') with (transWk σ σ') in *.
+            change (interpSU ?σ) with (interpWk σ) in *.
+            now rewrite -corrσ1 IHP interpWk_wkRemove.
+        - destruct (to_uqSymProp P) as [Σ' [σ' P']].
+          cbn.
+          destruct (oc_sound (T := fun Σ => Term Σ _) t) as (? & σ2 & ? & [] & Ht).
+          destruct (meetSUCorrect σ' σ2) as (Σ12 & σ1' & σ2' & σ12 & [] & corrσ1 & corrσ2).
+          destruct (weakenRemoveView xIn σ12).
+          cbn.
+          rewrite -inst_lookup interpWk_lookup; cbn.
+          apply iff_iff_iff_impl_morphism.
+          + replace (inst (substSU x1 σ2') (env.remove (x∷σ) (inst (interpWk σ1'0) ι) bIn') )
+              with (inst t (env.remove (x∷σ) ι (weakenIn σ1'0 bIn')));
+              first done.
+            rewrite Ht corrσ2 substSU_trans.
+            unfold substSU at 1, substSubstSU at 1.
+            rewrite inst_subst.
+            f_equal.
+            rewrite -?inst_sub_shift.
+            rewrite -?inst_subst.
+            f_equal.
+            rewrite -?interpWk_wkRemove.
+            change (interpSU ?σ) with (interpWk σ).
+            rewrite -?interpTransWk.
+            f_equal.
+            apply weakenRemovePres_wkRemove.
+          + rewrite safe_substSU.
+            rewrite -?inst_sub_shift -(inst_subst (interpWk _)) -interpWk_wkRemove -interpTransWk.
+            rewrite -weakenRemovePres_wkRemove.
+            rewrite interpTransWk inst_subst -inst_subst -interpTransWk.
+            change (transSU ?σ ?σ') with (transWk σ σ') in *.
+            change (interpSU ?σ) with (interpWk σ) in *.
+            now rewrite -corrσ1 IHP interpWk_wkRemove.
+        - (* pattern_match_val *)
+          admit.
+        - (* pattern_match_var *)
+          admit.
+        - destruct (to_uqSymProp P) as [Σ' [σ' P']].
+          cbn.
+          destruct (oc_sound b) as (? & σ2 & ? & [] & Hb).
+          destruct (meetSUCorrect σ' σ2) as (Σ12 & σ1' & σ2' & σ12 & [] & corrσ1 & corrσ2).
+          cbn.
+          rewrite safe_substSU.
+          rewrite <- IHP, <-inst_subst.
+          change (interpSU ?σ) with (interpWk σ) in *.
+          change (transSU ?σ ?σ') with (transWk σ σ') in *.
+          now rewrite <-interpTransWk, <-corrσ1.
+      Admitted.
+
+      Lemma unquantify_sound {Σ ι} (P : SymProp Σ) :
+        safe (unquantify P) ι <-> safe P ι.
+      Proof.
+        unfold unquantify.
+        generalize (to_uqSymProp_sound P).
+        destruct (to_uqSymProp P) as (Σ' & σ' & P').
+        intros H.
+        rewrite -(H ι).
+        now rewrite -(from_uqSymProp_sound (existT Σ' (σ', P'))).
+      Qed.
     End Unquantify.
   End Postprocessing.
 
@@ -2647,9 +2962,4 @@ Module Type LogSymPropOn
 
   End LogicalSoundness.
 
-  Import iris.bi.interface iris.proofmode.tactics.
-  Import SymProp.
-  Import logicalrelation.notations.
-  Import proofmode.
-
-  End LogSymPropOn.
+End LogSymPropOn.
