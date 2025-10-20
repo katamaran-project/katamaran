@@ -589,6 +589,58 @@ Module Type GenOccursCheckOn
                      end
                   ).
 
+    Inductive WeakenVarView {Σ2} {b} (bIn : b ∈ Σ2) : forall Σ1, WeakensTo Σ1 Σ2 -> Type :=
+    | WeakenVarUnused : forall {Σ1} (wk : WeakensTo Σ1 (Σ2 - b)), WeakenVarView bIn (transWk wk (wkRemove bIn))
+    | WeakenVarUsed : forall {Σ1} (bIn' : b ∈ Σ1) (wk : WeakensTo Σ1 Σ2), WeakenVarView bIn wk
+    .
+
+    Equations weakenVarView {Σ1 Σ2 b} (bIn2 : b ∈ Σ2) (wk : WeakensTo Σ1 Σ2) : WeakenVarView bIn2 wk :=
+    | bIn2 | WkNil => match ctx.view bIn2 with end
+    | bIn2 | WkSkipVar _ wk =>
+               match ctx.view bIn2 with
+               | ctx.isZero => _ (* WeakenVarUnused ctx.in_zero wk *)
+               | ctx.isSucc bIn2' => let Hind := weakenVarView bIn2' wk in
+                                     _
+                                       (* match weakenVarView bIn2' wk with *)
+                                       (* | WeakenVarUnused _ wk' => _ *)
+                                       (* | WeakenVarUsed _ bIn1 wk' => WeakenVarUnused bIn1 (WkSkipVar _ wk') *)
+                                       (* end *)
+               end
+    | bIn2 | WkKeepVar _ wk =>
+               match ctx.view bIn2 with
+               | ctx.isZero => WeakenVarUsed _ ctx.in_zero _
+               | ctx.isSucc bIn2' => let Hind := weakenVarView bIn2' wk in
+                                     _
+               end
+    .
+    Next Obligation.
+      intros. clear bIn2 b.
+      replace (WkSkipVar x wk) with (transWk wk (wkRemove (b := x) ctx.in_zero)).
+      eapply (WeakenVarUnused ctx.in_zero wk).
+      cbn.
+      now rewrite transWk_equation_2, transWk_refl_2.
+    Defined.
+    Next Obligation.
+      intros. clear bIn2 b.
+      destruct Hind.
+      - replace (WkSkipVar x (transWk wk (wkRemove bIn2')))
+          with (transWk (WkSkipVar x wk) (wkRemove (ctx.in_succ bIn2'))).
+        eapply (WeakenVarUnused (ctx.in_succ bIn2') (WkSkipVar x wk)).
+        simpl.
+        now rewrite transWk_equation_3.
+      - now eapply WeakenVarUsed.
+    Defined.
+    Next Obligation.
+      intros. clear bIn2 b.
+      destruct Hind.
+      - replace (WkKeepVar x0 (transWk wk (wkRemove bIn2')))
+          with (transWk (WkKeepVar x0 wk) (wkRemove (ctx.in_succ bIn2'))).
+        eapply (WeakenVarUnused (ctx.in_succ bIn2') (WkKeepVar x0 wk)).
+        simpl.
+        now rewrite transWk_equation_4.
+      - now eapply WeakenVarUsed, ctx.in_succ.
+    Defined.
+
     #[export] Instance substUniv_weaken : SubstUniv WeakensTo.
     Proof.
       econstructor.
@@ -732,5 +784,17 @@ Module Type GenOccursCheckOn
       now rewrite <-?interpTransWk, weakenRemovePres_wkRemove.
     Qed.
   End Weakenings.
+
+
+  Section BackwardsCompat.
+    Definition old_occurs_check {T} {sT : SubstSU WeakensTo T} {gocT : GenOccursCheck (Sb := WeakensTo) T}
+      {Σ x} (xIn : x ∈ Σ) (t : T Σ) : option (T (Σ - x)) :=
+      let '(existT Σ' (ζ , t')) := gen_occurs_check (T := T) (Sb := WeakensTo) t in
+      match weakenVarView xIn ζ with
+      | WeakenVarUnused _ ζ' =>
+          fun t' => Some (substSU (T := T) (Sb := WeakensTo) t' ζ')
+      | WeakenVarUsed _ _ _ => fun _ => None
+      end t'.
+  End BackwardsCompat.
 
 End GenOccursCheckOn.
