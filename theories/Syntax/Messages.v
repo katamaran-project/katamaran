@@ -130,6 +130,13 @@ Module Type MessagesOn
                        existT Σ' (σ' , mk msg')
         end.
 
+    #[export] Instance genoccurschecklaws_amessage : GenOccursCheckLaws AMessage.
+    Proof.
+      constructor.
+      destruct t.
+      (* TODO: add laws instance for contained messages *)
+      admit.
+    Admitted.
 
     #[export] Instance instprop_amessage : InstProp AMessage :=
       fun _ _ _ => True.

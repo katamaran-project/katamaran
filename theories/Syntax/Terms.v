@@ -904,6 +904,22 @@ Module Type TermsOn (Import TY : Types).
       now rewrite lookup_sub_comp, lookup_sub_shift, env.lookup_tabulate.
     Qed.
 
+    Lemma sub_shift_succ {Σ b b'} (bIn : b ∈ Σ) :
+      sub_up1 (b := b') (sub_shift bIn) = sub_shift (ctx.in_succ bIn).
+    Proof.
+      apply env.lookup_extensional; intros.
+      destruct (ctx.view bInΓ); first easy.
+      cbn -[env.tabulate].
+      rewrite lookup_sub_comp.
+      rewrite lookup_sub_shift.
+      destruct b0 as [x0 τ0].
+      change (ctx.snoc (ctx.remove bIn) b') with
+        (ctx.remove (ctx.in_succ (b' := b') bIn)).
+      rewrite (lookup_sub_shift (ctx.in_succ (b' := b') bIn) (ctx.in_succ (b := x0∷τ0) i)).
+      cbn.
+      now rewrite lookup_sub_wk1.
+    Qed.
+
     Lemma sub_comp_wk1_comm {Σ0 Σ1 b} (ζ : Sub Σ0 Σ1) :
       subst sub_wk1 (sub_up1 ζ) = subst ζ (sub_wk1 (b:=b)).
     Proof. now rewrite sub_comp_wk1_tail. Qed.

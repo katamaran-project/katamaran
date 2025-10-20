@@ -244,6 +244,52 @@ Module Type FormulasOn
                                   existT Σ12 (σ' , formula_or (substSU F1' σ1') (substSU F2' σ2'))
       end.
 
+  #[export] Instance GenOccursCheckLawsFormula `{SubstUnivVar Sb}
+    {_ : SubstUnivLaws Sb} {_ : SubstUnivVarLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      GenOccursCheckLaws (Sb := Sb) Formula.
+  Proof.
+    constructor.
+    induction t; cbn.
+    - destruct (oc_sound ts) as (Σ' & σ' & ts' & [] & Hts).
+      do 4 eexists; first easy.
+      cbn. now f_equal.
+    - destruct (oc_sound t) as (Σ' & σ' & t' & [] & Ht).
+      do 4 eexists; first easy.
+      cbn. now f_equal.
+    - destruct (oc_sound ζ) as (Σ'' & σ' & ζ' & [] & Hζ).
+      do 4 eexists; first easy.
+      cbn. now f_equal.
+    - destruct (oc_sound t1) as (Σ1 & σ1 & t1' & [] & Ht1).
+      destruct (oc_sound t2) as (Σ2 & σ2 & t2' & [] & Ht2).
+      destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2).
+      do 4 eexists; first easy.
+      cbn.
+      change (subst ?t (interpSU ?ζ)) with (substSU t ζ).
+      destruct (substSU_trans x0 x2 t1').
+      destruct (substSU_trans x1 x2 t2').
+      now destruct corrσ1, corrσ2, Ht1, Ht2.
+    - now do 4 eexists.
+    - now do 4 eexists.
+    - destruct IHt1 as (Σ1 & σ1 & t1' & [] & Ht1).
+      destruct IHt2 as (Σ2 & σ2 & t2' & [] & Ht2).
+      destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2).
+      do 4 eexists; first easy.
+      cbn.
+      change (subst ?t (interpSU ?ζ)) with (substSU t ζ).
+      destruct (substSU_trans x0 x2 t1').
+      destruct (substSU_trans x1 x2 t2').
+      now destruct corrσ1, corrσ2, Ht1, Ht2.
+    - destruct IHt1 as (Σ1 & σ1 & t1' & [] & Ht1).
+      destruct IHt2 as (Σ2 & σ2 & t2' & [] & Ht2).
+      destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2).
+      do 4 eexists; first easy.
+      cbn.
+      change (subst ?t (interpSU ?ζ)) with (substSU t ζ).
+      destruct (substSU_trans x0 x2 t1').
+      destruct (substSU_trans x1 x2 t2').
+      now destruct corrσ1, corrσ2, Ht1, Ht2.
+  Qed.
+
   Section PathCondition.
     Import Entailment.
 
