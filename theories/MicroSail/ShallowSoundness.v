@@ -172,20 +172,19 @@ Module Type Soundness
 
         - (* stm_val *)
           apply rule_stm_val.
-          apply rule_stm_relval.
           apply bi.exist_intro' with h1.
           apply bi.and_intro.
           reflexivity.
           apply bi.pure_intro.
           auto.
 
-        - (* stm_relval *)
-          apply rule_stm_relval.
-          apply bi.exist_intro' with h1.
-          apply bi.and_intro.
-          reflexivity.
-          apply bi.pure_intro.
-          auto.  
+        (* - (* stm_relval *) *)
+        (*   apply rule_stm_relval. *)
+        (*   apply bi.exist_intro' with h1. *)
+        (*   apply bi.and_intro. *)
+        (*   reflexivity. *)
+        (*   apply bi.pure_intro. *)
+        (*   auto.   *)
 
         - (* stm_exp *)
           apply rule_stm_exp.
@@ -290,12 +289,8 @@ Module Type Soundness
           now intros ->%CPureSpec.wp_produce_chunk.
 
         - (* stm_bind *)
-          eapply rule_stm_bind.
-          apply IHs, HYP. clear IHs HYP.
-          intros v1 δ2. cbn.
-          apply rule_exist. intros h.
-          apply rule_pull. intros HYP.
-          now apply H.
+          unfold error in HYP.
+          contradiction.
 
         - (* stm_debug *)
           constructor. auto.

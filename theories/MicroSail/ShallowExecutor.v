@@ -317,13 +317,13 @@ Module Type ShallowExecOn
         fix exec_aux {Γ τ} (s : Stm Γ τ) : CStoreSpec Γ Γ (RelVal τ) :=
           match s with
           | stm_val _ l => pure (ty.valToRelVal l)
-          | stm_relval _ l => pure l
+          (* | stm_relval _ l => pure l *)
           | stm_exp e => eval_exp e
           | stm_let x σ s k =>
               v <- exec_aux s ;;
               pushpop v (exec_aux k)
           | stm_block δ k =>
-              pushspops δ (exec_aux k)
+              pushspops (env.map (fun b => ty.valToRelVal) δ) (exec_aux k)
           | stm_assign x e =>
               v <- exec_aux e ;;
               _ <- assign x v ;;
@@ -340,7 +340,7 @@ Module Type ShallowExecOn
               exec_aux k
           | stm_call_frame δ' s =>
               δ <- get_local ;;
-              _ <- put_local δ' ;;
+              _ <- put_local (env.map (fun b => ty.valToRelVal) δ') ;;
               v <- exec_aux s ;;
               _ <- put_local δ ;;
               pure v
@@ -361,8 +361,9 @@ Module Type ShallowExecOn
               v__new <- eval_exp e ;;
               lift_heapspec (CHeapSpec.write_register reg v__new)
           | stm_bind s k =>
-              v <- exec_aux s ;;
-              exec_aux (k v)
+              error
+              (* v <- exec_aux s ;; *)
+              (* exec_aux (k v) *)
           | stm_debugk k =>
               exec_aux k
           end.

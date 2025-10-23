@@ -438,6 +438,13 @@ Module Type PatternsOn (Import TY : Types).
       MatchResultRel p -> RelVal σ :=
       fun c => pattern_match_relval_reverse p (projT1 c) (projT2 c).
 
+    Lemma pattern_match_relval_reverse_syncNamedEnvIsSync (σ : Ty) (pat : Pattern σ) pc δpc : pattern_match_relval_reverse pat pc (ty.syncNamedEnv δpc) = SyncVal (pattern_match_val_reverse pat pc δpc).
+    Proof.
+      unfold pattern_match_relval_reverse.
+      rewrite ty.unliftSyncNamedEnvIsSync.
+      auto.
+    Qed.
+
     Lemma unliftIsSyncValImpliesAllSync {c} {n : NamedEnv RelVal c} {n0 : NamedEnv Val c}
       (H : ty.unliftNamedEnv n = SyncVal n0) :
       env.map (λ b : N∷Ty, SyncVal) n0 = n.

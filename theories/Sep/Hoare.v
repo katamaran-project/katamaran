@@ -92,10 +92,10 @@ Module Type ProgramLogicOn
         {l : Val τ} {P : L} {Q : RelVal τ -> CStore Γ -> L} :
       (P ⊢ Q (ty.valToRelVal l) δ) ->
       ⦃ P ⦄ stm_val τ l ; δ ⦃ Q ⦄
-    | rule_stm_relval
-        {l : RelVal τ} {P : L} {Q : RelVal τ -> CStore Γ -> L} :
-      (P ⊢ Q l δ) ->
-      ⦃ P ⦄ stm_relval τ l ; δ ⦃ Q ⦄
+    (* | rule_stm_relval *)
+    (*     {l : RelVal τ} {P : L} {Q : RelVal τ -> CStore Γ -> L} : *)
+    (*   (P ⊢ Q l δ) -> *)
+    (*   ⦃ P ⦄ stm_relval τ l ; δ ⦃ Q ⦄ *)
     | rule_stm_exp
         {e : Exp Γ τ} {P : L} {Q : RelVal τ -> CStore Γ -> L} :
       (P ⊢ Q (eval e δ) δ) ->
@@ -109,10 +109,10 @@ Module Type ProgramLogicOn
                     ⦃ Q v δ' ⦄ k ; env.snoc δ' (x∷σ) v ⦃ fun v δ'' => R v (env.tail δ'') ⦄ ) ->
                 ⦃ P ⦄ let: x := s in k ; δ ⦃ R ⦄
     | rule_stm_block
-        (Δ : PCtx) (δΔ : CStore Δ)
+        (Δ : PCtx) (δΔ : CStoreVal Δ)
         (k : Stm (Γ ▻▻ Δ) τ)
         (P : L) (R : RelVal τ -> CStore Γ -> L) :
-      ⦃ P ⦄ k ; δ ►► δΔ ⦃ fun v δ'' => R v (env.drop Δ δ'') ⦄ ->
+      ⦃ P ⦄ k ; δ ►► (env.map (fun b => ty.valToRelVal) δΔ) ⦃ fun v δ'' => R v (env.drop Δ δ'') ⦄ ->
                 ⦃ P ⦄ stm_block δΔ k ; δ ⦃ R ⦄
     | rule_stm_seq
         (σ : Ty) (s1 : Stm Γ σ) (s2 : Stm Γ τ)
@@ -126,7 +126,7 @@ Module Type ProgramLogicOn
       (match eval e1 δ with SyncVal v => v = true | _ => False end -> ⦃ P ⦄ k ; δ ⦃ Q ⦄) ->
       ⦃ P ⦄ stm_assertk e1 e2 k ; δ ⦃ Q ⦄
     | rule_stm_fail
-        (s : RelVal ty.string) (Q : RelVal τ -> CStore Γ -> L) :
+        (s : string) (Q : RelVal τ -> CStore Γ -> L) :
       ⦃ True ⦄ stm_fail τ s ; δ ⦃ Q ⦄
     | rule_stm_read_register
         (r : 𝑹𝑬𝑮 τ) (v : RelVal τ) :
@@ -156,9 +156,9 @@ Module Type ProgramLogicOn
       ⦃ P ⦄ FunDef f ; evals es δ ⦃ fun v _ => Q v δ ⦄ ->
                        ⦃ P ⦄ stm_call f es ; δ ⦃ Q ⦄
     | rule_stm_call_frame (* TODO: remove stm_call_frame (similar for bind and block then) *)
-        (Δ : PCtx) (δΔ : CStore Δ) (s : Stm Δ τ)
+        (Δ : PCtx) (δΔ : CStoreVal Δ) (s : Stm Δ τ)
         (P : L) (Q : RelVal τ -> CStore Γ -> L) :
-      ⦃ P ⦄ s ; δΔ ⦃ fun v _ => Q v δ ⦄ ->
+      ⦃ P ⦄ s ; (env.map (fun b => ty.valToRelVal) δΔ) ⦃ fun v _ => Q v δ ⦄ ->
                 ⦃ P ⦄ stm_call_frame δΔ s ; δ ⦃ Q ⦄ (* TODO: to S or not to S for the fuel *)
     | rule_stm_foreign
         {Δ} {f : 𝑭𝑿 Δ τ} (es : NamedEnv (Exp Γ) Δ)
@@ -171,14 +171,10 @@ Module Type ProgramLogicOn
       LTriple (evals es δ) P Q (LEnv l) ->
       ⦃ Q ⦄ k ; δ ⦃ R ⦄ ->
                 ⦃ P ⦄ stm_lemmak l es k ; δ ⦃ R ⦄
-    | rule_stm_bind
-        {σ : Ty} (s : Stm Γ σ) (k : RelVal σ -> Stm Γ τ)
-        (P : L) (Q : RelVal σ -> CStore Γ -> L)
-        (R : RelVal τ -> CStore Γ -> L) :
-      ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
-                (forall (v__σ : RelVal σ) (δ' : CStore Γ),
-                    ⦃ Q v__σ δ' ⦄ k v__σ ; δ' ⦃ R ⦄) ->
-                ⦃ P ⦄ stm_bind s k ; δ ⦃ R ⦄
+    (* | rule_stm_bind *)
+    (*     {σ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ) *)
+    (*     (R : RelVal τ -> CStore Γ -> L) : *)
+    (*             ⦃ True ⦄ stm_bind s k ; δ ⦃ R ⦄ *)
     | rule_stm_debugk
         (k : Stm Γ τ)
         (P : L) (Q : RelVal τ -> CStore Γ -> L) :
@@ -188,7 +184,7 @@ Module Type ProgramLogicOn
         {σ} (s : Stm Γ σ) (pat : Pattern σ)
         (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ)
         (P : L) (Q : RelVal σ -> CStore Γ -> L) (R : RelVal τ -> CStore Γ -> L) :
-      ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
+      ⦃ P ⦄ s ; δ ⦃ fun rv δ =>  ⌜secLeak rv⌝ ∗ Q rv δ ⦄ ->
                 (forall pc δpc δ',
                     ⦃ Q (pattern_match_relval_reverse pat pc δpc) δ' ⦄ rhs pc ; δ' ►► δpc
                                                                                ⦃ fun v2 δ' => R v2 (env.drop (PatternCaseCtx pc) δ') ⦄) ->

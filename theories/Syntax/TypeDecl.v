@@ -177,14 +177,14 @@ Module ty.
       | SyncVal v => v
       | NonSyncVal vl _ => vl
       end.
-    Arguments projLeftRV {A} !rv.
+    Global Arguments projLeftRV {A} !rv.
 
     Definition projRightRV {A} (rv : RV A) : A :=
       match rv with
       | SyncVal v => v
       | NonSyncVal _ vr => vr
       end.
-    Arguments projRightRV {A} !rv.
+    Global Arguments projRightRV {A} !rv.
 
     Definition RelVal {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} (τ : Ty) : Set :=
       RV (Val τ)
@@ -203,18 +203,18 @@ Module ty.
 
     Definition projLeft {A} (rv : RelVal A) : Val A :=
       projLeftRV rv.
-    Arguments projLeft {A} !rv.
+    Global Arguments projLeft {A} !rv.
 
     Definition projRight {A} (rv : RelVal A) : Val A :=
       projRightRV rv.
-    Arguments projRight {A} !rv.
+    Global Arguments projRight {A} !rv.
 
     Definition liftUnOpRV {A B} (f : A -> B) (rv : RV A) : RV B :=
       match rv with
       | (SyncVal v) => SyncVal (f v)
       | (NonSyncVal vl vr) => NonSyncVal (f vl) (f vr)
       end.
-    Arguments liftUnOpRV {A B} f !rv.
+    Global Arguments liftUnOpRV {A B} f !rv.
 
     Instance proper_liftUnOpRV {A B : Type} : Proper ((pointwise_relation _ eq) ==> eq ==> eq) (@liftUnOpRV A B).
     Proof.
@@ -241,7 +241,7 @@ Module ty.
       | (SyncVal v1 , SyncVal v2) => SyncVal (f v1 v2)
       | (_ , _) => NonSyncVal (f (projLeftRV rv1) (projLeftRV rv2)) (f (projRightRV rv1) (projRightRV rv2))
       end.
-    Arguments liftBinOpRV {A B C} f !rv1 !rv2.
+    Global Arguments liftBinOpRV {A B C} f !rv1 !rv2.
 
     Instance proper_liftBinOpRV {A B C : Type} : Proper (pointwise_relation _ (pointwise_relation _ eq) ==> eq ==> eq ==> eq) (@liftBinOpRV A B C).
     Proof.
@@ -265,7 +265,7 @@ Module ty.
     Definition rv_eq {A} (rv1 rv2 : RV A) : Prop :=
       let rvp := liftBinOpRV (fun x y => x = y) rv1 rv2 in
       projLeftRV rvp /\ projRightRV rvp.
-    Arguments rv_eq {A} !rv1 !rv2.
+    Global Arguments rv_eq {A} !rv1 !rv2.
 
     Lemma rv_eq_to_eq {A} (rv1 rv2 : RV A) :
       rv_eq rv1 rv2 <-> (projLeftRV rv1 = projLeftRV rv2 /\ projRightRV rv1 = projRightRV rv2).
@@ -284,7 +284,7 @@ Module ty.
 
     Definition liftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) : RelVal σ2 :=
       liftUnOpRV f rv.
-    Arguments liftUnOp {σ1 σ2} f !rv.
+    Global Arguments liftUnOp {σ1 σ2} f !rv.
 
     Instance proper_liftUnOp {σ1 σ2 : Ty} : Proper ((pointwise_relation _ eq) ==> eq ==> eq) (@liftUnOp σ1 σ2).
     Proof.
@@ -307,7 +307,7 @@ Module ty.
 
     Definition liftBinOp {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) : RelVal σ3 :=
       liftBinOpRV f rv1 rv2.
-    Arguments liftBinOp {σ1 σ2 σ3} f !rv1 !rv2.
+    Global Arguments liftBinOp {σ1 σ2 σ3} f !rv1 !rv2.
 
     Instance proper_liftBinOp {σ1 σ2 σ3 : Ty} : Proper (pointwise_relation _ (pointwise_relation _ eq) ==> eq ==> eq ==> eq) (@liftBinOp σ1 σ2 σ3).
     Proof.
@@ -399,7 +399,7 @@ Module ty.
         end.
 
     Definition syncNamedEnv {N} {Γ : NCtx N Ty} : NamedEnv Val Γ -> NamedEnv RelVal Γ :=
-      env.map (fun b => valToRelVal).
+      env.map (fun b => SyncVal).
 
     Definition nonsyncNamedEnv {N} {Γ : NCtx N Ty} : NamedEnv Val Γ -> NamedEnv Val Γ -> NamedEnv RelVal Γ :=
       env.zipWith (fun b => NonSyncVal).
@@ -414,6 +414,15 @@ Module ty.
           | (_ , NonSyncVal vs1' vs2') => NonSyncVal (vs1' .[ k ↦ projLeft v ]) (vs2' .[ k ↦ projRight v ])
           end
       end.
+
+    Lemma unliftSyncNamedEnvIsSync {N} {Γ : NCtx N Ty} (nenv : NamedEnv Val Γ) :
+      unliftNamedEnv (syncNamedEnv nenv) = SyncVal nenv.
+    Proof.
+      induction nenv.
+      - auto.
+      - cbn. change (env.map (λ b0 : N∷Ty, SyncVal) nenv) with (syncNamedEnv nenv).
+        rewrite IHnenv. auto.
+    Qed.
 
     Fixpoint listOfRVToRVOfList {A} (rv_list : (Datatypes.list (RV A))) : RV (Datatypes.list A) :=
       match rv_list with
@@ -638,7 +647,7 @@ Module ty.
   #[global] Arguments bvec {TK} n%_nat_scope.
   (* #[global] Arguments tuple {TK} σs%_ctx_scope. *)
   (* #[global] Arguments union {TK} U. *)
-  (* #[global] Arguments record {TK} R. *)
+  (* #[global] Argumentsn record {TK} R. *)
 
 End ty.
 Export ty

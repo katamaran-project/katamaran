@@ -78,6 +78,15 @@ Module Type PredicateMixin (Import B : Base) (Import PP : PurePredicateKit B) (I
       @luser p ts ⊢ @luser p ts ∗ @luser p ts;
   }.
   Arguments luser {_ _} p _.
+
+  Class PredicateDefVal (HProp : bi) : Type :=
+    { lptsregVal    : forall {σ : Ty}, 𝑹𝑬𝑮 σ -> Val σ -> HProp;
+      luserVal      : forall (p : 𝑯), Env Val (𝑯_Ty p) -> HProp;
+      lduplicateVal : forall (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+        is_duplicable p = true ->
+        @luserVal p ts ⊢ @luserVal p ts ∗ @luserVal p ts;
+    }.
+  Arguments luserVal {_ _} p _.
 End PredicateMixin.
 
 Module Type PredicateKit (B : Base) :=

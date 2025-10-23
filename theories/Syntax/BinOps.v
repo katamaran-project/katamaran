@@ -406,9 +406,11 @@ Module bop.
       | update_vector_subrange s l => fun v1 v2 => bv.update_vector_subrange s l v1 v2
       | relop op                   => eval_relop_val op
       end.
+    Global Arguments eval {σ1 σ2 σ3} !op v1 v2.
 
     Definition evalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : RelVal σ1 -> RelVal σ2 -> RelVal σ3 :=
     liftBinOp (eval op).
+    Global Arguments evalRel {σ1} {σ2} {σ3} !op !rv1 !rv2.
 
     Lemma comProjLeftRVEvalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) :
       projLeftRV (evalRel op rv1 rv2) = eval op (projLeftRV rv1) (projLeftRV rv2).

@@ -54,6 +54,7 @@ Module Type ExpressionsOn (Import TY : Types).
 
   Local Notation PCtx := (NCtx PVar Ty).
   Local Notation CStore := (@NamedEnv PVar Ty RelVal).
+  Local Notation CStoreVal := (@NamedEnv PVar Ty Val).
 
   (* Intrinsically well-typed expressions. The context Γ of mutable variables
      contains names PVar and types Ty, but the names are not computationally
@@ -128,25 +129,26 @@ Module Type ExpressionsOn (Import TY : Types).
   Definition Exp_rec {Γ} (P : forall σ, Exp Γ σ -> Set) := Exp_rect P.
   Definition Exp_ind {Γ} (P : forall σ, Exp Γ σ -> Prop) := Exp_rect P.
 
-  (* Fixpoint eval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) {struct e} : Val σ := *)
-  (*   match e in (Exp _ t) return (Val t) with *)
-  (*   | exp_var x           => δ.[??x] *)
-  (*   | exp_val _ l         => l *)
-  (*   | exp_binop op e1 e2  => bop.eval op (eval e1 δ) (eval e2 δ) *)
-  (*   | exp_unop op e       => uop.eval op (eval e δ) *)
-  (*   (* | exp_list es         => List.map (fun e => eval e δ) es *) *)
-  (*   | exp_bvec es         => Vector.t_rect *)
-  (*                              _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => bv m) *)
-  (*                              bv.nil (fun eb m _ => bv.cons (eval eb δ)) *)
-  (*                              _ es *)
-  (*   (* | exp_tuple es        => env.Env_rect *) *)
-  (*   (*                            (fun σs _ => Val (ty.tuple σs)) *) *)
-  (*   (*                            tt *) *)
-  (*   (*                            (fun σs _ (vs : Val (ty.tuple σs)) σ e => (vs, eval e δ)) *) *)
-  (*   (*                            es *) *)
-  (*   (* | exp_union U K e     => unionv_fold U (existT K (eval e δ)) *) *)
-  (*   (* | exp_record R es     => recordv_fold R (env.map (fun xτ e => eval e δ) es) *) *)
-  (*   end. *)
+  Fixpoint evalVal {Γ σ} (e : Exp Γ σ) (δ : CStoreVal Γ) {struct e} : Val σ :=
+    match e in (Exp _ t) return (Val t) with
+    | exp_var x           => δ.[??x]
+    | exp_val _ l         => l
+    | exp_binop op e1 e2  => bop.eval op (evalVal e1 δ) (evalVal e2 δ)
+    | exp_unop op e       => uop.eval op (evalVal e δ)
+    (* | exp_list es         => List.map (fun e => evalVal e δ) es *)
+    | exp_bvec es         => Vector.t_rect
+                               _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => bv m)
+                               bv.nil (fun eb m _ => bv.cons (evalVal eb δ))
+                               _ es
+    (* | exp_tuple es        => env.Env_rect *)
+    (*                            (fun σs _ => Val (ty.tuple σs)) *)
+    (*                            tt *)
+    (*                            (fun σs _ (vs : Val (ty.tuple σs)) σ e => (vs, evalVal e δ)) *)
+    (*                            es *)
+    (* | exp_union U K e     => unionv_fold U (existT K (evalVal e δ)) *)
+    (* | exp_record R es     => recordv_fold R (env.map (fun xτ e => evalVal e δ) es) *)
+    end.
+  Arguments evalVal {Γ σ} !e δ.
 
     Fixpoint eval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) {struct e} : RelVal σ :=
     match e in (Exp _ t) return RelVal t with
@@ -157,7 +159,7 @@ Module Type ExpressionsOn (Import TY : Types).
     (* | exp_list es         => List.map (fun e => eval e δ) es *)
     | exp_bvec es         => Vector.t_rect
                                _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => RelVal (ty.bvec m))
-                               (ty.valToRelVal (σ := ty.bvec 0) bv.nil) (fun eb m _ => ty.liftBinOpRV (A := bool) (B := bv m) (C := bv (S m)) (@bv.cons m) (eval eb δ))
+                               (ty.valToRelVal (σ := ty.bvec 0) bv.nil) (fun eb m _ => ty.liftBinOp (σ1 := ty.bool) (σ2 := ty.bvec m) (σ3 := ty.bvec (S m)) (@bv.cons m) (eval eb δ))
                                _ es
     (* | exp_tuple es        => env.Env_rect *)
     (*                            (fun σs _ => Val (ty.tuple σs)) *)
@@ -167,9 +169,63 @@ Module Type ExpressionsOn (Import TY : Types).
     (* | exp_union U K e     => unionv_fold U (existT K (eval e δ)) *)
     (* | exp_record R es     => recordv_fold R (env.map (fun xτ e => eval e δ) es) *)
     end.
+    Global Arguments eval {Γ} {σ} !e δ.
 
-  Definition evals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ) : CStore Δ :=
-    env.map (fun xτ e => eval e δ) es.
+    Lemma evalValProjLeftIsProjLeftEval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) :
+      evalVal e (env.map (fun b => ty.projLeft) δ) = ty.projLeft (eval e δ).
+    Proof.
+      induction e.
+      - cbn. now rewrite env.lookup_map.
+      - auto.
+      - cbn. now rewrite bop.comProjLeftEvalRel, IHe1, IHe2.
+      - cbn. now rewrite uop.comProjLeftEvalRel, IHe.
+      - induction es.
+        + auto.
+        + cbn in *. destruct X as [-> rest].
+          rewrite (IHes rest).
+          now rewrite ty.comProjLeftLiftBinOp.
+    Qed.
+
+    Lemma evalValProjRightIsProjRightEval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) :
+      evalVal e (env.map (fun b => ty.projRight) δ) = ty.projRight (eval e δ).
+    Proof.
+      induction e.
+      - cbn. now rewrite env.lookup_map.
+      - auto.
+      - cbn. now rewrite bop.comProjRightEvalRel, IHe1, IHe2.
+      - cbn. now rewrite uop.comProjRightEvalRel, IHe.
+      - induction es.
+        + auto.
+        + cbn in *. destruct X as [-> rest].
+          rewrite (IHes rest).
+          now rewrite ty.comProjRightLiftBinOp.
+    Qed.
+
+    Definition evalVals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStoreVal Γ) : CStoreVal Δ :=
+      env.map (fun xτ e => evalVal e δ) es.
+
+    Definition evals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ) : CStore Δ :=
+      env.map (fun xτ e => eval e δ) es.
+
+    Lemma evalValsProjLeftIsProjLeftEvals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ) :
+      evalVals es (env.map (fun b => ty.projLeft) δ) = env.map (fun b => ty.projLeft) (evals es δ).
+    Proof.
+      induction es.
+      - auto.
+      - cbn. rewrite evalValProjLeftIsProjLeftEval.
+        f_equal.
+        apply IHes.
+    Qed.
+
+    Lemma evalValsProjRightIsProjRightEvals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ) :
+      evalVals es (env.map (fun b => ty.projRight) δ) = env.map (fun b => ty.projRight) (evals es δ).
+    Proof.
+      induction es.
+      - auto.
+      - cbn. rewrite evalValProjRightIsProjRightEval.
+        f_equal.
+        apply IHes.
+    Qed.
 
   Notation exp_int l := (@exp_val _ ty.int l%Z).
   Notation exp_bool l := (@exp_val _ ty.bool l).

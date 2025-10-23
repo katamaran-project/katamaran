@@ -49,7 +49,7 @@ From iris Require Import
 
 From Katamaran Require Import
      Iris.Base
-     Iris.Instance
+     (* Iris.Instance *)
      Prelude
      Semantics
      Sep.Hoare
@@ -58,7 +58,8 @@ From Katamaran Require Import
      Specification
      BinaryResources
      BinaryWeakestPre
-     BinaryAdequacy.
+     BinaryAdequacy
+.
 
 Import ctx.notations.
 Import env.notations.

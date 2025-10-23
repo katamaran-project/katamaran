@@ -79,14 +79,14 @@ Module Type IrisPrelims
 
     (* IVal designates the values in our language, allowing for succesful
        termination with a value, or failure termination with a string. *)
-    Definition IVal (τ : Ty) : Type := RelVal τ + RelVal ty.string.
+    Definition IVal (τ : Ty) : Type := Val τ + string.
 
     (* The "expressions" of the LanguageMixin are configurations consisting of a
        statement and a local variable store. *)
     Record Conf (Γ : PCtx) τ : Type :=
       MkConf
         { conf_stm   : Stm Γ τ;
-          conf_store : CStore Γ
+          conf_store : CStoreVal Γ
         }.
 
     Section TransparentObligations.
@@ -102,54 +102,54 @@ Module Type IrisPrelims
       Record ValConf (Γ : PCtx) τ : Type :=
         MkValConf
           { valconf_val   : IVal τ;
-            valconf_store : CStore Γ
+            valconf_store : CStoreVal Γ
           }.
     End ValConf.
 
     Definition of_ival {Γ τ} (v : IVal τ) : Stm Γ τ :=
       match v with
-      | inl v => stm_relval _ v
+      | inl v => stm_val _ v
       | inr m => stm_fail _ m
       end.
 
     Definition of_val {Γ} {τ} (v : ValConf Γ τ) : Conf Γ τ :=
       MkConf (of_ival (valconf_val v)) (valconf_store v).
 
-    Definition stm_to_relval {Γ τ} (s : Stm Γ τ) : option (IVal τ) :=
+    Definition stm_to_val {Γ τ} (s : Stm Γ τ) : option (IVal τ) :=
       match s with
-      | stm_relval _ v  => Some (inl v)
+      | stm_val _ v  => Some (inl v)
       | stm_fail _ m => Some (inr m)
       | _            => None
       end.
 
-    Lemma stm_relval_stuck {Γ τ γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ τ} :
-      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> stm_to_relval s1 = None.
+    Lemma stm_val_stuck {Γ τ γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ τ} :
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> stm_to_val s1 = None.
     Proof. now destruct 1. Qed.
 
-    Lemma stm_to_relval_Some_inl {Γ τ} {s : Stm Γ τ} {v : RelVal τ} :
-      stm_to_relval s = Some (inl v) ->
-      s = stm_relval _ v.
+    Lemma stm_to_val_Some_inl {Γ τ} {s : Stm Γ τ} {v : Val τ} :
+      stm_to_val s = Some (inl v) ->
+      s = stm_val _ v.
     Proof.
       intros H; destruct s; try discriminate; inversion H; subst; auto.
     Qed.
 
-    Lemma stm_to_relval_Some_inr {Γ τ} {s : Stm Γ τ} {m : RelVal ty.string} :
-      stm_to_relval s = Some (inr m) ->
+    Lemma stm_to_val_Some_inr {Γ τ} {s : Stm Γ τ} {m : Val ty.string} :
+      stm_to_val s = Some (inr m) ->
       s = stm_fail _ m.
     Proof.
       intros H; destruct s; try discriminate; inversion H; subst; auto.
     Qed.
 
-    Lemma stm_to_relval_Some_cases {Γ τ} {s : Stm Γ τ} {v : IVal τ} :
-      stm_to_relval s = Some v ->
-      (∃ v', s = stm_relval τ v' ∧ v = inl v') ∨ (∃ m, s = stm_fail τ m ∧ v = inr m).
+    Lemma stm_to_val_Some_cases {Γ τ} {s : Stm Γ τ} {v : IVal τ} :
+      stm_to_val s = Some v ->
+      (∃ v', s = stm_val τ v' ∧ v = inl v') ∨ (∃ m, s = stm_fail τ m ∧ v = inr m).
     Proof.
       intros H; destruct s, v; try discriminate; inversion H; subst.
       - left. eexists. split; reflexivity.
       - right. eexists. split; reflexivity.
     Qed.
 
-    Definition stm_to_fail {Γ τ} (s : Stm Γ τ) : option (RelVal ty.string) :=
+    Definition stm_to_fail {Γ τ} (s : Stm Γ τ) : option (Val ty.string) :=
       match s with
       | stm_fail _ m => Some m
       | _           => None
@@ -161,7 +161,7 @@ Module Type IrisPrelims
 
     Definition to_val {Γ} {τ} (t : Conf Γ τ) : option (ValConf Γ τ) :=
       match t with
-      | MkConf s δ => option.map (fun v => MkValConf v δ) (stm_to_relval s)
+      | MkConf s δ => option.map (fun v => MkValConf v δ) (stm_to_val s)
       end.
 
     Lemma to_of_val {Γ} {τ} (v : ValConf Γ τ) : to_val (of_val v) = Some v.
@@ -177,11 +177,11 @@ Module Type IrisPrelims
     Qed.
 
     Lemma stm_to_val_of_ival {Γ τ} (v : IVal τ) :
-      @stm_to_relval Γ τ (of_ival v) = Some v.
+      @stm_to_val Γ τ (of_ival v) = Some v.
     Proof. by destruct v. Qed.
 
-    Lemma stm_to_relval_eq {Γ τ} {s : Stm Γ τ} {v : IVal τ} :
-      stm_to_relval s = Some v ->
+    Lemma stm_to_val_eq {Γ τ} {s : Stm Γ τ} {v : IVal τ} :
+      stm_to_val s = Some v ->
       s = of_ival v.
     Proof.
       destruct s, v; try discriminate; intros H; inversion H; subst; auto.
@@ -192,7 +192,7 @@ Module Type IrisPrelims
     Definition State := prod RegStore Memory.
 
     Variant prim_step [Γ τ] (c1 : Conf Γ τ) : State -> list Empty_set -> Conf Γ τ -> State -> list (Conf Γ τ) -> Prop :=
-      mk_prim_step γ1 γ2 μ1 μ2 (δ2 : CStore Γ) s2 :
+      mk_prim_step γ1 γ2 μ1 μ2 (δ2 : CStoreVal Γ) s2 :
         ⟨ γ1, μ1, conf_store c1 , conf_stm c1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
         prim_step c1 (γ1 , μ1) nil (MkConf s2 δ2) (γ2 , μ2) nil.
 
@@ -205,7 +205,7 @@ Module Type IrisPrelims
 
     Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-    #[export] Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_relval _ v) δ) (MkValConf (inl v) δ).
+    #[export] Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf (inl v) δ).
       intros; eapply of_to_val; by cbn.
     Defined.
 
@@ -214,37 +214,37 @@ Module Type IrisPrelims
     Defined.
 
     Lemma stm_to_val_Final{Γ : PCtx} {τ : Ty} {s : Stm Γ τ} {v : IVal τ} :
-      stm_to_relval s = Some v -> Final s.
+      stm_to_val s = Some v -> Final s.
     Proof.
       intros H. destruct v as [v|m], s; try discriminate; now cbn.
     Qed.
 
-    Lemma stm_to_relval_not_Final {Γ τ} {s : Stm Γ τ} :
-      stm_to_relval s = None ->
+    Lemma stm_to_val_not_Final {Γ τ} {s : Stm Γ τ} :
+      stm_to_val s = None ->
       ~ Final s.
     Proof.
       intros H Hf; destruct s; cbn in Hf; try discriminate; try contradiction.
     Qed.
 
-    Lemma reducible_no_obs_not_relval {Γ τ} {s : Stm Γ τ} :
-      ∀ {δ : CStore Γ} {σ : state (microsail_lang Γ τ)},
-      stm_to_relval s = None ->
+    Lemma reducible_no_obs_not_val {Γ τ} {s : Stm Γ τ} :
+      ∀ {δ : CStoreVal Γ} {σ : state (microsail_lang Γ τ)},
+      stm_to_val s = None ->
       reducible_no_obs {| conf_stm := s; conf_store := δ |} σ.
     Proof.
       intros δ [γ μ] H. pose proof (progress s) as [Hs|Hs].
-      - apply stm_to_relval_not_Final in H. contradiction.
+      - apply stm_to_val_not_Final in H. contradiction.
       - destruct (Hs γ μ δ) as (γ' & μ' & δ' & s' & Hstep).
         exists (MkConf s' δ'), (γ', μ'), nil.
         constructor. simpl. auto.
     Qed.
 
-    Lemma reducible_not_relval {Γ τ} {s : Stm Γ τ} :
-      ∀ {δ : CStore Γ} {σ : state (microsail_lang Γ τ)},
-      stm_to_relval s = None ->
+    Lemma reducible_not_val {Γ τ} {s : Stm Γ τ} :
+      ∀ {δ : CStoreVal Γ} {σ : state (microsail_lang Γ τ)},
+      stm_to_val s = None ->
       reducible {| conf_stm := s; conf_store := δ |} σ.
     Proof.
       intros δ [γ μ] H. apply reducible_no_obs_reducible.
-      now apply reducible_no_obs_not_relval.
+      now apply reducible_no_obs_not_val.
     Qed.
 
   End Language.
@@ -252,7 +252,7 @@ Module Type IrisPrelims
   Section Registers.
 
     Definition SomeReg : Type := sigT 𝑹𝑬𝑮.
-    Definition SomeVal : Type := sigT RelVal.
+    Definition SomeVal : Type := sigT Val.
 
     Definition RegStore_to_map (γ : RegStore) : gmap SomeReg (exclR (leibnizO SomeVal)) :=
       list_to_map (K := SomeReg)
@@ -312,7 +312,7 @@ Module Type IrisPrelims
     #[export] Existing Instance reg_inG.
 
     Context `{srGS: sailRegGS Σ}.
-    Definition reg_pointsTo {τ} (r : 𝑹𝑬𝑮 τ) (v : RelVal τ) : iProp Σ :=
+    Definition reg_pointsTo {τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) : iProp Σ :=
       own reg_gv_name (◯ {[ existT _ r := Excl (existT _ v) ]}).
 
     Definition regs_inv (regstore : RegStore) : iProp Σ :=
@@ -321,7 +321,7 @@ Module Type IrisPrelims
           ⌜ map_Forall (K := SomeReg) (A := excl SomeVal) (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register regstore reg)) = v end ) regsmap ⌝
       )%I.
 
-    Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : RelVal τ) :
+    Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
       ⊢ (regs_inv regstore -∗ reg_pointsTo r v -∗ ⌜read_register regstore r = v⌝)%I.
     Proof.
       iDestruct 1 as (regsmap) "[Hregs %]".
@@ -342,7 +342,7 @@ Module Type IrisPrelims
       by dependent elimination H.
     Qed.
 
-    Lemma regs_inv_update {τ} {r} {v : RelVal τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeVal))} {regstore : RegStore} :
+    Lemma regs_inv_update {τ} {r} {v : Val τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeVal))} {regstore : RegStore} :
       map_Forall (K := SomeReg) (A := excl SomeVal) (λ r' v', match r' with
                            | existT τ r'' => Excl (existT _ (read_register regstore r'')) = v'
                            end) regsmap ->
@@ -368,7 +368,7 @@ Module Type IrisPrelims
           apply (map_Forall_lookup_1 _ _ _ _ regseq eq1).
     Qed.
 
-    Lemma reg_update regstore {τ} r (v1 v2 : RelVal τ) :
+    Lemma reg_update regstore {τ} r (v1 v2 : Val τ) :
       regs_inv regstore -∗ reg_pointsTo r v1 ==∗ regs_inv (write_register regstore r v2) ∗ reg_pointsTo r v2.
     Proof.
       iDestruct 1 as (regsmap) "[Hregs %]".
@@ -467,9 +467,9 @@ Module Type IrisResources
   Global Opaque iris_invGS.
 
   Definition Post {Σ} (Γ : PCtx) (τ : Ty) : Type :=
-    IVal τ -> CStore Γ -> iProp Σ.
+    IVal τ -> CStoreVal Γ -> iProp Σ.
 
-  Definition lift_cnt {Γ τ σ} (k : RelVal σ -> Stm Γ τ) (v : IVal σ) : Stm Γ τ :=
+  Definition lift_cnt {Γ τ σ} (k : Val σ -> Stm Γ τ) (v : IVal σ) : Stm Γ τ :=
     match v with
     | inl v => k v
     | inr m => stm_fail _ m

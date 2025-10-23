@@ -70,6 +70,131 @@ Module Type BaseMixin (Import TY : Types).
           RelVal (@type _ _ xt)) Σ).
 
   Notation CStore := (@NamedEnv PVar Ty RelVal).
+  Notation CStoreVal := (@NamedEnv PVar Ty Val).
+
+  Definition projLeftCStore {Γ} (δ : CStore Γ) : CStoreVal Γ :=
+    env.map (fun _ => ty.projLeft) δ.
+
+  Definition projRightCStore {Γ} (δ : CStore Γ) : CStoreVal Γ :=
+    env.map (fun _ => ty.projRight) δ.
+
+  Definition zipCStoreVal {Γ : PCtx} (δ1 δ2 : CStoreVal Γ) : CStore Γ.
+  Proof.
+    induction Γ.
+    - exact env.nil.
+    - apply env.snoc.
+      + apply IHΓ.
+        * env.destroy δ1. exact δ1.
+        * env.destroy δ2. exact δ2.
+      + apply NonSyncVal.
+        * env.destroy δ1. exact v.
+        * env.destroy δ2. exact v.
+          Show Proof.
+  Defined.
+
+  (* TODO: Replace proof mode definition by declaritive definition *)
+  (* Fixpoint zipCStoreVal {Γ : PCtx} (δ1 δ2 : CStoreVal Γ) : CStore Γ := *)
+  (* match Γ , δ1 , δ2 with *)
+  (* | ctx.nil , _ , _ => env.nil *)
+  (* | ctx.snoc Γ b , env.snoc δ1 b1 db1 , env.snoc δ2 b2 db2 => *)
+  (*     env.snoc (zipCStoreVal δ1 δ2) (NonSyncVal db1 db2) *)
+  (* end. *)
+
+  Lemma projLeftZipCStoreVal {Γ} (δ1 δ2 : CStoreVal Γ) :
+    projLeftCStore (zipCStoreVal δ1 δ2) = δ1.
+  Proof.
+    induction Γ.
+    - env.destroy δ1. reflexivity.
+    - env.destroy δ1. env.destroy δ2. cbn.
+      rewrite IHΓ. reflexivity.
+  Qed.
+
+  Lemma projRightZipCStoreVal {Γ} (δ1 δ2 : CStoreVal Γ) :
+    projRightCStore (zipCStoreVal δ1 δ2) = δ2.
+  Proof.
+    induction Γ.
+    - env.destroy δ2. reflexivity.
+    - env.destroy δ1. env.destroy δ2. cbn.
+      rewrite IHΓ. reflexivity.
+  Qed.
+
+  Lemma projLeftCStoreCatIsCatOfProjLeftCStore {Γ1 Γ2} (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
+    projLeftCStore (env.cat δ1 δ2) = env.cat (projLeftCStore δ1) (projLeftCStore δ2).
+  Proof.
+    induction Γ2.
+    - env.destroy δ2. reflexivity.
+    - env.destroy δ2. cbn. rewrite IHΓ2. reflexivity.
+  Qed.
+
+  Lemma projRightCStoreCatIsCatOfProjRightCStore {Γ1 Γ2} (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
+    projRightCStore (env.cat δ1 δ2) = env.cat (projRightCStore δ1) (projRightCStore δ2).
+  Proof.
+    induction Γ2.
+    - env.destroy δ2. reflexivity.
+    - env.destroy δ2. cbn. rewrite IHΓ2. reflexivity.
+  Qed.
+
+  Lemma projLeftCStoreEnvMapValToRelValIsId {Γ} (δ : CStoreVal Γ) :
+    projLeftCStore (env.map (fun _ => ty.valToRelVal) δ) = δ.
+  Proof.
+    induction Γ.
+    - env.destroy δ. reflexivity.
+    - env.destroy δ. cbn. rewrite IHΓ. reflexivity.
+  Qed.
+
+  Lemma projRightCStoreEnvMapValToRelValIsId {Γ} (δ : CStoreVal Γ) :
+    projRightCStore (env.map (fun _ => ty.valToRelVal) δ) = δ.
+  Proof.
+    induction Γ.
+    - env.destroy δ. reflexivity.
+    - env.destroy δ. cbn. rewrite IHΓ. reflexivity.
+  Qed.
+
+  Lemma projLeftCStoreEnvTailIsEnvTailProjLeftCStore {Γ b} (δ : CStore (ctx.snoc Γ b)) :
+    projLeftCStore (env.tail δ) = env.tail (projLeftCStore δ).
+  Proof.
+    env.destroy δ.
+    reflexivity.
+  Qed.
+
+  Lemma projRightCStoreEnvTailIsEnvTailProjRightCStore {Γ b} (δ : CStore (ctx.snoc Γ b)) :
+    projRightCStore (env.tail δ) = env.tail (projRightCStore δ).
+  Proof.
+    env.destroy δ.
+    reflexivity.
+  Qed.
+
+  Lemma projLeftCStoreEnvDropIsEnvDropProjLeftCStore {Γ Δ} (δ : CStore (ctx.cat Γ Δ)) :
+  projLeftCStore (env.drop Δ δ) = env.drop Δ (projLeftCStore δ).
+  Proof.
+    induction Δ.
+    - reflexivity.
+    - cbn. rewrite IHΔ, projLeftCStoreEnvTailIsEnvTailProjLeftCStore. reflexivity.
+  Qed.
+
+  Lemma projRightCStoreEnvDropIsEnvDropProjRightCStore {Γ Δ} (δ : CStore (ctx.cat Γ Δ)) :
+    projRightCStore (env.drop Δ δ) = env.drop Δ (projRightCStore δ).
+  Proof.
+    induction Δ.
+    - reflexivity.
+    - cbn. rewrite IHΔ, projRightCStoreEnvTailIsEnvTailProjRightCStore. reflexivity.
+  Qed.
+
+  Lemma projLeftCStoreEnvUpdateIsEnvUpdateProjLeftCStore {Γ} (δ : CStore Γ)
+    (x : PVar) (σ : Ty) (xIn : ctx.In {| name := x; type := σ |} Γ) (rv : RelVal σ) :
+    projLeftCStore (env.update δ xIn rv) = env.update (projLeftCStore δ) xIn (ty.projLeft rv).
+  Proof.
+    unfold projLeftCStore.
+    now rewrite env.map_update.
+  Qed.
+
+  Lemma projRightCStoreEnvUpdateIsEnvUpdateProjRightCStore {Γ} (δ : CStore Γ)
+    (x : PVar) (σ : Ty) (xIn : ctx.In {| name := x; type := σ |} Γ) (rv : RelVal σ) :
+    projRightCStore (env.update δ xIn rv) = env.update (projRightCStore δ) xIn (ty.projRight rv).
+  Proof.
+    unfold projRightCStore.
+    now rewrite env.map_update.
+  Qed.
 
   Definition SMatchResult {N σ} (pat : Pattern (N:=N) σ) (Σ : LCtx) : Type :=
     { pc : PatternCase pat & NamedEnv (Term Σ) (PatternCaseCtx pc) }.

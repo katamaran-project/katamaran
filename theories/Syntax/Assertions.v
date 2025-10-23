@@ -299,6 +299,16 @@ Section Contracts.
 
   #[global] Arguments MkLemma : clear implicits.
 
+  Record LemmaVal (Δ : PCtx) : Type :=
+    MkLemmaVal
+      { lemmaVal_logic_variables  : LCtx;
+        lemmaVal_patterns         : SStore Δ lemmaVal_logic_variables;
+        lemmaVal_precondition     : Assertion lemmaVal_logic_variables;
+        lemmaVal_postcondition    : Assertion lemmaVal_logic_variables;
+      }.
+
+  #[global] Arguments MkLemmaVal : clear implicits.
+
   Open Scope lazy_bool_scope.
 
   (* This function is used as part of the linter, which checks that all

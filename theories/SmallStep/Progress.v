@@ -37,7 +37,7 @@ Module ProgressOn (Import B : Base) (Import P : Program B) (Import STEP : SmallS
 
   Local Ltac progress_can_form :=
     match goal with
-    | [ H: CStore (ctx.cat _ _) |- _ ] => destruct (env.catView H)
+    | [ H: CStoreVal (ctx.cat _ _) |- _ ] => destruct (env.catView H)
     | [ H: Final ?s |- _ ] => destruct s; cbn in H
     end; destruct_conjs; subst; try contradiction.
 
@@ -55,21 +55,21 @@ Module ProgressOn (Import B : Base) (Import P : Program B) (Import STEP : SmallS
 
   Local Ltac progress_inst T :=
     match goal with
-    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStore (ctx.cat ?Γ ?Δ)), _),
-        γ : RegStore, μ : Memory, δ1: CStore ?Γ, δ2: CStore ?Δ |- _
+    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStoreVal (ctx.cat ?Γ ?Δ)), _),
+        γ : RegStore, μ : Memory, δ1: CStoreVal ?Γ, δ2: CStoreVal ?Δ |- _
       ] => specialize (IH γ μ (env.cat δ1 δ2)); T
-    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStore ?Γ), _),
-        γ : RegStore, δ: CStore ?Γ |- _
+    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStoreVal ?Γ), _),
+        γ : RegStore, δ: CStoreVal ?Γ |- _
       ] => solve [ specialize (IH γ μ δ); T | clear IH; T ]
     end.
 
   Lemma progress_foreign
     {Γ Δ : PCtx} {σ : Ty} (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ)
-    (γ : RegStore) (μ : Memory) (δ : CStore Γ) :
-    exists (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) (s' : Stm Γ σ),
+    (γ : RegStore) (μ : Memory) (δ : CStoreVal Γ) :
+    exists (γ' : RegStore) (μ' : Memory) (δ' : CStoreVal Γ) (s' : Stm Γ σ),
       ⟨ γ, μ, δ, stm_foreign f es ⟩ ---> ⟨ γ', μ', δ', s' ⟩.
   Proof.
-    destruct (ForeignProgress f (evals es δ) γ μ) as (γ' & μ' & res & p).
+    destruct (ForeignProgress f (evalVals es δ) γ μ) as (γ' & μ' & res & p).
     exists γ', μ', δ. eexists; constructor; eauto.
   Qed.
 
@@ -83,6 +83,8 @@ Module ProgressOn (Import B : Base) (Import P : Program B) (Import STEP : SmallS
 
   Lemma progress {Γ σ} (s : Stm Γ σ) :
     Final s \/ forall γ μ δ, exists γ' μ' δ' s', ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩.
-  Proof. induction s; intros; try progress_tac. Qed.
+  Proof.
+    induction s; intros; try progress_tac.
+  Qed.
 
 End ProgressOn.

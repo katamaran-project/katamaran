@@ -174,9 +174,39 @@ Module uop.
       | bvtake m            => bv.take m
       | negate              => bv.negate
       end.
+    Global Arguments eval {σ1} {σ2} !op v.    
 
     Definition evalRel {σ1 σ2 : Ty} (op : UnOp σ1 σ2) : RelVal σ1 -> RelVal σ2 :=
       liftUnOp (eval op).
+    Global Arguments evalRel {σ1} {σ2} !op !rv.
+
+    Lemma comProjLeftRVEvalRel {σ1 σ2 : Ty} (op : UnOp σ1 σ2) (rv : RelVal σ1) :
+      projLeftRV (evalRel op rv) = eval op (projLeftRV rv).
+    Proof.
+      unfold evalRel.
+      apply comProjLeftRVLiftUnOpRV.
+    Qed.
+
+    Lemma comProjRightRVEvalRel {σ1 σ2 : Ty} (op : UnOp σ1 σ2) (rv : RelVal σ1) :
+      projRightRV (evalRel op rv) = eval op (projRightRV rv).
+    Proof.
+      unfold evalRel.
+      apply comProjRightRVLiftUnOpRV.
+    Qed.
+
+    Lemma comProjLeftEvalRel {σ1 σ2 : Ty} (op : UnOp σ1 σ2) (rv : RelVal σ1) :
+      projLeft (evalRel op rv) = eval op (projLeft rv).
+    Proof.
+      unfold evalRel.
+      apply comProjLeftLiftUnOp.
+    Qed.
+
+    Lemma comProjRightEvalRel {σ1 σ2 : Ty} (op : UnOp σ1 σ2) (rv : RelVal σ1) :
+      projRight (evalRel op rv) = eval op (projRight rv).
+    Proof.
+      unfold evalRel.
+      apply comProjRightLiftUnOp.
+    Qed.
 
   End WithTypeDef.
   #[export] Existing Instance eq_dec_unop.

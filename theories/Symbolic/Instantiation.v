@@ -239,10 +239,10 @@ Module Type InstantiationOn
   Proof.
     intros ι.
     destruct op;
-    cbn -[ty.liftUnOp ty.liftBinOp]; unfold bop.eval_relop_relval; unfold bop.evalRel;
+    cbn; unfold bop.eval_relop_relval;
       rewrite ty.liftUnOpBinOpToBinOp;
       cbn;
-      destructInsts;
+      destructInsts; cbn;
       unfold bv.sltb, bv.sleb, bv.ultb, bv.uleb;
       rewrite ?negb_involutive, <- ?Z.leb_antisym, <- ?Z.ltb_antisym,
       <- ?N.leb_antisym, <- ?N.ltb_antisym; try easy; try repeat destruct eq_dec; auto.
@@ -647,7 +647,7 @@ Module Type InstantiationOn
     Lemma term_plus_assoc {Σ} {t1 t2 t3} : term_binop (Σ := Σ) bop.plus t1 (term_binop bop.plus t2 t3) ≡ term_binop bop.plus (term_binop bop.plus t1 t2) t3.
     Proof.
       intro ι; cbn.
-      destructInsts.
+      destructInsts; cbn.
       { apply f_equal. now Lia.lia. }
       all: apply f_equal2; cbn; now Lia.lia.
     Qed.

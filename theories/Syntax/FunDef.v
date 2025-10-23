@@ -47,12 +47,12 @@ Module Type FunDefKit (Import B : Base) (Import F : FunDecl B).
   Parameter ForeignCall :
     forall
       {Δ σ} (f : 𝑭𝑿 Δ σ)
-      (args : CStore Δ)
-      (res  : RelVal ty.string + RelVal σ)
+      (args : CStoreVal Δ)
+      (res  : string + Val σ)
       (γ γ' : RegStore)
       (μ μ' : Memory), Prop.
   Parameter ForeignProgress :
-    forall {Δ σ} (f : 𝑭𝑿 Δ σ) (args : CStore Δ) γ μ,
+    forall {Δ σ} (f : 𝑭𝑿 Δ σ) (args : CStoreVal Δ) γ μ,
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
 
   Parameter FunDef : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.

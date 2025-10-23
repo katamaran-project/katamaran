@@ -41,14 +41,14 @@ Module Type RegStoreKit (Import B : Base).
      instantiate it with their own data structure and [read_register]/[write_register]
      functions *)
   Parameter RegStore : Type.
-  Parameter read_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ), RelVal σ.
-  Parameter write_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : RelVal σ), RegStore.
+  Parameter read_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ), Val σ.
+  Parameter write_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Val σ), RegStore.
 
-  Parameter read_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : RelVal σ),
+  Parameter read_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : Val σ),
             read_register (write_register γ r v) r = v.
 
   Parameter read_write_distinct :
-    forall (γ : RegStore) {σ τ} (r__σ : 𝑹𝑬𝑮 σ) (r__τ : 𝑹𝑬𝑮 τ) (v__σ : RelVal σ),
+    forall (γ : RegStore) {σ τ} (r__σ : 𝑹𝑬𝑮 σ) (r__τ : 𝑹𝑬𝑮 τ) (v__σ : Val σ),
       existT _ r__σ <> existT _ r__τ ->
       read_register (write_register γ r__σ v__σ) r__τ = read_register γ r__τ.
 
@@ -56,27 +56,27 @@ End RegStoreKit.
 
 Module DefaultRegStoreKit (Import B : Base) <: RegStoreKit B.
 
-  Definition RegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> RelVal σ.
+  Definition RegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Val σ.
 
   Definition write_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ)
-    (v : RelVal σ) : RegStore :=
+    (v : Val σ) : RegStore :=
     fun τ r' =>
       match eq_dec_het r r' with
-      | left eqt => eq_rect σ RelVal v τ (f_equal projT1 eqt)
+      | left eqt => eq_rect σ Val v τ (f_equal projT1 eqt)
       | right _ => γ τ r'
       end.
 
   Definition read_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) :
-    RelVal σ := γ _ r.
+    Val σ := γ _ r.
 
-  Lemma read_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v : RelVal σ) :
+  Lemma read_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
     read_register (write_register γ r v) r = v.
   Proof.
     unfold read_register, write_register.
     unfold eq_dec_het. now rewrite EqDec.eq_dec_refl.
   Qed.
 
-  Lemma read_write_distinct γ {σ τ} (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (v : RelVal σ):
+  Lemma read_write_distinct γ {σ τ} (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (v : Val σ):
     existT _ r <> existT _ k ->
     read_register (write_register γ r v) k = read_register γ k.
   Proof.
@@ -97,7 +97,7 @@ Module DefaultRegStoreKit (Import B : Base) <: RegStoreKit B.
     - reflexivity.
   Qed.
 
-  Lemma write_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v1 v2 : RelVal σ) :
+  Lemma write_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v1 v2 : Val σ) :
     forall τ (r' : 𝑹𝑬𝑮 τ),
       write_register (write_register γ r v1) r v2 r' =
       write_register γ r v2 r'.
