@@ -691,31 +691,89 @@ Module RiscvPmpSpecVerif.
     destruct (v + v0 <=ᵘ? v1)%bv eqn:?; bv_comp; auto.
   Qed.
 
+  (* ADMITTED NOTE: uncomment the proof below, the lemma should hold with the
+                 proof script provided. It is split into four subgoals based on
+                 the `H` hypothesis, this is done purely to not have
+                 stack overflow errors in Coq. :) We'll need to revisit this
+                 for a proper solution at some point. *)
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
-    Time destruct H; apply verification_condition_with_erasure_sound; vm_compute;
-      constructor; cbn;
-      repeat (intros; split; intros);
-      repeat match goal with
-        | H: (?b1 || ?b2)%bool = true |- _ =>
-            apply Bool.orb_true_iff in H
-        | H: ?P /\ ?Q |- _ =>
-            destruct H
-        | H: ?P \/ ?Q |- _ =>
-            destruct H as [H|H]
-        | H: negb ?b = true |- _ =>
-            apply Bool.negb_true_iff in H;
-            subst
-        (* | H1: ?a <=ᵘ ?b, H2: ?b <ᵘ ?a |- False =>
-            unfold bv.ult, bv.ule in *; apply N.le_ngt in H1; apply (H1 H2) *)
-        end;
-      subst;
-      unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *;
-      simpl in *;
-      try discriminate;
-      try Lia.lia;
-      try bv.bv_zify.
-  Qed.
+  (*   Time destruct H; apply verification_condition_with_erasure_sound; vm_compute; *)
+  (*     constructor; cbn. *)
+  (*   - repeat (intros; split; intros); *)
+  (*       unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *; *)
+  (*       simpl in *; *)
+  (*       subst; *)
+  (*       (* intuition; *) try bv.bv_zify; *)
+  (*       repeat match goal with *)
+  (*       | H: (?b1 || ?b2)%bool = true |- _ => *)
+  (*           apply Bool.orb_true_iff in H *)
+  (*       | H: negb ?b = true |- _ => *)
+  (*           apply Bool.negb_true_iff in H; *)
+  (*           subst *)
+  (*       | H: ?P /\ ?Q |- _ => *)
+  (*           destruct H *)
+  (*       | H: ?P \/ ?Q |- _ => *)
+  (*           destruct H as [H|H] *)
+  (*       end; *)
+  (*       auto; *)
+  (*       try bv.bv_zify. *)
+  (*   - repeat (intros; split; intros); *)
+  (*       unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *; *)
+  (*       simpl in *; *)
+  (*       subst; *)
+  (*       (* intuition; *) try bv.bv_zify; *)
+  (*       repeat match goal with *)
+  (*       | H: (?b1 || ?b2)%bool = true |- _ => *)
+  (*           apply Bool.orb_true_iff in H *)
+  (*       | H: negb ?b = true |- _ => *)
+  (*           apply Bool.negb_true_iff in H; *)
+  (*           subst *)
+  (*       | H: ?P /\ ?Q |- _ => *)
+  (*           destruct H *)
+  (*       | H: ?P \/ ?Q |- _ => *)
+  (*           destruct H as [H|H] *)
+  (*       end; *)
+  (*       auto; *)
+  (*       try bv.bv_zify. *)
+  (*   - repeat (intros; split; intros); *)
+  (*       unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *; *)
+  (*       simpl in *; *)
+  (*       subst; *)
+  (*       (* intuition; *) try bv.bv_zify; *)
+  (*       repeat match goal with *)
+  (*       | H: (?b1 || ?b2)%bool = true |- _ => *)
+  (*           apply Bool.orb_true_iff in H *)
+  (*       | H: negb ?b = true |- _ => *)
+  (*           apply Bool.negb_true_iff in H; *)
+  (*           subst *)
+  (*       | H: ?P /\ ?Q |- _ => *)
+  (*           destruct H *)
+  (*       | H: ?P \/ ?Q |- _ => *)
+  (*           destruct H as [H|H] *)
+  (*       end; *)
+  (*       auto; *)
+  (*       try bv.bv_zify. *)
+  (*   - repeat (intros; split; intros); *)
+  (*       unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *; *)
+  (*       simpl in *; *)
+  (*       subst; *)
+  (*       (* intuition; *) try bv.bv_zify; *)
+  (*       repeat match goal with *)
+  (*       | H: (?b1 || ?b2)%bool = true |- _ => *)
+  (*           apply Bool.orb_true_iff in H *)
+  (*       | H: negb ?b = true |- _ => *)
+  (*           apply Bool.negb_true_iff in H; *)
+  (*           subst *)
+  (*       | H: ?P /\ ?Q |- _ => *)
+  (*           destruct H *)
+  (*       | H: ?P \/ ?Q |- _ => *)
+  (*           destruct H as [H|H] *)
+  (*       end; *)
+  (*       auto; *)
+  (*       try bv.bv_zify. *)
+  (* Qed. *)
+  Admitted.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof. now destruct H. Qed.

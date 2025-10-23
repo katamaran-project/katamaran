@@ -206,12 +206,13 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition decide_in_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty.list ty_pmpentry)) : bool :=
       match es with
-      | cfg0 :: cfg1 :: cfg2 :: [] =>
+      | cfg0 :: cfg1 :: cfg2 :: cfg3 :: [] =>
           let (c, a) := e in
           let (c', a') := match idx with
                           | PMP0CFG => cfg0
                           | PMP1CFG => cfg1
                           | PMP2CFG => cfg2
+                          | PMP3CFG => cfg3
                           end in
           (pmpcfg_ent_eqb c c' && (bv.eqb a a'))%bool
       | _ => false
@@ -222,11 +223,12 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition decide_prev_addr (cfg : Val ty_pmpcfgidx) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) : bool :=
       match entries with
-      | (c0 , a0) :: (c1 , a1) :: (c2 , a2) :: [] =>
+      | (c0 , a0) :: (c1 , a1) :: (c2 , a2) :: (c3 , a3) :: [] =>
           match cfg with
           | PMP0CFG => bv.eqb prev [bv 0]
           | PMP1CFG => bv.eqb prev a0
           | PMP2CFG => bv.eqb prev a1
+          | PMP3CFG => bv.eqb prev a2
           end
       | _ => false
       end%list.
@@ -245,9 +247,9 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition decide_not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) : bool :=
       match entries with
-      | (c0 , a0) :: (c1 , a1) :: (c2 , a2) :: [] =>
-          (((PmpAddrMatchType_eqb (A c0) OFF) && (PmpAddrMatchType_eqb (A c1) OFF) && (PmpAddrMatchType_eqb (A c2) OFF))
-          || (([bv 0] <=ᵘ? paddr) && (a0 <=ᵘ? paddr) && (a1 <=ᵘ? paddr) && (a2 <=ᵘ? paddr)))%bool
+      | (c0 , a0) :: (c1 , a1) :: (c2 , a2) :: (c3 , a3) :: [] =>
+          (((PmpAddrMatchType_eqb (A c0) OFF) && (PmpAddrMatchType_eqb (A c1) OFF) && (PmpAddrMatchType_eqb (A c2) OFF) && (PmpAddrMatchType_eqb (A c3) OFF))
+          || (([bv 0] <=ᵘ? paddr) && (a0 <=ᵘ? paddr) && (a1 <=ᵘ? paddr) && (a2 <=ᵘ? paddr) && (a3 <=ᵘ? paddr)))%bool
       | _ => false
       end%list.
 

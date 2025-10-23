@@ -141,10 +141,10 @@ Inductive CSRIdx : Set :=
 | MCause
 | MEpc
 | MPMP0CFG
-| MPMP1CFG
 | MPMPADDR0
 | MPMPADDR1
 | MPMPADDR2
+| MPMPADDR3
 .
 
 Definition NumPmpEntries := 2.
@@ -153,6 +153,7 @@ Inductive PmpCfgIdx : Set :=
 | PMP0CFG
 | PMP1CFG
 | PMP2CFG
+| PMP3CFG
 .
 
 Inductive PmpCfgPerm : Set :=
@@ -169,6 +170,7 @@ Inductive PmpAddrIdx : Set :=
 | PMPADDR0
 | PMPADDR1
 | PMPADDR2
+| PMPADDR3
 .
 
 (* NOTE: PMP Addr Match Type limited to OFF and TOR for now *)
@@ -490,16 +492,16 @@ Section Finite.
     {| enum := [User;Machine] |}.
 
   #[export,program] Instance CSRIdx_finite : Finite CSRIdx :=
-    {| enum := [MStatus;MTvec;MCause;MEpc;MPMP0CFG;MPMP1CFG;MPMPADDR0;MPMPADDR1;MPMPADDR2] |}.
+    {| enum := [MStatus;MTvec;MCause;MEpc;MPMP0CFG;MPMPADDR0;MPMPADDR1;MPMPADDR2;MPMPADDR3] |}.
 
   #[export,program] Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
-    {| enum := [PMP0CFG;PMP1CFG;PMP2CFG] |}.
+    {| enum := [PMP0CFG;PMP1CFG;PMP2CFG;PMP3CFG] |}.
 
   #[export,program] Instance PmpCfgPerm_finite : Finite PmpCfgPerm :=
     {| enum := [PmpO; PmpR; PmpW; PmpX; PmpRW; PmpRX; PmpWX; PmpRWX] |}.
 
   #[export,program] Instance PmpAddrIdx_finite : Finite PmpAddrIdx :=
-    {| enum := [PMPADDR0;PMPADDR1;PMPADDR2] |}.
+    {| enum := [PMPADDR0;PMPADDR1;PMPADDR2;PMPADDR3] |}.
 
   #[export,program] Instance PmpAddrMatchType_finite : Finite PmpAddrMatchType :=
     {| enum := [OFF;TOR] |}.
@@ -934,9 +936,11 @@ Module Export RiscvPmpBase <: Base.
     | pmp0cfg       : Reg ty_pmpcfg_ent
     | pmp1cfg       : Reg ty_pmpcfg_ent
     | pmp2cfg       : Reg ty_pmpcfg_ent
+    | pmp3cfg       : Reg ty_pmpcfg_ent
     | pmpaddr0      : Reg ty_xlenbits
     | pmpaddr1      : Reg ty_xlenbits
     | pmpaddr2      : Reg ty_xlenbits
+    | pmpaddr3      : Reg ty_xlenbits
     .
 
     Import bv.notations.
@@ -1029,9 +1033,11 @@ Module Export RiscvPmpBase <: Base.
         | pmp0cfg       , pmp0cfg       => left eq_refl
         | pmp1cfg       , pmp1cfg       => left eq_refl
         | pmp2cfg       , pmp2cfg       => left eq_refl
+        | pmp3cfg       , pmp3cfg       => left eq_refl
         | pmpaddr0      , pmpaddr0      => left eq_refl
         | pmpaddr1      , pmpaddr1      => left eq_refl
         | pmpaddr2      , pmpaddr2      => left eq_refl
+        | pmpaddr3      , pmpaddr3      => left eq_refl
         | _             , _             => right _
         end.
     Proof. all: transparent_abstract (intros H; depelim H). Defined.
@@ -1082,9 +1088,11 @@ Module Export RiscvPmpBase <: Base.
           existT _ pmp0cfg;
           existT _ pmp1cfg;
           existT _ pmp2cfg;
+          existT _ pmp3cfg;
           existT _ pmpaddr0;
           existT _ pmpaddr1;
-          existT _ pmpaddr2
+          existT _ pmpaddr2;
+          existT _ pmpaddr3
         ]%list
       |}.
 

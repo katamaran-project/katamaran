@@ -105,6 +105,7 @@ Module RiscvNotations.
   Notation "'tmp1'"         := "tmp1" : string_scope.
   Notation "'tmp2'"         := "tmp2" : string_scope.
   Notation "'tmp3'"         := "tmp3" : string_scope.
+  Notation "'tmp4'"         := "tmp4" : string_scope.
   Notation "'rs1_int'"      := "rs1_int" : string_scope.
   Notation "'rs2_int'"      := "rs2_int" : string_scope.
   Notation "'result_wide'"  := "result_wide" : string_scope.
@@ -274,6 +275,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'tmp1'"         := (@exp_var _ "tmp1" _ _) : exp_scope.
     Notation "'tmp2'"         := (@exp_var _ "tmp2" _ _) : exp_scope.
     Notation "'tmp3'"         := (@exp_var _ "tmp3" _ _) : exp_scope.
+    Notation "'tmp4'"         := (@exp_var _ "tmp4" _ _) : exp_scope.
     Notation "'rs1_int'"      := (@exp_var _ "rs1_int" _ _) : exp_scope.
     Notation "'rs2_int'"      := (@exp_var _ "rs2_int" _ _) : exp_scope.
     Notation "'result_wide'"  := (@exp_var _ "result_wide" _ _) : exp_scope.
@@ -628,19 +630,15 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       let: tmp1 := exp_vector_subrange 8 8 value in
       let: tmp2 := call pmpWriteCfg tmp tmp1 in
       stm_write_register pmp1cfg tmp2 ;;
+      let: tmp  := stm_read_register pmp2cfg in
+      let: tmp1 := exp_vector_subrange 16 8 value in
+      let: tmp2 := call pmpWriteCfg tmp tmp1 in
+      stm_write_register pmp2cfg tmp2 ;;
+      let: tmp  := stm_read_register pmp3cfg in
+      let: tmp1 := exp_vector_subrange 24 8 value in
+      let: tmp2 := call pmpWriteCfg tmp tmp1 in
+      stm_write_register pmp3cfg tmp2 ;;
       stm_val ty.unit tt
-    else if: exp_var "n" = exp_int 1%Z
-         then
-           let: tmp  := stm_read_register pmp2cfg in
-           let: tmp1 := exp_vector_subrange 0 8 value in
-           let: tmp2 := call pmpWriteCfg tmp tmp1 in
-           stm_write_register pmp2cfg tmp2 ;;
-           (* NOTE: no support for pmp3cfg, so don't do anything here (i.e., keep its "cfg" zero) *)
-           (* let: tmp  := stm_read_register pmp3cfg in *)
-           (* let: tmp1 := exp_vector_subrange 8 8 value in *)
-           (* let: tmp2 := call pmpWriteCfg tmp tmp1 in *)
-           (* stm_write_register pmp3cfg tmp2 ;; *)
-           stm_val ty.unit tt
     else fail "writing to non-existent cfg".
 
   Definition fun_pmpWriteCfg : Stm [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent :=
@@ -678,10 +676,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       | PMP_Success  => stm_val ty.bool true
       | PMP_Fail     => stm_val ty.bool false
       | PMP_Continue =>
+      let: tmp1 := stm_read_register pmp3cfg in
+      let: tmp2 := stm_read_register pmpaddr3 in
+      let: tmp3 := stm_read_register pmpaddr2 in
+      let: tmp := call pmpMatchEntry addr width acc priv tmp1 tmp2 tmp3 in
+      match: tmp in pmpmatch with
+      | PMP_Success  => stm_val ty.bool true
+      | PMP_Fail     => stm_val ty.bool false
+      | PMP_Continue =>
           match: priv in privilege with
           | Machine => stm_val ty.bool true
           | User    => stm_val ty.bool false
           end
+      end
       end
       end
       end in
@@ -838,6 +845,30 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                                W;
                                R ]) ;;
         stm_val ty.unit tt
+    end ;;
+    let: tmp := stm_read_register pmp2cfg in
+    match: tmp in rpmpcfg_ent with
+      ["L"; "A"; "X"; "W"; "R"] =>
+        stm_write_register
+          pmp2cfg (exp_record rpmpcfg_ent
+                              [nenv L;
+                               exp_val ty_pmpaddrmatchtype OFF;
+                               X;
+                               W;
+                               R ]) ;;
+        stm_val ty.unit tt
+    end ;;
+    let: tmp := stm_read_register pmp3cfg in
+    match: tmp in rpmpcfg_ent with
+      ["L"; "A"; "X"; "W"; "R"] =>
+        stm_write_register
+          pmp3cfg (exp_record rpmpcfg_ent
+                              [nenv L;
+                               exp_val ty_pmpaddrmatchtype OFF;
+                               X;
+                               W;
+                               R ]) ;;
+        stm_val ty.unit tt
     end.
 
   Definition fun_exceptionType_to_bits : Stm [e ∷ ty_exception_type] ty_exc_code :=
@@ -957,10 +988,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                   | Machine => stm_val ty.bool true
                   | _ => stm_val ty.bool false
                   end
-    | MPMP1CFG => match: p in privilege with
-                  | Machine => stm_val ty.bool true
-                  | _ => stm_val ty.bool false
-                  end
     | MPMPADDR0 => match: p in privilege with
                    | Machine => stm_val ty.bool true
                    | _ => stm_val ty.bool false
@@ -970,6 +997,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                    | _ => stm_val ty.bool false
                    end
     | MPMPADDR2 => match: p in privilege with
+                   | Machine => stm_val ty.bool true
+                   | _ => stm_val ty.bool false
+                   end
+    | MPMPADDR3 => match: p in privilege with
                    | Machine => stm_val ty.bool true
                    | _ => stm_val ty.bool false
                    end
@@ -1004,14 +1035,16 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | MPMP0CFG  =>
         let: tmp1 := stm_pmpcfg_ent_to_bits (stm_read_register pmp0cfg) in
         let: tmp2 := stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg) in
-        exp_zext (exp_binop bop.bvapp tmp1 tmp2)
-    | MPMP1CFG  =>
-        let: tmp1 := stm_pmpcfg_ent_to_bits (stm_read_register pmp2cfg) in
-        let: tmp2 := stm_val (ty.bvec 8) Bitvector.bv.zero in (* NOTE: no support for fourth cfg (pmp3cfg) *)
-        exp_zext (exp_binop bop.bvapp tmp1 tmp2)
+        let: tmp3 := stm_pmpcfg_ent_to_bits (stm_read_register pmp0cfg) in
+        let: tmp4 := stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg) in
+        let: tmp  := exp_binop bop.bvapp tmp1 tmp2 in
+        let: tmp  := exp_binop bop.bvapp tmp tmp3 in
+        let: tmp  := exp_binop bop.bvapp tmp tmp4 in
+        tmp
     | MPMPADDR0 => stm_read_register pmpaddr0
     | MPMPADDR1 => stm_read_register pmpaddr1
     | MPMPADDR2 => stm_read_register pmpaddr2
+    | MPMPADDR3 => stm_read_register pmpaddr3
     end.
 
   Definition fun_writeCSR : Stm [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit :=
@@ -1026,7 +1059,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | MEpc => stm_write_register mepc value ;;
               stm_val ty.unit tt
     | MPMP0CFG => stm_call pmpWriteCfgReg ([exp_int 0%Z : Exp _ (type (_∷ _)); value])
-    | MPMP1CFG => stm_call pmpWriteCfgReg ([exp_int 1%Z : Exp _ (type (_∷ _)); value])
     | MPMPADDR0 => let: tmp1 := stm_read_register pmp0cfg in
                    let: tmp1 := call pmpLocked tmp1 in
                    let: tmp2 := stm_read_register pmpaddr0 in
@@ -1044,6 +1076,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                    let: tmp2 := stm_read_register pmpaddr2 in
                    let: tmp  := call pmpWriteAddr tmp1 tmp2 value in
                    stm_write_register pmpaddr2 value ;;
+                   stm_val ty.unit tt
+    | MPMPADDR3 => let: tmp1 := stm_read_register pmp3cfg in
+                   let: tmp1 := call pmpLocked tmp1 in
+                   let: tmp2 := stm_read_register pmpaddr3 in
+                   let: tmp  := call pmpWriteAddr tmp1 tmp2 value in
+                   stm_write_register pmpaddr3 value ;;
                    stm_val ty.unit tt
     end.
 

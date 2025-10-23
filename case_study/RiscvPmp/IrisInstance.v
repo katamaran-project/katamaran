@@ -234,13 +234,15 @@ Module RiscvPmpIrisInstance <:
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
       match entries with
-      | (cfg0, addr0) :: (cfg1, addr1) :: (cfg2, addr2) :: [] =>
+      | (cfg0, addr0) :: (cfg1, addr1) :: (cfg2, addr2) :: (cfg3, addr3) :: [] =>
           reg_pointsTo pmp0cfg cfg0 ∗
           reg_pointsTo pmpaddr0 addr0 ∗
           reg_pointsTo pmp1cfg cfg1 ∗
           reg_pointsTo pmpaddr1 addr1 ∗
           reg_pointsTo pmp2cfg cfg2 ∗
-          reg_pointsTo pmpaddr2 addr2
+          reg_pointsTo pmpaddr2 addr2 ∗
+          reg_pointsTo pmp3cfg cfg3 ∗
+          reg_pointsTo pmpaddr3 addr3
       | _ => False
       end.
   End WithSailGS.
@@ -545,18 +547,19 @@ Module RiscvPmpIrisInstance <:
 
     Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
         interp_pmp_entries entries ⊣⊢
-          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr) (cfg2 : Pmpcfg_ent) (addr2 : Addr),
-            ⌜entries = [(cfg0, addr0); (cfg1, addr1); (cfg2, addr2)]⌝ ∗
+          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr) (cfg2 : Pmpcfg_ent) (addr2 : Addr) (cfg3 : Pmpcfg_ent) (addr3 : Addr),
+            ⌜entries = [(cfg0, addr0); (cfg1, addr1); (cfg2, addr2); (cfg3, addr3)]⌝ ∗
             reg_pointsTo pmp0cfg cfg0 ∗ reg_pointsTo pmpaddr0 addr0 ∗
             reg_pointsTo pmp1cfg cfg1 ∗ reg_pointsTo pmpaddr1 addr1 ∗
-            reg_pointsTo pmp2cfg cfg2 ∗ reg_pointsTo pmpaddr2 addr2.
+            reg_pointsTo pmp2cfg cfg2 ∗ reg_pointsTo pmpaddr2 addr2 ∗
+            reg_pointsTo pmp3cfg cfg3 ∗ reg_pointsTo pmpaddr3 addr3.
     Proof.
       intros entries; iSplit; iIntros  "H".
       - unfold interp_pmp_entries.
-        destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|[cfg2 addr2] [|]]]] eqn:?; try done.
+        destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|[cfg2 addr2] [|[cfg3 addr3] [|]]]]] eqn:?; try done.
         repeat iExists _.
         now iFrame.
-     -  iDestruct "H" as "(% & % & % & % & % & % & -> & ? & ? & ? & ?)"; iFrame.
+     -  iDestruct "H" as "(% & % & % & % & % & % & % & % & -> & ? & ? & ? & ? & ?)"; iFrame.
     Qed.
 
     Lemma interp_ptstomem_exists_intro (bytes : nat) :
