@@ -85,6 +85,19 @@ Module Type FormulasOn
     | bop.bvult  => Basics.flip (formula_relop bop.bvule)
     end.
 
+  #[export] Instance subSU_formula `{SubstUniv Sb} : SubstSU Sb Formula :=
+    fix subSU_formula {Σ1 Σ2} fml ζ {struct fml} :=
+      match fml with
+      | formula_user p ts      => formula_user p (substSU ts ζ)
+      | formula_bool t         => formula_bool (substSU t ζ)
+      | formula_prop ζ' P      => formula_prop (substSU ζ' ζ) P
+      | formula_relop op t1 t2 => formula_relop op (substSU t1 ζ) (substSU t2 ζ)
+      | formula_true           => formula_true
+      | formula_false          => formula_false
+      | formula_and F1 F2      => formula_and (subSU_formula F1 ζ) (subSU_formula F2 ζ)
+      | formula_or F1 F2       => formula_or (subSU_formula F1 ζ) (subSU_formula F2 ζ)
+      end.
+
   #[export] Instance sub_formula : Subst Formula :=
     fix sub_formula {Σ} fml {Σ2} ζ {struct fml} :=
       match fml with
@@ -97,6 +110,15 @@ Module Type FormulasOn
       | formula_and F1 F2      => formula_and (sub_formula F1 ζ) (sub_formula F2 ζ)
       | formula_or F1 F2       => formula_or (sub_formula F1 ζ) (sub_formula F2 ζ)
       end.
+
+  #[export] Instance substSubstSULaws_formula `{SubstUnivMeet Sb} :
+    SubstSubstSULaws Sb Formula.
+  Proof.
+    intros Σ1 Σ2 ζ t.
+    induction t; cbn; f_equal;
+      try apply substSU_interpSU; now assumption.
+  Qed.
+
 
   #[export] Instance substlaws_formula : SubstLaws Formula.
   Proof.
@@ -222,73 +244,61 @@ Module Type FormulasOn
   #[export] Instance GenOccursCheckFormula `{SubstUnivVar Sb}: GenOccursCheck (Sb := Sb) Formula :=
     fix oc {Σ} fml {struct fml} :=
       match fml with
-      | formula_user p ts      => let '(existT Σ' (σ' , ts')) := gen_occurs_check ts in
-                                  existT Σ' (σ' , formula_user p ts')
-      | formula_bool t         => let '(existT Σ' (σ' , t')) := gen_occurs_check t in
-                                  existT Σ' (σ' , formula_bool t')
-      | formula_prop ζ P       => let '(existT Σ' (σ' , ζ')) := gen_occurs_check ζ in
-                                  existT Σ' (σ' , formula_prop ζ' P)
-      | formula_relop op t1 t2 => let '(existT Σ1 (σ1 , t1')) := gen_occurs_check t1 in
-                                  let '(existT Σ2 (σ2 , t2')) := gen_occurs_check  t2 in
-                                  let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ') := meetSU σ1 σ2 in
-                                  existT Σ12 (σ' , formula_relop op (substSU t1' σ1') (substSU t2' σ2'))
-      | formula_true           => existT [ctx] (initSU , formula_true)
-      | formula_false          => existT [ctx] (initSU , formula_false)
-      | formula_and F1 F2      => let '(existT Σ1 (σ1 , F1')) := oc F1 in
-                                  let '(existT Σ2 (σ2 , F2')) := oc F2 in
-                                  let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ') := meetSU σ1 σ2 in
-                                  existT Σ12 (σ' , formula_and (substSU F1' σ1') (substSU F2' σ2'))
-      | formula_or F1 F2       => let '(existT Σ1 (σ1 , F1')) := oc F1 in
-                                  let '(existT Σ2 (σ2 , F2')) := oc F2 in
-                                  let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ') := meetSU σ1 σ2 in
-                                  existT Σ12 (σ' , formula_or (substSU F1' σ1') (substSU F2' σ2'))
+      | formula_user p ts      => liftUnOp (fun _ => formula_user p) (gen_occurs_check ts)
+      | formula_bool t         => liftUnOp (fun _ => formula_bool) (gen_occurs_check t)
+      | formula_prop ζ P       => liftUnOp (fun _ ζ => formula_prop ζ P) (gen_occurs_check ζ)
+      | formula_relop op t1 t2 => liftBinOp (fun _ => formula_relop op) (gen_occurs_check t1) (gen_occurs_check  t2)
+      | formula_true           => weakenInit formula_true
+      | formula_false          => weakenInit formula_false
+      | formula_and F1 F2      => liftBinOp (fun _ F1' F2' => formula_and F1' F2') (oc F1) (oc F2)
+      | formula_or F1 F2       => liftBinOp (fun _ F1' F2' => formula_or F1' F2') (oc F1) (oc F2)
       end.
 
-  #[export] Instance GenOccursCheckLawsFormula `{SubstUnivVar Sb}
-    {_ : SubstUnivLaws Sb} {_ : SubstUnivVarLaws Sb} {_ : SubstUnivMeetLaws Sb} :
-      GenOccursCheckLaws (Sb := Sb) Formula.
-  Proof.
-    constructor.
-    induction t; cbn.
-    - destruct (oc_sound ts) as (Σ' & σ' & ts' & [] & Hts).
-      do 4 eexists; first easy.
-      cbn. now f_equal.
-    - destruct (oc_sound t) as (Σ' & σ' & t' & [] & Ht).
-      do 4 eexists; first easy.
-      cbn. now f_equal.
-    - destruct (oc_sound ζ) as (Σ'' & σ' & ζ' & [] & Hζ).
-      do 4 eexists; first easy.
-      cbn. now f_equal.
-    - destruct (oc_sound t1) as (Σ1 & σ1 & t1' & [] & Ht1).
-      destruct (oc_sound t2) as (Σ2 & σ2 & t2' & [] & Ht2).
-      destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2).
-      do 4 eexists; first easy.
-      cbn.
-      change (subst ?t (interpSU ?ζ)) with (substSU t ζ).
-      destruct (substSU_trans x0 x2 t1').
-      destruct (substSU_trans x1 x2 t2').
-      now destruct corrσ1, corrσ2, Ht1, Ht2.
-    - now do 4 eexists.
-    - now do 4 eexists.
-    - destruct IHt1 as (Σ1 & σ1 & t1' & [] & Ht1).
-      destruct IHt2 as (Σ2 & σ2 & t2' & [] & Ht2).
-      destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2).
-      do 4 eexists; first easy.
-      cbn.
-      change (subst ?t (interpSU ?ζ)) with (substSU t ζ).
-      destruct (substSU_trans x0 x2 t1').
-      destruct (substSU_trans x1 x2 t2').
-      now destruct corrσ1, corrσ2, Ht1, Ht2.
-    - destruct IHt1 as (Σ1 & σ1 & t1' & [] & Ht1).
-      destruct IHt2 as (Σ2 & σ2 & t2' & [] & Ht2).
-      destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2).
-      do 4 eexists; first easy.
-      cbn.
-      change (subst ?t (interpSU ?ζ)) with (substSU t ζ).
-      destruct (substSU_trans x0 x2 t1').
-      destruct (substSU_trans x1 x2 t2').
-      now destruct corrσ1, corrσ2, Ht1, Ht2.
-  Qed.
+  (* #[export] Instance GenOccursCheckLawsFormula `{SubstUnivVar Sb} *)
+  (*   {_ : SubstUnivLaws Sb} {_ : SubstUnivVarLaws Sb} {_ : SubstUnivMeetLaws Sb} : *)
+  (*     GenOccursCheckLaws (Sb := Sb) Formula. *)
+  (* Proof. *)
+  (*   constructor. *)
+  (*   induction t; cbn. *)
+  (*   - destruct (oc_sound ts) as (Σ' & σ' & ts' & [] & Hts). *)
+  (*     do 4 eexists; first easy. *)
+  (*     cbn. now f_equal. *)
+  (*   - destruct (oc_sound t) as (Σ' & σ' & t' & [] & Ht). *)
+  (*     do 4 eexists; first easy. *)
+  (*     cbn. now f_equal. *)
+  (*   - destruct (oc_sound ζ) as (Σ'' & σ' & ζ' & [] & Hζ). *)
+  (*     do 4 eexists; first easy. *)
+  (*     cbn. now f_equal. *)
+  (*   - destruct (oc_sound t1) as (Σ1 & σ1 & t1' & [] & Ht1). *)
+  (*     destruct (oc_sound t2) as (Σ2 & σ2 & t2' & [] & Ht2). *)
+  (*     destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2). *)
+  (*     do 4 eexists; first easy. *)
+  (*     cbn. *)
+  (*     change (subst ?t (interpSU ?ζ)) with (substSU t ζ). *)
+  (*     destruct (substSU_trans x0 x2 t1'). *)
+  (*     destruct (substSU_trans x1 x2 t2'). *)
+  (*     now destruct corrσ1, corrσ2, Ht1, Ht2. *)
+  (*   - now do 4 eexists. *)
+  (*   - now do 4 eexists. *)
+  (*   - destruct IHt1 as (Σ1 & σ1 & t1' & [] & Ht1). *)
+  (*     destruct IHt2 as (Σ2 & σ2 & t2' & [] & Ht2). *)
+  (*     destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2). *)
+  (*     do 4 eexists; first easy. *)
+  (*     cbn. *)
+  (*     change (subst ?t (interpSU ?ζ)) with (substSU t ζ). *)
+  (*     destruct (substSU_trans x0 x2 t1'). *)
+  (*     destruct (substSU_trans x1 x2 t2'). *)
+  (*     now destruct corrσ1, corrσ2, Ht1, Ht2. *)
+  (*   - destruct IHt1 as (Σ1 & σ1 & t1' & [] & Ht1). *)
+  (*     destruct IHt2 as (Σ2 & σ2 & t2' & [] & Ht2). *)
+  (*     destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2). *)
+  (*     do 4 eexists; first easy. *)
+  (*     cbn. *)
+  (*     change (subst ?t (interpSU ?ζ)) with (substSU t ζ). *)
+  (*     destruct (substSU_trans x0 x2 t1'). *)
+  (*     destruct (substSU_trans x1 x2 t2'). *)
+  (*     now destruct corrσ1, corrσ2, Ht1, Ht2. *)
+  (* Qed. *)
 
   Section PathCondition.
     Import Entailment.
@@ -327,6 +337,18 @@ Module Type FormulasOn
     Proof.
       induction xs; env.destroy ys; cbn; [easy|].
       now rewrite IHxs, env.inversion_eq_snoc.
+    Qed.
+
+    #[export] Instance substSubstSULaws_ctx `{SubstUnivMeet Sb}
+      {T : LCtx -> Type}
+      {sT : Subst T} {sST : SubstSU Sb T}
+      (ssuLT : SubstSubstSULaws Sb T) :
+      SubstSubstSULaws Sb (fun Σ => Ctx (T Σ)).
+    Proof.
+      intros Σ1 Σ2 ζ t.
+      induction t; first reflexivity.
+      cbn; f_equal; first assumption.
+      now eapply substSU_interpSU.
     Qed.
 
   End PathCondition.

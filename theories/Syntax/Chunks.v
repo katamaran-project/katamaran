@@ -162,6 +162,17 @@ Module Type ChunksOn
         chunk_wand (sub_chunk c1 ζ) (sub_chunk c2 ζ)
       end.
 
+  #[export] Instance SubstSUChunk `{SubstUniv Sb} : SubstSU Sb Chunk :=
+    fix subSU_chunk {Σ1 Σ2} (c : Chunk Σ1) (ζ : Sb Σ1 Σ2) {struct c} : Chunk Σ2 :=
+      match c with
+      | chunk_user p ts => chunk_user p (substSU ts ζ)
+      | chunk_ptsreg r t => chunk_ptsreg r (substSU (T := fun Σ => Term Σ _) t ζ)
+      | chunk_conj c1 c2 =>
+        chunk_conj (subSU_chunk c1 ζ) (subSU_chunk c2 ζ)
+      | chunk_wand c1 c2 =>
+        chunk_wand (subSU_chunk c1 ζ) (subSU_chunk c2 ζ)
+      end.
+
   #[export] Instance substlaws_chunk : SubstLaws Chunk.
   Proof.
     constructor.
@@ -203,22 +214,12 @@ Module Type ChunksOn
 
   #[export] Instance GenOccursCheckChunk : GenOccursCheck (Sb := WeakensTo) Chunk :=
     fun Σ =>
-      fix gen_occurs_check_chunk (c : Chunk Σ) : { Σ' & WeakensTo Σ' Σ * Chunk Σ'}%type :=
+      fix gen_occurs_check_chunk (c : Chunk Σ) : Weakened WeakensTo Chunk Σ :=
       match c with
-      | chunk_user p ts => let '(existT _ (σ1 , ts')) := gen_occurs_check ts in
-                           existT _ (σ1 , chunk_user p ts')
-      | chunk_ptsreg r t => let '(existT _ (σ1 , t')) := gen_occurs_check t in
-                            existT _ (σ1 , chunk_ptsreg r t')
-      | chunk_conj c1 c2 =>
-          let '(existT _ (σ1 , c1')) := gen_occurs_check_chunk c1 in
-          let '(existT _ (σ2 , c2')) := gen_occurs_check_chunk c2 in
-          let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU (Sb := WeakensTo) (SubstUnivMeet := substUnivMeet_weaken) σ1 σ2 in
-          existT Σ12 (σ12 , chunk_conj (subst c1' (interpSU σ1')) (subst c2' (interpSU σ2')))
-      | chunk_wand c1 c2 =>
-          let '(existT _ (σ1 , c1')) := gen_occurs_check_chunk c1 in
-          let '(existT _ (σ2 , c2')) := gen_occurs_check_chunk c2 in
-          let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU (Sb := WeakensTo) (SubstUnivMeet := substUnivMeet_weaken) σ1 σ2 in
-          existT Σ12 (σ12 , chunk_wand (subst c1' (interpSU σ1')) (subst c2' (interpSU σ2')))
+      | chunk_user p ts => liftUnOp (fun _ => chunk_user p) (gen_occurs_check ts)
+      | chunk_ptsreg r t => liftUnOp (fun _ => chunk_ptsreg r) (gen_occurs_check t)
+      | chunk_conj c1 c2 => liftBinOp (fun _ c1' c2' => chunk_conj c1' c2') (gen_occurs_check_chunk c1) (gen_occurs_check_chunk c2)
+      | chunk_wand c1 c2 => liftBinOp (fun _ c1' c2' => chunk_wand c1' c2') (gen_occurs_check_chunk c1) (gen_occurs_check_chunk c2)
       end.
 
   Definition SCHeap : Type := list SCChunk.
