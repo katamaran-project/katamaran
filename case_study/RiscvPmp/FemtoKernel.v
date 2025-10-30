@@ -214,10 +214,6 @@ Module inv := invariants.
     Example femtokernel_handler_asm : list ASM :=
       [
         RTYPE t0 t0 t0 RISCV_ADD
-      ; ITYPE bv.zero zero ra RISCV_ADDI
-      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
-      ; Λ x, STORE (bv.of_N mmio_write_addr) t0 ra WORD (* works because mmio_write_addr fits into 12 bits. *)
-      ; MRET
       ].
     Example femtokernel_handler' (handler_start : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_handler_asm) handler_start.
@@ -230,6 +226,9 @@ Module inv := invariants.
     (* ADDRESSES *)
     Definition init_addr     : N := 0.
     Definition handler_addr  : N := init_addr + init_size.
+    Definition handler_addr_block0  : N := handler_addr.
+    Definition handler_addr_block1 : N := handler_addr_block0 + mmio_handler_size_block0.
+
     (* NOTE: There is no data in the MMIO case, but we just keep *)
     Definition data_addr     : N := handler_addr + handler_size.
     Definition adv_addr : N := handler_addr + handler_size.
@@ -365,6 +364,19 @@ Module inv := invariants.
     (* Import SymProp.notations. *)
     (* Set Printing Depth 200. *)
     (* Eval vm_compute in vc__femtohandler. *)
+
+
+    Definition vc__femtohandler_block0 : 𝕊 [] :=
+      postprocess (sannotated_block_verification_condition
+                     (femtokernel_handler_pre)
+                     (femtokernel_handler_gen_block0)
+                     (femtokernel_handler_post_block0) wnil).
+
+    Definition vc__femtohandler_block1 : 𝕊 [] :=
+      postprocess (sannotated_block_verification_condition
+                     (femtokernel_handler_pre_block1)
+                     (femtokernel_handler_gen_block1)
+                     (femtokernel_handler_post) wnil).
 
 
     Lemma even_iff_land1: forall n, N.even n <-> N.land n 1 = 0%N.
