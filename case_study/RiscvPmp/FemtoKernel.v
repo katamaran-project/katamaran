@@ -212,46 +212,44 @@ Module inv := invariants.
     Example femtokernel_init' (init_start : N) (handler_start : N) (adv_start : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_init_asm handler_start adv_start) init_start.
 
-    Example femtokernel_handler_asm (data_start : N) : list ASM :=
-      [
-        UTYPE bv.zero ra RISCV_AUIPC
-      ; Λ x, LOAD (bv.of_N (data_start - (x - 4))) ra ra false WORD
-      ; MRET
-      ].
-    Example femtokernel_handler' (handler_start : N) (data_start : N) : list AnnotInstr :=
-      resolve_ASM (femtokernel_handler_asm data_start) handler_start.
-
-    Example femtokernel_mmio_handler_asm : list ASM :=
+    Example femtokernel_mmio_handler_asm_block0 : list ASM :=
       [
         RTYPE t0 t0 t0 RISCV_ADD
-      ; ITYPE bv.zero zero ra RISCV_ADDI
-      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
-      ; Λ x, STORE (bv.of_N mmio_write_addr) t0 ra WORD (* works because mmio_write_addr fits into 12 bits. *)
-      ; MRET
       ].
 
-    Example femtokernel_mmio_handler' (handler_start : N) : list AnnotInstr :=
-      resolve_ASM (femtokernel_mmio_handler_asm) handler_start.
+    Example femtokernel_mmio_handler_block0' (handler_start : N) : list AnnotInstr :=
+      resolve_ASM (femtokernel_mmio_handler_asm_block0) handler_start.
+
+
+    Example femtokernel_mmio_handler_asm_block1 : list ASM :=
+      [
+        ITYPE bv.zero zero ra RISCV_ADDI
+        ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
+        ; Λ x, STORE (bv.of_N mmio_write_addr) t0 ra WORD (* works because mmio_write_addr fits into 12 bits. *)
+        ; MRET
+      ].
+
+    Example femtokernel_mmio_handler_block1' (handler_start : N) : list AnnotInstr :=
+      resolve_ASM (femtokernel_mmio_handler_asm_block1) handler_start.
 
     (* SIZES *)
     Definition init_size : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_init' 0 0 0))) * 4.
 
-    Definition handler_size : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_handler' 0 0))) * 4.
-    Definition mmio_handler_size : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_mmio_handler' 0))) * 4.
-    (* Note: MMIO has no `data` region, hence no data size or address. *)
+    Definition mmio_handler_size_block0 : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_mmio_handler_block0' 0))) * 4.
+    Definition mmio_handler_size_block1 : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_mmio_handler_block0' 0))) * 4.
+    Definition mmio_handler_size : N := mmio_handler_size_block0 + mmio_handler_size_block1.
+
     Definition data_size : N := 4.
 
     (* ADDRESSES *)
     Definition init_addr     : N := 0.
     Definition handler_addr  : N := init_addr + init_size.
+    Definition handler_addr_block0  : N := handler_addr.
+    Definition handler_addr_block1 : N := handler_addr_block0 + mmio_handler_size_block0.
+
     (* NOTE: There is no data in the MMIO case, but we just keep *)
-    Definition data_addr     : N := handler_addr + handler_size.
+    Definition data_addr     : N := handler_addr + mmio_handler_size.
     Definition adv_addr      : N := data_addr + data_size.
-    Definition mmio_adv_addr : N := handler_addr + mmio_handler_size.
-    (* NOTE: We have set things up so that the `adv_addr` and the `mmio_adv_addr` are equal in both cases, such that we can reuse the proofs. Prove that this is the case here, to make sure that we gets stuck if we ever make changes that break this hypothesis. *)
-    Lemma adv_mmio_eq : adv_addr = mmio_adv_addr.
-  Proof. now compute. Qed.
-    (* Since both are equal, we continue with just the `adv_addr` from now on *)
 
     (* CODE AND CONFIG SHORTANDS*)
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
@@ -265,10 +263,11 @@ Module inv := invariants.
     Definition femtokernel_init_gen := femtokernel_init' init_addr handler_addr adv_addr.
 
     (* The code is different in both cases for the handler, so we cannot derive the concrete cases from the more general one. *)
-    Definition femtokernel_handler := femtokernel_handler' handler_addr data_addr.
-    Definition femtokernel_mmio_handler := femtokernel_mmio_handler' handler_addr.
+    Definition femtokernel_mmio_handler_block0 := femtokernel_mmio_handler_block0' handler_addr_block0.
+    Definition femtokernel_mmio_handler_block1 := femtokernel_mmio_handler_block1' handler_addr_block1.
     (* We reflect the booleans present in the contracts, but now at the meta level. This allows us to recycle large parts of the Katamaran and Iris contracts as part of the verification. *)
-    Definition femtokernel_handler_gen (is_mmio : bool) := if is_mmio then femtokernel_mmio_handler else femtokernel_handler.
+    Definition femtokernel_handler_gen_block0 := femtokernel_mmio_handler_block0.
+    Definition femtokernel_handler_gen_block1 := femtokernel_mmio_handler_block1.
 
     Import asn.notations.
     Import RiscvPmp.Sig.
@@ -322,21 +321,46 @@ Module inv := invariants.
     Qed.
 
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
-    Example femtokernel_handler_pre (is_mmio : bool) : Assertion ["a" :: ty_xlenbits] :=
+    Example femtokernel_handler_pre : Assertion ["a" :: ty_xlenbits] :=
       (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
       (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
       (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
+      (∃ "v", x5 ↦ (term_var "v")) ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_regs_ptsto ∗
-      asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-      if negb is_mmio then
-        (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵢ term_val ty_xlenbits (bv.of_N 42)
-      else asn_inv_mmio.
+      asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) (* Different handler sizes cause different entries *)
+      .
 
-    Example femtokernel_handler_post (is_mmio : bool) :
+    Example femtokernel_handler_post_block0 :
+      Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
+      (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
+        (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
+        (∃ "v", mcause ↦ term_var "v") ∗
+        (∃ "epc", mepc ↦ term_var "epc") ∗
+        (∃ "v", x5 ↦ term_binop bop.bvmul (term_val ty_xlenbits (bv.of_N 2)) (term_var "v")) ∗
+        cur_privilege ↦ term_val ty_privilege Machine ∗
+        asn_regs_ptsto ∗
+        asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
+        ⊤ (* Inv is persistent; don't repeat *).
+
+    Example femtokernel_handler_pre_block1 : Assertion ["a" :: ty_xlenbits] :=
+      (term_var "a" = term_val ty_word (bv.of_N handler_addr_block1)) ∗
+        (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
+        (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
+        (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
+        (∃ "v", mcause ↦ term_var "v") ∗
+        (∃ "epc", mepc ↦ term_var "epc") ∗
+(* fdu *)
+        (∃ "v", x5 ↦ term_binop bop.bvmul (term_val ty_xlenbits (bv.of_N 2)) (term_var "v")) ∗
+        cur_privilege ↦ term_val ty_privilege Machine ∗
+        asn_regs_ptsto ∗
+        asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
+        asn_inv_mmio.
+
+    Example femtokernel_handler_post :
       Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
@@ -345,29 +369,33 @@ Module inv := invariants.
           cur_privilege ↦ term_val ty_privilege User ∗
           asn_regs_ptsto ∗
           asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-          if negb is_mmio then
-            (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_size) ↦ᵢ term_val ty_xlenbits (bv.of_N 42))
-          else ⊤ (* Inv is persistent; don't repeat *).
+          ⊤ (* Inv is persistent; don't repeat *).
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
     (*   Eval vm_compute in *)
     (*     simplify (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post). *)
-
-    Definition vc__femtohandler (is_mmio : bool) : 𝕊 [] :=
-      postprocess (sannotated_block_verification_condition
-                     (femtokernel_handler_pre is_mmio)
-                     (femtokernel_handler_gen is_mmio)
-                     (femtokernel_handler_post is_mmio) wnil).
-
-      (* let vc1 := VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post in *)
-      (* let vc2 := Postprocessing.prune vc1 in *)
-      (* let vc3 := Postprocessing.solve_evars vc2 in *)
-      (* let vc4 := Postprocessing.solve_uvars vc3 in *)
-      (* let vc5 := Postprocessing.prune vc4 in *)
-      (* vc5. *)
+    (* let vc1 := VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post in *)
+    (* let vc2 := Postprocessing.prune vc1 in *)
+    (* let vc3 := Postprocessing.solve_evars vc2 in *)
+    (* let vc4 := Postprocessing.solve_uvars vc3 in *)
+    (* let vc5 := Postprocessing.prune vc4 in *)
+    (* vc5. *)
     (* Import SymProp.notations. *)
     (* Set Printing Depth 200. *)
     (* Eval vm_compute in vc__femtohandler. *)
+
+
+    Definition vc__femtohandler_block0 : 𝕊 [] :=
+      postprocess (sannotated_block_verification_condition
+                     (femtokernel_handler_pre)
+                     (femtokernel_handler_gen_block0)
+                     (femtokernel_handler_post_block0) wnil).
+
+    Definition vc__femtohandler_block1 : 𝕊 [] :=
+      postprocess (sannotated_block_verification_condition
+                     (femtokernel_handler_pre_block1)
+                     (femtokernel_handler_gen_block1)
+                     (femtokernel_handler_post) wnil).
 
 
     Lemma even_iff_land1: forall n, N.even n <-> N.land n 1 = 0%N.
@@ -384,24 +412,30 @@ Module inv := invariants.
       - simpl. destruct (bv.trunc m p); auto.
     Qed.
 
-    Import Erasure.notations.
-    Lemma sat__femtohandler (is_mmio : bool) : safeE (vc__femtohandler is_mmio).
+    Lemma sat__femtohandler_block0 : safeE (vc__femtohandler_block0).
     Proof.
-      destruct is_mmio.
-      - (* For the mmio case, we still need to prove that our word falls within mmio *)
+      vm_compute.
+      constructor; cbn.
+      intuition;
+        bv_solve_Ltac.solveBvManual. exists v6. auto.
+    Qed.
+
+    (* fdu *)
+    Import Erasure.notations.
+    Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
+    Proof.
+       unfold vc__femtohandler_block1. unfold femtokernel_handler_pre_block1.
         vm_compute.
         constructor; cbn.
         intuition;
           bv_solve_Ltac.solveBvManual.
         2-5: eapply bv.in_seqBv'; now vm_compute.
         unfold bv.land.
-        assert (Heventrunc: N.even (bv.truncn 32 (2 * bv.bin (n := 32) v5))).
+        assert (Heventrunc: N.even (bv.truncn 32 (2 * bv.bin (n := 32) v7))).
         { apply even_trunc. rewrite N.even_mul. done. }
-        apply even_iff_land1 in Heventrunc.  rewrite Heventrunc. done.
-      - vm_compute.
-        constructor; cbn.
-        intuition;
-          bv_solve_Ltac.solveBvManual.
+        apply even_iff_land1 in Heventrunc.
+
+        rewrite Heventrunc. done.
     Qed.
 
     Definition femtoinit_stats :=
