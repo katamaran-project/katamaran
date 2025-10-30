@@ -105,6 +105,13 @@ Module Type SymbolicExecOn
           MkDebugCallLemma l c (subst ts ζ01) (subst pc ζ01) (subst h ζ01)
         end.
 
+    #[export] Instance SubstSUDebugCallLemma `{SubstUniv Sb} : SubstSU Sb DebugCallLemma :=
+      fun Σ0 Σ1 d ζ01 =>
+        match d with
+        | MkDebugCallLemma l c ts pc (* δ *) h =>
+          MkDebugCallLemma l c (substSU ts ζ01) (substSU pc ζ01) (substSU h ζ01)
+        end.
+
     #[export] Instance SubstLawsDebugCallLemma : SubstLaws DebugCallLemma.
     Proof.
       constructor.
@@ -128,13 +135,8 @@ Module Type SymbolicExecOn
       fun Σ d =>
         match d with
         | MkDebugCallLemma l c ts pc (* δ *) h =>
-            let '(existT _ (σ1 , ts')) := gen_occurs_check ts  in
-            (* δ'  := gen_occurs_check xIn δ  in *)
-            let '(existT _ (σ2 , pc'))  := gen_occurs_check pc  in
-            let '(existT _ (σ3 , h'))  := gen_occurs_check h  in
-            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
-            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
-            existT _ (σ123 , MkDebugCallLemma l c (substSU ts' (transSU σ1' σ12')) (* δ' *) (substSU pc' (transSU σ2' σ12')) (substSU h' σ3'))
+            liftTernOp (fun Σ ts' pc' h' => MkDebugCallLemma l c ts' pc' h')
+              (gen_occurs_check ts) (gen_occurs_check pc) (gen_occurs_check h)
         end.
 
     Record DebugStm (Σ : LCtx) : Type :=
@@ -152,6 +154,13 @@ Module Type SymbolicExecOn
         match d with
         | MkDebugCall f c ts pc (* δ *) h =>
           MkDebugCall f c (subst ts ζ01) (subst pc ζ01) (* (subst δ ζ01) *) (subst h ζ01)
+        end.
+
+    #[export] Instance SubstSUDebugCall `{SubstUniv Sb} : SubstSU Sb DebugCall :=
+      fun Σ0 Σ1 d ζ01 =>
+        match d with
+        | MkDebugCall f c ts pc (* δ *) h =>
+            MkDebugCall f c (substSU ts ζ01) (substSU pc ζ01) (* (substSU δ ζ01) *) (substSU h ζ01)
         end.
 
     #[export] Instance SubstLawsDebugCall : SubstLaws DebugCall.
@@ -177,13 +186,8 @@ Module Type SymbolicExecOn
       fun Σ d =>
         match d with
         | MkDebugCall f c ts pc (* δ *) h =>
-            let '(existT _ (σ1 , ts')) := gen_occurs_check ts  in
-            (* δ'  := gen_occurs_check xIn δ  in *)
-            let '(existT _ (σ2 , pc'))  := gen_occurs_check pc  in
-            let '(existT _ (σ3 , h'))  := gen_occurs_check h  in
-            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
-            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
-            existT _ (σ123 , MkDebugCall f c (substSU ts' (transSU σ1' σ12')) (* δ' *) (substSU pc' (transSU σ2' σ12')) (substSU h' σ3'))
+            liftTernOp (fun Σ ts' pc' h' => MkDebugCall f c ts' pc' h')
+              (gen_occurs_check ts) (gen_occurs_check pc) (gen_occurs_check h)
         end.
 
     #[export] Instance SubstDebugStm : Subst DebugStm :=
@@ -191,6 +195,13 @@ Module Type SymbolicExecOn
         match d with
         | MkDebugStm s pc δ h =>
           MkDebugStm s (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
+        end.
+
+    #[export] Instance SubstSUDebugStm `{SubstUniv Sb} : SubstSU Sb DebugStm :=
+      fun Σ0 Σ1 d ζ01 =>
+        match d with
+        | MkDebugStm s pc δ h =>
+          MkDebugStm s (substSU pc ζ01) (substSU δ ζ01) (substSU h ζ01)
         end.
 
     #[export] Instance SubstLawsDebugStm : SubstLaws DebugStm.
@@ -214,13 +225,8 @@ Module Type SymbolicExecOn
       fun Σ d =>
         match d with
         | MkDebugStm s pc δ h =>
-            let '(existT _ (σ1 , pc')) := gen_occurs_check pc in
-            (* δ'  := gen_occurs_check xIn δ  in *)
-            let '(existT _ (σ2 , δ'))  := gen_occurs_check δ in
-            let '(existT _ (σ3 , h'))  := gen_occurs_check h  in
-            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
-            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
-            existT _ (σ123 , MkDebugStm s (substSU pc' (transSU σ1' σ12')) (substSU δ' (transSU σ2' σ12')) (substSU h' σ3'))
+            liftTernOp (fun Σ pc' δ' h' => MkDebugStm s pc' δ' h')
+              (gen_occurs_check pc) (gen_occurs_check δ) (gen_occurs_check h)
         end.
 
     Record ErrorNoFuel (Σ : LCtx) : Type :=
@@ -241,6 +247,13 @@ Module Type SymbolicExecOn
         match e with
         | MkErrorNoFuel f args pc h =>
           MkErrorNoFuel f (subst args ζ01) (subst pc ζ01) (subst h ζ01)
+        end.
+
+    #[export] Instance SubstSUErrorNoFuel `{SubstUniv Sb} : SubstSU Sb ErrorNoFuel :=
+      fun Σ0 Σ1 e ζ01 =>
+        match e with
+        | MkErrorNoFuel f args pc h =>
+          MkErrorNoFuel f (substSU args ζ01) (substSU pc ζ01) (substSU h ζ01)
         end.
 
     #[export] Instance SubstLawsErrorNoFuel : SubstLaws ErrorNoFuel.
@@ -264,13 +277,8 @@ Module Type SymbolicExecOn
       fun Σ d =>
         match d with
         | MkErrorNoFuel f args pc h=>
-            let '(existT _ (σ1 , args')) := gen_occurs_check args  in
-            (* δ'  := gen_occurs_check xIn δ  in *)
-            let '(existT _ (σ2 , pc'))  := gen_occurs_check pc  in
-            let '(existT _ (σ3 , h'))  := gen_occurs_check h  in
-            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
-            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
-            existT _ (σ123 , MkErrorNoFuel f (substSU args' (transSU σ1' σ12')) (* δ' *) (substSU pc' (transSU σ2' σ12')) (substSU h' σ3'))
+            liftTernOp (fun Σ args' pc' h' => MkErrorNoFuel f args' pc' h')
+              (gen_occurs_check args) (gen_occurs_check pc) (gen_occurs_check h)
         end.
 
   End DebugInfo.

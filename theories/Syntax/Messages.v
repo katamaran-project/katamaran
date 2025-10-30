@@ -53,14 +53,21 @@ Module Type MessagesOn
     | there {b} (msg : M (Σ ▻ b)).
     #[global] Arguments there {_ _ _} msg.
 
-    (* Without the precedence, typeclass resolution sometimes mysteriously enters a loop... *)
-    #[export] Instance subst_closemessage `{Subst M} : Subst (CloseMessage M) | 2 :=
+    (* Not an instance because it makes type class inference run into a loop *)
+    Definition subst_closemessage `{Subst M} : Subst (CloseMessage M) :=
       fun {Σ} m {Σ2} ζ =>
         match m with
         | there msg => there (subst msg (sub_up1 ζ))
         end.
 
-    #[export] Instance substlaws_closemessage `{SubstLaws M} : SubstLaws (CloseMessage M) | 2.
+    (* Not an instance because it makes type class inference run into a loop *)
+    Definition substSU_closemessage `{SubstSU WeakensTo M} : SubstSU WeakensTo (CloseMessage M) :=
+      fun {Σ Σ2} m ζ =>
+        match m with
+        | there msg => there (substSU msg (WkKeepVar _ ζ))
+        end.
+
+    #[export] Instance substlaws_closemessage `{SubstLaws M} : @SubstLaws (CloseMessage M) subst_closemessage | 2.
     Proof.
       constructor.
       - intros ? m. destruct m; cbn; f_equal;
@@ -92,11 +99,12 @@ Module Type MessagesOn
 
     Definition empty {Σ} : AMessage Σ := mk (M := Unit) tt.
 
-    Fixpoint closeAux {Σ ΣΔ} {struct ΣΔ} : forall {M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M} {goccM : GenOccursCheck (Sb := WeakensTo) M}, M (Σ ▻▻ ΣΔ) -> AMessage Σ :=
-      match ΣΔ with
-      | []      => fun _ _ _ _ _ msg => mk msg
-      | ΣΔ  ▻ b => fun _ _ _ _ g msg => closeAux (there msg)
-      end%ctx.
+    Fixpoint closeAux {Σ ΣΔ} {M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M} {goccM : GenOccursCheck (Sb := WeakensTo) M} {struct ΣΔ} : M (Σ ▻▻ ΣΔ) -> AMessage Σ :=
+      let ssuT : SubstSU WeakensTo M := fun _ _ t ζ => subst t (interpSU ζ)
+      in match ΣΔ with
+         | []      => fun msg => mk msg
+         | ΣΔ  ▻ b => fun msg => closeAux (subM := subst_closemessage) (there msg)
+         end%ctx.
 
     Definition close {Σ ΣΔ} (msg : AMessage (Σ ▻▻ ΣΔ)) : AMessage Σ :=
       match msg with mk msg => closeAux msg end.
@@ -105,6 +113,12 @@ Module Type MessagesOn
       fix sub {Σ} m {Σ2} ζ {struct m} :=
         match m with
         | mk msg    => mk (subst msg ζ)
+        end.
+
+    #[export] Instance substSU_amessage : SubstSU WeakensTo AMessage :=
+      fix sub {Σ Σ2} m ζ {struct m} :=
+        match m with
+        | mk msg    => mk (substSU msg ζ)
         end.
 
     #[export] Instance substlaws_amessage : SubstLaws AMessage.
@@ -126,17 +140,16 @@ Module Type MessagesOn
     #[export] Instance genoccurscheck_amessage : GenOccursCheck AMessage :=
       fix oc {Σ} m {struct m} :=
         match m with
-        | mk msg    => let '(existT Σ' (σ' , msg')) := gen_occurs_check msg in
-                       existT Σ' (σ' , mk msg')
+        | mk msg    => liftUnOp (fun _ msg => mk msg) (gen_occurs_check msg)
         end.
 
-    #[export] Instance genoccurschecklaws_amessage : GenOccursCheckLaws AMessage.
-    Proof.
-      constructor.
-      destruct t.
-      (* TODO: add laws instance for contained messages *)
-      admit.
-    Admitted.
+    (* #[export] Instance genoccurschecklaws_amessage : GenOccursCheckLaws AMessage. *)
+    (* Proof. *)
+    (*   constructor. *)
+    (*   destruct t. *)
+    (*   (* TODO: add laws instance for contained messages *) *)
+    (*   admit. *)
+    (* Admitted. *)
 
     #[export] Instance instprop_amessage : InstProp AMessage :=
       fun _ _ _ => True.

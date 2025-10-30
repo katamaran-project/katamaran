@@ -475,6 +475,11 @@ Section AnnotatedBlockVerification.
         match d with
         | MkDebugBlockver pc1 h => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01)
         end.
+    #[export] Instance SubstSUDebugBlockver `{SubstUniv Sb} : SubstSU Sb DebugBlockver :=
+      fun Σ0 Σ1 d ζ01 =>
+        match d with
+        | MkDebugBlockver pc1 h => MkDebugBlockver (substSU pc1 ζ01) (substSU h ζ01)
+        end.
 
     #[export] Instance SubstLawsDebugBlockver : SubstLaws DebugBlockver.
     Proof.
@@ -496,10 +501,7 @@ Section AnnotatedBlockVerification.
       fun Σ d =>
         match d with
         | MkDebugBlockver pc1 h =>
-            let '(existT _ (σ1 , pc')) := gen_occurs_check pc1 in
-            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
-            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
-            existT _ (σ12 , MkDebugBlockver (substSU pc' σ1') (substSU h' σ2'))
+            liftBinOp (fun _ pc' h' => MkDebugBlockver pc' h') (gen_occurs_check pc1) (gen_occurs_check h)
         end.
 
   End Debug.

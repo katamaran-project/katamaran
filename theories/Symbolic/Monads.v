@@ -103,11 +103,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
     #[export] Instance GenOccursCheckDebugAsn : GenOccursCheck DebugAsn :=
       fun Σ d =>
         match d with
-        | MkDebugAsn pc h =>
-            let '(existT _ (σ1 , pc')) := gen_occurs_check pc  in
-            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
-            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
-            existT _ (σ12 , MkDebugAsn (substSU pc' σ1') (substSU h' σ2'))
+        | MkDebugAsn pc h => liftBinOp (fun _ pc' h' => MkDebugAsn pc' h') (gen_occurs_check pc) (gen_occurs_check h)
         end.
 
     Record DebugConsumeChunk (Σ : LCtx) : Type :=
@@ -124,6 +120,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         match d with
         | MkDebugConsumeChunk pc (* δ *) h c =>
             MkDebugConsumeChunk (subst pc ζ01) (* (subst δ ζ01) *) (subst h ζ01) (subst c ζ01)
+        end.
+
+    #[export] Instance SubstSUDebugConsumeChunk `{SubstUniv Sb}: SubstSU Sb DebugConsumeChunk :=
+      fun Σ0 Σ1 d ζ01 =>
+        match d with
+        | MkDebugConsumeChunk pc (* δ *) h c =>
+            MkDebugConsumeChunk (substSU pc ζ01) (* (substSU δ ζ01) *) (substSU h ζ01) (substSU c ζ01)
         end.
 
     #[export] Instance SubstLawsDebugConsumeChunk : SubstLaws DebugConsumeChunk.
@@ -148,15 +151,9 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun Σ d =>
         match d with
         | MkDebugConsumeChunk pc (* δ *) h c =>
-            let '(existT _ (σ1 , pc')) := gen_occurs_check pc  in
-            (* δ'  := gen_occurs_check xIn δ  in *)
-            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
-            let '(existT _ (σ3 , c'))  := gen_occurs_check c  in
-            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
-            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
-            existT _ (σ123 , MkDebugConsumeChunk (substSU pc' (transSU σ1' σ12')) (* δ' *) (substSU h' (transSU σ2' σ12')) (substSU c' σ3'))
+            liftTernOp (fun Σ pc' h' c' => MkDebugConsumeChunk pc' h' c')
+              (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check c)
         end.
-
 
     Record DebugReadRegister (Σ : LCtx) : Type :=
       MkDebugReadRegister
@@ -171,6 +168,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         match d with
         | MkDebugReadRegister pc h r =>
             MkDebugReadRegister (subst pc ζ01) (subst h ζ01) r
+        end.
+
+    #[export] Instance SubstSUDebugReadRegister `{SubstUniv Sb} : SubstSU Sb DebugReadRegister :=
+      fun Σ0 Σ1 d ζ01 =>
+        match d with
+        | MkDebugReadRegister pc h r =>
+            MkDebugReadRegister (substSU pc ζ01) (substSU h ζ01) r
         end.
 
     #[export] Instance SubstLawsDebugReadRegister : SubstLaws DebugReadRegister.
@@ -193,10 +197,8 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun Σ d =>
         match d with
         | MkDebugReadRegister pc h r =>
-            let '(existT _ (σ1 , pc')) := gen_occurs_check pc  in
-            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
-            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
-            existT _ (σ12 , MkDebugReadRegister (substSU pc' σ1') (substSU h' σ2') r)
+            liftBinOp (fun Σ pc' h' => MkDebugReadRegister pc' h' r)
+              (gen_occurs_check pc) (gen_occurs_check h)
         end.
 
     Record DebugWriteRegister (Σ : LCtx) : Type :=
@@ -213,6 +215,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         match d with
         | MkDebugWriteRegister pc h r t =>
             MkDebugWriteRegister (subst pc ζ01) (subst h ζ01) r (subst t ζ01)
+        end.
+
+    #[export] Instance SubstSUDebugWriteRegister `{SubstUniv Sb} : SubstSU Sb DebugWriteRegister :=
+      fun Σ0 Σ1 d ζ01 =>
+        match d with
+        | MkDebugWriteRegister pc h r t =>
+            MkDebugWriteRegister (substSU pc ζ01) (substSU h ζ01) r (substSU t ζ01)
         end.
 
     #[export] Instance SubstLawsDebugWriteRegister : SubstLaws DebugWriteRegister.
@@ -236,12 +245,8 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun Σ d =>
         match d with
         | MkDebugWriteRegister pc h r t =>
-            let '(existT _ (σ1 , pc')) := gen_occurs_check pc  in
-            let '(existT _ (σ2 , h'))  := gen_occurs_check h  in
-            let '(existT _ (σ3 , t'))  := gen_occurs_check t  in
-            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU σ1 σ2 in
-            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU σ12 σ3 in
-            existT _ (σ123 , MkDebugWriteRegister (substSU pc' (transSU σ1' σ12')) (substSU h' (transSU σ2' σ12')) r (substSU t' σ3'))
+            liftTernOp (fun Σ pc' h' t' => MkDebugWriteRegister pc' h' r t')
+              (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check t)
         end.
 
     Record DebugString (Σ : LCtx) : Type :=
@@ -276,8 +281,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun Σ d =>
         match d with
         | MkDebugString pc s =>
-            let '(existT _ (σ' , pc')) := gen_occurs_check pc in
-            existT _ (σ' , MkDebugString pc' s)
+            liftUnOp (fun Σ pc' => MkDebugString pc' s) (gen_occurs_check pc)
         end.
 
     Record DebugAssertFormula (Σ : LCtx) : Type :=
@@ -315,15 +319,8 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun Σ d =>
         match d with
         | MkDebugAssertFormula pc h fml =>
-            let '(existT _ (σ1 , pc')) := gen_occurs_check (T := PathCondition) pc in
-            let '(existT _ (σ2 , h'))  := gen_occurs_check (T := SHeap) h in
-            let '(existT _ (σ3 , fml'))  := gen_occurs_check (T := Formula) fml in
-            let '(MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ12) := meetSU (Sb := WeakensTo) (SubstUnivMeet := substUnivMeet_weaken) σ1 σ2 in
-            let '(MkMeetResult _ _ _ _ Σ123 σ12' σ3' σ123) := meetSU (Sb := WeakensTo) (SubstUnivMeet := substUnivMeet_weaken) σ12 σ3 in
-            let pc'' : PathCondition Σ123 := (substSU (T := PathCondition) pc' (transSU σ1' σ12')) in
-            let h'' : SHeap Σ123 := (substSU (T := SHeap) h' (transSU σ2' σ12')) in
-            let fml'' : Formula Σ123 := (substSU (T := Formula) fml' σ3') in
-            existT Σ123 (σ123 , MkDebugAssertFormula (Σ := Σ123) pc'' h'' fml'')
+            liftTernOp (fun Σ pc' h' fml' => MkDebugAssertFormula pc' h' fml')
+              (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check fml)
         end.
 
   End DebugInfo.
@@ -890,7 +887,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst s δ) ;; *)
             (* replay (rhs pc) (persist δ θ ►► δpc) *)
             error (amsg.mk
-                     {| debug_string_pathcondition := wco _;
+                     {| debug_string_pathcondition := wco w0;
                         debug_string_message       :=
                           "NOT IMPLEMENTED: replay_aux.pattern_match";
                      |})
@@ -899,7 +896,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst (term_var x) δ) ;; *)
             (* replay (rhs pc) (env.remove _ (δ⟨θ⟩ ►► δpc) _) *)
             error (amsg.mk
-                     {| debug_string_pathcondition := wco _;
+                     {| debug_string_pathcondition := wco w0;
                         debug_string_message       :=
                           "NOT IMPLEMENTED: replay_aux.pattern_match_var";
                      |})
@@ -1147,7 +1144,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             lift_purespec
               (SPureSpec.angelic_pattern_match id pat
                  (amsg.mk
-                    {| debug_string_pathcondition := wco _;
+                    {| debug_string_pathcondition := wco w;
                        debug_string_message       :=
                         "SHeapSpec.consume.pattern_match";
                     |})
@@ -1182,7 +1179,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
               lift_purespec
                 (SPureSpec.assert_eq_nenv
                    (amsg.mk
-                      {| debug_string_pathcondition := wco _;
+                      {| debug_string_pathcondition := wco w0;
                          debug_string_message       := "SHeapSpec.call_contract";
                       |})
                    (subst δe evars) args⟨θ1⟩) ;;
@@ -1205,7 +1202,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
               lift_purespec
                 (SPureSpec.assert_eq_nenv
                    (amsg.mk
-                      {| debug_string_pathcondition := wco _;
+                      {| debug_string_pathcondition := wco w0;
                          debug_string_message       := "SHeapSpec.call_lemma";
                       |})
                    (subst δe evars) args⟨θ1⟩) ;;
