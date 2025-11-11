@@ -180,6 +180,13 @@ Module Type ChunksOn
     { intros ? ? ? ? ? c. induction c; cbn; f_equal; auto; apply subst_sub_comp. }
   Qed.
 
+  #[export] Instance substsulaws_chunk `{SubstUnivMeet Sb, SubstUnivLaws Sb} :
+    SubstSULaws Sb Chunk.
+  Proof.
+    intros Σ1 Σ2 Σ3 ζ1 ζ2 t.
+    induction t; cbn; f_equal; auto; now rewrite substSU_trans.
+  Qed.
+
   #[export] Instance inst_chunk : Inst Chunk SCChunk :=
     fix inst_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : SCChunk :=
     match c with
@@ -216,10 +223,10 @@ Module Type ChunksOn
     fun Σ =>
       fix gen_occurs_check_chunk (c : Chunk Σ) : Weakened WeakensTo Chunk Σ :=
       match c with
-      | chunk_user p ts => liftUnOp (fun _ => chunk_user p) (gen_occurs_check ts)
-      | chunk_ptsreg r t => liftUnOp (fun _ => chunk_ptsreg r) (gen_occurs_check t)
-      | chunk_conj c1 c2 => liftBinOp (fun _ c1' c2' => chunk_conj c1' c2') (gen_occurs_check_chunk c1) (gen_occurs_check_chunk c2)
-      | chunk_wand c1 c2 => liftBinOp (fun _ c1' c2' => chunk_wand c1' c2') (gen_occurs_check_chunk c1) (gen_occurs_check_chunk c2)
+      | chunk_user p ts => liftUnOp (fun _ => chunk_user p) (fun _ _ _ _ => eq_refl) (gen_occurs_check ts)
+      | chunk_ptsreg r t => liftUnOp (fun _ => chunk_ptsreg r) (fun _ _ _ _ => eq_refl) (gen_occurs_check t)
+      | chunk_conj c1 c2 => liftBinOp (fun _ c1' c2' => chunk_conj c1' c2') (fun _ _ _ _ _ => eq_refl) (gen_occurs_check_chunk c1) (gen_occurs_check_chunk c2)
+      | chunk_wand c1 c2 => liftBinOp (fun _ c1' c2' => chunk_wand c1' c2') (fun _ _ _ _ _ => eq_refl) (gen_occurs_check_chunk c1) (gen_occurs_check_chunk c2)
       end.
 
   Definition SCHeap : Type := list SCChunk.

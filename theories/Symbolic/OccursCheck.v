@@ -56,7 +56,7 @@ Module Type OccursCheckOn
   Class OccursCheck (T : LCtx -> Type) : Type :=
     occurs_check : forall {Σ x} (xIn : x ∈ Σ) (t : T Σ), option (T (Σ - x)).
 
-  #[export] Instance OccursCheck_Const {A} : OccursCheck (Const A) :=
+  #[export,universes(polymorphic=yes)] Instance OccursCheck_Const {A} : OccursCheck (Const A) :=
     fun Σ x xIn v => Some v.
 
   #[export] Instance occurs_check_env {I : Set} {T : LCtx -> I -> Set}

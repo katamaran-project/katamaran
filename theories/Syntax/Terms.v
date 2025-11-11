@@ -665,7 +665,7 @@ Module Type TermsOn (Import TY : Types).
 
     Polymorphic Definition List (A : LCtx → Type) (Σ : LCtx) : Type :=
       list (A Σ).
-    Definition Const (A : Type) (Σ : LCtx) : Type :=
+    Polymorphic Definition Const (A : Type) (Σ : LCtx) : Type :=
       A.
 
   End Symbolic.
@@ -704,7 +704,7 @@ Module Type TermsOn (Import TY : Types).
       subst xs ζ = List.map (fun x => subst x ζ) xs.
     Proof. induction xs; cbn; f_equal; auto. Qed.
 
-    #[export] Instance SubstConst {A} : Subst (Const A) | 10 :=
+    #[export,universes(polymorphic=yes)] Instance SubstConst {A} : Subst (Const A) | 10 :=
        fun _ x _ _ => x.
     #[export] Instance SubstEnv {B : Set} {A : Ctx _ → B → Set} `{∀ b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
       Subst (fun Σ => Env (A Σ) Δ) :=
@@ -794,7 +794,7 @@ Module Type TermsOn (Import TY : Types).
       }
     Qed.
 
-    #[export] Instance SubstLawsConst {A} : SubstLaws (Const A).
+    #[export,universes(polymorphic=yes)] Instance SubstLawsConst {A} : SubstLaws (Const A).
     Proof. constructor; reflexivity. Qed.
 
     #[export] Instance SubstLawsEnv {B : Set} {A : Ctx _ → B → Set}

@@ -119,6 +119,12 @@ Module Type SymbolicExecOn
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    #[export] Instance SubstSULawsDebugCallLemma `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      SubstSULaws Sb DebugCallLemma.
+    Proof.
+      intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.
+    Qed.
+
     Import option.notations.
     #[export] Instance OccursCheckDebugCallLemma : OccursCheck DebugCallLemma :=
       fun Σ x xIn d =>
@@ -136,6 +142,7 @@ Module Type SymbolicExecOn
         match d with
         | MkDebugCallLemma l c ts pc (* δ *) h =>
             liftTernOp (fun Σ ts' pc' h' => MkDebugCallLemma l c ts' pc' h')
+              (fun _ _ _ _ _ _ => eq_refl)
               (gen_occurs_check ts) (gen_occurs_check pc) (gen_occurs_check h)
         end.
 
@@ -170,6 +177,12 @@ Module Type SymbolicExecOn
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    #[export] Instance SubstSULawsDebugCall `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      SubstSULaws Sb DebugCall.
+    Proof.
+      intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.
+    Qed.
+
     Import option.notations.
     #[export] Instance OccursCheckDebugCall : OccursCheck DebugCall :=
       fun Σ x xIn d =>
@@ -187,6 +200,7 @@ Module Type SymbolicExecOn
         match d with
         | MkDebugCall f c ts pc (* δ *) h =>
             liftTernOp (fun Σ ts' pc' h' => MkDebugCall f c ts' pc' h')
+              (fun _ _ _ _ _ _ => eq_refl)
               (gen_occurs_check ts) (gen_occurs_check pc) (gen_occurs_check h)
         end.
 
@@ -211,6 +225,12 @@ Module Type SymbolicExecOn
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    #[export] Instance SubstSULawsDebugStm `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      SubstSULaws Sb DebugStm.
+    Proof.
+      intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.
+    Qed.
+
     #[export] Instance OccursCheckDebugStm : OccursCheck DebugStm :=
       fun Σ x xIn d =>
         match d with
@@ -226,6 +246,7 @@ Module Type SymbolicExecOn
         match d with
         | MkDebugStm s pc δ h =>
             liftTernOp (fun Σ pc' δ' h' => MkDebugStm s pc' δ' h')
+              (fun _ _ _ _ _ _ => eq_refl)
               (gen_occurs_check pc) (gen_occurs_check δ) (gen_occurs_check h)
         end.
 
@@ -263,6 +284,12 @@ Module Type SymbolicExecOn
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    #[export] Instance SubstSULawsErrorNoFuel `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      SubstSULaws Sb ErrorNoFuel.
+    Proof.
+      intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.
+    Qed.
+
     #[export] Instance OccursCheckErrorNoFuel : OccursCheck ErrorNoFuel :=
       fun Σ x xIn d =>
         match d with
@@ -278,6 +305,7 @@ Module Type SymbolicExecOn
         match d with
         | MkErrorNoFuel f args pc h=>
             liftTernOp (fun Σ args' pc' h' => MkErrorNoFuel f args' pc' h')
+              (fun _ _ _ _ _ _ => eq_refl)
               (gen_occurs_check args) (gen_occurs_check pc) (gen_occurs_check h)
         end.
 

@@ -98,6 +98,14 @@ Module Type FormulasOn
       | formula_or F1 F2       => formula_or (subSU_formula F1 ζ) (subSU_formula F2 ζ)
       end.
 
+  #[export] Instance substSULaws_formula `{SubstUnivLaws Sb} :
+    SubstSULaws Sb Formula.
+  Proof.
+    intros Σ1 Σ2 Σ3 ζ1 ζ2 fml.
+    now induction fml; cbn; f_equal;
+      try apply substSU_trans.
+  Qed.
+
   #[export] Instance sub_formula : Subst Formula :=
     fix sub_formula {Σ} fml {Σ2} ζ {struct fml} :=
       match fml with
@@ -241,64 +249,41 @@ Module Type FormulasOn
   #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.
   Proof. occurs_check_derive. Qed.
 
-  #[export] Instance GenOccursCheckFormula `{SubstUnivVar Sb}: GenOccursCheck (Sb := Sb) Formula :=
+  #[export] Instance GenOccursCheckFormula `{SubstUnivVar Sb, SubstUnivMeet Sb, SubstUnivLaws Sb}: GenOccursCheck (Sb := Sb) Formula :=
     fix oc {Σ} fml {struct fml} :=
       match fml with
-      | formula_user p ts      => liftUnOp (fun _ => formula_user p) (gen_occurs_check ts)
-      | formula_bool t         => liftUnOp (fun _ => formula_bool) (gen_occurs_check t)
-      | formula_prop ζ P       => liftUnOp (fun _ ζ => formula_prop ζ P) (gen_occurs_check ζ)
-      | formula_relop op t1 t2 => liftBinOp (fun _ => formula_relop op) (gen_occurs_check t1) (gen_occurs_check  t2)
+      | formula_user p ts      => liftUnOp (fun _ => formula_user p) (fun _ _ _ _ => eq_refl) (gen_occurs_check ts)
+      | formula_bool t         => liftUnOp (fun _ => formula_bool) (fun _ _ _ _ => eq_refl) (gen_occurs_check t)
+      | formula_prop ζ P       => liftUnOp (fun _ ζ => formula_prop ζ P) (fun _ _ _ _ => eq_refl) (gen_occurs_check ζ)
+      | formula_relop op t1 t2 => liftBinOp (fun _ => formula_relop op) (fun _ _ _ _ _ => eq_refl) (gen_occurs_check t1) (gen_occurs_check  t2)
       | formula_true           => weakenInit formula_true
       | formula_false          => weakenInit formula_false
-      | formula_and F1 F2      => liftBinOp (fun _ F1' F2' => formula_and F1' F2') (oc F1) (oc F2)
-      | formula_or F1 F2       => liftBinOp (fun _ F1' F2' => formula_or F1' F2') (oc F1) (oc F2)
+      | formula_and F1 F2      => liftBinOp (fun _ F1' F2' => formula_and F1' F2') (fun _ _ _ _ _ => eq_refl) (oc F1) (oc F2)
+      | formula_or F1 F2       => liftBinOp (fun _ F1' F2' => formula_or F1' F2') (fun _ _ _ _ _ => eq_refl) (oc F1) (oc F2)
       end.
 
-  (* #[export] Instance GenOccursCheckLawsFormula `{SubstUnivVar Sb} *)
-  (*   {_ : SubstUnivLaws Sb} {_ : SubstUnivVarLaws Sb} {_ : SubstUnivMeetLaws Sb} : *)
-  (*     GenOccursCheckLaws (Sb := Sb) Formula. *)
-  (* Proof. *)
-  (*   constructor. *)
-  (*   induction t; cbn. *)
-  (*   - destruct (oc_sound ts) as (Σ' & σ' & ts' & [] & Hts). *)
-  (*     do 4 eexists; first easy. *)
-  (*     cbn. now f_equal. *)
-  (*   - destruct (oc_sound t) as (Σ' & σ' & t' & [] & Ht). *)
-  (*     do 4 eexists; first easy. *)
-  (*     cbn. now f_equal. *)
-  (*   - destruct (oc_sound ζ) as (Σ'' & σ' & ζ' & [] & Hζ). *)
-  (*     do 4 eexists; first easy. *)
-  (*     cbn. now f_equal. *)
-  (*   - destruct (oc_sound t1) as (Σ1 & σ1 & t1' & [] & Ht1). *)
-  (*     destruct (oc_sound t2) as (Σ2 & σ2 & t2' & [] & Ht2). *)
-  (*     destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2). *)
-  (*     do 4 eexists; first easy. *)
-  (*     cbn. *)
-  (*     change (subst ?t (interpSU ?ζ)) with (substSU t ζ). *)
-  (*     destruct (substSU_trans x0 x2 t1'). *)
-  (*     destruct (substSU_trans x1 x2 t2'). *)
-  (*     now destruct corrσ1, corrσ2, Ht1, Ht2. *)
-  (*   - now do 4 eexists. *)
-  (*   - now do 4 eexists. *)
-  (*   - destruct IHt1 as (Σ1 & σ1 & t1' & [] & Ht1). *)
-  (*     destruct IHt2 as (Σ2 & σ2 & t2' & [] & Ht2). *)
-  (*     destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2). *)
-  (*     do 4 eexists; first easy. *)
-  (*     cbn. *)
-  (*     change (subst ?t (interpSU ?ζ)) with (substSU t ζ). *)
-  (*     destruct (substSU_trans x0 x2 t1'). *)
-  (*     destruct (substSU_trans x1 x2 t2'). *)
-  (*     now destruct corrσ1, corrσ2, Ht1, Ht2. *)
-  (*   - destruct IHt1 as (Σ1 & σ1 & t1' & [] & Ht1). *)
-  (*     destruct IHt2 as (Σ2 & σ2 & t2' & [] & Ht2). *)
-  (*     destruct (meetSUCorrect σ1 σ2) as (? & ? & ? & ? & [] & corrσ1 & corrσ2). *)
-  (*     do 4 eexists; first easy. *)
-  (*     cbn. *)
-  (*     change (subst ?t (interpSU ?ζ)) with (substSU t ζ). *)
-  (*     destruct (substSU_trans x0 x2 t1'). *)
-  (*     destruct (substSU_trans x1 x2 t2'). *)
-  (*     now destruct corrσ1, corrσ2, Ht1, Ht2. *)
-  (* Qed. *)
+  #[export] Instance GenOccursCheckLawsFormula `{SubstUnivVar Sb}
+    {_ : SubstUnivLaws Sb} {_ : SubstUnivVarLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      GenOccursCheckLaws (Sb := Sb) Formula.
+  Proof.
+    constructor.
+    induction t; cbn.
+    - eapply (liftUnOp_weakenedRefines (fun Σ' => formula_user p));
+        first now intros.
+      eapply oc_sound.
+    - eapply (liftUnOp_weakenedRefines (fun Σ' => formula_bool));
+        first (now intros).
+      eapply oc_sound.
+    - eapply (liftUnOp_weakenedRefines (fun Σ' ζ => formula_prop ζ P));
+        first (now intros).
+      eapply oc_sound.
+    - eapply (liftBinOp_weakenedRefines (fun Σ' => formula_relop rop));
+        now eapply oc_sound.
+    - refine (weakenInitRefines formula_true).
+    - refine (weakenInitRefines formula_false).
+    - now eapply (liftBinOp_weakenedRefines (fun Σ' F1' => formula_and F1')).
+    - now eapply (liftBinOp_weakenedRefines (fun Σ' F1' => formula_or F1')).
+  Qed.
 
   Section PathCondition.
     Import Entailment.
