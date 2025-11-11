@@ -77,6 +77,13 @@ Module Type MessagesOn
           rewrite ?sub_up1_comp; auto using subst_sub_comp.
     Qed.
 
+    #[export] Instance substsulaws_closemessage {M} {suM : SubstSU WeakensTo M} {sulM : SubstSULaws WeakensTo M} : SubstSULaws WeakensTo (CloseMessage M) (H := substSU_closemessage) | 2.
+    Proof.
+      intros Σ1 Σ2 Σ3 ζ1 ζ2 t.
+      destruct t; cbn; f_equal.
+      now rewrite <-substSU_trans, transWk_equation_4.
+    Qed.
+
     (* Without the precedence, typeclass resolution sometimes mysteriously enters a loop... *)
     #[export] Instance occurscheck_closemessage `{OccursCheck M} : OccursCheck (CloseMessage M) | 2 :=
       fun {Σ x} xIn m =>
@@ -84,7 +91,7 @@ Module Type MessagesOn
         | there msg => there <$> occurs_check (ctx.in_succ xIn) msg
         end.
 
-    #[export] Instance genoccurscheck_closemessage {M} {ocM : GenOccursCheck M} : GenOccursCheck (CloseMessage M) | 2.
+    #[export] Instance genoccurscheck_closemessage `{SubstSU WeakensTo M} {ocM : GenOccursCheck M} : GenOccursCheck (sSUT := substSU_closemessage) (CloseMessage M) | 2.
     Admitted.
       (* fun {Σ} m => *)
       (*   match m with *)
@@ -94,17 +101,16 @@ Module Type MessagesOn
 
 
     Inductive AMessage (Σ : LCtx) : Type :=
-    | mk {M} {subM : Subst M} {wkM : SubstSU WeakensTo M} {subLM : SubstLaws M} {occM: OccursCheck M} {goccM : GenOccursCheck (Sb := WeakensTo) M} (msg : M Σ).
-    #[global] Arguments mk {_ _ _ _ _ _ _} msg.
+    | mk {M} {subM : Subst M} {wkM : SubstSU WeakensTo M} {wkM : SubstSULaws WeakensTo M} {subLM : SubstLaws M} {occM: OccursCheck M} {goccM : GenOccursCheck (Sb := WeakensTo) M} (msg : M Σ).
+    #[global] Arguments mk {_ _ _ _ _ _ _ _} msg.
 
     Definition empty {Σ} : AMessage Σ := mk (M := Unit) tt.
 
-    Fixpoint closeAux {Σ ΣΔ} {M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M} {goccM : GenOccursCheck (Sb := WeakensTo) M} {struct ΣΔ} : M (Σ ▻▻ ΣΔ) -> AMessage Σ :=
-      let ssuT : SubstSU WeakensTo M := fun _ _ t ζ => subst t (interpSU ζ)
-      in match ΣΔ with
-         | []      => fun msg => mk msg
-         | ΣΔ  ▻ b => fun msg => closeAux (subM := subst_closemessage) (there msg)
-         end%ctx.
+    Fixpoint closeAux {Σ ΣΔ} {M} {suM : SubstSU WeakensTo M} {suLM : SubstSULaws WeakensTo M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M} {goccM : GenOccursCheck (sSUT := suM) M} {struct ΣΔ} : M (Σ ▻▻ ΣΔ) -> AMessage Σ :=
+      match ΣΔ with
+      | []      => fun msg => mk msg
+      | ΣΔ  ▻ b => fun msg => closeAux (suM := substSU_closemessage) (subM := subst_closemessage) (there msg)
+      end%ctx.
 
     Definition close {Σ ΣΔ} (msg : AMessage (Σ ▻▻ ΣΔ)) : AMessage Σ :=
       match msg with mk msg => closeAux msg end.
@@ -131,6 +137,12 @@ Module Type MessagesOn
           rewrite ?sub_up1_comp; auto using subst_sub_comp.
     Qed.
 
+    #[export] Instance substsulaws_amessage : SubstSULaws WeakensTo AMessage.
+    Proof.
+      intros ? ? ? ? ? [?]; cbn; f_equal.
+      exact (substSU_trans _ _ msg).
+    Qed.
+
     #[export] Instance occurscheck_amessage : OccursCheck AMessage :=
       fix oc {Σ x} xIn m {struct m} :=
         match m with
@@ -140,7 +152,7 @@ Module Type MessagesOn
     #[export] Instance genoccurscheck_amessage : GenOccursCheck AMessage :=
       fix oc {Σ} m {struct m} :=
         match m with
-        | mk msg    => liftUnOp (fun _ msg => mk msg) (gen_occurs_check msg)
+        | mk msg    => liftUnOp (fun _ msg => mk msg) (fun _ _ _ _ => eq_refl) (gen_occurs_check msg)
         end.
 
     (* #[export] Instance genoccurschecklaws_amessage : GenOccursCheckLaws AMessage. *)

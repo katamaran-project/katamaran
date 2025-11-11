@@ -83,11 +83,23 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           MkDebugAsn (subst pc ζ01) (* (subst δ ζ01) *) (subst h ζ01)
         end.
 
+    #[export] Instance SubstSUDebugAsn : SubstSU WeakensTo DebugAsn :=
+      fun Σ0 Σ1 d ζ01 =>
+        match d with
+        | MkDebugAsn pc (* δ *) h =>
+          MkDebugAsn (substSU pc ζ01) (* (substSU δ ζ01) *) (substSU h ζ01)
+        end.
+
     #[export] Instance SubstLawsDebugAsn : SubstLaws DebugAsn.
     Proof.
       constructor.
       - intros ? []; cbn; now rewrite ?subst_sub_id.
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance SubstSULawsDebugAsn : SubstSULaws WeakensTo DebugAsn.
+    Proof.
+      intros Σ1 Σ2 Σ3 ζ1 ζ2 [pc h]; cbn -[transSU]; f_equal; now apply substSU_trans.
     Qed.
 
     #[export] Instance OccursCheckDebugAsn : OccursCheck DebugAsn :=
@@ -103,7 +115,9 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
     #[export] Instance GenOccursCheckDebugAsn : GenOccursCheck DebugAsn :=
       fun Σ d =>
         match d with
-        | MkDebugAsn pc h => liftBinOp (fun _ pc' h' => MkDebugAsn pc' h') (gen_occurs_check pc) (gen_occurs_check h)
+        | MkDebugAsn pc h =>
+            liftBinOp (fun _ pc' h' => MkDebugAsn pc' h') (fun _ _ _ _ _ => eq_refl)
+              (gen_occurs_check pc) (gen_occurs_check h)
         end.
 
     Record DebugConsumeChunk (Σ : LCtx) : Type :=
@@ -136,6 +150,12 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    #[export] Instance SubstSULawsDebugConsumeChunk `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      SubstSULaws Sb DebugConsumeChunk.
+    Proof.
+      intros ? ? ? ? ? []; cbn; f_equal; apply substSU_trans.
+    Qed.
+
     #[export] Instance OccursCheckDebugConsumeChunk : OccursCheck DebugConsumeChunk :=
       fun Σ x xIn d =>
         match d with
@@ -152,6 +172,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         match d with
         | MkDebugConsumeChunk pc (* δ *) h c =>
             liftTernOp (fun Σ pc' h' c' => MkDebugConsumeChunk pc' h' c')
+              (fun _ _ _ _ _ _ => eq_refl)
               (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check c)
         end.
 
@@ -184,6 +205,12 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    #[export] Instance SubstSULawsDebugReadRegister `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      SubstSULaws Sb DebugReadRegister.
+    Proof.
+      intros ? ? ? ? ? []; cbn; f_equal; apply substSU_trans.
+    Qed.
+
     #[export] Instance OccursCheckDebugReadRegister : OccursCheck DebugReadRegister :=
       fun Σ x xIn d =>
         match d with
@@ -198,6 +225,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         match d with
         | MkDebugReadRegister pc h r =>
             liftBinOp (fun Σ pc' h' => MkDebugReadRegister pc' h' r)
+              (fun _ _ _ _ _ => eq_refl)
               (gen_occurs_check pc) (gen_occurs_check h)
         end.
 
@@ -231,6 +259,12 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    #[export] Instance SubstSULawsDebugWriteRegister `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      SubstSULaws Sb DebugWriteRegister.
+    Proof.
+      intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.
+    Qed.
+
     #[export] Instance OccursCheckDebugWriteRegister : OccursCheck DebugWriteRegister :=
       fun Σ x xIn d =>
         match d with
@@ -246,6 +280,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         match d with
         | MkDebugWriteRegister pc h r t =>
             liftTernOp (fun Σ pc' h' t' => MkDebugWriteRegister pc' h' r t')
+              (fun _ _ _ _ _ _ => eq_refl)
               (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check t)
         end.
 
@@ -260,6 +295,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         match d with
         | MkDebugString pc s =>
             MkDebugString (subst pc ζ01) s
+        end.
+
+    #[export] Instance SubstSUDebugString : SubstSU WeakensTo DebugString :=
+      fun Σ0 Σ1 d ζ01 =>
+        match d with
+        | MkDebugString pc s =>
+            MkDebugString (substSU pc ζ01) s
         end.
 
     #[export] Instance SubstLawsDebugString : SubstLaws DebugString.
@@ -281,7 +323,8 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun Σ d =>
         match d with
         | MkDebugString pc s =>
-            liftUnOp (fun Σ pc' => MkDebugString pc' s) (gen_occurs_check pc)
+            liftUnOp (fun Σ pc' => MkDebugString pc' s) (fun _ _ _ _ => eq_refl)
+              (gen_occurs_check pc)
         end.
 
     Record DebugAssertFormula (Σ : LCtx) : Type :=
@@ -296,6 +339,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         match d with
         | MkDebugAssertFormula pc h fml =>
           MkDebugAssertFormula (subst pc ζ01) (subst h ζ01) (subst fml ζ01)
+        end.
+
+    #[export] Instance SubstSUDebugAssertFormula : SubstSU WeakensTo DebugAssertFormula :=
+      fun Σ0 Σ1 d ζ01 =>
+        match d with
+        | MkDebugAssertFormula pc h fml =>
+          MkDebugAssertFormula (substSU pc ζ01) (substSU h ζ01) (substSU fml ζ01)
         end.
 
     #[export] Instance SubstLawsDebugAssertFormula : SubstLaws DebugAssertFormula.
@@ -320,6 +370,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         match d with
         | MkDebugAssertFormula pc h fml =>
             liftTernOp (fun Σ pc' h' fml' => MkDebugAssertFormula pc' h' fml')
+              (fun _ _ _ _ _ _ => eq_refl)
               (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check fml)
         end.
 
