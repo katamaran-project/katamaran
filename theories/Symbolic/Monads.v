@@ -112,13 +112,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             Some (MkDebugAsn pc' (* δ' *) h')
         end.
 
-    #[export] Instance GenOccursCheckDebugAsn : GenOccursCheck DebugAsn :=
-      fun Σ d =>
-        match d with
-        | MkDebugAsn pc h =>
-            liftBinOp (fun _ pc' h' => MkDebugAsn pc' h') (fun _ _ _ _ _ => eq_refl)
-              (gen_occurs_check pc) (gen_occurs_check h)
-        end.
+    (* #[export] Instance GenOccursCheckDebugAsn : GenOccursCheck DebugAsn := *)
+    (*   fun Σ d => *)
+    (*     match d with *)
+    (*     | MkDebugAsn pc h => *)
+    (*         liftBinOp (fun _ pc' h' => MkDebugAsn pc' h') (fun _ _ _ _ _ => eq_refl) *)
+    (*           (gen_occurs_check pc) (gen_occurs_check h) *)
+    (*     end. *)
 
     Record DebugConsumeChunk (Σ : LCtx) : Type :=
       MkDebugConsumeChunk
@@ -167,14 +167,14 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             Some (MkDebugConsumeChunk pc' (* δ' *) h'  c')
         end.
 
-    #[export] Instance GenOccursCheckDebugConsumeChunk : GenOccursCheck (Sb := WeakensTo) DebugConsumeChunk :=
-      fun Σ d =>
-        match d with
-        | MkDebugConsumeChunk pc (* δ *) h c =>
-            liftTernOp (fun Σ pc' h' c' => MkDebugConsumeChunk pc' h' c')
-              (fun _ _ _ _ _ _ => eq_refl)
-              (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check c)
-        end.
+    (* #[export] Instance GenOccursCheckDebugConsumeChunk : GenOccursCheck (Sb := WeakensTo) DebugConsumeChunk := *)
+    (*   fun Σ d => *)
+    (*     match d with *)
+    (*     | MkDebugConsumeChunk pc (* δ *) h c => *)
+    (*         liftTernOp (fun Σ pc' h' c' => MkDebugConsumeChunk pc' h' c') *)
+    (*           (fun _ _ _ _ _ _ => eq_refl) *)
+    (*           (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check c) *)
+    (*     end. *)
 
     Record DebugReadRegister (Σ : LCtx) : Type :=
       MkDebugReadRegister
@@ -220,14 +220,14 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             Some (MkDebugReadRegister pc' h' r)
         end.
 
-    #[export] Instance GenOccursCheckDebugReadRegister : GenOccursCheck DebugReadRegister :=
-      fun Σ d =>
-        match d with
-        | MkDebugReadRegister pc h r =>
-            liftBinOp (fun Σ pc' h' => MkDebugReadRegister pc' h' r)
-              (fun _ _ _ _ _ => eq_refl)
-              (gen_occurs_check pc) (gen_occurs_check h)
-        end.
+    (* #[export] Instance GenOccursCheckDebugReadRegister : GenOccursCheck DebugReadRegister := *)
+    (*   fun Σ d => *)
+    (*     match d with *)
+    (*     | MkDebugReadRegister pc h r => *)
+    (*         liftBinOp (fun Σ pc' h' => MkDebugReadRegister pc' h' r) *)
+    (*           (fun _ _ _ _ _ => eq_refl) *)
+    (*           (gen_occurs_check pc) (gen_occurs_check h) *)
+    (*     end. *)
 
     Record DebugWriteRegister (Σ : LCtx) : Type :=
       MkDebugWriteRegister
@@ -275,14 +275,14 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             Some (MkDebugWriteRegister pc' h' r t')
         end.
 
-    #[export] Instance GenOccursCheckDebugWriteRegister : GenOccursCheck DebugWriteRegister :=
-      fun Σ d =>
-        match d with
-        | MkDebugWriteRegister pc h r t =>
-            liftTernOp (fun Σ pc' h' t' => MkDebugWriteRegister pc' h' r t')
-              (fun _ _ _ _ _ _ => eq_refl)
-              (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check t)
-        end.
+    (* #[export] Instance GenOccursCheckDebugWriteRegister : GenOccursCheck DebugWriteRegister := *)
+    (*   fun Σ d => *)
+    (*     match d with *)
+    (*     | MkDebugWriteRegister pc h r t => *)
+    (*         liftTernOp (fun Σ pc' h' t' => MkDebugWriteRegister pc' h' r t') *)
+    (*           (fun _ _ _ _ _ _ => eq_refl) *)
+    (*           (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check t) *)
+    (*     end. *)
 
     Record DebugString (Σ : LCtx) : Type :=
       MkDebugString
@@ -319,13 +319,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             Some (MkDebugString pc' s)
         end.
 
-    #[export] Instance GenOccursCheckDebugString : GenOccursCheck DebugString :=
-      fun Σ d =>
-        match d with
-        | MkDebugString pc s =>
-            liftUnOp (fun Σ pc' => MkDebugString pc' s) (fun _ _ _ _ => eq_refl)
-              (gen_occurs_check pc)
-        end.
+    (* #[export] Instance GenOccursCheckDebugString : GenOccursCheck DebugString := *)
+    (*   fun Σ d => *)
+    (*     match d with *)
+    (*     | MkDebugString pc s => *)
+    (*         liftUnOp (fun Σ pc' => MkDebugString pc' s) (fun _ _ _ _ => eq_refl) *)
+    (*           (gen_occurs_check pc) *)
+    (*     end. *)
 
     Record DebugAssertFormula (Σ : LCtx) : Type :=
       MkDebugAssertFormula
@@ -365,14 +365,14 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             Some (MkDebugAssertFormula pc' h' fml')
         end.
 
-    #[export] Instance GenOccursCheckDebugAssertFormula : GenOccursCheck (Sb := WeakensTo) DebugAssertFormula :=
-      fun Σ d =>
-        match d with
-        | MkDebugAssertFormula pc h fml =>
-            liftTernOp (fun Σ pc' h' fml' => MkDebugAssertFormula pc' h' fml')
-              (fun _ _ _ _ _ _ => eq_refl)
-              (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check fml)
-        end.
+    (* #[export] Instance GenOccursCheckDebugAssertFormula : GenOccursCheck (Sb := WeakensTo) DebugAssertFormula := *)
+    (*   fun Σ d => *)
+    (*     match d with *)
+    (*     | MkDebugAssertFormula pc h fml => *)
+    (*         liftTernOp (fun Σ pc' h' fml' => MkDebugAssertFormula pc' h' fml') *)
+    (*           (fun _ _ _ _ _ _ => eq_refl) *)
+    (*           (gen_occurs_check pc) (gen_occurs_check h) (gen_occurs_check fml) *)
+    (*     end. *)
 
   End DebugInfo.
 

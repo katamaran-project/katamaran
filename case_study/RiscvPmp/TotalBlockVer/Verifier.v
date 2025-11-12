@@ -478,13 +478,13 @@ Section AnnotatedBlockVerification.
             Some (MkDebugBlockver pc' h')
         end.
 
-    #[export] Instance GenOccursCheckDebugBlockver : GenOccursCheck DebugBlockver :=
-      fun Σ d =>
-        match d with
-        | MkDebugBlockver pc1 h =>
-            liftBinOp (fun _ pc' h' => MkDebugBlockver pc' h')
-              (gen_occurs_check pc1) (gen_occurs_check h)
-        end.
+    (* #[export] Instance GenOccursCheckDebugBlockver : GenOccursCheck DebugBlockver := *)
+    (*   fun Σ d => *)
+    (*     match d with *)
+    (*     | MkDebugBlockver pc1 h => *)
+    (*         liftBinOp (fun _ pc' h' => MkDebugBlockver pc' h') *)
+    (*           (gen_occurs_check pc1) (gen_occurs_check h) *)
+    (*     end. *)
 
   End Debug.
 
