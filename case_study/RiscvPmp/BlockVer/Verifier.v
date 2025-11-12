@@ -488,6 +488,12 @@ Section AnnotatedBlockVerification.
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    #[export] Instance SubstSULawsDebugBlockver `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      SubstSULaws Sb DebugBlockver.
+    Proof.
+      intros ? ? ? ? ? [pc h]; cbn; f_equal; now apply substSU_trans.
+    Qed.
+
     #[export] Instance OccursCheckDebugBlockver : OccursCheck DebugBlockver :=
       fun Σ x xIn d =>
         match d with
@@ -497,12 +503,12 @@ Section AnnotatedBlockVerification.
             Some (MkDebugBlockver pc' h')
         end.
 
-    #[export] Instance GenOccursCheckDebugBlockver : GenOccursCheck DebugBlockver :=
-      fun Σ d =>
-        match d with
-        | MkDebugBlockver pc1 h =>
-            liftBinOp (fun _ pc' h' => MkDebugBlockver pc' h') (gen_occurs_check pc1) (gen_occurs_check h)
-        end.
+    (* #[export] Instance GenOccursCheckDebugBlockver : GenOccursCheck DebugBlockver := *)
+    (*   fun Σ d => *)
+    (*     match d with *)
+    (*     | MkDebugBlockver pc1 h => *)
+    (*         liftBinOp (fun _ pc' h' => MkDebugBlockver pc' h') (gen_occurs_check pc1) (gen_occurs_check h) *)
+    (*     end. *)
 
   End Debug.
 

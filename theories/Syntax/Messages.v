@@ -91,22 +91,21 @@ Module Type MessagesOn
         | there msg => there <$> occurs_check (ctx.in_succ xIn) msg
         end.
 
-    #[export] Instance genoccurscheck_closemessage `{SubstSU WeakensTo M} {ocM : GenOccursCheck M} : GenOccursCheck (sSUT := substSU_closemessage) (CloseMessage M) | 2.
-    Admitted.
-      (* fun {Σ} m => *)
-      (*   match m with *)
-      (*   | there msg => let '(existT Σ' (σ , msg')) := occurs_check msg in *)
-
-      (*   end. *)
-
+    (* #[export] Instance genoccurscheck_closemessage `{SubstSU WeakensTo M} {ocM : GenOccursCheck M} : GenOccursCheck (sSUT := substSU_closemessage) (CloseMessage M) | 2 := *)
+    (*   fun {Σ} m => *)
+    (*     match m with *)
+    (*     | there msg => match gen_occurs_check (GenOccursCheck := ocM) msg with *)
+    (*                      MkWeakened ζ wv wvl => *)
+    (*                    end *)
+    (*     end. *)
 
     Inductive AMessage (Σ : LCtx) : Type :=
-    | mk {M} {subM : Subst M} {wkM : SubstSU WeakensTo M} {wkM : SubstSULaws WeakensTo M} {subLM : SubstLaws M} {occM: OccursCheck M} {goccM : GenOccursCheck (Sb := WeakensTo) M} (msg : M Σ).
-    #[global] Arguments mk {_ _ _ _ _ _ _ _} msg.
+    | mk {M} {subM : Subst M} {wkM : SubstSU WeakensTo M} {wkM : SubstSULaws WeakensTo M} {subLM : SubstLaws M} {occM: OccursCheck M} (msg : M Σ).
+    #[global] Arguments mk {_ _ _ _ _ _ _} msg.
 
     Definition empty {Σ} : AMessage Σ := mk (M := Unit) tt.
 
-    Fixpoint closeAux {Σ ΣΔ} {M} {suM : SubstSU WeakensTo M} {suLM : SubstSULaws WeakensTo M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M} {goccM : GenOccursCheck (sSUT := suM) M} {struct ΣΔ} : M (Σ ▻▻ ΣΔ) -> AMessage Σ :=
+    Fixpoint closeAux {Σ ΣΔ} {M} {suM : SubstSU WeakensTo M} {suLM : SubstSULaws WeakensTo M} {subM : Subst M} {subLM : SubstLaws M} {occM: OccursCheck M} {struct ΣΔ} : M (Σ ▻▻ ΣΔ) -> AMessage Σ :=
       match ΣΔ with
       | []      => fun msg => mk msg
       | ΣΔ  ▻ b => fun msg => closeAux (suM := substSU_closemessage) (subM := subst_closemessage) (there msg)
@@ -149,10 +148,28 @@ Module Type MessagesOn
         | mk msg    => mk <$> occurs_check xIn msg
         end.
 
+      (* During unquantify, we want to stop treating debug messages as substitutable,
+         because messages often mention many variables that play no other role
+         and they should be unquantified away.
+
+         More generally, we do this during every gen_occurs_check.
+
+         This has the downside that boxed messages will no longer be subject to
+         substitution, but as long as unquantify and other clients of gen_occurs_check
+         are executed after other
+         simplification passes have run, no information should get lost.
+       *)
+      Definition BoxMessage (M : LCtx -> Type) : LCtx -> Type := Const {Σ' : LCtx & M Σ'}.
+      Definition boxMsg' {M Σ Σ'}  : M Σ -> BoxMessage M Σ' := existT _.
+      Definition boxMsg {Σ Σ'}  (msg : AMessage Σ) : AMessage Σ' :=
+        match msg with
+          amsg.mk msg => amsg.mk (boxMsg' msg)
+        end.
+
     #[export] Instance genoccurscheck_amessage : GenOccursCheck AMessage :=
       fix oc {Σ} m {struct m} :=
         match m with
-        | mk msg    => liftUnOp (fun _ msg => mk msg) (fun _ _ _ _ => eq_refl) (gen_occurs_check msg)
+        | mk msg    => weakenInit (amsg.mk (boxMsg' msg))
         end.
 
     (* #[export] Instance genoccurschecklaws_amessage : GenOccursCheckLaws AMessage. *)
