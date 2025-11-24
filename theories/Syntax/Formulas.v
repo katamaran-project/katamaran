@@ -264,25 +264,22 @@ Module Type FormulasOn
 
   #[export] Instance GenOccursCheckLawsFormula `{SubstUnivVar Sb}
     {_ : SubstUnivLaws Sb} {_ : SubstUnivVarLaws Sb} {_ : SubstUnivMeetLaws Sb} :
-      GenOccursCheckLaws (Sb := Sb) Formula.
+      GenOccursCheckLaws (Sb := Sb) Formula (fun _ => eq).
   Proof.
     constructor.
     induction t; cbn.
-    - eapply (liftUnOp_weakenedRefines (fun Σ' => formula_user p));
-        first now intros.
-      eapply oc_sound.
-    - eapply (liftUnOp_weakenedRefines (fun Σ' => formula_bool));
-        first (now intros).
-      eapply oc_sound.
-    - eapply (liftUnOp_weakenedRefines (fun Σ' ζ => formula_prop ζ P));
-        first (now intros).
-      eapply oc_sound.
-    - eapply (liftBinOp_weakenedRefines (fun Σ' => formula_relop rop));
-        now eapply oc_sound.
-    - refine (weakenInitRefines formula_true).
-    - refine (weakenInitRefines formula_false).
-    - now eapply (liftBinOp_weakenedRefines (fun Σ' F1' => formula_and F1')).
-    - now eapply (liftBinOp_weakenedRefines (fun Σ' F1' => formula_or F1')).
+    - refine (liftUnOp_weakenedRefines (R1 := eq) (fun Σ' => formula_user p) _ (oc_sound ts)).
+      typeclasses eauto.
+    - refine (liftUnOp_weakenedRefines (R1 := eq) (fun Σ' => formula_bool) _ (oc_sound t)).
+      typeclasses eauto.
+    - refine (liftUnOp_weakenedRefines (R1 := eq) (fun Σ' ζ => formula_prop ζ P) _ (oc_sound ζ)).
+      typeclasses eauto.
+    - refine (liftBinOp_weakenedRefines (R1 := eq) (R2 := eq) (fun Σ' => formula_relop rop) _ (oc_sound t1) (oc_sound t2)).
+      typeclasses eauto.
+    - refine (weakenInitRefines _ formula_true eq_refl).
+    - refine (weakenInitRefines _ formula_false eq_refl).
+    - refine (liftBinOp_weakenedRefines (fun Σ' F1' => formula_and F1') _ IHt1 IHt2).
+    - refine (liftBinOp_weakenedRefines (fun Σ' F1' => formula_or F1') _ IHt1 IHt2).
   Qed.
 
   Section PathCondition.
