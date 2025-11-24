@@ -2360,6 +2360,10 @@ Module bv.
         x <=ᵘ x.
     Proof. intros; unfold bv.ule; auto. Qed.
 
+    Lemma ule_zero : forall {n} (x : bv n),
+        bv.zero <=ᵘ x.
+    Proof. intros; unfold bv.ule, bv.zero; cbn; Lia.lia. Qed.
+
     Lemma uleb_ugt : forall {n} (x y : bv n),
         x <=ᵘ? y = false <-> y <ᵘ x.
     Proof. intros; unfold bv.uleb, bv.ule; now apply N.leb_gt. Qed.

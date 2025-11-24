@@ -1007,6 +1007,30 @@ Module Type GenericSolverOn
     Definition simplify_le {Σ} (t1 t2 : Term Σ ty.int) : DList Σ :=
       singleton (peval_formula_le t1 t2).
 
+    Definition simplify_bvule {Σ n} (t1 t2 : Term Σ (ty.bvec n)) : DList Σ :=
+      let default := fun _ : () => simplify_relopb bop.bvule (peval t1) (peval t2) in
+      match term_get_val t1 with
+      | Some v => if N.eqb (bv.bin v) 0%N then empty else default ()
+      | _ => default ()
+      end.
+
+    Lemma simplify_bvule_spec [w : World] [n] (s t : Term w (ty.bvec n)) :
+      instpred (simplify_bvule s t) ⊣⊢ instpred (formula_relop bop.bvule s t).
+    Proof. unfold simplify_bvule. arw.
+           destruct (term_get_val_spec s); arw.
+           destruct (N.eqb_spec (bv.bin a) 0%N); arw.
+           - rewrite instpred_dlist_empty.
+             cbn. subst.
+             constructor; intros; split; last easy; intros _; cbn.
+             cbn; unfold bv.ule, bv.unsigned in *.
+             rewrite e.
+             apply bv.ule_zero.
+           - now rewrite ?peval_sound formula_relop_term'.
+           - now rewrite ?peval_sound formula_relop_term'.
+    Qed.
+
+    #[export] Hint Resolve simplify_bvule_spec : core.
+
     Definition simplify_lt {Σ} (t1 t2 : Term Σ ty.int) : DList Σ :=
       singleton (peval_formula_lt t1 t2).
 
@@ -1026,6 +1050,7 @@ Module Type GenericSolverOn
       | bop.eq => fun t1 t2 => simplify_eq (peval t1) (peval t2)
       | bop.le => simplify_le
       | bop.lt => simplify_lt
+      | bop.bvule => simplify_bvule
       | op     => fun t1 t2 => simplify_relopb op (peval t1) (peval t2)
       end.
 
