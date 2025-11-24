@@ -39,6 +39,7 @@ From Katamaran Require Import
      Syntax.TypeDecl
      Syntax.Variables
      Tactics.
+From Coq Require Import Morphisms.
 
 Import ctx.notations.
 Import env.notations.
@@ -62,9 +63,6 @@ Module Type GenOccursCheckOn
 
   Class SubstSU (Sb : LCtx -> LCtx -> Type) (T : LCtx -> Type) :=
     substSU : forall {Σ1 Σ2}, T Σ1 -> Sb Σ1 Σ2 -> T Σ2.
-
-  (* Lemma substSubstSU `{SubstUniv Sb} `{Subst T} : SubstSU Sb T := *)
-  (*   fun {Σ1 Σ2} t σ => subst t (interpSU σ). *)
 
   Fixpoint substSU_term `{SubstUniv Sb} {σ Σ1 Σ2} (t : Term Σ1 σ) (ζ : Sb Σ1 Σ2) {struct t} : Term Σ2 σ :=
     match t with
@@ -449,19 +447,21 @@ Module Type GenOccursCheckOn
       | ctx.snoc ys y => liftBinOp (fun _ => ctx.snoc) (fun _ _ _ _ _ => eq_refl) (oc ys) (ocA _ y)
       end.
 
-  Inductive WeakenedRefines `{SubstUniv Sb, SubstSU Sb T} {Σ} (v : T Σ) : Weakened Sb T Σ -> Prop :=
+  Inductive WeakenedRefines `{SubstUniv Sb, SubstSU Sb T} {Σ} (R : T Σ -> T Σ -> Prop) (v : T Σ) : Weakened Sb T Σ -> Prop :=
   | MkWeakenedRefines Σsupp (ζsupp : Sb Σsupp Σ) bv (bvL : BoxSbLaws bv) :
-    unboxSb bv ζsupp = v ->
-    WeakenedRefines v (MkWeakened ζsupp bv bvL).
+    R (unboxSb bv ζsupp) v ->
+    WeakenedRefines R v (MkWeakened ζsupp bv bvL).
 
-  Lemma mkWeakenedRefines `{SubstUniv Sb, SubstSU Sb T} {Σ} (v : T Σ)
-    {Σsupp} (ζsupp : Sb Σsupp Σ) bv (bvL : BoxSbLaws bv) :
-    unboxSb bv ζsupp = v -> WeakenedRefines v (MkWeakened ζsupp bv bvL).
-  Proof. intros []. now constructor. Qed.
+  Lemma mkWeakenedRefines `{SubstUniv Sb, SubstSU Sb T} {Σ} (R : T Σ -> T Σ -> Prop)
+    (v : T Σ) {Σsupp} (ζsupp : Sb Σsupp Σ) bv (bvL : BoxSbLaws bv) :
+    R (unboxSb bv ζsupp) v -> WeakenedRefines R v (MkWeakened ζsupp bv bvL).
+  Proof. intros HR. now constructor. Qed.
 
-  Lemma weakenInitRefines `{SubstSULaws Sb T} {Σ} (v : T [ctx]) :
-    WeakenedRefines (substSU v initSU) (weakenInit (Σ := Σ) v).
+  Lemma weakenInitRefines `{SubstSULaws Sb T} {Σ} R (v : T [ctx]) :
+    R (substSU v initSU) (substSU v initSU) ->
+    WeakenedRefines R (substSU v initSU) (weakenInit (Σ := Σ) v).
   Proof.
+    intros HR.
     now apply mkWeakenedRefines.
   Qed.
 
@@ -475,46 +475,71 @@ Module Type GenOccursCheckOn
       }.
   Arguments SubstUnivMeetLaws Sb {H} {H0}.
 
-  Lemma liftUnOp_weakenedRefines `{SubstUnivMeetLaws Sb, SubstUnivLaws Sb} {T1 T2 Σ}
+  Lemma liftUnOp_weakenedRefines' `{SubstUnivMeetLaws Sb, SubstUnivLaws Sb} {T1 T2 Σ} {R1 R2}
+    {_ : SubstSU Sb T1} {_ : SubstSU Sb T2}
+    (f1 : forall {Σ'}, T1 Σ' -> T2 Σ')
+    (f2 : T1 Σ -> T2 Σ)
+    (fS : forall {Σ1 Σ2} (ζ : Sb Σ1 Σ2) t, f1 (substSU t ζ) = substSU (f1 t) ζ)
+    (fP : forall t1 t2, R1 t1 t2 -> R2 (f1 t1) (f2 t2))
+    {v1} (wv1 : Weakened Sb T1 Σ) (wrv1 : WeakenedRefines R1 v1 wv1)
+    : WeakenedRefines R2 (f2 v1) (liftUnOp (fun _ => f1) (fun _ _ => fS) wv1).
+  Proof.
+    destruct wrv1 as [? ζsupp1 bv1 bvl1 HR1]; cbn.
+    apply mkWeakenedRefines.
+    now apply fP.
+  Qed.
+
+  Lemma liftUnOp_weakenedRefines `{SubstUnivMeetLaws Sb, SubstUnivLaws Sb} {T1 T2 Σ} {R1 R2}
     {_ : SubstSU Sb T1} {_ : SubstSU Sb T2}
     (f : forall {Σ'}, T1 Σ' -> T2 Σ')
     (fS : forall {Σ1 Σ2} (ζ : Sb Σ1 Σ2) t, f (substSU t ζ) = substSU (f t) ζ)
-    (fmono : forall {Σ1 Σ2} {t1 : T1 Σ1} {ζ : Sb Σ1 Σ2},
-        f (substSU t1 ζ) = substSU (f t1) ζ)
-    {v1} (wv1 : Weakened Sb T1 Σ) (wrv1 : WeakenedRefines v1 wv1)
-      : WeakenedRefines (f v1) (liftUnOp (fun _ => f) (fun _ _ => fS) wv1).
+    {fP : Proper (R1 ==> R2) f}
+    {v1} (wv1 : Weakened Sb T1 Σ) (wrv1 : WeakenedRefines R1 v1 wv1)
+      : WeakenedRefines R2 (f v1) (liftUnOp (fun _ => f) (fun _ _ => fS) wv1).
   Proof.
-    destruct wrv1 as [? ζsupp1 bv1 bvl1 []]; cbn.
-    now apply mkWeakenedRefines.
+    eapply (liftUnOp_weakenedRefines' f (f _) fS fP wrv1).
+  Qed.
+
+  Lemma liftBinOp_weakenedRefines' `{SubstUnivMeetLaws Sb} {_ : SubstUnivLaws Sb} {T1 T2 T3 Σ}
+    {R1} {R2 : T2 Σ -> T2 Σ -> Prop} {R3}
+    {_ : SubstSU Sb T1} {_ : SubstSU Sb T2} {_ : SubstSU Sb T3}
+    (f1 : T1 Σ -> T2 Σ -> T3 Σ)
+    (f2 : forall {Σ'}, T1 Σ' -> T2 Σ' -> T3 Σ')
+    (fmono2 : forall {Σ1 Σ2} (ζ : Sb Σ1 Σ2) (t1 : T1 Σ1) (t2 : T2 Σ1),
+        substSU (f2 t1 t2) ζ = f2 (substSU t1 ζ) (substSU t2 ζ))
+    (fP12 : forall t11 t21, R1 t11 t21 -> forall t12 t22,  R2 t12 t22 -> R3 (f2 t11 t12) (f1 t21 t22))
+    {v1 v2}
+    (wv1 : Weakened Sb T1 Σ) (wv2 : Weakened Sb T2 Σ)
+    (wrv1 : WeakenedRefines R1 v1 wv1) (wrv2 : WeakenedRefines (T := T2) R2 v2 wv2)
+      : WeakenedRefines R3 (f1 v1 v2) (liftBinOp (fun _ => f2) (fun _ _ => fmono2) wv1 wv2).
+  Proof.
+    destruct wrv1 as [? ζsupp1 bv1 bvl1 HR1], wrv2 as [? ζsupp2 bv2 bvl2 HR2]; cbn.
+    change (fun H3 H4 : LCtx => Sb H3 H4) with Sb.
+    destruct (meetSUCorrect ζsupp1 ζsupp2) as (Σ12 & ζ1 & ζ2 & ζ12 & [] & -> & ->); cbn.
+    now apply mkWeakenedRefines, fP12.
   Qed.
 
   Lemma liftBinOp_weakenedRefines `{SubstUnivMeetLaws Sb} {_ : SubstUnivLaws Sb} {T1 T2 T3 Σ}
+    {R1} {R2 : T2 Σ -> T2 Σ -> Prop} {R3}
     {_ : SubstSU Sb T1} {_ : SubstSU Sb T2} {_ : SubstSU Sb T3}
     (f : forall {Σ'}, T1 Σ' -> T2 Σ' -> T3 Σ')
     (fmono : forall {Σ1 Σ2} (ζ : Sb Σ1 Σ2) (t1 : T1 Σ1) (t2 : T2 Σ1),
         substSU (f t1 t2) ζ = f (substSU t1 ζ) (substSU t2 ζ))
+    {fP : Proper (R1 ==> R2 ==> R3) f}
     {v1 v2}
     (wv1 : Weakened Sb T1 Σ) (wv2 : Weakened Sb T2 Σ)
-    (wrv1 : WeakenedRefines v1 wv1) (wrv2 : WeakenedRefines v2 wv2)
-      : WeakenedRefines (f v1 v2) (liftBinOp (fun _ => f) (fun _ _ => fmono) wv1 wv2).
+    (wrv1 : WeakenedRefines R1 v1 wv1) (wrv2 : WeakenedRefines (T := T2) R2 v2 wv2)
+      : WeakenedRefines R3 (f v1 v2) (liftBinOp (fun _ => f) (fun _ _ => fmono) wv1 wv2).
   Proof.
-    destruct wrv1 as [? ζsupp1 bv1 bvl1 []], wrv2 as [? ζsupp2 bv2 bvl2 []]; cbn.
-    change (fun H3 H4 : LCtx => Sb H3 H4) with Sb.
-    destruct (meetSUCorrect ζsupp1 ζsupp2) as (Σ12 & ζ1 & ζ2 & ζ12 & [] & -> & ->); cbn.
-    rewrite <- (unboxSbLaws bvl1).
-    rewrite <- (unboxSbLaws bvl2).
-    apply mkWeakenedRefines.
-    cbn.
-    f_equal; now rewrite <-unboxSbLaws.
+    eapply liftBinOp_weakenedRefines'; eassumption.
   Qed.
 
   Class GenOccursCheckLaws `{SubstUnivMeet Sb, SubstUnivLaws Sb}
-    (T : LCtx -> Type) {sT : SubstSU Sb T}  {ocT : GenOccursCheck T} : Prop :=
+    (T : LCtx -> Type) (R : forall Σ, T Σ -> T Σ -> Prop) {sT : SubstSU Sb T}  {ocT : GenOccursCheck T} : Prop :=
     MkGenOccursCheckLaws {
-       oc_sound : forall {Σ} (t : T Σ),
-          WeakenedRefines t (gen_occurs_check t)
+       oc_sound : forall {Σ} (t : T Σ), WeakenedRefines (R _) t (gen_occurs_check t)
       }.
-  Arguments GenOccursCheckLaws {Sb} {H H0 H1 H2 H3} T {sT ocT}.
+  Arguments GenOccursCheckLaws {Sb} {H H0 H1 H2 H3} T R {sT ocT}.
 
   (* Hm, I seem to need something stronger to prove completeness... *)
   (* Lemma oc_univ {Sb} {sSb : SubstUnivMeet Sb} *)
@@ -566,54 +591,58 @@ Module Type GenOccursCheckOn
     {sT : forall i : I, SubstSU Sb (fun Σ : LCtx => T Σ i)}
     {slT : forall i : I, SubstSULaws Sb (fun Σ : LCtx => T Σ i)}
     {OCT : forall i, GenOccursCheck (Sb := Sb) (fun Σ => T Σ i)}
-    {OCTL : forall i, GenOccursCheckLaws (Sb := Sb) (fun Σ => T Σ i) } :
-    forall {Γ : Ctx I}, GenOccursCheckLaws (Sb := Sb) (fun Σ => Env (T Σ) Γ) :=
-    fun {Γ} => MkGenOccursCheckLaws _ _ _ _.
+    {OCTL : forall i, GenOccursCheckLaws (Sb := Sb) (fun Σ => T Σ i) (fun _ => eq) } :
+    forall {Γ : Ctx I}, GenOccursCheckLaws (Sb := Sb) (fun Σ => Env (T Σ) Γ) (fun _ => eq) :=
+    fun {Γ} => MkGenOccursCheckLaws _ _ _ _ _.
   Proof.
     induction t.
-    - now refine (weakenInitRefines [env]).
-    - refine (liftBinOp_weakenedRefines (fun _ ts' t' => ts' ► (b ↦ t')) _ IHt _).
-      eapply OCTL.
+    - now refine (weakenInitRefines eq [env] eq_refl).
+    - refine (liftBinOp_weakenedRefines (R2 := eq)(fun _ ts' t' => ts' ► (b ↦ t')) _ IHt (oc_sound db)).
+      typeclasses eauto.
   Qed.
 
   #[export,refine] Instance gen_occurs_check_laws_term `{SubstUnivVarLaws Sb} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} {τ} :
-    GenOccursCheckLaws (fun Σ => Term Σ τ) :=
-    MkGenOccursCheckLaws _ _ _ _.
+    GenOccursCheckLaws (fun Σ => Term Σ τ) (fun _ => eq) :=
+    MkGenOccursCheckLaws _ _ _ _ _.
   Proof.
     induction t; cbn.
-    - refine (mkWeakenedRefines (suVar lIn) (boxSbLaws_term_var ctx.in_zero) _).
+    - refine (mkWeakenedRefines eq _ (suVar lIn) (boxSbLaws_term_var ctx.in_zero) _).
       cbn.
       now rewrite (suVarSound lIn).
     - now eapply mkWeakenedRefines.
-    - now eapply (liftBinOp_weakenedRefines (fun _ => term_binop op)).
-    - now eapply (liftUnOp_weakenedRefines (fun _ => term_unop op)).
-    - eapply (liftUnOp_weakenedRefines (fun _ => term_tuple)).
-      { now intros. }
+    - eapply (liftBinOp_weakenedRefines (fun _ => term_binop op)); try eassumption.
+      typeclasses eauto.
+    - eapply (liftUnOp_weakenedRefines (fun _ => term_unop op)); try eassumption.
+      typeclasses eauto.
+    - eapply (liftUnOp_weakenedRefines (R1 := eq) (fun _ => term_tuple)).
+      { typeclasses eauto. }
       induction IH; cbn.
-      + refine (weakenInitRefines [env]).
-      + now eapply (liftBinOp_weakenedRefines (fun _ E d => env.snoc E b d)).
-    - now eapply (liftUnOp_weakenedRefines (fun _ => term_union U K)).
-    - eapply (liftUnOp_weakenedRefines (fun _ => term_record R)).
-      + now intros.
+      + refine (weakenInitRefines _ [env] eq_refl).
+      + eapply (liftBinOp_weakenedRefines (fun _ E d => env.snoc E b d)); try eassumption.
+        typeclasses eauto.
+    - eapply (liftUnOp_weakenedRefines (fun _ => term_union U K)); try eassumption.
+      typeclasses eauto.
+    - eapply (liftUnOp_weakenedRefines (R1 := eq) (fun _ => term_record R)).
+      + typeclasses eauto.
       + induction IH; cbn.
-        * refine (weakenInitRefines [env]).
+        * refine (weakenInitRefines _ [env] eq_refl).
         * refine (liftBinOp_weakenedRefines (fun _ E d => env.snoc E b d) _ IHIH q).
   Qed.
 
   #[export,refine] Instance gen_occurs_check_laws_list
     `{SubstUnivMeetLaws Sb} {T}
     {_ : SubstSU Sb T} {_ : SubstUnivLaws Sb}
-    {_ : SubstSULaws Sb T}  {_ : GenOccursCheck T} {_ : GenOccursCheckLaws T} :
-    GenOccursCheckLaws (List T) :=
-    MkGenOccursCheckLaws _ _ _ _.
+    {_ : SubstSULaws Sb T}  {_ : GenOccursCheck T} {_ : GenOccursCheckLaws T (fun _ => eq)} :
+    GenOccursCheckLaws (List T) (fun _ => eq) :=
+    MkGenOccursCheckLaws _ _ _ _ _.
   Proof.
-    induction t; first now refine (weakenInitRefines nil).
-    refine (liftBinOp_weakenedRefines (fun _ => cons) _ _ IHt).
-    eapply oc_sound.
+    induction t; first now refine (weakenInitRefines _ nil eq_refl).
+    refine (liftBinOp_weakenedRefines (R1 := eq) (fun _ => cons) _ (oc_sound a) IHt).
+    typeclasses eauto.
   Qed.
 
   #[export] Instance gen_occurs_check_laws_sub `{SubstUnivVarLaws Sb} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} {Σ} :
-    GenOccursCheckLaws (Sub Σ) := gen_occurs_check_laws_env (T := fun Σ b => Term Σ (type b)).
+    GenOccursCheckLaws (Sub Σ)  (fun _ => eq) := gen_occurs_check_laws_env (T := fun Σ b => Term Σ (type b)).
 
   (* #[export,refine] Instance gen_occurs_check_laws_pair `{SubstUnivMeet Sb, SubstLaws AT, SubstLaws BT} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} *)
   (*   {_ : GenOccursCheck AT} {_ : GenOccursCheckLaws AT} *)
@@ -766,6 +795,14 @@ Module Type GenOccursCheckOn
     | WkKeepVar _ wk => VarUsed b wk
     .
 
+    Inductive WeakenNilView : forall Σ1, WeakensTo Σ1 [ctx] -> Type :=
+    | WkNilViewNil : WeakenNilView WkNil
+    .
+
+    Equations weakenNilView {Σ1} (wk : WeakensTo Σ1 [ctx]) : WeakenNilView wk :=
+    | WkNil => WkNilViewNil
+    .
+
     Fixpoint wkRemove (Σ : LCtx) b (bIn : b ∈ Σ) : WeakensTo (Σ - b) Σ :=
       ctx.In_case (fun b Σ bIn => WeakensTo (Σ - b) Σ)
                   (fun b Σ => WkSkipVar _ wkRefl)
@@ -806,6 +843,27 @@ Module Type GenOccursCheckOn
                                      | ctx.isSucc bIn' => ctx.in_succ (weakenIn σ' bIn')
                                      end
       end.
+    Arguments weakenIn {Σ1 Σ2} σ {b} bIn : simpl nomatch.
+
+    Lemma weakenIn_transWk {Σ b} (xIn : (b ∈ Σ)%katamaran) {Σ2 Σ3}
+      (ζ1 : WeakensTo Σ Σ2) (ζ2 : WeakensTo Σ2 Σ3) :
+      weakenIn ζ2 (weakenIn ζ1 xIn) = weakenIn (transWk ζ1 ζ2) xIn.
+    Proof.
+      revert Σ b xIn ζ1.
+      induction ζ2; intros *.
+      - dependent elimination ζ1; cbn.
+        destruct (ctx.view xIn).
+      - rewrite transWk_equation_2; cbn.
+        now f_equal.
+      - dependent elimination ζ1.
+        + rewrite transWk_equation_3; cbn.
+          now f_equal.
+        + rewrite transWk_equation_4.
+          destruct (ctx.view xIn); cbn; first easy.
+          f_equal.
+          clear -IHζ2.
+          refine (IHζ2 _ _ _ w0).
+    Qed.
 
     Lemma weakenRemovePres {Σ1 Σ2} (wk : WeakensTo Σ1 Σ2) :
       forall {b} (bIn : b ∈ Σ1),
@@ -817,6 +875,7 @@ Module Type GenOccursCheckOn
       - destruct (ctx.view bIn); first easy.
         apply WkKeepVar, IHwk.
     Defined.
+    Arguments weakenRemovePres {Σ1 Σ2} wk {b} bIn : simpl nomatch.
 
     Inductive WeakenRemoveView {Σ b} : forall {Σ1} (bIn : b ∈ Σ), WeakensTo Σ1 (Σ - b) -> Set :=
     | MkWeakenRemoveView : forall Σ1' (bIn' : b ∈ Σ1') (σ1' : WeakensTo Σ1' Σ),
@@ -899,41 +958,6 @@ Module Type GenOccursCheckOn
       - intros. eapply transWk; eassumption.
       - intros; now eapply interpWk.
     Defined.
-
-    Program Definition elimWeakenedVarZero `{SubstSULaws WeakensTo T} {Σ b}
-      (funused : forall Σs, T Σs -> T Σs)
-      (funusedM : forall {Σ1 Σ2} (ζ : WeakensTo Σ1 Σ2) (t : T Σ1), funused Σ2 (substSU t ζ) = substSU (funused Σ1 t) ζ)
-      (fused : forall Σs, T (Σs ▻ b) -> T Σs)
-      (fusedM : forall {Σ1 Σ2} (ζ : WeakensTo Σ1 Σ2) t, fused (substSU t (WkKeepVar b ζ)) = substSU (fused t) ζ)
-      (wv : Weakened WeakensTo T (Σ ▻ b)) : Weakened WeakensTo T Σ :=
-      match wv with
-        MkWeakened σ1 v vL =>
-          match weakenZeroView σ1 in @WeakenZeroView _ _ Σ1 σ1 return (forall (v' : BoxSb WeakensTo T Σ1), BoxSbLaws v' -> Weakened WeakensTo T Σ) with
-          | VarUnused _ σ1' => fun v' vL' => MkWeakened σ1' (liftBoxUnOp funused v') _
-          | VarUsed _ σ1' => fun v' vL' => MkWeakened σ1' (boxSb (fused _ (unboxSb v' wkRefl))) _
-          end v vL
-      end.
-    Next Obligation.
-      intros. now apply liftBoxUnOpLaws.
-    Qed.
-    Next Obligation.
-      intros. apply boxSbLaws.
-    Qed.
-
-    Program Definition elimWeakenedVar {T1} `{SubstSU WeakensTo T1} `{SubstSULaws WeakensTo T2} {Σ b} {bIn : b ∈ Σ}
-      (f : forall Σs {bIn' : b ∈ Σs}, T1 (Σs - b) -> T2 Σs)
-      (wv : Weakened WeakensTo T1 (Σ - b)) : Weakened WeakensTo T2 Σ :=
-      match wv with
-        MkWeakened σ1 v vL =>
-          match weakenRemoveView bIn σ1 in @WeakenRemoveView _ _ Σ1 bIn σ1
-                return (forall (v : BoxSb WeakensTo T1 Σ1), BoxSbLaws v -> Weakened WeakensTo T2 Σ) with
-          | @MkWeakenRemoveView _ _ Σ1' bIn' σ1' =>
-              fun v' vL' => MkWeakened σ1' (boxSb (f _ (unboxSb v' wkRefl))) _
-          end v vL
-      end.
-    Next Obligation.
-      intros. apply boxSbLaws.
-    Qed.
 
     Definition extendMeetSkipSkip {Σ1 Σ2 Σ3 x} (meet : MeetResult Σ3 Σ1 Σ2) :
       MeetResult (Σ3 ▻ x) Σ1 Σ2 :=
@@ -1065,6 +1089,42 @@ Module Type GenOccursCheckOn
       now eapply IHwk.
     Qed.
 
+    Program Definition elimWeakenedVarZero {T} {_ : SubstSU WeakensTo T} {_ : SubstSULaws WeakensTo T} {Σ b}
+      (funused : forall Σs, T Σs -> T Σs)
+      (funusedM : forall {Σ1 Σ2} (ζ : WeakensTo Σ1 Σ2) (t : T Σ1), funused Σ2 (substSU t ζ) = substSU (funused Σ1 t) ζ)
+      (fused : forall Σs, T (Σs ▻ b) -> T Σs)
+      (wv : Weakened WeakensTo T (Σ ▻ b)) : Weakened WeakensTo T Σ :=
+      match wv with
+        MkWeakened σ1 v vL =>
+          match weakenZeroView σ1 in @WeakenZeroView _ _ Σ1 σ1 return (forall (v' : BoxSb WeakensTo T Σ1), BoxSbLaws v' -> Weakened WeakensTo T Σ) with
+          | VarUnused _ σ1' => fun v' vL' => MkWeakened σ1' (liftBoxUnOp funused v') _
+          | VarUsed _ σ1' => fun v' vL' => MkWeakened σ1' (boxSb (fused _ (unboxSb v' wkRefl))) _
+          end v vL
+      end.
+    Next Obligation.
+      intros. now apply liftBoxUnOpLaws.
+    Qed.
+    Next Obligation.
+      intros. apply boxSbLaws.
+    Qed.
+
+    Program Definition elimWeakenedVar {T1 T2} {_ : SubstSU WeakensTo T1} {_ : SubstSU WeakensTo T2} {_ : SubstSULaws WeakensTo T2}
+      {Σ b} {bIn : b ∈ Σ}
+      (f : forall Σs {bIn' : b ∈ Σs}, T1 (Σs - b) -> T2 Σs)
+      (wv : Weakened WeakensTo T1 (Σ - b)) : Weakened WeakensTo T2 Σ :=
+      match wv with
+        MkWeakened σ1 v vL =>
+          match weakenRemoveView bIn σ1 in @WeakenRemoveView _ _ Σ1 bIn σ1
+                return (forall (v : BoxSb WeakensTo T1 Σ1), BoxSbLaws v -> Weakened WeakensTo T2 Σ) with
+          | @MkWeakenRemoveView _ _ Σ1' bIn' σ1' =>
+              fun v' vL' => MkWeakened σ1' (boxSb (f _ (unboxSb v' wkRefl))) _
+          end v vL
+      end.
+    Next Obligation.
+      intros. apply boxSbLaws.
+    Qed.
+
+
     Lemma weakenRemovePres_wkRemove {Σ1 Σ2 b} (bIn : b ∈ Σ1) (σ : WeakensTo Σ1 Σ2) :
       transWk (weakenRemovePres σ bIn) (wkRemove (weakenIn σ bIn)) =
         transWk (wkRemove bIn) σ.
@@ -1092,6 +1152,72 @@ Module Type GenOccursCheckOn
     Proof.
       now rewrite <-?interpTransWk, weakenRemovePres_wkRemove.
     Qed.
+
+    Lemma weakenRemovePres_transWk {Σ x σ} (xIn : (x∷σ ∈ Σ)%katamaran) {Σ2 Σ3}
+      (ζ1 : WeakensTo Σ Σ2) (ζ2 : WeakensTo Σ2 Σ3)
+      (P : forall xIn0 : (x∷σ ∈ Σ3)%katamaran, WeakensTo (Σ - x∷σ) (Σ3 - x∷σ) -> Prop) :
+      P (weakenIn (transWk ζ1 ζ2) xIn) (weakenRemovePres (transWk ζ1 ζ2) xIn) ->
+      P (weakenIn ζ2 (weakenIn ζ1 xIn)) (transWk (weakenRemovePres ζ1 xIn) (weakenRemovePres ζ2 (weakenIn ζ1 xIn))).
+    Proof.
+      revert Σ ζ1 xIn P.
+      induction ζ2; intros Σ ζ1 xIn P.
+      - destruct (weakenNilView ζ1), (ctx.view xIn).
+      - simpl.
+        rewrite ?transWk_equation_2.
+        simpl.
+        now refine (IHζ2 _ ζ1 xIn (fun xIn ζ => P (ctx.in_succ xIn) (WkSkipVar x0 ζ))).
+      - destruct (weakenZeroView ζ1).
+        + simpl.
+          rewrite ?transWk_equation_3.
+          now refine (IHζ2 _ wk xIn (fun xIn ζ => P (ctx.in_succ xIn) (WkSkipVar x0 ζ))).
+        + destruct (ctx.view xIn).
+          * simpl.
+            now rewrite ?transWk_equation_4.
+          * simpl.
+            rewrite ?transWk_equation_4.
+            simpl.
+            now refine (IHζ2 _ wk i (fun xIn ζ => P (ctx.in_succ xIn) (WkKeepVar x0 ζ))).
+    Qed.
+
+    Lemma elimWeakenedVarZero_weakenedRefines
+      {T Σ} {b}
+      {R1 R2}
+      {_ : SubstSU WeakensTo T} {_ : SubstSULaws WeakensTo T}
+      (funused : forall Σs, T Σs -> T Σs)
+      (funusedM : forall {Σ1 Σ2} (ζ : WeakensTo Σ1 Σ2) (t : T Σ1), funused Σ2 (substSU t ζ) = substSU (funused Σ1 t) ζ)
+      (fused : forall Σs, T (Σs ▻ b) -> T Σs)
+      (fusedM : forall {Σ1 Σ2} (ζ : WeakensTo Σ1 Σ2) (t : T (Σ1 ▻ b)), fused _ (substSU t (WkKeepVar b ζ)) = substSU (fused _ t) ζ)
+      (fusedP : Proper (R1 ==> R2) (fused Σ))
+      {funusedP : forall t1 t2, R1 (substSU t1 (WkSkipVar b wkRefl)) t2 -> R2 (funused Σ t1) (fused Σ t2)}
+      {v1} (wv1 : Weakened WeakensTo T (Σ ▻ b)) (wrv1 : WeakenedRefines R1 v1 wv1)
+      : WeakenedRefines R2 (fused _ v1) (elimWeakenedVarZero funused (fun _ _ => funusedM) fused wv1).
+    Proof.
+      destruct wrv1 as [? ζsupp1 bv1 bvl1 HR1]; cbn.
+      destruct (weakenZeroView ζsupp1); apply mkWeakenedRefines; cbn.
+      - eapply funusedP.
+        now rewrite unboxSbLaws, transWk_equation_2, transWk_refl_2.
+      - rewrite <-fusedM.
+        apply fusedP.
+        now rewrite unboxSbLaws, transWk_equation_4, transWk_refl_1.
+    Qed.
+
+    Lemma elimWeakenedVar_weakenedRefines {T1 T2} {_ : SubstSU WeakensTo T1} {_ : SubstSU WeakensTo T2} {_ : SubstSULaws WeakensTo T2}
+      {Σ b} {bIn : b ∈ Σ} {R1 R2}
+      (f1 : forall Σs  {bIn' : b ∈ Σs}, T1 (Σs - b) -> T2 Σs)
+      (f2 : T1 (Σ - b) -> T2 Σ)
+      (f1M : forall {Σ1 Σ2} {bIn' : b ∈ Σ1} (ζ : WeakensTo Σ1 Σ2) (t : T1 (Σ1 - b)),
+          f1 _ (substSU t (weakenRemovePres ζ bIn')) = substSU (f1 _ t) ζ)
+      (fP : forall t1 t2, R1 t1 t2 -> R2 (f1 _ t1) (f2 t2))
+      {v1} (wv1 : Weakened WeakensTo T1 (Σ - b)) (wrv1 : WeakenedRefines R1 v1 wv1)
+      : WeakenedRefines R2 (f2 v1) (elimWeakenedVar f1 wv1).
+    Proof.
+      destruct wrv1 as [? ζsupp1 bv1 bvl1 HR1]; cbn.
+      destruct (weakenRemoveView bIn ζsupp1); apply mkWeakenedRefines; cbn.
+      rewrite <-f1M.
+      apply fP.
+      now rewrite unboxSbLaws, transWk_refl_1.
+    Qed.
+
   End Weakenings.
 
 
@@ -1104,6 +1230,22 @@ Module Type GenOccursCheckOn
           fun t' => Some (unboxSb t' ζ')
       | WeakenVarUsed _ _ _ => fun _ => None
       end t'.
-  End BackwardsCompat.
 
+    Lemma old_occurs_check_sound {T R} {sT : SubstSU WeakensTo T}
+      {gocT : GenOccursCheck (Sb := WeakensTo) T}
+      {gocLT : GenOccursCheckLaws (Sb := WeakensTo) T R}
+      {Σ x} (xIn : x ∈ Σ) (t : T Σ) :
+      wlp (fun t' => R _ (substSU (SubstSU := sT) t' (wkRemove xIn)) t)
+        (old_occurs_check (T := T) xIn t).
+    Proof.
+      unfold old_occurs_check.
+      pose proof (oc_sound t).
+      destruct H as [Σsupp ζ t' tL' HR]; cbn.
+      destruct (weakenVarView xIn ζ).
+      - eapply wlp_some.
+        now rewrite unboxSbLaws.
+      - now eapply wlp_none.
+    Qed.
+
+  End BackwardsCompat.
 End GenOccursCheckOn.
