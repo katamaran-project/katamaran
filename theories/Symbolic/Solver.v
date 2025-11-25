@@ -1010,26 +1010,49 @@ Module Type GenericSolverOn
     Definition simplify_bvule {Σ n} (t1 t2 : Term Σ (ty.bvec n)) : DList Σ :=
       let default := fun _ : () => simplify_relopb bop.bvule (peval t1) (peval t2) in
       match term_get_val t1 with
-      | Some v => if N.eqb (bv.bin v) 0%N then empty else default ()
+      | Some v => if bv.eqb v bv.zero then empty else default ()
       | _ => default ()
       end.
+
+    Definition simplify_bvult {Σ n} (t1 t2 : Term Σ (ty.bvec n)) : DList Σ :=
+      let default := fun _ : () => simplify_relopb bop.bvult (peval t1) (peval t2) in
+       match term_get_val t2 with
+       | Some v => if bv.eqb v bv.zero then singleton formula_false else default ()
+       | _ => default ()
+       end.
+
+    Lemma True_bientails [w : World] (P : Pred w) : (⊢ P) -> True ⊣⊢ P.
+    Proof. intros HP. constructor. intros ι Hpc. destruct HP as [HP]. now specialize (HP ι Hpc). Qed.
+
+    Lemma False_bientails [w : World] (P : Pred w) : (⊢ ¬ P) -> False ⊣⊢ P.
+    Proof. intros HP. constructor. intros ι Hpc. destruct HP as [HP]. now specialize (HP ι Hpc I). Qed.
 
     Lemma simplify_bvule_spec [w : World] [n] (s t : Term w (ty.bvec n)) :
       instpred (simplify_bvule s t) ⊣⊢ instpred (formula_relop bop.bvule s t).
     Proof. unfold simplify_bvule. arw.
            destruct (term_get_val_spec s); arw.
-           destruct (N.eqb_spec (bv.bin a) 0%N); arw.
+           destruct (bv.eqb_spec a bv.zero); arw.
            - rewrite instpred_dlist_empty.
-             cbn. subst.
-             constructor; intros; split; last easy; intros _; cbn.
-             cbn; unfold bv.ule, bv.unsigned in *.
-             rewrite e.
-             apply bv.ule_zero.
+             apply True_bientails.
+             constructor; intros; subst; cbn.
+             now apply bv.zero_ule.
            - now rewrite ?peval_sound formula_relop_term'.
            - now rewrite ?peval_sound formula_relop_term'.
     Qed.
 
-    #[export] Hint Resolve simplify_bvule_spec : core.
+    Lemma simplify_bvult_spec [w : World] [n] (s t : Term w (ty.bvec n)) :
+      instpred (simplify_bvult s t) ⊣⊢ instpred (formula_relop bop.bvult s t).
+    Proof. unfold simplify_bvult.
+           destruct (term_get_val_spec t); arw.
+           destruct (bv.eqb_spec a bv.zero); arw.
+           - apply False_bientails.
+             constructor; intros; subst; cbn.
+             now apply bv.ult_zero.
+           - now rewrite ?peval_sound formula_relop_term'.
+           - now rewrite ?peval_sound formula_relop_term'.
+    Qed.
+
+    #[export] Hint Resolve simplify_bvult_spec simplify_bvule_spec : core.
 
     Definition simplify_lt {Σ} (t1 t2 : Term Σ ty.int) : DList Σ :=
       singleton (peval_formula_lt t1 t2).
@@ -1051,6 +1074,7 @@ Module Type GenericSolverOn
       | bop.le => simplify_le
       | bop.lt => simplify_lt
       | bop.bvule => simplify_bvule
+      | bop.bvult => simplify_bvult
       | op     => fun t1 t2 => simplify_relopb op (peval t1) (peval t2)
       end.
 
