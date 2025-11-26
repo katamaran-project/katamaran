@@ -322,7 +322,7 @@ Module inv := invariants.
     (*   simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post). *)
 
     Definition vc__femtoinit : 𝕊 [] :=
-      postprocess (sannotated_block_verification_condition femtokernel_init_pre femtokernel_init_gen femtokernel_init_post wnil).
+      postprocess2 (sannotated_block_verification_condition femtokernel_init_pre femtokernel_init_gen femtokernel_init_post wnil).
     Definition vc__femtoinit_unq : 𝕊 [] :=
       Postprocessing.unquantify vc__femtoinit.
 
