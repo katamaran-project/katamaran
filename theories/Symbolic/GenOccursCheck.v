@@ -637,7 +637,7 @@ Module Type GenOccursCheckOn
     MkGenOccursCheckLaws _ _ _ _ _.
   Proof.
     induction t; first now refine (weakenInitRefines _ nil eq_refl).
-    refine (liftBinOp_weakenedRefines (R1 := eq) (fun _ => cons) _ (oc_sound a) IHt).
+    refine (liftBinOp_weakenedRefines (R1 := eq) (fun _ => cons) _ (oc_sound a) IHt);
     typeclasses eauto.
   Qed.
 
