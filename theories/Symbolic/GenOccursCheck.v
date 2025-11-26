@@ -597,7 +597,7 @@ Module Type GenOccursCheckOn
   Proof.
     induction t.
     - now refine (weakenInitRefines eq [env] eq_refl).
-    - refine (liftBinOp_weakenedRefines (R2 := eq)(fun _ ts' t' => ts' ► (b ↦ t')) _ IHt (oc_sound db)).
+    - refine (liftBinOp_weakenedRefines (R2 := eq)(fun _ ts' t' => ts' ► (b ↦ t')) _ IHt (oc_sound db));
       typeclasses eauto.
   Qed.
 
