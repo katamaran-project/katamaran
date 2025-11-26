@@ -107,10 +107,10 @@ Module Examples.
       sblock_verification_condition (extend_to_minimal_pre P) i (extend_to_minimal_post Q) wnil.
 
     Definition Valid_VC {Σ} (P : Assertion (Σ ▻ "a" :: ty_xlenbits)) (i : list AST) (Q : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)) :=
-      safeE (postprocess (VC_triple P i Q)).
+      safeE (postprocess2 (VC_triple P i Q)).
 
     Definition Debug_VC {Σ} (P : Assertion (Σ ▻ "a" :: ty_xlenbits)) (i : list AST) (Q : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)) :=
-      VerificationCondition (postprocess (VC_triple P i Q)).
+      VerificationCondition (postprocess2 (VC_triple P i Q)).
 
     Record BlockVerifierContract {Σ} :=
       MkBlockVerifierContract

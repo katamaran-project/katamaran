@@ -2158,19 +2158,30 @@ Module Type SymPropOn
     Import Postprocessing.
 
     Definition postprocess {Σ} (P : 𝕊 Σ) : 𝕊 Σ :=
-      unquantify (prune (solve_uvars (prune (solve_evars (prune P))))).
+      prune (solve_uvars (prune (solve_evars (prune P)))).
 
     Lemma postprocess_sound {Σ} (P : 𝕊 Σ) :
       forall ι, SymProp.safe (postprocess P) ι -> safe P ι.
     Proof.
       unfold postprocess. intros ι H.
-      rewrite unquantify_sound in H.
       rewrite prune_sound in H.
       apply solve_uvars_sound in H.
       rewrite prune_sound in H.
       rewrite solve_evars_sound in H.
       rewrite prune_sound in H.
       exact H.
+    Qed.
+
+    Definition postprocess2 {Σ} (P : 𝕊 Σ) : 𝕊 Σ :=
+      unquantify (postprocess P).
+
+    (* unquantify explodes with compute, not with vm_compute *)
+    Lemma postprocess2_sound {Σ} (P : 𝕊 Σ) :
+      forall ι, SymProp.safe (postprocess2 P) ι -> safe P ι.
+    Proof.
+      unfold postprocess2. intros ι H.
+      rewrite unquantify_sound in H.
+      now apply postprocess_sound.
     Qed.
 
   End PostProcess.
