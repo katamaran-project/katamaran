@@ -2206,7 +2206,7 @@ Module Type SymPropOn
     Inductive ESymProp : Type :=
     | eangelic_binary (o1 o2 : ESymProp)
     | edemonic_binary (o1 o2 : ESymProp)
-    | eerror (msg : EError)
+    | eerror (* (msg : EError) *)
     | eblock
     | eassertk (fml : EFormula) (k : ESymProp)
     | eassumek (fml : EFormula) (k : ESymProp)
@@ -2260,7 +2260,7 @@ Module Type SymPropOn
       match p with
       | eangelic_binary o1 o2 => eangelic_binary (erase_EErrors o1) (erase_EErrors o2)
       | edemonic_binary o1 o2 => edemonic_binary (erase_EErrors o1) (erase_EErrors o2)
-      | eerror msg => eerror (MkEError (Σ := wnil) (amsg.mk (M := Unit) tt))
+      | eerror (* msg *) => eerror (* (MkEError (Σ := wnil) (amsg.mk (M := Unit) tt)) *)
       | eblock => eblock
       | eassertk fml k => eassertk fml (erase_EErrors k)
       | eassumek fml k => eassumek fml (erase_EErrors k)
@@ -2281,7 +2281,7 @@ Module Type SymPropOn
       match p with
       | angelic_binary o1 o2 => eangelic_binary (erase_symprop' o1) (erase_symprop' o2)
       | demonic_binary o1 o2 => edemonic_binary (erase_symprop' o1) (erase_symprop' o2)
-      | error msg => eerror (MkEError msg)
+      | error msg => eerror (* (MkEError (Σ := wnil) (amsg.mk (M := Unit) tt)) *)
       | block => eblock
       | assertk fml _ k => eassertk (erase_formula fml) (erase_symprop' k)
       | assumek fml k => eassumek (erase_formula fml) (erase_symprop' k)
@@ -2298,7 +2298,7 @@ Module Type SymPropOn
       | debug b k => edebug b (erase_symprop' k)
       end.
 
-    Definition erase_symprop {Σ} (p : SymProp Σ) : ESymProp := erase_EErrors (erase_symprop' p).
+    Definition erase_symprop {Σ} (p : SymProp Σ) : ESymProp := (erase_symprop' p).
 
     Fixpoint erase_valuation {Σ} (ι : Valuation Σ) : list { σ : Ty & Val σ} :=
       match ι with
@@ -2417,7 +2417,7 @@ Module Type SymPropOn
       match f with
       | eangelic_binary p1 p2 => inst_symprop ι p1 \/ inst_symprop ι p2
       | edemonic_binary p1 p2 => inst_symprop ι p1 /\ inst_symprop ι p2
-      | eerror _ => False
+      | eerror (* _ *) => False
       | eblock => True
       | eassertk fml k => inst_eformula' ι fml /\ inst_symprop ι k
       | eassumek fml k => inst_eformula' ι fml -> inst_symprop ι k
