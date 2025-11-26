@@ -268,13 +268,13 @@ Module Type FormulasOn
   Proof.
     constructor.
     induction t; cbn.
-    - refine (liftUnOp_weakenedRefines (R1 := eq) (fun Σ' => formula_user p) _ (oc_sound ts)).
+    - refine (liftUnOp_weakenedRefines (R1 := eq) (fun Σ' => formula_user p) _ (oc_sound ts));
       typeclasses eauto.
-    - refine (liftUnOp_weakenedRefines (R1 := eq) (fun Σ' => formula_bool) _ (oc_sound t)).
+    - refine (liftUnOp_weakenedRefines (R1 := eq) (fun Σ' => formula_bool) _ (oc_sound t));
       typeclasses eauto.
-    - refine (liftUnOp_weakenedRefines (R1 := eq) (fun Σ' ζ => formula_prop ζ P) _ (oc_sound ζ)).
+    - refine (liftUnOp_weakenedRefines (R1 := eq) (fun Σ' ζ => formula_prop ζ P) _ (oc_sound ζ));
       typeclasses eauto.
-    - refine (liftBinOp_weakenedRefines (R1 := eq) (R2 := eq) (fun Σ' => formula_relop rop) _ (oc_sound t1) (oc_sound t2)).
+    - refine (liftBinOp_weakenedRefines (R1 := eq) (R2 := eq) (fun Σ' => formula_relop rop) _ (oc_sound t1) (oc_sound t2));
       typeclasses eauto.
     - refine (weakenInitRefines _ formula_true eq_refl).
     - refine (weakenInitRefines _ formula_false eq_refl).

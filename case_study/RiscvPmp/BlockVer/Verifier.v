@@ -428,7 +428,7 @@ Section BlockVerificationDerived.
     Qed.
 
     Lemma sound_sblock_verification_condition {Γ pre post instrs} :
-      safeE (postprocess (sblock_verification_condition pre instrs post wnil)) ->
+      safeE (postprocess2 (sblock_verification_condition pre instrs post wnil)) ->
       forall ι : Valuation Γ,
       ⊢ semTripleBlock (fun a => asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a]))
           instrs
@@ -436,7 +436,7 @@ Section BlockVerificationDerived.
     Proof.
       intros Hverif ι.
       apply sound_cexec_triple_addr.
-      apply (safeE_safe env.nil), postprocess_sound in Hverif.
+      apply (safeE_safe env.nil), postprocess2_sound in Hverif.
       apply LogicalSoundness.psafe_safe in Hverif; [|done].
       revert Hverif.
       apply rexec_triple_addr.
@@ -771,7 +771,7 @@ Section AnnotatedBlockVerification.
 
     Lemma sound_sannotated_block_verification_condition {Γ pre post instrs} :
       LemmaSem ->
-      safeE (postprocess (sannotated_block_verification_condition (Σ := Γ)
+      safeE (postprocess2 (sannotated_block_verification_condition (Σ := Γ)
                             pre instrs post wnil)) ->
       forall ι : Valuation Γ,
       ⊢ semTripleAnnotatedBlock (fun a => asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a]))
@@ -780,7 +780,7 @@ Section AnnotatedBlockVerification.
       unfold sannotated_block_verification_condition, SHeapSpec.run.
       intros lemSem Hverif ι.
       apply sound_cexec_annotated_block_triple_addr; auto.
-      apply (safeE_safe env.nil), postprocess_sound in Hverif.
+      apply (safeE_safe env.nil), postprocess2_sound in Hverif.
       apply LogicalSoundness.psafe_safe in Hverif; [|done].
       revert Hverif.
       apply rexec_annotated_block_triple_addr.
