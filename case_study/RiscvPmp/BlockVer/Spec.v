@@ -713,7 +713,7 @@ Module RiscvPmpSpecVerif.
       unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *;
       simpl in *;
       try discriminate;
-      try Lia.lia.
+      try bv_solve_Ltac.solveBvManual.
   Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
