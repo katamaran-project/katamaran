@@ -147,6 +147,7 @@ Module Type InstantiationOn
     (*     let InstTerm xt := @inst_term (@type recordf Ty xt) in *)
     (*     recordv_fold R (inst (Inst := inst_env (InstSA := InstTerm)) ts ι) *)
     end.
+
   #[export] Instance lift_term_val {σ} : Lift (fun Σ => Term Σ σ) (Val σ) :=
     fun Σ v => term_val σ v.
 
@@ -967,6 +968,13 @@ Module Type InstantiationOn
       Proof.
         unfold bientails. constructor; try easy.
         intros x y z xy yz ι. now transitivity (instprop y ι).
+      Qed.
+
+      #[export] Instance commutative_bientails : Symmetric (⊣⊢).
+      Proof.
+        unfold bientails. constructor.
+        - intros yip. apply H. auto.
+        - intros xip. apply H. auto.
       Qed.
 
       #[export] Instance subrelation_bientails_entails :

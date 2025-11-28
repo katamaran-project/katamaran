@@ -122,12 +122,29 @@ Module Type IrisPrelims
       | _            => None
       end.
 
+    Definition stm_to_val' {Γ τ} (s : Stm Γ τ) : option (IVal τ) :=
+      match s with
+      | stm_val _ v  => Some (inl v)
+      | _            => None
+      end.
+
     Lemma stm_val_stuck {Γ τ γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ τ} :
       ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> stm_to_val s1 = None.
     Proof. now destruct 1. Qed.
 
+    Lemma stm_val'_stuck {Γ τ γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ τ} :
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> stm_to_val' s1 = None.
+    Proof. now destruct 1. Qed.
+
     Lemma stm_to_val_Some_inl {Γ τ} {s : Stm Γ τ} {v : Val τ} :
       stm_to_val s = Some (inl v) ->
+      s = stm_val _ v.
+    Proof.
+      intros H; destruct s; try discriminate; inversion H; subst; auto.
+    Qed.
+
+    Lemma stm_to_val'_Some_inl {Γ τ} {s : Stm Γ τ} {v : Val τ} :
+      stm_to_val' s = Some (inl v) ->
       s = stm_val _ v.
     Proof.
       intros H; destruct s; try discriminate; inversion H; subst; auto.
@@ -140,6 +157,13 @@ Module Type IrisPrelims
       intros H; destruct s; try discriminate; inversion H; subst; auto.
     Qed.
 
+    Lemma stm_to_val'_Some_inr {Γ τ} {s : Stm Γ τ} {m : Val ty.string} :
+      stm_to_val' s = Some (inr m) ->
+      s = stm_fail _ m.
+    Proof.
+      intros H; destruct s; try discriminate; inversion H; subst; auto.
+    Qed.
+
     Lemma stm_to_val_Some_cases {Γ τ} {s : Stm Γ τ} {v : IVal τ} :
       stm_to_val s = Some v ->
       (∃ v', s = stm_val τ v' ∧ v = inl v') ∨ (∃ m, s = stm_fail τ m ∧ v = inr m).
@@ -147,6 +171,14 @@ Module Type IrisPrelims
       intros H; destruct s, v; try discriminate; inversion H; subst.
       - left. eexists. split; reflexivity.
       - right. eexists. split; reflexivity.
+    Qed.
+
+    Lemma stm_to_val'_Some_cases {Γ τ} {s : Stm Γ τ} {v : IVal τ} :
+      stm_to_val' s = Some v ->
+      (∃ v', s = stm_val τ v' ∧ v = inl v').
+    Proof.
+      intros H; destruct s, v; try discriminate; inversion H; subst.
+      eexists. split; reflexivity.
     Qed.
 
     Definition stm_to_fail {Γ τ} (s : Stm Γ τ) : option (Val ty.string) :=
@@ -187,6 +219,13 @@ Module Type IrisPrelims
       destruct s, v; try discriminate; intros H; inversion H; subst; auto.
     Qed.
 
+    Lemma stm_to_val'_eq {Γ τ} {s : Stm Γ τ} {v : IVal τ} :
+      stm_to_val' s = Some v ->
+      s = of_ival v.
+    Proof.
+      destruct s, v; try discriminate; intros H; inversion H; subst; auto.
+    Qed.
+
     Definition observation := Empty_set.
 
     Definition State := prod RegStore Memory.
@@ -215,6 +254,12 @@ Module Type IrisPrelims
 
     Lemma stm_to_val_Final{Γ : PCtx} {τ : Ty} {s : Stm Γ τ} {v : IVal τ} :
       stm_to_val s = Some v -> Final s.
+    Proof.
+      intros H. destruct v as [v|m], s; try discriminate; now cbn.
+    Qed.
+
+    Lemma stm_to_val'_Final{Γ : PCtx} {τ : Ty} {s : Stm Γ τ} {v : IVal τ} :
+      stm_to_val' s = Some v -> Final s.
     Proof.
       intros H. destruct v as [v|m], s; try discriminate; now cbn.
     Qed.

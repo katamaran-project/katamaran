@@ -141,36 +141,30 @@ Module IrisBinaryWP
 
     Import SmallStepNotations.
 
- Definition semWP2_fix {Γ1 Γ2 τ}
-    (wp : Wp2 Γ1 Γ2 τ) : Wp2 Γ1 Γ2 τ :=
-    (λ (δ1 : CStoreVal Γ1) (δ2 : CStoreVal Γ2)
+    Definition semWP2_fix {Γ1 Γ2 τ}
+      (wp : Wp2 Γ1 Γ2 τ) : Wp2 Γ1 Γ2 τ :=
+      (λ (δ1 : CStoreVal Γ1) (δ2 : CStoreVal Γ2)
          (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
          (POST : Post2 Γ1 Γ2 τ),
-      match stm_to_val s1, stm_to_val s2 with
-      | Some v1, Some v2 => |={⊤}=> POST v1 δ1 v2 δ2
-      | Some v1, None    => |={⊤}=> False
-      | None   , Some v2 => |={⊤}=> False
-      | None   , None    =>
-          match stm_to_fail s1, stm_to_fail s2 with
-          | Some m1, Some m2 => |={⊤}=> True
-          | Some m1, None    => |={⊤}=> False
-          | None   , Some m2 => |={⊤}=> False
-          | None   , None    =>
-              (∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
-                  (regs_inv2 γ1 γ2 ∗ mem_inv2_sail μ1 μ2
-                   ={⊤,∅}=∗ (∀ (s12 : Stm Γ1 τ) (δ12 : CStoreVal Γ1)
-                               (γ12 : RegStore) (μ12 : Memory)
-                               (s22 : Stm Γ2 τ) (δ22 : CStoreVal Γ2)
-                               (γ22 : RegStore) (μ22 : Memory),
-                                ⌜⟨ γ1, μ1, δ1 , s1 ⟩ ---> ⟨ γ12, μ12, δ12, s12 ⟩⌝
+        match stm_to_val s1, stm_to_val s2 with
+        | Some v1, Some v2 => |={⊤}=> POST v1 δ1 v2 δ2
+        | Some v1, None    => |={⊤}=> False
+        | None   , Some v2 => |={⊤}=> False
+        | None   , None    =>
+            (∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
+                (regs_inv2 γ1 γ2 ∗ mem_inv2_sail μ1 μ2
+                 ={⊤,∅}=∗ (∀ (s12 : Stm Γ1 τ) (δ12 : CStoreVal Γ1)
+                             (γ12 : RegStore) (μ12 : Memory)
+                             (s22 : Stm Γ2 τ) (δ22 : CStoreVal Γ2)
+                             (γ22 : RegStore) (μ22 : Memory),
+                              ⌜⟨ γ1, μ1, δ1 , s1 ⟩ ---> ⟨ γ12, μ12, δ12, s12 ⟩⌝
                                 ∗ ⌜⟨ γ2, μ2, δ2 , s2 ⟩ ---> ⟨ γ22, μ22, δ22, s22 ⟩⌝
-                                ={∅}▷=∗
-                                |={∅,⊤}=> 
-                                         (regs_inv2 γ12 γ22 ∗ mem_inv2_sail μ12 μ22) ∗
-                                         wp δ12 δ22 s12 s22 POST)))
-          end
-      end)%I.
-  Global Arguments semWP2_fix {_ _}%ctx_scope {_} wp /.
+                              ={∅}▷=∗
+                                      |={∅,⊤}=> 
+                             (regs_inv2 γ12 γ22 ∗ mem_inv2_sail μ12 μ22) ∗
+                               wp δ12 δ22 s12 s22 POST)))
+        end)%I.
+    Global Arguments semWP2_fix {_ _}%ctx_scope {_} wp /.
 
   Ltac f_equiv_more_arities := match goal with
                                | H:_ ?f ?g |- ?R (?f ?x ?y ?z1) (?g ?x ?y ?z1) => solve [ simple apply H ]
@@ -201,39 +195,29 @@ Module IrisBinaryWP
   Proof. by unfold semWP2; rewrite fixpoint_semWP2_fix_eq. Qed.
 
   Lemma semWP2_unfold [Γ1 Γ2 τ] (δ1 : CStoreVal Γ1) (δ2 : CStoreVal Γ2) (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
-      (Q : Post2 Γ1 Γ2 τ) :
-      semWP2 δ1 δ2 s1 s2 Q ⊣⊢
-        match stm_to_val s1, stm_to_val s2 with
-        | Some v1, Some v2 => |={⊤}=> Q v1 δ1 v2 δ2
-        | None, Some _ => |={⊤}=> False
-        | Some _, None => |={⊤}=> False
-        | None, None =>
-            match stm_to_fail s1, stm_to_fail s2 with
-            | Some m1, Some m2 => |={⊤}=> True
-            | Some m1, None    => |={⊤}=> False
-            | None   , Some m2 => |={⊤}=> False
-            | None   , None    =>
-                (∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
-                    (regs_inv2 γ1 γ2 ∗ mem_inv2_sail μ1 μ2
-                     ={⊤,∅}=∗ (∀ (s12 : Stm Γ1 τ) (δ12 : CStoreVal Γ1)
-                                 (γ12 : RegStore) (μ12 : Memory)
-                                 (s22 : Stm Γ2 τ) (δ22 : CStoreVal Γ2)
-                                 (γ22 : RegStore) (μ22 : Memory),
-                                  ⌜⟨ γ1, μ1, δ1 , s1 ⟩ ---> ⟨ γ12, μ12, δ12, s12 ⟩⌝
-                                    ∗ ⌜⟨ γ2, μ2, δ2 , s2 ⟩ ---> ⟨ γ22, μ22, δ22, s22 ⟩⌝
-                                  ={∅}▷=∗
-                                          |={∅,⊤}=> 
-                                 (regs_inv2 γ12 γ22 ∗ mem_inv2_sail μ12 μ22) ∗
-                                   semWP2 δ12 δ22 s12 s22 Q)))%I
-            end
-        end.
+    (Q : Post2 Γ1 Γ2 τ) :
+    semWP2 δ1 δ2 s1 s2 Q ⊣⊢
+      match stm_to_val s1, stm_to_val s2 with
+      | Some v1, Some v2 => |={⊤}=> Q v1 δ1 v2 δ2
+      | None, Some _ => |={⊤}=> False
+      | Some _, None => |={⊤}=> False
+      | None, None =>
+          (∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
+              (regs_inv2 γ1 γ2 ∗ mem_inv2_sail μ1 μ2
+               ={⊤,∅}=∗ (∀ (s12 : Stm Γ1 τ) (δ12 : CStoreVal Γ1)
+                           (γ12 : RegStore) (μ12 : Memory)
+                           (s22 : Stm Γ2 τ) (δ22 : CStoreVal Γ2)
+                           (γ22 : RegStore) (μ22 : Memory),
+                            ⌜⟨ γ1, μ1, δ1 , s1 ⟩ ---> ⟨ γ12, μ12, δ12, s12 ⟩⌝
+                              ∗ ⌜⟨ γ2, μ2, δ2 , s2 ⟩ ---> ⟨ γ22, μ22, δ22, s22 ⟩⌝
+                            ={∅}▷=∗
+                                    |={∅,⊤}=> 
+                           (regs_inv2 γ12 γ22 ∗ mem_inv2_sail μ12 μ22) ∗
+                             semWP2 δ12 δ22 s12 s22 Q)))%I
+      end.
     Proof.
       rewrite (fixpoint_semWP2_eq _ _ s1). cbn.
       destruct (stm_to_val s1); destruct (stm_to_val s2).
-      { auto. }
-      { auto. }
-      { auto. }
-      destruct (stm_to_fail s1); destruct (stm_to_fail s2).
       { auto. }
       { auto. }
       { auto. }
@@ -268,9 +252,6 @@ Module IrisBinaryWP
                           { iMod "H".
                             iModIntro.
                             by iApply "HQ". }
-                          destruct (stm_to_fail s1) eqn:Es1f;
-                            destruct (stm_to_fail s2) eqn:Es2f;
-                            auto.
                           iIntros (γ1 γ2 μ1 μ2) "Hresources".
                           iMod ("H" with "Hresources") as "H".
                           iModIntro.
@@ -342,20 +323,16 @@ Module IrisBinaryWP
       - iFrame. auto.
       - auto.
       - auto.
-      - destruct (stm_to_fail s1); destruct (stm_to_fail s2).
-        + auto.
-        + auto.
-        + auto.
-        + iIntros (γ1 γ2 μ1 μ2) "Hres".
-          iSpecialize ("H" with "Hres").
-          iMod "H". iModIntro.
-          iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22 HStep).
-          iSpecialize ("H" $!  _ _ _ _ _ _ _ _ HStep).
-          iMod "H"; iModIntro. iModIntro. iMod "H". iModIntro. iMod "H". iModIntro.
-          iDestruct "H" as "(Hres & H)".
-          iFrame.
-          iApply (semWP2_mono with "H").
-          iIntros. iFrame.
+      - iIntros (γ1 γ2 μ1 μ2) "Hres".
+        iSpecialize ("H" with "Hres").
+        iMod "H". iModIntro.
+        iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22 HStep).
+        iSpecialize ("H" $!  _ _ _ _ _ _ _ _ HStep).
+        iMod "H"; iModIntro. iModIntro. iMod "H". iModIntro. iMod "H". iModIntro.
+        iDestruct "H" as "(Hres & H)".
+        iFrame.
+        iApply (semWP2_mono with "H").
+        iIntros. iFrame.
     Qed.
 
     Ltac discriminate_step :=
@@ -450,7 +427,7 @@ Module IrisBinaryWP
         { tauto. }
         rewrite (semWP2_unfold _ _ s).
         rewrite (stm_val_stuck H). rewrite (stm_val_stuck H0).
-        rewrite (stm_fail_stuck H). rewrite (stm_fail_stuck H0).
+        (* rewrite (stm_fail_stuck H). rewrite (stm_fail_stuck H0). *)
         iSpecialize ("WPs" $! _ _ _ _ with "state_inv").
         iSpecialize ("WPs" $! _ _ _ _ _ _ _ _ step).
         iMod "Hclose". iMod "WPs". iMod "WPs".
@@ -521,7 +498,7 @@ Module IrisBinaryWP
         auto.
       - rewrite (semWP2_unfold _ _ s).
         rewrite (stm_val_stuck H). rewrite (stm_val_stuck H0).
-        rewrite (stm_fail_stuck H). rewrite (stm_fail_stuck H0).
+        (* rewrite (stm_fail_stuck H). rewrite (stm_fail_stuck H0). *)
         iSpecialize ("WPs" $! γ1 γ2 μ1 μ2 with "state_inv").
         iMod "Hclose". iMod "WPs".
         assert (⟨ γ1, μ1, δ1, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩
@@ -560,7 +537,7 @@ Module IrisBinaryWP
         rewrite (stm_val_stuck H). do 3 iModIntro. iMod "Hclose". iMod "WPk". auto.
       - rewrite (semWP2_unfold _ _ k).
         rewrite (stm_val_stuck H). rewrite (stm_val_stuck H0).
-        rewrite (stm_fail_stuck H). rewrite (stm_fail_stuck H0).
+        (* rewrite (stm_fail_stuck H). rewrite (stm_fail_stuck H0). *)
         iSpecialize ("WPk" $! γ1 γ2 μ1 μ2 with "state_inv").
         iMod "Hclose". iMod "WPk" as "WPk".
         assert (⟨ γ1, μ1, δΓ1 ►► δΔ1, k ⟩ ---> ⟨ γ', μ', δ' ►► δΔ', k' ⟩ /\ ⟨ γ2, μ2, δΓ2 ►► δΔ2, k0 ⟩ ---> ⟨ γ'0, μ'0, δ'0 ►► δΔ'0, k'0 ⟩) as steps.
@@ -736,7 +713,7 @@ Module IrisBinaryWP
         done.
       - rewrite (semWP2_unfold _ _ s).
         rewrite (stm_val_stuck H). rewrite (stm_val_stuck H0).
-        rewrite (stm_fail_stuck H). rewrite (stm_fail_stuck H0).
+        (* rewrite (stm_fail_stuck H). rewrite (stm_fail_stuck H0). *)
         iSpecialize ("WPs" $! γ1 γ2 μ1 μ2 with "state_inv").
         iMod "Hclose". iMod "WPs".
         assert (⟨ γ1, μ1, δ1, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ /\ ⟨ γ2, μ2, δ2, s0 ⟩ ---> ⟨ γ'0, μ'0, δ'0, s'0 ⟩) as steps.

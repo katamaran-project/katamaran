@@ -286,12 +286,10 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
 
   End SmallInversions.
 
-  Inductive StepsN {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStoreVal Γ) (s1 : Stm Γ σ) : nat -> RegStore -> Memory -> CStoreVal Γ -> Stm Γ σ -> Prop :=
-  | stepsn_zero :
-    StepsN γ1 μ1 δ1 s1 0 γ1 μ1 δ1 s1
-  | stepsn_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : CStoreVal Γ} {s2 s3 : Stm Γ σ} {n : nat} :
-    Step γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 -> StepsN γ2 μ2 δ2 s2 n γ3 μ3 δ3 s3 -> StepsN γ1 μ1 δ1 s1  (S n) γ3 μ3 δ3 s3
-  .
+  Inductive NSteps {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStoreVal Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> CStoreVal Γ -> Stm Γ σ -> nat -> Prop :=
+  | nstep_refl : NSteps γ1 μ1 δ1 s1 γ1 μ1 δ1 s1 0
+  | nstep_trans {n} {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : CStoreVal Γ} {s2 s3 : Stm Γ σ} :
+    Step γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 -> NSteps γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 n -> NSteps γ1 μ1 δ1 s1 γ3 μ3 δ3 s3 (S n).
 
   Inductive Steps {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStoreVal Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> CStoreVal Γ -> Stm Γ σ -> Prop :=
   | step_refl : Steps γ1 μ1 δ1 s1 γ1 μ1 δ1 s1
@@ -300,12 +298,12 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
 
   Module Import SmallStepNotations.
     Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
-    Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ -{ n }-> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@StepsN _ _ γ1 μ1 δ1 s1 n γ2 μ2 δ2 s2)
+    Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ -{ n }-> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@NSteps _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 n)
     (at level 75, only parsing, right associativity).
     Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Steps _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2).
   End SmallStepNotations.
 
-  Lemma StepsN_trans {Γ τ} :
+  Lemma NSteps_trans {Γ τ} :
     forall {γ1 γ2 γ3 μ1 μ2 μ3 δ1 δ2 δ3} {s1 s2 s3 : Stm Γ τ} {n m},
       ⟨ γ1, μ1, δ1, s1 ⟩ -{ n }-> ⟨ γ2, μ2, δ2, s2 ⟩ ->
       ⟨ γ2, μ2, δ2, s2 ⟩ -{ m }-> ⟨ γ3, μ3, δ3, s3 ⟩ ->
@@ -315,7 +313,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     revert γ3 μ3 δ3 s3 Hs2s3.
     induction Hs1s2; first auto.
     intros γ4 μ4 δ4 s4 Hs3s4.
-    eapply stepsn_trans. eassumption.
+    eapply nstep_trans. eassumption.
     now apply IHHs1s2.
   Qed.
 
@@ -333,17 +331,17 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     now apply IHHs1s2.
   Qed.
 
-  Lemma StepsN_bind {Γ σ τ} :
+  Lemma NSteps_bind {Γ σ τ} :
     forall {γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ σ} {k : Val σ -> Stm Γ τ} {n},
       ⟨ γ1, μ1, δ1, s1 ⟩ -{ n }-> ⟨ γ2, μ2, δ2, s2 ⟩ ->
       ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ -{ n }-> ⟨ γ2, μ2, δ2, stm_bind s2 k ⟩.
   Proof.
     intros γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 k n H.
-    induction H; first apply stepsn_zero.
+    induction H; first apply nstep_refl.
     rewrite <- PeanoNat.Nat.add_1_l.
-    eapply StepsN_trans ; last eauto.
-    eapply stepsn_trans. apply st_bind_step. eauto.
-    apply stepsn_zero.
+    eapply NSteps_trans ; last eauto.
+    eapply nstep_trans. apply st_bind_step. eauto.
+    apply nstep_refl.
   Qed.
 
   Lemma Steps_bind {Γ σ τ} :
@@ -358,7 +356,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     apply step_refl.
   Qed.
 
-  Lemma StepsN_block {Γ τ} :
+  Lemma NSteps_block {Γ τ} :
     forall {γ1 γ2 μ1 μ2 δ1 δ2 Δ δΔ1 δΔ2} {s1 s2 : Stm (Γ ▻▻ Δ) τ} {n},
       ⟨ γ1, μ1, δ1 ►► δΔ1, s1 ⟩ -{ n }-> ⟨ γ2, μ2, δ2 ►► δΔ2, s2 ⟩ ->
       ⟨ γ1, μ1, δ1, stm_block δΔ1 s1 ⟩ -{ n }-> ⟨ γ2, μ2, δ2, stm_block δΔ2 s2 ⟩.
@@ -371,10 +369,10 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       intros δ1' δΔ1 Eδ1' δ2' Eδ2'.
     - rewrite Eδ1' in Eδ2'.
       destruct (proj1 (env.inversion_eq_cat _ _ _ _) Eδ2') as (-> & ->).
-      apply stepsn_zero.
+      apply nstep_refl.
     - destruct (env.catView δ2). rewrite Eδ1' in H.
-      eapply stepsn_trans. apply st_block_step.
-      apply H. apply IHStepsN; auto.
+      eapply nstep_trans. apply st_block_step.
+      apply H. apply IHNSteps; auto.
   Qed.
 
   Lemma Steps_block {Γ τ} :
@@ -402,8 +400,8 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ1, μ1, δ1,  x <- s1 ⟩ -{ n }-> ⟨ γ2, μ2, δ2, x <- s2 ⟩.
   Proof.
     intros γ1 γ2 μ1 μ2 δ1 δ2 x ? s1 s2 n H.
-    induction H; first apply stepsn_zero.
-    eapply stepsn_trans; last apply IHStepsN. constructor. auto.
+    induction H; first apply nstep_refl.
+    eapply nstep_trans; last apply IHNSteps. constructor. auto.
   Qed.
 
   Lemma Steps_assign {Γ τ} :
@@ -422,8 +420,8 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ1, μ1, δ, stm_call_frame δΔ1 s1 ⟩ -{ n }-> ⟨ γ2, μ2, δ, stm_call_frame δΔ2 s2 ⟩.
   Proof.
     intros Δ γ1 γ2 μ1 μ2 δ δΔ1 δΔ2 s1 s2 n H.
-    induction H; first apply stepsn_zero.
-    eapply stepsn_trans; last apply IHStepsN. constructor. auto.
+    induction H; first apply nstep_refl.
+    eapply nstep_trans; last apply IHNSteps. constructor. auto.
   Qed.
 
   Lemma Steps_call_frame {Γ τ} :

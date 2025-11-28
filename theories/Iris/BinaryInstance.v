@@ -107,7 +107,7 @@ Module IrisInstanceWithContracts2
   Lemma iris_rule_stm_call {Γ} (δ : CStore Γ)
     {Δ σ} (f : 𝑭 Δ σ) (c : SepContract Δ σ) (es : NamedEnv (Exp Γ) Δ)
     (P : iProp Σ)
-    (Q : Val σ -> CStore Γ -> iProp Σ) :
+    (Q : RelVal σ -> CStore Γ -> iProp Σ) :
     CEnv f = Some c ->
     CTriple P c (evals es δ) (fun v => Q v δ) ->
     ⊢ ▷ ValidContractEnvSem CEnv -∗
@@ -120,31 +120,41 @@ Module IrisInstanceWithContracts2
     rewrite ceq. clear ceq.
     destruct c as [Σe δΔ req res ens]; cbn in *.
     iPoseProof (ctrip with "P") as (ι Heq) "[req consr]". clear ctrip.
-    iPoseProof ("cenv" $! ι with "req") as "wpf0". rewrite Heq.
+    iPoseProof ("cenv" $! ι with "req") as "wpf0".
+    rewrite <- Heq.
+    rewrite evalValsProjLeftIsProjLeftEvals evalValsProjRightIsProjRightEvals.
     iApply (semWP2_mono with "wpf0").
-    iIntros ([] ? ? ?) "(<- & <- & H)"; auto.
+    iIntros ([] ? ? ?) "(%δ' & (<- & <-) & H)"; auto.
     repeat iSplitR; auto.
+    iExists δ.
+    iSplit.
+    { auto. }
+    destruct v2; auto.
+    iDestruct "H" as "(%rv & eq & H)".
+    iExists rv.
+    iFrame.
     by iApply "consr".
   Qed.
 
   Lemma iris_rule_stm_call_frame {Γ} (δ : CStore Γ)
-        (Δ : PCtx) (δΔ : CStore Δ) (τ : Ty) (s : Stm Δ τ)
-        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ (semTriple δΔ P s (fun v _ => Q v δ) -∗
+        (Δ : PCtx) (δΔ : CStoreVal Δ) (τ : Ty) (s : Stm Δ τ)
+        (P : iProp Σ) (Q : RelVal τ -> CStore Γ -> iProp Σ) :
+        ⊢ (semTriple (ty.syncNamedEnv δΔ) P s (fun v _ => Q v δ) -∗
            semTriple δ P (stm_call_frame δΔ s) Q).
   Proof.
     iIntros "trips P".
     iSpecialize ("trips" with "P").
     iApply semWP2_call_frame.
+    rewrite projLeftCStoreEnvMapValToRelValIsId projRightCStoreEnvMapValToRelValIsId.
     iApply (semWP2_mono with "trips").
-    iIntros ([] ? ? ?) "(<- & <- & $)"; auto.
+    iIntros ([] ? ? ?) "(%δ' & (<- & <-) & $)"; auto.
   Qed.
 
   Lemma iris_rule_stm_foreign
     {Γ} (δ : CStore Γ) {τ} {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
-    (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+    (P : iProp Σ) (Q : RelVal τ -> CStore Γ -> iProp Σ) :
     ForeignSem ->
-    CTriple P (CEnvEx f) (evals es δ) (λ v : Val τ, Q v δ) ->
+    CTriple P (CEnvEx f) (evals es δ) (λ v : RelVal τ, Q v δ) ->
     ⊢ semTriple δ P (stm_foreign f es) Q.
   Proof.
     iIntros (forSem ctrip) "P".
@@ -153,15 +163,22 @@ Module IrisInstanceWithContracts2
     iPoseProof (ctrip with "P") as "[%ι [%Heq [req consr]]]". clear ctrip.
     iPoseProof (forSem ι Heq with "req") as "WPf". clear forSem.
     iApply (semWP2_mono with "WPf").
-    iIntros ([v|m] δΓ' ? ?) "(<- & <- & H)"; auto.
+    iIntros ([v|m] δΓ' ? ?) "(%δ' & (<- & <-) & H)"; auto.
     repeat iSplitR; auto.
-    iDestruct "H" as "(H & <-)".
+    destruct v2; auto.
+    iDestruct "H" as "(%rv & (<- & <-) & H' & <-)".
+    iExists δ'.
+    iSplit.
+    { auto. }
+    iExists rv.
+    iSplit.
+    { auto. }
     by iApply "consr".
   Qed.
 
   Lemma iris_rule_stm_lemmak
     {Γ} (δ : CStore Γ) {τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
-    (P Q : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
+    (P Q : iProp Σ) (R : RelVal τ -> CStore Γ -> iProp Σ) :
     LemmaSem ->
     LTriple (evals es δ) P Q (LEnv l) ->
     ⊢ semTriple δ Q k R -∗
@@ -177,7 +194,7 @@ Module IrisInstanceWithContracts2
 
   Lemma sound_stm
     {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
-    forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ),
+    forall (PRE : iProp Σ) (POST : RelVal τ -> CStore Γ -> iProp Σ),
       ForeignSem ->
       LemmaSem ->
       ⦃ PRE ⦄ s ; δ ⦃ POST ⦄ ->
@@ -185,7 +202,7 @@ Module IrisInstanceWithContracts2
         semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -198,7 +215,10 @@ Module IrisInstanceWithContracts2
     - by iApply iris_rule_stm_block.
     - by iApply iris_rule_stm_seq.
     - iApply iris_rule_stm_assertk.
-      iIntros "H". by iApply "trips".
+      + auto.
+      + iIntros "%H'". iApply "trips". destruct (eval e1 δ).
+        * inversion H'. auto.
+        * inversion H'.
     - by iApply iris_rule_stm_fail.
     - by iApply iris_rule_stm_read_register.
     - by iApply iris_rule_stm_write_register.
@@ -208,7 +228,7 @@ Module IrisInstanceWithContracts2
     - by iApply iris_rule_stm_call_frame.
     - by iApply iris_rule_stm_foreign.
     - by iApply iris_rule_stm_lemmak.
-    - by iApply iris_rule_stm_bind.
+    (* - by iApply iris_rule_stm_bind. *)
     - by iApply iris_rule_stm_debugk.
     - by iApply iris_rule_stm_pattern_match.
   Qed.

@@ -383,23 +383,23 @@ Module Type ChunksOn
           (fun '(t', h') => (h', ctx.nil ▻ formula_propeq t t'))
           (find_chunk_ptsreg_precise h).
 
-      (* Lemma try_consume_chunk_ptsreg_precise_spec : *)
-      (*   option.wlp *)
-      (*     (fun '(h', eqs) => *)
-      (*        forall ι : Valuation Σ, *)
-      (*        instprop eqs ι -> *)
-      (*        List.In *)
-      (*          (inst (chunk_ptsreg r t) ι, inst h' ι) *)
-      (*          (heap_extractions (inst h ι))) *)
-      (*     try_consume_chunk_ptsreg_precise. *)
-      (* Proof. *)
-      (*   unfold try_consume_chunk_ptsreg_precise. apply option.wlp_map. *)
-      (*   generalize (find_chunk_ptsreg_precise_spec h). *)
-      (*   apply option.wlp_monotonic. intros [h' t'] HIn ι [_ Heq]. *)
-      (*   specialize (HIn ι). *)
-      (*   cbn in Heq |- *. *)
-      (*   now rewrite Heq. *)
-      (* Qed. *)
+      Lemma try_consume_chunk_ptsreg_precise_spec :
+        option.wlp
+          (fun '(h', eqs) =>
+             forall ι : Valuation Σ,
+             instprop eqs ι ->
+             List.In
+               (inst (chunk_ptsreg r t) ι, inst h' ι)
+               (heap_extractions (inst h ι)))
+          try_consume_chunk_ptsreg_precise.
+      Proof.
+        unfold try_consume_chunk_ptsreg_precise. apply option.wlp_map.
+        generalize (find_chunk_ptsreg_precise_spec h).
+        apply option.wlp_monotonic. intros [h' t'] HIn ι [_ Heq].
+        specialize (HIn ι).
+        cbn in Heq |- *.
+        now rewrite Heq.
+      Qed.
     End PrecisePtsreg.
 
     Definition try_consume_chunk_precise {Σ} (h : SHeap Σ) (c : Chunk Σ) :
@@ -417,26 +417,26 @@ Module Type ChunksOn
       | _ => None
       end.
 
-    (* Lemma try_consume_chunk_precise_spec {Σ} (h : SHeap Σ) (c : Chunk Σ) : *)
-    (*   option.wlp *)
-    (*     (fun '(h', eqs) => *)
-    (*        forall ι : Valuation Σ, *)
-    (*        instprop eqs ι -> *)
-    (*        List.In (inst c ι, inst h' ι) *)
-    (*          (heap_extractions (inst h ι))) *)
-    (*     (try_consume_chunk_precise h c). *)
-    (* Proof. *)
-    (*   destruct c; [(* | *) |constructor|constructor]; *)
-    (*     cbn [try_consume_chunk_precise]. *)
-    (*   (* - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; [|constructor]. *) *)
-    (*   (*   remember (eq_rect (𝑯_Ty p) (Env (Term Σ)) ts (ΔI ▻▻ ΔO) prec) as ts'. *) *)
-    (*   (*   destruct (env.catView ts') as [tsI tsO]. *) *)
-    (*   (*   generalize (try_consume_chunk_user_precise_spec prec tsI tsO h). *) *)
-    (*   (*   apply option.wlp_monotonic. intros [h' eqs]. *) *)
-    (*   (*   intros HIn ι Heqs. specialize (HIn ι Heqs). *) *)
-    (*   (*   now rewrite Heqts', rew_opp_l in HIn. *) *)
-    (*   - apply try_consume_chunk_ptsreg_precise_spec. *)
-    (* Qed. *)
+    Lemma try_consume_chunk_precise_spec {Σ} (h : SHeap Σ) (c : Chunk Σ) :
+      option.wlp
+        (fun '(h', eqs) =>
+           forall ι : Valuation Σ,
+           instprop eqs ι ->
+           List.In (inst c ι, inst h' ι)
+             (heap_extractions (inst h ι)))
+        (try_consume_chunk_precise h c).
+    Proof.
+      destruct c; [(* | *) |constructor|constructor];
+        cbn [try_consume_chunk_precise].
+      (* - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; [|constructor]. *)
+      (*   remember (eq_rect (𝑯_Ty p) (Env (Term Σ)) ts (ΔI ▻▻ ΔO) prec) as ts'. *)
+      (*   destruct (env.catView ts') as [tsI tsO]. *)
+      (*   generalize (try_consume_chunk_user_precise_spec prec tsI tsO h). *)
+      (*   apply option.wlp_monotonic. intros [h' eqs]. *)
+      (*   intros HIn ι Heqs. specialize (HIn ι Heqs). *)
+      (*   now rewrite Heqts', rew_opp_l in HIn. *)
+      - apply try_consume_chunk_ptsreg_precise_spec.
+    Qed.
 
   End Consume.
 

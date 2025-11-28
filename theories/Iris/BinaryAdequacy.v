@@ -145,7 +145,7 @@ Module Type IrisAdequacy2
   Proof.
     induction 1.
     - now constructor.
-    - refine (language.nsteps_l _ _ _ _ [] _ _ IHStepsN).
+    - refine (language.nsteps_l _ _ _ _ [] _ _ IHNSteps).
       refine (step_atomic _ _ _ _ _ nil nil eq_refl eq_refl _).
       now eapply mk_prim_step.
   Qed.
@@ -249,10 +249,17 @@ Module Type IrisAdequacy2
   Qed.
 
   Definition ResultOrFail2 {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) :
-    (Val τ -> Prop) -> Prop :=
+    (Val τ -> Val τ -> Prop) -> Prop :=
     match s1, s2 with
-    | stm_val _ v1, stm_val _ v2 => λ POST, v1 = v2 ∧ POST v1
+    | stm_val _ v1, stm_val _ v2 => λ POST, POST v1 v2
     | stm_fail _ m1, stm_fail _ m2 => λ _, True
+    | _, _ => λ _, False
+    end.
+
+  Definition Result2 {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) :
+    (IVal τ -> IVal τ -> Prop) -> Prop :=
+    match stm_to_val s1, stm_to_val s2 with
+    | Some v1 , Some v2 => λ POST, POST v1 v2
     | _, _ => λ _, False
     end.
 
@@ -264,16 +271,10 @@ Module Type IrisAdequacy2
     {δ11 δ21 δ12 : CStoreVal Γ} {s12 : Stm Γ σ} {Q : IVal σ -> IVal σ -> Prop} {n} :
     ⟨ γ11, μ11, δ11, s11 ⟩ -{ n }-> ⟨ γ12, μ12, δ12, s12 ⟩ -> Final s12 ->
     (forall Σ `{sailGS2 Σ}, mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ semWP2 δ11 δ21 s11 s21 (fun v1 _ v2 _ => ⌜ Q v1 v2 ⌝)) ->
-    ResultOrFail s12 (fun v12 =>
-                        exists γ22 μ22 δ22 v22,
-                          ⟨ γ21, μ21, δ21, s21 ⟩ -{ n }-> ⟨ γ22, μ22, δ22, stm_val _ v22 ⟩ /\
-                            Q (inl v12) (inl v22)).
+    exists γ22 μ22 δ22 s22, ⟨ γ21, μ21, δ21, s21 ⟩ -{ n }-> ⟨ γ22, μ22, δ22, s22 ⟩ /\
+    Result2 s12 s22 Q.
   Proof.
     intros Heval1 Hfinal Hwp.
-    destruct (stepsn_to_nsteps Heval1) as [Hevaln1 | n Hevaln1].
-    {
-      admit.
-    }
     refine (uPred.pure_soundness _
               (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
     iIntros (Hinv) "Hcred".
@@ -288,7 +289,7 @@ Module Type IrisAdequacy2
     pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
     iMod (mem_inv_init2 (mGS := mGS) μ11 μ21) as (memG) "[Hmem Rmem]".
     pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2)) memG).
-    specialize (Hwp sG).
+    specialize (Hwp _ sG).
     iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
     { iApply own_RegStore_to_map_reg_pointsTos.
       apply finite.NoDup_enum.
@@ -301,199 +302,172 @@ Module Type IrisAdequacy2
     clear Hwp.
     iStopProof.
     revert γ21 μ21 δ21 s21.
-    induction Hevaln1.
+    induction Heval1.
     - iIntros (γ21 μ21 δ21 s21) "(Hcred & Hmem & Hwp2 & Hregs)".
-      rewrite fixpoint_semWp2_eq.
+      rewrite fixpoint_semWP2_eq.
       unfold Final in Hfinal.
+      (* TODO: Same thing twice because Final and stm_to_val are actually the same but no way to express this *)
       destruct s1 eqn:?; inversion Hfinal; cbn.
       + case_match.
         * iMod "Hwp2" as "%HQ".
           iApply fupd_mask_intro; first by set_solver.
           iIntros "_ !%".
-          destruct s21; try inversion H.
-          eexists _, _, _, _; split; first apply step_refl; auto.
+          eexists _, _, _, _.
+          split.
+          { apply SEM.nstep_refl. }
+          destruct (stm_to_val s21).
+         ++ by inversion H.
+         ++ congruence.
         * by iMod "Hwp2" as "%".
-      + iApply fupd_mask_intro; first by set_solver.
-        by iIntros.
+      + case_match.
+        * iMod "Hwp2" as "%HQ".
+          iApply fupd_mask_intro; first by set_solver.
+          iIntros "_ !%".
+          eexists _, _, _, _.
+          split.
+          { apply SEM.nstep_refl. }
+          destruct (stm_to_val s21).
+          ++ by inversion H.
+          ++ congruence.
+        * by iMod "Hwp2" as "%".
     - iIntros (γ21 μ21 δ21 s21) "(Hcred & Hmem & Hwp2 & Hregs)".
-      specialize (IHHevaln1 (nsteps_to_steps Hevaln1) Hfinal).
-      rewrite fixpoint_semWp2_eq. cbn.
-      rewrite (stm_val_stuck H) (stm_fail_stuck H).
+      specialize (IHHeval1 Hfinal).
+      rewrite fixpoint_semWP2_eq. cbn.
+      rewrite (stm_val_stuck H).
       case_match eqn:Evs21;
         try case_match eqn:Efs21;
         try by iMod "Hwp2".
       iSpecialize ("Hwp2" with "[$Hregs $Hmem]").
       iMod "Hwp2" as "Hwp2". iModIntro.
-      pose proof (is_not_final s21 Evs21 Efs21) as Hnfinal21.
-      destruct (can_step s21 γ21 μ21 δ21 Hnfinal21) as (γ22 & μ22 & δ22 & s22 & Hsteps21).
+      pose proof (is_not_final s21 Evs21) as Hnfinal21.
+      assert (stm_to_fail s21 = None).
+      { destruct s21; auto.
+        inversion Evs21.
+      }
+      destruct (can_step s21 γ21 μ21 δ21 (Hnfinal21 H0)) as (γ22 & μ22 & δ22 & s22 & Hsteps21).
       iSpecialize ("Hwp2" $! _ _ _ _ _ _ _ _ (conj H Hsteps21)).
       iMod "Hwp2". iModIntro. iModIntro. iMod "Hwp2".
       iMod "Hwp2" as "([Hregs Hmem] & Hwp)".
       iDestruct "Hcred" as "(Hcred1 & Hcred)".
-      iMod (IHHevaln1 γ22 μ22 δ22 s22 with "[$Hregs $Hmem $Hwp $Hcred]") as "IH2".
+      iMod (IHHeval1 γ22 μ22 δ22 s22 with "[$Hregs $Hmem $Hwp $Hcred]") as "IH2".
       iModIntro.
       iApply (step_fupdN_mono with "IH2").
       iPureIntro.
-      apply result_or_fail_mono.
-      intros v (γ23 & μ23 & δ23 & v23 & Hsteps223 & HQ).
+      intros (γ23 & μ23 & δ23 & v23 & Hsteps223 & HQ).
       repeat eexists; last eassumption.
-      eapply step_trans.
+      eapply SEM.nstep_trans.
       apply Hsteps21.
       apply Hsteps223.
   Qed.
 
+  (* Lemma wp2_adequacy' {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) *)
+  (*   {γ1 γ2 : RegStore} {μ1 μ2 : Memory} *)
+  (*   {δ1 : CStore Γ1} {δ2 : CStore Γ2} *)
+  (*   {Q : IVal τ -> CStore Γ1 -> IVal τ -> CStore Γ2 -> Prop} : *)
+  (*   (forall `{sailGS2 Σ}, *)
+  (*       ⊢ mem_res2 μ1 μ2 ∗ own_regstore2 γ1 γ2 -∗ semWP2 δ1 δ2 s1 s2 (λ v1 δ1 v2 δ2, ⌜Q v1 δ1 v2 δ2⌝)) -> *)
+  (*   adequate NotStuck (MkConf s1 δ1) (γ1, μ1) *)
+  (*     (λ v1 _, ∃ s2' δ2' γ2' μ2', rtc erased_step ([MkConf s2 δ2]%list, (γ2, μ2)) ([MkConf s2' δ2']%list, (γ2', μ2')) ∧ Final s2' ∧ match s2' with *)
+  (*                                                                                                                                   | stm_val _ v2 => Q (valconf_val v1) (valconf_store v1) (inl v2) δ2' *)
+  (*                                                                                                                                   | stm_fail _ m2 => Q (valconf_val v1) (valconf_store v1) (inr m2) δ2' *)
+  (*                                                                                                                                   | _ => False *)
+  (*                                                                                                                                   end). *)
+  (* Proof. *)
+  (*   intros wp2. *)
+  (*   apply (wp_adequacy sailΣ2 (microsail_lang Γ1 τ) NotStuck (MkConf s1 δ1) (γ1, μ1)). *)
+  (*   iIntros (Hinv κs). *)
+  (*   assert (regsmapv1 := RegStore_to_map_valid γ1). *)
+  (*   assert (regsmapv2 := RegStore_to_map_valid γ2). *)
+  (*   iMod (own_alloc ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (spec_name1) "[H1γ1 H2γ1]"; *)
+  (*     first by apply auth_both_valid. *)
+  (*   iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (spec_name2) "[H1γ2 H2γ2]"; *)
+  (*     first by apply auth_both_valid. *)
+  (*   pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS. *)
+  (*   iMod (mem_inv_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]". *)
+  (*   set (regsG_left := {| reg_inG := @reg_pre_inG2_left sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name1 |}). *)
+  (*   set (regsG_right := {| reg_inG := @reg_pre_inG2_right sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name2 |}). *)
+  (*   set (sailG_left  := SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)). *)
+  (*   set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)). *)
+  (*   set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG). *)
+  (*   iModIntro. *)
+  (*   iExists (fun σ _ => regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_inv _ (@memGS2_memGS_left _ memG) (σ.2))%I. *)
+  (*   iExists _. *)
+  (*   rewrite mem_inv2_mem_inv. cbn. iDestruct "Hmem" as "($ & Hmem)". *)
+  (*   iSplitL "H1γ1". *)
+  (*   { now iApply (@own_RegStore_to_regs_inv _ regsG_left γ1). } *)
+  (*   iPoseProof (wp2 _ gs2 with "[$Rmem H2γ1 H2γ2]") as "H". *)
+  (*   { iApply (own_RegStore_to_map_reg_pointsTos (l := finite.enum (sigT 𝑹𝑬𝑮))). *)
+  (*     eapply finite.NoDup_enum. *)
+  (*     iSplitL "H2γ1". iApply "H2γ1". iApply "H2γ2". } *)
+  (*   rewrite /semWP2 /semWP. *)
+  (*   iSpecialize ("H" with "[H1γ2 $Hmem]"). *)
+  (*   { now iApply own_RegStore_to_regs_inv. } *)
+  (*   iApply (wp_mono with "H"). *)
+  (*   iIntros (v1) "(%γ2' & %μ2' & %δ2' & %s2' & %v2 & %Hstep & %Heq & Hreg & Hmem & %HQ)". *)
+  (*   iExists s2', δ2', γ2', μ2'. destruct v1 as [[v1|m1] δ1']; simpl in *; *)
+  (*     iPureIntro; repeat split. *)
+  (*   - now apply steps_to_erased. *)
+  (*   - apply (stm_to_val_Final Heq). *)
+  (*   - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)]; auto. *)
+  (*   - now apply steps_to_erased. *)
+  (*   - apply (stm_to_val_Final Heq). *)
+  (*   - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)]; auto. *)
+  (* Qed. *)
 
-  Proof.
-    intros [n1 steps1]%steps_to_nsteps (* Hs2 *) H.
-    refine (wp_strong_adequacy sailΣ2 (microsail_lang Γ1 τ) _ _ _ _ _ _ _ _ (fun _ => 0) _ steps1).
-    iIntros (Hinv).
-    assert (regsmapv1 := RegStore_to_map_valid γ1).
-    assert (regsmapv2 := RegStore_to_map_valid γ2).
-    iMod (own_alloc ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (spec_name1) "[H1γ1 H2γ1]";
-      first by apply auth_both_valid.
-    iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (spec_name2) "[H1γ2 H2γ2]";
-      first by apply auth_both_valid.
-    pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
-    iMod (mem_inv_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
-    set (regsG_left := {| reg_inG := @reg_pre_inG2_left sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name1 |}).
-    set (regsG_right := {| reg_inG := @reg_pre_inG2_right sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name2 |}).
-    set (sailG_left  := SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)).
-    set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
-    set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG).
-    iModIntro.
-    iExists (λ σ _ _ _, regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_inv _ (@memGS2_memGS_left _ memG) (σ.2))%I.
-    iExists [_]%list, _, _. cbn.
-    rewrite mem_inv2_mem_inv. iDestruct "Hmem" as "($ & Hmem)".
-    iSplitL "H1γ1".
-    { now iApply (@own_RegStore_to_regs_inv _ regsG_left γ1). }
-    iPoseProof (H gs2 with "[$Rmem H2γ1 H2γ2]") as "(H & HΦ)".
-    { iApply (own_RegStore_to_map_reg_pointsTos (l := finite.enum (sigT 𝑹𝑬𝑮))).
-      eapply finite.NoDup_enum. iFrame "H2γ1". iApply "H2γ2". }
-    rewrite /semWP2 /semWP.
-    iDestruct ("H" with "[H1γ2 $Hmem]") as "$".
-    { now iApply own_RegStore_to_regs_inv. }
-    iIntros (es' t2') "_ _ _ [Hregs Hmem] _ _".
-    now iApply "HΦ".
-    (* iIntros (es' t2') "%Happ %Hlen %Hns [Hregs Hmem] H _". *)
-    (* destruct es'; try discriminate. *)
-    (* inversion Happ; subst. simpl. *)
-    (* iDestruct "H" as "(H & _)". *)
-    (* specialize (Hns (MkConf s1' δ1') eq_refl (elem_of_list_here _ _)). *)
-    (* destruct Hns as [Hns|Hns]. *)
-    (* - cbn in Hns. destruct Hns as [(v1' & δ1'') Hns]. rewrite Hns. simpl. *)
-    (*   iDestruct "H" as "(% & % & % & % & % & ? & ? & ? & Hmem22 & ?)". *)
-    (*   iApply "HΦ". *)
-  Qed.
-
-
-  Lemma wp2_adequacy' {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
-    {γ1 γ2 : RegStore} {μ1 μ2 : Memory}
-    {δ1 : CStore Γ1} {δ2 : CStore Γ2}
-    {Q : IVal τ -> CStore Γ1 -> IVal τ -> CStore Γ2 -> Prop} :
-    (forall `{sailGS2 Σ},
-        ⊢ mem_res2 μ1 μ2 ∗ own_regstore2 γ1 γ2 -∗ semWP2 δ1 δ2 s1 s2 (λ v1 δ1 v2 δ2, ⌜Q v1 δ1 v2 δ2⌝)) ->
-    adequate NotStuck (MkConf s1 δ1) (γ1, μ1)
-      (λ v1 _, ∃ s2' δ2' γ2' μ2', rtc erased_step ([MkConf s2 δ2]%list, (γ2, μ2)) ([MkConf s2' δ2']%list, (γ2', μ2')) ∧ Final s2' ∧ match s2' with
-                                                                                                                                    | stm_val _ v2 => Q (valconf_val v1) (valconf_store v1) (inl v2) δ2'
-                                                                                                                                    | stm_fail _ m2 => Q (valconf_val v1) (valconf_store v1) (inr m2) δ2'
-                                                                                                                                    | _ => False
-                                                                                                                                    end).
-  Proof.
-    intros wp2.
-    apply (wp_adequacy sailΣ2 (microsail_lang Γ1 τ) NotStuck (MkConf s1 δ1) (γ1, μ1)).
-    iIntros (Hinv κs).
-    assert (regsmapv1 := RegStore_to_map_valid γ1).
-    assert (regsmapv2 := RegStore_to_map_valid γ2).
-    iMod (own_alloc ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (spec_name1) "[H1γ1 H2γ1]";
-      first by apply auth_both_valid.
-    iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (spec_name2) "[H1γ2 H2γ2]";
-      first by apply auth_both_valid.
-    pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
-    iMod (mem_inv_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
-    set (regsG_left := {| reg_inG := @reg_pre_inG2_left sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name1 |}).
-    set (regsG_right := {| reg_inG := @reg_pre_inG2_right sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name2 |}).
-    set (sailG_left  := SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)).
-    set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
-    set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG).
-    iModIntro.
-    iExists (fun σ _ => regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_inv _ (@memGS2_memGS_left _ memG) (σ.2))%I.
-    iExists _.
-    rewrite mem_inv2_mem_inv. cbn. iDestruct "Hmem" as "($ & Hmem)".
-    iSplitL "H1γ1".
-    { now iApply (@own_RegStore_to_regs_inv _ regsG_left γ1). }
-    iPoseProof (wp2 _ gs2 with "[$Rmem H2γ1 H2γ2]") as "H".
-    { iApply (own_RegStore_to_map_reg_pointsTos (l := finite.enum (sigT 𝑹𝑬𝑮))).
-      eapply finite.NoDup_enum.
-      iSplitL "H2γ1". iApply "H2γ1". iApply "H2γ2". }
-    rewrite /semWP2 /semWP.
-    iSpecialize ("H" with "[H1γ2 $Hmem]").
-    { now iApply own_RegStore_to_regs_inv. }
-    iApply (wp_mono with "H").
-    iIntros (v1) "(%γ2' & %μ2' & %δ2' & %s2' & %v2 & %Hstep & %Heq & Hreg & Hmem & %HQ)".
-    iExists s2', δ2', γ2', μ2'. destruct v1 as [[v1|m1] δ1']; simpl in *;
-      iPureIntro; repeat split.
-    - now apply steps_to_erased.
-    - apply (stm_to_val_Final Heq).
-    - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)]; auto.
-    - now apply steps_to_erased.
-    - apply (stm_to_val_Final Heq).
-    - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)]; auto.
-  Qed.
-
-  (* NOTE: more general stmt, generalized over diff programs (in terms of the actual program logic, instead of the semTriple) *)
-  Lemma adequacy {Γ τ} (s : Stm Γ τ)
-    {γ1 γ2 : RegStore} {μ1 μ2 : Memory}
-    {δ : CStore Γ}
-    {Q : Val τ -> Prop} :
-    (forall `{sailGS2 Σ},
-        ⊢ semTriple δ (mem_res2 μ1 μ2 ∗ own_regstore2 γ1 γ2) s (fun v _ => ⌜Q v⌝)) ->
-    adequate NotStuck (MkConf s δ) (γ1, μ1)
-             (λ v _, ∃ s' δ' γ2' μ2', rtc erased_step ([MkConf s δ]%list, (γ2, μ2)) ([MkConf s' δ']%list, (γ2', μ2')) ∧ Final s' ∧ @ResultOrFail2 Γ _ _ (of_ival (valconf_val v)) s' Q).
-  Proof.
-    intros trips.
-    apply (wp_adequacy sailΣ2 (microsail_lang Γ τ) NotStuck (MkConf s δ) (γ1, μ1)).
-    iIntros (Hinv κs).
-    assert (regsmapv1 := RegStore_to_map_valid γ1).
-    assert (regsmapv2 := RegStore_to_map_valid γ2).
-    iMod (own_alloc ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (spec_name1) "[H1γ1 H2γ1]";
-      first by apply auth_both_valid.
-    iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (spec_name2) "[H1γ2 H2γ2]";
-      first by apply auth_both_valid.
-    pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
-    iMod (mem_inv_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
-    set (regsG_left := {| reg_inG := @reg_pre_inG2_left sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name1 |}).
-    set (regsG_right := {| reg_inG := @reg_pre_inG2_right sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name2 |}).
-    set (sailG_left  := SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)).
-    set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
-    set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG).
-    iModIntro.
-    iExists (fun σ _ => regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_inv _ (@memGS2_memGS_left _ memG) (σ.2))%I.
-    iExists _.
-    rewrite mem_inv2_mem_inv. cbn. iDestruct "Hmem" as "($ & Hmem)".
-    iSplitL "H1γ1".
-    { now iApply (@own_RegStore_to_regs_inv _ regsG_left γ1). }
-    iPoseProof (trips _ gs2 with "[$Rmem H2γ1 H2γ2]") as "H".
-    { iApply (own_RegStore_to_map_reg_pointsTos (l := finite.enum (sigT 𝑹𝑬𝑮))).
-      eapply finite.NoDup_enum.
-      iSplitL "H2γ1". iApply "H2γ1". iApply "H2γ2". }
-    rewrite /semWP2 /semWP.
-    iSpecialize ("H" with "[H1γ2 $Hmem]").
-    { now iApply own_RegStore_to_regs_inv. }
-    iApply (wp_mono with "H").
-    iIntros (v1) "(%γ2' & %μ2' & %δ2' & %s2' & %v2 & %Hstep & %Heq & Hreg & Hmem & %Hvaleq & %Hstoreeq & H)".
-    iExists s2', δ2', γ2', μ2'. destruct v1 as [[v1|m1] δ1']; simpl in *;
-      iDestruct "H" as "%H"; iPureIntro; repeat split.
-    - now apply steps_to_erased.
-    - apply (stm_to_val_Final Heq).
-    - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)].
-      + inversion Hvaleq; subst; auto.
-      + discriminate.
-    - now apply steps_to_erased.
-    - apply (stm_to_val_Final Heq).
-    - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)].
-      + discriminate.
-      + inversion Hvaleq; subst; auto.
-  Qed.
+  (* (* NOTE: more general stmt, generalized over diff programs (in terms of the actual program logic, instead of the semTriple) *) *)
+  (* Lemma adequacy {Γ τ} (s : Stm Γ τ) *)
+  (*   {γ1 γ2 : RegStore} {μ1 μ2 : Memory} *)
+  (*   {δ : CStore Γ} *)
+  (*   {Q : Val τ -> Prop} : *)
+  (*   (forall `{sailGS2 Σ}, *)
+  (*       ⊢ semTriple δ (mem_res2 μ1 μ2 ∗ own_regstore2 γ1 γ2) s (fun v _ => ⌜Q v⌝)) -> *)
+  (*   adequate NotStuck (MkConf s δ) (γ1, μ1) *)
+  (*            (λ v _, ∃ s' δ' γ2' μ2', rtc erased_step ([MkConf s δ]%list, (γ2, μ2)) ([MkConf s' δ']%list, (γ2', μ2')) ∧ Final s' ∧ @ResultOrFail2 Γ _ _ (of_ival (valconf_val v)) s' Q). *)
+  (* Proof. *)
+  (*   intros trips. *)
+  (*   apply (wp_adequacy sailΣ2 (microsail_lang Γ τ) NotStuck (MkConf s δ) (γ1, μ1)). *)
+  (*   iIntros (Hinv κs). *)
+  (*   assert (regsmapv1 := RegStore_to_map_valid γ1). *)
+  (*   assert (regsmapv2 := RegStore_to_map_valid γ2). *)
+  (*   iMod (own_alloc ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (spec_name1) "[H1γ1 H2γ1]"; *)
+  (*     first by apply auth_both_valid. *)
+  (*   iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (spec_name2) "[H1γ2 H2γ2]"; *)
+  (*     first by apply auth_both_valid. *)
+  (*   pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS. *)
+  (*   iMod (mem_inv_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]". *)
+  (*   set (regsG_left := {| reg_inG := @reg_pre_inG2_left sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name1 |}). *)
+  (*   set (regsG_right := {| reg_inG := @reg_pre_inG2_right sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name2 |}). *)
+  (*   set (sailG_left  := SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)). *)
+  (*   set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)). *)
+  (*   set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG). *)
+  (*   iModIntro. *)
+  (*   iExists (fun σ _ => regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_inv _ (@memGS2_memGS_left _ memG) (σ.2))%I. *)
+  (*   iExists _. *)
+  (*   rewrite mem_inv2_mem_inv. cbn. iDestruct "Hmem" as "($ & Hmem)". *)
+  (*   iSplitL "H1γ1". *)
+  (*   { now iApply (@own_RegStore_to_regs_inv _ regsG_left γ1). } *)
+  (*   iPoseProof (trips _ gs2 with "[$Rmem H2γ1 H2γ2]") as "H". *)
+  (*   { iApply (own_RegStore_to_map_reg_pointsTos (l := finite.enum (sigT 𝑹𝑬𝑮))). *)
+  (*     eapply finite.NoDup_enum. *)
+  (*     iSplitL "H2γ1". iApply "H2γ1". iApply "H2γ2". } *)
+  (*   rewrite /semWP2 /semWP. *)
+  (*   iSpecialize ("H" with "[H1γ2 $Hmem]"). *)
+  (*   { now iApply own_RegStore_to_regs_inv. } *)
+  (*   iApply (wp_mono with "H"). *)
+  (*   iIntros (v1) "(%γ2' & %μ2' & %δ2' & %s2' & %v2 & %Hstep & %Heq & Hreg & Hmem & %Hvaleq & %Hstoreeq & H)". *)
+  (*   iExists s2', δ2', γ2', μ2'. destruct v1 as [[v1|m1] δ1']; simpl in *; *)
+  (*     iDestruct "H" as "%H"; iPureIntro; repeat split. *)
+  (*   - now apply steps_to_erased. *)
+  (*   - apply (stm_to_val_Final Heq). *)
+  (*   - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)]. *)
+  (*     + inversion Hvaleq; subst; auto. *)
+  (*     + discriminate. *)
+  (*   - now apply steps_to_erased. *)
+  (*   - apply (stm_to_val_Final Heq). *)
+  (*   - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)]. *)
+  (*     + discriminate. *)
+  (*     + inversion Hvaleq; subst; auto. *)
+  (* Qed. *)
 
   (* Lemma adequacy_gen {Γ1 Γ2 τ} (s11 s12 : Stm Γ1 τ) (s21 s22 : Stm Γ2 τ) *)
   (*   {γ11 γ12 γ21 γ22 : RegStore} {μ11 μ12 μ21 μ22 : Memory} *)

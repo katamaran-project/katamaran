@@ -353,7 +353,7 @@ Module ty.
            | _ => idtac
            end.
 
-    Tactic Notation "ty.removeLiftBinOp" := removeLiftBinOp.
+    (* Tactic Notation "ty.removeLiftBinOp" := removeLiftBinOp. *)
 
     Definition valToRelVal {σ} : Val σ -> RelVal σ :=
       SyncVal.

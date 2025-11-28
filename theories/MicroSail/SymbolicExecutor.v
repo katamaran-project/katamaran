@@ -429,7 +429,7 @@ Module Type SymbolicExecOn
             ⟨ ω01 ⟩ t <- exec_aux s__σ;;
             pushpop t (exec_aux s__τ)
         | stm_block δ s =>
-            pushspops (lift δ) (exec_aux s)
+            pushspops (lift (env.map (fun b => ty.valToRelVal) δ)) (exec_aux s)
         | stm_assign x s =>
             ⟨ ω01 ⟩ t <- exec_aux s;;
             ⟨ ω12 ⟩ _ <- assign x t;;
@@ -439,7 +439,7 @@ Module Type SymbolicExecOn
             lift_heapspec (exec_call f args)
         | stm_call_frame δ s =>
             ⟨ ω01 ⟩ δ1 <- get_local (w:=w0);;
-            ⟨ ω12 ⟩ _  <- put_local (lift δ);;
+            ⟨ ω12 ⟩ _  <- put_local (lift (env.map (fun b => ty.valToRelVal) δ));;
             ⟨ ω23 ⟩ t  <- exec_aux s;;
             ⟨ ω34 ⟩ _  <- put_local (persist δ1 (ω12 ∘ ω23));;
             pure (persist__term t ω34)

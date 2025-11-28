@@ -2344,6 +2344,10 @@ Module bv.
         y <ᵘ? x = negb (x <=ᵘ? y).
     Proof. intros; unfold bv.uleb, bv.ultb; apply N.ltb_antisym. Qed.
 
+    Lemma uleb_antisym : forall {n} (x y : bv n),
+        y <=ᵘ? x = negb (x <ᵘ? y).
+    Proof. intros; unfold bv.uleb, bv.ultb; apply N.leb_antisym. Qed.
+
     Lemma ult_ule_incl : forall {n} (x y : bv n),
         x <ᵘ y -> x <=ᵘ y.
     Proof. intros; unfold bv.ule, bv.ult; apply N.lt_le_incl; auto. Qed.

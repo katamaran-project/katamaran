@@ -41,8 +41,8 @@ From Katamaran Require Import
      Signature
      Bitvector
      Semantics.Registers
-     MicroSail.ShallowExecutor (* MicroSail.SymbolicExecutor *)
-     (* Symbolic.Solver *)
+     MicroSail.ShallowExecutor MicroSail.SymbolicExecutor
+     Symbolic.Solver
      Specification
      Program.
 
@@ -232,7 +232,7 @@ Module Import ExampleProgram <: Program ExampleBase.
     (* | gcdloop    : Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int *)
     (* | msum       : Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either) *)
     (* | length {σ} : Fun [ "xs" ∷ ty.list σ ] ty.int *)
-    | example1   : Fun [ "x" ∷ ty.bool ] (ty.int)
+    | example1   : Fun [ "x" ∷ ty.bool; "y" ∷ ty.int ] (ty.int)
     | fpthree16  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
     | fpthree32  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
     | fpthree64  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
@@ -271,8 +271,8 @@ Module Import ExampleProgram <: Program ExampleBase.
     (*       | Right => MkAlt (pat_var "z") (y)%exp *)
     (*       end). *)
 
-    Definition fun_example1 : Stm [ "x" ∷ ty.bool ] (ty.int) :=
-      stm_if (stm_exp (exp_var "x")) (stm_val ty.int 0) (stm_val ty.int 0).
+    Definition fun_example1 : Stm [ "x" ∷ ty.bool; "y" ∷ ty.int ] (ty.int) :=
+      stm_if (stm_exp (exp_var "x")) (stm_exp (exp_var "y")) (stm_exp (exp_var "y")).
 
     Definition fun_fpthree' (e f : nat) : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec (1 + e + f)) :=
       let: "exp" ∷ ty.bvec e := stm_val (ty.bvec e) bv.one in
@@ -383,9 +383,9 @@ Module Import ExampleProgram <: Program ExampleBase.
   Include DefaultRegStoreKit ExampleBase.
 
   Section ForeignKit.
-    Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv RelVal σs)
+    Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
       (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop := False.
-    Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv RelVal σs) γ μ :
+    Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
       exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
     Proof. destruct f. Qed.
   End ForeignKit.
@@ -518,13 +518,14 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
     (*      sep_contract_postcondition   := asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post *)
     (*   |}. *)
 
-    Definition sep_contract_example1 : SepContract [ "x" ∷ ty.bool ] ty.int :=
+    Definition sep_contract_example1 : SepContract [ "x" ∷ ty.bool; "y" ∷ ty.int ] ty.int :=
       {|
-        sep_contract_logic_variables := ["x" ∷ ty.bool];
-        sep_contract_localstore      := [term_var "x"];
-        sep_contract_precondition    := asn.formula (formula_secLeak (term_var "x"));
+        sep_contract_logic_variables := ["x" ∷ ty.bool; "y" ∷ ty.int];
+        sep_contract_localstore      := [term_var "x"; term_var "y"];
+        sep_contract_precondition    := asn.formula (formula_secLeak (term_var "x"))
+                                          ∗ asn.formula (formula_secLeak (term_var "y"));
         sep_contract_result          := "result";
-        sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_val ty.int 0))
+        sep_contract_postcondition   := asn.formula (formula_eq (term_var "result") (term_var "y"))
       |}.
 
     Definition sep_contract_bvtest : SepContract [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42) :=
@@ -590,42 +591,45 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
 
 End ExampleSpecification.
 
-Module Import ExampleExecutor :=
+Module Import ExampleShallowExecutor :=
   MakeShallowExecutor ExampleBase ExampleSig ExampleProgram ExampleSpecification.
 
-(* Local Ltac solve := *)
-(*   repeat *)
-(*     (compute *)
-(*      - [Z.of_nat Pos.of_succ_nat List.length Pos.succ Val Z.add *)
-(*                  Z.succ *)
-(*         Z.compare Z.eqb Z.ge Z.geb Z.gt Z.gtb Z.le Z.leb Z.lt *)
-(*         Z.ltb Z.mul Z.of_nat Z.opp Z.pos_sub Z.succ is_true negb *)
-(*        ] in *; *)
-(*       repeat *)
-(*        match goal with *)
-(*        | H: NamedEnv _ _ |- _ => unfold NamedEnv in H *)
-(*        | H: _ /\ _ |- _ => destruct H *)
-(*        | H: Z.ltb _ _ = true |- _ => apply Z.ltb_lt in H *)
-(*        | H: Z.ltb _ _ = false |- _ => apply Z.ltb_ge in H *)
-(*        | H : pair _ _ = pair _ _ |- _ => inversion H; subst; clear H *)
-(*        | |- forall _, _ => intro *)
-(*        | |- exists _, _ => eexists *)
-(*        | |- Debug _ _ => constructor *)
-(*        | |- _ /\ _ => constructor *)
-(*        | |- VerificationCondition _ => constructor; cbn *)
-(*        | |- Obligation _ _ _ => constructor; cbn *)
-(*        | |- _ \/ False => left *)
-(*        | |- False \/ _ => right *)
-(*        end; *)
-(*      cbn [List.length Z.add]; *)
-(*      subst; try congruence; *)
-(*      auto *)
-(*     ). *)
+Module Import ExampleExecutor :=
+  MakeExecutor ExampleBase ExampleSig ExampleProgram ExampleSpecification.
 
-(* Arguments inst {_ _ _ _} !_ _ /. *)
-(* Arguments inst_term {_} [_] !_ _ /. *)
-(* Arguments instprop {_ _ _} !_ _ /. *)
-(* Arguments instprop_formula [_] !_ _ /. *)
+Local Ltac solve :=
+  repeat
+    (compute
+     - [Z.of_nat Pos.of_succ_nat List.length Pos.succ Val Z.add
+                 Z.succ
+        Z.compare Z.eqb Z.ge Z.geb Z.gt Z.gtb Z.le Z.leb Z.lt
+        Z.ltb Z.mul Z.of_nat Z.opp Z.pos_sub Z.succ is_true negb
+       ] in *;
+      repeat
+       match goal with
+       | H: NamedEnv _ _ |- _ => unfold NamedEnv in H
+       | H: _ /\ _ |- _ => destruct H
+       | H: Z.ltb _ _ = true |- _ => apply Z.ltb_lt in H
+       | H: Z.ltb _ _ = false |- _ => apply Z.ltb_ge in H
+       | H : pair _ _ = pair _ _ |- _ => inversion H; subst; clear H
+       | |- forall _, _ => intro
+       | |- exists _, _ => eexists
+       | |- Debug _ _ => constructor
+       | |- _ /\ _ => constructor
+       | |- VerificationCondition _ => constructor; cbn
+       | |- Obligation _ _ _ => constructor; cbn
+       | |- _ \/ False => left
+       | |- False \/ _ => right
+       end;
+     cbn [List.length Z.add];
+     subst; try congruence;
+     auto
+    ).
+
+Arguments inst {_ _ _ _} !_ _ /.
+Arguments inst_term {_} [_] !_ _ /.
+Arguments instprop {_ _ _} !_ _ /.
+Arguments instprop_formula [_] !_ _ /.
 
 (* Goal True. idtac "Timing before: example/length". Abort. *)
 (* Lemma valid_contract_length {σ} : Symbolic.ValidContract (@sep_contract_length σ) (FunDef length). *)
@@ -663,8 +667,11 @@ Module Import ExampleExecutor :=
 Lemma valid_contract_pevaltest1 : Shallow.ValidContract sep_contract_example1 (FunDef example1).
 Proof.
   cbv.
-  destruct v.
-  - tauto.
-  - tauto.
+  intros.
+  destruct v, v0; tauto.
 Qed.
 
+Lemma valid_contract_example1 : Symbolic.ValidContractWithErasure sep_contract_example1 (FunDef example1).
+Proof.
+  vm_compute.
+Qed.

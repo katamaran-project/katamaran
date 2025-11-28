@@ -327,8 +327,9 @@ Module RefineExecOn
       #[export] Instance refine_compat_bind {Γ1 Γ2 Γ3 : PCtx} `{RA : Rel AT A} `{RB : Rel BT B} {w} : RefineCompat (RStoreSpec Γ1 Γ2 RA -> (□ᵣ (RA -> RStoreSpec Γ2 Γ3 RB)) -> RStoreSpec Γ1 Γ3 RB) CStoreSpec.bind w (SStoreSpec.bind (w := w)) _ | (RefineCompat _ _ _ SStoreSpec.bind _) :=
         MkRefineCompat refine_bind.
 
+      (* TODO: Had to make arguments of CStoreSpec.angelic explicit, because Coq automatically makes σ implicit (annoying feature that I don't agree with and can't fix) *)
       #[export] Program Instance refine_compat_angelic (x : option LVar) {Γ} {w : World} {σ}:
-        RefineCompat (RStoreSpec Γ Γ (RVal σ)) (CStoreSpec.angelic σ) w (SStoreSpec.angelic (w := w) x σ) emp :=
+        RefineCompat (RStoreSpec Γ Γ (RVal σ)) (@CStoreSpec.angelic _ σ) w (SStoreSpec.angelic (w := w) x σ) emp :=
         MkRefineCompat _.
       Next Obligation.
         iIntros (? ? ? ?) "_".
@@ -336,7 +337,7 @@ Module RefineExecOn
       Qed.
 
       #[export] Program Instance refine_compat_demonic (x : option LVar) {Γ} {w : World} {σ} :
-        RefineCompat (RStoreSpec Γ Γ (RVal σ)) (CStoreSpec.demonic σ) w (SStoreSpec.demonic (w := w) x σ) emp :=
+        RefineCompat (RStoreSpec Γ Γ (RVal σ)) (@CStoreSpec.demonic _ σ) w (SStoreSpec.demonic (w := w) x σ) emp :=
         MkRefineCompat _.
       Next Obligation.
         iIntros (? ? ? ?) "_".
@@ -450,7 +451,7 @@ Module RefineExecOn
         ℛ⟦ RStore Γ ⟧ δ sδ ⊢ ℛ⟦RVal σ⟧ (B.eval e δ) (seval_exp sδ e).
       Proof.
         unfold RStore, RVal, RInst. crushPredEntails3.
-        rewrite <-eval_exp_inst.
+        rewrite <- eval_exp_inst.
         now subst.
       Qed.
 
@@ -488,7 +489,7 @@ Module RefineExecOn
       Qed.
 
       Lemma refine_env_update {Γ x σ} (xIn : (x∷σ ∈ Γ)%katamaran) (w : World)
-        (t : Term w σ) (v : Val σ) (δs : SStore Γ w) (δc : CStore Γ) :
+        (t : Term w σ) (v : RelVal σ) (δs : SStore Γ w) (δc : CStore Γ) :
         ℛ⟦RVal σ⟧ v t ∗ ℛ⟦RStore Γ⟧ δc δs ⊢ ℛ⟦RStore Γ⟧ (δc ⟪ x ↦ v ⟫) (δs ⟪ x ↦ t ⟫).
       Proof.
         unfold RVal, RStore, RInst.
@@ -536,7 +537,7 @@ Module RefineExecOn
         MkRefineCompat (refine_eval_exps es).
 
       #[export] Instance refine_compat_env_update {Γ x σ} (xIn : (x∷σ ∈ Γ)%katamaran) (w : World)
-        (t : Term w σ) (v : Val σ) (δs : SStore Γ w) (δc : CStore Γ) :
+        (t : Term w σ) (v : RelVal σ) (δs : SStore Γ w) (δc : CStore Γ) :
         RefineCompat (RStore Γ) (δc ⟪ x ↦ v ⟫) w (δs ⟪ x ↦ t ⟫) _ :=
         MkRefineCompat (refine_env_update xIn w t v δs δc).
 

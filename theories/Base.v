@@ -369,26 +369,25 @@ Module Type BaseMixin (Import TY : Types).
                    end] => destruct b; cbn
       end.
 
-  (* Lemma eval_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) : *)
-  (*   eval e (inst δΓΣ ι) = inst (seval_exp δΓΣ e) ι. *)
-  (* Proof. *)
-  (*   induction e; cbn; repeat f_equal; auto. *)
-  (*   { unfold inst, inst_store, inst_env at 1; cbn. *)
-  (*     now rewrite env.lookup_map. *)
-  (*   } *)
-  (*   (* 2: { *) *)
-  (*   (*   induction es as [|eb n es IHes]; cbn in *. *) *)
-  (*   (*   { reflexivity. } *) *)
-  (*   (*   { destruct X as [-> Heqs]. *) *)
-  (*   (*     change (inst_term ?ι ?t) with (inst ι t). *) *)
-  (*   (*     destruct (inst (seval_exp δΓΣ eb) ι); *) *)
-  (*   (*       cbn; f_equal; auto. *) *)
-  (*   (*   } *) *)
-  (*   (* } *) *)
-  (*   { rewrite IHe1. rewrite IHe2. *)
-  (*   now destructInsts. } *)
-  (*   { admit. } *)
-  (* Qed. *)
+  Lemma eval_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
+    eval e (inst δΓΣ ι) = inst (seval_exp δΓΣ e) ι.
+  Proof.
+    induction e; cbn; repeat f_equal; auto.
+    { unfold inst, inst_store, inst_env at 1; cbn.
+      now rewrite env.lookup_map.
+    }
+    {
+      induction es as [|eb n es IHes]; cbn in *.
+      { reflexivity. }
+      { destruct X as [-> Heqs].
+        change (inst_term ?ι ?t) with (inst ι t).
+        apply f_equal2; auto.
+      }
+    }
+    (* { rewrite IHe1. rewrite IHe2. *)
+    (* now destructInsts. } *)
+    (* { admit. } *)
+  Qed.
 
   Lemma subst_seval {Γ τ Σ Σ'} (e : Exp Γ τ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :
     subst (T := fun Σ => Term Σ _) (seval_exp δ e) ζ = seval_exp (subst δ ζ) e.
