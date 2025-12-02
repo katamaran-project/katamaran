@@ -591,9 +591,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
         (*   ((term_binop bop.bvand *)
         (*       (term_var "w") *)
         (*       (term_val ty_word (bv.of_N 48)))) *)
-        (*   (term_val ty_word (bv.of_N 48)) = term_val ty.bool true; *)
- 
-        (term_binop bop.bvand (term_var "w") (term_val ty_word (bv.of_N 1)) =  (term_val ty_word (bv.of_N 0)));
+        (* (term_val ty_word (bv.of_N 48)) = term_val ty.bool true; *)
+        (* (term_binop bop.bvand (term_var "w") (term_val ty_word (bv.of_N 1)) =  (term_val ty_word (bv.of_N 0))); *)
+      (term_unop (uop.bvtake 1) (term_var "w") = term_val (ty.bvec 1) (bv.of_N 0));
       lemma_postcondition   :=
         asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w")) ∗
       ( term_var "r") ↦ᵣ (term_var "w");

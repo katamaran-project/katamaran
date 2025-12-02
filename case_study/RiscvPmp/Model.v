@@ -258,13 +258,14 @@ Module RiscvPmpModel2.
     Context `{sg : sailGS Σ}.
 
     Lemma gprs_equiv :
+      forall Σ (ι : Valuation Σ),
       interp_gprs ⊣⊢
-      asn.interpret asn_regs_ptsto env.nil.
+      asn.interpret asn_regs_ptsto ι.
     Proof.
-      unfold interp_gprs, reg_file.
+      iIntros. unfold interp_gprs, reg_file.
       rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
       cbn. iSplit.
-      - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
+      - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)". iSplit; auto.
       - iIntros "H"; iSplitR; first by iExists bv.zero.
         repeat iDestruct "H" as "($ & H)"; iFrame.
     Qed.

@@ -326,6 +326,9 @@ Section BlockVerificationDerived.
       end.
     (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
 
+    Definition blockVerifierAssumptions `{sailGS Σ} (PRE : (Val ty_xlenbits) → iProp Σ) (a : Val ty_xlenbits) : iProp Σ :=
+      (PRE a) ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v).
+
     Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : Val ty_word -> iProp Σ) (a : Val ty_word) : iProp Σ :=
       semTriple [env] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
         (FunDef RiscvPmpProgram.step)

@@ -994,15 +994,25 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
                          σ
                          (ctx.in_cat_left Σ (ctx.in_map (fun '(y::τ) => y::τ) xIn)))).
 
-    Definition asn_and_regs {Σ} (f : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
-      f x1 ∗ f x2 ∗ f x3 ∗ f x4 ∗ f x5 ∗ f x6 ∗ f x7 ∗ f x8 ∗ f x9 ∗
-      f x10 ∗ f x11 ∗ f x12 ∗ f x13 ∗ f x14 ∗ f x15 ∗ f x16 ∗ f x17 ∗ f x18 ∗ f x19 ∗
-      f x20 ∗ f x21 ∗ f x22 ∗ f x23 ∗ f x24 ∗ f x25 ∗ f x26 ∗ f x27 ∗ f x28 ∗ f x29 ∗
-      f x30 ∗ f x31.
+    Definition asn_and_regs {Σ} (f : Reg ty_xlenbits -> Assertion Σ) (regs : list (Reg ty_xlenbits)) : Assertion Σ :=
+      List.fold_right (fun r acc => f r ∗ acc) ⊤ regs.
+
+    Definition filter_regs (exclude : list Z) : list (Reg ty_xlenbits) :=
+      let all_regs := seqZ 1 31 in
+      let diff := list_difference all_regs exclude in
+      List.fold_right
+        (fun x acc => match reg_convert (bv.of_Z x) with
+                      | Some r => List.cons r acc
+                      | None => acc
+                      end)
+        List.nil diff.
+
+    Definition asn_regs_ptsto_excl {Σ} (exclude : list Z) : Assertion Σ :=
+      let regs := filter_regs exclude in
+      asn_and_regs  (fun r => asn.exist "w" _ (r ↦ term_var "w")) regs.
 
     Definition asn_regs_ptsto {Σ} : Assertion Σ :=
-      asn_and_regs
-        (fun r => asn.exist "w" _ (r ↦ term_var "w")).
+      asn_regs_ptsto_excl List.nil.
 
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
