@@ -1888,6 +1888,10 @@ Module Type GenericSolverOn
         formula_eqb f1 f3 &&& formula_eqb f2 f4;
       formula_eqb (formula_and f1 f2) (formula_and f3 f4) :=
         formula_eqb f1 f3 &&& formula_eqb f2 f4;
+      formula_eqb (@formula_secLeak _ σ t1) (@formula_secLeak _ τ t2) with eq_dec σ τ => {
+          formula_eqb (@formula_secLeak _ σ t1) (@formula_secLeak _ ?(σ) t2) (left eq_refl) := Term_eqb t1 t2;
+          formula_eqb (@formula_secLeak _ σ t1) (@formula_secLeak _ τ t2) (right _) := false;
+          };
       formula_eqb _ _ := false.
 
     Lemma formula_eqb_spec {Σ} (f1 f2 : Formula Σ) :

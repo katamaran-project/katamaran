@@ -671,7 +671,19 @@ Proof.
   destruct v, v0; tauto.
 Qed.
 
+(* Ltac trace_cbv fuel := *)
+(*   match fuel with *)
+(*   | 0 => idtac "Out of fuel" *)
+(*   | S n => *)
+(*       (cbv beta; idtac "beta"; idtac fuel) || *)
+(*         (cbv iota; idtac "iota"; fuel)) || *)
+(*         (cbv delta; idtac ("delta" fuel)) || *)
+(*         (cbv zeta; idtac ("zeta" fuel)) *)
+(*   end. *)
+
+
 Lemma valid_contract_example1 : Symbolic.ValidContractWithErasure sep_contract_example1 (FunDef example1).
 Proof.
   vm_compute.
+  now constructor.
 Qed.

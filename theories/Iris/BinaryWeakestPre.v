@@ -1060,20 +1060,20 @@ Section Soundness.
   Proof.
     iIntros "(%v & %eq) Hk P".
     destruct v eqn:Ee1.
-      + iSpecialize ("Hk" with "[] P"); auto.
+    + iSpecialize ("Hk" with "[] P"); auto.
       iApply (semWP2_assertk with "[Hk]");
-      rewrite evalValProjLeftIsProjLeftEval evalValProjRightIsProjRightEval !eq;
-      cbn;
+        rewrite evalValProjLeftIsProjLeftEval evalValProjRightIsProjRightEval !eq;
+        cbn;
         iIntros (H1e H2e);
         try (rewrite H1e in H2e, Ee1; discriminate);
         auto.
       congruence.
-      + iApply (semWP2_assertk with "[Hk]");
-          rewrite evalValProjLeftIsProjLeftEval evalValProjRightIsProjRightEval !eq;
-          cbn;
-          iIntros (H1e H2e);
-          try congruence.
-        iApply semWP2_fail. auto.
+    + iApply (semWP2_assertk with "[Hk]");
+        rewrite evalValProjLeftIsProjLeftEval evalValProjRightIsProjRightEval !eq;
+        cbn;
+        iIntros (H1e H2e);
+        try congruence.
+      iApply semWP2_fail. auto.
   Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)

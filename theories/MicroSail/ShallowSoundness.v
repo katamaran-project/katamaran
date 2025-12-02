@@ -243,7 +243,8 @@ Module Type Soundness
           now apply IHs2.
 
         - (* stm_assert *)
-          apply rule_stm_assert; intro Heval.
+          apply rule_stm_assert.
+          intro Heval.
           apply IHs, HYP.
           destruct (eval e1 δ1).
           + now subst.
