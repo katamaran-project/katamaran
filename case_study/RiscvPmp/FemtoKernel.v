@@ -1256,14 +1256,14 @@ Qed.
       Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
       iFrame "∗ #". rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
       now repeat iDestruct "H'" as "($ & H')".
+      Unshelve. all: constructor.
     - iIntros "Hmem".
       iInv "Hinv" as (t) ">[Hfrag %Hpred]" "_".
       iDestruct "Hmem" as "(%memmap & Hinv2 & %link & Htr)".
       iDestruct (trace.trace_full_frag_eq with "Htr Hfrag") as "->".
-      iApply fupd_mask_intro; first set_solver.
+      iApply fupd_mask_intro; first apply empty_subseteq.
       now iIntros "_".
-      Unshelve. constructor. constructor.
-  Abort.
+  Qed.
 
 (* Print Assumptions femtokernel_endToEnd. *)
 
