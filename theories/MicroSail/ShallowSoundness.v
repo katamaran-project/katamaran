@@ -243,7 +243,9 @@ Module Type Soundness
           now apply IHs2.
 
         - (* stm_assert *)
+          destruct HYP as (HsL & HYP).
           apply rule_stm_assert.
+          { destruct (eval e1 δ1); try contradiction. by eexists. }
           intro Heval.
           apply IHs, HYP.
           destruct (eval e1 δ1).

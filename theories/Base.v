@@ -78,27 +78,14 @@ Module Type BaseMixin (Import TY : Types).
   Definition projRightCStore {Γ} (δ : CStore Γ) : CStoreVal Γ :=
     env.map (fun _ => ty.projRight) δ.
 
-  Definition zipCStoreVal {Γ : PCtx} (δ1 δ2 : CStoreVal Γ) : CStore Γ.
-  Proof.
-    induction Γ.
-    - exact env.nil.
-    - apply env.snoc.
-      + apply IHΓ.
-        * env.destroy δ1. exact δ1.
-        * env.destroy δ2. exact δ2.
-      + apply NonSyncVal.
-        * env.destroy δ1. exact v.
-        * env.destroy δ2. exact v.
-          Show Proof.
-  Defined.
-
-  (* TODO: Replace proof mode definition by declaritive definition *)
-  (* Fixpoint zipCStoreVal {Γ : PCtx} (δ1 δ2 : CStoreVal Γ) : CStore Γ := *)
-  (* match Γ , δ1 , δ2 with *)
-  (* | ctx.nil , _ , _ => env.nil *)
-  (* | ctx.snoc Γ b , env.snoc δ1 b1 db1 , env.snoc δ2 b2 db2 => *)
-  (*     env.snoc (zipCStoreVal δ1 δ2) (NonSyncVal db1 db2) *)
-  (* end. *)
+  Fixpoint zipCStoreVal {Γ : PCtx} (δ1 : CStoreVal Γ) : CStoreVal Γ -> CStore Γ :=
+  match δ1 with
+  | env.nil            => fun _ => env.nil
+  | env.snoc δ1 b1 db1 => fun δ2 => match env.view δ2 with
+                                    | env.isSnoc δ2 db2 =>
+      env.snoc (zipCStoreVal δ1 δ2) _ (NonSyncVal db1 db2)
+               end
+  end.
 
   Lemma projLeftZipCStoreVal {Γ} (δ1 δ2 : CStoreVal Γ) :
     projLeftCStore (zipCStoreVal δ1 δ2) = δ1.
@@ -203,17 +190,17 @@ Module Type BaseMixin (Import TY : Types).
   Section PatternMatching.
     Context {N : Set}.
 
-    (* Lemma inst_tuple_pattern_match {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty} *)
-    (*   (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : Env (Term Σ) σs) : *)
-    (*   inst (tuple_pattern_match_env p ts) ι = *)
-    (*   tuple_pattern_match_env p (inst (T := fun Σ => Env (Term Σ) σs) ts ι). *)
-    (* Proof. *)
-    (*   unfold inst at 1; cbn. *)
-    (*   induction p; cbn. *)
-    (*   - reflexivity. *)
-    (*   - destruct (env.view ts); cbn. *)
-    (*     f_equal. apply IHp. *)
-    (* Qed. *)
+    Lemma inst_tuple_pattern_match {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty}
+      (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : Env (Term Σ) σs) :
+      inst (tuple_pattern_match_env p ts) ι =
+      tuple_pattern_match_env p (inst (T := fun Σ => Env (Term Σ) σs) ts ι).
+    Proof.
+      unfold inst at 1; cbn.
+      induction p; cbn.
+      - reflexivity.
+      - destruct (env.view ts); cbn.
+        f_equal. apply IHp.
+    Qed.
 
     (* Lemma inst_tuple_pattern_match_reverse {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty} *)
     (*   (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : NamedEnv (Term Σ) Δ) : *)

@@ -455,9 +455,14 @@ Module Type SymbolicExecOn
             exec_aux s2
         | stm_assertk e _ k =>
             ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
+            ⟨ θ ⟩ _ <- lift_purespec (SPureSpec.assertSecLeak (amsg.mk
+                                        {| debug_string_pathcondition := wco _;
+                                          debug_string_message       :=
+                                            "Pattern matched term is not secLeak";
+                                        |}) t) ;;
             (* This uses assume_formula for a partial correctness
                interpretation of the object language failure effect. *)
-            ⟨ ω12 ⟩ _ <- lift_heapspec (SHeapSpec.assume_formula (formula_bool t)) ;;
+            ⟨ ω12 ⟩ _ <- lift_heapspec (SHeapSpec.assume_formula (formula_bool t⟨θ⟩)) ;;
             exec_aux k
         | stm_fail _ _ =>
             (* Same as stm_assert: partial correctness of failure. *)

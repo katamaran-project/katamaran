@@ -312,6 +312,11 @@ Module RefineExecOn
           CStoreSpec.evalStoreSpec w (SStoreSpec.evalStoreSpec (w := w)) emp :=
         MkRefineCompat (refine_evalStoreSpec).
 
+      #[export] Instance refine_compat_lift_purespec {Γ} `(R : Rel AT A) {w : World}:
+        RefineCompat (RPureSpec R -> RStoreSpec Γ Γ R)
+          CStoreSpec.lift_purespec w (SStoreSpec.lift_purespec (w := w)) emp :=
+        MkRefineCompat (refine_lift_purespec R).
+
       #[export] Instance refine_compat_lift_heapspec {Γ} `(R : Rel AT A) {w : World}:
         RefineCompat (RHeapSpec R -> RStoreSpec Γ Γ R)
             CStoreSpec.lift_heapspec w (SStoreSpec.lift_heapspec (w := w)) emp :=
@@ -574,6 +579,35 @@ Module RefineExecOn
       Qed.
 
     End ExecAux.
+
+        Ltac rsolve_step :=
+      first [
+          (lazymatch goal with
+           | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
+           | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
+           end)
+        | lazymatch goal with
+          | |- envs_entails _ (ℛ⟦ ?R ⟧ ?v ?vs) =>
+              (iApply (refine_compat_lemma (R := R) (vs := vs));
+               lazymatch goal with | |- RefineCompat _ _ _ _ _ => fail | _ => idtac end
+              )
+          | |- envs_entails _ (_ ∗ _) => iSplit
+          | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
+          end
+        ].
+
+    Ltac rsolve :=
+      iStartProof;
+      repeat rsolve_step; try done;
+      (* After walking through the symbolic computation using the above lemmas,
+       * we try to apply induction hypotheses.
+       * To do this, we determine the right world to apply the IH in by looking at the current goal.
+       *)
+      repeat match goal with
+        | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
+        | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
+        | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
+        end.
 
   End StoreSpec.
 

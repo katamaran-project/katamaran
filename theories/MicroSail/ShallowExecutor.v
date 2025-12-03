@@ -347,6 +347,7 @@ Module Type ShallowExecOn
           | stm_seq e k => _ <- exec_aux e ;; exec_aux k
           | stm_assertk e1 _ k =>
               v <- eval_exp e1 ;;
+              _ <- lift_purespec (CPureSpec.assertSecLeak v);;
               _ <- lift_heapspec (CHeapSpec.assume_formula (v = ty.valToRelVal (σ := ty.bool) true)) ;;
               exec_aux k
           | stm_fail _ s =>
