@@ -1161,11 +1161,12 @@ Qed.
       rewrite <- ?bi.sep_assoc.
       unfold interp_gprs; reduce_big_sepS_big_sepL; cbn.
       now repeat iDestruct "H'" as "($ & H')".
+      Unshelve. all: constructor.
     - iIntros "Hmem".
       iInv "Hmmio" as (t) ">[Hfrag %Hpred]" "_".
       iDestruct "Hmem" as "(%memmap & Hinv & %link & Htr)".
       iDestruct (trace.trace_full_frag_eq with "Htr Hfrag") as "->".
-      iApply fupd_mask_intro; first set_solver.
+      iApply fupd_mask_intro; first apply empty_subseteq.
       now iIntros "_".
   Qed.
 
