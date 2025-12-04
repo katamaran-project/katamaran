@@ -69,6 +69,7 @@ Module Type SymbolicExecOn
   (Import SPEC : Specification B SIG PROG).
 
   Import Entailment.
+  Import Erasure.
   Import ModalNotations.
   Local Open Scope modal.
 
@@ -87,6 +88,22 @@ Module Type SymbolicExecOn
           debug_call_heap                   : SHeap Σ;
         }.
 
+    Record EDebugCall : Type :=
+      MkEDebugCall
+        { edebug_call_function_parameters    : PCtx;
+          edebug_call_function_result_type   : Ty;
+          edebug_call_function_name          : 𝑭 edebug_call_function_parameters edebug_call_function_result_type;
+          edebug_call_function_contract      : option (SepContract edebug_call_function_parameters edebug_call_function_result_type);
+          edebug_call_function_arguments     : NamedEnv ETerm edebug_call_function_parameters;
+          (* edebug_call_program_context        : PCtx; *)
+          edebug_call_pathcondition          : list EFormula;
+          (* edebug_call_localstore             : SStore debug_call_program_context Σ; *)
+          edebug_call_heap                   : list EChunk;
+        }.
+
+    #[export] Instance EraseDebugCall : Erase DebugCall EDebugCall :=
+      fun _ '(MkDebugCall f fc args pc h) => MkEDebugCall f fc (erase args) (erase pc) (erase h).
+
     Record DebugCallLemma (Σ : LCtx) : Type :=
       MkDebugCallLemma
         { debug_call_lemma_parameters    : PCtx;
@@ -97,6 +114,21 @@ Module Type SymbolicExecOn
           (* debug_call_localstore       : SStore debug_call_program_context Σ; *)
           debug_call_lemma_heap          : SHeap Σ;
         }.
+
+    Record EDebugCallLemma : Type :=
+      MkEDebugCallLemma
+        { edebug_call_lemma_parameters    : PCtx;
+          edebug_call_lemma_name          : 𝑳 edebug_call_lemma_parameters;
+          edebug_call_lemma_contract      : Lemma edebug_call_lemma_parameters;
+          edebug_call_lemma_arguments     : NamedEnv ETerm edebug_call_lemma_parameters;
+          edebug_call_lemma_pathcondition : list EFormula;
+          (* edebug_call_localstore       : NamedEnv ETerm debug_call_program_context; *)
+          edebug_call_lemma_heap          : list EChunk;
+        }.
+
+    #[export] Instance EraseDebugCallLemma : Erase DebugCallLemma EDebugCallLemma :=
+      fun _ '(MkDebugCallLemma l lc args pc h) => MkEDebugCallLemma l lc (erase args) (erase pc) (erase h).
+
 
     #[export] Instance SubstDebugCallLemma : Subst DebugCallLemma :=
       fun Σ0 d Σ1 ζ01 =>
@@ -146,16 +178,6 @@ Module Type SymbolicExecOn
               (gen_occurs_check ts) (gen_occurs_check pc) (gen_occurs_check h)
         end.
 
-    Record DebugStm (Σ : LCtx) : Type :=
-      MkDebugStm
-        { debug_stm_program_context        : PCtx;
-          debug_stm_statement_type         : Ty;
-          debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
-          debug_stm_pathcondition          : PathCondition Σ;
-          debug_stm_localstore             : SStore debug_stm_program_context Σ;
-          debug_stm_heap                   : SHeap Σ;
-        }.
-
     #[export] Instance SubstDebugCall : Subst DebugCall :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
@@ -203,6 +225,29 @@ Module Type SymbolicExecOn
               (fun _ _ _ _ _ _ => eq_refl)
               (gen_occurs_check ts) (gen_occurs_check pc) (gen_occurs_check h)
         end.
+
+    Record DebugStm (Σ : LCtx) : Type :=
+      MkDebugStm
+        { debug_stm_program_context        : PCtx;
+          debug_stm_statement_type         : Ty;
+          debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
+          debug_stm_pathcondition          : PathCondition Σ;
+          debug_stm_localstore             : SStore debug_stm_program_context Σ;
+          debug_stm_heap                   : SHeap Σ;
+        }.
+
+    Record EDebugStm : Type :=
+      MkEDebugStm
+        { edebug_stm_program_context        : PCtx;
+          edebug_stm_statement_type         : Ty;
+          edebug_stm_statement              : Stm edebug_stm_program_context edebug_stm_statement_type;
+          edebug_stm_pathcondition          : list EFormula;
+          edebug_stm_localstore             : NamedEnv ETerm edebug_stm_program_context;
+          edebug_stm_heap                   : list EChunk;
+        }.
+
+    #[export] Instance EraseDebugStm : Erase DebugStm EDebugStm :=
+      fun _ '(MkDebugStm s pc Δ h) => MkEDebugStm s (erase pc) (erase Δ) (erase h).
 
     #[export] Instance SubstDebugStm : Subst DebugStm :=
       fun Σ0 d Σ1 ζ01 =>
@@ -262,6 +307,22 @@ Module Type SymbolicExecOn
           error_no_fuel_pathcondition : PathCondition Σ;
           error_no_fuel_heap           : SHeap Σ;
         }.
+
+    Record EErrorNoFuel : Type :=
+      MkEErrorNoFuel
+        { eerror_no_fuel_call_parameter_types : PCtx;
+          eerror_no_fuel_call_return_type     : Ty;
+          eerror_no_fuel_call_function        :
+            𝑭 eerror_no_fuel_call_parameter_types
+              eerror_no_fuel_call_return_type;
+          eerror_no_fuel_call_arguments :
+            NamedEnv ETerm eerror_no_fuel_call_parameter_types;
+          eerror_no_fuel_pathcondition : list EFormula;
+          eerror_no_fuel_heap           : list EChunk;
+        }.
+
+    #[export] Instance EraseErrorNoFuel : Erase ErrorNoFuel EErrorNoFuel :=
+      fun _ '(MkErrorNoFuel f Δ pc h) => MkEErrorNoFuel f (erase Δ) (erase pc) (erase h).
 
     #[export] Instance SubstErrorNoFuel : Subst ErrorNoFuel :=
       fun Σ0 e Σ1 ζ01 =>

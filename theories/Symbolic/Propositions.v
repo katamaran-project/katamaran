@@ -79,6 +79,17 @@ Module Type SymPropOn
           msg_pathcondition   : PathCondition Σ;
         }.
     Global Arguments MkMessage {Σ} _ _ _ _ _ _.
+    Record EMessage : Type :=
+      MkEMessage
+        { emsg_function        : string;
+          emsg_message         : string;
+          emsg_program_context : PCtx;
+          emsg_localstore      : NamedEnv ETerm emsg_program_context;
+          emsg_heap            : list EChunk;
+          emsg_pathcondition   : list EFormula;
+        }.
+    #[export] Instance EraseMessage : Erase Message EMessage :=
+      fun _ '(MkMessage f m _ δ h pc) => MkEMessage f m (erase δ) (erase h) (erase pc).
 
     #[export] Instance SubstMessage : Subst Message :=
       fun Σ1 msg Σ2 ζ12 =>
@@ -1101,6 +1112,13 @@ Module Type SymPropOn
         | MkAngelicBinaryFailMsg _ _ _ msg1 msg2 =>
             liftBinOp (fun _ => MkAngelicBinaryFailMsg _ _ _) (fun _ _ _ _ _ => eq_refl) (gen_occurs_check msg1) (gen_occurs_check msg2)
         end.
+    Inductive EAngelicBinaryFailMsg (ME1 ME2 : Type) : Type :=
+    | MkEAngelicBinaryFailMsg : ME1 -> ME2 -> EAngelicBinaryFailMsg ME1 ME2
+    .
+
+    #[export] Instance EraseAngelicBinaryFailMsg `{Erase M1 ME1, Erase M2 ME2}:
+      Erase (AngelicBinaryFailMsg M1 M2) (EAngelicBinaryFailMsg ME1 ME2) :=
+      fun _ '(MkAngelicBinaryFailMsg _ _ _ msg1 msg2) => MkEAngelicBinaryFailMsg (erase msg1) (erase msg2).
 
     Import SymProp.
 
@@ -2190,34 +2208,10 @@ Module Type SymPropOn
 
     Import SymProp.
 
-    Inductive ETerm : Ty -> Set :=
-    | eterm_var     (ℓ : LVar) (σ : Ty) (n : nat) : ETerm σ
-    | eterm_val     (σ : Ty) (v : Val σ) : ETerm σ
-    | eterm_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (t1 : ETerm σ1) (t2 : ETerm σ2) : ETerm σ3
-    | eterm_unop    {σ1 σ2} (op : UnOp σ1 σ2) (t : ETerm σ1) : ETerm σ2
-    | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs)
-    | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U)
-    | eterm_record  (R : recordi) (ts : NamedEnv ETerm (recordf_ty R)) : ETerm (ty.record R).
-
-    Inductive EFormula : Type :=
-    | eformula_user (p : 𝑷) (ts : Env ETerm (𝑷_Ty p))
-    | eformula_bool (t : ETerm ty.bool)
-    | eformula_prop {Σ' : LCtx} (ζ : Env (fun x => ETerm (type x)) Σ') (P : abstract_named Val Σ' Prop)
-    | eformula_relop {σ} (op : RelOp σ) (t1 t2 : ETerm σ)
-    | eformula_true
-    | eformula_false
-    | eformula_and (F1 F2 : EFormula)
-    | eformula_or (F1 F2 : EFormula).
-    Arguments eformula_user : clear implicits.
-
-    Inductive EError : Type :=
-    | MkEError : forall {Σ}, AMessage Σ -> EError
-    .
-
     Inductive ESymProp : Type :=
     | eangelic_binary (o1 o2 : ESymProp)
     | edemonic_binary (o1 o2 : ESymProp)
-    | eerror (* (msg : EError) *)
+    | eerror (msg : amsg.EAMessage)
     | eblock
     | eassertk (fml : EFormula) (k : ESymProp)
     | eassumek (fml : EFormula) (k : ESymProp)
@@ -2242,80 +2236,36 @@ Module Type SymPropOn
     | edebug {Σ}
         (b : AMessage Σ) (k : ESymProp).
 
-    Definition erase_term {Σ} : forall {σ} (t : Term Σ σ), ETerm σ :=
-      fix erase {σ} t :=
-        match t with
-        | @term_var _ ℓ σ ℓIn         => eterm_var ℓ σ (ctx.in_at ℓIn)
-        | term_val σ v               => eterm_val σ v
-        | term_binop op t1 t2        => eterm_binop op (erase t1) (erase t2)
-        | term_unop op t             => eterm_unop op (erase t)
-        | term_tuple ts              => eterm_tuple (env.map (fun _ => erase) ts)
-        | term_union U K t           => eterm_union K (erase t)
-        | term_record R ts           => eterm_record R (env.map (fun _ => erase) ts)
-        end.
-
-    Definition erase_formula {Σ} : Formula Σ -> EFormula :=
-      fix erase f :=
-        match f with
-        | formula_user p ts      => eformula_user p (env.map (@erase_term Σ) ts)
-        | formula_bool t         => eformula_bool (erase_term t)
-        | formula_prop ζ P       => eformula_prop (env.map (fun _ => erase_term) ζ) P
-        | formula_relop op t1 t2 => eformula_relop op (erase_term t1) (erase_term t2)
-        | formula_true           => eformula_true
-        | formula_false          => eformula_false
-        | formula_and F1 F2      => eformula_and (erase F1) (erase F2)
-        | formula_or F1 F2       => eformula_or (erase F1) (erase F2)
-        end.
-
-    Fixpoint erase_EErrors (p : ESymProp) : ESymProp :=
+    Fixpoint erase_symprop {Σ} (p : SymProp Σ) : ESymProp :=
       match p with
-      | eangelic_binary o1 o2 => eangelic_binary (erase_EErrors o1) (erase_EErrors o2)
-      | edemonic_binary o1 o2 => edemonic_binary (erase_EErrors o1) (erase_EErrors o2)
-      | eerror (* msg *) => eerror (* (MkEError (Σ := wnil) (amsg.mk (M := Unit) tt)) *)
-      | eblock => eblock
-      | eassertk fml k => eassertk fml (erase_EErrors k)
-      | eassumek fml k => eassumek fml (erase_EErrors k)
-      | eangelicv b k => eangelicv b (erase_EErrors k)
-      | edemonicv b k => edemonicv b (erase_EErrors k)
-      | eassert_vareq x xIn t k => eassert_vareq x xIn t (erase_EErrors k)
-      | eassume_vareq x xIn t k => eassume_vareq x xIn t (erase_EErrors k)
-      | epattern_match s pat rhs =>
-          epattern_match s pat
-            (fun pc => erase_EErrors (rhs pc))
-      | epattern_match_var x xIn pat rhs =>
-          epattern_match_var x xIn pat
-            (fun pc => erase_EErrors (rhs pc))
-      | edebug b k => edebug b (erase_EErrors k)
-      end.
-
-    Fixpoint erase_symprop' {Σ} (p : SymProp Σ) : ESymProp :=
-      match p with
-      | angelic_binary o1 o2 => eangelic_binary (erase_symprop' o1) (erase_symprop' o2)
-      | demonic_binary o1 o2 => edemonic_binary (erase_symprop' o1) (erase_symprop' o2)
-      | error msg => eerror (* (MkEError (Σ := wnil) (amsg.mk (M := Unit) tt)) *)
+      | angelic_binary o1 o2 => eangelic_binary (erase_symprop o1) (erase_symprop o2)
+      | demonic_binary o1 o2 => edemonic_binary (erase_symprop o1) (erase_symprop o2)
+      | error (amsg.mk msg) => eerror (amsg.MkEAMessage (erase msg))
       | block => eblock
-      | assertk fml _ k => eassertk (erase_formula fml) (erase_symprop' k)
-      | assumek fml k => eassumek (erase_formula fml) (erase_symprop' k)
-      | angelicv b k => eangelicv b (erase_symprop' k)
-      | demonicv b k => edemonicv b (erase_symprop' k)
-      | @assert_vareq _ x σ xIn t msg k => eassert_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop' k)
-      | @assume_vareq _ x σ xIn t k => eassume_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop' k)
+      | assertk fml _ k => eassertk (erase_formula fml) (erase_symprop k)
+      | assumek fml k => eassumek (erase_formula fml) (erase_symprop k)
+      | angelicv b k => eangelicv b (erase_symprop k)
+      | demonicv b k => edemonicv b (erase_symprop k)
+      | @assert_vareq _ x σ xIn t msg k => eassert_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop k)
+      | @assume_vareq _ x σ xIn t k => eassume_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop k)
       | pattern_match s pat rhs =>
           epattern_match (erase_term s) pat
-            (fun pc => erase_symprop' (rhs pc))
+            (fun pc => erase_symprop (rhs pc))
       | @pattern_match_var _ x σ xIn pat rhs =>
           epattern_match_var x (ctx.in_at xIn) pat
-            (fun pc => erase_symprop' (rhs pc))
-      | debug b k => edebug b (erase_symprop' k)
+            (fun pc => erase_symprop (rhs pc))
+      | debug b k => edebug b (erase_symprop k)
       end.
 
-    Definition erase_symprop {Σ} (p : SymProp Σ) : ESymProp := (erase_symprop' p).
+    #[export] Instance erase_SymProp : Erase SymProp ESymProp := fun _ => erase_symprop.
 
     Fixpoint erase_valuation {Σ} (ι : Valuation Σ) : list { σ : Ty & Val σ} :=
       match ι with
       | env.nil        => nil
       | env.snoc ι b v => cons (existT (type b) v) (erase_valuation ι)
       end.
+
+    #[export] Instance erase_Valuation : Erase (fun Σ => Valuation Σ) (list { σ : Ty & Val σ}) := fun _ => erase_valuation.
 
     Lemma erase_valuation_eq_rect {Σ1 Σ2} (ι : Valuation Σ1) (e : Σ1 = Σ2) :
       erase_valuation (eq_rect Σ1 (fun Σ => Valuation Σ) ι Σ2 e) = erase_valuation ι.
@@ -2428,7 +2378,7 @@ Module Type SymPropOn
       match f with
       | eangelic_binary p1 p2 => inst_symprop ι p1 \/ inst_symprop ι p2
       | edemonic_binary p1 p2 => inst_symprop ι p1 /\ inst_symprop ι p2
-      | eerror (* _ *) => False
+      | eerror _ => False
       | eblock => True
       | eassertk fml k => inst_eformula' ι fml /\ inst_symprop ι k
       | eassumek fml k => inst_eformula' ι fml -> inst_symprop ι k
@@ -2524,10 +2474,10 @@ Module Type SymPropOn
       inst_symprop (erase_valuation ι) (erase_symprop p) <->
       safe p ι.
     Proof.
-      induction p; cbn [inst_symprop erase_symprop erase_symprop' erase_EErrors safe]; unfold inst_eformula'.
+      induction p; cbn [inst_symprop erase_symprop erase_symprop safe]; unfold inst_eformula'.
       - apply Morphisms_Prop.or_iff_morphism. auto. auto.
       - apply Morphisms_Prop.and_iff_morphism. auto. auto.
-      - reflexivity.
+      - now destruct msg.
       - reflexivity.
       - apply Morphisms_Prop.and_iff_morphism.
         + now rewrite inst_eformula_erase.

@@ -345,4 +345,31 @@ Module Type FormulasOn
   Notation formula_bvule := (formula_relop bop.bvule).
   Notation formula_bvult := (formula_relop bop.bvult).
 
+  Section Erasure.
+    Inductive EFormula : Type :=
+    | eformula_user (p : 𝑷) (ts : Env ETerm (𝑷_Ty p))
+    | eformula_bool (t : ETerm ty.bool)
+    | eformula_prop {Σ' : LCtx} (ζ : Env (fun x => ETerm (type x)) Σ') (P : abstract_named Val Σ' Prop)
+    | eformula_relop {σ} (op : RelOp σ) (t1 t2 : ETerm σ)
+    | eformula_true
+    | eformula_false
+    | eformula_and (F1 F2 : EFormula)
+    | eformula_or (F1 F2 : EFormula).
+    Arguments eformula_user : clear implicits.
+
+    Definition erase_formula {Σ} : Formula Σ -> EFormula :=
+      fix erase f :=
+        match f with
+        | formula_user p ts      => eformula_user p (env.map (@erase_term Σ) ts)
+        | formula_bool t         => eformula_bool (erase_term t)
+        | formula_prop ζ P       => eformula_prop (env.map (fun _ => erase_term) ζ) P
+        | formula_relop op t1 t2 => eformula_relop op (erase_term t1) (erase_term t2)
+        | formula_true           => eformula_true
+        | formula_false          => eformula_false
+        | formula_and F1 F2      => eformula_and (erase F1) (erase F2)
+        | formula_or F1 F2       => eformula_or (erase F1) (erase F2)
+        end.
+    #[export] Instance erase_Formula : Erase Formula EFormula := fun _ => erase_formula.
+
+  End Erasure.
 End FormulasOn.

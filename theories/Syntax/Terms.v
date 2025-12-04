@@ -1105,4 +1105,33 @@ Module Type TermsOn (Import TY : Types).
 
   End TermNotations.
 
+  Section Erasure.
+    Inductive ETerm : Ty -> Set :=
+    | eterm_var     (ℓ : LVar) (σ : Ty) (n : nat) : ETerm σ
+    | eterm_val     (σ : Ty) (v : Val σ) : ETerm σ
+    | eterm_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (t1 : ETerm σ1) (t2 : ETerm σ2) : ETerm σ3
+    | eterm_unop    {σ1 σ2} (op : UnOp σ1 σ2) (t : ETerm σ1) : ETerm σ2
+    | eterm_tuple   {σs : Ctx Ty} (ts : Env ETerm σs) : ETerm (ty.tuple σs)
+    | eterm_union   {U : unioni} (K : unionk U) (t : ETerm (unionk_ty U K)) : ETerm (ty.union U)
+    | eterm_record  (R : recordi) (ts : NamedEnv ETerm (recordf_ty R)) : ETerm (ty.record R).
+
+    Definition erase_term {Σ} : forall {σ} (t : Term Σ σ), ETerm σ :=
+      fix erase {σ} t :=
+        match t with
+        | @term_var _ ℓ σ ℓIn         => eterm_var ℓ σ (ctx.in_at ℓIn)
+        | term_val σ v               => eterm_val σ v
+        | term_binop op t1 t2        => eterm_binop op (erase t1) (erase t2)
+        | term_unop op t             => eterm_unop op (erase t)
+        | term_tuple ts              => eterm_tuple (env.map (fun _ => erase) ts)
+        | term_union U K t           => eterm_union K (erase t)
+        | term_record R ts           => eterm_record R (env.map (fun _ => erase) ts)
+        end.
+
+    Fixpoint erase_SStore {Γ Σ} (ts : SStore Γ Σ) : NamedEnv ETerm Γ :=
+      match ts with
+      | [env] => [env]
+      | env.snoc ts b t => env.snoc (erase_SStore ts) b (erase_term t)
+      end.
+  End Erasure.
+
 End TermsOn.
