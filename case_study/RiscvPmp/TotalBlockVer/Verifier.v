@@ -450,6 +450,13 @@ Section AnnotatedBlockVerification.
         { debug_blockver_pathcondition          : PathCondition Σ;
           debug_blockver_heap                   : SHeap Σ;
         }.
+    Record EDebugBlockver : Type :=
+      MkEDebugBlockver
+        { edebug_blockver_pathcondition          : list EFormula;
+          edebug_blockver_heap                   : list EChunk;
+        }.
+    #[export] Instance EraseDebugBlockVer : Erase DebugBlockver EDebugBlockver :=
+      fun _ '(MkDebugBlockver pathc h) => MkEDebugBlockver (erase pathc) (erase h).
     #[export] Instance SubstDebugBlockver : Subst DebugBlockver :=
       fun Σ0 d Σ1 ζ01 =>
         match d with

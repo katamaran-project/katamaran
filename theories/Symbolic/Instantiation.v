@@ -987,4 +987,33 @@ Module Type InstantiationOn
 
   End Entailment.
 
+  (* In order to mitigate performance issues with representing indexed syntax, we *)
+  (* erase symbolic terms and propositions to a non-indexed representation from which we *)
+  (* can reconstruct the correct interpretation. *)
+  (* More details in Propositions.v *)
+  Class Erase (T : LCtx -> Type) (TE : Type) : Type :=
+      erase : forall {Σ}, T Σ -> TE.
+
+  #[export] Instance erase_Unit : Erase Unit unit := fun _ _ => tt.
+
+  #[export] Instance erase_Const {T : Type} : Erase (Const T) T := fun _ t => t.
+
+  #[export] Instance erase_Ctx `{Erase T TE} : Erase (fun Σ => Ctx (T Σ)) (list TE) :=
+    fix er _ t :=
+      match t with
+      | [ctx] => []%list
+      | ctx.snoc ts t => cons (erase t) (er _ ts)
+      end.
+
+  #[export] Instance erase_List `{Erase T TE} : Erase (fun Σ => list (T Σ)) (list TE) :=
+    fix er _ t :=
+      match t with
+      | []%list => []%list
+      | cons t ts => cons (erase t) (er _ ts)
+      end.
+
+  #[export] Instance erase_Term {σ} : Erase (fun Σ => Term Σ σ) (ETerm σ) := fun _ => erase_term.
+
+  #[export] Instance EraseSStore {Γ} : Erase (fun Σ => SStore Γ Σ) (NamedEnv ETerm Γ) := fun _ => erase_SStore.
+
 End InstantiationOn.

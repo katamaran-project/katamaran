@@ -57,6 +57,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
   (Import A : AssertionsOn B P W).
 
   Import ModalNotations.
+  Import Erasure.
   #[local] Open Scope modal.
 
   #[local] Hint Extern 2 (Persistent (WTerm ?σ)) =>
@@ -129,6 +130,17 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           debug_consume_chunk_chunk                  : Chunk Σ;
         }.
 
+    Record EDebugConsumeChunk : Type :=
+      MkEDebugConsumeChunk
+        { (* edebug_consume_chunk_program_context        : PCtx; *)
+          edebug_consume_chunk_pathcondition          : list EFormula;
+          (* edebug_consume_chunk_localstore             : SStore debug_consume_chunk_program_context Σ; *)
+          edebug_consume_chunk_heap                   : list EChunk;
+          edebug_consume_chunk_chunk                  : EChunk;
+        }.
+    #[export] Instance Erase_DebugConsumeChunk : Erase DebugConsumeChunk EDebugConsumeChunk :=
+      fun _ '(MkDebugConsumeChunk pc h c) => MkEDebugConsumeChunk (erase pc) (erase h) (erase c).
+
     #[export] Instance SubstDebugConsumeChunk : Subst DebugConsumeChunk :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
@@ -184,6 +196,17 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           debug_read_register_register      : 𝑹𝑬𝑮 debug_read_register_type;
         }.
 
+    Record EDebugReadRegister : Type :=
+      MkEDebugReadRegister
+        { edebug_read_register_pathcondition : list EFormula;
+          edebug_read_register_heap          : list EChunk;
+          edebug_read_register_type          : Ty;
+          edebug_read_register_register      : 𝑹𝑬𝑮 edebug_read_register_type;
+        }.
+
+    #[export] Instance EraseDebugReadRegister : Erase DebugReadRegister EDebugReadRegister :=
+      fun _ '(MkDebugReadRegister pc h r) => MkEDebugReadRegister (erase pc) (erase h) r.
+
     #[export] Instance SubstDebugReadRegister : Subst DebugReadRegister :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
@@ -237,6 +260,17 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
           debug_write_register_register      : 𝑹𝑬𝑮 debug_write_register_type;
           debug_write_register_value         : Term Σ debug_write_register_type;
         }.
+    Record EDebugWriteRegister : Type :=
+      MkEDebugWriteRegister
+        { edebug_write_register_pathcondition : list EFormula;
+          edebug_write_register_heap          : list EChunk;
+          edebug_write_register_type          : Ty;
+          edebug_write_register_register      : 𝑹𝑬𝑮 edebug_write_register_type;
+          edebug_write_register_value         : ETerm edebug_write_register_type;
+        }.
+
+    #[export] Instance EraseDebugWriteRegister : Erase DebugWriteRegister EDebugWriteRegister :=
+      fun _ '(MkDebugWriteRegister pc h r t) => MkEDebugWriteRegister (erase pc) (erase h) r (erase t).
 
     #[export] Instance SubstDebugWriteRegister : Subst DebugWriteRegister :=
       fun Σ0 d Σ1 ζ01 =>
@@ -289,6 +323,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         { debug_string_pathcondition : PathCondition Σ;
           debug_string_message       : string;
         }.
+    Record EDebugString : Type :=
+      MkEDebugString
+        { edebug_string_pathcondition : list EFormula;
+          edebug_string_message       : string;
+        }.
+    #[export] Instance EraseDebugString : Erase DebugString EDebugString :=
+      fun _ '(MkDebugString pc s) => MkEDebugString (erase pc) s.
 
     #[export] Instance SubstDebugString : Subst DebugString :=
       fun Σ0 d Σ1 ζ01 =>

@@ -187,18 +187,23 @@ Module Type ChunksOn
     induction t; cbn; f_equal; auto; now rewrite substSU_trans.
   Qed.
 
-  #[export] Instance inst_chunk : Inst Chunk SCChunk :=
-    fix inst_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : SCChunk :=
+  Fixpoint map_GChunk {T1 T2 : Ty -> Set} (f : forall σ, T1 σ -> T2 σ) (c : GChunk T1) : GChunk T2 :=
     match c with
-    | chunk_user p ts => chunk_user p (inst ts ι)
-    | chunk_ptsreg r t => chunk_ptsreg r (inst t ι)
-    | chunk_conj c1 c2 => chunk_conj (inst_chunk c1 ι) (inst_chunk c2 ι)
-    | chunk_wand c1 c2 => chunk_wand (inst_chunk c1 ι) (inst_chunk c2 ι)
+    | chunk_user p ts => chunk_user p (env.map f ts)
+    | chunk_ptsreg r t => chunk_ptsreg r (f _ t)
+    | chunk_conj c1 c2 => chunk_conj (map_GChunk f c1) (map_GChunk f c2)
+    | chunk_wand c1 c2 => chunk_wand (map_GChunk f c1) (map_GChunk f c2)
     end.
+  Arguments map_GChunk {T1 T2} f !c : simpl nomatch.
+
+  #[export] Instance inst_chunk : Inst Chunk SCChunk :=
+    fun Σ c ι => map_GChunk (T1 := Term Σ) (fun _ v => inst v ι) c.
 
   #[export] Instance inst_subst_chunk : InstSubst Chunk SCChunk.
   Proof.
-    intros ? ? ζ ι c; induction c; cbn; f_equal; auto; apply inst_subst.
+    intros ? ? ζ ι c; induction c; cbn; f_equal; auto.
+    refine (inst_subst _ _ ts).
+    apply inst_subst.
   Qed.
 
   Import option.notations.
@@ -237,19 +242,14 @@ Module Type ChunksOn
   #[export] Instance inst_subst_heap : InstSubst SHeap SCHeap.
   Proof. apply inst_subst_list. Qed.
 
-  Fixpoint peval_chunk {Σ} (c : Chunk Σ) : Chunk Σ :=
-    match c with
-    | chunk_user p ts => chunk_user p (env.map peval ts)
-    | chunk_ptsreg r t => chunk_ptsreg r (peval t)
-    | chunk_conj c1 c2 => chunk_conj (peval_chunk c1) (peval_chunk c2)
-    | chunk_wand c1 c2 => chunk_wand (peval_chunk c1) (peval_chunk c2)
-    end.
+  Definition peval_chunk {Σ} (c : Chunk Σ) : Chunk Σ := map_GChunk peval c.
 
   Lemma peval_chunk_sound {Σ} (c : Chunk Σ) :
     forall (ι : Valuation Σ),
       inst (peval_chunk c) ι = inst c ι.
   Proof.
-    induction c; cbn; intros ι; f_equal; auto using peval_sound.
+    intros ι.
+    induction c; cbn; f_equal; eauto using peval_sound.
     apply pevals_sound. apply peval_sound.
   Qed.
 
@@ -339,11 +339,14 @@ Module Type ChunksOn
           destruct (env.eqb_hom_spec Term_eqb (@Term_eqb_spec Σ) tsI tsI'); try discriminate.
           apply noConfusion_inv in Heqo. cbn in Heqo. subst.
           apply instprop_formula_eqs_ctx in Heqs.
-          rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
-          rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat.
-          change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.
-          rewrite (@inst_eq_rect_indexed (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
-          rewrite rew_opp_l. now destruct is_duplicable.
+          f_equal; first f_equal.
+          + change (env.map (fun Σ v => inst v ?ι) ?ts) with (inst ts ι).
+            rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
+            rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat.
+            change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.
+            rewrite (@inst_eq_rect_indexed (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
+            now rewrite rew_opp_l.
+          + now destruct is_duplicable.
         - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
           intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
           remember (inst (chunk_user p (eq_rect_r (fun c0 : Ctx Ty => Env (Term Σ) c0) (tsI ►► tsO) prec)) ι) as c'.
@@ -500,4 +503,10 @@ Module Type ChunksOn
 
   End Interpretation.
 
+  Section Erasure.
+    Definition EChunk := GChunk ETerm.
+
+    #[export] Instance Erase_Chunk : Erase Chunk EChunk :=
+      fun Σ => map_GChunk (T1 := Term Σ) (fun _ t => erase t).
+  End Erasure.
 End ChunksOn.
