@@ -100,7 +100,7 @@ Module Type BaseMixin (Import TY : Types).
     projRightCStore (zipCStoreVal δ1 δ2) = δ2.
   Proof.
     induction Γ.
-    - env.destroy δ2. reflexivity.
+    - env.destroy δ2. env.destroy δ1. reflexivity.
     - env.destroy δ1. env.destroy δ2. cbn.
       rewrite IHΓ. reflexivity.
   Qed.
@@ -190,17 +190,17 @@ Module Type BaseMixin (Import TY : Types).
   Section PatternMatching.
     Context {N : Set}.
 
-    Lemma inst_tuple_pattern_match {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty}
-      (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : Env (Term Σ) σs) :
-      inst (tuple_pattern_match_env p ts) ι =
-      tuple_pattern_match_env p (inst (T := fun Σ => Env (Term Σ) σs) ts ι).
-    Proof.
-      unfold inst at 1; cbn.
-      induction p; cbn.
-      - reflexivity.
-      - destruct (env.view ts); cbn.
-        f_equal. apply IHp.
-    Qed.
+    (* Lemma inst_tuple_pattern_match {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty} *)
+    (*   (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : Env (Term Σ) σs) : *)
+    (*   inst (tuple_pattern_match_env p ts) ι = *)
+    (*   tuple_pattern_match_env p (inst (T := fun Σ => Env (Term Σ) σs) ts ι). *)
+    (* Proof. *)
+    (*   unfold inst at 1; cbn. *)
+    (*   induction p; cbn. *)
+    (*   - reflexivity. *)
+    (*   - destruct (env.view ts); cbn. *)
+    (*     f_equal. apply IHp. *)
+    (* Qed. *)
 
     (* Lemma inst_tuple_pattern_match_reverse {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty} *)
     (*   (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : NamedEnv (Term Σ) Δ) : *)
@@ -238,7 +238,7 @@ Module Type BaseMixin (Import TY : Types).
     (*     f_equal. apply IHp. *)
     (* Qed. *)
 
-    Definition pattern_match_term_reverse {Σ σ} (pat : Pattern (N:=N) σ) :
+    Fixpoint pattern_match_term_reverse {Σ σ} (pat : Pattern (N:=N) σ) :
       forall (pc : PatternCase pat), NamedEnv (Term Σ) (PatternCaseCtx pc) -> Term Σ σ :=
       match pat with
       | pat_var x =>
@@ -280,8 +280,8 @@ Module Type BaseMixin (Import TY : Types).
       (*     fun _ ts => term_tuple (tuple_pattern_match_env_reverse p ts) *)
       (* | pat_record R Δ p => *)
       (*     fun _ ts => term_record R (record_pattern_match_env_reverse p ts) *)
-      (* | pat_union U x => *)
-      (*     fun '(existT K pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts) *)
+      | pat_union U x =>
+          fun '(existT K pc) ts => term_union U K (pattern_match_term_reverse (x K) pc ts)
       end.
 
     Lemma inst_pattern_match_term_reverse {Σ σ} (ι : Valuation Σ) (pat : Pattern (N:=N) σ) :
@@ -306,7 +306,13 @@ Module Type BaseMixin (Import TY : Types).
       (*   now rewrite <- inst_tuple_pattern_match_reverse. *)
       (* - intros _ ts. f_equal. *)
       (*   apply inst_record_pattern_match_reverse. *)
-      (* - intros [] ts. cbn. f_equal. f_equal. apply H. *)
+      - intros [] ts. cbn.
+        rewrite H.
+        unfold pattern_match_relval_reverse.
+        Search ty.liftUnOpRV.
+        unfold ty.liftUnOp.
+        rewrite ty.liftUnOpRVUnOpRVToUnOpRV.
+        auto.
     Qed.
 
     Lemma inst_unfreshen_namedenv (n : N -> LVar) {Σ Σ' Δ}
@@ -340,7 +346,7 @@ Module Type BaseMixin (Import TY : Types).
       (* | exp_list es        => term_list (List.map seval_exp es) *)
       | exp_bvec es        => term_bvec (Vector.map seval_exp es)
       (* | exp_tuple es       => term_tuple (env.map (@seval_exp) es) *)
-      (* | exp_union E K e    => term_union E K (seval_exp e) *)
+      | exp_union E K e    => term_union E K (seval_exp e)
       (* | exp_record R es    => term_record R (env.map (fun _ => seval_exp) es) *)
       end%exp.
 

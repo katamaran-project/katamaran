@@ -154,73 +154,73 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
-  (* | rX                    : Fun [rs ∷ ty_regno] ty_xlenbits *)
-  (* | wX                    : Fun [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit *)
+  | rX                    : Fun [rs ∷ ty_regno] ty_xlenbits
+  | wX                    : Fun [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit
   | bool_to_bits          : Fun ["x" :: ty.bool] (ty.bvec 1)
   | shift_right_arith32   : Fun [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32)
-  (* | extend_value (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes) *)
+  | extend_value (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [is_unsigned :: ty.bool; value :: ty_memory_op_result bytes] (ty_memory_op_result xlenbytes)
   | get_arch_pc           : Fun ctx.nil ty_xlenbits
   | get_next_pc           : Fun ctx.nil ty_xlenbits
   | set_next_pc           : Fun [addr ∷ ty_xlenbits] ty.unit
   | tick_pc               : Fun ctx.nil ty.unit
   | to_bits (l : nat)     : Fun [value :: ty.int] (ty.bvec l)
-  (* | abs                   : Fun [v ∷ ty.int] ty.int *)
+  | abs                   : Fun [v ∷ ty.int] ty.int
   | within_phys_mem       : Fun [paddr ∷ ty_xlenbits; width :: ty.int] ty.bool
-  (* | mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) *)
-  (* | checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) *)
-  (* | checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes] (ty_memory_op_result 1) *)
-  (* | pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes) *)
-  (* | pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1) *)
-  (* | pmpLocked             : Fun [cfg ∷ ty_pmpcfg_ent] ty.bool *)
-  (* | pmpWriteCfgReg        : Fun ["n" :: ty.int; value :: ty_xlenbits] ty.unit *)
-  (* | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent *)
+  | mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
+  | checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t ∷ ty_access_type; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
+  | checked_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes] (ty_memory_op_result 1)
+  | pmp_mem_read (bytes : nat) {H : restrict_bytes bytes} : Fun [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] (ty_memory_op_result bytes)
+  | pmp_mem_write (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; data ∷ ty_bytes bytes; typ ∷ ty_access_type; priv ∷ ty_privilege] (ty_memory_op_result 1)
+  | pmpLocked             : Fun [cfg ∷ ty_pmpcfg_ent] ty.bool
+  | pmpWriteCfgReg        : Fun ["n" :: ty.int; value :: ty_xlenbits] ty.unit
+  | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_byte] ty_pmpcfg_ent
   | pmpWriteAddr          : Fun [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
-  (* | pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) *)
-  (* | pmpCheckPerms         : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool *)
-  (* | pmpCheckRWX           : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool *)
-  (* | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch *)
-  (* | pmpAddrRange          : Fun [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range *)
-  (* | pmpMatchAddr          : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch *)
-  (* | process_load (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result bytes; is_unsigned :: ty.bool] ty_retired *)
-  (* | mem_write_value (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1) *)
+  | pmpCheck (bytes : nat) {H : restrict_bytes bytes} : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
+  | pmpCheckPerms         : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool
+  | pmpCheckRWX           : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool
+  | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
+  | pmpAddrRange          : Fun [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range
+  | pmpMatchAddr          : Fun [addr ∷ ty_xlenbits; width :: ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch
+  | process_load (bytes : nat) {p : IsTrue (width_constraint bytes)} : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result bytes; is_unsigned :: ty.bool] ty_retired
+  | mem_write_value (bytes : nat) {H : restrict_bytes bytes} : Fun [paddr ∷ ty_xlenbits; value ∷ ty_bytes bytes] (ty_memory_op_result 1)
   | main                  : Fun ctx.nil ty.unit
-  (* | init_model            : Fun ctx.nil ty.unit *)
-  (* | loop                  : Fun ctx.nil ty.unit *)
-  (* | step                  : Fun ctx.nil ty.unit *)
-  (* | fetch                 : Fun ctx.nil ty_fetch_result *)
-  (* | init_sys              : Fun ctx.nil ty.unit *)
-  (* | init_pmp              : Fun ctx.nil ty.unit *)
-  (* | exceptionType_to_bits : Fun [e ∷ ty_exception_type] ty_exc_code *)
-  (* | privLevel_to_bits     : Fun [p ∷ ty_privilege] ty_priv_level *)
-  (* | handle_mem_exception  : Fun [addr ∷ ty_xlenbits; e ∷ ty_exception_type] ty.unit *)
-  (* | exception_handler     : Fun [cur_priv ∷ ty_privilege; ctl ∷ ty_ctl_result; "pc" ∷ ty_xlenbits] ty_xlenbits *)
-  (* | exception_delegatee   : Fun [p ∷ ty_privilege] ty_privilege *)
-  (* | trap_handler          : Fun [del_priv ∷ ty_privilege; c ∷ ty_exc_code; "pc" ∷ ty_xlenbits] ty_xlenbits *)
-  (* | prepare_trap_vector   : Fun [p ∷ ty_privilege; cause ∷ ty_mcause] ty_xlenbits *)
-  (* | tvec_addr             : Fun [m ∷ ty_xlenbits; c ∷ ty_mcause] (ty.option ty_xlenbits) *)
-  (* | handle_illegal        : Fun ctx.nil ty.unit *)
-  (* | check_CSR             : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool *)
-  (* | is_CSR_defined        : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool *)
-  (* | csrAccess             : Fun [csr ∷ ty_csridx] ty_access_type *)
-  (* | csrPriv               : Fun [csr ∷ ty_csridx] ty_privilege *)
-  (* | check_CSR_access      : Fun [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege] ty.bool *)
-  (* | readCSR               : Fun [csr ∷ ty_csridx] ty_xlenbits *)
-  (* | writeCSR              : Fun [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit *)
-  (* | execute               : Fun ["ast" ∷ ty_ast] ty_retired *)
-  (* | execute_RTYPE         : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired *)
-  (* | execute_ITYPE         : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_iop] ty_retired *)
-  (* | execute_SHIFTIOP      : Fun [shamt ∷ ty.bvec 6; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_sop] ty_retired *)
-  (* | execute_UTYPE         : Fun [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired *)
-  (* | execute_BTYPE         : Fun [imm ∷ ty.bvec 13; rs2 ∷ ty_regno; rs1 ∷ ty_regno; op ∷ ty_bop] ty_retired *)
-  (* | execute_RISCV_JAL     : Fun [imm ∷ ty.bvec 21; rd ∷ ty_regno] ty_retired *)
-  (* | execute_RISCV_JALR    : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired *)
-  (* | execute_LOAD          : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; is_unsigned :: ty.bool; width :: ty_word_width] ty_retired *)
-  (* | execute_STORE         : Fun [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired *)
-  (* | execute_ECALL         : Fun ctx.nil ty_retired *)
-  (* | execute_EBREAK        : Fun ctx.nil ty_retired *)
-  (* | execute_MRET          : Fun ctx.nil ty_retired *)
-  (* | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired *)
-  (* | execute_MUL           : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; high :: ty.bool; signed1 :: ty.bool; signed2 :: ty.bool] ty_retired *)
+  | init_model            : Fun ctx.nil ty.unit
+  | loop                  : Fun ctx.nil ty.unit
+  | step                  : Fun ctx.nil ty.unit
+  | fetch                 : Fun ctx.nil ty_fetch_result
+  | init_sys              : Fun ctx.nil ty.unit
+  | init_pmp              : Fun ctx.nil ty.unit
+  | exceptionType_to_bits : Fun [e ∷ ty_exception_type] ty_exc_code
+  | privLevel_to_bits     : Fun [p ∷ ty_privilege] ty_priv_level
+  | handle_mem_exception  : Fun [addr ∷ ty_xlenbits; e ∷ ty_exception_type] ty.unit
+  | exception_handler     : Fun [cur_priv ∷ ty_privilege; ctl ∷ ty_ctl_result; "pc" ∷ ty_xlenbits] ty_xlenbits
+  | exception_delegatee   : Fun [p ∷ ty_privilege] ty_privilege
+  | trap_handler          : Fun [del_priv ∷ ty_privilege; c ∷ ty_exc_code; "pc" ∷ ty_xlenbits] ty_xlenbits
+  | prepare_trap_vector   : Fun [p ∷ ty_privilege; cause ∷ ty_mcause] ty_xlenbits
+  | tvec_addr             : Fun [m ∷ ty_xlenbits; c ∷ ty_mcause] (ty.option ty_xlenbits)
+  | handle_illegal        : Fun ctx.nil ty.unit
+  | check_CSR             : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
+  | is_CSR_defined        : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
+  | csrAccess             : Fun [csr ∷ ty_csridx] ty_access_type
+  | csrPriv               : Fun [csr ∷ ty_csridx] ty_privilege
+  | check_CSR_access      : Fun [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege] ty.bool
+  | readCSR               : Fun [csr ∷ ty_csridx] ty_xlenbits
+  | writeCSR              : Fun [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit
+  | execute               : Fun ["ast" ∷ ty_ast] ty_retired
+  | execute_RTYPE         : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired
+  | execute_ITYPE         : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_iop] ty_retired
+  | execute_SHIFTIOP      : Fun [shamt ∷ ty.bvec 6; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_sop] ty_retired
+  | execute_UTYPE         : Fun [imm ∷ ty.bvec 20; rd ∷ ty_regno; op ∷ ty_uop] ty_retired
+  | execute_BTYPE         : Fun [imm ∷ ty.bvec 13; rs2 ∷ ty_regno; rs1 ∷ ty_regno; op ∷ ty_bop] ty_retired
+  | execute_RISCV_JAL     : Fun [imm ∷ ty.bvec 21; rd ∷ ty_regno] ty_retired
+  | execute_RISCV_JALR    : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired
+  | execute_LOAD          : Fun [imm ∷ ty.bvec 12; rs1 ∷ ty_regno; rd ∷ ty_regno; is_unsigned :: ty.bool; width :: ty_word_width] ty_retired
+  | execute_STORE         : Fun [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired
+  | execute_ECALL         : Fun ctx.nil ty_retired
+  | execute_EBREAK        : Fun ctx.nil ty_retired
+  | execute_MRET          : Fun ctx.nil ty_retired
+  | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
+  | execute_MUL           : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; high :: ty.bool; signed1 :: ty.bool; signed2 :: ty.bool] ty_retired
   .
 
   (* Restrictions on MMIO needed, because MMIO operations leave a trace and are disallowed for 0-length data *)

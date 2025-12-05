@@ -56,7 +56,7 @@ Module ty.
   Class TypeDeclKit : Type :=
     { (* Type constructor names. *)
       (* enumi    : Set;           (* Names of enum type constructors. *) *)
-      (* unioni   : Set;           (* Names of union type constructors. *) *)
+      unioni   : Set;           (* Names of union type constructors. *)
       (* recordi  : Set;           (* Names of record type constructors. *) *)
     }.
 
@@ -76,7 +76,7 @@ Module ty.
     (* | enum (E : enumi) *)
     | bvec (n : nat)
     (* | tuple (σs : Ctx Ty) *)
-    (* | union (U : unioni) *)
+    | union (U : unioni)
     (* | record (R : recordi) *)
     .
     Derive NoConfusion for Ty.
@@ -99,7 +99,7 @@ Module ty.
       (* Hypothesis (P_enum   : forall E, P (enum E)). *)
       Hypothesis (P_bvec   : forall n, P (bvec n)).
       (* Hypothesis (P_tuple  : forall σs (IH : ctx.All P σs), P (tuple σs)). *)
-      (* Hypothesis (P_union  : forall U, P (union U)). *)
+      Hypothesis (P_union  : forall U, P (union U)).
       (* Hypothesis (P_record : forall R, P (record R)). *)
 
       Fixpoint Ty_rect (σ : Ty) : P σ :=
@@ -114,7 +114,7 @@ Module ty.
         (* | enum E   => ltac:(apply P_enum; auto) *)
         | bvec n   => ltac:(apply P_bvec; auto)
         (* | tuple σs => ltac:(apply P_tuple, ctx.all_intro, Ty_rect) *)
-        (* | union U  => ltac:(apply P_union; auto) *)
+        | union U  => ltac:(apply P_union; auto)
         (* | record R => ltac:(apply P_record; auto) *)
         end.
 
@@ -128,8 +128,8 @@ Module ty.
   Class TypeDenoteKit (TDC : TypeDeclKit) : Type :=
     { (* Mapping enum type constructor names to enum types *)
       (* enumt   : enumi -> Set; *)
-      (* (* Mapping union type constructor names to union types *) *)
-      (* uniont  : unioni -> Set; *)
+      (* Mapping union type constructor names to union types *)
+      uniont  : unioni -> Set;
       (* (* Mapping record type constructor names to record types *) *)
       (* recordt : recordi -> Set; *)
     }.
@@ -148,7 +148,7 @@ Module ty.
       (* | enum E => enumt E *)
       | bvec n => bv n
       (* | tuple σs => EnvRec Val σs *)
-      (* | union U => uniont U *)
+      | union U => uniont U
       (* | record R => recordt R *)
       end%type.
 
@@ -216,7 +216,7 @@ Module ty.
       end.
     Global Arguments liftUnOpRV {A B} f !rv.
 
-    Instance proper_liftUnOpRV {A B : Type} : Proper ((pointwise_relation _ eq) ==> eq ==> eq) (@liftUnOpRV A B).
+    #[export] Instance proper_liftUnOpRV {A B : Type} : Proper ((pointwise_relation _ eq) ==> eq ==> eq) (@liftUnOpRV A B).
     Proof.
       intros f g Rfg rv rv' eq.
       destruct rv, rv'; cbn; inversion eq;
@@ -233,6 +233,16 @@ Module ty.
       projRightRV (liftUnOpRV f rv) = f (projRightRV rv).
     Proof.
       destruct rv; auto.
+    Qed.
+
+    Lemma liftUnOpRV_inj {A B} (f : A -> B) rv1 rv2 (f_inj : ∀ a b, f a = f b -> a = b) :
+      liftUnOpRV f rv1 = liftUnOpRV f rv2 ->
+      rv1 = rv2.
+    Proof.
+      destruct rv1, rv2; cbn in *; intro H; try discriminate;
+        inversion H.
+      - apply f_inj in H1. now subst.
+      - apply f_inj in H1, H2. now subst.
     Qed.
 
     
@@ -305,6 +315,16 @@ Module ty.
       destruct rv; auto.
     Qed.
 
+    Lemma liftUnOp_inj {σ1 σ2} (f : Val σ1 -> Val σ2) (rv1 rv2 : RelVal σ1)  (f_inj : ∀ a b, f a = f b -> a = b) :
+      liftUnOp f rv1 = liftUnOp f rv2 ->
+      rv1 = rv2.
+    Proof.
+      destruct rv1, rv2; cbn in *; intro H; try discriminate;
+        inversion H.
+      - apply f_inj in H1. now subst.
+      - apply f_inj in H1, H2. now subst.
+    Qed.
+
     Definition liftBinOp {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) : RelVal σ3 :=
       liftBinOpRV f rv1 rv2.
     Global Arguments liftBinOp {σ1 σ2 σ3} f !rv1 !rv2.
@@ -326,6 +346,24 @@ Module ty.
       projRight (liftBinOp f rv1 rv2) = f (projRight rv1) (projRight rv2).
     Proof.
       destruct rv1, rv2; auto.
+    Qed.
+
+    Lemma liftUnOpRVUnOpRVToUnOpRV {A C D} (f1 : C -> D) (f2 : A -> C) (rv : RV A) :
+      liftUnOpRV f1 (liftUnOpRV f2 rv) = liftUnOpRV (fun a => f1 (f2 a)) rv.
+    Proof.
+      destruct rv; auto.
+    Qed.
+
+    Lemma liftUnOpRVUnOpToUnOp {σ1 σ2 C} (f1 : Val σ2 -> C) (f2 : Val σ1 -> Val σ2) (rv : RelVal σ1) :
+      liftUnOpRV f1 (liftUnOp f2 rv) = liftUnOpRV (fun a => f1 (f2 a)) rv.
+    Proof.
+      destruct rv; auto.
+    Qed.
+
+    Lemma liftUnOpUnOpToUnOp {σ1 σ2 σ3} (f1 : Val σ2 -> Val σ3) (f2 : Val σ1 -> Val σ2) (rv : RelVal σ1) :
+      liftUnOp f1 (liftUnOp f2 rv) = liftUnOp (fun a => f1 (f2 a)) rv.
+    Proof.
+      destruct rv; auto.
     Qed.
 
     Lemma liftUnOpRVBinOpRVToBinOpRV {A B C D} (fUn : C -> D) (fBin : A -> B -> C) (rv1 : RV A) (rv2 : RV B) :
@@ -484,18 +522,18 @@ Module ty.
 
   Class TypeDefKit {TDC : TypeDeclKit} (TDN : TypeDenoteKit TDC) : Type :=
     { (* enum_eqdec   : EqDec enumi; *)
-      (* union_eqdec  : EqDec unioni; *)
+      union_eqdec  : EqDec unioni;
       (* record_eqdec : EqDec recordi; *)
 
       (* enumt_eqdec E  : EqDec (enumt E); *)
       (* enumt_finite E : finite.Finite (enumt E); *)
 
-      (* uniont_eqdec U  : EqDec (uniont U); *)
-      (* (* Names of union data constructors. *) *)
-      (* unionk          : unioni -> Set; *)
-      (* unionk_eqdec U  : EqDec (unionk U); *)
-      (* unionk_finite U : finite.Finite (unionk U); *)
-      (* unionk_ty U     : unionk U -> Ty; *)
+      uniont_eqdec U  : EqDec (uniont U);
+      (* Names of union data constructors. *)
+      unionk          : unioni -> Set;
+      unionk_eqdec U  : EqDec (unionk U);
+      unionk_finite U : finite.Finite (unionk U);
+      unionk_ty U     : unionk U -> Ty;
 
       (* recordt_eqdec R  : EqDec (recordt R); *)
       (* (* Record field names. *) *)
@@ -503,33 +541,49 @@ Module ty.
       (* (* Record field types. *) *)
       (* recordf_ty       : recordi -> NCtx recordf Ty; *)
 
-      (* (* Union types. *) *)
-      (* (* Union data constructor field type *) *)
-      (* unionv_fold U   : { K : unionk U & Val (unionk_ty U K) } -> uniont U; *)
-      (* unionv_unfold U : uniont U -> { K : unionk U & Val (unionk_ty U K) }; *)
+      (* Union types. *)
+      (* Union data constructor field type *)
+      unionv_fold U   : { K : unionk U & Val (unionk_ty U K) } -> uniont U;
+      unionv_unfold U : uniont U -> { K : unionk U & Val (unionk_ty U K) };
 
       (* (* Record types. *) *)
       (* recordv_fold R   : NamedEnv Val (recordf_ty R) -> recordt R; *)
       (* recordv_unfold R : recordt R -> NamedEnv Val (recordf_ty R); *)
 
-      (* unionv_fold_unfold U K : unionv_fold U (unionv_unfold U K) = K; *)
-      (* unionv_unfold_fold U K : unionv_unfold U (unionv_fold U K) = K; *)
+      unionv_fold_unfold U K : unionv_fold U (unionv_unfold U K) = K;
+      unionv_unfold_fold U K : unionv_unfold U (unionv_fold U K) = K;
 
       (* recordv_fold_unfold R v : recordv_fold R (recordv_unfold R v) = v; *)
       (* recordv_unfold_fold R v : recordv_unfold R (recordv_fold R v) = v; *)
     }.
 
+  Definition unionv_fold_rel {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} {TDK : TypeDefKit TDN} U (existThingy : { K : unionk U & RelVal (unionk_ty U K) }) : RelVal (ty.union U) :=
+    ty.liftUnOp (σ2 := ty.union _) (fun v => @unionv_fold TDC TDN _ U (existT (projT1 existThingy) v)) (projT2 existThingy).
+
+  Definition unionv_unfold_rel {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} {TDK : TypeDefKit TDN} U (rv : RelVal (union U)) : RV { K : unionk U & Val (unionk_ty U K) } :=
+    ty.liftUnOpRV (unionv_unfold U) rv.
+
+  Definition unionv_unfold_fold_rel {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} {TDK : TypeDefKit TDN} U K a :
+    unionv_unfold_rel U (unionv_fold_rel U (existT K a)) = ty.liftUnOpRV (λ a : Val (unionk_ty U K), existT K a) a.
+  Proof.
+    unfold ty.unionv_unfold_rel.
+    unfold unionv_fold_rel.
+    setoid_rewrite (ty.liftUnOpRVUnOpToUnOp (σ2 := ty.union _)).
+    now setoid_rewrite unionv_unfold_fold.    
+  Qed.
+
+
   (* Coq 8.16 will start generating coercions for [:>] in Class definitions. Not
      sure what the implications are and if we want that. For now, manually
      declare the necessary fields as superclass instances. *)
   (* #[export] Existing Instance enum_eqdec. *)
-  (* #[export] Existing Instance union_eqdec. *)
+  #[export] Existing Instance union_eqdec.
   (* #[export] Existing Instance record_eqdec. *)
   (* #[export] Existing Instance enumt_eqdec. *)
   (* #[export] Existing Instance enumt_finite. *)
-  (* #[export] Existing Instance uniont_eqdec. *)
-  (* #[export] Existing Instance unionk_eqdec. *)
-  (* #[export] Existing Instance unionk_finite. *)
+  #[export] Existing Instance uniont_eqdec.
+  #[export] Existing Instance unionk_eqdec.
+  #[export] Existing Instance unionk_finite.
   (* #[export] Existing Instance recordt_eqdec. *)
 
   Section WithTypeDef.
@@ -546,17 +600,17 @@ Module ty.
         | int        , int        => left eq_refl
         | bool       , bool       => left eq_refl
         | string     , string     => left eq_refl
-        (* | list σ     , list τ     => f_equal_dec list noConfusion_inv (ty_eqdec σ τ) *)
+        (* | list σ     , list τ     => f_equal_dec list (nCinv _ _) (ty_eqdec σ τ) *)
         | prod σ1 σ2 , prod τ1 τ2 => f_equal2_dec prod (nCinv _ _) (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
-        (* | sum σ1 σ2  , sum τ1 τ2  => f_equal2_dec sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2) *)
+        (* | sum σ1 σ2  , sum τ1 τ2  => f_equal2_dec sum (nCinv _ _) (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2) *)
         | unit       , unit       => left eq_refl
-        (* | enum E1    , enum E2    => f_equal_dec enum noConfusion_inv (eq_dec E1 E2) *)
+        (* | enum E1    , enum E2    => f_equal_dec enum (nCinv _ _) (eq_dec E1 E2) *)
         | bvec n1    , bvec n2    => f_equal_dec bvec (nCinv _ _) (eq_dec n1 n2)
         (* | tuple σs   , tuple τs   => f_equal_dec *)
-        (*                                tuple noConfusion_inv *)
+        (*                                tuple (nCinv _ _) *)
         (*                                (eq_dec (EqDec := ctx.eq_dec_ctx ty_eqdec) σs τs) *)
-        (* | union U1   , union U2   => f_equal_dec union noConfusion_inv (eq_dec U1 U2) *)
-        (* | record R1  , record R2  => f_equal_dec record noConfusion_inv (eq_dec R1 R2) *)
+        | union U1   , union U2   => f_equal_dec union (nCinv _ _) (eq_dec U1 U2)
+        (* | record R1  , record R2  => f_equal_dec record (nCinv _ _) (eq_dec R1 R2) *)
         | _          , _          => right (nCinv _ _)
         end.
 
@@ -580,7 +634,7 @@ Module ty.
         (*                      (Datatypes.prod (EnvRec Val τs) (Val τ)) *)
         (*                      (prod_eqdec IHτs (eqd τ))) *)
         (*                 σs *)
-        (* | union U  => eq_dec (A := uniont U) *)
+        | union U  => eq_dec (A := uniont U)
         (* | record R => eq_dec (A := recordt R) *)
         end.
 
@@ -600,21 +654,33 @@ Module ty.
       #[export] Instance RelVal_eq_dec : forall σ, EqDec (RelVal σ) :=
       fun σ => RV_eq_dec _ (Val_eq_dec _).
 
-    (* Lemma unionv_fold_inj {U} (v1 v2 : {K : unionk U & Val (unionk_ty U K)}) : *)
-    (*   unionv_fold U v1 = unionv_fold U v2 <-> v1 = v2. *)
-    (* Proof. *)
-    (*   split; intro H; [|now f_equal]. *)
-    (*   apply (f_equal (unionv_unfold U)) in H. *)
-    (*   now rewrite !unionv_unfold_fold in H. *)
-    (* Qed. *)
+    Lemma unionv_fold_inj {U} (v1 v2 : {K : unionk U & Val (unionk_ty U K)}) :
+      unionv_fold U v1 = unionv_fold U v2 <-> v1 = v2.
+    Proof.
+      split; intro H; [|now f_equal].
+      apply (f_equal (unionv_unfold U)) in H.
+      now rewrite !unionv_unfold_fold in H.
+    Qed.
 
-    (* Lemma unionv_unfold_inj {U} (v1 v2 : Val (union U)) : *)
-    (*   unionv_unfold U v1 = unionv_unfold U v2 <-> v1 = v2. *)
-    (* Proof. *)
-    (*   split; intro H; [|now f_equal]. *)
-    (*   apply (f_equal (unionv_fold U)) in H. *)
-    (*   now rewrite !unionv_fold_unfold in H. *)
-    (* Qed. *)
+    Set Equations With UIP.
+    Lemma unionv_fold_rel_inj {U} {K : unionk U} (v1 v2 : RelVal (unionk_ty U K)) :
+      unionv_fold_rel U (existT K v1) = unionv_fold_rel U (existT K v2) <-> v1 = v2.
+    Proof.
+      split; intro H; [|now subst].
+      apply (f_equal (unionv_unfold_rel U)) in H.
+      setoid_rewrite unionv_unfold_fold_rel in H.
+      apply liftUnOpRV_inj in H; auto.
+      intros a b eq. now dependent elimination eq.
+    Qed.
+    Unset Equations With UIP.
+
+    Lemma unionv_unfold_inj {U} (v1 v2 : Val (union U)) :
+      unionv_unfold U v1 = unionv_unfold U v2 <-> v1 = v2.
+    Proof.
+      split; intro H; [|now f_equal].
+      apply (f_equal (unionv_fold U)) in H.
+      now rewrite !unionv_fold_unfold in H.
+    Qed.
 
     (* Lemma recordv_fold_inj {R} (v1 v2 : NamedEnv Val (recordf_ty R)) : *)
     (*   recordv_fold R v1 = recordv_fold R v2 <-> v1 = v2. *)
@@ -646,28 +712,32 @@ Module ty.
   (* #[global] Arguments enum {TK} E. *)
   #[global] Arguments bvec {TK} n%_nat_scope.
   (* #[global] Arguments tuple {TK} σs%_ctx_scope. *)
-  (* #[global] Arguments union {TK} U. *)
+  #[global] Arguments union {TK} U.
   (* #[global] Argumentsn record {TK} R. *)
 
 End ty.
 Export ty
-  ( TypeDeclKit, (* enumt, uniont, recordt, *)
+  ( TypeDeclKit,
+    (* enumt, *)
+    uniont,
+    (* recordt, *)
 
     TypeDenoteKit,
     Ty, Val, RelVal,
 
     RV, SyncVal, NonSyncVal,
 
-    TypeDefKit(* , enum_eqdec, enumt_eqdec, enumt_finite, *)
+    TypeDefKit, (* enum_eqdec, enumt_eqdec, enumt_finite, *)
     (* enumi, *)
-    (* unioni, *)
+    unioni,
     (* recordi, *)
-    (* union_eqdec, uniont_eqdec, unionk, unionk_eqdec, unionk_finite, unionk_ty, *)
-    (* unionv_fold, unionv_unfold, record_eqdec, recordt_eqdec, recordf, *)
+    union_eqdec, uniont_eqdec, unionk, unionk_eqdec, unionk_finite, unionk_ty,
+    unionv_fold, unionv_unfold,
+    (* record_eqdec, recordt_eqdec, recordf, *)
     (* recordf_ty, recordv_fold, recordv_unfold, *)
 
-    (* unionv_fold_unfold, unionv_unfold_fold, *)
-    (* unionv_fold_inj, unionv_unfold_inj, *)
+    unionv_fold_unfold, unionv_unfold_fold,
+    unionv_fold_inj, unionv_unfold_inj(* , *)
     (* recordv_fold_unfold, recordv_unfold_fold, *)
     (* recordv_fold_inj, recordv_unfold_inj *)
   ).
@@ -682,26 +752,26 @@ Module Type Types.
 
 End Types.
 
-#[local] Instance DefaultTypeDeclKit : TypeDeclKit := ty.Build_TypeDeclKit.
-  (* {| enumi := Empty_set; *)
-  (*    unioni := Empty_set; *)
-  (*    recordi := Empty_set; *)
-  (* |}. *)
+#[local] Instance DefaultTypeDeclKit : TypeDeclKit :=
+  {| (* enumi := Empty_set; *)
+     unioni := Empty_set;
+     (* recordi := Empty_set; *)
+  |}.
 
-#[local] Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit := ty.Build_TypeDenoteKit _.
-  (* {| enumt _ := Empty_set; *)
-  (*    uniont _ := Empty_set; *)
-  (*    recordt _ := Empty_set; *)
-  (* |}. *)
+#[local] Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit :=
+  {| (* enumt _ := Empty_set; *)
+     uniont _ := Empty_set;
+     (* recordt _ := Empty_set; *)
+  |}.
 
-#[local,refine] Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit := ty.Build_TypeDefKit _ _.
-  (* {| unionk _            := Empty_set; *)
-  (*    unionk_ty _ _       := ty.unit; *)
-  (*    unionv_fold         := Empty_set_rec _; *)
-  (*    unionv_unfold       := Empty_set_rec _; *)
-  (*    recordf             := Empty_set; *)
-  (*    recordf_ty          := Empty_set_rec _; *)
-  (*    recordv_fold        := Empty_set_rec _; *)
-  (*    recordv_unfold      := Empty_set_rec _; *)
-  (* |}. *)
+#[local,refine] Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit :=
+  {| unionk _            := Empty_set;
+     unionk_ty _ _       := ty.unit;
+     unionv_fold         := Empty_set_rec _;
+     unionv_unfold       := Empty_set_rec _;
+     (* recordf             := Empty_set; *)
+     (* recordf_ty          := Empty_set_rec _; *)
+     (* recordv_fold        := Empty_set_rec _; *)
+     (* recordv_unfold      := Empty_set_rec _; *)
+  |}.
 Proof. all: abstract (intros []). Defined.

@@ -142,7 +142,7 @@ Module Type InstantiationOn
                                       (inst (Inst := @inst_term _) t ι)
     (* | term_tuple ts              => *)
     (*     envrec.of_env (inst (Inst := inst_env (InstSA := @inst_term)) ts ι) *)
-    (* | @term_union _ U K t        => unionv_fold U (existT K (inst (Inst := inst_term) t ι)) *)
+    | @term_union _ U K t        => ty.unionv_fold_rel U (existT K (inst (Inst := inst_term) t ι))
     (* | @term_record _ R ts        => *)
     (*     let InstTerm xt := @inst_term (@type recordf Ty xt) in *)
     (*     recordv_fold R (inst (Inst := inst_env (InstSA := InstTerm)) ts ι) *)
@@ -501,7 +501,7 @@ Module Type InstantiationOn
     #[export,program] Instance proper_term_unop {σ1 σ2} (op : UnOp σ1 σ2) [Σ] :
       Proper ((≡) ==> (≡)) (term_unop (Σ:=Σ) op).
     (* #[export,program] Instance proper_term_tuple {Σ σs} : Proper ((≡) ==> (≡)) (@term_tuple Σ σs). *)
-    (* #[export,program] Instance proper_term_union {Σ U K} : Proper ((≡) ==> (≡)) (@term_union Σ U K). *)
+    #[export,program] Instance proper_term_union {Σ U K} : Proper ((≡) ==> (≡)) (@term_union Σ U K).
     (* #[export,program] Instance proper_term_record {Σ R} : Proper ((≡) ==> (≡)) (@term_record Σ R). *)
     #[export,program] Instance proper_env_snoc {Σ σs} :
       Proper ((≡) ==> forall_relation (fun σ => (≡) ==> (≡)))
@@ -875,28 +875,28 @@ Module Type InstantiationOn
     (*   - dependent elimination op; cbn; try constructor; auto. *)
     (* Qed. *)
 
-    (* Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty.union U)) : *)
-    (*   option { K : unionk U & Term Σ (unionk_ty U K) } := *)
-    (*   term_get_union (term_val _ v)   := *)
-    (*     Some (let (K, p) := unionv_unfold U v in existT K (term_val _ p)); *)
-    (*   term_get_union (term_union K t) := Some (existT K t); *)
-    (*   term_get_union _ := None. *)
+    Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty.union U)) :
+      option { K : unionk U & Term Σ (unionk_ty U K) } :=
+      term_get_union (term_val _ v)   :=
+        Some (let (K, p) := unionv_unfold U v in existT K (term_val _ p));
+      term_get_union (term_union K t) := Some (existT K t);
+      term_get_union _ := None.
 
-    (* Lemma term_get_union_spec {Σ U} (s : Term Σ (ty.union U)) : *)
-    (*   option.wlp *)
-    (*     (fun x : {K : unionk U & Term Σ (unionk_ty U K)} => *)
-    (*        match x with *)
-    (*        | existT K t => *)
-    (*          forall ι : Valuation Σ, *)
-    (*            inst (T := fun Σ => Term Σ (ty.union U)) (A := uniont U) s ι = *)
-    (*            unionv_fold U (@existT (unionk U) (fun K => Val (unionk_ty U K)) K (inst t ι)) :> Val (ty.union U) *)
-    (*        end) *)
-    (*     (term_get_union s). *)
-    (* Proof. *)
-    (*   dependent elimination s; cbn; try constructor; auto. *)
-    (*   destruct (unionv_unfold U v) eqn:?. intros. cbn. *)
-    (*   now rewrite <- Heqs, unionv_fold_unfold. *)
-    (* Qed. *)
+    Lemma term_get_union_spec {Σ U} (s : Term Σ (ty.union U)) :
+      option.wlp
+        (fun x : {K : unionk U & Term Σ (unionk_ty U K)} =>
+           match x with
+           | existT K t =>
+             forall ι : Valuation Σ,
+               inst (T := fun Σ => Term Σ (ty.union U)) (A := RelVal (ty.union U)) s ι =
+               ty.unionv_fold_rel U (@existT (unionk U) (fun K => RelVal (unionk_ty U K)) K (inst t ι)) :> RelVal (ty.union U)
+           end)
+        (term_get_union s).
+    Proof.
+      dependent elimination s; cbn; try constructor; auto.
+      destruct (unionv_unfold U v) eqn:?. intros. cbn.
+      now rewrite <- Heqs, unionv_fold_unfold.
+    Qed.
 
     (* Equations(noeqns) term_get_record {R Σ} (t : Term Σ (ty.record R)) : *)
     (*   option (NamedEnv (Term Σ) (recordf_ty R)) := *)
@@ -912,7 +912,7 @@ Module Type InstantiationOn
     (*     (fun ts => *)
     (*        forall ι : Valuation Σ, *)
     (*          inst (T := fun Σ => Term Σ (ty.record R)) (A := recordt R) s ι = *)
-    (*          recordv_fold R (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (recordf_ty R)) (A := NamedEnv Val (recordf_ty R)) ts ι)) *)
+    (*     r     recordv_fold R (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (recordf_ty R)) (A := NamedEnv Val (recordf_ty R)) ts ι)) *)
     (*     (term_get_record s). *)
     (* Proof. *)
     (*   dependent elimination s; try constructor; auto. intros ι. cbn. *)

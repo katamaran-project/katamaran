@@ -65,14 +65,14 @@ Module Type TermsOn (Import TY : Types).
   | term_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ3
   | term_unop    {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) : Term Σ σ2
   (* | term_tuple   {σs} (ts : Env (Term Σ) σs) : Term Σ (ty.tuple σs) *)
-  (* | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) *)
+  | term_union   {U : unioni} (K : unionk U) (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
   (* | term_record  (R : recordi) (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R) *)
   .
   #[global] Arguments term_var {_} _ {_ _}.
   #[global] Arguments term_val {_} _ _.
   #[global] Arguments term_relval {_} _ _.
   (* #[global] Arguments term_tuple {_ _} ts. *)
-  (* #[global] Arguments term_union {_} U K t. *)
+  #[global] Arguments term_union {_} U K t.
   (* #[global] Arguments term_record {_} R ts. *)
   Bind Scope term_scope with Term.
   Derive NoConfusion Signature for Term.
@@ -201,8 +201,8 @@ Module Type TermsOn (Import TY : Types).
                            P t → P (term_unop op t))).
     (* Hypothesis (ptuple : (∀ [σs] (ts : Env (Term Σ) σs) (IH : PE ts), *)
     (*                         P (term_tuple ts))). *)
-    (* Hypothesis (punion : (∀ [U] (K : unionk U) (t : Term Σ (unionk_ty U K)), *)
-    (*                         P t → P (term_union U K t))). *)
+    Hypothesis (punion : (∀ [U] (K : unionk U) (t : Term Σ (unionk_ty U K)),
+                            P t → P (term_union U K t))).
     (* Hypothesis (precord : (∀ [R] (ts : NamedEnv (Term Σ) (recordf_ty R)) *)
     (*                          (IH : PNE ts), P (term_record R ts))). *)
 
@@ -214,7 +214,7 @@ Module Type TermsOn (Import TY : Types).
       | term_binop op t1 t2 => pbinop op (Term_rect t1) (Term_rect t2)
       | term_unop op t      => punop op (Term_rect t)
       (* | term_tuple ts       => ptuple (env.all_intro Term_rect ts) *)
-      (* | term_union U K t    => punion K (Term_rect t) *)
+      | term_union U K t    => punion K (Term_rect t)
       (* | term_record R ts    => *)
       (*     precord (env.all_intro (fun b => Term_rect (σ := type b)) ts) *)
       end.
@@ -520,16 +520,18 @@ Module Type TermsOn (Import TY : Types).
 
   Section Term_union_case.
 
-    (* Context {Σ U} (P : Term Σ (ty.union U) → Type). *)
+    Context {Σ U} (P : Term Σ (ty.union U) → Type).
 
-    (* Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.union U ∈ Σ), P (term_var l)). *)
-    (* Hypothesis (pval : ∀ (v : Val (ty.union U)), P (term_val (ty.union U) v)). *)
-    (* Hypothesis (punion : ∀ K (t : Term Σ (unionk_ty U K)), P (term_union U K t)). *)
+    Hypothesis (pvar : ∀ (l : LVar) (lIn : l∷ty.union U ∈ Σ), P (term_var l)).
+    Hypothesis (pval : ∀ (v : Val (ty.union U)), P (term_val (ty.union U) v)).
+    Hypothesis (prelval : ∀ (rv : RelVal (ty.union U)), P (term_relval (ty.union U) rv)).
+    Hypothesis (punion : ∀ K (t : Term Σ (unionk_ty U K)), P (term_union U K t)).
 
-    (* Equations(noeqns) Term_union_case (t : Term Σ (ty.union U)) : P t := *)
-    (* | term_var_in lIn  => pvar lIn *)
-    (* | term_val _ v     => pval v *)
-    (* | term_union U K t => punion K t. *)
+    Equations(noeqns) Term_union_case (t : Term Σ (ty.union U)) : P t :=
+    | term_var_in lIn  => pvar lIn
+    | term_val _ v     => pval v
+    | term_relval _ rv  => prelval rv
+    | term_union U K t => punion K t.
 
   End Term_union_case.
 
@@ -617,7 +619,7 @@ Module Type TermsOn (Import TY : Types).
       | term_relval _ v     => view_relval v
       | term_binop op t1 t2 => view_binop op (view t1) (view t2)
       | term_unop op t      => view_unop op (view t)
-      (* | _                   => tt *)
+      | _                   => tt
       end.
 
   End TermView.
@@ -648,12 +650,12 @@ Module Type TermsOn (Import TY : Types).
       };
       (* Term_eqb (@term_tuple ?(σs) xs) (@term_tuple σs ys) := *)
       (*   @env.eqb_hom _ (Term Σ) Term_eqb _ xs ys; *)
-      (* Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2) *)
-      (*   with eq_dec k1 k2 => { *)
-      (*   Term_eqb (term_union k1 e1) (term_union ?(k1) e2) (left eq_refl) := *)
-      (*     Term_eqb e1 e2; *)
-      (*   Term_eqb _ _ (right _) := false *)
-      (* }; *)
+      Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
+        with eq_dec k1 k2 => {
+        Term_eqb (term_union k1 e1) (term_union ?(k1) e2) (left eq_refl) :=
+          Term_eqb e1 e2;
+        Term_eqb _ _ (right _) := false
+      };
       (* Term_eqb (@term_record ?(r) xs) (@term_record r ys) := *)
       (*   @env.eqb_hom _ (fun b => Term Σ (type b)) (fun b => @Term_eqb (type b)) _ xs ys; *)
       Term_eqb _ _ := false
@@ -715,7 +717,7 @@ Module Type TermsOn (Import TY : Types).
       | term_binop op t1 t2        => term_binop op (sub_term t1 ζ) (sub_term t2 ζ)
       | term_unop op t             => term_unop op (sub_term t ζ)
       (* | term_tuple ts              => term_tuple (env.map (fun _ t => sub_term t ζ) ts) *)
-      (* | term_union U K t           => term_union U K (sub_term t ζ) *)
+      | term_union U K t           => term_union U K (sub_term t ζ)
       (* | term_record R ts           => term_record R (env.map (fun _ t => sub_term t ζ) ts) *)
       end.
 

@@ -76,13 +76,13 @@ Module Type ExpressionsOn (Import TY : Types).
   (* | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty.list σ) *)
   | exp_bvec    {n} (es : Vector.t (Exp Γ ty.bool) n) : Exp Γ (ty.bvec n)
   (* | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty.tuple σs) *)
-  (* | exp_union   {U : unioni} (K : unionk U) (e : Exp Γ (unionk_ty U K)) : Exp Γ (ty.union U) *)
+  | exp_union   {U : unioni} (K : unionk U) (e : Exp Γ (unionk_ty U K)) : Exp Γ (ty.union U)
   (* | exp_record  (R : recordi) (es : NamedEnv (Exp Γ) (recordf_ty R)) : Exp Γ (ty.record R) *)
   .
   Arguments exp_var {_} _ {_ _}.
   Arguments exp_val {_} _ _.
   (* Arguments exp_tuple {_ σs} & es. *)
-  (* Arguments exp_union {_} U K & e. *)
+  Arguments exp_union {_} U K & e.
   (* Arguments exp_record {_} R & es. *)
   Bind Scope exp_scope with Exp.
 
@@ -108,7 +108,7 @@ Module Type ExpressionsOn (Import TY : Types).
     (* Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty.list σ) (exp_list es)). *)
     Hypothesis (P_bvec    : forall (n : nat) (es : Vector.t (Exp Γ ty.bool) n), PV es -> P (ty.bvec n) (exp_bvec es)).
     (* Hypothesis (P_tuple   : forall (σs : Ctx Ty) (es : Env (Exp Γ) σs), PE es -> P (ty.tuple σs) (exp_tuple es)). *)
-    (* Hypothesis (P_union   : forall (U : unioni) (K : unionk U) (e : Exp Γ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (exp_union U K e)). *)
+    Hypothesis (P_union   : forall (U : unioni) (K : unionk U) (e : Exp Γ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (exp_union U K e)).
     (* Hypothesis (P_record  : forall (R : recordi) (es : NamedEnv (Exp Γ) (recordf_ty R)), PNE es -> P (ty.record R) (exp_record R es)). *)
 
     Fixpoint Exp_rect {τ : Ty} (e : Exp Γ τ) {struct e} : P τ e :=
@@ -120,7 +120,7 @@ Module Type ExpressionsOn (Import TY : Types).
       (* | exp_list es               => ltac:(apply P_list; induction es; cbn; auto using unit) *)
       | exp_bvec es               => ltac:(apply P_bvec; induction es; cbn; auto using unit)
       (* | exp_tuple es              => ltac:(apply P_tuple; induction es; cbn; auto using unit) *)
-      (* | exp_union U K e           => ltac:(apply P_union; auto) *)
+      | exp_union U K e           => ltac:(apply P_union; auto)
       (* | exp_record R es           => ltac:(apply P_record; induction es; cbn; auto using unit) *)
       end.
 
@@ -145,7 +145,7 @@ Module Type ExpressionsOn (Import TY : Types).
     (*                            tt *)
     (*                            (fun σs _ (vs : Val (ty.tuple σs)) σ e => (vs, evalVal e δ)) *)
     (*                            es *)
-    (* | exp_union U K e     => unionv_fold U (existT K (evalVal e δ)) *)
+    | exp_union U K e     => unionv_fold U (existT K (evalVal e δ))
     (* | exp_record R es     => recordv_fold R (env.map (fun xτ e => evalVal e δ) es) *)
     end.
   Arguments evalVal {Γ σ} !e δ.
@@ -166,7 +166,7 @@ Module Type ExpressionsOn (Import TY : Types).
     (*                            tt *)
     (*                            (fun σs _ (vs : Val (ty.tuple σs)) σ e => (vs, eval e δ)) *)
     (*                            es *)
-    (* | exp_union U K e     => unionv_fold U (existT K (eval e δ)) *)
+    | exp_union U K e     => ty.unionv_fold_rel U (existT K (eval e δ))
     (* | exp_record R es     => recordv_fold R (env.map (fun xτ e => eval e δ) es) *)
     end.
     Global Arguments eval {Γ} {σ} !e δ.
@@ -184,6 +184,9 @@ Module Type ExpressionsOn (Import TY : Types).
         + cbn in *. destruct X as [-> rest].
           rewrite (IHes rest).
           now rewrite ty.comProjLeftLiftBinOp.
+      - (* union *)
+        cbn. rewrite ty.comProjLeftLiftUnOp.
+        now rewrite IHe.
     Qed.
 
     Lemma evalValProjRightIsProjRightEval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) :
@@ -199,6 +202,9 @@ Module Type ExpressionsOn (Import TY : Types).
         + cbn in *. destruct X as [-> rest].
           rewrite (IHes rest).
           now rewrite ty.comProjRightLiftBinOp.
+      - (* union *)
+        cbn. rewrite ty.comProjRightLiftUnOp.
+        now rewrite IHe.
     Qed.
 
     Definition evalVals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStoreVal Γ) : CStoreVal Δ :=

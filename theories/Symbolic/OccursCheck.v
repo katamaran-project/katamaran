@@ -86,7 +86,7 @@ Module Type OccursCheckOn
           Some (term_unop op t')
       (* | term_tuple ts => *)
       (*   term_tuple <$> occurs_check (OccursCheck := occurs_check_env (OCT := @occurs_check_term)) xIn ts *)
-      (* | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0 *)
+      | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0
       (* | term_record R ts => *)
       (*   let OCTerm xt := @occurs_check_term (@type recordf Ty xt) in *)
       (*   term_record R <$> occurs_check (OccursCheck := occurs_check_env (OCT := OCTerm)) xIn ts *)

@@ -252,7 +252,7 @@ Module Type GenericSolverOn
         | term_binop _ _ _ => 4
         | term_unop _ _    => 5
         (* | term_tuple _     => 5 *)
-        (* | term_union _ _ _ => 6 *)
+        | term_union _ _ _ => 6
         (* | term_record _ _  => 7 *)
         end%positive in
       if Term_eqb_relval t1 t2
@@ -450,14 +450,14 @@ Module Type GenericSolverOn
         (*        cat (IHts vτs) (simplify_eq_val t vτ)) *)
         (*     ts vs. *)
 
-        (* Definition simplify_eq_union_val [U] [K1 : unionk U] *)
-        (*   (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) : DList Σ := *)
-        (*   let (K2, v2) := unionv_unfold U v2 in *)
-        (*   match eq_dec K1 K2 with *)
-        (*   | left e  => let v2' := eq_rect_r (fun K1 => Val (unionk_ty U K1)) v2 e in *)
-        (*                simplify_eq_val t1 v2' *)
-        (*   | right _ => error *)
-        (*   end. *)
+        Definition simplify_eq_union_val [U] [K1 : unionk U]
+          (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) : DList Σ :=
+          let (K2, v2) := unionv_unfold U v2 in
+          match eq_dec K1 K2 with
+          | left e  => let v2' := eq_rect_r (fun K1 => Val (unionk_ty U K1)) v2 e in
+                       simplify_eq_val t1 v2'
+          | right _ => error
+          end.
 
         (* Definition simplify_eq_record_val (R : recordi) *)
         (*   (ts : NamedEnv (Term Σ) (recordf_ty R)) (v : Val (ty.record R)) : *)
@@ -484,7 +484,7 @@ Module Type GenericSolverOn
         | term_binop op t1 t2 => simplify_eq_binop_val simplify_eq_val op t1 t2
         | term_unop op t      => simplify_eq_unop_val simplify_eq_val op t
         (* | term_tuple ts       => simplify_eq_tuple_val simplify_eq_val ts *)
-        (* | term_union U K t    => simplify_eq_union_val simplify_eq_val t *)
+        | term_union U K t    => simplify_eq_union_val simplify_eq_val t
         (* | term_record R ts    => simplify_eq_record_val simplify_eq_val R ts *)
         end v.
 
@@ -846,19 +846,21 @@ Module Type GenericSolverOn
         (*     (fun (*record*) trs => formula_eqs_nctx tls trs) *)
         (*     tr. *)
 
-        (* Definition simplify_eq_union [U] [K1 : unionk U] *)
-        (*   (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (ty.union U)) : DList Σ := *)
-        (*   Term_union_case (fun _ => DList Σ) *)
-        (*     ((*var*) fun x In    => dlist_eq t2 (term_union U K1 t1)) *)
-        (*     ((*val*) fun v       => simplify_eq_val (term_union U K1 t1) v) *)
-        (*     ((*union*) *)
-        (*       fun K2 t3 => *)
-        (*         match eq_dec K1 K2 with *)
-        (*         | left e  => simplify_eq t1 *)
-        (*                        (eq_rect_r (fun K => Term Σ (unionk_ty U K)) t3 e) *)
-        (*         | right _ => error *)
-        (*         end) *)
-        (*     t2. *)
+        Definition simplify_eq_union [U] [K1 : unionk U]
+          (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (ty.union U)) : DList Σ :=
+          let default := dlist_eq t2 (term_union U K1 t1) in
+          Term_union_case (fun _ => DList Σ)
+            ((*var*) fun x In    => default)
+            ((*val*) fun v       => simplify_eq_val (term_union U K1 t1) v)
+            ((*relval*) fun v    => default)
+            ((*union*)
+              fun K2 t3 =>
+                match eq_dec K1 K2 with
+                | left e  => simplify_eq t1
+                               (eq_rect_r (fun K => Term Σ (unionk_ty U K)) t3 e)
+                | right _ => error
+                end)
+            t2.
 
       End WithSimplifyEq.
 
@@ -871,7 +873,7 @@ Module Type GenericSolverOn
         | term_binop op t1 t2 => simplify_eq_binop simplify_eq op t1 t2
         | term_unop op t1     => simplify_eq_unop simplify_eq op t1
         (* | term_tuple tls      => simplify_eq_tuple simplify_eq tls *)
-        (* | term_union U K tl   => simplify_eq_union simplify_eq tl *)
+        | term_union U K tl   => simplify_eq_union simplify_eq tl
         (* | term_record R tls   => simplify_eq_record simplify_eq tls *)
         end tr.
 
@@ -1050,12 +1052,13 @@ Module Type GenericSolverOn
         (*   + now destruct v. *)
         (*   + destruct v as [vs v]; arw. *)
         (*     apply bi.sep_proper; eauto. *)
-        (* - unfold simplify_eq_union_val. *)
-        (*   destruct unionv_unfold as [K2 v2] eqn:?. *)
-        (*   apply (f_equal (unionv_fold U)) in Heqs. *)
-        (*   rewrite unionv_fold_unfold in Heqs. subst. *)
-        (*   destruct eq_dec as [->|e]; arw. *)
-        (*   now rewrite (repₚ_unionv_neq e). *)
+        - unfold simplify_eq_union_val.
+          destruct unionv_unfold as [K2 v2] eqn:?.
+          apply (f_equal (unionv_fold U)) in Heqs.
+          rewrite unionv_fold_unfold in Heqs. subst.
+          destruct eq_dec as [->|e]; arw.
+          + rewrite IHt. now rewrite repₚ_unionv_fold.            
+          + now rewrite (repₚ_unionv_neq e).
         (* - rewrite -(recordv_fold_unfold R v). *)
         (*   rewrite repₚ_term_record. *)
         (*   generalize (recordv_unfold R v); intros vs. *)
@@ -1416,10 +1419,32 @@ Module Type GenericSolverOn
         (* - destruct tr using Term_tuple_case; cbn; arw. *)
         (*   induction IH; cbn; destruct (env.view ts0); cbn; arw. *)
         (*   rewrite eqₚ_term_tuple_snoc. now apply bi.sep_proper. *)
-        (* - destruct tr using Term_union_case; cbn; arw. *)
-        (*   destruct eq_dec; subst; arw. *)
-        (*   + now rewrite eqₚ_unionv_fold. *)
-        (*   + now rewrite eqₚ_term_union_neq. *)
+        - destruct tr using Term_union_case; cbn; arw.
+          + constructor. intros ι Hwco. unfold instpred_formula_relop.
+            cbn. destruct inst, ι.[? l∷ty.union U]; cbn;
+              split; intro H; try discriminate; try contradiction.
+            * inversion H. destruct eq_dec; try congruence.
+            * apply f_equal. destruct eq_dec; auto.
+          + constructor. intros ι Hwco. unfold instpred_formula_relop.
+            cbn. destruct inst, rv; cbn;
+              split; intro H; try discriminate; try contradiction.
+            * inversion H. destruct eq_dec; try congruence.
+            * apply f_equal. destruct eq_dec; auto.
+          + destruct eq_dec; subst; arw.
+            * rewrite IHtl.
+              constructor. intros ι Hwco. cbn. unfold instpred_formula_relop.
+              cbn. destruct inst, inst; cbn;
+                split; intro H; try discriminate; try contradiction.
+              -- by subst.
+              -- Set Equations With UIP.
+                 apply unionv_fold_inj in H. by dependent elimination H.
+                 Unset Equations With UIP.
+            * Search formula_eq eqₚ.
+              constructor. intros ι Hwco.
+              split; intro H.
+              -- contradiction.
+              -- apply instpred_formula_relop_eqₚ in H; auto.
+                 by rewrite (fromBientails (eqₚ_term_union_neq n) ι) in H.
         (* - destruct tr using Term_record_case; cbn; arw; arw_slow. *)
         (*   + rewrite -(recordv_fold_unfold R v). *)
         (*     rewrite repₚ_term_record. *)

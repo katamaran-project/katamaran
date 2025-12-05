@@ -695,50 +695,72 @@ Module Type UnifLogicOn
     (* Proof. crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed. *)
 
     Set Equations With UIP.
-    (* Lemma repₚ_unionv_fold {w : World} {U} {K : unionk U} {t : STerm (unionk_ty U K) w} {v : Val (unionk_ty U K)} : *)
-    (*   repₚ (T := STerm _) (unionv_fold U (existT K v)) (term_union U K t) ⊣⊢ repₚ (T := STerm _) v t. *)
-    (* Proof. *)
-    (*   unfold repₚ; crushPredEntails3; try (now subst). *)
-    (*   apply (f_equal (unionv_unfold U)) in H0. *)
-    (*   rewrite !unionv_unfold_fold in H0. *)
-    (*   now dependent elimination H0. *)
-    (* Qed. *)
 
-    (* Lemma eqₚ_unionv_fold {w : World} {U} {K : unionk U} {t1 t2 : STerm (unionk_ty U K) w} : *)
-    (*   eqₚ (T := STerm _) (term_union U K t1) (term_union U K t2) ⊣⊢ eqₚ (T := STerm _) t1 t2. *)
-    (* Proof. *)
-    (*   unfold eqₚ; crushPredEntails3. *)
-    (*   - apply (f_equal (unionv_unfold U)) in H0. *)
-    (*     rewrite !unionv_unfold_fold in H0. *)
-    (*     (* avoid axiom K *) *)
-    (*     refine (Eqdep_dec.inj_pair2_eq_dec _ _ _ _ _ _ H0). *)
-    (*     apply unionk_eqdec. *)
-    (*   - now do 2 f_equal. *)
-    (* Qed. *)
+    Lemma repₚ_unionv_fold {w : World} {U} {K : unionk U} {t : STerm (unionk_ty U K) w} {v : Val (unionk_ty U K)} :
+      repₚ (T := STerm _) (ty.valToRelVal (σ := ty.union _) (unionv_fold U (existT K v))) (term_union U K t) ⊣⊢ repₚ (T := STerm _) (ty.valToRelVal v) t.
+    Proof.
+      unfold repₚ; crushPredEntails3; try (now subst).
+      - destruct inst; cbn in *; try discriminate.
+        inversion H0.
+        apply unionv_fold_inj in H2.
+        by dependent elimination H2.
+      - by rewrite H0.
+    Qed.
+    
+    Lemma repₚ_unionv_fold_rel {w : World} {U} {K : unionk U} {t : STerm (unionk_ty U K) w} {rv : RelVal (unionk_ty U K)} :
+      repₚ (T := STerm _) (ty.unionv_fold_rel U (existT K rv)) (term_union U K t) ⊣⊢ repₚ (T := STerm _) rv t.
+    Proof.
+      unfold repₚ; crushPredEntails3; try (now subst).
+      by apply ty.unionv_fold_rel_inj in H0.
+    Qed.
 
-    (* Lemma repₚ_unionv_neq {w : World} {U} {K1 K2 : unionk U} {t : STerm (unionk_ty U K1) w} {v : Val (unionk_ty U K2)} :  *)
-    (*   K1 ≠ K2 -> *)
-    (*   repₚ (T := STerm _) (unionv_fold U (existT K2 v)) (term_union U K1 t) ⊣⊢ False. *)
-    (* Proof. *)
-    (*   intros HKneq. *)
-    (*   unfold repₚ; crushPredEntails3; try (now subst). *)
-    (*   apply (f_equal (unionv_unfold U)) in H0. *)
-    (*   rewrite !unionv_unfold_fold in H0. *)
-    (*   dependent elimination H0. *)
-    (*   now apply HKneq. *)
-    (* Qed. *)
+    Lemma eqₚ_unionv_fold {w : World} {U} {K : unionk U} {t1 t2 : STerm (unionk_ty U K) w} :
+      eqₚ (T := STerm _) (term_union U K t1) (term_union U K t2) ⊣⊢ eqₚ (T := STerm _) t1 t2.
+    Proof.
+      unfold eqₚ; crushPredEntails3.
+      - by apply ty.unionv_fold_rel_inj.
+      - now rewrite H0.
+    Qed.
 
-    (* Lemma eqₚ_term_union_neq {w : World} {U} {K1 K2 : unionk U} {t1 : STerm (unionk_ty U K1) w} {t2 : STerm (unionk_ty U K2) w} :  *)
-    (*   K1 ≠ K2 -> *)
-    (*   eqₚ (T := STerm _) (term_union U K1 t1) (term_union U K2 t2) ⊣⊢ False. *)
-    (* Proof. *)
-    (*   intros HKneq. *)
-    (*   unfold repₚ; crushPredEntails3; try (now subst). *)
-    (*   apply HKneq. *)
-    (*   apply (f_equal (unionv_unfold U)) in H0. *)
-    (*   rewrite !unionv_unfold_fold in H0. *)
-    (*   apply (eq_sigT_fst H0). *)
-    (* Qed. *)
+    Lemma repₚ_unionv_neq {w : World} {U} {K1 K2 : unionk U} {t : STerm (unionk_ty U K1) w} {v : Val (unionk_ty U K2)} :
+      K1 ≠ K2 ->
+      repₚ (T := STerm _) (ty.valToRelVal (σ := ty.union _) (unionv_fold U (existT K2 v))) (term_union U K1 t) ⊣⊢ False.
+    Proof.
+      intros HKneq.
+      unfold repₚ; crushPredEntails3; try (now subst).
+      destruct inst; cbn in *; try discriminate.
+      inversion H0.
+      apply (f_equal (ty.unionv_unfold U)) in H2.
+      rewrite !ty.unionv_unfold_fold in H2.
+      dependent elimination H2.      
+      tauto.
+    Qed.
+
+    Lemma repₚ_unionv_rel_neq {w : World} {U} {K1 K2 : unionk U} {t : STerm (unionk_ty U K1) w} {v : RelVal (unionk_ty U K2)} :
+      K1 ≠ K2 ->
+      repₚ (T := STerm _) (ty.unionv_fold_rel U (existT K2 v)) (term_union U K1 t) ⊣⊢ False.
+    Proof.
+      intros HKneq.
+      unfold repₚ; crushPredEntails3; try (now subst).
+      apply (f_equal (ty.unionv_unfold_rel U)) in H0.
+      rewrite !ty.unionv_unfold_fold_rel in H0.
+      destruct inst_term, v; cbn in *; try discriminate;
+      dependent elimination H0;
+      tauto.
+    Qed.
+
+    Lemma eqₚ_term_union_neq {w : World} {U} {K1 K2 : unionk U} {t1 : STerm (unionk_ty U K1) w} {t2 : STerm (unionk_ty U K2) w} :
+      K1 ≠ K2 ->
+      eqₚ (T := STerm _) (term_union U K1 t1) (term_union U K2 t2) ⊣⊢ False.
+    Proof.
+      intros HKneq.
+      unfold repₚ; crushPredEntails3; try (now subst).
+      apply HKneq.
+      apply (f_equal (ty.unionv_unfold_rel U)) in H0.
+      rewrite !ty.unionv_unfold_fold_rel in H0.
+      repeat destruct inst; cbn in *; try discriminate;
+        by dependent elimination H0.
+    Qed.
 
 
     Lemma proprepₚ_cong {T1 : LCtx -> Type} `{InstPred T1}
