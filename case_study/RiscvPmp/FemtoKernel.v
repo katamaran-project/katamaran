@@ -222,11 +222,12 @@ Module inv := invariants.
 
     Example femtokernel_mmio_handler_block0' (handler_start mmio_handler_start_block2 : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_mmio_handler_asm_block0 mmio_handler_start_block2) handler_start.
-
+    (* fdu *)
     Example femtokernel_mmio_handler_asm_block1 : list ASM :=
       [
-        ITYPE (bv.of_N mmio_write_addr) zero ra RISCV_ADDI (* works because mmio_write_addr fits into 12 bits. *)
+          ITYPE (bv.of_N mmio_write_addr) zero ra RISCV_ADDI (* works because mmio_write_addr fits into 12 bits. *)
         ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
+        ; AnnotDebugBreak
         ; Λ x, STORE bv.zero t0 ra WORD
       ].
 
@@ -286,7 +287,7 @@ Module inv := invariants.
     Import asn.notations.
     Import RiscvPmp.Sig.
     (* Fix word length at 4 for this example, as we do not perform any other writes*)
-    Local Notation asn_inv_mmio := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [env])).
+    Local Notation asn_mmio_pred := (asn.chunk (chunk_user (mmio_trace bytes_per_word) [env])).
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
@@ -351,7 +352,7 @@ Module inv := invariants.
       asn_regs_ptsto ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-      asn_inv_mmio.
+      asn_mmio_pred.
 
     Example femtokernel_handler_post_block0 : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
       (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗
@@ -375,8 +376,9 @@ Module inv := invariants.
       asn_regs_ptsto_excl [5] ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-      asn_inv_mmio.
+      asn_mmio_pred.
 
+  (* fdu *)
   Example femtokernel_handler_pre_block1 : Assertion ["a" :: ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block1)) ∗
     (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
@@ -388,7 +390,7 @@ Module inv := invariants.
     asn_regs_ptsto_excl [5] ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
-    asn_inv_mmio.
+    asn_mmio_pred.
 
   Example femtokernel_handler_post_block1 : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block1)) ∗
@@ -401,7 +403,7 @@ Module inv := invariants.
     asn_regs_ptsto ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
-    asn_inv_mmio.
+    asn_mmio_pred.
 
   Example femtokernel_handler_pre_block2 : Assertion ["a" :: ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block2)) ∗
@@ -413,7 +415,7 @@ Module inv := invariants.
     asn_regs_ptsto ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block2)))) ∗
-asn_inv_mmio.
+    asn_mmio_pred.
 
   Example femtokernel_handler_post : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block2)) ∗
@@ -425,7 +427,7 @@ asn_inv_mmio.
     asn_regs_ptsto ∗
     cur_privilege ↦ term_val ty_privilege User ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block2)))) ∗
-    asn_inv_mmio.
+    asn_mmio_pred.
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
     (*   Eval vm_compute in *)
@@ -514,8 +516,13 @@ Locate erase_symprop.
     Qed.
 
     Import Erasure.notations.
+    Set Printing Depth 200.
+    (* Eval vm_compute in vc__femtohandler_block1. *)
+    (* fdu *)
     Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
     Proof.
+      cbn.
+      Set Printing Depth 70. 
       vm_compute.
       constructor; cbn. intros. split; intros; intuition; bv_solve_Ltac.solveBvManual. 
       1-4: eapply bv.in_seqBv'; now vm_compute.
@@ -638,7 +645,7 @@ Locate erase_symprop.
     iPureIntro. eapply mmio_ram_False; eauto.
   Qed.
 
-  Definition femto_inv_mmio `{sailGS Σ} := interp_inv_mmio bytes_per_word.
+  Definition femto_mmio_pred `{sailGS Σ} := interp_mmio_pred bytes_per_word.
 
   Definition femto_handler_pre `{sailGS Σ} a : iProp Σ :=
     asn.interpret femtokernel_handler_pre [ a ].
@@ -854,7 +861,7 @@ Qed.
         cur_privilege ↦ᵣ User ∗
         interp_gprs ∗
         interp_pmp_entries femto_pmpentries ∗
-        femto_inv_mmio ∗
+        femto_mmio_pred ∗
         (pc ↦ᵣ (bv.of_N adv_addr)) ∗
         (∃ v, nextpc ↦ᵣ v) ∗
         ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2)) ∗
@@ -981,7 +988,7 @@ Qed.
       reg_pointsTo pmp1cfg default_pmpcfg_ent ∗
       (reg_pointsTo pmpaddr1 bv.zero) ∗
       (pc ↦ᵣ bv.zero) ∗
-      femto_inv_mmio ∗ (* This is not needed for the `init` code, but it is needed later on *)
+      femto_mmio_pred ∗ (* This is not needed for the `init` code, but it is needed later on *)
       ptstoSthL advAddrs ∗
       (∃ v, nextpc ↦ᵣ v) ∗
       ptsto_instrs (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ∗
@@ -1148,7 +1155,7 @@ Qed.
           ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2)) ∗
           ptsto_instrs (bv.of_N mmio_handler_addr_block1) (filter_AnnotInstr_AST (femtokernel_handler_gen_block1)) ∗
           ptsto_instrs (bv.of_N mmio_handler_addr_block2) (filter_AnnotInstr_AST (femtokernel_handler_gen_block2)) ∗
-      femto_inv_mmio ∗
+      femto_mmio_pred ∗
       ptstoSthL advAddrs.
   Proof.
     iIntros (Hinit Hhandler0 Hhandler1 Hhandler2 Hft) "Hmem".
