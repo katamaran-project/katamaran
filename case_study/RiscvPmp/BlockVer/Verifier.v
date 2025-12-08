@@ -469,7 +469,7 @@ Section AnnotatedBlockVerification.
       MkDebugBlockver
         { debug_blockver_pathcondition          : PathCondition Σ;
           debug_blockver_heap                   : SHeap Σ;
-          debug_blockver_string                 : SHeap Σ;
+          debug_blockver_string                 : string;
         }.
     Record EDebugBlockver : Type :=
       MkEDebugBlockver
@@ -477,16 +477,16 @@ Section AnnotatedBlockVerification.
           edebug_blockver_heap                   : list EChunk;
         }.
     #[export] Instance EraseDebugBlockver : Erase DebugBlockver EDebugBlockver :=
-      fun _ '(MkDebugBlockver pcv h) => MkEDebugBlockver (erase pcv) (erase h).
+      fun _ '(MkDebugBlockver pcv h _) => MkEDebugBlockver (erase pcv) (erase h).
     #[export] Instance SubstDebugBlockver : Subst DebugBlockver :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
-        | MkDebugBlockver pc1 h s => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01) s
+        | MkDebugBlockver pc1 h s => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01) (subst s ζ01)
         end.
     #[export] Instance SubstSUDebugBlockver `{SubstUniv Sb} : SubstSU Sb DebugBlockver :=
       fun Σ0 Σ1 d ζ01 =>
         match d with
-        | MkDebugBlockver pc1 h => MkDebugBlockver (substSU pc1 ζ01) (substSU h ζ01)
+        | MkDebugBlockver pc1 h s => MkDebugBlockver (substSU pc1 ζ01) (substSU h ζ01) (substSU s ζ01)
         end.
 
     #[export] Instance SubstLawsDebugBlockver : SubstLaws DebugBlockver.
@@ -508,7 +508,8 @@ Section AnnotatedBlockVerification.
         | MkDebugBlockver pc1 h s =>
             pc' <- occurs_check xIn pc1 ;;
             h'  <- occurs_check xIn h ;;
-            Some (MkDebugBlockver pc' h' s)
+            s'  <- occurs_check xIn s ;;
+            Some (MkDebugBlockver pc' h' s')
         end.
 
     (* #[export] Instance GenOccursCheckDebugBlockver : GenOccursCheck DebugBlockver := *)
@@ -551,7 +552,7 @@ Section AnnotatedBlockVerification.
                      amsg.mk
                        {| debug_blockver_pathcondition := wco w0;
                           debug_blockver_heap := h0;
-                         debug_blockver_string := "Blockver encountered an AnnotDebugBreak. Failing the verification."
+                          debug_blockver_string := "Blockver encountered an AnnotDebugBreak. Failing the verification."
                        |})
             | AnnotLemmaInvocation l es =>
                 let args := seval_exps [env] es in
