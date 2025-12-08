@@ -469,6 +469,7 @@ Section AnnotatedBlockVerification.
       MkDebugBlockver
         { debug_blockver_pathcondition          : PathCondition Σ;
           debug_blockver_heap                   : SHeap Σ;
+          debug_blockver_string                 : SHeap Σ;
         }.
     Record EDebugBlockver : Type :=
       MkEDebugBlockver
@@ -480,7 +481,7 @@ Section AnnotatedBlockVerification.
     #[export] Instance SubstDebugBlockver : Subst DebugBlockver :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
-        | MkDebugBlockver pc1 h => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01)
+        | MkDebugBlockver pc1 h s => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01) s
         end.
     #[export] Instance SubstSUDebugBlockver `{SubstUniv Sb} : SubstSU Sb DebugBlockver :=
       fun Σ0 Σ1 d ζ01 =>
@@ -504,10 +505,10 @@ Section AnnotatedBlockVerification.
     #[export] Instance OccursCheckDebugBlockver : OccursCheck DebugBlockver :=
       fun Σ x xIn d =>
         match d with
-        | MkDebugBlockver pc1 h =>
+        | MkDebugBlockver pc1 h s =>
             pc' <- occurs_check xIn pc1 ;;
             h'  <- occurs_check xIn h ;;
-            Some (MkDebugBlockver pc' h')
+            Some (MkDebugBlockver pc' h' s)
         end.
 
     (* #[export] Instance GenOccursCheckDebugBlockver : GenOccursCheck DebugBlockver := *)
@@ -545,13 +546,13 @@ Section AnnotatedBlockVerification.
                      (term_val ty_word bv_instrsize))
                   apc'
             | AnnotDebugBreak =>
-                debug
+                error
                   (fun (h0 : SHeap w0) =>
                      amsg.mk
                        {| debug_blockver_pathcondition := wco w0;
-                          debug_blockver_heap := h0
+                          debug_blockver_heap := h0;
+                         debug_blockver_string := "Blockver encountered an AnnotDebugBreak. Failing the verification."
                        |})
-                  (pure apc)
             | AnnotLemmaInvocation l es =>
                 let args := seval_exps [env] es in
                 ⟨ θ1 ⟩ _ <- call_lemma (LEnv l) args ;;
@@ -600,7 +601,7 @@ Section AnnotatedBlockVerification.
                 _ <- assert_formula (ainstr = apc) ;;
                 apc' <- cexec_instruction i apc ;;
                 cexec_annotated_block_addr b' (bv.add ainstr bv_instrsize) apc'
-            | AnnotDebugBreak => debug (pure apc)
+            | AnnotDebugBreak => debug error
             | AnnotLemmaInvocation l es =>
                 let args := evals es [env] in
                 _ <- call_lemma (LEnv l) args ;;
@@ -735,8 +736,8 @@ Section AnnotatedBlockVerification.
           iIntros (an2) "(Hpc & Hnpc & Hinstrs & HPOST)".
           iApply ("Hk" with "[$]").
         + cbv [debug pure lift_purespec CPureSpec.pure].
-          iIntros (->) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-          now iApply ("Hk" with "[$Hpc $Hnpc $Hinstrs Hh]").
+          cbn.
+          iIntros ([]).
         + iIntros (Hlemcall) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
           pose proof (Hlem := lemSem _ lem).
           apply call_lemma_sound in Hlemcall. destruct Hlemcall. cbn in *.
