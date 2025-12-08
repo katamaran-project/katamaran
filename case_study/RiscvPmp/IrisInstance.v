@@ -180,9 +180,8 @@ Module RiscvPmpIrisInstance <:
             interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
       end%I.
 
-    Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
-    Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
-      inv femto_inv_mmio_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝).
+    Definition interp_mmio_pred (width : nat) : iProp Σ :=
+      ∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝.
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
@@ -258,7 +257,7 @@ Module RiscvPmpIrisInstance <:
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
-    | inv_mmio bytes           | _                    => interp_inv_mmio bytes
+    | mmio_trace bytes         | _                    => interp_mmio_pred bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
