@@ -449,24 +449,26 @@ Section AnnotatedBlockVerification.
       MkDebugBlockver
         { debug_blockver_pathcondition          : PathCondition Σ;
           debug_blockver_heap                   : SHeap Σ;
+          debug_blockver_string                 : string;
         }.
     Record EDebugBlockver : Type :=
       MkEDebugBlockver
         { edebug_blockver_pathcondition          : list EFormula;
           edebug_blockver_heap                   : list EChunk;
+          edebug_blockver_string                 : string;
         }.
     #[export] Instance EraseDebugBlockVer : Erase DebugBlockver EDebugBlockver :=
-      fun _ '(MkDebugBlockver pathc h) => MkEDebugBlockver (erase pathc) (erase h).
+      fun _ '(MkDebugBlockver pathc h s) => MkEDebugBlockver (erase pathc) (erase h) s.
     #[export] Instance SubstDebugBlockver : Subst DebugBlockver :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
-        | MkDebugBlockver pc1 h => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01)
+        | MkDebugBlockver pc1 h s => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01) s
         end.
 
     #[export] Instance SubstSUDebugBlockver `{SubstUniv Sb} : SubstSU Sb DebugBlockver :=
       fun Σ0 Σ1 d ζ01 =>
         match d with
-        | MkDebugBlockver pc1 h => MkDebugBlockver (substSU pc1 ζ01) (substSU h ζ01)
+        | MkDebugBlockver pc1 h s => MkDebugBlockver (substSU pc1 ζ01) (substSU h ζ01) s
         end.
 
     #[export] Instance SubstSULawsDebugBlockver `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
@@ -485,10 +487,10 @@ Section AnnotatedBlockVerification.
     #[export] Instance OccursCheckDebugBlockver : OccursCheck DebugBlockver :=
       fun Σ x xIn d =>
         match d with
-        | MkDebugBlockver pc1 h =>
+        | MkDebugBlockver pc1 h s =>
             pc' <- occurs_check xIn pc1 ;;
             h'  <- occurs_check xIn h ;;
-            Some (MkDebugBlockver pc' h')
+            Some (MkDebugBlockver pc' h' s)
         end.
 
     (* #[export] Instance GenOccursCheckDebugBlockver : GenOccursCheck DebugBlockver := *)
@@ -531,7 +533,8 @@ Section AnnotatedBlockVerification.
                   (fun (h0 : SHeap w0) =>
                      amsg.mk
                        {| debug_blockver_pathcondition := wco w0;
-                          debug_blockver_heap := h0
+                          debug_blockver_heap := h0;
+                          debug_blockver_string := "Blockver encountered an AnnotDebugBreak. Failing the verification."
                        |})
                   (pure apc)
             | AnnotLemmaInvocation l es =>

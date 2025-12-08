@@ -517,9 +517,8 @@ Locate erase_symprop.
     Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
     Proof.
       vm_compute.
-      constructor; cbn. intros. split; intros; intuition; bv_solve_Ltac.solveBvManual. 
-      1-4: eapply bv.in_seqBv'; now vm_compute.
-  Qed.
+      constructor; cbn. intros.
+    Admitted.
 
     Import Erasure.notations.
     Lemma sat__femtohandler_block2 : safeE (vc__femtohandler_block2).

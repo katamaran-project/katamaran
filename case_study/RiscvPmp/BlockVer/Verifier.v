@@ -475,18 +475,19 @@ Section AnnotatedBlockVerification.
       MkEDebugBlockver
         { edebug_blockver_pathcondition          : list EFormula;
           edebug_blockver_heap                   : list EChunk;
+          edebug_blockver_string                 : string;
         }.
     #[export] Instance EraseDebugBlockver : Erase DebugBlockver EDebugBlockver :=
-      fun _ '(MkDebugBlockver pcv h _) => MkEDebugBlockver (erase pcv) (erase h).
+      fun _ '(MkDebugBlockver pcv h s) => MkEDebugBlockver (erase pcv) (erase h) s.
     #[export] Instance SubstDebugBlockver : Subst DebugBlockver :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
-        | MkDebugBlockver pc1 h s => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01) (subst s ζ01)
+        | MkDebugBlockver pc1 h s => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01) s
         end.
     #[export] Instance SubstSUDebugBlockver `{SubstUniv Sb} : SubstSU Sb DebugBlockver :=
       fun Σ0 Σ1 d ζ01 =>
         match d with
-        | MkDebugBlockver pc1 h s => MkDebugBlockver (substSU pc1 ζ01) (substSU h ζ01) (substSU s ζ01)
+        | MkDebugBlockver pc1 h s => MkDebugBlockver (substSU pc1 ζ01) (substSU h ζ01) s
         end.
 
     #[export] Instance SubstLawsDebugBlockver : SubstLaws DebugBlockver.
