@@ -228,7 +228,6 @@ Module inv := invariants.
       [
           ITYPE (bv.of_N mmio_write_addr) zero ra RISCV_ADDI (* works because mmio_write_addr fits into 12 bits. *)
         ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
-        ; AnnotDebugBreak
         ; Λ x, STORE bv.zero t0 ra WORD
       ].
 
@@ -512,12 +511,11 @@ Locate erase_symprop.
 
     Import Erasure.notations.
     Set Printing Depth 200.
-    (* Eval vm_compute in vc__femtohandler_block1. *)
+    Eval cbv in vc__femtohandler_block1.
+
     (* fdu *)
     Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
     Proof.
-      cbn.
-      Set Printing Depth 70. 
       vm_compute.
       constructor; cbn. intros. split; intros; intuition; bv_solve_Ltac.solveBvManual. 
       1-4: eapply bv.in_seqBv'; now vm_compute.
