@@ -265,7 +265,7 @@ Module inv := invariants.
     Import asn.notations.
     Import RiscvPmp.Sig.
     (* Fix word length at 4 for this example, as we do not perform any other writes*)
-    Local Notation asn_inv_mmio := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [env])).
+    Local Notation asn_mmio_pred := (asn.chunk (chunk_user (mmio_trace bytes_per_word) [env])).
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
@@ -346,7 +346,7 @@ Module inv := invariants.
       (∃ "x1", x1 ↦ term_var "x1") ∗
       x5 ↦ term_var "x5" ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-      asn_inv_mmio.
+      asn_mmio_pred.
 
     Example femtokernel_handler_post :
       Assertion ["x5" :: ty_xlenbits; "mepc" :: ty_xlenbits; "a" :: ty_xlenbits; "an"::ty_xlenbits] :=
@@ -577,7 +577,7 @@ Locate erase_symprop.
     iPureIntro. eapply mmio_ram_False; eauto.
   Qed.
 
-  Definition femto_inv_mmio `{sailGS Σ} := interp_inv_mmio bytes_per_word.
+  Definition femto_mmio_pred `{sailGS Σ} := interp_mmio_pred bytes_per_word.
 
   (* Note: temporarily make femtokernel_handler_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_handler_pre.
