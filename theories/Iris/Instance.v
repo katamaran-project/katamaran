@@ -128,6 +128,20 @@ Section Soundness.
     (* always modality needed? perhaps not because sail not higher-order? *)
     Global Arguments semTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
 
+    Lemma semTriple_consequence {Γ τ} {δ : CStore Γ} {PRE1 PRE2 : iProp Σ}
+                                 {s : Stm Γ τ} {POST1 POST2 : Val τ -> CStore Γ -> iProp Σ} :
+      semTriple δ PRE1 s POST1 -∗
+      (PRE2 -∗ PRE1) -∗
+      (∀ v δ, POST1 v δ -∗ POST2 v δ) -∗
+      semTriple δ PRE2 s POST2.
+    Proof.
+      iIntros "H HPRE HPOST HPRE2".
+      iSpecialize ("HPRE" with "HPRE2").
+      iSpecialize ("H" with "HPRE").
+      iApply (semWP_mono with "H").
+      now iIntros ([] ?).
+    Qed.
+
     Lemma iris_rule_consequence {Γ σ} {δ : CStore Γ}
             {P P'} {Q Q' : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
             (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') ->
@@ -430,6 +444,20 @@ Section Soundness.
       semTTriple δ PRE s POST ⊢ semTriple δ PRE s POST.
     Proof.
       iIntros "Ht PRE". iSpecialize ("Ht" with "PRE"). by iApply semTWP_semWP.
+    Qed.
+
+    Lemma semTTriple_consequence {Γ τ} {δ : CStore Γ} {PRE1 PRE2 : iProp Σ}
+                                 {s : Stm Γ τ} {POST1 POST2 : Val τ -> CStore Γ -> iProp Σ} :
+      semTTriple δ PRE1 s POST1 -∗
+      (PRE2 -∗ PRE1) -∗
+      (∀ v δ, POST1 v δ -∗ POST2 v δ) -∗
+      semTTriple δ PRE2 s POST2.
+    Proof.
+      iIntros "H HPRE HPOST HPRE2".
+      iSpecialize ("HPRE" with "HPRE2").
+      iSpecialize ("H" with "HPRE").
+      iApply (semTWP_mono with "H").
+      now iIntros ([] ?).
     Qed.
 
     Lemma iris_rule_tconsequence {Γ σ} {δ : CStore Γ}
