@@ -307,59 +307,67 @@ Section BlockVerificationDerived.
 
     Context {Σ} {GS : sailGS Σ}.
 
-    Fixpoint step_instrs_aux (l : list AST) (POST : Val ty.unit -> CStore [ctx] -> iProp Σ) : iProp Σ :=
+    Fixpoint step_instrs_aux (l : list AST) (a : Val ty_xlenbits) (POST : Val ty_xlenbits -> iProp Σ) : iProp Σ :=
       match l with
-      | _ :: l =>
-          semTWP [env] fun_step (λ v δ, match v with
-                                        | inl _ => step_instrs_aux l POST
-                                        | inr _ => True%I
-                                        end)
-      | [] => POST () [env]
+      | i :: l =>
+          semTTriple [env] (asn.interpret (exec_instruction_prologue i) [a])
+            fun_step
+            (λ v δ, ∃ an,
+                asn.interpret (exec_instruction_epilogue i) [env].[("a" :: ty_xlenbits) ↦ a].[_ ↦ an]
+                ∗ step_instrs_aux l an POST)%I
+      | [] => POST a
       end.
 
-    Lemma step_instrs_aux_mono {l : list AST} {POST1 POST2 : Val ty.unit -> CStore [ctx] -> iProp Σ} :
-      step_instrs_aux l POST1 -∗
-      (∀ v δ, POST1 v δ -∗ POST2 v δ) -∗
-      step_instrs_aux l POST2.
+    Lemma step_instrs_aux_mono {l : list AST} {a : Val ty_xlenbits} {POST1 POST2 : Val ty_xlenbits -> iProp Σ} :
+      step_instrs_aux l a POST1 -∗
+      (∀ an, POST1 an -∗ POST2 an) -∗
+      step_instrs_aux l a POST2.
     Proof.
-      iIntros "H HPOSTS".
-      iInduction l as [|i l IHl]; simpl.
+      revert a.
+      iInduction l as [|i l IHl];
+        iIntros (a) "H HPOSTS".
       - by iApply "HPOSTS".
-      - iApply (semTWP_mono with "H").
-        iIntros ([] ?) "H"; auto.
-        iApply ("IHl" with "H HPOSTS").
+      - cbn.
+        iApply (semTTriple_consequence with "H").
+        + iIntros "($ & $ & $)".
+        + iIntros (? ?) "(%an & Hinstrs & H)".
+          iExists an. iFrame "Hinstrs".
+          iApply ("IHl" with "H HPOSTS").
     Qed.
 
-    Lemma step_instrs_aux_mono_instrs {l1 l2 : list AST} {POST1 POST2 : Val ty.unit -> CStore [ctx] -> iProp Σ} :
-      step_instrs_aux l1 POST1 -∗
-      (∀ v δ, POST1 v δ -∗ step_instrs_aux l2 POST2) -∗
-      step_instrs_aux (l1 ++ l2) POST2.
+    Lemma step_instrs_aux_mono_instrs {l1 l2 : list AST} {a : Val ty_xlenbits} {POST1 POST2 : Val ty_xlenbits -> iProp Σ} :
+      step_instrs_aux l1 a POST1 -∗
+      (∀ an, POST1 an -∗ step_instrs_aux l2 an POST2) -∗
+      step_instrs_aux (l1 ++ l2) a POST2.
     Proof.
-      iIntros "H Hk".
-      iInduction l1 as [|i l1 IHl]; simpl.
+      revert a.
+      iInduction l1 as [|i l1 IHl];
+        iIntros (a)"H Hk"; cbn.
       - by iApply "Hk".
-      - iApply (semTWP_mono with "H").
-        iIntros ([] ?) "H"; auto.
-        iApply ("IHl" with "H Hk").
+      - iApply (semTTriple_consequence with "H").
+        + iIntros "($ & $ & $)".
+        + iIntros (? ?) "(%an & Hinstrs & H)".
+          iExists an. iFrame "Hinstrs".
+          iApply ("IHl" with "H Hk").
     Qed.
 
-    Definition step_instrs (l : list AST) (PRE : iProp Σ) (POST : Val ty.unit -> CStore [ctx] -> iProp Σ) : iProp Σ :=
-      PRE -∗ step_instrs_aux l POST.
+    Definition step_instrs (l : list AST) (a : Val ty_xlenbits) (PRE : Val ty_xlenbits -> iProp Σ) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) : iProp Σ :=
+      PRE a -∗ step_instrs_aux l a (POST a).
 
-    Lemma step_instrs_mono {l : list AST} {PRE : iProp Σ} {POST1 POST2 : Val ty.unit -> CStore [ctx] -> iProp Σ} :
-      step_instrs l PRE POST1 -∗
+    Lemma step_instrs_mono {l : list AST} {a : Val ty_xlenbits} {PRE : Val ty_xlenbits -> iProp Σ} {POST1 POST2 : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ} :
+      step_instrs l a PRE POST1 -∗
       (∀ v δ, POST1 v δ -∗ POST2 v δ) -∗
-      step_instrs l PRE POST2.
+      step_instrs l a PRE POST2.
     Proof.
       iIntros "H HPOSTS HPRE".
       iSpecialize ("H" with "HPRE").
       iApply (step_instrs_aux_mono with "H HPOSTS").
     Qed.
 
-    Lemma step_instrs_mono_instrs {l1 l2 : list AST} {PRE : iProp Σ} {POST1 POST2 : Val ty.unit -> CStore [ctx] -> iProp Σ} :
-      step_instrs l1 PRE POST1 -∗
-      (∀ v δ, POST1 v δ -∗ step_instrs_aux l2 POST2) -∗
-      step_instrs (l1 ++ l2) PRE POST2.
+    Lemma step_instrs_mono_instrs {l1 l2 : list AST} {a : Val ty_xlenbits} {PRE : Val ty_xlenbits -> iProp Σ} {POST1 POST2 : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ} :
+      step_instrs l1 a PRE POST1 -∗
+      (∀ an, POST1 a an -∗ step_instrs_aux l2 an (POST2 a)) -∗
+      step_instrs (l1 ++ l2) a PRE POST2.
     Proof.
       iIntros "H HPOSTS HPRE".
       iSpecialize ("H" with "HPRE").
@@ -373,27 +381,23 @@ Section BlockVerificationDerived.
       end.
     (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
 
-    Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : Val ty_word -> iProp Σ) (a : Val ty_word) : iProp Σ :=
-      step_instrs [instr] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
-        (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a instr)%I.
+    Definition semTripleOneInstrStep (PRE : Val ty_xlenbits -> iProp Σ) (instr : AST) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) (a : Val ty_word) : iProp Σ :=
+      step_instrs [instr] a PRE POST.
 
-    Definition semTripleBlock (PRE : Val ty_word -> iProp Σ) (instrs : list AST) (POST : Val ty_word -> Val ty_word -> iProp Σ) : iProp Σ :=
-      ∀ a,
-      step_instrs instrs
-         (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs)
-         (λ _ _, ∃ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an)%I.
-    #[global] Arguments semTripleBlock PRE%_I instrs POST%_I.
+    Definition semTripleBlock (PRE : Val ty_xlenbits -> iProp Σ) (instrs : list AST) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) : iProp Σ :=
+      ∀ a, step_instrs instrs a PRE POST.
 
     Lemma sound_exec_instruction {instr} a Φ (h : SCHeap) :
       cexec_instruction instr a Φ h ->
-      ⊢ semTripleOneInstrStep (interpret_scheap h) instr
-          (fun an => ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ an h'⌝) a.
+      ⊢ semTripleOneInstrStep (λ a, interpret_scheap h) instr
+          (λ a an, ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ an h'⌝) a.
     Proof.
       cbv [cexec_instruction exec_instruction_prologue bind produce demonic
              produce_chunk lift_purespec CPureSpec.produce_chunk CPureSpec.pure
              CPureSpec.demonic CStoreSpec.evalStoreSpec].
       cbn - [consume].
-      iIntros (Hverif) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
+      iIntros (Hverif) "Hheap". cbn.
+      iIntros "(Hpc & Hinstr & [%npc Hnpc])".
       specialize (Hverif npc). apply sound_cexec in Hverif.
       iApply (semTWP_mono with "[-]").
       iApply (sound_tstm (callgraph.mkNode step) TforeignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
@@ -410,26 +414,22 @@ Section BlockVerificationDerived.
 
     Lemma sound_exec_block_addr {instrs ainstr apc} Φ (h : SCHeap) :
       cexec_block_addr instrs ainstr apc Φ h ->
-      ⊢ (step_instrs instrs
-           (interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs)
-           (λ _ _, ∃ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs ∗ (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝)))%I.
+      ⊢ (step_instrs instrs apc (λ a, interpret_scheap h)
+           (λ a an, ∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝))%I.
     Proof.
       revert ainstr apc Φ h.
       iInduction instrs as [|instr instrs]; cbn; iIntros (ainstr apc Φ h);
         cbv [bind assert_formula lift_purespec CPureSpec.assert_formula
                CPureSpec.assert_pathcondition pure CPureSpec.pure].
-      - iIntros (HΦ). iIntros "(Hpre & Hpc & Hnpc & _)".
-        simpl. iExists apc. iFrame "Hpc Hnpc". auto.
+      - iIntros (HΦ). iIntros "Hh". simpl.
+        iExists h. iFrame "Hh". done.
       - iIntros ([-> Hverif%sound_exec_instruction]).
         unfold semTripleOneInstrStep, semTTriple in Hverif.
-        iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs)".
+        iIntros "Hh".
         iPoseProof (Hverif with "[$]") as "H".
         iApply (step_instrs_aux_mono_instrs with "H").
-        iIntros (? ?) "((%an & Hnpc & Hpc & (%h' & Hh' & %Hexec)) & Hinstr)".
-        iSpecialize ("IHinstrs" $! _ _ _ _ Hexec with "[$Hh' $Hpc $Hnpc $Hinstrs]").
-        iApply (step_instrs_aux_mono with "IHinstrs").
-        iIntros (? ?) "(%an' & H)".
-        iExists an'. iFrame "Hinstr H".
+        iIntros (an) "(%h' & Hh' & %Hexec)".
+        iApply ("IHinstrs" $! _ _ _ _ Hexec with "Hh'").
     Qed.
 
     Lemma sound_cexec_triple_addr {Γ : LCtx} {pre post instrs} {ι : Valuation Γ} :
@@ -438,14 +438,15 @@ Section BlockVerificationDerived.
           (λ a na : Val ty_word, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
     Proof.
       cbv [cexec_triple_addr bind demonic_ctx demonic CPureSpec.demonic lift_purespec].
-      iIntros (Htrip a) "(Hpre & Hpc & Hnpc & Hinstrs)".
+
+      iIntros (Htrip a) "Hpre".
       rewrite CPureSpec.wp_demonic_ctx in Htrip.
       specialize (Htrip ι a). apply produce_sound in Htrip.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
       apply sound_exec_block_addr in Hexec.
       iPoseProof (Hexec with "[$]") as "H". clear Hexec.
       iApply (step_instrs_aux_mono with "H").
-      iIntros (? ?) "(%an & $ & $ & $ & %h' & Hh' & %Hconsume)".
+      iIntros (an) "(%h' & Hh' & %Hconsume)".
       apply consume_sound in Hconsume.
       iDestruct (Hconsume with "Hh'") as "($ & _)".
     Qed.
@@ -742,15 +743,16 @@ Section AnnotatedBlockVerification.
       | _ => None
       end.
 
-    Fixpoint annot_step_instrs_aux (l : list AnnotInstr) (POST : Val ty.unit -> CStore [ctx] -> iProp Σ) : iProp Σ :=
+    Fixpoint annot_step_instrs_aux (l : list AnnotInstr) (a : Val ty_xlenbits) (POST : Val ty_xlenbits -> iProp Σ) : iProp Σ :=
       match l with
       | i :: l =>
           match i with
-          | AnnotAST _ =>
-              semTWP [env] fun_step (λ v δ, match v with
-                                            | inl _ => annot_step_instrs_aux l POST
-                                            | inr _ => True%I
-                                            end)
+          | AnnotAST i =>
+              semTTriple [env] (asn.interpret (exec_instruction_prologue i) [a])
+                fun_step
+                (λ v δ, ∃ an,
+                    asn.interpret (exec_instruction_epilogue i) [env].[("a" :: ty_xlenbits) ↦ a].[_ ↦ an]
+                    ∗ annot_step_instrs_aux l an POST)%I
           | AnnotDebugBreak => False%I (* POST () [env] *)
           | AnnotLemmaInvocation lem es =>
               (* ⌜LTriple (evals es [env]) True (annot_step_instrs_aux l POST) (LEnv lem)⌝ *)
@@ -758,25 +760,28 @@ Section AnnotatedBlockVerification.
               | {| lemma_logic_variables := lvars; lemma_patterns := pats;
                    lemma_precondition := req; lemma_postcondition := ens; |} =>
                       ∃ ι : Valuation lvars,
-                          ⌜evals es [env] = inst pats ι⌝ ∧ asn.interpret req ι ∗ (asn.interpret ens ι -∗ annot_step_instrs_aux l POST)
+                          ⌜evals es [env] = inst pats ι⌝ ∧ asn.interpret req ι ∗ (asn.interpret ens ι -∗ annot_step_instrs_aux l a POST)
               end
           end
-      | [] => POST () [env]
+      | [] => POST a
       end.
 
-    Definition annot_step_instrs (l : list AnnotInstr) (PRE : iProp Σ) (POST : Val ty.unit -> CStore [ctx] -> iProp Σ) : iProp Σ :=
-      PRE -∗ annot_step_instrs_aux l POST.
+    Definition annot_step_instrs (l : list AnnotInstr) (a : Val ty_xlenbits) (PRE : Val ty_xlenbits -> iProp Σ) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) : iProp Σ :=
+      PRE a -∗ annot_step_instrs_aux l a (POST a).
 
-    Lemma annot_step_instrs_aux_mono (l : list AnnotInstr) (POST1 POST2 : Val ty.unit -> CStore [ctx] -> iProp Σ) :
-      annot_step_instrs_aux l POST1 -∗
-      (∀ v δ, POST1 v δ -∗ POST2 v δ) -∗
-      annot_step_instrs_aux l POST2.
+    Lemma annot_step_instrs_aux_mono (l : list AnnotInstr) (a : Val ty_xlenbits) (POST1 POST2 : Val ty_xlenbits -> iProp Σ) :
+      annot_step_instrs_aux l a POST1 -∗
+      (∀ an, POST1 an -∗ POST2 an) -∗
+      annot_step_instrs_aux l a POST2.
     Proof.
-      iInduction l as [|i l IHl]; iIntros "H HPOST".
+      revert a.
+      iInduction l as [|i l IHl]; iIntros (a) "H HPOST".
       - by iApply "HPOST".
-      - destruct i; simpl; auto.
-        + iApply (semTWP_mono with "H").
-          iIntros ([[]|] δ) "H"; auto.
+      - destruct i; cbn; auto.
+        + iApply (semTTriple_consequence with "H");
+            first iIntros "($ & $ & $)".
+          iIntros (? ?) "(%an & H)"; auto.
+          iExists an; iDestruct "H" as "($ & H)".
           iApply ("IHl" with "H HPOST").
         + destruct (LEnv _).
           iDestruct "H" as "(%ι & H)".
@@ -789,33 +794,27 @@ Section AnnotatedBlockVerification.
       LemmaSem ->
       cexec_annotated_block_addr instrs ainstr apc (fun res h' => interpret_scheap h' ⊢ POST res) h ->
       (⊢
-         (annot_step_instrs instrs
-             (interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs))
-             (λ _ _, ∃ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) ∗ POST an)))%I.
+         (annot_step_instrs instrs apc (λ a, interpret_scheap h) (λ a an,  POST an)))%I.
     Proof.
       intros lemSem.
       revert ainstr apc h POST.
       induction instrs as [|instr instrs]; cbn; intros ainstr apc h POST;
         cbv [bind assert_formula lift_purespec CPureSpec.assert_formula
                CPureSpec.assert_pathcondition pure CPureSpec.pure]; auto.
-      - iIntros (H) "(Hpre & Hpc & Hnpc & _)".
-        iExists apc. iFrame. iSplitR; auto.
-        iApply (H with "Hpre").
+      - iIntros (H) "Hpre". simpl. iApply (H with "Hpre").
       - destruct instr as [instr| |Δ lem es].
         + intros [-> Hverif%sound_exec_instruction]. cbn [extract_AST ptsto_instrs].
-          iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs)". simpl.
-          iPoseProof (Hverif with "[$Hh $Hnpc $Hpc $Hinstr]") as "H".
-          cbn. iApply (semTWP_mono with "H").
-          iIntros ([[]|] δ); destruct (env.view δ); auto.
-          iIntros "((%an & Hnpc & Hpc & (%h' & Hh' & %Hexec)) & Hinstr)".
+          iIntros "Hh". iPoseProof (Hverif with "Hh") as "H".
+          cbn. iApply (semTTriple_consequence with "H");
+            first iIntros "($ & $ & $)".
+          iIntros (? δ); destruct (env.view δ); auto.
+          iIntros "(%an & H & (%h' & Hh' & %Hexec))".
           iPoseProof (IHinstrs _ _ _ _ Hexec) as "IHinstrs".
-          iSpecialize ("IHinstrs" with "[$Hh' $Hpc $Hnpc $Hinstrs]").
-          iApply (annot_step_instrs_aux_mono with "IHinstrs").
-          iIntros (? ?) "(%an' & $ & $ & $ & $)".
-          iFrame "Hinstr".
+          iSpecialize ("IHinstrs" with "Hh'").
+          iExists an. iFrame "H IHinstrs".
         + cbv [debug pure lift_purespec CPureSpec.pure].
           iIntros ([]).
-        + iIntros (Hlemcall) "(Hh & Hpc & Hnpc & Hinstrs)".
+        + iIntros (Hlemcall) "Hh".
           pose proof (Hlem := lemSem _ lem).
           remember (LEnv lem) as E. simpl.
           apply call_lemma_sound in Hlemcall.
@@ -830,11 +829,9 @@ Section AnnotatedBlockVerification.
     Qed.
 
     Definition semTripleAnnotatedBlock (PRE : Val ty_word -> iProp Σ)
-      (instrs : list AnnotInstr) (POST : Val ty_word -> Val ty_word -> iProp Σ) : iProp Σ :=
-      (∀ a,
-          annot_step_instrs instrs
-         (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs))
-         (λ _ _, ∃ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ POST a an))%I.
+      (instrs : list AnnotInstr) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) : iProp Σ :=
+      ∀ a,
+          annot_step_instrs instrs a PRE POST.
     Global Arguments semTripleAnnotatedBlock PRE%_I instrs POST%_I.
 
     Lemma sound_cexec_annotated_block_triple_addr {Γ pre post instrs} :
@@ -846,20 +843,20 @@ Section AnnotatedBlockVerification.
     Proof.
       intros lemSem Hexec ι.
       unfold semTripleAnnotatedBlock.
-      iIntros (a) "(Hpre & Hpc & Hnpc & Hinstrs)".
+      iIntros (a) "Hpre".
       hnf in Hexec.
       rewrite CPureSpec.wp_demonic_ctx in Hexec.
       specialize (Hexec ι a).
       unfold bind in Hexec.
       iPoseProof (produce_sound _ _ Hexec with "[//] [$Hpre]") as "(%h2 & Hh2 & %Hexec')".
       clear Hexec.
-      iApply (sound_exec_annotated_block_addr (apc := a) h2 with "[$Hh2 $Hpc $Hnpc $Hinstrs]"); auto.
-      revert Hexec'.
-      apply mono_cexec_annotated_block_addr.
+      iApply (sound_exec_annotated_block_addr (apc := a) h2 with "Hh2"); auto.
+      eapply mono_cexec_annotated_block_addr.
       intros ? ? <- h3 Hcons.
       iIntros "Hh3".
       iPoseProof (consume_sound _ _ Hcons with "Hh3") as "[Hcons _]".
       iFrame.
+      apply Hexec'.
     Qed.
 
     Lemma sound_sannotated_block_verification_condition {Γ pre post instrs} :
