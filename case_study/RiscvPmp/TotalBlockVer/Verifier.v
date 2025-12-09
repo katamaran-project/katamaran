@@ -374,14 +374,14 @@ Section BlockVerificationDerived.
       iApply (step_instrs_aux_mono_instrs with "H HPOSTS").
     Qed.
 
-    Fixpoint ptsto_instrs (a : Val ty_word) (instrs : list AST) : iProp Σ :=
+    Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
       match instrs with
       | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
       | nil => True%I
       end.
     (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
 
-    Definition semTripleOneInstrStep (PRE : Val ty_xlenbits -> iProp Σ) (instr : AST) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) (a : Val ty_word) : iProp Σ :=
+    Definition semTripleOneInstrStep (PRE : Val ty_xlenbits -> iProp Σ) (instr : AST) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) (a : Val ty_xlenbits) : iProp Σ :=
       step_instrs [instr] a PRE POST.
 
     Definition semTripleBlock (PRE : Val ty_xlenbits -> iProp Σ) (instrs : list AST) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) : iProp Σ :=
@@ -434,8 +434,8 @@ Section BlockVerificationDerived.
 
     Lemma sound_cexec_triple_addr {Γ : LCtx} {pre post instrs} {ι : Valuation Γ} :
       cexec_triple_addr pre instrs post (fun _ _ => True) []%list ->
-      ⊢ semTripleBlock (λ a : Val ty_word, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])) instrs
-          (λ a na : Val ty_word, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
+      ⊢ semTripleBlock (λ a : Val ty_xlenbits, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])) instrs
+          (λ a na : Val ty_xlenbits, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
     Proof.
       cbv [cexec_triple_addr bind demonic_ctx demonic CPureSpec.demonic lift_purespec].
 
@@ -828,7 +828,7 @@ Section AnnotatedBlockVerification.
           now iFrame.
     Qed.
 
-    Definition semTripleAnnotatedBlock (PRE : Val ty_word -> iProp Σ)
+    Definition semTripleAnnotatedBlock (PRE : Val ty_xlenbits -> iProp Σ)
       (instrs : list AnnotInstr) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) : iProp Σ :=
       ∀ a,
           annot_step_instrs instrs a PRE POST.
@@ -838,8 +838,8 @@ Section AnnotatedBlockVerification.
       LemmaSem ->
       (cexec_annotated_block_triple_addr (Σ := Γ) pre instrs post (λ _ _ , True) []%list) ->
       forall ι : Valuation Γ,
-      ⊢ semTripleAnnotatedBlock (λ a : Val ty_word, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])) instrs
-          (λ a na : Val ty_word, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
+      ⊢ semTripleAnnotatedBlock (λ a : Val ty_xlenbits, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])) instrs
+          (λ a na : Val ty_xlenbits, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
     Proof.
       intros lemSem Hexec ι.
       unfold semTripleAnnotatedBlock.
