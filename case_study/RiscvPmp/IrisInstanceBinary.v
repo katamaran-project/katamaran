@@ -157,8 +157,6 @@ Module RiscvPmpIrisInstance2 <:
   Section WithSailGS.
     Context `{sailRegGS2 Σ}.
 
-    Definition reg_file : gset (bv 5) := list_to_set (bv.finite.enum 5).
-
     Definition reg_pointsTo21 {τ} (r : Reg τ) (v : Val τ) : iProp Σ :=
       reg_pointsTo2 r v v.
     Definition interp_ptsreg (r : RegIdx) (v : Word) : iProp Σ :=
@@ -168,7 +166,7 @@ Module RiscvPmpIrisInstance2 <:
       end.
 
     Definition interp_gprs : iProp Σ :=
-      [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
+      [∗ set] r ∈ RiscvPmpIrisInstance.reg_file, (∃ v, interp_ptsreg r v)%I.
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
       match entries with
@@ -355,4 +353,6 @@ Module RiscvPmpIrisInstance2 <:
   Include IrisAdequacy2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
 
+  Definition WP2_loop `{sailGS2 Σ} : iProp Σ :=
+    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (fun _ _ _ _ => True%I).
 End RiscvPmpIrisInstance2.

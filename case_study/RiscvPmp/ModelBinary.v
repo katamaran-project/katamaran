@@ -300,16 +300,37 @@ Module RiscvPmpModel2.
   Section LemProofs.
     Context `{sg : sailGS2 Σ}.
 
+    Import IrisInstance.
+
     Lemma gprs_equiv :
       interp_gprs ⊣⊢
       asn.interpret asn_regs_ptsto env.nil.
     Proof.
-      unfold interp_gprs, reg_file.
+      unfold interp_gprs.
       rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
       cbn. iSplit.
       - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
       - iIntros "H"; iSplitR; first by iExists bv.zero.
         repeat iDestruct "H" as "($ & H)"; iFrame.
+    Qed.
+
+    Lemma interp_gprs_split :
+      interp_gprs ⊢
+        @RiscvPmpIrisInstance.interp_gprs _ sailRegGS2_sailRegGS_left
+        ∗ @RiscvPmpIrisInstance.interp_gprs _ sailRegGS2_sailRegGS_right.
+    Proof.
+      unfold interp_gprs, RiscvPmpIrisInstance.interp_gprs.
+      rewrite ?big_sepS_elements.
+      remember (elements RiscvPmpIrisInstance.reg_file) as l.
+      replace (elements RiscvPmpIrisInstance.reg_file) with l.
+      clear Heql.
+      iIntros "H".
+      iInduction l as [|]; simpl; try done.
+      iDestruct "H" as "((%v & Hptsto) & H)".
+      iDestruct ("IHl" with "H") as "($ & $)". iClear "IHl".
+      unfold interp_ptsreg, RiscvPmpIrisInstance.interp_ptsreg.
+      destruct (reg_convert a); try done.
+      iDestruct "Hptsto" as "($ & $)".
     Qed.
 
     Lemma open_gprs_sound :
