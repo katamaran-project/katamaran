@@ -267,8 +267,8 @@ Module Type BaseMixin (Import TY : Types).
       (*       end *)
       | pat_unit =>
           fun pc _ => term_val ty.unit pc
-      (* | pat_enum E => *)
-      (*     fun v _ => term_val (ty.enum E) v *)
+      | pat_enum E =>
+          fun v _ => term_val (ty.enum E) v
       | pat_bvec_split m n x y =>
           fun _ Exy =>
             let (Ex,vr) := env.view Exy in
@@ -299,7 +299,7 @@ Module Type BaseMixin (Import TY : Types).
       - intros __y ts. env.destroy ts. cbn in *. now destructInsts.
       - intros [] ts; now env.destroy ts.
       (* - intros [] ts. reflexivity. *)
-      (* - reflexivity. *)
+      - intros pc ts. env.destroy ts. reflexivity.
       - intros __y ts. env.destroy ts. cbn in *. now destructInsts.
       (* - reflexivity. *)
       (* - intros _ ts. *)

@@ -152,7 +152,7 @@ Module Type PatternsOn (Import TY : Types).
     | pat_pair (x y : N) {σ τ}                        : Pattern (ty.prod σ τ)
     (* | pat_sum σ τ (x y : N)                           : Pattern (ty.sum σ τ) *)
     | pat_unit                                        : Pattern ty.unit
-    (* | pat_enum E                                      : Pattern (ty.enum E) *)
+    | pat_enum E                                      : Pattern (ty.enum E)
     | pat_bvec_split m n (x y : N)                    : Pattern (ty.bvec (m+n))
     (* | pat_bvec_exhaustive m                           : Pattern (ty.bvec m) *)
     (* | pat_tuple {σs Δ} (p : TuplePat σs Δ)            : Pattern (ty.tuple σs) *)
@@ -172,7 +172,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_pair x y           => unit
       (* | pat_sum σ τ x y        => bool *)
       | pat_unit               => unit
-      (* | pat_enum E             => enumt E *)
+      | pat_enum E             => enumt E
       | pat_bvec_split m n x y => unit
       (* | pat_bvec_exhaustive m  => bv m *)
       (* | pat_tuple p            => unit *)
@@ -190,7 +190,7 @@ Module Type PatternsOn (Import TY : Types).
         | pat_pair _ _           => EqDecInstances.unit_EqDec
         (* | pat_sum _ _ _ _        => EqDecInstances.bool_EqDec *)
         | pat_unit               => EqDecInstances.unit_EqDec
-        (* | pat_enum E             => enumt_eqdec E *)
+        | pat_enum E             => enumt_eqdec E
         | pat_bvec_split _ _ _ _ => EqDecInstances.unit_EqDec
         (* | pat_bvec_exhaustive m  => bv.eqdec_bv *)
         (* | pat_tuple _            => EqDecInstances.unit_EqDec *)
@@ -211,7 +211,7 @@ Module Type PatternsOn (Import TY : Types).
         | pat_pair _ _           => finite.unit_finite
         (* | pat_sum _ _ _ _        => Finite_bool *)
         | pat_unit               => finite.unit_finite
-        (* | pat_enum E             => enumt_finite E *)
+        | pat_enum E             => enumt_finite E
         | pat_bvec_split _ _ _ _ => finite.unit_finite
         (* | pat_bvec_exhaustive m  => bv.finite.finite_bv *)
         (* | pat_tuple _            => finite.unit_finite *)
@@ -233,7 +233,7 @@ Module Type PatternsOn (Import TY : Types).
       | @pat_pair x y σ τ      => fun _ => [x∷σ; y∷τ]
       (* | pat_sum σ τ x y        => fun b => if b then [x∷σ] else [y∷τ] *)
       | pat_unit               => fun _ => [ctx]
-      (* | pat_enum _             => fun _ => [ctx] *)
+      | pat_enum _             => fun _ => [ctx]
       | pat_bvec_split m n x y => fun _ => [x∷ty.bvec m; y∷ty.bvec n]
       (* | pat_bvec_exhaustive m  => fun _ => [ctx] *)
       (* | @pat_tuple _ Δ _       => fun _ => Δ *)
@@ -270,8 +270,8 @@ Module Type PatternsOn (Import TY : Types).
       (*       end *)
       | pat_unit =>
           fun _ => existT tt [env]
-      (* | pat_enum E => *)
-      (*     fun v : enumt E => existT v [env] *)
+      | pat_enum E =>
+          fun v : enumt E => existT v [env]
       | pat_bvec_split m n x y =>
           fun v =>
             match bv.appView m n v with
@@ -321,8 +321,8 @@ Module Type PatternsOn (Import TY : Types).
       (*       end *)
       | pat_unit =>
           fun _ _ => tt
-      (* | pat_enum E => *)
-      (*     fun v _ => v *)
+      | pat_enum E =>
+          fun v _ => v
       | pat_bvec_split m n x y =>
           fun _ Exy =>
             let (Ex,vy) := env.view Exy in
@@ -355,7 +355,7 @@ Module Type PatternsOn (Import TY : Types).
       - destruct pc; now env.destroy vs.
       (* - destruct pc; now env.destroy vs. *)
       (* - destruct pc; now env.destroy vs. *)
-      (* - now env.destroy vs. *)
+      - now env.destroy vs.
       - destruct pc; env.destroy vs.
         now rewrite bv.appView_app.
       (* - now env.destroy vs. *)
@@ -390,7 +390,7 @@ Module Type PatternsOn (Import TY : Types).
       - destruct v; reflexivity.
       (* - destruct v; reflexivity. *)
       (* - destruct v; reflexivity. *)
-      (* - reflexivity. *)
+      - reflexivity.
       - destruct bv.appView; reflexivity.
       (* - reflexivity. *)
       (* - unfold tuple_pattern_match_val. *)
@@ -706,7 +706,7 @@ Module Type PatternsOn (Import TY : Types).
       (*                               (fresh_lvar Σ (Some (n x))) *)
       (*                               (fresh_lvar Σ (Some (n y))) *)
       | pat_unit               => pat_unit
-      (* | pat_enum E             => pat_enum E *)
+      | pat_enum E             => pat_enum E
       | pat_bvec_split m _ x y =>
           let x' := fresh_lvar Σ (Some (n x)) in
           let y' := fresh_lvar (Σ▻x'∷ty.bvec m) (Some (n y)) in
@@ -739,7 +739,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_pair _ _           => fun pc => pc
       (* | pat_sum _ _ _ _        => fun pc => pc *)
       | pat_unit               => fun pc => pc
-      (* | pat_enum E             => fun pc => pc *)
+      | pat_enum E             => fun pc => pc
       | pat_bvec_split _ _ _ _ => fun pc => pc
       (* | pat_bvec_exhaustive m  => fun pc => pc *)
       (* | pat_tuple _            => fun pc => pc *)
@@ -759,7 +759,7 @@ Module Type PatternsOn (Import TY : Types).
       | pat_pair _ _           => fun pc => pc
       (* | pat_sum _ _ _ _        => fun pc => pc *)
       | pat_unit               => fun pc => pc
-      (* | pat_enum E             => fun pc => pc *)
+      | pat_enum E             => fun pc => pc
       | pat_bvec_split _ _ _ _ => fun pc => pc
       (* | pat_bvec_exhaustive m  => fun pc => pc *)
       (* | pat_tuple _            => fun pc => pc *)
@@ -790,7 +790,7 @@ Module Type PatternsOn (Import TY : Types).
       (*                                       | false => eq_refl *)
       (*                                       end *)
       | pat_unit               => fun _ => eq_refl
-      (* | pat_enum _             => fun _ => eq_refl *)
+      | pat_enum _             => fun _ => eq_refl
       | pat_bvec_split _ _ _ _ => fun _ => eq_refl
       (* | pat_bvec_exhaustive m  => fun _ => eq_refl *)
       (* | pat_tuple _            => fun _ => eq_refl *)
@@ -835,7 +835,7 @@ Module Type PatternsOn (Import TY : Types).
       (*       | false => fun ts => let (_,v) := env.view ts in [nenv v] *)
       (*       end *)
       | pat_unit   => fun _ _ => [env]
-      (* | pat_enum E => fun _ _ => [env] *)
+      | pat_enum E => fun _ _ => [env]
       | pat_bvec_split m n x y =>
           fun _ ts =>
             let (ts1,vy) := env.view ts in
@@ -873,7 +873,7 @@ Module Type PatternsOn (Import TY : Types).
       (*       | false => fun ts => let (_,v) := env.view ts in [nenv v] *)
       (*       end *)
       | pat_unit   => fun _ _ => [env]
-      (* | pat_enum E => fun _ _ => [env] *)
+      | pat_enum E => fun _ _ => [env]
       | pat_bvec_split m n x y =>
           fun _ ts =>
             let (ts1,vy) := env.view ts in

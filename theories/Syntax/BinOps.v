@@ -69,8 +69,8 @@ Module bop.
     | and               : BinOp bool bool bool
     | or                : BinOp bool bool bool
     | pair {σ1 σ2 : Ty} : BinOp σ1 σ2 (prod σ1 σ2)
-    (* | cons {σ : Ty}     : BinOp σ (list σ) (list σ) *)
-    (* | append {σ : Ty}   : BinOp (list σ) (list σ) (list σ) *)
+    | cons {σ : Ty}     : BinOp σ (list σ) (list σ)
+    | append {σ : Ty}   : BinOp (list σ) (list σ) (list σ)
     | shiftr {m n}      : BinOp (bvec m) (bvec n) (bvec m)
     | shiftl {m n}      : BinOp (bvec m) (bvec n) (bvec m)
     | bvadd {n}         : BinOp (bvec n) (bvec n) (bvec n)
@@ -116,10 +116,10 @@ Module bop.
 
     Definition binoptel_pair (σ1 σ2 : Ty) : BinOpTel :=
       ((σ1, σ2, prod σ1 σ2), pair).
-    (* Definition binoptel_cons (σ : Ty) : BinOpTel := *)
-    (*   ((σ, list σ, list σ), cons). *)
-    (* Definition binoptel_append (σ : Ty) : BinOpTel := *)
-    (*   ((list σ, list σ, list σ), append). *)
+    Definition binoptel_cons (σ : Ty) : BinOpTel :=
+      ((σ, list σ, list σ), cons).
+    Definition binoptel_append (σ : Ty) : BinOpTel :=
+      ((list σ, list σ, list σ), append).
     Definition binoptel_shiftr (m n : nat) : BinOpTel :=
       ((bvec m, bvec n, bvec m), shiftr).
     Definition binoptel_shiftl (m n : nat) : BinOpTel :=
@@ -184,10 +184,10 @@ Module bop.
       | or    , or     => left eq_refl
       | @pair σ1 σ2 , @pair τ1 τ2   =>
         f_equal2_dec binoptel_pair (ninv _ _) (eq_dec σ1 τ1) (eq_dec σ2 τ2)
-      (* | @cons σ  , @cons τ   => *)
-      (*   f_equal_dec binoptel_cons (ninv _ _) (eq_dec σ τ) *)
-      (* | @append σ , @append τ   => *)
-      (*   f_equal_dec binoptel_append (ninv _ _) (eq_dec σ τ) *)
+      | @cons σ  , @cons τ   =>
+        f_equal_dec binoptel_cons (ninv _ _) (eq_dec σ τ)
+      | @append σ , @append τ   =>
+        f_equal_dec binoptel_append (ninv _ _) (eq_dec σ τ)
       | @shiftr m n , @shiftr p q =>
           f_equal2_dec binoptel_shiftr (ninv _ _) (eq_dec m p) (eq_dec n q)
       | @shiftl m n , @shiftl p q =>
@@ -391,10 +391,10 @@ Module bop.
       | and                        => andb
       | or                         => fun v1 v2 => orb v1 v2
       | pair                       => Datatypes.pair
-      (* | cons                       => List.cons *)
+      | cons                       => List.cons
       | shiftr                     => fun v1 v2 => bv.shiftr v1 v2
       | shiftl                     => fun v1 v2 => bv.shiftl v1 v2
-      (* | append                     => app *)
+      | append                     => app
       | bvadd                      => fun v1 v2 => bv.add v1 v2
       | bvsub                      => fun v1 v2 => bv.sub v1 v2
       | bvmul                      => fun v1 v2 => bv.mul v1 v2

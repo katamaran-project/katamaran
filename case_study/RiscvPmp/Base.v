@@ -579,11 +579,12 @@ Module Export RiscvPmpBase <: Base.
   Import env.notations.
   Import stdpp.finite.
 
-  #[export] Instance typedeclkit : TypeDeclKit := DefaultTypeDeclKit
-    (* {| enumi := Enums; *)
-    (*    unioni := Unions; *)
-    (*    recordi := Records; *)
-    (* |} *).
+  #[export] Instance typedeclkit : TypeDeclKit :=
+    {| enumi := Enums;
+       unioni := Unions;
+       (* recordi := Records; *)
+    |}
+  .
 
   (* Override notations of bindigns to put the variable x into string_scope. *)
   Notation "x ∷ t" := (MkB x%string t) : ctx_scope.
@@ -593,33 +594,33 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_byte                           := (ty.bvec byte).
   Definition ty_bytes (bytes : nat)            := (ty.bvec (bytes * byte)).
   Definition ty_regno                          := (ty.bvec 5).
-  (* Definition ty_privilege                      := (ty.enum privilege). *)
+  Definition ty_privilege                      := (ty.enum privilege).
   Definition ty_priv_level                     := (ty.bvec 2).
-  (* Definition ty_csridx                         := (ty.enum csridx). *)
-  (* Definition ty_pmpcfgidx                      := (ty.enum pmpcfgidx). *)
-  (* Definition ty_pmpcfgperm                     := (ty.enum pmpcfgperm). *)
-  (* Definition ty_pmpaddridx                     := (ty.enum pmpaddridx). *)
-  (* Definition ty_pmpaddrmatchtype               := (ty.enum pmpaddrmatchtype). *)
-  (* Definition ty_pmpmatch                       := (ty.enum pmpmatch). *)
-  (* Definition ty_pmpaddrmatch                   := (ty.enum pmpaddrmatch). *)
+  Definition ty_csridx                         := (ty.enum csridx).
+  Definition ty_pmpcfgidx                      := (ty.enum pmpcfgidx).
+  Definition ty_pmpcfgperm                     := (ty.enum pmpcfgperm).
+  Definition ty_pmpaddridx                     := (ty.enum pmpaddridx).
+  Definition ty_pmpaddrmatchtype               := (ty.enum pmpaddrmatchtype).
+  Definition ty_pmpmatch                       := (ty.enum pmpmatch).
+  Definition ty_pmpaddrmatch                   := (ty.enum pmpaddrmatch).
   (* Definition ty_pmp_addr_range                 := (ty.option (ty.prod ty_xlenbits ty_xlenbits)). *)
-  (* Definition ty_rop                            := (ty.enum rop). *)
-  (* Definition ty_iop                            := (ty.enum iop). *)
-  (* Definition ty_sop                            := (ty.enum sop). *)
-  (* Definition ty_uop                            := (ty.enum uop). *)
-  (* Definition ty_bop                            := (ty.enum bop). *)
-  (* Definition ty_csrop                          := (ty.enum csrop). *)
-  (* Definition ty_mop                            := (ty.enum mop). *)
-  (* Definition ty_retired                        := (ty.enum retired). *)
-  (* Definition ty_word_width                     := (ty.enum wordwidth). *)
+  Definition ty_rop                            := (ty.enum rop).
+  Definition ty_iop                            := (ty.enum iop).
+  Definition ty_sop                            := (ty.enum sop).
+  Definition ty_uop                            := (ty.enum uop).
+  Definition ty_bop                            := (ty.enum bop).
+  Definition ty_csrop                          := (ty.enum csrop).
+  Definition ty_mop                            := (ty.enum mop).
+  Definition ty_retired                        := (ty.enum retired).
+  Definition ty_word_width                     := (ty.enum wordwidth).
   Definition ty_mcause                         := (ty_xlenbits).
   Definition ty_exc_code                       := (ty.bvec 8).
-  (* Definition ty_ast                            := (ty.union ast). *)
-  (* Definition ty_access_type                    := (ty.union access_type). *)
-  (* Definition ty_exception_type                 := (ty.union exception_type). *)
-  (* Definition ty_memory_op_result (bytes : nat) := (ty.union (memory_op_result bytes)). *)
-  (* Definition ty_fetch_result                   := (ty.union fetch_result). *)
-  (* Definition ty_ctl_result                     := (ty.union ctl_result). *)
+  Definition ty_ast                            := (ty.union ast).
+  Definition ty_access_type                    := (ty.union access_type).
+  Definition ty_exception_type                 := (ty.union exception_type).
+  Definition ty_memory_op_result (bytes : nat) := (ty.union (memory_op_result bytes)).
+  Definition ty_fetch_result                   := (ty.union fetch_result).
+  Definition ty_ctl_result                     := (ty.union ctl_result).
   (* Definition ty_pmpcfg_ent                     := (ty.record rpmpcfg_ent). *)
   (* Definition ty_mstatus                        := (ty.record rmstatus). *)
   (* Definition ty_pmpentry                       := (ty.prod ty_pmpcfg_ent ty_xlenbits). *)
@@ -663,11 +664,12 @@ Module Export RiscvPmpBase <: Base.
     | rmstatus    => Mstatus
     end.
 
-  #[export] Instance typedenotekit : TypeDenoteKit typedeclkit := DefaultTypeDenoteKit
-    (* {| enumt := enum_denote; *)
-    (*    uniont := union_denote; *)
-    (*    recordt := record_denote; *)
-    (* |} *).
+  #[export] Instance typedenotekit : TypeDenoteKit typedeclkit :=
+    {| enumt := enum_denote;
+       uniont := union_denote;
+       (* recordt := record_denote; *)
+    |}
+  .
 
   Definition union_constructor (U : Unions) : Set :=
     match U with
@@ -680,43 +682,43 @@ Module Export RiscvPmpBase <: Base.
     (* | pmp_entries   => PmpEntriesConstructor *)
     end.
 
-  (* Definition union_constructor_type (U : Unions) : union_constructor U -> Ty := *)
-  (*   match U with *)
-  (*   | ast              => fun K => *)
-  (*                           match K with *)
-  (*                           | KRTYPE      => ty.tuple [ty_regno; ty_regno; ty_regno; ty_rop] *)
-  (*                           | KITYPE      => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty_iop] *)
-  (*                           | KSHIFTIOP   => ty.tuple [ty.bvec 6;  ty_regno; ty_regno; ty_sop] *)
-  (*                           | KUTYPE      => ty.tuple [ty.bvec 20; ty_regno; ty_uop] *)
-  (*                           | KBTYPE      => ty.tuple [ty.bvec 13; ty_regno; ty_regno; ty_bop] *)
-  (*                           | KRISCV_JAL  => ty.tuple [ty.bvec 21; ty_regno] *)
-  (*                           | KRISCV_JALR => ty.tuple [ty.bvec 12; ty_regno; ty_regno] *)
-  (*                           | KLOAD       => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty.bool; ty_word_width] *)
-  (*                           | KSTORE      => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty_word_width] *)
-  (*                           | KECALL      => ty.unit *)
-  (*                           | KEBREAK     => ty.unit *)
-  (*                           | KMRET       => ty.unit *)
-  (*                           | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty.bool; ty_csrop] *)
-  (*                           | KMUL        => ty.tuple [ty_regno; ty_regno; ty_regno; ty.bool; ty.bool; ty.bool] *)
-  (*                           end *)
-  (*   | access_type      => fun _ => ty.unit *)
-  (*   | exception_type   => fun _ => ty.unit *)
-  (*   | memory_op_result bytes => fun K => *)
-  (*                                 match K with *)
-  (*                                 | KMemValue     => ty.bvec (bytes * 8) *)
-  (*                                 | KMemException => ty_exception_type *)
-  (*                                 end *)
-  (*   | fetch_result     => fun K => *)
-  (*                           match K with *)
-  (*                           | KF_Base  => ty_word *)
-  (*                           | KF_Error => ty.prod ty_exception_type ty_word *)
-  (*                           end *)
-  (*   | ctl_result       => fun K => *)
-  (*                           match K with *)
-  (*                           | KCTL_TRAP => ty_exception_type *)
-  (*                           | KCTL_MRET => ty.unit *)
-  (*                           end *)
-  (*   end. *)
+  Definition union_constructor_type (U : Unions) : union_constructor U -> Ty :=
+    match U with
+    | ast              => fun K =>
+                            match K with
+                            | KRTYPE      => ty.tuple [ty_regno; ty_regno; ty_regno; ty_rop]
+                            | KITYPE      => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty_iop]
+                            | KSHIFTIOP   => ty.tuple [ty.bvec 6;  ty_regno; ty_regno; ty_sop]
+                            | KUTYPE      => ty.tuple [ty.bvec 20; ty_regno; ty_uop]
+                            | KBTYPE      => ty.tuple [ty.bvec 13; ty_regno; ty_regno; ty_bop]
+                            | KRISCV_JAL  => ty.tuple [ty.bvec 21; ty_regno]
+                            | KRISCV_JALR => ty.tuple [ty.bvec 12; ty_regno; ty_regno]
+                            | KLOAD       => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty.bool; ty_word_width]
+                            | KSTORE      => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty_word_width]
+                            | KECALL      => ty.unit
+                            | KEBREAK     => ty.unit
+                            | KMRET       => ty.unit
+                            | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty.bool; ty_csrop]
+                            | KMUL        => ty.tuple [ty_regno; ty_regno; ty_regno; ty.bool; ty.bool; ty.bool]
+                            end
+    | access_type      => fun _ => ty.unit
+    | exception_type   => fun _ => ty.unit
+    | memory_op_result bytes => fun K =>
+                                  match K with
+                                  | KMemValue     => ty.bvec (bytes * 8)
+                                  | KMemException => ty_exception_type
+                                  end
+    | fetch_result     => fun K =>
+                            match K with
+                            | KF_Base  => ty_word
+                            | KF_Error => ty.prod ty_exception_type ty_word
+                            end
+    | ctl_result       => fun K =>
+                            match K with
+                            | KCTL_TRAP => ty_exception_type
+                            | KCTL_MRET => ty.unit
+                            end
+    end.
 
   #[export] Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
     ltac:(destruct E; auto with typeclass_instances).
@@ -731,109 +733,109 @@ Module Export RiscvPmpBase <: Base.
   #[export] Instance eqdec_record_denote R : EqDec (record_denote R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
-  (* Definition union_unfold (U : unioni) : uniont U -> { K & Val (union_constructor_type U K) } := *)
-  (*   match U with *)
-  (*   | ast              => fun Kv => *)
-  (*                           match Kv with *)
-  (*                           | RTYPE rs2 rs1 rd op           => existT KRTYPE (tt , rs2 , rs1 , rd , op) *)
-  (*                           | ITYPE imm rs1 rd op           => existT KITYPE (tt , imm , rs1 , rd , op) *)
-  (*                           | SHIFTIOP shamt rs1 rd op      => existT KSHIFTIOP (tt , shamt , rs1 , rd , op) *)
-  (*                           | UTYPE imm rd op               => existT KUTYPE (tt , imm , rd , op) *)
-  (*                           | BTYPE imm rs2 rs1 op          => existT KBTYPE (tt , imm , rs2 , rs1 , op) *)
-  (*                           | RISCV_JAL imm rd              => existT KRISCV_JAL (tt , imm , rd) *)
-  (*                           | RISCV_JALR imm rs1 rd         => existT KRISCV_JALR (tt , imm , rs1 , rd) *)
-  (*                           | LOAD imm rs1 rd is_unsigned w => existT KLOAD (tt , imm , rs1 , rd , is_unsigned , w) *)
-  (*                           | STORE imm rs2 rs1 w           => existT KSTORE (tt , imm , rs2 , rs1 , w) *)
-  (*                           | ECALL                         => existT KECALL tt *)
-  (*                           | EBREAK                        => existT KEBREAK tt *)
-  (*                           | MRET                          => existT KMRET tt *)
-  (*                           | CSR csr rs1 rd is_imm op      => existT KCSR (tt , csr , rs1 , rd , is_imm , op) *)
-  (*                           | MUL rs2 rs1 rd h s1 s2        => existT KMUL (tt, rs2 , rs1 , rd , h, s1, s2 ) *)
-  (*                           end *)
-  (*   | access_type      => fun Kv => *)
-  (*                           match Kv with *)
-  (*                           | Read      => existT KRead tt *)
-  (*                           | Write     => existT KWrite tt *)
-  (*                           | ReadWrite => existT KReadWrite tt *)
-  (*                           | Execute   => existT KExecute tt *)
-  (*                           end *)
-  (*   | exception_type   => fun Kv => *)
-  (*                           match Kv with *)
-  (*                           | E_Fetch_Access_Fault => existT KE_Fetch_Access_Fault tt *)
-  (*                           | E_Load_Access_Fault  => existT KE_Load_Access_Fault tt *)
-  (*                           | E_SAMO_Access_Fault  => existT KE_SAMO_Access_Fault tt *)
-  (*                           | E_U_EnvCall          => existT KE_U_EnvCall tt *)
-  (*                           | E_M_EnvCall          => existT KE_M_EnvCall tt *)
-  (*                           | E_Illegal_Instr      => existT KE_Illegal_Instr tt *)
-  (*                           end *)
-  (*   | memory_op_result bytes => fun Kv => *)
-  (*                           match Kv with *)
-  (*                           | MemValue _ v     => existT KMemValue v *)
-  (*                           | MemException _ e => existT KMemException e *)
-  (*                           end *)
-  (*   | fetch_result     => fun Kv => *)
-  (*                           match Kv with *)
-  (*                           | F_Base v    => existT KF_Base v *)
-  (*                           | F_Error e v => existT KF_Error (e , v) *)
-  (*                           end *)
-  (*   | ctl_result       => fun Kv => *)
-  (*                           match Kv with *)
-  (*                           | CTL_TRAP e => existT KCTL_TRAP e *)
-  (*                           | CTL_MRET   => existT KCTL_MRET tt *)
-  (*                           end *)
-  (*   end. *)
+  Definition union_unfold (U : unioni) : uniont U -> { K & Val (union_constructor_type U K) } :=
+    match U with
+    | ast              => fun Kv =>
+                            match Kv with
+                            | RTYPE rs2 rs1 rd op           => existT KRTYPE (tt , rs2 , rs1 , rd , op)
+                            | ITYPE imm rs1 rd op           => existT KITYPE (tt , imm , rs1 , rd , op)
+                            | SHIFTIOP shamt rs1 rd op      => existT KSHIFTIOP (tt , shamt , rs1 , rd , op)
+                            | UTYPE imm rd op               => existT KUTYPE (tt , imm , rd , op)
+                            | BTYPE imm rs2 rs1 op          => existT KBTYPE (tt , imm , rs2 , rs1 , op)
+                            | RISCV_JAL imm rd              => existT KRISCV_JAL (tt , imm , rd)
+                            | RISCV_JALR imm rs1 rd         => existT KRISCV_JALR (tt , imm , rs1 , rd)
+                            | LOAD imm rs1 rd is_unsigned w => existT KLOAD (tt , imm , rs1 , rd , is_unsigned , w)
+                            | STORE imm rs2 rs1 w           => existT KSTORE (tt , imm , rs2 , rs1 , w)
+                            | ECALL                         => existT KECALL tt
+                            | EBREAK                        => existT KEBREAK tt
+                            | MRET                          => existT KMRET tt
+                            | CSR csr rs1 rd is_imm op      => existT KCSR (tt , csr , rs1 , rd , is_imm , op)
+                            | MUL rs2 rs1 rd h s1 s2        => existT KMUL (tt, rs2 , rs1 , rd , h, s1, s2 )
+                            end
+    | access_type      => fun Kv =>
+                            match Kv with
+                            | Read      => existT KRead tt
+                            | Write     => existT KWrite tt
+                            | ReadWrite => existT KReadWrite tt
+                            | Execute   => existT KExecute tt
+                            end
+    | exception_type   => fun Kv =>
+                            match Kv with
+                            | E_Fetch_Access_Fault => existT KE_Fetch_Access_Fault tt
+                            | E_Load_Access_Fault  => existT KE_Load_Access_Fault tt
+                            | E_SAMO_Access_Fault  => existT KE_SAMO_Access_Fault tt
+                            | E_U_EnvCall          => existT KE_U_EnvCall tt
+                            | E_M_EnvCall          => existT KE_M_EnvCall tt
+                            | E_Illegal_Instr      => existT KE_Illegal_Instr tt
+                            end
+    | memory_op_result bytes => fun Kv =>
+                            match Kv with
+                            | MemValue _ v     => existT KMemValue v
+                            | MemException _ e => existT KMemException e
+                            end
+    | fetch_result     => fun Kv =>
+                            match Kv with
+                            | F_Base v    => existT KF_Base v
+                            | F_Error e v => existT KF_Error (e , v)
+                            end
+    | ctl_result       => fun Kv =>
+                            match Kv with
+                            | CTL_TRAP e => existT KCTL_TRAP e
+                            | CTL_MRET   => existT KCTL_MRET tt
+                            end
+    end.
 
-  (* Definition union_fold (U : unioni) : { K & Val (union_constructor_type U K) } -> uniont U := *)
-  (*     match U with *)
-  (*     | ast              => fun Kv => *)
-  (*                             match Kv with *)
-  (*                             | existT KRTYPE (tt , rs2 , rs1 , rd , op)             => RTYPE rs2 rs1 rd op *)
-  (*                             | existT KITYPE (tt , imm , rs1 , rd , op)             => ITYPE imm rs1 rd op *)
-  (*                             | existT KSHIFTIOP (tt , shamt , rs1 , rd , op)        => SHIFTIOP shamt rs1 rd op *)
-  (*                             | existT KUTYPE (tt , imm , rd , op)                   => UTYPE imm rd op *)
-  (*                             | existT KBTYPE (tt , imm , rs2 , rs1 , op)            => BTYPE imm rs2 rs1 op *)
-  (*                             | existT KRISCV_JAL (tt , imm , rd)                    => RISCV_JAL imm rd *)
-  (*                             | existT KRISCV_JALR (tt , imm , rs1 , rd)             => RISCV_JALR imm rs1 rd *)
-  (*                             | existT KLOAD (tt , imm , rs1 , rd , is_unsigned , w) => LOAD imm rs1 rd is_unsigned w *)
-  (*                             | existT KSTORE (tt , imm , rs2 , rs1 , w)             => STORE imm rs2 rs1 w *)
-  (*                             | existT KECALL tt                                     => ECALL *)
-  (*                             | existT KEBREAK tt                                    => EBREAK *)
-  (*                             | existT KMRET tt                                      => MRET *)
-  (*                             | existT KCSR (tt , csr , rs1 , rd , is_imm , op)      => CSR csr rs1 rd is_imm op *)
-  (*                             | existT KMUL (tt, rs2 , rs1 , rd , h, s1, s2 )        => MUL rs2 rs1 rd h s1 s2 *)
-  (*                             end *)
-  (*     | access_type      => fun Kv => *)
-  (*                             match Kv with *)
-  (*                             | existT KRead tt      => Read *)
-  (*                             | existT KWrite tt     => Write *)
-  (*                             | existT KReadWrite tt => ReadWrite *)
-  (*                             | existT KExecute tt   => Execute *)
-  (*                             end *)
-  (*     | exception_type   => fun Kv => *)
-  (*                             match Kv with *)
-  (*                             | existT KE_Fetch_Access_Fault tt => E_Fetch_Access_Fault *)
-  (*                             | existT KE_Load_Access_Fault tt  => E_Load_Access_Fault *)
-  (*                             | existT KE_SAMO_Access_Fault tt  => E_SAMO_Access_Fault *)
-  (*                             | existT KE_U_EnvCall tt          => E_U_EnvCall *)
-  (*                             | existT KE_M_EnvCall tt          => E_M_EnvCall *)
-  (*                             | existT KE_Illegal_Instr tt      => E_Illegal_Instr *)
-  (*                             end *)
-  (*     | memory_op_result bytes => fun Kv => *)
-  (*                             match Kv with *)
-  (*                             | existT KMemValue v     => MemValue bytes v *)
-  (*                             | existT KMemException e => MemException bytes e *)
-  (*                             end *)
-  (*     | fetch_result     => fun Kv => *)
-  (*                             match Kv with *)
-  (*                             | existT KF_Base v        => F_Base v *)
-  (*                             | existT KF_Error (e , v) => F_Error e v *)
-  (*                             end *)
-  (*     | ctl_result       => fun Kv => *)
-  (*                             match Kv with *)
-  (*                             | existT KCTL_TRAP e  => CTL_TRAP e *)
-  (*                             | existT KCTL_MRET tt => CTL_MRET *)
-  (*                             end *)
-  (*     end. *)
+  Definition union_fold (U : unioni) : { K & Val (union_constructor_type U K) } -> uniont U :=
+      match U with
+      | ast              => fun Kv =>
+                              match Kv with
+                              | existT KRTYPE (tt , rs2 , rs1 , rd , op)             => RTYPE rs2 rs1 rd op
+                              | existT KITYPE (tt , imm , rs1 , rd , op)             => ITYPE imm rs1 rd op
+                              | existT KSHIFTIOP (tt , shamt , rs1 , rd , op)        => SHIFTIOP shamt rs1 rd op
+                              | existT KUTYPE (tt , imm , rd , op)                   => UTYPE imm rd op
+                              | existT KBTYPE (tt , imm , rs2 , rs1 , op)            => BTYPE imm rs2 rs1 op
+                              | existT KRISCV_JAL (tt , imm , rd)                    => RISCV_JAL imm rd
+                              | existT KRISCV_JALR (tt , imm , rs1 , rd)             => RISCV_JALR imm rs1 rd
+                              | existT KLOAD (tt , imm , rs1 , rd , is_unsigned , w) => LOAD imm rs1 rd is_unsigned w
+                              | existT KSTORE (tt , imm , rs2 , rs1 , w)             => STORE imm rs2 rs1 w
+                              | existT KECALL tt                                     => ECALL
+                              | existT KEBREAK tt                                    => EBREAK
+                              | existT KMRET tt                                      => MRET
+                              | existT KCSR (tt , csr , rs1 , rd , is_imm , op)      => CSR csr rs1 rd is_imm op
+                              | existT KMUL (tt, rs2 , rs1 , rd , h, s1, s2 )        => MUL rs2 rs1 rd h s1 s2
+                              end
+      | access_type      => fun Kv =>
+                              match Kv with
+                              | existT KRead tt      => Read
+                              | existT KWrite tt     => Write
+                              | existT KReadWrite tt => ReadWrite
+                              | existT KExecute tt   => Execute
+                              end
+      | exception_type   => fun Kv =>
+                              match Kv with
+                              | existT KE_Fetch_Access_Fault tt => E_Fetch_Access_Fault
+                              | existT KE_Load_Access_Fault tt  => E_Load_Access_Fault
+                              | existT KE_SAMO_Access_Fault tt  => E_SAMO_Access_Fault
+                              | existT KE_U_EnvCall tt          => E_U_EnvCall
+                              | existT KE_M_EnvCall tt          => E_M_EnvCall
+                              | existT KE_Illegal_Instr tt      => E_Illegal_Instr
+                              end
+      | memory_op_result bytes => fun Kv =>
+                              match Kv with
+                              | existT KMemValue v     => MemValue bytes v
+                              | existT KMemException e => MemException bytes e
+                              end
+      | fetch_result     => fun Kv =>
+                              match Kv with
+                              | existT KF_Base v        => F_Base v
+                              | existT KF_Error (e , v) => F_Error e v
+                              end
+      | ctl_result       => fun Kv =>
+                              match Kv with
+                              | existT KCTL_TRAP e  => CTL_TRAP e
+                              | existT KCTL_MRET tt => CTL_MRET
+                              end
+      end.
 
   (* Definition record_field_type (R : recordi) : NCtx string Ty := *)
   (*   match R with *)
@@ -859,16 +861,17 @@ Module Export RiscvPmpBase <: Base.
   (*                          (_ ∷ ty.bool             ; R p) ]; *)
   (* | rmstatus    | m => [kv ("MPP" ∷ ty_privilege; MPP m) ]. *)
 
-  #[export,refine] Instance typedefkit : TypeDefKit typedenotekit := DefaultTypeDefKit
-    (* {| unionk           := union_constructor; *)
-    (*    unionk_ty        := union_constructor_type; *)
-    (*    recordf          := string; *)
-    (*    recordf_ty       := record_field_type; *)
-    (*    unionv_fold      := union_fold; *)
-    (*    unionv_unfold    := union_unfold; *)
-    (*    recordv_fold     := record_fold; *)
-    (*    recordv_unfold   := record_unfold; *)
-    (* |} *).
+  #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
+    {| unionk           := union_constructor;
+       unionk_ty        := union_constructor_type;
+       (* recordf          := string; *)
+       (* recordf_ty       := record_field_type; *)
+       unionv_fold      := union_fold;
+       unionv_unfold    := union_unfold;
+       (* recordv_fold     := record_fold; *)
+       (* recordv_unfold   := record_unfold; *)
+    |}
+  .
   Proof.
   Qed.
   (* Proof. *)
@@ -1085,11 +1088,11 @@ Module Export RiscvPmpBase <: Base.
   Section Inhabited.
       #[export] Instance val_inhabited σ: Inhabited (Val σ).
       Proof. generalize dependent σ.
-            induction σ as [| | | | | (* | | E | | | U | R *)]; try apply _; cbn.
+            induction σ as [| | | | | | (* | E | | | *) U (* | R *)]; try apply _; cbn.
             (* - destruct E; repeat constructor. *)
             (* - induction σs; first apply _. *)
             (*   cbn. inversion IH. apply prod_inhabited; [apply IHσs |]; auto. *)
-            (* - destruct U;  repeat constructor. all: try apply bv.bv_inhabited. *)
+            - destruct U;  repeat constructor. all: try apply bv.bv_inhabited.
             (* - destruct R;  repeat constructor. *)
       Qed.
 

@@ -1260,15 +1260,30 @@ Module Type WorldsOn
         auto.
     Qed.
 
-    (* Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) : *)
-    (*   repₚ (T := STerm _) (vs, v) (term_tuple (E ► (σ ↦ d))) ⊣⊢ *)
-    (*   repₚ (T := STerm _) vs (term_tuple E) ∗ repₚ (T := STerm σ) v d. *)
-    (* Proof. unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0| now subst ]. Qed. *)
+    Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) :
+      repₚ (T := STerm _) (ty.valToRelVal (σ := ty.tuple (Γ ▻ σ)) (vs, v)) (term_tuple (E ► (σ ↦ d))) ⊣⊢
+        repₚ (T := STerm _) (ty.valToRelVal (σ := ty.tuple Γ) vs) (term_tuple E) ∗
+        repₚ (T := STerm σ) (ty.valToRelVal v) d.
+    Proof. unfold repₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; unfold ty.envToRelValTuple in *;
+             change ((env.map (λ (b : Ty) (s : Term w b), inst s ι) E)) with (inst E ι) in *.
+           + destruct (ty.unliftEnv (inst E ι)), inst; cbn in *; now inversion H0.
+           + destruct (ty.unliftEnv (inst E ι)), inst; cbn in *; now inversion H0.
+           + destruct (ty.unliftEnv (inst E ι)), inst; cbn in *; try discriminate.
+             inversion H0. by inversion H1.
+    Qed.
 
-    (* Lemma eqₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [ts1 ts2 : Env (Term w) Γ] [σ : Ty] (t1 t2 : Term w σ) : *)
-    (*   eqₚ (T := STerm _) (term_tuple (ts1 ► (σ ↦ t1))) (term_tuple (ts2 ► (σ ↦ t2))) ⊣⊢ *)
-    (*   eqₚ (T := STerm _) (term_tuple ts1) (term_tuple ts2) ∗ eqₚ (T := STerm σ) t1 t2. *)
-    (* Proof. unfold eqₚ, bi_pred, bi_sep, sepₚ; crushPredEntails2; [now inversion H0 | now inversion H0 | now f_equal]. Qed. *)
+    Lemma eqₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [ts1 ts2 : Env (Term w) Γ] [σ : Ty] (t1 t2 : Term w σ) :
+      instpred_formula_relop bop.eq (term_tuple (ts1 ► (σ ↦ t1))) (term_tuple (ts2 ► (σ ↦ t2))) ⊣⊢
+        instpred_formula_relop bop.eq (term_tuple ts1) (term_tuple ts2) ∗
+        instpred_formula_relop bop.eq t1 t2.
+    Proof.
+      unfold instpred_formula_relop, bi_pred, bi_sep, sepₚ; crushPredEntails2; unfold ty.envToRelValTuple in *;
+        change ((env.map (λ (b : Ty) (s : Term w b), inst s ι) ts1)) with (inst ts1 ι) in *;
+        change ((env.map (λ (b : Ty) (s : Term w b), inst s ι) ts2)) with (inst ts2 ι) in *.
+      + destruct (ty.unliftEnv (inst ts1 ι)), (ty.unliftEnv (inst ts2 ι)), inst, inst; cbn in *; now inversion H0.
+      + destruct (ty.unliftEnv (inst ts1 ι)), (ty.unliftEnv (inst ts2 ι)), inst, inst; cbn in *; now inversion H0.
+      + destruct (ty.unliftEnv (inst ts1 ι)), (ty.unliftEnv (inst ts2 ι)), inst, inst; cbn in *; now f_equal.
+    Qed.
 
     Lemma repₚ_term_bvapp {w : World} {m n : nat} {t1 : STerm (ty.bvec m) w} {t2 : STerm (ty.bvec n) w}
       {v1 : RelVal (ty.bvec m)} {v2 : RelVal (ty.bvec n)} :
@@ -1315,12 +1330,17 @@ Module Type WorldsOn
       repeat destruct inst; inversion H0; inversion H1; by subst.
     Qed.
 
-    (* Lemma repₚ_term_record {w : World} {R : recordi} {vs : NamedEnv Val (recordf_ty R)} {svs : NamedEnv (Term w) (recordf_ty R)} : *)
-    (*   repₚ (T := STerm _) (recordv_fold R vs) (term_record R svs) ⊣⊢ repₚ vs svs. *)
-    (* Proof. unfold repₚ; crushPredEntails2; [|now subst]. *)
-    (*        apply (f_equal (recordv_unfold R)) in H0. *)
-    (*        now rewrite !recordv_unfold_fold in H0. *)
-    (* Qed. *)
+    Lemma repₚ_term_record {w : World} {R : recordi} {vs : NamedEnv Val (recordf_ty R)} {svs : NamedEnv (Term w) (recordf_ty R)} :
+      repₚ (T := STerm _) (SyncVal (ty.recordv_fold R vs)) (term_record R svs) ⊣⊢ repₚ (ty.syncNamedEnv vs) svs.
+    Proof. unfold repₚ; crushPredEntails2; [|].
+           apply (f_equal (ty.recordv_unfold_rel R)) in H0.
+           rewrite !ty.recordv_unfold_fold_rel in H0.
+           cbn in H0.
+           rewrite recordv_unfold_fold in H0.
+           now apply unliftIsSyncValImpliesAllSync in H0.
+           rewrite H0. unfold ty.recordv_fold_rel.
+           now rewrite ty.unliftSyncNamedEnvIsSync.
+    Qed.
 
     (* Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} : *)
     (*   eqₚ (T := STerm _) (term_record R ts1) (term_record R ts2) ⊣⊢ eqₚ ts1 ts2. *)
@@ -1329,6 +1349,83 @@ Module Type WorldsOn
     (*          now rewrite !recordv_unfold_fold in H0. *)
     (*        - now rewrite H0. *)
     (* Qed. *)
+
+    Equations(noeqns) formula_eqs_nctx_sync {N : Set} {Δ : NCtx N Ty} {Σ : LCtx}
+      (δ δ' : NamedEnv (Term Σ) Δ) : PathCondition Σ :=
+    | env.nil,        env.nil          => ctx.nil
+    | env.snoc δ _ t, env.snoc δ' _ t' =>
+        ctx.snoc (formula_eqs_nctx_sync δ δ') (formula_eq t t').
+
+    Lemma helper_syncVal_inj {A} {v1 v2 : A} :
+      SyncVal v1 = SyncVal v2 -> v1 = v2.
+    Proof.
+      intro H.
+      now inversion H.
+    Qed.
+
+    Lemma instprop_formula_eqs_nctx_sync {N : Set} {Δ : NCtx N Ty} {Σ} (xs ys : NamedEnv (Term Σ) Δ) ι :
+      instprop (formula_eqs_nctx_sync xs ys) ι <-> ty.unliftNamedEnv (inst xs ι) = ty.unliftNamedEnv (inst ys ι) /\ ty.isSyncValRV (ty.unliftNamedEnv (inst xs ι)).
+    Proof.
+      induction xs; env.destroy ys; cbn; [easy|].
+      specialize (IHxs ys).
+      change (env.map (λ (b0 : N∷Ty) (s : Term Σ (type b0)), inst s ι) xs) with (inst xs ι).
+      change (env.map (λ (b0 : N∷Ty) (s : Term Σ (type b0)), inst s ι) ys) with (inst ys ι).
+      change (instprop (formula_eqs_nctx_sync xs ys) ι) with (instprop_ctx (formula_eqs_nctx_sync xs ys) ι) in IHxs.
+      rewrite IHxs.
+      unfold inst, inst_env, inst.
+      destruct (ty.unliftNamedEnv (env.map (λ (b0 : N∷Ty) (s : Term Σ (type b0)), inst_term s ι) xs)),
+        (ty.unliftNamedEnv (env.map (λ (b0 : N∷Ty) (s : Term Σ (type b0)), inst_term s ι) ys)); destruct inst_term, inst_term; intuition;
+        try inversion H3; try now inversion H2; try discriminate.
+      all: cbn in *. now inversion H0.
+      all: try inversion H1; try inversion H0; try done.
+      + apply helper_syncVal_inj in H2.
+        apply env.inversion_eq_snoc in H2.
+        intuition. now subst.
+      + apply helper_syncVal_inj in H2.
+        apply env.inversion_eq_snoc in H2.
+        intuition.
+    Qed.
+
+    Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} :
+      instpred_formula_relop bop.eq (term_record R ts1) (term_record R ts2) ⊣⊢
+        instpred (formula_eqs_nctx_sync ts1 ts2).
+    Proof.
+      constructor. intros. rewrite instpred_prop.
+      rewrite instprop_formula_eqs_nctx_sync.
+      crushPredEntails2.
+      - unfold ty.recordv_fold_rel in H0.
+        destruct (ty.unliftNamedEnv
+                 (@inst _ _
+                    (@inst_env _ _ _
+                       (λ xt : @recordf typedeclkit typedenotekit typedefkit∷Ty,
+                          @inst_term (@type _ _ xt))
+                       _) _ _ _)) as [|] eqn:eq1;
+        destruct 
+              (ty.unliftNamedEnv
+                 (@inst _ _
+                    (@inst_env _ _ _
+                       (λ xt : @recordf typedeclkit typedenotekit typedefkit∷Ty,
+                          @inst_term (@type _ _ xt))
+                       _) _ ts2 _)) as [|] eqn:eq2; cbn in *;
+          try contradiction.
+        apply unliftIsSyncValImpliesAllSync in eq1, eq2.
+        unfold inst in *.
+        rewrite <- eq1, <- eq2.
+        apply recordv_fold_inj in H0.
+        now subst.
+      - unfold ty.recordv_fold_rel in *.
+        destruct (ty.unliftNamedEnv (inst ts1 ι)) as [|] eqn:eq.
+        + auto.
+        + now rewrite eq in H0.
+      - unfold ty.recordv_fold_rel in *.
+        destruct (ty.unliftNamedEnv (inst ts1 ι)) as [|] eqn:eq1.
+        + rewrite eq1. destruct (ty.unliftNamedEnv (inst ts2 ι)) as [|] eqn:eq2;
+            rewrite eq2;
+            cbn.
+          * by inversion H0.
+          * congruence.
+        + contradiction.
+    Qed.
 
     Lemma repₚ_namedenv_nil {w : World} {N} :
       repₚ (w := w) (T := fun w => NamedEnv (Term w) ([ctx] : NCtx N Ty)) [env] [env] ⊣⊢ emp.
