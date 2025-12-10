@@ -209,7 +209,7 @@ Module Import asn.
       - now rewrite bi.and_emp.
       - destruct pattern_match_val.
         apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
-        apply base.elem_of_list_In. apply finite.elem_of_enum.
+        apply base.list_elem_of_In. apply finite.elem_of_enum.
       - apply andb_true_iff in a_pure. destruct a_pure as [H1 H2].
         rewrite (IHa1 H1) (IHa2 H2). clear. iSplit.
         + iIntros ([H1 H2]). now iPureIntro.

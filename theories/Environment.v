@@ -278,7 +278,7 @@ Section WithBinding.
       insert bIn (remove b E bIn) (lookup E bIn) = E.
     Proof. induction E; destroy bIn; cbn; now f_equal. Qed.
 
-    Lemma lookup_insert {b Γ} (bIn : b ∈ Γ) (v : D b) (E : Env (Γ - b)) :
+    Lemma lookup_insert_eq {b Γ} (bIn : b ∈ Γ) (v : D b) (E : Env (Γ - b)) :
       lookup (insert bIn E v) bIn = v.
     Proof. induction Γ; destroy bIn; destroy E; cbn; auto. Qed.
 
@@ -286,7 +286,7 @@ Section WithBinding.
       lookup (drop Σ E) bIn = lookup E (ctx.in_cat_left Σ bIn).
     Proof. induction Σ; destroy bIn; destroy E; cbn; auto. Qed.
 
-    Lemma lookup_take {b Σ Γ} (bIn : b ∈ Σ) (E : Env (Γ ▻▻ Σ)) :
+    Lemma lookup_take_lt {b Σ Γ} (bIn : b ∈ Σ) (E : Env (Γ ▻▻ Σ)) :
       lookup (take Σ E) bIn = lookup E (ctx.in_cat_right bIn).
     Proof. induction Σ; destroy bIn; destroy E; cbn; auto. Qed.
 
@@ -384,12 +384,12 @@ Section WithBinding.
       - f_equal. apply IHE.
     Qed.
 
-    Lemma insert_insert' {Γ x} (xIn : x ∈ Γ) (E : Env (Γ - x)) (v : D x) :
+    Lemma insert_insert_eq' {Γ x} (xIn : x ∈ Γ) (E : Env (Γ - x)) (v : D x) :
       insert xIn E v = insert' xIn E v.
     Proof.
       unfold insert'. eapply lookup_extensional. intros b' bIn.
       rewrite lookup_tabulate. destruct ctx.occurs_check_view.
-      - now rewrite lookup_insert.
+      - now rewrite lookup_insert_eq.
       - now rewrite lookup_insert_shift.
     Qed.
 

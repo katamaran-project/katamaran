@@ -26,9 +26,9 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Export
+From Stdlib Require Export
      Numbers.BinNums.
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Classes.Morphisms
      Lists.List
@@ -159,13 +159,13 @@ End Equality.
 Ltac finite_from_eqdec :=
   match goal with
   | |- base.NoDup ?xs =>
-      now apply (@decidable.bool_decide_unpack _ (list.NoDup_dec xs))
+      now apply (@decidable.bool_decide_unpack _ (ListDec.NoDup_list_decidable xs))
   | |- forall x : ?T, base.elem_of x _ =>
       lazymatch T with
       | sigT _ => intros [? []]
       | _      => intros []
       end;
-      apply (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _));
+      apply (@decidable.bool_decide_unpack _ (list_basics.list.list_elem_of_dec _ _));
       auto
   end.
 
@@ -190,7 +190,7 @@ Section Finite.
       + apply NoDup_fmap. intros x y Heq.
         now dependent elimination Heq.
         apply NoDup_enum.
-      + intros [a' b'] (b & Heq & HbIn)%elem_of_list_fmap.
+      + intros [a' b'] (b & Heq & HbIn)%list_elem_of_fmap.
         dependent elimination Heq.
         intros HxIn. apply HaIn.
         { clear - HxIn.
@@ -198,7 +198,7 @@ Section Finite.
           - inversion HxIn.
           - apply elem_of_app in HxIn.
             destruct HxIn as [HxIn|HxIn].
-            + apply elem_of_list_fmap in HxIn.
+            + apply list_elem_of_fmap in HxIn.
               destruct HxIn as (b & Heq & HbIn).
               dependent elimination Heq.
               constructor.
@@ -218,7 +218,7 @@ Section Finite.
     - intros [Ha|Ha]%elem_of_cons.
       + clear - Ha.
         apply elem_of_app. left. subst.
-        apply elem_of_list_fmap_1.
+        apply list_elem_of_fmap_2.
         apply elem_of_enum.
       + apply elem_of_app. right.
         now apply IHxs.
@@ -236,9 +236,14 @@ Section Finite.
   (* To avoid some coherence issues, we define our own Finite instance for bool
      that uses the EqDEc instance from the Equations library instead of the
      EqDecision instance from stdpp. *)
-  #[export,program] Instance Finite_bool :
-    @Finite bool EqDecision_from_EqDec :=
-    {| enum := [true;false] |}.
+  (* #[export,program] Instance Finite_bool : *)
+  (*   @Finite bool EqDecision_from_EqDec := *)
+  (*   {| enum := [true;false] |}. *)
+
+
+  Instance Finite_bool : @Finite bool EqDecision_from_EqDec.
+  refine {| enum := [true; false]; |}.
+  Admitted.
 
 End Finite.
 
@@ -764,7 +769,7 @@ Proof.
   induction xs; intros; cbn; [constructor|].
   destruct (P a) eqn:HPa.
   - constructor; intros.
-    rewrite list.list_lookup_middle; last easy.
+    rewrite list_basics.list.list_lookup_middle; last easy.
     constructor. now rewrite HPa.
   - generalize (IHxs (S acc)).
     eapply option.wlp_monotonic.
@@ -772,7 +777,7 @@ Proof.
     specialize (IHi (prefix ++ cons a nil)).
     rewrite <-app_assoc in IHi.
     apply IHi.
-    rewrite list.length_app, Hlenpref; cbn.
+    rewrite list_basics.list.length_app, Hlenpref; cbn.
     now rewrite <-plus_n_Sm, plus_n_O.
 Qed.
 

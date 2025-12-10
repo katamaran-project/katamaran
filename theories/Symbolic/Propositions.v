@@ -863,7 +863,7 @@ Module Type SymPropOn
         now rewrite <- Hmatch, pattern_match_val_inverse_right.
       - pose proof (pattern_match_val_inverse_left pat (inst s ι)) as Hmatch.
         destruct pattern_match_val as [pc ιpat]. intros Hsafe.
-        exists pc. split. apply base.elem_of_list_In, finite.elem_of_enum.
+        exists pc. split. apply base.list_elem_of_In, finite.elem_of_enum.
         exists ιpat. split. exact Hmatch. exact Hsafe.
     Qed.
 
@@ -891,7 +891,7 @@ Module Type SymPropOn
         f_equal. f_equal. symmetry. apply inst_sub_cat_right.
       - pose proof (pattern_match_val_inverse_left pat ι.[? x∷σ]) as Hmatch.
         destruct pattern_match_val as [pc ιpat]. intros Hsafe.
-        exists pc. split. apply base.elem_of_list_In, finite.elem_of_enum.
+        exists pc. split. apply base.list_elem_of_In, finite.elem_of_enum.
         exists ιpat. split; auto. clear Hsafe.
         rewrite env.remove_cat_left, eq_rect_sym2.
         symmetry. etransitivity; [|exact Hmatch].
@@ -914,7 +914,7 @@ Module Type SymPropOn
       split.
       - pose proof (pattern_match_val_inverse_left pat (inst s ι)) as Hmatch.
         destruct pattern_match_val as [pc ιpat]. intros HYP. apply HYP; auto.
-        apply base.elem_of_list_In, finite.elem_of_enum.
+        apply base.list_elem_of_In, finite.elem_of_enum.
       - intros Heq pc HIn ιpat Hmatch. rewrite <- Hmatch in Heq.
         now rewrite pattern_match_val_inverse_right in Heq.
     Qed.
@@ -934,7 +934,7 @@ Module Type SymPropOn
       split.
       - pose proof (pattern_match_val_inverse_left pat ι.[? x∷σ]) as Hmatch.
         destruct pattern_match_val as [pc ιpat].
-        intros HYP. apply HYP. apply base.elem_of_list_In, finite.elem_of_enum.
+        intros HYP. apply HYP. apply base.list_elem_of_In, finite.elem_of_enum.
         rewrite <- Hmatch. unfold pattern_match_val_reverse'. cbn.
         f_equal. rewrite env.remove_cat_left. rewrite eq_rect_sym2.
         symmetry. apply inst_sub_cat_right.
@@ -1436,7 +1436,7 @@ Module Type SymPropOn
           unfold eq_rect_r in Hp. rewrite safe_eq_rect, eq_sym_involutive in Hp.
           exists (env.insert bIn ιe (inst (eq_rect ((Σ1 ▻▻ Σe) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιe))).
           rewrite safe_assert_msgs_formulas. cbn.
-          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert.
+          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert_eq.
           rewrite ?inst_eq_rect.
           split; auto.
           rewrite instprop_subst, inst_eq_rect in Hpc.
@@ -1669,7 +1669,7 @@ Module Type SymPropOn
           rewrite safe_assume_pathcondition, instprop_subst, inst_eq_rect. intros Hpc.
           unfold eq_rect_r. rewrite safe_eq_rect, eq_sym_involutive.
           rewrite safe_assume_pathcondition in HYP. cbn in HYP.
-          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert in HYP.
+          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert_eq in HYP.
           rewrite inst_eq_rect in HYP.
           rewrite inst_sub_single2 in Hpc.
           now apply HYP.
@@ -2755,7 +2755,7 @@ Module Type LogSymPropOn
         pose proof (f_equal (fun ι => env.lookup ι xIn) H2) as Hlkp.
         rewrite inst_sub_single2 -inst_lookup env.lookup_tabulate in Hlkp.
         cbn in Hlkp.
-        rewrite env.lookup_insert inst_pattern_match_term_reverse in Hlkp.
+        rewrite env.lookup_insert_eq inst_pattern_match_term_reverse in Hlkp.
         apply (f_equal (pattern_match_val pat)) in Hlkp.
         rewrite pattern_match_val_inverse_right Hpmv in Hlkp.
         dependent elimination Hlkp.

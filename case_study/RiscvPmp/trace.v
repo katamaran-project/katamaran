@@ -1,6 +1,7 @@
 From iris.algebra Require Import auth excl.
 From iris.base_logic Require Import lib.own.
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import proofmode.
+
 
 Class traceG (Trace : Type) Σ := TraceG {
     trace_inG :: inG Σ (authR (optionUR (exclR (leibnizO Trace))));

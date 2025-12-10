@@ -298,7 +298,7 @@ Module Type IrisAdequacy2
     (* destruct es'; try discriminate. *)
     (* inversion Happ; subst. simpl. *)
     (* iDestruct "H" as "(H & _)". *)
-    (* specialize (Hns (MkConf s1' δ1') eq_refl (elem_of_list_here _ _)). *)
+    (* specialize (Hns (MkConf s1' δ1') eq_refl (list_elem_of_here _ _)). *)
     (* destruct Hns as [Hns|Hns]. *)
     (* - cbn in Hns. destruct Hns as [(v1' & δ1'') Hns]. rewrite Hns. simpl. *)
     (*   iDestruct "H" as "(% & % & % & % & % & ? & ? & ? & Hmem22 & ?)". *)

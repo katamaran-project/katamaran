@@ -272,7 +272,7 @@ Module Type IrisPrelims
       unfold RegStore_to_map in eq.
       destruct (list_to_map _ !! _) eqn:eq' in eq; inversion eq; subst.
       rewrite <-elem_of_list_to_map in eq'.
-      - eapply elem_of_list_fmap_2 in eq'.
+      - eapply list_elem_of_fmap_1 in eq'.
         destruct eq' as ([σ' r'] & eq2 & eq3).
         now inversion eq2.
       - rewrite <-list_fmap_compose.
@@ -288,9 +288,9 @@ Module Type IrisPrelims
       intros [σ r].
       rewrite (elem_of_list_to_map_1' _ _ (Excl (existT _ (read_register γ r))));
         first done.
-      - intros y ([y1 y2] & eq & _)%elem_of_list_fmap_2.
+      - intros y ([y1 y2] & eq & _)%list_elem_of_fmap_1.
         now inversion eq.
-      - eapply (elem_of_list_fmap_1 (λ x : SomeReg, let (x0, r0) := x in _) _ (existT σ r)).
+      - eapply (list_elem_of_fmap_2 (λ x : SomeReg, let (x0, r0) := x in _) _ (existT σ r)).
         eapply finite.elem_of_enum.
     Qed.
 
@@ -356,7 +356,7 @@ Module Type IrisPrelims
       intros [τ' r'] x eq1.
       destruct (eq_dec_het r r') as [eq2|neq].
       + dependent elimination eq2.
-        rewrite lookup_insert in eq1.
+        rewrite lookup_insert_eq in eq1.
         apply (inj Some) in eq1.
         by rewrite <- eq1, (read_write regstore r v).
       + assert (existT _ r ≠ existT _ r') as neq2.
