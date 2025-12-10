@@ -31,7 +31,7 @@
    result for it. Unfortunately, this file has a lot of overhead instantiating
    the Iris model for a function that does not use separation logic. *)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Lists.List
      Program.Tactics

@@ -27,7 +27,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
   Classes.Morphisms
   Classes.Morphisms_Prop
   Classes.RelationClasses

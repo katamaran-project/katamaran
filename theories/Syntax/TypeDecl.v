@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Strings.String
      ZArith.BinInt.
@@ -36,7 +36,7 @@ From Katamaran Require Import
      Bitvector
      Context
      Prelude.
-From Coq Require Import
+From Stdlib Require Import
      Strings.String
      ZArith.BinInt.
 From Katamaran Require Import

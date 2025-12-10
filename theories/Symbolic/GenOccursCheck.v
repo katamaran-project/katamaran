@@ -39,7 +39,7 @@ From Katamaran Require Import
      Syntax.TypeDecl
      Syntax.Variables
      Tactics.
-From Coq Require Import Morphisms.
+From Stdlib Require Import Morphisms.
 
 Import ctx.notations.
 Import env.notations.

@@ -27,7 +27,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Arith.PeanoNat
      Bool.Bool
      Classes.Morphisms
@@ -40,7 +40,7 @@ From Coq Require Import
      Program.Tactics
      Strings.String
      ZArith.BinInt.
-From Coq Require
+From Stdlib Require
      Classes.CRelationClasses.
 From Equations Require Import
      Equations.
