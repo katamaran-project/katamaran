@@ -296,7 +296,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_result          := "result_checked_mem_write";
       sep_contract_postcondition   :=
         term_var "result_checked_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
+        asn.match_bool (term_var "inv") (asn_mmio_pred bytes) (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
     |}.
 
   Definition sep_contract_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : SepContractFun (@pmpCheck bytes H) :=
@@ -351,7 +351,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
+        asn.match_bool (term_var "inv") (asn_mmio_pred bytes) (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_var "m") ∗
         asn_pmp_entries (term_var "entries");
     |}.
@@ -393,7 +393,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
+        asn.match_bool (term_var "inv") (asn_mmio_pred bytes) (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries");
     |}.
@@ -495,7 +495,11 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            asn_mmio_pred bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data");
       sep_contract_result          := "result_write_mmio";
-      sep_contract_postcondition   := asn_mmio_pred bytes;
+      sep_contract_postcondition   := term_var "result_write_mmio" = term_val ty.bool true ∗
+                                       asn_in_mmio bytes (term_var "paddr") ∗
+                                       asn_mmio_pred bytes ∗
+                                       asn_mmio_checked_write bytes (term_var "paddr") (term_var "data");
+
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
@@ -875,6 +879,8 @@ Module RiscvPmpIrisInstanceWithContracts.
     unfold mem_inv, fun_write_mmio; cbn.
     iFrame "Hregs Hmem Htr Htrf".
     repeat (iModIntro; iSplitL; auto).
+    repeat iSplitL; eauto.
+    iPureIntro.
     eapply mmio_pred_cons in Hpred. eauto.
     unfold event_pred. exists v. reflexivity.
   Qed.
