@@ -49,7 +49,13 @@ Module DefaultRegDeclKit (Import T : Types) <: RegDeclKit T.
   Local Obligation Tactic :=
     finite_from_eqdec.
 
-  #[export,program] Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮) :=
-    {| finite.enum := nil |}.
+  #[export] Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮).
+  Proof.
+    refine {| finite.enum := nil; finite.NoDup_enum := base.NoDup_nil_2; finite.elem_of_enum := fun x => _ |}.
+    destruct x as (x & R). destruct R.
+  Defined.
+
+  (* denis says: stuck here, probably something to do with the equations library
+     that i don't quite understand. *)
 
 End DefaultRegDeclKit.
