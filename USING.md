@@ -20,7 +20,7 @@ Program variable names are allowed to use shadowing.
 The file [Context.v](theories/Context.v) provides most of the variable binding-related definitions.
 An (ordered) context [`Inductive Ctx`](theories/Context.v) is a list of bindings that represent a set of variables in scope.
 This datatype is parameterized over a type of bindings `B`, and is thus a bit more general because it is also used in the representation of tuples and records, heap predicates etc..
-For variable bindings the `B` parameter is always instantited to [`Record Binding`](theories/Context.v) that consists of a name and a type for a variable.
+For variable bindings the `B` parameter is always instantiated to [`Record Binding`](theories/Context.v) that consists of a name and a type for a variable.
 This instantiation is then used to represent program variable contexts ([`Notation PCtx`](theories/Base.v)) and logic variable contexts ([`Notation LCtx`](theories/Base.v)).
 
 Variables are represented using context containment proofs ([`Class In (b : B) (Γ : Ctx B)`](theories/Context.v)) that consist of a witness (de Bruijn index) and a proof that the binding `(b : B)` is the binding at that position in the context `(Γ : Ctx B)`.
