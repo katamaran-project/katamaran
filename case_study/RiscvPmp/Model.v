@@ -97,7 +97,6 @@ Module RiscvPmpModel2.
   Section ForeignProofs.
     Context `{sg : sailGS Σ}.
 
-
     Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
         gen_heap.gen_heap_interp memmap -∗ trace.st_frag trace.iostate_name (memory_iostate μ) -∗ trace.tr_auth trace.trace_name (memory_trace μ) -∗

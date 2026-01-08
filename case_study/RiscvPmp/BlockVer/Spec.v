@@ -489,19 +489,17 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   (* NOTE: for now no resources in `POST`; add those once we need to reinstate local state *)
   (* NOTE: if overflow is important, a no-overflow statement can be added to the `asn_mmio_checked_write` resource *)
   Definition sep_contract_mmio_write (bytes : nat) {H: restrict_bytes bytes} : SepContractFunX (mmio_write H) :=
-    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "iostate" :: ty.bool ];
+    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "iostate" :: ty.bool ; "newiostate" :: ty.bool ];
         sep_contract_localstore      := [term_var "paddr"; term_var "data"];
         sep_contract_precondition    :=
            asn_in_mmio bytes (term_var "paddr") ∗
-           asn_mmio_state_pred bytes (term_var "iostate") (term_var "data") ∗
-           asn_mmio_trace_pred bytes ∗
-           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data");
+           asn_mmio_state_pred bytes (term_var "iostate") ∗
+           asn_mmio_checked_write bytes (term_var "paddr") (term_var "iostate") (term_var "data") (term_var "newiostate");
       sep_contract_result          := "result_write_mmio";
       sep_contract_postcondition   :=
                                        term_var "result_write_mmio" = term_val ty.bool true ∗
                                        asn_in_mmio bytes (term_var "paddr") ∗
                                        asn_mmio_state_pred bytes (term_var "iostate") (term_var "data") ∗
-                                       asn_mmio_trace_pred bytes ∗
                                        asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"); 
 
     |}.
@@ -594,10 +592,14 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       lemma_precondition    :=
         ((term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm))) ∗
           (term_var "r") ↦ᵣ (term_var "w") ∗
-          (asn.chunk (chunk_user (mmio_state bytes_per_word) [term_var "s"; term_var "w"])) 
-    ;
+          (asn.chunk (chunk_user (mmio_state bytes_per_word) [term_var "s"])) ∗
+          (* depending on the protocol state, the value should be either even or odd *)
+          asn.match_bool s
+          (term_unop (uop.bvtake 1) (term_var "w") = term_val (ty.bvec 1) (bv.of_N 1))
+          (term_unop (uop.bvtake 1) (term_var "w") = term_val (ty.bvec 1) (bv.of_N 0));
       lemma_postcondition   :=
-        asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w")) ∗
+        (asn.chunk (chunk_user (mmio_state bytes_per_word) [term_var "s"])) ∗
+        asn_mmio_checked_write (map_wordwidth widthh) s (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w")) (term_unop uop.not s) ∗
       ( term_var "r") ↦ᵣ (term_var "w");
     |}.
 

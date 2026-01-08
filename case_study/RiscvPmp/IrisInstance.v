@@ -160,9 +160,11 @@ Module RiscvPmpIrisInstance <:
   Definition event_pred (width : nat) (e : Event) := ∃ v, e = mkEvent IOWrite write_addr width v.
   Definition mmio_trace_pred (width : nat) (t : Trace) : Prop := Forall (event_pred width) t.
 
+  (* bad name: this is the protocol state machine transition function. *)
+  (* note: state machine has no condition on address? *)
   Inductive mmio_state_pred : IOState -> Event -> IOState -> Prop :=
   | IOR : forall iost e, event_type e = IORead -> mmio_state_pred iost e iost
-  | IOW_none : forall iost e, event_nbbytes e = O -> mmio_state_pred iost e iost
+  | IOW_none : forall iost e, event_nbbytes e = O -> mmio_state_pred iost e iost (* unnecessary case: remove? *)
   | IOW_even_odd: forall e n v, event_nbbytes e = S n -> bv.eqb (@bv.take (event_nbbytes e) 1%nat v) bv.zero (*curr evn*) ->
                                 mmio_state_pred false (* prev odd*) e true
   | IOW_odd_even: forall e n v, event_nbbytes e = S n -> bv.eqb (@bv.take (event_nbbytes e) 1%nat v) bv.one (*curr odd*) ->
@@ -194,6 +196,7 @@ Module RiscvPmpIrisInstance <:
 
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
     Definition interp_mmio_trace_pred `{invGS Σ} (width : nat) : iProp Σ :=
+      (* missing: invariant saying what we know about the trace t depending on protocol state s *)
       inv femto_inv_mmio_ns (∃ (s : IOState) (t : Trace) , tr_frag1 t ∗ st_auth1 s ∗ ⌜mmio_trace_pred width t⌝).
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
