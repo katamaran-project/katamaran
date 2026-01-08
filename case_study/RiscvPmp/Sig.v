@@ -300,9 +300,9 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptsto                         => [ty_xlenbits; ty_byte]
       | ptsto_one _                   => [ty_xlenbits; ty_byte]
       | ptstomem_readonly width       => [ty_xlenbits; ty.bvec (width * byte)]
-      | mmio_state width              => [ty.bool; ty.bvec (width * byte)]
+      | mmio_state width              => [ty.bool]
       | mmio_trace bytes              => ctx.nil
-      | mmio_checked_write width      => [ty_xlenbits; ty.bvec (width * byte)]
+      | mmio_checked_write width      => [ty_xlenbits; ty.bool; ty.bvec (width * byte); ty.bool]
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
@@ -340,9 +340,9 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
       | ptsto_one _               => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
       | ptstomem_readonly width   => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
-      | mmio_state width          => Some (MkPrecise ε [ty.bool; ty.bvec (width * byte)] eq_refl)
+      | mmio_state width          => Some (MkPrecise ε [ty.bool] eq_refl)
       | mmio_trace bytes          => Some (MkPrecise ε ε eq_refl)
-      | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte)] eq_refl) (* There will only be one of these simultaneously; always precise! *)
+      | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bool; ty.bvec (width * byte); ty.bool] eq_refl) (* There will only be one of these simultaneously; always precise! *)
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
