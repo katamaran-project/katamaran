@@ -168,9 +168,9 @@ Module RiscvPmpIrisInstance <:
   Inductive mmio_state_pred : IOState -> Event -> IOState -> Prop :=
   | IOR : forall iost e, event_type e = IORead -> mmio_state_pred iost e iost
   | IOW_none : forall iost e, event_nbbytes e = O -> mmio_state_pred iost e iost (* unnecessary case: remove? *)
-  | IOW_even_odd: forall e n v, event_nbbytes e = S n -> bv.eqb (@bv.take (event_nbbytes e) 1%nat v) bv.zero (*curr evn*) ->
+  | IOW_even_odd: forall e n v, event_type e = IOWrite -> event_nbbytes e = S n -> bv.eqb (@bv.take (event_nbbytes e) 1%nat v) bv.zero (*curr evn*) ->
                                 mmio_state_pred false (* prev odd*) e true
-  | IOW_odd_even: forall e n v, event_nbbytes e = S n -> bv.eqb (@bv.take (event_nbbytes e) 1%nat v) bv.one (*curr odd*) ->
+  | IOW_odd_even: forall e n v, event_type e = IOWrite -> event_nbbytes e = S n -> bv.eqb (@bv.take (event_nbbytes e) 1%nat v) bv.one (*curr odd*) ->
                                 mmio_state_pred true (*prev even*) e false
   .
 
