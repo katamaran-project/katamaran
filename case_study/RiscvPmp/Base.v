@@ -1177,7 +1177,7 @@ Module Export RiscvPmpBase <: Base.
                 (μ' , readv)%type
       end.
 
-    Definition fun_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) (iostatem : IOState -> Event -> IOState) :
+    Definition fun_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
       Val (ty_bytes data_size) -> Memory :=
       match data_size as n return (Val (ty_bytes n) → Memory) with
       | O   => fun _data => μ
