@@ -93,6 +93,7 @@ Module inv := invariants.
     Definition adv_addr_end : N := maxAddr. (* Change once adversary gets access to MMIO*)
     (* Address where we will write in MMIO memory, and proof that our writes will indeed be within the MMIO region*)
     Definition mmio_write_addr : N := mmioStartAddr.
+
     Lemma write_word_is_MMIO: withinMMIO (bv.of_N mmio_write_addr) bytes_per_word.
     Proof.
       (* Avoid compute in case the list of MMIO addresses ever becomes longer *)
@@ -215,9 +216,13 @@ Module inv := invariants.
 
     Example femtokernel_handler_asm : list ASM :=
       [
-        ITYPE bv.one zero t1 RISCV_ADDI (* t1 <- 1 *)
-        ; RTYPE t1 t0 t2 RISCV_AND (* t2 = t0 && 1 *)
-        ; Λ current_pc, BTYPE (bv.of_N (mmio_handler_start_block2 - current_pc)) t1 t2 RISCV_BEQ (* branch if t0 odd (t2 = 1) *)
+        (* ITYPE bv.one zero t1 RISCV_ADDI (* t1 <- 1 *) *)
+        UTYPE bv.zero t1 RISCV_AUIPC
+        ; Λ current_pc, LOAD (bv.of_N (data_start - (current_pc - 4))) t1 t1 false WORD (* t1 <- data *)
+        ; ITYPE bv.one t1 t1 RISCV_ANDI (* t1 <- mask t1 *)
+        ; ITYPE bv.one t0 t2 RISCV_ANDI (* t2 <- mask t0 *)
+        (* ; RTYPE t1 t0 t2 RISCV_AND (* t2 = t0 && t1 *) *)
+        ; Λ current_pc, BTYPE (bv.of_N (mmio_handler_start_block2 - current_pc)) t1 t2 RISCV_BEQ (* branch if t1 = t2 *)
       ].
     Example femtokernel_handler' (handler_start : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_handler_asm) handler_start.
@@ -247,6 +252,11 @@ Module inv := invariants.
     (* NOTE: There is no data in the MMIO case, but we just keep *)
     Definition data_addr     : N := handler_addr + handler_size.
     Definition adv_addr : N := handler_addr + handler_size.
+
+    Compute femto_pmpcfg_ent0.
+    Compute data_addr.
+    Compute adv_addr.
+    Compute mmioStartAddr.
 
     (* CODE AND CONFIG SHORTANDS *)
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
@@ -385,13 +395,13 @@ Module inv := invariants.
     Definition vc__femtohandler_block0 : 𝕊 [] :=
       postprocess2 (sannotated_block_verification_condition
                      (femtokernel_handler_pre)
-                     (femtokernel_handler_gen_block0 mmio_handler_addr_block2)
+                     (femtokernel_handler_gen_block0 mmio_handler_addr_block2 data_addr)
                      (femtokernel_handler_post_block0) wnil).
 
     Definition vc__femtohandler_block1 : 𝕊 [] :=
       postprocess2 (sannotated_block_verification_condition
                      (femtokernel_handler_pre_block1)
-                     (femtokernel_handler_gen_block1)
+                     (femtokernel_handler_gen_block1 data_addr)
                      (femtokernel_handler_post_block1) wnil).
 
     Definition vc__femtohandler_block2 : 𝕊 [] :=
@@ -577,7 +587,7 @@ Locate erase_symprop.
     iPureIntro. eapply mmio_ram_False; eauto.
   Qed.
 
-  Definition femto_mmio_pred `{sailGS Σ} := interp_mmio_pred bytes_per_word.
+  Definition femto_mmio_pred `{sailGS Σ} := interp_mmio_trace_pred bytes_per_word.
 
   (* Note: temporarily make femtokernel_handler_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_handler_pre.
@@ -762,9 +772,9 @@ Locate erase_symprop.
   Proof.
     iIntros "IH (Hbase & HaccU & (Hinstrs0 & Hinstrs1 & Hinstrs2))".
     iDestruct "Hbase" as "(Hpre & Hpc & Hnextpc)".
-    iDestruct "Hpre" as "( [%Ha _] & [#Haoffset _] & Hmstatus & Hmtvec & Hmcause & [%Hmepcv Hmepc] & (%v & Hx5 & [%Htake _]) & Hpts & Hcurpriv & Hpmpentries & Hpred)".
-    iApply (femto_handler_verified_block1 with "[Hmstatus Hmtvec Hmcause Hmepc Hpts Hx5 Hcurpriv Hpmpentries Hpc Hnextpc Hinstrs1 Hpred]").
-    - iFrame "Hmstatus Hmtvec Hmcause Hmepc Hx5 Hpts Hcurpriv Haoffset Hpred". iFrame "Hpc Hnextpc". subst.
+    iDestruct "Hpre" as "( [%Ha _] & [#Haoffset _] & Hmstatus & Hmtvec & Hmcause & [%Hmepcv Hmepc] & (%s & %v & Hx5 & Htake) & Hpts & Hcurpriv & Hpmpentries & Hpred)".
+    iApply (femto_handler_verified_block1 with "[Hmstatus Hmtvec Hmcause Hmepc Hpts Hx5 Htake Hcurpriv Hpmpentries Hpc Hnextpc Hinstrs1 Hpred]").
+    - iFrame "Hmstatus Hmtvec Hmcause Hmepc Hx5 Htake Hpts Hcurpriv Haoffset Hpred". iFrame "Hpc Hnextpc". subst.
       iSplitL "Hpmpentries".
       -- cbn; repeat iSplit; auto.
       -- cbv in Ha. subst. iFrame "Hinstrs1".
@@ -808,7 +818,9 @@ Locate erase_symprop.
         iDestruct "IH" as "(Hbase & HaccU & Hinstrs)". iFrame "HaccU Hinstrs".
         iDestruct "Hbase" as "(Hpre0 & Hpc0 & Hnextpc0)".
         unfold blockVerifierAssumptions. iFrame "Hpre0 Hpc0 Hnextpc0".
-      + iFrame "HaccU". iSplitL "Hpmpentries". iSplitR. auto. iSplitR. subst. auto. iSplitR. auto. cbn. subst. iFrame "Hpmpentries". cbn. subst. iFrame "Hinstrs0 Hinstrs1 Hinstrs2".
+      + iFrame "HaccU". iSplitL "Hpmpentries". iSplitR. auto. iSplitR. subst. auto. iSplitR. cbn.
+        unfold interp_mmio_state_pred. rewrite Heven. auto.
+        cbn. subst. iFrame "Hpmpentries". cbn. subst. iFrame "Hinstrs0 Hinstrs1 Hinstrs2".
     - (* Tut: Case even i.e. we do not jump and therefore enter block1 *)
       iApply (femtokernel_handler_safe_block2 with "[]").
       + iModIntro. iIntros "IH". cbn. subst.
@@ -1074,7 +1086,7 @@ Qed.
       iApply (inv.inv_alloc). iExists _; now iFrame.
     - iApply (intro_ptstoSthL μ).
       iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); now compute.
-  Qed.
+    Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
     ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝.
@@ -1138,7 +1150,7 @@ Qed.
     read_register γ pmpaddr1 = bv.zero ->
     read_register γ pc = (bv.of_N init_addr) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    mmio_pred bytes_per_word (memory_trace μ') (* The initial demands hold over the final state *).
+    mmio_trace_pred bytes_per_word (memory_trace μ') (* The initial demands hold over the final state *).
   Proof.
     intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps.
     refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _).
@@ -1180,3 +1192,4 @@ Qed.
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
 (* End: *)
+

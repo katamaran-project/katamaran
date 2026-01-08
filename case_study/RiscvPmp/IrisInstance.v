@@ -55,12 +55,14 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Class mcMemPreGS Σ := {
       mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
       mc_gtPreGS :: trace_preG Trace Σ;
-      }.
+      mc_gsPreGS :: iostate_preG IOState Σ;
+    }.
   #[export] Existing Instance mc_ghPreGS.
   #[export] Existing Instance mc_gtPreGS.
+  #[export] Existing Instance mc_gsPreGS.
 
   Definition memGpreS : gFunctors -> Set := mcMemPreGS.
-  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace].
+  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace ; iostatePreΣ IOState].
 
   Lemma NoDup_liveAddrs : NoDup liveAddrs.
   Proof. now eapply Prelude.nodup_fixed. Qed.
@@ -73,7 +75,7 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Proof. intros. solve_inG. Defined.
 
   Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
-    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ tr_frag1 (memory_trace μ))%I.
+    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ st_auth1 (memory_iostate μ) ∗ tr_frag1 (memory_trace μ))%I.
 
   Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
   Proof.
@@ -112,19 +114,20 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Proof.
     pose (memmap := initMemMap μ).
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
-    iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]".
-
+    iMod (trace_alloc (memory_trace μ)) as (gT) "[Htrauth Htrfrag]".
+    iMod (state_alloc (memory_iostate μ)) as (gS) "[Hstauth Hstfrag]".
     iModIntro.
-    iExists (McMemGS gH gT).
-    iSplitL "Hinv Hauth".
+    iExists (McMemGS gH gT _).
+    iSplitL "Hinv Hstfrag Htrauth".
     - iExists memmap.
       iFrame.
       iPureIntro.
       apply initMemMap_works.
     - unfold mem_res, initMemMap in *. iFrame.
-      iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => pointsto a (DfracOwn 1) v) with "[$]").
-      eapply NoDup_liveAddrs.
+        iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => pointsto a (DfracOwn 1) v) with "[$]").
+        eapply NoDup_liveAddrs.
   Qed.
+
 End RiscvPmpIrisAdeqParameters.
 
 Module RiscvPmpIrisInstancePredicates.
@@ -149,7 +152,16 @@ Module RiscvPmpIrisInstancePredicates.
   (* The address we will perform all writes to is the first legal MMIO address *)
   Definition write_addr : Addr := bv.of_N maxAddr.
   Definition event_pred (width : nat) (e : Event) := ∃ v, e = mkEvent IOWrite write_addr width v.
-  Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
+  Definition mmio_trace_pred (width : nat) (t : Trace) : Prop := Forall (event_pred width) t.
+
+  Inductive mmio_state_pred : IOState -> Event -> IOState -> Prop :=
+  | IOR : forall iost e, event_type e = IORead -> mmio_state_pred iost e iost
+  | IOW_none : forall iost e, event_nbbytes e = O -> mmio_state_pred iost e iost
+  | IOW_even_odd: forall e n v, event_nbbytes e = S n -> bv.eqb (@bv.take (event_nbbytes e) 1%nat v) bv.zero (*curr evn*) ->
+                                mmio_state_pred false (* prev odd*) e true
+  | IOW_odd_even: forall e n v, event_nbbytes e = S n -> bv.eqb (@bv.take (event_nbbytes e) 1%nat v) bv.one (*curr odd*) ->
+                                mmio_state_pred true (*prev even*) e false
+  .
 
   Lemma difference_commute_gset {A} `{Countable A} (X Y Z : gset A) :
     (X ∖ Y) ∖ Z = (X ∖ Z) ∖ Y.
@@ -303,8 +315,9 @@ Module RiscvPmpIrisInstancePredicates.
             interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
       end%I.
 
-    Definition interp_mmio_pred (width : nat) : iProp Σ :=
-      ∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝.
+    Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
+    Definition interp_mmio_trace_pred `{invGS Σ} (width : nat) : iProp Σ :=
+      inv femto_inv_mmio_ns (∃ (s : IOState) (t : Trace) , tr_frag1 t ∗ st_auth1 s ∗ ⌜mmio_trace_pred width t⌝).
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
@@ -313,6 +326,9 @@ Module RiscvPmpIrisInstancePredicates.
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
     Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ ∃ v, bytes = v⌝.
+
+    Definition interp_mmio_state_pred `{invGS Σ} {width : nat} (s : IOState) (bytes : bv (width * byte)) : iProp Σ :=
+      ⌜∃ a, let e := {| event_type := IOWrite;  event_addr := a;  event_nbbytes := width;  event_contents := bytes |} in  mmio_state_pred s e (iostatem s e)⌝.
 
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).
@@ -398,6 +414,10 @@ Module RiscvPmpIrisInstancePredicates.
       now iApply big_sepS_delete_multi.
     Qed.
 
+
+
+
+
     Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
@@ -434,7 +454,8 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
-    | mmio_trace bytes         | _                    => interp_mmio_pred bytes
+    | mmio_state _             | [st; v] (* [unit] *) => interp_mmio_state_pred st v (* fdu: revisit *)
+    | mmio_trace bytes         | [env] (* [unit] *)   => interp_mmio_trace_pred bytes (* fdu: for now aim to add an argument to this predicate. No new predicate needed. *)
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
