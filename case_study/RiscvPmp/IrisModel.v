@@ -56,9 +56,9 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
       McMemGS {
           (* ghost variable for tracking state of heap *)
           mc_ghGS : gen_heapGS Addr MemVal Σ;
-          (* tracking traces *)
+          (* tracking traces: we want a ghost variable for tracking the current trace *)
           mc_gtGS : traceG Trace Σ;
-          (* tracking state *)
+          (* tracking state: we want a ghost variable for tracking the protocol state *)
           mc_gsGS : iostateG IOState Σ;
         }.
     #[export] Existing Instance mc_ghGS.
@@ -72,7 +72,6 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
         (∃ memmap, gen_heap_interp memmap
            ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
            ∗ tr_auth1 (memory_trace μ)
-           ∗ st_frag1 (memory_iostate μ)
         )%I.
 
   End RiscvPmpIrisParams.
