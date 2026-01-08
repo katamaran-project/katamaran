@@ -1239,8 +1239,7 @@ Module Type GenOccursCheckOn
         (old_occurs_check (T := T) xIn t).
     Proof.
       unfold old_occurs_check.
-      pose proof (oc_sound t).
-      destruct H as [Σsupp ζ t' tL' HR]; cbn.
+      destruct (oc_sound t) as [Σsupp ζ t' tL' HR]; cbn.
       destruct (weakenVarView xIn ζ).
       - eapply wlp_some.
         now rewrite unboxSbLaws.
