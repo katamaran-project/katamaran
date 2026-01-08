@@ -93,6 +93,7 @@ Module inv := invariants.
     Definition adv_addr_end : N := maxAddr. (* Change once adversary gets access to MMIO*)
     (* Address where we will write in MMIO memory, and proof that our writes will indeed be within the MMIO region*)
     Definition mmio_write_addr : N := mmioStartAddr.
+
     Lemma write_word_is_MMIO: withinMMIO (bv.of_N mmio_write_addr) bytes_per_word.
     Proof.
       (* Avoid compute in case the list of MMIO addresses ever becomes longer *)
@@ -213,25 +214,32 @@ Module inv := invariants.
     Example femtokernel_init' (init_start : N) (handler_start : N) (adv_start : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_init_asm handler_start adv_start) init_start.
 
-    Example femtokernel_mmio_handler_asm_block0 (mmio_handler_start_block2 : N) : list ASM :=
+    (* fdu *)
+    Example femtokernel_mmio_handler_asm_block0 (mmio_handler_start_block2 : N) (data_start : N) : list ASM :=
       [
-        ITYPE bv.one zero t1 RISCV_ADDI (* t1 <- 1 *)
-        ; RTYPE t1 t0 t2 RISCV_AND (* t2 = t0 && 1 *)
-        ; Λ current_pc, BTYPE (bv.of_N (mmio_handler_start_block2 - current_pc)) t1 t2 RISCV_BEQ (* branch if t0 odd (t2 = 1) *)
+        (* ITYPE bv.one zero t1 RISCV_ADDI (* t1 <- 1 *) *)
+        UTYPE bv.zero t1 RISCV_AUIPC
+        ; Λ current_pc, LOAD (bv.of_N (data_start - (current_pc - 4))) t1 t1 false WORD (* t1 <- data *)
+        ; ITYPE bv.one t1 t1 RISCV_ANDI (* t1 <- mask t1 *)
+        ; ITYPE bv.one t0 t2 RISCV_ANDI (* t2 <- mask t0 *)
+        (* ; RTYPE t1 t0 t2 RISCV_AND (* t2 = t0 && t1 *) *)
+        ; Λ current_pc, BTYPE (bv.of_N (mmio_handler_start_block2 - current_pc)) t1 t2 RISCV_BEQ (* branch if t1 = t2 *)
       ].
 
-    Example femtokernel_mmio_handler_block0' (handler_start mmio_handler_start_block2 : N) : list AnnotInstr :=
-      resolve_ASM (femtokernel_mmio_handler_asm_block0 mmio_handler_start_block2) handler_start.
-    (* fdu *)
-    Example femtokernel_mmio_handler_asm_block1 : list ASM :=
+    Example femtokernel_mmio_handler_block0' (handler_start mmio_handler_start_block2 : N) (data_start : N) : list AnnotInstr :=
+      resolve_ASM (femtokernel_mmio_handler_asm_block0 mmio_handler_start_block2 data_start) handler_start.
+
+    Example femtokernel_mmio_handler_asm_block1 (data_start : N) : list ASM :=
       [
         ITYPE (bv.of_N mmio_write_addr) zero ra RISCV_ADDI (* works because mmio_write_addr fits into 12 bits. *)
         ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
         ; STORE bv.zero t0 ra WORD
+        ; ITYPE (bv.one) t1 t1  RISCV_XORI (* t1 <- flip t1 *)
+        ; Λ x, STORE (bv.of_N (data_start - x)) t1 t1 WORD (* data <- t1 *)
       ].
 
-    Example femtokernel_mmio_handler_block1' (handler_start: N) : list AnnotInstr :=
-      resolve_ASM (femtokernel_mmio_handler_asm_block1) handler_start.
+    Example femtokernel_mmio_handler_block1' (handler_start: N) (data_start : N) : list AnnotInstr :=
+      resolve_ASM (femtokernel_mmio_handler_asm_block1 (data_start : N)) handler_start.
 
     Example femtokernel_mmio_handler_asm_block2 : list ASM :=
       [
@@ -246,8 +254,8 @@ Module inv := invariants.
 
     Definition init_size : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_init' 0 0 0))) * 4.
 
-    Definition mmio_handler_size_block0 : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_mmio_handler_block0' 0 0))) * instruction_size.
-    Definition mmio_handler_size_block1 : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_mmio_handler_block1' 0))) * instruction_size.
+    Definition mmio_handler_size_block0 : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_mmio_handler_block0' 0 0 0))) * instruction_size.
+    Definition mmio_handler_size_block1 : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_mmio_handler_block1' 0 0))) * instruction_size.
     Definition mmio_handler_size_block2 : N := N.of_nat (List.length (filter_AnnotInstr_AST (femtokernel_mmio_handler_block2' 0))) * instruction_size.
     Definition mmio_handler_size : N := mmio_handler_size_block0 + mmio_handler_size_block1 + mmio_handler_size_block2.
 
@@ -261,6 +269,11 @@ Module inv := invariants.
     Definition mmio_handler_addr_block2 : N := mmio_handler_addr_block1 + mmio_handler_size_block1.
     Definition data_addr     : N := handler_addr + mmio_handler_size.
     Definition adv_addr      : N := data_addr + data_size.
+
+    Compute femto_pmpcfg_ent0.
+    Compute data_addr.
+    Compute adv_addr.
+    Compute mmioStartAddr.
 
     (* CODE AND CONFIG SHORTANDS *)
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
@@ -339,6 +352,8 @@ Module inv := invariants.
     Qed.
 
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
+
+    (* fdu *)
     Example femtokernel_handler_pre : Assertion ["a" :: ty_xlenbits] :=
       (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
@@ -347,6 +362,7 @@ Module inv := invariants.
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "v", mip ↦ term_var "v") ∗ (∃ "v", mie ↦ term_var "v") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
+      (∃ "v", (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ᵢ term_var "v") ∗
       asn_regs_ptsto ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
@@ -359,24 +375,25 @@ Module inv := invariants.
       (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
       (∃ "cause", mcause ↦ term_var "cause") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
+      (∃ "v", (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ᵢ term_var "v") ∗
       (∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w")))
         (asn.or
-            (asn.sep
-                (term_unop (uop.bvtake 1) (term_var "w") = term_val (ty.bvec 1) (bv.of_N 0))
-                (term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block1))
-            )
-            (asn.sep
-                (term_unop (uop.bvtake 1) (term_var "w") = term_val (ty.bvec 1) (bv.of_N 1))
+           (
+               (* we reach block1 and t0 contains a value that satisfies the mmio_state predicate *)
+               (∃ "s", asn.chunk (chunk_user (mmio_state bytes_per_word) [term_var "s"; term_var "w"])) ∗
+               (term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block1))
+           )
+           (
+                (* we jump to block2 essentially skipping the write *)
                 (term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block2))
             )
-        )
-      ) ∗
+        ))
+       ∗
       asn_regs_ptsto_excl [5] ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
       asn_mmio_pred.
 
-  (* fdu *)
   Example femtokernel_handler_pre_block1 : Assertion ["a" :: ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block1)) ∗
     (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
@@ -384,7 +401,8 @@ Module inv := invariants.
     (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
     (∃ "cause", mcause ↦ term_var "cause") ∗
     (∃ "epc", mepc ↦ term_var "epc") ∗
-    (∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w"))) (term_unop (uop.bvtake 1) (term_var "w") = term_val (ty.bvec 1) (bv.of_N 0))) ∗
+    (∃ "s", ∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w"))) (asn.chunk (chunk_user (mmio_state bytes_per_word) [term_var "s"; term_var "w"]))) ∗
+    (* (∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w"))) (term_unop (uop.bvtake 1) (term_var "w") = term_val (ty.bvec 1) (bv.of_N 0))) ∗ *)
     asn_regs_ptsto_excl [5] ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
@@ -445,13 +463,13 @@ Module inv := invariants.
     Definition vc__femtohandler_block0 : 𝕊 [] :=
       postprocess2 (sannotated_block_verification_condition
                      (femtokernel_handler_pre)
-                     (femtokernel_handler_gen_block0 mmio_handler_addr_block2)
+                     (femtokernel_handler_gen_block0 mmio_handler_addr_block2 data_addr)
                      (femtokernel_handler_post_block0) wnil).
 
     Definition vc__femtohandler_block1 : 𝕊 [] :=
       postprocess2 (sannotated_block_verification_condition
                      (femtokernel_handler_pre_block1)
-                     (femtokernel_handler_gen_block1)
+                     (femtokernel_handler_gen_block1 data_addr)
                      (femtokernel_handler_post_block1) wnil).
 
     Definition vc__femtohandler_block2 : 𝕊 [] :=
@@ -478,6 +496,12 @@ Locate erase_symprop.
     (*   - simpl. destruct (bv.trunc m p); auto. *)
     (* Qed. *)
 
+Import Erasure.notations.
+
+
+(* for debugging *)
+Set Printing Depth 100.
+Eval vm_compute in vc__femtohandler_block0.
 
     (* Prove that the verification condition that Katamaran creates for this block holds.
        I.e. we're just proving the verification condition for block0. *)
@@ -486,7 +510,9 @@ Locate erase_symprop.
     Proof.
       vm_compute.
       constructor; cbn.
-      intuition.
+      intuition. apply H.
+      (* fdu *)
+      apply H. 
       -  (* courtesy of Dominique Devriese *)
          unfold bv.take.
          destruct (bv.appView 1 _ v).
@@ -512,11 +538,6 @@ Locate erase_symprop.
             reflexivity.
     Qed.
 
-    Import Erasure.notations.
-    Set Printing Depth 1000.
-    Eval vm_compute in vc__femtohandler_block1.
-
-    (* fdu *)
     Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
     Proof.
       vm_compute.
@@ -642,7 +663,7 @@ Locate erase_symprop.
     iPureIntro. eapply mmio_ram_False; eauto.
   Qed.
 
-  Definition femto_mmio_pred `{sailGS Σ} := interp_mmio_pred bytes_per_word.
+  Definition femto_mmio_pred `{sailGS Σ} := interp_mmio_trace_pred bytes_per_word.
 
   Definition femto_handler_pre `{sailGS Σ} a : iProp Σ :=
     asn.interpret femtokernel_handler_pre [ a ].
@@ -653,7 +674,7 @@ Locate erase_symprop.
   Eval cbn in fun a an => femto_handler_post_block0 a an.
 
   Definition femto_handler_block0_contract `{sailGS Σ} : iProp Σ :=
-    semTripleAnnotatedBlock femto_handler_pre (femtokernel_handler_gen_block0 mmio_handler_addr_block2) femto_handler_post_block0.
+    semTripleAnnotatedBlock femto_handler_pre (femtokernel_handler_gen_block0 mmio_handler_addr_block2 data_addr) femto_handler_post_block0.
 
   (* Note: temporarily make femtokernel_handler_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_handler_pre.
@@ -726,7 +747,7 @@ Locate erase_symprop.
   Definition femtoKernelAssumptions  `{sailGS Σ} (PRE : (Val ty_xlenbits) → iProp Σ) (a : Val ty_xlenbits) : iProp Σ :=
     blockVerifierAssumptions PRE a ∗
     interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User ∗
-    ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2)) ∗
+    ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2 data_addr)) ∗
     ptsto_instrs (bv.of_N mmio_handler_addr_block1) (filter_AnnotInstr_AST (femtokernel_handler_gen_block1)) ∗
     ptsto_instrs (bv.of_N mmio_handler_addr_block2) (filter_AnnotInstr_AST (femtokernel_handler_gen_block2)).
 
@@ -789,9 +810,9 @@ Locate erase_symprop.
   Proof.
     iIntros "IH (Hbase & HaccU & (Hinstrs0 & Hinstrs1 & Hinstrs2))".
     iDestruct "Hbase" as "(Hpre & Hpc & Hnextpc)".
-    iDestruct "Hpre" as "( [%Ha _] & [#Haoffset _] & Hmstatus & Hmtvec & Hmcause & [%Hmepcv Hmepc] & (%v & Hx5 & [%Htake _]) & Hpts & Hcurpriv & Hpmpentries & Hpred)".
-    iApply (femto_handler_verified_block1 with "[Hmstatus Hmtvec Hmcause Hmepc Hpts Hx5 Hcurpriv Hpmpentries Hpc Hnextpc Hinstrs1 Hpred]").
-    - iFrame "Hmstatus Hmtvec Hmcause Hmepc Hx5 Hpts Hcurpriv Haoffset Hpred". iFrame "Hpc Hnextpc". subst.
+    iDestruct "Hpre" as "( [%Ha _] & [#Haoffset _] & Hmstatus & Hmtvec & Hmcause & [%Hmepcv Hmepc] & (%s & %v & Hx5 & Htake) & Hpts & Hcurpriv & Hpmpentries & Hpred)".
+    iApply (femto_handler_verified_block1 with "[Hmstatus Hmtvec Hmcause Hmepc Hpts Hx5 Htake Hcurpriv Hpmpentries Hpc Hnextpc Hinstrs1 Hpred]").
+    - iFrame "Hmstatus Hmtvec Hmcause Hmepc Hx5 Htake Hpts Hcurpriv Haoffset Hpred". iFrame "Hpc Hnextpc". subst.
       iSplitL "Hpmpentries".
       -- cbn; repeat iSplit; auto.
       -- cbv in Ha. subst. iFrame "Hinstrs1".
@@ -835,7 +856,9 @@ Locate erase_symprop.
         iDestruct "IH" as "(Hbase & HaccU & Hinstrs)". iFrame "HaccU Hinstrs".
         iDestruct "Hbase" as "(Hpre0 & Hpc0 & Hnextpc0)".
         unfold blockVerifierAssumptions. iFrame "Hpre0 Hpc0 Hnextpc0".
-      + iFrame "HaccU". iSplitL "Hpmpentries". iSplitR. auto. iSplitR. subst. auto. iSplitR. auto. cbn. subst. iFrame "Hpmpentries". cbn. subst. iFrame "Hinstrs0 Hinstrs1 Hinstrs2".
+      + iFrame "HaccU". iSplitL "Hpmpentries". iSplitR. auto. iSplitR. subst. auto. iSplitR. cbn.
+        unfold interp_mmio_state_pred. rewrite Heven. auto.
+        cbn. subst. iFrame "Hpmpentries". cbn. subst. iFrame "Hinstrs0 Hinstrs1 Hinstrs2".
     - (* Tut: Case even i.e. we do not jump and therefore enter block1 *)
       iApply (femtokernel_handler_safe_block2 with "[]").
       + iModIntro. iIntros "IH". cbn. subst.
@@ -861,7 +884,7 @@ Qed.
         femto_mmio_pred ∗
         (pc ↦ᵣ (bv.of_N adv_addr)) ∗
         (∃ v, nextpc ↦ᵣ v) ∗
-        ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2)) ∗
+        ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2 data_addr)) ∗
         ptsto_instrs (bv.of_N mmio_handler_addr_block1) (filter_AnnotInstr_AST (femtokernel_handler_gen_block1)) ∗
         ptsto_instrs (bv.of_N mmio_handler_addr_block2) (filter_AnnotInstr_AST (femtokernel_handler_gen_block2)) ∗
         ptstoSthL advAddrs  (* Tut: we give up exclusive ownership of adv memory ONLY (notably not the mmio-trace and private state for handler and init) *)
@@ -989,7 +1012,7 @@ Qed.
       ptstoSthL advAddrs ∗
       (∃ v, nextpc ↦ᵣ v) ∗
       ptsto_instrs (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ∗
-      ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2)) ∗
+      ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2 data_addr)) ∗
       ptsto_instrs (bv.of_N mmio_handler_addr_block1) (filter_AnnotInstr_AST (femtokernel_handler_gen_block1)) ∗
       ptsto_instrs (bv.of_N mmio_handler_addr_block2) (filter_AnnotInstr_AST (femtokernel_handler_gen_block2))
       -∗
@@ -1143,13 +1166,13 @@ Qed.
 
   Lemma femtokernel_splitMemory `{sailGS Σ} {μ : Memory} :
     mem_has_instrs μ (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
-    mem_has_instrs μ (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2)) ->
+    mem_has_instrs μ (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2 data_addr)) ->
     mem_has_instrs μ (bv.of_N mmio_handler_addr_block1) (filter_AnnotInstr_AST (femtokernel_handler_gen_block1)) ->
     mem_has_instrs μ (bv.of_N mmio_handler_addr_block2) (filter_AnnotInstr_AST (femtokernel_handler_gen_block2)) ->
-    mmio_pred bytes_per_word (memory_trace μ) -> (* Demand a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
+    mmio_trace_pred bytes_per_word (memory_trace μ) -> (* Demand a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
     @mem_res _ sailGS_memGS μ ⊢ |={⊤}=>
           ptsto_instrs (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ∗
-          ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2)) ∗
+          ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2 data_addr)) ∗
           ptsto_instrs (bv.of_N mmio_handler_addr_block1) (filter_AnnotInstr_AST (femtokernel_handler_gen_block1)) ∗
           ptsto_instrs (bv.of_N mmio_handler_addr_block2) (filter_AnnotInstr_AST (femtokernel_handler_gen_block2)) ∗
       femto_mmio_pred ∗
@@ -1159,7 +1182,7 @@ Qed.
     unfold mem_res, initMemMap.
     rewrite (liveAddrs_split).
     rewrite ?map_app ?list_to_map_app ?big_sepM_union.
-    iDestruct "Hmem" as "[(Hinit & Hhandler0 & Hhandler1 & Hhandler2 & Hmem & Hadv) Htr]".
+    iDestruct "Hmem" as "[(Hinit & Hhandler0 & Hhandler1 & Hhandler2 & Hmem & Hadv) (Hstauth & Htrfrag)]".
     iSplitL "Hinit".
     { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
       iApply (sub_heap_mapsto_interp_ptsto with "Hinit"); now compute. }
@@ -1175,13 +1198,13 @@ Qed.
     { iApply (intro_ptsto_instrs (μ := μ)); auto. cbv. reflexivity.
       cbn. unfold mmio_handler_size.
       iApply (sub_heap_mapsto_interp_ptsto with "Hhandler2"); now compute. }
-    iSplitL "Hmem Htr".
+    iSplitL "Hmem Htrfrag Hstauth".
     - (* We set up the trace invariant. *)
-       iModIntro. unfold femto_mmio_pred. unfold interp_mmio_pred. iExists _.
-       now iFrame.
+      unfold femto_mmio_pred. unfold interp_mmio_trace_pred.
+      iApply (inv.inv_alloc). iNext. iExists _, _.  iFrame. auto.
     - iApply (intro_ptstoSthL μ).
       iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); now compute.
-  Qed.
+    Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
     ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝.
@@ -1235,10 +1258,10 @@ Qed.
   Lemma femtokernel_endToEnd {γ γ' : RegStore} {μ μ' : Memory}
         {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} :
     mem_has_instrs μ (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
-    mem_has_instrs μ (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2)) ->
+    mem_has_instrs μ (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen_block0 mmio_handler_addr_block2 data_addr)) ->
     mem_has_instrs μ (bv.of_N mmio_handler_addr_block1) (filter_AnnotInstr_AST (femtokernel_handler_gen_block1)) ->
     mem_has_instrs μ (bv.of_N mmio_handler_addr_block2) (filter_AnnotInstr_AST (femtokernel_handler_gen_block2)) ->
-    mmio_pred bytes_per_word (memory_trace μ) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
+    mmio_trace_pred bytes_per_word (memory_trace μ) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
     read_register γ cur_privilege = Machine ->
     read_register γ pmp0cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr0 = bv.zero ->
@@ -1246,7 +1269,7 @@ Qed.
     read_register γ pmpaddr1 = bv.zero ->
     read_register γ pc = (bv.of_N init_addr) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    mmio_pred bytes_per_word (memory_trace μ') (* The initial demands hold over the final state *).
+    mmio_trace_pred bytes_per_word (memory_trace μ') (* The initial demands hold over the final state *).
   Proof.
     intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps.
     refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _).
@@ -1254,30 +1277,29 @@ Qed.
     cbn.
     iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
     rewrite γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc.
-    iMod (femtokernel_splitMemory with "Hmem") as "(Hinit & Hhandler0 & Hhandler1 & Hhandler2 & Hpred & Hadv)";
-      try assumption.
+    iMod (femtokernel_splitMemory with "Hmem") as "(Hinit & Hhandler0 & Hhandler1 & Hhandler2 & #Hinv & Hadv)";
+      try eassumption.
     iModIntro.
-    iSplitR "Hpred".
-    - destruct (env.view δ).
+    iSplitR "".
+    - destruct (env.view δ). (* INV and frag of state *)
       iApply femtokernel_init_safe.
       Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
       iFrame "∗ #". rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
       repeat iDestruct "H'" as "($ & H')". iSplitL; auto.
-      unfold femto_mmio_pred. unfold interp_mmio_pred.
-      iExists (memory_trace μ). iSplitL; auto.
-      iPoseProof trace.trace_alloc as "Htrace".
-      instantiate (1 := memory_trace μ). admit.
-   - iIntros "Hmem".
-      iApply fupd_mask_intro; first apply empty_subseteq.
-      iDestruct "Hmem" as "(%memmap & Hinv2 & %link & Htr  )".
-      iDestruct "Hpred" as (t) "[Hfrag %Hpred]". iIntros "_".
-      iDestruct (trace.trace_full_frag_eq with "Htr Hfrag") as "->".
-      easy.
-      Unshelve. all: constructor.
-  Abort.
+   -
+     iIntros "Hmem". (* INV only *)
+     iInv "Hinv" as  (s t) ">(Htrf & Hsta & #Hpred)" "_".
+     iDestruct "Hmem" as "(%memmap & Hinv2 & %link & Htra & Hstf)".
+     iDestruct (trace.trace_full_frag_eq with "Htra Htrf") as "->".
+     iDestruct (trace.iost_full_frag_eq with "Hsta Hstf") as "->".
+     iApply fupd_mask_intro; first apply empty_subseteq.
+     iIntros "_"; auto.
+     Unshelve. constructor. auto.
+Qed.
 
 (* Print Assumptions femtokernel_endToEnd. *)
 
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
 (* End: *)
+
