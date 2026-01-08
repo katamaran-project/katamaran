@@ -1129,6 +1129,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_postcondition   := ⊤;
           |}.
 
+
         Definition CEnvEx : SepContractEnvEx :=
           fun Δ τ fn =>
             match fn with
@@ -1136,7 +1137,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | write_ram bytes      => sep_contract_write_ram bytes
             | @within_mmio bytes H => @sep_contract_within_mmio bytes H
             | mmio_read bytes      => sep_contract_mmio_read bytes
-            | mmio_write bytes     => sep_contract_mmio_write bytes
+            | mmio_write bytes     => sep_contract_mmio_write bytes 
             | decode               => sep_contract_decode
             end.
 
@@ -1251,7 +1252,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | close_ptsto_instr       => lemma_close_ptsto_instr
             | extract_pmp_ptsto bytes => lemma_extract_pmp_ptsto bytes
             | return_pmp_ptsto bytes  => lemma_return_pmp_ptsto bytes
-            | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
+            | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh 
             end.
 
       End LemDef.

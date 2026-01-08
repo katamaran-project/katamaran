@@ -1109,7 +1109,17 @@ Module Export RiscvPmpBase <: Base.
         event_nbbytes : nat;
         event_contents : bv (event_nbbytes * 8);
       }.
+
     Definition Trace : Set := list Event.
+    Definition IOState := bool.
+
+    Definition iostatem (s : IOState) (e : Event) : IOState :=
+      match s, e with
+      | _, {| event_type := _;  event_addr := _;  event_nbbytes := O ;  event_contents := v |} => s
+      | _, {| event_type := IORead;  event_addr := _;  event_nbbytes := _ ;  event_contents := v |} => s
+      | true, {| event_type := IOWrite;  event_addr := _;  event_nbbytes := S n;  event_contents := v |} => false
+      | false, {| event_type := IOWrite;  event_addr := _;  event_nbbytes := S n;  event_contents := v |} => true
+      end.
 
     (* Memory *)
     Record MemoryType : Type :=
@@ -1117,13 +1127,15 @@ Module Export RiscvPmpBase <: Base.
         memory_ram : RAM;
         memory_trace : Trace;
         memory_state : State;
+        memory_iostate : IOState;
       } .
     Definition Memory := MemoryType.
 
-    Definition memory_update_ram (μ : Memory) (r : RAM) := mkMem r (memory_trace μ) (memory_state μ).
-    Definition memory_update_trace (μ : Memory) (t : Trace) := mkMem (memory_ram μ) t (memory_state μ).
+    Definition memory_update_ram (μ : Memory) (r : RAM) := mkMem r (memory_trace μ) (memory_state μ) (memory_iostate μ).
+    Definition memory_update_trace (μ : Memory) (t : Trace) := mkMem (memory_ram μ) t (memory_state μ) (memory_iostate μ).
     Definition memory_append_trace (μ : Memory) (e : Event) := memory_update_trace μ (cons e (memory_trace μ)).
-    Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s.
+    Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s  (memory_iostate μ).
+    Definition memory_update_iostate (μ : Memory) (ios : IOState) := mkMem (memory_ram μ) (memory_trace μ) (memory_state μ)  ios.
 
     Fixpoint fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) : 
       Val (ty_bytes data_size) :=
@@ -1175,7 +1187,7 @@ Module Export RiscvPmpBase <: Base.
                 (μ' , readv)%type
       end.
 
-    Definition fun_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
+    Definition fun_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) (iostatem : IOState -> Event -> IOState) :
       Val (ty_bytes data_size) -> Memory :=
       match data_size as n return (Val (ty_bytes n) → Memory) with
       | O   => fun _data => μ
@@ -1183,7 +1195,7 @@ Module Export RiscvPmpBase <: Base.
                 let s' := state_tra_write (memory_state μ) addr (S n) data in
                 let mmioev := mkEvent IOWrite addr (S n) data in
                 let μ' := memory_append_trace (memory_update_state μ s') mmioev in
-                μ'
+                memory_update_iostate μ' (iostatem (memory_iostate μ) mmioev)
       end.
 
   End MemoryModel.

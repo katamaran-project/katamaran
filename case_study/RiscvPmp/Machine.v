@@ -1272,8 +1272,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     ForeignCall (mmio_read width) [addr] res γ γ' μ μ' :=
       let (μupd,readv) := fun_read_mmio μ width addr in
       (γ' , μ' , res) = (γ , μupd , inr readv);
-    ForeignCall (@mmio_write width H) [addr; data] res γ γ' μ μ' :=
-      (γ' , μ' , res) = (γ , @fun_write_mmio μ width addr data , inr true);
+      ForeignCall (@mmio_write width H) [addr; data] res γ γ' μ μ' :=
+      (γ' , μ' , res) = (γ , @fun_write_mmio μ width addr iostatem data , inr true);
     ForeignCall (@within_mmio width H) [addr] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , μ , inr (fun_within_mmio width addr));
     ForeignCall decode [code] res γ γ' μ μ' :=
