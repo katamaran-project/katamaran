@@ -358,6 +358,14 @@ Module Import ctx.
       - intros e. depelim e. destruct n, m; cbn in H; congruence.
     Qed.
 
+    Section Length.
+      Fixpoint length (Γ : Ctx B) : nat :=
+        match Γ with
+        | nil      => 0
+        | snoc Γ _ => S (length Γ)
+        end.
+    End Length.
+
     Section All.
 
       Inductive All (P : B -> Type) : Ctx B -> Type :=
