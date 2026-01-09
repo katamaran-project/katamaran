@@ -63,6 +63,7 @@ From iris.program_logic Require weakestpre adequacy.
 From iris.proofmode Require string_ident tactics.
 From stdpp Require namespaces.
 From Katamaran Require Import RiscvPmp.LoopVerification.
+From Katamaran Require Import RiscvPmp.LoopVerificationBinary.
 
 Module AsnNotations.
   Export asn.notations.
@@ -113,6 +114,8 @@ Module UnaryCheck.
   Section WithAsnNotations.
     Import AsnNotations.
 
+    (* TODO: in both pre and post, we are missing some regs (pc, npc) and
+             ptsto_instrs chunks. *)
     Definition PRE : AssertionWith [ "a" :: ty_xlenbits ] :=
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N adv_addr) < term_val ty.int (Z.of_N maxAddr))%asn ∗
       mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |} ∗
@@ -149,6 +152,7 @@ Module UnaryCheck.
 End UnaryCheck.
 
 Module RunningExample.
+  Import TotalBlockVer.Verifier.
   (* First version of the running example is the bare minimum, just making sure
      that all the building blocks fit together. The example is a MRET instr,
      with the entire memory and all registers public (i.e., there are no secrets). *)
@@ -158,15 +162,44 @@ Module RunningExample.
   Definition PRE := UnaryCheck.PRE.
   Definition POST := UnaryCheck.POST.
 
-  Definition vc_code : 𝕊 ε :=
-    postprocess (TotalBlockVer.Verifier.sblock_verification_condition PRE code POST wnil).
+  Section TotalVerif.
+    Import IrisInstance.RiscvPmpIrisInstance.
+    Import IrisModel.RiscvPmpIrisBase.
 
-  Lemma sat_code : TotalBlockVer.Verifier.safeE vc_code.
-  Proof.
-    vm_compute.
-    constructor; cbn.
-    intuition; bv_solve_Ltac.solveBvManual.
-  Qed.
+    Definition vc_code : 𝕊 ε :=
+      (* We need the vm_compute here, otherwise Rocq will spin forever when we
+         try to apply sat_code further down. *)
+      Eval vm_compute in postprocess2 (sblock_verification_condition PRE code POST wnil).
+
+    Lemma sat_code : TotalBlockVer.Verifier.safeE vc_code.
+    Proof.
+      constructor; cbn.
+      intuition; bv_solve_Ltac.solveBvManual.
+    Qed.
+
+    Definition iPRE `{sailGS Σ} (a : Val ty_xlenbits) : iProp Σ :=
+      asn.interpret PRE [env].["a" :: ty_xlenbits ↦ a].
+
+    Definition iPOST `{sailGS Σ} (a an : Val ty_xlenbits) : iProp Σ :=
+      asn.interpret POST [env].["a" :: ty_xlenbits ↦ a].["an" :: ty_xlenbits ↦ an].
+
+    Definition contract_step `{sailGS Σ} (a : Val ty_xlenbits) : iProp Σ :=
+      semTripleBlock iPRE a code iPOST.
+
+    Section WithIris.
+      Import iris.program_logic.weakestpre.
+      Import iris.proofmode.tactics.
+
+      Lemma contract_step_verified : ∀ `{sailGS Σ} (a : Val ty_xlenbits), ⊢ contract_step a.
+      Proof.
+        unfold contract_step.
+        iIntros (Σ sg a).
+        iApply sound_sblock_verification_condition.
+        apply sat_code.
+      Qed.
+
+    End WithIris.
+  End TotalVerif.
 
   Section WithIris.
     Import iris.program_logic.weakestpre.
@@ -176,60 +209,271 @@ Module RunningExample.
 
     #[local] Notation "a '↦ᵣ' t" := (reg_pointsTo2 a t t).
 
-    (* Ref: femto_handler_pre *)
-    Definition iPRE `{sailGS2 Σ} : iProp Σ :=
-      mstatus ↦ᵣ {| MPP := User |} ∗
-      (∃ v, mtvec ↦ᵣ v) ∗
-      (∃ v, mcause ↦ᵣ v) ∗
-      mepc ↦ᵣ (bv.of_N adv_addr) ∗
-      cur_privilege ↦ᵣ Machine ∗
-      interp_gprs ∗
-      interp_pmp_entries pmp_cfg.
+    Definition iPRE2 `{sailGS2 Σ} (a : Val ty_xlenbits) : iProp Σ :=
+      asn.interpret PRE [env].["a" :: ty_xlenbits ↦ a].
 
-    Definition iPOST `{sailGS2 Σ} : iProp Σ :=
-      (∃ v, mstatus ↦ᵣ v) ∗
-      (∃ v, mtvec ↦ᵣ v) ∗
-      (∃ v, mcause ↦ᵣ v) ∗
-      (∃ v, mepc ↦ᵣ v) ∗
-      cur_privilege ↦ᵣ User ∗
-      interp_gprs ∗
-      interp_pmp_entries pmp_cfg.
+    Definition iPOST2 `{sailGS2 Σ} (a an : Val ty_xlenbits) : iProp Σ :=
+      asn.interpret POST [env].["a" :: ty_xlenbits ↦ a].["an" :: ty_xlenbits ↦ an].
 
-    Import IrisInstance.RiscvPmpIrisInstance.
-    Print WP2_loop.
-    Definition contract `{sailGS2 Σ} : iProp Σ :=
-      semTTriple [env] iPRE fun_step (λ _ _, iPOST).
+    Import RiscvPmpIrisInstance2.
 
-    Definition contract `{sailGS2 Σ} : iProp Σ :=
-      iPRE -∗
-        (iPOST -∗ WP2_loop) -∗
-          WP2_loop.
+    Fixpoint ptsto_instrs2 `{sailGS2 Σ} (a : Val ty_word) (instrs : list AST) : iProp Σ :=
+      match instrs with
+      | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs2 (bv.add a bv_instrsize) insts)%I
+      | nil => True%I
+      end.
 
-    Lemma contract_verified : ∀ `{sailGS2 Σ}, ⊢ contract.
+    Definition semTripleBlock2 {Σ} `{sailGS2 Σ} (PRE : Val ty_xlenbits -> iProp Σ) (instrs : list AST) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) : iProp Σ :=
+      (∀ a,
+         (PRE a ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs2 a instrs) -∗
+         (∀ an, pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs2 a instrs ∗ POST a an -∗ WP2_loop) -∗
+         WP2_loop)%I.
+    #[global] Arguments semTripleBlock2 {_ _} PRE%_I instrs POST%_I.
+
+    Definition contract_step2 `{sailGS2 Σ} : iProp Σ :=
+      semTripleBlock2 iPRE2 code iPOST2.
+
+    Section MoveToBinaryWeakestPre.
+      Fixpoint semWP2_n `{sailGS2 Σ} {Γ τ} (n : nat)
+        (δ1 : CStore Γ) (δ2 : CStore Γ) (s1 : Stm Γ τ) (s2 : Stm Γ τ)
+        (POST : IVal τ -> CStore Γ -> IVal τ -> CStore Γ -> iProp Σ) : iProp Σ :=
+        match n with
+        | O => ∀ v1 δ1 v2 δ2, POST v1 δ1 v2 δ2
+        | S n => semWP2 δ1 δ2 s1 s2 (λ v1 δ1 v2 δ2,
+                     ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗
+                     match v1 with
+                     | inl v1 => semWP2_n n δ1 δ2 s1 s2 POST
+                     | inr _ => True
+                     end)%I
+        end.
+
+      Lemma semWP2_n_mono `{sailGS2 Σ} {Γ τ} (n : nat)
+        (δ1 : CStore Γ) (δ2 : CStore Γ) (s1 : Stm Γ τ) (s2 : Stm Γ τ)
+        (POST1 POST2 : IVal τ -> CStore Γ -> IVal τ -> CStore Γ -> iProp Σ) :
+        semWP2_n n δ1 δ2 s1 s2 POST1 -∗
+        (∀ v1 δ1 v2 δ2, POST1 v1 δ1 v2 δ2 -∗ POST2 v1 δ1 v2 δ2) -∗
+        semWP2_n n δ1 δ2 s1 s2 POST2.
+      Proof.
+        revert δ1 δ2 POST1 POST2.
+        iInduction n as [|n]; iIntros (δ1 δ2 POST1 POST2).
+        - iIntros "POST1 HPOSTS".
+          cbn. iIntros (v1 δ1' v2 δ2').
+          now iApply "HPOSTS".
+        - iIntros "Hwp HPOSTS".
+          cbn.
+          iApply (semWP2_mono with "Hwp").
+          iIntros (v1 δ1' v2 δ2') "(<- & <- & H)"; auto.
+          destruct v1; auto.
+          repeat iSplitR; auto.
+          iApply ("IHn" with "H").
+          iIntros (? ? ? ?) "H".
+          now iApply "HPOSTS".
+      Qed.
+
+      Fixpoint semTWP_n {Σ : gFunctors} {sG : sailGS Σ} [Γ τ] (n : nat) (δ : CStore Γ)
+                        (s : Stm Γ τ) (Q : @IrisModel.RiscvPmpIrisBase.Post Σ Γ τ) : iProp Σ :=
+        match n with
+        | O => ∀ v δ, Q v δ
+        | S n => semTWP δ s (λ v δ, semTWP_n n δ s Q)%I
+        end.
+
+      Lemma semWP2_n_focus {Σ} {sG : sailGS2 Σ} {Γ τ} (n : nat) {s1 : Stm Γ τ} {s2 : Stm Γ τ} :
+        ⊢ ∀ Q1 Q2 Q δ1 δ2,
+          @semTWP_n _ sailGS2_sailGS_left _ _ n δ1 s1 Q1 -∗
+          @semTWP_n _ sailGS2_sailGS_right _ _ n δ2 s2 Q2 -∗
+          (∀ v1 δ1 v2 δ2, Q1 v1 δ1 ∗ Q2 v2 δ2 -∗ Q v1 δ1 v2 δ2) -∗
+          semWP2_n n δ1 δ2 s1 s2 Q.
+      Proof.
+        iInduction n as [|n];
+          iIntros (Q1 Q2 Q δ1 δ2) "HTWP1 HTWP2 H".
+        - simpl. iIntros (v1 δ1' v2 δ2').
+          iApply "H".
+          iSpecialize ("HTWP1" $! v1 δ1').
+          iSpecialize ("HTWP2" $! v2 δ2').
+          iFrame "HTWP1 HTWP2".
+        - simpl.
+          iApply (semWP2_focus with "HTWP1 HTWP2").
+          (* iIntros ([] δ1' v2 δ2') "(HTWP1 & HTWP2)"; auto.
+          now iApply ("IHn" with "HTWP1 HTWP2 H"). *)
+      Abort.
+
+      Definition semTriple_n {Σ} `{sailGS2 Σ} {Γ τ} (n : nat) (δ : CStore Γ)
+        (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
+        PRE -∗ semWP2_n n δ δ s s (λ v1 δ1 v2 δ2, (* ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗ *)
+                                                  match v1 with
+                                                  | inl v1 => POST v1 δ1
+                                                  | inr _ => True
+                                                  end)%I.
+      #[global] Arguments semTriple_n {Σ} {_} {Γ} {τ} n%nat δ PRE%_I s%_exp POST%_I.
+
+      Lemma semTriple_n_S {Σ} `{sailGS2 Σ} {Γ τ} (n : nat) (δ : CStore Γ)
+        (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) :
+        semTriple δ PRE s (λ _ δ, semWP2_n n δ δ s s (λ v1 δ1 v2 δ2,
+                                       match v1 with
+                                       | inl v1 => POST v1 δ1
+                                       | inr _ => True
+                                       end)) ⊣⊢ 
+        semTriple_n (S n) δ PRE s POST.
+      Proof.
+        unfold semTriple, semTriple_n. cbn.
+        iSplit; iIntros "H PRE"; iSpecialize ("H" with "PRE");
+          iApply (semWP2_mono with "H");
+          iIntros ([] ? ? ?) "(-> & -> & H)"; auto.
+      Qed.
+
+      Lemma semTriple_n_S_alt_1 {Σ} `{sailGS2 Σ} {Γ τ} (n : nat) (δ : CStore Γ)
+        (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) :
+        semTriple δ PRE s (λ _ δ, PRE ∗ semTriple_n n δ PRE s POST)  ⊢ 
+        semTriple_n (S n) δ PRE s POST.
+      Proof.
+        iIntros "H".
+        rewrite <- semTriple_n_S.
+        iIntros "HPRE". iSpecialize ("H" with "HPRE").
+        iApply (semWP2_mono with "H").
+        iIntros ([] ? ? ?) "(-> & -> & H)"; auto.
+        iDestruct "H" as "(HPRE & H)". iSpecialize ("H" with "HPRE").
+        repeat iSplitR; auto.
+      Qed.
+
+      Lemma semTriple_n_S_alt_2 {Σ} `{sailGS2 Σ} {Γ τ} (n : nat) (δ : CStore Γ)
+        (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) :
+        semTriple_n (S n) δ PRE s POST ⊢
+        semTriple δ PRE s (λ _ δ, semTriple_n n δ PRE s POST).
+      Proof.
+        iIntros "H".
+        iPoseProof (semTriple_n_S with "H") as "H".
+        iIntros "HPRE". iSpecialize ("H" with "HPRE").
+        iApply (semWP2_mono with "H").
+        iIntros ([] ? ? ?) "(-> & -> & H)"; auto.
+        repeat iSplitR; auto. iIntros "HPRE". auto.
+      Qed.
+        
+    End MoveToBinaryWeakestPre.
+
+    Lemma semTriple2_semTTriple_seq {Σ : gFunctors} {sG : sailGS2 Σ}
+      (δ : CStore [ctx]) {a : Val ty_xlenbits} {instrs : list AST} (PRE PRE1 PRE2 : iProp Σ)
+      (POST : Val ty.unit -> CStore [ctx] -> iProp Σ)
+      (POST1 POST2 : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) :
+      @semTripleBlock _ sailGS2_sailGS_left (λ _, PRE1) a instrs POST1 -∗
+      @semTripleBlock _ sailGS2_sailGS_right (λ _, PRE2) a instrs POST2 -∗
+      (PRE -∗ PRE1 ∗ PRE2) -∗
+      (∀ a1 an1 a2 an2, (POST1 a1 an1 ∗ POST2 a2 an2) -∗ POST () [env]) -∗
+        semTriple_n (length instrs) δ PRE fun_step POST.
     Proof.
-      iIntros (Σ sG) "Hpre Hk".
-      iDestruct "Hpre" as "((Hmstatus₁ & Hmstatus₂) & (%mtvec & Hmtvec₁ & Hmtvec₂)
-                          & (%mcause & Hmcause₁ & Hmcause₂) & (Hmepc₁ & Hmepc₂)
-                          & (Hcp₁ & Hcp₂) & Hgprs & Hpmp)".
-      iPoseProof (RiscvPmpModel2.interp_pmpentries_dedup with "Hpmp") as "(Hpmp₁ & Hpmp₂)".
-      iPoseProof (RiscvPmpModel2.interp_gprs_split with "Hgprs") as "(Hgprs₁ & Hgprs₂)".
-      iApply semWP2_focus.
+      iInduction instrs as [|instr instrs].
+      - cbn. unfold semTriple_n. cbn.
+        unfold semTripleBlock, step_instrs. cbn.
+        iIntros "H1 H2 HPREs HPOSTs HPRE" ([] ? ? ?); auto.
+        destruct v, (env.view δ1).
+        iDestruct ("HPREs" with "HPRE") as "(HPRE1 & HPRE2)". 
+        iSpecialize ("H1" with "HPRE1").
+        iSpecialize ("H2" with "HPRE2").
+        iApply ("HPOSTs" with "[$H1 $H2]").
+      - iIntros "H1 H2 HPREs HPOSTs".
+        cbn.
 
-      
-      iApply semWP2_anaglyph.
-      iApply (semWP_mono with "[-]").
-      - iApply (sound_sblock_verification_condition with "[-Hk Hmstatus₂ Hmtvec₂ Hmcause₂ Hmepc₂ Hcp₂ Hpmp₂ Hgprs₂] [Hk Hmstatus₂ Hmtvec₂ Hmcause₂ Hmepc₂ Hcp₂ Hpmp₂ Hgprs₂]").
-        + apply UnaryCheck.sat_code.
-        + cbn - [asn_regs_ptsto].
-          iPoseProof (@Model.RiscvPmpModel2.gprs_equiv _ RiscvPmpModel2.sailGS2_sailGS_left with "Hgprs₁") as "Hgprs₁".
-          iFrame "Hmstatus₁ Hmtvec₁ Hmcause₁ Hmepc₁ Hcp₁ Hpmp₁ Hgprs₁".
-          admit (* TODO: missing some stuff in the pre and post above :) *).
-        + cbn.
-          iIntros (an) "(Hpc₁ & Hnpc₁ & Hhandler & H & Hmstatus₁ & Hmtvec₁ & Hmcause₁ & Hmepc₁ & Hcurpriv₁ & Hregs₁ & Hpmp₁)".
-          unfold iPOST.
-          iSpecialize ("Hk" with "[$Hmstatus]").
-      -
 
+        
+        iIntros "HPRE". cbn. iApply semWP2_focus.
+        admit. admit.
+
+
+        
+        (* iPoseProof semTriple_n_S as "(H & _)". (* TODO: why does the iApply for this hang? *)
+        iApply "H". iClear "H".
+        iIntros "HPRE". iDestruct ("HPREs" with "HPRE") as "(HPRE1 & HPRE2)". *)
+        (* TODO: CONTINUE
+           This is where I left off before my vacation started.
+           We need a way to split a single instruction off everywhere, reason with
+           it, then we can use the IH for the rest.
+           Defined some lemmas in Verifier.v (suffix _seq, _seq_alt), might be
+           useful?
+           Also note that the current lemma might not be defined correctly yet,
+           maybe we define a "sequencing" style here as well? Need to think some
+           more on this lemma... *)
+        (* iApply (semWP2_focus with "[H1 HPRE1] [H2 HPRE2]"). *)
+        + admit.
+        (* + admit.
+        + iIntros (? ? ? ?) "HPOST". *)
+          (* NOTE: at this point, we should get that v1 = inl tt ∧ v2 = inl tt!
+                   Then we can simplify the match and use the IH to finish the proof. *)
+    Admitted.
+
+    Lemma WP2_loop_split `{sg : sailGS2 Σ} : ∀ PRE POST,
+      PRE -∗
+      (semTriple [env] PRE fun_step POST ∗ (∀ v1 δ1, POST v1 δ1 -∗ WP2_loop)) -∗
+      WP2_loop.
+    Proof.
+      iIntros (PRE POST) "HPRE (Htrip & Hk)".
+      unfold semTriple.
+      iSpecialize ("Htrip" with "HPRE").
+      unfold WP2_loop at 2.
+      cbn [FunDef]. unfold fun_loop.
+      iApply semWP2_seq.
+      iApply semWP2_call_inline.
+      iApply (semWP2_mono with "Htrip").
+      iIntros (v1 δ1 v2 δ2) "(-> & -> & H)".
+      destruct v2 as [v|m].
+      - iSpecialize ("Hk" with "H").
+        now iApply semWP2_call_inline.
+      - now iApply semWP2_fail.
+    Qed.
+
+    Lemma WP2_loop_split_n `{sg : sailGS2 Σ} : ∀ n POST,
+      (semWP2_n n [env] [env] fun_step fun_step POST ∗ (∀ v1 δ1 v2 δ2, POST v1 δ1 v2 δ2 -∗ WP2_loop)) -∗
+      WP2_loop.
+    Proof.
+      iLöb as "IH".
+      iIntros ([] POST) "(Htrip & Hk)".
+      - iApply ("Hk" with "[Htrip]").
+        iSpecialize ("Htrip" $! (inl ()) [env] (inl ()) [env]).
+        iExact "Htrip".
+      - unfold WP2_loop at 4.
+        cbn [FunDef]. unfold fun_loop.
+        iApply semWP2_seq.
+        iApply semWP2_call_inline_later. simpl. iModIntro.
+        iApply (semWP2_mono with "Htrip").
+        iIntros (? ? [] δ2) "(-> & -> & H)".
+        + iApply semWP2_call_inline.
+          destruct (env.view δ2).
+          iApply ("IH" with "[$H $Hk]"). 
+        + now iApply semWP2_fail.
+    Qed.
+
+    Lemma WP2_loop_split_n' `{sg : sailGS2 Σ} : ∀ n PRE POST,
+      PRE -∗
+      (semTriple_n n [env] PRE fun_step POST ∗ (∀ v1 δ1, POST v1 δ1 -∗ WP2_loop)) -∗
+      WP2_loop.
+    Proof.
+      iLöb as "IH".
+      iIntros (n).
+      iInduction n as [|];
+        iIntros (PRE POST) "HPre (Htrip & Hk)".
+      - iSpecialize ("Htrip" with "HPre"). simpl.
+        iApply ("Hk" with "[Htrip]").
+        iSpecialize ("Htrip" $! (inl ()) [env] (inl ()) [env]).
+        iExact "Htrip".
+      - iSpecialize ("Htrip" with "HPre"). simpl.
+        unfold WP2_loop at 6.
+        cbn [FunDef]. unfold fun_loop.
+        iApply semWP2_seq.
+        iApply semWP2_call_inline_later. simpl. iModIntro.
+        iApply (semWP2_mono with "Htrip").
+        iIntros (? ? [] ?) "(-> & -> & H)".
+        + admit.
+        + now iApply semWP2_fail.
+    Abort.
+
+    Lemma contract_step2_verified : ∀ `{sailGS2 Σ}, ⊢ contract_step2.
+    Proof.
+      unfold contract_step2.
+      iIntros (Σ sG a) "HPRE Hk".
+      iApply (WP2_loop_split_n (length code)).
+      iSplitR "Hk".
+      - admit.
+      - iIntros (v1 δ1 v2 δ2) "H". iApply "Hk".
+        iExact "H".
+    Admitted.
   End WithIris.
 
 End RunningExample.
