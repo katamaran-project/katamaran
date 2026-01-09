@@ -73,8 +73,11 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
   Proof. intros. solve_inG. Defined.
 
+  (* mem_res is the predicate representing full ownership of the entire memory
+   * which is given to the verifier in the adequacy lemma.
+   *)
   Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
-    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ st_auth1 (memory_iostate μ) ∗ tr_frag1 (memory_trace μ))%I.
+    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ tr_frag1 (memory_trace μ))%I.
 
   Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
   Proof.
