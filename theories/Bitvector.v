@@ -1481,6 +1481,9 @@ Module bv.
       now rewrite <-truncz_add, truncz_idemp.
     Qed.
 
+    Lemma of_nat_add {n} x y : @add n (of_nat x) (of_nat y) = of_nat (x + y).
+    Proof. now rewrite <- ?of_Z_nat, of_Z_add, Nat2Z.inj_add. Qed.
+
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
     Proof.
       intros n x y. unfold eq2n.
