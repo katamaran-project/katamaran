@@ -332,7 +332,7 @@ Section FunDefKit.
                                        exp_var "cursor" + exp_var "imm"
                                      ] in
        let: p :: bool := call read_allowed (exp_var "perm") in
-       stm_assert p (exp_string "Err: [load] no read permission") ;;                 
+       stm_assert p (exp_string "Err: [load] no read permission") ;;
        let: "tmp" := exp_val ty.perm R in
        use lemma subperm_not_E [exp_var "tmp"; exp_var "perm"] ;;
        use lemma safe_move_cursor [exp_var "c"; exp_var "base_cap"] ;;
@@ -765,7 +765,7 @@ Section FunDefKit.
        use lemma correctPC_subperm_R [exp_var "c"] ;;
        let: n :: ty.memval := call read_mem c in
        match: n with
-       | inl n => 
+       | inl n =>
            let: i :: ty.instr := foreign dI n in
            call exec_instr i
        | inr c => fail "Err [exec]: instructions cannot be capabilities"
