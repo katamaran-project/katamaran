@@ -313,22 +313,32 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
       Context {N : Set}.
 
-      Definition angelic_pattern_match {σ} (pat : Pattern (N:=N) σ)
+      Definition angelic_pattern_match' {σ} (pat : Pattern (N:=N) σ)
         (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
-        _ <- assertSecLeak v;;
         pc <- angelic_finite (PatternCase pat);;
         vs <- angelic_ctx (PatternCaseCtx pc) ;;
         _  <- assert_formula (pattern_match_relval_reverse pat pc vs = v);;
         pure (existT pc vs).
-      #[global] Arguments angelic_pattern_match {σ} pat v.
+      #[global] Arguments angelic_pattern_match' {σ} pat v.
 
-      Definition demonic_pattern_match {σ} (pat : Pattern (N:=N) σ)
+      Definition angelic_pattern_match {σ} (pat : Pattern (N:=N) σ)
         (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
         _ <- assertSecLeak v;;
+        angelic_pattern_match' pat v.
+      #[global] Arguments angelic_pattern_match {σ} pat v.
+
+      Definition demonic_pattern_match' {σ} (pat : Pattern (N:=N) σ)
+        (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
         pc <- demonic_finite (PatternCase pat);;
         vs <- demonic_ctx (PatternCaseCtx pc) ;;
         _  <- assume_formula (pattern_match_relval_reverse pat pc vs = v);;
         pure (existT pc vs).
+      #[global] Arguments demonic_pattern_match' {σ} pat v.
+
+      Definition demonic_pattern_match {σ} (pat : Pattern (N:=N) σ)
+        (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
+        _ <- assertSecLeak v;;
+        demonic_pattern_match' pat v.
       #[global] Arguments demonic_pattern_match {σ} pat v.
 
       (* Definition new_pattern_match {σ} (pat : Pattern (N:=N) σ) *)
@@ -569,6 +579,13 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       Monotonic (MPureSpec eq) (assertSecLeak rv).
     Proof. typeclasses eauto. Qed.
 
+    #[export] Instance mon_angelic_pattern_match' {N σ} (pat : Pattern (N:=N) σ) v :
+      Monotonic (MPureSpec eq) (@angelic_pattern_match' _ _ pat v).
+    Proof. typeclasses eauto. Qed.
+    #[export] Instance mon_demonic_pattern_match' {N σ} (pat : Pattern (N:=N) σ) v :
+      Monotonic (MPureSpec eq) (@demonic_pattern_match' _ _ pat v).
+    Proof. typeclasses eauto. Qed.
+
     #[export] Instance mon_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
       Monotonic (MPureSpec eq) (@angelic_pattern_match _ _ pat v).
     Proof. typeclasses eauto. Qed.
@@ -738,18 +755,6 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       all: firstorder.
     Qed.
 
-    Lemma test (A : Type) (a : option A) (f : A -> Prop) : ssrfun.Option.default False (option_map f a) <-> option.wp f a.
-    Proof.
-      split.
-      - intros.
-        destruct a; cbn in *.
-        + constructor. auto.
-        + contradiction.
-      - intros. destruct a; cbn in *.
-        + inversion H. auto.
-        + inversion H.
-    Qed.
-
     Lemma pattern_match_syncval_inverse_left {N σ} (pat : Pattern (N:=N) σ) v :
       pattern_match_relval_reverse' pat (matchResultToMatchResultRel (pattern_match_val pat v)) =
         SyncVal v.
@@ -758,29 +763,27 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       cbn.
       rewrite unliftNamedEnvOfEnvMapValToRelValIsSyncVal.
       cbn.
-      change (pattern_match_val_reverse pat (projT1 ?x)
-                (projT2 ?x)) with
+      change (pattern_match_val_reverse pat (projT1 ?x) (projT2 ?x)) with
         (pattern_match_val_reverse' pat (pattern_match_val pat v)).
       rewrite pattern_match_val_inverse_left.
       auto.
     Qed.
-    
-    Lemma wp_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
+
+    Lemma wp_angelic_pattern_match' {N σ} (pat : Pattern (N:=N) σ) v
       (Φ : MatchResultRel pat -> Prop) :
-      angelic_pattern_match pat v Φ <->
+      secLeak v /\ angelic_pattern_match' pat v Φ <->
         option.wp Φ (pattern_match_relval pat v)
     .
     Proof.
-      unfold angelic_pattern_match, angelic_finite. cbn.
-      rewrite wp_assertSecLeak.
+      unfold angelic_pattern_match', angelic_finite. cbn.
       rewrite wp_angelic_list. setoid_rewrite wp_angelic_ctx.
       split.
-      - intros (H & (pc & Hin & δpc & <- & Hwp)).
+      - intros (sLv & (pc & Hin & δpc & <- & Hwp)).
         rewrite pattern_match_relval_inverse_right.
-        unfold pattern_match_relval_reverse in H.
+        unfold pattern_match_relval_reverse in sLv.
         destruct ty.unliftNamedEnv.
         easy.
-        cbn in H.
+        cbn in sLv.
         contradiction.
       - set (mr := pattern_match_relval pat v). intros HΦ.
         destruct mr as [mr' | _] eqn:eq.
@@ -808,25 +811,22 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         + cbn in HΦ. inversion HΦ.
     Qed.
 
-    Lemma unliftIsSyncImpliesAllSync {N Γ} (vs : NamedEnv RelVal Γ) (n : NamedEnv Val Γ) (Hvs : ty.unliftNamedEnv vs = SyncVal n) :
-      env.map (λ b : N∷Ty, SyncVal) n = vs.
-    Proof.
-      induction vs.
-      - inversion Hvs. auto.
-      - env.destroy n.
-        cbn in Hvs.
-        destruct db; destruct (ty.unliftNamedEnv vs); try congruence.
-        depelim Hvs.
-        cbn.
-        rewrite IHvs. auto. auto.
-    Qed.
-      
-    Lemma wp_demonic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
+    Lemma wp_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
       (Φ : MatchResultRel pat -> Prop) :
-      demonic_pattern_match pat v Φ <-> option.wp Φ (pattern_match_relval pat v).
+      angelic_pattern_match pat v Φ <->
+        option.wp Φ (pattern_match_relval pat v)
+    .
     Proof.
-      unfold demonic_pattern_match, demonic_finite. cbn.
+      unfold angelic_pattern_match. cbn.
       rewrite wp_assertSecLeak.
+      apply wp_angelic_pattern_match'.
+    Qed.
+
+        Lemma wp_demonic_pattern_match' {N σ} (pat : Pattern (N:=N) σ) v
+      (Φ : MatchResultRel pat -> Prop) :
+      secLeak v /\ demonic_pattern_match' pat v Φ <-> option.wp Φ (pattern_match_relval pat v).
+    Proof.
+      unfold demonic_pattern_match', demonic_finite. cbn.
       rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx.
       split.
       - set (mr := pattern_match_relval pat v). intros (sL & HΦ).
@@ -864,11 +864,20 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
              cbn in H0.
              inversion eq.
              unfold ty.valToRelVal in H0.
-             apply unliftIsSyncImpliesAllSync in Hvs.
+             apply ty.unliftIsSyncImpliesAllSync in Hvs.
              rewrite <- Hvs.
              auto.
           -- inversion eq.  
         + inversion mr.
+    Qed.
+
+    Lemma wp_demonic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
+      (Φ : MatchResultRel pat -> Prop) :
+      demonic_pattern_match pat v Φ <-> option.wp Φ (pattern_match_relval pat v).
+    Proof.
+      unfold demonic_pattern_match. cbn.
+      rewrite wp_assertSecLeak.
+      apply wp_demonic_pattern_match'.
     Qed.
 
     Lemma wp_assert_eq_env {Δ : Ctx Ty} (δ δ' : Env RelVal Δ) :

@@ -236,14 +236,37 @@ Module Type ShallowExecOn
 
     Section PatternMatching.
 
+      Definition demonic_pattern_match' {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ) :
+        CStoreSpec Γ Γ (MatchResultRel pat) :=
+        lift_purespec (CPureSpec.demonic_pattern_match' pat v).
+      #[global] Arguments demonic_pattern_match' {N Γ σ} pat v.
+
       Definition demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ) :
         CStoreSpec Γ Γ (MatchResultRel pat) :=
         lift_purespec (CPureSpec.demonic_pattern_match pat v).
       #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
 
+      Lemma demonic_pattern_match_unfold {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ)
+        (Φ : MatchResultRel pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
+        demonic_pattern_match pat v Φ δ h <-> secLeak v /\ demonic_pattern_match' pat v Φ δ h.
+      Proof.
+        unfold demonic_pattern_match, CPureSpec.demonic_pattern_match, CPureSpec.bind, lift_purespec, CPureSpec.assertSecLeak, CPureSpec.assert_formula, CPureSpec.assert_pathcondition.
+        intuition.
+      Qed.
+
+      Lemma wp_demonic_pattern_match' {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ)
+        (Φ : MatchResultRel pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
+        secLeak v /\ demonic_pattern_match' pat v Φ δ h <->
+          option.wp (fun mr => Φ mr δ h) (pattern_match_relval pat v).
+      Proof.
+        unfold demonic_pattern_match', lift_purespec.
+        now rewrite CPureSpec.wp_demonic_pattern_match'.
+      Qed.
+
       Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ)
         (Φ : MatchResultRel pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
-        demonic_pattern_match pat v Φ δ h <-> option.wp (fun mr => Φ mr δ h) (pattern_match_relval pat v).
+        demonic_pattern_match pat v Φ δ h <->
+          option.wp (fun mr => Φ mr δ h) (pattern_match_relval pat v).
       Proof.
         unfold demonic_pattern_match, lift_purespec.
         now rewrite CPureSpec.wp_demonic_pattern_match.

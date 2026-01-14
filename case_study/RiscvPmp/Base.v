@@ -70,6 +70,7 @@ Proof.
 Defined.
 
 Definition Xlenbits : Set := bv xlenbits.
+Definition XlenbitsRel {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} : Set := RelVal (ty.bvec xlenbits).
 Definition Addr : Set     := bv xlenbits.
 Definition Word : Set     := bv word.
 Definition Byte : Set     := bv byte.
@@ -582,9 +583,8 @@ Module Export RiscvPmpBase <: Base.
   #[export] Instance typedeclkit : TypeDeclKit :=
     {| enumi := Enums;
        unioni := Unions;
-       (* recordi := Records; *)
-    |}
-  .
+       recordi := Records;
+    |}.
 
   (* Override notations of bindigns to put the variable x into string_scope. *)
   Notation "x ∷ t" := (MkB x%string t) : ctx_scope.
@@ -603,7 +603,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_pmpaddrmatchtype               := (ty.enum pmpaddrmatchtype).
   Definition ty_pmpmatch                       := (ty.enum pmpmatch).
   Definition ty_pmpaddrmatch                   := (ty.enum pmpaddrmatch).
-  (* Definition ty_pmp_addr_range                 := (ty.option (ty.prod ty_xlenbits ty_xlenbits)). *)
+  Definition ty_pmp_addr_range                 := (ty.option (ty.prod ty_xlenbits ty_xlenbits)).
   Definition ty_rop                            := (ty.enum rop).
   Definition ty_iop                            := (ty.enum iop).
   Definition ty_sop                            := (ty.enum sop).
@@ -621,10 +621,10 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_memory_op_result (bytes : nat) := (ty.union (memory_op_result bytes)).
   Definition ty_fetch_result                   := (ty.union fetch_result).
   Definition ty_ctl_result                     := (ty.union ctl_result).
-  (* Definition ty_pmpcfg_ent                     := (ty.record rpmpcfg_ent). *)
-  (* Definition ty_mstatus                        := (ty.record rmstatus). *)
-  (* Definition ty_pmpentry                       := (ty.prod ty_pmpcfg_ent ty_xlenbits). *)
-  (* Definition ty_pmpentries                     := (ty.list (ty.prod ty_pmpcfg_ent ty_xlenbits)). *)
+  Definition ty_pmpcfg_ent                     := (ty.record rpmpcfg_ent).
+  Definition ty_mstatus                        := (ty.record rmstatus).
+  Definition ty_pmpentry                       := (ty.prod ty_pmpcfg_ent ty_xlenbits).
+  Definition ty_pmpentries                     := (ty.list (ty.prod ty_pmpcfg_ent ty_xlenbits)).
 
   Definition enum_denote (e : Enums) : Set :=
     match e with
@@ -667,9 +667,8 @@ Module Export RiscvPmpBase <: Base.
   #[export] Instance typedenotekit : TypeDenoteKit typedeclkit :=
     {| enumt := enum_denote;
        uniont := union_denote;
-       (* recordt := record_denote; *)
-    |}
-  .
+       recordt := record_denote;
+    |}.
 
   Definition union_constructor (U : Unions) : Set :=
     match U with
@@ -837,57 +836,54 @@ Module Export RiscvPmpBase <: Base.
                               end
       end.
 
-  (* Definition record_field_type (R : recordi) : NCtx string Ty := *)
-  (*   match R with *)
-  (*   | rpmpcfg_ent => [ "L" ∷ ty.bool; *)
-  (*                      "A" ∷ ty_pmpaddrmatchtype; *)
-  (*                      "X" ∷ ty.bool; *)
-  (*                      "W" ∷ ty.bool; *)
-  (*                      "R" ∷ ty.bool *)
-  (*     ] *)
-  (*   | rmstatus    => ["MPP" ∷ ty_privilege *)
-  (*     ] *)
-  (*   end. *)
+  Definition record_field_type (R : recordi) : NCtx string Ty :=
+    match R with
+    | rpmpcfg_ent => [ "L" ∷ ty.bool;
+                       "A" ∷ ty_pmpaddrmatchtype;
+                       "X" ∷ ty.bool;
+                       "W" ∷ ty.bool;
+                       "R" ∷ ty.bool
+      ]
+    | rmstatus    => ["MPP" ∷ ty_privilege
+      ]
+    end.
 
-  (* Equations record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R := *)
-  (* | rpmpcfg_ent | [l;a;x;w;r]%env := MkPmpcfg_ent l a x w r *)
-  (* | rmstatus    | [mpp]%env       := MkMstatus mpp. *)
+  Equations record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R :=
+  | rpmpcfg_ent | [l;a;x;w;r]%env := MkPmpcfg_ent l a x w r
+  | rmstatus    | [mpp]%env       := MkMstatus mpp.
 
-  (* Equations record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) := *)
-  (* | rpmpcfg_ent | p => [kv (_ ∷ ty.bool             ; L p); *)
-  (*                          (_ ∷ ty_pmpaddrmatchtype ; A p); *)
-  (*                          (_ ∷ ty.bool             ; X p); *)
-  (*                          (_ ∷ ty.bool             ; W p); *)
-  (*                          (_ ∷ ty.bool             ; R p) ]; *)
-  (* | rmstatus    | m => [kv ("MPP" ∷ ty_privilege; MPP m) ]. *)
+  Equations record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) :=
+  | rpmpcfg_ent | p => [kv (_ ∷ ty.bool             ; L p);
+                           (_ ∷ ty_pmpaddrmatchtype ; A p);
+                           (_ ∷ ty.bool             ; X p);
+                           (_ ∷ ty.bool             ; W p);
+                           (_ ∷ ty.bool             ; R p) ];
+  | rmstatus    | m => [kv ("MPP" ∷ ty_privilege; MPP m) ].
 
   #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
     {| unionk           := union_constructor;
        unionk_ty        := union_constructor_type;
-       (* recordf          := string; *)
-       (* recordf_ty       := record_field_type; *)
+       recordf          := string;
+       recordf_ty       := record_field_type;
        unionv_fold      := union_fold;
        unionv_unfold    := union_unfold;
-       (* recordv_fold     := record_fold; *)
-       (* recordv_unfold   := record_unfold; *)
-    |}
-  .
+       recordv_fold     := record_fold;
+       recordv_unfold   := record_unfold;
+    |}.
   Proof.
-  Qed.
-  (* Proof. *)
-  (*   - abstract (intros [] []; now cbn). *)
-  (*   - abstract (intros [] [[] x]; cbn in x; *)
-  (*       repeat match goal with *)
-  (*              | x: unit |- _ => destruct x *)
-  (*              | x: prod _ _ |- _ => destruct x *)
-  (*              end; auto). *)
-  (*   - abstract (now intros [] []). *)
-  (*   - abstract (intros []; now apply env.Forall_forall). *)
-  (* Defined. *)
+    - abstract (intros [] []; now cbn).
+    - abstract (intros [] [[] x]; cbn in x;
+        repeat match goal with
+               | x: unit |- _ => destruct x
+               | x: prod _ _ |- _ => destruct x
+               end; auto).
+    - abstract (now intros [] []).
+    - abstract (intros []; now apply env.Forall_forall).
+  Defined.
 
-  (* Canonical typedeclkit. *)
-  (* Canonical typedenotekit. *)
-  (* Canonical typedefkit. *)
+  Canonical typedeclkit.
+  Canonical typedenotekit.
+  Canonical typedefkit.
 
   #[export] Instance varkit : VarKit := DefaultVarKit.
 
@@ -896,11 +892,11 @@ Module Export RiscvPmpBase <: Base.
     Inductive Reg : Ty -> Set :=
     | pc            : Reg ty_xlenbits
     | nextpc        : Reg ty_xlenbits
-    (* | mstatus       : Reg ty_mstatus *)
+    | mstatus       : Reg ty_mstatus
     | mtvec         : Reg ty_xlenbits
     | mcause        : Reg ty_mcause
     | mepc          : Reg ty_xlenbits
-    (* | cur_privilege : Reg ty_privilege *)
+    | cur_privilege : Reg ty_privilege
     | x1            : Reg ty_xlenbits
     | x2            : Reg ty_xlenbits
     | x3            : Reg ty_xlenbits
@@ -932,8 +928,8 @@ Module Export RiscvPmpBase <: Base.
     | x29           : Reg ty_xlenbits
     | x30           : Reg ty_xlenbits
     | x31           : Reg ty_xlenbits
-    (* | pmp0cfg       : Reg ty_pmpcfg_ent *)
-    (* | pmp1cfg       : Reg ty_pmpcfg_ent *)
+    | pmp0cfg       : Reg ty_pmpcfg_ent
+    | pmp1cfg       : Reg ty_pmpcfg_ent
     | pmpaddr0      : Reg ty_xlenbits
     | pmpaddr1      : Reg ty_xlenbits
     .
@@ -989,11 +985,11 @@ Module Export RiscvPmpBase <: Base.
         match x , y with
         | pc            , pc            => left eq_refl
         | nextpc        , nextpc        => left eq_refl
-        (* | mstatus       , mstatus       => left eq_refl *)
+        | mstatus       , mstatus       => left eq_refl
         | mtvec         , mtvec         => left eq_refl
         | mcause        , mcause        => left eq_refl
         | mepc          , mepc          => left eq_refl
-        (* | cur_privilege , cur_privilege => left eq_refl *)
+        | cur_privilege , cur_privilege => left eq_refl
         | x1            , x1            => left eq_refl
         | x2            , x2            => left eq_refl
         | x3            , x3            => left eq_refl
@@ -1025,8 +1021,8 @@ Module Export RiscvPmpBase <: Base.
         | x29           , x29           => left eq_refl
         | x30           , x30           => left eq_refl
         | x31           , x31           => left eq_refl
-        (* | pmp0cfg       , pmp0cfg       => left eq_refl *)
-        (* | pmp1cfg       , pmp1cfg       => left eq_refl *)
+        | pmp0cfg       , pmp0cfg       => left eq_refl
+        | pmp1cfg       , pmp1cfg       => left eq_refl
         | pmpaddr0      , pmpaddr0      => left eq_refl
         | pmpaddr1      , pmpaddr1      => left eq_refl
         | _             , _             => right _
@@ -1040,11 +1036,11 @@ Module Export RiscvPmpBase <: Base.
       {| enum :=
         [ existT _ pc;
           existT _ nextpc;
-          (* existT _ mstatus; *)
+          existT _ mstatus;
           existT _ mtvec;
           existT _ mcause;
           existT _ mepc;
-          (* existT _ cur_privilege; *)
+          existT _ cur_privilege;
           existT _ x1;
           existT _ x2;
           existT _ x3;
@@ -1076,8 +1072,8 @@ Module Export RiscvPmpBase <: Base.
           existT _ x29;
           existT _ x30;
           existT _ x31;
-          (* existT _ pmp0cfg; *)
-          (* existT _ pmp1cfg; *)
+          existT _ pmp0cfg;
+          existT _ pmp1cfg;
           existT _ pmpaddr0;
           existT _ pmpaddr1
         ]%list
@@ -1088,12 +1084,12 @@ Module Export RiscvPmpBase <: Base.
   Section Inhabited.
       #[export] Instance val_inhabited σ: Inhabited (Val σ).
       Proof. generalize dependent σ.
-            induction σ as [| | | | | | (* | E | | | *) U (* | R *)]; try apply _; cbn.
-            (* - destruct E; repeat constructor. *)
-            (* - induction σs; first apply _. *)
-            (*   cbn. inversion IH. apply prod_inhabited; [apply IHσs |]; auto. *)
+            induction σ as [| | | | | | | E | | | U | R]; try apply _; cbn.
+            - destruct E; repeat constructor.
+            - induction σs; first apply _.
+              cbn. inversion IH. apply prod_inhabited; [apply IHσs |]; auto.
             - destruct U;  repeat constructor. all: try apply bv.bv_inhabited.
-            (* - destruct R;  repeat constructor. *)
+            - destruct R;  repeat constructor.
       Qed.
 
   End Inhabited.

@@ -223,6 +223,12 @@ Module ty.
         rewrite Rfg; auto.
     Qed.
 
+    Lemma liftUnOpRVId {A} (rv : RV A) :
+      liftUnOpRV id rv = rv.
+    Proof.
+      destruct rv; auto.
+    Qed.
+
     Lemma comProjLeftRVLiftUnOpRV {A B} (f : A -> B) (rv : RV A) :
       projLeftRV (liftUnOpRV f rv) = f (projLeftRV rv).
     Proof.
@@ -258,6 +264,12 @@ Module ty.
       intros f g Rfg rv1 rv1' eq1 rv2 rv2' eq2.
       destruct rv1, rv2, rv1', rv2'; cbn; inversion eq1; inversion eq2;
         rewrite Rfg; auto.
+    Qed.
+
+    Lemma liftBinOpRVNonSync2 {A B C} (f : A -> B -> C) (rv : RV A) v1 v2 :
+      liftBinOpRV f rv (NonSyncVal v1 v2) = NonSyncVal (f (projLeftRV rv) v1) (f (projRightRV rv) v2).
+    Proof.
+      destruct rv; auto.
     Qed.
 
     Lemma comProjLeftRVLiftBinOpRV {A B C} (f : A -> B -> C) (rv1 : RV A) (rv2 : RV B) :
@@ -301,6 +313,27 @@ Module ty.
       intros f g Rfg rv rv' eq.
       destruct rv, rv'; cbn; inversion eq;
         rewrite Rfg; auto.
+    Qed.
+
+    Lemma liftUnOpRVSyncVal {A B} (f : A -> B) (rv : RV A) (v : B) :
+      liftUnOpRV f rv = SyncVal v ->
+      ∃ v', rv = SyncVal v' /\ f v' = v. 
+    Proof.
+      intros.
+      destruct rv.
+      - eexists; intuition. cbn in *. now inversion H.
+      - cbn in H. inversion H.
+    Qed.
+
+    Lemma liftUnOpRVNonSyncVal {A B} (f : A -> B) (rv : RV A) (v1 v2 : B) :
+      liftUnOpRV f rv = NonSyncVal v1 v2 ->
+      ∃ v1' v2', rv = NonSyncVal v1' v2' /\ f v1' = v1 /\ f v2' = v2. 
+    Proof.
+      intros.
+      destruct rv.
+      - exists a; intuition. cbn in *. now inversion H.
+      - cbn in H. inversion H.
+        now exists a, a0.
     Qed.
 
     Lemma comProjLeftLiftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) :
@@ -377,6 +410,36 @@ Module ty.
     Proof.
       destruct rv1, rv2; auto.
     Qed.
+
+    Lemma liftBinOpRVUnOpRV1ToBinOpRV {A B C D} (fBin : A -> B -> C) (fUn : D -> A) rv1 rv2 :
+      liftBinOpRV fBin
+        (liftUnOpRV fUn rv1) rv2 =  liftBinOpRV (fun v1 v2 => fBin (fUn v1) v2) rv1 rv2.
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Lemma liftBinOpUnOp1ToBinOp {σ1 σ2 σ3 σ4} (fUn : Val σ4 -> Val σ1) (fBin : Val σ1 -> Val σ2 -> Val σ3) rv1 rv2 :
+      liftBinOp fBin
+        (liftUnOp fUn rv1) rv2 =  liftBinOp (fun v1 v2 => fBin (fUn v1) v2) rv1 rv2.
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Lemma liftBinOpRVUnOpRV2ToBinOpRV {A B C D} (fBin : A -> B -> C) (fUn : D -> B) rv1 rv2 :
+      liftBinOpRV fBin rv1 (liftUnOpRV fUn rv2) =
+        liftBinOpRV (fun v1 v2 => fBin v1 (fUn v2)) rv1 rv2.
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+    Lemma liftBinOpUnOp2ToBinOp {σ1 σ2 σ3 σ4} (fBin : Val σ1 -> Val σ2 -> Val σ3) (fUn : Val σ4 -> Val σ2) rv1 rv2 :
+      liftBinOp fBin rv1 (liftUnOp fUn rv2) =
+        liftBinOp (fun v1 v2 => fBin v1 (fUn v2)) rv1 rv2.
+    Proof.
+      destruct rv1, rv2; auto.
+    Qed.
+
+
 
     Ltac removeLiftBinOp :=
     repeat match goal with
@@ -455,15 +518,16 @@ Module ty.
     Definition nonsyncNamedEnv {N} {Γ : NCtx N Ty} : NamedEnv Val Γ -> NamedEnv Val Γ -> NamedEnv RelVal Γ :=
       env.zipWith (fun b => NonSyncVal).
 
+    Fixpoint unliftEnv {Γ : Ctx Ty} (vs : Env RelVal Γ) : RV (Env Val Γ) :=
+      match vs with
+      | []%env => SyncVal []%env
+      | env.snoc vs k v => liftBinOpRV (fun x y => env.snoc x k y) (unliftEnv vs) v
+      end.
+
     Fixpoint unliftNamedEnv {N} {Γ : NCtx N Ty} (vs : NamedEnv RelVal Γ) : RV (NamedEnv Val Γ) :=
       match vs with
       | []%env => SyncVal []%env
-      | env.snoc vs k v =>
-          match (v , unliftNamedEnv vs) with
-          | (SyncVal v' , SyncVal vs') => SyncVal (vs' .[ k ↦ v'])
-          | (_ , SyncVal vs') => NonSyncVal (vs' .[ k ↦ projLeft v ]) (vs' .[ k ↦ projRight v ])
-          | (_ , NonSyncVal vs1' vs2') => NonSyncVal (vs1' .[ k ↦ projLeft v ]) (vs2' .[ k ↦ projRight v ])
-          end
+      | env.snoc vs k v => liftBinOpRV (fun x y => env.snoc x k y) (unliftNamedEnv vs) v
       end.
 
     Lemma unliftSyncNamedEnvIsSync {N} {Γ : NCtx N Ty} (nenv : NamedEnv Val Γ) :
@@ -483,14 +547,66 @@ Module ty.
       end.
 
 
+    Lemma projLeftRVunliftNamedEnv {N : Set} {Γ : NCtx N Ty}
+      (nenv : NamedEnv RelVal Γ) :
+      projLeftRV (unliftNamedEnv nenv) = env.map (fun b rv => projLeft (A := type b) rv) nenv.
+    Proof.
+      induction nenv.
+      - auto.
+      - cbn. rewrite comProjLeftRVLiftBinOpRV.
+        change (@Env (N∷@Ty TDC) (λ xt : N∷@Ty TDC, @Val TDC TDN (@type _ _ xt)) Γ) with (@NamedEnv N (@Ty TDC) (@Val TDC TDN) Γ).
+        now rewrite IHnenv.
+    Qed.
+
+    Lemma projRightRVunliftNamedEnv {N : Set} {Γ : NCtx N Ty}
+      (nenv : NamedEnv RelVal Γ) :
+      projRightRV (unliftNamedEnv nenv) = env.map (fun b rv => projRight (A := type b) rv) nenv.
+    Proof.
+      induction nenv.
+      - auto.
+      - cbn. rewrite comProjRightRVLiftBinOpRV.
+        change (@Env (N∷@Ty TDC) (λ xt : N∷@Ty TDC, @Val TDC TDN (@type _ _ xt)) Γ) with (@NamedEnv N (@Ty TDC) (@Val TDC TDN) Γ).
+        now rewrite IHnenv.
+    Qed.
+
+    Lemma unliftEnvSnoc {Γ} (E : Env RelVal Γ) db v :
+      unliftEnv (env.snoc E db v) =
+        liftBinOpRV (fun x y => env.snoc (Γ := Γ) x db y)  (unliftEnv E) v.
+    Proof.
+      cbn.
+      destruct v; destruct (unliftEnv E); auto.
+    Qed.
+
+    Lemma unliftNamedEnvSnoc {N' : Set} {Γ : NCtx N' ty.Ty} (E : NamedEnv RelVal Γ) db v :
+      unliftNamedEnv (env.snoc E db v) =
+        liftBinOpRV (fun x y => env.snoc (Γ := Γ) x db y)  (unliftNamedEnv E) v.
+    Proof.
+      cbn.
+      destruct v; destruct (unliftNamedEnv E); auto.
+    Qed.
+
+    Lemma unliftIsSyncImpliesAllSync {N Γ} (vs : NamedEnv RelVal Γ) (n : NamedEnv Val Γ) (Hvs : unliftNamedEnv vs = SyncVal n) :
+      env.map (λ b : N∷Ty, SyncVal) n = vs.
+    Proof.
+      induction vs.
+      - inversion Hvs. auto.
+      - env.destroy n.
+        depelim Hvs.
+        destruct db.
+        + destruct (unliftNamedEnv vs); cbn in *; try congruence.
+          depelim H.
+          rewrite IHvs; auto.
+        + destruct (unliftNamedEnv vs); cbn in *; try congruence.
+    Qed.
+
     Fixpoint listOfRVToRVOfList {A} (rv_list : (Datatypes.list (RV A))) : RV (Datatypes.list A) :=
       match rv_list with
       | nil => SyncVal nil
       | (x :: l)%list => liftBinOpRV cons x (listOfRVToRVOfList l)
       end.
 
-    (* Definition listOfRelValToRelValOfList {A} (rv_list : (Datatypes.list (RelVal A))) : RelVal (list A) := *)
-    (*   listOfRVToRVOfList rv_list. *)
+    Definition listOfRelValToRelValOfList {A} (rv_list : (Datatypes.list (RelVal A))) : RelVal (list A) :=
+      listOfRVToRVOfList rv_list.
 
     Definition RVOfPairToPairOfRV {σ1 σ2} (rv : RV (σ1 * σ2)) : RV σ1 * RV σ2 :=
       match rv with
@@ -539,20 +655,35 @@ Module ty.
       vecOfRVToRVOfVec rv_vec
       .
 
-      Fixpoint unliftEnv {Γ : Ctx Ty} (vs : Env RelVal Γ) : RV (Env Val Γ) :=
-        match vs with
-        | []%env => SyncVal []%env
-        | env.snoc vs k v =>
-            match (v , unliftEnv vs) with
-            | (SyncVal v' , SyncVal vs') => SyncVal (vs' ► (k ↦ v'))
-            | (_ , SyncVal vs') => NonSyncVal (vs' ► (k ↦ projLeft v)) (vs' ► (k ↦ projRight v))
-            | (_ , NonSyncVal vs1' vs2') => NonSyncVal (vs1' ► (k ↦ projLeft v)) (vs2'► (k ↦ projRight v))
-            end
-        end.
-
       Definition envToRelValTuple {Γ} (H : Env RelVal Γ) :
         RelVal (tuple Γ) :=
         liftUnOpRV (envrec.of_env (σs := Γ)) (unliftEnv H).
+
+      Definition pairToTuple {σs σ} (rvtup : Val (tuple σs)) (rv : Val σ) :
+        Val (tuple (σs ▻ σ)) :=
+        (rvtup, rv).
+
+      Definition pairOfRelValToRelValTuple {σs σ} (rvtup : RelVal (tuple σs)) (rv : RelVal σ) :
+        RelVal (tuple (σs ▻ σ)) :=
+        liftBinOp (σ3 := ty.tuple (σs ▻ σ)) (fun vtup v => pairToTuple vtup v) rvtup rv.
+
+      Lemma comProjLeftPairOfRelValToRelValTuple {σs : Ctx Ty} {σ : Ty}
+        (rvtup : RelVal (tuple σs)) (rv : RelVal σ) :
+        projLeft (pairOfRelValToRelValTuple rvtup rv) = (projLeft rvtup, projLeft rv).
+      Proof.
+        unfold pairOfRelValToRelValTuple.
+        rewrite comProjLeftLiftBinOp.
+        auto.
+      Qed.
+
+      Lemma comProjRightPairOfRelValToRelValTuple {σs : Ctx Ty} {σ : Ty}
+        (rvtup : RelVal (tuple σs)) (rv : RelVal σ) :
+        projRight (pairOfRelValToRelValTuple rvtup rv) = (projRight rvtup, projRight rv).
+      Proof.
+        unfold pairOfRelValToRelValTuple.
+        rewrite comProjRightLiftBinOp.
+        auto.
+      Qed.
 
       Definition sumOfRelValToRelValOfSum {σ1 σ2} (rv : RelVal σ1 + RelVal σ2) :
         RelVal (ty.sum σ1 σ2) :=
@@ -560,6 +691,8 @@ Module ty.
         | inl rv => liftUnOp (σ2 := ty.sum σ1 σ2) inl rv
         | inr rv => liftUnOp (σ2 := ty.sum σ1 σ2) inr rv
         end.
+
+    
 
   End WithTypeDenote.
 
@@ -731,14 +864,16 @@ Module ty.
     Qed.
 
     Set Equations With UIP.
-    Lemma unionv_fold_rel_inj {U} {K : unionk U} (v1 v2 : RelVal (unionk_ty U K)) :
-      unionv_fold_rel U (existT K v1) = unionv_fold_rel U (existT K v2) <-> v1 = v2.
+    Lemma unionv_fold_rel_inj {U}  (v1 v2 : {K : unionk U & RelVal (unionk_ty U K)}) :
+      unionv_fold_rel U v1 = unionv_fold_rel U v2 <-> v1 = v2.
     Proof.
       split; intro H; [|now subst].
       apply (f_equal (unionv_unfold_rel U)) in H.
       setoid_rewrite unionv_unfold_fold_rel in H.
-      apply liftUnOpRV_inj in H; auto.
-      intros a b eq. now dependent elimination eq.
+      depelim v1. depelim v2.
+      destruct r, r0; cbn in *; try congruence.
+      - inversion H. now depelim H2.
+      - inversion H. depelim H2. now depelim H4.
     Qed.
     Unset Equations With UIP.
 
@@ -792,13 +927,13 @@ Module ty.
   #[global] Arguments int {TK}.
   #[global] Arguments bool {TK}.
   #[global] Arguments string {TK}.
-  (* #[global] Arguments list {TK} σ. *)
+  #[global] Arguments list {TK} σ.
   #[global] Arguments prod {TK} σ τ.
-  (* #[global] Arguments sum {TK} σ τ. *)
+  #[global] Arguments sum {TK} σ τ.
   #[global] Arguments unit {TK}.
   #[global] Arguments enum {TK} E.
   #[global] Arguments bvec {TK} n%_nat_scope.
-  (* #[global] Arguments tuple {TK} σs%_ctx_scope. *)
+  #[global] Arguments tuple {TK} σs%_ctx_scope.
   #[global] Arguments union {TK} U.
   #[global] Arguments record {TK} R.
 

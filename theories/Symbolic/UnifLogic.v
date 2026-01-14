@@ -685,14 +685,18 @@ Module Type UnifLogicOn
       eqₚ (w := w) (term_val σ v) (term_val σ v) ⊣⊢ True.
     Proof. unfold eqₚ. crushPredEntails3. Qed.
 
-    (* Lemma rep_term_cons {w : World} {σ : Ty} {t : STerm σ w} {ts : STerm (ty.list σ) w} {v vs} : *)
-    (*   repₚ v t ∗ repₚ (T := STerm (ty.list σ)) vs ts ⊣⊢ repₚ (T := STerm (ty.list σ)) (v :: vs) (term_binop bop.cons t ts). *)
-    (* Proof. unfold repₚ. crushPredEntails3; try (now subst); now inversion H0. Qed. *)
+    Search Term Inst.
 
-    (* Lemma eq_term_cons {w : World} {σ : Ty} {t1 t2 : STerm σ w} {ts1 ts2 : STerm (ty.list σ) w} : *)
-    (*   eqₚ (T := STerm (ty.list σ)) (term_binop bop.cons t1 ts1) (term_binop bop.cons t2 ts2) ⊣⊢ *)
-    (*     eqₚ t1 t2 ∗ eqₚ (T := STerm (ty.list σ)) ts1 ts2. *)
-    (* Proof. crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed. *)
+    Lemma rep_term_cons {w : World} {σ : Ty} {t : STerm σ w} {ts : STerm (ty.list σ) w} {v vs} :
+      repₚ v t ∗ repₚ (T := STerm (ty.list σ)) vs ts ⊢ repₚ (T := STerm (ty.list σ)) (ty.liftBinOpRV cons v vs) (term_binop bop.cons t ts).
+    Proof.
+      unfold repₚ. crushPredEntails3; try (now subst).
+    Qed.
+
+    Lemma eq_term_cons {w : World} {σ : Ty} {t1 t2 : STerm σ w} {ts1 ts2 : STerm (ty.list σ) w} :
+      eqₚ t1 t2 ∗ eqₚ (T := STerm (ty.list σ)) ts1 ts2 ⊢
+      eqₚ (T := STerm (ty.list σ)) (term_binop bop.cons t1 ts1) (term_binop bop.cons t2 ts2).
+    Proof. crushPredEntails3; try (now inversion H0); now cbn; f_equal. Qed.
 
     Set Equations With UIP.
 
@@ -711,14 +715,20 @@ Module Type UnifLogicOn
       repₚ (T := STerm _) (ty.unionv_fold_rel U (existT K rv)) (term_union U K t) ⊣⊢ repₚ (T := STerm _) rv t.
     Proof.
       unfold repₚ; crushPredEntails3; try (now subst).
-      by apply ty.unionv_fold_rel_inj in H0.
+      change (ty.liftUnOp (σ2 := ty.union _) (λ v : Val (unionk_ty U K), unionv_fold U (existT K v)) ?a) with
+        (ty.unionv_fold_rel U (existT K a)) in H0.
+      apply ty.unionv_fold_rel_inj in H0.
+      by depelim H0.
     Qed.
 
     Lemma eqₚ_unionv_fold {w : World} {U} {K : unionk U} {t1 t2 : STerm (unionk_ty U K) w} :
       eqₚ (T := STerm _) (term_union U K t1) (term_union U K t2) ⊣⊢ eqₚ (T := STerm _) t1 t2.
     Proof.
       unfold eqₚ; crushPredEntails3.
-      - by apply ty.unionv_fold_rel_inj.
+      - change (ty.liftUnOp (σ2 := ty.union _) (λ v : Val (unionk_ty U K), unionv_fold U (existT K v)) ?a) with
+          (ty.unionv_fold_rel U (existT K a)) in H0.
+        apply ty.unionv_fold_rel_inj in H0.
+        by depelim H0.
       - now rewrite H0.
     Qed.
 
@@ -809,19 +819,27 @@ Module Type UnifLogicOn
       crushPredEntails3.
     Qed.
 
-    (* Lemma repₚ_inversion_term_inl {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svl : STerm σ w) : *)
-    (*   (repₚ v (term_inl svl) : Pred w) ⊢ ∃ (vl : Val σ), ⌜ v = inl vl ⌝ ∗ repₚ vl svl. *)
-    (* Proof. *)
-    (*   unfold repₚ. *)
-    (*   destruct v; crushPredEntails3; now inversion H0. *)
-    (* Qed. *)
+    Lemma repₚ_inversion_term_inl {σ τ} (v : RelVal (ty.sum σ τ)) {w : World} (svl : STerm σ w) :
+      (repₚ v (term_inl svl) : Pred w) ⊢ ∃ (vl : RelVal σ), ⌜ v = ty.sumOfRelValToRelValOfSum (inl vl) ⌝ ∗ repₚ vl svl.
+    Proof.
+      unfold repₚ.
+      destruct v; crushPredEntails3.
+      + cbn. destruct inst; cbn in *; inversion H0.
+        eexists. intuition. constructor.
+      + cbn. destruct inst; cbn in *; inversion H0.
+        eexists. intuition. constructor.
+    Qed.
 
-    (* Lemma repₚ_inversion_term_inr {σ τ} (v : Val (ty.sum σ τ)) {w : World} (svr : STerm τ w) : *)
-    (*   (repₚ v (term_inr svr) : Pred w) ⊢ ∃ vr, ⌜ v = inr vr ⌝ ∗ repₚ vr svr. *)
-    (* Proof. *)
-    (*   unfold repₚ. *)
-    (*   destruct v; crushPredEntails3; now inversion H0. *)
-    (* Qed. *)
+    Lemma repₚ_inversion_term_inr {σ τ} (v : RelVal (ty.sum σ τ)) {w : World} (svr : STerm τ w) :
+      (repₚ v (term_inr svr) : Pred w) ⊢ ∃ vr, ⌜ v = ty.sumOfRelValToRelValOfSum (inr vr) ⌝ ∗ repₚ vr svr.
+    Proof.
+      unfold repₚ.
+      destruct v; crushPredEntails3.
+      + cbn. destruct inst; cbn in *; inversion H0.
+        eexists. intuition. constructor.
+      + cbn. destruct inst; cbn in *; inversion H0.
+        eexists. intuition. constructor.
+    Qed.
 
     Lemma repₚ_inversion_term_unsigned {n} (v : RelVal ty.int) {w : World} (sbv : STerm (ty.bvec n) w) :
       (repₚ v (term_unsigned sbv) : Pred w)
@@ -839,31 +857,37 @@ Module Type UnifLogicOn
       now exists (inst_term sbv ι).
     Qed.
 
-    (* Lemma repₚ_inversion_record {R} {w : World} {v : recordt R} {svs : NamedEnv (λ τ : Ty, Term w τ) (recordf_ty R)} : *)
-    (*   repₚ (T := STerm (ty.record R)) v (term_record R svs) ⊣⊢ *)
-    (*     ∃ (vs : NamedEnv Val (recordf_ty R)), ⌜ v = recordv_fold R vs ⌝ ∗ repₚ vs svs. *)
-    (* Proof. *)
-    (*   unfold repₚ. crushPredEntails3. *)
-    (*   - exists (recordv_unfold R v). *)
-    (*     rewrite recordv_fold_unfold. *)
-    (*     crushPredEntails3. *)
-    (*     now rewrite <-H0, recordv_unfold_fold. *)
-    (*   - now subst. *)
-    (* Qed. *)
+    Lemma unliftNonEmptyNonsyncNamedEnvIsNonSync {N} {Γ : NCtx N Ty} (nenv1 nenv2 : NamedEnv Val Γ) :
+      Γ ≠ [ctx] -> ty.unliftNamedEnv (ty.nonsyncNamedEnv nenv1 nenv2) = NonSyncVal nenv1 nenv2.
+    Proof.
+      induction nenv1; env.destroy nenv2.
+      - tauto.
+      - cbn in *. intros _. rewrite ty.liftBinOpRVNonSync2; cbn.
+        rewrite ty.projRightRVunliftNamedEnv ty.projLeftRVunliftNamedEnv.
+        rewrite !env.map_zipWith.
+        rewrite env.zipWith1 env.zipWith2.
+        now rewrite !env.map_id.
+    Qed.
 
-    (* Lemma repₚ_inversion_union {U} (K : unionk U) {v : Val (ty.union U)} *)
-    (*   {w : World} {st : STerm (unionk_ty U K) w} : *)
-    (*   repₚ (T := STerm (ty.union U)) v (term_union U K st) ⊢ *)
-    (*     ∃ (t : Val (unionk_ty U K)), ⌜ v = unionv_fold U (existT K t) ⌝ ∗ repₚ t st. *)
-    (* Proof. *)
-    (*   unfold repₚ. crushPredEntails3. *)
-    (*   destruct (unionv_unfold U v) as [K' t] eqn:Heqv . *)
-    (*   rewrite <-H0 in Heqv. *)
-    (*   rewrite unionv_unfold_fold in Heqv. *)
-    (*   dependent elimination Heqv. *)
-    (*   exists (inst (st : STerm _ w) ι). *)
-    (*   now crushPredEntails3. *)
-    (* Qed. *)
+    Lemma repₚ_inversion_record {R} {w : World} {v : RelVal (ty.record R)} {svs : NamedEnv (λ τ : Ty, Term w τ) (recordf_ty R)} :
+      repₚ (T := STerm (ty.record R)) v (term_record R svs) ⊣⊢
+        ∃ (vs : NamedEnv RelVal (recordf_ty R)), ⌜ v = ty.recordv_fold_rel R vs ⌝ ∗ repₚ vs svs.
+    Proof.
+      unfold repₚ. crushPredEntails3.
+      - exists (inst_env (S := fun w xt => Term w (type xt)) svs ι).
+        now crushPredEntails3.
+      - now rewrite H1.
+    Qed.
+
+    Lemma repₚ_inversion_union {U} (K : unionk U) {v : RelVal (ty.union U)}
+      {w : World} {st : STerm (unionk_ty U K) w} :
+      repₚ (T := STerm (ty.union U)) v (term_union U K st) ⊢
+        ∃ (t : RelVal (unionk_ty U K)), ⌜ v = ty.unionv_fold_rel U (existT K t) ⌝ ∗ repₚ t st.
+    Proof.
+      unfold repₚ. crushPredEntails3.
+      exists (inst (st : STerm _ w) ι).
+      now crushPredEntails3.
+    Qed.
 
     Section WithEnvironments.
       Import ctx.notations.
@@ -2097,33 +2121,40 @@ Module Type UnifLogicOn
       - destruct inst, inst, v1, v2; inversion H0; inversion H1; auto.
     Qed.
 
-    (* Lemma RVal_union_invertK {U : unioni} {K1 K2 : unionk U} {vf : Val (unionk_ty U K1)} {w : World} {tf : Term w (unionk_ty U K2)} : *)
-    (*   ℛ⟦RVal (ty.union U)⟧ (unionv_fold U (existT K1 vf)) (term_union U K2 tf) ⊢ bi_pure (K1 = K2). *)
-    (* Proof. *)
-    (*   unfold RVal, RInst, repₚ; crushPredEntails3. *)
-    (*   rewrite unionv_fold_inj in H0. *)
-    (*   now inversion H0. *)
-    (* Qed. *)
+    Lemma RVal_union_invertK {U : unioni} {K1 K2 : unionk U} {vf : RelVal (unionk_ty U K1)} {w : World} {tf : Term w (unionk_ty U K2)} :
+      ℛ⟦RVal (ty.union U)⟧ (ty.unionv_fold_rel U (existT K1 vf)) (term_union U K2 tf) ⊢ bi_pure (K1 = K2).
+    Proof.
+      unfold RVal, RInst, repₚ; crushPredEntails3.
+      change (ty.liftUnOp (σ2 := ty.union _) (λ v : Val (unionk_ty U K2), unionv_fold U (existT K2 v)) ?a) with
+        (ty.unionv_fold_rel U (existT K2 a)) in H0.
+      change (ty.liftUnOp (σ2 := ty.union _) (λ v : Val (unionk_ty U K1), unionv_fold U (existT K1 v)) ?a) with
+        (ty.unionv_fold_rel U (existT K1 a)) in H0.
+      apply ty.unionv_fold_rel_inj in H0.
+      now inversion H0.
+    Qed.
 
-    (* Lemma RVal_union {U : unioni} {K : unionk U} {vf : Val (unionk_ty U K)} {w : World} {tf : Term w (unionk_ty U K)} : *)
-    (*   ℛ⟦RVal (ty.union U)⟧ (unionv_fold U (existT K vf)) (term_union U K tf) ⊣⊢ *)
-    (*     ℛ⟦RVal (unionk_ty U K)⟧ vf tf. *)
-    (* Proof. *)
-    (*   unfold RVal, RInst, repₚ; crushPredEntails3; last by subst. *)
-    (*   rewrite unionv_fold_inj in H0. *)
-    (*   now apply inj_right_pair in H0. *)
-    (* Qed. *)
+    Lemma RVal_union {U : unioni} {K : unionk U} {vf : RelVal (unionk_ty U K)} {w : World} {tf : Term w (unionk_ty U K)} :
+      ℛ⟦RVal (ty.union U)⟧ (ty.unionv_fold_rel U (existT K vf)) (term_union U K tf) ⊣⊢
+        ℛ⟦RVal (unionk_ty U K)⟧ vf tf.
+    Proof.
+      unfold RVal, RInst, repₚ; crushPredEntails3; last by subst.
+      change (ty.liftUnOp (σ2 := ty.union _) (λ v : Val (unionk_ty U K), unionv_fold U (existT K v)) ?a) with
+        (ty.unionv_fold_rel U (existT K a)) in H0.
+      rewrite ty.unionv_fold_rel_inj in H0.
+      now apply inj_right_pair in H0.
+    Qed.
 
-    (* Lemma refine_tuple_pattern_match_env {N Δ σs} {p : TuplePat σs Δ} {w : World} : *)
-    (*   ⊢ ℛ⟦REnv σs -> RNEnv N Δ⟧ (tuple_pattern_match_env p) (tuple_pattern_match_env (T := Term w) p). *)
-    (* Proof. *)
-    (*   iIntros (e se) "He". iStopProof. *)
-    (*   unfold RNEnv, REnv, RInst, repₚ. *)
-    (*   crushPredEntails3; subst. *)
-    (*   now rewrite inst_tuple_pattern_match. *)
-    (* Qed. *)
+    Lemma refine_tuple_pattern_match_env {N Δ σs} {p : TuplePat σs Δ} {w : World} :
+      ⊢ ℛ⟦REnv σs -> RNEnv N Δ⟧ (tuple_pattern_match_env p) (tuple_pattern_match_env (T := Term w) p).
+    Proof.
+      iIntros (e se) "He". iStopProof.
+      unfold RNEnv, REnv, RInst, repₚ.
+      crushPredEntails3; subst.
+      now rewrite inst_tuple_pattern_match.
+    Qed.
 
-    (* Lemma RVal_tuple {σs} {v : Val (ty.tuple σs)} {w : World} {a : Env (Term w) σs} : *)
+    (* Seems to only be needed in newpattern_match *)
+    (* Lemma RVal_tuple {σs} {v : RelVal (ty.tuple σs)} {w : World} {a : Env (Term w) σs} : *)
     (*   ℛ⟦RVal (ty.tuple σs)⟧ v (term_tuple a) ⊣⊢ ℛ⟦REnv σs⟧ (envrec.to_env σs v) a. *)
     (* Proof. *)
     (*   unfold RVal, REnv, RInst, repₚ. *)
@@ -2132,18 +2163,18 @@ Module Type UnifLogicOn
     (*   - now rewrite H0 envrec.of_to_env. *)
     (* Qed. *)
 
-    (* Lemma refine_record_pattern_match_env {N R Δ} {p : RecordPat (recordf_ty R) Δ} {w : World} *)
-    (*   {e} {se : NamedEnv (Term w) (recordf_ty R)} : *)
-    (*   ℛ⟦RNEnv recordf (recordf_ty R)⟧ e se ⊣⊢ *)
-    (*     ℛ⟦RNEnv N Δ⟧ (record_pattern_match_env p e) (record_pattern_match_env p se). *)
-    (* Proof. *)
-    (*   unfold RNEnv, RInst, repₚ. *)
-    (*   crushPredEntails3; subst. *)
-    (*   - now rewrite inst_record_pattern_match. *)
-    (*   - rewrite inst_record_pattern_match in H0. *)
-    (*     apply (f_equal (record_pattern_match_env_reverse p)) in H0. *)
-    (*     now rewrite !record_pattern_match_env_inverse_left in H0. *)
-    (* Qed. *)
+    Lemma refine_record_pattern_match_env {N R Δ} {p : RecordPat (recordf_ty R) Δ} {w : World}
+      {e} {se : NamedEnv (Term w) (recordf_ty R)} :
+      ℛ⟦RNEnv recordf (recordf_ty R)⟧ e se ⊣⊢
+        ℛ⟦RNEnv N Δ⟧ (record_pattern_match_env p e) (record_pattern_match_env p se).
+    Proof.
+      unfold RNEnv, RInst, repₚ.
+      crushPredEntails3; subst.
+      - now rewrite inst_record_pattern_match.
+      - rewrite inst_record_pattern_match in H0.
+        apply (f_equal (record_pattern_match_env_reverse p)) in H0.
+        now rewrite !record_pattern_match_env_inverse_left in H0.
+    Qed.
 
     (* Lemma RVal_record {R} {w : World} {v : NamedEnv Val (recordf_ty R)} {a : NamedEnv (Term w) (recordf_ty R)} : *)
     (*   ℛ⟦RNEnv recordf (recordf_ty R)⟧ v a ⊣⊢ *)
@@ -2155,7 +2186,7 @@ Module Type UnifLogicOn
     (*   now rewrite !recordv_unfold_fold in H0. *)
     (* Qed. *)
 
-    (* Lemma RVal_invert_inl {σ τ} {v} {w : World} {sl : Term w σ} :  *)
+    (* Lemma RVal_invert_inl {σ τ} {v} {w : World} {sl : Term w σ} : *)
     (*   ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inl sl) ⊢ ∃ (vl : Val σ), bi_pure (v = inl vl) ∗ ℛ⟦RVal σ⟧ vl sl. *)
     (* Proof. *)
     (*   unfold RVal, RInst, repₚ, bi_pure; simpl. *)
@@ -2163,7 +2194,7 @@ Module Type UnifLogicOn
     (*   eexists. split; reflexivity. *)
     (* Qed. *)
 
-    (* Lemma RVal_invert_inr {σ τ} {v} {w : World} {sl : Term w τ} :  *)
+    (* Lemma RVal_invert_inr {σ τ} {v} {w : World} {sl : Term w τ} : *)
     (*   ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inr sl) ⊢ ∃ (vl : Val τ), bi_pure (v = inr vl) ∗ ℛ⟦RVal τ⟧ vl sl. *)
     (* Proof. *)
     (*   unfold RVal, RInst, repₚ, bi_pure; simpl. *)
@@ -2263,9 +2294,9 @@ Module Type UnifLogicOn
     RefineCompat (RNEnv LVar (wlctx Σ)) ι w2 (sub_acc (acc_trans ω1 ω2)) _ :=
     MkRefineCompat refine_namedenv_sub_acc_trans.
 
-  (* #[export] Instance refine_compat_named_env_sub_acc {Σ : LCtx} {w : World} {ι : Valuation Σ} {ω : wlctx Σ ⊒ w} : *)
-  (*   RefineCompat (RNEnv LVar (wlctx Σ)) ι w (sub_acc ω) _ | 10 := *)
-  (*   MkRefineCompat refine_namedenv_sub_acc. *)
+  #[export] Instance refine_compat_named_env_sub_acc {Σ : LCtx} {w : World} {ι : Valuation Σ} {ω : wlctx Σ ⊒ w} :
+    RefineCompat (RNEnv LVar (wlctx Σ)) ι w (sub_acc ω) _ | 10 :=
+    MkRefineCompat refine_namedenv_sub_acc.
 
 
   Import notations logicalrelation.notations logicalrelation iris.proofmode.tactics.
@@ -2284,10 +2315,10 @@ Module Type UnifLogicOn
   Module AutorewriteUnifLogic.
     Import DList.
 
-    (* #[export] Hint Rewrite @recordv_fold_inj @unionv_fold_inj : uniflogic. *)
+    #[export] Hint Rewrite @recordv_fold_inj @unionv_fold_inj : uniflogic.
     #[export] Hint Rewrite @term_eq_true_r @term_eq_true_l @term_eq_false_l @term_eq_false_r @term_not_or @term_not_and @term_unop_val @term_binop_val : uniflogic.
     #[export] Hint Rewrite formula_bool_and formula_bool_relop (* formula_bool_relop_neg *) : uniflogic.
-    #[export] Hint Rewrite @repₚ_term_prod (* @rep_term_cons *) rep_eq_terms_true eq_val_rep_l eq_val_rep_r (* @eq_term_cons *) @eqₚ_term_prod (* @repₚ_unionv_fold @eqₚ_unionv_fold *) (* @rep_neq_nil_cons *) @repₚ_term_or_false (* @repₚ_term_inr_inl @repₚ_term_inl_inr @eqₚ_term_inl_inr @eqₚ_term_inr_inl @repₚ_term_inr @eqₚ_term_inr @repₚ_term_inl @eqₚ_term_inl *) @repₚ_term_unsigned @eqₚ_term_unsigned @repₚ_term_signed @eqₚ_term_signed @repₚ_term_neg' @repₚ_term_not' @repₚ_term_and (* repₚ_term_tuple_snoc eqₚ_term_tuple_snoc *) @repₚ_term_bvapp @eqₚ_term_bvapp @repₚ_term_bvcons @eqₚ_term_bvcons (* @repₚ_term_record @eqₚ_term_record *) @repₚ_namedenv_nil @repₚ_namedenv_snoc @eqₚ_namedenv_snoc @eq_term_val @rep_term_val : uniflogic.
+    #[export] Hint Rewrite @repₚ_term_prod @rep_term_cons rep_eq_terms_true eq_val_rep_l eq_val_rep_r @eq_term_cons @eqₚ_term_prod @repₚ_unionv_fold @eqₚ_unionv_fold (* @rep_neq_nil_cons *) @repₚ_term_or_false @repₚ_term_inr_inl @repₚ_term_inl_inr @eqₚ_term_inl_inr @eqₚ_term_inr_inl @repₚ_term_inr @eqₚ_term_inr @repₚ_term_inl @eqₚ_term_inl @repₚ_term_unsigned @eqₚ_term_unsigned @repₚ_term_signed @eqₚ_term_signed @repₚ_term_neg' @repₚ_term_not' @repₚ_term_and repₚ_term_tuple_snoc eqₚ_term_tuple_snoc @repₚ_term_bvapp @eqₚ_term_bvapp @repₚ_term_bvcons @eqₚ_term_bvcons @repₚ_term_record @eqₚ_term_record @repₚ_namedenv_nil @repₚ_namedenv_snoc @eqₚ_namedenv_snoc @eq_term_val @rep_term_val : uniflogic.
     #[export] Hint Rewrite @instpred_formula_relop_neg @formula_relop_term @instpred_formula_relop_eq_val @instpred_formula_relop_eq_val' @instpred_formula_relop_val @instpred_formula_relop_val' : uniflogic.
     #[export] Hint Rewrite @instpred_dlist_empty instpred_dlist_cat instpred_dlist_singleton : uniflogic.
 

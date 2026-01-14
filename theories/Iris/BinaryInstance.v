@@ -215,7 +215,7 @@ Module IrisInstanceWithContracts2
     - by iApply iris_rule_stm_block.
     - by iApply iris_rule_stm_seq.
     - iApply iris_rule_stm_assertk.
-      + auto. admit.
+      + auto.
       + iIntros "%H'". iApply "trips". destruct (eval e1 δ).
         * inversion H'. auto.
         * inversion H'.
@@ -230,9 +230,7 @@ Module IrisInstanceWithContracts2
     - by iApply iris_rule_stm_lemmak.
     (* - by iApply iris_rule_stm_bind. *)
     - by iApply iris_rule_stm_debugk.
-    - iApply iris_rule_stm_pattern_match.
-      {  admit. }
-      done.
+    - by iApply iris_rule_stm_pattern_match.
   Qed.
 
   Lemma sound :

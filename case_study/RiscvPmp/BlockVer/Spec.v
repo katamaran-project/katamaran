@@ -33,7 +33,7 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 From Katamaran Require Import
-     Iris.Instance
+  (* Iris.Instance *) Iris.BinaryInstance
      Iris.Base
      Notations
      Bitvector

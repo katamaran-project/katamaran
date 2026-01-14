@@ -274,6 +274,9 @@ Module Import ExampleProgram <: Program ExampleBase.
     Definition fun_example1 : Stm [ "x" ∷ ty.bool; "y" ∷ ty.int ] (ty.int) :=
       stm_if (stm_exp (exp_var "x")) (stm_exp (exp_var "y")) (stm_exp (exp_var "y")).
 
+    Definition fun_constanttime_if : Stm [ "x" :: ty.bool; "a" :: ty.int ] (ty.int) :=
+      stm_assign 
+
     Definition fun_fpthree' (e f : nat) : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec (1 + e + f)) :=
       let: "exp" ∷ ty.bvec e := stm_val (ty.bvec e) bv.one in
       let: "frac" ∷ ty.bvec f := stm_val (ty.bvec f) bv.one in

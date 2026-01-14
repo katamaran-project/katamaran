@@ -31,7 +31,8 @@ From Coq Require Import
 From Katamaran Require Import
      Bitvector
      Environment
-     Iris.Instance
+     (* Iris.Instance *)
+     Iris.BinaryInstance
      Iris.Base
      Program
      Semantics
@@ -45,8 +46,8 @@ From Katamaran Require Import
      RiscvPmp.Sig
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
-     RiscvPmp.Model
-     RiscvPmp.Contracts.
+     RiscvPmp.Model.
+From Katamaran Require Import RiscvPmp.Contracts.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.

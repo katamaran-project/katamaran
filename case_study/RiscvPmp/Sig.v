@@ -272,7 +272,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       Pmp_cfg_unlocked (fst ent).
     Global Arguments Pmp_entry_unlocked !ent.
 
-    Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
+    Definition 𝑷_inst (p : 𝑷) : env.abstract RelVal (𝑷_Ty p) Prop :=
       match p with
       | gen_pmp_access  => Gen_Pmp_access
       | pmp_access      => Pmp_access

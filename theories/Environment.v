@@ -555,6 +555,12 @@ Section WithBinding.
       map (cat E1 E2) = cat (map E1) (map E2).
     Proof. induction E2; cbn; congruence. Qed.
 
+    Lemma map_snoc {Γ1} (E1 : Env D1 Γ1) b (v : D1 b) :
+      map (snoc E1 v) = snoc (map E1) (f v).
+    Proof.
+      auto.
+    Qed.
+
     Lemma map_drop {Γ Δ} (EΓΔ : Env D1 (Γ ▻▻ Δ)) :
       map (drop Δ EΓΔ) = drop Δ (map EΓΔ).
     Proof.
@@ -611,17 +617,46 @@ Section WithBinding.
                          | isSnoc E2 db2 => snoc (zipWith E1 E2) (f db1 db2)
                          end
       end.
+
   End ZipWith.
 
   Section WithD123.
 
-    Context {D1 D2 D3 : B -> Set}.
+    Context {D1 D2 D3 D4 : B -> Set}.
     Variable f : forall b, D1 b -> D2 b.
     Variable g : forall b, D2 b -> D3 b.
 
     Lemma map_map {Γ} (E : Env D1 Γ) :
       map g (map f E) = map (fun b d => g (f d)) E.
     Proof. induction E; cbn; f_equal; assumption. Qed.
+
+    Variable g' : forall b, D3 b -> D4 b.
+    Variable h : forall τ, D1 τ -> D2 τ -> D3 τ.
+    Lemma map_zipWith {Γ} (E1 : Env D1 Γ) (E2 : Env D2 Γ) :
+      map g' (zipWith h E1 E2) = zipWith (fun b d1 d2 => g' (h d1 d2)) E1 E2.
+    Proof.
+      induction E1.
+      - auto.
+      - cbn. destruct (view E2).
+        cbn. now rewrite IHE1.
+    Qed.
+
+    Variable f' : forall τ, D1 τ -> D3 τ.
+    Lemma zipWith1 {Γ} (E1 : Env D1 Γ) (E2 : Env D2 Γ) :
+      zipWith (fun b d1 _ => f' d1) E1 E2 = map f' E1.
+    Proof.
+      induction E1; auto.
+      destruct (view E2); cbn.
+      now rewrite IHE1.
+    Qed.
+
+    Lemma zipWith2 {Γ} (E1 : Env D1 Γ) (E2 : Env D2 Γ) :
+      zipWith (fun b _ d2 => f' d2) E2 E1 = map f' E1.
+    Proof.
+      induction E1; auto;
+      destruct (view E2); cbn; auto.
+      now rewrite IHE1.
+    Qed.
 
   End WithD123.
 

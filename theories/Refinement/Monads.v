@@ -547,6 +547,7 @@ Module Type RefinementMonadsOn
       unfold RConst, RInst; cbn.
       repeat rewrite repₚ_const.
       iDestruct "Hι1" as "<-"; rsolve.
+      Search pattern_match_val_reverse pattern_match_term_reverse.
     Qed.
     #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
 

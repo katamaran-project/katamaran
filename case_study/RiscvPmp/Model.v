@@ -32,7 +32,7 @@ From Coq Require Import
 From Katamaran Require Import
      Bitvector
      Environment
-     Iris.Instance
+     (* Iris.Instance *) Iris.BinaryInstance
      Iris.Base
      Program
      Semantics

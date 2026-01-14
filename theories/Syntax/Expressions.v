@@ -73,17 +73,17 @@ Module Type ExpressionsOn (Import TY : Types).
   | exp_val     (σ : Ty) : Val σ -> Exp Γ σ
   | exp_binop   {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ σ3
   | exp_unop    {σ1 σ2} (op : UnOp σ1 σ2) (e : Exp Γ σ1) : Exp Γ σ2
-  (* | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty.list σ) *)
+  | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty.list σ)
   | exp_bvec    {n} (es : Vector.t (Exp Γ ty.bool) n) : Exp Γ (ty.bvec n)
-  (* | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty.tuple σs) *)
+  | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty.tuple σs)
   | exp_union   {U : unioni} (K : unionk U) (e : Exp Γ (unionk_ty U K)) : Exp Γ (ty.union U)
-  (* | exp_record  (R : recordi) (es : NamedEnv (Exp Γ) (recordf_ty R)) : Exp Γ (ty.record R) *)
+  | exp_record  (R : recordi) (es : NamedEnv (Exp Γ) (recordf_ty R)) : Exp Γ (ty.record R)
   .
   Arguments exp_var {_} _ {_ _}.
   Arguments exp_val {_} _ _.
-  (* Arguments exp_tuple {_ σs} & es. *)
+  Arguments exp_tuple {_ σs} & es.
   Arguments exp_union {_} U K & e.
-  (* Arguments exp_record {_} R & es. *)
+  Arguments exp_record {_} R & es.
   Bind Scope exp_scope with Exp.
 
   Section ExpElimination.
@@ -98,18 +98,19 @@ Module Type ExpressionsOn (Import TY : Types).
       Vector.fold_right (fun e ps => P _ e * ps)%type es unit.
     Let PE : forall σs, Env (Exp Γ) σs -> Type :=
       env.Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
-    (* Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Exp Γ) σs -> Type := *)
-    (*   env.Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type. *)
+    Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Exp Γ) σs -> Type :=
+      env.Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
 
     Hypothesis (P_var     : forall (x : PVar) (σ : Ty) (xInΓ : x∷σ ∈ Γ), P σ (exp_var x)).
     Hypothesis (P_val     : forall (σ : Ty) (l : Val σ), P σ (exp_val σ l)).
     Hypothesis (P_binop   : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1), P σ1 e1 -> forall e2 : Exp Γ σ2, P σ2 e2 -> P σ3 (exp_binop op e1 e2)).
     Hypothesis (P_unop    : forall (σ1 σ2 : Ty) (op : UnOp σ1 σ2) (e : Exp Γ σ1), P σ1 e -> P σ2 (exp_unop op e)).
-    (* Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty.list σ) (exp_list es)). *)
+    Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty.list σ) (exp_list es)).
     Hypothesis (P_bvec    : forall (n : nat) (es : Vector.t (Exp Γ ty.bool) n), PV es -> P (ty.bvec n) (exp_bvec es)).
-    (* Hypothesis (P_tuple   : forall (σs : Ctx Ty) (es : Env (Exp Γ) σs), PE es -> P (ty.tuple σs) (exp_tuple es)). *)
+
+    Hypothesis (P_tuple   : forall (σs : Ctx Ty) (es : Env (Exp Γ) σs), PE es -> P (ty.tuple σs) (exp_tuple es)).
     Hypothesis (P_union   : forall (U : unioni) (K : unionk U) (e : Exp Γ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (exp_union U K e)).
-    (* Hypothesis (P_record  : forall (R : recordi) (es : NamedEnv (Exp Γ) (recordf_ty R)), PNE es -> P (ty.record R) (exp_record R es)). *)
+    Hypothesis (P_record  : forall (R : recordi) (es : NamedEnv (Exp Γ) (recordf_ty R)), PNE es -> P (ty.record R) (exp_record R es)).
 
     Fixpoint Exp_rect {τ : Ty} (e : Exp Γ τ) {struct e} : P τ e :=
       match e with
@@ -117,11 +118,11 @@ Module Type ExpressionsOn (Import TY : Types).
       | exp_val _ l               => ltac:(apply P_val; auto)
       | exp_binop op e1 e2        => ltac:(apply P_binop; auto)
       | exp_unop op e             => ltac:(apply P_unop; auto)
-      (* | exp_list es               => ltac:(apply P_list; induction es; cbn; auto using unit) *)
+      | exp_list es               => ltac:(apply P_list; induction es; cbn; auto using unit)
       | exp_bvec es               => ltac:(apply P_bvec; induction es; cbn; auto using unit)
-      (* | exp_tuple es              => ltac:(apply P_tuple; induction es; cbn; auto using unit) *)
+      | exp_tuple es              => ltac:(apply P_tuple; induction es; cbn; auto using unit)
       | exp_union U K e           => ltac:(apply P_union; auto)
-      (* | exp_record R es           => ltac:(apply P_record; induction es; cbn; auto using unit) *)
+      | exp_record R es           => ltac:(apply P_record; induction es; cbn; auto using unit)
       end.
 
   End ExpElimination.
@@ -135,18 +136,18 @@ Module Type ExpressionsOn (Import TY : Types).
     | exp_val _ l         => l
     | exp_binop op e1 e2  => bop.eval op (evalVal e1 δ) (evalVal e2 δ)
     | exp_unop op e       => uop.eval op (evalVal e δ)
-    (* | exp_list es         => List.map (fun e => evalVal e δ) es *)
+    | exp_list es         => List.map (fun e => evalVal e δ) es
     | exp_bvec es         => Vector.t_rect
                                _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => bv m)
                                bv.nil (fun eb m _ => bv.cons (evalVal eb δ))
                                _ es
-    (* | exp_tuple es        => env.Env_rect *)
-    (*                            (fun σs _ => Val (ty.tuple σs)) *)
-    (*                            tt *)
-    (*                            (fun σs _ (vs : Val (ty.tuple σs)) σ e => (vs, evalVal e δ)) *)
-    (*                            es *)
+    | exp_tuple es        => env.Env_rect
+                               (fun σs _ => Val (ty.tuple σs))
+                               tt
+                               (fun σs _ (vs : Val (ty.tuple σs)) σ e => (vs, evalVal e δ))
+                               es
     | exp_union U K e     => unionv_fold U (existT K (evalVal e δ))
-    (* | exp_record R es     => recordv_fold R (env.map (fun xτ e => evalVal e δ) es) *)
+    | exp_record R es     => recordv_fold R (env.map (fun xτ e => evalVal e δ) es)
     end.
   Arguments evalVal {Γ σ} !e δ.
 
@@ -156,20 +157,21 @@ Module Type ExpressionsOn (Import TY : Types).
     | exp_val _ l         => ty.valToRelVal l
     | exp_binop op e1 e2  => bop.evalRel op (eval e1 δ) (eval e2 δ)
     | exp_unop op e       => uop.evalRel op (eval e δ)
-    (* | exp_list es         => List.map (fun e => eval e δ) es *)
+    | exp_list es         => ty.listOfRelValToRelValOfList (List.map (fun e => eval e δ) es)
     | exp_bvec es         => Vector.t_rect
                                _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => RelVal (ty.bvec m))
                                (ty.valToRelVal (σ := ty.bvec 0) bv.nil) (fun eb m _ => ty.liftBinOp (σ1 := ty.bool) (σ2 := ty.bvec m) (σ3 := ty.bvec (S m)) (@bv.cons m) (eval eb δ))
                                _ es
-    (* | exp_tuple es        => env.Env_rect *)
-    (*                            (fun σs _ => Val (ty.tuple σs)) *)
-    (*                            tt *)
-    (*                            (fun σs _ (vs : Val (ty.tuple σs)) σ e => (vs, eval e δ)) *)
-    (*                            es *)
+    | exp_tuple es        => env.Env_rect
+                               (fun σs _ => RelVal (ty.tuple σs))
+                               (ty.valToRelVal (σ := ty.tuple []) tt)
+                               (fun σs _ (vs : RelVal (ty.tuple σs)) σ e => ty.pairOfRelValToRelValTuple vs (eval e δ))
+                               es
     | exp_union U K e     => ty.unionv_fold_rel U (existT K (eval e δ))
-    (* | exp_record R es     => recordv_fold R (env.map (fun xτ e => eval e δ) es) *)
+    | exp_record R es     => ty.recordv_fold_rel R (env.map (fun xτ e => eval e δ) es)
     end.
     Global Arguments eval {Γ} {σ} !e δ.
+
 
     Lemma evalValProjLeftIsProjLeftEval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) :
       evalVal e (env.map (fun b => ty.projLeft) δ) = ty.projLeft (eval e δ).
@@ -179,32 +181,81 @@ Module Type ExpressionsOn (Import TY : Types).
       - auto.
       - cbn. now rewrite bop.comProjLeftEvalRel, IHe1, IHe2.
       - cbn. now rewrite uop.comProjLeftEvalRel, IHe.
-      - induction es.
+      - (* list *)
+        induction es.
+        + auto.
+        + cbn in *. destruct X as [-> rest].
+          rewrite (IHes rest).
+          Search ty.projLeft ty.liftBinOpRV.
+          unfold ty.projLeft.
+          rewrite ty.comProjLeftRVLiftBinOpRV.
+          auto.
+      - (* bvec *)
+        induction es.
         + auto.
         + cbn in *. destruct X as [-> rest].
           rewrite (IHes rest).
           now rewrite ty.comProjLeftLiftBinOp.
+      - (* tuple *)
+        induction es.
+        + auto.
+        + cbn in *. destruct X as [H rest].
+          rewrite ty.comProjLeftPairOfRelValToRelValTuple.
+          rewrite IHes; auto.
+          now rewrite rest.
       - (* union *)
         cbn. rewrite ty.comProjLeftLiftUnOp.
         now rewrite IHe.
+      - (* record *)
+        cbn. unfold ty.recordv_fold_rel. unfold ty.projLeft. rewrite ty.comProjLeftRVLiftUnOpRV.
+        rewrite ty.projLeftRVunliftNamedEnv.
+        rewrite env.map_map.
+        apply f_equal.
+        induction es.
+        + auto.
+        + cbn in *. destruct X as [H <-]. rewrite IHes; auto.          
     Qed.
 
     Lemma evalValProjRightIsProjRightEval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) :
       evalVal e (env.map (fun b => ty.projRight) δ) = ty.projRight (eval e δ).
-    Proof.
+   Proof.
       induction e.
       - cbn. now rewrite env.lookup_map.
       - auto.
       - cbn. now rewrite bop.comProjRightEvalRel, IHe1, IHe2.
       - cbn. now rewrite uop.comProjRightEvalRel, IHe.
-      - induction es.
+      - (* list *)
+        induction es.
+        + auto.
+        + cbn in *. destruct X as [-> rest].
+          rewrite (IHes rest).
+          unfold ty.projRight.
+          rewrite ty.comProjRightRVLiftBinOpRV.
+          auto.
+      - (* bvec *)
+        induction es.
         + auto.
         + cbn in *. destruct X as [-> rest].
           rewrite (IHes rest).
           now rewrite ty.comProjRightLiftBinOp.
+      - (* tuple *)
+        induction es.
+        + auto.
+        + cbn in *. destruct X as [H rest].
+          rewrite ty.comProjRightPairOfRelValToRelValTuple.
+          rewrite IHes; auto.
+          now rewrite rest.
       - (* union *)
         cbn. rewrite ty.comProjRightLiftUnOp.
         now rewrite IHe.
+      - (* record *)
+        cbn. unfold ty.recordv_fold_rel. unfold ty.projRight. rewrite ty.comProjRightRVLiftUnOpRV.
+        rewrite ty.projRightRVunliftNamedEnv.
+        rewrite env.map_map.
+        apply f_equal.
+        induction es.
+        + auto.
+        + cbn in *. destruct X as [H <-]. rewrite IHes; auto.          
     Qed.
 
     Definition evalVals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStoreVal Γ) : CStoreVal Δ :=
@@ -238,8 +289,8 @@ Module Type ExpressionsOn (Import TY : Types).
   Notation exp_true   := (@exp_val _ ty.bool true).
   Notation exp_false  := (@exp_val _ ty.bool false).
   Notation exp_string s := (@exp_val _ ty.string s%string).
-  (* Notation exp_inl e := (exp_unop uop.inl e%exp). *)
-  (* Notation exp_inr e := (exp_unop uop.inr e%exp). *)
+  Notation exp_inl e := (exp_unop uop.inl e%exp).
+  Notation exp_inr e := (exp_unop uop.inr e%exp).
   Notation exp_neg e := (exp_unop uop.neg e%exp).
   Notation exp_not e := (exp_unop uop.not e%exp).
   Notation exp_sext e := (exp_unop uop.sext e%exp).

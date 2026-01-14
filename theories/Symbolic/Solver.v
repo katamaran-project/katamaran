@@ -1089,7 +1089,8 @@ Module Type GenericSolverOn
               -- inversion Heq.
         - induction IH.
           + now destruct v.
-          + destruct v as [vs v]; arw.
+          + destruct v as [vs v]; arw. cbn.
+            rewrite instpred_dlist_cat.
             rewrite q.
             rewrite repₚ_term_tuple_snoc.
             apply bi.sep_proper; eauto.
@@ -1098,8 +1099,7 @@ Module Type GenericSolverOn
           apply (f_equal (unionv_fold U)) in Heqs.
           rewrite unionv_fold_unfold in Heqs. subst.
           destruct eq_dec as [->|e]; arw.
-          + rewrite IHt. now rewrite repₚ_unionv_fold.            
-          + now rewrite (repₚ_unionv_neq e).
+          now rewrite (repₚ_unionv_neq e).
         - rewrite -(recordv_fold_unfold R v).
           rewrite repₚ_term_record.
           generalize (recordv_unfold R v); intros vs.
@@ -1528,7 +1528,7 @@ Module Type GenericSolverOn
               cbn -[eq_dec]; destruct eq_dec; try now subst.
           + induction IH; cbn; destruct (env.view ts0); cbn; arw.
             rewrite q.
-          rewrite eqₚ_term_tuple_snoc. now apply bi.sep_proper.
+            now apply bi.sep_proper.
         - destruct tr using Term_union_case; cbn; arw.
           + constructor. intros ι Hwco. unfold instpred_formula_relop.
             cbn. destruct inst, ι.[? l∷ty.union U]; cbn;
@@ -1595,9 +1595,7 @@ Module Type GenericSolverOn
               split; intro H; try discriminate; try contradiction.
             * inversion H. destruct recordt_eqdec; try congruence.
             * apply f_equal. destruct recordt_eqdec; auto.
-          + Search term_record.
-            rewrite eqₚ_term_record.
-            induction IH.
+          + induction IH.
             * env.destroy ts0. auto.
             * env.destroy ts0. arw.
             arw_slow. apply bi.sep_proper; auto.

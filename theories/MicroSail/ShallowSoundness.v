@@ -110,6 +110,14 @@ Module Type Soundness
       apply CHeapSpec.produce_sound.
     Qed.
 
+    Lemma assertSecLeak_sound {σ}
+      (Φ : () → Prop) (rv : RelVal σ) :
+      CPureSpec.assertSecLeak rv Φ ->
+      secLeak rv /\ Φ tt.
+    Proof.
+      auto.
+    Qed.
+
     Definition SoundExecCall (exec_call : ExecCall) : Prop :=
       forall Γ τ Δ (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
         (Φ : RelVal τ → SCHeap → Prop)
@@ -258,17 +266,47 @@ Module Type Soundness
           apply bi.True_intro.
 
         - (* stm_match_pattern *)
-          eapply rule_stm_pattern_match.
-          apply IHs, HYP. clear IHs HYP.
-          intros pc δpc δΓ'. cbn.
-          apply rule_exist. intros h.
-          apply rule_pull. intros HYP.
-          apply wp_demonic_pattern_match in HYP.
-          rewrite pattern_match_relval_inverse_right in HYP.
-          destruct (ty.unliftNamedEnv δpc).
-          + inversion HYP. now apply H.
-          + inversion HYP.
-
+          remember (λ (v : RelVal σ) (δ' : CStore Γ),
+                     (∃ h' : SCHeap, interpret_scheap h' ∧
+                       ⌜(λ a : RelVal σ,
+                             demonic_pattern_match pat a
+                               (λ a0 : MatchResultRel pat,
+                                   (let
+                                       'existT pc δpc := a0 in
+                                     λ (POST : RelVal τ → CStore Γ → SCHeap → Prop) (δ0 : CStore Γ),
+                                       exec_aux exec_call_foreign exec_lemma exec_call
+                                         (rhs pc)
+                                         (λ (a1 : RelVal τ) (δ1 : CStore (Γ ▻▻ PatternCaseCtx pc)),
+                                           POST a1 (env.drop (PatternCaseCtx pc) δ1))
+                                         (δ0 ►► δpc)) Φ)) v δ' h'⌝%I)%I) as Q.
+          eapply (rule_stm_pattern_match _ _ _ _ _ Q).
+          + unfold demonic_pattern_match, CPureSpec.demonic_pattern_match in HYP.
+            eapply (rule_consequence_right).
+            apply IHs.
+            apply HYP.
+            clear HYP.
+            intros v δ.
+            iIntros "HYP".
+            iDestruct "HYP" as (h') "(interph' & %HYP)".
+            apply assertSecLeak_sound in HYP.
+            destruct HYP as [sLv HYP].
+            iSplit.
+            { auto. }
+            rewrite HeqQ.
+            iExists h'. iFrame.
+            iPureIntro.
+            apply demonic_pattern_match_unfold.
+            intuition.
+          + clear IHs HYP.
+            intros pc δpc δΓ'. cbn.
+            rewrite HeqQ.
+            apply rule_exist. intros h.
+            apply rule_pull. intros HYP.
+            apply wp_demonic_pattern_match in HYP.
+            rewrite pattern_match_relval_inverse_right in HYP.
+            destruct (ty.unliftNamedEnv δpc).
+            * inversion HYP. now apply H.
+            * inversion HYP.
         - (* stm_read_register *)
           destruct HYP as [v HYP].
           eapply rule_consequence_left.
