@@ -985,6 +985,27 @@ Module Type UnifLogicOn
       constructor; crushPredEntails3.
     Qed.
 
+    Class RemoveSub {w1 w2 w3 : World} (ω : w2 ⊒ w3) (ω2 : w1 ⊒ w3) (ωr : w1 ⊒ w2) :=
+      removeSub : forall P, forgetting (acc_trans ωr ω) P ⊣⊢ forgetting ω2 P.
+
+    #[export] Instance removesub_base {w1 w2 w3 : World} (ω : w2 ⊒ w3) (ωr : w1 ⊒ w2) :
+      RemoveSub ω (acc_trans ωr ω) ωr | 0.
+    Proof. now unfold RemoveSub. Qed.
+
+    #[export] Instance removesub_step {w1 w2 w3 w0 : World} (ω : w2 ⊒ w3) (ω2 : w1 ⊒ w3) (ωr : w1 ⊒ w2) (ωf : w0 ⊒ w1):
+      RemoveSub ω ω2 ωr -> RemoveSub ω (acc_trans ωf ω2) (acc_trans ωf ωr) | 1.
+    Proof. unfold RemoveSub. intros H P. iSplit; iIntros "H";
+             specialize (H (forgetting ωf P));
+             rewrite !forgetting_trans in H;
+             now rewrite !forgetting_trans H.
+    Qed.
+
+    #[export] Instance removesub_step' {w1 w2 w3 w4 : World} (ω1 : w2 ⊒ w3) (ω2 : w3 ⊒ w4) (ω : w1 ⊒ w4) (ωr1 : w1 ⊒ w3) (ωr2 : w1 ⊒ w2) :
+      RemoveSub ω2 ω ωr1 -> RemoveSub ω1 ωr1 ωr2 -> RemoveSub (acc_trans ω1 ω2) ω ωr2 | 0.
+    Proof. unfold RemoveSub. intros H1 H2 P.
+           now rewrite <-(H1 P), !forgetting_trans, <-(H2 P), !forgetting_trans.
+    Qed.
+
     Class IntoForgetting {w1 w2 : World} (ω : w1 ⊒ w2) (P : Pred w2) (Q : Pred w1) :=
       into_forgetting : P ⊢ forgetting ω Q.
 
@@ -1000,6 +1021,14 @@ Module Type UnifLogicOn
       IntoForgetting ω (forgetting ω P) P | 0.
     Proof. now unfold IntoForgetting. Qed.
 
+    #[export] Instance into_forgetting_forgetting_trans {w1 w2 w3 : World} {ω : w1 ⊒ w3} {ω' : w2 ⊒ w3} {ωr : w1 ⊒ w2}(P : Pred w1) :
+      RemoveSub ω' ω ωr ->
+      IntoForgetting ω' (forgetting ω P) (forgetting ωr P) | 1.
+    Proof.
+      unfold RemoveSub, IntoForgetting.
+      iIntros (H) "HωP".
+      now rewrite <-(H P), forgetting_trans.
+    Qed.
 
     (* TODO: define typeclass FromForgetting to preserve other forgetting assumptions *)
     Lemma modality_mixin_forgetting {w1 w2 : World} `{ω : w1 ⊒ w2} : modality_mixin (forgetting ω) (MIEnvTransform (IntoForgetting ω)) (MIEnvTransform (IntoForgetting ω)).
@@ -1389,6 +1418,7 @@ Module Type UnifLogicOn
       first [
           (lazymatch goal with
            | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
+           | |- envs_entails _ (forgetting _ _) => iModIntro
            | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
            end)
         | lazymatch goal with
@@ -1533,6 +1563,17 @@ Module Type UnifLogicOn
     Proof. destruct u, su. now crushPredEntails3. Qed.
     Hint Resolve refine_unit : core.
     
+    Lemma refine_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w} :
+      ⊢ ℛ⟦ RA -> RB -> RProd RA RB ⟧ pair (@pair (AT w) (BT w)).
+    Proof.
+      crushPredEntails3.
+      now constructor.
+    Qed.
+
+    #[export] Instance refine_compat_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w} :
+      RefineCompat (RA -> RB -> RProd RA RB) pair w (@pair (AT w) (BT w)) emp :=
+      MkRefineCompat refine_pair.
+
     Lemma refine_RHeap_nil {w} :
       ⊢ ℛ⟦ RHeap ⟧ nil (nil : SHeap (wctx w)).
     Proof.

@@ -1702,9 +1702,8 @@ Module Type RefinementMonadsOn
         (CHeapSpec.call_contract c) (SHeapSpec.call_contract c (w := w)).
     Proof.
       iIntros (cδ sδ) "#rδ".
-      destruct c as [lvars pats req res ens]; cbn; rsolve.
-      rewrite !forgetting_trans.
-      iModIntro. iModIntro. rsolve.
+      destruct c as [lvars pats req res ens]; cbn.
+      rsolve.
     Qed.
 
     #[export] Instance refine_compat_call_contract {Δ τ} (c : SepContract Δ τ) {w} :
@@ -1718,8 +1717,6 @@ Module Type RefinementMonadsOn
     Proof.
       iIntros (cδ sδ) "#rδ".
       destruct lem as [lvars pats req ens]; cbn; rsolve.
-      rewrite !forgetting_trans.
-      iModIntro; rsolve.
     Qed.
 
     #[export] Instance refine_compat_call_lemma {Δ} (lem : Lemma Δ) w :

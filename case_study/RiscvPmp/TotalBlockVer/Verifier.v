@@ -277,10 +277,6 @@ Section BlockVerificationDerived.
       unfold cexec_triple_addr, sexec_triple_addr.
       rsolve.
       iApply rexec_block_addr; rsolve.
-      rewrite !forgetting_trans.
-      iModIntro.
-      iModIntro.
-      rsolve.
     Qed.
 
     Lemma rblock_verification_condition {Σ : LCtx}
@@ -822,10 +818,6 @@ Section AnnotatedBlockVerification.
       unfold cexec_annotated_block_triple_addr, sexec_annotated_block_triple_addr.
       rsolve.
       iApply rexec_annotated_block_addr; rsolve.
-      rewrite !forgetting_trans.
-      iModIntro.
-      iModIntro.
-      rsolve.
     Qed.
 
     Lemma rannotated_block_verification_condition {Σ}

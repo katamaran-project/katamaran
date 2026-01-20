@@ -589,7 +589,6 @@ Module RefineExecOn
     Proof.
       destruct c as [lvars pats req result ens]; cbn. rsolve.
       iApply rexec.
-      rewrite forgetting_trans. iModIntro. rsolve.
     Qed.
 
   End WithExec.
