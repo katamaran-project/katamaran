@@ -239,12 +239,8 @@ Module RunningExample.
         (POST : IVal τ -> CStore Γ -> IVal τ -> CStore Γ -> iProp Σ) : iProp Σ :=
         match n with
         | O => ∀ v1 δ1 v2 δ2, POST v1 δ1 v2 δ2
-        | S n => semWP2 δ1 δ2 s1 s2 (λ v1 δ1 v2 δ2,
-                     ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗
-                     match v1 with
-                     | inl v1 => semWP2_n n δ1 δ2 s1 s2 POST
-                     | inr _ => True
-                     end)%I
+        | S n => semWP2 δ1 δ2 s1 s2 (λ v1 δ1' v2 δ2',
+                     ⌜v1 = v2⌝ ∗ ⌜δ1' = δ2'⌝ ∗ semWP2_n n δ1 δ2 s1 s2 POST)%I
         end.
 
       Lemma semWP2_n_mono `{sailGS2 Σ} {Γ τ} (n : nat)
@@ -263,141 +259,33 @@ Module RunningExample.
           cbn.
           iApply (semWP2_mono with "Hwp").
           iIntros (v1 δ1' v2 δ2') "(<- & <- & H)"; auto.
-          destruct v1; auto.
           repeat iSplitR; auto.
           iApply ("IHn" with "H").
           iIntros (? ? ? ?) "H".
           now iApply "HPOSTS".
       Qed.
 
-      Fixpoint semTWP_n {Σ : gFunctors} {sG : sailGS Σ} [Γ τ] (n : nat) (δ : CStore Γ)
-                        (s : Stm Γ τ) (Q : @IrisModel.RiscvPmpIrisBase.Post Σ Γ τ) : iProp Σ :=
-        match n with
-        | O => ∀ v δ, Q v δ
-        | S n => semTWP δ s (λ v δ, semTWP_n n δ s Q)%I
-        end.
-
-      Lemma semWP2_n_focus {Σ} {sG : sailGS2 Σ} {Γ τ} (n : nat) {s1 : Stm Γ τ} {s2 : Stm Γ τ} :
-        ⊢ ∀ Q1 Q2 Q δ1 δ2,
-          @semTWP_n _ sailGS2_sailGS_left _ _ n δ1 s1 Q1 -∗
-          @semTWP_n _ sailGS2_sailGS_right _ _ n δ2 s2 Q2 -∗
-          (∀ v1 δ1 v2 δ2, Q1 v1 δ1 ∗ Q2 v2 δ2 -∗ Q v1 δ1 v2 δ2) -∗
-          semWP2_n n δ1 δ2 s1 s2 Q.
+      Lemma semWP2_S_n_twp_seq {Σ} {sG : sailGS2 Σ} {Γ τ} (n : nat) {s1 : Stm Γ τ} {s2 : Stm Γ τ} :
+        ⊢ ∀ Q δ1 δ2,
+            @semTWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1',
+                @semTWP _ sailGS2_sailGS_right _ _ δ2 s2 (λ v2 δ2',
+                    ⌜v1 = v2⌝ ∗ ⌜δ1' = δ2'⌝ ∗
+                    semWP2_n n δ1 δ2 s1 s2 Q)) -∗
+          semWP2_n (S n) δ1 δ2 s1 s2 Q.
       Proof.
-        iInduction n as [|n];
-          iIntros (Q1 Q2 Q δ1 δ2) "HTWP1 HTWP2 H".
-        - simpl. iIntros (v1 δ1' v2 δ2').
-          iApply "H".
-          iSpecialize ("HTWP1" $! v1 δ1').
-          iSpecialize ("HTWP2" $! v2 δ2').
-          iFrame "HTWP1 HTWP2".
-        - simpl.
-          iApply (semWP2_focus with "HTWP1 HTWP2").
-          (* iIntros ([] δ1' v2 δ2') "(HTWP1 & HTWP2)"; auto.
-          now iApply ("IHn" with "HTWP1 HTWP2 H"). *)
-      Abort.
+        simpl. iIntros (Q δ1 δ2) "H".
+        now iApply semWP2_focus_seq.
+      Qed.
 
       Definition semTriple_n {Σ} `{sailGS2 Σ} {Γ τ} (n : nat) (δ : CStore Γ)
         (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
-        PRE -∗ semWP2_n n δ δ s s (λ v1 δ1 v2 δ2, (* ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗ *)
-                                                  match v1 with
+        PRE -∗ semWP2_n n δ δ s s (λ v1 δ1 v2 δ2, match v1 with
                                                   | inl v1 => POST v1 δ1
                                                   | inr _ => True
                                                   end)%I.
       #[global] Arguments semTriple_n {Σ} {_} {Γ} {τ} n%nat δ PRE%_I s%_exp POST%_I.
 
-      Lemma semTriple_n_S {Σ} `{sailGS2 Σ} {Γ τ} (n : nat) (δ : CStore Γ)
-        (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) :
-        semTriple δ PRE s (λ _ δ, semWP2_n n δ δ s s (λ v1 δ1 v2 δ2,
-                                       match v1 with
-                                       | inl v1 => POST v1 δ1
-                                       | inr _ => True
-                                       end)) ⊣⊢ 
-        semTriple_n (S n) δ PRE s POST.
-      Proof.
-        unfold semTriple, semTriple_n. cbn.
-        iSplit; iIntros "H PRE"; iSpecialize ("H" with "PRE");
-          iApply (semWP2_mono with "H");
-          iIntros ([] ? ? ?) "(-> & -> & H)"; auto.
-      Qed.
-
-      Lemma semTriple_n_S_alt_1 {Σ} `{sailGS2 Σ} {Γ τ} (n : nat) (δ : CStore Γ)
-        (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) :
-        semTriple δ PRE s (λ _ δ, PRE ∗ semTriple_n n δ PRE s POST)  ⊢ 
-        semTriple_n (S n) δ PRE s POST.
-      Proof.
-        iIntros "H".
-        rewrite <- semTriple_n_S.
-        iIntros "HPRE". iSpecialize ("H" with "HPRE").
-        iApply (semWP2_mono with "H").
-        iIntros ([] ? ? ?) "(-> & -> & H)"; auto.
-        iDestruct "H" as "(HPRE & H)". iSpecialize ("H" with "HPRE").
-        repeat iSplitR; auto.
-      Qed.
-
-      Lemma semTriple_n_S_alt_2 {Σ} `{sailGS2 Σ} {Γ τ} (n : nat) (δ : CStore Γ)
-        (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) :
-        semTriple_n (S n) δ PRE s POST ⊢
-        semTriple δ PRE s (λ _ δ, semTriple_n n δ PRE s POST).
-      Proof.
-        iIntros "H".
-        iPoseProof (semTriple_n_S with "H") as "H".
-        iIntros "HPRE". iSpecialize ("H" with "HPRE").
-        iApply (semWP2_mono with "H").
-        iIntros ([] ? ? ?) "(-> & -> & H)"; auto.
-        repeat iSplitR; auto. iIntros "HPRE". auto.
-      Qed.
-        
     End MoveToBinaryWeakestPre.
-
-    Lemma semTriple2_semTTriple_seq {Σ : gFunctors} {sG : sailGS2 Σ}
-      (δ : CStore [ctx]) {a : Val ty_xlenbits} {instrs : list AST} (PRE PRE1 PRE2 : iProp Σ)
-      (POST : Val ty.unit -> CStore [ctx] -> iProp Σ)
-      (POST1 POST2 : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) :
-      @semTripleBlock _ sailGS2_sailGS_left (λ _, PRE1) a instrs POST1 -∗
-      @semTripleBlock _ sailGS2_sailGS_right (λ _, PRE2) a instrs POST2 -∗
-      (PRE -∗ PRE1 ∗ PRE2) -∗
-      (∀ a1 an1 a2 an2, (POST1 a1 an1 ∗ POST2 a2 an2) -∗ POST () [env]) -∗
-        semTriple_n (length instrs) δ PRE fun_step POST.
-    Proof.
-      iInduction instrs as [|instr instrs].
-      - cbn. unfold semTriple_n. cbn.
-        unfold semTripleBlock, step_instrs. cbn.
-        iIntros "H1 H2 HPREs HPOSTs HPRE" ([] ? ? ?); auto.
-        destruct v, (env.view δ1).
-        iDestruct ("HPREs" with "HPRE") as "(HPRE1 & HPRE2)". 
-        iSpecialize ("H1" with "HPRE1").
-        iSpecialize ("H2" with "HPRE2").
-        iApply ("HPOSTs" with "[$H1 $H2]").
-      - iIntros "H1 H2 HPREs HPOSTs".
-        cbn.
-
-
-        
-        iIntros "HPRE". cbn. iApply semWP2_focus.
-        admit. admit.
-
-
-        
-        (* iPoseProof semTriple_n_S as "(H & _)". (* TODO: why does the iApply for this hang? *)
-        iApply "H". iClear "H".
-        iIntros "HPRE". iDestruct ("HPREs" with "HPRE") as "(HPRE1 & HPRE2)". *)
-        (* TODO: CONTINUE
-           This is where I left off before my vacation started.
-           We need a way to split a single instruction off everywhere, reason with
-           it, then we can use the IH for the rest.
-           Defined some lemmas in Verifier.v (suffix _seq, _seq_alt), might be
-           useful?
-           Also note that the current lemma might not be defined correctly yet,
-           maybe we define a "sequencing" style here as well? Need to think some
-           more on this lemma... *)
-        (* iApply (semWP2_focus with "[H1 HPRE1] [H2 HPRE2]"). *)
-        + admit.
-        (* + admit.
-        + iIntros (? ? ? ?) "HPOST". *)
-          (* NOTE: at this point, we should get that v1 = inl tt ∧ v2 = inl tt!
-                   Then we can simplify the match and use the IH to finish the proof. *)
-    Admitted.
 
     Lemma WP2_loop_split `{sg : sailGS2 Σ} : ∀ PRE POST,
       PRE -∗
@@ -436,7 +324,7 @@ Module RunningExample.
         iIntros (? ? [] δ2) "(-> & -> & H)".
         + iApply semWP2_call_inline.
           destruct (env.view δ2).
-          iApply ("IH" with "[$H $Hk]"). 
+          iApply ("IH" with "[$H $Hk]").
         + now iApply semWP2_fail.
     Qed.
 
@@ -470,7 +358,9 @@ Module RunningExample.
       iIntros (Σ sG a) "HPRE Hk".
       iApply (WP2_loop_split_n (length code)).
       iSplitR "Hk".
-      - admit.
+      - unfold code.
+        iApply semWP2_S_n_twp_seq.
+        admit.
       - iIntros (v1 δ1 v2 δ2) "H". iApply "Hk".
         iExact "H".
     Admitted.
