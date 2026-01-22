@@ -717,13 +717,13 @@ Module RiscvPmpSpecVerif.
   Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
-  Proof. now destruct H. Qed.
+  Proof. now destruct H; vm_compute. Qed.
 
   Lemma valid_mem_write_value {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_write_value bytes H).
-  Proof. now destruct H. Qed.
+  Proof. now destruct H; vm_compute. Qed.
 
-  Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
-  Proof. symbolic_simpl. intros. Lia.lia. Qed.
+  Lemma valid_contract_within_phys_mem : ValidContract within_phys_mem.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_EBREAK : ValidContractDebug execute_EBREAK.
   Proof. now symbolic_simpl. Qed.
@@ -769,7 +769,7 @@ Module RiscvPmpSpecVerif.
     - refine (valid_contract _ H valid_execute_rX).
     - refine (valid_contract _ H valid_execute_wX).
     - refine (valid_contract _ H valid_execute_tick_pc).
-    - refine (valid_contract_debug _ H valid_contract_within_phys_mem).
+    - refine (valid_contract _ H valid_contract_within_phys_mem).
     - refine (valid_contract _ H valid_mem_read).
     - refine (valid_contract _ H valid_checked_mem_read).
     - refine (valid_contract _ H valid_checked_mem_write).

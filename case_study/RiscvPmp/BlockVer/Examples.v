@@ -86,6 +86,8 @@ Module Examples.
     Definition minimal_pre {Σ} : Assertion Σ :=
       (* asn.exist "_" _ (nextpc ↦ term_var "_")
       ∗ *)cur_privilege ↦ term_val ty_privilege Machine
+      ∗ mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool false; term_val ty.bool false ]
+      ∗ ∃ "mip", mip ↦ term_var "mip" ∗ ∃ "mie", mie ↦ term_var "mie"
       ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ;
                                     (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]).
 
@@ -94,6 +96,8 @@ Module Examples.
     Definition minimal_post {Σ} : Assertion Σ :=
       (* asn.exist "_" _ (nextpc ↦ term_var "_")
       ∗ *) cur_privilege ↦ term_val ty_privilege Machine
+      ∗ mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool false; term_val ty.bool false ]
+      ∗ ∃ "mip", mip ↦ term_var "mip" ∗ ∃ "mie", mie ↦ term_var "mie"
       ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ;
                                     (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]).
 
@@ -158,15 +162,15 @@ Module Examples.
     Notation "r '↦ᵣ' v" := (with_regidx r (fun reg => asn.chunk (chunk_ptsreg reg v))) (at level 70) : asn_scope.
     Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
 
-    Definition asn_init_pc {Σ} : Assertion (Σ ▻ "a" :: ty_xlenbits) :=
+    Definition asn_init_pc {Σ} {aIn : ("a"∷ty_xlenbits ∈ Σ)%katamaran} : Assertion Σ :=
       term_var "a" = term_val ty_xlenbits bv.zero.
 
-    Definition asn_pc_eq {Σ} (t : Term (Σ ▻ "a" :: ty_xlenbits) ty_xlenbits) : Assertion (Σ ▻ "a" :: ty_xlenbits) :=
+    Definition asn_pc_eq {Σ} {aIn : ("a"∷ty_xlenbits ∈ Σ)%katamaran} (t : Term Σ ty_xlenbits) : Assertion Σ :=
       term_var "a" = t.
 
     Local Notation term_pc_val := (term_var "a").
 
-    Definition asn_next_pc_eq {Σ} (t : Term (Σ ▻ "an" :: ty_xlenbits) ty_xlenbits) : Assertion (Σ ▻ "an" :: ty_xlenbits) :=
+    Definition asn_next_pc_eq {Σ} {anIn : ("an"∷ty_xlenbits ∈ Σ)%katamaran} (t : Term Σ ty_xlenbits) : Assertion Σ :=
       term_var "an" = t.
 
     Definition mv_zero_ex : BlockVerifierContract :=
@@ -276,12 +280,12 @@ Module Examples.
         ∗ reg_pointsTo pc bv.zero ∗ (∃ npc, reg_pointsTo nextpc npc)
         ∗ ptsto_instrs_from_contract jump_if_zero bv.zero.
 
-      Definition jump_if_zero_post (x1 : Val ty_xlenbits) : iProp Σ :=
-        ∃ (an : Val ty_xlenbits),
-          reg_pointsTo pc an ∗ (∃ npc, reg_pointsTo nextpc npc)
-          ∗ ptsto_instrs_from_contract jump_if_zero bv.zero
-          ∗ asn.interpret (extract_post_from_contract jump_if_zero)
-          [env].["x1"∷ty_xlenbits ↦ x1].["a"∷ty_xlenbits ↦ bv.zero].["an"∷ty_xlenbits ↦ an].
+      Definition jump_if_zero_post (x1 : Val ty_xlenbits): iProp Σ :=
+          ∃ (an : Val ty_xlenbits),
+            reg_pointsTo pc an ∗ (∃ npc, reg_pointsTo nextpc npc)
+              ∗ ptsto_instrs_from_contract jump_if_zero bv.zero
+              ∗ asn.interpret (extract_post_from_contract jump_if_zero)
+              [env].["x1"∷ty_xlenbits ↦ x1].["a"∷ty_xlenbits ↦ bv.zero].["an"∷ty_xlenbits ↦ an].
 
       Definition iris_contract (pre post : iProp Σ) : iProp Σ :=
         pre -∗ (post -∗ WP_loop) -∗ WP_loop.
@@ -295,9 +299,8 @@ Module Examples.
         iIntros (x1) "Hpre Hk".
         iApply (sound_sblock_verification_condition valid_jump_if_zero
                   [env].["x1"∷ty_xlenbits ↦ x1] $! bv.zero with "Hpre [Hk]").
-        iIntros (an) "H".
-        iApply "Hk".
-        by iExists an.
+        iIntros (an) "(Hmip & Hmie & H)".
+        iApply ("Hk" with "[$]").
       Qed.
 
       Definition set_X2_to_42_pre (instrs_loc : Val ty_xlenbits) : iProp Σ :=

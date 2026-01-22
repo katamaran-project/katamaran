@@ -99,13 +99,13 @@ Section BlockVerificationDerived.
     Import asn.notations.
 
     Definition exec_instruction_prologue (i : AST) :
-      Assertion ([ctx] ▻ ("a":: ty_xlenbits)) :=
+      Assertion (["a"∷ty_xlenbits])%ctx :=
       pc     ↦ term_var "a" ∗
       asn.chunk (chunk_user ptstoinstr [term_var "a"; term_val ty_ast i]) ∗
       asn.exist "an" ty_xlenbits (nextpc ↦ term_var "an").
 
     Definition exec_instruction_epilogue (i : AST) :
-      Assertion ([ctx] ▻ ("a":: ty_xlenbits) ▻ ("an":: ty_xlenbits)) :=
+      Assertion ["a":: ty_xlenbits; "an":: ty_xlenbits]%ctx :=
       pc     ↦ term_var "an" ∗
       asn.chunk (chunk_user ptstoinstr [term_var "a"; term_val ty_ast i]) ∗
       nextpc ↦ term_var "an".
@@ -645,7 +645,7 @@ Section AnnotatedBlockVerification.
       iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))⟧
                  (cexec_annotated_block_addr b)
                  (fun w' θ => sexec_annotated_block_addr b (w := w'))) as "H".
-      { iInduction b as [|instr b] "IHb"; rsolve.
+      { iInduction b as [|instr b] "IHb"; cbn; rsolve.
         destruct instr; cbn; rsolve.
         - iApply "IHb"; rsolve.
         - iApply "IHb"; rsolve.
@@ -712,7 +712,7 @@ Section AnnotatedBlockVerification.
           iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs) Hk".
           iApply semWP_seq.
           iApply semWP_call_inline.
-          iApply (semWP_mono with "[Hh Hnpc Hpc Hinstr]").
+          iApply (semWP_mono with "[-Hinstrs Hk]").
           { iApply (sound_exec_instruction Hverif). iFrame. }
           clear Hverif.
           iIntros ([v|m] _); last (iIntros "_"; now rewrite semWP_fail);
@@ -762,10 +762,9 @@ Section AnnotatedBlockVerification.
       iApply (sound_exec_annotated_block_addr (apc := a) h2 with "[$Hh2 $Hpc $Hnpc $Hinstrs]"); auto.
       revert Hexec'.
       apply mono_cexec_annotated_block_addr.
-      intros ? ? <- h3 Hcons.
+      intros [? ?] ? <- h3 Hcons.
       iIntros "Hh3".
-      iPoseProof (consume_sound _ _ Hcons with "Hh3") as "[Hcons _]".
-      iFrame.
+      now iPoseProof (consume_sound _ _ Hcons with "Hh3") as "[Hcons _]".
     Qed.
 
     Lemma sound_sannotated_block_verification_condition {Γ pre post instrs} :

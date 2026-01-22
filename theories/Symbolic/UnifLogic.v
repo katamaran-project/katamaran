@@ -1562,7 +1562,11 @@ Module Type UnifLogicOn
       ⊢ ℛ⟦ RUnit ⟧ u su : Pred w.
     Proof. destruct u, su. now crushPredEntails3. Qed.
     Hint Resolve refine_unit : core.
-    
+
+    Lemma RProd_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w} {v1 v2 sv1} {sv2 : BT w}:
+      ℛ⟦ RProd RA RB ⟧ (v1, v2) (sv1 , sv2) ⊣⊢ ℛ⟦ RA ⟧ v1 sv1 ∗ ℛ⟦ RB ⟧ v2 sv2.
+    Proof. now crushPredEntails3. Qed.
+
     Lemma refine_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w} :
       ⊢ ℛ⟦ RA -> RB -> RProd RA RB ⟧ pair (@pair (AT w) (BT w)).
     Proof.

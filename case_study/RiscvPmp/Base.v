@@ -134,13 +134,25 @@ Inductive Privilege : Set :=
 | Machine
 .
 
+Inductive InterruptType : Set :=
+| I_U_Software
+| I_M_Software
+| I_U_Timer
+| I_M_Timer
+| I_U_External
+| I_M_External
+.
+
 (* Enum for available CRSs' *)
 Inductive CSRIdx : Set :=
 | MStatus
+| Mie
 | MTvec
-| MCause
+| MScratch
 | MEpc
+| MCause
 | MPMP0CFG
+| Mip
 | MPMPADDR0
 | MPMPADDR1
 .
@@ -254,6 +266,7 @@ Inductive WordWidth :=
 
 Inductive Enums : Set :=
 | privilege
+| interruptType
 | csridx
 | pmpcfgidx
 | pmpcfgperm
@@ -313,11 +326,27 @@ Inductive FetchResult : Set :=
 | F_Error (e : ExceptionType) (v : Xlenbits)
 .
 
+Record Minterrupts : Set :=
+  MkMinterrupts
+    { MEI : bool
+    ; UEI : bool
+    ; MTI : bool
+    ; UTI : bool
+    ; MSI : bool
+    ; USI : bool
+    }.
+
 (* NOTE: simplified to only take the ctl_trap constructor into account
          (other constructors are for mret, sret and uret, not considered atm) *)
 Inductive CtlResult : Set :=
 | CTL_TRAP (e : ExceptionType)
 | CTL_MRET
+.
+
+Inductive InterruptSet : Set :=
+| Ints_Pending (v : Minterrupts)
+| Ints_Delegated (v : Minterrupts)
+| Ints_Empty
 .
 
 Inductive MemoryOpResult (bytes : nat): Set :=
@@ -373,6 +402,12 @@ Inductive CtlResultConstructor : Set :=
 | KCTL_MRET
 .
 
+Inductive InterruptSetConstructor : Set :=
+| KInts_Pending
+| KInts_Delegated
+| KInts_Empty
+.
+
 Inductive Unions : Set :=
 | ast
 | access_type
@@ -380,6 +415,7 @@ Inductive Unions : Set :=
 | memory_op_result (bytes : nat)
 | fetch_result
 | ctl_result
+| interrupt_set
 (* | pmp_entries *)
 .
 
@@ -395,11 +431,14 @@ Record Pmpcfg_ent : Set :=
 Record Mstatus : Set :=
   MkMstatus
     { MPP : Privilege
+    ; MPIE : bool
+    ; MIE : bool
     }.
 
 Inductive Records : Set :=
 | rpmpcfg_ent
 | rmstatus
+| rminterrupts
 .
 
 Section TransparentObligations.
@@ -408,6 +447,7 @@ Section TransparentObligations.
   Derive NoConfusion for Enums.
   Derive NoConfusion for Privilege.
   Derive NoConfusion for CSRIdx.
+  Derive NoConfusion for InterruptType.
   Derive NoConfusion for PmpCfgIdx.
   Derive NoConfusion for PmpCfgPerm.
   Derive NoConfusion for PmpAddrIdx.
@@ -434,11 +474,14 @@ Section TransparentObligations.
   Derive NoConfusion for FetchResultConstructor.
   Derive NoConfusion for CtlResult.
   Derive NoConfusion for CtlResultConstructor.
+  Derive NoConfusion for InterruptSetConstructor.
   Derive NoConfusion for MemoryOpResult.
   Derive NoConfusion for MemoryOpResultConstructor.
   Derive NoConfusion for Records.
   Derive NoConfusion for Pmpcfg_ent.
   Derive NoConfusion for Mstatus.
+  Derive NoConfusion for Minterrupts.
+  Derive NoConfusion for InterruptSet.
 End TransparentObligations.
 
 Derive EqDec for Enums.
@@ -468,13 +511,18 @@ Derive EqDec for ExceptionType.
 Derive EqDec for ExceptionTypeConstructor.
 Derive EqDec for FetchResult.
 Derive EqDec for FetchResultConstructor.
+Derive EqDec for InterruptType.
 Derive EqDec for CtlResult.
 Derive EqDec for CtlResultConstructor.
+Derive EqDec for InterruptSet.
+Derive EqDec for InterruptSetConstructor.
 Derive EqDec for MemoryOpResult.
 Derive EqDec for MemoryOpResultConstructor.
 Derive EqDec for Records.
 Derive EqDec for Pmpcfg_ent.
 Derive EqDec for Mstatus.
+Derive EqDec for Minterrupts.
+Derive EqDec for InterruptSet.
 
 Section Finite.
   Import stdpp.finite.
@@ -486,7 +534,10 @@ Section Finite.
     {| enum := [User;Machine] |}.
 
   #[export,program] Instance CSRIdx_finite : Finite CSRIdx :=
-    {| enum := [MStatus;MTvec;MCause;MEpc;MPMP0CFG;MPMPADDR0;MPMPADDR1] |}.
+    {| enum := [MStatus;Mie;MTvec;MScratch;MEpc;MCause;MPMP0CFG;MPMPADDR0;MPMPADDR1;Mip] |}.
+
+  #[export,program] Instance InterruptType_finite : Finite InterruptType :=
+    {| enum := [I_U_Software; I_M_Software; I_U_Timer; I_M_Timer; I_U_External; I_M_External] |}.
 
   #[export,program] Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
     {| enum := [PMP0CFG;PMP1CFG] |}.
@@ -567,6 +618,10 @@ Section Finite.
     Finite CtlResultConstructor :=
     {| enum := [KCTL_TRAP;KCTL_MRET] |}.
 
+  #[export,program] Instance InterruptSetConstructor_finite :
+    Finite InterruptSetConstructor :=
+    {| enum := [KInts_Pending;KInts_Delegated;KInts_Empty] |}.
+
   #[export,program] Instance MemoryOpResultConstructor_finite :
     Finite MemoryOpResultConstructor :=
     {| enum := [KMemValue;KMemException] |}.
@@ -594,6 +649,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_bytes (bytes : nat)            := (ty.bvec (bytes * byte)).
   Definition ty_regno                          := (ty.bvec 5).
   Definition ty_privilege                      := (ty.enum privilege).
+  Definition ty_interruptType                  := (ty.enum interruptType).
   Definition ty_priv_level                     := (ty.bvec 2).
   Definition ty_csridx                         := (ty.enum csridx).
   Definition ty_pmpcfgidx                      := (ty.enum pmpcfgidx).
@@ -620,14 +676,17 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_memory_op_result (bytes : nat) := (ty.union (memory_op_result bytes)).
   Definition ty_fetch_result                   := (ty.union fetch_result).
   Definition ty_ctl_result                     := (ty.union ctl_result).
+  Definition ty_interrupt_set                  := (ty.union interrupt_set).
   Definition ty_pmpcfg_ent                     := (ty.record rpmpcfg_ent).
   Definition ty_mstatus                        := (ty.record rmstatus).
+  Definition ty_Minterrupts                    := (ty.record rminterrupts).
   Definition ty_pmpentry                       := (ty.prod ty_pmpcfg_ent ty_xlenbits).
   Definition ty_pmpentries                     := (ty.list (ty.prod ty_pmpcfg_ent ty_xlenbits)).
 
   Definition enum_denote (e : Enums) : Set :=
     match e with
     | privilege        => Privilege
+    | interruptType    => InterruptType
     | csridx           => CSRIdx
     | pmpcfgidx        => PmpCfgIdx
     | pmpcfgperm       => PmpCfgPerm
@@ -654,6 +713,7 @@ Module Export RiscvPmpBase <: Base.
     | memory_op_result bytes => MemoryOpResult bytes
     | fetch_result           => FetchResult
     | ctl_result             => CtlResult
+    | interrupt_set          => InterruptSet
     (* | pmp_entries      => Coq type in the model for pmp_entries  *)
     end.
 
@@ -661,6 +721,7 @@ Module Export RiscvPmpBase <: Base.
     match R with
     | rpmpcfg_ent => Pmpcfg_ent
     | rmstatus    => Mstatus
+    | rminterrupts    => Minterrupts
     end.
 
   #[export] Instance typedenotekit : TypeDenoteKit typedeclkit :=
@@ -677,6 +738,7 @@ Module Export RiscvPmpBase <: Base.
     | memory_op_result bytes => MemoryOpResultConstructor
     | fetch_result           => FetchResultConstructor
     | ctl_result             => CtlResultConstructor
+    | interrupt_set           => InterruptSetConstructor
     (* | pmp_entries   => PmpEntriesConstructor *)
     end.
 
@@ -715,6 +777,12 @@ Module Export RiscvPmpBase <: Base.
                             match K with
                             | KCTL_TRAP => ty_exception_type
                             | KCTL_MRET => ty.unit
+                            end
+    | interrupt_set    => fun K =>
+                            match K with
+                            | KInts_Pending => ty_Minterrupts
+                            | KInts_Delegated => ty_Minterrupts
+                            | KInts_Empty => ty.unit
                             end
     end.
 
@@ -781,6 +849,12 @@ Module Export RiscvPmpBase <: Base.
                             | CTL_TRAP e => existT KCTL_TRAP e
                             | CTL_MRET   => existT KCTL_MRET tt
                             end
+    | interrupt_set    => fun Kv =>
+                            match Kv with
+                            | Ints_Pending v => existT KInts_Pending v
+                            | Ints_Delegated v => existT KInts_Delegated v
+                            | Ints_Empty => existT KInts_Empty tt
+                            end
     end.
 
   Definition union_fold (U : unioni) : { K & Val (union_constructor_type U K) } -> uniont U :=
@@ -833,6 +907,12 @@ Module Export RiscvPmpBase <: Base.
                               | existT KCTL_TRAP e  => CTL_TRAP e
                               | existT KCTL_MRET tt => CTL_MRET
                               end
+      | interrupt_set    => fun Kv =>
+                              match Kv with
+                              | existT KInts_Pending v  => Ints_Pending v
+                              | existT KInts_Delegated v  => Ints_Delegated v
+                              | existT KInts_Empty tt => Ints_Empty
+                              end
       end.
 
   Definition record_field_type (R : recordi) : NCtx string Ty :=
@@ -844,20 +924,39 @@ Module Export RiscvPmpBase <: Base.
                        "R" ∷ ty.bool
       ]
     | rmstatus    => ["MPP" ∷ ty_privilege
+                      ; "MPIE" ∷ ty.bool
+                      ; "MIE" ∷ ty.bool
+      ]
+    | rminterrupts    => [ "MEI" ∷ ty.bool
+                           ; "UEI" ∷ ty.bool
+                           ; "MTI" ∷ ty.bool
+                           ; "UTI" ∷ ty.bool
+                           ; "MSI" ∷ ty.bool
+                           ; "USI" ∷ ty.bool
       ]
     end.
 
   Equations record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R :=
-  | rpmpcfg_ent | [l;a;x;w;r]%env := MkPmpcfg_ent l a x w r
-  | rmstatus    | [mpp]%env       := MkMstatus mpp.
+  | rpmpcfg_ent  | [l;a;x;w;r]%env := MkPmpcfg_ent l a x w r
+  | rmstatus     | [mpp;mpie;mie]%env       := MkMstatus mpp mpie mie
+  | rminterrupts | [mei;uei;mti;uti;msi;usi]%env       := MkMinterrupts mei uei mti uti msi usi.
 
   Equations record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) :=
-  | rpmpcfg_ent | p => [kv (_ ∷ ty.bool             ; L p);
-                           (_ ∷ ty_pmpaddrmatchtype ; A p);
-                           (_ ∷ ty.bool             ; X p);
-                           (_ ∷ ty.bool             ; W p);
-                           (_ ∷ ty.bool             ; R p) ];
-  | rmstatus    | m => [kv ("MPP" ∷ ty_privilege; MPP m) ].
+  | rpmpcfg_ent  | p := [kv (_ ∷ ty.bool             ; L p);
+                         (_ ∷ ty_pmpaddrmatchtype ; A p);
+                         (_ ∷ ty.bool             ; X p);
+                         (_ ∷ ty.bool             ; W p);
+                         (_ ∷ ty.bool             ; R p) ]
+  | rmstatus     | m := [kv ("MPP" ∷ ty_privilege; MPP m)
+                         ; ("MPIE" ∷ ty.bool; MPIE m)
+                         ; ("MIE" ∷ ty.bool; MIE m)]
+  | rminterrupts | m := [kv ("MEI" ∷ ty.bool; MEI m)
+                         ; ("UEI" ∷ ty.bool; UEI m)
+                         ; ("MTI" ∷ ty.bool; MTI m)
+                         ; ("UTI" ∷ ty.bool; UTI m)
+                         ; ("MSI" ∷ ty.bool; MSI m)
+                         ; ("USI" ∷ ty.bool; USI m)
+  ].
 
   #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
     {| unionk           := union_constructor;
@@ -892,9 +991,12 @@ Module Export RiscvPmpBase <: Base.
     | pc            : Reg ty_xlenbits
     | nextpc        : Reg ty_xlenbits
     | mstatus       : Reg ty_mstatus
+    | mie           : Reg ty_Minterrupts
+    | mip           : Reg ty_Minterrupts
     | mtvec         : Reg ty_xlenbits
     | mcause        : Reg ty_mcause
     | mepc          : Reg ty_xlenbits
+    | mscratch      : Reg ty_xlenbits
     | cur_privilege : Reg ty_privilege
     | x1            : Reg ty_xlenbits
     | x2            : Reg ty_xlenbits
@@ -985,9 +1087,12 @@ Module Export RiscvPmpBase <: Base.
         | pc            , pc            => left eq_refl
         | nextpc        , nextpc        => left eq_refl
         | mstatus       , mstatus       => left eq_refl
+        | mie           , mie       => left eq_refl
+        | mip           , mip       => left eq_refl
         | mtvec         , mtvec         => left eq_refl
-        | mcause        , mcause        => left eq_refl
+        | mscratch      , mscratch      => left eq_refl
         | mepc          , mepc          => left eq_refl
+        | mcause        , mcause        => left eq_refl
         | cur_privilege , cur_privilege => left eq_refl
         | x1            , x1            => left eq_refl
         | x2            , x2            => left eq_refl
@@ -1036,9 +1141,12 @@ Module Export RiscvPmpBase <: Base.
         [ existT _ pc;
           existT _ nextpc;
           existT _ mstatus;
+          existT _ mie;
+          existT _ mip;
           existT _ mtvec;
-          existT _ mcause;
+          existT _ mscratch;
           existT _ mepc;
+          existT _ mcause;
           existT _ cur_privilege;
           existT _ x1;
           existT _ x2;

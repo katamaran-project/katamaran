@@ -108,8 +108,11 @@ Section Loop.
                         pc            ↦ i                ∗
      (∃ npc : Xlenbits, nextpc        ↦ npc)             ∗
      (∃ mc : Xlenbits,  mcause        ↦ mc)              ∗
+     (∃ mi,            mip            ↦ mi)              ∗
+     (∃ mi,            mie            ↦ mi)              ∗
+     (∃ ms : Xlenbits,  mscratch      ↦ ms)              ∗
      (∃ v : Xlenbits,   mepc          ↦ v)               ∗
-                        mstatus       ↦ {| MPP := mpp |} ∗
+     (∃ mpie mie,       mstatus       ↦ {| MPP := mpp; MPIE := mpie; MIE := mie |}) ∗
                         interp_pmp_entries entries       ∗
                         interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
                         interp_gprs)%I.
@@ -119,11 +122,14 @@ Section Loop.
      interp_gprs ∗
      interp_pmp_entries entries ∗
      (∃ mc, mcause ↦ mc) ∗
+     (∃ mi, mip ↦ mi) ∗
+     (∃ mi, mie ↦ mi) ∗
+     (∃ ms : Xlenbits,  mscratch ↦ ms) ∗
      cur_privilege ↦ m ∗
      (∃ v, nextpc ↦ v ∗
            pc ↦ v) ∗
      mtvec ↦ h ∗
-     mstatus ↦ {| MPP := mpp |} ∗
+     (∃ mpie mie, mstatus ↦ {| MPP := mpp; MPIE := mpie; MIE := mie |}) ∗
      (∃ v, mepc ↦ v))%I.
 
   Definition CSRMod (m : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
@@ -132,11 +138,14 @@ Section Loop.
      (∃ entries, interp_pmp_entries entries) ∗
      ⌜m = Machine⌝ ∗
      (∃ mc, mcause ↦ mc) ∗
+     (∃ mi, mip ↦ mi) ∗
+     (∃ mi, mie ↦ mi) ∗
+     (∃ ms : Xlenbits,  mscratch ↦ ms) ∗
      cur_privilege ↦ Machine ∗
      (∃ v, nextpc ↦ v ∗
            pc ↦ v) ∗
      (∃ h, mtvec ↦ h) ∗
-     (∃ mpp, mstatus ↦ {| MPP := mpp |}) ∗
+     (∃ mpp mpie mie, mstatus ↦ {| MPP := mpp; MPIE := mpie; MIE := mie |}) ∗
      (∃ mepc_v, mepc ↦ mepc_v))%I.
 
   Definition Trap (m : Privilege) (h : Xlenbits) (entries : list (Pmpcfg_ent * Xlenbits)) :=
@@ -144,11 +153,14 @@ Section Loop.
      interp_gprs ∗
      interp_pmp_entries entries ∗
      (∃ mc, mcause ↦ mc) ∗
+     (∃ mi, mip ↦ mi) ∗
+     (∃ mi, mie ↦ mi) ∗
+     (∃ ms : Xlenbits,  mscratch ↦ ms) ∗
      cur_privilege ↦ Machine ∗
      nextpc ↦ h ∗
      pc ↦ h ∗
      mtvec ↦ h ∗
-     mstatus ↦ {| MPP := m |} ∗
+     (∃ mpie , mstatus ↦ {| MPP := m; MPIE := mpie; MIE := false |}) ∗
      (∃ mepc_v, mepc ↦ mepc_v))%I.
 
   Definition Recover (m : Privilege) (h : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
@@ -157,12 +169,15 @@ Section Loop.
      interp_pmp_entries entries ∗
      ⌜m = Machine⌝ ∗
      (∃ mc, mcause ↦ mc) ∗
+     (∃ mi, mip ↦ mi) ∗
+     (∃ mi, mie ↦ mi) ∗
+     (∃ ms : Xlenbits,  mscratch ↦ ms) ∗
      cur_privilege ↦ mpp ∗
      (∃ mepc_v, mepc   ↦ mepc_v ∗
                 pc     ↦ mepc_v ∗
                 nextpc ↦ mepc_v) ∗
      mtvec ↦ h ∗
-     mstatus ↦ {| MPP := User |})%I.
+     (∃ mpie mie, mstatus ↦ {| MPP := User; MPIE := mpie; MIE := mie |}))%I.
 
   (* Executing normally *)
   (* TODO: this should be the same as Start of iteration (P), drop one of them *)
@@ -170,12 +185,14 @@ Section Loop.
     (            interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
                                         interp_gprs ∗
                                         interp_pmp_entries es ∗
+                                        (∃ mi, mip ↦ mi) ∗
+                                        (∃ mi, mie ↦ mi) ∗
                                         (∃ mc,         mcause        ↦ mc) ∗
                                         cur_privilege ↦ cp ∗
                                         (∃ npc : Addr, nextpc        ↦ npc) ∗
                                         (∃ cpc : Addr, pc            ↦ cpc) ∗
                                         mtvec         ↦ h ∗
-                                        mstatus       ↦ {| MPP := mpp |} ∗
+                                        (∃ mpie mie, mstatus       ↦ {| MPP := mpp; MPIE := mpie; MIE := mie |}) ∗
                                         mepc          ↦ mepc_v)%I.
 
   (* Modified CSRs, requires Machine mode *)
@@ -184,12 +201,14 @@ Section Loop.
                                                            interp_gprs ∗
                                                            (∃ es : list (Pmpcfg_ent * Addr), interp_pmp_entries es) ∗
                                                            ⌜m = Machine⌝ ∗
+                                                                         (∃ mi, mip ↦ mi) ∗
+                                                                         (∃ mi, mie ↦ mi) ∗
                                                                          (∃ mc : Addr,                  mcause        ↦ mc) ∗
                                                                          cur_privilege ↦ Machine ∗
                                                                          (∃ npc : Addr,                 nextpc        ↦ npc ∗
                                                                                                                       pc            ↦ npc) ∗
                                                                          (∃ h : Addr,                   mtvec         ↦ h) ∗
-                                                                         (∃ mpp : Privilege,            mstatus       ↦ {| MPP := mpp |}) ∗
+                                                                         (∃ (mpp : Privilege) mpie mie,            mstatus       ↦ {| MPP := mpp; MPIE := mpie; MIE := mie |}) ∗
                                                                          (∃ epc : Addr,                 mepc          ↦ epc))%I.
 
   (* Trap occured -> Go into M-mode *)
@@ -198,11 +217,13 @@ Section Loop.
                             interp_gprs ∗
                             interp_pmp_entries es ∗
                             (∃ mc, mcause        ↦ mc) ∗
+                            (∃ mi, mip ↦ mi) ∗
+                            (∃ mi, mie ↦ mi) ∗
                             cur_privilege ↦ Machine ∗
                             nextpc        ↦ h ∗
                             pc            ↦ h ∗
                             mtvec         ↦ h ∗
-                            mstatus       ↦ {| MPP := m |} ∗
+                            (∃ mpie , mstatus       ↦ {| MPP := m; MPIE := mpie; MIE := false |}) ∗
                             mepc          ↦ i)%I.
 
   (* MRET = Recover *)
@@ -212,11 +233,13 @@ Section Loop.
                             interp_pmp_entries es ∗
                             ⌜m = Machine⌝ ∗
                                           (∃ mc, mcause        ↦ mc) ∗
+                                          (∃ mi, mip ↦ mi) ∗
+                                          (∃ mi, mie ↦ mi) ∗
                                           cur_privilege ↦ mpp ∗
                                           nextpc        ↦ mepc_v ∗
                                           pc            ↦ mepc_v ∗
                                           mtvec         ↦ h ∗
-                                          mstatus       ↦ {| MPP := User |} ∗
+                                          (∃ mpie mie, mstatus       ↦ {| MPP := User; MPIE := mpie; MIE := mie |}) ∗
                                           mepc          ↦ mepc_v)%I.
 
   Definition step_post' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) : iProp Σ :=
@@ -272,7 +295,7 @@ Section Loop.
   Lemma valid_step_semTriple :
     ⊢ semTriple_step.
   Proof.
-    iIntros (m i h mepc_v mpp entries) "(Hcp & Hmtvec & Hpc & Hnpc & Hmc & Hmepc & Hmstatus & Hpe & Hpaa & Hgprs)".
+    iIntros (m i h mepc_v mpp entries) "(Hcp & Hmtvec & Hpc & Hnpc & Hmc & Hmip & Hmie & Hmscr & Hmepc & Hmstatus & Hpe & Hpaa & Hgprs)".
     iApply (semWP_mono with "[-]").
     iApply valid_step_contract.
     Unshelve.
@@ -283,13 +306,13 @@ Section Loop.
     unfold step_post.
     iIntros ([v|e] _); last auto;
       iIntros "[H | [H | [H | H]]]".
-    - iDestruct "H" as "(Hpaa & Hgprs & Hmc & Hpe & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
+    - iDestruct "H" as "(Hpaa & Hgprs & Hpe & Hmc & Hmie & Hmip & Hmscr & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
       iLeft; unfold Execution; iFrame.
-    - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
+    - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hmie & Hmip & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
       iRight; iLeft; unfold CSRMod; now iFrame.
-    - iDestruct "H" as "(Hpaa & Hgprs & Hentries & Hmc & Hpe & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
+    - iDestruct "H" as "(Hpaa & Hgprs & Hentries & Hmc & Hmie & Hmip & Hmscratch & Hpe & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
       iRight; iRight; iLeft; unfold Trap; iFrame.
-    - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hcp & [% (Hmepc & Hnpc & Hpc)] & Hmtvec & Hmstatus)".
+    - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hmie & Hmip & Hmscratch & Hcp & [% (Hmepc & Hnpc & Hpc)] & Hmtvec & Hmstatus)".
       iRight; iRight; iRight; unfold Recover; by iFrame.
   Qed.
 
@@ -337,7 +360,7 @@ Section Loop.
     iIntros ([v|e] δ); last (iIntros "_"; by rewrite semWP_fail);
       iIntros "[HRes | [HRes | [HRes | HRes]]]";
       iApply (semWP_call_inline loop _).
-    - iDestruct "HRes" as "(? & ? & ? & ? & ? & [%i' (? & ?)] & ? & ? & ?)".
+    - iDestruct "HRes" as "(? & ? & ? & ? & ? & ? & ? & ? & [%i' (? & ?)] & ? & ? & ?)".
       unfold semTriple_loop.
       iApply ("H" $! m h i' mpp entries).
       unfold loop_pre.

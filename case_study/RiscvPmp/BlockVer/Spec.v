@@ -717,10 +717,10 @@ Module RiscvPmpSpecVerif.
   Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
-  Proof. now destruct H. Qed.
+  Proof. now destruct H; vm_compute. Qed.
 
   Lemma valid_mem_write_value {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_write_value bytes H).
-  Proof. now destruct H. Qed.
+  Proof. now destruct H; vm_compute. Qed.
 
   Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
   Proof. symbolic_simpl. intros. Lia.lia. Qed.

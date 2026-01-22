@@ -673,8 +673,6 @@ Section AnnotatedBlockVerification.
     Import SHeapSpec.notations.
     Import asn.notations.
 
-    Search SHeapSpec.
-
     Fixpoint sexec_annotated_block_addr (b : list AnnotInstr) :
       ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w0 ainstr apc =>
