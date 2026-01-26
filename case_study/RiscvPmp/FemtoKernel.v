@@ -298,7 +298,9 @@ Module inv := invariants.
     Import asn.notations.
     Import RiscvPmp.Sig.
     (* Fix word length at 4 for this example, as we do not perform any other writes*)
-    Local Notation asn_mmio_pred := (asn.chunk (chunk_user (mmio_trace bytes_per_word) [env])).
+    Local Notation asn_mmio_trace_state_inv := (asn.chunk (chunk_user (mmio_trace bytes_per_word) [env])).
+    Local Notation asn_mmio_state_pred s := (asn.chunk (chunk_user (mmio_state bytes_per_word) [s])).
+
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
@@ -353,7 +355,6 @@ Module inv := invariants.
 
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
 
-    (* fdu *)
     Example femtokernel_handler_pre : Assertion ["a" :: ty_xlenbits] :=
       (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
@@ -366,8 +367,11 @@ Module inv := invariants.
       asn_regs_ptsto ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-      asn_mmio_pred.
+      (∃ "s", asn_mmio_state_pred (term_var "s")) ∗
+      asn_mmio_trace_state_inv
+    .
 
+    (* fdu *)
     Example femtokernel_handler_post_block0 : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
       (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
@@ -376,23 +380,23 @@ Module inv := invariants.
       (∃ "cause", mcause ↦ term_var "cause") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
       (∃ "v", (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ᵢ term_var "v") ∗
-      (∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w")))
-        (asn.or
-           (
-               (* we reach block1 and t0 contains a value that satisfies the mmio_state predicate *)
-               (∃ "s", asn.chunk (chunk_user (mmio_state bytes_per_word) [term_var "s"; term_var "w"])) ∗
-               (term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block1))
-           )
-           (
-                (* we jump to block2 essentially skipping the write *)
-                (term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block2))
-            )
-        ))
-       ∗
       asn_regs_ptsto_excl [5] ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-      asn_mmio_pred.
+      (∃ "w", ∃ "s",
+            ((asn.chunk (chunk_ptsreg x5 (term_var "w"))) ∗
+            (asn.or
+               ( (* we reach block1 and t0 contains a value that satisfies the mmio_state protocol *)
+                 (asn.chunk (chunk_user (mmio_state_prot bytes_per_word) [(term_var "w"); (term_var "s")])) ∗
+                 (asn_mmio_state_pred (term_var "s")) ∗
+                 (term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block1))
+               )
+               ( (* we jump to block2 essentially skipping the write *)
+                 (asn_mmio_state_pred (term_var "s")) ∗
+                 (term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block2))
+               )
+      ))) ∗
+      asn_mmio_trace_state_inv.
 
   Example femtokernel_handler_pre_block1 : Assertion ["a" :: ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block1)) ∗
@@ -401,12 +405,12 @@ Module inv := invariants.
     (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
     (∃ "cause", mcause ↦ term_var "cause") ∗
     (∃ "epc", mepc ↦ term_var "epc") ∗
-    (∃ "s", ∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w"))) (asn.chunk (chunk_user (mmio_state bytes_per_word) [term_var "s"; term_var "w"]))) ∗
+    (∃ "s", ∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w"))) (asn.chunk (chunk_user (mmio_state bytes_per_word) [term_var "s"]))) ∗
     (* (∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w"))) (term_unop (uop.bvtake 1) (term_var "w") = term_val (ty.bvec 1) (bv.of_N 0))) ∗ *)
     asn_regs_ptsto_excl [5] ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
-    asn_mmio_pred.
+    asn_mmio_trace_state_inv.
 
   Example femtokernel_handler_post_block1 : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block1)) ∗
@@ -419,7 +423,7 @@ Module inv := invariants.
     asn_regs_ptsto ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
-    asn_mmio_pred.
+    asn_mmio_trace_state_inv.
 
   Example femtokernel_handler_pre_block2 : Assertion ["a" :: ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block2)) ∗
@@ -431,7 +435,7 @@ Module inv := invariants.
     asn_regs_ptsto ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block2)))) ∗
-    asn_mmio_pred.
+    asn_mmio_trace_state_inv.
 
   Example femtokernel_handler_post : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block2)) ∗
@@ -443,7 +447,7 @@ Module inv := invariants.
     asn_regs_ptsto ∗
     cur_privilege ↦ term_val ty_privilege User ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block2)))) ∗
-    asn_mmio_pred.
+    asn_mmio_trace_state_inv.
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
     (*   Eval vm_compute in *)
@@ -496,25 +500,23 @@ Locate erase_symprop.
     (*   - simpl. destruct (bv.trunc m p); auto. *)
     (* Qed. *)
 
+
+
 Import Erasure.notations.
 
 
 (* for debugging *)
-Set Printing Depth 100.
+Set Printing Depth 200.
 Eval vm_compute in vc__femtohandler_block0.
-
+(* fdu *)
     (* Prove that the verification condition that Katamaran creates for this block holds.
        I.e. we're just proving the verification condition for block0. *)
     Import Erasure.notations.
     Lemma sat__femtohandler_block0 : safeE (vc__femtohandler_block0).
     Proof.
       vm_compute.
-      constructor; cbn.
-      intuition. apply H.
-      (* fdu *)
-      apply H. 
+      constructor; cbn. unfold bv.sext'. intros. destruct (bv.msb v).
       -  (* courtesy of Dominique Devriese *)
-         unfold bv.take.
          destruct (bv.appView 1 _ v).
          change (@bv.mk 32 1 I) with (@bv.app 1 31 [bv 0x1] bv.zero) in H.
          change (@bv.land 32) with (@bv.land (1 + 31)) in H.
@@ -523,7 +525,8 @@ Eval vm_compute in vc__femtohandler_block0.
          rewrite !bv.take_app in H.
          now rewrite bv.land_ones_r in H.
       -  unfold bv.take. destruct (bv.appView 1 _ v).
-         destruct xs. destruct bin.
+         destr
+           uct xs. destruct bin.
          -- simpl in *. rewrite <- bv.of_N_wf. auto.
          -- simpl in *. destruct p; inversion i.
             destruct H.
@@ -1272,7 +1275,7 @@ Qed.
     mmio_trace_pred bytes_per_word (memory_trace μ') (* The initial demands hold over the final state *).
   Proof.
     intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps.
-    refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _).
+    refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _). (* inv trace satisfies protocol state *)
     iIntros (Σ' H).
     cbn.
     iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
