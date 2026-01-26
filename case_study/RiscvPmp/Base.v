@@ -1111,7 +1111,6 @@ Module Export RiscvPmpBase <: Base.
       }.
 
     Definition Trace : Set := list Event.
-    Definition IOState := bool.
 
     (* Memory *)
     Record MemoryType : Type :=
