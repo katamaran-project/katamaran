@@ -55,12 +55,14 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Class mcMemPreGS Σ := {
       mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
       mc_gtPreGS :: trace_preG Trace Σ;
+      mc_gsPreGS :: iostate_preG IOState Σ;
     }.
   #[export] Existing Instance mc_ghPreGS.
   #[export] Existing Instance mc_gtPreGS.
+  #[export] Existing Instance mc_gsPreGS.
 
   Definition memGpreS : gFunctors -> Set := mcMemPreGS.
-  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace].
+  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace ; iostatePreΣ IOState].
 
   Lemma NoDup_liveAddrs : NoDup liveAddrs.
   Proof. now eapply Prelude.nodup_fixed. Qed.
@@ -116,8 +118,9 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
     pose (memmap := initMemMap μ).
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
     iMod (trace_alloc (memory_trace μ)) as (gT) "[Htrauth Htrfrag]".
+    iMod (state_alloc true) as (gS) "[Hstauth Hstfrag]".
     iModIntro.
-    iExists (McMemGS gH gT).
+    iExists (McMemGS gH gT gS).
     iSplitL "Hinv Htrauth".
     - iExists memmap.
       iFrame.
@@ -151,22 +154,19 @@ Module RiscvPmpIrisInstancePredicates.
 
   (* The address we will perform all writes to is the first legal MMIO address *)
   Definition write_addr : Addr := bv.of_N maxAddr.
-  Definition event_pred (width : nat) (e : Event) := ∃ v, e = mkEvent IOWrite write_addr width v.
-  Definition mmio_trace_pred (width : nat) (t : Trace) : Prop := Forall (event_pred width) t.
 
   (* This is the io-protocol state machine transition function. *)
   (* Note a condition on the event_addr is not (yet) required by the protocol and thus missing. *)
-  Inductive mmio_state_prot: IOState -> Event -> IOState -> Prop :=
-  | IOR :         forall iost e, event_type e = IORead ->
-                            mmio_state_prot iost e iost
-  | IOW_odd_even: forall e n v,  event_type e = IOWrite ->
-                            event_nbbytes e = S n ->
-                            bv.eqb (@bv.take (event_nbbytes e) 1%nat v) bv.zero (*curr evn*) ->
-                            mmio_state_prot false (* prev odd*) e true
-  | IOW_even_odd: forall e n v,  event_type e = IOWrite ->
-                            event_nbbytes e = S n ->
-                            bv.eqb (@bv.take (event_nbbytes e) 1%nat v) bv.one (*curr odd*) ->
-                            mmio_state_prot true (*prev even*) e false
+  Inductive impl_mmio_state_prot: IOState -> Event -> IOState -> Prop :=
+  | IOW_odd_even: forall e v, event_type e = IOWrite ->
+                         event_nbbytes e > 0 ->
+                         negb (bv.to_bool (@bv.take 1 (event_nbbytes e * 8 - 1) v)) (*new even*) ->
+                         impl_mmio_state_prot false (*old odd *) e true
+
+  | IOW_even_odd: forall e v, event_type e = IOWrite ->
+                         event_nbbytes e > 0 ->
+                         bv.to_bool (@bv.take 1 (event_nbbytes e * 8 - 1) v)  (*new odd*) ->
+                         impl_mmio_state_prot true (*old even*) e false
   .
 
   Lemma difference_commute_gset {A} `{Countable A} (X Y Z : gset A) :
@@ -299,7 +299,7 @@ Module RiscvPmpIrisInstancePredicates.
   Qed.
 
   Section WithMemory.
-    Context {Σ : gFunctors} {mG : mcMemGS Σ} {sG : mcIOStateGS Σ}.
+    Context {Σ : gFunctors} {mG : mcMemGS Σ}.
 
     (* TODO: change back to words instead of bytes... might be an easier first version
              and most likely still convenient in the future *)
@@ -322,9 +322,8 @@ Module RiscvPmpIrisInstancePredicates.
       end%I.
 
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
-    Definition interp_mmio_trace_pred `{invGS Σ} (width : nat) : iProp Σ :=
-      (* missing: invariant saying what we know about the trace t depending on protocol state s *)
-      inv femto_inv_mmio_ns (∃ (s : IOState) (t : Trace) , tr_frag1 t ∗ st_auth1 s ∗ ⌜mmio_trace_pred width t⌝ ∗ ⌜mmio_trace_state_pred t s⌝).
+    Definition interp_mmio_trace_state_inv `{invGS Σ} (width : nat) : iProp Σ :=
+      inv femto_inv_mmio_ns (∃ (s : IOState) (t : Trace) , tr_frag1 t ∗ st_auth1 s ∗ ⌜mmio_trace_state_pred t s⌝).
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
@@ -332,11 +331,14 @@ Module RiscvPmpIrisInstancePredicates.
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
-    Definition interp_mmio_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ ∃ v, bytes = v⌝.
+    Definition interp_mmio_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte)) (s s': IOState)  : iProp Σ :=
+      ⌜addr = write_addr⌝ ∗
+      ⌜let e := {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := width ;  event_contents := bytes |}
+       in  impl_mmio_state_prot s e s'⌝.
 
+    (* Current protocol state is: *)
     Definition interp_mmio_state_pred `{invGS Σ} (s : IOState) : iProp Σ :=
-      ⌜∃ e s', mmio_state_prot s e s'⌝.
-      (* ⌜∃ e s', let e := {| event_type := IOWrite;  event_addr := a;  event_nbbytes := width;  event_contents := bytes |} in  mmio_state_prot s e s'⌝. *)
+      st_frag1 s.
 
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).
@@ -453,7 +455,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
     Import env.notations.
 
-    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ, mcIOStateGS Σ}
+    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
@@ -462,9 +464,10 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
-    | mmio_state _             | [st] (* [unit] *)    => interp_mmio_state_pred st
-    | mmio_trace bytes         | [env] (* [unit] *)   => interp_mmio_trace_pred bytes (* fdu: for now aim to add an argument to this predicate. No new predicate needed. *)
-    | mmio_checked_write _     | [ addr; st; w; st' ]          => interp_mmio_checked_write addr w
+    | mmio_state _             | [st] (* [unit] *)    => interp_mmio_state_pred st (* We have ownership over st *)
+    | mmio_trace bytes         | [env] (* [unit] *)   => interp_mmio_trace_state_inv bytes (* Given st and tr state_prot is satisfied *)
+    | mmio_state_prot _        | [w; st]             => interp_mmio_state_prot w st (* Given st and w state_prot is satisfied *)
+    | mmio_checked_write _     | [ addr; w; st; st' ] => interp_mmio_checked_write addr w st st'
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
@@ -479,7 +482,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
           destruct x; auto
       end.
 
-    Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ, mcIOStateGS Σ} :
+    Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
         (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
@@ -491,7 +494,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
   End RiscvPmpIrisPredicates.
 
   Section RiscVPmpIrisInstanceProofs.
-    Context `{sr : sailRegGS Σ} `{igs : invGS Σ} `{mG : mcMemGS Σ} `{mS : mcIOStateGS Σ}.
+    Context `{sr : sailRegGS Σ} `{igs : invGS Σ} `{mG : mcMemGS Σ}.
 
     (* Note that the condition on overflow is required: some illegal set-ups are accepted by `pmp_match_addr` as it does not track overflow, and shrinking those might make the output go from match to no match. *)
     Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :

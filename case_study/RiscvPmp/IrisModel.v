@@ -51,6 +51,9 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     (* Defines the memory ghost state. *)
     Definition MemVal : Set := Byte.
 
+    (* Defines the io-protocol ghost state *)
+    Definition IOState : Set := bool.
+
     (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)
     Class mcMemGS Σ :=
       McMemGS {
@@ -58,9 +61,13 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
           mc_ghGS : gen_heapGS Addr MemVal Σ;
           (* tracking traces: we want a ghost variable for tracking the current trace *)
           mc_gtGS : traceG Trace Σ;
+          (* tracking iostate: we want a ghost variable for tracking the state of the corrent io-protocol *)
+          mc_iostGS : iostateG IOState Σ;
+
         }.
     #[export] Existing Instance mc_ghGS.
     #[export] Existing Instance mc_gtGS.
+    #[export] Existing Instance mc_iostGS. (* Tut: Registers field as an instance. Needed for instance resolution. *)
 
     Definition memGS : gFunctors -> Set := mcMemGS.
 
@@ -70,18 +77,6 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
            ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
            ∗ tr_auth1 (memory_trace μ)
         )%I.
-
-
-
-    (* Defines the IOState ghost state. *)
-    Definition IOStateVal : Set := IOState.
-
-    Class mcIOStateGS Σ :=
-      McIOStateGS {
-          (* tracking iostate: we want a ghost variable for tracking the state of the corrent io-protocol *)
-          mc_iostGS : iostateG IOState Σ;
-        }.
-    #[export] Existing Instance mc_iostGS.
 
 
   End RiscvPmpIrisParams.

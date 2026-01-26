@@ -275,7 +275,9 @@ Module inv := invariants.
     Import asn.notations.
     Import RiscvPmp.Sig.
     (* Fix word length at 4 for this example, as we do not perform any other writes*)
-    Local Notation asn_mmio_pred := (asn.chunk (chunk_user (mmio_trace bytes_per_word) [env])).
+    Local Notation asn_mmio_trace_state_inv := (asn.chunk (chunk_user (mmio_trace bytes_per_word) [env])).
+    Local Notation asn_mmio_state_pred s := (asn.chunk (chunk_user (mmio_state bytes_per_word) [s])).
+
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
@@ -356,7 +358,9 @@ Module inv := invariants.
       (∃ "x1", x1 ↦ term_var "x1") ∗
       x5 ↦ term_var "x5" ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-      asn_mmio_pred.
+      (∃ "s", asn_mmio_state_pred (term_var "s")) ∗
+      asn_mmio_trace_state_inv
+    .
 
     Example femtokernel_handler_post :
       Assertion ["x5" :: ty_xlenbits; "mepc" :: ty_xlenbits; "a" :: ty_xlenbits; "an"::ty_xlenbits] :=
@@ -1153,7 +1157,7 @@ Qed.
     mmio_trace_pred bytes_per_word (memory_trace μ') (* The initial demands hold over the final state *).
   Proof.
     intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps.
-    refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _).
+    refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _). (* inv trace satisfies protocol state *)
     iIntros (Σ' H).
     cbn.
     iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmie & Hmip & Hmtvec & Hmscratch & Hmepc & Hmcause & Hcurpriv & H')".
