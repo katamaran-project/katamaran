@@ -161,21 +161,31 @@ Module RiscvPmpIrisInstance <:
   (* The address we will perform all writes to is the first legal MMIO address *)
   Definition write_addr : Addr := bv.of_N maxAddr.
 
+  Definition is_even {n} : bv n -> bool :=
+    match n with
+      | 0%nat => fun _ => true
+      | (S n)%nat => fun v => negb (bv.to_bool (bv.take 1 v))
+    end.
+
+  Lemma is_even_correct: forall n (b : bv n), is_even b <-> N.even (bv.bin b).
+    split; intros; destruct b; destruct bin; auto;
+      try (destruct p; auto; destruct n; auto);
+      try (destruct n; auto; destruct p; auto).
+  Qed.
+
   (* This is the io-protocol state machine transition function. *)
   (* Note a condition on the event_addr is not (yet) required by the protocol and thus missing. *)
   Inductive impl_mmio_state_prot: IOState -> Event -> IOState -> Prop :=
-  | IOW_odd_even: forall e v, event_type e = IOWrite ->
-                         event_nbbytes e > 0 ->
-                         negb (bv.to_bool (@bv.take 1 (event_nbbytes e * 8 - 1) v)) (*new even*) ->
-                         impl_mmio_state_prot false (*old odd *) e true
+  | IOW_odd_even: forall e, event_type e = IOWrite ->
+                       event_nbbytes e > 0 ->
+                       (is_even (event_contents e)) -> (* new even *)
+                       impl_mmio_state_prot false (* old odd *) e true (* new even *)
 
-  | IOW_even_odd: forall e v, event_type e = IOWrite ->
-                         event_nbbytes e > 0 ->
-                         bv.to_bool (@bv.take 1 (event_nbbytes e * 8 - 1) v)  (*new odd*) ->
-                         impl_mmio_state_prot true (*old even*) e false
+  | IOW_even_odd: forall e, event_type e = IOWrite ->
+                       event_nbbytes e > 0 ->
+                       negb (is_even (event_contents e)) -> (* new odd *)
+                       impl_mmio_state_prot true (* old even *) e false (* new odd *)
   .
-
-
 
   Definition interp_mmio_state_prot `{invGS Σ} {width : nat} (w: bv (width * byte)) (s : IOState) : iProp Σ :=
     ⌜True⌝.

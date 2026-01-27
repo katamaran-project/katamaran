@@ -986,24 +986,18 @@ Module RiscvPmpIrisInstanceWithContracts.
     now iFrame.
   Qed.
 
-
   Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (width : WordWidth) :
     ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width ).
   Proof.
     intros ι; destruct_syminstance ι; cbn.
     iIntros "([<- _] & Hmmio & Hcond)".
     iFrame.
-    unfold interp_mmio_checked_write. cbn in *.
-    destruct iostate_old; iDestruct "Hcond" as "[Hcond _]"; cbn; subst; iSplitR; auto;
-      unfold inst; unfold inst_term; unfold RiscvPmpBlockVerifSpec.map_wordwidth; cbn;
-      iDestruct "Hcond" as "%Hcond"; iPureIntro; simpl in *.
-      - assert (HH: width = WORD).  admit. subst. cbn.
-        eapply IOW_even_odd; simpl in *; try lia; eauto.
-        erewrite Hcond. auto.
-      - assert (HH: width = WORD). admit. subst. cbn.
-        eapply IOW_odd_even; simpl in *; try lia; eauto.
-        erewrite Hcond. auto.
- Admitted.
+    destruct iostate_old; iDestruct "Hcond" as "[Hcond _]";
+      iSplitR; auto;
+      cbn; iDestruct "Hcond" as "%Hcond"; iPureIntro;
+      destruct width; constructor; simpl in *; try lia; eauto;
+      rewrite bv.take_take; rewrite Hcond; auto.
+  Qed.
 
   Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.
   Proof.
