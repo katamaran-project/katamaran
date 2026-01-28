@@ -618,7 +618,7 @@ Goal True. idtac "Timing after: example/length". Abort.
 
 Goal True. idtac "Timing before: example/cmp". Abort.
 Lemma valid_contract_cmp : Symbolic.ValidContractReflect sep_contract_cmp (FunDef cmp).
-Proof. reflexivity. Qed.
+Proof. now vm_compute. Qed.
 Goal True. idtac "Timing after: example/cmp". Abort.
 Lemma valid_contract_bvtest : Symbolic.ValidContractWithErasure sep_contract_bvtest (FunDef bvtest).
 Proof.

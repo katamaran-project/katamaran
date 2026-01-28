@@ -769,22 +769,28 @@ Module Type SymbolicExecOn
       (* Use inline_fuel = 1 by default. *)
       ValidContractWithFuel 1 c body.
 
-    Definition ok {Σ} (p : 𝕊 Σ) : bool :=
-      match prune p with
-      | SymProp.block => true
-      | _           => false
+    Inductive VerificationFailed {Σ} (msg : AMessage Σ) :=.
+
+    Fixpoint ok' {Σ} (p : 𝕊 Σ) : Prop :=
+      match p with
+      | SymProp.block => True
+      | SymProp.debug _ p => ok' p
+      | SymProp.error msg => VerificationFailed msg
+      | _           => False
       end.
+    Definition ok {Σ} (p : 𝕊 Σ) : Prop := ok' (prune p).
 
     Lemma ok_sound {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
-      is_true (ok p) -> safe p ι.
+      ok p -> safe p ι.
     Proof.
-      rewrite <- prune_sound. unfold ok.
-      generalize (prune p) as q. clear. intros q.
-      destruct q; try discriminate; cbn; auto.
+      unfold ok.
+      rewrite <- prune_sound.
+      generalize (prune p) as q.
+      induction q; cbn; now intuition.
     Qed.
 
     Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil))))).
+      ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil)))).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       ValidContractReflectWithFuel 1 c body.

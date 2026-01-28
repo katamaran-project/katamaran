@@ -769,32 +769,32 @@ Section ContractVerification.
 
   Goal True. idtac "Timing before: llist/valid_contract_append". Abort.
   Lemma valid_contract_append : Symbolic.ValidContractReflect sep_contract_append fun_append.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
   Goal True. idtac "Timing after: llist/valid_contract_append". Abort.
 
   Goal True. idtac "Timing before: llist/valid_contract_appendloop". Abort.
   Lemma valid_contract_appendloop : Symbolic.ValidContractReflect sep_contract_appendloop fun_appendloop.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
   Goal True. idtac "Timing after: llist/valid_contract_appendloop". Abort.
 
   Goal True. idtac "Timing before: llist/valid_contract_length". Abort.
   Lemma valid_contract_length : Symbolic.ValidContractReflect sep_contract_length fun_length.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
   Goal True. idtac "Timing after: llist/valid_contract_length". Abort.
 
   Goal True. idtac "Timing before: llist/valid_contract_copy". Abort.
   Lemma valid_contract_copy : Symbolic.ValidContractReflect sep_contract_copy fun_copy.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
   Goal True. idtac "Timing after: llist/valid_contract_copy". Abort.
 
   Goal True. idtac "Timing before: llist/valid_contract_reverse". Abort.
   Lemma valid_contract_reverse : Symbolic.ValidContractReflect sep_contract_reverse fun_reverse.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
   Goal True. idtac "Timing after: llist/valid_contract_reverse". Abort.
 
   Goal True. idtac "Timing before: llist/valid_contract_reverseloop". Abort.
   Lemma valid_contract_reverseloop : Symbolic.ValidContractReflect sep_contract_reverseloop fun_reverseloop.
-  Proof. reflexivity. Qed.
+  Proof. now vm_compute. Qed.
   Goal True. idtac "Timing after: llist/valid_contract_reverseloop". Abort.
 
 End ContractVerification.
@@ -849,7 +849,7 @@ Module ExampleModel.
       Lemma fst_pair_id2 : forall {A} {B},
           (λ (x : A) (y : B), (Datatypes.fst ∘ pair x) y) = (λ (x : A) (y : B), x).
       Proof.
-        intros; reflexivity.
+        intros; now vm_compute.
       Qed.
 
       Lemma imap_pair_fst_seq {A} (l : list A) :
@@ -858,7 +858,7 @@ Module ExampleModel.
         rewrite fmap_imap.
         rewrite fst_pair_id2.
         rewrite imap_seq_0.
-        rewrite list_fmap_id; reflexivity.
+        rewrite list_fmap_id; now vm_compute.
       Qed.
 
       Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
