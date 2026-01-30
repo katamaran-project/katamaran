@@ -32,7 +32,7 @@ From Coq Require Import
 From Katamaran Require Import
      Bitvector
      Environment
-     (* Iris.Instance *) Iris.BinaryInstance
+     Iris.Instance
      Iris.Base
      Program
      Semantics
@@ -90,9 +90,9 @@ Module RiscvPmpModel2.
   End RiscvPmpProgramLogic.
   Include RiscvPmpProgramLogic.
 
-  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase
-    RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance.
+  (* Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature *)
+  (*   RiscvPmpProgram RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase *)
+  (*   RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance. *)
 
   Section ForeignProofs.
     Context `{sg : sailGS Σ}.
@@ -140,20 +140,20 @@ Module RiscvPmpModel2.
         f_equal; auto.
     Qed.
 
-    Lemma read_ram_sound (bytes : nat) :
-      TValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
-    Proof.
-      intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
-      iIntros "H". cbn in *. iApply semTWP_foreign.
-      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-      iIntros (res ? ? Hf).
-      iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
-      iMod "Hclose" as "_". iModIntro.
-      rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-      iFrame "Hregs Hmem". iApply semTWP_val. auto.
-    Qed.
+    (* Lemma read_ram_sound (bytes : nat) : *)
+    (*   TValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes). *)
+    (* Proof. *)
+    (*   intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn. *)
+    (*   iIntros "H". cbn in *. iApply semTWP_foreign. *)
+    (*   iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr)". *)
+    (*   iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro. *)
+    (*   iIntros (res ? ? Hf). *)
+    (*   iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram". *)
+    (*   iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem". *)
+    (*   iMod "Hclose" as "_". iModIntro. *)
+    (*   rewrite Heq in Hf. cbn in Hf. inversion Hf; subst. *)
+    (*   iFrame "Hregs Hmem". iApply semTWP_val. auto. *)
+    (* Qed. *)
 
     Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
       map_Forall (λ (a : Addr) (v : Base.Byte), (memory_ram μ) a = v) memmap ->
@@ -176,179 +176,179 @@ Module RiscvPmpModel2.
         by apply map_Forall_update.
     Qed.
 
-    Lemma write_ram_sound (bytes : nat) :
-      TValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).
-    Proof.
-      intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-      iIntros "[%w H]". iApply semTWP_foreign.
-      iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-      iIntros (res ? ? Hf). iMod "Hclose" as "_".
-      iMod (fun_write_ram_works _ _ data Hmap  with "[$H $Hmem $Htr]") as "[Hmem H]".
-      iModIntro. rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-      iFrame "Hregs Hmem". iApply semTWP_val. auto.
-    Qed.
+    (* Lemma write_ram_sound (bytes : nat) : *)
+    (*   TValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes). *)
+    (* Proof. *)
+    (*   intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *. *)
+    (*   iIntros "[%w H]". iApply semTWP_foreign. *)
+    (*   iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]". *)
+    (*   iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro. *)
+    (*   iIntros (res ? ? Hf). iMod "Hclose" as "_". *)
+    (*   iMod (fun_write_ram_works _ _ data Hmap  with "[$H $Hmem $Htr]") as "[Hmem H]". *)
+    (*   iModIntro. rewrite Heq in Hf. cbn in Hf. inversion Hf; subst. *)
+    (*   iFrame "Hregs Hmem". iApply semTWP_val. auto. *)
+    (* Qed. *)
 
-    Lemma mmio_read_sound (bytes : nat) :
-     TValidContractForeign (sep_contract_mmio_read bytes) (mmio_read bytes).
-    Proof.
-      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
-      now iIntros "[%HFalse _]".
-    Qed.
+    (* Lemma mmio_read_sound (bytes : nat) : *)
+    (*  TValidContractForeign (sep_contract_mmio_read bytes) (mmio_read bytes). *)
+    (* Proof. *)
+    (*   intros Γ es δ ι Heq. destruct_syminstance ι. cbn. *)
+    (*   now iIntros "[%HFalse _]". *)
+    (* Qed. *)
 
-    Lemma mmio_write_sound `(H: restrict_bytes bytes) :
-     TValidContractForeign (sep_contract_mmio_write H) (mmio_write H).
-    Proof.
-      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
-      now iIntros "[%HFalse _]".
-    Qed.
+    (* Lemma mmio_write_sound `(H: restrict_bytes bytes) : *)
+    (*  TValidContractForeign (sep_contract_mmio_write H) (mmio_write H). *)
+    (* Proof. *)
+    (*   intros Γ es δ ι Heq. destruct_syminstance ι. cbn. *)
+    (*   now iIntros "[%HFalse _]". *)
+    (* Qed. *)
 
-    Lemma interp_pmp_fun_within_mmio_spec {entries m p} (paddr : Addr) bytes:
-      Pmp_access paddr (bv.of_nat bytes) entries m p →
-      interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
-      ⌜fun_within_mmio bytes paddr = false%nat⌝.
-    Proof.
-      iIntros (Hpmp) "Hint". rewrite /fun_within_mmio.
-      rewrite bool_decide_and andb_false_iff.
-      destruct (decide (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N) as [Hlt | Hnlt].
-      - iDestruct (interp_pmp_within_mmio_spec with "Hint") as "->"; eauto.
-      - iPureIntro. right.
-        by rewrite bool_decide_false.
-    Qed.
+    (* Lemma interp_pmp_fun_within_mmio_spec {entries m p} (paddr : Addr) bytes: *)
+    (*   Pmp_access paddr (bv.of_nat bytes) entries m p → *)
+    (*   interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗ *)
+    (*   ⌜fun_within_mmio bytes paddr = false%nat⌝. *)
+    (* Proof. *)
+    (*   iIntros (Hpmp) "Hint". rewrite /fun_within_mmio. *)
+    (*   rewrite bool_decide_and andb_false_iff. *)
+    (*   destruct (decide (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N) as [Hlt | Hnlt]. *)
+    (*   - iDestruct (interp_pmp_within_mmio_spec with "Hint") as "->"; eauto. *)
+    (*   - iPureIntro. right. *)
+    (*     by rewrite bool_decide_false. *)
+    (* Qed. *)
 
-    Lemma within_mmio_sound `(H: restrict_bytes bytes) :
-     TValidContractForeign (@sep_contract_within_mmio bytes H) (within_mmio H).
-    Proof.
-      intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-      iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])".
-      iApply semTWP_foreign. iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-      iPoseProof (interp_pmp_fun_within_mmio_spec with "Hpmpa") as "%Hnotmmio"; first eauto.
-      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-      iIntros (res ? ? Hf). iMod "Hclose" as "_". iModIntro.
-      rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-      iFrame "Hregs Hmem Htr". iSplitR; auto. iApply semTWP_val.
-      now iFrame "Hcurp Hpmp Hpmpa".
-    Qed.
+    (* Lemma within_mmio_sound `(H: restrict_bytes bytes) : *)
+    (*  TValidContractForeign (@sep_contract_within_mmio bytes H) (within_mmio H). *)
+    (* Proof. *)
+    (*   intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *. *)
+    (*   iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])". *)
+    (*   iApply semTWP_foreign. iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]". *)
+    (*   iPoseProof (interp_pmp_fun_within_mmio_spec with "Hpmpa") as "%Hnotmmio"; first eauto. *)
+    (*   iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro. *)
+    (*   iIntros (res ? ? Hf). iMod "Hclose" as "_". iModIntro. *)
+    (*   rewrite Heq in Hf. cbn in Hf. inversion Hf; subst. *)
+    (*   iFrame "Hregs Hmem Htr". iSplitR; auto. iApply semTWP_val. *)
+    (*   now iFrame "Hcurp Hpmp Hpmpa". *)
+    (* Qed. *)
 
-    Lemma decode_sound :
-      TValidContractForeign sep_contract_decode decode.
-    Proof.
-      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
-      iIntros "_". cbn in *. iApply semTWP_foreign.
-      iIntros (? ?) "(Hregs & Hmem)".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-      iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-      iMod "Hclose" as "_". iModIntro. iFrame "Hregs Hmem".
-      destruct (pure_decode _).
-      - now iApply semTWP_fail.
-      - now iApply semTWP_val.
-    Qed.
+    (* Lemma decode_sound : *)
+    (*   TValidContractForeign sep_contract_decode decode. *)
+    (* Proof. *)
+    (*   intros Γ es δ ι Heq. destruct_syminstance ι. cbn. *)
+    (*   iIntros "_". cbn in *. iApply semTWP_foreign. *)
+    (*   iIntros (? ?) "(Hregs & Hmem)". *)
+    (*   iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro. *)
+    (*   iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst. *)
+    (*   iMod "Hclose" as "_". iModIntro. iFrame "Hregs Hmem". *)
+    (*   destruct (pure_decode _). *)
+    (*   - now iApply semTWP_fail. *)
+    (*   - now iApply semTWP_val. *)
+    (* Qed. *)
 
-    Lemma TforeignSem : TForeignSem.
-    Proof.
-      intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound.
-    Qed.
+    (* Lemma TforeignSem : TForeignSem. *)
+    (* Proof. *)
+    (*   intros Δ τ f; destruct f; *)
+    (*     eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound. *)
+    (* Qed. *)
 
-    Lemma foreignSem : ForeignSem.
-    Proof. apply (TForeignSem_ForeignSem TforeignSem). Qed.
+    (* Lemma foreignSem : ForeignSem. *)
+    (* Proof. apply (TForeignSem_ForeignSem TforeignSem). Qed. *)
   End ForeignProofs.
 
   Section LemProofs.
     Context `{sg : sailGS Σ}.
 
-    Lemma gprs_equiv :
-      interp_gprs ⊣⊢
-      asn.interpret asn_regs_ptsto env.nil.
-    Proof.
-      unfold interp_gprs, reg_file.
-      rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
-      cbn. iSplit.
-      - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
-      - iIntros "H"; iSplitR; first by iExists bv.zero.
-        repeat iDestruct "H" as "($ & H)"; iFrame.
-    Qed.
+    (* Lemma gprs_equiv : *)
+    (*   interp_gprs ⊣⊢ *)
+    (*   asn.interpret asn_regs_ptsto env.nil. *)
+    (* Proof. *)
+    (*   unfold interp_gprs, reg_file. *)
+    (*   rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum]. *)
+    (*   cbn. iSplit. *)
+    (*   - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)". *)
+    (*   - iIntros "H"; iSplitR; first by iExists bv.zero. *)
+    (*     repeat iDestruct "H" as "($ & H)"; iFrame. *)
+    (* Qed. *)
 
-    Lemma open_gprs_sound :
-      ValidLemma RiscvPmpSpecification.lemma_open_gprs.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      rewrite gprs_equiv. cbn. iIntros. iFrame.
-    Qed.
+    (* Lemma open_gprs_sound : *)
+    (*   ValidLemma RiscvPmpSpecification.lemma_open_gprs. *)
+    (* Proof. *)
+    (*   intros ι; destruct_syminstance ι; cbn. *)
+    (*   rewrite gprs_equiv. cbn. iIntros. iFrame. *)
+    (* Qed. *)
 
-    Lemma close_gprs_sound :
-      ValidLemma RiscvPmpSpecification.lemma_close_gprs.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      rewrite gprs_equiv. cbn. iIntros. iFrame.
-    Qed.
+    (* Lemma close_gprs_sound : *)
+    (*   ValidLemma RiscvPmpSpecification.lemma_close_gprs. *)
+    (* Proof. *)
+    (*   intros ι; destruct_syminstance ι; cbn. *)
+    (*   rewrite gprs_equiv. cbn. iIntros. iFrame. *)
+    (* Qed. *)
 
-    Lemma open_ptsto_instr_sound :
-      ValidLemma RiscvPmpSpecification.lemma_open_ptsto_instr.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      now iIntros.
-    Qed.
+    (* Lemma open_ptsto_instr_sound : *)
+    (*   ValidLemma RiscvPmpSpecification.lemma_open_ptsto_instr. *)
+    (* Proof. *)
+    (*   intros ι; destruct_syminstance ι; cbn. *)
+    (*   now iIntros. *)
+    (* Qed. *)
 
-    Lemma close_ptsto_instr_sound :
-      ValidLemma RiscvPmpSpecification.lemma_close_ptsto_instr.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      now iIntros.
-    Qed.
+    (* Lemma close_ptsto_instr_sound : *)
+    (*   ValidLemma RiscvPmpSpecification.lemma_close_ptsto_instr. *)
+    (* Proof. *)
+    (*   intros ι; destruct_syminstance ι; cbn. *)
+    (*   now iIntros. *)
+    (* Qed. *)
 
-    Lemma open_pmp_entries_sound :
-      ValidLemma RiscvPmpSpecification.lemma_open_pmp_entries.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      rewrite pmp_entries_ptsto.
-      iIntros "(% & % & % & % & -> & e1 & e2 & e3 & e4)".
-      repeat iExists _.
-      now iFrame "e1 e2 e3 e4".
-    Qed.
+    (* Lemma open_pmp_entries_sound : *)
+    (*   ValidLemma RiscvPmpSpecification.lemma_open_pmp_entries. *)
+    (* Proof. *)
+    (*   intros ι; destruct_syminstance ι; cbn. *)
+    (*   rewrite pmp_entries_ptsto. *)
+    (*   iIntros "(% & % & % & % & -> & e1 & e2 & e3 & e4)". *)
+    (*   repeat iExists _. *)
+    (*   now iFrame "e1 e2 e3 e4". *)
+    (* Qed. *)
 
-    Lemma close_pmp_entries_sound :
-      ValidLemma RiscvPmpSpecification.lemma_close_pmp_entries.
-    Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed.
+    (* Lemma close_pmp_entries_sound : *)
+    (*   ValidLemma RiscvPmpSpecification.lemma_close_pmp_entries. *)
+    (* Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed. *)
 
-    Lemma extract_pmp_ptsto_sound (bytes : nat) :
-      ValidLemma (RiscvPmpSpecification.lemma_extract_pmp_ptsto bytes).
-    Proof.
-      intros ι; destruct_syminstance ι; cbn - [liveAddrs].
-      iIntros "[Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]".
-      assert (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N.
-      {
-        eapply N.le_lt_trans; last apply lenAddr_rep.
-        unfold bv.unsigned in *. zify; auto. (* TODO: why does lia not solve this? *) }
-      iDestruct (interp_pmp_addr_inj_extr with "Hmem") as "[Hmemwo Hia]"; eauto.
-      iFrame.
-      iApply interp_addr_access_extr; last iFrame; eauto.
-      - unfold bv.unsigned in *. zify; auto. (* TODO idem *)
-      - unfold bv.unsigned in *. zify; auto. (* TODO idem *)
-    Qed.
+    (* Lemma extract_pmp_ptsto_sound (bytes : nat) : *)
+    (*   ValidLemma (RiscvPmpSpecification.lemma_extract_pmp_ptsto bytes). *)
+    (* Proof. *)
+    (*   intros ι; destruct_syminstance ι; cbn - [liveAddrs]. *)
+    (*   iIntros "[Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]". *)
+    (*   assert (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N. *)
+    (*   { *)
+    (*     eapply N.le_lt_trans; last apply lenAddr_rep. *)
+    (*     unfold bv.unsigned in *. zify; auto. (* TODO: why does lia not solve this? *) } *)
+    (*   iDestruct (interp_pmp_addr_inj_extr with "Hmem") as "[Hmemwo Hia]"; eauto. *)
+    (*   iFrame. *)
+    (*   iApply interp_addr_access_extr; last iFrame; eauto. *)
+    (*   - unfold bv.unsigned in *. zify; auto. (* TODO idem *) *)
+    (*   - unfold bv.unsigned in *. zify; auto. (* TODO idem *) *)
+    (* Qed. *)
 
-    Lemma return_pmp_ptsto_sound (bytes : nat) :
-      ValidLemma (RiscvPmpSpecification.lemma_return_pmp_ptsto bytes).
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      iIntros "[Hwithout Hptsto]".
-      iDestruct (interp_addr_access_inj with "Hptsto") as "Hacc".
-      unfold interp_pmp_addr_access_without.
-      iApply ("Hwithout" with "Hacc").
-    Qed.
+    (* Lemma return_pmp_ptsto_sound (bytes : nat) : *)
+    (*   ValidLemma (RiscvPmpSpecification.lemma_return_pmp_ptsto bytes). *)
+    (* Proof. *)
+    (*   intros ι; destruct_syminstance ι; cbn. *)
+    (*   iIntros "[Hwithout Hptsto]". *)
+    (*   iDestruct (interp_addr_access_inj with "Hptsto") as "Hacc". *)
+    (*   unfold interp_pmp_addr_access_without. *)
+    (*   iApply ("Hwithout" with "Hacc"). *)
+    (* Qed. *)
 
-    Lemma close_mmio_write_sound (imm : bv 12) (width : WordWidth):
-      ValidLemma (RiscvPmpSpecification.lemma_close_mmio_write imm width).
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      now iIntros.
-    Qed.
+    (* Lemma close_mmio_write_sound (imm : bv 12) (width : WordWidth): *)
+    (*   ValidLemma (RiscvPmpSpecification.lemma_close_mmio_write imm width). *)
+    (* Proof. *)
+    (*   intros ι; destruct_syminstance ι; cbn. *)
+    (*   now iIntros. *)
+    (* Qed. *)
 
-    Lemma lemSem : LemmaSem.
-    Proof.
-      intros Δ [];
-        eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound, close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound, close_mmio_write_sound.
-    Qed.
+    (* Lemma lemSem : LemmaSem. *)
+    (* Proof. *)
+    (*   intros Δ []; *)
+    (*     eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound, close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound, close_mmio_write_sound. *)
+    (* Qed. *)
   End LemProofs.
 
 End RiscvPmpModel2.

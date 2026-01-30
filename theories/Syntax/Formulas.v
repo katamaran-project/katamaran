@@ -120,6 +120,21 @@ Module Type FormulasOn
     | NonSyncVal _ _ => False
     end.
 
+  Definition secLeak_bool {σ} (rv : RelVal σ) : Datatypes.bool :=
+    match rv with
+    | SyncVal v => true
+    | NonSyncVal _ _ => false
+    end.
+
+  Lemma secLeakOtherDef {σ} {rv : RelVal σ} :
+    secLeak rv <-> rv = SyncVal (ty.projLeft rv).
+  Proof.
+    split; intro H.
+    + destruct rv; try contradiction.
+      eauto.
+    + rewrite H. cbn. auto.
+  Qed.      
+
   #[export] Instance instprop_formula : InstProp Formula :=
     fix inst_formula {Σ} (fml : Formula Σ) (ι : Valuation Σ) :=
       match fml with

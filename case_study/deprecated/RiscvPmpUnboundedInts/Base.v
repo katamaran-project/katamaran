@@ -63,10 +63,10 @@ Inductive CSRIdx : Set :=
 | MTvec
 | MCause
 | MEpc
-| MPMP0CFG
-| MPMP1CFG
-| MPMPADDR0
-| MPMPADDR1
+(* | MPMP0CFG *)
+(* | MPMP1CFG *)
+(* | MPMPADDR0 *)
+(* | MPMPADDR1 *)
 .
 
 (* NOTE: PMP CSRs limited to 1 for now *)

@@ -31,6 +31,7 @@ From Katamaran Require Import
      Bitvector
      trace
      Iris.BinaryInstance
+     Iris.Instance
      Iris.Base
      Syntax.Predicates
      RiscvPmp.Base
@@ -126,9 +127,9 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Qed.
 End RiscvPmpIrisAdeqParameters.
 
-Module RiscvPmpIrisInstance <:
-  IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+Module RiscvPmpIrisInstance (* <: *)
+  (* IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics *)
+  (*   RiscvPmpIrisBase RiscvPmpIrisAdeqParameters *).
   Import RiscvPmpIrisBase.
   Import RiscvPmpProgram.
 
@@ -251,15 +252,15 @@ Module RiscvPmpIrisInstance <:
 
     Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
-    | pmp_entries              | [ v ]                => interp_pmp_entries v
-    | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
-    | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
+    (* | pmp_entries              | [ v ]                => False *)
+    (* | pmp_addr_access          | [ entries; m ]       => False *)
+    (* | pmp_addr_access_without bytes | [ addr; entries; m ] => False *)
     | gprs                     | _                    => interp_gprs
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
-    | inv_mmio bytes           | _                    => interp_inv_mmio bytes
-    | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
+    (* | inv_mmio bytes           | _                    => interp_inv_mmio bytes *)
+    (* | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w *)
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
@@ -736,9 +737,9 @@ Module RiscvPmpIrisInstance <:
 
   End RiscVPmpIrisInstanceProofs.
 
-  Include IrisSignatureRules RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase.
-  Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+  (* Include IrisSignatureRules RiscvPmpBase RiscvPmpSignature RiscvPmpProgram *)
+  (*   RiscvPmpSemantics RiscvPmpIrisBase. *)
+  (* Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram *)
+  (*   RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters. *)
 
 End RiscvPmpIrisInstance.

@@ -852,28 +852,28 @@ Module Type InstantiationOn
       - dependent elimination op0; cbn; constructor; auto.
     Qed.
 
-    (* Equations(noeqns) term_get_list {Σ σ} (t : Term Σ (ty.list σ)) : *)
-    (*   option ((Term Σ σ * Term Σ (ty.list σ)) + unit) := *)
-    (*   term_get_list (term_val _ []%list)       := Some (inr tt); *)
-    (*   term_get_list (term_val _ (cons x xs))   := Some (inl (term_val _ x , term_val (ty.list σ) xs)); *)
-    (*   term_get_list (term_binop bop.cons x xs) := Some (inl (x , xs)); *)
-    (*   term_get_list _                          := None. *)
+    Equations(noeqns) term_get_list {Σ σ} (t : Term Σ (ty.list σ)) :
+      option ((Term Σ σ * Term Σ (ty.list σ)) + unit) :=
+      term_get_list (term_val _ []%list)       := Some (inr tt);
+      term_get_list (term_val _ (cons x xs))   := Some (inl (term_val _ x , term_val (ty.list σ) xs));
+      term_get_list (term_binop bop.cons x xs) := Some (inl (x , xs));
+      term_get_list _                          := None.
 
-    (* Lemma term_get_list_spec {Σ σ} (s : Term Σ (ty.list σ)) : *)
-    (*   option.wlp *)
-    (*     (fun s' => match s' with *)
-    (*                | inl (x , xs) => forall ι : Valuation Σ, *)
-    (*                    inst (T := fun Σ => Term Σ (ty.list σ)) (A := list (Val σ)) s ι = *)
-    (*                      @cons (Val σ) (inst x ι) (inst (T := fun Σ => Term Σ (ty.list σ)) xs ι) *)
-    (*                | inr _ => forall ι : Valuation Σ, *)
-    (*                    inst (T := fun Σ => Term Σ (ty.list σ)) (A := list (Val σ)) s ι = nil *)
-    (*                end) *)
-    (*     (term_get_list s). *)
-    (* Proof. *)
-    (*   dependent elimination s; cbn; try constructor; auto. *)
-    (*   - destruct v; constructor; auto. *)
-    (*   - dependent elimination op; cbn; try constructor; auto. *)
-    (* Qed. *)
+    Lemma term_get_list_spec {Σ σ} (s : Term Σ (ty.list σ)) :
+      option.wlp
+        (fun s' => match s' with
+                   | inl (x , xs) => forall ι : Valuation Σ,
+                       inst (T := fun Σ => Term Σ (ty.list σ)) (A := RelVal (ty.list σ)) s ι =
+                         ty.liftBinOp (σ2 := ty.list _) (σ3 := ty.list _) (@cons (Val σ)) (inst x ι) (inst (T := fun Σ => Term Σ (ty.list σ)) xs ι)
+                   | inr _ => forall ι : Valuation Σ,
+                       inst (T := fun Σ => Term Σ (ty.list σ)) (A := RelVal (ty.list σ)) s ι = SyncVal nil
+                   end)
+        (term_get_list s).
+    Proof.
+      dependent elimination s; cbn; try constructor; auto.
+      - destruct v; constructor; auto.
+      - dependent elimination op; cbn; try constructor; auto.
+    Qed.
 
     Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty.union U)) :
       option { K : unionk U & Term Σ (unionk_ty U K) } :=

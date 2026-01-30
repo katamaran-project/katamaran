@@ -439,7 +439,14 @@ Module ty.
       destruct rv1, rv2; auto.
     Qed.
 
-
+    Lemma liftBinOpSyncImpliesSyncArgs {σ1 σ2 σ3 : Ty} (f : Val σ1 -> Val σ2 -> Val σ3) rv1 rv2 v :
+      liftBinOp f rv1 rv2 = SyncVal v
+      -> ∃ v1 v2, rv1 = SyncVal v1 /\ rv2 = SyncVal v2 /\ f v1 v2 = v.
+    Proof.
+      destruct rv1, rv2; cbn.
+      all: intros H; inversion H.
+      exists v0, v1. tauto.
+    Qed.
 
     Ltac removeLiftBinOp :=
     repeat match goal with
@@ -607,6 +614,15 @@ Module ty.
 
     Definition listOfRelValToRelValOfList {A} (rv_list : (Datatypes.list (RelVal A))) : RelVal (list A) :=
       listOfRVToRVOfList rv_list.
+
+    Fixpoint RVOfListToListOfRV {A} (rv_list : RV (Datatypes.list A)) : (Datatypes.list (RV A)) :=
+      match rv_list with
+      | SyncVal l => map SyncVal l
+      | NonSyncVal l1 l2 => zip_with NonSyncVal l1 l2
+      end.
+
+    Definition RelValOfListToListOfRelVal {A} (rv_list : RelVal (list A)) : (Datatypes.list (RelVal A)) :=
+      RVOfListToListOfRV rv_list.
 
     Definition RVOfPairToPairOfRV {σ1 σ2} (rv : RV (σ1 * σ2)) : RV σ1 * RV σ2 :=
       match rv with

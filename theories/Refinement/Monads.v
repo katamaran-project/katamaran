@@ -990,16 +990,16 @@ Module Type RefinementMonadsOn
     Qed.
     
     Lemma RChunk_ind (P : Rel Chunk SCChunk) {w : World} :
-      (* (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (chunk_user p args) (chunk_user p sargs)) ∗ *)
+      (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (chunk_user p args) (chunk_user p sargs)) ∗
         (∀ σ r v sv, ℛ⟦ RVal σ ⟧ v sv -∗ ℛ⟦ P ⟧ (chunk_ptsreg r v) (chunk_ptsreg r sv)) ∗
         (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ c1 sc1 -∗ ℛ⟦ P ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (chunk_conj c1 c2) (chunk_conj sc1 sc2)) ∗
         (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ c1 sc1 -∗ ℛ⟦ P ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (chunk_wand c1 c2) (chunk_wand sc1 sc2))
         ⊢
         ∀ c (sc : Chunk w), ℛ⟦ RChunk ⟧ c sc → ℛ⟦ P ⟧ c sc.
     Proof.
-      constructor. intros ι Hpc ((* Huser &  *)Hptsreg & Hconj & Hwand) c sc Hsc.
+      constructor. intros ι Hpc (Huser &Hptsreg & Hconj & Hwand) c sc Hsc.
       revert c Hsc; induction sc; intros c Hsc; inversion Hsc.
-      (* - now eapply Huser. *)
+      - now eapply Huser.
       - now eapply Hptsreg.
       - eapply Hconj; try now cbn.
         + now eapply IHsc1.
@@ -1010,16 +1010,16 @@ Module Type RefinementMonadsOn
     Qed.
 
     Lemma RChunk_case (P : Rel Chunk SCChunk) {w : World} :
-      (* (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (chunk_user p args) (chunk_user p sargs)) ∗ *)
+      (∀ p args sargs, ℛ⟦ REnv (𝑯_Ty p) ⟧ args sargs -∗ ℛ⟦ P ⟧ (chunk_user p args) (chunk_user p sargs)) ∗
         (∀ σ r v sv, ℛ⟦ RVal σ ⟧ v sv -∗ ℛ⟦ P ⟧ (chunk_ptsreg r v) (chunk_ptsreg r sv)) ∗
         (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (chunk_conj c1 c2) (chunk_conj sc1 sc2)) ∗
         (∀ c1 sc1 c2 sc2, ℛ⟦ RChunk ⟧ c1 sc1 -∗ ℛ⟦ RChunk ⟧ c2 sc2 -∗ ℛ⟦ P ⟧ (chunk_wand c1 c2) (chunk_wand sc1 sc2))
         ⊢
         ∀ c (sc : Chunk w), ℛ⟦ RChunk ⟧ c sc → ℛ⟦ P ⟧ c sc.
     Proof.
-      iIntros "(Hptsreg & Hconj & Hwand) %c %sc #Hsc". (* Huser & *)
-      iApply (RChunk_ind P with "[Hptsreg Hconj Hwand] Hsc"). (* Huser *)
-      (* iSplitL "Huser". { iExact "Huser". } *)
+      iIntros "(Huser & Hptsreg & Hconj & Hwand) %c %sc #Hsc".
+      iApply (RChunk_ind P with "[Huser Hptsreg Hconj Hwand] Hsc").
+      iSplitL "Huser". { iExact "Huser". }
       iSplitL "Hptsreg". { iExact "Hptsreg". }
       iSplitL "Hconj".
       - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 _ _". 
@@ -1036,25 +1036,25 @@ Module Type RefinementMonadsOn
       iApply (RChunk_ind (MkRel (fun c w sc => ∀ (msg : AMessage w), ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c) (SPureSpec.assert_eq_chunk (w := w) msg sc))%I) with "[] Hc1").
       clear.
       repeat iSplit.
-      (* - iIntros (p args sargs) "Hargs %msg %c2 %sc2 Hc2". *)
-      (*   iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg p args sargs, ℛ⟦REnv (𝑯_Ty p)⟧ args sargs -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (chunk_user p args) c2) (SPureSpec.assert_eq_chunk msg (chunk_user p sargs) sc2))%I) with "[] Hc2 Hargs"). *)
-      (*   clear. *)
-      (*   repeat iSplit. *)
-      (*   + iIntros (p args sargs) "Hargs %msg %p2 %args2 %sargs2 Hargs2 %w1 %ω1 !>". *)
-      (*     cbn -[RSat]. *)
-      (*     destruct (eq_dec p2 p); last by iApply (refine_error (RA := RUnit)). *)
-      (*     subst; unfold REnv, RInst; cbn. *)
-      (*     rewrite <- !forgetting_repₚ. *)
-      (*     now iApply (refine_assert_eq_env with "Hargs2 Hargs"). *)
-      (*   + iIntros (σ r v sv) "Hv %msg %p %args %sargs Hargs %w1 %ω1 !>"; rsolve. *)
-      (*   + iIntros (c1 sc1 c2 sc2) "_ _ %msg %p %args %sargs Hargs %w1 %ω1 !>"; rsolve. *)
-      (*   + iIntros (c1 sc1 c2 sc2) "_ _ %msg %p %args %sargs Hargs %w1 %ω1 !>"; rsolve. *)
+      - iIntros (p args sargs) "Hargs %msg %c2 %sc2 Hc2".
+        iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg p args sargs, ℛ⟦REnv (𝑯_Ty p)⟧ args sargs -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (chunk_user p args) c2) (SPureSpec.assert_eq_chunk msg (chunk_user p sargs) sc2))%I) with "[] Hc2 Hargs").
+        clear.
+        repeat iSplit.
+        + iIntros (p args sargs) "Hargs %msg %p2 %args2 %sargs2 Hargs2 %w1 %ω1 !>".
+          cbn -[RSat].
+          destruct (eq_dec p2 p); last by iApply (refine_error (RA := RUnit)).
+          subst; unfold REnv, RInst; cbn.
+          rewrite <- !forgetting_repₚ.
+          now iApply (refine_assert_eq_env with "Hargs2 Hargs").
+        + iIntros (σ r v sv) "Hv %msg %p %args %sargs Hargs %w1 %ω1 !>"; rsolve.
+        + iIntros (c1 sc1 c2 sc2) "_ _ %msg %p %args %sargs Hargs %w1 %ω1 !>"; rsolve.
+        + iIntros (c1 sc1 c2 sc2) "_ _ %msg %p %args %sargs Hargs %w1 %ω1 !>"; rsolve.
       - iIntros (σ r v sv) "Hv %msg %c2 %sc2 Hc2".
         iApply (RChunk_case (MkRel (fun c2 w sc2 => ∀ msg σ r v sv, ℛ⟦RVal σ⟧ v sv -∗ ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (chunk_ptsreg r v) c2) (SPureSpec.assert_eq_chunk msg (chunk_ptsreg r sv) sc2))%I) with "[] Hc2 Hv").
         clear.
         repeat iSplit.
-        (* + iIntros (p args sargs) "Hargs %msg %σ %r %v %sv Hv %w1 %ω1 !>". *)
-        (*   iApply (refine_error (RA := RUnit)). *)
+        + iIntros (p args sargs) "Hargs %msg %σ %r %v %sv Hv %w1 %ω1 !>".
+          iApply (refine_error (RA := RUnit)).
         + iIntros (σ2 r2 v2 sv2) "Hv2 %msg %σ %r %v %sv Hv %w1 %ω1 !>".
           cbn -[RSat].
           destruct (eq_dec_het r r2); last rsolve.
@@ -1070,7 +1070,7 @@ Module Type RefinementMonadsOn
                                                                                                                                                                                         ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c2) (SPureSpec.assert_eq_chunk msg sc2) -∗
                                                                                                                                                                                                                                                                                                 ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (chunk_conj c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_conj sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
         clear. repeat iSplitL.
-        (* + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>"; rsolve. *)
+        + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>"; rsolve.
         + iIntros (σ r v sv) "Hv %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>"; rsolve.
         + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
           iApply (refine_bind (RA := RUnit) (RB := RUnit) with "[Hc1 IHc1 Hc3] [Hc2 IHc2 Hc4]").
@@ -1088,8 +1088,8 @@ Module Type RefinementMonadsOn
                                                                                                                                                                                         ℛ⟦RChunk -> □ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk c2) (SPureSpec.assert_eq_chunk msg sc2) -∗
                                                                                                                                                                                                                                                                                                 ℛ⟦□ᵣ (RPureSpec RUnit)⟧ (CPureSpec.assert_eq_chunk (chunk_wand c1 c2) c3) (SPureSpec.assert_eq_chunk msg (chunk_wand sc1 sc2) sc3))%I) with "[] Hc3 Hc1 IHc1 Hc2 IHc2").
         clear. repeat iSplitL.
-        (* + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>". *)
-        (*   iApply (refine_error (RA := RUnit)). *)
+        + iIntros (p args sargs) "Hargs %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
+          iApply (refine_error (RA := RUnit)).
         + iIntros (σ r v sv) "Hv %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".
           iApply (refine_error (RA := RUnit)).
         + iIntros (c3 sc3 c4 sc4) "Hc3 Hc4 %msg %c1 %sc1 %c2 %sc2 Hc1 IHc1 Hc2 IHc2 %w1 %ω1 !>".

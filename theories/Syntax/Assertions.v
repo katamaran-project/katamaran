@@ -95,14 +95,14 @@ Module Import asn.
   #[global] Arguments exist [_] _ _ _.
   #[global] Arguments debug {_}.
 
-  (* Definition match_union_alt {Σ} U (t : Term Σ (ty.union U)) *)
-  (*   (alts : forall (K : unionk U), Alternative Assertion Σ (unionk_ty U K)) : Assertion Σ := *)
-  (*   pattern_match t (pat_union U (fun K => alt_pat (alts K))) *)
-  (*     (fun '(existT K pc) => *)
-  (*        of_pattern_case_curried *)
-  (*          (alt_pat (alts K)) *)
-  (*          (alt_rhs (alts K)) pc). *)
-  (* #[global] Arguments asn.match_union_alt {Σ} _ _ _. *)
+  Definition match_union_alt {Σ} U (t : Term Σ (ty.union U))
+    (alts : forall (K : unionk U), Alternative Assertion Σ (unionk_ty U K)) : Assertion Σ :=
+    pattern_match t (pat_union U (fun K => alt_pat (alts K)))
+      (fun '(existT K pc) =>
+         of_pattern_case_curried
+           (alt_pat (alts K))
+           (alt_rhs (alts K)) pc).
+  #[global] Arguments asn.match_union_alt {Σ} _ _ _.
 
   Fixpoint exs {Σ} Δ : Assertion (Σ ▻▻ Δ) -> Assertion Σ :=
     match Δ return Assertion (Σ ▻▻ Δ) -> Assertion Σ with

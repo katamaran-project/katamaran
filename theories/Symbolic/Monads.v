@@ -777,13 +777,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Definition assert_eq_chunk : ⊢ AMessage -> Chunk -> Chunk -> □(SPureSpec Unit) :=
       fix assert_eq w0 msg c1 c2 w1 θ1 {struct c1} :=
         match c1 , c2 with
-        (* | chunk_user p1 vs1 , chunk_user p2 vs2 => *)
-        (*     match eq_dec p1 p2 with *)
-        (*     | left e => assert_eq_env (persist msg θ1) *)
-        (*                   (eq_rect p1 (fun p => Env (Term w1) (𝑯_Ty p)) vs1⟨θ1⟩ p2 e) *)
-        (*                   (persist (A := fun w => (fun Σ => Env (Term Σ) _) (wctx w)) vs2 θ1) *)
-        (*     | right _ => error msg⟨θ1⟩ *)
-        (*     end *)
+        | chunk_user p1 vs1 , chunk_user p2 vs2 =>
+            match eq_dec p1 p2 with
+            | left e => assert_eq_env (persist msg θ1)
+                          (eq_rect p1 (fun p => Env (Term w1) (𝑯_Ty p)) vs1⟨θ1⟩ p2 e)
+                          (persist (A := fun w => (fun Σ => Env (Term Σ) _) (wctx w)) vs2 θ1)
+            | right _ => error msg⟨θ1⟩
+            end
         | chunk_ptsreg r1 v1 , chunk_ptsreg r2 v2 =>
             match eq_dec_het r1 r2 with
             | left e => assert_formula (persist msg θ1)

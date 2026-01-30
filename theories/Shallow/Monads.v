@@ -104,11 +104,11 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Proof.
       destruct c; cbn; try discriminate; intros H.
       (* Stuff needed for chunk_user *)
-      (* apply bi.entails_anti_sym. *)
-      (* - now apply lduplicate. *)
-      (* - transitivity (luser p ts ∗ emp)%I. *)
-      (*   + apply bi.sep_mono'; auto. *)
-      (*   + now rewrite bi.sep_emp. *)
+      apply bi.entails_anti_sym.
+      - now apply lduplicate.
+      - transitivity (luser p ts ∗ emp)%I.
+        + apply bi.sep_mono'; auto.
+        + now rewrite bi.sep_emp.
     Qed.
 
     Lemma in_heap_extractions {h : SCHeap} {c1 h1}
@@ -378,11 +378,11 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
     Fixpoint assert_eq_chunk (c1 c2 : SCChunk) : CPureSpec unit :=
       match c1 , c2 with
-      (* | chunk_user p1 vs1 , chunk_user p2 vs2 => *)
-      (*     match eq_dec p1 p2 with *)
-      (*     | left e => assert_eq_env (eq_rect p1 (fun p => Env Val (𝑯_Ty p)) vs1 p2 e) vs2 *)
-      (*     | right _ => error *)
-      (*     end *)
+      | chunk_user p1 vs1 , chunk_user p2 vs2 =>
+          match eq_dec p1 p2 with
+          | left e => assert_eq_env (eq_rect p1 (fun p => Env RelVal (𝑯_Ty p)) vs1 p2 e) vs2
+          | right _ => error
+          end
       | chunk_ptsreg r1 v1 , chunk_ptsreg r2 v2 =>
           match eq_dec_het r1 r2 with
           | left e => assert_formula (eq_rect _ RelVal v1 _ (f_equal projT1 e) = v2)
@@ -911,13 +911,13 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Proof.
       revert c'. induction c; intros c' Φ; destruct c'; cbn in *;
         unfold error, FALSE; try (intuition discriminate).
-      (* - destruct eq_dec as [e|n]; cbn. *)
-      (*   + rewrite wp_assert_eq_env. apply and_iff_compat_r'. *)
-      (*     intros ?. destruct e; cbn. split; intros Heq. *)
-      (*     * now f_equal. *)
-      (*     * now dependent elimination Heq. *)
-      (*   + split; try contradiction. intros [Heq Hwp]. apply n. *)
-      (*     now dependent elimination Heq. *)
+      - destruct eq_dec as [e|n]; cbn.
+        + rewrite wp_assert_eq_env. apply and_iff_compat_r'.
+          intros ?. destruct e; cbn. split; intros Heq.
+          * now f_equal.
+          * now dependent elimination Heq.
+        + split; try contradiction. intros [Heq Hwp]. apply n.
+          now dependent elimination Heq.
       - destruct eq_dec_het as [e|n]; cbn.
         + apply and_iff_compat_r'. intros ?.
           dependent elimination e; cbn.

@@ -951,8 +951,6 @@ Module Type WorldsOn
       apply instpred_formula_eq_com'.
     Qed.
 
-
-
     Lemma instpred_formula_relop_eqₚ {w : World} {σ} (t1 t2 : STerm σ w) :
       instpred (w := w) (formula_relop bop.eq t1 t2) ⊢ eqₚ t1 t2.
     Proof.
@@ -995,6 +993,49 @@ Module Type WorldsOn
       apply instpred_formula_relop_eq.
     Qed.
 
+    Lemma instpred_formula_propeq_com' {w : World} {σ} (t1 t2 : STerm σ w) :
+      instpred_formula_propeq t1 t2 ⊣⊢ instpred_formula_propeq t2 t1.
+    Proof.
+      by crushPredEntails2.
+    Qed.
+    
+    Lemma instpred_formula_propeq_com {w : World} {σ} (t1 t2 : STerm σ w) :
+      instpred (w := w) (formula_propeq t1 t2) ⊣⊢
+        instpred (w := w) (formula_propeq t2 t1).
+    Proof.
+      apply instpred_formula_propeq_com'.
+    Qed.
+
+    Lemma instpred_formula_propeqₚ {w : World} {σ} (t1 t2 : STerm σ w) :
+      instpred (w := w) (formula_propeq t1 t2) ⊣⊢ eqₚ t1 t2.
+    Proof.
+      crushPredEntails2.
+    Qed.
+
+    Lemma instpred_formula_propeq_relval {w : World} {σ} {t1 : STerm σ w} v :
+      instpred (formula_propeq t1 (term_relval _ v)) ⊣⊢ repₚ v t1.
+    Proof.
+      crushPredEntails2.
+    Qed.
+
+    Lemma instpred_formula_propeq_relval' {w : World} {σ} {t1 : STerm σ w} v :
+      instpred_formula_propeq t1 (term_relval _ v) ⊣⊢ repₚ v t1.
+    Proof. apply instpred_formula_propeq_relval. Qed.
+
+    Lemma instpred_formula_propeq_val {w : World} {σ} {t1 : STerm σ w} v :
+      instpred (formula_propeq t1 (term_val _ v)) ⊣⊢ repₚ (ty.valToRelVal v) t1.
+    Proof.
+      crushPredEntails2.
+    Qed.
+
+    Lemma instpred_formula_propeq_val' {w : World} {σ} {t1 : STerm σ w} v :
+      instpred_formula_propeq t1 (term_val _ v) ⊣⊢ repₚ (ty.valToRelVal v) t1.
+    Proof. apply instpred_formula_propeq_val. Qed.
+
+    Lemma instpred_formula_propeqₚ' {w : World} {σ} (t1 t2 : STerm σ w) :
+      instpred_formula_propeq t1 t2 ⊣⊢ eqₚ t1 t2.
+    Proof. apply instpred_formula_propeqₚ. Qed.
+
     Lemma instpred_formula_secLeak_val {w : World} σ v :
       ⊢ instpred (w := w) (formula_secLeak (term_val σ v)).
     Proof.
@@ -1007,8 +1048,17 @@ Module Type WorldsOn
       apply (instpred_formula_secLeak_val σ v).
     Qed.
 
+    Lemma instpred_formula_secLeak_relval {w : World} σ v :
+      ⊢ instpred (w := w) (formula_secLeak (term_relval σ (SyncVal v))).
+    Proof.
+      crushPredEntails2.
+    Qed.
     
-
+    Lemma instpred_formula_secLeak_relval' {w : World} σ v :
+      ⊢ instpred_formula_secLeak (w := w) (term_relval σ (SyncVal v)).
+    Proof.
+      apply (instpred_formula_secLeak_val σ v).
+    Qed.
 
     Lemma formula_relop_term {w : World} {σ} (t1 t2 : STerm σ w) op :
       instpred (w := w) (formula_relop op t1 t2) ⊣⊢
@@ -1051,6 +1101,18 @@ Module Type WorldsOn
              + destruct Classes.eq_dec. by subst. inversion H0.
              + repeat destruct Classes.eq_dec; try by subst.
            - destruct inst; inversion H0. cbn. by destruct Classes.eq_dec.
+    Qed.
+
+    Lemma rep_eq_relval_true [w : World] {σ} (t : Term w σ) rv :
+      repₚ (T := STerm ty.bool) (SyncVal true) (term_eq t (term_relval σ rv)) ⊣⊢
+        instpred (formula_eq t (term_relval σ rv)).
+    Proof.
+      unfold repₚ; crushPredEntails2.
+      - unfold instpred_formula_relop.
+        destruct inst, rv; cbn in *; inversion H0.
+        destruct Classes.eq_dec; auto. congruence.
+      - cbn in H0. destruct inst, rv; try contradiction; cbn in *.
+        destruct Classes.eq_dec; auto. congruence.
     Qed.
 
     Lemma rep_eq_terms_true [w : World] {σ} (t1 t2 : Term w σ) :
@@ -1406,7 +1468,7 @@ Module Type WorldsOn
         intuition.
     Qed.
 
-    Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} :
+    Lemma instpred_formula_eq_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} :
       instpred_formula_relop bop.eq (term_record R ts1) (term_record R ts2) ⊣⊢
         instpred (formula_eqs_nctx_sync ts1 ts2).
     Proof.
@@ -1445,6 +1507,14 @@ Module Type WorldsOn
           * by inversion H0.
           * congruence.
         + contradiction.
+    Qed.
+
+    Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} ι :
+      eqₚ (term_record R ts1) (term_record R ts2) ι ↔
+        ty.unliftNamedEnv (inst ts1 ι) = ty.unliftNamedEnv (inst ts2 ι).
+    Proof.
+      unfold eqₚ. cbn. unfold ty.recordv_fold_rel.
+      by rewrite ty.recordv_fold_rel_inj.
     Qed.
 
     Lemma repₚ_namedenv_nil {w : World} {N} :

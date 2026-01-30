@@ -233,6 +233,9 @@ Module Import ExampleProgram <: Program ExampleBase.
     (* | msum       : Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either) *)
     (* | length {σ} : Fun [ "xs" ∷ ty.list σ ] ty.int *)
     | example1   : Fun [ "x" ∷ ty.bool; "y" ∷ ty.int ] (ty.int)
+    | constanttime_if : Fun [ "x" :: ty.int; "secret" :: ty.int; "a" :: ty.int] (ty.int)
+    | nonconstanttime_if : Fun [ "x" :: ty.int; "secret" :: ty.int; "a" :: ty.int] (ty.int)
+    | test_term_eq : Fun [ "x" :: ty.int ] (ty.int)
     | fpthree16  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
     | fpthree32  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
     | fpthree64  : Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
@@ -274,8 +277,16 @@ Module Import ExampleProgram <: Program ExampleBase.
     Definition fun_example1 : Stm [ "x" ∷ ty.bool; "y" ∷ ty.int ] (ty.int) :=
       stm_if (stm_exp (exp_var "x")) (stm_exp (exp_var "y")) (stm_exp (exp_var "y")).
 
-    Definition fun_constanttime_if : Stm [ "x" :: ty.bool; "a" :: ty.int ] (ty.int) :=
-      stm_assign 
+    Definition fun_constanttime_if : Stm [ "x" :: ty.int; "secret" :: ty.int; "a" :: ty.int ] (ty.int) :=
+      stm_assign "x" (stm_exp (exp_var "secret" * exp_var "a" + (exp_val ty.int 1 - exp_var "secret") * exp_var "x")).
+
+    Definition fun_nonconstanttime_if : Stm [ "x" :: ty.int; "secret" :: ty.int; "a" :: ty.int ] (ty.int) :=
+      stm_if (stm_exp (exp_var "secret" = exp_val ty.int 0))
+             (stm_assign "x" (stm_exp (exp_var "a")))
+             (stm_assign "x" (stm_exp (exp_var "x"))).
+
+    Definition fun_test_term_eq : Stm [ "x" :: ty.int ] (ty.int) :=
+      (stm_exp (exp_var "x")).
 
     Definition fun_fpthree' (e f : nat) : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec (1 + e + f)) :=
       let: "exp" ∷ ty.bvec e := stm_val (ty.bvec e) bv.one in
@@ -373,6 +384,9 @@ Module Import ExampleProgram <: Program ExampleBase.
       (*               (stm_val ty.int 0) *)
       (*               "y" "ys" (let: "n" := call length (exp_var "ys") in exp_int 1 + exp_var "n") *)
       | example1 => fun_example1
+      | constanttime_if => fun_constanttime_if
+      | nonconstanttime_if => fun_nonconstanttime_if
+      | test_term_eq => fun_test_term_eq
       | fpthree16 => fun_fpthree16
       | fpthree32 => fun_fpthree32
       | fpthree64 => fun_fpthree64
@@ -531,6 +545,39 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
         sep_contract_postcondition   := asn.formula (formula_eq (term_var "result") (term_var "y"))
       |}.
 
+    Definition sep_contract_constanttime_if :
+      SepContract [ "x" ∷ ty.int; "secret" :: ty.int; "a" ∷ ty.int ] ty.int :=
+      {|
+        sep_contract_logic_variables := ["x" ∷ ty.int; "secret" :: ty.int; "a" ∷ ty.int];
+        sep_contract_localstore      := [term_var "x"; term_var "secret"; term_var "a"];
+        sep_contract_precondition    := ⊤;
+        sep_contract_result          := "result";
+        sep_contract_postcondition   := ⊤
+      |}.
+
+    Definition sep_contract_nonconstanttime_if :
+      SepContract [ "x" ∷ ty.int; "secret" :: ty.int; "a" ∷ ty.int ] ty.int :=
+      {|
+        sep_contract_logic_variables := ["x" ∷ ty.int; "secret" :: ty.int; "a" ∷ ty.int];
+        sep_contract_localstore      := [term_var "x"; term_var "secret"; term_var "a"];
+        sep_contract_precondition    := ⊤;
+        sep_contract_result          := "result";
+        sep_contract_postcondition   := ⊤
+      |}.
+
+    Definition sep_contract_test_term_eq :
+      SepContract [ "x" ∷ ty.int ] ty.int :=
+      {|
+        sep_contract_logic_variables := ["x" ∷ ty.int];
+        sep_contract_localstore      := [term_var "x"];
+        sep_contract_precondition    :=
+          asn.formula (formula_eq
+                         (term_val (ty.bvec 1) (bv.mk 0 I))
+                         (term_val (ty.bvec 1) (bv.mk 1 I)));
+        sep_contract_result          := "result";
+        sep_contract_postcondition   := ⊥
+      |}.
+
     Definition sep_contract_bvtest : SepContract [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42) :=
       {| sep_contract_logic_variables := ["sign" ∷ ty.bvec 42 ];
          sep_contract_localstore      := [term_var "sign"];
@@ -573,6 +620,9 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
         (* | msum       => None *)
         (* | length     => Some sep_contract_length *)
         | example1   => Some sep_contract_example1
+        | constanttime_if => Some sep_contract_constanttime_if
+        | nonconstanttime_if => Some sep_contract_nonconstanttime_if
+        | test_term_eq => Some sep_contract_test_term_eq
         | fpthree16  => None
         | fpthree32  => None
         | fpthree64  => None
@@ -674,19 +724,48 @@ Proof.
   destruct v, v0; tauto.
 Qed.
 
-(* Ltac trace_cbv fuel := *)
-(*   match fuel with *)
-(*   | 0 => idtac "Out of fuel" *)
-(*   | S n => *)
-(*       (cbv beta; idtac "beta"; idtac fuel) || *)
-(*         (cbv iota; idtac "iota"; fuel)) || *)
-(*         (cbv delta; idtac ("delta" fuel)) || *)
-(*         (cbv zeta; idtac ("zeta" fuel)) *)
-(*   end. *)
-
-
 Lemma valid_contract_example1 : Symbolic.ValidContractWithErasure sep_contract_example1 (FunDef example1).
 Proof.
   vm_compute.
   now constructor.
+Qed.
+
+Lemma valid_contract_constanttime_if_shallow : Shallow.ValidContract sep_contract_constanttime_if (FunDef constanttime_if).
+Proof.
+  cbv.
+  intros.
+  tauto.
+Qed.
+
+Lemma valid_contract_constanttime_if : Symbolic.ValidContractWithErasure sep_contract_constanttime_if (FunDef constanttime_if).
+Proof.
+  vm_compute.
+  now constructor.
+Qed.
+
+
+Lemma valid_contract_nonconstanttime_if : Symbolic.ValidContractWithErasure sep_contract_nonconstanttime_if (FunDef nonconstanttime_if) -> False.
+Proof.
+  vm_compute.
+  intros.
+  destruct x.
+  cbv in *.
+  specialize (P (SyncVal 0) (NonSyncVal 0 1) (SyncVal 0)).
+  cbv in *.
+  tauto.
+Qed.
+
+Lemma valid_contract_test_term_eq : Shallow.ValidContract sep_contract_test_term_eq (FunDef test_term_eq).
+Proof.
+  vm_compute.
+  now constructor.
+Qed.
+
+
+Lemma valid_contract_test_term_eq_shallow : Symbolic.ValidContractWithErasure sep_contract_test_term_eq (FunDef test_term_eq).
+Proof.
+  vm_compute.
+  constructor.
+  cbv.
+  tauto.
 Qed.

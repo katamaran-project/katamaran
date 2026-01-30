@@ -693,6 +693,16 @@ Module Type UnifLogicOn
       unfold repₚ. crushPredEntails3; try (now subst).
     Qed.
 
+    Lemma rep_term_cons_sync {w : World} {σ : Ty} {t : STerm σ w} {ts : STerm (ty.list σ) w} {v vs} :
+      repₚ (ty.valToRelVal v) t ∗ repₚ (T := STerm (ty.list σ)) (ty.valToRelVal vs) ts ⊣⊢ repₚ (T := STerm (ty.list σ)) (ty.liftBinOpRV cons (ty.valToRelVal v) (ty.valToRelVal vs)) (term_binop bop.cons t ts).
+    Proof.
+      unfold repₚ. crushPredEntails3; try (now subst).
+      { by rewrite H0 H1. }
+      all: apply (ty.liftBinOpSyncImpliesSyncArgs (σ3 := ty.list _)) in H0.
+      + destruct H0 as (v1 & v2 & -> & _ & H0). by inversion H0.
+      + destruct H0 as (v1 & v2 & _ & -> & H0). by inversion H0.
+    Qed.
+
     Lemma eq_term_cons {w : World} {σ : Ty} {t1 t2 : STerm σ w} {ts1 ts2 : STerm (ty.list σ) w} :
       eqₚ t1 t2 ∗ eqₚ (T := STerm (ty.list σ)) ts1 ts2 ⊢
       eqₚ (T := STerm (ty.list σ)) (term_binop bop.cons t1 ts1) (term_binop bop.cons t2 ts2).
@@ -881,12 +891,13 @@ Module Type UnifLogicOn
 
     Lemma repₚ_inversion_union {U} (K : unionk U) {v : RelVal (ty.union U)}
       {w : World} {st : STerm (unionk_ty U K) w} :
-      repₚ (T := STerm (ty.union U)) v (term_union U K st) ⊢
+      repₚ (T := STerm (ty.union U)) v (term_union U K st) ⊣⊢
         ∃ (t : RelVal (unionk_ty U K)), ⌜ v = ty.unionv_fold_rel U (existT K t) ⌝ ∗ repₚ t st.
     Proof.
       unfold repₚ. crushPredEntails3.
       exists (inst (st : STerm _ w) ι).
       now crushPredEntails3.
+      by rewrite H1.
     Qed.
 
     Section WithEnvironments.
@@ -2318,8 +2329,12 @@ Module Type UnifLogicOn
     #[export] Hint Rewrite @recordv_fold_inj @unionv_fold_inj : uniflogic.
     #[export] Hint Rewrite @term_eq_true_r @term_eq_true_l @term_eq_false_l @term_eq_false_r @term_not_or @term_not_and @term_unop_val @term_binop_val : uniflogic.
     #[export] Hint Rewrite formula_bool_and formula_bool_relop (* formula_bool_relop_neg *) : uniflogic.
-    #[export] Hint Rewrite @repₚ_term_prod @rep_term_cons rep_eq_terms_true eq_val_rep_l eq_val_rep_r @eq_term_cons @eqₚ_term_prod @repₚ_unionv_fold @eqₚ_unionv_fold (* @rep_neq_nil_cons *) @repₚ_term_or_false @repₚ_term_inr_inl @repₚ_term_inl_inr @eqₚ_term_inl_inr @eqₚ_term_inr_inl @repₚ_term_inr @eqₚ_term_inr @repₚ_term_inl @eqₚ_term_inl @repₚ_term_unsigned @eqₚ_term_unsigned @repₚ_term_signed @eqₚ_term_signed @repₚ_term_neg' @repₚ_term_not' @repₚ_term_and repₚ_term_tuple_snoc eqₚ_term_tuple_snoc @repₚ_term_bvapp @eqₚ_term_bvapp @repₚ_term_bvcons @eqₚ_term_bvcons @repₚ_term_record @eqₚ_term_record @repₚ_namedenv_nil @repₚ_namedenv_snoc @eqₚ_namedenv_snoc @eq_term_val @rep_term_val : uniflogic.
+    #[export] Hint Rewrite @repₚ_term_prod @rep_term_cons rep_eq_terms_true eq_val_rep_l eq_val_rep_r @eq_term_cons @eqₚ_term_prod @repₚ_unionv_fold @eqₚ_unionv_fold @rep_neq_nil_cons @repₚ_term_or_false @repₚ_term_inr_inl @repₚ_term_inl_inr @eqₚ_term_inl_inr @eqₚ_term_inr_inl @repₚ_term_inr @eqₚ_term_inr @repₚ_term_inl @eqₚ_term_inl @repₚ_term_unsigned @eqₚ_term_unsigned @repₚ_term_signed @eqₚ_term_signed @repₚ_term_neg' @repₚ_term_not' @repₚ_term_and repₚ_term_tuple_snoc eqₚ_term_tuple_snoc @repₚ_term_bvapp @eqₚ_term_bvapp @repₚ_term_bvcons @eqₚ_term_bvcons @repₚ_term_record @instpred_formula_eq_term_record @eqₚ_term_record @repₚ_namedenv_nil @repₚ_namedenv_snoc @eqₚ_namedenv_snoc @eq_term_val @rep_term_val : uniflogic.
     #[export] Hint Rewrite @instpred_formula_relop_neg @formula_relop_term @instpred_formula_relop_eq_val @instpred_formula_relop_eq_val' @instpred_formula_relop_val @instpred_formula_relop_val' : uniflogic.
+    #[export] Hint Rewrite @instpred_formula_propeq_relval @instpred_formula_propeq_relval' : uniflogic.
+    #[export] Hint Rewrite @instpred_formula_propeq_val @instpred_formula_propeq_val' : uniflogic.
+    #[export] Hint Rewrite @instpred_formula_propeqₚ' @instpred_formula_propeqₚ (* @instpred_formula_relop_eq' *) : uniflogic.
+
     #[export] Hint Rewrite @instpred_dlist_empty instpred_dlist_cat instpred_dlist_singleton : uniflogic.
 
     #[global] Ltac arw :=

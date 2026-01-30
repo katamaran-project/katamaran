@@ -34,7 +34,8 @@ From Katamaran Require Import
      Iris.BinaryResources
      RiscvPmp.Machine
      RiscvPmp.IrisModel
-     RiscvPmp.IrisInstance.
+     (* RiscvPmp.IrisInstance *)
+.
 From iris Require Import
      base_logic.lib.gen_heap
      proofmode.tactics.
@@ -49,7 +50,7 @@ Import RiscvPmpProgram.
 Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
   (* Pull in the definition of the LanguageMixin and register ghost state. *)
   Include RiscvPmpIrisBase.
-  Import RiscvPmpIrisAdeqParameters.
+  (* Import RiscvPmpIrisAdeqParameters. *)
 
   (* Defines the memory ghost state. *)
   Section RiscvPmpIrisParams2.

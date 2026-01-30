@@ -50,7 +50,7 @@ From Katamaran Require Import
      RiscvPmp.Machine
      RiscvPmp.Sig
      RiscvPmp.Contracts.
-From Katamaran Require RiscvPmp.Model.
+From Katamaran Require RiscvPmp.ModelBinary.
 
 From iris.program_logic Require Import total_lifting.
 
@@ -104,13 +104,16 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
   Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
-  Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-  Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-  Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
-  Notation asn_inv_mmio bytes := (asn.chunk (chunk_user (inv_mmio bytes) [env])).
-  Notation asn_mmio_checked_write bytes a w := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w])).
+  (* Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])). *)
+  (* Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])). *)
+  (* Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])). *)
+  (* Notation asn_inv_mmio bytes := (asn.chunk (chunk_user (inv_mmio bytes) [env])). *)
+  (* Notation asn_mmio_checked_write bytes a w := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w])). *)
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
+    term_binop (bop.relop bop.eq) e1 e2.
+
+  Definition term_eqb_1 {Σ} (e1 e2 : Term Σ (ty.bvec 1)) : Term Σ ty.bool :=
     term_binop (bop.relop bop.eq) e1 e2.
 
   Local Notation "e1 '=?' e2" := (term_eqb e1 e2).
@@ -180,8 +183,15 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     (asn.match_bool (r =? term_val ty_regno (bv.of_N 31)) (asn x31)
      ⊥))))))))))))))))))))))))))))))).
 
+    Definition asn_with_reg_1 {Σ} (r : Term Σ (ty.bvec 1)) (asn : Reg ty_xlenbits -> Assertion Σ) (asn_default : Assertion Σ) : Assertion Σ :=
+     asn.match_bool (term_eqb_1 r (term_val (ty.bvec 1) (bv.of_N 0))) (asn_default)
+    (asn.match_bool (term_eqb_1 r (term_val (ty.bvec 1) (bv.of_N 1))) (asn x1)⊥).
+
   Definition asn_reg_ptsto {Σ} (r : Term Σ ty_regno) (w : Term Σ ty_word) : Assertion Σ :=
     asn_with_reg r (fun r => asn.chunk (chunk_ptsreg r w)) (w = term_val ty_word bv.zero).
+
+  Definition asn_reg_ptsto_1 {Σ} (r : Term Σ (ty.bvec 1)) (w : Term Σ ty_word) : Assertion Σ :=
+    asn_with_reg_1 r (fun r => asn.chunk (chunk_ptsreg r w)) (w = term_val ty_word bv.zero).
 
   Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
@@ -213,25 +223,35 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
   Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
-  Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-  Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-  Local Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
+  (* Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])). *)
+  (* Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])). *)
+  (* Local Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])). *)
   Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
   (* TODO: clean up above notations to get rid of the following one *)
   Local Notation asn_cur_privilege val := (asn.chunk (chunk_ptsreg cur_privilege val)).
   Local Notation asn_bool t := (asn.formula (formula_bool t)).
-  Local Notation asn_in_mmio n l := (asn.formula (formula_user (in_mmio n) [l])).
-  Local Notation asn_inv_mmio bytes := (asn.chunk (chunk_user (inv_mmio bytes) [env])).
-  Local Notation asn_mmio_checked_write bytes a w := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w])).
+  (* Local Notation asn_in_mmio n l := (asn.formula (formula_user (in_mmio n) [l])). *)
+  (* Local Notation asn_inv_mmio bytes := (asn.chunk (chunk_user (inv_mmio bytes) [env])). *)
+  (* Local Notation asn_mmio_checked_write bytes a w := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w])). *)
   Import bv.notations.
 
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "w" :: ty_word];
        sep_contract_localstore      := [term_var "rs"];
-       sep_contract_precondition    := term_var "rs" ↦ᵣ term_var "w";
+      sep_contract_precondition    := asn.formula (formula_secLeak (term_var "rs")) ∗ term_var "rs" ↦ᵣ term_var "w";
        sep_contract_result          := "result_rX";
-       sep_contract_postcondition   := term_var "result_rX" = term_var "w" ∗
+       sep_contract_postcondition   := asn.formula (formula_propeq (term_var "result_rX") (term_var "w")) ∗
                                        term_var "rs" ↦ᵣ term_var "w";
+    |}.
+
+  Definition sep_contract_rX' : SepContract ["rs'" :: ty.bvec 1] (ty_xlenbits) :=
+    {| sep_contract_logic_variables := ["rs'" :: ty.bvec 1; "w" :: ty_word];
+      sep_contract_localstore      := [term_var "rs'"];
+      sep_contract_precondition    := asn.formula (formula_secLeak (term_var "rs'")) ∗
+                                        asn_reg_ptsto_1 (term_var "rs'") (term_var "w");
+      sep_contract_result          := "result_rX";
+      sep_contract_postcondition   := asn.formula (formula_propeq (term_var "result_rX") (term_var "w")) ∗
+                                        asn_reg_ptsto_1 (term_var "rs'") (term_var "w");
     |}.
 
   Definition sep_contract_wX : SepContractFun wX :=
@@ -246,23 +266,23 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     |}.
 
   Definition sep_contract_fetch_instr : SepContractFun fetch :=
-    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast; "entries" :: ty.list ty_pmpentry];
+    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast(* ; "entries" :: ty.list ty_pmpentry *)];
        sep_contract_localstore      := [];
        sep_contract_precondition    := asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
                                                  term_var "a" ↦ᵢ term_var "i" ∗
                                                  (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "a"))%asn ∗
                                                  (term_binop bop.plus (term_unsigned (term_var "a")) (term_val ty.int (Z.of_nat bytes_per_instr))) <= term_val ty.int (Z.of_N maxAddr) ∗
-                                                 asn_cur_privilege (term_val ty_privilege Machine) ∗
-                                                 asn_pmp_entries (term_var "entries") ∗
-                                                 asn_pmp_access (term_var "a") (term_val ty_word bv_instrsize) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Execute);
+                                                 asn_cur_privilege (term_val ty_privilege Machine)(*  ∗ *)
+                                                 (* asn_pmp_entries (term_var "entries") ∗ *)
+                                                 (* asn_pmp_access (term_var "a") (term_val ty_word bv_instrsize) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Execute) *);
        sep_contract_result          := "result_fetch";
        sep_contract_postcondition   :=
          asn.chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ term_var "i" ∗
          asn.exist "w" _
            (term_var "result_fetch" = term_union fetch_result KF_Base (term_var "w") ∗
                                         asn.chunk (chunk_user encodes_instr [term_var "w"; term_var "i"])) ∗
-           asn_cur_privilege (term_val ty_privilege Machine) ∗
-           asn_pmp_entries (term_var "entries");
+           asn_cur_privilege (term_val ty_privilege Machine)(*  ∗ *)
+           (* asn_pmp_entries (term_var "entries") *);
     |}.
 
   Definition sep_contract_checked_mem_read {bytes} {H: restrict_bytes bytes} : SepContractFun (@checked_mem_read bytes H) :=
@@ -286,10 +306,10 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_localstore      := [term_var "paddr"; term_var "data"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
-          (asn_in_mmio bytes (term_var "paddr") ∗
-           term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
-           asn_inv_mmio bytes ∗
-           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
+          ((* asn_in_mmio bytes (term_var "paddr") ∗ *)
+           term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits)))(*  ∗ *)
+           (* asn_inv_mmio bytes ∗ *)
+           (* asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") *))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr));
@@ -299,103 +319,103 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
         asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
     |}.
 
-  Definition sep_contract_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : SepContractFun (@pmpCheck bytes H) :=
-    {| sep_contract_logic_variables := ["addr" :: ty_xlenbits; "acc" :: ty_access_type; "priv" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
-       sep_contract_localstore      := [term_var "addr"; term_var "acc"; term_var "priv"];
-       sep_contract_precondition    :=
-        asn_pmp_entries (term_var "entries")
-          ∗ term_var "priv" = term_val ty_privilege Machine
-                                ∗ asn_pmp_access (term_var "addr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "priv") (term_var "acc");
-       sep_contract_result          := "result_pmpCheck";
-       sep_contract_postcondition   :=
-         term_var "result_pmpCheck" = term_inr (term_val ty.unit tt)
-         ∗ asn_pmp_entries (term_var "entries");
-    |}.
+  (* Definition sep_contract_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : SepContractFun (@pmpCheck bytes H) := *)
+  (*   {| sep_contract_logic_variables := ["addr" :: ty_xlenbits; "acc" :: ty_access_type; "priv" :: ty_privilege; "entries" :: ty.list ty_pmpentry]; *)
+  (*      sep_contract_localstore      := [term_var "addr"; term_var "acc"; term_var "priv"]; *)
+  (*      sep_contract_precondition    := *)
+  (*       asn_pmp_entries (term_var "entries") *)
+  (*         ∗ term_var "priv" = term_val ty_privilege Machine *)
+  (*                               ∗ asn_pmp_access (term_var "addr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "priv") (term_var "acc"); *)
+  (*      sep_contract_result          := "result_pmpCheck"; *)
+  (*      sep_contract_postcondition   := *)
+  (*        term_var "result_pmpCheck" = term_inr (term_val ty.unit tt) *)
+  (*        ∗ asn_pmp_entries (term_var "entries"); *)
+  (*   |}. *)
 
-  Definition sep_contract_pmp_mem_read {bytes} {H : restrict_bytes bytes} : SepContractFun (@pmp_mem_read bytes H) :=
-    {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "w" :: ty_bytes bytes; "m" :: ty_privilege];
-      sep_contract_localstore      := [term_var "typ"; term_var "m"; term_var "paddr"];
-      sep_contract_precondition    :=
-        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
-          term_var "m" = term_val ty_privilege Machine ∗
-          (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr) ∗
-          asn_cur_privilege (term_var "m") ∗
-          asn_pmp_entries (term_var "entries") ∗
-          asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "m") (term_var "typ");
-      sep_contract_result          := "result_mem_read";
-      sep_contract_postcondition   :=
-        term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
-        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
-        asn_cur_privilege (term_val ty_privilege Machine) ∗
-        asn_pmp_entries (term_var "entries");
-    |}.
+  (* Definition sep_contract_pmp_mem_read {bytes} {H : restrict_bytes bytes} : SepContractFun (@pmp_mem_read bytes H) := *)
+  (*   {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "w" :: ty_bytes bytes; "m" :: ty_privilege]; *)
+  (*     sep_contract_localstore      := [term_var "typ"; term_var "m"; term_var "paddr"]; *)
+  (*     sep_contract_precondition    := *)
+  (*       asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗ *)
+  (*         term_var "m" = term_val ty_privilege Machine ∗ *)
+  (*         (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ *)
+  (*         (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr) ∗ *)
+  (*         asn_cur_privilege (term_var "m") ∗ *)
+  (*         asn_pmp_entries (term_var "entries") ∗ *)
+  (*         asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "m") (term_var "typ"); *)
+  (*     sep_contract_result          := "result_mem_read"; *)
+  (*     sep_contract_postcondition   := *)
+  (*       term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗ *)
+  (*       asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗ *)
+  (*       asn_cur_privilege (term_val ty_privilege Machine) ∗ *)
+  (*       asn_pmp_entries (term_var "entries"); *)
+  (*   |}. *)
 
 
-  Definition sep_contract_pmp_mem_write {bytes} {H: restrict_bytes bytes} : SepContractFun (@pmp_mem_write bytes H) :=
-    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "typ" :: ty_access_type; "m" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
-      sep_contract_localstore      := [term_var "paddr"; term_var "data"; term_var "typ"; term_var "m"];
-      sep_contract_precondition    :=
-        asn.match_bool (term_var "inv")
-          (asn_in_mmio bytes (term_var "paddr") ∗
-           term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
-           asn_inv_mmio bytes ∗
-           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
-          (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
-           (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
-        asn_cur_privilege (term_var "m") ∗
-        term_var "m" = term_val ty_privilege Machine ∗
-        asn_pmp_entries (term_var "entries") ∗
-        asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "m") (term_var "typ");
-      sep_contract_result          := "result_mem_write";
-      sep_contract_postcondition   :=
-        term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
-        asn_cur_privilege (term_var "m") ∗
-        asn_pmp_entries (term_var "entries");
-    |}.
+  (* Definition sep_contract_pmp_mem_write {bytes} {H: restrict_bytes bytes} : SepContractFun (@pmp_mem_write bytes H) := *)
+  (*   {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "typ" :: ty_access_type; "m" :: ty_privilege; "entries" :: ty.list ty_pmpentry]; *)
+  (*     sep_contract_localstore      := [term_var "paddr"; term_var "data"; term_var "typ"; term_var "m"]; *)
+  (*     sep_contract_precondition    := *)
+  (*       asn.match_bool (term_var "inv") *)
+  (*         (asn_in_mmio bytes (term_var "paddr") ∗ *)
+  (*          term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗ *)
+  (*          asn_inv_mmio bytes ∗ *)
+  (*          asn_mmio_checked_write bytes (term_var "paddr") (term_var "data")) *)
+  (*         (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗ *)
+  (*          (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ *)
+  (*          (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗ *)
+  (*       asn_cur_privilege (term_var "m") ∗ *)
+  (*       term_var "m" = term_val ty_privilege Machine ∗ *)
+  (*       asn_pmp_entries (term_var "entries") ∗ *)
+  (*       asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "m") (term_var "typ"); *)
+  (*     sep_contract_result          := "result_mem_write"; *)
+  (*     sep_contract_postcondition   := *)
+  (*       term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗ *)
+  (*       asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗ *)
+  (*       asn_cur_privilege (term_var "m") ∗ *)
+  (*       asn_pmp_entries (term_var "entries"); *)
+  (*   |}. *)
 
   Definition sep_contract_mem_read {bytes} {H : restrict_bytes bytes} : SepContractFun (@mem_read bytes H) :=
-    {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "w" :: ty_bytes bytes];
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; (* "entries" :: ty.list ty_pmpentry; *) "w" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
           (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr) ∗
-          asn_cur_privilege (term_val ty_privilege Machine) ∗
-          asn_pmp_entries (term_var "entries") ∗
-          asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_var "typ");
+          asn_cur_privilege (term_val ty_privilege Machine)(*  ∗ *)
+          (* asn_pmp_entries (term_var "entries") ∗ *)
+          (* asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_var "typ") *);
       sep_contract_result          := "result_mem_read";
       sep_contract_postcondition   :=
         term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
                                        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
-          asn_cur_privilege (term_val ty_privilege Machine) ∗
-          asn_pmp_entries (term_var "entries");
+          asn_cur_privilege (term_val ty_privilege Machine)(*  ∗ *)
+          (* asn_pmp_entries (term_var "entries") *);
     |}.
 
   (* Access type `Write` needed here, as `mem_write_value` calls `pmp_mem_write` with this access type*)
   Definition sep_contract_mem_write_value {bytes} {H: restrict_bytes bytes} : SepContractFun (@mem_write_value bytes H) :=
-    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry];
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes(* ; "entries" :: ty.list ty_pmpentry *)];
       sep_contract_localstore      := [term_var "paddr"; term_var "data"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
-          (asn_in_mmio bytes (term_var "paddr") ∗
-           term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
-           asn_inv_mmio bytes ∗
-           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
+          ((* asn_in_mmio bytes (term_var "paddr") ∗ *)
+           term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) (* ∗ *)
+           (* asn_inv_mmio bytes ∗ *)
+           (* asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") *))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
-        asn_cur_privilege (term_val ty_privilege Machine) ∗
-        asn_pmp_entries (term_var "entries") ∗
-        asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Write);
+        asn_cur_privilege (term_val ty_privilege Machine) (* ∗ *)
+        (* asn_pmp_entries (term_var "entries") ∗ *)
+        (* asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Write) *);
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
-        asn_cur_privilege (term_val ty_privilege Machine) ∗
-        asn_pmp_entries (term_var "entries");
+        asn_cur_privilege (term_val ty_privilege Machine) (* ∗ *)
+        (* asn_pmp_entries (term_var "entries") *);
     |}.
 
 
@@ -434,11 +454,11 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       | @mem_read bytes H          => Some (@sep_contract_mem_read bytes H)
       | @mem_write_value bytes H   => Some (@sep_contract_mem_write_value bytes H)
       | tick_pc                    => Some sep_contract_tick_pc
-      | @pmpCheck bytes H          => Some (@sep_contract_pmpCheck bytes H)
+      (* | @pmpCheck bytes H          => Some (@sep_contract_pmpCheck bytes H) *)
       | within_phys_mem            => Some sep_contract_within_phys_mem
-      | pmpMatchAddr               => Some sep_contract_pmpMatchAddr
-      | @pmp_mem_read bytes H      => Some (@sep_contract_pmp_mem_read bytes H)
-      | @pmp_mem_write bytes H     => Some (@sep_contract_pmp_mem_write bytes H)
+      (* | pmpMatchAddr               => Some sep_contract_pmpMatchAddr *)
+      (* | @pmp_mem_read bytes H      => Some (@sep_contract_pmp_mem_read bytes H) *)
+      (* | @pmp_mem_write bytes H     => Some (@sep_contract_pmp_mem_write bytes H) *)
       | @checked_mem_read bytes H  => Some (@sep_contract_checked_mem_read bytes H)
       | @checked_mem_write bytes H => Some (@sep_contract_checked_mem_write bytes H)
       | execute_EBREAK            => Some sep_contract_execute_EBREAK
@@ -451,7 +471,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       | Some c => Linted c
       | None   => True
       end.
-  Proof. intros ? ? []; try constructor. Qed.
+  Proof.
+    intros ? ? []; try constructor.
+  Qed.
 
   Definition sep_contract_read_ram {bytes} : SepContractFunX (read_ram bytes) :=
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "w" :: ty_bytes bytes];
@@ -472,31 +494,31 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     |}.
 
   (* Note; we define the contract like this, because it matches the PRE of `checked_mem_read` quite well*)
-  Definition sep_contract_within_mmio `(H : restrict_bytes bytes) : SepContractFunX (within_mmio H) :=
-    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits];
-        sep_contract_localstore      := [term_var "paddr"];
-        sep_contract_precondition    :=
-        asn.match_bool (term_var "inv")
-          (asn_in_mmio bytes (term_var "paddr") ∗
-           term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))))
-          ((term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr));
-        sep_contract_result          := "result_is_within";
-        sep_contract_postcondition   := term_var "result_is_within" = term_var "inv"
-    |}.
+  (* Definition sep_contract_within_mmio `(H : restrict_bytes bytes) : SepContractFunX (within_mmio H) := *)
+  (*   {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits]; *)
+  (*       sep_contract_localstore      := [term_var "paddr"]; *)
+  (*       sep_contract_precondition    := *)
+  (*       asn.match_bool (term_var "inv") *)
+  (*         (asn_in_mmio bytes (term_var "paddr") ∗ *)
+  (*          term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits)))) *)
+  (*         ((term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)); *)
+  (*       sep_contract_result          := "result_is_within"; *)
+  (*       sep_contract_postcondition   := term_var "result_is_within" = term_var "inv" *)
+  (*   |}. *)
 
   (* NOTE: No new contract for `read`, as femtokernel does not perform any reads for now *)
   (* NOTE: for now no resources in `POST`; add those once we need to reinstate local state *)
   (* NOTE: if overflow is important, a no-overflow statement can be added to the `asn_mmio_checked_write` resource *)
-  Definition sep_contract_mmio_write (bytes : nat) {H: restrict_bytes bytes} : SepContractFunX (mmio_write H) :=
-    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes];
-        sep_contract_localstore      := [term_var "paddr"; term_var "data"];
-        sep_contract_precondition    :=
-           asn_in_mmio bytes (term_var "paddr") ∗
-           asn_inv_mmio bytes ∗
-           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data");
-        sep_contract_result          := "result_write_mmio";
-        sep_contract_postcondition   := ⊤;
-    |}.
+  (* Definition sep_contract_mmio_write (bytes : nat) {H: restrict_bytes bytes} : SepContractFunX (mmio_write H) := *)
+  (*   {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes]; *)
+  (*       sep_contract_localstore      := [term_var "paddr"; term_var "data"]; *)
+  (*       sep_contract_precondition    := *)
+  (*          asn_in_mmio bytes (term_var "paddr") ∗ *)
+  (*          asn_inv_mmio bytes ∗ *)
+  (*          asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"); *)
+  (*       sep_contract_result          := "result_write_mmio"; *)
+  (*       sep_contract_postcondition   := ⊤; *)
+  (*   |}. *)
 
   Definition sep_contract_decode    : SepContractFunX decode :=
     {| sep_contract_logic_variables := ["code" :: ty_word; "instr" :: ty_ast];
@@ -511,9 +533,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       match f with
       | read_ram bytes  => sep_contract_read_ram
       | write_ram bytes => sep_contract_write_ram
-      | within_mmio res => sep_contract_within_mmio res
-      | mmio_read bytes => sep_contract_mmio_read bytes
-      | mmio_write res  => @sep_contract_mmio_write _ res
+      (* | within_mmio res => sep_contract_within_mmio res *)
+      (* | mmio_read bytes => sep_contract_mmio_read bytes *)
+      (* | mmio_write res  => @sep_contract_mmio_write _ res *)
       | decode          => sep_contract_decode
       end.
 
@@ -554,19 +576,19 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        lemma_postcondition   := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "i"]);
     |}.
 
-  Definition lemma_extract_pmp_ptsto bytes : SepLemma (extract_pmp_ptsto bytes) :=
-    {| lemma_logic_variables := ["paddr" :: ty_xlenbits];
-       lemma_patterns        := [term_var "paddr"];
-       lemma_precondition    := ⊤;
-       lemma_postcondition   := ⊤;
-    |}.
+  (* Definition lemma_extract_pmp_ptsto bytes : SepLemma (extract_pmp_ptsto bytes) := *)
+  (*   {| lemma_logic_variables := ["paddr" :: ty_xlenbits]; *)
+  (*      lemma_patterns        := [term_var "paddr"]; *)
+  (*      lemma_precondition    := ⊤; *)
+  (*      lemma_postcondition   := ⊤; *)
+  (*   |}. *)
 
-  Definition lemma_return_pmp_ptsto bytes : SepLemma (return_pmp_ptsto bytes) :=
-    {| lemma_logic_variables := ["paddr" :: ty_xlenbits];
-       lemma_patterns        := [term_var "paddr"];
-       lemma_precondition    := ⊤;
-       lemma_postcondition   := ⊤;
-    |}.
+  (* Definition lemma_return_pmp_ptsto bytes : SepLemma (return_pmp_ptsto bytes) := *)
+  (*   {| lemma_logic_variables := ["paddr" :: ty_xlenbits]; *)
+  (*      lemma_patterns        := [term_var "paddr"]; *)
+  (*      lemma_precondition    := ⊤; *)
+  (*      lemma_postcondition   := ⊤; *)
+  (*   |}. *)
 
   Definition map_wordwidth (w : WordWidth) : nat :=
     match w with
@@ -581,15 +603,15 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
 
   Import TermNotations.
 
-  Definition lemma_close_mmio_write (immm : bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) :=
-    {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
-       lemma_patterns        := [term_var "paddr"; term_var "w"];
-       lemma_precondition    :=
-        (term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
-        (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42));
-       lemma_postcondition   :=
-        asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
-    |}.
+  (* Definition lemma_close_mmio_write (immm : bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) := *)
+  (*   {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits]; *)
+  (*      lemma_patterns        := [term_var "paddr"; term_var "w"]; *)
+  (*      lemma_precondition    := *)
+  (*       (term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗ *)
+  (*       (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42)); *)
+  (*      lemma_postcondition   := *)
+  (*       asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w")); *)
+  (*   |}. *)
 
    Definition LEnv : LemmaEnv :=
      fun Δ l =>
@@ -598,11 +620,11 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        | close_gprs                   => lemma_close_gprs
        | open_ptsto_instr             => lemma_open_ptsto_instr
        | close_ptsto_instr            => lemma_close_ptsto_instr
-       | open_pmp_entries             => lemma_open_pmp_entries
-       | close_pmp_entries            => lemma_close_pmp_entries
-       | extract_pmp_ptsto bytes      => lemma_extract_pmp_ptsto bytes
-       | return_pmp_ptsto bytes       => lemma_return_pmp_ptsto bytes
-       | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
+       (* | open_pmp_entries             => lemma_open_pmp_entries *)
+       (* | close_pmp_entries            => lemma_close_pmp_entries *)
+       (* | extract_pmp_ptsto bytes      => lemma_extract_pmp_ptsto bytes *)
+       (* | return_pmp_ptsto bytes       => lemma_return_pmp_ptsto bytes *)
+       (* | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh *)
       end.
 End RiscvPmpBlockVerifSpec.
 
@@ -643,8 +665,16 @@ Module RiscvPmpSpecVerif.
     | None => False
     end.
 
+
+  Definition test := (postprocess
+                       (SPureSpec.replay
+                          (postprocess (RiscvPmpBlockVerifExecutor.vcgen RiscvPmpBlockVerifExecutor.default_config 1 sep_contract_rX' fun_rX' wnil)))).
+
+  Import SymProp.notations.
+  Eval vm_compute in test.
+
   Lemma valid_execute_rX : ValidContract rX.
-  Proof. now vm_compute. Qed.
+  Proof. vm_compute. Qed.
 
   Lemma valid_execute_wX : ValidContract wX.
   Proof. now vm_compute. Qed.
