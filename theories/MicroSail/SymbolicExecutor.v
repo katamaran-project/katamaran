@@ -769,28 +769,28 @@ Module Type SymbolicExecOn
       (* Use inline_fuel = 1 by default. *)
       ValidContractWithFuel 1 c body.
 
-    Inductive VerificationFailed {Σ} (msg : AMessage Σ) :=.
+    Definition verification_failed_with_error (msg : amsg.EAMessage) : bool := false.
+    Opaque verification_failed_with_error.
 
-    Fixpoint ok' {Σ} (p : 𝕊 Σ) : Prop :=
+    Fixpoint ok' {Σ} (p : 𝕊 Σ) : bool :=
       match p with
-      | SymProp.block => True
+      | SymProp.block => true
       | SymProp.debug _ p => ok' p
-      | SymProp.error msg => VerificationFailed msg
-      | _           => False
+      | SymProp.error msg => verification_failed_with_error (amsg.erase_amessage _ msg)
+      | _           => false
       end.
-    Definition ok {Σ} (p : 𝕊 Σ) : Prop := ok' (prune p).
+    Definition ok {Σ} (p : 𝕊 Σ) : bool := ok' (prune p).
 
     Lemma ok_sound {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
-      ok p -> safe p ι.
+      is_true (ok p) -> safe p ι.
     Proof.
-      unfold ok.
-      rewrite <- prune_sound.
-      generalize (prune p) as q.
-      induction q; cbn; now intuition.
+      rewrite <- prune_sound. unfold ok.
+      generalize (prune p) as q. clear. intros q.
+      induction q; try discriminate; cbn; intuition.
     Qed.
 
     Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil)))).
+      is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil))))).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       ValidContractReflectWithFuel 1 c body.
