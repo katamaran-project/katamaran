@@ -302,11 +302,11 @@ Module RiscvPmpModel2.
 
     Import IrisInstance.
 
-    Lemma gprs_equiv :
+    Lemma gprs_equiv : ∀ {Σ} (ι : Valuation Σ),
       interp_gprs ⊣⊢
-      asn.interpret asn_regs_ptsto env.nil.
+      asn.interpret asn_regs_ptsto ι.
     Proof.
-      unfold interp_gprs.
+      iIntros. unfold interp_gprs.
       rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
       cbn. iSplit.
       - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
@@ -337,14 +337,14 @@ Module RiscvPmpModel2.
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      rewrite gprs_equiv. cbn. iIntros. iFrame.
+      rewrite (gprs_equiv env.nil). cbn. iIntros. iFrame.
     Qed.
 
     Lemma close_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_close_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      rewrite gprs_equiv. cbn. iIntros. iFrame.
+      rewrite (gprs_equiv env.nil). cbn. iIntros. iFrame.
     Qed.
 
     Lemma open_ptsto_instr_sound :
