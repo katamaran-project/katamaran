@@ -79,6 +79,7 @@ Module Type ShallowExecOn
   Definition ExecCall := forall Δ τ, 𝑭 Δ τ -> CStore Δ -> CHeapSpec (Val τ).
   Definition ExecCallForeign := forall Δ τ, 𝑭𝑿 Δ τ -> CStore Δ -> CHeapSpec (Val τ).
   Definition ExecLemma := forall Δ, 𝑳 Δ -> CStore Δ -> CHeapSpec unit.
+  Definition ExecFail := forall Γ τ (s : Val ty.string), CStoreSpec Γ Γ (Val τ).
   Definition Exec := forall Γ τ (s : Stm Γ τ), CStoreSpec Γ Γ (Val τ).
 
   Notation MonotonicExecCall exec_call :=
@@ -90,6 +91,9 @@ Module Type ShallowExecOn
   Notation MonotonicExecLemma exec_lemma :=
     (forall Δ (l : 𝑳 Δ) (δ : CStore Δ),
        Monotonic (MHeapSpec eq) (exec_lemma Δ l δ)).
+  Notation MonotonicExecFail exec_fail :=
+    (forall Γ τ (s : Val ty.string),
+       Monotonic (MStoreSpec Γ Γ eq) (exec_fail Γ τ s)).
   Notation MonotonicExec exec :=
     (forall Γ τ (s : Stm Γ τ),
        Monotonic (MStoreSpec Γ Γ eq) (exec Γ τ s)).
@@ -293,6 +297,7 @@ Module Type ShallowExecOn
       Variable exec_call_foreign : ExecCallForeign.
       Variable exec_lemma : ExecLemma.
       Variable exec_call : ExecCall.
+      Variable exec_fail : ExecFail.
 
       (* The openly-recursive executor. *)
       Definition exec_aux : Exec :=
@@ -331,7 +336,7 @@ Module Type ShallowExecOn
               _ <- lift_heapspec (CHeapSpec.assume_formula (v = true)) ;;
               exec_aux k
           | stm_fail _ s =>
-              block
+              exec_fail _ s
           | stm_pattern_match s pat rhs =>
               v  <- exec_aux s ;;
               '(existT pc δpc) <- demonic_pattern_match pat v ;;
@@ -351,13 +356,14 @@ Module Type ShallowExecOn
       Context
         (mexec_call_foreign : MonotonicExecCallForeign exec_call_foreign)
         (mexec_lemma : MonotonicExecLemma exec_lemma)
-        (mexec_call : MonotonicExecCall exec_call).
+        (mexec_call : MonotonicExecCall exec_call)
+        (mexec_fail : MonotonicExecFail exec_fail).
 
       #[export] Instance mon_exec_aux : MonotonicExec exec_aux.
       Proof. induction s; typeclasses eauto. Qed.
 
     End ExecAux.
-    #[global] Arguments exec_aux _ _ _ [Γ τ] !s.
+    #[global] Arguments exec_aux _ _ _ _ [Γ τ] !s.
 
   End CStoreSpec.
 
@@ -405,6 +411,9 @@ Module Type ShallowExecOn
     Definition debug_call [Δ τ] (f : 𝑭 Δ τ) (args : CStore Δ) : CHeapSpec unit :=
       CHeapSpec.pure tt.
 
+    Definition cexec_fail : ExecFail :=
+      fun Γ τ s => CStoreSpec.block.
+
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
        allowed levels before failing execution. *)
@@ -422,12 +431,12 @@ Module Type ShallowExecOn
             exec_call_error_no_fuel f args
         | None   , S n =>
             CStoreSpec.evalStoreSpec
-              (CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call n) (FunDef f))
+              (CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call n) cexec_fail (FunDef f))
               args
         end.
 
     Definition cexec (inline_fuel : nat) : Exec :=
-      @CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call inline_fuel).
+      @CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call inline_fuel) cexec_fail.
     #[global] Arguments cexec _ [_ _] s _ _ _ : simpl never.
 
     Definition vcgen (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
@@ -442,6 +451,9 @@ Module Type ShallowExecOn
     Proof. typeclasses eauto. Qed.
 
     Lemma mon_cexec_lemma : MonotonicExecLemma cexec_lemma.
+    Proof. typeclasses eauto. Qed.
+
+    Lemma mon_cexec_fail : MonotonicExecFail cexec_fail.
     Proof. typeclasses eauto. Qed.
 
     #[export] Instance mon_cexec_call (fuel : nat) : MonotonicExecCall (cexec_call fuel).

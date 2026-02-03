@@ -422,6 +422,7 @@ Module Type SymbolicExecOn
   Definition ExecCall := forall Δ τ, 𝑭 Δ τ -> ⊢ SStore Δ -> SHeapSpec (WTerm τ).
   Definition ExecCallForeign := forall Δ τ, 𝑭𝑿 Δ τ -> ⊢ SStore Δ -> SHeapSpec (WTerm τ).
   Definition ExecLemma := forall Δ, 𝑳 Δ -> ⊢ SStore Δ -> SHeapSpec Unit.
+  Definition ExecFail := forall Γ τ (s : Val ty.string), ⊢ SStoreSpec Γ Γ (WTerm τ).
   Definition Exec := forall Γ τ (s : Stm Γ τ), ⊢ SStoreSpec Γ Γ (WTerm τ).
 
   Module SStoreSpec.
@@ -567,6 +568,7 @@ Module Type SymbolicExecOn
       Variable exec_call_foreign : ExecCallForeign.
       Variable exec_lemma : ExecLemma.
       Variable exec_call : ExecCall.
+      Variable exec_fail : ExecFail.
 
       (* The openly-recursive executor. *)
       Definition exec_aux : forall {Γ τ} (s : Stm Γ τ), ⊢ SStoreSpec Γ Γ (STerm τ) :=
@@ -608,9 +610,8 @@ Module Type SymbolicExecOn
                interpretation of the object language failure effect. *)
             ⟨ ω12 ⟩ _ <- lift_heapspec (SHeapSpec.assume_formula (formula_bool t)) ;;
             exec_aux k
-        | stm_fail _ _ =>
-            (* Same as stm_assert: partial correctness of failure. *)
-            block (w:=w0)
+        | stm_fail _ s =>
+            exec_fail (w:=w0) s
         | stm_read_register reg =>
             lift_heapspec (SHeapSpec.read_register reg)
         | stm_write_register reg e =>
@@ -729,6 +730,9 @@ Module Type SymbolicExecOn
                (SHeapSpec.pure tt)
         else SHeapSpec.pure tt.
 
+    Definition sexec_fail : ExecFail :=
+      fun Γ τ s => SStoreSpec.block.
+
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
        allowed levels before failing execution. *)
@@ -746,13 +750,13 @@ Module Type SymbolicExecOn
             exec_call_error_no_fuel f (persist args0 θ1)
         | None   , S n =>
             SStoreSpec.evalStoreSpec
-              (SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call n) (FunDef f) (w := _))
+              (SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call n) sexec_fail (FunDef f) (w := _))
               (persist args0 θ1)
         end.
 
     Definition sexec (inline_fuel : nat) : Exec :=
-      @SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call inline_fuel).
-    #[global] Arguments sexec _ [_ _] s _ _ _ : simpl never.
+      @SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call inline_fuel) sexec_fail.
+    #[global] Arguments sexec _ [_ _] s _ _ _ _ : simpl never.
 
     Definition vcgen (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
       fun w => SHeapSpec.run (exec_contract (sexec inline_fuel) c s (w := w)).

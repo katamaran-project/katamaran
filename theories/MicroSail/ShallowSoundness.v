@@ -120,6 +120,16 @@ Module Type Soundness
         ⦃ fun v δ' =>
             ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ v h' ∧ δ' = δ1⌝ ⦄.
 
+    Definition SoundExecFail (exec_fail : ExecFail) : Prop :=
+      forall Γ τ (s : Val ty.string)
+        (Φ : Val τ → CStore Γ → SCHeap → Prop)
+        (δ1 : CStore Γ) (h1 : SCHeap),
+        exec_fail _ _ s Φ δ1 h1 →
+        ⦃ interpret_scheap h1 ⦄
+          stm_fail _ s; δ1
+        ⦃ fun (v : Val τ) (δ' : CStore Γ) =>
+            ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ v δ' h'⌝ ⦄.
+
     Definition SoundExecCallForeign (exec_call_foreign : ExecCallForeign) : Prop :=
       forall Γ τ Δ (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
         (Φ : Val τ → SCHeap → Prop) (δ1 : CStore Γ) (h1 : SCHeap),
@@ -153,17 +163,20 @@ Module Type Soundness
       Variable exec_call_foreign : ExecCallForeign.
       Variable exec_lemma : ExecLemma.
       Variable exec_call : ExecCall.
+      Variable exec_fail : ExecFail.
 
       Variable mexec_call_foreign : MonotonicExecCallForeign exec_call_foreign.
       Variable mexec_lemma : MonotonicExecLemma exec_lemma.
       Variable mexec_call : MonotonicExecCall exec_call.
+      Variable mexec_fail : MonotonicExecFail exec_fail.
 
       Variable sound_exec_call_foreign : SoundExecCallForeign exec_call_foreign.
       Variable sound_exec_lemma : SoundExecLemma exec_lemma.
       Variable sound_exec_call : SoundExecCall exec_call.
+      Variable sound_exec_fail : SoundExecFail exec_fail.
 
       Lemma exec_aux_sound :
-        SoundExec (exec_aux exec_call_foreign exec_lemma exec_call).
+        SoundExec (exec_aux exec_call_foreign exec_lemma exec_call exec_fail).
       Proof.
         unfold SoundExec. intros ? ? s.
         induction s; intros ? ? ?; cbn;
@@ -239,9 +252,7 @@ Module Type Soundness
           now apply IHs, HYP.
 
         - (* stm_fail *)
-          eapply rule_consequence_left.
-          apply rule_stm_fail.
-          apply bi.True_intro.
+          now eapply sound_exec_fail.
 
         - (* stm_match_newpattern *)
           eapply rule_stm_pattern_match.
@@ -349,6 +360,15 @@ Module Type Soundness
       now apply call_lemma_sound.
     Qed.
 
+    Lemma sound_cexec_fail : SoundExecFail cexec_fail.
+    Proof.
+      unfold SoundExecFail, cexec_fail. intros *.
+      intros HYP.
+      eapply rule_consequence_left.
+      eapply rule_stm_fail.
+      auto.
+    Qed.
+
     Lemma sound_cexec_call (fuel : nat) : SoundExecCall (cexec_call fuel).
     Proof.
       induction fuel; unfold SoundExecCall, evalStoreSpec; cbn; intros.
@@ -386,6 +406,7 @@ Module Type Soundness
           * apply sound_cexec_call_foreign.
           * apply sound_cexec_lemma.
           * auto.
+          * apply sound_cexec_fail.
     Qed.
 
     Lemma sound_cexec (fuel : nat) : SoundExec (cexec fuel).
@@ -394,6 +415,7 @@ Module Type Soundness
       - apply sound_cexec_call_foreign.
       - apply sound_cexec_lemma.
       - apply sound_cexec_call.
+      - apply sound_cexec_fail.
     Qed.
 
     Lemma vcgen_sound fuel {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :

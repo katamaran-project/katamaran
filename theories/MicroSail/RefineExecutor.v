@@ -90,6 +90,9 @@ Module RefineExecOn
   Definition RefineExecLemma (cexec_lemma : SHAL.ExecLemma) (sexec_lemma : SYMB.ExecLemma) : Prop :=
     ∀ Δ (l : 𝑳 Δ) w,
       ⊢ ℛ⟦RStore Δ -> RHeapSpec RUnit⟧ (cexec_lemma Δ l) (sexec_lemma Δ l w).
+  Definition RefineExecFail (cexec_fail : SHAL.ExecFail) (sexec_fail : SYMB.ExecFail) : Prop :=
+    ∀ Γ τ (s : Val ty.string) w,
+      ⊢ ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧ (cexec_fail Γ τ s) (sexec_fail Γ τ s w).
   Definition RefineExec (cexec : SHAL.Exec) (sexec : SYMB.Exec) : Prop :=
     ∀ Γ τ (s : Stm Γ τ) w,
       ⊢ ℛ⟦RStoreSpec Γ Γ (RVal τ)⟧ (cexec Γ τ s) (sexec Γ τ s w).
@@ -555,15 +558,17 @@ Module RefineExecOn
       Context `(rexec_call_foreign : RefineExecCallForeign c_exec_call_foreign s_exec_call_foreign).
       Context `(rexec_lemma : RefineExecLemma c_exec_lemma s_exec_lemma).
       Context `(rexec_call : RefineExecCall c_exec_call s_exec_call).
+      Context `(rexec_fail : RefineExecFail c_exec_fail s_exec_fail).
 
       Lemma refine_exec_aux :
-        RefineExec (@CStoreSpec.exec_aux c_exec_call_foreign c_exec_lemma c_exec_call) (@SStoreSpec.exec_aux s_exec_call_foreign s_exec_lemma s_exec_call) .
+        RefineExec (@CStoreSpec.exec_aux c_exec_call_foreign c_exec_lemma c_exec_call c_exec_fail) (@SStoreSpec.exec_aux s_exec_call_foreign s_exec_lemma s_exec_call s_exec_fail).
       Proof.
         intros ? ? s. induction s; cbn; intros w; rsolve.
         - now iApply rexec_call.
         - now iApply rexec_call_foreign.
         - now iApply rexec_lemma.
         - iApply IHs1.
+        - now iApply rexec_fail.
         - destruct a0, ta0.
           iRename select (ℛ⟦RMatchResult pat⟧ (existT x n) (existT x0 n0)) into "Hmr".
           iDestruct "Hmr" as "[%e Hvs]".
@@ -645,6 +650,13 @@ Module RefineExecOn
       fold (CHeapSpec.pure tt); rsolve.
     Qed.
 
+    Lemma refine_exec_fail :
+      RefineExecFail cexec_fail sexec_fail.
+    Proof.
+      iIntros (? ? ? ?).
+      unfold cexec_fail, sexec_fail; rsolve.
+    Qed.
+
     Lemma refine_exec_call (fuel : nat) :
       RefineExecCall (cexec_call fuel) (sexec_call cfg fuel).
     Proof.
@@ -654,14 +666,16 @@ Module RefineExecOn
       - now iApply refine_debug_call.
       - destruct (CEnv f); rsolve.
         iApply StoreSpec.refine_exec_aux;
-            auto using refine_exec_call_foreign, refine_exec_lemma.
+          auto using refine_exec_call_foreign, refine_exec_lemma,
+                     refine_exec_fail.
     Qed.
 
     Lemma refine_exec (fuel : nat) :
       RefineExec (cexec fuel) (sexec cfg fuel).
     Proof.
       unfold cexec, sexec. apply refine_exec_aux.
-      all: auto using refine_exec_call_foreign, refine_exec_lemma, refine_exec_call.
+      all: auto using refine_exec_call_foreign, refine_exec_lemma,
+                      refine_exec_call, refine_exec_fail.
     Qed.
 
     #[export] Instance refine_compat_exec {fuel : nat} (Γ : PCtx) (τ : Ty) (s : Stm Γ τ) {w} :
