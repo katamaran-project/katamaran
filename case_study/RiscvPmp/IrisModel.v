@@ -51,9 +51,6 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     (* Defines the memory ghost state. *)
     Definition MemVal : Set := Byte.
 
-    (* Defines the io-protocol ghost state *)
-    Definition IOState : Set := bool.
-
     (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)
     Class mcMemGS Σ :=
       McMemGS {

@@ -121,6 +121,24 @@ Parameter mmioenv : MMIOEnv.
 #[export] Existing Instance mmioenv.
 #[export] Instance state_inhabited : Inhabited Base.State := populate (state_init).
 
+(* Defines the io-protocol ghost state *)
+
+Context {TK : TypeDeclKit}.
+Definition IOState : Set := bool.
+#[export] Definition iostate_bits := 1.
+
+Class bv_rize (A : Set) (n : nat) : Set := {
+    bv_to : A -> bv n;
+    bv_from : bv n -> A ;
+  }.
+
+#[export] Instance bv_iostate : bv_rize IOState iostate_bits :=
+  {
+    bv_to := fun  b : IOState => if b then @bv.of_N iostate_bits 1 else @bv.of_N iostate_bits 0;
+    bv_from := fun (b : bv iostate_bits)  => if (bv.eqb b (bv.zero)) then false else true 
+  }.
+
+
 Require Import stdpp.finite.
 (* Addresses cannot both be MMIO and RAM. We need to know this when trying to inject pointsto-chunks for RAM back into maps of pointsto chunks. *)
 
@@ -591,7 +609,8 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_xlenbits                       := (ty.bvec xlenbits).
   Definition ty_word                           := (ty.bvec word).
   Definition ty_byte                           := (ty.bvec byte).
-  Definition ty_bytes (bytes : nat)            := (ty.bvec (bytes * byte)).
+  Definition ty_bytes (bytes : nat)              := (ty.bvec (bytes * byte)).
+  Definition ty_iostate                        := (ty.bvec iostate_bits).
   Definition ty_regno                          := (ty.bvec 5).
   Definition ty_privilege                      := (ty.enum privilege).
   Definition ty_priv_level                     := (ty.bvec 2).
