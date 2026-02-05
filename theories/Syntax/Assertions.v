@@ -86,6 +86,10 @@ Module Import asn.
     (p : RecordPat (recordf_ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ)) : Assertion Σ :=
     pattern_match s (pat_record R Δ p) (fun _ => rhs).
 
+  Definition match_bvec {Σ n} (t : Term Σ (ty.bvec n))
+    (rhs : Bitvector.bv.bv n -> Assertion Σ) : Assertion Σ :=
+    asn.pattern_match t (pat_bvec_exhaustive n) rhs.
+
   #[global] Arguments match_enum [_] E _ _.
   #[global] Arguments match_sum [_] σ τ _ _ _.
   #[global] Arguments match_list [_] {σ} s anil xh xt acons.
