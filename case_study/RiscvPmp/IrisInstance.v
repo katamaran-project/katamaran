@@ -343,14 +343,14 @@ Module RiscvPmpIrisInstancePredicates.
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
-    Definition interp_mmio_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte)) (s s': IOState)  : iProp Σ :=
+    Definition interp_mmio_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte)) (s s': bv iostate_bits)  : iProp Σ :=
       ⌜addr = write_addr⌝ ∗
       ⌜let e := {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := width ;  event_contents := bytes |}
-       in  impl_mmio_state_prot s e s'⌝.
+       in  impl_mmio_state_prot (bv_from s) e (bv_from s')⌝.
 
     (* Current protocol state is: *)
-    Definition interp_mmio_state_pred `{invGS Σ} (s : IOState) : iProp Σ :=
-      st_frag1 s.
+    Definition interp_mmio_state_pred `{invGS Σ} (s : bv iostate_bits) : iProp Σ :=
+      st_frag1 (bv_from s).
 
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).
@@ -469,18 +469,17 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
     Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
-    | pmp_entries              | [ v ]                => interp_pmp_entries v
-    | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
+    | pmp_entries              | [ v ]                     => interp_pmp_entries v
+    | pmp_addr_access          | [ entries; m ]            => interp_pmp_addr_access liveAddrs mmioAddrs entries m
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
     | gprs                     | _                    => interp_gprs ∅ (* For the Universal Contract verification we always need all GPRs, hence the empty exclude list *)
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
-    | mmio_state _             | [st] (* [unit] *)    => interp_mmio_state_pred st (* We have ownership over st *)
+    | mmio_state _             | [s] (* [unit] *)     => interp_mmio_state_pred s (* We have ownership over st *)
     | mmio_trace bytes         | [env] (* [unit] *)   => interp_mmio_trace_state_inv bytes (* Given st and tr state_prot is satisfied *)
-    | mmio_state_prot _        | [w; st]             => interp_mmio_state_prot w st (* Given st and w state_prot is satisfied *)
-    | mmio_checked_write _     | [ addr; w; st; st' ] => interp_mmio_checked_write addr w st st'
-    | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
+    | mmio_checked_write _     | [ addr; w; s; s' ]   => interp_mmio_checked_write addr w s s'
+    | encodes_instr            | [ code; instr ]      => ⌜pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
 
