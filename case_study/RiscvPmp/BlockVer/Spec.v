@@ -109,6 +109,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
   Notation asn_mmio_pred bytes := (asn.chunk (chunk_user (mmio_trace bytes) [env])).
   Notation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w; s; s'])).
+  Notation asn_mmio_state_prot bytes w s :=  (asn.formula (formula_user (mmio_state_prot bytes) [w; s])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
     term_binop (bop.relop bop.eq) e1 e2.
@@ -224,6 +225,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Local Notation asn_mmio_state_pred bytes s := (asn.chunk (chunk_user (mmio_state bytes) [s])).
   Local Notation asn_mmio_trace_pred bytes := (asn.chunk (chunk_user (mmio_trace bytes) [env])).
   Local Notation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w; s; s'])).
+  Notation asn_mmio_state_prot bytes w s :=  (asn.formula (formula_user (mmio_state_prot bytes) [w; s])).
+
   Import bv.notations.
 
   Definition sep_contract_rX : SepContractFun rX :=
@@ -593,25 +596,24 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Proof. destruct widthh; now compute. Qed.
   Local Hint Resolve wordwidth_upper_bound : typeclass_instances.
 
-  Import
-    TermNotations.
+  Import TermNotations.
+
+  (* Option 1: Make mmio_checked_write non spatial, and remove this lemma *)
+  (* Option 2: Extend asn_mmio_state_prot to take iostate_new *)
   Definition lemma_close_mmio_write (immm : bv 12) (widthh : WordWidth) : SepLemma (close_mmio_write immm widthh) :=
     {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "r" :: ty_regno; "w" :: ty_word; "iostate_old" :: ty_iostate];
       lemma_patterns        := [term_var "paddr"; term_var "r"];
       lemma_precondition    :=
         ((term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm))) ∗
           (term_var "r") ↦ᵣ (term_var "w") ∗
-          (* depending on the protocol state, the value should be either even or odd *)
-          asn.match_bvec (term_var "iostate_old")
-            (fun b => if is_even b
-                   then (term_unop (uop.bvtake 1) (term_var "w")) = term_val (ty_iostate) (bv.one)
-                   else (term_unop (uop.bvtake 1) (term_var "w")) = term_val (ty_iostate) (bv.zero)
-            );
+          (asn_mmio_state_prot (map_wordwidth widthh)
+             (term_truncate (map_wordwidth widthh * byte) (term_var "w"))
+             (term_var "iostate_old"));
       lemma_postcondition   :=
         (term_var "r") ↦ᵣ (term_var "w") ∗
-        asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm))
+          (∃ "iostate_new", asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm))
           (term_truncate (map_wordwidth widthh * byte) (term_var "w"))
-          (term_var "iostate_old") (term_unop uop.bvnot (term_var "iostate_old")); 
+          (term_var "iostate_old") (term_var "iostate_new"));
     |}.
 
 
@@ -990,14 +992,22 @@ Module RiscvPmpIrisInstanceWithContracts.
     now iFrame.
   Qed.
 
+
   Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (width : WordWidth) :
     ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width ).
   Proof.
     intros ι; destruct_syminstance ι. cbn.
     iIntros "([<- _] & Hmmio & Hcond)".
-    iFrame. unfold iostate_bits in *. 
-    unfold interp_mmio_checked_write. iSplitR "Hcond"; auto.
-Admitted.
+    iFrame. unfold iostate_bits in *.
+    unfold interp_mmio_checked_write. unfold Mmio_state_prot. simpl in *.
+    iDestruct "Hcond" as "(%Hold_ & _)". iPureIntro. 
+    destruct Hold_ with (addr := paddr) as [iostate_new Hold].
+    inversion Hold.
+    - subst. exists bv.one; split; simpl; auto.
+      constructor; cbn; auto; try lia. unfold is_even. destruct width; simpl; auto.
+    - subst. exists bv.zero; split; simpl; auto.
+      constructor; cbn; auto; try lia. unfold is_even. destruct width; simpl; auto.
+  Qed.
 
   Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.
   Proof.

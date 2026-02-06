@@ -214,13 +214,13 @@ Module inv := invariants.
 
     Example femtokernel_init' (init_start : N) (handler_start : N) (adv_start : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_init_asm handler_start adv_start) init_start.
-
+(* fdu *)
     Example femtokernel_mmio_handler_asm_block0 (mmio_handler_start_block2 : N) (data_start : N) : list ASM :=
       [
         (* ITYPE bv.one zero t1 RISCV_ADDI (* t1 <- 1 *) *)
         UTYPE bv.zero t1 RISCV_AUIPC
-        ; Λ current_pc, LOAD (bv.of_N (data_start - (current_pc - 4))) t1 t1 false WORD (* t1 <- data *)
-        ; ITYPE bv.one t1 t1 RISCV_ANDI (* t1 <- mask t1 *)
+        ; Λ current_pc, LOAD (bv.of_N (data_start - (current_pc - 4))) t1 t1 true WORD (* t1 <- data *)
+        ; ITYPE bv.one t1 t1 RISCV_ANDI (* t1 <- mask t1 *) (* Todo: Maybe remove this line, and add a condition to the precondition. *)
         ; ITYPE bv.one t0 t2 RISCV_ANDI (* t2 <- mask t0 *)
         (* ; RTYPE t1 t0 t2 RISCV_AND (* t2 = t0 && t1 *) *)
         ; Λ current_pc, BTYPE (bv.of_N (mmio_handler_start_block2 - current_pc)) t1 t2 RISCV_BEQ (* branch if t1 = t2 *)
@@ -360,12 +360,16 @@ Module inv := invariants.
       (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
       (∃ "cause", mcause ↦ term_var "cause") ∗
       (∃ "epc", mepc ↦ term_var "epc") ∗
-      (∃ "v", (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ᵢ term_var "v") ∗
+      (* (∃ "v", (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ᵢ term_var "v") ∗ *)
       asn_regs_ptsto ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-      (∃ "s", asn_mmio_state_pred (term_var "s")) ∗
-      asn_mmio_trace_state_inv
+      (∃ "oldvalue",  ∃ "s",
+          asn.sep ((term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ᵢ (term_var "oldvalue"))
+          (asn.sep (asn_mmio_state_pred (term_var "s"))
+          (asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "oldvalue"; term_var "s"])) )
+      )
+      ∗ asn_mmio_trace_state_inv
     .
 
     Example femtokernel_handler_post_block0 : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
@@ -381,13 +385,14 @@ Module inv := invariants.
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
       (∃ "oldvalue", ∃ "newvalue", ∃ "s",
           asn.sep
-           (    (asn.chunk (chunk_ptsreg x5 (term_var "newvalue")))
-              ∗ (asn_mmio_state_pred (term_var "s"))
-              ∗ (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ᵢ (term_var "oldvalue")
+          (    (asn.chunk (chunk_ptsreg x5 (term_var "newvalue")))
+                 ∗ (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ᵢ (term_var "oldvalue")
+                 ∗ (asn_mmio_state_pred (term_var "s"))
+                 ∗ (asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "oldvalue"; term_var "s"]))
            )
            (asn.or
              (
-               (asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "newvalue"; term_var "s"])) ∗ 
+               (∃ "s'", asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "newvalue"; term_var "s'"])) ∗ 
                (term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block1))
              )
              (
@@ -397,6 +402,8 @@ Module inv := invariants.
       ) ∗
       asn_mmio_trace_state_inv.
 
+
+    (* fdu *)
   Example femtokernel_handler_pre_block1 : Assertion ["a" :: ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block1)) ∗
     (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
@@ -404,11 +411,17 @@ Module inv := invariants.
     (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
     (∃ "cause", mcause ↦ term_var "cause") ∗
     (∃ "epc", mepc ↦ term_var "epc") ∗
-    (∃ "s", ∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w"))) (asn.chunk (chunk_user (mmio_state bytes_per_word) [term_var "s"]))) ∗
+    (* (∃ "s", ∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w"))) (asn.chunk (chunk_user (mmio_state bytes_per_word) [term_var "s"]))) ∗ *)
     (* (∃ "w", asn.sep (asn.chunk (chunk_ptsreg x5 (term_var "w"))) (term_unop (uop.bvtake 1) (term_var "w") = term_val (ty.bvec 1) (bv.of_N 0))) ∗ *)
     asn_regs_ptsto_excl [5] ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
+    (∃ "s", asn_mmio_state_pred (term_var "s")) ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
+    (∃ "newvalue",
+        asn.sep
+          (asn.chunk (chunk_ptsreg x5 (term_var "newvalue")))
+          (∃ "s'", asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "newvalue"; term_var "s'"]))
+    ) ∗
     asn_mmio_trace_state_inv.
 
   Example femtokernel_handler_post_block1 : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
@@ -499,9 +512,37 @@ Locate erase_symprop.
     (* Qed. *)
 
 
-
 Import Erasure.notations.
 
+Lemma bv1_destruct : forall (b : bv 1), b = bv.zero \/ b = bv.one.
+  Proof.
+    intros. destruct b. destruct bin.
+    - left. destruct i. trivial.
+    - right. destruct p; try inversion i. destruct i. trivial.
+  Qed.
+
+Search bv.app.
+
+Lemma bv_napp1_pop : forall (n : nat) (b1 b2 : bv 1) (bs : bv n), bv.app b1 bs <> bv.app b2 bs <-> b1 <> b2.
+  Proof.
+    split; intros.
+    - rewrite bv.app_inj in H. apply Decidable.not_and in H. simpl in H. destruct H; auto.
+      unfold Decidable.decidable. 
+      destruct (bv1_destruct b1) as [Hzero | Hone]; subst; auto.
+    - rewrite bv.app_inj. unfold not in *. intros. destruct H0; apply H; auto.
+  Qed.
+
+Lemma bv1_bool_false: forall (b : bv 1), bv.to_bool b = false -> b = bv.zero.
+  Proof.
+    intros.
+    destruct (bv1_destruct b) as [Hzero | Hone]; subst; auto. discriminate H.
+  Qed.
+
+Lemma bv1_bool_true: forall (b : bv 1), bv.to_bool b = true -> b = bv.one.
+  Proof.
+    intros.
+    destruct (bv1_destruct b) as [Hzero | Hone]; subst; auto. discriminate H.
+  Qed.
 
 (* for debugging *)
 Set Printing Depth 200.
@@ -512,34 +553,54 @@ Eval vm_compute in vc__femtohandler_block0.
     Lemma sat__femtohandler_block0 : safeE (vc__femtohandler_block0).
     Proof.
       vm_compute.
-      constructor; cbn. intros. split; auto.
-      unfold Mmio_state_prot. intros. admit.
-    Admitted.
-    (*   -  (* courtesy of Dominique Devriese *) *)
-    (*     intros. *)
-    (*      destruct (bv.appView 1 _ v). *)
-    (*      change (@bv.mk 32 1 I) with (@bv.app 1 31 [bv 0x1] bv.zero) in H. *)
-    (*      change (@bv.land 32) with (@bv.land (1 + 31)) in H. *)
-    (*      rewrite bv.land_app in H. *)
-    (*      apply (f_equal (bv.take 1)) in H. *)
-    (*      rewrite !bv.take_app in H. *)
-    (*      now rewrite bv.land_ones_r in H. *)
-    (*   -  unfold bv.take. destruct (bv.appView 1 _ v). *)
-    (*      destruct xs. destruct bin. *)
-    (*      -- simpl in *. rewrite <- bv.of_N_wf. auto. *)
-    (*      -- simpl in *. destruct p; inversion i. *)
-    (*         destruct H. *)
-    (*         rewrite <- bv.of_N_wf. *)
-    (*         rewrite bv.of_N_one. simpl. *)
-    (*         change (@bv.mk 32 1 I) with (@bv.app 1 31 [bv 0x1] bv.zero). *)
-    (*         change (@bv.land 32) with (@bv.land (1 + 31)). *)
-    (*         rewrite bv.land_app. *)
-    (*         rewrite bv.land_zero_r. *)
-    (*         change ([bv 0x1] : bv 1) with (bv.ones 1). *)
-    (*         rewrite bv.land_ones_r. *)
-    (*         reflexivity. *)
-    (* Qed. *)
+      constructor; cbn.
+      unfold Mmio_state_prot. intros.
+      edestruct H. Unshelve. 2: auto. clear H.
+      exists (bv_to x). split; auto. intros.
+      exists (negb x).
+      unfold bv.zext' in H0.
+      change (@bv.app 32 0 v (@bv.zero 0)) with (@bv.app 32 0 v (@bv.nil)) in H0.
+      rewrite bv.app_nil_r in H0. simpl in H0. simpl in H1.
+      destruct (bv.eqb v1); inversion H1; subst; simpl in *; clear H H2;
+      destruct (bv.to_bool (bv.take 1 v0)) eqn: V0; try now destruct H3.
+      - constructor; auto; simpl; try lia. clear addr v1 H1 H3.
+        destruct (bv.appView 1 _ v). 
+        destruct (bv.appView 1 _ v0).
+        rewrite bv.take_app in V0.
+        apply bv1_bool_false in V0. subst.
+        change (@bv.mk 32 1 I) with (@bv.app 1 31 [bv 0x1] bv.zero) in H0.
+        change (@bv.land 32) with (@bv.land (1 + 31)) in H0.
+        rewrite bv.land_app in H0.
+        rewrite bv.land_app in H0.
+        rewrite bv.land_ones_r in H0.
+        rewrite bv.land_ones_r in H0.
+        rewrite bv.land_zero_r in H0.
+        rewrite bv.land_zero_r in H0.
+        apply bv_napp1_pop in H0.
+        destruct (bv1_destruct xs) as [Hzero | Hone]; subst; auto. destruct H0; auto.
+        rewrite bv.take_app. rewrite negb_involutive. auto.
+      - constructor; auto; simpl; try lia. clear addr v1 H1 H3.
+        destruct (bv.appView 1 _ v). 
+        destruct (bv.appView 1 _ v0).
+        rewrite bv.take_app in V0.
+        apply bv1_bool_true in V0. subst.
+        change (@bv.mk 32 1 I) with (@bv.app 1 31 [bv 0x1] bv.zero) in H0.
+        change (@bv.land 32) with (@bv.land (1 + 31)) in H0.
+        rewrite bv.land_app in H0.
+        rewrite bv.land_app in H0.
+        rewrite bv.land_ones_r in H0.
+        rewrite bv.land_ones_r in H0.
+        rewrite bv.land_zero_r in H0.
+        rewrite bv.land_zero_r in H0.
+        apply bv_napp1_pop in H0.
+        destruct (bv1_destruct xs) as [Hzero | Hone]; subst; auto.
+        rewrite bv.take_app. auto.
+        destruct H0; auto.
+    Qed.
 
+
+    Eval vm_compute in vc__femtohandler_block1.
+    (* fdu *)
     Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
     Proof.
       vm_compute.
