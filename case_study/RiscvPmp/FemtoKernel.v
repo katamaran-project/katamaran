@@ -218,8 +218,8 @@ Module inv := invariants.
       [
         (* ITYPE bv.one zero t1 RISCV_ADDI (* t1 <- 1 *) *)
         UTYPE bv.zero t1 RISCV_AUIPC
-        ; Λ current_pc, LOAD (bv.of_N (data_start - (current_pc - 4))) t1 t1 false WORD (* t1 <- data *)
-        ; ITYPE bv.one t1 t1 RISCV_ANDI (* t1 <- mask t1 *)
+        ; Λ current_pc, LOAD (bv.of_N (data_start - (current_pc - 4))) t1 t1 true WORD (* t1 <- data *)
+        ; ITYPE bv.one t1 t1 RISCV_ANDI (* t1 <- mask t1 *) (* Todo: Maybe remove this line, and add a condition to the precondition. *)
         ; ITYPE bv.one t0 t2 RISCV_ANDI (* t2 <- mask t0 *)
         (* ; RTYPE t1 t0 t2 RISCV_AND (* t2 = t0 && t1 *) *)
         ; Λ current_pc, BTYPE (bv.of_N (mmio_handler_start_block2 - current_pc)) t1 t2 RISCV_BEQ (* branch if t1 = t2 *)
@@ -358,8 +358,12 @@ Module inv := invariants.
       (∃ "x1", x1 ↦ term_var "x1") ∗
       x5 ↦ term_var "x5" ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-      (∃ "s", asn_mmio_state_pred (term_var "s")) ∗
-      asn_mmio_trace_state_inv
+      (∃ "oldvalue",  ∃ "s",
+          asn.sep ((term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ᵢ (term_var "oldvalue"))
+          (asn.sep (asn_mmio_state_pred (term_var "s"))
+          (asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "oldvalue"; term_var "s"])) )
+      )
+      ∗ asn_mmio_trace_state_inv
     .
 
     Example femtokernel_handler_post :
