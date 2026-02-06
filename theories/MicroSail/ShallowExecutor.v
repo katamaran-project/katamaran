@@ -43,6 +43,7 @@ From Katamaran Require Import
      Prelude
      Signature
      Symbolic.Propositions
+     Hoare
      Specification.
 
 From stdpp Require base list option.
@@ -58,6 +59,7 @@ Module Type ShallowExecOn
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
+  (Import FL   : FailLogic)
   (Import SPEC : Specification B SIG PROG).
 
   (* The main specification monad that we use for execution. It is indexed by
@@ -333,6 +335,7 @@ Module Type ShallowExecOn
           | stm_seq e k => _ <- exec_aux e ;; exec_aux k
           | stm_assertk e1 _ k =>
               v <- eval_exp e1 ;;
+              _ <- lift_heapspec (CHeapSpec.assert_formula (if fail_rule_pre then True else v <> false)) ;;
               _ <- lift_heapspec (CHeapSpec.assume_formula (v = true)) ;;
               exec_aux k
           | stm_fail _ s =>
@@ -412,7 +415,7 @@ Module Type ShallowExecOn
       CHeapSpec.pure tt.
 
     Definition cexec_fail : ExecFail :=
-      fun Γ τ s => CStoreSpec.block.
+      fun Γ τ s => if fail_rule_pre then CStoreSpec.block else CStoreSpec.error.
 
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
@@ -454,13 +457,17 @@ Module Type ShallowExecOn
     Proof. typeclasses eauto. Qed.
 
     Lemma mon_cexec_fail : MonotonicExecFail cexec_fail.
-    Proof. typeclasses eauto. Qed.
+    Proof. unfold cexec_fail; destruct fail_rule_pre; typeclasses eauto. Qed.
 
     #[export] Instance mon_cexec_call (fuel : nat) : MonotonicExecCall (cexec_call fuel).
-    Proof. induction fuel; intros; cbn; destruct CEnv; typeclasses eauto. Qed.
+    Proof.
+      induction fuel; intros; cbn; destruct CEnv;
+        unfold cexec_fail; destruct fail_rule_pre;
+        typeclasses eauto.
+    Qed.
 
     Lemma mon_cexec (fuel : nat) : MonotonicExec (cexec fuel).
-    Proof. typeclasses eauto. Qed.
+    Proof. unfold cexec, cexec_fail; destruct fail_rule_pre; typeclasses eauto. Qed.
 
   End WithSpec.
 
@@ -497,8 +504,9 @@ Module MakeShallowExecutor
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)
+  (Import FL   : FailLogic)
   (Import SPEC : Specification B SIG PROG).
 
-  Include ShallowExecOn B SIG PROG SPEC.
+  Include ShallowExecOn B SIG PROG FL SPEC.
 
 End MakeShallowExecutor.

@@ -91,11 +91,12 @@ Module Type IrisAdequacy2
   (Import B      : Base)
   (Import SIG    : Signature B)
   (Import PROG   : Program B)
+  (Import FL     : FailLogic)
   (Import SEM    : Semantics B PROG)
   (Import IB2    : IrisBase2 B PROG SEM)
   (Import IAP    : IrisAdeqParameters2 B PROG SEM IB2 IB2 IB2)
   (Import IPred  : IrisPredicates2 B SIG PROG SEM IB2)
-  (Import IRules : IrisSignatureRules2 B SIG PROG SEM IB2 IPred).
+  (Import IRules : IrisSignatureRules2 B SIG PROG FL SEM IB2 IPred).
 
   Import SmallStepNotations.
 
@@ -401,8 +402,8 @@ Module Type IrisAdequacy2
     { now iApply own_RegStore_to_regs_inv. }
     iApply (wp_mono with "H").
     iIntros (v1) "(%γ2' & %μ2' & %δ2' & %s2' & %v2 & %Hstep & %Heq & Hreg & Hmem & %Hvaleq & %Hstoreeq & H)".
-    iExists s2', δ2', γ2', μ2'. destruct v1 as [[v1|m1] δ1']; simpl in *;
-      iDestruct "H" as "%H"; iPureIntro; repeat split.
+    iExists s2', δ2', γ2', μ2'. destruct fail_rule_pre, v1 as [[v1|m1] δ1']; simpl in *;
+      auto; iDestruct "H" as "%H"; iPureIntro; repeat split.
     - now apply steps_to_erased.
     - apply (stm_to_val_Final Heq).
     - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)].
@@ -413,6 +414,11 @@ Module Type IrisAdequacy2
     - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)].
       + discriminate.
       + inversion Hvaleq; subst; auto.
+    - now apply steps_to_erased.
+    - apply (stm_to_val_Final Heq).
+    - destruct (stm_to_val_Some_cases Heq) as [(v' & -> & ->)|(m' & -> & ->)].
+      + inversion Hvaleq; subst; auto.
+      + discriminate.
   Qed.
 
   (* Lemma adequacy_gen {Γ1 Γ2 τ} (s11 s12 : Stm Γ1 τ) (s21 s22 : Stm Γ2 τ) *)

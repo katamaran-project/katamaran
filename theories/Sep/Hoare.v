@@ -41,10 +41,23 @@ From Katamaran Require Import
 Import ctx.notations.
 Import env.notations.
 
+Module Type FailLogic.
+
+  Parameter fail_rule_pre : bool.
+
+End FailLogic.
+
+Module DefaultFailLogic <: FailLogic.
+
+  Definition fail_rule_pre : bool := true.
+
+End DefaultFailLogic.
+
 Module Type ProgramLogicOn
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
+  (Import FL   : FailLogic)
   (Import SPEC : Specification B SIG PROG).
 Module ProgramLogic.
 
@@ -120,10 +133,11 @@ Module ProgramLogic.
         (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         (eval e1 δ = true -> ⦃ P ⦄ k ; δ ⦃ Q ⦄) ->
+        (if fail_rule_pre then True else eval e1 δ ≠ false) ->
         ⦃ P ⦄ stm_assertk e1 e2 k ; δ ⦃ Q ⦄
     | rule_stm_fail
         (s : Val ty.string) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ True ⦄ stm_fail τ s ; δ ⦃ Q ⦄
+        ⦃ if fail_rule_pre then True else False ⦄ stm_fail τ s ; δ ⦃ Q ⦄
     | rule_stm_read_register
         (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
         ⦃ lptsreg r v ⦄

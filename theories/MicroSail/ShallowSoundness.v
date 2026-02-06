@@ -46,9 +46,10 @@ Module Type Soundness
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
+  (Import FL   : FailLogic)
   (Import SPEC : Specification B SIG PROG)
-  (Import EXEC : ShallowExecOn B SIG PROG SPEC)
-  (Import HOAR : ProgramLogicOn B SIG PROG SPEC).
+  (Import EXEC : ShallowExecOn B SIG PROG FL SPEC)
+  (Import HOAR : ProgramLogicOn B SIG PROG FL SPEC).
 
   Import CStoreSpec.
   Import ProgramLogic.
@@ -248,8 +249,8 @@ Module Type Soundness
           now apply IHs2.
 
         - (* stm_assert *)
-          apply rule_stm_assert; intro Heval.
-          now apply IHs, HYP.
+          destruct HYP as [Hf HYP].
+          apply rule_stm_assert; auto.
 
         - (* stm_fail *)
           now eapply sound_exec_fail.
@@ -364,9 +365,12 @@ Module Type Soundness
     Proof.
       unfold SoundExecFail, cexec_fail. intros *.
       intros HYP.
-      eapply rule_consequence_left.
-      eapply rule_stm_fail.
-      auto.
+      destruct fail_rule_pre eqn:Ef.
+      - eapply rule_consequence_left.
+        eapply rule_stm_fail.
+        rewrite Ef.
+        auto.
+      - destruct HYP.
     Qed.
 
     Lemma sound_cexec_call (fuel : nat) : SoundExecCall (cexec_call fuel).
@@ -450,10 +454,11 @@ Module MakeShallowSoundness
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
+  (Import FL   : FailLogic)
   (Import SPEC : Specification B SIG PROG)
-  (Import EXEC : ShallowExecOn B SIG PROG SPEC)
-  (Import HOAR : ProgramLogicOn B SIG PROG SPEC).
+  (Import EXEC : ShallowExecOn B SIG PROG FL SPEC)
+  (Import HOAR : ProgramLogicOn B SIG PROG FL SPEC).
 
-  Include Soundness B SIG PROG SPEC EXEC HOAR.
+  Include Soundness B SIG PROG FL SPEC EXEC HOAR.
 
 End MakeShallowSoundness.

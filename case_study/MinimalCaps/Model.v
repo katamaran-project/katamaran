@@ -186,7 +186,7 @@ Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBa
 
 End MinCapsIrisAdeqParameters.
 
-Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase MinCapsIrisAdeqParameters.
+Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSemantics MinCapsIrisBase MinCapsIrisAdeqParameters.
   Import env.notations.
   Import iris.bi.interface.
   Import iris.bi.big_op.
@@ -524,14 +524,14 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
 
   End MinimalCapsPredicates.
 
-  Include IrisSignatureRules MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase.
-  Include IrisAdequacy MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsIrisBase MinCapsIrisAdeqParameters.
+  Include IrisSignatureRules MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSemantics MinCapsIrisBase.
+  Include IrisAdequacy MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSemantics MinCapsIrisBase MinCapsIrisAdeqParameters.
 
 End MinCapsIrisInstance.
 
 Module MinCapsIrisInstanceWithContracts.
-  Include ProgramLogicOn MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
-  Include IrisInstanceWithContracts MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics
+  Include ProgramLogicOn MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification.
+  Include IrisInstanceWithContracts MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSemantics
     MinCapsSpecification MinCapsIrisBase MinCapsIrisAdeqParameters MinCapsIrisInstance.
 
   Section LemProofs.
@@ -798,9 +798,9 @@ Module MinCapsIrisInstanceWithContracts.
 
   (* Import the soundness proofs for the shallow and symbolic executors. *)
   Include MicroSail.RefineExecutor.RefineExecOn MinCapsBase MinCapsSignature
-    MinCapsProgram MinCapsSpecification MinCapsShallowExec MinCapsExecutor.
+    MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExec MinCapsExecutor.
   Include MicroSail.ShallowSoundness.Soundness MinCapsBase MinCapsSignature
-    MinCapsProgram MinCapsSpecification MinCapsShallowExec.
+    MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExec.
 
   (* contracts_sound proves that all contracts in our contract environment
      are sound. *)

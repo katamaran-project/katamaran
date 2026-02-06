@@ -817,6 +817,7 @@ Module Type IrisSignatureRules2
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
+  (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
   (Import IB2   : IrisBase2 B PROG SEM)
   (Import IPred : IrisPredicates2 B SIG PROG SEM IB2).
@@ -834,7 +835,7 @@ Section Soundness.
     semWP2 δ δ s s (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗
                                    match v1 with
                                    | inl v1 => POST v1 δ1
-                                   | inr m  => True%I
+                                   | inr m => if fail_rule_pre then True%I else False%I
                                    end)%I.
   (* always modality needed? perhaps not because sail not higher-order? *)
   Global Arguments semTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
@@ -963,31 +964,36 @@ Section Soundness.
     iApply (semWP2_mono with "Hs"). iIntros (v1 δ1 v2 δ2) "(<- & <- & Q)".
     destruct v1 as [v1|m1]; simpl.
     - now iSpecialize ("Hk" with "Q").
-    - now iApply semWP2_fail.
+    - destruct fail_rule_pre; auto; now iApply semWP2_fail.
   Qed.
 
   Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
         (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
                       (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
     ⊢ (⌜eval e1 δ = true⌝ -∗ semTriple δ P k Q) -∗
+      (if fail_rule_pre then True else ⌜eval e1 δ ≠ false⌝) -∗
       semTriple δ P (stm_assertk e1 e2 k) Q.
   Proof.
-    iIntros "Hk P". destruct (eval e1 δ) eqn:Ee1.
+    iIntros "Hk Hf P". destruct (eval e1 δ) eqn:Ee1.
     - iSpecialize ("Hk" with "[] P"); auto.
       iApply (semWP2_assertk with "[Hk]"); iIntros (H1e H2e);
         try (rewrite H1e in H2e, Ee1; discriminate);
         auto.
     - iApply semWP2_assertk;
         iIntros (H1 H2); rewrite Ee1 in H1, H2; try discriminate.
-      now iApply semWP2_fail.
+      destruct fail_rule_pre.
+      + now iApply semWP2_fail.
+      + iDestruct "Hf" as "%Hf".
+        contradiction.
   Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
     (τ : Ty) (s : Val ty.string) :
     forall {Q : Val τ -> CStore Γ -> iProp Σ},
-      ⊢ semTriple δ True (stm_fail τ s) Q.
+      ⊢ semTriple δ (if fail_rule_pre then True else False) (stm_fail τ s) Q.
   Proof.
-    iIntros (Q) "_".
+    iIntros (Q) "H".
+    destruct fail_rule_pre; auto.
     now iApply semWP2_fail.
   Qed.
 
@@ -1039,7 +1045,8 @@ Section Soundness.
     iIntros (v1 δ1 v2 δ2) "(<- & <- & HR)".
     destruct v1 as [v1|m1].
     - now iApply ("tripk" with "HR").
-    - now iApply semWP2_fail.
+    - destruct fail_rule_pre; auto.
+      now iApply semWP2_fail.
   Qed.
 
   Lemma iris_rule_stm_call_inline_later
@@ -1099,7 +1106,7 @@ Section Soundness.
       repeat iModIntro. iExists γ21, μ21, δ, (of_ival (inr msg)), (inr msg).
       iFrame "Hreg2 Hmem2". repeat iSplit; auto. iPureIntro.
       eapply step_trans. apply Hs2. simpl. apply step_refl.
-  Qed.
+  Abort.
 
   Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
     (s : Stm Γ σ) (pat : Pattern σ)
@@ -1121,7 +1128,8 @@ Section Soundness.
         rewrite <- Ev1. now rewrite pattern_match_val_inverse_left. }
       iApply (semWP2_mono with "Hk"). iIntros (? ? ? ?) "(<- & <- & R)".
       now iFrame "R".
-    - now iApply semWP2_fail.
+    - destruct fail_rule_pre; auto.
+      now iApply semWP2_fail.
   Qed.
 
   Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=

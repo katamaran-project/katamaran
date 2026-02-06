@@ -607,9 +607,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
 End RiscvPmpBlockVerifSpec.
 
 Module RiscvPmpBlockVerifShalExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifSpec.
+  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpBlockVerifSpec.
 Module RiscvPmpBlockVerifExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifSpec.
+  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpBlockVerifSpec.
 
 Module RiscvPmpSpecVerif.
   Import RiscvPmpBlockVerifSpec.
@@ -785,15 +785,15 @@ End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
   Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpBlockVerifSpec.
+    DefaultFailLogic RiscvPmpBlockVerifSpec.
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase
+    RiscvPmpProgram DefaultFailLogic RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase
     RiscvPmpIrisAdeqParameters
     RiscvPmpIrisInstance.
   Include MicroSail.ShallowSoundness.Soundness RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
+    RiscvPmpProgram DefaultFailLogic RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
   Include MicroSail.RefineExecutor.RefineExecOn RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor
+    RiscvPmpProgram DefaultFailLogic RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor
     RiscvPmpBlockVerifExecutor.
 
   Import RiscvPmpIrisBase.

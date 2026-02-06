@@ -233,7 +233,7 @@ End ExampleSpecification.
 (* Use the specification and the solver module to compose the symbolic executor
    and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
-  MakeExecutor DefaultBase ExampleSig ExampleProgram ExampleSpecification.
+  MakeExecutor DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSpecification.
 
 (* Some simple Ltac tactic to solve the shallow and symbolic VCs. *)
 Local Ltac solve :=
@@ -255,7 +255,7 @@ Local Ltac solve :=
 
 (* Also instantiate the shallow verification condition generator. *)
 Module Import ExampleShalExec :=
-  MakeShallowExecutor DefaultBase ExampleSig ExampleProgram ExampleSpecification.
+  MakeShallowExecutor DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSpecification.
 
 (* This computes and proves the shallow VC. Make sure to not unfold the
    definition of the binary operators and Coq predicates used in the example. *)
@@ -390,7 +390,7 @@ Module Import ExampleModel.
   (* Finally, include the constructed operational model, the axiomatic program
      logic, and the Iris implementation of the axioms. *)
   Module Import ExampleIrisInstance <:
-    IrisInstance DefaultBase ExampleSig ExampleProgram ExampleSemantics
+    IrisInstance DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSemantics
       ExampleIrisBase ExampleIrisAdeqParams.
 
     (* There are no user-defined spatial predicates, also use trivial definitions
@@ -405,12 +405,12 @@ Module Import ExampleModel.
     End ExampleIrisPredicates.
 
     Include IrisSignatureRules DefaultBase ExampleSig ExampleProgram
-      ExampleSemantics ExampleIrisBase.
-    Include IrisAdequacy DefaultBase ExampleSig ExampleProgram ExampleSemantics
+      DefaultFailLogic ExampleSemantics ExampleIrisBase.
+    Include IrisAdequacy DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSemantics
       ExampleIrisBase ExampleIrisAdeqParams.
-    Include ProgramLogicOn DefaultBase ExampleSig ExampleProgram ExampleSpecification.
+    Include ProgramLogicOn DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSpecification.
     Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleProgram
-      ExampleSemantics ExampleSpecification ExampleIrisBase ExampleIrisAdeqParams.
+      DefaultFailLogic ExampleSemantics ExampleSpecification ExampleIrisBase ExampleIrisAdeqParams.
 
     (* Verification of the absent foreign functions. *)
     Lemma foreignSem `{sailGS Σ} : ForeignSem.
@@ -422,9 +422,9 @@ Module Import ExampleModel.
 
     (* Import the soundness proofs for the shallow and symbolic executors. *)
     Include MicroSail.ShallowSoundness.Soundness DefaultBase ExampleSig ExampleProgram
-      ExampleSpecification ExampleShalExec.
+      DefaultFailLogic ExampleSpecification ExampleShalExec.
     Include MicroSail.RefineExecutor.RefineExecOn DefaultBase ExampleSig
-      ExampleProgram ExampleSpecification ExampleShalExec ExampleExecutor.
+      ExampleProgram DefaultFailLogic ExampleSpecification ExampleShalExec ExampleExecutor.
 
     (* Show that all the contracts are sound in the Iris model. *)
     Lemma contracts_sound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.

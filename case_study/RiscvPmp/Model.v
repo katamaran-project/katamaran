@@ -85,13 +85,13 @@ Module RiscvPmpModel2.
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.
 
-  Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
+  Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
+    Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
   End RiscvPmpProgramLogic.
   Include RiscvPmpProgramLogic.
 
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase
+    RiscvPmpProgram DefaultFailLogic RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase
     RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance.
 
   Section ForeignProofs.

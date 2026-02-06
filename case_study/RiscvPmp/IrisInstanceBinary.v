@@ -28,6 +28,7 @@
 
 From Katamaran Require Import
      Base
+     Hoare
      Bitvector
      Iris.BinaryWeakestPre
      Iris.BinaryAdequacy
@@ -80,7 +81,7 @@ Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgr
 End RiscvPmpIrisAdeqParams2.
 
 Module RiscvPmpIrisInstance2 <:
-  IrisInstance2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics
+  IrisInstance2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSemantics
     RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
   Import RiscvPmpIrisBase2.
   Import RiscvPmpProgram.
@@ -348,10 +349,10 @@ Module RiscvPmpIrisInstance2 <:
     RiscvPmpSemantics RiscvPmpIrisBase2.
 
   Include IrisSignatureRules2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase2.
+    DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase2.
 
   Include IrisAdequacy2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
+    DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
 
   Definition WP2_loop `{sailGS2 Σ} : iProp Σ :=
     semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (fun _ _ _ _ => True%I).

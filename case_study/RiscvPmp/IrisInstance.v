@@ -28,6 +28,7 @@
 
 From Katamaran Require Import
      Base
+     Hoare
      Bitvector
      trace
      Iris.Instance
@@ -127,7 +128,7 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
 End RiscvPmpIrisAdeqParameters.
 
 Module RiscvPmpIrisInstance <:
-  IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics
+  IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSemantics
     RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
   Import RiscvPmpIrisBase.
   Import RiscvPmpProgram.
@@ -737,8 +738,8 @@ Module RiscvPmpIrisInstance <:
   End RiscVPmpIrisInstanceProofs.
 
   Include IrisSignatureRules RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase.
+    DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase.
   Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+    DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
 
 End RiscvPmpIrisInstance.

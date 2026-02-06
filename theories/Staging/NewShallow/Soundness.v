@@ -50,7 +50,9 @@ Module Type Soundness
   (Import PROG : Program B)
   (Import SPEC : Specification B SIG PROG)
   (Import EXEC : NewShallowExecOn B SIG PROG SPEC)
-  (Import HOAR : ProgramLogicOn B SIG PROG SPEC).
+  (* TODO: passes DefaultFailLogic, should be parametrized by some FailLogic in
+           the future. Also requires modifying NewShallowExecOn. *)
+  (Import HOAR : ProgramLogicOn B SIG PROG DefaultFailLogic SPEC).
 
   Import CHeapSpecM.
   Import ProgramLogic.
@@ -125,9 +127,10 @@ Module Type Soundness
         eapply rule_stm_seq. apply IHs1. intros δ2. apply IHs2.
 
       - (* stm_assert *)
-        apply rule_stm_assert; intro Heval.
+        apply rule_stm_assert. intro Heval.
         eapply rule_consequence_left. apply IHs.
         now apply entails_apply, bi.pure_intro.
+        now unfold DefaultFailLogic.fail_rule_pre.
 
       - (* stm_fail *)
         eapply rule_consequence_left.

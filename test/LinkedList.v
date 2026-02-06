@@ -740,7 +740,7 @@ End ExampleSpecification.
 (* Use the specification and the solver module to compose the symbolic executor
    and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleSignature ExampleProgram ExampleSpecification.
+  MakeExecutor ExampleBase ExampleSignature ExampleProgram DefaultFailLogic ExampleSpecification.
 
 Section DebugExample.
   Import SymProp.notations.
@@ -802,7 +802,7 @@ End ContractVerification.
 (* Also instantiate the shallow executor for the soundness proofs and the
    statistics. *)
 Module Import ExampleShalExec :=
-  MakeShallowExecutor ExampleBase ExampleSignature ExampleProgram ExampleSpecification.
+  MakeShallowExecutor ExampleBase ExampleSignature ExampleProgram DefaultFailLogic ExampleSpecification.
 
 (* Instantiate the operational semantics which is an input to the Iris model. *)
 Module ExampleSemantics <: Semantics ExampleBase ExampleProgram :=
@@ -904,7 +904,7 @@ Module ExampleModel.
      this logic. This is then provided to the library as part of the
      [IrisInstance] module. *)
   Module Import ExampleIrisInstance <:
-    IrisInstance ExampleBase ExampleSignature ExampleProgram ExampleSemantics
+    IrisInstance ExampleBase ExampleSignature ExampleProgram DefaultFailLogic ExampleSemantics
       ExampleIrisBase ExampleIrisAdeqParams.
 
     Import iris.base_logic.lib.gen_heap.
@@ -944,8 +944,8 @@ Module ExampleModel.
 
     (* At this point we have enough information to instantiate the program logic
        rules of Iris that do not refer to specific contracts. *)
-    Include IrisSignatureRules ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleIrisBase.
-    Include IrisAdequacy ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleIrisBase ExampleIrisAdeqParams.
+    Include IrisSignatureRules ExampleBase ExampleSignature ExampleProgram DefaultFailLogic ExampleSemantics ExampleIrisBase.
+    Include IrisAdequacy ExampleBase ExampleSignature ExampleProgram DefaultFailLogic ExampleSemantics ExampleIrisBase ExampleIrisAdeqParams.
 
   End ExampleIrisInstance.
 
@@ -960,16 +960,16 @@ Module ExampleModel.
        parameterized over a given set of contracts so it is included here
        instead of [IrisInstance].  *)
     Include ProgramLogicOn ExampleBase ExampleSignature ExampleProgram
-      ExampleSpecification.
+      DefaultFailLogic ExampleSpecification.
     Include IrisInstanceWithContracts ExampleBase ExampleSignature
-      ExampleProgram ExampleSemantics ExampleSpecification
+      ExampleProgram DefaultFailLogic ExampleSemantics ExampleSpecification
       ExampleIrisBase ExampleIrisAdeqParams ExampleIrisInstance.
 
     (* Import the soundness proofs for the shallow and symbolic executors. *)
     Include MicroSail.ShallowSoundness.Soundness ExampleBase ExampleSignature
-      ExampleProgram ExampleSpecification ExampleShalExec.
+      ExampleProgram DefaultFailLogic ExampleSpecification ExampleShalExec.
     Include MicroSail.RefineExecutor.RefineExecOn ExampleBase ExampleSignature
-      ExampleProgram ExampleSpecification ExampleShalExec ExampleExecutor.
+      ExampleProgram DefaultFailLogic ExampleSpecification ExampleShalExec ExampleExecutor.
 
     (* In this section we verify the contracts of the foreign functions defined in
        Coq and the entailments encoded in ghost lemmas using Iris Proof Mode. *)

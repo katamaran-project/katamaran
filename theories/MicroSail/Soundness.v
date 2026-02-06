@@ -31,6 +31,7 @@ From Katamaran Require Import
   Specification
   Program
   Tactics
+  Hoare
   MicroSail.ShallowExecutor
   MicroSail.SymbolicExecutor
   MicroSail.RefineExecutor.
@@ -39,9 +40,10 @@ Module MakeSymbolicSoundness
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)
+  (Import FL   : FailLogic)
   (Import SPEC : Specification B SIG PROG)
-  (Import SHAL : ShallowExecOn B SIG PROG SPEC)
-  (Import SYMB : SymbolicExecOn B SIG PROG SPEC).
+  (Import SHAL : ShallowExecOn B SIG PROG FL SPEC)
+  (Import SYMB : SymbolicExecOn B SIG PROG FL SPEC).
 
-Include RefineExecOn B SIG PROG SPEC SHAL SYMB.
+Include RefineExecOn B SIG PROG FL SPEC SHAL SYMB.
 End MakeSymbolicSoundness.

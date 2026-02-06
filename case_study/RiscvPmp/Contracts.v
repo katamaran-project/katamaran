@@ -35,6 +35,7 @@ From Katamaran Require Import
      Notations
      Bitvector
      Specification
+     Hoare
      Symbolic.Solver
      Symbolic.Propositions
      Symbolic.Worlds
@@ -1301,10 +1302,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
 End RiscvPmpSpecification.
 
 Module RiscvPmpExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
+  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
 
 Module RiscvPmpShallowExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSpecification.
+  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
 
 Module RiscvPmpValidContracts.
   Import RiscvPmpExecutor.

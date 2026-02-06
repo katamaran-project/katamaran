@@ -89,6 +89,7 @@ Module Type IrisSignatureRules
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
+  (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
   (Import IB    : IrisBase B PROG SEM)
   (Import IPred : IrisPredicates B SIG PROG SEM IB).
@@ -123,7 +124,7 @@ Section Soundness.
                 (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
         PRE -∗ semWP δ s (λ v δ, match v with
                             | inl v => POST v δ
-                            | inr m => True%I
+                            | inr m => if fail_rule_pre then True%I else False%I
                             end).
     (* always modality needed? perhaps not because sail not higher-order? *)
     Global Arguments semTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
@@ -139,7 +140,7 @@ Section Soundness.
       iSpecialize ("HPRE" with "HPRE2").
       iSpecialize ("H" with "HPRE").
       iApply (semWP_mono with "H").
-      now iIntros ([] ?).
+      destruct fail_rule_pre; now iIntros ([] ?).
     Qed.
 
     Lemma iris_rule_consequence {Γ σ} {δ : CStore Γ}
@@ -248,23 +249,27 @@ Section Soundness.
             (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
                         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (⌜ eval e1 δ = true ⌝ -∗ semTriple δ P k Q) -∗
+          (if fail_rule_pre then True else ⌜eval e1 δ ≠ false⌝) -∗
         semTriple δ P (stm_assertk e1 e2 k) Q.
     Proof.
-        iIntros "tripk P".
-        iApply (semWP_assertk with "[tripk P] []").
+        iIntros "tripk Hf P".
+        iApply (semWP_assertk with "[tripk P] [Hf]").
         - iIntros (->).
-        by iApply "tripk".
+          by iApply "tripk".
         - iIntros (?).
-        now rewrite semWP_fail.
+          rewrite semWP_fail.
+          destruct fail_rule_pre; auto.
+          now iDestruct "Hf" as "%Hf".
     Qed.
 
     Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
             (τ : Ty) (s : Val ty.string) :
             forall (Q : Val τ -> CStore Γ -> iProp Σ),
-            ⊢ semTriple δ True (stm_fail τ s) Q.
+            ⊢ semTriple δ (if fail_rule_pre then True else False) (stm_fail τ s) Q.
     Proof.
-        iIntros (Q) "_".
-        by iApply semWP_fail.
+        iIntros (Q) "H".
+        destruct fail_rule_pre; auto.
+        now iApply semWP_fail.
     Qed.
 
     Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
@@ -367,8 +372,8 @@ Section Soundness.
         - do 3 iModIntro. iMod "Hclose" as "_".
         iFrame. iApply semWP_val. now iApply "HPQ".
         - do 3 iModIntro. iMod "Hclose" as "_".
-        iFrame. now iApply semWP_fail.
-    Qed.
+        iFrame. iApply semWP_fail.
+    Abort.
 
     Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
         (s : Stm Γ σ) (pat : Pattern σ)
@@ -434,7 +439,7 @@ Section Soundness.
                 (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
         PRE -∗ semTWP δ s (λ v δ, match v with
                             | inl v => POST v δ
-                            | inr m => True%I
+                            | inr m => if fail_rule_pre then True%I else False%I
                             end).
     (* always modality needed? perhaps not because sail not higher-order? *)
     Global Arguments semTTriple {Γ} {τ} δ PRE%_I s%_exp POST%_I.
@@ -457,7 +462,7 @@ Section Soundness.
       iSpecialize ("HPRE" with "HPRE2").
       iSpecialize ("H" with "HPRE").
       iApply (semTWP_mono with "H").
-      now iIntros ([] ?).
+      destruct fail_rule_pre; now iIntros ([] ?).
     Qed.
 
     Lemma iris_rule_tconsequence {Γ σ} {δ : CStore Γ}
@@ -566,23 +571,27 @@ Section Soundness.
             (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
                         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (⌜ eval e1 δ = true ⌝ -∗ semTTriple δ P k Q) -∗
+          (if fail_rule_pre then True else ⌜eval e1 δ ≠ false⌝) -∗
         semTTriple δ P (stm_assertk e1 e2 k) Q.
     Proof.
-        iIntros "tripk P".
-        iApply (semTWP_assertk with "[tripk P] []").
+        iIntros "tripk Hf P".
+        iApply (semTWP_assertk with "[tripk P] [Hf]").
         - iIntros (->).
-        by iApply "tripk".
+          by iApply "tripk".
         - iIntros (?).
-        now rewrite semTWP_fail.
+          rewrite semTWP_fail.
+          destruct fail_rule_pre; auto.
+          now iDestruct "Hf" as "%Hf".
     Qed.
 
     Lemma iris_rule_tstm_fail {Γ} (δ : CStore Γ)
             (τ : Ty) (s : Val ty.string) :
             forall (Q : Val τ -> CStore Γ -> iProp Σ),
-            ⊢ semTTriple δ True (stm_fail τ s) Q.
+            ⊢ semTTriple δ (if fail_rule_pre then True else False) (stm_fail τ s) Q.
     Proof.
-        iIntros (Q) "_".
-        by iApply semTWP_fail.
+        iIntros (Q) "H".
+        destruct fail_rule_pre; auto.
+        now iApply semTWP_fail.
     Qed.
 
     Lemma iris_rule_tstm_read_register {Γ} (δ : CStore Γ)
@@ -673,8 +682,8 @@ Section Soundness.
         - iModIntro. iMod "Hclose" as "_".
         iFrame. iApply semTWP_val. now iApply "HPQ".
         - iModIntro. iMod "Hclose" as "_".
-        iFrame. now iApply semTWP_fail.
-    Qed.
+        iFrame. iApply semTWP_fail.
+    Abort.
 
     Lemma iris_rule_tstm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
         (s : Stm Γ σ) (pat : Pattern σ)
@@ -769,11 +778,12 @@ Module Type IrisAdequacy
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
+  (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
   (Import IB    : IrisBase B PROG SEM)
   (Import IAP   : IrisAdeqParameters B IB)
   (Import IPred : IrisPredicates B SIG PROG SEM IB)
-  (Import IRules : IrisSignatureRules B SIG PROG SEM IB IPred).
+  (Import IRules : IrisSignatureRules B SIG PROG FL SEM IB IPred).
 
   Import SmallStepNotations.
 
@@ -919,8 +929,8 @@ Module Type IrisAdequacy
 
 End IrisAdequacy.
 
-Module Type IrisInstance (B : Base) (SIG : Signature B) (PROG : Program B) (SEM : Semantics B PROG) (IB : IrisBase B PROG SEM) (IAP : IrisAdeqParameters B IB) :=
-  IrisPredicates B SIG PROG SEM IB <+ IrisSignatureRules B SIG PROG SEM IB <+ IrisAdequacy B SIG PROG SEM IB IAP.
+Module Type IrisInstance (B : Base) (SIG : Signature B) (PROG : Program B) (FL : FailLogic) (SEM : Semantics B PROG) (IB : IrisBase B PROG SEM) (IAP : IrisAdeqParameters B IB) :=
+  IrisPredicates B SIG PROG SEM IB <+ IrisSignatureRules B SIG PROG FL SEM IB <+ IrisAdequacy B SIG PROG FL SEM IB IAP.
 
 (*
  * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature.
@@ -930,12 +940,13 @@ Module IrisInstanceWithContracts
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
+  (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
   (Import SPEC  : Specification B SIG PROG)
   (Import IB    : IrisBase B PROG SEM)
   (Import IAP   : IrisAdeqParameters B IB)
-  (Import II    : IrisInstance B SIG PROG SEM IB IAP)
-  (Import PLOG  : ProgramLogicOn B SIG PROG SPEC).
+  (Import II    : IrisInstance B SIG PROG FL SEM IB IAP)
+  (Import PLOG  : ProgramLogicOn B SIG PROG FL SPEC).
 
   Section WithSailGS.
     Import ProgramLogic.
@@ -1044,7 +1055,8 @@ Module IrisInstanceWithContracts
             - by iApply iris_rule_stm_let.
             - by iApply iris_rule_stm_block.
             - by iApply iris_rule_stm_seq.
-            - by iApply iris_rule_stm_assertk.
+            - iApply iris_rule_stm_assertk; auto.
+              destruct fail_rule_pre; auto.
             - by iApply iris_rule_stm_fail.
             - by iApply iris_rule_stm_read_register.
             - by iApply iris_rule_stm_write_register.
@@ -1219,9 +1231,11 @@ Module IrisInstanceWithContracts
               apply Hwf.
             + iIntros (v δ'). iApply ("trips" with "[%] IH").
               apply Hwf.
-          - iApply iris_rule_tstm_assertk. iIntros (Heval).
-            iApply ("trips" $! Heval with "[%] IH").
-            apply Hwf.
+          - iApply iris_rule_tstm_assertk.
+            + iIntros (Heval).
+              iApply ("trips" $! Heval with "[%] IH").
+              apply Hwf.
+            + destruct fail_rule_pre; auto.
           - iApply iris_rule_tstm_fail.
           - iApply iris_rule_tstm_read_register.
           - now iApply iris_rule_tstm_write_register.

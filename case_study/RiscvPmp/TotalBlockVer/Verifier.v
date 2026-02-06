@@ -104,30 +104,6 @@ Section BlockVerificationDerived.
     Import SHeapSpec SHeapSpec.notations.
     Import asn.notations.
 
-    Section Executor.
-      Import RiscvPmpBlockVerifExecutor.
-
-      Variable cfg : Config.
-
-      (* We provide an alternative exec function for stm_fail, where we get an
-         "error" instead of a "block". *)
-      Definition sexec_fail : ExecFail :=
-        fun Γ τ s {w0} => SStoreSpec.error
-              (fun δ h =>
-                 amsg.mk
-                   {| msg_function := "sexec_fail";
-                     msg_message := "Encountered fail, not allowed in BlockVerifier";
-                     msg_program_context := _;
-                     msg_localstore := δ;
-                     msg_heap := h;
-                     msg_pathcondition := wco w0
-                   |}).
-
-      Definition sexec (inline_fuel : nat) : Exec :=
-        @SStoreSpec.exec_aux sexec_call_foreign (sexec_lemma cfg) (sexec_call cfg inline_fuel) sexec_fail.
-      #[global] Arguments sexec _ [_ _] s _ _ _ _ : simpl never.
-    End Executor.
-
     Definition exec_instruction_prologue (i : AST) :
       Assertion ([ctx] ▻ ("a":: ty_xlenbits)) :=
       pc     ↦ term_var "a" ∗
@@ -201,47 +177,6 @@ Section BlockVerificationDerived.
     Import CStoreSpec (evalStoreSpec).
     Import CHeapSpec CHeapSpec.notations.
 
-    Section Executor.
-      (* We provide an alternative exec function for stm_fail, where we get an
-         "error" instead of a "block". *)
-      Definition cexec_fail : ExecFail :=
-        fun Γ τ s => CStoreSpec.error.
-
-      Import (hints) CStoreSpec.
-
-      Lemma mon_cexec_fail : MonotonicExecFail cexec_fail.
-      Proof. typeclasses eauto. Qed.
-
-      Definition cexec (inline_fuel : nat) : Exec :=
-        @CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call inline_fuel) cexec_fail.
-      #[global] Arguments cexec _ [_ _] s _ _ _ : simpl never.
-
-      Lemma mon_cexec (fuel : nat) : MonotonicExec (cexec fuel).
-      Proof. typeclasses eauto. Qed.
-
-      Section Soundness.
-        Import iris.proofmode.tactics.
-        Import RiscvPmpIrisInstanceWithContracts.
-
-        Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
-
-        Lemma sound_cexec_fail : SoundExecFail cexec_fail.
-        Proof.
-          unfold SoundExecFail, cexec_fail. intros *.
-          now intros [].
-        Qed.
-
-        Lemma sound_cexec (fuel : nat) : SoundExec (cexec fuel).
-        Proof.
-          apply exec_aux_sound.
-          - apply sound_cexec_call_foreign.
-          - apply sound_cexec_lemma.
-          - apply sound_cexec_call.
-          - apply sound_cexec_fail.
-        Qed.
-      End Soundness.
-    End Executor.
-
     Definition cexec_instruction (i : AST) :
       Val ty_xlenbits -> CHeapSpec (Val ty_xlenbits) :=
       let inline_fuel := 10%nat in
@@ -302,30 +237,6 @@ Section BlockVerificationDerived.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve HeapSpec.
-
-    Section WithCfg.
-      Variable cfg : Config.
-
-      Lemma refine_exec_fail :
-        RefineExecFail cexec_fail sexec_fail.
-      Proof.
-        iIntros (? ? ? ?).
-        unfold cexec_fail, sexec_fail; rsolve.
-      Qed.
-
-      Lemma refine_exec (fuel : nat) :
-        RefineExec (cexec fuel) (sexec cfg fuel).
-      Proof.
-        unfold cexec, sexec. apply refine_exec_aux.
-        all: auto using refine_exec_call_foreign, refine_exec_lemma,
-            refine_exec_call, refine_exec_fail.
-      Qed.
-
-      #[export] Instance refine_compat_exec {fuel : nat} (Γ : PCtx) (τ : Ty) (s : Stm Γ τ) {w} :
-        RefineCompat (RStoreSpec Γ Γ (RVal τ))
-          (cexec fuel s) w (sexec cfg fuel s w) _ :=
-        MkRefineCompat (refine_exec fuel s w).
-    End WithCfg.
 
     Lemma rexec_instruction (i : AST) {w} :
       ⊢ ℛ⟦RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
@@ -596,7 +507,7 @@ Section BlockVerificationDerived.
       cbn - [consume].
       iIntros (Hverif) "Hheap". cbn.
       iIntros "(Hpc & Hinstr & [%npc Hnpc])".
-      specialize (Hverif npc). apply BlockVerificationDerived.sound_cexec in Hverif.
+      specialize (Hverif npc). apply sound_cexec in Hverif.
       iApply (semTWP_mono with "[-]").
       iApply (sound_tstm (callgraph.mkNode step) TforeignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
       - apply callgraph.InvokedByStmList_WellFormed_aux; auto.

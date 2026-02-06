@@ -50,6 +50,7 @@ From Katamaran Require Import
      Signature
      Symbolic.Worlds
      Specification
+     Hoare
      Base.
 
 From stdpp Require
@@ -66,6 +67,7 @@ Module Type SymbolicExecOn
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
+  (Import FL   : FailLogic)
   (Import SPEC : Specification B SIG PROG).
 
   Import Entailment.
@@ -606,9 +608,13 @@ Module Type SymbolicExecOn
             exec_aux s2
         | stm_assertk e _ k =>
             ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
+            ⟨ ω12 ⟩ _ <- lift_heapspec (SHeapSpec.assert_formula (fun _ => amsg.empty)
+                                          (if fail_rule_pre
+                                           then formula_true
+                                           else formula_relop bop.neq t (term_val ty.bool false))) ;;
             (* This uses assume_formula for a partial correctness
                interpretation of the object language failure effect. *)
-            ⟨ ω12 ⟩ _ <- lift_heapspec (SHeapSpec.assume_formula (formula_bool t)) ;;
+            ⟨ ω13 ⟩ _ <- lift_heapspec (SHeapSpec.assume_formula (formula_bool (persist t ω12))) ;;
             exec_aux k
         | stm_fail _ s =>
             exec_fail (w:=w0) s
@@ -731,7 +737,18 @@ Module Type SymbolicExecOn
         else SHeapSpec.pure tt.
 
     Definition sexec_fail : ExecFail :=
-      fun Γ τ s => SStoreSpec.block.
+      fun Γ τ s {w0} =>
+        if fail_rule_pre
+        then @SStoreSpec.block _ _ _ w0
+        else SStoreSpec.error (fun δ h =>
+                 amsg.mk
+                   {| msg_function := "sexec_fail";
+                     msg_message := "Encountered fail";
+                     msg_program_context := _;
+                     msg_localstore := δ;
+                     msg_heap := h;
+                     msg_pathcondition := wco w0
+                   |}).
 
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
@@ -881,8 +898,9 @@ Module MakeExecutor
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)
+  (Import FL   : FailLogic)
   (Import SPEC : Specification B SIG PROG).
 
-  Include SymbolicExecOn B SIG PROG SPEC .
+  Include SymbolicExecOn B SIG PROG FL SPEC .
 
 End MakeExecutor.

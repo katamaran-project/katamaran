@@ -444,9 +444,9 @@ Module Import ReplaySpecification <: Specification DefaultBase ReplaySig ReplayP
 End ReplaySpecification.
 
 Module Import ReplayExecutor :=
-  MakeExecutor DefaultBase ReplaySig ReplayProgram ReplaySpecification.
+  MakeExecutor DefaultBase ReplaySig ReplayProgram Hoare.DefaultFailLogic ReplaySpecification.
 Module Import ReplayShallowExecutor :=
-  MakeShallowExecutor DefaultBase ReplaySig ReplayProgram ReplaySpecification.
+  MakeShallowExecutor DefaultBase ReplaySig ReplayProgram Hoare.DefaultFailLogic ReplaySpecification.
 
 Lemma shallow_valid_contract_main : Shallow.ValidContract sep_contract_main (FunDef main).
 Proof.

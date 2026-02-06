@@ -572,7 +572,7 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
 End ExampleSpecification.
 
 Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleSig ExampleProgram ExampleSpecification.
+  MakeExecutor ExampleBase ExampleSig ExampleProgram Hoare.DefaultFailLogic ExampleSpecification.
 
 Local Ltac solve :=
   repeat

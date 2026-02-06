@@ -42,6 +42,7 @@ From Katamaran Require Import
      MinimalCaps.Contracts.Definitions
      Notations
      Specification
+     Hoare
      MicroSail.ShallowExecutor
      MicroSail.SymbolicExecutor
      Symbolic.Solver.
@@ -57,9 +58,9 @@ Open Scope Z_scope.
 Import MinCapsSpecification.
 
 Module Import MinCapsExecutor :=
-  MakeExecutor MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
+  MakeExecutor MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification.
 Module Import MinCapsShallowExec :=
-  MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsProgram MinCapsSpecification.
+  MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification.
 
 (*** MinCapsValidContracts ***)
 (* In this module we prove that all specified contracts are valid. *)

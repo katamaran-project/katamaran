@@ -47,6 +47,7 @@ From Katamaran Require Import
      Specification
      Program
      Tactics
+     Hoare
      MicroSail.ShallowExecutor
      MicroSail.SymbolicExecutor.
 
@@ -60,9 +61,10 @@ Module RefineExecOn
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)
+  (Import FL   : FailLogic)
   (Import SPEC : Specification B SIG PROG)
-  (Import SHAL : ShallowExecOn B SIG PROG SPEC)
-  (Import SYMB : SymbolicExecOn B SIG PROG SPEC).
+  (Import SHAL : ShallowExecOn B SIG PROG FL SPEC)
+  (Import SYMB : SymbolicExecOn B SIG PROG FL SPEC).
 
   Import ModalNotations.
   Import SymProp.
@@ -568,6 +570,7 @@ Module RefineExecOn
         - now iApply rexec_call_foreign.
         - now iApply rexec_lemma.
         - iApply IHs1.
+        - destruct fail_rule_pre; rsolve.
         - now iApply rexec_fail.
         - destruct a0, ta0.
           iRename select (ℛ⟦RMatchResult pat⟧ (existT x n) (existT x0 n0)) into "Hmr".
@@ -654,7 +657,7 @@ Module RefineExecOn
       RefineExecFail cexec_fail sexec_fail.
     Proof.
       iIntros (? ? ? ?).
-      unfold cexec_fail, sexec_fail; rsolve.
+      unfold cexec_fail, sexec_fail; destruct fail_rule_pre; rsolve.
     Qed.
 
     Lemma refine_exec_call (fuel : nat) :
