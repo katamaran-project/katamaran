@@ -996,17 +996,19 @@ Module RiscvPmpIrisInstanceWithContracts.
   Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (width : WordWidth) :
     ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width ).
   Proof.
-    intros ι; destruct_syminstance ι. cbn.
+    intros ι; destruct_syminstance ι. cbn -[is_even negb].
     iIntros "([<- _] & Hmmio & Hcond)".
     iFrame. unfold iostate_bits in *.
-    unfold interp_mmio_checked_write. unfold Mmio_state_prot. simpl in *.
-    iDestruct "Hcond" as "(%Hold_ & _)". iPureIntro. 
+    unfold interp_mmio_checked_write. unfold Mmio_state_prot. cbn -[is_even negb] in *.
+    iDestruct "Hcond" as "(%Hold_ & _)". iPureIntro.
     destruct Hold_ with (addr := paddr) as [iostate_new Hold].
     inversion Hold.
-    - subst. exists bv.one; split; simpl; auto.
-      constructor; cbn; auto; try lia. unfold is_even. destruct width; simpl; auto.
-    - subst. exists bv.zero; split; simpl; auto.
-      constructor; cbn; auto; try lia. unfold is_even. destruct width; simpl; auto.
+    subst. exists (bv.not iostate_old); split; simpl; auto.
+    unfold iostate_bits in *.
+    replace (bv.eqb (bv.not iostate_old) bv.zero)
+      with (negb (bv.eqb iostate_old bv.zero)) by
+      now destruct (bv.view iostate_old), (bv.view xs), b.
+    constructor; cbn; try done; now destruct width.
   Qed.
 
   Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.

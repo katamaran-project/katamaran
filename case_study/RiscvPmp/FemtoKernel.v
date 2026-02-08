@@ -555,47 +555,23 @@ Eval vm_compute in vc__femtohandler_block0.
       vm_compute.
       constructor; cbn.
       unfold Mmio_state_prot. intros.
-      edestruct H. Unshelve. 2: auto. clear H.
-      exists (bv_to x). split; auto. intros.
-      exists (negb x).
-      unfold bv.zext' in H0.
-      change (@bv.app 32 0 v (@bv.zero 0)) with (@bv.app 32 0 v (@bv.nil)) in H0.
-      rewrite bv.app_nil_r in H0. simpl in H0. simpl in H1.
-      destruct (bv.eqb v1); inversion H1; subst; simpl in *; clear H H2;
-      destruct (bv.to_bool (bv.take 1 v0)) eqn: V0; try now destruct H3.
-      - constructor; auto; simpl; try lia. clear addr v1 H1 H3.
-        destruct (bv.appView 1 _ v). 
-        destruct (bv.appView 1 _ v0).
-        rewrite bv.take_app in V0.
-        apply bv1_bool_false in V0. subst.
-        change (@bv.mk 32 1 I) with (@bv.app 1 31 [bv 0x1] bv.zero) in H0.
-        change (@bv.land 32) with (@bv.land (1 + 31)) in H0.
-        rewrite bv.land_app in H0.
-        rewrite bv.land_app in H0.
-        rewrite bv.land_ones_r in H0.
-        rewrite bv.land_ones_r in H0.
-        rewrite bv.land_zero_r in H0.
-        rewrite bv.land_zero_r in H0.
-        apply bv_napp1_pop in H0.
-        destruct (bv1_destruct xs) as [Hzero | Hone]; subst; auto. destruct H0; auto.
-        rewrite bv.take_app. rewrite negb_involutive. auto.
-      - constructor; auto; simpl; try lia. clear addr v1 H1 H3.
-        destruct (bv.appView 1 _ v). 
-        destruct (bv.appView 1 _ v0).
-        rewrite bv.take_app in V0.
-        apply bv1_bool_true in V0. subst.
-        change (@bv.mk 32 1 I) with (@bv.app 1 31 [bv 0x1] bv.zero) in H0.
-        change (@bv.land 32) with (@bv.land (1 + 31)) in H0.
-        rewrite bv.land_app in H0.
-        rewrite bv.land_app in H0.
-        rewrite bv.land_ones_r in H0.
-        rewrite bv.land_ones_r in H0.
-        rewrite bv.land_zero_r in H0.
-        rewrite bv.land_zero_r in H0.
-        apply bv_napp1_pop in H0.
-        destruct (bv1_destruct xs) as [Hzero | Hone]; subst; auto.
-        rewrite bv.take_app. auto.
-        destruct H0; auto.
+      exists (bv.not v1). split; last done.
+      intros addr. specialize (H addr).
+      destruct H as [s' Hsp].
+      inversion Hsp; cbn -[is_even] in *; subst; clear Hsp.
+      unfold iostate_bits in *.
+      exists (negb (bv.eqb v1 bv.zero)).
+      replace (negb (bv.eqb (bv.not v1) bv.zero)) with (bv.eqb v1 bv.zero)
+        by now destruct (bv.view v1), (bv.view xs), b.
+      constructor; cbn -[is_even]; try done.
+      unfold bv.zext' in H0. rewrite bv.app_nil_r in H0; cbn in H0.
+      unfold is_even in *.
+      destruct (bv.view v), (bv.view v0), (bv.view v1), (bv.view xs1).
+      change [bv [32] 0x1] with (@bv.cons 31 true bv.zero) in *.
+      change bv.one with (@bv.cons 31 true bv.zero) in *.
+      rewrite !bv.land_cons !bv.land_zero_r in H0, H2.
+      rewrite !bv.land_cons !bv.land_zero_r.
+      now destruct b, b0, b1.
     Qed.
 
 
@@ -605,6 +581,7 @@ Eval vm_compute in vc__femtohandler_block0.
     Proof.
       vm_compute.
       constructor; cbn. intros.
+      exists v0.
       split; intros; intuition; bv_solve_Ltac.solveBvManual.
       1-4: eapply bv.in_seqBv'; now vm_compute.
     Qed.
