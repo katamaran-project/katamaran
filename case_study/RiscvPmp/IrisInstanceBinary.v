@@ -172,6 +172,10 @@ Module RiscvPmpIrisInstancePredicates2.
   End WithSailGS.
 End RiscvPmpIrisInstancePredicates2.
 
+Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
+  IrisInstance2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram FL RiscvPmpSemantics
+    RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
+  Module Import RiscvPmpIrisInstance := RiscvPmpIrisInstance FL.
   Import RiscvPmpIrisInstancePredicates2.
   Import RiscvPmpIrisBase2.
   Import RiscvPmpProgram.
@@ -344,10 +348,11 @@ End RiscvPmpIrisInstancePredicates2.
     RiscvPmpSemantics RiscvPmpIrisBase2.
 
   Include IrisSignatureRules2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase2.
+    FL RiscvPmpSemantics RiscvPmpIrisBase2.
 
   Include IrisAdequacy2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
+    FL RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
+
   Lemma gprs_equiv `{sailGS2 Σ} : ∀ {Σ} (ι : Valuation Σ),
       interp_gprs ⊣⊢
         asn.interpret asn_regs_ptsto ι.

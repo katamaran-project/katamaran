@@ -79,6 +79,7 @@ Ltac destruct_syminstance ι :=
 Import RiscvPmpIrisBase2.
 
 Module RiscvPmpModel2.
+  Module Import RiscvPmpIrisInstance2 := RiscvPmpIrisInstance2 DefaultFailLogic.
   Import RiscvPmpSignature.
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.

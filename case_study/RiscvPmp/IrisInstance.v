@@ -740,9 +740,10 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
 
   Include IrisSignatureRules RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase.
+    FL RiscvPmpSemantics RiscvPmpIrisBase.
   Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+    FL RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+
   Lemma gprs_equiv `{sailGS Σ} : ∀ {Σ} (ι : Valuation Σ),
       interp_gprs ⊣⊢
         asn.interpret asn_regs_ptsto ι.
