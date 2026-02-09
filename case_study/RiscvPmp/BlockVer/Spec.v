@@ -63,6 +63,12 @@ Import ctx.resolution.
 Import ctx.notations.
 Import env.notations.
 
+Module RiscvPmpBlockVerifFailLogic <: FailLogic.
+  Definition fail_rule_pre : bool := false.
+End RiscvPmpBlockVerifFailLogic.
+
+Module RiscvPmpBlockVerifIrisInstance := RiscvPmpIrisInstance RiscvPmpBlockVerifFailLogic.
+
 Module Assembly.
   (* Instruction synonyms. *)
   Definition ADD (rd rs1 rs2 : RegIdx) : AST :=
@@ -608,9 +614,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
 End RiscvPmpBlockVerifSpec.
 
 Module RiscvPmpBlockVerifShalExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpBlockVerifSpec.
+  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec.
 Module RiscvPmpBlockVerifExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpBlockVerifSpec.
+  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec.
 
 Module RiscvPmpSpecVerif.
   Import RiscvPmpBlockVerifSpec.
@@ -786,19 +792,19 @@ End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
   Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    DefaultFailLogic RiscvPmpBlockVerifSpec.
+    RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec.
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram DefaultFailLogic RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase
+    RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase
     RiscvPmpIrisAdeqParameters
-    RiscvPmpIrisInstance.
+    RiscvPmpBlockVerifIrisInstance.
   Include MicroSail.ShallowSoundness.Soundness RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram DefaultFailLogic RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
+    RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
   Include MicroSail.RefineExecutor.RefineExecOn RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram DefaultFailLogic RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor
+    RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor
     RiscvPmpBlockVerifExecutor.
 
   Import RiscvPmpIrisBase.
-  Import RiscvPmpIrisInstance.
+  Import RiscvPmpBlockVerifIrisInstance.
   Import RiscvPmp.Model.
 
   Import iris.bi.interface.
@@ -850,6 +856,13 @@ Module RiscvPmpIrisInstanceWithContracts.
   (* Important sanity condition on mmio predicates - NOTE: could be in typeclass, together with the condition that reads are either all accepted, or none of them are *)
   Lemma mmio_pred_cons {bytes : nat} t e: event_pred bytes e → mmio_pred bytes t → mmio_pred bytes (cons e t).
   Proof. now apply List.Forall_cons. Qed.
+
+  Lemma mmio_read_sound `{!sailGS Σ} (bytes : nat) :
+    TValidContractForeign (RiscvPmpSpecification.sep_contract_mmio_read bytes) (mmio_read bytes).
+  Proof.
+    intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+    now iIntros "[%HFalse _]".
+  Qed.
 
   Lemma mmio_write_sound `{!sailGS Σ} `(H: restrict_bytes bytes) :
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
@@ -922,7 +935,7 @@ Module RiscvPmpIrisInstanceWithContracts.
 
   Lemma TforeignSemBlockVerif `{sailGS Σ} : TForeignSem.
     intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, RiscvPmpModel2.mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound.
+        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound.
   Qed.
 
   Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
@@ -970,11 +983,25 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct width; now compute.
   Qed.
 
+  Lemma open_pmp_entries_sound `{sailGS Σ} :
+    ValidLemma RiscvPmpSpecification.lemma_open_pmp_entries.
+  Proof.
+    intros ι; destruct_syminstance ι; cbn.
+    rewrite pmp_entries_ptsto.
+    iIntros "(% & % & % & % & -> & e1 & e2 & e3 & e4)".
+    repeat iExists _.
+    now iFrame "e1 e2 e3 e4".
+  Qed.
+
+  Lemma close_pmp_entries_sound `{sailGS Σ} :
+    ValidLemma RiscvPmpSpecification.lemma_close_pmp_entries.
+  Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed.
+
   Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.
   Proof.
     intros Δ []; intros ι; destruct_syminstance ι; try now iIntros "_".
-    - apply Model.RiscvPmpModel2.open_pmp_entries_sound.
-    - apply Model.RiscvPmpModel2.close_pmp_entries_sound.
+    - apply open_pmp_entries_sound.
+    - apply close_pmp_entries_sound.
     - apply open_ptsto_instr_sound.
     - apply close_ptsto_instr_sound.
     - apply close_mmio_write_sound.
@@ -992,14 +1019,21 @@ Module RiscvPmpIrisInstanceWithContracts.
     eauto.
   Qed.
 
-  (* TODO: prove this lemma as: apply (TValidContractEnvSem_ValidContractEnvSem TcontractsSound). *)
+  Lemma TValidContractEnvSem_ValidContractEnvSem `{sailGS Σ} :
+    TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv ⊢
+    ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+  Proof.
+    unfold TValidContractEnvSem, TValidContractEnvN, HasValidContract, ValidContractEnvSem.
+    iIntros "H" (σs σ f). iSpecialize ("H" $! (callgraph.mkNode f)). simpl.
+    destruct (CEnv f) eqn:Ef; auto.
+    iApply TValidContractSem_ValidContractSem.
+    iApply "H". iPureIntro.
+    destruct f; try discriminate Ef; typeclasses eauto.
+  Qed.
+
   Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
   Proof.
-    apply (sound foreignSemBlockVerif lemSemBlockVerif).
-    intros Γ τ f c Heq.
-    pose proof (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc].
-    eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness.
-    eauto.
+    iApply (TValidContractEnvSem_ValidContractEnvSem $! TcontractsSound).
   Qed.
 
 End RiscvPmpIrisInstanceWithContracts.
