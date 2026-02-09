@@ -38,6 +38,8 @@ From stdpp Require Import
      base.
 From stdpp Require
      finite strings.
+From iris.proofmode Require Import
+     tactics.
 From Katamaran Require Import
      Base
      Bitvector
@@ -89,6 +91,12 @@ Lemma xlenbits_pos : (xlenbits > 0).
 Proof. cbv. lia. Qed.
 (* All addresses present in RAM memory *)
 Definition liveAddrs := bv.seqBv (@bv.of_N xlenbits minAddr) lenAddr.
+
+(* All addressable addresses of the machine *)
+Definition all_addrs_def : list Addr := bv.seqBv bv.zero (N.pow 2 (N.of_nat xlenbits)).
+Definition all_addrs_aux : seal (@all_addrs_def). Proof. by eexists. Qed.
+Definition all_addrs : list Addr := all_addrs_aux.(unseal).
+Lemma all_addrs_eq : all_addrs = all_addrs_def. Proof. rewrite -all_addrs_aux.(seal_eq) //. Qed.
 
 (* 2. Definition of MMIO memory *)
 (* For now, we only consider the one femtokernel address to be part of the MMIO-mapped memory. *)

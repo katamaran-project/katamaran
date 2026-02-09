@@ -86,13 +86,6 @@ Module RiscvPmpIrisInstance2 <:
   Import RiscvPmpIrisBase2.
   Import RiscvPmpProgram.
 
-  Notation all_addrs := RiscvPmpIrisInstance.all_addrs (only parsing).
-
-  (* The address we will perform all writes to is the first legal MMIO address *)
-  Definition write_addr : Addr := bv.of_N maxAddr.
-  Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
-  Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
-
   Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
 
   Section WithMemory.

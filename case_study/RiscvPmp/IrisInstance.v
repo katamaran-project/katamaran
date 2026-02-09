@@ -148,11 +148,6 @@ Module RiscvPmpIrisInstance <:
           end
     end.
 
-  Definition all_addrs_def : list Addr := bv.seqBv bv.zero (N.pow 2 (N.of_nat xlenbits)).
-  Definition all_addrs_aux : seal (@all_addrs_def). Proof. by eexists. Qed.
-  Definition all_addrs : list Addr := all_addrs_aux.(unseal).
-  Lemma all_addrs_eq : all_addrs = all_addrs_def. Proof. rewrite -all_addrs_aux.(seal_eq) //. Qed.
-
   (* The address we will perform all writes to is the first legal MMIO address *)
   Definition write_addr : Addr := bv.of_N maxAddr.
   Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
