@@ -266,7 +266,7 @@ Module Examples.
 
   Section WithSailResources.
       Import IrisModel.RiscvPmpIrisBase.
-      Import IrisInstance.RiscvPmpIrisInstance.
+      Import RiscvPmpBlockVerifIrisInstance.
       Import RiscvPmpIrisInstanceWithContracts.
 
       Context `{sailGS Σ} `{sailGS2 Σ}.

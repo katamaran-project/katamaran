@@ -74,7 +74,7 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
-Import RiscvPmpIrisBase RiscvPmpIrisInstance.
+Import RiscvPmpIrisBase RiscvPmpIrisInstancePredicates RiscvPmpBlockVerifIrisInstance.
 
 Section BlockVerificationDerived.
 

@@ -127,9 +127,7 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Qed.
 End RiscvPmpIrisAdeqParameters.
 
-Module RiscvPmpIrisInstance <:
-  IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSemantics
-    RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+Module RiscvPmpIrisInstancePredicates.
   Import RiscvPmpIrisBase.
   Import RiscvPmpProgram.
 
@@ -238,6 +236,14 @@ Module RiscvPmpIrisInstance <:
       | _ => False
       end.
   End WithSailGS.
+End RiscvPmpIrisInstancePredicates.
+
+Module RiscvPmpIrisInstance (FL : FailLogic) <:
+  IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram FL RiscvPmpSemantics
+    RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+  Import RiscvPmpIrisBase.
+  Import RiscvPmpProgram.
+  Import RiscvPmpIrisInstancePredicates.
 
   #[global] Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
 
@@ -732,9 +738,21 @@ Module RiscvPmpIrisInstance <:
 
   End RiscVPmpIrisInstanceProofs.
 
+
   Include IrisSignatureRules RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase.
   Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+  Lemma gprs_equiv `{sailGS Σ} : ∀ {Σ} (ι : Valuation Σ),
+      interp_gprs ⊣⊢
+        asn.interpret asn_regs_ptsto ι.
+  Proof.
+    iIntros. unfold interp_gprs, reg_file.
+    rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
+    cbn. iSplit.
+    - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
+    - iIntros "H"; iSplitR; first by iExists bv.zero.
+      repeat iDestruct "H" as "($ & H)"; iFrame.
+  Qed.
 
 End RiscvPmpIrisInstance.

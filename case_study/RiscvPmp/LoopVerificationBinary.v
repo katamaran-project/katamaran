@@ -61,9 +61,11 @@ Import ListNotations.
 Import RiscvPmpSpecification.
 Import RiscvPmpProgram.
 Import RiscvPmpIrisBase2.
-Import RiscvPmpIrisInstance2.
 Import RiscvPmpModel2.
+Import RiscvPmpModel2.RiscvPmpIrisInstance2.
 Import RiscvPmpValidContracts.
+Import IrisInstance.RiscvPmpIrisInstancePredicates.
+Import RiscvPmpIrisInstancePredicates2.
 
 Import RiscvPmpSignature.
 Module Import RiscvPmpShallowExecutor :=
@@ -327,7 +329,7 @@ Section Loop.
   Proof.
     iApply (@iris_rule_consequence _ _ _ _ env.nil
              ((∃ p : Privilege, cur_privilege ↦ p) ∗
-              (∃ es : list RiscvPmpIrisInstance2.PmpEntryCfg, interp_pmp_entries es))
+              (∃ es : list PmpEntryCfg, interp_pmp_entries es))
              _ _ _ fun_init_model _ _).
     iApply valid_init_model_contract.
     Unshelve.

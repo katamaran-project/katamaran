@@ -63,6 +63,7 @@ Import bv.notations.
 
 Import RiscvPmpProgram.
 Import RiscvPmpSignature.
+Import RiscvPmpIrisInstancePredicates.
 
 Ltac destruct_syminstance ι :=
   repeat
@@ -78,9 +79,9 @@ Ltac destruct_syminstance ι :=
     end.
 
 Import RiscvPmpIrisBase.
-Import RiscvPmpIrisInstance.
 
 Module RiscvPmpModel2.
+  Module Import RiscvPmpIrisInstance := RiscvPmpIrisInstance DefaultFailLogic.
   Import RiscvPmpSignature.
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.
@@ -256,18 +257,6 @@ Module RiscvPmpModel2.
 
   Section LemProofs.
     Context `{sg : sailGS Σ}.
-
-    Lemma gprs_equiv : ∀ {Σ} (ι : Valuation Σ),
-      interp_gprs ⊣⊢
-      asn.interpret asn_regs_ptsto ι.
-    Proof.
-      iIntros. unfold interp_gprs, reg_file.
-      rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
-      cbn. iSplit.
-      - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
-      - iIntros "H"; iSplitR; first by iExists bv.zero.
-        repeat iDestruct "H" as "($ & H)"; iFrame.
-    Qed.
 
     Lemma open_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.

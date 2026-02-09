@@ -80,21 +80,18 @@ Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgr
 
 End RiscvPmpIrisAdeqParams2.
 
-Module RiscvPmpIrisInstance2 <:
-  IrisInstance2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSemantics
-    RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
+Module RiscvPmpIrisInstancePredicates2.
+  Import RiscvPmpIrisInstancePredicates.
   Import RiscvPmpIrisBase2.
   Import RiscvPmpProgram.
-
-  Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
 
   Section WithMemory.
     Context {Σ : gFunctors} {mG : memGS2 Σ}.
 
     Definition interp_ptsto_one (k : Exec) (addr : Addr) (b : Byte) : iProp Σ :=
       match k with
-      | Left  => RiscvPmpIrisInstance.interp_ptsto (mG := memGS2_memGS_left) addr b
-      | Right => RiscvPmpIrisInstance.interp_ptsto (mG := memGS2_memGS_right) addr b
+      | Left  => interp_ptsto (mG := memGS2_memGS_left) addr b
+      | Right => interp_ptsto (mG := memGS2_memGS_right) addr b
       end.
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
@@ -107,8 +104,8 @@ Module RiscvPmpIrisInstance2 <:
     Proof. eapply big_sepL_app. Qed.
 
     Definition interp_ptstomem {width : nat} (addr : Addr) (v : bv (width * byte)) : iProp Σ :=
-      @RiscvPmpIrisInstance.interp_ptstomem _ memGS2_memGS_left _ addr v ∗
-      @RiscvPmpIrisInstance.interp_ptstomem _ memGS2_memGS_right _ addr v.
+      @interp_ptstomem _ memGS2_memGS_left _ addr v ∗
+      @interp_ptstomem _ memGS2_memGS_right _ addr v.
 
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
       inv femto_inv_ro_ns (interp_ptstomem addr b).
@@ -160,19 +157,24 @@ Module RiscvPmpIrisInstance2 <:
       end.
 
     Definition interp_gprs : iProp Σ :=
-      [∗ set] r ∈ RiscvPmpIrisInstance.reg_file, (∃ v, interp_ptsreg r v)%I.
+      [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
       match entries with
       | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
           reg_pointsTo21 pmp0cfg cfg0 ∗
-                       reg_pointsTo21 pmpaddr0 addr0 ∗
-                       reg_pointsTo21 pmp1cfg cfg1 ∗
-                       reg_pointsTo21 pmpaddr1 addr1
+          reg_pointsTo21 pmpaddr0 addr0 ∗
+          reg_pointsTo21 pmp1cfg cfg1 ∗
+          reg_pointsTo21 pmpaddr1 addr1
       | _ => False
       end.
 
   End WithSailGS.
+End RiscvPmpIrisInstancePredicates2.
+
+  Import RiscvPmpIrisInstancePredicates2.
+  Import RiscvPmpIrisBase2.
+  Import RiscvPmpProgram.
 
   Section RiscvPmpIrisPredicates.
 
@@ -230,7 +232,7 @@ Module RiscvPmpIrisInstance2 <:
       unfold interp_pmp_addr_access_without, interp_pmp_addr_access, all_addrs.
       (* Hard direction: create `interp_addr_access` from scratch *)
       pose proof (RiscvPmpIrisInstance.in_allAddrs_split base width Hrep) as [l1 [l2 Hall]].
-      unfold RiscvPmpIrisInstance.all_addrs in Hall. rewrite Hall.
+      unfold all_addrs in Hall. rewrite Hall.
       rewrite !big_sepL_app.
       iIntros "(Hlow & Hia & Hhigh)".
       iSplitL "Hia".
@@ -346,6 +348,17 @@ Module RiscvPmpIrisInstance2 <:
 
   Include IrisAdequacy2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     DefaultFailLogic RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
+  Lemma gprs_equiv `{sailGS2 Σ} : ∀ {Σ} (ι : Valuation Σ),
+      interp_gprs ⊣⊢
+        asn.interpret asn_regs_ptsto ι.
+  Proof.
+    iIntros. unfold interp_gprs.
+    rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
+    cbn. iSplit.
+    - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
+    - iIntros "H"; iSplitR; first by iExists bv.zero.
+      repeat iDestruct "H" as "($ & H)"; iFrame.
+  Qed.
 
   Definition WP2_loop `{sailGS2 Σ} : iProp Σ :=
     semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (fun _ _ _ _ => True%I).

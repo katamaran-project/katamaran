@@ -74,7 +74,8 @@ Module inv := invariants.
 
   Import Contracts.
   Import RiscvPmpIrisBase.
-  Import RiscvPmpIrisInstance.
+  Import RiscvPmpIrisInstancePredicates.
+  Import RiscvPmpBlockVerifIrisInstance.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpIrisInstanceWithContracts.
   Import RiscvPmpBlockVerifShalExecutor.
@@ -585,7 +586,7 @@ Module inv := invariants.
            env.map].
       cbn.
       iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp & Hfortytwo & Hpc & Hnpc & Hhandler)".
-      rewrite (Model.RiscvPmpModel2.gprs_equiv env.nil).
+      rewrite (gprs_equiv env.nil).
       iFrame. destruct is_mmio; now iFrame.
     - cbv [femtokernel_handler_pre interpret_chunk lptsreg PredicateDefIProp
            inst instprop_formula inst_term env.lookup ctx.view ctx.in_at
@@ -595,7 +596,7 @@ Module inv := invariants.
       iIntros (an) "(Hmip & Hmie & Hpc & Hnpc & Hhandler & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hregs & Hpmp & Hfortytwo)".
       cbn.
       iApply "Hk".
-      rewrite (Model.RiscvPmpModel2.gprs_equiv env.nil).
+      rewrite (gprs_equiv env.nil).
       iFrame "Hmip Hmie Hmstatus Hmtvec Hmcause Hcurpriv Hregs Hpmp Hnpc Hhandler".
       destruct is_mmio; cbn; iFrame.
   Qed.
@@ -755,13 +756,13 @@ Module inv := invariants.
     iApply (sound_sannotated_block_verification_condition lemSemBlockVerif sat__femtoinit [env] $! bv.zero with "[Hpre] [Hk]").
     - unfold femto_init_pre. cbn -[ptsto_instrs].
       iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hpc & Hnpc & Hinit)".
-      rewrite (Model.RiscvPmpModel2.gprs_equiv env.nil).
+      rewrite (gprs_equiv env.nil).
       now iFrame "Hmstatus Hmtvec Hmcause Hmip Hmie Hmepc Hcurpriv Hgprs Hpmp0cfg Hpmp1cfg Hpc Hnpc Hinit Hpmpaddr0 Hpmpaddr1".
     - cbn.
       iIntros (an) "(Hpc & Hnpc & Hhandler & [%eq _] & (Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hmstatus & Hcp & (Hgprs & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1))))".
       iApply ("Hk" with "[Hpc $Hnpc $Hhandler $Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmepc $Hcp Hgprs $Hpmp0cfg $Hpmpaddr0 $Hpmp1cfg $Hpmpaddr1]").
       cbn in eq. subst.
-      rewrite (Model.RiscvPmpModel2.gprs_equiv env.nil).
+      rewrite (gprs_equiv env.nil).
       now iFrame.
   Qed.
 
@@ -1044,7 +1045,7 @@ Module inv := invariants.
       iApply (femtokernel_init_safe is_mmio with "[-]").
 
       Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
-      iFrame "∗ #". rewrite (Model.RiscvPmpModel2.gprs_equiv env.nil). cbn.
+      iFrame "∗ #". rewrite (gprs_equiv env.nil). cbn.
       now repeat iDestruct "H'" as "($ & H')".
     - iIntros "Hmem".
       (* Prove that this predicate follows from the invariants in both cases *)

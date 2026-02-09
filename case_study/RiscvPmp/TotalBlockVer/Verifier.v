@@ -74,7 +74,7 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
-Import RiscvPmpIrisBase RiscvPmpIrisInstance.
+Import RiscvPmpIrisBase RiscvPmpIrisInstancePredicates RiscvPmpBlockVerifIrisInstance.
 #[local] Notation "a '↦' t" := (reg_pointsTo a t) (at level 70).
 #[local] Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
 

@@ -55,6 +55,7 @@ From Katamaran Require RiscvPmp.Model.
 From iris.program_logic Require Import total_lifting.
 
 Import RiscvPmpProgram.
+Import RiscvPmpIrisInstancePredicates.
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -585,7 +586,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
        lemma_patterns        := [term_var "paddr"; term_var "w"];
        lemma_precondition    :=
-        (term_val ty_xlenbits RiscvPmpIrisInstance.write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
+        (term_val ty_xlenbits write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
         (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42));
        lemma_postcondition   :=
         asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));

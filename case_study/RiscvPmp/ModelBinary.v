@@ -42,6 +42,7 @@ From Katamaran Require Import
      RiscvPmp.Contracts
      RiscvPmp.Model
      RiscvPmp.IrisModelBinary
+     RiscvPmp.IrisInstance
      RiscvPmp.IrisInstanceBinary
      RiscvPmp.Sig.
 From Equations Require Import
@@ -60,6 +61,7 @@ Import bv.notations.
 
 Import RiscvPmpProgram.
 Import RiscvPmpSignature.
+Import RiscvPmpIrisInstancePredicates2.
 
 Ltac destruct_syminstance ι :=
   repeat
@@ -75,7 +77,6 @@ Ltac destruct_syminstance ι :=
     end.
 
 Import RiscvPmpIrisBase2.
-Import RiscvPmpIrisInstance2.
 
 Module RiscvPmpModel2.
   Import RiscvPmpSignature.
@@ -134,8 +135,8 @@ Module RiscvPmpModel2.
 
     Lemma interp_pmpentries_dedup : ∀ (entries : list PmpEntryCfg),
         interp_pmp_entries entries ⊣⊢
-          IrisInstance.RiscvPmpIrisInstance.interp_pmp_entries (H := sailRegGS2_sailRegGS_left) entries ∗
-          IrisInstance.RiscvPmpIrisInstance.interp_pmp_entries (H := sailRegGS2_sailRegGS_right) entries.
+          RiscvPmpIrisInstancePredicates.interp_pmp_entries (H := sailRegGS2_sailRegGS_left) entries ∗
+          RiscvPmpIrisInstancePredicates.interp_pmp_entries (H := sailRegGS2_sailRegGS_right) entries.
     Proof.
       iIntros (entries).
       destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|]]] eqn:?; cbn;
@@ -302,33 +303,21 @@ Module RiscvPmpModel2.
 
     Import IrisInstance.
 
-    Lemma gprs_equiv : ∀ {Σ} (ι : Valuation Σ),
-      interp_gprs ⊣⊢
-      asn.interpret asn_regs_ptsto ι.
-    Proof.
-      iIntros. unfold interp_gprs.
-      rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
-      cbn. iSplit.
-      - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
-      - iIntros "H"; iSplitR; first by iExists bv.zero.
-        repeat iDestruct "H" as "($ & H)"; iFrame.
-    Qed.
-
     Lemma interp_gprs_split :
       interp_gprs ⊢
-        @RiscvPmpIrisInstance.interp_gprs _ sailRegGS2_sailRegGS_left
-        ∗ @RiscvPmpIrisInstance.interp_gprs _ sailRegGS2_sailRegGS_right.
+        @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_left
+        ∗ @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_right.
     Proof.
-      unfold interp_gprs, RiscvPmpIrisInstance.interp_gprs.
+      unfold interp_gprs, RiscvPmpIrisInstancePredicates.interp_gprs.
       rewrite ?big_sepS_elements.
-      remember (elements RiscvPmpIrisInstance.reg_file) as l.
-      replace (elements RiscvPmpIrisInstance.reg_file) with l.
+      remember (elements RiscvPmpIrisInstancePredicates.reg_file) as l.
+      replace (elements RiscvPmpIrisInstancePredicates.reg_file) with l.
       clear Heql.
       iIntros "H".
       iInduction l as [|]; simpl; try done.
       iDestruct "H" as "((%v & Hptsto) & H)".
       iDestruct ("IHl" with "H") as "($ & $)". iClear "IHl".
-      unfold interp_ptsreg, RiscvPmpIrisInstance.interp_ptsreg.
+      unfold interp_ptsreg, RiscvPmpIrisInstancePredicates.interp_ptsreg.
       destruct (reg_convert a); try done.
       iDestruct "Hptsto" as "($ & $)".
     Qed.
@@ -511,10 +500,10 @@ Module RiscvPmpModel2.
         exists acc.
         assert (Htmp: (N.of_nat 1 < bv.exp2 xlenbits)%N) by lia.
         rewrite <- (@bv.bin_of_nat_small _ _ Hbytes) in Hrep.
-        refine (IrisInstance.RiscvPmpIrisInstance.pmp_access_reduced_width Hrep (bv.ult_nat_S_zero Htmp) (bv.ule_nat_one_S Htmp Hbytes) Haccess).
+        refine (RiscvPmpIrisInstance.pmp_access_reduced_width Hrep (bv.ult_nat_S_zero Htmp) (bv.ule_nat_one_S Htmp Hbytes) Haccess).
         destruct bytes; first by simpl. (* we need to know a bit more about bytes to finish this case *)
         iSimpl in "Hbs".
-        apply IrisInstance.RiscvPmpIrisInstance.pmp_access_addr_S_width_pred in Haccess; try lia.
+        apply RiscvPmpIrisInstance.pmp_access_addr_S_width_pred in Haccess; try lia.
         rewrite bv.add_comm in Haccess.
         iApply ("IHbytes" $! (bv.one + paddr) pmp p acc Haccess with "[%] [%] Hbs"); try lia.
         rewrite bv.bin_add_small ?bv_bin_one; lia.
@@ -526,7 +515,7 @@ Module RiscvPmpModel2.
         simpl.
         iSplitL "Hw"; auto.
         destruct bytes; first now simpl.
-        apply IrisInstance.RiscvPmpIrisInstance.pmp_access_addr_S_width_pred in Hpmp; auto.
+        apply RiscvPmpIrisInstance.pmp_access_addr_S_width_pred in Hpmp; auto.
         rewrite bv.add_comm in Hpmp.
         iApply ("IHbytes" $! (bv.one + paddr) pmp p p0 Hpmp with "[%] [%]"); auto; try lia.
         rewrite bv.bin_add_small bv_bin_one; lia.
