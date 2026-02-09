@@ -36,7 +36,7 @@ From Katamaran Require Import
      Bitvector
      Semantics
      RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.BlockVer.PartialVerifier
      RiscvPmp.Machine
      RiscvPmp.Sig.
 

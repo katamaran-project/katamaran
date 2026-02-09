@@ -35,10 +35,9 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.TotalBlockVer.Spec
-     RiscvPmp.TotalBlockVer.Verifier
      RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.BlockVer.PartialVerifier
+     RiscvPmp.BlockVer.TotalVerifier
      RiscvPmp.Machine
      RiscvPmp.Sig
      RiscvPmp.IrisModelBinary

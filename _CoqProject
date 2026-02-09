@@ -31,9 +31,9 @@ case_study/RiscvPmp/LoopVerification.v
 case_study/RiscvPmp/LoopVerificationBinary.v
 case_study/RiscvPmp/BlockVer/Examples.v
 case_study/RiscvPmp/BlockVer/Spec.v
-case_study/RiscvPmp/BlockVer/Verifier.v
-case_study/RiscvPmp/TotalBlockVer/Verifier.v
-# case_study/RiscvPmp/TotalBlockVer/RunningExample.v
+case_study/RiscvPmp/BlockVer/PartialVerifier.v
+case_study/RiscvPmp/BlockVer/TotalVerifier.v
+# case_study/RiscvPmp/BlockVer/RunningExample.v
 case_study/RiscvPmp/FemtoKernel.v
 case_study/Assumptions.v
 -R theories Katamaran

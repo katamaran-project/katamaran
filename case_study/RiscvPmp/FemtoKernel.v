@@ -36,7 +36,7 @@ From Katamaran Require Import
      Specification
      SmallStep.Step
      RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.BlockVer.PartialVerifier
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
