@@ -118,7 +118,8 @@ Module UnaryCheck.
              ptsto_instrs chunks. *)
     Definition PRE : AssertionWith [ "a" :: ty_xlenbits ] :=
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N adv_addr) < term_val ty.int (Z.of_N maxAddr))%asn ∗
-      mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |} ∗
+      (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+      (∃ "mip", mip ↦ term_var "mip") ∗ (∃ "mie", mie ↦ term_var "mie") ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       mepc ↦ term_val ty_xlenbits (bv.of_N adv_addr) ∗
@@ -129,6 +130,8 @@ Module UnaryCheck.
     Definition POST : AssertionWith ["a" :: ty_xlenbits; "an" :: ty_xlenbits] :=
       (term_var "an" = term_val ty_xlenbits (bv.of_N adv_addr))%asn ∗
       (∃ "v", mstatus ↦ term_var "v") ∗
+      (∃ "mip", mip ↦ term_var "mip") ∗
+      (∃ "mie", mie ↦ term_var "mie") ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "v", mepc ↦ term_var "v") ∗
