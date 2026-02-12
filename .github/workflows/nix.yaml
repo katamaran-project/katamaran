@@ -5,6 +5,8 @@ on:
 
 jobs:
   build:
+    if: github.event_name == 'push' && github.event.pull_request == null
+    name: ${{ matrix.rocq }}
     runs-on: [ubuntu-latest]
     strategy:
       fail-fast: false
