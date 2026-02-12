@@ -1122,6 +1122,13 @@ Module Type PartialEvaluationOn
       | None   => term_unop op t
       end.
 
+    Definition peval_zext {m n : nat} {p : IsTrue (m <=? n)}
+      (t : Term Σ (ty.bvec m)) : Term Σ (ty.bvec n) :=
+      match eq_dec n m with
+      | left e => eq_rect_r (fun n => Term Σ (ty.bvec n)) t e
+      | right _ => term_zext t
+      end.
+
     Definition peval_unop {σ1 σ2} (op : UnOp σ1 σ2) : Term Σ σ1 -> Term Σ σ2 :=
       match op with
       | uop.not                       => peval_not
@@ -1129,6 +1136,7 @@ Module Type PartialEvaluationOn
       | uop.vector_subrange start len => peval_vector_subrange start len
       | uop.bvdrop m                  => peval_bvdrop m
       | uop.bvtake m                  => peval_bvtake m
+      | uop.zext                      => peval_zext
       | op                            => peval_unop' op
       end.
 
@@ -1199,13 +1207,25 @@ Module Type PartialEvaluationOn
       now destruct bv.leview.
     Qed.
 
+    Lemma peval_zext_sound {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) :
+      peval_zext (p :=p) t ≡ term_zext t.
+    Proof.
+      intros ι. cbn. unfold peval_zext, bv.zext.
+      destruct bv.leview eqn:?. destruct eq_dec.
+      - clear Heql. assert (k = 0) by lia. subst.
+        assert (e = transparent.nat_add_0_r m) by apply uip.
+        subst. unfold bv.zext'. rewrite bv.app_nil_r.
+        refine (inst_eq_rect_indexed (T := fun n Σ => Term Σ (ty.bvec n)) _ _ ι).
+      - cbn. unfold bv.zext. now rewrite Heql.
+    Qed.
+
     Lemma peval_unop_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
       peval_unop op t ≡ term_unop op t.
     Proof.
       destruct op; cbn [peval_unop];
         auto using peval_unop'_sound, peval_not_sound, peval_unsigned_sound,
                  peval_bvdrop_sound, peval_bvtake_sound,
-                   peval_vector_subrange_sound.
+                   peval_vector_subrange_sound, peval_zext_sound.
     Qed.
 
     Definition peval_union {U K} (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) :=
@@ -1602,6 +1622,12 @@ Module Type PartialEvaluationOn
     Qed.
 
   End WithLCtx.
+
+  Example test_zext x :
+    let t := term_var_in ctx.in_zero in
+    @peval [x∷ty.bvec 32] _ (term_zext t) = t.
+  Proof. reflexivity. Abort.
+
 End PartialEvaluationOn.
 
 (* Local Variables: *)

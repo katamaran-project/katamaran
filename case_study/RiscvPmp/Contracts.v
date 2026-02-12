@@ -215,45 +215,6 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
         Definition sep_contract_execute : SepContractFun execute :=
           instr_exec_contract.
 
-        Definition sep_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : SepContractFun (process_load bytes) :=
-          {| sep_contract_logic_variables := [rd :: ty_regno; vaddr :: ty_xlenbits; value :: ty_memory_op_result bytes; is_unsigned :: ty.bool; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mcause" :: ty_mcause];
-             sep_contract_localstore      := [term_var rd; term_var vaddr; term_var value; term_var is_unsigned];
-             sep_contract_precondition    :=
-               asn_gprs
-               ∗ pc            ↦ term_var "i"
-               ∗ nextpc        ↦ term_var "npc"
-               ∗ cur_privilege ↦ term_var p
-               ∗ mcause        ↦ term_var "mcause"
-               ∗ ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var "mpie"; term_var "mie" ]
-               ∗ mtvec         ↦ term_var tvec
-               ∗ mepc          ↦ term_var "mepc";
-             sep_contract_result          := "result_process_load";
-             sep_contract_postcondition   :=
-               asn_gprs ∗
-               asn.match_union_alt (memory_op_result bytes) (term_var value)
-                (fun K =>
-                   match K with
-                   | KMemValue     => MkAlt (pat_var v)
-                                        (term_var "result_process_load" = term_val ty_retired RETIRE_SUCCESS
-                                         ∗ pc            ↦ term_var "i"
-                                         ∗ nextpc        ↦ term_var "npc"
-                                         ∗ cur_privilege ↦ term_var p
-                                         ∗ mcause        ↦ term_var "mcause"
-                                         ∗ ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var "mpie"; term_var "mie" ]
-                                         ∗ mtvec         ↦ term_var tvec
-                                         ∗ mepc          ↦ term_var "mepc")
-                   | KMemException => MkAlt (pat_var e)
-                                        (term_var "result_process_load" = term_val ty_retired RETIRE_FAIL
-                                         ∗             pc            ↦ term_var "i"
-                                         ∗             nextpc        ↦ term_var tvec
-                                         ∗             cur_privilege ↦ term_val ty_privilege Machine
-                                         ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-                                         ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var p; term_var "mpie"; term_val ty.bool false ]
-                                         ∗             mepc          ↦ term_var "i"
-                                         ∗             mtvec         ↦ term_var tvec)
-                   end);
-          |}.
-
         Definition sep_contract_readCSR : SepContractFun readCSR :=
           {| sep_contract_logic_variables := [csr :: ty_csridx; "mpp" :: ty_privilege;
                                               "mtvec" :: ty_xlenbits; "mcause" :: ty_mcause;
@@ -1041,7 +1002,6 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | execute_STORE           => Some sep_contract_execute_STORE
             | execute_LOAD            => Some sep_contract_execute_LOAD
             | execute_MUL             => Some sep_contract_execute_MUL
-            | process_load bytes      => Some (sep_contract_process_load bytes)
             | get_arch_pc             => Some sep_contract_get_arch_pc
             | get_next_pc             => Some sep_contract_get_next_pc
             | set_next_pc             => Some sep_contract_set_next_pc
@@ -1407,9 +1367,6 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof. now vm_compute. Qed.
 
-  Lemma valid_contract_process_load (bytes : nat) {pr : IsTrue (width_constraint bytes)} : ValidContractWithFuel InlineOneLevel (process_load bytes).
-  Proof. now vm_compute. Qed.
-
   Lemma valid_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
   Proof. destruct H; symbolic_simpl; eauto. Qed.
 
@@ -1584,7 +1541,7 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_STORE : ValidContract execute_STORE.
   Proof. now vm_compute. Qed.
 
-  Lemma valid_contract_execute_LOAD : ValidContract execute_LOAD.
+  Lemma valid_contract_execute_LOAD : ValidContractWithFuel InlineOneLevel execute_LOAD.
   Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_CSR : ValidContract execute_CSR.
@@ -1672,7 +1629,6 @@ Module RiscvPmpValidContracts.
     - refine (valid_contract _ H valid_contract_pmpMatchEntry).
     - refine (valid_contract _ H valid_contract_pmpAddrRange).
     - refine (valid_contract_debug _ H valid_contract_pmpMatchAddr).
-    - refine (valid_contract_with_fuel _ _ H (@valid_contract_process_load bytes p)).
     - refine (valid_contract _ H (@valid_contract_mem_write_value bytes H0)).
     - refine (valid_contract _ H valid_contract_init_model).
     - refine (valid_contract_with_fuel _ _ H valid_contract_step).
@@ -1703,7 +1659,7 @@ Module RiscvPmpValidContracts.
     - refine (valid_contract _ H valid_contract_execute_BTYPE).
     - refine (valid_contract _ H valid_contract_execute_RISCV_JAL).
     - refine (valid_contract _ H valid_contract_execute_RISCV_JALR).
-    - refine (valid_contract _ H valid_contract_execute_LOAD).
+    - refine (valid_contract_with_fuel _ _ H valid_contract_execute_LOAD).
     - refine (valid_contract _ H valid_contract_execute_STORE).
     - refine (valid_contract _ H valid_contract_execute_ECALL).
     - refine (valid_contract_debug _ H valid_contract_execute_EBREAK).
