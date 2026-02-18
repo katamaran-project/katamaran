@@ -291,11 +291,40 @@ Module RiscvPmpModel2.
       iFrame "Hpmp Hpmpa Hcurp". now iPureIntro.
     Qed.
 
+    Lemma externalWorldUpdates_sound :
+      ValidContractForeign sep_contract_externalWorldUpdates externalWorldUpdates.
+    Proof.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+      iIntros "[Hmip1 Hmip2]".
+      iApply semWP2_foreign.
+      iIntros (γ μ) "(Hregs1 & Hmem)".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res γ' μ' Hfc). do 3 iModIntro.
+      rewrite Heq in Hfc; cbn in Hfc; unfold fun_externalWorldUpdates in Hfc.
+      (* destruct state_tra_world_updates as (vmip' , s') eqn:Hstwu. *)
+      inversion Hfc; subst.
+      iMod (reg_update γ mip vmip _ with "Hregs1 Hmip1") as "[Hregs1 Hmip1]".
+      iMod "Hclose" as "_". iModIntro.
+      iFrame "Hregs1 Hmem".
+      iIntros (γ2 μ2) "[Hregs2 Hmem2]".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res2 γ2' μ2' Hfc2).
+      rewrite Heq in Hfc2; cbn in Hfc2; unfold fun_externalWorldUpdates in Hfc2.
+      inversion Hfc2; subst.
+      iMod "Hclose" as "_".
+      iMod (reg_update γ2 mip vmip _ with "Hregs2 Hmip2") as "[Hregs2 Hmip2]".
+      iModIntro.
+      iFrame "Hregs2 Hmem2".
+      iApply semWP2_val_1.
+      now iModIntro; iFrame.
+    Qed.
+
     Lemma foreignSem : ForeignSem.
     Proof.
-      intros Δ τ f; destruct f;
+      intros Δ τ f; destruct f; cbn;
         eauto using read_ram_sound, write_ram_sound, decode_sound,
-                    mmio_read_sound, mmio_write_sound, within_mmio_sound.
+                    mmio_read_sound, mmio_write_sound, within_mmio_sound,
+                    externalWorldUpdates_sound.
     Qed.
   End ForeignProofs.
 

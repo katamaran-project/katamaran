@@ -516,12 +516,13 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
-      | read_ram bytes  => sep_contract_read_ram
-      | write_ram bytes => sep_contract_write_ram
-      | within_mmio res => sep_contract_within_mmio res
-      | mmio_read bytes => sep_contract_mmio_read bytes
-      | mmio_write res  => @sep_contract_mmio_write _ res
-      | decode          => sep_contract_decode
+      | read_ram bytes       => sep_contract_read_ram
+      | write_ram bytes      => sep_contract_write_ram
+      | within_mmio res      => sep_contract_within_mmio res
+      | mmio_read bytes      => sep_contract_mmio_read bytes
+      | mmio_write res       => @sep_contract_mmio_write _ res
+      | decode               => sep_contract_decode
+      | externalWorldUpdates => sep_contract_externalWorldUpdates
       end.
 
   Lemma linted_cenvex :
@@ -933,9 +934,27 @@ Module RiscvPmpIrisInstanceWithContracts.
       auto.
   Qed.
 
+  Lemma externalWorldUpdates_sound `{sailGS Σ} :
+    TValidContractForeign RiscvPmpSpecification.sep_contract_externalWorldUpdates externalWorldUpdates.
+  Proof.
+    intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+    iIntros "Hmip". cbn in *. iApply semTWP_foreign.
+    iIntros (? ?) "(Hregs & Hmem)".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; auto.
+    iModIntro.
+    iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
+    (* unfold fun_externalWorldUpdates in Hf. *)
+    (* destruct state_tra_world_updates as (vmip' , s'). *)
+    inversion Hf; subst.
+    iMod (reg_update γ mip vmip _ with "Hregs Hmip") as "[Hregs Hmip]".
+    iMod "Hclose" as "_". iModIntro. iFrame "Hregs Hmem".
+    iApply semTWP_val.
+    iModIntro; now iSplitL; first now iExists _.
+  Qed.
+
   Lemma TforeignSemBlockVerif `{sailGS Σ} : TForeignSem.
-    intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound.
+    intros Δ τ f; destruct f; cbn;
+      eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound.
   Qed.
 
   Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.

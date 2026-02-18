@@ -240,6 +240,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | mmio_write `(H: restrict_bytes bytes)  : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
   | within_mmio `(H: restrict_bytes bytes) : FunX [paddr ∷ ty_xlenbits] ty.bool
   | decode                                 : FunX [bv ∷ ty_word] ty_ast
+  (* A method that is invoked once per cycle in the step function.
+   * It updates pseudo-registers based on external world changes.
+   * Particularly, the method models interrupt requests by peripherals that enable
+   * bits in the mip pseudo-register.
+   *)
+  | externalWorldUpdates                   : FunX [] ty.unit
   .
 
   Inductive Lem : PCtx -> Set :=
@@ -836,6 +842,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end.
 
   Definition fun_step : Stm ctx.nil ty.unit :=
+    (* Allow the external world to update certain architectural state, particularly the mip (interrupts pending) CSR. *)
+    stm_foreign externalWorldUpdates [env] ;;
     let: p := stm_read_register cur_privilege in
     let: "di" := call dispatchInterrupt p in
     match: exp_var "di" with
@@ -1460,7 +1468,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     ForeignCall (@within_mmio width H) [addr] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , μ , inr (fun_within_mmio width addr));
     ForeignCall decode [code] res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_decode code).
+        (γ' , μ' , res) = (γ , μ , pure_decode code);
+    ForeignCall externalWorldUpdates [] res γ γ' μ μ' :=
+      let '(vmip' , μ'') := fun_externalWorldUpdates μ in
+      (* The external world may arbitrarily change the interrupts pending register (mip)
+         but will leave other state untouched. *)
+      (γ' , μ' , res) = (write_register γ mip vmip' , μ'' , inr ()).
 
   Local Arguments ForeignCall {_ _} f /.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :

@@ -68,7 +68,8 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
     Definition memGS2_memGS_right : forall `{mG : memGS2 Σ}, memGS Σ := @mc_ghGS2_right.
     Definition mem_inv2 : forall {Σ}, memGS2 Σ -> Memory -> Memory -> iProp Σ :=
       fun {Σ} hG μ1 μ2 =>
-        (RiscvPmpIrisBase.mem_inv memGS2_memGS_left μ1 ∗ RiscvPmpIrisBase.mem_inv memGS2_memGS_right μ2)%I.
+        (RiscvPmpIrisBase.mem_inv memGS2_memGS_left μ1 ∗ RiscvPmpIrisBase.mem_inv memGS2_memGS_right μ2
+        )%I.
     Lemma mem_inv2_mem_inv :
       forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
         mem_inv2 mG μ1 μ2 ⊣⊢ mem_inv memGS2_memGS_left μ1 ∗ mem_inv memGS2_memGS_right μ2.

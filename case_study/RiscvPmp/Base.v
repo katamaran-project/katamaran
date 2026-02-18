@@ -117,12 +117,23 @@ Proof. generalize a. induction size.
          apply decidable.and_dec; [apply _|auto].
 Qed.
 
+Record Minterrupts : Set :=
+  MkMinterrupts
+    { MEI : bool
+    ; UEI : bool
+    ; MTI : bool
+    ; UTI : bool
+    ; MSI : bool
+    ; USI : bool
+    }.
+
 (* 3. Definition of machinery required to do MMIO *)
 Class MMIOEnv : Type := {
   State : Type;
   (* The combination of these two allows us to simulate a finitely non-deterministic I/O device, by quantifying over these transition functions at the top-level and adding restrictions *)
   state_tra_read : State -> Addr -> forall (bytes : nat) , State * bv (bytes * 8);
   state_tra_write : State -> Addr -> forall (bytes : nat) , bv (bytes * 8) -> State;
+  state_tra_world_updates : State -> Minterrupts * State;
   state_init : State; (* Useful mostly when reasoning about concrete devices *)
 }.
 Parameter mmioenv : MMIOEnv.
@@ -333,16 +344,6 @@ Inductive FetchResult : Set :=
 | F_Base (v : Word)
 | F_Error (e : ExceptionType) (v : Xlenbits)
 .
-
-Record Minterrupts : Set :=
-  MkMinterrupts
-    { MEI : bool
-    ; UEI : bool
-    ; MTI : bool
-    ; UTI : bool
-    ; MSI : bool
-    ; USI : bool
-    }.
 
 (* NOTE: simplified to only take the ctl_trap constructor into account
          (other constructors are for mret, sret and uret, not considered atm) *)
@@ -1290,6 +1291,14 @@ Module Export RiscvPmpBase <: Base.
                let μ' := memory_append_trace (memory_update_state μ s') mmioev in
                 (μ' , readv)%type
       end.
+
+    Definition fun_externalWorldUpdates (μ : Memory)  :
+      Minterrupts * Memory :=
+      (* DOMI: temporarily disabled interrupts until I know how to fix the relational model *)
+      (MkMinterrupts false false false false false false , μ).
+      (* let '(vmip , s') := state_tra_world_updates (memory_state μ) in *)
+      (* let μ' := memory_update_state μ s' in *)
+      (* (vmip , μ'). *)
 
     Definition fun_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
       Val (ty_bytes data_size) -> Memory :=

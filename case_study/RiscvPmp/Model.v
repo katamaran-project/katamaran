@@ -245,10 +245,28 @@ Module RiscvPmpModel2.
       - now iApply semTWP_val.
     Qed.
 
+    Lemma externalWorldUpdates_sound :
+      TValidContractForeign sep_contract_externalWorldUpdates externalWorldUpdates.
+    Proof.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+      iIntros "Hmip". cbn in *. iApply semTWP_foreign.
+      iIntros (? ?) "(Hregs & Hmem)".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto.
+      iModIntro.
+      iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
+      (* unfold fun_externalWorldUpdates in Hf. *)
+      (* destruct state_tra_world_updates as (vmip' , s'). *)
+      inversion Hf; subst.
+      iMod (reg_update γ mip vmip _ with "Hregs Hmip") as "[Hregs Hmip]".
+      iMod "Hclose" as "_". iModIntro. iFrame "Hregs Hmem".
+      iApply semTWP_val.
+      iModIntro; now iSplitL; first now iExists _.
+    Qed.
+
     Lemma TforeignSem : TForeignSem.
     Proof.
       intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound.
+        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound.
     Qed.
 
     Lemma foreignSem : ForeignSem.

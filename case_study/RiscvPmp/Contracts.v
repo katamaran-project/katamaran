@@ -1128,6 +1128,15 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_postcondition   := ⊤;
           |}.
 
+        Definition sep_contract_externalWorldUpdates    : SepContractFunX externalWorldUpdates :=
+          {| sep_contract_logic_variables := ["vmip" ∷ ty_Minterrupts];
+            sep_contract_localstore      := [];
+            sep_contract_precondition    := mip ↦ term_var "vmip";
+            sep_contract_result          := "result_externalWorldUpdates";
+            sep_contract_postcondition   := ∃ "nvmip", mip ↦ term_var "nvmip";
+          |}.
+
+
         Definition CEnvEx : SepContractEnvEx :=
           fun Δ τ fn =>
             match fn with
@@ -1137,6 +1146,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | mmio_read bytes      => sep_contract_mmio_read bytes
             | mmio_write bytes     => sep_contract_mmio_write bytes
             | decode               => sep_contract_decode
+            | externalWorldUpdates => sep_contract_externalWorldUpdates
             end.
 
         Lemma linted_cenvex :
