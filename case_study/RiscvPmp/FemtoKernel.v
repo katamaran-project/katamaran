@@ -350,6 +350,9 @@ Module inv := invariants.
       (* (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗ *)
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
       (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+      (∃ "mie", mie ↦ term_var "mie") ∗
+      (∃ "mip", mip ↦ term_var "mip") ∗
+      (∃ "ms" , mscratch ↦ term_var "ms") ∗
       (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "v", mip ↦ term_var "v") ∗ (∃ "v", mie ↦ term_var "v") ∗
@@ -358,10 +361,10 @@ Module inv := invariants.
       (∃ "x1", x1 ↦ term_var "x1") ∗
       x5 ↦ term_var "x5" ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
-      (∃ "oldvalue",  ∃ "s",
-          asn.sep ((term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ᵢ (term_var "oldvalue"))
+      (∃ "oldvalue",  ∃ "s", ∃ "s'",
+          asn.sep ((term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size)) ↦ₘ (term_var "oldvalue"))
           (asn.sep (asn_mmio_state_pred (term_var "s"))
-          (asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "oldvalue"; term_var "s"])) )
+          (asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "oldvalue"; term_var "s"; term_var "s'"])) )
       )
       ∗ asn_mmio_trace_state_inv
     .
@@ -595,7 +598,7 @@ Locate erase_symprop.
     iPureIntro. eapply mmio_ram_False; eauto.
   Qed.
 
-  Definition femto_mmio_pred `{sailGS Σ} := interp_mmio_trace_pred bytes_per_word.
+  Definition femto_mmio_pred `{sailGS Σ} (t : Trace) (s : IOState) := mmio_trace_state_pred t s.
 
   (* Note: temporarily make femtokernel_handler_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_handler_pre.
@@ -613,7 +616,7 @@ Locate erase_symprop.
   Eval cbn in fun a an => femto_handler_post_block1 a an.
 
   Definition femto_handler_block1_contract `{sailGS Σ} : iProp Σ :=
-    semTripleAnnotatedBlock femto_handler_pre_block1 (femtokernel_handler_gen_block1) femto_handler_post_block1.
+    semTripleAnnotatedBlock femto_handler_pre_block1 (femtokernel_handler_gen_block1 data_addr) femto_handler_post_block1.
 
   (* Note: temporarily make femtokernel_handler_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_handler_pre_block1.
@@ -780,23 +783,29 @@ Locate erase_symprop.
   Proof.
     iIntros "IH (Hbase & HaccU & (Hinstrs0 & Hinstrs1 & Hinstrs2))".
     iDestruct "Hbase" as "(Hpre & Hpc & Hnextpc)".
-    iDestruct "Hpre" as "( [%Ha _] & [#Haoffset _] & Hmstatus & Hmtvec & Hmcause & [%Hmepcv Hmepc] & (%s & %v & Hx5 & Htake) & Hpts & Hcurpriv & Hpmpentries & Hpred)".
-    iApply (femto_handler_verified_block1 with "[Hmstatus Hmtvec Hmcause Hmepc Hpts Hx5 Htake Hcurpriv Hpmpentries Hpc Hnextpc Hinstrs1 Hpred]").
-    - iFrame "Hmstatus Hmtvec Hmcause Hmepc Hx5 Htake Hpts Hcurpriv Haoffset Hpred". iFrame "Hpc Hnextpc". subst.
+    iDestruct "Hpre" as "( [%Ha _] & [#Haoffset _] & Hmstatus & Hmip & Hmie & Hmtvec & Hmcause & [%Hmepcv Hmepc] & Hpts & Hcurpriv & Hpmpentries & Hpred)".
+    (* iDestruct "Hpre" as "( [%Ha _] & [#Haoffset _] & Hmstatus & Hmtvec & Hmcause & [%Hmepcv Hmepc] & (%s & %v & Hx5 & Htake) & Hpts & Hcurpriv & Hpmpentries & Hpred)". *)
+    iApply (femto_handler_verified_block1 with "[Hmstatus Hmtvec Hmcause Hmip Hmie Hmepc Hpts Hcurpriv Hpmpentries Hpc Hnextpc Hinstrs1 Hpred]").
+    - iFrame "Hmstatus Hmtvec Hmcause Hmip Hmie Hmepc Hpts Hcurpriv Haoffset Hpred". iFrame "Hpc Hnextpc". subst.
       iSplitL "Hpmpentries".
       -- cbn; repeat iSplit; auto.
       -- cbv in Ha. subst. iFrame "Hinstrs1".
-    - cbn.
-      iIntros (an) "(Hpc & Hnextpc & Hinstrs1 & [%Ha2 _] & _ & Hmstatus & Hmtvec & Hmcause & Hmepc & (%Han & _) & Hpts & Hcurpriv & Hpmpentries & Hpred )".
+     - iIntros (an) "(Hpc & Hnextpc & Hinstrs1 &
+       ([%Ha2 _] & _ & Hmstatus & Hmie & Hmip & Hscratch & Hmtvec & Hmcause & Hmepc & (%Han & _) & Hpts & Hcurpriv & Hpmpentries & Hpred & Hinv ))".
       iApply (femtokernel_handler_safe_block2 with "[$IH]").
-      iPoseProof (Model.RiscvPmpModel2.gprs_equiv with "Hpts") as "Hgprs".
-      rewrite Han. rewrite Ha2. iFrame "Hpc Hnextpc Hmstatus Hmtvec Hmcause Hmepc Hcurpriv HaccU Hpred".
-      iFrame "Hpmpentries".
-      iSplitL "Hgprs"; auto.
-      + cbn. subst. iSplitR. iSplitR; auto. iSplitR. iSplitR; auto.
-        iPoseProof (Model.RiscvPmpModel2.gprs_equiv with "Hgprs") as "Hgprs"; auto.
-      + cbn. subst. iFrame "Hinstrs0 Hinstrs1 Hinstrs2".
-  Qed.
+      (* iPoseProof (Model.RiscvPmpModel2.gprs_equiv with "Hpts") as "Hgprs". *)
+      (* rewrite Han. rewrite Ha2. *)
+      iFrame "Hpc Hnextpc Hmstatus Hmip Hmie Hmtvec Hmcause Hmepc HaccU".
+      iFrame "Hcurpriv".
+      iFrame "Hinv".
+      iFrame "Hscratch".
+      iDestruct "Hpred" as "(%v & %s & %s' & Hx5 & Hmem & Hstate & Hprot)".
+      iFrame "Hx5". iFrame "Hpts".
+      cbn in Ha, Ha2, Han. subst.
+      iSplitR "Hinstrs0 Hinstrs1 Hinstrs2".
+      + iFrame "Hpmpentries Hmem". cbn. repeat iSplitL ""; auto.
+      + cbn in *. subst. iFrame "Hinstrs0 Hinstrs1 Hinstrs2".
+ Qed.
 
   Lemma femtokernel_handler_safe_block0 `{sailGS Σ} a :
     ⊢ femtoKernelAssumptions femto_handler_pre a -∗
@@ -805,41 +814,43 @@ Locate erase_symprop.
     iLöb as "Hind".
     iIntros "(Hbase & HaccU & (Hinstrs0 & Hinstrs1 & Hinstrs2))".
     iDestruct "Hbase" as "(Hpre & Hpc & Hnextpc)".
-    iDestruct "Hpre" as "( [%Ha _] & [#Haoffset _] & Hmstatus & Hmtvec & Hmcause & [%Hmepcv Hmepc] & Hpts & Hcurpriv & Hpmpentries & Hpred)". cbv in Ha.
+    iDestruct "Hpre" as "( [%Ha _] & [#Haoffset _] & Hmstatus & Hmie & Hmip & Hmtvec & Hmcause & [%Hmepcv Hmepc] & Hpts & Hcurpriv & Hpmpentries & Hpred)". cbv in Ha. subst.
     iApply (femto_handler_verified_block0 with "[
-           Hmstatus  Hmtvec Hmcause Hmepc Hpts Hcurpriv Hpmpentries Hpred
+           Hmstatus  Hmtvec Hmcause Hmie Hmip Hmepc Hpts Hcurpriv Hpmpentries Hpred
            $Hpc $Hnextpc Hinstrs0]").
     {
-      subst. iFrame "Hinstrs0". iFrame "Hmstatus  Hmtvec Hmcause Hmepc Hpts Hcurpriv Hpmpentries Hpred Haoffset".
+      subst. iFrame "Hinstrs0". iFrame "Hmstatus  Hmtvec Hmcause Hmie Hmip Hmepc Hpts Hcurpriv Hpmpentries Hpred Haoffset".
       auto.
     }
-    iIntros "%Han (Hpc & [%Hv Hnextpc] & Hinstrs0 & Hpost0)".
-    cbn.
-    iDestruct "Hpost0" as "(_ & _ & Hmstatus & Hmtvec & Hmcause & Hmepc & (%t0 & Hx5 & #Hand) & Hpts & Hcurpriv & Hpmpentries & Hpred)".
+    iIntros "%an (Hpc & [%v Hnextpc] & Hinstrs0 & Hpost0)".
+    iDestruct "Hpost0" as "(_ & _ & Hmstatus & Hmie & Hmip & Hscratch & Hmtvec & Hmcause & Hmepc & Hpts & Hcurpriv & Hpmpentries & Hpred)".
+    iDestruct "Hpred" as "((%vold & %vnew & %s & %s' & Hx5 & Hold & Hspred & [%Hpold _] &  Hpred ) & Hinv)".
     (* Tut: We destruct over the two cases even / odd number in t0 *)
-    iDestruct "Hand" as "[( [%Heven _ ] & [%Hblock1 _]) | ([%Hodd _ ] & [%Hblock2 _])]".
+    iDestruct "Hpred" as "[HpredL | HpredR]".
     - (* Tut: Case even i.e. we do not jump and therefore enter block1 *)
-      iApply (femtokernel_handler_safe_block1 with "[] [HaccU Hinstrs0 Hinstrs1 Hinstrs2 $Hnextpc $Hpc $Hmstatus $Hmtvec $Hmcause $Hmepc $Hx5 $Hpts $Hcurpriv Hpmpentries $Hpred]").
-      + iModIntro. iIntros "IH". cbn. subst.
-        iApply "Hind".
-        unfold femtoKernelAssumptions.
-        iDestruct "IH" as "(Hbase & HaccU & Hinstrs)". iFrame "HaccU Hinstrs".
-        iDestruct "Hbase" as "(Hpre0 & Hpc0 & Hnextpc0)".
-        unfold blockVerifierAssumptions. iFrame "Hpre0 Hpc0 Hnextpc0".
-      + iFrame "HaccU". iSplitL "Hpmpentries". iSplitR. auto. iSplitR. subst. auto. iSplitR. cbn.
-        unfold interp_mmio_state_pred. rewrite Heven. auto.
-        cbn. subst. iFrame "Hpmpentries". cbn. subst. iFrame "Hinstrs0 Hinstrs1 Hinstrs2".
-    - (* Tut: Case even i.e. we do not jump and therefore enter block1 *)
+      iApply (femtokernel_handler_safe_block1 with "[]").
+      + iModIntro. iIntros "IH". iApply "Hind". cbn. subst. iApply "IH".
+      + iFrame "Hnextpc Hpc Hmstatus Hmip Hmie Hscratch Hmtvec Hmcause Hmepc Hx5 Hpts Hcurpriv". iFrame "HaccU". cbn -[luser] in *. 
+        iSplitR "Hinstrs0 Hinstrs1 Hinstrs2".
+        ++ iDestruct "Hinv" as "#Hinv". iDestruct "HpredL" as "[Hstate [%Han _]]".
+           subst.
+           iSplitL ""; auto. iSplitL ""; auto.
+           iSplitL "Hpmpentries". iFrame.
+           iSplitL "Hold Hstate Hspred"; auto. iExists vold. iExists s. iFrame "Hold Hspred".
+        ++ subst. cbn. iFrame "Hinstrs0 Hinstrs1 Hinstrs2".
+    - (* Tut: Case even i.e. we jump and therefore enter block2 *)
       iApply (femtokernel_handler_safe_block2 with "[]").
-      + iModIntro. iIntros "IH". cbn. subst.
-        iApply "Hind".
-        unfold femtoKernelAssumptions.
-        iDestruct "IH" as "(Hbase & HaccU & Hinstrs)". iFrame "HaccU Hinstrs".
-        iDestruct "Hbase" as "(Hpre0 & Hpc0 & Hnextpc0)".
-        unfold blockVerifierAssumptions. iFrame "Hpre0 Hpc0 Hnextpc0".
-      + iFrame "HaccU Hpc Hnextpc Hmstatus Hmtvec Hmcause Hmepc Hcurpriv". iFrame "Hx5 Hpts Hpred". iSplitL "Hpmpentries". iSplitR. auto. iSplitR. subst. auto. cbn. subst. iFrame "Hpmpentries". cbn. subst. iFrame "Hinstrs0 Hinstrs1 Hinstrs2".
+      + iModIntro. iIntros "IH". iApply "Hind". cbn. subst. iApply "IH".
+      + iFrame "HaccU Hpc Hnextpc Hmstatus Hmtvec Hmcause Hmip Hmie Hscratch Hmepc Hcurpriv". iFrame "Hx5 Hpts".
+        cbn -[luser] in *.
+        iSplitR "Hinstrs0 Hinstrs1 Hinstrs2".
+        ++ iDestruct "Hinv" as "#Hinv". iDestruct "HpredR" as "[%Han _]".
+              subst.
+              iSplitL ""; auto. iSplitL ""; auto.
+              iSplitL "Hpmpentries". iFrame.
+              iSplitL "Hold Hspred"; auto. iExists vold. iExists s. iFrame "Hold Hspred". iExists s'. auto.
+        ++ subst. cbn. iFrame "Hinstrs0 Hinstrs1 Hinstrs2".
 Qed.
-
 
 
   (* TODO: this lemma feels very incremental wrt to the last one; merge? *)
@@ -864,11 +875,11 @@ Qed.
     iIntros "([%mpp Hmst] & Hmtvec & Hmcause & Hmip & Hmie & Hmscratch & Hmepc & Hcurpriv & Hgprs & Hpmpcfg & #Hmmio & Hpc & Hnpc & Hhandler & Hmemadv)".
     iExists mpp.
     unfold LoopVerification.loop_pre, LoopVerification.Step_pre, LoopVerification.Execution.
-    iFrame "Hmst Hmtvec Hmcause Hmip Hmie Hmscratch Hmepc Hcurpriv Hgprs Hpmpcfg Hpc Hnpc".
-    iModIntro.
+    iFrame "Hmst Hmtvec Hmcause Hmip Hmie Hmscratch Hmepc Hpc Hnpc". iModIntro.
+    iFrame "Hcurpriv Hpmpaddr Hgprs Hpmpentries". cbn.
 
-    iSplitL "Hmemadv".
-    now iApply memAdv_pmpPolicy.
+    (* iSplitL "Hmemadv". *)
+    (* now iApply memAdv_pmpPolicy. *)
 
     iSplitL "".
     iModIntro.
