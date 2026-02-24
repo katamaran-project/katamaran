@@ -2625,6 +2625,22 @@ Module bv.
 
   End Sequences.
 
+  Module tactics.
+
+    Ltac destroy v :=
+      lazymatch type of v with
+      | bv 0         => destruct (view v)
+      | bv (S _)     => destruct (view v) as [?b v];
+                        destroy v
+      | bv (?m + ?n) => let v' := fresh v in
+                        destruct (appView m n v) as [v v'];
+                        destroy v;
+                        destroy v'
+      | bv ?n        => is_var n (* Fail if recursion doesn't end in a var. *)
+      end.
+
+  End tactics.
+
   Section Tests.
     Goal lsb [bv[2] 0] = false. reflexivity. Abort.
     Goal lsb [bv[2] 1] = true.  reflexivity. Abort.
