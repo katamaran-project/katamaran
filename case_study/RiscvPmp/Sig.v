@@ -117,7 +117,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
       | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
       | in_mmio _       => [ty_xlenbits]
-      | mmio_state_prot width         => [ty.bvec (width * byte); ty_iostate]
+      | mmio_state_prot width         => [ty.bvec (width * byte); ty_iostate; ty_iostate]
       end.
 
     Example default_pmpcfg_ent : Pmpcfg_ent :=
@@ -299,8 +299,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
                               impl_mmio_state_prot b (* old odd *) e (negb b) (* new even *)
     .
 
-    Definition Mmio_state_prot {width : nat} (w: bv (width * byte)) (s :  bv iostate_bits) : Prop :=
-      forall addr, ∃ s', impl_mmio_state_prot (bv_from s)  {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := _ ;  event_contents := w |} s'.
+    Definition Mmio_state_prot {width : nat} (w: bv (width * byte)) (s s' :  bv iostate_bits) : Prop :=
+      forall addr, impl_mmio_state_prot (bv_from s)  {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := _ ;  event_contents := w |} (bv_from s').
 
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
@@ -893,7 +893,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
   | prev_addr                | [ cfg; entries; prev ]         => simplify_prev_addr cfg entries prev
   | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx
   | in_mmio bytes            | [ a ]                          => Some [formula_user (in_mmio bytes) [a]]%ctx
-  | mmio_state_prot width    | [w; s]                         => Some [formula_user (mmio_state_prot width) [w; s]]%ctx
+  | mmio_state_prot width    | [w; s; s']                     => Some [formula_user (mmio_state_prot width) [w; s; s']]%ctx
   .
 
   Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :

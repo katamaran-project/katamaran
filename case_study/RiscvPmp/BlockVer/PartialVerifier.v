@@ -323,25 +323,27 @@ Section BlockVerificationDerived.
     (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
 
     Definition blockVerifierAssumptions `{sailGS Σ} (PRE : (Val ty_xlenbits) → iProp Σ) (a : Val ty_xlenbits) : iProp Σ :=
-      (PRE a) ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v).
+    (PRE a) ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v).
 
     Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : Val ty_word -> iProp Σ) (a : Val ty_word) : iProp Σ :=
-      semTTriple [env] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
+      semTriple [env] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
         (FunDef RiscvPmpProgram.step)
         (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a instr)%I.
 
     Definition semTripleBlock (PRE : Val ty_word -> iProp Σ) (instrs : list AST) (POST : Val ty_word -> Val ty_word -> iProp Σ) : iProp Σ :=
       (∀ a,
-<<<<<<<< HEAD:case_study/RiscvPmp/BlockVer/PartialVerifier.v
          (PRE a ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs a instrs) -∗
          (∀ an, pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ WP_loop) -∗
          WP_loop)%I.
-========
-         (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs) -∗
-         (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ TWP_loop) -∗
-         TWP_loop)%I.
->>>>>>>> 22e16241 ([riscv] Further add total awareness into TotalBlockVer):case_study/RiscvPmp/TotalBlockVer/Verifier.v
     #[global] Arguments semTripleBlock PRE%_I instrs POST%_I.
+
+    Lemma sound_stm_aux {τ} {PRE} {s : Stm [ctx] τ} {POST} :
+      ⦃ PRE ⦄ s; [env] ⦃ POST ⦄ → ⊢ semTriple [env] PRE s POST.
+    Proof.
+      iIntros (Htrip) "PRE".
+      iApply sound_stm; eauto using foreignSemBlockVerif, lemSemBlockVerif.
+      iApply contractsSound.
+    Qed.
 
     Lemma sound_exec_instruction {instr} a Φ (h : SCHeap) :
       cexec_instruction instr a Φ h ->
@@ -354,24 +356,21 @@ Section BlockVerificationDerived.
       cbn - [consume].
       iIntros (Hverif) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
       specialize (Hverif npc). apply sound_cexec in Hverif.
-      iApply (semTWP_mono with "[-]").
-      iApply (sound_tstm (callgraph.mkNode step) TforeignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
-      - apply callgraph.InvokedByStmList_WellFormed_aux; auto.
-      - iIntros (n R) "!>". iApply TcontractsSound. iPureIntro.
-        apply (Transitive_Closure.Acc_inv_trans _ _ _ _ R).
-        apply accessible_step.
-      - iIntros ([v|m] _); last done; iIntros "(%h1 & Hh1 & %Htrip)". clear Hverif.
-        destruct Htrip as [an Htrip].
-        iPoseProof (consume_sound _ _ Htrip with "Hh1")
-          as "[(Hpc & $ & Han) (%h2 & Hh2 & %HΦ)]".
-        iExists an. cbn. by iFrame.
+      iApply (semWP_mono with "[-]").
+      iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
+      iApply contractsSound.
+      iIntros ([v|m] _); last done; iIntros "(%h1 & Hh1 & %Htrip)". clear Hverif.
+      destruct Htrip as [an Htrip].
+      iPoseProof (consume_sound _ _ Htrip with "Hh1")
+        as "[(Hpc & $ & Han) (%h2 & Hh2 & %HΦ)]".
+      iExists an. cbn. by iFrame.
     Qed.
 
     Lemma sound_exec_block_addr {instrs ainstr apc} Φ (h : SCHeap) :
       cexec_block_addr instrs ainstr apc Φ h ->
       interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs ⊢
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs ∗
-             (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ TWP_loop) -∗ TWP_loop.
+             (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ WP_loop) -∗ WP_loop.
     Proof.
       revert ainstr apc Φ h.
       induction instrs as [|instr instrs]; cbn; intros ainstr apc Φ h;
@@ -380,18 +379,18 @@ Section BlockVerificationDerived.
       - intros HΦ. iIntros "(Hpre & Hpc & Hnpc & _) Hk".
         iApply "Hk"; iFrame; auto.
       - intros [-> Hverif%sound_exec_instruction].
-        unfold semTripleOneInstrStep, semTTriple in Hverif.
+        unfold semTripleOneInstrStep, semTriple in Hverif.
         iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs) Hk".
-        iApply semTWP_seq.
-        iApply semTWP_call_inline.
-        iApply (semTWP_mono with "[-Hinstrs Hk] [Hinstrs Hk]").
+        iApply semWP_seq.
+        iApply semWP_call_inline.
+        iApply (semWP_mono with "[-Hinstrs Hk] [Hinstrs Hk]").
         iApply Hverif. iFrame. clear Hverif.
         cbn.
-        iIntros ([v|m] _); last (iIntros "_"; now rewrite semTWP_fail);
+        iIntros ([v|m] _); last (iIntros "_"; now rewrite semWP_fail);
           iIntros "([%an (Hnpc & Hpc & Hk2)] & Hinstr)".
         iDestruct "Hk2" as "(%h' & Hh' & %Hexec)".
         specialize (IHinstrs _ _ _ _ Hexec). clear Hexec.
-        iApply (semTWP_call_inline loop).
+        iApply (semWP_call_inline loop).
         iApply (IHinstrs with "[$Hh' $Hpc Hnpc $Hinstrs]").
         { now iExists an. }
         iIntros (an2) "(Hpc & Hnpc & Hinstrs & HPOST)".
@@ -466,25 +465,23 @@ Section AnnotatedBlockVerification.
       MkDebugBlockver
         { debug_blockver_pathcondition          : PathCondition Σ;
           debug_blockver_heap                   : SHeap Σ;
-          debug_blockver_string                 : string;
         }.
     Record EDebugBlockver : Type :=
       MkEDebugBlockver
         { edebug_blockver_pathcondition          : list EFormula;
           edebug_blockver_heap                   : list EChunk;
-          edebug_blockver_string                 : string;
         }.
     #[export] Instance EraseDebugBlockver : Erase DebugBlockver EDebugBlockver :=
-      fun _ '(MkDebugBlockver pcv h s) => MkEDebugBlockver (erase pcv) (erase h) s.
+      fun _ '(MkDebugBlockver pcv h) => MkEDebugBlockver (erase pcv) (erase h).
     #[export] Instance SubstDebugBlockver : Subst DebugBlockver :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
-        | MkDebugBlockver pc1 h s => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01) s
+        | MkDebugBlockver pc1 h => MkDebugBlockver (subst pc1 ζ01) (subst h ζ01)
         end.
     #[export] Instance SubstSUDebugBlockver `{SubstUniv Sb} : SubstSU Sb DebugBlockver :=
       fun Σ0 Σ1 d ζ01 =>
         match d with
-        | MkDebugBlockver pc1 h s => MkDebugBlockver (substSU pc1 ζ01) (substSU h ζ01) s
+        | MkDebugBlockver pc1 h => MkDebugBlockver (substSU pc1 ζ01) (substSU h ζ01)
         end.
 
     #[export] Instance SubstLawsDebugBlockver : SubstLaws DebugBlockver.
@@ -503,11 +500,10 @@ Section AnnotatedBlockVerification.
     #[export] Instance OccursCheckDebugBlockver : OccursCheck DebugBlockver :=
       fun Σ x xIn d =>
         match d with
-        | MkDebugBlockver pc1 h s =>
+        | MkDebugBlockver pc1 h =>
             pc' <- occurs_check xIn pc1 ;;
             h'  <- occurs_check xIn h ;;
-            s'  <- occurs_check xIn s ;;
-            Some (MkDebugBlockver pc' h' s')
+            Some (MkDebugBlockver pc' h')
         end.
 
     (* #[export] Instance GenOccursCheckDebugBlockver : GenOccursCheck DebugBlockver := *)
@@ -545,13 +541,13 @@ Section AnnotatedBlockVerification.
                      (term_val ty_word bv_instrsize))
                   apc'
             | AnnotDebugBreak =>
-                error
+                debug
                   (fun (h0 : SHeap w0) =>
                      amsg.mk
                        {| debug_blockver_pathcondition := wco w0;
-                          debug_blockver_heap := h0;
-                          debug_blockver_string := "Blockver encountered an AnnotDebugBreak. Failing the verification."
+                          debug_blockver_heap := h0
                        |})
+                  (pure apc)
             | AnnotLemmaInvocation l es =>
                 let args := seval_exps [env] es in
                 ⟨ θ1 ⟩ _ <- call_lemma (LEnv l) args ;;
@@ -600,7 +596,7 @@ Section AnnotatedBlockVerification.
                 _ <- assert_formula (ainstr = apc) ;;
                 apc' <- cexec_instruction i apc ;;
                 cexec_annotated_block_addr b' (bv.add ainstr bv_instrsize) apc'
-            | AnnotDebugBreak => debug error
+            | AnnotDebugBreak => debug (pure apc)
             | AnnotLemmaInvocation l es =>
                 let args := evals es [env] in
                 _ <- call_lemma (LEnv l) args ;;
@@ -704,8 +700,8 @@ Section AnnotatedBlockVerification.
       LemmaSem ->
       cexec_annotated_block_addr instrs ainstr apc (fun res h' => interpret_scheap h' ⊢ POST res) h ->
       ⊢ ((interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs)) -∗
-         (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) ∗ POST an -∗ TWP_loop) -∗
-         TWP_loop)%I.
+         (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr (omap extract_AST instrs) ∗ POST an -∗ WP_loop) -∗
+         WP_loop)%I.
     Proof.
       intros lemSem.
       revert ainstr apc h POST.
@@ -717,28 +713,22 @@ Section AnnotatedBlockVerification.
         destruct instr as [instr| |Δ lem es].
         + intros [-> Hverif]. cbn [extract_AST ptsto_instrs].
           iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs) Hk".
-<<<<<<<< HEAD:case_study/RiscvPmp/BlockVer/PartialVerifier.v
           iApply semWP_seq.
           iApply semWP_call_inline.
           iApply (semWP_mono with "[-Hinstrs Hk]").
-========
-          iApply semTWP_seq.
-          iApply semTWP_call_inline.
-          iApply (semTWP_mono with "[Hh Hnpc Hpc Hinstr]").
->>>>>>>> 22e16241 ([riscv] Further add total awareness into TotalBlockVer):case_study/RiscvPmp/TotalBlockVer/Verifier.v
           { iApply (sound_exec_instruction Hverif). iFrame. }
           clear Hverif.
-          iIntros ([v|m] _); last (iIntros "_"; now rewrite semTWP_fail);
+          iIntros ([v|m] _); last (iIntros "_"; now rewrite semWP_fail);
             iIntros "([%an (Hnpc & Hpc & (%h2 & Hh2 & %Hverif))] & Hinstr)".
-          iApply (semTWP_call_inline loop).
+          iApply (semWP_call_inline loop).
           specialize (IHinstrs _ _ _ _ Hverif).
           iApply (IHinstrs with "[$Hh2 $Hpc Hnpc $Hinstrs]").
           by iExists _.
           iIntros (an2) "(Hpc & Hnpc & Hinstrs & HPOST)".
           iApply ("Hk" with "[$]").
         + cbv [debug pure lift_purespec CPureSpec.pure].
-          cbn.
-          iIntros ([]).
+          iIntros (->) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
+          now iApply ("Hk" with "[$Hpc $Hnpc $Hinstrs Hh]").
         + iIntros (Hlemcall) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
           pose proof (Hlem := lemSem _ lem).
           apply call_lemma_sound in Hlemcall. destruct Hlemcall. cbn in *.
@@ -752,15 +742,9 @@ Section AnnotatedBlockVerification.
     Definition semTripleAnnotatedBlock (PRE : Val ty_word -> iProp Σ)
       (instrs : list AnnotInstr) (POST : Val ty_word -> Val ty_word -> iProp Σ) : iProp Σ :=
       (∀ a,
-<<<<<<<< HEAD:case_study/RiscvPmp/BlockVer/PartialVerifier.v
          (PRE a ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
          (∀ an, pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ POST a an -∗ WP_loop) -∗
          WP_loop)%I.
-========
-         (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs)) -∗
-         (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a (omap extract_AST instrs) ∗ POST a an -∗ TWP_loop) -∗
-         TWP_loop)%I.
->>>>>>>> 22e16241 ([riscv] Further add total awareness into TotalBlockVer):case_study/RiscvPmp/TotalBlockVer/Verifier.v
     Global Arguments semTripleAnnotatedBlock PRE%_I instrs POST%_I.
 
     Lemma sound_cexec_annotated_block_triple_addr {Γ pre post instrs} :
