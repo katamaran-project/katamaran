@@ -76,7 +76,6 @@ Module Examples.
   Definition X2 : RegIdx := bv.of_nat 2.
   Definition X3 : RegIdx := bv.of_nat 3.
   Definition X4 : RegIdx := bv.of_nat 4.
-
   Section WithAsnNotations.
     Import asn.notations.
 
@@ -107,7 +106,7 @@ Module Examples.
     Definition extend_to_minimal_post {Σ} (Q : Assertion Σ) : Assertion Σ :=
       Q ∗ minimal_post.
 
-    Definition VC_triple {Σ} (P : Assertion (Σ ▻ "a" :: ty_xlenbits)) (i : list AST) (Q : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)) :=
+    Definition VC_triple {Σ} (P : Assertion (Σ ▻ "a" :: ty_xlenbits)) (i : list AST) (Q : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)) : 𝕊 wnil :=
       sblock_verification_condition (extend_to_minimal_pre P) i (extend_to_minimal_post Q) wnil.
 
     Definition Valid_VC {Σ} (P : Assertion (Σ ▻ "a" :: ty_xlenbits)) (i : list AST) (Q : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)) :=
@@ -122,6 +121,9 @@ Module Examples.
       ; instrs        : list AST
       ; postcondition : Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits)
       }.
+
+    Definition exec_VC {Σ} (c : @BlockVerifierContract Σ) : 𝕊 wnil :=
+      match c with MkBlockVerifierContract P i Q => postprocess2 (VC_triple P i Q) end.
 
     Definition map {Σ A} (c : @BlockVerifierContract Σ)
       (f : Assertion (Σ ▻ "a" :: ty_xlenbits) -> list AST -> Assertion (Σ ▻ "a" :: ty_xlenbits ▻ "an" :: ty_xlenbits) -> A)
