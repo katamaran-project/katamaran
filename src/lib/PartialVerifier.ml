@@ -160,8 +160,8 @@ let sexec_instruction i =
 
 let rec sexec_block_addr b w ainstr apc =
   match b with
-  | Coq_nil -> RiscvPmpSignature.SHeapSpec.pure w apc
-  | Coq_cons (i, b') ->
+  | [] -> RiscvPmpSignature.SHeapSpec.pure w apc
+  | i::b' ->
     RiscvPmpSignature.SHeapSpec.bind w
       (RiscvPmpSignature.SHeapSpec.assert_formula w (fun _ ->
         RiscvPmpBase.Coq_amsg.empty w.RiscvPmpSignature.wctx)

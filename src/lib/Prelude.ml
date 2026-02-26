@@ -58,12 +58,12 @@ let coq_EqDecision_from_EqDec eqdec =
 
 let coq_Finite_sigT _ finA _ finB =
   fold_right (fun a xs -> app (map (fun x -> Coq_existT (a, x)) (finB a)) xs)
-    Coq_nil finA
+    [] finA
 
 (** val coq_Finite_bool : bool coq_Finite **)
 
 let coq_Finite_bool =
-  Coq_cons (Coq_true, (Coq_cons (Coq_false, Coq_nil)))
+  Coq_true::(Coq_false::[])
 
 type coq_NatComparison =
 | EQ of nat
@@ -124,18 +124,17 @@ module Coq_option =
       ('a1 -> 'a2 option) -> 'a1 list -> 'a2 list option **)
 
   let rec traverse_list f = function
-  | Coq_nil -> Some Coq_nil
-  | Coq_cons (x, xs0) ->
-    bind (f x) (fun b ->
-      bind (traverse_list f xs0) (fun bs -> Some (Coq_cons (b, bs))))
+  | [] -> Some []
+  | x::xs0 ->
+    bind (f x) (fun b -> bind (traverse_list f xs0) (fun bs -> Some (b::bs)))
  end
 
 (** val findAD :
     'a1 coq_EqDec -> 'a1 -> ('a1, 'a2) sigT list -> 'a2 option **)
 
 let rec findAD eqA a = function
-| Coq_nil -> None
-| Coq_cons (s, xs0) ->
+| [] -> None
+| s::xs0 ->
   let Coq_existT (a', b) = s in
   (match eq_dec eqA a a' with
    | Coq_left -> Some b
@@ -145,8 +144,8 @@ let rec findAD eqA a = function
 
 let rec find_index_aux p xs acc =
   match xs with
-  | Coq_nil -> None
-  | Coq_cons (x, xs0) ->
+  | [] -> None
+  | x::xs0 ->
     (match p x with
      | Coq_true -> Some acc
      | Coq_false -> find_index_aux p xs0 (S acc))

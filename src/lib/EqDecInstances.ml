@@ -72,14 +72,13 @@ let sum_eqdec h h0 x y =
 
 let rec list_eqdec h x y =
   match x with
-  | Coq_nil ->
+  | [] -> (match y with
+           | [] -> Coq_left
+           | _::_ -> Coq_right)
+  | y0::l ->
     (match y with
-     | Coq_nil -> Coq_left
-     | Coq_cons (_, _) -> Coq_right)
-  | Coq_cons (y0, l) ->
-    (match y with
-     | Coq_nil -> Coq_right
-     | Coq_cons (a, l0) ->
+     | [] -> Coq_right
+     | a::l0 ->
        (match eq_dec_point y0 (coq_EqDec_EqDecPoint h y0) a with
         | Coq_left -> list_eqdec h l l0
         | Coq_right -> Coq_right))

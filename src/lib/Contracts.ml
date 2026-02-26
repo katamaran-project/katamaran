@@ -19763,7 +19763,7 @@ module RiscvPmpSpecification =
         ((Coq_ty.Coq_record (Obj.magic Coq_rpmpcfg_ent)), (Coq_ty.Coq_bvec (S
         (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S
         (S (S (S (S (S (S (S (S O)))))))))))))))))))))))))))))))))))
-        (Coq_cons ((RiscvPmpBase.Coq_term_binop ((Coq_ty.Coq_record
+        ((RiscvPmpBase.Coq_term_binop ((Coq_ty.Coq_record
         (Obj.magic Coq_rpmpcfg_ent)), (Coq_ty.Coq_bvec (S (S (S (S (S (S (S
         (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S
         (S (S O))))))))))))))))))))))))))))))))), (Coq_ty.Coq_prod
@@ -19795,8 +19795,8 @@ module RiscvPmpSpecification =
            Coq_true, Coq_false, Coq_false)), EmptyString))))))))))),
         (Coq_ty.Coq_bvec (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S
         (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S
-        O))))))))))))))))))))))))))))))))), (S (S O)))))), (Coq_cons
-        ((RiscvPmpBase.Coq_term_binop ((Coq_ty.Coq_record
+        O))))))))))))))))))))))))))))))))), (S (S
+        O))))))::((RiscvPmpBase.Coq_term_binop ((Coq_ty.Coq_record
         (Obj.magic Coq_rpmpcfg_ent)), (Coq_ty.Coq_bvec (S (S (S (S (S (S (S
         (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S
         (S (S O))))))))))))))))))))))))))))))))), (Coq_ty.Coq_prod
@@ -19828,7 +19828,7 @@ module RiscvPmpSpecification =
            Coq_true, Coq_false, Coq_false)), EmptyString))))))))))),
         (Coq_ty.Coq_bvec (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S
         (S (S (S (S (S (S (S (S (S (S (S (S (S (S (S
-        O))))))))))))))))))))))))))))))))), O)))), Coq_nil)))))))))))))))))))))))))))) }
+        O))))))))))))))))))))))))))))))))), O))))::[])))))))))))))))))))))))))) }
 
   (** val lemma_close_pmp_entries : coq_SepLemma **)
 
@@ -19968,7 +19968,7 @@ module RiscvPmpSpecification =
           ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_true,
           Coq_true, Coq_false, Coq_false)), EmptyString)))))))))));
         Binding.coq_type = RiscvPmpBase.ty_xlenbits })) (Coq_ty.Coq_prod
-        (RiscvPmpBase.ty_pmpcfg_ent, RiscvPmpBase.ty_xlenbits)) (Coq_cons
+        (RiscvPmpBase.ty_pmpcfg_ent, RiscvPmpBase.ty_xlenbits))
         ((RiscvPmpBase.Coq_term_binop (RiscvPmpBase.ty_pmpcfg_ent,
         RiscvPmpBase.ty_xlenbits, (Coq_ty.Coq_prod
         (RiscvPmpBase.ty_pmpcfg_ent, RiscvPmpBase.ty_xlenbits)),
@@ -19993,8 +19993,8 @@ module RiscvPmpSpecification =
            Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
            ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
            Coq_true, Coq_false, Coq_false)), EmptyString))))))))))),
-        RiscvPmpBase.ty_xlenbits, (S (S O)))))), (Coq_cons
-        ((RiscvPmpBase.Coq_term_binop (RiscvPmpBase.ty_pmpcfg_ent,
+        RiscvPmpBase.ty_xlenbits, (S (S
+        O))))))::((RiscvPmpBase.Coq_term_binop (RiscvPmpBase.ty_pmpcfg_ent,
         RiscvPmpBase.ty_xlenbits, (Coq_ty.Coq_prod
         (RiscvPmpBase.ty_pmpcfg_ent, RiscvPmpBase.ty_xlenbits)),
         (Coq_bop.Coq_pair (RiscvPmpBase.ty_pmpcfg_ent,
@@ -20017,7 +20017,7 @@ module RiscvPmpSpecification =
            Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
            ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_true,
            Coq_true, Coq_false, Coq_false)), EmptyString))))))))))),
-        RiscvPmpBase.ty_xlenbits, O)))), Coq_nil)))))))))) }
+        RiscvPmpBase.ty_xlenbits, O))))::[])))))))) }
 
   (** val lemma_extract_pmp_ptsto : nat -> coq_SepLemma **)
 

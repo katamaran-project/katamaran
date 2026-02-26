@@ -378,7 +378,7 @@ module Coq_ty =
   | Coq_int -> Some (Obj.magic Z0)
   | Coq_bool -> Some (Obj.magic Coq_true)
   | Coq_string -> Some (Obj.magic EmptyString)
-  | Coq_list _ -> Some (Obj.magic Coq_nil)
+  | Coq_list _ -> Some (Obj.magic [])
   | Coq_prod (_UU03c4_1, _UU03c4_2) ->
     Coq_option.bind (inhabit tDC tDN _UU03c4_1) (fun v1 ->
       Coq_option.bind (inhabit tDC tDN _UU03c4_2) (fun v2 -> Some

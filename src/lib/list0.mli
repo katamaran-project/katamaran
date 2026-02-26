@@ -1,4 +1,3 @@
-open Datatypes
 open Specif
 open Base
 

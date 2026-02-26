@@ -35,10 +35,6 @@ val fst : ('a1, 'a2) prod -> 'a1
 
 val snd : ('a1, 'a2) prod -> 'a2
 
-type 'a list =
-| Coq_nil
-| Coq_cons of 'a * 'a list
-
 val length : 'a1 list -> nat
 
 val app : 'a1 list -> 'a1 list -> 'a1 list

@@ -1662,180 +1662,133 @@ let coq_InterruptSet_EqDec =
 (** val coq_Privilege_finite : coq_Privilege coq_Finite **)
 
 let coq_Privilege_finite =
-  Datatypes.Coq_cons (User, (Datatypes.Coq_cons (Machine, Datatypes.Coq_nil)))
+  User::(Machine::[])
 
 (** val coq_CSRIdx_finite : coq_CSRIdx coq_Finite **)
 
 let coq_CSRIdx_finite =
-  Datatypes.Coq_cons (MStatus, (Datatypes.Coq_cons (Mie, (Datatypes.Coq_cons
-    (MTvec, (Datatypes.Coq_cons (MScratch, (Datatypes.Coq_cons (MEpc,
-    (Datatypes.Coq_cons (MCause, (Datatypes.Coq_cons (MPMP0CFG,
-    (Datatypes.Coq_cons (MPMPADDR0, (Datatypes.Coq_cons (MPMPADDR1,
-    (Datatypes.Coq_cons (Mip, Datatypes.Coq_nil)))))))))))))))))))
+  MStatus::(Mie::(MTvec::(MScratch::(MEpc::(MCause::(MPMP0CFG::(MPMPADDR0::(MPMPADDR1::(Mip::[])))))))))
 
 (** val coq_InterruptType_finite : coq_InterruptType coq_Finite **)
 
 let coq_InterruptType_finite =
-  Datatypes.Coq_cons (I_U_Software, (Datatypes.Coq_cons (I_M_Software,
-    (Datatypes.Coq_cons (I_U_Timer, (Datatypes.Coq_cons (I_M_Timer,
-    (Datatypes.Coq_cons (I_U_External, (Datatypes.Coq_cons (I_M_External,
-    Datatypes.Coq_nil)))))))))))
+  I_U_Software::(I_M_Software::(I_U_Timer::(I_M_Timer::(I_U_External::(I_M_External::[])))))
 
 (** val coq_PmpCfgIdx_finite : coq_PmpCfgIdx coq_Finite **)
 
 let coq_PmpCfgIdx_finite =
-  Datatypes.Coq_cons (PMP0CFG, (Datatypes.Coq_cons (PMP1CFG,
-    Datatypes.Coq_nil)))
+  PMP0CFG::(PMP1CFG::[])
 
 (** val coq_PmpCfgPerm_finite : coq_PmpCfgPerm coq_Finite **)
 
 let coq_PmpCfgPerm_finite =
-  Datatypes.Coq_cons (PmpO, (Datatypes.Coq_cons (PmpR, (Datatypes.Coq_cons
-    (PmpW, (Datatypes.Coq_cons (PmpX, (Datatypes.Coq_cons (PmpRW,
-    (Datatypes.Coq_cons (PmpRX, (Datatypes.Coq_cons (PmpWX,
-    (Datatypes.Coq_cons (PmpRWX, Datatypes.Coq_nil)))))))))))))))
+  PmpO::(PmpR::(PmpW::(PmpX::(PmpRW::(PmpRX::(PmpWX::(PmpRWX::[])))))))
 
 (** val coq_PmpAddrIdx_finite : coq_PmpAddrIdx coq_Finite **)
 
 let coq_PmpAddrIdx_finite =
-  Datatypes.Coq_cons (PMPADDR0, (Datatypes.Coq_cons (PMPADDR1,
-    Datatypes.Coq_nil)))
+  PMPADDR0::(PMPADDR1::[])
 
 (** val coq_PmpAddrMatchType_finite : coq_PmpAddrMatchType coq_Finite **)
 
 let coq_PmpAddrMatchType_finite =
-  Datatypes.Coq_cons (OFF, (Datatypes.Coq_cons (TOR, Datatypes.Coq_nil)))
+  OFF::(TOR::[])
 
 (** val coq_PmpMatch_finite : coq_PmpMatch coq_Finite **)
 
 let coq_PmpMatch_finite =
-  Datatypes.Coq_cons (PMP_Success, (Datatypes.Coq_cons (PMP_Continue,
-    (Datatypes.Coq_cons (PMP_Fail, Datatypes.Coq_nil)))))
+  PMP_Success::(PMP_Continue::(PMP_Fail::[]))
 
 (** val coq_PmpAddrMatch_finite : coq_PmpAddrMatch coq_Finite **)
 
 let coq_PmpAddrMatch_finite =
-  Datatypes.Coq_cons (PMP_NoMatch, (Datatypes.Coq_cons (PMP_PartialMatch,
-    (Datatypes.Coq_cons (PMP_Match, Datatypes.Coq_nil)))))
+  PMP_NoMatch::(PMP_PartialMatch::(PMP_Match::[]))
 
 (** val coq_ROP_finite : coq_ROP coq_Finite **)
 
 let coq_ROP_finite =
-  Datatypes.Coq_cons (RISCV_ADD, (Datatypes.Coq_cons (RISCV_SUB,
-    (Datatypes.Coq_cons (RISCV_SLT, (Datatypes.Coq_cons (RISCV_SLTU,
-    (Datatypes.Coq_cons (RISCV_SLL, (Datatypes.Coq_cons (RISCV_SRL,
-    (Datatypes.Coq_cons (RISCV_SRA, (Datatypes.Coq_cons (RISCV_AND,
-    (Datatypes.Coq_cons (RISCV_OR, (Datatypes.Coq_cons (RISCV_XOR,
-    Datatypes.Coq_nil)))))))))))))))))))
+  RISCV_ADD::(RISCV_SUB::(RISCV_SLT::(RISCV_SLTU::(RISCV_SLL::(RISCV_SRL::(RISCV_SRA::(RISCV_AND::(RISCV_OR::(RISCV_XOR::[])))))))))
 
 (** val coq_IOP_finite : coq_IOP coq_Finite **)
 
 let coq_IOP_finite =
-  Datatypes.Coq_cons (RISCV_ADDI, (Datatypes.Coq_cons (RISCV_SLTI,
-    (Datatypes.Coq_cons (RISCV_SLTIU, (Datatypes.Coq_cons (RISCV_ANDI,
-    (Datatypes.Coq_cons (RISCV_ORI, (Datatypes.Coq_cons (RISCV_XORI,
-    Datatypes.Coq_nil)))))))))))
+  RISCV_ADDI::(RISCV_SLTI::(RISCV_SLTIU::(RISCV_ANDI::(RISCV_ORI::(RISCV_XORI::[])))))
 
 (** val coq_SOP_finite : coq_SOP coq_Finite **)
 
 let coq_SOP_finite =
-  Datatypes.Coq_cons (RISCV_SLLI, (Datatypes.Coq_cons (RISCV_SRLI,
-    (Datatypes.Coq_cons (RISCV_SRAI, Datatypes.Coq_nil)))))
+  RISCV_SLLI::(RISCV_SRLI::(RISCV_SRAI::[]))
 
 (** val coq_UOP_finite : coq_UOP coq_Finite **)
 
 let coq_UOP_finite =
-  Datatypes.Coq_cons (RISCV_LUI, (Datatypes.Coq_cons (RISCV_AUIPC,
-    Datatypes.Coq_nil)))
+  RISCV_LUI::(RISCV_AUIPC::[])
 
 (** val coq_BOP_finite : coq_BOP coq_Finite **)
 
 let coq_BOP_finite =
-  Datatypes.Coq_cons (RISCV_BEQ, (Datatypes.Coq_cons (RISCV_BNE,
-    (Datatypes.Coq_cons (RISCV_BLT, (Datatypes.Coq_cons (RISCV_BGE,
-    (Datatypes.Coq_cons (RISCV_BLTU, (Datatypes.Coq_cons (RISCV_BGEU,
-    Datatypes.Coq_nil)))))))))))
+  RISCV_BEQ::(RISCV_BNE::(RISCV_BLT::(RISCV_BGE::(RISCV_BLTU::(RISCV_BGEU::[])))))
 
 (** val coq_CSROP_finite : coq_CSROP coq_Finite **)
 
 let coq_CSROP_finite =
-  Datatypes.Coq_cons (CSRRW, (Datatypes.Coq_cons (CSRRS, (Datatypes.Coq_cons
-    (CSRRC, Datatypes.Coq_nil)))))
+  CSRRW::(CSRRS::(CSRRC::[]))
 
 (** val coq_MOP_finite : coq_MOP coq_Finite **)
 
 let coq_MOP_finite =
-  Datatypes.Coq_cons (RISCV_MUL, (Datatypes.Coq_cons (RISCV_MULH,
-    (Datatypes.Coq_cons (RISCV_MULHU, (Datatypes.Coq_cons (RISCV_MULHSU,
-    Datatypes.Coq_nil)))))))
+  RISCV_MUL::(RISCV_MULH::(RISCV_MULHU::(RISCV_MULHSU::[])))
 
 (** val coq_Retired_finite : coq_Retired coq_Finite **)
 
 let coq_Retired_finite =
-  Datatypes.Coq_cons (RETIRE_SUCCESS, (Datatypes.Coq_cons (RETIRE_FAIL,
-    Datatypes.Coq_nil)))
+  RETIRE_SUCCESS::(RETIRE_FAIL::[])
 
 (** val coq_WordWidth_finite : coq_WordWidth coq_Finite **)
 
 let coq_WordWidth_finite =
-  Datatypes.Coq_cons (BYTE, (Datatypes.Coq_cons (HALF, (Datatypes.Coq_cons
-    (WORD, Datatypes.Coq_nil)))))
+  BYTE::(HALF::(WORD::[]))
 
 (** val coq_ASTConstructor_finite : coq_ASTConstructor coq_Finite **)
 
 let coq_ASTConstructor_finite =
-  Datatypes.Coq_cons (KRTYPE, (Datatypes.Coq_cons (KITYPE,
-    (Datatypes.Coq_cons (KSHIFTIOP, (Datatypes.Coq_cons (KUTYPE,
-    (Datatypes.Coq_cons (KBTYPE, (Datatypes.Coq_cons (KRISCV_JAL,
-    (Datatypes.Coq_cons (KRISCV_JALR, (Datatypes.Coq_cons (KLOAD,
-    (Datatypes.Coq_cons (KSTORE, (Datatypes.Coq_cons (KECALL,
-    (Datatypes.Coq_cons (KEBREAK, (Datatypes.Coq_cons (KMRET,
-    (Datatypes.Coq_cons (KCSR, (Datatypes.Coq_cons (KMUL,
-    Datatypes.Coq_nil)))))))))))))))))))))))))))
+  KRTYPE::(KITYPE::(KSHIFTIOP::(KUTYPE::(KBTYPE::(KRISCV_JAL::(KRISCV_JALR::(KLOAD::(KSTORE::(KECALL::(KEBREAK::(KMRET::(KCSR::(KMUL::[])))))))))))))
 
 (** val coq_AccessTypeConstructor_finite :
     coq_AccessTypeConstructor coq_Finite **)
 
 let coq_AccessTypeConstructor_finite =
-  Datatypes.Coq_cons (KRead, (Datatypes.Coq_cons (KWrite, (Datatypes.Coq_cons
-    (KReadWrite, (Datatypes.Coq_cons (KExecute, Datatypes.Coq_nil)))))))
+  KRead::(KWrite::(KReadWrite::(KExecute::[])))
 
 (** val coq_ExceptionTypeConstructor_finite :
     coq_ExceptionTypeConstructor coq_Finite **)
 
 let coq_ExceptionTypeConstructor_finite =
-  Datatypes.Coq_cons (KE_Fetch_Access_Fault, (Datatypes.Coq_cons
-    (KE_Load_Access_Fault, (Datatypes.Coq_cons (KE_SAMO_Access_Fault,
-    (Datatypes.Coq_cons (KE_U_EnvCall, (Datatypes.Coq_cons (KE_M_EnvCall,
-    (Datatypes.Coq_cons (KE_Illegal_Instr, Datatypes.Coq_nil)))))))))))
+  KE_Fetch_Access_Fault::(KE_Load_Access_Fault::(KE_SAMO_Access_Fault::(KE_U_EnvCall::(KE_M_EnvCall::(KE_Illegal_Instr::[])))))
 
 (** val coq_FetchResultConstructor_finite :
     coq_FetchResultConstructor coq_Finite **)
 
 let coq_FetchResultConstructor_finite =
-  Datatypes.Coq_cons (KF_Base, (Datatypes.Coq_cons (KF_Error,
-    Datatypes.Coq_nil)))
+  KF_Base::(KF_Error::[])
 
 (** val coq_CtlResultConstructor_finite :
     coq_CtlResultConstructor coq_Finite **)
 
 let coq_CtlResultConstructor_finite =
-  Datatypes.Coq_cons (KCTL_TRAP, (Datatypes.Coq_cons (KCTL_MRET,
-    Datatypes.Coq_nil)))
+  KCTL_TRAP::(KCTL_MRET::[])
 
 (** val coq_InterruptSetConstructor_finite :
     coq_InterruptSetConstructor coq_Finite **)
 
 let coq_InterruptSetConstructor_finite =
-  Datatypes.Coq_cons (KInts_Pending, (Datatypes.Coq_cons (KInts_Delegated,
-    (Datatypes.Coq_cons (KInts_Empty, Datatypes.Coq_nil)))))
+  KInts_Pending::(KInts_Delegated::(KInts_Empty::[]))
 
 (** val coq_MemoryOpResultConstructor_finite :
     coq_MemoryOpResultConstructor coq_Finite **)
 
 let coq_MemoryOpResultConstructor_finite =
-  Datatypes.Coq_cons (KMemValue, (Datatypes.Coq_cons (KMemException,
-    Datatypes.Coq_nil)))
+  KMemValue::(KMemException::[])
 
 module RiscvPmpBase =
  struct
@@ -3327,52 +3280,37 @@ module RiscvPmpBase =
       (Coq_ty.coq_Ty, coq_Reg) sigT coq_Finite **)
 
   let _UU1d479__UU1d46c__UU1d46e__finite =
-    Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_pc)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_nextpc)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_mstatus, Coq_mstatus)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_Minterrupts, Coq_mie)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_Minterrupts, Coq_mip)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_mtvec)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_mscratch)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_mepc)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_mcause, Coq_mcause)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_privilege, Coq_cur_privilege)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x1)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x2)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x3)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x4)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x5)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x6)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x7)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x8)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x9)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x10)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x11)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x12)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x13)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x14)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x15)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x16)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x17)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x18)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x19)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x20)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x21)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x22)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x23)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x24)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x25)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x26)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x27)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x28)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x29)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x30)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_x31)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_pmpcfg_ent, Coq_pmp0cfg)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_pmpcfg_ent, Coq_pmp1cfg)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_pmpaddr0)),
-      (Datatypes.Coq_cons ((Coq_existT (ty_xlenbits, Coq_pmpaddr1)),
-      Datatypes.Coq_nil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+    (Coq_existT (ty_xlenbits, Coq_pc))::((Coq_existT (ty_xlenbits,
+      Coq_nextpc))::((Coq_existT (ty_mstatus, Coq_mstatus))::((Coq_existT
+      (ty_Minterrupts, Coq_mie))::((Coq_existT (ty_Minterrupts,
+      Coq_mip))::((Coq_existT (ty_xlenbits, Coq_mtvec))::((Coq_existT
+      (ty_xlenbits, Coq_mscratch))::((Coq_existT (ty_xlenbits,
+      Coq_mepc))::((Coq_existT (ty_mcause, Coq_mcause))::((Coq_existT
+      (ty_privilege, Coq_cur_privilege))::((Coq_existT (ty_xlenbits,
+      Coq_x1))::((Coq_existT (ty_xlenbits, Coq_x2))::((Coq_existT
+      (ty_xlenbits, Coq_x3))::((Coq_existT (ty_xlenbits,
+      Coq_x4))::((Coq_existT (ty_xlenbits, Coq_x5))::((Coq_existT
+      (ty_xlenbits, Coq_x6))::((Coq_existT (ty_xlenbits,
+      Coq_x7))::((Coq_existT (ty_xlenbits, Coq_x8))::((Coq_existT
+      (ty_xlenbits, Coq_x9))::((Coq_existT (ty_xlenbits,
+      Coq_x10))::((Coq_existT (ty_xlenbits, Coq_x11))::((Coq_existT
+      (ty_xlenbits, Coq_x12))::((Coq_existT (ty_xlenbits,
+      Coq_x13))::((Coq_existT (ty_xlenbits, Coq_x14))::((Coq_existT
+      (ty_xlenbits, Coq_x15))::((Coq_existT (ty_xlenbits,
+      Coq_x16))::((Coq_existT (ty_xlenbits, Coq_x17))::((Coq_existT
+      (ty_xlenbits, Coq_x18))::((Coq_existT (ty_xlenbits,
+      Coq_x19))::((Coq_existT (ty_xlenbits, Coq_x20))::((Coq_existT
+      (ty_xlenbits, Coq_x21))::((Coq_existT (ty_xlenbits,
+      Coq_x22))::((Coq_existT (ty_xlenbits, Coq_x23))::((Coq_existT
+      (ty_xlenbits, Coq_x24))::((Coq_existT (ty_xlenbits,
+      Coq_x25))::((Coq_existT (ty_xlenbits, Coq_x26))::((Coq_existT
+      (ty_xlenbits, Coq_x27))::((Coq_existT (ty_xlenbits,
+      Coq_x28))::((Coq_existT (ty_xlenbits, Coq_x29))::((Coq_existT
+      (ty_xlenbits, Coq_x30))::((Coq_existT (ty_xlenbits,
+      Coq_x31))::((Coq_existT (ty_pmpcfg_ent, Coq_pmp0cfg))::((Coq_existT
+      (ty_pmpcfg_ent, Coq_pmp1cfg))::((Coq_existT (ty_xlenbits,
+      Coq_pmpaddr0))::((Coq_existT (ty_xlenbits,
+      Coq_pmpaddr1))::[]))))))))))))))))))))))))))))))))))))))))))))
 
   (** val val_inhabited : Coq_ty.coq_Ty -> Coq_ty.coq_Val coq_Inhabited **)
 
@@ -3528,8 +3466,7 @@ module RiscvPmpBase =
   (** val memory_append_trace : coq_Memory -> coq_Event -> coq_MemoryType **)
 
   let memory_append_trace _UU03bc_ e =
-    memory_update_trace _UU03bc_ (Datatypes.Coq_cons (e,
-      _UU03bc_.memory_trace))
+    memory_update_trace _UU03bc_ (e::_UU03bc_.memory_trace)
 
   (** val memory_update_state : coq_Memory -> coq_State -> coq_MemoryType **)
 
@@ -3643,8 +3580,8 @@ module RiscvPmpBase =
   | Coq_exp_list (_UU03c3_, es) ->
     Obj.magic p_list _UU03c3_ es
       (let rec f = function
-       | Datatypes.Coq_nil -> Obj.magic Coq_tt
-       | Datatypes.Coq_cons (y, l0) ->
+       | [] -> Obj.magic Coq_tt
+       | y::l0 ->
          Coq_pair
            ((coq_Exp_rect _UU0393_ p_var p_val p_binop p_unop p_list p_bvec
               p_tuple p_union p_record _UU03c3_ y),
@@ -3715,8 +3652,8 @@ module RiscvPmpBase =
   | Coq_exp_list (_UU03c3_, es) ->
     Obj.magic p_list _UU03c3_ es
       (let rec f = function
-       | Datatypes.Coq_nil -> Obj.magic Coq_tt
-       | Datatypes.Coq_cons (y, l0) ->
+       | [] -> Obj.magic Coq_tt
+       | y::l0 ->
          Coq_pair
            ((coq_Exp_rec _UU0393_ p_var p_val p_binop p_unop p_list p_bvec
               p_tuple p_union p_record _UU03c3_ y),
@@ -3894,9 +3831,8 @@ module RiscvPmpBase =
       Coq_ty.coq_Ty -> coq_Term list -> coq_Term **)
 
   let rec term_list _UU03a3_ _UU03c3_ = function
-  | Datatypes.Coq_nil ->
-    Coq_term_val ((Coq_ty.Coq_list _UU03c3_), (Obj.magic Datatypes.Coq_nil))
-  | Datatypes.Coq_cons (t0, ts0) ->
+  | [] -> Coq_term_val ((Coq_ty.Coq_list _UU03c3_), (Obj.magic []))
+  | t0::ts0 ->
     Coq_term_binop (_UU03c3_, (Coq_ty.Coq_list _UU03c3_), (Coq_ty.Coq_list
       _UU03c3_), (Coq_bop.Coq_cons _UU03c3_), t0,
       (term_list _UU03a3_ _UU03c3_ ts0))
@@ -4865,10 +4801,10 @@ module RiscvPmpBase =
 
   let rec coq_SubstList h _UU03a3_1 xs _UU03a3_2 _UU03b6_ =
     match xs with
-    | Datatypes.Coq_nil -> Datatypes.Coq_nil
-    | Datatypes.Coq_cons (x, xs0) ->
-      Datatypes.Coq_cons ((subst h _UU03a3_1 x _UU03a3_2 _UU03b6_),
-        (coq_SubstList h _UU03a3_1 xs0 _UU03a3_2 _UU03b6_))
+    | [] -> []
+    | x::xs0 ->
+      (subst h _UU03a3_1 x _UU03a3_2 _UU03b6_)::(coq_SubstList h _UU03a3_1
+                                                  xs0 _UU03a3_2 _UU03b6_)
 
   (** val coq_SubstConst : 'a1 coq_Const coq_Subst **)
 
@@ -5477,9 +5413,8 @@ module RiscvPmpBase =
         v)))
     | Coq_pat_list (_UU03c3_, x, y) ->
       (match Obj.magic v with
-       | Datatypes.Coq_nil ->
-         Coq_existT ((Obj.magic Coq_true), Coq_env.Coq_nil)
-       | Datatypes.Coq_cons (v0, vs) ->
+       | [] -> Coq_existT ((Obj.magic Coq_true), Coq_env.Coq_nil)
+       | v0::vs ->
          Coq_existT ((Obj.magic Coq_false), (Coq_env.Coq_snoc
            ((Coq_ctx.Coq_snoc (Coq_ctx.Coq_nil, { Binding.name = x;
            Binding.coq_type = _UU03c3_ })), (Coq_env.Coq_snoc
@@ -5537,7 +5472,7 @@ module RiscvPmpBase =
         _UU03c3_0 } vs
     | Coq_pat_list (_UU03c3_, x, y) ->
       (match Obj.magic c with
-       | Coq_true -> Obj.magic Datatypes.Coq_nil
+       | Coq_true -> Obj.magic []
        | Coq_false ->
          let Coq_env.Coq_isSnoc (eh, t0) =
            Obj.magic Coq_env.view
@@ -5549,7 +5484,7 @@ module RiscvPmpBase =
            Obj.magic Coq_env.view (Coq_ctx.Coq_snoc (Coq_ctx.Coq_nil,
              { Binding.name = x; Binding.coq_type = _UU03c3_ })) eh
          in
-         Obj.magic (Datatypes.Coq_cons (h, t0)))
+         Obj.magic (h::t0))
     | Coq_pat_pair (x, y, _UU03c3_0, _UU03c4_) ->
       let Coq_env.Coq_isSnoc (ex, vy) =
         Obj.magic Coq_env.view
@@ -6780,12 +6715,10 @@ module RiscvPmpBase =
       coq_GenOccursCheck -> ('a1, 'a2 coq_List) coq_GenOccursCheck **)
 
   let rec gen_occurs_check_list h h0 h1 h2 sT ocT _UU03a3_ = function
-  | Datatypes.Coq_nil ->
-    weakenInit h1 h2 (substSU_list sT) h1 h2 _UU03a3_ Datatypes.Coq_nil
-  | Datatypes.Coq_cons (l, ls0) ->
+  | [] -> weakenInit h1 h2 (substSU_list sT) h1 h2 _UU03a3_ []
+  | l::ls0 ->
     liftBinOp h1 h2 h1 h2 _UU03a3_ sT (substSU_list sT) (substSU_list sT)
-      (fun _ x x0 -> Datatypes.Coq_cons (x, x0))
-      (gen_occurs_check h1 sT ocT _UU03a3_ l)
+      (fun _ x x0 -> x::x0) (gen_occurs_check h1 sT ocT _UU03a3_ l)
       (gen_occurs_check_list h h0 h1 h2 sT ocT _UU03a3_ ls0)
 
   (** val gen_occurs_check_pair :
@@ -8492,8 +8425,8 @@ module RiscvPmpBase =
   | Coq_term_var (_, _, _) -> None
   | Coq_term_val (_, v) ->
     (match Obj.magic v with
-     | Datatypes.Coq_nil -> Some (Coq_inr Coq_tt)
-     | Datatypes.Coq_cons (v0, l) ->
+     | [] -> Some (Coq_inr Coq_tt)
+     | v0::l ->
        Some (Coq_inl (Coq_pair ((Coq_term_val (_UU03c3_, v0)), (Coq_term_val
          ((Coq_ty.Coq_list _UU03c3_), (Obj.magic l)))))))
   | Coq_term_binop (_, _, _, op, t1, t2) ->
@@ -8573,17 +8506,15 @@ module RiscvPmpBase =
       ('a1, 'a2) coq_Erase -> ('a1 Coq_ctx.coq_Ctx, 'a2 list) coq_Erase **)
 
   let rec erase_Ctx h x = function
-  | Coq_ctx.Coq_nil -> Datatypes.Coq_nil
-  | Coq_ctx.Coq_snoc (ts, t1) ->
-    Datatypes.Coq_cons ((erase h x t1), (erase_Ctx h x ts))
+  | Coq_ctx.Coq_nil -> []
+  | Coq_ctx.Coq_snoc (ts, t1) -> (erase h x t1)::(erase_Ctx h x ts)
 
   (** val erase_List :
       ('a1, 'a2) coq_Erase -> ('a1 list, 'a2 list) coq_Erase **)
 
   let rec erase_List h x = function
-  | Datatypes.Coq_nil -> Datatypes.Coq_nil
-  | Datatypes.Coq_cons (t1, ts) ->
-    Datatypes.Coq_cons ((erase h x t1), (erase_List h x ts))
+  | [] -> []
+  | t1::ts -> (erase h x t1)::(erase_List h x ts)
 
   (** val erase_Term : Coq_ty.coq_Ty -> (coq_Term, coq_ETerm) coq_Erase **)
 
@@ -8892,8 +8823,8 @@ module RiscvPmpBase =
 
   let coq_Term_Quote_def _UU03a3_ _UU03c3_ t0 ts o =
     match find_index (fun t' -> coq_Term_eqb _UU03a3_ _UU03c3_ t0 t') ts with
-    | Some i -> Coq_pair ((PEX (Pos.of_succ_nat i)), Datatypes.Coq_nil)
-    | None -> Coq_pair ((PEX o), (Datatypes.Coq_cons (t0, Datatypes.Coq_nil)))
+    | Some i -> Coq_pair ((PEX (Pos.of_succ_nat i)), [])
+    | None -> Coq_pair ((PEX o), (t0::[]))
 
   (** val coq_Term_Quote_unop :
       (coq_LVar, Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx ->
@@ -8929,9 +8860,8 @@ module RiscvPmpBase =
       (match t2 with
        | Coq_term_var (l, _, lIn) ->
          (match Obj.magic v with
-          | Datatypes.Coq_nil ->
-            Coq_term_var (l, (Coq_ty.Coq_list _UU03c3_), lIn)
-          | Datatypes.Coq_cons (v0, l0) ->
+          | [] -> Coq_term_var (l, (Coq_ty.Coq_list _UU03c3_), lIn)
+          | v0::l0 ->
             Coq_term_binop (_UU03c3_, (Coq_ty.Coq_list _UU03c3_),
               (Coq_ty.Coq_list _UU03c3_), (Coq_bop.Coq_cons _UU03c3_),
               (Coq_term_val (_UU03c3_, v0)), (Coq_term_binop
@@ -8943,10 +8873,10 @@ module RiscvPmpBase =
          Coq_term_val ((Coq_ty.Coq_list _UU03c3_), (Obj.magic app v v0))
        | Coq_term_binop (_UU03c3_1, _UU03c3_2, _, op, t3, t4) ->
          (match Obj.magic v with
-          | Datatypes.Coq_nil ->
+          | [] ->
             Coq_term_binop (_UU03c3_1, _UU03c3_2, (Coq_ty.Coq_list _UU03c3_),
               op, t3, t4)
-          | Datatypes.Coq_cons (v0, l) ->
+          | v0::l ->
             Coq_term_binop (_UU03c3_, (Coq_ty.Coq_list _UU03c3_),
               (Coq_ty.Coq_list _UU03c3_), (Coq_bop.Coq_cons _UU03c3_),
               (Coq_term_val (_UU03c3_, v0)), (Coq_term_binop
@@ -8957,9 +8887,9 @@ module RiscvPmpBase =
               _UU03c3_), op, t3, t4))))))
        | Coq_term_unop (_UU03c3_1, _, op, t0) ->
          (match Obj.magic v with
-          | Datatypes.Coq_nil ->
+          | [] ->
             Coq_term_unop (_UU03c3_1, (Coq_ty.Coq_list _UU03c3_), op, t0)
-          | Datatypes.Coq_cons (v0, l) ->
+          | v0::l ->
             Coq_term_binop (_UU03c3_, (Coq_ty.Coq_list _UU03c3_),
               (Coq_ty.Coq_list _UU03c3_), (Coq_bop.Coq_cons _UU03c3_),
               (Coq_term_val (_UU03c3_, v0)), (Coq_term_binop
@@ -13802,12 +13732,12 @@ module RiscvPmpBase =
   let coq_CanonTerm_to_Term _UU03a3_ _UU03c3_ ct =
     match _UU03c3_ with
     | Coq_ty.Coq_int ->
-      let Coq_pair (pexpr, env) = Obj.magic ct Datatypes.Coq_nil Coq_xH in
+      let Coq_pair (pexpr, env) = Obj.magic ct [] Coq_xH in
       evalPolTm _UU03a3_ Coq_ty.Coq_int (coq_TermRing_int _UU03a3_) env
         (norm_aux Z0 (Zpos Coq_xH) BinInt.Z.add BinInt.Z.mul BinInt.Z.sub
           BinInt.Z.opp BinInt.Z.eqb pexpr)
     | Coq_ty.Coq_bvec n ->
-      let Coq_pair (pexpr, env) = Obj.magic ct Datatypes.Coq_nil Coq_xH in
+      let Coq_pair (pexpr, env) = Obj.magic ct [] Coq_xH in
       evalPolTm _UU03a3_ (Coq_ty.Coq_bvec n) (coq_TermRing_bv _UU03a3_ n) env
         (norm_aux Z0 (Zpos Coq_xH) BinInt.Z.add BinInt.Z.mul BinInt.Z.sub
           BinInt.Z.opp BinInt.Z.eqb pexpr)
@@ -13864,12 +13794,11 @@ module RiscvPmpBase =
       Coq_ty.coq_Ty -> Coq_ty.coq_Val -> coq_CanonTerm **)
 
   let peval2_val _ = function
-  | Coq_ty.Coq_int ->
-    (fun v -> Obj.magic (fun _ _ -> Coq_pair ((PEc v), Datatypes.Coq_nil)))
+  | Coq_ty.Coq_int -> (fun v -> Obj.magic (fun _ _ -> Coq_pair ((PEc v), [])))
   | Coq_ty.Coq_bvec n ->
     (fun v ->
       Obj.magic (fun _ _ -> Coq_pair ((PEc
-        (Coq_bv.unsigned n (Obj.magic v))), Datatypes.Coq_nil)))
+        (Coq_bv.unsigned n (Obj.magic v))), [])))
   | x -> Obj.magic (fun x0 -> Coq_term_val (x, x0))
 
   (** val peval2_binop :
@@ -14152,9 +14081,7 @@ module RiscvPmpBase =
     | Coq_pat_bool -> Coq_term_val (Coq_ty.Coq_bool, pc)
     | Coq_pat_list (_UU03c3_, x, y) ->
       (match Obj.magic pc with
-       | Coq_true ->
-         Coq_term_val ((Coq_ty.Coq_list _UU03c3_),
-           (Obj.magic Datatypes.Coq_nil))
+       | Coq_true -> Coq_term_val ((Coq_ty.Coq_list _UU03c3_), (Obj.magic []))
        | Coq_false ->
          let Coq_env.Coq_isSnoc (eh, t0) =
            Obj.magic Coq_env.view

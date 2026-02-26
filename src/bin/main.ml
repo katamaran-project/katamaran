@@ -40,7 +40,7 @@ let rec string_of_symprop (s : SymProp.coq_SymProp) : string =
 let () =
   let triple = 
     { precondition = (Coq_formula Coq_formula_true);
-      instrs = Coq_nil;
+      instrs = [];
       postcondition = (Coq_formula Coq_formula_true) }
   in
   let result = exec_VC Coq_ctx.Coq_nil triple in

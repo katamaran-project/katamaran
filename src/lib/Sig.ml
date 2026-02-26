@@ -250,9 +250,8 @@ module RiscvPmpSignature =
   (** val default_pmpentries : (coq_Pmpcfg_ent, coq_Xlenbits) prod list **)
 
   let default_pmpentries =
-    Coq_cons ((Coq_pair (default_pmpcfg_ent, (Coq_bv.zero xlenbits))),
-      (Coq_cons ((Coq_pair (default_pmpcfg_ent, (Coq_bv.zero xlenbits))),
-      Coq_nil)))
+    (Coq_pair (default_pmpcfg_ent, (Coq_bv.zero xlenbits)))::((Coq_pair
+      (default_pmpcfg_ent, (Coq_bv.zero xlenbits)))::[])
 
   (** val pmp_check_RWX : Coq_ty.coq_Val -> Coq_ty.coq_Val -> bool **)
 
@@ -407,13 +406,13 @@ module RiscvPmpSignature =
 
   let decide_in_entries idx e es =
     match Obj.magic es with
-    | Coq_nil -> Coq_false
-    | Coq_cons (cfg0, l) ->
+    | [] -> Coq_false
+    | cfg0::l ->
       (match l with
-       | Coq_nil -> Coq_false
-       | Coq_cons (cfg1, l0) ->
+       | [] -> Coq_false
+       | cfg1::l0 ->
          (match l0 with
-          | Coq_nil ->
+          | [] ->
             let Coq_pair (c, a) = Obj.magic e in
             let Coq_pair (c', a') =
               match Obj.magic idx with
@@ -423,25 +422,25 @@ module RiscvPmpSignature =
             (match pmpcfg_ent_eqb c c' with
              | Coq_true -> Coq_bv.eqb xlenbits a a'
              | Coq_false -> Coq_false)
-          | Coq_cons (_, _) -> Coq_false))
+          | _::_ -> Coq_false))
 
   (** val decide_prev_addr :
       Coq_ty.coq_Val -> Coq_ty.coq_Val -> Coq_ty.coq_Val -> bool **)
 
   let decide_prev_addr cfg entries prev =
     match Obj.magic entries with
-    | Coq_nil -> Coq_false
-    | Coq_cons (v, l) ->
+    | [] -> Coq_false
+    | v::l ->
       let Coq_pair (_, a0) = v in
       (match l with
-       | Coq_nil -> Coq_false
-       | Coq_cons (_, l0) ->
+       | [] -> Coq_false
+       | _::l0 ->
          (match l0 with
-          | Coq_nil ->
+          | [] ->
             (match Obj.magic cfg with
              | PMP0CFG -> Coq_bv.eqb xlenbits (Obj.magic prev) N0
              | PMP1CFG -> Coq_bv.eqb xlenbits (Obj.magic prev) a0)
-          | Coq_cons (_, _) -> Coq_false))
+          | _::_ -> Coq_false))
 
   (** val decide_within_cfg :
       Coq_ty.coq_Val -> Coq_ty.coq_Val -> Coq_ty.coq_Val -> Coq_ty.coq_Val ->
@@ -459,15 +458,15 @@ module RiscvPmpSignature =
 
   let decide_not_within_cfg paddr entries =
     match Obj.magic entries with
-    | Coq_nil -> Coq_false
-    | Coq_cons (v, l) ->
+    | [] -> Coq_false
+    | v::l ->
       let Coq_pair (c0, a0) = v in
       (match l with
-       | Coq_nil -> Coq_false
-       | Coq_cons (v0, l0) ->
+       | [] -> Coq_false
+       | v0::l0 ->
          let Coq_pair (c1, a1) = v0 in
          (match l0 with
-          | Coq_nil ->
+          | [] ->
             (match match coq_PmpAddrMatchType_eqb c0.coq_A OFF with
                    | Coq_true -> coq_PmpAddrMatchType_eqb c1.coq_A OFF
                    | Coq_false -> Coq_false with
@@ -478,7 +477,7 @@ module RiscvPmpSignature =
                       | Coq_false -> Coq_false with
                 | Coq_true -> Coq_bv.uleb xlenbits a1 (Obj.magic paddr)
                 | Coq_false -> Coq_false))
-          | Coq_cons (_, _) -> Coq_false))
+          | _::_ -> Coq_false))
 
   (** val is_pmp_cfg_unlocked : Coq_ty.coq_Val -> bool **)
 
@@ -1973,17 +1972,15 @@ module RiscvPmpSignature =
 
   let rec try_consume_chunk_exact _UU03a3_ h c =
     match h with
-    | Coq_nil -> None
-    | Coq_cons (c', h0) ->
+    | [] -> None
+    | c'::h0 ->
       (match chunk_eqb (RiscvPmpBase.coq_Term_eqb _UU03a3_) c c' with
        | Coq_true ->
-         Some
-           (match chunk_isdup c with
-            | Coq_true -> Coq_cons (c, h0)
-            | Coq_false -> h0)
+         Some (match chunk_isdup c with
+               | Coq_true -> c::h0
+               | Coq_false -> h0)
        | Coq_false ->
-         option_map (fun x -> Coq_cons (c', x))
-           (try_consume_chunk_exact _UU03a3_ h0 c))
+         option_map (fun x -> c'::x) (try_consume_chunk_exact _UU03a3_ h0 c))
 
   (** val match_chunk_user_precise_clause_1 :
       (coq_LVar, Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx ->
@@ -2035,17 +2032,17 @@ module RiscvPmpSignature =
       option **)
 
   let rec try_consume_chunk_user_precise _UU03a3_ p _UU0394_I _UU0394_O tsI tsO = function
-  | Coq_nil -> None
-  | Coq_cons (c, h') ->
+  | [] -> None
+  | c::h' ->
     (match match_chunk_user_precise _UU03a3_ p _UU0394_I _UU0394_O tsI tsO c with
      | Some eqs ->
        Some (Coq_pair
          ((match _UU1d46f__is_dup p with
-           | Coq_true -> Coq_cons (c, h')
+           | Coq_true -> c::h'
            | Coq_false -> h'),
          eqs))
      | None ->
-       option_map (prod_map (fun x -> Coq_cons (c, x)) (Obj.magic id))
+       option_map (prod_map (fun x -> c::x) (Obj.magic id))
          (try_consume_chunk_user_precise _UU03a3_ p _UU0394_I _UU0394_O tsI
            tsO h'))
 
@@ -2079,12 +2076,12 @@ module RiscvPmpSignature =
       (RiscvPmpBase.coq_Term, coq_SHeap) prod option **)
 
   let rec find_chunk_ptsreg_precise _UU03a3_ _UU03c3_ r = function
-  | Coq_nil -> None
-  | Coq_cons (c, h') ->
+  | [] -> None
+  | c::h' ->
     (match match_chunk_ptsreg_precise _UU03a3_ _UU03c3_ r c with
      | Some t -> Some (Coq_pair (t, h'))
      | None ->
-       option_map (prod_map (Obj.magic id) (fun x -> Coq_cons (c, x)))
+       option_map (prod_map (Obj.magic id) (fun x -> c::x))
          (find_chunk_ptsreg_precise _UU03a3_ _UU03c3_ r h'))
 
   (** val try_consume_chunk_ptsreg_precise :
@@ -3172,8 +3169,8 @@ module RiscvPmpSignature =
 
   let rec simplify_pmpcheck_pure_list _UU03a3_ a width lo es p acc =
     match es with
-    | Coq_nil -> is_machine_mode _UU03a3_ p
-    | Coq_cons (p0, es0) ->
+    | [] -> is_machine_mode _UU03a3_ p
+    | p0::es0 ->
       let Coq_pair (cfg, addr) = p0 in
       let cfg0 = cfg_to_env _UU03a3_ cfg in
       let addr0 = RiscvPmpBase.Coq_term_val (RiscvPmpBase.ty_xlenbits,
@@ -4487,9 +4484,8 @@ module RiscvPmpSignature =
         coq_SymProp **)
 
     let rec angelic_list' _UU03a3_ d p = function
-    | Coq_nil -> d
-    | Coq_cons (x, xs0) ->
-      Coq_angelic_binary ((p x), (angelic_list' _UU03a3_ d p xs0))
+    | [] -> d
+    | x::xs0 -> Coq_angelic_binary ((p x), (angelic_list' _UU03a3_ d p xs0))
 
     (** val angelic_list :
         (coq_LVar, Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx ->
@@ -4497,8 +4493,8 @@ module RiscvPmpSignature =
         RiscvPmpBase.coq_List -> coq_SymProp **)
 
     let angelic_list _UU03a3_ msg p = function
-    | Coq_nil -> Coq_error msg
-    | Coq_cons (x, xs0) -> angelic_list' _UU03a3_ (p x) p xs0
+    | [] -> Coq_error msg
+    | x::xs0 -> angelic_list' _UU03a3_ (p x) p xs0
 
     (** val demonic_list' :
         (coq_LVar, Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx ->
@@ -4506,17 +4502,16 @@ module RiscvPmpSignature =
         coq_SymProp **)
 
     let rec demonic_list' _UU03a3_ d p = function
-    | Coq_nil -> d
-    | Coq_cons (x, xs0) ->
-      Coq_demonic_binary ((p x), (demonic_list' _UU03a3_ d p xs0))
+    | [] -> d
+    | x::xs0 -> Coq_demonic_binary ((p x), (demonic_list' _UU03a3_ d p xs0))
 
     (** val demonic_list :
         (coq_LVar, Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx -> ('a1
         -> coq_SymProp) -> 'a1 RiscvPmpBase.coq_List -> coq_SymProp **)
 
     let demonic_list _UU03a3_ p = function
-    | Coq_nil -> Coq_block
-    | Coq_cons (x, xs0) -> demonic_list' _UU03a3_ (p x) p xs0
+    | [] -> Coq_block
+    | x::xs0 -> demonic_list' _UU03a3_ (p x) p xs0
 
     (** val angelic_finite :
         ('a1, 'a1) coq_RelDecision -> 'a1 coq_Finite -> (coq_LVar,
@@ -6409,10 +6404,10 @@ module RiscvPmpSignature =
         Coq_env.coq_Env -> (Coq_ty.coq_Ty, Coq_ty.coq_Val) sigT list **)
 
     let rec erase_valuation _ = function
-    | Coq_env.Coq_nil -> Coq_nil
+    | Coq_env.Coq_nil -> []
     | Coq_env.Coq_snoc (_UU0393_, _UU03b9_0, b, v) ->
-      Coq_cons ((Coq_existT (b.Binding.coq_type, v)),
-        (erase_valuation _UU0393_ _UU03b9_0))
+      (Coq_existT (b.Binding.coq_type,
+        v))::(erase_valuation _UU0393_ _UU03b9_0)
 
     (** val erase_Valuation :
         (((coq_LVar, Coq_ty.coq_Ty) Binding.coq_Binding, Coq_ty.coq_Val)
@@ -6593,11 +6588,10 @@ module RiscvPmpSignature =
 
     let rec list_remove xs n =
       match xs with
-      | Coq_nil -> Coq_nil
-      | Coq_cons (x, xs0) ->
-        (match n with
-         | O -> xs0
-         | S n0 -> Coq_cons (x, (list_remove xs0 n0)))
+      | [] -> []
+      | x::xs0 -> (match n with
+                   | O -> xs0
+                   | S n0 -> x::(list_remove xs0 n0))
 
     module Coq_notations =
      struct
@@ -7579,8 +7573,8 @@ module RiscvPmpSignature =
 
     let simplify_eq_binop_cons_val _UU03a3_ simplify_eq_val0 _UU03c3_ t1 t2 v =
       match Obj.magic v with
-      | Coq_nil -> DList.error _UU03a3_
-      | Coq_cons (vh, vl) ->
+      | [] -> DList.error _UU03a3_
+      | vh::vl ->
         DList.cat _UU03a3_ (simplify_eq_val0 _UU03c3_ t1 vh)
           (Obj.magic simplify_eq_val0 (Coq_ty.Coq_list _UU03c3_) t2 vl)
 
@@ -10265,30 +10259,30 @@ module RiscvPmpSignature =
         ('a1, ('a1 list, 'a1 coq_SPureSpec) coq_Impl) coq_Impl coq_Valid **)
 
     let rec angelic_list' w d = function
-    | Coq_nil -> pure w d
-    | Coq_cons (x, xs0) -> angelic_binary w (pure w d) (angelic_list' w x xs0)
+    | [] -> pure w d
+    | x::xs0 -> angelic_binary w (pure w d) (angelic_list' w x xs0)
 
     (** val angelic_list :
         (RiscvPmpBase.Coq_amsg.coq_AMessage, ('a1 list, 'a1 coq_SPureSpec)
         coq_Impl) coq_Impl coq_Valid **)
 
     let angelic_list w msg = function
-    | Coq_nil -> error w msg
-    | Coq_cons (x, xs0) -> angelic_list' w x xs0
+    | [] -> error w msg
+    | x::xs0 -> angelic_list' w x xs0
 
     (** val demonic_list' :
         ('a1, ('a1 list, 'a1 coq_SPureSpec) coq_Impl) coq_Impl coq_Valid **)
 
     let rec demonic_list' w d = function
-    | Coq_nil -> pure w d
-    | Coq_cons (x, xs0) -> demonic_binary w (pure w d) (demonic_list' w x xs0)
+    | [] -> pure w d
+    | x::xs0 -> demonic_binary w (pure w d) (demonic_list' w x xs0)
 
     (** val demonic_list :
         ('a1 list, 'a1 coq_SPureSpec) coq_Impl coq_Valid **)
 
     let demonic_list w = function
-    | Coq_nil -> block w
-    | Coq_cons (x, xs0) -> demonic_list' w x xs0
+    | [] -> block w
+    | x::xs0 -> demonic_list' w x xs0
 
     (** val angelic_finite :
         ('a1, 'a1) coq_RelDecision -> 'a1 coq_Finite ->
@@ -11297,7 +11291,7 @@ module RiscvPmpSignature =
         coq_Valid **)
 
     let produce_chunk w0 c h =
-      pure w0 (Coq_cons ((peval_chunk w0.wctx c), h))
+      pure w0 ((peval_chunk w0.wctx c)::h)
 
     (** val consume_chunk :
         (coq_Chunk, (coq_SHeap, coq_SHeap coq_SPureSpec) coq_Impl) coq_Impl
@@ -11421,8 +11415,7 @@ module RiscvPmpSignature =
       match find_chunk_ptsreg_precise w.wctx _UU03c4_ reg h with
       | Some p ->
         let Coq_pair (t', h') = p in
-        pure w (Coq_pair (t', (Coq_cons ((Coq_chunk_ptsreg (_UU03c4_, reg,
-          t')), h'))))
+        pure w (Coq_pair (t', ((Coq_chunk_ptsreg (_UU03c4_, reg, t'))::h')))
       | None ->
         error w (RiscvPmpBase.Coq_amsg.Coq_mk
           ((Obj.magic coq_SubstDebugReadRegister),
@@ -11444,8 +11437,7 @@ module RiscvPmpSignature =
       match find_chunk_ptsreg_precise w.wctx _UU03c4_ reg h with
       | Some p ->
         let Coq_pair (_, h') = p in
-        pure w (Coq_pair (t, (Coq_cons ((Coq_chunk_ptsreg (_UU03c4_, reg,
-          t)), h'))))
+        pure w (Coq_pair (t, ((Coq_chunk_ptsreg (_UU03c4_, reg, t))::h')))
       | None ->
         error w (RiscvPmpBase.Coq_amsg.Coq_mk
           ((Obj.magic coq_SubstDebugWriteRegister),
@@ -11471,7 +11463,7 @@ module RiscvPmpSignature =
         coq_Valid **)
 
     let run _ m =
-      m (fun _ _ _ _ -> SymProp.Coq_block) Coq_nil
+      m (fun _ _ _ _ -> SymProp.Coq_block) []
 
     (** val lift_purespec :
         ('a1 coq_SPureSpec, 'a1 coq_SHeapSpec) coq_Impl coq_Valid **)
@@ -12116,7 +12108,7 @@ module RiscvPmpSignature =
 
   let term_pmp_entries _UU03a3_ =
     RiscvPmpBase.term_list _UU03a3_ (Coq_ty.Coq_prod
-      (RiscvPmpBase.ty_pmpcfgidx, RiscvPmpBase.ty_pmpaddridx)) (Coq_cons
+      (RiscvPmpBase.ty_pmpcfgidx, RiscvPmpBase.ty_pmpaddridx))
       ((RiscvPmpBase.Coq_term_binop (RiscvPmpBase.ty_pmpcfgidx,
       RiscvPmpBase.ty_pmpaddridx, (Coq_ty.Coq_prod
       (RiscvPmpBase.ty_pmpcfgidx, RiscvPmpBase.ty_pmpaddridx)),
@@ -12124,14 +12116,14 @@ module RiscvPmpSignature =
       RiscvPmpBase.ty_pmpaddridx)), (RiscvPmpBase.Coq_term_val
       (RiscvPmpBase.ty_pmpcfgidx, (Obj.magic PMP0CFG))),
       (RiscvPmpBase.Coq_term_val (RiscvPmpBase.ty_pmpaddridx,
-      (Obj.magic PMPADDR0))))), (Coq_cons ((RiscvPmpBase.Coq_term_binop
+      (Obj.magic PMPADDR0)))))::((RiscvPmpBase.Coq_term_binop
       (RiscvPmpBase.ty_pmpcfgidx, RiscvPmpBase.ty_pmpaddridx,
       (Coq_ty.Coq_prod (RiscvPmpBase.ty_pmpcfgidx,
       RiscvPmpBase.ty_pmpaddridx)), (Coq_bop.Coq_pair
       (RiscvPmpBase.ty_pmpcfgidx, RiscvPmpBase.ty_pmpaddridx)),
       (RiscvPmpBase.Coq_term_val (RiscvPmpBase.ty_pmpcfgidx,
       (Obj.magic PMP1CFG))), (RiscvPmpBase.Coq_term_val
-      (RiscvPmpBase.ty_pmpaddridx, (Obj.magic PMPADDR1))))), Coq_nil))))
+      (RiscvPmpBase.ty_pmpaddridx, (Obj.magic PMPADDR1)))))::[]))
 
   module Coq_rv_notations =
    struct

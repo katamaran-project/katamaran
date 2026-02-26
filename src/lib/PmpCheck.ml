@@ -140,10 +140,10 @@ let pmp_get_perms cfg p = match p with
 
 let rec pmp_check_rec a width lo entries p acc =
   match entries with
-  | Coq_nil -> (match p with
-                | User -> Coq_false
-                | Machine -> Coq_true)
-  | Coq_cons (p0, entries0) ->
+  | [] -> (match p with
+           | User -> Coq_false
+           | Machine -> Coq_true)
+  | p0::entries0 ->
     let Coq_pair (cfg, hi) = p0 in
     (match pmp_match_entry a width p cfg lo hi with
      | PMP_Success -> decide_access_pmp_perm acc (pmp_get_perms cfg p)

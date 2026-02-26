@@ -355,7 +355,7 @@ module Coq_bv =
     (** val enumV : (nat -> bool -> 'a1 -> 'a1) -> 'a1 -> nat -> 'a1 list **)
 
     let rec enumV c n = function
-    | O -> Coq_cons (n, Coq_nil)
+    | O -> n::[]
     | S m0 ->
       Datatypes.app (enumV (fun k -> c (S k)) (c O Coq_false n) m0)
         (enumV (fun k -> c (S k)) (c O Coq_true n) m0)

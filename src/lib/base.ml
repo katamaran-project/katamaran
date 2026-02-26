@@ -26,7 +26,7 @@ type 'a coq_Inhabited =
 (** val list_inhabited : 'a1 list coq_Inhabited **)
 
 let list_inhabited =
-  Coq_nil
+  []
 
 (** val bool_inhabated : bool coq_Inhabited **)
 

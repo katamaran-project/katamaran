@@ -288,9 +288,8 @@ module Coq_ctx =
   (** val names : ('a1, 'a2) Binding.coq_Binding coq_Ctx -> 'a1 list **)
 
   let rec names = function
-  | Coq_nil -> Datatypes.Coq_nil
-  | Coq_snoc (_UU0393_0, b) ->
-    let y = b.Binding.name in Coq_cons (y, (names _UU0393_0))
+  | Coq_nil -> []
+  | Coq_snoc (_UU0393_0, b) -> let y = b.Binding.name in y::(names _UU0393_0)
 
   (** val split_at_dot' : string -> (string -> string -> 'a1) -> 'a1 **)
 

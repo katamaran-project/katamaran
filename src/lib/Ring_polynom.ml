@@ -438,8 +438,8 @@ let rec norm_aux cO cI cadd cmul csub copp ceqb = function
     ('a1 -> 'a1 -> positive -> 'a1) -> 'a1 -> ('a1, positive) prod list -> 'a1 **)
 
 let rec mkmult_rec mkmult_pow0 r = function
-| Coq_nil -> r
-| Coq_cons (p0, t) ->
+| [] -> r
+| p0::t ->
   let Coq_pair (x, p) = p0 in mkmult_rec mkmult_pow0 (mkmult_pow0 r x p) t
 
 (** val mkmult1 :
@@ -447,18 +447,16 @@ let rec mkmult_rec mkmult_pow0 r = function
     ('a1, positive) prod list -> 'a1 **)
 
 let mkmult1 rI mkpow0 mkmult_pow0 = function
-| Coq_nil -> rI
-| Coq_cons (y, t) ->
-  let Coq_pair (x, p) = y in mkmult_rec mkmult_pow0 (mkpow0 x p) t
+| [] -> rI
+| y::t -> let Coq_pair (x, p) = y in mkmult_rec mkmult_pow0 (mkpow0 x p) t
 
 (** val mkmultm1 :
     'a1 -> ('a1 -> 'a1) -> ('a1 -> positive -> 'a1) -> ('a1 -> 'a1 ->
     positive -> 'a1) -> ('a1, positive) prod list -> 'a1 **)
 
 let mkmultm1 rI ropp mkopp_pow0 mkmult_pow0 = function
-| Coq_nil -> ropp rI
-| Coq_cons (y, t) ->
-  let Coq_pair (x, p) = y in mkmult_rec mkmult_pow0 (mkopp_pow0 x p) t
+| [] -> ropp rI
+| y::t -> let Coq_pair (x, p) = y in mkmult_rec mkmult_pow0 (mkopp_pow0 x p) t
 
 (** val mkmult_c_pos :
     'a1 -> 'a2 -> ('a2 -> 'a2 -> bool) -> ('a2 -> 'a1) -> ('a1 -> positive ->
@@ -501,7 +499,7 @@ let mkadd_mult rI radd rsub cI ceqb phi get_sign mkpow0 mkmult_pow0 rP c lm =
 let add_pow_list r n l =
   match n with
   | N0 -> l
-  | Npos p -> Coq_cons ((Coq_pair (r, p)), l)
+  | Npos p -> (Coq_pair (r, p))::l
 
 (** val add_mult_dev :
     'a1 -> 'a1 -> ('a1 -> 'a1 -> 'a1) -> ('a1 -> 'a1 -> 'a1) -> 'a2 -> 'a2 ->
@@ -563,7 +561,7 @@ let rec mult_dev rO rI radd rsub ropp cO cI ceqb phi get_sign mkpow0 mkopp_pow0 
 
 let coq_Pphi_avoid rO rI radd rsub ropp cO cI ceqb phi get_sign mkpow0 mkopp_pow0 mkmult_pow0 fv p =
   mult_dev rO rI radd rsub ropp cO cI ceqb phi get_sign mkpow0 mkopp_pow0
-    mkmult_pow0 p fv N0 Coq_nil
+    mkmult_pow0 p fv N0 []
 
 (** val mkmult_pow : ('a1 -> 'a1 -> 'a1) -> 'a1 -> 'a1 -> positive -> 'a1 **)
 

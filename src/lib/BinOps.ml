@@ -437,7 +437,7 @@ module Coq_bop =
       | Coq_true -> Obj.magic Coq_true
       | Coq_false -> Obj.magic v2)
   | Coq_pair (_, _) -> Obj.magic (fun x x0 -> Datatypes.Coq_pair (x, x0))
-  | Coq_cons _ -> Obj.magic (fun x x0 -> Datatypes.Coq_cons (x, x0))
+  | Coq_cons _ -> Obj.magic (fun x x0 -> x::x0)
   | Coq_append _ -> Obj.magic app
   | Coq_shiftr (m, n) -> (fun v1 v2 -> Obj.magic Coq_bv.shiftr m n v1 v2)
   | Coq_shiftl (m, n) -> (fun v1 v2 -> Obj.magic Coq_bv.shiftl m n v1 v2)

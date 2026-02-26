@@ -49,22 +49,18 @@ let fst = function
 let snd = function
 | Coq_pair (_, y) -> y
 
-type 'a list =
-| Coq_nil
-| Coq_cons of 'a * 'a list
-
 (** val length : 'a1 list -> nat **)
 
 let rec length = function
-| Coq_nil -> O
-| Coq_cons (_, l') -> S (length l')
+| [] -> O
+| _::l' -> S (length l')
 
 (** val app : 'a1 list -> 'a1 list -> 'a1 list **)
 
 let rec app l m =
   match l with
-  | Coq_nil -> m
-  | Coq_cons (a, l1) -> Coq_cons (a, (app l1 m))
+  | [] -> m
+  | a::l1 -> a::(app l1 m)
 
 type comparison =
 | Eq
