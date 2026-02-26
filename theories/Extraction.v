@@ -6,11 +6,22 @@ Extraction Language OCaml.
 
 Set Extraction Output Directory "src/lib".
 
+(* Extract Inductive nat => "int" [ "0" "succ" ]. *)
+(* Extract Inductive bool => "bool" [ "true" "false" ]. *)
+(* Extract Inductive unit => "unit" [ "()" ]. *)
+(* Extract Inductive list => "list" [ "[]" "(::)" ]. *)
+(* Extract Inductive prod => "(*)" [ "(,)" ]. *)
+
+(* (* Unsound for big nats *) *)
+(* Extract Inductive nat => int [ "0" "succ" ] *)
+(*    "(fun fO fS n -> if n=0 then fO () else fS (n-1))". *)
+
+(* Extract Inlined Constant Nat.add => "( + )". *)
+
 (* breaks otherwise *)
-Set Extraction KeepSingleton.
+(* Set Extraction KeepSingleton. *)
 
 
 (* TODO: figure out why coq_Pred, coq_SHeapSpec and coq_CHeapSpec are defined too far down the mli *)
 
-Recursive Extraction Examples.exec_VC.
-Extraction "BlockVerifier" Examples.exec_VC.
+Separate Extraction Examples.exec_VC.

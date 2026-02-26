@@ -1,4 +1,4 @@
-open BlockVerifier
+open Examples
 
 let () =
   let triple =
