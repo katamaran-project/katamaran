@@ -515,20 +515,31 @@ Module Import ExampleModel.
 
 End ExampleModel.
 
-(* This tactic calculates the number of different execution branches explored by
-   the shallow and symbolic executor for the body of the function [fn]. *)
-Ltac calcstats fn :=
-  let smb := eval compute in (Symbolic.Statistics.calc fn) in
-  let shl := Shallow.Statistics.calc fn in
-  let row := constr:(pair fn (pair shl smb)) in
-  idtac row.
+Section Statistics.
 
-(* We print the statistics for every μSail function defined in the program, i.e.
+  Variable undefined : forall A, A.
+
+  #[global] Instance stats_forall {A} {B : A -> Prop} {SP : forall a, CStatistics.ShallowStats (B a)} :
+    CStatistics.ShallowStats (forall a : A, B a) := SP (undefined A).
+  #[global] Instance stats_exists {A} {B : A -> Prop} {SP : forall a, CStatistics.ShallowStats (B a)} :
+    CStatistics.ShallowStats (exists a : A, B a) := SP (undefined A).
+
+  (* This tactic calculates the number of different execution branches explored by
+   the shallow and symbolic executor for the body of the function [fn]. *)
+  Ltac calcstats fn :=
+    let smb := eval compute in (Symbolic.Statistics.calc fn) in
+      let shl := Shallow.Statistics.calc fn in
+      let row := constr:(pair fn (pair shl smb)) in
+      idtac row.
+
+  (* We print the statistics for every μSail function defined in the program, i.e.
    just the [summaxlen] function in this case. *)
-Goal forall {Δ τ} (f : Fun Δ τ), f = f.
-  idtac "Branching statistics:".
-  destruct f;
-    match goal with
-    |- ?g = _ => calcstats g
-    end.
-Abort.
+  Goal forall {Δ τ} (f : Fun Δ τ), f = f.
+    idtac "Branching statistics:".
+    destruct f;
+      match goal with
+        |- ?g = _ => calcstats g
+      end.
+  Abort.
+
+End Statistics.

@@ -1214,12 +1214,16 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     #[global] Instance stats_impl `{ShallowStats P, ShallowStats Q} :
       ShallowStats (P -> Q) := plus_stats (stats P) (stats Q).
 
-    Axiom undefined : forall A, A.
+    Section WithUndefined.
 
-    #[global] Instance stats_forall {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
-      ShallowStats (forall a : A, B a) := SP (undefined A).
-    #[global] Instance stats_exists {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
-      ShallowStats (exists a : A, B a) := SP (undefined A).
+      Variable undefined : forall A, A.
+
+      #[global] Instance stats_forall {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
+        ShallowStats (forall a : A, B a) := SP (undefined A).
+      #[global] Instance stats_exists {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
+        ShallowStats (exists a : A, B a) := SP (undefined A).
+
+    End WithUndefined.
 
   End CStatistics.
 
