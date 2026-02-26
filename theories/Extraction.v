@@ -25,16 +25,13 @@ Set Extraction Output Directory "src/lib".
 
 (* TODO: figure out why coq_Pred, coq_SHeapSpec and coq_CHeapSpec are defined too far down the mli *)
 
-(* TODO: manually patch this constant to a record of type Base.MMIOENV as below:
+(* TODO: currently need to apply a patch that removes from the extracted code in Base1.ml and Base1.mli the following definitions:
+   - type MMIOENV
+   - Parameter mmioenv
+   - fun_read_mmio
+   - fun_write_mmio *)
 
-+let mmioenv = { state_tra_read = (fun a b c -> failwith "called undefined state_tra_read");
-+                state_tra_write = (fun a b c d -> failwith "called undefined state_tra_write");
-+                state_tra_world_updates = (fun a -> failwith "called undefined state_tra_world_updates");
-+                state_init = failwith "called state_init" }
+(* TODO: stub this better *)
 Extract Constant Base.mmioenv => "fail".
-
-*)
-
-(* TODO: this Parameter needs replacing with a concrete value since state_init is called at some point during execution; currently the extracted verifier fails here. *)
 
 Separate Extraction Examples.exec_VC.

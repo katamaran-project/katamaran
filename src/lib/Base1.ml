@@ -142,22 +142,9 @@ let rec withinMMIODec a = function
 type coq_Minterrupts = { coq_MEI : bool; coq_UEI : bool; coq_MTI : bool;
                          coq_UTI : bool; coq_MSI : bool; coq_USI : bool }
 
-type coq_MMIOEnv = { state_tra_read : (__ -> coq_Addr -> nat -> (__,
-                                      Coq_bv.bv) prod);
-                     state_tra_write : (__ -> coq_Addr -> nat -> Coq_bv.bv ->
-                                       __);
-                     state_tra_world_updates : (__ -> (coq_Minterrupts, __)
-                                               prod);
-                     state_init : __ }
-
 type coq_State = __
 
 (** val mmioenv : coq_MMIOEnv **)
-
-let mmioenv = { state_tra_read = (fun a b c -> failwith "called undefined state_tra_read");
-                state_tra_write = (fun a b c d -> failwith "called undefined state_tra_write");
-                state_tra_world_updates = (fun a -> failwith "called undefined state_tra_world_updates");
-                state_init = failwith "called state_init" }
 
 type coq_Privilege =
 | User
@@ -3599,22 +3586,6 @@ module RiscvPmpBase =
   (** val fun_read_mmio :
       coq_Memory -> nat -> Coq_ty.coq_Val -> (coq_Memory, Coq_ty.coq_Val) prod **)
 
-  let fun_read_mmio _UU03bc_ data_size addr =
-    match data_size with
-    | O -> Coq_pair (_UU03bc_, (Obj.magic Coq_bv.zero (mul data_size byte)))
-    | S _ ->
-      let Coq_pair (s', readv) =
-        mmioenv.state_tra_read _UU03bc_.memory_state (Obj.magic addr)
-          data_size
-      in
-      let mmioev = { event_type = IORead; event_addr = (Obj.magic addr);
-        event_nbbytes = data_size; event_contents = readv }
-      in
-      let _UU03bc_' =
-        memory_append_trace (memory_update_state _UU03bc_ s') mmioev
-      in
-      Coq_pair (_UU03bc_', (Obj.magic readv))
-
   (** val fun_externalWorldUpdates :
       coq_Memory -> (coq_Minterrupts, coq_Memory) prod **)
 
@@ -3625,19 +3596,6 @@ module RiscvPmpBase =
 
   (** val fun_write_mmio :
       coq_Memory -> nat -> Coq_ty.coq_Val -> Coq_ty.coq_Val -> coq_Memory **)
-
-  let fun_write_mmio _UU03bc_ data_size addr _data =
-    match data_size with
-    | O -> _UU03bc_
-    | S n ->
-      let s' =
-        mmioenv.state_tra_write _UU03bc_.memory_state (Obj.magic addr) (S n)
-          (Obj.magic _data)
-      in
-      let mmioev = { event_type = IOWrite; event_addr = (Obj.magic addr);
-        event_nbbytes = (S n); event_contents = (Obj.magic _data) }
-      in
-      memory_append_trace (memory_update_state _UU03bc_ s') mmioev
 
   type coq_Exp =
   | Coq_exp_var of coq_PVar * Coq_ty.coq_Ty

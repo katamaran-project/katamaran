@@ -77,17 +77,7 @@ val withinMMIODec : coq_Addr -> nat -> coq_Decision
 type coq_Minterrupts = { coq_MEI : bool; coq_UEI : bool; coq_MTI : bool;
                          coq_UTI : bool; coq_MSI : bool; coq_USI : bool }
 
-type coq_MMIOEnv = { state_tra_read : (__ -> coq_Addr -> nat -> (__,
-                                      Coq_bv.bv) prod);
-                     state_tra_write : (__ -> coq_Addr -> nat -> Coq_bv.bv ->
-                                       __);
-                     state_tra_world_updates : (__ -> (coq_Minterrupts, __)
-                                               prod);
-                     state_init : __ }
-
 type coq_State = __
-
-val mmioenv : coq_MMIOEnv
 
 type coq_Privilege =
 | User
@@ -836,14 +826,8 @@ module RiscvPmpBase :
 
   val fun_within_mmio : nat -> Coq_ty.coq_Val -> bool
 
-  val fun_read_mmio :
-    coq_Memory -> nat -> Coq_ty.coq_Val -> (coq_Memory, Coq_ty.coq_Val) prod
-
   val fun_externalWorldUpdates :
     coq_Memory -> (coq_Minterrupts, coq_Memory) prod
-
-  val fun_write_mmio :
-    coq_Memory -> nat -> Coq_ty.coq_Val -> Coq_ty.coq_Val -> coq_Memory
 
   type coq_Exp =
   | Coq_exp_var of coq_PVar * Coq_ty.coq_Ty
