@@ -154,8 +154,10 @@ type coq_State = __
 
 (** val mmioenv : coq_MMIOEnv **)
 
-let mmioenv =
-  failwith "AXIOM TO BE REALIZED (Katamaran.RiscvPmp.Base.mmioenv)"
+let mmioenv = { state_tra_read = (fun a b c -> failwith "called undefined state_tra_read");
+                state_tra_write = (fun a b c d -> failwith "called undefined state_tra_write");
+                state_tra_world_updates = (fun a -> failwith "called undefined state_tra_world_updates");
+                state_init = failwith "called state_init" }
 
 type coq_Privilege =
 | User
