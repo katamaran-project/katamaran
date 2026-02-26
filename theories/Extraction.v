@@ -10,7 +10,8 @@ Set Extraction Output Directory "src/lib".
 (* Extract Inductive bool => "bool" [ "true" "false" ]. *)
 (* Extract Inductive unit => "unit" [ "()" ]. *)
 (* Extract Inductive list => "list" [ "[]" "(::)" ]. *)
-(* Extract Inductive prod => "(*)" [ "(,)" ]. *)
+(* the below definition should not have spaces around the asterisk (prod type constructor) but if you remove them then proof general cannot advance the proof cursor............................. *)
+(* Extract Inductive prod => "( * )" [ "(,)" ]. *)
 
 (* (* Unsound for big nats *) *)
 (* Extract Inductive nat => int [ "0" "succ" ] *)
