@@ -423,9 +423,6 @@ Module Import ReplaySpecification <: Specification DefaultBase ReplaySig ReplayP
       fun Δ τ f =>
         match f with end.
 
-    Definition SepLemma {Δ} (f : Lem Δ) : Type :=
-      Lemma Δ.
-
     Definition lemma_open_list : SepLemma open_list :=
       {| lemma_logic_variables := ["l" :: ty_X];
          lemma_patterns        := env.nil;

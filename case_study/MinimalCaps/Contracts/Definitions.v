@@ -74,9 +74,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
            sep_contract_postcondition   := asn_gprs ∗ (asn_pc_safe pc ∨ asn_pc_expr pc);
         |}.
 
-      Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
-        SepContract Δ τ.
-
       Definition sep_contract_read_reg : SepContractFun read_reg :=
         {{ asn_gprs }}
           fn read_reg ["rs" :: ty.enum regname] ty.word
@@ -405,9 +402,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
     Section LemDef.
       Import LemmaNotations.
 
-      Definition SepLemma {Δ} (f : Lem Δ) : Type :=
-        KatamaranLem Δ.
-
       Definition lemma_correctPC_subperm_R : SepLemma correctPC_subperm_R :=
         {{ asn_correctPC (term_var "p", term_var "b", term_var "e", term_var "a") }}
           lem correctPC_subperm_R [("p", "b", "e", "a") :: ty.cap]
@@ -479,9 +473,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
 
     Section ForeignDef.
       Import ForeignNotations.
-
-      Definition SepContractFunX {Δ τ} (f : FunX Δ τ) : Type :=
-        SepContract Δ τ.
 
       Definition sep_contract_rM : SepContractFunX rM :=
         {{ asn_csafe_angelic (term_record capability

@@ -51,6 +51,13 @@ Module Type SpecificationMixin (B : Base) (Import SIG : Signature B) (Import P :
   Definition LemmaEnv : Type :=
     forall Δ (l : 𝑳 Δ), Lemma Δ.
 
+  Definition SepContractFun {Δ τ} (f : 𝑭 Δ τ) : Type :=
+    SepContract Δ τ.
+  Definition SepContractFunX {Δ τ} (f : 𝑭𝑿 Δ τ) : Type :=
+    SepContract Δ τ.
+  Definition SepLemma {Δ} (f : 𝑳 Δ) : Type :=
+    Lemma Δ.
+
 End SpecificationMixin.
 
 Module Type SpecificationKit (B : Base) (Import SIG : Signature B) (P : Program B)

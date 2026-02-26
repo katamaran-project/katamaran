@@ -135,15 +135,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
                        σ
                        (ctx.in_cat_left Σ (ctx.in_map (fun '(y::τ) => y::τ) xIn)))).
 
-  Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
-    SepContract Δ τ.
-
-  Definition SepContractFunX {Δ τ} (f : FunX Δ τ) : Type :=
-    SepContract Δ τ.
-
-  Definition SepLemma {Δ} (f : Lem Δ) : Type :=
-    Lemma Δ.
-
   Fixpoint asn_exists {Σ} (Γ : NCtx string Ty) : Assertion (Σ ▻▻ Γ) -> Assertion Σ :=
     match Γ return Assertion (Σ ▻▻ Γ) -> Assertion Σ with
     | ctx.nil => fun asn => asn

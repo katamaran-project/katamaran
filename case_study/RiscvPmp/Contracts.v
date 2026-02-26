@@ -65,15 +65,6 @@ Definition KatamaranLem := Lemma.
 Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
   Include SpecificationMixin RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
 
-  Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
-    SepContract Δ τ.
-
-  Definition SepContractFunX {Δ τ} (f : FunX Δ τ) : Type :=
-    SepContract Δ τ.
-
-  Definition SepLemma {Δ} (f : Lem Δ) : Type :=
-    KatamaranLem Δ.
-
   Section Contracts.
     Section ContractDefKit.
       Import asn.notations.
