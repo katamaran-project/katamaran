@@ -7400,11 +7400,11 @@ module MakeExecutor :
 
     val stats_impl : coq_ShallowStats -> coq_ShallowStats -> coq_ShallowStats
 
-    val undefined : 'a1
+    val stats_forall :
+      (__ -> __) -> ('a1 -> coq_ShallowStats) -> coq_ShallowStats
 
-    val stats_forall : ('a1 -> coq_ShallowStats) -> coq_ShallowStats
-
-    val stats_exists : ('a1 -> coq_ShallowStats) -> coq_ShallowStats
+    val stats_exists :
+      (__ -> __) -> ('a1 -> coq_ShallowStats) -> coq_ShallowStats
    end
 
   type coq_DebugAsn = { debug_asn_pathcondition : coq_PathCondition;
@@ -8204,6 +8204,12 @@ module MakeExecutor :
   type coq_LemmaEnv =
     (pVar, Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx ->
     PROG._UU1d473_ -> SIG.coq_Lemma
+
+  type coq_SepContractFun = SIG.coq_SepContract
+
+  type coq_SepContractFunX = SIG.coq_SepContract
+
+  type coq_SepLemma = SIG.coq_Lemma
 
   val coq_CEnv : coq_SepContractEnv
 
@@ -16331,6 +16337,7 @@ module RiscvPmpSignature :
 
   val combined_solver : coq_Solver
 
+  type 'a coq_CPureSpec = __
 
   module CPureSpec :
    sig
@@ -16339,6 +16346,7 @@ module RiscvPmpSignature :
      end
    end
 
+  type 'a coq_CHeapSpec = __
 
   module CHeapSpec :
    sig
@@ -16390,11 +16398,11 @@ module RiscvPmpSignature :
 
     val stats_impl : coq_ShallowStats -> coq_ShallowStats -> coq_ShallowStats
 
-    val undefined : 'a1
+    val stats_forall :
+      (__ -> __) -> ('a1 -> coq_ShallowStats) -> coq_ShallowStats
 
-    val stats_forall : ('a1 -> coq_ShallowStats) -> coq_ShallowStats
-
-    val stats_exists : ('a1 -> coq_ShallowStats) -> coq_ShallowStats
+    val stats_exists :
+      (__ -> __) -> ('a1 -> coq_ShallowStats) -> coq_ShallowStats
    end
 
   type coq_DebugAsn = { debug_asn_pathcondition : coq_PathCondition;
@@ -16981,8 +16989,6 @@ module RiscvPmpIrisInstancePredicates :
   val write_addr : addr
  end
 
-type katamaranLem = RiscvPmpSignature.coq_Lemma
-
 module RiscvPmpSpecification :
  sig
   type coq_SepContractEnv =
@@ -17003,7 +17009,7 @@ module RiscvPmpSpecification :
 
   type coq_SepContractFunX = RiscvPmpSignature.coq_SepContract
 
-  type coq_SepLemma = katamaranLem
+  type coq_SepLemma = RiscvPmpSignature.coq_Lemma
 
   val instr_exec_contract :
     Coq_ty.coq_Ty -> (pVar, Coq_ty.coq_Ty) Binding.coq_Binding
@@ -17825,6 +17831,12 @@ module RiscvPmpBlockVerifSpec :
     (pVar, Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx ->
     RiscvPmpProgram.coq_Lem -> RiscvPmpSignature.coq_Lemma
 
+  type coq_SepContractFun = RiscvPmpSignature.coq_SepContract
+
+  type coq_SepContractFunX = RiscvPmpSignature.coq_SepContract
+
+  type coq_SepLemma = RiscvPmpSignature.coq_Lemma
+
   val term_eqb :
     (lVar, Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx ->
     RiscvPmpBase.coq_Term -> RiscvPmpBase.coq_Term -> RiscvPmpBase.coq_Term
@@ -17842,12 +17854,6 @@ module RiscvPmpBlockVerifSpec :
     (pVar, Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx -> (lVar,
     Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx ->
     RiscvPmpBase.coq_SStore
-
-  type coq_SepContractFun = RiscvPmpSignature.coq_SepContract
-
-  type coq_SepContractFunX = RiscvPmpSignature.coq_SepContract
-
-  type coq_SepLemma = RiscvPmpSignature.coq_Lemma
 
   val asn_exists :
     (string, Coq_ty.coq_Ty) Binding.coq_Binding Coq_ctx.coq_Ctx -> (string,
