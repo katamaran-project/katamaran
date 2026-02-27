@@ -172,6 +172,7 @@ Module Type IrisResources2
 
   Definition SomeRelVal : Type := sigT RelVal.
 
+  Locate "↦ᵣ".
 
   Lemma reg_update2 `{srGS: sailRegGS2 Σ} regstore1 regstore2 {τ} r (rv1 rv2 : RelVal τ) :
     regs_inv2 regstore1 regstore2 -∗ reg_pointsTo2 r rv1 ==∗ regs_inv2 (write_register regstore1 r (ty.projLeft rv2)) (write_register regstore2 r (ty.projRight rv2)) ∗ reg_pointsTo2 r rv2.
@@ -180,9 +181,9 @@ Module Type IrisResources2
       iIntros "(regs1_inv & regs2_inv)".
       iIntros "(Hreg1 & Hreg2)".
       unfold reg_pointsTo2.
-      iAssert ((|==> regs_inv (write_register regstore1 r (ty.projLeft rv2)) ∗ r ↦ᵣ ty.projLeft rv2)%I) with "[regs1_inv Hreg1]" as "H1".
+      iAssert ((|==> regs_inv (write_register regstore1 r (ty.projLeft rv2)) ∗ reg_pointsTo r (ty.projLeft rv2))%I) with "[regs1_inv Hreg1]" as "H1".
       { iApply (reg_update with "regs1_inv Hreg1"). }
-      iAssert ((|==> regs_inv (write_register regstore2 r (ty.projRight rv2)) ∗ r ↦ᵣ ty.projRight rv2)%I) with "[regs2_inv Hreg2]" as "H2".
+      iAssert ((|==> regs_inv (write_register regstore2 r (ty.projRight rv2)) ∗ reg_pointsTo r (ty.projRight rv2))%I) with "[regs2_inv Hreg2]" as "H2".
       { iApply (reg_update with "regs2_inv Hreg2"). }
       iMod "H1". iMod "H2".
       iModIntro.
@@ -191,6 +192,7 @@ Module Type IrisResources2
       iFrame.
     Qed.
 
+    #[global] Notation "a '↦ᵣ' t" := (reg_pointsTo2 a t) (at level 70).
 End IrisResources2.
 
 Module Type IrisBase2 (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=

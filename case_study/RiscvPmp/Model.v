@@ -100,9 +100,11 @@ Module RiscvPmpModel2.
 
     Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
-        gen_heap.gen_heap_interp memmap -∗ trace.tr_auth trace.trace_name (memory_trace μ) -∗
+        gen_heap.gen_heap_interp memmap -∗
+        trace.tr_auth (@trace.trace_name _ _ mc_gtGS) (memory_trace μ) -∗
+        trace.tr_auth (@trace.trace_name _ _ mc_gltGS) (leakage_trace μ) -∗
         mem_inv sailGS_memGS μ.
-    Proof. iIntros (μ memmap) "Hmap Hmem Htr"; iExists memmap; now iFrame. Qed.
+    Proof. iIntros (μ memmap) "Hmap Hmem Htr Hltr"; iExists memmap; iFrame. Qed.
 
     Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
                                 (paddr : Addr) (data : Byte),
@@ -157,14 +159,15 @@ Module RiscvPmpModel2.
 
     Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
       map_Forall (λ (a : Addr) (v : Base.Byte), (memory_ram μ) a = v) memmap ->
-      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗ tr_auth1 (memory_trace μ) ={⊤}=∗
+      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗
+        tr_auth (@trace_name _ _ mc_gtGS) (memory_trace μ) ∗ tr_auth (@trace_name _ _ mc_gltGS) (leakage_trace μ) ={⊤}=∗
       mem_inv sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
     Proof.
       iRevert (data w paddr μ memmap).
       iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
-        iIntros (data w paddr μ memmap Hmap) "[Haddr [Hmem Htr]]".
+        iIntros (data w paddr μ memmap Hmap) "[Haddr [Hmem [Htr Hltr]]]".
       - iModIntro. iSplitL; last done.
-        now iApply (mem_inv_not_modified $! Hmap with "Hmem Htr").
+        now iApply (mem_inv_not_modified $! Hmap with "Hmem Htr Hltr").
      -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
         destruct (bv.appView byte (bytes * byte) w) as [bw w].
@@ -172,7 +175,7 @@ Module RiscvPmpModel2.
         iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
         iApply ("IHbytes" $! data w
                        (bv.add bv.one paddr) (memory_update_ram μ (write_byte (memory_ram μ) paddr bd))
-                    (insert paddr bd memmap) with "[%] [$Haddr $Hmem $Htr]").
+                    (insert paddr bd memmap) with "[%] [$Haddr $Hmem $Htr $Hltr]").
         by apply map_Forall_update.
     Qed.
 

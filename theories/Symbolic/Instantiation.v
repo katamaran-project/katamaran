@@ -500,7 +500,7 @@ Module Type InstantiationOn
     Qed.
     #[export,program] Instance proper_term_unop {σ1 σ2} (op : UnOp σ1 σ2) [Σ] :
       Proper ((≡) ==> (≡)) (term_unop (Σ:=Σ) op).
-    (* #[export,program] Instance proper_term_tuple {Σ σs} : Proper ((≡) ==> (≡)) (@term_tuple Σ σs). *)
+    #[export,program] Instance proper_term_tuple {Σ σs} : Proper ((≡) ==> (≡)) (@term_tuple Σ σs).
     #[export,program] Instance proper_term_union {Σ U K} : Proper ((≡) ==> (≡)) (@term_union Σ U K).
     #[export,program] Instance proper_term_record {Σ R} : Proper ((≡) ==> (≡)) (@term_record Σ R).
     #[export,program] Instance proper_env_snoc {Σ σs} :

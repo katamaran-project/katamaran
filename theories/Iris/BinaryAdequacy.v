@@ -150,18 +150,18 @@ Module Type IrisAdequacy2
       now eapply mk_prim_step.
   Qed.
 
-  Lemma steps_to_nsteps {σ Γ γ μ δ} (s : Stm Γ σ) {γ' μ' δ' s'}:
-    ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    exists n, language.nsteps n ([MkConf s δ]%list , (γ,μ)) [] ([MkConf s' δ']%list , (γ',μ')).
-  Proof.
-    induction 1.
-    - exists 0. now constructor.
-    - destruct IHSteps as [n steps].
-      exists (S n).
-      refine (language.nsteps_l _ _ _ _ [] _ _ steps).
-      refine (step_atomic _ _ _ _ _ nil nil eq_refl eq_refl _).
-      now eapply mk_prim_step.
-  Qed.
+  (* Lemma steps_to_nsteps {σ Γ γ μ δ} (s : Stm Γ σ) {γ' μ' δ' s'}: *)
+  (*   ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> *)
+  (*   exists n, language.nsteps n ([MkConf s δ]%list , (γ,μ)) [] ([MkConf s' δ']%list , (γ',μ')). *)
+  (* Proof. *)
+  (*   induction 1. *)
+  (*   - exists 0. now constructor. *)
+  (*   - destruct IHSteps as [n steps]. *)
+  (*     exists (S n). *)
+  (*     refine (language.nsteps_l _ _ _ _ [] _ _ steps). *)
+  (*     refine (step_atomic _ _ _ _ _ nil nil eq_refl eq_refl _). *)
+  (*     now eapply mk_prim_step. *)
+  (* Qed. *)
 
   Lemma own_RegStore_to_map_reg_pointsTos `{sailGS2 Σ} {γ1 γ2 : RegStore} {l : list (sigT 𝑹𝑬𝑮)} :
     NoDup l ->
@@ -211,6 +211,14 @@ Module Type IrisAdequacy2
   | nstep_refl : NSteps γ1 μ1 δ1 s1 γ1 μ1 δ1 s1 0
   | nstep_trans {n} {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : CStoreVal Γ} {s2 s3 : Stm Γ σ} :
       Step γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 -> NSteps γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 n -> NSteps γ1 μ1 δ1 s1 γ3 μ3 δ3 s3 (S n).
+
+  Lemma steps_to_nsteps {Γ : PCtx} {σ : Ty} {γ1 γ2 : RegStore} {μ1 μ2 : Memory} {δ1 δ2 : CStoreVal Γ} {s1 s2 : Stm Γ σ} :
+    Steps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 -> exists n, NSteps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 n.
+  Proof.
+    induction 1 as [|γ1 μ1 δ1 s1 γ2 γ3 μ2 μ3 δ2 δ3 s2 s3 eval evals [n nsteps]].
+    - exists 0. constructor.
+    - exists (S n). econstructor; eassumption.
+  Qed.
 
   Lemma nsteps_to_steps {Γ : PCtx} {σ : Ty} {γ1 γ2 : RegStore} {μ1 μ2 : Memory} {δ1 δ2 : CStoreVal Γ} {s1 s2 : Stm Γ σ} {n} :
     NSteps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 n -> Steps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2.
@@ -359,6 +367,72 @@ Module Type IrisAdequacy2
       apply Hsteps21.
       apply Hsteps223.
   Qed.
+
+  Lemma adequacy_gen {Γ σ} (s11 s21 : Stm Γ σ) {γ11 γ12 γ21} {μ11 μ12 μ21}
+    {δ11 δ12 δ21 : CStoreVal Γ} {s12 : Stm Γ σ} {Q : forall `{sailGS2 Σ}, IVal σ -> CStoreVal Γ -> IVal σ -> CStoreVal Γ -> iProp Σ}
+    (φ : Prop) :
+    ⟨ γ11, μ11, δ11, s11 ⟩ --->* ⟨ γ12, μ12, δ12, s12 ⟩ ->
+    (forall `{sailGS2 Σ},
+        mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ |={⊤}=> semWP2 δ11 δ21 s11 s21 Q
+                                                             ∗ (∀ μ22, mem_inv2 μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
+    )%I -> φ.
+  Proof.
+    intros Heval1 Hwp.
+    destruct (steps_to_nsteps Heval1) as [n Hevaln1].
+    refine (uPred.pure_soundness _
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
+    iIntros (Hinv) "".
+    iMod (own_alloc ((● RegStore_to_map γ11 ⋅ ◯ RegStore_to_map γ11 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    iMod (own_alloc ((● RegStore_to_map γ21 ⋅ ◯ RegStore_to_map γ21 ) : regUR)) as (regs2) "[Hregsown2 Hregsinv2]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
+    iMod (mem_inv_init2 (mGS := mGS) μ11 μ21) as (memG) "[Hmem Rmem]".
+    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2)) memG).
+    specialize (Hwp _ sG).
+    iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
+    { iApply own_RegStore_to_map_reg_pointsTos.
+      apply finite.NoDup_enum.
+      iSplitR "Hregsinv2"; iAssumption.
+    }
+    iAssert (regs_inv2 γ11 γ21) with "[Hregsown1 Hregsown2]" as "Hregs".
+    { iSplitL "Hregsown1";
+      now iApply own_RegStore_to_regs_inv.
+    }
+    clear Hwp.
+    iStopProof.
+    revert γ21 μ21 δ21 s21.
+    induction Hevaln1.
+    - iIntros (γ21 μ21 δ21 s21) "(Hmem & Hwp2 & Hregs) Hcred".
+      iMod "Hwp2" as "[_ Hcont]".
+      iMod ("Hcont" with "Hmem") as "%Hφ".
+      cbn. done.
+    - iIntros (γ21 μ21 δ21 s21) "(Hregs & Hwp2 & Hmem) Hcred".
+      specialize (IHHevaln1 (nsteps_to_steps Hevaln1)).
+      rewrite fixpoint_semWP2_eq; cbn.
+      rewrite (stm_val_stuck H).
+      repeat case_match;
+        try (iMod "Hwp2" as "(H & _)";
+             by iMod "H").
+      iMod "Hwp2".
+      iDestruct "Hwp2" as "(Hwp2 & Hinv)".
+      iSpecialize ("Hwp2" with "[$Hregs $Hmem]").
+      assert (stm_to_fail s21 = None) as H1.
+      { destruct s21; cbn in *; inversion H0; done. }
+      pose proof (is_not_final s21 H0 H1) as Hnfinal21.
+      destruct (can_step s21 γ21 μ21 δ21 Hnfinal21) as (γ22 & μ22 & δ22 & s22 & Hsteps21).
+      iMod "Hwp2" as "Hwp2". iModIntro.
+      iSpecialize ("Hwp2" $! _ _ _ _ _ _ _ _ (conj H Hsteps21)).
+      iMod "Hwp2". iModIntro. iModIntro. iMod "Hwp2".
+      iDestruct "Hcred" as "(Hcred1 & Hcredn)".
+      iMod "Hwp2" as "([Hregs Hmem] & Hwp2)".
+      now iMod (IHHevaln1 with "[$Hmem $Hregs $Hwp2 $Hinv] Hcredn") as "IH".
+  Qed.
+
 
   (* Lemma wp2_adequacy' {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) *)
   (*   {γ1 γ2 : RegStore} {μ1 μ2 : Memory} *)

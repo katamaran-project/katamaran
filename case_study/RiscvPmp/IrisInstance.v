@@ -55,12 +55,15 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Class mcMemPreGS Σ := {
       mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
       mc_gtPreGS :: trace_preG Trace Σ;
+      mc_gltPreGS :: trace_preG LeakageTrace Σ;
       }.
   #[export] Existing Instance mc_ghPreGS.
   #[export] Existing Instance mc_gtPreGS.
+  #[export] Existing Instance mc_gltPreGS.
 
   Definition memGpreS : gFunctors -> Set := mcMemPreGS.
-  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace].
+  Definition memΣ : gFunctors :=
+    #[gen_heapΣ Addr MemVal ; tracePreΣ Trace; tracePreΣ LeakageTrace].
 
   Lemma NoDup_liveAddrs : NoDup liveAddrs.
   Proof. now eapply Prelude.nodup_fixed. Qed.
@@ -73,7 +76,9 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Proof. intros. solve_inG. Defined.
 
   Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
-    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ tr_frag1 (memory_trace μ))%I.
+    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗
+                tr_frag (@trace_name _ _ mc_gtGS) (memory_trace μ) ∗
+                tr_frag (@trace_name _ _ mc_gltGS) (leakage_trace μ))%I.
 
   Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
   Proof.
@@ -113,10 +118,10 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
     pose (memmap := initMemMap μ).
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
     iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]".
-
+    iMod (trace_alloc (leakage_trace μ)) as (gTl) "[Hauthl Hfragl]".
     iModIntro.
-    iExists (McMemGS gH gT).
-    iSplitL "Hinv Hauth".
+    iExists (McMemGS gH gT gTl).
+    iSplitL "Hinv Hauth Hauthl".
     - iExists memmap.
       iFrame.
       iPureIntro.
@@ -263,7 +268,9 @@ Module RiscvPmpIrisInstance (* <: *)
     (* | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w *)
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
-    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
+    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
+    | interp_inv_constant_time | _                    => False (* Unary instance has no support for different execution predicates *)
+    .
 
     Ltac destruct_pmp_entries :=
       repeat match goal with

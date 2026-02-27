@@ -58,17 +58,22 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
           mc_ghGS : gen_heapGS Addr MemVal Σ;
           (* tracking traces *)
           mc_gtGS : traceG Trace Σ;
+          mc_gltGS : traceG LeakageTrace Σ;
         }.
     #[export] Existing Instance mc_ghGS.
     #[export] Existing Instance mc_gtGS.
+    #[export] Existing Instance mc_gltGS.
 
     Definition memGS : gFunctors -> Set := mcMemGS.
+
+    Check (@trace_name _ _ mc_gtGS).
 
     Definition mem_inv : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
         (∃ memmap, gen_heap_interp memmap
            ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
-           ∗ tr_auth1 (memory_trace μ)
+           ∗ tr_auth (@trace_name _ _ mc_gtGS) (memory_trace μ)
+           ∗ tr_auth  (@trace_name _ _ mc_gltGS) (leakage_trace μ)
         )%I.
 
   End RiscvPmpIrisParams.

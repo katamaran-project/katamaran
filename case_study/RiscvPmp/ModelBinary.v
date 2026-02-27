@@ -315,13 +315,43 @@ Module RiscvPmpModel2.
     (*   (* TODO: It makes sense that this does not neccessarily work out of the box, because I disable some access control stuff *) *)
     (* Admitted. *)
 
-    Search CEnvEx.
+    Lemma leak_sound :
+      ValidContractForeign sep_contract_leak leak.
+    Proof.
+      intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
+      iIntros "((%Hpre & _) & Hinv)". iApply semWP2_foreign.
+      iIntros (? ? ? ?) "(Hreg & ((%memmapL & HmemL' & HmapL & HtrL & HltrL) & (%memmapR & HmemR' & HmapR & HtrR & HltrR)))".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      iIntros (res1 ? ? res2 ? ? (Hf1 & Hf2)).
+      rewrite evalValsProjLeftIsProjLeftEvals in Hf1. rewrite evalValsProjRightIsProjRightEvals in Hf2.
+      rewrite Heq in Hf1. rewrite Heq in Hf2. cbn in Hf1. cbn in Hf2.
+      inversion Hf1; inversion Hf2; subst. iFrame. iIntros "!> !> !>".
+      iMod "Hclose" as "_".
+      iInv "Hinv" as (t) " [>HltrfL >HltrfR]" "Hclose".
+      iPoseProof (trace.trace_full_frag_eq with "HltrL HltrfL") as "%eqL".
+      iPoseProof (trace.trace_full_frag_eq with "HltrR HltrfR") as "%eqR".
+      cbn. subst t.
+      rewrite eqR.
+      iMod (trace.trace_update _ _ (cons _ _) with "[$HltrL $HltrfL]") as "[HltrL HltrfL]".
+      iMod (trace.trace_update _ _ (cons _ _) with "[$HltrR $HltrfR]") as "[HltrR HltrfR]".
+      iMod ("Hclose" with "[HltrfL HltrfR]") as "_".
+      {(* Instantiate evars *)
+        iExists _; iFrame. }
+      apply secLeakOtherDef in Hpre. rewrite Hpre.
+      iFrame.
+      (* iIntros (? ?) "Hres2". iMod (fupd_mask_subseteq empty) as "Hclose"; auto. *)
+      (* iModIntro. iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2. *)
+      (* inversion Hf2; subst. iFrame "Hres2". iMod "Hclose" as "_". iModIntro. *)
+      iApply semWP2_val_1.
+      iExists δ. iSplitR; first by iPureIntro.
+      iExists (SyncVal tt). auto.
+    Qed.
 
     Lemma foreignSem : ForeignSem.
     Proof.
       intros Δ τ f; destruct f;
         eauto using read_ram_sound, write_ram_sound, decode_sound(* , *)
-                    (* mmio_read_sound, mmio_write_sound, within_mmio_sound *)
+                    (* mmio_read_sound, mmio_write_sound, within_mmio_sound *), leak_sound
       .
     Qed.
   End ForeignProofs.

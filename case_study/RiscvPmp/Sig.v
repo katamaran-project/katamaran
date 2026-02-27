@@ -82,6 +82,7 @@ Inductive Predicate : Set :=
 | encodes_instr
 | ptstomem (bytes : nat)
 | ptstoinstr
+| inv_leakage
 .
 
 Section TransparentObligations.
@@ -304,6 +305,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
+      | inv_leakage                   => ctx.nil
       end.
 
     Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
@@ -321,6 +323,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | encodes_instr              => true
         | ptstomem _                 => false
         | ptstoinstr                 => false
+        | inv_leakage                => true
         end
       }.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -342,6 +345,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
+      | inv_leakage               => Some (MkPrecise ε ε eq_refl)
       end.
 
   End PredicateKit.

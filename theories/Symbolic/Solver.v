@@ -527,9 +527,31 @@ Module Type GenericSolverOn
         (t1 : Term Σ σ1) (t2 : Term Σ σ2) (t : Term Σ σ) : DList Σ :=
         dlist_eq (term_binop op t1 t2) t.
 
+      Definition simplify_eq_binop_minus_default
+        (t1 : Term Σ ty.int) (t2 : Term Σ ty.int) (t : Term Σ ty.int) : DList Σ :=
+        dlist_eq (term_val ty.int 0) (term_minus t (term_minus t1 t2)).
+
       Definition simplify_eq_binop_minus (tl1 : Term Σ ty.int)
         (tl2 : Term Σ ty.int) (tr : Term Σ ty.int) : DList Σ :=
-        dlist_eq (term_val ty.int 0) (term_minus tr (term_minus tl1 tl2)).
+          Term_int_case (fun _ => DList Σ)
+            (fun (*var*) _ _ => simplify_eq_binop_minus_default tl1 tl2 tr)
+            (fun (*val*) v =>
+               match v with
+               | 0%Z => dlist_eq tl1 tr
+               | _ => simplify_eq_binop_minus_default tl1 tl2 tr
+               end
+            )
+            (fun (*relval*) rv => simplify_eq_binop_minus_default tl1 tl2 tr) (* TODO: A simplify_eq_relval might be warranted in the future *)
+            (fun (*plus*) tr1 tr2 =>
+               simplify_eq_binop_minus_default tl1 tl2 tr)
+            (fun (*minus*) tr1 tr2 =>
+               simplify_eq_binop_minus_default tl1 tl2 tr)
+            (fun (*times*) tr1 tr2 => simplify_eq_binop_minus_default tl1 tl2 tr)
+            (fun (*land*) tr1 tr2 => simplify_eq_binop_minus_default tl1 tl2 tr)
+            (fun (*neg*) tr' => simplify_eq_binop_minus_default tl1 tl2 tr)
+            (fun (*signed*) n _ => simplify_eq_binop_minus_default tl1 tl2 tr)
+            (fun (*unsigned*) n _ => simplify_eq_binop_minus_default tl1 tl2 tr)
+            tl2.
 
       Definition simplify_eq_binop_times (tl1 : Term Σ ty.int)
         (tl2 : Term Σ ty.int) (tr : Term Σ ty.int) : DList Σ :=
@@ -1259,6 +1281,19 @@ Module Type GenericSolverOn
         apply instpred_formula_relop_eq.
       Qed.
 
+      Lemma simplify_eq_binop_minus_default_spec (tl1 : Term w ty.int) (tl2 : Term w ty.int) (tr : Term w ty.int) :
+  instpred
+    (simplify_eq_binop_minus_default (λ (σ : Ty) (t1 t2 : Term w σ), dlist_eq t1 t2) tl1 tl2
+       tr)
+    ⊣⊢ repₚ (ty.valToRelVal (σ := ty.bool) true) (term_eq (term_minus tl1 tl2) tr).
+      Proof.
+        unfold simplify_eq_binop_minus_default. rewrite instpred_dlist_singleton.
+        rewrite instpred_formula_eq_com instpred_formula_relop_eq_val.
+        constructor. intros ι _. cbn.
+        repeat destruct inst; cbn; repeat destruct eq_dec; split; intro H;
+          try apply f_equal; inversion H; by lia.
+      Qed.
+
       Lemma simplify_eq_binop_default_spec' [σ1 σ2 σ] (op : BinOp σ1 σ2 σ)
         (t1 : Term w σ1) (t2 : Term w σ2) (t : Term w σ) :
         secLeakT (term_binop op t1 t2) ->
@@ -1309,7 +1344,6 @@ Module Type GenericSolverOn
         unfold repₚ. unfold inst, inst_term.
         by rewrite term_negb_relop.
       Qed.
-
 
       (* TODO: I changed eqₚ tl tr to instpred (formula_eq tl tr) mirroring simplify_eqb_spec 
       The simple reason is that with eqₚ it isn't true right now *)
@@ -1429,11 +1463,17 @@ Module Type GenericSolverOn
               destruct inst, inst, inst, inst; cbn;
                 split; intro H; inversion H;
                 try apply (f_equal SyncVal); repeat destruct eq_dec; subst; try lia.
-          + (*minus*) unfold simplify_eq_binop_minus. arw.
-            constructor; intros ι _; cbn.
-            repeat destruct inst; cbn;
-              split; intro H; inversion H;
-              try apply (f_equal SyncVal); repeat destruct eq_dec; subst; try lia.
+          + (*minus*) unfold simplify_eq_binop_minus.
+            clear IHtl1 IHtl2.
+            destruct tl2 using Term_int_case; arw; cbn.
+            all: try by rewrite simplify_eq_binop_minus_default_spec.
+            destruct i.
+            * rewrite instpred_dlist_singleton. constructor. intros ι _. cbn.
+              unfold instpred_formula_relop. destruct inst, inst; cbn.
+              all: destruct eq_dec; try subst.
+              all: split; intro H; try inversion H; try apply f_equal; lia.
+            * by rewrite simplify_eq_binop_minus_default_spec.
+            * by rewrite simplify_eq_binop_minus_default_spec.
           + (*times*) unfold simplify_eq_binop_times. arw.
             constructor; intros ι _; cbn.
             repeat destruct inst; cbn;
@@ -2189,7 +2229,7 @@ Module Type GenericSolverOn
         | term_binop op t1 t2 => cat (simplify_secLeak t1) (simplify_secLeak t2)
         | term_unop op t1     => simplify_secLeak t1
         | term_tuple tls      => dlist_secLeak t (* TODO: Improve this by splitting this up into several smaller secLeak statements, I need a foldr function on Env for this *)
-        | term_union U K tl   => dlist_secLeak t
+        | term_union U K tl   => dlist_secLeak tl
         | term_record R tls   => dlist_secLeak t (* TODO: Same as for tuples *)
         end.
 
@@ -2230,7 +2270,17 @@ Module Type GenericSolverOn
           tauto.
       Qed.
 
-
+      Lemma instpred_formula_secLeak_union {U : unioni} {K0 : unionk U} (t : Term w (unionk_ty U K0)) :
+        instpred (formula_secLeak t) ⊣⊢ instpred_formula_secLeak (term_union U K0 t).
+      Proof.
+        crushPredEntails2.
+        - unfold instpred_formula_secLeak in *. cbn.
+          destruct inst; try contradiction; auto.
+        - unfold instpred_formula_secLeak in *. cbn in *.
+          rewrite secLeakOtherDef in H0.
+          destruct inst; cbn; inversion H0.
+          tauto.
+      Qed.
 
       Lemma simplify_secLeak_spec [σ] (t : Term w σ) :
         instpred (simplify_secLeak t) ⊣⊢ instpred (formula_secLeak t).
@@ -2245,6 +2295,7 @@ Module Type GenericSolverOn
             * inversion H0.
         - rewrite IHt1 IHt2. apply instpred_formula_secLeak_binop.
         - rewrite IHt. apply instpred_formula_secLeak_unop.
+        - apply instpred_formula_secLeak_union.
       Qed.
     End SimplifySecLeakSpec.
 
@@ -2767,25 +2818,47 @@ Module Type GenericSolverOn
                                 | None , Some hyp2' => Some (smart_or hyp1 hyp2')
                                 | None , None => None
                                 end
-      | formula_relop op t1 t2 => None
+      | @formula_relop _ σ' op t1 t2 =>
+          match op with
+          | bop.eq =>
+              Some (formula_and (formula_propeq t1 t2)
+                      (formula_and (formula_secLeak t1) (formula_secLeak t2)))
+          | _ => None
+          end
+
+          (*     match fact with *)
+          (*     | @formula_secLeak _ σ t => *)
+          (*         fun t1' t2' => *)
+          (*           match eq_dec σ σ' with *)
+          (*           | left Heqσ => *)
+          (*               let t' := eq_rect σ (Term _) t σ' Heqσ in *)
+          (*               if Term_eqb t' t1' || Term_eqb t' t2' *)
+          (*               then Some (formula_propeq t1' t2') *)
+          (*               else None *)
+          (*           | right _ => None *)
+          (*           end *)
+          (*     | _ => fun _ _ => None *)
+          (*     end *)
+          (* | _ => fun _ _ => None *)
+          (* end t1 t2 *)
           (* let hyp' := peval_formula_relop_neg op t1 t2 in *)
           (* if formula_eqb hyp' fact then Some formula_false else None *)
-      | @formula_secLeak _ σ t => match fact with
-                                  | @formula_relop _ σ' rop t1 t2 =>
-                                      match rop with
-                                      | bop.eq => fun t1' t2' =>
-                                                    match eq_dec σ σ' with
-                                                    | left Heqσ =>
-                                                        let t' := eq_rect σ (Term _) t σ' Heqσ in
-                                                        if Term_eqb t' t1'
-                                                        then Some (formula_propeq t1' t2')
-                                                        else None
-                                                    | right _ => None
-                                                    end
-                                      | _ => fun _ _ => None
-                                      end t1 t2
-                                  | _ => None
-                                  end
+      (* | @formula_secLeak _ σ t => match fact with *)
+      (*                             | @formula_relop _ σ' rop t1 t2 => *)
+      (*                                 match rop with *)
+      (*                                 | bop.eq => fun t1' t2' => *)
+      (*                                               match eq_dec σ σ' with *)
+      (*                                               | left Heqσ => *)
+      (*                                                   let t' := eq_rect σ (Term _) t σ' Heqσ in *)
+      (*                                                   if Term_eqb t' t1' || Term_eqb t' t2' *)
+      (*                                                   then Some (formula_propeq t1' t2') *)
+      (*                                                   else None *)
+      (*                                               | right _ => None *)
+      (*                                               end *)
+      (*                                 | _ => fun _ _ => None *)
+      (*                                 end t1 t2 *)
+      (*                             | _ => None *)
+      (*                             end *)
       | _ => None
       end.
 
@@ -2825,25 +2898,45 @@ Module Type GenericSolverOn
           | |- context[ formula_eqb ?F1 ?F2] => destruct (formula_eqb_spec F1 F2); subst
           | H : option.wlp _ (formula_simplifies ?hyp ?F)|- context[ formula_simplifies ?hyp ?F ] => destruct H
         end; try (now eapply option.wlp_none); try eapply option.wlp_some; cbn;
-        try (now iApply bi_wand_iff_true);
-        arw; cbn; try iIntros "#Hfact";
+        try (now iApply bi_wand_iff_true).
+      {
+        eapply option.wlp_some.
+        destruct rop; try now eapply option.wlp_none.
+        eapply option.wlp_some.
+        constructor. intros ι Hwco _; cbn.
+        clear H.
+        unfold instpred_formula_relop, instpred_formula_secLeak, instpred_formula_propeq.
+        intros Heq. split; intros H.
+        - constructor. destruct inst, inst; try contradiction. cbn in *. by subst.
+          constructor; destruct inst, inst; try contradiction; cbn; auto.
+        - destruct H. destruct H0. destruct inst, inst; cbn in *; try contradiction.
+          + by inversion H.
+          
+
+            (* eapply option.wlp_some. *)
+        (* destruct rop; try now eapply option.wlp_none. *)
+        (* destruct fact; try now eapply option.wlp_none. *)
+        (* destruct eq_dec; try now eapply option.wlp_none. subst. cbn. *)
+        (* destruct (Term_eqb_spec t t1); *)
+        (*   destruct (Term_eqb_spec t t2); cbn; *)
+        (*   try now eapply option.wlp_none. *)
+        (* all: eapply option.wlp_some. *)
+        (* all: constructor. *)
+        (* all: intros ι Hwco _; cbn. *)
+        (* all: clear H. *)
+        (* all: unfold instpred_formula_relop, instpred_formula_secLeak, instpred_formula_propeq. *)
+        (* all: subst. *)
+        (* all: intros Heq. all: split; intros H. *)
+        (* all: try (cbn; destruct inst, inst; cbn in *; try contradiction; by subst). *)
+        (* - reflexivity. *)
+        (* - cbn in *. destruct inst; cbn in *; try contradiction. auto. *)
+        (* - rewrite H. destruct inst, inst; cbn in *; try contradiction. auto. inversion H. *)
+        (* - rewrite H. destruct inst, inst; cbn in *; try contradiction. auto. inversion H. *)
+      }
+        all: arw; cbn; try iIntros "#Hfact";
         try (iApply bi_wand_iff_or || iApply bi_wand_iff_sep); try iSplit;
         try now (iApply H || iApply H0 || iApply H1 || iApply bi.wand_iff_refl).
-      rewrite option.wlp_some.
-      destruct fact; try now eapply option.wlp_none.
-      destruct rop; try now eapply option.wlp_none.
-      destruct eq_dec; try now eapply option.wlp_none.
-      destruct (Term_eqb_spec (eq_rect σ (Term w) t σ0 e) t1); try now eapply option.wlp_none.
-      eapply option.wlp_some.
-      constructor.
-      intros ι Hwco _. cbn.
-      clear H.
-      unfold instpred_formula_relop, instpred_formula_secLeak, instpred_formula_propeq.
-      subst.
-      intros Heq. split; intros H.
-      - cbn. destruct inst, inst; cbn in *; try contradiction. by subst.
-      - cbn in *. destruct inst, inst; cbn in *; try contradiction. auto.
-        (* - iIntros "#Hfact'". *)
+      (* - iIntros "#Hfact'". *)
       (*   iDestruct (repₚ_antisym_left with "Hfact Hfact'") as "%Heq". *)
       (*   discriminate. *)
       (* - iIntros ([]). *)

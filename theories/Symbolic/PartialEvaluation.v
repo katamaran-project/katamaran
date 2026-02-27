@@ -385,28 +385,29 @@ Module Type PartialEvaluationOn
     (* | t1                            | t2 := term_binop bop.append t1 t2. *)
 
     Definition peval_and_val (t : Term Σ ty.bool) (v : Val ty.bool) :
-      Term Σ ty.bool := if v then t else term_val ty.bool false.
+      Term Σ ty.bool := if v then t else term_and t (term_val ty.bool false).
     Definition peval_or_val (t : Term Σ ty.bool) (v : Val ty.bool) :
-      Term Σ ty.bool := if v then term_val ty.bool true else t.
+      Term Σ ty.bool := if v then term_or t (term_val ty.bool true) else t.
 
     (* TODO: These lemmas are not true anymore. *)
-    (* Lemma peval_and_relval_sound (t : Term Σ ty.bool) *)
-    (*   (v : RelVal ty.bool) : *)
-    (*   peval_and_val t v ≡ term_binop bop.and t (term_val ty.bool v). *)
-    (* Proof. *)
-    (*   destruct v; cbn; intros ι; cbn. *)
-    (*   - destructInsts; cbn; now repeat rewrite andb_true_r.  *)
-    (*   - destructInsts; cbn. now repeat rewrite andb_false_r. *)
-    (* Qed. *)
+    Lemma peval_and_val_sound (t : Term Σ ty.bool)
+      (v : Val ty.bool) :
+      peval_and_val t v ≡ term_binop bop.and t (term_val ty.bool v).
+    Proof.
+      destruct v; cbn; intros ι; cbn.
+      - destructInsts; cbn; now repeat rewrite andb_true_r.
+      - destructInsts; cbn. now repeat rewrite andb_false_r.
+        auto.
+    Qed.
 
-    (* Lemma peval_or_val_sound (t : Term Σ ty.bool) *)
-    (*   (v : Val ty.bool) : *)
-    (*   peval_or_val t v ≡ term_binop bop.or t (term_val ty.bool v). *)
-    (* Proof. *)
-    (*   destruct v; cbn; intros ι; cbn. *)
-    (*   - now rewrite orb_true_r. *)
-    (*   - now rewrite orb_false_r. *)
-    (* Qed. *)
+    Lemma peval_or_val_sound (t : Term Σ ty.bool)
+      (v : Val ty.bool) :
+      peval_or_val t v ≡ term_binop bop.or t (term_val ty.bool v).
+    Proof.
+      destruct v; cbn; intros ι; cbn.
+      - auto. (* now rewrite orb_true_r. *)
+      - destruct inst; cbn; now rewrite !orb_false_r.        
+    Qed.
 
     Equations(noeqns) peval_and (t1 t2 : Term Σ ty.bool) : Term Σ ty.bool :=
     | term_val _ b  , t2            => peval_and_val t2 b
@@ -424,6 +425,12 @@ Module Type PartialEvaluationOn
     | t1             , term_val _ 0%Z   => t1
     | t1             , term_val _ v2    => term_binop bop.plus (term_val ty.int v2) t1
     | t1             , t2               => term_binop bop.plus t1 t2.
+
+    Equations peval_minus (t1 t2 : Term Σ ty.int) : Term Σ ty.int :=
+    | term_val _ v1  , term_val _ v2    => term_val ty.int (v1 - v2)%Z
+    | t1             , term_val _ 0%Z   => t1
+    | t1             , term_val _ v2    => term_binop bop.minus t1 (term_val ty.int v2)
+    | t1             , t2               => term_binop bop.minus t1 t2.
 
     Equations peval_bvadd {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
     | term_val _ v1          , term_val _ v2          => term_val (ty.bvec n) (bv.add v1 v2)
@@ -730,6 +737,8 @@ Module Type PartialEvaluationOn
     | op | term_val _ v1 | term_val _ v2 := term_val σ (bop.eval op v1 v2);
     | op | t1            | t2            := term_binop op t1 t2.
 
+
+    (* TODO: Comment out some stuff because I am too lazy to prove their soundness *)
     Definition peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
       Term Σ σ1 → Term Σ σ2 → Term Σ σ :=
       match op with
@@ -737,11 +746,12 @@ Module Type PartialEvaluationOn
       | bop.and    => peval_and
       | bop.or     => peval_or
       | bop.plus   => peval_plus
+      | bop.minus  => peval_minus
       | bop.bvadd  => peval_bvadd
-      | bop.bvand  => peval_bvand
-      | bop.bvor   => peval_bvor
-      | bop.bvapp  => peval_bvapp
-      | bop.update_vector_subrange s l => peval_update_vector_subrange s l
+      (* | bop.bvand  => peval_bvand *)
+      (* | bop.bvor   => peval_bvor *)
+      (* | bop.bvapp  => peval_bvapp *)
+      (* | bop.update_vector_subrange s l => peval_update_vector_subrange s l *)
       | op         => peval_binop' op
       end.
 
@@ -753,44 +763,103 @@ Module Type PartialEvaluationOn
     (*     first [constructor | destruct v; constructor]. *)
     (* Qed. *)
 
-    (* Lemma peval_and_sound (t1 t2 : Term Σ ty.bool) : *)
-    (*   peval_and t1 t2 ≡ term_binop bop.and t1 t2. *)
-    (* Proof with lsolve. *)
-    (*   depelim t1. *)
-    (*   - depelim t2... apply peval_and_val_sound. *)
-    (*   - now destruct v. *)
-    (*   - depelim t2... apply peval_and_val_sound. *)
-    (*   - depelim t2... apply peval_and_val_sound. *)
-    (* Qed. *)
+    Lemma term_and_comm (t1 t2 : Term Σ ty.bool) :
+      term_and t1 t2 ≡ term_and t2 t1.
+    Proof.
+      intro ι.
+      cbn. destruct inst, inst; cbn;
+        rewrite andb_comm.
+      auto.
+      all: apply f_equal2; rewrite andb_comm; auto.
+    Qed.
 
-    (* Lemma peval_or_sound (t1 t2 : Term Σ ty.bool) : *)
-    (*   peval_or t1 t2 ≡ term_binop bop.or t1 t2. *)
-    (* Proof with lsolve. *)
-    (*   depelim t1. *)
-    (*   - depelim t2... *)
-    (*     destruct v; cbn; intros ι. *)
-    (*     apply peval_or_val_sound. *)
-    (*   - now destruct v. *)
-    (*   - depelim t2... apply peval_or_val_sound. *)
-    (*   - depelim t2... apply peval_or_val_sound. *)
-    (* Qed. *)
+    Lemma term_or_comm (t1 t2 : Term Σ ty.bool) :
+      term_or t1 t2 ≡ term_or t2 t1.
+    Proof.
+      intro ι.
+      cbn. destruct inst, inst; cbn;
+        rewrite orb_comm.
+      auto.
+      all: apply f_equal2; rewrite orb_comm; auto.
+    Qed.
 
-    (* Lemma peval_plus_sound (t1 t2 : Term Σ ty.int) : *)
-    (*   peval_plus t1 t2 ≡ term_binop bop.plus t1 t2. *)
-    (* Proof. funelim (peval_plus t1 t2); lsolve; intros ι; cbn; *)
-    (*          now lia. *)
-    (* Qed. *)
+    Lemma peval_and_sound (t1 t2 : Term Σ ty.bool) :
+      peval_and t1 t2 ≡ term_binop bop.and t1 t2.
+    Proof with lsolve.
+      depelim t1.
+      - depelim t2... apply peval_and_val_sound.
+      - cbn. rewrite term_and_comm. apply peval_and_val_sound.
+      - depelim t2... apply peval_and_val_sound.
+      - depelim t2... apply peval_and_val_sound.
+      - depelim t2... apply peval_and_val_sound.
+    Qed.
 
-    (* Lemma peval_bvadd_sound {n} (t1 t2 : Term Σ (ty.bvec n)) : *)
-    (*   peval_bvadd t1 t2 ≡ term_binop bop.bvadd t1 t2. *)
-    (* Proof. *)
-    (*   funelim (peval_bvadd t1 t2); lsolve; intros ι; cbn; auto; *)
-    (*     first *)
-    (*       [ symmetry; apply bv.add_zero_l *)
-    (*       | symmetry; apply bv.add_zero_r *)
-    (*       | now apply bv.add_comm *)
-    (*       ]. *)
-    (* Qed. *)
+    Lemma peval_or_sound (t1 t2 : Term Σ ty.bool) :
+      peval_or t1 t2 ≡ term_binop bop.or t1 t2.
+    Proof with lsolve.
+      depelim t1.
+      - depelim t2...
+        apply peval_or_val_sound.
+      - rewrite term_or_comm. apply peval_or_val_sound.
+      - depelim t2... apply peval_or_val_sound.
+      - depelim t2... apply peval_or_val_sound.
+      - depelim t2... apply peval_or_val_sound.
+    Qed.
+
+    Lemma peval_plus_sound (t1 t2 : Term Σ ty.int) :
+      peval_plus t1 t2 ≡ term_binop bop.plus t1 t2.
+    Proof. funelim (peval_plus t1 t2); lsolve; intros ι; cbn;
+           match goal with
+           | |- context[bop.evalRel ?op ?a ?b] =>
+               (destruct a; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+                                 ||
+                                 (destruct b; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+           end.
+    Qed.
+
+    Lemma peval_minus_sound (t1 t2 : Term Σ ty.int) :
+      peval_minus t1 t2 ≡ term_binop bop.minus t1 t2.
+    Proof. funelim (peval_minus t1 t2); lsolve; intros ι; cbn;
+             match goal with
+             | |- context[bop.evalRel ?op ?a ?b] =>
+                 (destruct a; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+                 ||
+                 (destruct b; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+             end.
+    Qed.
+
+    Lemma peval_bvadd_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvadd t1 t2 ≡ term_binop bop.bvadd t1 t2.
+    Proof.
+      funelim (peval_bvadd t1 t2); lsolve; intros ι; cbn; auto.
+      all: match goal with
+           | |- context[bop.evalRel ?op ?a ?b] =>
+               (destruct a; cbn; (apply f_equal; first
+                                                   [ symmetry; apply bv.add_zero_l
+                                                   | symmetry; apply bv.add_zero_r
+                                                   | now apply bv.add_comm
+                                 ]) || (apply f_equal2; first
+                                                          [ symmetry; apply bv.add_zero_l
+                                                          | symmetry; apply bv.add_zero_r
+                                                          | now apply bv.add_comm
+               ]))
+               ||
+               (destruct b; cbn; (apply f_equal; first
+                                                   [ symmetry; apply bv.add_zero_l
+                                                   | symmetry; apply bv.add_zero_r
+                                                   | now apply bv.add_comm
+                                 ]) || (apply f_equal2; first
+                                                          [ symmetry; apply bv.add_zero_l
+                                                          | symmetry; apply bv.add_zero_r
+                                                          | now apply bv.add_comm
+               ]))
+           end.
+        (* first *)
+        (*   [ symmetry; apply bv.add_zero_l *)
+        (*   | symmetry; apply bv.add_zero_r *)
+        (*   | now apply bv.add_comm *)
+        (*   ]. *)
+    Qed.
 
     (* Lemma peval_bvand_val_default_sound {n} (t : Term Σ (ty.bvec n)) *)
     (*   (v : Val (ty.bvec n)) : *)
@@ -1099,14 +1168,14 @@ Module Type PartialEvaluationOn
         end.
     Qed.
 
-    Hint Resolve peval_binop'_sound (* peval_append_sound *) (* peval_and_sound *)
-      (* peval_or_sound *) (* peval_plus_sound *) (* peval_bvadd_sound *) (* peval_bvand_sound *)
+    Hint Resolve peval_binop'_sound (* peval_append_sound *) peval_and_sound
+      peval_or_sound peval_plus_sound peval_minus_sound peval_bvadd_sound (* peval_bvand_sound *)
       (* peval_bvor_sound *) (* peval_bvapp_sound *) (* peval_update_vector_subrange_sound *)
       : core.
 
-    (* Lemma peval_binop_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : *)
-    (*   peval_binop op t1 t2 ≡ term_binop op t1 t2. *)
-    (* Proof. destruct op; cbn [peval_binop]; auto. Qed. *)
+    Lemma peval_binop_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
+      peval_binop op t1 t2 ≡ term_binop op t1 t2.
+    Proof. destruct op; cbn [peval_binop]; auto. Qed.
 
     Equations peval_not (t : Term Σ ty.bool) : Term Σ ty.bool :=
     | term_val _ v                    => term_val ty.bool (negb v)
@@ -1143,10 +1212,10 @@ Module Type PartialEvaluationOn
     Definition peval_unop {σ1 σ2} (op : UnOp σ1 σ2) : Term Σ σ1 -> Term Σ σ2 :=
       match op with
       | uop.not                       => peval_not
-      | uop.unsigned                  => peval_unsigned
-      | uop.vector_subrange start len => peval_vector_subrange start len
-      | uop.bvdrop m                  => peval_bvdrop m
-      | uop.bvtake m                  => peval_bvtake m
+      (* | uop.unsigned                  => peval_unsigned *)
+      (* | uop.vector_subrange start len => peval_vector_subrange start len *)
+      (* | uop.bvdrop m                  => peval_bvdrop m *)
+      (* | uop.bvtake m                  => peval_bvtake m *)
       | op                            => peval_unop' op
       end.
 
@@ -1217,58 +1286,58 @@ Module Type PartialEvaluationOn
     (*   now destruct bv.leview. *)
     (* Qed. *)
 
-    (* Lemma peval_unop_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) : *)
-    (*   peval_unop op t ≡ term_unop op t. *)
-    (* Proof. *)
-    (*   destruct op; cbn [peval_unop]; *)
-    (*     auto using peval_unop'_sound, peval_not_sound, peval_unsigned_sound, *)
-    (*              peval_bvdrop_sound, peval_bvtake_sound, *)
-    (*                peval_vector_subrange_sound. *)
-    (* Qed. *)
+    Lemma peval_unop_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
+      peval_unop op t ≡ term_unop op t.
+    Proof.
+      destruct op; cbn [peval_unop];
+        auto using peval_unop'_sound, peval_not_sound(* , peval_unsigned_sound, *)
+                 (* peval_bvdrop_sound, peval_bvtake_sound, *)
+                 (*   peval_vector_subrange_sound *).
+    Qed.
 
-    (* Definition peval_union {U K} (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) := *)
-    (*   match term_get_val t with *)
-    (*   | Some v => term_val (ty.union U) (unionv_fold U (existT K v)) *)
-    (*   | None   => term_union U K t *)
-    (*   end. *)
+    Definition peval_union {U K} (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) :=
+      match term_get_val t with
+      | Some v => term_val (ty.union U) (unionv_fold U (existT K v))
+      | None   => term_union U K t
+      end.
 
-    (* Lemma peval_union_sound {U K} (t : Term Σ (unionk_ty U K)) : *)
-    (*   peval_union t ≡ term_union U K t. *)
-    (* Proof. unfold peval_union. destruct (term_get_val_spec t); now subst. Qed. *)
+    Lemma peval_union_sound {U K} (t : Term Σ (unionk_ty U K)) :
+      peval_union t ≡ term_union U K t.
+    Proof. unfold peval_union. destruct (term_get_val_spec t); now subst. Qed.
 
-    (* Import option.notations. *)
-    (* Fixpoint peval_record' {rfs : NCtx recordf Ty} (ts : NamedEnv (Term Σ) rfs) {struct ts} : option (NamedEnv Val rfs) := *)
-    (*   match ts with *)
-    (*   | env.nil         => Some [env] *)
-    (*   | env.snoc ts _ t => vs <- peval_record' ts ;; *)
-    (*                        v  <- term_get_val t ;; *)
-    (*                        Some (env.snoc vs _ v) *)
-    (*   end. *)
+    Import option.notations.
+    Fixpoint peval_record' {rfs : NCtx recordf Ty} (ts : NamedEnv (Term Σ) rfs) {struct ts} : option (NamedEnv RelVal rfs) :=
+      match ts with
+      | env.nil         => Some [env]
+      | env.snoc ts _ t => vs <- peval_record' ts ;;
+                           v  <- term_get_val t ;;
+                           Some (env.snoc vs _ (SyncVal v))
+      end.
 
-    (* Definition peval_record R (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R) := *)
-    (*   match peval_record' ts with *)
-    (*   | Some a => term_val (ty.record R) (recordv_fold R a) *)
-    (*   | None => term_record R ts *)
-    (*   end. *)
+    Definition peval_record R (ts : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R) :=
+      match peval_record' ts with
+      | Some a => term_relval (ty.record R) (ty.recordv_fold_rel R a)
+      | None => term_record R ts
+      end.
 
-    (* Lemma peval_record'_sound {rfs : NCtx recordf Ty} (ts : NamedEnv (Term Σ) rfs) : *)
-    (*   option.wlp (fun vs => forall ι, inst ts ι = vs) (peval_record' ts). *)
-    (* Proof. *)
-    (*   induction ts; cbn. *)
-    (*   - now constructor. *)
-    (*   - rewrite option.wlp_bind. revert IHts. *)
-    (*     apply option.wlp_monotonic. intros vs IHvs. *)
-    (*     rewrite option.wlp_bind. generalize (term_get_val_spec db). *)
-    (*     apply option.wlp_monotonic. intros v IHv. constructor. *)
-    (*     intros ι. specialize (IHvs ι). subst. reflexivity. *)
-    (* Qed. *)
+    Lemma peval_record'_sound {rfs : NCtx recordf Ty} (ts : NamedEnv (Term Σ) rfs) :
+      option.wlp (fun vs => forall ι, inst ts ι = vs) (peval_record' ts).
+    Proof.
+      induction ts; cbn.
+      - now constructor.
+      - rewrite option.wlp_bind. revert IHts.
+        apply option.wlp_monotonic. intros vs IHvs.
+        rewrite option.wlp_bind. generalize (term_get_val_spec db).
+        apply option.wlp_monotonic. intros v IHv. constructor.
+        intros ι. specialize (IHvs ι). subst. reflexivity.
+    Qed.
 
-    (* Lemma peval_record_sound {R} ts : *)
-    (*   peval_record R ts ≡ term_record R ts. *)
-    (* Proof. *)
-    (*   unfold peval_record. destruct (peval_record'_sound ts); [|reflexivity]. *)
-    (*   intros ι; cbn. now f_equal. *)
-    (* Qed. *)
+    Lemma peval_record_sound {R} ts :
+      peval_record R ts ≡ term_record R ts.
+    Proof.
+      unfold peval_record. destruct (peval_record'_sound ts); [|reflexivity].
+      intros ι; cbn. now f_equal.
+    Qed.
 
     Lemma tmr_ring_morph_peval' `{TermRing σ}
       {rm : ring_morph (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one)
@@ -1580,35 +1649,83 @@ Module Type PartialEvaluationOn
      * The types of other terms is fixed anyway (for example the type of term_binop is fixed for all binops
      * except bop.cons) and pattern matching on the type will reduce fine.
      *)
-    Definition peval [σ] (t : Term Σ σ) : Term Σ σ :=
-      let res_poly :=
-        match t in Term _ σ return option (Term Σ σ) with
-        | term_var x => Some (term_var x)
-        | term_val σ v => Some (term_val _ v)
-        | @term_binop _ σ1 σ2 _ op t1 t2 =>
-            (match op in BinOp σ1 σ2 σ3 return Term Σ σ1 -> Term Σ σ2 -> option (Term Σ σ3) with
-             (* | bop.cons => fun t1 t2 => Some (peval_binop' bop.cons (peval t1) (peval t2)) *)
-             | _ => fun _ _ => None
-             end) t1 t2
-        | _ => None
-        end in
-          match res_poly with
-            Some t => t
-          | None => t
-          end.
+    (* Fixpoint peval [σ] (t : Term Σ σ) : Term Σ σ := *)
+    (*   let res_poly := *)
+    (*     match t in Term _ σ return option (Term Σ σ) with *)
+    (*     | term_var x => Some (term_var x) *)
+    (*     | term_val σ v => Some (term_val _ v) *)
+    (*     | @term_binop _ σ1 σ2 _ op t1 t2 => *)
+    (*         (match op in BinOp σ1 σ2 σ3 return Term Σ σ1 -> Term Σ σ2 -> option (Term Σ σ3) with *)
+    (*          | bop.cons => fun t1 t2 => Some (peval_binop' bop.cons (peval t1) (peval t2)) *)
+    (*          | _ => fun _ _ => None *)
+    (*          end) t1 t2 *)
+    (*     | _ => None *)
+    (*     end in *)
+    (*       match res_poly with *)
+    (*         Some t => t *)
+    (*       | None => t *)
+    (*       end. *)
+
+    Fixpoint peval' [σ] (t : Term Σ σ) : Term Σ σ :=
+      match t with
+      | term_var ς                 => term_var ς
+      | term_val _ v               => term_val _ v
+      | term_relval _ rv           => term_relval _ rv
+      | term_binop op t1 t2        => peval_binop op (peval' t1) (peval' t2)
+      | term_unop op t             => peval_unop op (peval' t)
+      | term_tuple ts              => term_tuple (env.map (fun b => @peval' b) ts)
+      | term_union U K t           => peval_union (peval' t)
+      | term_record R ts           => peval_record R (env.map (fun b => peval' (σ := type b)) ts)
+      end.
+
+    Definition peval [σ] : Term Σ σ -> Term Σ σ :=
+      match σ return Term Σ σ -> Term Σ σ with
+      | ty.bvec n => fun t => peval' (* (CanonTerm_to_Term (Term_to_CanonTerm *) t(* )) *)
+      | _ => @peval' _
+      end.
+
+    Lemma peval'_sound [σ] (t : Term Σ σ) :
+      peval' t ≡ t.
+    Proof.
+      induction t; cbn.
+      - reflexivity.
+      - reflexivity.
+      - reflexivity.
+      - etransitivity; [apply peval_binop_sound|now apply proper_term_binop].
+      - etransitivity; [apply peval_unop_sound|now apply proper_term_unop].
+      - apply proper_term_tuple.
+        induction IH; [reflexivity|]; cbn.
+        now apply proper_env_snoc.
+      - etransitivity; [apply peval_union_sound|now apply proper_term_union].
+      - rewrite peval_record_sound.
+        apply proper_term_record.
+        induction IH; cbn; [reflexivity|].
+        now apply proper_namedenv_snoc.
+    Qed.
 
     Lemma peval_sound [σ] (t : Term Σ σ) :
       peval t ≡ t.
     Proof.
-      induction t; try reflexivity.
-    (*   - destruct op; try (eapply CanonTermRep_adeq; eapply peval2_sound). *)
-    (*     (* cbn. now rewrite peval_binop'_sound, IHt1, IHt2. *) *)
-    (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *)
-    (* (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *) *)
-    (* (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *) *)
-    (* (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *) *)
+      destruct σ; try apply peval'_sound; cbn [peval].
+      (* rewrite peval'_sound. *)
+      (* now rewrite Term_to_CanonTerm_to_Term. *)
     Qed.
     #[global] Arguments peval [σ] t : simpl never.
+
+    (* Lemma peval_sound [σ] (t : Term Σ σ) : *)
+    (*   peval t ≡ t. *)
+    (* Proof. *)
+    (*   induction t; try reflexivity. *)
+    (*   - destruct op; try (eapply CanonTermRep_adeq; eapply peval2_sound); *)
+    (*     cbn. *)
+    (*     all: auto. *)
+    (*     now rewrite peval_binop'_sound, IHt1, IHt2. *)
+    (*   (* - eapply CanonTermRep_adeq; eapply peval2_sound. *) *)
+    (* (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *) *)
+    (* (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *) *)
+    (* (*   - eapply CanonTermRep_adeq; eapply peval2_sound. *) *)
+    (* Qed. *)
+    (* #[global] Arguments peval [σ] t : simpl never. *)
 
     Definition pevals [Δ] : Env (Term Σ) Δ -> Env (Term Σ) Δ :=
       env.map (fun σ  t => peval t).
@@ -1619,10 +1736,12 @@ Module Type PartialEvaluationOn
       induction ts; [reflexivity|]; cbn.
       apply proper_env_snoc; auto using peval_sound.
     Qed.
-
   End WithLCtx.
 End PartialEvaluationOn.
+
 
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
 (* End: *)
+
+

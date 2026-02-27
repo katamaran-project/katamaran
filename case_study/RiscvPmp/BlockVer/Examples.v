@@ -57,7 +57,7 @@ From iris.algebra Require dfrac big_op.
 From iris.program_logic Require weakestpre adequacy.
 From iris.proofmode Require string_ident tactics.
 From stdpp Require namespaces.
-From Katamaran Require Import RiscvPmp.LoopVerification.
+(* From Katamaran Require Import RiscvPmp.LoopVerification. *)
 
 Module Examples.
   Import RiscvPmpBlockVerifExecutor.
@@ -69,7 +69,7 @@ Module Examples.
   Local Notation "a <=ᵘ b" := (term_binop (bop.relop bop.bvule) a b) : exp_scope.
   Local Notation "a = b" := (term_binop (bop.relop bop.eq) a b) : exp_scope.
   Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
-  Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+  (* Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])). *)
 
   Definition X0 : RegIdx := bv.zero.
   Definition X1 : RegIdx := bv.one.
@@ -86,16 +86,19 @@ Module Examples.
     Definition minimal_pre {Σ} : Assertion Σ :=
       (* asn.exist "_" _ (nextpc ↦ term_var "_")
       ∗ *)cur_privilege ↦ term_val ty_privilege Machine
-      ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ;
-                                    (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]).
+      (* ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ; *)
+      (*                               (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]) *) ∗
+            asn.chunk (chunk_user inv_leakage [env])
+    .
 
     (* minimal_post asserts ownership of the cur_privilege CSR,
        but do not care in which mode we end up. *)
     Definition minimal_post {Σ} : Assertion Σ :=
       (* asn.exist "_" _ (nextpc ↦ term_var "_")
       ∗ *) cur_privilege ↦ term_val ty_privilege Machine
-      ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ;
-                                    (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]).
+      (* ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ; *)
+      (*                               (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]) *)
+    .
 
     Definition extend_to_minimal_pre {Σ} (P : Assertion Σ) : Assertion Σ :=
       P ∗ minimal_pre.
@@ -174,8 +177,11 @@ Module Examples.
         [MV X1 X0]
       {{ X1 ↦ᵣ term_val ty_xlenbits bv.zero }}.
 
+    Import SymProp.notations.
+    Import Erasure.notations.
+
     Example valid_mv_zero_ex : ValidBlockVerifierContract mv_zero_ex.
-    Proof. solve_vc. Qed.
+    Proof. vm_compute. solve_vc. Qed.
 
     Definition mv_same_reg_ex : BlockVerifierContract :=
       {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x" }} [MV X1 X1] {{ X1 ↦ᵣ term_var "x" }}
@@ -223,7 +229,7 @@ Module Examples.
          default offset allows one instruction between this block and the true
          block. *)
     Definition jump_if_zero : BlockVerifierContract :=
-      {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x1" }}
+      {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x1" ∗ asn.formula (formula_secLeak (term_var "x1")) }}
         [ BEQ X1 X0 true_offset ]
         {{ if: term_var "x1" ?= term_val ty_xlenbits bv.zero
            then asn_next_pc_eq (term_pc_val +ᵇ term_val ty_xlenbits (bv.zext true_offset))
@@ -232,7 +238,7 @@ Module Examples.
 
     (* TODO: would rather write ∀ true_offset, ... but verification then explodes *)
     Lemma valid_jump_if_zero : ValidBlockVerifierContract jump_if_zero.
-    Proof. solve_vc. Qed.
+    Proof. vm_compute. solve_vc. Qed.
 
     (* Sets the contents of register X2 to value 42. The contract reflects
          this, we require ownership of X2, and after executing we know that
@@ -261,30 +267,30 @@ Module Examples.
     map c (fun _ i _ => i).
 
   Section WithSailResources.
-      Import IrisModel.RiscvPmpIrisBase.
-      Import IrisInstance.RiscvPmpIrisInstance.
+      Import IrisModelBinary.RiscvPmpIrisBase2.
+      Import IrisInstanceBinary.RiscvPmpIrisInstance2.
       Import RiscvPmpIrisInstanceWithContracts.
 
       Context `{sailGS Σ} `{sailGS2 Σ}.
 
-      Definition ptsto_instrs_from_contract {Γ} (c : @BlockVerifierContract Γ) (a : Val ty_xlenbits) : iProp Σ :=
+      Definition ptsto_instrs_from_contract {Γ} (c : @BlockVerifierContract Γ) (a : RelVal ty_xlenbits) : iProp Σ :=
         ptsto_instrs a (extract_instrs_from_contract c).
 
-      Definition jump_if_zero_pre (x1 : Val ty_xlenbits) : iProp Σ :=
+      Definition jump_if_zero_pre (x1 : RelVal ty_xlenbits) : iProp Σ :=
         asn.interpret (extract_pre_from_contract jump_if_zero)
-          [env].["x1"∷ty_xlenbits ↦ x1].["a"∷ty_xlenbits ↦ bv.zero]
-        ∗ reg_pointsTo pc bv.zero ∗ (∃ npc, reg_pointsTo nextpc npc)
-        ∗ ptsto_instrs_from_contract jump_if_zero bv.zero.
+          [env].["x1"∷ty_xlenbits ↦ x1].["a"∷ty_xlenbits ↦ (SyncVal bv.zero)]
+        ∗ reg_pointsTo2 pc (SyncVal bv.zero) ∗ (∃ npc, reg_pointsTo2 nextpc npc)
+        ∗ ptsto_instrs_from_contract jump_if_zero (SyncVal bv.zero).
 
-      Definition jump_if_zero_post (x1 : Val ty_xlenbits) : iProp Σ :=
-        ∃ (an : Val ty_xlenbits),
-          reg_pointsTo pc an ∗ (∃ npc, reg_pointsTo nextpc npc)
-          ∗ ptsto_instrs_from_contract jump_if_zero bv.zero
+      Definition jump_if_zero_post (x1 : RelVal ty_xlenbits) : iProp Σ :=
+        ∃ (an : RelVal ty_xlenbits),
+          reg_pointsTo2 pc an ∗ (∃ npc, reg_pointsTo2 nextpc npc)
+          ∗ ptsto_instrs_from_contract jump_if_zero (SyncVal bv.zero)
           ∗ asn.interpret (extract_post_from_contract jump_if_zero)
-          [env].["x1"∷ty_xlenbits ↦ x1].["a"∷ty_xlenbits ↦ bv.zero].["an"∷ty_xlenbits ↦ an].
+          [env].["x1"∷ty_xlenbits ↦ x1].["a"∷ty_xlenbits ↦ (SyncVal bv.zero)].["an"∷ty_xlenbits ↦ an].
 
       Definition iris_contract (pre post : iProp Σ) : iProp Σ :=
-        pre -∗ (post -∗ WP_loop) -∗ WP_loop.
+        pre -∗ (post -∗ WP2_loop) -∗ WP2_loop.
 
       Definition jump_if_zero_contract : iProp Σ := ∀ x1,
           iris_contract (jump_if_zero_pre x1) (jump_if_zero_post x1).
@@ -294,26 +300,31 @@ Module Examples.
       Proof.
         iIntros (x1) "Hpre Hk".
         iApply (sound_sblock_verification_condition valid_jump_if_zero
-                  [env].["x1"∷ty_xlenbits ↦ x1] $! bv.zero with "Hpre [Hk]").
+                  [env].["x1"∷ty_xlenbits ↦ x1] $! (SyncVal bv.zero) with "[Hpre] [Hk]").
+        unfold jump_if_zero_pre, extract_pre_from_contract, jump_if_zero. cbn.
+        iDestruct "Hpre" as "((((A1 & _) & A1' & (A1'' & _)) & A2 & A3) & B & C & D & E)".
+        iFrame.
         iIntros (an) "H".
         iApply "Hk".
         by iExists an.
       Qed.
 
-      Definition set_X2_to_42_pre (instrs_loc : Val ty_xlenbits) : iProp Σ :=
+      
+      Definition set_X2_to_42_pre (instrs_loc : RelVal ty_xlenbits) : iProp Σ :=
         asn.interpret (extract_pre_from_contract set_X2_to_42)
           [env].["a"∷ty_xlenbits ↦ instrs_loc]
-        ∗ reg_pointsTo pc instrs_loc ∗ (∃ npc, reg_pointsTo nextpc npc)
-        ∗ ptsto_instrs_from_contract set_X2_to_42 instrs_loc.
+        ∗ reg_pointsTo2 pc instrs_loc ∗ (∃ npc, reg_pointsTo2 nextpc npc)
+        ∗ ptsto_instrs_from_contract set_X2_to_42 instrs_loc
+        ∗ ⌜ secLeak instrs_loc ⌝.
 
-      Definition set_X2_to_42_post (instrs_loc : Val ty_xlenbits) : iProp Σ :=
-        ∃ (an : Val ty_xlenbits),
-          reg_pointsTo pc an ∗ (∃ npc, reg_pointsTo nextpc npc)
+      Definition set_X2_to_42_post (instrs_loc : RelVal ty_xlenbits) : iProp Σ :=
+        ∃ (an : RelVal ty_xlenbits),
+          reg_pointsTo2 pc an ∗ (∃ npc, reg_pointsTo2 nextpc npc)
           ∗ ptsto_instrs_from_contract set_X2_to_42 instrs_loc
           ∗ asn.interpret (extract_post_from_contract set_X2_to_42)
               [env].["a"∷ty_xlenbits ↦ instrs_loc].["an"∷ty_xlenbits ↦ an].
 
-      Definition set_X2_to_42_contract (instrs_loc : Val ty_xlenbits) : iProp Σ :=
+      Definition set_X2_to_42_contract (instrs_loc : RelVal ty_xlenbits) : iProp Σ :=
         iris_contract (set_X2_to_42_pre instrs_loc) (set_X2_to_42_post instrs_loc).
 
       Lemma set_X2_to_42_verified : ∀ instrs_loc,
@@ -321,10 +332,90 @@ Module Examples.
       Proof.
         iIntros (instrs_loc) "Hpre Hk".
         iApply (sound_sblock_verification_condition valid_set_X2_to_42
-                  [env] $! instrs_loc with "Hpre [Hk]").
+                  [env] $! instrs_loc with "[Hpre] [Hk]").
+        iDestruct "Hpre" as "(A & B & C & D & E)".
+        unfold extract_pre_from_contract, set_X2_to_42. cbn.
+        iFrame.
         iIntros (an) "H".
         iApply "Hk".
         by iExists an.
       Qed.
   End WithSailResources.
+
+  Import IrisInstanceBinary.
+  Import RiscvPmpIrisInstance2.
+  Import RiscvPmpSemantics.
+  Import RiscvPmpIrisAdeqParams2.
+  Import SmallStepNotations.
+  Import IrisModelBinary.RiscvPmpIrisBase2.
+
+  From iris.bi Require big_op.
+  From iris.algebra Require big_op.
+  From iris.program_logic Require weakestpre.
+
+    Definition mem_has_word (μ : Memory) (a : Val ty_word) (w : Val ty_word) : Prop :=
+      exists v0 v1 v2 v3, List.map (memory_ram μ) (bv.seqBv a 4) = [v0; v1; v2; v3]%list /\ bv.app v0 (bv.app v1 (bv.app v2 (bv.app v3 bv.nil))) = w.
+
+    (* byte order correct? *)
+    Definition mem_has_instr (μ : Memory) (a : Val ty_word) (instr : AST) : Prop :=
+      exists w, mem_has_word μ a w /\ pure_decode w = inr instr.
+
+    Fixpoint mem_has_instrs (μ : Memory) (a : Val ty_word) (instrs : list AST) : Prop :=
+      match instrs with
+      | cons inst instrs => mem_has_instr μ a inst /\ mem_has_instrs μ (bv.add (bv.of_N 4) a) instrs
+      | nil => True
+      end.
+
+    Definition filter_AnnotInstr_AST (l : list AnnotInstr) := base.omap extract_AST l.
+
+    Definition init_addr     : N := 0.
+
+    Locate "↦ᵣ".
+    Locate reg_pointsTo2.
+
+      Lemma mvZero_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
+        {δ1 δ2 δ1' δ2' : CStoreVal [ctx]} {s' : Stm [ctx] ty.unit} (is_mmio : bool) :
+        mem_has_instrs μ1 (bv.of_N init_addr) [MV X1 X0] ->
+        mem_has_instrs μ2 (bv.of_N init_addr) [MV X1 X0] ->
+        read_register γ1 cur_privilege = Machine ->
+        read_register γ2 cur_privilege = Machine ->
+        (* read_register γ pmp0cfg = default_pmpcfg_ent -> *)
+        (* read_register γ pmpaddr0 = bv.zero -> *)
+        (* read_register γ pmp1cfg = default_pmpcfg_ent -> *)
+        (* read_register γ pmpaddr1 = bv.zero -> *)
+        read_register γ1 pc = (bv.of_N init_addr) ->
+        read_register γ2 pc = (bv.of_N init_addr) ->
+        ⟨ γ1, μ1, δ1, fun_loop ⟩ --->* ⟨ γ1', μ1', δ1', s' ⟩ ->
+        ⟨ γ2, μ2, δ2, fun_loop ⟩ --->* ⟨ γ2', μ2', δ2', s' ⟩ ->
+        leakage_trace μ1 = leakage_trace μ2 ->
+        leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
+      Proof.
+        intros μ1init μ2init γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 eq_leak.
+        refine (adequacy_gen (μ21 := μ2) (γ21 := γ2) (δ21 := δ2) (Q := fun _ _ _ _ _ _ => True%I) fun_loop _ steps1 _).
+        iIntros (Σ' H).
+        cbn.
+        iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
+        rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
+        iModIntro.
+        iSplitR "".
+        - destruct (env.view δ1); env.destroy δ2.
+          
+          iApply (femtokernel_init_safe is_mmio with "[-]").
+
+          Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
+          iFrame "∗ #". rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
+          now repeat iDestruct "H'" as "($ & H')".
+        - iIntros "Hmem".
+          (* Prove that this predicate follows from the invariants in both cases *)
+          destruct (negb is_mmio).
+          + iInv "Hfortytwo" as ">Hptsto" "_".
+            iDestruct (interp_ptstomem_valid with "Hmem Hptsto") as "$".
+            iApply fupd_mask_intro; first set_solver.
+            now iIntros "_".
+          + iInv "Hfortytwo" as (t) ">[Hfrag %Hpred]" "_".
+            iDestruct "Hmem" as "(%memmap & Hinv & %link & Htr)".
+            iDestruct (trace.trace_full_frag_eq with "Htr Hfrag") as "->".
+            iApply fupd_mask_intro; first set_solver.
+            now iIntros "_".
+
 End Examples.

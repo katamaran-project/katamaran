@@ -34,7 +34,9 @@ From Katamaran Require Import
      Iris.BinaryResources
      RiscvPmp.Machine
      RiscvPmp.IrisModel
-     (* RiscvPmp.IrisInstance *)
+     RiscvPmp.IrisInstance
+     Iris.BinaryWeakestPre
+     RiscvPmp.Sig
 .
 From iris Require Import
      base_logic.lib.gen_heap
@@ -50,7 +52,7 @@ Import RiscvPmpProgram.
 Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
   (* Pull in the definition of the LanguageMixin and register ghost state. *)
   Include RiscvPmpIrisBase.
-  (* Import RiscvPmpIrisAdeqParameters. *)
+  Import RiscvPmpIrisAdeqParameters.
 
   (* Defines the memory ghost state. *)
   Section RiscvPmpIrisParams2.
@@ -79,6 +81,11 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
       @mc_gtGS _ memGS2_memGS_left.
     Definition memGS2_gtGS2_right `{mG : memGS2 Σ} : traceG Trace Σ :=
       @mc_gtGS _ memGS2_memGS_right.
+
+    Definition memGS2_gltGS2_left `{mG : memGS2 Σ} : traceG LeakageTrace Σ :=
+      @mc_gltGS _ memGS2_memGS_left.
+    Definition memGS2_gltGS2_right `{mG : memGS2 Σ} : traceG LeakageTrace Σ :=
+      @mc_gltGS _ memGS2_memGS_right.
   End RiscvPmpIrisParams2.
 
   Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.

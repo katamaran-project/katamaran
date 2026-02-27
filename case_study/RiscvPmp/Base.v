@@ -326,6 +326,12 @@ Inductive MemoryOpResult (bytes : nat): Set :=
 | MemException (e : ExceptionType)
 .
 
+Inductive LeakEvent : Set :=
+| LeakPc : Addr -> LeakEvent
+| LeakMemRead : Addr -> LeakEvent
+| LeakMemWrite : Addr -> LeakEvent
+.
+
 Inductive ASTConstructor : Set :=
 | KRTYPE
 | KITYPE
@@ -374,6 +380,12 @@ Inductive CtlResultConstructor : Set :=
 | KCTL_MRET
 .
 
+Inductive LeakEventConstructor : Set :=
+| KLeakPc
+| KLeakMemRead
+| KLeakMemWrite
+.
+
 Inductive Unions : Set :=
 | ast
 | access_type
@@ -382,6 +394,7 @@ Inductive Unions : Set :=
 | fetch_result
 | ctl_result
 (* | pmp_entries *)
+| leak_event
 .
 
 Record Pmpcfg_ent : Set :=
@@ -437,6 +450,8 @@ Section TransparentObligations.
   Derive NoConfusion for CtlResultConstructor.
   Derive NoConfusion for MemoryOpResult.
   Derive NoConfusion for MemoryOpResultConstructor.
+  Derive NoConfusion for LeakEvent.
+  Derive NoConfusion for LeakEventConstructor.
   Derive NoConfusion for Records.
   Derive NoConfusion for Pmpcfg_ent.
   Derive NoConfusion for Mstatus.
@@ -473,6 +488,8 @@ Derive EqDec for CtlResult.
 Derive EqDec for CtlResultConstructor.
 Derive EqDec for MemoryOpResult.
 Derive EqDec for MemoryOpResultConstructor.
+Derive EqDec for LeakEvent.
+Derive EqDec for LeakEventConstructor.
 Derive EqDec for Records.
 Derive EqDec for Pmpcfg_ent.
 Derive EqDec for Mstatus.
@@ -571,6 +588,10 @@ Section Finite.
   #[export,program] Instance MemoryOpResultConstructor_finite :
     Finite MemoryOpResultConstructor :=
     {| enum := [KMemValue;KMemException] |}.
+
+  #[export,program] Instance LeakEventConstructor_finite :
+    Finite LeakEventConstructor :=
+    {| enum := [KLeakPc;KLeakMemRead;KLeakMemWrite] |}.
 End Finite.
 
 Module Export RiscvPmpBase <: Base.
@@ -621,6 +642,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_memory_op_result (bytes : nat) := (ty.union (memory_op_result bytes)).
   Definition ty_fetch_result                   := (ty.union fetch_result).
   Definition ty_ctl_result                     := (ty.union ctl_result).
+  Definition ty_leak_event                     := (ty.union leak_event).
   Definition ty_pmpcfg_ent                     := (ty.record rpmpcfg_ent).
   Definition ty_mstatus                        := (ty.record rmstatus).
   Definition ty_pmpentry                       := (ty.prod ty_pmpcfg_ent ty_xlenbits).
@@ -656,6 +678,7 @@ Module Export RiscvPmpBase <: Base.
     | fetch_result           => FetchResult
     | ctl_result             => CtlResult
     (* | pmp_entries      => Coq type in the model for pmp_entries  *)
+    | leak_event             => LeakEvent
     end.
 
   Definition record_denote (R : Records) : Set :=
@@ -679,6 +702,7 @@ Module Export RiscvPmpBase <: Base.
     | fetch_result           => FetchResultConstructor
     | ctl_result             => CtlResultConstructor
     (* | pmp_entries   => PmpEntriesConstructor *)
+    | leak_event             => LeakEventConstructor
     end.
 
   Definition union_constructor_type (U : Unions) : union_constructor U -> Ty :=
@@ -716,6 +740,12 @@ Module Export RiscvPmpBase <: Base.
                             match K with
                             | KCTL_TRAP => ty_exception_type
                             | KCTL_MRET => ty.unit
+                            end
+    | leak_event       => fun K =>
+                            match K with
+                            | KLeakPc => ty.bvec xlenbits
+                            | KLeakMemRead => ty.bvec xlenbits
+                            | KLeakMemWrite => ty.bvec xlenbits
                             end
     end.
 
@@ -782,6 +812,12 @@ Module Export RiscvPmpBase <: Base.
                             | CTL_TRAP e => existT KCTL_TRAP e
                             | CTL_MRET   => existT KCTL_MRET tt
                             end
+    | leak_event       => fun Kv =>
+                            match Kv with
+                            | LeakPc pc => existT KLeakPc pc
+                            | LeakMemRead addr => existT KLeakMemRead addr
+                            | LeakMemWrite addr => existT KLeakMemWrite addr
+                            end
     end.
 
   Definition union_fold (U : unioni) : { K & Val (union_constructor_type U K) } -> uniont U :=
@@ -833,6 +869,12 @@ Module Export RiscvPmpBase <: Base.
                               match Kv with
                               | existT KCTL_TRAP e  => CTL_TRAP e
                               | existT KCTL_MRET tt => CTL_MRET
+                              end
+      | leak_event       => fun Kv =>
+                              match Kv with
+                              |existT KLeakPc pc => LeakPc pc
+                              | existT KLeakMemRead addr => LeakMemRead addr
+                              | existT KLeakMemWrite addr => LeakMemWrite addr
                               end
       end.
 
@@ -1112,19 +1154,25 @@ Module Export RiscvPmpBase <: Base.
       }.
     Definition Trace : Set := list Event.
 
+    Definition LeakageTrace := list LeakEvent.
+
     (* Memory *)
     Record MemoryType : Type :=
       mkMem {
         memory_ram : RAM;
         memory_trace : Trace;
         memory_state : State;
+        leakage_trace : LeakageTrace
       } .
     Definition Memory := MemoryType.
 
-    Definition memory_update_ram (μ : Memory) (r : RAM) := mkMem r (memory_trace μ) (memory_state μ).
-    Definition memory_update_trace (μ : Memory) (t : Trace) := mkMem (memory_ram μ) t (memory_state μ).
+    Definition memory_update_ram (μ : Memory) (r : RAM) := mkMem r (memory_trace μ) (memory_state μ) (leakage_trace μ).
+    Definition memory_update_trace (μ : Memory) (t : Trace) := mkMem (memory_ram μ) t (memory_state μ) (leakage_trace μ).
     Definition memory_append_trace (μ : Memory) (e : Event) := memory_update_trace μ (cons e (memory_trace μ)).
-    Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s.
+    Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s (leakage_trace μ).
+    Definition memory_update_leakage_trace (μ : Memory) (t : LeakageTrace) := mkMem (memory_ram μ) (memory_trace μ) (memory_state μ) t.
+    Definition fun_leak (μ : Memory) (e : LeakEvent) := memory_update_leakage_trace μ (cons e (leakage_trace μ)).
+
 
     Fixpoint fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) : 
       Val (ty_bytes data_size) :=
@@ -1188,6 +1236,20 @@ Module Export RiscvPmpBase <: Base.
       end.
 
   End MemoryModel.
+
+  (* Section LeakageModel. *)
+  (*   Inductive LeakEvent : Set := *)
+  (*   | LeakPc : Addr -> LeakEvent *)
+  (*   | LeakMemRead : Addr -> LeakEvent *)
+  (*   | LeakMemWrite : Addr -> LeakEvent *)
+  (*   . *)
+
+  (*   Definition LeakageTrace := list LeakEvent. *)
+
+  (*   Definition fun_leak_pc (t : LeakageTrace) (pc : Addr) := cons (LeakPc pc) t. *)
+  (*   Definition fun_leak_read (t : LeakageTrace) (addr : Addr) := cons (LeakMemRead addr) t. *)
+  (*   Definition fun_leak_write (t : LeakageTrace) (addr : Addr) := cons (LeakMemWrite addr) t. *)
+  (* End LeakageModel. *)
 
   Include BaseMixin.
 

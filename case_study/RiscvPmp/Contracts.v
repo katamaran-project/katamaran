@@ -1071,20 +1071,20 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
         Local Notation "e1 '=?' e2" := (term_binop (bop.relop bop.eq) e1 e2).
 
         Definition sep_contract_read_ram (bytes : nat) : SepContractFunX (read_ram bytes) :=
-          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_bytes bytes];
+          {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "mem_val" :: ty_bytes bytes];
              sep_contract_localstore      := [term_var "paddr"];
              sep_contract_precondition    :=
-               asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
+               asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "mem_val"]);
              sep_contract_result          := "result_read_ram";
-             sep_contract_postcondition   := asn.formula (formula_propeq (term_var "result_read_ram") (term_var "w"))
-              ∗ asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
+             sep_contract_postcondition   := asn.formula (formula_propeq (term_var "result_read_ram") (term_var "mem_val"))
+              ∗ asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "mem_val"]);
           |}.
 
         Definition sep_contract_write_ram (bytes : nat) : SepContractFunX (write_ram bytes) :=
           {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes];
              sep_contract_localstore      := [term_var "paddr"; term_var "data"];
              sep_contract_precondition    :=
-              ∃ "w", asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "w"]);
+              ∃ "mem_val", asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "mem_val"]);
              sep_contract_result          := "result_write_ram";
              sep_contract_postcondition   :=
                asn.chunk (chunk_user (ptstomem bytes) [term_var "paddr"; term_var "data"])
@@ -1133,6 +1133,18 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_postcondition   := ⊤;
           |}.
 
+        Notation asn_inv_leakage := (asn.chunk (chunk_user inv_leakage [env])).
+
+        Definition sep_contract_leak    : SepContractFunX leak :=
+          {| sep_contract_logic_variables := ["leak" :: ty_leak_event];
+            sep_contract_localstore      := [term_var "leak"];
+            sep_contract_precondition    :=
+              asn.formula (formula_secLeak (term_var "leak")) ∗
+                asn_inv_leakage;
+            sep_contract_result          := "result_decode";
+            sep_contract_postcondition   := ⊤;
+          |}.
+
         Definition CEnvEx : SepContractEnvEx :=
           fun Δ τ fn =>
             match fn with
@@ -1142,6 +1154,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             (* | mmio_read bytes      => sep_contract_mmio_read bytes *)
             (* | mmio_write bytes     => sep_contract_mmio_write bytes *)
             | decode               => sep_contract_decode
+            | leak                 => sep_contract_leak
             end.
 
         (* Lemma linted_cenvex : *)

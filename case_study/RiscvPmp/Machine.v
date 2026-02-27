@@ -232,6 +232,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   (* | mmio_write `(H: restrict_bytes bytes)  : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool *)
   (* | within_mmio `(H: restrict_bytes bytes) : FunX [paddr ∷ ty_xlenbits] ty.bool *)
   | decode                                 : FunX [bv ∷ ty_word] ty_ast
+  | leak                                   : FunX ["leak" :: ty_leak_event] ty.unit
   .
 
   Inductive Lem : PCtx -> Set :=
@@ -579,7 +580,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
       if: tmp
       then (* (use lemma (extract_pmp_ptsto bytes) [paddr] ;; *)
-            (let: tmp := stm_foreign (read_ram bytes) [paddr] in
+        (stm_foreign leak [exp_union leak_event KLeakMemRead paddr];;
+                           let: tmp := stm_foreign (read_ram bytes) [paddr] in
             (* use lemma (return_pmp_ptsto bytes) [paddr] ;; *)
             stm_exp (exp_union (memory_op_result bytes) KMemValue tmp))
       else match: t in union access_type with
@@ -604,6 +606,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
       if: tmp
       then ((* use lemma (extract_pmp_ptsto bytes) [paddr] ;; *)
+          stm_foreign leak [exp_union leak_event KLeakMemWrite paddr];;
             stm_foreign (write_ram bytes) [paddr; data] ;;
             (* use lemma (return_pmp_ptsto bytes) [paddr] ;; *)
             stm_exp (exp_union (memory_op_result 1) KMemValue (exp_val ty_byte [bv 1])))
@@ -779,6 +782,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp1 := Execute in
     let: tmp := stm_read_register pc in
     use lemma open_ptsto_instr [tmp];;
+    stm_foreign leak [exp_union leak_event KLeakPc tmp];;
     let: tmp2 := stm_call (@mem_read 4%nat restrict_bytes_four) [tmp1; tmp] in
     match: tmp2 in union (memory_op_result 4) with
     |> KMemValue (pat_var "result") =>
@@ -1288,13 +1292,17 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     (*   (γ' , μ' , res) = (γ , @fun_write_mmio μ width addr data , inr true); *)
     (* ForeignCall (@within_mmio width H) [addr] res γ γ' μ μ' := *)
     (*   (γ' , μ' , res) = (γ , μ , inr (fun_within_mmio width addr)); *)
-    ForeignCall decode [code] res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_decode code).
+    ForeignCall decode [code] res γ γ' μ μ'  :=
+      (γ' , μ' , res) = (γ , μ , pure_decode code);
+    ForeignCall leak [le] res γ γ' μ μ' :=
+      (γ' , μ', res) = (γ , fun_leak μ le , inr tt  )
+  .
 
   Local Arguments ForeignCall {_ _} f /.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
-  Proof. destruct f; env.destroy args; [| | cbn(* ; destruct fun_read_mmio *)|..]; repeat econstructor.
+  Proof. destruct f; env.destroy args; [| | cbn(* ; destruct fun_read_mmio *)|..].
+         all: repeat econstructor.
   Qed.
   End ForeignKit.
 

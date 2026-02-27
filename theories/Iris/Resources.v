@@ -473,7 +473,7 @@ Module Type IrisPrelims
 
   End Registers.
 
-  #[global] Notation "a '↦ᵣ' t" := (reg_pointsTo a t) (at level 70).
+  (* #[global] Notation "a '↦ᵣ' t" := (reg_pointsTo a t) (at level 70). *)
 End IrisPrelims.
 
 Module Type IrisResources

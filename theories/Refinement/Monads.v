@@ -525,7 +525,7 @@ Module Type RefinementMonadsOn
       by iApply refine_assertSecLeak.
     Qed.
 
-    #[export] Instance refine_compat_purespec_assertSecLeak {w σ msg} :
+    #[export] Instance refine_compat_purespec_assertSecLeak' {w σ msg} :
       RefineCompat (RVal σ -> RPureSpec RUnit) CPureSpec.assertSecLeak w (SPureSpec.assertSecLeak (w := w) msg) _ :=
       MkRefineCompat refine_assertSecLeak'.
 
@@ -547,7 +547,6 @@ Module Type RefinementMonadsOn
       unfold RConst, RInst; cbn.
       repeat rewrite repₚ_const.
       iDestruct "Hι1" as "<-"; rsolve.
-      Search pattern_match_val_reverse pattern_match_term_reverse.
     Qed.
     #[global] Arguments refine_angelic_pattern_match' {N} n {σ} pat.
 
@@ -1426,6 +1425,10 @@ Module Type RefinementMonadsOn
       iIntros (m sm) "Hm".
       iApply "Hm"; rsolve.
     Qed.
+
+    #[export] Instance refine_compat_run {w} :
+      RefineCompat (RHeapSpec RUnit -> ℙ) CHeapSpec.run w (SHeapSpec.run (w := w)) _ :=
+      MkRefineCompat refine_run.
 
     Lemma refine_lift_purespec `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RPureSpec RA -> RHeapSpec RA⟧

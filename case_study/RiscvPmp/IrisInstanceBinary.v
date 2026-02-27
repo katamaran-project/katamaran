@@ -72,6 +72,8 @@ Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgr
     iMod (mem_inv_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
     iMod (trace_alloc (memory_trace μ1)) as (gT1) "[Hauth1 Hfrag1]".
     iMod (trace_alloc (memory_trace μ2)) as (gT2) "[Hauth2 Hfrag2]".
+    iMod (trace_alloc (leakage_trace μ1)) as (gTl1) "[Hauthl1 Hfragl1]".
+    iMod (trace_alloc (leakage_trace μ2)) as (gTl2) "[Hauthl2 Hfragl2]".
     iModIntro.
     iExists (McMemGS2 mG1 mG2).
     iSplitL "inv1 inv2"; iFrame.
@@ -135,6 +137,12 @@ Module RiscvPmpIrisInstance2 <:
     Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
     Definition interp_mmio_checked_write_rel {width : nat} (addr : RVAddr) (bytes : RelVal (ty.bvec (width * byte))) : iProp Σ := interp_mmio_checked_write (ty.projLeft addr) (ty.projLeft bytes) ∧ interp_mmio_checked_write (ty.projRight addr) (ty.projRight bytes).
 
+    Definition constant_time_inv_ns : ns.namespace := (ns.ndot ns.nroot "inv_constant_time").
+    Definition interp_inv_constant_time `{invGS Σ} : iProp Σ :=
+      inv constant_time_inv_ns (∃ t,
+            (@tr_frag _ _ (@traceG_preG _ _ memGS2_gltGS2_left) (@trace_name _ _ memGS2_gltGS2_left) t)
+              ∗ (@tr_frag _ _ (@traceG_preG _ _ memGS2_gltGS2_right) (@trace_name _ _ memGS2_gltGS2_right) t)).
+
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).
 
@@ -157,7 +165,8 @@ Module RiscvPmpIrisInstance2 <:
 
     (* TODO: introduce constant for nr of word bytes (replace 4) *)
     Definition interp_ptsto_instr (addr : RVAddr) (instr : RV AST) : iProp Σ :=
-      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ ty.liftUnOpRV pure_decode v = ty.liftUnOpRV inr instr ⌝)%I.
+      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ ty.liftUnOpRV pure_decode v = ty.liftUnOpRV inr instr ⌝ ∗ ⌜ secLeak v ⌝)%I.
+    Arguments interp_ptsto_instr addr instr : simpl never.
   End WithMemory.
   Section WithSailGS.
     Context `{sailRegGS2 Σ}.
@@ -204,7 +213,9 @@ Module RiscvPmpIrisInstance2 <:
     (* | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write_rel addr w *)
     | encodes_instr            | [ code; instr ]      => ⌜ ty.liftUnOpRV pure_decode code = ty.liftUnOpRV inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
-    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
+    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
+    | inv_leakage              | _                    => interp_inv_constant_time
+    .
 
     Ltac destruct_pmp_entries :=
       repeat match goal with
@@ -353,13 +364,29 @@ Module RiscvPmpIrisInstance2 <:
     (* Qed. *)
   End RiscVPmpIrisInstanceProofs.
 
+
   Include IrisBinaryWP RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     RiscvPmpSemantics RiscvPmpIrisBase2.
 
   Include IrisSignatureRules2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase2.
+     RiscvPmpSemantics RiscvPmpIrisBase2.
 
   Include IrisAdequacy2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
+     RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
+
+  Lemma gprs_equiv `{sailGS2 Σ} : ∀ {Σ} (ι : Valuation Σ),
+      interp_gprs ⊣⊢
+        asn.interpret asn_regs_ptsto ι.
+  Proof.
+    iIntros. unfold interp_gprs.
+    rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
+    cbn. iSplit.
+    - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
+    - iIntros "H"; iSplitR; first by iExists (SyncVal bv.zero).
+      repeat iDestruct "H" as "($ & H)"; iFrame.
+  Qed.
+
+  Definition WP2_loop `{sailGS2 Σ} : iProp Σ :=
+    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (fun _ _ _ _ => True%I).
 
 End RiscvPmpIrisInstance2.

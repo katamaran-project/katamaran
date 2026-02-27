@@ -245,12 +245,12 @@ Module Import asn.
       (at level 200, format
        "'[hv' 'if:'  c  '/' '[' 'then'  A1  ']' '/' '[' 'else'  A2 ']' ']'"
       ) : asn_scope.
-    Notation "x = y" := (formula (formula_relop bop.eq x y)) (x in scope term_scope, y in scope term_scope) : asn_scope .
+    Notation "x = y" := (formula (formula_propeq x y)) (x in scope term_scope, y in scope term_scope) : asn_scope .
     Notation "x >= y" := (formula (formula_relop bop.le y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x > y" := (formula (formula_relop bop.lt y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x <= y" := (formula (formula_relop bop.le x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x < y" := (formula (formula_relop bop.lt x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
-    Notation "x = y" := (formula (formula_relop bop.eq x y)) (x in scope term_scope, y in scope term_sxcope) : asn_scope.
+    Notation "x = y" := (formula (formula_propeq x y)) (x in scope term_scope, y in scope term_sxcope) : asn_scope.
     Notation "x >=ˢ y" := (formula (formula_relop bop.bvsle y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x >ˢ y" := (formula (formula_relop bop.bvslt y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x <=ˢ y" := (formula (formula_relop bop.bvsle x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
@@ -268,6 +268,10 @@ Module Import asn.
          (recordpat_snoc .. (recordpat_snoc (recordpat_snoc recordpat_nil _ x) _ y) .. _ z)
          rhs%asn)
       (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : asn_scope.
+
+    Definition secLeak {Σ σ} t := (formula (@formula_secLeak Σ σ t)).
+
+    Definition secLeakvar {Σ σ} a {lIn : a∷σ ∈ Σ} := (@secLeak Σ σ (term_var a)).
 
   End notations.
 
