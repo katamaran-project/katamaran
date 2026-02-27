@@ -23,7 +23,10 @@ Note: The `--profile release` flag ensures compilation (and execution) continues
 The program should terminate, printing a prettified SymProp to stdout:
 
 ```
-forall (?? : <bitvector>), forall (?? : <record>), assert { <val>::int <= (neg[unsigned[<var>::<bitvector><bitvector>]int] + <val>::int)} /\ Coq_block
+forall (?? : <bitvector>), forall (?? : <record>),
+assert {
+  <val>::int <= (neg[unsigned[<var>::<bitvector><bitvector>]int] + <val>::int)
+} /\ Coq_block
 ```
 
 This SymProp represents the output of Katamaran's RISCV-PMP Block Verifier, invoked on a simple Hoare triple, defined in `bin/main.ml`:
@@ -43,6 +46,7 @@ This SymProp represents the output of Katamaran's RISCV-PMP Block Verifier, invo
 
 ## TODO
 
+- Pretty printing of ASCII and other text representations
 - Inline the builtin types to better match the OCaml equivalent types
 - Inline the bitvector, and weird Zarith stuff somehow
 - Inline operations on the builtins like Nat.add
