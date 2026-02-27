@@ -50,3 +50,4 @@ This SymProp represents the output of Katamaran's RISCV-PMP Block Verifier, invo
 - Add a make target for extraction
 - derive a show instance for symprop and friends automatically (generate an s-expr)
 - discuss erasure of LVars: right now they are computationally irrelevant, but in order to print them I need to pattern match on them.
+- Discuss erasure of other parts of the code: right now many module functors are extracted completely, even though they (should) only contain computationally irrelevant modules as arguments. As an example: `logicalrelation` is still extracted, since `Pred` lives in `Type`, not `Prop`. Is this desired?
