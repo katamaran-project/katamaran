@@ -230,9 +230,9 @@ Module RiscvPmpIrisInstancePredicates.
       match entries with
       | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
           reg_pointsTo pmp0cfg cfg0 ∗
-                       reg_pointsTo pmpaddr0 addr0 ∗
-                       reg_pointsTo pmp1cfg cfg1 ∗
-                       reg_pointsTo pmpaddr1 addr1
+          reg_pointsTo pmpaddr0 addr0 ∗
+          reg_pointsTo pmp1cfg cfg1 ∗
+          reg_pointsTo pmpaddr1 addr1
       | _ => False
       end.
   End WithSailGS.
