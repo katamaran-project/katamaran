@@ -371,12 +371,8 @@ Section BlockVerificationDerived.
 
     Definition stepTriple (l : list AST) (a apc : Val ty_xlenbits)
       (PRE : Val ty_xlenbits -> iProp Σ) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) : iProp Σ :=
-      match l with
-      | nil => PRE a -∗ POST a apc
-      | _   =>
-        PRE a -∗
-        step_n l a apc (λ an, POST a an)%I
-      end.
+      PRE a -∗
+        step_n l a apc (POST a).
 
     Definition semTripleOneInstrStep (PRE : Val ty_xlenbits -> iProp Σ) (instr : AST) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) (a : Val ty_xlenbits) : iProp Σ :=
       stepTriple [instr] a a PRE POST.
