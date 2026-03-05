@@ -296,11 +296,18 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   | step_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : CStoreVal Γ} {s2 s3 : Stm Γ σ} :
       Step γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 -> Steps γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 -> Steps γ1 μ1 δ1 s1 γ3 μ3 δ3 s3.
 
+  Inductive StepsWithExitCond {Γ : PCtx} {σ : Ty} (exitCond : RegStore -> Memory -> Prop) (γ1 : RegStore) (μ1 : Memory) (δ1 : CStoreVal Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> CStoreVal Γ -> Stm Γ σ -> Prop :=
+  | stepWithExitCond_refl : StepsWithExitCond exitCond γ1 μ1 δ1 s1 γ1 μ1 δ1 s1
+  | stepWithExitCond_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : CStoreVal Γ} {s2 s3 : Stm Γ σ} :
+    ~ exitCond γ1 μ1 -> Step γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 -> StepsWithExitCond exitCond  γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 -> StepsWithExitCond exitCond  γ1 μ1 δ1 s1 γ3 μ3 δ3 s3.
+
   Module Import SmallStepNotations.
     Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
     Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ -{ n }-> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@NSteps _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 n)
     (at level 75, only parsing, right associativity).
     Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Steps _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2).
+    Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ -( exitCond )->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@StepsWithExitCond _ _ exitCond γ1 μ1 δ1 s1 γ2 μ2 δ2 s2)
+                                                                                 (at level 75, only parsing, right associativity).
   End SmallStepNotations.
 
   Lemma NSteps_trans {Γ τ} :
@@ -331,6 +338,22 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     now apply IHHs1s2.
   Qed.
 
+  Lemma StepsWithExitCond_trans {Γ τ} exitCond :
+    forall {γ1 γ2 γ3 μ1 μ2 μ3 δ1 δ2 δ3} {s1 s2 s3 : Stm Γ τ},
+      ⟨ γ1, μ1, δ1, s1 ⟩ -( exitCond )->* ⟨ γ2, μ2, δ2, s2 ⟩ ->
+      ⟨ γ2, μ2, δ2, s2 ⟩ -( exitCond )->* ⟨ γ3, μ3, δ3, s3 ⟩ ->
+      ⟨ γ1, μ1, δ1, s1 ⟩ -( exitCond )->* ⟨ γ3, μ3, δ3, s3 ⟩.
+  Proof.
+    intros γ1 γ2 γ3 μ1 μ2 μ3 δ1 δ2 δ3 s1 s2 s3 Hs1s2 Hs2s3.
+    revert γ3 μ3 δ3 s3 Hs2s3.
+    induction Hs1s2; first auto.
+    intros γ4 μ4 δ4 s4 Hs3s4.
+    eapply stepWithExitCond_trans.
+    auto.
+    eassumption.
+    now apply IHHs1s2.
+  Qed.
+
   Lemma NSteps_bind {Γ σ τ} :
     forall {γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ σ} {k : Val σ -> Stm Γ τ} {n},
       ⟨ γ1, μ1, δ1, s1 ⟩ -{ n }-> ⟨ γ2, μ2, δ2, s2 ⟩ ->
@@ -354,6 +377,18 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     eapply Steps_trans; last eauto.
     eapply step_trans. apply st_bind_step. eauto.
     apply step_refl.
+  Qed.
+
+  Lemma StepsWithExitCond_bind {Γ σ τ} exitCond :
+    forall {γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ σ} {k : Val σ -> Stm Γ τ},
+      ⟨ γ1, μ1, δ1, s1 ⟩ -( exitCond )->* ⟨ γ2, μ2, δ2, s2 ⟩ ->
+      ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ -( exitCond )->* ⟨ γ2, μ2, δ2, stm_bind s2 k ⟩.
+  Proof.
+    intros γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 k H.
+    induction H; first apply stepWithExitCond_refl.
+    eapply StepsWithExitCond_trans; last eauto.
+    eapply stepWithExitCond_trans. auto. apply st_bind_step. eauto.
+    apply stepWithExitCond_refl.
   Qed.
 
   Lemma NSteps_block {Γ τ} :
@@ -394,6 +429,27 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       apply H. apply IHSteps; auto.
   Qed.
 
+  Lemma StepsWithExitCond_block {Γ τ} exitCond :
+    forall {γ1 γ2 μ1 μ2 δ1 δ2 Δ δΔ1 δΔ2} {s1 s2 : Stm (Γ ▻▻ Δ) τ},
+      ⟨ γ1, μ1, δ1 ►► δΔ1, s1 ⟩ -( exitCond )->* ⟨ γ2, μ2, δ2 ►► δΔ2, s2 ⟩ ->
+      ⟨ γ1, μ1, δ1, stm_block δΔ1 s1 ⟩ -( exitCond )->* ⟨ γ2, μ2, δ2, stm_block δΔ2 s2 ⟩.
+  Proof.
+    intros ? ? ? ? ? ? ? ? ? ? ? H.
+    remember (δ1 ►► δΔ1) as δ1' eqn:Eδ1'.
+    remember (δ2 ►► δΔ2) as δ2' eqn:Eδ2'.
+    revert δ1 δΔ1 Eδ1' δ2 Eδ2'.
+    induction H;
+      intros δ1' δΔ1 Eδ1' δ2' Eδ2'.
+    - rewrite Eδ1' in Eδ2'.
+      destruct (proj1 (env.inversion_eq_cat _ _ _ _) Eδ2') as (-> & ->).
+      apply stepWithExitCond_refl.
+    - destruct (env.catView δ2). rewrite Eδ1' in H0.
+      eapply stepWithExitCond_trans.
+      auto.
+      apply st_block_step.
+      apply H0. apply IHStepsWithExitCond; auto.
+  Qed.
+
   Lemma StepsN_assign {Γ τ} :
     forall {γ1 γ2 μ1 μ2 δ1 δ2} {x : PVar} {xInΓ : x∷τ ∈ Γ} {s1 s2 : Stm Γ τ} {n},
       ⟨ γ1, μ1, δ1, s1 ⟩ -{ n }-> ⟨ γ2, μ2, δ2, s2 ⟩ ->
@@ -414,6 +470,18 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     eapply step_trans; last apply IHSteps. constructor. auto.
   Qed.
 
+  Lemma StepsWithExitCond_assign {Γ τ} exitCond :
+    forall {γ1 γ2 μ1 μ2 δ1 δ2} {x : PVar} {xInΓ : x∷τ ∈ Γ} {s1 s2 : Stm Γ τ},
+      ⟨ γ1, μ1, δ1, s1 ⟩ -( exitCond )->* ⟨ γ2, μ2, δ2, s2 ⟩ ->
+      ⟨ γ1, μ1, δ1,  x <- s1 ⟩ -( exitCond )->* ⟨ γ2, μ2, δ2, x <- s2 ⟩.
+  Proof.
+    intros γ1 γ2 μ1 μ2 δ1 δ2 x ? s1 s2 H.
+    induction H; first apply stepWithExitCond_refl.
+    eapply stepWithExitCond_trans; last apply IHStepsWithExitCond.
+    auto.
+    constructor. auto.
+  Qed.
+
   Lemma StepsN_call_frame {Γ τ} :
     forall {Δ} {γ1 γ2 μ1 μ2} {δ : CStoreVal Γ} {δΔ1 δΔ2 : CStoreVal Δ} {s1 s2 : Stm Δ τ} {n},
       ⟨ γ1, μ1, δΔ1, s1 ⟩ -{ n }-> ⟨ γ2, μ2, δΔ2, s2 ⟩ ->
@@ -432,6 +500,18 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     intros Δ γ1 γ2 μ1 μ2 δ δΔ1 δΔ2 s1 s2 H.
     induction H; first apply step_refl.
     eapply step_trans; last apply IHSteps. constructor. auto.
+  Qed.
+
+  Lemma StepsWithExitCond_call_frame {Γ τ} exitCond :
+    forall {Δ} {γ1 γ2 μ1 μ2} {δ : CStoreVal Γ} {δΔ1 δΔ2 : CStoreVal Δ} {s1 s2 : Stm Δ τ},
+      ⟨ γ1, μ1, δΔ1, s1 ⟩ -( exitCond )->* ⟨ γ2, μ2, δΔ2, s2 ⟩ ->
+      ⟨ γ1, μ1, δ, stm_call_frame δΔ1 s1 ⟩ -( exitCond )->* ⟨ γ2, μ2, δ, stm_call_frame δΔ2 s2 ⟩.
+  Proof.
+    intros Δ γ1 γ2 μ1 μ2 δ δΔ1 δΔ2 s1 s2 H.
+    induction H; first apply stepWithExitCond_refl.
+    eapply stepWithExitCond_trans; last apply IHStepsWithExitCond.
+    auto.
+    constructor. auto.
   Qed.
 
   (* Tests if a statement is a final one, i.e. a finished computation. *)

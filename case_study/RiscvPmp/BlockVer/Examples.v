@@ -370,13 +370,17 @@ Module Examples.
 
     Definition init_addr     : N := 0.
 
-    Locate "↦ᵣ".
-    Locate reg_pointsTo2.
+    Search nat N.
+
+    Definition pcOutOfInstrs (start : Val ty_word) (instrs : list AST) (γ : RegStore) (μ : Memory) : Prop :=
+      let pc := read_register γ pc in
+      bv.ult pc start \/ bv.uge pc (start + bv.of_N (4 * N.of_nat (length instrs))).
 
       Lemma mvZero_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
         {δ1 δ2 δ1' δ2' : CStoreVal [ctx]} {s' : Stm [ctx] ty.unit} (is_mmio : bool) :
-        mem_has_instrs μ1 (bv.of_N init_addr) [MV X1 X0] ->
-        mem_has_instrs μ2 (bv.of_N init_addr) [MV X1 X0] ->
+        let instrs := [JALR X0 X1 bv.zero] in
+        mem_has_instrs μ1 (bv.of_N init_addr) instrs ->
+        mem_has_instrs μ2 (bv.of_N init_addr) instrs ->
         read_register γ1 cur_privilege = Machine ->
         read_register γ2 cur_privilege = Machine ->
         (* read_register γ pmp0cfg = default_pmpcfg_ent -> *)
@@ -385,13 +389,13 @@ Module Examples.
         (* read_register γ pmpaddr1 = bv.zero -> *)
         read_register γ1 pc = (bv.of_N init_addr) ->
         read_register γ2 pc = (bv.of_N init_addr) ->
-        ⟨ γ1, μ1, δ1, fun_loop ⟩ --->* ⟨ γ1', μ1', δ1', s' ⟩ ->
-        ⟨ γ2, μ2, δ2, fun_loop ⟩ --->* ⟨ γ2', μ2', δ2', s' ⟩ ->
+        ⟨ γ1, μ1, δ1, fun_loop ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs )->* ⟨ γ1', μ1', δ1', s' ⟩ ->
+        ⟨ γ2, μ2, δ2, fun_loop ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs )->* ⟨ γ2', μ2', δ2', s' ⟩ ->
         leakage_trace μ1 = leakage_trace μ2 ->
         leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
       Proof.
-        intros μ1init μ2init γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 eq_leak.
-        refine (adequacy_gen (μ21 := μ2) (γ21 := γ2) (δ21 := δ2) (Q := fun _ _ _ _ _ _ => True%I) fun_loop _ steps1 _).
+        intros instrs μ1init μ2init γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 eq_leak.
+        refine (adequacy_gen_withExitCond (μ21 := μ2) (γ21 := γ2) (δ21 := δ2) (Q := fun _ _ _ _ _ _ => True%I) fun_loop _ steps1 _).
         iIntros (Σ' H).
         cbn.
         iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
