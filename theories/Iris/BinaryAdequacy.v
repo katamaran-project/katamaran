@@ -477,6 +477,7 @@ Module Type IrisAdequacy2
     pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
     iMod (mem_inv_init2 (mGS := mGS) μ11 μ21) as (memG) "[Hmem Rmem]".
     pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2)) memG).
+    Set Printing Implicit.
     specialize (Hwp _ sG).
     iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
     { iApply own_RegStore_to_map_reg_pointsTos.

@@ -911,7 +911,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
              supervisor mode is supported. *)
     match: tmp with
     | inl epc => epc
-    | inr e   => fail "Invalid tvec mode"
+    | inr e   => fail "Inv
+alid tvec mode"
     end.
 
   Definition fun_tvec_addr : Stm [m ∷ ty_xlenbits; c ∷ ty_mcause] (ty.option ty_xlenbits) :=

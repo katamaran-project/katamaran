@@ -183,6 +183,8 @@ Module IrisBinaryWP
 
   Definition semWP2 {Γ1 Γ2 τ} : Wp2 Γ1 Γ2 τ :=
     λ δ1 δ2 s1 s2 POST, (fixpoint (@semWP2_fix Γ1 Γ2 τ)) δ1 δ2 s1 s2 POST.
+  Global Arguments semWP2 {Γ1 Γ2}%ctx_scope {τ} _ _ _ _ _%I.
+
 
   Lemma fixpoint_semWP2_fix_eq {Γ1 Γ2 τ} (δ1 : CStoreVal Γ1) (δ2 : CStoreVal Γ2)
     (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) (POST : Post2 Γ1 Γ2 τ) :
@@ -267,7 +269,38 @@ Module IrisBinaryWP
                           iFrame "Hresources".
                           iApply ("IH" with "H HQ").
     Qed.
-    
+
+      Global Instance semWP2_ne `{sailGS2 Σ} (δ1 δ2 : CStoreVal [ctx]) (s1 s2 : Stm [ctx] ty.unit) n :
+    Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (dist n)))) ==> dist n) (semWP2 δ1 δ2 s1 s2).
+  Proof.
+    revert δ1 δ2 s1 s2. induction (lt_wf n) as [n _ IH]=> s1 s2 δ1 δ2 Φ Ψ HΦ.
+    rewrite !semWP2_unfold /semWP2_fix /=.
+    (* FIXME: figure out a way to properly automate this proof *)
+    (* FIXME: reflexivity, as being called many times by f_equiv and f_contractive
+  is very slow here *)
+    do 34 (f_contractive || f_equiv || apply HΦ).
+    rewrite IH; [done|lia|].
+    intros δ1' s1' δ2' s2'.
+    eapply dist_lt; last done. apply HΦ.
+  Qed.
+
+  Global Instance semWP2_proper `{sailGS2 Σ} (δ1 δ2 : CStoreVal [ctx]) (s1 s2 : Stm [ctx] ty.unit) :
+    Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (≡)))) ==> (≡)) (semWP2 δ1 δ2 s1 s2).
+  Proof.
+    intros Φ Φ' ?. apply equiv_dist=>n. apply semWP2_ne=>v. intros δ1' s1' δ2'. apply equiv_dist.
+    apply H0.
+  Qed.
+
+  Global Instance semWP2_contractive `{sailGS2 Σ} (δ1 δ2 : CStoreVal [ctx]) (s1 s2 : Stm [ctx] ty.unit) n :
+    TCEq (stm_to_val s1) None → TCEq (stm_to_val s2) None →
+    Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (dist_later n)))) ==> dist n) (semWP2 δ1 δ2 s1 s2).
+  Proof.
+    intros Hs1 Hs2 Φ Ψ HΦ.
+    rewrite !semWP2_unfold.
+    rewrite Hs1 Hs2.
+    do 37 (f_contractive || f_equiv).
+    by apply HΦ.
+  Qed.
 
     Lemma semWP2_val_1 {Γ1 Γ2 τ} (v1 : Val τ) (v2 : Val τ) (Q : Post2 Γ1 Γ2 τ) :
       ∀ δ1 δ2,

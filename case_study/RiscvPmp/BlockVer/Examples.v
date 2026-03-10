@@ -352,6 +352,8 @@ Module Examples.
   From iris.bi Require big_op.
   From iris.algebra Require big_op.
   From iris.program_logic Require weakestpre.
+  Import iris.algebra.excl.
+  Import iris.algebra.gmap.
 
     Definition mem_has_word (μ : Memory) (a : Val ty_word) (w : Val ty_word) : Prop :=
       exists v0 v1 v2 v3, List.map (memory_ram μ) (bv.seqBv a 4) = [v0; v1; v2; v3]%list /\ bv.app v0 (bv.app v1 (bv.app v2 (bv.app v3 bv.nil))) = w.
@@ -370,15 +372,131 @@ Module Examples.
 
     Definition init_addr     : N := 0.
 
-    Search nat N.
+    Definition RiscVStep (γ1 : RegStore) (μ1 : Memory) :
+      forall (γ2 : RegStore) (μ2 : Memory), Prop :=
+      fun γ2 μ2 => ⟨ γ1, μ1, [env], fun_step ⟩ --->* ⟨ γ2, μ2, [env], stm_val ty.unit tt ⟩.
+
+    Inductive RiscVStepsWithExitCond (exitCond : RegStore -> Memory -> Prop) (γ1 : RegStore) (μ1 : Memory) : RegStore -> Memory -> Prop :=
+    | riscVStepWithExitCond_refl : RiscVStepsWithExitCond exitCond γ1 μ1 γ1 μ1
+    | riscVStepWithExitCond_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} :
+      ~ exitCond γ1 μ1 ->
+      RiscVStep γ1 μ1 γ2 μ2 ->
+      RiscVStepsWithExitCond exitCond  γ2 μ2 γ3 μ3 ->
+      RiscVStepsWithExitCond exitCond  γ1 μ1 γ3 μ3.
+    Notation "⟨ γ1 , μ1 ⟩ -( exitCond )->* ⟨ γ2 , μ2 ⟩" := (@RiscVStepsWithExitCond exitCond γ1 μ1 γ2 μ2)
+                                                             (at level 75, only parsing, right associativity).
+
+    Inductive RiscVNStepsWithExitCond  (exitCond : RegStore -> Memory -> Prop) (γ1 : RegStore) (μ1 : Memory) : RegStore -> Memory -> nat -> Prop :=
+    | riscVNStepWithExitCond_refl : RiscVNStepsWithExitCond exitCond γ1 μ1 γ1 μ1 0
+    | riscVNStepWithExitCond_trans {n} {γ2 γ3 : RegStore} {μ2 μ3 : Memory} :
+      ~ exitCond γ1 μ1 ->
+      RiscVStep γ1 μ1 γ2 μ2 ->
+      RiscVNStepsWithExitCond exitCond  γ2 μ2 γ3 μ3 n ->
+      RiscVNStepsWithExitCond exitCond  γ1 μ1 γ3 μ3 (S n)
+    .
+    Notation "⟨ γ1 , μ1 ⟩ -( exitCond , n )->* ⟨ γ2 , μ2 ⟩" := (@RiscVNStepsWithExitCond exitCond γ1 μ1 γ2 μ2 n)
+                                                             (at level 75, only parsing, right associativity).
+
+    Definition myPost2 `{sailGS2 Σ} :=
+      iProp Σ.
+
+    Definition myWp2 `{sailGS2 Σ} :=
+        myPost2 -d>
+        iProp Σ.
+
+    Definition myWP2_loop_fix `{sailGS2 Σ} (ExitCond : iProp Σ) (wp : myWp2) :
+      myWp2 :=
+      fun (POST : myPost2) =>
+      (ExitCond ∨
+        semWP2 env.nil env.nil (FunDef step) (FunDef step)
+          (fun _ _ _ _ => ▷ wp POST)%I)%I.
+    (* 4 empty arguments, because the return valueas are unit and the CStoreVals are empty *)
+  
+  Global Instance myWP2_loop_fix_Contractive `{sailGS2 Σ} (ExitCond : iProp Σ) :
+    Contractive (myWP2_loop_fix ExitCond).
+  Proof.
+    rewrite /myWP2_loop_fix /= => n wp wp' Hwp Post.
+    do 7 (f_contractive || f_equiv).
+    unfold myWp2 in *.
+    apply Hwp.
+  Qed.
+
+  Definition myWP2_loop `{sailGS2 Σ} (ExitCond : iProp Σ) : myWp2 :=
+    fixpoint (myWP2_loop_fix ExitCond).
 
     Definition pcOutOfInstrs (start : Val ty_word) (instrs : list AST) (γ : RegStore) (μ : Memory) : Prop :=
       let pc := read_register γ pc in
       bv.ult pc start \/ bv.uge pc (start + bv.of_N (4 * N.of_nat (length instrs))).
 
+    Import IrisModel.RiscvPmpIrisBase.
+
+    Lemma adequacy_gen_RiscVNStepsExitCond n exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22} {Q : forall `{sailGS2 Σ}, iProp Σ}
+    (φ : Prop) :
+    ⟨ γ11, μ11 ⟩ -( exitCond , n )->* ⟨ γ12, μ12 ⟩ ->
+    ⟨ γ21, μ21 ⟩ -( exitCond , n )->* ⟨ γ22, μ22 ⟩ ->
+    (forall `{sailGS2 Σ},
+        mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ |={⊤}=> myWP2_loop (∃ μ1 μ2 γ1 γ2, mem_res2 μ1 μ2 ∗ own_regstore2 γ1 γ2 ∗ ⌜ exitCond γ1 μ1 ∨ exitCond γ2 μ2 ⌝) Q
+        ∗ (mem_inv2 _ μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
+    )%I -> φ.
+  Proof.
+    intros Heval1 Heval2 Hwp.
+    refine (uPred.pure_soundness _
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
+    iIntros (Hinv) "".
+    iMod (own_alloc (A := regUR) ((● RegStore_to_map γ11 ⋅ ◯ RegStore_to_map γ11 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    iMod (own_alloc ((● RegStore_to_map γ21 ⋅ ◯ RegStore_to_map γ21 ) : regUR)) as (regs2) "[Hregsown2 Hregsinv2]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
+    iMod (mem_inv_init2 μ11 μ21) as (memG) "[Hmem Rmem]".
+    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2)) memG).
+    specialize (Hwp _ sG).
+    iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
+    { iApply own_RegStore_to_map_reg_pointsTos.
+      apply finite.NoDup_enum.
+      iSplitR "Hregsinv2"; iAssumption.
+    }
+    iAssert (regs_inv2 γ11 γ21) with "[Hregsown1 Hregsown2]" as "Hregs".
+    { iSplitL "Hregsown1";
+      now iApply own_RegStore_to_regs_inv.
+    }
+    clear Hwp.
+    iStopProof.
+    revert γ21 μ21 δ21 s21.
+    induction Hevaln1.
+    - iIntros (γ21 μ21 δ21 s21) "(Hmem & Hwp2 & Hregs) Hcred".
+      iMod "Hwp2" as "[_ Hcont]".
+      iMod ("Hcont" with "Hmem") as "%Hφ".
+      cbn. done.
+    - iIntros (γ21 μ21 δ21 s21) "(Hregs & Hwp2 & Hmem) Hcred".
+      specialize (IHHevaln1 (nstepsWithExitCond_to_stepsWithExitCond Hevaln1)).
+      rewrite fixpoint_semWP2_eq; cbn.
+      rewrite (stm_val_stuck H0).
+      repeat case_match;
+        try (iMod "Hwp2" as "(H & _)";
+             by iMod "H").
+      iMod "Hwp2".
+      iDestruct "Hwp2" as "(Hwp2 & Hinv)".
+      iSpecialize ("Hwp2" with "[$Hregs $Hmem]").
+      assert (stm_to_fail s21 = None) as H2.
+      { destruct s21; cbn in *; inversion H1; done. }
+      pose proof (is_not_final s21 H1 H2) as Hnfinal21.
+      destruct (can_step s21 γ21 μ21 δ21 Hnfinal21) as (γ22 & μ22 & δ22 & s22 & Hsteps21).
+      iMod "Hwp2" as "Hwp2". iModIntro.
+      iSpecialize ("Hwp2" $! _ _ _ _ _ _ _ _ (conj H0 Hsteps21)).
+      iMod "Hwp2". iModIntro. iModIntro. iMod "Hwp2".
+      iDestruct "Hcred" as "(Hcred1 & Hcredn)".
+      iMod "Hwp2" as "([Hregs Hmem] & Hwp2)".
+      now iMod (IHHevaln1 with "[$Hmem $Hregs $Hwp2 $Hinv] Hcredn") as "IH".
+  Qed.
+
       Lemma mvZero_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
-        {δ1 δ2 δ1' δ2' : CStoreVal [ctx]} {s' : Stm [ctx] ty.unit} (is_mmio : bool) :
-        let instrs := [JALR X0 X1 bv.zero] in
+        {δ1 δ2 δ1' δ2' : CStoreVal [ctx]} {s' : Stm [ctx] ty.unit} (is_mmio : bool) n :
+        let instrs := [ MV X3 X2; MV X2 X1; MV X1 X3] in
         mem_has_instrs μ1 (bv.of_N init_addr) instrs ->
         mem_has_instrs μ2 (bv.of_N init_addr) instrs ->
         read_register γ1 cur_privilege = Machine ->
@@ -389,13 +507,17 @@ Module Examples.
         (* read_register γ pmpaddr1 = bv.zero -> *)
         read_register γ1 pc = (bv.of_N init_addr) ->
         read_register γ2 pc = (bv.of_N init_addr) ->
-        ⟨ γ1, μ1, δ1, fun_loop ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs )->* ⟨ γ1', μ1', δ1', s' ⟩ ->
-        ⟨ γ2, μ2, δ2, fun_loop ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs )->* ⟨ γ2', μ2', δ2', s' ⟩ ->
+        ⟨ γ1, μ1 ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs , n )->* ⟨ γ1', μ1' ⟩ ->
+        ⟨ γ2, μ2 ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs , n )->* ⟨ γ2', μ2' ⟩ ->
         leakage_trace μ1 = leakage_trace μ2 ->
         leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
       Proof.
-        intros instrs μ1init μ2init γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 eq_leak.
-        refine (adequacy_gen_withExitCond (μ21 := μ2) (γ21 := γ2) (δ21 := δ2) (Q := fun _ _ _ _ _ _ => True%I) fun_loop _ steps1 _).
+        revert μ1 μ2 γ1 γ2.
+        induction n; intros μ1 μ2 γ1 γ2 instrs μ1init μ2init γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 eq_leak.
+        
+
+        specialize (IHn H4 H10).
+          refine (adequacy_gen_withExitCond (μ21 := μ2) (γ21 := γ2) (δ21 := δ2) (Q := fun _ _ _ _ _ _ => True%I) fun_loop _ steps1 _).
         iIntros (Σ' H).
         cbn.
         iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
