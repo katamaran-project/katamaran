@@ -366,5 +366,5 @@ Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
   Qed.
 
   Definition WP2_loop `{sailGS2 Σ} : iProp Σ :=
-    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (fun _ _ _ _ => True%I).
+    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝)%I.
 End RiscvPmpIrisInstance2.

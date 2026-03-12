@@ -78,9 +78,6 @@ Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSig
 Section Loop.
   Context `{sg : sailGS2 Σ}.
 
-  Definition WP2_loop : iProp Σ :=
-    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝)%I.
-
   Definition step_sem_contract :=
     Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
 
