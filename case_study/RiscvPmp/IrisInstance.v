@@ -78,7 +78,10 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
    * which is given to the verifier in the adequacy lemma.
    *)
   Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
-    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ tr_frag1 (memory_trace μ))%I.
+    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ (∃ s, st_frag1 s ∗ st_auth1 s) ∗ tr_frag1 (memory_trace μ))%I.
+
+  Definition iost_res `{hG : mcMemGS Σ} : IOState -> iProp Σ :=
+    fun σ => (st_auth1 σ )%I.
 
   Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
   Proof.
@@ -349,8 +352,8 @@ Module RiscvPmpIrisInstancePredicates.
        in  impl_mmio_state_prot (bv_from s) e (bv_from s')⌝.
 
     (* Current protocol state is: *)
-    Definition interp_mmio_state_pred `{invGS Σ} (s : bv iostate_bits) : iProp Σ :=
-      st_frag1 (bv_from s).
+    Definition interp_mmio_state_pred `{invGS Σ} : iProp Σ :=
+      ∃ s, st_frag1 s.
 
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).
@@ -476,8 +479,8 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
-    | mmio_state _             | [s] (* [unit] *)     => interp_mmio_state_pred s (* We have ownership over st *)
-    | mmio_trace bytes         | [env] (* [unit] *)   => interp_mmio_trace_state_inv bytes (* Given st and tr state_prot is satisfied *)
+    | mmio_state _             | [env]                => interp_mmio_state_pred (* We have ownership over st *)
+    | mmio_trace bytes         | [env]                => interp_mmio_trace_state_inv bytes (* Given st and tr state_prot is satisfied *)
     | mmio_checked_write _     | [ addr; w; s; s' ]   => interp_mmio_checked_write addr w s s'
     | encodes_instr            | [ code; instr ]      => ⌜pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
