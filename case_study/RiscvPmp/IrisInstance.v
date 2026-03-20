@@ -443,7 +443,10 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
     Import env.notations.
 
-    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
+    (* We don't need additional ghost state beyond what we already have for the WP. *)
+    Definition resGS := trivGS.
+
+    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ, trivGS Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
@@ -468,7 +471,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
           destruct x; auto
       end.
 
-    Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} :
+    Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ, trivGS Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
         (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).

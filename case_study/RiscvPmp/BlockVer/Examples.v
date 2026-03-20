@@ -273,7 +273,7 @@ Module Examples.
       Import RiscvPmpBlockVerifIrisInstance.
       Import RiscvPmpIrisInstanceWithContracts.
 
-      Context `{sailGS Σ} `{sailGS2 Σ}.
+      Context `{sailGS Σ} {rG : trivGS Σ}.
 
       Definition ptsto_instrs_from_contract {Γ} (c : @BlockVerifierContract Γ) (a : Val ty_xlenbits) : iProp Σ :=
         ptsto_instrs a (extract_instrs_from_contract c).

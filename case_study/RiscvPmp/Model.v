@@ -96,7 +96,7 @@ Module RiscvPmpModel2.
     RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance.
 
   Section ForeignProofs.
-    Context `{sg : sailGS Σ}.
+    Context `{sg : sailGS Σ} {rG : trivGS Σ}.
 
     Lemma mem_state_interp_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
@@ -275,7 +275,7 @@ Module RiscvPmpModel2.
   End ForeignProofs.
 
   Section LemProofs.
-    Context `{sg : sailGS Σ}.
+    Context `{sg : sailGS Σ, rG : trivGS Σ}.
 
     Lemma open_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.

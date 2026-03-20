@@ -804,7 +804,7 @@ Section AnnotatedBlockVerification.
     Import ProgramLogic.
     Import CHeapSpec.
 
-    Context {Σ} {GS : sailGS Σ}.
+    Context {Σ} {GS : sailGS Σ} {rG : trivGS Σ}.
 
     Definition extract_AST (i : AnnotInstr) : option AST :=
       match i with

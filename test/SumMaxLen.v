@@ -397,11 +397,15 @@ Module Import ExampleModel.
        here. *)
     Section ExampleIrisPredicates.
       Import iris.base_logic.lib.iprop.
-      Definition luser_inst : forall `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ :=
-        fun Σ sRG iG mG p ts => match p with end.
-      Definition lduplicate_inst : forall `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
-          is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG _ ts) (luser_inst (sRG := sRG) mG _ ts ∗ luser_inst (sRG := sRG) mG _ ts) :=
-        fun Σ sRG iG mG p ts dup => match p with end.
+      Definition luser_inst : forall `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} {mG : memGS Σ} {_ : trivGS Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ :=
+        fun Σ sRG iG mG rG p ts => match p with end.
+      Definition lduplicate_inst : forall `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} {mG : memGS Σ} {rG : trivGS Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+          is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) _ ts) (luser_inst (sRG := sRG) _ ts ∗ luser_inst (sRG := sRG) _ ts) :=
+        fun Σ sRG iG mG rG p ts dup => match p with end.
+
+      (* We don't need additional ghost state beyond what we already have for the WP. *)
+      Definition resGS := trivGS.
+
     End ExampleIrisPredicates.
 
     Include IrisSignatureRules DefaultBase ExampleSig ExampleProgram

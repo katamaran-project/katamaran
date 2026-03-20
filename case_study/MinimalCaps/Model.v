@@ -502,9 +502,12 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
   Section MinimalCapsPredicates.
     Import env.notations.
 
+    (* We don't need additional ghost state beyond what we already have for the WP. *)
+    Definition resGS := trivGS.
+
     (* luser_inst gives the implementation for the predicates defined for this
        case study. *)
-    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
+    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} {_ : trivGS Σ}
              (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | ptsto   | [a; v] => pointsto a (DfracOwn 1) v
     | safe    | [c]    => interp c
@@ -513,7 +516,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
     | ih      | []     => IH
     | wp_loop | []     => interp_loop (sg := SailGS _ _ _).
 
-    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) :
+    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} {mG : mcMemGS Σ} {_ : trivGS Σ}:
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
         (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).

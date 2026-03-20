@@ -924,9 +924,12 @@ Module ExampleModel.
       | v :: vs => (∃ p' pn, ⌜p = inl p'⌝ ∗ ptstocons_interp p' v pn ∗ ptstolist_interp pn vs)%I
       end.
 
+    (* We don't need additional ghost state beyond what we already have for the WP.*)
+    Definition resGS := trivGS.
+
     (* Pattern match on the generic representation of abstract predicates map them
        to their Iris definition. *)
-    Definition luser_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} (mG : mcMemGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
+    Definition luser_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} {mG : mcMemGS Σ} {_ : trivGS Σ} (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
       (match p return Env Val (𝑯_Ty p) -> iProp Σ with
       | ptstocons => fun ts => ptstocons_interp (env.head (env.tail (env.tail ts))) (env.head (env.tail ts)) (env.head ts)
       | ptstolist => fun ts => ptstolist_interp (env.head (env.tail ts)) (env.head ts)
@@ -935,9 +938,9 @@ Module ExampleModel.
     (* This definition verifies the soundness if duplicability. However, this
        example does not contain any predicates marked as duplicable and therefore
        the proof is trivial *)
-    Definition lduplicate_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} (mG : mcMemGS Σ) :
+    Definition lduplicate_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} {mG : mcMemGS Σ} {_ : trivGS Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
-      is_duplicable p = true -> luser_inst mG p ts ⊢ luser_inst mG p ts ∗ luser_inst mG p ts.
+      is_duplicable p = true -> luser_inst p ts ⊢ luser_inst p ts ∗ luser_inst p ts.
     Proof.
       destruct p; now cbn.
     Qed.
