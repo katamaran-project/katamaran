@@ -154,12 +154,12 @@ Module IrisBinaryWP
       let mG_right   := memGS2_memGS_right in
       (λ δ1 δ2 s1 s2 Q,
         ∀ γ21 μ21,
-          regs_inv (srGS := srGS_right) γ21 ∗ mem_inv (mG := mG_right) μ21 -∗
+          regs_inv (srGS := srGS_right) γ21 ∗ mem_state_interp (mG := mG_right) μ21 -∗
             semWP (sG := sG_left) δ1 s1 (λ v1 δ1',
               ∃ γ22 μ22 δ2' s2' v2,
                 ⌜⟨ γ21, μ21, δ2, s2 ⟩ --->* ⟨ γ22, μ22, δ2', s2' ⟩⌝
                 ∗ ⌜stm_to_val s2' = Some v2⌝
-                ∗ regs_inv (srGS := srGS_right) γ22 ∗ mem_inv (mG := mG_right) μ22
+                ∗ regs_inv (srGS := srGS_right) γ22 ∗ mem_state_interp (mG := mG_right) μ22
                 ∗ Q v1 δ1' v2 δ2'
           ))%I.
 
@@ -679,18 +679,18 @@ Module IrisBinaryWP
       let srGS_right := sailRegGS2_sailRegGS_right in
       let mG_right   := memGS2_memGS_right in
       ⊢ (∀ γ1 μ1,
-            (@regs_inv _ srGS_left γ1 ∗ @mem_inv _ mG_left μ1)
+            (@regs_inv _ srGS_left γ1 ∗ @mem_state_interp _ mG_left μ1)
             ={⊤,∅}=∗
               (∀ res1 γ1' μ1',
                    ⌜ForeignCall f1 (evals es1 δ1) res1 γ1 γ1' μ1 μ1'⌝
                    ={∅}▷=∗
                      |={∅,⊤}=>
-                       (@regs_inv _ srGS_left γ1' ∗ @mem_inv _ mG_left μ1')
+                       (@regs_inv _ srGS_left γ1' ∗ @mem_state_interp _ mG_left μ1')
                        ∗  (∀ γ2 μ2,
-                             (@regs_inv _ srGS_right γ2 ∗ @mem_inv _ mG_right μ2) ={⊤,∅}=∗
+                             (@regs_inv _ srGS_right γ2 ∗ @mem_state_interp _ mG_right μ2) ={⊤,∅}=∗
                                (∀ res2 γ2' μ2',
                                  ⌜ForeignCall f2 (evals es2 δ2) res2 γ2 γ2' μ2 μ2'⌝ ={∅,⊤}=∗
-                                   (@regs_inv _ srGS_right γ2' ∗ @mem_inv _ mG_right μ2')
+                                   (@regs_inv _ srGS_right γ2' ∗ @mem_state_interp _ mG_right μ2')
                                    ∗ semWP2 δ1 δ2 (match res1 with inr v => stm_val _ v
                                                                  | inl s => stm_fail _ s
                                                    end)

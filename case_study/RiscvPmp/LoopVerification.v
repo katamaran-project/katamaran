@@ -46,6 +46,7 @@ From Katamaran Require Import
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Model
+     RiscvPmp.trace
      RiscvPmp.Contracts.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
@@ -74,7 +75,7 @@ Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase Risc
 Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpExecutor.
 
 Section Loop.
-  Context `{sg : sailGS Σ}.
+  Context `{sg : sailGS Σ} {rG : iostateG IOState Σ}.
   Definition step_sem_contract :=
     Eval simpl in ValidContractSemCurried fun_step sep_contract_step.
 

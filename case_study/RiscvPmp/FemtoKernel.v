@@ -41,6 +41,7 @@ From Katamaran Require Import
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.PmpCheck
+     RiscvPmp.trace
      RiscvPmp.Sig.
 From Katamaran Require
      RiscvPmp.Contracts
@@ -427,8 +428,8 @@ Module inv := invariants.
                      (femtokernel_handler_post) wnil).
 
 Import Erasure.notations.
-Eval vm_compute in Erasure.erase_symprop vc__femtohandler_block0.
-Locate erase_symprop.
+(* Eval vm_compute in Erasure.erase_symprop vc__femtohandler_block0. *)
+(* Locate erase_symprop. *)
 
     (* Lemma even_iff_land1: forall n, N.even n <-> N.land n 1 = 0%N. *)
     (* Proof. *)
@@ -590,7 +591,7 @@ Locate erase_symprop.
         * iIntros "[Ha Hl]"; now iFrame.
   Qed.
 
-  Lemma memAdv_pmpPolicy `{sailGS Σ} :
+  Lemma memAdv_pmpPolicy `{sailGS Σ, iostateG IOState Σ} :
     (ptstoSthL advAddrs ⊢
       interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User)%I.
   Proof.
@@ -606,7 +607,7 @@ Locate erase_symprop.
     iPureIntro. eapply mmio_ram_False; eauto.
   Qed.
 
-  Definition femto_mmio_pred `{sailGS Σ} (t : Trace) (s : IOState) := mmio_trace_state_pred t s.
+  Definition femto_mmio_pred `{sailGS Σ, iostateG IOState Σ} (t : Trace) (s : IOState) := mmio_trace_state_pred t s.
 
   (* Note: temporarily make femtokernel_handler_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_handler_pre.
@@ -615,48 +616,48 @@ Locate erase_symprop.
 
   Transparent femtokernel_handler_pre.
 
-  Definition femto_handler_pre_block1 `{sailGS Σ} a : iProp Σ :=
-    (asn.interpret femtokernel_handler_pre_block1 [ a ]).
-  Eval cbn in fun a => femto_handler_pre_block1 a.
+  Definition femto_handler_pre_block1 `{sailGS Σ, iostateG IOState Σ} a : iProp Σ :=
+    asn.interpret femtokernel_handler_pre_block1 [ a ].
+  (* Eval cbn in fun a => femto_handler_pre_block1 a. *)
 
-  Definition femto_handler_post_block1 `{sailGS Σ} a an : iProp Σ :=
+  Definition femto_handler_post_block1 `{sailGS Σ, iostateG IOState Σ} a an : iProp Σ :=
     asn.interpret femtokernel_handler_post_block1 [].[("a"∷ty_xlenbits) ↦ a ].[("an"∷ty_xlenbits) ↦ an ].
-  Eval cbn in fun a an => femto_handler_post_block1 a an.
+  (* Eval cbn in fun a an => femto_handler_post_block1 a an. *)
 
-  Definition femto_handler_block1_contract `{sailGS Σ} : iProp Σ :=
+  Definition femto_handler_block1_contract `{sailGS Σ, iostateG IOState Σ} : iProp Σ :=
     semTripleAnnotatedBlock femto_handler_pre_block1 (femtokernel_handler_gen_block1 data_addr) femto_handler_post_block1.
 
   (* Note: temporarily make femtokernel_handler_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_handler_pre_block1.
   Import env.notations.
 
-  Lemma femto_handler_verified_block1: forall `{sailGS Σ}, ⊢ femto_handler_block1_contract.
+  Lemma femto_handler_verified_block1 `{sailGS Σ, iostateG IOState Σ} :  ⊢ femto_handler_block1_contract.
   Proof.
-    iIntros (Σ sG a).
+    iIntros (a).
     iApply (sound_sannotated_block_verification_condition lemSemBlockVerif $! a).
     exact sat__femtohandler_block1.
   Qed.
 
   Transparent femtokernel_handler_pre_block1.
 
-  Definition femto_handler_pre_block2 `{sailGS Σ} a : iProp Σ :=
+  Definition femto_handler_pre_block2 `{sailGS Σ, iostateG IOState Σ} a : iProp Σ :=
     asn.interpret femtokernel_handler_pre_block2 [ a ].
-  Eval cbn in fun a => femto_handler_pre_block2 a.
+  (* Eval cbn in fun a => femto_handler_pre_block2 a. *)
 
-  Definition femto_handler_post `{sailGS Σ} a an : iProp Σ :=
+  Definition femto_handler_post `{sailGS Σ, iostateG IOState Σ} a an : iProp Σ :=
     asn.interpret femtokernel_handler_post [].[("a"∷ty_xlenbits) ↦ a ].[("an"∷ty_xlenbits) ↦ an ].
-  Eval cbn in fun a an => femto_handler_post a an.
+  (* Eval cbn in fun a an => femto_handler_post a an. *)
 
-  Definition femto_handler_block2_contract `{sailGS Σ} : iProp Σ :=
+  Definition femto_handler_block2_contract `{sailGS Σ, iostateG IOState Σ} : iProp Σ :=
     semTripleAnnotatedBlock femto_handler_pre_block2 (femtokernel_handler_gen_block2) (femto_handler_post).
 
   (* Note: temporarily make femtokernel_handler_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_handler_pre_block2.
   Import env.notations.
 
-  Lemma femto_handler_verified_block2: forall `{sailGS Σ}, ⊢ femto_handler_block2_contract.
+  Lemma femto_handler_verified_block2 `{sailGS Σ, iostateG IOState Σ} : ⊢ femto_handler_block2_contract.
   Proof.
-    iIntros (Σ sG a).
+    iIntros (a).
     iApply (sound_sannotated_block_verification_condition lemSemBlockVerif $! a).
     exact sat__femtohandler_block2.
   Qed.
@@ -784,7 +785,7 @@ Locate erase_symprop.
     iApply (semWP_mono with "Hk"); auto.
   Qed.
 
-  Lemma femtokernel_handler_safe_block1 `{sailGS Σ} a :
+  Lemma femtokernel_handler_safe_block1 `{sailGS Σ, iostateG IOState Σ} a :
     ⊢ ▷ (femtoKernelAssumptions femto_handler_pre (bv.of_N handler_addr) -∗ WP_loop) -∗
       femtoKernelAssumptions femto_handler_pre_block1 a -∗
       WP_loop.
@@ -812,7 +813,7 @@ Locate erase_symprop.
       + iFrame "Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
  Qed.
 
-   Lemma femtokernel_handler_safe_block0 `{sailGS Σ} a :
+  Lemma femtokernel_handler_safe_block0 `{sailGS Σ, iostateG IOState Σ} a :
     ⊢ femtoKernelAssumptions femto_handler_pre a -∗
       WP_loop.
   Proof.
@@ -885,7 +886,13 @@ Qed.
     iAssert (interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User) with "[Hmemadv]" as "Hpmpaddr".
     by iApply memAdv_pmpPolicy.
     iFrame "Hmst Hmtvec Hmcause Hmip Hmie Hmscratch Hmepc Hpc Hnpc". iModIntro.
-    iFrame "Hcurpriv Hpmpaddr Hgprs Hpmpentries".
+    iFrame "Hcurpriv Hpmpaddr Hpmpentries".
+    rewrite gprs_equiv.
+    iFrame "Hregs".
+
+    (* iSplitL "Hmemadv". *)
+    (* now iApply memAdv_pmpPolicy. *)
+
     iSplitL "".
     iModIntro.
     unfold LoopVerification.CSRMod.
@@ -988,7 +995,7 @@ Qed.
     by compute.
   Qed.
 
-  Lemma intro_ptstomem_word `{sailGS Σ} v0 v1 v2 v3 (a : Val ty_word) :
+  Lemma intro_ptstomem_word `{sailGS Σ, iostateG IOState Σ} v0 v1 v2 v3 (a : Val ty_word) :
     interp_ptsto (bv.of_Z (0 + bv.unsigned a)) v0 ∗
     interp_ptsto (bv.of_Z (1 + bv.unsigned a)) v1 ∗
     interp_ptsto (bv.of_Z (2 + bv.unsigned a)) v2 ∗
@@ -1010,7 +1017,7 @@ Qed.
     now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
   Qed.
 
-  Lemma intro_ptstomem_word2 `{sailGS Σ} {μ : Memory} {a : Val ty_word} {v : Val ty_word} :
+  Lemma intro_ptstomem_word2 `{sailGS Σ, iostateG IOState Σ} {μ : Memory} {a : Val ty_word} {v : Val ty_word} :
     mem_has_word μ a v ->
     ([∗ list] a' ∈ bv.seqBv a 4, interp_ptsto a' ((memory_ram μ) a')) ⊢ interp_ptstomem a v.
   Proof.
@@ -1023,7 +1030,7 @@ Qed.
     now iApply (intro_ptstomem_word with "[$Hmema $Hmema1 $Hmema2 $Hmema3]").
   Qed.
 
-  Lemma intro_ptsto_instr `{sailGS Σ} {μ : Memory} {a : Val ty_word} {instr : AST} :
+  Lemma intro_ptsto_instr `{sailGS Σ, iostateG IOState Σ} {μ : Memory} {a : Val ty_word} {instr : AST} :
     (4 + bv.bin a < bv.exp2 xlenbits)%N ->
     mem_has_instr μ a instr ->
     ([∗ list] a' ∈ bv.seqBv a 4, interp_ptsto a' ((memory_ram μ) a'))
@@ -1035,7 +1042,7 @@ Qed.
     now iApply (intro_ptstomem_word2 Hmhw).
   Qed.
 
-  Lemma intro_ptsto_instrs `{sailGS Σ} {μ : Memory} {a : Val ty_word} {instrs : list AST} :
+  Lemma intro_ptsto_instrs `{sailGS Σ, iostateG IOState Σ} {μ : Memory} {a : Val ty_word} {instrs : list AST} :
     (4 * N.of_nat (length instrs) + bv.bin a < bv.exp2 xlenbits)%N ->
     mem_has_instrs μ a instrs ->
     ([∗ list] a' ∈ bv.seqBv a (4 * N.of_nat (length instrs)), interp_ptsto a' ((memory_ram μ) a'))
@@ -1063,7 +1070,7 @@ Qed.
         * now rewrite ?bv.add_assoc.
   Qed.
 
-  Lemma intro_ptstoSthL `{sailGS Σ} (μ : Memory) (addrs : list Xlenbits)  :
+  Lemma intro_ptstoSthL `{sailGS Σ, iostateG IOState Σ} (μ : Memory) (addrs : list Xlenbits)  :
     ([∗ list] a' ∈ addrs, interp_ptsto a' ((memory_ram μ) a')) ⊢ ptstoSthL addrs.
   Proof.
     induction addrs as [|a l]; cbn.
@@ -1074,7 +1081,7 @@ Qed.
       + now iApply IHl.
   Qed.
 
-  Lemma sub_heap_mapsto_interp_ptsto {Σ : gFunctors} {H : sailGS Σ} {s e} (μ : Memory):
+  Lemma sub_heap_mapsto_interp_ptsto {Σ : gFunctors} {sG : sailGS Σ} {rG : iostateG IOState Σ} {s e} (μ : Memory):
     (minAddr <= bv.bin s)%N → (bv.bin s + e <= minAddr + lenAddr)%N →
     ([∗ list] y ∈ bv.seqBv s e, gen_heap.pointsto y (dfrac.DfracOwn 1) (memory_ram μ y)) ⊢ [∗ list] a' ∈ bv.seqBv s e, interp_ptsto a' (memory_ram μ a').
   Proof.
@@ -1088,7 +1095,7 @@ Qed.
     - rewrite bv.bin_of_N_small; last apply minAddr_rep. lia.
   Qed.
 
-   Lemma femtokernel_splitMemory `{sailGS Σ} {μ : Memory} {σ : IOState} :
+  Lemma femtokernel_splitMemory `{sailGS Σ, iostate_preG IOState Σ} {μ : Memory} {s} :
     mem_has_instrs μ (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
     mem_has_instrs μ (bv.of_N handler_addr) (filter_AnnotInstr_AST femtokernel_handler) ->
     mmio_pred bytes_per_word (memory_trace μ) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
@@ -1115,10 +1122,10 @@ Qed.
       iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); now compute.
     Qed.
 
-  Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
-    ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝.
+  Lemma interp_ptsto_valid `{sailGS Σ, iostateG IOState Σ} {μ a v} :
+    ⊢ mem_state_interp _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝.
   Proof.
-    unfold interp_ptsto, mem_inv.
+    unfold interp_ptsto, mem_state_interp.
     iIntros "(%memmap & Hinv & %link & Htr) [Hptsto %Hmmio]".
     iDestruct (gen_heap.gen_heap_valid with "Hinv Hptsto") as "%x".
     iPureIntro.
@@ -1134,8 +1141,8 @@ Qed.
   Qed.
 
   (* TODO: use this lemma in earlier proofs, like `read_ram_works`? *)
-  Lemma interp_ptstomem_valid `{sailGS Σ} {μ a v} :
-    ⊢ mem_inv _ μ -∗ interp_ptstomem a v -∗ ⌜mem_has_word μ a v⌝.
+  Lemma interp_ptstomem_valid `{sailGS Σ, iostateG IOState Σ} {μ a v} :
+    ⊢ mem_state_interp _ μ -∗ interp_ptstomem a v -∗ ⌜mem_has_word μ a v⌝.
   Proof.
     iIntros "Hinv Hptstomem".
 
@@ -1164,8 +1171,8 @@ Qed.
   Transparent ptsto_instrs.
   Opaque Model.RiscvPmpModel2.gprs_equiv.
 
-  Lemma femtokernel_endToEnd  {γ γ' : RegStore} {μ μ' : Memory} {σ σ' : IOState}
-    {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} :
+  Lemma femtokernel_endToEnd {γ γ' : RegStore} {μ μ' : Memory} s
+        {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} :
     mem_has_instrs μ (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
     mem_has_instrs μ (bv.of_N handler_addr) (filter_AnnotInstr_AST femtokernel_handler) ->
     mmio_pred bytes_per_word (memory_trace μ) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
@@ -1176,16 +1183,14 @@ Qed.
     read_register γ pmpaddr0 = bv.zero ->
     read_register γ pmp1cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr1 = bv.zero ->
+    read_register γ mstatus = {| MPP := User; MPIE := false; MIE := false |} ->
     read_register γ pc = (bv.of_N init_addr) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    mmio_trace_state_pred (memory_trace μ') σ'. (* The initial demands hold over the final state *)
+    exists s', mmio_trace_state_pred (memory_trace μ') s' (* The initial demands hold over the final state *).
   Proof.
-    intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γmstatus γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps.
+    intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γmstatus γpc steps.
     refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _). (* inv trace satisfies protocol state *)
-    iIntros (Σ' H).
-    (* allocate iostate here *)
-    (* inv_alloc. *)
-    (*  *)
+    iIntros (Σ' sG mpG).
     cbn.
     iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmie & Hmip & Hmtvec & Hmscratch & Hmepc & Hmcause & Hcurpriv & H')".
     rewrite γmstatus γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc.
@@ -1216,12 +1221,6 @@ Qed.
       easy.
       Unshelve. all: constructor.
   Abort.
-
-  iDestruct (trace.iost_full_frag_eq with "Hsta Hstf") as "%Heqs". subst.
-  iMod (trace.trace_update _ _ (cons _ _) with "[$Htra $Htrf]") as "[Htra Htrf]".
-  iMod (trace.state_update _ _ _ with "[$Hsta $Hstf]") as "[Hsta Hstf]".
-  iMod ("Hclose" with "[Htrf Hsta]") as "_".
- 
 
 (* Print Assumptions femtokernel_endToEnd. *)
 

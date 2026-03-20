@@ -55,6 +55,7 @@ From Katamaran Require Import
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
+     RiscvPmp.trace
      RiscvPmp.Sig.
 From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
@@ -301,7 +302,7 @@ Section BlockVerificationDerived.
     Import ProgramLogic.
     Import CHeapSpec.
 
-    Context {Σ} {GS : sailGS Σ}.
+    Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
 
     Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
       match instrs with
@@ -803,7 +804,7 @@ Section AnnotatedBlockVerification.
     Import ProgramLogic.
     Import CHeapSpec.
 
-    Context {Σ} {GS : sailGS Σ}.
+    Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
 
     Definition extract_AST (i : AnnotInstr) : option AST :=
       match i with

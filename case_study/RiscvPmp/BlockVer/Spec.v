@@ -49,6 +49,7 @@ From Katamaran Require Import
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.Sig
+     RiscvPmp.trace
      RiscvPmp.Contracts.
 From Katamaran Require RiscvPmp.Model.
 
@@ -847,7 +848,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import iris.proofmode.string_ident.
   Import iris.proofmode.tactics.
 
-  Lemma read_ram_sound `{sailGS Σ} {bytes} :
+  Lemma read_ram_sound `{sailGS Σ} {rG : iostateG IOState Σ} {bytes} :
     TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram (read_ram bytes).
   Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι.
@@ -867,11 +868,11 @@ Module RiscvPmpIrisInstanceWithContracts.
       - (* old case *)
         iModIntro.
         iPoseProof (RiscvPmpModel2.fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-        iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+        iPoseProof (RiscvPmpModel2.mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
         iFrame "Hregs Hmem". iApply semTWP_val. now iFrame "H".
   Qed.
 
-  Lemma write_ram_sound `{sailGS Σ} {bytes} :
+  Lemma write_ram_sound `{sailGS Σ} {rG : iostateG IOState Σ} {bytes} :
     TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_write_ram (write_ram bytes).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
@@ -884,15 +885,15 @@ Module RiscvPmpIrisInstanceWithContracts.
     rewrite semTWP_val. now iFrame "Hregs H".
  Qed.
 
-  Lemma mmio_read_sound `{!sailGS Σ} (bytes : nat) :
+  Lemma mmio_read_sound `{!sailGS Σ} {rG : iostateG IOState Σ} (bytes : nat) :
     TValidContractForeign (RiscvPmpSpecification.sep_contract_mmio_read bytes) (mmio_read bytes).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
     now iIntros "[%HFalse _]".
   Qed.
 
-  Lemma mmio_write_sound `{!sailGS Σ} `(H: restrict_bytes bytes) :
-    TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
+  Lemma mmio_write_sound `{!sailGS Σ} {rG : iostateG IOState Σ} `(rB: restrict_bytes bytes) :
+    TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ rB) (mmio_write rB).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "([%Hmmio _] & #Hinv & (%s & Hstf) & (-> & %Hstate))".
@@ -905,18 +906,18 @@ Module RiscvPmpIrisInstanceWithContracts.
     iMod (trace.trace_update _ _ (cons _ _) with "[$Htra $Htrf]") as "[Htra Htrf]".
     iMod ("Hclose" with "[Htrf Hsta]") as "_".
     {(* Instantiate evars *)
-      iExists s. iExists _. iNext. iFrame. iPureIntro. admit.
+      iExists _. iExists _. iNext. iFrame. iPureIntro. admit.
             }
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     iMod "Hclose" as "_". rewrite semTWP_val.
     destruct bytes; first contradiction.
-    unfold mem_inv, fun_write_mmio; cbn.
-    iFrame "Hregs Hmem Hstf Htra".
+    unfold mem_state_interp, fun_write_mmio; cbn.
+    iFrame "Hregs Hmem Htra Hstf".
     repeat iSplitL; auto.
   Admitted.
 
-  Lemma decode_sound `{sailGS Σ} :
+  Lemma decode_sound `{sailGS Σ} {rG : iostateG IOState Σ} :
     TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
@@ -926,12 +927,12 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros (? ? ? Hf). iMod "Hclose" as "_".
     rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     destruct (pure_decode _); inversion Hdecode.
-    iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+    iPoseProof (RiscvPmpModel2.mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
     rewrite semTWP_val. now iFrame "Hregs Hmem".
   Qed.
 
-  Lemma within_mmio_sound `{!sailGS Σ} `(H: restrict_bytes bytes):
-    TValidContractForeign (RiscvPmpBlockVerifSpec.sep_contract_within_mmio H) (RiscvPmpProgram.within_mmio H).
+  Lemma within_mmio_sound `{!sailGS Σ} {rG : iostateG IOState Σ} `(rB: restrict_bytes bytes):
+    TValidContractForeign (RiscvPmpBlockVerifSpec.sep_contract_within_mmio rB) (RiscvPmpProgram.within_mmio rB).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "Hpre". iApply semTWP_foreign.
@@ -986,7 +987,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound.
   Qed.
 
-  Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
+  Lemma foreignSemBlockVerif `{sailGS Σ} {rG : iostateG IOState Σ} : ForeignSem.
   Proof. apply (TForeignSem_ForeignSem TforeignSemBlockVerif). Qed.
 
   Ltac destruct_syminstance ι :=
@@ -1002,7 +1003,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       | _ => idtac
       end.
 
-  Lemma open_ptsto_instr_sound `{sailGS Σ} :
+  Lemma open_ptsto_instr_sound `{sailGS Σ} {rG : iostateG IOState Σ} :
     ValidLemma RiscvPmpBlockVerifSpec.lemma_open_ptsto_instr.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
@@ -1011,7 +1012,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     now iFrame.
   Qed.
 
-  Lemma close_ptsto_instr_sound `{sailGS Σ} :
+  Lemma close_ptsto_instr_sound `{sailGS Σ} {rG : iostateG IOState Σ} :
     ValidLemma RiscvPmpBlockVerifSpec.lemma_close_ptsto_instr.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
@@ -1021,7 +1022,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
 
-  Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (width : WordWidth) :
+  Lemma close_mmio_write_sound `{sailGS Σ} {rG : iostateG IOState Σ} (imm : bv 12) (width : WordWidth) :
     ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width ).
   Proof.
     intros ι; destruct_syminstance ι. cbn -[is_even negb].
@@ -1039,7 +1040,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     constructor; cbn; try done; now destruct width.
   Qed.
 
-  Lemma open_pmp_entries_sound `{sailGS Σ} :
+  Lemma open_pmp_entries_sound `{sailGS Σ} {rG : iostateG IOState Σ} :
     ValidLemma RiscvPmpSpecification.lemma_open_pmp_entries.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
@@ -1049,11 +1050,11 @@ Module RiscvPmpIrisInstanceWithContracts.
     now iFrame "e1 e2 e3 e4".
   Qed.
 
-  Lemma close_pmp_entries_sound `{sailGS Σ} :
+  Lemma close_pmp_entries_sound `{sailGS Σ} {rG : iostateG IOState Σ} :
     ValidLemma RiscvPmpSpecification.lemma_close_pmp_entries.
   Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed.
 
-  Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.
+  Lemma lemSemBlockVerif `{sailGS Σ} {rG : iostateG IOState Σ} : LemmaSem.
   Proof.
     intros Δ []; intros ι; destruct_syminstance ι; try now iIntros "_".
     - apply open_pmp_entries_sound.
@@ -1066,7 +1067,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifExecutor.Symbolic.
 
-  Lemma TcontractsSound `{sailGS Σ} : ⊢ TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+  Lemma TcontractsSound `{sailGS Σ} {rG : iostateG IOState Σ} : ⊢ TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
   Proof.
     apply (tsound TforeignSemBlockVerif lemSemBlockVerif).
     intros Γ τ f c Heq.
@@ -1075,7 +1076,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     eauto.
   Qed.
 
-  Lemma TValidContractEnvSem_ValidContractEnvSem `{sailGS Σ} :
+  Lemma TValidContractEnvSem_ValidContractEnvSem `{sailGS Σ} {rG : iostateG IOState Σ} :
     TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv ⊢
     ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
   Proof.
@@ -1087,7 +1088,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct f; try discriminate Ef; typeclasses eauto.
   Qed.
 
-  Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+  Lemma contractsSound `{sailGS Σ} {rG : iostateG IOState Σ} : ⊢ ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
   Proof.
     iApply (TValidContractEnvSem_ValidContractEnvSem $! TcontractsSound).
   Qed.

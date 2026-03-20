@@ -96,12 +96,12 @@ Module RiscvPmpModel2.
     RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance.
 
   Section ForeignProofs.
-    Context `{sg : sailGS Σ}.
+    Context `{sg : sailGS Σ} {rG : iostateG IOState Σ}.
 
-    Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
+    Lemma mem_state_interp_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
         gen_heap.gen_heap_interp memmap -∗ trace.tr_auth trace.trace_name (memory_trace μ) -∗
-        mem_inv sailGS_memGS μ.
+        mem_state_interp sailGS_memGS μ.
     Proof. iIntros (μ memmap) "Hmap Hmem Htr"; iExists memmap; now iFrame. Qed.
 
     Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
@@ -150,7 +150,7 @@ Module RiscvPmpModel2.
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res ? ? Hf).
       iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+      iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
       iMod "Hclose" as "_". iModIntro.
       rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       iFrame "Hregs Hmem". iApply semTWP_val. auto.
@@ -159,14 +159,15 @@ Module RiscvPmpModel2.
     Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
       map_Forall (λ (a : Addr) (v : Base.Byte), (memory_ram μ) a = v) memmap ->
       interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗ tr_auth1 (memory_trace μ) ={⊤}=∗
-      mem_inv sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
+      mem_state_interp sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
     Proof.
       iRevert (data w paddr μ memmap).
       iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
         iIntros (data w paddr μ memmap Hmap) "(Haddr & Hmem & Htr)".
       - iModIntro. iSplitL; last done.
-        now iApply (mem_inv_not_modified $! Hmap with "Hmem Htr").
-     -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
+        now iApply (mem_state_interp_not_modified $! Hmap with "Hmem Htr").
+     -  unfold interp_ptstomem.
+        change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
         destruct (bv.appView byte (bytes * byte) w) as [bw w].
         iDestruct "Haddr" as "[[H $] Haddr]".
@@ -274,7 +275,7 @@ Module RiscvPmpModel2.
   End ForeignProofs.
 
   Section LemProofs.
-    Context `{sg : sailGS Σ}.
+    Context `{sg : sailGS Σ, rG : iostateG IOState Σ}.
 
     Lemma gprs_equiv :
       forall Σ (ι : Valuation Σ),

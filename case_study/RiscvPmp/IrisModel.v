@@ -58,17 +58,14 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
           mc_ghGS : gen_heapGS Addr MemVal Σ;
           (* tracking traces: we want a ghost variable for tracking the current trace *)
           mc_gtGS : traceG Trace Σ;
-          (* tracking iostate: we want a ghost variable for tracking the state of the corrent io-protocol *)
-          mc_iostGS : iostateG IOState Σ;
 
         }.
     #[export] Existing Instance mc_ghGS.
     #[export] Existing Instance mc_gtGS.
-    #[export] Existing Instance mc_iostGS. (* Tut: Registers field as an instance. Needed for instance resolution. *)
 
     Definition memGS : gFunctors -> Set := mcMemGS.
 
-    Definition mem_inv : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
+    Definition mem_state_interp : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
         (∃ memmap, gen_heap_interp memmap
            ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
