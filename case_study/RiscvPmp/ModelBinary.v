@@ -335,11 +335,11 @@ Module RiscvPmpModel2.
 
     Lemma interp_gprs_split :
       interp_gprs ⊢
-        @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_left
-        ∗ @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_right.
+        @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_left []
+        ∗ @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_right [].
     Proof.
       unfold interp_gprs, RiscvPmpIrisInstancePredicates.interp_gprs.
-      rewrite ?big_sepS_elements.
+      rewrite difference_empty_L ?big_sepS_elements.
       remember (elements RiscvPmpIrisInstancePredicates.reg_file) as l.
       replace (elements RiscvPmpIrisInstancePredicates.reg_file) with l.
       clear Heql.
