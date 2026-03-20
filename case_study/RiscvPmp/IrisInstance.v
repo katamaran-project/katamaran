@@ -185,7 +185,7 @@ Module RiscvPmpIrisInstancePredicates.
   Qed.
 
   Lemma big_sepS_delete_multi :
-    ∀ {Σ} {A : Type} {EqDecision0 : EqDecision A} {H : Countable A} (Φ : A → iProp Σj
+    ∀ {Σ} {A : Type} {EqDecision0 : EqDecision A} {H : Countable A} (Φ : A → iProp Σ)
       (X : gset A) (Y : list A),
       NoDup Y ->
       list_to_set Y ⊆ X ->
