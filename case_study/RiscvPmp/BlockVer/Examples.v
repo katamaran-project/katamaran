@@ -35,9 +35,11 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
+     Instance
      RiscvPmp.BlockVer.Spec
      RiscvPmp.BlockVer.PartialVerifier
      RiscvPmp.Machine
+     RiscvPmp.trace
      RiscvPmp.Sig.
 
 Import RiscvPmpProgram.

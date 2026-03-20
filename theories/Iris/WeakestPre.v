@@ -88,10 +88,10 @@ Module Type IrisWeakestPre
         match stm_to_val s with
         | Some v => |={⊤}=> Q v δ
         | None   => ∀ (γ1 : RegStore) (μ1 : Memory),
-                       regs_inv γ1 ∗ mem_inv μ1 ={⊤,∅}=∗
+                       regs_inv γ1 ∗ mem_state_interp μ1 ={⊤,∅}=∗
                        (∀ (s2 : Stm Γ τ) (δ2 : CStore Γ) (γ2 : RegStore) (μ2 : Memory),
                           ⌜⟨ γ1, μ1, δ , s ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩⌝ ∗ £ 1 ={∅}▷=∗
-                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semWP δ2 s2 Q)
+                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_state_interp μ2) ∗ semWP δ2 s2 Q)
         end.
     Proof.
       unfold semWP. rewrite wp_unfold. unfold wp_pre. cbn.
@@ -120,10 +120,10 @@ Module Type IrisWeakestPre
         match stm_to_val s with
         | Some v => |={⊤}=> Q v δ
         | None   => ∀ (γ1 : RegStore) (μ1 : Memory),
-                       regs_inv γ1 ∗ mem_inv μ1 ={⊤,∅}=∗
+                       regs_inv γ1 ∗ mem_state_interp μ1 ={⊤,∅}=∗
                        (∀ (s2 : Stm Γ τ) (δ2 : CStore Γ) (γ2 : RegStore) (μ2 : Memory),
                           ⌜⟨ γ1, μ1, δ , s ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩⌝ ={∅}▷=∗
-                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semWP δ2 s2 Q)
+                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_state_interp μ2) ∗ semWP δ2 s2 Q)
         end ⊢ semWP δ s Q.
     Proof.
       rewrite semWP_unfold.
@@ -391,12 +391,12 @@ Module Type IrisWeakestPre
 
     Lemma semWP_foreign {Γ Δ τ} {f : 𝑭𝑿 Δ τ} {es : NamedEnv (Exp Γ) Δ} {Q δ} :
       ⊢ (∀ γ μ,
-            (regs_inv γ ∗ mem_inv μ)
+            (regs_inv γ ∗ mem_state_interp μ)
             ={⊤,∅}=∗
         (∀ res γ' μ' ,
           ⌜ ForeignCall f (evals es δ) res γ γ' μ μ' ⌝
            ={∅}▷=∗
-           |={∅,⊤}=> (regs_inv γ' ∗ mem_inv μ') ∗
+           |={∅,⊤}=> (regs_inv γ' ∗ mem_state_interp μ') ∗
                       semWP δ (match res with inr v => stm_val _ v
                                        | inl s => stm_fail _ s
                              end) Q)) -∗
@@ -430,10 +430,10 @@ Module Type IrisWeakestPre
     Lemma semWP_step {Γ τ} {s1 s2 : Stm Γ τ} {γ1 γ2 : RegStore} {μ1 μ2 : Memory}
                      {δ1 δ2 : CStore Γ} {Q : Post Γ τ} :
       ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
-      regs_inv γ1 ∗ mem_inv μ1 -∗
+      regs_inv γ1 ∗ mem_state_interp μ1 -∗
       £ 1 -∗
       semWP δ1 s1 Q ={⊤,∅}=∗
-      ▷ |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semWP δ2 s2 Q.
+      ▷ |={∅,⊤}=> (regs_inv γ2 ∗ mem_state_interp μ2) ∗ semWP δ2 s2 Q.
     Proof.
       iIntros (Hstep) "Hres Hlc Hwp".
       rewrite semWP_unfold.
@@ -471,10 +471,10 @@ Module Type IrisWeakestPre
     Lemma semWP_preservation {Γ τ} {n : nat} {s1 s2 : Stm Γ τ} {γ1 γ2 : RegStore} {μ1 μ2 : Memory}
                      {δ1 δ2 : CStore Γ} {Q : Post Γ τ} κ :
       language.nsteps n ([MkConf s1 δ1]%list , (γ1,μ1)) κ ([MkConf s2 δ2]%list , (γ2,μ2)) ->
-      regs_inv γ1 ∗ mem_inv μ1 -∗
+      regs_inv γ1 ∗ mem_state_interp μ1 -∗
       £ n -∗
       semWP δ1 s1 Q ={⊤,∅}=∗
-      |={∅}▷=>^n |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semWP δ2 s2 Q.
+      |={∅}▷=>^n |={∅,⊤}=> (regs_inv γ2 ∗ mem_state_interp μ2) ∗ semWP δ2 s2 Q.
     Proof.
       revert s1 s2 γ1 γ2 μ1 μ2 δ1 δ2 Q κ.
       induction n as [|n IHn];
@@ -498,10 +498,10 @@ Module Type IrisWeakestPre
                      {δ1 δ2 : CStore Γ} {v : IVal τ} {Q : Post Γ τ} κ :
       language.nsteps n ([MkConf s1 δ1]%list , (γ1,μ1)) κ ([MkConf s2 δ2]%list , (γ2,μ2)) ->
       stm_to_val s2 = Some v ->
-      regs_inv γ1 ∗ mem_inv μ1 -∗
+      regs_inv γ1 ∗ mem_state_interp μ1 -∗
       £ n -∗
       semWP δ1 s1 Q ={⊤,∅}=∗
-      |={∅}▷=>^n |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ Q v δ2.
+      |={∅}▷=>^n |={∅,⊤}=> (regs_inv γ2 ∗ mem_state_interp μ2) ∗ Q v δ2.
     Proof.
       iIntros (Hstep Hs2) "Hres Hlc Hwp".
       iMod (semWP_preservation with "Hres Hlc Hwp") as "H"; first eauto.

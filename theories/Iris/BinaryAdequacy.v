@@ -77,13 +77,13 @@ Module Type IrisAdeqParameters2
   Parameter memΣ_GpreS2 : forall {Σ}, subG memΣ2 Σ -> memGpreS2 Σ.
   Parameter mem_res2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
 
-    (* Definition mem_inv `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
+    (* Definition mem_state_interp `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
     (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
     (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
     (*   )%I. *)
 
-  Parameter mem_inv_init2 : forall `{mGS : memGpreS2 Σ} (μ1 μ2 : Memory),
-                                         ⊢ |==> ∃ mG : memGS2 Σ, (mem_inv2 (mG := mG) μ1 μ2 ∗ mem_res2 (mG := mG) μ1 μ2)%I.
+  Parameter mem_init2 : forall `{mGS : memGpreS2 Σ} (μ1 μ2 : Memory),
+                                         ⊢ |==> ∃ mG : memGS2 Σ, (mem_state_interp2 (mG := mG) μ1 μ2 ∗ mem_res2 (mG := mG) μ1 μ2)%I.
 
 End IrisAdeqParameters2.
 
@@ -251,7 +251,7 @@ Module Type IrisAdequacy2
                ⌜⟨ γ2, μ2, δ2, s2 ⟩ --->* ⟨ γ2', μ2', δ2', s2' ⟩⌝ -∗
                ⌜stm_to_val s2' = Some v2⌝ -∗
                Q v1 δ1' v2 δ2' -∗
-               mem_inv2 μ1' μ2' ={⊤,∅}=∗ ⌜ φ ⌝)))%I ->
+               mem_state_interp2 μ1' μ2' ={⊤,∅}=∗ ⌜ φ ⌝)))%I ->
     φ.
   Proof.
     intros Hwp.
@@ -266,7 +266,7 @@ Module Type IrisAdequacy2
     iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (spec_name2) "[H1γ2 H2γ2]";
       first by apply auth_both_valid.
     pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
-    iMod (mem_inv_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
+    iMod (mem_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
     set (regsG_left := {| reg_inG := @reg_pre_inG2_left sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name1 |}).
     set (regsG_right := {| reg_inG := @reg_pre_inG2_right sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name2 |}).
     set (sailG_left  := SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)).
@@ -278,7 +278,7 @@ Module Type IrisAdequacy2
       eapply finite.NoDup_enum.
       iSplitL "H2γ1". iApply "H2γ1". iApply "H2γ2". }
     iMod "Hwp". rewrite /semWP2.
-    rewrite mem_inv2_mem_inv. iDestruct "Hmem" as "(Hmem1 & Hmem2)".
+    rewrite mem_state_interp2_mem_state_interp. iDestruct "Hmem" as "(Hmem1 & Hmem2)".
     iSpecialize ("Hwp" with "[$Hmem2 H1γ2]").
     { now iApply own_RegStore_to_regs_inv. }
     iMod (semWP_postcondition steps Hval with "[Hmem1 H1γ1] [Hlc] Hwp") as "H"; eauto.
@@ -289,7 +289,7 @@ Module Type IrisAdequacy2
     iApply (step_fupdN_wand with "H").
     iIntros "H". iMod "H".
     iDestruct "H" as "([Hreg1 Hmem1] & %γ22 & %μ22 & %δ2' & %s2' & %v2 & Hs2 & Hs2' & Hregs2 & Hmem2 & HQ)".
-    iPoseProof (mem_inv2_mem_inv with "[$Hmem1 $Hmem2]") as "Hmem".
+    iPoseProof (mem_state_interp2_mem_state_interp with "[$Hmem1 $Hmem2]") as "Hmem".
     now iMod ("Hφ" with "Hs2 Hs2' HQ Hmem").
   Qed.
 
@@ -316,15 +316,15 @@ Module Type IrisAdequacy2
     iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (spec_name2) "[H1γ2 H2γ2]";
       first by apply auth_both_valid.
     pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
-    iMod (mem_inv_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
+    iMod (mem_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
     set (regsG_left := {| reg_inG := @reg_pre_inG2_left sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name1 |}).
     set (regsG_right := {| reg_inG := @reg_pre_inG2_right sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name2 |}).
     set (sailG_left  := SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)).
     set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
     set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG).
-    iExists (λ σ _, regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_inv _ (@memGS2_memGS_left _ memG) (σ.2))%I, _. cbn.
+    iExists (λ σ _, regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_state_interp _ (@memGS2_memGS_left _ memG) (σ.2))%I, _. cbn.
     iPoseProof (Hwp sailΣ2 gs2) as "H".
-    rewrite mem_inv2_mem_inv.
+    rewrite mem_state_interp2_mem_state_interp.
     iDestruct "Hmem" as "($ & Hmem2)".
     iSplitR "H1γ2 H2γ2 Rmem Hmem2".
     - now iApply (@own_RegStore_to_regs_inv sailΣ2 regsG_left γ1).

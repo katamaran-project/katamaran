@@ -35,6 +35,7 @@ From Katamaran Require Import
      Notations
      Specification
      SmallStep.Step
+     Instance
      RiscvPmp.BlockVer.Spec
      RiscvPmp.BlockVer.TotalVerifier
      RiscvPmp.BlockVer.BinaryVerifier
@@ -1421,9 +1422,9 @@ Module inv := invariants.
   Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
-    ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝.
+    ⊢ mem_state_interp _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝.
   Proof.
-    unfold interp_ptsto, mem_inv.
+    unfold interp_ptsto, mem_state_interp.
     iIntros "(%memmap & Hinv & %link & Htr) [Hptsto %Hmmio]".
     iDestruct (gen_heap.gen_heap_valid with "Hinv Hptsto") as "%x".
     iPureIntro.
@@ -1440,7 +1441,7 @@ Module inv := invariants.
 
   (* TODO: use this lemma in earlier proofs, like `read_ram_works`? *)
   Lemma interp_ptstomem_valid `{sailGS Σ} {μ a v} :
-    ⊢ mem_inv _ μ -∗ interp_ptstomem a v -∗ ⌜mem_has_word μ a v⌝.
+    ⊢ mem_state_interp _ μ -∗ interp_ptstomem a v -∗ ⌜mem_has_word μ a v⌝.
   Proof.
     iIntros "Hinv Hptstomem".
 

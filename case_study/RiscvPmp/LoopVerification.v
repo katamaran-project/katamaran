@@ -46,6 +46,7 @@ From Katamaran Require Import
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Model
+     RiscvPmp.trace
      RiscvPmp.Contracts.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.

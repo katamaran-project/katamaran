@@ -66,11 +66,11 @@ Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgr
     fun μ1 μ2 => (mem_res (hG := memGS2_memGS_left) μ1 ∗
                  mem_res (hG := memGS2_memGS_right) μ2)%I.
 
-  Lemma mem_inv_init2 `{gHP : prod (memGpreS Σ) (memGpreS Σ)} (μ1 μ2 : Memory) :
-    ⊢ |==> ∃ mG : memGS2 Σ, (mem_inv2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
+  Lemma mem_init2 `{gHP : prod (memGpreS Σ) (memGpreS Σ)} (μ1 μ2 : Memory) :
+    ⊢ |==> ∃ mG : memGS2 Σ, (mem_state_interp2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
   Proof.
-    iMod (mem_inv_init (gHP := fst gHP) μ1) as (mG1) "[inv1 res1]".
-    iMod (mem_inv_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
+    iMod (mem_init (gHP := fst gHP) μ1) as (mG1) "[inv1 res1]".
+    iMod (mem_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
     iMod (trace_alloc (memory_trace μ1)) as (gT1) "[Hauth1 Hfrag1]".
     iMod (trace_alloc (memory_trace μ2)) as (gT2) "[Hauth2 Hfrag2]".
     iModIntro.

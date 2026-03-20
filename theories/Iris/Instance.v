@@ -769,8 +769,8 @@ Module Type IrisAdeqParameters
   Parameter memΣ : gFunctors.
   Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
   Parameter mem_res : forall `{mG : memGS Σ}, Memory -> iProp Σ.
-  Parameter mem_inv_init : forall `{mGS : memGpreS Σ} (μ : Memory),
-                                         ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
+  Parameter mem_init : forall `{mGS : memGpreS Σ} (μ : Memory),
+                                         ⊢ |==> ∃ mG : memGS Σ, (mem_state_interp (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
 
 End IrisAdeqParameters.
 
@@ -875,9 +875,9 @@ Module Type IrisAdequacy
         iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
           first by apply auth_both_valid.
         pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
-        iMod (mem_inv_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
+        iMod (mem_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
         iModIntro.
-        iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
+        iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_state_interp (σ.2))%I.
         iExists _.
         iSplitR "Hs2 Rmem".
         * iFrame "Hmem".
@@ -895,7 +895,7 @@ Module Type IrisAdequacy
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     (forall `{sailGS Σ'},
         mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP δ s Q
-          ∗ (mem_inv μ' ={⊤,∅}=∗ ⌜φ⌝)
+          ∗ (mem_state_interp μ' ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.
     (* intros steps trips. *)
@@ -906,7 +906,7 @@ Module Type IrisAdequacy
     iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
     pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
-    iMod (mem_inv_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
+    iMod (mem_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
     pose (regsG := {| reg_inG := @reg_pre_inG sailΣ (@subG_sailGpreS sailΣ (subG_refl sailΣ)); reg_gv_name := spec_name |}).
     pose (sailG := SailGS Hinv regsG memG).
     iMod (trips sailΣ sailG with "[$Rmem Hs2]") as "[trips Hφ]".
@@ -915,7 +915,7 @@ Module Type IrisAdequacy
       eapply finite.NoDup_enum.
     }
     iModIntro.
-    iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
+    iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_state_interp (σ.2))%I.
     iExists [ λ v, Q _ sailG (valconf_val v) (valconf_store v)]%list.
     iExists _.
     iExists _.

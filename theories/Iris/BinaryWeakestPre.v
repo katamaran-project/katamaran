@@ -154,12 +154,12 @@ Module IrisBinaryWP
       let mG_right   := memGS2_memGS_right in
       (λ δ1 δ2 s1 s2 Q,
         ∀ γ21 μ21,
-          regs_inv (srGS := srGS_right) γ21 ∗ mem_inv (mG := mG_right) μ21 -∗
+          regs_inv (srGS := srGS_right) γ21 ∗ mem_state_interp (mG := mG_right) μ21 -∗
             semWP (sG := sG_left) δ1 s1 (λ v1 δ1',
               ∃ γ22 μ22 δ2' s2' v2,
                 ⌜⟨ γ21, μ21, δ2, s2 ⟩ --->* ⟨ γ22, μ22, δ2', s2' ⟩⌝
                 ∗ ⌜stm_to_val s2' = Some v2⌝
-                ∗ regs_inv (srGS := srGS_right) γ22 ∗ mem_inv (mG := mG_right) μ22
+                ∗ regs_inv (srGS := srGS_right) γ22 ∗ mem_state_interp (mG := mG_right) μ22
                 ∗ Q v1 δ1' v2 δ2'
           ))%I.
 
@@ -679,18 +679,18 @@ Module IrisBinaryWP
       let srGS_right := sailRegGS2_sailRegGS_right in
       let mG_right   := memGS2_memGS_right in
       ⊢ (∀ γ1 μ1,
-            (@regs_inv _ srGS_left γ1 ∗ @mem_inv _ mG_left μ1)
+            (@regs_inv _ srGS_left γ1 ∗ @mem_state_interp _ mG_left μ1)
             ={⊤,∅}=∗
               (∀ res1 γ1' μ1',
                    ⌜ForeignCall f1 (evals es1 δ1) res1 γ1 γ1' μ1 μ1'⌝
                    ={∅}▷=∗
                      |={∅,⊤}=>
-                       (@regs_inv _ srGS_left γ1' ∗ @mem_inv _ mG_left μ1')
+                       (@regs_inv _ srGS_left γ1' ∗ @mem_state_interp _ mG_left μ1')
                        ∗  (∀ γ2 μ2,
-                             (@regs_inv _ srGS_right γ2 ∗ @mem_inv _ mG_right μ2) ={⊤,∅}=∗
+                             (@regs_inv _ srGS_right γ2 ∗ @mem_state_interp _ mG_right μ2) ={⊤,∅}=∗
                                (∀ res2 γ2' μ2',
                                  ⌜ForeignCall f2 (evals es2 δ2) res2 γ2 γ2' μ2 μ2'⌝ ={∅,⊤}=∗
-                                   (@regs_inv _ srGS_right γ2' ∗ @mem_inv _ mG_right μ2')
+                                   (@regs_inv _ srGS_right γ2' ∗ @mem_state_interp _ mG_right μ2')
                                    ∗ semWP2 δ1 δ2 (match res1 with inr v => stm_val _ v
                                                                  | inl s => stm_fail _ s
                                                    end)
@@ -814,18 +814,18 @@ Module IrisBinaryWP
       {γ1 γ1' γ2 : RegStore} {μ1 μ1' μ2 : Memory} {δ1 δ1' : CStore Γ1}
       {δ2 : CStore Γ2} {Q : Post2 Γ1 Γ2 τ} :
       ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ1', μ1', δ1', s1' ⟩ ->
-      regs_inv2 γ1 γ2 ∗ mem_inv2 μ1 μ2 -∗
+      regs_inv2 γ1 γ2 ∗ mem_state_interp2 μ1 μ2 -∗
       £ 1 -∗
       semWP2 δ1 δ2 s1 s2 Q ={⊤,∅}=∗
-      ▷ |={∅,⊤}=> (@regs_inv _ sailRegGS2_sailRegGS_left γ1' ∗ @mem_inv _ memGS2_memGS_left μ1')
+      ▷ |={∅,⊤}=> (@regs_inv _ sailRegGS2_sailRegGS_left γ1' ∗ @mem_state_interp _ memGS2_memGS_left μ1')
                   ∗ @semWP _ sailGS2_sailGS_left _ _ δ1' s1' (λ (v1 : IVal τ) (δ1'0 : CStore Γ1),
                     ∃ (γ22 : RegStore) (μ22 : Memory) (δ2' : CStore Γ2) (s2' : Stm Γ2 τ) (v2 : IVal τ),
                       ⌜⟨ γ2, μ2, δ2, s2 ⟩ --->* ⟨ γ22, μ22, δ2', s2' ⟩⌝
-                        ∗ ⌜stm_to_val s2' = Some v2⌝ ∗ @regs_inv _ sailRegGS2_sailRegGS_right γ22 ∗ @mem_inv _ memGS2_memGS_right μ22 ∗ Q v1 δ1'0 v2 δ2').
+                        ∗ ⌜stm_to_val s2' = Some v2⌝ ∗ @regs_inv _ sailRegGS2_sailRegGS_right γ22 ∗ @mem_state_interp _ memGS2_memGS_right μ22 ∗ Q v1 δ1'0 v2 δ2').
     Proof.
       iIntros (Hstep) "([Hreg1 Hreg2] & Hmem) Hlc Hwp".
       rewrite /semWP2.
-      iDestruct (mem_inv2_mem_inv with "Hmem") as "[Hmem1 Hmem2]".
+      iDestruct (mem_state_interp2_mem_state_interp with "Hmem") as "[Hmem1 Hmem2]".
       iSpecialize ("Hwp" with "[$Hreg2 $Hmem2]").
       iApply (semWP_step Hstep with "[Hreg1 Hmem1] [Hlc] Hwp"); eauto.
       iFrame "Hreg1 Hmem1".

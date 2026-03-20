@@ -30,7 +30,6 @@ From Katamaran Require Import
      Base
      Hoare
      Bitvector
-     trace
      Iris.Instance
      Iris.Base
      Syntax.Predicates
@@ -38,6 +37,7 @@ From Katamaran Require Import
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
      RiscvPmp.IrisModel
+     RiscvPmp.trace
      RiscvPmp.Sig.
 
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
@@ -107,8 +107,8 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
         now rewrite map_map map_id.
   Qed.
 
-  Lemma mem_inv_init `{gHP : !mcMemPreGS Σ} (μ : Memory) :
-    ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res μ)%I.
+  Lemma mem_init `{gHP : !mcMemPreGS Σ} (μ : Memory) :
+    ⊢ |==> ∃ mG : mcMemGS Σ, (mem_state_interp mG μ ∗ mem_res μ)%I.
   Proof.
     pose (memmap := initMemMap μ).
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".

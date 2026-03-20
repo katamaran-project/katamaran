@@ -363,7 +363,7 @@ Module Import ExampleModel.
     Include IrisPrelims DefaultBase ExampleProgram ExampleSemantics.
 
     Definition memGS : gFunctors -> Set := fun Σ => True.
-    Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
+    Definition mem_state_interp : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
 
     (* Combine the memory and register ghost states. *)
     Include IrisResources DefaultBase ExampleProgram ExampleSemantics.
@@ -381,8 +381,8 @@ Module Import ExampleModel.
     Definition memΣ : gFunctors := gFunctors.nil.
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ := fun _ _ => I.
     Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
-    Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
-      ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+    Lemma mem_init `{gHP : memGpreS Σ} (μ : Memory) :
+      ⊢ |==> ∃ mG : memGS Σ, (mem_state_interp mG μ ∗ mem_res mG μ)%I.
     Proof. now iStartProof. Qed.
   End ExampleIrisAdeqParams.
 
