@@ -1081,6 +1081,67 @@ Module Export RiscvPmpBase <: Base.
       | 11111 => Some x31
       end.
 
+    Definition reg_convert_to_idx (r : Reg ty_xlenbits) : option RegIdx :=
+      match r with
+      | x1 => Some (bv.of_nat 1)
+      | x2 => Some (bv.of_nat 2)
+      | x3 => Some (bv.of_nat 3)
+      | x4 => Some (bv.of_nat 4)
+      | x5 => Some (bv.of_nat 5)
+      | x6 => Some (bv.of_nat 6)
+      | x7 => Some (bv.of_nat 7)
+      | x8 => Some (bv.of_nat 8)
+      | x9 => Some (bv.of_nat 9)
+      | x10 => Some (bv.of_nat 10)
+      | x11 => Some (bv.of_nat 11)
+      | x12 => Some (bv.of_nat 12)
+      | x13 => Some (bv.of_nat 13)
+      | x14 => Some (bv.of_nat 14)
+      | x15 => Some (bv.of_nat 15)
+      | x16 => Some (bv.of_nat 16)
+      | x17 => Some (bv.of_nat 17)
+      | x18 => Some (bv.of_nat 18)
+      | x19 => Some (bv.of_nat 19)
+      | x20 => Some (bv.of_nat 20)
+      | x21 => Some (bv.of_nat 21)
+      | x22 => Some (bv.of_nat 22)
+      | x23 => Some (bv.of_nat 23)
+      | x24 => Some (bv.of_nat 24)
+      | x25 => Some (bv.of_nat 25)
+      | x26 => Some (bv.of_nat 26)
+      | x27 => Some (bv.of_nat 27)
+      | x28 => Some (bv.of_nat 28)
+      | x29 => Some (bv.of_nat 29)
+      | x30 => Some (bv.of_nat 30)
+      | x31 => Some (bv.of_nat 31)
+      | _ => @None RegIdx
+      end.
+
+    Lemma reg_convert_to_idx_Some_inj : ∀ r1 r2 id,
+      reg_convert_to_idx r1 = Some id ->
+      reg_convert_to_idx r2 = Some id ->
+      r1 = r2.
+    Proof.
+      intros r1 r2 id H1 H2.
+      remember (existT _ r1) as σ1 eqn:Hσ1;
+        destruct σ1 as [t1 r1'];
+        destruct r1';
+        pose proof (eq_sigT_fst Hσ1) as H';
+        try discriminate;
+        clear H';
+        apply EqDec.inj_right_pair in Hσ1; subst;
+        remember (existT _ r2) as σ2 eqn:Hσ2;
+        destruct σ2 as [t2 r2'];
+        destruct r2';
+        pose proof (eq_sigT_fst Hσ2) as H';
+        try discriminate;
+        clear H';
+        apply EqDec.inj_right_pair in Hσ2; subst;
+        cbn in H1; cbn in H2; try discriminate;
+        rewrite <- H1 in H2; clear H1;
+        try discriminate; reflexivity.
+    Qed.
+
     Section TransparentObligations.
       Local Set Transparent Obligations.
       Derive Signature NoConfusion (* NoConfusionHom *) for Reg.
