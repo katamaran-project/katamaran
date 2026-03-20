@@ -70,7 +70,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
       fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal).
 
-    Definition mem_inv : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
+    Definition mem_state_interp : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
         (∃ memmap, gen_heap_interp memmap ∗
            ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
@@ -112,8 +112,8 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
           now rewrite map_map map_id.
     Qed.
 
-    Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
-      ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+    Lemma mem_init `{gHP : memGpreS Σ} (μ : Memory) :
+      ⊢ |==> ∃ mG : mcMemGS Σ, (mem_state_interp mG μ ∗ mem_res mG μ)%I.
     Proof.
       iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
 

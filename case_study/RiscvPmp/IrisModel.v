@@ -47,8 +47,8 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
   (* Pull in the definition of the LanguageMixin and register ghost state. *)
   Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
 
-  (* Defines the memory ghost state. *)
   Section RiscvPmpIrisParams.
+    (* Defines the memory ghost state. *)
     Definition MemVal : Set := Byte.
 
     (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)
@@ -56,20 +56,22 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
       McMemGS {
           (* ghost variable for tracking state of heap *)
           mc_ghGS : gen_heapGS Addr MemVal Σ;
-          (* tracking traces *)
+          (* tracking traces: we want a ghost variable for tracking the current trace *)
           mc_gtGS : traceG Trace Σ;
+
         }.
     #[export] Existing Instance mc_ghGS.
     #[export] Existing Instance mc_gtGS.
 
     Definition memGS : gFunctors -> Set := mcMemGS.
 
-    Definition mem_inv : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
+    Definition mem_state_interp : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
         (∃ memmap, gen_heap_interp memmap
            ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
            ∗ tr_auth1 (memory_trace μ)
         )%I.
+
 
   End RiscvPmpIrisParams.
 

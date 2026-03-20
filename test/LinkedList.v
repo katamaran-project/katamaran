@@ -861,7 +861,7 @@ Module ExampleModel.
         rewrite list_fmap_id; now vm_compute.
       Qed.
 
-      Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+      Definition mem_state_interp : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
         fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) μ)%I.
     End ExampleIrisParameters.
 
@@ -885,8 +885,8 @@ Module ExampleModel.
     Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, pointsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
 
-    Lemma mem_inv_init `{! gen_heapGpreS Z (Z * (Z + unit)) Σ} (μ : Memory) :
-      ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+    Lemma mem_init `{! gen_heapGpreS Z (Z * (Z + unit)) Σ} (μ : Memory) :
+      ⊢ |==> ∃ mG : memGS Σ, (mem_state_interp mG μ ∗ mem_res mG μ)%I.
     Proof.
       iMod (gen_heap_init (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
 
@@ -894,7 +894,7 @@ Module ExampleModel.
       iModIntro.
       rewrite (right_id empty union μ).
 
-      iExists (McMemGS gH (nroot .@ "mem_inv")).
+      iExists (McMemGS gH (nroot .@ "mem_state_interp")).
       iFrame.
     Qed.
   End ExampleIrisAdeqParams.
@@ -924,9 +924,12 @@ Module ExampleModel.
       | v :: vs => (∃ p' pn, ⌜p = inl p'⌝ ∗ ptstocons_interp p' v pn ∗ ptstolist_interp pn vs)%I
       end.
 
+    (* We don't need additional ghost state beyond what we already have for the WP.*)
+    Definition resGS := trivGS.
+
     (* Pattern match on the generic representation of abstract predicates map them
        to their Iris definition. *)
-    Definition luser_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} (mG : mcMemGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
+    Definition luser_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} {mG : mcMemGS Σ} {_ : trivGS Σ} (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
       (match p return Env Val (𝑯_Ty p) -> iProp Σ with
       | ptstocons => fun ts => ptstocons_interp (env.head (env.tail (env.tail ts))) (env.head (env.tail ts)) (env.head ts)
       | ptstolist => fun ts => ptstolist_interp (env.head (env.tail ts)) (env.head ts)
@@ -935,9 +938,9 @@ Module ExampleModel.
     (* This definition verifies the soundness if duplicability. However, this
        example does not contain any predicates marked as duplicable and therefore
        the proof is trivial *)
-    Definition lduplicate_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} (mG : mcMemGS Σ) :
+    Definition lduplicate_inst `{sRG : sailRegGS Σ} `{fancy_updates.invGS Σ} {mG : mcMemGS Σ} {_ : trivGS Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
-      is_duplicable p = true -> luser_inst mG p ts ⊢ luser_inst mG p ts ∗ luser_inst mG p ts.
+      is_duplicable p = true -> luser_inst p ts ⊢ luser_inst p ts ∗ luser_inst p ts.
     Proof.
       destruct p; now cbn.
     Qed.
@@ -1005,7 +1008,7 @@ Module ExampleModel.
         iIntros "_".
         iApply semWP_foreign.
         iIntros (γ1 μ1) "[Hregs Hmem]".
-        unfold mem_inv.
+        unfold mem_state_interp.
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro. iIntros (? ? ? f1).
         rewrite Heq in f1. cbn in f1.
@@ -1036,7 +1039,7 @@ Module ExampleModel.
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro. iIntros (? ? ? f1).
         rewrite Heq in f1. cbn in f1.
-        unfold mem_inv.
+        unfold mem_state_interp.
         do 3 iModIntro.
         iMod "Hclose2" as "_".
         iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs) with "Hmem Hres") as "%eq".
@@ -1062,7 +1065,7 @@ Module ExampleModel.
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro. iIntros (? ? ? f1).
         rewrite Heq in f1. cbn in f1.
-        unfold mem_inv.
+        unfold mem_state_interp.
         do 3 iModIntro.
         iMod "Hclose2" as "_".
         iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs) with "Hmem Hres") as "%".
@@ -1116,7 +1119,7 @@ Module ExampleModel.
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro. iIntros (res ? ? Hf).
         rewrite Heq in Hf. cbn in Hf.
-        unfold mem_inv.
+        unfold mem_state_interp.
         do 3 iModIntro.
         iMod "Hclose2" as "_".
         iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs__old) with "Hmem Hres") as "%".

@@ -102,6 +102,9 @@ Module RiscvPmpIrisInstance <:
 
     Import env.notations.
 
+    (* We don't need additional ghost state beyond what we already have for the WP. *)
+    Definition resGS := mcMemGS.
+
     Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | pmp_entries              | [ v ]                => interp_pmp_entries v

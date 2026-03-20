@@ -60,6 +60,12 @@ Import env.notations.
 
 Set Implicit Arguments.
 
+(* A trivial type class for case studies that don't need additional
+ * ghost state constraints in resGS.
+ *)
+Class trivGS (Σ : gFunctors) : Set := MkTrivGS {}.
+#[export] Instance  trivTrivGS {Σ} : trivGS Σ := MkTrivGS _.
+
 (* The following three modules define the Iris instance of the program logic
    depending solely on the operational semantics (through IrisBase) and the
    user-defined predicates (in IrisPredicates), but without depending on a
@@ -78,10 +84,15 @@ Module Type IrisPredicates
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
   (Import IB   : IrisBase B PROG SEM).
-  Parameter luser_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
-  Parameter lduplicate_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+
+  (* Additional ghost state assumptions necessary for instantiating predicates. *)
+  Parameter Inline resGS : gFunctors -> Set.
+  Existing Class resGS.
+
+  Parameter luser_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} {mG : memGS Σ} {rG : resGS Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
+  Parameter lduplicate_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} {mG : memGS Σ} {rG : resGS Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
       is_duplicable p = true ->
-      luser_inst mG ts ⊢ luser_inst mG ts ∗ luser_inst mG ts.
+      luser_inst ts ⊢ luser_inst ts ∗ luser_inst ts.
 
 End IrisPredicates.
 
@@ -97,12 +108,12 @@ Section Soundness.
 
   Import SmallStepNotations.
 
-  Context `{sG : sailGS Σ}.
+  Context `{sG : sailGS Σ, rG : resGS Σ}.
 
   #[export] Instance PredicateDefIProp : PredicateDef (iProp Σ) :=
     {| lptsreg σ r v        := reg_pointsTo r v;
-       luser p ts           := luser_inst sailGS_memGS ts;
-       lduplicate p ts Hdup := lduplicate_inst sailGS_memGS ts Hdup
+       luser p ts           := luser_inst ts;
+       lduplicate p ts Hdup := lduplicate_inst ts Hdup
     |}.
 
   Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
@@ -769,8 +780,8 @@ Module Type IrisAdeqParameters
   Parameter memΣ : gFunctors.
   Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
   Parameter mem_res : forall `{mG : memGS Σ}, Memory -> iProp Σ.
-  Parameter mem_inv_init : forall `{mGS : memGpreS Σ} (μ : Memory),
-                                         ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
+  Parameter mem_init : forall `{mGS : memGpreS Σ} (μ : Memory),
+                                         ⊢ |==> ∃ mG : memGS Σ, (mem_state_interp (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
 
 End IrisAdeqParameters.
 
@@ -875,9 +886,9 @@ Module Type IrisAdequacy
         iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
           first by apply auth_both_valid.
         pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
-        iMod (mem_inv_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
+        iMod (mem_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
         iModIntro.
-        iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
+        iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_state_interp (σ.2))%I.
         iExists _.
         iSplitR "Hs2 Rmem".
         * iFrame "Hmem".
@@ -893,9 +904,9 @@ Module Type IrisAdequacy
   Lemma adequacy_gen {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : forall `{sailGS Σ}, IVal σ -> CStore Γ -> iProp Σ} (φ : Prop):
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    (forall `{sailGS Σ'},
+    (forall `{sailGS Σ', memGpreS Σ'},
         mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP δ s Q
-          ∗ (mem_inv μ' ={⊤,∅}=∗ ⌜φ⌝)
+          ∗ (mem_state_interp μ' ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.
     (* intros steps trips. *)
@@ -906,16 +917,16 @@ Module Type IrisAdequacy
     iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
     pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
-    iMod (mem_inv_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
+    iMod (mem_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
     pose (regsG := {| reg_inG := @reg_pre_inG sailΣ (@subG_sailGpreS sailΣ (subG_refl sailΣ)); reg_gv_name := spec_name |}).
     pose (sailG := SailGS Hinv regsG memG).
-    iMod (trips sailΣ sailG with "[$Rmem Hs2]") as "[trips Hφ]".
+    iMod (trips sailΣ sailG mGS with "[$Rmem Hs2]") as "[trips Hφ]".
     {unfold own_regstore.
       iApply (own_RegStore_to_map_reg_pointsTos (srGS := regsG) (γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
       eapply finite.NoDup_enum.
     }
     iModIntro.
-    iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
+    iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_state_interp (σ.2))%I.
     iExists [ λ v, Q _ sailG (valconf_val v) (valconf_store v)]%list.
     iExists _.
     iExists _.
@@ -950,7 +961,7 @@ Module IrisInstanceWithContracts
 
   Section WithSailGS.
     Import ProgramLogic.
-    Context {Σ} {sG : sailGS Σ}.
+    Context {Σ} {sG : sailGS Σ} {rG : resGS Σ}.
 
     Section PartialTriple.
         Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=

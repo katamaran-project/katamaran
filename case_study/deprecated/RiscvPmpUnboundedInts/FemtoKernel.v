@@ -789,9 +789,9 @@ Import BlockVerificationDerived2.
   Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
-    ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜μ a = v⌝.
+    ⊢ mem_state_interp _ μ -∗ interp_ptsto a v -∗ ⌜μ a = v⌝.
   Proof.
-    unfold interp_ptsto, mem_inv.
+    unfold interp_ptsto, mem_state_interp.
     iIntros "(%memmap & Hinv & %link) Hptsto".
     iDestruct (gen_heap.gen_heap_valid with "Hinv Hptsto") as "%x".
     iPureIntro.

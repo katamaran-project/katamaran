@@ -35,6 +35,7 @@ From Katamaran Require Import
      Notations
      Specification
      SmallStep.Step
+     Instance
      RiscvPmp.BlockVer.Spec
      RiscvPmp.BlockVer.TotalVerifier
      RiscvPmp.BlockVer.BinaryVerifier
@@ -1421,9 +1422,9 @@ Module inv := invariants.
   Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
-    ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝.
+    ⊢ mem_state_interp _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝.
   Proof.
-    unfold interp_ptsto, mem_inv.
+    unfold interp_ptsto, mem_state_interp.
     iIntros "(%memmap & Hinv & %link & Htr) [Hptsto %Hmmio]".
     iDestruct (gen_heap.gen_heap_valid with "Hinv Hptsto") as "%x".
     iPureIntro.
@@ -1440,7 +1441,7 @@ Module inv := invariants.
 
   (* TODO: use this lemma in earlier proofs, like `read_ram_works`? *)
   Lemma interp_ptstomem_valid `{sailGS Σ} {μ a v} :
-    ⊢ mem_inv _ μ -∗ interp_ptstomem a v -∗ ⌜mem_has_word μ a v⌝.
+    ⊢ mem_state_interp _ μ -∗ interp_ptstomem a v -∗ ⌜mem_has_word μ a v⌝.
   Proof.
     iIntros "Hinv Hptstomem".
 
@@ -1489,7 +1490,7 @@ Module inv := invariants.
     refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _).
     iIntros (Σ' H).
     cbn.
-    iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmie & Hmip & Hmtvec & Hmscratch & Hmepc & Hmcause & Hcurpriv & H')".
+    iIntros (_) "(Hmem & Hpc & Hnpc & Hmstatus & Hmie & Hmip & Hmtvec & Hmscratch & Hmepc & Hmcause & Hcurpriv & H')".
     rewrite γmstatus γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc.
     iMod (femtokernel_splitMemory with "Hmem") as "(Hinit & Hhandler & Hdata & #Hmmio & Hadv)";
       try eassumption.
@@ -1541,14 +1542,14 @@ Module inv := invariants.
 
     Let femto_inv_mmio `{sailGS2 Σ} := interp_inv_mmio bytes_per_word.
 
-    Definition UnaryPredicateDefIProp {Σ} (sG : sailGS Σ) :=
+    Definition UnaryPredicateDefIProp {Σ} {_ : trivGS Σ} (sG : sailGS Σ) :=
       @RiscvPmpBlockVerifIrisInstance.PredicateDefIProp _ sG.
 
-    Definition asn_interpret_left `{sailGS2 Σ} : ∀ {Γ : LCtx}, Assertion Γ -> Valuation Γ -> iProp Σ :=
-      @asn.interpret _ (UnaryPredicateDefIProp sailGS2_sailGS_left).
+    Definition asn_interpret_left `{sailGS2 Σ} {_ : trivGS Σ} : ∀ {Γ : LCtx}, Assertion Γ -> Valuation Γ -> iProp Σ :=
+      @asn.interpret _ (UnaryPredicateDefIProp sailGS2_sailGS_left _).
 
     Definition asn_interpret_right `{sailGS2 Σ} : ∀ {Γ : LCtx}, Assertion Γ -> Valuation Γ -> iProp Σ :=
-      @asn.interpret _ (UnaryPredicateDefIProp sailGS2_sailGS_right).
+      @asn.interpret _ (UnaryPredicateDefIProp sailGS2_sailGS_right _).
 
     Definition interp_ptstomem2 `{memGS2 Σ} {width : nat} (addr : Addr) (v__l v__r : bv (width * byte)) : iProp Σ :=
       (@RiscvPmpIrisInstancePredicates.interp_ptstomem _ memGS2_memGS_left width addr v__l

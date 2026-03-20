@@ -64,7 +64,13 @@ Module Type IrisParameters
      should always refer to your typeclass and refrain from using the [memGS]
      aliases completely. *)
   Parameter Inline memGS : gFunctors -> Set.
-  Parameter mem_inv : forall `{mG : memGS Σ}, Memory -> iProp Σ.
+
+  (**
+   * Katamaran case studies can instantiate these parameters to extend the generic Iris model's
+   * state_interp with extra conditions they need to connect case-study-specific physical state
+   * (often memory and other extra-architectural state) to logical state.
+   *)
+  Parameter mem_state_interp : forall `{mG : memGS Σ}, Memory -> iProp Σ.
 End IrisParameters.
 
 (* TODO: export, back to module instead of module type *)
@@ -459,7 +465,7 @@ Module Type IrisResources
 
   #[export] Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
     iris_invGS := sailGS_invGS;
-    state_interp σ ns κs nt := (regs_inv σ.1 ∗ mem_inv σ.2)%I;
+    state_interp σ ns κs nt := (regs_inv σ.1 ∗ mem_state_interp σ.2)%I;
     fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
     num_laters_per_step _ := 0;
     state_interp_mono _ _ _ _ := fupd_intro _ _;
