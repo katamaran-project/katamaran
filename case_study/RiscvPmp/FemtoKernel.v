@@ -666,7 +666,7 @@ Module inv := invariants.
       (∃ v, mscratch ↦ᵣ v) ∗
       (∃ v, mepc ↦ᵣ v) ∗
       cur_privilege ↦ᵣ User ∗
-      interp_gprs ∗
+      interp_gprs nil ∗
       interp_pmp_entries femto_pmpentries ∗
       (if negb is_mmio
        then femto_inv_fortytwo
