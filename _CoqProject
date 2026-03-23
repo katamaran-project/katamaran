@@ -35,8 +35,8 @@ case_study/RiscvPmp/BlockVer/PartialVerifier.v
 case_study/RiscvPmp/BlockVer/TotalVerifier.v
 case_study/RiscvPmp/BlockVer/BinaryVerifier.v
 # case_study/RiscvPmp/BlockVer/RunningExample.v
-# case_study/RiscvPmp/FemtoKernel.v
-# case_study/Assumptions.v
+case_study/RiscvPmp/FemtoKernel.v
+case_study/Assumptions.v
 -R theories Katamaran
 test/Example.v
 test/LinkedList.v
