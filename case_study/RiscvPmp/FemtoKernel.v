@@ -281,13 +281,13 @@ Module inv := invariants.
       (∃ "v", mepc ↦ term_var "v") ∗
       mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool false; term_val ty.bool false ] ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
-      asn_regs_ptsto ∗
+      (∃ "x1", x1 ↦ term_var "x1") ∗
       (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
                                    (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])).
 
     Import TermNotations.
 
-    Example femtokernel_init_post: Assertion  ["a"::ty_xlenbits; ("an"::ty_xlenbits)] :=
+    Example femtokernel_init_post : Assertion ["a"::ty_xlenbits; ("an"::ty_xlenbits)] :=
       (
         (term_var "an" = term_var "a" +ᵇ (term_val ty_xlenbits (bv.of_N adv_addr)))%asn ∗
           (mtvec ↦ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_addr)) ∗
@@ -296,7 +296,7 @@ Module inv := invariants.
           (∃ "v", mepc ↦ term_var "v") ∗
           mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool true; term_val ty.bool true ] ∗
           cur_privilege ↦ term_val ty_privilege User ∗
-          asn_regs_ptsto ∗
+          x1 ↦ term_val ty_xlenbits [bv 0x80] ∗
           asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a")))
       ).
 
@@ -338,30 +338,37 @@ Module inv := invariants.
     Qed.
 
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
-    Example femtokernel_handler_pre (is_mmio : bool) : Assertion ["a" :: ty_xlenbits] :=
+    Example femtokernel_handler_pre (is_mmio : bool) : Assertion ["x5" :: ty_xlenbits; "mepc" :: ty_xlenbits; "a" :: ty_xlenbits] :=
       (* (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗ *)
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
       (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
       (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "v", mip ↦ term_var "v") ∗ (∃ "v", mie ↦ term_var "v") ∗
-      (∃ "epc", mepc ↦ term_var "epc") ∗
+      (mepc ↦ term_var "mepc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
-      asn_regs_ptsto ∗
+      (∃ "x1", x1 ↦ term_var "x1") ∗
+      x5 ↦ term_var "x5" ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
       if negb is_mmio then
         (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_size)) ↦ᵢ term_val ty_xlenbits (bv.of_N 42)
       else asn_inv_mmio.
 
     Example femtokernel_handler_post (is_mmio : bool) :
-      Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
+      Assertion ["x5" :: ty_xlenbits; "mepc" :: ty_xlenbits; "a" :: ty_xlenbits; "an"::ty_xlenbits] :=
+      term_var "an" = term_var "mepc" ∗
       (∃ "mie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool true; term_var "mie" ]) ∗
           (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mip ↦ term_var "v") ∗ (∃ "v", mie ↦ term_var "v") ∗
-          (mepc ↦ term_var "an") ∗
+          (mepc ↦ term_var "mepc") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
-          asn_regs_ptsto ∗
+          (if negb is_mmio then
+            x1 ↦ term_val ty_xlenbits (bv.of_N 42) ∗
+            x5 ↦ term_var "x5"
+          else
+            x1 ↦ term_val ty_xlenbits bv.zero ∗
+            x5 ↦ term_val ty_xlenbits (bv.of_N 42)) ∗
           asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
           if negb is_mmio then
             (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_size) ↦ᵢ term_val ty_xlenbits (bv.of_N 42))
@@ -401,16 +408,16 @@ Module inv := invariants.
         intuition bv_solve_Ltac.solveBvManual.
     Qed.
 
-    Definition contract_femtohandler `{sailGS Σ} (a : Val ty_xlenbits) (is_mmio : bool) : iProp Σ :=
+    Definition contract_femtohandler `{sailGS Σ} (a x5 mepc : Val ty_xlenbits) (is_mmio : bool) : iProp Σ :=
       semTripleBlock
-        (λ a, asn.interpret (femtokernel_handler_pre is_mmio) [env].["a" ∷ ty_xlenbits ↦ a])
+        (λ a, asn.interpret (femtokernel_handler_pre is_mmio) [env].["x5" ∷ ty_xlenbits ↦ x5].["mepc" ∷ ty_xlenbits ↦ mepc].["a" ∷ ty_xlenbits ↦ a])
         a (filter_AST (femtokernel_handler_gen is_mmio))
-        (λ a an, asn.interpret (femtokernel_handler_post is_mmio) [env].["a" ∷ ty_xlenbits ↦ a].["an" ∷ ty_xlenbits ↦ an]).
+        (λ a an, asn.interpret (femtokernel_handler_post is_mmio) [env].["x5" ∷ ty_xlenbits ↦ x5].["mepc" ∷ ty_xlenbits ↦ mepc].["a" ∷ ty_xlenbits ↦ a].["an" ∷ ty_xlenbits ↦ an]).
 
-    Lemma contract_femtohandler_verified : ∀ `{sailGS Σ} (a : Val ty_xlenbits) (is_mmio : bool),
-        ⊢ contract_femtohandler a is_mmio.
+    Lemma contract_femtohandler_verified : ∀ `{sailGS Σ} (a x5 mepc : Val ty_xlenbits) (is_mmio : bool),
+        ⊢ contract_femtohandler a x5 mepc is_mmio.
     Proof.
-      unfold contract_femtohandler. iIntros (Σ sg a is_mmio).
+      unfold contract_femtohandler. iIntros (Σ sg a x5 mepc is_mmio).
       iApply (sound_sannotated_block_verification_condition lemSemBlockVerif).
       pose proof (sat__femtohandler is_mmio) as H.
       destruct is_mmio; vm_compute; apply H.
@@ -576,19 +583,31 @@ Module inv := invariants.
   Local Instance if_persistent `{sailGS Σ} (b : bool) (A B : iProp Σ) (P: Persistent A) (P' : Persistent B)  : Persistent (if b then A else B).
   Proof. destruct b; apply _. Qed.
 
-  Lemma femtokernel_handler_safe `{sailGS Σ} (is_mmio : bool) :
+  Ltac solve_nodup :=
+    repeat constructor;
+    repeat
+      match goal with
+      | |- ?e ∉ ?l =>
+          intros ?
+      | H: ?e ∈ ?l |- _ =>
+          inversion H
+      end.
+
+  Lemma femtokernel_handler_safe `{sailGS Σ} (x5_val mepc : Val ty_xlenbits) (is_mmio : bool) :
     ⊢ exec_instructions_prologue (bv.of_N handler_addr) (filter_AST (femtokernel_handler_gen is_mmio))
-      ∗ asn.interpret (femtokernel_handler_pre is_mmio) [env].["a" ∷ ty_xlenbits ↦ bv.of_N handler_addr] ∗
+      ∗ asn.interpret (femtokernel_handler_pre is_mmio) [env].["x5" ∷ ty_xlenbits ↦ x5_val].["mepc" ∷ ty_xlenbits ↦ mepc].["a" ∷ ty_xlenbits ↦ bv.of_N handler_addr] ∗
+        interp_gprs [x1; x5] ∗
         (∃ v, mscratch ↦ᵣ v) ∗
         interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User (* Not needed for handler, but required for the rest of execution *)
         -∗
         WP_loop.
   Proof.
+    revert x5_val mepc.
     iLöb as "Hind".
-    iIntros "(Hpro & Hpre & Hmscratch & HaccU)".
-    iPoseProof (contract_femtohandler_verified (bv.of_N handler_addr) is_mmio) as "H".
+    iIntros (x5_val mepc) "(Hpro & Hpre & Hgprs & Hmscratch & HaccU)".
+    iPoseProof (contract_femtohandler_verified (bv.of_N handler_addr) x5_val mepc is_mmio) as "H".
     unfold contract_femtohandler; cbn - [asn_regs_ptsto].
-    iDestruct "Hpre" as "([% _] & Hmstatus & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hcurpriv & Hgprs & Hpmpentries & Hmem)".
+    iDestruct "Hpre" as "([% _] & Hmstatus & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hcurpriv & Hx1 & Hx5 & Hpmpentries & Hmem)".
     iAssert (□ (asn.interpret
              (if negb is_mmio
               then
@@ -598,16 +617,21 @@ Module inv := invariants.
              .["a"∷ty_xlenbits ↦ bv.of_N handler_addr]))%I with "[Hmem]" as "#Hmem'".
     { destruct is_mmio; cbn; auto; iDestruct "Hmem" as "#$". }
     iClear "Hmem".
-    iPoseProof (WP_loop_semTripleBlock _ _ _ _ with "Hpro [-Hmscratch HaccU] H") as "Hk";
-      first (cbn - [asn_regs_ptsto]; iFrame "Hmstatus Hmtvec Hmcause Hmip Hmie Hmepc Hcurpriv Hpmpentries Hgprs Hmem'"; iPureIntro; auto).
+    iPoseProof (WP_loop_semTripleBlock _ _ _ _ with "Hpro [-Hgprs Hmscratch HaccU] H") as "Hk";
+      first (cbn - [asn_regs_ptsto]; iFrame "Hmstatus Hmtvec Hmcause Hmip Hmie Hmepc Hcurpriv Hpmpentries Hx1 Hx5"; try iSplitR; try (iPureIntro; auto); destruct is_mmio; iFrame "Hmem'").
     iApply "Hk".
     iIntros (an) "(Hpost & Hepi)".
     cbn - [asn_regs_ptsto].
-    iDestruct "Hpost" as "(Hmstatus & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hcurpriv & Hgprs & Hpmpentries & Hmem)".
-    iPoseProof (gprs_equiv with "Hgprs") as "Hgprs".
+    iDestruct "Hpost" as "([<- _] & Hmstatus & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hcurpriv & Hx1x5 & Hpmpentries & Hmem)".
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-    iPoseProof (LoopVerification.valid_semTriple_loop with "[Hmem $Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc $Hpc $Hcurpriv $Hgprs $Hpmpentries $Hnpc $HaccU Hinstrs]") as "Hk".
-    { iSplitR; last iSplitL.
+    iPoseProof (LoopVerification.valid_semTriple_loop with "[Hmem $Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc $Hpc $Hcurpriv Hx1x5 Hgprs $Hpmpentries $Hnpc $HaccU Hinstrs]") as "Hk".
+    { iSplitL "Hx1x5 Hgprs".
+      { iApply (interp_gprs_with_excluded (exclude := [x1; x5]));
+          first solve_nodup.
+        iFrame "Hgprs".
+        destruct is_mmio; cbn;
+          iDestruct "Hx1x5" as "($ & $)". }
+      iSplitR; last iSplitL.
       - iModIntro.
         unfold LoopVerification.CSRMod.
         iIntros "(_ & _ & _ & %eq & _)".
@@ -615,9 +639,15 @@ Module inv := invariants.
       - iModIntro.
         unfold LoopVerification.Trap.
         iIntros "(HaccU & Hgprs & Hpmpentries & Hmcause & Hmip & Hmie & Hmscratch & Hcurpriv & Hnextpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
-        rewrite gprs_equiv.
-        iApply ("Hind" with "[$Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc $Hcurpriv $Hpmpentries $Hpc $HaccU $Hnextpc $Hgprs $Hmem' $Hinstrs]").
-        iPureIntro; auto.
+        iDestruct "Hmepc" as "(%mepc & Hmepc)".
+        rewrite <- (interp_gprs_with_excluded (exclude := [x1; x5]));
+          try solve_nodup.
+        iDestruct "Hgprs" as "(Hx1x5 & Hgprs)".
+        cbn.
+        iDestruct "Hx1x5" as "(Hx1 & [%x5_val' Hx5] & _)".
+        iApply ("Hind" $! x5_val' mepc with "[$Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc $Hcurpriv $Hpmpentries $Hpc $HaccU $Hnextpc $Hgprs Hmem' $Hinstrs $Hx1 $Hx5]").
+        { iSplitR; first (iPureIntro; auto).
+          destruct is_mmio; iFrame "Hmem'". }
       - iModIntro.
         unfold LoopVerification.Recover.
         iIntros "(_ & _ & _ & %eq & _)".
@@ -667,9 +697,13 @@ Module inv := invariants.
     unfold LoopVerification.Trap.
     iModIntro.
     iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hmip & Hmie & Hmscratch & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
-    rewrite (gprs_equiv env.nil).
-    iApply (femtokernel_handler_safe with "[$Hmem $Hgprs $Hpmpents $Hmcause $Hmip $Hmie $Hmscratch $Hcurpriv $Hnpc $Hpc $Hmtvec $Hmstatus $Hmepc Hfortytwo $Hhandler]").
-    { cbn. destruct is_mmio; auto. }
+    iDestruct "Hmepc" as "[%mepc Hmepc]".
+    iPoseProof (interp_gprs_with_excluded (exclude := [x1; x5]) with "Hgprs") as "(Hx1x5 & Hgprs)";
+      first solve_nodup.
+    iDestruct "Hx1x5" as "(Hx1 & [%x5 Hx5] & _)".
+    iApply (femtokernel_handler_safe x5 with "[$Hmepc $Hmem $Hgprs $Hpmpents $Hmcause $Hmip $Hmie $Hmscratch $Hcurpriv $Hnpc $Hpc $Hmtvec $Hmstatus Hfortytwo Hhandler Hx1 Hx5]").
+    { iFrame "Hhandler Hx1 Hx5". iSplit; cbn; auto.
+      destruct is_mmio; auto. }
     iModIntro.
     unfold LoopVerification.Recover.
     iIntros "(_ & _ & _ & %eq & _)".
@@ -690,6 +724,7 @@ Module inv := invariants.
       ∗ ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST (femtokernel_handler_gen is_mmio))
       ∗ ptstoSthL advAddrs
       ∗ asn.interpret femtokernel_init_pre [env].["a" ∷ ty_xlenbits ↦ bv.of_N init_addr]
+      ∗ interp_gprs [x1]
       ∗ (∃ v, mscratch ↦ᵣ v)
       ∗ (if negb is_mmio
          then femto_inv_fortytwo
@@ -698,16 +733,19 @@ Module inv := invariants.
         WP_loop.
   Proof.
     iLöb as "Hind".
-    iIntros "(Hpro & Hhandler & Hadv & Hpre & Hmscratch & #Hmem)".
+    iIntros "(Hpro & Hhandler & Hadv & Hpre & Hgprs & Hmscratch & #Hmem)".
     iPoseProof (contract_femtoinit_verified (bv.of_N init_addr)) as "H".
     unfold contract_femtoinit; cbn - [asn_regs_ptsto].
-    iDestruct "Hpre" as "([% _] & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hmstatus & Hcurpriv & Hgprs & Hpmpentries)".
-    iPoseProof (WP_loop_semTripleBlock _ _ _ _ with "Hpro [-Hmscratch Hhandler Hadv] H") as "Hk";
-      first (cbn - [asn_regs_ptsto]; iFrame "Hmstatus Hmtvec Hmcause Hmip Hmie Hmepc Hcurpriv Hpmpentries Hgprs"; iPureIntro; auto).
+    iDestruct "Hpre" as "([% _] & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hmstatus & Hcurpriv & Hx1 & Hpmpentries)".
+    iPoseProof (WP_loop_semTripleBlock _ _ _ _ with "Hpro [-Hmscratch Hhandler Hadv Hgprs] H") as "Hk";
+      first (cbn - [asn_regs_ptsto]; iFrame "Hmstatus Hmtvec Hmcause Hmip Hmie Hmepc Hcurpriv Hpmpentries Hx1"; iPureIntro; auto).
     iApply "Hk".
     iIntros (an) "(Hpost & Hepi)".
-    iDestruct "Hpost" as "([-> _] & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hmstatus & Hcurpriv & Hgprs & Hpmpentries)".
-    iPoseProof (gprs_equiv with "Hgprs") as "Hgprs".
+    iDestruct "Hpost" as "([-> _] & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hmstatus & Hcurpriv & Hx1 & Hpmpentries)".
+    iAssert (interp_gprs nil) with "[Hgprs Hx1]" as "Hgprs".
+    { iApply (interp_gprs_with_excluded (exclude := [x1]));
+        first solve_nodup.
+      now iFrame "Hx1 Hgprs". }
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
     rewrite ?bv.add_zero_l.
     iApply (fupd_semWP ⊤).
@@ -957,6 +995,13 @@ Module inv := invariants.
 
       Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
       iFrame "∗ #". cbn.
+      rewrite (bi.sep_comm (∃ (v : Word), x1 ↦ᵣ v)%I).
+      rewrite <- ?(bi.sep_assoc _ _ (interp_gprs [x1])).
+      assert ((∃ v : Word, x1 ↦ᵣ v) ⊣⊢ ([∗ list] r ∈ [x1], ∃ v : Val ty_xlenbits, reg_pointsTo r v))%I as ->.
+      { iSplit; cbn. now iIntros "$". now iIntros "($ & _)". }
+      rewrite (interp_gprs_with_excluded (exclude := [x1]));
+        last solve_nodup.
+      rewrite (gprs_equiv env.nil).
       now repeat iDestruct "H'" as "($ & H')".
     - iIntros "Hmem".
       (* Prove that this predicate follows from the invariants in both cases *)
