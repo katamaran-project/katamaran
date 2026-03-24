@@ -1044,6 +1044,12 @@ Module Export RiscvPmpBase <: Base.
     | pmpaddr1      : Reg ty_xlenbits
     .
 
+    Definition GPRS : list (Reg ty_xlenbits) :=
+      [ x1 ; x2 ; x3 ; x4 ; x5 ; x6 ; x7 ; x8 ; x9 ;
+        x10 ; x11 ; x12 ; x13 ; x14 ; x15 ; x16 ; x17 ; x18 ; x19 ;
+        x20 ; x21 ; x22 ; x23 ; x24 ; x25 ; x26 ; x27 ; x28 ; x29 ;
+        x30 ; x31 ].
+
     Import bv.notations.
     Definition reg_convert (idx : RegIdx) : option (Reg ty_xlenbits) :=
       match bv.to_bitstring idx with
@@ -1203,8 +1209,16 @@ Module Export RiscvPmpBase <: Base.
         end.
     Proof. all: transparent_abstract (intros H; depelim H). Defined.
 
+    #[export] Instance Reg_tyxlenbits_eqdec : EqDec (Reg ty_xlenbits).
+    Proof.
+      intros r1 r2.
+      destruct (decide (existT _ r1 = existT _ r2)) as [H|H].
+      - left. now apply inj_right_pair.
+      - right. intros <-. now apply H.
+    Defined.
+
     Local Obligation Tactic :=
-      finite_from_eqdec.
+      try finite_from_eqdec.
 
     Program Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) :=
       {| enum :=
@@ -1255,6 +1269,68 @@ Module Export RiscvPmpBase <: Base.
           existT _ pmpaddr1
         ]%list
       |}.
+
+    #[export,program] Instance Reg_ty_xlenbits_finite : Finite (Reg ty_xlenbits) :=
+      {| enum :=
+        [ pc;
+          nextpc;
+          mtvec;
+          mcause;
+          mscratch;
+          mepc;
+          x1;
+          x2;
+          x3;
+          x4;
+          x5;
+          x6;
+          x7;
+          x8;
+          x9;
+          x10;
+          x11;
+          x12;
+          x13;
+          x14;
+          x15;
+          x16;
+          x17;
+          x18;
+          x19;
+          x20;
+          x21;
+          x22;
+          x23;
+          x24;
+          x25;
+          x26;
+          x27;
+          x28;
+          x29;
+          x30;
+          x31;
+          pmpaddr0;
+          pmpaddr1
+        ]%list
+      |}.
+    Next Obligation.
+      intros r.
+      remember (existT _ r) as σ eqn:Hσ.
+      destruct σ as [t r'].
+      destruct r';
+        pose proof (eq_sigT_fst Hσ) as H;
+        try discriminate;
+        clear H;
+        apply EqDec.inj_right_pair in Hσ; subst;
+        repeat constructor;
+        repeat
+          match goal with
+          | |- ?e ∉ ?l =>
+              intros ?
+          | H: ?e ∈ ?l |- _ =>
+              inversion H
+          end.
+    Qed.
 
   End RegDeclKit.
 
