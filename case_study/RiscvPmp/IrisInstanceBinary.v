@@ -355,12 +355,12 @@ Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
 
   Lemma gprs_equiv `{sailGS2 Σ} : ∀ {Σ} (ι : Valuation Σ),
       interp_gprs ⊣⊢
-        asn.interpret asn_regs_ptsto ι.
+        asn.interpret (asn_regs_ptsto nil) ι.
   Proof.
     iIntros. unfold interp_gprs.
     rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
-    cbn. iSplit.
-    - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
+    simpl. iSplit.
+    - iIntros "(_ & H)"; now repeat iDestruct "H" as "($ & H)".
     - iIntros "H"; iSplitR; first by iExists bv.zero.
       repeat iDestruct "H" as "($ & H)"; iFrame.
   Qed.

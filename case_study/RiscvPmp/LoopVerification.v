@@ -76,7 +76,7 @@ Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSig
 Section Loop.
   Context `{sg : sailGS Σ}.
   Definition step_sem_contract :=
-    Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
+    Eval simpl in ValidContractSemCurried fun_step sep_contract_step.
 
   Local Notation "r '↦' val" := (reg_pointsTo r val) (at level 70).
   (* Some Iris Proof Mode tactics like (iFrame) try very hard to solve some
@@ -301,20 +301,26 @@ Section Loop.
     iApply valid_step_contract.
     Unshelve.
     3: exact [kv existT (_∷ty_privilege) m; existT (_∷ty_xlenbits) h; existT (_∷ty.list ty_pmpentry) entries; existT (_∷ty_privilege) mpp; existT (_∷ty_xlenbits) i]%env.
-    cbn.
+    cbn - [interp_gprs].
     iFrame.
-    cbn.
+    cbn - [interp_gprs].
     unfold step_post.
     iIntros ([v|e] _); last auto;
       iIntros "[H | [H | [H | H]]]".
-    - iDestruct "H" as "(Hpaa & Hgprs & Hpe & Hmc & Hmie & Hmip & Hmscr & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
-      iLeft; unfold Execution; iFrame.
-    - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hmie & Hmip & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
-      iRight; iLeft; unfold CSRMod; now iFrame.
-    - iDestruct "H" as "(Hpaa & Hgprs & Hentries & Hmc & Hmie & Hmip & Hmscratch & Hpe & Hcp & Hnpc & Hmtvec & Hmstatus & Hmepc)".
-      iRight; iRight; iLeft; unfold Trap; iFrame.
-    - iDestruct "H" as "(Hpaa & Hgprs & Hpe & [% _] & Hmc & Hmie & Hmip & Hmscratch & Hcp & [% (Hmepc & Hnpc & Hpc)] & Hmtvec & Hmstatus)".
-      iRight; iRight; iRight; unfold Recover; by iFrame.
+    - iLeft; unfold Execution.
+      now repeat iDestruct "H" as "($ & H)".
+    - iRight; iLeft; unfold CSRMod.
+      iDestruct "H" as "($ & $ & $ & [% _] & H)".
+      subst; iSplitR; auto.
+      now repeat iDestruct "H" as "($ & H)".
+    - iRight; iRight; iLeft; unfold Trap.
+      repeat iDestruct "H" as "($ & H)".
+      iFrame "H".
+    - iRight; iRight; iRight; unfold Recover.
+      iDestruct "H" as "($ & $ & $ & [% _] & H)".
+      subst; iSplitR; auto.
+      repeat iDestruct "H" as "($ & H)".
+      iDestruct "H" as "([% ($ & $ & $)] & $)".
   Qed.
 
   Lemma init_model_iprop : ⊢ semTriple_init_model.

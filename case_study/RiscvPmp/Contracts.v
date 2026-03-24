@@ -75,6 +75,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
       Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
       Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
+      (* Shadow the definition of asn_regs_ptsto that takes an "exclude list",
+         we never use it for the Universal Contract verification. *)
+      Definition asn_regs_ptsto {Σ} : Assertion Σ := asn_regs_ptsto [].
+
       Section ContractDef.
         Import RiscvNotations.
         Import RiscvPmpSignature.notations.

@@ -279,15 +279,15 @@ Module RiscvPmpModel2.
     Lemma open_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.
     Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      rewrite (gprs_equiv env.nil). cbn. iIntros. iFrame.
+      intros ι; destruct_syminstance ι; simpl.
+      rewrite (gprs_equiv env.nil). simpl. iIntros. iFrame.
     Qed.
 
     Lemma close_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_close_gprs.
     Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      rewrite (gprs_equiv env.nil). cbn. iIntros. iFrame.
+      intros ι; destruct_syminstance ι; simpl.
+      rewrite (gprs_equiv env.nil). simpl. iIntros. iFrame.
     Qed.
 
     Lemma open_ptsto_instr_sound :
