@@ -207,11 +207,6 @@ Module Type IrisAdequacy2
     [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮),
       match x with | existT _ r => reg_pointsTo2 r (NonSyncVal (read_register γ1 r) (read_register γ2 r)) end.
 
-  Inductive NSteps {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStoreVal Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> CStoreVal Γ -> Stm Γ σ -> nat -> Prop :=
-  | nstep_refl : NSteps γ1 μ1 δ1 s1 γ1 μ1 δ1 s1 0
-  | nstep_trans {n} {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : CStoreVal Γ} {s2 s3 : Stm Γ σ} :
-      Step γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 -> NSteps γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 n -> NSteps γ1 μ1 δ1 s1 γ3 μ3 δ3 s3 (S n).
-
   Lemma steps_to_nsteps {Γ : PCtx} {σ : Ty} {γ1 γ2 : RegStore} {μ1 μ2 : Memory} {δ1 δ2 : CStoreVal Γ} {s1 s2 : Stm Γ σ} :
     Steps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 -> exists n, NSteps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 n.
   Proof.
@@ -341,7 +336,7 @@ Module Type IrisAdequacy2
           iIntros "_ !%".
           eexists _, _, _, _.
           split.
-          { apply SEM.nstep_refl. }
+          { apply nstep_refl. }
           destruct (stm_to_val s21).
          ++ by inversion H.
          ++ congruence.
@@ -352,7 +347,7 @@ Module Type IrisAdequacy2
           iIntros "_ !%".
           eexists _, _, _, _.
           split.
-          { apply SEM.nstep_refl. }
+          { apply nstep_refl. }
           destruct (stm_to_val s21).
           ++ by inversion H.
           ++ congruence.
@@ -382,9 +377,116 @@ Module Type IrisAdequacy2
       iPureIntro.
       intros (γ23 & μ23 & δ23 & v23 & Hsteps223 & HQ).
       repeat eexists; last eassumption.
-      eapply SEM.nstep_trans.
+      eapply nstep_trans.
       apply Hsteps21.
       apply Hsteps223.
+  Qed.
+
+
+  Lemma semWP2_step `{sailGS2 Σ} {Γ σ} (s11 s21 : Stm Γ σ) {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
+    {δ11 δ12 δ21 δ22 : CStoreVal Γ} {s12 s22 : Stm Γ σ}
+    {Q : forall `{sailGS2 Σ}, IVal σ -> CStoreVal Γ -> IVal σ -> CStoreVal Γ -> iProp Σ}  :
+    ⟨ γ11, μ11, δ11, s11 ⟩ ---> ⟨ γ12, μ12, δ12, s12 ⟩ ->
+    ⟨ γ21, μ21, δ21, s21 ⟩ ---> ⟨ γ22, μ22, δ22, s22 ⟩ ->
+    regs_inv2 γ11 γ21 ∗ mem_inv2 μ11 μ21 ∗
+    semWP2 δ11 δ21 s11 s21 Q
+    -∗ |={⊤,∅}=> |={∅}▷=> |={∅,⊤}=>  regs_inv2 γ12 γ22 ∗ mem_inv2 μ12 μ22 ∗
+                                   semWP2 δ12 δ22 s12 s22 Q.
+    Proof.
+      iIntros (steps1 steps2) "H".
+      iDestruct "H" as "(Hregs & Hmem & Hwp)".
+      rewrite semWP2_unfold.
+      specialize (stm_val_stuck steps1) as ->.
+      specialize (stm_val_stuck steps2) as ->.
+      iSpecialize ("Hwp" with "[$Hregs $Hmem]").
+      iMod "Hwp".
+      iSpecialize ("Hwp" $! _ _ _ _ _ _ _ _).
+      iSpecialize ("Hwp" with "[%]").
+      eauto. iModIntro.
+      iMod "Hwp". do 3 iModIntro. do 2 iMod "Hwp". iModIntro.
+      iDestruct "Hwp" as "((Hregs & Hmem) & Hwp)".
+      iFrame.
+    Qed.
+
+  Lemma semWP2_preservation `{sailGS2 Σ} {Γ σ} n (s11 s21 : Stm Γ σ) {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
+    {δ11 δ12 δ21 δ22 : CStoreVal Γ} {s12 s22 : Stm Γ σ}
+    {Q : forall `{sailGS2 Σ}, IVal σ -> CStoreVal Γ -> IVal σ -> CStoreVal Γ -> iProp Σ}  :
+    ⟨ γ11, μ11, δ11, s11 ⟩ -{ n }-> ⟨ γ12, μ12, δ12, s12 ⟩ ->
+    ⟨ γ21, μ21, δ21, s21 ⟩ -{ n }-> ⟨ γ22, μ22, δ22, s22 ⟩ ->
+    mem_inv2 μ11 μ21 ∗ regs_inv2 γ11 γ21 -∗
+     semWP2 δ11 δ21 s11 s21 Q
+    ={⊤,∅}=∗ |={∅}▷=>^(n) |={∅,⊤}=> mem_inv2 μ12 μ22 ∗ regs_inv2 γ12 γ22 ∗
+             semWP2 δ12 δ22 s12 s22 Q.
+  Proof.
+    revert s11 s21 s12 s22 μ11 μ21 γ11 γ21 μ12 μ22 γ12 γ22 δ11 δ12 δ21 δ22 Q.
+    induction n as [|n IH]=> s11 s21 s12 s22 μ11 μ21 γ11 γ21 μ12 μ22 γ12 γ22 δ11 δ12 δ21 δ22 Q /=.
+    { intros steps1 steps2.
+      inversion steps1. inversion steps2. subst.
+      iIntros "(Hmem & Hregs)".
+      iIntros "Hwp".
+      iFrame.
+      by iApply fupd_mask_subseteq.
+    }
+    iIntros (steps1 steps2) "(Hmem & Hregs)".
+    iIntros " Hwp".
+    inversion steps1 as [ | ? γ1 ? μ1 ? ? ? ? ? Hstep1 Hevaln1].
+    inversion steps2 as [ | ? γ2 ? μ2 ? ? ? ? ? Hstep2 Hevaln2]. subst.
+    iPoseProof (semWP2_step Hstep1 Hstep2 with "[$Hmem $Hregs $Hwp]") as "Hwp".
+    iMod "Hwp". iModIntro. iMod "Hwp". do 2 iModIntro. do 2 iMod "Hwp".
+    iDestruct "Hwp" as "(Hregs & Hmem & Hwp)".
+    specialize (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Q Hevaln1 Hevaln2).
+    by iApply (IH with "[$Hmem $Hregs]"). 
+  Qed.
+
+ Lemma adequacy_gen_nsteps {Γ σ} n (s11 s21 : Stm Γ σ) {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
+    {δ11 δ12 δ21 δ22 : CStoreVal Γ} {s12 s22 : Stm Γ σ}
+    {Q : forall `{sailGS2 Σ}, IVal σ -> CStoreVal Γ -> IVal σ -> CStoreVal Γ -> iProp Σ}
+    (φ : Prop) :
+    ⟨ γ11, μ11, δ11, s11 ⟩ -{ n }-> ⟨ γ12, μ12, δ12, s12 ⟩ ->
+    ⟨ γ21, μ21, δ21, s21 ⟩ -{ n }-> ⟨ γ22, μ22, δ22, s22 ⟩ ->
+    (forall `{sailGS2 Σ},
+        mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ |={⊤}=> semWP2 δ11 δ21 s11 s21 Q
+        ∗ (∀ μ22, mem_inv2 μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
+    )%I -> φ.
+  Proof.
+    intros Heval1 Heval2 Hwp.
+    refine (uPred.pure_soundness _
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
+    iIntros (Hinv) "".
+    iMod (own_alloc ((● RegStore_to_map γ11 ⋅ ◯ RegStore_to_map γ11 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    iMod (own_alloc ((● RegStore_to_map γ21 ⋅ ◯ RegStore_to_map γ21 ) : regUR)) as (regs2) "[Hregsown2 Hregsinv2]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
+    iMod (mem_inv_init2 (mGS := mGS) μ11 μ21) as (memG) "[Hmem Rmem]".
+    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2)) memG).
+    specialize (Hwp _ sG).
+    iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
+    { iApply own_RegStore_to_map_reg_pointsTos.
+      apply finite.NoDup_enum.
+      iSplitR "Hregsinv2"; iAssumption.
+    }
+    iAssert (regs_inv2 γ11 γ21) with "[Hregsown1 Hregsown2]" as "Hregs".
+    { iSplitL "Hregsown1";
+      now iApply own_RegStore_to_regs_inv.
+    }
+    clear Hwp.
+    iIntros "Hcred".
+    iMod "Hwp2". iDestruct "Hwp2" as "(Hwp2 & H)".
+    iPoseProof (semWP2_preservation Heval1 Heval2 with "[$Hmem $Hregs] Hwp2") as "Hnew".
+    iMod "Hnew".
+    iAssert (|={∅}▷=>^(n) |={∅}=> ⌜φ⌝)%I
+      with "[-]" as "H"; last first.
+    { destruct n; [done|]. by iApply step_fupdN_S_fupd. }
+    Search "fupdN".
+    iApply (step_fupdN_wand with "Hnew").
+    iIntros "Hnew". iMod "Hnew". iApply "H".
+    iDestruct "Hnew" as "(Hmem & ? & ?)".
+    iFrame.
   Qed.
 
   Lemma adequacy_gen {Γ σ} (s11 s21 : Stm Γ σ) {γ11 γ12 γ21} {μ11 μ12 μ21}

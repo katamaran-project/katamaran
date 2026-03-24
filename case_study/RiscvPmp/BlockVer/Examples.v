@@ -376,26 +376,41 @@ Module Examples.
       forall (γ2 : RegStore) (μ2 : Memory), Prop :=
       fun γ2 μ2 => ⟨ γ1, μ1, [env], fun_step ⟩ --->* ⟨ γ2, μ2, [env], stm_val ty.unit tt ⟩.
 
-    Inductive RiscVStepsWithExitCond (exitCond : RegStore -> Memory -> Prop) (γ1 : RegStore) (μ1 : Memory) : RegStore -> Memory -> Prop :=
+    Definition RiscVStepsN (γ1 : RegStore) (μ1 : Memory) :
+      forall (γ2 : RegStore) (μ2 : Memory) n, Prop :=
+      fun γ2 μ2 n => ⟨ γ1, μ1, [env], fun_step ⟩ -{ n }-> ⟨ γ2, μ2, [env], stm_val ty.unit tt ⟩.
+
+    Inductive RiscVStepsWithExitCond (exitCond : Val ty_xlenbits -> Prop) (γ1 : RegStore) (μ1 : Memory) : RegStore -> Memory -> Prop :=
     | riscVStepWithExitCond_refl : RiscVStepsWithExitCond exitCond γ1 μ1 γ1 μ1
     | riscVStepWithExitCond_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} :
-      ~ exitCond γ1 μ1 ->
+      ~ exitCond (read_register γ1 pc) ->
       RiscVStep γ1 μ1 γ2 μ2 ->
       RiscVStepsWithExitCond exitCond  γ2 μ2 γ3 μ3 ->
       RiscVStepsWithExitCond exitCond  γ1 μ1 γ3 μ3.
     Notation "⟨ γ1 , μ1 ⟩ -( exitCond )->* ⟨ γ2 , μ2 ⟩" := (@RiscVStepsWithExitCond exitCond γ1 μ1 γ2 μ2)
                                                              (at level 75, only parsing, right associativity).
 
-    Inductive RiscVNStepsWithExitCond  (exitCond : RegStore -> Memory -> Prop) (γ1 : RegStore) (μ1 : Memory) : RegStore -> Memory -> nat -> Prop :=
+    Inductive RiscVNStepsWithExitCond  (exitCond : Val ty_xlenbits -> Prop) (γ1 : RegStore) (μ1 : Memory) : RegStore -> Memory -> nat -> Prop :=
     | riscVNStepWithExitCond_refl : RiscVNStepsWithExitCond exitCond γ1 μ1 γ1 μ1 0
     | riscVNStepWithExitCond_trans {n} {γ2 γ3 : RegStore} {μ2 μ3 : Memory} :
-      ~ exitCond γ1 μ1 ->
+      ~ exitCond (read_register γ1 pc) ->
       RiscVStep γ1 μ1 γ2 μ2 ->
       RiscVNStepsWithExitCond exitCond  γ2 μ2 γ3 μ3 n ->
       RiscVNStepsWithExitCond exitCond  γ1 μ1 γ3 μ3 (S n)
     .
     Notation "⟨ γ1 , μ1 ⟩ -( exitCond , n )->* ⟨ γ2 , μ2 ⟩" := (@RiscVNStepsWithExitCond exitCond γ1 μ1 γ2 μ2 n)
                                                              (at level 75, only parsing, right associativity).
+
+    Inductive RiscVlistNStepsWithExitCond  (exitCond : Val ty_xlenbits -> Prop) (γ1 : RegStore) (μ1 : Memory) : RegStore -> Memory -> list nat -> Prop :=
+    | riscVlistNStepWithExitCond_refl : RiscVlistNStepsWithExitCond exitCond γ1 μ1 γ1 μ1 []
+    | riscVlistNStepWithExitCond_trans {n} {l} {γ2 γ3 : RegStore} {μ2 μ3 : Memory} :
+      ~ exitCond (read_register γ1 pc) ->
+      RiscVStepsN γ1 μ1 γ2 μ2 n ->
+      RiscVlistNStepsWithExitCond exitCond  γ2 μ2 γ3 μ3 l ->
+      RiscVlistNStepsWithExitCond exitCond  γ1 μ1 γ3 μ3 (n :: l)
+    .
+    Notation "⟨ γ1 , μ1 ⟩ -l( exitCond , n )->* ⟨ γ2 , μ2 ⟩" := (@RiscVlistNStepsWithExitCond exitCond γ1 μ1 γ2 μ2 n)
+                                                                 (at level 75, only parsing, right associativity).
 
     Definition myPost2 `{sailGS2 Σ} :=
       iProp Σ.
@@ -424,24 +439,44 @@ Module Examples.
   Definition myWP2_loop `{sailGS2 Σ} (ExitCond : iProp Σ) : myWp2 :=
     fixpoint (myWP2_loop_fix ExitCond).
 
+  Lemma fixpoint_myWP2_loop_fix_eq `{sailGS2 Σ} (ExitCond : iProp Σ) (POST : myPost2) :
+    fixpoint (myWP2_loop_fix ExitCond) POST ≡ myWP2_loop_fix ExitCond (fixpoint (myWP2_loop_fix ExitCond)) POST.
+  Proof. exact: (fixpoint_unfold (myWP2_loop_fix ExitCond) POST). Qed.
+
+  Lemma fixpoint_myWP2_loop_eq `{sailGS2 Σ} (ExitCond : iProp Σ) (POST : myPost2) :
+    myWP2_loop ExitCond POST ≡ myWP2_loop_fix ExitCond (myWP2_loop ExitCond) POST.
+  Proof. by unfold myWP2_loop; rewrite fixpoint_myWP2_loop_fix_eq. Qed.
+
     Definition pcOutOfInstrs (start : Val ty_word) (instrs : list AST) (γ : RegStore) (μ : Memory) : Prop :=
       let pc := read_register γ pc in
       bv.ult pc start \/ bv.uge pc (start + bv.of_N (4 * N.of_nat (length instrs))).
 
     Import IrisModel.RiscvPmpIrisBase.
 
-    Lemma adequacy_gen_RiscVNStepsExitCond n exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22} {Q : forall `{sailGS2 Σ}, iProp Σ}
+    Lemma reg2_change `{sailGS2 Σ} {γ1 γ2 γ1' γ2'} :
+      own_regstore2 γ1 γ2 ∗ regs_inv2 γ1' γ2' ⊢
+        ⌜ read_register γ1 pc = read_register γ1' pc /\ read_register γ2 pc = read_register γ2' pc ⌝.
+      Proof.
+        iIntros "(HownRegstore & Hinv)".
+        unfold own_regstore2; cbn.
+        iDestruct "HownRegstore" as "(Hpc & _)".
+        Search regs_inv2.
+        iPoseProof (reg_valid2 with "Hinv Hpc") as "(%eq1 & %eq2)".
+        cbn in *. rewrite eq1 eq2. done.
+      Qed.
+
+    Lemma adequacy_gen_RiscVNStepsExitCond l exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22} {Q : forall `{sailGS2 Σ}, iProp Σ}
     (φ : Prop) :
-    ⟨ γ11, μ11 ⟩ -( exitCond , n )->* ⟨ γ12, μ12 ⟩ ->
-    ⟨ γ21, μ21 ⟩ -( exitCond , n )->* ⟨ γ22, μ22 ⟩ ->
+    ⟨ γ11, μ11 ⟩ -l( exitCond , l )->* ⟨ γ12, μ12 ⟩ ->
+    ⟨ γ21, μ21 ⟩ -l( exitCond , l )->* ⟨ γ22, μ22 ⟩ ->
     (forall `{sailGS2 Σ},
-        mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ |={⊤}=> myWP2_loop (∃ μ1 μ2 γ1 γ2, mem_res2 μ1 μ2 ∗ own_regstore2 γ1 γ2 ∗ ⌜ exitCond γ1 μ1 ∨ exitCond γ2 μ2 ⌝) Q
+        mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ |={⊤}=> myWP2_loop (∃ γ1 γ2, own_regstore2 γ1 γ2 ∗ ⌜ exitCond (read_register γ1 pc) ∨ exitCond (read_register γ2 pc) ⌝) Q
         ∗ (mem_inv2 _ μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.
     intros Heval1 Heval2 Hwp.
     refine (uPred.pure_soundness _
-              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc (list_sum l) (list_sum l) _)).
     iIntros (Hinv) "".
     iMod (own_alloc (A := regUR) ((● RegStore_to_map γ11 ⋅ ◯ RegStore_to_map γ11 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
     { apply auth_both_valid.
@@ -453,10 +488,11 @@ Module Examples.
       apply RegStore_to_map_valid. }
     pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
     iMod (mem_inv_init2 μ11 μ21) as (memG) "[Hmem Rmem]".
-    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2)) memG).
+    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1) (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ _)) regs2)) memG).
     specialize (Hwp _ sG).
     iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
-    { iApply own_RegStore_to_map_reg_pointsTos.
+    { unfold own_regstore2.
+      iApply RiscvPmpIrisInstance2.own_RegStore_to_map_reg_pointsTos.
       apply finite.NoDup_enum.
       iSplitR "Hregsinv2"; iAssumption.
     }
@@ -466,19 +502,32 @@ Module Examples.
     }
     clear Hwp.
     iStopProof.
-    revert γ21 μ21 δ21 s21.
-    induction Hevaln1.
-    - iIntros (γ21 μ21 δ21 s21) "(Hmem & Hwp2 & Hregs) Hcred".
+    revert Heval1 Heval2.
+    revert γ11 μ11 γ21 μ21.
+    induction l.
+    - iIntros (γ11 μ11 γ21 μ21 Heval1 Heval2) "(Hmem & Hwp2 & Hregs) Hcred".
+      inversion Heval1. inversion Heval2. subst.
       iMod "Hwp2" as "[_ Hcont]".
       iMod ("Hcont" with "Hmem") as "%Hφ".
       cbn. done.
-    - iIntros (γ21 μ21 δ21 s21) "(Hregs & Hwp2 & Hmem) Hcred".
-      specialize (IHHevaln1 (nstepsWithExitCond_to_stepsWithExitCond Hevaln1)).
-      rewrite fixpoint_semWP2_eq; cbn.
-      rewrite (stm_val_stuck H0).
-      repeat case_match;
-        try (iMod "Hwp2" as "(H & _)";
-             by iMod "H").
+    - iIntros (γ11 μ11 γ21 μ21 Heval1 Heval2) "(Hmem & Hwp2 & Hregs) Hcred".
+      inversion Heval1 as [ | ? ? γ1 ? μ1 ? nEC1 Hstep1 Hevaln1].
+      inversion Heval2 as [ | ? ? γ2 ? μ2 ? nEC2 Hstep2 Hevaln2]. subst.
+      specialize (IHl _ _ _ _ Hevaln1 Hevaln2).
+      rewrite fixpoint_myWP2_loop_eq.
+      unfold myWP2_loop_fix.
+      iMod "Hwp2" as "([H | Hwp2] & Hφ)".
+      + iDestruct "H" as (γ1' γ2') "(HownRegStore & %ECs)".        
+        iPoseProof (reg2_change with "[$HownRegStore $Hregs]") as "(%eq1 & %eq2)".
+        rewrite eq1 eq2 in ECs. tauto.
+      + iPoseProof (semWP2_preservation Hstep1 Hstep2 with "[$Hmem $Hregs]") as "Hwp".
+        (* TODO: I think the problem is simply that Coq doesn't realize which Q to choose because Q is a function on sG so we have higher-order unification *)
+        iSpecialize ("Hwp" with "Hwp2").
+        iStopProof.
+        refine (adequacy_gen_nsteps (μ21 := μ21) (γ21 := γ21) (δ21 := [env]) (Q := fun _ _ _ _ _ _ => True%I) _ Hstep1 Hstep2).
+        
+        Search step.
+        by iMod "H").
       iMod "Hwp2".
       iDestruct "Hwp2" as "(Hwp2 & Hinv)".
       iSpecialize ("Hwp2" with "[$Hregs $Hmem]").
