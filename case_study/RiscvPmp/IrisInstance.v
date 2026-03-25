@@ -353,8 +353,8 @@ Module RiscvPmpIrisInstancePredicates.
        in  impl_mmio_state_prot (bv_from s) e (bv_from s')⌝.
 
     (* Current protocol state is: *)
-    Definition interp_mmio_state_pred `{iostateG IOState Σ} : iProp Σ :=
-      ∃ s, st_frag1 (bv_from s).
+    Definition interp_mmio_state_pred `{iostateG IOState Σ} (s : bv iostate_bits): iProp Σ :=
+      st_frag1 (bv_from s).
 
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).
@@ -481,7 +481,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
-    | mmio_state _             | [] (* [unit] *)     => interp_mmio_state_pred (* We have ownership over st *)
+    | mmio_state _             | [s] (* [unit] *)     => interp_mmio_state_pred s (* We have ownership over st *)
     | mmio_trace bytes         | [env] (* [unit] *)   => interp_mmio_trace_state_inv (* Given st and tr state_prot is satisfied *)
     | mmio_checked_write _     | [ addr; w; s; s' ]   => interp_mmio_checked_write addr w s s'
     | encodes_instr            | [ code; instr ]      => ⌜pure_decode code = inr instr ⌝%I

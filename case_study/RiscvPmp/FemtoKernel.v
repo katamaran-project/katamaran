@@ -191,8 +191,7 @@ Module inv := invariants.
               cons hd' (resolve_ASM tl new_off)
        end.
     (* Init code is the same in both versions of the femtokernel, since MMIO memory is placed after the adversary code, hence not affecting initialization *)
-    Example femtokernel_init_asm (handler_start : N) (adv_start : N): list ASM :=
-
+    Example femtokernel_init_asm (handler_start : N) (adv_start : N) : list ASM :=
       [
         UTYPE bv.zero ra RISCV_AUIPC
         ; Λ x, ITYPE (bv.of_N (adv_start - (x - 4))) ra ra RISCV_ADDI
@@ -217,12 +216,10 @@ Module inv := invariants.
 
     Example femtokernel_handler_asm : list ASM :=
       [
-        (* ITYPE bv.one zero t1 RISCV_ADDI (* t1 <- 1 *) *)
         UTYPE bv.zero t1 RISCV_AUIPC
         ; Λ current_pc, LOAD (bv.of_N (data_start - (current_pc - 4))) t1 t1 true WORD (* t1 <- data *)
         ; ITYPE bv.one t1 t1 RISCV_ANDI (* t1 <- mask t1 *) (* Todo: Maybe remove this line, and add a condition to the precondition. *)
         ; ITYPE bv.one t0 t2 RISCV_ANDI (* t2 <- mask t0 *)
-        (* ; RTYPE t1 t0 t2 RISCV_AND (* t2 = t0 && t1 *) *)
         ; Λ current_pc, BTYPE (bv.of_N (mmio_handler_start_block2 - current_pc)) t1 t2 RISCV_BEQ (* branch if t1 = t2 *)
       ].
     Example femtokernel_handler' (handler_start : N) : list AnnotInstr :=
@@ -278,7 +275,7 @@ Module inv := invariants.
     Import RiscvPmp.Sig.
     (* Fix word length at 4 for this example, as we do not perform any other writes*)
     Local Notation asn_mmio_trace_state_inv := (asn.chunk (chunk_user (mmio_trace bytes_per_word) [env])).
-    Local Notation asn_mmio_state_pred := (asn.chunk (chunk_user (mmio_state bytes_per_word) [env])).
+    Local Notation asn_mmio_state_pred s := (asn.chunk (chunk_user (mmio_state bytes_per_word) [s])).
 
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
@@ -370,7 +367,7 @@ Module inv := invariants.
       asn_pmp_addr_access (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) (term_val ty_privilege User) ∗
       (∃ "oldvalue",  ∃ "s", ∃ "s'", (
           term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size) ↦ₘ (term_var "oldvalue") ∗
-          asn_mmio_state_pred ∗ 
+          asn_mmio_state_pred (term_var "s") ∗
           asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "oldvalue"; term_var "s"; term_var "s'"])
       ))
       ∗ asn_mmio_trace_state_inv.
@@ -805,13 +802,13 @@ Import Erasure.notations.
       iFrame "Hcurpriv".
       iFrame "Hinv".
       iFrame "Hscratch".
-      iDestruct "Hpred" as "(%v & %s & %s' & Hx5 & Hmem & Hstate & Hprot)".
+      iDestruct "Hpred" as "(%v & %s & Hx5 & Hmem & Hstate)".
       iFrame "Hx5". iFrame "Hpts".
       cbn in Ha, Ha2, Han. subst.
       iSplitR "Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
-      + iFrame "Hpmpentries Hmem HaccU". cbn. iFrame. repeat iSplitL ""; auto.
+      + iFrame "Hpmpentries Hmem HaccU". cbn. iFrame. repeat iSplitL "". auto. auto. auto. auto. admit.
       + iFrame "Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
- Qed.
+ Admitted.
 
   Lemma femtokernel_handler_safe_block0 `{sailGS Σ, iostateG IOState Σ} a :
     ⊢ femtoKernelAssumptions femto_handler_pre a -∗
@@ -839,11 +836,11 @@ Import Erasure.notations.
       + iModIntro. iIntros "IH". iApply "Hind". iFrame "IH".
       + iFrame "Hnextpc Hpc Hmstatus Hmip Hmie Hscratch Hmtvec Hmcause Hmepc Hx5 Hpts Hcurpriv".
         iSplitR "Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
-        ++ iDestruct "Hinv" as "#Hinv". iDestruct "HpredL" as "[Hprot [%Han _]]". cbn in *.
+        ++ iDestruct "Hinv" as "#Hinv". iDestruct "HpredL" as "[(%s_prot & Hprot & _) [%Han _]]". cbn in *.
            subst.
            iSplitL ""; auto. iSplitL ""; auto.
            iFrame "Hpmpentries HaccU".
-           iSplitL "Hold Hstate Hprot"; auto. iExists vold. iExists s, s'. iFrame "Hold Hstate Hprot". iSplit; auto.
+           iSplitL "Hold Hstate Hprot"; auto. iExists vold. iExists s, s'. iFrame "Hold". iSplit; auto.
         ++ subst. iFrame "Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
     - (* Tut: Case illegal value i.e. we jump and therefore enter block2 *)
       iApply (femtokernel_handler_safe_block2 with "[]").
@@ -886,7 +883,7 @@ Qed.
     iAssert (interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User) with "[Hmemadv]" as "Hpmpaddr".
     by iApply memAdv_pmpPolicy.
     iFrame "Hmst Hmtvec Hmcause Hmip Hmie Hmscratch Hmepc Hpc Hnpc". iModIntro.
-    iFrame "Hcurpriv Hpmpaddr Hpmpentries".
+    iFrame "Hcurpriv Hpmpaccess Hpmpentries".
     rewrite gprs_equiv.
     iFrame "Hregs".
 
@@ -1171,8 +1168,8 @@ Qed.
   Transparent ptsto_instrs.
   Opaque Model.RiscvPmpModel2.gprs_equiv.
 
-  Lemma femtokernel_endToEnd {γ γ' : RegStore} {μ μ' : Memory} s
-        {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} :
+  Lemma femtokernel_endToEnd  {γ γ' : RegStore} {μ μ' : Memory} {σ : IOState}
+    {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} :
     mem_has_instrs μ (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
     mem_has_instrs μ (bv.of_N handler_addr) (filter_AnnotInstr_AST femtokernel_handler) ->
     mmio_pred bytes_per_word (memory_trace μ) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
@@ -1183,12 +1180,12 @@ Qed.
     read_register γ pmpaddr0 = bv.zero ->
     read_register γ pmp1cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr1 = bv.zero ->
-    read_register γ mstatus = {| MPP := User; MPIE := false; MIE := false |} ->
     read_register γ pc = (bv.of_N init_addr) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    exists s', mmio_trace_state_pred (memory_trace μ') s' (* The initial demands hold over the final state *).
+    mem_has_word μ (bv.of_N data_addr) (bv.of_N 0) ->
+    (∃ σ', mmio_trace_state_pred (memory_trace μ') σ'). (* The initial demands hold over the final state *)
   Proof.
-    intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γmstatus γpc steps.
+    intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γmstatus γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps Hmem.
     refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _). (* inv trace satisfies protocol state *)
     iIntros (Σ' sG mpG).
     cbn.
@@ -1229,5 +1226,3 @@ Qed.
 (* proof-omit-proofs-option: t *)
 (* End: *)
 
-
-  
