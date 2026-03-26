@@ -295,8 +295,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Variant impl_mmio_state_prot: IOState -> Event -> IOState -> Prop :=
     | IOW : forall b e, event_type e = IOWrite ->
                               event_nbbytes e > 0 ->
-                              is_even (event_contents e) = b -> (* new even *)
-                              impl_mmio_state_prot b (* old odd *) e (negb b) (* new even *)
+                              is_even (event_contents e) = b -> (* new *)
+                              impl_mmio_state_prot (negb b) (* old is not new *) e b (* new *)
     .
 
     Definition Mmio_state_prot {width : nat} (w: bv (width * byte)) (s s' :  bv iostate_bits) : Prop :=

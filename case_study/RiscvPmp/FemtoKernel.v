@@ -365,10 +365,11 @@ Module inv := invariants.
       x5 ↦ term_var "x5" ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
       asn_pmp_addr_access (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) (term_val ty_privilege User) ∗
-      (∃ "oldvalue",  ∃ "s", ∃ "s'", (
+      (∃ "oldvalue",  ∃ "s", (
           term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size) ↦ₘ (term_var "oldvalue") ∗
-          asn_mmio_state_pred (term_var "s") ∗
-          asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "oldvalue"; term_var "s"; term_var "s'"])
+          (term_unop (uop.bvtake 1) (term_var "oldvalue") = term_var "s") ∗
+          asn_mmio_state_pred (term_var "s") 
+          (* asn.formula (formula_user (mmio_state_prot bytes_per_word) [term_var "oldvalue"; term_var "s"; term_var "s'"]) *)
       ))
       ∗ asn_mmio_trace_state_inv.
 
@@ -806,9 +807,10 @@ Import Erasure.notations.
       iFrame "Hx5". iFrame "Hpts".
       cbn in Ha, Ha2, Han. subst.
       iSplitR "Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
-      + iFrame "Hpmpentries Hmem HaccU". cbn. iFrame. repeat iSplitL "". auto. auto. auto. auto. admit.
+      + iFrame "Hpmpentries Hmem HaccU". cbn. iFrame. repeat iSplitL "". auto. auto. auto. auto.
+        iDestruct "Hstate" as "[Hstate Hprot]". iFrame. iDestruct "Hprot" as (v0) "[%Hprot _]". iExists v0. iPureIntro. split; auto. 
       + iFrame "Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
- Admitted.
+ Qed.
 
   Lemma femtokernel_handler_safe_block0 `{sailGS Σ, iostateG IOState Σ} a :
     ⊢ femtoKernelAssumptions femto_handler_pre a -∗
