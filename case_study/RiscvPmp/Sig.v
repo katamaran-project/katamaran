@@ -997,14 +997,14 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition asn_and_regs {Σ} (f : Reg ty_xlenbits -> Assertion Σ)
       (GPRS : list (Reg ty_xlenbits)): Assertion Σ :=
       foldr
-        (λ r asn, f r ∗ asn)
+        (@asn.sep Σ)
         (asn.formula formula_true)
-        GPRS.
+        (map f GPRS).
 
-    Definition asn_regs_ptsto {Σ} (exclude : list (Reg ty_xlenbits)) : Assertion Σ :=
+    Definition asn_regs_ptsto {Σ : LCtx} (exclude : gset (Reg ty_xlenbits)) : Assertion Σ :=
       asn_and_regs
         (fun r => asn.exist "w" _ (r ↦ term_var "w"))
-        (list_difference GPRS exclude).
+        (elements (GPRS ∖ exclude)).
 
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 

@@ -198,7 +198,7 @@ Module RiscvPmpIrisInstancePredicates.
       contradiction.
   Qed.
 
-  Lemma big_sepS_delete_multi :
+  Lemma big_sepS_delete_multi_list :
     ∀ {Σ} {A : Type} {EqDecision0 : EqDecision A} {H : Countable A} (Φ : A → iProp Σ)
       (X : gset A) (Y : list A),
       NoDup Y ->
@@ -238,6 +238,30 @@ Module RiscvPmpIrisInstancePredicates.
         destruct Hsub as [HyX Hsub].
         iApply ("IH" $! _ Hdup Hsub).
         iFrame "HY H".
+  Qed.
+
+  Lemma big_sepS_delete_multi :
+    ∀ {Σ} {A : Type} {EqDecision0 : EqDecision A} {H : Countable A} (Φ : A → iProp Σ)
+      (X : gset A) (Y : gset A),
+      Y ⊆ X ->
+      ([∗ set] x ∈ X, Φ x) ⊣⊢ ([∗ set] y ∈ Y, Φ y) ∗ ([∗ set] x ∈ (X ∖ Y), Φ x).
+  Proof.
+    intros ? ? ? ? Φ X Y Hsub.
+    remember (elements Y) as l eqn:El.
+    assert (Hdup: NoDup l) by (subst; apply NoDup_elements).
+    assert (Hl: list_to_set l = Y) by (subst; apply list_to_set_elements_L).
+    assert (Hsub': list_to_set l ⊆ X) by (now rewrite Hl).
+    iSplit.
+    - iIntros "H".
+      iPoseProof (big_sepS_delete_multi_list _ Hdup Hsub' with "H") as "H".
+      rewrite Hl. iDestruct "H" as "(H & $)".
+      rewrite <- Hl.
+      now iApply big_sepS_list_to_set.
+    - iIntros "(HY & HX)".
+      iApply (big_sepS_delete_multi_list _ Hdup Hsub').
+      rewrite Hl. iFrame "HX".
+      rewrite <- Hl.
+      now iApply big_sepS_list_to_set.
   Qed.
 
   Lemma NoDup_reg_convert_to_idx (l : list (Reg ty_xlenbits)) :
@@ -318,28 +342,8 @@ Module RiscvPmpIrisInstancePredicates.
   Section WithSailGS.
     Context `{sailRegGS Σ} `{invGS Σ}.
 
-    Definition reg_file : gset (bv 5) := list_to_set (bv.finite.enum 5).
-
-    Lemma GPRS_NoDup : NoDup GPRS.
-    Proof. unfold GPRS.
-           repeat constructor;
-             repeat
-               match goal with
-               | |- ?e ∉ ?l =>
-                   intros ?
-               | H: ?e ∈ ?l |- _ =>
-                   inversion H
-               end.
-    Qed.
-
-    Definition interp_ptsreg (r : RegIdx) (v : Word) : iProp Σ :=
-      match reg_convert r with
-      | Some x => reg_pointsTo x v
-      | None => True
-      end.
-
-    Definition interp_gprs (exclude : list (Reg ty_xlenbits)) : iProp Σ :=
-      [∗ list] r ∈ list_difference GPRS exclude,
+    Definition interp_gprs (exclude : gset (Reg ty_xlenbits)) : iProp Σ :=
+      [∗ set] r ∈ GPRS ∖ exclude,
         (∃ v, reg_pointsTo r v)%I.
 
     Lemma list_to_set_list_difference : ∀ {A : Type} `{Countable A} (l1 l2 : list A),
@@ -384,47 +388,15 @@ Module RiscvPmpIrisInstancePredicates.
             now apply elem_of_difference.
     Qed.
 
-    Lemma interp_gprs_with_excluded `{sailGS Σ} (exclude : list (Reg ty_xlenbits)) :
-      NoDup exclude ->
+    Lemma interp_gprs_with_excluded `{sailGS Σ} (exclude : gset (Reg ty_xlenbits)) :
       exclude ⊆ GPRS ->
-      ([∗ list] r ∈ exclude, ∃ v, reg_pointsTo r v) ∗ interp_gprs exclude ⊣⊢ interp_gprs [].
+      ([∗ set] r ∈ exclude, ∃ v, reg_pointsTo r v) ∗ interp_gprs exclude ⊣⊢ interp_gprs ∅.
     Proof.
-      iInduction exclude as [|ex exclude] "IH";
-        simpl; iIntros (Hdup Hsub); iSplit; auto.
-      - now iIntros "(_ & $)".
-      - rewrite list_subseteq_cons_iff in Hsub.
-        destruct Hsub as [Hex Hsub].
-        pose proof (proj1 (NoDup_cons _ _) Hdup) as [Hnex Hdup'].
-        iSpecialize ("IH" with "[] []"); auto.
-        iIntros "([Hex Hexclude] & Hgprs)".
-        unfold interp_gprs at 3.
-        iPoseProof (big_sepS_list_to_set with "Hgprs") as "H".
-        { apply NoDup_list_difference. apply GPRS_NoDup. }
-        rewrite list_to_set_list_difference.
-        cbn [list_to_set].
-        rewrite <- difference_difference_l_L.
-        rewrite difference_commute_gset.
-        iPoseProof (big_sepS_delete _ (list_to_set GPRS ∖ list_to_set exclude) ex with "[$H $Hex]") as "H".
-        { apply elem_of_difference. now rewrite ?elem_of_list_to_set. }
-        iApply "IH".
-        iFrame "Hexclude".
-        unfold interp_gprs.
-        iApply big_sepS_list_to_set.
-        { apply NoDup_list_difference. apply GPRS_NoDup. }
-        now rewrite <- list_to_set_list_difference.
-      - iIntros "H".
-        unfold interp_gprs at 3.
-        iPoseProof (big_sepS_list_to_set with "H") as "H".
-        { apply NoDup_list_difference. apply GPRS_NoDup. }
-        rewrite list_to_set_list_difference.
-        cbn [list_to_set]. rewrite difference_empty_L.
-        iPoseProof (big_sepS_delete_multi _ Hdup with "H") as "H".
-        { now apply list_to_set_subseteq. }
-        iDestruct "H" as "([$ $] & H)".
-        unfold interp_gprs at 3.
-        iApply big_sepS_list_to_set.
-        { apply NoDup_list_difference. apply GPRS_NoDup. }
-        now rewrite <- list_to_set_list_difference.
+      intros Hsub.
+      unfold interp_gprs.
+      rewrite difference_empty_L.
+      iApply bi.wand_iff_sym.
+      now iApply big_sepS_delete_multi.
     Qed.
 
     Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
@@ -459,7 +431,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
-    | gprs                     | _                    => interp_gprs [] (* For the Universal Contract verification we always need all GPRs, hence the empty exclude list *)
+    | gprs                     | _                    => interp_gprs ∅ (* For the Universal Contract verification we always need all GPRs, hence the empty exclude list *)
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
@@ -947,24 +919,24 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
   Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     FL RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
 
-  Lemma gprs_equiv `{sailGS Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : list (Reg ty_xlenbits)),
+  Lemma gprs_equiv `{sailGS Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
       interp_gprs exclude ⊣⊢
         asn.interpret (asn_regs_ptsto exclude) ι.
   Proof.
     iIntros (? ι exclude).
-
-    unfold interp_gprs, asn_regs_ptsto.
-    iInduction GPRS as [|gpr gprs] "IH";
-      iSplit; iIntros "H";
-      simpl; auto.
-    - case_match.
-      + now iApply "IH".
-      + simpl. iDestruct "H" as "($ & H)".
-        now iApply "IH".
-    - case_match.
-      + now iApply "IH".
-      + simpl. iDestruct "H" as "($ & H)".
-        now iApply "IH".
+    unfold interp_gprs, asn_regs_ptsto, asn_and_regs.
+    remember (elements (GPRS ∖ exclude)) as l eqn:El.
+    assert (Hdup: NoDup l) by (subst; apply NoDup_elements).
+    assert (Hl: list_to_set l = GPRS ∖ exclude) by (subst; apply list_to_set_elements_L).
+    rewrite <- Hl.
+    rewrite big_sepS_list_to_set; last auto.
+    clear El Hdup Hl.
+    iInduction l as [|gpr gprs] "IH";
+      iSplit; iIntros "H"; simpl; auto.
+    - iDestruct "H" as "($ & H)".
+      now iApply ("IH" with "H").
+    - iDestruct "H" as "($ & H)".
+      now iApply ("IH" with "H").
   Qed.
 
 End RiscvPmpIrisInstance.

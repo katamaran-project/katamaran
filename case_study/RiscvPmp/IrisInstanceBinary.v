@@ -150,14 +150,9 @@ Module RiscvPmpIrisInstancePredicates2.
 
     Definition reg_pointsTo21 {τ} (r : Reg τ) (v : Val τ) : iProp Σ :=
       reg_pointsTo2 r v v.
-    Definition interp_ptsreg (r : RegIdx) (v : Word) : iProp Σ :=
-      match reg_convert r with
-      | Some x => reg_pointsTo21 x v
-      | None => True
-      end.
 
     Definition interp_gprs : iProp Σ :=
-      [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
+      [∗ set] r ∈ GPRS, (∃ v, reg_pointsTo21 r v)%I.
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
       match entries with
@@ -355,14 +350,23 @@ Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
 
   Lemma gprs_equiv `{sailGS2 Σ} : ∀ {Σ} (ι : Valuation Σ),
       interp_gprs ⊣⊢
-        asn.interpret (asn_regs_ptsto nil) ι.
+        asn.interpret (asn_regs_ptsto ∅) ι.
   Proof.
-    iIntros. unfold interp_gprs.
-    rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
-    simpl. iSplit.
-    - iIntros "(_ & H)"; now repeat iDestruct "H" as "($ & H)".
-    - iIntros "H"; iSplitR; first by iExists bv.zero.
-      repeat iDestruct "H" as "($ & H)"; iFrame.
+    iIntros.
+    unfold interp_gprs, asn_regs_ptsto, asn_and_regs.
+    rewrite difference_empty_L.
+    remember (elements GPRS) as l eqn:El.
+    assert (Hdup: NoDup l) by (subst; apply NoDup_elements).
+    assert (Hl: list_to_set l = GPRS) by (subst; apply list_to_set_elements_L).
+    rewrite <- Hl.
+    rewrite big_sepS_list_to_set; last auto.
+    clear El Hdup Hl.
+    iInduction l as [|gpr gprs] "IH";
+      iSplit; iIntros "H"; cbn; auto.
+    - iDestruct "H" as "($ & H)".
+      now iApply ("IH" with "H").
+    - iDestruct "H" as "($ & H)".
+      now iApply ("IH" with "H").
   Qed.
 
   Definition WP2_loop `{sailGS2 Σ} : iProp Σ :=

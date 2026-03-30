@@ -46,6 +46,8 @@ From Katamaran Require Import
      RiscvPmp.Sig.
 From Equations Require Import
      Equations.
+From stdpp Require Import
+     base.
 
 Import RiscvPmpProgram.
 
@@ -77,7 +79,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
 
       (* Shadow the definition of asn_regs_ptsto that takes an "exclude list",
          we never use it for the Universal Contract verification. *)
-      Definition asn_regs_ptsto {Σ} : Assertion Σ := asn_regs_ptsto [].
+      Definition asn_regs_ptsto {Σ} : Assertion Σ := asn_regs_ptsto ∅.
 
       Section ContractDef.
         Import RiscvNotations.

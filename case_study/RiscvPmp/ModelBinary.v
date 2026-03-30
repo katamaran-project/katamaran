@@ -335,16 +335,16 @@ Module RiscvPmpModel2.
 
     Lemma interp_gprs_split :
       interp_gprs ⊢
-        @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_left []
-        ∗ @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_right [].
+        @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_left ∅
+        ∗ @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_right ∅.
     Proof.
       unfold interp_gprs, RiscvPmpIrisInstancePredicates.interp_gprs.
-      rewrite ?big_sepS_elements.
-      remember (elements RiscvPmpIrisInstancePredicates.reg_file) as l.
-      replace (elements RiscvPmpIrisInstancePredicates.reg_file) with l.
-      clear Heql.
-      iIntros "H".
-      iInduction l as [|]; simpl; try done.
+    (*   rewrite ?big_sepS_elements. *)
+    (*   remember (elements RiscvPmpIrisInstancePredicates.reg_file) as l. *)
+    (*   replace (elements RiscvPmpIrisInstancePredicates.reg_file) with l. *)
+    (*   clear Heql. *)
+    (*   iIntros "H". *)
+    (*   iInduction l as [|]; cbn; try done. *)
     (*   iDestruct "H" as "((%v & Hptsto) & H)". *)
     (*   iDestruct ("IHl" with "H") as "($ & $)". iClear "IHl". *)
     (*   unfold interp_ptsreg, RiscvPmpIrisInstancePredicates.interp_ptsreg. *)
@@ -355,15 +355,15 @@ Module RiscvPmpModel2.
     Lemma open_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.
     Proof.
-      intros ι; destruct_syminstance ι; simpl.
-      rewrite (gprs_equiv env.nil). simpl. iIntros. iFrame.
+      intros ι; destruct_syminstance ι; cbn.
+      rewrite (gprs_equiv env.nil). cbn. iIntros. iFrame.
     Qed.
 
     Lemma close_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_close_gprs.
     Proof.
-      intros ι; destruct_syminstance ι; simpl.
-      rewrite (gprs_equiv env.nil). simpl. iIntros. iFrame.
+      intros ι; destruct_syminstance ι; cbn.
+      rewrite (gprs_equiv env.nil). cbn. iIntros. iFrame.
     Qed.
 
     Lemma open_ptsto_instr_sound :
