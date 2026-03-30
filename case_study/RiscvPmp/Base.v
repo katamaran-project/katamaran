@@ -1044,12 +1044,6 @@ Module Export RiscvPmpBase <: Base.
     | pmpaddr1      : Reg ty_xlenbits
     .
 
-    Definition GPRS : list (Reg ty_xlenbits) :=
-      [ x1 ; x2 ; x3 ; x4 ; x5 ; x6 ; x7 ; x8 ; x9 ;
-        x10 ; x11 ; x12 ; x13 ; x14 ; x15 ; x16 ; x17 ; x18 ; x19 ;
-        x20 ; x21 ; x22 ; x23 ; x24 ; x25 ; x26 ; x27 ; x28 ; x29 ;
-        x30 ; x31 ].
-
     Import bv.notations.
     Definition reg_convert (idx : RegIdx) : option (Reg ty_xlenbits) :=
       match bv.to_bitstring idx with
@@ -1331,6 +1325,9 @@ Module Export RiscvPmpBase <: Base.
               inversion H
           end.
     Qed.
+
+    Definition GPRS : gset (Reg ty_xlenbits) :=
+      (list_to_set ∘ omap reg_convert) (bv.finite.enum 5).
 
   End RegDeclKit.
 
