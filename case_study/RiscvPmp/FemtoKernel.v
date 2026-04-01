@@ -829,7 +829,7 @@ Import Erasure.notations.
     }
     iIntros "%an (Hpc & [%v Hnextpc] & Hinstrs0 & Hpost0)".
     iDestruct "Hpost0" as "(_ & _ & Hmstatus & Hmie & Hmip & Hscratch & Hmtvec & Hmcause & Hmepc & Hpts & Hcurpriv & Hpmpentries & HaccU & Hpred)".
-    iDestruct "Hpred" as "((%vold & %vnew & %s & %s' & Hx5 & Hold & [Hpold _] & Hstate & Hpred ) & Hinv)".
+    iDestruct "Hpred" as "((%vold & %vnew & %s & %s' & Hx5 & Hold & [#Hpold _] & Hstate & Hpred ) & Hinv)".
     (* Tut: We destruct over the two cases even / odd number in t0 *)
     iDestruct "Hpred" as "[HpredL | HpredR]".
     - (* Tut: Case legal value i.e. we do not jump and therefore enter block1 *)
@@ -837,11 +837,11 @@ Import Erasure.notations.
       + iModIntro. iIntros "IH". iApply "Hind". iFrame "IH".
       + iFrame "Hnextpc Hpc Hmstatus Hmip Hmie Hscratch Hmtvec Hmcause Hmepc Hx5 Hpts Hcurpriv".
         iSplitR "Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
-        ++ iDestruct "Hinv" as "#Hinv". iDestruct "HpredL" as "([%s_prot _] & [Hprot _] & [%Han _])". cbn in *.
+        ++ iDestruct "Hinv" as "#Hinv". iDestruct "HpredL" as "([%s_prot _] & [%Hprot _] & [%Han _])". cbn in *.
            subst.
            iSplitL ""; auto. iSplitL ""; auto.
-           iFrame "Hpmpentries HaccU".
-           iSplitL "Hold Hstate Hprot"; auto. iExists vold. iExists s. iFrame "Hold". iSplit; auto. iSplit; auto. admit.
+           iFrame "Hpmpentries HaccU". iFrame "Hold Hpold Hstate Hinv".
+           iExists (bv.take 1 vnew). auto. 
         ++ subst. iFrame "Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
     - (* Tut: Case illegal value i.e. we jump and therefore enter block2 *)
       iApply (femtokernel_handler_safe_block2 with "[]").
@@ -853,9 +853,9 @@ Import Erasure.notations.
               iSplitL ""; auto. iSplitL ""; auto.
               iFrame "Hpmpentries HaccU".
               iSplitL "Hold Hstate"; auto.
-              iExists vold. iExists s. iFrame "Hold Hstate".
+              iExists vold. iExists s. iFrame "Hold Hstate". auto.
         ++ subst. iFrame "Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
-Admitted.
+Qed.
 
 
   (* TODO: this lemma feels very incremental wrt to the last one; merge? *)
