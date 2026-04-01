@@ -281,26 +281,62 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition is_even {n} : bv n -> bool :=
       match n with
       | 0%nat => fun _ => true
-      | (S n)%nat => fun v => bv.eqb (bv.land v bv.one) bv.one
+      | (S n)%nat => fun v => bv.eqb (bv.land v bv.one) bv.zero
       end.
 
-    (* Lemma is_even_correct: forall n (b : bv n), is_even b <-> N.even (bv.bin b). *)
-    (*   split; intros; destruct b; destruct bin; auto; *)
-    (*     try (destruct p; auto; destruct n; auto); *)
-    (*     try (destruct n; auto; destruct p; auto). *)
-    (* Qed. *)
+    Lemma is_even_correct: forall n (v : bv n), is_even v <-> N.even (bv.bin v).
+      split; intros; destruct v; destruct bin; auto;
+        try (destruct p; auto; destruct n; auto);
+        try (destruct n; auto; destruct p; auto).
+    Qed.
+
+
+    Lemma even_take1_prop: forall n (v : bv (S n)), is_even v <-> (bv.take 1 v) = bv.zero.
+    Proof.
+      intros.
+      destruct (bv.view v).
+      rewrite bv.take_cons.
+      unfold is_even.
+      change bv.one with (@bv.cons n true bv.zero) in *.
+      rewrite bv.land_cons. rewrite bv.land_zero_r. simpl.
+      destruct b; simpl; split; intro; auto. contradiction. discriminate H.
+    Qed.
+
+    Lemma even_take1: forall n (v : bv (S n)), is_even v = bv.eqb (bv.take 1 v) bv.zero.
+      intros n v.
+      destruct (bv.view v).
+      rewrite bv.take_cons.
+      unfold is_even.
+      change bv.one with (@bv.cons n true bv.zero) in *.
+      rewrite bv.land_cons. rewrite bv.land_zero_r. simpl.
+      destruct b; simpl; split; intro; auto.
+    Qed.
 
     (* This is the io-protocol state machine transition function. *)
     (* Note a condition on the event_addr is not (yet) required by the protocol and thus missing. *)
     Variant impl_mmio_state_prot: IOState -> Event -> IOState -> Prop :=
-    | IOW : forall b e, event_type e = IOWrite ->
-                              event_nbbytes e > 0 ->
-                              is_even (event_contents e) = b -> (* new *)
-                              impl_mmio_state_prot (negb b) (* old is not new *) e b (* new *)
+      | IOW : forall e b, event_type e = IOWrite ->
+                   event_nbbytes e > 0 ->
+                   b = (is_even (event_contents e)) ->
+                   impl_mmio_state_prot b e (negb b)
     .
 
     Definition Mmio_state_prot {width : nat} (w: bv (width * byte)) (s s' :  bv iostate_bits) : Prop :=
       forall addr, impl_mmio_state_prot (bv_from s)  {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := _ ;  event_contents := w |} (bv_from s').
+
+
+   Lemma impl_mmio_state_prot_same: forall s e, impl_mmio_state_prot s e s -> False.
+      Proof.
+        intros. inversion H. by apply no_fixpoint_negb in H5.
+   Qed.
+
+   Lemma Mmio_state_prot_same : forall (n : nat) (a : bv xlenbits) (s : bv iostate_bits) (v : bv (n * byte)), Mmio_state_prot v s s → False.
+   Proof.
+     intros. unfold Mmio_state_prot in *.
+     pose proof (H a) as H1.
+     inversion H1.
+     by apply impl_mmio_state_prot_same in H1.
+   Qed.
 
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with

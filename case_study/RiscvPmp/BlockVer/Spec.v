@@ -300,7 +300,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_result          := "result_checked_mem_write";
       sep_contract_postcondition   :=
         term_var "result_checked_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "write_mmio") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
+        asn.match_bool (term_var "write_mmio")
+          (asn_mmio_state_pred bytes (term_var "iostate_new"))
+          (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
     |}.
 
   Definition sep_contract_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : SepContractFun (@pmpCheck bytes H) :=
@@ -357,7 +359,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "write_mmio") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
+        asn.match_bool (term_var "write_mmio")
+          (asn_mmio_state_pred bytes (term_var "iostate_new"))
+          (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_var "m") ∗
         asn_pmp_entries (term_var "entries");
     |}.
@@ -404,7 +408,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "write_mmio") (asn_mmio_trace_pred bytes) (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
+        asn.match_bool (term_var "write_mmio")
+          ((asn_mmio_trace_pred bytes) ∗ asn_mmio_state_pred bytes (term_var "iostate_new"))
+          (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries");
     |}.
@@ -708,7 +714,8 @@ Module RiscvPmpSpecVerif.
   Proof. destruct H; now vm_compute. Qed.
 
   Lemma valid_pmp_mem_write {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_write bytes H).
-  Proof. destruct H; vm_compute; (constructor; simpl; intros; exists v3; exists v4; done).
+  Proof.
+    destruct H; vm_compute; constructor; simpl; cbn; intros; eauto.
   Qed.
 
   Import Bitvector.bv.notations.
@@ -721,8 +728,8 @@ Module RiscvPmpSpecVerif.
   Qed.
 
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
-(*   Proof. *)
-(*     destruct H; apply verification_condition_with_erasure_sound; vm_compute;
+  Proof.
+    destruct H; apply verification_condition_with_erasure_sound; vm_compute;
       constructor; cbn;
       repeat (intros; split; intros);
       repeat match goal with
@@ -743,8 +750,7 @@ Module RiscvPmpSpecVerif.
       simpl in *;
       try discriminate;
       try bv_solve_Ltac.solveBvManual.
-  Qed. *)
-Admitted.
+  Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
   Proof. now destruct H; vm_compute. Qed.
@@ -1031,12 +1037,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct Hold_ with (addr := paddr) as [Hold].
     inversion Hold.
     subst; split; simpl; auto.
-    unfold iostate_bits in *.
-    replace (bv.eqb (bv.not iostate_old) bv.zero)
-      with (negb (bv.eqb iostate_old bv.zero)) by
-      now destruct (bv.view iostate_old), (bv.view xs), b.
-    constructor; cbn; try done; now destruct width.
-  Qed.
+ Qed.
 
   Lemma open_pmp_entries_sound `{sailGS Σ} {rG : iostateG IOState Σ} :
     ValidLemma RiscvPmpSpecification.lemma_open_pmp_entries.
