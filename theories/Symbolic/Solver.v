@@ -327,7 +327,7 @@ Module Type GenericSolverOn
 
       Definition simplify_eq_binop_default {σ1 σ2 σ} (op : BinOp σ1 σ2 σ)
         (t1 : Term Σ σ1) (t2 : Term Σ σ2) (t : Term Σ σ) : DList Σ :=
-        dlist_eq (term_binop op t1 t2) t.
+        simplify_eqb (term_binop op t1 t2) t.
 
       Definition simplify_eq_binop_minus (tl1 : Term Σ ty.int)
         (tl2 : Term Σ ty.int) (tr : Term Σ ty.int) : DList Σ :=
@@ -339,7 +339,7 @@ Module Type GenericSolverOn
 
       Definition simplify_eq_unop_default {σ1 σ2} (op : UnOp σ1 σ2)
         (t1 : Term Σ σ1) (t : Term Σ σ2) : DList Σ :=
-        dlist_eq (term_unop op t1) t.
+        simplify_eqb (term_unop op t1) t.
 
       Section WithSimplifyEq.
 
