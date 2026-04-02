@@ -599,6 +599,20 @@ Module bv.
           intros a. unfold eq_rect_r. now rewrite eq_sym_map_distr, rew_map.
     Qed.
 
+    Lemma cons_neq [n] (x y : bool) (xs ys : bv n) :
+      cons x xs <> cons y ys <-> (x <> y \/ xs <> ys).
+    Proof.
+      pose proof (cons_inj x y xs ys).
+      destruct (eq_dec x y); intuition (try congruence).
+    Qed.
+
+    Lemma app_neq [m n] (x1 y1 : bv m) (x2 y2 : bv n) :
+      app x1 x2 <> app y1 y2 <-> (x1 <> y1 \/ x2 <> y2).
+    Proof.
+      pose proof (app_inj x1 y1 x2 y2).
+      destruct (eq_dec x1 y1); intuition (try congruence).
+    Qed.
+
   End ListLike.
 
   Section Constants.
