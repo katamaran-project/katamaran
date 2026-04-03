@@ -1093,7 +1093,7 @@ Qed.
     - rewrite bv.bin_of_N_small; last apply minAddr_rep. lia.
   Qed.
 
-  Lemma femtokernel_splitMemory `{sailGS Σ, iostate_preG IOState Σ} {μ : Memory} {s} :
+  Lemma femtokernel_splitMemory `{sailGS Σ, iostate_preG IOState Σ} {μ : Memory} {s} {v} :
     mem_has_instrs μ (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
     mem_has_instrs μ (bv.of_N handler_addr) (filter_AnnotInstr_AST femtokernel_handler) ->
     mmio_pred bytes_per_word (memory_trace μ) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
@@ -1183,7 +1183,7 @@ Qed.
     read_register γ pmpaddr1 = bv.zero ->
     read_register γ pc = (bv.of_N init_addr) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    mem_has_word μ (bv.of_N data_addr) (bv.of_N 0) ->
+    mem_has_word μ (bv.of_N data_addr) (if σ then bv.one else bv.zero) ->
     (∃ σ', mmio_trace_state_pred (memory_trace μ') σ'). (* The initial demands hold over the final state *)
   Proof.
     intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γmstatus γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps Hmem.
