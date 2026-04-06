@@ -77,13 +77,13 @@ Module Type IrisAdeqParameters2
   Parameter memΣ_GpreS2 : forall {Σ}, subG memΣ2 Σ -> memGpreS2 Σ.
   Parameter mem_res2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
 
-    (* Definition mem_state_interp `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
+    (* Definition mem_inv `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
     (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
     (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
     (*   )%I. *)
 
   Parameter mem_init2 : forall `{mGS : memGpreS2 Σ} (μ1 μ2 : Memory),
-                                         ⊢ |==> ∃ mG : memGS2 Σ, (mem_state_interp2 (mG := mG) μ1 μ2 ∗ mem_res2 (mG := mG) μ1 μ2)%I.
+                                         ⊢ |==> ∃ mG : memGS2 Σ, (mem_inv2 (mG := mG) μ1 μ2 ∗ mem_res2 (mG := mG) μ1 μ2)%I.
 
 End IrisAdeqParameters2.
 
@@ -260,8 +260,8 @@ Module Type IrisAdequacy2
     (* semWP2 already gives the above hypo, don't need it here (wrong res) *)
     (forall `{sailGS2 Σ},
         mem_res2 μ1 μ2 ∗ own_regstore2 γ1 γ2
-          ⊢ semWP2 δ1 δ2 s1 s2 Q ∗ (mem_state_interp(*2*) (mG := memGS2_memGS_left)  μ1' (*μ2'*) ={⊤,∅}=∗ ⌜φ⌝))%I ->
-    (* Just mem_state_interp should be enough, for the RHS, it is part of semWP2, so
+          ⊢ semWP2 δ1 δ2 s1 s2 Q ∗ (mem_inv(*2*) (mG := memGS2_memGS_left)  μ1' (*μ2'*) ={⊤,∅}=∗ ⌜φ⌝))%I ->
+    (* Just mem_inv should be enough, for the RHS, it is part of semWP2, so
        this should be okay. *)
     φ.
   Proof.
@@ -282,9 +282,9 @@ Module Type IrisAdequacy2
     set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
     set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG).
     iModIntro.
-    iExists (λ σ _ _ _, regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_state_interp _ (@memGS2_memGS_left _ memG) (σ.2))%I.
+    iExists (λ σ _ _ _, regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_inv _ (@memGS2_memGS_left _ memG) (σ.2))%I.
     iExists [_]%list, _, _. cbn.
-    rewrite mem_state_interp2_mem_state_interp. iDestruct "Hmem" as "($ & Hmem)".
+    rewrite mem_inv2_mem_inv. iDestruct "Hmem" as "($ & Hmem)".
     iSplitL "H1γ1".
     { now iApply (@own_RegStore_to_regs_inv _ regsG_left γ1). }
     iPoseProof (H _ gs2 with "[$Rmem H2γ1 H2γ2]") as "(H & HΦ)".
@@ -337,9 +337,9 @@ Module Type IrisAdequacy2
     set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
     set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG).
     iModIntro.
-    iExists (fun σ _ => regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_state_interp _ (@memGS2_memGS_left _ memG) (σ.2))%I.
+    iExists (fun σ _ => regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_inv _ (@memGS2_memGS_left _ memG) (σ.2))%I.
     iExists _.
-    rewrite mem_state_interp2_mem_state_interp. cbn. iDestruct "Hmem" as "($ & Hmem)".
+    rewrite mem_inv2_mem_inv. cbn. iDestruct "Hmem" as "($ & Hmem)".
     iSplitL "H1γ1".
     { now iApply (@own_RegStore_to_regs_inv _ regsG_left γ1). }
     iPoseProof (wp2 _ gs2 with "[$Rmem H2γ1 H2γ2]") as "H".
@@ -388,9 +388,9 @@ Module Type IrisAdequacy2
     set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
     set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG).
     iModIntro.
-    iExists (fun σ _ => regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_state_interp _ (@memGS2_memGS_left _ memG) (σ.2))%I.
+    iExists (fun σ _ => regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_inv _ (@memGS2_memGS_left _ memG) (σ.2))%I.
     iExists _.
-    rewrite mem_state_interp2_mem_state_interp. cbn. iDestruct "Hmem" as "($ & Hmem)".
+    rewrite mem_inv2_mem_inv. cbn. iDestruct "Hmem" as "($ & Hmem)".
     iSplitL "H1γ1".
     { now iApply (@own_RegStore_to_regs_inv _ regsG_left γ1). }
     iPoseProof (trips _ gs2 with "[$Rmem H2γ1 H2γ2]") as "H".
@@ -429,7 +429,7 @@ Module Type IrisAdequacy2
   (*   ⟨ γ21, μ21, δ21, s21 ⟩ --->* ⟨ γ22, μ22, δ22, s22 ⟩ -> *)
   (*   (forall `{sailGS2 Σ}, *)
   (*       mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ *)
-  (*                semWp2 δ11 δ21 s11 s21 Q ∗ (mem_state_interp2 μ11 μ21 ={⊤,∅}=∗ ⌜φ⌝)) -> *)
+  (*                semWp2 δ11 δ21 s11 s21 Q ∗ (mem_inv2 μ11 μ21 ={⊤,∅}=∗ ⌜φ⌝)) -> *)
   (*   φ. *)
   (*   Admitted. *)
 End IrisAdequacy2.

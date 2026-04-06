@@ -126,7 +126,7 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
 
     Definition memGS : gFunctors -> Set := mcMemGS.
 
-    Definition mem_state_interp `{mG : mcMemGS Σ} (μ : Memory) : iProp Σ :=
+    Definition mem_inv `{mG : mcMemGS Σ} (μ : Memory) : iProp Σ :=
         (∃ memmap, gen_heap_interp (hG := mc_ghG (mcMemGS := mG)) memmap ∗
           ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
@@ -169,7 +169,7 @@ Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBa
       ([∗ map] l↦v ∈ initMemMap μ, pointsto l (DfracOwn 1) v) %I.
 
   Lemma mem_init `{gHP : memGpreS Σ} (μ : Memory) :
-                                              ⊢ |==> ∃ mG : memGS Σ, (mem_state_interp (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
+                                              ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
   Proof.
     iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
     pose (memmap := initMemMap μ).
@@ -691,10 +691,10 @@ Module MinCapsIrisInstanceWithContracts.
           ▷ (∃ w, gen_heap.pointsto a (dfrac.DfracOwn 1) w ∗ interp w).
     Proof. iIntros (a w) "? ?"; iModIntro; iExists _; iAccu. Qed.
 
-    Lemma mem_state_interp_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
+    Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : MemVal), μ a = v) memmap⌝ -∗
         gen_heap.gen_heap_interp memmap -∗
-        mem_state_interp μ.
+        mem_inv μ.
     Proof. iIntros (μ memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
 
     Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
@@ -715,11 +715,11 @@ Module MinCapsIrisInstanceWithContracts.
         apply Hmap; assumption.
     Qed.
 
-    Lemma mem_state_interp_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
+    Lemma mem_inv_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
                              (paddr : Addr) (data : MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : MemVal), μ a = v) memmap⌝ -∗
           gen_heap.gen_heap_interp (<[paddr := data]> memmap) -∗
-          mem_state_interp (fun_wM μ paddr data).
+          mem_inv (fun_wM μ paddr data).
     Proof.
       iIntros (μ memmap paddr data) "%Hmap Hmem".
       iExists (<[paddr := data]> memmap); iFrame.
@@ -753,7 +753,7 @@ Module MinCapsIrisInstanceWithContracts.
       iModIntro.
       iFrame "Hregs".
       iSplitL "Hmem'".
-      iApply (mem_state_interp_not_modified $! H with "Hmem'").
+      iApply (mem_inv_not_modified $! H with "Hmem'").
       iApply wp_value; cbn.
       iSplitL; trivial.
       apply map_Forall_lookup_1 with (i := a) (x := v) in H; auto.
@@ -787,7 +787,7 @@ Module MinCapsIrisInstanceWithContracts.
       iModIntro.
       iFrame "Hregs".
       iSplitL.
-      iApply (mem_state_interp_update $! H with "Hmem'").
+      iApply (mem_inv_update $! H with "Hmem'").
       now iApply wp_value.
     Qed.
 

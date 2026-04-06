@@ -65,7 +65,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
 
     Definition memGS : gFunctors -> Set := mcMemGS.
 
-    Definition mem_state_interp : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
+    Definition mem_inv: forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
         (∃ memmap, gen_heap_interp memmap
            ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝

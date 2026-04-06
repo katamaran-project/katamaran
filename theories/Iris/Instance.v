@@ -781,7 +781,7 @@ Module Type IrisAdeqParameters
   Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
   Parameter mem_res : forall `{mG : memGS Σ}, Memory -> iProp Σ.
   Parameter mem_init : forall `{mGS : memGpreS Σ} (μ : Memory),
-                                         ⊢ |==> ∃ mG : memGS Σ, (mem_state_interp (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
+                                         ⊢ |==> ∃ mG : memGS Σ, (mem_inv (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
 
 End IrisAdeqParameters.
 
@@ -888,7 +888,7 @@ Module Type IrisAdequacy
         pose proof (memΣ_GpreS (Σ := sailΣ) _) as mGS.
         iMod (mem_init (mGS := mGS) μ) as (memG) "[Hmem Rmem]".
         iModIntro.
-        iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_state_interp (σ.2))%I.
+        iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
         iExists _.
         iSplitR "Hs2 Rmem".
         * iFrame "Hmem".
@@ -906,7 +906,7 @@ Module Type IrisAdequacy
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     (forall `{sailGS Σ', memGpreS Σ'},
         mem_res μ ∗ own_regstore γ ⊢ |={⊤}=> semWP δ s Q
-          ∗ (mem_state_interp μ' ={⊤,∅}=∗ ⌜φ⌝)
+          ∗ (mem_inv μ' ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.
     (* intros steps trips. *)
@@ -926,7 +926,7 @@ Module Type IrisAdequacy
       eapply finite.NoDup_enum.
     }
     iModIntro.
-    iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_state_interp (σ.2))%I.
+    iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
     iExists [ λ v, Q _ sailG (valconf_val v) (valconf_store v)]%list.
     iExists _.
     iExists _.

@@ -104,10 +104,10 @@ Module RiscvPmpModel2.
           cbn
       end.
 
-    Lemma mem_state_interp_not_modified : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal),
+    Lemma mem_inv_not_modified : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Word), (γ, μ).2 a = v) memmap⌝ -∗
         gen_heap.gen_heap_interp memmap -∗
-        mem_state_interp sailGS_memGS μ.
+        mem_inv sailGS_memGS μ.
     Proof. iIntros (γ μ memmap) "Hmap Hmem"; iExists memmap; now iFrame. Qed.
 
     Lemma map_Forall_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal)
@@ -128,11 +128,11 @@ Module RiscvPmpModel2.
         apply Hmap; assumption.
     Qed.
 
-    Lemma mem_state_interp_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal)
+    Lemma mem_inv_update : ∀ (γ : RegStore) (μ : Memory) (memmap : gmap Addr MemVal)
                              (paddr : Addr) (data : MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Word), (γ, μ).2 a = v) memmap⌝ -∗
           gen_heap.gen_heap_interp (<[paddr := data]> memmap) -∗
-          mem_state_interp sailGS_memGS (fun_write_ram μ paddr data).
+          mem_inv sailGS_memGS (fun_write_ram μ paddr data).
     Proof.
       iIntros (γ μ memmap paddr data) "%Hmap Hmem".
       iExists (<[paddr := data]> memmap); iFrame.
@@ -157,7 +157,7 @@ Module RiscvPmpModel2.
       iMod "Hclose" as "_".
       iModIntro.
       iPoseProof (gen_heap.gen_heap_valid with "Hmem H") as "%".
-      iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem") as "?".
+      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "?".
       iFrame.
       iApply wp_value; cbn.
       iSplitL; [|auto].
@@ -184,7 +184,7 @@ Module RiscvPmpModel2.
       iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem H") as "[Hmem H]".
       iMod "Hclose" as "_".
       iModIntro.
-      iPoseProof (mem_state_interp_update $! Hmap with "Hmem") as "?".
+      iPoseProof (mem_inv_update $! Hmap with "Hmem") as "?".
       iFrame.
       iApply wp_value; now iFrame.
     Qed.
@@ -207,7 +207,7 @@ Module RiscvPmpModel2.
       fold_semWP.
       iMod "Hclose" as "_".
       iModIntro.
-      iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem") as "?".
+      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem") as "?".
       iFrame.
       iSplitL; trivial.
       destruct (pure_decode bv0) eqn:Ed.

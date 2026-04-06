@@ -96,9 +96,9 @@ Module Type IrisParameters2
   Existing Class memGS2.
   Parameter memGS2_memGS_left : forall `{memGS2 Σ}, memGS Σ.
   Parameter memGS2_memGS_right : forall `{memGS2 Σ}, memGS Σ.
-  Parameter mem_state_interp2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
-  Parameter mem_state_interp2_mem_state_interp : forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
-      mem_state_interp2 μ1 μ2 ⊣⊢ @mem_state_interp _ memGS2_memGS_left μ1 ∗ @mem_state_interp _ memGS2_memGS_right μ2.
+  Parameter mem_inv2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
+  Parameter mem_inv2_mem_inv : forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
+      mem_inv2 μ1 μ2 ⊣⊢ @mem_inv _ memGS2_memGS_left μ1 ∗ @mem_inv _ memGS2_memGS_right μ2.
 End IrisParameters2.
 
 Module Type IrisResources2
@@ -126,7 +126,7 @@ Module Type IrisResources2
   #[export] Existing Instance sailGS2_memGS.
 
   Definition regs_inv2 `{sailRegGS2 Σ} γ1 γ2 := (regs_inv (srGS := sailRegGS2_sailRegGS_left) γ1 ∗ regs_inv (srGS := sailRegGS2_sailRegGS_right) γ2)%I.
-  Definition mem_state_interp2_sail `{sailGS2 Σ} μ1 μ2 := @mem_state_interp2 _ (sailGS2_memGS) μ1 μ2.
+  Definition mem_inv2_sail `{sailGS2 Σ} μ1 μ2 := @mem_inv2 _ (sailGS2_memGS) μ1 μ2.
 
   Definition reg_pointsTo2 `{sailRegGS2 Σ} {τ} : 𝑹𝑬𝑮 τ → Val τ → Val τ → iProp Σ :=
     fun reg v1 v2 =>
@@ -147,7 +147,7 @@ Module Type IrisResources2
   #[export] Program Instance sailGS2_irisGS2 `{sailGS2 Σ} {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
     {|
       iris_invGS2 := sailGS2_invGS;
-      state_interp2 σ1 σ2 κ := (regs_inv2 σ1.1 σ2.1 ∗ mem_state_interp2_sail σ1.2 σ2.2)%I;
+      state_interp2 σ1 σ2 κ := (regs_inv2 σ1.1 σ2.1 ∗ mem_inv2_sail σ1.2 σ2.2)%I;
       num_laters_per_step2 := fun _ => 0
     |}.
 

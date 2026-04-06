@@ -830,7 +830,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       - (* old case *)
         iModIntro.
         iPoseProof (RiscvPmpModel2.fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-        iPoseProof (RiscvPmpModel2.mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+        iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
         iFrame "Hregs Hmem". iApply semTWP_val. now iFrame "H".
   Qed.
 
@@ -870,7 +870,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     iMod "Hclose" as "_". rewrite semTWP_val.
     destruct bytes; first contradiction.
-    unfold mem_state_interp, fun_write_mmio; cbn.
+    unfold mem_inv, fun_write_mmio; cbn.
     now iFrame "Hregs Hmem Htr".
   Qed.
 
@@ -884,7 +884,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros (? ? ? Hf). iMod "Hclose" as "_".
     rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     destruct (pure_decode _); inversion Hdecode.
-    iPoseProof (RiscvPmpModel2.mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+    iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
     rewrite semTWP_val. now iFrame "Hregs Hmem".
   Qed.
 

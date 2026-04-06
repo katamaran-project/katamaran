@@ -24,17 +24,18 @@ case_study/RiscvPmp/trace.v
 case_study/RiscvPmp/IrisModel.v
 case_study/RiscvPmp/IrisInstance.v
 case_study/RiscvPmp/Model.v
-# case_study/RiscvPmp/IrisModelBinary.v
-# case_study/RiscvPmp/IrisInstanceBinary.v
-# case_study/RiscvPmp/ModelBinary.v
+case_study/RiscvPmp/IrisModelBinary.v
+case_study/RiscvPmp/IrisInstanceBinary.v
+case_study/RiscvPmp/ModelBinary.v
 case_study/RiscvPmp/LoopVerification.v
-# case_study/RiscvPmp/LoopVerificationBinary.v
+case_study/RiscvPmp/LoopVerificationBinary.v
 case_study/RiscvPmp/BlockVer/Examples.v
 case_study/RiscvPmp/BlockVer/Spec.v
+case_study/RiscvPmp/GVT.v
 case_study/RiscvPmp/BlockVer/PartialVerifier.v
 case_study/RiscvPmp/BlockVer/TotalVerifier.v
 case_study/RiscvPmp/BlockVer/BinaryVerifier.v
-# case_study/RiscvPmp/BlockVer/RunningExample.v
+case_study/RiscvPmp/BlockVer/RunningExample.v
 case_study/RiscvPmp/FemtoKernel.v
 case_study/Assumptions.v
 -R theories Katamaran

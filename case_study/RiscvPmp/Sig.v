@@ -78,9 +78,11 @@ Inductive Predicate : Set :=
 | ptsto
 | ptsto_one (k : Exec)
 | ptstomem_readonly (bytes : nat)
-| mmio_state (bytes : nat)
-| mmio_trace (bytes : nat) (* `bytes` needed because size of trace events needs to match size of MMIO writes *)
+| inv_mmio (bytes : nat) (* `bytes` needed because size of trace events needs to match size of MMIO writes *)
 | mmio_checked_write (bytes : nat)
+| mmio_state (bytes : nat)
+| mmio_state_trace (bytes : nat)
+| mmio_state_checked_write (bytes : nat)
 | encodes_instr
 | ptstomem (bytes : nat)
 | ptstoinstr
@@ -366,9 +368,11 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptsto                         => [ty_xlenbits; ty_byte]
       | ptsto_one _                   => [ty_xlenbits; ty_byte]
       | ptstomem_readonly width       => [ty_xlenbits; ty.bvec (width * byte)]
+      | inv_mmio bytes                => ctx.nil
+      | mmio_checked_write width      => [ty_xlenbits; ty.bvec (width * byte)]
       | mmio_state width              => [ty.bvec iostate_bits]
-      | mmio_trace bytes              => ctx.nil
-      | mmio_checked_write width      => [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate]
+      | mmio_state_trace bytes              => ctx.nil
+      | mmio_state_checked_write width      => [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate]
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
@@ -384,9 +388,11 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | ptsto                      => false
         | ptsto_one _                => false
         | ptstomem_readonly width    => true
-        | mmio_state _               => false
-        | mmio_trace bytes           => true
+        | inv_mmio bytes             => true
         | mmio_checked_write _       => false
+        | mmio_state _               => false
+        | mmio_state_trace bytes     => true
+        | mmio_state_checked_write _ => false
         | encodes_instr              => true
         | ptstomem _                 => false
         | ptstoinstr                 => false
@@ -406,9 +412,11 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptsto                     => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
       | ptsto_one _               => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
       | ptstomem_readonly width   => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
+      | inv_mmio bytes            => Some (MkPrecise ε ε eq_refl)
+      | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte)] eq_refl) (* There will only be one of these simultaneously; always precise! *)
       | mmio_state width          => Some (MkPrecise ε [ty_iostate] eq_refl)
-      | mmio_trace bytes          => Some (MkPrecise ε ε eq_refl)
-      | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate] eq_refl) (* There will only be one of these simultaneously; always precise! *)
+      | mmio_state_trace bytes    => Some (MkPrecise ε ε eq_refl)
+      | mmio_state_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate] eq_refl)
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)

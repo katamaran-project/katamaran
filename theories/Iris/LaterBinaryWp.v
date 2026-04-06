@@ -107,13 +107,13 @@ Module Type IrisBinaryWPParameters
   Parameter reg_inv_r      : forall `{sG : sailRegGS Σ}, RegStore -> iProp Σ.
   Parameter reg_inv2_split : forall `{sG : sailRegGS2 Σ} (γl γr : RegStore),
       reg_inv2 γl γr ⊣⊢ @reg_inv_l _ sailRegGS2_sailRegGS_left γl ∗ @reg_inv_r _ sailRegGS2_sailRegGS_right γr. *)
-  Parameter mem_state_interp2   : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
+  Parameter mem_inv2   : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
   (* Parameter mem_inv_l  : forall `{mG : memGS Σ}, Memory -> iProp Σ.
   Parameter mem_inv_r  : forall `{mG : memGS Σ}, Memory -> iProp Σ. *)
   Parameter mc_memGS_left : forall `{mG : memGS2 Σ}, memGS Σ.
   Parameter mc_memGS_right : forall `{mG : memGS2 Σ}, memGS Σ.
-  Parameter mem_state_interp2_split : forall `{sG : sailGS2 Σ} (μl μr : Memory),
-      mem_state_interp2 μl μr ⊣⊢ @mem_state_interp _ mc_memGS_left μl ∗ @mem_state_interp _ mc_memGS_right μr.
+  Parameter mem_inv2_split : forall `{sG : sailGS2 Σ} (μl μr : Memory),
+      mem_inv2 μl μr ⊣⊢ @mem_inv _ mc_memGS_left μl ∗ @mem_inv _ mc_memGS_right μr.
 End IrisBinaryWPParameters.
 
 (* IrisBinaryWPAsymmetric allows asymmetry between the executions. The left
@@ -130,11 +130,11 @@ Module IrisBinaryWPAsymmetric (B : Base) (SIG : Signature B) (PROG : Program B)
       reg_inv2 _ γl γr ⊣⊢ @regs_inv _ sailRegGS2_sailRegGS_left γl ∗ @regs_inv _ sailRegGS2_sailRegGS_right γr.
   Proof. by rewrite /reg_inv2. Qed.
   
-  Definition mem_state_interp2   := @mem_state_interp2.
+  Definition mem_inv2   := @mem_inv2.
   Parameter mc_memGS_left : forall `{mG : memGS2 Σ}, memGS Σ.
   Parameter mc_memGS_right : forall `{mG : memGS2 Σ}, memGS Σ.
-  Parameter mem_state_interp2_split : forall `{sG : sailGS2 Σ} (μl μr : Memory),
-      @mem_state_interp2 _ _ μl μr ⊣⊢ @mem_state_interp _ mc_memGS_left μl ∗ @mem_state_interp _ mc_memGS_right μr.
+  Parameter mem_inv2_split : forall `{sG : sailGS2 Σ} (μl μr : Memory),
+      @mem_inv2 _ _ μl μr ⊣⊢ @mem_inv _ mc_memGS_left μl ∗ @mem_inv _ mc_memGS_right μr.
 End IrisBinaryWPAsymmetric.
 
 Module IrisBinaryWP
@@ -228,11 +228,11 @@ Module IrisBinaryWP
       match stm_to_val s with
       | Some v => POST v δ γ μ
       | _      =>
-          @regs_inv _ sG γ ∗ @mem_state_interp _ mG μ -∗
+          @regs_inv _ sG γ ∗ @mem_inv _ mG μ -∗
                (∀ (s' : Stm Γ τ) (δ' : CStore Γ)
                   (γ' : RegStore) (μ' : Memory),
                    ⌜⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩⌝ -∗ (* ={∅}▷=∗ *)
-                    ▷ ((@regs_inv _ sG γ' ∗ @mem_state_interp _ mG μ') ∗ wp δ' s' γ' μ' POST))
+                    ▷ ((@regs_inv _ sG γ' ∗ @mem_inv _ mG μ') ∗ wp δ' s' γ' μ' POST))
       end)%I.
   Global Arguments semWp_fix {_}%_ctx_scope {_ _ _} wp /.
 
@@ -461,8 +461,8 @@ Module IrisBinaryWPAsymmetricLaws
   (* TODO: bit annoying with the mem, regstore, but required for one direction... Seems odd, solve it properly. *)
   Lemma semWp2_val {Γ1 Γ2 τ} (v1 : Val τ) (v2 : Val τ) (Q : Post2 Γ1 Γ2 τ) :
     forall δ1 δ2 (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
-      (* (reg_inv2 _ γ1 γ2 ∗ mem_state_interp2 _ μ1 μ2) ∗ *) semWp2 δ1 δ2 (stm_val τ v1) (stm_val τ v2) Q
-      ⊣⊢ (* (reg_inv2 _ γ1 γ2 ∗ mem_state_interp2 _ μ1 μ2) ∗ *) Q v1 δ1 v2 δ2.
+      (* (reg_inv2 _ γ1 γ2 ∗ mem_inv2 _ μ1 μ2) ∗ *) semWp2 δ1 δ2 (stm_val τ v1) (stm_val τ v2) Q
+      ⊣⊢ (* (reg_inv2 _ γ1 γ2 ∗ mem_inv2 _ μ1 μ2) ∗ *) Q v1 δ1 v2 δ2.
   Proof.
     iIntros (δ1 δ2 γ1 γ2 μ1 μ2).
     rewrite /semWp2.
@@ -583,9 +583,9 @@ Module IrisBinaryWPAsymmetricLaws
   Lemma semWp_step {Γ τ sR mG} {s : Stm Γ τ} (δ : CStore Γ) (γ : RegStore) (μ : Memory) (POST : Post Γ τ) :
     ~ Final s ->
     (∀ γ μ γ' μ' δ' s',
-        (regs_inv γ ∗ @mem_state_interp _ mG μ) -∗
+        (regs_inv γ ∗ @mem_inv _ mG μ) -∗
         ⌜⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩⌝ -∗
-         ▷ ((regs_inv γ' ∗ @mem_state_interp _ mG μ') ∗ @semWp _ _ _ sR mG δ' s' γ' μ' POST)) ⊢
+         ▷ ((regs_inv γ' ∗ @mem_inv _ mG μ') ∗ @semWp _ _ _ sR mG δ' s' γ' μ' POST)) ⊢
     @semWp Σ _ _ sR mG δ s γ μ POST.
   Proof.
     iIntros (Hf).
@@ -623,8 +623,8 @@ Module IrisBinaryWPAsymmetricLaws
       ⌜⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ1', μ1', δ1', s1' ⟩⌝ -∗
       ⌜⟨ γ2, μ2, δ2, s2 ⟩ ---> ⟨ γ2', μ2', δ2', s2' ⟩⌝ -∗ 
        ∃ POST1 POST2,
-       (@regs_inv _ sG_left γ1 ∗ @mem_state_interp _ mG_left μ1 -∗ ▷ ((@regs_inv _ sG_left γ1' ∗ @mem_state_interp _ mG_left μ1') ∗ @semWp _ _ _ sG_left mG_left δ1' s1' γ1' μ1' POST1))
-       ∗ (@regs_inv _ sG_right γ2 ∗ @mem_state_interp _ mG_right μ2 -∗ ▷ ((@regs_inv _ sG_right γ2' ∗ @mem_state_interp _ mG_right μ2') ∗ @semWp _ _ _ sG_right mG_right δ2' s2' γ2' μ2' POST2))
+       (@regs_inv _ sG_left γ1 ∗ @mem_inv _ mG_left μ1 -∗ ▷ ((@regs_inv _ sG_left γ1' ∗ @mem_inv _ mG_left μ1') ∗ @semWp _ _ _ sG_left mG_left δ1' s1' γ1' μ1' POST1))
+       ∗ (@regs_inv _ sG_right γ2 ∗ @mem_inv _ mG_right μ2 -∗ ▷ ((@regs_inv _ sG_right γ2' ∗ @mem_inv _ mG_right μ2') ∗ @semWp _ _ _ sG_right mG_right δ2' s2' γ2' μ2' POST2))
        ∗ ▷ max_steps δ1' δ2' s1' s2' γ1' γ2' μ1' μ2' (∀ v1 δ1 γ1 μ1 v2 δ2 γ2 μ2, POST1 v1 δ1 γ1 μ1 ∗ POST2 v2 δ2 γ2 μ2 -∗ POST v1 δ1 v2 δ2)) -∗
       semWp2 δ1 δ2 s1 s2 POST.
   Proof.
@@ -809,14 +809,14 @@ Module IrisBinaryWPAsymmetricLaws
 
   Lemma semWp2_foreign {Γ Δ τ} {f1 f2 : 𝑭𝑿 Δ τ} {es1 es2 : NamedEnv (Exp Γ) Δ} {Q δ1 δ2} :
     ⊢ (∀ γ1 γ2 μ1 μ2,
-          (regs_inv2 γ1 γ2 ∗ mem_state_interp2 _ μ1 μ2)
+          (regs_inv2 γ1 γ2 ∗ mem_inv2 _ μ1 μ2)
           ={⊤,∅}=∗
       (∀ res1 γ1' μ1' res2 γ2' μ2',
         ⌜ ForeignCall f1 (evals es1 δ1) res1 γ1 γ1' μ1 μ1' ⌝
         ∗ ⌜ ForeignCall f2 (evals es2 δ2) res2 γ2 γ2' μ2 μ2' ⌝
         ={∅}▷=∗
          |={∅,⊤}=>
-         (regs_inv2 γ1' γ2' ∗ mem_state_interp2 _ μ1' μ2') ∗
+         (regs_inv2 γ1' γ2' ∗ mem_inv2 _ μ1' μ2') ∗
                     semWp2 δ1 δ2 (match res1 with inr v => stm_val _ v
                                              | inl s => stm_fail _ s
                                   end)

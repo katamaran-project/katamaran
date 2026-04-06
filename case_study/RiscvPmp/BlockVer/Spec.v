@@ -115,8 +115,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
   Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
   Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
-  Notation asn_mmio_pred bytes := (asn.chunk (chunk_user (mmio_trace bytes) [env])).
-  Notation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w; s; s'])).
+  Notation asn_mmio_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
+  Notation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_write bytes) [a; w; s; s'])).
   Notation asn_mmio_state_prot bytes w s s' :=  (asn.formula (formula_user (mmio_state_prot bytes) [w; s; s'])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
@@ -222,8 +222,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Local Notation asn_bool t := (asn.formula (formula_bool t)).
   Local Notation asn_in_mmio n l := (asn.formula (formula_user (in_mmio n) [l])).
   Local Notation asn_mmio_state_pred bytes s := (asn.chunk (chunk_user (mmio_state bytes) [s])).
-  Local Notation asn_mmio_trace_pred bytes := (asn.chunk (chunk_user (mmio_trace bytes) [env])).
-  Local Notation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w; s; s'])).
+  Local Notation asn_mmio_trace_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
+  Local Notation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_write bytes) [a; w; s; s'])).
   Notation asn_mmio_state_prot bytes w s s' :=  (asn.formula (formula_user (mmio_state_prot bytes) [w; s; s'])).
 
   Import bv.notations.
@@ -871,7 +871,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       - (* old case *)
         iModIntro.
         iPoseProof (RiscvPmpModel2.fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-        iPoseProof (RiscvPmpModel2.mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+        iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
         iFrame "Hregs Hmem". iApply semTWP_val. now iFrame "H".
   Qed.
 
@@ -916,7 +916,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     iMod "Hclose" as "_". rewrite semTWP_val.
     destruct bytes; first contradiction.
-    unfold mem_state_interp, fun_write_mmio; cbn.
+    unfold mem_inv, fun_write_mmio; cbn.
     iFrame "Hregs Hmem Htra Hstf".
     repeat iSplitL; auto.
   Qed.
@@ -931,7 +931,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros (? ? ? Hf). iMod "Hclose" as "_".
     rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     destruct (pure_decode _); inversion Hdecode.
-    iPoseProof (RiscvPmpModel2.mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+    iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
     rewrite semTWP_val. now iFrame "Hregs Hmem".
   Qed.
 
@@ -968,7 +968,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       auto.
   Qed.
 
-  Lemma externalWorldUpdates_sound `{sailGS Σ} :
+  Lemma externalWorldUpdates_sound `{sailGS Σ} {rG : iostateG IOState Σ} :
     TValidContractForeign RiscvPmpSpecification.sep_contract_externalWorldUpdates externalWorldUpdates.
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
@@ -986,7 +986,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iModIntro; now iSplitL; first now iExists _.
   Qed.
 
-  Lemma TforeignSemBlockVerif `{sailGS Σ} : TForeignSem.
+  Lemma TforeignSemBlockVerif `{sailGS Σ} {rG : iostateG IOState Σ} : TForeignSem.
     intros Δ τ f; destruct f; cbn;
       eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound.
   Qed.
@@ -1034,9 +1034,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iFrame. unfold iostate_bits in *.
     unfold interp_mmio_checked_write. unfold Mmio_state_prot. cbn -[is_even negb] in *.
     iDestruct "Hcond" as "(%Hold_ & _)". iPureIntro.
-    destruct Hold_ with (addr := paddr) as [Hold].
-    inversion Hold.
-    subst; split; simpl; auto.
+    split; simpl; auto.
  Qed.
 
   Lemma open_pmp_entries_sound `{sailGS Σ} {rG : iostateG IOState Σ} :

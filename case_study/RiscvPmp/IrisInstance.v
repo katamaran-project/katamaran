@@ -117,7 +117,7 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Qed.
 
   Lemma mem_init `{gHP : !mcMemPreGS Σ} (μ : Memory) :
-    ⊢ |==> ∃ mG : mcMemGS Σ, (mem_state_interp mG μ ∗ mem_res μ)%I.
+    ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res μ)%I.
   Proof.
     pose (memmap := initMemMap μ).
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
@@ -157,32 +157,17 @@ Module RiscvPmpIrisInstancePredicates.
 
   (* The address we will perform all writes to is the first legal MMIO address *)
   Definition write_addr : Addr := bv.of_N maxAddr.
+  Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
+  Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
 
-  Definition is_even {n} : bv n -> bool :=
-    match n with
-      | 0%nat => fun _ => true
-      | (S n)%nat => fun v => negb (bv.to_bool (bv.take 1 v))
-    end.
+  Definition s__init : IOState := true.
 
-  Lemma is_even_correct: forall n (b : bv n), is_even b <-> N.even (bv.bin b).
-    split; intros; destruct b; destruct bin; auto;
-      try (destruct p; auto; destruct n; auto);
-      try (destruct n; auto; destruct p; auto).
-  Qed.
-
-  (* This is the io-protocol state machine transition function. *)
-  (* Note a condition on the event_addr is not (yet) required by the protocol and thus missing. *)
-  Inductive impl_mmio_state_prot: IOState -> Event -> IOState -> Prop :=
-  | IOW_odd_even: forall e, event_type e = IOWrite ->
-                       event_nbbytes e > 0 ->
-                       (is_even (event_contents e)) -> (* new even *)
-                       impl_mmio_state_prot false (* old odd *) e true (* new even *)
-
-  | IOW_even_odd: forall e, event_type e = IOWrite ->
-                       event_nbbytes e > 0 ->
-                       negb (is_even (event_contents e)) -> (* new odd *)
-                       impl_mmio_state_prot true (* old even *) e false (* new odd *)
-  .
+  (* Tut: Note, trace is kept in reverse order *)
+  Inductive mmio_trace_state_pred: Trace -> IOState -> Prop :=
+  | Tnil : mmio_trace_state_pred [] s__init
+  | Tcons  : forall e tl s s', impl_mmio_state_prot s e s' ->
+                               mmio_trace_state_pred tl s ->
+                               mmio_trace_state_pred (e :: tl) s'.
 
   Lemma difference_commute_gset {A} `{Countable A} (X Y Z : gset A) :
     (X ∖ Y) ∖ Z = (X ∖ Z) ∖ Y.
@@ -338,6 +323,8 @@ Module RiscvPmpIrisInstancePredicates.
     Global Arguments interp_ptstomem {width} addr v : simpl never.
 
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
+    Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
+      inv femto_inv_mmio_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝).
     Definition interp_mmio_trace_state_inv `{invGS Σ, iostateG IOState Σ} : iProp Σ :=
       inv femto_inv_mmio_ns (∃ (s : IOState) (t : Trace) , tr_frag1 t ∗ st_auth1 s ∗ ⌜mmio_trace_state_pred t s⌝).
 
@@ -347,7 +334,8 @@ Module RiscvPmpIrisInstancePredicates.
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
-    Definition interp_mmio_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte)) (s s': bv iostate_bits)  : iProp Σ :=
+    Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
+    Definition interp_mmio_state_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte)) (s s': bv iostate_bits)  : iProp Σ :=
       ⌜addr = write_addr⌝ ∗
       ⌜let e := {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := width ;  event_contents := bytes |}
        in  impl_mmio_state_prot (bv_from s) e (bv_from s')⌝.
@@ -481,9 +469,11 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
+    | inv_mmio bytes           | _                    => interp_inv_mmio bytes
+    | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
     | mmio_state _             | [s] (* [unit] *)     => interp_mmio_state_pred s (* We have ownership over st *)
-    | mmio_trace bytes         | [env] (* [unit] *)   => interp_mmio_trace_state_inv (* Given st and tr state_prot is satisfied *)
-    | mmio_checked_write _     | [ addr; w; s; s' ]   => interp_mmio_checked_write addr w s s'
+    | mmio_state_trace bytes   | [env] (* [unit] *)   => interp_mmio_trace_state_inv (* Given st and tr state_prot is satisfied *)
+    | mmio_state_checked_write _     | [ addr; w; s; s' ]   => interp_mmio_state_checked_write addr w s s'
     | encodes_instr            | [ code; instr ]      => ⌜pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
@@ -966,7 +956,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
   Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     FL RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
 
-  Lemma gprs_equiv `{sailGS Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
+  Lemma gprs_equiv `{sailGS Σ, iostateG IOState Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
       interp_gprs exclude ⊣⊢
         asn.interpret (asn_regs_ptsto exclude) ι.
   Proof.

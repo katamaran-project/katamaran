@@ -67,7 +67,7 @@ Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgr
                  mem_res (hG := memGS2_memGS_right) μ2)%I.
 
   Lemma mem_init2 `{gHP : prod (memGpreS Σ) (memGpreS Σ)} (μ1 μ2 : Memory) :
-    ⊢ |==> ∃ mG : memGS2 Σ, (mem_state_interp2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
+    ⊢ |==> ∃ mG : memGS2 Σ, (mem_inv2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
   Proof.
     iMod (mem_init (gHP := fst gHP) μ1) as (mG1) "[inv1 res1]".
     iMod (mem_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
@@ -190,6 +190,9 @@ Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
     | inv_mmio bytes           | _                    => interp_inv_mmio bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
+    | mmio_state _             | [s]                  => True
+    | mmio_state_trace bytes   | [env]                => True
+    | mmio_state_checked_write _     | [ addr; w; s; s' ]    => True
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
