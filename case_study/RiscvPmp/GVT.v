@@ -836,7 +836,7 @@ Import Erasure.notations.
       { iDestruct "Hblockver" as "(Hpc & %npc & Hnpc)".
         iFrame "Hcurpriv Hmtvec Hpc Hnpc Hmcause Hmip Hmie Hmscratch Hmepc Hmstatus Hpmpentries HaccU".
         by iApply gprs_equiv.
-      }.
+      }
       (* Prove that the adversary cannot modify CSRs. *)
       iSplitR.
       { iModIntro.
