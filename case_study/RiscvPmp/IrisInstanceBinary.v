@@ -33,8 +33,8 @@ From Katamaran Require Import
      Iris.BinaryWeakestPre
      Iris.BinaryAdequacy
      Iris.BinaryInstance
-     trace
      Syntax.Predicates
+     RiscvPmp.trace
      RiscvPmp.Base
      RiscvPmp.Machine
      RiscvPmp.IrisModelBinary
@@ -190,9 +190,6 @@ Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
     | inv_mmio bytes           | _                    => interp_inv_mmio bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
-    | mmio_state _             | [s]                  => True
-    | mmio_state_trace bytes   | [env]                => True
-    | mmio_state_checked_write _     | [ addr; w; s; s' ]    => True
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.

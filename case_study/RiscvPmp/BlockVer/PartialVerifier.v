@@ -314,7 +314,7 @@ Section BlockVerificationDerived.
     Import ProgramLogic.
     Import CHeapSpec.
 
-    Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
+    Context {Σ} {GS : sailGS Σ}.
 
     Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
       match instrs with
@@ -689,7 +689,7 @@ Section AnnotatedBlockVerification.
     Import ProgramLogic.
     Import CHeapSpec.
 
-    Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
+    Context {Σ} {GS : sailGS Σ}.
 
     Definition extract_AST (i : AnnotInstr) : option AST :=
       match i with

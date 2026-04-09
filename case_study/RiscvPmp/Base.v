@@ -140,24 +140,6 @@ Parameter mmioenv : MMIOEnv.
 #[export] Existing Instance mmioenv.
 #[export] Instance state_inhabited : Inhabited Base.State := populate (state_init).
 
-(* Defines the io-protocol ghost state *)
-
-Context {TK : TypeDeclKit}.
-Definition IOState : Set := bool.
-#[export] Definition iostate_bits := 1.
-
-Class bv_rize (A : Set) (n : nat) : Set := {
-    bv_to : A -> bv n;
-    bv_from : bv n -> A ;
-  }.
-
-#[export] Instance bv_iostate : bv_rize IOState iostate_bits :=
-  {
-    bv_to := fun  b : IOState => if b then @bv.of_N iostate_bits 1 else @bv.of_N iostate_bits 0;
-    bv_from := fun (b : bv iostate_bits)  => negb (bv.eqb b (bv.zero))
-  }.
-
-
 Require Import stdpp.finite.
 (* Addresses cannot both be MMIO and RAM. We need to know this when trying to inject pointsto-chunks for RAM back into maps of pointsto chunks. *)
 
@@ -673,8 +655,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_xlenbits                       := (ty.bvec xlenbits).
   Definition ty_word                           := (ty.bvec word).
   Definition ty_byte                           := (ty.bvec byte).
-  Definition ty_bytes (bytes : nat)              := (ty.bvec (bytes * byte)).
-  Definition ty_iostate                        := (ty.bvec iostate_bits).
+  Definition ty_bytes (bytes : nat)            := (ty.bvec (bytes * byte)).
   Definition ty_regno                          := (ty.bvec 5).
   Definition ty_privilege                      := (ty.enum privilege).
   Definition ty_interruptType                  := (ty.enum interruptType).
@@ -1379,7 +1360,6 @@ Module Export RiscvPmpBase <: Base.
         event_nbbytes : nat;
         event_contents : bv (event_nbbytes * 8);
       }.
-
     Definition Trace : Set := list Event.
 
     (* Memory *)
@@ -1394,7 +1374,7 @@ Module Export RiscvPmpBase <: Base.
     Definition memory_update_ram (μ : Memory) (r : RAM) := mkMem r (memory_trace μ) (memory_state μ).
     Definition memory_update_trace (μ : Memory) (t : Trace) := mkMem (memory_ram μ) t (memory_state μ).
     Definition memory_append_trace (μ : Memory) (e : Event) := memory_update_trace μ (cons e (memory_trace μ)).
-    Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s .
+    Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s.
 
     Fixpoint fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) : 
       Val (ty_bytes data_size) :=
@@ -1461,7 +1441,8 @@ Module Export RiscvPmpBase <: Base.
       | S n => fun data : Val (ty_bytes (S n)) =>
                 let s' := state_tra_write (memory_state μ) addr (S n) data in
                 let mmioev := mkEvent IOWrite addr (S n) data in
-                memory_append_trace (memory_update_state μ s') mmioev
+                let μ' := memory_append_trace (memory_update_state μ s') mmioev in
+                μ'
       end.
 
   End MemoryModel.

@@ -35,12 +35,14 @@ From Katamaran Require Import
      Notations
      Specification
      SmallStep.Step
+     Instance
      RiscvPmp.BlockVer.Spec
      RiscvPmp.BlockVer.TotalVerifier
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.PmpCheck
+     RiscvPmp.trace
      RiscvPmp.Sig.
 From Katamaran Require
      RiscvPmp.Contracts
@@ -304,7 +306,7 @@ Module inv := invariants.
     Qed.
 
     Definition contract_femtoinit `{sailGS Σ} (a : Val ty_xlenbits) : iProp Σ :=
-      semTripleBlock
+        semTripleBlock
         (λ a, asn.interpret femtokernel_init_pre [env].["a" ∷ ty_xlenbits ↦ a])
         a (filter_AST femtokernel_init_gen)
         (λ a an, asn.interpret femtokernel_init_post [env].["a" ∷ ty_xlenbits ↦ a].["an" ∷ ty_xlenbits ↦ an]).
@@ -973,7 +975,7 @@ Module inv := invariants.
     refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _).
     iIntros (Σ' H).
     cbn.
-    iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmie & Hmip & Hmtvec & Hmscratch & Hmepc & Hmcause & Hcurpriv & H')".
+    iIntros (_) "(Hmem & Hpc & Hnpc & Hmstatus & Hmie & Hmip & Hmtvec & Hmscratch & Hmepc & Hmcause & Hcurpriv & H')".
     rewrite γmstatus γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc.
     iMod (femtokernel_splitMemory with "Hmem") as "(Hinit & Hhandler & #Hmmio & Hadv)";
       try assumption.

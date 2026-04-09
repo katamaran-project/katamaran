@@ -63,7 +63,6 @@ Inductive PurePredicate : Set :=
 | prev_addr
 | in_entries
 | in_mmio (bytes : nat)
-| mmio_state_prot (bytes : nat)
 .
 
 Inductive Exec : Set :=
@@ -80,9 +79,6 @@ Inductive Predicate : Set :=
 | ptstomem_readonly (bytes : nat)
 | inv_mmio (bytes : nat) (* `bytes` needed because size of trace events needs to match size of MMIO writes *)
 | mmio_checked_write (bytes : nat)
-| mmio_state (bytes : nat)
-| mmio_state_trace (bytes : nat)
-| mmio_state_checked_write (bytes : nat)
 | encodes_instr
 | ptstomem (bytes : nat)
 | ptstoinstr
@@ -105,7 +101,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
   Section PredicateKit.
     Definition 𝑷 := PurePredicate.
-
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
       match p with
       | gen_pmp_access  => [ty_xlenbits; ty_xlenbits; ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
@@ -118,8 +113,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg  => [ty_xlenbits; ty.list ty_pmpentry]
       | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
       | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
-      | in_mmio _       => [ty_xlenbits]
-      | mmio_state_prot width         => [ty.bvec (width * byte); ty_iostate; ty_iostate]
+      | in_mmio _  => [ty_xlenbits]
       end.
 
     Example default_pmpcfg_ent : Pmpcfg_ent :=
@@ -278,68 +272,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       Pmp_cfg_unlocked (fst ent).
     Global Arguments Pmp_entry_unlocked !ent.
 
-
-    (* Helper functions for io-protocol state machine transition function. *)
-    Definition is_even {n} : bv n -> bool :=
-      match n with
-      | 0%nat => fun _ => true
-      | (S n)%nat => fun v => bv.eqb (bv.land v bv.one) bv.zero
-      end.
-
-    Lemma is_even_correct: forall n (v : bv n), is_even v <-> N.even (bv.bin v).
-      split; intros; destruct v; destruct bin; auto;
-        try (destruct p; auto; destruct n; auto);
-        try (destruct n; auto; destruct p; auto).
-    Qed.
-
-
-    Lemma even_take1_prop: forall n (v : bv (S n)), is_even v <-> (bv.take 1 v) = bv.zero.
-    Proof.
-      intros.
-      destruct (bv.view v).
-      rewrite bv.take_cons.
-      unfold is_even.
-      change bv.one with (@bv.cons n true bv.zero) in *.
-      rewrite bv.land_cons. rewrite bv.land_zero_r. simpl.
-      destruct b; simpl; split; intro; auto. contradiction. discriminate H.
-    Qed.
-
-    Lemma even_take1: forall n (v : bv (S n)), is_even v = bv.eqb (bv.take 1 v) bv.zero.
-      intros n v.
-      destruct (bv.view v).
-      rewrite bv.take_cons.
-      unfold is_even.
-      change bv.one with (@bv.cons n true bv.zero) in *.
-      rewrite bv.land_cons. rewrite bv.land_zero_r. simpl.
-      destruct b; simpl; split; intro; auto.
-    Qed.
-
-    (* This is the io-protocol state machine transition function. *)
-    (* Note a condition on the event_addr is not (yet) required by the protocol and thus missing. *)
-    Variant impl_mmio_state_prot: IOState -> Event -> IOState -> Prop :=
-      | IOW : forall e b, event_type e = IOWrite ->
-                   event_nbbytes e > 0 ->
-                   b = (is_even (event_contents e)) ->
-                   impl_mmio_state_prot b e (negb b)
-    .
-
-    Definition Mmio_state_prot {width : nat} (w: bv (width * byte)) (s s' :  bv iostate_bits) : Prop :=
-      forall addr, impl_mmio_state_prot (bv_from s)  {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := _ ;  event_contents := w |} (bv_from s').
-
-
-   Lemma impl_mmio_state_prot_same: forall s e, impl_mmio_state_prot s e s -> False.
-      Proof.
-        intros. inversion H. by apply no_fixpoint_negb in H5.
-   Qed.
-
-   Lemma Mmio_state_prot_same : forall (n : nat) (a : bv xlenbits) (s : bv iostate_bits) (v : bv (n * byte)), Mmio_state_prot v s s → False.
-   Proof.
-     intros. unfold Mmio_state_prot in *.
-     pose proof (H a) as H1.
-     inversion H1.
-     by apply impl_mmio_state_prot_same in H1.
-   Qed.
-
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
       | gen_pmp_access  => Gen_Pmp_access
@@ -353,7 +285,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | prev_addr       => Prev_addr
       | in_entries      => In_entries
       | in_mmio bytes => (fun a => withinMMIO a bytes)
-      | mmio_state_prot width         => @Mmio_state_prot width
       end.
 
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -370,9 +301,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptstomem_readonly width       => [ty_xlenbits; ty.bvec (width * byte)]
       | inv_mmio bytes                => ctx.nil
       | mmio_checked_write width      => [ty_xlenbits; ty.bvec (width * byte)]
-      | mmio_state width              => [ty.bvec iostate_bits]
-      | mmio_state_trace bytes              => ctx.nil
-      | mmio_state_checked_write width      => [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate]
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
@@ -390,9 +318,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | ptstomem_readonly width    => true
         | inv_mmio bytes             => true
         | mmio_checked_write _       => false
-        | mmio_state _               => false
-        | mmio_state_trace bytes     => true
-        | mmio_state_checked_write _ => false
         | encodes_instr              => true
         | ptstomem _                 => false
         | ptstoinstr                 => false
@@ -414,9 +339,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptstomem_readonly width   => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | inv_mmio bytes            => Some (MkPrecise ε ε eq_refl)
       | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte)] eq_refl) (* There will only be one of these simultaneously; always precise! *)
-      | mmio_state width          => Some (MkPrecise ε [ty_iostate] eq_refl)
-      | mmio_state_trace bytes    => Some (MkPrecise ε ε eq_refl)
-      | mmio_state_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate] eq_refl)
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
@@ -926,8 +848,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
   Import DList.
 
   Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (PathCondition Σ) :=
-  | gen_pmp_access           | [ paddr; width; lo; entries; priv; perm ] => simplify_gen_pmp_access paddr width lo entries priv perm
-  | pmp_access               | [ paddr; width; entries; priv; perm ]     => simplify_pmp_access paddr width entries priv perm
+  | gen_pmp_access               | [ paddr; width; lo; entries; priv; perm ] => simplify_gen_pmp_access paddr width lo entries priv perm
+  | pmp_access               | [ paddr; width; entries; priv; perm ] => simplify_pmp_access paddr width entries priv perm
   | pmp_check_perms          | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
   | pmp_check_rwx            | [ cfg; acc ]                   => simplify_pmp_check_rwx cfg acc
   | sub_perm                 | [ a1; a2 ]                     => simplify_sub_perm a1 a2
@@ -936,9 +858,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
   | not_within_cfg           | [ paddr; entries ]             => Some [formula_user not_within_cfg [paddr; entries]]%ctx
   | prev_addr                | [ cfg; entries; prev ]         => simplify_prev_addr cfg entries prev
   | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx
-  | in_mmio bytes            | [ a ]                          => Some [formula_user (in_mmio bytes) [a]]%ctx
-  | mmio_state_prot width    | [w; s; s']                     => Some [formula_user (mmio_state_prot width) [w; s; s']]%ctx
-  .
+  | in_mmio bytes            | [ a ]                          => Some [formula_user (in_mmio bytes) [a]]%ctx.
 
   Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :
     simplify_sub_perm a1 a2 ⊣⊢ Some [formula_user sub_perm [a1; a2]].
@@ -1043,7 +963,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     - simple apply simplify_prev_addr_spec.
     - reflexivity.
     - reflexivity.
-    - inversion v0; try reflexivity.
   Qed.
 
   Definition solver : Solver :=

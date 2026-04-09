@@ -30,7 +30,6 @@ From Katamaran Require Import
      Base
      Hoare
      Bitvector
-     trace
      Iris.Instance
      Iris.Base
      Syntax.Predicates
@@ -56,14 +55,11 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Class mcMemPreGS Σ := {
       mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
       mc_gtPreGS :: trace_preG Trace Σ;
-      mc_gsPreGS :: iostate_preG IOState Σ;
     }.
   #[export] Existing Instance mc_ghPreGS.
   #[export] Existing Instance mc_gtPreGS.
-  #[export] Existing Instance mc_gsPreGS.
-
   Definition memGpreS : gFunctors -> Set := mcMemPreGS.
-  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace ; iostatePreΣ IOState].
+  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace].
 
   Lemma NoDup_liveAddrs : NoDup liveAddrs.
   Proof. now eapply Prelude.nodup_fixed. Qed.
@@ -80,9 +76,6 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
    *)
   Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
     fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ tr_frag1 (memory_trace μ))%I.
-
-  Definition iost_res `{hG : mcMemGS Σ} {rG : iostateG IOState Σ} : IOState -> iProp Σ :=
-    fun σ => (st_auth1 σ )%I.
 
   Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
   Proof.
@@ -121,19 +114,19 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Proof.
     pose (memmap := initMemMap μ).
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
-    iMod (trace_alloc (memory_trace μ)) as (gT) "[Htrauth Htrfrag]".
+    iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]".
+
     iModIntro.
     iExists (McMemGS gH gT).
-    iSplitL "Hinv Htrauth".
+    iSplitL "Hinv Hauth".
     - iExists memmap.
       iFrame.
       iPureIntro.
       apply initMemMap_works.
     - unfold mem_res, initMemMap in *. iFrame.
-        iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => pointsto a (DfracOwn 1) v) with "[$]").
-        eapply NoDup_liveAddrs.
+      iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => pointsto a (DfracOwn 1) v) with "[$]").
+      eapply NoDup_liveAddrs.
   Qed.
-
 End RiscvPmpIrisAdeqParameters.
 
 Module RiscvPmpIrisInstancePredicates.
@@ -159,15 +152,6 @@ Module RiscvPmpIrisInstancePredicates.
   Definition write_addr : Addr := bv.of_N maxAddr.
   Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
   Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
-
-  Definition s__init : IOState := true.
-
-  (* Tut: Note, trace is kept in reverse order *)
-  Inductive mmio_trace_state_pred: Trace -> IOState -> Prop :=
-  | Tnil : mmio_trace_state_pred [] s__init
-  | Tcons  : forall e tl s s', impl_mmio_state_prot s e s' ->
-                               mmio_trace_state_pred tl s ->
-                               mmio_trace_state_pred (e :: tl) s'.
 
   Lemma difference_commute_gset {A} `{Countable A} (X Y Z : gset A) :
     (X ∖ Y) ∖ Z = (X ∖ Z) ∖ Y.
@@ -320,13 +304,10 @@ Module RiscvPmpIrisInstancePredicates.
             let (byte, bytes) := bv.appView byte (w * byte) bytes in
             interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
       end%I.
-    Global Arguments interp_ptstomem {width} addr v : simpl never.
 
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
     Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
       inv femto_inv_mmio_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝).
-    Definition interp_mmio_trace_state_inv `{invGS Σ, iostateG IOState Σ} : iProp Σ :=
-      inv femto_inv_mmio_ns (∃ (s : IOState) (t : Trace) , tr_frag1 t ∗ st_auth1 s ∗ ⌜mmio_trace_state_pred t s⌝).
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
@@ -335,14 +316,6 @@ Module RiscvPmpIrisInstancePredicates.
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
     Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
-    Definition interp_mmio_state_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte)) (s s': bv iostate_bits)  : iProp Σ :=
-      ⌜addr = write_addr⌝ ∗
-      ⌜let e := {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := width ;  event_contents := bytes |}
-       in  impl_mmio_state_prot (bv_from s) e (bv_from s')⌝.
-
-    (* Current protocol state is: *)
-    Definition interp_mmio_state_pred `{iostateG IOState Σ} (s : bv iostate_bits): iProp Σ :=
-      st_frag1 (bv_from s).
 
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).
@@ -428,10 +401,6 @@ Module RiscvPmpIrisInstancePredicates.
       now iApply big_sepS_delete_multi.
     Qed.
 
-
-
-
-
     Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
@@ -458,12 +427,14 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
   Section RiscvPmpIrisPredicates.
 
     Import env.notations.
-    Definition resGS := iostateG IOState.
 
-    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ, iostateG IOState Σ}
+    (* We don't need additional ghost state beyond what we already have for the WP. *)
+    Definition resGS := trivGS.
+
+    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ, trivGS Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
-    | pmp_entries              | [ v ]                     => interp_pmp_entries v
-    | pmp_addr_access          | [ entries; m ]            => interp_pmp_addr_access liveAddrs mmioAddrs entries m
+    | pmp_entries              | [ v ]                => interp_pmp_entries v
+    | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
     | gprs                     | _                    => interp_gprs ∅ (* For the Universal Contract verification we always need all GPRs, hence the empty exclude list *)
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
@@ -471,10 +442,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
     | inv_mmio bytes           | _                    => interp_inv_mmio bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
-    | mmio_state _             | [s] (* [unit] *)     => interp_mmio_state_pred s (* We have ownership over st *)
-    | mmio_state_trace bytes   | [env] (* [unit] *)   => interp_mmio_trace_state_inv (* Given st and tr state_prot is satisfied *)
-    | mmio_state_checked_write _     | [ addr; w; s; s' ]   => interp_mmio_state_checked_write addr w s s'
-    | encodes_instr            | [ code; instr ]      => ⌜pure_decode code = inr instr ⌝%I
+    | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
 
@@ -488,9 +456,10 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
           destruct x; auto
       end.
 
-    Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ, iostateG IOState Σ} :
+    Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ, trivGS Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
-        is_duplicable p = true ->
+        is_duplicable p =
+          true ->
         (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
     Proof.
       destruct p; intros ts Heq; try discriminate Heq;
@@ -753,7 +722,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
         @interp_ptstomem _ _ (S n)%nat a (bv.app b bs)
         ⊣⊢
         (interp_ptsto a b ∗ interp_ptstomem (bv.one + a) bs).
-    Proof. intros; unfold interp_ptstomem; now rewrite bv.appView_app. Qed.
+    Proof. intros; cbn [interp_ptstomem]; now rewrite bv.appView_app. Qed.
 
     Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
         interp_pmp_entries entries ⊣⊢
@@ -956,7 +925,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
   Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     FL RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
 
-  Lemma gprs_equiv `{sailGS Σ, iostateG IOState Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
+  Lemma gprs_equiv `{sailGS Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
       interp_gprs exclude ⊣⊢
         asn.interpret (asn_regs_ptsto exclude) ι.
   Proof.

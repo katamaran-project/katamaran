@@ -1141,7 +1141,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | write_ram bytes      => sep_contract_write_ram bytes
             | @within_mmio bytes H => @sep_contract_within_mmio bytes H
             | mmio_read bytes      => sep_contract_mmio_read bytes
-            | mmio_write bytes     => sep_contract_mmio_write bytes 
+            | mmio_write bytes     => sep_contract_mmio_write bytes
             | decode               => sep_contract_decode
             | externalWorldUpdates => sep_contract_externalWorldUpdates
             end.
@@ -1240,8 +1240,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           |}.
 
         Definition lemma_close_mmio_write (immm : Bitvector.bv.bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) :=
-          {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "r" :: ty_regno; "w" :: ty_xlenbits];
-             lemma_patterns        := [term_var "paddr"; term_var "r"];
+          {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
+             lemma_patterns        := [term_var "paddr"; term_var "w"];
              lemma_precondition    := ⊤;
              lemma_postcondition   := ⊤;
           |}.
@@ -1257,7 +1257,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | close_ptsto_instr       => lemma_close_ptsto_instr
             | extract_pmp_ptsto bytes => lemma_extract_pmp_ptsto bytes
             | return_pmp_ptsto bytes  => lemma_return_pmp_ptsto bytes
-            | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh 
+            | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
             end.
 
       End LemDef.

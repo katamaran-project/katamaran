@@ -44,7 +44,7 @@ From Katamaran Require Import
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Sig
-     trace.
+     RiscvPmp.trace.
 From Equations Require Import
      Equations.
 
@@ -96,7 +96,8 @@ Module RiscvPmpModel2.
     RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance.
 
   Section ForeignProofs.
-    Context `{sg : sailGS Σ} {rG : iostateG IOState Σ}.
+    Context `{sg : sailGS Σ, rG : trivGS Σ}.
+
 
     Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
@@ -142,7 +143,6 @@ Module RiscvPmpModel2.
 
     Lemma read_ram_sound (bytes : nat) :
       TValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
-
     Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
       iIntros "H". cbn in *. iApply semTWP_foreign.
@@ -163,11 +163,10 @@ Module RiscvPmpModel2.
     Proof.
       iRevert (data w paddr μ memmap).
       iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
-        iIntros (data w paddr μ memmap Hmap) "(Haddr & Hmem & Htr)".
+        iIntros (data w paddr μ memmap Hmap) "[Haddr [Hmem Htr]]".
       - iModIntro. iSplitL; last done.
         now iApply (mem_inv_not_modified $! Hmap with "Hmem Htr").
-     -  unfold interp_ptstomem.
-        change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
+     -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
         destruct (bv.appView byte (bytes * byte) w) as [bw w].
         iDestruct "Haddr" as "[[H $] Haddr]".
@@ -275,7 +274,7 @@ Module RiscvPmpModel2.
   End ForeignProofs.
 
   Section LemProofs.
-    Context `{sg : sailGS Σ, rG : iostateG IOState Σ}.
+    Context `{sg : sailGS Σ, rG : trivGS Σ}.
 
     Lemma open_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.

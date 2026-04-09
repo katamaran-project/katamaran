@@ -792,7 +792,6 @@ Import BlockVerificationDerived2.
     ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜μ a = v⌝.
   Proof.
     unfold interp_ptsto, mem_inv.
-    iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
     iIntros "(%memmap & Hinv & %link) Hptsto".
     iDestruct (gen_heap.gen_heap_valid with "Hinv Hptsto") as "%x".
     iPureIntro.

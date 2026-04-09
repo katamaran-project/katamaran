@@ -75,7 +75,7 @@ Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase Risc
 Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpExecutor.
 
 Section Loop.
-  Context `{sg : sailGS Σ} {rG : iostateG IOState Σ}.
+  Context `{sg : sailGS Σ} {rG : trivGS Σ}.
   Definition step_sem_contract :=
     Eval simpl in ValidContractSemCurried fun_step sep_contract_step.
 

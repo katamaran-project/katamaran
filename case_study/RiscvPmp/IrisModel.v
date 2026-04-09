@@ -31,7 +31,7 @@ From Katamaran Require Import
      Environment
      Iris.Base
      RiscvPmp.Machine
-     trace.
+     RiscvPmp.trace.
 From iris Require Import
      base_logic.lib.gen_heap
      proofmode.tactics.

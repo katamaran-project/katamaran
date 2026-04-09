@@ -302,7 +302,7 @@ Section BlockVerificationDerived.
     Import ProgramLogic.
     Import CHeapSpec.
 
-    Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
+    Context {Σ} {GS : sailGS Σ}.
 
     Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
       match instrs with
@@ -804,7 +804,7 @@ Section AnnotatedBlockVerification.
     Import ProgramLogic.
     Import CHeapSpec.
 
-    Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
+    Context {Σ} {GS : sailGS Σ}.
 
     Definition extract_AST (i : AnnotInstr) : option AST :=
       match i with
@@ -860,7 +860,7 @@ Section AnnotatedBlockVerification.
             iSpecialize ("H" with "Hh'").
             now simpl.
     Qed.
-      
+
     Lemma sound_cexec_annotated_block_triple_addr {Γ pre post a instrs} :
       LemmaSem ->
       (cexec_annotated_block_triple_addr (Σ := Γ) pre instrs post (λ _ _ , True) []%list) ->

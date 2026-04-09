@@ -112,9 +112,8 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
           now rewrite map_map map_id.
     Qed.
 
-    Lemma mem_init `{gHP : memGpreS Σ} (μ : Memory) :
+    Lemma mem_inv_init `{gHP : memGpreS Σ} (μ : Memory) :
       ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
-      iExists (fun σ _ _ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv (σ.2))%I.
     Proof.
       iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
 
