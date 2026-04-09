@@ -2543,6 +2543,11 @@ Module Type SymPropOn
       Notation "e1 <=ᵘ e2" := (eformula_relop bop.bvule e1 e2) (only printing).
       Notation "e1 <ᵘ e2" := (eformula_relop bop.bvult e1 e2) (only printing).
 
+      Notation "- x" := (eterm_unop uop.neg x) (only printing).
+
+      Notation unsigned x := (eterm_unop uop.unsigned x).
+      Notation signed x := (eterm_unop uop.signed x).
+
     End notations.
 
   End Erasure.
