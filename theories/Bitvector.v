@@ -1630,28 +1630,32 @@ Module bv.
           now rewrite Zminus_mod, Z_mod_same_full, Z.sub_0_r, Zmod_mod.
     Qed.
 
-    Lemma unsigned_negate {n} x : @unsigned n (negate x) = truncz n (- (unsigned x)).
+    Lemma negate_alt {n} (x : bv n) :
+      negate x = of_Z (- unsigned x).
     Proof.
-      unfold negate, unsigned, truncz; cbn.
-      generalize (bv_is_wf x).
-      rewrite ?truncn_spec.
-      intros Hx.
-      assert (2 ^ Z.of_nat n ≠ 0)%Z by Lia.lia.
-      rewrite ?Znat.N2Z.inj_mod, ?Znat.N2Z.inj_pow.
+      apply unsigned_inj. rewrite unsigned_of_Z.
+      unfold negate, unsigned at 1. cbn.
+      rewrite of_N_truncz.
+      pose proof (bv_is_wf x).
       rewrite Znat.N2Z.inj_sub; [|Lia.lia].
-      rewrite ?Znat.N2Z.inj_pow, ?Znat.nat_N_Z.
-      cbn.
+      change (Z.of_N (bin x)) with (unsigned x).
+      unfold truncz.
+      rewrite ?Znat.N2Z.inj_mod, ?Znat.N2Z.inj_pow, ?Znat.nat_N_Z.
+      change (Z.of_N 2) with 2%Z.
       rewrite Zdiv.Zminus_mod, Zdiv.Z_mod_same_full.
       change (0)%Z with (0 mod 2 ^ Z.of_nat n)%Z.
       now rewrite <-Zdiv.Zminus_mod.
     Qed.
 
+    Lemma unsigned_negate {n} x : @unsigned n (negate x) = truncz n (- (unsigned x)).
+    Proof.
+      now rewrite negate_alt, unsigned_of_Z.
+    Qed.
+
     Lemma of_Z_negate {n} x : @negate n (of_Z x) = of_Z (- x).
     Proof.
       apply unsigned_inj_eq2nz.
-      rewrite unsigned_of_Z.
-      rewrite unsigned_negate.
-      now rewrite unsigned_of_Z, ?truncz_eq2nz.
+      now rewrite unsigned_negate, !unsigned_of_Z, !truncz_eq2nz.
     Qed.
 
     Lemma unsigned_sub {n} x y : @unsigned n (sub x y) = truncz n (unsigned x - unsigned y).
@@ -1712,6 +1716,22 @@ Module bv.
     #[global] Arguments ugt {n} x y /.
     #[global] Arguments sge {n} x y /.
     #[global] Arguments sgt {n} x y /.
+
+    Lemma ult_iff_unsigned_lt {n} {x y : bv n} :
+      ult x y <-> (unsigned x < unsigned y)%Z.
+    Proof. apply N2Z.inj_lt. Qed.
+
+    Lemma ugt_iff_unsigned_gt {n} {x y : bv n} :
+      ugt x y <-> (unsigned x > unsigned y)%Z.
+    Proof. unfold ugt. now rewrite ult_iff_unsigned_lt, Z.gt_lt_iff. Qed.
+
+    Lemma ule_iff_unsigned_le {n} {x y : bv n} :
+      ule x y <-> (unsigned x <= unsigned y)%Z.
+    Proof. apply N2Z.inj_le. Qed.
+
+    Lemma uge_iff_unsigned_ge {n} {x y : bv n} :
+      uge x y <-> (unsigned x >= unsigned y)%Z.
+    Proof. unfold uge. now rewrite ule_iff_unsigned_le, Z.ge_le_iff. Qed.
 
   End Arithmetic.
 
@@ -2275,14 +2295,12 @@ Module bv.
     Qed.
 
     Lemma unsigned_succ_small n m :
-      (N.succ (bin m) < exp2 n)%N ->
+      (Z.succ (unsigned m) < 2 ^ Z.of_nat n)%Z ->
       Z.succ (unsigned m) = @unsigned n (one + m).
     Proof.
-      intro H. unfold unsigned.
-      rewrite bin_add_small.
-      - rewrite Znat.N2Z.inj_add.
+      pose proof (unsigned_bounds m). intros.
+      rewrite <- unsigned_add_small;
         destruct n; cbn in *; Lia.lia.
-      - induction m using bv_case; cbn in *; Lia.lia.
     Qed.
   End DropTruncs.
 
@@ -2310,45 +2328,40 @@ Module bv.
         x <ᵘ z.
     Proof. intros n x y z; unfold bv.ult; apply N.lt_trans. Qed.
 
-    Lemma add_ule_mono : forall {x} (n m p : bv x),
-        (bv.bin p + bv.bin n < bv.exp2 x)%N ->
-        (bv.bin p + bv.bin m < bv.exp2 x)%N ->
-        n <=ᵘ m <-> p + n <=ᵘ p + m.
-    Proof. intros; unfold bv.ule; rewrite ?bv.bin_add_small; Lia.lia. Qed.
-
-    Lemma ule_add_r : forall {x} (n m p : bv x),
-        (bv.bin m + bv.bin p < bv.exp2 x)%N ->
-        n <=ᵘ m -> n <=ᵘ m + p.
+    Lemma add_ule_mono {x} (n m p : bv x) :
+      (unsigned p + unsigned n < 2 ^ Z.of_nat x)%Z ->
+      (unsigned p + unsigned m < 2 ^ Z.of_nat x)%Z ->
+      n <=ᵘ m <-> p + n <=ᵘ p + m.
     Proof.
-      intros.
-      unfold bv.ule in *.
-      rewrite bv.bin_add_small; auto.
-      rewrite <- (N.add_0_r (bv.bin n)).
-      apply N.add_le_mono; auto.
-      apply N.le_0_l.
+      rewrite !ule_iff_unsigned_le.
+      do 2 intros <-%unsigned_add_small; lia.
     Qed.
 
-    Lemma add_ule_r : forall {x} (n m p : bv x),
-        (bv.bin n + bv.bin p < bv.exp2 x)%N ->
-        n + p <=ᵘ m -> n <=ᵘ m.
+    Lemma ule_add_r {x} (n m p : bv x) :
+      (unsigned m + unsigned p < 2 ^ Z.of_nat x)%Z ->
+      n <=ᵘ m -> n <=ᵘ m + p.
     Proof.
-      intros.
-      unfold bv.ule in *.
-      rewrite bv.bin_add_small in H0; auto.
-      rewrite <- N.add_0_r in H0.
-      apply (N.le_le_add_le _ _ _ _ (N.le_0_l (bv.bin p)) H0).
+      rewrite !ule_iff_unsigned_le.
+      pose proof (unsigned_bounds p).
+      intros <-%unsigned_add_small; lia.
     Qed.
 
-    Lemma add_ule_S_ult : forall {x} (n m p : bv x),
-        (bv.bin n + bv.bin p < bv.exp2 x)%N ->
-        bv.zero <ᵘ p ->
-        n + p <=ᵘ m -> n <ᵘ m.
+    Lemma add_ule_r {x} (n m p : bv x) :
+      (unsigned n + unsigned p < 2 ^ Z.of_nat x)%Z ->
+      n + p <=ᵘ m -> n <=ᵘ m.
     Proof.
-      intros.
-      unfold bv.ule, bv.ult in *.
-      rewrite bv.bin_add_small in H1; auto.
-      apply (N.lt_le_add_lt _ _ _ _ H0).
-      now rewrite N.add_0_r.
+      rewrite !ule_iff_unsigned_le.
+      pose proof (unsigned_bounds p).
+      intros <-%unsigned_add_small; lia.
+    Qed.
+
+    Lemma add_ule_S_ult {x} (n m p : bv x) :
+      (unsigned n + unsigned p < 2 ^ Z.of_nat x)%Z ->
+      bv.zero <ᵘ p ->
+      n + p <=ᵘ m -> n <ᵘ m.
+    Proof.
+      rewrite !ule_iff_unsigned_le, !ult_iff_unsigned_lt, unsigned_zero.
+      intros <-%unsigned_add_small; lia.
     Qed.
 
     Lemma ultb_antisym : forall {n} (x y : bv n),
@@ -2435,26 +2448,6 @@ Module bv.
       rewrite H.
       intros.
       rewrite bv.bin_of_nat_small; Lia.lia.
-    Qed.
-
-    Lemma ult_iff_unsigned_lt {n} {x y : bv n} :
-      x <ᵘ y <-> (bv.unsigned x < bv.unsigned y)%Z.
-    Proof. apply N2Z.inj_lt. Qed.
-
-    Lemma ugt_iff_unsigned_gt {n} {x y : bv n} :
-      x >ᵘ y <-> (bv.unsigned x > bv.unsigned y)%Z.
-    Proof. unfold ugt.
-           now rewrite ult_iff_unsigned_lt, Z.gt_lt_iff.
-    Qed.
-
-    Lemma ule_iff_unsigned_le {n} {x y : bv n} :
-      x <=ᵘ y <-> (bv.unsigned x <= bv.unsigned y)%Z.
-    Proof. apply N2Z.inj_le. Qed.
-
-    Lemma uge_iff_unsigned_ge {n} {x y : bv n} :
-      x >=ᵘ y <-> (bv.unsigned x >= bv.unsigned y)%Z.
-    Proof. unfold uge.
-           now rewrite ule_iff_unsigned_le, Z.ge_le_iff.
     Qed.
 
   End Comparison.
