@@ -1597,6 +1597,31 @@ Module bv.
       now rewrite <-?of_N_truncz, <-Znat.N2Z.inj_add, <-?of_N_truncz, ?truncn_idemp.
     Qed.
 
+    Lemma unsigned_add_small {n} (x y : bv n) :
+      (unsigned x + unsigned y < 2 ^ Z.of_nat n)%Z ->
+      (unsigned x + unsigned y)%Z = unsigned (add x y).
+    Proof.
+      intros H. rewrite unsigned_add. unfold truncz.
+      pose proof (unsigned_bounds x).
+      pose proof (unsigned_bounds y).
+      rewrite Zmod_small; lia.
+    Qed.
+
+    Lemma unsigned_add_large {n} (x y : bv n) :
+      (2 ^ Z.of_nat n <= unsigned x + unsigned y)%Z →
+      (unsigned x + unsigned y - 2 ^ Z.of_nat n)%Z = unsigned (add x y).
+    Proof.
+      intros H. rewrite unsigned_add. unfold truncz.
+      pose proof (unsigned_bounds x).
+      pose proof (unsigned_bounds y).
+      generalize dependent (unsigned x); clear x; intros x.
+      generalize dependent (unsigned y); clear y; intros y.
+      generalize dependent (Z.of_nat n); clear n; intros e.
+      intros.
+      assert (0 <= x + y - 2 ^ e < 2 ^ e)%Z as <-%Zmod_small by lia.
+      now rewrite Zminus_mod, Z_mod_same_full, Z.sub_0_r, Zmod_mod.
+    Qed.
+
     (* A view on the possible outcomes of an unsigned integer addition. *)
     Variant UnsignedAddView {n} (u v : bv n) : Z -> Prop :=
     | UnsignedAddNoOverflow (p : (unsigned u + unsigned v < 2 ^ Z.of_nat n)%Z) :
@@ -1608,26 +1633,12 @@ Module bv.
       UnsignedAddView u v (unsigned (add u v)).
     Proof.
       destruct (Z.ltb_spec (unsigned u + unsigned v) (2 ^ Z.of_nat n)).
-      - enough (unsigned (add u v) = unsigned u + unsigned v)%Z as ->.
+      - enough (unsigned u + unsigned v = unsigned (add u v))%Z as <-.
         + now constructor.
-        + destruct u as [u wf_u], v as [v wf_v].
-          unfold unsigned, add, of_N in *; cbn in *.
-          rewrite of_N_truncz. unfold truncz.
-          rewrite Zmod_small; lia.
-      - enough (unsigned (add u v) = unsigned u + unsigned v - 2 ^ Z.of_nat n)%Z as ->.
+        + now apply unsigned_add_small.
+      - enough (unsigned u + unsigned v - 2 ^ Z.of_nat n = unsigned (add u v))%Z as <-.
         + now constructor.
-        + destruct u as [u wf_u], v as [v wf_v].
-          unfold unsigned, add, of_N in *; cbn in *.
-          rewrite of_N_truncz. unfold truncz.
-          rewrite Znat.N2Z.inj_add.
-          apply is_wf_spec in wf_u. apply is_wf_spec in wf_v.
-          Zify.zify.
-          remember (Z.of_nat n) as e.
-          remember (Z.of_N u) as x.
-          remember (Z.of_N v) as y.
-          clear n u v Heqe Heqx Heqy.
-          assert (0 <= x + y - 2 ^ e < 2 ^ e)%Z as <-%Zmod_small by lia.
-          now rewrite Zminus_mod, Z_mod_same_full, Z.sub_0_r, Zmod_mod.
+        + now apply unsigned_add_large.
     Qed.
 
     Lemma negate_alt {n} (x : bv n) :
@@ -2640,6 +2651,57 @@ Module bv.
       | bv ?n        => is_var n (* Fail if recursion doesn't end in a var. *)
       end.
 
+    Ltac zify_unsigned_add n x y :=
+      lazymatch goal with
+      | H: (unsigned x + unsigned y < 2 ^ Z.of_nat n)%Z |- _ =>
+          destruct (unsigned_add_small x y H)
+      | H: (2 ^ Z.of_nat n ≤ unsigned x + unsigned y)%Z |- _ =>
+          destruct (unsigned_add_large x y H)
+      | |- _ =>
+          (* Creates 2 branches *)
+          destruct (unsigned_add_view x y)
+      end.
+
+    Ltac zify_unsigned :=
+      repeat
+        lazymatch goal with
+        (* TODO: Individual rewrites can be slow in proofs. Either 1) define *)
+        (* inequalities using bv.unsigned that these rewrites could be *)
+        (* implemented with change_no_check or 2) use a rewrite database. *)
+        | |- context[ ule ?x ?y ] => rewrite ule_iff_unsigned_le
+        | |- context[ ult ?x ?y ] => rewrite ult_iff_unsigned_lt
+        | |- context[ uge ?x ?y ] => rewrite uge_iff_unsigned_ge
+        | |- context[ ugt ?x ?y ] => rewrite ugt_iff_unsigned_gt
+        | H: context[ ule ?x ?y ] |- _ => rewrite ule_iff_unsigned_le in H
+        | H: context[ ult ?x ?y ] |- _ => rewrite ult_iff_unsigned_lt in H
+        | H: context[ uge ?x ?y ] |- _ => rewrite uge_iff_unsigned_ge in H
+        | H: context[ ugt ?x ?y ] |- _ => rewrite ugt_iff_unsigned_gt in H
+
+        (* Due to how unsigned and zero are defined, change_no_check also *)
+        (* works when the bitvector length is not statically known. *)
+        | |- context[ unsigned zero ] =>
+            change_no_check (unsigned zero) with 0%Z
+        | H: context[ unsigned zero ] |- _ =>
+            change_no_check (unsigned zero) with 0%Z in H
+
+        (* These are potentially branching, so keep them last. *)
+        | |- context[ @unsigned ?n (?x + ?y) ] => zify_unsigned_add n x y
+        | _: context[ @unsigned ?n (?x + ?y) ] |- _ => zify_unsigned_add n x y
+        end.
+
+    Ltac zify_generalize_unsigned n x :=
+      is_var x;
+      pose proof (unsigned_bounds x);
+      generalize dependent (unsigned x);
+      clear x; intros x.
+
+    Ltac zify_generalize :=
+      repeat
+        match goal with
+        | |- context[@unsigned ?n ?x] => zify_generalize_unsigned n x
+        | _: context[@unsigned ?n ?x] |- _ => zify_generalize_unsigned n x
+        end.
+
   End tactics.
 
   Section Tests.
@@ -2719,21 +2781,9 @@ Import bv.notations.
 
 Module bv_solve_Ltac.
   Ltac solveBvManual :=
-    intros;
-    cbn;
-    repeat
-      (match goal with
-       | |- context[ bv.ule ?x ?y ] => rewrite bv.ule_iff_unsigned_le
-       | |- context[ bv.ult ?x ?y ] => rewrite bv.ult_iff_unsigned_lt
-       | |- context[ bv.uge ?x ?y ] => rewrite bv.uge_iff_unsigned_ge
-       | |- context[ bv.ugt ?x ?y ] => rewrite bv.ugt_iff_unsigned_gt
-       | |- context[ bv.unsigned (?x + ?y) ] => destruct (bv.unsigned_add_view x y)
-       | _ : context[ bv.unsigned (?x + ?y) ] |- _ => destruct (bv.unsigned_add_view x y)
-       end; cbn);
-    repeat
-      match goal with
-      | x : bv ?n |- _ => pose proof (bv.unsigned_bounds x); generalize dependent (bv.unsigned x); clear x
-      end;
+    cbn; intros;
+    bv.tactics.zify_unsigned;
+    bv.tactics.zify_generalize;
     cbn; intros; try lia.
 
   Goal forall v : bv 32, (76 + bv.unsigned v < 200)%Z -> (4 + bv.unsigned (v + [bv 0x4]) <= 200)%Z.
