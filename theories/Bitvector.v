@@ -2801,8 +2801,15 @@ Module bv.
       | H: (2 ^ Z.of_nat n ≤ unsigned x + unsigned y)%Z |- _ =>
           destruct (unsigned_add_large x y H)
       | |- _ =>
-          (* Creates 2 branches *)
-          destruct (unsigned_add_view x y)
+          let H := fresh "H" in
+          first
+            [ assert (unsigned x + unsigned y < 2 ^ Z.of_nat n)%Z as H by lia;
+              destruct (unsigned_add_small x y H)
+            | assert (2 ^ Z.of_nat n ≤ unsigned x + unsigned y)%Z as H by lia;
+              destruct (unsigned_add_large x y H)
+            | (* Creates 2 branches *)
+              destruct (unsigned_add_view x y)
+            ]
       end.
 
     Ltac zify_unsigned :=
