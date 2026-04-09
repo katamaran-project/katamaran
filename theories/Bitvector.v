@@ -818,6 +818,10 @@ Module bv.
       rewrite truncn_spec, Znat.Z2N.inj_mod; f_equal; cbn; lia.
     Qed.
 
+    Lemma truncz_small {n : nat} {x : Z} :
+      (0 <= x < 2 ^ Z.of_nat n)%Z → truncz n x = x.
+    Proof. apply Zmod_small. Qed.
+
     Lemma unsigned_cons n b (x : bv n) :
       unsigned (cons b x) = Z.b2z b + 2 * unsigned x.
     Proof. destruct b, x; unfold unsigned; cbn; Lia.lia. Qed.
@@ -1714,14 +1718,24 @@ Module bv.
   Section Sequencing.
     Import stdpp.list_numbers.
 
-    (* not sure why we don't use exp2 here? *)
-    Definition bv_modulus (n : nat) : Z := 2 ^ (Z.of_nat n).
-
-    Lemma exp2_bv_modulus {n} : bv_modulus n = Z.of_N (exp2 n).
-    Proof. unfold bv_modulus. now lia. Qed.
-
     Definition bv_seq {n : nat} (start : bv n) (len : Z) : list (bv n) :=
-      (fun i : Z => add start (bv.of_Z i)) <$> (seqZ 0 len).
+      of_Z <$> seqZ (unsigned start) len.
+
+    Lemma NoDup_seq_bv (n : nat) (start : bv n) (len : Z) :
+      (0 <= len <= 2 ^ Z.of_nat n)%Z ->
+      base.NoDup (@bv_seq n start len).
+    Proof.
+      intros H. apply list.NoDup_alt. intros i j b'. unfold bv_seq.
+      rewrite !list_lookup_fmap.
+      intros [x [[-> ?]%lookup_seqZ ->]]%fmap_Some H1%fmap_Some.
+      destruct H1 as (x & Hseq & Heq).
+      apply lookup_seqZ in Hseq as (-> & Hj).
+      apply (f_equal (add (negate start))) in Heq.
+      apply (f_equal unsigned) in Heq.
+      rewrite !unsigned_add, !unsigned_of_Z, !unsigned_negate in Heq.
+      rewrite <- !truncz_add, !truncz_small in Heq; lia.
+    Qed.
+
   End Sequencing.
 
   Section Logical.
@@ -2271,26 +2285,6 @@ Module bv.
       - induction m using bv_case; cbn in *; Lia.lia.
     Qed.
   End DropTruncs.
-
-  Section NoDupBvSeq.
-    Lemma NoDup_seq_bv n start len :
-      (0 <= len <= bv_modulus n)%Z ->
-      base.NoDup (@bv_seq n start len).
-    Proof.
-      rewrite exp2_bv_modulus.
-      intros H. apply list.NoDup_alt. intros i j b'. unfold bv_seq. rewrite !list.list_lookup_fmap.
-      intros [x [[-> ?]%list_numbers.lookup_seqZ ->]]%option.fmap_Some.
-      intros.
-      apply option.fmap_Some in H1.
-      destruct H1 as (x & Hseq & Heq).
-      apply list_numbers.lookup_seqZ in Hseq as (-> & Hj).
-      apply add_cancel_l in Heq.
-      change (0 + ?x)%Z with x in Heq.
-      rewrite ?of_Z_nat in Heq.
-      apply (f_equal (@bin _)) in Heq.
-      rewrite ?bin_of_nat_small in Heq; Lia.lia.
-    Qed.
-  End NoDupBvSeq.
 
   Section Comparison.
     Lemma ule_nat_one_S : forall {w} (n : nat),
