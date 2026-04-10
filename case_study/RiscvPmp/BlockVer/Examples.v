@@ -302,7 +302,8 @@ Module Examples.
       Proof.
         iIntros (x1) "Hpre Hk".
         iApply (sound_sblock_verification_condition valid_jump_if_zero
-                  [env].["x1"∷ty_xlenbits ↦ x1] $! bv.zero with "Hpre [Hk]").
+                  [env].["x1"∷ty_xlenbits ↦ x1] $! bv.zero with "[Hpre] [Hk]").
+        iDestruct "Hpre" as "(? & ? & ? & ?)"; iFrame.
         iIntros (an) "(Hmip & Hmie & H)".
         iApply ("Hk" with "[$]").
       Qed.
@@ -328,10 +329,10 @@ Module Examples.
       Proof.
         iIntros (instrs_loc) "Hpre Hk".
         iApply (sound_sblock_verification_condition valid_set_X2_to_42
-                  [env] $! instrs_loc with "Hpre [Hk]").
-        iIntros (an) "H".
-        iApply "Hk".
-        by iExists an.
+                  [env] $! instrs_loc with "[Hpre] [Hk]").
+        iDestruct "Hpre" as "(? & ? & ?)". by iFrame.
+        iIntros (an) "[HL HR]".
+        iApply "Hk". iFrame.
       Qed.
   End WithSailResources.
 End Examples.
