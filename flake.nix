@@ -1,5 +1,5 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   outputs = inputs: inputs.flake-utils.lib.eachDefaultSystem (system:
@@ -31,7 +31,6 @@
         stdpp = "1.11.0";
       };
 
-      rocqPackages819 = patchRocqPackages pkgs.coqPackages_8_19 iris43;
       rocqPackages820 = patchRocqPackages pkgs.coqPackages_8_20 iris43;
       rocqPackages900 = patchRocqPackages pkgs.coqPackages_9_0 iris43;
 
@@ -40,12 +39,10 @@
     in
     rec {
       packages = rec {
-        default = rocq819;
-        rocq819 = rocqPackages819.katamaran;
+        default = rocq820;
         rocq820 = rocqPackages820.katamaran;
         rocq900 = rocqPackages900.katamaran;
 
-        rocq819-deps = mkDeps rocq819;
         rocq820-deps = mkDeps rocq820;
         rocq900-deps = mkDeps rocq900;
       };
