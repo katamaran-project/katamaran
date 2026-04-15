@@ -42,6 +42,7 @@ From Equations Require Import
      Equations.
 From Katamaran Require Import
      Notations Prelude.
+From Ltac2 Require Ltac2.
 Require Import stdpp.base.
 Local Set Implicit Arguments.
 
@@ -2462,6 +2463,148 @@ Module bv.
     Qed.
 
   End Comparison.
+
+  Module reify.
+
+    Inductive exp (n : nat) : Set :=
+    | Var (x : bv n)
+    | Zero
+    | OneZero (H : 0%nat = n)
+    | OneOne {n'} (H : S n' = n)
+    | Add (e1 e2 : exp n)
+    | Sub (e1 e2 : exp n)
+    | Mul (e1 e2 : exp n)
+    | OfZ (z : Z)
+    | App {k l : nat} (e1 : exp k) (e2 : exp l) (H : (k + l = n)%nat)
+    .
+    #[global] Arguments Zero {n}.
+    #[global] Arguments OneZero {n} _.
+    #[global] Arguments OneOne {n n'} _.
+    #[global] Arguments OfZ {n} z.
+
+    Fixpoint eval {n} (e : exp n) : bv n :=
+      match e with
+      | Var x       => x
+      | Zero        => zero
+      | OneZero _   => one
+      | OneOne _    => one
+      | Add e1 e2   => eval e1 + eval e2
+      | Sub e1 e2   => eval e1 - eval e2
+      | Mul e1 e2   => eval e1 * eval e2
+      | OfZ z       => of_Z z
+      | App e1 e2 H => eq_rect _ bv (app (eval e1) (eval e2)) _ H
+      end%bv.
+
+    Fixpoint eval_unsigned {n} (e : exp n) : Z :=
+      match e with
+      | Var x              => bv.unsigned x
+      | Zero               => 0
+      | OneZero _          => 0
+      | OneOne _           => 1
+      | Add e1 e2          => eval_unsigned e1 + eval_unsigned e2
+      | Sub e1 e2          => eval_unsigned e1 - eval_unsigned e2
+      | Mul e1 e2          => eval_unsigned e1 * eval_unsigned e2
+      | OfZ z              => z
+      | @App _ k l e1 e2 _ => Z.modulo (eval_unsigned e1) (2 ^ Z.of_nat k) +
+                              eval_unsigned e2 * 2 ^ Z.of_nat k
+      end%Z.
+
+    Ltac Zify.zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
+
+    Lemma unsigned_eval {n} (e : exp n) :
+      unsigned (eval e) = (eval_unsigned e mod 2 ^ Z.of_nat n)%Z.
+    Proof.
+      induction e; cbn.
+      - pose proof (unsigned_bounds x).
+        now rewrite Z.mod_small.
+      - now rewrite Zmod_0_l.
+      - now subst.
+      - subst.
+        rewrite Z.mod_small. reflexivity.
+        rewrite Nat2Z.inj_succ, Z.pow_succ_r; lia.
+      - now rewrite unsigned_add, IHe1, IHe2, Zplus_mod.
+      - now rewrite unsigned_sub, IHe1, IHe2, Zminus_mod.
+      - now rewrite unsigned_mul, IHe1, IHe2, Zmult_mod.
+      - now rewrite unsigned_of_Z.
+      - destruct H; cbn. rewrite unsigned_app.
+        generalize dependent (unsigned (eval e1)); intros u.
+        generalize dependent (unsigned (eval e2)); intros v.
+        generalize dependent (eval_unsigned e1); intros x.
+        generalize dependent (eval_unsigned e2); intros y.
+        rewrite Nat2Z.inj_add, Z.pow_add_r; [..|lia|lia].
+        set (m := (2 ^ Z.of_nat k)%Z).
+        set (n := (2 ^ Z.of_nat l)%Z).
+        clear. intros. subst.
+        rewrite (Z.mul_comm m n).
+        rewrite Zplus_mod at 1.
+        assert (0 <= x mod m < n * m)%Z as Hx by nia.
+        rewrite (Z.mod_small _ _ Hx). clear Hx.
+        rewrite Zmult_mod_distr_r.
+        assert (0 <= (x mod m + y mod n * m) < n * m)%Z as Hxy by nia.
+        now rewrite (Z.mod_small _ _ Hxy).
+    Qed.
+
+    Lemma eval_unsigned_representable {n} (v : bv n) z (e : exp n) :
+      v = eval e ->
+      z = eval_unsigned e ->
+      (0 <= z < 2 ^ Z.of_nat n)%Z ->
+      z = bv.unsigned v.
+    Proof. intros. subst. now rewrite unsigned_eval, Z.mod_small. Qed.
+
+    Import Ltac2 Printf.
+
+    Ltac2 is_closed_constr (t : constr) : bool :=
+      let rec visit (t : constr) : unit :=
+        match Constr.Unsafe.kind t with
+        | Constr.Unsafe.Var _ => Control.zero Match_failure
+        | _                   => Constr.Unsafe.iter visit t
+        end
+      in
+      match Control.case (fun () => visit t) with
+      | Val (_, _)        => true
+      | Err Match_failure => false
+      | Err e             => Control.throw e
+      end.
+
+    Ltac2 rec reify (n : constr) (v : constr) : constr :=
+      lazy_match! v with
+      | bv.zero => constr:(@Zero $n)
+      | bv.one =>
+          lazy_match! Std.eval_hnf n with
+          | O      => constr:(@OneZero $n eq_refl)
+          | S ?n'' => constr:(@OneOne $n $n'' eq_refl)
+          | _      =>
+              let m := "reify_bv: could not determine width for bv.one" in
+              Control.zero (Tactic_failure (Some (Message.of_string m)))
+          end
+
+      | bv.add ?x ?y        => let ex := reify n x in
+                               let ey := reify n y in
+                               constr:(@Add $n $ex $ey)
+      | bv.sub ?x ?y        => let ex := reify n x in
+                               let ey := reify n y in
+                               constr:(@Sub $n $ex $ey)
+      | bv.mul ?x ?y        => let ex := reify n x in
+                               let ey := reify n y in
+                               constr:(@Mul $n $ex $ey)
+      | bv.of_Z ?z          => constr:(@OfZ $n $z)
+      | bv.mk ?m _          => let z := if is_closed_constr m
+                                        then eval cbv in (Z.of_N $m)
+                                        else eval cbn in (Z.of_N $m)
+                               in constr:(@OfZ $n $z)
+      | @bv.app ?k ?l ?x ?y => let ex := reify k x in
+                               let ey := reify l y in
+                               constr:(@App $n $k $l $ex $ey eq_refl)
+      | _                   =>
+          match Constr.Unsafe.kind v with
+          | Constr.Unsafe.Var _ => constr:(@Var $n $v)
+          | _                   =>
+              let m := fprintf "reify_bv: fallback case expects a variable but got '%t'" v in
+              Control.zero (Tactic_failure (Some m))
+          end
+      end.
+
+  End reify.
 
   Load BitvectorSolve.
 
