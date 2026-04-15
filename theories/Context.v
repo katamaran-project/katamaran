@@ -256,7 +256,7 @@ Module Import ctx.
          https://doi.org/10.1017/S0956796803004829 *)
 
     (* A view expressing that membership in the empty context is uninhabited. *)
-    Variant NilView [b : B] (i : In b nil) : Type :=.
+    Variant NilView [b : B] (i : In b nil) : Prop :=.
 
     (* A view for membership in a non-empty context. *)
     Variant SnocView {b' : B} (Γ : Ctx B) :

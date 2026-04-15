@@ -1972,7 +1972,7 @@ Module bv.
       revert V c n. induction m; intros V c n.
       - reflexivity.
       - specialize (IHm (fun k => V (S k)) (fun k => c (S k))).
-        cbn. now rewrite List.app_length, !IHm, Nat.add_0_r.
+        cbn. now rewrite length_app, !IHm, Nat.add_0_r.
     Qed.
 
     Lemma enumV_inj {V : forall k : nat, Type} (c : forall k, bool -> V k -> V (S k))
@@ -2482,7 +2482,7 @@ Module bv.
       f_equal. now rewrite of_Z_unsigned. Qed.
 
     Lemma seqBv_len n base width : length (@seqBv n base width) = N.to_nat width.
-    Proof. unfold seqBv. rewrite map_length, list_numbers.length_seqZ. lia. Qed.
+    Proof. unfold seqBv. rewrite length_map, list_numbers.length_seqZ. lia. Qed.
 
     Lemma seqBv_width_at_least {n width} base k y :
       base.lookup k (@seqBv n base width) = Some y -> exists p , width = N.of_nat (k + S p)%nat.
