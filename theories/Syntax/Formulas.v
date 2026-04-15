@@ -355,7 +355,7 @@ Module Type FormulasOn
     | eformula_false
     | eformula_and (F1 F2 : EFormula)
     | eformula_or (F1 F2 : EFormula).
-    Arguments eformula_user : clear implicits.
+    #[global] Arguments eformula_user : clear implicits.
 
     Definition erase_formula {Σ} : Formula Σ -> EFormula :=
       fix erase f :=
