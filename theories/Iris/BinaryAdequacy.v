@@ -246,6 +246,24 @@ Module Type IrisAdequacy2
     | _, _ => λ _, False
     end.
 
+  Lemma wp2_strong_adequacy {Γ1 Γ2 τ} (s1 s1' : Stm Γ1 τ) (s2 : Stm Γ2 τ)
+    {γ1 γ1' γ2 : RegStore} {μ1 μ1' μ2 : Memory}
+    {δ1 δ1' : CStore Γ1} {δ2 : CStore Γ2} {v1 : IVal τ}
+    {Q : ∀ `{sailGS2 Σ}, IVal τ -> CStore Γ1 -> IVal τ -> CStore Γ2 -> iProp Σ}
+    {φ : Prop} :
+    (forall `{sailGS2 Σ},
+        ⊢ |={⊤}=> ((mem_res2 μ1 μ2 ∗ own_regstore2 γ1 γ2) -∗
+                    semWP2 δ1 δ2 s1 s2 Q
+                    ∗ (∀ γ2' μ2' δ2' s2' v2,
+                         ⌜⟨ γ2, μ2, δ2, s2 ⟩ --->* ⟨ γ2', μ2', δ2', s2' ⟩⌝ -∗
+                         ⌜stm_to_val s2' = Some v2⌝ -∗
+                         Q v1 δ1' v2 δ2' -∗
+                         mem_inv2 μ1' μ2' ={⊤,∅}=∗ ⌜ φ ⌝)))%I ->
+    ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ1', μ1', δ1', s1' ⟩ ->
+    stm_to_val s1' = Some v1 ->
+    φ.
+  Proof.
+  Admitted.
   (* TODO: give this some more thought. Feels icky that the RHS doesn't play
            a role in deriving φ. Another question is why we generalize over
            a postcond Q, it doesn't relate to φ in any way?
