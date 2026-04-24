@@ -427,6 +427,91 @@ Module Type IrisWeakestPre
       do 3 iModIntro. iMod "Hclose" as "_". iModIntro. now iFrame "state_inv".
     Qed.
 
+    Lemma semWP_step {Γ τ} {s1 s2 : Stm Γ τ} {γ1 γ2 : RegStore} {μ1 μ2 : Memory}
+                     {δ1 δ2 : CStore Γ} {Q : Post Γ τ} :
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
+      regs_inv γ1 ∗ mem_inv μ1 -∗
+      £ 1 -∗
+      semWP δ1 s1 Q ={⊤,∅}=∗
+      ▷ |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semWP δ2 s2 Q.
+    Proof.
+      iIntros (Hstep) "Hres Hlc Hwp".
+      rewrite semWP_unfold.
+      rewrite (stm_val_stuck Hstep).
+      iMod ("Hwp" with "Hres [$Hlc]") as "H"; first eauto.
+      iMod "H". iModIntro. iModIntro. now iMod "H".
+    Qed.
+
+    #[local] Lemma list_singleton_app_cons :
+      ∀ {A} l1 l2 (a b : A), ([a] = l1 ++ b :: l2)%list -> a = b ∧ l1 = []%list ∧ l2 = []%list.
+    Proof.
+      intros A l1. induction l1 as [|e1 l1 IHl1]; simpl;
+        intros l2 a b Happ.
+      now inversion Happ.
+      inversion Happ; subst.
+      exfalso. eapply app_cons_not_nil. eauto.
+    Qed.
+
+    Lemma step_to_Step {Γ τ} {n : nat} {s1 s2 : Stm Γ τ} {γ1 γ2 : RegStore} {μ1 μ2 : Memory}
+                     {δ1 δ2 : CStore Γ} κ :
+      step ([MkConf s1 δ1]%list, (γ1, μ1)) κ ([MkConf s2 δ2]%list, (γ2, μ2)) ->
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩.
+    Proof.
+      intros H.
+      destruct H as [[] [] [] [] ? t1 t2 Hρ1 Hρ2 Hprim].
+      destruct Hprim as [? ? ? ? ? ? H]. cbn in H.
+      inversion Hρ1; inversion Hρ2; subst.
+      inversion Hρ1 as [Hl1]; inversion Hρ2 as [Hl2].
+      apply list_singleton_app_cons in Hl1 as (Hl1 & -> & ->).
+      apply list_singleton_app_cons in Hl2 as (Hl2 & ?).
+      inversion_clear Hl1. inversion_clear Hl2.
+      done.
+    Qed.
+
+    Lemma semWP_preservation {Γ τ} {n : nat} {s1 s2 : Stm Γ τ} {γ1 γ2 : RegStore} {μ1 μ2 : Memory}
+                     {δ1 δ2 : CStore Γ} {Q : Post Γ τ} κ :
+      language.nsteps n ([MkConf s1 δ1]%list , (γ1,μ1)) κ ([MkConf s2 δ2]%list , (γ2,μ2)) ->
+      regs_inv γ1 ∗ mem_inv μ1 -∗
+      £ n -∗
+      semWP δ1 s1 Q ={⊤,∅}=∗
+      |={∅}▷=>^n |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ semWP δ2 s2 Q.
+    Proof.
+      revert s1 s2 γ1 γ2 μ1 μ2 δ1 δ2 Q κ.
+      induction n as [|n IHn];
+        intros s1 s2 γ1 γ2 μ1 μ2 δ1 δ2 Q κ;
+        iIntros (Hstep) "Hres Hlc Hwp".
+      - inversion_clear Hstep; iFrame "Hres Hwp".
+        now iApply fupd_mask_subseteq.
+      - inversion_clear Hstep.
+        rewrite lc_succ. iDestruct "Hlc" as "[Hlc1 Hlc2]".
+        destruct H as [? ? ? ? ? ? ? Heq ? Hprim].
+        destruct Hprim.
+        inversion Heq as [Heq']; apply list_singleton_app_cons in Heq' as (? & ? & ?); subst.
+        simpl in *.
+        iPoseProof (semWP_step with "Hres Hlc1 Hwp") as "H"; first eauto.
+        iMod "H". iModIntro. iModIntro. iModIntro. iMod "H".
+        iDestruct "H" as "(Hres & Hwp)".
+        iApply (IHn with "Hres Hlc2 Hwp"); eauto.
+    Qed.
+
+    Lemma semWP_postcondition {Γ τ} {n : nat} {s1 s2 : Stm Γ τ} {γ1 γ2 : RegStore} {μ1 μ2 : Memory}
+                     {δ1 δ2 : CStore Γ} {v : IVal τ} {Q : Post Γ τ} κ :
+      language.nsteps n ([MkConf s1 δ1]%list , (γ1,μ1)) κ ([MkConf s2 δ2]%list , (γ2,μ2)) ->
+      stm_to_val s2 = Some v ->
+      regs_inv γ1 ∗ mem_inv μ1 -∗
+      £ n -∗
+      semWP δ1 s1 Q ={⊤,∅}=∗
+      |={∅}▷=>^n |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ Q v δ2.
+    Proof.
+      iIntros (Hstep Hs2) "Hres Hlc Hwp".
+      iMod (semWP_preservation with "Hres Hlc Hwp") as "H"; first eauto.
+      iModIntro. iApply (step_fupdN_wand with "H").
+      iIntros "H". iMod "H" as "($ & H)".
+      destruct (stm_to_val_Some_cases Hs2) as [(v' & -> & ->)|(m & -> & ->)].
+      - now rewrite semWP_val.
+      - now rewrite semWP_fail.
+    Qed.
+
   End WeakestPre.
 
   Module wptactics.
