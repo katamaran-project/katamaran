@@ -119,11 +119,11 @@ Section Loop.
      (∃ mpie mie,       mstatus       ↦ {| MPP := mpp; MPIE := mpie; MIE := mie |}) ∗
                         interp_pmp_entries entries       ∗
                         interp_pmp_addr_access (mG := sailGS2_memGS) liveAddrs mmioAddrs entries m ∗
-                        interp_gprs)%I.
+                        interp_gprs ∅)%I.
 
   Definition Execution (m : Privilege) (h : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
     (interp_pmp_addr_access (mG := sailGS2_memGS) liveAddrs mmioAddrs entries m ∗
-     interp_gprs ∗
+     interp_gprs ∅ ∗
      interp_pmp_entries entries ∗
      (∃ mc, mcause ↦ mc) ∗
      (∃ mi, mip ↦ mi) ∗
@@ -138,7 +138,7 @@ Section Loop.
 
   Definition CSRMod (m : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
     (interp_pmp_addr_access (mG := sailGS2_memGS) liveAddrs mmioAddrs entries m ∗
-     interp_gprs ∗
+     interp_gprs ∅ ∗
      (∃ entries, interp_pmp_entries entries) ∗
      ⌜m = Machine⌝ ∗
      (∃ mc, mcause ↦ mc) ∗
@@ -154,7 +154,7 @@ Section Loop.
 
   Definition Trap (m : Privilege) (h : Xlenbits) (entries : list (Pmpcfg_ent * Xlenbits)) :=
     (interp_pmp_addr_access (mG := sailGS2_memGS) liveAddrs mmioAddrs entries m ∗
-     interp_gprs ∗
+     interp_gprs ∅ ∗
      interp_pmp_entries entries ∗
      (∃ mc, mcause ↦ mc) ∗
      (∃ mi, mip ↦ mi) ∗
@@ -169,7 +169,7 @@ Section Loop.
 
   Definition Recover (m : Privilege) (h : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Xlenbits)) :=
     (interp_pmp_addr_access (mG := sailGS2_memGS) liveAddrs mmioAddrs entries m ∗
-     interp_gprs ∗
+     interp_gprs ∅ ∗
      interp_pmp_entries entries ∗
      ⌜m = Machine⌝ ∗
      (∃ mc, mcause ↦ mc) ∗
@@ -187,7 +187,7 @@ Section Loop.
   (* TODO: this should be the same as Start of iteration (P), drop one of them *)
   Definition Execution' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
     (            interp_pmp_addr_access (mG := sailGS2_memGS) liveAddrs mmioAddrs entries m ∗
-                                        interp_gprs ∗
+                                        interp_gprs ∅ ∗
                                         interp_pmp_entries es ∗
                                         (∃ mc,         mcause        ↦ mc) ∗
                                         (∃ mi, mip ↦ mi) ∗
@@ -202,7 +202,7 @@ Section Loop.
   (* Modified CSRs, requires Machine mode *)
   Definition CSRMod' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
     (                               interp_pmp_addr_access (mG := sailGS2_memGS) liveAddrs mmioAddrs entries m ∗
-                                                           interp_gprs ∗
+                                                           interp_gprs ∅ ∗
                                                            (∃ es : list (Pmpcfg_ent * Addr), interp_pmp_entries es) ∗
                                                            ⌜m = Machine⌝ ∗
                                                                          (∃ mc : Addr,                  mcause        ↦ mc) ∗
@@ -218,7 +218,7 @@ Section Loop.
   (* Trap occured -> Go into M-mode *)
   Definition Trap' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
     (interp_pmp_addr_access (mG := sailGS2_memGS) liveAddrs mmioAddrs entries m ∗
-                            interp_gprs ∗
+                            interp_gprs ∅ ∗
                             interp_pmp_entries es ∗
                             (∃ mc, mcause        ↦ mc) ∗
                             (∃ mi, mip ↦ mi) ∗
@@ -233,7 +233,7 @@ Section Loop.
   (* MRET = Recover *)
   Definition Recover' (m cp : Privilege) (h i : Addr) (entries es : list (Pmpcfg_ent * Addr)) (mpp : Privilege) (mepc_v : Addr) :=
     (interp_pmp_addr_access (mG := sailGS2_memGS) liveAddrs mmioAddrs entries m ∗
-                            interp_gprs ∗
+                            interp_gprs ∅ ∗
                             interp_pmp_entries es ∗
                             ⌜m = Machine⌝ ∗
                                           (∃ mc, mcause        ↦ mc) ∗

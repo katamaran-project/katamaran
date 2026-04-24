@@ -151,8 +151,19 @@ Module RiscvPmpIrisInstancePredicates2.
     Definition reg_pointsTo21 {τ} (r : Reg τ) (v : Val τ) : iProp Σ :=
       reg_pointsTo2 r v v.
 
-    Definition interp_gprs : iProp Σ :=
-      [∗ set] r ∈ GPRS, (∃ v, reg_pointsTo21 r v)%I.
+    Definition interp_gprs (exclude : gset (Reg ty_xlenbits)) : iProp Σ :=
+      [∗ set] r ∈ GPRS ∖ exclude, (∃ v, reg_pointsTo21 r v)%I.
+
+    Lemma interp_gprs_with_excluded `{sailGS2 Σ} (exclude : gset (Reg ty_xlenbits)) :
+      exclude ⊆ GPRS ->
+      ([∗ set] r ∈ exclude, ∃ v, reg_pointsTo21 r v) ∗ interp_gprs exclude ⊣⊢ interp_gprs ∅.
+    Proof.
+      intros Hsub.
+      unfold interp_gprs.
+      rewrite difference_empty_L.
+      iApply bi.wand_iff_sym.
+      now iApply big_sepS_delete_multi.
+    Qed.
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
       match entries with
@@ -184,7 +195,7 @@ Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
-    | gprs                     | _                    => interp_gprs
+    | gprs                     | _                    => interp_gprs ∅
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one k              | [ addr; w ]          => interp_ptsto_one k addr w
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
@@ -348,21 +359,20 @@ Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
   Include IrisAdequacy2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     FL RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
 
-  Lemma gprs_equiv `{sailGS2 Σ} : ∀ {Σ} (ι : Valuation Σ),
-      interp_gprs ⊣⊢
-        asn.interpret (asn_regs_ptsto ∅) ι.
+  Lemma gprs_equiv `{sailGS2 Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
+      interp_gprs exclude ⊣⊢
+        asn.interpret (asn_regs_ptsto exclude) ι.
   Proof.
-    iIntros.
+    iIntros (? ι exclude).
     unfold interp_gprs, asn_regs_ptsto, asn_and_regs.
-    rewrite difference_empty_L.
-    remember (elements GPRS) as l eqn:El.
+    remember (elements (GPRS ∖ exclude)) as l eqn:El.
     assert (Hdup: NoDup l) by (subst; apply NoDup_elements).
-    assert (Hl: list_to_set l = GPRS) by (subst; apply list_to_set_elements_L).
+    assert (Hl: list_to_set l = GPRS ∖ exclude) by (subst; apply list_to_set_elements_L).
     rewrite <- Hl.
     rewrite big_sepS_list_to_set; last auto.
     clear El Hdup Hl.
     iInduction l as [|gpr gprs] "IH";
-      iSplit; iIntros "H"; cbn; auto.
+      iSplit; iIntros "H"; simpl; auto.
     - iDestruct "H" as "($ & H)".
       now iApply ("IH" with "H").
     - iDestruct "H" as "($ & H)".

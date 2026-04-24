@@ -333,24 +333,23 @@ Module RiscvPmpModel2.
 
     Import IrisInstance.
 
-    Lemma interp_gprs_split :
-      interp_gprs ⊢
-        @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_left ∅
-        ∗ @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_right ∅.
+    Lemma interp_gprs_split (exclude : gset (Reg ty_xlenbits)) :
+      interp_gprs exclude ⊢
+        @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_left exclude
+        ∗ @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_right exclude.
     Proof.
       unfold interp_gprs, RiscvPmpIrisInstancePredicates.interp_gprs.
-    (*   rewrite ?big_sepS_elements. *)
-    (*   remember (elements RiscvPmpIrisInstancePredicates.reg_file) as l. *)
-    (*   replace (elements RiscvPmpIrisInstancePredicates.reg_file) with l. *)
-    (*   clear Heql. *)
-    (*   iIntros "H". *)
-    (*   iInduction l as [|]; cbn; try done. *)
-    (*   iDestruct "H" as "((%v & Hptsto) & H)". *)
-    (*   iDestruct ("IHl" with "H") as "($ & $)". iClear "IHl". *)
-    (*   unfold interp_ptsreg, RiscvPmpIrisInstancePredicates.interp_ptsreg. *)
-    (*   destruct (reg_convert a); try done. *)
-    (*   iDestruct "Hptsto" as "($ & $)". *)
-    Admitted.
+      remember (elements (GPRS ∖ exclude)) as l eqn:El.
+      assert (Hdup: NoDup l) by (subst; apply NoDup_elements).
+      assert (Hl: list_to_set l = GPRS ∖ exclude) by (subst; apply list_to_set_elements_L).
+      rewrite <- Hl.
+      rewrite ?big_sepS_list_to_set; auto.
+      clear El Hdup Hl.
+      iInduction l as [|gpr gprs] "IH";
+        iIntros "H"; simpl; auto.
+      iDestruct "H" as "((% & $ & $) & H)".
+      iApply ("IH" with "H").
+    Qed.
 
     Lemma open_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.
