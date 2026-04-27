@@ -2467,10 +2467,18 @@ Module bv.
   Module reify.
 
     Inductive exp (n : nat) : Set :=
+    (* An unrestricted bitvector value. The intended purpose is to represent
+       a hypothesis from the context. This should currently not be used as a
+       default case for unsupported bitvector operations. *)
     | Var (x : bv n)
     | Zero
+    (* The [OneZero] constructor represents the bv.one operation when the size
+       of the bitvector is statically known to be zero and [OneSucc] when it is
+       statically known to be not zero, more specifically if the size head
+       reduces to an application of the successor constructor. The case that
+       the size cannot be statically determined is unsupported. *)
     | OneZero (H : 0%nat = n)
-    | OneOne {n'} (H : S n' = n)
+    | OneSucc {n'} (H : S n' = n) (* bv.one when the size is not zero *)
     | Add (e1 e2 : exp n)
     | Sub (e1 e2 : exp n)
     | Mul (e1 e2 : exp n)
@@ -2479,7 +2487,7 @@ Module bv.
     .
     #[global] Arguments Zero {n}.
     #[global] Arguments OneZero {n} _.
-    #[global] Arguments OneOne {n n'} _.
+    #[global] Arguments OneSucc {n n'} _.
     #[global] Arguments OfZ {n} z.
 
     Fixpoint eval {n} (e : exp n) : bv n :=
@@ -2487,7 +2495,7 @@ Module bv.
       | Var x       => x
       | Zero        => zero
       | OneZero _   => one
-      | OneOne _    => one
+      | OneSucc _   => one
       | Add e1 e2   => eval e1 + eval e2
       | Sub e1 e2   => eval e1 - eval e2
       | Mul e1 e2   => eval e1 * eval e2
@@ -2500,7 +2508,7 @@ Module bv.
       | Var x              => bv.unsigned x
       | Zero               => 0
       | OneZero _          => 0
-      | OneOne _           => 1
+      | OneSucc _          => 1
       | Add e1 e2          => eval_unsigned e1 + eval_unsigned e2
       | Sub e1 e2          => eval_unsigned e1 - eval_unsigned e2
       | Mul e1 e2          => eval_unsigned e1 * eval_unsigned e2
@@ -2553,6 +2561,25 @@ Module bv.
 
     Import Ltac2 Printf.
 
+    (* An Ltac2 type to represent reified bitvector expressions. We currently
+       do not store size information about the represented bitvector values
+       in most cases and instead rely on the type checker to fill those in. *)
+    Ltac2 Type rec exp := [
+      | Var (ident)
+      | Zero
+      | OneZero
+      | OneSucc
+      | Add (exp, exp)
+      | Sub (exp, exp)
+      | Mul (exp, exp)
+      | OfZ (constr)
+      (* The append is the only operation which retains the sizes since that
+         is needed for the interpretation into an integer. *)
+      | App (constr, constr, exp, exp)
+      ].
+
+    (* Returns true iff the given term does not contain any section or
+       proof context variables, i.e. no Var. *)
     Ltac2 is_closed_constr (t : constr) : bool :=
       let rec visit (t : constr) : unit :=
         match Constr.Unsafe.kind t with
@@ -2566,42 +2593,101 @@ Module bv.
       | Err e             => Control.throw e
       end.
 
-    Ltac2 rec reify (n : constr) (v : constr) : constr :=
+    (* Reify a bitvector  *)
+    Ltac2 rec reify_bv (v : constr) : exp :=
       lazy_match! v with
-      | bv.zero => constr:(@Zero $n)
-      | bv.one =>
-          lazy_match! Std.eval_hnf n with
-          | O      => constr:(@OneZero $n eq_refl)
-          | S ?n'' => constr:(@OneOne $n $n'' eq_refl)
-          | _      =>
+      | zero            => Zero
+      | @one ?k         =>
+          lazy_match! Std.eval_hnf k with
+          | O   => OneZero
+          | S _ => OneSucc
+          | _   =>
               let m := "reify_bv: could not determine width for bv.one" in
               Control.zero (Tactic_failure (Some (Message.of_string m)))
           end
-
-      | bv.add ?x ?y        => let ex := reify n x in
-                               let ey := reify n y in
-                               constr:(@Add $n $ex $ey)
-      | bv.sub ?x ?y        => let ex := reify n x in
-                               let ey := reify n y in
-                               constr:(@Sub $n $ex $ey)
-      | bv.mul ?x ?y        => let ex := reify n x in
-                               let ey := reify n y in
-                               constr:(@Mul $n $ex $ey)
-      | bv.of_Z ?z          => constr:(@OfZ $n $z)
-      | bv.mk ?m _          => let z := if is_closed_constr m
-                                        then eval cbv in (Z.of_N $m)
-                                        else eval cbn in (Z.of_N $m)
-                               in constr:(@OfZ $n $z)
-      | @bv.app ?k ?l ?x ?y => let ex := reify k x in
-                               let ey := reify l y in
-                               constr:(@App $n $k $l $ex $ey eq_refl)
-      | _                   =>
+      | add ?x ?y       => Add (reify_bv x) (reify_bv y)
+      | sub ?x ?y       => Sub (reify_bv x) (reify_bv y)
+      | mul ?x ?y       => Mul (reify_bv x) (reify_bv y)
+      | of_Z ?z         => OfZ z
+      | mk ?m _         => let z := if is_closed_constr m
+                                    then eval cbv in (Z.of_N $m)
+                                    else eval cbn in (Z.of_N $m)
+                           in OfZ z
+      | app ?k ?l ?x ?y => App k l (reify_bv x) (reify_bv y)
+      | _               =>
           match Constr.Unsafe.kind v with
-          | Constr.Unsafe.Var _ => constr:(@Var $n $v)
+          | Constr.Unsafe.Var x => Var x
           | _                   =>
               let m := fprintf "reify_bv: fallback case expects a variable but got '%t'" v in
               Control.zero (Tactic_failure (Some m))
           end
+      end.
+
+   (* Reflect the Ltac2 exp type into the Gallina exp type. *)
+   Ltac2 rec reflect_exp (n : constr) (e : exp) : constr :=
+      match e with
+      | Var x       => let v := Control.hyp x in
+                       constr:(@Var $n $v)
+      | Zero        => constr:(@Zero $n)
+      | OneZero     => constr:(@OneZero _ eq_refl)
+      | OneSucc     => constr:(@OneSucc _ _ eq_refl)
+      | Add x y     => let ex := reflect_exp n x in
+                       let ey := reflect_exp n y in
+                       constr:(@Add _ $ex $ey)
+      | Sub x y     => let ex := reflect_exp n x in
+                       let ey := reflect_exp n y in
+                       constr:(@Sub _ $ex $ey)
+      | Mul x y     => let ex := reflect_exp n x in
+                       let ey := reflect_exp n y in
+                       constr:(@Mul _ $ex $ey)
+      | OfZ z       => constr:(@OfZ _ $z)
+      | App k l x y => let ex := reflect_exp k x in
+                       let ey := reflect_exp l y in
+                       constr:(@App _ $k $l $ex $ey eq_refl)
+      end.
+
+    Ltac2 rec reflect_unsigned (e : exp) : constr :=
+      match e with
+      | Var x       => let v := Control.hyp x in
+                       constr:(@unsigned _ $v)
+      | Zero        => constr:(0)
+      | OneZero     => constr:(0)
+      | OneSucc     => constr:(1)
+      | Add x y     => let ex := reflect_unsigned x in
+                       let ey := reflect_unsigned y in
+                       constr:(Z.add $ex $ey)
+      | Sub x y     => let ex := reflect_unsigned x in
+                       let ey := reflect_unsigned y in
+                       constr:(Z.sub $ex $ey)
+      | Mul x y     => let ex := reflect_unsigned x in
+                       let ey := reflect_unsigned y in
+                       constr:(Z.mul $ex $ey)
+      | OfZ z       => z
+      | App k _ x y => let ex := reflect_unsigned x in
+                       let ey := reflect_unsigned y in
+                       constr:(Z.modulo $ex (2 ^ Z.of_nat $k) +
+                               $ey * 2 ^ Z.of_nat $k)
+      end.
+
+    Ltac2 rec reflect_bv (e : exp) : constr :=
+      match e with
+      | Var x       => Control.hyp x
+      | Zero        => constr:(@zero _ )
+      | OneZero     => constr:(@one 0)
+      | OneSucc     => constr:(@one _ _)
+      | Add x y     => let ex := reflect_bv x in
+                       let ey := reflect_bv y in
+                       constr:(@add _ $ex $ey)
+      | Sub x y     => let ex := reflect_bv x in
+                       let ey := reflect_bv y in
+                       constr:(@sub _ $ex $ey)
+      | Mul x y     => let ex := reflect_bv x in
+                       let ey := reflect_bv y in
+                       constr:(@mul _ $ex $ey)
+      | OfZ z       => constr:(@of_Z _ $z)
+      | App k l x y => let ex := reflect_bv x in
+                       let ey := reflect_bv y in
+                       constr:(@app $k $l $ex $ey)
       end.
 
   End reify.
