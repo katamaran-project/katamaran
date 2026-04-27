@@ -1226,6 +1226,11 @@ Module bv.
       now rewrite <-to_N_truncz2, truncz_idemp, Znat.Z2N.id.
     Qed.
 
+    Lemma unsigned_of_Z_small (n : nat) (x : Z) :
+      (0 <= x < 2 ^ Z.of_nat n)%Z ->
+      x = @bv.unsigned n (bv.of_Z x).
+    Proof. intros. now rewrite unsigned_of_Z, truncz_small. Qed.
+
     Lemma of_Z_signed n (v : bv n) :
       of_Z (signed v) = v.
     Proof.
@@ -1598,6 +1603,20 @@ Module bv.
       now rewrite <-?of_N_truncz, <-Znat.N2Z.inj_add, <-?of_N_truncz, ?truncn_idemp.
     Qed.
 
+    Ltac Zify.zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
+
+    Lemma of_Z_S [n : nat] (z : Z) :
+      @of_Z n (Z.succ z) = add one (bv.of_Z z).
+    Proof.
+      apply unsigned_inj.
+      rewrite unsigned_add, !unsigned_of_Z, <- Z.add_1_l.
+      replace (unsigned one) with (truncz n 1).
+      now rewrite <- truncz_add.
+      destruct n; [easy|].
+      rewrite truncz_small; [easy|].
+      rewrite Nat2Z.inj_succ, Z.pow_succ_r; lia.
+    Qed.
+
     Lemma unsigned_add_small {n} (x y : bv n) :
       (unsigned x + unsigned y < 2 ^ Z.of_nat n)%Z ->
       (unsigned x + unsigned y)%Z = unsigned (add x y).
@@ -1750,22 +1769,74 @@ Module bv.
   Section Sequencing.
     Import stdpp.list_numbers.
 
-    Definition bv_seq {n : nat} (start : bv n) (len : Z) : list (bv n) :=
+    Definition seq {n : nat} (start : bv n) (len : Z) : list (bv n) :=
       of_Z <$> seqZ (unsigned start) len.
 
-    Lemma NoDup_seq_bv (n : nat) (start : bv n) (len : Z) :
-      (0 <= len <= 2 ^ Z.of_nat n)%Z ->
-      base.NoDup (@bv_seq n start len).
+    Lemma length_seq n s l :
+      length (@seq n s l) = Z.to_nat l.
+    Proof. unfold seq. now rewrite length_map, list_numbers.length_seqZ. Qed.
+
+    Lemma elem_of_seq {n} (s : bv n) l a :
+      a ∈ seq s l ↔
+      (∃ k, a = add s (of_Z k) /\ 0 <= k < l)%Z.
     Proof.
-      intros H. apply list.NoDup_alt. intros i j b'. unfold bv_seq.
-      rewrite !list_lookup_fmap.
-      intros [x [[-> ?]%lookup_seqZ ->]]%fmap_Some H1%fmap_Some.
-      destruct H1 as (x & Hseq & Heq).
-      apply lookup_seqZ in Hseq as (-> & Hj).
-      apply (f_equal (add (negate start))) in Heq.
+      split.
+      - intros (k & -> & Hk%elem_of_seqZ)%elem_of_list_fmap.
+        assert (exists i, k = unsigned s + i /\ 0 <= i < l)%Z.
+        { exists (k - unsigned s)%Z. lia. }
+        destruct H as (i & -> & Hb). clear Hk.
+        exists i.
+        by rewrite <- of_Z_add, of_Z_unsigned.
+      - intros (k & Heq & Hlt). apply elem_of_list_fmap.
+        exists (unsigned s + k)%Z. split.
+        + subst. by rewrite <-of_Z_add, of_Z_unsigned.
+        + apply elem_of_seqZ. lia.
+    Qed.
+
+    Lemma elem_of_seq' {n} (s : bv n) l a :
+      a ∈ seq s l <->
+      ∃ k, a = add s k /\ (unsigned k < l)%Z.
+    Proof.
+      split.
+      - intros (k & Heq & Hb)%elem_of_seq. exists (of_Z k).
+        split. done. clear Heq. rewrite unsigned_of_Z.
+        assert (truncz n k <= k)%Z by (apply Z.mod_le; lia).
+        lia.
+      - intros (k & Heq & Hb). apply elem_of_seq.
+        exists (unsigned k). rewrite of_Z_unsigned.
+        pose proof (bv.unsigned_bounds k).
+        split. done. lia.
+    Qed.
+
+    Lemma seq_no_overlap {n} (s1 s2 : bv n) (l1 l2 : Z) a :
+      (unsigned s1 + l1 <= unsigned s2)%Z ->
+      (unsigned s2 + l2 < 2 ^ Z.of_nat n)%Z ->
+      a ∈ seq s1 l1 ->
+      a ∈ seq s2 l2 ->
+      False.
+    Proof.
+      intros Hb1 Hb2 Hi1 Hi2. apply elem_of_seq' in Hi1, Hi2.
+      destruct Hi1 as (i1 & -> & Hle1), Hi2 as (i2 & Heq & Hle2).
       apply (f_equal unsigned) in Heq.
-      rewrite !unsigned_add, !unsigned_of_Z, !unsigned_negate in Heq.
-      rewrite <- !truncz_add, !truncz_small in Heq; lia.
+      pose proof (unsigned_bounds i2).
+      rewrite <- !unsigned_add_small in Heq; lia.
+    Qed.
+
+    Lemma NoDup_seq {n} (s : bv n) (l : Z) :
+      (0 <= l <= 2 ^ Z.of_nat n)%Z ->
+      NoDup (seq s l).
+    Proof.
+      intros H. apply NoDup_fmap_2_strong; auto using NoDup_seqZ.
+      intros x y H1 H2 Heq. apply elem_of_seqZ in H1, H2.
+      assert (∃ i j, unsigned s + i = x /\ unsigned s + j = y
+                     /\ 0 <= i < l /\ 0 <= j < l)%Z
+        as (i & j & <- & <- & ? & ?).
+      { exists (x - unsigned s)%Z, (y - unsigned s)%Z. lia. }
+      clear H1 H2. f_equal.
+      rewrite <- !of_Z_add, !of_Z_unsigned in Heq.
+      apply add_cancel_l in Heq. clear s.
+      apply (f_equal unsigned) in Heq.
+      rewrite !unsigned_of_Z, !truncz_small in Heq; lia.
     Qed.
 
   End Sequencing.
