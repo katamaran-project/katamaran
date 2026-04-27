@@ -2711,7 +2711,7 @@ Module bv.
       | Mul x y     => let ex := reflect_exp n x in
                        let ey := reflect_exp n y in
                        constr:(@Mul _ $ex $ey)
-      | OfZ z       => constr:(@OfZ _ $z)
+      | OfZ z       => constr:(@OfZ $n $z)
       | App k l x y => let ex := reflect_exp k x in
                        let ey := reflect_exp l y in
                        constr:(@App _ $k $l $ex $ey eq_refl)
@@ -2939,6 +2939,8 @@ Module bv.
 
   Module tactics.
 
+    Import Ltac2 Ltac2.Notations.
+
     Ltac destroy v :=
       lazymatch type of v with
       | bv 0         => destruct (view v)
@@ -2969,45 +2971,154 @@ Module bv.
             ]
       end.
 
-    Ltac zify_unsigned :=
-      repeat
-        lazymatch goal with
-        (* TODO: Individual rewrites can be slow in proofs. Either 1) define *)
-        (* inequalities using bv.unsigned that these rewrites could be *)
-        (* implemented with change_no_check or 2) use a rewrite database. *)
-        | |- context[ ule ?x ?y ] => rewrite ule_iff_unsigned_le
-        | |- context[ ult ?x ?y ] => rewrite ult_iff_unsigned_lt
-        | |- context[ uge ?x ?y ] => rewrite uge_iff_unsigned_ge
-        | |- context[ ugt ?x ?y ] => rewrite ugt_iff_unsigned_gt
-        | H: context[ ule ?x ?y ] |- _ => rewrite ule_iff_unsigned_le in H
-        | H: context[ ult ?x ?y ] |- _ => rewrite ult_iff_unsigned_lt in H
-        | H: context[ uge ?x ?y ] |- _ => rewrite uge_iff_unsigned_ge in H
-        | H: context[ ugt ?x ?y ] |- _ => rewrite ugt_iff_unsigned_gt in H
+    Ltac zify_nonbranching_nonfailing :=
+      lazymatch goal with
+      (* TODO: Individual rewrites can be slow in proofs. Either 1) define *)
+      (* inequalities using bv.unsigned that these rewrites could be *)
+      (* implemented with change_no_check or 2) use a rewrite database. *)
+      | |- context[ ule ?x ?y ] => rewrite ule_iff_unsigned_le
+      | |- context[ ult ?x ?y ] => rewrite ult_iff_unsigned_lt
+      | |- context[ uge ?x ?y ] => rewrite uge_iff_unsigned_ge
+      | |- context[ ugt ?x ?y ] => rewrite ugt_iff_unsigned_gt
+      | H: context[ ule ?x ?y ] |- _ => rewrite ule_iff_unsigned_le in H
+      | H: context[ ult ?x ?y ] |- _ => rewrite ult_iff_unsigned_lt in H
+      | H: context[ uge ?x ?y ] |- _ => rewrite uge_iff_unsigned_ge in H
+      | H: context[ ugt ?x ?y ] |- _ => rewrite ugt_iff_unsigned_gt in H
 
-        (* Due to how unsigned and zero are defined, change_no_check also *)
-        (* works when the bitvector length is not statically known. *)
-        | |- context[ unsigned zero ] =>
-            change_no_check (unsigned zero) with 0%Z
-        | H: context[ unsigned zero ] |- _ =>
-            change_no_check (unsigned zero) with 0%Z in H
+      (* Due to how unsigned and zero are defined, change_no_check also *)
+      (* works when the bitvector length is not statically known. *)
+      | |- context[ unsigned zero ] =>
+          change_no_check (unsigned zero) with 0%Z
+      | H: context[ unsigned zero ] |- _ =>
+          change_no_check (unsigned zero) with 0%Z in H
+      end.
 
-        (* These are potentially branching, so keep them last. *)
-        | |- context[ @unsigned ?n (?x + ?y) ] => zify_unsigned_add n x y
-        | _: context[ @unsigned ?n (?x + ?y) ] |- _ => zify_unsigned_add n x y
-        end.
+    Ltac2 rec stream_to_dlist (s : unit -> 'a) (tail : 'a list) : 'a list :=
+      match Control.case s with
+      | Val (x, k) => stream_to_dlist (fun () => k No_value) (x :: tail)
+      | Err _      => tail
+      end.
 
-    Ltac zify_generalize_unsigned n x :=
+    Ltac2 list_to_fset (t : 'k FSet.Tags.tag) (l : 'k list) : 'k FSet.t :=
+      List.fold_right FSet.add l (FSet.empty t).
+
+    (* Collect all the unsigned terms. The optional identifiers denotes if it
+       was found in a hypothesis or the head *)
+    #[local] Ltac2 unsigned_sites () : (ident option * constr * constr) list :=
+      let collect (l : ident option) (t : constr) :=
+        stream_to_dlist
+          (fun _ => multi_match! t with
+                   context[@unsigned ?n ?v] => (l, n, v)
+                 end)
+      in
+
+      let scan_hyp (hyp : ident * constr option * constr) :=
+        match hyp with (id, _body, ty) => collect (Some id) ty end
+      in
+
+      List.fold_right scan_hyp (Control.hyps ()) (collect None (Control.goal ()) []) .
+
+    (* Get all of the terms that already have bounds in the context. *)
+    #[local] Ltac2 unsigned_bounds () : (constr * constr) list :=
+      stream_to_dlist
+        (fun _ => multi_match! goal with
+               | [ _ : (0 <= @unsigned ?n ?v < 2 ^ Z.of_nat ?n)%Z |- _ ] => (n, v)
+               | [ _ : (0 <= @unsigned ?n ?v)%Z,
+                   _ : (@unsigned ?n ?v < 2 ^ Z.of_nat ?n)%Z |- _ ] => (n, v)
+               end) [].
+
+    (* Collect all the bitvector variables that are referenced under an
+       unsigned application. *)
+    #[local] Ltac2 unsigned_vars () : (ident, constr) FMap.t :=
+      let rec go (n : constr) (v : constr) (tail : (ident, constr) FMap.t) :=
+        lazy_match! v with
+        | zero      => tail
+        | one       => tail
+        | add ?x ?y => go n x (go n y tail)
+        | sub ?x ?y => go n x (go n y tail)
+        | mul ?x ?y => go n x (go n y tail)
+        | of_Z ?_z  => tail
+        | _            =>
+            match Constr.Unsafe.kind v with
+            | Constr.Unsafe.Cast c _ _ => go n c tail
+            | Constr.Unsafe.Var id     => FMap.add id n tail
+            | _                        => tail
+            end
+        end
+      in
+
+      List.fold_left
+        (fun seen s => match s with (_, n, v) => go n v seen end)
+        (FMap.empty FSet.Tags.ident_tag)
+        (unsigned_sites ()).
+
+    Ltac2 pose_unsigned_bounds (n : constr) (x : ident) : unit :=
+      let hbound := Fresh.in_goal @Hbound in
+      let v      := Control.hyp x in
+      assert ($hbound := @unsigned_bounds $n $v).
+
+    (* Saturate the context will all unsigned bounds for bitvector variables
+       that appear in an unsigned application. *)
+    Ltac2 saturate_unsigned_bounds () : unit :=
+      let vars : (ident, constr) FMap.t := unsigned_vars () in
+      let with_bounds : ident FSet.t :=
+        list_to_fset FSet.Tags.ident_tag
+          (List.map_filter (fun (_n, v) =>
+                              match Constr.Unsafe.kind v with
+                              | Constr.Unsafe.Var id     => Some id
+                              | _                        => None
+                              end)
+             (unsigned_bounds ()))
+      in
+      let need_bounds : ident list :=
+        FSet.elements (FSet.diff (FMap.domain vars) with_bounds)
+      in
+
+      List.iter
+        (fun x =>
+           match FMap.find_opt x vars with
+           | Some n => pose_unsigned_bounds n x
+           | None   => Control.throw Not_found
+           end)
+        need_bounds.
+
+    Ltac2 zify_unsigned_small (n : constr) (v : constr) : unit :=
+      if Constr.is_var v then
+        Control.zero (Tactic_failure None)
+      else if reify.is_closed_constr v then
+        let u := constr:(@unsigned $n $v) in
+        let z := eval cbv in $u in
+        assert ($z = $u) as <- by constructor
+      else
+        let t := reify.reify_bv v in
+        let z := reify.reflect_unsigned t in
+        let e := reify.reflect_exp n t in
+        assert ($z = @unsigned $n $v) as <-
+          by (refine open_constr:(@reify.eval_unsigned_representable $n $v $z $e eq_refl eq_refl _);
+              ltac1:(lia)).
+
+    Ltac2 zify_unsigned_fast () :=
+      match! goal with
+      | [ _ : context[@unsigned ?n ?v] |- _ ] => zify_unsigned_small n v
+      | [ |- context[@unsigned ?n ?v] ] => zify_unsigned_small n v
+      end.
+
+    Ltac zify_unsigned_generalize n x :=
       is_var x;
-      pose proof (unsigned_bounds x);
-      generalize dependent (unsigned x);
+      generalize dependent (@unsigned n x);
       clear x; intros x.
 
     Ltac zify_generalize :=
       repeat
         match goal with
-        | |- context[@unsigned ?n ?x] => zify_generalize_unsigned n x
-        | _: context[@unsigned ?n ?x] |- _ => zify_generalize_unsigned n x
+        | |- context[@unsigned ?n ?x] => zify_unsigned_generalize n x
+        | _: context[@unsigned ?n ?x] |- _ => zify_unsigned_generalize n x
         end.
+
+    Ltac zify_unsigned :=
+      repeat zify_nonbranching_nonfailing;
+      ltac2:(saturate_unsigned_bounds ());
+      ltac2:(repeat (zify_unsigned_fast ())).
 
   End tactics.
 
