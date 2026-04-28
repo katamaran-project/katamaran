@@ -121,6 +121,8 @@ Module Type IrisResources2
                        sailGS2_memGS : memGS2 Σ;
                      }.
 
+  Print HintDb typeclass_instances.
+
   #[export] Existing Instance sailGS2_invGS.
   #[export] Existing Instance sailGS2_regGS2.
   #[export] Existing Instance sailGS2_memGS.

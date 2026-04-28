@@ -171,7 +171,7 @@ Module RiscvPmpModel2.
      -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
         destruct (bv.appView byte (bytes * byte) w) as [bw w].
-        iDestruct "Haddr" as "[[H $] Haddr]".
+        iDestruct "Haddr" as "[H Haddr]".
         iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
         iApply ("IHbytes" $! data w
                        (bv.add bv.one paddr) (memory_update_ram μ (write_byte (memory_ram μ) paddr bd))

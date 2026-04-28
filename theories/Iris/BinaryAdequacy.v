@@ -410,7 +410,7 @@ Module Type IrisAdequacy2
 
   Lemma semWP2_preservation `{sailGS2 Σ} {Γ σ} n (s11 s21 : Stm Γ σ) {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
     {δ11 δ12 δ21 δ22 : CStoreVal Γ} {s12 s22 : Stm Γ σ}
-    {Q : forall `{sailGS2 Σ}, IVal σ -> CStoreVal Γ -> IVal σ -> CStoreVal Γ -> iProp Σ}  :
+    {Q : IVal σ -> CStoreVal Γ -> IVal σ -> CStoreVal Γ -> iProp Σ}  :
     ⟨ γ11, μ11, δ11, s11 ⟩ -{ n }-> ⟨ γ12, μ12, δ12, s12 ⟩ ->
     ⟨ γ21, μ21, δ21, s21 ⟩ -{ n }-> ⟨ γ22, μ22, δ22, s22 ⟩ ->
     mem_inv2 μ11 μ21 ∗ regs_inv2 γ11 γ21 -∗

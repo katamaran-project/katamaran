@@ -169,7 +169,7 @@ Module RiscvPmpIrisInstance (* <: *)
     (* TODO: change back to words instead of bytes... might be an easier first version
              and most likely still convenient in the future *)
     Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
-      pointsto addr (DfracOwn 1) b ∗ ⌜¬ withinMMIO addr 1⌝.
+      pointsto addr (DfracOwn 1) b (* ∗ ⌜¬ withinMMIO addr 1⌝ *).
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
     Definition ptstoSthL : list Addr -> iProp Σ :=
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
@@ -683,16 +683,16 @@ Module RiscvPmpIrisInstance (* <: *)
       repeat case_decide; auto; iIntros; by exfalso.
     Qed.
 
-    (* Inserting a byte is always possible *)
-    Lemma interp_addr_access_byte_inj base :
-       ptstoSth base -∗ interp_addr_access_byte liveAddrs mmioAddrs base.
-    Proof.
-      unfold interp_addr_access_byte, ptstoSth, interp_ptsto.
-      iIntros "HFalse". iDestruct "HFalse" as (?) "[Hmapsto %HFalse]".
-      case_decide.
-      - by cbn in HFalse.
-      - case_decide; auto.
-    Qed.
+    (* (* Inserting a byte is always possible *) *)
+    (* Lemma interp_addr_access_byte_inj base : *)
+    (*    ptstoSth base -∗ interp_addr_access_byte liveAddrs mmioAddrs base. *)
+    (* Proof. *)
+    (*   unfold interp_addr_access_byte, ptstoSth, interp_ptsto. *)
+    (*   iIntros "HFalse". iDestruct "HFalse" as (?) "[Hmapsto %HFalse]". *)
+    (*   case_decide. *)
+    (*   - by cbn in HFalse. *)
+    (*   - case_decide; auto. *)
+    (* Qed. *)
 
     (* Use knowledge of RAM to extract range *)
     Lemma interp_addr_access_extr base width :
@@ -719,18 +719,18 @@ Module RiscvPmpIrisInstance (* <: *)
       rewrite /bv.unsigned bv.bin_add_small !bv.bin_of_N_small; lia. (* TODO: use representability of min/maxAddr here, once they are made properly opaque *)
     Qed.
 
-    (* Inserting a range is always possible *)
-    Lemma interp_addr_access_inj base width:
-      (∃ (w : bv (width * byte)), interp_ptstomem base w) ⊢
-      interp_addr_access liveAddrs mmioAddrs base width.
-    Proof.
-      iIntros "Hint".
-      rewrite interp_ptstomem_big_sepS.
-      unfold interp_addr_access, ptstoSthL.
-      iApply big_sepL_mono; last auto.
-      iIntros (? y Hseq) "/=".
-      iApply interp_addr_access_byte_inj.
-    Qed.
+    (* (* Inserting a range is always possible *) *)
+    (* Lemma interp_addr_access_inj base width: *)
+    (*   (∃ (w : bv (width * byte)), interp_ptstomem base w) ⊢ *)
+    (*   interp_addr_access liveAddrs mmioAddrs base width. *)
+    (* Proof. *)
+    (*   iIntros "Hint". *)
+    (*   rewrite interp_ptstomem_big_sepS. *)
+    (*   unfold interp_addr_access, ptstoSthL. *)
+    (*   iApply big_sepL_mono; last auto. *)
+    (*   iIntros (? y Hseq) "/=". *)
+    (*   iApply interp_addr_access_byte_inj. *)
+    (* Qed. *)
 
     (* TODO: This lemma is not a special case of the above, because of strange semantics of `Pmp_access`*)
     Lemma interp_pmp_addr_access_without_0 {entries m} base :

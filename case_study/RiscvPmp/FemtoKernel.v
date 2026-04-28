@@ -845,7 +845,7 @@ Module inv := invariants.
     change (bv.add _ bv.one) with (@bv.of_Z xlenbits 3).
     now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
     rewrite ?bv.add_assoc.
-    now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+:q    now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
   Qed.
 
   Lemma intro_ptstomem_word2 `{sailGS Σ} {μ : Memory} {a : Val ty_word} {v : Val ty_word} :
