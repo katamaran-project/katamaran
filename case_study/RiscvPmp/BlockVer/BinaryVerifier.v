@@ -193,51 +193,6 @@ Module BinaryBlockVerifier.
       - now iApply semWP2_fail.
     Qed.
 
-    Lemma WP2_loop_semTripleBlock : ∀ PRE a instrs POST,
-      (exec_instructions_prologue a instrs) -∗
-      (PRE a) -∗
-      semTripleBlock PRE a instrs POST -∗
-      (∀ an, POST a an ∗ exec_instructions_epilogue a an instrs -∗ WP2_loop) -∗
-      WP2_loop.
-    Proof.
-      iIntros (PRE a instrs).
-      iRevert (PRE a).
-      iInduction instrs as [|instr instrs] "IH";
-        iIntros (PRE a POST) "Hpro HPRE Htrip Hk".
-      - cbn. iSpecialize ("Htrip" with "HPRE").
-        iApply ("Hk" with "[$Htrip $Hpro]").
-      - cbn. iDestruct ("Htrip" with "HPRE") as "(_ & Htrip)". fold step_n.
-        iDestruct "Hpro" as "(Hpc & Hinstrs & Hnpc)"; cbn.
-        iDestruct "Hinstrs" as "(Hinstr & Hinstrs)".
-        iSpecialize ("Htrip" with "[$]").
-        unfold WP2_loop at 4.
-        cbn [FunDef]. unfold fun_loop.
-        iApply semWP2_seq.
-        iApply semWP2_call_inline. simpl.
-        iApply (semWP2_mono with "Htrip").
-        iIntros ([] ? ? ?) "(<- & <- & H)"; auto.
-        iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)".
-        iApply semWP2_call_inline.
-        destruct instrs.
-        + cbn.
-          iSpecialize ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc]").
-          iApply (semWP2_mono with "Hk").
-          now iIntros (? ? ? ?) "(<- & <-)".
-        + cbn. iDestruct "Htrip" as "(<- & Htrip)".
-          iSpecialize ("IH" $! (λ _, True)%I _ (λ a' an, ⌜a' = bv.add a bv_instrsize⌝ ∗ POST a an)%I with "[$Hpc $Hinstrs $Hnpc] [] [Htrip] [Hinstr Hk]"); auto.
-          { iIntros "_". iSplitR; first auto. iIntros "H".
-            iSpecialize ("Htrip" with "H"). iApply (semWP2_mono with "Htrip").
-            iIntros ([] ? ? ?) "(<- & <- & H)"; auto.
-            repeat iSplitR; auto.
-            iDestruct "H" as "(%na & Hepi & H)". iExists na. iFrame "Hepi".
-            iApply (step_n_mono with "H").
-            iIntros (an) "$"; auto. }
-          { iIntros (an) "([% HPOST] & Hpc & Hinstrs & Hnpc)".
-            iApply "Hk". iFrame "HPOST Hpc Hnpc Hinstr Hinstrs". }
-          iApply (semWP2_mono with "IH").
-          now iIntros (? ? ? ?) "(<- & <-)".
-    Qed.
-
     Lemma WP2_loop_semTripleBlock_later : ∀ PRE a instr instrs POST,
       (exec_instructions_prologue a (instr :: instrs)) -∗
       (PRE a) -∗
@@ -288,6 +243,22 @@ Module BinaryBlockVerifier.
           iApply ("Hk" with "[$HPOST $Hinstr $Hepi]").
         + iApply (semWP2_mono with "IH").
           now iIntros (? ? ? ?) "(<- & <-)".
+    Qed.
+
+    Lemma WP2_loop_semTripleBlock : ∀ PRE a instrs POST,
+      (exec_instructions_prologue a instrs) -∗
+      (PRE a) -∗
+      semTripleBlock PRE a instrs POST -∗
+      (∀ an, POST a an ∗ exec_instructions_epilogue a an instrs -∗ WP2_loop) -∗
+      WP2_loop.
+    Proof.
+      iIntros (PRE a instrs).
+      iRevert (PRE a).
+      iInduction instrs as [|instr instrs] "IH";
+        iIntros (PRE a POST) "Hpro HPRE Htrip Hk".
+      - cbn. iSpecialize ("Htrip" with "HPRE").
+        iApply ("Hk" with "[$Htrip $Hpro]").
+      - now iApply (WP2_loop_semTripleBlock_later with "Hpro HPRE Htrip").
     Qed.
 
     Lemma step_n_focus (instrs : list AST) (ainstr apc : Val ty_xlenbits) (POST1 POST2 POST : Val ty_xlenbits -> iProp Σ) :
