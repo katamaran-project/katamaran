@@ -143,8 +143,12 @@ Parameter mmioenv : MMIOEnv.
 (* Defines the io-protocol ghost state *)
 
 Context {TK : TypeDeclKit}.
-Definition IOState : Set := bool.
-#[export] Definition iostate_bits := 1.
+Inductive IOState : Set :=
+  | SGo
+  | SStop
+  | SReset.
+
+    #[export] Definition iostate_bits := 2.
 
 Class bv_rize (A : Set) (n : nat) : Set := {
     bv_to : A -> bv n;
@@ -153,8 +157,18 @@ Class bv_rize (A : Set) (n : nat) : Set := {
 
 #[export] Instance bv_iostate : bv_rize IOState iostate_bits :=
   {
-    bv_to := fun  b : IOState => if b then @bv.of_N iostate_bits 1 else @bv.of_N iostate_bits 0;
-    bv_from := fun (b : bv iostate_bits)  => negb (bv.eqb b (bv.zero))
+    bv_to := fun  s : IOState => match s with
+                              | SGo   => @bv.of_N iostate_bits 0
+                              | SStop   => @bv.of_N iostate_bits 1
+                              | SReset => @bv.of_N iostate_bits 2
+                              end;
+
+    bv_from := fun (s : bv iostate_bits)  =>
+                 match s with
+                 | bv.mk 0 I => SGo
+                 | bv.mk 2 I => SStop
+                 | _ => SReset
+                 end;
   }.
 
 

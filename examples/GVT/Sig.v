@@ -63,7 +63,8 @@ Inductive PurePredicate : Set :=
 | prev_addr
 | in_entries
 | in_mmio (bytes : nat)
-| mmio_state_prot (bytes : nat)
+| mmio_event_prot (bytes : nat)
+| mmio_interrupt_state_prot
 .
 
 Inductive Exec : Set :=
@@ -120,7 +121,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
       | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
       | in_mmio _       => [ty_xlenbits]
-      | mmio_state_prot width         => [ty.bvec (width * byte); ty_iostate; ty_iostate]
+      | mmio_event_prot width     => [ty.bvec (width * byte); ty_interrupt_set; ty_iostate]
+      | mmio_interrupt_state_prot => [ty.bvec iostate_bits; ty_iostate; ty_iostate]
       end.
 
     Example default_pmpcfg_ent : Pmpcfg_ent :=
@@ -317,29 +319,66 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     (* This is the io-protocol state machine transition function. *)
     (* Note a condition on the event_addr is not (yet) required by the protocol and thus missing. *)
-    Variant impl_mmio_state_prot: IOState -> Event -> IOState -> Prop :=
-      | IOW : forall e b, event_type e = IOWrite ->
-                   event_nbbytes e > 0 ->
-                   b = (is_even (event_contents e)) ->
-                   impl_mmio_state_prot b e (negb b)
+    Variant impl_mmio_event_prot: IOState -> InterruptSet -> Event -> Prop :=
+      | IOW : forall i e s, event_type e = IOWrite ->
+                       event_nbbytes e > 0 ->
+                       i = Ints_Empty ->
+                       s = SGo ->
+                       impl_mmio_event_prot s i e
+      | IOW0 : forall i e s, event_type e = IOWrite ->
+                        event_contents e = bv.zero  ->
+                        impl_mmio_event_prot s i e
+      | IOR : forall i e s, event_type e = IORead ->
+                       impl_mmio_event_prot s i e
     .
 
-    Definition Mmio_state_prot {width : nat} (w: bv (width * byte)) (s s' :  bv iostate_bits) : Prop :=
-      forall addr, impl_mmio_state_prot (bv_from s)  {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := _ ;  event_contents := w |} (bv_from s').
+    Definition Mmio_event_prot {width : nat} (w: bv (width * byte)) (i : InterruptSet) (s :  bv iostate_bits) : Prop :=
+      forall addr, impl_mmio_event_prot (bv_from s) i {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := _ ;  event_contents := w |}.
+
+    Variant impl_mmio_interrupt_state_prot: bv iostate_bits -> IOState -> IOState -> Prop :=
+      | IGG : forall w s s', w = bv_to s' ->
+                        s = SGo ->
+                        s' = SGo ->
+                        impl_mmio_interrupt_state_prot w s s'
+      | ISR : forall w s s', w = bv_to s' ->
+                        s = SStop ->
+                        s' = SReset ->
+                        impl_mmio_interrupt_state_prot w s s'
+      | IRG : forall w s s', w = bv_to s' ->
+                        s = SReset ->
+                        s' = SGo ->
+                        impl_mmio_interrupt_state_prot w s s'
+      | IRR : forall w s s', w = bv_to s' ->
+                        s = SReset ->
+                        s' = SReset ->
+                        impl_mmio_interrupt_state_prot w s s'
+ 
+    .
+
+    Definition Mmio_interrupt_state_prot (w : bv iostate_bits) (s s' :  bv iostate_bits) : Prop :=
+      impl_mmio_interrupt_state_prot w (bv_from s) (bv_from s').
 
 
-   Lemma impl_mmio_state_prot_same: forall s e, impl_mmio_state_prot s e s -> False.
-      Proof.
-        intros. inversion H. by apply no_fixpoint_negb in H5.
-   Qed.
+    (* Variant impl_mmio_interrupt_state_prot: IOState -> InterruptSet -> IOState -> Prop := *)
+    (*   | IRS : forall i s s' v, i = Ints_Pending v -> *)
+    (*                       true = MEI v -> *)
+    (*                       s = SGo -> *)
+    (*                       s' = SStop -> *)
+    (*                       impl_mmio_interrupt_state_prot s i s' *)
+    (*   | IRR : forall i s s' v, i = Ints_Pending v -> *)
+    (*                       true = MEI v -> *)
+    (*                       s = SStop -> *)
+    (*                       s' = SReset -> *)
+    (*                       impl_mmio_interrupt_state_prot s i s' *)
+    (*   | IRG : forall i s s' v, i = Ints_Pending v -> *)
+    (*                       true = MEI v -> *)
+    (*                       s = SReset -> *)
+    (*                       s' = SGo -> *)
+    (*                       impl_mmio_interrupt_state_prot s i s' *)
+    (* . *)
 
-   Lemma Mmio_state_prot_same : forall (n : nat) (a : bv xlenbits) (s : bv iostate_bits) (v : bv (n * byte)), Mmio_state_prot v s s → False.
-   Proof.
-     intros. unfold Mmio_state_prot in *.
-     pose proof (H a) as H1.
-     inversion H1.
-     by apply impl_mmio_state_prot_same in H1.
-   Qed.
+    (* Definition Mmio_interrupt_state_prot (i : InterruptSet) (s s' :  bv iostate_bits) : Prop := *)
+    (*   impl_mmio_interrupt_state_prot (bv_from s) i (bv_from s'). *)
 
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
@@ -354,7 +393,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | prev_addr       => Prev_addr
       | in_entries      => In_entries
       | in_mmio bytes => (fun a => withinMMIO a bytes)
-      | mmio_state_prot width         => @Mmio_state_prot width
+      | mmio_event_prot width     => @Mmio_event_prot width
+      | mmio_interrupt_state_prot => @Mmio_interrupt_state_prot
       end.
 
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -373,7 +413,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | mmio_checked_write width      => [ty_xlenbits; ty.bvec (width * byte)]
       | mmio_state width              => [ty.bvec iostate_bits]
       | mmio_state_trace bytes              => ctx.nil
-      | mmio_state_checked_write width      => [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate]
+      | mmio_state_checked_write width      => [ty_xlenbits; ty.bvec (width * byte); ty_interrupt_set; ty_iostate]
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
@@ -417,7 +457,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte)] eq_refl) (* There will only be one of these simultaneously; always precise! *)
       | mmio_state width          => Some (MkPrecise ε [ty_iostate] eq_refl)
       | mmio_state_trace bytes    => Some (MkPrecise ε ε eq_refl)
-      | mmio_state_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate] eq_refl)
+      | mmio_state_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte); ty_interrupt_set; ty_iostate ] eq_refl)
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
@@ -938,7 +978,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
   | prev_addr                | [ cfg; entries; prev ]         => simplify_prev_addr cfg entries prev
   | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx
   | in_mmio bytes            | [ a ]                          => Some [formula_user (in_mmio bytes) [a]]%ctx
-  | mmio_state_prot width    | [w; s; s']                     => Some [formula_user (mmio_state_prot width) [w; s; s']]%ctx
+  | mmio_event_prot width    | [w; i; s]                      => Some [formula_user (mmio_event_prot width) [w; i; s]]%ctx
+  | mmio_interrupt_state_prot | [i; s; s']           => Some [formula_user (mmio_interrupt_state_prot) [i; s; s']]%ctx
   .
 
   Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :
@@ -1032,7 +1073,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
   Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.
   Proof.
     intros Σ p ts.
-    destruct p; cbv in ts; env.destroy ts; cbn - [simplify_pmp_access].
+    destruct p; cbv in ts; env.destroy ts; cbn - [simplify_pmp_access]; try reflexivity.
     - simple apply simplify_gen_pmp_access_spec.
     - simple apply simplify_pmp_access_spec.
     - simple apply simplify_pmp_check_perms_spec.
@@ -1040,11 +1081,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     - simple apply simplify_sub_perm_spec.
     - simple apply simplify_access_pmp_perm_spec.
     - simple apply simplify_within_cfg_spec.
-    - reflexivity.
     - simple apply simplify_prev_addr_spec.
-    - reflexivity.
-    - reflexivity.
-    - inversion v0; try reflexivity.
   Qed.
 
   Definition solver : Solver :=

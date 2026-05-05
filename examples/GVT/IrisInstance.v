@@ -159,14 +159,14 @@ Module RiscvPmpIrisInstancePredicates.
   Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
   Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
 
-  Definition s__init : IOState := true.
+  Definition s__init : IOState := SGo.
 
   (* Tut: Note, trace is kept in reverse order *)
   Inductive mmio_trace_state_pred: Trace -> IOState -> Prop :=
   | Tnil : mmio_trace_state_pred [] s__init
-  | Tcons  : forall e tl s s', impl_mmio_state_prot s e s' ->
-                               mmio_trace_state_pred tl s ->
-                               mmio_trace_state_pred (e :: tl) s'.
+  | Tcons  : forall e tl i s, impl_mmio_event_prot s i e ->
+                         mmio_trace_state_pred tl s ->
+                         mmio_trace_state_pred (e :: tl) s.
 
   Lemma difference_commute_gset {A} `{Countable A} (X Y Z : gset A) :
     (X ∖ Y) ∖ Z = (X ∖ Z) ∖ Y.
@@ -334,10 +334,11 @@ Module RiscvPmpIrisInstancePredicates.
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
     Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
-    Definition interp_mmio_state_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte)) (s s': bv iostate_bits)  : iProp Σ :=
+
+    Definition interp_mmio_state_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte))  (i : InterruptSet) (s : bv iostate_bits) : iProp Σ :=
       ⌜addr = write_addr⌝ ∗
       ⌜let e := {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := width ;  event_contents := bytes |}
-       in  impl_mmio_state_prot (bv_from s) e (bv_from s')⌝.
+       in  impl_mmio_event_prot (bv_from s) i e⌝.
 
     (* Current protocol state is: *)
     Definition interp_mmio_state_pred `{iostateG IOState Σ} (s : bv iostate_bits): iProp Σ :=
@@ -472,7 +473,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
     | mmio_state _             | [s] (* [unit] *)     => interp_mmio_state_pred s (* We have ownership over st *)
     | mmio_state_trace bytes   | [env] (* [unit] *)   => interp_mmio_trace_state_inv (* Given st and tr state_prot is satisfied *)
-    | mmio_state_checked_write _     | [ addr; w; s; s' ]   => interp_mmio_state_checked_write addr w s s'
+    | mmio_state_checked_write _     | [ addr; w; i; s]   => interp_mmio_state_checked_write addr w i s
     | encodes_instr            | [ code; instr ]      => ⌜pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
