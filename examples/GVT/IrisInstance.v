@@ -154,17 +154,12 @@ Module RiscvPmpIrisInstancePredicates.
           end
     end.
 
-  (* The address we will perform all writes to is the first legal MMIO address *)
-  Definition write_addr : Addr := bv.of_N maxAddr.
-  Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
-  Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
-
   Definition s__init : IOState := SGo.
 
   (* Tut: Note, trace is kept in reverse order *)
   Inductive mmio_trace_state_pred: Trace -> IOState -> Prop :=
   | Tnil : mmio_trace_state_pred [] s__init
-  | Tcons  : forall e tl i s, impl_mmio_event_prot s i e ->
+  | Tcons  : forall e tl s s', impl_mmio_event_prot e s s' ->
                          mmio_trace_state_pred tl s ->
                          mmio_trace_state_pred (e :: tl) s.
 
@@ -323,26 +318,36 @@ Module RiscvPmpIrisInstancePredicates.
 
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
     Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
-      inv femto_inv_mmio_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝).
+      inv femto_inv_mmio_ns (∃ t, tr_frag1 t).
     Definition interp_mmio_trace_state_inv `{invGS Σ, iostateG IOState Σ} : iProp Σ :=
       inv femto_inv_mmio_ns (∃ (s : IOState) (t : Trace) , tr_frag1 t ∗ st_auth1 s ∗ ⌜mmio_trace_state_pred t s⌝).
+
+    Definition interp_mmio_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
+      pointsto addr (DfracOwn 1) b ∗ ⌜withinMMIO addr 1⌝.
+    Definition interp_mmio_ptstommio' {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
+      [∗ list] offset ∈ seq 0 width,
+        interp_mmio_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
+    Fixpoint interp_mmio_ptstommio {width : nat} (addr : Addr) : bv (width * byte) -> iProp Σ :=
+      match width with
+      | O   => fun _ => True
+      | S w =>
+          fun bytes =>
+            let (byte, bytes) := bv.appView byte (w * byte) bytes in
+            interp_mmio_ptsto addr byte ∗ interp_mmio_ptstommio (bv.one + addr) bytes
+      end%I.
+    Global Arguments interp_mmio_ptstommio {width} addr v : simpl never.
+
+
+
+    (* Current protocol state is: *)
+    Definition interp_mmio_state_pred `{iostateG IOState Σ} (s : bv iostate_bits): iProp Σ :=
+      st_frag1 (bv2s s).
+
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
       inv femto_inv_ro_ns (interp_ptstomem addr b).
 
-    (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
-    (* NOTE: no local state yet, but this should be an iProp for the general case *)
-    Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
-
-    Definition interp_mmio_state_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte))  (i : InterruptSet) (s : bv iostate_bits) : iProp Σ :=
-      ⌜addr = write_addr⌝ ∗
-      ⌜let e := {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := width ;  event_contents := bytes |}
-       in  impl_mmio_event_prot (bv_from s) i e⌝.
-
-    (* Current protocol state is: *)
-    Definition interp_mmio_state_pred `{iostateG IOState Σ} (s : bv iostate_bits): iProp Σ :=
-      st_frag1 (bv_from s).
 
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).
@@ -470,10 +475,10 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
     | inv_mmio bytes           | _                    => interp_inv_mmio bytes
-    | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
+    | mmio_ptsto               | [ addr; w ]          => interp_mmio_ptsto addr w
+    | mmio_ptstommio _         | [ addr; bs ]         => interp_mmio_ptstommio addr bs
     | mmio_state _             | [s] (* [unit] *)     => interp_mmio_state_pred s (* We have ownership over st *)
     | mmio_state_trace bytes   | [env] (* [unit] *)   => interp_mmio_trace_state_inv (* Given st and tr state_prot is satisfied *)
-    | mmio_state_checked_write _     | [ addr; w; i; s]   => interp_mmio_state_checked_write addr w i s
     | encodes_instr            | [ code; instr ]      => ⌜pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.

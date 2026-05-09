@@ -116,8 +116,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
   Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
   Notation asn_mmio_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
-  Notation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_write bytes) [a; w; s; s'])).
-  Notation asn_mmio_event_prot bytes w i s :=  (asn.formula (formula_user (mmio_event_prot bytes) [w; i; s])).
+  Notation asn_mmio_event bytes a w t s :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
     term_binop (bop.relop bop.eq) e1 e2.
@@ -223,8 +222,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Local Notation asn_in_mmio n l := (asn.formula (formula_user (in_mmio n) [l])).
   Local Notation asn_mmio_state_pred bytes s := (asn.chunk (chunk_user (mmio_state bytes) [s])).
   Local Notation asn_mmio_trace_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
-  Local Notation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_write bytes) [a; w; s; s'])).
-  Notation asn_mmio_event_prot bytes w i s :=  (asn.formula (formula_user (mmio_event_prot bytes) [w; i; s])).
+  Local Notation asn_mmio_event bytes a w t s :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s])).
 
   Import bv.notations.
 
@@ -284,15 +282,15 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     |}.
 
   Definition sep_contract_checked_mem_write {bytes} {H: restrict_bytes bytes} : SepContractFun (@checked_mem_write bytes H) :=
-    {| sep_contract_logic_variables := ["write_mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "interrupts" :: ty_interrupt_set; "iostate" :: (ty_iostate)];
+    {| sep_contract_logic_variables := ["mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "s" :: (ty_iostate)];
       sep_contract_localstore      := [term_var "paddr"; term_var "data"];
       sep_contract_precondition    :=
-        asn.match_bool (term_var "write_mmio")
+        asn.match_bool (term_var "mmio")
           (asn_in_mmio bytes (term_var "paddr") ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            (asn_mmio_trace_pred bytes) ∗
-           (asn_mmio_state_pred bytes (term_var "iostate")) ∗
-           (asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") (term_var "interrupts") (term_var "iostate"))
+           (asn_mmio_state_pred bytes (term_var "s")) ∗
+           (asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s"))
           )
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
@@ -300,8 +298,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_result          := "result_checked_mem_write";
       sep_contract_postcondition   :=
         term_var "result_checked_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "write_mmio")
-          (asn_mmio_state_pred bytes (term_var "iostate"))
+        asn.match_bool (term_var "mmio")
+          (asn_mmio_state_pred bytes (term_var "s"))
           (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
     |}.
 
@@ -338,7 +336,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     |}.
 
   Definition sep_contract_pmp_mem_write {bytes} {H: restrict_bytes bytes} : SepContractFun (@pmp_mem_write bytes H) :=
-    {| sep_contract_logic_variables := ["write_mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "typ" :: ty_access_type; "m" :: ty_privilege; "entries" :: ty.list ty_pmpentry; "interrupts" :: ty_interrupt_set; "iostate" :: ty_iostate];
+    {| sep_contract_logic_variables := ["write_mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "typ" :: ty_access_type; "m" :: ty_privilege; "entries" :: ty.list ty_pmpentry; "s" :: ty_iostate];
       sep_contract_localstore      := [term_var "paddr"; term_var "data"; term_var "typ"; term_var "m"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "write_mmio")
@@ -346,8 +344,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            (asn_in_mmio bytes (term_var "paddr")) ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits)))) ∗
            (asn_mmio_trace_pred bytes) ∗
-           (asn_mmio_state_pred bytes (term_var "iostate")) ∗
-           (asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") (term_var "interrupts") (term_var "iostate"))
+           (asn_mmio_state_pred bytes (term_var "s")) ∗
+           (asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s"))
           )
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
@@ -360,7 +358,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "write_mmio")
-          (asn_mmio_state_pred bytes (term_var "iostate"))
+          (asn_mmio_state_pred bytes (term_var "s"))
           (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_var "m") ∗
         asn_pmp_entries (term_var "entries");
@@ -388,16 +386,16 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
 
   (* Access type `Write` needed here, as `mem_write_value` calls `pmp_mem_write` with this access type*)
   Definition sep_contract_mem_write_value {bytes} {H: restrict_bytes bytes} : SepContractFun (@mem_write_value bytes H) :=
-    {| sep_contract_logic_variables := ["write_mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry; "interrupts" :: ty_interrupt_set; "iostate" :: ty_iostate];
+    {| sep_contract_logic_variables := ["write_mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry; "s" :: ty_iostate];
       sep_contract_localstore      := [term_var "paddr"; term_var "data"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "write_mmio")
           (
             (asn_in_mmio bytes (term_var "paddr")) ∗
               (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits)))) ∗
-              (asn_mmio_state_pred bytes (term_var "iostate")) ∗
+              (asn_mmio_state_pred bytes (term_var "s")) ∗
               (asn_mmio_trace_pred bytes) ∗
-              (asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") (term_var "interrupts") (term_var "iostate"))
+              (asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s"))
           )
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
@@ -409,7 +407,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "write_mmio")
-          ((asn_mmio_trace_pred bytes) ∗ asn_mmio_state_pred bytes (term_var "iostate"))
+          ((asn_mmio_trace_pred bytes) ∗ asn_mmio_state_pred bytes (term_var "s"))
           (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries");
@@ -505,19 +503,19 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   (* NOTE: for now no resources in `POST`; add those once we need to reinstate local state *)
   (* NOTE: if overflow is important, a no-overflow statement can be added to the `asn_mmio_checked_write` resource *)
   Definition sep_contract_mmio_write (bytes : nat) {H: restrict_bytes bytes} : SepContractFunX (mmio_write H) :=
-    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "interrupts" :: ty_interrupt_set; "iostate" :: ty_iostate];
+    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "s" :: ty_iostate];
         sep_contract_localstore      := [term_var "paddr"; term_var "data"];
         sep_contract_precondition    :=
            asn_in_mmio bytes (term_var "paddr") ∗
            asn_mmio_trace_pred bytes ∗
-           asn_mmio_state_pred bytes (term_var "iostate") ∗
-           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") (term_var "interrupts") (term_var "iostate");
+           asn_mmio_state_pred bytes (term_var "s") ∗
+           asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s");
       sep_contract_result          := "result_write_mmio";
       sep_contract_postcondition   :=
         term_var "result_write_mmio" = term_val ty.bool true ∗
                                        asn_in_mmio bytes (term_var "paddr") ∗
                                        asn_mmio_trace_pred bytes ∗
-                                       asn_mmio_state_pred bytes (term_var "iostate");
+                                       asn_mmio_state_pred bytes (term_var "s");
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
@@ -604,27 +602,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
 
   Import TermNotations.
 
-  (* Option 1: Make mmio_checked_write non spatial, and remove this lemma *)
-  (* Option 2: Extend asn_mmio_state_prot to take iostate_new *)
-  Definition lemma_close_mmio_write (immm : bv 12) (widthh : WordWidth) : SepLemma (close_mmio_write immm widthh) :=
-    {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "r" :: ty_regno; "w" :: ty_word; "interrupts" :: ty_interrupt_set; "iostate" :: ty_iostate];
-      lemma_patterns        := [term_var "paddr"; term_var "r"];
-      lemma_precondition    :=
-        ((term_val ty_xlenbits write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm))) ∗
-          (term_var "r") ↦ᵣ (term_var "w") ∗
-          (asn_mmio_event_prot (map_wordwidth widthh)
-             (term_truncate (map_wordwidth widthh * byte) (term_var "w"))
-             (term_var "interrupts")
-             (term_var "iostate")
-          );
-      lemma_postcondition   :=
-        (term_var "r") ↦ᵣ (term_var "w") ∗
-          (asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm))
-          (term_truncate (map_wordwidth widthh * byte) (term_var "w"))
-          (term_var "interrupts") (term_var "iostate"));
-    |}.
-
-
    Definition LEnv : LemmaEnv :=
      fun Δ l =>
        match l with
@@ -707,15 +684,18 @@ Module RiscvPmpSpecVerif.
   Lemma valid_checked_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@checked_mem_read bytes H).
   Proof. destruct H; now vm_compute. Qed.
 
-  Lemma valid_checked_mem_write {bytes} {H : restrict_bytes bytes} : ValidContract (@checked_mem_write bytes H).
-  Proof. destruct H; now vm_compute. Qed.
+  Lemma valid_checked_mem_write {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_write bytes H).
+    Proof. 
+      destruct H; vm_compute; constructor; simpl; cbn; intros; eexists; eauto.
+    Qed.
 
   Lemma valid_pmp_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@pmp_mem_read bytes H).
   Proof. destruct H; now vm_compute. Qed.
 
   Lemma valid_pmp_mem_write {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_write bytes H).
   Proof.
-    destruct H; vm_compute; constructor; simpl; cbn; intros; eauto.
+    destruct H; vm_compute; constructor; cbn.
+    1 - 3: intros; split; intros; eauto.
   Qed.
 
   Import Bitvector.bv.notations.
@@ -757,9 +737,10 @@ Module RiscvPmpSpecVerif.
 
   Lemma valid_mem_write_value {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@mem_write_value bytes H).
   Proof.
-    destruct H; vm_compute; constructor; intros; simpl; eauto.
+    destruct H; vm_compute; constructor; cbn.
+    1 - 3: intros; split; intros; eauto.
   Qed.
-
+  
   Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
   Proof. symbolic_simpl. intros. Lia.lia. Qed.
 
@@ -814,7 +795,7 @@ Module RiscvPmpSpecVerif.
     - refine (valid_contract_debug _ H valid_contract_within_phys_mem).
     - refine (valid_contract _ H valid_mem_read).
     - refine (valid_contract _ H valid_checked_mem_read).
-    - refine (valid_contract _ H valid_checked_mem_write).
+    - refine (valid_contract_debug _ H valid_checked_mem_write).
     - refine (valid_contract _ H valid_pmp_mem_read).
     - refine (valid_contract_debug _ H valid_pmp_mem_write).
     - refine (valid_contract_with_fuel_debug _ _ H valid_pmpCheck).
@@ -899,10 +880,10 @@ Module RiscvPmpIrisInstanceWithContracts.
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ rB) (mmio_write rB).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & #Hinv & Hstf & (-> & %Hstate))".
+    iIntros "([%Hmmio _] & #Hinv & Hstf & [%Hstate _])".
     iApply semTWP_foreign.
     iIntros (? ?) "[Hregs [%a (Hmem & %Hmap & Htra)]]".
-    iInv "Hinv" as ">(%s & %t & Htrf & Hsta & %Hpred)" "Hclose". 
+    iInv "Hinv" as ">(%ss & %t & Htrf & Hsta & %Hpred)" "Hclose". 
     iDestruct (trace.trace_full_frag_eq with "Htra Htrf") as "%Heqt". subst.
     iDestruct (trace.iost_full_frag_eq with "Hsta Hstf") as "%Heqs". subst.
     iMod (trace.trace_update _ _ (cons _ _) with "[$Htra $Htrf]") as "[Htra Htrf]".
@@ -910,13 +891,12 @@ Module RiscvPmpIrisInstanceWithContracts.
     iMod ("Hclose" with "[Htrf Hsta]") as "_".
     {(* Instantiate evars *)
       iExists _. iExists _. iNext. iFrame.
-      iPureIntro. econstructor; eauto.
+      iPureIntro. inversion Hstate. econstructor. eapply H. eapply Hpred.
       }
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     iMod "Hclose" as "_". rewrite semTWP_val.
     destruct bytes; first contradiction.
-    unfold mem_inv, fun_write_mmio; cbn.
     iFrame "Hregs Hmem Htra Hstf".
     repeat iSplitL; auto.
   Qed.
@@ -1025,18 +1005,6 @@ Module RiscvPmpIrisInstanceWithContracts.
     now iFrame.
   Qed.
 
-
-  Lemma close_mmio_write_sound `{sailGS Σ} {rG : iostateG IOState Σ} (imm : bv 12) (width : WordWidth) :
-    ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width ).
-  Proof.
-    intros ι; destruct_syminstance ι. cbn -[is_even negb].
-    iIntros "([<- _] & Hmmio & Hcond)".
-    iFrame. unfold iostate_bits in *.
-    unfold interp_mmio_checked_write. unfold Mmio_event_prot. cbn -[is_even negb] in *.
-    iDestruct "Hcond" as "(%Hold_ & _)". iPureIntro.
-    split; simpl; auto.
- Qed.
-
   Lemma open_pmp_entries_sound `{sailGS Σ} {rG : iostateG IOState Σ} :
     ValidLemma RiscvPmpSpecification.lemma_open_pmp_entries.
   Proof.
@@ -1058,7 +1026,6 @@ Module RiscvPmpIrisInstanceWithContracts.
     - apply close_pmp_entries_sound.
     - apply open_ptsto_instr_sound.
     - apply close_ptsto_instr_sound.
-    - apply close_mmio_write_sound.
   Qed.
 
   Import RiscvPmpBlockVerifSpec.

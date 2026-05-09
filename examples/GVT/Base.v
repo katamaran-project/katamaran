@@ -148,27 +148,29 @@ Inductive IOState : Set :=
   | SStop
   | SReset.
 
-    #[export] Definition iostate_bits := 2.
-
+#[export] Definition iostate_bits := 2.
 Class bv_rize (A : Set) (n : nat) : Set := {
-    bv_to : A -> bv n;
-    bv_from : bv n -> A ;
+    s2bv : A -> bv n;
+    bv2s : bv n -> A ;
   }.
 
-#[export] Instance bv_iostate : bv_rize IOState iostate_bits :=
-  {
-    bv_to := fun  s : IOState => match s with
-                              | SGo   => @bv.of_N iostate_bits 0
-                              | SStop   => @bv.of_N iostate_bits 1
-                              | SReset => @bv.of_N iostate_bits 2
-                              end;
 
-    bv_from := fun (s : bv iostate_bits)  =>
-                 match s with
-                 | bv.mk 0 I => SGo
-                 | bv.mk 2 I => SStop
-                 | _ => SReset
-                 end;
+#[export] Instance bv_iostate {n : nat} : bv_rize IOState n :=
+  {
+    s2bv := fun  s : IOState =>
+              match s with
+              | SGo => bv.of_N 0
+              | SReset => bv.of_N 1
+              | SStop => bv.of_N 2
+              end;
+
+    bv2s := fun (b : bv n)  =>
+              match n, b with
+              | S n', bv.mk 1 I => SReset
+              | S (S n'), bv.mk 3 I => SReset
+              | S (S n'), bv.mk 2 I => SStop
+              | _, _ => SGo
+              end;
   }.
 
 
@@ -317,6 +319,7 @@ Inductive WordWidth :=
 
 Inductive Enums : Set :=
 | privilege
+| ioeventType
 | interruptType
 | csridx
 | pmpcfgidx
@@ -460,6 +463,11 @@ Inductive Unions : Set :=
 (* | pmp_entries *)
 .
 
+(* MMIO Event Types *)
+Inductive EventTy : Set :=
+| IOWrite
+| IORead .
+
 Record Pmpcfg_ent : Set :=
   MkPmpcfg_ent
     { L : bool;
@@ -482,12 +490,15 @@ Inductive Records : Set :=
 | rminterrupts
 .
 
+
+
 Section TransparentObligations.
   Local Set Transparent Obligations.
 
   Derive NoConfusion for Enums.
   Derive NoConfusion for Privilege.
   Derive NoConfusion for CSRIdx.
+  Derive NoConfusion for EventTy.
   Derive NoConfusion for InterruptType.
   Derive NoConfusion for PmpCfgIdx.
   Derive NoConfusion for PmpCfgPerm.
@@ -552,6 +563,7 @@ Derive EqDec for ExceptionType.
 Derive EqDec for ExceptionTypeConstructor.
 Derive EqDec for FetchResult.
 Derive EqDec for FetchResultConstructor.
+Derive EqDec for EventTy.
 Derive EqDec for InterruptType.
 Derive EqDec for CtlResult.
 Derive EqDec for CtlResultConstructor.
@@ -576,6 +588,9 @@ Section Finite.
 
   #[export,program] Instance CSRIdx_finite : Finite CSRIdx :=
     {| enum := [MStatus;Mie;MTvec;MScratch;MEpc;MCause;MPMP0CFG;MPMPADDR0;MPMPADDR1;Mip] |}.
+
+  #[export,program] Instance EventTy_finite : Finite EventTy :=
+    {| enum := [IOWrite; IORead] |}.
 
   #[export,program] Instance InterruptType_finite : Finite InterruptType :=
     {| enum := [I_U_Software; I_M_Software; I_U_Timer; I_M_Timer; I_U_External; I_M_External] |}.
@@ -688,6 +703,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_word                           := (ty.bvec word).
   Definition ty_byte                           := (ty.bvec byte).
   Definition ty_bytes (bytes : nat)              := (ty.bvec (bytes * byte)).
+  Definition ty_ioeventType                    := (ty.enum ioeventType).
   Definition ty_iostate                        := (ty.bvec iostate_bits).
   Definition ty_regno                          := (ty.bvec 5).
   Definition ty_privilege                      := (ty.enum privilege).
@@ -728,6 +744,7 @@ Module Export RiscvPmpBase <: Base.
   Definition enum_denote (e : Enums) : Set :=
     match e with
     | privilege        => Privilege
+    | ioeventType      => EventTy
     | interruptType    => InterruptType
     | csridx           => CSRIdx
     | pmpcfgidx        => PmpCfgIdx
@@ -1383,9 +1400,7 @@ Module Export RiscvPmpBase <: Base.
     Definition RAM : Type := Addr -> Byte.
 
     (* Trace of Events *)
-    Inductive EventTy : Set :=
-    | IOWrite
-    | IORead .
+
     Record Event : Set :=
       mkEvent {
         event_type : EventTy;
