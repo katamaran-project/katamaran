@@ -28,11 +28,7 @@
 (******************************************************************************)
 
 From Stdlib Require Import
-     Classes.Morphisms
-     Classes.Morphisms_Prop
-     Classes.RelationClasses
      NArith.BinNat
-     Relations.Relation_Definitions
      ZArith.BinInt.
 
 From stdpp Require Import vector decidable numbers.
