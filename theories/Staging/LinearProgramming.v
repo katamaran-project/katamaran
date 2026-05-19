@@ -28,7 +28,6 @@
 (******************************************************************************)
 
 From Stdlib Require Import
-     Bool.Bool
      Classes.Morphisms
      Classes.Morphisms_Prop
      Classes.RelationClasses
