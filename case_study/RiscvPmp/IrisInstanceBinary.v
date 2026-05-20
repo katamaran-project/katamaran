@@ -163,6 +163,7 @@ Module RiscvPmpIrisInstance2 <:
 
     End WithAddrs.
 
+
     (* TODO: introduce constant for nr of word bytes (replace 4) *)
     Definition interp_ptsto_instr (addr : RVAddr) (instr : RV AST) : iProp Σ :=
       (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ ty.liftUnOpRV pure_decode v = ty.liftUnOpRV inr instr ⌝ ∗ ⌜ secLeak v ⌝)%I.

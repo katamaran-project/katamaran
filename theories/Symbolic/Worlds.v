@@ -1439,10 +1439,12 @@ Module Type WorldsOn
         ctx.snoc (formula_eqs_nctx_sync δ δ') (formula_eq t t').
 
     Lemma helper_syncVal_inj {A} {v1 v2 : A} :
-      SyncVal v1 = SyncVal v2 -> v1 = v2.
+      SyncVal v1 = SyncVal v2 <-> v1 = v2.
     Proof.
-      intro H.
-      now inversion H.
+      split.
+      - intro H.
+        now inversion H.
+      - intro H. by subst.
     Qed.
 
     Lemma instprop_formula_eqs_nctx_sync {N : Set} {Δ : NCtx N Ty} {Σ} (xs ys : NamedEnv (Term Σ) Δ) ι :
@@ -1460,10 +1462,10 @@ Module Type WorldsOn
         try inversion H3; try now inversion H2; try discriminate.
       all: cbn in *. now inversion H0.
       all: try inversion H1; try inversion H0; try done.
-      + apply helper_syncVal_inj in H2.
+      + rewrite helper_syncVal_inj in H2.
         apply env.inversion_eq_snoc in H2.
         intuition. now subst.
-      + apply helper_syncVal_inj in H2.
+      + rewrite helper_syncVal_inj in H2.
         apply env.inversion_eq_snoc in H2.
         intuition.
     Qed.
