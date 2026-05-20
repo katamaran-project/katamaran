@@ -27,10 +27,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Stdlib Require Import
-     NArith.BinNat
-     ZArith.BinInt.
-
 From stdpp Require Import vector decidable numbers.
 
 From Katamaran Require Import
@@ -116,20 +112,38 @@ Module VecUtils.
 
   Section DecideForall2.
 
+    (* reimplemented for compatibility with Rocq 8.20 *)
+    Lemma Forall2_cons_iff_copy {A B : Type} {P : A -> B -> Prop} {n h1 h2}
+      {v1 : vec A n} {v2 : vec B n} :
+      Forall2 P (h1 ::: v1) (h2 ::: v2) <->
+      P h1 h2 /\ Forall2 P v1 v2.
+    Proof.
+      split.
+      - intros H.
+        inversion H as [| P2 x1 x2 v1p v2p HPx HPv ]; subst.
+        split; first assumption.
+        pose proof eq_sigT_snd H2.
+        pose proof eq_sigT_snd H4.
+        rewrite (Eqdep_dec.UIP_refl_nat n (eq_sigT_fst H2)) in H0.
+        rewrite (Eqdep_dec.UIP_refl_nat n (eq_sigT_fst H4)) in H1.
+        now cbn; subst.
+      - now intros; constructor.
+    Qed.
+
     Equations vec_forall2_dec {n A B} {R : A -> B -> Prop} {decR : forall x y, Decision (R x y)} (vs1 : vec A n) (vs2 : vec B n) :
       Decision (Vector.Forall2 R vs1 vs2) :=
     | [#] | [#] := left (Forall2_nil R)
     | v1 ::: vs1 | v2 ::: vs2 := match decR v1 v2 , vec_forall2_dec vs1 vs2 with
                                  | left Rv1v2 , left Rvs1vs2 => left (Forall2_cons R _ _ _ _ Rv1v2 Rvs1vs2)
-                                 | right nRv1v2 , _ => right (fun Rvs => nRv1v2 _)
-                                 | _ , right nRvs1vs2 => right (fun Rvs => nRvs1vs2 _)
+                                 | right nRv1v2 , _ => right (fun Rvs => _)
+                                 | _ , right nRvs1vs2 => right (fun Rvs => _)
                                  end
     .
     Next Obligation.
-      now rewrite Forall2_cons_iff in Rvs.
+      now apply Forall2_cons_iff_copy in Rvs.
     Qed.
     Next Obligation.
-      now rewrite Forall2_cons_iff in Rvs.
+      now apply Forall2_cons_iff_copy in Rvs.
     Qed.
 
     #[export] Instance forall2_dec {n A B} {R : A -> B -> Prop} {decR : forall x y, Decision (R x y)} :
@@ -142,7 +156,7 @@ Module VecUtils.
   Proof.
     induction vs; first intuition constructor.
     cbn.
-    rewrite Forall2_cons_iff, Forall_cons_iff.
+    rewrite Forall2_cons_iff_copy, Forall_cons_iff.
     now intuition.
   Qed.
 End VecUtils.
@@ -525,7 +539,7 @@ Module LinearProgramming.
   Proof.
     induction 1 as [|n s1 c1 ss cs H1 Hs]; first now cbn.
     revert vs. refine (vec_S_inv _ _).
-    intros v vs [Hsv1 Hsvs]%Forall2_cons_iff; cbn.
+    intros v vs [Hsv1 Hsvs]%Forall2_cons_iff_copy; cbn.
     specialize (IHHs vs Hsvs).
     enough (c1 * v >= 0)%Z by now lia.
     clear IHHs Hsvs Hs vs ss cs.
@@ -541,7 +555,7 @@ Module LinearProgramming.
   Proof.
     induction 1 as [|n s1 c1 ss cs H1 Hs]; first now cbn.
     revert vs. refine (vec_S_inv _ _).
-    intros v vs [Hsv1 Hsvs]%Forall2_cons_iff; cbn.
+    intros v vs [Hsv1 Hsvs]%Forall2_cons_iff_copy; cbn.
     specialize (IHHs vs Hsvs).
     enough (c1 * v <= 0)%Z by now lia.
     clear IHHs Hsvs Hs vs ss cs.
@@ -584,7 +598,7 @@ Module LinearProgramming.
     revert slacks vs.
     induction t;
       refine (vec_S_inv _ _); intros slack slacks;
-      refine (vec_S_inv _ _); intros v vs [Hv Hslacks]%Forall2_cons_iff;
+      refine (vec_S_inv _ _); intros v vs [Hv Hslacks]%Forall2_cons_iff_copy;
       cbn -[vremove]; first easy.
     destruct n as [|n]; first inversion t.
     rewrite ?vremove_FS.
@@ -727,7 +741,7 @@ Module LinearProgramming.
     Lemma Forall_zip_with_ext {A B C1 C2 : Type} {P1 : C1 → Prop} {P2 : C2 → Prop}
       {f1 : A → B → C1} {f2 : A → B → C2} {l1 : list A} {l2 : list B} :
       (forall a b, P1 (f1 a b) -> P2 (f2 a b)) ->
-        ListDef.Forall P1 (zip_with f1 l1 l2) → ListDef.Forall P2 (zip_with f2 l1 l2).
+        List.Forall P1 (zip_with f1 l1 l2) → List.Forall P2 (zip_with f2 l1 l2).
     Proof.
       intros HPf. revert l2.
       induction l1; intros l2; destruct l2; cbn; try easy.
