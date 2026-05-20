@@ -224,9 +224,10 @@ Module inv := invariants.
     Example femtokernel_init' (init_start : N) (handler_start : N) (adv_start : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_init_asm handler_start adv_start) init_start.
 
+    (* fdu *)
     Example femtokernel_mmio_handler_asm_block0 (mmio_handler_start_block2 : N) (mmio_read_addr : N) : list ASM :=
       [
-          ITYPE (bv.of_N 3) zero t1 RISCV_ADDI (* t1 <- mask bit 1 and 2 (note it's bit 3 and 4 in reference implementation) *)
+        ITYPE (bv.of_N 16) zero t1 RISCV_ADDI (* t1 <- mask bit 4 *)
         ; UTYPE bv.zero t2 RISCV_AUIPC (* t2 <- current pc *)
         ; Λ current_pc, LOAD (bv.of_N (mmio_read_addr - (current_pc - 4))) t2 t2 true WORD (* t2 <- mmio_interrupt_state *)
         ; RTYPE t1 t2 t1 RISCV_AND (* t1 <- t1 && t2 *)
@@ -254,13 +255,13 @@ Module inv := invariants.
         (* Note: Keep lines commented until support for FE310 gpios interrupt register has been implemented correctly *)
         ; UTYPE (bv.drop 12 (bv.of_N data_start)) t0 RISCV_LUI   (* load upper 20 bits of data_start *)
         ; ITYPE (@bv.take 12 xlenbits (bv.of_N data_start)) t0 t0 RISCV_ADDI    (* load lower 12 bits of data_start *)
-     (* ; ITYPE (bv.of_N 1) zero t1 RISCV_ADDI (* t1 <- mask bit 1 (note it's bit 3 in reference implementation) *) *)
-        ; LOAD bv.zero t0 t2 true WORD (* t2 <- data *)
-     (* ; RTYPE t1 t2 t1 RISCV_AND (* t1 <- t1 && t2 *) *)
-     (* ; STORE bv.zero t1 t0 WORD (* clear interrupt pending of pin 1 if t1 = 0b1 (note it's pin 3 in reference implementation) *) *)
-     (* ; SHIFTIOP bv.one t1 t1 RISCV_SLLI (* shift left by one bit *) *)
-        ; SHIFTIOP bv.one t2 t2 RISCV_SLLI (* Note: swap this out with line above once interrupt register is supported *)
-        ; STORE bv.zero t1 t0 WORD (* clear interrupt pending of pin 2 if t1 = 0b01 (note it's pin 4 in reference implementation) *)
+        ; ITYPE (bv.of_N 8) zero t1 RISCV_ADDI (* t1 <- mask bit 3) *)
+        ; LOAD bv.zero t0 t2 true WORD (* t2 <- mmio_interrupt_state *)
+        ; RTYPE t1 t2 t1 RISCV_AND (* t1 <- t1 && t2 *)
+        ; STORE bv.zero t1 t0 WORD (* clear interrupt pending of pin 3 if t1 = 0b1000 *)
+        ; SHIFTIOP bv.one t1 t1 RISCV_SLLI (* shift left by one bit *)
+        (* ; SHIFTIOP bv.one t2 t2 RISCV_SLLI (* Note: swap this out with line above once interrupt register is supported *) *)
+        ; STORE bv.zero t1 t0 WORD (* clear interrupt pending of pin 4 if t1 = 0b10000  *)
         ; MRET
       ].
 
@@ -372,9 +373,10 @@ Module inv := invariants.
 
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
 
+    (* fdu *)
     Example femtokernel_handler_pre : Assertion ["a" :: ty_xlenbits] :=
       (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block0)) ∗
-      (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - mmio_handler_addr_block0)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
+      (* (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - mmio_handler_addr_block0)) < term_val ty.int (Z.of_N maxAddr))%asn ∗ *)
       (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
       (∃ "mie", mie ↦ term_var "mie") ∗
       (∃ "mip", mip ↦ term_var "mip") ∗
@@ -387,8 +389,8 @@ Module inv := invariants.
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block0)))) ∗ (* Different handler sizes cause different entries *)
       (∃ "statevalue",  ∃ "s", (
           (term_unop (uop.bvtake 2) (term_var "statevalue") = term_var "s") (* INV: statevalue always corresponds to ghost state *)
-          ∗ asn.chunk (chunk_user (mmio_ptstommio bytes_per_word) [(term_val ty_xlenbits mmio_interrupt_addr); (term_var "statevalue")])
-          ∗ term_val ty_xlenbits (mmio_interrupt_addr) ↦ₘ (term_var "statevalue") (* State currently encoded in data memory, may change to GPIO interrupt register. *)
+            ∗ asn.chunk (chunk_user (ptstomem bytes_per_word) [((* term_var "a" +ᵇ  *)term_val ty_xlenbits (bv.of_N mmio_read_addr)); (term_var "statevalue")])
+          (* ∗ term_val ty_xlenbits (mmio_interrupt_addr) ↦ₘ (term_var "statevalue") (* State currently encoded in data memory, may change to GPIO interrupt register. *) *)
 
           ∗ asn_mmio_state_pred (term_var "s")
       ))
@@ -407,10 +409,12 @@ Module inv := invariants.
       asn_regs_ptsto (gset_singleton x10) ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block0)))) ∗ (* Different handler sizes cause different entries *)
-      (∃ "statevalue", ∃ "newvalue", ∃ "s", ∃ "a", ∃ "t",
-          ((term_unop (uop.bvtake 2) (term_var "statevalue") = term_var "s") (* INV: statevalue always corresponds to ghost state *)
-             ∗ asn.chunk (chunk_user (mmio_ptstommio bytes_per_word) [(term_val ty_xlenbits mmio_interrupt_addr); (term_var "statevalue")])
-             ∗ asn_mmio_state_pred (term_var "s")
+      (∃ "newvalue", ∃ "s", ∃ "a", ∃ "t",
+          (
+            (* (term_unop (uop.bvtake 2) (term_var "statevalue") = term_var "s") (* INV: statevalue always corresponds to ghost state *) *)
+            (*  ∗ asn.chunk (chunk_user (ptstomem bytes_per_word) [((* term_var "a" +ᵇ  *)term_val ty_xlenbits (bv.of_N mmio_read_addr)); (term_var "statevalue")]) *)
+             (* ∗ asn.chunk (chunk_user (mmio_ptstommio bytes_per_word) [(term_val ty_xlenbits mmio_interrupt_addr); (term_var "statevalue")]) *)
+              asn_mmio_state_pred (term_var "s")
              ∗ asn.chunk (chunk_ptsreg x10 (term_var "newvalue"))
              ∗ (asn.or
                   (
@@ -437,11 +441,6 @@ Module inv := invariants.
     asn_regs_ptsto ∅ ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
-    (∃ "statevalue", ∃ "s", (
-       (term_unop (uop.bvtake 2) (term_var "statevalue") = term_var "s") (* INV: statevalue always corresponds to ghost state *)
-       ∗ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N (mmio_handler_size_block1 + mmio_handler_size_block2)) ↦ₘ (term_var "statevalue") (* State currently encoded in data memory, may change to GPIO interrupt register. *)
-       ∗ asn_mmio_state_pred (term_var "s"))
-    ) ∗
     asn_mmio_trace_state_inv.
 
 
@@ -460,11 +459,6 @@ Module inv := invariants.
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
     asn.chunk (chunk_ptsreg x10 (term_val ty_xlenbits (bv.of_N 0))) ∗ (* zero in t0 *)
-    (∃ "statevalue", ∃ "s", (
-     (term_unop (uop.bvtake 2) (term_var "statevalue") = term_var "s") (* INV: state value corresponds to ghost state *)
-     ∗ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N (mmio_handler_size_block1 + mmio_handler_size_block2)) ↦ₘ (term_var "statevalue") (* State currently encoded in data memory, may change to GPIO interrupt register. *)
-     ∗ asn_mmio_state_pred (term_var "s"))
-    ) ∗
     asn_mmio_trace_state_inv.
 
   Example femtokernel_handler_pre_block2 : Assertion ["a" :: ty_xlenbits] :=
@@ -480,26 +474,26 @@ Module inv := invariants.
     asn_regs_ptsto (gset_singleton x10) ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block2)))) ∗
-    (* (∃ "oldstatevalue", ∃ "newstatevalue", ∃ "i", ∃ "s", ∃ "s'", ∃ "a", ∃ "t", *)
-    (*     ( *)
-    (*       (term_unop (uop.bvtake 2) (term_var "oldstatevalue") = term_var "s") (* INV: state value corresponds to ghost state *) *)
-    (*        ∗ (term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size_block2)) ↦ₘ (term_var "oldstatevalue")  (* state value in memory *) *)
-    (*        ∗ (asn_mmio_state_pred (term_var "s")) (* we have ownership of current state s *) *)
-    (*        ∗ (asn.or *)
-    (*             (∃ "somevalue",  *)
-    (*                 ( *)
-    (*                   (asn.formula (formula_user (mmio_event bytes_per_word) [term_var "a"; term_var "somevalue"; term_var "t"; term_var "i" ; term_var "s"; term_var "s"])) (* to write a value other than 0, s has to be SGo *) *)
-    (*                     ∗ (term_var "i") = (term_val ty_interrupt_set Ints_Empty) *)
-    (*                     ∗ (asn.chunk (chunk_ptsreg x10 (term_var "somevalue"))) (* new value in a0 *) *)
-    (*                 ) *)
-    (*             ) *)
-    (*             ( *)
-    (*               (asn.chunk (chunk_ptsreg x10 (term_val ty_xlenbits (bv.of_N 0)))) (* zero in t0 *) *)
-    (*             ) *)
-    (*        ) *)
-    (*      ∗ (term_unop (uop.bvtake 2) (term_var "newstatevalue") = term_var "s'") (* INV: state value corresponds to ghost state *) *)
-    (*    ) *)
-    (* ) ∗ *)
+    (∃ "oldstatevalue", ∃ "newstatevalue", ∃ "s", ∃ "s'", ∃ "a", ∃ "t",
+        (
+          (term_unop (uop.bvtake 2) (term_var "oldstatevalue") = term_var "s") (* INV: state value corresponds to ghost state *)
+           ∗ (term_val ty_xlenbits (bv.of_N mmio_read_addr)) ↦ₘ (term_var "oldstatevalue")  (* state value in memory *)
+           ∗ (asn_mmio_state_pred (term_var "s")) (* we have ownership of current state s *)
+           ∗ (asn.or
+                (∃ "somevalue",
+                    (
+                      (* to write a value other than 0, s has to be SGo *)
+                      (asn.formula (formula_user (mmio_event bytes_per_word) [term_var "a"; term_var "somevalue"; term_var "t"; term_var "s"])) 
+                        ∗ (asn.chunk (chunk_ptsreg x10 (term_var "somevalue"))) (* new value in a0 *)
+                    )
+                )
+                (
+                  (asn.chunk (chunk_ptsreg x10 (term_val ty_xlenbits (bv.of_N 0)))) (* zero in a0 *)
+                )
+           )
+         ∗ (term_unop (@uop.bvtake _ xlenbits 2) (term_var "newstatevalue") = term_var "s'") (* INV: state value corresponds to ghost state *)
+       )
+    ) ∗
     asn_mmio_trace_state_inv.
 
   Example femtokernel_handler_post : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
@@ -518,7 +512,7 @@ Module inv := invariants.
     (∃ "somevalue", asn.chunk (chunk_ptsreg x10 (term_var "somevalue"))) ∗ (* new value in a0 *)
     (∃ "statevalue", ∃ "s'", (
         (term_unop (uop.bvtake 2) (term_var "statevalue") = term_var "s'") (* INV: state value corresponds to ghost state *)
-      ∗ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size_block2) ↦ₘ (term_var "statevalue") (* state value in memory *)
+      ∗ (term_val ty_xlenbits (bv.of_N mmio_read_addr)) ↦ₘ (term_var "statevalue")  (* state value in memory *)
       ∗ asn_mmio_state_pred (term_var "s'") (* we have ownership of current state s *)
     )) ∗
     asn_mmio_trace_state_inv.
@@ -569,19 +563,23 @@ Import Erasure.notations.
 Lemma sat__femtohandler_block0 : safeE (vc__femtohandler_block0).
 Proof.
   vm_compute.
-  constructor; cbn.
-  intros. split; intros; exists Ints_Empty; auto.
-    split; auto. unfold Mmio_event_prot. intros.
+  constructor; cbn. intros. split.
+  intuition; bv_solve_Ltac.solveBvManual; intros.
+  1-4: eapply bv.in_seqBv'; now vm_compute.
+  split. econstructor; eauto. econstructor; eauto.
+  split; intros. 2: eexists; econstructor.
+  exists (bv.of_N mmio_read_addr). eexists. split; auto.
+  unfold Mmio_event_prot. eexists. intros.
     constructor; auto; try (simpl; lia).
     (* rewrite bv.land_zero_r in H. rewrite bv.add_zero_l in H. *)
-      destruct (bv.view v1). destruct (bv.view xs).
-        rewrite bv.take_cons.
-        rewrite bv.take_cons. cbn -[bv_from].
-        change (@bv.mk 32 3 I) with (@bv.cons 31 true (@bv.cons 30 true (bv.zero))) in H.
-        rewrite bv.land_cons in H.
-        rewrite bv.land_cons in H.
-        rewrite bv.land_zero_r in H.
-        destruct b0 eqn: B0; cbn -[bv_from]; destruct b eqn: B; auto; try (simpl in H; discriminate H).
+      (* destruct (bv.view v1). destruct (bv.view xs). *)
+      (*   rewrite bv.take_cons. *)
+      (*   rewrite bv.take_cons. cbn -[bv_from]. *)
+      (*   change (@bv.mk 32 3 I) with (@bv.cons 31 true (@bv.cons 30 true (bv.zero))) in H. *)
+      (*   rewrite bv.land_cons in H. *)
+      (*   rewrite bv.land_cons in H. *)
+      (*   rewrite bv.land_zero_r in H. *)
+      (*   destruct b0 eqn: B0; cbn -[bv_from]; destruct b eqn: B; auto; try (simpl in H; discriminate H). *)
 Qed.
 
 (* for debugging *)
@@ -597,8 +595,9 @@ Import Erasure.notations.
 Lemma sat__femtohandler_block2 : safeE (vc__femtohandler_block2).
 Proof.
   vm_compute.
+(* fdu *)
   constructor; cbn.
-      intuition; bv_solve_Ltac.solveBvManual; intros.
+      intuition; bv_solve_Ltac.solveBvManual; intros. admit.
       - subst. exists Ints_Empty. exists (bv.take 2 v2). split; auto.
         eexists. repeat split.
         1-4: eapply bv.in_seqBv'; now vm_compute.

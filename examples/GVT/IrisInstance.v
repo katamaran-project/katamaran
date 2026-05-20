@@ -337,10 +337,18 @@ Module RiscvPmpIrisInstancePredicates.
       end%I.
     Global Arguments interp_mmio_ptstommio {width} addr v : simpl never.
 
+    Definition interp_mmio_state_checked_read `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte)) (s s': bv iostate_bits)  : iProp Σ :=
+      ⌜withinMMIO addr width⌝ ∗
+                ⌜let e := {| event_type := IORead;  event_addr := addr;  event_nbbytes := width;  event_contents := bytes |}
+          in  impl_mmio_event_prot e (bv2s s) (bv2s s')⌝.
 
+    Definition interp_mmio_state_checked_write `{invGS Σ} {width : nat} (addr : Addr) (bytes : bv (width * byte)) (s s': bv iostate_bits)  : iProp Σ :=
+      ⌜withinMMIO addr width⌝ ∗
+      ⌜let e := {| event_type := IOWrite;  event_addr := addr;  event_nbbytes := width ;  event_contents := bytes |}
+      in  impl_mmio_event_prot e (bv2s s) (bv2s s')⌝.
 
     (* Current protocol state is: *)
-    Definition interp_mmio_state_pred `{iostateG IOState Σ} (s : bv iostate_bits): iProp Σ :=
+    Definition interp_mmio_state_pred `{iostateG IOState Σ} (s : bv iostate_bits) : iProp Σ :=
       st_frag1 (bv2s s).
 
 
@@ -467,21 +475,23 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
     Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ, iostateG IOState Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
-    | pmp_entries              | [ v ]                     => interp_pmp_entries v
-    | pmp_addr_access          | [ entries; m ]            => interp_pmp_addr_access liveAddrs mmioAddrs entries m
+    | pmp_entries               | [ v ]                => interp_pmp_entries v
+    | pmp_addr_access           | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
     | pmp_addr_access_without bytes | [ addr; entries; m ] => interp_pmp_addr_access_without liveAddrs mmioAddrs addr bytes entries m
-    | gprs                     | _                    => interp_gprs ∅ (* For the Universal Contract verification we always need all GPRs, hence the empty exclude list *)
-    | ptsto                    | [ addr; w ]          => interp_ptsto addr w
-    | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
-    | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
-    | inv_mmio bytes           | _                    => interp_inv_mmio bytes
-    | mmio_ptsto               | [ addr; w ]          => interp_mmio_ptsto addr w
-    | mmio_ptstommio _         | [ addr; bs ]         => interp_mmio_ptstommio addr bs
-    | mmio_state _             | [s] (* [unit] *)     => interp_mmio_state_pred s (* We have ownership over st *)
-    | mmio_state_trace bytes   | [env] (* [unit] *)   => interp_mmio_trace_state_inv (* Given st and tr state_prot is satisfied *)
-    | encodes_instr            | [ code; instr ]      => ⌜pure_decode code = inr instr ⌝%I
-    | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
-    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
+    | gprs                      | _                    => interp_gprs ∅ (* For the Universal Contract verification we always need all GPRs, hence the empty exclude list *)
+    | ptsto                     | [ addr; w ]          => interp_ptsto addr w
+    | ptsto_one _               | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
+    | ptstomem_readonly _       | [ addr; w ]          => interp_ptstomem_readonly addr w
+    | inv_mmio bytes            | _                    => interp_inv_mmio bytes
+    | mmio_ptsto                | [ addr; w ]          => interp_mmio_ptsto addr w
+    | mmio_ptstommio _          | [ addr; bs ]         => interp_mmio_ptstommio addr bs
+    | mmio_state _              | [s] (* [unit] *)     => interp_mmio_state_pred s (* We have ownership over st *)
+    | mmio_state_trace bytes    | [env] (* [unit] *)   => interp_mmio_trace_state_inv (* Given st and tr state_prot is satisfied *)
+    | mmio_state_checked_read _ | [addr; w; s; s'] => interp_mmio_state_checked_read addr w s s'
+    | mmio_state_checked_write _ | [addr; w; s; s'] => interp_mmio_state_checked_write addr w s s'
+    | encodes_instr             | [ code; instr ]      => ⌜pure_decode code = inr instr ⌝%I
+    | ptstomem _                | [ addr; bs]          => interp_ptstomem addr bs
+    | ptstoinstr                | [ addr; instr ]      => interp_ptsto_instr addr instr.
 
     Ltac destruct_pmp_entries :=
       repeat match goal with

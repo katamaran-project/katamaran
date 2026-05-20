@@ -145,10 +145,9 @@ Parameter mmioenv : MMIOEnv.
 Context {TK : TypeDeclKit}.
 Inductive IOState : Set :=
   | SGo
-  | SStop
-  | SReset.
+  | SStop.
 
-#[export] Definition iostate_bits := 2.
+#[export] Definition iostate_bits := 1.
 Class bv_rize (A : Set) (n : nat) : Set := {
     s2bv : A -> bv n;
     bv2s : bv n -> A ;
@@ -160,16 +159,13 @@ Class bv_rize (A : Set) (n : nat) : Set := {
     s2bv := fun  s : IOState =>
               match s with
               | SGo => bv.of_N 0
-              | SReset => bv.of_N 1
-              | SStop => bv.of_N 2
+              | SStop => bv.of_N 1
               end;
 
     bv2s := fun (b : bv n)  =>
               match n, b with
-              | S n', bv.mk 1 I => SReset
-              | S (S n'), bv.mk 3 I => SReset
-              | S (S n'), bv.mk 2 I => SStop
-              | _, _ => SGo
+              | _, bv.mk 0 _ => SGo
+              | _, _         => SStop
               end;
   }.
 

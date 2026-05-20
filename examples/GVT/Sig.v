@@ -64,6 +64,7 @@ Inductive PurePredicate : Set :=
 | in_entries
 | in_mmio (bytes : nat)
 | mmio_event (bytes : nat)
+| mmio_read_valid
 .
 
 Inductive Exec : Set :=
@@ -82,6 +83,8 @@ Inductive Predicate : Set :=
 | mmio_ptsto
 | mmio_ptstommio (bytes : nat)
 | mmio_state (bytes : nat)
+| mmio_state_checked_read (bytes : nat)
+| mmio_state_checked_write (bytes : nat)
 | mmio_state_trace (bytes : nat)
 | encodes_instr
 | ptstomem (bytes : nat)
@@ -120,7 +123,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
       | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
       | in_mmio _       => [ty_xlenbits]
-      | mmio_event width     => [ty_xlenbits (* addr *); ty.bvec (width * byte) (* val *); ty_ioeventType; ty_iostate]
+      | mmio_event width       => [ty_xlenbits (* addr *); ty.bvec (width * byte) (* val *); ty_ioeventType; ty_iostate; ty_iostate]
+      | mmio_read_valid => [ty_xlenbits (* addr *); ty_iostate]
       end.
 
     Example default_pmpcfg_ent : Pmpcfg_ent :=
@@ -282,62 +286,52 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     (* Helper definitions for io-protocol state machine transition function. *)
     Definition mmio_interrupt_addr : Addr := bv.of_N (mmioStartAddr + 4).
-    (* Definition bv2s {n : nat} (b : bv n) : IOState := *)
-    (*   match n, b with *)
-    (*   | S n', bv.mk 1 I => SReset *)
-    (*   | S (S n'), bv.mk 3 I => SReset *)
-    (*   | S (S n'), bv.mk 2 I => SStop *)
-    (*   | _, _ => SGo *)
-    (*   end. *)
 
-    (* Definition s2bv {n : nat} (s : IOState) : bv n := *)
-    (*   match s with *)
-    (*   | SGo => bv.of_N 0 *)
-    (*   | SReset => bv.of_N 1 *)
-    (*   | SStop => bv.of_N 2 *)
-    (*   end. *)
+    Definition Mmio_read_valid (a : Addr) (s : bv iostate_bits) : Prop := True.
 
-      (* This is the io-protocol state machine transition function. *)
-      Variant impl_mmio_event_prot: Event -> IOState -> IOState -> Prop :=
-        | IOR : forall e s s',
-            event_type e = IORead ->
-            s = s' ->
-            impl_mmio_event_prot e s s'
-        | IOW : forall e s s',
-            event_type e = IOWrite ->
-            event_addr e <> mmio_interrupt_addr ->
-            event_nbbytes e > 0 ->
-            s = SGo -> s' = SGo ->
-            impl_mmio_event_prot e s s'
-        | IOW0 : forall e s s',
-            event_type e = IOWrite ->
-            event_addr e <> mmio_interrupt_addr ->
-            event_contents e = bv.zero  ->
-            s = s' ->
-            impl_mmio_event_prot e s s'
-        | IOW__sme : forall e s s',
-            event_type e = IOWrite ->
-            event_addr e = mmio_interrupt_addr ->
-            event_nbbytes e = 2%nat ->
-            event_contents e = s2bv s' ->
-            s = s' ->
-            impl_mmio_event_prot e s s'
-        | IOW__rst : forall e s s',
-            event_type e = IOWrite ->
-            event_addr e = mmio_interrupt_addr ->
-            event_contents e = s2bv s' ->
-            s = SStop -> s' = SReset ->
-            impl_mmio_event_prot e s s'
-        | IOW__go : forall e s s',
-            event_type e = IOWrite ->
-            event_addr e = mmio_interrupt_addr ->
-            event_contents e = s2bv s' ->
-            s = SReset -> s' = SGo ->
-            impl_mmio_event_prot e s s'
+    (* This is the io-protocol state machine transition function. *)
+    Variant impl_mmio_event_prot: Event -> IOState -> IOState -> Prop :=
+      | IOR : forall e s s',
+          event_type e = IORead ->
+          event_addr e <> mmio_interrupt_addr ->
+          Mmio_read_valid (event_addr e) (s2bv s) ->
+          s = s' ->
+          impl_mmio_event_prot e s s'
+      | IOW : forall e s s',
+          event_type e = IOWrite ->
+          event_addr e <> mmio_interrupt_addr ->
+          event_nbbytes e > 0 ->
+          s = SGo -> s' = SGo ->
+          impl_mmio_event_prot e s s'
+      | IOW0 : forall e s s',
+          event_type e = IOWrite ->
+          event_addr e <> mmio_interrupt_addr ->
+          event_contents e = bv.zero  ->
+          s = s' ->
+          impl_mmio_event_prot e s s'
+      | IOR__intr : forall e s s' w,
+          event_type e = IORead ->
+          event_addr e = mmio_interrupt_addr ->
+          event_contents e = w ->
+          w = s2bv s' ->
+          Mmio_read_valid (event_addr e) (s2bv s) ->
+          impl_mmio_event_prot e s s'
+      | IOW__sme : forall e s s',
+          event_type e = IOWrite ->
+          event_addr e = mmio_interrupt_addr ->
+          event_contents e = s2bv s' ->
+          s = s' ->
+          impl_mmio_event_prot e s s'
+      | IOW__go : forall e s s',
+          event_type e = IOWrite ->
+          event_addr e = mmio_interrupt_addr ->
+          event_contents e = s2bv s' ->
+          s = SStop -> s' = SGo ->
+          impl_mmio_event_prot e s s'
     .
 
-    Definition Mmio_event_prot {width : nat} (a : Addr) (w: bv (width * byte)) (t : EventTy) (s :  bv iostate_bits) : Prop :=
-      exists (s' : bv iostate_bits), impl_mmio_event_prot {| event_type := t;  event_addr := a;  event_nbbytes := _ ;  event_contents := w |} (bv2s s) (bv2s s').
+    Definition Mmio_event_prot {width : nat} (a : Addr) (w: bv (width * byte)) (t : EventTy) (s s' :  bv iostate_bits) : Prop :=
+      impl_mmio_event_prot {| event_type := t;  event_addr := a;  event_nbbytes := _ ;  event_contents := w |} (bv2s s) (bv2s s').
 
     Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
       match p with
@@ -353,6 +347,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | in_entries      => In_entries
       | in_mmio bytes => (fun a => withinMMIO a bytes)
       | mmio_event width => @Mmio_event_prot width
+      | mmio_read_valid => @Mmio_read_valid
       end.
 
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -371,6 +366,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | mmio_ptsto                    => [ty_xlenbits; ty_byte]
       | mmio_ptstommio width          => [ty_xlenbits; ty.bvec (width * byte)]
       | mmio_state width              => [ty.bvec iostate_bits]
+      | mmio_state_checked_read width      => [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate]
+      | mmio_state_checked_write width      => [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate]
       | mmio_state_trace bytes              => ctx.nil
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
@@ -391,6 +388,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | mmio_ptsto                 => false
         | mmio_ptstommio _           => false
         | mmio_state _               => false
+        | mmio_state_checked_read _  => false
+        | mmio_state_checked_write _ => false
         | mmio_state_trace bytes     => true
         | encodes_instr              => true
         | ptstomem _                 => false
@@ -415,6 +414,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | mmio_ptsto                => Some (MkPrecise [ty_xlenbits] [ty_byte] eq_refl)
       | mmio_ptstommio width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | mmio_state width          => Some (MkPrecise ε [ty_iostate] eq_refl)
+      | mmio_state_checked_read width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate] eq_refl)
+      | mmio_state_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte); ty_iostate; ty_iostate] eq_refl)
       | mmio_state_trace bytes    => Some (MkPrecise ε ε eq_refl)
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
@@ -936,7 +937,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
   | prev_addr                | [ cfg; entries; prev ]         => simplify_prev_addr cfg entries prev
   | in_entries               | [ cfg; entries; prev ]         => Some [formula_user in_entries [cfg; entries; prev]]%ctx
   | in_mmio bytes            | [ a ]                          => Some [formula_user (in_mmio bytes) [a]]%ctx
-  | mmio_event width    | [a; w; t; s ]                      => Some [formula_user (mmio_event width) [a; w; t; s]]%ctx
+  | mmio_event width    | [a; w; t; s; s']                      => Some [formula_user (mmio_event width) [a; w; t; s; s']]%ctx
+  | mmio_read_valid | [a; s]                      => Some [formula_user mmio_read_valid [a; s]]%ctx
   .
 
   Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :
