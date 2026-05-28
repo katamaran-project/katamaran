@@ -238,6 +238,7 @@ Module Import asn.
        "'[hv' 'if:'  c  '/' '[' 'then'  A1  ']' '/' '[' 'else'  A2 ']' ']'"
       ) : asn_scope.
     Notation "x = y" := (formula (formula_relop bop.eq x y)) (x in scope term_scope, y in scope term_scope) : asn_scope .
+    Notation "x != y" := (formula (formula_relop bop.neq x y)) (x in scope term_scope, y in scope term_scope) : asn_scope .
     Notation "x >= y" := (formula (formula_relop bop.le y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x > y" := (formula (formula_relop bop.lt y x)) (x in scope term_scope, y in scope term_scope) : asn_scope.
     Notation "x <= y" := (formula (formula_relop bop.le x y)) (x in scope term_scope, y in scope term_scope) : asn_scope.
