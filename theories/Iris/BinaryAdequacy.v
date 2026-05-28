@@ -238,11 +238,13 @@ Module Type IrisAdequacy2
     - right. apply reducible_not_val. auto.
   Qed.
 
-  Lemma wp2_strong_adequacy {Γ1 Γ2 τ} (s1 s1' : Stm Γ1 τ) (s2 : Stm Γ2 τ)
-    {γ1 γ1' γ2 : RegStore} {μ1 μ1' μ2 : Memory}
-    {δ1 δ1' : CStore Γ1} {δ2 : CStore Γ2} {v1 : IVal τ}
+  Lemma wp2_strong_adequacy {Γ1 Γ2 τ} {s1 s1' : Stm Γ1 τ} (s2 : Stm Γ2 τ)
+    {γ1 γ1' : RegStore} (γ2 : RegStore) {μ1 μ1' : Memory} (μ2 : Memory)
+    {δ1 δ1' : CStore Γ1} (δ2 : CStore Γ2) {v1 : IVal τ}
     {Q : ∀ `{sailGS2 Σ}, IVal τ -> CStore Γ1 -> IVal τ -> CStore Γ2 -> iProp Σ}
-    {φ : Prop} :
+    {φ : Prop}
+    (Hsteps: ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ1', μ1', δ1', s1' ⟩)
+    (Hval : stm_to_val s1' = Some v1) :
     (forall `{sailGS2 Σ},
         ⊢ ((mem_res2 μ1 μ2 ∗ own_regstore2 γ1 γ2 ={⊤}=∗ semWP2 δ1 δ2 s1 s2 Q)
            ∗ (∀ γ2' μ2' δ2' s2' v2,
@@ -250,11 +252,10 @@ Module Type IrisAdequacy2
                ⌜stm_to_val s2' = Some v2⌝ -∗
                Q v1 δ1' v2 δ2' -∗
                mem_inv2 μ1' μ2' ={⊤,∅}=∗ ⌜ φ ⌝)))%I ->
-    ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ1', μ1', δ1', s1' ⟩ ->
-    stm_to_val s1' = Some v1 ->
     φ.
   Proof.
-    intros Hwp [n steps]%steps_to_nsteps Hs1'.
+    intros Hwp.
+    destruct (steps_to_nsteps Hsteps) as [n steps].
     eapply (uPred.pure_soundness (M := iResUR sailΣ2)).
     eapply (step_fupdN_soundness_gen _ HasLc n n).
     iIntros (Hinv) "Hlc".
@@ -280,7 +281,7 @@ Module Type IrisAdequacy2
     rewrite mem_inv2_mem_inv. iDestruct "Hmem" as "(Hmem1 & Hmem2)".
     iSpecialize ("Hwp" with "[$Hmem2 H1γ2]").
     { now iApply own_RegStore_to_regs_inv. }
-    iMod (semWP_postcondition steps Hs1' with "[Hmem1 H1γ1] [Hlc] Hwp") as "H"; eauto.
+    iMod (semWP_postcondition steps Hval with "[Hmem1 H1γ1] [Hlc] Hwp") as "H"; eauto.
     { iFrame "Hmem1".
       now iApply (@own_RegStore_to_regs_inv sailΣ2 (@sailGS_sailRegGS sailΣ2 sailGS2_sailGS_left) γ1). }
     iAssert (|={∅}▷=>^n |={∅}=> ⌜φ⌝)%I with "[-]" as "H"; last first.
