@@ -117,7 +117,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
   Notation asn_mmio_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
   Notation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
-  Notation asn_mmio_read_valid bytes a w s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; w; s])).
+  Notation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
     term_binop (bop.relop bop.eq) e1 e2.
@@ -226,7 +226,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Local Notation asn_mmio_checked_read bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_read bytes) [a; w; s; s'])).
 
   Local Notation asn_mmio_trace_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
-  Local Notation asn_mmio_read_valid bytes a w s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; w; s])).
+  Local Notation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
   Local Notation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
 
   Import bv.notations.
@@ -276,9 +276,11 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        sep_contract_precondition    := term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr") ∗
                 asn.match_bool (term_var "mmio")
                 ( asn_in_mmio bytes (term_var "paddr") ∗
+                  term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
                   asn_mmio_trace_pred bytes ∗
                   asn_mmio_state_pred bytes (term_var "s") ∗
-                  asn_mmio_read_valid bytes (term_var "paddr") (term_var "s"))
+                  asn_mmio_read_valid bytes (term_var "paddr") (term_var "s")
+                )
                 ( term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) <= term_val ty.int (Z.of_N maxAddr) ∗
                   asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w"));
 sep_contract_result         :=  "result_mem_read";
@@ -287,7 +289,7 @@ sep_contract_result         :=  "result_mem_read";
                             ( ∃ "s'", ∃ "v", (
                               term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "v") ∗
                               asn_mmio_event bytes (term_var "paddr") (term_var "v") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'") ∗
-                              asn_mmio_state_pred bytes (term_var "s'")))
+                              asn_mmio_state_pred bytes (term_var "s")))
                             (
                               term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
                               asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w"));
@@ -332,27 +334,29 @@ sep_contract_result         :=  "result_mem_read";
       sep_contract_localstore      := [term_var "typ"; term_var "m"; term_var "paddr"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "mmio")
-          (asn_in_mmio bytes (term_var "paddr") ∗
+          (  asn_in_mmio bytes (term_var "paddr") ∗
              term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
-             (asn_mmio_trace_pred bytes) ∗
-             (asn_mmio_state_pred bytes (term_var "s")) ∗
-             ∃ "s'", ((asn_mmio_event bytes (term_var "paddr") (term_var "w") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'")))
-          )
-          ((term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
-        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
+             asn_mmio_trace_pred bytes ∗
+             asn_mmio_state_pred bytes (term_var "s") ∗
+             asn_mmio_read_valid bytes (term_var "paddr") (term_var "s"))
+          (  (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+             (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr) ∗
+             asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w")) ∗
         term_var "m" = term_val ty_privilege Machine ∗
         asn_cur_privilege (term_var "m") ∗
         asn_pmp_entries (term_var "entries") ∗
         asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_var "m") (term_var "typ");
       sep_contract_result          := "result_mem_read";
       sep_contract_postcondition   :=
-        term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
         asn.match_bool (term_var "mmio")
-          (asn_mmio_state_pred bytes (term_var "s"))
-          (asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w")) ∗
-        asn_cur_privilege (term_val ty_privilege Machine) ∗
-        asn_pmp_entries (term_var "entries");
+          ( ∃ "s'", ∃ "v", (
+            term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "v") ∗
+            asn_mmio_event bytes (term_var "paddr") (term_var "v") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'") ∗
+            asn_mmio_state_pred bytes (term_var "s")))
+          ( term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
+            asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w")) ∗
+          asn_cur_privilege (term_val ty_privilege Machine) ∗
+          asn_pmp_entries (term_var "entries");
     |}.
 
   Definition sep_contract_pmp_mem_write {bytes} {H: restrict_bytes bytes} : SepContractFun (@pmp_mem_write bytes H) :=
@@ -390,26 +394,26 @@ sep_contract_result         :=  "result_mem_read";
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "mmio")
-          (
-            (asn_in_mmio bytes (term_var "paddr")) ∗
-            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits)))) ∗
-            (asn_mmio_state_pred bytes (term_var "s")) ∗
-            (asn_mmio_trace_pred bytes) ∗
-            ∃ "s'", ((asn_mmio_event bytes (term_var "paddr") (term_var "w") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'")))
-          )
-          ( (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
-            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)
-          ) ∗
-        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w") ∗
+          (  asn_in_mmio bytes (term_var "paddr") ∗
+             term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
+             asn_mmio_trace_pred bytes ∗
+             asn_mmio_state_pred bytes (term_var "s") ∗
+             asn_mmio_read_valid bytes (term_var "paddr") (term_var "s"))
+          (  (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
+             (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr) ∗
+             asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w")) ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries") ∗
         asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_var "typ");
       sep_contract_result          := "result_mem_read";
       sep_contract_postcondition   :=
-        term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
         asn.match_bool (term_var "mmio")
-          ((asn_mmio_trace_pred bytes) ∗ asn_mmio_state_pred bytes (term_var "s"))
-          (asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w")) ∗
+          ( ∃ "s'", ∃ "v", (
+            term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "v") ∗
+            asn_mmio_event bytes (term_var "paddr") (term_var "v") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'") ∗
+            asn_mmio_state_pred bytes (term_var "s")))
+          ( term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
+            asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w")) ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries");
     |}.
@@ -530,19 +534,19 @@ sep_contract_result         :=  "result_mem_read";
         sep_contract_postcondition   := term_var "result_is_within" = term_var "inv"
     |}.
 
-  (* fdu: allow zero length read? *)
-  Definition sep_contract_mmio_read {bytes} : SepContractFunX (mmio_read bytes) :=
+  Definition sep_contract_mmio_read {bytes} {H: restrict_bytes bytes} : SepContractFunX (mmio_read H) :=
     {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "s" :: ty_iostate];
       sep_contract_localstore      := [term_var "paddr"];
       sep_contract_precondition    :=
         asn_in_mmio bytes (term_var "paddr") ∗
         asn_mmio_trace_pred bytes ∗
-        asn_mmio_state_pred bytes (term_var "s");
+        asn_mmio_state_pred bytes (term_var "s") ∗
+        asn_mmio_read_valid bytes (term_var "paddr") (term_var "s");
       sep_contract_result        := "result_read_mmio";
       sep_contract_postcondition   :=
         ∃ "s'", (
           asn_mmio_event bytes (term_var "paddr") (term_var "result_read_mmio") (term_val ty_ioeventType IORead ) (term_var "s") (term_var "s'") ∗
-          asn_mmio_state_pred bytes (term_var "s'")) ∗
+          asn_mmio_state_pred bytes (term_var "s")) ∗
         asn_in_mmio bytes (term_var "paddr") ∗
         asn_mmio_trace_pred bytes;
     |}.
@@ -578,7 +582,7 @@ sep_contract_result         :=  "result_mem_read";
       | read_ram bytes       => sep_contract_read_ram
       | write_ram bytes      => sep_contract_write_ram
       | within_mmio res      => sep_contract_within_mmio res
-      | mmio_read bytes      => sep_contract_mmio_read
+      | mmio_read res        => @sep_contract_mmio_read _ res
       | mmio_write res       => @sep_contract_mmio_write _ res
       | decode               => sep_contract_decode
       | externalWorldUpdates => sep_contract_externalWorldUpdates
@@ -727,38 +731,17 @@ Module RiscvPmpSpecVerif.
 
   Import RiscvPmpBlockVerifExecutor.
 
-  Lemma bv_rize_inverse : forall n (x : bv n), (s2bv (bv2s x)) = x.
-    Proof.
-      intros. destruct (bv.view x).
-       - intros. destruct (bv.view x). auto.
-       - 
-
-
-  Search idem.
-  
   Lemma valid_checked_mem_read {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
-    destruct H; vm_compute; constructor; cbn.
-    intros. split; eauto. admit. intros. inversion H1; subst; try discriminate; simpl in H3, H2. rewrite H5 in H4.
-
-    1 - 3: intros; split; intros; eauto; intros; left; intros.
-  Admitted.
+  Proof. destruct H; vm_compute; constructor; cbn; intros; eexists; eauto. Qed.
 
   Lemma valid_checked_mem_write {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_write bytes H).
-  Proof.
-    destruct H; vm_compute; constructor; simpl; cbn; intros; eexists; eauto.
-  Qed.
+  Proof. destruct H; vm_compute; constructor; cbn; intros; eexists; eauto. Qed.
 
   Lemma valid_pmp_mem_read {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_read bytes H).
-  Proof.
-    destruct H; vm_compute; constructor; cbn.
-    1 - 3: intros; split; intros; eauto; split; intros; left; eexists; eauto.
-  Qed.
+  Proof. destruct H; vm_compute; constructor; cbn; intros; split; intros; eauto. Qed.
 
   Lemma valid_pmp_mem_write {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@pmp_mem_write bytes H).
-  Proof.
-    destruct H; vm_compute; constructor; cbn.
-    1 - 3: intros; split; intros; eauto.
-  Qed.
+  Proof. destruct H; vm_compute; constructor; cbn; intros; split; intros; eauto. Qed.
 
   Import Bitvector.bv.notations.
 
@@ -930,12 +913,11 @@ Module RiscvPmpIrisInstanceWithContracts.
     rewrite semTWP_val. now iFrame "Hregs H".
  Qed.
 
-  Lemma mmio_read_sound `{!sailGS Σ} {rG : iostateG IOState Σ} (bytes : nat) :
-    TValidContractForeign (RiscvPmpBlockVerifSpec.sep_contract_mmio_read) (mmio_read bytes).
+  Lemma mmio_read_sound `{!sailGS Σ} {rG : iostateG IOState Σ} `(rB: restrict_bytes bytes) :
+    TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_read _ rB) (mmio_read rB).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & #Hinv & Hstf)".
-    cbn.
+    iIntros "([%Hmmio _] & #Hinv & Hstf & [%Hrv _])".
     iApply semTWP_foreign.
     iIntros (? ?) "[Hregs [%a (Hmem & %Hmap & Htra)]]".
     iInv "Hinv" as ">(%σ & %t & Htrf & Hsta & %Hpred)" "Hclose".
@@ -945,32 +927,45 @@ Module RiscvPmpIrisInstanceWithContracts.
     iMod (trace.state_update _ _ _ with "[$Hsta $Hstf]") as "[Hsta Hstf]".
     iMod ("Hclose" with "[Htrf Hsta]") as "_".
     {(* Instantiate evars *)
-      iExists _. iExists _. iNext. iFrame.
-      iPureIntro. econstructor. econstructor; eauto. admit. eapply Hpred.
+      edestruct Hrv.
+      - iFrame. iNext. iPureIntro. econstructor; eauto.
+      instantiate (2 := {| event_type := IORead; event_addr := paddr; event_nbbytes := bytes; event_contents := _ |}).
+      instantiate (1 := (bv2s s)). destruct H. eapply IOR__intr; auto; eauto.
+      - iFrame. iNext. iPureIntro. econstructor; eauto.
+          instantiate (1 := (bv2s s)).  destruct H. eapply IOR; auto; eauto.
     }
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+    unfold mem_inv.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
+
     remember (fun_read_mmio μ bytes paddr) as fr.
     destruct fr as [μupd readv].
-    cbn.
-    unfold fun_read_mmio in Heqfr.
-    destruct (state_tra_read (memory_state μ) paddr bytes) as [Hbase w] eqn: SF.
-    inversion Hf. subst. 
+    unfold fun_read_mmio in Heqfr. destruct (bytes). { inversion Hmmio. }
+    destruct (state_tra_read (memory_state μ) paddr (S n)). subst.
+    inversion Heqfr. subst.
+    inversion Hf. subst.
     iMod "Hclose" as "_". rewrite semTWP_val.
-    destruct bytes; first contradiction. 
-    iFrame "Hregs Hmem Hstf".
-    inversion Heqfr. subst. simpl. iFrame "Htra".
-    repeat iSplitL; auto.
+    iFrame "Hregs Hmem Hstf". cbn.
+    iSplitR ""; auto.
+    iSplitL ""; eauto.
+    iModIntro. cbn. admit. (* instantiate (1 := b). iFrame. *)
+    iSplitL; auto.
+    iSplitL; auto.
+    iPureIntro. unfold Mmio_event_prot.
+    edestruct Hrv. eexists. split; eauto.
+    edestruct H.
+    - eapply IOR__intr; subst. eauto. eauto. eauto. admit. (*  instantiate (1 := x). *)
+    - econstructor; eauto. subst; eauto.
   Admitted.
 
   Lemma mmio_write_sound `{!sailGS Σ} {rG : iostateG IOState Σ} `(rB: restrict_bytes bytes) :
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ rB) (mmio_write rB).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & #Hinv & Hstf & [%Hstate _])".
+    iIntros "([%Hmmio _] & #Hinv & Hstf & (%v & [%Hstate _]))".
     iApply semTWP_foreign.
     iIntros (? ?) "[Hregs [%a (Hmem & %Hmap & Htra)]]".
-    iInv "Hinv" as ">(%ss & %t & Htrf & Hsta & %Hpred)" "Hclose". 
+    iInv "Hinv" as ">(%ss & %t & Htrf & Hsta & %Hpred)" "Hclose".
     iDestruct (trace.trace_full_frag_eq with "Htra Htrf") as "%Heqt". subst.
     iDestruct (trace.iost_full_frag_eq with "Hsta Hstf") as "%Heqs". subst.
     iMod (trace.trace_update _ _ (cons _ _) with "[$Htra $Htrf]") as "[Htra Htrf]".
@@ -978,14 +973,14 @@ Module RiscvPmpIrisInstanceWithContracts.
     iMod ("Hclose" with "[Htrf Hsta]") as "_".
     {(* Instantiate evars *)
       iExists _. iExists _. iNext. iFrame.
-      iPureIntro. inversion Hstate. econstructor. eapply H. eapply Hpred.
+      iPureIntro. econstructor; eauto.
       }
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     unfold mem_inv.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     iMod "Hclose" as "_". rewrite semTWP_val.
     destruct bytes; first contradiction.
-    iFrame "Hregs Hmem Htra Hstf".
+    iFrame "Hregs Hmem Htra Hstf". iSplitL. iPureIntro. apply Hmap.
     repeat iSplitL; auto.
   Qed.
 
