@@ -94,12 +94,7 @@ Module inv := invariants.
     (* Address where we will write in MMIO memory, and proof that our writes will indeed be within the MMIO region*)
     Definition mmio_write_addr : N := mmioStartAddr.
     Lemma write_word_is_MMIO: withinMMIO (bv.of_N mmio_write_addr) bytes_per_word.
-    Proof.
-      (* Avoid compute in case the list of MMIO addresses ever becomes longer *)
-      repeat split; cbn; unfold mmioAddrs;
-      eassert (mmioLenAddr = _) as -> by now compute. (* Get actual length so we can use successors *)
-      all: apply bv.in_seqBv; now compute.
-    Qed.
+    Proof. apply bounds_withinMMIO; now compute. Qed.
 
     (* Aliases for registers *)
     Definition zero : RegIdx := [bv 0].

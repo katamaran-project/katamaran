@@ -105,6 +105,9 @@ Definition mmioStartAddr := maxAddr.
 Definition mmioLenAddr := (maxAddr + lenAddr)%N.
 Definition mmioAddrs : list Addr := bv.seqBv (@bv.of_N xlenbits mmioStartAddr) mmioLenAddr.
 Definition isMMIO a : Prop := a ∈ mmioAddrs.
+Lemma mmioAddrs_rep :
+  (mmioStartAddr + mmioLenAddr ≤ bv.exp2 xlenbits)%N.
+Proof. now compute. Qed.
 Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
   match size with
   | O => False (* Avoid allowing and hence recording zero-width MMIO events *)
@@ -116,6 +119,99 @@ Proof. generalize a. induction size.
        - intro a'. cbn. destruct size; first apply _.
          apply decidable.and_dec; [apply _|auto].
 Qed.
+
+Section WithBvNotations.
+  Import bv.notations.
+
+  Lemma bounds_withinMMIO : ∀ (addr : Addr) (size : nat),
+    (bv.bin addr + N.of_nat size < bv.exp2 xlenbits)%N ->
+    (bv.of_N mmioStartAddr <=ᵘ addr
+     ∧ addr + bv.of_nat size <ᵘ bv.of_N (mmioStartAddr + mmioLenAddr))%bv ->
+    withinMMIO addr (S size).
+  Proof.
+    intros addr size H [Hle Hlt].
+    simpl. revert addr H Hle Hlt.
+    induction size as [|size IHsize]; intros addr H Hle Hlt.
+    - apply bv.in_seqBv; auto.
+      now rewrite <- bv.add_of_nat_0_r in Hlt.
+    - assert (H': (bv.bin (bv.one + addr) + N.of_nat size < bv.exp2 xlenbits)%N) by bv.bv_zify.
+      assert (Hle': (bv.of_N mmioStartAddr <=ᵘ bv.one + addr)%bv) by bv.bv_zify.
+      assert (Hlt': (bv.one + addr + bv.of_nat size <ᵘ bv.of_N (mmioStartAddr + mmioLenAddr))%bv)
+        by bv.bv_zify.
+      specialize (IHsize (bv.one + addr)%bv H' Hle' Hlt').
+      destruct size as [|size].
+      + simpl. split; auto.
+        apply bv.in_seqBv; auto.
+        apply bv.ult_trans with (y := (addr + bv.of_nat 1)%bv);
+          first bv.bv_zify; auto.
+      + split; auto.
+        apply bv.in_seqBv; auto.
+        apply bv.ult_trans with (y := (addr + bv.of_nat (S (S size)))%bv);
+          first bv.bv_zify; auto.
+  Qed.
+
+  Lemma withinMMIO_bounds : ∀ (addr : Addr) (size : nat),
+    withinMMIO addr size ->
+    (bv.of_N mmioStartAddr <=ᵘ addr
+     ∧ addr + bv.of_nat (size - 1) <ᵘ bv.of_N (mmioStartAddr + mmioLenAddr))%bv.
+  Proof.
+    intros addr size HIn; destruct size as [|size]; simpl;
+      try contradiction.
+    simpl in HIn. rewrite Nat.sub_0_r.
+    revert addr HIn.
+    induction size as [|size IHsize]; intros addr HIn.
+    - apply bv.seqBv_in' in HIn.
+      now rewrite <- bv.add_of_nat_0_r.
+      apply mmioAddrs_rep.
+    - destruct HIn as [He HIn]. simpl in HIn.
+      apply bv.seqBv_in' in He. destruct He as [Hle Hlt].
+      split; auto.
+      specialize (IHsize (bv.one + addr)%bv HIn).
+      destruct IHsize as [_ IH].
+      rewrite bv.of_nat_S.
+      rewrite bv.add_assoc.
+      now rewrite (@bv.add_comm _ addr bv.one).
+      apply mmioAddrs_rep.
+  Qed.
+
+  Lemma withinMMIO_elem_of : ∀ (addr : Addr) (size : nat),
+    withinMMIO addr (S size)
+    <-> Forall (λ size, addr + bv.of_nat size ∈ mmioAddrs)%bv (seq 0 (S size)).
+  Proof.
+    assert (Heq: ∀ size, seq 0 (S (S size)) = (0%nat :: seq 1 (S size))%list) by auto.
+    intros addr size. revert addr. induction size as [|size IH]; intros addr;
+      cbn - [seq]; split; intros H.
+    - apply Forall_singleton. now rewrite <- bv.add_of_nat_0_r.
+    - rewrite Forall_singleton in H.
+      now rewrite <- bv.add_of_nat_0_r in H.
+    - destruct H as [He H].
+      specialize (IH (bv.one + addr)%bv).
+      rewrite Heq.
+      apply Forall_cons. split.
+      + now rewrite <- bv.add_of_nat_0_r.
+      + pose proof ((proj1 IH) H) as H'.
+        rewrite Forall_seq in H'.
+        simpl in H'.
+        rewrite Forall_seq.
+        intros s [HInl HInr].
+        destruct s as [|s]; try lia.
+        rewrite bv.of_nat_S bv.add_assoc.
+        rewrite (@bv.add_comm _ addr bv.one).
+        apply H'; lia.
+    - rewrite Heq in H. apply Forall_cons in H.
+      destruct H as [Haddr H]. rewrite <- bv.add_of_nat_0_r in Haddr.
+      split; auto.
+      specialize (IH (bv.one + addr)%bv).
+      apply IH.
+      rewrite Forall_seq in H.
+      rewrite Forall_seq.
+      intros s [HInl Hinr].
+      rewrite (@bv.add_comm _ bv.one addr).
+      rewrite <- bv.add_assoc.
+      rewrite <- bv.of_nat_S.
+      apply H. lia.
+  Qed.
+End WithBvNotations.
 
 Record Minterrupts : Set :=
   MkMinterrupts
