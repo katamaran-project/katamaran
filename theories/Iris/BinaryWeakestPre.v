@@ -810,6 +810,27 @@ Module IrisBinaryWP
       now iApply (semTWP_Steps with "[Hres] H").
     Qed.
 
+    Lemma semWP2_step_left {Γ1 Γ2 τ} {s1 s1' : Stm Γ1 τ} {s2 : Stm Γ2 τ}
+      {γ1 γ1' γ2 : RegStore} {μ1 μ1' μ2 : Memory} {δ1 δ1' : CStore Γ1}
+      {δ2 : CStore Γ2} {Q : Post2 Γ1 Γ2 τ} :
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ1', μ1', δ1', s1' ⟩ ->
+      regs_inv2 γ1 γ2 ∗ mem_inv2 μ1 μ2 -∗
+      £ 1 -∗
+      semWP2 δ1 δ2 s1 s2 Q ={⊤,∅}=∗
+      ▷ |={∅,⊤}=> (@regs_inv _ sailRegGS2_sailRegGS_left γ1' ∗ @mem_inv _ memGS2_memGS_left μ1')
+                  ∗ @semWP _ sailGS2_sailGS_left _ _ δ1' s1' (λ (v1 : IVal τ) (δ1'0 : CStore Γ1),
+                    ∃ (γ22 : RegStore) (μ22 : Memory) (δ2' : CStore Γ2) (s2' : Stm Γ2 τ) (v2 : IVal τ),
+                      ⌜⟨ γ2, μ2, δ2, s2 ⟩ --->* ⟨ γ22, μ22, δ2', s2' ⟩⌝
+                        ∗ ⌜stm_to_val s2' = Some v2⌝ ∗ @regs_inv _ sailRegGS2_sailRegGS_right γ22 ∗ @mem_inv _ memGS2_memGS_right μ22 ∗ Q v1 δ1'0 v2 δ2').
+    Proof.
+      iIntros (Hstep) "([Hreg1 Hreg2] & Hmem) Hlc Hwp".
+      rewrite /semWP2.
+      iDestruct (mem_inv2_mem_inv with "Hmem") as "[Hmem1 Hmem2]".
+      iSpecialize ("Hwp" with "[$Hreg2 $Hmem2]").
+      iApply (semWP_step Hstep with "[Hreg1 Hmem1] [Hlc] Hwp"); eauto.
+      iFrame "Hreg1 Hmem1".
+    Qed.
+
   End WithSailGS2.
 End IrisBinaryWP.
 
