@@ -209,9 +209,8 @@ Module inv := invariants.
     Example femtokernel_handler_asm : list ASM :=
       [
         ITYPE (bv.of_N 42) zero t0 RISCV_ADDI
-      ; ITYPE bv.zero zero ra RISCV_ADDI
       ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N 42)]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
-      ; Λ x, STORE (bv.of_N mmio_write_addr) t0 ra WORD (* works because mmio_write_addr fits into 12 bits. *)
+      ; STORE (bv.of_N mmio_write_addr) t0 zero WORD (* works because mmio_write_addr fits into 12 bits. *)
       ; MRET
       ].
     Example femtokernel_handler' (handler_start : N) : list AnnotInstr :=
@@ -323,7 +322,6 @@ Module inv := invariants.
       (∃ "v", mip ↦ term_var "v") ∗ (∃ "v", mie ↦ term_var "v") ∗
       (mepc ↦ term_var "mepc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
-      (∃ "x1", x1 ↦ term_var "x1") ∗
       x5 ↦ term_var "x5" ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
       asn_inv_mmio.
@@ -337,8 +335,7 @@ Module inv := invariants.
           (∃ "v", mip ↦ term_var "v") ∗ (∃ "v", mie ↦ term_var "v") ∗
           (mepc ↦ term_var "mepc") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
-          (x1 ↦ term_val ty_xlenbits bv.zero ∗
-           x5 ↦ term_val ty_xlenbits (bv.of_N 42)) ∗
+          x5 ↦ term_val ty_xlenbits (bv.of_N 42) ∗
           asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))). (* Different handler sizes cause different entries *)
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
@@ -594,8 +591,8 @@ Module inv := invariants.
 
   Lemma femtokernel_handler_safe `{sailGS Σ} (x5_val mepc : Val ty_xlenbits) :
     ⊢ exec_instructions_prologue (bv.of_N handler_addr) (filter_AST femtokernel_handler)
-      ∗ asn.interpret femtokernel_handler_pre [env].["x5" ∷ ty_xlenbits ↦ x5_val].["mepc" ∷ ty_xlenbits ↦ mepc].["a" ∷ ty_xlenbits ↦ bv.of_N handler_addr] ∗
-        interp_gprs {[x1; x5]} ∗
+      ∗ asn.interpret femtokernel_handler_pre (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5_val].["a" ∷ ty_xlenbits ↦ bv.of_N handler_addr] ∗
+        interp_gprs {[x5]} ∗
         (∃ v, mscratch ↦ᵣ v) ∗
         interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User (* Not needed for handler, but required for the rest of execution *)
         -∗
@@ -606,21 +603,21 @@ Module inv := invariants.
     iIntros (x5_val mepc) "(Hpro & Hpre & Hgprs & Hmscratch & HaccU)".
     iPoseProof (contract_femtohandler_verified (bv.of_N handler_addr) x5_val mepc) as "H".
     unfold contract_femtohandler; cbn - [asn_regs_ptsto].
-    iDestruct "Hpre" as "([% _] & Hmstatus & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hcurpriv & Hx1 & Hx5 & Hpmpentries & #Hmem)".
+    iDestruct "Hpre" as "([% _] & Hmstatus & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hcurpriv & Hx5 & Hpmpentries & #Hmem)".
     iPoseProof (WP_loop_semTripleBlock _ _ _ _ with "Hpro [-Hgprs Hmscratch HaccU] H") as "Hk";
-      first (cbn - [asn_regs_ptsto]; iFrame "Hmstatus Hmtvec Hmcause Hmip Hmie Hmepc Hcurpriv Hpmpentries Hx1 Hx5 Hmem"; try iSplitR; try (iPureIntro; auto)).
+      first (cbn - [asn_regs_ptsto]; iFrame "Hmstatus Hmtvec Hmcause Hmip Hmie Hmepc Hcurpriv Hpmpentries Hx5 Hmem"; try iSplitR; try (iPureIntro; auto)).
     iApply "Hk".
     iIntros (an) "(Hpost & Hepi)".
     cbn - [asn_regs_ptsto].
-    iDestruct "Hpost" as "([<- _] & Hmstatus & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hcurpriv & Hx1x5 & Hpmpentries)".
+    iDestruct "Hpost" as "([<- _] & Hmstatus & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hcurpriv & Hx5 & Hpmpentries)".
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-    iPoseProof (LoopVerification.valid_semTriple_loop with "[Hmem $Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc $Hpc $Hcurpriv Hx1x5 Hgprs $Hpmpentries $Hnpc $HaccU Hinstrs]") as "Hk".
-    { iSplitL "Hx1x5 Hgprs".
-      { iApply (interp_gprs_with_excluded (exclude := {[x1; x5]}));
+    iPoseProof (LoopVerification.valid_semTriple_loop with "[Hmem $Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc $Hpc $Hcurpriv Hx5 Hgprs $Hpmpentries $Hnpc $HaccU Hinstrs]") as "Hk".
+    { iSplitL "Hx5 Hgprs".
+      { iApply (interp_gprs_with_excluded (exclude := {[x5]}));
           try solve_subseteq.
         iFrame "Hgprs".
         reduce_big_sepS_big_sepL.
-        now iDestruct "Hx1x5" as "($ & $)". }
+        now iFrame "Hx5". }
       iSplitR; last iSplitL.
       - iModIntro.
         unfold LoopVerification.CSRMod.
@@ -628,15 +625,13 @@ Module inv := invariants.
         inversion eq.
       - iModIntro.
         unfold LoopVerification.Trap.
-        iIntros "(HaccU & Hgprs & Hpmpentries & Hmcause & Hmip & Hmie & Hmscratch & Hcurpriv & Hnextpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
-        iDestruct "Hmepc" as "(%mepc & Hmepc)".
-        rewrite <- (interp_gprs_with_excluded (exclude := {[x1; x5]}));
+        iIntros "(HaccU & Hgprs & Hpmpentries & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & Hcurpriv & Hnextpc & Hpc & Hmtvec & Hmstatus & [%vmepc Hmepc])".
+        rewrite <- (interp_gprs_with_excluded (exclude := {[x5]}));
           try solve_subseteq.
-        iDestruct "Hgprs" as "(Hx1x5 & Hgprs)".
+        iDestruct "Hgprs" as "(Hx5 & Hgprs)".
         cbn.
         reduce_big_sepS_big_sepL.
-        repeat try iDestruct "Hx1x5" as "([% ?] & Hx1x5)".
-        iApply ("Hind" $! _ mepc).
+        iDestruct "Hx5" as "([% ?] & _)".
         iFrame "Hgprs Hmstatus Hmtvec Hmcause Hmip Hmie Hmscratch Hmepc Hcurpriv Hpmpentries Hpc HaccU Hnextpc Hinstrs Hmem".
         repeat try (iRename select (_ ↦ᵣ _) into "Hpts";
                     iFrame "Hpts").
@@ -687,13 +682,11 @@ Module inv := invariants.
     iSplitL.
     unfold LoopVerification.Trap.
     iModIntro.
-    iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hmip & Hmie & Hmscratch & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
-    iDestruct "Hmepc" as "[%mepc Hmepc]".
-    iPoseProof (interp_gprs_with_excluded (exclude := {[x1; x5]}) with "Hgprs") as "(Hx1x5 & Hgprs)";
+    iIntros "(Hmem & Hgprs & Hpmpents & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & [%vmepc Hmepc])".
+    iPoseProof (interp_gprs_with_excluded (exclude := {[x5]}) with "Hgprs") as "(Hx5 & Hgprs)";
       try solve_subseteq.
     reduce_big_sepS_big_sepL.
-    repeat try iDestruct "Hx1x5" as "([% ?] & Hx1x5)".
-    iApply (femtokernel_handler_safe _ mepc).
+    repeat try iDestruct "Hx5" as "([% ?] & Hx5)".
     cbn.
     iFrame "Hmepc Hgprs Hpmpents Hmcause Hmip Hmie Hmscratch Hcurpriv Hnpc Hpc Hmtvec Hmstatus Hmem Hhandler Hmmio".
     repeat try (iRename select (_ ↦ᵣ _) into "Hpts";
