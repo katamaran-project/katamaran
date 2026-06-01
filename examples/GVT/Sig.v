@@ -191,12 +191,9 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition Mmio_event_prot {width : nat} (a : Addr) (w: bv (width * byte)) (t : EventTy) (s s' :  bv iostate_bits) : Prop :=
       impl_mmio_event_prot {| event_type := t;  event_addr := a;  event_nbbytes := _ ;  event_contents := w |} (bv2s s) (bv2s s').
 
-    Definition Mmio_read_valid {width : nat} (a : Addr) (s : bv iostate_bits) : Prop :=
-      forall (s' : IOState) (w : bv (width * byte)),
-        ((s' = mmio_interrupt_w2s w (bv2s s) /\ a = mmio_interrupt_addr) \/ (s' = bv2s s /\ a <> mmio_interrupt_addr)).
-    (* ((s' = mmio_interrupt_w2s w (bv2s s) /\ a = mmio_interrupt_addr) \/ (s' = bv2s s /\ a <> mmio_interrupt_addr)). *)
-    (* (impl_mmio_event_prot {| event_type := IORead;  event_addr := a;  event_nbbytes := _;  event_contents := w |} (bv2s s) (bv2s s')). *)
-
+    Definition Mmio_read_valid {width : nat} (a : Addr) (s : bv iostate_bits) : Prop := True.
+      (* forall (s' : IOState) (w : bv (width * byte)), *)
+        (* ((s' = mmio_interrupt_w2s w (bv2s s) /\ a = mmio_interrupt_addr) \/ (s' = bv2s s /\ a <> mmio_interrupt_addr)). *)
 
     Definition 𝑷 := PurePredicate.
 

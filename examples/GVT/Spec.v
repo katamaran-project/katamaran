@@ -928,11 +928,10 @@ Module RiscvPmpIrisInstanceWithContracts.
     iMod (trace.state_update _ _ (bv2s s) with "[$Hsta $Hstf]") as "[Hsta Hstf]".
     iMod ("Hclose" with "[Htrf Hsta]") as "_".
     {(* Instantiate evars *)
-      edestruct Hrv.
-      - iFrame. iNext. iPureIntro. econstructor; eauto.
-        destruct H. eapply IOR__intr; auto; eauto.
-      - iFrame. iNext. iPureIntro. econstructor; eauto.
-        destruct H. eapply IOR; auto; eauto.
+      iFrame. iNext. iPureIntro.
+      destruct (decide (paddr = mmio_interrupt_addr)).
+      - subst. econstructor; eauto. eapply IOR__intr; eauto.
+      - subst. econstructor; eauto. eapply IOR; eauto.
     }
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     unfold mem_inv.
@@ -950,12 +949,13 @@ Module RiscvPmpIrisInstanceWithContracts.
     iSplitR ""; auto.
     iSplitL ""; eauto.
     iFrame "Hinv". iPureIntro; intuition.
-
-    (* destruct Hrv as [[-> ->]|[-> Hanint]]. eexists. split; eauto. *)
-    (* edestruct H. *)
-    (* - eapply IOR__intr; subst. eauto. eauto. eauto. admit. (*  instantiate (1 := x). *) *)
-    (* - econstructor; eauto. subst; eauto. *)
-  Admitted.
+    destruct (decide (paddr = mmio_interrupt_addr)).
+    - exists (s2bv (mmio_interrupt_w2s readv (bv2s s))). split; last done.
+      eapply IOR__intr; eauto.
+      change (event_contents {| event_type := IORead; event_addr := paddr; event_nbbytes := S bytes1; event_contents := readv |}) with readv.
+      destruct (mmio_interrupt_w2s readv (bv2s s)) eqn: A; rewrite A; eauto.
+    - exists s. split; last done. now eapply IOR.
+  Qed.
 
   Lemma mmio_write_sound `{!sailGS Σ} {rG : iostateG IOState Σ} `(rB: restrict_bytes bytes) :
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ rB) (mmio_write rB).
