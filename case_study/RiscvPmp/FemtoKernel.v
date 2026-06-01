@@ -1025,7 +1025,11 @@ Module inv := invariants.
       repeat first [iDestruct "H'" as "($ & H')"
                    | iDestruct "H'" as "(? & H')"].
       unfold interp_gprs; reduce_big_sepS_big_sepL; cbn.
-      now repeat iDestruct "H'" as "($ & H')".
+      iAssert (□ ∀ r v, r ↦ᵣ v -∗ ∃ v, r ↦ᵣ v)%I as "#Heq".
+      { iModIntro. iIntros (? v) "H". now iExists v. }
+      repeat try (iRename select (_ ↦ᵣ _) into "Hpts";
+                  iPoseProof ("Heq" with "Hpts") as "Hpts";
+                  iFrame "Hpts").
     - iIntros "Hmem".
       iInv "Hmmio" as (t) ">[Hfrag %Hpred]" "_".
       iDestruct "Hmem" as "(%memmap & Hinv & %link & Htr)".
