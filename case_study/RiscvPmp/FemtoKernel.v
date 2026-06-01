@@ -248,12 +248,35 @@ Module inv := invariants.
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
-    Example femtokernel_init_pre : Assertion ["a"::ty_xlenbits] :=
+    Definition Σ__csrs : LCtx :=
+      ["mtvec" :: ty_xlenbits;
+       "mcause" :: ty_xlenbits;
+       "mepc" :: ty_xlenbits;
+       "mie" :: ty_Minterrupts;
+       "mip" :: ty_Minterrupts].
+
+    Record CSRVals := mkCSRVals {
+        vmtvec  : Val ty_xlenbits;
+        vmcause : Val ty_xlenbits;
+        vmepc   : Val ty_xlenbits;
+        vmie    : Val ty_Minterrupts;
+        vmip    : Val ty_Minterrupts;
+      }.
+
+    Definition CSRVals_Valuation (vals : CSRVals) : Valuation Σ__csrs :=
+      [env]
+        .["mtvec" ∷ ty_xlenbits ↦ vmtvec vals]
+        .["mcause" ∷ ty_xlenbits ↦ vmcause vals]
+        .["mepc" ∷ ty_xlenbits ↦ vmepc vals]
+        .["mie" ∷ ty_Minterrupts ↦ vmie vals]
+        .["mip" ∷ ty_Minterrupts ↦ vmip vals].
+
+    Example femtokernel_init_pre : Assertion (Σ__csrs ▻▻ ["a"::ty_xlenbits]) :=
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N adv_addr) < term_val ty.int (Z.of_N maxAddr))%asn ∗
-      (∃ "v", mtvec ↦ term_var "v") ∗
-      (∃ "v", mcause ↦ term_var "v") ∗
-      (∃ "v", mip ↦ term_var "v") ∗ (∃ "v", mie ↦ term_var "v") ∗
-      (∃ "v", mepc ↦ term_var "v") ∗
+      mtvec ↦ term_var "mtvec" ∗
+      mcause ↦ term_var "mcause" ∗
+      mip ↦ term_var "mip" ∗ mie ↦ term_var "mie" ∗
+      mepc ↦ term_var "mepc" ∗
       mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool false; term_val ty.bool false ] ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       (∃ "x1", x1 ↦ term_var "x1") ∗
@@ -262,13 +285,13 @@ Module inv := invariants.
 
     Import TermNotations.
 
-    Example femtokernel_init_post : Assertion ["a"::ty_xlenbits; ("an"::ty_xlenbits)] :=
+    Example femtokernel_init_post : Assertion (Σ__csrs ▻▻ ["a"::ty_xlenbits; ("an"::ty_xlenbits)]) :=
       (
         (term_var "an" = term_var "a" +ᵇ (term_val ty_xlenbits (bv.of_N adv_addr)))%asn ∗
           (mtvec ↦ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_addr)) ∗
-          (∃ "v", mcause ↦ term_var "v") ∗
-          (∃ "v", mip ↦ term_var "v") ∗ (∃ "v", mie ↦ term_var "v") ∗
-          (∃ "v", mepc ↦ term_var "v") ∗
+          mcause ↦ term_var "mcause" ∗
+          (∃ "v", mip ↦ term_var "v") ∗ mie ↦ term_var "mie" ∗
+          mepc ↦ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N adv_addr) ∗
           mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool true; term_val ty.bool true ] ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           x1 ↦ term_val ty_xlenbits [bv 0x80] ∗
@@ -297,43 +320,44 @@ Module inv := invariants.
       intuition bv_solve_Ltac.solveBvManual.
     Qed.
 
-    Definition contract_femtoinit `{sailGS Σ} (a : Val ty_xlenbits) : iProp Σ :=
+    Definition contract_femtoinit `{sailGS Σ} (a : Val ty_xlenbits) (csrs : CSRVals) : iProp Σ :=
+      let ι__csrs := CSRVals_Valuation csrs in
       semTripleBlock
-        (λ a, asn.interpret femtokernel_init_pre [env].["a" ∷ ty_xlenbits ↦ a])
+        (λ a, asn.interpret femtokernel_init_pre ι__csrs.["a" ∷ ty_xlenbits ↦ a])
         a (filter_AST femtokernel_init_gen)
-        (λ a an, asn.interpret femtokernel_init_post [env].["a" ∷ ty_xlenbits ↦ a].["an" ∷ ty_xlenbits ↦ an]).
+        (λ a an, asn.interpret femtokernel_init_post ι__csrs.["a" ∷ ty_xlenbits ↦ a].["an" ∷ ty_xlenbits ↦ an]).
 
-    Lemma contract_femtoinit_verified : ∀ `{sailGS Σ} (a : Val ty_xlenbits),
-        ⊢ contract_femtoinit a.
+    Lemma contract_femtoinit_verified : ∀ `{sailGS Σ} (a : Val ty_xlenbits) (csrs : CSRVals),
+        ⊢ contract_femtoinit a csrs.
     Proof.
-      unfold contract_femtoinit. iIntros (Σ sg a).
+      unfold contract_femtoinit. iIntros (Σ sg a csrs).
       iApply (sound_sannotated_block_verification_condition lemSemBlockVerif).
       vm_compute.
       apply sat__femtoinit.
     Qed.
 
     (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
-    Example femtokernel_handler_pre : Assertion ["x5" :: ty_xlenbits; "mepc" :: ty_xlenbits; "a" :: ty_xlenbits] :=
+    Example femtokernel_handler_pre : Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "a" :: ty_xlenbits]) :=
       (* (term_var "a" = term_val ty_word (bv.of_N handler_addr)) ∗ *)
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
       (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
       (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
-      (∃ "v", mcause ↦ term_var "v") ∗
-      (∃ "v", mip ↦ term_var "v") ∗ (∃ "v", mie ↦ term_var "v") ∗
-      (mepc ↦ term_var "mepc") ∗
+      mcause ↦ term_var "mcause" ∗
+      (∃ "v", mip ↦ term_var "v") ∗ mie ↦ term_var "mie" ∗
+      mepc ↦ term_var "mepc" ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       x5 ↦ term_var "x5" ∗
       asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))) ∗ (* Different handler sizes cause different entries *)
       asn_inv_mmio.
 
     Example femtokernel_handler_post :
-      Assertion ["x5" :: ty_xlenbits; "mepc" :: ty_xlenbits; "a" :: ty_xlenbits; "an"::ty_xlenbits] :=
+      Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       term_var "an" = term_var "mepc" ∗
       (∃ "mie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool true; term_var "mie" ]) ∗
           (mtvec ↦ term_val ty_word (bv.of_N handler_addr)) ∗
-          (∃ "v", mcause ↦ term_var "v") ∗
-          (∃ "v", mip ↦ term_var "v") ∗ (∃ "v", mie ↦ term_var "v") ∗
-          (mepc ↦ term_var "mepc") ∗
+          mcause ↦ term_var "mcause" ∗
+          (∃ "v", mip ↦ term_var "v") ∗ mie ↦ term_var "mie" ∗
+          mepc ↦ term_var "mepc" ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           x5 ↦ term_val ty_xlenbits (bv.of_N 42) ∗
           asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_addr)))). (* Different handler sizes cause different entries *)
@@ -368,16 +392,17 @@ Module inv := invariants.
       1-4: eapply bv.in_seqBv'; now vm_compute.
     Qed.
 
-    Definition contract_femtohandler `{sailGS Σ} (a x5 mepc : Val ty_xlenbits) : iProp Σ :=
+    Definition contract_femtohandler `{sailGS Σ} (a x5 : Val ty_xlenbits) (csrs : CSRVals) : iProp Σ :=
+      let ι__csrs := CSRVals_Valuation csrs in
       semTripleBlock
-        (λ a, asn.interpret femtokernel_handler_pre [env].["x5" ∷ ty_xlenbits ↦ x5].["mepc" ∷ ty_xlenbits ↦ mepc].["a" ∷ ty_xlenbits ↦ a])
+        (λ a, asn.interpret femtokernel_handler_pre ι__csrs.["x5" ∷ ty_xlenbits ↦ x5].["a" ∷ ty_xlenbits ↦ a])
         a (filter_AST femtokernel_handler)
-        (λ a an, asn.interpret femtokernel_handler_post [env].["x5" ∷ ty_xlenbits ↦ x5].["mepc" ∷ ty_xlenbits ↦ mepc].["a" ∷ ty_xlenbits ↦ a].["an" ∷ ty_xlenbits ↦ an]).
+        (λ a an, asn.interpret femtokernel_handler_post ι__csrs.["x5" ∷ ty_xlenbits ↦ x5].["a" ∷ ty_xlenbits ↦ a].["an" ∷ ty_xlenbits ↦ an]).
 
-    Lemma contract_femtohandler_verified : ∀ `{sailGS Σ} (a x5 mepc : Val ty_xlenbits),
-        ⊢ contract_femtohandler a x5 mepc.
+    Lemma contract_femtohandler_verified : ∀ `{sailGS Σ} (a x5 : Val ty_xlenbits) (csrs : CSRVals),
+        ⊢ contract_femtohandler a x5 csrs.
     Proof.
-      unfold contract_femtohandler. iIntros (Σ sg a x5 mepc).
+      unfold contract_femtohandler. iIntros (Σ sg a x5 csrs).
       iApply (sound_sannotated_block_verification_condition lemSemBlockVerif).
       pose proof sat__femtohandler as H.
       vm_compute; apply H.
@@ -589,7 +614,7 @@ Module inv := invariants.
           rewrite Hel
       end.
 
-  Lemma femtokernel_handler_safe `{sailGS Σ} (x5_val mepc : Val ty_xlenbits) :
+  Lemma femtokernel_handler_safe `{sailGS Σ} (x5_val : Val ty_xlenbits) (csrs : CSRVals) :
     ⊢ exec_instructions_prologue (bv.of_N handler_addr) (filter_AST femtokernel_handler)
       ∗ asn.interpret femtokernel_handler_pre (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5_val].["a" ∷ ty_xlenbits ↦ bv.of_N handler_addr] ∗
         interp_gprs {[x5]} ∗
@@ -598,10 +623,10 @@ Module inv := invariants.
         -∗
         WP_loop.
   Proof.
-    revert x5_val mepc.
+    revert x5_val csrs.
     iLöb as "Hind".
-    iIntros (x5_val mepc) "(Hpro & Hpre & Hgprs & Hmscratch & HaccU)".
-    iPoseProof (contract_femtohandler_verified (bv.of_N handler_addr) x5_val mepc) as "H".
+    iIntros (x5_val csrs) "(Hpro & Hpre & Hgprs & Hmscratch & HaccU)".
+    iPoseProof (contract_femtohandler_verified (bv.of_N handler_addr) x5_val csrs) as "H".
     unfold contract_femtohandler; cbn - [asn_regs_ptsto].
     iDestruct "Hpre" as "([% _] & Hmstatus & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hcurpriv & Hx5 & Hpmpentries & #Hmem)".
     iPoseProof (WP_loop_semTripleBlock _ _ _ _ with "Hpro [-Hgprs Hmscratch HaccU] H") as "Hk";
@@ -632,6 +657,14 @@ Module inv := invariants.
         cbn.
         reduce_big_sepS_big_sepL.
         iDestruct "Hx5" as "([% ?] & _)".
+        iApply ("Hind" $! _
+                       {|
+                         vmtvec  := bv.of_N handler_addr;
+                         vmcause := vmcause;
+                         vmepc   := vmepc;
+                         vmie    := vmie;
+                         vmip    := vmip;
+                                        |}).
         iFrame "Hgprs Hmstatus Hmtvec Hmcause Hmip Hmie Hmscratch Hmepc Hcurpriv Hpmpentries Hpc HaccU Hnextpc Hinstrs Hmem".
         repeat try (iRename select (_ ↦ᵣ _) into "Hpts";
                     iFrame "Hpts").
@@ -687,6 +720,14 @@ Module inv := invariants.
       try solve_subseteq.
     reduce_big_sepS_big_sepL.
     repeat try iDestruct "Hx5" as "([% ?] & Hx5)".
+    iApply (femtokernel_handler_safe _
+                                     {|
+                                       vmtvec  := bv.of_N handler_addr;
+                                       vmcause := vmcause;
+                                       vmepc   := vmepc;
+                                       vmie    := vmie;
+                                       vmip    := vmip;
+                                     |}).
     cbn.
     iFrame "Hmepc Hgprs Hpmpents Hmcause Hmip Hmie Hmscratch Hcurpriv Hnpc Hpc Hmtvec Hmstatus Hmem Hhandler Hmmio".
     repeat try (iRename select (_ ↦ᵣ _) into "Hpts";
@@ -707,18 +748,17 @@ Module inv := invariants.
   (* see above *)
   Transparent femtokernel_init_pre.
 
-  Lemma femtokernel_init_safe `{sailGS Σ} :
+  Lemma femtokernel_init_safe `{sailGS Σ} (csrs : CSRVals) :
     ⊢ exec_instructions_prologue (bv.of_N init_addr) (filter_AST femtokernel_init_gen)
       ∗ ptsto_instrs (bv.of_N handler_addr) (filter_AnnotInstr_AST femtokernel_handler)
       ∗ ptstoSthL advAddrs
-      ∗ asn.interpret femtokernel_init_pre [env].["a" ∷ ty_xlenbits ↦ bv.of_N init_addr]
+      ∗ asn.interpret femtokernel_init_pre (CSRVals_Valuation csrs).["a" ∷ ty_xlenbits ↦ bv.of_N init_addr]
       ∗ interp_gprs {[x1]}
       ∗ (∃ v, mscratch ↦ᵣ v)
       ∗ femto_inv_mmio (* This is not needed for the `init` code, but it is needed later on *)
         -∗
         WP_loop.
   Proof.
-    iLöb as "Hind".
     iIntros "(Hpro & Hhandler & Hadv & Hpre & Hgprs & Hmscratch & #Hmem)".
     iPoseProof (contract_femtoinit_verified (bv.of_N init_addr)) as "H".
     unfold contract_femtoinit; cbn - [asn_regs_ptsto].
@@ -941,7 +981,6 @@ Module inv := invariants.
     repeat f_equal; auto.
   Qed.
 
-
   Lemma femtokernel_endToEnd {γ γ' : RegStore} {μ μ' : Memory}
         {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} :
     mem_has_instrs μ (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
@@ -969,13 +1008,22 @@ Module inv := invariants.
     iSplitL.
     - destruct (env.view δ).
 
-      iApply (femtokernel_init_safe with "[-]").
+      iApply (femtokernel_init_safe {|
+                         vmtvec  := read_register γ mtvec;
+                         vmcause := read_register γ mcause;
+                         vmepc   := read_register γ mepc;
+                         vmie    := read_register γ mie;
+                         vmip    := read_register γ mip;
+                |}
+               with "[-]").
 
       #[local] Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
-      iFrame "∗ #". cbn.
+      iFrame "∗ #". cbn - [interp_gprs].
       rewrite <- ?bi.sep_assoc.
       iSplitR; first auto.
       rewrite <- ?bi.sep_assoc.
+      repeat first [iDestruct "H'" as "($ & H')"
+                   | iDestruct "H'" as "(? & H')"].
       unfold interp_gprs; reduce_big_sepS_big_sepL; cbn.
       now repeat iDestruct "H'" as "($ & H')".
     - iIntros "Hmem".
