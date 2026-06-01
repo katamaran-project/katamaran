@@ -923,39 +923,38 @@ Module RiscvPmpIrisInstanceWithContracts.
     iInv "Hinv" as ">(%σ & %t & Htrf & Hsta & %Hpred)" "Hclose".
     iDestruct (trace.trace_full_frag_eq with "Htra Htrf") as "%Heqt". subst.
     iDestruct (trace.iost_full_frag_eq with "Hsta Hstf") as "%Heqs". subst.
-    iMod (trace.trace_update _ _ (cons _ _) with "[$Htra $Htrf]") as "[Htra Htrf]".
-    iMod (trace.state_update _ _ _ with "[$Hsta $Hstf]") as "[Hsta Hstf]".
+    destruct (fun_read_mmio μ bytes paddr) as [μupd readv] eqn:Hreadmmio.
+    iMod (trace.trace_update _ _ (cons {| event_type := IORead; event_addr := paddr; event_nbbytes := bytes; event_contents := readv |} _) with "[$Htra $Htrf]") as "[Htra Htrf]".
+    iMod (trace.state_update _ _ (bv2s s) with "[$Hsta $Hstf]") as "[Hsta Hstf]".
     iMod ("Hclose" with "[Htrf Hsta]") as "_".
     {(* Instantiate evars *)
       edestruct Hrv.
       - iFrame. iNext. iPureIntro. econstructor; eauto.
-      instantiate (2 := {| event_type := IORead; event_addr := paddr; event_nbbytes := bytes; event_contents := _ |}).
-      instantiate (1 := (bv2s s)). destruct H. eapply IOR__intr; auto; eauto.
+        destruct H. eapply IOR__intr; auto; eauto.
       - iFrame. iNext. iPureIntro. econstructor; eauto.
-          instantiate (1 := (bv2s s)).  destruct H. eapply IOR; auto; eauto.
+        destruct H. eapply IOR; auto; eauto.
     }
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     unfold mem_inv.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
+    rewrite Hreadmmio in Hf.
 
-    remember (fun_read_mmio μ bytes paddr) as fr.
-    destruct fr as [μupd readv].
-    unfold fun_read_mmio in Heqfr. destruct (bytes). { inversion Hmmio. }
-    destruct (state_tra_read (memory_state μ) paddr (S n)). subst.
-    inversion Heqfr. subst.
     inversion Hf. subst.
     iMod "Hclose" as "_". rewrite semTWP_val.
     iFrame "Hregs Hmem Hstf". cbn.
+
+    destruct bytes as [|bytes1]; first inversion Hmmio.
+    cbn in Hreadmmio.
+    destruct (state_tra_read (memory_state μ) paddr (S bytes1)); inversion Hreadmmio.
+
     iSplitR ""; auto.
     iSplitL ""; eauto.
-    iModIntro. cbn. admit. (* instantiate (1 := b). iFrame. *)
-    iSplitL; auto.
-    iSplitL; auto.
-    iPureIntro. unfold Mmio_event_prot.
-    edestruct Hrv. eexists. split; eauto.
-    edestruct H.
-    - eapply IOR__intr; subst. eauto. eauto. eauto. admit. (*  instantiate (1 := x). *)
-    - econstructor; eauto. subst; eauto.
+    iFrame "Hinv". iPureIntro; intuition.
+
+    (* destruct Hrv as [[-> ->]|[-> Hanint]]. eexists. split; eauto. *)
+    (* edestruct H. *)
+    (* - eapply IOR__intr; subst. eauto. eauto. eauto. admit. (*  instantiate (1 := x). *) *)
+    (* - econstructor; eauto. subst; eauto. *)
   Admitted.
 
   Lemma mmio_write_sound `{!sailGS Σ} {rG : iostateG IOState Σ} `(rB: restrict_bytes bytes) :
