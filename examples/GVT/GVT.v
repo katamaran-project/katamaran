@@ -230,8 +230,10 @@ Module inv := invariants.
     Example femtokernel_mmio_handler_asm_block0 (mmio_handler_start_block2 : N) : list ASM :=
       [
         CSR MCause t1 zero false CSRRW (* t1 <- mcause  *)
+        ; UTYPE (bv.drop 12 (bv.of_N 0x80000000)) t0 RISCV_LUI   (* load upper 20 bits of immediate *)
+        ; ITYPE (@bv.take 12 xlenbits (bv.of_N 0x80000000)) t0 t0 RISCV_ADDI    (* load lower 12 bits of immediate *)
+        ; RTYPE t0 t1 t1 RISCV_AND (* t1 <- mask mcause with msb *)
         (* ; SHIFTIOP (bv.of_N 31) t1 t1 RISCV_SRLI (* t1 >> 31 *) *)
-        ; ITYPE (bv.of_N 31) t1 t1 RISCV_ANDI (* t1 <- mask mcause with msb *)
         ; Λ current_pc, BTYPE (bv.of_N (mmio_handler_start_block2 - current_pc)) t1 zero RISCV_BEQ (* branch if t1 = zero *)
       ].
 
@@ -356,6 +358,7 @@ Module inv := invariants.
     Local Notation asn_mmio_trace_state_inv := (asn.chunk (chunk_user (mmio_state_trace bytes_per_word) [env])).
     Local Notation asn_mmio_state_pred s := (asn.chunk (chunk_user (mmio_state bytes_per_word) [s])).
     Local Notation asn_mmio_read_valid a s := (asn.formula (formula_user (mmio_read_valid bytes_per_word) [a; s])).
+    Local Notation asn_mmio_event a v t s s' := (asn.formula (formula_user (mmio_event bytes_per_word) [a; v; t; s; s'])).
 
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
@@ -526,10 +529,11 @@ Module inv := invariants.
     asn_regs_ptsto ∅ ∗
     cur_privilege ↦ term_val ty_privilege User ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
-    (∃ "s", ∃ "sv", (
+    (∃ "s", ∃ "s'", ∃ "sv", (
       asn_mmio_state_pred (term_var "s") ∗
+        (∃ "w", asn_mmio_event (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "w") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'")) ∗
       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
-      term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" (* statevalue corresponds to ghost state *)
+      term_unop (uop.bvtake 1) (term_var "sv") = term_var "s'" (* statevalue corresponds to ghost state *)
     )) ∗
     asn_mmio_trace_state_inv.
 
@@ -611,13 +615,6 @@ Module inv := invariants.
   (* Eval vm_compute in Erasure.erase_symprop vc__femtohandler_block0. *)
   (* Locate erase_symprop. *)
 
-  Import Erasure.notations.
-  Search bv.app.
-  Compute (@bv.app 31 1 (bv.mk 31 I) bv.zero).
-  Compute (@bv.cons 31 true bv.zero).
-
-
-  Example sadf: (@bv.bin 32 (bv.land (bv.of_N 31) (bv.of_N 31))) <> 0%N. by vm_compute. Qed.
   (* Prove that the verification condition that Katamaran creates for this block holds.
         I.e. we're just proving the verification condition for block0. *)
   Import Erasure.notations.
@@ -625,6 +622,10 @@ Module inv := invariants.
   Proof.
     vm_compute. constructor. cbn. intros.
     repeat split; intros; auto.
+    rewrite <- bv.bin_inj_equiv. rewrite <- bv.bin_inj_equiv in H1.
+    rewrite H1.
+    Set Printing Implicit.
+    change (bv.mk 0x80000000 _) with (@bv.app 31 1 bv.zero bv.one).
   Admitted.
 
 
@@ -638,8 +639,10 @@ Module inv := invariants.
     intuition; bv_solve_Ltac.solveBvManual; intros.
     1-4: eapply bv.in_seqBv'; now vm_compute.
     exists v1. split. apply IOW__sme; auto.
-    right. right. split; auto.
-    edestruct H with (w := v3); edestruct H1; try contradiction.
+    right. right. exists v3. split; auto.
+    eapply IOR__intr; eauto.
+    unfold mmio_interrupt_w2s. simpl.
+    inversion H0; destruct (bv.bin v1); subst. contradiction H2.
   Admitted.
 
   Import Erasure.notations.
@@ -985,8 +988,8 @@ Module inv := invariants.
         rewrite <- gprs_equiv. iFrame.
         iFrame.
 
-        iDestruct "Hpred" as "(%v & %v0 & Hpred & Hmem & [%Htake _])".
-        iExists v, v0. subst. iFrame. subst.
+        iDestruct "Hpred" as "(%v & %v0 & %v1 & Hpred & Hprot & Hmem & [%Htake _])".
+        iExists v, v1. subst. iFrame. subst.
         destruct (bv.view (bv.drop 31 mc)). destruct (bv.view xs). destruct b; simpl.
         - iRight. iPureIntro. split; auto.
         - iLeft. iPureIntro. split; auto.
@@ -1041,7 +1044,7 @@ Module inv := invariants.
         subst.
         iSplitR; auto. iSplitR; auto.
         iFrame "Hmstatus Hmie Hmip Hmscratch Hmtvec Hmcause Hmepc Hgprs Hcurpriv Hpmpentries Hinv Hptsto Hpred".
-        admit. (* fdu: follows from mmio behavior *)
+        auto. (* fdu: follows from mmio behavior *)
   Admitted.
 
   (* TODO: this lemma feels very incremental wrt to the last one; merge? *)
@@ -1084,7 +1087,7 @@ Module inv := invariants.
       iApply (femtokernel_handler_safe_block0 (bv.of_N mmio_handler_addr_block0)).
       iSplitL "Hpc Hnpc HaccU Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
       { unfold femtoKernelAssumptions.
-        iFrame. 
+        iFrame.
       }
       cbn.
       iDestruct "Hmcause" as "(%mc & Hmcause)".
