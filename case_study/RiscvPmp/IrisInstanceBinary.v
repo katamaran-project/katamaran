@@ -108,14 +108,16 @@ Module RiscvPmpIrisInstancePredicates2.
       @interp_ptstomem _ memGS2_memGS_right _ addr v.
 
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
-      inv femto_inv_ro_ns (interp_ptstomem addr b).
+      @interp_ptstomem_readonly _ memGS2_memGS_left _ _ addr b ∗
+      @interp_ptstomem_readonly _ memGS2_memGS_right _ _ addr b.
 
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
     Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
-      inv femto_inv_mmio_ns (∃ t,
-            (@tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_left) (@trace_name _ _ memGS2_gtGS2_left) t)
-            ∗ (@tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_right) (@trace_name _ _ memGS2_gtGS2_right) t)
-            ∗ ⌜mmio_pred width t⌝).
+      inv femto_inv_mmio_ns (∃ t__l t__r,
+          (@tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_left) (@trace_name _ _ memGS2_gtGS2_left) t__l)
+          ∗ (@tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_right) (@trace_name _ _ memGS2_gtGS2_right) t__r)
+          ∗ ⌜mmio_pred width t__l⌝
+          ∗ ⌜mmio_pred width t__r⌝).
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
