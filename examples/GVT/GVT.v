@@ -473,16 +473,16 @@ Module inv := invariants.
         (∃ "s", ∃ "sv", (
           (asn.or
              (
-               term_unop (uop.bvdrop 31) (term_var "cause") = term_val (ty.bvec _) bv.zero ∗
+               (* term_unop (uop.bvdrop 31) (term_var "cause") = term_val (ty.bvec _) bv.zero ∗ *)
                (* term_binop bop.shiftr (term_var "cause") (term_val ty_xlenbits (bv.of_N 31)) = term_val (ty.bvec _) bv.zero ∗ *)
-              (* term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N 31)) = term_val (ty.bvec _) bv.zero ∗ *)
+               term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N  0x80000000)) = term_val (ty.bvec _) bv.zero ∗
               (* term_unop (uop.bvtake iostate_bits) (term_var "sv") = term_var "s" ∗ *)
               term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block2)
             )
              (
-               term_unop (uop.bvdrop 31) (term_var "cause") = term_val (ty.bvec _) bv.one ∗
+               (* term_unop (uop.bvdrop 31) (term_var "cause") = term_val (ty.bvec _) bv.one ∗ *)
               (* term_binop bop.shiftr (term_var "cause") (term_val ty_xlenbits (bv.of_N 31)) = term_val (ty.bvec _) bv.one ∗ *)
-              (* term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N 31)) = term_val (ty.bvec _) (bv.of_N 31) ∗ *)
+               term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N 0x80000000)) = term_val (ty.bvec _) (bv.of_N  0x80000000) ∗
               (* asn_mmio_read_valid (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "s") ∗ *)
               term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block1)
             )
@@ -622,11 +622,15 @@ Module inv := invariants.
   Proof.
     vm_compute. constructor. cbn. intros.
     repeat split; intros; auto.
-    rewrite <- bv.bin_inj_equiv. rewrite <- bv.bin_inj_equiv in H1.
-    rewrite H1.
-    Set Printing Implicit.
-    change (bv.mk 0x80000000 _) with (@bv.app 31 1 bv.zero bv.one).
-  Admitted.
+    1, 2:  destruct (@bv.appView 31 1 v2);
+      change (bv.mk 0x80000000 _) with (@bv.app 31 1 bv.zero bv.one) in *;
+      rewrite (@bv.land_app 31 1 _ bv.zero _ bv.one);
+      rewrite bv.land_zero_r; rewrite bv.land_ones_r;
+      destruct (bv.view ys); destruct (bv.view xs0); destruct b; auto;
+      simpl in H1; rewrite (@bv.land_app 31 1 _ bv.zero _ bv.one) in H1;
+      rewrite bv.land_zero_r in H1; rewrite bv.land_zero_l in H1;
+      contradiction.
+  Qed.
 
 
   (* for debugging *)
