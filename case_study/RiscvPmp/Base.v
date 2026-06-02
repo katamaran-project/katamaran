@@ -108,6 +108,9 @@ Definition isMMIO a : Prop := a ∈ mmioAddrs.
 Lemma mmioAddrs_rep :
   (mmioStartAddr + mmioLenAddr ≤ bv.exp2 xlenbits)%N.
 Proof. now compute. Qed.
+(* We dedicate the last address of MMIO memory for shutdown events. *)
+Definition mmioShutdownAddr : Addr := bv.of_N (mmioStartAddr + mmioLenAddr - 1)%N.
+Definition isShutdownAddr a : Prop := a = mmioShutdownAddr.
 Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
   match size with
   | O => False (* Avoid allowing and hence recording zero-width MMIO events *)
@@ -1448,7 +1451,8 @@ Module Export RiscvPmpBase <: Base.
     (* Trace of Events *)
     Inductive EventTy : Set :=
     | IOWrite
-    | IORead .
+    | IORead
+    | IOShutdown.
     Record Event : Set :=
       mkEvent {
         event_type : EventTy;
@@ -1530,15 +1534,33 @@ Module Export RiscvPmpBase <: Base.
       (* let μ' := memory_update_state μ s' in *)
       (* (vmip , μ'). *)
 
-    Definition fun_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
+    Definition fun_write_mmio (μ : Memory) (e : EventTy) (data_size : nat) (addr : Val ty_xlenbits) :
       Val (ty_bytes data_size) -> Memory :=
       match data_size as n return (Val (ty_bytes n) → Memory) with
       | O   => fun _data => μ
       | S n => fun data : Val (ty_bytes (S n)) =>
                 let s' := state_tra_write (memory_state μ) addr (S n) data in
-                let mmioev := mkEvent IOWrite addr (S n) data in
+                let mmioev := mkEvent e addr (S n) data in
                 let μ' := memory_append_trace (memory_update_state μ s') mmioev in
                 μ'
+      end.
+
+    (* fun_handle_write_mmio dispatches an mmio write for special cases to the
+       appropriate handler, i.e., writes to the mmioShutdownAddr result in a
+       different MMIO event. All other cases are the general IOWrite event.
+       The function returns a product, with the bool indicating that the
+       machine can keep executing (true), or needs to halt (false). The other
+       component is the resulting Memory of the operation. *)
+    Definition fun_handle_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits)
+      : Val (ty_bytes data_size) -> bool * Memory :=
+      match data_size with
+      | O => fun _ => (true, μ) (* No data to write, making this a no-op *)
+      | S n =>
+          fun (data : Val (ty_bytes (S n))) =>
+            let (power, event) := if decide (isShutdownAddr addr)
+                                  then (false, IOShutdown)
+                                  else (true , IOWrite) in
+            (power, fun_write_mmio μ event addr data)
       end.
 
   End MemoryModel.

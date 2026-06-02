@@ -278,13 +278,13 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
          asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w");
     |}.
 
-
   Definition sep_contract_checked_mem_write {bytes} {H: restrict_bytes bytes} : SepContractFun (@checked_mem_write bytes H) :=
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "paddr"; term_var "data"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
+           term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
@@ -336,6 +336,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
+           term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
@@ -379,6 +380,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
+           term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
@@ -490,6 +492,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
         sep_contract_localstore      := [term_var "paddr"; term_var "data"];
         sep_contract_precondition    :=
            asn_in_mmio bytes (term_var "paddr") ∗
+           term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data");
         sep_contract_result          := "result_write_mmio";
@@ -856,11 +859,15 @@ Module RiscvPmpIrisInstanceWithContracts.
     now iIntros "[%HFalse _]".
   Qed.
 
+  Lemma isNotMMIOShutdownAddr {a : Addr} :
+    a ≠ mmioShutdownAddr <-> ~ isShutdownAddr a.
+  Proof. by unfold isShutdownAddr. Qed.
+
   Lemma mmio_write_sound `{!sailGS Σ} `(H: restrict_bytes bytes) :
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & #Hinv & [-> ->])". iApply semTWP_foreign.
+    iIntros "([%Hmmio _] & [%Hneq _] & #Hinv & [-> ->])". iApply semTWP_foreign.
     iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
     iInv "Hinv" as (t) " [>Htrf >%Hpred]" "Hclose".
     iDestruct (trace.trace_full_frag_eq with "Htr Htrf") as "%Heqt". subst t.
@@ -871,9 +878,14 @@ Module RiscvPmpIrisInstanceWithContracts.
       apply mmio_pred_cons; [|eauto].
       constructor. }
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-    iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-    iMod "Hclose" as "_". rewrite semTWP_val.
+    iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
+
+    unfold fun_handle_write_mmio in Hf.
     destruct bytes; first contradiction.
+    cbn in Hf. rewrite isNotMMIOShutdownAddr in Hneq.
+    rewrite -> (decide_False _ _ Hneq) in Hf.
+    inversion Hf; subst.
+    iMod "Hclose" as "_". rewrite semTWP_val.
     unfold mem_inv, fun_write_mmio; cbn.
     now iFrame "Hregs Hmem Htr".
   Qed.

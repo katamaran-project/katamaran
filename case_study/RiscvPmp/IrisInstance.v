@@ -149,7 +149,10 @@ Module RiscvPmpIrisInstancePredicates.
   (* The address we will perform all writes to is the first legal MMIO address *)
   Definition write_addr : Addr := bv.of_N maxAddr.
   Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
-  Definition mmio_pred (width : nat) (t : Trace): Prop := Forall (event_pred width) t.
+  Definition is_shutdown (e : Event) := ∃ v, e = mkEvent IOShutdown mmioShutdownAddr 1 v.
+  Definition mmio_pred (width : nat) (t : Trace) : Prop := Forall (event_pred width) t.
+  Definition mmio_pred_final (width : nat) (t : Trace) : Prop :=
+    ∃ t' e, Forall (event_pred width) t' ∧ is_shutdown e ∧ t = e :: t'.
 
   Lemma difference_commute_gset {A} `{Countable A} (X Y Z : gset A) :
     (X ∖ Y) ∖ Z = (X ∖ Z) ∖ Y.
