@@ -507,11 +507,11 @@ Module inv := invariants.
     asn_regs_ptsto ∅ ∗
     cur_privilege ↦ term_val ty_privilege Machine ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
-    (∃ "sv", term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv")) ∗
-    (∃ "s", (
+    (∃ "s", ∃ "sv", (
       asn_mmio_state_pred (term_var "s") ∗
+      term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
+      term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" ∗ (* statevalue corresponds to new ghost state *)
       asn_mmio_read_valid (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "s")
-
     )) ∗
     asn_mmio_trace_state_inv.
 
@@ -533,7 +533,7 @@ Module inv := invariants.
       asn_mmio_state_pred (term_var "s") ∗
         (∃ "w", asn_mmio_event (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "w") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'")) ∗
       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
-      term_unop (uop.bvtake 1) (term_var "sv") = term_var "s'" (* statevalue corresponds to ghost state *)
+      term_unop (uop.bvtake 1) (term_var "sv") = term_var "s'" (* statevalue corresponds to new ghost state *)
     )) ∗
     asn_mmio_trace_state_inv.
 
@@ -637,17 +637,51 @@ Module inv := invariants.
   (* Set Printing Depth 200. *)
   (* Eval vm_compute in Erasure.erase_symprop vc__femtohandler_block1. *)
 
+    Lemma shiftr_zero: forall m  y (xs : bv m),
+      @bv.shiftr m y xs (bv.of_nat 0) =  xs.
+    Proof. intros. unfold bv.shiftr. rewrite Z.shiftr_0_r. apply bv.of_Z_unsigned. Qed.
+
+    Lemma shiftr_cons: forall m n y b (xs : bv m),
+      @bv.shiftr (S m) y (bv.cons b xs) (bv.of_nat (S n)) =  eq_rec _ bv (bv.zext' (@bv.shiftr m y xs (bv.of_nat n)) 1) _ (Nat.add_1_r m).
+    Proof.
+      unfold bv.zext'. rewrite <- Eqdep.EqdepTheory.eq_rec_eq. unfold bv.shiftr. simpl.
+      Admitted.
+
   Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
   Proof.
     vm_compute. constructor; cbn. intros.
     intuition; bv_solve_Ltac.solveBvManual; intros.
     1-4: eapply bv.in_seqBv'; now vm_compute.
-    exists v1. split. apply IOW__sme; auto.
-    right. right. exists v3. split; auto.
+    exists (bv.take 1 v0). split. apply IOW__sme; auto.
+    right. right. exists v2. split; auto.
     eapply IOR__intr; eauto.
-    unfold mmio_interrupt_w2s. simpl.
-    inversion H0; destruct (bv.bin v1); subst. contradiction H2.
-  Admitted.
+
+
+    inversion H0; subst; try inversion H1; try contradiction H2; auto.
+    cbn [event_contents event_nbbytes event_type event_addr] in *.
+    unfold mmio_interrupt_w2s.
+
+    (* shifts *)
+    destruct (bv.view v2).
+    destruct (bv.view xs). destruct (bv.view xs). destruct (bv.view xs). destruct (bv.view xs).
+    change (bv.mk 0x4 _)  with (@bv.of_nat 5 0x4).
+    change (bv.mk 0x3 _)  with (@bv.of_nat 5 0x3).
+    rewrite !shiftr_cons. rewrite !shiftr_zero.
+    rewrite <- !Eqdep.EqdepTheory.eq_rec_eq.
+
+    unfold bv.zext'. rewrite !bv.app_cons.
+
+    (* further simplifications of goal *)
+    destruct (bv.view v0).  rewrite bv.take_cons.
+    change (bv.mk 1 _) with (@bv.cons 31 true bv.zero).
+    rewrite !bv.land_cons. rewrite !bv.land_zero_r.
+
+    change (bv.of_N 24) with (bv.cons false (bv.cons false (bv.cons false (bv.cons true (@bv.cons 27 true (bv.zero)))))).
+    repeat rewrite bv.land_cons. rewrite bv.land_zero_r. rewrite !andb_false_r.
+    rewrite !andb_true_r.
+
+    destruct b, b0, b1, b2, b3, b4; simpl; auto.
+  Qed.
 
   Import Erasure.notations.
   Lemma sat__femtohandler_block2 : safeE (vc__femtohandler_block2).
