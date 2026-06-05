@@ -641,11 +641,51 @@ Module inv := invariants.
       @bv.shiftr m y xs (bv.of_nat 0) =  xs.
     Proof. intros. unfold bv.shiftr. rewrite Z.shiftr_0_r. apply bv.of_Z_unsigned. Qed.
 
-    Lemma shiftr_cons: forall m n y b (xs : bv m),
+    Lemma bv_bin_eq_rec {n m} (H : n = m) (x : bv n) :
+      bv.bin (eq_rec n bv x m H) = bv.bin x.
+    Proof. now subst. Qed.
+
+    Lemma bv_case_cons {A : forall n : nat, bv n -> Type} {c : forall n (b : bool) (x : bv n), A (S n) (bv.cons b x)} {n : A O bv.nil}
+      {m b} (xs : bv m) :
+      bv.bv_case A n c (bv.cons b xs) = c m b xs.
+    Proof.
+      destruct b, xs, bin; now cbn.
+    Qed.
+
+    Lemma fold_right_cons {A : forall n : nat, Type} {c : forall n, bool -> A n -> A (S n)} {n : A O}
+        {m b} (xs : bv m) :
+        bv.fold_right A c n (bv.cons b xs) = c m b (bv.fold_right A c n xs).
+    Proof.
+      unfold bv.fold_right.
+      now rewrite bv_case_cons.
+    Qed.
+
+    Lemma bv_bin_zext' {m n} (x : bv m) :
+      bv.bin (bv.zext' x n) = bv.bin x.
+    Proof.
+      unfold bv.zext', bv.app.
+      induction x using bv.bv_rect; first done.
+      rewrite fold_right_cons; cbn.
+      rewrite !bv.bin_cons.
+      now rewrite IHx.
+    Qed.
+
+    Lemma shiftr_cons {m n y b} (xs : bv m) :
       @bv.shiftr (S m) y (bv.cons b xs) (bv.of_nat (S n)) =  eq_rec _ bv (bv.zext' (@bv.shiftr m y xs (bv.of_nat n)) 1) _ (Nat.add_1_r m).
     Proof.
-      unfold bv.zext'. rewrite <- Eqdep.EqdepTheory.eq_rec_eq. unfold bv.shiftr. simpl.
-      Admitted.
+      unfold bv.shiftr.
+      rewrite bv.unsigned_cons bv.of_nat_S.
+      rewrite <-bv.unsigned_succ_small, <-Z.add_1_l.
+      rewrite <-Z.shiftr_shiftr.
+      rewrite <-Z.div2_spec.
+      rewrite Z.div2_div.
+      rewrite (Z.mul_comm 2 (bv.unsigned xs)).
+      rewrite Z_div_plus_full ; last lia.
+      rewrite Z.b2z_div2 Z.add_0_l.
+      apply bv.bin_inj.
+      rewrite bv_bin_eq_rec.
+      rewrite bv_bin_zext'.
+    Admitted.
 
   Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
   Proof.

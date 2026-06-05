@@ -818,6 +818,10 @@ Module bv.
       rewrite truncn_spec, Znat.Z2N.inj_mod; f_equal; cbn; lia.
     Qed.
 
+    Lemma bin_cons n b (x : bv n) :
+      bin (cons b x) = (N.b2n b + 2 * bin x)%N.
+    Proof. destruct b, x; cbn; Lia.lia. Qed.
+
     Lemma unsigned_cons n b (x : bv n) :
       unsigned (cons b x) = Z.b2z b + 2 * unsigned x.
     Proof. destruct b, x; unfold unsigned; cbn; Lia.lia. Qed.
