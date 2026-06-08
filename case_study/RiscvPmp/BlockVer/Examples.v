@@ -152,13 +152,28 @@ Module Examples.
     Local Ltac solve_vc :=
       vm_compute; constructor; cbn; intros; repeat split; try solve_bv; auto.
 
-    Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
+    (* Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ := *)
+    (*   match reg_convert r with *)
+    (*   | None     => ⊤ *)
+    (*   | Some reg => P reg *)
+    (*   end. *)
+
+    (* Notation "r '↦ᵣ' v" := (with_regidx r (fun reg => asn.chunk (chunk_ptsreg reg v))) (at level 70) : asn_scope. *)
+    Definition asn_regidx_pts {Σ} (r : RegIdx) (v : Term Σ ty_xlenbits) : Assertion Σ :=
       match reg_convert r with
       | None     => ⊤
-      | Some reg => P reg
+      | Some reg => asn.chunk (chunk_ptsreg reg v)
       end.
+    Arguments asn_regidx_pts : simpl never.
 
-    Notation "r '↦ᵣ' v" := (with_regidx r (fun reg => asn.chunk (chunk_ptsreg reg v))) (at level 70) : asn_scope.
+    Notation "r '↦ᵣ' v" := (asn_regidx_pts r v) (at level 70) : asn_scope.
+
+    Ltac unfold_asn_regidx_pts :=
+      match goal with
+      | |- context[asn.interpret (asn_regidx_pts ?r ?v) ?ι] =>
+          change (asn.interpret (asn_regidx_pts ?r ?v) ?ι) with
+          (lptsreg r (inst_term v ι))
+      end.
     Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
 
     Definition asn_init_pc {Σ} : Assertion (Σ ▻ "a" :: ty_xlenbits) :=
@@ -206,7 +221,8 @@ Module Examples.
         ; MV X2 X1
         ; MV X1 X3
         ]
-      {{ X1 ↦ᵣ term_var "y" ∗ X2 ↦ᵣ term_var "x" ∗ ∃ "v", X3 ↦ᵣ term_var "v" }}
+      {{ asn_next_pc_eq (term_val (ty.bvec _) (bv.of_nat 12)) ∗
+           X1 ↦ᵣ term_var "y" ∗ X2 ↦ᵣ term_var "x" ∗ ∃ "v", X3 ↦ᵣ term_var "v" }}
       with ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
     Example valid_swap_ex : ValidBlockVerifierContract swap_ex.
@@ -355,6 +371,24 @@ Module Examples.
   Import iris.algebra.excl.
   Import iris.algebra.gmap.
 
+  Search Assertion.
+
+  Definition asn_regs_ptsto_with_registers {Σ} γ1 γ2 : Assertion Σ :=
+    asn_and_regs
+      (fun r => asn.chunk (chunk_ptsreg r (term_relval _ (NonSyncVal (read_register γ1 r) (read_register γ2 r))))).
+
+  Lemma gprs_with_registers_equiv `{sailGS2 Σ} γ1 γ2 : ∀ {Σ} (ι : Valuation Σ),
+      interp_gprs_with_registers γ1 γ2 ⊣⊢
+        asn.interpret (asn_regs_ptsto_with_registers γ1 γ2) ι.
+  Proof.
+    iIntros. unfold interp_gprs_with_registers.
+    rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
+    cbn. iSplit.
+    - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
+    - iIntros "H"; iSplitR; auto.
+      repeat iDestruct "H" as "($ & H)"; iFrame.
+  Qed.
+
     Definition mem_has_word (μ : Memory) (a : Val ty_word) (w : Val ty_word) : Prop :=
       exists v0 v1 v2 v3, List.map (memory_ram μ) (bv.seqBv a 4) = [v0; v1; v2; v3]%list /\ bv.app v0 (bv.app v1 (bv.app v2 (bv.app v3 bv.nil))) = w.
 
@@ -471,6 +505,12 @@ Module Examples.
   Proof. unfold myWP2_loop. rewrite {1}fixpoint_myWP2_loop_fix_eq. unfold myWP2_loop. done.
   Qed.
 
+  Lemma exitCondImpliesMyWP2_loop `{sailGS2 Σ} (ExitCond : iProp Σ) :
+    ExitCond ⊢ myWP2_loop ExitCond.
+  Proof.
+    iIntros "EC". rewrite fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix. iLeft. done.
+  Qed.
+
   Definition pcOutOfInstrs (start : Val ty_word) (instrs : list AST) (pc : Val ty_xlenbits) : Prop :=
       bv.ult pc start \/ bv.uge pc (start + bv.of_N (4 * N.of_nat (length instrs))).
 
@@ -530,8 +570,8 @@ Module Examples.
     (forall `{sailGS2 Σ},
         mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢
           |={⊤}=> myWP2_loop
-                    (∃ γ1 γ2, own_regstore2 γ1 γ2 ∗
-                       ⌜ exitCond (read_register γ1 pc) ∨ exitCond (read_register γ2 pc) ⌝)
+                    (∃ a, pc ↦ᵣ a ∗
+                       ⌜ exitCond (ty.projLeft a) ∨ exitCond (ty.projRight a) ⌝)
         ∗ (mem_inv2 _ μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.
@@ -578,9 +618,11 @@ Module Examples.
       rewrite fixpoint_myWP2_loop_eq.
       unfold myWP2_loop_fix.
       iMod "Hwp2" as "([H | Hwp2] & Hφ)".
-      + iDestruct "H" as (γ1' γ2') "(HownRegStore & %ECs)".
-        iPoseProof (reg2_change with "[$HownRegStore $Hregs]") as "(%eq1 & %eq2)".
-        rewrite eq1 eq2 in ECs. tauto.
+      + iDestruct "H" as (a') "(Hpc & %ECs)".
+        unfold reg_pointsTo2.
+        Search regs_inv2.
+        iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & %eq2)".
+        rewrite eq1 in nEC1. rewrite eq2 in nEC2. tauto.
       + iPoseProof (semWP2_preservation Hstep1 Hstep2 with "[$Hmem $Hregs]") as "Hwp".
         iSpecialize ("Hwp" with "Hwp2").
         iMod "Hwp".
@@ -600,6 +642,21 @@ Module Examples.
   Qed.
 
 
+  Lemma constant_time_from_mem_res2_only_leak `{sailGS2 Σ} `{memGS2 Σ} {μ1 μ2 E} :
+    leakage_trace μ1 = leakage_trace μ2 -> mem_res2_only_leak μ1 μ2 ⊢ |={E}=> interp_inv_constant_time.
+  Proof.
+    iIntros (eq_leak) "Hmem".
+    unfold interp_inv_constant_time.
+    iApply (inv_alloc constant_time_inv_ns E (∃ t : LeakageTrace, trace.tr_frag trace.trace_name t ∗ trace.tr_frag trace.trace_name t) with "[Hmem]").
+    iModIntro.
+    unfold mem_res2_only_leak, IrisInstance.RiscvPmpIrisAdeqParameters.mem_res_only_leak.
+    rewrite eq_leak.
+    iFrame.
+  Qed.
+
+Section AdequacyTools.
+
+  Context {Σ} {GS : sailGS2 Σ}.
   Lemma regPstsTo_sync_is_nonsync `{sailGS2 Σ} σ r (v : Val σ) : r ↦ᵣ NonSyncVal v v ⊣⊢ r ↦ᵣ SyncVal v.
   Proof.
     unfold reg_pointsTo2. auto.
@@ -714,30 +771,36 @@ Module Examples.
           unfold lenAddr in Hrep. lia.
   Qed.
 
-  Lemma mvZeroMemory `{sailGS2 Σ} {μ1 μ2 : Memory} ws instrs :
+  Lemma instrsMemory `{sailGS2 Σ} {μ1 μ2 : Memory} ws instrs :
     (4 * N.of_nat (length instrs) < lenAddr)%N ->
     mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
     mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
-    @mem_res2 _ sailGS2_memGS μ1 μ2 ⊢ |={⊤}=>
+    @mem_res2_without_leak _ sailGS2_memGS μ1 μ2 ⊢ |={⊤}=>
       ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs.
   Proof.
     iIntros (Hrep Hinit1 Hinit2) "Hmem".
-    unfold mem_res2, IrisInstance.RiscvPmpIrisAdeqParameters.mem_res.
+    unfold mem_res2_without_leak, IrisInstance.RiscvPmpIrisAdeqParameters.mem_res_without_leak.
     replace liveAddrs with
       (bv.seqBv (n := 32) (bv.of_N minAddr) (4 * N.of_nat (length instrs)) ++
          bv.seqBv (n := 32) (bv.of_N minAddr + bv.of_N (4 * N.of_nat (length instrs))) (lenAddr - 4 * N.of_nat (length instrs))).
     2: { rewrite <- bv.seqBv_app. apply f_equal. lia. }
-    iDestruct "Hmem" as "[[[Hinit1 Hrest1] [Htr1 Hltr1]] [[Hinit2 Hrest2] [Htr2 Hltr2]]]".
+    iDestruct "Hmem" as "[[[Hinit1 Hrest1] Htr1] [[Hinit2 Hrest2] Htr2]]".
     iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
     { unfold init_addr. cbn. lia. }
     iFrame. auto.
   Qed.
 
+  (* Definition pcOutOfInstrs_WP2_loop `{sailGS2 Σ} instrs := *)
+  (*   myWP2_loop *)
+  (*   (∃ γ0 γ3 : RegStore, own_regstore2 γ0 γ3 ∗ *)
+  (*                          ⌜pcOutOfInstrs (bv.of_N init_addr) instrs (read_register γ0 pc) *)
+  (*                        ∨ pcOutOfInstrs (bv.of_N init_addr) instrs (read_register γ3 pc)⌝)%I. *)
+
   Definition pcOutOfInstrs_WP2_loop `{sailGS2 Σ} instrs :=
     myWP2_loop
-    (∃ γ0 γ3 : RegStore, own_regstore2 γ0 γ3 ∗
-                           ⌜pcOutOfInstrs (bv.of_N init_addr) instrs (read_register γ0 pc)
-                         ∨ pcOutOfInstrs (bv.of_N init_addr) instrs (read_register γ3 pc)⌝)%I.
+      (∃ a, pc ↦ᵣ a ∗
+                             ⌜pcOutOfInstrs (bv.of_N init_addr) instrs (ty.projLeft a)
+                           ∨ pcOutOfInstrs (bv.of_N init_addr) instrs (ty.projRight a)⌝)%I.
 
   Definition pcBehindInstrs_WP2_loop `{sailGS2 Σ} start instrs :=
     myWP2_loop
@@ -745,34 +808,28 @@ Module Examples.
                              ⌜pcBehindInstrs start instrs (read_register γ0 pc)
                            ∨ pcBehindInstrs start instrs (read_register γ3 pc)⌝)%I.
 
-  Definition instrs_init_pre `{sailGS2 Σ} instrs : iProp Σ :=
+  (* TODO: This is not instruction agnostic anymore *)
+  Definition swap_init_pre `{sailGS2 Σ} v1 v2 : iProp Σ :=
+    let instrs :=  [ MV X3 X2; MV X2 X1; MV X1 X3] in
     (∃ rv, mstatus ↦ᵣ rv) ∗
       (∃ rv, mtvec ↦ᵣ rv) ∗
       (∃ rv, mcause ↦ᵣ rv) ∗
       (∃ rv, mepc ↦ᵣ rv) ∗
       cur_privilege ↦ᵣ SyncVal Machine ∗
-      interp_gprs ∗
       (pc ↦ᵣ SyncVal (bv.of_N init_addr)) ∗
       (∃ v, nextpc ↦ᵣ v) ∗
-      ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs.
+      ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs ∗
+      x1 ↦ᵣ v1 ∗
+      x2 ↦ᵣ v2 ∗
+      (∃ v, x3 ↦ᵣ v) ∗
+      interp_inv_constant_time
+  .
 
-  Definition instrs_init_post `{sailGS2 Σ} instrs : iProp Σ :=
-    (∃ rv, mstatus ↦ᵣ rv) ∗
-      (∃ rv, mtvec ↦ᵣ rv) ∗
-      (∃ rv, mcause ↦ᵣ rv) ∗
-      (∃ rv, mepc ↦ᵣ rv) ∗
-      cur_privilege ↦ᵣ SyncVal Machine ∗
-      interp_gprs ∗
-      (pc ↦ᵣ SyncVal (bv.of_nat (length instrs))) ∗
-      (∃ v, nextpc ↦ᵣ v) ∗
-      ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs.
-
-    Definition instrs_init_contract `{sailGS2 Σ} instrs : iProp Σ :=
-    instrs_init_pre instrs -∗
-        pcOutOfInstrs_WP2_loop instrs.
+    Definition swap_init_contract `{sailGS2 Σ} v1 v2 : iProp Σ :=
+      swap_init_pre v1 v2 -∗
+                             pcOutOfInstrs_WP2_loop [ MV X3 X2; MV X2 X1; MV X1 X3].
 
     Import BlockVer.Verifier.
-    Context {Σ} {GS : sailGS2 Σ}.
     Import iris.base_logic.lib.iprop iris.proofmode.tactics.
     Import RiscvPmpIrisInstanceWithContracts.
     Import ProgramLogic.
@@ -1080,110 +1137,389 @@ Module Examples.
           done.
     Qed.
 
-    Lemma instrs_init_verified : forall `{sailGS2 Σ},
-      let instrs :=  [ MV X3 X2; MV X2 X1; MV X1 X3] in
-      ⊢ instrs_init_contract instrs.
+    Lemma swap_init_verified v1 v2 :
+      ⊢ swap_init_contract v1 v2.
   Proof.
-    iIntros (Σ sG instrs) "Hpre".
-    unfold pcOutOfInstrs_WP2_loop. rewrite fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
-    unfold instrs_init_pre.
-    iRight.
-    iApply (sound_sblock_verification_condition valid_mv_ex [env].[ "x"∷ty.bvec xlenbits ↦ SyncVal (bv.of_N (n := xlenbits) 0) ].[ "y"∷ty.bvec xlenbits ↦ SyncVal (bv.of_N 0) ] $! (SyncVal (bv.zero (n := xlenbits))) with "[Hpre]").
-    (* - unfold femto_init_pre. cbn -[ptsto_instrs]. *)
-    (*   iDestruct "Hpre" as "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1) & Hpc & Hnpc & Hinit)". *)
-    (*   rewrite Model.RiscvPmpModel2.gprs_equiv. *)
-    (*   now iFrame "Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmp0cfg Hpmp1cfg Hpc Hnpc Hinit Hpmpaddr0 Hpmpaddr1". *)
-    (* - iIntros (an) "(Hpc & Hnpc & Hhandler & [%eq _] & (Hmstatus & Hmtvec & Hmcause & Hmepc & Hcp & (Hgprs & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1))))". *)
-    (*   iApply ("Hk" with "[Hpc $Hnpc $Hhandler $Hmstatus $Hmtvec $Hmcause $Hmepc $Hcp Hgprs $Hpmp0cfg $Hpmpaddr0 $Hpmp1cfg $Hpmpaddr1]"). *)
-    (*   cbn in eq. subst. *)
-    (*   rewrite Model.RiscvPmpModel2.gprs_equiv. *)
-    (*   now iFrame. *)
+    iIntros "Hpre".
+    iDestruct "Hpre" as "(Hstatus & Htvec & Hcause & Hepc & Hpriv & Hpc & Hnpc & Hinstrs & Hx1 & Hx2 & Hx3 & Hinv)".
+    unfold pcOutOfInstrs_WP2_loop.
+    iApply (myWP2_loop_semTripleBlock with "[$Hpc $Hinstrs $Hnpc] [Hpriv Hx1 Hx2 Hx3 Hinv] [] []").
+    2: iApply (sound_sblock_verification_condition valid_swap_ex [env].["x"::ty_xlenbits ↦ v1].["y"::ty_xlenbits ↦ v2]).
+    - cbn. iFrame.
+      done.
+    - cbn -[own_regstore2].
+      iIntros (an) "((([-> H1] & (H2 & H2' & H2'')) & H3) & H4 & H5 & H6 & H7)".
+      iApply exitCondImpliesMyWP2_loop.
+      iFrame.
+      iPureIntro.
+      right. right. done.
   Qed.
 
-  Lemma mvZero_init_safe `{sailGS2 Σ} :
+End AdequacyTools.
+
+  Lemma swap_safe `{sailGS2 Σ} v1 v2 :
     let instrs := [ MV X3 X2; MV X2 X1; MV X1 X3] in
     ⊢ (∃ rv, mstatus ↦ᵣ rv) ∗
       (∃ rv, mtvec ↦ᵣ rv) ∗
       (∃ rv, mcause ↦ᵣ rv) ∗
       (∃ rv, mepc ↦ᵣ rv) ∗
       cur_privilege ↦ᵣ SyncVal Machine ∗
-      interp_gprs ∗
       (pc ↦ᵣ SyncVal (bv.of_N init_addr)) ∗
       (∃ v, nextpc ↦ᵣ v) ∗
-      ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs
+      ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs ∗
+      x1 ↦ᵣ v1 ∗
+      x2 ↦ᵣ v2 ∗
+      (∃ v, x3 ↦ᵣ v) ∗
+      interp_inv_constant_time
     -∗
-       myWP2_loop
-       (∃ γ0 γ3 : RegStore, own_regstore2 γ0 γ3 ∗
-                              ⌜pcOutOfInstrs (bv.of_N init_addr) instrs (read_register γ0 pc)
-                            ∨ pcOutOfInstrs (bv.of_N init_addr) instrs (read_register γ3 pc)⌝) True.
+       pcOutOfInstrs_WP2_loop instrs.
   Proof.
-    iIntros (instrs) "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpc & Hnextpc & Hinit)".
-    iApply (instrs_init_verified with "[$Hmstatus $Hmtvec $Hmcause $Hmepc $Hcurpriv $Hgprs $Hpc $Hinit $Hnextpc]").
-    iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpc & Hnextpc & Hinit)".
-    unfold pcOutOfInstrs_WP2_loop.
-    rewrite fixpoint_myWP2_loop_eq.
-    unfold myWP2_loop_fix.
-    iDestruct "Hpc" as "(%pc & Hpc)".
-    iApply fupd_wp.
-    iMod (femtokernel_manualStep2 with "[Hmstatus $Hmtvec $Hmcause $Hgprs $Hcurpriv $Hpmpents $Hfortytwo $Hpc $Hnextpc $Hhandler $Hadv $Hmepc ]") as "[%mpp Hlooppre]".
-    {iDestruct "Hmstatus" as "[%mst Hmstatus]".
-      destruct mst as [mpp].
-      now iExists mpp.
-    }
-    iPoseProof (LoopVerification.valid_semTriple_loop with "Hlooppre") as "H".
-    iModIntro. cbn. unfold semWP.
-    iApply (wp_mono with "H"). auto.
+    iIntros (instrs) "H".
+    iApply (swap_init_verified with "[-]"); auto.
   Qed.
 
-  Lemma mvZero_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
+  Lemma swap_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
     {δ1 δ2 δ1' δ2' : CStoreVal [ctx]} {s' : Stm [ctx] ty.unit} (is_mmio : bool) l ws :
     let instrs := [ MV X3 X2; MV X2 X1; MV X1 X3] in
     mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
     mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
-    read_register γ1 cur_privilege = Machine ->
-    read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
     (* read_register γ pmp0cfg = default_pmpcfg_ent -> *)
     (* read_register γ pmpaddr0 = bv.zero -> *)
     (* read_register γ pmp1cfg = default_pmpcfg_ent -> *)
     (* read_register γ pmpaddr1 = bv.zero -> *)
-    read_register γ1 pc = (bv.of_N init_addr) ->
-    read_register γ2 pc = (bv.of_N init_addr) ->
+    RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+    RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
     ⟨ γ1, μ1 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ1', μ1' ⟩ ->
     ⟨ γ2, μ2 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ2', μ2' ⟩ ->
     leakage_trace μ1 = leakage_trace μ2 ->
     leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
   Proof.
         intros instrs μinit1 μinit2 γ1curpriv γ2curpriv (* γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 *) γ1pc γ2pc steps1 steps2 Htrace.
-        apply (adequacy_gen_RiscVNStepsExitCond (μ21 := μ2) (γ21 := γ2) (Q := fun _ _ => True%I) _ steps1 steps2).
+        apply (adequacy_gen_RiscVNStepsExitCond (μ21 := μ2) (γ21 := γ2) _ steps1 steps2).
         iIntros (Σ' H).
-        unfold own_regstore2 at 1. cbn -[own_regstore2].
-        iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & H')".
-        rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
-        rewrite !regPstsTo_sync_is_nonsync.
-        iMod (mvZeroMemory with "Hmem") as "H"; eauto.
+        iIntros "(Hmem & H')".
+        iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
+        iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak") as "Hinv"; auto.
+        iMod "Hinv" as "#Hinv".
+        iMod (instrsMemory with "Hmem") as "H"; eauto.
         { (* TODO: Maybe do this in more generality *)
           cbn. by unfold lenAddr.
         }
-        iModIntro.
         iSplitR "".
         - destruct (env.view δ1); env.destroy δ2.
-          iClear "H'".
-          iApply (femtokernel_init_safe is_mmio with "[-]").
+          iApply swap_safe.
+          cbn.
+          rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
+          rewrite !regPstsTo_sync_is_nonsync.
+          iFrame "∗ #".
+          by repeat iDestruct "H'" as "($ & H')".
+        - iModIntro.
+          iIntros "Rmem".
+          iInv "Hinv" as "Hleak".
+          iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
+          unfold mem_inv_only_leak.
+          iMod "Hleak".
+          iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
+          iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
+          iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
+          iModIntro. iFrame.
+          iApply fupd_mask_intro; first set_solver.
+          now iIntros "_".
+  Qed.
 
-          Local Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
-          iFrame "∗ #". rewrite Model.RiscvPmpModel2.gprs_equiv. cbn.
-          now repeat iDestruct "H'" as "($ & H')".
-        - iIntros "Hmem".
-          (* Prove that this predicate follows from the invariants in both cases *)
-          destruct (negb is_mmio).
-          + iInv "Hfortytwo" as ">Hptsto" "_".
-            iDestruct (interp_ptstomem_valid with "Hmem Hptsto") as "$".
-            iApply fupd_mask_intro; first set_solver.
-            now iIntros "_".
-          + iInv "Hfortytwo" as (t) ">[Hfrag %Hpred]" "_".
-            iDestruct "Hmem" as "(%memmap & Hinv & %link & Htr)".
-            iDestruct (trace.trace_full_frag_eq with "Htr Hfrag") as "->".
-            iApply fupd_mask_intro; first set_solver.
-            now iIntros "_".
+  Definition instrs_pre `{sailGS2 Σ} instrs γ1 γ2 : iProp Σ :=
+    own_regstore2 γ1 γ2 ∗
+      ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs ∗
+      interp_inv_constant_time
+  .
+
+  Definition instrs_contract `{sailGS2 Σ} instrs γ1 γ2 :=
+    (instrs_pre instrs γ1 γ2 -∗ pcOutOfInstrs_WP2_loop instrs)%I.
+
+
+  Lemma instrs_verified `{sailGS2 Σ} instrs' γ1 γ2 R (ι : Valuation R)
+    block
+    (valid_block : ValidBlockVerifierContract block)
+    (blockInstrs : instrs block = instrs')
+    (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
+              cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+              interp_inv_constant_time -∗
+                                          asn.interpret (extract_pre_from_contract block) ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+    (ImplPost : forall an, asn.interpret (extend_to_minimal_post (postcondition block)) ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)].["an"∷ty_xlenbits ↦ an] ∗ pc ↦ᵣ an -∗
+          pc ↦ᵣ an ∗
+            ⌜pcOutOfInstrs (bv.of_N init_addr) instrs' (ty.projLeft an)
+              ∨ pcOutOfInstrs (bv.of_N init_addr) instrs' (ty.projRight an)⌝)
+    :
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+    RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
+    ⊢ instrs_contract instrs' γ1 γ2.
+  Proof.
+    iIntros (γ1curpriv γ2curpriv γ1pc γ2pc) "Hpre".
+    iDestruct "Hpre" as "(Hregs & Hinstrs & #Hinv)".
+    cbn.
+    iDestruct "Hregs" as "(Hpc & Hnpc & Hstatus & Htvec & Hcause & Hepc & Hpriv & Hregs)".
+    rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
+    rewrite !regPstsTo_sync_is_nonsync.
+    unfold pcOutOfInstrs_WP2_loop.
+    destruct block.
+    iApply (myWP2_loop_semTripleBlock with "[$Hpc $Hinstrs $Hnpc] [Hpriv Hregs] [] []").
+    Focus 2.
+    cbn in *. rewrite blockInstrs in valid_block.
+    iApply (sound_sblock_verification_condition valid_block).
+    - cbn. iApply ImplPre. iFrame "Hinv Hpriv".
+      rewrite gprs_with_registers_equiv.
+      cbn.
+      repeat (iDestruct "Hregs" as "($ & Hregs)").
+    - cbn -[own_regstore2].
+      iIntros (an) "((Hpost & Hpriv) & (Hpc & Hinstrs & Hnpc & %HsL))".
+      iApply exitCondImpliesMyWP2_loop.
+      iExists an.
+      iApply ImplPost.
+      iFrame.
+      Unshelve. exact ctx.nil. exact env.nil.
+  Qed.
+
+  Lemma instrs_safe `{sailGS2 Σ} instrs' γ1 γ2 {R} {ι : Valuation R}
+    block
+    (valid_block : ValidBlockVerifierContract block)
+    (blockInstrs : instrs block = instrs')
+    (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
+                 cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+                 interp_inv_constant_time -∗
+                                             asn.interpret (extract_pre_from_contract block) ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+    (ImplPost : forall an, asn.interpret (extend_to_minimal_post (postcondition block)) ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)].["an"∷ty_xlenbits ↦ an] ∗ pc ↦ᵣ an -∗
+                                                                                                                                                                                    pc ↦ᵣ an ∗
+                                                                                                                                                                                    ⌜pcOutOfInstrs (bv.of_N init_addr) instrs' (ty.projLeft an)
+                           ∨ pcOutOfInstrs (bv.of_N init_addr) instrs' (ty.projRight an)⌝)
+    :
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+    RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
+    ⊢ own_regstore2 γ1 γ2 ∗
+      ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs' ∗
+      interp_inv_constant_time
+    -∗
+       pcOutOfInstrs_WP2_loop instrs'.
+  Proof.
+    iIntros (γ1curpriv γ2curpriv γ1pc γ2pc) "H".
+    iApply instrs_verified; auto.
+    all: auto.
+  Qed.
+
+    Definition declare_public_registers γ1 γ2 (public_registers : list {x : Ty & Reg x}) :=
+      Forall
+        (fun x => match x with
+                  |existT x0 r => read_register γ1 r = read_register γ2 r
+                  end)
+        public_registers
+    .
+
+    Lemma something_registers `{sailGS2 Σ} {γ1 γ2} {public_registers : list {x : Ty & Reg x}}
+      (HpubReg : declare_public_registers γ1 γ2 public_registers)
+      : interp_gprs_with_registers γ1 γ2 ⊣⊢ interp_gprs_with_public_registers γ1 γ2 public_registers.
+    Proof.
+      unfold interp_gprs_with_public_registers, interp_gprs_with_registers, interp_ptsreg_with_public_registers, interp_ptsreg_with_registers.
+      iSplit;
+        iApply big_sepS_mono;
+        intros x Hx;
+        destruct (reg_convert x); auto.
+    Qed.
+
+    Lemma instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
+      instrs' l ws {R} {ι : Valuation R}
+      public_registers
+      (HpubReg : declare_public_registers γ1 γ2 public_registers)
+      {block : @BlockVerifierContract R}
+      (valid_block : ValidBlockVerifierContract block)
+      (blockInstrs : instrs block = instrs')
+      (ImplPre : forall `{sailGS2 Σ}, interp_gprs_with_public_registers γ1 γ2 public_registers ∗
+                                        cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+                                        interp_inv_constant_time
+                                      -∗
+                                                                    asn.interpret (extract_pre_from_contract block) ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+      (ImplPost : forall `{sailGS2 Σ}, forall an,
+          asn.interpret (extend_to_minimal_post (postcondition block)) ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)].["an"∷ty_xlenbits ↦ an] ∗ pc ↦ᵣ an -∗
+                                                                                                                                                               pc ↦ᵣ an ∗
+                                                                                                                                                               ⌜pcOutOfInstrs (bv.of_N init_addr) instrs' (ty.projLeft an)
+          ∨ pcOutOfInstrs (bv.of_N init_addr) instrs' (ty.projRight an)⌝)
+      :
+      (4 * N.of_nat (length instrs') < lenAddr)%N ->
+      mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
+      mem_has_instrs μ2 (bv.of_N init_addr) ws instrs' ->
+      RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+      RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+      RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+      RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
+      ⟨ γ1, μ1 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs' , l )->* ⟨ γ1', μ1' ⟩ ->
+      ⟨ γ2, μ2 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs' , l )->* ⟨ γ2', μ2' ⟩ ->
+      leakage_trace μ1 = leakage_trace μ2 ->
+      leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
+    Proof.
+      intros Hleninstrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
+      apply (adequacy_gen_RiscVNStepsExitCond (μ21 := μ2) (γ21 := γ2) _ steps1 steps2).
+      iIntros (Σ' H').
+      iIntros "(Hmem & H')".
+      iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
+      iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak") as "Hinv"; auto.
+      iMod "Hinv" as "#Hinv".
+      iMod (instrsMemory with "Hmem") as "H"; eauto.
+      iSplitR "".
+      - iApply (instrs_safe γ1 γ2 block).
+        all: eauto.
+        iIntros "(Hregs & Hpriv & #Hinv)".
+        iApply ImplPre.
+        iFrame "∗ #".
+        by iFrame "∗ #".
+      - iModIntro.
+        iIntros "Rmem".
+        iInv "Hinv" as "Hleak".
+        iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
+        unfold mem_inv_only_leak.
+        iMod "Hleak".
+        iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
+        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
+        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
+        iModIntro. iFrame.
+        iApply fupd_mask_intro; first set_solver.
+        now iIntros "_".
+    Qed.
+
+
+    Lemma swap_endToEnd2 {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} l ws :
+    let instrs := [ MV X3 X2; MV X2 X1; MV X1 X3] in
+    mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
+    mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    (* read_register γ pmp0cfg = default_pmpcfg_ent -> *)
+    (* read_register γ pmpaddr0 = bv.zero -> *)
+    (* read_register γ pmp1cfg = default_pmpcfg_ent -> *)
+    (* read_register γ pmpaddr1 = bv.zero -> *)
+    RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+    RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
+    ⟨ γ1, μ1 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ2', μ2' ⟩ ->
+    leakage_trace μ1 = leakage_trace μ2 ->
+    leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
+    Proof.
+      assert (declare_public_registers γ1 γ2 []) as HpubReg.
+      { by apply Forall_nil.  }
+      apply (instrs_endToEnd
+               (ι := [env].["x"::ty_xlenbits ↦
+                              NonSyncVal (read_register γ1 x1) (read_register γ2 x1)].["y"::ty_xlenbits ↦ NonSyncVal (read_register γ1 x2) (read_register γ2 x2)]) _
+               HpubReg valid_swap_ex); eauto.
+      - intros. cbn. iIntros "(Hregs & Hpriv & Hinv)".
+        iFrame.
+        rewrite <- something_registers; auto.
+        rewrite gprs_with_registers_equiv.
+        cbn.
+        repeat (iDestruct "Hregs" as "($ & Hregs)").
+        auto.
+      - intros. cbn. iIntros "((((-> & _) & L') & H & Hregs) & HpcL & HpcR)".
+        iFrame. cbn.
+        iPureIntro.
+        right. right. done.
+      - done.
+        Unshelve. exact ctx.nil. exact env.nil.
+    Qed.
+
+    Lemma jumpIfZero_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} l ws
+      (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1]) :
+      let instrs := [ BEQ X1 X0 true_offset ] in
+      mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
+      mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
+      RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+      RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+      (* read_register γ pmp0cfg = default_pmpcfg_ent -> *)
+      (* read_register γ pmpaddr0 = bv.zero -> *)
+      (* read_register γ pmp1cfg = default_pmpcfg_ent -> *)
+      (* read_register γ pmpaddr1 = bv.zero -> *)
+      RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+      RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
+      ⟨ γ1, μ1 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ1', μ1' ⟩ ->
+      ⟨ γ2, μ2 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ2', μ2' ⟩ ->
+      leakage_trace μ1 = leakage_trace μ2 ->
+      leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
+    Proof.
+      eapply (instrs_endToEnd
+               (ι := [env].["x1"::ty_xlenbits ↦
+                              SyncVal (read_register γ1 x1)]) _
+               HpubReg valid_jump_if_zero); eauto.
+      - intros. cbn. iIntros "(Hregs & Hpriv & Hinv)".
+        iFrame.
+        rewrite <- something_registers; auto.
+        rewrite gprs_with_registers_equiv.
+        cbn.
+        unfold declare_public_registers in HpubReg. rewrite Forall_singleton in HpubReg.
+        rewrite HpubReg.
+        iDestruct "Hregs" as "($ & Hregs)".
+        auto.
+      - intros. cbn.
+        destruct (Classes.eq_dec (read_register γ1 x1) bv.zero) as [|] eqn:HisZero;
+          rewrite HisZero; cbn;
+        iIntros "(((-> & _) & J & I) & L)".
+        + iFrame. iPureIntro. right. right. cbn.
+          now rewrite <-bv.uleb_ule.
+        + iFrame. iPureIntro. right. right. cbn.
+          now rewrite <-bv.uleb_ule.
+      - done.
+        Unshelve. exact ctx.nil. exact env.nil.
+    Qed.
+
+    Lemma test {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} w ws instr instrs'
+      public_registers
+      (HpubReg : declare_public_registers γ1 γ2 public_registers)
+      {R} {ι : Valuation R}
+      {block : @BlockVerifierContract R}
+      (valid_block : ValidBlockVerifierContract block)
+      (blockInstrs : instrs block = instr :: instrs')
+      (ImplPre : forall `{sailGS2 Σ}, interp_gprs_with_public_registers γ1 γ2 public_registers ∗
+                                        cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+                                        interp_inv_constant_time
+                                      -∗
+                                         asn.interpret (extract_pre_from_contract block) ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+      :
+      (4 * N.of_nat (length (instr :: instrs')) < lenAddr)%N ->
+      RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+      RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
+      mem_has_instrs μ1 (bv.of_N init_addr) (w :: ws) (instr :: instrs') ->
+      mem_has_instrs μ2 (bv.of_N init_addr) (w :: ws) (instr :: instrs') ->
+      RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+      RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+      RiscVStep γ1 μ1 γ1' μ1' ->
+      RiscVStep γ2 μ2 γ2' μ2' ->
+      leakage_trace μ1 = leakage_trace μ2 ->
+      ∃ n, RiscVStepN γ1 μ1 γ1' μ1' n /\ RiscVStepN γ2 μ2 γ2' μ2' n.
+    Proof.
+      intros HlenInstrs pc1 pc2 Hmem1 Hmem2 priv1 priv2 step1 step2.
+      unfold ValidBlockVerifierContract, Examples.map, Valid_VC in valid_block.
+      destruct block. cbn in valid_block, blockInstrs. rewrite blockInstrs in valid_block.
+      destruct (steps_to_nsteps step1) as [n Hstep1].
+          refine (uPred.pure_soundness _
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
+    iIntros (Hinv) "".
+    iMod (own_alloc ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (regs2) "[Hregsown2 Hregsinv2]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
+    iMod (mem_inv_init2 μ1 μ2) as (memG) "[Hmem Rmem]".
+    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1) (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ _)) regs2)) memG).
+    iAssert (regs_inv2 γ1 γ2) with "[Hregsown1 Hregsown2]" as "Hregs".
+    { iSplitL "Hregsown1";
+      by iApply own_RegStore_to_regs_inv.
+    }
+    iPoseProof (own_regstore2 γ1 γ2 with "[Hregsinv1 Hregsinv2]") as "Rregs".
+    
+    Qed.
 
 End Examples.

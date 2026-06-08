@@ -65,6 +65,24 @@ Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgr
     fun μ1 μ2 => (mem_res (hG := memGS2_memGS_left) μ1 ∗
                  mem_res (hG := memGS2_memGS_right) μ2)%I.
 
+  Definition mem_res2_without_leak `{hG : memGS2 Σ} : Memory -> Memory -> iProp Σ :=
+    fun μ1 μ2 => (mem_res_without_leak (hG := memGS2_memGS_left) μ1 ∗
+                    mem_res_without_leak (hG := memGS2_memGS_right) μ2)%I.
+
+  Definition mem_res2_only_leak `{hG : memGS2 Σ} : Memory -> Memory -> iProp Σ :=
+    fun μ1 μ2 => (mem_res_only_leak (hG := memGS2_memGS_left) μ1 ∗
+                    mem_res_only_leak (hG := memGS2_memGS_right) μ2)%I.
+
+  Lemma mem_res2_split_leak `{hG : memGS2 Σ} μ1 μ2 :
+    mem_res2 μ1 μ2 ⊣⊢ mem_res2_without_leak μ1 μ2 ∗ mem_res2_only_leak μ1 μ2.
+  Proof.
+    unfold mem_res2.
+    rewrite !mem_res_split_leak.
+    iSplit.
+    - iIntros "(A & B & C)". iFrame.
+    - iIntros "((A & B) & (C & D))". iFrame.
+  Qed.
+
   Lemma mem_inv_init2 `{gHP : prod (memGpreS Σ) (memGpreS Σ)} (μ1 μ2 : Memory) :
     ⊢ |==> ∃ mG : memGS2 Σ, (mem_inv2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
   Proof.
@@ -184,6 +202,30 @@ Module RiscvPmpIrisInstance2 <:
 
     Definition interp_gprs : iProp Σ :=
       [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
+
+
+    Definition interp_ptsreg_with_registers (r : RegIdx) γ1 γ2 : iProp Σ :=
+      match reg_convert r with
+      | Some x => reg_pointsTo21 x (NonSyncVal (read_register γ1 x) (read_register γ2 x))
+      | None => True
+      end.
+
+    Definition interp_gprs_with_registers γ1 γ2 : iProp Σ :=
+      [∗ set] r ∈ reg_file,
+        interp_ptsreg_with_registers r γ1 γ2.
+
+    Definition interp_ptsreg_with_public_registers (r : RegIdx) γ1 γ2 (public_registers : list (sigT 𝑹𝑬𝑮)) : iProp Σ :=
+      match reg_convert r with
+      | Some x =>
+          if decide (x ∈ public_registers) then
+            reg_pointsTo21 x (SyncVal (read_register γ1 x))
+            else reg_pointsTo21 x (NonSyncVal (read_register γ1 x) (read_register γ2 x))
+      | None => True
+      end.
+
+    Definition interp_gprs_with_public_registers γ1 γ2 (public_registers : list (sigT 𝑹𝑬𝑮)) : iProp Σ :=
+      [∗ set] r ∈ reg_file,
+        interp_ptsreg_with_public_registers r γ1 γ2 public_registers.
 
     (* Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ := *)
     (*   match entries with *)

@@ -74,6 +74,25 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
            ∗ tr_auth  (@trace_name _ _ mc_gltGS) (leakage_trace μ)
         )%I.
 
+    Definition mem_inv_without_leak : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
+      fun {Σ} hG μ =>
+        (∃ memmap, gen_heap_interp memmap
+                     ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
+                     ∗ tr_auth (@trace_name _ _ mc_gtGS) (memory_trace μ)
+        )%I.
+
+    Definition mem_inv_only_leak : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
+      fun {Σ} hG μ => tr_auth (@trace_name _ _ mc_gltGS) (leakage_trace μ).
+
+    Lemma mem_inv_split_leak {Σ} (hGS : mcMemGS Σ) μ :
+      mem_inv hGS μ ⊣⊢ mem_inv_without_leak hGS μ ∗ mem_inv_only_leak hGS μ.
+    Proof.
+      unfold mem_inv, mem_inv_without_leak, mem_inv_only_leak.
+      iSplit.
+      - iIntros "(%memmap & A & B & C & D)". iFrame.
+      - iIntros "((%memmap & A & B & C) & D)". iFrame.
+    Qed.
+
   End RiscvPmpIrisParams.
 
   Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.

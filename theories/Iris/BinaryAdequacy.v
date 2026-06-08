@@ -207,6 +207,15 @@ Module Type IrisAdequacy2
     [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮),
       match x with | existT _ r => reg_pointsTo2 r (NonSyncVal (read_register γ1 r) (read_register γ2 r)) end.
 
+  Definition own_regstore2_with_public_registers `{sailGS2 Σ} (γ1 γ2 : RegStore) (public_registers : list (sigT 𝑹𝑬𝑮)) : iProp Σ :=
+    [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮),
+      match x with | existT _ r =>
+                       if decide (elem_of x public_registers) then
+                         reg_pointsTo2 r (SyncVal (read_register γ1 r))
+                       else
+                         reg_pointsTo2 r (NonSyncVal (read_register γ1 r) (read_register γ2 r))
+      end.
+
   Lemma steps_to_nsteps {Γ : PCtx} {σ : Ty} {γ1 γ2 : RegStore} {μ1 μ2 : Memory} {δ1 δ2 : CStoreVal Γ} {s1 s2 : Stm Γ σ} :
     Steps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 -> exists n, NSteps γ1 μ1 δ1 s1 γ2 μ2 δ2 s2 n.
   Proof.

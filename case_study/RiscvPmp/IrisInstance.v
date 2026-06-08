@@ -80,6 +80,22 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
                 tr_frag (@trace_name _ _ mc_gtGS) (memory_trace μ) ∗
                 tr_frag (@trace_name _ _ mc_gltGS) (leakage_trace μ))%I.
 
+  Definition mem_res_without_leak `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
+    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗
+                tr_frag (@trace_name _ _ mc_gtGS) (memory_trace μ))%I.
+
+  Definition mem_res_only_leak `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
+    fun μ => (tr_frag (@trace_name _ _ mc_gltGS) (leakage_trace μ))%I. 
+
+  Lemma mem_res_split_leak `{hG : mcMemGS Σ} μ :
+    mem_res μ ⊣⊢ mem_res_without_leak μ ∗ mem_res_only_leak μ.
+  Proof.
+    unfold mem_res, mem_res_without_leak, mem_res_only_leak.
+    iSplit.
+    - iIntros "(A & B & C)". iFrame.
+    - iIntros "((A & B) & C)". iFrame.
+  Qed.
+
   Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
   Proof.
     unfold initMemMap.

@@ -40,6 +40,7 @@ From Katamaran Require Import
 .
 From iris Require Import
      base_logic.lib.gen_heap
+     base_logic.lib.invariants
      proofmode.tactics.
 
 Set Implicit Arguments.
@@ -72,6 +73,23 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
     Definition mem_inv2 : forall {Σ}, memGS2 Σ -> Memory -> Memory -> iProp Σ :=
       fun {Σ} hG μ1 μ2 =>
         (RiscvPmpIrisBase.mem_inv memGS2_memGS_left μ1 ∗ RiscvPmpIrisBase.mem_inv memGS2_memGS_right μ2)%I.
+    Definition mem_inv2_without_leak : forall {Σ}, memGS2 Σ -> Memory -> Memory -> iProp Σ :=
+      fun {Σ} hG μ1 μ2 =>
+        (RiscvPmpIrisBase.mem_inv_without_leak memGS2_memGS_left μ1 ∗ RiscvPmpIrisBase.mem_inv_without_leak memGS2_memGS_right μ2)%I.
+
+    Definition mem_inv2_only_leak : forall {Σ}, memGS2 Σ -> Memory -> Memory -> iProp Σ :=
+      fun {Σ} hG μ1 μ2 =>
+        (RiscvPmpIrisBase.mem_inv_only_leak memGS2_memGS_left μ1 ∗ RiscvPmpIrisBase.mem_inv_only_leak memGS2_memGS_right μ2)%I.
+
+    Lemma mem_inv2_split_leak {Σ} (hGS : mcMemGS2 Σ) μ1 μ2 :
+      mem_inv2 hGS μ1 μ2 ⊣⊢ mem_inv2_without_leak hGS μ1 μ2 ∗ mem_inv2_only_leak hGS μ1 μ2.
+    Proof.
+      unfold mem_inv2, mem_inv2_without_leak, mem_inv2_only_leak.
+      rewrite !mem_inv_split_leak.
+      iSplit;
+        iIntros "(A & B & C)"; iFrame.
+    Qed.
+
     Lemma mem_inv2_mem_inv :
       forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
         mem_inv2 mG μ1 μ2 ⊣⊢ mem_inv memGS2_memGS_left μ1 ∗ mem_inv memGS2_memGS_right μ2.
@@ -86,6 +104,9 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
       @mc_gltGS _ memGS2_memGS_left.
     Definition memGS2_gltGS2_right `{mG : memGS2 Σ} : traceG LeakageTrace Σ :=
       @mc_gltGS _ memGS2_memGS_right.
+
+    Definition constant_time_inv_ns : ns.namespace := (ns.ndot ns.nroot "inv_constant_time").
+
   End RiscvPmpIrisParams2.
 
   Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
