@@ -685,7 +685,15 @@ Module inv := invariants.
       rewrite Z.b2z_div2 Z.add_0_l.
       apply bv.bin_inj.
       rewrite bv_bin_eq_rec.
-      rewrite bv_bin_zext'.
+      Set Printing Implicit.
+      set (x := (@bv.unsigned m xs ≫ @bv.unsigned n y)) in *.
+      unfold bv.of_Z. unfold bv.zext'.
+      rewrite !bv.to_N_truncz2.
+      rewrite  <- !bv.of_Z_N.
+      unfold Z.to_N. destruct x; try (by rewrite bv_bin_zext'; auto).
+      rewrite !bv.of_N_truncz.
+      rewrite <- !bv.unsigned_of_Z.
+      rewrite !bv.of_Z_unsigned. rewrite !bv.of_Z_N.
 Admitted.
 
   Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
