@@ -670,13 +670,14 @@ Module inv := invariants.
       now rewrite IHx.
     Qed.
 
-    Lemma shiftr_cons {m n y b} (xs : bv m) :
-      @bv.shiftr (S m) y (bv.cons b xs) (bv.of_nat (S n)) =  eq_rec _ bv (bv.zext' (@bv.shiftr m y xs (bv.of_nat n)) 1) _ (Nat.add_1_r m).
+    Lemma shiftr_cons {m n b} (xs : bv m) (y : bv n) :
+      (N.succ (bv.bin y) < bv.exp2 n)%N -> @bv.shiftr (S m) n (bv.cons b xs) (bv.add bv.one y) =  eq_rec _ bv (bv.zext' (@bv.shiftr m n xs y) 1) _ (Nat.add_1_r m).
     Proof.
-      unfold bv.shiftr.
-      rewrite bv.unsigned_cons bv.of_nat_S.
-      rewrite <-bv.unsigned_succ_small, <-Z.add_1_l.
+      intros. unfold bv.shiftr.
+      rewrite bv.unsigned_cons.
+      rewrite <-bv.unsigned_succ_small, <-Z.add_1_l. 2: by apply H.
       rewrite <-Z.shiftr_shiftr.
+      2: { destruct y using bv.bv_rect; unfold bv.unsigned; simpl; try lia. }
       rewrite <-Z.div2_spec.
       rewrite Z.div2_div.
       rewrite (Z.mul_comm 2 (bv.unsigned xs)).
@@ -685,7 +686,7 @@ Module inv := invariants.
       apply bv.bin_inj.
       rewrite bv_bin_eq_rec.
       rewrite bv_bin_zext'.
-    Admitted.
+Admitted.
 
   Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
   Proof.
@@ -706,7 +707,9 @@ Module inv := invariants.
     destruct (bv.view xs). destruct (bv.view xs). destruct (bv.view xs). destruct (bv.view xs).
     change (bv.mk 0x4 _)  with (@bv.of_nat 5 0x4).
     change (bv.mk 0x3 _)  with (@bv.of_nat 5 0x3).
-    rewrite !shiftr_cons. rewrite !shiftr_zero.
+    change (bv.of_nat 4) with (@bv.add 5 bv.one (bv.of_nat 3)).
+    change (bv.of_nat 3) with (@bv.add 5 bv.one (@bv.add 5 bv.one (@bv.add 5 bv.one (bv.of_nat 0)))).
+    rewrite !shiftr_cons; try (simpl; lia). rewrite !shiftr_zero.
     rewrite <- !Eqdep.EqdepTheory.eq_rec_eq.
 
     unfold bv.zext'. rewrite !bv.app_cons.
