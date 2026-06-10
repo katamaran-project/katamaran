@@ -670,10 +670,12 @@ Module inv := invariants.
       now rewrite IHx.
     Qed.
 
-    Lemma shiftr_cons {m n b} (xs : bv m) (y : bv n) :
-      (N.succ (bv.bin y) < bv.exp2 n)%N -> @bv.shiftr (S m) n (bv.cons b xs) (bv.add bv.one y) =  eq_rec _ bv (bv.zext' (@bv.shiftr m n xs y) 1) _ (Nat.add_1_r m).
+    Lemma shiftr_cons {m n b} (xs : bv m) (y : bv n) : (N.succ (bv.bin y) < bv.exp2 n)%N ->
+      @bv.shiftr (S m) n (bv.cons b xs) (bv.add bv.one y) =
+        eq_rec _ bv (bv.zext' (@bv.shiftr m n xs y) 1) _ (Nat.add_1_r m).
     Proof.
-      intros. unfold bv.shiftr.
+      intros.
+      unfold bv.shiftr.
       rewrite bv.unsigned_cons.
       rewrite <-bv.unsigned_succ_small, <-Z.add_1_l. 2: by apply H.
       rewrite <-Z.shiftr_shiftr.
@@ -683,18 +685,22 @@ Module inv := invariants.
       rewrite (Z.mul_comm 2 (bv.unsigned xs)).
       rewrite Z_div_plus_full ; last lia.
       rewrite Z.b2z_div2 Z.add_0_l.
-      apply bv.bin_inj.
-      rewrite bv_bin_eq_rec.
-      Set Printing Implicit.
       set (x := (@bv.unsigned m xs ≫ @bv.unsigned n y)) in *.
-      unfold bv.of_Z. unfold bv.zext'.
+      unfold bv.of_Z.
       rewrite !bv.to_N_truncz2.
       rewrite  <- !bv.of_Z_N.
-      unfold Z.to_N. destruct x; try (by rewrite bv_bin_zext'; auto).
+      unfold Z.to_N. destruct x eqn: X; try (by apply bv.bin_inj; rewrite bv_bin_eq_rec; rewrite bv_bin_zext'; auto).
       rewrite !bv.of_N_truncz.
+      rewrite positive_N_Z.
       rewrite <- !bv.unsigned_of_Z.
-      rewrite !bv.of_Z_unsigned. rewrite !bv.of_Z_N.
-Admitted.
+      rewrite !bv.of_Z_unsigned.
+      apply bv.bin_inj. rewrite bv_bin_eq_rec. rewrite bv_bin_zext'.
+      simpl.
+      unfold bv.truncz.
+      rewrite !Zmod_small.
+      rewrite !bv.truncn_small. reflexivity.
+  Admitted.
+
 
   Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
   Proof.
