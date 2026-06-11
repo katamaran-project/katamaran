@@ -1039,7 +1039,7 @@ Module inv := invariants.
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
     iDestruct "Hpost" as "(Hshared & [% Hmstatus] & Han & Hx5 & Hx10)"; cbn.
     iAssert (interp_gprs {[ x5 ]}) with "[Hgprs Hx10]" as "Hgprs".
-    { iApply (interp_gprs_with_excluded_gen (exclude2 := {[x10]}));
+    { iApply (interp_gprs_with_excluded_gen {[x5]} (exclude2 := {[x10]}));
         try solve_subseteq.
       iFrame "Hgprs".
       reduce_big_sepS_big_sepL.
