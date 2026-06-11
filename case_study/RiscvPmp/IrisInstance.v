@@ -407,6 +407,13 @@ Module RiscvPmpIrisInstancePredicates.
       now iApply big_sepS_delete_multi.
     Qed.
 
+    Lemma interp_gprs_with_excluded_gen `{sailGS Σ} (exclude1 exclude2 : gset (Reg ty_xlenbits)) :
+      exclude1 ⊆ GPRS ->
+      exclude2 ⊆ GPRS ->
+      ([∗ set] r ∈ exclude2, ∃ v, reg_pointsTo r v) ∗ interp_gprs (exclude1 ∪ exclude2) ⊣⊢ interp_gprs exclude1.
+    Proof.
+    Admitted.
+
     Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
