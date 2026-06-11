@@ -148,7 +148,10 @@ Module RiscvPmpIrisInstancePredicates.
 
   (* The address we will perform all writes to is the first legal MMIO address *)
   Definition write_addr : Addr := bv.of_N maxAddr.
-  Definition event_pred (width : nat) (e : Event) := e = mkEvent IOWrite write_addr width (bv.of_N 42).
+  Definition write_addr_adv : Addr := write_addr + (bv.of_nat bytes_per_word).
+  Definition event_pred (width : nat) (e : Event) :=
+    (∃ v, e = mkEvent IOWrite write_addr width v) (* We allow any value for MMIO writes by M-mode that are non-observable by others *)
+    ∨ (e = mkEvent IOWrite write_addr_adv width (bv.of_N 42)). (* The only MMIO address accessible to a possible adversary can only ever contain the value 42 *)
   Definition is_shutdown (e : Event) := ∃ v, e = mkEvent IOShutdown mmioShutdownAddr 1 v.
   Definition mmio_pred (width : nat) (t : Trace) : Prop := Forall (event_pred width) t.
   Definition mmio_pred_final (width : nat) (t : Trace) : Prop :=
@@ -316,7 +319,9 @@ Module RiscvPmpIrisInstancePredicates.
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
-    Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
+    Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
+      ⌜addr = write_addr⌝ (* Allow arbitrary write values for M-mode only address *)
+      ∨ ⌜addr = write_addr_adv ∧ bytes = (bv.of_N 42)⌝. (* When writing to an MMIO address that is observable by the adv, we only allow 42 to be written. *)
 
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).

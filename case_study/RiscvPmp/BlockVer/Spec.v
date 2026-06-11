@@ -587,8 +587,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
        lemma_patterns        := [term_var "paddr"; term_var "w"];
        lemma_precondition    :=
-        (term_val ty_xlenbits write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
-        (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42));
+        (term_val ty_xlenbits write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∨
+        ((term_val ty_xlenbits write_addr_adv) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
+          (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42)));
        lemma_postcondition   :=
         asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
     |}.
@@ -867,27 +868,38 @@ Module RiscvPmpIrisInstanceWithContracts.
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & [%Hneq _] & #Hinv & [-> ->])". iApply semTWP_foreign.
+    iIntros "([%Hmmio _] & [%Hneq _] & #Hinv & %Hmmio_checked)". iApply semTWP_foreign.
     iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
-    iInv "Hinv" as (t) " [>Htrf >%Hpred]" "Hclose".
-    iDestruct (trace.trace_full_frag_eq with "Htr Htrf") as "%Heqt". subst t.
-    iMod (trace.trace_update _ _ (cons _ _) with "[$Htr $Htrf]") as "[Htr Htrf]".
-    iMod ("Hclose" with "[Htrf]") as "_".
-    {(* Instantiate evars *)
-      iExists _; iFrame. iPureIntro.
-      apply mmio_pred_cons; [|eauto].
-      constructor. }
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
-
     unfold fun_handle_write_mmio in Hf.
     destruct bytes; first contradiction.
     cbn in Hf. rewrite isNotMMIOShutdownAddr in Hneq.
     rewrite -> (decide_False _ _ Hneq) in Hf.
     inversion Hf; subst.
     iMod "Hclose" as "_". rewrite semTWP_val.
-    unfold mem_inv, fun_write_mmio; cbn.
-    now iFrame "Hregs Hmem Htr".
+    iFrame "Hregs Hmem %".
+    iInv "Hinv" as (t) " [>Htrf >%Hpred]" "Hclose".
+    iDestruct (trace.trace_full_frag_eq with "Htr Htrf") as "%Heqt". subst t.
+    (* The updated trace depends on what kind of MMIO write was performed,
+       we first destruct Hmmio_checked so we know whether a M-mode mmio write
+       is being performed (in which case data can be written as part of the
+       MMIO write event, or if an MMIO write on behalf of U-mode is requested.
+       In that case, the only possible write event is with value 42. *)
+    destruct Hmmio_checked as [-> |[-> ->]];
+      iMod (trace.trace_update _ _ (cons _ _) with "[$Htr $Htrf]") as "[Htr Htrf]".
+    - iMod ("Hclose" with "[Htrf]") as "_".
+      {(* Instantiate evars *)
+        iExists _; iFrame. iPureIntro.
+        apply mmio_pred_cons; [|eauto].
+        left. now exists data. }
+      now iFrame "Htr".
+    - iMod ("Hclose" with "[Htrf]") as "_".
+      {(* Instantiate evars *)
+        iExists _; iFrame. iPureIntro.
+        apply mmio_pred_cons; [|eauto].
+        now right. }
+      now iFrame "Htr".
   Qed.
 
   Lemma decode_sound `{sailGS Σ} :
@@ -998,9 +1010,9 @@ Module RiscvPmpIrisInstanceWithContracts.
     ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width).
   Proof.
     intros ι; destruct_syminstance ι; cbn.
-    iIntros "([<- _] & [-> _])".
     unfold interp_mmio_checked_write.
-    iPureIntro.
+    iIntros "[[<- _] | ([<- _] & [-> _])]"; iPureIntro; intuition.
+    right.
     split; auto.
     destruct width; now compute.
   Qed.
