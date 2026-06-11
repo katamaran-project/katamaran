@@ -603,8 +603,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   ∃ "mip",    mip           ↦ term_var "mip" ∗
                   ∃ "mscratch", mscratch    ↦ term_var "mscratch" ∗
                               cur_privilege ↦ term_var "m" ∗
-                  ∃ v,       (nextpc        ↦ term_var v ∗
-                              pc            ↦ term_var v) ∗
+                  ∃ v,       (pc        ↦ term_var v ∗
+                              nextpc    ↦ term_var v) ∗
                               mtvec         ↦ term_var "h" ∗
                   ∃ "mpie", ∃ "mie", mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "mpie"; term_var "mie"  ] ∗
                   ∃ v,        mepc          ↦ term_var v
@@ -619,8 +619,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   ∃ "mip",    mip           ↦ term_var "mip" ∗
                   ∃ "mscratch", mscratch    ↦ term_var "mscratch" ∗
                                  cur_privilege ↦ term_val ty_privilege Machine ∗
-                  ∃ v, (nextpc        ↦ term_var v ∗ (* tick, nextpc + 4 *)
-                        pc            ↦ term_var v) ∗
+                  ∃ v, (pc                ↦ term_var v ∗ (* tick, nextpc + 4 *)
+                        nextpc            ↦ term_var v) ∗
                   ∃ "new_mtvec", mtvec         ↦ term_var "new_mtvec" ∗
                   ∃ "new_mpp", ∃ "mpie", ∃ "mie", mstatus       ↦ term_record rmstatus [ term_var "new_mpp"; term_var "mpie"; term_var "mie" ] ∗
                   ∃ "new_mepc",  mepc          ↦ term_var "new_mepc"
@@ -634,8 +634,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   ∃ "mip",    mip           ↦ term_var "mip" ∗
                   ∃ "mscratch", mscratch    ↦ term_var "mscratch" ∗
                   cur_privilege ↦ (term_val ty_privilege Machine) ∗
-                  nextpc        ↦ term_var "h" ∗
                   pc            ↦ term_var "h" ∗
+                  nextpc        ↦ term_var "h" ∗
                   mtvec         ↦ term_var "h" ∗
                   ∃ "mpie", mstatus       ↦ term_record rmstatus [ term_var "m"; term_var "mpie"; term_val ty.bool false  ] ∗
                   mepc          ↦ term_var "i"
@@ -651,8 +651,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   ∃ "mscratch", mscratch    ↦ term_var "mscratch" ∗
                   cur_privilege ↦ term_var "mpp" ∗
                   ∃ "mepc", (mepc          ↦ term_var "mepc" ∗
-                             nextpc        ↦ term_var "mepc" ∗
-                             pc            ↦ term_var "mepc") ∗
+                             pc            ↦ term_var "mepc" ∗
+                             nextpc        ↦ term_var "mepc") ∗
                   mtvec         ↦ term_var "h" ∗
                   ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_var "mie" ])
           |}.
