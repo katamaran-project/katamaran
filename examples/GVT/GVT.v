@@ -670,37 +670,53 @@ Module inv := invariants.
       now rewrite IHx.
     Qed.
 
-    Lemma shiftr_cons {m n b} (xs : bv m) (y : bv n) : (N.succ (bv.bin y) < bv.exp2 n)%N ->
-      @bv.shiftr (S m) n (bv.cons b xs) (bv.add bv.one y) =
-        eq_rec _ bv (bv.zext' (@bv.shiftr m n xs y) 1) _ (Nat.add_1_r m).
+  Lemma Z_shiftr_unsigned_bounds {m n} (xs : bv m) (y : bv n) : (0 <= (@bv.unsigned m xs ≫ @bv.unsigned n y) < 2 ^ m)%Z.
     Proof.
-      intros.
-      unfold bv.shiftr.
-      rewrite bv.unsigned_cons.
-      rewrite <-bv.unsigned_succ_small, <-Z.add_1_l. 2: by apply H.
-      rewrite <-Z.shiftr_shiftr.
-      2: { destruct y using bv.bv_rect; unfold bv.unsigned; simpl; try lia. }
-      rewrite <-Z.div2_spec.
-      rewrite Z.div2_div.
-      rewrite (Z.mul_comm 2 (bv.unsigned xs)).
-      rewrite Z_div_plus_full ; last lia.
-      rewrite Z.b2z_div2 Z.add_0_l.
-      set (x := (@bv.unsigned m xs ≫ @bv.unsigned n y)) in *.
-      unfold bv.of_Z.
-      rewrite !bv.to_N_truncz2.
-      rewrite  <- !bv.of_Z_N.
-      unfold Z.to_N. destruct x eqn: X; try (by apply bv.bin_inj; rewrite bv_bin_eq_rec; rewrite bv_bin_zext'; auto).
-      rewrite !bv.of_N_truncz.
-      rewrite positive_N_Z.
-      rewrite <- !bv.unsigned_of_Z.
-      rewrite !bv.of_Z_unsigned.
-      apply bv.bin_inj. rewrite bv_bin_eq_rec. rewrite bv_bin_zext'.
-      simpl.
-      unfold bv.truncz.
-      rewrite !Zmod_small.
-      rewrite !bv.truncn_small. reflexivity.
-  Admitted.
+      split.
+      { rewrite Z.shiftr_div_pow2. apply Z.div_pos. 2: apply Z.pow_pos_nonneg; try lia. all : try apply bv.unsigned_bounds. }
+      unfold Z.shiftr, Z.shiftl.
+      destruct (bv.unsigned y) eqn: Y; simpl. { apply bv.unsigned_bounds. }
+      - rewrite <- Pos.iter_swap_gen with (g := λ (x : bv m), (@bv.shiftr m 1 x bv.one)). apply bv.unsigned_bounds.
+        intros. unfold bv.shiftr. cbn. rewrite <- Z.div2_spec.
+        pose proof Z.div2_nonneg (bv.unsigned a).
+        unfold bv.unsigned. simpl.
+        rewrite bv.to_N_truncz2. 2 : { apply H. apply bv.unsigned_bounds. } rewrite bv.truncn_idemp.
+        rewrite Z2N.inj_div2.
+        rewrite N2Z.id. rewrite <- N2Z.inj_div2. rewrite N2Z.inj_iff.
+        apply bv.truncn_small. rewrite N.div2_div. apply N.Div0.div_lt_upper_bound.
+        pose proof @bv.bv_is_wf m a.
+        transitivity (bv.exp2 m); try lia.
+      - unfold bv.unsigned in *. pose proof N2Z.is_nonneg (bv.bin y). pose proof Pos2Z.neg_is_neg p. rewrite <- Y in H0.
+        apply Z.lt_gt in H0. contradiction.
+   Qed.
 
+  Lemma shiftr_cons {m n b} (xs : bv m) (y : bv n) : (N.succ (bv.bin y) < bv.exp2 n)%N ->
+    @bv.shiftr (S m) n (bv.cons b xs) (bv.add bv.one y) =
+      eq_rec _ bv (bv.zext' (@bv.shiftr m n xs y) 1) _ (Nat.add_1_r m).
+  Proof.
+    intros.
+    unfold bv.shiftr.
+    rewrite bv.unsigned_cons.
+    rewrite <-bv.unsigned_succ_small, <-Z.add_1_l. 2: by apply H.
+    rewrite <-Z.shiftr_shiftr.
+    2: { destruct y using bv.bv_rect; unfold bv.unsigned; simpl; try lia. }
+    rewrite <-Z.div2_spec.
+    rewrite Z.div2_div.
+    rewrite (Z.mul_comm 2 (bv.unsigned xs)).
+    rewrite Z_div_plus_full ; last lia.
+    rewrite Z.b2z_div2 Z.add_0_l.
+    Set Printing Implicit.
+    set (x := (@bv.unsigned m xs ≫ @bv.unsigned n y)) in *.
+    apply bv.bin_inj. rewrite bv_bin_eq_rec. rewrite bv_bin_zext'.
+    unfold bv.shiftr in *.
+    simpl. clear b.
+    pose proof @Z_shiftr_unsigned_bounds m n xs y as [Zbl Zbr]; auto.
+    rewrite !bv.to_N_truncz2; auto.
+    rewrite !bv.truncn_idemp.
+    assert (N_Z_shiftr_bound: (Z.to_N x < bv.exp2 m)%N). rewrite Z2N.inj_lt in Zbr; simpl; auto; try lia.
+    rewrite !bv.truncn_small; auto.
+    transitivity (bv.exp2 m); auto. unfold bv.exp2. destruct m; simpl; try lia. rewrite Pos.pow_succ_r. lia.
+  Qed.
 
   Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
   Proof.
@@ -1556,7 +1572,7 @@ Module inv := invariants.
         iFrame "Hx01 Hx23 Hx31 Hx15 Hx07 Hx19 Hx27".
         iFrame "Hx11 Hx03 Hx24 Hx16 Hx08 Hx20 Hx28".
         iFrame "Hx12 Hx04 Hx22 Hx30 Hx14 Hx06 Hx18".
-        iFrame "Hx26 Hx10 Hx02". 
+        iFrame "Hx26 Hx10 Hx02".
         iFrame "Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1".
         eauto.
       }
