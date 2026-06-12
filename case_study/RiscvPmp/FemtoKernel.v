@@ -1375,7 +1375,7 @@ Module inv := invariants.
       ptsto_instrs_handler ∗
       interp_ptstomem (bv.of_N data_addr) secret ∗
       femto_inv_mmio ∗
-      ptstoSthL advAddrs.
+      [∗ list] a ∈ advAddrs, a ↦ₘ memory_ram μ a.
   Proof.
     iIntros (Hinit Hhentry Hhwrite Hhsecret Hhexit Hdata Hft) "Hmem".
     unfold mem_res, initMemMap.
@@ -1405,8 +1405,7 @@ Module inv := invariants.
     iSplitL "Htr".
     - (* Two cases; either we set up the trace invariant o memory invariant or the trace invariant. *)
       iApply (inv.inv_alloc). iExists _; now iFrame.
-    - iApply (intro_ptstoSthL μ).
-      iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); now compute.
+    - iApply (sub_heap_mapsto_interp_ptsto with "Hadv"); now compute.
   Qed.
 
   Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} :
@@ -1482,6 +1481,7 @@ Module inv := invariants.
     rewrite γmstatus γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc.
     iMod (femtokernel_splitMemory with "Hmem") as "(Hinit & Hhandler & Hdata & #Hmmio & Hadv)";
       try eassumption.
+    iPoseProof (intro_ptstoSthL with "Hadv") as "Hadv".
     iModIntro.
     iSplitL.
     - destruct (env.view δ).
