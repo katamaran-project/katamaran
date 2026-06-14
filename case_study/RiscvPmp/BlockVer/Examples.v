@@ -563,10 +563,193 @@ Module Examples.
       - intros (h & H). by constructor.
     Qed.
 
-    Lemma adequacy_gen_RiscVNStepsExitCond l exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
+        Lemma create_resources Σ {sG' : subG memΣ2 Σ} {sG'' : subG sailΣ2 Σ} (Hinv : invGS Σ) γ1 γ2 μ1 μ2 :
+      ⊢ |==>
+        ∃ regs1 regs2 memG, let sG := @SailGS2 Σ Hinv (SailRegGS2 (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1) (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ sG'')) regs2)) memG in
+           mem_inv2 (@sailGS2_memGS Σ sG) μ1 μ2 ∗ mem_res2 μ1 μ2 ∗
+             @regs_inv2 _ (@sailGS2_regGS2 Σ sG) γ1 γ2 ∗ @own_regstore2 _ sG γ1 γ2.
+      Proof.
+        iMod (own_alloc ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (regs2) "[Hregsown2 Hregsinv2]".
+    { apply auth_both_valid.
+      intuition.
+      apply RegStore_to_map_valid. }
+    pose proof (memΣ_GpreS2 (Σ := Σ) _) as mGS.
+    iMod (mem_inv_init2 (gHP := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
+    pose (sG := @SailGS2 Σ Hinv (SailRegGS2 (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1) (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ sG'')) regs2)) memG).
+    iAssert (regs_inv2 γ1 γ2) with "[Hregsown1 Hregsown2]" as "Hregs".
+    { iSplitL "Hregsown1";
+      by iApply own_RegStore_to_regs_inv.
+    }
+    iAssert (own_regstore2 γ1 γ2) with "[Hregsinv1 Hregsinv2]" as "Rregs".
+    { iApply RiscvPmpIrisInstance2.own_RegStore_to_map_reg_pointsTos.
+      apply finite.NoDup_enum.
+      iSplitR "Hregsinv2"; iAssumption.
+    }.
+    iModIntro. iExists regs1, regs2, memG. iFrame "Hmem Rmem Hregs Rregs".
+      Qed.
+
+  (*   Lemma adequacy_gen_RiscVNStepsExitCond l exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22} *)
+  (*   (φ : Prop) : *)
+  (*   ⟨ γ11, μ11 ⟩ -l( exitCond , l )->* ⟨ γ12, μ12 ⟩ -> *)
+  (*   ⟨ γ21, μ21 ⟩ -l( exitCond , l )->* ⟨ γ22, μ22 ⟩ -> *)
+  (*   (forall `{sailGS2 Σ}, *)
+  (*       mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ *)
+  (*         |={⊤}=> myWP2_loop *)
+  (*                   (∃ a, pc ↦ᵣ a ∗ *)
+  (*                      ⌜ exitCond (ty.projLeft a) ∨ exitCond (ty.projRight a) ⌝) *)
+  (*       ∗ (mem_inv2 _ μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝) *)
+  (*   )%I -> φ. *)
+  (* Proof. *)
+  (*   intros Heval1 Heval2 Hwp. *)
+  (*   refine (uPred.pure_soundness _ *)
+  (*             (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc (list_sum_plus_one l) (list_sum_plus_one l) _)). *)
+  (*   iIntros (Hinv) "Hcred'". *)
+  (*   iMod (create_resources Hinv γ11 γ21 μ11 μ21) as (regs1 regs2 memG) "(Hmem & Rmem & Hregs & Rregs)". *)
+  (*   pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1) (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ _)) regs2)) memG). *)
+  (*   specialize (Hwp _ sG). *)
+  (*   iPoseProof (Hwp with "[$Rmem $Rregs]") as "Hwp2". *)
+  (*   clear Hwp. *)
+  (*   iStopProof. *)
+  (*   revert Heval1 Heval2. *)
+  (*   revert γ11 μ11 γ21 μ21. *)
+  (*   induction l; iIntros (γ11 μ11 γ21 μ21 Heval1 Heval2) "(Hcred & Hmem & Hregs & Hwp2)". *)
+  (*   - inversion Heval1. inversion Heval2. subst. *)
+  (*     iMod "Hwp2" as "[_ Hcont]". *)
+  (*     iMod ("Hcont" with "Hmem") as "%Hφ". *)
+  (*     cbn. done. *)
+  (*   - inversion Heval1 as [ | ? ? γ1 ? μ1 ? nEC1 Hstep1 Hevaln1]. clear Heval1. *)
+  (*     inversion Heval2 as [ | ? ? γ2 ? μ2 ? nEC2 Hstep2 Hevaln2]. clear Heval2. subst. *)
+  (*     specialize (IHl _ _ _ _ Hevaln1 Hevaln2). *)
+  (*     rewrite fixpoint_myWP2_loop_eq. *)
+  (*     unfold myWP2_loop_fix. *)
+  (*     iMod "Hwp2" as "([H | Hwp2] & Hφ)". *)
+  (*     + iDestruct "H" as (a') "(Hpc & %ECs)". *)
+  (*       unfold reg_pointsTo2. *)
+  (*       iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & %eq2)". *)
+  (*       rewrite eq1 in nEC1. rewrite eq2 in nEC2. tauto. *)
+  (*     + iPoseProof (semWP2_preservation Hstep1 Hstep2 with "[$Hmem $Hregs]") as "Hwp". *)
+  (*       iSpecialize ("Hwp" with "Hwp2"). *)
+  (*       iMod "Hwp". *)
+  (*       change (list_sum_plus_one (a :: l)) with (a + 1 + list_sum_plus_one l). *)
+  (*       iAssert (|={∅}▷=>^a |={∅}=>  |={∅}▷=> |={∅}▷=>^(list_sum_plus_one l) ⌜φ⌝)%I with "[-]" as "H"; last first. *)
+  (*       { do 2 rewrite step_fupdN_add. destruct a. done. by iApply step_fupdN_S_fupd. } *)
+  (*       iApply (step_fupdN_wand with "Hwp"). *)
+  (*       iIntros ">(Hmem & Hregs & Hwp)". *)
+  (*       rewrite semWP2_val. *)
+  (*       iMod "Hwp" as "Hwp". *)
+  (*       rewrite (into_sep_lc_add (a + 1) (list_sum_plus_one l)). *)
+  (*       rewrite (into_sep_lc_add a 1). *)
+  (*       iDestruct "Hcred" as "[[Hcreda Hcred1] Hcredl]". *)
+  (*       iMod (lc_fupd_elim_later with "Hcred1 Hwp") as "Hwp". *)
+  (*       now iMod (IHl with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl". *)
+  (* Qed. *)
+
+  From Equations Require Import Equations.
+
+  Lemma nsteps_to_lsteps {γ γ' : RegStore} {μ μ' : Memory} ExitCond n :
+    ⟨ γ, μ ⟩ -( ExitCond , n )->* ⟨ γ', μ' ⟩ ->
+    ∃ l, length l = n ∧
+           ⟨ γ, μ ⟩ -l( ExitCond , l )->* ⟨ γ', μ' ⟩.
+  Proof.
+    revert γ μ.
+    induction n.
+    - intros γ μ nsteps. exists []. inversion nsteps. split; auto. constructor.
+    - intros γ μ nsteps. dependent elimination nsteps.
+      destruct (IHn γ2 μ2 r0) as [l Hl].
+      destruct (steps_to_nsteps r) as [n Hn].
+      exists (n :: l).
+      destruct Hl as [Hlen Hl].
+      cbn. split.
+      + by rewrite Hlen.
+      + econstructor; eauto.
+  Qed.
+
+    (* Lemma semWP2_lockstep `{sailGS2 Σ} {s1 s2} *)
+    (*   {γ1 μ1 δ1 γ1' μ1' n1} *)
+    (*   {γ2 μ2 δ2 γ2' μ2' n2} *)
+    (*   {Q} *)
+    (*   (Hsteps1 : NSteps γ1 μ1 δ1 s1 γ1' μ1' [env] (stm_val ty.unit ()) n1) *)
+    (*   (Hsteps2 : NSteps γ2 μ2 δ2 s2 γ2' μ2' [env] (stm_val ty.unit ()) n2) : *)
+    (*   mem_inv2 _ μ1 μ2 ∗ *)
+    (*     regs_inv2 γ1 γ2 ∗ *)
+    (*     semWP2 δ1 δ2 s1 s2 Q ⊢ *)
+    (*     |={⊤,∅}=> |={∅}▷=>^n1 ⌜n1 = n2⌝. *)
+    (* Proof. *)
+    (*   revert n2 s1 s2 γ1 γ1' δ1 μ1 μ1' γ2 γ2' δ2 μ2 μ2' Hsteps1 Hsteps2 Q. *)
+    (*   induction n1. *)
+    (*   - intros n2 s1 s2 γ1 γ1' δ1 μ1 μ1' γ2 γ2' δ2 μ2 μ2' Hsteps1 Hsteps2 Q. *)
+    (*     iIntros "(Hmem & Hregs & Hwp)". *)
+    (*     inversion Hsteps1. subst. *)
+    (*     inversion Hsteps2; subst; auto. *)
+    (*     + cbn. iApply fupd_mask_intro; first set_solver. iIntros "Hclose". by iFrame. *)
+    (*     + rewrite semWP2_unfold. cbn. *)
+    (*       destruct s2; cbn; iMod "Hwp"; auto. *)
+    (*       all: inversion H0. *)
+    (*   - intros n2 s1 s2 γ1 γ1' δ1 μ1 μ1' γ2 γ2' δ2 μ2 μ2' Hsteps1 Hsteps2 Q. *)
+    (*     iIntros "(Hmem & Hregs & Hwp)". *)
+    (*     inversion Hsteps1. subst. inversion Hsteps2; subst. *)
+    (*     { rewrite semWP2_unfold. cbn. *)
+    (*       destruct s1; cbn; iMod "Hwp"; auto. *)
+    (*       all: inversion H1. *)
+    (*     } *)
+    (*     iPoseProof (semWP2_step H1 H0 with "[$Hmem $Hregs $Hwp]") as "Hwp". *)
+    (*     iMod "Hwp". iModIntro. *)
+    (*     replace (S n1) with (1 + n1); auto. *)
+    (*     rewrite step_fupdN_add. *)
+    (*     iMod "Hwp". do 2 iModIntro. iMod "Hwp". iMod "Hwp" as "(Hregs & Hmem & Hwp)". *)
+    (*     replace (1 + n1) with (S n1); auto. *)
+    (*     specialize (IHn1 n s0 s3 γ0 γ1' δ0 μ0 μ1' γ3 γ2' δ3 μ3 μ2' H6 H2 Q). *)
+    (*     iMod (IHn1 with "[$Hmem $Hregs $Hwp]") as "IH". *)
+    (*     iModIntro. iApply (step_fupdN_mono with "IH"). *)
+    (*     iStartProof. *)
+    (*     by iIntros "<-". *)
+    (* Qed. *)
+
+    Lemma semWP2_preservation' `{sailGS2 Σ} n {s11 s21} {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
+    {δ11 δ21}
+    {Q}  :
+    NSteps γ11 μ11 δ11 s11 γ12 μ12 [env] (stm_val ty.unit ()) n ->
+      Steps γ21 μ21 δ21 s21 γ22 μ22 [env] (stm_val ty.unit ()) ->
+    mem_inv2 _ μ11 μ21 ∗ regs_inv2 γ11 γ21 -∗
+      semWP2 δ11 δ21 s11 s21 Q
+    ={⊤,∅}=∗ |={∅}▷=>^(n) |={∅,⊤}=> mem_inv2 _ μ12 μ22 ∗ regs_inv2 γ12 γ22 ∗
+                                      semWP2 [env] [env] (stm_val ty.unit ()) (stm_val ty.unit ()) Q.
+  Proof.
+    revert s11 s21 μ11 μ21 γ11 γ21 μ12 μ22 γ12 γ22 δ11 δ21 Q.
+    induction n as [|n IH]=> s11 s21 μ11 μ21 γ11 γ21 μ12 μ22 γ12 γ22 δ11 δ21 Q /=.
+    { intros steps1 steps2.
+      inversion steps1. inversion steps2; subst; iIntros "(Hmem & Hregs)"; iIntros "Hwp".
+      - iFrame.
+        by iApply fupd_mask_subseteq.
+      - rewrite {1}semWP2_unfold. cbn. 
+        destruct s21; cbn; iMod "Hwp"; auto.
+        + iApply fupd_mask_intro; first set_solver. iIntros "Hclose". iMod "Hclose".
+          inversion H4.
+        + inversion H4.
+    }
+    iIntros (steps1 steps2) "(Hmem & Hregs)".
+    iIntros " Hwp".
+    inversion steps1 as [ | ? γ1 ? μ1 ? ? ? ? ? Hstep1 Hevaln1]. subst.
+    inversion steps2; subst.
+    { rewrite {1}semWP2_unfold. cbn. 
+      destruct s11; cbn; iMod "Hwp"; auto.
+      all: inversion Hstep1.
+    }
+    iPoseProof (semWP2_step Hstep1 H0 with "[$Hmem $Hregs $Hwp]") as "Hwp".
+    iMod "Hwp". iModIntro. iMod "Hwp". do 2 iModIntro. do 2 iMod "Hwp".
+    iDestruct "Hwp" as "(Hregs & Hmem & Hwp)".
+    specialize (IH _ _ _ _ _ _ _ _ _ _ _ _ Q Hevaln1 H1).
+    by iApply (IH with "[$Hmem $Hregs]").
+  Qed.
+
+      Lemma adequacy_gen_RiscVNStepsExitCond n exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
     (φ : Prop) :
-    ⟨ γ11, μ11 ⟩ -l( exitCond , l )->* ⟨ γ12, μ12 ⟩ ->
-    ⟨ γ21, μ21 ⟩ -l( exitCond , l )->* ⟨ γ22, μ22 ⟩ ->
+    ⟨ γ11, μ11 ⟩ -( exitCond , n )->* ⟨ γ12, μ12 ⟩ ->
+    ⟨ γ21, μ21 ⟩ -( exitCond , n )->* ⟨ γ22, μ22 ⟩ ->
     (forall `{sailGS2 Σ},
         mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢
           |={⊤}=> myWP2_loop
@@ -576,69 +759,51 @@ Module Examples.
     )%I -> φ.
   Proof.
     intros Heval1 Heval2 Hwp.
+    apply nsteps_to_lsteps in Heval1.
+    destruct Heval1 as (l1 & Hl1 & Heval1).
     refine (uPred.pure_soundness _
-              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc (list_sum_plus_one l) (list_sum_plus_one l) _)).
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc (list_sum_plus_one l1) (list_sum_plus_one l1) _)).
     iIntros (Hinv) "Hcred'".
-    iMod (own_alloc (A := regUR) ((● RegStore_to_map γ11 ⋅ ◯ RegStore_to_map γ11 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
-    { apply auth_both_valid.
-      intuition.
-      apply RegStore_to_map_valid. }
-    iMod (own_alloc ((● RegStore_to_map γ21 ⋅ ◯ RegStore_to_map γ21 ) : regUR)) as (regs2) "[Hregsown2 Hregsinv2]".
-    { apply auth_both_valid.
-      intuition.
-      apply RegStore_to_map_valid. }
-    pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
-    iMod (mem_inv_init2 μ11 μ21) as (memG) "[Hmem Rmem]".
+    iMod (create_resources Hinv γ11 γ21 μ11 μ21) as (regs1 regs2 memG) "(Hmem & Rmem & Hregs & Rregs)".
     pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1) (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ _)) regs2)) memG).
     specialize (Hwp _ sG).
-    iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
-    { unfold own_regstore2.
-      iApply RiscvPmpIrisInstance2.own_RegStore_to_map_reg_pointsTos.
-      apply finite.NoDup_enum.
-      iSplitR "Hregsinv2"; iAssumption.
-    }
-    iAssert (regs_inv2 γ11 γ21) with "[Hregsown1 Hregsown2]" as "Hregs".
-    { iSplitL "Hregsown1";
-      now iApply own_RegStore_to_regs_inv.
-    }
+    iPoseProof (Hwp with "[$Rmem $Rregs]") as "Hwp2".
     clear Hwp.
     iStopProof.
     revert Heval1 Heval2.
-    revert γ11 μ11 γ21 μ21.
-    induction l.
-    - iIntros (γ11 μ11 γ21 μ21 Heval1 Heval2) "(Hcred & Hmem & Hwp2 & Hregs)".
-      inversion Heval1. inversion Heval2. subst.
+    revert γ11 μ11 γ21 μ21 n Hl1.
+    induction l1; iIntros (γ11 μ11 γ21 μ21 n Hl1 Heval1 Heval2) "(Hcred & Hmem & Hregs & Hwp2)".
+    - inversion Heval1. cbn in Hl1. subst.
+      inversion Heval2. subst.
       iMod "Hwp2" as "[_ Hcont]".
       iMod ("Hcont" with "Hmem") as "%Hφ".
       cbn. done.
-    - iIntros (γ11 μ11 γ21 μ21 Heval1 Heval2) "(Hcred & Hmem & Hwp2 & Hregs)".
-      inversion Heval1 as [ | ? ? γ1 ? μ1 ? nEC1 Hstep1 Hevaln1]. clear Heval1.
-      inversion Heval2 as [ | ? ? γ2 ? μ2 ? nEC2 Hstep2 Hevaln2]. clear Heval2. subst.
-      specialize (IHl _ _ _ _ Hevaln1 Hevaln2).
+    - inversion Heval1 as [ | ? ? γ1 ? μ1 ? nEC1 Hstep1 Hevaln1]. clear Heval1. subst.
+      inversion Heval2. subst. clear Heval2.
+      rename H1 into Hstep2. rename H4 into Hevaln2. rename H0 into nEC2.
+      specialize (IHl1 _ _ _ _ _ eq_refl Hevaln1 Hevaln2).
       rewrite fixpoint_myWP2_loop_eq.
       unfold myWP2_loop_fix.
       iMod "Hwp2" as "([H | Hwp2] & Hφ)".
       + iDestruct "H" as (a') "(Hpc & %ECs)".
         unfold reg_pointsTo2.
-        Search regs_inv2.
         iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & %eq2)".
         rewrite eq1 in nEC1. rewrite eq2 in nEC2. tauto.
-      + iPoseProof (semWP2_preservation Hstep1 Hstep2 with "[$Hmem $Hregs]") as "Hwp".
+      + iPoseProof (semWP2_preservation' Hstep1 Hstep2 with "[$Hmem $Hregs]") as "Hwp".
         iSpecialize ("Hwp" with "Hwp2").
         iMod "Hwp".
-        change (list_sum_plus_one (a :: l)) with (a + 1 + list_sum_plus_one l).
-        iAssert (|={∅}▷=>^a |={∅}=>  |={∅}▷=> |={∅}▷=>^(list_sum_plus_one l) ⌜φ⌝)%I with "[-]" as "H"; last first.
+        change (list_sum_plus_one (a :: l1)) with (a + 1 + list_sum_plus_one l1).
+        iAssert (|={∅}▷=>^a |={∅}=>  |={∅}▷=> |={∅}▷=>^(list_sum_plus_one l1) ⌜φ⌝)%I with "[-]" as "H"; last first.
         { do 2 rewrite step_fupdN_add. destruct a. done. by iApply step_fupdN_S_fupd. }
         iApply (step_fupdN_wand with "Hwp").
         iIntros ">(Hmem & Hregs & Hwp)".
         rewrite semWP2_val.
         iMod "Hwp" as "Hwp".
-        rewrite (into_sep_lc_add (a + 1) (list_sum_plus_one l)).
+        rewrite (into_sep_lc_add (a + 1) (list_sum_plus_one l1)).
         rewrite (into_sep_lc_add a 1).
         iDestruct "Hcred" as "[[Hcreda Hcred1] Hcredl]".
         iMod (lc_fupd_elim_later with "Hcred1 Hwp") as "Hwp".
-        now iMod (IHl with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl".
-    Unshelve. auto.
+        now iMod (IHl1 with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl".        
   Qed.
 
 
@@ -1179,7 +1344,7 @@ End AdequacyTools.
   Qed.
 
   Lemma swap_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
-    {δ1 δ2 δ1' δ2' : CStoreVal [ctx]} {s' : Stm [ctx] ty.unit} (is_mmio : bool) l ws :
+    {δ1 δ2 δ1' δ2' : CStoreVal [ctx]} {s' : Stm [ctx] ty.unit} (is_mmio : bool) n ws :
     let instrs := [ MV X3 X2; MV X2 X1; MV X1 X3] in
     mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
     mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
@@ -1191,8 +1356,8 @@ End AdequacyTools.
     (* read_register γ pmpaddr1 = bv.zero -> *)
     RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
     RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
-    ⟨ γ1, μ1 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ1', μ1' ⟩ ->
-    ⟨ γ2, μ2 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ2', μ2' ⟩ ->
+    ⟨ γ1, μ1 ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs , n )->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs , n )->* ⟨ γ2', μ2' ⟩ ->
     leakage_trace μ1 = leakage_trace μ2 ->
     leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
   Proof.
@@ -1331,7 +1496,7 @@ End AdequacyTools.
     Qed.
 
     Lemma instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
-      instrs' l ws {R} {ι : Valuation R}
+      instrs' n ws {R} {ι : Valuation R}
       public_registers
       (HpubReg : declare_public_registers γ1 γ2 public_registers)
       {block : @BlockVerifierContract R}
@@ -1355,8 +1520,8 @@ End AdequacyTools.
       RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
       RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
       RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
-      ⟨ γ1, μ1 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs' , l )->* ⟨ γ1', μ1' ⟩ ->
-      ⟨ γ2, μ2 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs' , l )->* ⟨ γ2', μ2' ⟩ ->
+      ⟨ γ1, μ1 ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs' , n )->* ⟨ γ1', μ1' ⟩ ->
+      ⟨ γ2, μ2 ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs' , n )->* ⟨ γ2', μ2' ⟩ ->
       leakage_trace μ1 = leakage_trace μ2 ->
       leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
     Proof.
@@ -1389,8 +1554,7 @@ End AdequacyTools.
         now iIntros "_".
     Qed.
 
-
-    Lemma swap_endToEnd2 {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} l ws :
+    Lemma swap_endToEnd2 {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws :
     let instrs := [ MV X3 X2; MV X2 X1; MV X1 X3] in
     mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
     mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
@@ -1402,8 +1566,8 @@ End AdequacyTools.
     (* read_register γ pmpaddr1 = bv.zero -> *)
     RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
     RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
-    ⟨ γ1, μ1 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ1', μ1' ⟩ ->
-    ⟨ γ2, μ2 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ2', μ2' ⟩ ->
+    ⟨ γ1, μ1 ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs , n )->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs , n )->* ⟨ γ2', μ2' ⟩ ->
     leakage_trace μ1 = leakage_trace μ2 ->
     leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
     Proof.
@@ -1428,7 +1592,7 @@ End AdequacyTools.
         Unshelve. exact ctx.nil. exact env.nil.
     Qed.
 
-    Lemma jumpIfZero_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} l ws
+    Lemma jumpIfZero_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws
       (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1]) :
       let instrs := [ BEQ X1 X0 true_offset ] in
       mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
@@ -1441,8 +1605,8 @@ End AdequacyTools.
       (* read_register γ pmpaddr1 = bv.zero -> *)
       RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
       RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
-      ⟨ γ1, μ1 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ1', μ1' ⟩ ->
-      ⟨ γ2, μ2 ⟩ -l( pcOutOfInstrs (bv.of_N init_addr) instrs , l )->* ⟨ γ2', μ2' ⟩ ->
+      ⟨ γ1, μ1 ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs , n )->* ⟨ γ1', μ1' ⟩ ->
+      ⟨ γ2, μ2 ⟩ -( pcOutOfInstrs (bv.of_N init_addr) instrs , n )->* ⟨ γ2', μ2' ⟩ ->
       leakage_trace μ1 = leakage_trace μ2 ->
       leakage_trace μ1' = leakage_trace μ2'      (* The initial demands hold over the final state *).
     Proof.
@@ -1471,55 +1635,5 @@ End AdequacyTools.
         Unshelve. exact ctx.nil. exact env.nil.
     Qed.
 
-    Lemma test {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} w ws instr instrs'
-      public_registers
-      (HpubReg : declare_public_registers γ1 γ2 public_registers)
-      {R} {ι : Valuation R}
-      {block : @BlockVerifierContract R}
-      (valid_block : ValidBlockVerifierContract block)
-      (blockInstrs : instrs block = instr :: instrs')
-      (ImplPre : forall `{sailGS2 Σ}, interp_gprs_with_public_registers γ1 γ2 public_registers ∗
-                                        cur_privilege ↦ᵣ ty.SyncVal Machine ∗
-                                        interp_inv_constant_time
-                                      -∗
-                                         asn.interpret (extract_pre_from_contract block) ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
-      :
-      (4 * N.of_nat (length (instr :: instrs')) < lenAddr)%N ->
-      RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
-      RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
-      mem_has_instrs μ1 (bv.of_N init_addr) (w :: ws) (instr :: instrs') ->
-      mem_has_instrs μ2 (bv.of_N init_addr) (w :: ws) (instr :: instrs') ->
-      RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-      RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-      RiscVStep γ1 μ1 γ1' μ1' ->
-      RiscVStep γ2 μ2 γ2' μ2' ->
-      leakage_trace μ1 = leakage_trace μ2 ->
-      ∃ n, RiscVStepN γ1 μ1 γ1' μ1' n /\ RiscVStepN γ2 μ2 γ2' μ2' n.
-    Proof.
-      intros HlenInstrs pc1 pc2 Hmem1 Hmem2 priv1 priv2 step1 step2.
-      unfold ValidBlockVerifierContract, Examples.map, Valid_VC in valid_block.
-      destruct block. cbn in valid_block, blockInstrs. rewrite blockInstrs in valid_block.
-      destruct (steps_to_nsteps step1) as [n Hstep1].
-          refine (uPred.pure_soundness _
-              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
-    iIntros (Hinv) "".
-    iMod (own_alloc ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (regs1) "[Hregsown1 Hregsinv1]".
-    { apply auth_both_valid.
-      intuition.
-      apply RegStore_to_map_valid. }
-    iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (regs2) "[Hregsown2 Hregsinv2]".
-    { apply auth_both_valid.
-      intuition.
-      apply RegStore_to_map_valid. }
-    pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
-    iMod (mem_inv_init2 μ1 μ2) as (memG) "[Hmem Rmem]".
-    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1) (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ _)) regs2)) memG).
-    iAssert (regs_inv2 γ1 γ2) with "[Hregsown1 Hregsown2]" as "Hregs".
-    { iSplitL "Hregsown1";
-      by iApply own_RegStore_to_regs_inv.
-    }
-    iPoseProof (own_regstore2 γ1 γ2 with "[Hregsinv1 Hregsinv2]") as "Rregs".
-    
-    Qed.
-
 End Examples.
+
