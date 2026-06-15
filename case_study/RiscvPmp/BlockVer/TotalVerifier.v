@@ -597,7 +597,7 @@ Section AnnotatedBlockVerification.
         | MkDebugBlockver pc1 h s => MkDebugBlockver (substSU pc1 ζ01) (substSU h ζ01) s
         end.
 
-    #[export] Instance SubstSULawsDebugBlockver `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+    #[export] Instance SubstSULawsDebugBlockver `{SubstUnivLaws Sb} :
       SubstSULaws Sb DebugBlockver.
     Proof.
       intros ? ? ? ? ? [pc h]; cbn; f_equal; now apply substSU_trans.

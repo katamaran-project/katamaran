@@ -180,7 +180,7 @@ Module Type ChunksOn
     { intros ? ? ? ? ? c. induction c; cbn; f_equal; auto; apply subst_sub_comp. }
   Qed.
 
-  #[export] Instance substsulaws_chunk `{SubstUnivMeet Sb, SubstUnivLaws Sb} :
+  #[export] Instance substsulaws_chunk `{SubstUnivLaws Sb} :
     SubstSULaws Sb Chunk.
   Proof.
     intros Σ1 Σ2 Σ3 ζ1 ζ2 t.

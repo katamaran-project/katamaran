@@ -115,24 +115,29 @@ Module Type GenOccursCheckOn
   #[export] Instance substSU_pair `{SubstSU Sb T1, SubstSU Sb T2} : SubstSU Sb (Pair T1 T2) :=
     fun {Σ1 Σ2} '(t1 , t2) σ => (substSU t1 σ , substSU t2 σ).
 
-  Class SubstUnivLaws Sb `{SubstUnivMeet Sb} : Prop :=
+  Class SubstUnivLaws Sb `{SubstUniv Sb} : Prop :=
     MkSubstUnivLaws {
         interpTransSU : forall {Σ1 Σ2 Σ3} (σ1 : Sb Σ1 Σ2) (σ2 : Sb Σ2 Σ3),
           substSU (interpSU σ1) σ2 = interpSU (transSU σ1 σ2)
       ; transSU_assoc : forall {Σ1 Σ2 Σ3 Σ4} (σ1 : Sb Σ1 Σ2) (σ2 : Sb Σ2 Σ3) (σ3 : Sb Σ3 Σ4),
           transSU σ1 (transSU σ2 σ3) = transSU (transSU σ1 σ2) σ3
     }.
-  Arguments SubstUnivLaws Sb {H H0}.
+  Arguments SubstUnivLaws Sb {H}.
 
-  Class SubstSULaws Sb `{SubstSU Sb T, SubstUnivMeet Sb} {sul : SubstUnivLaws Sb} : Prop :=
+  Class SubstSULaws Sb T `{SubstUniv Sb, SubstSU Sb T} {sul : SubstUnivLaws Sb} : Prop :=
     substSU_trans : forall {Σ1 Σ2 Σ3} (σ1 : Sb Σ1 Σ2) (σ2 : Sb Σ2 Σ3) (t : T Σ1),
         substSU t (transSU σ1 σ2) = substSU (substSU t σ1) σ2.
-  Arguments SubstSULaws Sb T {H H0 H1 sul}.
+  Arguments SubstSULaws Sb T {H H0 sul}.
 
   #[export] Instance substSULaws_option `{SubstSULaws Sb T} : SubstSULaws Sb (Option T).
   Proof.
-    intros Σ1 Σ2 Σ3 ζ1 ζ2 [t|]; last easy.
+    intros Σ1 Σ2 Σ3 ζ1 ζ2 [tu|]; last easy.
     cbn. now rewrite substSU_trans.
+  Qed.
+
+  #[export] Instance substSULaws_pair `{SubstSULaws Sb T1} {T2} {sSU2 : SubstSU Sb T2} {sSUL2 : SubstSULaws Sb T2} : SubstSULaws Sb (Pair T1 T2).
+  Proof.
+    intros Σ1 Σ2 Σ3 ζ1 ζ2 [t1 t2]; cbn; now rewrite !substSU_trans.
   Qed.
 
   Class SubstSubstSULaws `{SubstUniv Sb, SubstSU Sb T, Subst T} : Prop :=
@@ -149,7 +154,7 @@ Module Type GenOccursCheckOn
       now f_equal.
   Qed.
 
-  #[export] Instance substSubstSULaws_env `{SubstUnivMeet Sb} {B : Set} {Δ}
+  #[export] Instance substSubstSULaws_env `{SubstUniv Sb} {B : Set} {Δ}
     {T : LCtx -> B -> Set}
     {sT : forall (b : B), Subst (fun Σ => T Σ b)}
     {sST : forall (b : B), SubstSU Sb (fun Σ => T Σ b)}
@@ -161,7 +166,7 @@ Module Type GenOccursCheckOn
     now eapply ssuLT.
   Qed.
 
-  #[export] Instance substSubstSULaws_sub `{SubstUnivMeet Sb} {Δ} :
+  #[export] Instance substSubstSULaws_sub `{SubstUniv Sb} {Δ} :
       SubstSubstSULaws Sb (Sub Δ).
   Proof.
     eapply substSubstSULaws_env.
@@ -169,7 +174,7 @@ Module Type GenOccursCheckOn
     now eapply substSubstSUTermLaws.
   Qed.
 
-  #[export] Instance substSUTermLaws `{SubstUnivLaws Sb} {σ} : SubstSULaws Sb (fun Σ => Term Σ σ).
+  #[export] Instance substSUTermLaws `{SubstUniv Sb} {sSUL : SubstUnivLaws Sb} {σ} : SubstSULaws Sb (fun Σ => Term Σ σ).
   Proof.
     intros Σ1 Σ2 Σ3 σ1 σ2 t.
     rewrite ?substSU_interpSU.
@@ -192,7 +197,7 @@ Module Type GenOccursCheckOn
   #[export,universes(polymorphic=yes)] Instance substSU_Const {Sb} {T : Type} : SubstSU Sb (Const T) :=
     fun Σ1 Σ2 v ζ => v.
 
-  #[export,universes(polymorphic=yes)] Instance substSULaws_Const `{SubstUnivMeet Sb, SubstUnivLaws Sb} {T : Type} : SubstSULaws Sb (Const T).
+  #[export,universes(polymorphic=yes)] Instance substSULaws_Const `{SubstUnivLaws Sb} {T : Type} : SubstSULaws Sb (Const T).
   Proof. easy. Qed.
 
   #[export] Instance substSULaws_env `{SubstUnivLaws Sb} {B : Set} {Δ}
@@ -208,31 +213,31 @@ Module Type GenOccursCheckOn
     now apply suLT.
   Qed.
 
-  Class SubstUnivVar `{SubstUnivMeet Sb} :=
+  Class SubstUnivVar (Sb : LCtx -> LCtx -> Type) :=
     suVar : forall {x Σ} (xIn : x ∈ Σ), Sb [ x ]%ctx  Σ.
-  Arguments SubstUnivVar Sb {H} {H0}.
+  Arguments SubstUnivVar Sb.
 
-  Class SubstUnivVarUp `{SubstUnivVar Sb} :=
+  Class SubstUnivVarUp Sb `{SubstUnivVar Sb} :=
     upSU : forall {Σ1 Σ2 x}, Sb Σ1 Σ2 -> Sb (Σ1 ▻ x) (Σ2 ▻ x)
   .
-  Arguments SubstUnivVarUp Sb {H H0 H1}.
+  Arguments SubstUnivVarUp Sb {H}.
 
-  Class SubstUnivVarUpLaws `{SubstUnivVarUp Sb} : Prop :=
+  Class SubstUnivVarUpLaws `{SubstUniv Sb, SubstUnivVarUp Sb} : Prop :=
     upSU_sound : forall {Σ1 Σ2 x} (ζ : Sb Σ1 Σ2),
         interpSU (upSU (x := x) ζ) = sub_up1 (interpSU ζ)
   .
-  Arguments SubstUnivVarUpLaws Sb {H H0 H1 H2}.
+  Arguments SubstUnivVarUpLaws Sb {H H0 H1}.
   Class SubstUnivVarDown `{SubstUnivVar Sb} :=
     MkSubstUnivVarDown {
         wkVarSU : forall {Σ1 Σ2 x}, x ∈ Σ1 -> Sb Σ1 Σ2 -> x ∈ Σ2
       ; downSU : forall {Σ1 Σ2 x} (xIn : x ∈ Σ1) (σ : Sb Σ1 Σ2),
           let xIn' := wkVarSU xIn σ in Sb (Σ1 - x) (Σ2 - x)
       }.
-  Arguments SubstUnivVarDown Sb {H H0 H1}.
+  Arguments SubstUnivVarDown Sb {H}.
 
-  Class SubstUnivVarLaws `{SubstUnivVar Sb} : Prop :=
+  Class SubstUnivVarLaws `{SubstUniv Sb, SubstUnivVar Sb} : Prop :=
     suVarSound : forall `(xIn : x ∈ Σ), interpSU (suVar xIn) = [ term_var_in xIn ]%env.
-  Arguments SubstUnivVarLaws Sb {H} {H0} {H1}.
+  Arguments SubstUnivVarLaws Sb {H} {H0}.
 
   Record BoxSb Sb (T : LCtx -> Type) (Σ : LCtx) : Type :=
     MkBoxSb {
@@ -315,7 +320,7 @@ Module Type GenOccursCheckOn
     now rewrite <-(unboxSbLaws bvl1), <-(unboxSbLaws bvl2), fmono.
   Qed.
 
-  Program Definition weakenInit `{SubstUnivMeet Sb, SubstSULaws Sb T}
+  Program Definition weakenInit `{SubstSULaws Sb T}
     {Σ} (v : T [ctx]) : Weakened Sb T Σ :=
     MkWeakened initSU (boxSb v) _.
   Next Obligation.
@@ -379,12 +384,12 @@ Module Type GenOccursCheckOn
                              (fun _ _ _ _ _ => eq_refl)(oc ts) (gen_occurs_check t)
       end.
 
-  Lemma boxSbLaws_term_var `{SubstUnivMeet Sb, SubstUnivLaws Sb} {Σ x τ} (xIn : x∷τ ∈ Σ) : BoxSbLaws (boxSb (T := fun Σ => Term Σ τ) (term_var x)).
+  Lemma boxSbLaws_term_var `{SubstUniv Sb} {sSUM : SubstUnivMeet Sb} {sSUL : SubstUnivLaws Sb} {Σ x τ} (xIn : x∷τ ∈ Σ) : BoxSbLaws (boxSb (T := fun Σ => Term Σ τ) (term_var x)).
   Proof.
     constructor. intros. now rewrite substSU_trans.
   Qed.
 
-  #[export] Instance gen_occurs_check_term `{SubstUnivVar Sb, SubstUnivMeet Sb, SubstUnivLaws Sb} :
+  #[export] Instance gen_occurs_check_term `{SubstUniv Sb} {sSUM : SubstUnivMeet Sb} {sSUV : SubstUnivVar Sb} {sSUL : SubstUnivLaws Sb} :
     forall σ, GenOccursCheck (fun Σ => Term Σ σ) :=
     fix gen_occurs_check_term {τ Σ} (t : Term Σ τ) {struct t} :
       Weakened Sb (fun Σ => Term Σ τ) Σ :=
@@ -439,7 +444,7 @@ Module Type GenOccursCheckOn
     now rewrite IHt,?substSU_trans.
   Qed.
 
-  #[export] Instance gen_occurscheck_ctx `{sA : SubstSULaws Sb A} {ocA : GenOccursCheck A} :
+  #[export] Instance gen_occurscheck_ctx `{SubstSULaws Sb A} {sSUM : SubstUnivMeet Sb} {ocA : GenOccursCheck A} :
     GenOccursCheck (fun Σ => Ctx (A Σ)) :=
     fix oc {Σ} ys {struct ys} :=
       match ys with
@@ -457,7 +462,7 @@ Module Type GenOccursCheckOn
     R (unboxSb bv ζsupp) v -> WeakenedRefines R v (MkWeakened ζsupp bv bvL).
   Proof. intros HR. now constructor. Qed.
 
-  Lemma weakenInitRefines `{SubstSULaws Sb T} {Σ} R (v : T [ctx]) :
+  Lemma weakenInitRefines `{SubstSULaws Sb T} {sSUM : SubstUnivMeet Sb} {Σ} R (v : T [ctx]) :
     R (substSU v initSU) (substSU v initSU) ->
     WeakenedRefines R (substSU v initSU) (weakenInit (Σ := Σ) v).
   Proof.
@@ -534,12 +539,12 @@ Module Type GenOccursCheckOn
     eapply liftBinOp_weakenedRefines'; eassumption.
   Qed.
 
-  Class GenOccursCheckLaws `{SubstUnivMeet Sb, SubstUnivLaws Sb}
+  Class GenOccursCheckLaws `{SubstUnivMeet Sb} {sSUL : SubstUnivLaws Sb}
     (T : LCtx -> Type) (R : forall Σ, T Σ -> T Σ -> Prop) {sT : SubstSU Sb T}  {ocT : GenOccursCheck T} : Prop :=
     MkGenOccursCheckLaws {
        oc_sound : forall {Σ} (t : T Σ), WeakenedRefines (R _) t (gen_occurs_check t)
       }.
-  Arguments GenOccursCheckLaws {Sb} {H H0 H1 H2 H3} T R {sT ocT}.
+  Arguments GenOccursCheckLaws {Sb} {H H0 sSUL} T R {sT ocT}.
 
   (* Hm, I seem to need something stronger to prove completeness... *)
   (* Lemma oc_univ {Sb} {sSb : SubstUnivMeet Sb} *)
@@ -601,7 +606,7 @@ Module Type GenOccursCheckOn
       typeclasses eauto.
   Qed.
 
-  #[export,refine] Instance gen_occurs_check_laws_term `{SubstUnivVarLaws Sb} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} {τ} :
+  #[export,refine] Instance gen_occurs_check_laws_term `{SubstUnivLaws Sb, SubstUnivVar Sb} {_ : SubstUnivMeet Sb} {_ : SubstUnivVarLaws Sb} {_ : SubstUnivMeetLaws Sb} {τ} :
     GenOccursCheckLaws (fun Σ => Term Σ τ) (fun _ => eq) :=
     MkGenOccursCheckLaws _ _ _ _ _.
   Proof.
@@ -641,7 +646,7 @@ Module Type GenOccursCheckOn
     typeclasses eauto.
   Qed.
 
-  #[export] Instance gen_occurs_check_laws_sub `{SubstUnivVarLaws Sb} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} {Σ} :
+  #[export] Instance gen_occurs_check_laws_sub `{SubstUnivVarLaws Sb} {_ : SubstUnivMeet Sb} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} {Σ} :
     GenOccursCheckLaws (Sub Σ)  (fun _ => eq) := gen_occurs_check_laws_env (T := fun Σ b => Term Σ (type b)).
 
   (* #[export,refine] Instance gen_occurs_check_laws_pair `{SubstUnivMeet Sb, SubstLaws AT, SubstLaws BT} {_ : SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} *)
@@ -1219,6 +1224,10 @@ Module Type GenOccursCheckOn
     Qed.
 
   End Weakenings.
+
+  Section Substitutions.
+    #[export] Instance substUniv_Sub : SubstUniv Sub := MkSubstUniv Sub (fun _ => [env]) (fun Σ1 Σ2 Σ3 ζ1 ζ2 => subst ζ1 ζ2) (fun _ _ ζ => ζ).
+  End Substitutions.
 
 
   Section BackwardsCompat.

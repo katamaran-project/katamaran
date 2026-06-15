@@ -162,7 +162,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    #[export] Instance SubstSULawsDebugConsumeChunk `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+    #[export] Instance SubstSULawsDebugConsumeChunk `{SubstUnivLaws Sb} :
       SubstSULaws Sb DebugConsumeChunk.
     Proof.
       intros ? ? ? ? ? []; cbn; f_equal; apply substSU_trans.
@@ -228,7 +228,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    #[export] Instance SubstSULawsDebugReadRegister `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+    #[export] Instance SubstSULawsDebugReadRegister `{SubstUnivLaws Sb} :
       SubstSULaws Sb DebugReadRegister.
     Proof.
       intros ? ? ? ? ? []; cbn; f_equal; apply substSU_trans.
@@ -293,7 +293,7 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    #[export] Instance SubstSULawsDebugWriteRegister `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+    #[export] Instance SubstSULawsDebugWriteRegister `{SubstUnivLaws Sb} :
       SubstSULaws Sb DebugWriteRegister.
     Proof.
       intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.

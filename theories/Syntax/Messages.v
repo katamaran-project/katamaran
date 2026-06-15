@@ -77,7 +77,7 @@ Module Type MessagesOn
           rewrite ?sub_up1_comp; auto using subst_sub_comp.
     Qed.
 
-    #[export] Instance substsulaws_closemessage {M} {suM : SubstSU WeakensTo M} {sulM : SubstSULaws WeakensTo M} : SubstSULaws WeakensTo (CloseMessage M) (H := substSU_closemessage) | 2.
+    #[export] Instance substsulaws_closemessage {M} {suM : SubstSU WeakensTo M} {sulM : SubstSULaws WeakensTo M} : SubstSULaws WeakensTo (CloseMessage M) (H0 := substSU_closemessage) | 2.
     Proof.
       intros Σ1 Σ2 Σ3 ζ1 ζ2 t.
       destruct t; cbn; f_equal.

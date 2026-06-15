@@ -110,7 +110,7 @@ Module Type SymPropOn
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    #[export] Instance SubstSULawsMessage `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+    #[export] Instance SubstSULawsMessage `{SubstUnivLaws Sb} :
       SubstSULaws Sb Message.
     Proof.
       intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.

@@ -488,7 +488,7 @@ Section AnnotatedBlockVerification.
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    #[export] Instance SubstSULawsDebugBlockver `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+    #[export] Instance SubstSULawsDebugBlockver `{SubstUnivLaws Sb} :
       SubstSULaws Sb DebugBlockver.
     Proof.
       intros ? ? ? ? ? [pc h]; cbn; f_equal; now apply substSU_trans.

@@ -153,7 +153,7 @@ Module Type SymbolicExecOn
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    #[export] Instance SubstSULawsDebugCallLemma `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+    #[export] Instance SubstSULawsDebugCallLemma `{SubstUnivLaws Sb} :
       SubstSULaws Sb DebugCallLemma.
     Proof.
       intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.
@@ -201,7 +201,7 @@ Module Type SymbolicExecOn
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    #[export] Instance SubstSULawsDebugCall `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+    #[export] Instance SubstSULawsDebugCall `{SubstUnivLaws Sb} :
       SubstSULaws Sb DebugCall.
     Proof.
       intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.
@@ -272,7 +272,7 @@ Module Type SymbolicExecOn
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    #[export] Instance SubstSULawsDebugStm `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+    #[export] Instance SubstSULawsDebugStm `{SubstUnivLaws Sb} :
       SubstSULaws Sb DebugStm.
     Proof.
       intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.
@@ -347,7 +347,7 @@ Module Type SymbolicExecOn
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    #[export] Instance SubstSULawsErrorNoFuel `{SubstUnivLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+    #[export] Instance SubstSULawsErrorNoFuel `{SubstUnivLaws Sb} :
       SubstSULaws Sb ErrorNoFuel.
     Proof.
       intros ? ? ? ? ? []; cbn; f_equal; now apply substSU_trans.

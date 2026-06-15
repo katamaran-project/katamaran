@@ -249,7 +249,8 @@ Module Type FormulasOn
   #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.
   Proof. occurs_check_derive. Qed.
 
-  #[export] Instance GenOccursCheckFormula `{SubstUnivVar Sb, SubstUnivMeet Sb, SubstUnivLaws Sb}: GenOccursCheck (Sb := Sb) Formula :=
+  #[export] Instance GenOccursCheckFormula `{SubstUniv Sb} {_ : SubstUnivVar Sb} {_ : SubstUnivMeet Sb} {_ : SubstUnivLaws Sb} :
+    GenOccursCheck (Sb := Sb) Formula :=
     fix oc {Σ} fml {struct fml} :=
       match fml with
       | formula_user p ts      => liftUnOp (fun _ => formula_user p) (fun _ _ _ _ => eq_refl) (gen_occurs_check ts)
@@ -262,7 +263,7 @@ Module Type FormulasOn
       | formula_or F1 F2       => liftBinOp (fun _ F1' F2' => formula_or F1' F2') (fun _ _ _ _ _ => eq_refl) (oc F1) (oc F2)
       end.
 
-  #[export] Instance GenOccursCheckLawsFormula `{SubstUnivVar Sb}
+  #[export] Instance GenOccursCheckLawsFormula `{SubstUniv Sb} {_ : SubstUnivMeet Sb} {_ : SubstUnivVar Sb}
     {_ : SubstUnivLaws Sb} {_ : SubstUnivVarLaws Sb} {_ : SubstUnivMeetLaws Sb} :
       GenOccursCheckLaws (Sb := Sb) Formula (fun _ => eq).
   Proof.
