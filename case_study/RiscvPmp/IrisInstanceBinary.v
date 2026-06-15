@@ -111,13 +111,18 @@ Module RiscvPmpIrisInstancePredicates2.
       @interp_ptstomem_readonly _ memGS2_memGS_left _ _ addr b ∗
       @interp_ptstomem_readonly _ memGS2_memGS_right _ _ addr b.
 
+    Definition filter_adv_observable (t : Trace) : Trace :=
+      List.filter (λ e, negb (bv.eqb (event_addr e) write_addr))%bv t.
+
+    (* TODO: add the above filter for mmio_pred. Important lemma, any valid
+             mmio_pred without the filter, implies one with the filter. The
+             non-filtered one is stronger, since it also says something about
+             secret MMIO events (unary version). *)
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
     Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
-      inv femto_inv_mmio_ns (∃ t__l t__r,
-          (@tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_left) (@trace_name _ _ memGS2_gtGS2_left) t__l)
-          ∗ (@tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_right) (@trace_name _ _ memGS2_gtGS2_right) t__r)
-          ∗ ⌜mmio_pred width t__l⌝
-          ∗ ⌜mmio_pred width t__r⌝).
+      inv femto_inv_mmio_ns (
+          (∃ t__l, @tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_left) (@trace_name _ _ memGS2_gtGS2_left) t__l ∗ ⌜mmio_pred bytes_per_word t__l⌝)
+          ∗ (∃ t__r, @tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_right) (@trace_name _ _ memGS2_gtGS2_right) t__r ∗ ⌜mmio_pred bytes_per_word t__r⌝)).
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
