@@ -1628,16 +1628,13 @@ Module inv := invariants.
       ∗ @ptsto_instrs_handler _ sailGS2_sailGS_right.
 
     Definition femtokernel_safe_shared_pre2 `{sailGS2 Σ} (addr : N) (b : Block) : iProp Σ :=
-      @femtokernel_safe_shared_pre _ sailGS2_sailGS_left addr b
-      ∗ @femtokernel_safe_shared_pre _ sailGS2_sailGS_right addr b.
-
-    Definition asn_iprop_pre2 `{sailGS2 Σ} {Γ} (asn : Assertion (Σ__csrs ▻▻ Γ ▻▻ ["a" :: ty_xlenbits])) (csrs : CSRVals) (ι : Valuation Γ) (addr : Val ty_xlenbits) : iProp Σ :=
-      @asn_iprop_pre _ sailGS2_sailGS_left _ asn csrs ι addr
-      ∗ @asn_iprop_pre _ sailGS2_sailGS_right _ asn csrs ι addr.
+      exec_instructions_prologue (bv.of_N addr) (filter_AST b) ∗
+        (∃ v, mscratch ↦ᵣ v) ∗
+        interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries User. (* Not needed for handler, but required for the rest of execution *)
 
     Lemma femtokernel_handler_exit_safe_rel `{sailGS2 Σ} (csrs : CSRVals) :
       ⊢ femtokernel_safe_shared_pre2 handler_exit_addr femtokernel_handler_exit ∗
-        @asn_iprop_pre2 _ _ ctx.nil femtokernel_handler_exit_pre csrs env.nil (bv.of_N handler_exit_addr) ∗
+        asn.interpret femtokernel_handler_exit_pre (CSRVals_Valuation csrs).["a" ∷ ty_xlenbits ↦ bv.of_N handler_exit_addr] ∗
         interp_gprs ∅ ∗
         ▷ (ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
            LoopVerificationBinary.Trap User (bv.of_N handler_entry_addr) femto_pmpentries -∗ WP2_loop)
@@ -1647,7 +1644,7 @@ Module inv := invariants.
 
     Lemma femtokernel_handler_write_safe_rel `{sailGS2 Σ} (vx5 : Val ty_xlenbits) (csrs : CSRVals) :
       ⊢ femtokernel_safe_shared_pre2 handler_write_addr femtokernel_handler_write ∗
-        asn_iprop_pre2 femtokernel_handler_write_pre csrs env.nil.["x5" ∷ ty_xlenbits ↦ vx5] (bv.of_N handler_write_addr) ∗
+        asn.interpret femtokernel_handler_write_pre (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ vx5].["a" ∷ ty_xlenbits ↦ bv.of_N handler_write_addr] ∗
         interp_gprs {[x5]} ∗
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
         ▷ (ptsto_instrs (bv.of_N handler_write_addr) (filter_AST femtokernel_handler_write) -∗
@@ -1659,7 +1656,7 @@ Module inv := invariants.
 
     Lemma femtokernel_handler_secret_write_safe_rel `{sailGS2 Σ} (vx1 secret1 secret2 : Val ty_xlenbits) (csrs : CSRVals) :
       ⊢ femtokernel_safe_shared_pre2 handler_secret_write_addr femtokernel_handler_secret_write ∗
-        asn_iprop_pre2 femtokernel_handler_secret_write_pre csrs env.nil.["x1" ∷ ty_xlenbits ↦ vx1].["secret" ∷ ty_xlenbits ↦ secret1] (bv.of_N handler_secret_write_addr) ∗
+        asn.interpret femtokernel_handler_secret_write_pre_rel (CSRVals_Valuation csrs).["x1" ∷ ty_xlenbits ↦ vx1].["a" ∷ ty_xlenbits ↦ bv.of_N handler_secret_write_addr] ∗
         interp_gprs {[x1]} ∗
         interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 ∗
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
@@ -1673,7 +1670,7 @@ Module inv := invariants.
 
     Lemma femtokernel_handler_entry_safe_rel `{sailGS2 Σ} (x5_val x10_val : Val ty_xlenbits) (csrs : CSRVals) :
       ⊢ femtokernel_safe_shared_pre2 handler_entry_addr femtokernel_handler_entry ∗
-        asn_iprop_pre2 femtokernel_handler_entry_pre csrs env.nil.["x5" ∷ ty_xlenbits ↦ x5_val].["x10" ∷ ty_xlenbits ↦ x10_val] (bv.of_N handler_entry_addr) ∗
+        asn.interpret femtokernel_handler_entry_pre (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5_val].["x10" ∷ ty_xlenbits ↦ x10_val].["a" ∷ ty_xlenbits ↦ bv.of_N handler_secret_write_addr] ∗
         interp_gprs {[ x1; x5; x10 ]} ∗
         (∃ v, x1 ↦ᵣ v) ∗
         (∃ (v1 v2 : Val ty_xlenbits), interp_ptstomem2 (bv.of_N data_addr) v1 v2) ∗
