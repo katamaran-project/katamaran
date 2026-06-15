@@ -435,22 +435,8 @@ Module inv := invariants.
         cur_privilege ↦ term_val ty_privilege Machine ∗
         asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block0)))) ∗ (* Different handler sizes cause different entries *)
         (∃ "s", ∃ "sv",  (
-          (asn.or
-            (
-              term_unop (uop.bvdrop 31) (term_var "cause") = term_val (ty.bvec _) bv.zero
-            (* term_binop bop.shiftr (term_var "cause") (term_val ty_xlenbits (bv.of_N 31)) = term_val (ty.bvec _) bv.zero *)
-            (* term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N 31)) = term_val (ty.bvec _) bv.zero *)
-            (* term_unop (uop.bvtake iostate_bits) (term_var "sv") = term_var "s" ∗ *)
-            )
-            (
-              term_unop (uop.bvdrop 31) (term_var "cause") = term_val (ty.bvec _) bv.one
-              (* term_binop bop.shiftr (term_var "cause") (term_val ty_xlenbits (bv.of_N 31)) = term_val (ty.bvec _) bv.one *)
-              (* term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N 31)) = term_val (ty.bvec _) (bv.of_N 31) *)
-              (* asn_mmio_read_valid (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "s") *)
-            )
-          ) ∗
-            (* term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size) ↦ₘ (term_var "sv") ∗ *)
-             term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
+          term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
+          term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" ∗ (* statevalue corresponds to ghost state *)
           asn_mmio_state_pred (term_var "s")
         )) ∗
         asn_mmio_trace_state_inv
@@ -472,23 +458,13 @@ Module inv := invariants.
         asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block0)))) ∗ (* Different handler sizes cause different entries *)
         (∃ "s", ∃ "sv", (
           (asn.or
-             (
-               (* term_unop (uop.bvdrop 31) (term_var "cause") = term_val (ty.bvec _) bv.zero ∗ *)
-               (* term_binop bop.shiftr (term_var "cause") (term_val ty_xlenbits (bv.of_N 31)) = term_val (ty.bvec _) bv.zero ∗ *)
-               term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N  0x80000000)) = term_val (ty.bvec _) bv.zero ∗
-              (* term_unop (uop.bvtake iostate_bits) (term_var "sv") = term_var "s" ∗ *)
-              term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block2)
-            )
-             (
-               (* term_unop (uop.bvdrop 31) (term_var "cause") = term_val (ty.bvec _) bv.one ∗ *)
-              (* term_binop bop.shiftr (term_var "cause") (term_val ty_xlenbits (bv.of_N 31)) = term_val (ty.bvec _) bv.one ∗ *)
-               term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N 0x80000000)) = term_val (ty.bvec _) (bv.of_N  0x80000000) ∗
-              (* asn_mmio_read_valid (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "s") ∗ *)
-              term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block1)
-            )
+             (term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N  0x80000000)) = term_val (ty.bvec _) bv.zero ∗
+              term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block2))
+             (term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N 0x80000000)) = term_val (ty.bvec _) (bv.of_N  0x80000000) ∗
+              term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block1))
           ) ∗
-          (* term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_size) ↦ₘ (term_var "sv") ∗ *)
           term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
+          term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" ∗ (* statevalue corresponds to ghost state *)
           asn_mmio_state_pred (term_var "s")
         )) ∗
         asn_mmio_trace_state_inv
@@ -510,7 +486,7 @@ Module inv := invariants.
     (∃ "s", ∃ "sv", (
       asn_mmio_state_pred (term_var "s") ∗
       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
-      term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" ∗ (* statevalue corresponds to new ghost state *)
+      term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" ∗ (* statevalue corresponds to ghost state *)
       asn_mmio_read_valid (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "s")
     )) ∗
     asn_mmio_trace_state_inv.
@@ -531,13 +507,12 @@ Module inv := invariants.
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
     (∃ "s", ∃ "s'", ∃ "sv", (
       asn_mmio_state_pred (term_var "s") ∗
-        (∃ "w", asn_mmio_event (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "w") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'")) ∗
+      (∃ "w", asn_mmio_event (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "w") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'")) ∗
       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
       term_unop (uop.bvtake 1) (term_var "sv") = term_var "s'" (* statevalue corresponds to new ghost state *)
     )) ∗
     asn_mmio_trace_state_inv.
 
-    (* fdu *)
   Example femtokernel_handler_pre_block2 : Assertion ["a" :: ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block2)) ∗
     (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - mmio_handler_addr_block0)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
@@ -622,13 +597,13 @@ Module inv := invariants.
   Proof.
     vm_compute. constructor. cbn. intros.
     repeat split; intros; auto.
-    1, 2:  destruct (@bv.appView 31 1 v2);
+     destruct (@bv.appView 31 1 v0);
       change (bv.mk 0x80000000 _) with (@bv.app 31 1 bv.zero bv.one) in *;
       rewrite (@bv.land_app 31 1 _ bv.zero _ bv.one);
       rewrite bv.land_zero_r; rewrite bv.land_ones_r;
       destruct (bv.view ys); destruct (bv.view xs0); destruct b; auto;
-      simpl in H1; rewrite (@bv.land_app 31 1 _ bv.zero _ bv.one) in H1;
-      rewrite bv.land_zero_r in H1; rewrite bv.land_zero_l in H1;
+      simpl in H; rewrite (@bv.land_app 31 1 _ bv.zero _ bv.one) in H;
+      rewrite bv.land_zero_r in H; rewrite bv.land_zero_l in H;
       contradiction.
   Qed.
 
@@ -726,7 +701,6 @@ Module inv := invariants.
     exists (bv.take 1 v0). split. apply IOW__sme; auto.
     right. right. exists v2. split; auto.
     eapply IOR__intr; eauto.
-
 
     inversion H0; subst; try inversion H1; try contradiction H2; auto.
     cbn [event_contents event_nbbytes event_type event_addr] in *.
@@ -1036,10 +1010,8 @@ Module inv := invariants.
         iFrame.
         iDestruct "Hpred" as "(%v & %v0 & Hpred & Hmem & [%Htake _])".
         iExists v, v0. iFrame. subst.
-        destruct (bv.view (bv.drop 31 mc)). destruct (bv.view xs). destruct b; simpl.
-        - iRight. iPureIntro. split; auto.
-        - iLeft. iPureIntro. split; auto. }
-              (* Prove that the adversary cannot MRET. *)
+        iPureIntro; split; auto. }
+      (* Prove that the adversary cannot MRET. *)
       { iModIntro.
         unfold LoopVerification.Recover.
         iIntros "(_ & _ & _ & %eq & _)".
@@ -1099,11 +1071,22 @@ Module inv := invariants.
         rewrite <- gprs_equiv. iFrame.
         iFrame.
 
-        iDestruct "Hpred" as "(%v & %v0 & %v1 & Hpred & Hprot & Hmem & [%Htake _])".
-        iExists v, v1. subst. iFrame. subst.
-        destruct (bv.view (bv.drop 31 mc)). destruct (bv.view xs). destruct b; simpl.
-        - iRight. iPureIntro. split; auto.
-        - iLeft. iPureIntro. split; auto.
+        iDestruct "Hpred" as "(%v & %v0 & %v1 & Hpred & (%v2 & [%Hprot _]) & Hmem & [%Htake _])".
+
+        inversion Hprot; subst; simpl in *; try contradiction; try inversion H1. iFrame. iPureIntro; auto.
+         {
+            unfold mmio_interrupt_w2s in *.
+            destruct (bv.view v1), ( bv.view v2), (bv.view v).
+            destruct (bv.view xs1). simpl.
+            change (bv.of_N 24) with (bv.cons false (bv.cons false (bv.cons false (bv.cons true (@bv.cons 27 true (bv.zero)))))) in H4.
+            rewrite bv.take_cons in H4.
+            rewrite bv.take_cons. simpl.
+            destruct (bv.view xs0). destruct (bv.view xs0). destruct (bv.view xs0). destruct (bv.view xs0).
+            repeat rewrite bv.land_cons in H4. repeat rewrite !andb_false_r in H4.
+            rewrite !andb_true_r in H4. rewrite bv.land_zero_r in H4. simpl in H4.
+            destruct b, b0, b1, b2, b3, b4, b5; simpl in *; try inversion H4; auto.
+            1 - 24: admit.
+          }
       }
       (* Prove that the adversary cannot MRET. *)
       { iModIntro.
@@ -1115,11 +1098,11 @@ Module inv := invariants.
     (* Prove that we can derive safety from the universal contract's post condition.  *)
     unfold WP_loop.
     iApply (semWP_mono with "H"). auto.
-  Qed.
+  Abort.
 
   Lemma femtokernel_handler_safe_block0 `{sailGS Σ, iostateG IOState Σ} a :
     ⊢ femtoKernelAssumptions a ∗ femto_handler_pre a -∗
-                                                        WP_loop.
+      WP_loop.
   Proof.
     iLöb as "Hind".
     iIntros "(Hfemto & Hpre)".
@@ -1132,7 +1115,7 @@ Module inv := invariants.
     cbn - [femto_handler_pre].
     iDestruct "Hpost0" as (v) "(_ & _ & Hmstatus & Hmie & Hmip & Hmscratch & Hmtvec & Hmcause & Hmepc & Hgprs & Hcurpriv & Hpmpentries & Hpred)".
     (* We destruct over the two cases interrupt / access fault *)
-    iDestruct "Hpred" as "((%v0 & %v1 & [HpredL | HpredR] & Hptsto & Hpred)& #Hinv)".
+    iDestruct "Hpred" as "((%v0 & %v1 & [HpredL | HpredR] & Hptsto & Hcause & Hpred)& #Hinv)".
     - (* Access fault i.e. we decide whether to write the value in an or 0 depending on last known state in data. *)
       iApply (femtokernel_handler_safe_block2 with "[]").
       + iExact "Hind".
@@ -1142,8 +1125,7 @@ Module inv := invariants.
         iDestruct "HpredL" as "([%Hcause _] & [%Han _])".
         subst.
         iSplitR; auto. iSplitR; auto.
-        iFrame "Hmstatus Hmie Hmip Hmscratch Hmtvec Hmcause Hmepc Hgprs Hcurpriv Hpmpentries Hinv Hptsto Hpred".
-        admit. (* fdu: follows from mmio behavior *)
+        iFrame "Hmstatus Hmie Hmip Hmscratch Hmtvec Hmcause Hmepc Hgprs Hcurpriv Hpmpentries Hinv Hptsto Hcause Hpred".
     - (* Case interrupt i.e. we fetch the new state from mmio and store it to data. *)
       iApply (femtokernel_handler_safe_block1 with "[]").
       + iExact "Hind".
@@ -1154,9 +1136,9 @@ Module inv := invariants.
         cbn - [femto_handler_pre].
         subst.
         iSplitR; auto. iSplitR; auto.
-        iFrame "Hmstatus Hmie Hmip Hmscratch Hmtvec Hmcause Hmepc Hgprs Hcurpriv Hpmpentries Hinv Hptsto Hpred".
-        auto. (* fdu: follows from mmio behavior *)
-  Admitted.
+        iFrame "Hmstatus Hmie Hmip Hmscratch Hmtvec Hmcause Hmepc Hgprs Hcurpriv Hpmpentries Hinv Hptsto Hcause Hpred".
+        iPureIntro; unfold Mmio_read_valid; split; auto.
+  Qed.
 
   (* TODO: this lemma feels very incremental wrt to the last one; merge? *)
   Lemma femtokernel_manualStep2 `{sailGS Σ, iostateG IOState Σ} :
@@ -1206,9 +1188,7 @@ Module inv := invariants.
       iSplitR. iSplit; auto.
       rewrite <- gprs_equiv. cbn.
       iFrame "Hmstatus Hmie Hmip Hmscratch Hmtvec Hmcause Hmepc Hgprs Hcurpriv Hpmpentries Hinv".
-      iDestruct "Hpred" as (v v0) "(Hpred & Hptsto & Htake)". iFrame. destruct (bv.view (bv.drop 31 mc)). destruct (bv.view xs). destruct b.
-      - iRight. iPureIntro. split; auto.
-      - iLeft. iPureIntro. split; auto.
+      iDestruct "Hpred" as (v v0) "(Hpred & Hptsto & Htake)". iFrame.
     }
     {
       iModIntro.
