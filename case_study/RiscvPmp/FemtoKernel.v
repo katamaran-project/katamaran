@@ -1569,6 +1569,11 @@ Module inv := invariants.
       femto_inv_mmio ∗ asn.interpret femtokernel_handler_entry_pre Σ.
     Admitted.
 
+    Lemma femto_inv_mmio_split `{sailGS2 Σ} :
+      femto_inv_mmio -∗
+      @FemtoKernel.femto_inv_mmio _ sailGS2_sailGS_left
+      ∗ @FemtoKernel.femto_inv_mmio _ sailGS2_sailGS_right.
+    Proof. iApply inv.inv_split. Qed.
     Lemma femtokernel_init_pre_binary_split `{sailGS2 Σ} (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["a" ∷ ty_xlenbits ↦ bv.of_N init_addr] in
       asn.interpret femtokernel_init_pre Σ -∗
@@ -1651,27 +1656,6 @@ Module inv := invariants.
         -∗
         WP2_loop.
     Admitted.
-
-    Section WithAssertionNotations.
-      Import asn.notations.
-      Import TermNotations.
-      Import bv.notations.
-
-      (* We define _rel analogues of the non _rel version for the secret_write pre and post.
-         The difference is that we omit the data ↦ secret, since we will have two different secrets. *)
-      Example femtokernel_handler_secret_write_pre_rel : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
-        asn.sub_assertion (femtokernel_handler_shared_pre handler_secret_write_addr) (sub_up1 (sub_cat_left _)) ∗
-        (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
-        x1 ↦ term_var "x1".
-
-      Example femtokernel_handler_secret_write_post_rel :
-        Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
-        asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
-        (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
-        term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_secret_write_size) ∗
-        x1 ↦ term_val ty_xlenbits bv.zero.
-
-    End WithAssertionNotations.
 
     Lemma femtokernel_handler_secret_write_safe_rel `{sailGS2 Σ} (vx1 secret1 secret2 : Val ty_xlenbits) (csrs : CSRVals) :
       ⊢ femtokernel_safe_shared_pre2 handler_secret_write_addr femtokernel_handler_secret_write ∗
@@ -1911,7 +1895,7 @@ Module inv := invariants.
         iExists γ2', μ2', δ2', s2'.
         iDestruct "Hmem" as "[(%memmap1 & Hinv1 & %link1 & Htr1)
                               (%memmap2 & Hinv2 & %link2 & Htr2)]".
-        iInv "Hmmio" as ">(%t1 & %t2 & Hfrag1 & Hfrag2 & Hpred1 & Hpred2)" "_".
+        iInv "Hmmio" as ">((%t1 & Hfrag1 & Hpred1) & (%t2 & Hfrag2 & Hpred2))" "_".
         iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
         iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
         iApply fupd_mask_intro; first set_solver.
