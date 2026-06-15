@@ -1541,6 +1541,27 @@ Module inv := invariants.
       (@RiscvPmpIrisInstancePredicates.interp_ptstomem _ memGS2_memGS_left width addr v__l
        ∗ @RiscvPmpIrisInstancePredicates.interp_ptstomem _ memGS2_memGS_right width addr v__r)%I.
 
+    Section WithAssertionNotations.
+      Import asn.notations.
+      Import TermNotations.
+      Import bv.notations.
+
+      (* We define _rel analogues of the non _rel version for the secret_write pre and post.
+         The difference is that we omit the data ↦ secret, since we will have two different secrets. *)
+      Example femtokernel_handler_secret_write_pre_rel : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+        asn.sub_assertion (femtokernel_handler_shared_pre handler_secret_write_addr) (sub_up1 (sub_cat_left _)) ∗
+        (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+        x1 ↦ term_var "x1".
+
+      Example femtokernel_handler_secret_write_post_rel :
+        Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
+        asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
+        (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+        term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_secret_write_size) ∗
+        x1 ↦ term_val ty_xlenbits bv.zero.
+
+    End WithAssertionNotations.
+
     Lemma femtokernel_handler_pre_persistent_preds `{sailGS2 Σ} (x5 x10 : Val ty_xlenbits) (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5].["x10" ∷ ty_xlenbits ↦ x10].["a" ∷ ty_xlenbits ↦ bv.of_N handler_entry_addr] in
       asn.interpret femtokernel_handler_entry_pre Σ -∗
