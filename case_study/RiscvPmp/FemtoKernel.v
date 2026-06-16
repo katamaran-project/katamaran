@@ -1723,7 +1723,35 @@ Module inv := invariants.
            LoopVerificationBinary.Trap User (bv.of_N handler_entry_addr) femto_pmpentries -∗ WP2_loop)
         -∗
         WP2_loop.
-    Admitted.
+    Proof.
+      iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Htrap)".
+      iApply (WP2_loop_semTripleBlock (λ a, asn.interpret femtokernel_handler_exit_pre _) _ _
+                (λ a na, asn.interpret femtokernel_handler_exit_post _)
+               with "Hpro Hpre []").
+      - iIntros "Hpre".
+        iPoseProof (femtokernel_handler_exit_pre_binary_split with "Hpre")
+          as "(Hpre1 & Hpre2)".
+        iPoseProof (@contract_femtohandler_exit_verified _ sailGS2_sailGS_left (bv.of_N handler_exit_addr) csrs with "Hpre1") as "H1".
+        iPoseProof (@contract_femtohandler_exit_verified _ sailGS2_sailGS_right (bv.of_N handler_exit_addr) csrs with "Hpre2") as "H2".
+        iApply (step_n_focus with "H1 H2").
+        iIntros (na1 na2) "(H1 & H2)".
+        iApply (femtokernel_handler_exit_post_binary_combine with "H1 H2").
+      - iIntros (an) "(Hpost & Hepi)".
+        iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
+        iSpecialize ("Htrap" with "[Hinstrs]"); first by iModIntro.
+        iPoseProof (LoopVerificationBinary.valid_semTriple_loop with "[-]") as "Hk".
+        + iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _])"; cbn in *.
+          iFrame "Hpc Hnpc Hmstatus HaccU Hgprs Hmscratch Htrap".
+          iSplitL "Hshared";
+            first by repeat iDestruct "Hshared" as "($ & Hshared)".
+          repeat iSplitL; iModIntro;
+            unfold LoopVerification.CSRMod, LoopVerification.Recover.
+          * iIntros "(? & ? & ? & ? & %eq & ?)".
+            inversion eq.
+          * iIntros "[% (_ & _ & _ & _ & _ & %eq & H)]".
+            inversion eq.
+        + iApply (semWP2_mono with "Hk"); iIntros; destruct_seps; auto.
+    Qed.
 
     Lemma femtokernel_handler_write_safe_rel `{sailGS2 Σ} (vx5 : Val ty_xlenbits) (csrs : CSRVals) :
       ⊢ femtokernel_safe_shared_pre2 handler_write_addr femtokernel_handler_write ∗
@@ -1735,7 +1763,37 @@ Module inv := invariants.
            LoopVerificationBinary.Trap User (bv.of_N handler_entry_addr) femto_pmpentries -∗ WP2_loop)
         -∗
         WP2_loop.
-    Admitted.
+    Proof.
+      iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hhexit & Htrap)".
+      iPoseProof (femtokernel_handler_write_pre_persistent_preds with "Hpre")
+                   as "(#Hinv & Hpre)".
+      iApply (WP2_loop_semTripleBlock (λ a, asn.interpret femtokernel_handler_write_pre _) _ _
+                (λ a na, asn.interpret femtokernel_handler_write_post _)
+               with "Hpro Hpre []").
+      - iIntros "Hpre".
+        iPoseProof (femtokernel_handler_write_pre_binary_split with "Hpre")
+          as "(Hpre1 & Hpre2)".
+        iPoseProof (@contract_femtohandler_write_verified _ sailGS2_sailGS_left vx5 (bv.of_N handler_write_addr) csrs with "Hpre1") as "H1".
+        iPoseProof (@contract_femtohandler_write_verified _ sailGS2_sailGS_right vx5 (bv.of_N handler_write_addr) csrs with "Hpre2") as "H2".
+        iApply (step_n_focus with "H1 H2").
+        iIntros (na1 na2) "(H1 & H2)".
+        iApply (femtokernel_handler_write_post_binary_combine with "H1 H2").
+      - iIntros (an) "(Hpost & Hepi)".
+        iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
+        iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _] & Hx5)"; cbn in *.
+        iAssert (interp_gprs ∅) with "[Hgprs Hx5]" as "Hgprs".
+        { iApply (interp_gprs_with_excluded (exclude := {[x5]}));
+            try solve_subseteq.
+          iFrame "Hgprs".
+          reduce_big_sepS_big_sepL.
+          now iFrame "Hx5". }
+        iApply femtokernel_handler_exit_safe_rel.
+        rewrite Han.
+        iSpecialize ("Htrap" with "[Hinstrs]"); first by iModIntro.
+        iFrame "Hpc Hhexit Hnpc Hmscratch HaccU Hmstatus Hgprs Htrap Hinv"; cbn.
+        repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+        now iPureIntro.
+    Qed.
 
     Lemma femtokernel_handler_secret_write_safe_rel `{sailGS2 Σ} (vx1 secret1 secret2 : Val ty_xlenbits) (csrs : CSRVals) :
       ⊢ femtokernel_safe_shared_pre2 handler_secret_write_addr femtokernel_handler_secret_write ∗
@@ -1749,11 +1807,42 @@ Module inv := invariants.
            LoopVerificationBinary.Trap User (bv.of_N handler_entry_addr) femto_pmpentries -∗ WP2_loop)
         -∗
         WP2_loop.
-    Admitted.
+    Proof.
+      iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hdata & Hhexit & Htrap)".
+      iPoseProof (femtokernel_handler_secret_write_pre_persistent_preds with "Hpre")
+                   as "(#Hinv & Hpre)".
+      iApply (WP2_loop_semTripleBlock (λ a, asn.interpret femtokernel_handler_secret_write_pre_rel _) _ _
+                (λ a na, asn.interpret femtokernel_handler_secret_write_post_rel _
+                         ∗ interp_ptstomem2 (bv.of_N data_addr) secret1 secret2)%I
+               with "Hpro Hpre [Hdata]").
+      - iIntros "Hpre".
+        iPoseProof (femtokernel_handler_secret_write_pre_binary_split with "[$Hpre $Hdata]")
+          as "(Hpre1 & Hpre2)".
+        iPoseProof (@contract_femtohandler_secret_write_verified _ sailGS2_sailGS_left vx1 secret1 (bv.of_N handler_secret_write_addr) csrs with "Hpre1") as "H1".
+        iPoseProof (@contract_femtohandler_secret_write_verified _ sailGS2_sailGS_right vx1 secret2 (bv.of_N handler_secret_write_addr) csrs with "Hpre2") as "H2".
+        iApply (step_n_focus with "H1 H2").
+        iIntros (na1 na2) "(H1 & H2)".
+        iApply (femtokernel_handler_secret_write_post_binary_combine with "H1 H2").
+      - iIntros (an) "(Hpost & Hepi)".
+        iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
+        iDestruct "Hpost" as "((Hshared & Hmstatus & [%Han _] & Hx1) & Hdata)"; cbn - [interp_ptstomem] in *.
+        iAssert (interp_gprs ∅) with "[Hgprs Hx1]" as "Hgprs".
+        { iApply (interp_gprs_with_excluded (exclude := {[x1]}));
+            try solve_subseteq.
+          iFrame "Hgprs".
+          reduce_big_sepS_big_sepL.
+          now iFrame "Hx1". }
+        iApply femtokernel_handler_exit_safe_rel.
+        rewrite Han.
+        iSpecialize ("Htrap" with "[Hinstrs] [Hdata]"); try by iModIntro.
+        iFrame "Hpc Hhexit Hnpc Hmscratch HaccU Hmstatus Hgprs Htrap Hinv"; cbn - [interp_ptstomem].
+        repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+        now iPureIntro.
+    Qed.
 
     Lemma femtokernel_handler_entry_safe_rel `{sailGS2 Σ} (x5_val x10_val : Val ty_xlenbits) (csrs : CSRVals) :
       ⊢ femtokernel_safe_shared_pre2 handler_entry_addr femtokernel_handler_entry ∗
-        asn.interpret femtokernel_handler_entry_pre (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5_val].["x10" ∷ ty_xlenbits ↦ x10_val].["a" ∷ ty_xlenbits ↦ bv.of_N handler_secret_write_addr] ∗
+        asn.interpret femtokernel_handler_entry_pre (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5_val].["x10" ∷ ty_xlenbits ↦ x10_val].["a" ∷ ty_xlenbits ↦ bv.of_N handler_entry_addr] ∗
         interp_gprs {[ x1; x5; x10 ]} ∗
         (∃ v, x1 ↦ᵣ v) ∗
         (∃ (v1 v2 : Val ty_xlenbits), interp_ptstomem2 (bv.of_N data_addr) v1 v2) ∗
@@ -1762,7 +1851,94 @@ Module inv := invariants.
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit)
         -∗
         WP2_loop.
-    Admitted.
+    Proof.
+      revert x5_val x10_val csrs.
+      iLöb as "IH".
+      iIntros (x5_val x10_val csrs) "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hx1 & Hdata & Hhwrite & Hhsecret & Hhexit)".
+      iPoseProof (femtokernel_handler_entry_pre_persistent_preds with "Hpre")
+                   as "(#Hinv & Hpre)".
+      iApply (WP2_loop_semTripleBlock (λ a, asn.interpret femtokernel_handler_entry_pre _) _ _
+                (λ a na, asn.interpret femtokernel_handler_entry_post _)
+               with "Hpro Hpre []").
+      - iIntros "Hpre".
+        iPoseProof (femtokernel_handler_entry_pre_binary_split with "Hpre")
+          as "(Hpre1 & Hpre2)".
+        iPoseProof (@contract_femtohandler_entry_verified _ sailGS2_sailGS_left x5_val x10_val (bv.of_N handler_entry_addr) csrs with "Hpre1") as "H1".
+        iPoseProof (@contract_femtohandler_entry_verified _ sailGS2_sailGS_right x5_val x10_val (bv.of_N handler_entry_addr) csrs with "Hpre2") as "H2".
+        iApply (step_n_focus with "H1 H2").
+        iIntros (na1 na2) "(H1 & H2)".
+        iApply (femtokernel_handler_entry_post_binary_combine with "H1 H2").
+      - iIntros (an) "(Hpost & Hepi)".
+        iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
+        iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
+        iAssert (interp_gprs {[ x1; x5 ]}) with "[Hgprs Hx10]" as "Hgprs".
+        { iApply (interp_gprs_with_excluded_gen {[x1; x5]} (exclude2 := {[x10]}));
+            try solve_subseteq.
+          iFrame "Hgprs".
+          reduce_big_sepS_big_sepL.
+          now iFrame "Hx10". }
+        case_match; cbn - [interp_ptstomem];
+          iDestruct "Han" as "[-> _]".
+      (* TODO: these two cases have almost the exact same proof script,
+             only difference is in which lemma to apply (write <> secret_write),
+             and how some framing introducing is done w.r.t. the ptsto_instrs (Hhsecret and Hhwrite) *)
+        + iApply femtokernel_handler_write_safe_rel; cbn - [interp_ptstomem].
+          iFrame "Hpc Hnpc Hhwrite Hmscratch HaccU".
+          repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+          iAssert (interp_gprs {[ x5 ]}) with "[Hgprs Hx1]" as "Hgprs".
+          { iApply (interp_gprs_with_excluded_gen {[x5]} (exclude2 := {[x1]}));
+              try solve_subseteq.
+            iFrame "Hgprs".
+            reduce_big_sepS_big_sepL.
+            now iFrame "Hx1". }
+          iFrame "Hx5 Hgprs Hmstatus Hhexit Hinv".
+          repeat iSplitR; auto.
+          unfold LoopVerificationBinary.Trap.
+          iModIntro. iIntros "Hhwrite Hhexit Htrap".
+          iDestruct "Htrap" as "(Hpc & Hnpc & [%vmpie Hmstatus] & HaccU & Hgprs & Hcp & Hmtvec & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & [%vmepc Hmepc] & Hpmp)".
+          iPoseProof (interp_gprs_with_excluded (exclude := {[x1; x5; x10]}) with "Hgprs") as "(Hregs & Hgprs)";
+            try solve_subseteq.
+          reduce_big_sepS_big_sepL.
+          iDestruct "Hregs" as "([% Hx1] & [% Hx5] & [% Hx10] & _)".
+          iApply ("IH" $! _ _ {|
+                         vmtvec        := bv.of_N handler_entry_addr;
+                         vmcause       := vmcause;
+                         vmepc         := vmepc;
+                         vmie          := vmie;
+                         vmip          := vmip;
+                         vmstatus_mpie := vmpie;
+                       |}); cbn.
+          now iFrame "Hdata Hpc Hinstrs Hnpc Hmscratch HaccU Hcp Hmtvec Hmcause Hmip Hmie Hmepc Hpmp Hhwrite Hhsecret Hhexit Hmstatus Hx1 Hx5 Hx10 Hgprs Hinv".
+        + iDestruct "Hx1" as "[% Hx1]".
+          iDestruct "Hdata" as "(% & % & Hdata)".
+          iApply femtokernel_handler_secret_write_safe_rel; cbn - [interp_ptstomem].
+          iFrame "Hpc Hnpc Hhsecret Hmscratch HaccU".
+          repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+          iAssert (interp_gprs {[ x1 ]}) with "[Hgprs Hx5]" as "Hgprs".
+          { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5]}));
+              try solve_subseteq.
+            iFrame "Hgprs".
+            reduce_big_sepS_big_sepL.
+            now iFrame "Hx5". }
+          iFrame "Hx1 Hdata Hgprs Hmstatus Hhexit Hinv".
+          repeat iSplitR; auto.
+          unfold LoopVerificationBinary.Trap.
+          iModIntro. iIntros "Hhsecret Hdata Hhexit Htrap".
+          iDestruct "Htrap" as "(Hpc & Hnpc & [%vmpie Hmstatus] & HaccU & Hgprs & Hcp & Hmtvec & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & [%vmepc Hmepc] & Hpmp)".
+          iPoseProof (interp_gprs_with_excluded (exclude := {[x1; x5; x10]}) with "Hgprs") as "(Hregs & Hgprs)";
+            try solve_subseteq.
+          reduce_big_sepS_big_sepL.
+          iDestruct "Hregs" as "([% Hx5] & Hx1 & [% Hx10] & _)".
+          iApply ("IH" $! _ _ {|
+                         vmtvec        := bv.of_N handler_entry_addr;
+                         vmcause       := vmcause;
+                         vmepc         := vmepc;
+                         vmie          := vmie;
+                         vmip          := vmip;
+                         vmstatus_mpie := vmpie;
+                       |}); cbn - [interp_ptstomem].
+          now iFrame "Hpc Hinstrs Hnpc Hmscratch HaccU Hcp Hmtvec Hmcause Hmip Hmie Hmepc Hpmp Hhwrite Hhsecret Hhexit Hmstatus Hx1 Hdata Hx5 Hx10 Hgprs Hinv".
+    Qed.
 
     Lemma memAdv_pmpPolicy_binary `{sailGS2 Σ} :
       (ptstoSthL advAddrs ⊢
