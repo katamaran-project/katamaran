@@ -161,7 +161,7 @@ Module RiscvPmpIrisInstancePredicates.
   | Tnil : mmio_trace_state_pred [] s__init
   | Tcons  : forall e tl s s', impl_mmio_event_prot e s s' ->
                          mmio_trace_state_pred tl s ->
-                         mmio_trace_state_pred (e :: tl) s.
+                         mmio_trace_state_pred (e :: tl) s'.
 
   Lemma difference_commute_gset {A} `{Countable A} (X Y Z : gset A) :
     (X ∖ Y) ∖ Z = (X ∖ Z) ∖ Y.

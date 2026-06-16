@@ -289,7 +289,7 @@ sep_contract_result         :=  "result_mem_read";
                             ( ∃ "s'", ∃ "v", (
                               term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "v") ∗
                               asn_mmio_event bytes (term_var "paddr") (term_var "v") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'") ∗
-                              asn_mmio_state_pred bytes (term_var "s")))
+                              asn_mmio_state_pred bytes (term_var "s'")))
                             (
                               term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
                               asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w"));
@@ -312,7 +312,7 @@ sep_contract_result         :=  "result_mem_read";
         sep_contract_postcondition   :=
           term_var "result_checked_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
           asn.match_bool (term_var "mmio")
-            (asn_mmio_state_pred bytes (term_var "s"))
+            (∃ "s'", asn_mmio_state_pred bytes (term_var "s'"))
             (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
     |}.
 
@@ -352,7 +352,7 @@ sep_contract_result         :=  "result_mem_read";
           ( ∃ "s'", ∃ "v", (
             term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "v") ∗
             asn_mmio_event bytes (term_var "paddr") (term_var "v") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'") ∗
-            asn_mmio_state_pred bytes (term_var "s")))
+            asn_mmio_state_pred bytes (term_var "s'")))
           ( term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
             asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w")) ∗
           asn_cur_privilege (term_val ty_privilege Machine) ∗
@@ -382,7 +382,7 @@ sep_contract_result         :=  "result_mem_read";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "mmio")
-          (asn_mmio_state_pred bytes (term_var "s"))
+          (∃ "s'", asn_mmio_state_pred bytes (term_var "s'"))
           (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_var "m") ∗
         asn_pmp_entries (term_var "entries");
@@ -411,7 +411,7 @@ sep_contract_result         :=  "result_mem_read";
           ( ∃ "s'", ∃ "v", (
             term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "v") ∗
             asn_mmio_event bytes (term_var "paddr") (term_var "v") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'") ∗
-            asn_mmio_state_pred bytes (term_var "s")))
+            asn_mmio_state_pred bytes (term_var "s'")))
           ( term_var "result_mem_read" = term_union (memory_op_result bytes) KMemValue (term_var "w") ∗
             asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "w") (term_var "paddr" ↦ₘ[ bytes ] term_var "w")) ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
@@ -442,7 +442,7 @@ sep_contract_result         :=  "result_mem_read";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "mmio")
-          ((asn_mmio_trace_pred bytes) ∗ asn_mmio_state_pred bytes (term_var "s"))
+          ((asn_mmio_trace_pred bytes) ∗ (∃ "s'", asn_mmio_state_pred bytes (term_var "s'")))
           (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries");
@@ -546,7 +546,7 @@ sep_contract_result         :=  "result_mem_read";
       sep_contract_postcondition   :=
         ∃ "s'", (
           asn_mmio_event bytes (term_var "paddr") (term_var "result_read_mmio") (term_val ty_ioeventType IORead ) (term_var "s") (term_var "s'") ∗
-          asn_mmio_state_pred bytes (term_var "s")) ∗
+          asn_mmio_state_pred bytes (term_var "s'")) ∗
         asn_in_mmio bytes (term_var "paddr") ∗
         asn_mmio_trace_pred bytes;
     |}.
@@ -565,7 +565,7 @@ sep_contract_result         :=  "result_mem_read";
          term_var "result_write_mmio" = term_val ty.bool true ∗
          asn_in_mmio bytes (term_var "paddr") ∗
          asn_mmio_trace_pred bytes ∗
-         asn_mmio_state_pred bytes (term_var "s");
+         (∃ "s'", asn_mmio_state_pred bytes (term_var "s'"));
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
@@ -921,40 +921,78 @@ Module RiscvPmpIrisInstanceWithContracts.
     iApply semTWP_foreign.
     iIntros (? ?) "[Hregs [%a (Hmem & %Hmap & Htra)]]".
     iInv "Hinv" as ">(%σ & %t & Htrf & Hsta & %Hpred)" "Hclose".
-    iDestruct (trace.trace_full_frag_eq with "Htra Htrf") as "%Heqt". subst.
+    iDestruct (trace.trace_full_frag_eq with "Htra Htrf") as "%Heqt".
     iDestruct (trace.iost_full_frag_eq with "Hsta Hstf") as "%Heqs". subst.
     destruct (fun_read_mmio μ bytes paddr) as [μupd readv] eqn:Hreadmmio.
     iMod (trace.trace_update _ _ (cons {| event_type := IORead; event_addr := paddr; event_nbbytes := bytes; event_contents := readv |} _) with "[$Htra $Htrf]") as "[Htra Htrf]".
-    iMod (trace.state_update _ _ (bv2s s) with "[$Hsta $Hstf]") as "[Hsta Hstf]".
-    iMod ("Hclose" with "[Htrf Hsta]") as "_".
-    {(* Instantiate evars *)
-      iFrame. iNext. iPureIntro.
-      destruct (decide (paddr = mmio_interrupt_addr)).
-      - subst. econstructor; eauto. eapply IOR__intr; eauto.
-      - subst. econstructor; eauto. eapply IOR; eauto.
-    }
-    iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-    unfold mem_inv.
-    iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
-    rewrite Hreadmmio in Hf.
 
-    inversion Hf. subst.
-    iMod "Hclose" as "_". rewrite semTWP_val.
-    iFrame "Hregs Hmem Hstf". cbn.
-
-    destruct bytes as [|bytes1]; first inversion Hmmio.
-    cbn in Hreadmmio.
-    destruct (state_tra_read (memory_state μ) paddr (S bytes1)); inversion Hreadmmio.
-
-    iSplitR ""; auto.
-    iSplitL ""; eauto.
-    iFrame "Hinv". iPureIntro; intuition.
     destruct (decide (paddr = mmio_interrupt_addr)).
-    - exists (s2bv (mmio_interrupt_w2s readv (bv2s s))). split; last done.
+    (* Case IOR__intr *)
+    {
+      iMod (trace.state_update _ _ _ with "[$Hsta $Hstf]") as "[Hsta Hstf]".
+      iMod ("Hclose" with "[Htrf Hsta]") as "_".
+      {(* Instantiate evars *)
+        iExists (mmio_interrupt_w2s readv (bv2s s)).
+        iFrame. iNext. iPureIntro. econstructor. subst.
+        eapply IOR__intr; eauto. eauto.
+      }
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      unfold mem_inv.
+      iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
+      rewrite Hreadmmio in Hf.
+
+      inversion Hf.
+      subst.
+      iMod "Hclose" as "_". rewrite semTWP_val.
+      iFrame "Hregs Hmem".
+
+      destruct bytes as [|bytes1]; first inversion Hmmio.
+      cbn in Hreadmmio.
+      destruct (state_tra_read (memory_state μ) mmio_interrupt_addr (S bytes1)); inversion Hreadmmio.
+
+      iSplitL "Htra"; auto.
+      iSplitR ""; eauto.
+      iSplitR ""; eauto.
+
+
+      iExists (s2bv (mmio_interrupt_w2s readv (bv2s s))).
+      subst. iFrame.
+      iSplitL "".
+
+      iPureIntro; intuition.
       eapply IOR__intr; eauto.
-      change (event_contents {| event_type := IORead; event_addr := paddr; event_nbbytes := S bytes1; event_contents := readv |}) with readv.
-      destruct (mmio_interrupt_w2s readv (bv2s s)) eqn: A; rewrite A; eauto.
-    - exists s. split; last done. now eapply IOR.
+      change (event_contents {| event_type := IORead; event_addr := mmio_interrupt_addr; event_nbbytes := S bytes1; event_contents := readv |}) with readv.
+      change (event_nbbytes {| event_type := IORead; event_addr := mmio_interrupt_addr; event_nbbytes := S bytes1; event_contents := readv |}) with (S bytes1).
+      - destruct (mmio_interrupt_w2s readv (bv2s s)); auto.
+      - unfold interp_mmio_state_pred. unfold bv2s. simpl. destruct mmio_interrupt_w2s; auto.
+    }
+    (* Case IOR *)
+    {
+      subst.
+      iMod (trace.state_update _ _ (bv2s s) with "[$Hsta $Hstf]") as "[Hsta Hstf]".
+      iMod ("Hclose" with "[Htrf Hsta]") as "_".
+      {(* Instantiate evars *)
+        iFrame. iNext. iPureIntro.
+        subst. econstructor; eauto. eapply IOR; eauto.
+      }
+      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
+      unfold mem_inv.
+      iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
+      rewrite Hreadmmio in Hf.
+
+      inversion Hf. subst.
+      iMod "Hclose" as "_". rewrite semTWP_val.
+      iFrame "Hregs Hmem Hstf". cbn.
+
+      destruct bytes as [|bytes1]; first inversion Hmmio.
+      cbn in Hreadmmio.
+      destruct (state_tra_read (memory_state μ) paddr (S bytes1)); inversion Hreadmmio.
+
+      iSplitR ""; auto.
+      iSplitL ""; eauto.
+      iFrame "Hinv". iPureIntro; intuition.
+      now eapply IOR.
+    }
   Qed.
 
   Lemma mmio_write_sound `{!sailGS Σ} {rG : iostateG IOState Σ} `(rB: restrict_bytes bytes) :
