@@ -533,9 +533,10 @@ Module inv := invariants.
     Example femtokernel_handler_entry_post :
       Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
-      (term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_entry_size)
-       ∨ term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N (handler_entry_size + handler_write_size))) ∗
       mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
+      (if: (term_var "x10" ?= term_val ty_xlenbits (bv.of_N mmio_write_adv))
+       then term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_entry_size)
+       else term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N (handler_entry_size + handler_write_size))) ∗
       x5 ↦ term_val ty_xlenbits (bv.of_N mmio_write_adv) ∗
       x10 ↦ term_var "x10".
 
@@ -1067,11 +1068,12 @@ Module inv := invariants.
       iFrame "Hgprs".
       reduce_big_sepS_big_sepL.
       now iFrame "Hx10". }
-    iDestruct "Han" as "[[-> _]|[-> _]]".
+    case_match; cbn - [interp_ptstomem];
+      iDestruct "Han" as "[-> _]".
     (* TODO: these two cases have almost the exact same proof script,
              only difference is in which lemma to apply (write <> secret_write),
              and how some framing introducing is done w.r.t. the ptsto_instrs (Hhsecret and Hhwrite) *)
-    - iApply femtokernel_handler_write_safe; cbn.
+    - iApply femtokernel_handler_write_safe; cbn - [interp_ptstomem].
       iFrame "Hpc Hnpc Hhwrite Hmscratch HaccU".
       repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
       iAssert (interp_gprs {[ x5 ]}) with "[Hgprs Hx1]" as "Hgprs".
