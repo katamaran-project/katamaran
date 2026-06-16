@@ -138,30 +138,33 @@ Section BlockVerificationDerived.
         pure (persist__term na θ4).
 
     (* inputs:
-     * - b : list of instructions to be executed
-     * - ainstr: term representing pc value at which the next instruction can be found in memory
-     * - apc: term representing pc value after executing previous instruction
-     * output: term representing nextpc value after executing the sequence of instructions.
+     * - b : list of instructions (indexed by address / bytes_per_instr)
+     * - fuel: maximum number of steps to execute
+     * - apc: term representing the current pc value
+     * output: term representing the pc value after executing up to fuel steps.
      *
-     * This definition passes around code addresses in a clever way to simplify the recursive definition.
-     * While symbolically executing the list of instructions, ainstr will be incremented by 4 at every step, while ainstr is obtained from the execution of the instruction.
-     * As long as the list of instructions is non-empty (i.e. we don't reach the end of the block), we require that ainstr and apc are the same (i.e. the previous instruction did not jump).
-     * If b is empty, then we simply return apc.
+     * apc must be a concrete bitvector (term_val) for execution to proceed;
+     * if it is symbolic, or if the index apc/bytes_per_instr falls outside b,
+     * execution halts and returns apc.  Backward and forward jumps are supported
+     * because the instruction is looked up by address each step rather than
+     * advancing linearly through the list.
      *)
-    Fixpoint sexec_block_addr (b : list AST) :
-      ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
-      fun _ ainstr apc =>
-        match b with
-        | nil       => pure apc
-        | cons i b' =>
-            ⟨ θ1 ⟩ _    <- assert_formula (fun _ => amsg.empty)
-                             (formula_propeq ainstr apc) ;;
-            ⟨ θ2 ⟩ apc' <- sexec_instruction i (persist__term apc θ1) ;;
-            sexec_block_addr b'
-              (term_binop bop.bvadd
-                 (persist__term ainstr (θ1 ∘ θ2))
-                 (term_val ty_word bv_instrsize))
-              apc'
+    Fixpoint sexec_cfg_addr (b : list AST) (fuel : nat) :
+      ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      fun _ apc =>
+        match fuel with
+        | O    => pure apc
+        | S n' =>
+            match term_get_val apc with
+            | None   => pure apc
+            | Some v =>
+                match List.nth_error b (N.to_nat (bv.bin v) / bytes_per_instr)%nat with
+                | None   => pure apc
+                | Some i =>
+                    ⟨ θ1 ⟩ apc' <- sexec_instruction i apc ;;
+                    sexec_cfg_addr b n' apc'
+                end
+            end
         end.
 
     (* Apply symbolic execution to verify a Hoare triple for a block of instructions.
@@ -178,7 +181,7 @@ Section BlockVerificationDerived.
         let δ1 := env.snoc (persist ( A:= Sub Σ) δ θ1) _ a in
         ⟨ θ2 ⟩ _ <- produce req δ1 ;;
         let a2 := persist__term a θ2 in
-        ⟨ θ3 ⟩ na <- sexec_block_addr b a2 a2 ;;
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr b (List.length b) a2 ;;
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
