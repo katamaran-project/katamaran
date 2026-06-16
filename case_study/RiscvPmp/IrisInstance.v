@@ -396,17 +396,6 @@ Module RiscvPmpIrisInstancePredicates.
             now apply elem_of_difference.
     Qed.
 
-    Lemma interp_gprs_with_excluded `{sailGS Σ} (exclude : gset (Reg ty_xlenbits)) :
-      exclude ⊆ GPRS ->
-      ([∗ set] r ∈ exclude, ∃ v, reg_pointsTo r v) ∗ interp_gprs exclude ⊣⊢ interp_gprs ∅.
-    Proof.
-      intros Hsub.
-      unfold interp_gprs.
-      rewrite difference_empty_L.
-      iApply bi.wand_iff_sym.
-      now iApply big_sepS_delete_multi.
-    Qed.
-
     Lemma interp_gprs_with_excluded_gen `{sailGS Σ} (exclude1 exclude2 : gset (Reg ty_xlenbits)) :
       exclude2 ⊆ GPRS ∖ exclude1 ->
       ([∗ set] r ∈ exclude2, ∃ v, reg_pointsTo r v) ∗ interp_gprs (exclude1 ∪ exclude2) ⊣⊢ interp_gprs exclude1.
@@ -416,6 +405,15 @@ Module RiscvPmpIrisInstancePredicates.
       iApply bi.wand_iff_sym.
       rewrite <- difference_difference_l_L.
       now iApply big_sepS_delete_multi.
+    Qed.
+
+    Lemma interp_gprs_with_excluded `{sailGS Σ} (exclude : gset (Reg ty_xlenbits)) :
+      exclude ⊆ GPRS ->
+      ([∗ set] r ∈ exclude, ∃ v, reg_pointsTo r v) ∗ interp_gprs exclude ⊣⊢ interp_gprs ∅.
+    Proof.
+      intros Hsub.
+      rewrite <- union_empty_l_L at 2.
+      now iApply interp_gprs_with_excluded_gen.
     Qed.
 
     Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.

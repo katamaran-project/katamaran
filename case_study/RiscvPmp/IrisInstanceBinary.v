@@ -161,15 +161,24 @@ Module RiscvPmpIrisInstancePredicates2.
     Definition interp_gprs (exclude : gset (Reg ty_xlenbits)) : iProp Σ :=
       [∗ set] r ∈ GPRS ∖ exclude, (∃ v, reg_pointsTo21 r v)%I.
 
+    Lemma interp_gprs_with_excluded_gen `{sailGS2 Σ} (exclude1 exclude2 : gset (Reg ty_xlenbits)) :
+      exclude2 ⊆ GPRS ∖ exclude1 ->
+      ([∗ set] r ∈ exclude2, ∃ v, reg_pointsTo21 r v) ∗ interp_gprs (exclude1 ∪ exclude2) ⊣⊢ interp_gprs exclude1.
+    Proof.
+      intros Hsub1.
+      unfold interp_gprs.
+      iApply bi.wand_iff_sym.
+      rewrite <- difference_difference_l_L.
+      now iApply big_sepS_delete_multi.
+    Qed.
+
     Lemma interp_gprs_with_excluded `{sailGS2 Σ} (exclude : gset (Reg ty_xlenbits)) :
       exclude ⊆ GPRS ->
       ([∗ set] r ∈ exclude, ∃ v, reg_pointsTo21 r v) ∗ interp_gprs exclude ⊣⊢ interp_gprs ∅.
     Proof.
       intros Hsub.
-      unfold interp_gprs.
-      rewrite difference_empty_L.
-      iApply bi.wand_iff_sym.
-      now iApply big_sepS_delete_multi.
+      rewrite <- union_empty_l_L at 2.
+      now iApply interp_gprs_with_excluded_gen.
     Qed.
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
