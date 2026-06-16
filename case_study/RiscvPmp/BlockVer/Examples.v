@@ -588,9 +588,8 @@ Module Examples.
     { iApply RiscvPmpIrisInstance2.own_RegStore_to_map_reg_pointsTos.
       apply finite.NoDup_enum.
       iSplitR "Hregsinv2"; iAssumption.
-    }.
+    }
     iModIntro. iExists regs1, regs2, memG. iFrame "Hmem Rmem Hregs Rregs".
-    done.
       Qed.
 
   (*   Lemma adequacy_gen_RiscVNStepsExitCond l exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22} *)

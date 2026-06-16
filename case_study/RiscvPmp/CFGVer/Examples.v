@@ -231,6 +231,7 @@ Module Examples.
     (* TODO: move into Spec.v *)
     Definition JAL (rd : RegIdx) (imm : bv 21) : AST :=
       RISCV_JAL imm rd.
+    Definition NOP : AST := MV X0 X0.
     Definition LW (rd rs : RegIdx) (imm : bv 12) : AST :=
       LOAD imm rs rd false WORD.
     Definition SW (rs2 rs1 : RegIdx) (imm : bv 12) : AST :=
@@ -255,6 +256,28 @@ Module Examples.
     (* TODO: would rather write ∀ true_offset, ... but verification then explodes *)
     Lemma valid_jump_if_zero : ValidBlockVerifierContract jump_if_zero.
     Proof. vm_compute. solve_vc. Qed.
+
+    (* Unconditional forward jump: jumps 8 bytes ahead (2 instruction widths).
+       The block verifier cannot handle this because sexec_block_addr requires
+       ainstr = apc at each step, i.e. control flow must be linear. *)
+    Definition jmp_offset : bv 21 := bv.of_N 8.
+
+    Definition jmp_fwd : BlockVerifierContract :=
+      {{ asn_init_pc }}
+        [ JAL X0 jmp_offset ; NOP ]
+      {{ asn_next_pc_eq (term_pc_val +ᵇ term_val ty_xlenbits (bv.zext jmp_offset)) }}.
+
+    (* This proof fails: after vm_compute, solve_vc leaves two unprovable goals:
+       (1) ty.valToRelVal [bv 0x8] = SyncVal ([bv 0x0] + [bv 0x4])%bv
+           — the ainstr = apc check: JAL jumps to 0x8 but sexec_block_addr
+             expects the next instruction at ainstr = 0x4 (linear advance).
+       (2) ty.valToRelVal [bv 0xc] = SyncVal ([bv 0x0] + [bv 0x8])%bv
+           — the verifier then executes NOP as if at 0x4, landing at 0xc,
+             which disagrees with the postcondition an = 0x0 + 0x8 = 0x8.
+       The fix requires sexec_cfg_addr: follow the actual PC after each
+       instruction instead of advancing ainstr linearly. *)
+    Lemma valid_jmp_fwd : ValidBlockVerifierContract jmp_fwd.
+    Proof. vm_compute. solve_vc. Admitted.
 
     (* Sets the contents of register X2 to value 42. The contract reflects
          this, we require ownership of X2, and after executing we know that
@@ -588,7 +611,7 @@ Module Examples.
     { iApply RiscvPmpIrisInstance2.own_RegStore_to_map_reg_pointsTos.
       apply finite.NoDup_enum.
       iSplitR "Hregsinv2"; iAssumption.
-    }.
+    }
     iModIntro. iExists regs1, regs2, memG. iFrame "Hmem Rmem Hregs Rregs".
     done.
       Qed.

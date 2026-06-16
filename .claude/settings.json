@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "rocq-mcp": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/LLM4Rocq/rocq-mcp", "rocq-mcp"],
+      "env": {
+        "ROCQ_WORKSPACE": "/home/emiel/Documents/katamaran"
+      }
+    }
+  }
+}
