@@ -1575,13 +1575,6 @@ Module inv := invariants.
 
     End WithAssertionNotations.
 
-    Lemma femtokernel_handler_pre_persistent_preds `{sailGS2 Σ} (x5 x10 : Val ty_xlenbits) (csrs : CSRVals) :
-      let Σ := (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5].["x10" ∷ ty_xlenbits ↦ x10].["a" ∷ ty_xlenbits ↦ bv.of_N handler_entry_addr] in
-      asn.interpret femtokernel_handler_entry_pre Σ -∗
-     ⌜(@bv.unsigned xlenbits (bv.of_N handler_entry_addr) + Z.of_N (adv_addr - handler_entry_addr) < Z.of_N maxAddr)%Z⌝ ∗
-      femto_inv_mmio ∗ asn.interpret femtokernel_handler_entry_pre Σ.
-    Admitted.
-
     Lemma femto_inv_mmio_split `{sailGS2 Σ} :
       femto_inv_mmio -∗
       @FemtoKernel.femto_inv_mmio _ sailGS2_sailGS_left
@@ -1613,6 +1606,24 @@ Module inv := invariants.
       repeat (iRename select (⌜_ = _⌝)%I into "Heq";
               iDestruct "Heq" as "->");
       auto.
+
+    Lemma femtokernel_handler_entry_pre_persistent_preds `{sailGS2 Σ} (x5 x10 : Val ty_xlenbits) (csrs : CSRVals) :
+      let Σ := (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5].["x10" ∷ ty_xlenbits ↦ x10].["a" ∷ ty_xlenbits ↦ bv.of_N handler_entry_addr] in
+      asn.interpret femtokernel_handler_entry_pre Σ -∗
+      femto_inv_mmio ∗ asn.interpret femtokernel_handler_entry_pre Σ.
+    Proof. solve_split. Qed.
+
+    Lemma femtokernel_handler_write_pre_persistent_preds `{sailGS2 Σ} (x5 : Val ty_xlenbits) (csrs : CSRVals) :
+      let Σ := (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5].["a" ∷ ty_xlenbits ↦ bv.of_N handler_write_addr] in
+      asn.interpret femtokernel_handler_write_pre Σ -∗
+      femto_inv_mmio ∗ asn.interpret femtokernel_handler_write_pre Σ.
+    Proof. solve_split. Qed.
+
+    Lemma femtokernel_handler_secret_write_pre_persistent_preds `{sailGS2 Σ} (x1 : Val ty_xlenbits) (csrs : CSRVals) :
+      let Σ := (CSRVals_Valuation csrs).["x1" ∷ ty_xlenbits ↦ x1].["a" ∷ ty_xlenbits ↦ bv.of_N handler_secret_write_addr] in
+      asn.interpret femtokernel_handler_secret_write_pre_rel Σ -∗
+      femto_inv_mmio ∗ asn.interpret femtokernel_handler_secret_write_pre_rel Σ.
+    Proof. solve_split. Qed.
 
     Lemma femtokernel_init_pre_binary_split `{sailGS2 Σ} (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["a" ∷ ty_xlenbits ↦ bv.of_N init_addr] in
