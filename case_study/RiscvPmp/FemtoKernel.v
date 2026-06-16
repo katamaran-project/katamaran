@@ -1584,7 +1584,7 @@ Module inv := invariants.
       femto_inv_mmio -∗
       @FemtoKernel.femto_inv_mmio _ sailGS2_sailGS_left
       ∗ @FemtoKernel.femto_inv_mmio _ sailGS2_sailGS_right.
-    Proof. iApply inv.inv_split. Qed.
+    Proof. iIntros "($ & $)". Qed.
 
     #[local] Ltac destruct_seps :=
       repeat (iRename select (_ ∗ _)%I into "H'";
@@ -1845,7 +1845,6 @@ Module inv := invariants.
       iPoseProof (@femtokernel_splitMemory _ sailGS2_sailGS_right _ _ Hinit2 Hhentry2 Hhwrite2 Hhsecret2 Hhexit2 Hdata2 Hft2 with "Hmem2") as "H2".
       iMod "H1" as "(Hinit1 & Hhandler1 & Hdata1 & Hinv1 & Hadv1)".
       iMod "H2" as "(Hinit2 & Hhandler2 & Hdata2 & Hinv2 & Hadv2)".
-      iModIntro.
       unfold ptsto_instrs_handler2, interp_ptstomem2.
       rewrite ptsto_instrs_equiv.
       iCombine "Hinit1" "Hinit2" as "Hinit".
@@ -1853,7 +1852,7 @@ Module inv := invariants.
       iCombine "Hdata1" "Hdata2" as "Hdata".
       iFrame "Hinit Hhandler Hdata".
       iSplitL "Hinv1 Hinv2".
-      - admit.
+      - by iFrame "Hinv1 Hinv2".
       - unfold ptstoSthL, RiscvPmpIrisInstancePredicates.ptstoSthL,
           RiscvPmpIrisInstancePredicates.ptstoSth.
         iPoseProof (big_sepL_impl _ (λ k v, v ↦ₘ (memory_ram μ1 v))
@@ -1862,7 +1861,7 @@ Module inv := invariants.
           pose proof (Forall_lookup_1 _ _ _ _ Hadv HIn) as Heq.
           simpl in Heq. now rewrite Heq. }
         iApply (intro_ptstoSthL_binary with "[$Hadv1 $Hadv2]").
-    Admitted.
+    Qed.
 
     Lemma femtokernel_rel_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ1' μ2 : Memory}
       {δ1 δ1' δ2 : CStore [ctx]} {m1 : string} {secret1 secret2 : Val ty_xlenbits} :
@@ -1934,12 +1933,21 @@ Module inv := invariants.
         iExists γ2', μ2', δ2', s2'.
         iDestruct "Hmem" as "[(%memmap1 & Hinv1 & %link1 & Htr1)
                               (%memmap2 & Hinv2 & %link2 & Htr2)]".
-        iInv "Hmmio" as ">((%t1 & Hfrag1 & Hpred1) & (%t2 & Hfrag2 & Hpred2))" "_".
-        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
-        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
-        iApply fupd_mask_intro; first set_solver.
-        iIntros "_". iSplitR; auto.
-        unfold mmio_pred_final.
+
+        admit.
+
+        (* iDestruct "Hmmio" as "(Hmmio1 & Hmmio2)". *)
+        (* iInv "Hmmio1" as ">(%t1 & Hfrag1 & %Hpred1)" "Hclose1". *)
+        (* iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->". *)
+        (* iSpecialize ("Hclose1" with "[Htr1]"). *)
+        (* { iModIntro. iExists t1. admit. } *)
+
+        (* iInv "Hmmio" as ">((%t1 & Hfrag1 & Hpred1) & (%t2 & Hfrag2 & Hpred2))" "_". *)
+        (* iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->". *)
+        (* iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->". *)
+        (* iApply fupd_mask_intro; first set_solver. *)
+        (* iIntros "_". iSplitR; auto. *)
+        (* unfold mmio_pred_final. *)
         (* TODO
            - [ ] Require that a MMIOShutdown is issued at some point? There
                  are other possibilities to run into a [fail m], this might
