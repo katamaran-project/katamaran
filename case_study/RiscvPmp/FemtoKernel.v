@@ -1670,17 +1670,41 @@ Module inv := invariants.
       asn_interpret_left femtokernel_init_post (Σ na1) -∗
       asn_interpret_right femtokernel_init_post (Σ na2) -∗
       ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_init_post (Σ na1).
-    Proof.
-    Admitted.
+    Proof. solve_split. Qed.
 
-    Lemma femtokernel_handler_post_binary_combine `{sailGS2 Σ} (x5 x10 na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
+    Lemma femtokernel_handler_entry_post_binary_combine `{sailGS2 Σ} (x5 x10 na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
       let ι__csrs := CSRVals_Valuation csrs in
       let Σ na := ι__csrs.["x5"∷ty_xlenbits ↦ x5].["x10" ∷ ty_xlenbits ↦ x10].["a"∷ty_xlenbits ↦ bv.of_N handler_entry_addr].["an"∷ty_xlenbits ↦ na] in
       asn_interpret_left femtokernel_handler_entry_post (Σ na1) -∗
       asn_interpret_right femtokernel_handler_entry_post (Σ na2) -∗
       ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_entry_post (Σ na1).
-    Proof.
-    Admitted.
+    Proof. solve_split; case_match; solve_split. Qed.
+
+    Lemma femtokernel_handler_write_post_binary_combine `{sailGS2 Σ} (x5 na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
+      let ι__csrs := CSRVals_Valuation csrs in
+      let Σ na := ι__csrs.["x5"∷ty_xlenbits ↦ x5].["a"∷ty_xlenbits ↦ bv.of_N handler_write_addr].["an"∷ty_xlenbits ↦ na] in
+      asn_interpret_left femtokernel_handler_write_post (Σ na1) -∗
+      asn_interpret_right femtokernel_handler_write_post (Σ na2) -∗
+      ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_write_post (Σ na1).
+    Proof. solve_split. Qed.
+
+    Lemma femtokernel_handler_secret_write_post_binary_combine `{sailGS2 Σ} (x1 secret1 secret2 na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
+      let ι__csrs := CSRVals_Valuation csrs in
+      let Σ__rel na := ι__csrs.["x1"∷ty_xlenbits ↦ x1].["a"∷ty_xlenbits ↦ bv.of_N handler_secret_write_addr].["an"∷ty_xlenbits ↦ na] in
+      let Σ secret na := ι__csrs.["x1"∷ty_xlenbits ↦ x1].["secret" ∷ ty_xlenbits ↦ secret].["a"∷ty_xlenbits ↦ bv.of_N handler_secret_write_addr].["an"∷ty_xlenbits ↦ na] in
+      asn_interpret_left femtokernel_handler_secret_write_post (Σ secret1 na1) -∗
+      asn_interpret_right femtokernel_handler_secret_write_post (Σ secret2 na2) -∗
+      ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_secret_write_post_rel (Σ__rel na1)
+      ∗ interp_ptstomem2 (bv.of_N data_addr) secret1 secret2.
+    Proof. solve_split. Qed.
+
+    Lemma femtokernel_handler_exit_post_binary_combine `{sailGS2 Σ} (na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
+      let ι__csrs := CSRVals_Valuation csrs in
+      let Σ na := ι__csrs.["a"∷ty_xlenbits ↦ bv.of_N handler_write_addr].["an"∷ty_xlenbits ↦ na] in
+      asn_interpret_left femtokernel_handler_exit_post (Σ na1) -∗
+      asn_interpret_right femtokernel_handler_exit_post (Σ na2) -∗
+      ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_exit_post (Σ na1).
+    Proof. solve_split. Qed.
 
     Definition ptsto_instrs_handler2 `{sailGS2 Σ} : iProp Σ :=
       @ptsto_instrs_handler _ sailGS2_sailGS_left
