@@ -507,6 +507,16 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        sep_contract_postcondition   := term_var "result_decode" = term_var "instr";
     |}.
 
+  (* TODO: fix contract once we incorporate interrupts into the relational model *)
+  Definition sep_contract_externalWorldUpdates    : SepContractFunX externalWorldUpdates :=
+    {| sep_contract_logic_variables := ["vmip" ∷ ty_Minterrupts];
+       sep_contract_localstore      := [];
+       sep_contract_precondition    := mip ↦ term_var "vmip";
+       sep_contract_result          := "result_externalWorldUpdates";
+       sep_contract_postcondition   :=
+         mip ↦ term_val ty_Minterrupts (MkMinterrupts false false false false false false);
+    |}.
+
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
@@ -964,7 +974,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   Lemma externalWorldUpdates_sound `{sailGS Σ} :
-    TValidContractForeign RiscvPmpSpecification.sep_contract_externalWorldUpdates externalWorldUpdates.
+    TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_externalWorldUpdates externalWorldUpdates.
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
     iIntros "Hmip". cbn in *. iApply semTWP_foreign.
@@ -978,7 +988,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iMod (reg_update γ mip vmip _ with "Hregs Hmip") as "[Hregs Hmip]".
     iMod "Hclose" as "_". iModIntro. iFrame "Hregs Hmem".
     iApply semTWP_val.
-    iModIntro; now iSplitL; first now iExists _.
+    now iFrame "Hmip".
   Qed.
 
   Lemma TforeignSemBlockVerif `{sailGS Σ} : TForeignSem.

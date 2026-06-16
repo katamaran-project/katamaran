@@ -407,12 +407,18 @@ Module inv := invariants.
     Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
+    Definition post_mip_val : Val ty_Minterrupts :=
+      MkMinterrupts false false false false false false.
+    Definition term_post_mip_val {Σ} : Term Σ ty_Minterrupts :=
+      term_val ty_Minterrupts post_mip_val.
+
     Definition Σ__csrs : LCtx :=
       ["mtvec" :: ty_xlenbits;
        "mcause" :: ty_xlenbits;
        "mepc" :: ty_xlenbits;
        "mie" :: ty_Minterrupts;
-       "mip" :: ty_Minterrupts].
+       "mip" :: ty_Minterrupts;
+       "mstatus_mpie" :: ty.bool].
 
     Record CSRVals := mkCSRVals {
         vmtvec  : Val ty_xlenbits;
@@ -420,6 +426,7 @@ Module inv := invariants.
         vmepc   : Val ty_xlenbits;
         vmie    : Val ty_Minterrupts;
         vmip    : Val ty_Minterrupts;
+        vmstatus_mpie : Val ty.bool;
       }.
 
     Definition CSRVals_Valuation (vals : CSRVals) : Valuation Σ__csrs :=
@@ -428,7 +435,8 @@ Module inv := invariants.
         .["mcause" ∷ ty_xlenbits ↦ vmcause vals]
         .["mepc" ∷ ty_xlenbits ↦ vmepc vals]
         .["mie" ∷ ty_Minterrupts ↦ vmie vals]
-        .["mip" ∷ ty_Minterrupts ↦ vmip vals].
+        .["mip" ∷ ty_Minterrupts ↦ vmip vals]
+        .["mstatus_mpie" ∷ ty.bool ↦ vmstatus_mpie vals].
 
     Example femtokernel_init_pre : Assertion (Σ__csrs ▻▻ ["a"::ty_xlenbits]) :=
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N adv_addr) < term_val ty.int (Z.of_N maxAddr))%asn ∗
@@ -449,7 +457,7 @@ Module inv := invariants.
         (term_var "an" = term_var "a" +ᵇ (term_val ty_xlenbits (bv.of_N adv_addr)))%asn ∗
           (mtvec ↦ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_entry_addr)) ∗
           mcause ↦ term_var "mcause" ∗
-          (∃ "v", mip ↦ term_var "v") ∗ mie ↦ term_var "mie" ∗
+          mip ↦ term_post_mip_val ∗ mie ↦ term_var "mie" ∗
           mepc ↦ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N adv_addr) ∗
           mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool true; term_val ty.bool true ] ∗
           cur_privilege ↦ term_val ty_privilege User ∗
@@ -511,61 +519,60 @@ Module inv := invariants.
       cur_privilege ↦ term_val ty_privilege priv ∗
       mtvec ↦ term_val ty_word (bv.of_N handler_entry_addr) ∗
       mcause ↦ term_var "mcause" ∗
-      (∃ "v", mip ↦ term_var "v") ∗ mie ↦ term_var "mie" ∗
+      mip ↦ term_post_mip_val ∗ mie ↦ term_var "mie" ∗
       mepc ↦ term_var "mepc" ∗
       asn_pmp_entries term_femto_pmpentries.
       (* asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_entry_addr)))). (* Different handler sizes cause different entries *) *)
 
     Example femtokernel_handler_entry_pre : Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_entry_addr) (sub_up1 (sub_cat_left _)) ∗
-      (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
       x5 ↦ term_var "x5" ∗
       x10 ↦ term_var "x10".
 
     Example femtokernel_handler_entry_post :
       Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
-      (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
       (term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_entry_size)
        ∨ term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N (handler_entry_size + handler_write_size))) ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
       x5 ↦ term_val ty_xlenbits (bv.of_N mmio_write_adv) ∗
       x10 ↦ term_var "x10".
 
     Example femtokernel_handler_write_pre : Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_write_addr) (sub_up1 (sub_cat_left _)) ∗
-      (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
       x5 ↦ term_var "x5".
 
     Example femtokernel_handler_write_post :
       Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
-      (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
       term_var "an" = term_val ty_xlenbits (bv.of_N handler_exit_addr) ∗
       x5 ↦ term_val ty_xlenbits (bv.of_N 42).
 
     Example femtokernel_handler_secret_write_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_secret_write_addr) (sub_up1 (sub_cat_left _)) ∗
-      (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
       x1 ↦ term_var "x1" ∗
       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
 
     Example femtokernel_handler_secret_write_post :
       Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
-      (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
       term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_secret_write_size) ∗
       x1 ↦ term_val ty_xlenbits bv.zero ∗
       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
 
     Example femtokernel_handler_exit_pre : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
       femtokernel_handler_shared_pre handler_exit_addr ∗
-      (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]).
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ].
 
     Example femtokernel_handler_exit_post :
       Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       femtokernel_handler_shared_post User ∗
-      (* TODO *)
-      (∃ "mie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool true; term_var "mie" ]) ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool true; term_var "mstatus_mpie" ] ∗
       term_var "an" = term_var "mepc".
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
@@ -952,7 +959,7 @@ Module inv := invariants.
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
     iSpecialize ("Htrap" with "[Hinstrs]"); first by iModIntro.
     iPoseProof (LoopVerification.valid_semTriple_loop with "[-]") as "Hk".
-    - iDestruct "Hpost" as "(Hshared & [% Hmstatus] & [%Han _])"; cbn in *.
+    - iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _])"; cbn in *.
       iFrame "Hpc Hnpc Hmstatus HaccU Hgprs Hmscratch Htrap".
       iSplitL "Hshared";
         first by repeat iDestruct "Hshared" as "($ & Hshared)".
@@ -983,7 +990,7 @@ Module inv := invariants.
     iApply (WP_loop_semTripleBlock with "Hpro Hpre H"). iClear "H".
     iIntros (an) "(Hpost & Hepi)".
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-    iDestruct "Hpost" as "(Hshared & [% Hmstatus] & [%Han _] & Hx5)"; cbn in *.
+    iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _] & Hx5)"; cbn in *.
     iAssert (interp_gprs ∅) with "[Hgprs Hx5]" as "Hgprs".
     { iApply (interp_gprs_with_excluded (exclude := {[x5]}));
         try solve_subseteq.
@@ -1017,7 +1024,7 @@ Module inv := invariants.
     iApply (WP_loop_semTripleBlock with "Hpro Hpre H"). iClear "H".
     iIntros (an) "(Hpost & Hepi)".
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-    iDestruct "Hpost" as "(Hshared & [% Hmstatus] & [%Han _] & Hx1 & Haddr)"; cbn - [interp_ptstomem] in *.
+    iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _] & Hx1 & Haddr)"; cbn - [interp_ptstomem] in *.
     iAssert (interp_gprs ∅) with "[Hgprs Hx1]" as "Hgprs".
     { iApply (interp_gprs_with_excluded (exclude := {[x1]}));
         try solve_subseteq.
@@ -1053,7 +1060,7 @@ Module inv := invariants.
     iApply (WP_loop_semTripleBlock with "Hpro Hpre H"). iClear "H".
     iIntros (an) "(Hpost & Hepi)".
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-    iDestruct "Hpost" as "(Hshared & [% Hmstatus] & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
+    iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
     iAssert (interp_gprs {[ x1; x5 ]}) with "[Hgprs Hx10]" as "Hgprs".
     { iApply (interp_gprs_with_excluded_gen {[x1; x5]} (exclude2 := {[x10]}));
         try solve_subseteq.
@@ -1077,17 +1084,18 @@ Module inv := invariants.
       repeat iSplitR; auto.
       unfold LoopVerification.Trap.
       iModIntro. iIntros "Hhwrite Hhexit Htrap".
-      iDestruct "Htrap" as "(Hpc & Hnpc & Hmstatus & HaccU & Hgprs & Hcp & Hmtvec & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & [%vmepc Hmepc] & Hpmp)".
+      iDestruct "Htrap" as "(Hpc & Hnpc & [%vmpie Hmstatus] & HaccU & Hgprs & Hcp & Hmtvec & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & [%vmepc Hmepc] & Hpmp)".
       iPoseProof (interp_gprs_with_excluded (exclude := {[x1; x5; x10]}) with "Hgprs") as "(Hregs & Hgprs)";
         try solve_subseteq.
       reduce_big_sepS_big_sepL.
       iDestruct "Hregs" as "([% Hx1] & [% Hx5] & [% Hx10] & _)".
       iApply ("IH" $! _ _ {|
-                         vmtvec  := bv.of_N handler_entry_addr;
-                         vmcause := vmcause;
-                         vmepc   := vmepc;
-                         vmie    := vmie;
-                         vmip    := vmip;
+                         vmtvec        := bv.of_N handler_entry_addr;
+                         vmcause       := vmcause;
+                         vmepc         := vmepc;
+                         vmie          := vmie;
+                         vmip          := vmip;
+                         vmstatus_mpie := vmpie;
                 |}); cbn.
       now iFrame "Hdata Hpc Hinstrs Hnpc Hmscratch HaccU Hcp Hmtvec Hmcause Hmip Hmie Hmepc Hpmp Hhwrite Hhsecret Hhexit Hmstatus Hx1 Hx5 Hx10 Hgprs Hinv".
     - iDestruct "Hx1" as "[% Hx1]".
@@ -1105,17 +1113,18 @@ Module inv := invariants.
       repeat iSplitR; auto.
       unfold LoopVerification.Trap.
       iModIntro. iIntros "Hhsecret Hdata Hhexit Htrap".
-      iDestruct "Htrap" as "(Hpc & Hnpc & Hmstatus & HaccU & Hgprs & Hcp & Hmtvec & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & [%vmepc Hmepc] & Hpmp)".
+      iDestruct "Htrap" as "(Hpc & Hnpc & [%vmpie Hmstatus] & HaccU & Hgprs & Hcp & Hmtvec & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & [%vmepc Hmepc] & Hpmp)".
       iPoseProof (interp_gprs_with_excluded (exclude := {[x1; x5; x10]}) with "Hgprs") as "(Hregs & Hgprs)";
         try solve_subseteq.
       reduce_big_sepS_big_sepL.
       iDestruct "Hregs" as "([% Hx5] & Hx1 & [% Hx10] & _)".
       iApply ("IH" $! _ _ {|
-                         vmtvec  := bv.of_N handler_entry_addr;
-                         vmcause := vmcause;
-                         vmepc   := vmepc;
-                         vmie    := vmie;
-                         vmip    := vmip;
+                         vmtvec        := bv.of_N handler_entry_addr;
+                         vmcause       := vmcause;
+                         vmepc         := vmepc;
+                         vmie          := vmie;
+                         vmip          := vmip;
+                         vmstatus_mpie := vmpie;
                 |}); cbn - [interp_ptstomem].
       now iFrame "Hpc Hinstrs Hnpc Hmscratch HaccU Hcp Hmtvec Hmcause Hmip Hmie Hmepc Hpmp Hhwrite Hhsecret Hhexit Hmstatus Hx1 Hdata Hx5 Hx10 Hgprs Hinv".
   Qed.
@@ -1164,18 +1173,19 @@ Module inv := invariants.
     iSplitL.
     unfold LoopVerification.Trap.
     iModIntro.
-    iIntros "(Hpc & Hnpc & Hmstatus & Hmem & Hgprs & Hcurpriv & Hmtvec & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & [%vmepc Hmepc] & Hpmpents)".
+    iIntros "(Hpc & Hnpc & [%vmpie Hmstatus] & Hmem & Hgprs & Hcurpriv & Hmtvec & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & [%vmepc Hmepc] & Hpmpents)".
     iPoseProof (interp_gprs_with_excluded (exclude := {[x1;x5;x10]}) with "Hgprs") as "(Hregs & Hgprs)";
       try solve_subseteq.
     reduce_big_sepS_big_sepL.
     iDestruct "Hregs" as "([% Hx5] & Hx1 & [% Hx10] & _)".
     iApply (femtokernel_handler_entry_safe _ _
                                      {|
-                                       vmtvec  := bv.of_N handler_entry_addr;
-                                       vmcause := vmcause;
-                                       vmepc   := vmepc;
-                                       vmie    := vmie;
-                                       vmip    := vmip;
+                                       vmtvec        := bv.of_N handler_entry_addr;
+                                       vmcause       := vmcause;
+                                       vmepc         := vmepc;
+                                       vmie          := vmie;
+                                       vmip          := vmip;
+                                       vmstatus_mpie := vmpie;
                                      |}).
     cbn - [interp_ptstomem].
     now iFrame "Hmepc Hgprs Hpmpents Hmcause Hmip Hmie Hmscratch Hcurpriv Hnpc Hpc Hmtvec Hmstatus Hmem Hhentry Hhwrite Hhsecret Hhexit Hmmio Hx1 Hx5 Hx10 Hdata".
@@ -1487,11 +1497,12 @@ Module inv := invariants.
     - destruct (env.view δ).
 
       iApply (femtokernel_init_safe {|
-                         vmtvec  := read_register γ mtvec;
-                         vmcause := read_register γ mcause;
-                         vmepc   := read_register γ mepc;
-                         vmie    := read_register γ mie;
-                         vmip    := read_register γ mip;
+                         vmtvec        := read_register γ mtvec;
+                         vmcause       := read_register γ mcause;
+                         vmepc         := read_register γ mepc;
+                         vmie          := read_register γ mie;
+                         vmip          := read_register γ mip;
+                         vmstatus_mpie := false;
                 |}
                with "[-]").
 
@@ -1550,13 +1561,13 @@ Module inv := invariants.
          The difference is that we omit the data ↦ secret, since we will have two different secrets. *)
       Example femtokernel_handler_secret_write_pre_rel : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
         asn.sub_assertion (femtokernel_handler_shared_pre handler_secret_write_addr) (sub_up1 (sub_cat_left _)) ∗
-        (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+        mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
         x1 ↦ term_var "x1".
 
       Example femtokernel_handler_secret_write_post_rel :
         Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
         asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
-        (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
+        mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
         term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_secret_write_size) ∗
         x1 ↦ term_val ty_xlenbits bv.zero.
 
