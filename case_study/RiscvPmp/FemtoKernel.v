@@ -1974,7 +1974,51 @@ Module inv := invariants.
         ptstoSthL advAddrs
         ={⊤}=∗
         ∃ mpp, LoopVerificationBinary.loop_pre User (bv.of_N handler_entry_addr) (bv.of_N adv_addr) mpp femto_pmpentries.
-    Admitted.
+    Proof.
+      iIntros "([%mpp Hmst] & Hmtvec & Hmcause & Hmip & Hmie & Hmscratch & Hmepc & Hcurpriv & Hgprs & Hpmpcfg & #Hmmio & Hpc & Hnpc & ((Hhentry1 & Hhwrite1 & Hhsecret1 & Hhexit1) & (Hhentry2 & Hhwrite2 & Hhsecret2 & Hhexit2)) & Hdata & Hmemadv)".
+      iPoseProof (ptsto_instrs_equiv with "[$Hhentry1 $Hhentry2]") as "Hhentry".
+      iPoseProof (ptsto_instrs_equiv with "[$Hhwrite1 $Hhwrite2]") as "Hhwrite".
+      iPoseProof (ptsto_instrs_equiv with "[$Hhsecret1 $Hhsecret2]") as "Hhsecret".
+      iPoseProof (ptsto_instrs_equiv with "[$Hhexit1 $Hhexit2]") as "Hhexit".
+      iExists mpp.
+      unfold LoopVerificationBinary.loop_pre, LoopVerificationBinary.Step_pre, LoopVerificationBinary.Execution.
+      iFrame "Hmst Hmtvec Hmcause Hmip Hmie Hmscratch Hmepc Hcurpriv Hgprs Hpmpcfg Hpc Hnpc".
+      iModIntro.
+
+      iSplitL "Hmemadv".
+      now iApply memAdv_pmpPolicy_binary.
+
+      iSplitL "".
+      iModIntro.
+      unfold LoopVerificationBinary.CSRMod.
+      iIntros "(_ & _&  _ & _ & %eq & _)".
+      inversion eq.
+
+      iSplitL.
+      unfold LoopVerification.Trap.
+      iModIntro.
+      iIntros "(Hpc & Hnpc & [%vmpie Hmstatus] & Hmem & Hgprs & Hcurpriv & Hmtvec & [%vmcause Hmcause] & [%vmip Hmip] & [%vmie Hmie] & Hmscratch & [%vmepc Hmepc] & Hpmpents)".
+      iPoseProof (interp_gprs_with_excluded (exclude := {[x1;x5;x10]}) with "Hgprs") as "(Hregs & Hgprs)";
+        try solve_subseteq.
+      reduce_big_sepS_big_sepL.
+      iDestruct "Hregs" as "([% Hx5] & Hx1 & [% Hx10] & _)".
+      iApply (femtokernel_handler_entry_safe_rel _ _
+                                             {|
+                                               vmtvec        := bv.of_N handler_entry_addr;
+                                               vmcause       := vmcause;
+                                               vmepc         := vmepc;
+                                               vmie          := vmie;
+                                               vmip          := vmip;
+                                               vmstatus_mpie := vmpie;
+                                             |}).
+      cbn - [interp_ptstomem].
+      now iFrame "Hmepc Hgprs Hpmpents Hmcause Hmip Hmie Hmscratch Hcurpriv Hnpc Hpc Hmtvec Hmstatus Hmem Hhentry Hhwrite Hhsecret Hhexit Hmmio Hx1 Hx5 Hx10 Hdata".
+
+      iModIntro.
+      unfold LoopVerification.Recover.
+      iIntros "(% & _ & _ & _ & _ & _ & %eq & _)".
+      inversion eq.
+    Qed.
 
     Lemma femtokernel_init_safe_rel `{sailGS2 Σ} (csrs : CSRVals) :
       ⊢ exec_instructions_prologue (bv.of_N init_addr) (filter_AST femtokernel_init_gen)
