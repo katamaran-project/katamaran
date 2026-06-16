@@ -1601,14 +1601,18 @@ Module inv := invariants.
       unfold reg_pointsTo21, reg_pointsTo2, interp_ptstomem2;
       destruct_seps;
       repeat (iRename select (reg_pointsTo _ _)%I into "H'";
-              try iFrame "H'");
+              iFrame "H'");
       repeat (iRename select (RiscvPmpIrisInstancePredicates.interp_ptstomem _ _)%I into "H'";
-              try iFrame "H'");
-      repeat (iRename select (⌜_⌝ ∧ _)%I into "H'";
-              iDestruct "H'" as "[#$ ?]");
+              iFrame "H'");
+      repeat (iRename select (⌜_⌝ ∧ emp)%I into "H'";
+              iDestruct "H'" as "[#H' _]";
+              try iFrame "H'"; try iDestruct "H'" as "?");
       try (iRename select (interp_inv_mmio _) into "Hmmio";
            iDestruct "Hmmio" as "#Hmmio";
-           iPoseProof (femto_inv_mmio_split with "Hmmio") as "($ & $)").
+           iPoseProof (femto_inv_mmio_split with "Hmmio") as "($ & $)");
+      repeat (iRename select (⌜_ = _⌝)%I into "Heq";
+              iDestruct "Heq" as "->");
+      auto.
 
     Lemma femtokernel_init_pre_binary_split `{sailGS2 Σ} (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["a" ∷ ty_xlenbits ↦ bv.of_N init_addr] in
