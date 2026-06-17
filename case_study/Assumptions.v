@@ -16,3 +16,6 @@ Print Assumptions RiscvPmp.FemtoKernel.femtokernel_init_safe.
 
 Goal True. idtac "Assumptions of femtokernel end-to-end theorem:". Abort.
 Print Assumptions RiscvPmp.FemtoKernel.femtokernel_endToEnd.
+
+Goal True. idtac "Assumptions of femtokernel relational end-to-end theorem:". Abort.
+Print Assumptions RiscvPmp.FemtoKernel.femtokernel_rel_endToEnd.
