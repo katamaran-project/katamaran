@@ -296,7 +296,7 @@ sep_contract_result         :=  "result_mem_read";
     |}.
 
   Definition sep_contract_checked_mem_write {bytes} {H: restrict_bytes bytes} : SepContractFun (@checked_mem_write bytes H) :=
-    {|  sep_contract_logic_variables := ["mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "s" :: (ty_iostate)];
+    {|  sep_contract_logic_variables := ["mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "s" :: (ty_iostate); "s'" :: (ty_iostate)];
         sep_contract_localstore      := [term_var "paddr"; term_var "data"];
         sep_contract_precondition    :=
           asn.match_bool (term_var "mmio")
@@ -304,7 +304,7 @@ sep_contract_result         :=  "result_mem_read";
               term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
               (asn_mmio_trace_pred bytes) ∗
               (asn_mmio_state_pred bytes (term_var "s")) ∗
-              ∃ "s'", ((asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s") (term_var "s'"))))
+              (asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s") (term_var "s'")))
             ( ∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
               (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
               (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr));
@@ -312,7 +312,7 @@ sep_contract_result         :=  "result_mem_read";
         sep_contract_postcondition   :=
           term_var "result_checked_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
           asn.match_bool (term_var "mmio")
-            (∃ "s'", asn_mmio_state_pred bytes (term_var "s'"))
+            (asn_mmio_state_pred bytes (term_var "s'"))
             (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
     |}.
 
@@ -360,7 +360,7 @@ sep_contract_result         :=  "result_mem_read";
     |}.
 
   Definition sep_contract_pmp_mem_write {bytes} {H: restrict_bytes bytes} : SepContractFun (@pmp_mem_write bytes H) :=
-    {| sep_contract_logic_variables := ["mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "typ" :: ty_access_type; "m" :: ty_privilege; "entries" :: ty.list ty_pmpentry; "s" :: ty_iostate];
+    {| sep_contract_logic_variables := ["mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "typ" :: ty_access_type; "m" :: ty_privilege; "entries" :: ty.list ty_pmpentry; "s" :: ty_iostate; "s'" :: ty_iostate];
       sep_contract_localstore      := [term_var "paddr"; term_var "data"; term_var "typ"; term_var "m"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "mmio")
@@ -369,7 +369,7 @@ sep_contract_result         :=  "result_mem_read";
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits)))) ∗
            (asn_mmio_trace_pred bytes) ∗
            (asn_mmio_state_pred bytes (term_var "s")) ∗
-           ∃ "s'", ((asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s") (term_var "s'")))
+           (asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s") (term_var "s'"))
           )
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
@@ -382,7 +382,7 @@ sep_contract_result         :=  "result_mem_read";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "mmio")
-          (∃ "s'", asn_mmio_state_pred bytes (term_var "s'"))
+          (asn_mmio_state_pred bytes (term_var "s'"))
           (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_var "m") ∗
         asn_pmp_entries (term_var "entries");
@@ -421,7 +421,7 @@ sep_contract_result         :=  "result_mem_read";
 
   (* Access type `Write` needed here, as `mem_write_value` calls `pmp_mem_write` with this access type*)
   Definition sep_contract_mem_write_value {bytes} {H: restrict_bytes bytes} : SepContractFun (@mem_write_value bytes H) :=
-    {| sep_contract_logic_variables := ["mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry; "s" :: ty_iostate];
+    {| sep_contract_logic_variables := ["mmio" :: ty.bool; "paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "entries" :: ty.list ty_pmpentry; "s" :: ty_iostate ; "s'" :: ty_iostate];
       sep_contract_localstore      := [term_var "paddr"; term_var "data"];
       sep_contract_precondition    :=
         asn.match_bool (term_var "mmio")
@@ -430,7 +430,7 @@ sep_contract_result         :=  "result_mem_read";
               (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits)))) ∗
               (asn_mmio_state_pred bytes (term_var "s")) ∗
               (asn_mmio_trace_pred bytes) ∗
-              ∃ "s'", ((asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s") (term_var "s'")))
+              (asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s") (term_var "s'"))
           )
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
@@ -442,7 +442,7 @@ sep_contract_result         :=  "result_mem_read";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "mmio")
-          ((asn_mmio_trace_pred bytes) ∗ (∃ "s'", asn_mmio_state_pred bytes (term_var "s'")))
+          ((asn_mmio_trace_pred bytes) ∗ asn_mmio_state_pred bytes (term_var "s'"))
           (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries");
@@ -553,19 +553,19 @@ sep_contract_result         :=  "result_mem_read";
 
   (* NOTE: if overflow is important, a no-overflow statement can be added to the `asn_mmio_checked_write` resource *)
   Definition sep_contract_mmio_write (bytes : nat) {H: restrict_bytes bytes} : SepContractFunX (mmio_write H) :=
-    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "s" :: ty_iostate];
+    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "data" :: ty_bytes bytes; "s" :: ty_iostate; "s'" :: ty_iostate];
        sep_contract_localstore      := [term_var "paddr"; term_var "data"];
        sep_contract_precondition    :=
          asn_in_mmio bytes (term_var "paddr") ∗
          asn_mmio_trace_pred bytes ∗
          asn_mmio_state_pred bytes (term_var "s") ∗
-         ∃ "s'", (asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s") (term_var "s'"));
+         asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s") (term_var "s'");
        sep_contract_result          := "result_write_mmio";
        sep_contract_postcondition   :=
          term_var "result_write_mmio" = term_val ty.bool true ∗
          asn_in_mmio bytes (term_var "paddr") ∗
          asn_mmio_trace_pred bytes ∗
-         (∃ "s'", asn_mmio_state_pred bytes (term_var "s'"));
+         asn_mmio_state_pred bytes (term_var "s'");
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
@@ -999,7 +999,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ rB) (mmio_write rB).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & #Hinv & Hstf & (%v & [%Hstate _]))".
+    iIntros "([%Hmmio _] & #Hinv & Hstf & [%Hstate _])".
     iApply semTWP_foreign.
     iIntros (? ?) "[Hregs [%a (Hmem & %Hmap & Htra)]]".
     iInv "Hinv" as ">(%ss & %t & Htrf & Hsta & %Hpred)" "Hclose".

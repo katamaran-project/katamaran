@@ -491,7 +491,6 @@ Module inv := invariants.
     )) ∗
     asn_mmio_trace_state_inv.
 
-
   Example femtokernel_handler_post_block1 : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
     (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block1)) ∗
     (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - mmio_handler_addr_block0)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
@@ -506,7 +505,7 @@ Module inv := invariants.
     cur_privilege ↦ term_val ty_privilege User ∗
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
     (∃ "s", ∃ "s'", ∃ "sv", (
-      asn_mmio_state_pred (term_var "s") ∗
+      asn_mmio_state_pred (term_var "s'") ∗
       (∃ "w", asn_mmio_event (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "w") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'")) ∗
       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
       term_unop (uop.bvtake 1) (term_var "sv") = term_var "s'" (* statevalue corresponds to new ghost state *)
@@ -680,7 +679,6 @@ Module inv := invariants.
     rewrite (Z.mul_comm 2 (bv.unsigned xs)).
     rewrite Z_div_plus_full ; last lia.
     rewrite Z.b2z_div2 Z.add_0_l.
-    Set Printing Implicit.
     set (x := (@bv.unsigned m xs ≫ @bv.unsigned n y)) in *.
     apply bv.bin_inj. rewrite bv_bin_eq_rec. rewrite bv_bin_zext'.
     unfold bv.shiftr in *.
@@ -698,13 +696,12 @@ Module inv := invariants.
     vm_compute. constructor; cbn. intros.
     intuition; bv_solve_Ltac.solveBvManual; intros.
     1-4: eapply bv.in_seqBv'; now vm_compute.
-    exists (bv.take 1 v0). split. apply IOW__sme; auto.
-    right. right. exists v2. split; auto.
-    eapply IOR__intr; eauto.
+    exists v1. split. apply IOW__sme; auto.
+    right. right. exists (bv.take 1 v0), v2. repeat split; auto.
 
     inversion H0; subst; try inversion H1; try contradiction H2; auto.
     cbn [event_contents event_nbbytes event_type event_addr] in *.
-    unfold mmio_interrupt_w2s.
+    unfold mmio_interrupt_w2s in *.
 
     (* shifts *)
     destruct (bv.view v2).
@@ -719,15 +716,18 @@ Module inv := invariants.
     unfold bv.zext'. rewrite !bv.app_cons.
 
     (* further simplifications of goal *)
-    destruct (bv.view v0).  rewrite bv.take_cons.
+    destruct (bv.view v0).  rewrite bv.take_cons in H4.
     change (bv.mk 1 _) with (@bv.cons 31 true bv.zero).
     rewrite !bv.land_cons. rewrite !bv.land_zero_r.
 
-    change (bv.of_N 24) with (bv.cons false (bv.cons false (bv.cons false (bv.cons true (@bv.cons 27 true (bv.zero)))))).
-    repeat rewrite bv.land_cons. rewrite bv.land_zero_r. rewrite !andb_false_r.
+    change (bv.of_N 24) with (bv.cons false (bv.cons false (bv.cons false (bv.cons true (@bv.cons 27 true (bv.zero)))))) in H4.
+    repeat rewrite bv.land_cons in H4. rewrite bv.land_zero_r in H4. rewrite !andb_false_r in H4.
     rewrite !andb_true_r.
+    rewrite !andb_true_r in H4.
 
-    destruct b, b0, b1, b2, b3, b4; simpl; auto.
+    destruct (bv.view v1). destruct (bv.view xs1). simpl in *.
+
+    destruct b, b0, b1, b2, b3, b4, b5; simpl in *; auto; inversion H4.
   Qed.
 
   Import Erasure.notations.
@@ -1072,21 +1072,7 @@ Module inv := invariants.
         iFrame.
 
         iDestruct "Hpred" as "(%v & %v0 & %v1 & Hpred & (%v2 & [%Hprot _]) & Hmem & [%Htake _])".
-
-        inversion Hprot; subst; simpl in *; try contradiction; try inversion H1. iFrame. iPureIntro; auto.
-         {
-            unfold mmio_interrupt_w2s in *.
-            destruct (bv.view v1), ( bv.view v2), (bv.view v).
-            destruct (bv.view xs1). simpl.
-            change (bv.of_N 24) with (bv.cons false (bv.cons false (bv.cons false (bv.cons true (@bv.cons 27 true (bv.zero)))))) in H4.
-            rewrite bv.take_cons in H4.
-            rewrite bv.take_cons. simpl.
-            destruct (bv.view xs0). destruct (bv.view xs0). destruct (bv.view xs0). destruct (bv.view xs0).
-            repeat rewrite bv.land_cons in H4. repeat rewrite !andb_false_r in H4.
-            rewrite !andb_true_r in H4. rewrite bv.land_zero_r in H4. simpl in H4.
-            destruct b, b0, b1, b2, b3, b4, b5; simpl in *; try inversion H4; auto.
-            1 - 24: admit.
-          }
+        iExists v0, v1. iFrame. iSplitR; auto.
       }
       (* Prove that the adversary cannot MRET. *)
       { iModIntro.
@@ -1098,7 +1084,7 @@ Module inv := invariants.
     (* Prove that we can derive safety from the universal contract's post condition.  *)
     unfold WP_loop.
     iApply (semWP_mono with "H"). auto.
-  Abort.
+  Qed.
 
   Lemma femtokernel_handler_safe_block0 `{sailGS Σ, iostateG IOState Σ} a :
     ⊢ femtoKernelAssumptions a ∗ femto_handler_pre a -∗
