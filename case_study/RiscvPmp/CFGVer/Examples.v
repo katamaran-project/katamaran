@@ -39,6 +39,8 @@ From Katamaran Require Import
      RiscvPmp.BlockVer.Verifier
      RiscvPmp.Machine
      RiscvPmp.Sig.
+From Katamaran Require
+     RiscvPmp.CFGVer.Verifier.
 
 Import RiscvPmpProgram.
 Import RiscvPmpBlockVerifExecutor.
@@ -278,6 +280,25 @@ Module Examples.
        instruction instead of advancing ainstr linearly. *)
     Lemma valid_jmp_fwd : ValidBlockVerifierContract jmp_fwd.
     Proof. vm_compute. solve_vc. Admitted.
+
+    (* CFGVer verification of jmp_fwd: the CFG verifier follows the actual PC
+       after each instruction, so it correctly handles the forward jump that
+       BlockVer cannot. Exit condition: PC ≥ 8 (execution left the block). *)
+    Definition jmp_fwd_exitCond : bv xlenbits -> bool :=
+      fun v => bv.ugeb v (bv.of_N 8).
+
+    Definition valid_jmp_fwd_cfg_vc : Prop :=
+      safeE (postprocess (
+        Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition (Σ := [ctx])
+          (extend_to_minimal_pre asn_init_pc)
+          [JAL X0 jmp_offset; NOP]
+          jmp_fwd_exitCond
+          5
+          (extend_to_minimal_post (asn_next_pc_eq (term_val ty_xlenbits (bv.of_N 8))))
+          wnil)).
+
+    Lemma valid_jmp_fwd_cfg : valid_jmp_fwd_cfg_vc.
+    Proof. vm_compute. solve_vc. Qed.
 
     (* Sets the contents of register X2 to value 42. The contract reflects
          this, we require ownership of X2, and after executing we know that
@@ -613,7 +634,6 @@ Module Examples.
       iSplitR "Hregsinv2"; iAssumption.
     }
     iModIntro. iExists regs1, regs2, memG. iFrame "Hmem Rmem Hregs Rregs".
-    done.
       Qed.
 
   (*   Lemma adequacy_gen_RiscVNStepsExitCond l exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22} *)
