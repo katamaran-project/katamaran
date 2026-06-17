@@ -2153,7 +2153,7 @@ Module inv := invariants.
       ∃ γ2' μ2' δ2' s2',
         ⟨ γ2, μ2, δ2, fun_loop ⟩ --->* ⟨ γ2', μ2', δ2', s2' ⟩
         (* The initial demands hold over the final states *)
-        ∧ mmio_pred_final bytes_per_word (memory_trace μ1') ∧ mmio_pred_final bytes_per_word (memory_trace μ2').
+        ∧ mmio_pred bytes_per_word (memory_trace μ1') ∧ mmio_pred bytes_per_word (memory_trace μ2').
     Proof.
       intros μinit μhentry μhwrite μhsecret μhexit μdata1 μdata2 μadv μft1 μft2 γeq γmstatus γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps1.
       eapply (wp2_strong_adequacy fun_loop γ2 μ2 δ2 steps1 (Q := fun _ _ v1 δ1' v2 δ2' => ⌜v1 = v2⌝ ∗ ⌜δ1' = δ2'⌝ ∗ femto_inv_mmio)%I); auto.
@@ -2165,11 +2165,12 @@ Module inv := invariants.
            destruct (env.view δ1), (env.view δ2).
 
            iPoseProof (femtokernel_init_safe_rel {|
-                    vmtvec  := read_register γ1 mtvec;
-                    vmcause := read_register γ1 mcause;
-                    vmepc   := read_register γ1 mepc;
-                    vmie    := read_register γ1 mie;
-                    vmip    := read_register γ1 mip;
+                    vmtvec        := read_register γ1 mtvec;
+                    vmcause       := read_register γ1 mcause;
+                    vmepc         := read_register γ1 mepc;
+                    vmie          := read_register γ1 mie;
+                    vmip          := read_register γ1 mip;
+                    vmstatus_mpie := false;
                      |}
                     with "[-]") as "H".
            { #[local] Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
@@ -2195,26 +2196,20 @@ Module inv := invariants.
         iDestruct "Hmem" as "[(%memmap1 & Hinv1 & %link1 & Htr1)
                               (%memmap2 & Hinv2 & %link2 & Htr2)]".
 
-        admit.
-
-        (* iDestruct "Hmmio" as "(Hmmio1 & Hmmio2)". *)
-        (* iInv "Hmmio1" as ">(%t1 & Hfrag1 & %Hpred1)" "Hclose1". *)
-        (* iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->". *)
-        (* iSpecialize ("Hclose1" with "[Htr1]"). *)
-        (* { iModIntro. iExists t1. admit. } *)
-
-        (* iInv "Hmmio" as ">((%t1 & Hfrag1 & Hpred1) & (%t2 & Hfrag2 & Hpred2))" "_". *)
-        (* iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->". *)
-        (* iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->". *)
-        (* iApply fupd_mask_intro; first set_solver. *)
-        (* iIntros "_". iSplitR; auto. *)
-        (* unfold mmio_pred_final. *)
-        (* TODO
-           - [ ] Require that a MMIOShutdown is issued at some point? There
-                 are other possibilities to run into a [fail m], this might
-                 give an issue here with mmio_pred_final.
-           ODOT *)
-    Admitted.
+        iDestruct "Hmmio" as "(Hmmio1 & Hmmio2)".
+        iInv "Hmmio1" as ">(%t1 & Hfrag1 & %Hpred1)" "Hclose1".
+        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
+        iSpecialize ("Hclose1" with "[Hfrag1]").
+        { iModIntro. iExists t1. auto. }
+        iMod "Hclose1" as "_".
+        iInv "Hmmio2" as ">(%t2 & Hfrag2 & %Hpred2)" "Hclose2".
+        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
+        iSpecialize ("Hclose2" with "[Hfrag2]").
+        { iModIntro. iExists t2. auto. }
+        iMod "Hclose2" as "_".
+        iApply fupd_mask_intro; first set_solver.
+        iIntros "_". auto.
+    Qed.
 
   End RelationalVerification.
 
