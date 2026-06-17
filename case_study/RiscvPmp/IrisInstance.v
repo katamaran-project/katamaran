@@ -55,12 +55,13 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Class mcMemPreGS Σ := {
       mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
       mc_gtPreGS :: trace_preG Trace Σ;
+      mc_wpPreGS :: writePending_preG Σ;
       }.
   #[export] Existing Instance mc_ghPreGS.
   #[export] Existing Instance mc_gtPreGS.
 
   Definition memGpreS : gFunctors -> Set := mcMemPreGS.
-  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace].
+  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace; writePendingΣ ].
 
   Lemma NoDup_liveAddrs : NoDup liveAddrs.
   Proof. now eapply Prelude.nodup_fixed. Qed.
@@ -73,7 +74,10 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Proof. intros. solve_inG. Defined.
 
   Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
-    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ tr_frag1 (memory_trace μ))%I.
+    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗
+             tr_frag1 (memory_trace μ) ∗
+             nothingPending
+          )%I.
 
   Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
   Proof.
@@ -113,10 +117,11 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
     pose (memmap := initMemMap μ).
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
     iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]".
+    iMod writePending_alloc as (gP) "[HauthPend HfragPend]".
 
     iModIntro.
-    iExists (McMemGS gH gT).
-    iSplitL "Hinv Hauth".
+    iExists (McMemGS gH gT gP).
+    iSplitL "Hinv Hauth HauthPend".
     - iExists memmap.
       iFrame.
       iPureIntro.
@@ -456,7 +461,10 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
-    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
+    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
+    | notWritten width         | [ addr; val ]        => writePending (mkEvent IOWrite addr width val)
+    | Sig.written width        | [ addr; val ]        => written (mkEvent IOWrite addr width val)
+    .
 
     Ltac destruct_pmp_entries :=
       repeat match goal with

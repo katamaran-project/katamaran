@@ -82,6 +82,8 @@ Inductive Predicate : Set :=
 | encodes_instr
 | ptstomem (bytes : nat)
 | ptstoinstr
+| notWritten (bytes : nat)
+| written (bytes : nat)
 .
 
 Section TransparentObligations.
@@ -113,7 +115,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg  => [ty_xlenbits; ty.list ty_pmpentry]
       | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
       | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
-      | in_mmio _  => [ty_xlenbits]
+      | in_mmio _       => [ty_xlenbits]
       end.
 
     Example default_pmpcfg_ent : Pmpcfg_ent :=
@@ -284,7 +286,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | not_within_cfg  => Not_within_cfg
       | prev_addr       => Prev_addr
       | in_entries      => In_entries
-      | in_mmio bytes => (fun a => withinMMIO a bytes)
+      | in_mmio bytes   => (fun a => withinMMIO a bytes)
       end.
 
     Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -304,6 +306,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
+      | notWritten width              => [ty_xlenbits; ty_bytes width]
+      | written width                 => [ty_xlenbits; ty_bytes width]
       end.
 
     Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
@@ -321,6 +325,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | encodes_instr              => true
         | ptstomem _                 => false
         | ptstoinstr                 => false
+        | notWritten width           => false
+        | written width              => false
         end
       }.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -342,6 +348,9 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
+      (* for now not needed? *)
+      | notWritten width          => None
+      | written width             => None
       end.
 
   End PredicateKit.

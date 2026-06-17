@@ -33,6 +33,7 @@ From Katamaran Require Import
      RiscvPmp.Machine
      trace.
 From iris Require Import
+  algebra.auth
      base_logic.lib.gen_heap
      proofmode.tactics.
 
@@ -51,6 +52,44 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
   Section RiscvPmpIrisParams.
     Definition MemVal : Set := Byte.
 
+    Inductive WritePendingState :=
+    | NothingPending : WritePendingState
+    | Pending : Event -> WritePendingState
+    | Written : Event -> WritePendingState.
+
+    Definition writePendingΣ := #[GFunctor (authR (optionUR (excl.exclR (leibnizO WritePendingState))))].
+
+    Class writePending_preG Σ := WritePending_preG {
+                                 writePending_pre_inG :: inG Σ (auth.authR (optionR (excl.exclR (leibnizO WritePendingState))));
+                               }.
+
+    Class writePendingG Σ := WritePendingG {
+                                 writePending_inG :: inG Σ (auth.authR (optionR (excl.exclR (leibnizO WritePendingState))));
+                                 writePendingG_gname : gname
+                               }.
+
+    Definition writePending_auth `{writePendingG Σ} e : iProp Σ :=
+      own writePendingG_gname (● (Some (excl.Excl (Pending e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
+    Definition writePending `{writePendingG Σ} e : iProp Σ :=
+      own writePendingG_gname (◯ (Some (excl.Excl (Pending e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
+    Definition written_auth `{writePendingG Σ} e : iProp Σ :=
+      own writePendingG_gname (● (Some (excl.Excl (Written e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
+    Definition written `{writePendingG Σ} e : iProp Σ :=
+      own writePendingG_gname (◯ (Some (excl.Excl (Written e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
+    Definition nothingPending_auth `{writePendingG Σ} : iProp Σ :=
+      own writePendingG_gname (● (Some (excl.Excl NothingPending) : optionR (excl.exclR (leibnizO WritePendingState)))).
+    Definition nothingPending `{writePendingG Σ} : iProp Σ :=
+      own writePendingG_gname (◯ (Some (excl.Excl NothingPending) : optionR (excl.exclR (leibnizO WritePendingState)))).
+
+    Lemma writePending_alloc `{!writePending_preG Σ} :
+      ⊢ |==> ∃ tG : writePendingG Σ,
+          nothingPending_auth ∗ nothingPending.
+    Proof.
+      iMod (own_alloc (● (Some (excl.Excl NothingPending): optionR (excl.exclR (leibnizO WritePendingState))) ⋅ ◯ (Some (excl.Excl NothingPending) : optionR (excl.exclR (leibnizO WritePendingState))))) as (γ) "[? ?]".
+      { apply auth_both_valid_2; done. }
+      iModIntro. iExists (WritePendingG _ γ). now iFrame.
+    Qed.
+
     (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)
     Class mcMemGS Σ :=
       McMemGS {
@@ -58,6 +97,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
           mc_ghGS : gen_heapGS Addr MemVal Σ;
           (* tracking traces *)
           mc_gtGS : traceG Trace Σ;
+          mc_wpGS :: writePendingG Σ
         }.
     #[export] Existing Instance mc_ghGS.
     #[export] Existing Instance mc_gtGS.
@@ -69,6 +109,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
         (∃ memmap, gen_heap_interp memmap
            ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
            ∗ tr_auth1 (memory_trace μ)
+           ∗ nothingPending_auth
         )%I.
 
   End RiscvPmpIrisParams.

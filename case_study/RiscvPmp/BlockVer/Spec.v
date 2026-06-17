@@ -494,9 +494,11 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            asn_in_mmio bytes (term_var "paddr") ∗
            term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            asn_inv_mmio bytes ∗
-           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data");
+           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
+           asn.chunk (chunk_user (notWritten bytes) [ term_var "paddr"; term_var "data" ]);
         sep_contract_result          := "result_write_mmio";
-        sep_contract_postcondition   := ⊤;
+        sep_contract_postcondition   :=
+           asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ]);
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
