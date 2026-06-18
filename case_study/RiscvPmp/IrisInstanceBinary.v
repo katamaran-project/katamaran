@@ -124,10 +124,10 @@ Module RiscvPmpIrisInstancePredicates2.
         @tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_left) (@trace_name _ _ memGS2_gtGS2_left) t1 ∗
         @tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_right) (@trace_name _ _ memGS2_gtGS2_right) t2 ∗
         ∃ t, ( let wpG := memGS2_wpGS2_left in
-               ((⌜filter_adv_observable t1 = t⌝ ∗ (∃ e, writePending_auth e ∨ nothingPending_auth))
+               ((⌜filter_adv_observable t1 = t⌝ ∗ nothingPending_auth)
                ∨ ∃ e1, ⌜filter_adv_observable t1 = e1 :: t⌝ ∗ written_auth e1)
              ∗ let wpG := memGS2_wpGS2_right in
-               ((⌜filter_adv_observable t2 = t⌝ ∗ (∃ e, writePending_auth e ∨ nothingPending_auth))
+               ((⌜filter_adv_observable t2 = t⌝ ∗ nothingPending_auth)
                ∨ ∃ e2, ⌜filter_adv_observable t2 = e2 :: t⌝ ∗ written_auth e2)
              )
         ).
@@ -230,7 +230,7 @@ Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
     (* notWritten and Written are only used for the unary verification, we will not
        reason using Katamaran with them in the binary verification. *)
-    | notWritten width         | [ addr; val ]        => False
+    | Sig.nothingPending       | _                    => False
     | Sig.written width        | [ addr; val ]        => False.
 
     Ltac destruct_pmp_entries :=

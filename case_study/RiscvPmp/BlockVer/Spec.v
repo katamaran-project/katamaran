@@ -288,7 +288,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           asn.chunk (chunk_user (notWritten bytes) [ term_var "paddr"; term_var "data" ]))
+           asn.chunk (chunk_user nothingPending env.nil))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr));
@@ -343,7 +343,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           asn.chunk (chunk_user (notWritten bytes) [ term_var "paddr"; term_var "data" ]))
+           asn.chunk (chunk_user nothingPending env.nil))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
@@ -390,7 +390,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           asn.chunk (chunk_user (notWritten bytes) [ term_var "paddr"; term_var "data" ]))
+           asn.chunk (chunk_user nothingPending env.nil))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
@@ -503,7 +503,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           asn.chunk (chunk_user (notWritten bytes) [ term_var "paddr"; term_var "data" ]);
+           asn.chunk (chunk_user nothingPending env.nil);
         sep_contract_result          := "result_write_mmio";
         sep_contract_postcondition   :=
            asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ]);
@@ -902,7 +902,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & [%Hneq _] & #Hinv & %Hmmio_checked & HnotWritten)". iApply semTWP_foreign.
+    iIntros "([%Hmmio _] & [%Hneq _] & #Hinv & %Hmmio_checked & Hnp)". iApply semTWP_foreign.
     iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr & Hwp)]]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.

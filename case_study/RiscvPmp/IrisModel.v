@@ -54,7 +54,6 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
 
     Inductive WritePendingState :=
     | NothingPending : WritePendingState
-    | Pending : Event -> WritePendingState
     | Written : Event -> WritePendingState.
 
     Definition writePendingΣ := #[GFunctor (authR (optionUR (excl.exclR (leibnizO WritePendingState))))].
@@ -76,18 +75,14 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
       writePending_preG Σ.
     Proof. solve_inG. Qed.
 
-    Definition writePending_auth `{writePendingG Σ} e : iProp Σ :=
-      own writePendingG_gname (● (Some (excl.Excl (Pending e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
-    Definition writePending `{writePendingG Σ} e : iProp Σ :=
-      own writePendingG_gname (◯ (Some (excl.Excl (Pending e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
-    Definition written_auth `{writePendingG Σ} e : iProp Σ :=
-      own writePendingG_gname (● (Some (excl.Excl (Written e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
-    Definition written `{writePendingG Σ} e : iProp Σ :=
-      own writePendingG_gname (◯ (Some (excl.Excl (Written e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
     Definition nothingPending_auth `{writePendingG Σ} : iProp Σ :=
       own writePendingG_gname (● (Some (excl.Excl NothingPending) : optionR (excl.exclR (leibnizO WritePendingState)))).
     Definition nothingPending `{writePendingG Σ} : iProp Σ :=
       own writePendingG_gname (◯ (Some (excl.Excl NothingPending) : optionR (excl.exclR (leibnizO WritePendingState)))).
+    Definition written_auth `{writePendingG Σ} e : iProp Σ :=
+      own writePendingG_gname (● (Some (excl.Excl (Written e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
+    Definition written `{writePendingG Σ} e : iProp Σ :=
+      own writePendingG_gname (◯ (Some (excl.Excl (Written e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
 
     Lemma writePending_alloc `{!writePending_preG Σ} :
       ⊢ |==> ∃ tG : writePendingG Σ,

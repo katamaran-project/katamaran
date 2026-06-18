@@ -82,7 +82,7 @@ Inductive Predicate : Set :=
 | encodes_instr
 | ptstomem (bytes : nat)
 | ptstoinstr
-| notWritten (bytes : nat)
+| nothingPending
 | written (bytes : nat)
 .
 
@@ -306,7 +306,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
-      | notWritten width              => [ty_xlenbits; ty_bytes width]
+      | nothingPending                => ctx.nil
       | written width                 => [ty_xlenbits; ty_bytes width]
       end.
 
@@ -325,7 +325,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | encodes_instr              => true
         | ptstomem _                 => false
         | ptstoinstr                 => false
-        | notWritten width           => false
+        | nothingPending             => false
         | written width              => false
         end
       }.
@@ -349,7 +349,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
       (* for now not needed? *)
-      | notWritten width          => None
+      | nothingPending            => None
       | written width             => None
       end.
 

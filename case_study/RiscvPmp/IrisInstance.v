@@ -467,7 +467,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
-    | notWritten width         | [ addr; val ]        => writePending (mkEvent IOWrite addr width val)
+    | Sig.nothingPending           | _                => nothingPending
     | Sig.written width        | [ addr; val ]        => written (mkEvent IOWrite addr width val)
     .
 
