@@ -287,14 +287,17 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
-           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
+           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
+           asn.chunk (chunk_user (notWritten bytes) [ term_var "paddr"; term_var "data" ]))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr));
       sep_contract_result          := "result_checked_mem_write";
       sep_contract_postcondition   :=
         term_var "result_checked_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
+        asn.match_bool (term_var "inv")
+                       (asn.chunk (chunk_user (written bytes) [term_var "paddr"; term_var "data"]))
+                       (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
     |}.
 
   Definition sep_contract_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : SepContractFun (@pmpCheck bytes H) :=
@@ -339,7 +342,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
-           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
+           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
+           asn.chunk (chunk_user (notWritten bytes) [ term_var "paddr"; term_var "data" ]))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
@@ -350,7 +354,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
+        asn.match_bool (term_var "inv")
+                       (asn.chunk (chunk_user (written bytes) [term_var "paddr"; term_var "data"]))
+                       (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_var "m") ∗
         asn_pmp_entries (term_var "entries");
     |}.
@@ -383,7 +389,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
-           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data"))
+           asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
+           asn.chunk (chunk_user (notWritten bytes) [ term_var "paddr"; term_var "data" ]))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
@@ -393,11 +400,12 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
-        asn.match_bool (term_var "inv") ⊤ (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
+        asn.match_bool (term_var "inv")
+                       (asn.chunk (chunk_user (written bytes) [term_var "paddr"; term_var "data"]))
+                       (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries");
     |}.
-
 
   Definition sep_contract_tick_pc : SepContractFun tick_pc :=
     {| sep_contract_logic_variables := ["ao" :: ty_xlenbits; "an" :: ty_xlenbits];
@@ -843,7 +851,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι.
       iIntros "H". cbn in *. iApply semTWP_foreign.
-      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
+      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr & Hwp)".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       iMod "Hclose" as "_". destruct inv.
@@ -852,13 +860,13 @@ Module RiscvPmpIrisInstanceWithContracts.
         iInv "H" as "Hptsto" "Hclose_ptsto".
         iDestruct (bi.later_mono _ _ (RiscvPmpModel2.fun_read_ram_works Hmap) with "[$Hptsto $Hmem]") as "#>%eq_fun_read_ram".
         iMod ("Hclose_ptsto" with "Hptsto") as "_". iModIntro.
-        iFrame "Hregs Hmem Htr". iSplitR; first auto.
+        iFrame "Hregs Hmem Htr Hwp". iSplitR; first auto.
         iApply semTWP_val. iModIntro.
         now iFrame "H".
       - (* old case *)
         iModIntro.
         iPoseProof (RiscvPmpModel2.fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-        iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+        iPoseProof (RiscvPmpModel2.mem_inv_not_modified $! Hmap with "Hmem Htr Hwp") as "Hmem".
         iFrame "Hregs Hmem". iApply semTWP_val. now iFrame "H".
   Qed.
 
@@ -894,8 +902,8 @@ Module RiscvPmpIrisInstanceWithContracts.
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & [%Hneq _] & #Hinv & %Hmmio_checked)". iApply semTWP_foreign.
-    iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+    iIntros "([%Hmmio _] & [%Hneq _] & #Hinv & %Hmmio_checked & HnotWritten)". iApply semTWP_foreign.
+    iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr & Hwp)]]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
     unfold fun_handle_write_mmio in Hf.

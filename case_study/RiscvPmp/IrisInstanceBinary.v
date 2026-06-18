@@ -221,7 +221,11 @@ Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
-    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
+    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
+    (* notWritten and Written are only used for the unary verification, we will not
+       reason using Katamaran with them in the binary verification. *)
+    | notWritten width         | [ addr; val ]        => False
+    | Sig.written width        | [ addr; val ]        => False.
 
     Ltac destruct_pmp_entries :=
       repeat match goal with

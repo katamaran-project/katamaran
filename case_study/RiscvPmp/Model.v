@@ -98,12 +98,12 @@ Module RiscvPmpModel2.
   Section ForeignProofs.
     Context `{sg : sailGS Σ}.
 
-
     Lemma mem_inv_not_modified : ∀ (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
         gen_heap.gen_heap_interp memmap -∗ trace.tr_auth trace.trace_name (memory_trace μ) -∗
+        nothingPending_auth -∗
         mem_inv sailGS_memGS μ.
-    Proof. iIntros (μ memmap) "Hmap Hmem Htr"; iExists memmap; now iFrame. Qed.
+    Proof. iIntros (μ memmap) "Hmap Hmem Htr Hwp"; iExists memmap; now iFrame. Qed.
 
     Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
                                 (paddr : Addr) (data : Byte),
@@ -146,11 +146,11 @@ Module RiscvPmpModel2.
     Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
       iIntros "H". cbn in *. iApply semTWP_foreign.
-      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
+      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr & Hwp)".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res ? ? Hf).
       iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr Hwp") as "Hmem".
       iMod "Hclose" as "_". iModIntro.
       rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       iFrame "Hregs Hmem". iApply semTWP_val. auto.
@@ -158,14 +158,15 @@ Module RiscvPmpModel2.
 
     Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
       map_Forall (λ (a : Addr) (v : Base.Byte), (memory_ram μ) a = v) memmap ->
-      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗ tr_auth1 (memory_trace μ) ={⊤}=∗
+      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗ tr_auth1 (memory_trace μ)
+      ∗ nothingPending_auth ={⊤}=∗
       mem_inv sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
     Proof.
       iRevert (data w paddr μ memmap).
       iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
-        iIntros (data w paddr μ memmap Hmap) "[Haddr [Hmem Htr]]".
+        iIntros (data w paddr μ memmap Hmap) "(Haddr & Hmem & Htr & Hwp)".
       - iModIntro. iSplitL; last done.
-        now iApply (mem_inv_not_modified $! Hmap with "Hmem Htr").
+        now iApply (mem_inv_not_modified $! Hmap with "Hmem Htr Hwp").
      -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
         destruct (bv.appView byte (bytes * byte) w) as [bw w].
@@ -173,7 +174,7 @@ Module RiscvPmpModel2.
         iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
         iApply ("IHbytes" $! data w
                        (bv.add bv.one paddr) (memory_update_ram μ (write_byte (memory_ram μ) paddr bd))
-                    (insert paddr bd memmap) with "[%] [$Haddr $Hmem $Htr]").
+                    (insert paddr bd memmap) with "[%] [$Haddr $Hmem $Htr $Hwp]").
         by apply map_Forall_update.
     Qed.
 
@@ -182,10 +183,10 @@ Module RiscvPmpModel2.
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
       iIntros "[%w H]". iApply semTWP_foreign.
-      iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+      iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr & Hwp)]]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res ? ? Hf). iMod "Hclose" as "_".
-      iMod (fun_write_ram_works _ _ data Hmap  with "[$H $Hmem $Htr]") as "[Hmem H]".
+      iMod (fun_write_ram_works _ _ data Hmap  with "[$H $Hmem $Htr $Hwp]") as "[Hmem H]".
       iModIntro. rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       iFrame "Hregs Hmem". iApply semTWP_val. auto.
     Qed.
@@ -222,12 +223,12 @@ Module RiscvPmpModel2.
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
       iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])".
-      iApply semTWP_foreign. iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+      iApply semTWP_foreign. iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr & Hwp)]]".
       iPoseProof (interp_pmp_fun_within_mmio_spec with "Hpmpa") as "%Hnotmmio"; first eauto.
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res ? ? Hf). iMod "Hclose" as "_". iModIntro.
       rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-      iFrame "Hregs Hmem Htr". iSplitR; auto. iApply semTWP_val.
+      iFrame "Hregs Hmem Htr Hwp". iSplitR; auto. iApply semTWP_val.
       now iFrame "Hcurp Hpmp Hpmpa".
     Qed.
 

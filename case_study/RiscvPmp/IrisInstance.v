@@ -59,12 +59,18 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
       }.
   #[export] Existing Instance mc_ghPreGS.
   #[export] Existing Instance mc_gtPreGS.
+  #[export] Existing Instance mc_wpPreGS.
 
   Definition memGpreS : gFunctors -> Set := mcMemPreGS.
   Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace; writePendingΣ ].
 
   Lemma NoDup_liveAddrs : NoDup liveAddrs.
-  Proof. now eapply Prelude.nodup_fixed. Qed.
+  Proof.
+    apply bv.NoDup_seqbv.
+    pose proof maxAddr_rep as H.
+    unfold maxAddr in H.
+    now rewrite (bv.bin_of_N_small minAddr_rep).
+  Qed.
 
   #[global] Arguments liveAddrs : simpl never.
 
@@ -118,7 +124,6 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
     iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]".
     iMod writePending_alloc as (gP) "[HauthPend HfragPend]".
-
     iModIntro.
     iExists (McMemGS gH gT gP).
     iSplitL "Hinv Hauth HauthPend".

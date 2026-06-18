@@ -68,6 +68,14 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
                                  writePendingG_gname : gname
                                }.
 
+    #[export] Instance writePendingΣ_preG `{writePendingG Σ} : writePending_preG Σ.
+    Proof. constructor. typeclasses eauto. Defined.
+
+    #[export] Instance subG_writePendingPreΣ {Σ}:
+      subG writePendingΣ Σ →
+      writePending_preG Σ.
+    Proof. solve_inG. Qed.
+
     Definition writePending_auth `{writePendingG Σ} e : iProp Σ :=
       own writePendingG_gname (● (Some (excl.Excl (Pending e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
     Definition writePending `{writePendingG Σ} e : iProp Σ :=
@@ -101,6 +109,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
         }.
     #[export] Existing Instance mc_ghGS.
     #[export] Existing Instance mc_gtGS.
+    #[export] Existing Instance mc_wpGS.
 
     Definition memGS : gFunctors -> Set := mcMemGS.
 
