@@ -120,11 +120,17 @@ Module RiscvPmpIrisInstancePredicates2.
              secret MMIO events (unary version). *)
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
     Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
-      @interp_inv_mmio _ memGS2_memGS_left _ width
-      ∗ @interp_inv_mmio _ memGS2_memGS_right _ width.
-      (* inv femto_inv_mmio_ns (
-          (∃ t__l, @tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_left) (@trace_name _ _ memGS2_gtGS2_left) t__l ∗ ⌜mmio_pred bytes_per_word t__l⌝)
-          ∗ (∃ t__r, @tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_right) (@trace_name _ _ memGS2_gtGS2_right) t__r ∗ ⌜mmio_pred bytes_per_word t__r⌝)). *)
+      inv femto_inv_mmio_ns (∃ t1 t2,
+        @tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_left) (@trace_name _ _ memGS2_gtGS2_left) t1 ∗
+        @tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_right) (@trace_name _ _ memGS2_gtGS2_right) t2 ∗
+        ∃ t, ( let wpG := memGS2_wpGS2_left in
+               ((⌜filter_adv_observable t1 = t⌝ ∗ (∃ e, writePending_auth e ∨ nothingPending_auth))
+               ∨ ∃ e1, ⌜filter_adv_observable t1 = e1 :: t⌝ ∗ written_auth e1)
+             ∗ let wpG := memGS2_wpGS2_right in
+               ((⌜filter_adv_observable t2 = t⌝ ∗ (∃ e, writePending_auth e ∨ nothingPending_auth))
+               ∨ ∃ e2, ⌜filter_adv_observable t2 = e2 :: t⌝ ∗ written_auth e2)
+             )
+        ).
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)

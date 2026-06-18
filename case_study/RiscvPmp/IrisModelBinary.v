@@ -79,6 +79,10 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
       @mc_gtGS _ memGS2_memGS_left.
     Definition memGS2_gtGS2_right `{mG : memGS2 Σ} : traceG Trace Σ :=
       @mc_gtGS _ memGS2_memGS_right.
+    Definition memGS2_wpGS2_left `{mG : memGS2 Σ} : writePendingG Σ :=
+      @mc_wpGS _ memGS2_memGS_left.
+    Definition memGS2_wpGS2_right `{mG : memGS2 Σ} : writePendingG Σ :=
+      @mc_wpGS _ memGS2_memGS_right.
   End RiscvPmpIrisParams2.
 
   Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
