@@ -2105,17 +2105,22 @@ Module Type SymPropOn
         { intros ι; cbn -[interpSU]. rewrite <-instprop_substSU, unboxSbLaws.
           change (transSU ?ζ1 ?ζ2) with (transWk ζ1 ζ2). now rewrite transWk_refl_1. easy. }
         induction P; cbn; try done.
-        - refine (liftBinOp_weakenedRefines _ _ IHP1 IHP2).
-        - refine (liftBinOp_weakenedRefines _ _ IHP1 IHP2).
-        - refine (liftBinOp_weakenedRefines' (fun fml' kP' => assertk fml' msg kP') (λ Σ' fml' kP', assertk fml' (amsg.boxMsg msg) kP') _ _ (oc_sound fml) IHP).
+        - (* angelic_binary *)
+          refine (liftBinOp_weakenedRefines _ _ IHP1 IHP2).
+        - (* demonic_binary *)
+          refine (liftBinOp_weakenedRefines _ _ IHP1 IHP2).
+        - (* assertk *)
+          refine (liftBinOp_weakenedRefines' (fun fml' kP' => assertk fml' msg kP') (λ Σ' fml' kP', assertk fml' (amsg.boxMsg msg) kP') _ _ (oc_sound fml) IHP).
           intros ? ? [] ? ? Hiff ι; cbn.
           apply and_iff_morphism; first easy.
           now apply Hiff.
-        - refine (liftBinOp_weakenedRefines' _ _ _ _ (oc_sound fml) IHP).
+        - (* assumek *)
+          refine (liftBinOp_weakenedRefines' _ _ _ _ (oc_sound fml) IHP).
           intros ? ? [] ? ? Hiff ι; cbn.
           apply iff_iff_iff_impl_morphism; first easy.
           now apply Hiff.
-        - unfold uq_angelicv.
+        - (* angelicv *)
+          unfold uq_angelicv.
           refine (elimWeakenedVarZero_weakenedRefines (R2 := IffSymProp (Σ:=Σ)) _ _ _ _ _ IHP).
           { now intros. }
           intros.
@@ -2124,7 +2129,8 @@ Module Type SymPropOn
             now apply IffSymProp_angelic_weaken.
           + cbn.
             now rewrite H.
-        - unfold uq_demonicv.
+        - (* demonicv *)
+          unfold uq_demonicv.
           refine (elimWeakenedVarZero_weakenedRefines _ _ _ _ _ IHP).
           { now intros. }
           intros.
@@ -2133,7 +2139,8 @@ Module Type SymPropOn
             now apply IffSymProp_demonic_weaken.
           + cbn.
             now rewrite H.
-        - unfold uq_assert_vareq.
+        - (* assert_vareq *)
+          unfold uq_assert_vareq.
           refine (elimWeakenedVar_weakenedRefines (R1 := prod_relation eq (@IffSymProp _)) (λ Σ0 xIn' '(t', kP'), assert_vareq x t' (amsg.boxMsg msg) kP') (fun '(t , P) => assert_vareq x t msg P) _ _ (v1 := (t, P)) _).
           { intros *. now destruct t0, msg. }
           { intros. destruct t1, t2. destruct H as [H0 H]; cbn in *; subst.
@@ -2142,7 +2149,8 @@ Module Type SymPropOn
           refine (liftBinOp_weakenedRefines (R1 := eq) (λ Σ' : LCtx, pair)
                     (fun _ _ _ _ _ => eq_refl)
                     (oc_sound t) IHP).
-        - unfold uq_assume_vareq.
+        - (* assume_vareq *)
+          unfold uq_assume_vareq.
           refine (elimWeakenedVar_weakenedRefines (R1 := prod_relation eq (@IffSymProp _)) (λ Σ0 xIn' '(t', kP'), assume_vareq x t' kP') (fun '(t , P) => assume_vareq x t P) _ _ (v1 := (t, P)) _).
           { intros *. now destruct t0. }
           { intros. destruct t1, t2. destruct H as [H0 H]; cbn in *; subst.
