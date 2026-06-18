@@ -138,6 +138,59 @@ Module Examples.
     Definition DebugBlockVerifierContract {Σ} (c : @BlockVerifierContract Σ) : Prop :=
       map c Debug_VC.
 
+    (* CFG verifier contract: analog of BlockVerifierContract but for the CFG
+       verifier, which requires an explicit exit condition and fuel bound.
+       Uses Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition. *)
+    Definition CFG_VC_triple {Σ}
+      (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
+      (i  : list AST)
+      (ec : bv xlenbits -> bool)
+      (fl : nat)
+      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
+      Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition (Σ := Σ)
+        (extend_to_minimal_pre P) i ec fl (extend_to_minimal_post Q) wnil.
+
+    Definition Valid_CFG_VC {Σ}
+      (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
+      (i  : list AST)
+      (ec : bv xlenbits -> bool)
+      (fl : nat)
+      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
+      safeE (postprocess (CFG_VC_triple P i ec fl Q)).
+
+    Record CFGVerifierContract {Σ} :=
+      MkCFGVerifierContract
+      { cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
+      ; cfg_instrs        : list AST
+      ; cfg_exitCond      : bv xlenbits -> bool
+      ; cfg_fuel          : nat
+      ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
+      }.
+
+    Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
+      (f : Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
+           (bv xlenbits -> bool) -> nat ->
+           Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) -> A) : A :=
+      match c with
+      | {| cfg_precondition := pre; cfg_instrs := i;
+           cfg_exitCond := ec; cfg_fuel := fl;
+           cfg_postcondition := post |} => f pre i ec fl post
+      end.
+
+    Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
+      cfg_map c Valid_CFG_VC.
+
+    Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
+      cfg_map c (fun P i ec fl Q =>
+        VerificationCondition (postprocess (CFG_VC_triple P i ec fl Q))).
+
+    Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']{{' Q '}}'" :=
+      (@MkCFGVerifierContract [ctx] P%asn i ec fl Q%asn)
+      (at level 90).
+    Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']{{' Q '}}' 'with' logvars" :=
+      (@MkCFGVerifierContract logvars P%asn i ec fl Q%asn)
+      (at level 90).
+
     Local Notation "'{{' P '}}' i '{{' Q '}}'" := (@MkBlockVerifierContract [ctx] P%asn i Q%asn)
         (at level 90, format "'[v' '{{'  P  '}}' '/'  i '/' '{{'  Q  '}}' ']'").
     Local Notation "'{{' P '}}' i '{{' Q '}}' 'with' logvars" := (@MkBlockVerifierContract logvars P%asn i Q%asn)
@@ -287,17 +340,13 @@ Module Examples.
     Definition jmp_fwd_exitCond : bv xlenbits -> bool :=
       fun v => bv.ugeb v (bv.of_N 8).
 
-    Definition valid_jmp_fwd_cfg_vc : Prop :=
-      safeE (postprocess (
-        Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition (Σ := [ctx])
-          (extend_to_minimal_pre asn_init_pc)
-          [JAL X0 jmp_offset; NOP]
-          jmp_fwd_exitCond
-          5
-          (extend_to_minimal_post (asn_next_pc_eq (term_val ty_xlenbits (bv.of_N 8))))
-          wnil)).
+    Definition jmp_fwd_cfg_contract : CFGVerifierContract :=
+      {{ asn_init_pc }}
+        [JAL X0 jmp_offset; NOP]
+      @cfg[ jmp_fwd_exitCond , 5 ]{{
+        asn_next_pc_eq (term_val ty_xlenbits (bv.of_N 8)) }}.
 
-    Lemma valid_jmp_fwd_cfg : valid_jmp_fwd_cfg_vc.
+    Lemma valid_jmp_fwd_cfg_contract : ValidCFGVerifierContract jmp_fwd_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
 
     (* Sets the contents of register X2 to value 42. The contract reflects
@@ -1011,6 +1060,12 @@ Section AdequacyTools.
                              ⌜pcOutOfInstrs (bv.of_N init_addr) instrs (ty.projLeft a)
                            ∨ pcOutOfInstrs (bv.of_N init_addr) instrs (ty.projRight a)⌝)%I.
 
+  Definition exitCond_WP2_loop `{sailGS2 Σ} (exitCond : bv xlenbits -> bool) : iProp Σ :=
+    myWP2_loop
+      (∃ a, pc ↦ᵣ a ∗
+              ⌜exitCond (ty.projLeft a)
+             ∨ exitCond (ty.projRight a)⌝)%I.
+
   Definition pcBehindInstrs_WP2_loop `{sailGS2 Σ} start instrs :=
     myWP2_loop
       (∃ γ0 γ3 : RegStore, own_regstore2 γ0 γ3 ∗
@@ -1346,6 +1401,133 @@ Section AdequacyTools.
           done.
     Qed.
 
+    Lemma sound_exec_cfg_addr_myWP2
+        {b exitCond fuel} (apc : RelVal ty_xlenbits)
+        (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
+      Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr b exitCond fuel apc Φ h →
+      interpret_scheap h ∗ pc ↦ᵣ apc ∗ (∃ v, nextpc ↦ᵣ v) ∗
+        Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ⊢
+      (∀ an,
+         ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => True end⌝ ∗
+         pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+           Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ∗
+         (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ ExitCondIprop) -∗
+      myWP2_loop ExitCondIprop.
+    Proof.
+      revert apc h.
+      induction fuel as [|n' IH]; intros apc h Hexec.
+      - cbn [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr CHeapSpec.error] in Hexec.
+        contradiction.
+      - destruct apc as [v|v1 v2].
+        + cbn [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr ty.RVToOption
+               CHeapSpec.angelic_binary] in Hexec.
+          destruct Hexec as [Hexit | Hexec].
+          * destruct (exitCond v) eqn:Hexit_eq.
+            -- cbn [CHeapSpec.pure] in Hexit.
+               iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
+               iApply exitCondImpliesMyWP2_loop.
+               iApply ("Hk" $! (SyncVal v)).
+               iSplit. { iPureIntro. exact Hexit_eq. }
+               iFrame. iPureIntro. exact Hexit.
+            -- cbn [CHeapSpec.error] in Hexit. contradiction.
+          * destruct (Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned v) eqn:Hmod.
+            -- set (k := N.to_nat (bv.bin v) / bytes_per_instr) in *.
+               destruct (List.nth_error b k) as [i|] eqn:Hnth.
+               ++ unfold bind, CHeapSpec.bind in Hexec.
+                  iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
+                  unfold Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned in Hmod.
+                  apply Nat.eqb_eq in Hmod.
+                  have Haddr : bv.add bv.zero (bv.of_N (N.of_nat (k * bytes_per_instr))) = v.
+                  { have Hdiv : k * bytes_per_instr = N.to_nat (bv.bin v).
+                    { have Hdm := Nat.div_mod (N.to_nat (bv.bin v)) bytes_per_instr.
+                      unfold k, bytes_per_instr in *. lia. }
+                    rewrite Hdiv. rewrite N2Nat.id. rewrite bv.of_N_bin.
+                    rewrite bv.add_zero_l. reflexivity. }
+                  iPoseProof (Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs_nth b k bv.zero Hnth
+                    with "Hinstrs") as "[Hinstr Hframe]".
+                  iEval (rewrite Haddr) in "Hinstr".
+                  iEval (rewrite Haddr) in "Hframe".
+                  rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix. iRight.
+                  iApply (semWP2_mono with "[Hh Hnpc Hpc Hinstr]").
+                  { iApply (Katamaran.RiscvPmp.CFGVer.Verifier.sound_exec_instruction Hexec). iFrame. }
+                  iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
+                  2-3: iIntros "(%δ' & _ & HF)"; auto.
+                  2: iIntros "_"; done.
+                  iIntros "(%δ' & eqδ' & %rv & eqrv & ([%an (Hnpc' & Hpc' & (%h' & Hh' & %Hcfg & _))] & Hinstr' & _))".
+                  iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
+                  iModIntro.
+                  iRevert "Hk".
+                  iApply (IH an h' Hcfg).
+                  iFrame "Hh' Hpc' Hinstrs'". iExists an. iExact "Hnpc'".
+               ++ cbn [CHeapSpec.error] in Hexec. contradiction.
+            -- cbn [CHeapSpec.error] in Hexec. contradiction.
+        + cbn [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr ty.RVToOption] in Hexec.
+          iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
+          iApply exitCondImpliesMyWP2_loop.
+          iApply ("Hk" $! (NonSyncVal v1 v2)).
+          iSplit. { done. }
+          iFrame. iPureIntro. exact Hexec.
+    Qed.
+
+    Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post b exitCond fuel}
+        (ι : Valuation Γ) (ExitCondIprop : iProp Σ) :
+      Katamaran.RiscvPmp.CFGVer.Verifier.cexec_triple_addr pre b exitCond fuel post (λ _ _, True) [] →
+      ⊢ ∀ a : RelVal ty_xlenbits,
+        asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
+        pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+        Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b -∗
+        (∀ an,
+           ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => True end⌝ ∗
+           pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+           Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ∗
+           asn.interpret post ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an] -∗ ExitCondIprop) -∗
+        myWP2_loop ExitCondIprop.
+    Proof.
+      cbv [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_triple_addr bind demonic_ctx demonic
+           CPureSpec.demonic lift_purespec].
+      iIntros (Htrip a) "(Hpre & %HsLa & Hpc & Hnpc & Hinstrs) Hk".
+      rewrite CPureSpec.wp_demonic_ctx in Htrip.
+      specialize (Htrip ι a).
+      apply produce_sound in Htrip.
+      iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
+      iApply (sound_exec_cfg_addr_myWP2 a ExitCondIprop _ _ Hexec
+        with "[$Hpc $Hnpc $Hinstrs $Hh2]").
+      iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & (%h3 & [Hh3 %Hconsume]))".
+      apply consume_sound in Hconsume.
+      iPoseProof (Hconsume with "Hh3") as "[HPOST Hheap]".
+      iApply ("Hk" $! an).
+      iSplit. { iPureIntro. exact Hexit. }
+      iFrame.
+    Qed.
+
+    Lemma sound_sblock_verification_condition_myWP2 {Γ pre post b exitCond fuel}
+        (Hverif : safeE (postprocess (
+            Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition
+              pre b exitCond fuel post wnil)))
+        (ι : Valuation Γ) (ExitCond : iProp Σ) :
+      ⊢ ∀ a : RelVal ty_xlenbits,
+          asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
+          pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+          Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b -∗
+          (∀ an,
+             ⌜match an with
+               | SyncVal v => exitCond v = true
+               | NonSyncVal _ _ => True
+               end⌝ ∗
+             pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+             Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ∗
+             asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+             ExitCond) -∗
+          myWP2_loop ExitCond.
+    Proof.
+      apply (sound_cexec_triple_addr_myWP2 (fuel := fuel) ι ExitCond).
+      apply (safeE_safe env.nil), postprocess_sound in Hverif.
+      apply LogicalSoundness.psafe_safe in Hverif; [|done].
+      revert Hverif.
+      apply Katamaran.RiscvPmp.CFGVer.Verifier.rexec_triple_addr.
+      - easy. - easy. - easy. - constructor.
+    Qed.
+
     Lemma swap_init_verified v1 v2 :
       ⊢ swap_init_contract v1 v2.
   Proof.
@@ -1520,6 +1702,95 @@ End AdequacyTools.
     all: auto.
   Qed.
 
+  Definition cfg_instrs_pre `{sailGS2 Σ} instrs γ1 γ2 : iProp Σ :=
+    own_regstore2 γ1 γ2 ∗
+      Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs
+        (SyncVal (bv.of_N init_addr)) instrs ∗
+      interp_inv_constant_time.
+
+  Definition cfg_instrs_contract `{sailGS2 Σ} exitCond instrs γ1 γ2 :=
+    (cfg_instrs_pre instrs γ1 γ2 -∗ exitCond_WP2_loop exitCond)%I.
+
+  Lemma cfg_instrs_verified `{sailGS2 Σ} instrs' exitCond γ1 γ2 R (ι : Valuation R)
+    (block : @CFGVerifierContract R)
+    (valid_block : ValidCFGVerifierContract block)
+    (blockInstrs : cfg_instrs block = instrs')
+    (blockExitCond : cfg_exitCond block = exitCond)
+    (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
+               cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+               interp_inv_constant_time -∗
+               asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+                 ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+    (ImplPost : forall an,
+        asn.interpret (extend_to_minimal_post (cfg_postcondition block))
+          ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)].["an"∷ty_xlenbits ↦ an]
+          ∗ pc ↦ᵣ an -∗
+        pc ↦ᵣ an ∗
+          ⌜exitCond (ty.projLeft an)
+          ∨ exitCond (ty.projRight an)⌝) :
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+    RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
+    ⊢ cfg_instrs_contract exitCond instrs' γ1 γ2.
+  Proof.
+    iIntros (γ1curpriv γ2curpriv γ1pc γ2pc) "Hpre".
+    iDestruct "Hpre" as "(Hregs & Hinstrs & #Hinv)".
+    cbn.
+    iDestruct "Hregs" as "(Hpc & Hnpc & Hstatus & Htvec & Hcause & Hepc & Hpriv & Hregs)".
+    rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
+    rewrite !regPstsTo_sync_is_nonsync.
+    unfold cfg_instrs_contract, exitCond_WP2_loop.
+    destruct block.
+    cbn in valid_block, blockInstrs, blockExitCond, ImplPre, ImplPost.
+    subst cfg_instrs0 cfg_exitCond0.
+    unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
+    iApply (sound_sblock_verification_condition_myWP2 valid_block ι _
+              $! (SyncVal (bv.of_N init_addr))
+              with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
+    - iSplitL "Hpriv Hregs".
+      + iApply ImplPre. iFrame "Hinv Hpriv".
+        rewrite gprs_with_registers_equiv. cbn.
+        repeat (iDestruct "Hregs" as "($ & Hregs)").
+      + iSplit. { done. }
+        iFrame.
+    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & Hpost)".
+      iExists an.
+      iApply (ImplPost an). iFrame.
+    Unshelve. all: try exact R. all: try exact ι.
+  Qed.
+
+  Lemma cfg_instrs_safe `{sailGS2 Σ} instrs' exitCond γ1 γ2 {R} {ι : Valuation R}
+    (block : @CFGVerifierContract R)
+    (valid_block : ValidCFGVerifierContract block)
+    (blockInstrs : cfg_instrs block = instrs')
+    (blockExitCond : cfg_exitCond block = exitCond)
+    (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
+               cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+               interp_inv_constant_time -∗
+               asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+                 ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+    (ImplPost : forall an,
+        asn.interpret (extend_to_minimal_post (cfg_postcondition block))
+          ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)].["an"∷ty_xlenbits ↦ an]
+          ∗ pc ↦ᵣ an -∗
+        pc ↦ᵣ an ∗
+          ⌜exitCond (ty.projLeft an)
+          ∨ exitCond (ty.projRight an)⌝) :
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+    RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
+    ⊢ own_regstore2 γ1 γ2 ∗
+      Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs
+        (SyncVal (bv.of_N init_addr)) instrs' ∗
+      interp_inv_constant_time
+    -∗ exitCond_WP2_loop exitCond.
+  Proof.
+    iIntros (γ1curpriv γ2curpriv γ1pc γ2pc) "H".
+    iApply cfg_instrs_verified; eauto.
+  Qed.
+
     Definition declare_public_registers γ1 γ2 (public_registers : list {x : Ty & Reg x}) :=
       Forall
         (fun x => match x with
@@ -1538,6 +1809,61 @@ End AdequacyTools.
         intros x Hx;
         destruct (reg_convert x); auto.
     Qed.
+
+    (* Dependency analysis for instrs_endToEnd and what changes in the CFG version.
+
+       instrs_endToEnd
+       ├── adequacy_gen_RiscVNStepsExitCond
+       │     UNCHANGED: takes myWP2_loop ExitCond → concrete leakage equivalence.
+       ├── mem_res2_split_leak / constant_time_from_mem_res2_only_leak / mem_inv2_split_leak
+       │     UNCHANGED: generic memory resource splitting lemmas.
+       ├── instrsMemory
+       │     UNCHANGED: ptsto_instrs body is identical in BlockVer and CFGVer; same result.
+       └── instrs_safe → instrs_verified
+             instrs_verified uses two key ingredients:
+             ├── sound_sblock_verification_condition   (from BlockVer.Verifier)
+             │     CHANGES: gives semTripleBlock (single-step WP2) from
+             │     safeE (postprocess (sblock_verification_condition ...)).
+             │     CFG analog: need safeE_safe → postprocess_sound → psafe_safe
+             │     → CFGVer.Verifier.rexec_triple_addr to reach cexec_triple_addr.
+             └── myWP2_loop_semTripleBlock
+                   CHANGES: induction over the instruction LIST (step_n, semTripleBlock).
+                   This structural induction does not apply to CFGs, which use fuel-based
+                   execution following the actual PC (sexec_cfg_addr / cexec_cfg_addr).
+                   CFG analog: sound_cexec_triple_addr_myWP2 already proved in
+                   Section AdequacyTools; it takes cexec_triple_addr and produces
+                   myWP2_loop ExitCond via induction on fuel (not the instruction list).
+                   → step_n, exec_instructions_prologue/epilogue: NOT NEEDED for CFG.
+
+       Summary of changes required for a cfg_instrs_endToEnd analog:
+
+       1. EXIT CONDITION:
+            pcOutOfInstrs_WP2_loop instrs → exitCond_WP2_loop exitCond
+          The BlockVer exit condition is "PC fell off the instruction list"; the CFG
+          version uses an explicit user-supplied boolean exitCond.
+          Define exitCond_WP2_loop analogously to pcOutOfInstrs_WP2_loop.
+
+       2. CONTRACT TYPE:
+            BlockVerifierContract / ValidBlockVerifierContract
+            → CFGVerifierContract (adds exitCond and fuel fields)
+          ValidCFGVerifierContract uses CFGVer.Verifier.sblock_verification_condition.
+
+       3. BRIDGE LEMMA (replaces two BlockVer lemmas with one CFG lemma):
+            sound_sblock_verification_condition + myWP2_loop_semTripleBlock
+            → sound_sblock_verification_condition_myWP2
+          This new lemma takes safeE (postprocess (sblock_verification_condition ...))
+          and directly produces myWP2_loop ExitCond by:
+            (a) applying the safeE → cexec_triple_addr chain
+                (safeE_safe → postprocess_sound → psafe_safe → rexec_triple_addr),
+            (b) then applying sound_cexec_triple_addr_myWP2.
+
+       4. ImplPost OBLIGATION:
+            checks pcOutOfInstrs (bv.of_N init_addr) instrs' (ty.projLeft an)
+            → checks exitCond v = true directly from the exitCond exit hypothesis.
+
+       5. instrs_pre shape: UNCHANGED (own_regstore2 ∗ ptsto_instrs ∗ interp_inv_constant_time).
+
+       6. instrs_contract shape: pcOutOfInstrs_WP2_loop instrs → exitCond_WP2_loop exitCond. *)
 
     Lemma instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
       instrs' n ws {R} {ι : Valuation R}
@@ -1678,6 +2004,81 @@ End AdequacyTools.
       - done.
         Unshelve. exact ctx.nil. exact env.nil.
     Qed.
+
+
+
+  Lemma jmp_fwd_safe_cfg `{sailGS2 Σ} γ1 γ2 :
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
+    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
+    ⊢ cfg_instrs_contract jmp_fwd_exitCond [JAL X0 jmp_offset; NOP] γ1 γ2.
+  Proof.
+    intros γ1curpriv γ2curpriv γ1pc γ2pc.
+    unfold cfg_instrs_contract, cfg_instrs_pre, exitCond_WP2_loop.
+    iIntros "(Hregs & Hinstrs & #Hinv)".
+    cbn.
+    iDestruct "Hregs" as
+      "(Hpc & Hnpc & Hstatus & Htvec & Hcause & Hepc & Hpriv & Hregs)".
+    rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
+    rewrite !regPstsTo_sync_is_nonsync.
+    iApply (sound_sblock_verification_condition_myWP2 valid_jmp_fwd_cfg_contract [env] _
+              $! (SyncVal (bv.of_N init_addr))
+              with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
+    - iSplitL "Hpriv".
+      + cbn. iSplit. { iPureIntro. split; [reflexivity | trivial]. }
+        iFrame "∗ #".
+      + iFrame "Hpc". iSplitL "Hnpc". { iExists _. iExact "Hnpc". }
+        iExact "Hinstrs".
+    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & Hpost)".
+      destruct an as [v | vl vr].
+      + iExists (SyncVal v). iFrame "Hpc".
+        cbn in Hexit. iPureIntro. left. cbn. rewrite Hexit. exact I.
+      + iSimpl in "Hpost".
+        iDestruct "Hpost" as "([%FF _] & _)".
+        exfalso. cbn in FF. discriminate FF.
+  Qed.
+
+  Lemma jmp_fwd_endToEnd_cfg {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws
+  (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1]) :  
+    let instrs := [JAL X0 jmp_offset; NOP] in
+    mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
+    mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
+    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
+    ⟨ γ1, μ1 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
+    leakage_trace μ1 = leakage_trace μ2 ->
+    leakage_trace μ1' = leakage_trace μ2'.
+  Proof.
+    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
+    apply (adequacy_gen_RiscVNStepsExitCond (μ21 := μ2) (γ21 := γ2) _ steps1 steps2).
+    iIntros (Σ' H).
+    iIntros "(Hmem & H')".
+    iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
+    iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak") as "Hinv"; auto.
+    iMod "Hinv" as "#Hinv".
+    iMod (instrsMemory with "Hmem") as "H"; eauto.
+    { cbn. by unfold lenAddr. }
+    iSplitR "".
+    - iApply (jmp_fwd_safe_cfg γ1 γ2 γ1curpriv γ2curpriv γ1pc γ2pc).
+      iFrame "∗ #".
+      done.
+    - iModIntro.
+      iIntros "Rmem".
+      iInv "Hinv" as "Hleak".
+      iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
+      unfold mem_inv_only_leak.
+      iMod "Hleak".
+      iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
+      iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
+      iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
+      iModIntro. iFrame.
+      iApply fupd_mask_intro; first set_solver.
+      now iIntros "_".
+  Qed.
 
 End Examples.
 
