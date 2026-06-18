@@ -288,7 +288,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           asn.chunk (chunk_user nothingPending env.nil))
+           if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
+           then asn.chunk (chunk_user nothingPending env.nil)
+           else ⊤)
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr));
@@ -296,7 +298,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_postcondition   :=
         term_var "result_checked_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "inv")
-                       (asn.chunk (chunk_user (written bytes) [term_var "paddr"; term_var "data"]))
+                       (if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
+                        then asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ])
+                        else ⊤)
                        (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
     |}.
 
@@ -343,7 +347,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           asn.chunk (chunk_user nothingPending env.nil))
+           if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
+           then asn.chunk (chunk_user nothingPending env.nil)
+           else ⊤)
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
@@ -355,7 +361,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "inv")
-                       (asn.chunk (chunk_user (written bytes) [term_var "paddr"; term_var "data"]))
+                       (if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
+                        then asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ])
+                        else ⊤)
                        (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_var "m") ∗
         asn_pmp_entries (term_var "entries");
@@ -390,7 +398,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           asn.chunk (chunk_user nothingPending env.nil))
+           if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
+           then asn.chunk (chunk_user nothingPending env.nil)
+           else ⊤)
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
@@ -401,7 +411,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "inv")
-                       (asn.chunk (chunk_user (written bytes) [term_var "paddr"; term_var "data"]))
+                       (if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
+                        then asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ])
+                        else ⊤)
                        (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries");
@@ -503,10 +515,14 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           asn.chunk (chunk_user nothingPending env.nil);
+           if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
+           then asn.chunk (chunk_user nothingPending env.nil)
+           else ⊤;
         sep_contract_result          := "result_write_mmio";
         sep_contract_postcondition   :=
-           asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ]);
+           if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
+           then asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ])
+           else ⊤;
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
