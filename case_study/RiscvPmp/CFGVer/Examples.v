@@ -1924,6 +1924,70 @@ End AdequacyTools.
         now iIntros "_".
     Qed.
 
+    Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
+      instrs' exitCond n ws {R} {ι : Valuation R}
+      public_registers
+      (HpubReg : declare_public_registers γ1 γ2 public_registers)
+      (block : @CFGVerifierContract R)
+      (valid_block : ValidCFGVerifierContract block)
+      (blockInstrs : cfg_instrs block = instrs')
+      (blockExitCond : cfg_exitCond block = exitCond)
+      (ImplPre : forall `{sailGS2 Σ},
+          interp_gprs_with_public_registers γ1 γ2 public_registers ∗
+          cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+          interp_inv_constant_time -∗
+          asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+            ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+      (ImplPost : forall `{sailGS2 Σ}, forall an,
+          asn.interpret (extend_to_minimal_post (cfg_postcondition block))
+            ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)].["an"∷ty_xlenbits ↦ an]
+            ∗ pc ↦ᵣ an -∗
+          pc ↦ᵣ an ∗
+            ⌜exitCond (ty.projLeft an) ∨ exitCond (ty.projRight an)⌝) :
+      (4 * N.of_nat (length instrs') < lenAddr)%N ->
+      mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
+      mem_has_instrs μ2 (bv.of_N init_addr) ws instrs' ->
+      RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+      RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+      RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
+      RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
+      ⟨ γ1, μ1 ⟩ -(exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
+      ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
+      leakage_trace μ1 = leakage_trace μ2 ->
+      leakage_trace μ1' = leakage_trace μ2'.
+    Proof.
+      intros Hleninstrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
+        steps1 steps2 Htrace.
+      apply (adequacy_gen_RiscVNStepsExitCond (μ21 := μ2) (γ21 := γ2)
+        _ steps1 steps2).
+      iIntros (Σ' H').
+      iIntros "(Hmem & H')".
+      iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
+      iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak")
+        as "Hinv"; auto.
+      iMod "Hinv" as "#Hinv".
+      iMod (instrsMemory with "Hmem") as "H"; eauto.
+      iSplitR "".
+      - iApply (cfg_instrs_safe γ1 γ2 block).
+        all: eauto.
+        iIntros "(Hregs & Hpriv & #Hinv')".
+        iApply ImplPre.
+        iFrame "∗ #".
+        by iFrame "∗ #".
+      - iModIntro.
+        iIntros "Rmem".
+        iInv "Hinv" as "Hleak".
+        iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
+        unfold mem_inv_only_leak.
+        iMod "Hleak".
+        iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
+        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
+        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
+        iModIntro. iFrame.
+        iApply fupd_mask_intro; first set_solver.
+        now iIntros "_".
+    Qed.
+
     Lemma swap_endToEnd2 {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws :
     let instrs := [ MV X3 X2; MV X2 X1; MV X1 X3] in
     mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
@@ -2054,30 +2118,25 @@ End AdequacyTools.
     leakage_trace μ1' = leakage_trace μ2'.
   Proof.
     intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
-    apply (adequacy_gen_RiscVNStepsExitCond (μ21 := μ2) (γ21 := γ2) _ steps1 steps2).
-    iIntros (Σ' H).
-    iIntros "(Hmem & H')".
-    iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
-    iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak") as "Hinv"; auto.
-    iMod "Hinv" as "#Hinv".
-    iMod (instrsMemory with "Hmem") as "H"; eauto.
-    { cbn. by unfold lenAddr. }
-    iSplitR "".
-    - iApply (jmp_fwd_safe_cfg γ1 γ2 γ1curpriv γ2curpriv γ1pc γ2pc).
-      iFrame "∗ #".
-      done.
-    - iModIntro.
-      iIntros "Rmem".
-      iInv "Hinv" as "Hleak".
-      iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
-      unfold mem_inv_only_leak.
-      iMod "Hleak".
-      iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
-      iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
-      iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
-      iModIntro. iFrame.
-      iApply fupd_mask_intro; first set_solver.
-      now iIntros "_".
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
+      instrs jmp_fwd_exitCond n ws [ctx] [env]
+      [existT ty_xlenbits x1] HpubReg jmp_fwd_cfg_contract
+      valid_jmp_fwd_cfg_contract eq_refl eq_refl).
+    all: try eauto.
+    - intros Σ H.
+      cbn.
+      iIntros "(Hregs & Hpriv & #Hinv)".
+      iSplitL "".
+      + iPureIntro. split; [reflexivity | done].
+      + iFrame "∗ #".
+    - intros Σ H an.
+      destruct an as [v | vl vr].
+      + cbn. iIntros "(((%Heq & _) & _) & Hpc)".
+        iFrame "Hpc". iPureIntro. left.
+        cbn in Heq. injection Heq as ->. vm_compute. exact I.
+      + cbn. iIntros "(((%Heq & _) & _) & _)".
+        cbn in Heq. discriminate Heq.
+    - cbn. by unfold lenAddr.
   Qed.
 
 End Examples.
