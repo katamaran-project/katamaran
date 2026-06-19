@@ -7,5 +7,6 @@
         "ROCQ_WORKSPACE": "/home/emiel/Documents/katamaran"
       }
     }
-  }
+  },
+  "compactionPrompt": "This is a Katamaran/Rocq formal verification session. Compact to preserve:\n\n1. ROCQ-MCP STATE: Any active state IDs from rocq_start (file + theorem + state_id). These cannot be recovered — if lost, the session must be restarted.\n\n2. COMPILE STATUS: For each .v file touched this session, record the last compile outcome: file path, mode used (vos/full), and whether it succeeded or what the first error was. Drop verbose coqc output — just keep the status line and error message.\n\n3. CURRENT PROOF: The lemma name being proved, the last goal state shown by rocq_check, and which tactics have been tried (succeeded or ruled out). Drop superseded rocq_check calls — only keep the most recent goal.\n\n4. KEY DECISIONS: Any proof approach confirmed working (e.g. 'use swap_endToEnd as analogue') or ruled out (e.g. 'instrs_endToEnd is BlockVer only'). One sentence per decision.\n\n5. OPEN ERRORS: Any error message that is the current debugging target. Full text.\n\nDROP: Full text of successful compile output; file reads of definitions documented in CLAUDE.md or the /katamaran skill; intermediate exploration reads whose conclusions are already captured; assistant narration that restates tool results."
 }
