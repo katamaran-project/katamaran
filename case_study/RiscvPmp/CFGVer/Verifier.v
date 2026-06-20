@@ -229,7 +229,7 @@ Section BlockVerificationDerived.
         | O    => error
         | S n' =>
             match ty.RVToOption apc with
-            | None   => pure apc
+            | None   => error
             | Some v =>
                 angelic_binary
                   (if exitCond v then pure apc else error)
@@ -526,11 +526,8 @@ Section BlockVerificationDerived.
                   iFrame "Hh' Hpc' Hinstrs'". iExists an. iExact "Hnpc'".
                ++ cbn [CHeapSpec.error] in Hexec. contradiction.
             -- cbn [CHeapSpec.error] in Hexec. contradiction.
-        + cbn [cexec_cfg_addr ty.RVToOption] in Hexec.
-          iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-          iApply ("Hk" $! (NonSyncVal v1 v2)).
-          iSplit. { done. }
-          iFrame. iPureIntro. exact Hexec.
+        + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.error] in Hexec.
+          contradiction.
     Qed.
 
     Lemma sound_cexec_triple_addr {Γ : LCtx} {pre post b} (exitCond : bv xlenbits -> bool) {fuel} {ι : Valuation Γ} :

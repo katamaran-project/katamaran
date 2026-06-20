@@ -951,7 +951,7 @@ Section AdequacyTools.
       interpret_scheap h ∗ pc ↦ᵣ apc ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ⊢
       (∀ an,
-         ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => True end⌝ ∗
+         ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
          pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ∗
          (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ ExitCondIprop) -∗
@@ -1004,12 +1004,9 @@ Section AdequacyTools.
                   iFrame "Hh' Hpc' Hinstrs'". iExists an. iExact "Hnpc'".
                ++ cbn [CHeapSpec.error] in Hexec. contradiction.
             -- cbn [CHeapSpec.error] in Hexec. contradiction.
-        + cbn [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr ty.RVToOption] in Hexec.
-          iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-          iApply exitCondImpliesMyWP2_loop.
-          iApply ("Hk" $! (NonSyncVal v1 v2)).
-          iSplit. { done. }
-          iFrame. iPureIntro. exact Hexec.
+        + cbn [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr ty.RVToOption
+               CHeapSpec.error] in Hexec.
+          contradiction.
     Qed.
 
     Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post b exitCond fuel}
@@ -1020,7 +1017,7 @@ Section AdequacyTools.
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b -∗
         (∀ an,
-           ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => True end⌝ ∗
+           ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ∗
            asn.interpret post ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an] -∗ ExitCondIprop) -∗
@@ -1055,7 +1052,7 @@ Section AdequacyTools.
           (∀ an,
              ⌜match an with
                | SyncVal v => exitCond v = true
-               | NonSyncVal _ _ => True
+               | NonSyncVal _ _ => False
                end⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
              Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ∗
@@ -1091,14 +1088,7 @@ End AdequacyTools.
                cur_privilege ↦ᵣ ty.SyncVal Machine ∗
                interp_inv_constant_time -∗
                asn.interpret (extend_to_minimal_pre (cfg_precondition block))
-                 ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
-    (ImplPost : forall an,
-        asn.interpret (extend_to_minimal_post (cfg_postcondition block))
-          ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)].["an"∷ty_xlenbits ↦ an]
-          ∗ pc ↦ᵣ an -∗
-        pc ↦ᵣ an ∗
-          ⌜exitCond (ty.projLeft an)
-          ∨ exitCond (ty.projRight an)⌝) :
+                 ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
     RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
     RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
     RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
@@ -1113,7 +1103,7 @@ End AdequacyTools.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold cfg_instrs_contract, exitCond_WP2_loop.
     destruct block.
-    cbn in valid_block, blockInstrs, blockExitCond, ImplPre, ImplPost.
+    cbn in valid_block, blockInstrs, blockExitCond, ImplPre.
     subst cfg_instrs0 cfg_exitCond0.
     unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
     iApply (sound_sblock_verification_condition_myWP2 valid_block ι _
@@ -1126,8 +1116,10 @@ End AdequacyTools.
       + iSplit. { done. }
         iFrame.
     - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & Hpost)".
-      iExists an.
-      iApply (ImplPost an). iFrame.
+      iExists an. iFrame "Hpc". iPureIntro.
+      destruct an as [v | v1 v2].
+      + cbn in Hexit. left. cbn. rewrite Hexit. exact I.
+      + contradiction.
     Unshelve. all: try exact R. all: try exact ι.
   Qed.
 
@@ -1140,14 +1132,7 @@ End AdequacyTools.
                cur_privilege ↦ᵣ ty.SyncVal Machine ∗
                interp_inv_constant_time -∗
                asn.interpret (extend_to_minimal_pre (cfg_precondition block))
-                 ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
-    (ImplPost : forall an,
-        asn.interpret (extend_to_minimal_post (cfg_postcondition block))
-          ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)].["an"∷ty_xlenbits ↦ an]
-          ∗ pc ↦ᵣ an -∗
-        pc ↦ᵣ an ∗
-          ⌜exitCond (ty.projLeft an)
-          ∨ exitCond (ty.projRight an)⌝) :
+                 ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
     RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
     RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
     RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
@@ -1196,13 +1181,7 @@ End AdequacyTools.
           cur_privilege ↦ᵣ ty.SyncVal Machine ∗
           interp_inv_constant_time -∗
           asn.interpret (extend_to_minimal_pre (cfg_precondition block))
-            ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
-      (ImplPost : forall `{sailGS2 Σ}, forall an,
-          asn.interpret (extend_to_minimal_post (cfg_postcondition block))
-            ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)].["an"∷ty_xlenbits ↦ an]
-            ∗ pc ↦ᵣ an -∗
-          pc ↦ᵣ an ∗
-            ⌜exitCond (ty.projLeft an) ∨ exitCond (ty.projRight an)⌝) :
+            ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
       (4 * N.of_nat (length instrs') < lenAddr)%N ->
       mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
       mem_has_instrs μ2 (bv.of_N init_addr) ws instrs' ->
@@ -1278,16 +1257,6 @@ End AdequacyTools.
       rewrite gprs_with_registers_equiv. cbn.
       repeat (iDestruct "Hregs" as "($ & Hregs)").
       auto.
-    - intros Σ H an.
-      destruct an as [v | vl vr].
-      + cbn. iIntros "(Hpost & Hpc)".
-        iDestruct "Hpost" as "(((%Heq & _) & _) & _)".
-        inversion Heq. subst.
-        iFrame "Hpc". iPureIntro. left.
-        vm_compute. exact I.
-      + cbn. iIntros "(Hpost & _)".
-        iDestruct "Hpost" as "(((%Heq & _) & _) & _)".
-        discriminate Heq.
     - cbn. by unfold lenAddr.
     Unshelve. exact ctx.nil. exact env.nil.
   Qed.
@@ -1326,17 +1295,8 @@ End AdequacyTools.
       rewrite Hx1. rewrite regPstsTo_sync_is_nonsync.
       iDestruct "Hregs" as "($ & Hregs)".
       done.
-    - intros Σ H an.
-      destruct an as [v | vl vr].
-      + cbn.
-        destruct (Classes.eq_dec (read_register γ1 x1) bv.zero) as [|] eqn:HisZero;
-          rewrite HisZero; cbn;
-        iIntros "(((-> & _) & J & I) & L)".
-        + iFrame. iPureIntro. right. right. cbn.
-          now rewrite <-bv.uleb_ule.
-        + iFrame. iPureIntro. right. right. cbn.
-          now rewrite <-bv.uleb_ule.
     - cbn. by unfold lenAddr.
+    Unshelve. exact ctx.nil. exact env.nil.
   Qed.
 
   Lemma jmp_fwd_safe_cfg `{sailGS2 Σ} γ1 γ2 :
@@ -1366,9 +1326,7 @@ End AdequacyTools.
       destruct an as [v | vl vr].
       + iExists (SyncVal v). iFrame "Hpc".
         cbn in Hexit. iPureIntro. left. cbn. rewrite Hexit. exact I.
-      + iSimpl in "Hpost".
-        iDestruct "Hpost" as "([%FF _] & _)".
-        exfalso. cbn in FF. discriminate FF.
+      + contradiction.
   Qed.
 
   Lemma jmp_fwd_endToEnd_cfg {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws
@@ -1397,13 +1355,6 @@ End AdequacyTools.
       iSplitL "".
       + iPureIntro. split; [reflexivity | done].
       + iFrame "∗ #".
-    - intros Σ H an.
-      destruct an as [v | vl vr].
-      + cbn. iIntros "(((%Heq & _) & _) & Hpc)".
-        iFrame "Hpc". iPureIntro. left.
-        cbn in Heq. injection Heq as ->. vm_compute. exact I.
-      + cbn. iIntros "(((%Heq & _) & _) & _)".
-        cbn in Heq. discriminate Heq.
     - cbn. by unfold lenAddr.
   Qed.
 
