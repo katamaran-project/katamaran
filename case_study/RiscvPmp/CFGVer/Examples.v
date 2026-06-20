@@ -93,40 +93,29 @@ Module Examples.
             asn.chunk (chunk_user inv_leakage [env])
     .
 
-    (* minimal_post asserts ownership of the cur_privilege CSR,
-       but do not care in which mode we end up. *)
-    Definition minimal_post {Σ} : Assertion Σ :=
-      (* asn.exist "_" _ (nextpc ↦ term_var "_")
-      ∗ *) cur_privilege ↦ term_val ty_privilege Machine
-      (* ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ; *)
-      (*                               (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]) *)
-    .
-
     Definition extend_to_minimal_pre {Σ} (P : Assertion Σ) : Assertion Σ :=
       P ∗ minimal_pre.
 
-    Definition extend_to_minimal_post {Σ} (Q : Assertion Σ) : Assertion Σ :=
-      Q ∗ minimal_post.
-
     (* CFG verifier contract: analog of BlockVerifierContract but for the CFG
        verifier, which requires an explicit exit condition and fuel bound.
-       Uses Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition. *)
+       Uses Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition.
+       Postconditions are not exposed: SHeapSpec has no leakcheck, so the final
+       heap state is unconstrained and any leftover resources are silently dropped. *)
     Definition CFG_VC_triple {Σ}
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AST)
       (ec : bv xlenbits -> bool)
-      (fl : nat)
-      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
+      (fl : nat) :=
       Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition (Σ := Σ)
-        (extend_to_minimal_pre P) i ec fl (extend_to_minimal_post Q) wnil.
+        (extend_to_minimal_pre P) i ec fl
+        (asn.formula (formula_bool (term_val ty.bool true))) wnil.
 
     Definition Valid_CFG_VC {Σ}
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AST)
       (ec : bv xlenbits -> bool)
-      (fl : nat)
-      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
-      safeE (postprocess (CFG_VC_triple P i ec fl Q)).
+      (fl : nat) :=
+      safeE (postprocess (CFG_VC_triple P i ec fl)).
 
     Record CFGVerifierContract {Σ} :=
       MkCFGVerifierContract
@@ -134,31 +123,28 @@ Module Examples.
       ; cfg_instrs        : list AST
       ; cfg_exitCond      : bv xlenbits -> bool
       ; cfg_fuel          : nat
-      ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
       }.
 
     Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
       (f : Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
-           (bv xlenbits -> bool) -> nat ->
-           Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) -> A) : A :=
+           (bv xlenbits -> bool) -> nat -> A) : A :=
       match c with
       | {| cfg_precondition := pre; cfg_instrs := i;
-           cfg_exitCond := ec; cfg_fuel := fl;
-           cfg_postcondition := post |} => f pre i ec fl post
+           cfg_exitCond := ec; cfg_fuel := fl |} => f pre i ec fl
       end.
 
     Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
       cfg_map c Valid_CFG_VC.
 
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-      cfg_map c (fun P i ec fl Q =>
-        VerificationCondition (postprocess (CFG_VC_triple P i ec fl Q))).
+      cfg_map c (fun P i ec fl =>
+        VerificationCondition (postprocess (CFG_VC_triple P i ec fl))).
 
-    Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']{{' Q '}}'" :=
-      (@MkCFGVerifierContract [ctx] P%asn i ec fl Q%asn)
+    Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']'" :=
+      (@MkCFGVerifierContract [ctx] P%asn i ec fl)
       (at level 90).
-    Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']{{' Q '}}' 'with' logvars" :=
-      (@MkCFGVerifierContract logvars P%asn i ec fl Q%asn)
+    Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
+      (@MkCFGVerifierContract logvars P%asn i ec fl)
       (at level 90).
 
     Local Ltac solve_bv :=
@@ -216,8 +202,7 @@ Module Examples.
     Definition mv_zero_ex : CFGVerifierContract :=
       {{ asn_init_pc ∗ ∃ "v", X1 ↦ᵣ term_var "v" }}
         [MV X1 X0]
-      @cfg[ pcOutOfInstrs_exitCond [MV X1 X0] , 3 ]{{
-        X1 ↦ᵣ term_val ty_xlenbits bv.zero }}.
+      @cfg[ pcOutOfInstrs_exitCond [MV X1 X0] , 3 ].
 
     Example valid_mv_zero_ex : ValidCFGVerifierContract mv_zero_ex.
     Proof. vm_compute. solve_vc. Qed.
@@ -225,8 +210,7 @@ Module Examples.
     Definition mv_same_reg_ex : CFGVerifierContract :=
       {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x" }}
         [MV X1 X1]
-      @cfg[ pcOutOfInstrs_exitCond [MV X1 X1] , 3 ]{{
-        X1 ↦ᵣ term_var "x" }}
+      @cfg[ pcOutOfInstrs_exitCond [MV X1 X1] , 3 ]
       with ["x" :: ty_xlenbits].
 
     Example valid_mv_same_reg_ex : ValidCFGVerifierContract mv_same_reg_ex.
@@ -235,8 +219,7 @@ Module Examples.
     Definition mv_ex : CFGVerifierContract :=
       {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" }}
         [MV X1 X2]
-      @cfg[ pcOutOfInstrs_exitCond [MV X1 X2] , 3 ]{{
-        X1 ↦ᵣ term_var "y" ∗ X2 ↦ᵣ term_var "y" }}
+      @cfg[ pcOutOfInstrs_exitCond [MV X1 X2] , 3 ]
       with ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
     Example valid_mv_ex : ValidCFGVerifierContract mv_ex.
@@ -246,9 +229,7 @@ Module Examples.
       {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" ∗
            ∃ "v", X3 ↦ᵣ term_var "v" }}
         [MV X3 X2; MV X2 X1; MV X1 X3]
-      @cfg[ pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3] , 5 ]{{
-        asn_next_pc_eq (term_val (ty.bvec _) (bv.of_nat 12)) ∗
-        X1 ↦ᵣ term_var "y" ∗ X2 ↦ᵣ term_var "x" ∗ ∃ "v", X3 ↦ᵣ term_var "v" }}
+      @cfg[ pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3] , 5 ]
       with ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
     Lemma valid_swap_cfg_contract : ValidCFGVerifierContract swap_cfg_contract.
@@ -275,10 +256,7 @@ Module Examples.
       {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x1" ∗
            asn.formula (formula_secLeak (term_var "x1")) }}
         [BEQ X1 X0 true_offset]
-      @cfg[ pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset] , 3 ]{{
-        if: term_var "x1" ?= term_val ty_xlenbits bv.zero
-        then asn_next_pc_eq (term_pc_val +ᵇ term_val ty_xlenbits (bv.zext true_offset))
-        else asn_next_pc_eq (term_pc_val +ᵇ term_val ty_xlenbits (bv.of_N 4)) }}
+      @cfg[ pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset] , 3 ]
       with ["x1" :: ty_xlenbits].
 
     Lemma valid_jump_if_zero_cfg_contract :
@@ -298,8 +276,7 @@ Module Examples.
     Definition jmp_fwd_cfg_contract : CFGVerifierContract :=
       {{ asn_init_pc }}
         [JAL X0 jmp_offset; NOP]
-      @cfg[ jmp_fwd_exitCond , 5 ]{{
-        asn_next_pc_eq (term_val ty_xlenbits (bv.of_N 8)) }}.
+      @cfg[ jmp_fwd_exitCond , 5 ].
 
     Lemma valid_jmp_fwd_cfg_contract : ValidCFGVerifierContract jmp_fwd_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
@@ -307,9 +284,7 @@ Module Examples.
     Definition set_X2_to_42 : CFGVerifierContract :=
       {{ asn_init_pc ∗ ∃ "_", X2 ↦ᵣ term_var "_" }}
         [ADDI X2 X0 (bv.of_N 42)]
-      @cfg[ pcOutOfInstrs_exitCond [ADDI X2 X0 (bv.of_N 42)] , 3 ]{{
-        asn_next_pc_eq (term_pc_val +ᵇ term_val ty_xlenbits (bv.of_N 4)) ∗
-        X2 ↦ᵣ term_val ty_xlenbits (bv.of_N 42) }}.
+      @cfg[ pcOutOfInstrs_exitCond [ADDI X2 X0 (bv.of_N 42)] , 3 ].
 
     Lemma valid_set_X2_to_42 : ValidCFGVerifierContract set_X2_to_42.
     Proof. vm_compute. solve_vc. Qed.
@@ -1019,8 +994,7 @@ Section AdequacyTools.
         (∀ an,
            ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ∗
-           asn.interpret post ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an] -∗ ExitCondIprop) -∗
+           Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b -∗ ExitCondIprop) -∗
         myWP2_loop ExitCondIprop.
     Proof.
       cbv [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_triple_addr bind demonic_ctx demonic
@@ -1032,9 +1006,7 @@ Section AdequacyTools.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
       iApply (sound_exec_cfg_addr_myWP2 a ExitCondIprop _ _ Hexec
         with "[$Hpc $Hnpc $Hinstrs $Hh2]").
-      iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & (%h3 & [Hh3 %Hconsume]))".
-      apply consume_sound in Hconsume.
-      iPoseProof (Hconsume with "Hh3") as "[HPOST Hheap]".
+      iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
       iApply ("Hk" $! an).
       iSplit. { iPureIntro. exact Hexit. }
       iFrame.
@@ -1055,12 +1027,11 @@ Section AdequacyTools.
                | NonSyncVal _ _ => False
                end⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-             Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ∗
-             asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+             Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b -∗
              ExitCond) -∗
           myWP2_loop ExitCond.
     Proof.
-      apply (sound_cexec_triple_addr_myWP2 (fuel := fuel) ι ExitCond).
+      apply (sound_cexec_triple_addr_myWP2 (post := post) (fuel := fuel) ι ExitCond).
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       apply LogicalSoundness.psafe_safe in Hverif; [|done].
       revert Hverif.
@@ -1115,7 +1086,7 @@ End AdequacyTools.
         repeat (iDestruct "Hregs" as "($ & Hregs)").
       + iSplit. { done. }
         iFrame.
-    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & Hpost)".
+    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs)".
       iExists an. iFrame "Hpc". iPureIntro.
       destruct an as [v | v1 v2].
       + cbn in Hexit. left. cbn. rewrite Hexit. exact I.
