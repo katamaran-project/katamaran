@@ -1128,7 +1128,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
         Definition sep_contract_decode    : SepContractFunX decode :=
           {| sep_contract_logic_variables := ["bv" :: ty_xlenbits];
              sep_contract_localstore      := [term_var "bv"];
-             sep_contract_precondition    := asn.formula (formula_secLeak (term_var "bv"));
+             sep_contract_precondition    := secLeakvar "bv";
              sep_contract_result          := "result_decode";
              sep_contract_postcondition   := ⊤;
           |}.
@@ -1139,7 +1139,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           {| sep_contract_logic_variables := ["leak" :: ty_leak_event];
             sep_contract_localstore      := [term_var "leak"];
             sep_contract_precondition    :=
-              asn.formula (formula_secLeak (term_var "leak")) ∗
+              secLeakvar "leak" ∗
                 asn_inv_leakage;
             sep_contract_result          := "result_decode";
             sep_contract_postcondition   := ⊤;

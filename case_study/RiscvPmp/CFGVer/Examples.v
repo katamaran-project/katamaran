@@ -199,6 +199,44 @@ Module Examples.
     Definition pcOutOfInstrs_exitCond (instrs : list AST) : bv xlenbits -> bool :=
       fun v => bv.ugeb v (bv.of_N (4 * N.of_nat (length instrs))).
 
+    (* ------------------------------------------------------------------ *)
+    (* Contract generator                                                   *)
+    (*                                                                      *)
+    (* reg_spec: (register, is_public, optional_fixed_value)               *)
+    (*   is_public = true  → secLeak assertion added (register is SyncVal) *)
+    (*   opt value = None  → ownership existentially quantified            *)
+    (*   opt value = Some v → ownership pinned to concrete value v         *)
+    (*                                                                      *)
+    (* Memory specs are a TODO (no public/private memory in endToEnd yet). *)
+    (* ------------------------------------------------------------------ *)
+
+    Definition reg_spec : Type := RegIdx * bool * option (bv xlenbits).
+
+    Definition gen_reg_asn {Σ} (s : reg_spec) : Assertion Σ :=
+      let '(r, is_pub, v_opt) := s in
+      match v_opt with
+      | None =>
+          asn.exist "v" ty_xlenbits
+            (if is_pub
+             then r ↦ᵣ term_var "v" ∗ secLeakvar "v"
+             else r ↦ᵣ term_var "v")
+      | Some v =>
+          if is_pub
+          then r ↦ᵣ term_val ty_xlenbits v ∗ secLeak (term_val ty_xlenbits v)
+          else r ↦ᵣ term_val ty_xlenbits v
+      end.
+
+    Definition gen_pre {Σ} (specs : list reg_spec) : Assertion Σ :=
+      List.fold_right (fun s acc => gen_reg_asn s ∗ acc) ⊤ specs.
+
+    Definition gen_contract
+        (specs : list reg_spec)
+        (instrs : list AST)
+        (ec : bv xlenbits -> bool)
+        (fl : nat)
+        : CFGVerifierContract :=
+      @MkCFGVerifierContract [ctx] (asn_init_pc ∗ gen_pre specs) instrs ec fl.
+
     Definition mv_zero_ex : CFGVerifierContract :=
       {{ asn_init_pc ∗ ∃ "v", X1 ↦ᵣ term_var "v" }}
         [MV X1 X0]
@@ -254,7 +292,7 @@ Module Examples.
          block. X1 must be a public register (secLeak). *)
     Definition jump_if_zero_cfg_contract : CFGVerifierContract :=
       {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x1" ∗
-           asn.formula (formula_secLeak (term_var "x1")) }}
+           secLeakvar "x1" }}
         [BEQ X1 X0 true_offset]
       @cfg[ pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset] , 3 ]
       with ["x1" :: ty_xlenbits].

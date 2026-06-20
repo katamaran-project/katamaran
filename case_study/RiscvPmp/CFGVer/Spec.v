@@ -245,7 +245,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "reg_val" :: ty_word];
        sep_contract_localstore      := [term_var "rs"];
-      sep_contract_precondition    := asn.formula (formula_secLeak (term_var "rs")) ∗ term_var "rs" ↦ᵣ term_var "reg_val";
+      sep_contract_precondition    := secLeakvar "rs" ∗ term_var "rs" ↦ᵣ term_var "reg_val";
        sep_contract_result          := "result_rX";
        sep_contract_postcondition   := asn.formula (formula_propeq (term_var "result_rX") (term_var "reg_val")) ∗
                                        term_var "rs" ↦ᵣ term_var "reg_val";
@@ -254,7 +254,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Definition sep_contract_wX : SepContractFun wX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "v" :: ty_xlenbits; "reg_val" :: ty_xlenbits];
        sep_contract_localstore      := [term_var "rs"; term_var "v"];
-      sep_contract_precondition    := asn.formula (formula_secLeak (term_var "rs")) ∗ term_var "rs" ↦ᵣ term_var "reg_val";
+      sep_contract_precondition    := secLeakvar "rs" ∗ term_var "rs" ↦ᵣ term_var "reg_val";
        sep_contract_result          := "result_wX";
        sep_contract_postcondition   := term_var "result_wX" = term_val ty.unit tt ∗
                                        if: term_eqb (term_var "rs") (term_val ty_regno [bv 0])
@@ -266,7 +266,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast(* ; "entries" :: ty.list ty_pmpentry *)];
        sep_contract_localstore      := [];
        sep_contract_precondition    :=
-        asn.formula (formula_secLeak (term_var "a")) ∗ (* Technically this can be concluded from the formula_le, but I think it is better explicit *)
+        secLeakvar "a" ∗ (* Technically this can be concluded from the formula_le, but I think it is better explicit *)
         asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
           term_var "a" ↦ᵢ term_var "i" ∗
           (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "a"))%asn ∗
@@ -277,12 +277,12 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
                                                                                                                  asn.chunk (chunk_user inv_leakage [env]);
        sep_contract_result          := "result_fetch";
        sep_contract_postcondition   :=
-        asn.formula (formula_secLeak (term_var "a")) ∗
+        secLeakvar "a" ∗
          asn.chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ term_var "i" ∗
          asn.exist "encoded_instr" _
          (term_var "result_fetch" = term_union fetch_result KF_Base (term_var "encoded_instr") ∗
                                       asn.chunk (chunk_user encodes_instr [term_var "encoded_instr"; term_var "i"])
-         ∗ asn.formula (formula_secLeak (term_var "encoded_instr"))) ∗
+         ∗ secLeakvar "encoded_instr") ∗
            asn_cur_privilege (term_val ty_privilege Machine) (* ∗ *)
            (* asn_pmp_entries (term_var "entries") *);
     |}.
@@ -291,8 +291,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
      {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "cmem_val" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
-         asn.formula (formula_secLeak (term_var "inv")) ∗
-           asn.formula (formula_secLeak (term_var "paddr")) ∗
+         secLeakvar "inv" ∗
+           secLeakvar "paddr" ∗
         asn.match_bool (term_var "inv")
           (term_var "paddr" ↦ᵣ[ bytes ] term_var "cmem_val")
           (term_var "paddr" ↦ₘ[ bytes ] term_var "cmem_val") ∗
@@ -301,8 +301,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
                                                                                                            asn.chunk (chunk_user inv_leakage [env]);
       sep_contract_result          := "result_mem_read";
       sep_contract_postcondition   :=
-         asn.formula (formula_secLeak (term_var "inv")) ∗
-           asn.formula (formula_secLeak (term_var "paddr")) ∗
+         secLeakvar "inv" ∗
+           secLeakvar "paddr" ∗
            asn.formula (formula_propeq (term_var "result_mem_read") (term_union (memory_op_result bytes) KMemValue (term_var "cmem_val"))) ∗
          asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "cmem_val") (term_var "paddr" ↦ₘ[ bytes ] term_var "cmem_val");
     |}.
@@ -323,7 +323,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)(* ) *) ∗
                                                                                                             asn.chunk (chunk_user inv_leakage [env]) ∗
-    asn.formula (formula_secLeak (term_var "paddr"));
+    secLeakvar "paddr";
       sep_contract_result          := "result_checked_mem_write";
       sep_contract_postcondition   :=
         term_var "result_checked_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
@@ -391,8 +391,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; (* "entries" :: ty.list ty_pmpentry; *) "mem_val" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
-        asn.formula (formula_secLeak (term_var "inv")) ∗
-          asn.formula (formula_secLeak (term_var "paddr")) ∗
+        secLeakvar "inv" ∗
+          secLeakvar "paddr" ∗
         asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "mem_val") (term_var "paddr" ↦ₘ[ bytes ] term_var "mem_val") ∗
           (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
           (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr) ∗
@@ -403,8 +403,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       sep_contract_result          := "result_mem_read";
       sep_contract_postcondition   :=
 
-        asn.formula (formula_secLeak (term_var "inv")) ∗
-          asn.formula (formula_secLeak (term_var "paddr")) ∗
+        secLeakvar "inv" ∗
+          secLeakvar "paddr" ∗
         asn.formula (formula_propeq (term_var "result_mem_read") (term_union (memory_op_result bytes) KMemValue (term_var "mem_val"))) ∗
                                        asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "mem_val") (term_var "paddr" ↦ₘ[ bytes ] term_var "mem_val") ∗
           asn_cur_privilege (term_val ty_privilege Machine)(*  ∗ *)
@@ -428,7 +428,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
         (* asn_pmp_entries (term_var "entries") ∗ *)
         (* asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Write) *) ∗
         asn.chunk (chunk_user inv_leakage [env]) ∗
-    asn.formula (formula_secLeak (term_var "paddr"));
+    secLeakvar "paddr";
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
@@ -553,7 +553,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     {| sep_contract_logic_variables := ["leak" :: ty_leak_event];
       sep_contract_localstore      := [term_var "leak"];
       sep_contract_precondition    := asn.chunk (chunk_user inv_leakage [env]) ∗
-    asn.formula (formula_secLeak (term_var "leak"));
+    secLeakvar "leak";
       sep_contract_result          := "result";
       sep_contract_postcondition   := ⊤;
     |}.
@@ -597,7 +597,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        lemma_precondition    := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "i"]);
       lemma_postcondition   := ∃ "op", (asn.chunk (chunk_user (ptstomem bytes_per_word) [term_var "paddr"; term_var "op"]) ∗
                                           asn.chunk (chunk_user encodes_instr [term_var "op"; term_var "i"]) ∗
-                                          asn.formula (formula_secLeak (term_var "op"))
+                                          secLeakvar "op"
                                        )
     |}.
 
@@ -606,7 +606,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        lemma_patterns        := [term_var "paddr"; term_var "cl"];
        lemma_precondition    := asn.chunk (chunk_user (ptstomem bytes_per_word) [term_var "paddr"; term_var "cl"]) ∗
                                   asn.chunk (chunk_user encodes_instr [term_var "cl"; term_var "i"]) ∗
-                                  asn.formula (formula_secLeak (term_var "cl"));
+                                  secLeakvar "cl";
        lemma_postcondition   := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "i"]);
     |}.
 

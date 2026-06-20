@@ -271,7 +271,7 @@ Module Import asn.
 
     Definition secLeak {Σ σ} t := (formula (@formula_secLeak Σ σ t)).
 
-    Definition secLeakvar {Σ σ} a {lIn : a∷σ ∈ Σ} := (@secLeak Σ σ (term_var a)).
+    Notation secLeakvar a := (secLeak (term_var a)).
 
   End notations.
 
