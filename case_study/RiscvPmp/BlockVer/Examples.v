@@ -373,15 +373,15 @@ Module Examples.
 
   Search Assertion.
 
-  Definition asn_regs_ptsto_with_registers {Σ} γ1 γ2 : Assertion Σ :=
+  Definition asn_regs_ptsto_with_registers γ1 γ2 : Assertion ctx.nil :=
     asn_and_regs
       (fun r => asn.chunk (chunk_ptsreg r (term_relval _ (NonSyncVal (read_register γ1 r) (read_register γ2 r))))).
 
-  Lemma gprs_with_registers_equiv `{sailGS2 Σ} γ1 γ2 : ∀ {Σ} (ι : Valuation Σ),
+  Lemma gprs_with_registers_equiv `{sailGS2 Σ} γ1 γ2 :
       interp_gprs_with_registers γ1 γ2 ⊣⊢
-        asn.interpret (asn_regs_ptsto_with_registers γ1 γ2) ι.
+        asn.interpret (asn_regs_ptsto_with_registers γ1 γ2) env.nil.
   Proof.
-    iIntros. unfold interp_gprs_with_registers.
+    unfold interp_gprs_with_registers.
     rewrite big_sepS_list_to_set; [|apply bv.finite.nodup_enum].
     cbn. iSplit.
     - iIntros "(_ & H)"; repeat iDestruct "H" as "($ & H)".
@@ -1445,7 +1445,6 @@ End AdequacyTools.
       iExists an.
       iApply ImplPost.
       iFrame.
-      Unshelve. exact ctx.nil. exact env.nil.
   Qed.
 
   Lemma instrs_safe `{sailGS2 Σ} instrs' γ1 γ2 {R} {ι : Valuation R}
@@ -1589,7 +1588,6 @@ End AdequacyTools.
         iPureIntro.
         right. right. done.
       - done.
-        Unshelve. exact ctx.nil. exact env.nil.
     Qed.
 
     Lemma jumpIfZero_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws
@@ -1632,7 +1630,6 @@ End AdequacyTools.
         + iFrame. iPureIntro. right. right. cbn.
           now rewrite <-bv.uleb_ule.
       - done.
-        Unshelve. exact ctx.nil. exact env.nil.
     Qed.
 
 End Examples.
