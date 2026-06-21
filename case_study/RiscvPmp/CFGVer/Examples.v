@@ -311,6 +311,14 @@ Module Examples.
     Lemma valid_jmp_fwd_cfg_contract : ValidCFGVerifierContract jmp_fwd_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
 
+    (* gen_contract version: precondition is asn_init_pc ∗ ⊤ (no register specs) *)
+    Definition jmp_fwd_cfg_contract_gen : CFGVerifierContract :=
+      gen_contract [] [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond 5.
+
+    Lemma valid_jmp_fwd_cfg_contract_gen :
+      ValidCFGVerifierContract jmp_fwd_cfg_contract_gen.
+    Proof. vm_compute. solve_vc. Qed.
+
     Definition set_X2_to_42 : CFGVerifierContract :=
       {{ asn_init_pc ∗ ∃ "_", X2 ↦ᵣ term_var "_" }}
         [ADDI X2 X0 (bv.of_N 42)]
@@ -1467,6 +1475,34 @@ End AdequacyTools.
       iSplitL "".
       + iPureIntro. split; [reflexivity | done].
       + iFrame "∗ #".
+    - cbn. by unfold lenAddr.
+  Qed.
+
+  Lemma jmp_fwd_endToEnd_cfg_gen {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws :
+    let instrs := [JAL X0 jmp_offset; NOP] in
+    mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
+    mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
+    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
+    ⟨ γ1, μ1 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
+    leakage_trace μ1 = leakage_trace μ2 ->
+    leakage_trace μ1' = leakage_trace μ2'.
+  Proof.
+    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
+    assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
+      instrs jmp_fwd_exitCond n ws [ctx] [env]
+      [] HpubReg jmp_fwd_cfg_contract_gen
+      valid_jmp_fwd_cfg_contract_gen eq_refl eq_refl).
+    all: try eauto.
+    - intros Σ H.
+      iIntros "(Hregs & Hpriv & #Hinv)".
+      cbn. iFrame "∗ #".
+      iSplit; (iSplit; [iPureIntro | done]).
+      all: vm_compute; done.
     - cbn. by unfold lenAddr.
   Qed.
 
