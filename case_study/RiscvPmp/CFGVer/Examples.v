@@ -319,6 +319,30 @@ Module Examples.
       ValidCFGVerifierContract jmp_fwd_cfg_contract_gen.
     Proof. vm_compute. solve_vc. Qed.
 
+    (* -4 in 13-bit two's complement: branches jump back 4 bytes (one instruction) *)
+    Definition back_offset : bv 13 := bv.of_N 8188.
+
+    (* -1 in 12-bit two's complement: ADDI immediate for decrement *)
+    Definition neg_one_12 : bv 12 := bv.of_N 4095.
+
+    (* Countdown program: X1 starts at 2 and counts down to 0.
+       addr 0: ADDI X1 X1 (-1)  -- decrement X1
+       addr 4: BNE X1 X0 (-4)   -- if X1 != 0, jump back to addr 0
+       addr 8: exit (exitCond satisfied)
+       Concrete execution: X1=2→1, BNE taken; X1=1→0, BNE not taken; exit.
+       Backward branch actually fires, demonstrating CFGVer handles loops. *)
+    Definition countdown_exitCond : bv xlenbits -> bool :=
+      fun v => bv.ugeb v (bv.of_N 8).
+
+    Definition countdown_cfg_contract : CFGVerifierContract :=
+      {{ asn_init_pc ∗ X1 ↦ᵣ term_val ty_xlenbits (bv.of_N 2) }}
+        [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
+      @cfg[ countdown_exitCond , 5 ].
+
+    Lemma valid_countdown_cfg_contract :
+      ValidCFGVerifierContract countdown_cfg_contract.
+    Proof. vm_compute. solve_vc. Qed.
+
     Definition set_X2_to_42 : CFGVerifierContract :=
       {{ asn_init_pc ∗ ∃ "_", X2 ↦ᵣ term_var "_" }}
         [ADDI X2 X0 (bv.of_N 42)]
@@ -1503,6 +1527,43 @@ End AdequacyTools.
       cbn. iFrame "∗ #".
       iSplit; (iSplit; [iPureIntro | done]).
       all: vm_compute; done.
+    - cbn. by unfold lenAddr.
+  Qed.
+
+  Lemma countdown_endToEnd {γ1 γ2 γ1' γ2' : RegStore}
+      {μ1 μ2 μ1' μ2' : Memory} n ws
+      (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1])
+      (Hx1_1 : RiscvPmpProgram.read_register γ1 x1 = bv.of_N 2)
+      (Hx1_2 : RiscvPmpProgram.read_register γ2 x1 = bv.of_N 2) :
+    let instrs := [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] in
+    mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
+    mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
+    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
+    ⟨ γ1, μ1 ⟩ -(countdown_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -(countdown_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
+    leakage_trace μ1 = leakage_trace μ2 ->
+    leakage_trace μ1' = leakage_trace μ2'.
+  Proof.
+    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
+      instrs countdown_exitCond n ws [ctx] [env]
+      [existT ty_xlenbits x1] HpubReg countdown_cfg_contract
+      valid_countdown_cfg_contract eq_refl eq_refl).
+    all: try eauto.
+    - intros Σ H.
+      iIntros "(Hregs & Hpriv & #Hinv)".
+      cbn.
+      iFrame "Hpriv Hinv".
+      assert (Hx1_eq : read_register γ1 x1 = read_register γ2 x1) by congruence.
+      rewrite <- (something_registers HpubReg).
+      rewrite gprs_with_registers_equiv. cbn.
+      rewrite Hx1_eq. rewrite regPstsTo_sync_is_nonsync. rewrite Hx1_2.
+      iDestruct "Hregs" as "($ & Hregs)".
+      iSplit; [iPureIntro | done].
+      vm_compute. done.
     - cbn. by unfold lenAddr.
   Qed.
 
