@@ -406,6 +406,27 @@ Module Examples.
       | _ , _ => False
       end.
 
+    (* Word extraction: assemble 4 consecutive bytes into a 32-bit word *)
+    Definition get_word (μ : Memory) (a : Val ty_word) : Val ty_word :=
+      bv.app (memory_ram μ a)
+        (bv.app (memory_ram μ (bv.add bv.one a))
+          (bv.app (memory_ram μ (bv.add (bv.of_N 2) a))
+            (bv.app (memory_ram μ (bv.add (bv.of_N 3) a)) bv.nil))).
+
+    (* mem_spec: a word address paired with a public/private flag *)
+    Definition mem_spec : Type := Val ty_word * bool.
+
+    (* declare_public_memory: the two worlds agree on the word value at
+       every address listed as public *)
+    Definition declare_public_memory (μ1 μ2 : Memory)
+        (public_addrs : list (Val ty_word)) : Prop :=
+      Forall (fun a => get_word μ1 a = get_word μ2 a) public_addrs.
+
+    (* gen_public_addrs: filter a mem_spec list to keep only public addresses *)
+    Definition gen_public_addrs (specs : list mem_spec) : list (Val ty_word) :=
+      base.omap (fun s : mem_spec => let '(a, pub) := s in
+        if pub then Some a else None) specs.
+
     Definition filter_AnnotInstr_AST (l : list AnnotInstr) := base.omap extract_AST l.
 
     Definition init_addr     : N := 0.
@@ -835,6 +856,12 @@ Section AdequacyTools.
     unfold interp_ptsto. auto.
   Qed.
 
+  (* Word-level analog of regPstsTo_sync_is_nonsync *)
+  Lemma ptstomem_sync_is_nonsync `{sailGS2 Σ} (a w : Val ty_word) :
+    interp_ptstomem (width := 4) (SyncVal a) (NonSyncVal w w) ⊣⊢
+    interp_ptstomem (width := 4) (SyncVal a) (SyncVal w).
+  Proof. unfold interp_ptstomem. auto. Qed.
+
   Lemma intro_ptstomem_word `{sailGS2 Σ} v0 v1 v2 v3 (a : Val ty_word) :
     @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H))) (bv.of_Z (0 + bv.unsigned a)) (DfracOwn 1) v0 ∗
       @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H))) (bv.of_Z (1 + bv.unsigned a)) (DfracOwn 1) v1 ∗
@@ -856,6 +883,49 @@ Section AdequacyTools.
     cbn.
     unfold IrisInstance.RiscvPmpIrisInstance.interp_ptsto.
     iFrame.
+    rewrite ?bv.add_assoc.
+    change (bv.add _ bv.one) with (@bv.of_Z xlenbits 3).
+    now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+    rewrite ?bv.add_assoc.
+    now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+  Qed.
+
+  Lemma intro_ptstomem_word_nonsync `{sailGS2 Σ}
+      v0l v1l v2l v3l v0r v1r v2r v3r (a : Val ty_word) :
+    @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H)))
+        (bv.of_Z (0 + bv.unsigned a)) (DfracOwn 1) v0l ∗
+    @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H)))
+        (bv.of_Z (1 + bv.unsigned a)) (DfracOwn 1) v1l ∗
+    @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H)))
+        (bv.of_Z (2 + bv.unsigned a)) (DfracOwn 1) v2l ∗
+    @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H)))
+        (bv.of_Z (3 + bv.unsigned a)) (DfracOwn 1) v3l ∗
+    @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_right Σ (@sailGS2_memGS Σ H)))
+        (bv.of_Z (0 + bv.unsigned a)) (DfracOwn 1) v0r ∗
+    @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_right Σ (@sailGS2_memGS Σ H)))
+        (bv.of_Z (1 + bv.unsigned a)) (DfracOwn 1) v1r ∗
+    @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_right Σ (@sailGS2_memGS Σ H)))
+        (bv.of_Z (2 + bv.unsigned a)) (DfracOwn 1) v2r ∗
+    @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_right Σ (@sailGS2_memGS Σ H)))
+        (bv.of_Z (3 + bv.unsigned a)) (DfracOwn 1) v3r ⊢
+    interp_ptstomem (width := 4) (SyncVal a)
+      (NonSyncVal (bv.app v0l (bv.app v1l (bv.app v2l (bv.app v3l bv.nil))))
+                  (bv.app v0r (bv.app v1r (bv.app v2r (bv.app v3r bv.nil))))).
+  Proof.
+    iIntros "(Hl0 & Hl1 & Hl2 & Hl3 & Hr0 & Hr1 & Hr2 & Hr3)".
+    unfold interp_ptstomem. unfold IrisInstance.RiscvPmpIrisInstance.interp_ptstomem.
+    rewrite ?bv.appView_app.
+    replace (@bv.of_Z xlenbits (0 + bv.unsigned a)%Z) with a
+      by now rewrite bv.of_Z_unsigned.
+    replace (@bv.of_Z xlenbits (1 + bv.unsigned a)%Z) with (bv.add bv.one a)
+      by now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
+    replace (@bv.of_Z xlenbits (2 + bv.unsigned a)%Z) with
+      (bv.add bv.one (bv.add bv.one a)).
+    replace (@bv.of_Z xlenbits (3 + bv.unsigned a)%Z) with
+      (bv.add bv.one (bv.add bv.one (bv.add bv.one a))).
+    cbn.
+    unfold IrisInstance.RiscvPmpIrisInstance.interp_ptsto.
+    iFrame "Hl0 Hl1 Hl2 Hl3 Hr0 Hr1 Hr2 Hr3".
     rewrite ?bv.add_assoc.
     change (bv.add _ bv.one) with (@bv.of_Z xlenbits 3).
     now rewrite <-bv.of_Z_add, bv.of_Z_unsigned.
@@ -885,6 +955,32 @@ Section AdequacyTools.
     inversion Heqμ1; inversion Heqμ2.
     rewrite H5 H6 H7 H8.
     now iApply (intro_ptstomem_word with "[$Hmem1a $Hmem1a1 $Hmem1a2 $Hmem1a3 $Hmem2a $Hmem2a1 $Hmem2a2 $Hmem2a3]").
+  Qed.
+
+  Lemma intro_ptstomem_word2_nonsync `{sailGS2 Σ} {μ1 μ2 : Memory}
+      {a : Val ty_word} {w1 w2 : Val ty_word} :
+    mem_has_word μ1 a w1 →
+    mem_has_word μ2 a w2 →
+    ([∗ list] a' ∈ bv.seqBv a 4,
+      @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H))) a'
+        (DfracOwn 1) (memory_ram μ1 a')) ∗
+    ([∗ list] a' ∈ bv.seqBv a 4,
+      @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_right Σ (@sailGS2_memGS Σ H))) a'
+        (DfracOwn 1) (memory_ram μ2 a'))
+    ⊢ interp_ptstomem (width := 4) (SyncVal a) (NonSyncVal w1 w2).
+  Proof.
+    iIntros (Hmhw1 Hmhw2) "[Hmem1 Hmem2]".
+    destruct Hmhw1 as (v01 & v11 & v21 & v31 & Heqμ1 & Heqv1).
+    destruct Hmhw2 as (v02 & v12 & v22 & v32 & Heqμ2 & Heqv2).
+    unfold bv.seqBv, seqZ. change (seq 0 ?x) with [0;1;2;3].
+    cbn -[bv.add interp_ptstomem word].
+    iDestruct "Hmem1" as "(Hmem1a & Hmem1a1 & Hmem1a2 & Hmem1a3 & _)".
+    iDestruct "Hmem2" as "(Hmem2a & Hmem2a1 & Hmem2a2 & Hmem2a3 & _)".
+    inversion Heqμ1. subst v01 v11 v21 v31.
+    inversion Heqμ2. subst v02 v12 v22 v32.
+    rewrite <- Heqv1, <- Heqv2.
+    iApply (intro_ptstomem_word_nonsync with
+      "[$Hmem1a $Hmem1a1 $Hmem1a2 $Hmem1a3 $Hmem2a $Hmem2a1 $Hmem2a2 $Hmem2a3]").
   Qed.
 
   Lemma intro_ptsto_instr `{sailGS2 Σ} {μ1 μ2 : Memory} {a : Val ty_word} w {instr : AST} :
@@ -957,6 +1053,76 @@ Section AdequacyTools.
     { unfold init_addr. cbn. lia. }
     iFrame. auto.
   Qed.
+
+  (* ------------------------------------------------------------------ *)
+  (* Public memory Iris predicates                                       *)
+  (* ------------------------------------------------------------------ *)
+
+  (* All data specs as NonSyncVal regardless of public flag.
+     Used as the intermediate form produced by extracting raw bytes. *)
+  Definition interp_mem_with_memory `{sailGS2 Σ}
+      (μ1 μ2 : Memory) (specs : list mem_spec) : iProp Σ :=
+    [∗ list] spec ∈ specs,
+      let '(a, _) := spec in
+      interp_ptstomem (width := 4) (SyncVal a)
+        (NonSyncVal (get_word μ1 a) (get_word μ2 a)).
+
+  (* Public specs use SyncVal (words must agree); private specs use NonSyncVal *)
+  Definition interp_mem_with_public_memory `{sailGS2 Σ}
+      (μ1 μ2 : Memory) (specs : list mem_spec) : iProp Σ :=
+    [∗ list] spec ∈ specs,
+      let '(a, pub) := (spec : mem_spec) in
+      if pub
+      then interp_ptstomem (width := 4) (SyncVal a) (SyncVal (get_word μ1 a))
+      else interp_ptstomem (width := 4) (SyncVal a)
+             (NonSyncVal (get_word μ1 a) (get_word μ2 a)).
+
+  (* get_word always witnesses mem_has_word (the four bytes at a..a+3 assemble
+     to exactly get_word μ a).  Proof requires unfolding bv.seqBv arithmetic. *)
+  Lemma get_word_is_mem_has_word (μ : Memory) (a : Val ty_word) :
+    mem_has_word μ a (get_word μ a).
+  Proof.
+    exists (memory_ram μ a), (memory_ram μ (bv.add bv.one a)),
+           (memory_ram μ (bv.add (bv.of_N 2) a)), (memory_ram μ (bv.add (bv.of_N 3) a)).
+    split; [| unfold get_word; reflexivity].
+    enough (bv.seqBv a 4 = [a; bv.add bv.one a; bv.add (bv.of_N 2) a; bv.add (bv.of_N 3) a])
+      as Hseq by now rewrite Hseq.
+    unfold bv.seqBv, seqZ.
+    change (Z.to_nat (Z.of_N 4)) with 4%nat.
+    cbn [seq fmap list_fmap List.map].
+    repeat f_equal.
+    all: rewrite <- bv.of_Z_add, bv.of_Z_unsigned.
+    - apply bv.add_zero_l.
+    - change (1%nat : Z) with (Z.of_N 1). now rewrite bv.of_Z_N.
+    - change (2%nat : Z) with (Z.of_N 2). now rewrite bv.of_Z_N.
+    - change (3%nat : Z) with (Z.of_N 3). now rewrite bv.of_Z_N.
+  Qed.
+
+  (* Extract both instruction memory AND data memory from mem_res2_without_leak.
+     Data words must occupy the 4*|data_specs| bytes immediately following
+     the instruction region (contiguous layout: instructions at [0, 4*n),
+     data at [4*n, 4*n + 4*m)).
+
+     The result is the "all-NonSyncVal" form interp_mem_with_memory.
+     Use something_memory (outside AdequacyTools) to convert to the
+     interp_mem_with_public_memory form.
+
+     Admitted: requires 3-way bv.seqBv_app split and induction over specs
+     to apply intro_ptstomem_word2_nonsync word-by-word.  The proof is
+     structurally analogous to instrsMemory + intro_ptsto_instrs. *)
+  Lemma instrsAndDataMemory `{sailGS2 Σ} {μ1 μ2 : Memory} ws_instrs data_specs instrs :
+    (4 * N.of_nat (length instrs) +
+     4 * N.of_nat (length data_specs) < lenAddr)%N →
+    mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs instrs →
+    mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs instrs →
+    (* data words are at init_addr + 4*|instrs|, init_addr + 4*|instrs| + 4, … *)
+    (∀ i spec, data_specs !! i = Some spec →
+      spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                         + 4 * N.of_nat i)) →
+    @mem_res2_without_leak _ sailGS2_memGS μ1 μ2 ⊢ |={⊤}=>
+      ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs ∗
+      interp_mem_with_memory μ1 μ2 data_specs.
+  Proof. Admitted.
 
   (* Definition pcOutOfInstrs_WP2_loop `{sailGS2 Σ} instrs := *)
   (*   myWP2_loop *)
@@ -1187,6 +1353,86 @@ End AdequacyTools.
     iApply cfg_instrs_verified; eauto.
   Qed.
 
+  Lemma cfg_instrs_verified_with_mem `{sailGS2 Σ} instrs' exitCond γ1 γ2
+    {R} {ι : Valuation R}
+    (data_specs : list mem_spec) (μ1 μ2 : Memory)
+    (block : @CFGVerifierContract R)
+    (valid_block : ValidCFGVerifierContract block)
+    (blockInstrs : cfg_instrs block = instrs')
+    (blockExitCond : cfg_exitCond block = exitCond)
+    (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
+               interp_mem_with_public_memory μ1 μ2 data_specs ∗
+               cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+               interp_inv_constant_time -∗
+               asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+                 ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+    RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
+    ⊢ own_regstore2 γ1 γ2 ∗
+      Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs
+        (SyncVal (bv.of_N init_addr)) instrs' ∗
+      interp_mem_with_public_memory μ1 μ2 data_specs ∗
+      interp_inv_constant_time
+    -∗ exitCond_WP2_loop exitCond.
+  Proof.
+    iIntros (γ1curpriv γ2curpriv γ1pc γ2pc) "Hpre".
+    iDestruct "Hpre" as "(Hregs & Hinstrs & Hmem & #Hinv)".
+    cbn.
+    iDestruct "Hregs" as
+      "(Hpc & Hnpc & Hstatus & Htvec & Hcause & Hepc & Hpriv & Hregs)".
+    rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
+    rewrite !regPstsTo_sync_is_nonsync.
+    unfold exitCond_WP2_loop.
+    destruct block.
+    cbn in valid_block, blockInstrs, blockExitCond, ImplPre.
+    subst cfg_instrs0 cfg_exitCond0.
+    unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
+    iApply (sound_sblock_verification_condition_myWP2 valid_block ι _
+              $! (SyncVal (bv.of_N init_addr))
+              with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs Hmem]").
+    - iSplitL "Hpriv Hregs Hmem".
+      + iApply ImplPre. iFrame "Hinv Hpriv Hmem".
+        rewrite gprs_with_registers_equiv. cbn.
+        repeat (iDestruct "Hregs" as "($ & Hregs)").
+      + iSplit. { done. }
+        iFrame.
+    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs)".
+      iExists an. iFrame "Hpc". iPureIntro.
+      destruct an as [v | v1 v2].
+      + cbn in Hexit. left. cbn. rewrite Hexit. exact I.
+      + contradiction.
+  Qed.
+
+  Lemma cfg_instrs_safe_with_mem `{sailGS2 Σ} instrs' exitCond γ1 γ2
+    {R} {ι : Valuation R}
+    (data_specs : list mem_spec) (μ1 μ2 : Memory)
+    (block : @CFGVerifierContract R)
+    (valid_block : ValidCFGVerifierContract block)
+    (blockInstrs : cfg_instrs block = instrs')
+    (blockExitCond : cfg_exitCond block = exitCond)
+    (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
+               interp_mem_with_public_memory μ1 μ2 data_specs ∗
+               cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+               interp_inv_constant_time -∗
+               asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+                 ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
+    RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
+    ⊢ own_regstore2 γ1 γ2 ∗
+      Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs
+        (SyncVal (bv.of_N init_addr)) instrs' ∗
+      interp_mem_with_public_memory μ1 μ2 data_specs ∗
+      interp_inv_constant_time
+    -∗ exitCond_WP2_loop exitCond.
+  Proof.
+    iIntros (γ1curpriv γ2curpriv γ1pc γ2pc) "H".
+    iApply cfg_instrs_verified_with_mem; eauto.
+  Qed.
+
     Definition declare_public_registers γ1 γ2 (public_registers : list {x : Ty & Reg x}) :=
       Forall
         (fun x => match x with
@@ -1205,6 +1451,53 @@ End AdequacyTools.
         intros x Hx;
         destruct (reg_convert x); auto.
     Qed.
+
+  (* ------------------------------------------------------------------ *)
+  (* Public memory equivalence: analogous to something_registers         *)
+  (* ------------------------------------------------------------------ *)
+
+  (* When declare_public_memory holds, the all-NonSyncVal representation
+     interp_mem_with_memory is equivalent to interp_mem_with_public_memory.
+     Proof: walk the spec list; for public entries use ptstomem_sync_is_nonsync
+     (worlds agree by HpubMem so NonSyncVal w w = SyncVal w). *)
+  Lemma something_memory `{sailGS2 Σ} μ1 μ2 (specs : list mem_spec)
+      (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs specs)) :
+    interp_mem_with_memory μ1 μ2 specs ⊣⊢
+    interp_mem_with_public_memory μ1 μ2 specs.
+  Proof.
+    unfold interp_mem_with_memory, interp_mem_with_public_memory.
+    iApply big_sepL_proper.
+    intros k [a pub] Hspec.
+    destruct pub; [|done].
+    rewrite <- ptstomem_sync_is_nonsync.
+    (* Need: get_word μ1 a = get_word μ2 a, i.e., a ∈ gen_public_addrs specs *)
+    assert (Heq : get_word μ1 a = get_word μ2 a).
+    { unfold declare_public_memory in HpubMem.
+      rewrite Forall_forall in HpubMem.
+      apply HpubMem.
+      unfold gen_public_addrs.
+      apply elem_of_list_omap.
+      exists (a, true). split; [|done].
+      now apply elem_of_list_lookup_2 with k. }
+    rewrite Heq. done.
+  Qed.
+
+  (* Helper lemmas for declare_public_memory, analogous to the register ones *)
+  Lemma declare_pub_mem_head_true a rest μ1 μ2 :
+    declare_public_memory μ1 μ2 (gen_public_addrs ((a, true) :: rest)) →
+    get_word μ1 a = get_word μ2 a.
+  Proof.
+    unfold declare_public_memory, gen_public_addrs. cbn.
+    rewrite Forall_cons. tauto.
+  Qed.
+
+  Lemma declare_pub_mem_tail a pub rest μ1 μ2 :
+    declare_public_memory μ1 μ2 (gen_public_addrs ((a, pub) :: rest)) →
+    declare_public_memory μ1 μ2 (gen_public_addrs rest).
+  Proof.
+    unfold declare_public_memory, gen_public_addrs. cbn.
+    destruct pub; cbn; [rewrite Forall_cons; tauto | done].
+  Qed.
 
   (* ------------------------------------------------------------------ *)
   (* gen_implpre: once-and-for-all ImplPre for gen_contract              *)
@@ -1357,6 +1650,84 @@ End AdequacyTools.
         iIntros "(Hregs & Hpriv & #Hinv')".
         iApply ImplPre.
         iFrame "∗ #".
+        by iFrame "∗ #".
+      - iModIntro.
+        iIntros "Rmem".
+        iInv "Hinv" as "Hleak".
+        iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
+        unfold mem_inv_only_leak.
+        iMod "Hleak".
+        iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
+        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
+        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
+        iModIntro. iFrame.
+        iApply fupd_mask_intro; first set_solver.
+        now iIntros "_".
+    Qed.
+
+  (* ------------------------------------------------------------------ *)
+  (* cfg_instrs_endToEnd_with_memory                                     *)
+  (* Like cfg_instrs_endToEnd, but also passes data memory ownership     *)
+  (* to ImplPre via interp_mem_with_public_memory.                       *)
+  (* data_specs describes the data words at init_addr + 4*|instrs| + …  *)
+  (* (contiguous layout immediately after the instruction region).       *)
+  (* ------------------------------------------------------------------ *)
+    Lemma cfg_instrs_endToEnd_with_memory
+        {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
+        instrs' exitCond n ws_instrs {R} {ι : Valuation R}
+        public_registers
+        (HpubReg : declare_public_registers γ1 γ2 public_registers)
+        data_specs
+        (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs data_specs))
+        (block : @CFGVerifierContract R)
+        (valid_block : ValidCFGVerifierContract block)
+        (blockInstrs : cfg_instrs block = instrs')
+        (blockExitCond : cfg_exitCond block = exitCond)
+        (HDataAddrs : ∀ i spec, data_specs !! i = Some spec →
+            spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs')
+                               + 4 * N.of_nat i))
+        (ImplPre : forall `{sailGS2 Σ},
+            interp_gprs_with_public_registers γ1 γ2 public_registers ∗
+            interp_mem_with_public_memory μ1 μ2 data_specs ∗
+            cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+            interp_inv_constant_time -∗
+            asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+              ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
+        (4 * N.of_nat (length instrs') +
+         4 * N.of_nat (length data_specs) < lenAddr)%N →
+        mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs instrs' →
+        mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs instrs' →
+        RiscvPmpProgram.read_register γ1 cur_privilege = Machine →
+        RiscvPmpProgram.read_register γ2 cur_privilege = Machine →
+        RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr →
+        RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr →
+        ⟨ γ1, μ1 ⟩ -(exitCond, n)->* ⟨ γ1', μ1' ⟩ →
+        ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ →
+        leakage_trace μ1 = leakage_trace μ2 →
+        leakage_trace μ1' = leakage_trace μ2'.
+    Proof.
+      intros Hlen μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
+        steps1 steps2 Htrace.
+      apply (adequacy_gen_RiscVNStepsExitCond (μ21 := μ2) (γ21 := γ2)
+        _ steps1 steps2).
+      iIntros (Σ' H').
+      iIntros "(Hmem & H')".
+      iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
+      iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak")
+        as "Hinv"; auto.
+      iMod "Hinv" as "#Hinv".
+      (* Extract instruction + data memory from raw byte ownership *)
+      iMod (instrsAndDataMemory ws_instrs data_specs instrs' with "Hmem") as "[H Hmemdata]";
+        [exact Hlen | exact μinit1 | exact μinit2 | exact HDataAddrs |].
+      (* Convert all-NonSyncVal to public form *)
+      rewrite (something_memory data_specs HpubMem).
+      iSplitR "".
+      - iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 block).
+        all: eauto.
+        iIntros "(Hregs & Hmem & Hpriv & #Hinv')".
+        iApply ImplPre.
+        rewrite <- (something_registers HpubReg).
+        iFrame "Hmem ∗ #".
         by iFrame "∗ #".
       - iModIntro.
         iIntros "Rmem".
