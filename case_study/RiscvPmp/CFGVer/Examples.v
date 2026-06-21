@@ -202,29 +202,20 @@ Module Examples.
     (* ------------------------------------------------------------------ *)
     (* Contract generator                                                   *)
     (*                                                                      *)
-    (* reg_spec: (register, is_public, optional_fixed_value)               *)
+    (* reg_spec: (register, is_public)                                      *)
     (*   is_public = true  → secLeak assertion added (register is SyncVal) *)
-    (*   opt value = None  → ownership existentially quantified            *)
-    (*   opt value = Some v → ownership pinned to concrete value v         *)
     (*                                                                      *)
     (* Memory specs are a TODO (no public/private memory in endToEnd yet). *)
     (* ------------------------------------------------------------------ *)
 
-    Definition reg_spec : Type := RegIdx * bool * option (bv xlenbits).
+    Definition reg_spec : Type := RegIdx * bool.
 
     Definition gen_reg_asn {Σ} (s : reg_spec) : Assertion Σ :=
-      let '(r, is_pub, v_opt) := s in
-      match v_opt with
-      | None =>
-          asn.exist "v" ty_xlenbits
-            (if is_pub
-             then r ↦ᵣ term_var "v" ∗ secLeakvar "v"
-             else r ↦ᵣ term_var "v")
-      | Some v =>
-          if is_pub
-          then r ↦ᵣ term_val ty_xlenbits v ∗ secLeak (term_val ty_xlenbits v)
-          else r ↦ᵣ term_val ty_xlenbits v
-      end.
+      let '(r, is_pub) := s in
+      asn.exist "v" ty_xlenbits
+        (if is_pub
+         then r ↦ᵣ term_var "v" ∗ secLeakvar "v"
+         else r ↦ᵣ term_var "v").
 
     Definition gen_pre {Σ} (specs : list reg_spec) : Assertion Σ :=
       List.fold_right (fun s acc => gen_reg_asn s ∗ acc) ⊤ specs.
@@ -236,6 +227,7 @@ Module Examples.
         (fl : nat)
         : CFGVerifierContract :=
       @MkCFGVerifierContract [ctx] (asn_init_pc ∗ gen_pre specs) instrs ec fl.
+
 
     Definition mv_zero_ex : CFGVerifierContract :=
       {{ asn_init_pc ∗ ∃ "v", X1 ↦ᵣ term_var "v" }}
@@ -328,6 +320,14 @@ Module Examples.
     Proof. vm_compute. solve_vc. Qed.
 
   End WithAsnNotations.
+
+  (* Public registers for a spec list: registers whose is_pub flag is true.
+     Defined outside WithAsnNotations to avoid notation-scope interference. *)
+  Definition gen_public_regs (specs : list reg_spec) : list {x : Ty & 𝑹𝑬𝑮 x} :=
+    base.omap (fun (spec : reg_spec) =>
+      let '(r, pub) := spec in
+      if pub then option_map (@existT Ty 𝑹𝑬𝑮 ty_xlenbits) (reg_convert r)
+      else None) specs.
 
   Import IrisInstanceBinary.
   Import RiscvPmpIrisInstance2.
@@ -1174,7 +1174,113 @@ End AdequacyTools.
         destruct (reg_convert x); auto.
     Qed.
 
+  (* ------------------------------------------------------------------ *)
+  (* gen_implpre: once-and-for-all ImplPre for gen_contract              *)
+  (* (placed here: needs declare_public_registers + regPstsTo_sync)     *)
+  (* ------------------------------------------------------------------ *)
 
+  Lemma gen_reg_asn_of_ptsreg `{sailGS2 Σ}
+      (r : RegIdx) (pub : bool) (γ1 γ2 : RegStore)
+      (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+      (Heq : pub = true →
+             ∀ x, reg_convert r = Some x →
+               read_register γ1 x = read_register γ2 x) :
+    interp_ptsreg_with_registers r γ1 γ2 ⊢
+    asn.interpret (gen_reg_asn (r, pub)) ι.
+  Proof.
+    unfold interp_ptsreg_with_registers, gen_reg_asn.
+    destruct (reg_convert r) as [x|] eqn:Hrc.
+    - destruct pub.
+      + specialize (Heq eq_refl x eq_refl) as Hval.
+        rewrite <- Hval.
+        unfold reg_pointsTo21.
+        rewrite regPstsTo_sync_is_nonsync.
+        iIntros "Hr".
+        iExists (SyncVal (read_register γ1 x)).
+        unfold asn_regidx_pts. rewrite Hrc. cbn. iFrame. done.
+      + iIntros "Hr".
+        iExists (NonSyncVal (read_register γ1 x) (read_register γ2 x)).
+        unfold asn_regidx_pts. rewrite Hrc. cbn. iExact "Hr".
+    - iIntros "_". iExists (SyncVal bv.zero).
+      unfold asn_regidx_pts. rewrite Hrc.
+      destruct pub; cbn; done.
+  Qed.
+
+  Lemma declare_pub_head_true r x rest γ1 γ2 :
+    reg_convert r = Some x →
+    declare_public_registers γ1 γ2 (gen_public_regs ((r, true) :: rest)) →
+    read_register γ1 x = read_register γ2 x.
+  Proof.
+    intros Hrc Hpub.
+    unfold declare_public_registers, gen_public_regs in Hpub.
+    cbn in Hpub. rewrite Hrc in Hpub. cbn in Hpub.
+    rewrite Forall_cons in Hpub. exact (proj1 Hpub).
+  Qed.
+
+  Lemma declare_pub_tail r pub rest γ1 γ2 :
+    declare_public_registers γ1 γ2 (gen_public_regs ((r, pub) :: rest)) →
+    declare_public_registers γ1 γ2 (gen_public_regs rest).
+  Proof.
+    intros Hpub.
+    unfold declare_public_registers, gen_public_regs in Hpub |-*.
+    cbn in Hpub |-*.
+    destruct pub.
+    - destruct (reg_convert r); cbn in Hpub |-*;
+        [rewrite Forall_cons in Hpub; exact (proj2 Hpub) | exact Hpub].
+    - exact Hpub.
+  Qed.
+
+  Lemma gen_implpre_inner `{sailGS2 Σ}
+      (specs : list reg_spec) (γ1 γ2 : RegStore)
+      (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+      (HpubReg : declare_public_registers γ1 γ2 (gen_public_regs specs))
+      (HND : NoDup (map fst specs))
+      (S : gset RegIdx)
+      (HS : ∀ s, s ∈ specs → s.1 ∈ S) :
+    ([∗ set] r ∈ S, interp_ptsreg_with_registers r γ1 γ2) ⊢
+    asn.interpret (gen_pre specs) ι.
+  Proof.
+    iInduction specs as [|[r pub] rest] "IH"
+        forall (HpubReg HND S HS).
+    - simpl. iIntros "_". done.
+    - simpl gen_pre. simpl asn.interpret.
+      rewrite NoDup_cons in HND. destruct HND as [Hnotin HND].
+      iIntros "H".
+      iDestruct (big_sepS_delete with "H") as "[Hr Hrest]".
+      { apply HS. apply elem_of_cons. left. done. }
+      iSplitL "Hr".
+      + iApply gen_reg_asn_of_ptsreg; [|iExact "Hr"].
+        intros Hpub x Hrc. subst pub.
+        by eapply declare_pub_head_true.
+      + iApply ("IH" $! (declare_pub_tail r pub rest HpubReg)
+                  HND (S ∖ {[r]}) with "[] [Hrest]").
+        * iPureIntro.
+          intros s Hs.
+          rewrite elem_of_difference.
+          split.
+          -- apply HS. rewrite elem_of_cons. by right.
+          -- rewrite elem_of_list_In in Hs.
+             apply (in_map fst) in Hs.
+             rewrite <- elem_of_list_In in Hs.
+             intro Hcontr. rewrite elem_of_singleton in Hcontr.
+             rewrite Hcontr in Hs. by apply Hnotin in Hs.
+        * cbn. iFrame.
+  Qed.
+
+  Lemma gen_implpre `{sailGS2 Σ}
+      (specs : list reg_spec) (γ1 γ2 : RegStore)
+      (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+      (HpubReg : declare_public_registers γ1 γ2 (gen_public_regs specs))
+      (HND : NoDup (map fst specs)) :
+    interp_gprs_with_public_registers γ1 γ2 (gen_public_regs specs) ⊢
+    asn.interpret (gen_pre specs) ι.
+  Proof.
+    rewrite <- (something_registers HpubReg).
+    unfold interp_gprs_with_registers.
+    apply gen_implpre_inner; [exact HpubReg | exact HND |].
+    intros s _. unfold reg_file.
+    apply elem_of_list_to_set, bv.finite.elem_of_enum.
+  Qed.
 
     Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
       instrs' exitCond n ws {R} {ι : Valuation R}
