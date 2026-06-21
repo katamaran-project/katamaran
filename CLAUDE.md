@@ -198,11 +198,77 @@ safeE (postprocess (sblock_verification_condition req instrs ens wnil))
 
 ---
 
+## Contract generator (`gen_contract`)
+
+Defined in `Examples.v` inside `WithAsnNotations`. Automates building
+`CFGVerifierContract` from a list of register specs and provides a
+once-and-for-all `ImplPre` lemma.
+
+### Types and definitions
+
+```coq
+Definition reg_spec : Type := RegIdx * bool.   (* (register, is_public) *)
+
+(* Assertion for one spec: existential over a RelVal, with secLeak if public *)
+Definition gen_reg_asn {Σ} (s : reg_spec) : Assertion Σ :=
+  let '(r, is_pub) := s in
+  asn.exist "v" ty_xlenbits
+    (if is_pub then r ↦ᵣ term_var "v" ∗ secLeakvar "v"
+               else r ↦ᵣ term_var "v").
+
+(* Precondition: fold with ∗; gen_pre [] = ⊤ *)
+Definition gen_pre {Σ} (specs : list reg_spec) : Assertion Σ :=
+  List.fold_right (fun s acc => gen_reg_asn s ∗ acc) ⊤ specs.
+
+(* Contract: precondition is asn_init_pc ∗ gen_pre specs *)
+Definition gen_contract (specs : list reg_spec) (instrs : list AST)
+    (ec : bv xlenbits -> bool) (fl : nat) : CFGVerifierContract :=
+  @MkCFGVerifierContract [ctx] (asn_init_pc ∗ gen_pre specs) instrs ec fl.
+
+(* Public register list: entries with is_public = true, converted to Reg *)
+Definition gen_public_regs (specs : list reg_spec) : list {x : Ty & 𝑹𝑬𝑮 x} :=
+  base.omap (fun '(r, pub) =>
+    if pub then option_map (@existT Ty 𝑹𝑬𝑮 ty_xlenbits) (reg_convert r)
+    else None) specs.
+```
+
+### `gen_implpre` — once-and-for-all `ImplPre`
+
+```coq
+Lemma gen_implpre `{sailGS2 Σ}
+    (specs : list reg_spec) (γ1 γ2 : RegStore)
+    (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+    (HpubReg : declare_public_registers γ1 γ2 (gen_public_regs specs))
+    (HND : NoDup (map fst specs)) :
+  interp_gprs_with_public_registers γ1 γ2 (gen_public_regs specs) ⊢
+  asn.interpret (gen_pre specs) ι.
+```
+
+Converts Iris register ownership into the symbolic `gen_pre` assertion. For
+public registers it uses `regPstsTo_sync_is_nonsync` to unify `NonSyncVal v v`
+into `SyncVal v`. `gen_implpre` for `specs = []` is trivially `True ⊢ True`.
+
+### Helper lemmas
+
+```coq
+Lemma declare_pub_head_true r x rest γ1 γ2 :
+  reg_convert r = Some x →
+  declare_public_registers γ1 γ2 (gen_public_regs ((r, true) :: rest)) →
+  read_register γ1 x = read_register γ2 x.
+(* Note: x is implicit under Set Implicit Arguments — use eapply, not exact *)
+
+Lemma declare_pub_tail r pub rest γ1 γ2 :
+  declare_public_registers γ1 γ2 (gen_public_regs ((r, pub) :: rest)) →
+  declare_public_registers γ1 γ2 (gen_public_regs rest).
+```
+
+---
+
 ## `cfg_instrs_endToEnd` (CFGVer generic end-to-end)
 
 CFG analog of BlockVer's `instrs_endToEnd`. Bundles adequacy +
 memory splitting + `cfg_instrs_safe` so that program-specific proofs
-only supply `ImplPre` and `ImplPost`.
+only supply `ImplPre`.
 
 ```coq
 Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
@@ -247,6 +313,10 @@ all: try eauto.
 `@` is required because `Set Implicit Arguments.` makes `instrs'` and `exitCond`
 implicit (they appear in the types of `blockInstrs`/`blockExitCond`).
 
+**`all: try eauto.` must come BEFORE the `-` bullets** — it handles routine
+goals (memory, register reads, execution steps) first, leaving only `ImplPre`
+and the length bound for the focused bullets.
+
 **Proof body pattern** (inside `cfg_instrs_endToEnd`'s own proof):
 
 ```coq
@@ -258,9 +328,29 @@ iFrame "∗ #".
 by iFrame "∗ #".         (* second iFrame closes the residual after the first *)
 ```
 
-No explicit `rewrite <- something_registers` needed here — the double `iFrame`
-handles the `interp_gprs_with_registers` ↔ `interp_gprs_with_public_registers`
-bridge automatically (matching BlockVer's `instrs_endToEnd` proof structure).
+### `ImplPre` proof pattern for `gen_contract`
+
+When `block = gen_contract specs`, the goal after `cbn` is a pair of
+`⌜P⌝ ∧ emp` fragments (one for `asn_init_pc`, one for `gen_pre specs`)
+followed by `cur_privilege` and `interp_inv_constant_time`.
+
+**Empty specs** (`gen_contract []`, see `jmp_fwd_endToEnd_cfg_gen`):
+
+```coq
+assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
+eapply (@cfg_instrs_endToEnd ... [] HpubReg jmp_fwd_cfg_contract_gen
+  valid_jmp_fwd_cfg_contract_gen eq_refl eq_refl).
+all: try eauto.
+- intros Σ H.
+  iIntros "(Hregs & Hpriv & #Hinv)".
+  cbn. iFrame "∗ #".                        (* frames Hpriv and Hinv *)
+  iSplit; (iSplit; [iPureIntro | done]).    (* decompose ⌜P⌝ ∧ emp for each fragment *)
+  all: vm_compute; done.                   (* closes init_addr=0 and True *)
+- cbn. by unfold lenAddr.
+```
+
+**`declare_public_registers γ1 γ2 []`** is proved by `by constructor` (stdpp's
+`Forall_nil` is an iff lemma, not the constructor — do NOT use `Forall_nil _`).
 
 ---
 
@@ -282,6 +372,11 @@ bridge automatically (matching BlockVer's `instrs_endToEnd` proof structure).
 | `iApply (ImplPre Σ')` gives "expected gFunctors" | `Σ` is explicit in `forall \`{sailGS2 Σ}`; use `iApply ImplPre.` (no arg) and let Coq infer `Σ` from the ambient Iris context. |
 | `Wrong bullet -: Current bullet - is not finished` after `iApply ImplPre` | Missing second `iFrame`; use `iFrame "∗ #". by iFrame "∗ #".` — the second call closes the residual `interp_gprs` goal. |
 | `eapply cfg_instrs_endToEnd instrs exitCond ...` gives type mismatch | `Set Implicit Arguments.` makes `instrs'` and `exitCond` implicit; use `@cfg_instrs_endToEnd` with all args explicit. |
+| `declare_public_registers γ1 γ2 []` proof fails with `Forall_nil _` | `Forall_nil` in stdpp is an iff lemma (`Forall P [] ↔ True`), not the constructor. Use `by constructor` instead. |
+| `declare_pub_head_true r x rest ...` gives type mismatch for `x` | `Set Implicit Arguments` makes `x : Reg ty_xlenbits` implicit. Use `by eapply declare_pub_head_true` and let Coq infer `x` from `Hrc`. |
+| `bv.finite.all_spec` not found | The lemma is `bv.finite.elem_of_enum : ∀ [m] (x : bv m), x ∈ bv.finite.enum m`. Use `apply elem_of_list_to_set, bv.finite.elem_of_enum.` |
+| `rewrite (something_registers HpubReg)` fails with "does not match any subterm" | The LHS is `interp_gprs_with_registers`; if the goal already has `interp_gprs_with_public_registers`, rewrite the other way: `rewrite <- (something_registers HpubReg)`. |
+| `all: vm_compute; done.` inside a `-` bullet closes too many goals | It is scoped to the current bullet's sub-goals. If it unexpectedly closes outer goals, ensure `all: try eauto.` runs FIRST (before the `-` bullets) to discharge the routine goals. |
 
 ---
 
@@ -307,10 +402,13 @@ JAL (non-linear control flow).
 Uses CFGVer with `jmp_fwd_exitCond := fun v => bv.ugeb v (bv.of_N 8)`, fuel = 5.
 Proof: `vm_compute. solve_vc.`
 
-End-to-end (`jmp_fwd_endToEnd_cfg`): **Proved** (commit `fe149069`, updated `2b6c7753`).
-Uses `cfg_instrs_endToEnd`. Proof applies `@cfg_instrs_endToEnd` with
-`jmp_fwd_cfg_contract` and only supplies `ImplPre` (pure init_pc assertion).
-No `ImplPost` needed — postconditions were removed from `CFGVerifierContract`.
+End-to-end (`jmp_fwd_endToEnd_cfg`): **Proved** (commit `fe149069`).
+Manual contract, requires `declare_public_registers γ1 γ2 [existT ty_xlenbits x1]`.
+
+**gen_contract version** (`jmp_fwd_cfg_contract_gen` / `jmp_fwd_endToEnd_cfg_gen`):
+**Proved** (commit `63affd15`). Uses `gen_contract []` (empty specs, precondition
+`asn_init_pc ∗ ⊤`). End-to-end requires no `HpubReg` hypothesis — proved by
+`by constructor` for `declare_public_registers γ1 γ2 []`.
 
 ---
 
