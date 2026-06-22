@@ -943,13 +943,14 @@ Module RiscvPmpIrisInstanceWithContracts.
         iExists _; iFrame. iPureIntro.
         apply mmio_pred_cons; [|eauto].
         left. now exists data. }
-      now iFrame "Htr".
+      now iFrame "Htr Hwp".
     - iMod ("Hclose" with "[Htrf]") as "_".
       {(* Instantiate evars *)
         iExists _; iFrame. iPureIntro.
         apply mmio_pred_cons; [|eauto].
         now right. }
-      now iFrame "Htr".
+      iMod (nothingPending_written _ with "[$Hwp $Hnp]") as "[Hwp Hnp]".
+      simpl. iFrame "Htr Hnp".
   Qed.
 
   Lemma decode_sound `{sailGS Σ} :

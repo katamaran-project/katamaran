@@ -59,11 +59,11 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Definition writePendingΣ := #[GFunctor (authR (optionUR (excl.exclR (leibnizO WritePendingState))))].
 
     Class writePending_preG Σ := WritePending_preG {
-                                 writePending_pre_inG :: inG Σ (auth.authR (optionR (excl.exclR (leibnizO WritePendingState))));
+                                 writePending_pre_inG :: inG Σ (auth.authR (optionUR (excl.exclR (leibnizO WritePendingState))));
                                }.
 
     Class writePendingG Σ := WritePendingG {
-                                 writePending_inG :: inG Σ (auth.authR (optionR (excl.exclR (leibnizO WritePendingState))));
+                                 writePending_inG :: inG Σ (auth.authR (optionUR (excl.exclR (leibnizO WritePendingState))));
                                  writePendingG_gname : gname
                                }.
 
@@ -76,21 +76,31 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     Proof. solve_inG. Qed.
 
     Definition nothingPending_auth `{writePendingG Σ} : iProp Σ :=
-      own writePendingG_gname (● (Some (excl.Excl NothingPending) : optionR (excl.exclR (leibnizO WritePendingState)))).
+      own writePendingG_gname (● (Some (excl.Excl NothingPending) : optionUR (excl.exclR (leibnizO WritePendingState)))).
     Definition nothingPending `{writePendingG Σ} : iProp Σ :=
-      own writePendingG_gname (◯ (Some (excl.Excl NothingPending) : optionR (excl.exclR (leibnizO WritePendingState)))).
+      own writePendingG_gname (◯ (Some (excl.Excl NothingPending) : optionUR (excl.exclR (leibnizO WritePendingState)))).
     Definition written_auth `{writePendingG Σ} e : iProp Σ :=
-      own writePendingG_gname (● (Some (excl.Excl (Written e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
+      own writePendingG_gname (● (Some (excl.Excl (Written e)) : optionUR (excl.exclR (leibnizO WritePendingState)))).
     Definition written `{writePendingG Σ} e : iProp Σ :=
-      own writePendingG_gname (◯ (Some (excl.Excl (Written e)) : optionR (excl.exclR (leibnizO WritePendingState)))).
+      own writePendingG_gname (◯ (Some (excl.Excl (Written e)) : optionUR (excl.exclR (leibnizO WritePendingState)))).
 
     Lemma writePending_alloc `{!writePending_preG Σ} :
       ⊢ |==> ∃ tG : writePendingG Σ,
           nothingPending_auth ∗ nothingPending.
     Proof.
-      iMod (own_alloc (● (Some (excl.Excl NothingPending): optionR (excl.exclR (leibnizO WritePendingState))) ⋅ ◯ (Some (excl.Excl NothingPending) : optionR (excl.exclR (leibnizO WritePendingState))))) as (γ) "[? ?]".
+      iMod (own_alloc (● (Some (excl.Excl NothingPending): optionUR (excl.exclR (leibnizO WritePendingState))) ⋅ ◯ (Some (excl.Excl NothingPending) : optionUR (excl.exclR (leibnizO WritePendingState))))) as (γ) "[? ?]".
       { apply auth_both_valid_2; done. }
       iModIntro. iExists (WritePendingG _ γ). now iFrame.
+    Qed.
+
+    Lemma nothingPending_written `{writePendingG Σ} e :
+      nothingPending_auth ∗ nothingPending ==∗
+      written_auth e ∗ written e.
+    Proof.
+      rewrite -!own_op.
+      iApply own_update. apply auth_update.
+      apply @option_local_update.
+      apply exclusive_local_update. constructor.
     Qed.
 
     (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)

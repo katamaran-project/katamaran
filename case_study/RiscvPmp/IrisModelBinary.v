@@ -83,6 +83,13 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
       @mc_wpGS _ memGS2_memGS_left.
     Definition memGS2_wpGS2_right `{mG : memGS2 Σ} : writePendingG Σ :=
       @mc_wpGS _ memGS2_memGS_right.
+
+    Lemma written_nothingPending `{memGS2 Σ} e :
+      @written _ memGS2_wpGS2_left e ∗ @written _ memGS2_wpGS2_right e ==∗
+      @nothingPending _ memGS2_wpGS2_left ∗ @nothingPending _ memGS2_wpGS2_right.
+    Proof.
+    Admitted.
+
   End RiscvPmpIrisParams2.
 
   Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
