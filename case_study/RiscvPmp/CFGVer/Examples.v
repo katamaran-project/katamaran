@@ -351,6 +351,35 @@ Module Examples.
     Lemma valid_set_X2_to_42 : ValidCFGVerifierContract set_X2_to_42.
     Proof. vm_compute. solve_vc. Qed.
 
+    (* Memory countdown: 4 instructions + a data word at address 16.
+       addr  0: LOAD  imm=16 rs1=X0 rd=X1  -- X1 := mem[X0+16] = mem[16]
+       addr  4: ADDI  X1 X1 (-1)            -- X1 := X1 - 1
+       addr  8: STORE imm=16 rs2=X1 rs1=X0  -- mem[16] := X1
+       addr 12: BNE   X1 X0 (-12)           -- if X1 ≠ 0, jump back to addr 0
+       Data:    mem[16] = 2 initially.
+       Two iterations: 2→1 (branch), 1→0 (fall-through); exit at pc=16. *)
+    Definition back_12_offset : bv 13 := bv.of_N 8180.
+
+    Definition countdown_mem_exitCond : bv xlenbits -> bool :=
+      fun v => bv.ugeb v (bv.of_N 16).
+
+    Definition countdown_mem_instrs : list AST :=
+      [ LOAD (bv.of_N 16) X0 X1 false WORD
+      ; ADDI X1 X1 neg_one_12
+      ; STORE (bv.of_N 16) X1 X0 WORD
+      ; BNE X1 X0 back_12_offset ].
+
+    Definition countdown_mem_cfg_contract : CFGVerifierContract :=
+      {{ asn_init_pc ∗ (∃ "_", X1 ↦ᵣ term_var "_") ∗
+         (term_val ty_xlenbits (bv.of_N 16) ↦ₘ
+          term_val ty_xlenbits (bv.of_N 2)) }}
+        countdown_mem_instrs
+      @cfg[ countdown_mem_exitCond , 10 ].
+
+    Lemma valid_countdown_mem_cfg_contract :
+      ValidCFGVerifierContract countdown_mem_cfg_contract.
+    Proof. vm_compute. solve_vc. Qed.
+
   End WithAsnNotations.
 
   (* Public registers for a spec list: registers whose is_pub flag is true.
@@ -2010,6 +2039,56 @@ End AdequacyTools.
       iDestruct "Hregs" as "($ & Hregs)".
       iSplit; [iPureIntro | done].
       vm_compute. done.
+    - cbn. by unfold lenAddr.
+  Qed.
+
+  Lemma countdown_mem_endToEnd {γ1 γ2 γ1' γ2' : RegStore}
+      {μ1 μ2 μ1' μ2' : Memory} n ws_instrs
+      (Hmem1 : get_word μ1 (bv.of_N 16) = bv.of_N 2)
+      (Hmem2 : get_word μ2 (bv.of_N 16) = bv.of_N 2) :
+    let instrs := countdown_mem_instrs in
+    mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs instrs ->
+    mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs instrs ->
+    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
+    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
+    ⟨ γ1, μ1 ⟩ -(countdown_mem_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -(countdown_mem_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
+    leakage_trace μ1 = leakage_trace μ2 ->
+    leakage_trace μ1' = leakage_trace μ2'.
+  Proof.
+    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
+    assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
+    assert (HpubMem : declare_public_memory μ1 μ2
+        (gen_public_addrs [(bv.of_N 16, true)])).
+    { unfold declare_public_memory, gen_public_addrs. cbn.
+      constructor. rewrite Hmem1 Hmem2. reflexivity. constructor. }
+    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
+      countdown_mem_instrs countdown_mem_exitCond n ws_instrs
+      [ctx] [env]
+      [] HpubReg
+      [(bv.of_N 16, true)] HpubMem
+      countdown_mem_cfg_contract valid_countdown_mem_cfg_contract
+      eq_refl eq_refl).
+    all: try eauto.
+    - intros i spec Hlook.
+      destruct i; cbn in Hlook; [inversion Hlook; subst | inversion Hlook].
+      vm_compute. done.
+    - intros Σ H.
+      iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
+      cbn.
+      iFrame "Hpriv Hinv".
+      rewrite Hmem1.
+      iDestruct "Hmemdata" as "[Hmem _]".
+      rewrite <- (something_registers HpubReg).
+      rewrite gprs_with_registers_equiv. cbn.
+      iDestruct "Hregs" as "(Hx1 & _)".
+      iSplitL "".
+      { iSplit; [iPureIntro | done]. vm_compute. done. }
+      iSplitL "Hx1".
+      { iExists _. iExact "Hx1". }
+      iExact "Hmem".
     - cbn. by unfold lenAddr.
   Qed.
 
