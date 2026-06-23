@@ -141,8 +141,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     (* Helper definitions for io-protocol state machine transition function. *)
     Definition mmio_interrupt_addr : Addr := bv.of_N (mmioStartAddr + 4).
 
-    Search bv.cons.
-
     Definition mmio_interrupt_w2s {width : nat} (w : bv (width * byte)) (s : IOState) : IOState :=
       match (bv.land w (bv.of_N 24)) with
       | bv.mk 8 _ => SGo
@@ -192,8 +190,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       impl_mmio_event_prot {| event_type := t;  event_addr := a;  event_nbbytes := _ ;  event_contents := w |} (bv2s s) (bv2s s').
 
     Definition Mmio_read_valid {width : nat} (a : Addr) (s : bv iostate_bits) : Prop := True.
-      (* forall (s' : IOState) (w : bv (width * byte)), *)
-        (* ((s' = mmio_interrupt_w2s w (bv2s s) /\ a = mmio_interrupt_addr) \/ (s' = bv2s s /\ a <> mmio_interrupt_addr)). *)
 
     Definition 𝑷 := PurePredicate.
 

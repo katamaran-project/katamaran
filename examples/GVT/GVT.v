@@ -233,7 +233,6 @@ Module inv := invariants.
         ; UTYPE (bv.drop 12 (bv.of_N 0x80000000)) t0 RISCV_LUI   (* load upper 20 bits of immediate *)
         ; ITYPE (@bv.take 12 xlenbits (bv.of_N 0x80000000)) t0 t0 RISCV_ADDI    (* load lower 12 bits of immediate *)
         ; RTYPE t0 t1 t1 RISCV_AND (* t1 <- mask mcause with msb *)
-        (* ; SHIFTIOP (bv.of_N 31) t1 t1 RISCV_SRLI (* t1 >> 31 *) *)
         ; Λ current_pc, BTYPE (bv.of_N (mmio_handler_start_block2 - current_pc)) t1 zero RISCV_BEQ (* branch if t1 = zero *)
       ].
 
@@ -417,30 +416,25 @@ Module inv := invariants.
       intuition bv_solve_Ltac.solveBvManual.
     Qed.
 
-    (* NOTE: in one case the handler reads (legacy) and in the other it writes (mmio). However, this does not have an impact on the shape of the contract, as we do not directly talk about the written/read value *)
-
 
     Example femtokernel_handler_pre : Assertion ["a" :: ty_xlenbits] :=
-      ∃ "cause", (
         (term_var "a" = term_val ty_word (bv.of_N mmio_handler_addr_block0)) ∗
-        (* (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - mmio_handler_addr_block0)) < term_val ty.int (Z.of_N maxAddr))%asn ∗ *)
         (∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_val ty.bool false ]) ∗
         (∃ "mie", mie ↦ term_var "mie") ∗
         (∃ "mip", mip ↦ term_var "mip") ∗
         (∃ "ms" , mscratch ↦ term_var "ms") ∗
         (mtvec ↦ term_val ty_word (bv.of_N mmio_handler_addr_block0)) ∗
-        (mcause ↦ term_var "cause") ∗
+        (∃ "cause", mcause ↦ term_var "cause") ∗
         (∃ "epc", mepc ↦ term_var "epc") ∗
         asn_regs_ptsto ∅ ∗
         cur_privilege ↦ term_val ty_privilege Machine ∗
-        asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block0)))) ∗ (* Different handler sizes cause different entries *)
+        asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block0)))) ∗ (* different handler sizes cause different entries *)
         (∃ "s", ∃ "sv",  (
-          term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
+          term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗ (* statevalue stored at data_addr *)
           term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" ∗ (* statevalue corresponds to ghost state *)
           asn_mmio_state_pred (term_var "s")
         )) ∗
-        asn_mmio_trace_state_inv
-      ).
+        asn_mmio_trace_state_inv.
 
     Example femtokernel_handler_post_block0 : Assertion ["a" :: ty_xlenbits; "an"::ty_xlenbits] :=
       ∃ "cause", (
@@ -455,15 +449,15 @@ Module inv := invariants.
         (∃ "epc", mepc ↦ term_var "epc") ∗
         asn_regs_ptsto ∅ ∗
         cur_privilege ↦ term_val ty_privilege Machine ∗
-        asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block0)))) ∗ (* Different handler sizes cause different entries *)
+        asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block0)))) ∗ (* different handler sizes cause different entries *)
         (∃ "s", ∃ "sv", (
           (asn.or
-             (term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N  0x80000000)) = term_val (ty.bvec _) bv.zero ∗
+             (term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N  0x80000000)) = term_val (ty.bvec _) bv.zero ∗ (* msb of mcause = 0, no interrupt, jump to block2 *)
               term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block2))
-             (term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N 0x80000000)) = term_val (ty.bvec _) (bv.of_N  0x80000000) ∗
+             (term_binop bop.bvand (term_var "cause") (term_val ty_xlenbits (bv.of_N 0x80000000)) = term_val (ty.bvec _) (bv.of_N  0x80000000) ∗ (* msb of mcause = 1, interrupt, continue to block1 *)
               term_var "an" = term_val ty_word (bv.of_N mmio_handler_addr_block1))
           ) ∗
-          term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
+          term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗ (* statevalue stored at data_addr *)
           term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" ∗ (* statevalue corresponds to ghost state *)
           asn_mmio_state_pred (term_var "s")
         )) ∗
@@ -485,9 +479,9 @@ Module inv := invariants.
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
     (∃ "s", ∃ "sv", (
       asn_mmio_state_pred (term_var "s") ∗
-      term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
+      term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗ (* statevalue stored at data_addr *)
       term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" ∗ (* statevalue corresponds to ghost state *)
-      asn_mmio_read_valid (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "s")
+      asn_mmio_read_valid (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "s") (* reading from mmio_read_addr yields a valid value, currently always the case *)
     )) ∗
     asn_mmio_trace_state_inv.
 
@@ -506,8 +500,8 @@ Module inv := invariants.
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block1)))) ∗
     (∃ "s", ∃ "s'", ∃ "sv", (
       asn_mmio_state_pred (term_var "s'") ∗
-      (∃ "w", asn_mmio_event (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "w") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'")) ∗
-      term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
+      (∃ "w", asn_mmio_event (term_val ty_xlenbits (bv.of_N mmio_read_addr)) (term_var "w") (term_val ty_ioeventType IORead) (term_var "s") (term_var "s'")) ∗ (* successful read event allows state change from s to s' *)
+      term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗ (* statevalue stored at data_addr *)
       term_unop (uop.bvtake 1) (term_var "sv") = term_var "s'" (* statevalue corresponds to new ghost state *)
     )) ∗
     asn_mmio_trace_state_inv.
@@ -527,7 +521,7 @@ Module inv := invariants.
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block2)))) ∗
     (∃ "s", ∃ "sv", (
       asn_mmio_state_pred (term_var "s") ∗
-      term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
+      term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗ (* statevalue stored at data_addr *)
       term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" (* statevalue corresponds to ghost state *)
     )) ∗
     asn_mmio_trace_state_inv.
@@ -547,7 +541,7 @@ Module inv := invariants.
     asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N mmio_handler_addr_block2)))) ∗
     (∃ "s", ∃ "sv", (
        asn_mmio_state_pred (term_var "s") ∗
-       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗
+       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ (term_var "sv") ∗ (* statevalue stored at data_addr *)
        term_unop (uop.bvtake 1) (term_var "sv") = term_var "s" (* statevalue corresponds to ghost state *)
     )) ∗
     asn_mmio_trace_state_inv.
@@ -611,86 +605,6 @@ Module inv := invariants.
   (* Set Printing Depth 200. *)
   (* Eval vm_compute in Erasure.erase_symprop vc__femtohandler_block1. *)
 
-    Lemma shiftr_zero: forall m  y (xs : bv m),
-      @bv.shiftr m y xs (bv.of_nat 0) =  xs.
-    Proof. intros. unfold bv.shiftr. rewrite Z.shiftr_0_r. apply bv.of_Z_unsigned. Qed.
-
-    Lemma bv_bin_eq_rec {n m} (H : n = m) (x : bv n) :
-      bv.bin (eq_rec n bv x m H) = bv.bin x.
-    Proof. now subst. Qed.
-
-    Lemma bv_case_cons {A : forall n : nat, bv n -> Type} {c : forall n (b : bool) (x : bv n), A (S n) (bv.cons b x)} {n : A O bv.nil}
-      {m b} (xs : bv m) :
-      bv.bv_case A n c (bv.cons b xs) = c m b xs.
-    Proof.
-      destruct b, xs, bin; now cbn.
-    Qed.
-
-    Lemma fold_right_cons {A : forall n : nat, Type} {c : forall n, bool -> A n -> A (S n)} {n : A O}
-        {m b} (xs : bv m) :
-        bv.fold_right A c n (bv.cons b xs) = c m b (bv.fold_right A c n xs).
-    Proof.
-      unfold bv.fold_right.
-      now rewrite bv_case_cons.
-    Qed.
-
-    Lemma bv_bin_zext' {m n} (x : bv m) :
-      bv.bin (bv.zext' x n) = bv.bin x.
-    Proof.
-      unfold bv.zext', bv.app.
-      induction x using bv.bv_rect; first done.
-      rewrite fold_right_cons; cbn.
-      rewrite !bv.bin_cons.
-      now rewrite IHx.
-    Qed.
-
-  Lemma Z_shiftr_unsigned_bounds {m n} (xs : bv m) (y : bv n) : (0 <= (@bv.unsigned m xs ≫ @bv.unsigned n y) < 2 ^ m)%Z.
-    Proof.
-      split.
-      { rewrite Z.shiftr_div_pow2. apply Z.div_pos. 2: apply Z.pow_pos_nonneg; try lia. all : try apply bv.unsigned_bounds. }
-      unfold Z.shiftr, Z.shiftl.
-      destruct (bv.unsigned y) eqn: Y; simpl. { apply bv.unsigned_bounds. }
-      - rewrite <- Pos.iter_swap_gen with (g := λ (x : bv m), (@bv.shiftr m 1 x bv.one)). apply bv.unsigned_bounds.
-        intros. unfold bv.shiftr. cbn. rewrite <- Z.div2_spec.
-        pose proof Z.div2_nonneg (bv.unsigned a).
-        unfold bv.unsigned. simpl.
-        rewrite bv.to_N_truncz2. 2 : { apply H. apply bv.unsigned_bounds. } rewrite bv.truncn_idemp.
-        rewrite Z2N.inj_div2.
-        rewrite N2Z.id. rewrite <- N2Z.inj_div2. rewrite N2Z.inj_iff.
-        apply bv.truncn_small. rewrite N.div2_div. apply N.Div0.div_lt_upper_bound.
-        pose proof @bv.bv_is_wf m a.
-        transitivity (bv.exp2 m); try lia.
-      - unfold bv.unsigned in *. pose proof N2Z.is_nonneg (bv.bin y). pose proof Pos2Z.neg_is_neg p. rewrite <- Y in H0.
-        apply Z.lt_gt in H0. contradiction.
-   Qed.
-
-  Lemma shiftr_cons {m n b} (xs : bv m) (y : bv n) : (N.succ (bv.bin y) < bv.exp2 n)%N ->
-    @bv.shiftr (S m) n (bv.cons b xs) (bv.add bv.one y) =
-      eq_rec _ bv (bv.zext' (@bv.shiftr m n xs y) 1) _ (Nat.add_1_r m).
-  Proof.
-    intros.
-    unfold bv.shiftr.
-    rewrite bv.unsigned_cons.
-    rewrite <-bv.unsigned_succ_small, <-Z.add_1_l. 2: by apply H.
-    rewrite <-Z.shiftr_shiftr.
-    2: { destruct y using bv.bv_rect; unfold bv.unsigned; simpl; try lia. }
-    rewrite <-Z.div2_spec.
-    rewrite Z.div2_div.
-    rewrite (Z.mul_comm 2 (bv.unsigned xs)).
-    rewrite Z_div_plus_full ; last lia.
-    rewrite Z.b2z_div2 Z.add_0_l.
-    set (x := (@bv.unsigned m xs ≫ @bv.unsigned n y)) in *.
-    apply bv.bin_inj. rewrite bv_bin_eq_rec. rewrite bv_bin_zext'.
-    unfold bv.shiftr in *.
-    simpl. clear b.
-    pose proof @Z_shiftr_unsigned_bounds m n xs y as [Zbl Zbr]; auto.
-    rewrite !bv.to_N_truncz2; auto.
-    rewrite !bv.truncn_idemp.
-    assert (N_Z_shiftr_bound: (Z.to_N x < bv.exp2 m)%N). rewrite Z2N.inj_lt in Zbr; simpl; auto; try lia.
-    rewrite !bv.truncn_small; auto.
-    transitivity (bv.exp2 m); auto. unfold bv.exp2. destruct m; simpl; try lia. rewrite Pos.pow_succ_r. lia.
-  Qed.
-
   Lemma sat__femtohandler_block1 : safeE (vc__femtohandler_block1).
   Proof.
     vm_compute. constructor; cbn. intros.
@@ -710,7 +624,7 @@ Module inv := invariants.
     change (bv.mk 0x3 _)  with (@bv.of_nat 5 0x3).
     change (bv.of_nat 4) with (@bv.add 5 bv.one (bv.of_nat 3)).
     change (bv.of_nat 3) with (@bv.add 5 bv.one (@bv.add 5 bv.one (@bv.add 5 bv.one (bv.of_nat 0)))).
-    rewrite !shiftr_cons; try (simpl; lia). rewrite !shiftr_zero.
+    rewrite !bv.shiftr_cons; try (simpl; lia). rewrite !bv.shiftr_zero.
     rewrite <- !Eqdep.EqdepTheory.eq_rec_eq.
 
     unfold bv.zext'. rewrite !bv.app_cons.
@@ -1002,7 +916,7 @@ Module inv := invariants.
         iApply "IH".
         iSplitL "Hpc Hnpc HaccU Hinstrs Hinstrs0 Hinstrs1 Hinstrs2".
         { iFrame. }
-        cbn. iDestruct "Hmcause" as (mc) "Hmcause". iExists _.
+        cbn. iDestruct "Hmcause" as (mc) "Hmcause".
         iSplitR. iSplit; auto.
         iFrame "Hmstatus Hmip Hmie Hmscratch Hmtvec Hmcause Hmepc".
         iSplitL "Hgprs".
@@ -1064,7 +978,7 @@ Module inv := invariants.
         iSplitL "Hpc Hnpc HaccU Hinstrs Hinstrs0 Hinstrs1 Hinstrs2 ".
         { iFrame. }
         cbn.
-        iDestruct "Hmcause" as (mc) "Hmcause". iExists mc.
+        iDestruct "Hmcause" as (mc) "Hmcause".
         iSplitR. iSplit; auto.
         iFrame "Hmstatus Hmip Hmie Hmscratch Hmtvec Hmcause Hmepc".
         iSplitL "Hgprs".
@@ -1093,7 +1007,7 @@ Module inv := invariants.
     iLöb as "Hind".
     iIntros "(Hfemto & Hpre)".
     iAssert (⌜bv.of_N mmio_handler_addr_block0 = a⌝)%I as %Heqa.
-    { cbn. by iDestruct "Hpre" as (v) "([%Ha0 _] & _)". }
+    { cbn. by iDestruct "Hpre" as "([%Ha0 _] & _)". }
     subst.
     iDestruct "Hfemto" as "(Hblockver & HaccU & Hinstrs & Hinstrs0 & Hinstrs1 & Hinstrs2)".
     iApply (femto_handler_verified_block0 with "[$Hpre $Hblockver $Hinstrs0]").
@@ -1170,7 +1084,6 @@ Module inv := invariants.
       }
       cbn.
       iDestruct "Hmcause" as "(%mc & Hmcause)".
-      iExists mc.
       iSplitR. iSplit; auto.
       rewrite <- gprs_equiv. cbn.
       iFrame "Hmstatus Hmie Hmip Hmscratch Hmtvec Hmcause Hmepc Hgprs Hcurpriv Hpmpentries Hinv".
